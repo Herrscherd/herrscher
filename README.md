@@ -425,7 +425,8 @@ Backends that can list their models are asked at startup, in the background, and
 their answers are cached on disk. Discovered models are added to the static
 catalog; they never remove one. `herrscher models list` shows where each model
 comes from (`catalog` or `discovered`), and `herrscher models refresh` asks again
-right away.
+right away. Both take `--state FILE`, the daemon state file whose directory holds the
+cache; without it they use the daemon default, the same cache the daemon reads.
 
 | Variable | Default | Effect |
 |---|---|---|
@@ -437,9 +438,10 @@ right away.
 
 The cache is `models-discovered.json`, next to the daemon state file: the directory of
 `--state` when given, otherwise `HERRSCHER_STATE_DIR`, otherwise `~/.config/herrscher`.
-It is created on first write, readable by its owner only. A vendor that fails or stays silent past
-its timeout keeps its last known list, and the daemon logs a warning. The daemon
-never waits for discovery to start.
+It is created on first write, readable by its owner only. Writers take an exclusive lock
+(`flock` on Unix, `LockFileEx` on Windows), so two writers never drop each other's vendor.
+A vendor that fails or stays silent past its timeout keeps its last known list, and the
+daemon logs a warning. The daemon never waits for discovery to start.
 
 ### Also
 

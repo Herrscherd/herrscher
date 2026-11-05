@@ -214,15 +214,14 @@ func TestMissingCacheFileLoadsEmpty(t *testing.T) {
 	}
 }
 
-func TestLoadSourcesReadsCacheFromStateDir(t *testing.T) {
+func TestSourcesReadTheCacheBesideTheStateFile(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HERRSCHER_STATE_DIR", dir)
 	cache := cacheWith(time.Now(), cachedModel{ID: "a-live", Label: "A live", Arg: "live", Route: "native"})
 	if err := saveDiscoveryCache(filepath.Join(dir, discoveryCacheName), cache); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv(envModelsHidden, "a-native")
-	sources := LoadSources()
+	sources := ModelDiscoveryFor(filepath.Join(dir, "state.json")).Sources()
 	got, err := CatalogWith(fakePlugins(), contracts.PolicyAll, sources)
 	if err != nil {
 		t.Fatalf("CatalogWith: %v", err)
@@ -329,7 +328,7 @@ func TestPersistRefreshedKeepsVendorsWrittenByOthers(t *testing.T) {
 
 func TestGatewayRoutesDroppedWithoutCredentials(t *testing.T) {
 	stateDir := t.TempDir()
-	t.Setenv(envStateDir, stateDir)
+	t.Setenv("HERRSCHER_STATE_DIR", stateDir)
 	t.Setenv(EnvGatewayURL, "")
 	t.Setenv(EnvGatewayToken, "")
 	cache := cacheWith(time.Now(),
@@ -351,7 +350,7 @@ func TestGatewayRoutesDroppedWithoutCredentials(t *testing.T) {
 
 func catalogIDs(t *testing.T) map[string]bool {
 	t.Helper()
-	got, err := CatalogWith(fakePlugins(), contracts.PolicyAll, LoadSources())
+	got, err := CatalogWith(fakePlugins(), contracts.PolicyAll, DefaultModelDiscovery().Sources())
 	if err != nil {
 		t.Fatalf("CatalogWith: %v", err)
 	}
@@ -360,6 +359,21 @@ func catalogIDs(t *testing.T) map[string]bool {
 		ids[got[idx].ID] = true
 	}
 	return ids
+}
+
+func TestDiscoveryAccessCarriesTheHostRoutePolicy(t *testing.T) {
+	t.Setenv(EnvGatewayURL, "https://gateway.example")
+	t.Setenv(EnvGatewayToken, "token")
+	var seen contracts.RoutePolicy
+	plugins := discoveringPlugins(func(_ context.Context, access contracts.DiscoveryAccess) ([]contracts.ModelSpec, error) {
+		seen = access.Policy
+		return nil, nil
+	})
+	settings := discoverySettings{ttl: time.Hour, timeout: time.Second, policy: contracts.PolicyGatewayOnly}
+	refreshDiscovery(context.Background(), plugins, cacheWith(time.Now().Add(-2*time.Hour)), settings, time.Now(), true)
+	if seen != contracts.PolicyGatewayOnly {
+		t.Fatalf("discovery access policy = %q, want the host gateway-only policy", seen)
+	}
 }
 
 func TestGatewayOnlyDiscoversThroughTheGatewayWhenCredentialsExist(t *testing.T) {
@@ -394,18 +408,73 @@ func TestSaveDiscoveryCacheCreatesItsDirectoryPrivately(t *testing.T) {
 	}
 }
 
-func TestPinStateDirPutsTheCacheBesideTheDaemonState(t *testing.T) {
-	t.Setenv(envStateDir, "")
+func TestModelDiscoveryPutsTheCacheBesideTheDaemonState(t *testing.T) {
+	t.Setenv("HERRSCHER_STATE_DIR", "")
 	state := filepath.Join(t.TempDir(), "elsewhere", "state.json")
-	if err := PinStateDir(state); err != nil {
-		t.Fatal(err)
-	}
-	path, err := discoveryCachePath()
-	if err != nil {
-		t.Fatal(err)
-	}
+	path := ModelDiscoveryFor(state).cachePath()
 	if want := filepath.Join(filepath.Dir(state), discoveryCacheName); path != want {
 		t.Fatalf("cache path = %s, want %s beside the --state file", path, want)
+	}
+}
+
+func TestModelDiscoveryForLeavesTheEnvironmentAlone(t *testing.T) {
+	t.Setenv("HERRSCHER_STATE_DIR", "")
+	_ = ModelDiscoveryFor(filepath.Join(t.TempDir(), "state.json"))
+	if inherited := os.Getenv("HERRSCHER_STATE_DIR"); inherited != "" {
+		t.Fatalf("ModelDiscoveryFor exported HERRSCHER_STATE_DIR=%q to child processes", inherited)
+	}
+}
+
+func modelsVerb(t *testing.T, verb string) contracts.Cmd {
+	t.Helper()
+	for _, cmd := range ModelsCommands() {
+		if len(cmd.Path) == 2 && cmd.Path[1] == verb {
+			return cmd
+		}
+	}
+	t.Fatalf("no models %s verb", verb)
+	return contracts.Cmd{}
+}
+
+func TestModelsListFollowsTheStateFlag(t *testing.T) {
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+	for _, plugin := range fakePlugins() {
+		contracts.Default.Register(plugin)
+	}
+	t.Setenv("HERRSCHER_STATE_DIR", t.TempDir())
+	dir := t.TempDir()
+	cache := cacheWith(time.Now(), cachedModel{ID: "alpha-state-live", Label: "state live", Arg: "sl", Route: "native"})
+	if err := saveDiscoveryCache(discoveryCacheIn(dir), cache); err != nil {
+		t.Fatal(err)
+	}
+	out, err := modelsVerb(t, "list").Run(context.Background(), contracts.Input{Args: map[string]string{"state": filepath.Join(dir, "state.json")}})
+	if err != nil {
+		t.Fatalf("models list --state: %v", err)
+	}
+	if !strings.Contains(out, "alpha-state-live") {
+		t.Fatalf("models list --state ignored the state file's cache:\n%s", out)
+	}
+}
+
+func TestClashWarnsOncePerCacheAcrossLoads(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	path := discoveryCacheIn(t.TempDir())
+	if err := saveDiscoveryCache(path, cacheWith(time.Now(), cachedModel{ID: "b-native", Label: "clash", Arg: "clash", Route: "native"})); err != nil {
+		t.Fatal(err)
+	}
+	models := ModelDiscoveryFor(filepath.Join(filepath.Dir(path), "state.json"))
+	for range 5 {
+		if _, err := CatalogWith(fakePlugins(), contracts.PolicyAll, models.Sources()); err != nil {
+			t.Fatalf("CatalogWith: %v", err)
+		}
+	}
+	if count := strings.Count(logs.String(), "discovered model ID is served by another backend"); count != 1 {
+		t.Fatalf("clash warnings over 5 loads of one cache = %d, want 1\n%s", count, logs.String())
 	}
 }
 
@@ -426,11 +495,11 @@ func TestClashWarnsOncePerIDPerCacheLoad(t *testing.T) {
 }
 
 func TestResolveModelRouteHonoursAHiddenRoutePolicy(t *testing.T) {
-	t.Setenv(envStateDir, t.TempDir())
+	t.Setenv("HERRSCHER_STATE_DIR", t.TempDir())
 	t.Setenv(EnvRoutePolicy, string(contracts.PolicyGatewayOnly))
 	restore := envx.Hide([]string{EnvRoutePolicy})
 	defer restore()
-	if _, _, err := resolveModelRoute("a-native", fakePlugins(), ""); err == nil {
+	if _, _, err := resolveModelRoute("a-native", fakePlugins(), "", nil); err == nil {
 		t.Fatal("a native model resolved under a gateway-only policy that is only hidden from the process environment")
 	}
 }

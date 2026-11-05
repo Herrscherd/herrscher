@@ -45,7 +45,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 		agents.SetUserBudget(n)
 	}
 	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways)
-	wireManagerHandler(ctx, hdl, hostState, instID, worktrees, sessions)
+	wireManagerHandler(ctx, hdl, hostState, instID, worktrees, sessions, options.modelDiscovery())
 	wireSupervisor(sup, hostState, instID)
 	seedCoord := &coordinatorSlot{}
 	schedSlot := &schedulerSlot{}
@@ -99,18 +99,20 @@ func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
 	return nil
 }
 
-func wireManagerHandler(ctx context.Context, hdl *manager.Handler, hostState *state.State, instID string, worktrees *worktree.Worktreer, sessions *sessionTable) {
+func wireManagerHandler(ctx context.Context, hdl *manager.Handler, hostState *state.State, instID string, worktrees *worktree.Worktreer, sessions *sessionTable, models *ModelDiscovery) {
 	hdl.SetSeeder(sessions.Seed)
 	hdl.SetHosts(newHostPlacer(hostState, instID, worktrees, func() string { return sourceVersionOf(ctx, hostState) }))
 	hdl.SetGatewayOnly(func() bool { return ResolvePolicy(envx.Getenv) == contracts.PolicyGatewayOnly })
 	hdl.SetDefaultModel(envx.Getenv(EnvDefaultModel))
 	hdl.SetVendorDefaultModel(func(vendor string) string { return envx.Getenv(VendorDefaultModelEnv(vendor)) })
-	hdl.SetModelValidator(validateModelChoice)
+	hdl.SetModelValidator(func(vendor, modelID string) error {
+		return validateModelChoice(models, vendor, modelID)
+	})
 	hdl.SetGateResolver(GateFor)
 }
 
-func validateModelChoice(vendor, modelID string) error {
-	entry, err := LookupModelWith(contracts.Default.Backends(), ResolvePolicy(envx.Getenv), LoadSources(), modelID)
+func validateModelChoice(models *ModelDiscovery, vendor, modelID string) error {
+	entry, err := LookupModelWith(contracts.Default.Backends(), ResolvePolicy(envx.Getenv), models.Sources(), modelID)
 	if err != nil {
 		return err
 	}

@@ -21,8 +21,10 @@ var (
 
 type catalogFn func(contracts.RoutePolicy) ([]host.CatalogEntry, error)
 
-func liveCatalog(p contracts.RoutePolicy) ([]host.CatalogEntry, error) {
-	return host.CatalogWith(contracts.Default.Backends(), p, host.LoadSources())
+func liveCatalog(models *host.ModelDiscovery) catalogFn {
+	return func(p contracts.RoutePolicy) ([]host.CatalogEntry, error) {
+		return host.CatalogWith(contracts.Default.Backends(), p, models.Sources())
+	}
 }
 
 type routeCurrent struct {

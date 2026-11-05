@@ -26,13 +26,16 @@ type oneShotSeedRuntime struct {
 	record      func(session string, entry state.TranscriptEntry)
 	timeout     time.Duration
 	backend     func(context.Context, state.Session) (contracts.Backend, error)
+	models      *ModelDiscovery
 }
 
 func (r oneShotSeedRuntime) backendFactory() func(context.Context, state.Session) (contracts.Backend, error) {
 	if r.backend != nil {
 		return r.backend
 	}
-	return newSeedBackend
+	return func(ctx context.Context, sess state.Session) (contracts.Backend, error) {
+		return newSeedBackend(ctx, sess, r.models)
+	}
 }
 
 type oneShotSeedRuntimeKey struct{}
@@ -211,6 +214,7 @@ type BackendRequest struct {
 	Dir     string
 	Resume  string
 	ModelID string
+	Models  *ModelDiscovery
 
 	resolver remoteBackendResolver
 }
@@ -242,7 +246,7 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 	var route modelRoute
 	if req.ModelID != "" {
 		var err error
-		if desired, route, err = resolveModelRoute(req.ModelID, plugins, desired); err != nil {
+		if desired, route, err = resolveModelRoute(req.ModelID, plugins, desired, req.Models); err != nil {
 			return nil, err
 		}
 	}
@@ -274,8 +278,8 @@ type modelRoute struct {
 	arg string
 }
 
-func resolveModelRoute(modelID string, plugins []contracts.Plugin, desired string) (string, modelRoute, error) {
-	entry, err := LookupModelWith(plugins, ResolvePolicy(envx.Getenv), LoadSources(), modelID)
+func resolveModelRoute(modelID string, plugins []contracts.Plugin, desired string, models *ModelDiscovery) (string, modelRoute, error) {
+	entry, err := LookupModelWith(plugins, ResolvePolicy(envx.Getenv), models.Sources(), modelID)
 	if err != nil {
 		return "", modelRoute{}, err
 	}
@@ -308,7 +312,7 @@ func setIfPresent(settings map[string]string, key, value string) {
 	}
 }
 
-func newSeedBackend(ctx context.Context, sess state.Session) (contracts.Backend, error) {
+func newSeedBackend(ctx context.Context, sess state.Session, models *ModelDiscovery) (contracts.Backend, error) {
 	dir := sess.Dir
 	if dir == "" {
 		dir = sess.Worktree
@@ -320,6 +324,7 @@ func newSeedBackend(ctx context.Context, sess state.Session) (contracts.Backend,
 		Dir:     resolveBackendDir(dir),
 		Resume:  sess.ResumeToken,
 		ModelID: sess.ModelID,
+		Models:  models,
 	})
 }
 

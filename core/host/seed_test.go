@@ -118,7 +118,7 @@ func TestNewSeedBackendResolvesRelativeWorktreeOnce(t *testing.T) {
 	})
 
 	sess := state.Session{Vendor: "codex", Worktree: relative}
-	if _, err := newSeedBackend(context.Background(), sess); err != nil {
+	if _, err := newSeedBackend(context.Background(), sess, nil); err != nil {
 		t.Fatalf("newSeedBackend: %v", err)
 	}
 	if gotDir != worker {
@@ -239,7 +239,7 @@ func TestNewSeedBackendPropagatesSessionModelID(t *testing.T) {
 	t.Setenv("NEUBLOX_GATEWAY_TOKEN", "")
 
 	sess := state.Session{Vendor: "codex", ModelID: "gpt-gateway"}
-	_, err := newSeedBackend(context.Background(), sess)
+	_, err := newSeedBackend(context.Background(), sess, nil)
 	if err == nil {
 		t.Fatal("newSeedBackend succeeded with a gateway-route model and no gateway credentials; want fail-closed error")
 	}
@@ -248,7 +248,7 @@ func TestNewSeedBackendPropagatesSessionModelID(t *testing.T) {
 	}
 
 	legacy := state.Session{Vendor: "codex"}
-	if _, err := newSeedBackend(context.Background(), legacy); err != nil {
+	if _, err := newSeedBackend(context.Background(), legacy, nil); err != nil {
 		t.Fatalf("legacy path (no ModelID) failed: %v", err)
 	}
 }

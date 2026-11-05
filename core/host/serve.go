@@ -61,6 +61,7 @@ type Deps = contracts.GatewaySet
 // Options holds the parsed flags for the serve daemon.
 type Options struct {
 	StatePath     string
+	Models        *ModelDiscovery
 	DefaultCmd    string
 	HealthAddr    string
 	StatusChannel string
@@ -197,6 +198,7 @@ func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, option
 		deps.handler.SetTerminalAdmin(ta)
 	}
 	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions)
+	runningHub.models = options.modelDiscovery()
 	liveStopped := make(chan struct{})
 	go func() {
 		defer close(liveStopped)

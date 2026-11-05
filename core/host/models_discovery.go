@@ -36,7 +36,6 @@ const (
 )
 
 const (
-	envStateDir      = "HERRSCHER_STATE_DIR"
 	cacheDirMode     = 0o700
 	cacheLockTimeout = 10 * time.Second
 	cacheLockPoll    = 10 * time.Millisecond
@@ -118,14 +117,22 @@ type discoveryAnswer struct {
 	err    error
 }
 
-// LoadSources reads the discovered cache and the hidden IDs from the environment.
-func LoadSources() Sources {
-	sources := Sources{hidden: splitSet(envx.Getenv(envModelsHidden)), notices: newClashNotices()}
-	path, err := discoveryCachePath()
-	if err != nil {
-		slog.Warn("model cache disabled", "err", err)
-		return sources
+// ModelDiscovery reads and refreshes the model cache beside one daemon state file.
+type ModelDiscovery struct {
+	dir     string
+	notices *clashNotices
+}
+
+// Sources returns the discovered models of this cache and the hidden IDs; a nil discovery yields the static catalog.
+func (d *ModelDiscovery) Sources() Sources {
+	if d == nil {
+		return Sources{hidden: splitSet(envx.Getenv(envModelsHidden))}
 	}
+	return loadSourcesAt(d.cachePath(), d.notices)
+}
+
+func loadSourcesAt(path string, notices *clashNotices) Sources {
+	sources := Sources{hidden: splitSet(envx.Getenv(envModelsHidden)), notices: notices}
 	cache, err := loadDiscoveryCache(path)
 	if err != nil {
 		slog.Warn("model cache unreadable, using the static catalog", "path", path, "err", err)
@@ -152,14 +159,10 @@ func withoutGatewayRoutes(cache discoveryCache) discoveryCache {
 	return kept
 }
 
-// StartBackgroundDiscovery refreshes the stale vendor lists in the background.
-func StartBackgroundDiscovery(ctx context.Context, plugins []contracts.Plugin) {
+// StartBackground refreshes the stale vendor lists in the background.
+func (d *ModelDiscovery) StartBackground(ctx context.Context, plugins []contracts.Plugin) {
 	go func() {
-		path, err := discoveryCachePath()
-		if err != nil {
-			slog.Warn("model discovery disabled", "err", err)
-			return
-		}
+		path := d.cachePath()
 		cache, err := loadDiscoveryCache(path)
 		if err != nil {
 			slog.Warn("model cache unreadable, refreshing from the backends", "path", path, "err", err)
@@ -222,20 +225,36 @@ func splitSet(raw string) map[string]bool {
 	return set
 }
 
-func discoveryCachePath() (string, error) {
-	if dir := envx.Get("STATE_DIR"); dir != "" {
-		return filepath.Join(dir, discoveryCacheName), nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("locate home for the model cache: %w", err)
-	}
-	return filepath.Join(home, ".config", "herrscher", discoveryCacheName), nil
+func discoveryCacheIn(stateDir string) string {
+	return filepath.Join(stateDir, discoveryCacheName)
 }
 
-// PinStateDir makes the directory of the daemon state file the one every model reader uses.
-func PinStateDir(statePath string) error {
-	return os.Setenv(envStateDir, filepath.Dir(statePath))
+// ModelDiscoveryFor returns the model discovery whose cache sits beside statePath.
+func ModelDiscoveryFor(statePath string) *ModelDiscovery {
+	dir := filepath.Dir(statePath)
+	if envDir := envx.Get("STATE_DIR"); envDir != "" && filepath.Clean(envDir) != filepath.Clean(dir) {
+		slog.Warn("HERRSCHER_STATE_DIR differs from --state, the model cache follows --state", "env", envDir, "state", dir)
+	}
+	return &ModelDiscovery{dir: dir, notices: newClashNotices()}
+}
+
+// DefaultModelDiscovery returns the model discovery of the default daemon state file.
+func DefaultModelDiscovery() *ModelDiscovery {
+	return ModelDiscoveryFor(DefaultStatePath())
+}
+
+func (o Options) modelDiscovery() *ModelDiscovery {
+	if o.Models != nil {
+		return o.Models
+	}
+	if o.StatePath == "" {
+		return DefaultModelDiscovery()
+	}
+	return ModelDiscoveryFor(o.StatePath)
+}
+
+func (d *ModelDiscovery) cachePath() string {
+	return discoveryCacheIn(d.dir)
 }
 
 func loadDiscoveryCache(path string) (discoveryCache, error) {
@@ -376,7 +395,7 @@ func refreshDiscovery(ctx context.Context, plugins []contracts.Plugin, cache dis
 		slog.Warn("gateway credentials unusable for model discovery, listing without them", "err", credsErr)
 	}
 	jobs := discoveryJobs(plugins, cache, settings, now, force, credsErr == nil)
-	access := contracts.DiscoveryAccess{Gateway: creds, Getenv: envx.Getenv}
+	access := contracts.DiscoveryAccess{Gateway: creds, Policy: settings.policy, Getenv: envx.Getenv}
 	answers := askVendors(ctx, jobs, settings.timeout, access)
 	next := cloneCache(cache)
 	outcomes := make([]discoveryOutcome, 0, len(jobs))

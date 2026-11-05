@@ -112,6 +112,7 @@ func declareBackendFlags(flags *flag.FlagSet) backendFlags {
 func (f backendFlags) request() host.BackendRequest {
 	return host.BackendRequest{
 		Vendor: *f.vendor, Cmd: *f.cmd, Kind: *f.kind, Resume: *f.resume, ModelID: *f.modelID,
+		Models: host.DefaultModelDiscovery(),
 	}
 }
 

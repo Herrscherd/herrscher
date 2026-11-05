@@ -78,16 +78,21 @@ func outcomeSummary(outcome discoveryOutcome) string {
 	}
 }
 
-func refreshModels(ctx context.Context) (string, error) {
-	path, err := discoveryCachePath()
-	if err != nil {
-		return "", err
+func modelDiscoveryFor(input contracts.Input) *ModelDiscovery {
+	statePath := input.Get("state")
+	if statePath == "" {
+		statePath = DefaultStatePath()
 	}
+	return ModelDiscoveryFor(statePath)
+}
+
+func refreshModels(ctx context.Context, plugins []contracts.Plugin, models *ModelDiscovery) (string, error) {
+	path := models.cachePath()
 	cache, err := loadDiscoveryCache(path)
 	if err != nil {
 		return "", err
 	}
-	next, outcomes := refreshDiscovery(ctx, contracts.Default.Backends(), cache, resolveDiscoverySettings(), time.Now(), true)
+	next, outcomes := refreshDiscovery(ctx, plugins, cache, resolveDiscoverySettings(), time.Now(), true)
 	if anyRefreshed(outcomes) {
 		if err := persistRefreshed(path, next, outcomes); err != nil {
 			return "", err
@@ -100,9 +105,10 @@ func refreshModels(ctx context.Context) (string, error) {
 func ModelsCommands() []contracts.Cmd {
 	return []contracts.Cmd{
 		contracts.New("models", "list").
+			ValueParam("state", "daemon state file whose model cache is read (default: the daemon default)", false).
 			Help("list the models every compiled backend offers, under the active route policy, with their source; --json for the app").
 			Do(func(_ context.Context, input contracts.Input) (string, error) {
-				entries, err := CatalogWith(contracts.Default.Backends(), ResolvePolicy(envx.Getenv), LoadSources())
+				entries, err := CatalogWith(contracts.Default.Backends(), ResolvePolicy(envx.Getenv), modelDiscoveryFor(input).Sources())
 				if err != nil {
 					return "", err
 				}
@@ -112,9 +118,10 @@ func ModelsCommands() []contracts.Cmd {
 				return modelsListText(entries), nil
 			}),
 		contracts.New("models", "refresh").
+			ValueParam("state", "daemon state file whose model cache is written (default: the daemon default)", false).
 			Help("ask every backend for its live model list now and store it; a failed backend keeps its last known list").
-			Do(func(ctx context.Context, _ contracts.Input) (string, error) {
-				return refreshModels(ctx)
+			Do(func(ctx context.Context, input contracts.Input) (string, error) {
+				return refreshModels(ctx, contracts.Default.Backends(), modelDiscoveryFor(input))
 			}),
 	}
 }

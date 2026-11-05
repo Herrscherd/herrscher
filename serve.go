@@ -65,9 +65,7 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 			return loadErr
 		}
 	}
-	if pinErr := host.PinStateDir(*statePath); pinErr != nil {
-		return pinErr
-	}
+	models := host.ModelDiscoveryFor(*statePath)
 	owner := or(envx.Get("OWNER_ID"), cfg.Owner)
 	var home *host.HomeRef
 	if cfg.Home != nil && cfg.Home.ID != "" {
@@ -89,6 +87,7 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 
 	opts := host.Options{
 		StatePath:           *statePath,
+		Models:              models,
 		DefaultCmd:          *defaultCmd,
 		HealthAddr:          *healthAddr,
 		StatusChannel:       *statusChannel,
@@ -105,7 +104,7 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 	withCompactionConfig(&opts, cfg)
 
 	openOnForeground(open, foreground)
-	host.StartBackgroundDiscovery(ctx, contracts.Default.Backends())
+	models.StartBackground(ctx, contracts.Default.Backends())
 	return runHubForeground(ctx, *statePath, gws, closers, foreground, opts)
 }
 

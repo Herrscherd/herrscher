@@ -23,6 +23,7 @@ type noticeGateway struct {
 	fakeGateway
 
 	delivered chan noticeRecord
+	entered   chan struct{}
 	release   chan struct{}
 }
 
@@ -31,6 +32,9 @@ func newNoticeGateway() *noticeGateway {
 }
 
 func (g *noticeGateway) Notify(ctx context.Context, conv contracts.Conversation, lang i18n.Language, notice contracts.Notice) (contracts.MessageID, error) {
+	if g.entered != nil {
+		g.entered <- struct{}{}
+	}
 	if g.release != nil {
 		select {
 		case <-g.release:
@@ -253,5 +257,82 @@ func TestGoLiveUsesTheSessionLanguage(t *testing.T) {
 	awaitRegisteredIncarnation(t, sessions, name, "incarnation")
 	if got := sessions.lookup(name).lang; got != i18n.English {
 		t.Fatalf("driver language = %v, want the session language English over the operator French", got)
+	}
+}
+
+func openTurnFromElsewhere(t *testing.T, f *compactFixture, tokensIn int) {
+	t.Helper()
+	f.driver.queue <- queued{ev: contracts.Event{T: eventInput, Text: "vas-y"}, origin: contracts.Conversation{Gateway: "elsewhere"}}
+	if in := nextFrame(t, f); in.T != eventInput {
+		t.Fatalf("frame = %+v, want the input turn", in)
+	}
+	f.from <- contracts.Event{T: eventReply, Text: "fini", Done: true, TokensIn: tokensIn}
+}
+
+func TestAutomaticCompactionNoticeReachesTheGatewayAfterATurnFromElsewhere(t *testing.T) {
+	gateway := newNoticeGateway()
+	f := newConfiguredCompactFixture(t, "claude", compactPolicy(50), func(d *sessionDriver) {
+		d.gateways = []contracts.GatewaySet{{Gateway: gateway}}
+		d.lang = i18n.French
+	})
+	openTurnFromElsewhere(t, f, 150_000)
+	if !compactFrameOrQuiet(t, f, mustAnswer(t, contracts.CompactResult{TokensAfter: 20_000, TokensMeasured: true, Note: "compacté", Notice: contracts.Notice{Code: contracts.CodeCompacted}})) {
+		t.Fatal("no automatic compaction after a turn from elsewhere")
+	}
+	if got := awaitNotice(t, gateway); got.notice.Code != contracts.CodeCompacted {
+		t.Fatalf("notice = %+v, want compaction.done", got.notice)
+	}
+}
+
+func TestManualCompactionNoticeReachesTheGatewayAfterATurnFromElsewhere(t *testing.T) {
+	gateway := newNoticeGateway()
+	f := newConfiguredCompactFixture(t, "claude", compactPolicy(92), func(d *sessionDriver) {
+		d.gateways = []contracts.GatewaySet{{Gateway: gateway}}
+		d.lang = i18n.French
+	})
+	openTurnFromElsewhere(t, f, 10)
+	f.driver.requestCompaction("", contracts.Conversation{})
+	nextFrame(t, f)
+	f.from <- mustAnswer(t, contracts.CompactResult{TokensAfter: 4_000, TokensMeasured: true, Note: "compacté", Notice: contracts.Notice{Code: contracts.CodeCompacted}})
+	if got := awaitNotice(t, gateway); got.notice.Code != contracts.CodeCompacted {
+		t.Fatalf("notice = %+v, want compaction.done", got.notice)
+	}
+}
+
+func TestNoticeIsDeliveredWhenTheParentContextIsCancelledDuringANotify(t *testing.T) {
+	gateway := newNoticeGateway()
+	gateway.entered = make(chan struct{}, 1)
+	gateway.release = make(chan struct{})
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: gateway}}, nil, nil)
+	parent, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go d.deliverNotices(parent)
+	d.notifyGateways(parent, contracts.Notice{Code: contracts.CodeCompacted})
+	select {
+	case <-gateway.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("gateway never started the notice")
+	}
+	cancel()
+	close(gateway.release)
+	if got := awaitNotice(t, gateway); got.notice.Code != contracts.CodeCompacted {
+		t.Fatalf("notice = %+v, want compaction.done after the parent was cancelled", got.notice)
+	}
+}
+
+func TestNoticesReachTheGatewayInTheOrderTheyWereRaised(t *testing.T) {
+	gateway := newNoticeGateway()
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: gateway}}, nil, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go d.deliverNotices(ctx)
+	codes := []contracts.Code{contracts.CodeCompacted, contracts.CodeCompactUnavailable, contracts.Code(99)}
+	for _, code := range codes {
+		d.notifyGateways(ctx, contracts.Notice{Code: code})
+	}
+	for _, code := range codes {
+		if got := awaitNotice(t, gateway); got.notice.Code != code {
+			t.Fatalf("notice = %d, want %d in raising order", got.notice.Code, code)
+		}
 	}
 }

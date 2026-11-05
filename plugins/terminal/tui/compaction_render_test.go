@@ -135,6 +135,9 @@ func TestNoticeEventAddsANoticeLine(t *testing.T) {
 	m.active = "c"
 
 	m.renderInto(tb, contracts.Event{T: eventNotice, Text: "contexte compacté"})
+	if len(tb.entries) == 0 {
+		t.Fatal("no entry rendered for the notice")
+	}
 	last := tb.entries[len(tb.entries)-1]
 	if last.role != roleNotice || last.text != "contexte compacté" {
 		t.Fatalf("last entry = %+v, want the notice as a notice line", last)

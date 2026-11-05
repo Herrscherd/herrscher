@@ -299,12 +299,16 @@ func TestMergedRequestIsNotAcceptedWhenTheFirstEnqueueFails(t *testing.T) {
 	queue <- queued{ev: contracts.Event{T: eventInput}}
 	d := &sessionDriver{queue: queue, enqueueTimeout: 100 * time.Millisecond}
 	first := make(chan [2]bool, 1)
+	registered := make(chan struct{})
+	d.compactRegistered = func() { close(registered) }
 	go func() {
 		merged, accepted := d.requestCompaction("premier", contracts.Conversation{})
 		first <- [2]bool{merged, accepted}
 	}()
-	for !waitingCompaction(d) {
-		time.Sleep(time.Millisecond)
+	select {
+	case <-registered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first request never registered")
 	}
 	merged, accepted := d.requestCompaction("second", contracts.Conversation{})
 	if !merged || accepted {
@@ -316,12 +320,6 @@ func TestMergedRequestIsNotAcceptedWhenTheFirstEnqueueFails(t *testing.T) {
 	if n := len(queue); n != 1 {
 		t.Fatalf("queue holds %d items, want only the filler", n)
 	}
-}
-
-func waitingCompaction(d *sessionDriver) bool {
-	d.compactMu.Lock()
-	defer d.compactMu.Unlock()
-	return d.compactWaiting != nil
 }
 
 func TestMeasuredCompactionStillAboveThresholdDoesNotLoop(t *testing.T) {

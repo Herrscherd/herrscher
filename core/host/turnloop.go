@@ -69,6 +69,7 @@ type sessionDriver struct {
 	running       atomic.Bool
 	channel       string
 	saidElsewhere bool
+	notices       chan noticeDelivery
 	gateways      []contracts.GatewaySet
 	toBridge      chan<- contracts.Event
 	from          <-chan contracts.Event
@@ -98,14 +99,15 @@ type sessionDriver struct {
 
 	gate budgetGate
 
-	terms          func() modelTerms
-	compaction     compactionPolicy
-	percentOf      func() int
-	turnReading    int
-	compactSpent   bool
-	compactMu      sync.Mutex
-	compactWaiting *compactRequest
-	lang           i18n.Language
+	terms             func() modelTerms
+	compaction        compactionPolicy
+	percentOf         func() int
+	turnReading       int
+	compactSpent      bool
+	compactMu         sync.Mutex
+	compactWaiting    *compactRequest
+	compactRegistered func()
+	lang              i18n.Language
 }
 
 type queued struct {
@@ -124,6 +126,7 @@ func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- c
 		renderers: make(map[string]*gatewayRenderer),
 		hangup:    make(chan struct{}, 1),
 		seen:      make(map[string]bool),
+		notices:   make(chan noticeDelivery, noticeQueueCapacity),
 		gate:      noBudgetGate{},
 
 		enqueueTimeout: defaultEnqueueTimeout,
@@ -432,6 +435,7 @@ func (d *sessionDriver) run(ctx context.Context) {
 			go d.poll(ctx, gateway.Reader)
 		}
 	}
+	go d.deliverNotices(ctx)
 	d.pump(ctx)
 }
 
@@ -904,15 +908,15 @@ func (d *sessionDriver) fanOut(ctx context.Context, event contracts.Event) {
 	if d.emitTap != nil {
 		d.emitTap(event)
 	}
+	if d.saidElsewhere {
+		return
+	}
 	d.eachGateway(func(index int, gateway contracts.GatewaySet) {
 		d.emitToGateway(ctx, index, gateway, event)
 	})
 }
 
 func (d *sessionDriver) eachGateway(visit func(index int, gateway contracts.GatewaySet)) {
-	if d.saidElsewhere {
-		return
-	}
 	for index, gateway := range d.gateways {
 		visit(index, gateway)
 	}

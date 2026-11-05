@@ -23,6 +23,7 @@ const (
 	defaultCompactPercent = 92
 	percentScale          = 100
 	noticeTimeout         = 10 * time.Second
+	noticeQueueCapacity   = 32
 	eventCompactNow       = "compact_now"
 	eventCompactStarted   = "compaction_started"
 	eventCompactDone      = "compaction_done"
@@ -296,6 +297,13 @@ func (d *sessionDriver) noticeRenders(notice contracts.Notice) bool {
 	return err == nil
 }
 
+type noticeDelivery struct {
+	sink   contracts.NoticeSink
+	conv   contracts.Conversation
+	lang   i18n.Language
+	notice contracts.Notice
+}
+
 func (d *sessionDriver) notifyGateways(ctx context.Context, notice contracts.Notice) {
 	d.eachGateway(func(_ int, gateway contracts.GatewaySet) {
 		sink, ok := gateway.Gateway.(contracts.NoticeSink)
@@ -303,14 +311,38 @@ func (d *sessionDriver) notifyGateways(ctx context.Context, notice contracts.Not
 			return
 		}
 		conv := contracts.Conversation{Gateway: gateway.Gateway.Manifest().Kind, ID: d.renderChannel(gateway)}
-		go deliverNotice(ctx, sink, conv, d.lang, notice)
+		d.enqueueNotice(ctx, noticeDelivery{sink: sink, conv: conv, lang: d.lang, notice: notice})
 	})
 }
 
-func deliverNotice(parent context.Context, sink contracts.NoticeSink, conv contracts.Conversation, lang i18n.Language, notice contracts.Notice) {
+func (d *sessionDriver) enqueueNotice(ctx context.Context, delivery noticeDelivery) {
+	select {
+	case d.notices <- delivery:
+		return
+	default:
+	}
+	select {
+	case d.notices <- delivery:
+	case <-ctx.Done():
+		warnStderr("herrscher serve: session %q: notice dropped, the session is closing\n", d.name)
+	}
+}
+
+func (d *sessionDriver) deliverNotices(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case delivery := <-d.notices:
+			deliverNotice(ctx, delivery)
+		}
+	}
+}
+
+func deliverNotice(parent context.Context, delivery noticeDelivery) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), noticeTimeout)
 	defer cancel()
-	if _, err := sink.Notify(ctx, conv, lang, notice); err != nil && !errors.Is(err, contracts.ErrNoticeFallbackPosted) {
+	if _, err := delivery.sink.Notify(ctx, delivery.conv, delivery.lang, delivery.notice); err != nil && !errors.Is(err, contracts.ErrNoticeFallbackPosted) {
 		logCleanup(err)
 	}
 }
@@ -367,6 +399,9 @@ func (d *sessionDriver) requestCompaction(instruction string, origin contracts.C
 	request := &compactRequest{instruction: instruction, done: make(chan struct{})}
 	d.compactWaiting = request
 	d.compactMu.Unlock()
+	if d.compactRegistered != nil {
+		d.compactRegistered()
+	}
 	request.queued = d.enqueue(queued{ev: contracts.Event{T: eventCompactNow}, origin: origin})
 	if !request.queued {
 		d.clearCompactWaiting(request)

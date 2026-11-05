@@ -177,7 +177,7 @@
   {
     "id": "cli.flag.channel",
     "description": "Aide de l'option --channel de bridge",
-    "other": "identifiant de la conversation à laquelle répond ce bridge"
+    "other": "identifiant de la conversation à laquelle répond ce pont"
   },
   {
     "id": "cli.flag.channel_short",
@@ -322,7 +322,7 @@
   {
     "id": "cli.serve.flag.cmd",
     "description": "Aide de l'option --cmd de serve",
-    "other": "commande de base reliée par bridge pour les nouvelles sessions (le mode stream-json ajoute -p et les options de flux)"
+    "other": "commande de base reliée par le pont pour les nouvelles sessions (le mode stream-json ajoute -p et les options de flux)"
   },
   {
     "id": "cli.serve.flag.health_addr",
@@ -427,12 +427,12 @@
   {
     "id": "cli.bridge.flag.state",
     "description": "Aide de l'option --state de bridge",
-    "other": "chemin du fichier d'état du démon dont le bridge lit le cache des modèles (vide = fichier d'état par défaut)"
+    "other": "chemin du fichier d'état du démon dont le pont lit le cache des modèles (vide = fichier d'état par défaut)"
   },
   {
     "id": "cli.bridge.flag.env_stdin",
     "description": "Aide de l'option --env-stdin de bridge",
-    "other": "lit des lignes KEY=VALUE sur l'entrée standard jusqu'à une ligne vide et les place dans l'environnement de ce processus (c'est ainsi qu'un bridge distant reçoit ses identifiants de passerelle)"
+    "other": "lit des lignes KEY=VALUE sur l'entrée standard jusqu'à une ligne vide et les place dans l'environnement de ce processus (c'est ainsi qu'un pont distant reçoit ses identifiants de passerelle)"
   },
   {
     "id": "cli.bridge.flag.cmd",
@@ -1400,12 +1400,12 @@
   {
     "id": "cli.session.account.notice",
     "description": "Confirmation de session set-account : le compte s'applique au prochain lancement et le bridge en cours garde l'ancien",
-    "other": "compte de {{.Name}} réglé sur {{.Account}} : effectif au prochain lancement de la session ; le bridge en cours garde l'ancien compte"
+    "other": "compte de {{.Name}} réglé sur {{.Account}} : effectif au prochain lancement de la session ; le pont en cours garde l'ancien compte"
   },
   {
     "id": "cli.session.account.notice_fresh",
     "description": "Confirmation de session set-account avec fresh : la conversation précédente n'est plus reprise au prochain lancement",
-    "other": "compte de {{.Name}} réglé sur {{.Account}} : au prochain lancement, la conversation précédente n'est plus reprise et une nouvelle s'ouvre sous ce compte ; le bridge en cours garde l'ancien compte jusqu'au prochain lancement"
+    "other": "compte de {{.Name}} réglé sur {{.Account}} : au prochain lancement, la conversation précédente n'est plus reprise et une nouvelle s'ouvre sous ce compte ; le pont en cours garde l'ancien compte jusqu'au prochain lancement"
   },
   {
     "id": "cli.session.account.vendor_default",

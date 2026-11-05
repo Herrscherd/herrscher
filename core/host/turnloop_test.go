@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -1036,14 +1037,41 @@ func TestDriverAnnouncesCoordinatorSuccessInSessionLanguage(t *testing.T) {
 		{name: "seal in english", trailer: "⟢ seal: 4", lang: i18n.English, want: "cohort sealed at 4"},
 		{name: "merge in french", trailer: "⟢ merge: worker-1", lang: i18n.French, want: "fusion traitée pour lead"},
 		{name: "merge in english", trailer: "⟢ merge: worker-1", lang: i18n.English, want: "merge handled for lead"},
-		{name: "launch in french", trailer: "⟢ fanout: scripter \u2014 a ;; b", lang: i18n.French, want: "cohorte lancée : 2 workers (scripter-w, scripter-w)"},
-		{name: "launch in english", trailer: "⟢ fanout: scripter \u2014 a ;; b", lang: i18n.English, want: "cohort launched: 2 workers (scripter-w, scripter-w)"},
 	}
 	for index := range tests {
 		t.Run(tests[index].name, func(t *testing.T) {
 			requireCoordinatorStatus(t, &recordingCoord{}, tests[index].lang, tests[index].trailer, tests[index].want)
 		})
 	}
+}
+
+func TestDriverAnnouncesLaunchedCohortWithEachWorkerName(t *testing.T) {
+	tests := []struct {
+		name string
+		lang i18n.Language
+		want string
+	}{
+		{name: "in french", lang: i18n.French, want: "cohorte lancée : 2 workers (scripter-w1, scripter-w2)"},
+		{name: "in english", lang: i18n.English, want: "cohort launched: 2 workers (scripter-w1, scripter-w2)"},
+	}
+	for index := range tests {
+		t.Run(tests[index].name, func(t *testing.T) {
+			requireCoordinatorStatus(t, &distinctWorkersCoord{}, tests[index].lang, "⟢ fanout: scripter \u2014 a ;; b", tests[index].want)
+		})
+	}
+}
+
+type distinctWorkersCoord struct {
+	recordingCoord
+}
+
+func (r *distinctWorkersCoord) FanOut(_ context.Context, req contracts.FanOutRequest) ([]string, error) {
+	r.fanouts = append(r.fanouts, req)
+	spawned := make([]string, len(req.Tasks))
+	for i := range req.Tasks {
+		spawned[i] = req.ToAgent + "-w" + strconv.Itoa(i+1)
+	}
+	return spawned, nil
 }
 
 func requireCoordinatorStatus(t *testing.T, coord contracts.Coordinator, lang i18n.Language, trailer, want string) {

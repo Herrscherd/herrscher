@@ -273,10 +273,19 @@ func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.Com
 }
 
 func (d *sessionDriver) failCompaction(ctx context.Context, trigger contracts.CompactTrigger, err error) {
-	if typed, ok := errors.AsType[contracts.NoticeError](err); ok && d.noticeRenders(typed.Notice()) {
-		d.notifyGateways(typed.Notice())
+	var text string
+	if !d.queueFailureNotice(err) {
+		text = compactFailureText(d.messages, d.lang, err)
 	}
-	d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String(), Text: compactFailureText(d.messages, d.lang, err)})
+	d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String(), Text: text})
+}
+
+func (d *sessionDriver) queueFailureNotice(err error) bool {
+	typed, ok := errors.AsType[contracts.NoticeError](err)
+	if !ok || !d.noticeRenders(typed.Notice()) {
+		return false
+	}
+	return d.notifyGateways(typed.Notice())
 }
 
 func compactFailureText(messages *hostMessages, lang i18n.Language, err error) string {
@@ -326,22 +335,28 @@ type noticeDelivery struct {
 	notice contracts.Notice
 }
 
-func (d *sessionDriver) notifyGateways(notice contracts.Notice) {
+func (d *sessionDriver) notifyGateways(notice contracts.Notice) bool {
+	queued := false
 	d.eachGateway(func(_ int, gateway contracts.GatewaySet) {
 		sink, ok := gateway.Gateway.(contracts.NoticeSink)
 		if !ok {
 			return
 		}
 		conv := contracts.Conversation{Gateway: gateway.Gateway.Manifest().Kind, ID: d.renderChannel(gateway)}
-		d.enqueueNotice(noticeDelivery{sink: sink, conv: conv, lang: d.lang, notice: notice})
+		if d.enqueueNotice(noticeDelivery{sink: sink, conv: conv, lang: d.lang, notice: notice}) {
+			queued = true
+		}
 	})
+	return queued
 }
 
-func (d *sessionDriver) enqueueNotice(delivery noticeDelivery) {
+func (d *sessionDriver) enqueueNotice(delivery noticeDelivery) bool {
 	select {
 	case d.notices <- delivery:
+		return true
 	default:
 		d.noticeLog.Warn("compaction notice dropped, the gateway's queue is full", keySession, d.name, "code", delivery.notice.Code, "gateway", delivery.conv.Gateway)
+		return false
 	}
 }
 

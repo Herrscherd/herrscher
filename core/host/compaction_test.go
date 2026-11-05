@@ -229,7 +229,20 @@ func TestBackendWithoutCompactorIsRefusedBeforeAnySend(t *testing.T) {
 	if got.notice.Code != contracts.CodeCompactUnavailable {
 		t.Fatalf("notice code = %v, want %v", got.notice.Code, contracts.CodeCompactUnavailable)
 	}
-	requireRenderedText(t, failed.Text, got.notice, i18n.French)
+	if failed.Text != "" {
+		t.Fatalf("compaction_failed text = %q, want none while the linked gateway shows the notice", failed.Text)
+	}
+	expectNoFrame(t, f)
+}
+
+func TestCompactFailureTextIsKeptWhenNoGatewayIsLinked(t *testing.T) {
+	f := newConfiguredCompactFixture(t, "cursor", compactPolicy(92), func(d *sessionDriver) {
+		d.lang = i18n.French
+	})
+	f.driver.requestCompaction("", contracts.Conversation{})
+	failed := waitEmitted(t, f, eventCompactFailed)
+	_, err := f.driver.compactStages()
+	requireRenderedText(t, failed.Text, contracts.NoticeOf(err), i18n.French)
 	expectNoFrame(t, f)
 }
 

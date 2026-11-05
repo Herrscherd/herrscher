@@ -198,7 +198,9 @@ func TestUnsupportedCompactionFailureTravelsAsANotice(t *testing.T) {
 	if got.notice.Code != contracts.CodeCompactUnavailable {
 		t.Fatalf("notice = %+v, want compact.unavailable", got.notice)
 	}
-	requireRenderedText(t, failed.Text, got.notice, i18n.French)
+	if failed.Text != "" {
+		t.Fatalf("compaction_failed text = %q, want none while the linked gateway shows the notice", failed.Text)
+	}
 	if reason := reasonText(t, got.notice); !strings.Contains(reason, `"s1"`) || !strings.Contains(reason, `"codex"`) {
 		t.Fatalf("reason = %q, want the session and its vendor", reason)
 	}
@@ -354,6 +356,31 @@ func (b *lockedBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
+}
+
+func TestFailureTextIsKeptWhenTheFullQueueDropsItsNotice(t *testing.T) {
+	gateway := newNoticeGateway()
+	gateway.entered = make(chan struct{}, 1)
+	gateway.release = make(chan struct{})
+	t.Cleanup(func() { close(gateway.release) })
+	f := newConfiguredCompactFixture(t, "cursor", compactPolicy(92), func(d *sessionDriver) {
+		d.gateways = []contracts.GatewaySet{{Gateway: gateway}}
+		d.lang = i18n.French
+		d.noticeLog = slog.New(slog.NewTextHandler(&lockedBuffer{}, nil))
+	})
+	blocked := noticeDelivery{sink: gateway, conv: contracts.Conversation{}, lang: i18n.French, notice: contracts.Notice{Code: contracts.CodeCompacted}}
+	for range noticeQueueCapacity + 1 {
+		f.driver.notices <- blocked
+	}
+	select {
+	case <-gateway.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("gateway never started the first notice")
+	}
+	f.driver.requestCompaction("", contracts.Conversation{})
+	failed := waitEmitted(t, f, eventCompactFailed)
+	_, err := f.driver.compactStages()
+	requireRenderedText(t, failed.Text, contracts.NoticeOf(err), i18n.French)
 }
 
 func TestFullNoticeQueueDropsTheNoticeAndTheTurnAdvances(t *testing.T) {

@@ -37,12 +37,13 @@ var (
 )
 
 type handoffDeps struct {
-	exists func(name string) bool
-	root   func(name string) string
-	brief  func(ctx context.Context, source string) (string, error)
-	create func(ctx context.Context, in contracts.Input) (string, error)
-	send   func(ctx context.Context, target, author, text string) error
-	limit  *handoffLimiter
+	exists  func(name string) bool
+	root    func(name string) string
+	account func(name string) string
+	brief   func(ctx context.Context, source string) (string, error)
+	create  func(ctx context.Context, in contracts.Input) (string, error)
+	send    func(ctx context.Context, target, author, text string) error
+	limit   *handoffLimiter
 }
 
 type handoffLimiter struct {
@@ -101,6 +102,10 @@ func sessionHandoffCmd(managerCmds []contracts.Cmd, store *state.State, sessions
 		},
 		root: func(name string) string {
 			return state.TreeRoot(store.SnapshotSessions(), name)
+		},
+		account: func(name string) string {
+			session, _ := store.FindSession(name)
+			return session.Account
 		},
 		brief: func(ctx context.Context, source string) (string, error) {
 			in := contracts.Input{Args: map[string]string{paramName: source, "task": handoffBriefTask, "timeout": handoffBriefTimeout}}
@@ -201,7 +206,7 @@ func (d handoffDeps) open(ctx context.Context, source, target, parent string, in
 	if err != nil {
 		return "", "", fmt.Errorf("the brief from %q: %w", source, err)
 	}
-	reply, err := d.create(ctx, contracts.Input{Args: newSessionArgs(target, input, parent)})
+	reply, err := d.create(ctx, contracts.Input{Args: newSessionArgs(target, d.account(source), input, parent)})
 	if err != nil {
 		return "", "", err
 	}
@@ -215,8 +220,11 @@ func (d handoffDeps) deliver(ctx context.Context, source, target, reply, brief s
 	return handoffReport(source, target, reply, brief), nil
 }
 
-func newSessionArgs(target string, input contracts.Input, parent string) map[string]string {
+func newSessionArgs(target, account string, input contracts.Input, parent string) map[string]string {
 	args := map[string]string{paramName: target}
+	if account != "" {
+		args["account"] = account
+	}
 	for _, key := range []string{"project", "model", "vendor", paramUnder, paramChannel} {
 		if value := input.Get(key); value != "" {
 			args[key] = value

@@ -1,6 +1,7 @@
 package keyproxy
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -108,7 +109,9 @@ func TestStreamCutAfterFirstChunkIsNotReplayed(t *testing.T) {
 	t.Cleanup(upstream.Close)
 	proxy := openProxy(t, upstream.URL, config.ProviderKeys{}, "first", "second")
 	grant := grantFor(t, proxy)
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, grant.BaseURL+"/v1/messages", strings.NewReader("{}"))
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, grant.BaseURL+"/v1/messages", strings.NewReader("{}"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -42,8 +42,9 @@ func fakeHandoff(rec *handoffRecord, clock func() time.Time, known ...string) ha
 			rec.sentTo, rec.sentText = target, text
 			return nil
 		},
-		root:  func(name string) string { return name },
-		limit: newHandoffLimiter(clock),
+		root:    func(name string) string { return name },
+		account: func(string) string { return "" },
+		limit:   newHandoffLimiter(clock),
 	}
 }
 
@@ -71,6 +72,25 @@ func TestHandoffSendsTheBriefAsTheFirstMessageOfTheNewSession(t *testing.T) {
 	}
 	if !strings.Contains(out, "created beta") || !strings.Contains(out, "BRIEF of alpha") {
 		t.Fatalf("the operator must see the created session and the brief, got %q", out)
+	}
+}
+
+func TestHandoffForwardsTheAccountOfTheSourceSession(t *testing.T) {
+	rec := &handoffRecord{}
+	deps := fakeHandoff(rec, fixedClock(), "alpha")
+	deps.account = func(name string) string {
+		if name == "alpha" {
+			return "work"
+		}
+		return ""
+	}
+	_, err := runHandoff(withLocalPrincipal(context.Background()), deps,
+		map[string]string{paramName: "alpha", paramTo: "beta"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.created) != 1 || rec.created[0].Get("account") != "work" {
+		t.Fatalf("create args = %v, want the account of alpha forwarded as work", rec.created)
 	}
 }
 

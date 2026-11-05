@@ -253,11 +253,9 @@ func buildBackend(ctx context.Context, req BackendRequest) (contracts.Backend, f
 	if err != nil {
 		return nil, noRelease, err
 	}
-	var route modelRoute
-	if req.ModelID != "" {
-		if route, err = modelRouteFor(entry, req.Keys); err != nil {
-			return nil, noRelease, err
-		}
+	route, err := routeFor(req.ModelID, entry, req.Keys)
+	if err != nil {
+		return nil, noRelease, err
 	}
 	failWith := func(err error) (contracts.Backend, func(), error) {
 		route.lease()()
@@ -268,11 +266,8 @@ func buildBackend(ctx context.Context, req BackendRequest) (contracts.Backend, f
 		return failWith(err)
 	}
 	if fromRemote {
-		if len(route.env) > 0 {
-			return failWith(&gatewayEnvUnsupportedError{Model: req.ModelID})
-		}
-		if req.Account != "" {
-			return failWith(&remoteAccountError{Account: req.Account})
+		if refusal := req.remoteRefusal(route); refusal != nil {
+			return failWith(refusal)
 		}
 		return backend, noRelease, nil
 	}
@@ -335,12 +330,25 @@ func chooseVendor(requested, modelID string, plugins []contracts.Plugin) (string
 	return vendor, entry, nil
 }
 
-func modelRouteFor(entry CatalogEntry, keys *keyproxy.Proxy) (modelRoute, error) {
+func routeFor(modelID string, entry CatalogEntry, keys *keyproxy.Proxy) (modelRoute, error) {
+	if modelID == "" {
+		return modelRoute{}, nil
+	}
 	env, release, err := spawnEnvVia(entry, os.Getenv, keys)
 	if err != nil {
 		return modelRoute{}, err
 	}
 	return modelRoute{env: env, arg: entry.Arg, grant: release}, nil
+}
+
+func (req BackendRequest) remoteRefusal(route modelRoute) error {
+	if len(route.env) > 0 {
+		return &gatewayEnvUnsupportedError{Model: req.ModelID}
+	}
+	if req.Account != "" {
+		return &remoteAccountError{Account: req.Account}
+	}
+	return nil
 }
 
 func applyBackendRequest(settings map[string]string, req BackendRequest, route modelRoute) {

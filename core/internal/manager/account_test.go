@@ -43,6 +43,7 @@ func TestAccountGateRefusesAnUnknownProfileBeforeCreate(t *testing.T) {
 }
 
 func newAccountHandler(t *testing.T, validate func(vendor, profile string) error, resolve func(vendor, modelID string) (string, error)) *Handler {
+	t.Helper()
 	return NewHandler(nil, nil, nil, nil, nil, agent.NewStore(t.TempDir()), nil, "", "", nil, validate, resolve)
 }
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/bridge"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/envx"
@@ -99,6 +100,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	driver := newSessionDriver(sess.Name, nil, toBridge, fromBridge)
 	driver.incarnation = sess.Incarnation
 	driver.agent = sess.Agent
+	driver.language = func() i18n.Language { return knownSessionLanguage(sess) }
 	attachOneShotTaps(driver, sess.Name, runtime)
 	pumpCtx, pumpCancel := context.WithCancel(seedCtx)
 	defer pumpCancel()

@@ -16,11 +16,13 @@ import (
 //go:embed locales
 var locales embed.FS
 
+// ErrUndeclaredKey reports a key that the platform texts do not declare.
 var ErrUndeclaredKey = errors.New("platform text key not declared")
 
 // Key names one line of the platform texts.
 type Key string
 
+// Keys of the platform texts.
 const (
 	UsageTagline      Key = "cli.usage.tagline"
 	UsageEnvBot       Key = "cli.usage.env.bot"

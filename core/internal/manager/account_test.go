@@ -2,6 +2,7 @@ package manager
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/Herrscherd/herrscher/core/internal/agent"
@@ -41,29 +42,45 @@ func TestAccountGateRefusesAnUnknownProfileBeforeCreate(t *testing.T) {
 	}
 }
 
+func newAccountHandler(t *testing.T, validate func(vendor, profile string) error, resolve func(vendor, modelID string) (string, error)) *Handler {
+	return NewHandler(nil, nil, nil, nil, nil, agent.NewStore(t.TempDir()), nil, "", "", nil, validate, resolve)
+}
+
 func TestAccountWithoutAResolvableVendorIsRefused(t *testing.T) {
-	h := &Handler{agents: agent.NewStore(t.TempDir()), validateAccount: func(_, _ string) error { return nil }}
-	if err := h.checkAccount(runtimeChoice{}, "ghost"); !errors.Is(err, ErrAccountVendor) {
+	accept := func(_, _ string) error { return nil }
+	if err := newAccountHandler(t, accept, nil).checkAccount(runtimeChoice{}, "ghost"); !errors.Is(err, ErrAccountVendor) {
 		t.Fatalf("checkAccount without a vendor: err %v, want ErrAccountVendor", err)
 	}
-	h.SetVendorResolver(func(string, string) (string, error) { return "", errors.New("no backend") })
-	if err := h.checkAccount(runtimeChoice{}, "ghost"); !errors.Is(err, ErrAccountVendor) {
+	unresolved := func(string, string) (string, error) { return "", errors.New("no backend") }
+	if err := newAccountHandler(t, accept, unresolved).checkAccount(runtimeChoice{}, "ghost"); !errors.Is(err, ErrAccountVendor) {
 		t.Fatalf("checkAccount with an unresolved vendor: err %v, want ErrAccountVendor", err)
 	}
 }
 
 func TestAccountIsCheckedAgainstTheResolvedVendor(t *testing.T) {
 	var checked string
-	h := &Handler{agents: agent.NewStore(t.TempDir()), validateAccount: func(vendor, _ string) error {
+	h := newAccountHandler(t, func(vendor, _ string) error {
 		checked = vendor
 		return nil
-	}}
-	h.SetVendorResolver(func(string, string) (string, error) { return "codex", nil })
+	}, func(string, string) (string, error) { return "codex", nil })
 	if err := h.checkAccount(runtimeChoice{}, "perso"); err != nil {
 		t.Fatal(err)
 	}
 	if checked != "codex" {
 		t.Fatalf("account checked against %q, want the resolved vendor codex", checked)
+	}
+}
+
+func TestAccountOnAnotherHostIsRefusedBeforeTheLocalCheck(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "forum")
+	st.Home = state.HomeRef{ID: "home", Type: "forum"}
+	h.validateAccount = func(_, _ string) error { return nil }
+	_, err := h.parseCreateRequest(t.Context(), args("name", "remote-session", "vendor", "claude", "account", "perso", "host", "box"))
+	if !errors.Is(err, ErrAccountHost) {
+		t.Fatalf("account on a remote host: err %v, want ErrAccountHost", err)
+	}
+	if !strings.Contains(err.Error(), `"box"`) {
+		t.Fatalf("error does not name the host: %v", err)
 	}
 }
 

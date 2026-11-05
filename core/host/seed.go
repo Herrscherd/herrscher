@@ -245,18 +245,17 @@ func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend
 }
 
 func buildBackend(ctx context.Context, req BackendRequest) (contracts.Backend, func(), error) {
-	desired := req.Vendor
-	if desired == "" {
-		desired = os.Getenv("HERRSCHER_BACKEND")
-	}
 	plugins := contracts.Default.Backends()
 	if req.ModelID == "" && ResolvePolicy(os.Getenv) == contracts.PolicyGatewayOnly {
 		return nil, noRelease, errGatewayOnlyNoModel
 	}
+	desired, entry, err := chooseVendor(req.Vendor, req.ModelID, plugins)
+	if err != nil {
+		return nil, noRelease, err
+	}
 	var route modelRoute
 	if req.ModelID != "" {
-		var err error
-		if desired, route, err = resolveModelRoute(req.ModelID, plugins, desired, req.Keys); err != nil {
+		if route, err = modelRouteFor(entry, req.Keys); err != nil {
 			return nil, noRelease, err
 		}
 	}
@@ -264,11 +263,16 @@ func buildBackend(ctx context.Context, req BackendRequest) (contracts.Backend, f
 		route.lease()()
 		return nil, noRelease, err
 	}
-	if backend, fromRemote, err := req.remoteResolver().Backend(ctx, plugins, desired); err != nil {
+	backend, fromRemote, err := req.remoteResolver().Backend(ctx, plugins, desired)
+	if err != nil {
 		return failWith(err)
-	} else if fromRemote {
+	}
+	if fromRemote {
 		if len(route.env) > 0 {
 			return failWith(&gatewayEnvUnsupportedError{Model: req.ModelID})
+		}
+		if req.Account != "" {
+			return failWith(&remoteAccountError{Account: req.Account})
 		}
 		return backend, noRelease, nil
 	}
@@ -289,7 +293,7 @@ func buildBackend(ctx context.Context, req BackendRequest) (contracts.Backend, f
 	}
 	route.env = env
 	applyBackendRequest(cfg.Settings, req, route)
-	backend, err := plugin.Backend(ctx, cfg)
+	backend, err = plugin.Backend(ctx, cfg)
 	if err != nil {
 		release()
 		return nil, noRelease, err
@@ -310,21 +314,33 @@ func (r modelRoute) lease() func() {
 	return r.grant
 }
 
-func resolveModelRoute(modelID string, plugins []contracts.Plugin, desired string, keys *keyproxy.Proxy) (string, modelRoute, error) {
+func chooseVendor(requested, modelID string, plugins []contracts.Plugin) (string, CatalogEntry, error) {
+	vendor := requested
+	if vendor == "" {
+		vendor = os.Getenv("HERRSCHER_BACKEND")
+	}
+	if modelID == "" {
+		return vendor, CatalogEntry{}, nil
+	}
 	entry, err := LookupModel(plugins, ResolvePolicy(os.Getenv), modelID)
 	if err != nil {
-		return "", modelRoute{}, err
+		return "", CatalogEntry{}, err
 	}
-	if desired == "" {
-		desired = entry.Vendor
-	} else if desired != entry.Vendor {
-		return "", modelRoute{}, &modelBackendMismatchError{Model: modelID, Owner: entry.Vendor, Requested: desired}
+	if vendor == "" {
+		return entry.Vendor, entry, nil
 	}
+	if vendor != entry.Vendor {
+		return "", CatalogEntry{}, &modelBackendMismatchError{Model: modelID, Owner: entry.Vendor, Requested: vendor}
+	}
+	return vendor, entry, nil
+}
+
+func modelRouteFor(entry CatalogEntry, keys *keyproxy.Proxy) (modelRoute, error) {
 	env, release, err := spawnEnvVia(entry, os.Getenv, keys)
 	if err != nil {
-		return "", modelRoute{}, err
+		return modelRoute{}, err
 	}
-	return desired, modelRoute{env: env, arg: entry.Arg, grant: release}, nil
+	return modelRoute{env: env, arg: entry.Arg, grant: release}, nil
 }
 
 func applyBackendRequest(settings map[string]string, req BackendRequest, route modelRoute) {

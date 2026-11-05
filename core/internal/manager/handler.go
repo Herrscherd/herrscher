@@ -127,16 +127,13 @@ func (h *Handler) SetModelValidator(fn func(vendor, modelID string) error) { h.v
 // nothing to ask can give.
 func (h *Handler) SetGateResolver(fn func(vendor string) (grain, why string)) { h.gate = fn }
 
-// SetVendorResolver wires the rule that decides which vendor a session will
-// launch, given its requested vendor and model, so an account is checked
-// against the vendor that will actually run.
-func (h *Handler) SetVendorResolver(fn func(vendor, modelID string) (string, error)) {
-	h.resolveVendor = fn
-}
-
 // ErrAccountVendor is returned when an account is requested for a session whose
 // backend vendor cannot be determined, so the account cannot be checked.
 var ErrAccountVendor = errors.New("no backend vendor is known for this session: pass --vendor, or set HERRSCHER_BACKEND")
+
+// ErrAccountHost is returned when an account is requested for a session placed on
+// another host, which resolves accounts in its own store.
+var ErrAccountHost = errors.New("an account cannot be used for a session placed on another host")
 
 type approvalGate struct {
 	enforced bool
@@ -179,6 +176,13 @@ func (h *Handler) checkAccount(runtime runtimeChoice, profile string) error {
 	return h.validateAccount(vendor, profile)
 }
 
+func checkAccountHost(hostName, account string) error {
+	if hostName == "" || account == "" {
+		return nil
+	}
+	return fmt.Errorf("account %q on host %q: %w; run the session on this host or drop the account", account, hostName, ErrAccountHost)
+}
+
 func (h *Handler) launchVendor(runtime runtimeChoice) (string, error) {
 	desired := h.vendorOf(runtime)
 	if h.resolveVendor == nil {
@@ -206,8 +210,8 @@ type coordinationReader interface {
 // session is created without an explicit cmd. partDir is the directory under
 // which per-session participant journals live (participants/<name>.log). agents
 // owns the durable agent homes used to provision sessions.
-func NewHandler(d channelAdmin, sup supervisor, wt Worktrees, fg forges, up updater, agents agentStore, st *state.State, defaultCmd, partDir string, defaultGateways []string, validateAccount func(vendor, profile string) error) *Handler {
-	return &Handler{log: obs.NewLogger(os.Stderr, slog.LevelInfo), d: d, sup: sup, wt: wt, fg: fg, up: up, agents: agents, st: st, defaultCmd: defaultCmd, partDir: partDir, defaultGateways: defaultGateways, validateAccount: validateAccount}
+func NewHandler(d channelAdmin, sup supervisor, wt Worktrees, fg forges, up updater, agents agentStore, st *state.State, defaultCmd, partDir string, defaultGateways []string, validateAccount func(vendor, profile string) error, resolveVendor func(vendor, modelID string) (string, error)) *Handler {
+	return &Handler{log: obs.NewLogger(os.Stderr, slog.LevelInfo), d: d, sup: sup, wt: wt, fg: fg, up: up, agents: agents, st: st, defaultCmd: defaultCmd, partDir: partDir, defaultGateways: defaultGateways, validateAccount: validateAccount, resolveVendor: resolveVendor}
 }
 
 // SetTerminalAdmin wires the terminal (TUI) channel admin used to route

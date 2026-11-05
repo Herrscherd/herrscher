@@ -489,6 +489,11 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 	}
 	base, _ := input.Lookup("base")
 	explicitAccount, _ := input.Lookup("account")
+	hostName := h.resolveHost(input, runtime.agent)
+	account := chooseSessionAccount(explicitAccount, h.agentAccount(runtime.agent))
+	if err := checkAccountHost(hostName, account); err != nil {
+		return createRequest{}, err
+	}
 	if err := h.checkAccount(runtime, explicitAccount); err != nil {
 		return createRequest{}, err
 	}
@@ -500,8 +505,8 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 		adopted:  adopted,
 		runtime:  runtime,
 		options:  options,
-		hostName: h.resolveHost(input, runtime.agent),
-		account:  chooseSessionAccount(explicitAccount, h.agentAccount(runtime.agent)),
+		hostName: hostName,
+		account:  account,
 		mode:     mode,
 		shared:   input.Bool("shared"),
 	}, nil

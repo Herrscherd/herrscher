@@ -695,7 +695,7 @@ func TestSessionBanner(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := sessionBanner(repo, "demo", tc.worktree, tc.branch, "claude", "", tc.shared)
+			got := (&Handler{}).sessionBanner(i18n.English, repo, "demo", tc.worktree, tc.branch, "claude", "", tc.shared)
 			for _, s := range tc.want {
 				if !strings.Contains(got, s) {
 					t.Errorf("banner missing %q\n--- got ---\n%s", s, got)
@@ -711,7 +711,7 @@ func TestSessionBanner(t *testing.T) {
 }
 
 func TestSessionBannerEmptyRepo(t *testing.T) {
-	got := sessionBanner("", "demo", "", "session/demo", "claude", "", true)
+	got := (&Handler{}).sessionBanner(i18n.English, "", "demo", "", "session/demo", "claude", "", true)
 	if !strings.Contains(got, "Project: **(cwd)**") {
 		t.Errorf("empty repo should render (cwd), got:\n%s", got)
 	}
@@ -721,7 +721,7 @@ func TestSessionBannerEmptyRepo(t *testing.T) {
 }
 
 func TestSessionBannerNamesTheRequestedModel(t *testing.T) {
-	got := sessionBanner("/home/me/proj", "demo", "", "session/demo", "claude --model claude-opus-4-8", "claude-opus-5", true)
+	got := (&Handler{}).sessionBanner(i18n.English, "/home/me/proj", "demo", "", "session/demo", "claude --model claude-opus-4-8", "claude-opus-5", true)
 	if !strings.Contains(got, "Model: `claude-opus-5`") {
 		t.Errorf("banner must name the requested model, got:\n%s", got)
 	}

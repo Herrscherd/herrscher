@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -44,7 +45,7 @@ func (h *Handler) sessionSetModeRun(_ context.Context, input contracts.Input) (c
 	if err := h.st.SetSessionApprovals(name, mode); err != nil {
 		return contracts.Result{}, err
 	}
-	return contracts.DataResult(setModeReply(sess, mode, gate)), nil
+	return contracts.DataResult(h.setModeReply(sess, mode, gate)), nil
 }
 
 func (h *Handler) sessionGetModeRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
@@ -62,13 +63,13 @@ func (h *Handler) sessionGetModeRun(_ context.Context, input contracts.Input) (c
 	return contracts.DataResult(sess.Approvals), nil
 }
 
-func setModeReply(sess state.Session, mode string, gate approvalGate) string {
-	reply := fmt.Sprintf("%s is now %s", sess.Name, mode)
+func (h *Handler) setModeReply(sess state.Session, mode string, gate approvalGate) string {
+	reply := h.text(clitext.SessionModeSet, clitext.Params{clitext.ParamName: sess.Name, clitext.ParamMode: mode})
 	if !gate.enforced && mode != approval.ModeBypass.String() {
-		reply += fmt.Sprintf(" (%s cannot enforce it, so %s runs ungated)", vendorLabel(sess.Vendor), sess.Name)
+		reply += h.text(clitext.SessionModeUnenforced, clitext.Params{clitext.ParamVendor: vendorLabel(sess.Vendor), clitext.ParamName: sess.Name})
 	}
 	if sess.Approvals == approval.ModeBypass.String() && mode != approval.ModeBypass.String() {
-		reply += " (a session created with --approvals bypass has no hook: recreate it for this to bite)"
+		reply += h.text(clitext.SessionModeBypassRecreate, nil)
 	}
 	return reply
 }

@@ -82,12 +82,31 @@ func (h *Handler) materializeOn(ctx context.Context, hostName string, profile ag
 func (h *Handler) SetLanguage(lang i18n.Language) { h.lang = i18n.Resolve(lang) }
 
 func (h *Handler) text(key clitext.Key, params clitext.Params) string {
-	text, err := clitext.Text(h.lang, key, params)
+	return h.textIn(h.lang, key, params)
+}
+
+func (h *Handler) textIn(lang i18n.Language, key clitext.Key, params clitext.Params) string {
+	text, err := clitext.Text(lang, key, params)
 	if err != nil {
 		h.log.Error("render operator text", "key", key, "err", err)
 		return string(key)
 	}
 	return text
+}
+
+func (h *Handler) noticeLanguage(raw string) i18n.Language {
+	lang, err := i18n.ParseLanguage(raw)
+	if err != nil {
+		return h.lang
+	}
+	return lang
+}
+
+func (h *Handler) gateReason(gate approvalGate) string {
+	if gate.why != "" {
+		return gate.why
+	}
+	return h.text(clitext.SessionApprovalsNoChannel, nil)
 }
 
 // SetDefaultModel wires the operator's configured default. It is a fallback,

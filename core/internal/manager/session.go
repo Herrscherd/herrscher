@@ -183,7 +183,7 @@ func (h *Handler) sessionSetBudgetRun(_ context.Context, input contracts.Input) 
 			return contracts.Result{}, applyErr
 		}
 	}
-	return contracts.DataResult(fmt.Sprintf("✅ budget updated for %d session(s)", len(targets))), nil
+	return contracts.DataResult(h.text(clitext.SessionBudgetUpdated, clitext.Params{clitext.ParamCount: len(targets)})), nil
 }
 
 func parseBudgetPatch(input contracts.Input) (budgetPatch, error) {
@@ -301,27 +301,24 @@ func sessionJSONRow(session state.Session) sessionJSON {
 	}
 }
 
-func sessionBanner(repo, name, worktree, branch, cmd, modelID string, shared bool) string {
-	banner := fmt.Sprintf("🚀 Session **%s** ready.\n", name)
+func (h *Handler) sessionBanner(lang i18n.Language, repo, name, worktree, branch, cmd, modelID string, shared bool) string {
+	banner := h.textIn(lang, clitext.SessionBannerReady, clitext.Params{clitext.ParamName: name}) + "\n"
 	if repo == "" {
-		banner += "• Project: **(cwd)**\n"
+		banner += h.textIn(lang, clitext.SessionBannerProjectCwd, nil) + "\n"
 	} else {
-		banner += fmt.Sprintf("• Project: **%s** (%#q)\n", filepath.Base(repo), repo)
+		banner += h.textIn(lang, clitext.SessionBannerProject, clitext.Params{clitext.ParamName: filepath.Base(repo), clitext.ParamRepo: fmt.Sprintf("%#q", repo)}) + "\n"
 	}
 	switch {
 	case worktree != "":
-		banner += "• Mode: isolated worktree\n"
-		banner += fmt.Sprintf("• Worktree: %#q\n", worktree)
-		banner += fmt.Sprintf("• Branch: %#q\n", branch)
+		banner += h.textIn(lang, clitext.SessionBannerWorktree, clitext.Params{clitext.ParamPath: fmt.Sprintf("%#q", worktree), clitext.ParamBranch: fmt.Sprintf("%#q", branch)}) + "\n"
 	case shared:
-		banner += "• Mode: shared (main checkout)\n"
-		banner += "• Branch: none (runs on current branch)\n"
+		banner += h.textIn(lang, clitext.SessionBannerShared, nil) + "\n"
 	default:
-		banner += "• Mode: shared (not a git repo)\n"
+		banner += h.textIn(lang, clitext.SessionBannerNotGit, nil) + "\n"
 	}
-	banner += fmt.Sprintf("• Command: %#q", cmd)
+	banner += h.textIn(lang, clitext.SessionBannerCommand, clitext.Params{clitext.ParamCommand: fmt.Sprintf("%#q", cmd)})
 	if modelID != "" {
-		banner += fmt.Sprintf("\n• Model: %#q", modelID)
+		banner += h.textIn(lang, clitext.SessionBannerModel, clitext.Params{clitext.ParamModel: fmt.Sprintf("%#q", modelID)})
 	}
 	return banner
 }
@@ -418,9 +415,9 @@ func (h *Handler) sessionCreateRun(ctx context.Context, input contracts.Input) (
 		return contracts.Result{}, fmt.Errorf("persist: %w", err)
 	}
 	h.sup.Start(sess)
-	banner := sessionBanner(place.repo, req.name, place.space.path, place.wt.Branch(req.name), req.runtime.cmd, req.runtime.model, req.shared)
+	banner := h.sessionBanner(h.noticeLanguage(req.lang), place.repo, req.name, place.space.path, place.wt.Branch(req.name), req.runtime.cmd, req.runtime.model, req.shared)
 	h.warnIfFailed(req.admin.Send(ctx, sess.ChannelID, banner), "send banner for "+req.name)
-	return contracts.DataResult(fmt.Sprintf("✅ Running on %s.\n\n%s%s", req.admin.ChannelRef(sess.ChannelID), banner, approvalsNote)), nil
+	return contracts.DataResult(h.text(clitext.SessionRunning, clitext.Params{clitext.ParamChannel: req.admin.ChannelRef(sess.ChannelID), clitext.ParamBanner: banner, clitext.ParamApprovals: approvalsNote})), nil
 }
 
 func (h *Handler) placeSession(ctx context.Context, input contracts.Input, req *createRequest) (placement, error) {
@@ -829,19 +826,15 @@ func (h *Handler) approvalsNote(ctx context.Context, req createRequest, space wo
 	gate := h.gateFor(vendor)
 	switch {
 	case !gate.enforced:
-		why := gate.why
-		if why == "" {
-			why = "it exposes no approval channel"
-		}
-		return fmt.Sprintf("\n\n⚠️ approvals: %#q cannot enforce them (%s), so **%s** runs ungated.", vendorLabel(vendor), why, name)
+		return "\n\n" + h.text(clitext.SessionApprovalsUnenforced, clitext.Params{clitext.ParamVendor: fmt.Sprintf("%#q", vendorLabel(vendor)), clitext.ParamWhy: h.gateReason(gate), clitext.ParamName: name})
 	case req.shared || space.path == "":
-		return fmt.Sprintf("\n\n⚠️ approvals: a shared session has no isolated worktree to gate, so **%s** runs ungated.", name)
+		return "\n\n" + h.text(clitext.SessionApprovalsShared, clitext.Params{clitext.ParamName: name})
 	case req.hostName != "" && agentName == "":
-		return fmt.Sprintf("\n\n⚠️ approvals: a remote session without an agent has no materialization channel, so **%s** runs ungated.", name)
+		return "\n\n" + h.text(clitext.SessionApprovalsRemoteNoAgent, clitext.Params{clitext.ParamName: name})
 	case agentName == "":
 		if err := agent.MaterializeHook(ctx, space.path, agent.SelfBin()); err != nil {
 			h.log.Warn("materialize hook failed", "session", name, "err", err)
-			return fmt.Sprintf("\n\n⚠️ approvals: the hook could not be written (%v), so **%s** runs ungated.", err, name)
+			return "\n\n" + h.text(clitext.SessionApprovalsHookFailed, clitext.Params{clitext.ParamErr: err.Error(), clitext.ParamName: name})
 		}
 	}
 	return ""
@@ -1044,7 +1037,7 @@ func (h *Handler) sessionResumeRun(_ context.Context, input contracts.Input) (co
 	}
 	sess.Archived = false
 	h.sup.Start(sess)
-	return contracts.DataResult(fmt.Sprintf("⟲ Session **%s** resumed.", name)), nil
+	return contracts.DataResult(h.text(clitext.SessionResumed, clitext.Params{clitext.ParamName: name})), nil
 }
 
 func (h *Handler) sessionSwitchRun(ctx context.Context, input contracts.Input) (contracts.Result, error) {
@@ -1097,32 +1090,28 @@ func (h *Handler) switchApprovalsNote(sess state.Session) string {
 	if gate.enforced {
 		return ""
 	}
-	why := gate.why
-	if why == "" {
-		why = "it exposes no approval channel"
-	}
-	return fmt.Sprintf("\n\n⚠️ approvals: %#q cannot enforce them (%s), so **%s** now runs ungated.", vendorLabel(sess.Vendor), why, sess.Name)
+	return "\n\n" + h.text(clitext.SessionApprovalsUnenforcedNow, clitext.Params{clitext.ParamVendor: fmt.Sprintf("%#q", vendorLabel(sess.Vendor)), clitext.ParamWhy: h.gateReason(gate), clitext.ParamName: sess.Name})
 }
 
 func (h *Handler) revertSwitch(name string, prior state.Session, restartErr error) error {
 	if rbErr := h.rollbackSwitch(name, prior.Vendor, prior.Cmd, prior.ModelID, prior.ResumeToken); rbErr != nil {
-		return fmt.Errorf("redémarrage backend: %w; rollback échoué, session %s hors service: %w", restartErr, name, rbErr)
+		return clitext.Failure(h.lang, restartErr, clitext.SessionSwitchRestartLost, clitext.Params{clitext.ParamName: name, clitext.ParamErr: restartErr.Error(), clitext.ParamRollbackErr: rbErr.Error()})
 	}
-	return fmt.Errorf("redémarrage backend: %w (session %s restaurée sur %s)", restartErr, name, prior.Vendor)
+	return clitext.Failure(h.lang, restartErr, clitext.SessionSwitchRestartRestored, clitext.Params{clitext.ParamName: name, clitext.ParamVendor: prior.Vendor, clitext.ParamErr: restartErr.Error()})
 }
 
 func (h *Handler) switchReply(ctx context.Context, name, vendor, handoff, switchNote string) string {
 	if handoff == "none" {
-		return fmt.Sprintf("session %s re-ciblée sur %s (sans reprise)%s", name, vendor, switchNote)
+		return h.text(clitext.SessionSwitchedNoResume, clitext.Params{clitext.ParamName: name, clitext.ParamVendor: vendor, clitext.ParamNote: switchNote})
 	}
 	seedText := buildHandoffSeed(
 		state.ReadTranscript(state.TranscriptPath(h.partDir, name), sessionLogTranscriptCap),
 		handoff,
 	)
 	if seedText != "" && h.seed != nil && !h.injectSeed(ctx, name, seedText) {
-		return fmt.Sprintf("session %s re-ciblée sur %s (reprise %s non confirmée)%s", name, vendor, handoff, switchNote)
+		return h.text(clitext.SessionSwitchUnconfirmed, clitext.Params{clitext.ParamName: name, clitext.ParamVendor: vendor, clitext.ParamHandoff: handoff, clitext.ParamNote: switchNote})
 	}
-	return fmt.Sprintf("session %s re-ciblée sur %s (reprise %s)%s", name, vendor, handoff, switchNote)
+	return h.text(clitext.SessionSwitchedResumed, clitext.Params{clitext.ParamName: name, clitext.ParamVendor: vendor, clitext.ParamHandoff: handoff, clitext.ParamNote: switchNote})
 }
 
 const seedRetryDelay = 150 * time.Millisecond

@@ -75,6 +75,8 @@ const (
 	ParamRan       = "Ran"
 	ParamVendor    = "Vendor"
 	ParamState     = "State"
+	ParamTo        = "To"
+	ParamSchedule  = "Schedule"
 )
 
 // Text renders key in lang with params. It refuses an undeclared key, and params

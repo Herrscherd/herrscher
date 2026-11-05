@@ -1205,5 +1205,70 @@
     "id": "cli.manage.current_tag",
     "description": "Tag marking the route policy or default model that is already set",
     "other": "current"
+  },
+  {
+    "id": "cli.session.list.empty",
+    "description": "Shown by session list when no session exists",
+    "other": "No active sessions."
+  },
+  {
+    "id": "cli.session.list.header",
+    "description": "Header of the session list",
+    "other": "Active sessions:"
+  },
+  {
+    "id": "cli.session.who.empty",
+    "description": "Shown by session who when nobody has written in the session",
+    "other": "Nobody has written in this session yet."
+  },
+  {
+    "id": "cli.session.who.header",
+    "description": "Header of the participants that session who lists",
+    "other": "Participants observed in **{{.Name}}**:"
+  },
+  {
+    "id": "cli.session.log.empty",
+    "description": "Shown by session log when the session has no transcript yet",
+    "other": "No transcript yet."
+  },
+  {
+    "id": "cli.session.closed",
+    "description": "Confirmation of session close, before any note about the channel",
+    "other": "🗄️ Session **{{.Name}}** closed."
+  },
+  {
+    "id": "cli.session.archived",
+    "description": "Confirmation of session archive, before any note about the channel",
+    "other": "📦 Session **{{.Name}}** archived. Resume it from /resume."
+  },
+  {
+    "id": "cli.session.renamed",
+    "description": "Confirmation of session rename, before any note about the files moved",
+    "other": "✎ Session **{{.Name}}** renamed to **{{.To}}**."
+  },
+  {
+    "id": "cli.session.rename.same_name",
+    "description": "Reply when session rename is asked for the name the session already has",
+    "other": "session **{{.Name}}** already has this name"
+  },
+  {
+    "id": "cli.session.channel.left_open",
+    "description": "Note after a session close or archive when its channel could not be archived",
+    "other": "⚠️ the channel stayed open: {{.Err}}"
+  },
+  {
+    "id": "cli.session.rename.transcript_left",
+    "description": "Note after a session rename when the transcript could not be moved",
+    "other": "⚠️ the transcript stayed under {{.Name}}: {{.Err}}"
+  },
+  {
+    "id": "cli.session.rename.participants_left",
+    "description": "Note after a session rename when the participants journal could not be moved",
+    "other": "⚠️ the participants journal stayed under {{.Name}}: {{.Err}}"
+  },
+  {
+    "id": "cli.session.rename.schedule_owns",
+    "description": "Note after a session rename when a schedule names the session",
+    "other": "⚠️ the schedule {{.Schedule}} owns this session by its name: its next window will reopen one under {{.Name}}."
   }
 ]

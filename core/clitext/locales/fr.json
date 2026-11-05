@@ -1205,5 +1205,70 @@
     "id": "cli.manage.current_tag",
     "description": "Tag marking the route policy or default model that is already set",
     "other": "actuel"
+  },
+  {
+    "id": "cli.session.list.empty",
+    "description": "Affiché par session list quand aucune session n'existe",
+    "other": "Aucune session active."
+  },
+  {
+    "id": "cli.session.list.header",
+    "description": "En-tête de la liste des sessions",
+    "other": "Sessions actives :"
+  },
+  {
+    "id": "cli.session.who.empty",
+    "description": "Affiché par session who quand personne n'a encore écrit dans la session",
+    "other": "Personne n'a encore écrit dans cette session."
+  },
+  {
+    "id": "cli.session.who.header",
+    "description": "En-tête des participants listés par session who",
+    "other": "Participants observés dans **{{.Name}}** :"
+  },
+  {
+    "id": "cli.session.log.empty",
+    "description": "Affiché par session log quand la session n'a pas encore de transcription",
+    "other": "Aucune transcription pour l'instant."
+  },
+  {
+    "id": "cli.session.closed",
+    "description": "Confirmation de la fermeture d'une session, avant une éventuelle note sur le salon",
+    "other": "🗄️ Session **{{.Name}}** fermée."
+  },
+  {
+    "id": "cli.session.archived",
+    "description": "Confirmation de l'archivage d'une session, avant une éventuelle note sur le salon",
+    "other": "📦 Session **{{.Name}}** archivée. Reprenez-la depuis /resume."
+  },
+  {
+    "id": "cli.session.renamed",
+    "description": "Confirmation du renommage d'une session, avant une éventuelle note sur les fichiers déplacés",
+    "other": "✎ Session **{{.Name}}** renommée en **{{.To}}**."
+  },
+  {
+    "id": "cli.session.rename.same_name",
+    "description": "Réponse quand un renommage demande le nom que la session porte déjà",
+    "other": "session **{{.Name}}** porte déjà ce nom"
+  },
+  {
+    "id": "cli.session.channel.left_open",
+    "description": "Note après la fermeture ou l'archivage d'une session dont le salon n'a pas pu être archivé",
+    "other": "⚠️ le salon est resté ouvert : {{.Err}}"
+  },
+  {
+    "id": "cli.session.rename.transcript_left",
+    "description": "Note après un renommage dont la transcription n'a pas pu être déplacée",
+    "other": "⚠️ la transcription est restée sous {{.Name}} : {{.Err}}"
+  },
+  {
+    "id": "cli.session.rename.participants_left",
+    "description": "Note après un renommage dont le journal des participants n'a pas pu être déplacé",
+    "other": "⚠️ le journal des participants est resté sous {{.Name}} : {{.Err}}"
+  },
+  {
+    "id": "cli.session.rename.schedule_owns",
+    "description": "Note après un renommage quand un horaire désigne la session par son nom",
+    "other": "⚠️ l'horaire {{.Schedule}} possède cette session par son nom : sa prochaine fenêtre en rouvrira une sous {{.Name}}."
   }
 ]

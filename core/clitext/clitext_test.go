@@ -99,6 +99,10 @@ func TestRenderedMessagesInEachLanguage(t *testing.T) {
 		{"env read failed", EnvReadFailed, Params{"Err": "bad"}, "read env file: bad", "lecture du fichier d'environnement : bad"},
 		{"announce key invalid", TransportAnnounceKeyInvalid, Params{"Err": "short"}, "HERRSCHER_ANNOUNCE_KEY: short", "HERRSCHER_ANNOUNCE_KEY : short"},
 		{"skill duplicate", SkillDuplicate, Params{"Name": "demo", "Kind": "bundle", "Owner": "core"}, "herrscher: skill demo from plugin bundle was left out: plugin core already ships one by that name", "herrscher : la compétence demo du plugin bundle a été écartée : le plugin core en livre déjà une de ce nom"},
+		{"session list header", SessionListHeader, nil, "Active sessions:", "Sessions actives :"},
+		{"session who header", SessionWhoHeader, Params{"Name": "demo"}, "Participants observed in **demo**:", "Participants observés dans **demo** :"},
+		{"session renamed", SessionRenamed, Params{"Name": "demo", "To": "neuf"}, "✎ Session **demo** renamed to **neuf**.", "✎ Session **demo** renommée en **neuf**."},
+		{"session schedule owns", SessionScheduleOwnsSession, Params{"Schedule": "`nightly`", "Name": "`demo`"}, "⚠️ the schedule `nightly` owns this session by its name: its next window will reopen one under `demo`.", "⚠️ l'horaire `nightly` possède cette session par son nom : sa prochaine fenêtre en rouvrira une sous `demo`."},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

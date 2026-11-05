@@ -16,13 +16,13 @@ import (
 
 var errNoPendingChoice = errors.New("has no pending choice")
 
-func addSessionVerbs(reg *cli.Registry, store *state.State, partDir, instID string, approvals *approvalTable, sessions *sessionTable, seedCoord *coordinatorSlot) error {
+func addSessionVerbs(reg *cli.Registry, store *state.State, partDir, instID string, approvals *approvalTable, sessions *sessionTable, seedCoord *coordinatorSlot, models *ModelDiscovery) error {
 	seen := newSeenTable(time.Now())
 	return addVerbs(reg,
 		seedVerb(store, instID, seedCoord),
 		sessionSendVerb(sessions),
 		sessionPickVerb(approvals, sessions),
-		sessionInfoVerb(store, partDir, sessions),
+		sessionInfoVerb(store, partDir, sessions, models),
 		sessionOverviewVerb(overviewSource{st: store, partDir: partDir, sessions: sessions, approvals: approvals, tallies: newTallyCache(), seen: seen}),
 		sessionSeenVerb(seen),
 		sessionScrollbackVerb(partDir),
@@ -122,11 +122,11 @@ func sendToSession(ctx context.Context, sessions *sessionTable, input contracts.
 	return "", nil
 }
 
-func sessionInfoVerb(store *state.State, partDir string, sessions *sessionTable) contracts.Cmd {
+func sessionInfoVerb(store *state.State, partDir string, sessions *sessionTable, models *ModelDiscovery) contracts.Cmd {
 	return contracts.New(nsSession, "info").
 		Help("list sessions as a frontend sees them (channel, vendor, dir, archived). JSON only").
 		Do(func(_ context.Context, _ contracts.Input) (string, error) {
-			b, err := json.Marshal(sessionInfos(store, partDir, sessions.compaction))
+			b, err := json.Marshal(sessionInfos(store, partDir, sessions.compaction, modelTermsFor(models)))
 			return string(b), err
 		})
 }
@@ -200,7 +200,7 @@ func compactSession(_ context.Context, store *state.State, sessions *sessionTabl
 		return "", &NotFoundError{Kind: "live session", Name: name}
 	}
 	if !driver.compactSupported() {
-		return "", fmt.Errorf("session %q runs %q: %w", name, driver.vendor, errCompactUnsupported)
+		return "", fmt.Errorf("session %q runs %q: %w", name, driver.modelNow().vendor, errCompactUnsupported)
 	}
 	merged, accepted := driver.requestCompaction(input.Get("instruction"), contracts.Conversation{Gateway: input.Get("origin")})
 	if !accepted {

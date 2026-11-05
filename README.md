@@ -430,12 +430,36 @@ comes from (`catalog` or `discovered`), and `herrscher models refresh` asks agai
 right away. Both take `--state FILE`, the daemon state file whose directory holds the
 cache; without it they use the daemon default, the same cache the daemon reads.
 
+A model that a backend declares `Hidden`, or that `HERRSCHER_MODELS_HIDDEN` names, is
+left out of the selector and of `herrscher models list`, but it still resolves: a
+session recorded on it resumes it, and an explicit `--model` naming it works. Each
+time the host resolves such a model it logs a warning, and it never switches to
+another model in its place.
+
+`herrscher models list --json` gives each model its prices and its window. `--all`
+also lists the hidden models, marked `hidden: true`, which still resolve when requested;
+without it the output is unchanged. Prices
+are in USD per million tokens (`inputPrice`, `outputPrice`, `cacheReadPrice`,
+`cacheWritePrice`), and a price of 0 means the price is unknown, never free.
+`contextWindow` is the model's window in tokens, 0 when its backend declares none.
+A turn's cost is the one its backend reports. When the backend reports none, the host
+estimates it from the turn's tokens and the resolved model's prices: uncached input,
+output, cache read and cache write, each times its price, summed and divided by
+1000000. The estimate is stored as the turn's cost, so the transcript, the cost line
+and `CostCap` all count it. It is computed only when every category the turn used has
+a known price: a turn that uses a category priced 0 keeps no estimate and shows no
+cost, so a partial figure is never shown as a cost. A gateway route has no prices and
+gets no estimate. Claude reports its cost on each turn's result, so the estimate is a
+fallback for it. Claude's `input_tokens` leaves out cache, which is why the estimate
+prices cache separately. Codex and cursor report neither token counts nor a cost, so
+their turns show no cost.
+
 | Variable | Default | Effect |
 |---|---|---|
 | `HERRSCHER_MODELS_DISCOVER` | every backend | comma-separated vendors that may be asked (`claude,codex`), or `none`; with `HERRSCHER_ROUTE_POLICY=gateway-only` vendors are asked only through the gateway, and only when its credentials are set |
 | `HERRSCHER_MODELS_TTL` | `24h` | how long a cached list is kept before it is asked again |
 | `HERRSCHER_MODELS_TIMEOUT` | `15s` | longest wait for one vendor's answer |
-| `HERRSCHER_MODELS_HIDDEN` | none | comma-separated model IDs hidden from the list and the selector; a session already on one still resumes it |
+| `HERRSCHER_MODELS_HIDDEN` | none | comma-separated model IDs hidden from the list and the selector; a session already on one still resumes it, with a warning |
 | `HERRSCHER_DEFAULT_MODEL_<VENDOR>` | none | default model of one vendor |
 
 The cache is `models-discovered.json`, next to the daemon state file: the directory of
@@ -587,10 +611,13 @@ threshold, a percentage of its context window. The default is 92, set with
 refused at load). Each session can override it with
 `herrscher session set-compact --name <name> --percent <percent>` (an empty percent
 restores the default, 0 disables it for that session). The window size comes from
-the vendor, in this order: `HERRSCHER_CONTEXT_LIMIT` when it is a positive number,
+the session's model and vendor, in this order: `HERRSCHER_CONTEXT_LIMIT` when it is a positive number,
 then the `contextLimits` table of `config.json` (a vendor name to a window in tokens,
-for example `{"contextLimits": {"codex": 400000}}`), then the built-in size of 200000
-for `claude`, `cursor` and `codex`. Vendor names are case-insensitive. `config.json`
+for example `{"contextLimits": {"codex": 400000}}`), then the window the resolved model declares (its `contextWindow`, when it is positive),
+then the built-in size of 200000 for `claude`, `cursor` and `codex`, for a model that
+declares none. `HERRSCHER_CONTEXT_LIMIT` and `contextLimits` are settings you make on
+purpose, so they take precedence over the window the catalogue declares for the model.
+Vendor names are case-insensitive. `config.json`
 refuses a zero or negative size, an empty vendor name and one vendor listed twice in
 two spellings. `herrscher serve` warns once at start about a vendor that no backend of
 the daemon serves; its entry is then unused. The built-in `codex` figure is a cautious
@@ -598,7 +625,7 @@ assumption, the smallest window verified in the Codex backend catalogue (`o4-min
 so automatic compaction runs early rather than after the provider refuses the request;
 raise it in `contextLimits` when the model in use takes more. The daemon is the only
 source of the window it compacts against: each session carries the window the daemon
-resolved for its vendor (`SessionInfo.ContextWindow`), and the TUI gauge, sidebar,
+resolved for its model and vendor (`SessionInfo.ContextWindow`), and the TUI gauge, sidebar,
 status bar and statusline read that figure. The TUI resolves the same table itself
 only as a fallback, when the daemon gives no size (a daemon older than this field),
 from the `config.json` of its own process and its own environment. The two can differ
@@ -606,8 +633,7 @@ when `herrscher serve -config <file>` reads another file, or when the TUI runs u
 environment that the daemon does not share; the daemon's figure is the one that counts.
 An invalid `config.json` makes `herrscher serve` refuse to start, while the TUI shows a
 flash naming the file and falls back to the built-in sizes, or to the
-`HERRSCHER_CONTEXT_LIMIT` override when it is set. One window per model is a
-follow-up. After a measured compaction still above the threshold, automatic compaction does not retrigger: it rearms once a
+`HERRSCHER_CONTEXT_LIMIT` override when it is set. After a measured compaction still above the threshold, automatic compaction does not retrigger: it rearms once a
 measured turn lands under the threshold. A compaction the backend does not measure
 never retriggers. `compactStack` lists the stages in order, where `backend` is the
 session's own compaction and other names are plugins declaring

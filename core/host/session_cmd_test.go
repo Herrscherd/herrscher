@@ -21,7 +21,7 @@ func compactCmdFixture(t *testing.T, vendor string) (*state.State, *sessionTable
 	sessions := newSessionTable()
 	sessions.register("api", &sessionDriver{
 		name:           "api",
-		vendor:         vendor,
+		terms:          func() modelTerms { return modelTerms{vendor: vendor} },
 		queue:          queue,
 		enqueueTimeout: time.Second,
 		compaction:     compactPolicy(defaultCompactPercent),

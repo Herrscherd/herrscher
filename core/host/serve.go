@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -12,12 +13,14 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/internal/health"
 	"github.com/Herrscherd/herrscher/core/internal/instanceid"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
+	"github.com/Herrscherd/herrscher/core/keyproxy"
 	"github.com/Herrscherd/herrscher/core/service"
 )
 
@@ -197,8 +200,20 @@ func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, option
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)
 	}
+	cfg, err := config.Load(config.DefaultPath())
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	keys, err := keyproxy.Open(ctx, cfg.Keys, keyproxy.OSLoader(), log)
+	if err != nil && !errors.Is(err, keyproxy.ErrDisabled) {
+		return fmt.Errorf("key proxy: %w", err)
+	}
+	defer CloseKeyProxy(ctx, log, keys)
 	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions)
 	runningHub.models = options.modelDiscovery()
+	runningHub.seedBackend = func(seedCtx context.Context, sess state.Session) (contracts.Backend, error) {
+		return newSeedBackend(seedCtx, sess, keys, runningHub.models)
+	}
 	liveStopped := make(chan struct{})
 	go func() {
 		defer close(liveStopped)
@@ -232,6 +247,16 @@ func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, option
 	return ctx.Err()
 }
 
+// CloseKeyProxy closes the key proxy when keys is set and logs a failed close.
+func CloseKeyProxy(ctx context.Context, log *slog.Logger, keys *keyproxy.Proxy) {
+	if keys == nil {
+		return
+	}
+	if err := keys.Close(ctx); err != nil {
+		log.Warn("key proxy did not close cleanly", "err", err)
+	}
+}
+
 func loadHubState(opts Options) (*state.State, error) {
 	store, err := state.LoadState(opts.StatePath)
 	if err != nil {
@@ -248,10 +273,10 @@ func loadHubState(opts Options) (*state.State, error) {
 
 func newHubSupervisor(ctx context.Context, self string, base *slog.Logger, host *health.Health, partDir, statePath string) *supervisor.Supervisor {
 	sup := supervisor.NewSupervisor(ctx, self)
+	sup.SetStatePath(statePath)
 	sup.SetLogger(base)
 	sup.SetMetrics(host.Metrics())
 	sup.SetAgentsRoot(filepath.Join(partDir, "agents"))
-	sup.SetStatePath(statePath)
 	return sup
 }
 

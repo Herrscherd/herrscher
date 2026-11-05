@@ -30,7 +30,6 @@ const (
 )
 
 const (
-	paneNavKeys         = "Tab volet suivant · clic viser"
 	paneApprovalKeysFmt = "o s r approbation de "
 )
 
@@ -181,13 +180,17 @@ func (m *model) surfaceScreen() string {
 	return strings.Join(slices.Concat(top, padLines(body, height), bottom), "\n")
 }
 
+func (m *model) paneNavHint() string {
+	return joinNonEmpty(m.labelledHint(actPaneNext, "volet suivant", ctxPane), "clic viser")
+}
+
 func (m *model) paneHeader(width int) string {
-	left := m.st.violet.Bold(true).Render(" Vue en volets") + m.st.dim.Render("  Tab volet suivant · clic pour viser")
+	left := m.st.violet.Bold(true).Render(" Vue en volets") + m.st.dim.Render("  "+joinNonEmpty(m.labelledHint(actPaneNext, "volet suivant", ctxPane), "clic pour viser"))
 	return cutText(joinRow(width, left, m.paneCounts()), width)
 }
 
 func (m *model) paneFooter(width int) string {
-	keys := paneNavKeys
+	keys := m.paneNavHint()
 	if name, ok := m.paneApproval(); ok {
 		keys += footerSeparator + paneApprovalKeysFmt + name
 	}
@@ -255,7 +258,7 @@ func (m *model) paneHiddenLine(hidden int) string {
 	if hidden == 1 {
 		noun = "volet"
 	}
-	return m.st.dim.Render(fmt.Sprintf(" +%d %s · Tab pour les voir", hidden, noun))
+	return m.st.dim.Render(fmt.Sprintf(" +%d %s · %s", hidden, noun, m.labelledHint(actPaneNext, "pour les voir", ctxPane)))
 }
 
 func (m *model) paneBody(width, height int) []string {
@@ -409,32 +412,34 @@ func (m *model) infoForChannel(channel string) contracts.SessionInfo {
 }
 
 func (m *model) handlePanesKey(msg tea.KeyMsg) (tea.Cmd, bool) {
-	switch msg.Type {
-	case tea.KeyCtrlP, tea.KeyEsc:
-		m.closeSurface()
-	case tea.KeyTab:
-		m.movePane(1)
-	case tea.KeyShiftTab:
-		m.movePane(-1)
-	case tea.KeyCtrlW:
-		m.panes.zoom = !m.panes.zoom
-	case tea.KeyLeft, tea.KeyRight:
-		if m.input.Value() != "" || !m.paneLayout().single {
+	action := m.stackAction(msg, ctxPane)
+	if run, ok := m.tables().panes[action]; ok {
+		return run(m, msg)
+	}
+	return nil, false
+}
+
+func panesRuns() (map[keyAction]chatRun, error) {
+	return dispatchOf(
+		bind[chatRun](actPaneClose, stepChat((*model).closeSurface)),
+		bind[chatRun](actPaneNext, stepChat(func(app *model) { app.movePane(1) })),
+		bind[chatRun](actPanePrevious, stepChat(func(app *model) { app.movePane(-1) })),
+		bind[chatRun](actPaneZoom, stepChat(func(app *model) { app.panes.zoom = !app.panes.zoom })),
+		bind[chatRun](actPaneSideNext, paneSideStep(1)),
+		bind[chatRun](actPaneSidePrevious, paneSideStep(-1)),
+		bind[chatRun](actPaneSend, chatCmd((*model).sendFromPane)),
+		bind[chatRun](actInterrupt, chatCmd((*model).overlayCtrlC)),
+	)
+}
+
+func paneSideStep(step int) chatRun {
+	return func(app *model, _ tea.KeyMsg) (tea.Cmd, bool) {
+		if app.input.Value() != "" || !app.paneLayout().single {
 			return nil, false
 		}
-		if msg.Type == tea.KeyLeft {
-			m.movePane(-1)
-		} else {
-			m.movePane(1)
-		}
-	case tea.KeyEnter:
-		return m.sendFromPane(), true
-	case tea.KeyCtrlC:
-		return m.overlayCtrlC(), true
-	default:
-		return nil, false
+		app.movePane(step)
+		return nil, true
 	}
-	return nil, true
 }
 
 func (m *model) sendFromPane() tea.Cmd {

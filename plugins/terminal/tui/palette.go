@@ -17,11 +17,12 @@ type CommandSpec struct {
 }
 
 const (
-	flagSeparator = " --"
-	cmdSkills     = "skills"
-	cmdTheme      = "theme"
-	cmdQueue      = "queue"
-	cmdPlan       = "plan"
+	flagSeparator  = " --"
+	cmdSkills      = "skills"
+	cmdTheme       = "theme"
+	cmdKeybindings = "keybindings"
+	cmdQueue       = "queue"
+	cmdPlan        = "plan"
 )
 
 func commandQuery(query string) string {
@@ -168,6 +169,8 @@ func mergeCommands(local, remote []CommandSpec) []CommandSpec {
 	return out
 }
 
+const cmdAccount = "account"
+
 func localCommands() []CommandSpec {
 	return []CommandSpec{
 		{Name: "help", Desc: "show the shortcuts"},
@@ -176,6 +179,7 @@ func localCommands() []CommandSpec {
 		{Name: "resume", Desc: "reopen an archived session"},
 		{Name: "agents", Desc: "voir toutes les sessions par état"},
 		{Name: verbRename, Args: "<nom>", Desc: "rename this session"},
+		{Name: verbHandoff, Args: "<nom>", Desc: "ouvrir une nouvelle session avec le brief de celle-ci"},
 		{Name: "usage", Desc: "cost, tokens and context for this session"},
 		{Name: "context", Desc: "ce qui occupe le contexte : système, outils, mémoire, skills, fichiers lus, conversation"},
 		{Name: "notify", Desc: "alterner les notifications : fin de tour, approbation, ou les deux"},
@@ -183,10 +187,12 @@ func localCommands() []CommandSpec {
 		{Name: cmdTheme, Desc: "pick the colour theme and the render options"},
 		{Name: "capabilities", Desc: "what this terminal can render, and what it falls back to"},
 		{Name: "plugins", Desc: "the plugins this binary is made of"},
+		{Name: cmdAccount, Args: "[profil] [fresh]", Desc: "lister les comptes de la session, ou en choisir un (sans argument : la liste ; fresh ouvre une nouvelle conversation sous ce compte)"},
 		{Name: "attach", Args: "<path>", Desc: "stage a local file with the next message"},
 		{Name: "copy", Args: "[reply|turn|all]", Desc: "put the last answer (or the turn, or everything) on the clipboard"},
 		{Name: "review", Desc: "revue guidée des fichiers du tour : relus, consignes, commit et PR"},
-		{Name: "mouse", Desc: "hand the mouse to the terminal so its own selection works (ctrl+g)"},
+		{Name: "mouse", Desc: "hand the mouse to the terminal so its own selection works"},
+		{Name: cmdKeybindings, Desc: "ouvrir keybindings.json pour changer les raccourcis"},
 		{Name: "statusline", Desc: "configure the status bar: fields, their order, or a script that draws it"},
 		{Name: cmdQueue, Desc: "voir la file de messages", PR: "PR 2"},
 	}

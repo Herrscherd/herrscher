@@ -286,7 +286,11 @@ func (m *model) planSlash(instruction string) tea.Cmd {
 func (m *model) modeChip(target *tab) string {
 	mode := target.modeID()
 	chip := modeStyle(mode, m.st).Bold(true).Render(modeText(mode, m.st.glyphs))
-	return chip + m.st.dim.Render(" "+m.st.glyphs.shiftTab)
+	hint := m.hintIn(actCycleMode, ctxPlan)
+	if hint == "" {
+		return chip
+	}
+	return chip + m.st.dim.Render(" "+hint)
 }
 
 type modeHit struct {
@@ -296,7 +300,7 @@ type modeHit struct {
 }
 
 func (m *model) modeStripHits() []modeHit {
-	column := lipgloss.Width(" " + m.st.glyphs.shiftTab + " ")
+	column := lipgloss.Width(" " + m.hintIn(actCycleMode, ctxPlan) + " ")
 	var hits []modeHit
 	for index, mode := range modeOrder() {
 		if index > 0 {
@@ -318,7 +322,7 @@ func (m *model) modeStripView(target *tab, width int) []string {
 		}
 		segments = append(segments, m.modeSegment(mode, current))
 	}
-	line := m.st.dim.Render(" "+m.st.glyphs.shiftTab+" ") + strings.Join(segments, "")
+	line := m.st.dim.Render(" "+m.hintIn(actCycleMode, ctxPlan)+" ") + strings.Join(segments, "")
 	say := ansi.Truncate(modeStripIndent+modeSpec(current).say, width, "…")
 	sayStyle := m.st.dim
 	if current == modeAuto {
@@ -395,26 +399,31 @@ func (m *model) choosePlan(index int) tea.Cmd {
 }
 
 func (m *model) handlePlanKey(msg tea.KeyMsg) tea.Cmd {
-	switch msg.Type {
-	case tea.KeyUp:
-		m.movePlan(-1)
-	case tea.KeyDown:
-		m.movePlan(1)
-	case tea.KeyEnter:
-		return m.choosePlan(m.planMenu.sel)
-	case tea.KeyEsc:
-		return m.choosePlan(len(planOptions()) - 1)
-	case tea.KeyShiftTab:
-		m.planMenu = nil
-		return m.cycleMode()
-	case tea.KeyCtrlC:
-		return m.overlayCtrlC()
-	case tea.KeyRunes:
-		if len(msg.Runes) == 1 {
-			return m.choosePlan(int(msg.Runes[0] - '1'))
-		}
+	action := m.stackAction(msg, ctxPlan)
+	if run, ok := m.tables().plan[action]; ok {
+		return run(m, msg)
 	}
 	return nil
+}
+
+func planRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actSelectPrevious, stepKey(func(app *model) { app.movePlan(-1) })),
+		bind[keyRun](actSelectNext, stepKey(func(app *model) { app.movePlan(1) })),
+		bind[keyRun](actSelectAccept, cmdKey(func(app *model) tea.Cmd { return app.choosePlan(app.planMenu.sel) })),
+		bind[keyRun](actPlanSkip, cmdKey(func(app *model) tea.Cmd { return app.choosePlan(len(planOptions()) - 1) })),
+		bind[keyRun](actCycleMode, cmdKey(func(app *model) tea.Cmd {
+			app.planMenu = nil
+			return app.cycleMode()
+		})),
+		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
+		bind[keyRun](actPlanChoose, func(app *model, msg tea.KeyMsg) tea.Cmd {
+			if index := int(msg.Runes[0] - '1'); len(msg.Runes) == 1 && index < len(planOptions()) {
+				return app.choosePlan(index)
+			}
+			return nil
+		}),
+	)
 }
 
 func (m *model) planMenuView() string {
@@ -432,6 +441,10 @@ func (m *model) planMenuView() string {
 		}
 		lines = append(lines, m.st.dim.Render(ansi.Truncate(modeStripIndent+option.say, width, "…")))
 	}
-	footer := "↑↓ choisir · ⏎ valider · ⇧⇥ changer de mode"
+	footer := joinNonEmpty(
+		m.pairHint(actSelectPrevious, actSelectNext, "choisir", ctxPlan),
+		m.labelledHint(actSelectAccept, "valider", ctxPlan),
+		m.labelledHint(actCycleMode, "changer de mode", ctxPlan),
+	)
 	return strings.Join(append(lines, m.st.dim.Render(ansi.Truncate(footer, width, "…"))), "\n")
 }

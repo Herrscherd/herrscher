@@ -378,7 +378,7 @@ func newTestHandlerWithUpdater(t *testing.T, homeType string) (*Handler, *fakeUp
 	up := &fakeUpdater{version: "abc1234"}
 	st := state.NewState(t.TempDir() + "/s.json")
 	agents := agent.NewStore(t.TempDir())
-	return NewHandler(d, sup, wt, fg, up, agents, st, "claude", t.TempDir(), []string{"chat"}), up, d, sup, wt, fg, st
+	return NewHandler(d, sup, wt, fg, up, agents, st, "claude", t.TempDir(), []string{"chat"}, nil, nil), up, d, sup, wt, fg, st
 }
 
 func args(kv ...string) contracts.Input {

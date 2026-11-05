@@ -27,8 +27,8 @@ func newDiffModel(t *testing.T, repo string, run commandRunner, width, height in
 
 func keyFor(name string) tea.KeyMsg {
 	switch name {
-	case "ctrl+d":
-		return tea.KeyMsg{Type: tea.KeyCtrlD}
+	case "ctrl+x":
+		return tea.KeyMsg{Type: tea.KeyCtrlX}
 	case "enter":
 		return tea.KeyMsg{Type: tea.KeyEnter}
 	case "esc":
@@ -82,7 +82,7 @@ func TestCtrlDOpensTheTurnDiffWithFilesAndCounts(t *testing.T) {
 	writeAndCommitBase(t, dir)
 	m, _ := newDiffModel(t, dir, nil, 120, 30)
 
-	press(m, "ctrl+d")
+	press(m, "ctrl+x", "d")
 
 	view := screen(m)
 	for _, want := range []string{"Diff du tour", "a.txt", "+2 −1", "b.txt", "relus 0/2"} {
@@ -99,7 +99,7 @@ func TestListRowsDropTheStatusLetterAndIndentByThree(t *testing.T) {
 	dir := initRepo(t)
 	writeAndCommitBase(t, dir)
 	m, _ := newDiffModel(t, dir, nil, 120, 30)
-	press(m, "ctrl+d")
+	press(m, "ctrl+x", "d")
 
 	row := m.diffFileRow(1, diffListWidth)
 	if !strings.HasPrefix(row, "   ") || strings.Contains(row, "?") || strings.Contains(row, " M ") {
@@ -115,7 +115,7 @@ func TestListDropsTheFolderTheFilesShare(t *testing.T) {
 	writeRepoFile(t, dir, "pkg/tui/one.go", "package tui\n")
 	writeRepoFile(t, dir, "pkg/tui/two.go", "package tui\n")
 	m, _ := newDiffModel(t, dir, nil, 120, 30)
-	press(m, "ctrl+d")
+	press(m, "ctrl+x", "d")
 
 	row := m.diffFileRow(0, diffListWidth)
 	if strings.Contains(row, "pkg/tui/") || !strings.Contains(row, "one.go") {
@@ -132,7 +132,7 @@ func TestPaneHeaderSaysOldAndNewAtEachWidth(t *testing.T) {
 			dir := initRepo(t)
 			writeAndCommitBase(t, dir)
 			m, _ := newDiffModel(t, dir, nil, width, 20)
-			press(m, "ctrl+d")
+			press(m, "ctrl+x", "d")
 
 			if !strings.Contains(screen(m), "ancien · nouveau") {
 				t.Fatalf("the pane header must read ancien · nouveau:\n%s", screen(m))
@@ -142,17 +142,17 @@ func TestPaneHeaderSaysOldAndNewAtEachWidth(t *testing.T) {
 }
 
 func TestFooterFoldsWholeHintsAtNarrowWidths(t *testing.T) {
-	hints := []string{"⌃D fermer le panneau", "↑↓ fichier", "espace relu", "i consigne", "c commit", "p PR", "b tour ou branche"}
 	for _, size := range []struct{ width, height int }{{60, 20}, {80, 30}} {
 		t.Run(fmt.Sprintf("%dx%d", size.width, size.height), func(t *testing.T) {
 			dir := initRepo(t)
 			writeAndCommitBase(t, dir)
 			m, _ := newDiffModel(t, dir, nil, size.width, size.height)
-			press(m, "ctrl+d")
+			hints := m.diffFooterHints()
+			press(m, "ctrl+x", "d")
 
 			lines := strings.Split(screen(m), "\n")
 			footer := strings.TrimRight(lines[len(lines)-2], " ")
-			if !strings.Contains(footer, "⌃D fermer le panneau") {
+			if !strings.Contains(footer, hints[0]) {
 				t.Fatalf("the close hint must stay on the footer: %q", footer)
 			}
 			if strings.HasSuffix(footer, "…") {
@@ -172,7 +172,7 @@ func TestEscClosesThePanel(t *testing.T) {
 	dir := initRepo(t)
 	writeAndCommitBase(t, dir)
 	m, _ := newDiffModel(t, dir, nil, 120, 30)
-	press(m, "ctrl+d")
+	press(m, "ctrl+x", "d")
 
 	press(m, "esc")
 
@@ -185,7 +185,7 @@ func TestSpaceMarksTheFileReviewedAndMovesOn(t *testing.T) {
 	dir := initRepo(t)
 	writeAndCommitBase(t, dir)
 	m, _ := newDiffModel(t, dir, nil, 120, 30)
-	press(m, "ctrl+d")
+	press(m, "ctrl+x", "d")
 
 	press(m, " ")
 
@@ -202,7 +202,7 @@ func TestDownArrowShowsTheNextFileDiff(t *testing.T) {
 	dir := initRepo(t)
 	writeAndCommitBase(t, dir)
 	m, _ := newDiffModel(t, dir, nil, 120, 30)
-	press(m, "ctrl+d")
+	press(m, "ctrl+x", "d")
 	if !strings.Contains(screen(m), "+ TWO") {
 		t.Fatalf("first file pane must show its change:\n%s", screen(m))
 	}
@@ -218,7 +218,7 @@ func TestNoteIsSentToTheAgentPrefixedByThePath(t *testing.T) {
 	dir := initRepo(t)
 	writeAndCommitBase(t, dir)
 	m, be := newDiffModel(t, dir, nil, 120, 30)
-	press(m, "ctrl+d")
+	press(m, "ctrl+x", "d")
 
 	press(m, "i", "f", "a", "i", "s", " ", "m", "i", "e", "u", "x", "enter")
 
@@ -234,7 +234,7 @@ func TestNoteStaysEditableUntilSent(t *testing.T) {
 	dir := initRepo(t)
 	writeAndCommitBase(t, dir)
 	m, be := newDiffModel(t, dir, nil, 120, 30)
-	press(m, "ctrl+d", "i", "x", "backspace", "esc")
+	press(m, "ctrl+x", "d", "i", "x", "backspace", "esc")
 
 	if len(be.submitted) != 0 {
 		t.Fatalf("esc must not send: %+v", be.submitted)
@@ -248,7 +248,7 @@ func TestCommitShowsAnEditableDraftAndEnterCommits(t *testing.T) {
 	dir := initRepo(t)
 	writeAndCommitBase(t, dir)
 	m, _ := newDiffModel(t, dir, nil, 120, 30)
-	press(m, "ctrl+d", "c")
+	press(m, "ctrl+x", "d", "c")
 
 	if !strings.Contains(screen(m), "feat: modifier a.txt, b.txt") {
 		t.Fatalf("commit box misses the draft:\n%s", screen(m))
@@ -268,7 +268,7 @@ func TestCommitShowsAnEditableDraftAndEnterCommits(t *testing.T) {
 func TestCommitWithNothingToCommitShowsANotice(t *testing.T) {
 	dir := initRepo(t)
 	m, _ := newDiffModel(t, dir, nil, 120, 30)
-	press(m, "ctrl+d", "c", "enter")
+	press(m, "ctrl+x", "d", "c", "enter")
 
 	if !strings.Contains(screen(m), "rien à commiter dans cette portée") {
 		t.Fatalf("notice missing:\n%s", screen(m))
@@ -281,7 +281,7 @@ func TestPRCommitsThenOpensAndShowsTheNumber(t *testing.T) {
 	writeAndCommitBase(t, dir)
 	runner := &scriptedRunner{prURL: "https://github.com/o/r/pull/42\n"}
 	m, _ := newDiffModel(t, dir, runner.run, 120, 30)
-	press(m, "ctrl+d")
+	press(m, "ctrl+x", "d")
 
 	press(m, "p")
 
@@ -299,7 +299,7 @@ func TestBranchToggleShowsCommitsAheadOfBase(t *testing.T) {
 	writeRepoFile(t, dir, "a.txt", "one\nTWO\n")
 	gitIn(t, dir, "commit", "-q", "-am", "feat: change a")
 	m, _ := newDiffModel(t, dir, nil, 120, 30)
-	press(m, "ctrl+d")
+	press(m, "ctrl+x", "d")
 
 	press(m, "b")
 
@@ -320,7 +320,7 @@ func TestTurnScopeIgnoresChangesMadeBeforeTheTurn(t *testing.T) {
 	settle(m, m.handleEnter())
 	writeRepoFile(t, dir, "b.txt", "during the turn\n")
 
-	press(m, "ctrl+d")
+	press(m, "ctrl+x", "d")
 
 	view := screen(m)
 	if !strings.Contains(view, "b.txt") {
@@ -386,7 +386,7 @@ func TestPanelFillsTheScreenAndNeverOverflowsAtEachWidth(t *testing.T) {
 		for _, height := range []int{20, 30} {
 			t.Run(fmt.Sprintf("%dx%d", width, height), func(t *testing.T) {
 				m, _ := newDiffModel(t, initNestedChange(t), nil, width, height)
-				press(m, "ctrl+d")
+				press(m, "ctrl+x", "d")
 
 				assertPanelFits(t, screen(m), width, height)
 			})
@@ -400,7 +400,7 @@ func TestDiffScreenRulesTheFooterAndEndsOnTheStatusBar(t *testing.T) {
 			dir := initRepo(t)
 			writeAndCommitBase(t, dir)
 			m, _ := newDiffModel(t, dir, nil, size.width, size.height)
-			press(m, "ctrl+d")
+			press(m, "ctrl+x", "d")
 
 			view := screen(m)
 			assertPanelFits(t, view, size.width, size.height)
@@ -421,7 +421,7 @@ func TestWideLayoutShowsListAndPaneSideBySide(t *testing.T) {
 	dir := initRepo(t)
 	writeAndCommitBase(t, dir)
 	m, _ := newDiffModel(t, dir, nil, 120, 30)
-	press(m, "ctrl+d")
+	press(m, "ctrl+x", "d")
 
 	rows := strings.Split(screen(m), "\n")
 	found := false
@@ -437,7 +437,7 @@ func TestWideLayoutShowsListAndPaneSideBySide(t *testing.T) {
 
 func TestFolderOutsideGitShowsAClearMessage(t *testing.T) {
 	m, _ := newDiffModel(t, t.TempDir(), nil, 120, 30)
-	press(m, "ctrl+d")
+	press(m, "ctrl+x", "d")
 
 	if !strings.Contains(screen(m), "aucun dépôt git dans le dossier de cette session") {
 		t.Fatalf("a folder outside git must say so:\n%s", screen(m))

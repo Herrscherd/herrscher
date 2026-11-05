@@ -141,7 +141,7 @@ func (m *model) selectedLink() (Link, bool) {
 func (m *model) openSelectedLink() {
 	launch, ok := m.selectedLink()
 	if !ok {
-		m.flash = "aucun lien sélectionné · ctrl+l en choisit un"
+		m.flash = joinNonEmpty("aucun lien sélectionné", m.labelledHint(actNextLink, "en choisit un", chatKeyStack()...))
 		return
 	}
 	if err := openLink(m.runContext(), launch, m.sys, m.edit); err != nil {

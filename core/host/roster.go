@@ -27,7 +27,8 @@ func (r storeRoster) Agents() []contracts.AgentInfo {
 		return nil
 	}
 	out := make([]contracts.AgentInfo, 0, len(list))
-	for _, a := range list {
+	for i := range list {
+		a := &list[i]
 		out = append(out, contracts.AgentInfo{Name: a.Name, Backend: a.Backend, Tags: a.Tags})
 	}
 	return out

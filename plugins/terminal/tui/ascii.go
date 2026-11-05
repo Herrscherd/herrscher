@@ -6,8 +6,7 @@ import (
 )
 
 const (
-	asciiEllipsis   = "..."
-	asciiEnterLabel = "enter"
+	asciiEllipsis = "..."
 )
 
 func asciiSubstitutes() map[rune]string {

@@ -198,7 +198,7 @@ linters:
       - path: ^core/internal/agent/agent\.go$
         linters: [gosec]
         text: "^G101:"
-      - path: ^core/(identity|scope|service|internal/(forge|runner|supervisor|worktree|checkpoint))/
+      - path: ^core/(identity|scope|service|keyproxy|internal/(forge|runner|supervisor|worktree|checkpoint))/
         linters: [gosec]
         text: "^G204:"
       - path: ^core/host/session_shell\.go$

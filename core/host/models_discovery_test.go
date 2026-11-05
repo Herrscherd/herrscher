@@ -494,12 +494,12 @@ func TestClashWarnsOncePerIDPerCacheLoad(t *testing.T) {
 	}
 }
 
-func TestResolveModelRouteHonoursAHiddenRoutePolicy(t *testing.T) {
+func TestChooseVendorHonoursAHiddenRoutePolicy(t *testing.T) {
 	t.Setenv("HERRSCHER_STATE_DIR", t.TempDir())
 	t.Setenv(EnvRoutePolicy, string(contracts.PolicyGatewayOnly))
 	restore := envx.Hide([]string{EnvRoutePolicy})
 	defer restore()
-	if _, _, err := resolveModelRoute("a-native", fakePlugins(), "", nil); err == nil {
+	if _, _, err := chooseVendor("", "a-native", fakePlugins(), nil); err == nil {
 		t.Fatal("a native model resolved under a gateway-only policy that is only hidden from the process environment")
 	}
 }

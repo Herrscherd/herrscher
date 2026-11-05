@@ -192,3 +192,45 @@ func TestHookImposesNoDeadlineOfItsOwn(t *testing.T) {
 		t.Fatal("the hook put a deadline on the ask: it would cut short the wait on a human")
 	}
 }
+
+func TestHookNamesACancelledApprovalApartFromAnUnansweredOne(t *testing.T) {
+	t.Setenv(SessionVar, "s1")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	ask := func(c context.Context, _ []string) (string, bool, error) {
+		return "", true, c.Err()
+	}
+	in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"ls"}}`)
+	var out, errOut bytes.Buffer
+	RunPermissionHook(ctx, in, &out, &errOut, testTarget, ask)
+	if d, _ := hookDecision(t, out.String()); d != "allow" {
+		t.Fatalf("got %q, want allow: a cancelled approval must not block the call", d)
+	}
+	msg := errOut.String()
+	if !strings.Contains(msg, "cancelled") {
+		t.Fatalf("stderr was %q, want it to say the approval was cancelled", msg)
+	}
+	if strings.Contains(msg, "could not answer") || strings.Contains(msg, "no daemon is listening") {
+		t.Fatalf("stderr was %q, want no daemon-absent or could-not-answer wording", msg)
+	}
+}
+
+func TestHookAppliesAnAnswerThatArrivesAfterCancellation(t *testing.T) {
+	for _, decision := range []string{"deny", "allow"} {
+		t.Run(decision, func(t *testing.T) {
+			t.Setenv(SessionVar, "s1")
+			ctx, cancel := context.WithCancel(context.Background())
+			ask := func(context.Context, []string) (string, bool, error) {
+				cancel()
+				return `{"decision":"` + decision + `","reason":"herrscher: answered"}`, true, nil
+			}
+			in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"git push"}}`)
+			var out, errOut bytes.Buffer
+			RunPermissionHook(ctx, in, &out, &errOut, testTarget, ask)
+			d, reason := hookDecision(t, out.String())
+			if d != decision || reason != "herrscher: answered" {
+				t.Fatalf("got %q/%q, want %q: a delivered answer must not be replaced by the cancellation", d, reason, decision)
+			}
+		})
+	}
+}

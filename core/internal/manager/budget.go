@@ -112,16 +112,6 @@ func cohortMembers(target state.Session, all []state.Session) []state.Session {
 			children[session.Parent] = append(children[session.Parent], session.Name)
 		}
 	}
-	root := target
-	seen := map[string]bool{root.Name: true}
-	for root.Parent != "" && root.Parent != root.Name {
-		parent, ok := byName[root.Parent]
-		if !ok || seen[parent.Name] {
-			break
-		}
-		seen[parent.Name] = true
-		root = parent
-	}
 	var members []state.Session
 	visited := make(map[string]bool)
 	var walk func(name string)
@@ -139,7 +129,7 @@ func cohortMembers(target state.Session, all []state.Session) []state.Session {
 			walk(ch)
 		}
 	}
-	walk(root.Name)
+	walk(state.TreeRoot(all, target.Name))
 	return members
 }
 

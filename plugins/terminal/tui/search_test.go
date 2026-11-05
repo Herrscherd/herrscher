@@ -192,10 +192,10 @@ func TestFoldKeysRepaintRatherThanServingTheCachedFrame(t *testing.T) {
 	long := "```go\n" + strings.Repeat("x := 1\n", foldThreshold+5) + "```"
 	for _, c := range []struct {
 		name string
-		key  tea.KeyMsg
+		key  string
 	}{
-		{"code fold", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c"), Alt: true}},
-		{"link selection", tea.KeyMsg{Type: tea.KeyCtrlL}},
+		{"code fold", "alt+c"},
+		{"link selection", "ctrl+x l"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			m := newTestModel()
@@ -205,7 +205,7 @@ func TestFoldKeysRepaintRatherThanServingTheCachedFrame(t *testing.T) {
 			m.applySize()
 			before := m.baseContent()
 
-			m.Update(c.key)
+			pressChord(m, c.key)
 			if after := m.baseContent(); after == before {
 				t.Fatalf("%s must change the painted frame, not serve the cached one", c.name)
 			}

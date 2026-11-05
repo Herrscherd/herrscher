@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -65,16 +66,6 @@ func cohortTotals(target state.Session, all []state.Session,
 			children[session.Parent] = append(children[session.Parent], session.Name)
 		}
 	}
-	root := target
-	seen := map[string]bool{root.Name: true}
-	for root.Parent != "" && root.Parent != root.Name {
-		parent, ok := byName[root.Parent]
-		if !ok || seen[parent.Name] {
-			break
-		}
-		seen[parent.Name] = true
-		root = parent
-	}
 	var totalCost float64
 	var totalTokens uint64
 	visited := make(map[string]bool)
@@ -95,7 +86,7 @@ func cohortTotals(target state.Session, all []state.Session,
 			walk(ch)
 		}
 	}
-	walk(root.Name)
+	walk(state.TreeRoot(all, target.Name))
 	return sessionUsage{cost: totalCost, tokens: totalTokens}
 }
 
@@ -364,6 +355,7 @@ type createRequest struct {
 	runtime    runtimeChoice
 	options    sessionOptions
 	hostName   string
+	account    string
 	mode       string
 	shared     bool
 }
@@ -488,6 +480,13 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 	if err != nil {
 		return createRequest{}, err
 	}
+	hostName, account, err := h.checkSessionAccount(input, runtime)
+	if err != nil {
+		return createRequest{}, err
+	}
+	if err := checkParentCycle(name, options.parent, h.st.SnapshotSessions()); err != nil {
+		return createRequest{}, err
+	}
 	mode := strings.TrimSpace(input.Get("approvals"))
 	if err := validateApprovalsMode(mode); err != nil {
 		return createRequest{}, err
@@ -501,7 +500,8 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 		adopted:  adopted,
 		runtime:  runtime,
 		options:  options,
-		hostName: h.resolveHost(input, runtime.agent),
+		hostName: hostName,
+		account:  account,
 		mode:     mode,
 		shared:   input.Bool("shared"),
 	}, nil
@@ -536,6 +536,33 @@ func (h *Handler) chooseHome(ctx context.Context, input contracts.Input, adopted
 	return state.HomeRef{ID: under, Type: kind}, admin, nil
 }
 
+func (h *Handler) checkSessionAccount(input contracts.Input, runtime runtimeChoice) (string, string, error) {
+	explicitAccount, _ := input.Lookup("account")
+	hostName := h.resolveHost(input, runtime.agent)
+	account := chooseSessionAccount(explicitAccount, h.agentAccount(runtime.agent))
+	err := h.checkAccountUsable(hostName, account)
+	if err == nil {
+		err = h.checkAccount(runtime, account)
+	}
+	if err != nil {
+		if account != explicitAccount {
+			err = fmt.Errorf("the account of agent %q: %w", runtime.agent, err)
+		}
+		return "", "", err
+	}
+	return hostName, account, nil
+}
+
+// PreflightAccount reports the account refusal that a session create with these arguments would meet, without creating anything.
+func (h *Handler) PreflightAccount(input contracts.Input) error {
+	runtime, err := h.chooseRuntime(input)
+	if err != nil {
+		return err
+	}
+	_, _, err = h.checkSessionAccount(input, runtime)
+	return err
+}
+
 func (h *Handler) chooseRuntime(input contracts.Input) (runtimeChoice, error) {
 	var runtime runtimeChoice
 	runtime.cmd = h.defaultCmd
@@ -563,6 +590,13 @@ func (h *Handler) chooseRuntime(input contracts.Input) (runtimeChoice, error) {
 		return runtimeChoice{}, err
 	}
 	return runtime, nil
+}
+
+func checkParentCycle(name, parent string, all []state.Session) error {
+	if parent == "" || !slices.Contains(state.TreeChain(all, parent), name) {
+		return nil
+	}
+	return &InvalidValueError{Field: "parent", Value: parent, Hint: "it would make " + name + " its own ancestor"}
 }
 
 func (h *Handler) parseSessionOptions(input contracts.Input, terminalOnly bool) (sessionOptions, error) {
@@ -635,6 +669,33 @@ func optionalNonNegative(input contracts.Input, key string) (int, error) {
 		return 0, &InvalidValueError{Field: key, Value: value, Hint: nonNegativeHint}
 	}
 	return count, nil
+}
+
+func (h *Handler) vendorOf(runtime runtimeChoice) string {
+	if runtime.vendor != "" {
+		return runtime.vendor
+	}
+	if agentSpec, found := h.agents.Get(runtime.agent); found {
+		return agentSpec.Backend
+	}
+	return ""
+}
+
+func chooseSessionAccount(explicit, agentAccount string) string {
+	if explicit != "" {
+		return explicit
+	}
+	return agentAccount
+}
+
+func (h *Handler) agentAccount(agentName string) string {
+	if agentName == "" {
+		return ""
+	}
+	if a, ok := h.agents.Get(agentName); ok {
+		return a.Account
+	}
+	return ""
 }
 
 func (h *Handler) resolveHost(input contracts.Input, agentName string) string {
@@ -787,6 +848,7 @@ func newSessionRecord(req createRequest, space workspace, project, runDir string
 		Parent: options.parent, Gateways: options.gateways, Extractor: options.extractor, Journal: options.journal,
 		ConsolidateEvery: options.consolidateEvery, CostCap: options.caps.cost, TokenCap: options.caps.tokens,
 		CohortCostCap: options.caps.cohortCost, CohortTokenCap: options.caps.cohortTokens, Host: req.hostName,
+		Account: req.account,
 	}
 }
 

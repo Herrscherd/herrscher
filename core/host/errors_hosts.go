@@ -200,3 +200,11 @@ type instanceIDMismatchError struct {
 func (e *instanceIDMismatchError) Error() string {
 	return fmt.Sprintf("instanceID mismatch: state has %q but %q was requested; changing it would orphan existing sessions", e.Have, e.Want)
 }
+
+type remoteAccountError struct {
+	Account string
+}
+
+func (e *remoteAccountError) Error() string {
+	return fmt.Sprintf("account %q cannot be applied: the backend runs on a remote host, which resolves accounts in its own store; drop the account or unset HERRSCHER_REMOTE=backend", e.Account)
+}

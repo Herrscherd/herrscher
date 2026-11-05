@@ -165,6 +165,8 @@ func runCommand(ctx context.Context, cmd string, args []string) error {
 		return runSession(ctx, args)
 	case "agent":
 		return runAgent(ctx, args)
+	case "account":
+		return runAccount(ctx, args)
 	case "host":
 		return runHost(ctx, args)
 	case "approve":

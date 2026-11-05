@@ -52,6 +52,7 @@ type Session struct {
 	Dir      string `json:"dir,omitempty"`
 	Project  string `json:"project,omitempty"`
 	Agent    string `json:"agent,omitempty"`
+	Account  string `json:"account,omitempty"`
 	// Host names the place this session's process runs, as registered by
 	// `host add`. Empty means this machine, which is every session written
 	// before remote execution existed.
@@ -480,6 +481,23 @@ func (s *State) SetCompactPercent(name string, percent *int) (bool, error) {
 			continue
 		}
 		s.Sessions[idx].CompactPercent = percent
+		return true, s.saveLocked()
+	}
+	return false, nil
+}
+
+// SetAccount sets a session account profile, dropping its resume token when fresh; false when no session matches.
+func (s *State) SetAccount(name, account string, fresh bool) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name != name {
+			continue
+		}
+		s.Sessions[idx].Account = account
+		if fresh {
+			s.Sessions[idx].ResumeToken = ""
+		}
 		return true, s.saveLocked()
 	}
 	return false, nil

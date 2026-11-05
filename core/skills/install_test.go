@@ -10,16 +10,16 @@ import (
 
 func shippedFS() fstest.MapFS {
 	return fstest.MapFS{
-		"pr-job/SKILL.md":     &fstest.MapFile{Data: []byte("---\nname: pr-job\n---\nshipped")},
-		"pr-job/ref/notes.md": &fstest.MapFile{Data: []byte("nested")},
-		"other/SKILL.md":      &fstest.MapFile{Data: []byte("other")},
-		"README.md":           &fstest.MapFile{Data: []byte("not a skill")},
+		"playbook/SKILL.md":     &fstest.MapFile{Data: []byte("---\nname: playbook\n---\nshipped")},
+		"playbook/ref/notes.md": &fstest.MapFile{Data: []byte("nested")},
+		"other/SKILL.md":        &fstest.MapFile{Data: []byte("other")},
+		"README.md":             &fstest.MapFile{Data: []byte("not a skill")},
 	}
 }
 
 func upgradedFS() fstest.MapFS {
 	fs := shippedFS()
-	fs["pr-job/SKILL.md"] = &fstest.MapFile{Data: []byte("---\nname: pr-job\n---\nrewritten")}
+	fs["playbook/SKILL.md"] = &fstest.MapFile{Data: []byte("---\nname: playbook\n---\nrewritten")}
 	return fs
 }
 
@@ -32,7 +32,7 @@ func TestInstallWritesEverySkillTree(t *testing.T) {
 	if len(out.Installed) != 2 {
 		t.Fatalf("installed %v, want both skill directories", out.Installed)
 	}
-	b, err := os.ReadFile(filepath.Join(dir, "pr-job", "ref", "notes.md"))
+	b, err := os.ReadFile(filepath.Join(dir, "playbook", "ref", "notes.md"))
 	if err != nil || string(b) != "nested" {
 		t.Fatalf("nested file = %q, %v", b, err)
 	}
@@ -46,7 +46,7 @@ func TestInstallNeverOverwritesAnEditedSkill(t *testing.T) {
 	if _, err := Install(shippedFS(), dir); err != nil {
 		t.Fatal(err)
 	}
-	edited := filepath.Join(dir, "pr-job", "SKILL.md")
+	edited := filepath.Join(dir, "playbook", "SKILL.md")
 	if err := os.WriteFile(edited, []byte("my own procedure"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -62,8 +62,8 @@ func TestInstallNeverOverwritesAnEditedSkill(t *testing.T) {
 	if string(b) != "my own procedure" {
 		t.Fatalf("edited skill = %q, want the operator's version kept", b)
 	}
-	if len(out.Diverged) != 1 || out.Diverged[0] != "pr-job" {
-		t.Fatalf("diverged = %v, want pr-job reported so the operator learns of it", out.Diverged)
+	if len(out.Diverged) != 1 || out.Diverged[0] != "playbook" {
+		t.Fatalf("diverged = %v, want playbook reported so the operator learns of it", out.Diverged)
 	}
 }
 
@@ -76,15 +76,15 @@ func TestInstallUpdatesAnUntouchedSkill(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out.Updated) != 1 || out.Updated[0] != "pr-job" {
-		t.Fatalf("updated = %v, want pr-job refreshed to the shipped text", out.Updated)
+	if len(out.Updated) != 1 || out.Updated[0] != "playbook" {
+		t.Fatalf("updated = %v, want playbook refreshed to the shipped text", out.Updated)
 	}
 	if len(out.Diverged) != 0 {
 		t.Fatalf("diverged = %v, want nothing: the copy was ours", out.Diverged)
 	}
-	b, err := os.ReadFile(filepath.Join(dir, "pr-job", "SKILL.md"))
+	b, err := os.ReadFile(filepath.Join(dir, "playbook", "SKILL.md"))
 	must(t, err)
-	if string(b) != "---\nname: pr-job\n---\nrewritten" {
+	if string(b) != "---\nname: playbook\n---\nrewritten" {
 		t.Fatalf("skill = %q, want the newly shipped text", b)
 	}
 	again, err := Install(upgradedFS(), dir)
@@ -102,21 +102,21 @@ func TestUpdateRemovesFilesTheReleaseDropped(t *testing.T) {
 		t.Fatal(err)
 	}
 	slimmed := upgradedFS()
-	delete(slimmed, "pr-job/ref/notes.md")
+	delete(slimmed, "playbook/ref/notes.md")
 	if _, err := Install(slimmed, dir); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "pr-job", "ref", "notes.md")); err == nil {
+	if _, err := os.Stat(filepath.Join(dir, "playbook", "ref", "notes.md")); err == nil {
 		t.Fatal("a file the release dropped is still installed")
 	}
 }
 
 func TestUnmanagedSkillIsReportedNotOverwritten(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "pr-job"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, "playbook"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	old := filepath.Join(dir, "pr-job", "SKILL.md")
+	old := filepath.Join(dir, "playbook", "SKILL.md")
 	if err := os.WriteFile(old, []byte("an older release"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -129,18 +129,18 @@ func TestUnmanagedSkillIsReportedNotOverwritten(t *testing.T) {
 	if string(b) != "an older release" {
 		t.Fatalf("unmanaged skill = %q, want it kept", b)
 	}
-	if len(out.Diverged) != 1 || out.Diverged[0] != "pr-job" {
-		t.Fatalf("diverged = %v, want pr-job reported", out.Diverged)
+	if len(out.Diverged) != 1 || out.Diverged[0] != "playbook" {
+		t.Fatalf("diverged = %v, want playbook reported", out.Diverged)
 	}
 }
 
 func TestUnmanagedSkillIdenticalToShippedIsAdopted(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "pr-job", "ref"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, "playbook", "ref"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	for p, f := range shippedFS() {
-		if !strings.HasPrefix(p, "pr-job/") {
+		if !strings.HasPrefix(p, "playbook/") {
 			continue
 		}
 		if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(p)), f.Data, 0o644); err != nil {
@@ -156,7 +156,7 @@ func TestUnmanagedSkillIdenticalToShippedIsAdopted(t *testing.T) {
 	}
 	if out, err = Install(upgradedFS(), dir); err != nil {
 		t.Fatal(err)
-	} else if len(out.Updated) != 1 || out.Updated[0] != "pr-job" {
+	} else if len(out.Updated) != 1 || out.Updated[0] != "playbook" {
 		t.Fatalf("updated = %v, want the adopted skill to take the new release", out.Updated)
 	}
 }
@@ -187,9 +187,9 @@ func TestInstallWritesPrivateFilesAndDirectories(t *testing.T) {
 	if _, err := Install(shippedFS(), dir); err != nil {
 		t.Fatal(err)
 	}
-	assertSkillMode(t, filepath.Join(dir, "pr-job", "SKILL.md"), 0o600)
-	assertSkillMode(t, filepath.Join(dir, "pr-job", "ref"), 0o750)
-	assertSkillMode(t, filepath.Join(dir, "pr-job", "ref", "notes.md"), 0o600)
+	assertSkillMode(t, filepath.Join(dir, "playbook", "SKILL.md"), 0o600)
+	assertSkillMode(t, filepath.Join(dir, "playbook", "ref"), 0o750)
+	assertSkillMode(t, filepath.Join(dir, "playbook", "ref", "notes.md"), 0o600)
 }
 
 func assertSkillMode(t *testing.T, path string, want os.FileMode) {

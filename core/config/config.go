@@ -57,6 +57,9 @@ type Config struct {
 	Source    string   `json:"source"`
 
 	Skills *SkillsConfig `json:"skills,omitempty"`
+
+	// Keys configures the local API key proxy. Absent means no proxy.
+	Keys *KeysConfig `json:"keys,omitempty"`
 }
 
 // SkillsConfig configures cross-backend skill injection. A nil pointer, or a nil
@@ -106,6 +109,9 @@ func Load(path string) (Config, error) {
 	}
 	if err := ValidateContextLimits(cfg.ContextLimits); err != nil {
 		return cfg, fmt.Errorf("parse %s: contextLimits: %w", path, err)
+	}
+	if err := ValidateKeys(cfg.Keys); err != nil {
+		return cfg, fmt.Errorf("parse %s: %w", path, err)
 	}
 	return cfg, nil
 }

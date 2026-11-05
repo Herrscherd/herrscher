@@ -111,6 +111,9 @@ func (s *Supervisor) bridgeArgs(sess state.Session) []string {
 	if sess.Vendor != "" {
 		args = append(args, "--vendor", sess.Vendor)
 	}
+	if sess.Account != "" {
+		args = append(args, "--account", sess.Account)
+	}
 	if sess.ModelID != "" {
 		args = append(args, "--model", sess.ModelID)
 	}

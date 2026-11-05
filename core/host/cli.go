@@ -44,8 +44,9 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if n, ok := agent.UserBudgetFromEnv(os.Getenv); ok {
 		agents.SetUserBudget(n)
 	}
-	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways)
-	wireManagerHandler(ctx, hdl, hostState, instID, worktrees, sessions, options.modelDiscovery())
+	models := options.modelDiscovery()
+	hdl := newManagerHandler(deps, options, partDir, hostState, sup, worktrees, updater, agents, models)
+	wireManagerHandler(ctx, hdl, hostState, instID, worktrees, sessions, models)
 	wireSupervisor(sup, hostState, instID)
 	seedCoord := &coordinatorSlot{}
 	schedSlot := &schedulerSlot{}
@@ -61,6 +62,13 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 		return nil, hostDeps{}, err
 	}
 	if err := addSessionVerbs(reg, hostState, partDir, instID, approvals, sessions, seedCoord); err != nil {
+		return nil, hostDeps{}, err
+	}
+	handoff, err := sessionHandoffCmd(hdl.Commands(), hostState, sessions, instID, seedCoord, hdl.PreflightAccount)
+	if err != nil {
+		return nil, hostDeps{}, err
+	}
+	if err := addVerbs(reg, handoff); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addCheckpointCommands(reg, hostState, sessions); err != nil {
@@ -99,6 +107,13 @@ func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
 	return nil
 }
 
+func newManagerHandler(deps Deps, options Options, partDir string, hostState *state.State, sup *supervisor.Supervisor, worktrees manager.Worktrees, updater serviceUpdater, agents *agent.Store, models *ModelDiscovery) *manager.Handler {
+	launch := func(vendor, modelID string) (string, error) { return launchVendor(models, vendor, modelID) }
+	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, validateProfileChoice, launch)
+	hdl.SetRemoteBackend(options.RemoteCategories[contracts.CategoryBackend])
+	return hdl
+}
+
 func wireManagerHandler(ctx context.Context, hdl *manager.Handler, hostState *state.State, instID string, worktrees *worktree.Worktreer, sessions *sessionTable, models *ModelDiscovery) {
 	hdl.SetSeeder(sessions.Seed)
 	hdl.SetHosts(newHostPlacer(hostState, instID, worktrees, func() string { return sourceVersionOf(ctx, hostState) }))
@@ -109,6 +124,22 @@ func wireManagerHandler(ctx context.Context, hdl *manager.Handler, hostState *st
 		return validateModelChoice(models, vendor, modelID)
 	})
 	hdl.SetGateResolver(GateFor)
+}
+
+func launchVendor(models *ModelDiscovery, vendor, modelID string) (string, error) {
+	plugins := contracts.Default.Backends()
+	chosen, _, err := chooseVendor(vendor, modelID, plugins, models)
+	if err != nil {
+		return "", err
+	}
+	if chosen != "" {
+		return chosen, nil
+	}
+	plugin, err := selectBackend("", plugins)
+	if err != nil {
+		return "", err
+	}
+	return plugin.Manifest.Kind, nil
 }
 
 func validateModelChoice(models *ModelDiscovery, vendor, modelID string) error {

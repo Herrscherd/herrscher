@@ -116,11 +116,27 @@ func fitScenarios() map[string]func(t *testing.T, m *model) {
 			m.drafts = []string{"brouillon"}
 			m.relayout()
 		},
+		"recherche":   func(_ *testing.T, m *model) { m.openSearch() },
+		"sessions":    func(_ *testing.T, m *model) { m.openSwitch() },
+		"reprise":     func(_ *testing.T, m *model) { m.openResume() },
+		"compétences": func(_ *testing.T, m *model) { m.openSkills() },
+		"diagnostic":  func(_ *testing.T, m *model) { m.openDiagnostics() },
+		"plugins":     func(_ *testing.T, m *model) { _ = m.openPlugins() },
+		"historique":  func(_ *testing.T, m *model) { m.openHistSearch() },
+		"thème":       func(_ *testing.T, m *model) { m.openTheme() },
+		"volets":      func(_ *testing.T, m *model) { m.openPanes() },
+		"diff":        func(_ *testing.T, m *model) { _ = m.openDiff(false) },
+		"mention": func(_ *testing.T, m *model) {
+			m.input.SetValue("@")
+			m.mentionCacheKey = m.worktreeDir() + "\x00"
+			m.mentionCacheRows = []string{"internal/very/long/path/to/a/file/whose/name/keeps/going/on/and/on.go", "README.md"}
+			m.resizeComposer()
+		},
 	}
 }
 
 func TestSurfacesFillTheScreenExactlyAtEverySize(t *testing.T) {
-	sizes := []struct{ width, height int }{{60, 20}, {60, 30}, {80, 30}, {120, 30}, {120, 42}, {200, 30}, {240, 50}}
+	sizes := []struct{ width, height int }{{60, 20}, {80, 20}, {120, 20}, {200, 20}, {60, 30}, {80, 30}, {120, 30}, {120, 42}, {200, 30}, {240, 50}}
 	for name, open := range fitScenarios() {
 		for _, size := range sizes {
 			t.Run(fmt.Sprintf("%s %dx%d", name, size.width, size.height), func(t *testing.T) {
@@ -131,6 +147,26 @@ func TestSurfacesFillTheScreenExactlyAtEverySize(t *testing.T) {
 				assertFitsScreen(t, m.View(), size.width, size.height)
 			})
 		}
+	}
+}
+
+func TestEveryOverlayChangesTheMainView(t *testing.T) {
+	base, _ := barModelAt(t, "")
+	base.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	mainView := base.View()
+	for name, open := range fitScenarios() {
+		if name == "repos" {
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
+			m, _ := barModelAt(t, "")
+			m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+			open(t, m)
+			m.relayout()
+			if m.View() == mainView {
+				t.Fatalf("scenario %q renders the main view unchanged, the opener did not open its surface", name)
+			}
+		})
 	}
 }
 
@@ -189,7 +225,7 @@ func TestViewDoesNotChangeTheComposer(t *testing.T) {
 		t.Fatal("View changed the composer text or prompt style")
 	}
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
-	if m.input.Placeholder != placeholderBusy {
+	if m.input.Placeholder != m.placeholderBusyText() {
 		t.Fatalf("Update must sync the placeholder to the busy state, got %q", m.input.Placeholder)
 	}
 }
@@ -204,5 +240,22 @@ func assertFitsScreen(t *testing.T, view string, width, height int) {
 		if lipgloss.Width(line) > width {
 			t.Errorf("line %d is %d cells wide, the screen is %d", index, lipgloss.Width(line), width)
 		}
+	}
+}
+
+func TestFitEachLineClipsWithAnEllipsis(t *testing.T) {
+	lines := fitEachLine([]string{"abcdefghij", "ab", "ééééééé"}, 5)
+	want := []string{"abcd…", "ab", "éééé…"}
+	for index, line := range lines {
+		if line != want[index] {
+			t.Fatalf("line %d = %q, want %q", index, line, want[index])
+		}
+		if width := lipgloss.Width(line); width > 5 {
+			t.Fatalf("line %d is %d columns, want at most 5", index, width)
+		}
+	}
+	untouched := fitEachLine([]string{"abcdefghij"}, 0)
+	if untouched[0] != "abcdefghij" {
+		t.Fatalf("width 0 must leave lines untouched, got %q", untouched[0])
 	}
 }

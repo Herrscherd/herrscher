@@ -56,7 +56,6 @@ const (
 	gatewayTerminal     = "terminal"
 	hintOpenApproval    = "ouvrir l’approbation"
 	hintReviewTurn      = "relire le diff du tour"
-	hintOpenPane        = "ouvrir · ⌃P en volet"
 )
 
 type boardGroupKey uint8
@@ -263,34 +262,44 @@ func (m *model) moveBoard(delta int) {
 }
 
 func (m *model) handleBoardKey(msg tea.KeyMsg) tea.Cmd {
+	action := m.stackAction(msg, ctxBoard)
+	if run, ok := m.tables().board[action]; ok {
+		return run(m, msg)
+	}
+	if action == "" {
+		m.typeBoardQuery(msg)
+	}
+	return nil
+}
+
+func boardRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actSelectCancel, stepKey(func(app *model) {
+			if app.board.query != "" {
+				app.setBoardQuery("")
+			} else {
+				app.closeSurface()
+			}
+		})),
+		bind[keyRun](actBoardPanes, stepKey((*model).openPanes)),
+		bind[keyRun](actSelectPrevious, stepKey(func(app *model) { app.moveBoard(-1) })),
+		bind[keyRun](actSelectNext, stepKey(func(app *model) { app.moveBoard(1) })),
+		bind[keyRun](actSelectAccept, cmdKey((*model).openBoardRow)),
+		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
+	)
+}
+
+func (m *model) typeBoardQuery(msg tea.KeyMsg) {
 	switch msg.Type {
-	case tea.KeyEsc:
-		if m.board.query != "" {
-			m.setBoardQuery("")
-		} else {
-			m.closeSurface()
-		}
-	case tea.KeyCtrlP:
-		m.openPanes()
-	case tea.KeyUp:
-		m.moveBoard(-1)
-	case tea.KeyDown:
-		m.moveBoard(1)
-	case tea.KeyEnter:
-		return m.openBoardRow()
 	case tea.KeyBackspace:
-		runes := []rune(m.board.query)
-		if len(runes) > 0 {
+		if runes := []rune(m.board.query); len(runes) > 0 {
 			m.setBoardQuery(string(runes[:len(runes)-1]))
 		}
 	case tea.KeySpace:
 		m.setBoardQuery(m.board.query + " ")
 	case tea.KeyRunes:
 		m.setBoardQuery(m.board.query + string(msg.Runes))
-	case tea.KeyCtrlC:
-		return m.overlayCtrlC()
 	}
-	return nil
 }
 
 func (m *model) openBoardRow() tea.Cmd {
@@ -533,12 +542,11 @@ func (m *model) gaugeCells(ratio float64, cells int, paint rowPaint) string {
 
 func (m *model) boardFooter(width int) string {
 	keys := fitSegments([]string{
-		hintChoose,
-		m.st.glyphs.enter + " ouvrir",
+		m.pairHint(actSelectPrevious, actSelectNext, "choisir", ctxBoard),
+		m.labelledHint(actSelectAccept, "ouvrir", ctxBoard),
 		"lettres filtrer",
-		m.st.glyphs.erase + " effacer",
-		"échap vider",
-		"⌃P en volets",
+		m.labelledHint(actSelectCancel, "vider", ctxBoard),
+		m.labelledHint(actBoardPanes, "en volets", ctxBoard),
 	}, width-boardFooterIndent)
 	sessions, vendors, gateways := m.boardTotals()
 	counts := fmt.Sprintf("%d %s · %d %s · %d %s ",
@@ -586,7 +594,7 @@ func (m *model) boardDetail(row *boardRow) []string {
 		m.panelRow("contexte", m.gaugeCells(ratio, boardDetailCells, func(style lipgloss.Style) lipgloss.Style { return style })+
 			m.tierStyle(ratio).Render(" "+contextPercent(row.info.ContextTokens, m.windowOf(row.info)))),
 		"",
-		strings.Repeat(" ", panelIndent) + m.st.dim.Render(m.st.glyphs.enter+" "+m.boardHint(row)),
+		strings.Repeat(" ", panelIndent) + m.st.dim.Render(joinWith(" ", m.hintIn(actSelectAccept, ctxBoard), m.boardHint(row))),
 	}
 }
 
@@ -597,7 +605,7 @@ func (m *model) boardHint(row *boardRow) string {
 	case row.group == groupReview:
 		return hintReviewTurn
 	}
-	return hintOpenPane
+	return joinNonEmpty("ouvrir", m.labelledHint(actBoardPanes, "en volet", ctxBoard))
 }
 
 func (m *model) overviewFor(name string) SessionOverview {

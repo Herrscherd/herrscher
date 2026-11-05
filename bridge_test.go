@@ -92,3 +92,13 @@ func TestNewBackendForKeepsRemoteBackendWithoutModel(t *testing.T) {
 		t.Fatal("remote backend not returned")
 	}
 }
+
+func TestNewBackendForRefusesAccountWithRemoteBackend(t *testing.T) {
+	_, err := newBackendFor(context.Background(), remoteStub{}, host.BackendRequest{Cmd: "claude", Account: "perso"})
+	if err == nil {
+		t.Fatal("remote backend + account must be refused")
+	}
+	if !strings.Contains(err.Error(), "perso") {
+		t.Fatalf("error does not name the account: %v", err)
+	}
+}

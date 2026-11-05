@@ -312,14 +312,14 @@ func (s turnEventSink) Emit(event contracts.Event) {
 }
 
 func resumeToken(backend contracts.Backend) string {
-	if ra, ok := backend.(contracts.ResumeAware); ok {
+	if ra, ok := resumeAwareOf(backend); ok {
 		return ra.ResumeToken()
 	}
 	return ""
 }
 
 func runPick(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, value string) {
-	inj, ok := backend.(contracts.ChoiceInjector)
+	inj, ok := choiceInjectorOf(backend)
 	if !ok {
 		return
 	}

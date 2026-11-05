@@ -1,0 +1,373 @@
+{
+  "bindings": [
+    {
+      "context": "Global",
+      "bindings": {
+        "ctrl+t": "app:toggleTodos",
+        "ctrl+o": "app:toggleTranscript",
+        "ctrl+shift+b": "app:toggleBrief",
+        "ctrl+up": "app:diffFileListUp",
+        "meta+up": "app:diffFileListUp",
+        "ctrl+down": "app:diffFileListDown",
+        "meta+down": "app:diffFileListDown",
+        "ctrl+]": "app:openArtifact",
+        "ctrl+r": "history:search"
+      }
+    },
+    {
+      "context": "DiffPanel",
+      "bindings": {
+        "ctrl+x b": "app:cycleDiffBase"
+      }
+    },
+    {
+      "context": "Chat",
+      "bindings": {
+        "up": "history:previous",
+        "down": "history:next",
+        "escape": "chat:cancel",
+        "ctrl+x ctrl+k": "chat:killAgents",
+        "shift+tab": "chat:cycleMode",
+        "meta+p": "chat:modelPicker",
+        "meta+o": "chat:fastMode",
+        "ctrl+y": "chat:defaultToNewerModel",
+        "meta+t": "chat:thinkingToggle",
+        "meta+w": "chat:workflowKeywordToggle",
+        "enter": "chat:submit",
+        "ctrl+x enter": "chat:queueSubmit",
+        "ctrl+x ctrl+s": "chat:sendNow",
+        "ctrl+enter": "chat:sendNow",
+        "ctrl+j": "chat:newline",
+        "ctrl+_": "chat:undo",
+        "ctrl+-": "chat:undo",
+        "ctrl+shift+-": "chat:undo",
+        "ctrl+shift+_": "chat:undo",
+        "ctrl+x ctrl+e": "chat:externalEditor",
+        "ctrl+g": "chat:externalEditor",
+        "ctrl+s": "chat:stash",
+        "ctrl+v": "chat:imagePaste",
+        "ctrl+l": "chat:clearInput",
+        "cmd+k": "chat:clearScreen",
+        "ctrl+x ctrl+a": "abovePrompt:toggle",
+        "ctrl+x tab": "abovePrompt:focus",
+        "space": "voice:pushToTalk"
+      }
+    },
+    {
+      "context": "Autocomplete",
+      "bindings": {
+        "tab": "autocomplete:accept",
+        "escape": "autocomplete:dismiss",
+        "up": "autocomplete:previous",
+        "down": "autocomplete:next"
+      }
+    },
+    {
+      "context": "Confirmation",
+      "bindings": {
+        "enter": "confirm:yes",
+        "escape": "confirm:no",
+        "up": "confirm:previous",
+        "down": "confirm:next",
+        "tab": "confirm:nextField",
+        "shift+tab": "confirm:cycleMode",
+        "space": "confirm:toggle"
+      }
+    },
+    {
+      "context": "Settings",
+      "bindings": {
+        "escape": "confirm:no",
+        "down": "select:next",
+        "j": "select:next",
+        "ctrl+n": "select:next",
+        "up": "select:previous",
+        "k": "select:previous",
+        "ctrl+p": "select:previous",
+        "pageup": "select:pageUp",
+        "pagedown": "select:pageDown",
+        "home": "select:first",
+        "end": "select:last",
+        "space": "select:accept",
+        "enter": "select:accept",
+        "/": "settings:search",
+        "r": "settings:retry",
+        "d": "settings:periodDay",
+        "w": "settings:periodWeek",
+        "f": "settings:fixUsage",
+        "t": "settings:sortByTokens",
+        "ctrl+u": "scroll:halfPageUp"
+      }
+    },
+    {
+      "context": "Tabs",
+      "bindings": {
+        "tab": "tabs:next",
+        "right": "tabs:next",
+        "shift+tab": "tabs:previous",
+        "left": "tabs:previous"
+      }
+    },
+    {
+      "context": "Transcript",
+      "bindings": {
+        "ctrl+e": "transcript:toggleShowAll",
+        "escape": "transcript:exit",
+        "q": "transcript:exit",
+        "pageup": "scroll:pageUp",
+        "pagedown": "scroll:pageDown",
+        "ctrl+p": "scroll:lineUp",
+        "k": "scroll:lineUp",
+        "up": "scroll:lineUp",
+        "wheelup": "scroll:lineUp",
+        "ctrl+n": "scroll:lineDown",
+        "j": "scroll:lineDown",
+        "down": "scroll:lineDown",
+        "wheeldown": "scroll:lineDown",
+        "g": "scroll:top",
+        "home": "scroll:top",
+        "ctrl+home": "scroll:top",
+        "shift+g": "scroll:bottom",
+        "end": "scroll:bottom",
+        "ctrl+end": "scroll:bottom",
+        "ctrl+u": "scroll:halfPageUp",
+        "ctrl+b": "scroll:fullPageUp",
+        "b": "scroll:fullPageUp",
+        "shift+space": "scroll:fullPageUp",
+        "ctrl+f": "scroll:fullPageDown",
+        "space": "scroll:fullPageDown"
+      }
+    },
+    {
+      "context": "HistorySearch",
+      "bindings": {
+        "ctrl+r": "historySearch:next",
+        "escape": "historySearch:accept",
+        "tab": "historySearch:accept",
+        "enter": "historySearch:execute",
+        "ctrl+s": "historySearch:cycleScope"
+      }
+    },
+    {
+      "context": "Task",
+      "bindings": {
+        "ctrl+x ctrl+b": "task:background",
+        "ctrl+b": "task:background"
+      }
+    },
+    {
+      "context": "ThemePicker",
+      "bindings": {
+        "ctrl+t": "theme:toggleSyntaxHighlighting",
+        "ctrl+e": "theme:editCustom"
+      }
+    },
+    {
+      "context": "Help",
+      "bindings": {
+        "escape": "help:dismiss"
+      }
+    },
+    {
+      "context": "Attachments",
+      "bindings": {
+        "right": "attachments:next",
+        "left": "attachments:previous",
+        "backspace": "attachments:remove",
+        "delete": "attachments:remove",
+        "down": "attachments:exit",
+        "escape": "attachments:exit"
+      }
+    },
+    {
+      "context": "Footer",
+      "bindings": {
+        "up": "footer:up",
+        "ctrl+p": "footer:up",
+        "down": "footer:down",
+        "ctrl+n": "footer:down",
+        "right": "footer:next",
+        "left": "footer:previous",
+        "enter": "footer:openSelected",
+        "escape": "footer:clearSelection",
+        "x": "footer:close"
+      }
+    },
+    {
+      "context": "AbovePrompt",
+      "bindings": {
+        "tab": "abovePrompt:next",
+        "right": "abovePrompt:next",
+        "shift+tab": "abovePrompt:previous",
+        "left": "abovePrompt:previous",
+        "enter": "abovePrompt:press",
+        "space": "abovePrompt:press",
+        "escape": "abovePrompt:leave",
+        "up": "pane:scrollUp",
+        "down": "pane:scrollDown",
+        "pageup": "pane:pageUp",
+        "pagedown": "pane:pageDown",
+        "home": "pane:top",
+        "end": "pane:bottom"
+      }
+    },
+    {
+      "context": "AbovePromptInput",
+      "bindings": {
+        "tab": "abovePrompt:next",
+        "right": "abovePrompt:next",
+        "shift+tab": "abovePrompt:previous",
+        "left": "abovePrompt:previous",
+        "enter": "abovePrompt:press",
+        "space": "abovePrompt:press",
+        "escape": "abovePrompt:leave"
+      }
+    },
+    {
+      "context": "AbovePromptSelect",
+      "bindings": {
+        "tab": "abovePrompt:next",
+        "right": "abovePrompt:next",
+        "shift+tab": "abovePrompt:previous",
+        "left": "abovePrompt:previous",
+        "enter": "abovePrompt:press",
+        "space": "abovePrompt:press",
+        "escape": "abovePrompt:leave",
+        "down": "abovePrompt:highlightNext",
+        "up": "abovePrompt:highlightPrevious"
+      }
+    },
+    {
+      "context": "PaneField",
+      "bindings": {
+        "tab": "abovePrompt:next",
+        "right": "abovePrompt:next",
+        "shift+tab": "abovePrompt:previous",
+        "left": "abovePrompt:previous",
+        "enter": "abovePrompt:press",
+        "space": "abovePrompt:press",
+        "escape": "abovePrompt:leave"
+      }
+    },
+    {
+      "context": "Pane",
+      "bindings": {
+        "up": "pane:scrollUp",
+        "down": "pane:scrollDown",
+        "pageup": "pane:pageUp",
+        "pagedown": "pane:pageDown",
+        "home": "pane:top",
+        "end": "pane:bottom",
+        "ctrl+x left": "pane:grow",
+        "ctrl+x up": "pane:grow",
+        "ctrl+x right": "pane:shrink",
+        "ctrl+x down": "pane:shrink",
+        "ctrl+x x": "pane:close"
+      }
+    },
+    {
+      "context": "DiffDialog",
+      "bindings": {
+        "escape": "diff:dismiss",
+        "left": "diff:previousSource",
+        "right": "diff:nextSource",
+        "up": "diff:previousFile",
+        "k": "diff:previousFile",
+        "down": "diff:nextFile",
+        "j": "diff:nextFile"
+      }
+    },
+    {
+      "context": "ModelPicker",
+      "bindings": {
+        "left": "modelPicker:decreaseEffort",
+        "right": "modelPicker:increaseEffort",
+        "s": "modelPicker:thisSessionOnly"
+      }
+    },
+    {
+      "context": "EffortSlider",
+      "bindings": {
+        "left": "effortSlider:decreaseEffort",
+        "right": "effortSlider:increaseEffort",
+        "tab": "effortSlider:toggleUltracode",
+        "s": "effortSlider:thisSessionOnly"
+      }
+    },
+    {
+      "context": "Select",
+      "bindings": {
+        "down": "select:next",
+        "j": "select:next",
+        "ctrl+n": "select:next",
+        "up": "select:previous",
+        "k": "select:previous",
+        "ctrl+p": "select:previous",
+        "pageup": "select:pageUp",
+        "pagedown": "select:pageDown",
+        "home": "select:first",
+        "end": "select:last",
+        "space": "select:accept",
+        "enter": "select:accept",
+        "escape": "select:cancel"
+      }
+    },
+    {
+      "context": "Plugin",
+      "bindings": {
+        "space": "plugin:toggle",
+        "i": "plugin:install",
+        "f": "plugin:favorite",
+        "ctrl+s": "plugin:cycleMarketplace"
+      }
+    },
+    {
+      "context": "Scroll",
+      "bindings": {
+        "pageup": "scroll:pageUp",
+        "pagedown": "scroll:pageDown",
+        "ctrl+p": "scroll:lineUp",
+        "k": "scroll:lineUp",
+        "up": "scroll:lineUp",
+        "wheelup": "scroll:lineUp",
+        "ctrl+n": "scroll:lineDown",
+        "j": "scroll:lineDown",
+        "down": "scroll:lineDown",
+        "wheeldown": "scroll:lineDown",
+        "g": "scroll:top",
+        "home": "scroll:top",
+        "ctrl+home": "scroll:top",
+        "shift+g": "scroll:bottom",
+        "end": "scroll:bottom",
+        "ctrl+end": "scroll:bottom",
+        "ctrl+u": "scroll:halfPageUp",
+        "ctrl+b": "scroll:fullPageUp",
+        "b": "scroll:fullPageUp",
+        "shift+space": "scroll:fullPageUp",
+        "ctrl+f": "scroll:fullPageDown",
+        "space": "scroll:fullPageDown",
+        "ctrl+shift+c": "selection:copy",
+        "cmd+c": "selection:copy",
+        "shift+left": "selection:extendLeft",
+        "shift+right": "selection:extendRight",
+        "shift+up": "selection:extendUp",
+        "shift+down": "selection:extendDown",
+        "shift+home": "selection:extendLineStart",
+        "shift+end": "selection:extendLineEnd"
+      }
+    },
+    {
+      "context": "Agents",
+      "bindings": {
+        "ctrl+s": "agents:switchView",
+        "ctrl+t": "agents:togglePin",
+        "ctrl+f": "agents:find",
+        "ctrl+down": "agents:nextGroup",
+        "meta+down": "agents:nextGroup",
+        "ctrl+up": "agents:previousGroup",
+        "meta+up": "agents:previousGroup",
+        "ctrl+r": "agents:rename"
+      }
+    }
+  ]
+}

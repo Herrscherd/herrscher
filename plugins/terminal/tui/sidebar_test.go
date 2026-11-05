@@ -88,11 +88,11 @@ func TestCtrlBTogglesTheSidebar(t *testing.T) {
 	if !m.sidebarVisible() {
 		t.Fatal("the sidebar must start visible at 120 columns")
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
+	pressChord(m, "ctrl+x v")
 	if m.sidebarVisible() {
 		t.Fatal("ctrl+b must hide the visible sidebar")
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
+	pressChord(m, "ctrl+x v")
 	if !m.sidebarVisible() {
 		t.Fatal("ctrl+b must show the hidden sidebar again")
 	}
@@ -122,7 +122,7 @@ func TestBackgroundSectionAppearsOnlyWithTasks(t *testing.T) {
 
 func TestCtrlTOpensTheTabPicker(t *testing.T) {
 	m := sidebarModel(t, 120)
-	m.Update(tea.KeyMsg{Type: tea.KeyCtrlT})
+	pressChord(m, "ctrl+x s")
 	if !m.switchOpen {
 		t.Fatal("ctrl+t must open the tab picker")
 	}

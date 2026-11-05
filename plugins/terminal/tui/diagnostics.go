@@ -10,7 +10,7 @@ type diagRow struct {
 	feature string
 }
 
-func diagRows(caps Capabilities) []diagRow {
+func diagRows(caps Capabilities, paging string) []diagRow {
 	graphics := diagRow{name: "graphismes", value: caps.Graphics.String()}
 	switch caps.Graphics {
 	case GraphicsKitty:
@@ -28,7 +28,7 @@ func diagRows(caps Capabilities) []diagRow {
 
 	mouse := diagRow{name: "souris", value: yesNo(caps.Mouse), feature: "molette et clic pour choisir un onglet"}
 	if !caps.Mouse {
-		mouse.feature = "défilement par pgup/pgdn"
+		mouse.feature = "défilement par " + paging
 	}
 
 	colour := diagRow{name: "couleur", value: caps.Colour.String(), feature: "la palette exactement comme dessinée"}
@@ -48,10 +48,10 @@ func yesNo(b bool) string {
 
 const diagValueWidth = 12
 
-func diagnosticsView(caps Capabilities, styles uiStyles) string {
+func diagnosticsView(caps Capabilities, paging string, styles uiStyles) string {
 	var builder strings.Builder
 	builder.WriteString(styles.dim.Render("terminal") + "  " + styles.text.Render(caps.Terminal))
-	for _, row := range diagRows(caps) {
+	for _, row := range diagRows(caps, paging) {
 		pad := strings.Repeat(" ", max(1, diagValueWidth-len(row.value)))
 		builder.WriteString("\n" + styles.dim.Render("  "+row.name+strings.Repeat(" ", max(1, factWidth-len(row.name)))) +
 			styles.text.Render(row.value) + pad + styles.dim.Render(row.feature))
@@ -67,7 +67,7 @@ func (m *model) diagView() string {
 	if !m.diagOpen {
 		return ""
 	}
-	return m.st.dim.Render("capacités · échap fermer") + "\n" + diagnosticsView(m.caps, m.st) +
+	return m.st.dim.Render(joinNonEmpty("capacités", m.labelledHint(actDiagnosticsClose, "fermer", ctxDiagnostics))) + "\n" + diagnosticsView(m.caps, joinWith("/", m.hintIn(actScrollPageUp, chatKeyStack()...), m.hintIn(actScrollPageDown, chatKeyStack()...)), m.st) +
 		"\n" + m.remoteImageRow()
 }
 

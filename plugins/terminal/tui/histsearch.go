@@ -6,7 +6,13 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const historyFooter = "⌃R historique · ⏎ reprendre · échap fermer"
+func (m *model) historyFooter() string {
+	return joinNonEmpty(
+		m.labelledHint(actHistorySearch, "historique", chatKeyStack()...),
+		m.labelledHint(actHistoryAccept, "reprendre", ctxHistorySearch),
+		m.labelledHint(actHistoryCancel, "fermer", ctxHistorySearch),
+	)
+}
 
 func (m *model) openHistSearch() {
 	m.histOpen = true
@@ -40,22 +46,36 @@ func (m *model) moveHistSel(delta int) {
 }
 
 func (m *model) handleHistSearchKey(msg tea.KeyMsg) tea.Cmd {
+	action := m.stackAction(msg, ctxHistorySearch)
+	if run, ok := m.tables().histSearch[action]; ok {
+		return run(m, msg)
+	}
+	if action == "" {
+		m.typeHistQuery(msg)
+	}
+	return nil
+}
+
+func histSearchRuns() (map[keyAction]keyRun, error) {
+	return dispatchOf(
+		bind[keyRun](actInterrupt, cmdKey((*model).overlayCtrlC)),
+		bind[keyRun](actHistoryCancel, stepKey((*model).closeHistSearch)),
+		bind[keyRun](actHistoryAccept, stepKey(func(app *model) {
+			if matches := app.histMatches(); len(matches) > 0 {
+				app.input.SetValue(matches[app.histSel])
+				app.input.CursorEnd()
+				app.resizeComposer()
+			}
+			app.closeHistSearch()
+		})),
+		bind[keyRun](actSelectPrevious, stepKey(func(app *model) { app.moveHistSel(-1) })),
+		bind[keyRun](actSelectNext, stepKey(func(app *model) { app.moveHistSel(1) })),
+		bind[keyRun](actHistoryNextMatch, stepKey(func(app *model) { app.moveHistSel(1) })),
+	)
+}
+
+func (m *model) typeHistQuery(msg tea.KeyMsg) {
 	switch msg.Type {
-	case tea.KeyCtrlC:
-		return m.overlayCtrlC()
-	case tea.KeyEsc:
-		m.closeHistSearch()
-	case tea.KeyEnter:
-		if matches := m.histMatches(); len(matches) > 0 {
-			m.input.SetValue(matches[m.histSel])
-			m.input.CursorEnd()
-			m.resizeComposer()
-		}
-		m.closeHistSearch()
-	case tea.KeyUp, tea.KeyCtrlP:
-		m.moveHistSel(-1)
-	case tea.KeyDown, tea.KeyCtrlN, tea.KeyCtrlR:
-		m.moveHistSel(1)
 	case tea.KeyBackspace:
 		if runes := []rune(m.histQuery); len(runes) > 0 {
 			m.histQuery = string(runes[:len(runes)-1])
@@ -70,7 +90,6 @@ func (m *model) handleHistSearchKey(msg tea.KeyMsg) tea.Cmd {
 			m.histSel = 0
 		}
 	}
-	return nil
 }
 
 func (m *model) histView() string {
@@ -93,7 +112,7 @@ func (m *model) histView() string {
 		}
 		rows = append(rows, row)
 	}
-	footer := historyFooter
+	footer := m.historyFooter()
 	if q := strings.TrimSpace(m.histQuery); q != "" {
 		footer = "« " + q + " » · " + footer
 	}

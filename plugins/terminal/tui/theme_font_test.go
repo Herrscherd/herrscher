@@ -64,7 +64,7 @@ func TestTerminalIsDetectedFromItsEnvironment(t *testing.T) {
 func TestInstallBlockFitsEachWindow(t *testing.T) {
 	for _, width := range []int{60, 80, 120, 200} {
 		m := themeSized(t, width, 20)
-		m.handleThemeLetter("f")
+		pressChord(m, "f")
 		lines := strings.Split(ansi.Strip(m.View()), "\n")
 		if len(lines) != 20 {
 			t.Fatalf("width %d: the install block must keep the window height, got %d lines", width, len(lines))
@@ -84,8 +84,8 @@ func TestInstallBlockCopiesTheCommandWithC(t *testing.T) {
 	m := themeSized(t, 80, 20)
 	clip := &fakeWriteClipboard{}
 	m.clip = clip
-	m.handleThemeLetter("f")
-	m.handleThemeLetter("c")
+	pressChord(m, "f")
+	pressChord(m, "c")
 	if clip.wrote != obelInstallCommand {
 		t.Fatalf("c must copy the install command, got %q", clip.wrote)
 	}
@@ -96,8 +96,8 @@ func TestInstallBlockCopiesTheConfigWithY(t *testing.T) {
 	clip := &fakeWriteClipboard{}
 	m.clip = clip
 	m.terminal = terminalKitty
-	m.handleThemeLetter("f")
-	m.handleThemeLetter("y")
+	pressChord(m, "f")
+	pressChord(m, "y")
 	if clip.wrote != "font_family "+obelMaskedFamily {
 		t.Fatalf("y must copy the terminal configuration, got %q", clip.wrote)
 	}
@@ -105,7 +105,7 @@ func TestInstallBlockCopiesTheConfigWithY(t *testing.T) {
 
 func TestEscapeClosesTheInstallBlockBeforeTheTheme(t *testing.T) {
 	m := themeSized(t, 80, 20)
-	m.handleThemeLetter("f")
+	pressChord(m, "f")
 	m.handleThemeKey(tea.KeyMsg{Type: tea.KeyEsc})
 	if m.themeScr == nil || m.themeScr.install {
 		t.Fatal("the first escape must close the install block and keep the theme screen open")
@@ -133,8 +133,8 @@ func TestInstallBlockCopiesAConfigEachTerminalReads(t *testing.T) {
 		clip := &fakeWriteClipboard{}
 		m.clip = clip
 		m.terminal = tc.kind
-		m.handleThemeLetter("f")
-		m.handleThemeLetter("y")
+		pressChord(m, "f")
+		pressChord(m, "y")
 		if clip.wrote != tc.want {
 			t.Errorf("terminal %v: y must copy %q, got %q", tc.kind, tc.want, clip.wrote)
 		}

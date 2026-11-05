@@ -395,3 +395,48 @@ func TestBuildBackendForKeepsRemoteBackendWithoutModel(t *testing.T) {
 		t.Fatal("remote backend not returned")
 	}
 }
+
+func TestBuildBackendForRefusesAccountWithRemoteBackend(t *testing.T) {
+	fake := &fakeRemoteResolver{}
+
+	_, err := BuildBackendFor(context.Background(), BackendRequest{Vendor: "claude", Cmd: "claude", Account: "perso", resolver: fake})
+	if err == nil {
+		t.Fatal("an account on a remote backend must be refused, not silently ignored")
+	}
+	if !strings.Contains(err.Error(), "perso") {
+		t.Fatalf("error does not name the account: %v", err)
+	}
+	if !fake.called {
+		t.Fatal("the remote resolver seam was never consulted; the test proves nothing")
+	}
+}
+
+func TestChooseVendorDerivesTheVendorFromTheModel(t *testing.T) {
+	t.Setenv("HERRSCHER_BACKEND", "")
+
+	vendor, entry, err := chooseVendor("", "b-native", fakePlugins(), nil)
+	if err != nil {
+		t.Fatalf("chooseVendor: %v", err)
+	}
+	if vendor != "beta" {
+		t.Fatalf("vendor %q, want beta, the owner of model b-native", vendor)
+	}
+	if entry.ID != "b-native" {
+		t.Fatalf("entry %q, want b-native", entry.ID)
+	}
+	if _, _, err := chooseVendor("alpha", "b-native", fakePlugins(), nil); err == nil {
+		t.Fatal("a model requested on a vendor that does not own it must be refused")
+	}
+}
+
+func TestChooseVendorReadsTheBackendEnvironment(t *testing.T) {
+	t.Setenv("HERRSCHER_BACKEND", "beta")
+
+	vendor, _, err := chooseVendor("", "", fakePlugins(), nil)
+	if err != nil {
+		t.Fatalf("chooseVendor: %v", err)
+	}
+	if vendor != "beta" {
+		t.Fatalf("vendor %q, want beta from HERRSCHER_BACKEND when neither the vendor nor the model is given", vendor)
+	}
+}

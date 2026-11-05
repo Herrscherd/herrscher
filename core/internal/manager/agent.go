@@ -52,7 +52,8 @@ func (h *Handler) agentListRun(_ context.Context, input contracts.Input) (string
 			Backend string   `json:"backend"`
 		}
 		rows := make([]row, 0, len(agents))
-		for _, listed := range agents {
+		for i := range agents {
+			listed := &agents[i]
 			tags := listed.Tags
 			if tags == nil {
 				tags = []string{}
@@ -70,7 +71,8 @@ func (h *Handler) agentListRun(_ context.Context, input contracts.Input) (string
 	}
 	var out strings.Builder
 	out.WriteString("Agents:\n")
-	for _, a := range agents {
+	for i := range agents {
+		a := &agents[i]
 		fmt.Fprintf(&out, "• **%s** (%#q)\n", a.Name, a.Home)
 	}
 	return out.String(), nil

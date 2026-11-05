@@ -32,7 +32,7 @@ func (m *model) layoutTranscript(tab *tab, width int) transcriptLayout {
 			built.turns = append(built.turns, len(built.lines))
 		}
 		if m.foldCode && item.role == roleAgent && !item.streaming {
-			item.text = foldCodeBlocks(item.text, m.st.glyphs)
+			item.text = foldCodeBlocks(item.text, m.st.glyphs, m.hintIn(actToggleCodeFold, chatKeyStack()...))
 		}
 		built.add(strings.Split(renderEntry(item, width, m.displayMode()), "\n"), item.id)
 		if index == treeOwner && len(tab.trail) > 0 {
@@ -118,13 +118,26 @@ type view struct {
 	caps Capabilities
 	st   uiStyles
 	md   *markdownRenderer
+	keys *keyTable
 
 	expand bool
 	spin   string
 }
 
 func (m *model) displayMode() view {
-	return view{caps: m.caps, st: m.st, md: m.md, expand: m.expandTools, spin: m.spinFrame()}
+	return view{caps: m.caps, st: m.st, md: m.md, keys: m.bindings, expand: m.expandTools, spin: m.spinFrame()}
+}
+
+func (v view) glyph(action keyAction) string {
+	table := v.keys
+	if table == nil {
+		table = defaultKeyTable()
+	}
+	return table.hintFor(action, chatKeyStack()...)
+}
+
+func (v view) hint(action keyAction, label string) string {
+	return joinWith(" ", v.glyph(action), label)
 }
 
 func renderEntry(item entry, width int, view view) string {

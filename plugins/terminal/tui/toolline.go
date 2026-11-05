@@ -267,7 +267,7 @@ func renderThinking(item entry, width int, display view) string {
 	if item.tokens > 0 {
 		label += display.st.dim.Render(" · " + formatTokens(item.tokens) + " tokens")
 	}
-	head := spreadRight([]string{label}, []string{display.st.dim.Render(arrow + " " + verb + " ⌃O")}, width)
+	head := spreadRight([]string{label}, []string{display.st.dim.Render(joinNonEmpty(arrow+" "+verb, display.glyph(actToggleTranscript)))}, width)
 	if !item.open {
 		return head
 	}
@@ -278,7 +278,7 @@ func renderThinking(item entry, width int, display view) string {
 	return strings.Join(lines, "\n")
 }
 
-func busyLine(width int, styles uiStyles, spin, elapsedText, tokens, cost string) string {
+func busyLine(width int, styles uiStyles, spin, elapsedText, tokens, cost, interrupt string) string {
 	parts := []string{elapsedText}
 	if tokens != "" {
 		parts = append(parts, "↑ "+tokens)
@@ -287,5 +287,5 @@ func busyLine(width int, styles uiStyles, spin, elapsedText, tokens, cost string
 		parts = append(parts, cost)
 	}
 	left := styles.spinner.Render(spin) + " " + styles.text.Render(workingVerb) + "  " + styles.dim.Render(strings.Join(parts, " · "))
-	return spreadRight([]string{left}, []string{styles.dim.Render("Échap interrompre")}, width)
+	return spreadRight([]string{left}, []string{styles.dim.Render(interrupt)}, width)
 }

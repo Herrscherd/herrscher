@@ -4,12 +4,15 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+
+	"github.com/Herrscherd/herrscher/core/compactwire"
 )
 
 type resultDispatcher interface {
@@ -27,8 +30,9 @@ type cmdRequest struct {
 }
 
 type cmdResponse struct {
-	Ok  *string `json:"ok,omitempty"`
-	Err *string `json:"err,omitempty"`
+	Ok     *string `json:"ok,omitempty"`
+	Err    *string `json:"err,omitempty"`
+	Notice string  `json:"notice,omitempty"`
 }
 
 func dispatchLiveCommand(ctx context.Context, path string, argv []string) (string, bool, error) {
@@ -63,12 +67,34 @@ func dispatchLiveCommand(ctx context.Context, path string, argv []string) (strin
 		return "", true, fmt.Errorf("command socket: decode response: %w", err)
 	}
 	if resp.Err != nil {
-		return "", true, &commandSocketError{Message: *resp.Err}
+		return "", true, commandFailure(resp)
 	}
 	if resp.Ok == nil {
 		return "", true, errCommandSocketEmpty
 	}
 	return *resp.Ok, true, nil
+}
+
+func commandFailure(resp cmdResponse) error {
+	plain := commandSocketError{Message: *resp.Err}
+	if resp.Notice == "" {
+		return &plain
+	}
+	notice, err := compactwire.DecodeNotice(resp.Notice)
+	if err != nil {
+		return &plain
+	}
+	return &noticedSocketError{commandSocketError: plain, notice: notice}
+}
+
+func encodedNotice(err error) string {
+	noticed, ok := errors.AsType[contracts.NoticeError](err)
+	if !ok {
+		return ""
+	}
+	encoded, encodeErr := compactwire.EncodeNotice(noticed.Notice())
+	logCleanup(encodeErr)
+	return encoded
 }
 
 func cancellationOr(ctx context.Context, err error) error {
@@ -120,6 +146,7 @@ func handleCommandConn(ctx context.Context, conn net.Conn, disp dispatcher, read
 		if derr != nil {
 			msg := derr.Error()
 			resp.Err = &msg
+			resp.Notice = encodedNotice(derr)
 		} else {
 			resp.Ok = &out
 		}

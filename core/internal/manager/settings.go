@@ -18,7 +18,7 @@ func (h *Handler) setHomeRun(ctx context.Context, input contracts.Input) (contra
 		return contracts.Result{}, fmt.Errorf("inspect channel: %w", err)
 	}
 	if kind != categoryKind && kind != forumKind {
-		return contracts.Result{}, &ChannelKindError{Channel: channelID, Kind: kind, Need: "home must be a category or forum"}
+		return contracts.Result{}, &ChannelKindError{Channel: channelID, Kind: kind, Need: "home must be a category or forum", Home: true}
 	}
 	if err := h.st.SetHome(state.HomeRef{ID: channelID, Type: kind}); err != nil {
 		return contracts.Result{}, fmt.Errorf("persist: %w", err)

@@ -115,8 +115,8 @@ func TestHostTextRendersEachLanguage(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := hostText(tt.lang, tt.key, tt.params); got != tt.want {
-				t.Fatalf("hostText(%v, %q) = %q, want %q", tt.lang, tt.key, got, tt.want)
+			if got := newHostMessages().text(tt.lang, tt.key, tt.params); got != tt.want {
+				t.Fatalf("text(%v, %q) = %q, want %q", tt.lang, tt.key, got, tt.want)
 			}
 		})
 	}
@@ -162,10 +162,10 @@ func TestCompactFailureTextMapsUntypedCauses(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := compactFailureText(i18n.French, tt.err); got != tt.fr {
+			if got := compactFailureText(newHostMessages(), i18n.French, tt.err); got != tt.fr {
 				t.Fatalf("french = %q, want %q", got, tt.fr)
 			}
-			if got := compactFailureText(i18n.English, tt.err); got != tt.en {
+			if got := compactFailureText(newHostMessages(), i18n.English, tt.err); got != tt.en {
 				t.Fatalf("english = %q, want %q", got, tt.en)
 			}
 		})
@@ -212,5 +212,20 @@ func TestSkillApprovalFailureTravelsAsAnUnexpectedNotice(t *testing.T) {
 	}
 	if code := noticed.Notice().Code; code != contracts.CodeUnexpected {
 		t.Fatalf("code = %v, want %v", code, contracts.CodeUnexpected)
+	}
+}
+
+func TestHostMessagesBuildTheCatalogOnce(t *testing.T) {
+	messages := newHostMessages()
+	first, err := messages.catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := messages.catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != second {
+		t.Fatal("the host catalog is built again on each call, want it memoized")
 	}
 }

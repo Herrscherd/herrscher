@@ -4,6 +4,7 @@ import (
 	"embed"
 	"io/fs"
 	"log/slog"
+	"sync"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
@@ -13,7 +14,15 @@ var hostLocales embed.FS
 
 const detailParam = "Detail"
 
-func newHostCatalog() (*i18n.Catalog, error) {
+type hostMessages struct {
+	catalog func() (*i18n.Catalog, error)
+}
+
+func newHostMessages() *hostMessages {
+	return &hostMessages{catalog: sync.OnceValues(buildHostCatalog)}
+}
+
+func buildHostCatalog() (*i18n.Catalog, error) {
 	sub, err := fs.Sub(hostLocales, "locales")
 	if err != nil {
 		return nil, err
@@ -21,11 +30,14 @@ func newHostCatalog() (*i18n.Catalog, error) {
 	return i18n.NewCatalog(slog.Default(), sub)
 }
 
-func hostText(lang i18n.Language, key string, params map[string]any) string {
+func (m *hostMessages) text(lang i18n.Language, key string, params map[string]any) string {
+	if m == nil {
+		m = newHostMessages()
+	}
 	if lang != i18n.English && lang != i18n.French {
 		lang = i18n.English
 	}
-	catalog, err := newHostCatalog()
+	catalog, err := m.catalog()
 	if err != nil {
 		slog.Error("host message catalog unavailable", "key", key, "err", err)
 		return key
@@ -36,4 +48,8 @@ func hostText(lang i18n.Language, key string, params map[string]any) string {
 		return key
 	}
 	return text
+}
+
+func (d *sessionDriver) hostText(key string, params map[string]any) string {
+	return d.messages.text(d.lang, key, params)
 }

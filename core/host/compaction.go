@@ -241,7 +241,7 @@ func (d *sessionDriver) maybeAutoCompact(ctx context.Context) {
 		return
 	}
 	if crossed(result.TokensAfter, limit, percent) {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: hostText(d.lang, "compaction.no_effect", map[string]any{"Percent": percent})})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("compaction.no_effect", map[string]any{"Percent": percent})})
 	}
 }
 
@@ -276,19 +276,19 @@ func (d *sessionDriver) failCompaction(ctx context.Context, trigger contracts.Co
 	if typed, ok := errors.AsType[contracts.NoticeError](err); ok && d.noticeRenders(typed.Notice()) {
 		d.notifyGateways(typed.Notice())
 	}
-	d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String(), Text: compactFailureText(d.lang, err)})
+	d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String(), Text: compactFailureText(d.messages, d.lang, err)})
 }
 
-func compactFailureText(lang i18n.Language, err error) string {
+func compactFailureText(messages *hostMessages, lang i18n.Language, err error) string {
 	if typed, ok := errors.AsType[contracts.NoticeError](err); ok {
 		if text, renderErr := contracts.NewRenderer().Render(lang, typed.Notice()); renderErr == nil {
 			return text
 		}
 	}
 	if key, known := knownCompactFailure(err); known {
-		return hostText(lang, key, nil)
+		return messages.text(lang, key, nil)
 	}
-	return hostText(lang, "compaction.failed", map[string]any{detailParam: err.Error()})
+	return messages.text(lang, "compaction.failed", map[string]any{detailParam: err.Error()})
 }
 
 func knownCompactFailure(err error) (string, bool) {

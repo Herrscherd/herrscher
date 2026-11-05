@@ -1874,14 +1874,6 @@
     "other": "{{.Key}} during a turn now queues the message."
   },
   {
-    "id": "tui.theme.legend.added",
-    "other": "added"
-  },
-  {
-    "id": "tui.theme.legend.removed",
-    "other": "removed"
-  },
-  {
     "id": "tui.theme.legend.waiting",
     "other": "waiting"
   },
@@ -1950,10 +1942,6 @@
     "id": "tui.plugins.more_below",
     "one": "… {{.Count}} below",
     "other": "… {{.Count}} below"
-  },
-  {
-    "id": "tui.plugins.pinned",
-    "other": "pinned"
   },
   {
     "id": "tui.plugins.notice.unavailable",

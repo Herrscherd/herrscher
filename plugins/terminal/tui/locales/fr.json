@@ -1874,14 +1874,6 @@
     "other": "{{.Key}} pendant un tour met maintenant le message en file."
   },
   {
-    "id": "tui.theme.legend.added",
-    "other": "ajouté"
-  },
-  {
-    "id": "tui.theme.legend.removed",
-    "other": "retiré"
-  },
-  {
     "id": "tui.theme.legend.waiting",
     "other": "attente"
   },
@@ -1950,10 +1942,6 @@
     "id": "tui.plugins.more_below",
     "one": "… {{.Count}} en dessous",
     "other": "… {{.Count}} en dessous"
-  },
-  {
-    "id": "tui.plugins.pinned",
-    "other": "épinglé"
   },
   {
     "id": "tui.plugins.notice.unavailable",

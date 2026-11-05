@@ -645,7 +645,7 @@ func (m *model) themeLegendLines() []string {
 	glyphs := styles.glyphs
 	return []string{
 		styles.text.Render(m.tr.t("tui.theme.legend.queue", map[string]any{tplArgKey: m.hintIn(actSubmit, chatKeyStack()...)})),
-		styles.green.Render(glyphs.success+" "+m.tr.t("tui.theme.legend.added", nil)) + "  " + styles.del.Render(glyphs.failure+" "+m.tr.t("tui.theme.legend.removed", nil)) + "  " + styles.warn.Render(glyphs.bolt+" "+m.tr.t("tui.theme.legend.waiting", nil)),
+		styles.green.Render(glyphs.success+" "+m.tr.shared("cli.manage.state.added")) + "  " + styles.del.Render(glyphs.failure+" "+m.tr.shared("cli.manage.state.removed")) + "  " + styles.warn.Render(glyphs.bolt+" "+m.tr.t("tui.theme.legend.waiting", nil)),
 		styles.dim.Render(glyphs.notice+" "+m.tr.t("tui.theme.legend.notice", nil)) + "  " + styles.red.Render(m.tr.t("tui.theme.legend.error", nil)),
 	}
 }

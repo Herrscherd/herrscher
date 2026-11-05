@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 const (
@@ -61,6 +62,10 @@ func (trans translator) t(key string, params map[string]any) string {
 		return key
 	}
 	return text
+}
+
+func (trans translator) shared(key clitext.Key) string {
+	return clitext.For(trans.lang).Text(key, nil)
 }
 
 // Language sets the language the TUI renders its texts in. The zero value

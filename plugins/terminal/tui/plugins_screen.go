@@ -396,7 +396,7 @@ func (m *model) pluginRow(index int) string {
 	pluginRow := m.pluginsRows[index]
 	row := fmt.Sprintf("%s · %s → %s", pluginRow.Module, pluginRow.Installed, pluginRow.Latest)
 	if pluginRow.Pinned {
-		row += " · " + m.tr.t("tui.plugins.pinned", nil)
+		row += " · " + m.tr.shared("cli.manage.pinned_tag")
 	}
 	if index == m.pluginsIdx && m.pluginsMode == pluginsList {
 		return m.st.accent.Render(m.st.glyphs.cursor) + " " + m.st.text.Render(row)

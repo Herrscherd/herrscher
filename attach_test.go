@@ -166,7 +166,7 @@ func TestAttachedFrontendRoutesAnEventToItsTab(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, testLang)
+	a, err := newAttachedDaemon(ctx, d.instance, testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +194,7 @@ func TestAttachedFrontendSendsTypedLinesToTheRightSession(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, testLang)
+	a, err := newAttachedDaemon(ctx, d.instance, testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +216,7 @@ func TestAttachedFrontendRefusesVerbsTheTerminalDoesNotOwn(t *testing.T) {
 	d := startFakeDaemon(t, func([]string) (string, error) { return "", nil })
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, testLang)
+	a, err := newAttachedDaemon(ctx, d.instance, testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +244,7 @@ func TestAttachedFrontendBindsANewSessionToTheTerminal(t *testing.T) {
 
 func TestAttachingWithoutADaemonFails(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
-	if _, err := newAttachedDaemon(context.Background(), "nobody", testLang); err == nil {
+	if _, err := newAttachedDaemon(context.Background(), "nobody", testLang()); err == nil {
 		t.Fatal("expected an error with no daemon listening")
 	}
 }
@@ -262,7 +262,7 @@ func TestScrollbackComesBackFromTheDaemon(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, testLang)
+	a, err := newAttachedDaemon(ctx, d.instance, testLang())
 	if err != nil {
 		t.Fatal(err)
 	}

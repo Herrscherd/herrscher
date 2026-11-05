@@ -76,7 +76,7 @@ func hostPlugin(ctx context.Context, lang i18n.Language, category contracts.Cate
 }
 
 func noSkeletonError(lang i18n.Language, category contracts.Category) error {
-	return renderError(lang, errNoSkeleton, clitext.PluginHostNoSkeleton, clitext.Params{"Category": strconv.Quote(string(category))})
+	return renderError(lang, errNoSkeleton, clitext.PluginHostNoSkeleton, clitext.Params{clitext.ParamCategory: strconv.Quote(string(category))})
 }
 
 func newPluginServer(lang i18n.Language, tlsCfg transport.TLSConfig) (*grpc.Server, error) {
@@ -85,7 +85,7 @@ func newPluginServer(lang i18n.Language, tlsCfg transport.TLSConfig) (*grpc.Serv
 	}
 	creds, err := tlsCfg.ServerCredentials()
 	if err != nil {
-		return nil, renderError(lang, err, clitext.PluginHostFailed, clitext.Params{"Err": err.Error()})
+		return nil, renderError(lang, err, clitext.PluginHostFailed, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	return grpc.NewServer(grpc.Creds(creds)), nil
 }
@@ -107,30 +107,30 @@ func announceEvery(ctx context.Context, conn *nats.Conn, ann transport.Announcem
 
 func runPluginHost(ctx context.Context, args []string) error {
 	lang := clitext.ClientLanguage()
-	tr := clitext.For(lang)
+	translator := clitext.For(lang)
 	flags := flag.NewFlagSet("plugin-host", flag.ContinueOnError)
-	category := flags.String("category", "", tr.Text(clitext.PluginHostFlagCategory, nil))
-	natsURL := flags.String("nats", nats.DefaultURL, tr.Text(clitext.PluginHostFlagNATS, nil))
-	instanceID := flags.String("instance", "", tr.Text(clitext.PluginHostFlagInstance, nil))
-	if err := tr.Err(); err != nil {
+	category := flags.String("category", "", translator.Text(clitext.PluginHostFlagCategory, nil))
+	natsURL := flags.String("nats", nats.DefaultURL, translator.Text(clitext.PluginHostFlagNATS, nil))
+	instanceID := flags.String("instance", "", translator.Text(clitext.PluginHostFlagInstance, nil))
+	if err := translator.Err(); err != nil {
 		return err
 	}
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if !host.SupportedRemoteCategory(contracts.Category(*category)) {
-		return renderError(lang, errUnsupportedCategory, clitext.PluginHostUnsupported, clitext.Params{"Category": strconv.Quote(*category)})
+		return renderError(lang, errUnsupportedCategory, clitext.PluginHostUnsupported, clitext.Params{clitext.ParamCategory: strconv.Quote(*category)})
 	}
 
 	tlsCfg := tlsConfigFromEnv()
 	if err := tlsCfg.Validate(); err != nil {
-		return renderError(lang, err, clitext.PluginHostFailed, clitext.Params{"Err": err.Error()})
+		return renderError(lang, err, clitext.PluginHostFailed, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 
 	host.CaptureAnnounceKey()
 	announceKey, err := announceKeyFromEnv()
 	if err != nil {
-		return renderError(lang, err, clitext.PluginHostFailed, clitext.Params{"Err": err.Error()})
+		return renderError(lang, err, clitext.PluginHostFailed, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 
 	hosted, err := hostPlugin(ctx, lang, contracts.Category(*category))
@@ -183,11 +183,11 @@ func firstOrchestrator(ctx context.Context, lang i18n.Language) (contracts.Orche
 		}
 		cfg, err := contracts.Resolve(plugin.Manifest.Config, os.Getenv)
 		if err != nil {
-			return nil, contracts.Manifest{}, renderError(lang, err, clitext.PluginHostOrchestrator, clitext.Params{"Err": err.Error()})
+			return nil, contracts.Manifest{}, renderError(lang, err, clitext.PluginHostOrchestrator, clitext.Params{clitext.ParamErr: err.Error()})
 		}
 		orch, err := plugin.Orchestrator(ctx, cfg, nil)
 		if err != nil {
-			return nil, contracts.Manifest{}, renderError(lang, err, clitext.PluginHostOrchestrator, clitext.Params{"Err": err.Error()})
+			return nil, contracts.Manifest{}, renderError(lang, err, clitext.PluginHostOrchestrator, clitext.Params{clitext.ParamErr: err.Error()})
 		}
 		return orch, plugin.Manifest, nil
 	}
@@ -203,11 +203,11 @@ func firstBackend(ctx context.Context, lang i18n.Language) (contracts.Backend, c
 		}
 		cfg, err := contracts.Resolve(plugin.Manifest.Config, os.Getenv)
 		if err != nil {
-			return nil, contracts.Manifest{}, renderError(lang, err, clitext.PluginHostBackend, clitext.Params{"Err": err.Error()})
+			return nil, contracts.Manifest{}, renderError(lang, err, clitext.PluginHostBackend, clitext.Params{clitext.ParamErr: err.Error()})
 		}
 		backend, err := plugin.Backend(ctx, cfg)
 		if err != nil {
-			return nil, contracts.Manifest{}, renderError(lang, err, clitext.PluginHostBackend, clitext.Params{"Err": err.Error()})
+			return nil, contracts.Manifest{}, renderError(lang, err, clitext.PluginHostBackend, clitext.Params{clitext.ParamErr: err.Error()})
 		}
 		return backend, plugin.Manifest, nil
 	}

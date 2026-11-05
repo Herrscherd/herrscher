@@ -11,10 +11,10 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
-var testLang = i18n.English
+func testLang() i18n.Language { return i18n.English }
 
 func testTranslator() *clitext.Translator {
-	return clitext.For(testLang)
+	return clitext.For(testLang())
 }
 
 func closeQuietly(c io.Closer) {

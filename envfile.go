@@ -21,7 +21,7 @@ func loadEnvFile(path string, lang i18n.Language) error {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return renderError(lang, err, clitext.EnvOpenFailed, clitext.Params{"Err": err.Error()})
+		return renderError(lang, err, clitext.EnvOpenFailed, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	return errors.Join(scanEnvFile(file, lang), file.Close())
 }
@@ -38,7 +38,7 @@ func scanEnvFile(r io.Reader, lang i18n.Language) error {
 			continue
 		}
 		if err := os.Setenv(key, unquoteEnv(val)); err != nil {
-			return renderError(lang, err, clitext.EnvSetFailed, clitext.Params{"Key": key, "Err": err.Error()})
+			return renderError(lang, err, clitext.EnvSetFailed, clitext.Params{clitext.ParamKey: key, clitext.ParamErr: err.Error()})
 		}
 	}
 	return scanner.Err()

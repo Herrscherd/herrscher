@@ -64,7 +64,7 @@ func TestTheEnvFileServePassesLeavesNoGatewayKeyBehind(t *testing.T) {
 	}
 	t.Cleanup(host.CaptureGatewayConfig(contracts.Default.Gateways()))
 
-	if err := loadEnvFile(path, testLang); err != nil {
+	if err := loadEnvFile(path, testLang()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -94,7 +94,7 @@ func TestTheProductionSequenceStillResolvesEveryDeclaredGatewaySetting(t *testin
 	}
 
 	t.Cleanup(host.CaptureGatewayConfig(contracts.Default.Gateways()))
-	if err := loadEnvFile(path, testLang); err != nil {
+	if err := loadEnvFile(path, testLang()); err != nil {
 		t.Fatal(err)
 	}
 

@@ -99,8 +99,8 @@ func serveWith(ctx context.Context, args []string, open *openWindow, cfg config.
 	}
 	defer unlock()
 
-	if err := installShippedSkills(ctx, langs.Operator); err != nil {
-		return err
+	if skillsErr := installShippedSkills(ctx, langs.Operator); skillsErr != nil {
+		return skillsErr
 	}
 
 	gws, closers, foreground, extra, err := startGateways(ctx)

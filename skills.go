@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -16,21 +17,22 @@ import (
 func installShippedSkills(ctx context.Context, lang i18n.Language) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
+		slog.Warn("shipped skills not installed, no home directory", "err", err)
 		return nil
 	}
 	dst := filepath.Join(home, ".claude", "skills")
-	tr := clitext.For(lang)
-	plug, notes := installPluginSkills(ctx, tr, contracts.Default.Plugins(), os.Getenv, dst)
+	translator := clitext.For(lang)
+	plug, notes := installPluginSkills(ctx, translator, contracts.Default.Plugins(), os.Getenv, dst)
 	for _, n := range notes {
 		fmt.Fprintln(os.Stderr, n)
 	}
-	reportSkills(tr, dst, plug)
+	reportSkills(translator, dst, plug)
 	retired, err := retireSkills(dst, plug)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, tr.Text(clitext.SkillsRetireFailed, clitext.Params{"Err": err.Error()}))
+		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillsRetireFailed, clitext.Params{clitext.ParamErr: err.Error()}))
 	}
-	reportRetired(tr, dst, retired)
-	return tr.Err()
+	reportRetired(translator, dst, retired)
+	return translator.Err()
 }
 
 func retireSkills(dst string, plug skills.Outcome) (skills.Outcome, error) {
@@ -40,34 +42,34 @@ func retireSkills(dst string, plug skills.Outcome) (skills.Outcome, error) {
 	return skills.Retire(dst, plug.Shipped)
 }
 
-func reportRetired(tr *clitext.Translator, dst string, out skills.Outcome) {
+func reportRetired(translator *clitext.Translator, dst string, out skills.Outcome) {
 	for _, name := range out.Removed {
-		fmt.Fprintln(os.Stderr, tr.Text(clitext.SkillRemoved, clitext.Params{"Name": name}))
+		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillRemoved, clitext.Params{clitext.ParamName: name}))
 	}
 	for _, name := range out.Diverged {
-		fmt.Fprintln(os.Stderr, tr.Text(clitext.SkillRetiredDiverged, clitext.Params{"Name": name, "Path": filepath.Join(dst, name)}))
+		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillRetiredDiverged, clitext.Params{clitext.ParamName: name, clitext.ParamPath: filepath.Join(dst, name)}))
 	}
 	for _, name := range out.Linked {
-		fmt.Fprintln(os.Stderr, tr.Text(clitext.SkillRetiredLinked, clitext.Params{"Name": name, "Path": filepath.Join(dst, name)}))
+		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillRetiredLinked, clitext.Params{clitext.ParamName: name, clitext.ParamPath: filepath.Join(dst, name)}))
 	}
 }
 
-func reportSkills(tr *clitext.Translator, dst string, out skills.Outcome) {
+func reportSkills(translator *clitext.Translator, dst string, out skills.Outcome) {
 	for _, name := range out.Installed {
-		fmt.Fprintln(os.Stderr, tr.Text(clitext.SkillInstalled, clitext.Params{"Name": name}))
+		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillInstalled, clitext.Params{clitext.ParamName: name}))
 	}
 	for _, name := range out.Updated {
-		fmt.Fprintln(os.Stderr, tr.Text(clitext.SkillUpdated, clitext.Params{"Name": name}))
+		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillUpdated, clitext.Params{clitext.ParamName: name}))
 	}
 	for _, name := range out.Diverged {
-		fmt.Fprintln(os.Stderr, tr.Text(clitext.SkillDiverged, clitext.Params{"Name": name, "Path": filepath.Join(dst, name)}))
+		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillDiverged, clitext.Params{clitext.ParamName: name, clitext.ParamPath: filepath.Join(dst, name)}))
 	}
 	for _, name := range out.Linked {
-		fmt.Fprintln(os.Stderr, tr.Text(clitext.SkillLinked, clitext.Params{"Name": name, "Path": filepath.Join(dst, name)}))
+		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillLinked, clitext.Params{clitext.ParamName: name, clitext.ParamPath: filepath.Join(dst, name)}))
 	}
 }
 
-func installPluginSkills(ctx context.Context, tr *clitext.Translator, plugins []contracts.Plugin, getenv func(string) string, dst string) (skills.Outcome, []string) {
+func installPluginSkills(ctx context.Context, translator *clitext.Translator, plugins []contracts.Plugin, getenv func(string) string, dst string) (skills.Outcome, []string) {
 	var all skills.Outcome
 	var notes []string
 	claimed := make(map[string]string)
@@ -79,29 +81,29 @@ func installPluginSkills(ctx context.Context, tr *clitext.Translator, plugins []
 		kind := plugin.Manifest.Kind
 		cfg, err := pluginSkillsConfig(plugin, getenv)
 		if err != nil {
-			notes = append(notes, tr.Text(clitext.SkillsNotConfigured, clitext.Params{"Kind": kind, "Err": err.Error()}))
+			notes = append(notes, translator.Text(clitext.SkillsNotConfigured, clitext.Params{clitext.ParamKind: kind, clitext.ParamErr: err.Error()}))
 			all.Partial = append(all.Partial, kind)
 			continue
 		}
 		tree, err := plugin.Skills(ctx, cfg)
 		if err != nil {
-			notes = append(notes, tr.Text(clitext.SkillsPluginFailed, clitext.Params{"Kind": kind, "Err": err.Error()}))
+			notes = append(notes, translator.Text(clitext.SkillsPluginFailed, clitext.Params{clitext.ParamKind: kind, clitext.ParamErr: err.Error()}))
 			all.Partial = append(all.Partial, kind)
 			continue
 		}
 		if tree == nil {
-			notes = append(notes, tr.Text(clitext.SkillsNoContent, clitext.Params{"Kind": kind}))
+			notes = append(notes, translator.Text(clitext.SkillsNoContent, clitext.Params{clitext.ParamKind: kind}))
 			all.Partial = append(all.Partial, kind)
 			continue
 		}
-		src, dups := reserve(tr, tree, kind, claimed)
+		src, dups := reserve(translator, tree, kind, claimed)
 		notes = append(notes, dups...)
 		if src == nil {
 			continue
 		}
 		out, err := skills.Install(src, dst)
 		if err != nil {
-			notes = append(notes, tr.Text(clitext.SkillsInstallFailed, clitext.Params{"Kind": kind, "Err": err.Error()}))
+			notes = append(notes, translator.Text(clitext.SkillsInstallFailed, clitext.Params{clitext.ParamKind: kind, clitext.ParamErr: err.Error()}))
 			all.Partial = append(all.Partial, kind)
 			continue
 		}
@@ -122,7 +124,7 @@ func pluginSkillsConfig(plugin *contracts.Plugin, getenv func(string) string) (c
 	return cfg, nil
 }
 
-func reserve(tr *clitext.Translator, tree fs.FS, kind string, claimed map[string]string) (fs.FS, []string) {
+func reserve(translator *clitext.Translator, tree fs.FS, kind string, claimed map[string]string) (fs.FS, []string) {
 	entries, err := fs.ReadDir(tree, ".")
 	if err != nil {
 		return tree, nil
@@ -136,7 +138,7 @@ func reserve(tr *clitext.Translator, tree fs.FS, kind string, claimed map[string
 		}
 		if owner, taken := claimed[entry.Name()]; taken {
 			hidden[entry.Name()] = true
-			notes = append(notes, tr.Text(clitext.SkillDuplicate, clitext.Params{"Name": entry.Name(), "Kind": kind, "Owner": owner}))
+			notes = append(notes, translator.Text(clitext.SkillDuplicate, clitext.Params{clitext.ParamName: entry.Name(), clitext.ParamKind: kind, clitext.ParamOwner: owner}))
 			continue
 		}
 		claimed[entry.Name()] = kind

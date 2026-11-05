@@ -164,7 +164,7 @@ func (a *attachedDaemon) Submit(channel, text string, attachments []tui.Attachme
 		}
 	}
 	if _, err := a.dispatch(argv); err != nil {
-		a.notify(channel, clitext.ErrorLine, clitext.Params{"Message": err.Error()})
+		a.notify(channel, clitext.ErrorLine, clitext.Params{clitext.ParamMessage: err.Error()})
 	}
 }
 
@@ -184,7 +184,7 @@ func (a *attachedDaemon) Dispatch(args []string) (string, error) {
 		if len(args) > 0 {
 			verb = args[0]
 		}
-		return "", renderError(a.lang, errNotAvailableFromTerminal, clitext.AttachNotAvailable, clitext.Params{"Verb": strconv.Quote(verb)})
+		return "", renderError(a.lang, errNotAvailableFromTerminal, clitext.AttachNotAvailable, clitext.Params{clitext.ParamVerb: strconv.Quote(verb)})
 	}
 	return a.dispatch(withTerminalOnly(args))
 }

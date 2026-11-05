@@ -257,6 +257,11 @@ func (d *ModelDiscovery) cachePath() string {
 	return discoveryCacheIn(d.dir)
 }
 
+// CachePath returns the model cache file this discovery reads and writes.
+func (d *ModelDiscovery) CachePath() string {
+	return d.cachePath()
+}
+
 func loadDiscoveryCache(path string) (discoveryCache, error) {
 	empty := discoveryCache{Vendors: make(map[string]vendorDiscovery)}
 	data, err := os.ReadFile(filepath.Clean(path))

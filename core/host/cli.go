@@ -166,6 +166,7 @@ func NewRegistry(ctx context.Context, gws []Deps, options Options) (*cli.Registr
 	self, execErr := os.Executable()
 	logCleanup(execErr)
 	sup := supervisor.NewSupervisor(ctx, self)
+	sup.SetStatePath(options.StatePath)
 	sup.SetBridgeEnv(append(GatewayEnvPairs(), AnnounceKeyEnvPairs()...))
 	if options.DefaultGateways == nil {
 		options.DefaultGateways = nonTerminalKinds(gws)

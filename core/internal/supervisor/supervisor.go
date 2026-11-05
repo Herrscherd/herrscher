@@ -37,6 +37,7 @@ type Supervisor struct {
 	run              func(context.Context, state.Session)
 	metrics          *metrics.Registry
 	agentsRoot       string
+	statePath        string
 	bridgeEnv        []string
 	runBridge        func(context.Context, state.Session)
 	hosts            func(name string) (Placement, bool)
@@ -163,6 +164,12 @@ func (s *Supervisor) SetMetrics(m *metrics.Registry) {
 // the daemon manages even under a non-default --state path.
 func (s *Supervisor) SetAgentsRoot(root string) {
 	s.agentsRoot = root
+}
+
+// SetStatePath records the daemon state file threaded to each local bridge as
+// --state, so the bridge reads the model cache beside the state this daemon bound.
+func (s *Supervisor) SetStatePath(path string) {
+	s.statePath = path
 }
 
 // SetBridgeEnv records extra KEY=VALUE entries handed to every bridge child on
@@ -303,7 +310,11 @@ func (s *Supervisor) bridgeCommand(ctx context.Context, sess state.Session) (*ex
 	if sess.Host != "" {
 		return s.remoteBridgeCommand(ctx, sess)
 	}
-	cmd := exec.CommandContext(ctx, s.selfBin, s.bridgeArgs(sess)...)
+	args := s.bridgeArgs(sess)
+	if s.statePath != "" {
+		args = append(args, "--state", s.statePath)
+	}
+	cmd := exec.CommandContext(ctx, s.selfBin, args...)
 	configureBridgeCommand(cmd)
 	if dir := sess.Dir; dir != "" {
 		cmd.Dir = dir

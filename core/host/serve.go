@@ -169,7 +169,7 @@ func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, option
 	logCleanup(execErr)
 	startRemotePluginHosts(ctx, self, options.RemoteCategories, base)
 	partDir := filepath.Dir(options.StatePath)
-	sup := newHubSupervisor(ctx, self, base, monitor, partDir)
+	sup := newHubSupervisor(ctx, self, base, monitor, partDir, options.StatePath)
 
 	instID, err := resolveInstanceID(store, options.InstanceID, options.Owner, log)
 	if err != nil {
@@ -246,11 +246,12 @@ func loadHubState(opts Options) (*state.State, error) {
 	return store, nil
 }
 
-func newHubSupervisor(ctx context.Context, self string, base *slog.Logger, host *health.Health, partDir string) *supervisor.Supervisor {
+func newHubSupervisor(ctx context.Context, self string, base *slog.Logger, host *health.Health, partDir, statePath string) *supervisor.Supervisor {
 	sup := supervisor.NewSupervisor(ctx, self)
 	sup.SetLogger(base)
 	sup.SetMetrics(host.Metrics())
 	sup.SetAgentsRoot(filepath.Join(partDir, "agents"))
+	sup.SetStatePath(statePath)
 	return sup
 }
 

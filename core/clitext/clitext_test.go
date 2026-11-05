@@ -20,8 +20,8 @@ func sources(t *testing.T) fs.FS {
 }
 
 func declaredByName() map[string][]string {
-	out := make(map[string][]string, len(declared))
-	for key, fields := range declared {
+	out := make(map[string][]string, len(declaredKeys()))
+	for key, fields := range declaredKeys() {
 		out[string(key)] = fields
 	}
 	return out
@@ -32,13 +32,13 @@ func TestEveryDeclaredKeyHasItsTextInEveryLanguage(t *testing.T) {
 }
 
 func TestEveryKeyFileIsDeclaredOnce(t *testing.T) {
-	groups := []map[Key][]string{usageKeys, cliKeys, serviceKeys, serveKeys, bridgeKeys, manageKeys, accountKeys, sessionKeys, pluginKeys}
+	groups := []map[Key][]string{usageKeys(), cliKeys(), serveKeys(), sessionKeys(), pluginKeys()}
 	total := 0
 	for _, group := range groups {
 		total += len(group)
 	}
-	if total != len(declared) {
-		t.Fatalf("keys declared %d times for %d distinct keys: a key sits in two groups", total, len(declared))
+	if total != len(declaredKeys()) {
+		t.Fatalf("keys declared %d times for %d distinct keys: a key sits in two groups", total, len(declaredKeys()))
 	}
 }
 

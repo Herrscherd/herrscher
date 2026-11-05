@@ -1,11 +1,14 @@
 package clitext
 
+// Keys of the messages of attached sessions.
 const (
-	AttachNotAvailable Key = "cli.attach.not_available"
-	AttachNoSession    Key = "cli.attach.no_session"
+	AttachNotAvailable = "cli.attach.not_available"
+	AttachNoSession    = "cli.attach.no_session"
 )
 
-var sessionKeys = map[Key][]string{
-	AttachNotAvailable: {"Verb"},
-	AttachNoSession:    nil,
+func sessionKeys() map[Key][]string {
+	return map[Key][]string{
+		AttachNotAvailable: {ParamVerb},
+		AttachNoSession:    nil,
+	}
 }

@@ -12,7 +12,6 @@ import (
 	"io/fs"
 	"maps"
 	"slices"
-	"sync"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
@@ -35,29 +34,49 @@ var (
 	ErrParamsMismatch = errors.New("message params do not match the key")
 )
 
-var declared = mergeDeclared(usageKeys, cliKeys, serviceKeys, serveKeys, bridgeKeys, manageKeys, accountKeys, sessionKeys, pluginKeys)
+func declaredKeys() map[Key][]string {
+	return mergeDeclared(usageKeys(), cliKeys(), serveKeys(), sessionKeys(), pluginKeys())
+}
 
-var catalog = sync.OnceValues(func() (*i18n.Catalog, error) {
+func loadCatalog() (*i18n.Catalog, error) {
 	sources, err := fs.Sub(locales, "locales")
 	if err != nil {
 		return nil, fmt.Errorf("command line locales: %w", err)
 	}
 	return i18n.NewCatalog(nil, sources)
-})
+}
+
+// Names of the params shared by several keys.
+const (
+	ParamErr      = "Err"
+	ParamKey      = "Key"
+	ParamName     = "Name"
+	ParamKind     = "Kind"
+	ParamPath     = "Path"
+	ParamMessage  = "Message"
+	ParamVerb     = "Verb"
+	ParamArg      = "Arg"
+	ParamCategory = "Category"
+	ParamOwner    = "Owner"
+)
 
 // Text renders key in lang with params. It refuses an undeclared key, and params
 // that do not name exactly the fields the key declares.
 func Text(lang i18n.Language, key Key, params Params) (string, error) {
-	fields, known := declared[key]
+	cat, err := loadCatalog()
+	if err != nil {
+		return "", err
+	}
+	return render(cat, lang, key, params)
+}
+
+func render(cat *i18n.Catalog, lang i18n.Language, key Key, params Params) (string, error) {
+	fields, known := declaredKeys()[key]
 	if !known {
 		return "", fmt.Errorf("%q: %w", key, ErrUndeclaredKey)
 	}
 	if err := checkParams(fields, params); err != nil {
 		return "", fmt.Errorf("%q: %w", key, err)
-	}
-	cat, err := catalog()
-	if err != nil {
-		return "", err
 	}
 	return cat.Message(lang, string(key), params)
 }
@@ -83,18 +102,25 @@ func allNamed(fields []string, params Params) bool {
 // at the end.
 type Translator struct {
 	lang i18n.Language
+	cat  *i18n.Catalog
 	err  error
 }
 
 // For returns a translator that renders in lang.
 func For(lang i18n.Language) *Translator {
-	return &Translator{lang: lang}
+	cat, err := loadCatalog()
+	translator := &Translator{lang: lang, cat: cat}
+	translator.fail(err)
+	return translator
 }
 
 // Text renders key with params. After a failure it returns the key itself, and
 // Err reports the first failure.
 func (t *Translator) Text(key Key, params Params) string {
-	text, err := Text(t.lang, key, params)
+	if t.cat == nil {
+		return string(key)
+	}
+	text, err := render(t.cat, t.lang, key, params)
 	if err != nil {
 		t.fail(err)
 		return string(key)
@@ -108,7 +134,7 @@ func (t *Translator) Err() error {
 }
 
 func (t *Translator) fail(err error) {
-	if t.err == nil {
+	if err != nil && t.err == nil {
 		t.err = err
 	}
 }

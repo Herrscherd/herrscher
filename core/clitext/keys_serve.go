@@ -1,33 +1,36 @@
 package clitext
 
+// Keys of the skills messages printed while serving.
 const (
-	SkillsRetireFailed   Key = "cli.skills.retire_failed"
-	SkillRemoved         Key = "cli.skills.removed"
-	SkillRetiredDiverged Key = "cli.skills.retired_diverged"
-	SkillRetiredLinked   Key = "cli.skills.retired_linked"
-	SkillInstalled       Key = "cli.skills.installed"
-	SkillUpdated         Key = "cli.skills.updated"
-	SkillDiverged        Key = "cli.skills.diverged"
-	SkillLinked          Key = "cli.skills.linked"
-	SkillsNotConfigured  Key = "cli.skills.not_configured"
-	SkillsPluginFailed   Key = "cli.skills.plugin_failed"
-	SkillsNoContent      Key = "cli.skills.no_content"
-	SkillsInstallFailed  Key = "cli.skills.install_failed"
-	SkillDuplicate       Key = "cli.skills.duplicate"
+	SkillsRetireFailed   = "cli.skills.retire_failed"
+	SkillRemoved         = "cli.skills.removed"
+	SkillRetiredDiverged = "cli.skills.retired_diverged"
+	SkillRetiredLinked   = "cli.skills.retired_linked"
+	SkillInstalled       = "cli.skills.installed"
+	SkillUpdated         = "cli.skills.updated"
+	SkillDiverged        = "cli.skills.diverged"
+	SkillLinked          = "cli.skills.linked"
+	SkillsNotConfigured  = "cli.skills.not_configured"
+	SkillsPluginFailed   = "cli.skills.plugin_failed"
+	SkillsNoContent      = "cli.skills.no_content"
+	SkillsInstallFailed  = "cli.skills.install_failed"
+	SkillDuplicate       = "cli.skills.duplicate"
 )
 
-var serveKeys = map[Key][]string{
-	SkillsRetireFailed:   {"Err"},
-	SkillRemoved:         {"Name"},
-	SkillRetiredDiverged: {"Name", "Path"},
-	SkillRetiredLinked:   {"Name", "Path"},
-	SkillInstalled:       {"Name"},
-	SkillUpdated:         {"Name"},
-	SkillDiverged:        {"Name", "Path"},
-	SkillLinked:          {"Name", "Path"},
-	SkillsNotConfigured:  {"Kind", "Err"},
-	SkillsPluginFailed:   {"Kind", "Err"},
-	SkillsNoContent:      {"Kind"},
-	SkillsInstallFailed:  {"Kind", "Err"},
-	SkillDuplicate:       {"Name", "Kind", "Owner"},
+func serveKeys() map[Key][]string {
+	return map[Key][]string{
+		SkillsRetireFailed:   {ParamErr},
+		SkillRemoved:         {ParamName},
+		SkillRetiredDiverged: {ParamName, ParamPath},
+		SkillRetiredLinked:   {ParamName, ParamPath},
+		SkillInstalled:       {ParamName},
+		SkillUpdated:         {ParamName},
+		SkillDiverged:        {ParamName, ParamPath},
+		SkillLinked:          {ParamName, ParamPath},
+		SkillsNotConfigured:  {ParamKind, ParamErr},
+		SkillsPluginFailed:   {ParamKind, ParamErr},
+		SkillsNoContent:      {ParamKind},
+		SkillsInstallFailed:  {ParamKind, ParamErr},
+		SkillDuplicate:       {ParamName, ParamKind, ParamOwner},
+	}
 }

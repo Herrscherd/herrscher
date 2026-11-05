@@ -1,27 +1,30 @@
 package clitext
 
+// Keys of the plugin host messages.
 const (
-	PluginHostFlagCategory   Key = "cli.plugin_host.flag.category"
-	PluginHostFlagNATS       Key = "cli.plugin_host.flag.nats"
-	PluginHostFlagInstance   Key = "cli.plugin_host.flag.instance"
-	PluginHostUnsupported    Key = "cli.plugin_host.unsupported_category"
-	PluginHostNoSkeleton     Key = "cli.plugin_host.no_skeleton"
-	PluginHostFailed         Key = "cli.plugin_host.failed"
-	PluginHostOrchestrator   Key = "cli.plugin_host.orchestrator"
-	PluginHostBackend        Key = "cli.plugin_host.backend"
-	PluginHostNoOrchestrator Key = "cli.plugin_host.no_orchestrator"
-	PluginHostNoBackend      Key = "cli.plugin_host.no_backend"
+	PluginHostFlagCategory   = "cli.plugin_host.flag.category"
+	PluginHostFlagNATS       = "cli.plugin_host.flag.nats"
+	PluginHostFlagInstance   = "cli.plugin_host.flag.instance"
+	PluginHostUnsupported    = "cli.plugin_host.unsupported_category"
+	PluginHostNoSkeleton     = "cli.plugin_host.no_skeleton"
+	PluginHostFailed         = "cli.plugin_host.failed"
+	PluginHostOrchestrator   = "cli.plugin_host.orchestrator"
+	PluginHostBackend        = "cli.plugin_host.backend"
+	PluginHostNoOrchestrator = "cli.plugin_host.no_orchestrator"
+	PluginHostNoBackend      = "cli.plugin_host.no_backend"
 )
 
-var pluginKeys = map[Key][]string{
-	PluginHostFlagCategory:   nil,
-	PluginHostFlagNATS:       nil,
-	PluginHostFlagInstance:   nil,
-	PluginHostUnsupported:    {"Category"},
-	PluginHostNoSkeleton:     {"Category"},
-	PluginHostFailed:         {"Err"},
-	PluginHostOrchestrator:   {"Err"},
-	PluginHostBackend:        {"Err"},
-	PluginHostNoOrchestrator: nil,
-	PluginHostNoBackend:      nil,
+func pluginKeys() map[Key][]string {
+	return map[Key][]string{
+		PluginHostFlagCategory:   nil,
+		PluginHostFlagNATS:       nil,
+		PluginHostFlagInstance:   nil,
+		PluginHostUnsupported:    {ParamCategory},
+		PluginHostNoSkeleton:     {ParamCategory},
+		PluginHostFailed:         {ParamErr},
+		PluginHostOrchestrator:   {ParamErr},
+		PluginHostBackend:        {ParamErr},
+		PluginHostNoOrchestrator: nil,
+		PluginHostNoBackend:      nil,
+	}
 }

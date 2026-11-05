@@ -491,7 +491,7 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 	explicitAccount, _ := input.Lookup("account")
 	hostName := h.resolveHost(input, runtime.agent)
 	account := chooseSessionAccount(explicitAccount, h.agentAccount(runtime.agent))
-	if err := h.checkAccountPlacement(hostName, account); err != nil {
+	if err := h.checkAccountInLocalStore(hostName, account); err != nil {
 		return createRequest{}, err
 	}
 	if err := h.checkAccount(runtime, explicitAccount); err != nil {

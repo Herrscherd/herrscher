@@ -428,3 +428,15 @@ func TestChooseVendorDerivesTheVendorFromTheModel(t *testing.T) {
 		t.Fatal("a model requested on a vendor that does not own it must be refused")
 	}
 }
+
+func TestChooseVendorReadsTheBackendEnvironment(t *testing.T) {
+	t.Setenv("HERRSCHER_BACKEND", "beta")
+
+	vendor, _, err := chooseVendor("", "", fakePlugins())
+	if err != nil {
+		t.Fatalf("chooseVendor: %v", err)
+	}
+	if vendor != "beta" {
+		t.Fatalf("vendor %q, want beta from HERRSCHER_BACKEND when neither the vendor nor the model is given", vendor)
+	}
+}

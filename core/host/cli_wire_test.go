@@ -94,3 +94,26 @@ func TestWiredManagerRefusesAccountWithRemoteBackend(t *testing.T) {
 		t.Fatalf("session create with an account and a remote backend: err %v, want manager.ErrAccountRemote before any placement", runErr)
 	}
 }
+
+func TestWiredManagerResolvesTheVendorFromTheBackendEnvironment(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("HERRSCHER_BACKEND", "codex")
+	name, err := contracts.ParseProfileName("pro")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (accounts.Store{Root: accounts.DefaultRoot(home)}).Create("codex", name); err != nil {
+		t.Fatal(err)
+	}
+	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	if err := st.SetHome(state.HomeRef{ID: "home", Type: "forum"}); err != nil {
+		t.Fatal(err)
+	}
+	hdl := newManagerHandler(Deps{}, Options{DefaultCmd: "codex"}, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()))
+	create := mustCommand(t, hdl.Commands(), "session", "create")
+	noVendor := contracts.Input{Args: map[string]string{"name": "pro-session", "account": "pro"}}
+	if _, runErr := create.Run(t.Context(), noVendor); !errors.Is(runErr, errStopAfterGuard) {
+		t.Fatalf("session create with account pro and vendor from HERRSCHER_BACKEND=codex: err %v, want the placement to be reached", runErr)
+	}
+}

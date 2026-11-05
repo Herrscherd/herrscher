@@ -185,7 +185,7 @@ func (h *Handler) checkAccount(runtime runtimeChoice, profile string) error {
 	return h.validateAccount(vendor, profile)
 }
 
-func (h *Handler) checkAccountPlacement(hostName, account string) error {
+func (h *Handler) checkAccountInLocalStore(hostName, account string) error {
 	if account == "" {
 		return nil
 	}

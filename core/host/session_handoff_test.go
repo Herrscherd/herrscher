@@ -356,17 +356,17 @@ func TestAgentConcurrentHandoffInTheSameTreeIsRefused(t *testing.T) {
 func TestHandoffLimiterForgetsTreesIdleForAnHour(t *testing.T) {
 	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
 	limit := newHandoffLimiter(func() time.Time { return now })
-	release, err := limit.acquire("alpha")
+	ticket, err := limit.acquire("alpha")
 	if err != nil {
 		t.Fatal(err)
 	}
-	release()
+	ticket.release()
 	now = now.Add(handoffWindow)
-	release, err = limit.acquire("beta")
+	ticket, err = limit.acquire("beta")
 	if err != nil {
 		t.Fatal(err)
 	}
-	release()
+	ticket.release()
 	if _, kept := limit.granted["alpha"]; kept {
 		t.Fatal("a tree whose handoffs are all older than the window must be forgotten")
 	}
@@ -434,14 +434,18 @@ func TestAgentReceivesTheHandoffCapability(t *testing.T) {
 
 func handoffRefusedFor(t *testing.T, refusal error) error {
 	t.Helper()
+	return handoffRefusedWith(t, refusal, map[string]string{paramName: "alpha", paramTo: "beta", "vendor": "claude"})
+}
+
+func handoffRefusedWith(t *testing.T, refusal error, args map[string]string) error {
+	t.Helper()
 	rec := &handoffRecord{}
 	deps := fakeHandoff(rec, fixedClock(), "alpha")
 	deps.account = func(string) string { return "work" }
 	deps.create = func(context.Context, contracts.Input) (string, error) {
 		return "", fmt.Errorf("refused: %w", refusal)
 	}
-	_, err := runHandoff(withLocalPrincipal(context.Background()), deps,
-		map[string]string{paramName: "alpha", paramTo: "beta", "vendor": "claude"})
+	_, err := runHandoff(withLocalPrincipal(context.Background()), deps, args)
 	return err
 }
 
@@ -484,8 +488,43 @@ func TestHandoffRefusedInheritedRemoteAccountIsExplained(t *testing.T) {
 
 func TestHandoffRefusalGivesTheExactRetryCommand(t *testing.T) {
 	err := handoffRefusedFor(t, manager.ErrAccountRemote)
-	want := `herrscher session handoff --name alpha --to beta --account ""`
+	want := `herrscher session handoff --name alpha --to beta --vendor claude --account ""`
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("err = %q, want the exact retry command %q", err, want)
+	}
+}
+
+func TestHandoffRetryCommandRepeatsEveryRefusedParameter(t *testing.T) {
+	err := handoffRefusedWith(t, manager.ErrAccountRemote, map[string]string{
+		paramName: "alpha", paramTo: "beta", "project": "my proj", "model": "m-1", "vendor": "claude", paramUnder: "cat1",
+	})
+	want := `herrscher session handoff --name alpha --to beta --project 'my proj' --model m-1 --vendor claude --under cat1 --account ""`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("err = %q, want the retry command %q", err, want)
+	}
+}
+
+func TestAgentAccountRefusalsDoNotSpendTheQuota(t *testing.T) {
+	rec := &handoffRecord{}
+	deps := fakeHandoff(rec, fixedClock(), "alpha")
+	deps.account = func(string) string { return "work" }
+	refusals := 0
+	deps.create = func(_ context.Context, in contracts.Input) (string, error) {
+		if refusals < handoffAgentPerHour {
+			refusals++
+			return "", fmt.Errorf("refused: %w", manager.ErrAccountRemote)
+		}
+		rec.created = append(rec.created, in)
+		return "created " + in.Get(paramName), nil
+	}
+	ctx := withSessionPrincipal(context.Background(), "alpha")
+	for i := range handoffAgentPerHour {
+		_, err := runHandoff(ctx, deps, map[string]string{paramTo: "refused" + string(rune('a'+i))})
+		if !errors.Is(err, manager.ErrAccountRemote) {
+			t.Fatalf("refused handoff %d: err = %v, want manager.ErrAccountRemote", i+1, err)
+		}
+	}
+	if _, err := runHandoff(ctx, deps, map[string]string{paramTo: "next"}); err != nil {
+		t.Fatalf("handoff after %d account refusals: err = %v, want it to pass: a refusal must not spend the quota", handoffAgentPerHour, err)
 	}
 }

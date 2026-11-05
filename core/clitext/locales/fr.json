@@ -120,7 +120,7 @@
     "other": "Lance `herrscher <commande> --help` pour voir les options de chaque commande."
   },
   {
-    "id": "cli.usage.env.discord",
+    "id": "cli.usage.env.bot",
     "description": "Ligne de variables : les variables Discord",
     "other": "env : DISCORD_BOT_TOKEN (requis), DISCORD_USER_ID (l'utilisateur que le bot écoute)"
   },

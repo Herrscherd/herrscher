@@ -26,7 +26,7 @@ const (
 	UsageUpdate          = "cli.usage.update"
 	UsageInstall         = "cli.usage.install"
 	UsageHelpFooter      = "cli.usage.help.footer"
-	UsageEnvDiscord      = "cli.usage.env.discord"
+	UsageEnvBot          = "cli.usage.env.bot"
 	UsageEnvOwner        = "cli.usage.env.owner"
 	UsageEnvRoute        = "cli.usage.env.route"
 	UsageEnvGateway      = "cli.usage.env.gateway"
@@ -60,7 +60,7 @@ func usageKeys() map[Key][]string {
 		UsageUpdate:          nil,
 		UsageInstall:         nil,
 		UsageHelpFooter:      nil,
-		UsageEnvDiscord:      nil,
+		UsageEnvBot:          nil,
 		UsageEnvOwner:        nil,
 		UsageEnvRoute:        nil,
 		UsageEnvGateway:      nil,

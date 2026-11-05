@@ -120,7 +120,7 @@
     "other": "Run `herrscher <command> --help` for flags and options."
   },
   {
-    "id": "cli.usage.env.discord",
+    "id": "cli.usage.env.bot",
     "description": "Environment line: the Discord variables",
     "other": "env: DISCORD_BOT_TOKEN (required), DISCORD_USER_ID (the user the bot obeys)"
   },

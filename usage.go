@@ -72,7 +72,7 @@ func usage(lang i18n.Language) error {
 		"",
 		"  " + hint.Render(translator.Text(clitext.UsageHelpFooter, nil)),
 		"",
-		"  " + hint.Render(translator.Text(clitext.UsageEnvDiscord, nil)),
+		"  " + hint.Render(translator.Text(clitext.UsageEnvBot, nil)),
 		"  " + hint.Render(translator.Text(clitext.UsageEnvOwner, nil)),
 		"  " + hint.Render(translator.Text(clitext.UsageEnvRoute, nil)),
 		"  " + hint.Render(translator.Text(clitext.UsageEnvGateway, nil)),

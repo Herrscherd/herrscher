@@ -82,7 +82,8 @@ func TestWiredSessionVerbsRenderInTheOperatorLanguage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("set-budget: %v", err)
 	}
-	if got, _ := result.Data().(string); !strings.Contains(got, "budget mis à jour") {
+	got, ok := result.Data().(string)
+	if !ok || !strings.Contains(got, "budget mis à jour") {
 		t.Fatalf("set-budget reply = %q, want it rendered in the operator language (French)", got)
 	}
 }

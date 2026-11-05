@@ -41,7 +41,7 @@ const (
 	SessionResumed                = "cli.session.resumed"
 	SessionModeSet                = "cli.session.mode.set"
 	SessionModeUnenforced         = "cli.session.mode.unenforced"
-	SessionModeBypassRecreate     = "cli.session.mode.bypass_recreate"
+	SessionModeRecreateNotice     = "cli.session.mode.bypass_recreate"
 	SessionPicked                 = "cli.session.picked"
 	SessionInterrupted            = "cli.session.interrupted"
 	SessionCompactMergedKept      = "cli.session.compact.merged_kept"
@@ -94,7 +94,7 @@ func sessionKeys() map[Key][]string {
 		SessionResumed:                {ParamName},
 		SessionModeSet:                {ParamName, ParamMode},
 		SessionModeUnenforced:         {ParamVendor, ParamName},
-		SessionModeBypassRecreate:     nil,
+		SessionModeRecreateNotice:     nil,
 		SessionPicked:                 {ParamName},
 		SessionInterrupted:            {ParamName},
 		SessionCompactMergedKept:      {ParamName},

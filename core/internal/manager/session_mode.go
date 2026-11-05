@@ -69,7 +69,7 @@ func (h *Handler) setModeReply(sess state.Session, mode string, gate approvalGat
 		reply += h.text(clitext.SessionModeUnenforced, clitext.Params{clitext.ParamVendor: vendorLabel(sess.Vendor), clitext.ParamName: sess.Name})
 	}
 	if sess.Approvals == approval.ModeBypass.String() && mode != approval.ModeBypass.String() {
-		reply += h.text(clitext.SessionModeBypassRecreate, nil)
+		reply += h.text(clitext.SessionModeRecreateNotice, nil)
 	}
 	return reply
 }

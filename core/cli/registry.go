@@ -27,7 +27,17 @@ var (
 
 // Registry holds the commands a process can run, keyed by their verb path.
 type Registry struct {
-	cmds []contracts.Cmd
+	cmds       []contracts.Cmd
+	helpParams map[clitext.Key]clitext.Params
+}
+
+// SetHelpParams sets the parameters that a help key takes when the registry renders it,
+// such as the roles that a grant can name.
+func (r *Registry) SetHelpParams(key clitext.Key, params clitext.Params) {
+	if r.helpParams == nil {
+		r.helpParams = make(map[clitext.Key]clitext.Params)
+	}
+	r.helpParams[key] = params
 }
 
 func key(path []string) string { return strings.Join(path, " ") }
@@ -282,26 +292,26 @@ func (r *Registry) Specs(lang i18n.Language) []Spec {
 	translator := clitext.For(lang)
 	out := make([]Spec, 0, len(r.cmds))
 	for _, c := range r.cmds {
-		out = append(out, Spec{Path: c.Path, Help: helpText(translator, c.Help), Params: localizedParams(translator, c.Params)})
+		out = append(out, Spec{Path: c.Path, Help: r.helpText(translator, c.Help), Params: r.localizedParams(translator, c.Params)})
 	}
 	sort.Slice(out, func(i, j int) bool { return key(out[i].Path) < key(out[j].Path) })
 	return out
 }
 
-func helpText(translator *clitext.Translator, helpKey string) string {
+func (r *Registry) helpText(translator *clitext.Translator, helpKey string) string {
 	if helpKey == "" {
 		return ""
 	}
-	return translator.Text(clitext.Key(helpKey), nil)
+	return translator.Text(clitext.Key(helpKey), r.helpParams[clitext.Key(helpKey)])
 }
 
-func localizedParams(translator *clitext.Translator, params []contracts.Param) []contracts.Param {
+func (r *Registry) localizedParams(translator *clitext.Translator, params []contracts.Param) []contracts.Param {
 	if len(params) == 0 {
 		return nil
 	}
 	out := make([]contracts.Param, 0, len(params))
 	for _, param := range params {
-		param.Help = helpText(translator, param.Help)
+		param.Help = r.helpText(translator, param.Help)
 		out = append(out, param)
 	}
 	return out
@@ -325,7 +335,7 @@ func (r *Registry) Help(lang i18n.Language) string {
 				line.WriteString(" [--" + param.Name + "]")
 			}
 		}
-		if help := helpText(translator, cmd.Help); help != "" {
+		if help := r.helpText(translator, cmd.Help); help != "" {
 			line.WriteString(": " + help)
 		}
 		lines = append(lines, line.String())

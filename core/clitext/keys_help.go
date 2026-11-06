@@ -353,7 +353,7 @@ func helpKeys() map[Key][]string {
 		CmdParamModelsRefreshState:            nil,
 		CmdParamRoleGrantLabel:                nil,
 		CmdParamRoleGrantPrincipal:            nil,
-		CmdParamRoleGrantRole:                 nil,
+		CmdParamRoleGrantRole:                 {"Roles"},
 		CmdParamRoleRevokePrincipal:           nil,
 		CmdParamRoleShowPrincipal:             nil,
 		CmdParamScheduleAddAgent:              nil,

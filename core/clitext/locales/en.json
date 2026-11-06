@@ -2560,7 +2560,7 @@
   {
     "id": "cli.help.param.role.grant.role",
     "description": "Help of the --role param of the command role grant",
-    "other": "the role to grant, one of the grantable roles; also takes a second bare argument"
+    "other": "the role to grant, one of: {{.Roles}}; also takes a second bare argument"
   },
   {
     "id": "cli.help.cmd.schedule.pause",

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -151,4 +152,30 @@ func TestShowNamesTheRoleAndWhatItRuns(t *testing.T) {
 			t.Fatalf("role show %q must mention %q", out, want)
 		}
 	}
+}
+
+func TestRoleGrantHelpListsTheGrantableRolesInEachLanguage(t *testing.T) {
+	reg, _ := roleRegistry(t)
+	for _, lang := range []i18n.Language{i18n.English, i18n.French} {
+		help := roleGrantParamHelp(t, reg, lang, "role")
+		if !strings.Contains(help, "observer, operator, owner") {
+			t.Fatalf("the role help in %s says %q, without the grantable roles", lang, help)
+		}
+	}
+}
+
+func roleGrantParamHelp(t *testing.T, reg *cli.Registry, lang i18n.Language, name string) string {
+	t.Helper()
+	for _, spec := range reg.Specs(lang) {
+		if strings.Join(spec.Path, " ") != "role grant" {
+			continue
+		}
+		for _, param := range spec.Params {
+			if param.Name == name {
+				return param.Help
+			}
+		}
+	}
+	t.Fatalf("role grant has no %s param in %s", name, lang)
+	return ""
 }

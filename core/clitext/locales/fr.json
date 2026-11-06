@@ -2560,7 +2560,7 @@
   {
     "id": "cli.help.param.role.grant.role",
     "description": "Help of the --role param of the command role grant",
-    "other": "le rôle à accorder, parmi les rôles accordables ; accepte aussi un second argument nu"
+    "other": "le rôle à accorder, parmi : {{.Roles}} ; accepte aussi un second argument nu"
   },
   {
     "id": "cli.help.cmd.schedule.pause",

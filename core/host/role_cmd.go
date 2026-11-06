@@ -18,6 +18,7 @@ const firstGrantWarning = "⚠️ this is the first role: from now on every gate
 	"Name the others with `role grant` before they find out."
 
 func addRoleCommands(reg *cli.Registry, hostState *state.State) error {
+	reg.SetHelpParams(clitext.CmdParamRoleGrantRole, clitext.Params{"Roles": strings.Join(authz.GrantableRoles(), ", ")})
 	return addVerbs(reg,
 		roleListVerb(hostState),
 		roleGrantVerb(hostState),

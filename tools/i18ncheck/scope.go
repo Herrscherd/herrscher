@@ -20,13 +20,13 @@ func presentationScope() []string {
 	return []string{"plugins/terminal", "plugins/terminal/tui", "manage", cliDirectory, "core/host", "core/internal/manager", "usage.go"}
 }
 
-func collect(root string) (map[string][]finding, error) {
+func collect(root string, scope []string) (map[string][]finding, error) {
 	if err := validateExemptions(exemptions()); err != nil {
 		return nil, err
 	}
 	files := token.NewFileSet()
 	found := make(map[string][]finding)
-	for _, entry := range presentationScope() {
+	for _, entry := range scope {
 		parsed, err := parseSources(files, filepath.Join(root, filepath.FromSlash(entry)))
 		if err != nil {
 			return nil, err
@@ -56,9 +56,6 @@ func parseSources(files *token.FileSet, target string) ([]*ast.File, error) {
 
 func sourcePaths(target string) ([]string, error) {
 	info, err := os.Stat(target)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
 	if err != nil {
 		return nil, fmt.Errorf("cannot read %s: %w", target, err)
 	}

@@ -1,29 +1,4 @@
 // Command i18ncheck ratchets the sentences shown to a person in the presentation packages down to their baseline.
-//
-// It reads the non-test sources of the packages listed in presentationScope and reports each string that
-// reads as a sentence and reaches a person without going through the message catalog. A string counts
-// when it is assigned to a flash or notice field, set as the Text of a contracts.Event or the flash of a
-// model literal, given to contracts.DataResult or as the value of contracts.Text, used as the message of
-// fmt.Errorf or errors.New, given as the help of a command (Help) or of a param (Param, ValueParam), or built
-// from such a string by concatenation or from a package-level string constant or variable of the same
-// package. Flags, command syntax, single
-// words, and the exemptions listed in exemptions are never reported.
-//
-// The baseline holds one line per package, "<package> <count>", with the number of literals that package
-// may still carry. A package may only lose literals: a count above its line is a new hard-coded sentence,
-// a count below its line means the line must be lowered, and a package at zero has no line at all.
-//
-// Usage:
-//
-//	i18ncheck -baseline <file> <root>
-//
-// Exit codes:
-//
-//	0   every package matches its baseline line
-//	1   a package has more literals than its line, or fewer, and its line must change
-//	2   the command line is wrong
-//	66  the baseline or a source file cannot be read or parsed
-//	74  the report cannot be written
 package main
 
 import (
@@ -64,7 +39,7 @@ func run(args []string, stdout, stderr io.Writer) exit {
 	if err != nil {
 		return report(stderr, err, exitNoInput)
 	}
-	found, err := collect(flags.Arg(0))
+	found, err := collect(flags.Arg(0), presentationScope())
 	if err != nil {
 		return report(stderr, err, exitNoInput)
 	}

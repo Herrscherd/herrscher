@@ -30,7 +30,7 @@ func collectMutant(t *testing.T, directory, file, source string) map[string][]fi
 	if err := os.WriteFile(filepath.Join(target, file), []byte(source), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	found, err := collect(root)
+	found, err := collect(root, []string{directory})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func collectMutant(t *testing.T, directory, file, source string) map[string][]fi
 
 func TestExtendedFixtureFindsExactlyTheSentences(t *testing.T) {
 	t.Parallel()
-	found, err := collect("testdata/extended")
+	found, err := collect("testdata/extended", []string{"manage", "core/cli", "core/host", "core/internal/manager", "plugins/terminal"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,11 +255,97 @@ func TestKeyedSentinelAcceptsOnlyCatalogReferences(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	translated := translatedSentinels([]*ast.File{file})
+	translated := keyedSentinelNames([]*ast.File{file})
 	if !translated["errKnown"] {
 		t.Fatal("a sentinel keyed by a clitext reference is not treated as translated")
 	}
 	if translated["errLocal"] {
 		t.Fatal("a sentinel keyed by a foreign selector is treated as translated")
+	}
+}
+
+func TestMissingScopeDirectoryIsAnError(t *testing.T) {
+	t.Parallel()
+	if _, err := collect(t.TempDir(), []string{"manage"}); err == nil {
+		t.Fatal("a missing directory of the scope was read as if it were empty")
+	}
+}
+
+func TestStandardStreamAndLogPrintsAreSinks(t *testing.T) {
+	t.Parallel()
+	for name, mutant := range map[string]struct {
+		source string
+		want   string
+	}{
+		"fmt.Println": {
+			source: "package manage\n\nfunc mutant() {\n\tfmt.Println(\"The upload was refused\")\n}\n",
+			want:   "The upload was refused",
+		},
+		"fmt.Printf format": {
+			source: "package manage\n\nfunc mutant() {\n\tfmt.Printf(\"The upload was refused\\n\")\n}\n",
+			want:   "The upload was refused\n",
+		},
+		"fmt.Fprintln to os.Stderr": {
+			source: "package manage\n\nfunc mutant() {\n\tfmt.Fprintln(os.Stderr, \"The upload was refused\")\n}\n",
+			want:   "The upload was refused",
+		},
+		"fmt.Fprintf to os.Stdout": {
+			source: "package manage\n\nfunc mutant() {\n\tfmt.Fprintf(os.Stdout, \"The upload was refused\")\n}\n",
+			want:   "The upload was refused",
+		},
+		"log.Print": {
+			source: "package manage\n\nfunc mutant() {\n\tlog.Print(\"The upload was refused\")\n}\n",
+			want:   "The upload was refused",
+		},
+		"log.Printf": {
+			source: "package manage\n\nfunc mutant() {\n\tlog.Printf(\"The upload was refused: %s\", reason)\n}\n",
+			want:   "The upload was refused: %s",
+		},
+	} {
+		found := collectMutant(t, "manage", "mutant.go", mutant.source)
+		if got := textsOf(found["manage"]); !slices.Contains(got, mutant.want) {
+			t.Errorf("%s: %q not found in %q", name, mutant.want, got)
+		}
+	}
+}
+
+func TestWriterOtherThanAStandardStreamIsNotShown(t *testing.T) {
+	t.Parallel()
+	found := collectMutant(t, "manage", "mutant.go", "package manage\n\nfunc mutant(buf *bytes.Buffer) {\n\tfmt.Fprintln(buf, \"The upload was refused\")\n\tfmt.Fprintf(buf, \"The upload was refused\")\n}\n")
+	if got := textsOf(found["manage"]); len(got) != 0 {
+		t.Fatalf("a write to a buffer was reported as shown to a person: %q", got)
+	}
+}
+
+func TestLocalLiteralReachesItsSinks(t *testing.T) {
+	t.Parallel()
+	found := collectMutant(t, "manage", "mutant.go", "package manage\n\nfunc mutant(m *model) error {\n\tmsg := \"The upload was refused\"\n\tm.flash = msg\n\treturn errors.New(msg)\n}\n")
+	want := []string{"The upload was refused", "The upload was refused"}
+	if got := textsOf(found["manage"]); !slices.Equal(got, want) {
+		t.Fatalf("local literal findings %q, want %q", got, want)
+	}
+}
+
+func TestLocalWithSeveralAssignmentsIsNotResolved(t *testing.T) {
+	t.Parallel()
+	found := collectMutant(t, "manage", "mutant.go", "package manage\n\nfunc mutant(m *model, late bool) {\n\tmsg := \"The upload was refused\"\n\tif late {\n\t\tmsg = \"The upload was cancelled\"\n\t}\n\tm.flash = msg\n}\n")
+	if got := textsOf(found["manage"]); len(got) != 0 {
+		t.Fatalf("a local with two assignments was resolved to one of them: %q", got)
+	}
+}
+
+func TestLocalShadowsPackageConstant(t *testing.T) {
+	t.Parallel()
+	found := collectMutant(t, "manage", "mutant.go", "package manage\n\nconst refusedNotice = \"The upload was refused\"\n\nfunc mutant(m *model) {\n\trefusedNotice := \"The upload was cancelled\"\n\tm.flash = refusedNotice\n}\n")
+	if got := textsOf(found["manage"]); !slices.Equal(got, []string{"The upload was cancelled"}) {
+		t.Fatalf("the local did not shadow the package constant: %q", got)
+	}
+}
+
+func TestLocalBuiltFromAFormatIsResolved(t *testing.T) {
+	t.Parallel()
+	found := collectMutant(t, "manage", "mutant.go", "package manage\n\nfunc mutant(m *model, name string) {\n\tmsg := fmt.Sprintf(\"Upload of %s was refused\", name)\n\tm.flash = msg\n}\n")
+	if got := textsOf(found["manage"]); !slices.Equal(got, []string{"Upload of %s was refused"}) {
+		t.Fatalf("a local built with fmt.Sprintf was not resolved to its format: %q", got)
 	}
 }

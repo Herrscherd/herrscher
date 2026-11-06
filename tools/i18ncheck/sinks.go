@@ -15,6 +15,7 @@ type sinkWalker struct {
 	files      *token.FileSet
 	translated map[string]bool
 	constants  map[string]ast.Expr
+	locals     map[string]ast.Expr
 	resolving  map[string]bool
 	exempt     map[ast.Node]bool
 	found      []finding
@@ -23,15 +24,79 @@ type sinkWalker struct {
 func findPackageSinks(files *token.FileSet, parsed []*ast.File) []finding {
 	walker := &sinkWalker{
 		files:      files,
-		translated: translatedSentinels(parsed),
+		translated: keyedSentinelNames(parsed),
 		constants:  packageConstants(parsed),
 		resolving:  make(map[string]bool),
 		exempt:     make(map[ast.Node]bool),
 	}
 	for _, file := range parsed {
-		ast.Inspect(file, walker.visit)
+		for _, declaration := range file.Decls {
+			walker.locals = localValues(declaration)
+			ast.Inspect(declaration, walker.visit)
+		}
 	}
 	return walker.found
+}
+
+func localValues(declaration ast.Decl) map[string]ast.Expr {
+	bindings := make(map[string][]ast.Expr)
+	ast.Inspect(declaration, func(node ast.Node) bool {
+		recordBindings(bindings, node)
+		return true
+	})
+	locals := make(map[string]ast.Expr, len(bindings))
+	for name, values := range bindings {
+		if len(values) == 1 {
+			locals[name] = values[0]
+		} else {
+			locals[name] = nil
+		}
+	}
+	return locals
+}
+
+func recordBindings(bindings map[string][]ast.Expr, node ast.Node) {
+	switch typed := node.(type) {
+	case *ast.AssignStmt:
+		recordAssignment(bindings, typed)
+	case *ast.ValueSpec:
+		recordValueSpec(bindings, typed)
+	case *ast.RangeStmt:
+		recordRangeTargets(bindings, typed)
+	}
+}
+
+func recordAssignment(bindings map[string][]ast.Expr, assign *ast.AssignStmt) {
+	pairs := (assign.Tok == token.DEFINE || assign.Tok == token.ASSIGN) && len(assign.Lhs) == len(assign.Rhs)
+	for index, target := range assign.Lhs {
+		ident, ok := target.(*ast.Ident)
+		if !ok {
+			continue
+		}
+		var value ast.Expr
+		if pairs {
+			value = assign.Rhs[index]
+		}
+		bindings[ident.Name] = append(bindings[ident.Name], value)
+	}
+}
+
+func recordValueSpec(bindings map[string][]ast.Expr, spec *ast.ValueSpec) {
+	for index, name := range spec.Names {
+		var value ast.Expr
+		if index < len(spec.Values) {
+			value = spec.Values[index]
+		}
+		bindings[name.Name] = append(bindings[name.Name], value)
+	}
+}
+
+func recordRangeTargets(bindings map[string][]ast.Expr, loop *ast.RangeStmt) {
+	for _, target := range []ast.Expr{loop.Key, loop.Value} {
+		if ident, ok := target.(*ast.Ident); ok {
+			bindings[ident.Name] = append(bindings[ident.Name], nil)
+		}
+	}
 }
 
 func (walker *sinkWalker) visit(node ast.Node) bool {
@@ -88,11 +153,11 @@ func addSpecValues(constants map[string]ast.Expr, spec *ast.ValueSpec) {
 	}
 }
 
-func translatedSentinels(parsed []*ast.File) map[string]bool {
+func keyedSentinelNames(parsed []*ast.File) map[string]bool {
 	translated := make(map[string]bool)
 	for _, file := range parsed {
 		ast.Inspect(file, func(node ast.Node) bool {
-			if name, ok := keyedSentinel(node); ok {
+			if name, ok := keyedSentinelName(node); ok {
 				translated[name] = true
 			}
 			return true
@@ -101,7 +166,7 @@ func translatedSentinels(parsed []*ast.File) map[string]bool {
 	return translated
 }
 
-func keyedSentinel(node ast.Node) (string, bool) {
+func keyedSentinelName(node ast.Node) (string, bool) {
 	pair, ok := node.(*ast.CompositeLit)
 	if !ok || len(pair.Elts) != 2 {
 		return "", false
@@ -211,14 +276,13 @@ func (walker *sinkWalker) callFindings(call *ast.CallExpr) []finding {
 	if dynamic, ok := walker.dynamicFormat(call); ok {
 		return []finding{dynamic}
 	}
-	index, ok := showingArgument(call.Fun)
-	if !ok || len(call.Args) <= index {
-		return nil
+	var found []finding
+	for _, shown := range shownArguments(call) {
+		if sentence, ok := walker.proseOf(shown); ok {
+			found = append(found, sentence)
+		}
 	}
-	if sentence, ok := walker.proseOf(call.Args[index]); ok {
-		return []finding{sentence}
-	}
-	return nil
+	return found
 }
 
 func (walker *sinkWalker) dynamicFormat(call *ast.CallExpr) (finding, bool) {
@@ -237,20 +301,56 @@ func isFormatFunction(selector *ast.SelectorExpr) bool {
 	return ok && qualifier.Name == "fmt" && (selector.Sel.Name == "Sprintf" || selector.Sel.Name == "Errorf")
 }
 
-func showingArgument(fun ast.Expr) (int, bool) {
-	selector, ok := fun.(*ast.SelectorExpr)
+func shownArguments(call *ast.CallExpr) []ast.Expr {
+	selector, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok {
-		return 0, false
+		return nil
 	}
-	if qualifier, ok := selector.X.(*ast.Ident); ok {
-		switch qualifier.Name + "." + selector.Sel.Name {
-		case "contracts.DataResult", "fmt.Errorf", "errors.New":
-			return 0, true
-		case "contracts.Text":
-			return 1, true
+	if qualifier, isIdent := selector.X.(*ast.Ident); isIdent {
+		if shown, known := shownByPackage(qualifier.Name+"."+selector.Sel.Name, call.Args); known {
+			return shown
 		}
 	}
-	return builderArgument(selector.Sel.Name)
+	index, ok := builderArgument(selector.Sel.Name)
+	if !ok {
+		return nil
+	}
+	return argumentAt(call.Args, index)
+}
+
+func shownByPackage(function string, args []ast.Expr) ([]ast.Expr, bool) {
+	switch function {
+	case "contracts.DataResult", "fmt.Errorf", "errors.New":
+		return argumentAt(args, 0), true
+	case "contracts.Text":
+		return argumentAt(args, 1), true
+	case "fmt.Print", "fmt.Println", "log.Print", "log.Println":
+		return args, true
+	case "fmt.Printf", "log.Printf":
+		return argumentAt(args, 0), true
+	case "fmt.Fprint", "fmt.Fprintln":
+		if !writesToStandardStream(args) {
+			return nil, true
+		}
+		return args[1:], true
+	case "fmt.Fprintf":
+		if !writesToStandardStream(args) {
+			return nil, true
+		}
+		return argumentAt(args[1:], 0), true
+	}
+	return nil, false
+}
+
+func writesToStandardStream(args []ast.Expr) bool {
+	return len(args) > 0 && (isQualified(args[0], "os", "Stdout") || isQualified(args[0], "os", "Stderr"))
+}
+
+func argumentAt(args []ast.Expr, index int) []ast.Expr {
+	if len(args) <= index {
+		return nil
+	}
+	return args[index : index+1]
 }
 
 func builderArgument(method string) (int, bool) {
@@ -277,7 +377,7 @@ func (walker *sinkWalker) textOf(expr ast.Expr) (string, bool) {
 	case *ast.BasicLit:
 		return unquote(typed)
 	case *ast.Ident:
-		return walker.constantText(typed.Name)
+		return walker.namedText(typed.Name)
 	case *ast.BinaryExpr:
 		return walker.concatText(typed)
 	case *ast.CallExpr:
@@ -311,9 +411,15 @@ func (walker *sinkWalker) joinText(call *ast.CallExpr) (string, bool) {
 	return strings.Join(parts, separator), shown
 }
 
-func (walker *sinkWalker) constantText(name string) (string, bool) {
-	value, declared := walker.constants[name]
-	if !declared || walker.resolving[name] {
+func (walker *sinkWalker) namedText(name string) (string, bool) {
+	if walker.resolving[name] {
+		return "", false
+	}
+	value, bound := walker.locals[name]
+	if !bound {
+		value, bound = walker.constants[name]
+	}
+	if !bound || value == nil {
 		return "", false
 	}
 	walker.resolving[name] = true

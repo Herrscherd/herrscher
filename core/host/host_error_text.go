@@ -81,6 +81,7 @@ func hostErrorKeys() []hostErrorKey {
 		{errHandoffBusy, "cli.host.fault.handoff_busy"},
 		{errHandoffQuota, "cli.host.fault.handoff_quota"},
 		{errShellRefused, "cli.host.fault.shell_refused"},
+		{errDaemonEventsUnreachable, "cli.host.fault.daemon_events_unreachable"},
 		{errEmptyShellCommand, "cli.host.fault.empty_shell_command"},
 		{errUnknownShellSession, "cli.host.fault.unknown_shell_session"},
 		{errRemoteShellSession, "cli.host.fault.remote_shell_session"},
@@ -88,24 +89,31 @@ func hostErrorKeys() []hostErrorKey {
 	}
 }
 
+// LocalizeError renders err for an operator boundary in lang.
+func LocalizeError(lang i18n.Language, err error) error {
+	return localizeHostError(lang, err)
+}
+
 func localizeHostError(lang i18n.Language, err error) error {
 	if err == nil {
 		return nil
 	}
-	text := err.Error()
+	resolved := i18n.Resolve(lang)
+	text := errorTextIn(resolved, err)
+	_, _, isLocal := localizedPart(resolved, err)
 	translated := false
 	for _, known := range hostErrorKeys() {
 		if !errors.Is(err, known.sentinel) {
 			continue
 		}
-		phrase, textErr := clitext.Text(i18n.Resolve(lang), clitext.Key(known.key), nil)
+		phrase, textErr := clitext.Text(resolved, clitext.Key(known.key), nil)
 		if textErr != nil {
 			continue
 		}
 		text = strings.Replace(text, known.sentinel.Error(), phrase, 1)
 		translated = true
 	}
-	if !translated {
+	if !translated && !isLocal {
 		return err
 	}
 	return localizedHostError{text: text, cause: err}

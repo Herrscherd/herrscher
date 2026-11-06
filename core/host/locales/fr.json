@@ -73,5 +73,390 @@
     "id": "coordination.launched",
     "description": "Une cohorte de workers est lancée sans incident, Count donne leur nombre et Workers leurs noms",
     "other": "cohorte lancée : {{.Count}} workers ({{.Workers}})"
+  },
+  {
+    "id": "account.home",
+    "description": "A failure to resolve the account profiles directory, Detail carries the cause",
+    "other": "impossible de résoudre le dossier des profils de compte : {{.Detail}}"
+  },
+  {
+    "id": "account.profile_open",
+    "description": "A failure to open an account profile, Detail carries the cause",
+    "other": "ouverture du profil de compte impossible : {{.Detail}}"
+  },
+  {
+    "id": "account.codex_home",
+    "description": "A failure on the codex proxy home directory, Detail carries the cause",
+    "other": "dossier du proxy codex : {{.Detail}}"
+  },
+  {
+    "id": "account.codex_home_create",
+    "description": "A failure to create the codex proxy home directory, Detail carries the cause",
+    "other": "création du dossier du proxy codex impossible : {{.Detail}}"
+  },
+  {
+    "id": "account.codex_config_open",
+    "description": "A failure to open the codex proxy configuration, Detail carries the cause",
+    "other": "ouverture de la configuration du proxy codex impossible : {{.Detail}}"
+  },
+  {
+    "id": "account.codex_config_write",
+    "description": "A failure to write the codex proxy configuration, Detail carries the cause",
+    "other": "écriture de la configuration du proxy codex impossible : {{.Detail}}"
+  },
+  {
+    "id": "session.read",
+    "description": "A failure to read the persisted sessions, Detail carries the cause",
+    "other": "lecture des sessions impossible : {{.Detail}}"
+  },
+  {
+    "id": "gateway.model",
+    "description": "A model needs the Neublox gateway, Model names the model and Detail carries the cause",
+    "other": "le modèle \"{{.Model}}\" exige la passerelle Neublox : {{.Detail}}"
+  },
+  {
+    "id": "gateway.base_url",
+    "description": "A failure on the gateway base URL, Detail carries the cause",
+    "other": "URL de base de la passerelle : {{.Detail}}"
+  },
+  {
+    "id": "gateway.key_proxy",
+    "description": "A failure to reach the gateway through the key proxy, Detail carries the cause",
+    "other": "passerelle derrière le proxy de clés : {{.Detail}}"
+  },
+  {
+    "id": "checkpoint.rewind_resume",
+    "description": "A rewind that leaves the conversation unresumed, Name names the session and Detail carries the cause",
+    "other": "retour arrière de {{.Name}} : conversation non reprise : {{.Detail}}"
+  },
+  {
+    "id": "fork.failed",
+    "description": "A session fork fails, Name names the session and Detail carries the cause",
+    "other": "bifurcation de \"{{.Name}}\" : {{.Detail}}"
+  },
+  {
+    "id": "fork.checkpoint_not_applied",
+    "description": "A checkpoint is not applied to the fork, Name, Position and Detail",
+    "other": "bifurcation de \"{{.Name}}\" : point de contrôle {{.Position}} non appliqué : {{.Detail}}"
+  },
+  {
+    "id": "fork.not_taken",
+    "description": "The conversation does not reach the fork checkpoint, Name, Position and Detail",
+    "other": "bifurcation de \"{{.Name}}\" : conversation non ramenée au point de contrôle {{.Position}} : {{.Detail}}"
+  },
+  {
+    "id": "fork.not_resumed",
+    "description": "The conversation of a fork is not resumed, Name names the session and Detail carries the cause",
+    "other": "bifurcation de \"{{.Name}}\" : conversation non reprise : {{.Detail}}"
+  },
+  {
+    "id": "session.refused",
+    "description": "A session cannot be handled (checkpoint, turn in flight, pending choice), Name names the session and Detail gives the reason",
+    "other": "la session \"{{.Name}}\" {{.Detail}}"
+  },
+  {
+    "id": "checkpoint.index",
+    "description": "An invalid checkpoint number, Detail describes the error and Got gives the value received",
+    "other": "{{.Detail}}, reçu \"{{.Got}}\""
+  },
+  {
+    "id": "command.socket_decode",
+    "description": "An unreadable response on the command socket, Detail carries the cause",
+    "other": "socket de commande : décodage de la réponse impossible : {{.Detail}}"
+  },
+  {
+    "id": "compaction.at",
+    "description": "A compaction failure at the threshold, Detail carries the cause",
+    "other": "compactAt : {{.Detail}}"
+  },
+  {
+    "id": "compaction.stack",
+    "description": "A failure in the compaction stack, Detail carries the cause",
+    "other": "compactStack : {{.Detail}}"
+  },
+  {
+    "id": "compaction.stack_named",
+    "description": "A failure in the compaction stack of a session, Name names the session and Detail carries the cause",
+    "other": "compactStack \"{{.Name}}\" : {{.Detail}}"
+  },
+  {
+    "id": "coordination.wrap",
+    "description": "A coordination failure, Detail carries the cause",
+    "other": "coordination : {{.Detail}}"
+  },
+  {
+    "id": "coordination.refused",
+    "description": "A coordination refused because of an uncommitted state, Detail carries the cause",
+    "other": "coordination refusée : {{.Detail}}"
+  },
+  {
+    "id": "coordination.create",
+    "description": "A coordination that could not create its session, Name names the session and Detail carries the cause",
+    "other": "coordination : création de \"{{.Name}}\" impossible : {{.Detail}}"
+  },
+  {
+    "id": "handoff.wrap",
+    "description": "A session handoff fails, Detail carries the cause",
+    "other": "transfert : {{.Detail}}"
+  },
+  {
+    "id": "delegate.wrap",
+    "description": "A delegation fails, Detail carries the cause",
+    "other": "délégation : {{.Detail}}"
+  },
+  {
+    "id": "report.wrap",
+    "description": "A report from a sub-session fails, Detail carries the cause",
+    "other": "rapport : {{.Detail}}"
+  },
+  {
+    "id": "report.refused",
+    "description": "A report refused because of an uncommitted state, Detail carries the cause",
+    "other": "rapport refusé : {{.Detail}}"
+  },
+  {
+    "id": "merge.wrap",
+    "description": "A cohort merge fails, Detail carries the cause",
+    "other": "fusion : {{.Detail}}"
+  },
+  {
+    "id": "merge.refused",
+    "description": "A cohort merge refused, Detail carries the cause",
+    "other": "fusion refusée : {{.Detail}}"
+  },
+  {
+    "id": "seal.wrap",
+    "description": "A cohort seal fails, Detail carries the cause",
+    "other": "scellement : {{.Detail}}"
+  },
+  {
+    "id": "seal.refused",
+    "description": "A cohort seal refused, Detail carries the cause",
+    "other": "scellement refusé : {{.Detail}}"
+  },
+  {
+    "id": "fanout.wrap",
+    "description": "A fan-out to a cohort fails, Detail carries the cause",
+    "other": "diffusion : {{.Detail}}"
+  },
+  {
+    "id": "route.wrap",
+    "description": "A message routing fails, Detail carries the cause",
+    "other": "routage : {{.Detail}}"
+  },
+  {
+    "id": "daemon.events_socket",
+    "description": "The daemon events socket is unreachable, Path gives the path and Detail carries the cause",
+    "other": "socket d'événements {{.Path}} : {{.Detail}}"
+  },
+  {
+    "id": "daemon.attachments",
+    "description": "An attachment list that is not a JSON array of paths, Detail carries the cause",
+    "other": "pièces jointes : un tableau JSON de chemins est attendu : {{.Detail}}"
+  },
+  {
+    "id": "hosts.clone",
+    "description": "A project clone onto a host fails, Project and Host name the project and the host, Detail carries the cause",
+    "other": "impossible de cloner {{.Project}} sur {{.Host}} : {{.Detail}}"
+  },
+  {
+    "id": "lock.dir",
+    "description": "The state lock directory is unreachable, Detail carries the cause",
+    "other": "dossier du verrou d'état : {{.Detail}}"
+  },
+  {
+    "id": "lock.state",
+    "description": "The state lock cannot be taken, Detail carries the cause",
+    "other": "verrou d'état : {{.Detail}}"
+  },
+  {
+    "id": "memory.wrap",
+    "description": "A memory failure at first start, Detail carries the cause",
+    "other": "mémoire : {{.Detail}}"
+  },
+  {
+    "id": "models.cache_read",
+    "description": "The model cache cannot be read, Detail carries the cause",
+    "other": "lecture du cache des modèles impossible : {{.Detail}}"
+  },
+  {
+    "id": "models.cache_decode",
+    "description": "The model cache cannot be decoded, Detail carries the cause",
+    "other": "décodage du cache des modèles impossible : {{.Detail}}"
+  },
+  {
+    "id": "models.cache_encode",
+    "description": "The model cache cannot be encoded, Detail carries the cause",
+    "other": "encodage du cache des modèles impossible : {{.Detail}}"
+  },
+  {
+    "id": "models.cache_dir",
+    "description": "The model cache directory cannot be created, Detail carries the cause",
+    "other": "création du dossier du cache des modèles impossible : {{.Detail}}"
+  },
+  {
+    "id": "models.cache_dir_open",
+    "description": "The model cache directory cannot be opened, Detail carries the cause",
+    "other": "ouverture du dossier du cache des modèles impossible : {{.Detail}}"
+  },
+  {
+    "id": "models.cache_temp",
+    "description": "The model cache temporary file cannot be created, Detail carries the cause",
+    "other": "création du fichier temporaire du cache des modèles impossible : {{.Detail}}"
+  },
+  {
+    "id": "models.cache_write",
+    "description": "The model cache cannot be written, Detail carries the cause",
+    "other": "écriture du cache des modèles impossible : {{.Detail}}"
+  },
+  {
+    "id": "models.cache_replace",
+    "description": "The model cache cannot be replaced, Detail carries the cause",
+    "other": "remplacement du cache des modèles impossible : {{.Detail}}"
+  },
+  {
+    "id": "models.cache_lock_open",
+    "description": "The model cache lock cannot be opened, Detail carries the cause",
+    "other": "ouverture du verrou du cache des modèles impossible : {{.Detail}}"
+  },
+  {
+    "id": "models.cache_lock",
+    "description": "The model cache lock cannot be taken, Detail carries the cause",
+    "other": "verrouillage du cache des modèles impossible : {{.Detail}}"
+  },
+  {
+    "id": "provision.smoke",
+    "description": "The binary placed on a host fails its smoke test, Host names the host and Detail carries the cause",
+    "other": "le binaire déposé sur {{.Host}} échoue à son test de fumée : {{.Detail}}"
+  },
+  {
+    "id": "approval.prompt",
+    "description": "La question qui demande à l'opérateur d'autoriser une demande d'outil, Request nomme l'outil et son sujet",
+    "other": "autoriser {{.Request}} ?"
+  },
+  {
+    "id": "approval.hint",
+    "description": "La ligne qui indique à l'opérateur comment répondre à une approbation en ligne de commande, Command est la commande approve et Help la commande d'aide",
+    "other": " (répondez avec `{{.Command}}`, voir `{{.Help}}`)"
+  },
+  {
+    "id": "remote.extract_archive",
+    "description": "L'archive de l'agent ne peut pas être décompressée dans le worktree, Path nomme le dossier et Detail porte la cause",
+    "other": "décompression de l'archive de l'agent dans {{.Path}} impossible : {{.Detail}}"
+  },
+  {
+    "id": "remote.extract_member",
+    "description": "Un élément de l'archive de l'agent ne peut pas être écrit, Member nomme le fichier et Detail porte la cause",
+    "other": "extraction de {{.Member}} impossible : {{.Detail}}"
+  },
+  {
+    "id": "remote.unsafe_member",
+    "description": "Un élément d'archive est refusé car il sortirait du worktree, Member le nomme et Root nomme le dossier",
+    "other": "élément d'archive refusé : {{.Member}} sortirait de {{.Root}}"
+  },
+  {
+    "id": "remote.stage_agent",
+    "description": "An agent cannot be staged for a remote host, Name names the agent and Detail carries the cause",
+    "other": "préparation de l'agent \"{{.Name}}\" impossible : {{.Detail}}"
+  },
+  {
+    "id": "remote.pack_agent",
+    "description": "An agent cannot be packed for a remote host, Name names the agent and Detail carries the cause",
+    "other": "empaquetage de l'agent \"{{.Name}}\" impossible : {{.Detail}}"
+  },
+  {
+    "id": "remote.unavailable",
+    "description": "A remote category stayed unreachable through the retry budget, Category names it, Attempts and Elapsed report the effort, Detail carries the last cause",
+    "other": "résolveur : ressource distante {{.Category}} indisponible après {{.Attempts}} tentative(s) en {{.Elapsed}} : {{.Detail}}"
+  },
+  {
+    "id": "remote.no_remote",
+    "description": "No remote of this category has announced itself, Category names the category and Detail carries the cause",
+    "other": "résolveur : aucun distant {{.Category}} n'a annoncé son adresse : {{.Detail}}"
+  },
+  {
+    "id": "seed.consolidate",
+    "description": "Consolidating a session after its seed fails, Name, Elapsed and Detail",
+    "other": "herrscher : session \"{{.Name}}\" : consolidation après {{.Elapsed}} : {{.Detail}}"
+  },
+  {
+    "id": "serve.instance_persist",
+    "description": "The instance identifier cannot be saved, Detail carries the cause",
+    "other": "enregistrement de l'identifiant d'instance impossible : {{.Detail}}"
+  },
+  {
+    "id": "serve.load_state",
+    "description": "The host state cannot be loaded, Detail carries the cause",
+    "other": "chargement de l'état impossible : {{.Detail}}"
+  },
+  {
+    "id": "serve.resolve_instance",
+    "description": "The instance identifier cannot be resolved, Detail carries the cause",
+    "other": "résolution de l'identifiant d'instance impossible : {{.Detail}}"
+  },
+  {
+    "id": "serve.compaction",
+    "description": "Compaction does not start when the host launches, Detail carries the cause",
+    "other": "compaction : {{.Detail}}"
+  },
+  {
+    "id": "serve.registry",
+    "description": "The command registry cannot be built, Detail carries the cause",
+    "other": "construction du registre des commandes impossible : {{.Detail}}"
+  },
+  {
+    "id": "serve.config",
+    "description": "The configuration cannot be loaded when the host launches, Detail carries the cause",
+    "other": "chargement de la configuration impossible : {{.Detail}}"
+  },
+  {
+    "id": "serve.key_proxy",
+    "description": "The key proxy does not start, Detail carries the cause",
+    "other": "proxy de clés : {{.Detail}}"
+  },
+  {
+    "id": "session.percent",
+    "description": "An invalid compaction percentage, Raw gives the value received and Detail carries the cause",
+    "other": "pourcentage \"{{.Raw}}\" : {{.Detail}}"
+  },
+  {
+    "id": "handoff.brief_from",
+    "description": "The brief of a source session cannot be read, Source names the session and Detail carries the cause",
+    "other": "le brief de \"{{.Source}}\" : {{.Detail}}"
+  },
+  {
+    "id": "handoff.account_inherited",
+    "description": "The account inherited from a source session is refused for the new session, with the retry command",
+    "other": "le compte \"{{.Account}}\" hérité de la session \"{{.Source}}\" est refusé pour la nouvelle session : {{.Detail}} ; relancez avec `{{.Command}}` pour démarrer sur le fournisseur par défaut, ou remplacez son --account \"\" par --account <profil>"
+  },
+  {
+    "id": "handoff.not_delivered",
+    "description": "A session is created but the brief does not reach it, Name names the session and Detail carries the cause",
+    "other": "la session \"{{.Name}}\" a été créée mais le brief ne l'a pas atteinte : {{.Detail}}"
+  },
+  {
+    "id": "turn.budget_refused",
+    "description": "A turn refused because the budget ceiling is reached, Reason gives the reason",
+    "other": "tour refusé, plafond de budget atteint ({{.Reason}}) ; augmentez le plafond puis renvoyez le message"
+  },
+  {
+    "id": "turn.token_ceiling",
+    "description": "A turn interrupted because the token ceiling is reached, Spent and Margin give the figures",
+    "other": "tour interrompu, plafond de tokens atteint ({{.Spent}} tokens sur ce tour, marge {{.Margin}})"
+  },
+  {
+    "id": "coordination.report_refused",
+    "description": "A session report refused, shown as an event",
+    "other": "report refusé"
+  },
+  {
+    "id": "coordination.report_delivered",
+    "description": "A session report delivered to its parent, Parent names the parent",
+    "other": "rapport livré à {{.Parent}}"
+  },
+  {
+    "id": "coordination.delegate_refused",
+    "description": "A task delegation refused, shown as an event",
+    "other": "delegate refusé"
   }
 ]

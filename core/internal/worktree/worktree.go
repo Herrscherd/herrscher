@@ -5,13 +5,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/redact"
 )
 
@@ -20,13 +21,6 @@ const (
 )
 
 const sessionsDir = ".herrscher-sessions"
-
-var (
-	errFlagBase     = errors.New("refusing a base ref that looks like a flag")
-	errUncommitted  = errors.New("uncommitted changes")
-	errNotAWorktree = errors.New("already exists and is not a git worktree")
-	errOtherBranch  = errors.New("worktree is on another branch")
-)
 
 // Worktreer manages git worktrees. It is repo-stateless: the repo root is passed
 // to each method, so one Worktreer serves every project in the workspace.
@@ -85,7 +79,7 @@ func (w *Worktreer) Create(ctx context.Context, repo, name, base string) (string
 		return "", nil
 	}
 	if base != "" && strings.HasPrefix(base, "-") {
-		return "", fmt.Errorf("%w: %q", errFlagBase, base)
+		return "", FailureError{Key: clitext.WorktreeFlagBase, Params: clitext.Params{clitext.ParamRef: strconv.Quote(base)}}
 	}
 	wtPath := w.Path(repo, name)
 	branch := w.Branch(name)
@@ -104,7 +98,7 @@ func (w *Worktreer) Create(ctx context.Context, repo, name, base string) (string
 	}
 	out, err := exec.CommandContext(ctx, "git", args...).CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("worktree add: %s: %w", redact.Output(out), err)
+		return "", FailureError{Key: clitext.WorktreeAddFailed, Params: clitext.Params{clitext.ParamOutput: redact.Output(out), clitext.ParamErr: err}, Cause: err}
 	}
 	return wtPath, nil
 }
@@ -136,11 +130,10 @@ func (w *Worktreer) reusable(ctx context.Context, repo, path, branch string) (bo
 
 	if !registered {
 		if statErr != nil && !missing {
-			return false, fmt.Errorf("inspect %q: %w", path, statErr)
+			return false, FailureError{Key: clitext.WorktreeInspect, Params: clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: statErr}, Cause: statErr}
 		}
 		if !missing {
-			return false, fmt.Errorf(
-				"%q %w; move it aside to start this session", path, errNotAWorktree)
+			return false, FailureError{Key: clitext.WorktreeNotAWorktree, Params: clitext.Params{clitext.ParamPath: strconv.Quote(path)}}
 		}
 		return false, nil
 	}
@@ -148,12 +141,12 @@ func (w *Worktreer) reusable(ctx context.Context, repo, path, branch string) (bo
 	if missing {
 		out, pruneErr := exec.CommandContext(ctx, "git", "-C", repo, subWorktree, "prune").CombinedOutput()
 		if pruneErr != nil {
-			return false, fmt.Errorf("worktree prune: %s: %w", redact.Output(out), pruneErr)
+			return false, FailureError{Key: clitext.WorktreePruneFailed, Params: clitext.Params{clitext.ParamOutput: redact.Output(out), clitext.ParamErr: pruneErr}, Cause: pruneErr}
 		}
 		return false, nil
 	}
 	if statErr != nil {
-		return false, fmt.Errorf("inspect %q: %w", path, statErr)
+		return false, FailureError{Key: clitext.WorktreeInspect, Params: clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: statErr}, Cause: statErr}
 	}
 
 	tip, err := w.branchAt(ctx, path)
@@ -161,8 +154,7 @@ func (w *Worktreer) reusable(ctx context.Context, repo, path, branch string) (bo
 		return false, err
 	}
 	if tip != branch {
-		return false, fmt.Errorf(
-			"%w %q: it is on branch %q, not %q; the session cannot take it over", errOtherBranch, path, tip, branch)
+		return false, FailureError{Key: clitext.WorktreeOtherBranch, Params: clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamTip: strconv.Quote(tip), clitext.ParamBranch: strconv.Quote(branch)}}
 	}
 	return true, nil
 }
@@ -170,7 +162,7 @@ func (w *Worktreer) reusable(ctx context.Context, repo, path, branch string) (bo
 func (w *Worktreer) branchAt(ctx context.Context, path string) (string, error) {
 	out, err := exec.CommandContext(ctx, "git", "-C", path, "symbolic-ref", "--short", "HEAD").Output()
 	if err != nil {
-		return "", fmt.Errorf("cannot read the branch checked out at %q (detached HEAD?): %w", path, err)
+		return "", FailureError{Key: clitext.WorktreeBranchUnreadable, Params: clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: err}, Cause: err}
 	}
 	return strings.TrimSpace(string(out)), nil
 }
@@ -181,7 +173,7 @@ func (w *Worktreer) branchAt(ctx context.Context, path string) (string, error) {
 func (w *Worktreer) IsCleanAt(ctx context.Context, path string) (bool, error) {
 	out, err := exec.CommandContext(ctx, "git", "-C", path, "status", "--porcelain").Output()
 	if err != nil {
-		return false, fmt.Errorf("cannot verify clean state of %q: %w", path, err)
+		return false, FailureError{Key: clitext.WorktreeCleanUnverified, Params: clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: err}, Cause: err}
 	}
 	return strings.TrimSpace(string(out)) == "", nil
 }
@@ -201,7 +193,7 @@ func (w *Worktreer) BranchExistsAt(ctx context.Context, path, branch string) (bo
 	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
 		return false, nil
 	}
-	return false, fmt.Errorf("cannot verify branch %q at %q: %w", branch, path, err)
+	return false, FailureError{Key: clitext.WorktreeBranchUnverified, Params: clitext.Params{clitext.ParamBranch: strconv.Quote(branch), clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: err}, Cause: err}
 }
 
 // MergeOutcome classifies a MergeInto result.
@@ -226,13 +218,13 @@ const (
 func (w *Worktreer) MergeInto(ctx context.Context, leadPath, branch string) (MergeOutcome, []string, error) {
 	pre, err := w.headAt(ctx, leadPath)
 	if err != nil {
-		return MergeConflict, nil, fmt.Errorf("merge: cannot read HEAD of %q: %w", leadPath, err)
+		return MergeConflict, nil, FailureError{Key: clitext.WorktreeHeadUnreadable, Params: clitext.Params{clitext.ParamPath: strconv.Quote(leadPath), clitext.ParamErr: err}, Cause: err}
 	}
 	out, mergeErr := exec.CommandContext(ctx, "git", "-C", leadPath, "merge", "--no-edit", branch).CombinedOutput()
 	if mergeErr == nil {
 		post, err := w.headAt(ctx, leadPath)
 		if err != nil {
-			return MergeApplied, nil, fmt.Errorf("merge: cannot read HEAD of %q after merge: %w", leadPath, err)
+			return MergeApplied, nil, FailureError{Key: clitext.WorktreeHeadUnreadableAfterMerge, Params: clitext.Params{clitext.ParamPath: strconv.Quote(leadPath), clitext.ParamErr: err}, Cause: err}
 		}
 		if post == pre {
 			return MergeUpToDate, nil, nil
@@ -244,7 +236,7 @@ func (w *Worktreer) MergeInto(ctx context.Context, leadPath, branch string) (Mer
 	if len(conflicts) > 0 {
 		return MergeConflict, conflicts, nil
 	}
-	return MergeConflict, nil, fmt.Errorf("merge %s into %q: %s: %w", branch, leadPath, redact.Output(out), mergeErr)
+	return MergeConflict, nil, FailureError{Key: clitext.WorktreeMergeFailed, Params: clitext.Params{clitext.ParamBranch: branch, clitext.ParamPath: strconv.Quote(leadPath), clitext.ParamOutput: redact.Output(out), clitext.ParamErr: mergeErr}, Cause: mergeErr}
 }
 
 func (w *Worktreer) headAt(ctx context.Context, path string) (string, error) {
@@ -274,10 +266,10 @@ func (w *Worktreer) Remove(ctx context.Context, repo, name string, force bool) e
 	if !force {
 		clean, err := w.IsCleanAt(ctx, wtPath)
 		if err != nil {
-			return fmt.Errorf("worktree %q: %w; close with force:true to remove anyway", name, err)
+			return FailureError{Key: clitext.WorktreeUncommittedRemove, Params: clitext.Params{clitext.ParamName: strconv.Quote(name), clitext.ParamErr: err}, Cause: err}
 		}
 		if !clean {
-			return fmt.Errorf("worktree %q has %w", name, errUncommitted)
+			return FailureError{Key: clitext.WorktreeUncommitted, Params: clitext.Params{clitext.ParamName: strconv.Quote(name)}}
 		}
 	}
 	args := []string{"-C", repo, subWorktree, "remove", wtPath}
@@ -286,11 +278,11 @@ func (w *Worktreer) Remove(ctx context.Context, repo, name string, force bool) e
 	}
 	out, err := exec.CommandContext(ctx, "git", args...).CombinedOutput()
 	if err != nil {
-		removeErr := fmt.Errorf("worktree remove: %s: %w", redact.Output(out), err)
+		removeErr := FailureError{Key: clitext.WorktreeRemoveFailed, Params: clitext.Params{clitext.ParamOutput: redact.Output(out), clitext.ParamErr: err}, Cause: err}
 		if force {
 			recovered, recoverErr := w.recoverEmptyOrphan(ctx, repo, name)
 			if recoverErr != nil {
-				return fmt.Errorf("%w; empty-orphan recovery: %w", removeErr, recoverErr)
+				return FailureError{Key: clitext.WorktreeOrphanRecovery, Params: clitext.Params{clitext.ParamRemove: removeErr, clitext.ParamRecovery: recoverErr}, Cause: recoverErr}
 			}
 			if recovered {
 				return nil
@@ -318,7 +310,7 @@ func (w *Worktreer) recoverEmptyOrphan(ctx context.Context, repo, name string) (
 	case os.IsNotExist(err):
 		return true, nil
 	case err != nil:
-		return false, fmt.Errorf("inspect %q: %w", path, err)
+		return false, FailureError{Key: clitext.WorktreeInspect, Params: clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: err}, Cause: err}
 	case len(entries) != 0:
 		return false, nil
 	}
@@ -327,7 +319,7 @@ func (w *Worktreer) recoverEmptyOrphan(ctx context.Context, repo, name string) (
 		return false, nil
 	}
 	if err := os.Remove(path); err != nil {
-		return false, fmt.Errorf("remove empty orphan %q: %w", path, err)
+		return false, FailureError{Key: clitext.WorktreeOrphanRemove, Params: clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: err}, Cause: err}
 	}
 	return true, nil
 }
@@ -388,12 +380,12 @@ func (w *Worktreer) registeredWorktree(ctx context.Context, repo, target string)
 		"git", "-C", repo, subWorktree, "list", "--porcelain", "-z",
 	).CombinedOutput()
 	if err != nil {
-		return false, fmt.Errorf("list registered worktrees: %s: %w", redact.Output(out), err)
+		return false, FailureError{Key: clitext.WorktreeListFailed, Params: clitext.Params{clitext.ParamOutput: redact.Output(out), clitext.ParamErr: err}, Cause: err}
 	}
 	rawTarget := target
 	target, err = canonicalPathForComparison(target)
 	if err != nil {
-		return false, fmt.Errorf("resolve target worktree path %q: %w", rawTarget, err)
+		return false, FailureError{Key: clitext.WorktreeResolveTarget, Params: clitext.Params{clitext.ParamPath: strconv.Quote(rawTarget), clitext.ParamErr: err}, Cause: err}
 	}
 	for _, field := range bytes.Split(out, []byte{0}) {
 		const prefix = "worktree "
@@ -404,7 +396,7 @@ func (w *Worktreer) registeredWorktree(ctx context.Context, repo, target string)
 			filepath.FromSlash(string(field[len(prefix):])),
 		)
 		if err != nil {
-			return false, fmt.Errorf("resolve registered worktree path: %w", err)
+			return false, FailureError{Key: clitext.WorktreeResolveRegistered, Params: clitext.Params{clitext.ParamErr: err}, Cause: err}
 		}
 		if samePath(path, target) {
 			return true, nil

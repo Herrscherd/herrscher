@@ -420,3 +420,29 @@ func TestJoinOfRunTimeValuesWithoutProseIsNotReported(t *testing.T) {
 		t.Fatalf("a join of run-time values without words was reported: %q", got)
 	}
 }
+
+func TestGatewayMenuPromptAndChoiceLabelAreSinks(t *testing.T) {
+	t.Parallel()
+	for name, mutant := range map[string]struct {
+		source string
+		want   string
+	}{
+		"Menu prompt": {
+			source: "package manage\n\nfunc mutant(g contracts.Gateway) {\n\t_ = g.Menu(ctx, conv, \"\", \"Pick the route to keep\", nil)\n}\n",
+			want:   "Pick the route to keep",
+		},
+		"RouteMenu prompt": {
+			source: "package manage\n\nfunc mutant(g contracts.MenuRouter) {\n\t_, _ = g.RouteMenu(ctx, \"c\", \"\", \"Pick the route to keep\", \"r\", nil)\n}\n",
+			want:   "Pick the route to keep",
+		},
+		"Choice label": {
+			source: "package manage\n\nfunc mutant() []contracts.Choice {\n\treturn []contracts.Choice{{Label: \"Keep the old route\", Value: \"keep\"}}\n}\n",
+			want:   "Keep the old route",
+		},
+	} {
+		found := collectMutant(t, "manage", "mutant.go", mutant.source)
+		if got := textsOf(found["manage"]); !slices.Contains(got, mutant.want) {
+			t.Errorf("%s: %q not found in %q", name, mutant.want, got)
+		}
+	}
+}

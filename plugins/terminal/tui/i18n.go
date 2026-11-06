@@ -38,10 +38,11 @@ type translator struct {
 	catalog func() (*i18n.Catalog, error)
 	cli     *clitext.Translator
 	cliOnce *sync.Once
+	log     *slog.Logger
 }
 
 func newTranslator() translator {
-	return translator{lang: i18n.English, catalog: sync.OnceValues(loadLocales), cli: clitext.For(i18n.English), cliOnce: new(sync.Once)}
+	return translator{lang: i18n.English, catalog: sync.OnceValues(loadLocales), cli: clitext.For(i18n.English), cliOnce: new(sync.Once), log: slog.Default()}
 }
 
 func loadLocales() (*i18n.Catalog, error) {
@@ -59,15 +60,22 @@ func (trans translator) in(lang i18n.Language) translator {
 	return trans
 }
 
+func (trans translator) logger() *slog.Logger {
+	if trans.log == nil {
+		return slog.Default()
+	}
+	return trans.log
+}
+
 func (trans translator) t(key string, params map[string]any) string {
 	catalog, err := trans.catalog()
 	if err != nil {
-		slog.Error("tui catalog unavailable", "key", key, "err", err)
+		trans.logger().Error("tui catalog unavailable", "key", key, "err", err)
 		return key
 	}
 	text, err := catalog.Message(i18n.Resolve(trans.lang), key, params)
 	if err != nil {
-		slog.Error("tui message not rendered", "key", key, "err", err)
+		trans.logger().Error("tui message not rendered", "key", key, "err", err)
 		return key
 	}
 	return text
@@ -77,7 +85,7 @@ func (trans translator) shared(key clitext.Key) string {
 	text := trans.cli.Text(key, nil)
 	if err := trans.cli.Err(); err != nil {
 		trans.cliOnce.Do(func() {
-			slog.Error("tui shared message not rendered", "key", key, "err", err)
+			trans.logger().Error("tui shared message not rendered", "key", key, "err", err)
 		})
 	}
 	return text

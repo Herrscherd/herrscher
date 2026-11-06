@@ -185,7 +185,7 @@ func restartWithConversation(ctx context.Context, name, token string) error {
 		return errRewindNeedsDaemon
 	}
 	if err := restarter.RestartWithResume(name, token); err != nil {
-		return fmt.Errorf("rewind %s: conversation not resumed: %w", name, err)
+		return wrapHost(err, "checkpoint.rewind_resume", map[string]any{nameParam: name})
 	}
 	return nil
 }
@@ -269,26 +269,26 @@ func forkCheckpoint(ctx context.Context, host forkHost, sessionStore *state.Stat
 		Base:         head,
 		TerminalOnly: true,
 	}, source.Vendor); err != nil {
-		return "", fmt.Errorf("fork %q: %w", source.Name, err)
+		return "", wrapHost(err, "fork.failed", map[string]any{nameParam: source.Name})
 	}
 	fork, ok := sessionStore.FindSession(forkName)
 	if !ok || fork.Worktree == "" {
 		rollbackFork(ctx, host, forkName)
-		return "", fmt.Errorf("fork %q: %w", forkName, errForkNoWorktree)
+		return "", wrapHost(errForkNoWorktree, "fork.failed", map[string]any{nameParam: forkName})
 	}
 	if err = checkpoints.Materialize(ctx, fork.Worktree, entry.Commit); err != nil {
 		rollbackFork(ctx, host, forkName)
-		return "", fmt.Errorf("fork %q: checkpoint %d not applied: %w", forkName, index, err)
+		return "", wrapHost(err, "fork.checkpoint_not_applied", map[string]any{nameParam: forkName, "Position": index})
 	}
 	token, err := forkConversation(source, entry, fork)
 	if err != nil {
 		rollbackFork(ctx, host, forkName)
-		return "", fmt.Errorf("fork %q: conversation not taken to checkpoint %d: %w", forkName, index, err)
+		return "", wrapHost(err, "fork.not_taken", map[string]any{nameParam: forkName, "Position": index})
 	}
 	if token != "" {
 		if err = host.RestartWithResume(forkName, token); err != nil {
 			rollbackFork(ctx, host, forkName)
-			return "", fmt.Errorf("fork %q: conversation not resumed: %w", forkName, err)
+			return "", wrapHost(err, "fork.not_resumed", map[string]any{nameParam: forkName})
 		}
 	}
 	if input.JSON {
@@ -365,7 +365,7 @@ func checkpointSession(sessionStore *state.State, name string) (state.Session, e
 		return state.Session{}, &NotFoundError{Kind: kindSession, Name: name}
 	}
 	if !checkpointable(sess) {
-		return state.Session{}, fmt.Errorf("session %q %w", name, errNotCheckpointable)
+		return state.Session{}, wrapHost(errNotCheckpointable, "session.refused", map[string]any{nameParam: name})
 	}
 	return sess, nil
 }
@@ -382,13 +382,13 @@ func checkpointTarget(sessionStore *state.State, input contracts.Input) (state.S
 func checkpointIndex(raw string) (int, error) {
 	index, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil || index < 1 {
-		return 0, fmt.Errorf("%w, got %q", errCheckpointNumber, raw)
+		return 0, wrapHost(errCheckpointNumber, "checkpoint.index", map[string]any{"Got": raw})
 	}
 	return index, nil
 }
 
 func busyRewindError(name string) error {
-	return fmt.Errorf("session %q %w", name, errTurnInFlight)
+	return wrapHost(errTurnInFlight, "session.refused", map[string]any{nameParam: name})
 }
 
 func checkpointViews(ctx context.Context, checkpoints *checkpoint.Store, worktree, name string) ([]checkpointView, error) {

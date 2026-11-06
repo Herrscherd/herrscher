@@ -1,7 +1,6 @@
 package host
 
 import (
-	"fmt"
 	"os"
 	"sync"
 
@@ -100,7 +99,7 @@ func spawnEnvFor(entry CatalogEntry, getenv func(string) string) (map[string]str
 	}
 	creds, err := loadGatewayCreds(getenv)
 	if err != nil {
-		return nil, fmt.Errorf("model %q needs the Neublox gateway: %w", entry.ID, err)
+		return nil, wrapHost(err, "gateway.model", map[string]any{"Model": entry.ID})
 	}
 	env := gatewayEnvFor(entry.Vendor, creds, entry.Arg)
 	if len(env) == 0 {

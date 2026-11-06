@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -245,37 +246,39 @@ func spinTick(d time.Duration) tea.Cmd {
 }
 
 type model struct {
-	tr            translator
-	handlers      *dispatchTables
-	buildTables   func() (*dispatchTables, error)
-	ctx           context.Context
-	limits        contextwindow.Limits
-	st            uiStyles
-	md            *markdownRenderer
-	keys          *keyLog
-	tm            Backend
-	vp            viewport.Model
-	input         textarea.Model
-	tabs          map[string]*tab
-	order         []string
-	active        string
-	ready         bool
-	showHelp      bool
-	pendingClose  bool
-	width         int
-	height        int
-	flash         string
-	approvalDues  map[string]approvalDue
-	approvalRisks map[string]approvalRating
-	tabSig        string
-	spin          int
-	cmds          []CommandSpec
-	diff          diffPanel
-	diffRun       commandRunner
-	palIdx        int
-	palWasOpen    bool
-	spinning      bool
-	composerRows  int
+	tr               translator
+	log              *slog.Logger
+	handlers         *dispatchTables
+	buildTables      func() (*dispatchTables, error)
+	ctx              context.Context
+	limits           contextwindow.Limits
+	st               uiStyles
+	md               *markdownRenderer
+	keys             *keyLog
+	tm               Backend
+	vp               viewport.Model
+	input            textarea.Model
+	tabs             map[string]*tab
+	order            []string
+	active           string
+	ready            bool
+	showHelp         bool
+	pendingClose     bool
+	width            int
+	height           int
+	flash            string
+	approvalDues     map[string]approvalDue
+	approvalRisks    map[string]approvalRating
+	approvalSubjects map[string]approvalRating
+	tabSig           string
+	spin             int
+	cmds             []CommandSpec
+	diff             diffPanel
+	diffRun          commandRunner
+	palIdx           int
+	palWasOpen       bool
+	spinning         bool
+	composerRows     int
 
 	infoCache   contracts.SessionInfo
 	infoKnown   bool
@@ -514,7 +517,7 @@ func newModel(backend Backend) *model {
 	field.SetHeight(maxComposerLines)
 	field.Focus()
 	match := &model{
-		ctx: context.Background(), tr: trans, buildTables: newDispatchTables, tm: backend, input: field, composerRows: 1, tabs: make(map[string]*tab), clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
+		ctx: context.Background(), tr: trans, log: slog.Default(), buildTables: newDispatchTables, tm: backend, input: field, composerRows: 1, tabs: make(map[string]*tab), clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
 		sys: systemLauncher(), edit: editorLauncher(os.Getenv),
 		st: newStyles(defaultTheme(), false), md: &markdownRenderer{}, theme: defaultTheme(), bar: newBarState(),
 		terminal: detectTerminal(os.LookupEnv),
@@ -846,7 +849,7 @@ func (m *model) submitTo(channel, text string, atts []Attachment) tea.Cmd {
 	wasBusy := tab.busy
 	tab.endStream()
 	item := entry{role: roleYou, text: text, attachments: atts}
-	item.preview = previewEscapes(atts, m.caps)
+	item.preview = previewEscapes(m.logger(), atts, m.caps)
 	tab.appendEntry(item)
 	tab.busy = true
 	tab.streamed = false
@@ -1145,6 +1148,8 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		m.rememberApprovalDeadline(event, time.Now())
 	case eventApprovalRisk:
 		m.rememberApprovalRisk(event, time.Now())
+	case eventApprovalSubject:
+		m.rememberApprovalSubject(event, time.Now())
 	case eventMenu:
 		if m.openApproval(target, event) {
 			return
@@ -1434,6 +1439,18 @@ func formatCost(cost float64) string {
 // Option adjusts a window before it is drawn. Options exist so a caller can say
 // what the window opens on without the TUI growing a constructor per launch path.
 type Option func(*model)
+
+// Logger sends the warnings of the window to log instead of the process default logger.
+func Logger(log *slog.Logger) Option {
+	return func(m *model) { m.log = log }
+}
+
+func (m *model) logger() *slog.Logger {
+	if m.log == nil {
+		return slog.Default()
+	}
+	return m.log
+}
 
 // OpenOn opens the window on a named session and sends text there as its first
 // message. An empty text opens the session and sends nothing, which is how a

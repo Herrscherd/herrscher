@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -281,7 +280,7 @@ func (m *model) receiveScript(msg scriptDoneMsg) {
 		return
 	}
 	if m.bar.script.failed {
-		slog.Info("statusline script recovered")
+		m.logger().Info("statusline script recovered")
 	}
 	m.bar.script.failed = false
 	m.bar.script.cause = ""
@@ -292,5 +291,5 @@ func (m *model) logScriptFailure(err error) {
 	if m.bar.script.failed && m.bar.script.cause == err.Error() {
 		return
 	}
-	slog.Warn("statusline script failed", "err", err)
+	m.logger().Warn("statusline script failed", "err", err)
 }

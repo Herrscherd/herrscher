@@ -177,7 +177,7 @@ func consolidateOneShot(ctx context.Context, orch contracts.Orchestrator, sess s
 	err := orch.Consolidate(consCtx)
 	consCancel()
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "herrscher: session %q: consolidate after %s: %v\n", sess.Name, time.Since(started).Round(time.Millisecond), err)
+		_, _ = fmt.Fprintln(os.Stderr, newHostMessages().text(i18n.English, "seed.consolidate", map[string]any{nameParam: sess.Name, "Elapsed": time.Since(started).Round(time.Millisecond).String(), detailParam: fmt.Sprint(err)}))
 	}
 }
 

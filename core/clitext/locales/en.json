@@ -3358,6 +3358,11 @@
     "other": "this session has reached its handoff limit for the last hour: the operator can still run the handoff"
   },
   {
+    "id": "cli.host.fault.daemon_events_unreachable",
+    "description": "The daemon events socket is unreachable",
+    "other": "the daemon does not answer on its events socket"
+  },
+  {
     "id": "cli.host.fault.shell_refused",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (shell refused)",
     "other": "command refused"
@@ -3376,6 +3381,151 @@
     "id": "cli.host.fault.remote_shell_session",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (remote shell session)",
     "other": "session shell: remote session, command refused"
+  },
+  {
+    "id": "cli.worktree.remote_scratch",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.remote_scratch)",
+    "other": "on {{.Where}}: a session with an agent needs a git repository there: a disposable directory cannot be provisioned remotely"
+  },
+  {
+    "id": "cli.worktree.remote_materialize",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.remote_materialize)",
+    "other": "materialize on {{.Where}}: {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.remote_call",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.remote_call)",
+    "other": "{{.Command}} on {{.Where}}: {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.remote_unreadable",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.remote_unreadable)",
+    "other": "{{.Command}} on {{.Where}}: unreadable answer {{.Output}}: {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.scratch_no_root",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.scratch_no_root)",
+    "other": "refusing a scratch directory: no root to place session {{.Name}} under"
+  },
+  {
+    "id": "cli.worktree.scratch_bad_name",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.scratch_bad_name)",
+    "other": "refusing a scratch directory: session name {{.Name}} is not a path component"
+  },
+  {
+    "id": "cli.worktree.scratch_remove_refused",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.scratch_remove_refused)",
+    "other": "refusing a scratch directory: to remove session {{.Name}} under root {{.Root}}"
+  },
+  {
+    "id": "cli.worktree.scratch_create",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.scratch_create)",
+    "other": "scratch {{.Path}}: {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.scratch_remove",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.scratch_remove)",
+    "other": "remove scratch {{.Path}}: {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.flag_base",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.flag_base)",
+    "other": "refusing a base ref that looks like a flag: {{.Ref}}"
+  },
+  {
+    "id": "cli.worktree.not_a_worktree",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.not_a_worktree)",
+    "other": "{{.Path}} already exists and is not a git worktree; move it aside to start this session"
+  },
+  {
+    "id": "cli.worktree.other_branch",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.other_branch)",
+    "other": "worktree is on another branch {{.Path}}: it is on branch {{.Tip}}, not {{.Branch}}; the session cannot take it over"
+  },
+  {
+    "id": "cli.worktree.uncommitted",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.uncommitted)",
+    "other": "worktree {{.Name}} has uncommitted changes"
+  },
+  {
+    "id": "cli.worktree.uncommitted_remove",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.uncommitted_remove)",
+    "other": "worktree {{.Name}}: {{.Err}}; close with force:true to remove anyway"
+  },
+  {
+    "id": "cli.worktree.add_failed",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.add_failed)",
+    "other": "worktree add: {{.Output}}: {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.prune_failed",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.prune_failed)",
+    "other": "worktree prune: {{.Output}}: {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.remove_failed",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.remove_failed)",
+    "other": "worktree remove: {{.Output}}: {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.orphan_recovery",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.orphan_recovery)",
+    "other": "{{.Remove}}; empty-orphan recovery: {{.Recovery}}"
+  },
+  {
+    "id": "cli.worktree.orphan_remove",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.orphan_remove)",
+    "other": "remove empty orphan {{.Path}}: {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.inspect",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.inspect)",
+    "other": "inspect {{.Path}}: {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.branch_unreadable",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.branch_unreadable)",
+    "other": "cannot read the branch checked out at {{.Path}} (detached HEAD?): {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.clean_unverified",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.clean_unverified)",
+    "other": "cannot verify clean state of {{.Path}}: {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.branch_unverified",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.branch_unverified)",
+    "other": "cannot verify branch {{.Branch}} at {{.Path}}: {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.head_unreadable",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.head_unreadable)",
+    "other": "merge: cannot read HEAD of {{.Path}}: {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.head_unreadable_after_merge",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.head_unreadable_after_merge)",
+    "other": "merge: cannot read HEAD of {{.Path}} after merge: {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.merge_failed",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.merge_failed)",
+    "other": "merge {{.Branch}} into {{.Path}}: {{.Output}}: {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.list_failed",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.list_failed)",
+    "other": "list registered worktrees: {{.Output}}: {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.resolve_target",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.resolve_target)",
+    "other": "resolve target worktree path {{.Path}}: {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.resolve_registered",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.resolve_registered)",
+    "other": "resolve registered worktree path: {{.Err}}"
   },
   {
     "id": "cli.service.env.owner_id",
@@ -3456,5 +3606,10 @@
     "id": "cli.terminal.session_unbound",
     "description": "Error for a terminal session action before the host bound its control",
     "other": "session control is not bound yet"
+  },
+  {
+    "id": "cli.usage.wrap",
+    "description": "A failure to render the usage help, Detail carries the cause",
+    "other": "usage: {{.Detail}}"
   }
 ]

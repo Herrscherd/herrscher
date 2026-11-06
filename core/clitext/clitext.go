@@ -37,7 +37,7 @@ var (
 )
 
 func declaredKeys() map[Key][]string {
-	return mergeDeclared(usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys(), accountKeys(), manageKeys(), hostKeys(), helpKeys(), hostErrKeys(), settingKeys())
+	return mergeDeclared(usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys(), accountKeys(), manageKeys(), hostKeys(), helpKeys(), hostErrKeys(), settingKeys(), worktreeKeys())
 }
 
 func loadCatalog() (*i18n.Catalog, error) {
@@ -125,6 +125,7 @@ func messageIDs(fsys fs.FS) ([]string, error) {
 // Names of the params shared by several keys.
 const (
 	ParamErr       = "Err"
+	ParamDetail    = "Detail"
 	ParamKey       = "Key"
 	ParamName      = "Name"
 	ParamKind      = "Kind"

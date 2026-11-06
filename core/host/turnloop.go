@@ -251,8 +251,10 @@ func (d *sessionDriver) setVerdict(req approval.Request, risk approval.Risk) {
 	d.verdicts[req] = risk
 }
 
-func (d *sessionDriver) askApproval(ctx context.Context, prompt, approvalID string, req approval.Request, deadline time.Time) {
+func (d *sessionDriver) askApproval(ctx context.Context, approvalID string, req approval.Request, deadline time.Time) {
 	opts := approvalChoices(approvalID, req)
+	prompt := d.hostText("approval.prompt", map[string]any{"Request": describeRequest(req)})
+	hint := d.hostText("approval.hint", map[string]any{"Command": "approve allow|deny " + approvalID, "Help": "approve allow --help"})
 	for _, gateway := range d.gateways {
 		channel := d.renderChannel(gateway)
 		if gateway.Gateway != nil {
@@ -261,6 +263,7 @@ func (d *sessionDriver) askApproval(ctx context.Context, prompt, approvalID stri
 			if risk, ok := d.verdict(req); ok {
 				announceApprovalRisk(gateway.Gateway, conv, approvalID, risk)
 			}
+			announceApprovalSubject(gateway.Gateway, conv, approvalID, describeRequest(req))
 		}
 		if mr, ok := gateway.Reader.(contracts.MenuRouter); ok && channel != "" {
 			if _, err := mr.RouteMenu(ctx, channel, "", prompt, d.name, opts); err == nil {
@@ -271,7 +274,7 @@ func (d *sessionDriver) askApproval(ctx context.Context, prompt, approvalID stri
 			continue
 		}
 		conv := contracts.Conversation{Gateway: gateway.Gateway.Manifest().Kind, ID: channel}
-		logCleanup(contracts.Degrade(gateway.Gateway).Menu(ctx, conv, "", prompt+" (answer with `approve allow|deny "+approvalID+"`, see `approve allow --help`)", opts))
+		logCleanup(contracts.Degrade(gateway.Gateway).Menu(ctx, conv, "", prompt+hint, opts))
 	}
 }
 
@@ -283,6 +286,10 @@ func announceApprovalRisk(gateway contracts.Gateway, conv contracts.Conversation
 	emitApprovalEvent(gateway, conv, contracts.Event{T: approvalRiskEventKind, Value: approvalID, Text: risk.String()})
 }
 
+func announceApprovalSubject(gateway contracts.Gateway, conv contracts.Conversation, approvalID, subject string) {
+	emitApprovalEvent(gateway, conv, contracts.Event{T: approvalSubjectEventKind, Value: approvalID, Text: subject})
+}
+
 func emitApprovalEvent(gateway contracts.Gateway, conv contracts.Conversation, event contracts.Event) {
 	switch sink := gateway.(type) {
 	case contracts.RoutedEventSink:
@@ -292,12 +299,12 @@ func emitApprovalEvent(gateway contracts.Gateway, conv contracts.Conversation, e
 	}
 }
 
-func askApprovalOn(ctx context.Context, sessions *sessionTable, session, prompt, approvalID string, req approval.Request, deadline time.Time) {
+func askApprovalOn(ctx context.Context, sessions *sessionTable, session, approvalID string, req approval.Request, deadline time.Time) {
 	driver := sessions.lookup(session)
 	if driver == nil {
 		return
 	}
-	driver.askApproval(ctx, prompt, approvalID, req, deadline)
+	driver.askApproval(ctx, approvalID, req, deadline)
 }
 
 const interruptSendTimeout = 2 * time.Second
@@ -627,7 +634,7 @@ func (d *sessionDriver) prepareTurn(ctx context.Context, item queued) (contracts
 	verdict := d.gate.Check(d.name)
 	if verdict.Reason != "" {
 		d.emitPaused(ctx, verdict.Reason)
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "tour refusé, plafond budget atteint (" + verdict.Reason + ") ; augmentez le plafond puis renvoyez le message"})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("turn.budget_refused", map[string]any{"Reason": verdict.Reason})})
 		return event, tokenGuard{}, false
 	}
 	if event.TurnID == "" {
@@ -773,8 +780,7 @@ func (d *sessionDriver) enforceTokenGuard(ctx context.Context, guard *tokenGuard
 		return
 	}
 	d.Interrupt()
-	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "tour interrompu, plafond de tokens atteint (" +
-		strconv.FormatUint(spent, 10) + " tokens sur ce tour, marge " + strconv.FormatUint(guard.headroom, 10) + ")"})
+	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("turn.token_ceiling", map[string]any{"Spent": strconv.FormatUint(spent, 10), "Margin": strconv.FormatUint(guard.headroom, 10)})})
 }
 
 func promptSize(e contracts.Event) int {
@@ -836,13 +842,13 @@ func (d *sessionDriver) reportDone(ctx context.Context, summary string) *contrac
 		FromSession: d.name, Summary: summary,
 	})
 	if err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "report refusé"})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.report_refused", nil)})
 		return &contracts.CoordinationEvent{
 			Kind: "report_failed", SourceSession: d.name,
-			Summary: sanitizeCoordinationError(err),
+			Summary: sanitizeCoordinationError(localizeHostError(d.lang, err)),
 		}
 	}
-	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "rapport livré à " + parent})
+	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.report_delivered", map[string]any{"Parent": parent})})
 	return &contracts.CoordinationEvent{
 		Kind: "reported", SourceSession: d.name,
 		ParentSession: parent, Summary: summary,
@@ -854,10 +860,10 @@ func (d *sessionDriver) delegateTask(ctx context.Context, toAgent, task string) 
 		FromSession: d.name, ToAgent: toAgent, Task: task,
 	})
 	if err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "delegate refusé"})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.delegate_refused", nil)})
 		return &contracts.CoordinationEvent{
 			Kind: "delegate_failed", SourceSession: d.name,
-			Agent: toAgent, Summary: sanitizeCoordinationError(err),
+			Agent: toAgent, Summary: sanitizeCoordinationError(localizeHostError(d.lang, err)),
 		}
 	}
 	return &contracts.CoordinationEvent{
@@ -873,7 +879,7 @@ func (d *sessionDriver) launchCohort(ctx context.Context, toAgent string, tasks 
 	if err != nil {
 		d.fanOut(ctx, contracts.Event{
 			T:    eventStatus,
-			Text: d.hostText("coordination.fanout_partial", map[string]any{"Launched": len(spawned), detailParam: err.Error()}),
+			Text: d.hostText("coordination.fanout_partial", map[string]any{"Launched": len(spawned), detailParam: localizeHostError(d.lang, err).Error()}),
 		})
 		return
 	}
@@ -888,7 +894,7 @@ func (d *sessionDriver) routeTask(ctx context.Context, task string) {
 		FromSession: d.name, Task: task,
 	})
 	if err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.route_refused", map[string]any{detailParam: err.Error()})})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.route_refused", map[string]any{detailParam: localizeHostError(d.lang, err).Error()})})
 		return
 	}
 	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.routed", map[string]any{"Agent": toAgent, "Session": session})})
@@ -898,7 +904,7 @@ func (d *sessionDriver) sealCohort(ctx context.Context, node int) {
 	if _, err := d.coordinator.Seal(ctx, contracts.SealRequest{
 		FromSession: d.name, Expected: node,
 	}); err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.seal_refused", map[string]any{detailParam: err.Error()})})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.seal_refused", map[string]any{detailParam: localizeHostError(d.lang, err).Error()})})
 		return
 	}
 	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.sealed", map[string]any{"Node": node})})
@@ -909,7 +915,7 @@ func (d *sessionDriver) mergeWorker(ctx context.Context, worker string) {
 		FromSession: d.name, Worker: worker,
 	})
 	if err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.merge_refused", map[string]any{detailParam: err.Error()})})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.merge_refused", map[string]any{detailParam: localizeHostError(d.lang, err).Error()})})
 		return
 	}
 	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.merged", map[string]any{"Lead": lead})})
@@ -919,7 +925,7 @@ func (d *sessionDriver) handoffTask(ctx context.Context, toAgent, task string) {
 	if _, err := d.coordinator.Handoff(ctx, contracts.HandoffRequest{
 		FromSession: d.name, ToAgent: toAgent, Task: task,
 	}); err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.handoff_refused", map[string]any{detailParam: err.Error()})})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.handoff_refused", map[string]any{detailParam: localizeHostError(d.lang, err).Error()})})
 	}
 }
 

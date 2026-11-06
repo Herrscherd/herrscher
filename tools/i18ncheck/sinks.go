@@ -28,6 +28,7 @@ type sinkWalker struct {
 	locals     map[string][]ast.Expr
 	resolving  map[string]bool
 	exempt     map[ast.Node]bool
+	elided     map[*ast.CompositeLit]ast.Expr
 	found      []finding
 }
 
@@ -38,6 +39,7 @@ func findPackageSinks(files *token.FileSet, parsed []*ast.File) []finding {
 		constants:  packageConstants(parsed),
 		resolving:  make(map[string]bool),
 		exempt:     make(map[ast.Node]bool),
+		elided:     make(map[*ast.CompositeLit]ast.Expr),
 	}
 	for _, file := range parsed {
 		for _, declaration := range file.Decls {
@@ -108,6 +110,7 @@ func (walker *sinkWalker) visit(node ast.Node) bool {
 	case *ast.AssignStmt:
 		walker.found = append(walker.found, walker.assignmentFindings(typed)...)
 	case *ast.CompositeLit:
+		walker.recordElidedTypes(typed)
 		walker.found = append(walker.found, walker.compositeFindings(typed)...)
 	case *ast.CallExpr:
 		if !walker.exempt[typed] {
@@ -218,11 +221,27 @@ func (walker *sinkWalker) assignmentFindings(assign *ast.AssignStmt) []finding {
 	return found
 }
 
+func (walker *sinkWalker) recordElidedTypes(literal *ast.CompositeLit) {
+	container, ok := literal.Type.(*ast.ArrayType)
+	if !ok {
+		return
+	}
+	for _, element := range literal.Elts {
+		if inner, isLiteral := element.(*ast.CompositeLit); isLiteral && inner.Type == nil {
+			walker.elided[inner] = container.Elt
+		}
+	}
+}
+
 func (walker *sinkWalker) compositeFindings(literal *ast.CompositeLit) []finding {
+	literalType := literal.Type
+	if literalType == nil {
+		literalType = walker.elided[literal]
+	}
 	var found []finding
 	for _, element := range literal.Elts {
 		pair, ok := element.(*ast.KeyValueExpr)
-		if !ok || !isShownKey(literal.Type, pair.Key) {
+		if !ok || !isShownKey(literalType, pair.Key) {
 			continue
 		}
 		found = append(found, walker.proseFindings(pair.Value)...)
@@ -237,6 +256,9 @@ func isShownKey(literalType, key ast.Expr) bool {
 	}
 	if isQualified(literalType, "contracts", "Event") {
 		return name.Name == "Text"
+	}
+	if isQualified(literalType, "contracts", "Choice") {
+		return name.Name == "Label"
 	}
 	if isNamedType(literalType, "model") {
 		return isShownName(name.Name)
@@ -306,6 +328,9 @@ func (walker *sinkWalker) shownArguments(call *ast.CallExpr) []ast.Expr {
 		if shown, known := walker.shownByPackage(qualifier.Name+"."+selector.Sel.Name, call.Args); known {
 			return shown
 		}
+	}
+	if isMenuMethod(selector.Sel.Name) {
+		return argumentAt(call.Args, menuPromptIndex)
 	}
 	index, ok := builderArgument(selector.Sel.Name)
 	if !ok {
@@ -379,6 +404,12 @@ func argumentAt(args []ast.Expr, index int) []ast.Expr {
 		return nil
 	}
 	return args[index : index+1]
+}
+
+const menuPromptIndex = 3
+
+func isMenuMethod(method string) bool {
+	return method == "Menu" || method == "RouteMenu"
 }
 
 func builderArgument(method string) (int, bool) {

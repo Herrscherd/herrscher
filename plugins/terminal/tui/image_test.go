@@ -58,13 +58,13 @@ func TestKittyPreviewEmptyIsNoOp(t *testing.T) {
 }
 
 func TestBoundedEscapeWarnsWithItsSizeWhenItDropsAnOverlongPreview(t *testing.T) {
-	logs := captureWarnings(t)
+	log, logs := captureWarnings()
 	noise := image.NewNRGBA(image.Rect(0, 0, maxPreviewWidth, previewRows*cellPixels))
 	rng := rand.New(rand.NewPCG(1, 2))
 	for i := range noise.Pix {
 		noise.Pix[i] = uint8(rng.UintN(256))
 	}
-	if esc := boundedEscape(noise, Capabilities{Graphics: GraphicsKitty}); esc != "" {
+	if esc := boundedEscape(log, noise, Capabilities{Graphics: GraphicsKitty}); esc != "" {
 		t.Fatalf("an over-long preview must be dropped, got %d bytes", len(esc))
 	}
 	expectWarning(t, logs, "image preview dropped")
@@ -74,9 +74,9 @@ func TestBoundedEscapeWarnsWithItsSizeWhenItDropsAnOverlongPreview(t *testing.T)
 }
 
 func TestBoundedEscapeKeepsASmallPreviewSilently(t *testing.T) {
-	logs := captureWarnings(t)
+	log, logs := captureWarnings()
 	small := image.NewNRGBA(image.Rect(0, 0, 8, 8))
-	if esc := boundedEscape(small, Capabilities{Graphics: GraphicsKitty}); esc == "" {
+	if esc := boundedEscape(log, small, Capabilities{Graphics: GraphicsKitty}); esc == "" {
 		t.Fatal("a small preview must be kept")
 	}
 	if logs.Len() != 0 {

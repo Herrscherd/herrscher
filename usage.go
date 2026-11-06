@@ -83,7 +83,7 @@ func usage(lang i18n.Language) error {
 		"  " + hint.Render(translator.Text(clitext.UsageEnvInit, nil)),
 	}
 	if err := errors.Join(translator.Err(), platform.Err()); err != nil {
-		return fmt.Errorf("usage: %w", err)
+		return clitext.Failure(lang, err, clitext.UsageWrap, clitext.Params{clitext.ParamDetail: err.Error()})
 	}
 
 	fmt.Fprintln(os.Stderr, strings.Join(blocks, "\n"))

@@ -59,7 +59,7 @@ func TestPreviewEscapesOnlyReadableImages(t *testing.T) {
 		{Name: "broken.png", Path: broken, Mime: "image/png"},
 	}
 
-	out := previewEscapes(atts, kittyCaps())
+	out := previewEscapes(quietLog(), atts, kittyCaps())
 	if strings.Count(out, "\x1b_G") == 0 {
 		t.Fatal("a readable PNG must produce a kitty graphics escape")
 	}
@@ -72,7 +72,7 @@ func TestPreviewEscapesOnlyReadableImages(t *testing.T) {
 }
 
 func TestPreviewEscapesEmptyWhenNoImages(t *testing.T) {
-	if out := previewEscapes([]Attachment{{Name: "a.txt", Mime: "text/plain"}}, kittyCaps()); out != "" {
+	if out := previewEscapes(quietLog(), []Attachment{{Name: "a.txt", Mime: "text/plain"}}, kittyCaps()); out != "" {
 		t.Fatalf("no images must yield no escape, got %q", out)
 	}
 }
@@ -81,7 +81,7 @@ func TestPreviewEscapesSkipsLargeImages(t *testing.T) {
 	dir := t.TempDir()
 	big := pngFile(t, dir, "big.png", 4000, 200)
 	atts := []Attachment{{Name: "big.png", Path: big, Mime: "image/png"}}
-	if out := previewEscapes(atts, kittyCaps()); out != "" {
+	if out := previewEscapes(quietLog(), atts, kittyCaps()); out != "" {
 		t.Fatalf("an oversized preview must not be inlined, got %d bytes of escape", len(out))
 	}
 }

@@ -82,6 +82,7 @@ func (m *model) fetchEntryImages(tab *tab, idx int) tea.Cmd {
 	}
 	var cmds []tea.Cmd
 	ctx := m.runContext()
+	log := m.logger()
 	channel, caps, get, allow := tab.channel, m.caps, m.imageFetcher, m.imageHosts
 	entryID := tab.entries[idx].id
 	for _, raw := range imageURLs(tab.entries[idx].text) {
@@ -89,9 +90,9 @@ func (m *model) fetchEntryImages(tab *tab, idx int) tea.Cmd {
 			continue
 		}
 		cmds = append(cmds, func() tea.Msg {
-			esc, err := renderFetchedImage(ctx, get, allow, raw, caps)
+			esc, err := renderFetchedImage(ctx, log, get, allow, raw, caps)
 			if err != nil {
-				slog.Warn("transcript image dropped", "err", err)
+				log.Warn("transcript image dropped", "err", err)
 				return nil
 			}
 			if esc == "" {
@@ -103,7 +104,7 @@ func (m *model) fetchEntryImages(tab *tab, idx int) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-func renderFetchedImage(ctx context.Context, get func(context.Context, string) ([]byte, error), allow []string, rawURL string, caps Capabilities) (string, error) {
+func renderFetchedImage(ctx context.Context, log *slog.Logger, get func(context.Context, string) ([]byte, error), allow []string, rawURL string, caps Capabilities) (string, error) {
 	data, err := fetchImage(ctx, get, allow, rawURL)
 	if err != nil {
 		return "", err
@@ -112,7 +113,7 @@ func renderFetchedImage(ctx context.Context, get func(context.Context, string) (
 	if err != nil {
 		return "", err
 	}
-	return boundedEscape(img, caps), nil
+	return boundedEscape(log, img, caps), nil
 }
 
 func urlHost(raw string) string {

@@ -23,6 +23,8 @@ const approvalEventKind = "approval"
 
 const approvalRiskEventKind = "approval_risk"
 
+const approvalSubjectEventKind = "approval_subject"
+
 const subjectMaxLen = 200
 
 const (
@@ -175,7 +177,7 @@ func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessio
 	warnWaitOutlivesTheHook(approvals.warn, wait)
 
 	octx, cancel := context.WithTimeout(ctx, wait)
-	askApprovalOn(octx, sessions, session, approvalPrompt(req), pending.id, req, time.Now().Add(wait))
+	askApprovalOn(octx, sessions, session, pending.id, req, time.Now().Add(wait))
 	cancel()
 
 	select {
@@ -392,10 +394,6 @@ func describeRequest(req approval.Request) string {
 		return req.Tool
 	}
 	return req.Tool + "(" + clip(req.Subject) + ")"
-}
-
-func approvalPrompt(req approval.Request) string {
-	return "allow " + describeRequest(req) + "?"
 }
 
 func clip(text string) string {

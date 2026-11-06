@@ -22,7 +22,7 @@ func TestClientSessionKeepsStderrQuiet(t *testing.T) {
 	terminalCapture := filepath.Join(dir, "terminal.txt")
 	clientLog := filepath.Join(dir, "client.log")
 
-	restoreTerminal, err := redirectStderr(terminalCapture)
+	restoreTerminal, err := redirectStderrCapped(terminalCapture, maxLogFileBytes)
 	if err != nil {
 		t.Fatalf("redirect terminal: %v", err)
 	}
@@ -62,7 +62,7 @@ var errTUIExited = errors.New("tui exited")
 func captureTerminal(t *testing.T, run func() error) (string, error) {
 	t.Helper()
 	capture := filepath.Join(t.TempDir(), "terminal.txt")
-	restore, err := redirectStderr(capture)
+	restore, err := redirectStderrCapped(capture, maxLogFileBytes)
 	if err != nil {
 		t.Fatalf("redirect terminal: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestClientLogOpenFailureRunsTheTUIOnTheTerminal(t *testing.T) {
 func TestClientLogRotatesOverTheCapAndKeepsOneGeneration(t *testing.T) {
 	clientLog := filepath.Join(t.TempDir(), "client.log")
 	previous := clientLog + ".1"
-	if err := os.WriteFile(clientLog, bytes.Repeat([]byte("x"), maxClientLogBytes+1), 0o600); err != nil {
+	if err := os.WriteFile(clientLog, bytes.Repeat([]byte("x"), maxLogFileBytes+1), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(previous, []byte("older generation\n"), 0o600); err != nil {
@@ -119,7 +119,7 @@ func TestClientLogRotatesOverTheCapAndKeepsOneGeneration(t *testing.T) {
 		t.Fatal(err)
 	}
 	rotated, err := os.Stat(previous)
-	if err != nil || rotated.Size() != maxClientLogBytes+1 {
+	if err != nil || rotated.Size() != maxLogFileBytes+1 {
 		t.Fatalf("client.log.1 = %v, %v; want the oversized previous log moved there", rotated, err)
 	}
 	current, err := os.ReadFile(clientLog)

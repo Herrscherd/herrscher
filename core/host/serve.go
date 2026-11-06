@@ -3,7 +3,6 @@ package host
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -159,7 +158,7 @@ func resolveInstanceID(hostState *state.State, optID, ownerID string, log *slog.
 		return "", nil
 	}
 	if err := hostState.SetInstanceID(resolved); err != nil {
-		return "", fmt.Errorf("persist instanceID: %w", err)
+		return "", wrapHost(err, "serve.instance_persist", nil)
 	}
 	return resolved, nil
 }
@@ -171,6 +170,17 @@ func resolveInstanceID(hostState *state.State, optID, ownerID string, log *slog.
 // registry by the caller). Command dispatch no longer runs here.
 // Session/service commands run through the operator CLI (see NewRegistry).
 func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, options Options) error {
+	return localizeHostError(options.operatorLanguage(), serveHub(ctx, gws, closers, options))
+}
+
+func (options Options) operatorLanguage() i18n.Language {
+	if options.live != nil {
+		return options.live.Get()
+	}
+	return options.Language
+}
+
+func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, options Options) error {
 	base := obs.Stderr(false)
 	defer closeGateways(ctx, closers, base)
 	log := base.With("component", "serve")
@@ -178,7 +188,7 @@ func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, option
 
 	store, err := loadHubState(options)
 	if err != nil {
-		return fmt.Errorf("load state: %w", err)
+		return wrapHost(err, "serve.load_state", nil)
 	}
 
 	self, execErr := os.Executable()
@@ -189,7 +199,7 @@ func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, option
 
 	instID, err := resolveInstanceID(store, options.InstanceID, options.Owner, log)
 	if err != nil {
-		return fmt.Errorf("resolve instance id: %w", err)
+		return wrapHost(err, "serve.resolve_instance", nil)
 	}
 
 	if options.DefaultGateways == nil {
@@ -199,13 +209,13 @@ func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, option
 	sessions := newSessionTable()
 	policy, err := newCompactionPolicy(ctx, options.CompactPercent, options.CompactStack, options.ContextLimits)
 	if err != nil {
-		return fmt.Errorf("compaction: %w", err)
+		return wrapHost(err, "serve.compaction", nil)
 	}
 	sessions.compaction = policy
 	sessions.store = store
 	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, store.Home)}, options, store, sup, instID, options.ContributedCommands, approvals, sessions)
 	if err != nil {
-		return fmt.Errorf("build command registry: %w", err)
+		return wrapHost(err, "serve.registry", nil)
 	}
 	kinds := contributedKinds(options.ContributedCommands)
 	specs, specsErr := reg.Specs(options.Language)
@@ -219,11 +229,11 @@ func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, option
 	}
 	cfg, err := config.Load(config.DefaultPath())
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+		return wrapHost(err, "serve.config", nil)
 	}
 	keys, err := keyproxy.Open(ctx, cfg.Keys, keyproxy.OSLoader(), log)
 	if err != nil && !errors.Is(err, keyproxy.ErrDisabled) {
-		return fmt.Errorf("key proxy: %w", err)
+		return wrapHost(err, "serve.key_proxy", nil)
 	}
 	defer CloseKeyProxy(ctx, log, keys)
 	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions)

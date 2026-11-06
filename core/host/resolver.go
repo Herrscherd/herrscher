@@ -3,7 +3,6 @@ package host
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net"
 	"os"
@@ -14,6 +13,7 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	transport "github.com/Herrscherd/herrscher-transport"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
@@ -215,9 +215,15 @@ type RemoteResolveError struct {
 	Err      error
 }
 
-func (e *RemoteResolveError) Error() string {
-	return fmt.Sprintf("resolver: remote %s unavailable after %d attempt(s) in %s: %v",
-		e.Category, e.Attempts, e.Elapsed, e.Err)
+func (e *RemoteResolveError) Error() string { return e.render(i18n.English) }
+
+func (e *RemoteResolveError) render(lang i18n.Language) string {
+	return newHostMessages().text(lang, "remote.unavailable", map[string]any{
+		"Category":  string(e.Category),
+		"Attempts":  e.Attempts,
+		"Elapsed":   e.Elapsed.String(),
+		detailParam: errorTextIn(lang, e.Err),
+	})
 }
 
 func (e *RemoteResolveError) Unwrap() error { return e.Err }

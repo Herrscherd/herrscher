@@ -2,7 +2,6 @@ package host
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -21,11 +20,11 @@ func BuildFirstMemoryWithManifest(ctx context.Context) (contracts.Memory, contra
 		}
 		cfg, err := contracts.Resolve(plugin.Manifest.Config, os.Getenv)
 		if err != nil {
-			return nil, contracts.Manifest{}, fmt.Errorf("memory: %w", err)
+			return nil, contracts.Manifest{}, wrapHost(err, "memory.wrap", nil)
 		}
 		mem, err := plugin.Memory(ctx, cfg)
 		if err != nil {
-			return nil, contracts.Manifest{}, fmt.Errorf("memory: %w", err)
+			return nil, contracts.Manifest{}, wrapHost(err, "memory.wrap", nil)
 		}
 		return mem, plugin.Manifest, nil
 	}

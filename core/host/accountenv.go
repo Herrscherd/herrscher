@@ -38,7 +38,7 @@ func accountRoot(req BackendRequest) (string, error) {
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("resolve home for account profiles: %w", err)
+		return "", wrapHost(err, "account.home", nil)
 	}
 	return accounts.DefaultRoot(home), nil
 }
@@ -113,11 +113,11 @@ func proxyEnvFor(vendor string, grant keyproxy.Grant) map[string]string {
 func codexProfileProxyEnv(profileDir string, grant keyproxy.Grant) (map[string]string, error) {
 	root, err := os.OpenRoot(profileDir)
 	if err != nil {
-		return nil, fmt.Errorf("open account profile: %w", err)
+		return nil, wrapHost(err, "account.profile_open", nil)
 	}
 	writeErr := errors.Join(writeCodexProxyHome(root, codexProxyConfig(grant.BaseURL+"/v1")), root.Close())
 	if writeErr != nil {
-		return nil, fmt.Errorf("codex proxy home: %w", writeErr)
+		return nil, wrapHost(writeErr, "account.codex_home", nil)
 	}
 	return map[string]string{
 		contracts.EnvCodexHome: filepath.Join(profileDir, codexProxyHomeDir),
@@ -127,15 +127,15 @@ func codexProfileProxyEnv(profileDir string, grant keyproxy.Grant) (map[string]s
 
 func writeCodexProxyHome(root *os.Root, config string) error {
 	if mkErr := root.Mkdir(codexProxyHomeDir, proxyDirMode); mkErr != nil && !errors.Is(mkErr, fs.ErrExist) {
-		return fmt.Errorf("create codex proxy home: %w", mkErr)
+		return wrapHost(mkErr, "account.codex_home_create", nil)
 	}
 	file, err := root.OpenFile(filepath.Join(codexProxyHomeDir, codexProxyConfigFile), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, proxyFileMode)
 	if err != nil {
-		return fmt.Errorf("open codex proxy config: %w", err)
+		return wrapHost(err, "account.codex_config_open", nil)
 	}
 	_, writeErr := file.WriteString(config)
 	if joined := errors.Join(writeErr, file.Close()); joined != nil {
-		return fmt.Errorf("write codex proxy config: %w", joined)
+		return wrapHost(joined, "account.codex_config_write", nil)
 	}
 	return nil
 }
@@ -153,7 +153,7 @@ func mergeInto(dst, src map[string]string) {
 func persistedSessions() ([]state.Session, error) {
 	persisted, err := state.LoadState(DefaultStatePath())
 	if err != nil {
-		return nil, fmt.Errorf("read sessions: %w", err)
+		return nil, wrapHost(err, "session.read", nil)
 	}
 	return persisted.SnapshotSessions(), nil
 }
@@ -209,7 +209,7 @@ func spawnEnvVia(entry CatalogEntry, getenv func(string) string, keys *keyproxy.
 	}
 	creds, err := loadGatewayCreds(getenv)
 	if err != nil {
-		return nil, noRelease, fmt.Errorf("model %q needs the Neublox gateway: %w", entry.ID, err)
+		return nil, noRelease, wrapHost(err, "gateway.model", map[string]any{"Model": entry.ID})
 	}
 	env := gatewayEnvFor(entry.Vendor, creds, entry.Arg)
 	if len(env) == 0 {
@@ -217,12 +217,12 @@ func spawnEnvVia(entry CatalogEntry, getenv func(string) string, keys *keyproxy.
 	}
 	upstream, err := url.Parse(creds.BaseURL())
 	if err != nil {
-		return nil, noRelease, fmt.Errorf("gateway base URL: %w", err)
+		return nil, noRelease, wrapHost(err, "gateway.base_url", nil)
 	}
 	route := keyproxy.GatewayRoute(upstream, gatewayAuthStyle(entry.Vendor), keyproxy.NewSecret(neubloxKeyName, creds.Token()))
 	grant, err := keys.Grant(route)
 	if err != nil {
-		return nil, noRelease, fmt.Errorf("gateway through the key proxy: %w", err)
+		return nil, noRelease, wrapHost(err, "gateway.key_proxy", nil)
 	}
 	return gatewayEnvThroughProxy(entry.Vendor, env, grant), grant.Release, nil
 }

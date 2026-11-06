@@ -197,7 +197,7 @@ func NewRegistry(ctx context.Context, gws []Deps, options Options) (*cli.Registr
 
 	instID, err := resolveInstanceID(hostState, options.InstanceID, options.Owner, obs.Stderr(false))
 	if err != nil {
-		return nil, err
+		return nil, localizeHostError(options.operatorLanguage(), err)
 	}
 
 	self, execErr := os.Executable()

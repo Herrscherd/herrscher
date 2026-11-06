@@ -201,7 +201,12 @@ func TestApprovalRendersAtEveryWidth(t *testing.T) {
 	long := "go test " + strings.Repeat("./plugins/terminal/tui/some/deep/path ", 6) + "END"
 	for _, width := range []int{60, 80, 120, 200} {
 		t.Run(fmt.Sprintf("%dcols", width), func(t *testing.T) {
-			m, _ := newApprovalModel(t, width, long, allApprovalRoles()...)
+			fb := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "work", ChannelID: "a", Project: "herrscher", Dir: "/home/shan/dev/wt/tui"}}}
+			m := newModel(fb)
+			m.Update(tea.WindowSizeMsg{Width: width, Height: 40})
+			m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventApprovalSubject, Value: testApprovalID, Text: "Bash(" + long + ")"}})
+			m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: approvalMenuEvent(t, long, allApprovalRoles()...)})
+			m.active = "a"
 			checkApprovalFits(t, m.View(), width)
 		})
 	}
@@ -341,5 +346,62 @@ func TestApprovalRiskSentBeforeTheMenuIsShown(t *testing.T) {
 	m.active = "a"
 	if view := m.View(); !strings.Contains(view, "high risk") {
 		t.Fatalf("a risk event sent before the menu must show the judge line:\n%s", view)
+	}
+}
+
+func TestApprovalSubjectEventNamesTheToolWhenTheMenuIsFrench(t *testing.T) {
+	fb := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "work", ChannelID: "a", Project: "herrscher", Dir: "/home/shan/dev/wt/tui"}}}
+	m := newModel(fb)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	subject := contracts.Event{T: eventApprovalSubject, Value: testApprovalID, Text: "Bash(go test ./...)"}
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: subject})
+	menu := approvalMenu{Prompt: "autoriser Bash(go test ./...) ? (répondez avec `approve allow " + testApprovalID + "`, voir `approve allow --help`)"}
+	menu.Options = append(menu.Options, approvalMenuOption{Label: approvalAllow, Value: testApprovalValue(approvalAllow)})
+	encoded, err := json.Marshal(menu)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventMenu, Text: menu.Prompt, Value: string(encoded)}})
+	target := m.tabs["a"]
+	if !target.pendingApproval {
+		t.Fatal("the French menu did not open an approval")
+	}
+	if target.approval.tool != "Bash" || target.approval.command != "go test ./..." {
+		t.Fatalf("approval names %q %q, want Bash and go test ./...", target.approval.tool, target.approval.command)
+	}
+}
+
+func TestApprovalWithoutSubjectShowsTheFrenchPromptAsIs(t *testing.T) {
+	fb := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "work", ChannelID: "a", Project: "herrscher", Dir: "/home/shan/dev/wt/tui"}}}
+	m := newModel(fb)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	prompt := "autoriser Bash(go test ./...) ? (répondez avec `approve allow " + testApprovalID + "`, voir `approve allow --help`)"
+	menu := approvalMenu{Prompt: prompt, Options: []approvalMenuOption{{Label: approvalAllow, Value: testApprovalValue(approvalAllow)}}}
+	encoded, err := json.Marshal(menu)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventMenu, Text: prompt, Value: string(encoded)}})
+	m.active = "a"
+	target := m.tabs["a"]
+	if !target.pendingApproval {
+		t.Fatal("the French menu did not open an approval")
+	}
+	if target.approval.tool != "" || target.approval.command != "" {
+		t.Fatalf("without an approval_subject event the tool must stay empty, got %q %q", target.approval.tool, target.approval.command)
+	}
+	if view := m.View(); !strings.Contains(view, "autoriser Bash(go test ./...) ?") {
+		t.Fatalf("the French prompt must show as is:\n%s", view)
+	}
+}
+
+func TestApprovalWithoutSubjectShowsTheEnglishPromptAsIs(t *testing.T) {
+	m, _ := newApprovalModel(t, 120, "go test ./plugins/terminal/tui/", approvalAllow)
+	target := m.tabs["a"]
+	if target.approval.tool != "" || target.approval.command != "" {
+		t.Fatalf("without an approval_subject event the tool must stay empty, got %q %q", target.approval.tool, target.approval.command)
+	}
+	if view := m.View(); !strings.Contains(view, "allow Bash(go test ./plugins/terminal/tui/)?") {
+		t.Fatalf("the English prompt must show as is:\n%s", view)
 	}
 }

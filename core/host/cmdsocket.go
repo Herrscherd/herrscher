@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net"
 	"os"
 	"time"
@@ -64,7 +63,7 @@ func dispatchLiveCommand(ctx context.Context, path string, argv []string) (strin
 	}
 	var resp cmdResponse
 	if err := json.Unmarshal(line, &resp); err != nil {
-		return "", true, fmt.Errorf("command socket: decode response: %w", err)
+		return "", true, wrapHost(err, "command.socket_decode", nil)
 	}
 	if resp.Err != nil {
 		return "", true, commandFailure(resp)

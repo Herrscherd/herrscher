@@ -2,17 +2,25 @@ package host
 
 import (
 	"embed"
+	"errors"
 	"io/fs"
 	"log/slog"
+	"maps"
+	"strings"
 	"sync"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
 
 //go:embed locales/en.json locales/fr.json
 var hostLocales embed.FS
 
-const detailParam = "Detail"
+const (
+	detailParam = "Detail"
+	nameParam   = "Name"
+	pathParam   = "Path"
+)
 
 type hostMessages struct {
 	catalog func() (*i18n.Catalog, error)
@@ -56,4 +64,52 @@ func (m *hostMessages) text(lang i18n.Language, key string, params map[string]an
 
 func (d *sessionDriver) hostText(key string, params map[string]any) string {
 	return d.messages.text(d.lang, key, params)
+}
+
+type hostWrapError struct {
+	key    string
+	params map[string]any
+	cause  error
+}
+
+func (e hostWrapError) Error() string { return e.render(i18n.English) }
+
+func (e hostWrapError) Unwrap() error { return e.cause }
+
+func (e hostWrapError) render(lang i18n.Language) string {
+	params := make(map[string]any, len(e.params)+1)
+	maps.Copy(params, e.params)
+	params[detailParam] = errorTextIn(lang, e.cause)
+	return newHostMessages().text(lang, e.key, params)
+}
+
+type localizableError interface {
+	error
+	render(lang i18n.Language) string
+}
+
+func errorTextIn(lang i18n.Language, err error) string {
+	if err == nil {
+		return ""
+	}
+	if english, local, ok := localizedPart(lang, err); ok {
+		return strings.Replace(err.Error(), english, local, 1)
+	}
+	return err.Error()
+}
+
+func localizedPart(lang i18n.Language, err error) (string, string, bool) {
+	var local localizableError
+	if errors.As(err, &local) {
+		return local.Error(), local.render(lang), true
+	}
+	var failure worktree.FailureError
+	if errors.As(err, &failure) {
+		return failure.Error(), failure.Text(lang), true
+	}
+	return "", "", false
+}
+
+func wrapHost(cause error, key string, params map[string]any) error {
+	return hostWrapError{key: key, params: params, cause: cause}
 }

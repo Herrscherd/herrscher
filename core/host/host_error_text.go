@@ -103,11 +103,11 @@ func localizeHostError(lang i18n.Language, err error) error {
 	return err
 }
 
-func localizeCommandErrors(reg *cli.Registry, lang i18n.Language) {
+func localizeCommandErrors(reg *cli.Registry, live *operatorLanguage) {
 	reg.Intercept(nil, func(_ contracts.Cmd, next cli.Runner) cli.Runner {
 		return func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
 			res, err := next(ctx, in)
-			return res, localizeHostError(lang, err)
+			return res, localizeHostError(live.Get(), err)
 		}
 	})
 }

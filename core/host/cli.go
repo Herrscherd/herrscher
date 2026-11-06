@@ -35,6 +35,7 @@ type schedulerSlot struct {
 }
 
 func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *state.State, sup *supervisor.Supervisor, instID string, extra []contracts.Cmd, approvals *approvalTable, sessions *sessionTable) (*cli.Registry, hostDeps, error) {
+	options = withOperatorLanguage(options)
 	partDir := filepath.Dir(options.StatePath)
 	worktrees := worktree.NewWorktreer(instID)
 	upCfg, cfgErr := service.DefaultConfig()
@@ -95,7 +96,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addVerbs(reg, memorySearchVerb(options.Language), whoamiVerb(), commandsVerb(options.Language, reg)); err != nil {
 		return nil, hostDeps{}, err
 	}
-	localizeCommandErrors(reg, options.Language)
+	localizeCommandErrors(reg, options.live)
 	return reg, hostDeps{wt: worktrees, agents: agents, handler: hdl, seedCoord: seedCoord, schedSlot: schedSlot}, nil
 }
 
@@ -113,6 +114,8 @@ func newManagerHandler(deps Deps, options Options, partDir string, hostState *st
 	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, validateProfileChoice, launch)
 	hdl.SetRemoteBackend(options.RemoteCategories[contracts.CategoryBackend])
 	hdl.SetLanguage(options.Language)
+	hdl.SetDefaultLanguage(options.DefaultLanguage)
+	hdl.OnLanguageChange(options.live.set)
 	return hdl
 }
 

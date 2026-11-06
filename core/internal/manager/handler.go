@@ -42,6 +42,8 @@ type Handler struct {
 	hs              Hosts
 	remoteBackend   bool
 	lang            i18n.Language
+	defaultLang     i18n.Language
+	onLanguage      func(i18n.Language)
 }
 
 // SetHosts wires the placement resolver. Without it every session is local,
@@ -80,6 +82,12 @@ func (h *Handler) materializeOn(ctx context.Context, hostName string, profile ag
 // SetLanguage wires the operator language the messages of the session verbs
 // render in. An undefined language falls back to English.
 func (h *Handler) SetLanguage(lang i18n.Language) { h.lang = i18n.Resolve(lang) }
+
+// OnLanguageChange registers the callback told each time /set lang changes the operator language.
+func (h *Handler) OnLanguageChange(fn func(i18n.Language)) { h.onLanguage = fn }
+
+// SetDefaultLanguage wires the language /set lang restores when it is given auto or nothing.
+func (h *Handler) SetDefaultLanguage(lang i18n.Language) { h.defaultLang = i18n.Resolve(lang) }
 
 func (h *Handler) text(key clitext.Key, params clitext.Params) string {
 	return h.textIn(h.lang, key, params)

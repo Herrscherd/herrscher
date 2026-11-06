@@ -26,6 +26,8 @@ var (
 	ErrMissingPath = errors.New("missing path")
 	// ErrMissingSoul is returned when an agent is created without a soul.
 	ErrMissingSoul = errors.New("missing soul")
+	// ErrUnsupportedLang is returned when /set lang names a language outside en, fr and auto.
+	ErrUnsupportedLang = errors.New(string(clitext.HostErrUnsupportedLang))
 	// ErrMissingTo is returned when a rename omits the new name.
 	ErrMissingTo = errors.New("missing to")
 	// ErrModelRequired is returned when a session under the gateway-only route policy names no model.

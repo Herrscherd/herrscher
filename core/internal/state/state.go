@@ -137,12 +137,13 @@ func (s Session) IsLegacy() bool {
 
 // State is the daemon's persisted configuration. All access is mutex-guarded.
 type State struct {
-	mu        sync.Mutex `json:"-"`
-	path      string     `json:"-"`
-	Home      HomeRef    `json:"home"`
-	Repo      string     `json:"repo,omitempty"`
-	Workspace string     `json:"workspace,omitempty"`
-	Source    string     `json:"source,omitempty"`
+	mu           sync.Mutex `json:"-"`
+	path         string     `json:"-"`
+	Home         HomeRef    `json:"home"`
+	Repo         string     `json:"repo,omitempty"`
+	Workspace    string     `json:"workspace,omitempty"`
+	Source       string     `json:"source,omitempty"`
+	OperatorLang string     `json:"operator_lang,omitempty"`
 	// Approvals is the daemon-wide rule set, stored rendered ("ask Bash(git
 	// push*)") rather than structured: it is what the operator typed, it reads
 	// back out of the file, and parsing is already the check that runs before a
@@ -574,6 +575,14 @@ func (s *State) SetSource(path string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.Source = path
+	return s.saveLocked()
+}
+
+// SetOperatorLang records the operator language chosen with /set lang, "" to fall back to the configured one, and persists.
+func (s *State) SetOperatorLang(lang string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.OperatorLang = lang
 	return s.saveLocked()
 }
 

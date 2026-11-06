@@ -49,16 +49,20 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 	if err != nil {
 		return err
 	}
-	langs, err := prepareLanguages(cfg)
+	langs, err := prepareLanguages(cfg, scanFlag(args, "state", host.DefaultStatePath()))
 	if err != nil {
 		return err
 	}
 	return serveWith(ctx, args, open, cfg, langs)
 }
 
-func prepareLanguages(cfg config.Config) (language.Languages, error) {
-	langs := language.Resolve(slog.Default(), cfg.Language)
-	if !language.Explicit(cfg.Language) {
+func prepareLanguages(cfg config.Config, statePath string) (language.Languages, error) {
+	stored, err := host.StoredOperatorLanguage(statePath)
+	if err != nil {
+		slog.Default().Warn("operator language setting unreadable, using the configured one", "err", err)
+	}
+	langs := language.Resolve(slog.Default(), cfg.Language, stored)
+	if !language.Explicit(cfg.Language) && stored == "" {
 		return langs, nil
 	}
 	if err := language.Export(langs.Operator); err != nil {
@@ -118,6 +122,7 @@ func serveWith(ctx context.Context, args []string, open *openWindow, cfg config.
 	opts := host.Options{
 		StatePath:           *statePath,
 		Language:            langs.Operator,
+		DefaultLanguage:     langs.Default,
 		Models:              models,
 		DefaultCmd:          *defaultCmd,
 		HealthAddr:          *healthAddr,
@@ -286,7 +291,7 @@ func loadOperator() (config.Config, language.Languages, error) {
 	if err != nil {
 		return config.Config{}, language.Languages{}, err
 	}
-	langs, err := prepareLanguages(cfg)
+	langs, err := prepareLanguages(cfg, host.DefaultStatePath())
 	return cfg, langs, err
 }
 

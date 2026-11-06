@@ -3,9 +3,11 @@ package manager
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
 
 func TestSetHomeCategory(t *testing.T) {
@@ -54,5 +56,79 @@ func TestSetHomeRejectionIsTheHomeChannelKindNotice(t *testing.T) {
 	}
 	if got := notice.Notice().Code; got != contracts.CodeChannelKindHome {
 		t.Fatalf("code = %s, want %s", got.Key(), contracts.CodeChannelKindHome.Key())
+	}
+}
+
+func TestSetLangPersistsAndRepliesInTheNewLanguage(t *testing.T) {
+	h, _, _, _, _, st := newTestHandler(t, "category")
+	h.SetDefaultLanguage(i18n.English)
+	res, err := h.setLangRun(context.Background(), args("lang", "fr"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.OperatorLang != "fr" {
+		t.Fatalf("operator language not persisted: %q", st.OperatorLang)
+	}
+	if h.lang != i18n.French {
+		t.Fatalf("handler language = %v, want French", h.lang)
+	}
+	reply, isText := res.Data().(string)
+	if !isText || !strings.Contains(reply, "langue de l'opérateur réglée sur fr") {
+		t.Fatalf("reply not in French: %q", reply)
+	}
+}
+
+func TestSetLangNotifiesTheLanguageHook(t *testing.T) {
+	h, _, _, _, _, _ := newTestHandler(t, "category")
+	var notified []i18n.Language
+	h.OnLanguageChange(func(lang i18n.Language) { notified = append(notified, lang) })
+	h.SetDefaultLanguage(i18n.English)
+	if _, err := h.setLangRun(context.Background(), args("lang", "fr")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.setLangRun(context.Background(), args("lang", "auto")); err != nil {
+		t.Fatal(err)
+	}
+	if len(notified) != 2 || notified[0] != i18n.French || notified[1] != i18n.English {
+		t.Fatalf("hook saw %v, want French then English", notified)
+	}
+}
+
+func TestSetLangAutoAndEmptyRestoreTheDefault(t *testing.T) {
+	for _, value := range []string{"auto", ""} {
+		t.Run("value "+value, func(t *testing.T) {
+			h, _, _, _, _, st := newTestHandler(t, "category")
+			h.SetDefaultLanguage(i18n.English)
+			if _, err := h.setLangRun(context.Background(), args("lang", "fr")); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := h.setLangRun(context.Background(), args("lang", value)); err != nil {
+				t.Fatal(err)
+			}
+			if st.OperatorLang != "" {
+				t.Fatalf("reset must clear the stored language: %q", st.OperatorLang)
+			}
+			if h.lang != i18n.English {
+				t.Fatalf("handler language = %v, want the default English", h.lang)
+			}
+		})
+	}
+}
+
+func TestSetLangRejectsAnythingOutsideTheClosedSet(t *testing.T) {
+	for _, value := range []string{"en_US", "FR", "fr_FR.UTF-8", "klingon"} {
+		t.Run(value, func(t *testing.T) {
+			h, _, _, _, _, st := newTestHandler(t, "category")
+			if _, err := h.setLangRun(context.Background(), args("lang", "fr")); err != nil {
+				t.Fatal(err)
+			}
+			_, err := h.setLangRun(context.Background(), args("lang", value))
+			if !errors.Is(err, ErrUnsupportedLang) {
+				t.Fatalf("err = %v, want ErrUnsupportedLang", err)
+			}
+			if st.OperatorLang != "fr" {
+				t.Fatalf("rejected value must not replace the stored language: %q", st.OperatorLang)
+			}
+		})
 	}
 }

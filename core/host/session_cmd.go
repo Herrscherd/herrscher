@@ -42,8 +42,8 @@ func addSessionVerbs(reg *cli.Registry, lang i18n.Language, store *state.State, 
 
 func sessionSeenVerb(seen *seenTable) contracts.Cmd {
 	return contracts.New(nsSession, "seen").
-		Help("record that the operator has read a session's last answer, which clears its review mark").
-		Param(paramName, "session name", true).
+		Help(clitext.CmdHelpSessionSeen).
+		Param(paramName, clitext.CmdParamSessionSeenName, true).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			seen.mark(input.Get(paramName), time.Now())
 			return contracts.Result{}, nil
@@ -56,11 +56,11 @@ func addCheckpointCommands(reg *cli.Registry, store *state.State, sessions *sess
 
 func seedVerb(store *state.State, instID string, seedCoord *coordinatorSlot) contracts.Cmd {
 	return contracts.New(nsSession, verbSeed).
-		Help("run one agent turn in a session and print the reply").
-		Param(paramName, "session name", true).
-		Param("task", "opening task", true).
-		ValueParam("turn_id", "optional caller-supplied turn identity", false).
-		ValueParam("timeout", "cap this turn (Go duration, e.g. 30m); default HERRSCHER_SEED_TIMEOUT then 120s", false).
+		Help(clitext.CmdHelpSessionSeed).
+		Param(paramName, clitext.CmdParamSessionSeedName, true).
+		Param("task", clitext.CmdParamSessionSeedTask, true).
+		ValueParam("turn_id", clitext.CmdParamSessionSeedTurnID, false).
+		ValueParam("timeout", clitext.CmdParamSessionSeedTimeout, false).
 		Do(func(cmdCtx context.Context, in contracts.Input) (contracts.Result, error) {
 			return cli.Data(runSeedVerb(cmdCtx, in, store, instID, seedCoord.coord))
 		})
@@ -95,13 +95,12 @@ func runSeedVerb(ctx context.Context, input contracts.Input, store *state.State,
 
 func sessionSendVerb(sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, "send").
-		Help("send one message into a live session's turn queue (the daemon runs the turn)").
-		Param(paramName, "session name", true).
-		Param("text", "message text", true).
-		Param("author", "display name shown to the agent (default: you)", false).
-		Param("attachments", "JSON array of local file paths to attach", false).
-		Param("origin", "gateway kind this was typed in (e.g. terminal): the turn is rendered there "+
-			"instead of in every channel the session is bound to", false).
+		Help(clitext.CmdHelpSessionSend).
+		Param(paramName, clitext.CmdParamSessionSendName, true).
+		Param("text", clitext.CmdParamSessionSendText, true).
+		Param("author", clitext.CmdParamSessionSendAuthor, false).
+		Param("attachments", clitext.CmdParamSessionSendAttachments, false).
+		Param("origin", clitext.CmdParamSessionSendOrigin, false).
 		Do(func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
 			return contracts.Result{}, sendToSession(ctx, sessions, in)
 		})
@@ -130,7 +129,7 @@ func sendToSession(ctx context.Context, sessions *sessionTable, input contracts.
 
 func sessionInfoVerb(store *state.State, partDir string, sessions *sessionTable, models *ModelDiscovery) contracts.Cmd {
 	return contracts.New(nsSession, "info").
-		Help("list sessions as a frontend sees them (channel, vendor, dir, archived). JSON only").
+		Help(clitext.CmdHelpSessionInfo).
 		Do(func(_ context.Context, _ contracts.Input) (contracts.Result, error) {
 			b, err := json.Marshal(sessionInfos(store, partDir, sessions.compaction, modelTermsFor(models)))
 			return contracts.DataResult(string(b)), err
@@ -139,7 +138,7 @@ func sessionInfoVerb(store *state.State, partDir string, sessions *sessionTable,
 
 func sessionOverviewVerb(src overviewSource) contracts.Cmd {
 	return contracts.New(nsSession, "overview").
-		Help("list every session with its live state (waiting, working, archived, review, idle), cost and last activity. JSON only").
+		Help(clitext.CmdHelpSessionOverview).
 		Do(func(_ context.Context, _ contracts.Input) (contracts.Result, error) {
 			b, err := json.Marshal(src.overviews())
 			return contracts.DataResult(string(b)), err
@@ -148,8 +147,8 @@ func sessionOverviewVerb(src overviewSource) contracts.Cmd {
 
 func sessionScrollbackVerb(partDir string) contracts.Cmd {
 	return contracts.New(nsSession, "scrollback").
-		Help("dump a session's replayable history as the frontend renders it. JSON only").
-		Param(paramName, "session name", true).
+		Help(clitext.CmdHelpSessionScrollback).
+		Param(paramName, clitext.CmdParamSessionScrollbackName, true).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
 			b, err := json.Marshal(scrollbackOf(partDir, in.Get(paramName)))
 			return contracts.DataResult(string(b)), err
@@ -158,9 +157,9 @@ func sessionScrollbackVerb(partDir string) contracts.Cmd {
 
 func sessionPickVerb(lang i18n.Language, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, "pick").
-		Help("answer a session's pending choice (an approval) with a menu value").
-		Param(paramName, "session name", true).
-		ValueParam("value", "menu value to answer with", true).
+		Help(clitext.CmdHelpSessionPick).
+		Param(paramName, clitext.CmdParamSessionPickName, true).
+		ValueParam("value", clitext.CmdParamSessionPickValue, true).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			name, value := input.Get(paramName), input.Get("value")
 			if answerApprovalPick(approvals, sessions, name, value) || sessions.pick(name, value) {
@@ -172,8 +171,8 @@ func sessionPickVerb(lang i18n.Language, approvals *approvalTable, sessions *ses
 
 func sessionInterruptVerb(lang i18n.Language, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, "interrupt").
-		Help("cancel a session's in-flight turn").
-		Param(paramName, "session name", true).
+		Help(clitext.CmdHelpSessionInterrupt).
+		Param(paramName, clitext.CmdParamSessionInterruptName, true).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			if !sessions.Interrupt(input.Get(paramName)) {
 				return contracts.Result{}, &noTurnInFlightError{Session: input.Get(paramName)}
@@ -186,11 +185,10 @@ const verbCompact = "compact"
 
 func sessionCompactVerb(lang i18n.Language, store *state.State, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, verbCompact).
-		Help("compact a session's context now, through its compaction stack, queued after the turn in progress").
-		Param(paramName, "session name", true).
-		Param("instruction", "free text for the compaction, empty for none", false).
-		Param("origin", "gateway kind this was typed in (e.g. terminal): the turn is rendered there "+
-			"instead of in every channel the session is bound to", false).
+		Help(clitext.CmdHelpSessionCompact).
+		Param(paramName, clitext.CmdParamSessionCompactName, true).
+		Param("instruction", clitext.CmdParamSessionCompactInstruction, false).
+		Param("origin", clitext.CmdParamSessionCompactOrigin, false).
 		Do(func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
 			return cli.Data(compactSession(ctx, lang, store, sessions, in))
 		})
@@ -228,9 +226,9 @@ func mergedCompactNotice(lang i18n.Language, name, instruction string) string {
 
 func sessionSetCompactVerb(store *state.State) contracts.Cmd {
 	return contracts.New(nsSession, "set-compact").
-		Help("set a session's automatic compaction threshold, in percent of its context window: 0 disables it, empty falls back to the config default").
-		Param(paramName, "session name", true).
-		Param("percent", "0 to 100, or empty for the config default", false).
+		Help(clitext.CmdHelpSessionSetCompact).
+		Param(paramName, clitext.CmdParamSessionSetCompactName, true).
+		Param("percent", clitext.CmdParamSessionSetCompactPercent, false).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			name := input.Get(paramName)
 			ok, err := applyCompactPercent(store, name, input.Get("percent"))

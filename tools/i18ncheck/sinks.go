@@ -204,14 +204,22 @@ func showingArgument(fun ast.Expr) (int, bool) {
 	if !ok {
 		return 0, false
 	}
-	qualifier, ok := selector.X.(*ast.Ident)
-	if !ok {
-		return 0, false
+	if qualifier, ok := selector.X.(*ast.Ident); ok {
+		switch qualifier.Name + "." + selector.Sel.Name {
+		case "contracts.DataResult", "fmt.Errorf", "errors.New":
+			return 0, true
+		case "contracts.Text":
+			return 1, true
+		}
 	}
-	switch qualifier.Name + "." + selector.Sel.Name {
-	case "contracts.DataResult", "fmt.Errorf", "errors.New":
+	return builderArgument(selector.Sel.Name)
+}
+
+func builderArgument(method string) (int, bool) {
+	switch method {
+	case "Help":
 		return 0, true
-	case "contracts.Text":
+	case "Param", "ValueParam":
 		return 1, true
 	}
 	return 0, false

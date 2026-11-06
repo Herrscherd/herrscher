@@ -9,6 +9,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -18,23 +19,23 @@ func addScheduleCommands(reg *cli.Registry, hostState *state.State, agents agent
 		scheduleAddVerb(hostState, agents),
 		scheduleListVerb(hostState),
 		scheduleRmVerb(hostState),
-		schedulePauseVerb(hostState, "pause", true, "stop firing a schedule, keeping it and its history"),
-		schedulePauseVerb(hostState, "resume", false, "let a paused schedule fire again, counting from now"),
+		schedulePauseVerb(hostState, "pause", true, clitext.CmdHelpSchedulePause),
+		schedulePauseVerb(hostState, "resume", false, clitext.CmdHelpScheduleResume),
 		scheduleRunVerb(slot),
 	)
 }
 
 func scheduleAddVerb(store *state.State, agents agentLookup) contracts.Cmd {
 	return contracts.New(nsSchedule, "add").
-		Help("wake a session on a cadence, with no human in the loop").
-		Param(paramName, "schedule name (unique)", true).
-		Param(paramSession, "target an existing session by name (exclusive with --agent)", false).
-		Param(paramAgent, "target a durable agent; its session is opened once and reused (exclusive with --session)", false).
-		Param("project", "workspace sub-directory for the agent's session", false).
-		Param("every", "fixed cadence, e.g. 30m or 24h (exclusive with --cron)", false).
-		Param("cron", "five-field cron in the daemon's local time, e.g. '0 9 * * 1-5' (exclusive with --every)", false).
-		Param("task", "the task handed to the session on each firing", true).
-		Param("grace", "how late a window missed while the daemon was down may still fire (default 1h)", false).
+		Help(clitext.CmdHelpScheduleAdd).
+		Param(paramName, clitext.CmdParamScheduleAddName, true).
+		Param(paramSession, clitext.CmdParamScheduleAddSession, false).
+		Param(paramAgent, clitext.CmdParamScheduleAddAgent, false).
+		Param("project", clitext.CmdParamScheduleAddProject, false).
+		Param("every", clitext.CmdParamScheduleAddEvery, false).
+		Param("cron", clitext.CmdParamScheduleAddCron, false).
+		Param("task", clitext.CmdParamScheduleAddTask, true).
+		Param("grace", clitext.CmdParamScheduleAddGrace, false).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
 			return cli.Data(addSchedule(store, agents, in))
 		})
@@ -86,7 +87,7 @@ func checkNewSchedule(store *state.State, agents agentLookup, definition schedul
 
 func scheduleListVerb(store *state.State) contracts.Cmd {
 	return contracts.New(nsSchedule, "list").
-		Help("list the schedules, with their target, cadence, state and next window").
+		Help(clitext.CmdHelpScheduleList).
 		Do(func(_ context.Context, _ contracts.Input) (contracts.Result, error) {
 			return contracts.DataResult(listSchedules(store)), nil
 		})
@@ -137,8 +138,8 @@ func nextWindowOf(sched schedule.Schedule, now time.Time) string {
 
 func scheduleRmVerb(store *state.State) contracts.Cmd {
 	return contracts.New(nsSchedule, "rm").
-		Help("remove a schedule; the session it opened is left alone").
-		Param(paramName, "schedule name", true).
+		Help(clitext.CmdHelpScheduleRm).
+		Param(paramName, clitext.CmdParamScheduleRmName, true).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
 			name := strings.TrimSpace(in.Get(paramName))
 			ok, err := store.RemoveSchedule(name)
@@ -152,10 +153,10 @@ func scheduleRmVerb(store *state.State) contracts.Cmd {
 		})
 }
 
-func schedulePauseVerb(store *state.State, verb string, paused bool, help string) contracts.Cmd {
+func schedulePauseVerb(store *state.State, verb string, paused bool, helpKey string) contracts.Cmd {
 	return contracts.New(nsSchedule, verb).
-		Help(help).
-		Param(paramName, "schedule name", true).
+		Help(helpKey).
+		Param(paramName, clitext.CmdParamScheduleName, true).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
 			return cli.Data(setSchedulePaused(store, verb, paused, strings.TrimSpace(in.Get(paramName))))
 		})
@@ -179,8 +180,8 @@ func setSchedulePaused(store *state.State, verb string, paused bool, name string
 
 func scheduleRunVerb(slot *schedulerSlot) contracts.Cmd {
 	return contracts.New(nsSchedule, "run").
-		Help("fire a schedule right now, out of band; the cadence is not moved").
-		Param(paramName, "schedule name", true).
+		Help(clitext.CmdHelpScheduleRun).
+		Param(paramName, clitext.CmdParamScheduleRunName, true).
 		Do(func(cmdCtx context.Context, in contracts.Input) (contracts.Result, error) {
 			name := strings.TrimSpace(in.Get(paramName))
 			if slot == nil || slot.sched == nil {

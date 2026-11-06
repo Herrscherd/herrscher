@@ -10,6 +10,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/envx"
 )
 
@@ -124,9 +125,9 @@ func refreshModels(ctx context.Context, plugins []contracts.Plugin, models *Mode
 func ModelsCommands() []contracts.Cmd {
 	return []contracts.Cmd{
 		contracts.New("models", "list").
-			ValueParam("state", "daemon state file whose model cache is read (default: the daemon default)", false).
-			Param("all", "also list the hidden models, marked hidden, which still resolve when requested", false).
-			Help("list the models every compiled backend offers, under the active route policy, with their source; --all adds the hidden ones; --json for the app").
+			ValueParam("state", clitext.CmdParamModelsListState, false).
+			Param("all", clitext.CmdParamModelsListAll, false).
+			Help(clitext.CmdHelpModelsList).
 			Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 				entries, err := listCatalog(input.Bool("all"), contracts.Default.Backends(), ResolvePolicy(envx.Getenv), modelDiscoveryFor(input).Sources())
 				if err != nil {
@@ -138,8 +139,8 @@ func ModelsCommands() []contracts.Cmd {
 				return contracts.DataResult(modelsListText(entries)), nil
 			}),
 		contracts.New("models", "refresh").
-			ValueParam("state", "daemon state file whose model cache is written (default: the daemon default)", false).
-			Help("ask every backend for its live model list now and store it; a failed backend keeps its last known list").
+			ValueParam("state", clitext.CmdParamModelsRefreshState, false).
+			Help(clitext.CmdHelpModelsRefresh).
 			Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 				return cli.Data(refreshModels(ctx, contracts.Default.Backends(), modelDiscoveryFor(input)))
 			}),

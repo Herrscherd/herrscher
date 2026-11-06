@@ -1,6 +1,9 @@
 package manager
 
-import contracts "github.com/Herrscherd/herrscher-contracts"
+import (
+	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
+)
 
 // Commands returns the manager's command set as neutral contracts.Cmd values for
 // the CLI registry to dispatch. Each Run closes over the Handler's dependencies,
@@ -8,129 +11,129 @@ import contracts "github.com/Herrscherd/herrscher-contracts"
 func (h *Handler) Commands() []contracts.Cmd {
 	return []contracts.Cmd{
 		contracts.New("session", "create").
-			Help("create a session: a bridged channel + isolated worktree + backend").
-			Param("name", "session name (slugified to a safe slug)", true).
-			Param("channel_id", "adopt this existing conversation instead of creating a channel (no home needed)", false).
-			Param("under", "create the conversation under this category/forum instead of the daemon's home", false).
-			Param("project", "workspace sub-dir the backend works on", false).
-			Param("clone", "remote repo (owner/name) to clone into the workspace first", false).
-			Param("cmd", "bridged command (defaults to the configured cmd)", false).
-			Param("backend", "bridge backend: stream (default) | oneshot", false).
-			Param("vendor", "agent backend vendor: claude | codex | cursor", false).
-			Param("model", "catalog model id (see `herrscher models list`); empty = use cmd as-is", false).
-			Param("gateways", "comma-separated gateway kinds to bind (e.g. chat,terminal)", false).
-			Param("terminal_only", "bind the session to the terminal gateway only", false).
-			Param("shared", "run in the main checkout instead of an isolated worktree", false).
-			Param("agent", "provision the session from a durable agent (its persona + MCP + zero-prompt settings)", false).
-			Param("account", "account profile this session spends on (a profile name, or native); empty = the agent's, then the vendor default", false).
-			Param("host", "run this session on a registered host (see `host list`); empty or `local` = this machine", false).
-			Param("approvals", "approval stance: ask (default), accept-edits, plan, auto, bypass, strict (see `approve rule`)", false).
-			Param("memory_project", "memory project this session files what it learns under (does NOT move the session: see project)", false).
-			Param("memory_agent", "memory agent root for this session's private learned skills (does NOT provision an agent: see agent)", false).
-			Param("project_pinned", "the memory project is a human's choice, not a guess: never revise it", false).
-			Param("extractor", "name a registered curation extractor to enable the P1 learning loop (empty = no learning)", false).
-			Param("journal", "call-journal path Consolidate reads (worktree-relative ok); only used with extractor", false).
-			Param("consolidate_every", "run Consolidate every N turns (0 = manual only); only used with extractor", false).
-			Param(langParam, "language of this session's notices: en (default) or fr", false).
-			Param("base", "existing ref the new worktree branches off (e.g. session/<A>); empty = fresh branch", false).
-			Param("parent", "lead session that delegated this one (result-back P3); empty = none", false).
-			Param("cost_cap", "pause this session after spending this many USD (0 = uncapped)", false).
-			Param("token_cap", "pause this session after this many total tokens (0 = uncapped)", false).
-			Param("cohort_cost_cap", "pause the whole cohort after this many USD (0 = uncapped)", false).
-			Param("cohort_token_cap", "pause the whole cohort after this many tokens (0 = uncapped)", false).
+			Help(clitext.CmdHelpSessionCreate).
+			Param("name", clitext.CmdParamSessionCreateName, true).
+			Param("channel_id", clitext.CmdParamSessionCreateChannelID, false).
+			Param("under", clitext.CmdParamSessionCreateUnder, false).
+			Param("project", clitext.CmdParamSessionCreateProject, false).
+			Param("clone", clitext.CmdParamSessionCreateClone, false).
+			Param("cmd", clitext.CmdParamSessionCreateCmd, false).
+			Param("backend", clitext.CmdParamSessionCreateBackend, false).
+			Param("vendor", clitext.CmdParamSessionCreateVendor, false).
+			Param("model", clitext.CmdParamSessionCreateModel, false).
+			Param("gateways", clitext.CmdParamSessionCreateGateways, false).
+			Param("terminal_only", clitext.CmdParamSessionCreateTerminalOnly, false).
+			Param("shared", clitext.CmdParamSessionCreateShared, false).
+			Param("agent", clitext.CmdParamSessionCreateAgent, false).
+			Param("account", clitext.CmdParamSessionCreateAccount, false).
+			Param("host", clitext.CmdParamSessionCreateHost, false).
+			Param("approvals", clitext.CmdParamSessionCreateApprovals, false).
+			Param("memory_project", clitext.CmdParamSessionCreateMemoryProject, false).
+			Param("memory_agent", clitext.CmdParamSessionCreateMemoryAgent, false).
+			Param("project_pinned", clitext.CmdParamSessionCreateProjectPinned, false).
+			Param("extractor", clitext.CmdParamSessionCreateExtractor, false).
+			Param("journal", clitext.CmdParamSessionCreateJournal, false).
+			Param("consolidate_every", clitext.CmdParamSessionCreateConsolidateEvery, false).
+			Param(langParam, clitext.CmdParamSessionCreateLang, false).
+			Param("base", clitext.CmdParamSessionCreateBase, false).
+			Param("parent", clitext.CmdParamSessionCreateParent, false).
+			Param("cost_cap", clitext.CmdParamSessionCreateCostCap, false).
+			Param("token_cap", clitext.CmdParamSessionCreateTokCap, false).
+			Param("cohort_cost_cap", clitext.CmdParamSessionCreateCohortCostCap, false).
+			Param("cohort_token_cap", clitext.CmdParamSessionCreateCohortTokCap, false).
 			Do(h.sessionCreateRun),
 		contracts.New("session", "close").
-			Help("close a session: stop the bridge, remove the worktree, archive the channel").
-			Param("name", "session name", true).
-			Param("force", "discard uncommitted worktree changes", false).
+			Help(clitext.CmdHelpSessionClose).
+			Param("name", clitext.CmdParamSessionCloseName, true).
+			Param("force", clitext.CmdParamSessionCloseForce, false).
 			Do(h.sessionCloseRun),
 		contracts.New("session", "archive").
-			Help("archive a session: stop the bridge, keep it resumable (row + transcript + resume token kept)").
-			Param("name", "session name", true).
+			Help(clitext.CmdHelpSessionArchive).
+			Param("name", clitext.CmdParamSessionArchiveName, true).
 			Do(h.sessionArchiveRun),
 		contracts.New("session", "rename").
-			Help("rename a session: the row, its transcript and its journal follow, the bridge restarts under the new name").
-			Param("name", "session name", true).
-			Param("to", "new session name (slugified)", true).
+			Help(clitext.CmdHelpSessionRename).
+			Param("name", clitext.CmdParamSessionRenameName, true).
+			Param("to", clitext.CmdParamSessionRenameTo, true).
 			Do(h.sessionRenameRun),
 		contracts.New("session", "list").
-			Help("list active sessions").
+			Help(clitext.CmdHelpSessionList).
 			Do(h.sessionListRun),
 		contracts.New("session", "who").
-			Help("list the participants observed in a session").
-			Param("name", "session name", true).
+			Help(clitext.CmdHelpSessionWho).
+			Param("name", clitext.CmdParamSessionWhoName, true).
 			Do(h.sessionWhoRun),
 		contracts.New("session", "log").
-			Help("dump a session's recorded transcript (scrollback); --json for the app").
-			Param("name", "session name", true).
-			Param("limit", "max entries to return (default 200, newest kept)", false).
+			Help(clitext.CmdHelpSessionLog).
+			Param("name", clitext.CmdParamSessionLogName, true).
+			Param("limit", clitext.CmdParamSessionLogLimit, false).
 			Do(h.sessionLogRun),
 		contracts.New("session", "resume").
-			Help("resume an archived session: clear archived + restart the bridge (revives with its stored transcript + resume token)").
-			Param("name", "session name", true).
+			Help(clitext.CmdHelpSessionResume).
+			Param("name", clitext.CmdParamSessionResumeName, true).
 			Do(h.sessionResumeRun),
 		contracts.New("session", "switch").
-			Help("re-target a live session's vendor/model/effort under the same id").
-			Param("name", "session name", true).
-			Param("vendor", "backend vendor", true).
-			Param("cmd", "backend invocation (carries model+effort)", true).
-			Param("model", "catalog model id (see `herrscher models list`); omit to keep the session's current model, pass empty to clear it", false).
-			Param("handoff", "none|full|summary context handoff", false).
+			Help(clitext.CmdHelpSessionSwitch).
+			Param("name", clitext.CmdParamSessionSwitchName, true).
+			Param("vendor", clitext.CmdParamSessionSwitchVendor, true).
+			Param("cmd", clitext.CmdParamSessionSwitchCmd, true).
+			Param("model", clitext.CmdParamSessionSwitchModel, false).
+			Param("handoff", clitext.CmdParamSessionSwitchHandoff, false).
 			Do(h.sessionSwitchRun),
 		contracts.New("session", "set-budget").
-			Help("set or clear budget caps on a live session (or its cohort); raising a cap resumes a paused session").
-			Param("name", "session name", true).
-			Param("cost_cap", "USD cap (0 = uncapped)", false).
-			Param("token_cap", "token cap (0 = uncapped)", false).
-			Param("cohort_cost_cap", "cohort USD cap (0 = uncapped)", false).
-			Param("cohort_token_cap", "cohort token cap (0 = uncapped)", false).
-			Param("scope", "session (default) | cohort", false).
+			Help(clitext.CmdHelpSessionSetBudget).
+			Param("name", clitext.CmdParamSessionSetBudgetName, true).
+			Param("cost_cap", clitext.CmdParamSessionSetBudgetCostCap, false).
+			Param("token_cap", clitext.CmdParamSessionSetBudgetTokCap, false).
+			Param("cohort_cost_cap", clitext.CmdParamSessionSetBudgetCohortCostCap, false).
+			Param("cohort_token_cap", clitext.CmdParamSessionSetBudgetCohortTokCap, false).
+			Param("scope", clitext.CmdParamSessionSetBudgetScope, false).
 			Do(h.sessionSetBudgetRun),
 		contracts.New("session", "set-mode").
-			Help("set a live session's approval stance: ask (manual), accept-edits, plan (read-only), auto (deny rules hold), bypass").
-			Param("name", "session name", true).
-			Param("mode", "ask | accept-edits | plan | auto | bypass | strict", true).
+			Help(clitext.CmdHelpSessionSetMode).
+			Param("name", clitext.CmdParamSessionSetModeName, true).
+			Param("mode", clitext.CmdParamSessionSetModeMode, true).
 			Do(h.sessionSetModeRun),
 		contracts.New("session", "get-mode").
-			Help("show a live session's approval stance (ask when none is stored)").
-			Param("name", "session name", true).
+			Help(clitext.CmdHelpSessionGetMode).
+			Param("name", clitext.CmdParamSessionGetModeName, true).
 			Do(h.sessionGetModeRun),
 		contracts.New("agent", "create").
-			Help("create a durable companion agent (persona + MCP + zero-prompt settings)").
-			Param("name", "agent name (slugified to a safe slug)", true).
-			Param("soul", "persona text written to SOUL.md (layered as .claude/CLAUDE.md)", false).
-			Param("mcp", "stdio MCP server command line, e.g. 'neublox serve --project {{WORKTREE}}'", false).
-			Param("backend", "agent backend vendor: claude | codex | cursor", false).
-			Param("cmd", "default invocation carrying the model, e.g. 'codex --model gpt-5.6'", false).
-			Param("host", "default host this agent's sessions run on (see `host list`)", false).
-			Param("tags", "space/comma-separated capability tokens (e.g. role:reviewer luau)", false).
+			Help(clitext.CmdHelpAgentCreate).
+			Param("name", clitext.CmdParamAgentCreateName, true).
+			Param("soul", clitext.CmdParamAgentCreateSoul, false).
+			Param("mcp", clitext.CmdParamAgentCreateMcp, false).
+			Param("backend", clitext.CmdParamAgentCreateBackend, false).
+			Param("cmd", clitext.CmdParamAgentCreateCmd, false).
+			Param("host", clitext.CmdParamAgentCreateHost, false).
+			Param("tags", clitext.CmdParamAgentCreateTags, false).
 			Do(h.agentCreateRun),
 		contracts.New("agent", "list").
-			Help("list durable companion agents (--json for the catalog)").
+			Help(clitext.CmdHelpAgentList).
 			Do(h.agentListRun),
 		contracts.New("agent", "show").
-			Help("show one agent's catalog record (name, tags, backend, soul); --json for Neublox").
-			Param("name", "agent name", true).
+			Help(clitext.CmdHelpAgentShow).
+			Param("name", clitext.CmdParamAgentShowName, true).
 			Do(h.agentShowRun),
 		contracts.New("agent", "set-soul").
-			Help("rewrite an agent's SOUL.md (applies to new sessions)").
-			Param("name", "agent name", true).
-			Param("soul", "new soul body", true).
+			Help(clitext.CmdHelpAgentSetSoul).
+			Param("name", clitext.CmdParamAgentSetSoulName, true).
+			Param("soul", clitext.CmdParamAgentSetSoulSoul, true).
 			Do(h.agentSetSoulRun),
 		contracts.New("set", "home").
-			Help("set the category/forum that holds session channels").
-			Param("channel", "category or forum channel id", true).
+			Help(clitext.CmdHelpSetHome).
+			Param("channel", clitext.CmdParamSetHomeChannel, true).
 			Do(h.setHomeRun),
 		contracts.New("set", "source").
-			Help("set the source checkout `service update` builds from").
-			Param("path", "absolute path to the source checkout", true).
+			Help(clitext.CmdHelpSetSource).
+			Param("path", clitext.CmdParamSetSourcePath, true).
 			Do(h.setSourceRun),
 		contracts.New("service", "restart").
-			Help("restart the daemon").
+			Help(clitext.CmdHelpServiceRestart).
 			Do(h.serviceRestartRun),
 		contracts.New("service", "update").
-			Help("rebuild the daemon from source and restart it").
-			Param("no_pull", "skip the git pull before building", false).
+			Help(clitext.CmdHelpServiceUpdate).
+			Param("no_pull", clitext.CmdParamServiceUpdateNoPull, false).
 			Do(h.serviceUpdateRun),
 	}
 }

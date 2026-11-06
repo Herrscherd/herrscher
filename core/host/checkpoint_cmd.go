@@ -12,6 +12,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/checkpoint"
 	"github.com/Herrscherd/herrscher/core/internal/conversation"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -105,8 +106,8 @@ func addCheckpointVerbs(sessionStore *state.State, sessions *sessionTable) []con
 
 func checkpointsVerb(sessionStore *state.State, checkpoints *checkpoint.Store) contracts.Cmd {
 	return contracts.New(nsSession, verbCheckpoints).
-		Help("list a session's checkpoints, one before each user message, with the files each one touched").
-		Param(paramName, "session name", true).
+		Help(clitext.CmdHelpSessionCheckpoints).
+		Param(paramName, clitext.CmdParamSessionCheckpointsName, true).
 		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 			sess, err := checkpointSession(sessionStore, input.Get(paramName))
 			if err != nil {
@@ -130,10 +131,10 @@ func marshalJSON[T any](value T) (string, error) {
 
 func rewindVerb(sessionStore *state.State, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, verbRewind).
-		Help("restore a session's code, its conversation, or both to the checkpoint before a message").
-		Param(paramName, "session name", true).
-		ValueParam(paramTo, "checkpoint number, as listed by session checkpoints", true).
-		ValueParam(paramWhat, "code, conversation or both", true).
+		Help(clitext.CmdHelpSessionRewind).
+		Param(paramName, clitext.CmdParamSessionRewindName, true).
+		ValueParam(paramTo, clitext.CmdParamSessionRewindTo, true).
+		ValueParam(paramWhat, clitext.CmdParamSessionRewindWhat, true).
 		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 			return cli.Data(rewindSession(ctx, sessionStore, sessions, input))
 		})
@@ -189,8 +190,8 @@ func restartWithConversation(ctx context.Context, name, token string) error {
 
 func undoVerb(sessionStore *state.State, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, verbUndo).
-		Help("undo the last rewind of a session's code").
-		Param(paramName, "session name", true).
+		Help(clitext.CmdHelpSessionUndo).
+		Param(paramName, clitext.CmdParamSessionUndoName, true).
 		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 			sess, err := checkpointSession(sessionStore, input.Get(paramName))
 			if err != nil {
@@ -210,10 +211,10 @@ func undoVerb(sessionStore *state.State, sessions *sessionTable) contracts.Cmd {
 
 func forkVerb() contracts.Cmd {
 	return contracts.New(nsSession, verbFork).
-		Help("start a new session from a checkpoint, in its own worktree; the original is left as it is").
-		Param(paramName, "session to fork", true).
-		ValueParam(paramTo, "checkpoint number, as listed by session checkpoints", true).
-		ValueParam(paramForkAs, "name of the new session (default <name>-fork)", false).
+		Help(clitext.CmdHelpSessionFork).
+		Param(paramName, clitext.CmdParamSessionForkName, true).
+		ValueParam(paramTo, clitext.CmdParamSessionForkTo, true).
+		ValueParam(paramForkAs, clitext.CmdParamSessionForkAs, false).
 		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 			fork, ok := forkerFrom(ctx)
 			if !ok {

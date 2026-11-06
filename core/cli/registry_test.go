@@ -9,6 +9,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func leaf(path ...string) contracts.Cmd {
@@ -237,7 +238,7 @@ func TestHelpRendersSortedUsage(t *testing.T) {
 		contracts.New("session", "list").Help("list sessions").
 			Do(func(context.Context, contracts.Input) (contracts.Result, error) { return contracts.Result{}, nil }),
 	)
-	h := r.Help()
+	h := r.Help(i18n.English)
 	if want := "  session list"; !strings.Contains(h, want) {
 		t.Fatalf("help missing %q:\n%s", want, h)
 	}
@@ -296,7 +297,7 @@ func TestSpecsDescribeTheWholeRegistry(t *testing.T) {
 		Param("name", "who", true).
 		Do(okRun)))
 
-	specs := r.Specs()
+	specs := r.Specs(i18n.English)
 	if len(specs) != 2 {
 		t.Fatalf("Specs = %+v, want both commands", specs)
 	}
@@ -413,5 +414,23 @@ func TestRenderPicksTheErrorOrTheResult(t *testing.T) {
 	_, err = cli.Render(contracts.Result{}, noticedError{notice: closedNotice()}, i18n.French)
 	if err == nil || !strings.Contains(err.Error(), "fermée") {
 		t.Fatalf("Render of a failure = %v, want the French error", err)
+	}
+}
+
+func TestSpecsAndHelpRenderTheHelpKeyInTheRequestedLanguage(t *testing.T) {
+	r := build(t,
+		contracts.New("session", "set-account").Help(clitext.CmdHelpSessionSetAccount).
+			Do(func(context.Context, contracts.Input) (contracts.Result, error) { return contracts.Result{}, nil }),
+	)
+	english := r.Specs(i18n.English)[0].Help
+	french := r.Specs(i18n.French)[0].Help
+	if !strings.Contains(english, "account profile") {
+		t.Fatalf("English spec help = %q, want the English text", english)
+	}
+	if !strings.Contains(french, "profil de compte") {
+		t.Fatalf("French spec help = %q, want the French text", french)
+	}
+	if h := r.Help(i18n.French); !strings.Contains(h, "profil de compte") {
+		t.Fatalf("French root help misses the French text:\n%s", h)
 	}
 }

@@ -3,7 +3,6 @@ package host
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -120,7 +119,7 @@ func (p hostPlacer) EnsureProject(ctx context.Context, name, project, repo strin
 	}
 	origin, err := originOf(ctx, filepath.Join(p.st.WorkspaceRoot(), project))
 	if err != nil {
-		return fmt.Errorf("cannot clone %s onto %s: %w", project, name, err)
+		return wrapEnglish(err, "hosts.clone", map[string]any{"Project": project, "Host": name})
 	}
 	if _, err := capture(ctx, run, "git", "clone", origin, repo); err != nil {
 		return err

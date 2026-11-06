@@ -627,7 +627,7 @@ func (d *sessionDriver) prepareTurn(ctx context.Context, item queued) (contracts
 	verdict := d.gate.Check(d.name)
 	if verdict.Reason != "" {
 		d.emitPaused(ctx, verdict.Reason)
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "tour refusé, plafond budget atteint (" + verdict.Reason + ") ; augmentez le plafond puis renvoyez le message"})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("turn.budget_refused", map[string]any{"Reason": verdict.Reason})})
 		return event, tokenGuard{}, false
 	}
 	if event.TurnID == "" {
@@ -773,8 +773,7 @@ func (d *sessionDriver) enforceTokenGuard(ctx context.Context, guard *tokenGuard
 		return
 	}
 	d.Interrupt()
-	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "tour interrompu, plafond de tokens atteint (" +
-		strconv.FormatUint(spent, 10) + " tokens sur ce tour, marge " + strconv.FormatUint(guard.headroom, 10) + ")"})
+	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("turn.token_ceiling", map[string]any{"Spent": strconv.FormatUint(spent, 10), "Margin": strconv.FormatUint(guard.headroom, 10)})})
 }
 
 func promptSize(e contracts.Event) int {
@@ -836,13 +835,13 @@ func (d *sessionDriver) reportDone(ctx context.Context, summary string) *contrac
 		FromSession: d.name, Summary: summary,
 	})
 	if err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "report refusé"})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.report_refused", nil)})
 		return &contracts.CoordinationEvent{
 			Kind: "report_failed", SourceSession: d.name,
 			Summary: sanitizeCoordinationError(err),
 		}
 	}
-	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "rapport livré à " + parent})
+	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.report_delivered", map[string]any{"Parent": parent})})
 	return &contracts.CoordinationEvent{
 		Kind: "reported", SourceSession: d.name,
 		ParentSession: parent, Summary: summary,
@@ -854,7 +853,7 @@ func (d *sessionDriver) delegateTask(ctx context.Context, toAgent, task string) 
 		FromSession: d.name, ToAgent: toAgent, Task: task,
 	})
 	if err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: "delegate refusé"})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.delegate_refused", nil)})
 		return &contracts.CoordinationEvent{
 			Kind: "delegate_failed", SourceSession: d.name,
 			Agent: toAgent, Summary: sanitizeCoordinationError(err),

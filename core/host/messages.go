@@ -12,7 +12,10 @@ import (
 //go:embed locales/en.json locales/fr.json
 var hostLocales embed.FS
 
-const detailParam = "Detail"
+const (
+	detailParam = "Detail"
+	nameParam   = "Name"
+)
 
 type hostMessages struct {
 	catalog func() (*i18n.Catalog, error)
@@ -56,4 +59,29 @@ func (m *hostMessages) text(lang i18n.Language, key string, params map[string]an
 
 func (d *sessionDriver) hostText(key string, params map[string]any) string {
 	return d.messages.text(d.lang, key, params)
+}
+
+type hostWrapError struct {
+	text  string
+	cause error
+}
+
+func (e hostWrapError) Error() string { return e.text }
+
+func (e hostWrapError) Unwrap() error { return e.cause }
+
+func wrapHost(lang i18n.Language, cause error, key string, params map[string]any) error {
+	detail := ""
+	if cause != nil {
+		detail = cause.Error()
+	}
+	if params == nil {
+		params = make(map[string]any)
+	}
+	params[detailParam] = detail
+	return hostWrapError{text: newHostMessages().text(lang, key, params), cause: cause}
+}
+
+func wrapEnglish(cause error, key string, params map[string]any) error {
+	return wrapHost(i18n.English, cause, key, params)
 }

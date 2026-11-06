@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -16,15 +15,15 @@ import (
 func stageAgentTar(sessionAgent agent.Agent, remoteWorktree, remoteBin string) (io.Reader, error) {
 	stage, err := os.MkdirTemp("", "herrscher-agent-")
 	if err != nil {
-		return nil, fmt.Errorf("stage agent %q: %w", sessionAgent.Name, err)
+		return nil, wrapEnglish(err, "remote.stage_agent", map[string]any{nameParam: sessionAgent.Name})
 	}
 	defer func() { logCleanup(os.RemoveAll(stage)) }()
 	if err := sessionAgent.MaterializeIntoAs(stage, remoteWorktree, remoteBin); err != nil {
-		return nil, fmt.Errorf("stage agent %q: %w", sessionAgent.Name, err)
+		return nil, wrapEnglish(err, "remote.stage_agent", map[string]any{nameParam: sessionAgent.Name})
 	}
 	var buf bytes.Buffer
 	if err := tarDir(stage, &buf); err != nil {
-		return nil, fmt.Errorf("pack agent %q: %w", sessionAgent.Name, err)
+		return nil, wrapEnglish(err, "remote.pack_agent", map[string]any{nameParam: sessionAgent.Name})
 	}
 	return &buf, nil
 }

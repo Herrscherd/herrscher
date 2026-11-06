@@ -3456,5 +3456,10 @@
     "id": "cli.terminal.session_unbound",
     "description": "Erreur pour une action de session du terminal avant que l'hôte ait lié son contrôle",
     "other": "le contrôle de session n'est pas encore lié"
+  },
+  {
+    "id": "cli.usage.wrap",
+    "description": "A failure to render the usage help, Detail carries the cause",
+    "other": "usage : {{.Detail}}"
   }
 ]

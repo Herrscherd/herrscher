@@ -279,11 +279,11 @@ func loadDiscoveryCache(path string) (discoveryCache, error) {
 		return empty, nil
 	}
 	if err != nil {
-		return empty, fmt.Errorf("read model cache: %w", err)
+		return empty, wrapEnglish(err, "models.cache_read", nil)
 	}
 	var cache discoveryCache
 	if err := json.Unmarshal(data, &cache); err != nil {
-		return empty, fmt.Errorf("decode model cache: %w", err)
+		return empty, wrapEnglish(err, "models.cache_decode", nil)
 	}
 	if cache.Vendors == nil {
 		cache.Vendors = make(map[string]vendorDiscovery)
@@ -294,30 +294,30 @@ func loadDiscoveryCache(path string) (discoveryCache, error) {
 func saveDiscoveryCache(path string, cache discoveryCache) error {
 	data, err := json.MarshalIndent(cache, "", "  ")
 	if err != nil {
-		return fmt.Errorf("encode model cache: %w", err)
+		return wrapEnglish(err, "models.cache_encode", nil)
 	}
 	dir := filepath.Dir(path)
 	if mkdirErr := os.MkdirAll(dir, cacheDirMode); mkdirErr != nil {
-		return fmt.Errorf("create model cache dir: %w", mkdirErr)
+		return wrapEnglish(mkdirErr, "models.cache_dir", nil)
 	}
 	root, err := os.OpenRoot(dir)
 	if err != nil {
-		return fmt.Errorf("open model cache dir: %w", err)
+		return wrapEnglish(err, "models.cache_dir_open", nil)
 	}
 	defer func() { logCleanup(root.Close()) }()
 	name := filepath.Base(path)
 	tempName := fmt.Sprintf(".%s-%d.tmp", name, time.Now().UnixNano())
 	temp, err := root.OpenFile(tempName, os.O_WRONLY|os.O_CREATE|os.O_EXCL, cacheFileMode)
 	if err != nil {
-		return fmt.Errorf("create model cache temp file: %w", err)
+		return wrapEnglish(err, "models.cache_temp", nil)
 	}
 	if err := writeAndClose(temp, data); err != nil {
 		logCleanup(root.Remove(tempName))
-		return fmt.Errorf("write model cache: %w", err)
+		return wrapEnglish(err, "models.cache_write", nil)
 	}
 	if err := root.Rename(tempName, name); err != nil {
 		logCleanup(root.Remove(tempName))
-		return fmt.Errorf("replace model cache: %w", err)
+		return wrapEnglish(err, "models.cache_replace", nil)
 	}
 	return nil
 }
@@ -340,11 +340,11 @@ func persistRefreshed(path string, next discoveryCache, outcomes []discoveryOutc
 func withCacheLock(path string, critical func() error) error {
 	lockPath := cacheLockPath(path)
 	if err := os.MkdirAll(filepath.Dir(lockPath), cacheDirMode); err != nil {
-		return fmt.Errorf("create model cache dir: %w", err)
+		return wrapEnglish(err, "models.cache_dir", nil)
 	}
 	lockFile, err := os.OpenFile(filepath.Clean(lockPath), os.O_CREATE|os.O_RDWR, cacheFileMode)
 	if err != nil {
-		return fmt.Errorf("open model cache lock: %w", err)
+		return wrapEnglish(err, "models.cache_lock_open", nil)
 	}
 	defer func() { logCleanup(lockFile.Close()) }()
 	if err := acquireCacheLock(lockFile); err != nil {
@@ -363,7 +363,7 @@ func acquireCacheLock(lockFile *os.File) error {
 	for {
 		locked, err := tryLock(lockFile)
 		if err != nil {
-			return fmt.Errorf("lock model cache: %w", err)
+			return wrapEnglish(err, "models.cache_lock", nil)
 		}
 		if locked {
 			return nil

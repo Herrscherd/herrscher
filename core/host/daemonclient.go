@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net"
 	"net/url"
 	"os"
@@ -84,7 +83,7 @@ func subscribeAt(ctx context.Context, path string) (<-chan DaemonEvent, error) {
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "unix", path)
 	if err != nil {
-		return nil, fmt.Errorf("events socket %s: %w", path, err)
+		return nil, wrapEnglish(err, "daemon.events_socket", map[string]any{"Path": path})
 	}
 	out := make(chan DaemonEvent, daemonEventBuffer)
 	stopClose := closeOnDone(ctx, conn)
@@ -115,7 +114,7 @@ func parseAttachmentPaths(raw string) ([]contracts.Attachment, error) {
 	}
 	var paths []string
 	if err := json.Unmarshal([]byte(raw), &paths); err != nil {
-		return nil, fmt.Errorf("attachments: expected a JSON array of paths: %w", err)
+		return nil, wrapEnglish(err, "daemon.attachments", nil)
 	}
 	out := make([]contracts.Attachment, 0, len(paths))
 	for _, path := range paths {

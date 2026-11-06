@@ -3456,5 +3456,10 @@
     "id": "cli.terminal.session_unbound",
     "description": "Error for a terminal session action before the host bound its control",
     "other": "session control is not bound yet"
+  },
+  {
+    "id": "cli.usage.wrap",
+    "description": "A failure to render the usage help, Detail carries the cause",
+    "other": "usage: {{.Detail}}"
   }
 ]

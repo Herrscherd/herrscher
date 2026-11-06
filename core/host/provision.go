@@ -116,7 +116,7 @@ func provisionHost(ctx context.Context, run hostRunner, host state.Host, src str
 		return host, err
 	}
 	if _, err := capture(ctx, run, bin, "--help"); err != nil {
-		return host, fmt.Errorf("the binary put on %s fails its smoke test: %w", host.Name, err)
+		return host, wrapEnglish(err, "provision.smoke", map[string]any{"Host": host.Name})
 	}
 
 	host.Bin, host.GOOS, host.GOARCH = bin, goos, goarch

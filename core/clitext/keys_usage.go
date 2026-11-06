@@ -25,6 +25,7 @@ const (
 	UsageUpdate          = "cli.usage.update"
 	UsageInstall         = "cli.usage.install"
 	UsageHelpFooter      = "cli.usage.help.footer"
+	UsageWrap            = "cli.usage.wrap"
 	UsageEnvOwner        = "cli.usage.env.owner"
 	UsageEnvRoute        = "cli.usage.env.route"
 	UsageEnvGateway      = "cli.usage.env.gateway"
@@ -57,6 +58,7 @@ func usageKeys() map[Key][]string {
 		UsageUpdate:          nil,
 		UsageInstall:         nil,
 		UsageHelpFooter:      nil,
+		UsageWrap:            {ParamDetail},
 		UsageEnvOwner:        nil,
 		UsageEnvRoute:        nil,
 		UsageEnvGateway:      nil,

@@ -2,7 +2,6 @@ package host
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"sync"
 
@@ -77,7 +76,7 @@ func awaitEntries(ctx context.Context, category contracts.Category, watch *remot
 		}
 		select {
 		case <-ctx.Done():
-			return nil, fmt.Errorf("resolver: no remote %s announced: %w", category, ctx.Err())
+			return nil, wrapEnglish(ctx.Err(), "remote.no_remote", map[string]any{"Category": category})
 		case <-watch.arrived:
 		}
 	}

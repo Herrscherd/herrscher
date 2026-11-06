@@ -125,6 +125,7 @@ func messageIDs(fsys fs.FS) ([]string, error) {
 // Names of the params shared by several keys.
 const (
 	ParamErr       = "Err"
+	ParamDetail    = "Detail"
 	ParamKey       = "Key"
 	ParamName      = "Name"
 	ParamKind      = "Kind"

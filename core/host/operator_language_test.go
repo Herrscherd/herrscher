@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -75,5 +76,38 @@ func TestSetLangThroughTheWiredManagerChangesBuilderReplies(t *testing.T) {
 	}
 	if out != want {
 		t.Fatalf("after set lang fr, the builder replied %q, want the french %q", out, want)
+	}
+}
+
+func TestCommandsFollowsTheLiveLanguageAfterSetLang(t *testing.T) {
+	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	live := newOperatorLanguage(i18n.English)
+	options := Options{DefaultCmd: "claude", live: live}
+	hdl := newManagerHandler(Deps{}, options, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
+	reg := &cli.Registry{}
+	if err := reg.Add(commandsVerb(live.Get, reg)); err != nil {
+		t.Fatal(err)
+	}
+	setLang := mustCommand(t, hdl.Commands(), "set", "lang")
+	if _, err := setLang.Run(t.Context(), contracts.Input{Args: map[string]string{"lang": "fr"}}); err != nil {
+		t.Fatalf("set lang fr: %v", err)
+	}
+	out, err := cli.Plain(reg.Dispatch(t.Context(), []string{"commands"}))
+	if err != nil {
+		t.Fatalf("commands: %v", err)
+	}
+	want, err := clitext.Text(i18n.French, clitext.CmdHelpCommands, nil)
+	if err != nil {
+		t.Fatalf("french text: %v", err)
+	}
+	english, err := clitext.Text(i18n.English, clitext.CmdHelpCommands, nil)
+	if err != nil {
+		t.Fatalf("english text: %v", err)
+	}
+	if want == english {
+		t.Fatalf("the french and english help of commands are identical, the test proves nothing")
+	}
+	if !strings.Contains(out, want) {
+		t.Fatalf("after set lang fr, commands replied %q, want the french help %q", out, want)
 	}
 }

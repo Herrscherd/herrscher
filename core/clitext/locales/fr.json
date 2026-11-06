@@ -2223,6 +2223,11 @@
     "other": "régler la copie source à partir de laquelle `service update` compile"
   },
   {
+    "id": "cli.help.cmd.set.lang",
+    "description": "Aide de la commande set lang",
+    "other": "régler la langue de l'opérateur sur en ou fr, auto ou vide rétablit la langue configurée"
+  },
+  {
     "id": "cli.help.cmd.service.restart",
     "description": "Help of the command service restart",
     "other": "redémarrer le démon"
@@ -2553,6 +2558,11 @@
     "other": "chemin absolu de la copie source"
   },
   {
+    "id": "cli.help.param.set.lang.lang",
+    "description": "Aide du paramètre --lang de la commande set lang",
+    "other": "en, fr ou auto"
+  },
+  {
     "id": "cli.help.param.service.update.no_pull",
     "description": "Help of the --no_pull param of the command service update",
     "other": "sauter le git pull avant la compilation"
@@ -2591,6 +2601,21 @@
     "id": "cli.host.source.set",
     "description": "Reply of a host command, source set",
     "other": "dépôt source réglé sur \"{{.Path}}\"."
+  },
+  {
+    "id": "cli.host.lang.set",
+    "description": "Réponse d'une commande hôte, langue de l'opérateur réglée",
+    "other": "langue de l'opérateur réglée sur {{.Lang}}, les passerelles et les plugins la prennent au prochain redémarrage."
+  },
+  {
+    "id": "cli.host.lang.reset",
+    "description": "Réponse d'une commande hôte, langue de l'opérateur rétablie",
+    "other": "langue de l'opérateur revenue à la langue configurée ({{.Lang}})."
+  },
+  {
+    "id": "cli.host.err.unsupported_lang",
+    "description": "Erreur d'une commande hôte, langue non prise en charge",
+    "other": "langue non prise en charge « {{.Lang}} », utilisez en, fr ou auto"
   },
   {
     "id": "cli.host.agent.created",

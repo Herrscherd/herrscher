@@ -64,12 +64,14 @@ type Deps = contracts.GatewaySet
 
 // Options holds the parsed flags for the serve daemon.
 type Options struct {
-	StatePath     string
-	Language      i18n.Language
-	Models        *ModelDiscovery
-	DefaultCmd    string
-	HealthAddr    string
-	StatusChannel string
+	StatePath       string
+	Language        i18n.Language
+	DefaultLanguage i18n.Language
+	live            *operatorLanguage
+	Models          *ModelDiscovery
+	DefaultCmd      string
+	HealthAddr      string
+	StatusChannel   string
 
 	CompactPercent *int
 	CompactStack   []string
@@ -116,6 +118,15 @@ type Options struct {
 type HomeRef struct {
 	ID   string
 	Type string
+}
+
+// StoredOperatorLanguage returns the operator language set with /set lang in the state file at statePath, "" when none is.
+func StoredOperatorLanguage(statePath string) (string, error) {
+	persisted, err := state.LoadState(statePath)
+	if err != nil {
+		return "", err
+	}
+	return persisted.OperatorLang, nil
 }
 
 // DefaultStatePath returns the default path to the daemon state file.

@@ -123,7 +123,7 @@ func refreshModels(ctx context.Context, lang i18n.Language, plugins []contracts.
 }
 
 // ModelsCommands returns the model catalog verbs.
-func ModelsCommands(lang i18n.Language) []contracts.Cmd {
+func ModelsCommands(lang languageSource) []contracts.Cmd {
 	return []contracts.Cmd{
 		contracts.New("models", "list").
 			ValueParam("state", clitext.CmdParamModelsListState, false).
@@ -137,13 +137,13 @@ func ModelsCommands(lang i18n.Language) []contracts.Cmd {
 				if input.JSON {
 					return cli.Data(modelsListJSON(entries))
 				}
-				return contracts.DataResult(modelsListText(lang, entries)), nil
+				return contracts.DataResult(modelsListText(lang(), entries)), nil
 			}),
 		contracts.New("models", "refresh").
 			ValueParam("state", clitext.CmdParamModelsRefreshState, false).
 			Help(clitext.CmdHelpModelsRefresh).
 			Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
-				return cli.Data(refreshModels(ctx, lang, contracts.Default.Backends(), modelDiscoveryFor(input)))
+				return cli.Data(refreshModels(ctx, lang(), contracts.Default.Backends(), modelDiscoveryFor(input)))
 			}),
 	}
 }

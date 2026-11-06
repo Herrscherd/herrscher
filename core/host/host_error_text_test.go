@@ -201,3 +201,16 @@ func TestRegistryCommandErrorsAreWrittenInTheHostLanguage(t *testing.T) {
 		t.Fatal("the localized registry error lost its sentinel")
 	}
 }
+
+func TestRegistryErrorsFollowTheLiveOperatorLanguage(t *testing.T) {
+	live := newOperatorLanguage(i18n.English)
+	reg, err := NewRegistry(context.Background(), nil, Options{StatePath: t.TempDir() + "/s.json", Language: i18n.English, live: live})
+	if err != nil {
+		t.Fatal(err)
+	}
+	live.set(i18n.French)
+	_, err = reg.Dispatch(context.Background(), []string{"role", "revoke"})
+	if want := "nommez un principal (voir `role list`)"; err == nil || err.Error() != want {
+		t.Fatalf("role revoke error = %v, want %q after the live switch", err, want)
+	}
+}

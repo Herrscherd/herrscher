@@ -129,6 +129,7 @@ const (
 	ParamName      = "Name"
 	ParamKind      = "Kind"
 	ParamPath      = "Path"
+	ParamLang      = "Lang"
 	ParamMessage   = "Message"
 	ParamVerb      = "Verb"
 	ParamArg       = "Arg"

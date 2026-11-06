@@ -9,6 +9,7 @@ import (
 	"testing/fstest"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/service"
 )
 
@@ -63,35 +64,54 @@ func TestRunRefusesACatalogCollisionBeforeAnyCommand(t *testing.T) {
 	contracts.Default = contracts.Registry{}
 	contracts.Default.Register(collidingPlugin("alpha", "a"))
 	contracts.Default.Register(collidingPlugin("beta", "b"))
+	refusal := clitext.For(clitext.ClientLanguage()).Err()
+	if refusal == nil {
+		t.Fatal("the colliding plugins must break the catalogs")
+	}
 
-	savedArgs := os.Args
-	t.Cleanup(func() { os.Args = savedArgs })
-	os.Args = []string{"herrscher", "help"}
-
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	savedStderr := os.Stderr
-	os.Stderr = w
-	code := run()
-	os.Stderr = savedStderr
-	if closeErr := w.Close(); closeErr != nil {
-		t.Fatal(closeErr)
-	}
-	out, readErr := io.ReadAll(r)
-	if readErr != nil {
-		t.Fatal(readErr)
-	}
-	stderr := string(out)
+	code, stdout, stderr := runCaptured(t, "help")
 	if code != 1 {
 		t.Fatalf("run() = %d, want 1 on a catalog collision", code)
 	}
-	for _, name := range []string{"alpha", "beta", "x.dup"} {
-		if !strings.Contains(stderr, name) {
-			t.Fatalf("stderr %q does not name %q", stderr, name)
+	if stdout != "" {
+		t.Fatalf("stdout %q: the command was dispatched after the refusal", stdout)
+	}
+	if want := refusal.Error() + "\n"; stderr != want {
+		t.Fatalf("stderr = %q, want exactly the refusal line %q", stderr, want)
+	}
+}
+
+func runCaptured(t *testing.T, args ...string) (int, string, string) {
+	t.Helper()
+	savedArgs := os.Args
+	t.Cleanup(func() { os.Args = savedArgs })
+	os.Args = append([]string{"herrscher"}, args...)
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	errR, errW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	savedOut, savedErr := os.Stdout, os.Stderr
+	os.Stdout, os.Stderr = outW, errW
+	code := run()
+	os.Stdout, os.Stderr = savedOut, savedErr
+	for _, w := range []*os.File{outW, errW} {
+		if closeErr := w.Close(); closeErr != nil {
+			t.Fatal(closeErr)
 		}
 	}
+	stdout, readErr := io.ReadAll(outR)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	stderr, readErr := io.ReadAll(errR)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	return code, string(stdout), string(stderr)
 }
 
 func collidingPlugin(kind, text string) contracts.Plugin {

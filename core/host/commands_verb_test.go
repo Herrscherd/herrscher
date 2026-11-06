@@ -1,8 +1,10 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -85,7 +87,7 @@ func TestCommandsVerbListsThenWarnsOnARawHelpText(t *testing.T) {
 	if err := reg.Add(raw); err != nil {
 		t.Fatal(err)
 	}
-	if err := reg.Add(commandsVerb(i18n.English, &reg)); err != nil {
+	if err := reg.Add(commandsVerb(fixedLanguage(i18n.English), &reg)); err != nil {
 		t.Fatal(err)
 	}
 	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"commands"}))
@@ -97,5 +99,36 @@ func TestCommandsVerbListsThenWarnsOnARawHelpText(t *testing.T) {
 	}
 	if !strings.Contains(out, `command "rawdemo show"`) || !strings.Contains(out, "rawdemo.help.undeclared") {
 		t.Fatalf("commands output does not warn with the command and the key:\n%s", out)
+	}
+}
+
+func TestCommandsJSONWarnsThroughTheLogOnARawHelpText(t *testing.T) {
+	var reg cli.Registry
+	raw := contracts.New("rawdemo", "show").Help("rawdemo.help.undeclared").
+		Do(func(context.Context, contracts.Input) (contracts.Result, error) { return contracts.Result{}, nil })
+	if err := reg.Add(raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := reg.Add(commandsVerb(fixedLanguage(i18n.English), &reg)); err != nil {
+		t.Fatal(err)
+	}
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"commands", "--json"}))
+	if err != nil {
+		t.Fatalf("commands --json must not fail on a raw help text: %v", err)
+	}
+	if !json.Valid([]byte(out)) {
+		t.Fatalf("commands --json output is not JSON:\n%s", out)
+	}
+	logged := logs.String()
+	if !strings.Contains(logged, "command help texts not fully rendered") {
+		t.Fatalf("no warning logged for the raw help text:\n%s", logged)
+	}
+	if !strings.Contains(logged, "rawdemo show") || !strings.Contains(logged, "rawdemo.help.undeclared") {
+		t.Fatalf("the logged warning does not name the command and the key:\n%s", logged)
 	}
 }

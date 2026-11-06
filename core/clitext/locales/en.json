@@ -2223,6 +2223,11 @@
     "other": "set the source checkout `service update` builds from"
   },
   {
+    "id": "cli.help.cmd.set.lang",
+    "description": "Help of the command set lang",
+    "other": "set the operator language to en or fr, auto or empty restores the configured one"
+  },
+  {
     "id": "cli.help.cmd.service.restart",
     "description": "Help of the command service restart",
     "other": "restart the daemon"
@@ -2553,6 +2558,11 @@
     "other": "absolute path to the source checkout"
   },
   {
+    "id": "cli.help.param.set.lang.lang",
+    "description": "Help of the --lang param of the command set lang",
+    "other": "en, fr or auto"
+  },
+  {
     "id": "cli.help.param.service.update.no_pull",
     "description": "Help of the --no_pull param of the command service update",
     "other": "skip the git pull before building"
@@ -2591,6 +2601,21 @@
     "id": "cli.host.source.set",
     "description": "Reply of a host command, source set",
     "other": "source checkout set to \"{{.Path}}\"."
+  },
+  {
+    "id": "cli.host.lang.set",
+    "description": "Reply of a host command, operator language set",
+    "other": "operator language set to {{.Lang}}, the gateways and plugins pick it up at the next restart."
+  },
+  {
+    "id": "cli.host.lang.reset",
+    "description": "Reply of a host command, operator language reset",
+    "other": "operator language back to the configured default, {{.Lang}}."
+  },
+  {
+    "id": "cli.host.err.unsupported_lang",
+    "description": "Error of a host command, unsupported language",
+    "other": "unsupported language \"{{.Lang}}\", use en, fr or auto"
   },
   {
     "id": "cli.host.agent.created",

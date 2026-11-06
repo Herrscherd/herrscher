@@ -71,7 +71,7 @@ func checkpointState(t *testing.T, worktree string) *state.State {
 
 func checkpointRegistry(st *state.State, sessions *sessionTable) *cli.Registry {
 	reg := &cli.Registry{}
-	if err := addCheckpointCommands(reg, i18n.English, st, sessions); err != nil {
+	if err := addCheckpointCommands(reg, fixedLanguage(i18n.English), st, sessions); err != nil {
 		panic(err)
 	}
 	return reg

@@ -39,8 +39,14 @@ func Pick(log *slog.Logger, sources ...Source) i18n.Language {
 
 // Operator resolves the operator language from HERRSCHER_LANG, then config.json, and warns once about an ignored value.
 func Operator(log *slog.Logger, configured string) i18n.Language {
+	return OperatorSetting(log, "", configured)
+}
+
+// OperatorSetting resolves the operator language from HERRSCHER_LANG, then the language set live with /set lang, then config.json.
+func OperatorSetting(log *slog.Logger, stored, configured string) i18n.Language {
 	return Pick(log,
 		Source{Origin: EnvVar, Value: os.Getenv(EnvVar)},
+		Source{Origin: "operator setting", Value: stored, Quiet: true},
 		Source{Origin: "config.json language", Value: configured},
 	)
 }
@@ -54,16 +60,18 @@ func Client(log *slog.Logger, configured string) i18n.Language {
 	)
 }
 
-// Languages holds the operator language and the client language of one process.
+// Languages holds the operator language, the operator default it falls back to, and the client language of one process.
 type Languages struct {
 	Operator i18n.Language
+	Default  i18n.Language
 	Client   i18n.Language
 }
 
-// Resolve resolves both languages once, and warns about an ignored value only through Operator.
-func Resolve(log *slog.Logger, configured string) Languages {
+// Resolve resolves the languages once, and warns about an ignored value only through Operator.
+func Resolve(log *slog.Logger, configured, stored string) Languages {
 	return Languages{
-		Operator: Operator(log, configured),
+		Operator: OperatorSetting(log, stored, configured),
+		Default:  Operator(slog.New(slog.DiscardHandler), configured),
 		Client:   ForClient(configured),
 	}
 }

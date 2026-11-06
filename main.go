@@ -150,7 +150,7 @@ func loadHostEnv() error {
 
 func runWithoutCommand(ctx context.Context) error {
 	if term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway() {
-		return runServe(ctx, nil, nil)
+		return runServe(ctx, nil, serveWith)
 	}
 	if err := usage(clitext.ClientLanguage()); err != nil {
 		return err
@@ -183,7 +183,7 @@ func runCommand(ctx context.Context, cmd string, args []string) error {
 	case "bridge":
 		return runBridge(ctx, args)
 	case "serve":
-		return runServe(ctx, args, nil)
+		return runServe(ctx, args, serveWith)
 	case "session":
 		return runSession(ctx, args)
 	case "agent":

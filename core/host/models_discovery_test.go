@@ -432,7 +432,7 @@ func TestModelDiscoveryForLeavesTheEnvironmentAlone(t *testing.T) {
 
 func modelsVerb(t *testing.T, verb string) contracts.Cmd {
 	t.Helper()
-	for _, cmd := range ModelsCommands(i18n.English) {
+	for _, cmd := range ModelsCommands(fixedLanguage(i18n.English)) {
 		if len(cmd.Path) == 2 && cmd.Path[1] == verb {
 			return cmd
 		}

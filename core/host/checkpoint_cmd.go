@@ -96,7 +96,7 @@ type checkpointView struct {
 	Files        []checkpointFile `json:"files"`
 }
 
-func addCheckpointVerbs(lang i18n.Language, sessionStore *state.State, sessions *sessionTable) []contracts.Cmd {
+func addCheckpointVerbs(lang languageSource, sessionStore *state.State, sessions *sessionTable) []contracts.Cmd {
 	return []contracts.Cmd{
 		checkpointsVerb(lang, sessionStore, &sessions.checkpoints),
 		rewindVerb(lang, sessionStore, sessions),
@@ -105,7 +105,7 @@ func addCheckpointVerbs(lang i18n.Language, sessionStore *state.State, sessions 
 	}
 }
 
-func checkpointsVerb(lang i18n.Language, sessionStore *state.State, checkpoints *checkpoint.Store) contracts.Cmd {
+func checkpointsVerb(lang languageSource, sessionStore *state.State, checkpoints *checkpoint.Store) contracts.Cmd {
 	return contracts.New(nsSession, verbCheckpoints).
 		Help(clitext.CmdHelpSessionCheckpoints).
 		Param(paramName, clitext.CmdParamSessionCheckpointsName, true).
@@ -121,7 +121,7 @@ func checkpointsVerb(lang i18n.Language, sessionStore *state.State, checkpoints 
 			if input.JSON {
 				return cli.Data(marshalJSON(views))
 			}
-			return contracts.DataResult(formatCheckpoints(namedSessionLanguage(sessionStore, sess.Name, lang), views)), nil
+			return contracts.DataResult(formatCheckpoints(namedSessionLanguage(sessionStore, sess.Name, lang()), views)), nil
 		})
 }
 
@@ -130,14 +130,14 @@ func marshalJSON[T any](value T) (string, error) {
 	return string(payload), err
 }
 
-func rewindVerb(lang i18n.Language, sessionStore *state.State, sessions *sessionTable) contracts.Cmd {
+func rewindVerb(lang languageSource, sessionStore *state.State, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, verbRewind).
 		Help(clitext.CmdHelpSessionRewind).
 		Param(paramName, clitext.CmdParamSessionRewindName, true).
 		ValueParam(paramTo, clitext.CmdParamSessionRewindTo, true).
 		ValueParam(paramWhat, clitext.CmdParamSessionRewindWhat, true).
 		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
-			return cli.Data(rewindSession(ctx, lang, sessionStore, sessions, input))
+			return cli.Data(rewindSession(ctx, lang(), sessionStore, sessions, input))
 		})
 }
 
@@ -190,7 +190,7 @@ func restartWithConversation(ctx context.Context, name, token string) error {
 	return nil
 }
 
-func undoVerb(lang i18n.Language, sessionStore *state.State, sessions *sessionTable) contracts.Cmd {
+func undoVerb(lang languageSource, sessionStore *state.State, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, verbUndo).
 		Help(clitext.CmdHelpSessionUndo).
 		Param(paramName, clitext.CmdParamSessionUndoName, true).
@@ -207,7 +207,7 @@ func undoVerb(lang i18n.Language, sessionStore *state.State, sessions *sessionTa
 			if err := sessions.checkpoints.Undo(ctx, sess.Worktree, sess.Name); err != nil {
 				return contracts.Result{}, err
 			}
-			return contracts.DataResult(replyText(namedSessionLanguage(sessionStore, sess.Name, lang)).Text(clitext.HostCheckpointUndone, clitext.Params{clitext.ParamName: sess.Name})), nil
+			return contracts.DataResult(replyText(namedSessionLanguage(sessionStore, sess.Name, lang())).Text(clitext.HostCheckpointUndone, clitext.Params{clitext.ParamName: sess.Name})), nil
 		})
 }
 

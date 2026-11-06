@@ -35,6 +35,7 @@ type schedulerSlot struct {
 }
 
 func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *state.State, sup *supervisor.Supervisor, instID string, extra []contracts.Cmd, approvals *approvalTable, sessions *sessionTable) (*cli.Registry, hostDeps, error) {
+	options = withOperatorLanguage(options)
 	partDir := filepath.Dir(options.StatePath)
 	worktrees := worktree.NewWorktreer(instID)
 	upCfg, cfgErr := service.DefaultConfig()
@@ -55,47 +56,47 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addVerbs(reg, hdl.Commands()...); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addVerbs(reg, ModelsCommands(options.Language)...); err != nil {
+	if err := addVerbs(reg, ModelsCommands(options.live.Get)...); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addVerbs(reg, extra...); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addSessionVerbs(reg, options.Language, hostState, partDir, instID, approvals, sessions, seedCoord, models); err != nil {
+	if err := addSessionVerbs(reg, options.live.Get, hostState, partDir, instID, approvals, sessions, seedCoord, models); err != nil {
 		return nil, hostDeps{}, err
 	}
-	handoff, err := sessionHandoffCmd(options.Language, hdl.Commands(), hostState, sessions, instID, seedCoord, hdl.PreflightAccount)
+	handoff, err := sessionHandoffCmd(options.live.Get, hdl.Commands(), hostState, sessions, instID, seedCoord, hdl.PreflightAccount)
 	if err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addVerbs(reg, handoff); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addCheckpointCommands(reg, options.Language, hostState, sessions); err != nil {
+	if err := addCheckpointCommands(reg, options.live.Get, hostState, sessions); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addMemoryVerbs(reg, options.Language); err != nil {
+	if err := addMemoryVerbs(reg, options.live.Get); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addSkillVerbs(reg, options.Language); err != nil {
+	if err := addSkillVerbs(reg, options.live.Get); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addScheduleCommands(reg, options.Language, hostState, agents, schedSlot); err != nil {
+	if err := addScheduleCommands(reg, options.live.Get, hostState, agents, schedSlot); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addHostCommands(reg, hostState); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addApproveCommands(reg, options.Language, hostState, agents, approvals, sessions); err != nil {
+	if err := addApproveCommands(reg, options.live.Get, hostState, agents, approvals, sessions); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addRoleCommands(reg, options.Language, hostState); err != nil {
+	if err := addRoleCommands(reg, options.live.Get, hostState); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addVerbs(reg, memorySearchVerb(options.Language), whoamiVerb(), commandsVerb(options.Language, reg)); err != nil {
+	if err := addVerbs(reg, memorySearchVerb(options.live.Get), whoamiVerb(), commandsVerb(options.live.Get, reg)); err != nil {
 		return nil, hostDeps{}, err
 	}
-	localizeCommandErrors(reg, options.Language)
+	localizeCommandErrors(reg, options.live)
 	return reg, hostDeps{wt: worktrees, agents: agents, handler: hdl, seedCoord: seedCoord, schedSlot: schedSlot}, nil
 }
 
@@ -109,10 +110,13 @@ func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
 }
 
 func newManagerHandler(deps Deps, options Options, partDir string, hostState *state.State, sup *supervisor.Supervisor, worktrees manager.Worktrees, updater serviceUpdater, agents *agent.Store, models *ModelDiscovery) *manager.Handler {
+	options = withOperatorLanguage(options)
 	launch := func(vendor, modelID string) (string, error) { return launchVendor(models, vendor, modelID) }
 	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, validateProfileChoice, launch)
 	hdl.SetRemoteBackend(options.RemoteCategories[contracts.CategoryBackend])
-	hdl.SetLanguage(options.Language)
+	hdl.SetLanguage(options.live.Get())
+	hdl.SetDefaultLanguage(options.DefaultLanguage)
+	hdl.OnLanguageChange(options.live.set)
 	return hdl
 }
 

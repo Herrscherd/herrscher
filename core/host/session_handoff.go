@@ -43,7 +43,7 @@ var (
 )
 
 type handoffDeps struct {
-	lang         i18n.Language
+	lang         languageSource
 	sessionLang  func(name string) i18n.Language
 	exists       func(name string) bool
 	root         func(name string) string
@@ -99,7 +99,7 @@ func (l *handoffLimiter) forgetIdle(now time.Time) {
 	}
 }
 
-func sessionHandoffCmd(lang i18n.Language, managerCmds []contracts.Cmd, store *state.State, sessions *sessionTable, instID string, seedCoord *coordinatorSlot, checkAccount func(contracts.Input) error) (contracts.Cmd, error) {
+func sessionHandoffCmd(lang languageSource, managerCmds []contracts.Cmd, store *state.State, sessions *sessionTable, instID string, seedCoord *coordinatorSlot, checkAccount func(contracts.Input) error) (contracts.Cmd, error) {
 	create, ok := findCommand(managerCmds, nsSession, "create")
 	if !ok {
 		return contracts.Cmd{}, errHandoffNoCreate
@@ -107,7 +107,7 @@ func sessionHandoffCmd(lang i18n.Language, managerCmds []contracts.Cmd, store *s
 	return sessionHandoffVerb(handoffDeps{
 		lang: lang,
 		sessionLang: func(name string) i18n.Language {
-			return namedSessionLanguage(store, name, lang)
+			return namedSessionLanguage(store, name, lang())
 		},
 		exists: func(name string) bool {
 			_, ok := store.FindSession(name)
@@ -121,7 +121,7 @@ func sessionHandoffCmd(lang i18n.Language, managerCmds []contracts.Cmd, store *s
 			return session.Account
 		},
 		brief: func(ctx context.Context, source string) (string, error) {
-			in := contracts.Input{Args: map[string]string{paramName: source, "task": handoffBriefTaskFor(store, source, lang), "timeout": handoffBriefTimeout}}
+			in := contracts.Input{Args: map[string]string{paramName: source, "task": handoffBriefTaskFor(store, source, lang()), "timeout": handoffBriefTimeout}}
 			return runSeedVerb(ctx, in, store, instID, seedCoord.coord)
 		},
 		create: func(ctx context.Context, in contracts.Input) (string, error) {
@@ -313,7 +313,7 @@ func newSessionArgs(target, account string, input contracts.Input, parent string
 
 func (d handoffDeps) replyLang(source string) i18n.Language {
 	if d.sessionLang == nil {
-		return i18n.Resolve(d.lang)
+		return i18n.Resolve(d.lang())
 	}
 	return d.sessionLang(source)
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"log"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -128,9 +129,7 @@ func TestPrepareLanguagesWarnsOnceForAnInvalidHerrscherLang(t *testing.T) {
 	t.Setenv(language.EnvVar, "klingon")
 	t.Setenv("LANG", "")
 	var out bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&out, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	captureDefaultLogger(t, &out)
 	langs, err := prepareLanguages(config.Config{}, host.DefaultStatePath())
 	if err != nil {
 		t.Fatal(err)
@@ -147,9 +146,7 @@ func TestPrepareLanguagesWarnsOnceThroughTheProcessLogger(t *testing.T) {
 	clearPublishedLanguage(t)
 	t.Setenv("LANG", "fr_FR.UTF-8")
 	var out bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&out, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	captureDefaultLogger(t, &out)
 	if _, err := prepareLanguages(config.Config{Language: "klingon"}, host.DefaultStatePath()); err != nil {
 		t.Fatal(err)
 	}
@@ -216,4 +213,13 @@ func TestRunServeReadsTheLanguageFromTheStateFileItIsGiven(t *testing.T) {
 	if served != i18n.French {
 		t.Fatalf("runServe served with operator %v, want French from the -state file", served)
 	}
+}
+
+func captureDefaultLogger(t *testing.T, out *bytes.Buffer) {
+	t.Helper()
+	previous := slog.Default()
+	previousLog := log.Writer()
+	slog.SetDefault(slog.New(slog.NewTextHandler(out, nil)))
+	t.Cleanup(func() { log.SetOutput(previousLog) })
+	t.Cleanup(func() { slog.SetDefault(previous) })
 }

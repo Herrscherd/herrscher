@@ -16,16 +16,16 @@ const keyTab = "tab"
 const keyDelete = "delete"
 
 var (
-	errKeyEmpty         = errors.New("touche vide")
-	errKeyModifier      = errors.New("modificateur inconnu")
-	errKeyUnknown       = errors.New("touche inconnue")
-	errKeyUnreliable    = errors.New("touche non reliable")
-	errKeyReserved      = errors.New("touche réservée par le terminal")
-	errKeyChordLength   = errors.New("accord vide")
-	errKeyUnknownCtx    = errors.New("contexte inconnu")
-	errKeyUnknownAction = errors.New("action inconnue")
-	errKeyDuplicate     = errors.New("doublon dans le contexte")
-	errKeyBadValue      = errors.New("l’action doit être une chaîne ou null")
+	errKeyEmpty         = errors.New("empty key")
+	errKeyModifier      = errors.New("unknown modifier")
+	errKeyUnknown       = errors.New("unrecognised key")
+	errKeyUnreliable    = errors.New("unreliable key")
+	errKeyReserved      = errors.New("key reserved by the terminal")
+	errKeyChordLength   = errors.New("empty chord")
+	errKeyUnknownCtx    = errors.New("unknown context")
+	errKeyUnknownAction = errors.New("unknown action")
+	errKeyDuplicate     = errors.New("duplicate in the context")
+	errKeyBadValue      = errors.New("the action must be a string or null")
 )
 
 type keyContext string

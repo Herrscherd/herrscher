@@ -11,9 +11,9 @@ import (
 )
 
 var (
-	errRefusedTarget    = errors.New("refusing a")
-	errOptionTarget     = errors.New("refusing a target that reads as an option")
-	errControlByte      = errors.New("refusing a target carrying a control byte")
+	errRefusedTarget    = errors.New("refused target scheme")
+	errOptionTarget     = errors.New("target reads as an option")
+	errControlByte      = errors.New("target contains a control byte")
 	errNoEditor         = errors.New("no $EDITOR or $VISUAL to open with")
 	errNoEditorLauncher = errors.New("no editor launcher configured")
 	errNoSystemLauncher = errors.New("no system launcher configured")
@@ -52,13 +52,13 @@ func checkURLTarget(target string) error {
 	case "http", "https", "mailto":
 		return nil
 	default:
-		return fmt.Errorf("%w %q target: %s", errRefusedTarget, parsed.Scheme, target)
+		return fmt.Errorf("%w : %q (%s)", errRefusedTarget, parsed.Scheme, target)
 	}
 }
 
 func checkTarget(target string) error {
 	if strings.HasPrefix(target, "-") {
-		return fmt.Errorf("%w: %s", errOptionTarget, target)
+		return fmt.Errorf("%w : %s", errOptionTarget, target)
 	}
 	if hasControl(target) {
 		return errControlByte

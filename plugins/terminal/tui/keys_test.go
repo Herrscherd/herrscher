@@ -219,13 +219,13 @@ func TestValidationErrorsAreReportedAndTheRestStillApplies(t *testing.T) {
 	]}`
 	load := loadForTest(t, herrscher, "", keysSection{})
 	wantProblems := []string{
-		"contexte inconnu",
-		"modificateur inconnu",
-		"touche non reliable",
-		"touche réservée",
-		"action inconnue",
-		"l’action doit être une chaîne ou null",
-		"doublon dans le contexte",
+		"unknown context",
+		"unknown modifier",
+		"unreliable key",
+		"key reserved by the terminal",
+		"unknown action",
+		"the action must be a string or null",
+		"duplicate in the context",
 	}
 	joined := strings.Join(load.problems, "\n")
 	for _, want := range wantProblems {

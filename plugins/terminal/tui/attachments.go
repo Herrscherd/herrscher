@@ -30,7 +30,7 @@ const (
 
 var (
 	errEmptyClipboard = errors.New("clipboard image is empty")
-	errSizeLimit      = errors.New("exceeds")
+	errSizeLimit      = errors.New("attachment too large")
 	errUsage          = errors.New("usage: /attach <path>")
 	errNotRegularFile = errors.New("not a regular file")
 )
@@ -55,7 +55,7 @@ func saveClipboardImage(data []byte, mime string, seq int) (Attachment, error) {
 		return Attachment{}, errEmptyClipboard
 	}
 	if int64(len(data)) > maxAttachmentBytes {
-		return Attachment{}, fmt.Errorf("pasted image %w %d MiB", errSizeLimit, maxAttachmentBytes/bytesPerMiB)
+		return Attachment{}, fmt.Errorf("%w : %d MiB", errSizeLimit, maxAttachmentBytes/bytesPerMiB)
 	}
 	name := fmt.Sprintf("paste-%d%s", seq, mimeExt(mime))
 	path, err := stage(name, data)
@@ -96,10 +96,10 @@ func attachLocalFile(path string, seq int) (Attachment, error) {
 		return Attachment{}, fmt.Errorf("attach %s: %w", path, err)
 	}
 	if !info.Mode().IsRegular() {
-		return Attachment{}, fmt.Errorf("attach %s: %w", path, errNotRegularFile)
+		return Attachment{}, fmt.Errorf("%w : %s", errNotRegularFile, path)
 	}
 	if info.Size() > maxAttachmentBytes {
-		return Attachment{}, fmt.Errorf("attach %s: %w %d MiB", path, errSizeLimit, maxAttachmentBytes/bytesPerMiB)
+		return Attachment{}, fmt.Errorf("%w : %s (%d MiB)", errSizeLimit, path, maxAttachmentBytes/bytesPerMiB)
 	}
 	abs, err := filepath.Abs(path)
 	if err != nil {

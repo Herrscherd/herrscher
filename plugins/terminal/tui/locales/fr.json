@@ -2341,6 +2341,86 @@
     "other": "aucun $EDITOR ni $VISUAL pour ouvrir"
   },
   {
+    "id": "tui.reason.key_empty",
+    "other": "touche vide"
+  },
+  {
+    "id": "tui.reason.key_modifier",
+    "other": "modificateur inconnu"
+  },
+  {
+    "id": "tui.reason.key_unknown",
+    "other": "touche inconnue"
+  },
+  {
+    "id": "tui.reason.key_unreliable",
+    "other": "touche non reliable"
+  },
+  {
+    "id": "tui.reason.key_reserved",
+    "other": "touche réservée par le terminal"
+  },
+  {
+    "id": "tui.reason.key_chord_empty",
+    "other": "accord vide"
+  },
+  {
+    "id": "tui.reason.key_unknown_context",
+    "other": "contexte inconnu"
+  },
+  {
+    "id": "tui.reason.key_unknown_action",
+    "other": "action inconnue"
+  },
+  {
+    "id": "tui.reason.key_duplicate",
+    "other": "doublon dans le contexte"
+  },
+  {
+    "id": "tui.reason.key_bad_value",
+    "other": "l’action doit être une chaîne ou null"
+  },
+  {
+    "id": "tui.reason.clipboard_empty",
+    "other": "l'image du presse-papiers est vide"
+  },
+  {
+    "id": "tui.reason.attachment_too_large",
+    "other": "pièce jointe trop volumineuse"
+  },
+  {
+    "id": "tui.reason.usage_attach",
+    "other": "usage : /attach <chemin>"
+  },
+  {
+    "id": "tui.reason.not_regular_file",
+    "other": "pas un fichier régulier"
+  },
+  {
+    "id": "tui.reason.not_image_type",
+    "other": "pas un type d'image"
+  },
+  {
+    "id": "tui.reason.refused_scheme",
+    "other": "schéma de cible refusé"
+  },
+  {
+    "id": "tui.reason.option_target",
+    "other": "la cible ressemble à une option"
+  },
+  {
+    "id": "tui.reason.control_byte",
+    "other": "la cible contient un octet de contrôle"
+  },
+  {
+    "id": "tui.reason.no_editor_launcher",
+    "other": "aucun lanceur d'éditeur configuré"
+  },
+  {
+    "id": "tui.reason.no_system_launcher",
+    "other": "aucun lanceur système configuré"
+  },
+  {
     "id": "tui.diffpanel.snapshot_failed",
     "other": "instantané du tour impossible : {{.Reason}}"
   },

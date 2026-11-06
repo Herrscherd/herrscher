@@ -2341,6 +2341,86 @@
     "other": "no $EDITOR or $VISUAL to open with"
   },
   {
+    "id": "tui.reason.key_empty",
+    "other": "empty key"
+  },
+  {
+    "id": "tui.reason.key_modifier",
+    "other": "unknown modifier"
+  },
+  {
+    "id": "tui.reason.key_unknown",
+    "other": "unrecognised key"
+  },
+  {
+    "id": "tui.reason.key_unreliable",
+    "other": "unreliable key"
+  },
+  {
+    "id": "tui.reason.key_reserved",
+    "other": "key reserved by the terminal"
+  },
+  {
+    "id": "tui.reason.key_chord_empty",
+    "other": "empty chord"
+  },
+  {
+    "id": "tui.reason.key_unknown_context",
+    "other": "unknown context"
+  },
+  {
+    "id": "tui.reason.key_unknown_action",
+    "other": "unknown action"
+  },
+  {
+    "id": "tui.reason.key_duplicate",
+    "other": "duplicate in the context"
+  },
+  {
+    "id": "tui.reason.key_bad_value",
+    "other": "the action must be a string or null"
+  },
+  {
+    "id": "tui.reason.clipboard_empty",
+    "other": "clipboard image is empty"
+  },
+  {
+    "id": "tui.reason.attachment_too_large",
+    "other": "attachment too large"
+  },
+  {
+    "id": "tui.reason.usage_attach",
+    "other": "usage: /attach <path>"
+  },
+  {
+    "id": "tui.reason.not_regular_file",
+    "other": "not a regular file"
+  },
+  {
+    "id": "tui.reason.not_image_type",
+    "other": "not an image type"
+  },
+  {
+    "id": "tui.reason.refused_scheme",
+    "other": "refused target scheme"
+  },
+  {
+    "id": "tui.reason.option_target",
+    "other": "target reads as an option"
+  },
+  {
+    "id": "tui.reason.control_byte",
+    "other": "target contains a control byte"
+  },
+  {
+    "id": "tui.reason.no_editor_launcher",
+    "other": "no editor launcher configured"
+  },
+  {
+    "id": "tui.reason.no_system_launcher",
+    "other": "no system launcher configured"
+  },
+  {
     "id": "tui.diffpanel.snapshot_failed",
     "other": "turn snapshot impossible: {{.Reason}}"
   },

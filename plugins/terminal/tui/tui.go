@@ -882,7 +882,7 @@ func (m *model) pasteImage() bool {
 	}
 	att, err := saveClipboardImage(data, mime, m.attachSeq)
 	if err != nil {
-		m.flash = err.Error()
+		m.flash = localizedReason(m.tr, err)
 		return true
 	}
 	m.attachSeq++
@@ -895,7 +895,7 @@ func (m *model) pasteImage() bool {
 func (m *model) stageAttachment(path string) {
 	att, err := attachLocalFile(path, m.attachSeq)
 	if err != nil {
-		m.flash = err.Error()
+		m.flash = localizedReason(m.tr, err)
 		return
 	}
 	m.attachSeq++

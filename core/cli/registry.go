@@ -362,8 +362,7 @@ func renderNoticeText(notice contracts.Notice, lang i18n.Language) (string, erro
 
 func noticeArg(notice contracts.Notice, name string) string {
 	for _, arg := range notice.Args {
-		if arg.Name() == name {
-			value, _ := arg.Value().(string)
+		if value, ok := arg.Value().(string); ok && arg.Name() == name {
 			return value
 		}
 	}

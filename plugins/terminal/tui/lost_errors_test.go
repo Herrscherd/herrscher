@@ -113,3 +113,11 @@ func TestPNGEncodingFailureLeavesAWarning(t *testing.T) {
 	}
 	expectWarning(t, logs, "invalid image size")
 }
+
+func TestModelOutputReachesTheInjectedLogger(t *testing.T) {
+	log, logs := captureWarnings()
+	m := newModel(nil)
+	Logger(log)(m)
+	m.receiveScript(scriptDoneMsg{err: errStatuslineNoCommand})
+	expectWarning(t, logs, "statusline.no_command")
+}

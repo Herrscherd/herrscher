@@ -1212,6 +1212,11 @@
     "other": "No transcript yet."
   },
   {
+    "id": "cli.session.close.branch_kept",
+    "description": "Branch kept notice after a refused session close, its branch is not deleted",
+    "other": "branch {{.Branch}} is kept."
+  },
+  {
     "id": "cli.session.closed",
     "description": "Confirmation of session close, before any note about the channel",
     "other": "🗄️ Session **{{.Name}}** closed."

@@ -1212,6 +1212,11 @@
     "other": "Aucune transcription pour l'instant."
   },
   {
+    "id": "cli.session.close.branch_kept",
+    "description": "Ligne after une fermeture refusée de session : sa branche est conservée",
+    "other": "la branche {{.Branch}} est conservée."
+  },
+  {
     "id": "cli.session.closed",
     "description": "Confirmation de la fermeture d'une session, avant une éventuelle note sur le salon",
     "other": "🗄️ Session **{{.Name}}** fermée."

@@ -10,6 +10,7 @@ const (
 	SessionWhoHeader              = "cli.session.who.header"
 	SessionLogEmpty               = "cli.session.log.empty"
 	SessionClosed                 = "cli.session.closed"
+	SessionCloseBranchKept        = "cli.session.close.branch_kept"
 	SessionArchived               = "cli.session.archived"
 	SessionRenamed                = "cli.session.renamed"
 	SessionRenameSameName         = "cli.session.rename.same_name"
@@ -63,6 +64,7 @@ func sessionKeys() map[Key][]string {
 		SessionWhoHeader:              {ParamName},
 		SessionLogEmpty:               nil,
 		SessionClosed:                 {ParamName},
+		SessionCloseBranchKept:        {ParamBranch},
 		SessionArchived:               {ParamName},
 		SessionRenamed:                {ParamName, ParamTo},
 		SessionRenameSameName:         {ParamName},

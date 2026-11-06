@@ -3,10 +3,12 @@ package manager
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -54,18 +56,26 @@ func TestAForcedCloseStillRemovesEverything(t *testing.T) {
 
 func TestARefusedCloseNamesTheDirtySessionInEachLanguage(t *testing.T) {
 	cases := []struct {
-		name string
-		lang i18n.Language
-		want string
+		name  string
+		lang  i18n.Language
+		wants []string
 	}{
-		{"english", i18n.English, "session dirty has uncommitted changes: commit them, or close it with force:true to discard them"},
-		{"french", i18n.French, "la session « dirty » a des changements non validés : valide-les, ou ferme-la avec force:true pour les abandonner"},
+		{"english", i18n.English, []string{
+			"session dirty has uncommitted changes: commit them, or close it with force:true to discard them",
+			"branch session/dirty is kept.",
+		}},
+		{"french", i18n.French, []string{
+			"la session « dirty » a des changements non validés : valide-les, ou ferme-la avec force:true pour les abandonner",
+			"la branche session/dirty est conservée.",
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := refusedDirtyClose(t)
-			if got := renderNotice(t, tc.lang, err); got != tc.want {
-				t.Fatalf("rendered %q, want %q", got, tc.want)
+			got := cli.Localize(refusedDirtyClose(t), tc.lang).Error()
+			for _, want := range tc.wants {
+				if !strings.Contains(got, want) {
+					t.Fatalf("rendered %q, want it to contain %q", got, want)
+				}
 			}
 		})
 	}

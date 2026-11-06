@@ -187,8 +187,8 @@ func TestLocalizedManagerErrorRendersInTheOperatorLanguage(t *testing.T) {
 	if !errors.Is(err, cause) {
 		t.Fatalf("the cause must stay reachable through errors.Is")
 	}
-	localized, ok := err.(*localizedError)
-	if !ok {
+	var localized *localizedError
+	if !errors.As(err, &localized) {
 		t.Fatalf("the error is %T, want a localizedError", err)
 	}
 	notice := localized.Notice()

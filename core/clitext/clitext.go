@@ -7,6 +7,7 @@ package clitext
 
 import (
 	"embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -43,25 +44,82 @@ func loadCatalog() (*i18n.Catalog, error) {
 	return catalogWith(pluginCatalogs())
 }
 
-func pluginCatalogs() []fs.FS {
+const hostCatalogName = "host"
+
+type namedCatalog struct {
+	kind string
+	fsys fs.FS
+}
+
+func pluginCatalogs() []namedCatalog {
 	plugins := contracts.Default.Plugins()
-	catalogs := make([]fs.FS, 0, len(plugins))
+	catalogs := make([]namedCatalog, 0, len(plugins))
 	for idx := range plugins {
-		catalogs = append(catalogs, plugins[idx].Catalog)
+		if plugins[idx].Catalog == nil {
+			continue
+		}
+		catalogs = append(catalogs, namedCatalog{kind: plugins[idx].Manifest.Kind, fsys: plugins[idx].Catalog})
 	}
 	return catalogs
 }
 
-func catalogWith(plugins []fs.FS) (*i18n.Catalog, error) {
-	sources, err := fs.Sub(locales, "locales")
-	if err != nil {
-		return nil, fmt.Errorf("command line locales: %w", err)
+func catalogWith(plugins []namedCatalog) (*i18n.Catalog, error) {
+	host, subErr := fs.Sub(locales, "locales")
+	if subErr != nil {
+		return nil, fmt.Errorf("command line locales: %w", subErr)
 	}
-	catalog, err := i18n.NewCatalog(nil, append([]fs.FS{sources}, plugins...)...)
+	owners := make(map[string]string)
+	if err := claimMessages(owners, namedCatalog{kind: hostCatalogName, fsys: host}); err != nil {
+		return nil, err
+	}
+	sources := []fs.FS{host}
+	for idx := range plugins {
+		plugin := plugins[idx]
+		if _, err := i18n.NewCatalog(nil, plugin.fsys); err != nil {
+			return nil, fmt.Errorf("plugin %s message catalog: %w", plugin.kind, err)
+		}
+		if err := claimMessages(owners, plugin); err != nil {
+			return nil, err
+		}
+		sources = append(sources, plugin.fsys)
+	}
+	catalog, err := i18n.NewCatalog(nil, sources...)
 	if err != nil {
-		return nil, fmt.Errorf("plugin message catalogs: %w", err)
+		return nil, fmt.Errorf("message catalogs: %w", err)
 	}
 	return catalog, nil
+}
+
+func claimMessages(owners map[string]string, catalog namedCatalog) error {
+	ids, err := messageIDs(catalog.fsys)
+	if err != nil {
+		return fmt.Errorf("%s message catalog: %w", catalog.kind, err)
+	}
+	for _, messageID := range ids {
+		if owner, taken := owners[messageID]; taken {
+			return fmt.Errorf("message %q declared by both %s and %s: %w", messageID, owner, catalog.kind, i18n.ErrDuplicateKey)
+		}
+		owners[messageID] = catalog.kind
+	}
+	return nil
+}
+
+func messageIDs(fsys fs.FS) ([]string, error) {
+	data, err := fs.ReadFile(fsys, "en.json")
+	if err != nil {
+		return nil, err
+	}
+	var entries []struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(entries))
+	for idx := range entries {
+		ids = append(ids, entries[idx].ID)
+	}
+	return ids, nil
 }
 
 // Names of the params shared by several keys.
@@ -218,15 +276,21 @@ func For(lang i18n.Language) *Translator {
 // Text renders key with params. After a failure it returns the key itself, and
 // Err reports the first failure.
 func (t *Translator) Text(key Key, params Params) string {
-	if t.cat == nil {
-		return string(key)
-	}
-	text, err := render(t.cat, t.lang, key, params)
+	text, err := t.Render(key, params)
 	if err != nil {
 		t.fail(err)
 		return string(key)
 	}
 	return text
+}
+
+// Render renders key with params and returns its failure to the caller instead of
+// keeping it, so a caller can name the message it was rendering.
+func (t *Translator) Render(key Key, params Params) (string, error) {
+	if t.cat == nil {
+		return "", t.err
+	}
+	return render(t.cat, t.lang, key, params)
 }
 
 // Err returns the first failure of the translator, or nil.

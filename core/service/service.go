@@ -728,11 +728,14 @@ func DefaultConfig() (Config, error) {
 		return Config{}, clitext.Failure(lang, err, clitext.ServiceLocateHome, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	uname := ""
-	if u, err := user.Current(); err == nil {
-		uname = u.Username
+	if current, userErr := user.Current(); userErr == nil {
+		uname = current.Username
 	}
-	envVars := registryEnvVars(translator)
-	if err := translator.Err(); err != nil {
+	if translatorErr := translator.Err(); translatorErr != nil {
+		return Config{}, translatorErr
+	}
+	envVars, err := registryEnvVars(translator)
+	if err != nil {
 		return Config{}, err
 	}
 	return Config{
@@ -748,34 +751,61 @@ func DefaultConfig() (Config, error) {
 	}, nil
 }
 
-func registryEnvVars(translator *clitext.Translator) []EnvVar {
-	var out []EnvVar
+func registryEnvVars(translator *clitext.Translator) ([]EnvVar, error) {
 	seen := make(map[string]bool)
+	var out []EnvVar
+	var failures []error
 	gateways := contracts.Default.Gateways()
-	for i := range gateways {
-		for _, setting := range gateways[i].Manifest.Config {
-			if setting.Env == "" || seen[setting.Env] {
-				continue
-			}
-			seen[setting.Env] = true
-			out = append(out, EnvVar{Key: setting.Env, Help: renderHelp(translator, setting.Help), Required: setting.Required})
-		}
+	for idx := range gateways {
+		vars, errs := pluginEnvVars(translator, &gateways[idx], seen)
+		out = append(out, vars...)
+		failures = append(failures, errs...)
 	}
+	vars, errs := hostEnvVars(translator, seen)
+	out = append(out, vars...)
+	failures = append(failures, errs...)
+	return out, errors.Join(failures...)
+}
+
+func pluginEnvVars(translator *clitext.Translator, gateway *contracts.Plugin, seen map[string]bool) ([]EnvVar, []error) {
+	var out []EnvVar
+	var failures []error
+	for _, setting := range gateway.Manifest.Config {
+		if setting.Env == "" || seen[setting.Env] {
+			continue
+		}
+		seen[setting.Env] = true
+		help, err := renderHelp(translator, setting.Help)
+		if err != nil {
+			failures = append(failures, fmt.Errorf("plugin %s setting %s: %w", gateway.Manifest.Kind, setting.Key, err))
+		}
+		out = append(out, EnvVar{Key: setting.Env, Help: help, Required: setting.Required})
+	}
+	return out, failures
+}
+
+func hostEnvVars(translator *clitext.Translator, seen map[string]bool) ([]EnvVar, []error) {
+	var out []EnvVar
+	var failures []error
 	core := coreEnvVars()
 	for idx := range core {
 		if !seen[core[idx].Key] {
-			core[idx].Help = renderHelp(translator, core[idx].Help)
+			help, err := renderHelp(translator, core[idx].Help)
+			if err != nil {
+				failures = append(failures, fmt.Errorf("host setting %s: %w", core[idx].Key, err))
+			}
+			core[idx].Help = help
 			out = append(out, core[idx])
 		}
 	}
-	return out
+	return out, failures
 }
 
-func renderHelp(translator *clitext.Translator, key string) string {
+func renderHelp(translator *clitext.Translator, key string) (string, error) {
 	if key == "" {
-		return ""
+		return "", nil
 	}
-	return translator.Text(clitext.Key(key), nil)
+	return translator.Render(clitext.Key(key), nil)
 }
 
 // Install runs the install plan for the current OS: it writes the unit/launcher

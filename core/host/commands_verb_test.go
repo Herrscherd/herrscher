@@ -19,7 +19,7 @@ func TestCommandsVerbDescribesTheRegistry(t *testing.T) {
 	defer cancel()
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: t.TempDir() + "/s.json", DefaultCmd: "claude"}, st, sup, "", nil, approvalTab, sessionTab)
+	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: t.TempDir() + "/s.json", DefaultCmd: "claude", Language: i18n.English}, st, sup, "", nil, approvalTab, sessionTab)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,13 +57,17 @@ func TestSkillVerbsAreRegistered(t *testing.T) {
 	defer cancel()
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: t.TempDir() + "/s.json", DefaultCmd: "claude"}, st, sup, "", nil, approvalTab, sessionTab)
+	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: t.TempDir() + "/s.json", DefaultCmd: "claude", Language: i18n.English}, st, sup, "", nil, approvalTab, sessionTab)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	have := make(map[string]bool)
-	for _, s := range reg.Specs(i18n.English) {
+	specs, specsErr := reg.Specs(i18n.English)
+	if specsErr != nil {
+		t.Fatal(specsErr)
+	}
+	for _, s := range specs {
 		have[strings.Join(s.Path, " ")] = true
 	}
 	for _, want := range []string{"skill list", "skill approve"} {

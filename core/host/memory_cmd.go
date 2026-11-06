@@ -283,12 +283,20 @@ func whoamiVerb() contracts.Cmd {
 func commandsVerb(lang i18n.Language, reg *cli.Registry) contracts.Cmd {
 	return contracts.New("commands").
 		Help(clitext.CmdHelpCommands).
-		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			if in.JSON {
-				b, err := json.Marshal(commandSpecsJSON(reg.Specs(lang)))
-				return contracts.DataResult(string(b)), err
+		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
+			specs, err := reg.Specs(lang)
+			if err != nil {
+				return contracts.Result{}, err
 			}
-			return contracts.DataResult(reg.Help(lang)), nil
+			if input.JSON {
+				raw, marshalErr := json.Marshal(commandSpecsJSON(specs))
+				return contracts.DataResult(string(raw)), marshalErr
+			}
+			help, err := reg.Help(lang)
+			if err != nil {
+				return contracts.Result{}, err
+			}
+			return contracts.DataResult(help), nil
 		})
 }
 

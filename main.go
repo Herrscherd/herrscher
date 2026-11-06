@@ -54,6 +54,11 @@ func run() int {
 		return writeFailureCode(out)
 	}
 
+	if err := clitext.For(clitext.ClientLanguage()).Err(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+
 	if err := host.CaptureStartupSecrets(loadHostEnv, hideGatewayKeys); err != nil {
 		return reportError(err)
 	}

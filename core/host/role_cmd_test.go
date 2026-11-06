@@ -166,7 +166,11 @@ func TestRoleGrantHelpListsTheGrantableRolesInEachLanguage(t *testing.T) {
 
 func roleGrantParamHelp(t *testing.T, reg *cli.Registry, lang i18n.Language, name string) string {
 	t.Helper()
-	for _, spec := range reg.Specs(lang) {
+	specs, err := reg.Specs(lang)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, spec := range specs {
 		if strings.Join(spec.Path, " ") != "role grant" {
 			continue
 		}

@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/Herrscherd/herrscher/core/service"
 )
 
 func TestReportErrorPrintsTheFrenchErrorLine(t *testing.T) {
@@ -28,4 +30,21 @@ func TestReportErrorPrintsTheFrenchErrorLine(t *testing.T) {
 	if code != 1 || strings.TrimSpace(string(out)) != "herrscher : boom" {
 		t.Fatalf("code %d, stderr %q; want 1 and %q", code, out, "herrscher : boom")
 	}
+}
+
+func TestDefaultConfigRendersTheRealGatewaySettingsInFrench(t *testing.T) {
+	t.Setenv("HERRSCHER_LANG", "fr")
+	cfg, err := service.DefaultConfig()
+	if err != nil {
+		t.Fatalf("DefaultConfig() with the real plugins: %v", err)
+	}
+	for _, v := range cfg.EnvVars {
+		if v.Key == "DISCORD_BOT_TOKEN" {
+			if v.Help != "jeton du bot Discord" {
+				t.Fatalf("DISCORD_BOT_TOKEN help = %q, want the French text", v.Help)
+			}
+			return
+		}
+	}
+	t.Fatal("DISCORD_BOT_TOKEN missing from the default config")
 }

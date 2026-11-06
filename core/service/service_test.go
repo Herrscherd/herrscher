@@ -853,24 +853,27 @@ func registerGatewaySetting(t *testing.T, plugins ...contracts.Plugin) {
 	}
 }
 
-func fakeGateway(helpKey, en, fr string) contracts.Plugin {
+func fakeGateway(kind, en, fr string) contracts.Plugin {
 	return contracts.Plugin{
 		Manifest: contracts.Manifest{
-			Kind:     "fake",
+			Kind:     kind,
 			Category: contracts.CategoryGateway,
-			Config:   []contracts.Setting{{Key: "token", Env: "FAKE_TOKEN", Help: helpKey}},
+			Config:   []contracts.Setting{{Key: "token", Env: "FAKE_TOKEN", Help: "fake.setting.token"}},
 		},
 		Catalog: fstest.MapFS{
-			"en.json": &fstest.MapFile{Data: []byte(fmt.Sprintf(`[{"id":%q,"description":"","other":%q}]`, helpKey, en))},
-			"fr.json": &fstest.MapFile{Data: []byte(fmt.Sprintf(`[{"id":%q,"description":"","other":%q}]`, helpKey, fr))},
+			"en.json": &fstest.MapFile{Data: []byte(fmt.Sprintf(`[{"id":%q,"description":"","other":%q}]`, "fake.setting.token", en))},
+			"fr.json": &fstest.MapFile{Data: []byte(fmt.Sprintf(`[{"id":%q,"description":"","other":%q}]`, "fake.setting.token", fr))},
 		},
 	}
 }
 
 func TestSettingHelpRendersInFrench(t *testing.T) {
-	registerGatewaySetting(t, fakeGateway("fake.setting.token", "Bot token", "Jeton du bot"))
+	registerGatewaySetting(t, fakeGateway("fake", "Bot token", "Jeton du bot"))
 	translator := clitext.For(i18n.French)
-	envVars := registryEnvVars(translator)
+	envVars, err := registryEnvVars(translator)
+	if err != nil {
+		t.Fatalf("registryEnvVars() error = %v", err)
+	}
 	idx := slices.IndexFunc(envVars, func(v EnvVar) bool { return v.Key == "FAKE_TOKEN" })
 	if idx < 0 {
 		t.Fatalf("FAKE_TOKEN missing from %v", envVars)
@@ -885,10 +888,29 @@ func TestSettingHelpRendersInFrench(t *testing.T) {
 
 func TestDefaultConfigRefusesAPluginKeyCollision(t *testing.T) {
 	registerGatewaySetting(t,
-		fakeGateway("fake.setting.token", "Bot token", "Jeton du bot"),
-		fakeGateway("fake.setting.token", "Other token", "Autre jeton"),
+		fakeGateway("alpha", "Bot token", "Jeton du bot"),
+		fakeGateway("beta", "Other token", "Autre jeton"),
 	)
-	if _, err := DefaultConfig(); !errors.Is(err, i18n.ErrDuplicateKey) {
+	_, err := DefaultConfig()
+	if !errors.Is(err, i18n.ErrDuplicateKey) {
 		t.Fatalf("DefaultConfig() error = %v, want i18n.ErrDuplicateKey", err)
+	}
+	for _, kind := range []string{"alpha", "beta"} {
+		if !strings.Contains(err.Error(), kind) {
+			t.Fatalf("DefaultConfig() error %q does not name %q", err, kind)
+		}
+	}
+}
+
+func TestDefaultConfigNamesThePluginWithARawHelpKey(t *testing.T) {
+	gamma := fakeGateway("gamma", "Bot token", "Jeton du bot")
+	gamma.Manifest.Config[0].Help = "Bot token raw"
+	registerGatewaySetting(t, gamma)
+	_, err := DefaultConfig()
+	if !errors.Is(err, clitext.ErrUndeclaredKey) {
+		t.Fatalf("DefaultConfig() error = %v, want clitext.ErrUndeclaredKey", err)
+	}
+	if !strings.Contains(err.Error(), "plugin gamma setting token") {
+		t.Fatalf("DefaultConfig() error %q does not name the plugin and setting", err)
 	}
 }

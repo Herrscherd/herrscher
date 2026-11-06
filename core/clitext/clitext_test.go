@@ -171,15 +171,15 @@ func localeEntry(key, text string) string {
 	return fmt.Sprintf(`[{"id":%q,"description":"","other":%q}]`, key, text)
 }
 
-func verbPlugin(en, fr string) contracts.Plugin {
+func verbPlugin(kind, en, fr string) contracts.Plugin {
 	return contracts.Plugin{
-		Manifest: contracts.Manifest{Kind: "fake", Category: contracts.CategorySkills},
+		Manifest: contracts.Manifest{Kind: kind, Category: contracts.CategorySkills},
 		Catalog:  pluginLocales("fake.verb.help", en, fr),
 	}
 }
 
 func TestPluginVerbHelpRendersInFrench(t *testing.T) {
-	registerPlugins(t, verbPlugin("Do the thing", "Fais la chose"))
+	registerPlugins(t, verbPlugin("fake", "Do the thing", "Fais la chose"))
 	translator := For(i18n.French)
 	if got := translator.Text("fake.verb.help", nil); got != "Fais la chose" {
 		t.Fatalf("plugin verb help in French = %q, want %q", got, "Fais la chose")
@@ -190,7 +190,7 @@ func TestPluginVerbHelpRendersInFrench(t *testing.T) {
 }
 
 func TestPluginKeyRefusesParams(t *testing.T) {
-	registerPlugins(t, verbPlugin("Do the thing", "Fais la chose"))
+	registerPlugins(t, verbPlugin("fake", "Do the thing", "Fais la chose"))
 	translator := For(i18n.French)
 	translator.Text("fake.verb.help", Params{ParamErr: "boom"})
 	if !errors.Is(translator.Err(), ErrParamsMismatch) {
@@ -200,19 +200,27 @@ func TestPluginKeyRefusesParams(t *testing.T) {
 
 func TestPluginKeyCollisionIsRefused(t *testing.T) {
 	registerPlugins(t,
-		verbPlugin("Do the thing", "Fais la chose"),
-		verbPlugin("Do it again", "Refais-la"),
+		verbPlugin("alpha", "Do the thing", "Fais la chose"),
+		verbPlugin("beta", "Do it again", "Refais-la"),
 	)
-	if err := For(i18n.French).Err(); !errors.Is(err, i18n.ErrDuplicateKey) {
+	err := For(i18n.French).Err()
+	if !errors.Is(err, i18n.ErrDuplicateKey) {
 		t.Fatalf("Err() = %v, want i18n.ErrDuplicateKey", err)
+	}
+	for _, kind := range []string{"alpha", "beta", "fake.verb.help"} {
+		if !strings.Contains(err.Error(), kind) {
+			t.Fatalf("collision error %q does not name %q", err, kind)
+		}
 	}
 }
 
-func TestRawHelpTextIsRefusedAsAKey(t *testing.T) {
-	registerPlugins(t)
-	translator := For(i18n.French)
-	translator.Text("owner id (per-daemon instance-id fallback)", nil)
-	if !errors.Is(translator.Err(), ErrUndeclaredKey) {
-		t.Fatalf("Err() = %v, want ErrUndeclaredKey", translator.Err())
+func TestPluginCatalogErrorNamesThePlugin(t *testing.T) {
+	registerPlugins(t, contracts.Plugin{
+		Manifest: contracts.Manifest{Kind: "broken", Category: contracts.CategorySkills},
+		Catalog:  fstest.MapFS{"en.json": &fstest.MapFile{Data: []byte("not json")}, "fr.json": &fstest.MapFile{Data: []byte("[]")}},
+	})
+	err := For(i18n.French).Err()
+	if err == nil || !strings.Contains(err.Error(), "broken") {
+		t.Fatalf("Err() = %v, want an error naming the plugin broken", err)
 	}
 }

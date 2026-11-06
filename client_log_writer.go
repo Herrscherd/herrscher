@@ -2,11 +2,15 @@ package main
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 )
 
-var errNonPositiveLimit = errors.New("client log cap must be positive")
+var (
+	errNonPositiveLimit = errors.New("client log cap must be positive")
+	errRotationStalled  = errors.New("client log rotation left the current file at its cap")
+)
 
 type rotatingWriter struct {
 	path  string
@@ -46,6 +50,9 @@ func (w *rotatingWriter) Write(data []byte) (int, error) {
 			if err := w.rotate(); err != nil {
 				return written, err
 			}
+			if w.size >= w.limit {
+				return written, errRotationStalled
+			}
 		}
 		chunk := data[:min(int64(len(data)), w.limit-w.size)]
 		count, err := w.file.Write(chunk)
@@ -54,6 +61,9 @@ func (w *rotatingWriter) Write(data []byte) (int, error) {
 		if err != nil {
 			return written, err
 		}
+		if count == 0 {
+			return written, io.ErrShortWrite
+		}
 		data = data[count:]
 	}
 	return written, nil
@@ -61,9 +71,12 @@ func (w *rotatingWriter) Write(data []byte) (int, error) {
 
 func (w *rotatingWriter) rotate() error {
 	if err := w.file.Close(); err != nil {
-		return err
+		return errors.Join(err, w.open())
 	}
 	if err := os.Rename(w.path, w.path+".1"); err != nil {
+		return errors.Join(err, w.open())
+	}
+	if err := os.Chmod(w.path+".1", modeSecret); err != nil {
 		return errors.Join(err, w.open())
 	}
 	return w.open()

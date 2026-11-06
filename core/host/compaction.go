@@ -91,12 +91,12 @@ func newCompactionPolicy(ctx context.Context, percent *int, names []string, perV
 	}
 	if percent != nil {
 		if err := contracts.ValidateAutoCompactPercent(*percent); err != nil {
-			return compactionPolicy{}, wrapEnglish(err, "compaction.at", nil)
+			return compactionPolicy{}, wrapHost(err, "compaction.at", nil)
 		}
 		policy.percent = *percent
 	}
 	if err := config.ValidateCompactStack(names); err != nil {
-		return compactionPolicy{}, wrapEnglish(err, "compaction.stack", nil)
+		return compactionPolicy{}, wrapHost(err, "compaction.stack", nil)
 	}
 	if len(names) > 0 {
 		policy.names = names
@@ -119,7 +119,7 @@ func newCompactionPolicy(ctx context.Context, percent *int, names []string, perV
 		}
 		compactor, err := customStage(ctx, name)
 		if err != nil {
-			return compactionPolicy{}, wrapEnglish(err, "compaction.stack_named", map[string]any{nameParam: name})
+			return compactionPolicy{}, wrapHost(err, "compaction.stack_named", map[string]any{nameParam: name})
 		}
 		policy.plugins[name] = compactor
 	}

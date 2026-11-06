@@ -232,7 +232,7 @@ func (d handoffDeps) checkedArgs(source, target, parent string, input contracts.
 func (d handoffDeps) launch(ctx context.Context, source string, input contracts.Input, account string, args map[string]string) (string, string, error) {
 	brief, err := d.brief(ctx, source)
 	if err != nil {
-		return "", "", wrapEnglish(err, "handoff.brief_from", map[string]any{"Source": source})
+		return "", "", wrapHost(err, "handoff.brief_from", map[string]any{"Source": source})
 	}
 	reply, err := d.create(ctx, contracts.Input{Args: args})
 	if err != nil {
@@ -257,7 +257,7 @@ func inheritedAccountError(input contracts.Input, source, account string, err er
 	if _, given := input.Lookup("account"); given || account == "" || !isAccountRefusal(err) {
 		return err
 	}
-	return wrapEnglish(err, "handoff.account_inherited", map[string]any{"Account": account, "Source": source, "Command": retryCommand(source, input)})
+	return wrapHost(err, "handoff.account_inherited", map[string]any{"Account": account, "Source": source, "Command": retryCommand(source, input)})
 }
 
 func retryCommand(source string, input contracts.Input) string {
@@ -288,7 +288,7 @@ func shellQuote(value string) string {
 
 func (d handoffDeps) deliver(ctx context.Context, source, target, reply, brief, account string) (string, error) {
 	if err := d.send(ctx, target, "session "+source, handoffMessage(source, brief)); err != nil {
-		return "", wrapEnglish(err, "handoff.not_delivered", map[string]any{nameParam: target})
+		return "", wrapHost(err, "handoff.not_delivered", map[string]any{nameParam: target})
 	}
 	return handoffReport(d.replyLang(source), source, target, reply, brief, account), nil
 }

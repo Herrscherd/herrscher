@@ -88,24 +88,32 @@ func hostErrorKeys() []hostErrorKey {
 	}
 }
 
+// LocalizeError renders err for an operator boundary in lang.
+func LocalizeError(lang i18n.Language, err error) error {
+	return localizeHostError(lang, err)
+}
+
 func localizeHostError(lang i18n.Language, err error) error {
 	if err == nil {
 		return nil
 	}
-	text := err.Error()
+	resolved := i18n.Resolve(lang)
+	text := errorTextIn(resolved, err)
+	var wrapped hostWrapError
+	isWrapped := errors.As(err, &wrapped)
 	translated := false
 	for _, known := range hostErrorKeys() {
 		if !errors.Is(err, known.sentinel) {
 			continue
 		}
-		phrase, textErr := clitext.Text(i18n.Resolve(lang), clitext.Key(known.key), nil)
+		phrase, textErr := clitext.Text(resolved, clitext.Key(known.key), nil)
 		if textErr != nil {
 			continue
 		}
 		text = strings.Replace(text, known.sentinel.Error(), phrase, 1)
 		translated = true
 	}
-	if !translated {
+	if !translated && !isWrapped {
 		return err
 	}
 	return localizedHostError{text: text, cause: err}

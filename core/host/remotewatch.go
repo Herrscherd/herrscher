@@ -76,7 +76,7 @@ func awaitEntries(ctx context.Context, category contracts.Category, watch *remot
 		}
 		select {
 		case <-ctx.Done():
-			return nil, wrapEnglish(ctx.Err(), "remote.no_remote", map[string]any{"Category": category})
+			return nil, wrapHost(ctx.Err(), "remote.no_remote", map[string]any{"Category": category})
 		case <-watch.arrived:
 		}
 	}

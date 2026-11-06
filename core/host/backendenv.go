@@ -99,7 +99,7 @@ func spawnEnvFor(entry CatalogEntry, getenv func(string) string) (map[string]str
 	}
 	creds, err := loadGatewayCreds(getenv)
 	if err != nil {
-		return nil, wrapEnglish(err, "gateway.model", map[string]any{"Model": entry.ID})
+		return nil, wrapHost(err, "gateway.model", map[string]any{"Model": entry.ID})
 	}
 	env := gatewayEnvFor(entry.Vendor, creds, entry.Arg)
 	if len(env) == 0 {

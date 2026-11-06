@@ -1,8 +1,10 @@
 package host
 
 import (
+	"fmt"
 	"testing"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
 
@@ -83,5 +85,21 @@ func TestHostMessageFamiliesAreFrozen(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestSessionlessOperatorFrenchReachesTheWrappedMessage(t *testing.T) {
+	live := newOperatorLanguage(i18n.French)
+	err := busyRewindError("alpha")
+	got := localizeHostError(commandErrorLanguage(nil, live.Get(), contracts.Input{}), err).Error()
+	want := `la session "alpha" a un tour en cours : interrompez-le (échap) avant de revenir en arrière`
+	if got != want {
+		t.Fatalf("sessionless fr operator got %q, want %q", got, want)
+	}
+	wrapped := fmt.Errorf("commande refusée: %w", busyRewindError("alpha"))
+	gotWrapped := localizeHostError(commandErrorLanguage(nil, live.Get(), contracts.Input{}), wrapped).Error()
+	wantWrapped := "commande refusée: " + want
+	if gotWrapped != wantWrapped {
+		t.Fatalf("fmt-wrapped sessionless fr operator got %q, want %q", gotWrapped, wantWrapped)
 	}
 }

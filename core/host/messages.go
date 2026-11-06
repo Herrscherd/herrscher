@@ -2,8 +2,11 @@ package host
 
 import (
 	"embed"
+	"errors"
 	"io/fs"
 	"log/slog"
+	"maps"
+	"strings"
 	"sync"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
@@ -62,26 +65,34 @@ func (d *sessionDriver) hostText(key string, params map[string]any) string {
 }
 
 type hostWrapError struct {
-	text  string
-	cause error
+	key    string
+	params map[string]any
+	cause  error
 }
 
-func (e hostWrapError) Error() string { return e.text }
+func (e hostWrapError) Error() string { return e.render(i18n.English) }
 
 func (e hostWrapError) Unwrap() error { return e.cause }
 
-func wrapHost(lang i18n.Language, cause error, key string, params map[string]any) error {
-	detail := ""
-	if cause != nil {
-		detail = cause.Error()
-	}
-	if params == nil {
-		params = make(map[string]any)
-	}
-	params[detailParam] = detail
-	return hostWrapError{text: newHostMessages().text(lang, key, params), cause: cause}
+func (e hostWrapError) render(lang i18n.Language) string {
+	params := make(map[string]any, len(e.params)+1)
+	maps.Copy(params, e.params)
+	params[detailParam] = errorTextIn(lang, e.cause)
+	return newHostMessages().text(lang, e.key, params)
 }
 
-func wrapEnglish(cause error, key string, params map[string]any) error {
-	return wrapHost(i18n.English, cause, key, params)
+func errorTextIn(lang i18n.Language, err error) string {
+	if err == nil {
+		return ""
+	}
+	text := err.Error()
+	var wrapped hostWrapError
+	if errors.As(err, &wrapped) {
+		text = strings.Replace(text, wrapped.Error(), wrapped.render(lang), 1)
+	}
+	return text
+}
+
+func wrapHost(cause error, key string, params map[string]any) error {
+	return hostWrapError{key: key, params: params, cause: cause}
 }

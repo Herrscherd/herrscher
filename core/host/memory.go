@@ -20,11 +20,11 @@ func BuildFirstMemoryWithManifest(ctx context.Context) (contracts.Memory, contra
 		}
 		cfg, err := contracts.Resolve(plugin.Manifest.Config, os.Getenv)
 		if err != nil {
-			return nil, contracts.Manifest{}, wrapEnglish(err, "memory.wrap", nil)
+			return nil, contracts.Manifest{}, wrapHost(err, "memory.wrap", nil)
 		}
 		mem, err := plugin.Memory(ctx, cfg)
 		if err != nil {
-			return nil, contracts.Manifest{}, wrapEnglish(err, "memory.wrap", nil)
+			return nil, contracts.Manifest{}, wrapHost(err, "memory.wrap", nil)
 		}
 		return mem, plugin.Manifest, nil
 	}

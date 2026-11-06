@@ -179,7 +179,7 @@ func sessionPickVerb(lang languageSource, approvals *approvalTable, sessions *se
 			if answerApprovalPick(approvals, sessions, name, value) || sessions.pick(name, value) {
 				return contracts.DataResult(replyText(lang()).Text(clitext.SessionPicked, clitext.Params{clitext.ParamName: name})), nil
 			}
-			return contracts.Result{}, wrapEnglish(errNoPendingChoice, "session.refused", map[string]any{nameParam: name})
+			return contracts.Result{}, wrapHost(errNoPendingChoice, "session.refused", map[string]any{nameParam: name})
 		})
 }
 
@@ -262,7 +262,7 @@ func applyCompactPercent(store *state.State, name, raw string) (bool, error) {
 	}
 	percent, err := strconv.Atoi(raw)
 	if err != nil {
-		return false, wrapEnglish(err, "session.percent", map[string]any{"Raw": raw})
+		return false, wrapHost(err, "session.percent", map[string]any{"Raw": raw})
 	}
 	if err := contracts.ValidateAutoCompactPercent(percent); err != nil {
 		return false, err

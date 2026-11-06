@@ -119,7 +119,7 @@ func (p hostPlacer) EnsureProject(ctx context.Context, name, project, repo strin
 	}
 	origin, err := originOf(ctx, filepath.Join(p.st.WorkspaceRoot(), project))
 	if err != nil {
-		return wrapEnglish(err, "hosts.clone", map[string]any{"Project": project, "Host": name})
+		return wrapHost(err, "hosts.clone", map[string]any{"Project": project, "Host": name})
 	}
 	if _, err := capture(ctx, run, "git", "clone", origin, repo); err != nil {
 		return err

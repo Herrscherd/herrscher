@@ -30,3 +30,25 @@ func TestOperatorLanguageIsSafeToChangeWhileReplying(t *testing.T) {
 	}()
 	wg.Wait()
 }
+
+func TestWorktreesErrorIsSafeToLocalizeWhileTheLanguageChanges(t *testing.T) {
+	h, _, _, _, _, _ := newTestHandler(t, "category")
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for range 100 {
+			h.SetLanguage(i18n.French)
+			h.SetLanguage(i18n.English)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for range 100 {
+			if _, _, err := h.worktreesOn("ghost"); err == nil {
+				t.Error("worktreesOn with an unknown host returned no error")
+			}
+		}
+	}()
+	wg.Wait()
+}

@@ -55,7 +55,7 @@ func (h *Handler) SetHosts(hs Hosts) { h.hs = hs }
 func (h *Handler) worktreesOn(hostName string) (Worktrees, string, error) {
 	if hostName == "" || h.hs == nil {
 		if hostName != "" {
-			return nil, "", localize(h.lang, fmt.Sprintf("session wants host %q but %v", hostName, ErrNoHostRegistered), clitext.HostErrNoHostRegistered, clitext.Params{clitext.ParamHost: hostName}, ErrNoHostRegistered)
+			return nil, "", localize(h.currentLanguage(), fmt.Sprintf("session wants host %q but %v", hostName, ErrNoHostRegistered), clitext.HostErrNoHostRegistered, clitext.Params{clitext.ParamHost: hostName}, ErrNoHostRegistered)
 		}
 		return h.wt, h.st.WorkspaceRoot(), nil
 	}
@@ -292,7 +292,7 @@ func (h *Handler) checkAccount(runtime runtimeChoice, profile string) error {
 		return &localizedError{english: fmt.Sprintf("account %q: %v: %v", profile, ErrAccountVendor, err), text: h.text(clitext.HostErrAccountVendor, clitext.Params{clitext.ParamAccount: profile}) + ": " + err.Error(), causes: []error{ErrAccountVendor, err}}
 	}
 	if vendor == "" {
-		return localize(h.lang, fmt.Sprintf("account %q: %v", profile, ErrAccountVendor), clitext.HostErrAccountVendor, clitext.Params{clitext.ParamAccount: profile}, ErrAccountVendor)
+		return localize(h.currentLanguage(), fmt.Sprintf("account %q: %v", profile, ErrAccountVendor), clitext.HostErrAccountVendor, clitext.Params{clitext.ParamAccount: profile}, ErrAccountVendor)
 	}
 	return h.validateAccount(vendor, profile)
 }
@@ -305,7 +305,7 @@ func (h *Handler) checkAccountUsable(hostName, account string) error {
 		return err
 	}
 	if h.remoteBackend {
-		return localize(h.lang, fmt.Sprintf("account %q: %v; unset HERRSCHER_REMOTE=backend to use accounts on this daemon, or drop the account", account, ErrAccountRemote), clitext.HostErrAccountRemote, clitext.Params{clitext.ParamAccount: account}, ErrAccountRemote)
+		return localize(h.currentLanguage(), fmt.Sprintf("account %q: %v; unset HERRSCHER_REMOTE=backend to use accounts on this daemon, or drop the account", account, ErrAccountRemote), clitext.HostErrAccountRemote, clitext.Params{clitext.ParamAccount: account}, ErrAccountRemote)
 	}
 	return nil
 }
@@ -314,7 +314,7 @@ func (h *Handler) checkAccountHost(hostName, account string) error {
 	if hostName == "" || account == "" {
 		return nil
 	}
-	return localize(h.lang, fmt.Sprintf("account %q on host %q: %v; run the session on this host or drop the account", account, hostName, ErrAccountHost), clitext.HostErrAccountHost, clitext.Params{clitext.ParamAccount: account, clitext.ParamHost: hostName}, ErrAccountHost)
+	return localize(h.currentLanguage(), fmt.Sprintf("account %q on host %q: %v; run the session on this host or drop the account", account, hostName, ErrAccountHost), clitext.HostErrAccountHost, clitext.Params{clitext.ParamAccount: account, clitext.ParamHost: hostName}, ErrAccountHost)
 }
 
 func (h *Handler) launchVendor(runtime runtimeChoice) (string, error) {

@@ -49,11 +49,15 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 	if err != nil {
 		return err
 	}
-	langs, err := prepareLanguages(cfg, stateFlagPath(args))
+	langs, err := serveLanguages(cfg, args)
 	if err != nil {
 		return err
 	}
 	return serveWith(ctx, args, open, cfg, langs)
+}
+
+func serveLanguages(cfg config.Config, args []string) (language.Languages, error) {
+	return prepareLanguages(cfg, stateFlagPath(args))
 }
 
 func prepareLanguages(cfg config.Config, statePath string) (language.Languages, error) {

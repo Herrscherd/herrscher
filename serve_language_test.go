@@ -196,3 +196,18 @@ func TestStateFlagSelectsTheStateFileServeReads(t *testing.T) {
 		t.Fatalf("operator = %v, want French from the -state file", langs.Operator)
 	}
 }
+
+func TestServeReadsTheLanguageFromTheStateFileItIsGiven(t *testing.T) {
+	clearPublishedLanguage(t)
+	custom := filepath.Join(t.TempDir(), "custom.json")
+	if err := os.WriteFile(custom, []byte(`{"operator_lang":"fr"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	langs, err := serveLanguages(config.Config{Language: "en"}, []string{"-state", custom})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if langs.Operator != i18n.French {
+		t.Fatalf("serve read operator = %v, want French from the -state file", langs.Operator)
+	}
+}

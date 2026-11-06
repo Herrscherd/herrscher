@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"net"
 	"os"
@@ -54,6 +55,9 @@ func answerNotJSON(t *testing.T, ln net.Listener) {
 	conn, err := ln.Accept()
 	if err != nil {
 		return
+	}
+	if _, err := bufio.NewReader(conn).ReadBytes('\n'); err != nil {
+		t.Error(err)
 	}
 	if _, err := conn.Write([]byte("pas du json\n")); err != nil {
 		t.Error(err)

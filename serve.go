@@ -49,7 +49,7 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 	if err != nil {
 		return err
 	}
-	langs, err := prepareLanguages(cfg, scanFlag(args, "state", host.DefaultStatePath()))
+	langs, err := prepareLanguages(cfg, stateFlagPath(args))
 	if err != nil {
 		return err
 	}
@@ -455,6 +455,10 @@ func buildGateways(ctx context.Context, lang i18n.Language) ([]host.Deps, error)
 		return nil, renderError(lang, errNoGateway, clitext.ServeNoGateway, nil)
 	}
 	return sets, nil
+}
+
+func stateFlagPath(args []string) string {
+	return scanFlag(args, "state", host.DefaultStatePath())
 }
 
 func scanFlag(args []string, name, def string) string {

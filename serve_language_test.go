@@ -172,3 +172,27 @@ func TestPrepareLanguagesReadsTheStateFileInUse(t *testing.T) {
 		t.Fatalf("operator = %v, want French from the -state file in use, not the default state", langs.Operator)
 	}
 }
+
+func TestStateFlagSelectsTheStateFileServeReads(t *testing.T) {
+	clearPublishedLanguage(t)
+	custom := filepath.Join(t.TempDir(), "custom.json")
+	if err := os.WriteFile(custom, []byte(`{"operator_lang":"fr"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := stateFlagPath([]string{"-state", custom}); got != custom {
+		t.Fatalf("stateFlagPath(-state) = %q, want %q", got, custom)
+	}
+	if got := stateFlagPath([]string{"--state=" + custom}); got != custom {
+		t.Fatalf("stateFlagPath(--state=) = %q, want %q", got, custom)
+	}
+	if got := stateFlagPath(nil); got != host.DefaultStatePath() {
+		t.Fatalf("stateFlagPath() = %q, want the default %q", got, host.DefaultStatePath())
+	}
+	langs, err := prepareLanguages(config.Config{Language: "en"}, stateFlagPath([]string{"-state", custom}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if langs.Operator != i18n.French {
+		t.Fatalf("operator = %v, want French from the -state file", langs.Operator)
+	}
+}

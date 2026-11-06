@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sync"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
@@ -41,6 +42,7 @@ type Handler struct {
 	vendorDefault   func(vendor string) string
 	hs              Hosts
 	remoteBackend   bool
+	langMu          sync.RWMutex
 	lang            i18n.Language
 	defaultLang     i18n.Language
 	onLanguage      func(i18n.Language)
@@ -81,16 +83,40 @@ func (h *Handler) materializeOn(ctx context.Context, hostName string, profile ag
 
 // SetLanguage wires the operator language the messages of the session verbs
 // render in. An undefined language falls back to English.
-func (h *Handler) SetLanguage(lang i18n.Language) { h.lang = i18n.Resolve(lang) }
+func (h *Handler) SetLanguage(lang i18n.Language) {
+	h.langMu.Lock()
+	defer h.langMu.Unlock()
+	h.lang = i18n.Resolve(lang)
+}
+
+func (h *Handler) currentLanguage() i18n.Language {
+	h.langMu.RLock()
+	defer h.langMu.RUnlock()
+	return h.lang
+}
+
+func (h *Handler) defaultLanguage() i18n.Language {
+	h.langMu.RLock()
+	defer h.langMu.RUnlock()
+	return h.defaultLang
+}
 
 // OnLanguageChange registers the callback told each time /set lang changes the operator language.
-func (h *Handler) OnLanguageChange(fn func(i18n.Language)) { h.onLanguage = fn }
+func (h *Handler) OnLanguageChange(notify func(i18n.Language)) {
+	h.langMu.Lock()
+	defer h.langMu.Unlock()
+	h.onLanguage = notify
+}
 
 // SetDefaultLanguage wires the language /set lang restores when it is given auto or nothing.
-func (h *Handler) SetDefaultLanguage(lang i18n.Language) { h.defaultLang = i18n.Resolve(lang) }
+func (h *Handler) SetDefaultLanguage(lang i18n.Language) {
+	h.langMu.Lock()
+	defer h.langMu.Unlock()
+	h.defaultLang = i18n.Resolve(lang)
+}
 
 func (h *Handler) text(key clitext.Key, params clitext.Params) string {
-	return h.textIn(h.lang, key, params)
+	return h.textIn(h.currentLanguage(), key, params)
 }
 
 func (h *Handler) textIn(lang i18n.Language, key clitext.Key, params clitext.Params) string {
@@ -105,7 +131,7 @@ func (h *Handler) textIn(lang i18n.Language, key clitext.Key, params clitext.Par
 func (h *Handler) noticeLanguage(raw string) i18n.Language {
 	lang, err := i18n.ParseLanguage(raw)
 	if err != nil {
-		return h.lang
+		return h.currentLanguage()
 	}
 	return lang
 }

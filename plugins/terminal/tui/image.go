@@ -54,9 +54,11 @@ func skipPreview(err error) string {
 }
 
 func boundedEscape(img image.Image, caps Capabilities) string {
-	if esc := imageEscape(img, caps); len(esc) <= maxPreviewBytes {
+	esc := imageEscape(img, caps)
+	if len(esc) <= maxPreviewBytes {
 		return esc
 	}
+	slog.Warn("image preview dropped, its escape sequence is over the cap", "bytes", len(esc), "max", maxPreviewBytes)
 	return ""
 }
 

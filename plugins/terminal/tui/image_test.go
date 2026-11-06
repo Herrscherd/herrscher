@@ -3,6 +3,8 @@ package tui
 import (
 	"bytes"
 	"encoding/base64"
+	"image"
+	"math/rand/v2"
 	"strings"
 	"testing"
 )
@@ -52,5 +54,32 @@ func TestKittyPreviewRoundTripsChunkedPayload(t *testing.T) {
 func TestKittyPreviewEmptyIsNoOp(t *testing.T) {
 	if out := kittyPreview(nil, 3); out != "" {
 		t.Fatalf("empty image must yield no escape, got %q", out)
+	}
+}
+
+func TestBoundedEscapeWarnsWithItsSizeWhenItDropsAnOverlongPreview(t *testing.T) {
+	logs := captureWarnings(t)
+	noise := image.NewNRGBA(image.Rect(0, 0, maxPreviewWidth, previewRows*cellPixels))
+	rng := rand.New(rand.NewPCG(1, 2))
+	for i := range noise.Pix {
+		noise.Pix[i] = uint8(rng.UintN(256))
+	}
+	if esc := boundedEscape(noise, Capabilities{Graphics: GraphicsKitty}); esc != "" {
+		t.Fatalf("an over-long preview must be dropped, got %d bytes", len(esc))
+	}
+	expectWarning(t, logs, "image preview dropped")
+	if !strings.Contains(logs.String(), "bytes=") || !strings.Contains(logs.String(), "max=") {
+		t.Fatalf("the drop warning must carry the size and the cap: %q", logs.String())
+	}
+}
+
+func TestBoundedEscapeKeepsASmallPreviewSilently(t *testing.T) {
+	logs := captureWarnings(t)
+	small := image.NewNRGBA(image.Rect(0, 0, 8, 8))
+	if esc := boundedEscape(small, Capabilities{Graphics: GraphicsKitty}); esc == "" {
+		t.Fatal("a small preview must be kept")
+	}
+	if logs.Len() != 0 {
+		t.Fatalf("a kept preview must not warn: %q", logs.String())
 	}
 }

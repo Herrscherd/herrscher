@@ -665,7 +665,7 @@ func (s *State) SetSessionApprovals(name, mode string) error {
 	return fmt.Errorf("%w: %q", errNoSession, name)
 }
 
-// SetSessionLanguage records the language a session answers in, "" to follow the operator, and persists.
+// SetSessionLanguage stores the language a session answers in and persists it.
 func (s *State) SetSessionLanguage(name, lang string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

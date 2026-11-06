@@ -112,3 +112,19 @@ func TestCommandErrorsUseTheTargetSessionLanguage(t *testing.T) {
 		})
 	}
 }
+
+func TestSessionLangUnknownSessionIsANotFoundNotice(t *testing.T) {
+	st := languageStore(t)
+	_, err := setSessionLang(st, i18n.French, "ghost", "fr")
+	var notFound *NotFoundError
+	if !errors.As(err, &notFound) {
+		t.Fatalf("setSessionLang on an unknown session = %v, want a NotFoundError", err)
+	}
+	notice := notFound.Notice()
+	if notice.Code != contracts.CodeSessionNotFound {
+		t.Fatalf("notice code = %s, want %s", notice.Code.Key(), contracts.CodeSessionNotFound.Key())
+	}
+	if fmt.Sprint(describeNoticeArgs(notice.Args)) != fmt.Sprint([]string{"Name/1=ghost"}) {
+		t.Fatalf("notice args = %v, want the session name ghost", describeNoticeArgs(notice.Args))
+	}
+}

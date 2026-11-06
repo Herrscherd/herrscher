@@ -13,18 +13,20 @@ import (
 )
 
 const (
-	tplArgAction = "Action"
-	tplArgCount  = "Count"
-	tplArgHint   = "Hint"
-	tplArgKey    = "Key"
-	tplArgLabel  = "Label"
-	tplArgName   = "Name"
-	tplArgReason = "Reason"
-	tplArgSha    = "Sha"
-	tplArgSpec   = "Spec"
-	tplArgText   = "Text"
-	tplArgTotal  = "Total"
-	tplArgWhen   = "When"
+	tplArgAction  = "Action"
+	tplArgCount   = "Count"
+	tplArgHint    = "Hint"
+	tplArgKey     = "Key"
+	tplArgLabel   = "Label"
+	tplArgName    = "Name"
+	tplArgOptions = "Options"
+	tplArgReason  = "Reason"
+	tplArgSha     = "Sha"
+	tplArgSpec    = "Spec"
+	tplArgText    = "Text"
+	tplArgTotal   = "Total"
+	tplArgValue   = "Value"
+	tplArgWhen    = "When"
 )
 
 //go:embed locales
@@ -124,11 +126,30 @@ func reasonKeys() []reasonKey {
 		{errControlByte, "tui.reason.control_byte"},
 		{errNoEditorLauncher, "tui.reason.no_editor_launcher"},
 		{errNoSystemLauncher, "tui.reason.no_system_launcher"},
+		{errUnparsableTarget, "tui.reason.unparsable_target"},
 	}
+}
+
+type detailedReason struct {
+	sentinel error
+	text     string
+	render   func(translator) string
+}
+
+func (reason detailedReason) Error() string {
+	return reason.text
+}
+
+func (reason detailedReason) Unwrap() error {
+	return reason.sentinel
 }
 
 func localizedReason(trans translator, err error) string {
 	message := err.Error()
+	var detailed detailedReason
+	if errors.As(err, &detailed) {
+		return strings.Replace(message, detailed.text, detailed.render(trans), 1)
+	}
 	for _, known := range reasonKeys() {
 		if errors.Is(err, known.sentinel) {
 			return strings.Replace(message, known.sentinel.Error(), trans.t(known.key, nil), 1)

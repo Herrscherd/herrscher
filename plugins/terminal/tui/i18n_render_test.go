@@ -105,6 +105,51 @@ func TestLocalizedReasonTranslatesWrappedSentinels(t *testing.T) {
 	}
 }
 
+func TestLocalizedReasonFindsSentinelInTheMiddle(t *testing.T) {
+	cases := []struct {
+		name string
+		lang i18n.Language
+		want string
+	}{
+		{"middle wrap en", i18n.English, "ctx: unknown key"},
+		{"middle wrap fr", i18n.French, "ctx: clé inconnue"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			wrapped := fmt.Errorf("ctx: %w", errUnknownKey)
+			if got := localizedReason(newTranslator().in(tc.lang), wrapped); got != tc.want {
+				t.Fatalf("localizedReason(%q) = %q, want %q", wrapped, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDetailedReasonsTranslateTheWholePhrase(t *testing.T) {
+	text := "nope"
+	var pal palette
+	colourErr := colorsFile{Text: &text}.applyTo(&pal)
+	_, optionErr := parseOption("glyphs", "x", glyphModes())
+	options := joinOptions(glyphModes())
+	cases := []struct {
+		name string
+		err  error
+		lang i18n.Language
+		want string
+	}{
+		{"invalid colour en", colourErr, i18n.English, `invalid colour "nope" (expected #rrggbb or ansi:0 to ansi:15)`},
+		{"invalid colour fr", colourErr, i18n.French, `couleur invalide « nope » (attendu #rrggbb ou ansi:0 à ansi:15)`},
+		{"unknown option en", optionErr, i18n.English, `unknown value for glyphs: "x" (expected ` + options + `)`},
+		{"unknown option fr", optionErr, i18n.French, `valeur inconnue pour glyphs : « x » (attendu ` + options + `)`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := localizedReason(newTranslator().in(tc.lang), tc.err); got != tc.want {
+				t.Fatalf("localizedReason(%q) = %q, want %q", tc.err, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestLocalizedReasonKeepsUnknownErrorsRaw(t *testing.T) {
 	raw := errors.New("open /etc/x: permission denied")
 	if got := localizedReason(newTranslator().in(i18n.French), raw); got != raw.Error() {

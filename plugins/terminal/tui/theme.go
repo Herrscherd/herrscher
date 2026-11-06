@@ -98,7 +98,17 @@ func parseOption[Choice closedOption](key, value string, options []Choice) (Choi
 		}
 	}
 	var zero Choice
-	return zero, fmt.Errorf("%w for %s: %q (expected %s)", errUnknownOption, key, value, joinOptions(options))
+	return zero, unknownOptionReason(key, value, joinOptions(options))
+}
+
+func unknownOptionReason(key, value, options string) error {
+	return detailedReason{
+		sentinel: errUnknownOption,
+		text:     fmt.Sprintf("%s for %s: %q (expected %s)", errUnknownOption, key, value, options),
+		render: func(trans translator) string {
+			return trans.t("tui.reason.unknown_option_for", map[string]any{tplArgKey: key, tplArgValue: value, tplArgOptions: options})
+		},
+	}
 }
 
 func joinOptions[Choice closedOption](options []Choice) string {

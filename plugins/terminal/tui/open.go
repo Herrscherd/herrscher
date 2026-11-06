@@ -17,6 +17,7 @@ var (
 	errNoEditor         = errors.New("no $EDITOR or $VISUAL to open with")
 	errNoEditorLauncher = errors.New("no editor launcher configured")
 	errNoSystemLauncher = errors.New("no system launcher configured")
+	errUnparsableTarget = errors.New("unparsable target")
 )
 
 type launcher func(ctx context.Context, target string) error
@@ -46,7 +47,7 @@ func systemLauncher() launcher {
 func checkURLTarget(target string) error {
 	parsed, err := url.Parse(target)
 	if err != nil {
-		return fmt.Errorf("refusing an unparsable target: %w", err)
+		return fmt.Errorf("%w: %w", errUnparsableTarget, err)
 	}
 	switch strings.ToLower(parsed.Scheme) {
 	case "http", "https", "mailto":

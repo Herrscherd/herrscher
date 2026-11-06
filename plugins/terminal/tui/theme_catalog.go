@@ -90,6 +90,16 @@ func (f themeFile) overlay(base Theme, themeName string) (Theme, error) {
 	return resolved, nil
 }
 
+func invalidColorReason(value string) error {
+	return detailedReason{
+		sentinel: errInvalidColor,
+		text:     fmt.Sprintf("%s %q (expected #rrggbb or ansi:0 to ansi:15)", errInvalidColor, value),
+		render: func(trans translator) string {
+			return trans.t("tui.reason.invalid_color_value", map[string]any{tplArgValue: value})
+		},
+	}
+}
+
 func (c colorsFile) applyTo(pal *palette) error {
 	overrides := []struct {
 		dst *colorValue
@@ -113,7 +123,7 @@ func (c colorsFile) applyTo(pal *palette) error {
 			continue
 		}
 		if !validColor(*override.src) {
-			return fmt.Errorf("%w %q (expected #rrggbb or ansi:0 to ansi:15)", errInvalidColor, *override.src)
+			return invalidColorReason(*override.src)
 		}
 		*override.dst = colorValue(*override.src)
 	}

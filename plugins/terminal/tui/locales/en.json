@@ -2421,6 +2421,18 @@
     "other": "no system launcher configured"
   },
   {
+    "id": "tui.reason.unparsable_target",
+    "other": "unparsable target"
+  },
+  {
+    "id": "tui.reason.invalid_color_value",
+    "other": "invalid colour \"{{.Value}}\" (expected #rrggbb or ansi:0 to ansi:15)"
+  },
+  {
+    "id": "tui.reason.unknown_option_for",
+    "other": "unknown value for {{.Key}}: \"{{.Value}}\" (expected {{.Options}})"
+  },
+  {
     "id": "tui.diffpanel.snapshot_failed",
     "other": "turn snapshot impossible: {{.Reason}}"
   },

@@ -2421,6 +2421,18 @@
     "other": "aucun lanceur système configuré"
   },
   {
+    "id": "tui.reason.unparsable_target",
+    "other": "cible illisible"
+  },
+  {
+    "id": "tui.reason.invalid_color_value",
+    "other": "couleur invalide « {{.Value}} » (attendu #rrggbb ou ansi:0 à ansi:15)"
+  },
+  {
+    "id": "tui.reason.unknown_option_for",
+    "other": "valeur inconnue pour {{.Key}} : « {{.Value}} » (attendu {{.Options}})"
+  },
+  {
     "id": "tui.diffpanel.snapshot_failed",
     "other": "instantané du tour impossible : {{.Reason}}"
   },

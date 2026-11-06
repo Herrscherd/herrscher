@@ -10,55 +10,55 @@ import (
 	"strings"
 )
 
-func previewEscapes(atts []Attachment, caps Capabilities) string {
+func previewEscapes(log *slog.Logger, atts []Attachment, caps Capabilities) string {
 	var previews []string
 	for _, a := range atts {
-		if esc := previewEscape(a, caps); esc != "" {
+		if esc := previewEscape(log, a, caps); esc != "" {
 			previews = append(previews, esc)
 		}
 	}
 	return strings.Join(previews, "\n")
 }
 
-func previewEscape(attachment Attachment, caps Capabilities) string {
+func previewEscape(log *slog.Logger, attachment Attachment, caps Capabilities) string {
 	if !strings.HasPrefix(attachment.Mime, "image/") {
 		return ""
 	}
 	info, err := os.Stat(attachment.Path)
 	if err != nil {
-		return skipPreview(err)
+		return skipPreview(log, err)
 	}
 	if info.Size() == 0 {
-		return skipPreview(errEmptyImage)
+		return skipPreview(log, errEmptyImage)
 	}
 	if info.Size() > maxDecodeBytes {
-		return skipPreview(fmt.Errorf("%w: %d/%d", errImageTooLarge, info.Size(), maxDecodeBytes))
+		return skipPreview(log, fmt.Errorf("%w: %d/%d", errImageTooLarge, info.Size(), maxDecodeBytes))
 	}
 	data, err := os.ReadFile(attachment.Path)
 	if err != nil {
-		return skipPreview(err)
+		return skipPreview(log, err)
 	}
 	if len(data) == 0 {
-		return skipPreview(errEmptyImage)
+		return skipPreview(log, errEmptyImage)
 	}
 	img, err := decodeImage(data)
 	if err != nil {
-		return skipPreview(err)
+		return skipPreview(log, err)
 	}
-	return boundedEscape(img, caps)
+	return boundedEscape(log, img, caps)
 }
 
-func skipPreview(err error) string {
-	slog.Warn("attachment preview skipped", "err", err)
+func skipPreview(log *slog.Logger, err error) string {
+	log.Warn("attachment preview skipped", "err", err)
 	return ""
 }
 
-func boundedEscape(img image.Image, caps Capabilities) string {
-	esc := imageEscape(img, caps)
+func boundedEscape(log *slog.Logger, img image.Image, caps Capabilities) string {
+	esc := imageEscape(log, img, caps)
 	if len(esc) <= maxPreviewBytes {
 		return esc
 	}
-	slog.Warn("image preview dropped, its escape sequence is over the cap", "bytes", len(esc), "max", maxPreviewBytes)
+	log.Warn("image preview dropped, its escape sequence is over the cap", "bytes", len(esc), "max", maxPreviewBytes)
 	return ""
 }
 

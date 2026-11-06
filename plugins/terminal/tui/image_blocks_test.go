@@ -40,15 +40,15 @@ func TestBlockRenderEmptyIsNoOp(t *testing.T) {
 
 func TestImageEscapePicksTheEncoderFromTheProbe(t *testing.T) {
 	img := twoByTwo()
-	kitty := imageEscape(img, Capabilities{Graphics: GraphicsKitty})
+	kitty := imageEscape(quietLog(), img, Capabilities{Graphics: GraphicsKitty})
 	if !strings.HasPrefix(kitty, "\x1b_G") {
 		t.Errorf("kitty must take the kitty graphics protocol: %q", kitty)
 	}
-	sixel := imageEscape(img, Capabilities{Graphics: GraphicsSixel})
+	sixel := imageEscape(quietLog(), img, Capabilities{Graphics: GraphicsSixel})
 	if !strings.HasPrefix(sixel, "\x1bPq") {
 		t.Errorf("a sixel terminal must take the sixel encoder: %q", sixel)
 	}
-	blocks := imageEscape(img, Capabilities{Graphics: GraphicsNone})
+	blocks := imageEscape(quietLog(), img, Capabilities{Graphics: GraphicsNone})
 	if !strings.Contains(blocks, blockUpperHalf) {
 		t.Errorf("a terminal with no protocol must fall back to half-blocks: %q", blocks)
 	}

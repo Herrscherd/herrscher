@@ -96,8 +96,8 @@ func TestEmptyScriptOutputIsAFailure(t *testing.T) {
 }
 
 func TestStatuslineJournalLogsEachNewCauseAndTheReturnToSuccess(t *testing.T) {
-	logs := captureWarnings(t)
-	m := &model{}
+	log, logs := captureWarnings()
+	m := &model{log: log}
 	m.receiveScript(scriptDoneMsg{err: errors.New("exit status 2")})
 	m.receiveScript(scriptDoneMsg{err: errors.New("exit status 2")})
 	m.receiveScript(scriptDoneMsg{err: errors.New("timed out after 1s")})

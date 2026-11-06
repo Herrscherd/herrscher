@@ -1,10 +1,8 @@
 package tui
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"testing"
 
@@ -158,11 +156,9 @@ func TestLocalizedReasonKeepsUnknownErrorsRaw(t *testing.T) {
 }
 
 func TestSharedCliTextLogsFailureOnce(t *testing.T) {
-	var logs bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	logger, logs := captureWarnings()
 	trans := newTranslator().in(i18n.French)
+	trans.log = logger
 	for range 5 {
 		if got := trans.shared(clitext.Key("cli.missing.key")); got != "cli.missing.key" {
 			t.Fatalf("a failed shared text must return its key, got %q", got)

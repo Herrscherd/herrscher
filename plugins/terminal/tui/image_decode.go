@@ -67,10 +67,10 @@ func downscale(img image.Image) image.Image {
 	return out
 }
 
-func encodePNG(img image.Image) ([]byte, error) {
+func encodePNG(log *slog.Logger, img image.Image) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, img); err != nil {
-		slog.Warn("image drawn as blocks, png encoding failed", "err", err)
+		log.Warn("image drawn as blocks, png encoding failed", "err", err)
 		return nil, fmt.Errorf("encode png: %w", err)
 	}
 	return buf.Bytes(), nil

@@ -13,13 +13,9 @@ import (
 	"testing"
 )
 
-func captureWarnings(t *testing.T) *bytes.Buffer {
-	t.Helper()
+func captureWarnings() (*slog.Logger, *bytes.Buffer) {
 	var buf bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
-	return &buf
+	return slog.New(slog.NewTextHandler(&buf, nil)), &buf
 }
 
 func expectWarning(t *testing.T, logs *bytes.Buffer, cause string) {
@@ -31,8 +27,9 @@ func expectWarning(t *testing.T, logs *bytes.Buffer, cause string) {
 }
 
 func TestTranscriptImageFetchFailureLeavesAWarning(t *testing.T) {
-	logs := captureWarnings(t)
+	log, logs := captureWarnings()
 	m := newTestModel()
+	m.log = log
 	m.caps = Capabilities{Graphics: GraphicsKitty}
 	m.imageHosts = []string{"cdn.example.com"}
 	m.imageFetcher = func(context.Context, string) ([]byte, error) { return nil, errors.New("connection reset by peer") }
@@ -46,8 +43,9 @@ func TestTranscriptImageFetchFailureLeavesAWarning(t *testing.T) {
 }
 
 func TestTranscriptImageDecodeFailureLeavesAWarning(t *testing.T) {
-	logs := captureWarnings(t)
+	log, logs := captureWarnings()
 	m := newTestModel()
+	m.log = log
 	m.caps = Capabilities{Graphics: GraphicsKitty}
 	m.imageHosts = []string{"cdn.example.com"}
 	m.imageFetcher = func(context.Context, string) ([]byte, error) { return []byte("not an image"), nil }
@@ -80,8 +78,8 @@ func TestAttachmentPreviewFailuresLeaveAWarning(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			logs := captureWarnings(t)
-			if esc := previewEscape(Attachment{Mime: "image/png", Path: tc.path}, Capabilities{Graphics: GraphicsKitty}); esc != "" {
+			log, logs := captureWarnings()
+			if esc := previewEscape(log, Attachment{Mime: "image/png", Path: tc.path}, Capabilities{Graphics: GraphicsKitty}); esc != "" {
 				t.Fatalf("a failed preview must draw nothing, got %q", esc)
 			}
 			expectWarning(t, logs, tc.cause)
@@ -90,8 +88,8 @@ func TestAttachmentPreviewFailuresLeaveAWarning(t *testing.T) {
 }
 
 func TestStatuslineFailureLeavesOneWarningPerFailure(t *testing.T) {
-	logs := captureWarnings(t)
-	m := &model{}
+	log, logs := captureWarnings()
+	m := &model{log: log}
 	m.receiveScript(scriptDoneMsg{err: errStatuslineNoCommand})
 	m.receiveScript(scriptDoneMsg{err: errStatuslineNoCommand})
 	expectWarning(t, logs, "statusline.no_command")
@@ -109,8 +107,8 @@ func (oversizedImage) Bounds() image.Rectangle { return image.Rect(0, 0, 1<<32, 
 func (oversizedImage) At(int, int) color.Color { return color.Black }
 
 func TestPNGEncodingFailureLeavesAWarning(t *testing.T) {
-	logs := captureWarnings(t)
-	if _, err := encodePNG(oversizedImage{}); err == nil {
+	log, logs := captureWarnings()
+	if _, err := encodePNG(log, oversizedImage{}); err == nil {
 		t.Fatal("an image beyond the PNG size limit must fail to encode")
 	}
 	expectWarning(t, logs, "invalid image size")

@@ -114,7 +114,7 @@ func TestDownscaleBringsALargeImageUnderThePreviewCap(t *testing.T) {
 			big.Set(x, y, color.RGBA{R: uint8(rng.Intn(256)), G: uint8(rng.Intn(256)), B: uint8(rng.Intn(256)), A: 0xff})
 		}
 	}
-	source, err := encodePNG(big)
+	source, err := encodePNG(quietLog(), big)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestDownscaleBringsALargeImageUnderThePreviewCap(t *testing.T) {
 	if small.Bounds().Dy() >= big.Bounds().Dy() {
 		t.Fatalf("downscale left the image at %v", small.Bounds())
 	}
-	encoded, err := encodePNG(small)
+	encoded, err := encodePNG(quietLog(), small)
 	if err != nil {
 		t.Fatal(err)
 	}

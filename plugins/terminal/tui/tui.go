@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -246,6 +247,7 @@ func spinTick(d time.Duration) tea.Cmd {
 
 type model struct {
 	tr            translator
+	log           *slog.Logger
 	handlers      *dispatchTables
 	buildTables   func() (*dispatchTables, error)
 	ctx           context.Context
@@ -514,7 +516,7 @@ func newModel(backend Backend) *model {
 	field.SetHeight(maxComposerLines)
 	field.Focus()
 	match := &model{
-		ctx: context.Background(), tr: trans, buildTables: newDispatchTables, tm: backend, input: field, composerRows: 1, tabs: make(map[string]*tab), clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
+		ctx: context.Background(), tr: trans, log: slog.Default(), buildTables: newDispatchTables, tm: backend, input: field, composerRows: 1, tabs: make(map[string]*tab), clip: newClipboard(), caps: Probe(os.Getenv), linkIdx: -1,
 		sys: systemLauncher(), edit: editorLauncher(os.Getenv),
 		st: newStyles(defaultTheme(), false), md: &markdownRenderer{}, theme: defaultTheme(), bar: newBarState(),
 		terminal: detectTerminal(os.LookupEnv),
@@ -846,7 +848,7 @@ func (m *model) submitTo(channel, text string, atts []Attachment) tea.Cmd {
 	wasBusy := tab.busy
 	tab.endStream()
 	item := entry{role: roleYou, text: text, attachments: atts}
-	item.preview = previewEscapes(atts, m.caps)
+	item.preview = previewEscapes(m.logger(), atts, m.caps)
 	tab.appendEntry(item)
 	tab.busy = true
 	tab.streamed = false
@@ -1434,6 +1436,18 @@ func formatCost(cost float64) string {
 // Option adjusts a window before it is drawn. Options exist so a caller can say
 // what the window opens on without the TUI growing a constructor per launch path.
 type Option func(*model)
+
+// Logger sends the warnings of the window to log instead of the process default logger.
+func Logger(log *slog.Logger) Option {
+	return func(m *model) { m.log = log }
+}
+
+func (m *model) logger() *slog.Logger {
+	if m.log == nil {
+		return slog.Default()
+	}
+	return m.log
+}
 
 // OpenOn opens the window on a named session and sends text there as its first
 // message. An empty text opens the session and sends nothing, which is how a

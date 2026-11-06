@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,8 @@ import (
 )
 
 func newTestModel() *model { return newModel(nil) }
+
+func quietLog() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
 func runCmd(cmd tea.Cmd) tea.Msg {
 	if cmd == nil {

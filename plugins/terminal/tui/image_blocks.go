@@ -2,6 +2,7 @@ package tui
 
 import (
 	"image"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -62,11 +63,11 @@ func blockCols(img image.Image, rows int) int {
 	return min(maxBlockCols, max(1, bounds.Dx()*rows*2/bounds.Dy()))
 }
 
-func imageEscape(img image.Image, caps Capabilities) string {
+func imageEscape(log *slog.Logger, img image.Image, caps Capabilities) string {
 	scaled := downscale(img)
 	switch caps.Graphics {
 	case GraphicsKitty:
-		data, err := encodePNG(scaled)
+		data, err := encodePNG(log, scaled)
 		if err != nil {
 			break
 		}

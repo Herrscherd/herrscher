@@ -22,6 +22,7 @@ func TestShownWrapSitesKeepTheirSentinel(t *testing.T) {
 			return colorsFile{Text: &text}.applyTo(&pal)
 		}},
 		{"unknown key", errUnknownKey, func(t *testing.T) error {
+			t.Helper()
 			path := filepath.Join(t.TempDir(), "x.toml")
 			if err := os.WriteFile(path, []byte("nonsense = 1\n"), 0o600); err != nil {
 				t.Fatal(err)
@@ -30,7 +31,7 @@ func TestShownWrapSitesKeepTheirSentinel(t *testing.T) {
 			return err
 		}},
 		{"unknown base", errUnknownBase, func(*testing.T) error {
-			_, err := resolveTheme("x", map[string]themeFile{"x": {Base: "nope"}}, map[string]bool{})
+			_, err := resolveTheme("x", map[string]themeFile{"x": {Base: "nope"}}, make(map[string]bool))
 			return err
 		}},
 		{"unknown option", errUnknownOption, func(*testing.T) error {
@@ -50,6 +51,7 @@ func TestShownWrapSitesKeepTheirSentinel(t *testing.T) {
 			return checkTarget("a\x01b")
 		}},
 		{"unsafe draft dir", errUnsafeDraftDir, func(t *testing.T) error {
+			t.Helper()
 			dir := t.TempDir()
 			if err := os.Chmod(dir, 0o777); err != nil {
 				t.Fatal(err)
@@ -57,6 +59,7 @@ func TestShownWrapSitesKeepTheirSentinel(t *testing.T) {
 			return checkPrivateDir(dir)
 		}},
 		{"not regular file", errNotRegularFile, func(t *testing.T) error {
+			t.Helper()
 			_, err := attachLocalFile(t.TempDir(), 1)
 			return err
 		}},

@@ -102,7 +102,7 @@ func parseOption[Choice closedOption](key, value string, options []Choice) (Choi
 }
 
 func unknownOptionReason(key, value, options string) error {
-	return detailedReason{
+	return reasonError{
 		sentinel: errUnknownOption,
 		text:     fmt.Sprintf("%s for %s: %q (expected %s)", errUnknownOption, key, value, options),
 		render: func(trans translator) string {

@@ -130,23 +130,23 @@ func reasonKeys() []reasonKey {
 	}
 }
 
-type detailedReason struct {
+type reasonError struct {
 	sentinel error
 	text     string
 	render   func(translator) string
 }
 
-func (reason detailedReason) Error() string {
+func (reason reasonError) Error() string {
 	return reason.text
 }
 
-func (reason detailedReason) Unwrap() error {
+func (reason reasonError) Unwrap() error {
 	return reason.sentinel
 }
 
 func localizedReason(trans translator, err error) string {
 	message := err.Error()
-	var detailed detailedReason
+	var detailed reasonError
 	if errors.As(err, &detailed) {
 		return strings.Replace(message, detailed.text, detailed.render(trans), 1)
 	}

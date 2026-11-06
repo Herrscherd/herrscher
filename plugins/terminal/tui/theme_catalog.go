@@ -91,7 +91,7 @@ func (f themeFile) overlay(base Theme, themeName string) (Theme, error) {
 }
 
 func invalidColorReason(value string) error {
-	return detailedReason{
+	return reasonError{
 		sentinel: errInvalidColor,
 		text:     fmt.Sprintf("%s %q (expected #rrggbb or ansi:0 to ansi:15)", errInvalidColor, value),
 		render: func(trans translator) string {

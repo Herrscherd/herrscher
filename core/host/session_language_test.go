@@ -2,7 +2,6 @@ package host
 
 import (
 	"path/filepath"
-	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -71,16 +70,26 @@ func TestHandoffBriefDirectiveFollowsTheSessionLanguage(t *testing.T) {
 		state.Session{Name: "en-s", Language: "en"},
 		state.Session{Name: "bare-s"},
 	)
-	if got := handoffBriefTaskFor(st, "fr-s"); !strings.HasSuffix(got, " Write the brief in French.") {
-		t.Fatalf("french session brief task = %q, want the French directive", got)
+	cases := []struct {
+		name     string
+		session  string
+		operator i18n.Language
+		want     string
+	}{
+		{"french session with english operator", "fr-s", i18n.English, " Write the brief in French."},
+		{"english session with french operator", "en-s", i18n.French, " Write the brief in English."},
+		{"session without language follows the french operator", "bare-s", i18n.French, " Write the brief in French."},
+		{"unknown session follows the english operator", "ghost", i18n.English, " Write the brief in English."},
+		{"session without language and operator without language has no directive", "bare-s", 0, ""},
+		{"unknown session and operator without language has no directive", "ghost", 0, ""},
 	}
-	if got := handoffBriefTaskFor(st, "en-s"); !strings.HasSuffix(got, " Write the brief in English.") {
-		t.Fatalf("english session brief task = %q, want the English directive", got)
-	}
-	for _, name := range []string{"bare-s", "ghost"} {
-		if got := handoffBriefTaskFor(st, name); got != handoffBriefTask {
-			t.Fatalf("session %q without language brief task = %q, want no directive", name, got)
-		}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := handoffBriefTaskFor(st, tc.session, tc.operator)
+			if got != handoffBriefTask+tc.want {
+				t.Fatalf("brief task = %q, want %q", got, handoffBriefTask+tc.want)
+			}
+		})
 	}
 	if got := briefLanguageDirective(0); got != "" {
 		t.Fatalf("zero language directive = %q, want none", got)

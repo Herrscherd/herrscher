@@ -87,6 +87,7 @@ const (
 	HostErrInspectChannel       = "cli.host.err.inspect_channel"
 	HostErrReadSoul             = "cli.host.err.read_soul"
 	HostErrAccountOfAgent       = "cli.host.err.account_of_agent"
+	HostAgentListHeader         = "cli.host.agent.list_header"
 )
 
 func hostKeys() map[Key][]string {
@@ -176,5 +177,6 @@ func hostKeys() map[Key][]string {
 		HostErrInspectChannel:       {ParamErr},
 		HostErrReadSoul:             {ParamErr},
 		HostErrAccountOfAgent:       {ParamAgent, ParamErr},
+		HostAgentListHeader:         nil,
 	}
 }

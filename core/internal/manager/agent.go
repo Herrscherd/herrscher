@@ -71,7 +71,7 @@ func (h *Handler) agentListRun(_ context.Context, input contracts.Input) (contra
 		return contracts.DataResult(h.text(clitext.HostAgentListEmpty, nil)), nil
 	}
 	var out strings.Builder
-	out.WriteString("Agents:\n")
+	out.WriteString(h.text(clitext.HostAgentListHeader, nil) + "\n")
 	for i := range agents {
 		a := &agents[i]
 		fmt.Fprintf(&out, "• %s (%#q)\n", a.Name, a.Home)

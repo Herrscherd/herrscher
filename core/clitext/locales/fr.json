@@ -1851,5 +1851,10 @@
     "id": "cli.host.err.account_of_agent",
     "description": "Reply of a host command, err account of agent",
     "other": "le compte de l'agent \"{{.Agent}}\" : {{.Err}}"
+  },
+  {
+    "id": "cli.host.agent.list_header",
+    "description": "Reply of a host command, agent list header",
+    "other": "Agents :"
   }
 ]

@@ -121,7 +121,7 @@ func sessionHandoffCmd(lang i18n.Language, managerCmds []contracts.Cmd, store *s
 			return session.Account
 		},
 		brief: func(ctx context.Context, source string) (string, error) {
-			in := contracts.Input{Args: map[string]string{paramName: source, "task": handoffBriefTaskFor(store, source), "timeout": handoffBriefTimeout}}
+			in := contracts.Input{Args: map[string]string{paramName: source, "task": handoffBriefTaskFor(store, source, lang), "timeout": handoffBriefTimeout}}
 			return runSeedVerb(ctx, in, store, instID, seedCoord.coord)
 		},
 		create: func(ctx context.Context, in contracts.Input) (string, error) {
@@ -350,13 +350,9 @@ func handoffReport(lang i18n.Language, source, target, reply, brief, account str
 	})
 }
 
-func handoffBriefTaskFor(store *state.State, source string) string {
+func handoffBriefTaskFor(store *state.State, source string, operator i18n.Language) string {
 	session, _ := store.FindSession(source)
-	lang, err := i18n.ParseLanguage(session.Language)
-	if err != nil {
-		return handoffBriefTask
-	}
-	directive := briefLanguageDirective(lang)
+	directive := briefLanguageDirective(sessionLanguage(session, operator))
 	if directive == "" {
 		return handoffBriefTask
 	}

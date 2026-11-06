@@ -134,7 +134,7 @@ func (r attachRunner) runAttached(ctx context.Context, instance string, opts ...
 		return err
 	}
 	return withClientLog(r.log, r.logPath, func() error {
-		return r.run(ctx, cancel, daemon, opts...)
+		return r.run(ctx, cancel, daemon, append([]tui.Option{tui.Logger(r.log)}, opts...)...)
 	})
 }
 
@@ -148,7 +148,7 @@ func withClientLog(log *slog.Logger, path string, run func() error) error {
 	if err := rotateClientLog(path); err != nil {
 		log.Warn("client log rotation failed, appending to the current file", "path", path, "err", err)
 	}
-	restore, err := redirectStderr(path)
+	restore, err := redirectStderrCapped(path, maxClientLogBytes)
 	if err != nil {
 		log.Warn("client log unavailable, stderr stays on the terminal", "path", path, "err", err)
 		return run()

@@ -168,10 +168,10 @@ func TestGrantConfirmationNamesThePrincipalAndTheRoleInEachLanguage(t *testing.T
 			t.Fatal(err)
 		}
 		reg := &cli.Registry{}
-		if err := addRoleCommands(reg, tc.lang, st); err != nil {
+		if err = addRoleCommands(reg, tc.lang, st); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := reg.Dispatch(context.Background(), []string{"role", "grant", "--principal", "chat:1", "--role", "owner"}); err != nil {
+		if _, err = reg.Dispatch(context.Background(), []string{"role", "grant", "--principal", "chat:1", "--role", "owner"}); err != nil {
 			t.Fatal(err)
 		}
 		out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"role", "grant", "--principal", "chat:2", "--role", "operator"}))

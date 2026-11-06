@@ -6,6 +6,8 @@ const (
 	HostSourceSet               = "cli.host.source.set"
 	HostLangSet                 = "cli.host.lang.set"
 	HostLangReset               = "cli.host.lang.reset"
+	HostSessionLangSet          = "cli.host.session.lang.set"
+	HostSessionLangReset        = "cli.host.session.lang.reset"
 	HostAgentCreated            = "cli.host.agent.created"
 	HostAgentListEmpty          = "cli.host.agent.list_empty"
 	HostAgentSoulUpdated        = "cli.host.agent.soul_updated"
@@ -99,6 +101,8 @@ func hostKeys() map[Key][]string {
 		HostSourceSet:               {ParamPath},
 		HostLangSet:                 {ParamLang},
 		HostLangReset:               {ParamLang},
+		HostSessionLangSet:          {ParamName, ParamLang},
+		HostSessionLangReset:        {ParamName, ParamLang},
 		HostErrUnsupportedLang:      {ParamLang},
 		HostAgentCreated:            {ParamName, ParamHome},
 		HostAgentListEmpty:          nil,

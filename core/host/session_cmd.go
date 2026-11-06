@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -16,7 +17,10 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-var errNoPendingChoice = errors.New("has no pending choice")
+var (
+	errNoPendingChoice = errors.New("has no pending choice")
+	errUnsupportedLang = errors.New("unsupported language, use en, fr or auto")
+)
 
 func replyText(lang i18n.Language) *clitext.Translator {
 	return clitext.For(i18n.Resolve(lang))
@@ -45,6 +49,7 @@ func addSessionVerbs(reg *cli.Registry, lang languageSource, store *state.State,
 		sessionCompactVerb(lang, store, sessions),
 		sessionSetCompactVerb(store),
 		sessionSetAccountVerb(lang, store),
+		sessionLangVerb(store, lang),
 		sessionAccountsVerb(lang, store),
 	)
 }
@@ -263,4 +268,48 @@ func applyCompactPercent(store *state.State, name, raw string) (bool, error) {
 		return false, err
 	}
 	return store.SetCompactPercent(name, &percent)
+}
+
+func sessionLangVerb(store *state.State, operator languageSource) contracts.Cmd {
+	return contracts.New(nsSession, "lang").
+		Help(clitext.CmdHelpSessionLang).
+		Param(paramName, clitext.CmdParamSessionLangName, true).
+		Param(paramLang, clitext.CmdParamSessionLangLang, true).
+		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
+			return cli.Data(setSessionLang(store, operator(), input.Get(paramName), input.Get(paramLang)))
+		})
+}
+
+func setSessionLang(store *state.State, operator i18n.Language, name, raw string) (string, error) {
+	choice, reset, ok := parseSessionLangChoice(strings.TrimSpace(raw))
+	if !ok {
+		return "", fmt.Errorf("%w: %q", errUnsupportedLang, raw)
+	}
+	stored := ""
+	if !reset {
+		stored = choice.String()
+	}
+	found, err := store.SetSessionLanguage(name, stored)
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return "", &NotFoundError{Kind: kindSession, Name: name}
+	}
+	if reset {
+		return replyText(operator).Text(clitext.HostSessionLangReset, clitext.Params{clitext.ParamName: name, clitext.ParamLang: i18n.Resolve(operator).String()}), nil
+	}
+	return replyText(choice).Text(clitext.HostSessionLangSet, clitext.Params{clitext.ParamName: name, clitext.ParamLang: choice.String()}), nil
+}
+
+func parseSessionLangChoice(raw string) (lang i18n.Language, reset, ok bool) {
+	switch raw {
+	case "", "auto":
+		return 0, true, true
+	case "en":
+		return i18n.English, false, true
+	case "fr":
+		return i18n.French, false, true
+	}
+	return 0, false, false
 }

@@ -3311,5 +3311,35 @@
     "id": "cli.host.fault.remote_shell_session",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (remote shell session)",
     "other": "session shell: remote session, command refused"
+  },
+  {
+    "id": "cli.help.cmd.session.lang",
+    "description": "Aide d'une commande de session (session lang)",
+    "other": "set the language of a session's errors and replies: en, fr or auto"
+  },
+  {
+    "id": "cli.help.param.session.lang.name",
+    "description": "Paramètre session lang, nom",
+    "other": "session name"
+  },
+  {
+    "id": "cli.help.param.session.lang.lang",
+    "description": "Paramètre session lang, langue",
+    "other": "en, fr or auto (auto follows the operator language)"
+  },
+  {
+    "id": "cli.host.session.lang.set",
+    "description": "Réponse de session lang, langue réglée",
+    "other": "session {{.Name}} now answers in {{.Lang}}"
+  },
+  {
+    "id": "cli.host.session.lang.reset",
+    "description": "Réponse de session lang, retour à la langue de l'opérateur",
+    "other": "session {{.Name}} follows the operator language ({{.Lang}})"
+  },
+  {
+    "id": "cli.host.fault.unsupported_lang",
+    "description": "Erreur d'une commande hôte, langue non prise en charge",
+    "other": "unsupported language, use en, fr or auto"
   }
 ]

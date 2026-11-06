@@ -13,6 +13,7 @@ import (
 	"maps"
 	"slices"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
 
@@ -35,15 +36,32 @@ var (
 )
 
 func declaredKeys() map[Key][]string {
-	return mergeDeclared(usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys(), accountKeys(), manageKeys(), hostKeys(), helpKeys(), hostErrKeys())
+	return mergeDeclared(usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys(), accountKeys(), manageKeys(), hostKeys(), helpKeys(), hostErrKeys(), settingKeys())
 }
 
 func loadCatalog() (*i18n.Catalog, error) {
+	return catalogWith(pluginCatalogs())
+}
+
+func pluginCatalogs() []fs.FS {
+	plugins := contracts.Default.Plugins()
+	catalogs := make([]fs.FS, 0, len(plugins))
+	for idx := range plugins {
+		catalogs = append(catalogs, plugins[idx].Catalog)
+	}
+	return catalogs
+}
+
+func catalogWith(plugins []fs.FS) (*i18n.Catalog, error) {
 	sources, err := fs.Sub(locales, "locales")
 	if err != nil {
 		return nil, fmt.Errorf("command line locales: %w", err)
 	}
-	return i18n.NewCatalog(nil, sources)
+	catalog, err := i18n.NewCatalog(nil, append([]fs.FS{sources}, plugins...)...)
+	if err != nil {
+		return nil, fmt.Errorf("plugin message catalogs: %w", err)
+	}
+	return catalog, nil
 }
 
 // Names of the params shared by several keys.
@@ -146,12 +164,22 @@ func (e failureError) Unwrap() error { return e.cause }
 func render(cat *i18n.Catalog, lang i18n.Language, key Key, params Params) (string, error) {
 	fields, known := declaredKeys()[key]
 	if !known {
-		return "", fmt.Errorf("%q: %w", key, ErrUndeclaredKey)
+		return renderPluginKey(cat, lang, key, params)
 	}
 	if err := checkParams(fields, params); err != nil {
 		return "", fmt.Errorf("%q: %w", key, err)
 	}
 	return cat.Message(lang, string(key), params)
+}
+
+func renderPluginKey(cat *i18n.Catalog, lang i18n.Language, key Key, params Params) (string, error) {
+	if !cat.Has(string(key)) {
+		return "", fmt.Errorf("%q: %w", key, ErrUndeclaredKey)
+	}
+	if len(params) > 0 {
+		return "", fmt.Errorf("%q takes no params, given %v: %w", key, slices.Sorted(maps.Keys(params)), ErrParamsMismatch)
+	}
+	return cat.Message(lang, string(key), nil)
 }
 
 func checkParams(fields []string, params Params) error {

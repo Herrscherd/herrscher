@@ -2,11 +2,19 @@ package service
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func TestWriteFileNeverOverwritesTemplate(t *testing.T) {
@@ -832,5 +840,55 @@ func TestSmokeRejectsBrokenBinary(t *testing.T) {
 	}
 	if err := Smoke(context.Background(), "/bin/true"); err != nil {
 		t.Skipf("smoke baseline unavailable: %v", err)
+	}
+}
+
+func registerGatewaySetting(t *testing.T, plugins ...contracts.Plugin) {
+	t.Helper()
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+	for idx := range plugins {
+		contracts.Default.Register(plugins[idx])
+	}
+}
+
+func fakeGateway(helpKey, en, fr string) contracts.Plugin {
+	return contracts.Plugin{
+		Manifest: contracts.Manifest{
+			Kind:     "fake",
+			Category: contracts.CategoryGateway,
+			Config:   []contracts.Setting{{Key: "token", Env: "FAKE_TOKEN", Help: helpKey}},
+		},
+		Catalog: fstest.MapFS{
+			"en.json": &fstest.MapFile{Data: []byte(fmt.Sprintf(`[{"id":%q,"description":"","other":%q}]`, helpKey, en))},
+			"fr.json": &fstest.MapFile{Data: []byte(fmt.Sprintf(`[{"id":%q,"description":"","other":%q}]`, helpKey, fr))},
+		},
+	}
+}
+
+func TestSettingHelpRendersInFrench(t *testing.T) {
+	registerGatewaySetting(t, fakeGateway("fake.setting.token", "Bot token", "Jeton du bot"))
+	translator := clitext.For(i18n.French)
+	envVars := registryEnvVars(translator)
+	idx := slices.IndexFunc(envVars, func(v EnvVar) bool { return v.Key == "FAKE_TOKEN" })
+	if idx < 0 {
+		t.Fatalf("FAKE_TOKEN missing from %v", envVars)
+	}
+	if envVars[idx].Help != "Jeton du bot" {
+		t.Fatalf("Help = %q, want %q", envVars[idx].Help, "Jeton du bot")
+	}
+	if err := translator.Err(); err != nil {
+		t.Fatalf("Err() = %v, want nil", err)
+	}
+}
+
+func TestDefaultConfigRefusesAPluginKeyCollision(t *testing.T) {
+	registerGatewaySetting(t,
+		fakeGateway("fake.setting.token", "Bot token", "Jeton du bot"),
+		fakeGateway("fake.setting.token", "Other token", "Autre jeton"),
+	)
+	if _, err := DefaultConfig(); !errors.Is(err, i18n.ErrDuplicateKey) {
+		t.Fatalf("DefaultConfig() error = %v, want i18n.ErrDuplicateKey", err)
 	}
 }

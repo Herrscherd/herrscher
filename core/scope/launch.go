@@ -8,6 +8,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/envx"
 )
 
@@ -38,27 +39,27 @@ func LaunchSettings() []contracts.Setting {
 	return []contracts.Setting{
 		{
 			Key: SetLearn, Env: "TERMINAL_LEARN", Default: "true",
-			Help: "the session a launch opens learns: false restores a session that records nothing",
+			Help: clitext.SettingTerminalLearn,
 		},
 		{
 			Key: SetExtractor, Env: "TERMINAL_EXTRACTOR", Default: "llm",
-			Help: "registered curation extractor that distils the transcript",
+			Help: clitext.SettingTerminalExtractor,
 		},
 		{
 			Key: SetEvery, Env: "TERMINAL_CONSOLIDATE_EVERY", Default: strconv.Itoa(defaultEvery),
-			Help: "turns between consolidation passes (0 = manual/idle only)",
+			Help: clitext.SettingTerminalConsolidate,
 		},
 		{
 			Key: SetMemAgent, Env: "TERMINAL_MEMORY_AGENT", Default: "tui",
-			Help: "memory root for what the window learns as itself",
+			Help: clitext.SettingTerminalMemoryAgent,
 		},
 		{
 			Key: SetProject, Env: "TERMINAL_PROJECT", Default: "",
-			Help: "force the memory project and pin it, instead of resolving one",
+			Help: clitext.SettingTerminalProject,
 		},
 		{
 			Key: SetProjectPin, Env: "TERMINAL_PROJECT_PIN", Default: "first-turn",
-			Help: "when the project is settled: first-turn (the prompt may revise it) | launch (the directory is final)",
+			Help: clitext.SettingTerminalProjectPin,
 		},
 	}
 }

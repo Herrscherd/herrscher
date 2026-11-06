@@ -2,10 +2,13 @@ package clitext
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"strings"
 	"testing"
+	"testing/fstest"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher-contracts/i18n/i18ntest"
 )
@@ -32,7 +35,7 @@ func TestEveryDeclaredKeyHasItsTextInEveryLanguage(t *testing.T) {
 }
 
 func TestEveryKeyFileIsDeclaredOnce(t *testing.T) {
-	groups := []map[Key][]string{usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys(), accountKeys(), manageKeys(), hostKeys(), helpKeys(), hostErrKeys()}
+	groups := []map[Key][]string{usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys(), accountKeys(), manageKeys(), hostKeys(), helpKeys(), hostErrKeys(), settingKeys()}
 	total := 0
 	for _, group := range groups {
 		total += len(group)
@@ -144,5 +147,72 @@ func TestHostRepliesRenderInEachLanguage(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func registerPlugins(t *testing.T, plugins ...contracts.Plugin) {
+	t.Helper()
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+	for idx := range plugins {
+		contracts.Default.Register(plugins[idx])
+	}
+}
+
+func pluginLocales(key, en, fr string) fstest.MapFS {
+	return fstest.MapFS{
+		"en.json": &fstest.MapFile{Data: []byte(localeEntry(key, en))},
+		"fr.json": &fstest.MapFile{Data: []byte(localeEntry(key, fr))},
+	}
+}
+
+func localeEntry(key, text string) string {
+	return fmt.Sprintf(`[{"id":%q,"description":"","other":%q}]`, key, text)
+}
+
+func verbPlugin(en, fr string) contracts.Plugin {
+	return contracts.Plugin{
+		Manifest: contracts.Manifest{Kind: "fake", Category: contracts.CategorySkills},
+		Catalog:  pluginLocales("fake.verb.help", en, fr),
+	}
+}
+
+func TestPluginVerbHelpRendersInFrench(t *testing.T) {
+	registerPlugins(t, verbPlugin("Do the thing", "Fais la chose"))
+	translator := For(i18n.French)
+	if got := translator.Text("fake.verb.help", nil); got != "Fais la chose" {
+		t.Fatalf("plugin verb help in French = %q, want %q", got, "Fais la chose")
+	}
+	if err := translator.Err(); err != nil {
+		t.Fatalf("Err() = %v, want nil", err)
+	}
+}
+
+func TestPluginKeyRefusesParams(t *testing.T) {
+	registerPlugins(t, verbPlugin("Do the thing", "Fais la chose"))
+	translator := For(i18n.French)
+	translator.Text("fake.verb.help", Params{ParamErr: "boom"})
+	if !errors.Is(translator.Err(), ErrParamsMismatch) {
+		t.Fatalf("Err() = %v, want ErrParamsMismatch", translator.Err())
+	}
+}
+
+func TestPluginKeyCollisionIsRefused(t *testing.T) {
+	registerPlugins(t,
+		verbPlugin("Do the thing", "Fais la chose"),
+		verbPlugin("Do it again", "Refais-la"),
+	)
+	if err := For(i18n.French).Err(); !errors.Is(err, i18n.ErrDuplicateKey) {
+		t.Fatalf("Err() = %v, want i18n.ErrDuplicateKey", err)
+	}
+}
+
+func TestRawHelpTextIsRefusedAsAKey(t *testing.T) {
+	registerPlugins(t)
+	translator := For(i18n.French)
+	translator.Text("owner id (per-daemon instance-id fallback)", nil)
+	if !errors.Is(translator.Err(), ErrUndeclaredKey) {
+		t.Fatalf("Err() = %v, want ErrUndeclaredKey", translator.Err())
 	}
 }

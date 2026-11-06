@@ -3286,5 +3286,40 @@
     "id": "cli.host.fault.remote_shell_session",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (remote shell session)",
     "other": "session shell: remote session, command refused"
+  },
+  {
+    "id": "cli.service.env.owner_id",
+    "description": "Help of the owner id setting",
+    "other": "owner id (per-daemon instance-id fallback)"
+  },
+  {
+    "id": "cli.setting.terminal_learn",
+    "description": "Help of the terminal learn setting",
+    "other": "the session a launch opens learns: false restores a session that records nothing"
+  },
+  {
+    "id": "cli.setting.terminal_extractor",
+    "description": "Help of the terminal extractor setting",
+    "other": "registered curation extractor that distils the transcript"
+  },
+  {
+    "id": "cli.setting.terminal_consolidate_every",
+    "description": "Help of the terminal consolidate every setting",
+    "other": "turns between consolidation passes (0 = manual/idle only)"
+  },
+  {
+    "id": "cli.setting.terminal_memory_agent",
+    "description": "Help of the terminal memory agent setting",
+    "other": "memory root for what the window learns as itself"
+  },
+  {
+    "id": "cli.setting.terminal_project",
+    "description": "Help of the terminal project setting",
+    "other": "force the memory project and pin it, instead of resolving one"
+  },
+  {
+    "id": "cli.setting.terminal_project_pin",
+    "description": "Help of the terminal project pin setting",
+    "other": "when the project is settled: first-turn (the prompt may revise it) | launch (the directory is final)"
   }
 ]

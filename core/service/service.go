@@ -141,7 +141,7 @@ var (
 
 func coreEnvVars() []EnvVar {
 	return []EnvVar{
-		{Key: "HERRSCHER_OWNER_ID", Help: "owner id (per-daemon instance-id fallback)"},
+		{Key: "HERRSCHER_OWNER_ID", Help: clitext.ServiceEnvOwnerID},
 	}
 }
 
@@ -718,6 +718,7 @@ func cmdQuote(value string) string {
 // user, default env-file location and health address).
 func DefaultConfig() (Config, error) {
 	lang := clitext.ClientLanguage()
+	translator := clitext.For(lang)
 	bin, err := os.Executable()
 	if err != nil {
 		return Config{}, clitext.Failure(lang, err, clitext.ServiceLocateBinary, clitext.Params{clitext.ParamErr: err.Error()})
@@ -730,6 +731,10 @@ func DefaultConfig() (Config, error) {
 	if u, err := user.Current(); err == nil {
 		uname = u.Username
 	}
+	envVars := registryEnvVars(translator)
+	if err := translator.Err(); err != nil {
+		return Config{}, err
+	}
 	return Config{
 		Lang:       lang,
 		BinPath:    bin,
@@ -738,12 +743,12 @@ func DefaultConfig() (Config, error) {
 		EnvFile:    filepath.Join(home, ".config", "herrscher", "herrscher.env"),
 		ConfigPath: filepath.Join(home, ".config", "herrscher", "config.json"),
 		HealthAddr: "127.0.0.1:8787",
-		EnvVars:    registryEnvVars(),
+		EnvVars:    envVars,
 		Path:       os.Getenv("PATH"),
 	}, nil
 }
 
-func registryEnvVars() []EnvVar {
+func registryEnvVars(translator *clitext.Translator) []EnvVar {
 	var out []EnvVar
 	seen := make(map[string]bool)
 	gateways := contracts.Default.Gateways()
@@ -753,16 +758,24 @@ func registryEnvVars() []EnvVar {
 				continue
 			}
 			seen[setting.Env] = true
-			out = append(out, EnvVar{Key: setting.Env, Help: setting.Help, Required: setting.Required})
+			out = append(out, EnvVar{Key: setting.Env, Help: renderHelp(translator, setting.Help), Required: setting.Required})
 		}
 	}
 	core := coreEnvVars()
 	for idx := range core {
 		if !seen[core[idx].Key] {
+			core[idx].Help = renderHelp(translator, core[idx].Help)
 			out = append(out, core[idx])
 		}
 	}
 	return out
+}
+
+func renderHelp(translator *clitext.Translator, key string) string {
+	if key == "" {
+		return ""
+	}
+	return translator.Text(clitext.Key(key), nil)
 }
 
 // Install runs the install plan for the current OS: it writes the unit/launcher

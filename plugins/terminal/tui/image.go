@@ -2,7 +2,9 @@ package tui
 
 import (
 	"encoding/base64"
+	"fmt"
 	"image"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -22,18 +24,33 @@ func previewEscape(attachment Attachment, caps Capabilities) string {
 	if !strings.HasPrefix(attachment.Mime, "image/") {
 		return ""
 	}
-	if st, err := os.Stat(attachment.Path); err != nil || st.Size() == 0 || st.Size() > maxDecodeBytes {
-		return ""
+	info, err := os.Stat(attachment.Path)
+	if err != nil {
+		return skipPreview(err)
+	}
+	if info.Size() == 0 {
+		return skipPreview(errEmptyImage)
+	}
+	if info.Size() > maxDecodeBytes {
+		return skipPreview(fmt.Errorf("%w: %d/%d", errImageTooLarge, info.Size(), maxDecodeBytes))
 	}
 	data, err := os.ReadFile(attachment.Path)
-	if err != nil || len(data) == 0 {
-		return ""
+	if err != nil {
+		return skipPreview(err)
+	}
+	if len(data) == 0 {
+		return skipPreview(errEmptyImage)
 	}
 	img, err := decodeImage(data)
 	if err != nil {
-		return ""
+		return skipPreview(err)
 	}
 	return boundedEscape(img, caps)
+}
+
+func skipPreview(err error) string {
+	slog.Warn("attachment preview skipped", "err", err)
+	return ""
 }
 
 func boundedEscape(img image.Image, caps Capabilities) string {

@@ -15,7 +15,7 @@ type sinkWalker struct {
 	files      *token.FileSet
 	translated map[string]bool
 	constants  map[string]ast.Expr
-	locals     map[string]ast.Expr
+	locals     map[string][]ast.Expr
 	resolving  map[string]bool
 	exempt     map[ast.Node]bool
 	found      []finding
@@ -38,21 +38,13 @@ func findPackageSinks(files *token.FileSet, parsed []*ast.File) []finding {
 	return walker.found
 }
 
-func localValues(declaration ast.Decl) map[string]ast.Expr {
+func localValues(declaration ast.Decl) map[string][]ast.Expr {
 	bindings := make(map[string][]ast.Expr)
 	ast.Inspect(declaration, func(node ast.Node) bool {
 		recordBindings(bindings, node)
 		return true
 	})
-	locals := make(map[string]ast.Expr, len(bindings))
-	for name, values := range bindings {
-		if len(values) == 1 {
-			locals[name] = values[0]
-		} else {
-			locals[name] = nil
-		}
-	}
-	return locals
+	return bindings
 }
 
 func recordBindings(bindings map[string][]ast.Expr, node ast.Node) {
@@ -211,9 +203,7 @@ func (walker *sinkWalker) assignmentFindings(assign *ast.AssignStmt) []finding {
 		if !ok || !isShownName(selector.Sel.Name) {
 			continue
 		}
-		if sentence, ok := walker.proseOf(assign.Rhs[index]); ok {
-			found = append(found, sentence)
-		}
+		found = append(found, walker.proseFindings(assign.Rhs[index])...)
 	}
 	return found
 }
@@ -225,9 +215,7 @@ func (walker *sinkWalker) compositeFindings(literal *ast.CompositeLit) []finding
 		if !ok || !isShownKey(literal.Type, pair.Key) {
 			continue
 		}
-		if sentence, ok := walker.proseOf(pair.Value); ok {
-			found = append(found, sentence)
-		}
+		found = append(found, walker.proseFindings(pair.Value)...)
 	}
 	return found
 }
@@ -277,10 +265,8 @@ func (walker *sinkWalker) callFindings(call *ast.CallExpr) []finding {
 		return []finding{dynamic}
 	}
 	var found []finding
-	for _, shown := range shownArguments(call) {
-		if sentence, ok := walker.proseOf(shown); ok {
-			found = append(found, sentence)
-		}
+	for _, shown := range walker.shownArguments(call) {
+		found = append(found, walker.proseFindings(shown)...)
 	}
 	return found
 }
@@ -301,13 +287,13 @@ func isFormatFunction(selector *ast.SelectorExpr) bool {
 	return ok && qualifier.Name == "fmt" && (selector.Sel.Name == "Sprintf" || selector.Sel.Name == "Errorf")
 }
 
-func shownArguments(call *ast.CallExpr) []ast.Expr {
+func (walker *sinkWalker) shownArguments(call *ast.CallExpr) []ast.Expr {
 	selector, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok {
 		return nil
 	}
 	if qualifier, isIdent := selector.X.(*ast.Ident); isIdent {
-		if shown, known := shownByPackage(qualifier.Name+"."+selector.Sel.Name, call.Args); known {
+		if shown, known := walker.shownByPackage(qualifier.Name+"."+selector.Sel.Name, call.Args); known {
 			return shown
 		}
 	}
@@ -318,7 +304,7 @@ func shownArguments(call *ast.CallExpr) []ast.Expr {
 	return argumentAt(call.Args, index)
 }
 
-func shownByPackage(function string, args []ast.Expr) ([]ast.Expr, bool) {
+func (walker *sinkWalker) shownByPackage(function string, args []ast.Expr) ([]ast.Expr, bool) {
 	switch function {
 	case "contracts.DataResult", "fmt.Errorf", "errors.New":
 		return argumentAt(args, 0), true
@@ -329,12 +315,12 @@ func shownByPackage(function string, args []ast.Expr) ([]ast.Expr, bool) {
 	case "fmt.Printf", "log.Printf":
 		return argumentAt(args, 0), true
 	case "fmt.Fprint", "fmt.Fprintln":
-		if !writesToStandardStream(args) {
+		if !walker.writesToStandardStream(args) {
 			return nil, true
 		}
 		return args[1:], true
 	case "fmt.Fprintf":
-		if !writesToStandardStream(args) {
+		if !walker.writesToStandardStream(args) {
 			return nil, true
 		}
 		return argumentAt(args[1:], 0), true
@@ -342,8 +328,40 @@ func shownByPackage(function string, args []ast.Expr) ([]ast.Expr, bool) {
 	return nil, false
 }
 
-func writesToStandardStream(args []ast.Expr) bool {
-	return len(args) > 0 && (isQualified(args[0], "os", "Stdout") || isQualified(args[0], "os", "Stderr"))
+func (walker *sinkWalker) writesToStandardStream(args []ast.Expr) bool {
+	return len(args) > 0 && walker.isStandardStream(args[0])
+}
+
+func (walker *sinkWalker) isStandardStream(expr ast.Expr) bool {
+	switch typed := expr.(type) {
+	case *ast.SelectorExpr:
+		return isQualified(typed, "os", "Stdout") || isQualified(typed, "os", "Stderr")
+	case *ast.Ident:
+		return walker.nameIsStandardStream(typed.Name)
+	}
+	return false
+}
+
+func (walker *sinkWalker) nameIsStandardStream(name string) bool {
+	if walker.resolving[name] {
+		return false
+	}
+	values, isLocal := walker.locals[name]
+	if !isLocal {
+		value, isConstant := walker.constants[name]
+		values = []ast.Expr{value}
+		if !isConstant {
+			return false
+		}
+	}
+	walker.resolving[name] = true
+	defer delete(walker.resolving, name)
+	for _, value := range values {
+		if value != nil && walker.isStandardStream(value) {
+			return true
+		}
+	}
+	return false
 }
 
 func argumentAt(args []ast.Expr, index int) []ast.Expr {
@@ -361,6 +379,39 @@ func builderArgument(method string) (int, bool) {
 		return 1, true
 	}
 	return 0, false
+}
+
+func (walker *sinkWalker) proseFindings(expr ast.Expr) []finding {
+	ident, isIdent := expr.(*ast.Ident)
+	if !isIdent {
+		if sentence, ok := walker.proseOf(expr); ok {
+			return []finding{sentence}
+		}
+		return nil
+	}
+	return walker.nameProseFindings(ident)
+}
+
+func (walker *sinkWalker) nameProseFindings(ident *ast.Ident) []finding {
+	values, isLocal := walker.locals[ident.Name]
+	if !isLocal {
+		if sentence, ok := walker.proseOf(ident); ok {
+			return []finding{sentence}
+		}
+		return nil
+	}
+	if walker.resolving[ident.Name] {
+		return nil
+	}
+	walker.resolving[ident.Name] = true
+	defer delete(walker.resolving, ident.Name)
+	var found []finding
+	for _, value := range values {
+		if value != nil {
+			found = append(found, walker.proseFindings(value)...)
+		}
+	}
+	return found
 }
 
 func (walker *sinkWalker) proseOf(expr ast.Expr) (finding, bool) {
@@ -415,16 +466,25 @@ func (walker *sinkWalker) namedText(name string) (string, bool) {
 	if walker.resolving[name] {
 		return "", false
 	}
-	value, bound := walker.locals[name]
-	if !bound {
-		value, bound = walker.constants[name]
+	if values, isLocal := walker.locals[name]; isLocal {
+		return walker.singleValueText(name, values)
 	}
+	value, bound := walker.constants[name]
 	if !bound || value == nil {
 		return "", false
 	}
 	walker.resolving[name] = true
 	defer delete(walker.resolving, name)
 	return walker.textOf(value)
+}
+
+func (walker *sinkWalker) singleValueText(name string, values []ast.Expr) (string, bool) {
+	if len(values) != 1 || values[0] == nil {
+		return "", false
+	}
+	walker.resolving[name] = true
+	defer delete(walker.resolving, name)
+	return walker.textOf(values[0])
 }
 
 func (walker *sinkWalker) concatText(sum *ast.BinaryExpr) (string, bool) {

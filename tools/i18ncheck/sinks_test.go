@@ -326,11 +326,50 @@ func TestLocalLiteralReachesItsSinks(t *testing.T) {
 	}
 }
 
-func TestLocalWithSeveralAssignmentsIsNotResolved(t *testing.T) {
+func TestLocalWithSeveralAssignmentsReportsEachValue(t *testing.T) {
 	t.Parallel()
 	found := collectMutant(t, "manage", "mutant.go", "package manage\n\nfunc mutant(m *model, late bool) {\n\tmsg := \"The upload was refused\"\n\tif late {\n\t\tmsg = \"The upload was cancelled\"\n\t}\n\tm.flash = msg\n}\n")
+	got := textsOf(found["manage"])
+	for _, want := range []string{"The upload was refused", "The upload was cancelled"} {
+		if !slices.Contains(got, want) {
+			t.Fatalf("%q not reported among %q", want, got)
+		}
+	}
+}
+
+func TestLocalDeclaredThenAssignedIsReported(t *testing.T) {
+	t.Parallel()
+	found := collectMutant(t, "manage", "mutant.go", "package manage\n\nfunc mutant(m *model, ok bool) {\n\tvar msg string\n\tif ok {\n\t\tmsg = \"Upload was refused by the server\"\n\t}\n\tm.flash = msg\n}\n")
+	if got := textsOf(found["manage"]); !slices.Contains(got, "Upload was refused by the server") {
+		t.Fatalf("the literal assigned to a declared local was not reported: %q", got)
+	}
+}
+
+func TestLocalMixingLiteralAndCallReportsTheLiteral(t *testing.T) {
+	t.Parallel()
+	found := collectMutant(t, "manage", "mutant.go", "package manage\n\nfunc mutant(m *model, reason func() string, ok bool) {\n\tmsg := reason()\n\tif ok {\n\t\tmsg = \"Upload was refused by the server\"\n\t}\n\tm.flash = msg\n\tm.notice = reason()\n}\n")
+	got := textsOf(found["manage"])
+	if !slices.Contains(got, "Upload was refused by the server") {
+		t.Fatalf("the literal next to a call was not reported: %q", got)
+	}
+	if len(got) != 1 {
+		t.Fatalf("a call was reported as a sentence: %q", got)
+	}
+}
+
+func TestWriterLocalToStandardStreamIsShown(t *testing.T) {
+	t.Parallel()
+	found := collectMutant(t, "manage", "mutant.go", "package manage\n\nfunc mutant() {\n\tout := os.Stdout\n\tfmt.Fprintln(out, \"The upload was refused\")\n}\n")
+	if got := textsOf(found["manage"]); !slices.Contains(got, "The upload was refused") {
+		t.Fatalf("a write through a local bound to os.Stdout was not reported: %q", got)
+	}
+}
+
+func TestWriterLocalToBufferIsNotShown(t *testing.T) {
+	t.Parallel()
+	found := collectMutant(t, "manage", "mutant.go", "package manage\n\nfunc mutant(buf *bytes.Buffer) {\n\tout := buf\n\tfmt.Fprintln(out, \"The upload was refused\")\n}\n")
 	if got := textsOf(found["manage"]); len(got) != 0 {
-		t.Fatalf("a local with two assignments was resolved to one of them: %q", got)
+		t.Fatalf("a write through a local bound to a buffer was reported: %q", got)
 	}
 }
 

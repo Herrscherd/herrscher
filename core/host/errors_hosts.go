@@ -2,6 +2,8 @@ package host
 
 import (
 	"fmt"
+
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
 
 type gatewayEnvUnsupportedError struct {
@@ -181,7 +183,11 @@ type unsafeTarMemberError struct {
 }
 
 func (e *unsafeTarMemberError) Error() string {
-	return fmt.Sprintf("refusing tar member %q: it lands outside %s", e.Member, e.Root)
+	return e.render(i18n.English)
+}
+
+func (e *unsafeTarMemberError) render(lang i18n.Language) string {
+	return newHostMessages().text(lang, "remote.unsafe_member", map[string]any{"Member": e.Member, "Root": e.Root})
 }
 
 type noRemoteBackendError struct {

@@ -86,7 +86,7 @@ func subscribeAt(ctx context.Context, path string) (<-chan DaemonEvent, error) {
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "unix", path)
 	if err != nil {
-		return nil, wrapHost(errDaemonEventsUnreachable, "daemon.events_socket", map[string]any{"Path": path})
+		return nil, wrapHost(errDaemonEventsUnreachable, "daemon.events_socket", map[string]any{pathParam: path})
 	}
 	out := make(chan DaemonEvent, daemonEventBuffer)
 	stopClose := closeOnDone(ctx, conn)

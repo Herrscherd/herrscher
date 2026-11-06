@@ -75,11 +75,11 @@ func tarDir(root string, writer io.Writer) error {
 
 func extractTar(src io.Reader, dst string) error {
 	if err := os.MkdirAll(dst, privateDirMode); err != nil {
-		return err
+		return wrapHost(err, "remote.extract_archive", map[string]any{pathParam: dst})
 	}
 	root, err := os.OpenRoot(dst)
 	if err != nil {
-		return err
+		return wrapHost(err, "remote.extract_archive", map[string]any{pathParam: dst})
 	}
 	defer closeRead(root)
 	tarReader := tar.NewReader(src)
@@ -89,13 +89,13 @@ func extractTar(src io.Reader, dst string) error {
 			return nil
 		}
 		if err != nil {
-			return err
+			return wrapHost(err, "remote.extract_archive", map[string]any{pathParam: dst})
 		}
 		if hdr.Typeflag != tar.TypeReg {
 			continue
 		}
 		if err := extractRegularMember(tarReader, hdr, root); err != nil {
-			return err
+			return wrapHost(err, "remote.extract_member", map[string]any{"Member": hdr.Name})
 		}
 	}
 }

@@ -741,7 +741,7 @@ func (h *Handler) resolveProject(ctx context.Context, input contracts.Input, hos
 	}
 	if spec, ok := input.Lookup("clone"); ok && spec != "" {
 		if hostName != "" {
-			return "", localize(h.currentLanguage(), fmt.Sprintf("%v %q: create the project locally first, then create the session with --host", ErrCloneUnsupported, hostName), clitext.HostErrCloneUnsupported, clitext.Params{clitext.ParamHost: hostName}, ErrCloneUnsupported)
+			return "", localize(h.currentLanguage(), fmt.Sprintf("%v: %q", ErrCloneUnsupported, hostName), clitext.HostErrCloneUnsupported, clitext.Params{clitext.ParamHost: hostName}, ErrCloneUnsupported)
 		}
 		cctx, cancel := context.WithTimeout(ctx, cloneTimeout)
 		dir, err := h.fg.Clone(cctx, spec, wtRoot)

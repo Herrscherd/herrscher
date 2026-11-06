@@ -1,7 +1,6 @@
 package manage
 
 import (
-	"errors"
 	"sort"
 	"strconv"
 	"strings"
@@ -9,7 +8,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
-var errNotModulePath = errors.New(string(clitext.ManagePinsLine))
+var errNotModulePath = clitext.SentinelError("not a module path")
 
 const pinFile = ".herrscher-pins"
 

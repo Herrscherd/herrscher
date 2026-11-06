@@ -3,7 +3,6 @@ package manage
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"os/exec"
 	"strings"
@@ -13,7 +12,7 @@ import (
 
 const contractsModule = "github.com/Herrscherd/herrscher-contracts"
 
-var errNoVersions = errors.New(string(clitext.ManageNoVersions))
+var errNoVersions = clitext.SentinelError("no published versions")
 
 // PluginVersion is one row of `herrscher plugin list`: what is compiled in, what
 // the operator asked to hold still, and what could be taken instead.

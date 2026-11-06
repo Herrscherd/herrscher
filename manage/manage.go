@@ -23,8 +23,8 @@ import (
 )
 
 var (
-	errNoHostModule  = errors.New(string(clitext.ManageNoHostModule))
-	errNotCompiledIn = errors.New(string(clitext.ManageNotCompiledIn))
+	errNoHostModule  = clitext.SentinelError("no host module found (looked for plugins.go); pass --host DIR")
+	errNotCompiledIn = clitext.SentinelError("module is not compiled in; run herrscher plugin add first")
 )
 
 func parseExit(err error) int {

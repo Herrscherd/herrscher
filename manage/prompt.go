@@ -14,7 +14,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
-var errChoiceOutOfRange = errors.New(string(clitext.ManageChoiceOutOfRange))
+var errChoiceOutOfRange = clitext.SentinelError("choice out of range")
 
 func isTerminal(f *os.File) bool {
 	st, err := f.Stat()

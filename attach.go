@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -119,7 +120,21 @@ func runAttached(ctx context.Context, instance string, opts ...tui.Option) error
 	if err != nil {
 		return err
 	}
-	return tui.Run(ctx, cancel, daemon, opts...)
+	return withClientLog(clientLogPath(), func() error {
+		return tui.Run(ctx, cancel, daemon, opts...)
+	})
+}
+
+func clientLogPath() string {
+	return filepath.Join(filepath.Dir(host.DefaultStatePath()), "client.log")
+}
+
+func withClientLog(path string, run func() error) error {
+	restore, err := redirectStderr(path)
+	if err != nil {
+		return err
+	}
+	return errors.Join(run(), restore())
 }
 
 func (a *attachedDaemon) Frontend() <-chan tui.RoutedEvent { return a.events }

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -60,7 +61,7 @@ func (r *Registry) Add(cmd contracts.Cmd) error {
 func (r *Registry) Dispatch(ctx context.Context, args []string) (contracts.Result, error) {
 	cmd, rest := r.match(args)
 	if cmd == nil {
-		return contracts.Result{}, fmt.Errorf("%w %q", errUnknownCommand, strings.Join(args, " "))
+		return contracts.Result{}, usageFailure(errUnknownCommand, clitext.Params{clitext.ParamName: strconv.Quote(strings.Join(args, " "))})
 	}
 	input, err := parse(*cmd, rest)
 	if err != nil {
@@ -131,7 +132,7 @@ func (r *Registry) Run(ctx context.Context, path []string, input contracts.Input
 		}
 	}
 	if cmd == nil {
-		return contracts.Result{}, fmt.Errorf("%w %q", errUnknownCommand, key(path))
+		return contracts.Result{}, usageFailure(errUnknownCommand, clitext.Params{clitext.ParamName: strconv.Quote(key(path))})
 	}
 	if input.Args == nil {
 		input.Args = make(map[string]string)
@@ -139,7 +140,7 @@ func (r *Registry) Run(ctx context.Context, path []string, input contracts.Input
 	for _, param := range cmd.Params {
 		if param.Required {
 			if _, ok := input.Args[param.Name]; !ok {
-				return contracts.Result{}, fmt.Errorf("%s: %w --%s", key(cmd.Path), errMissingRequired, param.Name)
+				return contracts.Result{}, usageFailure(errMissingRequired, clitext.Params{clitext.ParamCommand: key(cmd.Path), clitext.ParamName: param.Name})
 			}
 		}
 	}
@@ -244,7 +245,7 @@ func parseFlag(cmd contracts.Cmd, rest []string, index int, input contracts.Inpu
 	name, inline, isInline := strings.Cut(strings.TrimPrefix(rest[index], "--"), "=")
 	param, ok := isParam(cmd, name)
 	if !ok {
-		return 0, fmt.Errorf("%s: %w --%s", strings.Join(cmd.Path, " "), errUnknownFlag, name)
+		return 0, usageFailure(errUnknownFlag, clitext.Params{clitext.ParamCommand: strings.Join(cmd.Path, " "), clitext.ParamName: name})
 	}
 	if isInline {
 		input.Args[name] = inline
@@ -255,7 +256,7 @@ func parseFlag(cmd contracts.Cmd, rest []string, index int, input contracts.Inpu
 		input.Args[name] = rest[index+1]
 		return 1, nil
 	case param.Required || param.ValueRequired:
-		return 0, fmt.Errorf("%s: flag --%s %w", strings.Join(cmd.Path, " "), name, errFlagNeedsValue)
+		return 0, usageFailure(errFlagNeedsValue, clitext.Params{clitext.ParamCommand: strings.Join(cmd.Path, " "), clitext.ParamName: name})
 	default:
 		input.Args[name] = "true"
 		return 0, nil
@@ -268,7 +269,7 @@ func checkRequired(cmd contracts.Cmd, input contracts.Input) error {
 			continue
 		}
 		if _, ok := input.Args[param.Name]; !ok {
-			return fmt.Errorf("%s: %w --%s", strings.Join(cmd.Path, " "), errMissingRequired, param.Name)
+			return usageFailure(errMissingRequired, clitext.Params{clitext.ParamCommand: strings.Join(cmd.Path, " "), clitext.ParamName: param.Name})
 		}
 	}
 	return nil
@@ -390,6 +391,9 @@ func (e renderedError) Unwrap() error { return e.err }
 
 // Localize returns err with its notice rendered in lang, or err itself when it carries none.
 func Localize(err error, lang i18n.Language) error {
+	if usage, ok := isUsage(err); ok {
+		return localizedUsage(usage, err, lang)
+	}
 	var noticed contracts.NoticeError
 	if err == nil || !errors.As(err, &noticed) {
 		return err

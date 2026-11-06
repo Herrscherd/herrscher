@@ -1,6 +1,9 @@
 package main
 
 import (
+	"errors"
+	"go/ast"
+	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
@@ -42,6 +45,7 @@ func TestExtendedFixtureFindsExactlyTheSentences(t *testing.T) {
 	}
 	want := map[string][]string{
 		"manage": {
+			"Count: ",
 			"Route policy was changed",
 			"Session  was stopped",
 			"Session stopped unexpectedly",
@@ -69,13 +73,16 @@ func TestExtendedFixtureFindsExactlyTheSentences(t *testing.T) {
 func TestProgrammerErrorsListIsExplicit(t *testing.T) {
 	t.Parallel()
 	var texts []string
-	for _, entry := range programmerErrors() {
+	for _, entry := range exemptions() {
+		if entry.why != programmerError {
+			continue
+		}
 		if entry.directory != "core/cli" || entry.file != "registry.go" {
 			t.Errorf("programmer error %q is outside core/cli/registry.go", entry.text)
 		}
 		texts = append(texts, entry.text)
 	}
-	want := []string{"cli: command with empty path", "cli: duplicate command"}
+	want := []string{"cli: command with empty path", "cli: duplicate command", "command %q: %w", "param %q: %w"}
 	if !slices.Equal(texts, want) {
 		t.Fatalf("programmer errors %q, want exactly %q", texts, want)
 	}
@@ -163,6 +170,36 @@ func TestMutationsOnePerExtension(t *testing.T) {
 			source:    "package terminal\n\nvar errMutant = errors.New(\"the upload was refused\")\n",
 			want:      "the upload was refused",
 		},
+		"joined literal list": {
+			directory: "manage",
+			file:      "mutant.go",
+			source:    "package manage\n\nfunc mutant(m *model) {\n\tm.flash = strings.Join([]string{\"Session\", \"was\", \"stopped\"}, \" \")\n}\n",
+			want:      "Session was stopped",
+		},
+		"format passed as a parameter": {
+			directory: "manage",
+			file:      "mutant.go",
+			source:    "package manage\n\nfunc mutant(m *model, format string) {\n\tm.flash = fmt.Sprintf(format, 3)\n}\n",
+			want:      dynamicFormatText,
+		},
+		"banner flash field": {
+			directory: "manage",
+			file:      "mutant.go",
+			source:    "package manage\n\nfunc mutant(m *model) {\n\tm.bannerFlash = \"The upload was refused\"\n}\n",
+			want:      "The upload was refused",
+		},
+		"status field": {
+			directory: "manage",
+			file:      "mutant.go",
+			source:    "package manage\n\nfunc mutant(m *model) {\n\tm.status = \"The upload was refused\"\n}\n",
+			want:      "The upload was refused",
+		},
+		"contracts arg value": {
+			directory: "manage",
+			file:      "mutant.go",
+			source:    "package manage\n\nvar mutant = contracts.Arg{Name: \"Reason\", Value: \"The upload was refused\"}\n",
+			want:      "The upload was refused",
+		},
 		"programmer message not in the closed list": {
 			directory: "core/cli",
 			file:      "registry.go",
@@ -188,10 +225,41 @@ func TestCyclicConstantsDoNotLoop(t *testing.T) {
 func TestProgrammerErrorNeedsAPathBoundary(t *testing.T) {
 	t.Parallel()
 	const message = "cli: duplicate command"
-	if !isProgrammerError(token.Position{Filename: "/work/core/cli/registry.go"}, message) {
+	if !isExempt(token.Position{Filename: "/work/core/cli/registry.go"}, message) {
 		t.Fatal("the programmer message in core/cli/registry.go is not exempt")
 	}
-	if isProgrammerError(token.Position{Filename: "/work/xcore/cli/registry.go"}, message) {
+	if isExempt(token.Position{Filename: "/work/xcore/cli/registry.go"}, message) {
 		t.Fatal("a file whose path only ends with core/cli/registry.go is exempt")
+	}
+}
+
+func TestExemptionReasonsAreClosed(t *testing.T) {
+	t.Parallel()
+	unknown := []exemption{{directory: "manage", file: "x.go", text: "a b", why: reasonUnknown}}
+	if err := validateExemptions(unknown); !errors.Is(err, errUnknownReason) {
+		t.Fatalf("an exemption without a known reason passed validation: %v", err)
+	}
+	bare := []exemption{{directory: "manage", file: "x.go", text: "read config", why: technicalWrap}}
+	if err := validateExemptions(bare); !errors.Is(err, errWrapNotFormat) {
+		t.Fatalf("a technical wrap that does not end with %%w passed validation: %v", err)
+	}
+	if err := validateExemptions(exemptions()); err != nil {
+		t.Fatalf("the repository exemptions are refused: %v", err)
+	}
+}
+
+func TestKeyedSentinelAcceptsOnlyCatalogReferences(t *testing.T) {
+	t.Parallel()
+	source := "package manage\n\nvar errWrapped = keyed{errKnown, clitext.CommandUnknown}\nvar errOther = keyed{errLocal, other.Name}\n"
+	file, err := parser.ParseFile(token.NewFileSet(), "sentinels.go", source, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	translated := translatedSentinels([]*ast.File{file})
+	if !translated["errKnown"] {
+		t.Fatal("a sentinel keyed by a clitext reference is not treated as translated")
+	}
+	if translated["errLocal"] {
+		t.Fatal("a sentinel keyed by a foreign selector is treated as translated")
 	}
 }

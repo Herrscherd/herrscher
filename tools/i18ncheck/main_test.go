@@ -170,7 +170,7 @@ func TestProseRules(t *testing.T) {
 		"--yes":                          false,
 		"/mode <manuel|edits|plan|auto>": false,
 		"tui.keys.reloaded":              false,
-		"cancelled":                      false,
+		"cancelled":                      true,
 		"%w":                             false,
 		"%q":                             false,
 		"":                               false,

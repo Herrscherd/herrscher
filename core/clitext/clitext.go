@@ -174,6 +174,7 @@ const (
 	ParamRole      = "Role"
 	ParamPosition  = "Position"
 	ParamWhat      = "What"
+	ParamAllowed   = "Allowed"
 	ParamEvery     = "Every"
 	ParamCron      = "Cron"
 	ParamWhen      = "When"

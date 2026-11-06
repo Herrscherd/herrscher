@@ -2658,5 +2658,21 @@
   {
     "id": "tui.copy.target.all",
     "other": "all"
+  },
+  {
+    "id": "tui.attach.too_large",
+    "other": "attachment too large: {{.Limit}} MiB"
+  },
+  {
+    "id": "tui.attach.too_large_file",
+    "other": "attachment too large: {{.Path}} ({{.Limit}} MiB)"
+  },
+  {
+    "id": "tui.terminal.enhanced_keys_enable_failed",
+    "other": "enable enhanced keys: {{.Err}}"
+  },
+  {
+    "id": "tui.terminal.enhanced_keys_disable_failed",
+    "other": "disable enhanced keys: {{.Err}}"
   }
 ]

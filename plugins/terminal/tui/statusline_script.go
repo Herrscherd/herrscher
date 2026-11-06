@@ -29,8 +29,8 @@ const (
 )
 
 var (
-	errStatuslineNoCommand = errors.New("no statusline command set")
-	errStatuslineEmpty     = errors.New("statusline script printed no line")
+	errStatuslineNoCommand = errors.New("statusline.no_command")
+	errStatuslineEmpty     = errors.New("statusline.empty")
 )
 
 type statuslineConfig struct {

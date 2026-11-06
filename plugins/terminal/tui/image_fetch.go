@@ -12,9 +12,9 @@ import (
 )
 
 var (
-	errNotFetchable   = errors.New("is not fetchable")
-	errNoHost         = errors.New("names no host")
-	errNotAllowlisted = errors.New("is not on the attachment allowlist")
+	errNotFetchable   = errors.New("image.not_fetchable")
+	errNoHost         = errors.New("image.no_host")
+	errNotAllowlisted = errors.New("image.not_allowlisted")
 )
 
 func fetchImage(ctx context.Context, get func(context.Context, string) ([]byte, error), allow []string, rawURL string) ([]byte, error) {

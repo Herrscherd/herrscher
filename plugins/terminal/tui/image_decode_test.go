@@ -3,6 +3,7 @@ package tui
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"hash/crc32"
 	"image"
 	"image/color"
@@ -10,6 +11,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"math/rand"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -84,8 +86,8 @@ func TestDecodeImageRefusesAGigapixelHeader(t *testing.T) {
 	if err == nil {
 		t.Fatal("a header past maxDecodePixels must be refused")
 	}
-	if !strings.Contains(err.Error(), "pixel") {
-		t.Fatalf("the refusal must name the pixel bound: %v", err)
+	if !errors.Is(err, errImageTooLarge) || !strings.Contains(err.Error(), strconv.Itoa(maxDecodePixels)) {
+		t.Fatalf("the refusal must match errImageTooLarge and name the pixel bound: %v", err)
 	}
 }
 

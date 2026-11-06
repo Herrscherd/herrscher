@@ -7,7 +7,7 @@
 // fmt.Errorf or errors.New, given as the help of a command (Help) or of a param (Param, ValueParam), or built
 // from such a string by concatenation or from a package-level string constant or variable of the same
 // package. Flags, command syntax, single
-// words, and the programmer messages listed in programmerErrors are never reported.
+// words, and the exemptions listed in exemptions are never reported.
 //
 // The baseline holds one line per package, "<package> <count>", with the number of literals that package
 // may still carry. A package may only lose literals: a count above its line is a new hard-coded sentence,

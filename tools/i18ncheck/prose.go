@@ -7,22 +7,20 @@ import (
 )
 
 const (
-	minProseWords = 2
-	minWordRunes  = 2
-	wordEdges     = ".,:;!?()[]{}'\"`"
+	minWordRunes = 2
+	wordEdges    = ".,:;!?()[]{}'\"`"
 )
 
 func isProse(text string) bool {
 	if isCommandSyntax(text) {
 		return false
 	}
-	words := 0
 	for _, field := range strings.Fields(text) {
 		if isWord(strings.Trim(field, wordEdges)) {
-			words++
+			return true
 		}
 	}
-	return words >= minProseWords
+	return false
 }
 
 func isCommandSyntax(text string) bool {

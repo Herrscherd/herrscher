@@ -155,6 +155,21 @@
     "other": "commande inconnue {{.Name}}"
   },
   {
+    "id": "cli.param.missing",
+    "description": "Erreur pour un paramètre obligatoire absent de la commande",
+    "other": "{{.Command}} : --{{.Name}} est obligatoire"
+  },
+  {
+    "id": "cli.flag.unknown",
+    "description": "Erreur pour une option que la commande ne prend pas",
+    "other": "{{.Command}} : option inconnue --{{.Name}}"
+  },
+  {
+    "id": "cli.flag.needs_value",
+    "description": "Erreur pour une option donnée sans sa valeur",
+    "other": "{{.Command}} : l'option --{{.Name}} attend une valeur"
+  },
+  {
     "id": "cli.whoami.unknown_argument",
     "description": "Erreur pour un argument que whoami n'accepte pas",
     "other": "whoami : argument inconnu {{.Arg}} (seulement --json)"
@@ -3381,5 +3396,20 @@
     "id": "cli.host.fault.unsupported_lang",
     "description": "Erreur d'une commande hôte, langue non prise en charge",
     "other": "langue non prise en charge, utilisez en, fr ou auto"
+  },
+  {
+    "id": "cli.terminal.no_session_control",
+    "description": "Erreur pour une commande du terminal qui exige un contrôle de session que l'hôte n'a pas lié",
+    "other": "aucun contrôle de session n'est lié à ce terminal"
+  },
+  {
+    "id": "cli.terminal.not_available",
+    "description": "Erreur pour une commande que le terminal n'offre pas",
+    "other": "la commande {{.Command}} n'est pas disponible depuis le terminal (autorisées : {{.Allowed}})"
+  },
+  {
+    "id": "cli.terminal.session_unbound",
+    "description": "Erreur pour une action de session du terminal avant que l'hôte ait lié son contrôle",
+    "other": "le contrôle de session n'est pas encore lié"
   }
 ]

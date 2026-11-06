@@ -55,6 +55,9 @@ func declaredMessages(dir string) (map[string][]string, error) {
 		if callErr := collectTrCalls(fset, parsed, constants, declared); callErr != nil {
 			return nil, callErr
 		}
+		if keyedErr := collectKeyedErrors(fset, parsed, constants, declared); keyedErr != nil {
+			return nil, keyedErr
+		}
 		collectMentionedKeys(parsed, mentioned)
 	}
 	for key := range mentioned {
@@ -137,28 +140,82 @@ func collectTrCalls(fset *token.FileSet, file *ast.File, constants map[string]st
 		if !ok {
 			return true
 		}
-		fields, err := mapFields(fset, call, constants)
-		if err != nil {
+		if err := declare(fset, call.Pos(), key, call.Args[1], constants, declared); err != nil {
 			failure = err
 			return false
 		}
-		if previous, seen := declared[key]; seen && !slices.Equal(previous, fields) {
-			failure = &trError{fset.Position(call.Pos()).String(), "key " + key + " is called with different fields"}
-			return false
-		}
-		declared[key] = fields
 		return true
 	})
 	return failure
 }
 
-func mapFields(fset *token.FileSet, call *ast.CallExpr, constants map[string]string) ([]string, error) {
-	literal, ok := call.Args[1].(*ast.CompositeLit)
+func collectKeyedErrors(fset *token.FileSet, file *ast.File, constants map[string]string, declared map[string][]string) error {
+	var failure error
+	ast.Inspect(file, func(node ast.Node) bool {
+		literal, ok := node.(*ast.CompositeLit)
+		if !ok || failure != nil {
+			return failure == nil
+		}
+		typeName, ok := literal.Type.(*ast.Ident)
+		if !ok || typeName.Name != "keyedError" {
+			return true
+		}
+		key, params, found := keyedFields(literal)
+		if !found {
+			return true
+		}
+		if err := declare(fset, literal.Pos(), key, params, constants, declared); err != nil {
+			failure = err
+			return false
+		}
+		return true
+	})
+	return failure
+}
+
+func keyedFields(literal *ast.CompositeLit) (string, ast.Expr, bool) {
+	var key string
+	var params ast.Expr = &ast.Ident{Name: "nil"}
+	foundKey := false
+	for _, element := range literal.Elts {
+		pair, ok := element.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		name, ok := pair.Key.(*ast.Ident)
+		if !ok {
+			continue
+		}
+		switch name.Name {
+		case "key":
+			value, isText := stringLiteral(pair.Value)
+			key, foundKey = value, isText
+		case "params":
+			params = pair.Value
+		}
+	}
+	return key, params, foundKey
+}
+
+func declare(fset *token.FileSet, pos token.Pos, key string, params ast.Expr, constants map[string]string, declared map[string][]string) error {
+	fields, err := mapFields(fset, pos, params, constants)
+	if err != nil {
+		return err
+	}
+	if previous, seen := declared[key]; seen && !slices.Equal(previous, fields) {
+		return &trError{fset.Position(pos).String(), "key " + key + " is called with different fields"}
+	}
+	declared[key] = fields
+	return nil
+}
+
+func mapFields(fset *token.FileSet, pos token.Pos, params ast.Expr, constants map[string]string) ([]string, error) {
+	literal, ok := params.(*ast.CompositeLit)
 	if !ok {
-		if isNil(call.Args[1]) {
+		if isNil(params) {
 			return []string{}, nil
 		}
-		return nil, &trError{fset.Position(call.Pos()).String(), "parameters must be a map literal or nil"}
+		return nil, &trError{fset.Position(pos).String(), "parameters must be a map literal or nil"}
 	}
 	fields := []string{}
 	for _, element := range literal.Elts {

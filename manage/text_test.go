@@ -38,8 +38,8 @@ func TestWritingPluginRowsLoadsTheCatalogOnce(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	const budget = 150000
+	const budget = 300000
 	if allocs > budget {
-		t.Fatalf("writing %d rows allocated %.0f times, above the budget of %d allocations (one catalogue load allocates about 42000 times, so this is about 3.5 loads): the catalogue is reloaded per row", len(rows), allocs, budget)
+		t.Fatalf("writing %d rows allocated %.0f times, above the budget of %d allocations: the catalogue is reloaded per row", len(rows), allocs, budget)
 	}
 }

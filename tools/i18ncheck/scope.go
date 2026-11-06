@@ -21,6 +21,9 @@ func presentationScope() []string {
 }
 
 func collect(root string) (map[string][]finding, error) {
+	if err := validateExemptions(exemptions()); err != nil {
+		return nil, err
+	}
 	files := token.NewFileSet()
 	found := make(map[string][]finding)
 	for _, entry := range presentationScope() {

@@ -9,6 +9,8 @@ import (
 	"unicode"
 )
 
+const dynamicFormatText = "format passed as a parameter"
+
 type sinkWalker struct {
 	files      *token.FileSet
 	translated map[string]bool
@@ -105,11 +107,21 @@ func keyedSentinel(node ast.Node) (string, bool) {
 		return "", false
 	}
 	name, isIdent := pair.Elts[0].(*ast.Ident)
-	key, isText := pair.Elts[1].(*ast.BasicLit)
-	if !isIdent || !isText || !isCatalogKey(key) {
+	if !isIdent || !isCatalogReference(pair.Elts[1]) {
 		return "", false
 	}
 	return name.Name, true
+}
+
+func isCatalogReference(expr ast.Expr) bool {
+	switch typed := expr.(type) {
+	case *ast.BasicLit:
+		return isCatalogKey(typed)
+	case *ast.SelectorExpr:
+		qualifier, ok := typed.X.(*ast.Ident)
+		return ok && qualifier.Name == "clitext"
+	}
+	return false
 }
 
 func isCatalogKey(literal *ast.BasicLit) bool {
@@ -166,7 +178,14 @@ func isShownKey(literalType, key ast.Expr) bool {
 	if isNamedType(literalType, "model") {
 		return isShownName(name.Name)
 	}
+	if isArgType(literalType) {
+		return name.Name == "Value"
+	}
 	return false
+}
+
+func isArgType(expr ast.Expr) bool {
+	return isQualified(expr, "contracts", "Arg") || isNamedType(expr, "Arg")
 }
 
 func isQualified(expr ast.Expr, qualifier, name string) bool {
@@ -185,10 +204,13 @@ func isNamedType(expr ast.Expr, name string) bool {
 
 func isShownName(name string) bool {
 	lowered := strings.ToLower(name)
-	return lowered == "flash" || strings.HasSuffix(lowered, "notice")
+	return strings.HasSuffix(lowered, "flash") || strings.HasSuffix(lowered, "notice") || strings.HasSuffix(lowered, "status")
 }
 
 func (walker *sinkWalker) callFindings(call *ast.CallExpr) []finding {
+	if dynamic, ok := walker.dynamicFormat(call); ok {
+		return []finding{dynamic}
+	}
 	index, ok := showingArgument(call.Fun)
 	if !ok || len(call.Args) <= index {
 		return nil
@@ -197,6 +219,22 @@ func (walker *sinkWalker) callFindings(call *ast.CallExpr) []finding {
 		return []finding{sentence}
 	}
 	return nil
+}
+
+func (walker *sinkWalker) dynamicFormat(call *ast.CallExpr) (finding, bool) {
+	selector, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || len(call.Args) == 0 || !isFormatFunction(selector) {
+		return finding{}, false
+	}
+	if _, isText := walker.textOf(call.Args[0]); isText {
+		return finding{}, false
+	}
+	return finding{position: walker.files.Position(call.Pos()), text: dynamicFormatText}, true
+}
+
+func isFormatFunction(selector *ast.SelectorExpr) bool {
+	qualifier, ok := selector.X.(*ast.Ident)
+	return ok && qualifier.Name == "fmt" && (selector.Sel.Name == "Sprintf" || selector.Sel.Name == "Errorf")
 }
 
 func showingArgument(fun ast.Expr) (int, bool) {
@@ -228,7 +266,7 @@ func builderArgument(method string) (int, bool) {
 func (walker *sinkWalker) proseOf(expr ast.Expr) (finding, bool) {
 	text, ok := walker.textOf(expr)
 	position := walker.files.Position(expr.Pos())
-	if !ok || !isProse(text) || isProgrammerError(position, text) {
+	if !ok || !isProse(text) || isExempt(position, text) {
 		return finding{}, false
 	}
 	return finding{position: position, text: text}, true
@@ -243,9 +281,34 @@ func (walker *sinkWalker) textOf(expr ast.Expr) (string, bool) {
 	case *ast.BinaryExpr:
 		return walker.concatText(typed)
 	case *ast.CallExpr:
-		return walker.formatText(typed)
+		if text, ok := walker.formatText(typed); ok {
+			return text, true
+		}
+		return walker.joinText(typed)
 	}
 	return "", false
+}
+
+func (walker *sinkWalker) joinText(call *ast.CallExpr) (string, bool) {
+	if len(call.Args) != 2 || !isQualified(call.Fun, "strings", "Join") {
+		return "", false
+	}
+	list, ok := call.Args[0].(*ast.CompositeLit)
+	if !ok {
+		return "", false
+	}
+	separator, ok := walker.textOf(call.Args[1])
+	if !ok {
+		return "", false
+	}
+	parts := make([]string, 0, len(list.Elts))
+	shown := false
+	for _, element := range list.Elts {
+		text, isText := walker.textOf(element)
+		shown = shown || isText
+		parts = append(parts, text)
+	}
+	return strings.Join(parts, separator), shown
 }
 
 func (walker *sinkWalker) constantText(name string) (string, bool) {

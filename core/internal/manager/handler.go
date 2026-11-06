@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sync"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
@@ -41,6 +42,7 @@ type Handler struct {
 	vendorDefault   func(vendor string) string
 	hs              Hosts
 	remoteBackend   bool
+	langMu          sync.RWMutex
 	lang            i18n.Language
 	defaultLang     i18n.Language
 	onLanguage      func(i18n.Language)
@@ -53,7 +55,7 @@ func (h *Handler) SetHosts(hs Hosts) { h.hs = hs }
 func (h *Handler) worktreesOn(hostName string) (Worktrees, string, error) {
 	if hostName == "" || h.hs == nil {
 		if hostName != "" {
-			return nil, "", localize(h.lang, fmt.Sprintf("session wants host %q but %v", hostName, ErrNoHostRegistered), clitext.HostErrNoHostRegistered, clitext.Params{clitext.ParamHost: hostName}, ErrNoHostRegistered)
+			return nil, "", localize(h.currentLanguage(), fmt.Sprintf("session wants host %q but %v", hostName, ErrNoHostRegistered), clitext.HostErrNoHostRegistered, clitext.Params{clitext.ParamHost: hostName}, ErrNoHostRegistered)
 		}
 		return h.wt, h.st.WorkspaceRoot(), nil
 	}
@@ -81,16 +83,40 @@ func (h *Handler) materializeOn(ctx context.Context, hostName string, profile ag
 
 // SetLanguage wires the operator language the messages of the session verbs
 // render in. An undefined language falls back to English.
-func (h *Handler) SetLanguage(lang i18n.Language) { h.lang = i18n.Resolve(lang) }
+func (h *Handler) SetLanguage(lang i18n.Language) {
+	h.langMu.Lock()
+	defer h.langMu.Unlock()
+	h.lang = i18n.Resolve(lang)
+}
+
+func (h *Handler) currentLanguage() i18n.Language {
+	h.langMu.RLock()
+	defer h.langMu.RUnlock()
+	return h.lang
+}
+
+func (h *Handler) defaultLanguage() i18n.Language {
+	h.langMu.RLock()
+	defer h.langMu.RUnlock()
+	return h.defaultLang
+}
 
 // OnLanguageChange registers the callback told each time /set lang changes the operator language.
-func (h *Handler) OnLanguageChange(fn func(i18n.Language)) { h.onLanguage = fn }
+func (h *Handler) OnLanguageChange(notify func(i18n.Language)) {
+	h.langMu.Lock()
+	defer h.langMu.Unlock()
+	h.onLanguage = notify
+}
 
 // SetDefaultLanguage wires the language /set lang restores when it is given auto or nothing.
-func (h *Handler) SetDefaultLanguage(lang i18n.Language) { h.defaultLang = i18n.Resolve(lang) }
+func (h *Handler) SetDefaultLanguage(lang i18n.Language) {
+	h.langMu.Lock()
+	defer h.langMu.Unlock()
+	h.defaultLang = i18n.Resolve(lang)
+}
 
 func (h *Handler) text(key clitext.Key, params clitext.Params) string {
-	return h.textIn(h.lang, key, params)
+	return h.textIn(h.currentLanguage(), key, params)
 }
 
 func (h *Handler) textIn(lang i18n.Language, key clitext.Key, params clitext.Params) string {
@@ -105,7 +131,7 @@ func (h *Handler) textIn(lang i18n.Language, key clitext.Key, params clitext.Par
 func (h *Handler) noticeLanguage(raw string) i18n.Language {
 	lang, err := i18n.ParseLanguage(raw)
 	if err != nil {
-		return h.lang
+		return h.currentLanguage()
 	}
 	return lang
 }
@@ -266,7 +292,7 @@ func (h *Handler) checkAccount(runtime runtimeChoice, profile string) error {
 		return &localizedError{english: fmt.Sprintf("account %q: %v: %v", profile, ErrAccountVendor, err), text: h.text(clitext.HostErrAccountVendor, clitext.Params{clitext.ParamAccount: profile}) + ": " + err.Error(), causes: []error{ErrAccountVendor, err}}
 	}
 	if vendor == "" {
-		return localize(h.lang, fmt.Sprintf("account %q: %v", profile, ErrAccountVendor), clitext.HostErrAccountVendor, clitext.Params{clitext.ParamAccount: profile}, ErrAccountVendor)
+		return localize(h.currentLanguage(), fmt.Sprintf("account %q: %v", profile, ErrAccountVendor), clitext.HostErrAccountVendor, clitext.Params{clitext.ParamAccount: profile}, ErrAccountVendor)
 	}
 	return h.validateAccount(vendor, profile)
 }
@@ -279,7 +305,7 @@ func (h *Handler) checkAccountUsable(hostName, account string) error {
 		return err
 	}
 	if h.remoteBackend {
-		return localize(h.lang, fmt.Sprintf("account %q: %v; unset HERRSCHER_REMOTE=backend to use accounts on this daemon, or drop the account", account, ErrAccountRemote), clitext.HostErrAccountRemote, clitext.Params{clitext.ParamAccount: account}, ErrAccountRemote)
+		return localize(h.currentLanguage(), fmt.Sprintf("account %q: %v; unset HERRSCHER_REMOTE=backend to use accounts on this daemon, or drop the account", account, ErrAccountRemote), clitext.HostErrAccountRemote, clitext.Params{clitext.ParamAccount: account}, ErrAccountRemote)
 	}
 	return nil
 }
@@ -288,7 +314,7 @@ func (h *Handler) checkAccountHost(hostName, account string) error {
 	if hostName == "" || account == "" {
 		return nil
 	}
-	return localize(h.lang, fmt.Sprintf("account %q on host %q: %v; run the session on this host or drop the account", account, hostName, ErrAccountHost), clitext.HostErrAccountHost, clitext.Params{clitext.ParamAccount: account, clitext.ParamHost: hostName}, ErrAccountHost)
+	return localize(h.currentLanguage(), fmt.Sprintf("account %q on host %q: %v; run the session on this host or drop the account", account, hostName, ErrAccountHost), clitext.HostErrAccountHost, clitext.Params{clitext.ParamAccount: account, clitext.ParamHost: hostName}, ErrAccountHost)
 }
 
 func (h *Handler) launchVendor(runtime runtimeChoice) (string, error) {

@@ -44,16 +44,22 @@ func withCompactionConfig(opts *host.Options, cfg config.Config) {
 	opts.ContextLimits = cfg.ContextLimits
 }
 
-func runServe(ctx context.Context, args []string, open *openWindow) error {
+type serveFunc func(ctx context.Context, args []string, open *openWindow, cfg config.Config, langs language.Languages) error
+
+func runServe(ctx context.Context, args []string, serve serveFunc) error {
 	cfg, err := config.Load(scanFlag(args, "config", config.DefaultPath()))
 	if err != nil {
 		return err
 	}
-	langs, err := prepareLanguages(cfg, scanFlag(args, "state", host.DefaultStatePath()))
+	langs, err := serveLanguages(cfg, args)
 	if err != nil {
 		return err
 	}
-	return serveWith(ctx, args, open, cfg, langs)
+	return serve(ctx, args, nil, cfg, langs)
+}
+
+func serveLanguages(cfg config.Config, args []string) (language.Languages, error) {
+	return prepareLanguages(cfg, stateFlagPath(args))
 }
 
 func prepareLanguages(cfg config.Config, statePath string) (language.Languages, error) {
@@ -455,6 +461,10 @@ func buildGateways(ctx context.Context, lang i18n.Language) ([]host.Deps, error)
 		return nil, renderError(lang, errNoGateway, clitext.ServeNoGateway, nil)
 	}
 	return sets, nil
+}
+
+func stateFlagPath(args []string) string {
+	return scanFlag(args, "state", host.DefaultStatePath())
 }
 
 func scanFlag(args []string, name, def string) string {

@@ -188,11 +188,11 @@ func localize(lang i18n.Language, english string, key clitext.Key, params clitex
 }
 
 func (h *Handler) localized(sentinel error, key clitext.Key) error {
-	return localize(h.lang, sentinel.Error(), key, nil, sentinel)
+	return localize(h.currentLanguage(), sentinel.Error(), key, nil, sentinel)
 }
 
 func (h *Handler) labelled(label string, key clitext.Key, err error) error {
-	return localize(h.lang, label+": "+err.Error(), key, clitext.Params{clitext.ParamErr: err.Error()}, err)
+	return localize(h.currentLanguage(), label+": "+err.Error(), key, clitext.Params{clitext.ParamErr: err.Error()}, err)
 }
 
 func restartLostError(lang i18n.Language, name string, restartErr, rollbackErr error) error {

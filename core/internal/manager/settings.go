@@ -46,7 +46,7 @@ func (h *Handler) setLangRun(_ context.Context, input contracts.Input) (contract
 	}
 	lang, ok := operatorLangNamed(raw)
 	if !ok {
-		return contracts.Result{}, localize(h.lang, fmt.Sprintf("unsupported language %q, use en, fr or auto", raw), clitext.HostErrUnsupportedLang, clitext.Params{clitext.ParamLang: raw}, ErrUnsupportedLang)
+		return contracts.Result{}, localize(h.currentLanguage(), fmt.Sprintf("unsupported language %q, use en, fr or auto", raw), clitext.HostErrUnsupportedLang, clitext.Params{clitext.ParamLang: raw}, ErrUnsupportedLang)
 	}
 	if err := h.st.SetOperatorLang(raw); err != nil {
 		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)
@@ -59,8 +59,8 @@ func (h *Handler) resetLang() (contracts.Result, error) {
 	if err := h.st.SetOperatorLang(""); err != nil {
 		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)
 	}
-	h.changeLanguage(h.defaultLang)
-	return contracts.DataResult(h.text(clitext.HostLangReset, clitext.Params{clitext.ParamLang: h.defaultLang.String()})), nil
+	h.changeLanguage(h.defaultLanguage())
+	return contracts.DataResult(h.text(clitext.HostLangReset, clitext.Params{clitext.ParamLang: h.defaultLanguage().String()})), nil
 }
 
 func operatorLangNamed(name string) (i18n.Language, bool) {
@@ -75,7 +75,13 @@ func operatorLangNamed(name string) (i18n.Language, bool) {
 
 func (h *Handler) changeLanguage(lang i18n.Language) {
 	h.SetLanguage(lang)
-	if h.onLanguage != nil {
-		h.onLanguage(h.lang)
+	if hook := h.languageHook(); hook != nil {
+		hook(h.currentLanguage())
 	}
+}
+
+func (h *Handler) languageHook() func(i18n.Language) {
+	h.langMu.RLock()
+	defer h.langMu.RUnlock()
+	return h.onLanguage
 }

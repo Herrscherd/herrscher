@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -170,5 +171,49 @@ func TestPrepareLanguagesReadsTheStateFileInUse(t *testing.T) {
 	}
 	if langs.Operator != i18n.French {
 		t.Fatalf("operator = %v, want French from the -state file in use, not the default state", langs.Operator)
+	}
+}
+
+func TestStateFlagSelectsTheStateFileServeReads(t *testing.T) {
+	clearPublishedLanguage(t)
+	custom := filepath.Join(t.TempDir(), "custom.json")
+	if err := os.WriteFile(custom, []byte(`{"operator_lang":"fr"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := stateFlagPath([]string{"-state", custom}); got != custom {
+		t.Fatalf("stateFlagPath(-state) = %q, want %q", got, custom)
+	}
+	if got := stateFlagPath([]string{"--state=" + custom}); got != custom {
+		t.Fatalf("stateFlagPath(--state=) = %q, want %q", got, custom)
+	}
+	if got := stateFlagPath(nil); got != host.DefaultStatePath() {
+		t.Fatalf("stateFlagPath() = %q, want the default %q", got, host.DefaultStatePath())
+	}
+	langs, err := prepareLanguages(config.Config{Language: "en"}, stateFlagPath([]string{"-state", custom}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if langs.Operator != i18n.French {
+		t.Fatalf("operator = %v, want French from the -state file", langs.Operator)
+	}
+}
+
+func TestRunServeReadsTheLanguageFromTheStateFileItIsGiven(t *testing.T) {
+	clearPublishedLanguage(t)
+	custom := filepath.Join(t.TempDir(), "custom.json")
+	if err := os.WriteFile(custom, []byte(`{"operator_lang":"fr"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var served i18n.Language
+	capture := func(_ context.Context, _ []string, _ *openWindow, _ config.Config, langs language.Languages) error {
+		served = langs.Operator
+		return nil
+	}
+	args := []string{"-config", filepath.Join(t.TempDir(), "absent.json"), "-state", custom}
+	if err := runServe(context.Background(), args, capture); err != nil {
+		t.Fatal(err)
+	}
+	if served != i18n.French {
+		t.Fatalf("runServe served with operator %v, want French from the -state file", served)
 	}
 }

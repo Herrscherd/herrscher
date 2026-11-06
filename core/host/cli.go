@@ -92,7 +92,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addRoleCommands(reg, options.Language, hostState); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addVerbs(reg, memorySearchVerb(options.Language), whoamiVerb(), commandsVerb(reg)); err != nil {
+	if err := addVerbs(reg, memorySearchVerb(options.Language), whoamiVerb(), commandsVerb(options.Language, reg)); err != nil {
 		return nil, hostDeps{}, err
 	}
 	return reg, hostDeps{wt: worktrees, agents: agents, handler: hdl, seedCoord: seedCoord, schedSlot: schedSlot}, nil

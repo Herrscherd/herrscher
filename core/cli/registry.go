@@ -27,7 +27,17 @@ var (
 
 // Registry holds the commands a process can run, keyed by their verb path.
 type Registry struct {
-	cmds []contracts.Cmd
+	cmds       []contracts.Cmd
+	helpParams map[clitext.Key]clitext.Params
+}
+
+// SetHelpParams sets the parameters that a help key takes when the registry renders it,
+// such as the roles that a grant can name.
+func (r *Registry) SetHelpParams(key clitext.Key, params clitext.Params) {
+	if r.helpParams == nil {
+		r.helpParams = make(map[clitext.Key]clitext.Params)
+	}
+	r.helpParams[key] = params
 }
 
 func key(path []string) string { return strings.Join(path, " ") }
@@ -273,21 +283,40 @@ type Spec struct {
 	Params []contracts.Param `json:"params,omitempty"`
 }
 
-// Specs returns every registered command's shape, sorted by path. It exists so a
-// frontend's command menu is derived from what the daemon actually dispatches
-// rather than re-typed beside it: a hand-kept list is a list that silently falls
-// behind, which is how a palette ends up advertising seven of twenty-nine verbs.
-func (r *Registry) Specs() []Spec {
+// Specs returns every registered command's shape, sorted by path, with its help texts rendered in lang.
+func (r *Registry) Specs(lang i18n.Language) []Spec {
+	translator := clitext.For(lang)
 	out := make([]Spec, 0, len(r.cmds))
 	for _, c := range r.cmds {
-		out = append(out, Spec{Path: c.Path, Help: c.Help, Params: c.Params})
+		out = append(out, Spec{Path: c.Path, Help: r.helpText(translator, c.Help), Params: r.localizedParams(translator, c.Params)})
 	}
 	sort.Slice(out, func(i, j int) bool { return key(out[i].Path) < key(out[j].Path) })
 	return out
 }
 
-// Help renders one usage line per command, sorted by path, for the root help.
-func (r *Registry) Help() string {
+func (r *Registry) helpText(translator *clitext.Translator, helpKey string) string {
+	if helpKey == "" {
+		return ""
+	}
+	return translator.Text(clitext.Key(helpKey), r.helpParams[clitext.Key(helpKey)])
+}
+
+func (r *Registry) localizedParams(translator *clitext.Translator, params []contracts.Param) []contracts.Param {
+	if len(params) == 0 {
+		return nil
+	}
+	out := make([]contracts.Param, 0, len(params))
+	for _, param := range params {
+		param.Help = r.helpText(translator, param.Help)
+		out = append(out, param)
+	}
+	return out
+}
+
+// Help renders one usage line per command, sorted by path, for the root help, with
+// its help text rendered in lang.
+func (r *Registry) Help(lang i18n.Language) string {
+	translator := clitext.For(lang)
 	lines := make([]string, 0, len(r.cmds))
 	for _, cmd := range r.cmds {
 		var line strings.Builder
@@ -302,8 +331,8 @@ func (r *Registry) Help() string {
 				line.WriteString(" [--" + param.Name + "]")
 			}
 		}
-		if cmd.Help != "" {
-			line.WriteString(": " + cmd.Help)
+		if help := r.helpText(translator, cmd.Help); help != "" {
+			line.WriteString(": " + help)
 		}
 		lines = append(lines, line.String())
 	}

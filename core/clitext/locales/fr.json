@@ -1428,6 +1428,1156 @@
     "other": "(cette session)"
   },
   {
+    "id": "cli.help.cmd.session.set_account",
+    "description": "Help of the command session set-account",
+    "other": "régler le profil de compte d'une session : un nom de profil, native pour la connexion propre à la machine, ou vide pour le défaut du fournisseur ; une session avec une conversation sous un autre compte a besoin de fresh"
+  },
+  {
+    "id": "cli.help.param.session.accounts.name",
+    "description": "Help of the --name param of the command session accounts",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.set_account.name",
+    "description": "Help of the --name param of the command session set-account",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.set_account.profile",
+    "description": "Help of the --profile param of the command session set-account",
+    "other": "nom de profil, native, ou vide pour le défaut du fournisseur"
+  },
+  {
+    "id": "cli.help.param.session.set_account.fresh",
+    "description": "Help of the --fresh param of the command session set-account",
+    "other": "fresh pour démarrer une nouvelle conversation sous le nouveau compte"
+  },
+  {
+    "id": "cli.help.cmd.session.handoff",
+    "description": "Help of the command session handoff",
+    "other": "démarrer une nouvelle session dont le premier message est un brief que cette session rédige ; sans --to, rien n'est créé et la commande indique comment ouvrir cette session à la place. Ce n'est pas le transfert ⟢ handoff: trailer, qui passe une tâche à un autre agent dans le flux de coordination. Un appelant agent rattache la nouvelle session sous sa source, ne peut pas choisir --under ni --channel_id, et obtient au plus 3 transmissions par heure pour toute son arborescence de sessions, une à la fois ; une transmission compte dès que son brief démarre, même si elle échoue ensuite ; un compte refusé ne coûte ni brief ni place, sauf si son profil est retiré entre la vérification et la création ; l'opérateur n'a pas cette limite. Quand l'opérateur ferme une session, ses enfants directs deviennent des racines et leur quota repart. Cette limite est un garde-fou local, pas une frontière de sécurité : le socket de l'opérateur est accessible au même utilisateur, et son état se réinitialise au redémarrage du démon"
+  },
+  {
+    "id": "cli.help.param.session.handoff.name",
+    "description": "Help of the --name param of the command session handoff",
+    "other": "session à transmettre (défaut : la session appelante)"
+  },
+  {
+    "id": "cli.help.param.session.handoff.to",
+    "description": "Help of the --to param of the command session handoff",
+    "other": "nom de la nouvelle session ; sans lui, rien n'est créé"
+  },
+  {
+    "id": "cli.help.param.session.handoff.project",
+    "description": "Help of the --project param of the command session handoff",
+    "other": "sous-dossier de l'espace de travail où travaille la nouvelle session"
+  },
+  {
+    "id": "cli.help.param.session.handoff.model",
+    "description": "Help of the --model param of the command session handoff",
+    "other": "identifiant de modèle du catalogue pour la nouvelle session (voir `herrscher models list`)"
+  },
+  {
+    "id": "cli.help.param.session.handoff.vendor",
+    "description": "Help of the --vendor param of the command session handoff",
+    "other": "fournisseur du backend d'agent pour la nouvelle session : claude | codex | cursor"
+  },
+  {
+    "id": "cli.help.param.session.handoff.account",
+    "description": "Help of the --account param of the command session handoff",
+    "other": "profil de compte de la nouvelle session, résolu chez son fournisseur (par défaut : le compte de la session source ; --account \"\" démarre sur le défaut du fournisseur)"
+  },
+  {
+    "id": "cli.help.param.session.handoff.under",
+    "description": "Help of the --under param of the command session handoff",
+    "other": "créer la nouvelle conversation sous cette catégorie ou ce forum plutôt que dans le répertoire du démon (opérateur seulement)"
+  },
+  {
+    "id": "cli.help.param.session.handoff.channel_id",
+    "description": "Help of the --channel_id param of the command session handoff",
+    "other": "reprendre cette conversation existante pour la nouvelle session (opérateur seulement)"
+  },
+  {
+    "id": "cli.help.cmd.session.checkpoints",
+    "description": "Help of the command session checkpoints",
+    "other": "lister les points de contrôle d'une session, un avant chaque message utilisateur, avec les fichiers touchés"
+  },
+  {
+    "id": "cli.help.cmd.session.rewind",
+    "description": "Help of the command session rewind",
+    "other": "restaurer le code, la conversation, ou les deux, d'une session, au point de contrôle avant un message"
+  },
+  {
+    "id": "cli.help.cmd.session.undo",
+    "description": "Help of the command session undo",
+    "other": "annuler le dernier retour arrière du code d'une session"
+  },
+  {
+    "id": "cli.help.cmd.session.fork",
+    "description": "Help of the command session fork",
+    "other": "démarrer une nouvelle session à partir d'un point de contrôle, dans son propre worktree ; l'originale reste telle quelle"
+  },
+  {
+    "id": "cli.help.param.session.checkpoints.name",
+    "description": "Help of the --name param of the command session checkpoints",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.rewind.name",
+    "description": "Help of the --name param of the command session rewind",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.rewind.to",
+    "description": "Help of the --to param of the command session rewind",
+    "other": "numéro du point de contrôle, tel que listé par session checkpoints"
+  },
+  {
+    "id": "cli.help.param.session.rewind.what",
+    "description": "Help of the --what param of the command session rewind",
+    "other": "code, conversation ou les deux"
+  },
+  {
+    "id": "cli.help.param.session.undo.name",
+    "description": "Help of the --name param of the command session undo",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.fork.name",
+    "description": "Help of the --name param of the command session fork",
+    "other": "session à bifurquer"
+  },
+  {
+    "id": "cli.help.param.session.fork.to",
+    "description": "Help of the --to param of the command session fork",
+    "other": "numéro du point de contrôle, tel que listé par session checkpoints"
+  },
+  {
+    "id": "cli.help.param.session.fork.as",
+    "description": "Help of the --as param of the command session fork",
+    "other": "nom de la nouvelle session (par défaut <name>-fork)"
+  },
+  {
+    "id": "cli.help.cmd.models.list",
+    "description": "Help of the command models list",
+    "other": "lister les modèles proposés par chaque backend compilé, selon la politique de routage active, avec leur source ; --all ajoute les cachés ; --json pour l'app"
+  },
+  {
+    "id": "cli.help.cmd.models.refresh",
+    "description": "Help of the command models refresh",
+    "other": "demander maintenant à chaque backend sa liste de modèles et la stocker ; un backend en échec garde sa dernière liste connue"
+  },
+  {
+    "id": "cli.help.param.models.list.state",
+    "description": "Help of the --state param of the command models list",
+    "other": "fichier d'état du démon dont le cache de modèles est lu (par défaut : celui du démon)"
+  },
+  {
+    "id": "cli.help.param.models.list.all",
+    "description": "Help of the --all param of the command models list",
+    "other": "lister aussi les modèles cachés, marqués comme tels, qui restent résolus si on les demande"
+  },
+  {
+    "id": "cli.help.param.models.refresh.state",
+    "description": "Help of the --state param of the command models refresh",
+    "other": "fichier d'état du démon dont le cache de modèles est écrit (par défaut : celui du démon)"
+  },
+  {
+    "id": "cli.help.cmd.memory.locate",
+    "description": "Help of the command memory locate",
+    "other": "afficher les URI ouvrables (obsidian://, file://) de la note d'un nœud de mémoire"
+  },
+  {
+    "id": "cli.help.cmd.memory.forget",
+    "description": "Help of the command memory forget",
+    "other": "supprimer un nœud de mémoire par sa clé (sans effet s'il est absent)"
+  },
+  {
+    "id": "cli.help.cmd.memory.record",
+    "description": "Help of the command memory record",
+    "other": "créer ou mettre à jour un nœud de mémoire"
+  },
+  {
+    "id": "cli.help.cmd.memory.restore",
+    "description": "Help of the command memory restore",
+    "other": "réactiver par sa clé un nœud de mémoire archivé (ou fusionné)"
+  },
+  {
+    "id": "cli.help.cmd.memory.unlink",
+    "description": "Help of the command memory unlink",
+    "other": "supprimer le lien from→to entre deux nœuds de mémoire"
+  },
+  {
+    "id": "cli.help.cmd.skill.list",
+    "description": "Help of the command skill list",
+    "other": "lister les compétences que les agents se sont écrites, avec leur état, leur approbation et leur dernier usage"
+  },
+  {
+    "id": "cli.help.cmd.skill.approve",
+    "description": "Help of the command skill approve",
+    "other": "permettre de promouvoir une compétence apprise du périmètre privé de son agent vers le périmètre partagé du projet"
+  },
+  {
+    "id": "cli.help.cmd.memory.search",
+    "description": "Help of the command memory search",
+    "other": "recherche plein texte dans le coffre de mémoire ; --raw cherche aussi dans le niveau brut des transcriptions par tour (G7)"
+  },
+  {
+    "id": "cli.help.cmd.whoami",
+    "description": "Help of the command whoami",
+    "other": "afficher l'identité que git sur cette machine vous donne"
+  },
+  {
+    "id": "cli.help.cmd.commands",
+    "description": "Help of the command commands",
+    "other": "lister toutes les commandes que ce démon route, avec leurs paramètres"
+  },
+  {
+    "id": "cli.help.param.memory.locate.key",
+    "description": "Help of the --key param of the command memory locate",
+    "other": "clé du nœud"
+  },
+  {
+    "id": "cli.help.param.memory.forget.key",
+    "description": "Help of the --key param of the command memory forget",
+    "other": "clé du nœud"
+  },
+  {
+    "id": "cli.help.param.memory.record.key",
+    "description": "Help of the --key param of the command memory record",
+    "other": "clé du nœud"
+  },
+  {
+    "id": "cli.help.param.memory.record.kind",
+    "description": "Help of the --kind param of the command memory record",
+    "other": "type de nœud (decision, project, …)"
+  },
+  {
+    "id": "cli.help.param.memory.record.title",
+    "description": "Help of the --title param of the command memory record",
+    "other": "titre du nœud"
+  },
+  {
+    "id": "cli.help.param.memory.record.body",
+    "description": "Help of the --body param of the command memory record",
+    "other": "contenu du nœud (markdown)"
+  },
+  {
+    "id": "cli.help.param.memory.restore.key",
+    "description": "Help of the --key param of the command memory restore",
+    "other": "clé du nœud"
+  },
+  {
+    "id": "cli.help.param.memory.restore.force",
+    "description": "Help of the --force param of the command memory restore",
+    "other": "se détacher de son parent si le nœud a été fusionné"
+  },
+  {
+    "id": "cli.help.param.memory.unlink.from",
+    "description": "Help of the --from param of the command memory unlink",
+    "other": "clé du nœud source"
+  },
+  {
+    "id": "cli.help.param.memory.unlink.to",
+    "description": "Help of the --to param of the command memory unlink",
+    "other": "clé du nœud cible"
+  },
+  {
+    "id": "cli.help.param.skill.list.limit",
+    "description": "Help of the --limit param of the command skill list",
+    "other": "nombre maximal de lignes (défaut 50)"
+  },
+  {
+    "id": "cli.help.param.skill.approve.key",
+    "description": "Help of the --key param of the command skill approve",
+    "other": "clé du nœud de compétence (voir `skill list`)"
+  },
+  {
+    "id": "cli.help.param.skill.approve.revoke",
+    "description": "Help of the --revoke param of the command skill approve",
+    "other": "effacer l'approbation à la place ; une promotion déjà faite n'est pas annulée"
+  },
+  {
+    "id": "cli.help.param.memory.search.text",
+    "description": "Help of the --text param of the command memory search",
+    "other": "texte de la requête"
+  },
+  {
+    "id": "cli.help.param.memory.search.raw",
+    "description": "Help of the --raw param of the command memory search",
+    "other": "inclure les fragments bruts de transcription par tour (niveau d'archive G7)"
+  },
+  {
+    "id": "cli.help.param.memory.search.limit",
+    "description": "Help of the --limit param of the command memory search",
+    "other": "nombre maximal de résultats (défaut 10)"
+  },
+  {
+    "id": "cli.help.cmd.role.list",
+    "description": "Help of the command role list",
+    "other": "qui détient quel rôle, et ce que chaque rôle exécute"
+  },
+  {
+    "id": "cli.help.cmd.role.grant",
+    "description": "Help of the command role grant",
+    "other": "donner un rôle à un principal ; copier le principal depuis le refus lu"
+  },
+  {
+    "id": "cli.help.cmd.role.revoke",
+    "description": "Help of the command role revoke",
+    "other": "retirer à un principal son rôle"
+  },
+  {
+    "id": "cli.help.cmd.role.show",
+    "description": "Help of the command role show",
+    "other": "ce qu'un principal peut exécuter"
+  },
+  {
+    "id": "cli.help.param.role.grant.principal",
+    "description": "Help of the --principal param of the command role grant",
+    "other": "qui, tel que l'écrit un refus, ex. chat:1234 ; accepte aussi un argument nu"
+  },
+  {
+    "id": "cli.help.param.role.grant.label",
+    "description": "Help of the --label param of the command role grant",
+    "other": "un nom lisible pour `role list` ; il ne décide de rien"
+  },
+  {
+    "id": "cli.help.param.role.revoke.principal",
+    "description": "Help of the --principal param of the command role revoke",
+    "other": "qui, tel que l'écrit `role list` ; accepte aussi un argument nu"
+  },
+  {
+    "id": "cli.help.param.role.show.principal",
+    "description": "Help of the --principal param of the command role show",
+    "other": "qui, tel que l'écrit `role list` ; accepte aussi un argument nu"
+  },
+  {
+    "id": "cli.help.cmd.session.shell",
+    "description": "Help of the command session shell",
+    "other": "lance une commande dans le dossier de la session, après la politique d'approbation ; sa sortie entre dans le prochain message"
+  },
+  {
+    "id": "cli.help.param.session.shell.name",
+    "description": "Help of the --name param of the command session shell",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.shell.cmd",
+    "description": "Help of the --cmd param of the command session shell",
+    "other": "la ligne de commande, lancée avec sh -c"
+  },
+  {
+    "id": "cli.help.cmd.session.seen",
+    "description": "Help of the command session seen",
+    "other": "noter que l'opérateur a lu la dernière réponse d'une session, ce qui retire sa marque de relecture"
+  },
+  {
+    "id": "cli.help.cmd.session.seed",
+    "description": "Help of the command session seed",
+    "other": "lancer un tour d'agent dans une session et afficher la réponse"
+  },
+  {
+    "id": "cli.help.cmd.session.send",
+    "description": "Help of the command session send",
+    "other": "envoyer un message dans la file des tours d'une session en direct (le démon exécute le tour)"
+  },
+  {
+    "id": "cli.help.cmd.session.info",
+    "description": "Help of the command session info",
+    "other": "lister les sessions telles qu'une interface les voit (canal, fournisseur, dossier, archivée). JSON seulement"
+  },
+  {
+    "id": "cli.help.cmd.session.overview",
+    "description": "Help of the command session overview",
+    "other": "lister toutes les sessions avec leur état en direct (en attente, en cours, archivée, à relire, inactive), leur coût et leur dernière activité. JSON seulement"
+  },
+  {
+    "id": "cli.help.cmd.session.scrollback",
+    "description": "Help of the command session scrollback",
+    "other": "afficher l'historique rejouable d'une session tel que l'interface l'affiche. JSON seulement"
+  },
+  {
+    "id": "cli.help.cmd.session.pick",
+    "description": "Help of the command session pick",
+    "other": "répondre au choix en attente d'une session (une approbation) avec une valeur du menu"
+  },
+  {
+    "id": "cli.help.cmd.session.interrupt",
+    "description": "Help of the command session interrupt",
+    "other": "annuler le tour en cours d'une session"
+  },
+  {
+    "id": "cli.help.cmd.session.compact",
+    "description": "Help of the command session compact",
+    "other": "compacter maintenant le contexte d'une session, via sa pile de compaction, en file après le tour en cours"
+  },
+  {
+    "id": "cli.help.cmd.session.set_compact",
+    "description": "Help of the command session set-compact",
+    "other": "régler le seuil de compaction automatique d'une session, en pourcentage de sa fenêtre de contexte : 0 le désactive, vide revient au défaut de la configuration"
+  },
+  {
+    "id": "cli.help.param.session.seen.name",
+    "description": "Help of the --name param of the command session seen",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.seed.name",
+    "description": "Help of the --name param of the command session seed",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.seed.task",
+    "description": "Help of the --task param of the command session seed",
+    "other": "tâche d'ouverture"
+  },
+  {
+    "id": "cli.help.param.session.seed.turn_id",
+    "description": "Help of the --turn_id param of the command session seed",
+    "other": "identifiant de tour facultatif fourni par l'appelant"
+  },
+  {
+    "id": "cli.help.param.session.seed.timeout",
+    "description": "Help of the --timeout param of the command session seed",
+    "other": "plafonner ce tour (durée Go, ex. 30m) ; par défaut HERRSCHER_SEED_TIMEOUT, puis 120s"
+  },
+  {
+    "id": "cli.help.param.session.send.name",
+    "description": "Help of the --name param of the command session send",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.send.text",
+    "description": "Help of the --text param of the command session send",
+    "other": "texte du message"
+  },
+  {
+    "id": "cli.help.param.session.send.author",
+    "description": "Help of the --author param of the command session send",
+    "other": "nom affiché à l'agent (par défaut : vous)"
+  },
+  {
+    "id": "cli.help.param.session.send.attachments",
+    "description": "Help of the --attachments param of the command session send",
+    "other": "tableau JSON des chemins de fichiers locaux à joindre"
+  },
+  {
+    "id": "cli.help.param.session.send.origin",
+    "description": "Help of the --origin param of the command session send",
+    "other": "type de passerelle d'où ceci a été saisi (ex. terminal) : le tour s'affiche là, plutôt que dans chaque canal lié à la session"
+  },
+  {
+    "id": "cli.help.param.session.scrollback.name",
+    "description": "Help of the --name param of the command session scrollback",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.pick.name",
+    "description": "Help of the --name param of the command session pick",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.pick.value",
+    "description": "Help of the --value param of the command session pick",
+    "other": "valeur du menu à renvoyer"
+  },
+  {
+    "id": "cli.help.param.session.interrupt.name",
+    "description": "Help of the --name param of the command session interrupt",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.compact.name",
+    "description": "Help of the --name param of the command session compact",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.compact.instruction",
+    "description": "Help of the --instruction param of the command session compact",
+    "other": "texte libre pour la compaction, vide pour aucun"
+  },
+  {
+    "id": "cli.help.param.session.compact.origin",
+    "description": "Help of the --origin param of the command session compact",
+    "other": "type de passerelle d'où ceci a été saisi (ex. terminal) : le tour s'affiche là, plutôt que dans chaque canal lié à la session"
+  },
+  {
+    "id": "cli.help.param.session.set_compact.name",
+    "description": "Help of the --name param of the command session set-compact",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.set_compact.percent",
+    "description": "Help of the --percent param of the command session set-compact",
+    "other": "de 0 à 100, ou vide pour la valeur par défaut de la configuration"
+  },
+  {
+    "id": "cli.help.cmd.host.add",
+    "description": "Help of the command host add",
+    "other": "enregistrer une machine où les sessions peuvent tourner, et y installer herrscher"
+  },
+  {
+    "id": "cli.help.cmd.host.list",
+    "description": "Help of the command host list",
+    "other": "lister les lieux où une session peut tourner"
+  },
+  {
+    "id": "cli.help.cmd.host.check",
+    "description": "Help of the command host check",
+    "other": "dire si un hôte peut porter une session : ssh, herrscher, workspace, git"
+  },
+  {
+    "id": "cli.help.cmd.host.provision",
+    "description": "Help of the command host provision",
+    "other": "reconstruire et réinstaller herrscher sur un hôte depuis la source configurée"
+  },
+  {
+    "id": "cli.help.cmd.host.rm",
+    "description": "Help of the command host rm",
+    "other": "oublier un hôte (refusé tant que des sessions y tournent)"
+  },
+  {
+    "id": "cli.help.param.host.add.name",
+    "description": "Help of the --name param of the command host add",
+    "other": "nom de l'hôte (unique ; `local` est réservé) ; accepte aussi un argument nu"
+  },
+  {
+    "id": "cli.help.param.host.add.ssh",
+    "description": "Help of the --ssh param of the command host add",
+    "other": "cible ssh, ex. me@build1"
+  },
+  {
+    "id": "cli.help.param.host.add.workspace",
+    "description": "Help of the --workspace param of the command host add",
+    "other": "chemin absolu de la racine de l'espace de travail, côté distant"
+  },
+  {
+    "id": "cli.help.param.host.check.name",
+    "description": "Help of the --name param of the command host check",
+    "other": "nom de l'hôte ; accepte aussi un argument nu"
+  },
+  {
+    "id": "cli.help.param.host.provision.name",
+    "description": "Help of the --name param of the command host provision",
+    "other": "nom de l'hôte ; accepte aussi un argument nu"
+  },
+  {
+    "id": "cli.help.param.host.rm.name",
+    "description": "Help of the --name param of the command host rm",
+    "other": "nom de l'hôte ; accepte aussi un argument nu"
+  },
+  {
+    "id": "cli.help.cmd.schedule.add",
+    "description": "Help of the command schedule add",
+    "other": "réveiller une session à une cadence, sans humain dans la boucle"
+  },
+  {
+    "id": "cli.help.cmd.schedule.list",
+    "description": "Help of the command schedule list",
+    "other": "lister les plannings, avec leur cible, leur cadence, leur état et leur prochaine fenêtre"
+  },
+  {
+    "id": "cli.help.cmd.schedule.rm",
+    "description": "Help of the command schedule rm",
+    "other": "supprimer un planning ; la session qu'il a ouverte est laissée telle quelle"
+  },
+  {
+    "id": "cli.help.cmd.schedule.run",
+    "description": "Help of the command schedule run",
+    "other": "déclencher un planning tout de suite, hors cadence ; la cadence ne bouge pas"
+  },
+  {
+    "id": "cli.help.param.schedule.add.name",
+    "description": "Help of the --name param of the command schedule add",
+    "other": "nom du planning (unique)"
+  },
+  {
+    "id": "cli.help.param.schedule.add.session",
+    "description": "Help of the --session param of the command schedule add",
+    "other": "viser une session existante par son nom (exclusif avec --agent)"
+  },
+  {
+    "id": "cli.help.param.schedule.add.agent",
+    "description": "Help of the --agent param of the command schedule add",
+    "other": "viser un agent durable ; sa session est ouverte une fois puis réutilisée (exclusif avec --session)"
+  },
+  {
+    "id": "cli.help.param.schedule.add.project",
+    "description": "Help of the --project param of the command schedule add",
+    "other": "sous-répertoire de l'espace de travail de la session de l'agent"
+  },
+  {
+    "id": "cli.help.param.schedule.add.every",
+    "description": "Help of the --every param of the command schedule add",
+    "other": "cadence fixe, ex. 30m ou 24h (exclusif avec --cron)"
+  },
+  {
+    "id": "cli.help.param.schedule.add.cron",
+    "description": "Help of the --cron param of the command schedule add",
+    "other": "cron à cinq champs, à l'heure locale du démon, ex. '0 9 * * 1-5' (exclusif avec --every)"
+  },
+  {
+    "id": "cli.help.param.schedule.add.task",
+    "description": "Help of the --task param of the command schedule add",
+    "other": "la tâche confiée à la session à chaque déclenchement"
+  },
+  {
+    "id": "cli.help.param.schedule.add.grace",
+    "description": "Help of the --grace param of the command schedule add",
+    "other": "retard maximal avec lequel une fenêtre manquée pendant l'arrêt du démon peut encore se déclencher (défaut 1h)"
+  },
+  {
+    "id": "cli.help.param.schedule.rm.name",
+    "description": "Help of the --name param of the command schedule rm",
+    "other": "nom du planning"
+  },
+  {
+    "id": "cli.help.param.schedule.run.name",
+    "description": "Help of the --name param of the command schedule run",
+    "other": "nom du planning"
+  },
+  {
+    "id": "cli.help.cmd.approve.list",
+    "description": "Help of the command approve list",
+    "other": "lister les actions qui attendent une réponse"
+  },
+  {
+    "id": "cli.help.cmd.approve.allow",
+    "description": "Help of the command approve allow",
+    "other": "laisser une action en attente s'exécuter ; --session la garde pour cette session, --always écrit une règle pour elle"
+  },
+  {
+    "id": "cli.help.cmd.approve.deny",
+    "description": "Help of the command approve deny",
+    "other": "refuser une action en attente ; la raison est ce que l'agent lit"
+  },
+  {
+    "id": "cli.help.cmd.approve.rule",
+    "description": "Help of the command approve rule",
+    "other": "ajouter une règle, en retirer une avec --rm, ou les lister sans argument"
+  },
+  {
+    "id": "cli.help.cmd.approve.ask",
+    "description": "Help of the command approve ask",
+    "other": "verbe machine : demander au démon si un appel d'outil peut s'exécuter"
+  },
+  {
+    "id": "cli.help.cmd.approve.mode",
+    "description": "Help of the command approve mode",
+    "other": "régler la posture d'une session : ask (défaut), accept-edits, plan, auto, bypass, strict, ou smart (un modèle évalue chaque appel)"
+  },
+  {
+    "id": "cli.help.param.approve.allow.id",
+    "description": "Help of the --id param of the command approve allow",
+    "other": "identifiant de demande ; accepte aussi un argument nu"
+  },
+  {
+    "id": "cli.help.param.approve.allow.session",
+    "description": "Help of the --session param of the command approve allow",
+    "other": "laisser la même action s'exécuter jusqu'à la fin de la session"
+  },
+  {
+    "id": "cli.help.param.approve.allow.always",
+    "description": "Help of the --always param of the command approve allow",
+    "other": "écrire une règle qui laisse cette action exacte s'exécuter désormais"
+  },
+  {
+    "id": "cli.help.param.approve.deny.id",
+    "description": "Help of the --id param of the command approve deny",
+    "other": "identifiant de demande ; accepte aussi un argument nu"
+  },
+  {
+    "id": "cli.help.param.approve.deny.reason",
+    "description": "Help of the --reason param of the command approve deny",
+    "other": "pourquoi, dans la transcription propre de l'agent"
+  },
+  {
+    "id": "cli.help.param.approve.rule.rule",
+    "description": "Help of the --rule param of the command approve rule",
+    "other": "ex. `ask Bash(git push*)` ; accepte aussi un argument nu"
+  },
+  {
+    "id": "cli.help.param.approve.rule.rm",
+    "description": "Help of the --rm param of the command approve rule",
+    "other": "la règle à retirer, écrite exactement comme elle est listée"
+  },
+  {
+    "id": "cli.help.param.approve.ask.session",
+    "description": "Help of the --session param of the command approve ask",
+    "other": "la session à laquelle appartient l'appel"
+  },
+  {
+    "id": "cli.help.param.approve.ask.tool",
+    "description": "Help of the --tool param of the command approve ask",
+    "other": "nom de l'outil, ex. Bash"
+  },
+  {
+    "id": "cli.help.param.approve.ask.subject",
+    "description": "Help of the --subject param of the command approve ask",
+    "other": "la partie que la règle reconnaît : la commande, le chemin, l'url"
+  },
+  {
+    "id": "cli.help.param.approve.mode.session",
+    "description": "Help of the --session param of the command approve mode",
+    "other": "nom de la session ; accepte aussi un argument nu"
+  },
+  {
+    "id": "cli.help.param.approve.mode.mode",
+    "description": "Help of the --mode param of the command approve mode",
+    "other": "ask | accept-edits | plan | auto | bypass | strict | smart ; accepte aussi un second argument nu"
+  },
+  {
+    "id": "cli.help.cmd.session.create",
+    "description": "Help of the command session create",
+    "other": "créer une session : un canal relié + un worktree isolé + le backend"
+  },
+  {
+    "id": "cli.help.cmd.session.close",
+    "description": "Help of the command session close",
+    "other": "fermer une session : arrêter le pont, supprimer le worktree, archiver le canal"
+  },
+  {
+    "id": "cli.help.cmd.session.archive",
+    "description": "Help of the command session archive",
+    "other": "archiver une session : arrêter le pont, la garder reprenable (ligne, transcription et jeton de reprise conservés)"
+  },
+  {
+    "id": "cli.help.cmd.session.rename",
+    "description": "Help of the command session rename",
+    "other": "renommer une session : la ligne, sa transcription et son journal suivent, le pont redémarre sous le nouveau nom"
+  },
+  {
+    "id": "cli.help.cmd.session.list",
+    "description": "Help of the command session list",
+    "other": "lister les sessions actives"
+  },
+  {
+    "id": "cli.help.cmd.session.who",
+    "description": "Help of the command session who",
+    "other": "lister les participants observés dans une session"
+  },
+  {
+    "id": "cli.help.cmd.session.log",
+    "description": "Help of the command session log",
+    "other": "afficher la transcription enregistrée d'une session (défilement) ; --json pour l'app"
+  },
+  {
+    "id": "cli.help.cmd.session.resume",
+    "description": "Help of the command session resume",
+    "other": "reprendre une session archivée : retirer l'archive et redémarrer le pont (elle revit avec sa transcription et son jeton de reprise enregistrés)"
+  },
+  {
+    "id": "cli.help.cmd.session.switch",
+    "description": "Help of the command session switch",
+    "other": "réassigner le fournisseur, le modèle et l'effort d'une session en direct, sous le même identifiant"
+  },
+  {
+    "id": "cli.help.cmd.session.set_budget",
+    "description": "Help of the command session set-budget",
+    "other": "régler ou effacer les plafonds de budget d'une session en direct (ou de sa cohorte) ; relever un plafond reprend une session en pause"
+  },
+  {
+    "id": "cli.help.cmd.session.set_mode",
+    "description": "Help of the command session set-mode",
+    "other": "régler la posture d'approbation d'une session en direct : ask (manuel), accept-edits, plan (lecture seule), auto (les règles de refus tiennent), bypass"
+  },
+  {
+    "id": "cli.help.cmd.session.get_mode",
+    "description": "Help of the command session get-mode",
+    "other": "afficher la posture d'approbation d'une session en direct (ask si aucune n'est enregistrée)"
+  },
+  {
+    "id": "cli.help.cmd.agent.create",
+    "description": "Help of the command agent create",
+    "other": "créer un agent compagnon durable (persona + MCP + réglages sans invite)"
+  },
+  {
+    "id": "cli.help.cmd.agent.list",
+    "description": "Help of the command agent list",
+    "other": "lister les agents compagnons durables (--json pour le catalogue)"
+  },
+  {
+    "id": "cli.help.cmd.agent.show",
+    "description": "Help of the command agent show",
+    "other": "afficher la fiche du catalogue d'un agent (nom, étiquettes, backend, âme) ; --json pour Neublox"
+  },
+  {
+    "id": "cli.help.cmd.agent.set_soul",
+    "description": "Help of the command agent set-soul",
+    "other": "réécrire le SOUL.md d'un agent (s'applique aux nouvelles sessions)"
+  },
+  {
+    "id": "cli.help.cmd.set.home",
+    "description": "Help of the command set home",
+    "other": "régler la catégorie ou le forum qui accueille les canaux de session"
+  },
+  {
+    "id": "cli.help.cmd.set.source",
+    "description": "Help of the command set source",
+    "other": "régler la copie source à partir de laquelle `service update` compile"
+  },
+  {
+    "id": "cli.help.cmd.service.restart",
+    "description": "Help of the command service restart",
+    "other": "redémarrer le démon"
+  },
+  {
+    "id": "cli.help.cmd.service.update",
+    "description": "Help of the command service update",
+    "other": "reconstruire le démon depuis la source et le redémarrer"
+  },
+  {
+    "id": "cli.help.param.session.create.name",
+    "description": "Help of the --name param of the command session create",
+    "other": "nom de la session (converti en identifiant sûr)"
+  },
+  {
+    "id": "cli.help.param.session.create.channel_id",
+    "description": "Help of the --channel_id param of the command session create",
+    "other": "reprendre cette conversation existante au lieu de créer un canal (aucun répertoire personnel requis)"
+  },
+  {
+    "id": "cli.help.param.session.create.under",
+    "description": "Help of the --under param of the command session create",
+    "other": "créer la conversation sous cette catégorie ou ce forum plutôt que dans le répertoire du démon"
+  },
+  {
+    "id": "cli.help.param.session.create.project",
+    "description": "Help of the --project param of the command session create",
+    "other": "sous-dossier de l'espace de travail où travaille le backend"
+  },
+  {
+    "id": "cli.help.param.session.create.clone",
+    "description": "Help of the --clone param of the command session create",
+    "other": "dépôt distant (propriétaire/nom) à cloner d'abord dans l'espace de travail"
+  },
+  {
+    "id": "cli.help.param.session.create.cmd",
+    "description": "Help of the --cmd param of the command session create",
+    "other": "commande du pont (par défaut la commande configurée)"
+  },
+  {
+    "id": "cli.help.param.session.create.backend",
+    "description": "Help of the --backend param of the command session create",
+    "other": "backend du pont : stream (défaut) | oneshot"
+  },
+  {
+    "id": "cli.help.param.session.create.vendor",
+    "description": "Help of the --vendor param of the command session create",
+    "other": "fournisseur du backend d'agent : claude | codex | cursor"
+  },
+  {
+    "id": "cli.help.param.session.create.model",
+    "description": "Help of the --model param of the command session create",
+    "other": "identifiant de modèle du catalogue (voir `herrscher models list`) ; vide = utiliser la commande telle quelle"
+  },
+  {
+    "id": "cli.help.param.session.create.gateways",
+    "description": "Help of the --gateways param of the command session create",
+    "other": "types de passerelles à lier, séparés par des virgules (ex. chat,terminal)"
+  },
+  {
+    "id": "cli.help.param.session.create.terminal_only",
+    "description": "Help of the --terminal_only param of the command session create",
+    "other": "lier la session à la passerelle terminal seulement"
+  },
+  {
+    "id": "cli.help.param.session.create.shared",
+    "description": "Help of the --shared param of the command session create",
+    "other": "travailler dans la copie principale plutôt que dans un worktree isolé"
+  },
+  {
+    "id": "cli.help.param.session.create.agent",
+    "description": "Help of the --agent param of the command session create",
+    "other": "créer la session à partir d'un agent durable (son persona + MCP + réglages sans invite)"
+  },
+  {
+    "id": "cli.help.param.session.create.account",
+    "description": "Help of the --account param of the command session create",
+    "other": "profil de compte que cette session consomme (un nom de profil, ou native) ; vide = celui de l'agent, puis le défaut du fournisseur"
+  },
+  {
+    "id": "cli.help.param.session.create.host",
+    "description": "Help of the --host param of the command session create",
+    "other": "faire tourner cette session sur un hôte enregistré (voir `host list`) ; vide ou `local` = cette machine"
+  },
+  {
+    "id": "cli.help.param.session.create.approvals",
+    "description": "Help of the --approvals param of the command session create",
+    "other": "posture d'approbation : ask (défaut), accept-edits, plan, auto, bypass, strict (voir `approve rule`)"
+  },
+  {
+    "id": "cli.help.param.session.create.memory_project",
+    "description": "Help of the --memory_project param of the command session create",
+    "other": "projet de mémoire sous lequel cette session classe ce qu'elle apprend (ne déplace PAS la session : voir project)"
+  },
+  {
+    "id": "cli.help.param.session.create.memory_agent",
+    "description": "Help of the --memory_agent param of the command session create",
+    "other": "racine d'agent de mémoire pour les compétences apprises privées de cette session (ne crée PAS d'agent : voir agent)"
+  },
+  {
+    "id": "cli.help.param.session.create.project_pinned",
+    "description": "Help of the --project_pinned param of the command session create",
+    "other": "le projet de mémoire est un choix humain, pas une supposition : ne jamais le réviser"
+  },
+  {
+    "id": "cli.help.param.session.create.extractor",
+    "description": "Help of the --extractor param of the command session create",
+    "other": "nommer un extracteur de curation enregistré pour activer la boucle d'apprentissage P1 (vide = pas d'apprentissage)"
+  },
+  {
+    "id": "cli.help.param.session.create.journal",
+    "description": "Help of the --journal param of the command session create",
+    "other": "chemin du journal d'appels que lit Consolidate (relatif au worktree accepté) ; utilisé seulement avec extractor"
+  },
+  {
+    "id": "cli.help.param.session.create.consolidate_every",
+    "description": "Help of the --consolidate_every param of the command session create",
+    "other": "lancer Consolidate tous les N tours (0 = manuel seulement) ; utilisé seulement avec extractor"
+  },
+  {
+    "id": "cli.help.param.session.create.lang",
+    "description": "Help of the --lang param of the command session create",
+    "other": "langue des notices de cette session : en (défaut) ou fr"
+  },
+  {
+    "id": "cli.help.param.session.create.base",
+    "description": "Help of the --base param of the command session create",
+    "other": "référence existante dont part la branche du nouveau worktree (ex. session/<A>) ; vide = branche neuve"
+  },
+  {
+    "id": "cli.help.param.session.create.parent",
+    "description": "Help of the --parent param of the command session create",
+    "other": "session pilote qui a délégué celle-ci (retour de résultat P3) ; vide = aucune"
+  },
+  {
+    "id": "cli.help.param.session.create.cost_cap",
+    "description": "Help of the --cost_cap param of the command session create",
+    "other": "mettre cette session en pause après avoir dépensé ce nombre d'USD (0 = sans plafond)"
+  },
+  {
+    "id": "cli.help.param.session.create.token_cap",
+    "description": "Help of the --token_cap param of the command session create",
+    "other": "mettre cette session en pause après ce nombre total de jetons (0 = sans plafond)"
+  },
+  {
+    "id": "cli.help.param.session.create.cohort_cost_cap",
+    "description": "Help of the --cohort_cost_cap param of the command session create",
+    "other": "mettre en pause toute la cohorte après ce nombre d'USD (0 = sans plafond)"
+  },
+  {
+    "id": "cli.help.param.session.create.cohort_token_cap",
+    "description": "Help of the --cohort_token_cap param of the command session create",
+    "other": "mettre en pause toute la cohorte après ce nombre de jetons (0 = sans plafond)"
+  },
+  {
+    "id": "cli.help.param.session.close.name",
+    "description": "Help of the --name param of the command session close",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.close.force",
+    "description": "Help of the --force param of the command session close",
+    "other": "abandonner les modifications non commitées du worktree"
+  },
+  {
+    "id": "cli.help.param.session.archive.name",
+    "description": "Help of the --name param of the command session archive",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.rename.name",
+    "description": "Help of the --name param of the command session rename",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.rename.to",
+    "description": "Help of the --to param of the command session rename",
+    "other": "nom de la nouvelle session (converti en identifiant)"
+  },
+  {
+    "id": "cli.help.param.session.who.name",
+    "description": "Help of the --name param of the command session who",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.log.name",
+    "description": "Help of the --name param of the command session log",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.log.limit",
+    "description": "Help of the --limit param of the command session log",
+    "other": "nombre maximal d'entrées à renvoyer (défaut 200, les plus récentes gardées)"
+  },
+  {
+    "id": "cli.help.param.session.resume.name",
+    "description": "Help of the --name param of the command session resume",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.switch.name",
+    "description": "Help of the --name param of the command session switch",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.switch.vendor",
+    "description": "Help of the --vendor param of the command session switch",
+    "other": "fournisseur du backend"
+  },
+  {
+    "id": "cli.help.param.session.switch.cmd",
+    "description": "Help of the --cmd param of the command session switch",
+    "other": "commande d'appel du backend (porte le modèle et l'effort)"
+  },
+  {
+    "id": "cli.help.param.session.switch.model",
+    "description": "Help of the --model param of the command session switch",
+    "other": "identifiant de modèle du catalogue (voir `herrscher models list`) ; omettre pour garder le modèle actuel de la session, passer une valeur vide pour l'effacer"
+  },
+  {
+    "id": "cli.help.param.session.switch.handoff",
+    "description": "Help of the --handoff param of the command session switch",
+    "other": "passation du contexte : none, full ou summary"
+  },
+  {
+    "id": "cli.help.param.session.set_budget.name",
+    "description": "Help of the --name param of the command session set-budget",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.set_budget.cost_cap",
+    "description": "Help of the --cost_cap param of the command session set-budget",
+    "other": "plafond en USD (0 = sans plafond)"
+  },
+  {
+    "id": "cli.help.param.session.set_budget.token_cap",
+    "description": "Help of the --token_cap param of the command session set-budget",
+    "other": "plafond de jetons (0 = sans plafond)"
+  },
+  {
+    "id": "cli.help.param.session.set_budget.cohort_cost_cap",
+    "description": "Help of the --cohort_cost_cap param of the command session set-budget",
+    "other": "plafond en USD de la cohorte (0 = sans plafond)"
+  },
+  {
+    "id": "cli.help.param.session.set_budget.cohort_token_cap",
+    "description": "Help of the --cohort_token_cap param of the command session set-budget",
+    "other": "plafond de jetons de la cohorte (0 = sans plafond)"
+  },
+  {
+    "id": "cli.help.param.session.set_budget.scope",
+    "description": "Help of the --scope param of the command session set-budget",
+    "other": "session (défaut) | cohort"
+  },
+  {
+    "id": "cli.help.param.session.set_mode.name",
+    "description": "Help of the --name param of the command session set-mode",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.set_mode.mode",
+    "description": "Help of the --mode param of the command session set-mode",
+    "other": "ask | accept-edits | plan | auto | bypass | strict"
+  },
+  {
+    "id": "cli.help.param.session.get_mode.name",
+    "description": "Help of the --name param of the command session get-mode",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.agent.create.name",
+    "description": "Help of the --name param of the command agent create",
+    "other": "nom de l'agent (converti en identifiant sûr)"
+  },
+  {
+    "id": "cli.help.param.agent.create.soul",
+    "description": "Help of the --soul param of the command agent create",
+    "other": "texte de persona écrit dans SOUL.md (superposé à .claude/CLAUDE.md)"
+  },
+  {
+    "id": "cli.help.param.agent.create.mcp",
+    "description": "Help of the --mcp param of the command agent create",
+    "other": "ligne de commande du serveur MCP en stdio, ex. 'neublox serve --project' suivie du marqueur du worktree entre doubles accolades"
+  },
+  {
+    "id": "cli.help.param.agent.create.backend",
+    "description": "Help of the --backend param of the command agent create",
+    "other": "fournisseur du backend d'agent : claude | codex | cursor"
+  },
+  {
+    "id": "cli.help.param.agent.create.cmd",
+    "description": "Help of the --cmd param of the command agent create",
+    "other": "commande d'appel par défaut portant le modèle, ex. 'codex --model gpt-5.6'"
+  },
+  {
+    "id": "cli.help.param.agent.create.host",
+    "description": "Help of the --host param of the command agent create",
+    "other": "hôte par défaut où tournent les sessions de cet agent (voir `host list`)"
+  },
+  {
+    "id": "cli.help.param.agent.create.tags",
+    "description": "Help of the --tags param of the command agent create",
+    "other": "jetons de capacité séparés par des espaces ou des virgules (ex. role:reviewer luau)"
+  },
+  {
+    "id": "cli.help.param.agent.show.name",
+    "description": "Help of the --name param of the command agent show",
+    "other": "nom de l'agent"
+  },
+  {
+    "id": "cli.help.param.agent.set_soul.name",
+    "description": "Help of the --name param of the command agent set-soul",
+    "other": "nom de l'agent"
+  },
+  {
+    "id": "cli.help.param.agent.set_soul.soul",
+    "description": "Help of the --soul param of the command agent set-soul",
+    "other": "nouveau contenu de l'âme"
+  },
+  {
+    "id": "cli.help.param.set.home.channel",
+    "description": "Help of the --channel param of the command set home",
+    "other": "identifiant de la catégorie ou du forum"
+  },
+  {
+    "id": "cli.help.param.set.source.path",
+    "description": "Help of the --path param of the command set source",
+    "other": "chemin absolu de la copie source"
+  },
+  {
+    "id": "cli.help.param.service.update.no_pull",
+    "description": "Help of the --no_pull param of the command service update",
+    "other": "sauter le git pull avant la compilation"
+  },
+  {
+    "id": "cli.help.cmd.session.accounts",
+    "description": "Help of the command session accounts",
+    "other": "lister les profils de compte du fournisseur d'une session, en marquant le défaut et le choix de la session"
+  },
+  {
+    "id": "cli.help.param.role.grant.role",
+    "description": "Help of the --role param of the command role grant",
+    "other": "le rôle à accorder, parmi : {{.Roles}} ; accepte aussi un second argument nu"
+  },
+  {
+    "id": "cli.help.cmd.schedule.pause",
+    "description": "Help of the command schedule pause",
+    "other": "arrêter les déclenchements d'un planning, en gardant le planning et son historique"
+  },
+  {
+    "id": "cli.help.cmd.schedule.resume",
+    "description": "Help of the command schedule resume",
+    "other": "laisser un planning en pause se déclencher à nouveau, à compter de maintenant"
+  },
+  {
+    "id": "cli.help.param.schedule.name",
+    "description": "Help of the --name param of the schedule pause and resume commands",
+    "other": "nom du planning"
+  },
+  {
     "id": "cli.host.home.set",
     "description": "Reply of a host command, home set",
     "other": "accueil réglé sur {{.Channel}} ({{.Kind}})."

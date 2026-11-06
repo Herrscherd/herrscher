@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/authz"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -207,7 +208,7 @@ func operatorRegistryForTest(t *testing.T) *cli.Registry {
 
 func TestEverySessionNamingVerbIsClassified(t *testing.T) {
 	reg := operatorRegistryForTest(t)
-	for _, spec := range reg.Specs() {
+	for _, spec := range reg.Specs(i18n.English) {
 		verb := strings.Join(spec.Path, " ")
 		for _, p := range spec.Params {
 			if p.Name != "name" && p.Name != "session" {

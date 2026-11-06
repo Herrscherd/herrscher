@@ -1,6 +1,7 @@
 package main
 
 import (
+	"go/token"
 	"os"
 	"path/filepath"
 	"slices"
@@ -126,6 +127,24 @@ func TestMutationsOnePerExtension(t *testing.T) {
 			source:    "package manage\n\nvar mutant = contracts.Text(\"Reason\", \"The upload was refused\")\n",
 			want:      "The upload was refused",
 		},
+		"help text of a command": {
+			directory: "manage",
+			file:      "mutant.go",
+			source:    "package manage\n\nvar mutant = contracts.New(\"upload\", \"retry\").Help(\"Start the upload again\")\n",
+			want:      "Start the upload again",
+		},
+		"help text of a param": {
+			directory: "manage",
+			file:      "mutant.go",
+			source:    "package manage\n\nvar mutant = contracts.New(\"upload\").Param(\"name\", \"Name of the upload to retry\", true)\n",
+			want:      "Name of the upload to retry",
+		},
+		"help text of a value param": {
+			directory: "manage",
+			file:      "mutant.go",
+			source:    "package manage\n\nvar mutant = contracts.New(\"upload\").ValueParam(\"name\", \"Name of the upload to retry\", true)\n",
+			want:      "Name of the upload to retry",
+		},
 		"core host scope": {
 			directory: "core/host",
 			file:      "mutant.go",
@@ -155,5 +174,24 @@ func TestMutationsOnePerExtension(t *testing.T) {
 		if got := textsOf(found[mutant.directory]); !slices.Contains(got, mutant.want) {
 			t.Errorf("%s: %q not found in %q", name, mutant.want, got)
 		}
+	}
+}
+
+func TestCyclicConstantsDoNotLoop(t *testing.T) {
+	t.Parallel()
+	found := collectMutant(t, "manage", "cycle.go", "package manage\n\nconst pingNotice = pongNotice\n\nconst pongNotice = pingNotice\n\nconst selfNotice = selfNotice\n\nfunc mutant(m *model) {\n\tm.flash = pingNotice\n\tm.flash = selfNotice\n}\n")
+	if got := textsOf(found["manage"]); len(got) != 0 {
+		t.Fatalf("a cyclic constant produced findings %q", got)
+	}
+}
+
+func TestProgrammerErrorNeedsAPathBoundary(t *testing.T) {
+	t.Parallel()
+	const message = "cli: duplicate command"
+	if !isProgrammerError(token.Position{Filename: "/work/core/cli/registry.go"}, message) {
+		t.Fatal("the programmer message in core/cli/registry.go is not exempt")
+	}
+	if isProgrammerError(token.Position{Filename: "/work/xcore/cli/registry.go"}, message) {
+		t.Fatal("a file whose path only ends with core/cli/registry.go is exempt")
 	}
 }

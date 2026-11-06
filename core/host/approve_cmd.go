@@ -38,7 +38,7 @@ func addApproveCommands(reg *cli.Registry, lang i18n.Language, hostState *state.
 
 func approveListVerb(lang i18n.Language, approvals *approvalTable) contracts.Cmd {
 	return contracts.New(nsApprove, "list").
-		Help("list the actions waiting for an answer").
+		Help(clitext.CmdHelpApproveList).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
 			return cli.Data(listApprovals(lang, approvals, in.JSON))
 		})
@@ -68,10 +68,10 @@ func listApprovals(lang i18n.Language, approvals *approvalTable, asJSON bool) (s
 
 func approveAllowVerb(lang i18n.Language, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsApprove, "allow").
-		Help("let a waiting action run; --session keeps it for this session, --always writes a rule for it").
-		ValueParam("id", "request id; also takes a bare argument", false).
-		Param(paramSession, "let the same action run for the rest of the session", false).
-		Param("always", "write a rule that lets this exact action run from now on", false).
+		Help(clitext.CmdHelpApproveAllow).
+		ValueParam("id", clitext.CmdParamApproveAllowID, false).
+		Param(paramSession, clitext.CmdParamApproveAllowSession, false).
+		Param("always", clitext.CmdParamApproveAllowAlways, false).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
 			approvalID, scope, err := allowOperands(in)
 			if err != nil {
@@ -118,9 +118,9 @@ func allowOperands(input contracts.Input) (string, approvalScope, error) {
 
 func approveDenyVerb(lang i18n.Language, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsApprove, "deny").
-		Help("refuse a waiting action; the reason is what the agent reads").
-		ValueParam("id", "request id; also takes a bare argument", false).
-		ValueParam("reason", "why, in the agent's own transcript", false).
+		Help(clitext.CmdHelpApproveDeny).
+		ValueParam("id", clitext.CmdParamApproveDenyID, false).
+		ValueParam("reason", clitext.CmdParamApproveDenyReason, false).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			approvalID := firstOf(input.Get("id"), input.Rest)
 			if approvalID == "" {
@@ -136,9 +136,9 @@ func approveDenyVerb(lang i18n.Language, approvals *approvalTable, sessions *ses
 
 func approveRuleVerb(lang i18n.Language, store *state.State) contracts.Cmd {
 	return contracts.New(nsApprove, "rule").
-		Help("add a rule, remove one with --rm, or list them with no argument").
-		ValueParam("rule", "e.g. `ask Bash(git push*)`; also takes a bare argument", false).
-		ValueParam("rm", "the rule to remove, written exactly as it is listed", false).
+		Help(clitext.CmdHelpApproveRule).
+		ValueParam("rule", clitext.CmdParamApproveRuleRule, false).
+		ValueParam("rm", clitext.CmdParamApproveRuleRm, false).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			if rm := strings.TrimSpace(input.Get("rm")); rm != "" {
 				return cli.Data(removeApprovalRule(lang, store, rm))
@@ -194,10 +194,10 @@ func addApprovalRule(lang i18n.Language, store *state.State, raw string) (string
 
 func approveAskVerb(store *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsApprove, "ask").
-		Help("machine verb: ask the daemon whether one tool call may run").
-		ValueParam(paramSession, "the session the call belongs to", true).
-		ValueParam("tool", "tool name, e.g. Bash", true).
-		ValueParam("subject", "the part a rule matches: the command, the path, the url", false).
+		Help(clitext.CmdHelpApproveAsk).
+		ValueParam(paramSession, clitext.CmdParamApproveAskSession, true).
+		ValueParam("tool", clitext.CmdParamApproveAskTool, true).
+		ValueParam("subject", clitext.CmdParamApproveAskSubject, false).
 		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 			session := strings.TrimSpace(input.Get(paramSession))
 			req := approval.Request{
@@ -216,9 +216,9 @@ func approveAskVerb(store *state.State, agents *agent.Store, approvals *approval
 
 func approveModeVerb(store *state.State, lang i18n.Language) contracts.Cmd {
 	return contracts.New(nsApprove, "mode").
-		Help("set a session's stance: ask (default), accept-edits, plan, auto, bypass, strict, or smart (a model rates each call)").
-		ValueParam(paramSession, "session name; also takes a bare argument", false).
-		ValueParam("mode", "ask | accept-edits | plan | auto | bypass | strict | smart; also takes a second bare argument", false).
+		Help(clitext.CmdHelpApproveMode).
+		ValueParam(paramSession, clitext.CmdParamApproveModeSession, false).
+		ValueParam("mode", clitext.CmdParamApproveModeMode, false).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
 			return cli.Data(setApprovalMode(store, lang, in))
 		})

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
-
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
@@ -63,7 +63,7 @@ func TestSkillVerbsAreRegistered(t *testing.T) {
 	}
 
 	have := make(map[string]bool)
-	for _, s := range reg.Specs() {
+	for _, s := range reg.Specs(i18n.English) {
 		have[strings.Join(s.Path, " ")] = true
 	}
 	for _, want := range []string{"skill list", "skill approve"} {

@@ -119,18 +119,35 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 				},
 			},
 			eventTap(h.eventPublisher, sess.Name),
-			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent, terms: terms, lang: sessionLanguage(sess, h.lang)}, h.gate)
+			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent, terms: terms, lang: sessionLanguage(sess, h.lang), language: liveSessionLanguage(h.st, sess.Name)}, h.gate)
 	}()
 
 	serveCommandSocket(sctx, SessionCommandSocketPath(h.instanceID, sess.Name), asSession{disp: h, session: sess.Name, lang: h.lang})
 }
 
 func sessionLanguage(sess state.Session, operator i18n.Language) i18n.Language {
+	if lang := knownSessionLanguage(sess); lang != 0 {
+		return lang
+	}
+	return operator
+}
+
+func knownSessionLanguage(sess state.Session) i18n.Language {
 	lang, err := i18n.ParseLanguage(sess.Language)
 	if err != nil {
-		return operator
+		return 0
 	}
 	return lang
+}
+
+func liveSessionLanguage(store *state.State, name string) func() i18n.Language {
+	return func() i18n.Language {
+		session, ok := store.FindSession(name)
+		if !ok {
+			return 0
+		}
+		return knownSessionLanguage(session)
+	}
 }
 
 func (h *hub) stopLive() {
@@ -404,6 +421,7 @@ func sessionInfos(st *state.State, partDir string, policy compactionPolicy, term
 			Dir:                sessionDir(live),
 			AutoCompactPercent: policy.percentFor(live),
 			ContextWindow:      policy.limits.LimitFor(live.Vendor, terms(live).window),
+			Language:           knownSessionLanguage(live),
 		})
 	}
 	return out

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/identity"
 	"github.com/Herrscherd/herrscher/core/internal/control"
@@ -185,6 +186,7 @@ func runHubTurns(ctx context.Context, in <-chan contracts.Event, sink contracts.
 }
 
 func runHubTurnsCtl(ctx context.Context, events <-chan contracts.Event, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, ctrl *turnController, eng *skills.Engine, aff affordances, pin *scopePin) {
+	var lang i18n.Language
 	for {
 		select {
 		case <-ctx.Done():
@@ -194,12 +196,14 @@ func runHubTurnsCtl(ctx context.Context, events <-chan contracts.Event, sink con
 				return
 			}
 			switch event.T {
+			case "language":
+				lang = languageOf(event.Value)
 			case "pick":
 				runPick(ctx, sink, backend, event.Value)
 			case compactwire.EventRequest:
 				runCompact(ctx, sink, backend, ctrl, event)
-			default:
-				runOneTurn(ctx, sink, backend, orch, event, ctrl, eng, aff, pin)
+			case "input":
+				runOneTurn(ctx, sink, backend, orch, event, ctrl, eng, aff, pin, lang)
 			}
 		}
 	}
@@ -243,7 +247,7 @@ func settleFailedReply(ctrl *turnController, out string, err error) string {
 	}
 }
 
-func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, event contracts.Event, ctrl *turnController, eng *skills.Engine, aff affordances, pin *scopePin) {
+func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, event contracts.Event, ctrl *turnController, eng *skills.Engine, aff affordances, pin *scopePin, lang i18n.Language) {
 	turnCtx, endTurn := ctrl.begin(ctx)
 	defer endTurn()
 	if eng != nil {
@@ -255,7 +259,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	if orch != nil {
 		memCtx = orch.Context(turnCtx)
 	}
-	prompt := contracts.Prompt{Content: event.Text, Context: withIdentity(withCapabilities(withDelegation(withSkills(memCtx, eng), aff.roster), aff.caps), aff.user), Author: event.Who, Attachments: event.Attachments}
+	prompt := contracts.Prompt{Content: event.Text, Context: withIdentity(withCapabilities(withDelegation(withSkills(memCtx, eng), aff.roster), aff.caps), aff.user), Author: event.Who, Attachments: event.Attachments, Language: lang}
 	var usage turnUsage
 	onEvent := func(event contracts.BackendEvent) {
 		usage.absorb(event)
@@ -349,4 +353,12 @@ func emitBackendEvent(sink contracts.EventSink, event contracts.BackendEvent, to
 	case "reset":
 		sink.Emit(contracts.Event{T: "reset"})
 	}
+}
+
+func languageOf(tag string) i18n.Language {
+	lang, err := i18n.ParseLanguage(tag)
+	if err != nil {
+		return 0
+	}
+	return lang
 }

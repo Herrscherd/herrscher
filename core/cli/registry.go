@@ -13,6 +13,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 var (
@@ -340,11 +341,32 @@ func Localize(err error, lang i18n.Language) error {
 	if err == nil || !errors.As(err, &noticed) {
 		return err
 	}
-	text, renderErr := contracts.NewRenderer().Render(orEnglish(lang), noticed.Notice())
+	text, renderErr := renderNoticeText(noticed.Notice(), orEnglish(lang))
 	if renderErr != nil {
 		return err
 	}
 	return renderedError{text: text, err: err}
+}
+
+func renderNoticeText(notice contracts.Notice, lang i18n.Language) (string, error) {
+	text, err := contracts.NewRenderer().Render(lang, notice)
+	if err != nil || notice.Code != contracts.CodeSessionCloseDirty {
+		return text, err
+	}
+	kept, err := clitext.Text(lang, clitext.SessionCloseBranchKept, clitext.Params{clitext.ParamBranch: "session/" + noticeArg(notice, clitext.ParamName)})
+	if err != nil {
+		return "", err
+	}
+	return text + "\n" + kept, nil
+}
+
+func noticeArg(notice contracts.Notice, name string) string {
+	for _, arg := range notice.Args {
+		if value, ok := arg.Value().(string); ok && arg.Name() == name {
+			return value
+		}
+	}
+	return ""
 }
 
 // Handler adapts a text handler to the Result form a command runs.

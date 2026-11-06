@@ -1212,6 +1212,11 @@
     "other": "No transcript yet."
   },
   {
+    "id": "cli.session.close.branch_kept",
+    "description": "Branch kept notice after a refused session close, its branch is not deleted",
+    "other": "branch {{.Branch}} is kept."
+  },
+  {
     "id": "cli.session.closed",
     "description": "Confirmation of session close, before any note about the channel",
     "other": "🗄️ Session **{{.Name}}** closed."
@@ -1281,11 +1286,6 @@
     "id": "cli.session.switch.restart_lost",
     "description": "Error of session switch when the backend restart failed and the previous target could not be restored either",
     "other": "backend restart: {{.Err}}; rollback failed, session {{.Name}} out of service: {{.RollbackErr}}"
-  },
-  {
-    "id": "cli.session.close.dirty_worktree",
-    "description": "Error of session close when the worktree has uncommitted work and the close was not forced: the branch is kept",
-    "other": "{{.Err}}; commit, or close with force:true to discard (branch session/{{.Name}} is kept)"
   },
   {
     "id": "cli.session.approvals.unenforced",

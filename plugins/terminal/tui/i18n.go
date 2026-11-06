@@ -147,6 +147,10 @@ func (reason reasonError) Unwrap() error {
 
 func localizedReason(trans translator, err error) string {
 	message := err.Error()
+	var keyed keyedError
+	if errors.As(err, &keyed) {
+		return trans.t(keyed.key, keyed.params)
+	}
 	var detailed reasonError
 	if errors.As(err, &detailed) {
 		return strings.Replace(message, detailed.text, detailed.render(trans), 1)

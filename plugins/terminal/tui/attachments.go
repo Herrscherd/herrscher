@@ -55,7 +55,7 @@ func saveClipboardImage(data []byte, mime string, seq int) (Attachment, error) {
 		return Attachment{}, errEmptyClipboard
 	}
 	if int64(len(data)) > maxAttachmentBytes {
-		return Attachment{}, fmt.Errorf("%w : %d MiB", errSizeLimit, maxAttachmentBytes/bytesPerMiB)
+		return Attachment{}, keyedError{cause: errSizeLimit, key: "tui.attach.too_large", params: map[string]any{"Limit": maxAttachmentBytes / bytesPerMiB}}
 	}
 	name := fmt.Sprintf("paste-%d%s", seq, mimeExt(mime))
 	path, err := stage(name, data)
@@ -108,7 +108,7 @@ func attachLocalFile(path string, seq int) (Attachment, error) {
 		return Attachment{}, fmt.Errorf("%w : %s", errNotRegularFile, path)
 	}
 	if info.Size() > maxAttachmentBytes {
-		return Attachment{}, fmt.Errorf("%w : %s (%d MiB)", errSizeLimit, path, maxAttachmentBytes/bytesPerMiB)
+		return Attachment{}, keyedError{cause: errSizeLimit, key: "tui.attach.too_large_file", params: map[string]any{tplArgPath: path, "Limit": maxAttachmentBytes / bytesPerMiB}}
 	}
 	abs, err := filepath.Abs(path)
 	if err != nil {

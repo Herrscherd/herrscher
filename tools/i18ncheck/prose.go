@@ -1,28 +1,27 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 )
 
 const (
-	minProseWords = 2
-	minWordRunes  = 2
-	wordEdges     = ".,:;!?()[]{}'\"`"
+	minWordRunes = 2
+	wordEdges    = ".,:;!?()[]{}'\"`"
 )
 
 func isProse(text string) bool {
 	if isCommandSyntax(text) {
 		return false
 	}
-	words := 0
 	for _, field := range strings.Fields(text) {
-		if isWord(strings.Trim(field, wordEdges)) {
-			words++
+		if isWordField(field) {
+			return true
 		}
 	}
-	return words >= minProseWords
+	return false
 }
 
 func isCommandSyntax(text string) bool {
@@ -30,7 +29,18 @@ func isCommandSyntax(text string) bool {
 	if len(fields) == 0 {
 		return true
 	}
-	return strings.HasPrefix(fields[0], "-") || strings.HasPrefix(fields[0], "/") || strings.HasPrefix(fields[0], "<")
+	if !hasCommandPrefix(fields[0]) {
+		return false
+	}
+	return !slices.ContainsFunc(fields[1:], isWordField)
+}
+
+func hasCommandPrefix(token string) bool {
+	return strings.HasPrefix(token, "-") || strings.HasPrefix(token, "/") || strings.HasPrefix(token, "<")
+}
+
+func isWordField(field string) bool {
+	return isWord(strings.Trim(field, wordEdges))
 }
 
 func isWord(word string) bool {

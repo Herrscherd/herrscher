@@ -1,6 +1,4 @@
-core/cli 4
-core/host 59
-core/internal/manager 15
-manage 19
-plugins/terminal 4
-plugins/terminal/tui 18
+core/host 98
+core/internal/manager 17
+manage 20
+usage.go 1

@@ -155,6 +155,21 @@
     "other": "unknown command {{.Name}}"
   },
   {
+    "id": "cli.param.missing",
+    "description": "Error for a required parameter that a command was given without",
+    "other": "{{.Command}}: missing required --{{.Name}}"
+  },
+  {
+    "id": "cli.flag.unknown",
+    "description": "Error for a flag that a command does not take",
+    "other": "{{.Command}}: unknown flag --{{.Name}}"
+  },
+  {
+    "id": "cli.flag.needs_value",
+    "description": "Error for a flag given without its value",
+    "other": "{{.Command}}: flag --{{.Name}} needs a value"
+  },
+  {
     "id": "cli.whoami.unknown_argument",
     "description": "Error for an argument whoami does not accept",
     "other": "whoami: unknown argument {{.Arg}} (only --json)"
@@ -3381,5 +3396,20 @@
     "id": "cli.host.fault.unsupported_lang",
     "description": "Erreur d'une commande hôte, langue non prise en charge",
     "other": "unsupported language, use en, fr or auto"
+  },
+  {
+    "id": "cli.terminal.no_session_control",
+    "description": "Error for a terminal command that needs a session control the host did not bind",
+    "other": "no session control is bound to this terminal"
+  },
+  {
+    "id": "cli.terminal.not_available",
+    "description": "Error for a command the terminal does not offer",
+    "other": "command {{.Command}} is not available from the terminal (allowed: {{.Allowed}})"
+  },
+  {
+    "id": "cli.terminal.session_unbound",
+    "description": "Error for a terminal session action before the host bound its control",
+    "other": "session control is not bound yet"
   }
 ]

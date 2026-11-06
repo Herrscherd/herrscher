@@ -14,6 +14,12 @@ const (
 	TransportAnnounceKeyInvalid = "cli.transport.announce_key_invalid"
 	FlagChannel                 = "cli.flag.channel"
 	FlagChannelShort            = "cli.flag.channel_short"
+	ParamMissing                = "cli.param.missing"
+	TerminalNoSessionControl    = "cli.terminal.no_session_control"
+	TerminalNotAvailable        = "cli.terminal.not_available"
+	TerminalSessionUnbound      = "cli.terminal.session_unbound"
+	FlagUnknown                 = "cli.flag.unknown"
+	FlagNeedsValue              = "cli.flag.needs_value"
 )
 
 func cliKeys() map[Key][]string {
@@ -30,5 +36,11 @@ func cliKeys() map[Key][]string {
 		TransportAnnounceKeyInvalid: {ParamErr},
 		FlagChannel:                 nil,
 		FlagChannelShort:            nil,
+		ParamMissing:                {ParamCommand, ParamName},
+		FlagUnknown:                 {ParamCommand, ParamName},
+		FlagNeedsValue:              {ParamCommand, ParamName},
+		TerminalNoSessionControl:    nil,
+		TerminalNotAvailable:        {ParamCommand, ParamAllowed},
+		TerminalSessionUnbound:      nil,
 	}
 }

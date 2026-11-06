@@ -2658,5 +2658,21 @@
   {
     "id": "tui.copy.target.all",
     "other": "tout"
+  },
+  {
+    "id": "tui.attach.too_large",
+    "other": "pièce jointe trop grande : {{.Limit}} Mio"
+  },
+  {
+    "id": "tui.attach.too_large_file",
+    "other": "pièce jointe trop grande : {{.Path}} ({{.Limit}} Mio)"
+  },
+  {
+    "id": "tui.terminal.enhanced_keys_enable_failed",
+    "other": "activation des touches étendues impossible : {{.Err}}"
+  },
+  {
+    "id": "tui.terminal.enhanced_keys_disable_failed",
+    "other": "désactivation des touches étendues impossible : {{.Err}}"
   }
 ]

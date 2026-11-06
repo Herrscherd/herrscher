@@ -15,8 +15,8 @@ import (
 )
 
 var (
-	errEmptyImage    = errors.New("image is empty")
-	errImageTooLarge = errors.New("image past the decode bound")
+	errEmptyImage    = errors.New("image.empty")
+	errImageTooLarge = errors.New("image.too_large")
 )
 
 const maxDecodeBytes = 8 << 20
@@ -30,14 +30,14 @@ func decodeImage(data []byte) (image.Image, error) {
 		return nil, errEmptyImage
 	}
 	if len(data) > maxDecodeBytes {
-		return nil, fmt.Errorf("%w: %d bytes, bound is %d", errImageTooLarge, len(data), maxDecodeBytes)
+		return nil, fmt.Errorf("%w: %d/%d", errImageTooLarge, len(data), maxDecodeBytes)
 	}
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("read image header: %w", err)
 	}
 	if px := int64(cfg.Width) * int64(cfg.Height); px > maxDecodePixels {
-		return nil, fmt.Errorf("%w: %dx%d, bound is %d pixels", errImageTooLarge, cfg.Width, cfg.Height, maxDecodePixels)
+		return nil, fmt.Errorf("%w: %dx%d/%d", errImageTooLarge, cfg.Width, cfg.Height, maxDecodePixels)
 	}
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {

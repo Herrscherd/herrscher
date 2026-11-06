@@ -1473,7 +1473,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 	}
 	if err := writeStdout(enhancedKeysOn); err != nil {
 		cancel()
-		return fmt.Errorf("enable enhanced keys: %w", err)
+		return keyedError{cause: err, key: "tui.terminal.enhanced_keys_enable_failed", params: map[string]any{"Err": err.Error()}}
 	}
 	program := tea.NewProgram(model,
 		tea.WithAltScreen(),
@@ -1497,7 +1497,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 	_, runErr = program.Run()
 	cancel()
 	if err := writeStdout(enhancedKeysOff); err != nil {
-		return errors.Join(runErr, fmt.Errorf("disable enhanced keys: %w", err))
+		return errors.Join(runErr, keyedError{cause: err, key: "tui.terminal.enhanced_keys_disable_failed", params: map[string]any{"Err": err.Error()}})
 	}
 	return runErr
 }

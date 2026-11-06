@@ -111,6 +111,7 @@ type sessionDriver struct {
 	compactWaiting    *compactRequest
 	compactRegistered func()
 	lang              i18n.Language
+	language          func() i18n.Language
 	messages          *hostMessages
 }
 
@@ -648,18 +649,45 @@ func (d *sessionDriver) runTurn(ctx context.Context, event contracts.Event, guar
 	case <-d.hangup:
 	default:
 	}
-	select {
-	case d.toBridge <- event:
-	case <-d.hangup:
-		d.abandon(ctx, event)
-		return
-	case <-ctx.Done():
+	if !d.announceLanguage(ctx) || !d.sendToBridge(ctx, event) {
 		d.abandon(ctx, event)
 		return
 	}
 	if !d.awaitTurn(ctx, guard) {
 		d.abandon(ctx, event)
 	}
+}
+
+func (d *sessionDriver) sendToBridge(ctx context.Context, event contracts.Event) bool {
+	select {
+	case d.toBridge <- event:
+		return true
+	case <-d.hangup:
+		return false
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func (d *sessionDriver) currentLanguage() i18n.Language {
+	if d.language == nil {
+		return 0
+	}
+	return d.language()
+}
+
+func (d *sessionDriver) announceLanguage(ctx context.Context) bool {
+	if d.language == nil {
+		return true
+	}
+	return d.sendToBridge(ctx, contracts.Event{T: eventLanguage, Value: languageTag(d.language())})
+}
+
+func languageTag(lang i18n.Language) string {
+	if lang == 0 {
+		return ""
+	}
+	return lang.String()
 }
 
 func (d *sessionDriver) abandon(ctx context.Context, ev contracts.Event) {
@@ -987,6 +1015,7 @@ type sessionIdentity struct {
 	agent       string
 	terms       func() modelTerms
 	lang        i18n.Language
+	language    func() i18n.Language
 }
 
 // RunSession drives a session without a declared identity until ctx is done.
@@ -1009,6 +1038,7 @@ func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, cha
 	driver.emitTap = emit
 	driver.terms = identity.terms
 	driver.lang = identity.lang
+	driver.language = identity.language
 	driver.compaction = sessions.compaction
 	driver.percentOf = func() int { return sessions.percentOfSession(name) }
 	if gate != nil {

@@ -922,7 +922,7 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 		force := input.Bool("force")
 		if err := wtRoot.Remove(ctx, repo, name, force); err != nil {
 			h.sup.Start(sess)
-			return contracts.Result{}, dirtyWorktreeError(h.lang, name, err)
+			return contracts.Result{}, newDirtyWorktreeError(name, err)
 		}
 	}
 	note := h.tidyChannel(ctx, sess)

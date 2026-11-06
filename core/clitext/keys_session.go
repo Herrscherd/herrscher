@@ -10,6 +10,7 @@ const (
 	SessionWhoHeader              = "cli.session.who.header"
 	SessionLogEmpty               = "cli.session.log.empty"
 	SessionClosed                 = "cli.session.closed"
+	SessionCloseBranchKept        = "cli.session.close.branch_kept"
 	SessionArchived               = "cli.session.archived"
 	SessionRenamed                = "cli.session.renamed"
 	SessionRenameSameName         = "cli.session.rename.same_name"
@@ -23,7 +24,6 @@ const (
 	SessionSwitchedResumed        = "cli.session.switch.resumed"
 	SessionSwitchRestartRestored  = "cli.session.switch.restart_restored"
 	SessionSwitchRestartLost      = "cli.session.switch.restart_lost"
-	SessionCloseDirtyWorktree     = "cli.session.close.dirty_worktree"
 	SessionApprovalsUnenforced    = "cli.session.approvals.unenforced"
 	SessionApprovalsUnenforcedNow = "cli.session.approvals.unenforced_now"
 	SessionApprovalsNoChannel     = "cli.session.approvals.no_channel"
@@ -64,6 +64,7 @@ func sessionKeys() map[Key][]string {
 		SessionWhoHeader:              {ParamName},
 		SessionLogEmpty:               nil,
 		SessionClosed:                 {ParamName},
+		SessionCloseBranchKept:        {ParamBranch},
 		SessionArchived:               {ParamName},
 		SessionRenamed:                {ParamName, ParamTo},
 		SessionRenameSameName:         {ParamName},
@@ -77,7 +78,6 @@ func sessionKeys() map[Key][]string {
 		SessionSwitchedResumed:        {ParamName, ParamVendor, ParamHandoff, ParamNote},
 		SessionSwitchRestartRestored:  {ParamName, ParamVendor, ParamErr},
 		SessionSwitchRestartLost:      {ParamName, ParamErr, ParamRollbackErr},
-		SessionCloseDirtyWorktree:     {ParamName, ParamErr},
 		SessionApprovalsUnenforced:    {ParamVendor, ParamWhy, ParamName},
 		SessionApprovalsUnenforcedNow: {ParamVendor, ParamWhy, ParamName},
 		SessionApprovalsNoChannel:     nil,

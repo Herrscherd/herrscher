@@ -9,6 +9,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
@@ -310,5 +311,25 @@ func TestReposListsLocalCheckoutsOnly(t *testing.T) {
 func TestReposOnAnUnsetWorkspaceIsEmpty(t *testing.T) {
 	if got := workspaceRepos(""); got != nil {
 		t.Fatalf("workspaceRepos(\"\") = %+v, want nil", got)
+	}
+}
+
+func TestHubSessionsReportTheSessionLanguage(t *testing.T) {
+	h := newTestHub(t)
+	if err := h.st.AddSession(state.Session{Name: "fr", ChannelID: "c1", Language: "fr"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.st.AddSession(state.Session{Name: "unset", ChannelID: "c2"}); err != nil {
+		t.Fatal(err)
+	}
+	byName := make(map[string]contracts.SessionInfo)
+	for _, info := range h.Sessions() {
+		byName[info.Name] = info
+	}
+	if got := byName["fr"].Language; got != i18n.French {
+		t.Fatalf("session fr Language = %v, want %v", got, i18n.French)
+	}
+	if got := byName["unset"].Language; got != 0 {
+		t.Fatalf("session without a language Language = %v, want zero", got)
 	}
 }

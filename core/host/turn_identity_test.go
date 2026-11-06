@@ -6,6 +6,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
 
 func receiveTurnEvent(t *testing.T, ch <-chan contracts.Event) contracts.Event {
@@ -17,6 +18,19 @@ func receiveTurnEvent(t *testing.T, ch <-chan contracts.Event) contracts.Event {
 		t.Fatal("timed out waiting for turn event")
 		return contracts.Event{}
 	}
+}
+
+func relayTurnFrames(cancel context.CancelFunc, toBridge <-chan contracts.Event, frames, fromBridge chan<- contracts.Event, count int) {
+	for range count {
+		select {
+		case event := <-toBridge:
+			frames <- event
+		case <-time.After(time.Second):
+			cancel()
+			return
+		}
+	}
+	fromBridge <- contracts.Event{T: eventReply, Text: "done", Done: true}
 }
 
 func identifiedTestDriver(to chan<- contracts.Event, from <-chan contracts.Event) (*sessionDriver, <-chan contracts.Event) {
@@ -175,5 +189,53 @@ func TestDriversWithSameNameRemainDistinguishableByIncarnation(t *testing.T) {
 	newEvent := run("new-incarnation")
 	if oldEvent.SessionIncarnation == newEvent.SessionIncarnation {
 		t.Fatalf("same-name session events are indistinguishable: old=%+v new=%+v", oldEvent, newEvent)
+	}
+}
+
+func TestDriverSendsAnEmptyLanguageFrameWhenTheSessionHasNoLanguage(t *testing.T) {
+	toBridge := make(chan contracts.Event, 1)
+	fromBridge := make(chan contracts.Event, 8)
+	d, _ := identifiedTestDriver(toBridge, fromBridge)
+	d.language = func() i18n.Language { return 0 }
+	d.terms = func() modelTerms { return modelTerms{} }
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go d.pump(ctx)
+
+	frames := make(chan contracts.Event, 2)
+	go relayTurnFrames(cancel, toBridge, frames, fromBridge, 2)
+	if _, ok := d.SeedAndWaitWithTurnID(ctx, "bonjour", "turn-1"); !ok {
+		t.Fatal("the seeded turn must complete")
+	}
+
+	if first := receiveTurnEvent(t, frames); first.T != eventLanguage || first.Value != "" {
+		t.Fatalf("first frame = %q %q, want the language frame with an empty value", first.T, first.Value)
+	}
+}
+
+func TestDriverTellsTheBridgeTheSessionLanguageBeforeEachTurn(t *testing.T) {
+	toBridge := make(chan contracts.Event, 1)
+	fromBridge := make(chan contracts.Event, 8)
+	d, _ := identifiedTestDriver(toBridge, fromBridge)
+	d.language = func() i18n.Language { return i18n.French }
+	d.terms = func() modelTerms { return modelTerms{} }
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go d.pump(ctx)
+
+	frames := make(chan contracts.Event, 2)
+	go relayTurnFrames(cancel, toBridge, frames, fromBridge, 2)
+	if _, ok := d.SeedAndWaitWithTurnID(ctx, "bonjour", "turn-1"); !ok {
+		t.Fatal("the seeded turn must complete")
+	}
+
+	if first := receiveTurnEvent(t, frames); first.T != eventLanguage || first.Value != i18n.French.String() {
+		t.Fatalf("first frame = %q %q, want the language frame fr", first.T, first.Value)
+	}
+	if second := receiveTurnEvent(t, frames); second.T != eventInput || second.Text != "bonjour" {
+		t.Fatalf("second frame = %q %q, want the input", second.T, second.Text)
+	}
+	if got := d.sessionInfo().Language; got != i18n.French {
+		t.Fatalf("sessionInfo Language = %v, want %v", got, i18n.French)
 	}
 }

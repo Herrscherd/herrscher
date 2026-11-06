@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
 
 var errNoHubSocket = errors.New("bridge requires --hub-socket (pure-runner mode)")
@@ -82,12 +83,22 @@ func RunOneShot(ctx context.Context, newBackend BackendFactory, orch contracts.O
 	}
 	defer closeAndWarn(resp)
 
-	select {
-	case ev := <-input:
-		runOneTurn(ctx, channelSink{done: ctx.Done(), out: out}, resp, orch, ev, nil, newSkillEngine(resp), affordances{}, nil)
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
+	var lang i18n.Language
+	for {
+		select {
+		case event := <-input:
+			if event.T == "language" {
+				lang = languageOf(event.Value)
+				continue
+			}
+			if event.T != "input" {
+				continue
+			}
+			runOneTurn(ctx, channelSink{done: ctx.Done(), out: out}, resp, orch, event, nil, newSkillEngine(resp), affordances{}, nil, lang)
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 }
 

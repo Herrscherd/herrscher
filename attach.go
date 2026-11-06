@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -113,15 +115,26 @@ func (a *attachedDaemon) dispatch(argv []string) (string, error) {
 	return a.send(argv)
 }
 
-func runAttached(ctx context.Context, instance string, opts ...tui.Option) error {
+type attachRunner struct {
+	log     *slog.Logger
+	logPath string
+	connect func(ctx context.Context, instance string, lang i18n.Language) (*attachedDaemon, error)
+	run     func(ctx context.Context, cancel context.CancelFunc, backend tui.Backend, opts ...tui.Option) error
+}
+
+func newAttachRunner(log *slog.Logger) attachRunner {
+	return attachRunner{log: log, logPath: clientLogPath(), connect: newAttachedDaemon, run: tui.Run}
+}
+
+func (r attachRunner) runAttached(ctx context.Context, instance string, opts ...tui.Option) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	daemon, err := newAttachedDaemon(ctx, instance, clitext.ClientLanguage())
+	daemon, err := r.connect(ctx, instance, clitext.ClientLanguage())
 	if err != nil {
 		return err
 	}
-	return withClientLog(clientLogPath(), func() error {
-		return tui.Run(ctx, cancel, daemon, opts...)
+	return withClientLog(r.log, r.logPath, func() error {
+		return r.run(ctx, cancel, daemon, opts...)
 	})
 }
 
@@ -129,12 +142,32 @@ func clientLogPath() string {
 	return filepath.Join(filepath.Dir(host.DefaultStatePath()), "client.log")
 }
 
-func withClientLog(path string, run func() error) error {
+const maxClientLogBytes = 1 << 20
+
+func withClientLog(log *slog.Logger, path string, run func() error) error {
+	if err := rotateClientLog(path); err != nil {
+		log.Warn("client log rotation failed, appending to the current file", "path", path, "err", err)
+	}
 	restore, err := redirectStderr(path)
+	if err != nil {
+		log.Warn("client log unavailable, stderr stays on the terminal", "path", path, "err", err)
+		return run()
+	}
+	return errors.Join(run(), restore())
+}
+
+func rotateClientLog(path string) error {
+	info, err := os.Stat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
-	return errors.Join(run(), restore())
+	if info.Size() <= maxClientLogBytes {
+		return nil
+	}
+	return os.Rename(path, path+".1")
 }
 
 func (a *attachedDaemon) Frontend() <-chan tui.RoutedEvent { return a.events }

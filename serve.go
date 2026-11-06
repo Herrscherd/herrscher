@@ -173,7 +173,7 @@ func lockOrAttach(ctx context.Context, lang i18n.Language, statePath, instanceID
 		if open != nil {
 			opts = append(opts, tui.OpenOn(open.session, open.text))
 		}
-		aerr := runAttached(ctx, host.ServedInstanceID(statePath, instanceID), opts...)
+		aerr := newAttachRunner(slog.Default()).runAttached(ctx, host.ServedInstanceID(statePath, instanceID), opts...)
 		if aerr == nil {
 			return nil, true, nil
 		}
@@ -383,7 +383,7 @@ func runPromptWindow(ctx context.Context, name, text string) error {
 			return err
 		}
 		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeSessionStarted, clitext.Params{clitext.ParamName: name}))
-		return runAttached(ctx, instance, tui.OpenOn(name, text))
+		return newAttachRunner(slog.Default()).runAttached(ctx, instance, tui.OpenOn(name, text))
 	}
 	unlock()
 	cfg, langs, err := loadOperator()

@@ -198,7 +198,7 @@ func Text(lang i18n.Language, key Key, params Params) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return render(cat, lang, key, params)
+	return render(cat, declaredKeys(), lang, key, params)
 }
 
 // Failure returns an error that reads as key rendered in lang with params, and
@@ -221,8 +221,8 @@ func (e failureError) Error() string { return e.text }
 
 func (e failureError) Unwrap() error { return e.cause }
 
-func render(cat *i18n.Catalog, lang i18n.Language, key Key, params Params) (string, error) {
-	fields, known := declaredKeys()[key]
+func render(cat *i18n.Catalog, declared map[Key][]string, lang i18n.Language, key Key, params Params) (string, error) {
+	fields, known := declared[key]
 	if !known {
 		return renderPluginKey(cat, lang, key, params)
 	}
@@ -262,15 +262,16 @@ func allNamed(fields []string, params Params) bool {
 // first failure, so a block is written in one pass and its error is read once,
 // at the end.
 type Translator struct {
-	lang i18n.Language
-	cat  *i18n.Catalog
-	err  error
+	lang     i18n.Language
+	cat      *i18n.Catalog
+	declared map[Key][]string
+	err      error
 }
 
 // For returns a translator that renders in lang.
 func For(lang i18n.Language) *Translator {
 	cat, err := loadCatalog()
-	translator := &Translator{lang: lang, cat: cat}
+	translator := &Translator{lang: lang, cat: cat, declared: declaredKeys()}
 	translator.fail(err)
 	return translator
 }
@@ -291,7 +292,7 @@ func (t *Translator) Render(key Key, params Params) (string, error) {
 	if t.cat == nil {
 		return "", t.err
 	}
-	return render(t.cat, t.lang, key, params)
+	return render(t.cat, t.declared, t.lang, key, params)
 }
 
 // Err returns the first failure of the translator, or nil.

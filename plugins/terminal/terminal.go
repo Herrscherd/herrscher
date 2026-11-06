@@ -422,7 +422,7 @@ func (t *Terminal) Overview() (string, error) {
 func (t *Terminal) Resume(name string) (string, error) {
 	control := t.Control()
 	if control == nil {
-		return "", clitext.Failure(clitext.ClientLanguage(), errNoSessionControl, clitext.TerminalNoSessionControl, nil)
+		return "", terminalFailure(errNoSessionControl, clitext.TerminalNoSessionControl, nil)
 	}
 	if err := control.Resume(name); err != nil {
 		return "", err
@@ -566,13 +566,13 @@ func (t *Terminal) Dispatch(args []string) (string, error) {
 		if len(args) > 0 {
 			verb = args[0]
 		}
-		return "", clitext.Failure(clitext.ClientLanguage(), errNotAvailableFromTerminal, clitext.TerminalNotAvailable, clitext.Params{clitext.ParamCommand: strconv.Quote(verb), clitext.ParamAllowed: allowedVerbs()})
+		return "", terminalFailure(errNotAvailableFromTerminal, clitext.TerminalNotAvailable, clitext.Params{clitext.ParamCommand: strconv.Quote(verb), clitext.ParamAllowed: allowedVerbs()})
 	}
 	t.ctrlMu.Lock()
 	call, ctx := t.ctrl, t.baseCtx
 	t.ctrlMu.Unlock()
 	if call == nil {
-		return "", clitext.Failure(clitext.ClientLanguage(), errSessionControlUnbound, clitext.TerminalSessionUnbound, nil)
+		return "", terminalFailure(errSessionControlUnbound, clitext.TerminalSessionUnbound, nil)
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -587,7 +587,7 @@ func (t *Terminal) Close(name string, force bool) (string, error) {
 	control, ctx := t.ctrl, t.baseCtx
 	t.ctrlMu.Unlock()
 	if control == nil {
-		return "", clitext.Failure(clitext.ClientLanguage(), errSessionControlUnbound, clitext.TerminalSessionUnbound, nil)
+		return "", terminalFailure(errSessionControlUnbound, clitext.TerminalSessionUnbound, nil)
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -648,6 +648,10 @@ func bestEffort(_ error) {}
 
 func textResult(res contracts.Result, err error) (string, error) {
 	return cli.Render(res, err, clientLanguage())
+}
+
+func terminalFailure(cause error, key clitext.Key, params clitext.Params) error {
+	return clitext.Failure(clientLanguage(), cause, key, params)
 }
 
 func clientLanguage() i18n.Language {

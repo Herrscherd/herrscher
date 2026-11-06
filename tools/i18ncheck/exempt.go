@@ -15,7 +15,7 @@ const (
 	reasonUnknown reason = iota
 	programmerError
 	technicalWrap
-	translatedSentinel
+	keyedSentinel
 )
 
 var (
@@ -25,7 +25,7 @@ var (
 
 func (why reason) known() bool {
 	switch why {
-	case programmerError, technicalWrap, translatedSentinel:
+	case programmerError, technicalWrap, keyedSentinel:
 		return true
 	case reasonUnknown:
 		return false

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -16,7 +17,7 @@ func isProse(text string) bool {
 		return false
 	}
 	for _, field := range strings.Fields(text) {
-		if isWord(strings.Trim(field, wordEdges)) {
+		if isWordField(field) {
 			return true
 		}
 	}
@@ -28,7 +29,18 @@ func isCommandSyntax(text string) bool {
 	if len(fields) == 0 {
 		return true
 	}
-	return strings.HasPrefix(fields[0], "-") || strings.HasPrefix(fields[0], "/") || strings.HasPrefix(fields[0], "<")
+	if !hasCommandPrefix(fields[0]) {
+		return false
+	}
+	return !slices.ContainsFunc(fields[1:], isWordField)
+}
+
+func hasCommandPrefix(token string) bool {
+	return strings.HasPrefix(token, "-") || strings.HasPrefix(token, "/") || strings.HasPrefix(token, "<")
+}
+
+func isWordField(field string) bool {
+	return isWord(strings.Trim(field, wordEdges))
 }
 
 func isWord(word string) bool {

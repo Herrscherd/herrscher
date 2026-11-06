@@ -72,6 +72,7 @@ const (
 	CmdHelpSetHome                        = "cli.help.cmd.set.home"
 	CmdHelpSetSource                      = "cli.help.cmd.set.source"
 	CmdHelpSetLang                        = "cli.help.cmd.set.lang"
+	CmdHelpSessionLang                    = "cli.help.cmd.session.lang"
 	CmdHelpSkillApprove                   = "cli.help.cmd.skill.approve"
 	CmdHelpSkillList                      = "cli.help.cmd.skill.list"
 	CmdHelpIdentity                       = "cli.help.cmd.whoami"
@@ -232,6 +233,8 @@ const (
 	CmdParamSetHomeChannel                = "cli.help.param.set.home.channel"
 	CmdParamSetSourcePath                 = "cli.help.param.set.source.path"
 	CmdParamSetLangLang                   = "cli.help.param.set.lang.lang"
+	CmdParamSessionLangLang               = "cli.help.param.session.lang.lang"
+	CmdParamSessionLangName               = "cli.help.param.session.lang.name"
 	CmdParamSkillApproveKey               = "cli.help.param.skill.approve.key"
 	CmdParamSkillApproveRevoke            = "cli.help.param.skill.approve.revoke"
 	CmdParamSkillListLimit                = "cli.help.param.skill.list.limit"
@@ -309,6 +312,7 @@ func helpKeys() map[Key][]string {
 		CmdHelpSetHome:                        nil,
 		CmdHelpSetSource:                      nil,
 		CmdHelpSetLang:                        nil,
+		CmdHelpSessionLang:                    nil,
 		CmdHelpSkillApprove:                   nil,
 		CmdHelpSkillList:                      nil,
 		CmdHelpIdentity:                       nil,
@@ -469,6 +473,8 @@ func helpKeys() map[Key][]string {
 		CmdParamSetHomeChannel:                nil,
 		CmdParamSetSourcePath:                 nil,
 		CmdParamSetLangLang:                   nil,
+		CmdParamSessionLangLang:               nil,
+		CmdParamSessionLangName:               nil,
 		CmdParamSkillApproveKey:               nil,
 		CmdParamSkillApproveRevoke:            nil,
 		CmdParamSkillListLimit:                nil,

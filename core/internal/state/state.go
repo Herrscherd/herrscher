@@ -665,6 +665,19 @@ func (s *State) SetSessionApprovals(name, mode string) error {
 	return fmt.Errorf("%w: %q", errNoSession, name)
 }
 
+// SetSessionLanguage stores the language a session answers in and persists it.
+func (s *State) SetSessionLanguage(name, lang string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name == name {
+			s.Sessions[idx].Language = lang
+			return true, s.saveLocked()
+		}
+	}
+	return false, nil
+}
+
 // RoleAssignments returns a copy of the role table.
 func (s *State) RoleAssignments() map[string]RoleAssignment {
 	s.mu.Lock()

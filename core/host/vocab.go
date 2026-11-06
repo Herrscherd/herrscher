@@ -2,6 +2,7 @@ package host
 
 const (
 	paramName       = "name"
+	paramLang       = "lang"
 	paramSession    = "session"
 	paramAgent      = "agent"
 	nsSession       = "session"

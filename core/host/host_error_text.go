@@ -9,6 +9,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 type localizedHostError struct {
@@ -83,6 +84,7 @@ func hostErrorKeys() []hostErrorKey {
 		{errEmptyShellCommand, "cli.host.fault.empty_shell_command"},
 		{errUnknownShellSession, "cli.host.fault.unknown_shell_session"},
 		{errRemoteShellSession, "cli.host.fault.remote_shell_session"},
+		{errUnsupportedLang, "cli.host.fault.unsupported_lang"},
 	}
 }
 
@@ -90,24 +92,38 @@ func localizeHostError(lang i18n.Language, err error) error {
 	if err == nil {
 		return nil
 	}
+	text := err.Error()
+	translated := false
 	for _, known := range hostErrorKeys() {
 		if !errors.Is(err, known.sentinel) {
 			continue
 		}
-		text, textErr := clitext.Text(i18n.Resolve(lang), clitext.Key(known.key), nil)
+		phrase, textErr := clitext.Text(i18n.Resolve(lang), clitext.Key(known.key), nil)
 		if textErr != nil {
-			return err
+			continue
 		}
-		return localizedHostError{text: strings.Replace(err.Error(), known.sentinel.Error(), text, 1), cause: err}
+		text = strings.Replace(text, known.sentinel.Error(), phrase, 1)
+		translated = true
 	}
-	return err
+	if !translated {
+		return err
+	}
+	return localizedHostError{text: text, cause: err}
 }
 
-func localizeCommandErrors(reg *cli.Registry, live *operatorLanguage) {
+func localizeCommandErrors(reg *cli.Registry, store *state.State, live *operatorLanguage) {
 	reg.Intercept(nil, func(_ contracts.Cmd, next cli.Runner) cli.Runner {
-		return func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
-			res, err := next(ctx, in)
-			return res, localizeHostError(live.Get(), err)
+		return func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+			res, err := next(ctx, input)
+			return res, localizeHostError(commandErrorLanguage(store, live.Get(), input), err)
 		}
 	})
+}
+
+func commandErrorLanguage(store *state.State, operator i18n.Language, input contracts.Input) i18n.Language {
+	name := input.Get(paramName)
+	if name == "" {
+		return operator
+	}
+	return namedSessionLanguage(store, name, operator)
 }

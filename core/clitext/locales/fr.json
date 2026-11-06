@@ -3351,5 +3351,35 @@
     "id": "cli.setting.terminal_project_pin",
     "description": "Help of the terminal project pin setting",
     "other": "quand le projet est fixé : first-turn (le prompt peut le réviser) | launch (le répertoire est définitif)"
+  },
+  {
+    "id": "cli.help.cmd.session.lang",
+    "description": "Aide d'une commande de session (session lang)",
+    "other": "régler la langue des erreurs et réponses d'une session : en, fr ou auto"
+  },
+  {
+    "id": "cli.help.param.session.lang.name",
+    "description": "Paramètre session lang, nom",
+    "other": "nom de la session"
+  },
+  {
+    "id": "cli.help.param.session.lang.lang",
+    "description": "Paramètre session lang, langue",
+    "other": "en, fr ou auto (auto suit la langue de l'opérateur)"
+  },
+  {
+    "id": "cli.host.session.lang.set",
+    "description": "Réponse de session lang, langue réglée",
+    "other": "la session {{.Name}} répond désormais en {{.Lang}}"
+  },
+  {
+    "id": "cli.host.session.lang.reset",
+    "description": "Réponse de session lang, retour à la langue de l'opérateur",
+    "other": "la session {{.Name}} suit la langue de l'opérateur ({{.Lang}})"
+  },
+  {
+    "id": "cli.host.fault.unsupported_lang",
+    "description": "Erreur d'une commande hôte, langue non prise en charge",
+    "other": "langue non prise en charge, utilisez en, fr ou auto"
   }
 ]

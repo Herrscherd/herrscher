@@ -20,7 +20,7 @@ func receiveTurnEvent(t *testing.T, ch <-chan contracts.Event) contracts.Event {
 	}
 }
 
-func relayTurnFrames(cancel context.CancelFunc, toBridge <-chan contracts.Event, frames chan<- contracts.Event, fromBridge chan<- contracts.Event, count int) {
+func relayTurnFrames(cancel context.CancelFunc, toBridge <-chan contracts.Event, frames, fromBridge chan<- contracts.Event, count int) {
 	for range count {
 		select {
 		case event := <-toBridge:

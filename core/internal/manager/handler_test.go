@@ -1397,7 +1397,7 @@ func TestServiceRestart(t *testing.T) {
 	if len(up.builds) != 0 {
 		t.Fatalf("restart must not build, got %+v", up.builds)
 	}
-	if !strings.Contains(out, "Restarting") {
+	if !strings.Contains(out, "restarting the daemon") {
 		t.Fatalf("unexpected reply: %q", out)
 	}
 }

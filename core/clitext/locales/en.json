@@ -1426,5 +1426,435 @@
     "id": "cli.session.account.this",
     "description": "Listing: marks the profile the session currently spends on",
     "other": "(this session)"
+  },
+  {
+    "id": "cli.host.home.set",
+    "description": "Reply of a host command, home set",
+    "other": "home set to {{.Channel}} ({{.Kind}})."
+  },
+  {
+    "id": "cli.host.source.set",
+    "description": "Reply of a host command, source set",
+    "other": "source checkout set to \"{{.Path}}\"."
+  },
+  {
+    "id": "cli.host.agent.created",
+    "description": "Reply of a host command, agent created",
+    "other": "agent {{.Name}} created at \"{{.Home}}\"."
+  },
+  {
+    "id": "cli.host.agent.list_empty",
+    "description": "Reply of a host command, agent list empty",
+    "other": "No agents. Create one with `agent create <name>`."
+  },
+  {
+    "id": "cli.host.agent.soul_updated",
+    "description": "Reply of a host command, agent soul updated",
+    "other": "soul updated for {{.Name}} (applies to new sessions)."
+  },
+  {
+    "id": "cli.host.service.restarting",
+    "description": "Reply of a host command, service restarting",
+    "other": "restarting the daemon…"
+  },
+  {
+    "id": "cli.host.service.rebuilt",
+    "description": "Reply of a host command, service rebuilt",
+    "other": "rebuilt \"{{.Version}}\", restarting the daemon…"
+  },
+  {
+    "id": "cli.host.session.started_post",
+    "description": "Reply of a host command, session started post",
+    "other": "Session {{.Name}} started."
+  },
+  {
+    "id": "cli.host.checkpoint.none",
+    "description": "Reply of a host command, checkpoint none",
+    "other": "no checkpoints"
+  },
+  {
+    "id": "cli.host.checkpoint.undone",
+    "description": "Reply of a host command, checkpoint undone",
+    "other": "undid the last rewind of {{.Name}}"
+  },
+  {
+    "id": "cli.host.memory.restored",
+    "description": "Reply of a host command, memory restored",
+    "other": "restored {{.Key}}"
+  },
+  {
+    "id": "cli.host.memory.unlinked",
+    "description": "Reply of a host command, memory unlinked",
+    "other": "unlinked {{.From}} -> {{.To}}"
+  },
+  {
+    "id": "cli.host.schedule.none",
+    "description": "Reply of a host command, schedule none",
+    "other": "no schedules yet"
+  },
+  {
+    "id": "cli.host.schedule.removed",
+    "description": "Reply of a host command, schedule removed",
+    "other": "removed {{.Name}} (its session, if any, is still there; close it with `session close`)"
+  },
+  {
+    "id": "cli.host.schedule.fired",
+    "description": "Reply of a host command, schedule fired",
+    "other": "fired {{.Name}}"
+  },
+  {
+    "id": "cli.host.schedule.paused",
+    "description": "Reply of a host command, schedule paused",
+    "other": "paused {{.Name}}"
+  },
+  {
+    "id": "cli.host.schedule.resumed",
+    "description": "Reply of a host command, schedule resumed",
+    "other": "resumed {{.Name}}"
+  },
+  {
+    "id": "cli.host.approve.none",
+    "description": "Reply of a host command, approve none",
+    "other": "nothing is waiting"
+  },
+  {
+    "id": "cli.host.approve.allowed",
+    "description": "Reply of a host command, approve allowed",
+    "other": "allowed {{.ID}}"
+  },
+  {
+    "id": "cli.host.approve.denied",
+    "description": "Reply of a host command, approve denied",
+    "other": "denied {{.ID}}"
+  },
+  {
+    "id": "cli.host.approve.rule_removed",
+    "description": "Reply of a host command, approve rule removed",
+    "other": "removed {{.Rule}}"
+  },
+  {
+    "id": "cli.host.approve.rule_added",
+    "description": "Reply of a host command, approve rule added",
+    "other": "added {{.Rule}}"
+  },
+  {
+    "id": "cli.host.approve.rule_none",
+    "description": "Reply of a host command, approve rule none",
+    "other": "no rule: everything is allowed, which is how herrscher behaved before approvals existed"
+  },
+  {
+    "id": "cli.host.models.none",
+    "description": "Reply of a host command, models none",
+    "other": "no models offered under the current route policy"
+  },
+  {
+    "id": "cli.host.models.hidden",
+    "description": "Reply of a host command, models hidden",
+    "other": "  hidden: resolves when requested, not offered by the selector"
+  },
+  {
+    "id": "cli.host.models.refresh_none",
+    "description": "Reply of a host command, models refresh none",
+    "other": "no vendor is due for discovery (see HERRSCHER_MODELS_DISCOVER and HERRSCHER_ROUTE_POLICY)"
+  },
+  {
+    "id": "cli.host.models.discovered",
+    "description": "Reply of a host command, models discovered",
+    "other": "{{.Count}} model(s) discovered"
+  },
+  {
+    "id": "cli.host.models.discovery_kept",
+    "description": "Reply of a host command, models discovery kept",
+    "other": "discovery failed ({{.Err}}), kept the last known list"
+  },
+  {
+    "id": "cli.host.role.none",
+    "description": "Reply of a host command, role none",
+    "other": "nobody holds a role, so herrscher decides nothing about humans and each gateway's own rules stand alone."
+  },
+  {
+    "id": "cli.host.role.first_grant",
+    "description": "Reply of a host command, role first grant",
+    "other": "this is the first role: from now on every gateway account without one is `observer`. Name the others with `role grant` before they find out."
+  },
+  {
+    "id": "cli.host.role.grantable",
+    "description": "Reply of a host command, role grantable",
+    "other": "roles you can grant: {{.Roles}}"
+  },
+  {
+    "id": "cli.host.role.agent_note",
+    "description": "Reply of a host command, role agent note",
+    "other": "`agent` is not one of them: it is what a session holds, decided by the socket it arrives on."
+  },
+  {
+    "id": "cli.host.role.granted",
+    "description": "Reply of a host command, role granted",
+    "other": "{{.Principal}} is now \"{{.Role}}\""
+  },
+  {
+    "id": "cli.host.role.revoked_last",
+    "description": "Reply of a host command, role revoked last",
+    "other": "{{.Principal}} holds no role, and neither does anyone else: herrscher is back to deciding nothing about humans"
+  },
+  {
+    "id": "cli.host.role.revoked",
+    "description": "Reply of a host command, role revoked",
+    "other": "{{.Principal}} holds no role, so it is an `observer`"
+  },
+  {
+    "id": "cli.host.role.holds",
+    "description": "Reply of a host command, role holds",
+    "other": "{{.Principal}} holds \"{{.Role}}\""
+  },
+  {
+    "id": "cli.host.models.discovery_static",
+    "description": "Reply of a host command, models discovery static",
+    "other": "discovery failed ({{.Err}}), static catalog only"
+  },
+  {
+    "id": "cli.host.memory.forgotten",
+    "description": "Reply of a host command, memory forgotten",
+    "other": "forgotten {{.Key}}"
+  },
+  {
+    "id": "cli.host.memory.recorded",
+    "description": "Reply of a host command, memory recorded",
+    "other": "recorded {{.Key}}"
+  },
+  {
+    "id": "cli.host.memory.skills_none",
+    "description": "Reply of a host command, memory skills none",
+    "other": "no learned skills yet"
+  },
+  {
+    "id": "cli.host.memory.skill_last_used",
+    "description": "Reply of a host command, memory skill last used",
+    "other": "last used {{.When}}"
+  },
+  {
+    "id": "cli.host.memory.skill_revoked",
+    "description": "Reply of a host command, memory skill revoked",
+    "other": "revoked {{.Key}} (a promotion already made stands; unmake it with `memory unlink` and `memory restore`)"
+  },
+  {
+    "id": "cli.host.memory.skill_approved",
+    "description": "Reply of a host command, memory skill approved",
+    "other": "approved {{.Key}}"
+  },
+  {
+    "id": "cli.host.memory.search_none",
+    "description": "Reply of a host command, memory search none",
+    "other": "no matches"
+  },
+  {
+    "id": "cli.host.approve.mode_set",
+    "description": "Reply of a host command, approve mode set",
+    "other": "{{.Name}} is now {{.Mode}}"
+  },
+  {
+    "id": "cli.host.approve.smart_no_backend",
+    "description": "Reply of a host command, approve smart no backend",
+    "other": "{{.Name}} is now {{.Mode}}, but no LLM backend is configured to rate the calls: until one is, smart decides as ask does, so a call no rule names runs unasked"
+  },
+  {
+    "id": "cli.host.approve.bypass_no_hook",
+    "description": "Reply of a host command, approve bypass no hook",
+    "other": "{{.Name}} is now {{.Mode}} (a session created with --approvals bypass has no hook: recreate it for this to bite)"
+  },
+  {
+    "id": "cli.host.checkpoint.rewound",
+    "description": "Reply of a host command, checkpoint rewound",
+    "other": "rewound {{.Name}} to checkpoint {{.Position}} ({{.What}})"
+  },
+  {
+    "id": "cli.host.schedule.every",
+    "description": "Reply of a host command, schedule every",
+    "other": "every {{.Every}}"
+  },
+  {
+    "id": "cli.host.schedule.cron",
+    "description": "Reply of a host command, schedule cron",
+    "other": "cron {{.Cron}}"
+  },
+  {
+    "id": "cli.host.handoff.session",
+    "description": "Reply of a host command, handoff session",
+    "other": "the session"
+  },
+  {
+    "id": "cli.host.handoff.session_named",
+    "description": "Reply of a host command, handoff session named",
+    "other": "session {{.Name}}"
+  },
+  {
+    "id": "cli.host.handoff.vendor_default",
+    "description": "Reply of a host command, handoff vendor default",
+    "other": "the vendor default"
+  },
+  {
+    "id": "cli.host.handoff.pointer",
+    "description": "Reply of a host command, handoff pointer",
+    "other": "Nothing was created: {{.Where}} is already running, and its bound gateways share the same conversation. To open it in the TUI, run `herrscher` on the running daemon, which shows it as a tab. For a new session with a brief of this conversation, pass --{{.To}} <name>."
+  },
+  {
+    "id": "cli.host.handoff.report",
+    "description": "Reply of a host command, handoff report",
+    "other": "Session {{.Target}} created from {{.Source}} with account {{.Account}}, brief sent as its first message.\n\n{{.Reply}}\n\nBrief:\n{{.Brief}}"
+  },
+  {
+    "id": "cli.host.err.missing_channel",
+    "description": "Reply of a host command, err missing channel",
+    "other": "missing channel"
+  },
+  {
+    "id": "cli.host.err.missing_name",
+    "description": "Reply of a host command, err missing name",
+    "other": "missing name"
+  },
+  {
+    "id": "cli.host.err.missing_path",
+    "description": "Reply of a host command, err missing path",
+    "other": "missing path"
+  },
+  {
+    "id": "cli.host.err.missing_soul",
+    "description": "Reply of a host command, err missing soul",
+    "other": "missing soul"
+  },
+  {
+    "id": "cli.host.err.missing_to",
+    "description": "Reply of a host command, err missing to",
+    "other": "missing to"
+  },
+  {
+    "id": "cli.host.err.conflicting_channel",
+    "description": "Reply of a host command, err conflicting channel",
+    "other": "pass either channel_id or under, not both: one adopts a conversation that exists, the other creates one"
+  },
+  {
+    "id": "cli.host.err.conflicting_placement",
+    "description": "Reply of a host command, err conflicting placement",
+    "other": "terminal_only and under contradict each other: one keeps the session in the terminal, the other puts it in a gateway container"
+  },
+  {
+    "id": "cli.host.err.clone_unsupported",
+    "description": "Reply of a host command, err clone unsupported",
+    "other": "clone is not supported on host \"{{.Host}}\": create the project locally first, then create the session with --host"
+  },
+  {
+    "id": "cli.host.err.clone_failed",
+    "description": "Reply of a host command, err clone failed",
+    "other": "clone: {{.Err}}"
+  },
+  {
+    "id": "cli.host.err.no_host",
+    "description": "Reply of a host command, err no host",
+    "other": "session wants host \"{{.Host}}\" but no host is registered"
+  },
+  {
+    "id": "cli.host.err.account_vendor",
+    "description": "Reply of a host command, err account vendor",
+    "other": "account \"{{.Account}}\": no backend vendor is known for this session: pass --vendor, or set HERRSCHER_BACKEND"
+  },
+  {
+    "id": "cli.host.err.account_remote",
+    "description": "Reply of a host command, err account remote",
+    "other": "account \"{{.Account}}\": an account cannot be used while the backend runs on a remote host, which resolves accounts in its own store; unset HERRSCHER_REMOTE=backend to use accounts on this daemon, or drop the account"
+  },
+  {
+    "id": "cli.host.err.account_host",
+    "description": "Reply of a host command, err account host",
+    "other": "account \"{{.Account}}\" on host \"{{.Host}}\": an account cannot be used for a session placed on another host; run the session on this host or drop the account"
+  },
+  {
+    "id": "cli.host.schedule.scheduled",
+    "description": "Reply of a host command, schedule scheduled",
+    "other": "scheduled {{.Name}} ({{.Cadence}})"
+  },
+  {
+    "id": "cli.host.schedule.no_session",
+    "description": "Reply of a host command, schedule no session",
+    "other": "; note: no session named \"{{.Name}}\" right now, so its windows are skipped until there is one"
+  },
+  {
+    "id": "cli.host.schedule.last_run",
+    "description": "Reply of a host command, schedule last run",
+    "other": "last {{.When}}"
+  },
+  {
+    "id": "cli.host.schedule.next_run",
+    "description": "Reply of a host command, schedule next run",
+    "other": "next {{.When}}"
+  },
+  {
+    "id": "cli.host.schedule.never",
+    "description": "Reply of a host command, schedule never",
+    "other": "never"
+  },
+  {
+    "id": "cli.host.schedule.due",
+    "description": "Reply of a host command, schedule due",
+    "other": "due"
+  },
+  {
+    "id": "cli.host.schedule.unknown",
+    "description": "Reply of a host command, schedule unknown",
+    "other": "unknown"
+  },
+  {
+    "id": "cli.host.schedule.live",
+    "description": "Reply of a host command, schedule live",
+    "other": "live"
+  },
+  {
+    "id": "cli.host.schedule.status_paused",
+    "description": "Reply of a host command, schedule status paused",
+    "other": "paused"
+  },
+  {
+    "id": "cli.host.err.worktree",
+    "description": "Reply of a host command, err worktree",
+    "other": "worktree: {{.Err}}"
+  },
+  {
+    "id": "cli.host.err.provision_agent",
+    "description": "Reply of a host command, err provision agent",
+    "other": "provision agent \"{{.Agent}}\": {{.Err}}"
+  },
+  {
+    "id": "cli.host.err.create_channel",
+    "description": "Reply of a host command, err create channel",
+    "other": "create channel: {{.Err}}"
+  },
+  {
+    "id": "cli.host.err.create_forum_post",
+    "description": "Reply of a host command, err create forum post",
+    "other": "create forum post: {{.Err}}"
+  },
+  {
+    "id": "cli.host.err.persist",
+    "description": "Reply of a host command, err persist",
+    "other": "persist: {{.Err}}"
+  },
+  {
+    "id": "cli.host.err.inspect_channel",
+    "description": "Reply of a host command, err inspect channel",
+    "other": "inspect channel: {{.Err}}"
+  },
+  {
+    "id": "cli.host.err.read_soul",
+    "description": "Reply of a host command, err read soul",
+    "other": "read soul: {{.Err}}"
+  },
+  {
+    "id": "cli.host.err.account_of_agent",
+    "description": "Reply of a host command, err account of agent",
+    "other": "the account of agent \"{{.Agent}}\": {{.Err}}"
+  },
+  {
+    "id": "cli.host.agent.list_header",
+    "description": "Reply of a host command, agent list header",
+    "other": "Agents:"
   }
 ]

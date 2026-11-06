@@ -55,7 +55,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addVerbs(reg, hdl.Commands()...); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addVerbs(reg, ModelsCommands()...); err != nil {
+	if err := addVerbs(reg, ModelsCommands(options.Language)...); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addVerbs(reg, extra...); err != nil {
@@ -64,35 +64,35 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addSessionVerbs(reg, options.Language, hostState, partDir, instID, approvals, sessions, seedCoord, models); err != nil {
 		return nil, hostDeps{}, err
 	}
-	handoff, err := sessionHandoffCmd(hdl.Commands(), hostState, sessions, instID, seedCoord, hdl.PreflightAccount)
+	handoff, err := sessionHandoffCmd(options.Language, hdl.Commands(), hostState, sessions, instID, seedCoord, hdl.PreflightAccount)
 	if err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addVerbs(reg, handoff); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addCheckpointCommands(reg, hostState, sessions); err != nil {
+	if err := addCheckpointCommands(reg, options.Language, hostState, sessions); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addMemoryVerbs(reg); err != nil {
+	if err := addMemoryVerbs(reg, options.Language); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addSkillVerbs(reg); err != nil {
+	if err := addSkillVerbs(reg, options.Language); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addScheduleCommands(reg, hostState, agents, schedSlot); err != nil {
+	if err := addScheduleCommands(reg, options.Language, hostState, agents, schedSlot); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addHostCommands(reg, hostState); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addApproveCommands(reg, hostState, agents, approvals, sessions); err != nil {
+	if err := addApproveCommands(reg, options.Language, hostState, agents, approvals, sessions); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addRoleCommands(reg, hostState); err != nil {
+	if err := addRoleCommands(reg, options.Language, hostState); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addVerbs(reg, memorySearchVerb(), whoamiVerb(), commandsVerb(reg)); err != nil {
+	if err := addVerbs(reg, memorySearchVerb(options.Language), whoamiVerb(), commandsVerb(reg)); err != nil {
 		return nil, hostDeps{}, err
 	}
 	return reg, hostDeps{wt: worktrees, agents: agents, handler: hdl, seedCoord: seedCoord, schedSlot: schedSlot}, nil

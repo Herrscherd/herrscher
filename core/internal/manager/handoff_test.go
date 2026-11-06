@@ -33,7 +33,7 @@ func TestBuildHandoffSeedSummaryKeepsTailAndNotesElision(t *testing.T) {
 	if strings.Contains(seed, "msgA") {
 		t.Fatalf("summary must drop the oldest turn:\n%s", seed)
 	}
-	if !strings.Contains(seed, "3 tours antérieurs") {
+	if !strings.Contains(seed, "3 earlier turns elided") {
 		t.Fatalf("summary must note elided turns:\n%s", seed)
 	}
 }

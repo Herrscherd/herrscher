@@ -18,13 +18,22 @@ import (
 
 var errNoPendingChoice = errors.New("has no pending choice")
 
-func sessionText(lang i18n.Language) *clitext.Translator {
+func replyText(lang i18n.Language) *clitext.Translator {
 	return clitext.For(i18n.Resolve(lang))
+}
+
+func namedSessionLanguage(st *state.State, name string, operator i18n.Language) i18n.Language {
+	sess, ok := st.FindSession(name)
+	if !ok {
+		return i18n.Resolve(operator)
+	}
+	return sessionLanguage(sess, i18n.Resolve(operator))
 }
 
 func addSessionVerbs(reg *cli.Registry, lang i18n.Language, store *state.State, partDir, instID string, approvals *approvalTable, sessions *sessionTable, seedCoord *coordinatorSlot, models *ModelDiscovery) error {
 	seen := newSeenTable(time.Now())
-	return addVerbs(reg,
+	return addVerbs(
+		reg,
 		seedVerb(store, instID, seedCoord),
 		sessionSendVerb(sessions),
 		sessionPickVerb(lang, approvals, sessions),
@@ -50,8 +59,8 @@ func sessionSeenVerb(seen *seenTable) contracts.Cmd {
 		})
 }
 
-func addCheckpointCommands(reg *cli.Registry, store *state.State, sessions *sessionTable) error {
-	return addVerbs(reg, addCheckpointVerbs(store, sessions)...)
+func addCheckpointCommands(reg *cli.Registry, lang i18n.Language, store *state.State, sessions *sessionTable) error {
+	return addVerbs(reg, addCheckpointVerbs(lang, store, sessions)...)
 }
 
 func seedVerb(store *state.State, instID string, seedCoord *coordinatorSlot) contracts.Cmd {
@@ -164,7 +173,7 @@ func sessionPickVerb(lang i18n.Language, approvals *approvalTable, sessions *ses
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			name, value := input.Get(paramName), input.Get("value")
 			if answerApprovalPick(approvals, sessions, name, value) || sessions.pick(name, value) {
-				return contracts.DataResult(sessionText(lang).Text(clitext.SessionPicked, clitext.Params{clitext.ParamName: name})), nil
+				return contracts.DataResult(replyText(lang).Text(clitext.SessionPicked, clitext.Params{clitext.ParamName: name})), nil
 			}
 			return contracts.Result{}, fmt.Errorf("session %q %w", name, errNoPendingChoice)
 		})
@@ -178,7 +187,7 @@ func sessionInterruptVerb(lang i18n.Language, sessions *sessionTable) contracts.
 			if !sessions.Interrupt(input.Get(paramName)) {
 				return contracts.Result{}, &noTurnInFlightError{Session: input.Get(paramName)}
 			}
-			return contracts.DataResult(sessionText(lang).Text(clitext.SessionInterrupted, clitext.Params{clitext.ParamName: input.Get(paramName)})), nil
+			return contracts.DataResult(replyText(lang).Text(clitext.SessionInterrupted, clitext.Params{clitext.ParamName: input.Get(paramName)})), nil
 		})
 }
 
@@ -223,7 +232,7 @@ func mergedCompactNotice(lang i18n.Language, name, instruction string) string {
 	if instruction != "" {
 		key = clitext.SessionCompactMergedReplaced
 	}
-	return sessionText(lang).Text(key, clitext.Params{clitext.ParamName: name})
+	return replyText(lang).Text(key, clitext.Params{clitext.ParamName: name})
 }
 
 func sessionSetCompactVerb(store *state.State) contracts.Cmd {

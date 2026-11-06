@@ -185,6 +185,14 @@ func localize(lang i18n.Language, english string, key clitext.Key, params clitex
 	return &localizedError{english: english, text: text, causes: causes}
 }
 
+func (h *Handler) localized(sentinel error, key clitext.Key) error {
+	return localize(h.lang, sentinel.Error(), key, nil, sentinel)
+}
+
+func (h *Handler) labelled(label string, key clitext.Key, err error) error {
+	return localize(h.lang, label+": "+err.Error(), key, clitext.Params{clitext.ParamErr: err.Error()}, err)
+}
+
 func restartLostError(lang i18n.Language, name string, restartErr, rollbackErr error) error {
 	english := fmt.Sprintf("backend restart: %v; rollback failed, session %s out of service: %v", restartErr, name, rollbackErr)
 	params := clitext.Params{clitext.ParamName: name, clitext.ParamErr: restartErr.Error(), clitext.ParamRollbackErr: rollbackErr.Error()}

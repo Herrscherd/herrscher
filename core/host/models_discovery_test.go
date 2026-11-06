@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -245,7 +246,8 @@ func TestHiddenModelStillResumes(t *testing.T) {
 }
 
 func TestDiscoveredIDServedByOtherBackendIsDiscarded(t *testing.T) {
-	cache := cacheWith(time.Now(),
+	cache := cacheWith(
+		time.Now(),
 		cachedModel{ID: "b-native", Label: "clash", Arg: "clash", Route: "native"},
 		cachedModel{ID: "a-live", Label: "A live", Arg: "live", Route: "native"},
 	)
@@ -333,7 +335,8 @@ func TestGatewayRoutesDroppedWithoutCredentials(t *testing.T) {
 	t.Setenv("HERRSCHER_STATE_DIR", stateDir)
 	t.Setenv(EnvGatewayURL, "")
 	t.Setenv(EnvGatewayToken, "")
-	cache := cacheWith(time.Now(),
+	cache := cacheWith(
+		time.Now(),
 		cachedModel{ID: "a-via-gw", Label: "via gw", Arg: "gw", Route: "gateway"},
 		cachedModel{ID: "a-live", Label: "A live", Arg: "live", Route: "native"},
 	)
@@ -429,7 +432,7 @@ func TestModelDiscoveryForLeavesTheEnvironmentAlone(t *testing.T) {
 
 func modelsVerb(t *testing.T, verb string) contracts.Cmd {
 	t.Helper()
-	for _, cmd := range ModelsCommands() {
+	for _, cmd := range ModelsCommands(i18n.English) {
 		if len(cmd.Path) == 2 && cmd.Path[1] == verb {
 			return cmd
 		}
@@ -676,5 +679,14 @@ func TestToCachedKeepsContextWindowAndHidden(t *testing.T) {
 	cached := toCached([]contracts.ModelSpec{{ID: "a-live", Route: contracts.RouteNative, ContextWindow: 400_000, Hidden: true}})
 	if len(cached) != 1 || cached[0].ContextWindow != 400_000 || !cached[0].Hidden {
 		t.Fatalf("toCached dropped the window or the hidden flag: %+v", cached)
+	}
+}
+
+func TestModelsListTextFollowsTheLanguage(t *testing.T) {
+	if got := modelsListText(i18n.French, nil); got != "aucun modèle proposé avec la politique de routage actuelle" {
+		t.Fatalf("modelsListText(fr, none) = %q", got)
+	}
+	if got := modelsListText(i18n.English, nil); got != "no models offered under the current route policy" {
+		t.Fatalf("modelsListText(en, none) = %q", got)
 	}
 }

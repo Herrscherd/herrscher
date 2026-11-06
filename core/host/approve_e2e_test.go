@@ -14,6 +14,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -73,7 +74,7 @@ func newApprovalRegistry(t *testing.T, approvalTab *approvalTable, menus *menuRe
 	sessionTab := newSessionTable()
 	sessionTab.register("s1", newSessionDriver("s1", []contracts.GatewaySet{{Gateway: menus, Reader: menus}}, nil, nil))
 	reg := &cli.Registry{}
-	if err := addApproveCommands(reg, st, nil, approvalTab, sessionTab); err != nil {
+	if err := addApproveCommands(reg, i18n.English, st, nil, approvalTab, sessionTab); err != nil {
 		t.Fatalf("addApproveCommands: %v", err)
 	}
 	return reg

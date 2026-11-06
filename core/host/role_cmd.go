@@ -3,54 +3,52 @@ package host
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"sort"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/authz"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-const firstGrantWarning = "⚠️ this is the first role: from now on every gateway account without one is `observer`. " +
-	"Name the others with `role grant` before they find out."
-
-func addRoleCommands(reg *cli.Registry, hostState *state.State) error {
-	return addVerbs(reg,
-		roleListVerb(hostState),
-		roleGrantVerb(hostState),
-		roleRevokeVerb(hostState),
-		roleShowVerb(hostState),
+func addRoleCommands(reg *cli.Registry, lang i18n.Language, hostState *state.State) error {
+	return addVerbs(
+		reg,
+		roleListVerb(lang, hostState),
+		roleGrantVerb(lang, hostState),
+		roleRevokeVerb(lang, hostState),
+		roleShowVerb(lang, hostState),
 	)
 }
 
-func roleListVerb(store *state.State) contracts.Cmd {
+func roleListVerb(lang i18n.Language, store *state.State) contracts.Cmd {
 	return contracts.New("role", "list").
 		Help("who holds which role, and what each role runs").
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(listRoles(store, in.JSON))
+			return cli.Data(listRoles(lang, store, in.JSON))
 		})
 }
 
-func listRoles(st *state.State, asJSON bool) (string, error) {
+func listRoles(lang i18n.Language, st *state.State, asJSON bool) (string, error) {
 	assignments := st.RoleAssignments()
 	if asJSON {
 		body, err := json.Marshal(assignments)
 		return string(body), err
 	}
 	var body strings.Builder
-	writeRoleAssignments(&body, assignments)
-	_, _ = body.WriteString("roles you can grant: " + strings.Join(authz.GrantableRoles(), ", ") + "\n")
-	_, _ = body.WriteString("`agent` is not one of them: it is what a session holds, decided by the socket it arrives on.")
+	writeRoleAssignments(lang, &body, assignments)
+	_, _ = body.WriteString(replyText(lang).Text(clitext.HostRoleGrantable, clitext.Params{clitext.ParamRoles: strings.Join(authz.GrantableRoles(), ", ")}) + "\n")
+	_, _ = body.WriteString(replyText(lang).Text(clitext.HostRoleAgentNote, nil))
 	return body.String(), nil
 }
 
-func writeRoleAssignments(body *strings.Builder, assignments map[string]state.RoleAssignment) {
+func writeRoleAssignments(lang i18n.Language, body *strings.Builder, assignments map[string]state.RoleAssignment) {
 	if len(assignments) == 0 {
-		_, _ = body.WriteString("nobody holds a role, so herrscher decides nothing about humans " +
-			"and each gateway's own rules stand alone.\n")
-		_, _ = body.WriteString(firstGrantWarning + "\n\n")
+		_, _ = body.WriteString(replyText(lang).Text(clitext.HostRoleNone, nil) + "\n")
+		_, _ = body.WriteString(replyText(lang).Text(clitext.HostRoleFirstGrant, nil) + "\n\n")
 		return
 	}
 	for _, principal := range sortedPrincipals(assignments) {
@@ -64,18 +62,18 @@ func writeRoleAssignments(body *strings.Builder, assignments map[string]state.Ro
 	_, _ = body.WriteString("\n")
 }
 
-func roleGrantVerb(store *state.State) contracts.Cmd {
+func roleGrantVerb(lang i18n.Language, store *state.State) contracts.Cmd {
 	return contracts.New("role", "grant").
 		Help("give a principal a role; copy the principal from the refusal it read").
 		ValueParam("principal", "who, as a refusal spells it, e.g. chat:1234; also takes a bare argument", false).
 		ValueParam("role", "one of: "+strings.Join(authz.GrantableRoles(), ", ")+"; also takes a second bare argument", false).
 		ValueParam("label", "a readable name for `role list`; it decides nothing", false).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(grantRole(store, in))
+			return cli.Data(grantRole(lang, store, in))
 		})
 }
 
-func grantRole(store *state.State, input contracts.Input) (string, error) {
+func grantRole(lang i18n.Language, store *state.State, input contracts.Input) (string, error) {
 	ops := parseGrantOperands(input)
 	principal, role := ops.principal, ops.role
 	if err := grantable(principal, role); err != nil {
@@ -85,9 +83,9 @@ func grantRole(store *state.State, input contracts.Input) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	out := fmt.Sprintf("%s is now %#q", principal, role)
+	out := replyText(lang).Text(clitext.HostRoleGranted, clitext.Params{clitext.ParamPrincipal: principal, clitext.ParamRole: role})
 	if first {
-		out += "\n" + firstGrantWarning
+		out += "\n" + replyText(lang).Text(clitext.HostRoleFirstGrant, nil)
 	}
 	return out, nil
 }
@@ -110,16 +108,16 @@ func parseGrantOperands(input contracts.Input) grantOperands {
 	return grantOperands{principal: principal, role: role}
 }
 
-func roleRevokeVerb(store *state.State) contracts.Cmd {
+func roleRevokeVerb(lang i18n.Language, store *state.State) contracts.Cmd {
 	return contracts.New("role", "revoke").
 		Help("take a principal's role back").
 		ValueParam("principal", "who, as `role list` spells it; also takes a bare argument", false).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(revokeRole(store, in))
+			return cli.Data(revokeRole(lang, store, in))
 		})
 }
 
-func revokeRole(store *state.State, in contracts.Input) (string, error) {
+func revokeRole(lang i18n.Language, store *state.State, in contracts.Input) (string, error) {
 	principal := strings.TrimSpace(firstOf(in.Get("principal"), in.Rest))
 	if principal == "" {
 		return "", errPrincipalMissing
@@ -132,27 +130,27 @@ func revokeRole(store *state.State, in contracts.Input) (string, error) {
 		return "", &noRoleError{Principal: principal}
 	}
 	if len(store.RoleAssignments()) == 0 {
-		return principal + " holds no role, and neither does anyone else: herrscher is back to deciding nothing about humans", nil
+		return replyText(lang).Text(clitext.HostRoleRevokedLast, clitext.Params{clitext.ParamPrincipal: principal}), nil
 	}
-	return principal + " holds no role, so it is an `observer`", nil
+	return replyText(lang).Text(clitext.HostRoleRevoked, clitext.Params{clitext.ParamPrincipal: principal}), nil
 }
 
-func roleShowVerb(store *state.State) contracts.Cmd {
+func roleShowVerb(lang i18n.Language, store *state.State) contracts.Cmd {
 	return contracts.New("role", "show").
 		Help("what one principal may run").
 		ValueParam("principal", "who, as `role list` spells it; also takes a bare argument", false).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(showRole(store, in))
+			return cli.Data(showRole(lang, store, in))
 		})
 }
 
-func showRole(store *state.State, in contracts.Input) (string, error) {
+func showRole(lang i18n.Language, store *state.State, in contracts.Input) (string, error) {
 	principal := strings.TrimSpace(firstOf(in.Get("principal"), in.Rest))
 	if principal == "" {
 		return "", errPrincipalMissing
 	}
 	role := authz.RoleOf(authz.Principal{ID: principal}, store.RoleNames())
-	return fmt.Sprintf("%s holds %#q\n%s", principal, role, authz.Describe(role)), nil
+	return replyText(lang).Text(clitext.HostRoleHolds, clitext.Params{clitext.ParamPrincipal: principal, clitext.ParamRole: string(role)}) + "\n" + authz.Describe(role), nil
 }
 
 func grantable(principal, role string) error {

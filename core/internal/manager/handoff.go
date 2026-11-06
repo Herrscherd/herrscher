@@ -19,9 +19,9 @@ func buildHandoffSeed(entries []state.TranscriptEntry, mode string) string {
 		entries = entries[elided:]
 	}
 	var text strings.Builder
-	text.WriteString("[Reprise de conversation après changement de modèle. Contexte du fil précédent ci-dessous ; poursuis-le.]\n")
+	text.WriteString("[Conversation resumed after a model change. Context of the earlier thread below; continue it.]\n")
 	if elided > 0 {
-		fmt.Fprintf(&text, "(%d tours antérieurs élidés)\n", elided)
+		fmt.Fprintf(&text, "(%d earlier turns elided)\n", elided)
 	}
 	for _, e := range entries {
 		fmt.Fprintf(&text, "%s: %s\n", e.Role, e.Text)

@@ -3,28 +3,30 @@ package host
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-func addScheduleCommands(reg *cli.Registry, hostState *state.State, agents agentLookup, slot *schedulerSlot) error {
-	return addVerbs(reg,
-		scheduleAddVerb(hostState, agents),
-		scheduleListVerb(hostState),
-		scheduleRmVerb(hostState),
-		schedulePauseVerb(hostState, "pause", true, "stop firing a schedule, keeping it and its history"),
-		schedulePauseVerb(hostState, "resume", false, "let a paused schedule fire again, counting from now"),
-		scheduleRunVerb(slot),
+func addScheduleCommands(reg *cli.Registry, lang i18n.Language, hostState *state.State, agents agentLookup, slot *schedulerSlot) error {
+	return addVerbs(
+		reg,
+		scheduleAddVerb(lang, hostState, agents),
+		scheduleListVerb(lang, hostState),
+		scheduleRmVerb(lang, hostState),
+		schedulePauseVerb(lang, hostState, "pause", true, "stop firing a schedule, keeping it and its history"),
+		schedulePauseVerb(lang, hostState, "resume", false, "let a paused schedule fire again, counting from now"),
+		scheduleRunVerb(lang, slot),
 	)
 }
 
-func scheduleAddVerb(store *state.State, agents agentLookup) contracts.Cmd {
+func scheduleAddVerb(lang i18n.Language, store *state.State, agents agentLookup) contracts.Cmd {
 	return contracts.New(nsSchedule, "add").
 		Help("wake a session on a cadence, with no human in the loop").
 		Param(paramName, "schedule name (unique)", true).
@@ -36,11 +38,11 @@ func scheduleAddVerb(store *state.State, agents agentLookup) contracts.Cmd {
 		Param("task", "the task handed to the session on each firing", true).
 		Param("grace", "how late a window missed while the daemon was down may still fire (default 1h)", false).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(addSchedule(store, agents, in))
+			return cli.Data(addSchedule(lang, store, agents, in))
 		})
 }
 
-func addSchedule(store *state.State, agents agentLookup, input contracts.Input) (string, error) {
+func addSchedule(lang i18n.Language, store *state.State, agents agentLookup, input contracts.Input) (string, error) {
 	sched := schedule.Schedule{
 		Name:      strings.TrimSpace(input.Get(paramName)),
 		Session:   strings.TrimSpace(input.Get(paramSession)),
@@ -58,10 +60,10 @@ func addSchedule(store *state.State, agents agentLookup, input contracts.Input) 
 	if err := store.PutSchedule(sched); err != nil {
 		return "", err
 	}
-	out := "scheduled " + sched.Name + " (" + cadenceOf(sched) + ")"
+	text := replyText(lang)
+	out := text.Text(clitext.HostScheduleScheduled, clitext.Params{clitext.ParamName: sched.Name, clitext.ParamCadence: cadenceOf(lang, sched)})
 	if sched.Session != "" && !sessionKnown(store, sched.Session) {
-		out += "; note: no session named " + strconv.Quote(sched.Session) +
-			" right now, so its windows are skipped until there is one"
+		out += text.Text(clitext.HostScheduleNoSession, clitext.Params{clitext.ParamName: sched.Session})
 	}
 	return out, nil
 }
@@ -84,58 +86,61 @@ func checkNewSchedule(store *state.State, agents agentLookup, definition schedul
 	return nil
 }
 
-func scheduleListVerb(store *state.State) contracts.Cmd {
+func scheduleListVerb(lang i18n.Language, store *state.State) contracts.Cmd {
 	return contracts.New(nsSchedule, "list").
 		Help("list the schedules, with their target, cadence, state and next window").
 		Do(func(_ context.Context, _ contracts.Input) (contracts.Result, error) {
-			return contracts.DataResult(listSchedules(store)), nil
+			return contracts.DataResult(listSchedules(lang, store)), nil
 		})
 }
 
-func listSchedules(st *state.State) string {
+func listSchedules(lang i18n.Language, st *state.State) string {
 	rows := st.SnapshotSchedules()
 	if len(rows) == 0 {
-		return "no schedules yet"
+		return replyText(lang).Text(clitext.HostScheduleNone, nil)
 	}
 	now := time.Now()
 	var body strings.Builder
 	for index := range rows {
 		row := rows[index]
-		fmt.Fprintf(&body, "%s\t%s\t%s\t%s\tlast %s\tnext %s\n",
-			row.Name, targetOf(row), cadenceOf(row), scheduleStatus(row), lastRunOf(row), nextWindowOf(row, now))
+		fmt.Fprintf(&body, "%s\t%s\t%s\t%s\t%s\t%s\n",
+			row.Name, targetOf(row), cadenceOf(lang, row), scheduleStatus(lang, row), lastRunOf(lang, row), nextWindowOf(lang, row, now))
 	}
 	return strings.TrimRight(body.String(), "\n")
 }
 
-func scheduleStatus(sc schedule.Schedule) string {
-	if sc.Paused {
-		return "paused"
+func scheduleStatus(lang i18n.Language, sched schedule.Schedule) string {
+	var key clitext.Key = clitext.HostScheduleLive
+	if sched.Paused {
+		key = clitext.HostScheduleStatusPaused
 	}
-	return "live"
+	return replyText(lang).Text(key, nil)
 }
 
-func lastRunOf(sched schedule.Schedule) string {
-	if sched.LastRun == "" {
-		return "never"
+func lastRunOf(lang i18n.Language, sched schedule.Schedule) string {
+	when := replyText(lang).Text(clitext.HostScheduleNever, nil)
+	if sched.LastRun != "" {
+		when = sched.LastRun
 	}
-	return sched.LastRun
+	return replyText(lang).Text(clitext.HostScheduleLastRun, clitext.Params{clitext.ParamWhen: when})
 }
 
-func nextWindowOf(sched schedule.Schedule, now time.Time) string {
+func nextWindowOf(lang i18n.Language, sched schedule.Schedule, now time.Time) string {
+	text := replyText(lang)
 	switch {
 	case sched.Paused:
-		return "-"
+		return text.Text(clitext.HostScheduleNextRun, clitext.Params{clitext.ParamWhen: "-"})
 	case schedule.Due(sched, now):
-		return "due"
+		return text.Text(clitext.HostScheduleNextRun, clitext.Params{clitext.ParamWhen: text.Text(clitext.HostScheduleDue, nil)})
 	}
 	when, err := schedule.NextWindow(sched)
 	if err != nil {
-		return "unknown"
+		return text.Text(clitext.HostScheduleNextRun, clitext.Params{clitext.ParamWhen: text.Text(clitext.HostScheduleUnknown, nil)})
 	}
-	return when.Format(time.RFC3339)
+	return text.Text(clitext.HostScheduleNextRun, clitext.Params{clitext.ParamWhen: when.Format(time.RFC3339)})
 }
 
-func scheduleRmVerb(store *state.State) contracts.Cmd {
+func scheduleRmVerb(lang i18n.Language, store *state.State) contracts.Cmd {
 	return contracts.New(nsSchedule, "rm").
 		Help("remove a schedule; the session it opened is left alone").
 		Param(paramName, "schedule name", true).
@@ -148,20 +153,20 @@ func scheduleRmVerb(store *state.State) contracts.Cmd {
 			if !ok {
 				return contracts.Result{}, &NotFoundError{Kind: kindSchedule, Name: name}
 			}
-			return contracts.DataResult("removed " + name + " (its session, if any, is still there; close it with `session close`)"), nil
+			return contracts.DataResult(replyText(lang).Text(clitext.HostScheduleRemoved, clitext.Params{clitext.ParamName: name})), nil
 		})
 }
 
-func schedulePauseVerb(store *state.State, verb string, paused bool, help string) contracts.Cmd {
+func schedulePauseVerb(lang i18n.Language, store *state.State, verb string, paused bool, help string) contracts.Cmd {
 	return contracts.New(nsSchedule, verb).
 		Help(help).
 		Param(paramName, "schedule name", true).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(setSchedulePaused(store, verb, paused, strings.TrimSpace(in.Get(paramName))))
+			return cli.Data(setSchedulePaused(lang, store, paused, strings.TrimSpace(in.Get(paramName))))
 		})
 }
 
-func setSchedulePaused(store *state.State, verb string, paused bool, name string) (string, error) {
+func setSchedulePaused(lang i18n.Language, store *state.State, paused bool, name string) (string, error) {
 	ok, err := store.SetSchedulePaused(name, paused)
 	if err != nil {
 		return "", err
@@ -174,10 +179,14 @@ func setSchedulePaused(store *state.State, verb string, paused bool, name string
 			return "", err
 		}
 	}
-	return verb + "d " + name, nil
+	var key clitext.Key = clitext.HostScheduleResumed
+	if paused {
+		key = clitext.HostSchedulePaused
+	}
+	return replyText(lang).Text(key, clitext.Params{clitext.ParamName: name}), nil
 }
 
-func scheduleRunVerb(slot *schedulerSlot) contracts.Cmd {
+func scheduleRunVerb(lang i18n.Language, slot *schedulerSlot) contracts.Cmd {
 	return contracts.New(nsSchedule, "run").
 		Help("fire a schedule right now, out of band; the cadence is not moved").
 		Param(paramName, "schedule name", true).
@@ -189,7 +198,7 @@ func scheduleRunVerb(slot *schedulerSlot) contracts.Cmd {
 			if err := slot.sched.fireNow(cmdCtx, name); err != nil {
 				return contracts.Result{}, err
 			}
-			return contracts.DataResult("fired " + name), nil
+			return contracts.DataResult(replyText(lang).Text(clitext.HostScheduleFired, clitext.Params{clitext.ParamName: name})), nil
 		})
 }
 
@@ -211,9 +220,10 @@ func targetOf(definition schedule.Schedule) string {
 	return "agent:" + definition.Agent
 }
 
-func cadenceOf(definition schedule.Schedule) string {
+func cadenceOf(lang i18n.Language, definition schedule.Schedule) string {
+	text := replyText(lang)
 	if definition.Every != "" {
-		return "every " + definition.Every
+		return text.Text(clitext.HostScheduleEvery, clitext.Params{clitext.ParamEvery: definition.Every})
 	}
-	return "cron " + definition.Cron
+	return text.Text(clitext.HostScheduleCron, clitext.Params{clitext.ParamCron: definition.Cron})
 }

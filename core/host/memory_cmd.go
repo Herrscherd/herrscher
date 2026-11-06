@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -283,12 +284,24 @@ func whoamiVerb() contracts.Cmd {
 func commandsVerb(lang languageSource, reg *cli.Registry) contracts.Cmd {
 	return contracts.New("commands").
 		Help(clitext.CmdHelpCommands).
-		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			if in.JSON {
-				b, err := json.Marshal(commandSpecsJSON(reg.Specs(lang())))
-				return contracts.DataResult(string(b)), err
+		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
+			if input.JSON {
+				specs, specsErr := reg.Specs(lang())
+				if specsErr != nil {
+					slog.Warn("command help texts not fully rendered", "err", specsErr)
+				}
+				raw, marshalErr := json.Marshal(commandSpecsJSON(specs))
+				return contracts.DataResult(string(raw)), marshalErr
 			}
-			return contracts.DataResult(reg.Help(lang())), nil
+			help, helpErr := reg.Help(lang())
+			if helpErr == nil {
+				return contracts.DataResult(help), nil
+			}
+			warning, renderErr := clitext.For(lang()).Render(clitext.CmdHelpCommandsWarning, clitext.Params{clitext.ParamErr: helpErr.Error()})
+			if renderErr != nil {
+				return contracts.Result{}, renderErr
+			}
+			return contracts.DataResult(help + "\n" + warning), nil
 		})
 }
 

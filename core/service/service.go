@@ -141,7 +141,7 @@ var (
 
 func coreEnvVars() []EnvVar {
 	return []EnvVar{
-		{Key: "HERRSCHER_OWNER_ID", Help: "owner id (per-daemon instance-id fallback)"},
+		{Key: "HERRSCHER_OWNER_ID", Help: clitext.ServiceEnvOwnerID},
 	}
 }
 
@@ -718,6 +718,7 @@ func cmdQuote(value string) string {
 // user, default env-file location and health address).
 func DefaultConfig() (Config, error) {
 	lang := clitext.ClientLanguage()
+	translator := clitext.For(lang)
 	bin, err := os.Executable()
 	if err != nil {
 		return Config{}, clitext.Failure(lang, err, clitext.ServiceLocateBinary, clitext.Params{clitext.ParamErr: err.Error()})
@@ -727,8 +728,15 @@ func DefaultConfig() (Config, error) {
 		return Config{}, clitext.Failure(lang, err, clitext.ServiceLocateHome, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	uname := ""
-	if u, err := user.Current(); err == nil {
-		uname = u.Username
+	if current, userErr := user.Current(); userErr == nil {
+		uname = current.Username
+	}
+	if translatorErr := translator.Err(); translatorErr != nil {
+		return Config{}, translatorErr
+	}
+	envVars, err := registryEnvVars(translator)
+	if err != nil {
+		return Config{}, err
 	}
 	return Config{
 		Lang:       lang,
@@ -738,31 +746,66 @@ func DefaultConfig() (Config, error) {
 		EnvFile:    filepath.Join(home, ".config", "herrscher", "herrscher.env"),
 		ConfigPath: filepath.Join(home, ".config", "herrscher", "config.json"),
 		HealthAddr: "127.0.0.1:8787",
-		EnvVars:    registryEnvVars(),
+		EnvVars:    envVars,
 		Path:       os.Getenv("PATH"),
 	}, nil
 }
 
-func registryEnvVars() []EnvVar {
-	var out []EnvVar
+func registryEnvVars(translator *clitext.Translator) ([]EnvVar, error) {
 	seen := make(map[string]bool)
+	var out []EnvVar
+	var failures []error
 	gateways := contracts.Default.Gateways()
-	for i := range gateways {
-		for _, setting := range gateways[i].Manifest.Config {
-			if setting.Env == "" || seen[setting.Env] {
-				continue
-			}
-			seen[setting.Env] = true
-			out = append(out, EnvVar{Key: setting.Env, Help: setting.Help, Required: setting.Required})
-		}
+	for idx := range gateways {
+		vars, errs := pluginEnvVars(translator, &gateways[idx], seen)
+		out = append(out, vars...)
+		failures = append(failures, errs...)
 	}
+	vars, errs := hostEnvVars(translator, seen)
+	out = append(out, vars...)
+	failures = append(failures, errs...)
+	return out, errors.Join(failures...)
+}
+
+func pluginEnvVars(translator *clitext.Translator, gateway *contracts.Plugin, seen map[string]bool) ([]EnvVar, []error) {
+	var out []EnvVar
+	var failures []error
+	for _, setting := range gateway.Manifest.Config {
+		if setting.Env == "" || seen[setting.Env] {
+			continue
+		}
+		seen[setting.Env] = true
+		help, err := renderHelp(translator, setting.Help)
+		if err != nil {
+			failures = append(failures, fmt.Errorf("plugin %s setting %s: %w", gateway.Manifest.Kind, setting.Key, err))
+		}
+		out = append(out, EnvVar{Key: setting.Env, Help: help, Required: setting.Required})
+	}
+	return out, failures
+}
+
+func hostEnvVars(translator *clitext.Translator, seen map[string]bool) ([]EnvVar, []error) {
+	var out []EnvVar
+	var failures []error
 	core := coreEnvVars()
 	for idx := range core {
 		if !seen[core[idx].Key] {
+			help, err := renderHelp(translator, core[idx].Help)
+			if err != nil {
+				failures = append(failures, fmt.Errorf("host setting %s: %w", core[idx].Key, err))
+			}
+			core[idx].Help = help
 			out = append(out, core[idx])
 		}
 	}
-	return out
+	return out, failures
+}
+
+func renderHelp(translator *clitext.Translator, key string) (string, error) {
+	if key == "" {
+		return "", nil
+	}
+	return translator.Render(clitext.Key(key), nil)
 }
 
 // Install runs the install plan for the current OS: it writes the unit/launcher

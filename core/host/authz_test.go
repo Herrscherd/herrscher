@@ -208,7 +208,11 @@ func operatorRegistryForTest(t *testing.T) *cli.Registry {
 
 func TestEverySessionNamingVerbIsClassified(t *testing.T) {
 	reg := operatorRegistryForTest(t)
-	for _, spec := range reg.Specs(i18n.English) {
+	specs, specsErr := reg.Specs(i18n.English)
+	if specsErr != nil {
+		t.Fatal(specsErr)
+	}
+	for _, spec := range specs {
 		verb := strings.Join(spec.Path, " ")
 		for _, p := range spec.Params {
 			if p.Name != "name" && p.Name != "session" {

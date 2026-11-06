@@ -284,39 +284,59 @@ type Spec struct {
 }
 
 // Specs returns every registered command's shape, sorted by path, with its help texts rendered in lang.
-func (r *Registry) Specs(lang i18n.Language) []Spec {
+func (r *Registry) Specs(lang i18n.Language) ([]Spec, error) {
 	translator := clitext.For(lang)
+	if err := translator.Err(); err != nil {
+		return nil, err
+	}
+	var failures []error
 	out := make([]Spec, 0, len(r.cmds))
-	for _, c := range r.cmds {
-		out = append(out, Spec{Path: c.Path, Help: r.helpText(translator, c.Help), Params: r.localizedParams(translator, c.Params)})
+	for _, cmd := range r.cmds {
+		help, err := r.helpText(translator, cmd.Help)
+		if err != nil {
+			failures = append(failures, fmt.Errorf("command %q: %w", key(cmd.Path), err))
+		}
+		params, err := r.localizedParams(translator, cmd)
+		if err != nil {
+			failures = append(failures, fmt.Errorf("command %q: %w", key(cmd.Path), err))
+		}
+		out = append(out, Spec{Path: cmd.Path, Help: help, Params: params})
 	}
 	sort.Slice(out, func(i, j int) bool { return key(out[i].Path) < key(out[j].Path) })
-	return out
+	return out, errors.Join(failures...)
 }
 
-func (r *Registry) helpText(translator *clitext.Translator, helpKey string) string {
+func (r *Registry) helpText(translator *clitext.Translator, helpKey string) (string, error) {
 	if helpKey == "" {
-		return ""
+		return "", nil
 	}
-	return translator.Text(clitext.Key(helpKey), r.helpParams[clitext.Key(helpKey)])
+	return translator.Render(clitext.Key(helpKey), r.helpParams[clitext.Key(helpKey)])
 }
 
-func (r *Registry) localizedParams(translator *clitext.Translator, params []contracts.Param) []contracts.Param {
-	if len(params) == 0 {
-		return nil
+func (r *Registry) localizedParams(translator *clitext.Translator, cmd contracts.Cmd) ([]contracts.Param, error) {
+	if len(cmd.Params) == 0 {
+		return nil, nil
 	}
-	out := make([]contracts.Param, 0, len(params))
-	for _, param := range params {
-		param.Help = r.helpText(translator, param.Help)
+	var failures []error
+	out := make([]contracts.Param, 0, len(cmd.Params))
+	for _, param := range cmd.Params {
+		help, err := r.helpText(translator, param.Help)
+		if err != nil {
+			failures = append(failures, fmt.Errorf("param %q: %w", param.Name, err))
+		}
+		param.Help = help
 		out = append(out, param)
 	}
-	return out
+	return out, errors.Join(failures...)
 }
 
-// Help renders one usage line per command, sorted by path, for the root help, with
-// its help text rendered in lang.
-func (r *Registry) Help(lang i18n.Language) string {
+// Help renders one usage line per command, sorted by path, for the root help, with its help text rendered in lang.
+func (r *Registry) Help(lang i18n.Language) (string, error) {
 	translator := clitext.For(lang)
+	if err := translator.Err(); err != nil {
+		return "", err
+	}
+	var failures []error
 	lines := make([]string, 0, len(r.cmds))
 	for _, cmd := range r.cmds {
 		var line strings.Builder
@@ -331,13 +351,17 @@ func (r *Registry) Help(lang i18n.Language) string {
 				line.WriteString(" [--" + param.Name + "]")
 			}
 		}
-		if help := r.helpText(translator, cmd.Help); help != "" {
+		help, err := r.helpText(translator, cmd.Help)
+		if err != nil {
+			failures = append(failures, fmt.Errorf("command %q: %w", key(cmd.Path), err))
+		}
+		if help != "" {
 			line.WriteString(": " + help)
 		}
 		lines = append(lines, line.String())
 	}
 	sort.Strings(lines)
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, "\n"), errors.Join(failures...)
 }
 
 // Data wraps the output of a text handler as a Result.

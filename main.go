@@ -16,6 +16,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -54,6 +55,10 @@ func run() int {
 		return writeFailureCode(out)
 	}
 
+	if refuseBrokenCatalogs(os.Stderr) {
+		return 1
+	}
+
 	if err := host.CaptureStartupSecrets(loadHostEnv, hideGatewayKeys); err != nil {
 		return reportError(err)
 	}
@@ -89,6 +94,15 @@ func run() int {
 	}
 
 	return outcomeReporterFor(cmd)(ctx, runCommand(ctx, cmd, args))
+}
+
+func refuseBrokenCatalogs(stderr io.Writer) bool {
+	err := clitext.For(clitext.ClientLanguage()).Err()
+	if err == nil {
+		return false
+	}
+	errwriter.New(stderr).Println(err)
+	return true
 }
 
 func answerGitAskpass(args []string) int {

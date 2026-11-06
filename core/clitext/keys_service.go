@@ -34,11 +34,13 @@ const (
 	ServiceNoteNotStarted         = "cli.service.note.not_started"
 	ServiceNoteRunning            = "cli.service.note.running"
 	ServiceNoteWindowsEdit        = "cli.service.note.windows_edit"
+	ServiceEnvOwnerID             = "cli.service.env.owner_id"
 )
 
 func serviceKeys() map[Key][]string {
 	return map[Key][]string{
 		ServiceUsage:                  nil,
+		ServiceEnvOwnerID:             nil,
 		ServiceUnknownSubcommand:      {ParamName},
 		ServiceUnexpectedArgument:     {ParamVerb, ParamArg, ParamUsage},
 		ServiceUpdateUnexpectedArg:    {ParamArg},

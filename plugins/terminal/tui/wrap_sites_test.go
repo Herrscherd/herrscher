@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -63,6 +64,11 @@ func TestShownWrapSitesKeepTheirSentinel(t *testing.T) {
 			_, err := attachLocalFile(t.TempDir(), 1)
 			return err
 		}},
+		{"attach failure", fs.ErrNotExist, func(t *testing.T) error {
+			t.Helper()
+			_, err := attachLocalFile(filepath.Join(t.TempDir(), "missing"), 1)
+			return err
+		}},
 		{"unknown change", errUnknownChange, func(*testing.T) error {
 			_, err := parseChangeKind("Z")
 			return err
@@ -86,5 +92,17 @@ func TestShownWrapSitesKeepTheirSentinel(t *testing.T) {
 				t.Fatalf("the French reason %q was not translated from %q", french, err)
 			}
 		})
+	}
+}
+
+func TestAttachFailureKeepsTheOSCause(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing")
+	_, err := attachLocalFile(path, 1)
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("the attach failure %q must keep the OS cause", err)
+	}
+	french := localizedReason(newTranslator().in(i18n.French), err)
+	if want := "impossible de joindre " + path + ": "; !strings.HasPrefix(french, want) {
+		t.Fatalf("localizedReason = %q, want prefix %q", french, want)
 	}
 }

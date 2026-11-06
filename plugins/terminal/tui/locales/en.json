@@ -2433,6 +2433,10 @@
     "other": "unknown value for {{.Key}}: \"{{.Value}}\" (expected {{.Options}})"
   },
   {
+    "id": "tui.reason.attach_failed",
+    "other": "could not attach {{.Path}}"
+  },
+  {
     "id": "tui.diffpanel.snapshot_failed",
     "other": "turn snapshot impossible: {{.Reason}}"
   },

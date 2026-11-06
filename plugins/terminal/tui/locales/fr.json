@@ -2433,6 +2433,10 @@
     "other": "valeur inconnue pour {{.Key}} : « {{.Value}} » (attendu {{.Options}})"
   },
   {
+    "id": "tui.reason.attach_failed",
+    "other": "impossible de joindre {{.Path}}"
+  },
+  {
     "id": "tui.diffpanel.snapshot_failed",
     "other": "instantané du tour impossible : {{.Reason}}"
   },

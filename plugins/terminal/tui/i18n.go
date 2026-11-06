@@ -20,6 +20,7 @@ const (
 	tplArgLabel   = "Label"
 	tplArgName    = "Name"
 	tplArgOptions = "Options"
+	tplArgPath    = "Path"
 	tplArgReason  = "Reason"
 	tplArgSha     = "Sha"
 	tplArgSpec    = "Spec"

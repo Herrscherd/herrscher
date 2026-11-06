@@ -81,6 +81,15 @@ func stage(name string, data []byte) (string, error) {
 	return filepath.Join(dir, name), nil
 }
 
+func attachFailure(path string, cause error) error {
+	return fmt.Errorf("%w: %w", reasonError{
+		text: "attach " + path,
+		render: func(trans translator) string {
+			return trans.t("tui.reason.attach_failed", map[string]any{tplArgPath: path})
+		},
+	}, cause)
+}
+
 func attachLocalFile(path string, seq int) (Attachment, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -93,7 +102,7 @@ func attachLocalFile(path string, seq int) (Attachment, error) {
 	}
 	info, err := os.Stat(path)
 	if err != nil {
-		return Attachment{}, fmt.Errorf("attach %s: %w", path, err)
+		return Attachment{}, attachFailure(path, err)
 	}
 	if !info.Mode().IsRegular() {
 		return Attachment{}, fmt.Errorf("%w : %s", errNotRegularFile, path)
@@ -107,12 +116,12 @@ func attachLocalFile(path string, seq int) (Attachment, error) {
 	}
 	data, err := os.ReadFile(filepath.Clean(abs))
 	if err != nil {
-		return Attachment{}, fmt.Errorf("attach %s: %w", path, err)
+		return Attachment{}, attachFailure(path, err)
 	}
 	name := filepath.Base(abs)
 	staged, err := stage(fmt.Sprintf("%d-%s", seq, name), data)
 	if err != nil {
-		return Attachment{}, fmt.Errorf("attach %s: %w", path, err)
+		return Attachment{}, attachFailure(path, err)
 	}
 	return Attachment{Name: name, Path: staged, Mime: mimeByExt(abs), Size: info.Size()}, nil
 }

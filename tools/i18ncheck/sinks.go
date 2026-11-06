@@ -9,7 +9,17 @@ import (
 	"unicode"
 )
 
-const dynamicFormatText = "format passed as a parameter"
+const (
+	dynamicFormatText = "format passed as a parameter"
+	dynamicJoinText   = "text joined with a value assigned at run time"
+	maxPieces         = 64
+)
+
+type piece struct {
+	text    string
+	literal bool
+	dynamic bool
+}
 
 type sinkWalker struct {
 	files      *token.FileSet
@@ -382,14 +392,116 @@ func builderArgument(method string) (int, bool) {
 }
 
 func (walker *sinkWalker) proseFindings(expr ast.Expr) []finding {
-	ident, isIdent := expr.(*ast.Ident)
-	if !isIdent {
-		if sentence, ok := walker.proseOf(expr); ok {
-			return []finding{sentence}
-		}
+	switch typed := expr.(type) {
+	case *ast.Ident:
+		return walker.nameProseFindings(typed)
+	case *ast.BinaryExpr:
+		return walker.joinFindings(typed)
+	}
+	if sentence, ok := walker.proseOf(expr); ok {
+		return []finding{sentence}
+	}
+	return nil
+}
+
+func (walker *sinkWalker) joinFindings(sum *ast.BinaryExpr) []finding {
+	if sum.Op != token.ADD {
 		return nil
 	}
-	return walker.nameProseFindings(ident)
+	position := walker.files.Position(sum.Pos())
+	var found []finding
+	partly := false
+	for _, part := range walker.piecesOf(sum) {
+		if part.dynamic {
+			partly = partly || part.literal
+			continue
+		}
+		if isProse(part.text) && !isExempt(position, part.text) {
+			found = append(found, finding{position: position, text: part.text})
+		}
+	}
+	if partly && len(found) == 0 {
+		found = append(found, finding{position: position, text: dynamicJoinText})
+	}
+	return found
+}
+
+func (walker *sinkWalker) piecesOf(expr ast.Expr) []piece {
+	switch typed := expr.(type) {
+	case *ast.BinaryExpr:
+		if typed.Op != token.ADD {
+			return []piece{{}}
+		}
+		return joinPieces(walker.piecesOf(typed.X), walker.piecesOf(typed.Y))
+	case *ast.Ident:
+		return walker.namePieces(typed.Name)
+	}
+	if text, ok := walker.textOf(expr); ok {
+		return []piece{{text: text, literal: isProse(text)}}
+	}
+	return []piece{{}}
+}
+
+func (walker *sinkWalker) namePieces(name string) []piece {
+	if walker.resolving[name] {
+		return []piece{{}}
+	}
+	walker.resolving[name] = true
+	defer delete(walker.resolving, name)
+	values, isLocal := walker.locals[name]
+	if !isLocal {
+		value, bound := walker.constants[name]
+		if !bound || value == nil {
+			return []piece{{}}
+		}
+		return walker.piecesOf(value)
+	}
+	var all []piece
+	for _, value := range values {
+		all = append(all, walker.assignedPieces(value)...)
+	}
+	return distinctPieces(all)
+}
+
+func (walker *sinkWalker) assignedPieces(value ast.Expr) []piece {
+	switch value.(type) {
+	case nil:
+		return []piece{{dynamic: true}}
+	case *ast.Ident, *ast.BinaryExpr:
+		return walker.piecesOf(value)
+	}
+	if text, ok := walker.textOf(value); ok {
+		return []piece{{text: text, literal: isProse(text)}}
+	}
+	return []piece{{dynamic: true}}
+}
+
+func joinPieces(left, right []piece) []piece {
+	if len(left)*len(right) > maxPieces {
+		return []piece{{}}
+	}
+	joined := make([]piece, 0, len(left)*len(right))
+	for _, head := range left {
+		for _, tail := range right {
+			joined = append(joined, piece{text: head.text + tail.text, literal: head.literal || tail.literal, dynamic: head.dynamic || tail.dynamic})
+		}
+	}
+	return distinctPieces(joined)
+}
+
+func distinctPieces(pieces []piece) []piece {
+	seen := make(map[piece]bool, len(pieces))
+	distinct := make([]piece, 0, len(pieces))
+	for _, part := range pieces {
+		if !seen[part] {
+			seen[part] = true
+			distinct = append(distinct, part)
+		}
+	}
+	if len(distinct) > maxPieces {
+		return []piece{{}}
+	}
+	return distinct
 }
 
 func (walker *sinkWalker) nameProseFindings(ident *ast.Ident) []finding {

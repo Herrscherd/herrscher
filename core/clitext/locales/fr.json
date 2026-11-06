@@ -1633,6 +1633,11 @@
     "other": "lister toutes les commandes que ce démon route, avec leurs paramètres"
   },
   {
+    "id": "cli.help.commands_warning",
+    "description": "Avertissement affiché sous la liste des commandes quand des textes d'aide ne sont pas rendus",
+    "other": "certains textes d'aide ne sont pas rendus, la liste ci-dessus reste complète : {{.Err}}"
+  },
+  {
     "id": "cli.help.param.memory.locate.key",
     "description": "Help of the --key param of the command memory locate",
     "other": "clé du nœud"
@@ -3311,5 +3316,40 @@
     "id": "cli.host.fault.remote_shell_session",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (remote shell session)",
     "other": "session shell : session distante, commande refusée"
+  },
+  {
+    "id": "cli.service.env.owner_id",
+    "description": "Help of the owner id setting",
+    "other": "identifiant du propriétaire (repli sur l'identifiant d'instance du démon)"
+  },
+  {
+    "id": "cli.setting.terminal_learn",
+    "description": "Help of the terminal learn setting",
+    "other": "la session qu'un lancement ouvre apprend : false rétablit une session qui n'enregistre rien"
+  },
+  {
+    "id": "cli.setting.terminal_extractor",
+    "description": "Help of the terminal extractor setting",
+    "other": "extracteur de curation enregistré qui distille la transcription"
+  },
+  {
+    "id": "cli.setting.terminal_consolidate_every",
+    "description": "Help of the terminal consolidate every setting",
+    "other": "tours entre deux passes de consolidation (0 = manuel ou à l'inactivité seulement)"
+  },
+  {
+    "id": "cli.setting.terminal_memory_agent",
+    "description": "Help of the terminal memory agent setting",
+    "other": "racine de mémoire pour ce que la fenêtre apprend sous son propre nom"
+  },
+  {
+    "id": "cli.setting.terminal_project",
+    "description": "Help of the terminal project setting",
+    "other": "forcer le projet de mémoire et le figer, au lieu d'en résoudre un"
+  },
+  {
+    "id": "cli.setting.terminal_project_pin",
+    "description": "Help of the terminal project pin setting",
+    "other": "quand le projet est fixé : first-turn (le prompt peut le réviser) | launch (le répertoire est définitif)"
   }
 ]

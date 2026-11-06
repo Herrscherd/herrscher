@@ -13,6 +13,7 @@ const (
 	CmdHelpApproveMode                    = "cli.help.cmd.approve.mode"
 	CmdHelpApproveRule                    = "cli.help.cmd.approve.rule"
 	CmdHelpCommands                       = "cli.help.cmd.commands"
+	CmdHelpCommandsWarning                = "cli.help.commands_warning"
 	CmdHelpHostAdd                        = "cli.help.cmd.host.add"
 	CmdHelpHostCheck                      = "cli.help.cmd.host.check"
 	CmdHelpHostList                       = "cli.help.cmd.host.list"
@@ -249,6 +250,7 @@ func helpKeys() map[Key][]string {
 		CmdHelpApproveMode:                    nil,
 		CmdHelpApproveRule:                    nil,
 		CmdHelpCommands:                       nil,
+		CmdHelpCommandsWarning:                {ParamErr},
 		CmdHelpHostAdd:                        nil,
 		CmdHelpHostCheck:                      nil,
 		CmdHelpHostList:                       nil,

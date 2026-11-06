@@ -208,7 +208,11 @@ func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, option
 		return fmt.Errorf("build command registry: %w", err)
 	}
 	kinds := contributedKinds(options.ContributedCommands)
-	sup.SetBridgeEnv(hubBridgeEnv(reg.Specs(options.Language), kinds))
+	specs, specsErr := reg.Specs(options.Language)
+	if specsErr != nil {
+		log.Warn("command help texts not fully rendered", "err", specsErr)
+	}
+	sup.SetBridgeEnv(hubBridgeEnv(specs, kinds))
 	ensureCodexAgent(deps.agents)
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)

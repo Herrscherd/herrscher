@@ -233,12 +233,12 @@ func TestDispatchGlobalJSONFlag(t *testing.T) {
 
 func TestHelpRendersSortedUsage(t *testing.T) {
 	r := build(t,
-		contracts.New("set", "home").Help("set home").Param("channel", "", true).
+		contracts.New("set", "home").Help(string(clitext.CmdHelpRoleList)).Param("channel", "", true).
 			Do(func(context.Context, contracts.Input) (contracts.Result, error) { return contracts.Result{}, nil }),
-		contracts.New("session", "list").Help("list sessions").
+		contracts.New("session", "list").Help(string(clitext.CmdHelpSessionAccounts)).
 			Do(func(context.Context, contracts.Input) (contracts.Result, error) { return contracts.Result{}, nil }),
 	)
-	h := r.Help(i18n.English)
+	h := mustHelp(t, r, i18n.English)
 	if want := "  session list"; !strings.Contains(h, want) {
 		t.Fatalf("help missing %q:\n%s", want, h)
 	}
@@ -291,20 +291,20 @@ func TestSpecsDescribeTheWholeRegistry(t *testing.T) {
 		}
 	}
 	okRun := func(context.Context, contracts.Input) (contracts.Result, error) { return contracts.Result{}, nil }
-	must(r.Add(contracts.New("zulu").Help("last").Do(okRun)))
+	must(r.Add(contracts.New("zulu").Help(string(clitext.CmdHelpRoleList)).Do(okRun)))
 	must(r.Add(contracts.New("alpha", "one").
-		Help("first").
-		Param("name", "who", true).
+		Help(string(clitext.CmdHelpSessionAccounts)).
+		Param("name", "", true).
 		Do(okRun)))
 
-	specs := r.Specs(i18n.English)
+	specs := mustSpecs(t, &r, i18n.English)
 	if len(specs) != 2 {
 		t.Fatalf("Specs = %+v, want both commands", specs)
 	}
 	if got := strings.Join(specs[0].Path, " "); got != "alpha one" {
 		t.Fatalf("first spec = %q, want the alphabetical one", got)
 	}
-	if specs[0].Help != "first" || len(specs[0].Params) != 1 || specs[0].Params[0].Name != "name" {
+	if specs[0].Help != mustText(t, clitext.CmdHelpSessionAccounts) || len(specs[0].Params) != 1 || specs[0].Params[0].Name != "name" {
 		t.Fatalf("spec dropped declared shape: %+v", specs[0])
 	}
 }
@@ -422,15 +422,62 @@ func TestSpecsAndHelpRenderTheHelpKeyInTheRequestedLanguage(t *testing.T) {
 		contracts.New("session", "set-account").Help(clitext.CmdHelpSessionSetAccount).
 			Do(func(context.Context, contracts.Input) (contracts.Result, error) { return contracts.Result{}, nil }),
 	)
-	english := r.Specs(i18n.English)[0].Help
-	french := r.Specs(i18n.French)[0].Help
+	english := mustSpecs(t, r, i18n.English)[0].Help
+	french := mustSpecs(t, r, i18n.French)[0].Help
 	if !strings.Contains(english, "account profile") {
 		t.Fatalf("English spec help = %q, want the English text", english)
 	}
 	if !strings.Contains(french, "profil de compte") {
 		t.Fatalf("French spec help = %q, want the French text", french)
 	}
-	if h := r.Help(i18n.French); !strings.Contains(h, "profil de compte") {
+	if h := mustHelp(t, r, i18n.French); !strings.Contains(h, "profil de compte") {
 		t.Fatalf("French root help misses the French text:\n%s", h)
 	}
+}
+
+func TestRawHelpTextIsReportedWithItsCommand(t *testing.T) {
+	var r cli.Registry
+	cmd := leaf("chat", "read")
+	cmd.Help = "chat.help.never_declared"
+	if err := r.Add(cmd); err != nil {
+		t.Fatal(err)
+	}
+	_, specsErr := r.Specs(i18n.French)
+	if specsErr == nil || !strings.Contains(specsErr.Error(), `command "chat read"`) || !strings.Contains(specsErr.Error(), "chat.help.never_declared") {
+		t.Fatalf("Specs error = %v, want one naming the command and the raw key", specsErr)
+	}
+	_, helpErr := r.Help(i18n.French)
+	if helpErr == nil || !strings.Contains(helpErr.Error(), `command "chat read"`) {
+		t.Fatalf("Help error = %v, want one naming the command", helpErr)
+	}
+	if !errors.Is(specsErr, clitext.ErrUndeclaredKey) {
+		t.Fatalf("Specs error = %v, want ErrUndeclaredKey", specsErr)
+	}
+}
+
+func mustSpecs(t *testing.T, r *cli.Registry, lang i18n.Language) []cli.Spec {
+	t.Helper()
+	specs, err := r.Specs(lang)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return specs
+}
+
+func mustHelp(t *testing.T, r *cli.Registry, lang i18n.Language) string {
+	t.Helper()
+	help, err := r.Help(lang)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return help
+}
+
+func mustText(t *testing.T, key clitext.Key) string {
+	t.Helper()
+	text, err := clitext.Text(i18n.English, key, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return text
 }

@@ -95,6 +95,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addVerbs(reg, memorySearchVerb(options.Language), whoamiVerb(), commandsVerb(reg)); err != nil {
 		return nil, hostDeps{}, err
 	}
+	localizeCommandErrors(reg, options.Language)
 	return reg, hostDeps{wt: worktrees, agents: agents, handler: hdl, seedCoord: seedCoord, schedSlot: schedSlot}, nil
 }
 

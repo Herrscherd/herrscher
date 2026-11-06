@@ -1856,5 +1856,285 @@
     "id": "cli.host.agent.list_header",
     "description": "Reply of a host command, agent list header",
     "other": "Agents :"
+  },
+  {
+    "id": "cli.host.fault.conversation_account",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (conversation account)",
+    "other": "la session a une conversation sous un autre compte : relancez avec fresh pour démarrer une nouvelle conversation, ou annulez"
+  },
+  {
+    "id": "cli.host.fault.conversation_fork",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (conversation fork)",
+    "other": "bifurcation refusée : la conversation ne peut pas être ramenée à ce point de contrôle (son backend ne garde aucune position de message) ; rien n'a été créé"
+  },
+  {
+    "id": "cli.host.fault.conversation_restore",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (conversation restore)",
+    "other": "la restauration de la conversation n'est pas disponible à ce point de contrôle : son backend ne garde aucune position de message où revenir ; rien n'a été modifié"
+  },
+  {
+    "id": "cli.host.fault.scope_conflict",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (scope conflict)",
+    "other": "--session et --always sont deux portées : choisissez-en une"
+  },
+  {
+    "id": "cli.host.fault.no_risk_model",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (no risk model)",
+    "other": "aucun backend LLM n'est configuré"
+  },
+  {
+    "id": "cli.host.fault.risk_unreadable",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (risk unreadable)",
+    "other": "le modèle n'a pas répondu low, medium ni high"
+  },
+  {
+    "id": "cli.host.fault.what_invalid",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (what invalid)",
+    "other": "--what doit valoir code, conversation ou both"
+  },
+  {
+    "id": "cli.host.fault.rewind_needs_daemon",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (rewind needs daemon)",
+    "other": "le retour arrière de session n'est disponible que depuis le démon en cours"
+  },
+  {
+    "id": "cli.host.fault.fork_needs_daemon",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (fork needs daemon)",
+    "other": "la bifurcation de session n'est disponible que depuis le démon en cours"
+  },
+  {
+    "id": "cli.host.fault.turn_in_flight",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (turn in flight)",
+    "other": "a un tour en cours : interrompez-le (échap) avant de revenir en arrière"
+  },
+  {
+    "id": "cli.host.fault.checkpoint_number",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (checkpoint number)",
+    "other": "le numéro de point de contrôle doit être un entier positif"
+  },
+  {
+    "id": "cli.host.fault.not_checkpointable",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (not checkpointable)",
+    "other": "n'a aucun point de contrôle : elle ne tourne dans aucun worktree propre"
+  },
+  {
+    "id": "cli.host.fault.fork_no_worktree",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (fork no worktree)",
+    "other": "la nouvelle session n'a pas de worktree"
+  },
+  {
+    "id": "cli.host.fault.compact_unsupported",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (compact unsupported)",
+    "other": "son backend n'implémente pas Compactor"
+  },
+  {
+    "id": "cli.host.fault.bridge_gone",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (bridge gone)",
+    "other": "le pont s'est fermé pendant une compaction"
+  },
+  {
+    "id": "cli.host.fault.no_backend_factory",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (no backend factory)",
+    "other": "déclare Capabilities.Compactor mais ne fournit aucune fabrique de backend"
+  },
+  {
+    "id": "cli.host.fault.not_compactor_port",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (not compactor port)",
+    "other": "déclare Capabilities.Compactor mais n'implémente pas le port"
+  },
+  {
+    "id": "cli.host.fault.no_compactor_plugin",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (no compactor plugin)",
+    "other": "aucun plugin ne déclare Capabilities.Compactor sous ce nom"
+  },
+  {
+    "id": "cli.host.fault.compact_queue_full",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (compact queue full)",
+    "other": "la file des tours est pleine, la compaction n'a pas été mise en file"
+  },
+  {
+    "id": "cli.host.fault.request_name_missing",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (request name missing)",
+    "other": "nommez une demande (voir `approve list`)"
+  },
+  {
+    "id": "cli.host.fault.approve_mode_usage",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (approve mode usage)",
+    "other": "usage : approve mode <session> <ask|bypass|strict|smart>"
+  },
+  {
+    "id": "cli.host.fault.memory_locate_unsupported",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (memory locate unsupported)",
+    "other": "le backend mémoire ne gère pas locate"
+  },
+  {
+    "id": "cli.host.fault.memory_forget_unsupported",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (memory forget unsupported)",
+    "other": "le backend mémoire ne gère pas forget"
+  },
+  {
+    "id": "cli.host.fault.command_socket_empty",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (command socket empty)",
+    "other": "socket de commande : réponse vide"
+  },
+  {
+    "id": "cli.host.fault.no_gateway_plugin",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (no gateway plugin)",
+    "other": "aucun plugin de passerelle enregistré"
+  },
+  {
+    "id": "cli.host.fault.gateway_factory_empty",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (gateway factory empty)",
+    "other": "la fabrique n'a renvoyé aucune passerelle"
+  },
+  {
+    "id": "cli.host.fault.host_name_missing",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (host name missing)",
+    "other": "un hôte a besoin d'un nom"
+  },
+  {
+    "id": "cli.host.fault.local_host_reserved",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (local host reserved)",
+    "other": "`local` est cette machine et existe toujours : elle ne peut pas être enregistrée"
+  },
+  {
+    "id": "cli.host.fault.no_memory_plugin",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (no memory plugin)",
+    "other": "mémoire : aucun plugin mémoire enregistré"
+  },
+  {
+    "id": "cli.host.fault.principal_missing",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (principal missing)",
+    "other": "nommez un principal (voir `role list`)"
+  },
+  {
+    "id": "cli.host.fault.principal_example",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (principal example)",
+    "other": "nommez un principal : un refus l'écrit, par ex. chat:1234"
+  },
+  {
+    "id": "cli.host.fault.local_principal_role",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (local principal role)",
+    "other": "`local` est le socket du démon lui-même, et l'ouvrir exige déjà l'uid du démon : il est toujours `owner`"
+  },
+  {
+    "id": "cli.host.fault.source_not_set",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (source not set)",
+    "other": "aucune source réglée ; lancez d'abord /set source <chemin>"
+  },
+  {
+    "id": "cli.host.fault.worktree_subcommand",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (worktree subcommand)",
+    "other": "worktree : attend une de ces sous-commandes : create, pre-existing, remove, materialize"
+  },
+  {
+    "id": "cli.host.fault.worktree_materialize_required",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (worktree materialize required)",
+    "other": "worktree materialize : --worktree est obligatoire"
+  },
+  {
+    "id": "cli.host.fault.seed_timeout",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (seed timeout)",
+    "other": "délai dépassé pour le seed"
+  },
+  {
+    "id": "cli.host.fault.no_backend_plugin",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (no backend plugin)",
+    "other": "aucun plugin de backend enregistré"
+  },
+  {
+    "id": "cli.host.fault.host_none_registered",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (host none registered)",
+    "other": "nommez un hôte : aucun n'est encore enregistré, ajoutez-en un avec `host add <nom> --ssh <cible> --workspace <chemin>`"
+  },
+  {
+    "id": "cli.host.fault.gateway_only_no_model",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (gateway only no model)",
+    "other": "la politique de routage gateway-only interdit un lancement sans modèle : il tournerait avec la connexion fournisseur propre à cette machine"
+  },
+  {
+    "id": "cli.host.fault.fanout_no_tasks",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (fanout no tasks)",
+    "other": "fanout : aucune tâche"
+  },
+  {
+    "id": "cli.host.fault.route_empty_task",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (route empty task)",
+    "other": "route : tâche vide"
+  },
+  {
+    "id": "cli.host.fault.route_no_agent",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (route no agent)",
+    "other": "route : aucun agent ne correspond à la tâche"
+  },
+  {
+    "id": "cli.host.fault.seal_expected_positive",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (seal expected positive)",
+    "other": "scellement refusé : expected doit être > 0"
+  },
+  {
+    "id": "cli.host.fault.discovery_no_answer",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (discovery no answer)",
+    "other": "aucune réponse avant l'échéance de la découverte"
+  },
+  {
+    "id": "cli.host.fault.cache_lock_busy",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (cache lock busy)",
+    "other": "le cache des modèles est tenu par un autre écrivain"
+  },
+  {
+    "id": "cli.host.fault.no_pending_choice",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (no pending choice)",
+    "other": "n'a aucun choix en attente"
+  },
+  {
+    "id": "cli.host.fault.handoff_targets",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (handoff targets)",
+    "other": "--under et --channel_id s'excluent : une catégorie accueille une nouvelle conversation, un canal en adopte une existante"
+  },
+  {
+    "id": "cli.host.fault.handoff_agent_targets",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (handoff agent targets)",
+    "other": "un agent ne passe la main que sous sa propre session : --under et --channel_id reviennent à l'opérateur"
+  },
+  {
+    "id": "cli.host.fault.handoff_no_create",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (handoff no create)",
+    "other": "session create n'est pas enregistré, donc la passation de session n'a rien pour créer la nouvelle session"
+  },
+  {
+    "id": "cli.host.fault.handoff_no_source",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (handoff no source)",
+    "other": "nommez la session à passer avec --name"
+  },
+  {
+    "id": "cli.host.fault.handoff_busy",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (handoff busy)",
+    "other": "une passation depuis cette session est déjà en cours : attendez qu'elle se termine"
+  },
+  {
+    "id": "cli.host.fault.handoff_quota",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (handoff quota)",
+    "other": "cette session a atteint sa limite de passations pour la dernière heure : l'opérateur peut encore lancer la passation"
+  },
+  {
+    "id": "cli.host.fault.shell_refused",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (shell refused)",
+    "other": "commande refusée"
+  },
+  {
+    "id": "cli.host.fault.empty_shell_command",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (empty shell command)",
+    "other": "session shell : la commande est vide"
+  },
+  {
+    "id": "cli.host.fault.unknown_shell_session",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (unknown shell session)",
+    "other": "session shell : session inconnue"
+  },
+  {
+    "id": "cli.host.fault.remote_shell_session",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (remote shell session)",
+    "other": "session shell : session distante, commande refusée"
   }
 ]

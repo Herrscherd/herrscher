@@ -9,17 +9,20 @@ import (
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	orchestrator "github.com/Herrscherd/herrscher-orchestrator"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
-func addMemoryVerbs(reg *cli.Registry) error {
-	return addVerbs(reg,
+func addMemoryVerbs(reg *cli.Registry, lang i18n.Language) error {
+	return addVerbs(
+		reg,
 		memoryLocateVerb(),
 		memoryForgetVerb(),
 		memoryRecordVerb(),
-		memoryRestoreVerb(),
-		memoryUnlinkVerb(),
+		memoryRestoreVerb(lang),
+		memoryUnlinkVerb(lang),
 	)
 }
 
@@ -119,7 +122,7 @@ func recordMemoryNode(ctx context.Context, mem contracts.Memory, input contracts
 	return "recorded " + node.Key, nil
 }
 
-func memoryRestoreVerb() contracts.Cmd {
+func memoryRestoreVerb(lang i18n.Language) contracts.Cmd {
 	return contracts.New("memory", "restore").
 		Help("reactivate an archived (or merged) memory node by key").
 		Param("key", "node key", true).
@@ -129,12 +132,12 @@ func memoryRestoreVerb() contracts.Cmd {
 				if _, err := orchestrator.Restore(cmdCtx, mem, input.Get("key"), orchestrator.Force(input.Bool("force"))); err != nil {
 					return contracts.Result{}, err
 				}
-				return contracts.DataResult("restored " + input.Get("key")), nil
+				return contracts.DataResult(replyText(lang).Text(clitext.HostMemoryRestored, clitext.Params{clitext.ParamKey: input.Get("key")})), nil
 			})
 		})
 }
 
-func memoryUnlinkVerb() contracts.Cmd {
+func memoryUnlinkVerb(lang i18n.Language) contracts.Cmd {
 	return contracts.New("memory", "unlink").
 		Help("remove the edge from→to between two memory nodes").
 		Param("from", "source node key", true).
@@ -144,7 +147,7 @@ func memoryUnlinkVerb() contracts.Cmd {
 				if err := mem.Unlink(cmdCtx, input.Get("from"), input.Get("to")); err != nil {
 					return contracts.Result{}, err
 				}
-				return contracts.DataResult("unlinked " + input.Get("from") + " -> " + input.Get("to")), nil
+				return contracts.DataResult(replyText(lang).Text(clitext.HostMemoryUnlinked, clitext.Params{clitext.ParamFrom: input.Get("from"), clitext.ParamTo: input.Get("to")})), nil
 			})
 		})
 }

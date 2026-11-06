@@ -24,7 +24,7 @@ const (
 	shellOutputCap     = 16 << 10
 	shellToolName      = "Bash"
 	shellExitFormat    = "\n[sortie %d]"
-	shellTruncatedNote = "\n[sortie tronquée]"
+	shellTruncatedNote = "\n[output truncated]"
 )
 
 var (

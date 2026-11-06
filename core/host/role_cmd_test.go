@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -16,7 +17,7 @@ func roleRegistry(t *testing.T) (*cli.Registry, *state.State) {
 		t.Fatal(err)
 	}
 	reg := &cli.Registry{}
-	if err := addRoleCommands(reg, st); err != nil {
+	if err := addRoleCommands(reg, i18n.English, st); err != nil {
 		t.Fatal(err)
 	}
 	return reg, st

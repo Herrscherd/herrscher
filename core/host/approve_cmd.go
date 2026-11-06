@@ -11,7 +11,9 @@ import (
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -21,27 +23,28 @@ const approvalsFile = "APPROVALS"
 
 var errScopeConflict = errors.New("--session and --always are two scopes: pick one")
 
-func addApproveCommands(reg *cli.Registry, hostState *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) error {
-	return addVerbs(reg,
-		approveListVerb(approvals),
-		approveAllowVerb(approvals, sessions),
-		approveDenyVerb(approvals, sessions),
-		approveRuleVerb(hostState),
+func addApproveCommands(reg *cli.Registry, lang i18n.Language, hostState *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) error {
+	return addVerbs(
+		reg,
+		approveListVerb(lang, approvals),
+		approveAllowVerb(lang, approvals, sessions),
+		approveDenyVerb(lang, approvals, sessions),
+		approveRuleVerb(lang, hostState),
 		approveAskVerb(hostState, agents, approvals, sessions),
 		approveModeVerb(hostState),
 		sessionShellVerb(hostState, agents, approvals, sessions),
 	)
 }
 
-func approveListVerb(approvals *approvalTable) contracts.Cmd {
+func approveListVerb(lang i18n.Language, approvals *approvalTable) contracts.Cmd {
 	return contracts.New(nsApprove, "list").
 		Help("list the actions waiting for an answer").
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(listApprovals(approvals, in.JSON))
+			return cli.Data(listApprovals(lang, approvals, in.JSON))
 		})
 }
 
-func listApprovals(approvals *approvalTable, asJSON bool) (string, error) {
+func listApprovals(lang i18n.Language, approvals *approvalTable, asJSON bool) (string, error) {
 	pending := pendingApprovals(approvals)
 	sort.SliceStable(pending, func(left, job int) bool {
 		if pending[left].Age != pending[job].Age {
@@ -54,7 +57,7 @@ func listApprovals(approvals *approvalTable, asJSON bool) (string, error) {
 		return string(body), err
 	}
 	if len(pending) == 0 {
-		return "nothing is waiting", nil
+		return replyText(lang).Text(clitext.HostApproveNone, nil), nil
 	}
 	var body strings.Builder
 	for _, p := range pending {
@@ -63,7 +66,7 @@ func listApprovals(approvals *approvalTable, asJSON bool) (string, error) {
 	return strings.TrimRight(body.String(), "\n"), nil
 }
 
-func approveAllowVerb(approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
+func approveAllowVerb(lang i18n.Language, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsApprove, "allow").
 		Help("let a waiting action run; --session keeps it for this session, --always writes a rule for it").
 		ValueParam("id", "request id; also takes a bare argument", false).
@@ -77,7 +80,7 @@ func approveAllowVerb(approvals *approvalTable, sessions *sessionTable) contract
 			if !settleApproval(approvals, sessions, approvalID, approvalAnswer{scope: scope}) {
 				return contracts.Result{}, &requestNotWaitingError{ID: approvalID}
 			}
-			return contracts.DataResult("allowed " + approvalID), nil
+			return contracts.DataResult(replyText(lang).Text(clitext.HostApproveAllowed, clitext.Params{clitext.ParamID: approvalID})), nil
 		})
 }
 
@@ -113,7 +116,7 @@ func allowOperands(input contracts.Input) (string, approvalScope, error) {
 	return operands[0], scope, nil
 }
 
-func approveDenyVerb(approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
+func approveDenyVerb(lang i18n.Language, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsApprove, "deny").
 		Help("refuse a waiting action; the reason is what the agent reads").
 		ValueParam("id", "request id; also takes a bare argument", false).
@@ -127,28 +130,28 @@ func approveDenyVerb(approvals *approvalTable, sessions *sessionTable) contracts
 			if !settleApproval(approvals, sessions, approvalID, answer) {
 				return contracts.Result{}, &requestNotWaitingError{ID: approvalID}
 			}
-			return contracts.DataResult("denied " + approvalID), nil
+			return contracts.DataResult(replyText(lang).Text(clitext.HostApproveDenied, clitext.Params{clitext.ParamID: approvalID})), nil
 		})
 }
 
-func approveRuleVerb(store *state.State) contracts.Cmd {
+func approveRuleVerb(lang i18n.Language, store *state.State) contracts.Cmd {
 	return contracts.New(nsApprove, "rule").
 		Help("add a rule, remove one with --rm, or list them with no argument").
 		ValueParam("rule", "e.g. `ask Bash(git push*)`; also takes a bare argument", false).
 		ValueParam("rm", "the rule to remove, written exactly as it is listed", false).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			if rm := strings.TrimSpace(input.Get("rm")); rm != "" {
-				return cli.Data(removeApprovalRule(store, rm))
+				return cli.Data(removeApprovalRule(lang, store, rm))
 			}
 			raw := firstOf(input.Get("rule"), input.Rest)
 			if raw == "" {
-				return cli.Data(listApprovalRules(store, input.JSON))
+				return cli.Data(listApprovalRules(lang, store, input.JSON))
 			}
-			return cli.Data(addApprovalRule(store, raw))
+			return cli.Data(addApprovalRule(lang, store, raw))
 		})
 }
 
-func removeApprovalRule(store *state.State, raw string) (string, error) {
+func removeApprovalRule(lang i18n.Language, store *state.State, raw string) (string, error) {
 	parsed, err := approval.ParseRule(raw)
 	if err != nil {
 		return "", err
@@ -160,10 +163,10 @@ func removeApprovalRule(store *state.State, raw string) (string, error) {
 	if !removed {
 		return "", &noSuchRuleError{Rule: parsed.String()}
 	}
-	return "removed " + parsed.String(), nil
+	return replyText(lang).Text(clitext.HostApproveRuleRemoved, clitext.Params{clitext.ParamRule: parsed.String()}), nil
 }
 
-func listApprovalRules(st *state.State, asJSON bool) (string, error) {
+func listApprovalRules(lang i18n.Language, st *state.State, asJSON bool) (string, error) {
 	rules := st.ApprovalRules()
 	if asJSON {
 		if rules == nil {
@@ -173,12 +176,12 @@ func listApprovalRules(st *state.State, asJSON bool) (string, error) {
 		return string(b), err
 	}
 	if len(rules) == 0 {
-		return "no rule: everything is allowed, which is how herrscher behaved before approvals existed", nil
+		return replyText(lang).Text(clitext.HostApproveRuleNone, nil), nil
 	}
 	return "- " + strings.Join(rules, "\n- "), nil
 }
 
-func addApprovalRule(store *state.State, raw string) (string, error) {
+func addApprovalRule(lang i18n.Language, store *state.State, raw string) (string, error) {
 	parsed, err := approval.ParseRule(raw)
 	if err != nil {
 		return "", err
@@ -186,7 +189,7 @@ func addApprovalRule(store *state.State, raw string) (string, error) {
 	if err := store.AddApprovalRule(parsed.String()); err != nil {
 		return "", err
 	}
-	return "added " + parsed.String(), nil
+	return replyText(lang).Text(clitext.HostApproveRuleAdded, clitext.Params{clitext.ParamRule: parsed.String()}), nil
 }
 
 func approveAskVerb(store *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {

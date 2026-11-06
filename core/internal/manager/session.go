@@ -397,7 +397,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, input contracts.Input) (
 		runDir = place.repo
 	}
 	sess := newSessionRecord(req, place.space, place.project, runDir)
-	slot, err := openChannel(ctx, req, h.st.QualifiedName(req.name))
+	slot, err := h.openChannel(ctx, req, h.st.QualifiedName(req.name))
 	if err != nil {
 		if _, unsupported := errors.AsType[*UnsupportedHomeTypeError](err); unsupported {
 			return contracts.Result{}, err
@@ -868,7 +868,7 @@ func parseSessionLanguage(input contracts.Input) (string, error) {
 	return lang.String(), nil
 }
 
-func openChannel(ctx context.Context, req createRequest, title string) (channelSlot, error) {
+func (h *Handler) openChannel(ctx context.Context, req createRequest, title string) (channelSlot, error) {
 	if req.adopted != "" {
 		return channelSlot{id: req.adopted, typ: "text"}, nil
 	}
@@ -880,7 +880,7 @@ func openChannel(ctx context.Context, req createRequest, title string) (channelS
 		}
 		return channelSlot{id: chID, owned: true, typ: "text"}, nil
 	case forumKind:
-		chID, err := req.admin.ForumPost(ctx, req.home.ID, title, "Session **"+title+"** started.")
+		chID, err := req.admin.ForumPost(ctx, req.home.ID, title, h.textIn(h.noticeLanguage(req.lang), clitext.HostSessionStartedPost, clitext.Params{clitext.ParamName: title}))
 		if err != nil {
 			return channelSlot{}, fmt.Errorf("create forum post: %w", err)
 		}
@@ -1166,7 +1166,7 @@ func (h *Handler) sessionListRun(_ context.Context, input contracts.Input) (cont
 	out.WriteString(h.text(clitext.SessionListHeader, nil) + "\n")
 	for i := range sessions {
 		s := sessions[i]
-		fmt.Fprintf(&out, "• **%s** (%s) %s\n", s.Name, s.Type, h.adminFor(s).ChannelRef(s.ChannelID))
+		fmt.Fprintf(&out, "• %s (%s) %s\n", s.Name, s.Type, h.adminFor(s).ChannelRef(s.ChannelID))
 	}
 	return contracts.DataResult(out.String()), nil
 }
@@ -1239,7 +1239,7 @@ func (h *Handler) sessionLogRun(_ context.Context, input contracts.Input) (contr
 	}
 	var out strings.Builder
 	for _, e := range entries {
-		fmt.Fprintf(&out, "**%s** %s\n", e.Role, e.Text)
+		fmt.Fprintf(&out, "%s %s\n", e.Role, e.Text)
 	}
 	return contracts.DataResult(out.String()), nil
 }

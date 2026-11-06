@@ -26,10 +26,10 @@ const (
 	shellSafeChars      = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._/:=+-"
 	handoffAgentPerHour = 3
 	handoffWindow       = time.Hour
-	handoffBriefTask    = "Rédige le brief de passation de cette conversation, pour une session qui n'a pas ton historique : " +
-		"ce qui est construit, ce qui est décidé, ce qui reste ouvert (les questions que l'opérateur n'a pas tranchées), " +
-		"les fichiers, branches et PR en jeu, et la prochaine étape immédiate. " +
-		"Réponds uniquement par le brief, en français, sans préambule, et ne modifie rien dans le dépôt."
+	handoffBriefTask    = "Write the handover brief of this conversation, for a session that does not have your history: " +
+		"what is built, what is decided, what stays open (the questions the operator has not settled), " +
+		"the files, branches and PRs in play, and the immediate next step. " +
+		"Reply only with the brief, without preamble, and change nothing in the repository."
 )
 
 var (

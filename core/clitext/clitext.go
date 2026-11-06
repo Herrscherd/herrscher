@@ -35,7 +35,7 @@ var (
 )
 
 func declaredKeys() map[Key][]string {
-	return mergeDeclared(usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys(), accountKeys(), manageKeys())
+	return mergeDeclared(usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys(), accountKeys(), manageKeys(), hostKeys())
 }
 
 func loadCatalog() (*i18n.Catalog, error) {
@@ -88,6 +88,13 @@ const (
 	ParamWhy       = "Why"
 	ParamAccount   = "Account"
 	ParamMode      = "Mode"
+	ParamHome      = "Home"
+	ParamFrom      = "From"
+	ParamID        = "ID"
+	ParamRule      = "Rule"
+	ParamRoles     = "Roles"
+	ParamPrincipal = "Principal"
+	ParamRole      = "Role"
 )
 
 // ParamRollbackErr names the error of the rollback that followed a failed session switch.

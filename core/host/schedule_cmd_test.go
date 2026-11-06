@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -33,7 +34,7 @@ func testScheduleRegistry(t *testing.T, st *state.State, slot *schedulerSlot) *c
 	if slot == nil {
 		slot = &schedulerSlot{}
 	}
-	if err := addScheduleCommands(reg, st, fakeAgents{known: map[string]bool{"scout": true}}, slot); err != nil {
+	if err := addScheduleCommands(reg, i18n.English, st, fakeAgents{known: map[string]bool{"scout": true}}, slot); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
 	return reg

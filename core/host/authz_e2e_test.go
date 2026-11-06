@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -23,7 +24,7 @@ func TestTheSameArgvIsRefusedOnOneSocketAndRunOnTheOther(t *testing.T) {
 	reg := &cli.Registry{}
 	approvalTab := newApprovalTable()
 	sessionTab := newSessionTable()
-	if approveErr := addApproveCommands(reg, st, nil, approvalTab, sessionTab); approveErr != nil {
+	if approveErr := addApproveCommands(reg, i18n.English, st, nil, approvalTab, sessionTab); approveErr != nil {
 		t.Fatalf("addApproveCommands: %v", approveErr)
 	}
 	h := &hub{st: st, reg: reg, live: make(map[string]liveSession)}

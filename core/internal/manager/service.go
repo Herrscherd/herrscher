@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func (h *Handler) serviceRestartRun(ctx context.Context, _ contracts.Input) (contracts.Result, error) {
@@ -14,7 +16,7 @@ func (h *Handler) serviceRestartRun(ctx context.Context, _ contracts.Input) (con
 	if err := h.up.Restart(ctx); err != nil {
 		return contracts.Result{}, fmt.Errorf("restart: %w", err)
 	}
-	return contracts.DataResult("🔄 Restarting the daemon…"), nil
+	return contracts.DataResult(h.text(clitext.HostServiceRestarting, nil)), nil
 }
 
 func (h *Handler) serviceUpdateRun(ctx context.Context, input contracts.Input) (contracts.Result, error) {
@@ -33,5 +35,5 @@ func (h *Handler) serviceUpdateRun(ctx context.Context, input contracts.Input) (
 	if reported == "" {
 		reported = "(unknown)"
 	}
-	return contracts.DataResult(fmt.Sprintf("✅ Rebuilt %#q, restarting the daemon…", reported)), nil
+	return contracts.DataResult(h.text(clitext.HostServiceRebuilt, clitext.Params{clitext.ParamVersion: reported})), nil
 }

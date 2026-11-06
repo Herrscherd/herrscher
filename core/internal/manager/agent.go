@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 )
 
@@ -36,7 +37,7 @@ func (h *Handler) agentCreateRun(_ context.Context, input contracts.Input) (cont
 	if err != nil {
 		return contracts.Result{}, err
 	}
-	return contracts.DataResult(fmt.Sprintf("🤖 Agent **%s** created at %#q.", created.Name, created.Home)), nil
+	return contracts.DataResult(h.text(clitext.HostAgentCreated, clitext.Params{clitext.ParamName: created.Name, clitext.ParamHome: created.Home})), nil
 }
 
 func (h *Handler) agentListRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
@@ -67,13 +68,13 @@ func (h *Handler) agentListRun(_ context.Context, input contracts.Input) (contra
 		return contracts.DataResult(string(buf)), nil
 	}
 	if len(agents) == 0 {
-		return contracts.DataResult("No agents. Create one with `agent create <name>`."), nil
+		return contracts.DataResult(h.text(clitext.HostAgentListEmpty, nil)), nil
 	}
 	var out strings.Builder
 	out.WriteString("Agents:\n")
 	for i := range agents {
 		a := &agents[i]
-		fmt.Fprintf(&out, "• **%s** (%#q)\n", a.Name, a.Home)
+		fmt.Fprintf(&out, "• %s (%#q)\n", a.Name, a.Home)
 	}
 	return contracts.DataResult(out.String()), nil
 }
@@ -107,7 +108,7 @@ func (h *Handler) agentShowRun(_ context.Context, input contracts.Input) (contra
 		}
 		return contracts.DataResult(string(buf)), nil
 	}
-	return contracts.DataResult(fmt.Sprintf("**%s** (%#q)\n\n%s", candidate.Name, candidate.Home, string(soul))), nil
+	return contracts.DataResult(fmt.Sprintf("%s (%#q)\n\n%s", candidate.Name, candidate.Home, string(soul))), nil
 }
 
 func (h *Handler) agentSetSoulRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
@@ -122,5 +123,5 @@ func (h *Handler) agentSetSoulRun(_ context.Context, input contracts.Input) (con
 	if err := h.agents.SetSoul(slugify(name), soul); err != nil {
 		return contracts.Result{}, err
 	}
-	return contracts.DataResult(fmt.Sprintf("🖊 Soul updated for **%s** (applies to new sessions).", slugify(name))), nil
+	return contracts.DataResult(h.text(clitext.HostAgentSoulUpdated, clitext.Params{clitext.ParamName: slugify(name)})), nil
 }

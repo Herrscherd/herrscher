@@ -12,6 +12,8 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/checkpoint"
 	"github.com/Herrscherd/herrscher/core/internal/conversation"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -94,16 +96,16 @@ type checkpointView struct {
 	Files        []checkpointFile `json:"files"`
 }
 
-func addCheckpointVerbs(sessionStore *state.State, sessions *sessionTable) []contracts.Cmd {
+func addCheckpointVerbs(lang i18n.Language, sessionStore *state.State, sessions *sessionTable) []contracts.Cmd {
 	return []contracts.Cmd{
-		checkpointsVerb(sessionStore, &sessions.checkpoints),
+		checkpointsVerb(lang, sessionStore, &sessions.checkpoints),
 		rewindVerb(sessionStore, sessions),
-		undoVerb(sessionStore, sessions),
+		undoVerb(lang, sessionStore, sessions),
 		forkVerb(),
 	}
 }
 
-func checkpointsVerb(sessionStore *state.State, checkpoints *checkpoint.Store) contracts.Cmd {
+func checkpointsVerb(lang i18n.Language, sessionStore *state.State, checkpoints *checkpoint.Store) contracts.Cmd {
 	return contracts.New(nsSession, verbCheckpoints).
 		Help("list a session's checkpoints, one before each user message, with the files each one touched").
 		Param(paramName, "session name", true).
@@ -119,7 +121,7 @@ func checkpointsVerb(sessionStore *state.State, checkpoints *checkpoint.Store) c
 			if input.JSON {
 				return cli.Data(marshalJSON(views))
 			}
-			return contracts.DataResult(formatCheckpoints(views)), nil
+			return contracts.DataResult(formatCheckpoints(lang, views)), nil
 		})
 }
 
@@ -187,7 +189,7 @@ func restartWithConversation(ctx context.Context, name, token string) error {
 	return nil
 }
 
-func undoVerb(sessionStore *state.State, sessions *sessionTable) contracts.Cmd {
+func undoVerb(lang i18n.Language, sessionStore *state.State, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, verbUndo).
 		Help("undo the last rewind of a session's code").
 		Param(paramName, "session name", true).
@@ -204,7 +206,7 @@ func undoVerb(sessionStore *state.State, sessions *sessionTable) contracts.Cmd {
 			if err := sessions.checkpoints.Undo(ctx, sess.Worktree, sess.Name); err != nil {
 				return contracts.Result{}, err
 			}
-			return contracts.DataResult("undid the last rewind of " + sess.Name), nil
+			return contracts.DataResult(replyText(lang).Text(clitext.HostCheckpointUndone, clitext.Params{clitext.ParamName: sess.Name})), nil
 		})
 }
 
@@ -423,9 +425,9 @@ func checkpointViews(ctx context.Context, checkpoints *checkpoint.Store, worktre
 	return views, nil
 }
 
-func formatCheckpoints(views []checkpointView) string {
+func formatCheckpoints(lang i18n.Language, views []checkpointView) string {
 	if len(views) == 0 {
-		return "no checkpoints"
+		return replyText(lang).Text(clitext.HostCheckpointNone, nil)
 	}
 	var text strings.Builder
 	for _, view := range views {

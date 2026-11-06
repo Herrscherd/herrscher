@@ -1426,5 +1426,190 @@
     "id": "cli.session.account.this",
     "description": "Listing: marks the profile the session currently spends on",
     "other": "(this session)"
+  },
+  {
+    "id": "cli.host.home.set",
+    "description": "Reply of a host command, home set",
+    "other": "home set to {{.Channel}} ({{.Kind}})."
+  },
+  {
+    "id": "cli.host.source.set",
+    "description": "Reply of a host command, source set",
+    "other": "source checkout set to \"{{.Path}}\"."
+  },
+  {
+    "id": "cli.host.agent.created",
+    "description": "Reply of a host command, agent created",
+    "other": "agent {{.Name}} created at \"{{.Home}}\"."
+  },
+  {
+    "id": "cli.host.agent.list_empty",
+    "description": "Reply of a host command, agent list empty",
+    "other": "No agents. Create one with `agent create <name>`."
+  },
+  {
+    "id": "cli.host.agent.soul_updated",
+    "description": "Reply of a host command, agent soul updated",
+    "other": "soul updated for {{.Name}} (applies to new sessions)."
+  },
+  {
+    "id": "cli.host.service.restarting",
+    "description": "Reply of a host command, service restarting",
+    "other": "restarting the daemon…"
+  },
+  {
+    "id": "cli.host.service.rebuilt",
+    "description": "Reply of a host command, service rebuilt",
+    "other": "rebuilt \"{{.Version}}\", restarting the daemon…"
+  },
+  {
+    "id": "cli.host.session.started_post",
+    "description": "Reply of a host command, session started post",
+    "other": "Session {{.Name}} started."
+  },
+  {
+    "id": "cli.host.checkpoint.none",
+    "description": "Reply of a host command, checkpoint none",
+    "other": "no checkpoints"
+  },
+  {
+    "id": "cli.host.checkpoint.undone",
+    "description": "Reply of a host command, checkpoint undone",
+    "other": "undid the last rewind of {{.Name}}"
+  },
+  {
+    "id": "cli.host.memory.restored",
+    "description": "Reply of a host command, memory restored",
+    "other": "restored {{.Key}}"
+  },
+  {
+    "id": "cli.host.memory.unlinked",
+    "description": "Reply of a host command, memory unlinked",
+    "other": "unlinked {{.From}} -> {{.To}}"
+  },
+  {
+    "id": "cli.host.schedule.none",
+    "description": "Reply of a host command, schedule none",
+    "other": "no schedules yet"
+  },
+  {
+    "id": "cli.host.schedule.removed",
+    "description": "Reply of a host command, schedule removed",
+    "other": "removed {{.Name}} (its session, if any, is still there; close it with `session close`)"
+  },
+  {
+    "id": "cli.host.schedule.fired",
+    "description": "Reply of a host command, schedule fired",
+    "other": "fired {{.Name}}"
+  },
+  {
+    "id": "cli.host.schedule.paused",
+    "description": "Reply of a host command, schedule paused",
+    "other": "paused {{.Name}}"
+  },
+  {
+    "id": "cli.host.schedule.resumed",
+    "description": "Reply of a host command, schedule resumed",
+    "other": "resumed {{.Name}}"
+  },
+  {
+    "id": "cli.host.approve.none",
+    "description": "Reply of a host command, approve none",
+    "other": "nothing is waiting"
+  },
+  {
+    "id": "cli.host.approve.allowed",
+    "description": "Reply of a host command, approve allowed",
+    "other": "allowed {{.ID}}"
+  },
+  {
+    "id": "cli.host.approve.denied",
+    "description": "Reply of a host command, approve denied",
+    "other": "denied {{.ID}}"
+  },
+  {
+    "id": "cli.host.approve.rule_removed",
+    "description": "Reply of a host command, approve rule removed",
+    "other": "removed {{.Rule}}"
+  },
+  {
+    "id": "cli.host.approve.rule_added",
+    "description": "Reply of a host command, approve rule added",
+    "other": "added {{.Rule}}"
+  },
+  {
+    "id": "cli.host.approve.rule_none",
+    "description": "Reply of a host command, approve rule none",
+    "other": "no rule: everything is allowed, which is how herrscher behaved before approvals existed"
+  },
+  {
+    "id": "cli.host.models.none",
+    "description": "Reply of a host command, models none",
+    "other": "no models offered under the current route policy"
+  },
+  {
+    "id": "cli.host.models.hidden",
+    "description": "Reply of a host command, models hidden",
+    "other": "  hidden: resolves when requested, not offered by the selector"
+  },
+  {
+    "id": "cli.host.models.refresh_none",
+    "description": "Reply of a host command, models refresh none",
+    "other": "no vendor is due for discovery (see HERRSCHER_MODELS_DISCOVER and HERRSCHER_ROUTE_POLICY)"
+  },
+  {
+    "id": "cli.host.models.discovered",
+    "description": "Reply of a host command, models discovered",
+    "other": "{{.Count}} model(s) discovered"
+  },
+  {
+    "id": "cli.host.models.discovery_kept",
+    "description": "Reply of a host command, models discovery kept",
+    "other": "discovery failed ({{.Err}}), kept the last known list"
+  },
+  {
+    "id": "cli.host.role.none",
+    "description": "Reply of a host command, role none",
+    "other": "nobody holds a role, so herrscher decides nothing about humans and each gateway's own rules stand alone."
+  },
+  {
+    "id": "cli.host.role.first_grant",
+    "description": "Reply of a host command, role first grant",
+    "other": "this is the first role: from now on every gateway account without one is `observer`. Name the others with `role grant` before they find out."
+  },
+  {
+    "id": "cli.host.role.grantable",
+    "description": "Reply of a host command, role grantable",
+    "other": "roles you can grant: {{.Roles}}"
+  },
+  {
+    "id": "cli.host.role.agent_note",
+    "description": "Reply of a host command, role agent note",
+    "other": "`agent` is not one of them: it is what a session holds, decided by the socket it arrives on."
+  },
+  {
+    "id": "cli.host.role.granted",
+    "description": "Reply of a host command, role granted",
+    "other": "{{.Principal}} is now \"{{.Role}}\""
+  },
+  {
+    "id": "cli.host.role.revoked_last",
+    "description": "Reply of a host command, role revoked last",
+    "other": "{{.Principal}} holds no role, and neither does anyone else: herrscher is back to deciding nothing about humans"
+  },
+  {
+    "id": "cli.host.role.revoked",
+    "description": "Reply of a host command, role revoked",
+    "other": "{{.Principal}} holds no role, so it is an `observer`"
+  },
+  {
+    "id": "cli.host.role.holds",
+    "description": "Reply of a host command, role holds",
+    "other": "{{.Principal}} holds \"{{.Role}}\""
+  },
+  {
+    "id": "cli.host.models.discovery_static",
+    "description": "Reply of a host command, models discovery static",
+    "other": "discovery failed ({{.Err}}), static catalog only"
   }
 ]

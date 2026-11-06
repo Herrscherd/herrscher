@@ -302,7 +302,7 @@ func setSessionLang(store *state.State, operator i18n.Language, name, raw string
 	return replyText(choice).Text(clitext.HostSessionLangSet, clitext.Params{clitext.ParamName: name, clitext.ParamLang: choice.String()}), nil
 }
 
-func parseSessionLangChoice(raw string) (lang i18n.Language, reset, ok bool) {
+func parseSessionLangChoice(raw string) (i18n.Language, bool, bool) {
 	switch raw {
 	case "", "auto":
 		return 0, true, true

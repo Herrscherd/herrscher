@@ -111,19 +111,19 @@ func localizeHostError(lang i18n.Language, err error) error {
 	return localizedHostError{text: text, cause: err}
 }
 
-func localizeCommandErrors(reg *cli.Registry, st *state.State, live *operatorLanguage) {
+func localizeCommandErrors(reg *cli.Registry, store *state.State, live *operatorLanguage) {
 	reg.Intercept(nil, func(_ contracts.Cmd, next cli.Runner) cli.Runner {
-		return func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
-			res, err := next(ctx, in)
-			return res, localizeHostError(commandErrorLanguage(st, live.Get(), in), err)
+		return func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+			res, err := next(ctx, input)
+			return res, localizeHostError(commandErrorLanguage(store, live.Get(), input), err)
 		}
 	})
 }
 
-func commandErrorLanguage(st *state.State, operator i18n.Language, in contracts.Input) i18n.Language {
-	name := in.Get(paramName)
+func commandErrorLanguage(store *state.State, operator i18n.Language, input contracts.Input) i18n.Language {
+	name := input.Get(paramName)
 	if name == "" {
 		return operator
 	}
-	return namedSessionLanguage(st, name, operator)
+	return namedSessionLanguage(store, name, operator)
 }

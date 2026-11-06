@@ -101,7 +101,7 @@ func TestCommandErrorsUseTheTargetSessionLanguage(t *testing.T) {
 	}{
 		{"targeted french session wins over an english operator", map[string]string{paramName: "fr-s"}, i18n.English, i18n.French},
 		{"session without language follows the operator", map[string]string{paramName: "bare"}, i18n.French, i18n.French},
-		{"no session named follows the operator", map[string]string{}, i18n.French, i18n.French},
+		{"no session named follows the operator", make(map[string]string), i18n.French, i18n.French},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

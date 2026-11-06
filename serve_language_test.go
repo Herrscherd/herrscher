@@ -205,7 +205,7 @@ func TestRunServeReadsTheLanguageFromTheStateFileItIsGiven(t *testing.T) {
 		t.Fatal(err)
 	}
 	var served i18n.Language
-	capture := func(_ context.Context, _ []string, _ *openWindow, _ config.Config, langs language.Languages) error {
+	capture := func(_ context.Context, _ []string, _ config.Config, langs language.Languages) error {
 		served = langs.Operator
 		return nil
 	}

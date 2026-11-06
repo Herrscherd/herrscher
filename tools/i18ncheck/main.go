@@ -1,9 +1,8 @@
-// Command i18ncheck ratchets the sentences shown to a person in the presentation packages down to their baseline.
+// Command i18ncheck refuses any sentence shown to a person in the presentation packages that is not a typed exemption.
 package main
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -12,38 +11,28 @@ import (
 type exit uint8
 
 const (
-	exitClean   exit = 0
-	exitRatchet exit = 1
-	exitUsage   exit = 2
-	exitNoInput exit = 66
-	exitIOError exit = 74
+	exitClean    exit = 0
+	exitFindings exit = 1
+	exitUsage    exit = 2
+	exitNoInput  exit = 66
+	exitIOError  exit = 74
 )
 
-var errUsage = errors.New("usage: i18ncheck -baseline <file> <root>")
+var errUsage = errors.New("usage: i18ncheck <root>")
 
 func main() {
 	os.Exit(int(run(os.Args[1:], os.Stdout, os.Stderr)))
 }
 
 func run(args []string, stdout, stderr io.Writer) exit {
-	flags := flag.NewFlagSet("i18ncheck", flag.ContinueOnError)
-	flags.SetOutput(stderr)
-	baselinePath := flags.String("baseline", "", "baseline file, one line per package")
-	if err := flags.Parse(args); err != nil {
-		return exitUsage
-	}
-	if *baselinePath == "" || flags.NArg() != 1 {
+	if len(args) != 1 {
 		return report(stderr, errUsage, exitUsage)
 	}
-	allowed, err := readBaseline(*baselinePath)
+	found, err := collect(args[0], presentationScope())
 	if err != nil {
 		return report(stderr, err, exitNoInput)
 	}
-	found, err := collect(flags.Arg(0), presentationScope())
-	if err != nil {
-		return report(stderr, err, exitNoInput)
-	}
-	return compare(found, allowed, stdout, stderr)
+	return reportFindings(found, stdout, stderr)
 }
 
 func report(stderr io.Writer, err error, code exit) exit {

@@ -142,6 +142,7 @@ func TestMutationAddedLiteralIsCaught(t *testing.T) {
 	if err := os.Mkdir(manage, 0o700); err != nil {
 		t.Fatal(err)
 	}
+	completeScope(t, root)
 	mutant := "package manage\n\nfunc announce(m *model) {\n\tm.flash = \"Session stopped unexpectedly\"\n}\n"
 	if err := os.WriteFile(filepath.Join(manage, "mutant.go"), []byte(mutant), 0o600); err != nil {
 		t.Fatal(err)
@@ -166,9 +167,13 @@ func TestProseRules(t *testing.T) {
 		"unknown kind":       true,
 		"go list %s: %w: %s": true,
 		"no host module found (looked for plugins.go)": true,
-		"-v usage":                       false,
+		"-v usage":                       true,
 		"--yes":                          false,
 		"/mode <manuel|edits|plan|auto>": false,
+		"- Something went wrong here.":   true,
+		"/ Something went wrong here.":   true,
+		"< Something went wrong here.":   true,
+		"-v":                             false,
 		"tui.keys.reloaded":              false,
 		"cancelled":                      true,
 		"%w":                             false,
@@ -177,6 +182,25 @@ func TestProseRules(t *testing.T) {
 	} {
 		if got := isProse(text); got != want {
 			t.Errorf("isProse(%q) = %t, want %t", text, got, want)
+		}
+	}
+}
+
+func completeScope(t *testing.T, root string) {
+	t.Helper()
+	for _, entry := range presentationScope() {
+		target := filepath.Join(root, filepath.FromSlash(entry))
+		if strings.HasSuffix(entry, ".go") {
+			if err := os.WriteFile(target, []byte("package main\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
+		if err := os.MkdirAll(target, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(target, "clean.go"), []byte("package fixture\n"), 0o600); err != nil {
+			t.Fatal(err)
 		}
 	}
 }

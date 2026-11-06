@@ -1,6 +1,7 @@
 package host
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"go/ast"
@@ -103,7 +104,7 @@ func sentinelNames(t *testing.T) map[string]bool {
 	for _, file := range hostFiles(t) {
 		for _, spec := range varSpecs(file) {
 			for index, ident := range spec.Names {
-				if strings.HasPrefix(ident.Name, "err") && index < len(spec.Values) && callsErrorsNew(spec.Values[index]) {
+				if index < len(spec.Values) && callsErrorsNew(spec.Values[index]) {
 					names[ident.Name] = true
 				}
 			}
@@ -184,5 +185,19 @@ func recordTableEntry(node ast.Node, names map[string]bool) {
 	}
 	if ident, ok := pair.Elts[0].(*ast.Ident); ok {
 		names[ident.Name] = true
+	}
+}
+
+func TestRegistryCommandErrorsAreWrittenInTheHostLanguage(t *testing.T) {
+	reg, err := NewRegistry(context.Background(), nil, Options{StatePath: t.TempDir() + "/s.json", Language: i18n.French})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = reg.Dispatch(context.Background(), []string{"role", "revoke"})
+	if want := "nommez un principal (voir `role list`)"; err == nil || err.Error() != want {
+		t.Fatalf("role revoke error = %v, want %q", err, want)
+	}
+	if !errors.Is(err, errPrincipalMissing) {
+		t.Fatal("the localized registry error lost its sentinel")
 	}
 }

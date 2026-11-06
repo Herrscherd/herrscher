@@ -30,11 +30,13 @@ func (plainBackend) Close() error { return nil }
 type captureBackend struct {
 	reply     string
 	contexts  []string
+	texts     []string
 	languages []i18n.Language
 }
 
 func (b *captureBackend) Respond(_ context.Context, p contracts.Prompt, _ func(contracts.BackendEvent)) (string, error) {
 	b.contexts = append(b.contexts, p.Context)
+	b.texts = append(b.texts, p.Content)
 	b.languages = append(b.languages, p.Language)
 	return b.reply, nil
 }

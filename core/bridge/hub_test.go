@@ -397,6 +397,26 @@ func TestBridgeAnswersWithNoLanguageAfterAnEmptyLanguageFrame(t *testing.T) {
 	}
 }
 
+func TestRunOneShotAnswersOnlyTheInputAfterControlFrames(t *testing.T) {
+	in := make(chan contracts.Event, 3)
+	be := &captureBackend{reply: "ok"}
+	in <- contracts.Event{T: "interrupt"}
+	in <- contracts.Event{T: "language", Value: "fr"}
+	in <- contracts.Event{T: "input", Text: "bonjour"}
+	out := make(chan contracts.Event, 8)
+
+	err := RunOneShot(context.Background(), func(string) (contracts.Backend, error) { return be, nil }, nil, "channel", in, out)
+	if err != nil {
+		t.Fatalf("RunOneShot: %v", err)
+	}
+	if want := []string{"bonjour"}; !slices.Equal(be.texts, want) {
+		t.Fatalf("turn texts = %q, want %q", be.texts, want)
+	}
+	if want := []i18n.Language{i18n.French}; !slices.Equal(be.languages, want) {
+		t.Fatalf("turn languages = %v, want %v", be.languages, want)
+	}
+}
+
 func TestBridgeIgnoresUnknownFrameTypes(t *testing.T) {
 	in := make(chan contracts.Event, 3)
 	be := &captureBackend{reply: "ok"}

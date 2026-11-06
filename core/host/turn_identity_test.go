@@ -20,6 +20,19 @@ func receiveTurnEvent(t *testing.T, ch <-chan contracts.Event) contracts.Event {
 	}
 }
 
+func relayTurnFrames(cancel context.CancelFunc, toBridge <-chan contracts.Event, frames chan<- contracts.Event, fromBridge chan<- contracts.Event, count int) {
+	for range count {
+		select {
+		case event := <-toBridge:
+			frames <- event
+		case <-time.After(time.Second):
+			cancel()
+			return
+		}
+	}
+	fromBridge <- contracts.Event{T: eventReply, Text: "done", Done: true}
+}
+
 func identifiedTestDriver(to chan<- contracts.Event, from <-chan contracts.Event) (*sessionDriver, <-chan contracts.Event) {
 	d := newSessionDriver("same-name", nil, to, from)
 	d.incarnation = "incarnation-a"
@@ -190,11 +203,7 @@ func TestDriverSendsAnEmptyLanguageFrameWhenTheSessionHasNoLanguage(t *testing.T
 	go d.pump(ctx)
 
 	frames := make(chan contracts.Event, 2)
-	go func() {
-		frames <- <-toBridge
-		frames <- <-toBridge
-		fromBridge <- contracts.Event{T: eventReply, Text: "done", Done: true}
-	}()
+	go relayTurnFrames(cancel, toBridge, frames, fromBridge, 2)
 	if _, ok := d.SeedAndWaitWithTurnID(ctx, "bonjour", "turn-1"); !ok {
 		t.Fatal("the seeded turn must complete")
 	}
@@ -215,11 +224,7 @@ func TestDriverTellsTheBridgeTheSessionLanguageBeforeEachTurn(t *testing.T) {
 	go d.pump(ctx)
 
 	frames := make(chan contracts.Event, 2)
-	go func() {
-		frames <- <-toBridge
-		frames <- <-toBridge
-		fromBridge <- contracts.Event{T: eventReply, Text: "done", Done: true}
-	}()
+	go relayTurnFrames(cancel, toBridge, frames, fromBridge, 2)
 	if _, ok := d.SeedAndWaitWithTurnID(ctx, "bonjour", "turn-1"); !ok {
 		t.Fatal("the seeded turn must complete")
 	}

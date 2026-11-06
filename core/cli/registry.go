@@ -283,11 +283,7 @@ type Spec struct {
 	Params []contracts.Param `json:"params,omitempty"`
 }
 
-// Specs returns every registered command's shape, sorted by path, with its help
-// texts rendered in lang. It exists so a frontend's command menu is derived from
-// what the daemon actually dispatches rather than re-typed beside it: a hand-kept
-// list is a list that silently falls behind, which is how a palette ends up
-// advertising seven of twenty-nine verbs.
+// Specs returns every registered command's shape, sorted by path, with its help texts rendered in lang.
 func (r *Registry) Specs(lang i18n.Language) []Spec {
 	translator := clitext.For(lang)
 	out := make([]Spec, 0, len(r.cmds))

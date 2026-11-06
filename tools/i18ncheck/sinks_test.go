@@ -139,6 +139,12 @@ func TestMutationsOnePerExtension(t *testing.T) {
 			source:    "package manage\n\nvar mutant = contracts.New(\"upload\").Param(\"name\", \"Name of the upload to retry\", true)\n",
 			want:      "Name of the upload to retry",
 		},
+		"help text of a value param": {
+			directory: "manage",
+			file:      "mutant.go",
+			source:    "package manage\n\nvar mutant = contracts.New(\"upload\").ValueParam(\"name\", \"Name of the upload to retry\", true)\n",
+			want:      "Name of the upload to retry",
+		},
 		"core host scope": {
 			directory: "core/host",
 			file:      "mutant.go",

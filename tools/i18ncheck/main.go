@@ -6,8 +6,7 @@
 // model literal, given to contracts.DataResult or as the value of contracts.Text, used as the message of
 // fmt.Errorf or errors.New, given as the help of a command (Help) or of a param (Param, ValueParam), or built
 // from such a string by concatenation or from a package-level string constant or variable of the same
-// package. A bare identifier is resolved by its name against those package-level values alone, so a local
-// variable that shares the name of one of them is read as that package value. Flags, command syntax, single
+// package. Flags, command syntax, single
 // words, and the programmer messages listed in programmerErrors are never reported.
 //
 // The baseline holds one line per package, "<package> <count>", with the number of literals that package

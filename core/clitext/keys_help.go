@@ -1,6 +1,6 @@
 package clitext
 
-// Keys of the help texts of the commands and of their params.
+// CmdHelp and CmdParam name the help texts of the commands and their params.
 const (
 	CmdHelpAgentCreate                    = "cli.help.cmd.agent.create"
 	CmdHelpAgentList                      = "cli.help.cmd.agent.list"

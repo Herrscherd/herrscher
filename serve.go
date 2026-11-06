@@ -44,7 +44,13 @@ func withCompactionConfig(opts *host.Options, cfg config.Config) {
 	opts.ContextLimits = cfg.ContextLimits
 }
 
+type serveFunc func(ctx context.Context, args []string, open *openWindow, cfg config.Config, langs language.Languages) error
+
 func runServe(ctx context.Context, args []string, open *openWindow) error {
+	return runServeWith(ctx, args, open, serveWith)
+}
+
+func runServeWith(ctx context.Context, args []string, open *openWindow, serve serveFunc) error {
 	cfg, err := config.Load(scanFlag(args, "config", config.DefaultPath()))
 	if err != nil {
 		return err
@@ -53,7 +59,7 @@ func runServe(ctx context.Context, args []string, open *openWindow) error {
 	if err != nil {
 		return err
 	}
-	return serveWith(ctx, args, open, cfg, langs)
+	return serve(ctx, args, open, cfg, langs)
 }
 
 func serveLanguages(cfg config.Config, args []string) (language.Languages, error) {

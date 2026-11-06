@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -197,17 +198,22 @@ func TestStateFlagSelectsTheStateFileServeReads(t *testing.T) {
 	}
 }
 
-func TestServeReadsTheLanguageFromTheStateFileItIsGiven(t *testing.T) {
+func TestRunServeReadsTheLanguageFromTheStateFileItIsGiven(t *testing.T) {
 	clearPublishedLanguage(t)
 	custom := filepath.Join(t.TempDir(), "custom.json")
 	if err := os.WriteFile(custom, []byte(`{"operator_lang":"fr"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	langs, err := serveLanguages(config.Config{Language: "en"}, []string{"-state", custom})
-	if err != nil {
+	var served i18n.Language
+	capture := func(_ context.Context, _ []string, _ *openWindow, _ config.Config, langs language.Languages) error {
+		served = langs.Operator
+		return nil
+	}
+	args := []string{"-config", filepath.Join(t.TempDir(), "absent.json"), "-state", custom}
+	if err := runServeWith(context.Background(), args, nil, capture); err != nil {
 		t.Fatal(err)
 	}
-	if langs.Operator != i18n.French {
-		t.Fatalf("serve read operator = %v, want French from the -state file", langs.Operator)
+	if served != i18n.French {
+		t.Fatalf("runServe served with operator %v, want French from the -state file", served)
 	}
 }

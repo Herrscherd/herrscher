@@ -185,7 +185,7 @@ func TestPlanMenuEscKeepsPlanningWithoutTouchingTheHost(t *testing.T) {
 	if len(f.dispatched) != before || len(f.submitted) != 0 {
 		t.Fatal("keeping the plan open must neither change the mode nor submit")
 	}
-	if !strings.Contains(tabText(m.tabs["a"]), "reste ouvert") {
+	if !strings.Contains(tabText(m.tabs["a"]), "stays open") {
 		t.Fatalf("keeping the plan open must say so in the tab: %q", tabText(m.tabs["a"]))
 	}
 	if got := m.tabs["a"].modeID(); got != modePlan {
@@ -313,7 +313,7 @@ func TestModeStripKeepsOneGapAroundEverySegment(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	tb.setMode(modeManual)
 	strip := ansi.Strip(m.modeStripView(tb, 120)[0])
-	if !strings.Contains(strip, "Manuel  →  Édits acceptés  →  Plan  →  ⚠ Auto") {
+	if !strings.Contains(strip, "Manual  →  Edits accepted  →  Plan  →  ⚠ Auto") {
 		t.Errorf("mode strip = %q, want an even gap around each segment", strip)
 	}
 }
@@ -323,7 +323,7 @@ func TestPlanMenuShiftTabLeavesTheMenuForTheNextMode(t *testing.T) {
 	m := modeSession(f)
 	m.tabs["a"].setMode(modePlan)
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "1. read", Done: true}})
-	if !strings.Contains(ansi.Strip(m.planMenuView()), "⇧⇥ changer de mode") {
+	if !strings.Contains(ansi.Strip(m.planMenuView()), "⇧⇥ change mode") {
 		t.Fatalf("the plan menu footer must offer ⇧⇥: %q", ansi.Strip(m.planMenuView()))
 	}
 
@@ -343,10 +343,10 @@ func TestModeLabelsStayWholeInShortWindows(t *testing.T) {
 		m, _ := barModelAt(t, "")
 		m.Update(tea.WindowSizeMsg{Width: size.width, Height: size.height})
 		view := ansi.Strip(m.View())
-		if !strings.Contains(view, "Manuel  →  Édits acceptés  →  Plan") && size.width >= 60 {
+		if !strings.Contains(view, "Manual  →  Edits accepted  →  Plan") && size.width >= 60 {
 			t.Fatalf("%dx%d: the mode strip must keep whole labels:\n%s", size.width, size.height, view)
 		}
-		if strings.Contains(view, "Man  →") || strings.Contains(view, "Édits  →") {
+		if strings.Contains(view, "Man  →") || strings.Contains(view, "Edits  →") {
 			t.Fatalf("%dx%d: a mode label must not be shortened:\n%s", size.width, size.height, view)
 		}
 	}

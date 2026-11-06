@@ -123,7 +123,7 @@ func (m *model) turnStartCmd(channel string) tea.Cmd {
 func (m *model) openDiff(review bool) tea.Cmd {
 	chat := m.tabs[m.active]
 	if chat == nil {
-		m.flash = "no session open"
+		m.flash = m.tr.t("tui.common.no_session", nil)
 		return nil
 	}
 	panel := &m.diff
@@ -188,7 +188,7 @@ func (m *model) releaseQueuedTurns(msg turnStartMsg) {
 		return
 	}
 	if msg.err != nil {
-		m.flash = "instantané du tour impossible : " + msg.err.Error()
+		m.flash = m.tr.t("tui.diffpanel.snapshot_failed", map[string]any{tplArgReason: localizedReason(m.tr, msg.err)})
 	}
 	chat.turnStart = msg.tree
 	for _, turn := range chat.queued {
@@ -327,7 +327,7 @@ func (m *model) sendDiffNote() tea.Cmd {
 		return nil
 	}
 	panel.dlg, panel.field = dialogNone, ""
-	panel.notice, panel.noticeBad = "consigne envoyée sur "+file.Path, false
+	panel.notice, panel.noticeBad = m.tr.t("tui.diffpanel.sent_to", map[string]any{"Path": file.Path}), false
 	return m.submitTo(panel.channel, file.Path+": "+text, nil)
 }
 
@@ -349,27 +349,28 @@ func (m *model) commitCmd(withPR bool) tea.Cmd {
 	}
 	if message == "" {
 		panel.dlg = dialogNone
-		panel.notice, panel.noticeBad = "rien à commiter dans cette portée", true
+		panel.notice, panel.noticeBad = m.tr.t("tui.diffpanel.nothing_to_commit", nil), true
 		return nil
 	}
 	panel.busy, panel.dlg, panel.editing = true, dialogNone, false
 	subject, body := splitMessage(message)
+	trans := m.tr
 	repo, base := m.diffRepo(panel.channel), panel.report.Base
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), prCallLimit+gitCallLimit)
 		defer cancel()
 		sha, err := repo.commit(ctx, message)
 		if err != nil {
-			return diffActionMsg{notice: "commit échoué : " + err.Error(), bad: true}
+			return diffActionMsg{notice: trans.t("tui.diffpanel.commit_failed", map[string]any{tplArgReason: localizedReason(trans, err)}), bad: true}
 		}
 		if !withPR {
-			return diffActionMsg{notice: "commit " + sha + " " + subject}
+			return diffActionMsg{notice: trans.t("tui.diffpanel.committed", map[string]any{tplArgSha: sha, "Subject": subject})}
 		}
 		number, err := repo.openPR(ctx, base, subject, body)
 		if err != nil {
-			return diffActionMsg{notice: "commit " + sha + ", PR échouée : " + err.Error(), bad: true}
+			return diffActionMsg{notice: trans.t("tui.diffpanel.pr_failed", map[string]any{tplArgSha: sha, tplArgReason: localizedReason(trans, err)}), bad: true}
 		}
-		return diffActionMsg{notice: fmt.Sprintf("commit %s, PR #%d ouverte contre %s", sha, number, base)}
+		return diffActionMsg{notice: trans.t("tui.diffpanel.pr_opened", map[string]any{tplArgSha: sha, "Number": number, "Base": base})}
 	}
 }
 
@@ -497,15 +498,15 @@ func fitLines(lines []string, height int) []string {
 
 func (m *model) diffHeaderLine(width int) string {
 	panel := &m.diff
-	title := "Diff du tour"
+	title := m.tr.t("tui.diffpanel.title_turn", nil)
 	if panel.review {
-		title = "Revue"
+		title = m.tr.t("tui.diffpanel.title_review", nil)
 	}
-	turn := "tour"
+	turn := m.tr.t("tui.diffpanel.turn", nil)
 	if !panel.startedAt.IsZero() {
-		turn = "tour " + panel.startedAt.Format("15:04")
+		turn = m.tr.t("tui.diffpanel.turn_at", map[string]any{"Time": panel.startedAt.Format("15:04")})
 	}
-	branch := "branche"
+	branch := m.tr.t("tui.diffpanel.branch", nil)
 	turnLabel, branchLabel := m.st.dim.Render(turn), m.st.dim.Render(branch)
 	if panel.scope == diffScopeTurn {
 		turnLabel = m.st.overlaySel.Render(turn)
@@ -516,26 +517,25 @@ func (m *model) diffHeaderLine(width int) string {
 	return truncate(left, width)
 }
 
-const diffKeysContext = "comme /review, en panneau "
-
 func (m *model) diffKeysLine(width int) string {
 	hints := m.diffFooterHints()
 	full := " " + strings.Join(hints, " · ")
-	if lipgloss.Width(full)+1+lipgloss.Width(diffKeysContext) <= width {
-		return m.st.dim.Render(joinRow(width, full, diffKeysContext))
+	keysContext := m.tr.t("tui.diffpanel.keys_context", nil)
+	if lipgloss.Width(full)+1+lipgloss.Width(keysContext) <= width {
+		return m.st.dim.Render(joinRow(width, full, keysContext))
 	}
 	return m.st.dim.Render(foldKeyHints(hints, width))
 }
 
 func (m *model) diffFooterHints() []string {
 	return []string{
-		m.labelledHint(actDiffDismiss, "fermer le panneau", ctxDiffPanel),
-		m.pairHint(actDiffPrevFile, actDiffNextFile, "fichier", ctxDiffPanel),
-		m.labelledHint(actDiffReviewed, "relu", ctxDiffPanel),
-		m.labelledHint(actDiffNote, "consigne", ctxDiffPanel),
-		m.labelledHint(actDiffCommit, "commit", ctxDiffPanel),
-		m.labelledHint(actDiffPR, "PR", ctxDiffPanel),
-		m.labelledHint(actCycleDiffBase, "tour ou branche", ctxDiffPanel),
+		m.labelledHint(actDiffDismiss, m.tr.t("tui.diffpanel.hint_close", nil), ctxDiffPanel),
+		m.pairHint(actDiffPrevFile, actDiffNextFile, m.tr.t("tui.diffpanel.hint_file", nil), ctxDiffPanel),
+		m.labelledHint(actDiffReviewed, m.tr.t("tui.diffpanel.hint_reviewed", nil), ctxDiffPanel),
+		m.labelledHint(actDiffNote, m.tr.t("tui.diffpanel.hint_note", nil), ctxDiffPanel),
+		m.labelledHint(actDiffCommit, m.tr.t("tui.diffpanel.commit", nil), ctxDiffPanel),
+		m.labelledHint(actDiffPR, m.tr.t("tui.diffpanel.pr", nil), ctxDiffPanel),
+		m.labelledHint(actCycleDiffBase, m.tr.t("tui.diffpanel.hint_base", nil), ctxDiffPanel),
 	}
 }
 
@@ -560,10 +560,10 @@ func (m *model) diffMiddle(width, height int) []string {
 		return nil
 	}
 	if panel.err != nil {
-		return fitLines([]string{m.st.red.Render(truncate(" "+panel.err.Error(), width))}, height)
+		return fitLines([]string{m.st.red.Render(truncate(" "+localizedReason(m.tr, panel.err), width))}, height)
 	}
 	if panel.loading && len(panel.report.Files) == 0 {
-		return fitLines([]string{m.st.dim.Render(" chargement…")}, height)
+		return fitLines([]string{m.st.dim.Render(" " + m.tr.t("tui.diffpanel.loading", nil))}, height)
 	}
 	if width >= diffWideWidth {
 		left := m.diffFileColumn(diffListWidth, height)
@@ -584,14 +584,14 @@ func (m *model) diffFileColumn(width, height int) []string {
 	panel := &m.diff
 	footer := []string{m.diffSummary(width)}
 	if panel.scope == diffScopeBranch {
-		footer = append(footer, m.st.dim.Render(truncate(fmt.Sprintf("   branche : %d commits de plus sur %s", panel.report.Ahead, panel.report.Base), width)))
+		footer = append(footer, m.st.dim.Render(truncate(m.tr.t("tui.diffpanel.branch_ahead", map[string]any{tplArgCount: panel.report.Ahead, "Base": panel.report.Base}), width)))
 	}
 	footer = append(footer, "",
-		m.diffAction(actDiffReviewed, "marquer relu", width),
-		m.diffAction(actDiffNote, "consigne sur ce fichier", width),
-		m.diffAction(actDiffCommit, "commit du tour", width),
-		m.diffAction(actDiffPR, "commit puis PR", width),
-		m.diffAction(actDiffOpenFile, "ouvrir dans $EDITOR", width))
+		m.diffAction(actDiffReviewed, m.tr.t("tui.diffpanel.act_reviewed", nil), width),
+		m.diffAction(actDiffNote, m.tr.t("tui.diffpanel.act_note", nil), width),
+		m.diffAction(actDiffCommit, m.tr.t("tui.diffpanel.act_commit", nil), width),
+		m.diffAction(actDiffPR, m.tr.t("tui.diffpanel.act_commit_pr", nil), width),
+		m.diffAction(actDiffOpenFile, m.tr.t("tui.diffpanel.act_open_editor", nil), width))
 	rows := m.diffFileRows(width, max(1, height-len(footer)))
 	return fitLines(append(rows, footer...), height)
 }
@@ -603,7 +603,7 @@ func (m *model) diffAction(action keyAction, label string, width int) string {
 func (m *model) diffFileRows(width, limit int) []string {
 	panel := &m.diff
 	if len(panel.report.Files) == 0 {
-		return []string{m.st.dim.Render(truncate(" aucun changement dans cette portée", width))}
+		return []string{m.st.dim.Render(truncate(" "+m.tr.t("tui.diffpanel.no_change_scope", nil), width))}
 	}
 	start := 0
 	if panel.sel >= limit {
@@ -642,7 +642,7 @@ func (m *model) diffFileRow(index, width int) string {
 
 func (m *model) fileStats(file diffFile, selected bool) string {
 	if file.Binary {
-		return m.paint(m.st.dim, "binary", selected)
+		return m.paint(m.st.dim, m.tr.t("tui.diffpanel.binary", nil), selected)
 	}
 	return m.signedStats(file.Added, file.Deleted, selected)
 }
@@ -685,8 +685,8 @@ func commonDirPrefix(files []diffFile) string {
 
 func (m *model) diffSummary(width int) string {
 	panel := &m.diff
-	text := m.st.dim.Render(fmt.Sprintf("   %d fichiers ", len(panel.report.Files))) + m.totalStats(panel.report.Files) +
-		m.st.dim.Render(fmt.Sprintf(" · relus %d/%d", panel.reviewedCount(), len(panel.report.Files)))
+	text := m.st.dim.Render(m.tr.t("tui.diffpanel.files_summary", map[string]any{tplArgCount: len(panel.report.Files)})) + m.totalStats(panel.report.Files) +
+		m.st.dim.Render(m.tr.t("tui.diffpanel.reviewed_count", map[string]any{"Done": panel.reviewedCount(), tplArgTotal: len(panel.report.Files)}))
 	return truncate(text, width)
 }
 
@@ -706,15 +706,15 @@ func (m *model) diffPane(width, height int) []string {
 	}
 	file, ok := panel.selected()
 	if !ok {
-		return fitLines([]string{m.st.dim.Render(truncate(" rien à afficher", width))}, height)
+		return fitLines([]string{m.st.dim.Render(truncate(" "+m.tr.t("tui.diffpanel.nothing_to_show", nil), width))}, height)
 	}
 	twoNums := width >= diffTwoNumsWidth
 	lines := []string{m.diffPaneHeader(file, width)}
 	switch {
 	case file.Binary:
-		lines = append(lines, m.st.dim.Render(truncate(" fichier binaire : pas de diff texte", width)))
+		lines = append(lines, m.st.dim.Render(truncate(" "+m.tr.t("tui.diffpanel.binary_no_text", nil), width)))
 	case len(file.Rows) == 0:
-		lines = append(lines, m.st.dim.Render(truncate(" aucun changement textuel", width)))
+		lines = append(lines, m.st.dim.Render(truncate(" "+m.tr.t("tui.diffpanel.no_text_change", nil), width)))
 	default:
 		start := clampIndex(panel.scroll, len(file.Rows)-1)
 		end := min(start+height-1, len(file.Rows))
@@ -726,10 +726,10 @@ func (m *model) diffPane(width, height int) []string {
 }
 
 func (m *model) diffPaneHeader(file diffFile, width int) string {
-	right := m.fileStats(file, false) + m.st.dim.Render("   ancien · nouveau ")
+	right := m.fileStats(file, false) + m.st.dim.Render(m.tr.t("tui.diffpanel.old_new", nil))
 	tag := ""
 	if file.Status == changeAdded {
-		tag = "  nouveau"
+		tag = "  " + m.tr.t("tui.diffpanel.added", nil)
 	}
 	pathWidth := width - lipgloss.Width(right) - lipgloss.Width(tag) - 1
 	left := m.st.text.Render(truncateLeft(" "+file.Path, pathWidth)) + m.st.violet.Render(tag)
@@ -809,8 +809,8 @@ func (m *model) diffBelow(width int) []string {
 func (m *model) diffCommitBox(width int) []string {
 	panel := &m.diff
 	files := len(panel.report.Files)
-	title := m.st.strong.Render("Commit") + m.st.dim.Render(fmt.Sprintf(" · %s · %d fichiers ", panel.report.Branch, files)) + m.totalStats(panel.report.Files)
-	content := []string{title, m.st.dim.Render("auteur " + panel.report.Author)}
+	title := m.st.strong.Render(m.tr.t("tui.diffpanel.commit_title", nil)) + m.st.dim.Render(m.tr.t("tui.diffpanel.commit_meta", map[string]any{"Branch": panel.report.Branch, tplArgCount: files})) + m.totalStats(panel.report.Files)
+	content := []string{title, m.st.dim.Render(m.tr.t("tui.diffpanel.author", nil) + panel.report.Author)}
 	for index, line := range strings.Split(panel.message, "\n") {
 		if index == 0 {
 			line = m.st.strong.Render(line)
@@ -818,9 +818,9 @@ func (m *model) diffCommitBox(width int) []string {
 		content = append(content, m.st.text.Render(line))
 	}
 	if panel.editing {
-		content = append(content, m.st.dim.Render(joinNonEmpty(m.labelledHint(actNewline, "nouvelle ligne", ctxDiffMessage), m.labelledHint(actDiffStopEdit, "fin d’édition", ctxDiffMessage), m.labelledHint(actDiffCommit, "commit", ctxDiffMessage))))
+		content = append(content, m.st.dim.Render(joinNonEmpty(m.labelledHint(actNewline, m.tr.t("tui.diffpanel.newline", nil), ctxDiffMessage), m.labelledHint(actDiffStopEdit, m.tr.t("tui.diffpanel.end_edit", nil), ctxDiffMessage), m.labelledHint(actDiffCommit, m.tr.t("tui.diffpanel.commit", nil), ctxDiffMessage))))
 	} else {
-		content = append(content, m.st.dim.Render(joinNonEmpty(m.labelledHint(actDiffCommit, "commit", ctxDiffDialog), m.labelledHint(actDiffPR, "commit puis PR", ctxDiffDialog), m.labelledHint(actDiffEdit, "modifier", ctxDiffDialog), m.labelledHint(actDiffDismiss, "annuler", ctxDiffDialog))))
+		content = append(content, m.st.dim.Render(joinNonEmpty(m.labelledHint(actDiffCommit, m.tr.t("tui.diffpanel.commit", nil), ctxDiffDialog), m.labelledHint(actDiffPR, m.tr.t("tui.diffpanel.act_commit_pr", nil), ctxDiffDialog), m.labelledHint(actDiffEdit, m.tr.t("tui.diffpanel.edit", nil), ctxDiffDialog), m.labelledHint(actDiffDismiss, m.tr.t("tui.common.cancel", nil), ctxDiffDialog))))
 	}
 	return boxLines(content, width)
 }
@@ -828,12 +828,12 @@ func (m *model) diffCommitBox(width int) []string {
 func (m *model) diffNoteBox(width int) []string {
 	panel := &m.diff
 	file, _ := panel.selected()
-	title := m.st.strong.Render(m.st.glyphs.note+" CONSIGNE") + m.st.dim.Render(" · "+panel.displayPath(file.Path))
+	title := m.st.strong.Render(m.st.glyphs.note+" "+m.tr.t("tui.diffpanel.note_title", nil)) + m.st.dim.Render(" · "+panel.displayPath(file.Path))
 	field := m.st.text.Render(panel.field) + m.st.accent.Render(m.st.glyphs.caret)
 	if panel.field == "" {
-		field = m.st.dim.Render("que doit faire l’agent de ce fichier ?") + m.st.accent.Render(m.st.glyphs.caret)
+		field = m.st.dim.Render(m.tr.t("tui.diffpanel.note_prompt", nil)) + m.st.accent.Render(m.st.glyphs.caret)
 	}
-	content := []string{title, m.st.text.Render("› ") + field, m.st.dim.Render(joinNonEmpty(m.labelledHint(actDiffSendNote, "envoyer à "+panel.session, ctxDiffNote), m.labelledHint(actDiffDismiss, "annuler", ctxDiffNote)))}
+	content := []string{title, m.st.text.Render("› ") + field, m.st.dim.Render(joinNonEmpty(m.labelledHint(actDiffSendNote, m.tr.t("tui.diffpanel.send_to", map[string]any{"Session": panel.session}), ctxDiffNote), m.labelledHint(actDiffDismiss, m.tr.t("tui.common.cancel", nil), ctxDiffNote)))}
 	return boxLines(content, width)
 }
 

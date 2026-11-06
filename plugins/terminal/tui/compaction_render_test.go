@@ -60,8 +60,8 @@ func TestCompactionNoticeShowsTheFiguresOnlyWhenMeasured(t *testing.T) {
 			m.renderInto(tb, contracts.Event{T: eventCompactionStarted, Value: "automatic", Tokens: tc.started})
 			m.renderInto(tb, contracts.Event{T: eventCompactionDone, Value: "automatic", Tokens: tc.done})
 			last := tb.entries[len(tb.entries)-1]
-			if last.role != roleNotice || last.text != "compacté : "+tc.want {
-				t.Fatalf("notice = %+v, want %q", last, "compacté : "+tc.want)
+			if last.role != roleNotice || last.text != "compacted: "+tc.want {
+				t.Fatalf("notice = %+v, want %q", last, "compacted: "+tc.want)
 			}
 		})
 	}
@@ -118,8 +118,8 @@ func TestContextViewSaysNoAutoCompactionInSmallWindows(t *testing.T) {
 		tb.measureContext(contracts.Event{TokensIn: 82_000})
 		m.openContext()
 		view := ansi.Strip(m.contextView())
-		if !strings.Contains(view, "pas de compaction auto") {
-			t.Errorf("%dx%d: the total line must say there is no automatic compaction:\n%s", size.Width, size.Height, view)
+		if !strings.Contains(view, "no auto-compaction") {
+			t.Errorf("%dx%d: the total line must say there is no auto-compaction:\n%s", size.Width, size.Height, view)
 		}
 		if rows := strings.Count(view, "\n") + 1; rows > size.Height {
 			t.Errorf("%dx%d: the context view takes %d rows, more than the window", size.Width, size.Height, rows)
@@ -134,12 +134,12 @@ func TestNoticeEventAddsANoticeLine(t *testing.T) {
 	tb := m.ensureTab("c")
 	m.active = "c"
 
-	m.renderInto(tb, contracts.Event{T: eventNotice, Text: "contexte compacté"})
+	m.renderInto(tb, contracts.Event{T: eventNotice, Text: "context compacted"})
 	if len(tb.entries) == 0 {
 		t.Fatal("no entry rendered for the notice")
 	}
 	last := tb.entries[len(tb.entries)-1]
-	if last.role != roleNotice || last.text != "contexte compacté" {
+	if last.role != roleNotice || last.text != "context compacted" {
 		t.Fatalf("last entry = %+v, want the notice as a notice line", last)
 	}
 }

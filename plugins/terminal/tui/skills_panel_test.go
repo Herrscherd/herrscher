@@ -34,7 +34,7 @@ func TestSkillsPanelRendersRows(t *testing.T) {
 func TestSkillsPanelEmpty(t *testing.T) {
 	m := newTestModel()
 	m.skillsOpen = true
-	if !strings.Contains(m.skillsView(), "aucune skill") {
+	if !strings.Contains(m.skillsView(), "no skill in") {
 		t.Fatalf("empty panel must explain there are no skills: %q", m.skillsView())
 	}
 }

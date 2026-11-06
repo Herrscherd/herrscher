@@ -16,7 +16,7 @@ func transcriptWidths() []int {
 }
 
 func toolTestView(expand bool) view {
-	return view{caps: Capabilities{Colour: ColourTrue}, st: testStyles(), spin: "⣾", expand: expand}
+	return view{tr: newTranslator(), caps: Capabilities{Colour: ColourTrue}, st: testStyles(), spin: "⣾", expand: expand}
 }
 
 func assertFitsWidth(t *testing.T, out string, width int) {
@@ -117,7 +117,7 @@ func TestDiffFitsEveryTranscriptWidth(t *testing.T) {
 func TestDiffFoldsAfterFourLinesUnlessExpanded(t *testing.T) {
 	body := "Edit a.go\n@@ -1,6 +1,6 @@\n+a\n+b\n+c\n+d\n+e\n+f"
 	folded := ansi.Strip(renderTool(entry{role: roleTool, text: body, open: true}, 120, toolTestView(false)))
-	if !strings.Contains(folded, "2 ⌥E lignes de plus") {
+	if !strings.Contains(folded, "2 ⌥E more lines") {
 		t.Fatalf("a diff past four lines folds with the count: %q", folded)
 	}
 	expanded := ansi.Strip(renderTool(entry{role: roleTool, text: body, open: true}, 120, toolTestView(true)))
@@ -133,7 +133,7 @@ func TestThinkingFoldedShowsLabelAndHint(t *testing.T) {
 		assertFitsWidth(t, out, width)
 	}
 	got := ansi.Strip(renderThinking(item, 120, toolTestView(false)))
-	for _, want := range []string{"▸", "Réflexion · 14s · 1.2k tokens", "⌃O"} {
+	for _, want := range []string{"▸", "Thinking · 14s · 1.2k tokens", "⌃O"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("folded thinking missing %q: %q", want, got)
 		}
@@ -181,34 +181,34 @@ func TestSubagentTreeMarksEachState(t *testing.T) {
 	if !strings.Contains(rows[0], unicodeGlyphs().success) || !strings.Contains(rows[1], "⣾") || !strings.Contains(rows[2], unicodeGlyphs().failure) {
 		t.Fatalf("states must show check, spinner and cross: %q", rows)
 	}
-	if !strings.Contains(rows[2], subagentRetryNote) {
+	if !strings.Contains(rows[2], newTranslator().t("tui.render.subagent_retry", nil)) {
 		t.Fatalf("a timed out agent must say it was retried: %q", rows[2])
 	}
 }
 
 func TestBusyLineCarriesVerbTimeTokensCostAndEscape(t *testing.T) {
 	for _, width := range transcriptWidths() {
-		out := busyLine(width, testStyles(), "⣾", "1m12s", "4.2k", "$0.31", "échap interrompre")
+		out := busyLine(newTranslator(), width, testStyles(), "⣾", "1m12s", "4.2k", "$0.31", "esc to interrupt")
 		assertFitsWidth(t, out, width)
 	}
-	got := ansi.Strip(busyLine(120, testStyles(), "⣾", "1m12s", "4.2k", "$0.31", "échap interrompre"))
-	for _, want := range []string{workingVerb, "1m12s", "↑ 4.2k", "$0.31", "échap interrompre"} {
+	got := ansi.Strip(busyLine(newTranslator(), 120, testStyles(), "⣾", "1m12s", "4.2k", "$0.31", "esc to interrupt"))
+	for _, want := range []string{newTranslator().t("tui.common.working", nil), "1m12s", "↑ 4.2k", "$0.31", "esc to interrupt"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("busy line %q missing %q", got, want)
 		}
 	}
-	if !strings.HasSuffix(got, "échap interrompre") {
+	if !strings.HasSuffix(got, "esc to interrupt") {
 		t.Fatalf("the escape hint must sit on the right: %q", got)
 	}
 }
 
 func TestThinkingHeadNamesTheFoldKeyWithItsVerb(t *testing.T) {
 	folded := ansi.Strip(renderThinking(entry{role: roleThinking, text: "x", span: time.Second}, 120, toolTestView(false)))
-	if !strings.Contains(folded, "déplier · ⌃O") {
+	if !strings.Contains(folded, "fold · ⌃O") {
 		t.Fatalf("folded thinking must offer to unfold with ⌃O: %q", folded)
 	}
 	open := ansi.Strip(renderThinking(entry{role: roleThinking, text: "x", span: time.Second, open: true}, 120, toolTestView(false)))
-	if !strings.Contains(open, "replier · ⌃O") {
+	if !strings.Contains(open, "fold · ⌃O") {
 		t.Fatalf("open thinking must offer to fold with ⌃O: %q", open)
 	}
 }

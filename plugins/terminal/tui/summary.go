@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"slices"
 	"sort"
 	"strings"
@@ -20,7 +19,6 @@ const (
 	panelIndent     = 3
 	panelNoteStart  = panelIndent + panelKeyWidth
 	panelValueWidth = 24
-	panelTitle      = "Résumé"
 	skillPrivate    = "private"
 	scheduleLive    = "live"
 	nextPrefix      = "next "
@@ -174,22 +172,22 @@ func sortedKeys(set map[string]bool) []string {
 
 func (m *model) panelLines() []string {
 	vendors, gateways := m.panelFacets()
-	rows := []string{m.st.titledRule(m.st.dim, panelTitle, panelWidth)}
-	rows = append(rows, m.panelRow("vendeurs", m.st.text.Render(valueOrNA(strings.Join(vendors, " ")))))
+	rows := []string{m.st.titledRule(m.st.dim, m.tr.t("tui.summary.title", nil), panelWidth)}
+	rows = append(rows, m.panelRow(m.tr.t("tui.summary.field_vendors", nil), m.st.text.Render(valueOrNA(strings.Join(vendors, " ")))))
 	for index, line := range wrapWords(gateways, panelValueWidth) {
 		key := ""
 		if index == 0 {
-			key = "passerelles"
+			key = m.tr.t("tui.summary.field_gateways", nil)
 		}
 		rows = append(rows, m.panelRow(key, m.st.violet.Render(line)))
 	}
 	rows = append(rows,
-		m.panelRow("mémoire", m.st.text.Render(unavailable)),
-		m.panelRow("skills", m.st.green.Render(m.skillsValue())),
-		m.panelNote("écrite par l’agent"),
-		m.panelRow("cron", m.st.text.Render(m.cronValue())),
-		m.panelRow("politique", m.st.text.Render(m.policyValue())),
-		m.panelNote("même règle partout"),
+		m.panelRow(m.tr.t("tui.summary.field_memory", nil), m.st.text.Render(unavailable)),
+		m.panelRow(m.tr.t("tui.summary.field_skills", nil), m.st.green.Render(m.skillsValue())),
+		m.panelNote(m.tr.t("tui.summary.note_agent_written", nil)),
+		m.panelRow(m.tr.t("tui.summary.field_cron", nil), m.st.text.Render(m.cronValue())),
+		m.panelRow(m.tr.t("tui.summary.field_policy", nil), m.st.text.Render(m.policyValue())),
+		m.panelNote(m.tr.t("tui.summary.note_same_rule", nil)),
 	)
 	return rows
 }
@@ -199,7 +197,7 @@ func (m *model) skillsValue() string {
 	if skills == nil {
 		return unavailable
 	}
-	return fmt.Sprintf("%d · %d à approuver", skills.total, skills.pending)
+	return m.tr.t("tui.summary.skills_value", map[string]any{tplArgTotal: skills.total, "Pending": skills.pending})
 }
 
 func (m *model) cronValue() string {
@@ -207,7 +205,7 @@ func (m *model) cronValue() string {
 	if cron == nil {
 		return unavailable
 	}
-	value := fmt.Sprintf("%d %s", cron.live, choosePlural(cron.live, "tour", "tours"))
+	value := m.tr.t("tui.summary.cron_turns", map[string]any{tplArgCount: cron.live})
 	if cron.next != "" {
 		value += " · " + cron.next
 	}
@@ -219,7 +217,7 @@ func (m *model) policyValue() string {
 	if rules == nil {
 		return unavailable
 	}
-	return fmt.Sprintf("%d %s · %d %s", rules.total, choosePlural(rules.total, "règle", "règles"), rules.deny, choosePlural(rules.deny, "noire", "noires"))
+	return m.tr.t("tui.summary.rules", map[string]any{tplArgCount: rules.total}) + " · " + m.tr.t("tui.summary.denies", map[string]any{tplArgCount: rules.deny})
 }
 
 func valueOrNA(value string) string {
@@ -250,13 +248,6 @@ func wrapWords(words []string, width int) []string {
 		return []string{unavailable}
 	}
 	return lines
-}
-
-func choosePlural(count int, one, many string) string {
-	if count == 1 {
-		return one
-	}
-	return many
 }
 
 func (m *model) panelRow(key, value string) string {

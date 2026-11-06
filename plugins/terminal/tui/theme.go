@@ -8,8 +8,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const workingVerb = "En cours…"
-
 const borderNoneName = "none"
 
 const (
@@ -100,7 +98,17 @@ func parseOption[Choice closedOption](key, value string, options []Choice) (Choi
 		}
 	}
 	var zero Choice
-	return zero, fmt.Errorf("%w pour %s : %q (attendu %s)", errUnknownOption, key, value, joinOptions(options))
+	return zero, unknownOptionReason(key, value, joinOptions(options))
+}
+
+func unknownOptionReason(key, value, options string) error {
+	return reasonError{
+		sentinel: errUnknownOption,
+		text:     fmt.Sprintf("%s for %s: %q (expected %s)", errUnknownOption, key, value, options),
+		render: func(trans translator) string {
+			return trans.t("tui.reason.unknown_option_for", map[string]any{tplArgKey: key, tplArgValue: value, tplArgOptions: options})
+		},
+	}
 }
 
 func joinOptions[Choice closedOption](options []Choice) string {
@@ -216,23 +224,42 @@ const (
 	contrastInk  = "#ffffff"
 )
 
+func (theme Theme) displayName(trans translator) string {
+	switch theme.ID {
+	case themeSombre:
+		return trans.t("tui.theme.name.sombre", nil)
+	case themeClair:
+		return trans.t("tui.theme.name.clair", nil)
+	case themeTerminal:
+		return trans.t("tui.theme.name.terminal", nil)
+	case themeContraste:
+		return trans.t("tui.theme.name.contraste", nil)
+	case themePersonalID:
+		if theme.Label != "" {
+			return theme.Label
+		}
+		return trans.t("tui.theme.name.personal", nil)
+	}
+	return theme.Label
+}
+
 func builtinThemes() []Theme {
 	render := defaultRenderOptions()
 	return []Theme{
 		{
-			ID: themeSombre, Label: "Sombre", Render: render,
+			ID: themeSombre, Render: render,
 			Colors: palette{Text: sombreInk, Dim: sombreDim, Accent: sombreAccent, Violet: sombreInk, Add: "#7fb08a", AddBg: "#14231a", Del: "#d0706b", DelBg: "#2a1515", Wait: "#c9a55a", Err: "#d0706b", Sel: sombreInk, SelText: "#111111"},
 		},
 		{
-			ID: themeClair, Label: "Clair", Render: render,
+			ID: themeClair, Render: render,
 			Colors: palette{Text: clairInk, Dim: clairDim, Accent: clairAccent, Violet: clairInk, Add: "#2f7a45", AddBg: "#e3f1e6", Del: "#b03a35", DelBg: "#f7e1e0", Wait: "#8a6a1c", Err: "#b03a35", Sel: clairInk, SelText: "#ffffff"},
 		},
 		{
-			ID: themeTerminal, Label: "Terminal", Render: render,
+			ID: themeTerminal, Render: render,
 			Colors: palette{Text: "ansi:7", Dim: "ansi:8", Accent: "ansi:6", Violet: "ansi:5", Add: "ansi:2", AddBg: "#0c2a1d", Del: "ansi:1", DelBg: "#2c1111", Wait: "ansi:3", Err: "ansi:1", Sel: "ansi:7", SelText: "ansi:0"},
 		},
 		{
-			ID: themeContraste, Label: "Contraste élevé", Render: render,
+			ID: themeContraste, Render: render,
 			Colors: palette{Text: contrastInk, Dim: "#d0d0d0", Accent: "#ffff00", Violet: contrastInk, Add: "#5cff8a", AddBg: "#003314", Del: "#ff6b6b", DelBg: "#4a0000", Wait: "#ffd700", Err: "#ff6b6b", Sel: contrastInk, SelText: "#000000"},
 		},
 	}

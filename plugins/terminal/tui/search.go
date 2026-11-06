@@ -189,12 +189,12 @@ func (m *model) transcriptLines() []string {
 }
 
 func (m *model) searchView() string {
-	pos := "aucune correspondance"
+	pos := m.tr.t("tui.palette.no_match", nil)
 	if len(m.searchHits) > 0 {
 		pos = fmt.Sprintf("%d/%d", m.searchIdx+1, len(m.searchHits))
 	}
-	return m.st.dim.Render("recherche : ") + m.st.text.Render(m.searchQuery+"▏") +
-		m.st.dim.Render("  "+pos+"  "+joinNonEmpty(m.pairHint(actSearchPrevious, actSearchNext, "", ctxSearch), m.labelledHint(actSearchClose, "fermer", ctxSearch)))
+	return m.st.dim.Render(m.tr.t("tui.search.label", nil)) + m.st.text.Render(m.searchQuery+"▏") +
+		m.st.dim.Render("  "+pos+"  "+joinNonEmpty(m.pairHint(actSearchPrevious, actSearchNext, "", ctxSearch), m.labelledHint(actSearchClose, m.tr.t("tui.common.close", nil), ctxSearch)))
 }
 
 func (m *model) jumpTurn(delta int) {
@@ -226,7 +226,7 @@ func (m *model) jumpTurn(delta int) {
 	m.vp.SetYOffset(bounds[0])
 }
 
-func foldTurns(lines []string, bounds []int, keep int, styles uiStyles) []string {
+func foldTurns(trans translator, lines []string, bounds []int, keep int, styles uiStyles) []string {
 	if keep < 1 {
 		keep = 1
 	}
@@ -244,13 +244,13 @@ func foldTurns(lines []string, bounds []int, keep int, styles uiStyles) []string
 			out = append(out, lines[:start]...)
 		}
 		end := bounds[index+1]
-		out = append(out, foldedTurnLine(lines[start], end-start, styles))
+		out = append(out, foldedTurnLine(trans, lines[start], end-start, styles))
 	}
 	return out
 }
 
-func foldedTurnLine(head string, lines int, st uiStyles) string {
-	return truncate(head, foldedHeadWidth) + st.dim.Render(fmt.Sprintf(" %s %d lines", st.glyphs.fold, lines))
+func foldedTurnLine(trans translator, head string, lines int, st uiStyles) string {
+	return truncate(head, foldedHeadWidth) + st.dim.Render(" "+st.glyphs.fold+" "+trans.t("tui.search.lines", map[string]any{tplArgCount: lines}))
 }
 
 const turnFoldKeep = 2

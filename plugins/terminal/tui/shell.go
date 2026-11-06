@@ -27,7 +27,7 @@ func (m *model) runShell(command string) tea.Cmd {
 	channelTab := m.activeTab()
 	name := m.sessionName(m.active)
 	if channelTab == nil || name == "" {
-		m.flash = "!commande : aucune session ouverte"
+		m.flash = m.tr.t("tui.shell.no_session", nil)
 		return nil
 	}
 	channelTab.shellRunning = true

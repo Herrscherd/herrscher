@@ -45,18 +45,42 @@ type PluginSeam interface {
 }
 
 const (
-	pluginActionBump    = "passer à la dernière version"
-	pluginActionPin     = "épingler la version installée"
-	pluginActionUnpin   = "désépingler"
-	pluginActionVersion = "version…"
-	pluginActionRemove  = "retirer de la composition"
+	pluginActionBump    = "bump"
+	pluginActionPin     = "pin"
+	pluginActionUnpin   = "unpin"
+	pluginActionVersion = "version"
+	pluginActionRemove  = "remove"
 
-	pluginWarnProceed = "continuer"
-	pluginWarnAbort   = "annuler, ne rien changer"
+	pluginWarnProceed = "proceed"
+	pluginWarnAbort   = "abort"
 
-	pluginFailRestore = "remettre l’arbre comme il était"
-	pluginFailKeep    = "le garder, je répare à la main"
+	pluginFailRestore = "restore"
+	pluginFailKeep    = "keep"
 )
+
+func pluginMenuLabel(trans translator, option string) string {
+	switch option {
+	case pluginActionBump:
+		return trans.t("tui.plugins.menu.bump", nil)
+	case pluginActionPin:
+		return trans.t("tui.plugins.menu.pin", nil)
+	case pluginActionUnpin:
+		return trans.t("tui.plugins.menu.unpin", nil)
+	case pluginActionVersion:
+		return trans.t("tui.plugins.menu.version", nil)
+	case pluginActionRemove:
+		return trans.t("tui.plugins.menu.remove", nil)
+	case pluginWarnProceed:
+		return trans.t("tui.plugins.menu.proceed", nil)
+	case pluginWarnAbort:
+		return trans.t("tui.plugins.menu.abort", nil)
+	case pluginFailRestore:
+		return trans.t("tui.plugins.menu.restore", nil)
+	case pluginFailKeep:
+		return trans.t("tui.plugins.menu.keep", nil)
+	}
+	return option
+}
 
 type pluginsMode int
 
@@ -114,7 +138,7 @@ func (m *model) openPlugins() tea.Cmd {
 	m.pluginsRows = nil
 	m.pluginsNotice = ""
 	if m.pluginsSeam == nil {
-		m.pluginsNotice = "la gestion des plugins n’est pas disponible dans ce binaire"
+		m.pluginsNotice = m.tr.t("tui.plugins.notice.unavailable", nil)
 		return nil
 	}
 	seam, ctx := m.pluginsSeam, m.runContext()
@@ -150,10 +174,10 @@ func (m *model) handlePluginsMsg(msg tea.Msg) bool {
 			m.pluginsMode = pluginsFailed
 			break
 		}
-		m.pluginsNotice = "le changement est sur le disque ; il s’applique au prochain démarrage"
+		m.pluginsNotice = m.tr.t("tui.plugins.notice.on_disk", nil)
 		m.pluginsMode = pluginsDone
 	case pluginsRestoredMsg:
-		m.pluginsNotice = "l’arbre est revenu comme il était ; rien n’a été installé"
+		m.pluginsNotice = m.tr.t("tui.plugins.notice.restored", nil)
 		m.pluginsMode = pluginsDone
 	case pluginsErrMsg:
 		m.pluginsNotice = msg.err.Error()
@@ -224,7 +248,7 @@ func (m *model) choosePlugins() tea.Cmd {
 				return pluginsRestoredMsg{}
 			}
 		}
-		m.pluginsNotice = "l’arbre est laissé tel quel ; répare-le et relance la construction"
+		m.pluginsNotice = m.tr.t("tui.plugins.notice.left_as_is", nil)
 		m.pluginsMode = pluginsDone
 	case pluginsDone:
 		return m.openPlugins()
@@ -334,10 +358,10 @@ func (m *model) clampPluginsMenu() {
 
 func (m *model) pluginsView() string {
 	var builder strings.Builder
-	builder.WriteString(m.st.dim.Render(joinNonEmpty("plugins",
-		m.pairHint(actSelectPrevious, actSelectNext, "naviguer", ctxPlugin),
-		m.labelledHint(actSelectAccept, "choisir", ctxPlugin),
-		m.labelledHint(actSelectCancel, "retour", ctxPlugin),
+	builder.WriteString(m.st.dim.Render(joinNonEmpty(m.tr.t("tui.plugins.title", nil),
+		m.pairHint(actSelectPrevious, actSelectNext, m.tr.t("tui.plugins.navigate", nil), ctxPlugin),
+		m.labelledHint(actSelectAccept, m.tr.t("tui.plugins.choose", nil), ctxPlugin),
+		m.labelledHint(actSelectCancel, m.tr.t("tui.common.back", nil), ctxPlugin),
 	)))
 	m.writePluginNotices(&builder)
 	m.writePluginRows(&builder)
@@ -351,20 +375,20 @@ func (m *model) writePluginNotices(builder *strings.Builder) {
 		builder.WriteString("\n" + m.st.dim.Render("  "+m.pluginsNotice))
 	}
 	if len(m.pluginsRows) == 0 && m.pluginsNotice == "" {
-		builder.WriteString("\n" + m.st.dim.Render("  (aucun plugin compilé dans ce binaire)"))
+		builder.WriteString("\n" + m.st.dim.Render("  "+m.tr.t("tui.plugins.none_compiled", nil)))
 	}
 }
 
 func (m *model) writePluginRows(builder *strings.Builder) {
 	start, end := pluginsWindow(m.pluginsIdx, len(m.pluginsRows))
 	if start > 0 {
-		builder.WriteString("\n" + m.st.dim.Render(fmt.Sprintf("  … %d au-dessus", start)))
+		builder.WriteString("\n" + m.st.dim.Render("  "+m.tr.t("tui.plugins.more_above", map[string]any{tplArgCount: start})))
 	}
 	for i := start; i < end; i++ {
 		builder.WriteString("\n" + m.pluginRow(i))
 	}
 	if end < len(m.pluginsRows) {
-		builder.WriteString("\n" + m.st.dim.Render(fmt.Sprintf("  … %d en dessous", len(m.pluginsRows)-end)))
+		builder.WriteString("\n" + m.st.dim.Render("  "+m.tr.t("tui.plugins.more_below", map[string]any{tplArgCount: len(m.pluginsRows) - end})))
 	}
 }
 
@@ -372,7 +396,7 @@ func (m *model) pluginRow(index int) string {
 	pluginRow := m.pluginsRows[index]
 	row := fmt.Sprintf("%s · %s → %s", pluginRow.Module, pluginRow.Installed, pluginRow.Latest)
 	if pluginRow.Pinned {
-		row += " · épinglé"
+		row += " · " + m.tr.shared("cli.manage.pinned_tag")
 	}
 	if index == m.pluginsIdx && m.pluginsMode == pluginsList {
 		return m.st.accent.Render(m.st.glyphs.cursor) + " " + m.st.text.Render(row)
@@ -397,11 +421,15 @@ func (m *model) writePluginMenu(builder *strings.Builder) {
 	if m.pluginsMode == pluginsList || m.pluginsMode == pluginsDone {
 		return
 	}
-	for i, opt := range m.pluginsMenu {
-		if i == m.pluginsMenuIdx {
-			builder.WriteString("\n" + m.st.accent.Render(m.st.glyphs.cursor) + " " + m.st.text.Render(opt))
+	for index, opt := range m.pluginsMenu {
+		label := opt
+		if m.pluginsMode != pluginsVersions {
+			label = pluginMenuLabel(m.tr, opt)
+		}
+		if index == m.pluginsMenuIdx {
+			builder.WriteString("\n" + m.st.accent.Render(m.st.glyphs.cursor) + " " + m.st.text.Render(label))
 		} else {
-			builder.WriteString("\n" + m.st.dim.Render("  "+opt))
+			builder.WriteString("\n" + m.st.dim.Render("  "+label))
 		}
 	}
 }

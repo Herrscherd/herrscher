@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -27,10 +26,6 @@ const (
 	paneGaugeCells     = 6
 	paneStackRows      = 2
 	paneMinCellHeight  = paneBoxChrome + 3
-)
-
-const (
-	paneApprovalKeysFmt = "o s r approbation de "
 )
 
 type paneState struct {
@@ -181,18 +176,18 @@ func (m *model) surfaceScreen() string {
 }
 
 func (m *model) paneNavHint() string {
-	return joinNonEmpty(m.labelledHint(actPaneNext, "volet suivant", ctxPane), "clic viser")
+	return joinNonEmpty(m.labelledHint(actPaneNext, m.tr.t("tui.panel.next_pane", nil), ctxPane), m.tr.t("tui.panel.click_aim", nil))
 }
 
 func (m *model) paneHeader(width int) string {
-	left := m.st.violet.Bold(true).Render(" Vue en volets") + m.st.dim.Render("  "+joinNonEmpty(m.labelledHint(actPaneNext, "volet suivant", ctxPane), "clic pour viser"))
+	left := m.st.violet.Bold(true).Render(" "+m.tr.t("tui.panel.title", nil)) + m.st.dim.Render("  "+joinNonEmpty(m.labelledHint(actPaneNext, m.tr.t("tui.panel.next_pane", nil), ctxPane), m.tr.t("tui.panel.click_to_aim", nil)))
 	return cutText(joinRow(width, left, m.paneCounts()), width)
 }
 
 func (m *model) paneFooter(width int) string {
 	keys := m.paneNavHint()
 	if name, ok := m.paneApproval(); ok {
-		keys += footerSeparator + paneApprovalKeysFmt + name
+		keys += footerSeparator + m.tr.t("tui.panel.approval_keys", map[string]any{tplArgName: name})
 	}
 	return m.st.dim.Render(foldText(" "+keys, width))
 }
@@ -228,10 +223,10 @@ func (m *model) paneCounts() string {
 		}
 	}
 	parts := []string{
-		m.st.accent.Render(fmt.Sprintf("%d au travail", working)),
-		m.st.warn.Render(fmt.Sprintf("%d approbation", waiting)),
-		m.st.accent.Render(fmt.Sprintf("%d non lus", unread)),
-		m.st.green.Render(fmt.Sprintf("%d fini", finished)),
+		m.st.accent.Render(m.tr.t("tui.panel.count_working", map[string]any{tplArgCount: working})),
+		m.st.warn.Render(m.tr.t("tui.panel.count_waiting", map[string]any{tplArgCount: waiting})),
+		m.st.accent.Render(m.tr.t("tui.panel.count_unread", map[string]any{tplArgCount: unread})),
+		m.st.green.Render(m.tr.t("tui.panel.count_finished", map[string]any{tplArgCount: finished})),
 		m.st.dim.Render(formatCost(cost)),
 	}
 	return strings.Join(parts, m.st.dim.Render(" · ")) + " "
@@ -254,16 +249,12 @@ func (m *model) paneHiddenReserve(layout paneLayout) int {
 }
 
 func (m *model) paneHiddenLine(hidden int) string {
-	noun := "volets"
-	if hidden == 1 {
-		noun = "volet"
-	}
-	return m.st.dim.Render(fmt.Sprintf(" +%d %s · %s", hidden, noun, m.labelledHint(actPaneNext, "pour les voir", ctxPane)))
+	return m.st.dim.Render(" " + m.tr.t("tui.panel.hidden", map[string]any{tplArgCount: hidden, tplArgHint: m.labelledHint(actPaneNext, m.tr.t("tui.panel.see_them", nil), ctxPane)}))
 }
 
 func (m *model) paneBody(width, height int) []string {
 	if len(m.panes.channels) == 0 {
-		return padLines([]string{m.st.dim.Render("aucune session vivante")}, height)
+		return padLines([]string{m.st.dim.Render(m.tr.t("tui.panel.no_live_session", nil))}, height)
 	}
 	layout := m.paneLayout()
 	start, end := m.paneWindow(layout)
@@ -343,15 +334,15 @@ func identityPaint(style lipgloss.Style) lipgloss.Style {
 func (m *model) paneStateLabel(row *boardRow) string {
 	switch {
 	case row.overview.State == overviewWaiting:
-		return m.st.warn.Render("approbation")
+		return m.st.warn.Render(m.tr.t("tui.panel.state_waiting", nil))
 	case row.unread > 0:
-		return m.st.accent.Render(fmt.Sprintf("%d non lus", row.unread))
+		return m.st.accent.Render(m.tr.t("tui.panel.count_unread", map[string]any{tplArgCount: row.unread}))
 	case row.group == groupReview || row.finished:
-		return m.st.green.Render("fini " + overviewAge(row.overview.LastTs, time.Now()))
+		return m.st.green.Render(m.tr.t("tui.panel.state_finished", nil) + " " + overviewAge(row.overview.LastTs, time.Now()))
 	case row.overview.State == overviewWorking:
 		return m.st.dim.Render(overviewAge(row.overview.LastTs, time.Now()))
 	}
-	return m.st.dim.Render("au repos")
+	return m.st.dim.Render(m.tr.t("tui.panel.state_idle", nil))
 }
 
 func (m *model) paneTranscript(channelTab *tab, width int) []string {

@@ -86,7 +86,7 @@ func TestApprovalKeepsEveryChoiceAtTwentyRows(t *testing.T) {
 		t.Fatalf("the approval must fit the rows it is given, got %d lines", len(lines))
 	}
 	joined := strings.Join(lines, "\n")
-	for _, label := range []string{"Une fois", "Pour la session", "Toujours", "Refuser avec une raison"} {
+	for _, label := range []string{"Once", "For the session", "Always", "Deny with a reason"} {
 		if !strings.Contains(joined, label) {
 			t.Errorf("the approval must keep the choice %q visible at 60x20", label)
 		}

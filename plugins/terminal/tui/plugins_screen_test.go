@@ -60,7 +60,7 @@ func TestPluginsScreenListsWhatTheSeamReports(t *testing.T) {
 	if !strings.Contains(out, "mod/a") || !strings.Contains(out, "v1.1.0") {
 		t.Fatalf("screen must list each module with its versions: %q", out)
 	}
-	if !strings.Contains(out, "épinglé") {
+	if !strings.Contains(out, "pinned") {
 		t.Fatalf("a pinned module must carry its marker: %q", out)
 	}
 	for _, box := range []string{"╭", "╮", "╰", "│"} {
@@ -104,7 +104,7 @@ func TestPluginsScreenWarningAbortWritesNothing(t *testing.T) {
 	if !strings.Contains(out, "moves back from v1.0.0") {
 		t.Fatalf("the warning must name what was found: %q", out)
 	}
-	if !strings.Contains(out, pluginWarnAbort) {
+	if !strings.Contains(out, "cancel, change nothing") {
 		t.Fatalf("the warning must be a select menu: %q", out)
 	}
 	m.pluginsMenuIdx = indexOf(m.pluginsMenu, pluginWarnAbort)
@@ -135,7 +135,7 @@ func TestPluginsScreenFailedBuildOffersRestoreOrKeep(t *testing.T) {
 	if !strings.Contains(out, "undefined: contracts.Register") {
 		t.Fatalf("the compiler's own output must be shown: %q", out)
 	}
-	if !strings.Contains(out, pluginFailRestore) || !strings.Contains(out, pluginFailKeep) {
+	if !strings.Contains(out, "put the tree back as it was") || !strings.Contains(out, "keep it, I'll repair it by hand") {
 		t.Fatalf("a failed build must offer both outcomes: %q", out)
 	}
 	m.pluginsMenuIdx = indexOf(m.pluginsMenu, pluginFailRestore)
@@ -158,7 +158,7 @@ func TestPluginsScreenSuccessEndsOnTheRestartLine(t *testing.T) {
 	m.Update(runCmd(cmd))
 
 	out := m.pluginsView()
-	if !strings.Contains(out, "prochain démarrage") {
+	if !strings.Contains(out, "next start") {
 		t.Fatalf("a successful apply must say the change waits for a restart: %q", out)
 	}
 	if len(f.applied) != 1 || !strings.HasPrefix(f.applied[0], string(PluginBump)) {
@@ -192,7 +192,7 @@ func TestPluginsScreenNavClamps(t *testing.T) {
 
 func TestPluginsScreenPaletteEntry(t *testing.T) {
 	found := false
-	for _, c := range localCommands() {
+	for _, c := range localCommands(newTranslator()) {
 		if c.Name == "plugins" {
 			found = true
 		}
@@ -212,7 +212,7 @@ func indexOf(rows []string, want string) int {
 }
 
 func TestPluginsViewScrollsToSelection(t *testing.T) {
-	m := &model{pluginsOpen: true}
+	m := &model{tr: newTranslator(), pluginsOpen: true}
 	for i := range pluginsMax + 5 {
 		m.pluginsRows = append(m.pluginsRows, PluginRow{Module: fmt.Sprintf("mod/%d", i), Installed: "v1.0.0", Latest: "v1.0.0"})
 	}
@@ -222,7 +222,7 @@ func TestPluginsViewScrollsToSelection(t *testing.T) {
 	if !strings.Contains(view, "mod/14") {
 		t.Fatalf("the selected row is not drawn:\n%s", view)
 	}
-	if !strings.Contains(view, "au-dessus") {
+	if !strings.Contains(view, "above") {
 		t.Fatalf("the rows scrolled past are not announced:\n%s", view)
 	}
 }

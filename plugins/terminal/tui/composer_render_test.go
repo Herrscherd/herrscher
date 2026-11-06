@@ -60,7 +60,7 @@ func TestRenderShellStateShowsWarnTitleAndShellFooter(t *testing.T) {
 	if !strings.Contains(joined, "! SHELL") {
 		t.Fatal("shell state must show the ! SHELL title")
 	}
-	if !strings.Contains(joined, "la commande passe par la politique d’outils de l’hôte") {
+	if !strings.Contains(joined, "the command goes through the host's tool policy") {
 		t.Fatal("shell state must show the shell footer")
 	}
 }
@@ -69,7 +69,7 @@ func TestRenderEditingStateShowsEditorTitle(t *testing.T) {
 	lines := renderAt(t, 120, func(m *model) {
 		m.editing = true
 	})
-	if !strings.Contains(ansi.Strip(strings.Join(lines, "\n")), "Éditeur") {
+	if !strings.Contains(ansi.Strip(strings.Join(lines, "\n")), "editor") {
 		t.Fatal("editing state must show the Éditeur title")
 	}
 }
@@ -78,7 +78,7 @@ func TestRenderBusyFooterOffersQueue(t *testing.T) {
 	lines := renderAt(t, 200, func(m *model) {
 		m.tabs["a"].busy = true
 	})
-	if !strings.Contains(ansi.Strip(strings.Join(lines, "\n")), "⌃X⏎ envoyer la file") {
+	if !strings.Contains(ansi.Strip(strings.Join(lines, "\n")), "⌃X⏎ send queue") {
 		t.Fatal("busy footer must mention ctrl+enter")
 	}
 }
@@ -105,7 +105,7 @@ func TestShellTitleNamesTheSessionDirectory(t *testing.T) {
 	m.infoAt = time.Time{}
 	typeLine(m, "!ls")
 	title := ansi.Strip(m.composerTitleLeft())
-	if !strings.Contains(title, "! SHELL · dans .worktrees/tui-v2 · la sortie entre dans la session") {
+	if !strings.Contains(title, "! SHELL · in .worktrees/tui-v2 · output goes into the session") {
 		t.Fatalf("shell title must name the session directory, got %q", title)
 	}
 }
@@ -117,7 +117,7 @@ func TestShellTitleDropsTheDirectoryWhenUnknown(t *testing.T) {
 	if strings.Contains(title, "· dans ") {
 		t.Fatalf("an unknown directory must leave no « dans » segment, got %q", title)
 	}
-	if !strings.Contains(title, "la sortie entre dans la session") {
+	if !strings.Contains(title, "output goes into the session") {
 		t.Fatalf("shell title must keep its explanation, got %q", title)
 	}
 }
@@ -176,10 +176,10 @@ func TestShellTopEdgeFoldsWholeSegmentsAtSixtyColumns(t *testing.T) {
 	m.infoAt = time.Time{}
 	typeLine(m, "!ls")
 	top := ansi.Strip(m.composerZone()[0])
-	if !strings.Contains(top, "! SHELL · dans .worktrees/tui-v2") {
+	if !strings.Contains(top, "! SHELL · in .worktrees/tui-v2") {
 		t.Fatalf("the directory segment must survive folding at 60 columns, got %q", top)
 	}
-	if strings.Contains(top, "sortie") {
+	if strings.Contains(top, "output goes") {
 		t.Fatalf("the explanation segment must fold away whole, got %q", top)
 	}
 	if ansi.StringWidth(top) != 60 {
@@ -194,10 +194,12 @@ func TestIdleFooterFoldsWholeSegmentsAgainstTheBorder(t *testing.T) {
 		t.Fatal("the composer bottom edge must be visible at 60 columns")
 	}
 	edge := edges[len(edges)-1]
-	if !strings.Contains(edge, "╰ ⏎ envoyer · @ fichier · / commande ") {
+	if !strings.Contains(edge, "╰ ⏎ send · @ file · / command ") {
 		t.Fatalf("the idle footer must keep whole segments, got %q", edge)
 	}
-	if !strings.HasSuffix(edge, "─ échap échap retour ╯") {
+	escKey := "esc"
+	back := newTranslator().t("tui.compose.back", nil)
+	if !strings.HasSuffix(edge, strings.Join([]string{"─", escKey, escKey, back, "╯"}, " ")) {
 		t.Fatalf("the right label must keep its rule and sit on the border, got %q", edge)
 	}
 }
@@ -208,10 +210,10 @@ func TestBusyFooterAtSixtyColumnsFoldsBeforeTheInterruptHint(t *testing.T) {
 	})
 	edges := composerEdgeLines(lines, "╰")
 	edge := edges[len(edges)-1]
-	if !strings.Contains(edge, "╰ ⏎ en file · ⌥⏎ réorienter ") {
+	if !strings.Contains(edge, "╰ ⏎ queued · ⌥⏎ redirect ") {
 		t.Fatalf("the busy footer must keep its first segments, got %q", edge)
 	}
-	if !strings.HasSuffix(edge, "─ échap interrompre ╯") {
+	if !strings.HasSuffix(edge, "─ esc interrupt ╯") {
 		t.Fatalf("the busy footer must keep échap interrompre on the border, got %q", edge)
 	}
 }
@@ -222,7 +224,7 @@ func TestBusyShellFooterKeepsInterruptHint(t *testing.T) {
 		typeLine(m, "!ls")
 	})
 	edges := composerEdgeLines(lines, "╰")
-	if len(edges) == 0 || !strings.Contains(edges[len(edges)-1], "échap interrompre") {
+	if len(edges) == 0 || !strings.Contains(edges[len(edges)-1], "esc cancel") {
 		t.Fatalf("a busy shell composer must show échap interrompre on its footer, got %q", edges)
 	}
 }
@@ -233,7 +235,7 @@ func TestEditorTitleNamesTheEditorLaunched(t *testing.T) {
 	m, _ := queueFixture(t)
 	m.editing = true
 	title := ansi.Strip(m.composerTitleLeft())
-	if !strings.HasSuffix(title, "brouillon ouvert dans nvim") {
+	if !strings.HasSuffix(title, "draft open in nvim") {
 		t.Fatalf("the editor title must name the editor really launched, got %q", title)
 	}
 }
@@ -243,7 +245,7 @@ func TestEditorTitleFallsBackToViWithoutEditorVariables(t *testing.T) {
 	t.Setenv("EDITOR", "")
 	m, _ := queueFixture(t)
 	m.editing = true
-	if title := ansi.Strip(m.composerTitleLeft()); !strings.HasSuffix(title, "brouillon ouvert dans vi") {
+	if title := ansi.Strip(m.composerTitleLeft()); !strings.HasSuffix(title, "draft open in vi") {
 		t.Fatalf("without EDITOR or VISUAL the title must name vi, got %q", title)
 	}
 }
@@ -253,7 +255,7 @@ func TestEditorNameFollowsTheLauncherOrder(t *testing.T) {
 	t.Setenv("VISUAL", "/usr/bin/code")
 	m, _ := queueFixture(t)
 	m.editing = true
-	if title := ansi.Strip(m.composerTitleLeft()); !strings.HasSuffix(title, "brouillon ouvert dans nvim") {
+	if title := ansi.Strip(m.composerTitleLeft()); !strings.HasSuffix(title, "draft open in nvim") {
 		t.Fatalf("EDITOR must win over VISUAL in the title, as it does for the launch, got %q", title)
 	}
 	if got := editorArgv("/tmp/x.md"); got[0] != "/usr/bin/nvim" {
@@ -266,7 +268,7 @@ func TestEditingPlaceholderNamesTheEditor(t *testing.T) {
 	t.Setenv("EDITOR", "/usr/bin/nvim")
 	m, _ := queueFixture(t)
 	m.editing = true
-	want := "nvim est ouvert sur le brouillon, :wq pour revenir"
+	want := "nvim is open on the draft, :wq to come back"
 	if got := m.placeholderText(); got != want {
 		t.Fatalf("the editing placeholder must name the editor, got %q", got)
 	}
@@ -276,10 +278,10 @@ func TestDraftLineKeepsTheResumeHintRightAligned(t *testing.T) {
 	m, _ := queueFixture(t)
 	m.drafts = []string{"relis le plan"}
 	line := ansi.Strip(m.draftsView())
-	if !strings.HasPrefix(line, " ○ brouillons (1) : « relis le plan »") {
+	if !strings.HasPrefix(line, " ○ draft (1): « relis le plan »") {
 		t.Fatalf("the draft line must open with its count and preview, got %q", line)
 	}
-	if !strings.HasSuffix(line, "⌃S reprendre le dernier") {
+	if !strings.HasSuffix(line, "⌃S resume the last one") {
 		t.Fatalf("the draft line must end with the right-aligned resume hint, got %q", line)
 	}
 	if ansi.StringWidth(line) != m.innerWidth() {

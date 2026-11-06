@@ -30,7 +30,7 @@ const (
 
 var (
 	errEmptyClipboard = errors.New("clipboard image is empty")
-	errSizeLimit      = errors.New("exceeds")
+	errSizeLimit      = errors.New("attachment too large")
 	errUsage          = errors.New("usage: /attach <path>")
 	errNotRegularFile = errors.New("not a regular file")
 )
@@ -55,7 +55,7 @@ func saveClipboardImage(data []byte, mime string, seq int) (Attachment, error) {
 		return Attachment{}, errEmptyClipboard
 	}
 	if int64(len(data)) > maxAttachmentBytes {
-		return Attachment{}, fmt.Errorf("pasted image %w %d MiB", errSizeLimit, maxAttachmentBytes/bytesPerMiB)
+		return Attachment{}, fmt.Errorf("%w : %d MiB", errSizeLimit, maxAttachmentBytes/bytesPerMiB)
 	}
 	name := fmt.Sprintf("paste-%d%s", seq, mimeExt(mime))
 	path, err := stage(name, data)
@@ -81,6 +81,15 @@ func stage(name string, data []byte) (string, error) {
 	return filepath.Join(dir, name), nil
 }
 
+func attachFailure(path string, cause error) error {
+	return fmt.Errorf("%w: %w", reasonError{
+		text: "attach " + path,
+		render: func(trans translator) string {
+			return trans.t("tui.reason.attach_failed", map[string]any{tplArgPath: path})
+		},
+	}, cause)
+}
+
 func attachLocalFile(path string, seq int) (Attachment, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -93,13 +102,13 @@ func attachLocalFile(path string, seq int) (Attachment, error) {
 	}
 	info, err := os.Stat(path)
 	if err != nil {
-		return Attachment{}, fmt.Errorf("attach %s: %w", path, err)
+		return Attachment{}, attachFailure(path, err)
 	}
 	if !info.Mode().IsRegular() {
-		return Attachment{}, fmt.Errorf("attach %s: %w", path, errNotRegularFile)
+		return Attachment{}, fmt.Errorf("%w : %s", errNotRegularFile, path)
 	}
 	if info.Size() > maxAttachmentBytes {
-		return Attachment{}, fmt.Errorf("attach %s: %w %d MiB", path, errSizeLimit, maxAttachmentBytes/bytesPerMiB)
+		return Attachment{}, fmt.Errorf("%w : %s (%d MiB)", errSizeLimit, path, maxAttachmentBytes/bytesPerMiB)
 	}
 	abs, err := filepath.Abs(path)
 	if err != nil {
@@ -107,12 +116,12 @@ func attachLocalFile(path string, seq int) (Attachment, error) {
 	}
 	data, err := os.ReadFile(filepath.Clean(abs))
 	if err != nil {
-		return Attachment{}, fmt.Errorf("attach %s: %w", path, err)
+		return Attachment{}, attachFailure(path, err)
 	}
 	name := filepath.Base(abs)
 	staged, err := stage(fmt.Sprintf("%d-%s", seq, name), data)
 	if err != nil {
-		return Attachment{}, fmt.Errorf("attach %s: %w", path, err)
+		return Attachment{}, attachFailure(path, err)
 	}
 	return Attachment{Name: name, Path: staged, Mime: mimeByExt(abs), Size: info.Size()}, nil
 }

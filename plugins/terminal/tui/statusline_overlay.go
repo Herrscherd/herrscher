@@ -8,28 +8,25 @@ import (
 )
 
 const (
-	statuslineScriptFooter = "les cases ne servent plus : le script décide"
-	barLabelWidth          = 20
-	barListWidth           = 54
-	barColumnDivider       = "│"
-	barMinPaneWidth        = 40
-	barPaneIndent          = "   "
-	barScriptPath          = "~/.config/herrscher/statusline.sh"
-	barConfigPath          = "~/.config/herrscher/terminal.toml"
-	barJSONCaption         = "JSON reçu sur l’entrée standard"
-	barJSONNote            = " · à chaque événement"
-	barScriptNote          = " · " + barScriptPath
-	barBottomRows          = 3
-	barHeaderRows          = 4
-	barChromeRows          = 11
+	barLabelWidth    = 20
+	barListWidth     = 54
+	barColumnDivider = "│"
+	barMinPaneWidth  = 40
+	barPaneIndent    = "   "
+	barScriptPath    = "~/.config/herrscher/statusline.sh"
+	barConfigPath    = "~/.config/herrscher/terminal.toml"
+	barScriptNote    = " · " + barScriptPath
+	barBottomRows    = 3
+	barHeaderRows    = 4
+	barChromeRows    = 11
 )
 
-func barScriptSample() []string {
+func barScriptSample(trans translator) []string {
 	return []string{
 		"#!/bin/sh",
 		`jq -r '[.mode, .model, .git.branch,`,
 		`  "\(.context.percent)%", "$\(.cost.usd)",`,
-		`  (if .queue > 0 then "\(.queue) en file" else empty end)]`,
+		"  (if .queue > 0 then \"\\(.queue) " + trans.t("tui.statusline.sample_queue", nil) + "\" else empty end)]",
 		`  | join(" │ ")'`,
 	}
 }
@@ -56,7 +53,7 @@ func (m *model) openStatusline() tea.Cmd {
 func (m *model) closeStatusline() {
 	m.bar.open = false
 	if err := saveStatuslineChoice(m.bar.file, &m.bar); err != nil {
-		m.flash = "terminal.toml non écrit : " + err.Error()
+		m.flash = m.tr.t("tui.statusline.not_written", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 	}
 	m.relayout()
 }
@@ -169,14 +166,14 @@ func lineAt(lines []string, index int) string {
 
 func (m *model) statuslineControls(width int) []string {
 	lines := []string{
-		statusIndent + m.st.accent.Render("Barre d’état") + m.st.dim.Render(" · /statusline"),
+		statusIndent + m.st.accent.Render(m.tr.t("tui.statusline.title", nil)) + m.st.dim.Render(" · /statusline"),
 		m.statuslineSourceLine(),
 		"",
 	}
 	lines = append(lines, m.statuslineRows(width)...)
 	footer := m.statuslineFooter()
 	if m.bar.scripted() {
-		footer = statuslineScriptFooter
+		footer = m.tr.t("tui.statusline.script_footer", nil)
 	}
 	return append(lines, m.st.dim.Render(cutText(statusIndent+footer, width)))
 }
@@ -211,9 +208,9 @@ func (m *model) statuslineRow(fieldID string, selected bool, width int) string {
 	if shown {
 		mark = m.st.glyphs.ticked
 	}
-	label := padTo(spec.labelWith(m.hintIn(actCycleMode, chatKeyStack()...)), barLabelWidth)
+	label := padTo(spec.labelWith(m.tr, m.hintIn(actCycleMode, chatKeyStack()...)), barLabelWidth)
 	if selected {
-		plain := statusIndent + head + mark + " " + label + " " + spec.note
+		plain := statusIndent + head + mark + " " + label + " " + spec.note(m.tr)
 		return m.st.overlaySel.Render(padTo(cutText(plain, width), width))
 	}
 	markStyle, labelStyle := m.st.dim, m.st.dim
@@ -226,18 +223,18 @@ func (m *model) statuslineRow(fieldID string, selected bool, width int) string {
 			labelStyle = m.st.text
 		}
 	}
-	row := statusIndent + head + markStyle.Render(mark+" ") + labelStyle.Render(label+" ") + m.st.dim.Render(spec.note)
+	row := statusIndent + head + markStyle.Render(mark+" ") + labelStyle.Render(label+" ") + m.st.dim.Render(spec.note(m.tr))
 	return padTo(cutText(row, width), width)
 }
 
 func (m *model) statuslineSourceLine() string {
-	builtin, script := m.st.dim.Render(" intégrée "), m.st.dim.Render(" script ")
+	builtin, script := m.st.dim.Render(" "+m.tr.t("tui.statusline.builtin", nil)+" "), m.st.dim.Render(" "+m.tr.t("tui.statusline.script", nil)+" ")
 	if m.bar.scripted() {
-		script = m.st.chip.Render("script")
+		script = m.st.chip.Render(m.tr.t("tui.statusline.script", nil))
 	} else {
-		builtin = m.st.chip.Render("intégrée")
+		builtin = m.st.chip.Render(m.tr.t("tui.statusline.builtin", nil))
 	}
-	return statusIndent + m.st.dim.Render("source  ") + builtin + "  " + script + m.st.dim.Render("   s basculer")
+	return statusIndent + m.st.dim.Render(m.tr.t("tui.statusline.source", nil)+"  ") + builtin + "  " + script + m.st.dim.Render("   "+m.tr.t("tui.statusline.toggle", nil))
 }
 
 func (m *model) statuslinePane(width, budget int) []string {
@@ -246,8 +243,8 @@ func (m *model) statuslinePane(width, budget int) []string {
 		headStyle, bodyStyle = m.st.accent.Bold(true), m.st.text
 	}
 	blocks := [][]string{
-		append([]string{m.paneHeading(headStyle, "Script", barScriptNote)}, paneBody(bodyStyle, barScriptSample())...),
-		append([]string{"", m.paneHeading(m.st.dim.Bold(true), barJSONCaption, barJSONNote)}, paneBody(m.st.dim, barJSONSample())...),
+		append([]string{m.paneHeading(headStyle, m.tr.t("tui.statusline.script_heading", nil), barScriptNote)}, paneBody(bodyStyle, barScriptSample(m.tr))...),
+		append([]string{"", m.paneHeading(m.st.dim.Bold(true), m.tr.t("tui.statusline.json_caption", nil), m.tr.t("tui.statusline.json_note", nil))}, paneBody(m.st.dim, barJSONSample())...),
 		append([]string{"", m.paneHeading(m.st.dim.Bold(true), barConfigPath, "")}, m.statuslineTOMLLines()...),
 	}
 	lines := foldPaneBlocks(blocks, budget)
@@ -296,7 +293,7 @@ func (m *model) statuslineTOMLLines() []string {
 }
 
 func (m *model) statuslinePreviewCaption(width int) string {
-	captions := statuslinePreviewCaptions()
+	captions := statuslinePreviewCaptions(m.tr)
 	for _, caption := range captions {
 		if lipgloss.Width(statusIndent+caption) <= width {
 			return statusIndent + m.st.dim.Render(caption)
@@ -306,11 +303,11 @@ func (m *model) statuslinePreviewCaption(width int) string {
 	return m.st.dim.Render(cutText(statusIndent+last, width))
 }
 
-func statuslinePreviewCaptions() []string {
+func statuslinePreviewCaptions(trans translator) []string {
 	return []string{
-		"aperçu en direct, ligne suivante : la barre telle qu’elle sera dans le terminal",
-		"aperçu en direct, la barre telle qu’elle sera dans le terminal",
-		"aperçu en direct",
+		trans.t("tui.statusline.preview_next_line", nil),
+		trans.t("tui.statusline.preview_bar", nil),
+		trans.t("tui.statusline.preview_live", nil),
 	}
 }
 
@@ -324,8 +321,8 @@ func (m *model) statusLeftPreview() string {
 
 func (m *model) statuslineFooter() string {
 	return joinNonEmpty(
-		m.pairHint(actSelectPrevious, actSelectNext, "choisir", ctxStatusline),
-		m.labelledHint(actStatuslineToggle, "cocher", ctxStatusline),
-		"l’ordre suit la liste",
+		m.pairHint(actSelectPrevious, actSelectNext, m.tr.t("tui.statusline.choose", nil), ctxStatusline),
+		m.labelledHint(actStatuslineToggle, m.tr.t("tui.statusline.check", nil), ctxStatusline),
+		m.tr.t("tui.statusline.order", nil),
 	)
 }

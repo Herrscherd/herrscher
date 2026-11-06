@@ -26,8 +26,6 @@ const (
 	argWhat            = "--what"
 )
 
-const rewindUnsupportedNote = "conversation non reprise : le backend de cette session ne garde pas de position par message"
-
 type rewindStep int
 
 const (
@@ -47,8 +45,8 @@ const (
 )
 
 type rewindOptionSpec struct {
-	label             string
-	detail            string
+	labelKey          string
+	detailKey         string
 	needsConversation bool
 }
 
@@ -59,15 +57,15 @@ func rewindOptionOrder() []rewindOption {
 func (option rewindOption) spec() rewindOptionSpec {
 	switch option {
 	case rewindOptionBoth:
-		return rewindOptionSpec{label: "Restaurer le code et la conversation", detail: "le code et la conversation reviennent à ce message", needsConversation: true}
+		return rewindOptionSpec{labelKey: "tui.rewind.both.label", detailKey: "tui.rewind.both.detail", needsConversation: true}
 	case rewindOptionConversation:
-		return rewindOptionSpec{label: "Restaurer la conversation seulement", detail: "la conversation reprend à ce message", needsConversation: true}
+		return rewindOptionSpec{labelKey: "tui.rewind.conversation.label", detailKey: "tui.rewind.conversation.detail", needsConversation: true}
 	case rewindOptionCode:
-		return rewindOptionSpec{label: "Restaurer le code seulement", detail: "la conversation reste"}
+		return rewindOptionSpec{labelKey: "tui.rewind.code.label", detailKey: "tui.rewind.code.detail"}
 	case rewindOptionFork:
-		return rewindOptionSpec{label: "Forker à partir d’ici", detail: "/fork : nouvelle session, l’originale intacte"}
+		return rewindOptionSpec{labelKey: "tui.rewind.fork.label", detailKey: "tui.rewind.fork.detail"}
 	case rewindOptionCancel:
-		return rewindOptionSpec{label: "Annuler"}
+		return rewindOptionSpec{labelKey: "tui.rewind.cancel"}
 	}
 	return rewindOptionSpec{}
 }
@@ -92,14 +90,14 @@ func (what rewindWhat) String() string {
 	return ""
 }
 
-func (what rewindWhat) doneLabel() string {
+func (what rewindWhat) doneLabelKey() string {
 	switch what {
 	case rewindWhatCode:
-		return "code restauré"
+		return "tui.rewind.done.code"
 	case rewindWhatBoth:
-		return "code et conversation restaurés"
+		return "tui.rewind.done.both"
 	case rewindWhatConversation:
-		return "conversation reprise"
+		return "tui.rewind.done.conversation"
 	}
 	return ""
 }
@@ -153,21 +151,21 @@ func (m *model) escapeIdle() {
 func (m *model) openRewind() {
 	name := m.sessionName(m.active)
 	if name == "" {
-		m.flash = "retour : aucune session ouverte"
+		m.flash = m.tr.t("tui.rewind.no_session", nil)
 		return
 	}
 	out, err := m.tm.Dispatch([]string{sessionVerb, "checkpoints", argName, name, "--json"})
 	if err != nil {
-		m.flash = "retour : " + err.Error()
+		m.flash = m.tr.t("tui.rewind.failed", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 		return
 	}
 	var rows []rewindRow
 	if err := json.Unmarshal([]byte(out), &rows); err != nil {
-		m.flash = "retour : réponse illisible"
+		m.flash = m.tr.t("tui.rewind.unreadable", nil)
 		return
 	}
 	if len(rows) == 0 {
-		m.flash = "retour : aucun checkpoint pour " + name
+		m.flash = m.tr.t("tui.rewind.no_checkpoint", map[string]any{tplArgName: name})
 		return
 	}
 	m.rwRows = rows
@@ -286,7 +284,7 @@ func (m *model) chooseRewindOption() tea.Cmd {
 		m.rwStep = rewindStepSure
 	case rewindOptionBoth, rewindOptionConversation:
 		if !ok || !row.conversationRestorable() {
-			m.flash = rewindUnsupportedNote
+			m.flash = m.tr.t("tui.rewind.unsupported", nil)
 			return nil
 		}
 		m.rwWhat = rewindWhatBoth
@@ -350,29 +348,29 @@ func (m *model) forkFromRewind() tea.Cmd {
 
 func (m *model) handleRewindDone(msg rewindDoneMsg) {
 	if msg.err != nil {
-		m.flash = "retour refusé : " + msg.err.Error()
+		m.flash = m.tr.t("tui.rewind.refused", map[string]any{tplArgReason: localizedReason(m.tr, msg.err)})
 		return
 	}
 	if m.input.Value() == "" {
 		m.input.SetValue(msg.text)
 	}
-	m.flash = fmt.Sprintf("revenu au message %d · %s", msg.index, msg.what.doneLabel())
+	m.flash = m.tr.t("tui.rewind.done", map[string]any{"Index": msg.index, "What": m.tr.t(msg.what.doneLabelKey(), nil)})
 }
 
 func (m *model) handleForkDone(msg forkDoneMsg) {
 	if msg.err != nil {
-		m.flash = "fork refusé : " + msg.err.Error()
+		m.flash = m.tr.t("tui.rewind.fork_refused", map[string]any{tplArgReason: localizedReason(m.tr, msg.err)})
 		return
 	}
 	channel := channelOfSession(m.tm.Sessions(), msg.name)
 	if channel == "" {
-		m.flash = "fork créé : " + msg.name
+		m.flash = m.tr.t("tui.rewind.fork_created", map[string]any{tplArgName: msg.name})
 		return
 	}
 	m.ensureTab(channel)
 	m.active = channel
 	m.syncViewport()
-	m.flash = "fork ouvert : " + msg.name
+	m.flash = m.tr.t("tui.rewind.fork_opened", map[string]any{tplArgName: msg.name})
 }
 
 func channelOfSession(sessions []contracts.SessionInfo, name string) string {
@@ -403,12 +401,12 @@ func (m *model) rewindBody(width int) []string {
 }
 
 func (m *model) rewindHeader(width int) string {
-	title := m.st.accent.Render("Revenir en arrière") + m.st.dim.Render(" · "+m.doubleEscGlyphs())
+	title := m.st.accent.Render(m.tr.t("tui.rewind.title", nil)) + m.st.dim.Render(" · "+m.doubleEscGlyphs())
 	return cutText("  "+title, width)
 }
 
 func (m *model) rewindListLines(width int) []string {
-	lines := []string{cutText("  "+m.st.dim.Render("un checkpoint avant chaque message"), width)}
+	lines := []string{cutText("  "+m.st.dim.Render(m.tr.t("tui.rewind.hint", nil)), width)}
 	start, end := paletteWindow(len(m.rwRows), m.rwIdx, m.overlayRows())
 	for index := start; index < end; index++ {
 		row := m.rwRows[index]
@@ -417,7 +415,7 @@ func (m *model) rewindListLines(width int) []string {
 		if selected {
 			head = m.st.glyphs.prompt + " "
 		}
-		summary := rewindSummary(row.Files)
+		summary := rewindSummary(m.tr, row.Files)
 		line := cutText("  "+head+row.At+"  "+row.Text, width)
 		if width >= rewindMinSplit {
 			line = rightAligned(line, summary, width, rewindListGap)
@@ -427,7 +425,7 @@ func (m *model) rewindListLines(width int) []string {
 			lines = append(lines, cutText(rewindFileIndent+m.st.dim.Render(summary), width))
 		}
 	}
-	footer := fitSegments([]string{m.pairHint(actSelectPrevious, actSelectNext, "choisir", ctxMessageSelector), m.labelledHint(actSelectAccept, "revenir à ce message", ctxMessageSelector), m.labelledHint(actRewindFork, "forker d’ici", ctxMessageSelector), m.labelledHint(actRewindUndo, "annuler le retour", ctxMessageSelector), m.labelledHint(actSelectCancel, "fermer", ctxMessageSelector)}, width-rewindFooterIndent)
+	footer := fitSegments([]string{m.pairHint(actSelectPrevious, actSelectNext, m.tr.t("tui.common.choose", nil), ctxMessageSelector), m.labelledHint(actSelectAccept, m.tr.t("tui.rewind.go_to", nil), ctxMessageSelector), m.labelledHint(actRewindFork, m.tr.t("tui.rewind.fork_here", nil), ctxMessageSelector), m.labelledHint(actRewindUndo, m.tr.t("tui.rewind.undo", nil), ctxMessageSelector), m.labelledHint(actSelectCancel, m.tr.t("tui.common.close", nil), ctxMessageSelector)}, width-rewindFooterIndent)
 	return append(lines, "  "+m.st.dim.Render(footer))
 }
 
@@ -436,21 +434,21 @@ func (m *model) rewindOptionLines(width int) []string {
 	if !ok {
 		return nil
 	}
-	lines := []string{cutText("  "+m.st.text.Render("Message de "+row.At+" : « "+row.Text+" »"), width)}
+	lines := []string{cutText("  "+m.st.text.Render(m.tr.t("tui.rewind.message", map[string]any{"At": row.At, tplArgText: row.Text})), width)}
 	if files := rewindFileNames(row.Files); files != "" {
-		lines = append(lines, cutText("  "+m.st.dim.Render("fichiers touchés depuis : ")+m.st.green.Render(files), width))
+		lines = append(lines, cutText("  "+m.st.dim.Render(m.tr.t("tui.rewind.files_since", nil))+m.st.green.Render(files), width))
 	}
 	for index, option := range rewindOptionOrder() {
 		spec := option.spec()
+		label := fmt.Sprintf("%d. %s", index+1, m.tr.t(spec.labelKey, nil))
 		selected := option == m.rwOpt
 		head := "  "
 		if selected {
 			head = m.st.glyphs.prompt + " "
 		}
-		label := fmt.Sprintf("%d. %s", index+1, spec.label)
-		detail := spec.detail
+		detail := m.tr.t(spec.detailKey, nil)
 		if spec.needsConversation && !row.conversationRestorable() {
-			detail = rewindUnsupportedNote
+			detail = m.tr.t("tui.rewind.unsupported", nil)
 		}
 		line := "  " + head + label
 		if detail != "" {
@@ -458,7 +456,7 @@ func (m *model) rewindOptionLines(width int) []string {
 		}
 		lines = append(lines, m.rewindRow(cutText(line, width), selected, width))
 	}
-	footer := fitSegments([]string{m.pairHint(actSelectPrevious, actSelectNext, "choisir", ctxMessageSelector), m.labelledHint(actSelectAccept, "valider", ctxMessageSelector), m.labelledHint(actSelectCancel, "retour", ctxMessageSelector)}, width-rewindFooterIndent)
+	footer := fitSegments([]string{m.pairHint(actSelectPrevious, actSelectNext, m.tr.t("tui.common.choose", nil), ctxMessageSelector), m.labelledHint(actSelectAccept, m.tr.t("tui.common.accept", nil), ctxMessageSelector), m.labelledHint(actSelectCancel, m.tr.t("tui.common.back", nil), ctxMessageSelector)}, width-rewindFooterIndent)
 	return append(lines, "  "+m.st.dim.Render(footer))
 }
 
@@ -472,21 +470,21 @@ func (m *model) rewindSureLines(width int) []string {
 	if !ok {
 		return nil
 	}
-	question := rewindQuestion(m.rwWhat, row.At)
+	question := rewindQuestion(m.tr, m.rwWhat, row.At)
 	return []string{
 		cutText("  "+m.st.warn.Render(question), width),
-		cutText("  "+m.st.dim.Render("y confirmer · n annuler"), width),
+		cutText("  "+m.st.dim.Render(m.tr.t("tui.rewind.confirm_keys", nil)), width),
 	}
 }
 
-func rewindQuestion(what rewindWhat, when string) string {
+func rewindQuestion(trans translator, what rewindWhat, when string) string {
 	switch what {
 	case rewindWhatBoth:
-		return fmt.Sprintf("Restaurer le code et la conversation au message de %s ? Les fichiers reviennent à cet état et la conversation reprend à ce message.", when)
+		return trans.t("tui.rewind.sure_both", map[string]any{tplArgWhen: when})
 	case rewindWhatConversation:
-		return fmt.Sprintf("Restaurer la conversation au message de %s ? Les fichiers ne bougent pas.", when)
+		return trans.t("tui.rewind.sure_conversation", map[string]any{tplArgWhen: when})
 	case rewindWhatCode:
-		return fmt.Sprintf("Restaurer le code au message de %s ? Les fichiers du worktree reviennent à cet état.", when)
+		return trans.t("tui.rewind.sure_code", map[string]any{tplArgWhen: when})
 	}
 	return ""
 }
@@ -498,20 +496,16 @@ func (m *model) rewindRow(line string, selected bool, width int) string {
 	return m.st.dim.Render(padTo(line, width))
 }
 
-func rewindSummary(files []rewindFile) string {
+func rewindSummary(trans translator, files []rewindFile) string {
 	if len(files) == 0 {
-		return "aucun fichier"
+		return trans.t("tui.rewind.no_file", nil)
 	}
 	added, removed := 0, 0
 	for _, file := range files {
 		added += file.Added
 		removed += file.Removed
 	}
-	noun := "fichiers"
-	if len(files) == 1 {
-		noun = "fichier"
-	}
-	count := fmt.Sprintf("%d %s", len(files), noun)
+	count := trans.t("tui.rewind.files", map[string]any{tplArgCount: len(files)})
 	if lines := changedLines(added, removed); lines != "" {
 		return lines + " · " + count
 	}

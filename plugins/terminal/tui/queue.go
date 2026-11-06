@@ -10,12 +10,7 @@ import (
 
 const (
 	draftPreviewDivisor = 2
-	queueEndOfTurn      = "fin du tour"
-	queueAfterTool      = "après le prochain outil"
-	queueRemoveLabel    = "✕ retirer"
 	queueIndent         = "   "
-	queueAfterMark      = "↪ réorienter"
-	queueFileMark       = "○ file"
 	queueHeaderMark     = "○"
 	queueMarkWidth      = 14
 	queueFoldRows       = 2
@@ -115,8 +110,8 @@ func (m *model) draftsView() string {
 		return ""
 	}
 	last := oneLine(m.drafts[len(m.drafts)-1])
-	left := m.st.dim.Render(" ○ brouillons (" + strconv.Itoa(len(m.drafts)) + ") : « " + cutText(last, m.innerWidth()/draftPreviewDivisor) + " »")
-	right := m.st.accent.Render(m.hintIn(actStash, chatKeyStack()...)) + m.st.dim.Render(" reprendre le dernier")
+	left := m.st.dim.Render(" ○ " + m.tr.t("tui.queue.drafts", map[string]any{tplArgCount: len(m.drafts), tplArgText: cutText(last, m.innerWidth()/draftPreviewDivisor)}))
+	right := m.st.accent.Render(m.hintIn(actStash, chatKeyStack()...)) + m.st.dim.Render(" "+m.tr.t("tui.queue.resume_last", nil))
 	return justifyRow(left, right, m.innerWidth())
 }
 
@@ -128,11 +123,11 @@ func (m *model) queueLines(base, rows int) []string {
 	}
 	m.clampQueueSel()
 	width := m.innerWidth()
-	header := queueHeaderMark + " En file (" + strconv.Itoa(len(current.queue)) + ")"
+	header := queueHeaderMark + " " + m.tr.t("tui.queue.title", nil) + " (" + strconv.Itoa(len(current.queue)) + ")"
 	if current.busy {
-		header += footerSeparator + joinNonEmpty("partent dans l’ordre à la fin du tour", m.labelledHint(actQueueSubmit, "tout envoyer maintenant", chatKeyStack()...))
+		header += footerSeparator + joinNonEmpty(m.tr.t("tui.queue.busy_note", nil), m.labelledHint(actQueueSubmit, m.tr.t("tui.queue.send_all", nil), chatKeyStack()...))
 	} else {
-		header += " · prêts à partir"
+		header += " · " + m.tr.t("tui.queue.ready", nil)
 	}
 	if m.queueFocus {
 		header = m.queueFocusText()
@@ -140,22 +135,23 @@ func (m *model) queueLines(base, rows int) []string {
 	lines := []string{m.st.dim.Render(foldText(header, width))}
 	shown := queueShown(len(current.queue), rows)
 	numberWidth := len(strconv.Itoa(len(current.queue)))
+	removeLabel := m.tr.t("tui.queue.remove", nil)
 	for index, item := range current.queue[:shown] {
-		mark, when := queueFileMark, queueEndOfTurn
+		mark, when := m.tr.t("tui.queue.file_mark", nil), m.tr.t("tui.queue.end_of_turn", nil)
 		if item.steer {
-			mark, when = queueAfterMark, queueAfterTool
+			mark, when = m.tr.t("tui.queue.redirect_mark", nil), m.tr.t("tui.queue.after_tool", nil)
 		}
 		left := queueIndent + padLeft(strconv.Itoa(index+1), numberWidth) + "  " + padTo(mark, queueMarkWidth) + oneLine(item.text)
-		right := when + "  " + queueRemoveLabel
+		right := when + "  " + removeLabel
 		row := justifyRow(left, m.st.dim.Render(right), width)
 		if m.queueFocus && index == m.queueSel {
 			row = m.st.overlaySel.Render(justifyRow(left, right, width))
 		}
-		m.queueHits = append(m.queueHits, queueHit{row: base + len(lines), from: width - lipgloss.Width(queueRemoveLabel), to: width, index: index})
+		m.queueHits = append(m.queueHits, queueHit{row: base + len(lines), from: width - lipgloss.Width(removeLabel), to: width, index: index})
 		lines = append(lines, row)
 	}
 	if hidden := len(current.queue) - shown; hidden > 0 && rows >= queueFoldRows {
-		lines = append(lines, m.st.dim.Render(queueIndent+"… "+strconv.Itoa(hidden)+" de plus"))
+		lines = append(lines, m.st.dim.Render(queueIndent+m.tr.t("tui.queue.more", map[string]any{tplArgCount: hidden})))
 	}
 	return lines
 }
@@ -287,7 +283,7 @@ func (m *model) showQueue() {
 		return
 	}
 	if len(current.queue) == 0 {
-		current.appendEntry(entry{role: roleNotice, text: "la file est vide"})
+		current.appendEntry(entry{role: roleNotice, text: m.tr.t("tui.queue.empty", nil)})
 		m.syncViewport()
 		return
 	}
@@ -296,7 +292,7 @@ func (m *model) showQueue() {
 		lines = append(lines, strconv.Itoa(index+1)+". "+oneLine(item.text))
 	}
 
-	current.appendEntry(entry{role: roleNotice, text: "file (" + strconv.Itoa(len(lines)) + ") :\n" + strings.Join(lines, "\n")})
+	current.appendEntry(entry{role: roleNotice, text: m.tr.t("tui.queue.list", map[string]any{tplArgCount: len(lines), "Lines": strings.Join(lines, "\n")})})
 	m.syncViewport()
 }
 
@@ -310,10 +306,10 @@ func (m *model) enqueueWhileBusy(steer bool) bool {
 }
 
 func (m *model) queueFocusText() string {
-	return "○ En file" + footerSeparator + joinNonEmpty(
-		m.pairHint(actQueuePrevious, actQueueNext, "choisir", ctxQueue),
-		m.pairHint(actQueueMoveUp, actQueueMoveDown, "réordonner", ctxQueue),
-		m.labelledHint(actQueueRemove, "retirer", ctxQueue),
-		m.labelledHint(actQueueLeave, "quitter", ctxQueue),
+	return queueHeaderMark + " " + m.tr.t("tui.queue.title", nil) + footerSeparator + joinNonEmpty(
+		m.pairHint(actQueuePrevious, actQueueNext, m.tr.t("tui.common.choose", nil), ctxQueue),
+		m.pairHint(actQueueMoveUp, actQueueMoveDown, m.tr.t("tui.queue.reorder", nil), ctxQueue),
+		m.labelledHint(actQueueRemove, m.tr.t("tui.queue.remove_action", nil), ctxQueue),
+		m.labelledHint(actQueueLeave, m.tr.t("tui.queue.leave", nil), ctxQueue),
 	)
 }

@@ -153,10 +153,10 @@ func TestThemeScreenFitsTheWindow(t *testing.T) {
 func TestThemeScreenHeaderAndHelpFitOnOneLine(t *testing.T) {
 	for _, height := range []int{20, 30} {
 		plain := ansi.Strip(themeSized(t, 80, height).View())
-		if !strings.Contains(plain, "Thème · /theme · aperçu en direct") {
+		if !strings.Contains(plain, "Theme · /theme · live preview") {
 			t.Fatalf("%d lines: header must name the screen and the live preview", height)
 		}
-		for _, want := range []string{"⌃P⌃N aperçu en direct · ⏎ garder · échap revenir", "⌃Xt thème, depuis n’importe où"} {
+		for _, want := range []string{"⌃P⌃N live preview · ⏎ keep · esc back", "⌃Xt theme, from anywhere"} {
 			if !lineContains(plain, want) {
 				t.Fatalf("%d lines: help %q must sit on one line", height, want)
 			}
@@ -175,10 +175,10 @@ func lineContains(text, want string) bool {
 
 func TestThemeScreenListShowsDescriptionAndCurrentMark(t *testing.T) {
 	plain := ansi.Strip(themeSized(t, 120, 30).View())
-	if !lineContains(plain, "✓ Sombre") {
+	if !lineContains(plain, "✓ Dark") {
 		t.Fatal("the kept theme must carry the ✓ mark")
 	}
-	if !lineContains(plain, "fond sombre · défaut") || !lineContains(plain, "16 couleurs ANSI du terminal") {
+	if !lineContains(plain, "dark background · default") || !lineContains(plain, "the terminal's 16 ANSI colours") {
 		t.Fatal("built-in themes must show their description")
 	}
 }
@@ -197,7 +197,7 @@ func TestThemeScreenListsPersonalThemeWhenFileExists(t *testing.T) {
 
 func TestThemeScreenShowsPersonalPlaceholderWithoutFile(t *testing.T) {
 	plain := ansi.Strip(themeSized(t, 120, 30).View())
-	if !lineContains(plain, "Mon thème") || !lineContains(plain, "themes/perso.toml") {
+	if !lineContains(plain, "My theme") || !lineContains(plain, "themes/perso.toml") {
 		t.Fatalf("the personal theme must stay in the list before its file exists:\n%s", plain)
 	}
 }
@@ -217,7 +217,7 @@ func TestThemeScreenRefusesToKeepMissingPersonalTheme(t *testing.T) {
 func TestThemeScreenRenderOptionsAreVisibleAndCycle(t *testing.T) {
 	m := themeSized(t, 120, 30)
 	plain := ansi.Strip(m.View())
-	for _, want := range []string{"glyphes", "unicode", "arrondies", "compacte", "[✓] gras", "[✓] italique", "[ ] auto"} {
+	for _, want := range []string{"glyphs", "unicode", "rounded", "compact", "[✓] bold", "[✓] italic", "[ ] auto"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("RENDU must show %q:\n%s", want, plain)
 		}
@@ -234,7 +234,7 @@ func TestThemeScreenRenderOptionsAreVisibleAndCycle(t *testing.T) {
 
 func TestThemeScreenPreviewElementsAreShown(t *testing.T) {
 	plain := ansi.Strip(themeSized(t, 120, 30).View())
-	for _, want := range []string{"APERÇU · Sombre · gardé", "✓ ajouté", "✗ retiré", "● attente", "> ligne sélectionnée", "· notice", "erreur", "ctx"} {
+	for _, want := range []string{"PREVIEW · Dark · kept", "✓ added", "✗ removed", "● waiting", "> selected line", "· notice", "error", "ctx"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("preview must show %q:\n%s", want, plain)
 		}
@@ -242,10 +242,10 @@ func TestThemeScreenPreviewElementsAreShown(t *testing.T) {
 }
 
 func TestThemeScreenPreviewStepsAsideOnNarrowWindows(t *testing.T) {
-	if !strings.Contains(ansi.Strip(themeSized(t, 60, 30).View()), "APERÇU") {
+	if !strings.Contains(ansi.Strip(themeSized(t, 60, 30).View()), "PREVIEW") {
 		t.Fatal("a 30-line window must stack the preview under the list")
 	}
-	if strings.Contains(ansi.Strip(themeSized(t, 60, 20).View()), "APERÇU") {
+	if strings.Contains(ansi.Strip(themeSized(t, 60, 20).View()), "PREVIEW") {
 		t.Fatal("a 20-line window must hide the preview rather than overflow")
 	}
 }
@@ -338,15 +338,15 @@ func TestAsciiViewIsPureAtEveryWidth(t *testing.T) {
 	}
 }
 
-func TestWorkingVerbIsFrench(t *testing.T) {
-	if workingVerb != "En cours…" {
-		t.Fatalf("workingVerb = %q", workingVerb)
+func TestWorkingVerbIsEnglish(t *testing.T) {
+	if newTranslator().t("tui.common.working", nil) != "working…" {
+		t.Fatalf("workingVerb = %q", newTranslator().t("tui.common.working", nil))
 	}
 }
 
 func TestThemeScreenShowsRenderSection(t *testing.T) {
 	plain := ansi.Strip(themeSized(t, 120, 30).View())
-	for _, want := range []string{"police", "Obel Mono · recommandée", "un TUI ne choisit pas sa police : seule une appli", "qui dessine sa propre fenêtre le peut"} {
+	for _, want := range []string{"font", "Obel Mono · recommended", "a TUI does not choose its font: only an app", "that draws its own window can"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("RENDU must show %q:\n%s", want, plain)
 		}
@@ -360,7 +360,7 @@ func TestThemeScreenShowsDetectionBlock(t *testing.T) {
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m.openTheme()
 	plain := ansi.Strip(m.View())
-	for _, want := range []string{"sombre · lu par OSC 11 au démarrage", "NO_COLOR respecté : marqueurs et gras seuls", "fond sombre → Sombre, clair → Clair"} {
+	for _, want := range []string{"dark · read by OSC 11 at startup", "NO_COLOR respected: markers and bold only", "dark background → Dark, light → Light"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("DÉTECTION must show %q:\n%s", want, plain)
 		}
@@ -372,14 +372,14 @@ func TestThemeScreenDetectionReportsUnknownWithoutProbe(t *testing.T) {
 	m.loadTheme(dir, func() bool { panic("probe must not run without auto") })
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m.openTheme()
-	if plain := ansi.Strip(m.View()); !strings.Contains(plain, "inconnu") {
+	if plain := ansi.Strip(m.View()); !strings.Contains(plain, "unknown") {
 		t.Fatalf("without auto the background must read inconnu:\n%s", plain)
 	}
 }
 
 func TestThemeScreenPreviewUsesRealRenderers(t *testing.T) {
 	plain := ansi.Strip(themeSized(t, 120, 40).View())
-	for _, want := range []string{"Read", "Edit", "+12", "−4", "Bash", "go vet ./...", "refus dans 4:12", "git push origin feat/tui-v2", "41%", "85%", "97%", "En cours…"} {
+	for _, want := range []string{"Read", "Edit", "+12", "−4", "Bash", "go vet ./...", "deny in 4:12", "git push origin feat/tui-v2", "41%", "85%", "97%", "working…"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("preview must show %q:\n%s", want, plain)
 		}
@@ -392,11 +392,11 @@ func TestThemeScreenTerminalTomlBlock(t *testing.T) {
 	if !lineContains(plain, "[terminal]") || !lineContains(plain, "theme      = \"sombre\"") || !lineContains(plain, "auto_theme = false") {
 		t.Fatalf("terminal.toml block must show the section and its keys:\n%s", plain)
 	}
-	if strings.Contains(plain, "enregistré à l’instant") {
+	if strings.Contains(plain, "saved just now") {
 		t.Fatal("the saved line must not show before a commit")
 	}
 	m.commitTheme()
-	if !strings.Contains(ansi.Strip(m.View()), "enregistré à l’instant") {
+	if !strings.Contains(ansi.Strip(m.View()), "saved just now") {
 		t.Fatal("the saved line must show right after a commit")
 	}
 }
@@ -408,7 +408,7 @@ func TestThemePersonalTomlBlockListsTokens(t *testing.T) {
 			t.Fatalf("perso.toml block must list %q:\n%s", token, plain)
 		}
 	}
-	if !strings.Contains(plain, "hérite de base, ne nomme que ce qui change") {
+	if !strings.Contains(plain, "inherits from base, only names what changes") {
 		t.Fatal("perso.toml block must explain inheritance")
 	}
 }
@@ -419,10 +419,10 @@ func TestThemePreviewDropsBottomBlocksFirst(t *testing.T) {
 	if !strings.Contains(tall, "tui/theme.go  tui/rail.go") {
 		t.Fatalf("a tall window must show the file line:\n%s", tall)
 	}
-	if !strings.Contains(tall, "hérite de base") {
+	if !strings.Contains(tall, "inherits from base") {
 		t.Fatalf("a tall window must show the perso.toml block:\n%s", tall)
 	}
-	if strings.Contains(short, "hérite de base") && !strings.Contains(short, "[terminal]") {
+	if strings.Contains(short, "inherits from base") && !strings.Contains(short, "[terminal]") {
 		t.Fatalf("perso.toml must go before terminal.toml when short:\n%s", short)
 	}
 }
@@ -430,9 +430,9 @@ func TestThemePreviewDropsBottomBlocksFirst(t *testing.T) {
 func TestThemeControlsFoldByWholeBlocks(t *testing.T) {
 	for _, width := range []int{60, 120} {
 		plain := ansi.Strip(themeSized(t, width, 20).View())
-		requireAll(t, plain, fmt.Sprintf("%dx20", width), "Mon thème", "Terminal", "RENDU", "glyphes", "bordures", "densité", "texte", "police", "⏎ garder")
-		requireBoth(t, plain, fmt.Sprintf("%dx20 font explanation", width), "un TUI ne choisit pas sa police", "qui dessine sa propre fenêtre le peut")
-		requireAllOrNone(t, plain, fmt.Sprintf("%dx20 DÉTECTION", width), "DÉTECTION", "auto : fond sombre", "NO_COLOR respecté")
+		requireAll(t, plain, fmt.Sprintf("%dx20", width), "My theme", "Terminal", "RENDER", "glyphs", "borders", "density", "text", "font", "⏎ keep")
+		requireBoth(t, plain, fmt.Sprintf("%dx20 font explanation", width), "a TUI does not choose its font", "that draws its own window can")
+		requireAllOrNone(t, plain, fmt.Sprintf("%dx20 DÉTECTION", width), "DETECTION", "auto : dark background", "NO_COLOR respected")
 	}
 }
 
@@ -490,7 +490,7 @@ func TestThemePreviewNeverShowsItsTitleAlone(t *testing.T) {
 		for _, width := range []int{60, 80, 120} {
 			lines := strings.Split(ansi.Strip(themeSized(t, width, height).View()), "\n")
 			for index, line := range lines {
-				if !strings.HasPrefix(line, "APERÇU ·") {
+				if !strings.HasPrefix(line, "PREVIEW ·") {
 					continue
 				}
 				if index+2 >= len(lines) || strings.TrimSpace(lines[index+1]+lines[index+2]) == "" {

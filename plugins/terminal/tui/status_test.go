@@ -305,13 +305,13 @@ func TestStatusBarDropsItsFieldsByPriorityAsItNarrows(t *testing.T) {
 	m, tb := barModelAt(t, writeWorktreeRepo(t))
 	m.bar.setBackground(1)
 	wide := m.statusBar(tb, 200)
-	for _, want := range []string{"Manuel", "opus-5", "feat/tui-v2", "(worktree)", "82k/200k", "$1.42", "1 en fond"} {
+	for _, want := range []string{"Manual", "opus-5", "feat/tui-v2", "(worktree)", "82k/200k", "$1.42", "1 background"} {
 		if !strings.Contains(wide, want) {
 			t.Errorf("200 columns must carry %q: %q", want, wide)
 		}
 	}
 	mid := m.statusBar(tb, 60)
-	if strings.Contains(mid, "1 en fond") {
+	if strings.Contains(mid, "1 background") {
 		t.Errorf("the background tasks go first when narrow: %q", mid)
 	}
 	if !strings.Contains(mid, "41%") {
@@ -323,14 +323,14 @@ func TestStatusBarShowsTheSpinnerWhileBusy(t *testing.T) {
 	m, tb := barModelAt(t, "")
 	tb.busy = true
 	tb.startedAt = time.Now()
-	if bar := m.statusBar(tb, 200); !strings.Contains(bar, "échap pour interrompre") {
+	if bar := m.statusBar(tb, 200); !strings.Contains(bar, "esc to interrupt") {
 		t.Errorf("a busy tab must keep the working hint in the bar: %q", bar)
 	}
 }
 
 func TestStatusBarRendersTheModeChip(t *testing.T) {
 	m, tb := barModelAt(t, "")
-	if bar := m.statusBar(tb, 120); !strings.Contains(bar, "Manuel") {
+	if bar := m.statusBar(tb, 120); !strings.Contains(bar, "Manual") {
 		t.Errorf("the mode chip must lead with the session mode: %q", bar)
 	}
 	tb.setMode(modeAuto)

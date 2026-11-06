@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -43,7 +42,7 @@ func (m *model) moveSkills(d int) { m.skillsIdx += d; m.clampSkills() }
 
 func (m *model) skillsView() string {
 	if len(m.skillsRows) == 0 {
-		return m.st.dim.Render("  (aucune skill dans ~/.claude/skills)")
+		return m.st.dim.Render("  " + m.tr.t("tui.skills.none", map[string]any{"Dir": "~/.claude/skills"}))
 	}
 	start, end := paletteWindow(len(m.skillsRows), m.skillsIdx, m.overlayRows())
 	rows := make([]overlayRow, 0, end-start)
@@ -52,12 +51,12 @@ func (m *model) skillsView() string {
 		rows = append(rows, overlayRow{label: s.Name, detail: s.Description})
 	}
 	footer := joinNonEmpty(
-		m.pairHint(actSelectPrevious, actSelectNext, "parcourir", ctxSkills),
-		m.pairHint(actSelectPageUp, actSelectPageDown, "page", ctxSkills),
-		m.labelledHint(actSelectCancel, "fermer", ctxSkills),
+		m.pairHint(actSelectPrevious, actSelectNext, m.tr.t("tui.skills.browse", nil), ctxSkills),
+		m.pairHint(actSelectPageUp, actSelectPageDown, m.tr.t("tui.skills.page", nil), ctxSkills),
+		m.labelledHint(actSelectCancel, m.tr.t("tui.common.close", nil), ctxSkills),
 	)
 	if hidden := len(m.skillsRows) - (end - start); hidden > 0 {
-		footer = fmt.Sprintf("+%d autres · %s", hidden, footer)
+		footer = m.tr.t("tui.skills.more", map[string]any{tplArgCount: hidden, "Footer": footer})
 	}
 	return floatingList(rows, m.skillsIdx-start, footer, m.overlayWidth(), m.st)
 }

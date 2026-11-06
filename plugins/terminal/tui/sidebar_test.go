@@ -42,7 +42,7 @@ func sizedTestModelVisible(t *testing.T, width int) bool {
 
 func TestSidebarShowsItsSectionsWhenVisible(t *testing.T) {
 	view := sidebarModel(t, 120).View()
-	for _, want := range []string{"SESSION", "TODOS 1/2", "SOUS-AGENTS", "FICHIERS", "CONTEXTE", unicodeGlyphs().filet} {
+	for _, want := range []string{"SESSION", "TODOS 1/2", "SUB-AGENTS", "FILES", "CONTEXT", unicodeGlyphs().filet} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("the sidebar must show %q at 120 columns", want)
 		}
@@ -52,7 +52,7 @@ func TestSidebarShowsItsSectionsWhenVisible(t *testing.T) {
 func TestSidebarStaysHiddenBelowTheThreshold(t *testing.T) {
 	for _, width := range []int{60, 80} {
 		view := sidebarModel(t, width).View()
-		if strings.Contains(view, "SOUS-AGENTS") || strings.Contains(view, "Todos") {
+		if strings.Contains(view, "SUB-AGENTS") || strings.Contains(view, "Todos") {
 			t.Fatalf("at %d columns the sidebar must stay hidden", width)
 		}
 	}
@@ -68,7 +68,7 @@ func TestSidebarFoldsItsBottomSectionsBelowTwentyFourRows(t *testing.T) {
 	if strings.Contains(view, "explore") {
 		t.Fatal("below 24 rows the sub-agent section must fold to its summary line")
 	}
-	if !strings.Contains(view, "SOUS-AGENTS") {
+	if !strings.Contains(view, "SUB-AGENTS") {
 		t.Fatal("the folded sub-agent section must keep its summary line")
 	}
 }
@@ -110,12 +110,12 @@ func TestParseNumstatReadsAddedAndRemovedLines(t *testing.T) {
 
 func TestBackgroundSectionAppearsOnlyWithTasks(t *testing.T) {
 	m := sidebarModel(t, 120)
-	if strings.Contains(m.View(), "DE FOND") {
+	if strings.Contains(m.View(), "BACKGROUND") {
 		t.Fatal("the background section must stay hidden without tasks")
 	}
 	m.tabs[m.active].background = []backgroundTask{{ID: "b1", Name: "npm run build", State: "running"}}
 	view := m.View()
-	if !strings.Contains(view, "DE FOND") || !strings.Contains(view, "npm run build") {
+	if !strings.Contains(view, "BACKGROUND") || !strings.Contains(view, "npm run build") {
 		t.Fatal("the background section must list its tasks")
 	}
 }
@@ -178,7 +178,7 @@ func TestSidebarContextGaugeHasSixteenCellsWithoutBrackets(t *testing.T) {
 	if strings.ContainsAny(gaugeLine, "[]") {
 		t.Fatalf("the sidebar gauge must not be bracketed: %q", gaugeLine)
 	}
-	if !strings.Contains(ansi.Strip(lines[2]), "compacte seul à 92%") {
+	if !strings.Contains(ansi.Strip(lines[2]), "compacts alone at 92%") {
 		t.Fatalf("the sidebar must say compaction happens at 92%%: %q", ansi.Strip(lines[2]))
 	}
 }

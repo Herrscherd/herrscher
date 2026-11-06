@@ -8,9 +8,9 @@ import (
 
 func (m *model) historyFooter() string {
 	return joinNonEmpty(
-		m.labelledHint(actHistorySearch, "historique", chatKeyStack()...),
-		m.labelledHint(actHistoryAccept, "reprendre", ctxHistorySearch),
-		m.labelledHint(actHistoryCancel, "fermer", ctxHistorySearch),
+		m.labelledHint(actHistorySearch, m.tr.t("tui.common.history", nil), chatKeyStack()...),
+		m.labelledHint(actHistoryAccept, m.tr.t("tui.search.take", nil), ctxHistorySearch),
+		m.labelledHint(actHistoryCancel, m.tr.t("tui.common.close", nil), ctxHistorySearch),
 	)
 }
 
@@ -95,7 +95,7 @@ func (m *model) typeHistQuery(msg tea.KeyMsg) {
 func (m *model) histView() string {
 	matches := m.histMatches()
 	if len(matches) == 0 {
-		return m.st.dim.Render("  (aucune correspondance)")
+		return m.st.dim.Render("  (" + m.tr.t("tui.palette.no_match", nil) + ")")
 	}
 	visible := m.overlayRows()
 	start, _ := paletteWindow(len(matches), m.histSel, visible)

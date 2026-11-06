@@ -60,16 +60,16 @@ func (m *model) sessionFacts() []string {
 	}
 	var out []string
 	if info.Name != "" {
-		out = append(out, fact("session", info.Name, m.st))
+		out = append(out, fact(m.tr.t("tui.chrome.fact_session", nil), info.Name, m.st))
 	}
 	if where := joinNonEmpty(info.Project, info.Vendor); where != "" {
-		out = append(out, fact("repo", where, m.st))
+		out = append(out, fact(m.tr.t("tui.chrome.fact_repo", nil), where, m.st))
 	}
 	if label := modelLabel(info); label != "" {
-		out = append(out, fact("modèle", label, m.st))
+		out = append(out, fact(m.tr.t("tui.chrome.fact_model", nil), label, m.st))
 	}
 	if tb := m.tabs[m.active]; tb != nil && !tb.openedAt.IsZero() {
-		out = append(out, fact("open", formatDuration(time.Since(tb.openedAt)), m.st))
+		out = append(out, fact(m.tr.t("tui.chrome.fact_open", nil), formatDuration(time.Since(tb.openedAt)), m.st))
 	}
 	return out
 }
@@ -98,15 +98,15 @@ func (m *model) otherSessions() []string {
 	if len(rows) == 0 {
 		return nil
 	}
-	return append([]string{"", m.st.dim.Render("  autres sessions")}, rows...)
+	return append([]string{"", m.st.dim.Render("  " + m.tr.t("tui.chrome.other_sessions", nil))}, rows...)
 }
 
 func (m *model) shortcutRow() string {
 	return m.st.dim.Render("  " + joinNonEmpty(
-		"/ commandes",
-		"@ fichiers",
-		m.labelledHint(actTabsNext, "changer de session", chatKeyStack()...),
-		m.labelledHint(actCancel, "interrompre", chatKeyStack()...),
+		m.tr.t("tui.chrome.hint_commands", nil),
+		m.tr.t("tui.chrome.hint_files", nil),
+		m.labelledHint(actTabsNext, m.tr.t("tui.chrome.switch_session", nil), chatKeyStack()...),
+		m.labelledHint(actCancel, m.tr.t("tui.common.interrupt", nil), chatKeyStack()...),
 	))
 }
 
@@ -118,13 +118,6 @@ func joinNonEmpty(parts ...string) string {
 		}
 	}
 	return strings.Join(kept, " · ")
-}
-
-func plural(n int) string {
-	if n > 1 {
-		return "s"
-	}
-	return ""
 }
 
 func truncate(text string, width int) string {

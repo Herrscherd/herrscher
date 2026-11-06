@@ -36,12 +36,12 @@ func (m *model) compactCmd() tea.Cmd {
 		return nil
 	}
 	if target.busy || target.compaction.active {
-		m.flash = "le compactage attend la fin du tour en cours"
+		m.flash = m.tr.t("tui.status.compact_waits", nil)
 		return nil
 	}
 	name := m.sessionName(target.channel)
 	if name == "" {
-		m.flash = "aucune session vivante à compacter"
+		m.flash = m.tr.t("tui.status.compact_no_session", nil)
 		return nil
 	}
 	target.busy = true
@@ -75,7 +75,7 @@ func (target *tab) measureCompaction(used int) {
 	target.ctxTokens = used
 }
 
-func (target *tab) finishCompaction() {
+func (target *tab) finishCompaction(trans translator) {
 	if !target.compaction.active {
 		return
 	}
@@ -83,7 +83,7 @@ func (target *tab) finishCompaction() {
 	if target.compaction.measured {
 		after = formatTokens(target.compaction.to)
 	}
-	target.appendEntry(entry{role: roleNotice, text: "compacté : " + formatTokens(target.compaction.from) + arrow + after})
+	target.appendEntry(entry{role: roleNotice, text: trans.t("tui.render.compacted", map[string]any{"Range": formatTokens(target.compaction.from) + arrow + after})})
 	target.lastCompact = target.compaction
 	target.compaction = compaction{}
 }
@@ -97,7 +97,7 @@ func (target *tab) startCompaction(event contracts.Event) {
 	target.compaction = compaction{active: true, from: event.Tokens, measured: event.Tokens > 0}
 }
 
-func (target *tab) completeCompaction(event contracts.Event) {
+func (target *tab) completeCompaction(trans translator, event contracts.Event) {
 	if event.Tokens > 0 {
 		target.compaction.to = event.Tokens
 		target.compaction.measured = true
@@ -107,7 +107,7 @@ func (target *tab) completeCompaction(event contracts.Event) {
 		target.ctxTokens = 0
 		target.ctxMeasured = false
 	}
-	target.finishCompaction()
+	target.finishCompaction(trans)
 	if event.Text != "" {
 		target.appendEntry(entry{role: roleNotice, text: event.Text})
 	}
@@ -131,5 +131,5 @@ func (m *model) lastCompactNote() string {
 	if target.lastCompact.measured {
 		after = formatTokens(target.lastCompact.to)
 	}
-	return "dernier compactage : " + formatTokens(target.lastCompact.from) + arrow + after
+	return m.tr.t("tui.render.last_compact", map[string]any{"Range": formatTokens(target.lastCompact.from) + arrow + after})
 }

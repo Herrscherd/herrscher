@@ -28,7 +28,7 @@ func contextModel(t *testing.T, used int) *model {
 func TestContextOverlayWithoutDataShowsEveryCategoryAsUnavailable(t *testing.T) {
 	m := contextModel(t, 0)
 	view := ansi.Strip(m.contextView())
-	for _, name := range []string{"système", "outils et MCP", "mémoire", "skills", "fichiers lus", "conversation"} {
+	for _, name := range []string{"system", "tools and MCP", "memory", "skills", "files read", "conversation"} {
 		if !strings.Contains(view, name) {
 			t.Fatalf("category %q missing from the overlay:\n%s", name, view)
 		}
@@ -99,10 +99,10 @@ func TestContextViewShowsTheRealThresholdAndTheBackKey(t *testing.T) {
 	m, _ := barModelAt(t, "")
 	m.openContext()
 	view := ansi.Strip(m.contextView())
-	if !strings.Contains(view, "  compacte seul à 92%") {
+	if !strings.Contains(view, "  compacts alone at 92%") {
 		t.Errorf("the total line must show the real compaction threshold after a gap:\n%s", view)
 	}
-	if !strings.Contains(view, "échap fermer") {
+	if !strings.Contains(view, "esc close") {
 		t.Errorf("the footer must name the back key:\n%s", view)
 	}
 }

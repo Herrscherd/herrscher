@@ -17,7 +17,7 @@ func TestEmptyTabShowsAnEmptyState(t *testing.T) {
 	if strings.TrimSpace(out) == "" {
 		t.Fatal("an empty tab must not render an empty screen")
 	}
-	if !strings.Contains(out, "commandes") {
+	if !strings.Contains(out, "commands") {
 		t.Fatalf("the empty state must name a gesture: %q", out)
 	}
 }
@@ -54,8 +54,8 @@ func TestEmptyStateListsFactsThenSessionsThenShortcuts(t *testing.T) {
 	m.order = []string{"c1", "c2"}
 	m.tabs = map[string]*tab{"c1": {label: "docs-site"}, "c2": {label: "neublox"}}
 	out := m.emptyState(74)
-	iSessions := strings.Index(out, "autres sessions")
-	iShort := strings.Index(out, "commandes")
+	iSessions := strings.Index(out, "other sessions")
+	iShort := strings.Index(out, "commands")
 	if iSessions < 0 || iShort < 0 || iSessions > iShort {
 		t.Fatalf("empty state order wrong:\n%s", out)
 	}

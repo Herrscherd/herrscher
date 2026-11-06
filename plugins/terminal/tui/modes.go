@@ -37,13 +37,12 @@ const (
 	modeStripSep    = " → "
 	cursorMarkWidth = 2
 	planApproved    = "Plan approved. Implement it."
-	planKeepNotice  = "Le plan reste ouvert. Dis ce qui change : l’agent le réécrit sans rien toucher."
 )
 
 type sessionMode struct {
-	host  string
-	label string
-	say   string
+	host     string
+	labelKey string
+	sayKey   string
 }
 
 func modeOrder() []modeID {
@@ -69,14 +68,14 @@ func (mode modeID) String() string {
 func modeSpec(mode modeID) sessionMode {
 	switch mode {
 	case modeEdits:
-		return sessionMode{host: hostAcceptEdits, label: "Édits acceptés", say: "les éditions passent, les commandes demandent encore"}
+		return sessionMode{host: hostAcceptEdits, labelKey: "tui.mode.edits.label", sayKey: "tui.mode.edits.say"}
 	case modePlan:
-		return sessionMode{host: hostPlan, label: "Plan", say: "lecture seule : l’agent propose un plan, tu le valides avant toute écriture"}
+		return sessionMode{host: hostPlan, labelKey: "tui.mode.plan.label", sayKey: "tui.mode.plan.say"}
 	case modeAuto:
-		return sessionMode{host: hostAuto, label: "Auto", say: "rien ne demande : éditions et commandes passent, sauf ce qu’une règle de refus bloque"}
+		return sessionMode{host: hostAuto, labelKey: "tui.mode.auto.label", sayKey: "tui.mode.auto.say"}
 	case modeNone, modeManual:
 	}
-	return sessionMode{host: hostAsk, label: "Manuel", say: "chaque édition et chaque commande demande une approbation"}
+	return sessionMode{host: hostAsk, labelKey: "tui.mode.manual.label", sayKey: "tui.mode.manual.say"}
 }
 
 func modeStyle(mode modeID, styles uiStyles) lipgloss.Style {
@@ -106,8 +105,8 @@ func modeIDFromHost(host string) (modeID, bool) {
 	return modeNone, false
 }
 
-func modeText(mode modeID, glyphs glyphSet) string {
-	text := modeSpec(mode).label
+func modeText(trans translator, mode modeID, glyphs glyphSet) string {
+	text := trans.t(modeSpec(mode).labelKey, nil)
 	if mode == modeAuto {
 		text = glyphs.warn + " " + text
 	}
@@ -169,7 +168,7 @@ func (m *model) cycleMode() tea.Cmd {
 func (m *model) switchModeCmd(channel string, target *tab, mode modeID, submit string) tea.Cmd {
 	name := m.sessionName(channel)
 	if name == "" {
-		m.flash = "aucune session pour changer de mode"
+		m.flash = m.tr.t("tui.mode.no_session", nil)
 		return nil
 	}
 	previous := target.modeID()
@@ -285,7 +284,7 @@ func (m *model) planSlash(instruction string) tea.Cmd {
 
 func (m *model) modeChip(target *tab) string {
 	mode := target.modeID()
-	chip := modeStyle(mode, m.st).Bold(true).Render(modeText(mode, m.st.glyphs))
+	chip := modeStyle(mode, m.st).Bold(true).Render(modeText(m.tr, mode, m.st.glyphs))
 	hint := m.hintIn(actCycleMode, ctxPlan)
 	if hint == "" {
 		return chip
@@ -306,7 +305,7 @@ func (m *model) modeStripHits() []modeHit {
 		if index > 0 {
 			column += lipgloss.Width(modeStripSep)
 		}
-		end := column + lipgloss.Width(modeSegmentLabel(mode, m.st.glyphs))
+		end := column + lipgloss.Width(modeSegmentLabel(m.tr, mode, m.st.glyphs))
 		hits = append(hits, modeHit{mode: mode, start: column, end: end})
 		column = end
 	}
@@ -323,7 +322,7 @@ func (m *model) modeStripView(target *tab, width int) []string {
 		segments = append(segments, m.modeSegment(mode, current))
 	}
 	line := m.st.dim.Render(" "+m.hintIn(actCycleMode, ctxPlan)+" ") + strings.Join(segments, "")
-	say := ansi.Truncate(modeStripIndent+modeSpec(current).say, width, "…")
+	say := ansi.Truncate(modeStripIndent+m.tr.t(modeSpec(current).sayKey, nil), width, "…")
 	sayStyle := m.st.dim
 	if current == modeAuto {
 		sayStyle = m.st.modeAuto
@@ -331,18 +330,18 @@ func (m *model) modeStripView(target *tab, width int) []string {
 	return []string{ansi.Truncate(line, width, "…"), sayStyle.Render(say)}
 }
 
-func modeSegmentLabel(mode modeID, glyphs glyphSet) string {
-	return " " + modeText(mode, glyphs) + " "
+func modeSegmentLabel(trans translator, mode modeID, glyphs glyphSet) string {
+	return " " + modeText(trans, mode, glyphs) + " "
 }
 
 func (m *model) modeSegment(mode, current modeID) string {
 	if mode == current {
-		return modeStyle(mode, m.st).Bold(true).Reverse(true).Render(modeSegmentLabel(mode, m.st.glyphs))
+		return modeStyle(mode, m.st).Bold(true).Reverse(true).Render(modeSegmentLabel(m.tr, mode, m.st.glyphs))
 	}
 	if mode == modeAuto {
-		return m.st.modeAuto.Render(modeSegmentLabel(mode, m.st.glyphs))
+		return m.st.modeAuto.Render(modeSegmentLabel(m.tr, mode, m.st.glyphs))
 	}
-	return m.st.dim.Render(modeSegmentLabel(mode, m.st.glyphs))
+	return m.st.dim.Render(modeSegmentLabel(m.tr, mode, m.st.glyphs))
 }
 
 type planMenu struct {
@@ -351,17 +350,17 @@ type planMenu struct {
 }
 
 type planOption struct {
-	label  string
-	say    string
-	mode   modeID
-	submit string
+	labelKey string
+	sayKey   string
+	mode     modeID
+	submit   string
 }
 
 func planOptions() []planOption {
 	return []planOption{
-		{label: "Valider et passer en édits acceptés", say: "l’agent écrit sans redemander, les commandes demandent", mode: modeEdits, submit: planApproved},
-		{label: "Valider en manuel", say: "chaque édition passera par une approbation", mode: modeManual, submit: planApproved},
-		{label: "Continuer à planifier", say: "dire ce qui change dans le plan"},
+		{labelKey: "tui.mode.plan_edits.label", sayKey: "tui.mode.plan_edits.say", mode: modeEdits, submit: planApproved},
+		{labelKey: "tui.mode.plan_manual.label", sayKey: "tui.mode.plan_manual.say", mode: modeManual, submit: planApproved},
+		{labelKey: "tui.mode.plan_continue.label", sayKey: "tui.mode.plan_continue.say"},
 	}
 }
 
@@ -391,7 +390,7 @@ func (m *model) choosePlan(index int) tea.Cmd {
 		return nil
 	}
 	if option.mode == modeNone {
-		target.appendEntry(entry{role: roleNotice, text: planKeepNotice})
+		target.appendEntry(entry{role: roleNotice, text: m.tr.t("tui.mode.plan_kept", nil)})
 		m.syncViewport()
 		return nil
 	}
@@ -431,20 +430,20 @@ func (m *model) planMenuView() string {
 		return ""
 	}
 	width := m.innerWidth()
-	lines := []string{ansi.Truncate(m.st.accent.Render(m.st.glyphs.tool+" Plan proposé")+m.st.dim.Render(" · rien n’est écrit avant ta validation"), width, "…")}
+	lines := []string{ansi.Truncate(m.st.accent.Render(m.st.glyphs.tool+" "+m.tr.t("tui.mode.plan_proposed", nil))+m.st.dim.Render(" · "+m.tr.t("tui.mode.plan_nothing_written", nil)), width, "…")}
 	for index, option := range planOptions() {
-		row := fmt.Sprintf("%d. %s", index+1, option.label)
+		row := fmt.Sprintf("%d. %s", index+1, m.tr.t(option.labelKey, nil))
 		if index == m.planMenu.sel {
 			lines = append(lines, m.st.accent.Render(m.st.glyphs.cursor+" "+ansi.Truncate(row, width-cursorMarkWidth, "…")))
 		} else {
 			lines = append(lines, m.st.dim.Render("  "+ansi.Truncate(row, width-cursorMarkWidth, "…")))
 		}
-		lines = append(lines, m.st.dim.Render(ansi.Truncate(modeStripIndent+option.say, width, "…")))
+		lines = append(lines, m.st.dim.Render(ansi.Truncate(modeStripIndent+m.tr.t(option.sayKey, nil), width, "…")))
 	}
 	footer := joinNonEmpty(
-		m.pairHint(actSelectPrevious, actSelectNext, "choisir", ctxPlan),
-		m.labelledHint(actSelectAccept, "valider", ctxPlan),
-		m.labelledHint(actCycleMode, "changer de mode", ctxPlan),
+		m.pairHint(actSelectPrevious, actSelectNext, m.tr.t("tui.common.choose", nil), ctxPlan),
+		m.labelledHint(actSelectAccept, m.tr.t("tui.common.accept", nil), ctxPlan),
+		m.labelledHint(actCycleMode, m.tr.t("tui.common.change_mode", nil), ctxPlan),
 	)
 	return strings.Join(append(lines, m.st.dim.Render(ansi.Truncate(footer, width, "…"))), "\n")
 }

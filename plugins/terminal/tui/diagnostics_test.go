@@ -16,15 +16,15 @@ func TestDiagnosticsNamesEachResolvedValueAndItsFeature(t *testing.T) {
 		Colour:     ColourTrue,
 		Terminal:   "kitty",
 	}
-	out := diagnosticsView(caps, "pgup/pgdn", testStyles())
+	out := diagnosticsView(newTranslator(), caps, "pgup/pgdn", testStyles())
 	for _, want := range []string{
 		"kitty",
 		"truecolor",
-		"graphismes",
-		"hyperliens",
-		"souris",
-		"couleur",
-		"images en ligne",
+		"graphics",
+		"links",
+		"mouse",
+		"colour",
+		"inline images",
 		"OSC 8",
 	} {
 		if !strings.Contains(out, want) {
@@ -34,8 +34,8 @@ func TestDiagnosticsNamesEachResolvedValueAndItsFeature(t *testing.T) {
 }
 
 func TestDiagnosticsNamesTheFallbackRatherThanHidingTheRow(t *testing.T) {
-	out := diagnosticsView(Capabilities{Terminal: "xterm"}, "pgup/pgdn", testStyles())
-	for _, want := range []string{"graphismes", "none", "demi-blocs", "hyperliens", "texte stylé"} {
+	out := diagnosticsView(newTranslator(), Capabilities{Terminal: "xterm"}, "pgup/pgdn", testStyles())
+	for _, want := range []string{"graphics", "none", "half blocks", "links", "styled text"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("a plain terminal must still be told what it gets, missing %q:\n%s", want, out)
 		}
@@ -49,7 +49,7 @@ func TestCapabilitiesCommandOpensAndClosesTheScreen(t *testing.T) {
 	if !m.diagOpen {
 		t.Fatal("/capabilities must open the diagnostic screen")
 	}
-	if !strings.Contains(m.diagView(), "graphismes") {
+	if !strings.Contains(m.diagView(), "graphics") {
 		t.Fatalf("the open screen must render its rows: %q", m.diagView())
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -78,7 +78,7 @@ func TestCapabilityScreenNamesTheReboundPageKeys(t *testing.T) {
 	m.caps.Mouse = false
 	m.bindings = loadForTest(t, `{"bindings":[{"context":"Chat","bindings":{"alt+u":"scroll:pageUp","alt+d":"scroll:pageDown"}}]}`, "", keysSection{}).table
 	m.openDiagnostics()
-	if out := m.diagView(); !strings.Contains(out, "défilement par ⌥U/⌥D") {
+	if out := m.diagView(); !strings.Contains(out, "scrolling by ⌥U/⌥D") {
 		t.Fatalf("the mouse row must name the rebound page keys:\n%s", out)
 	}
 }

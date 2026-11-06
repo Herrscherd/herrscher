@@ -165,7 +165,7 @@ func TestQueueCommandShowsQueueAsNotice(t *testing.T) {
 	m, _ := queueFixture(t)
 	m.tabs["a"].queue = []queuedInput{{text: "un"}, {text: "deux"}}
 	m.showQueue()
-	if got := tabText(m.tabs["a"]); !strings.Contains(got, "file (2)") || !strings.Contains(got, "2. deux") {
+	if got := tabText(m.tabs["a"]); !strings.Contains(got, "queue (2)") || !strings.Contains(got, "2. deux") {
 		t.Fatalf("/queue must list the queue: %q", got)
 	}
 }
@@ -190,7 +190,7 @@ func TestDraftsViewListsParkedDrafts(t *testing.T) {
 	}
 	typeLine(m, "à plus tard")
 	m.stashDraft()
-	if got := m.draftsView(); !strings.Contains(got, "brouillons (1)") {
+	if got := m.draftsView(); !strings.Contains(got, "draft (1)") {
 		t.Fatalf("draft line missing: %q", got)
 	}
 }
@@ -228,13 +228,13 @@ func TestBusyPlaceholderMatchesMockup(t *testing.T) {
 	m.tabs["a"].busy = true
 	m.syncComposer()
 	m.View()
-	if got := m.input.Placeholder; got != "Écris pendant que l’agent travaille : ⏎ met en file, ⌥⏎ réoriente" {
+	if got := m.input.Placeholder; got != "Type while the agent works: ⏎ queue, ⌥⏎ redirect" {
 		t.Fatalf("busy placeholder = %q", got)
 	}
 	m.tabs["a"].busy = false
 	m.syncComposer()
 	m.View()
-	if got := m.input.Placeholder; got != "Tape un message, / ou @, ou !commande" {
+	if got := m.input.Placeholder; got != "Type a message, / or @, or !command" {
 		t.Fatalf("idle placeholder = %q", got)
 	}
 }
@@ -272,7 +272,7 @@ func TestQueueRowCutsLongTextWithEllipsis(t *testing.T) {
 		if !strings.Contains(stripped, "pense aussi au m") {
 			continue
 		}
-		if !strings.Contains(stripped, "…") || !strings.Contains(stripped, "✕ retirer") {
+		if !strings.Contains(stripped, "…") || !strings.Contains(stripped, "✕ remove") {
 			t.Fatalf("a cut queue row must end with an ellipsis and keep its remove label, got %q", stripped)
 		}
 		return
@@ -288,10 +288,10 @@ func TestQueueHeaderFoldsWholeSegmentsAtSixtyColumns(t *testing.T) {
 		m.syncViewport()
 	})
 	stripped := ansi.Strip(strings.Join(lines, "\n"))
-	if !strings.Contains(stripped, "○ En file (1) · partent dans l’ordre à la fin du tour") {
+	if !strings.Contains(stripped, "○ queued (1) · sent in order at the end of the turn") {
 		t.Fatalf("the queue header must keep its whole first segments at 60 columns:\n%s", stripped)
 	}
-	if strings.Contains(stripped, "tout envoyer") {
+	if strings.Contains(stripped, "send all") {
 		t.Fatal("the queue header must fold away its last segment rather than cut it")
 	}
 }
@@ -310,10 +310,10 @@ func TestQueueFoldsUnderTheOpenOverlay(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	m.openStatusline()
 	view := ansi.Strip(m.View())
-	if !strings.Contains(view, "Barre d’état · /statusline") {
+	if !strings.Contains(view, "Status bar · /statusline") {
 		t.Fatalf("the open overlay must keep its title ahead of the queue:\n%s", view)
 	}
-	if !strings.Contains(view, "En file (15)") {
+	if !strings.Contains(view, "queued (15)") {
 		t.Fatalf("the queue header must stay visible:\n%s", view)
 	}
 	if strings.Contains(view, "message 15") {
@@ -327,11 +327,11 @@ func TestQueueFoldsUnderTheOpenOverlay(t *testing.T) {
 func queueRowsInView(view string) (int, int) {
 	shown, hidden := 0, 0
 	for _, line := range strings.Split(view, "\n") {
-		if strings.Contains(line, " ○ file ") {
+		if strings.Contains(line, " ○ queued ") {
 			shown++
 		}
 		if rest, ok := strings.CutPrefix(strings.TrimSpace(line), "… "); ok {
-			if count, found := strings.CutSuffix(rest, " de plus"); found {
+			if count, found := strings.CutSuffix(rest, " more"); found {
 				if n, err := strconv.Atoi(count); err == nil {
 					hidden = n
 				}

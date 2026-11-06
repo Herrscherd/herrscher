@@ -16,7 +16,6 @@ import (
 )
 
 const (
-	draftBeatFlash = "signe de vie du brouillon interrompu : "
 	fallbackEditor = "vi"
 	draftFile      = "draft-*.md"
 	draftRunPrefix = "run-"
@@ -27,7 +26,7 @@ const (
 	draftHeartbeat = time.Hour
 )
 
-var errUnsafeDraftDir = errors.New("dossier des brouillons ouvert à d'autres ou aux droits trop larges")
+var errUnsafeDraftDir = errors.New("draft folder open to others or with too-wide rights")
 
 type editorDoneMsg struct {
 	path string
@@ -276,12 +275,12 @@ func (m *model) releaseDrafts() error {
 func (m *model) openEditor() tea.Cmd {
 	path, err := m.writeDraft(m.input.Value())
 	if err != nil {
-		m.flash = "éditeur indisponible : " + err.Error()
+		m.flash = m.tr.t("tui.editor.unavailable", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 		return m.armDraftBeatWatch()
 	}
 	if m.draftFiles != nil {
 		if beatErr := m.draftFiles.heartbeatError(); beatErr != nil {
-			m.flash = draftBeatFlash + beatErr.Error()
+			m.flash = m.tr.t("tui.editor.beat_failed", map[string]any{tplArgReason: localizedReason(m.tr, beatErr)})
 		}
 	}
 	m.editing = true
@@ -306,7 +305,7 @@ func (m *model) queueBeatFlash(err error) {
 	if !m.draftBeatStillFailing() {
 		return
 	}
-	text := draftBeatFlash + err.Error()
+	text := m.tr.t("tui.editor.beat_failed", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 	if m.flash != "" {
 		m.pendingBeatFlash = text
 		return
@@ -347,7 +346,7 @@ func (m *model) writeDraft(text string) (string, error) {
 
 func (m *model) removeDraft(path string) {
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		m.flash = "brouillon non supprimé : " + err.Error()
+		m.flash = m.tr.t("tui.editor.not_removed", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 	}
 }
 
@@ -355,12 +354,12 @@ func (m *model) applyEditorResult(msg editorDoneMsg) {
 	m.editing = false
 	defer m.removeDraft(msg.path)
 	if msg.err != nil {
-		m.flash = "éditeur fermé en erreur : " + msg.err.Error()
+		m.flash = m.tr.t("tui.editor.closed_error", map[string]any{tplArgReason: localizedReason(m.tr, msg.err)})
 		return
 	}
 	data, err := os.ReadFile(msg.path)
 	if err != nil {
-		m.flash = "relecture impossible : " + err.Error()
+		m.flash = m.tr.t("tui.editor.reread_failed", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 		return
 	}
 	m.input.SetValue(strings.TrimRight(string(data), "\n"))

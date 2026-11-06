@@ -11,12 +11,13 @@ import (
 )
 
 var (
-	errRefusedTarget    = errors.New("refusing a")
-	errOptionTarget     = errors.New("refusing a target that reads as an option")
-	errControlByte      = errors.New("refusing a target carrying a control byte")
-	errNoEditor         = errors.New("aucun $EDITOR ni $VISUAL pour ouvrir")
+	errRefusedTarget    = errors.New("refused target scheme")
+	errOptionTarget     = errors.New("target reads as an option")
+	errControlByte      = errors.New("target contains a control byte")
+	errNoEditor         = errors.New("no $EDITOR or $VISUAL to open with")
 	errNoEditorLauncher = errors.New("no editor launcher configured")
 	errNoSystemLauncher = errors.New("no system launcher configured")
+	errUnparsableTarget = errors.New("unparsable target")
 )
 
 type launcher func(ctx context.Context, target string) error
@@ -46,19 +47,19 @@ func systemLauncher() launcher {
 func checkURLTarget(target string) error {
 	parsed, err := url.Parse(target)
 	if err != nil {
-		return fmt.Errorf("refusing an unparsable target: %w", err)
+		return fmt.Errorf("%w: %w", errUnparsableTarget, err)
 	}
 	switch strings.ToLower(parsed.Scheme) {
 	case "http", "https", "mailto":
 		return nil
 	default:
-		return fmt.Errorf("%w %q target: %s", errRefusedTarget, parsed.Scheme, target)
+		return fmt.Errorf("%w : %q (%s)", errRefusedTarget, parsed.Scheme, target)
 	}
 }
 
 func checkTarget(target string) error {
 	if strings.HasPrefix(target, "-") {
-		return fmt.Errorf("%w: %s", errOptionTarget, target)
+		return fmt.Errorf("%w : %s", errOptionTarget, target)
 	}
 	if hasControl(target) {
 		return errControlByte
@@ -141,14 +142,14 @@ func (m *model) selectedLink() (Link, bool) {
 func (m *model) openSelectedLink() {
 	launch, ok := m.selectedLink()
 	if !ok {
-		m.flash = joinNonEmpty("aucun lien sélectionné", m.labelledHint(actNextLink, "en choisit un", chatKeyStack()...))
+		m.flash = joinNonEmpty(m.tr.t("tui.open.none", nil), m.labelledHint(actNextLink, m.tr.t("tui.open.pick_one", nil), chatKeyStack()...))
 		return
 	}
 	if err := openLink(m.runContext(), launch, m.sys, m.edit); err != nil {
-		m.flash = "ouverture impossible : " + err.Error()
+		m.flash = m.tr.t("tui.open.failed", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 		return
 	}
-	m.flash = "ouverture de " + launch.Target
+	m.flash = m.tr.t("tui.open.opening", map[string]any{"Target": launch.Target})
 }
 
 func (m *model) linkStatus() string {
@@ -156,9 +157,9 @@ func (m *model) linkStatus() string {
 	if !ok {
 		return ""
 	}
-	verb := "↵ open"
+	verb := m.tr.t("tui.open.verb_open", nil)
 	if launch.Kind == LinkFile {
-		verb = "↵ edit"
+		verb = m.tr.t("tui.open.verb_edit", nil)
 	}
 	return m.st.dim.Render(verb + " " + launch.Target)
 }

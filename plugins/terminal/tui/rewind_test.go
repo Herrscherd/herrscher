@@ -194,7 +194,7 @@ func TestConversationRestoreIsRefusedWithReason(t *testing.T) {
 	if cmd := pressMsg(m, tea.KeyMsg{Type: tea.KeyEnter}); cmd != nil {
 		t.Fatal("restoring the conversation must not dispatch anything")
 	}
-	if m.flash != rewindUnsupportedNote {
+	if m.flash != newTranslator().t("tui.rewind.unsupported", nil) {
 		t.Fatalf("flash = %q, want the reason", m.flash)
 	}
 	for _, args := range backend.dispatched {
@@ -277,14 +277,14 @@ func TestRewindSummaryOmitsZeroCounts(t *testing.T) {
 		files []rewindFile
 		want  string
 	}{
-		{[]rewindFile{{Path: "a.go", Added: 38}}, "+38 · 1 fichier"},
-		{[]rewindFile{{Path: "a.go", Added: 14, Removed: 9}, {Path: "b.go"}}, "+14 −9 · 2 fichiers"},
-		{[]rewindFile{{Path: "a.go", Removed: 4}}, "−4 · 1 fichier"},
-		{nil, "aucun fichier"},
+		{[]rewindFile{{Path: "a.go", Added: 38}}, "+38 · 1 file"},
+		{[]rewindFile{{Path: "a.go", Added: 14, Removed: 9}, {Path: "b.go"}}, "+14 −9 · 2 files"},
+		{[]rewindFile{{Path: "a.go", Removed: 4}}, "−4 · 1 file"},
+		{nil, "no file"},
 	}
 	for _, tc := range cases {
-		if got := rewindSummary(tc.files); got != tc.want {
-			t.Errorf("rewindSummary(%v) = %q, want %q", tc.files, got, tc.want)
+		if got := rewindSummary(newTranslator(), tc.files); got != tc.want {
+			t.Errorf("rewindSummary(newTranslator(), %v) = %q, want %q", tc.files, got, tc.want)
 		}
 	}
 }

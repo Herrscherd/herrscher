@@ -177,11 +177,11 @@ func TestTurnEndToastAppearsAndExpires(t *testing.T) {
 	m := notifyModel(t, false)
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: "reply", Done: true}})
-	if !strings.Contains(ansi.Strip(m.View()), "Tour fini") {
+	if !strings.Contains(ansi.Strip(m.View()), "Turn finished") {
 		t.Fatal("the turn-end toast must show in the window")
 	}
 	m.Update(toastExpiredMsg{seq: m.toast.seq})
-	if strings.Contains(ansi.Strip(m.View()), "Tour fini") {
+	if strings.Contains(ansi.Strip(m.View()), "Turn finished") {
 		t.Fatal("the toast must disappear when its timer fires")
 	}
 }
@@ -203,7 +203,7 @@ func TestToastShowsAgeDeliveryAndJumpHint(t *testing.T) {
 		m.handleWindowSize(tea.WindowSizeMsg{Width: width, Height: 20})
 		m.announce(kindTurnEnd, unicodeGlyphs().success, "Tour fini", "c", []string{"api"})
 		view := ansi.Strip(m.View())
-		for _, want := range []string{"il y a 0s", "OSC 9 envoyé", "⌃P y aller"} {
+		for _, want := range []string{"0s ago", "OSC 9 sent", "⌃P go there"} {
 			if !strings.Contains(view, want) {
 				t.Fatalf("width %d: the toast must show %q, window:\n%s", width, want, view)
 			}
@@ -215,7 +215,7 @@ func TestTurnEndToastWithoutStartTimeDoesNotPanic(t *testing.T) {
 	m := notifyModel(t, false)
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: "reply", Done: true}})
-	if !strings.Contains(ansi.Strip(m.View()), "Tour fini") {
+	if !strings.Contains(ansi.Strip(m.View()), "Turn finished") {
 		t.Fatal("a turn without a start time must still raise the toast")
 	}
 }
@@ -260,7 +260,7 @@ func TestToastAgeAdvancesOnEachTick(t *testing.T) {
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
 	m.announce(kindTurnEnd, unicodeGlyphs().success, "Tour fini", "c", []string{"api"})
 	m.toast.at = time.Now().Add(-3 * time.Second)
-	if !strings.Contains(ansi.Strip(m.View()), "il y a 3s") {
+	if !strings.Contains(ansi.Strip(m.View()), "3s ago") {
 		t.Fatal("the toast must show the age of its event")
 	}
 	m.toast.at = time.Now().Add(-4 * time.Second)
@@ -268,7 +268,7 @@ func TestToastAgeAdvancesOnEachTick(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("a tick while the toast shows must schedule the next tick")
 	}
-	if !strings.Contains(ansi.Strip(m.View()), "il y a 4s") {
+	if !strings.Contains(ansi.Strip(m.View()), "4s ago") {
 		t.Fatal("the age must advance when a tick arrives")
 	}
 }

@@ -167,7 +167,7 @@ func claudeReferenceContexts() []keyContext {
 		"Settings",
 		"Tabs",
 		"Attachments",
-		"Footer",
+		ctxFooter,
 		"AbovePrompt",
 		"AbovePromptInput",
 		"AbovePromptSelect",

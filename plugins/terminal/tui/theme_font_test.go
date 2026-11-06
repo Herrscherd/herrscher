@@ -25,14 +25,14 @@ func TestFontListingFindsEitherObelFamily(t *testing.T) {
 
 func TestFontRowShowsEachDetectionState(t *testing.T) {
 	cases := map[fontPresence]string{
-		fontInstalled: "installée",
-		fontAbsent:    "absente",
-		fontUnknown:   "inconnue",
-		fontUnchecked: "vérification…",
+		fontInstalled: "installed",
+		fontAbsent:    "absent",
+		fontUnknown:   "unknown",
+		fontUnchecked: "checking…",
 	}
 	for presence, want := range cases {
-		row := ansi.Strip(themeFontRow(testStyles(), presence))
-		if !strings.Contains(row, "police") || !strings.Contains(row, "Obel Mono · recommandée") || !strings.Contains(row, want) {
+		row := ansi.Strip(themeFontRow(testStyles(), newTranslator(), presence))
+		if !strings.Contains(row, "font") || !strings.Contains(row, "Obel Mono · recommended") || !strings.Contains(row, want) {
 			t.Errorf("state %v: the font row must show the family and %q, got %q", presence, want, row)
 		}
 	}
@@ -185,7 +185,7 @@ func checkInstallNotesFit(t *testing.T, width, height int, terminal terminalKind
 		}
 	}
 	text := strings.Join(strings.Fields(ansi.Strip(strings.Join(lines, "\n"))), " ")
-	for _, want := range []string{"licence SIL OFL 1.1", "garde tout"} {
+	for _, want := range []string{"SIL OFL 1.1 licence", "keeps everything"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("%dx%d %v: %q must be shown whole:\n%s", width, height, terminal, want, ansi.Strip(strings.Join(lines, "\n")))
 		}

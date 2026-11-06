@@ -54,7 +54,7 @@ func loadForTest(t *testing.T, herrscher, claude string, section keysSection) ke
 			t.Fatal(err)
 		}
 	}
-	return loadKeyBindings(claudePath, herrscherPath, section)
+	return loadKeyBindings(newTranslator(), claudePath, herrscherPath, section)
 }
 
 func actionOf(t *testing.T, table *keyTable, chord string, stack ...keyContext) keyAction {
@@ -219,13 +219,13 @@ func TestValidationErrorsAreReportedAndTheRestStillApplies(t *testing.T) {
 	]}`
 	load := loadForTest(t, herrscher, "", keysSection{})
 	wantProblems := []string{
-		"contexte inconnu",
-		"modificateur inconnu",
-		"touche non reliable",
-		"touche réservée",
-		"action inconnue",
-		"l’action doit être une chaîne ou null",
-		"doublon dans le contexte",
+		"unknown context",
+		"unknown modifier",
+		"unreliable key",
+		"key reserved by the terminal",
+		"unknown action",
+		"the action must be a string or null",
+		"duplicate in the context",
 	}
 	joined := strings.Join(load.problems, "\n")
 	for _, want := range wantProblems {
@@ -256,7 +256,7 @@ func TestChangedBindingShowsInHelp(t *testing.T) {
 	m := newTestModel()
 	m.bindings = loadForTest(t, herrscher, "", keysSection{}).table
 	help := ansi.Strip(m.helpView())
-	if !strings.Contains(help, "⌃Xa lien suivant") {
+	if !strings.Contains(help, "⌃Xa next link") {
 		t.Fatalf("changed binding missing from help: %s", help)
 	}
 }

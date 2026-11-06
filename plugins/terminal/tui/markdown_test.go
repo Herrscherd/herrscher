@@ -18,7 +18,7 @@ func TestMarkdownRendersStructure(t *testing.T) {
 		{"code block", "```go\nfmt.Println(1)\n```", "Println"},
 	}
 	for _, c := range cases {
-		out := renderEntry(entry{role: roleAgent, text: c.in}, 60, view{})
+		out := renderEntry(entry{role: roleAgent, text: c.in}, 60, view{tr: newTranslator()})
 		if !strings.Contains(out, c.want) {
 			t.Errorf("%s: rendered output must keep its content, got %q", c.name, out)
 		}
@@ -30,7 +30,7 @@ func TestMarkdownRendersStructure(t *testing.T) {
 
 func TestStreamingMarkdownStaysRaw(t *testing.T) {
 	in := "here it is:\n```go\nfmt.Println("
-	out := renderEntry(entry{role: roleAgent, text: in, streaming: true}, 60, view{})
+	out := renderEntry(entry{role: roleAgent, text: in, streaming: true}, 60, view{tr: newTranslator()})
 	if !strings.Contains(out, "```go") {
 		t.Fatalf("a streaming block must render raw: %q", out)
 	}
@@ -38,8 +38,8 @@ func TestStreamingMarkdownStaysRaw(t *testing.T) {
 
 func TestMarkdownRewrapsOnWidth(t *testing.T) {
 	body := strings.Repeat("lorem ipsum dolor sit amet ", 10)
-	narrow := renderMarkdown(body, 30, view{caps: Capabilities{}})
-	wide := renderMarkdown(body, 90, view{caps: Capabilities{}})
+	narrow := renderMarkdown(body, 30, view{tr: newTranslator(), caps: Capabilities{}})
+	wide := renderMarkdown(body, 90, view{tr: newTranslator(), caps: Capabilities{}})
 	if strings.Count(narrow, "\n") <= strings.Count(wide, "\n") {
 		t.Fatalf("narrow must wrap to more lines: narrow=%d wide=%d",
 			strings.Count(narrow, "\n"), strings.Count(wide, "\n"))
@@ -53,7 +53,7 @@ func TestMarkdownRewrapsOnWidth(t *testing.T) {
 
 func TestDiffBlockColoursItsLineClasses(t *testing.T) {
 	in := "before:\n```diff\n@@ -1,2 +1,2 @@\n-old line\n+new line\n context\n```\nafter."
-	out := renderEntry(entry{role: roleAgent, text: in}, 60, view{})
+	out := renderEntry(entry{role: roleAgent, text: in}, 60, view{tr: newTranslator()})
 	if !strings.Contains(out, ansiGreen) || !strings.Contains(out, "+ new line") {
 		t.Errorf("an added line must render green: %q", out)
 	}
@@ -85,7 +85,7 @@ func TestUnclosedDiffFenceTakesTheRest(t *testing.T) {
 }
 
 func TestDiffLineIsClippedNotWrapped(t *testing.T) {
-	out := renderDiff("+"+strings.Repeat("x", 80), 20, view{caps: Capabilities{}})
+	out := renderDiff("+"+strings.Repeat("x", 80), 20, view{tr: newTranslator(), caps: Capabilities{}})
 	if strings.Contains(out, "\n") {
 		t.Fatalf("a diff line must be clipped, not folded: %q", out)
 	}

@@ -40,7 +40,7 @@ func diffRows(lines []string, width int, display view) []string {
 			continue
 		}
 		if !display.expand && spent == diffHunkBudget {
-			out = append(out, display.st.dim.Render(fmt.Sprintf("%s %d %s", display.st.glyphs.fold, countDiffRows(lines[index:]), display.hint(actToggleToolExpand, "lignes de plus"))))
+			out = append(out, display.st.dim.Render(fmt.Sprintf("%s %d %s", display.st.glyphs.fold, countDiffRows(lines[index:]), display.hint(actToggleToolExpand, display.tr.t("tui.diff.more_rows", nil)))))
 			break
 		}
 		sign, code := diffSign(line)
@@ -123,7 +123,7 @@ func diffHeader(path string, body []string, display view) string {
 		}
 	}
 	return display.st.dim.Render("╭ ") + display.st.text.Render(path) + display.st.dim.Render(
-		fmt.Sprintf("  +%d −%d   ancien · nouveau   %s", added, removed, display.hint(actOpenDiff, "panneau de diff")),
+		display.tr.t("tui.diff.header_counts", map[string]any{"Added": added, "Removed": removed, tplArgHint: display.hint(actOpenDiff, display.tr.t("tui.diff.panel_label", nil))}),
 	)
 }
 
@@ -311,23 +311,23 @@ func codeBlocks(text string) []codeBlock {
 
 const foldThreshold = 12
 
-func foldCodeBlocks(text string, glyphs glyphSet, toggle string) string {
+func foldCodeBlocks(trans translator, text string, glyphs glyphSet, toggle string) string {
 	var out []string
 	var buf []string
-	lang := ""
+	codeLang := ""
 	inFence := false
 	for _, line := range strings.Split(text, "\n") {
 		fence := strings.TrimSpace(line)
 		switch {
 		case !inFence && strings.HasPrefix(fence, codeFence):
-			inFence, lang, buf = true, strings.TrimPrefix(fence, codeFence), nil
+			inFence, codeLang, buf = true, strings.TrimPrefix(fence, codeFence), nil
 		case inFence && fence == codeFence:
 			inFence = false
 			if len(buf) > foldThreshold {
-				out = append(out, foldSummary(lang, len(buf), glyphs, toggle))
+				out = append(out, foldSummary(trans, codeLang, len(buf), glyphs, toggle))
 				continue
 			}
-			out = append(out, codeFence+lang)
+			out = append(out, codeFence+codeLang)
 			out = append(out, buf...)
 			out = append(out, codeFence)
 		case inFence:
@@ -337,17 +337,17 @@ func foldCodeBlocks(text string, glyphs glyphSet, toggle string) string {
 		}
 	}
 	if inFence {
-		out = append(out, codeFence+lang)
+		out = append(out, codeFence+codeLang)
 		out = append(out, buf...)
 	}
 	return strings.Join(out, "\n")
 }
 
-func foldSummary(lang string, lines int, glyphs glyphSet, toggle string) string {
-	if lang == "" {
-		lang = "text"
+func foldSummary(trans translator, codeLang string, lines int, glyphs glyphSet, toggle string) string {
+	if codeLang == "" {
+		codeLang = "text"
 	}
-	return fmt.Sprintf("%s %s · %d lines (%s)", glyphs.fold, lang, lines, toggle)
+	return trans.t("tui.fold.code", map[string]any{"Glyph": glyphs.fold, "Lang": codeLang, tplArgCount: lines, "Toggle": toggle})
 }
 
 func (m *model) toggleFold() {
@@ -377,12 +377,12 @@ func (m *model) copyLastCode() {
 		}
 		body := blocks[len(blocks)-1].body
 		if err := m.clip.WriteText(m.runContext(), body); err != nil {
-			m.flash = "copie impossible : " + err.Error()
+			m.flash = m.tr.t("tui.copy.failed", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 			return
 		}
 		n := len(strings.Split(body, "\n"))
-		m.flash = fmt.Sprintf("%d ligne%s copiée%s", n, plural(n), plural(n))
+		m.flash = m.tr.t("tui.copy.code_done", map[string]any{tplArgCount: n})
 		return
 	}
-	m.flash = "aucun bloc de code dans la dernière réponse"
+	m.flash = m.tr.t("tui.copy.no_code_block", nil)
 }

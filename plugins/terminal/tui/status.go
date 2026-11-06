@@ -34,15 +34,16 @@ func (m *model) windowOf(info contracts.SessionInfo) int {
 func (m *model) loadContextLimits(path string, env func(string) string) {
 	cfg, err := config.Load(path)
 	if err != nil {
-		m.flash = "contextLimits ignoré, la taille par défaut s'applique : " + err.Error()
+		m.flash = m.tr.t("tui.status.limits_ignored", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 		cfg = config.Config{}
 	}
 	m.limits = contextwindow.NewLimits(env(contextwindow.EnvVar()), cfg.ContextLimits)
 }
 
 const (
-	ctxWarn  = 0.80
-	ctxAlarm = 0.95
+	ctxWarn         = 0.80
+	ctxAlarm        = 0.95
+	usageLabelWidth = 9
 )
 
 const narrowStatus = 60
@@ -109,11 +110,11 @@ func contextGaugeCells(ratio float64, cells int, styles uiStyles) string {
 		styles.dim.Render(strings.Repeat(styles.glyphs.gaugeEmpty, cells-filled))
 }
 
-func compactThresholdLabel(percent int) string {
+func compactThresholdLabel(trans translator, percent int) string {
 	if percent == 0 {
-		return "pas de compaction auto"
+		return trans.t("tui.status.no_auto_compact", nil)
 	}
-	return fmt.Sprintf("compacte seul à %d%%", percent)
+	return trans.t("tui.status.compacts_at", map[string]any{"Percent": percent})
 }
 
 func contextLeft(used, limit, percent int) float64 {
@@ -128,11 +129,11 @@ func contextLeft(used, limit, percent int) float64 {
 	return left
 }
 
-func contextRemainingLabel(used, limit, percent int) string {
+func contextRemainingLabel(trans translator, used, limit, percent int) string {
 	if percent == 0 {
-		return "pas de compaction auto"
+		return trans.t("tui.status.no_auto_compact", nil)
 	}
-	return fmt.Sprintf("%d %% avant compaction", int(contextLeft(used, limit, percent)*percentScale))
+	return trans.t("tui.status.before_compaction", map[string]any{"Percent": int(contextLeft(used, limit, percent) * percentScale)})
 }
 
 func modelLabel(info contracts.SessionInfo) string {
@@ -153,6 +154,10 @@ func (m *model) contextTokens(tab *tab) int {
 	return 0
 }
 
+func (m *model) usageRow(labelKey, value string) string {
+	return "  " + padTo(m.tr.t(labelKey, nil), usageLabelWidth) + value
+}
+
 func (m *model) usageReport(tab *tab) string {
 	info, known := m.activeInfo()
 	vendor := ""
@@ -160,32 +165,32 @@ func (m *model) usageReport(tab *tab) string {
 		vendor = info.Vendor
 	}
 	limit := m.windowOf(info)
-	lines := []string{"usage · " + tab.label}
+	lines := []string{m.tr.t("tui.status.usage_title", map[string]any{"Tab": tab.label})}
 	if vendor != "" {
-		lines = append(lines, "  vendor   "+vendor)
+		lines = append(lines, m.usageRow("tui.status.label_vendor", vendor))
 	}
 	if known && info.Model != "" {
-		lines = append(lines, "  model    "+info.Model)
+		lines = append(lines, m.usageRow("tui.status.label_model", info.Model))
 	}
 	if known && info.Effort != "" {
-		lines = append(lines, "  effort   "+info.Effort)
+		lines = append(lines, m.usageRow("tui.status.label_effort", info.Effort))
 	}
 	if known && info.Project != "" {
-		lines = append(lines, "  project  "+info.Project)
+		lines = append(lines, m.usageRow("tui.status.label_project", info.Project))
 	}
 	if used := m.contextTokens(tab); used > 0 {
 		lines = append(lines,
-			fmt.Sprintf("  context  %s  (%s)", formatContext(used, limit), contextPercent(used, limit)),
-			"  reste    "+contextRemainingLabel(used, limit, info.AutoCompactPercent),
+			m.usageRow("tui.status.label_context", formatContext(used, limit)+"  ("+contextPercent(used, limit)+")"),
+			m.usageRow("tui.status.label_left", contextRemainingLabel(m.tr, used, limit, info.AutoCompactPercent)),
 		)
 	} else {
-		lines = append(lines, "  context  no measurement yet")
+		lines = append(lines, m.usageRow("tui.status.label_context", m.tr.t("tui.status.no_measurement", nil)))
 	}
 	if tab.costTotal > 0 {
-		lines = append(lines, "  cost     "+formatCost(tab.costTotal)+"  since this tab opened")
+		lines = append(lines, m.usageRow("tui.status.label_cost", formatCost(tab.costTotal)+"  "+m.tr.t("tui.status.since_open", nil)))
 	}
 	if !tab.openedAt.IsZero() {
-		lines = append(lines, "  open     "+formatDuration(time.Since(tab.openedAt)))
+		lines = append(lines, m.usageRow("tui.status.label_open", formatDuration(time.Since(tab.openedAt))))
 	}
 	return strings.Join(lines, "\n")
 }

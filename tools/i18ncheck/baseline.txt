@@ -1,6 +1,6 @@
 core/cli 4
-core/host 114
-core/internal/manager 33
+core/host 112
+core/internal/manager 14
 manage 19
 plugins/terminal 4
 plugins/terminal/tui 18

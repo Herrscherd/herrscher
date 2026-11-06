@@ -53,6 +53,13 @@ func TestHostMessageFamiliesAreFrozen(t *testing.T) {
 			{"remote.no_remote", map[string]any{"Category": "gpu", "Detail": "boom"}, "résolveur : aucun distant gpu n'a annoncé son adresse : boom", "resolver: no remote gpu announced: boom"},
 			{"remote.unavailable", map[string]any{"Attempts": 3, "Category": "gpu", "Detail": "boom", "Elapsed": "2s"}, "résolveur : ressource distante gpu indisponible après 3 tentative(s) en 2s : boom", "resolver: remote gpu unavailable after 3 attempt(s) in 2s: boom"},
 			{"remote.stage_agent", map[string]any{"Name": "scripter", "Detail": "boom"}, `préparation de l'agent "scripter" impossible : boom`, `stage agent "scripter": boom`},
+			{"remote.extract_archive", map[string]any{"Path": "/w", "Detail": "boom"}, "décompression de l'archive de l'agent dans /w impossible : boom", "cannot unpack the agent archive into /w: boom"},
+			{"remote.extract_member", map[string]any{"Member": "a.txt", "Detail": "boom"}, "extraction de a.txt impossible : boom", "cannot extract a.txt: boom"},
+			{"remote.unsafe_member", map[string]any{"Member": "../x", "Root": "/w"}, "élément d'archive refusé : ../x sortirait de /w", "refusing archive member ../x: it lands outside /w"},
+		},
+		"approval": {
+			{"approval.prompt", map[string]any{"Request": "Bash(ls)"}, "autoriser Bash(ls) ?", "allow Bash(ls)?"},
+			{"approval.hint", map[string]any{"Command": "approve allow|deny id1", "Help": "approve allow --help"}, " (répondez avec `approve allow|deny id1`, voir `approve allow --help`)", " (answer with `approve allow|deny id1`, see `approve allow --help`)"},
 		},
 		"provision": {
 			{"provision.smoke", map[string]any{"Host": "h", "Detail": "boom"}, "le binaire déposé sur h échoue à son test de fumée : boom", "the binary put on h fails its smoke test: boom"},

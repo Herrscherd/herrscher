@@ -16,6 +16,7 @@ const (
 	eventMenu            = "menu"
 	eventApproval        = "approval"
 	eventApprovalRisk    = "approval_risk"
+	eventApprovalSubject = "approval_subject"
 	approvalDefaultWait  = 5 * time.Minute
 	approvalQuickWait    = 5 * time.Second
 	approvalUrgentWindow = time.Minute
@@ -129,9 +130,13 @@ func approvalRole(value string) string {
 func splitApprovalSubject(prompt string) (string, string) {
 	text, _, _ := strings.Cut(prompt, approvalPromptTail)
 	text = strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(text), approvalAllowPrefix), "?")
-	tool, rest, found := strings.Cut(text, "(")
+	return splitRequest(text)
+}
+
+func splitRequest(request string) (string, string) {
+	tool, rest, found := strings.Cut(request, "(")
 	if !found {
-		return text, ""
+		return request, ""
 	}
 	return tool, strings.TrimSuffix(rest, ")")
 }
@@ -209,6 +214,7 @@ func (m *model) openApproval(target *tab, event contracts.Event) bool {
 	}
 	m.applyKnownRisk(target)
 	m.applyKnownDeadline(target)
+	m.applyKnownSubject(target)
 	m.applySize()
 	return true
 }
@@ -277,6 +283,33 @@ func (m *model) rememberApprovalRisk(event contracts.Event, now time.Time) {
 	}
 }
 
+func (m *model) rememberApprovalSubject(event contracts.Event, now time.Time) {
+	if event.Value == "" {
+		return
+	}
+	if m.approvalSubjects == nil {
+		m.approvalSubjects = make(map[string]approvalRating)
+	}
+	m.approvalSubjects[event.Value] = approvalRating{level: event.Text, keep: now.Add(approvalEarlyTTL)}
+	for _, channel := range m.order {
+		if target := m.tabs[channel]; target != nil {
+			m.applyKnownSubject(target)
+		}
+	}
+}
+
+func (m *model) applyKnownSubject(target *tab) {
+	if !target.pendingApproval || target.approval.id == "" {
+		return
+	}
+	known, ok := m.approvalSubjects[target.approval.id]
+	if !ok {
+		return
+	}
+	target.approval.tool, target.approval.command = splitRequest(known.level)
+	delete(m.approvalSubjects, target.approval.id)
+}
+
 func (m *model) applyKnownRisk(target *tab) {
 	if !target.pendingApproval || target.approval.id == "" || target.approval.risk != "" {
 		return
@@ -302,6 +335,11 @@ func (m *model) applyKnownDeadline(target *tab) {
 }
 
 func (m *model) pruneApprovalDeadlines(now time.Time) {
+	for key, known := range m.approvalSubjects {
+		if now.After(known.keep) {
+			delete(m.approvalSubjects, key)
+		}
+	}
 	for key, known := range m.approvalRisks {
 		if now.After(known.keep) {
 			delete(m.approvalRisks, key)

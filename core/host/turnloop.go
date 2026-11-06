@@ -251,8 +251,10 @@ func (d *sessionDriver) setVerdict(req approval.Request, risk approval.Risk) {
 	d.verdicts[req] = risk
 }
 
-func (d *sessionDriver) askApproval(ctx context.Context, prompt, approvalID string, req approval.Request, deadline time.Time) {
+func (d *sessionDriver) askApproval(ctx context.Context, approvalID string, req approval.Request, deadline time.Time) {
 	opts := approvalChoices(approvalID, req)
+	prompt := d.hostText("approval.prompt", map[string]any{"Request": describeRequest(req)})
+	hint := d.hostText("approval.hint", map[string]any{"Command": "approve allow|deny " + approvalID, "Help": "approve allow --help"})
 	for _, gateway := range d.gateways {
 		channel := d.renderChannel(gateway)
 		if gateway.Gateway != nil {
@@ -261,6 +263,7 @@ func (d *sessionDriver) askApproval(ctx context.Context, prompt, approvalID stri
 			if risk, ok := d.verdict(req); ok {
 				announceApprovalRisk(gateway.Gateway, conv, approvalID, risk)
 			}
+			announceApprovalSubject(gateway.Gateway, conv, approvalID, describeRequest(req))
 		}
 		if mr, ok := gateway.Reader.(contracts.MenuRouter); ok && channel != "" {
 			if _, err := mr.RouteMenu(ctx, channel, "", prompt, d.name, opts); err == nil {
@@ -271,7 +274,7 @@ func (d *sessionDriver) askApproval(ctx context.Context, prompt, approvalID stri
 			continue
 		}
 		conv := contracts.Conversation{Gateway: gateway.Gateway.Manifest().Kind, ID: channel}
-		logCleanup(contracts.Degrade(gateway.Gateway).Menu(ctx, conv, "", prompt+" (answer with `approve allow|deny "+approvalID+"`, see `approve allow --help`)", opts))
+		logCleanup(contracts.Degrade(gateway.Gateway).Menu(ctx, conv, "", prompt+hint, opts))
 	}
 }
 
@@ -283,6 +286,10 @@ func announceApprovalRisk(gateway contracts.Gateway, conv contracts.Conversation
 	emitApprovalEvent(gateway, conv, contracts.Event{T: approvalRiskEventKind, Value: approvalID, Text: risk.String()})
 }
 
+func announceApprovalSubject(gateway contracts.Gateway, conv contracts.Conversation, approvalID, subject string) {
+	emitApprovalEvent(gateway, conv, contracts.Event{T: approvalSubjectEventKind, Value: approvalID, Text: subject})
+}
+
 func emitApprovalEvent(gateway contracts.Gateway, conv contracts.Conversation, event contracts.Event) {
 	switch sink := gateway.(type) {
 	case contracts.RoutedEventSink:
@@ -292,12 +299,12 @@ func emitApprovalEvent(gateway contracts.Gateway, conv contracts.Conversation, e
 	}
 }
 
-func askApprovalOn(ctx context.Context, sessions *sessionTable, session, prompt, approvalID string, req approval.Request, deadline time.Time) {
+func askApprovalOn(ctx context.Context, sessions *sessionTable, session, approvalID string, req approval.Request, deadline time.Time) {
 	driver := sessions.lookup(session)
 	if driver == nil {
 		return
 	}
-	driver.askApproval(ctx, prompt, approvalID, req, deadline)
+	driver.askApproval(ctx, approvalID, req, deadline)
 }
 
 const interruptSendTimeout = 2 * time.Second

@@ -246,38 +246,39 @@ func spinTick(d time.Duration) tea.Cmd {
 }
 
 type model struct {
-	tr            translator
-	log           *slog.Logger
-	handlers      *dispatchTables
-	buildTables   func() (*dispatchTables, error)
-	ctx           context.Context
-	limits        contextwindow.Limits
-	st            uiStyles
-	md            *markdownRenderer
-	keys          *keyLog
-	tm            Backend
-	vp            viewport.Model
-	input         textarea.Model
-	tabs          map[string]*tab
-	order         []string
-	active        string
-	ready         bool
-	showHelp      bool
-	pendingClose  bool
-	width         int
-	height        int
-	flash         string
-	approvalDues  map[string]approvalDue
-	approvalRisks map[string]approvalRating
-	tabSig        string
-	spin          int
-	cmds          []CommandSpec
-	diff          diffPanel
-	diffRun       commandRunner
-	palIdx        int
-	palWasOpen    bool
-	spinning      bool
-	composerRows  int
+	tr               translator
+	log              *slog.Logger
+	handlers         *dispatchTables
+	buildTables      func() (*dispatchTables, error)
+	ctx              context.Context
+	limits           contextwindow.Limits
+	st               uiStyles
+	md               *markdownRenderer
+	keys             *keyLog
+	tm               Backend
+	vp               viewport.Model
+	input            textarea.Model
+	tabs             map[string]*tab
+	order            []string
+	active           string
+	ready            bool
+	showHelp         bool
+	pendingClose     bool
+	width            int
+	height           int
+	flash            string
+	approvalDues     map[string]approvalDue
+	approvalRisks    map[string]approvalRating
+	approvalSubjects map[string]approvalRating
+	tabSig           string
+	spin             int
+	cmds             []CommandSpec
+	diff             diffPanel
+	diffRun          commandRunner
+	palIdx           int
+	palWasOpen       bool
+	spinning         bool
+	composerRows     int
 
 	infoCache   contracts.SessionInfo
 	infoKnown   bool
@@ -1147,6 +1148,8 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		m.rememberApprovalDeadline(event, time.Now())
 	case eventApprovalRisk:
 		m.rememberApprovalRisk(event, time.Now())
+	case eventApprovalSubject:
+		m.rememberApprovalSubject(event, time.Now())
 	case eventMenu:
 		if m.openApproval(target, event) {
 			return

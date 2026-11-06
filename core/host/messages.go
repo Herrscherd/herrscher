@@ -18,6 +18,7 @@ var hostLocales embed.FS
 const (
 	detailParam = "Detail"
 	nameParam   = "Name"
+	pathParam   = "Path"
 )
 
 type hostMessages struct {

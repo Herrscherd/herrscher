@@ -330,6 +330,31 @@
     "other": "the binary put on {{.Host}} fails its smoke test: {{.Detail}}"
   },
   {
+    "id": "approval.prompt",
+    "description": "The question asking the operator to allow a tool request, Request names the tool and its subject",
+    "other": "allow {{.Request}}?"
+  },
+  {
+    "id": "approval.hint",
+    "description": "The line that tells the operator how to answer an approval from the command line, Command is the approve command and Help the help command",
+    "other": " (answer with `{{.Command}}`, see `{{.Help}}`)"
+  },
+  {
+    "id": "remote.extract_archive",
+    "description": "The agent archive cannot be unpacked into the worktree, Path names the directory and Detail carries the cause",
+    "other": "cannot unpack the agent archive into {{.Path}}: {{.Detail}}"
+  },
+  {
+    "id": "remote.extract_member",
+    "description": "One member of the agent archive cannot be written, Member names the file and Detail carries the cause",
+    "other": "cannot extract {{.Member}}: {{.Detail}}"
+  },
+  {
+    "id": "remote.unsafe_member",
+    "description": "An archive member is refused because it would land outside the worktree, Member names it and Root names the directory",
+    "other": "refusing archive member {{.Member}}: it lands outside {{.Root}}"
+  },
+  {
     "id": "remote.stage_agent",
     "description": "An agent cannot be staged for a remote host, Name names the agent and Detail carries the cause",
     "other": "stage agent \"{{.Name}}\": {{.Detail}}"

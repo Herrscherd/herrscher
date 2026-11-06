@@ -330,6 +330,31 @@
     "other": "le binaire déposé sur {{.Host}} échoue à son test de fumée : {{.Detail}}"
   },
   {
+    "id": "approval.prompt",
+    "description": "La question qui demande à l'opérateur d'autoriser une demande d'outil, Request nomme l'outil et son sujet",
+    "other": "autoriser {{.Request}} ?"
+  },
+  {
+    "id": "approval.hint",
+    "description": "La ligne qui indique à l'opérateur comment répondre à une approbation en ligne de commande, Command est la commande approve et Help la commande d'aide",
+    "other": " (répondez avec `{{.Command}}`, voir `{{.Help}}`)"
+  },
+  {
+    "id": "remote.extract_archive",
+    "description": "L'archive de l'agent ne peut pas être décompressée dans le worktree, Path nomme le dossier et Detail porte la cause",
+    "other": "décompression de l'archive de l'agent dans {{.Path}} impossible : {{.Detail}}"
+  },
+  {
+    "id": "remote.extract_member",
+    "description": "Un élément de l'archive de l'agent ne peut pas être écrit, Member nomme le fichier et Detail porte la cause",
+    "other": "extraction de {{.Member}} impossible : {{.Detail}}"
+  },
+  {
+    "id": "remote.unsafe_member",
+    "description": "Un élément d'archive est refusé car il sortirait du worktree, Member le nomme et Root nomme le dossier",
+    "other": "élément d'archive refusé : {{.Member}} sortirait de {{.Root}}"
+  },
+  {
     "id": "remote.stage_agent",
     "description": "An agent cannot be staged for a remote host, Name names the agent and Detail carries the cause",
     "other": "préparation de l'agent \"{{.Name}}\" impossible : {{.Detail}}"

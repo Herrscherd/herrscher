@@ -1,0 +1,159 @@
+package main
+
+import (
+	"os"
+	"path/filepath"
+	"slices"
+	"testing"
+)
+
+func textsOf(found []finding) []string {
+	texts := make([]string, 0, len(found))
+	for _, sentence := range found {
+		texts = append(texts, sentence.text)
+	}
+	slices.Sort(texts)
+	return texts
+}
+
+func collectMutant(t *testing.T, directory, file, source string) map[string][]finding {
+	t.Helper()
+	root := t.TempDir()
+	target := filepath.Join(root, filepath.FromSlash(directory))
+	if err := os.MkdirAll(target, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(target, file), []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	found, err := collect(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return found
+}
+
+func TestExtendedFixtureFindsExactlyTheSentences(t *testing.T) {
+	t.Parallel()
+	found, err := collect("testdata/extended")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][]string{
+		"manage": {
+			"Route policy was changed",
+			"Session  was stopped",
+			"Session stopped unexpectedly",
+			"Session stopped unexpectedly",
+			"The reply was cut short",
+			"The session has stopped",
+		},
+		"core/cli":              {"cli: programmer message outside the list", "needs a value", "unknown command"},
+		"core/host":             {"no session is running here"},
+		"core/internal/manager": {"manager has no active lease"},
+		"plugins/terminal":      {"plugin has no terminal surface"},
+	}
+	for key, texts := range want {
+		if got := textsOf(found[key]); !slices.Equal(got, texts) {
+			t.Errorf("%s: got %q, want %q", key, got, texts)
+		}
+	}
+	for key, sentences := range found {
+		if _, expected := want[key]; !expected && len(sentences) > 0 {
+			t.Errorf("%s: unexpected findings %q", key, textsOf(sentences))
+		}
+	}
+}
+
+func TestProgrammerErrorsListIsExplicit(t *testing.T) {
+	t.Parallel()
+	var texts []string
+	for _, entry := range programmerErrors() {
+		if entry.directory != "core/cli" || entry.file != "registry.go" {
+			t.Errorf("programmer error %q is outside core/cli/registry.go", entry.text)
+		}
+		texts = append(texts, entry.text)
+	}
+	want := []string{"cli: command with empty path", "cli: duplicate command"}
+	if !slices.Equal(texts, want) {
+		t.Fatalf("programmer errors %q, want exactly %q", texts, want)
+	}
+}
+
+func TestProgrammerErrorIsCountedOutsideItsFile(t *testing.T) {
+	t.Parallel()
+	found := collectMutant(t, "manage", "elsewhere.go", "package manage\n\nvar errTwice = errors.New(\"cli: duplicate command\")\n")
+	if got := textsOf(found["manage"]); !slices.Equal(got, []string{"cli: duplicate command"}) {
+		t.Fatalf("the programmer exemption leaked outside core/cli/registry.go: %q", got)
+	}
+}
+
+func TestMutationsOnePerExtension(t *testing.T) {
+	t.Parallel()
+	for name, mutant := range map[string]struct {
+		directory string
+		file      string
+		source    string
+		want      string
+	}{
+		"key value on a model flash": {
+			directory: "manage",
+			file:      "mutant.go",
+			source:    "package manage\n\nfunc mutant(m *model) {\n\tm.tr = model{flash: \"Clipboard handed over to the terminal\"}\n}\n",
+			want:      "Clipboard handed over to the terminal",
+		},
+		"key value on a contracts event text": {
+			directory: "manage",
+			file:      "mutant.go",
+			source:    "package manage\n\nvar mutant = contracts.Event{T: \"notice\", Text: \"The upload was refused\"}\n",
+			want:      "The upload was refused",
+		},
+		"binary concatenation of strings": {
+			directory: "manage",
+			file:      "mutant.go",
+			source:    "package manage\n\nfunc mutant(m *model, name string) {\n\tm.flash = \"Upload of \" + name + \" was refused\"\n}\n",
+			want:      "Upload of  was refused",
+		},
+		"package constant reaching a sink": {
+			directory: "manage",
+			file:      "mutant.go",
+			source:    "package manage\n\nconst refusedNotice = \"The upload was refused\"\n\nfunc mutant(m *model) {\n\tm.flash = refusedNotice\n}\n",
+			want:      "The upload was refused",
+		},
+		"contracts text argument": {
+			directory: "manage",
+			file:      "mutant.go",
+			source:    "package manage\n\nvar mutant = contracts.Text(\"Reason\", \"The upload was refused\")\n",
+			want:      "The upload was refused",
+		},
+		"core host scope": {
+			directory: "core/host",
+			file:      "mutant.go",
+			source:    "package host\n\nvar errMutant = errors.New(\"the upload was refused\")\n",
+			want:      "the upload was refused",
+		},
+		"core internal manager scope": {
+			directory: "core/internal/manager",
+			file:      "mutant.go",
+			source:    "package manager\n\nvar errMutant = errors.New(\"the upload was refused\")\n",
+			want:      "the upload was refused",
+		},
+		"plugins terminal scope": {
+			directory: "plugins/terminal",
+			file:      "mutant.go",
+			source:    "package terminal\n\nvar errMutant = errors.New(\"the upload was refused\")\n",
+			want:      "the upload was refused",
+		},
+		"programmer message not in the closed list": {
+			directory: "core/cli",
+			file:      "registry.go",
+			source:    "package cli\n\nvar errMutant = errors.New(\"cli: duplicate command again\")\n",
+			want:      "cli: duplicate command again",
+		},
+	} {
+		found := collectMutant(t, mutant.directory, mutant.file, mutant.source)
+		if got := textsOf(found[mutant.directory]); !slices.Contains(got, mutant.want) {
+			t.Errorf("%s: %q not found in %q", name, mutant.want, got)
+		}
+	}
+}

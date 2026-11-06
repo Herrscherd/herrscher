@@ -17,7 +17,7 @@ type finding struct {
 }
 
 func presentationScope() []string {
-	return []string{"plugins/terminal/tui", "manage", "core/cli", "usage.go"}
+	return []string{"plugins/terminal", "plugins/terminal/tui", "manage", cliDirectory, "core/host", "core/internal/manager", "usage.go"}
 }
 
 func collect(root string) (map[string][]finding, error) {

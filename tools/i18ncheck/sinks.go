@@ -3,6 +3,7 @@ package main
 import (
 	"go/ast"
 	"go/token"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -11,6 +12,8 @@ import (
 type sinkWalker struct {
 	files      *token.FileSet
 	translated map[string]bool
+	constants  map[string]ast.Expr
+	resolving  map[string]bool
 	exempt     map[ast.Node]bool
 	found      []finding
 }
@@ -19,6 +22,8 @@ func findPackageSinks(files *token.FileSet, parsed []*ast.File) []finding {
 	walker := &sinkWalker{
 		files:      files,
 		translated: translatedSentinels(parsed),
+		constants:  packageConstants(parsed),
+		resolving:  make(map[string]bool),
 		exempt:     make(map[ast.Node]bool),
 	}
 	for _, file := range parsed {
@@ -32,10 +37,12 @@ func (walker *sinkWalker) visit(node ast.Node) bool {
 	case *ast.ValueSpec:
 		walker.exemptTranslated(typed)
 	case *ast.AssignStmt:
-		walker.found = append(walker.found, assignmentFindings(walker.files, typed)...)
+		walker.found = append(walker.found, walker.assignmentFindings(typed)...)
+	case *ast.CompositeLit:
+		walker.found = append(walker.found, walker.compositeFindings(typed)...)
 	case *ast.CallExpr:
 		if !walker.exempt[typed] {
-			walker.found = append(walker.found, callFindings(walker.files, typed)...)
+			walker.found = append(walker.found, walker.callFindings(typed)...)
 		}
 	}
 	return true
@@ -45,6 +52,36 @@ func (walker *sinkWalker) exemptTranslated(spec *ast.ValueSpec) {
 	for index, name := range spec.Names {
 		if index < len(spec.Values) && walker.translated[name.Name] {
 			walker.exempt[spec.Values[index]] = true
+		}
+	}
+}
+
+func packageConstants(parsed []*ast.File) map[string]ast.Expr {
+	constants := make(map[string]ast.Expr)
+	for _, file := range parsed {
+		for _, declaration := range file.Decls {
+			addDeclaredValues(constants, declaration)
+		}
+	}
+	return constants
+}
+
+func addDeclaredValues(constants map[string]ast.Expr, declaration ast.Decl) {
+	general, ok := declaration.(*ast.GenDecl)
+	if !ok || (general.Tok != token.CONST && general.Tok != token.VAR) {
+		return
+	}
+	for _, spec := range general.Specs {
+		if valueSpec, ok := spec.(*ast.ValueSpec); ok {
+			addSpecValues(constants, valueSpec)
+		}
+	}
+}
+
+func addSpecValues(constants map[string]ast.Expr, spec *ast.ValueSpec) {
+	for index, name := range spec.Names {
+		if index < len(spec.Values) {
+			constants[name.Name] = spec.Values[index]
 		}
 	}
 }
@@ -87,94 +124,151 @@ func isNotKeyRune(letter rune) bool {
 	return letter != '.' && letter != '_' && !unicode.IsLower(letter) && !unicode.IsDigit(letter)
 }
 
-func assignmentFindings(files *token.FileSet, assign *ast.AssignStmt) []finding {
+func (walker *sinkWalker) assignmentFindings(assign *ast.AssignStmt) []finding {
 	if len(assign.Lhs) != len(assign.Rhs) {
 		return nil
 	}
 	var found []finding
 	for index, target := range assign.Lhs {
-		if !isShownField(target) {
+		selector, ok := target.(*ast.SelectorExpr)
+		if !ok || !isShownName(selector.Sel.Name) {
 			continue
 		}
-		if sentence, ok := proseOf(files, assign.Rhs[index]); ok {
+		if sentence, ok := walker.proseOf(assign.Rhs[index]); ok {
 			found = append(found, sentence)
 		}
 	}
 	return found
 }
 
-func isShownField(target ast.Expr) bool {
-	selector, ok := target.(*ast.SelectorExpr)
+func (walker *sinkWalker) compositeFindings(literal *ast.CompositeLit) []finding {
+	var found []finding
+	for _, element := range literal.Elts {
+		pair, ok := element.(*ast.KeyValueExpr)
+		if !ok || !isShownKey(literal.Type, pair.Key) {
+			continue
+		}
+		if sentence, ok := walker.proseOf(pair.Value); ok {
+			found = append(found, sentence)
+		}
+	}
+	return found
+}
+
+func isShownKey(literalType, key ast.Expr) bool {
+	name, ok := key.(*ast.Ident)
 	if !ok {
 		return false
 	}
-	name := strings.ToLower(selector.Sel.Name)
-	return name == "flash" || strings.HasSuffix(name, "notice")
+	if isQualified(literalType, "contracts", "Event") {
+		return name.Name == "Text"
+	}
+	if isNamedType(literalType, "model") {
+		return isShownName(name.Name)
+	}
+	return false
 }
 
-func callFindings(files *token.FileSet, call *ast.CallExpr) []finding {
-	if len(call.Args) == 0 || !isShowingCall(call.Fun) {
+func isQualified(expr ast.Expr, qualifier, name string) bool {
+	selector, ok := expr.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	owner, ok := selector.X.(*ast.Ident)
+	return ok && owner.Name == qualifier && selector.Sel.Name == name
+}
+
+func isNamedType(expr ast.Expr, name string) bool {
+	ident, ok := expr.(*ast.Ident)
+	return ok && ident.Name == name
+}
+
+func isShownName(name string) bool {
+	lowered := strings.ToLower(name)
+	return lowered == "flash" || strings.HasSuffix(lowered, "notice")
+}
+
+func (walker *sinkWalker) callFindings(call *ast.CallExpr) []finding {
+	index, ok := showingArgument(call.Fun)
+	if !ok || len(call.Args) <= index {
 		return nil
 	}
-	if sentence, ok := proseOf(files, call.Args[0]); ok {
+	if sentence, ok := walker.proseOf(call.Args[index]); ok {
 		return []finding{sentence}
 	}
 	return nil
 }
 
-func isShowingCall(fun ast.Expr) bool {
+func showingArgument(fun ast.Expr) (int, bool) {
 	selector, ok := fun.(*ast.SelectorExpr)
 	if !ok {
-		return false
+		return 0, false
 	}
 	qualifier, ok := selector.X.(*ast.Ident)
 	if !ok {
-		return false
+		return 0, false
 	}
 	switch qualifier.Name + "." + selector.Sel.Name {
 	case "contracts.DataResult", "fmt.Errorf", "errors.New":
-		return true
+		return 0, true
+	case "contracts.Text":
+		return 1, true
 	}
-	return false
+	return 0, false
 }
 
-func proseOf(files *token.FileSet, expr ast.Expr) (finding, bool) {
-	text, ok := literalText(expr)
-	if !ok || !isProse(text) {
+func (walker *sinkWalker) proseOf(expr ast.Expr) (finding, bool) {
+	text, ok := walker.textOf(expr)
+	position := walker.files.Position(expr.Pos())
+	if !ok || !isProse(text) || isProgrammerError(position, text) {
 		return finding{}, false
 	}
-	return finding{position: files.Position(expr.Pos()), text: text}, true
+	return finding{position: position, text: text}, true
 }
 
-func literalText(expr ast.Expr) (string, bool) {
+func (walker *sinkWalker) textOf(expr ast.Expr) (string, bool) {
 	switch typed := expr.(type) {
 	case *ast.BasicLit:
 		return unquote(typed)
+	case *ast.Ident:
+		return walker.constantText(typed.Name)
+	case *ast.BinaryExpr:
+		return walker.concatText(typed)
 	case *ast.CallExpr:
-		return formatText(typed)
+		return walker.formatText(typed)
 	}
 	return "", false
 }
 
-func formatText(call *ast.CallExpr) (string, bool) {
+func (walker *sinkWalker) constantText(name string) (string, bool) {
+	value, declared := walker.constants[name]
+	if !declared || walker.resolving[name] {
+		return "", false
+	}
+	walker.resolving[name] = true
+	defer delete(walker.resolving, name)
+	return walker.textOf(value)
+}
+
+func (walker *sinkWalker) concatText(sum *ast.BinaryExpr) (string, bool) {
+	if sum.Op != token.ADD {
+		return "", false
+	}
+	left, leftIsText := walker.textOf(sum.X)
+	right, rightIsText := walker.textOf(sum.Y)
+	return left + right, leftIsText || rightIsText
+}
+
+func (walker *sinkWalker) formatText(call *ast.CallExpr) (string, bool) {
 	selector, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok || len(call.Args) == 0 {
 		return "", false
 	}
 	qualifier, ok := selector.X.(*ast.Ident)
-	if !ok || qualifier.Name != "fmt" {
+	if !ok || qualifier.Name != "fmt" || !slices.Contains([]string{"Sprintf", "Sprint", "Errorf"}, selector.Sel.Name) {
 		return "", false
 	}
-	switch selector.Sel.Name {
-	case "Sprintf", "Sprint", "Errorf":
-	default:
-		return "", false
-	}
-	literal, ok := call.Args[0].(*ast.BasicLit)
-	if !ok {
-		return "", false
-	}
-	return unquote(literal)
+	return walker.textOf(call.Args[0])
 }
 
 func unquote(literal *ast.BasicLit) (string, bool) {

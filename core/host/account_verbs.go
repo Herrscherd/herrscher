@@ -25,23 +25,23 @@ const (
 
 var errConversationAccount = errors.New("the session has a conversation under another account: rerun with fresh to start a new conversation, or cancel")
 
-func sessionAccountsVerb(lang i18n.Language, store *state.State) contracts.Cmd {
+func sessionAccountsVerb(lang languageSource, store *state.State) contracts.Cmd {
 	return contracts.New(nsSession, "accounts").
 		Help(clitext.CmdHelpSessionAccounts).
 		Param(paramName, clitext.CmdParamSessionAccountsName, true).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
-			return cli.Data(listSessionAccounts(lang, store, input.Get(paramName)))
+			return cli.Data(listSessionAccounts(lang(), store, input.Get(paramName)))
 		})
 }
 
-func sessionSetAccountVerb(lang i18n.Language, store *state.State) contracts.Cmd {
+func sessionSetAccountVerb(lang languageSource, store *state.State) contracts.Cmd {
 	return contracts.New(nsSession, "set-account").
 		Help(clitext.CmdHelpSessionSetAccount).
 		Param(paramName, clitext.CmdParamSessionSetAccountName, true).
 		Param(paramProfile, clitext.CmdParamSessionSetAccountProfile, false).
 		Param(paramFresh, clitext.CmdParamSessionSetAccountFresh, false).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
-			return cli.Data(setSessionAccount(lang, store, input.Get(paramName), input.Get(paramProfile), input.Get(paramFresh) == freshMarker))
+			return cli.Data(setSessionAccount(lang(), store, input.Get(paramName), input.Get(paramProfile), input.Get(paramFresh) == freshMarker))
 		})
 }
 

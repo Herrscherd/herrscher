@@ -128,6 +128,10 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Help(clitext.CmdHelpSetSource).
 			Param("path", clitext.CmdParamSetSourcePath, true).
 			Do(h.setSourceRun),
+		contracts.New("set", "lang").
+			Help(clitext.CmdHelpSetLang).
+			Param("lang", clitext.CmdParamSetLangLang, false).
+			Do(h.setLangRun),
 		contracts.New("service", "restart").
 			Help(clitext.CmdHelpServiceRestart).
 			Do(h.serviceRestartRun),

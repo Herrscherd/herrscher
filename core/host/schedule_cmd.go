@@ -14,7 +14,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-func addScheduleCommands(reg *cli.Registry, lang i18n.Language, hostState *state.State, agents agentLookup, slot *schedulerSlot) error {
+func addScheduleCommands(reg *cli.Registry, lang languageSource, hostState *state.State, agents agentLookup, slot *schedulerSlot) error {
 	return addVerbs(
 		reg,
 		scheduleAddVerb(lang, hostState, agents),
@@ -26,7 +26,7 @@ func addScheduleCommands(reg *cli.Registry, lang i18n.Language, hostState *state
 	)
 }
 
-func scheduleAddVerb(lang i18n.Language, store *state.State, agents agentLookup) contracts.Cmd {
+func scheduleAddVerb(lang languageSource, store *state.State, agents agentLookup) contracts.Cmd {
 	return contracts.New(nsSchedule, "add").
 		Help(clitext.CmdHelpScheduleAdd).
 		Param(paramName, clitext.CmdParamScheduleAddName, true).
@@ -38,7 +38,7 @@ func scheduleAddVerb(lang i18n.Language, store *state.State, agents agentLookup)
 		Param("task", clitext.CmdParamScheduleAddTask, true).
 		Param("grace", clitext.CmdParamScheduleAddGrace, false).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(addSchedule(lang, store, agents, in))
+			return cli.Data(addSchedule(lang(), store, agents, in))
 		})
 }
 
@@ -86,11 +86,11 @@ func checkNewSchedule(store *state.State, agents agentLookup, definition schedul
 	return nil
 }
 
-func scheduleListVerb(lang i18n.Language, store *state.State) contracts.Cmd {
+func scheduleListVerb(lang languageSource, store *state.State) contracts.Cmd {
 	return contracts.New(nsSchedule, "list").
 		Help(clitext.CmdHelpScheduleList).
 		Do(func(_ context.Context, _ contracts.Input) (contracts.Result, error) {
-			return contracts.DataResult(listSchedules(lang, store)), nil
+			return contracts.DataResult(listSchedules(lang(), store)), nil
 		})
 }
 
@@ -140,7 +140,7 @@ func nextWindowOf(lang i18n.Language, sched schedule.Schedule, now time.Time) st
 	return text.Text(clitext.HostScheduleNextRun, clitext.Params{clitext.ParamWhen: when.Format(time.RFC3339)})
 }
 
-func scheduleRmVerb(lang i18n.Language, store *state.State) contracts.Cmd {
+func scheduleRmVerb(lang languageSource, store *state.State) contracts.Cmd {
 	return contracts.New(nsSchedule, "rm").
 		Help(clitext.CmdHelpScheduleRm).
 		Param(paramName, clitext.CmdParamScheduleRmName, true).
@@ -153,16 +153,16 @@ func scheduleRmVerb(lang i18n.Language, store *state.State) contracts.Cmd {
 			if !ok {
 				return contracts.Result{}, &NotFoundError{Kind: kindSchedule, Name: name}
 			}
-			return contracts.DataResult(replyText(lang).Text(clitext.HostScheduleRemoved, clitext.Params{clitext.ParamName: name})), nil
+			return contracts.DataResult(replyText(lang()).Text(clitext.HostScheduleRemoved, clitext.Params{clitext.ParamName: name})), nil
 		})
 }
 
-func schedulePauseVerb(lang i18n.Language, store *state.State, verb string, paused bool, helpKey string) contracts.Cmd {
+func schedulePauseVerb(lang languageSource, store *state.State, verb string, paused bool, helpKey string) contracts.Cmd {
 	return contracts.New(nsSchedule, verb).
 		Help(helpKey).
 		Param(paramName, clitext.CmdParamScheduleName, true).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(setSchedulePaused(lang, store, paused, strings.TrimSpace(in.Get(paramName))))
+			return cli.Data(setSchedulePaused(lang(), store, paused, strings.TrimSpace(in.Get(paramName))))
 		})
 }
 
@@ -186,7 +186,7 @@ func setSchedulePaused(lang i18n.Language, store *state.State, paused bool, name
 	return replyText(lang).Text(key, clitext.Params{clitext.ParamName: name}), nil
 }
 
-func scheduleRunVerb(lang i18n.Language, slot *schedulerSlot) contracts.Cmd {
+func scheduleRunVerb(lang languageSource, slot *schedulerSlot) contracts.Cmd {
 	return contracts.New(nsSchedule, "run").
 		Help(clitext.CmdHelpScheduleRun).
 		Param(paramName, clitext.CmdParamScheduleRunName, true).
@@ -198,7 +198,7 @@ func scheduleRunVerb(lang i18n.Language, slot *schedulerSlot) contracts.Cmd {
 			if err := slot.sched.fireNow(cmdCtx, name); err != nil {
 				return contracts.Result{}, err
 			}
-			return contracts.DataResult(replyText(lang).Text(clitext.HostScheduleFired, clitext.Params{clitext.ParamName: name})), nil
+			return contracts.DataResult(replyText(lang()).Text(clitext.HostScheduleFired, clitext.Params{clitext.ParamName: name})), nil
 		})
 }
 

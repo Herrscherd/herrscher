@@ -4,6 +4,8 @@ package clitext
 const (
 	HostHomeSet                 = "cli.host.home.set"
 	HostSourceSet               = "cli.host.source.set"
+	HostLangSet                 = "cli.host.lang.set"
+	HostLangReset               = "cli.host.lang.reset"
 	HostAgentCreated            = "cli.host.agent.created"
 	HostAgentListEmpty          = "cli.host.agent.list_empty"
 	HostAgentSoulUpdated        = "cli.host.agent.soul_updated"
@@ -60,6 +62,7 @@ const (
 	HostErrMissingChannel       = "cli.host.err.missing_channel"
 	HostErrMissingName          = "cli.host.err.missing_name"
 	HostErrMissingPath          = "cli.host.err.missing_path"
+	HostErrUnsupportedLang      = "cli.host.err.unsupported_lang"
 	HostErrMissingSoul          = "cli.host.err.missing_soul"
 	HostErrMissingTo            = "cli.host.err.missing_to"
 	HostErrConflictingChannel   = "cli.host.err.conflicting_channel"
@@ -94,6 +97,9 @@ func hostKeys() map[Key][]string {
 	return map[Key][]string{
 		HostHomeSet:                 {ParamChannel, ParamKind},
 		HostSourceSet:               {ParamPath},
+		HostLangSet:                 {ParamLang},
+		HostLangReset:               {ParamLang},
+		HostErrUnsupportedLang:      {ParamLang},
 		HostAgentCreated:            {ParamName, ParamHome},
 		HostAgentListEmpty:          nil,
 		HostAgentSoulUpdated:        {ParamName},

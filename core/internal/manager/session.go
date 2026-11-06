@@ -551,7 +551,7 @@ func (h *Handler) checkSessionAccount(input contracts.Input, runtime runtimeChoi
 	}
 	if err != nil {
 		if account != explicitAccount {
-			err = localize(h.lang, fmt.Sprintf("the account of agent %q: %v", runtime.agent, err), clitext.HostErrAccountOfAgent, clitext.Params{clitext.ParamAgent: runtime.agent, clitext.ParamErr: err.Error()}, err)
+			err = localize(h.currentLanguage(), fmt.Sprintf("the account of agent %q: %v", runtime.agent, err), clitext.HostErrAccountOfAgent, clitext.Params{clitext.ParamAgent: runtime.agent, clitext.ParamErr: err.Error()}, err)
 		}
 		return "", "", err
 	}
@@ -741,7 +741,7 @@ func (h *Handler) resolveProject(ctx context.Context, input contracts.Input, hos
 	}
 	if spec, ok := input.Lookup("clone"); ok && spec != "" {
 		if hostName != "" {
-			return "", localize(h.lang, fmt.Sprintf("%v %q: create the project locally first, then create the session with --host", ErrCloneUnsupported, hostName), clitext.HostErrCloneUnsupported, clitext.Params{clitext.ParamHost: hostName}, ErrCloneUnsupported)
+			return "", localize(h.currentLanguage(), fmt.Sprintf("%v %q: create the project locally first, then create the session with --host", ErrCloneUnsupported, hostName), clitext.HostErrCloneUnsupported, clitext.Params{clitext.ParamHost: hostName}, ErrCloneUnsupported)
 		}
 		cctx, cancel := context.WithTimeout(ctx, cloneTimeout)
 		dir, err := h.fg.Clone(cctx, spec, wtRoot)
@@ -780,7 +780,7 @@ func (h *Handler) provisionAgent(ctx context.Context, req *createRequest, worktr
 		}
 		path, err := worktrees.Scratch(repo, req.name)
 		if err != nil {
-			return localize(h.lang, fmt.Sprintf("provision agent %q: %v", agentName, err), clitext.HostErrProvisionAgent, clitext.Params{clitext.ParamAgent: agentName, clitext.ParamErr: err.Error()}, err)
+			return localize(h.currentLanguage(), fmt.Sprintf("provision agent %q: %v", agentName, err), clitext.HostErrProvisionAgent, clitext.Params{clitext.ParamAgent: agentName, clitext.ParamErr: err.Error()}, err)
 		}
 		space.path, space.scratch = path, true
 	}
@@ -797,7 +797,7 @@ func (h *Handler) provisionAgent(ctx context.Context, req *createRequest, worktr
 	}
 	if err := h.materializeOn(ctx, req.hostName, agentSpec, space.path, req.mode != approval.ModeBypass.String()); err != nil {
 		h.rollbackWorkspace(ctx, worktrees, repo, req.name, *space)
-		return localize(h.lang, fmt.Sprintf("provision agent %q: %v", agentName, err), clitext.HostErrProvisionAgent, clitext.Params{clitext.ParamAgent: agentName, clitext.ParamErr: err.Error()}, err)
+		return localize(h.currentLanguage(), fmt.Sprintf("provision agent %q: %v", agentName, err), clitext.HostErrProvisionAgent, clitext.Params{clitext.ParamAgent: agentName, clitext.ParamErr: err.Error()}, err)
 	}
 	return nil
 }
@@ -1095,9 +1095,9 @@ func (h *Handler) switchApprovalsNote(sess state.Session) string {
 
 func (h *Handler) revertSwitch(name string, prior state.Session, restartErr error) error {
 	if rbErr := h.rollbackSwitch(name, prior.Vendor, prior.Cmd, prior.ModelID, prior.ResumeToken); rbErr != nil {
-		return restartLostError(h.lang, name, restartErr, rbErr)
+		return restartLostError(h.currentLanguage(), name, restartErr, rbErr)
 	}
-	return clitext.Failure(h.lang, restartErr, clitext.SessionSwitchRestartRestored, clitext.Params{clitext.ParamName: name, clitext.ParamVendor: prior.Vendor, clitext.ParamErr: restartErr.Error()})
+	return clitext.Failure(h.currentLanguage(), restartErr, clitext.SessionSwitchRestartRestored, clitext.Params{clitext.ParamName: name, clitext.ParamVendor: prior.Vendor, clitext.ParamErr: restartErr.Error()})
 }
 
 func (h *Handler) switchReply(ctx context.Context, name, vendor, handoff, switchNote string) string {

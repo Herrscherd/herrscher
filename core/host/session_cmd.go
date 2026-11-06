@@ -30,7 +30,7 @@ func namedSessionLanguage(st *state.State, name string, operator i18n.Language) 
 	return sessionLanguage(sess, i18n.Resolve(operator))
 }
 
-func addSessionVerbs(reg *cli.Registry, lang i18n.Language, store *state.State, partDir, instID string, approvals *approvalTable, sessions *sessionTable, seedCoord *coordinatorSlot, models *ModelDiscovery) error {
+func addSessionVerbs(reg *cli.Registry, lang languageSource, store *state.State, partDir, instID string, approvals *approvalTable, sessions *sessionTable, seedCoord *coordinatorSlot, models *ModelDiscovery) error {
 	seen := newSeenTable(time.Now())
 	return addVerbs(
 		reg,
@@ -59,7 +59,7 @@ func sessionSeenVerb(seen *seenTable) contracts.Cmd {
 		})
 }
 
-func addCheckpointCommands(reg *cli.Registry, lang i18n.Language, store *state.State, sessions *sessionTable) error {
+func addCheckpointCommands(reg *cli.Registry, lang languageSource, store *state.State, sessions *sessionTable) error {
 	return addVerbs(reg, addCheckpointVerbs(lang, store, sessions)...)
 }
 
@@ -164,7 +164,7 @@ func sessionScrollbackVerb(partDir string) contracts.Cmd {
 		})
 }
 
-func sessionPickVerb(lang i18n.Language, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
+func sessionPickVerb(lang languageSource, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, "pick").
 		Help(clitext.CmdHelpSessionPick).
 		Param(paramName, clitext.CmdParamSessionPickName, true).
@@ -172,13 +172,13 @@ func sessionPickVerb(lang i18n.Language, approvals *approvalTable, sessions *ses
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			name, value := input.Get(paramName), input.Get("value")
 			if answerApprovalPick(approvals, sessions, name, value) || sessions.pick(name, value) {
-				return contracts.DataResult(replyText(lang).Text(clitext.SessionPicked, clitext.Params{clitext.ParamName: name})), nil
+				return contracts.DataResult(replyText(lang()).Text(clitext.SessionPicked, clitext.Params{clitext.ParamName: name})), nil
 			}
 			return contracts.Result{}, fmt.Errorf("session %q %w", name, errNoPendingChoice)
 		})
 }
 
-func sessionInterruptVerb(lang i18n.Language, sessions *sessionTable) contracts.Cmd {
+func sessionInterruptVerb(lang languageSource, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, "interrupt").
 		Help(clitext.CmdHelpSessionInterrupt).
 		Param(paramName, clitext.CmdParamSessionInterruptName, true).
@@ -186,20 +186,20 @@ func sessionInterruptVerb(lang i18n.Language, sessions *sessionTable) contracts.
 			if !sessions.Interrupt(input.Get(paramName)) {
 				return contracts.Result{}, &noTurnInFlightError{Session: input.Get(paramName)}
 			}
-			return contracts.DataResult(replyText(lang).Text(clitext.SessionInterrupted, clitext.Params{clitext.ParamName: input.Get(paramName)})), nil
+			return contracts.DataResult(replyText(lang()).Text(clitext.SessionInterrupted, clitext.Params{clitext.ParamName: input.Get(paramName)})), nil
 		})
 }
 
 const verbCompact = "compact"
 
-func sessionCompactVerb(lang i18n.Language, store *state.State, sessions *sessionTable) contracts.Cmd {
+func sessionCompactVerb(lang languageSource, store *state.State, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, verbCompact).
 		Help(clitext.CmdHelpSessionCompact).
 		Param(paramName, clitext.CmdParamSessionCompactName, true).
 		Param("instruction", clitext.CmdParamSessionCompactInstruction, false).
 		Param("origin", clitext.CmdParamSessionCompactOrigin, false).
 		Do(func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(compactSession(ctx, lang, store, sessions, in))
+			return cli.Data(compactSession(ctx, lang(), store, sessions, in))
 		})
 }
 

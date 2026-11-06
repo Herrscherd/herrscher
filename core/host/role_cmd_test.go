@@ -17,7 +17,7 @@ func roleRegistry(t *testing.T) (*cli.Registry, *state.State) {
 		t.Fatal(err)
 	}
 	reg := &cli.Registry{}
-	if err := addRoleCommands(reg, i18n.English, st); err != nil {
+	if err := addRoleCommands(reg, fixedLanguage(i18n.English), st); err != nil {
 		t.Fatal(err)
 	}
 	return reg, st
@@ -194,7 +194,7 @@ func TestGrantConfirmationNamesThePrincipalAndTheRoleInEachLanguage(t *testing.T
 			t.Fatal(err)
 		}
 		reg := &cli.Registry{}
-		if err = addRoleCommands(reg, tc.lang, st); err != nil {
+		if err = addRoleCommands(reg, fixedLanguage(tc.lang), st); err != nil {
 			t.Fatal(err)
 		}
 		if _, err = reg.Dispatch(context.Background(), []string{"role", "grant", "--principal", "chat:1", "--role", "owner"}); err != nil {

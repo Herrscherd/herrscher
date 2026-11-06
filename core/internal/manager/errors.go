@@ -26,6 +26,8 @@ var (
 	ErrMissingPath = errors.New("missing path")
 	// ErrMissingSoul is returned when an agent is created without a soul.
 	ErrMissingSoul = errors.New("missing soul")
+	// ErrUnsupportedLang is returned when /set lang names a language outside en, fr and auto.
+	ErrUnsupportedLang = errors.New("unsupported language, use en, fr or auto")
 	// ErrMissingTo is returned when a rename omits the new name.
 	ErrMissingTo = errors.New("missing to")
 	// ErrModelRequired is returned when a session under the gateway-only route policy names no model.
@@ -186,11 +188,11 @@ func localize(lang i18n.Language, english string, key clitext.Key, params clitex
 }
 
 func (h *Handler) localized(sentinel error, key clitext.Key) error {
-	return localize(h.lang, sentinel.Error(), key, nil, sentinel)
+	return localize(h.currentLanguage(), sentinel.Error(), key, nil, sentinel)
 }
 
 func (h *Handler) labelled(label string, key clitext.Key, err error) error {
-	return localize(h.lang, label+": "+err.Error(), key, clitext.Params{clitext.ParamErr: err.Error()}, err)
+	return localize(h.currentLanguage(), label+": "+err.Error(), key, clitext.Params{clitext.ParamErr: err.Error()}, err)
 }
 
 func restartLostError(lang i18n.Language, name string, restartErr, rollbackErr error) error {

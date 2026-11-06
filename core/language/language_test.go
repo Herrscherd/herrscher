@@ -122,7 +122,7 @@ func TestResolveWarnsOnceForAnInvalidConfigLanguage(t *testing.T) {
 	log, buf := silentLog()
 	t.Setenv(EnvVar, "")
 	t.Setenv("LANG", "fr_FR.UTF-8")
-	langs := Resolve(log, "klingon")
+	langs := Resolve(log, "klingon", "")
 	if langs.Operator != i18n.English || langs.Client != i18n.French {
 		t.Fatalf("Resolve = %+v, want English operator and French client from LANG", langs)
 	}
@@ -153,5 +153,17 @@ func TestForClientFollowsLocaleWithoutExportingIt(t *testing.T) {
 	}
 	if got := os.Getenv(EnvVar); got != "" {
 		t.Fatalf("ForClient published %q, want nothing", got)
+	}
+}
+
+func TestResolveKeepsTheConfiguredDefaultApartFromTheStoredSetting(t *testing.T) {
+	t.Setenv(EnvVar, "")
+	log, _ := silentLog()
+	langs := Resolve(log, "en", "fr")
+	if langs.Operator != i18n.French {
+		t.Fatalf("operator = %v, want French from the stored setting", langs.Operator)
+	}
+	if langs.Default != i18n.English {
+		t.Fatalf("default = %v, want English from config.json", langs.Default)
 	}
 }

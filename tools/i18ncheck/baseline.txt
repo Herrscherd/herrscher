@@ -1,0 +1,3 @@
+core/cli 6
+manage 19
+plugins/terminal/tui 18

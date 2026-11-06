@@ -3383,6 +3383,151 @@
     "other": "session shell : session distante, commande refusée"
   },
   {
+    "id": "cli.worktree.remote_scratch",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.remote_scratch)",
+    "other": "sur {{.Where}} : une session avec un agent a besoin d'un dépôt git là-bas : un répertoire jetable ne peut pas être provisionné à distance"
+  },
+  {
+    "id": "cli.worktree.remote_materialize",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.remote_materialize)",
+    "other": "matérialisation sur {{.Where}} : {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.remote_call",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.remote_call)",
+    "other": "{{.Command}} sur {{.Where}} : {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.remote_unreadable",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.remote_unreadable)",
+    "other": "{{.Command}} sur {{.Where}} : réponse illisible {{.Output}} : {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.scratch_no_root",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.scratch_no_root)",
+    "other": "refus d'un répertoire de travail : aucune racine où placer la session {{.Name}}"
+  },
+  {
+    "id": "cli.worktree.scratch_bad_name",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.scratch_bad_name)",
+    "other": "refus d'un répertoire de travail : le nom de session {{.Name}} n'est pas un composant de chemin"
+  },
+  {
+    "id": "cli.worktree.scratch_remove_refused",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.scratch_remove_refused)",
+    "other": "refus d'un répertoire de travail : pour supprimer la session {{.Name}} sous la racine {{.Root}}"
+  },
+  {
+    "id": "cli.worktree.scratch_create",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.scratch_create)",
+    "other": "répertoire de travail {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.scratch_remove",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.scratch_remove)",
+    "other": "suppression du répertoire de travail {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.flag_base",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.flag_base)",
+    "other": "référence de base refusée, elle ressemble à une option : {{.Ref}}"
+  },
+  {
+    "id": "cli.worktree.not_a_worktree",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.not_a_worktree)",
+    "other": "{{.Path}} existe déjà et n'est pas un worktree git ; déplacez-le pour démarrer cette session"
+  },
+  {
+    "id": "cli.worktree.other_branch",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.other_branch)",
+    "other": "le worktree {{.Path}} est sur une autre branche : il est sur {{.Tip}}, et non sur {{.Branch}} ; la session ne peut pas le reprendre"
+  },
+  {
+    "id": "cli.worktree.uncommitted",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.uncommitted)",
+    "other": "le worktree {{.Name}} a des modifications non validées"
+  },
+  {
+    "id": "cli.worktree.uncommitted_remove",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.uncommitted_remove)",
+    "other": "worktree {{.Name}} : {{.Err}} ; fermez-le avec force:true pour le supprimer quand même"
+  },
+  {
+    "id": "cli.worktree.add_failed",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.add_failed)",
+    "other": "ajout du worktree : {{.Output}} : {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.prune_failed",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.prune_failed)",
+    "other": "élagage des worktrees : {{.Output}} : {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.remove_failed",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.remove_failed)",
+    "other": "suppression du worktree : {{.Output}} : {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.orphan_recovery",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.orphan_recovery)",
+    "other": "{{.Remove}} ; récupération du répertoire orphelin vide : {{.Recovery}}"
+  },
+  {
+    "id": "cli.worktree.orphan_remove",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.orphan_remove)",
+    "other": "suppression du répertoire orphelin vide {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.inspect",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.inspect)",
+    "other": "inspection de {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.branch_unreadable",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.branch_unreadable)",
+    "other": "impossible de lire la branche extraite dans {{.Path}} (HEAD détaché ?) : {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.clean_unverified",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.clean_unverified)",
+    "other": "impossible de vérifier l'état propre de {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.branch_unverified",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.branch_unverified)",
+    "other": "impossible de vérifier la branche {{.Branch}} dans {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.head_unreadable",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.head_unreadable)",
+    "other": "fusion : impossible de lire HEAD de {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.head_unreadable_after_merge",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.head_unreadable_after_merge)",
+    "other": "fusion : impossible de lire HEAD de {{.Path}} après la fusion : {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.merge_failed",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.merge_failed)",
+    "other": "fusion de {{.Branch}} dans {{.Path}} : {{.Output}} : {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.list_failed",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.list_failed)",
+    "other": "liste des worktrees enregistrés : {{.Output}} : {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.resolve_target",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.resolve_target)",
+    "other": "résolution du chemin cible du worktree {{.Path}} : {{.Err}}"
+  },
+  {
+    "id": "cli.worktree.resolve_registered",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.resolve_registered)",
+    "other": "résolution du chemin d'un worktree enregistré : {{.Err}}"
+  },
+  {
     "id": "cli.service.env.owner_id",
     "description": "Help of the owner id setting",
     "other": "identifiant du propriétaire (repli sur l'identifiant d'instance du démon)"

@@ -2,10 +2,14 @@ package host
 
 import (
 	"archive/tar"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
 
 func TestArchiveRefusalReachesTheFrenchOperatorInFrench(t *testing.T) {
@@ -32,5 +36,16 @@ func TestArchiveRefusalReachesTheFrenchOperatorInFrench(t *testing.T) {
 	}
 	if strings.Contains(got, "refusing") || strings.Contains(got, "cannot extract") {
 		t.Fatalf("english text reached the french operator: %q", got)
+	}
+}
+
+func TestWorktreeFailureReachesTheFrenchOperatorInFrench(t *testing.T) {
+	failure := worktree.FailureError{Key: clitext.WorktreeRemoteMaterialize, Params: clitext.Params{clitext.ParamWhere: "me@h", clitext.ParamErr: errors.New("boom")}}
+	got := localizeHostError(i18n.French, fmt.Errorf("installer: %w", failure)).Error()
+	if want := "installer: matérialisation sur me@h : boom"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	if english := localizeHostError(i18n.English, failure).Error(); english != "materialize on me@h: boom" {
+		t.Fatalf("english = %q", english)
 	}
 }

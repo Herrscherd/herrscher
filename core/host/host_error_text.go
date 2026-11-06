@@ -100,8 +100,7 @@ func localizeHostError(lang i18n.Language, err error) error {
 	}
 	resolved := i18n.Resolve(lang)
 	text := errorTextIn(resolved, err)
-	var local localizableError
-	isLocal := errors.As(err, &local)
+	_, _, isLocal := localizedPart(resolved, err)
 	translated := false
 	for _, known := range hostErrorKeys() {
 		if !errors.Is(err, known.sentinel) {

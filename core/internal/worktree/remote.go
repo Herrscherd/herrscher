@@ -4,22 +4,19 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os/exec"
+	"strconv"
 	"strings"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 const (
 	flagInstance = "--instance"
 	flagName     = "--name"
 	flagRepo     = "--repo"
-)
-
-var (
-	errRemoteScratch    = errors.New("a disposable directory cannot be provisioned remotely")
-	errUnreadableAnswer = errors.New("unreadable answer")
 )
 
 // Commander is the part of a runner this package needs: build the command that
@@ -93,7 +90,7 @@ func (r *Remote) Remove(ctx context.Context, repo, name string, force bool) erro
 
 // Scratch creates the scratch directory for name under root on the remote host.
 func (r *Remote) Scratch(_, _ string) (string, error) {
-	return "", fmt.Errorf("on %s: a session with an agent needs a git repository there: %w", r.run.Describe(), errRemoteScratch)
+	return "", FailureError{Key: clitext.WorktreeRemoteScratch, Params: clitext.Params{clitext.ParamWhere: r.run.Describe()}}
 }
 
 // ScratchPath returns the scratch directory path for name under root.
@@ -113,7 +110,8 @@ func (r *Remote) Materialize(ctx context.Context, worktreePath string, payload i
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("materialize on %s: %w", r.run.Describe(), reason(stderr.String(), err))
+		cause := reason(stderr.String(), err)
+		return FailureError{Key: clitext.WorktreeRemoteMaterialize, Params: clitext.Params{clitext.ParamWhere: r.run.Describe(), clitext.ParamErr: cause}, Cause: cause}
 	}
 	return nil
 }
@@ -124,10 +122,11 @@ func (r *Remote) call(ctx context.Context, argv []string, into any) error {
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	what := strings.Join(argv[:2], " ")
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s on %s: %w", what, r.run.Describe(), reason(stderr.String(), err))
+		cause := reason(stderr.String(), err)
+		return FailureError{Key: clitext.WorktreeRemoteCall, Params: clitext.Params{clitext.ParamCommand: what, clitext.ParamWhere: r.run.Describe(), clitext.ParamErr: cause}, Cause: cause}
 	}
 	if err := json.Unmarshal(bytes.TrimSpace(stdout.Bytes()), into); err != nil {
-		return fmt.Errorf("%s on %s: %w %q: %w", what, r.run.Describe(), errUnreadableAnswer, stdout.String(), err)
+		return FailureError{Key: clitext.WorktreeRemoteUnreadable, Params: clitext.Params{clitext.ParamCommand: what, clitext.ParamWhere: r.run.Describe(), clitext.ParamOutput: strconv.Quote(stdout.String()), clitext.ParamErr: err}, Cause: err}
 	}
 	return nil
 }

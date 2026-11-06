@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
 
 //go:embed locales/en.json locales/fr.json
@@ -91,11 +92,22 @@ func errorTextIn(lang i18n.Language, err error) string {
 	if err == nil {
 		return ""
 	}
-	var local localizableError
-	if errors.As(err, &local) {
-		return strings.Replace(err.Error(), local.Error(), local.render(lang), 1)
+	if english, local, ok := localizedPart(lang, err); ok {
+		return strings.Replace(err.Error(), english, local, 1)
 	}
 	return err.Error()
+}
+
+func localizedPart(lang i18n.Language, err error) (string, string, bool) {
+	var local localizableError
+	if errors.As(err, &local) {
+		return local.Error(), local.render(lang), true
+	}
+	var failure worktree.FailureError
+	if errors.As(err, &failure) {
+		return failure.Error(), failure.Text(lang), true
+	}
+	return "", "", false
 }
 
 func wrapHost(cause error, key string, params map[string]any) error {

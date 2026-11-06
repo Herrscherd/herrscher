@@ -1,4 +1,2 @@
 core/host 98
-core/internal/manager 17
-manage 20
 usage.go 1

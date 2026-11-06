@@ -12,7 +12,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
-var errUnknownAction = errors.New("unknown plugin action")
+var errUnknownAction = errors.New(string(clitext.ManageUnknownAction))
 
 // PluginOps is the programmatic half of the plugin verbs, for a front end that
 // asks the two confirmations itself. The CLI answers them inline and so runs

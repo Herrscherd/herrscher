@@ -17,9 +17,9 @@ import (
 )
 
 var (
-	errUnknownKind       = errors.New("unknown kind")
-	errInvalidModulePath = errors.New("invalid module path")
-	errEmptyStack        = errors.New("empty stack: every category was set to none")
+	errUnknownKind       = errors.New(string(clitext.ManageUnknownKind))
+	errInvalidModulePath = errors.New(string(clitext.ManageInvalidModulePath))
+	errEmptyStack        = errors.New(string(clitext.ManageEmptyStack))
 )
 
 func catalog() map[string]map[string]string {

@@ -23,8 +23,8 @@ import (
 )
 
 var (
-	errNoHostModule  = errors.New("no host module found (looked for plugins.go)")
-	errNotCompiledIn = errors.New("not compiled in")
+	errNoHostModule  = errors.New(string(clitext.ManageNoHostModule))
+	errNotCompiledIn = errors.New(string(clitext.ManageNotCompiledIn))
 )
 
 func parseExit(err error) int {

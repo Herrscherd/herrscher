@@ -10,9 +10,9 @@ import (
 )
 
 var (
-	errMarkerNotFound  = errors.New("marker not found")
-	errDuplicateMarker = errors.New("duplicate marker")
-	errMarkerOrder     = errors.New("end marker precedes begin marker")
+	errMarkerNotFound  = errors.New(string(clitext.ManageRegionNotFound))
+	errDuplicateMarker = errors.New(string(clitext.ManageDuplicateMarker))
+	errMarkerOrder     = errors.New(string(clitext.ManageMarkerOrder))
 )
 
 const (

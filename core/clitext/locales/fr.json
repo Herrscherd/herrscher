@@ -956,6 +956,26 @@
     "other": "le marqueur de fin précède le marqueur de début"
   },
   {
+    "id": "cli.manage.go_list_parse_module",
+    "description": "Erreur : la sortie de go list -m -json pour un module n'a pas pu être lue",
+    "other": "analyse de go list -m -json {{.Module}}@{{.Version}} : {{.Err}}"
+  },
+  {
+    "id": "cli.manage.go_list_parse",
+    "description": "Erreur : la sortie de go list -m -json n'a pas pu être lue",
+    "other": "analyse de go list -m -json : {{.Err}}"
+  },
+  {
+    "id": "cli.manage.go_list",
+    "description": "Erreur : l'outil go a refusé un appel à go list",
+    "other": "go list {{.Args}} : {{.Err}} : {{.Output}}"
+  },
+  {
+    "id": "cli.manage.no_versions",
+    "description": "Erreur : le module n'a aucune version publiée à reprendre",
+    "other": "aucune version publiée"
+  },
+  {
     "id": "cli.manage.skipped_pinned",
     "description": "Notice: a module was left out of the update because it is pinned",
     "other": "{{.Module}} ignoré (épinglé à {{.Version}})"
@@ -2658,6 +2678,26 @@
     "other": "\"{{.Version}}\" recompilé, redémarrage du démon…"
   },
   {
+    "id": "cli.host.session.budget_persist",
+    "description": "Erreur d'une commande hôte, le budget d'une session n'a pas pu être enregistré",
+    "other": "impossible d'enregistrer le budget de {{.Name}} : {{.Err}}"
+  },
+  {
+    "id": "cli.host.service.rebuilt_restart_failed",
+    "description": "Erreur d'une commande hôte, le démon est reconstruit mais son redémarrage a échoué",
+    "other": "{{.Version}} reconstruit, mais le redémarrage a échoué : {{.Err}}"
+  },
+  {
+    "id": "cli.host.service.update_failed",
+    "description": "Erreur d'une commande hôte, la mise à jour du démon a échoué",
+    "other": "mise à jour : {{.Err}}"
+  },
+  {
+    "id": "cli.host.service.restart_failed",
+    "description": "Erreur d'une commande hôte, le redémarrage du démon a échoué",
+    "other": "redémarrage : {{.Err}}"
+  },
+  {
     "id": "cli.host.session.started_post",
     "description": "Reply of a host command, session started post",
     "other": "Session {{.Name}} démarrée."
@@ -2961,6 +3001,11 @@
     "id": "cli.host.err.account_host",
     "description": "Reply of a host command, err account host",
     "other": "compte \"{{.Account}}\" sur l'hôte \"{{.Host}}\" : un compte ne peut pas servir à une session placée sur un autre hôte ; lancez la session sur cet hôte ou retirez le compte"
+  },
+  {
+    "id": "cli.host.err.session_limit",
+    "description": "Erreur d'une commande hôte, la limite de sessions serait dépassée",
+    "other": "limite de sessions atteinte ({{.Count}}) : fermez une session avant d'en créer une autre"
   },
   {
     "id": "cli.host.schedule.scheduled",

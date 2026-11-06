@@ -14,10 +14,10 @@ import (
 )
 
 var (
-	errUnknownPolicy   = errors.New("unknown route policy")
-	errNoGatewayCreds  = errors.New("gateway-only with no gateway credentials: every session would fail to start")
-	errIncompleteCreds = errors.New("incomplete gateway credentials")
-	errUnknownModel    = errors.New("unknown model")
+	errUnknownPolicy   = errors.New(string(clitext.ManageUnknownPolicy))
+	errNoGatewayCreds  = errors.New(string(clitext.ManageGatewayPairMissing))
+	errIncompleteCreds = errors.New(string(clitext.ManageGatewayPairPartial))
+	errUnknownModel    = errors.New(string(clitext.ManageUnknownModel))
 )
 
 type catalogFn func(contracts.RoutePolicy) ([]host.CatalogEntry, error)

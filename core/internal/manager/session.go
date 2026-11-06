@@ -236,7 +236,7 @@ func (h *Handler) applyBudgetTo(target state.Session, patch budgetPatch) error {
 	updated := applyBudget(target, patch, usage.cost, usage.tokens)
 	releaseCohortPause(&updated, cohort)
 	if err := h.st.SetBudget(updated.Name, updated.CostCap, updated.TokenCap, updated.CohortCostCap, updated.CohortTokenCap, updated.PausedReason); err != nil {
-		return fmt.Errorf("persist budget for %q: %w", updated.Name, err)
+		return h.keyed(clitext.HostSessionBudgetPersist, clitext.Params{clitext.ParamName: updated.Name, clitext.ParamErr: err.Error()}, err)
 	}
 	return nil
 }

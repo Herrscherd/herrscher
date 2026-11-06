@@ -9,7 +9,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
-var errNotModulePath = errors.New("not a module path")
+var errNotModulePath = errors.New(string(clitext.ManagePinsLine))
 
 const pinFile = ".herrscher-pins"
 

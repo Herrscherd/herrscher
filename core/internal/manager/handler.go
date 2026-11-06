@@ -246,15 +246,15 @@ func (h *Handler) SetRemoteBackend(remote bool) { h.remoteBackend = remote }
 
 // ErrAccountVendor is returned when an account is requested for a session whose
 // backend vendor cannot be determined, so the account cannot be checked.
-var ErrAccountVendor = errors.New("no backend vendor is known for this session: pass --vendor, or set HERRSCHER_BACKEND")
+var ErrAccountVendor = errors.New(string(clitext.HostErrAccountVendor))
 
 // ErrAccountHost is returned when an account is requested for a session placed on
 // another host, which resolves accounts in its own store.
-var ErrAccountHost = errors.New("an account cannot be used for a session placed on another host")
+var ErrAccountHost = errors.New(string(clitext.HostErrAccountHost))
 
 // ErrAccountRemote is returned when an account is requested while the backend runs
 // on a remote host, which resolves accounts in its own store.
-var ErrAccountRemote = errors.New("an account cannot be used while the backend runs on a remote host, which resolves accounts in its own store")
+var ErrAccountRemote = errors.New(string(clitext.HostErrAccountRemote))
 
 type approvalGate struct {
 	enforced bool

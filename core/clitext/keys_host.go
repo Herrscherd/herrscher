@@ -65,6 +65,12 @@ const (
 	HostErrMissingName          = "cli.host.err.missing_name"
 	HostErrMissingPath          = "cli.host.err.missing_path"
 	HostErrUnsupportedLang      = "cli.host.err.unsupported_lang"
+	HostErrSessionLimit         = "cli.host.err.session_limit"
+	HostFaultUnsupportedLang    = "cli.host.fault.unsupported_lang"
+	HostServiceRestartFailed    = "cli.host.service.restart_failed"
+	HostServiceUpdateFailed     = "cli.host.service.update_failed"
+	HostServiceRebuildFailed    = "cli.host.service.rebuilt_restart_failed"
+	HostSessionBudgetPersist    = "cli.host.session.budget_persist"
 	HostErrMissingSoul          = "cli.host.err.missing_soul"
 	HostErrMissingTo            = "cli.host.err.missing_to"
 	HostErrConflictingChannel   = "cli.host.err.conflicting_channel"
@@ -104,6 +110,11 @@ func hostKeys() map[Key][]string {
 		HostSessionLangSet:          {ParamName, ParamLang},
 		HostSessionLangReset:        {ParamName, ParamLang},
 		HostErrUnsupportedLang:      {ParamLang},
+		HostErrSessionLimit:         {ParamCount},
+		HostServiceRestartFailed:    {ParamErr},
+		HostServiceUpdateFailed:     {ParamErr},
+		HostServiceRebuildFailed:    {ParamVersion, ParamErr},
+		HostSessionBudgetPersist:    {ParamName, ParamErr},
 		HostAgentCreated:            {ParamName, ParamHome},
 		HostAgentListEmpty:          nil,
 		HostAgentSoulUpdated:        {ParamName},

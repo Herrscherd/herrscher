@@ -16,20 +16,19 @@ import (
 )
 
 const (
-	paramProfile     = "profile"
-	paramFresh       = "fresh"
-	freshMarker      = "fresh"
-	nativeChoice     = contracts.NativeProfile
-	noProfileChoice  = ""
-	listAccountsHelp = "list the account profiles of a session's vendor, marking the default and the session's choice"
+	paramProfile    = "profile"
+	paramFresh      = "fresh"
+	freshMarker     = "fresh"
+	nativeChoice    = contracts.NativeProfile
+	noProfileChoice = ""
 )
 
 var errConversationAccount = errors.New("the session has a conversation under another account: rerun with fresh to start a new conversation, or cancel")
 
 func sessionAccountsVerb(lang i18n.Language, store *state.State) contracts.Cmd {
 	return contracts.New(nsSession, "accounts").
-		Help(listAccountsHelp).
-		Param(paramName, "session name", true).
+		Help(clitext.CmdHelpSessionAccounts).
+		Param(paramName, clitext.CmdParamSessionAccountsName, true).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			return cli.Data(listSessionAccounts(lang, store, input.Get(paramName)))
 		})
@@ -37,10 +36,10 @@ func sessionAccountsVerb(lang i18n.Language, store *state.State) contracts.Cmd {
 
 func sessionSetAccountVerb(lang i18n.Language, store *state.State) contracts.Cmd {
 	return contracts.New(nsSession, "set-account").
-		Help("set a session's account profile: a profile name, native for the machine's own login, or empty for the vendor default; a session with a conversation under another account needs fresh").
-		Param(paramName, "session name", true).
-		Param(paramProfile, "profile name, native, or empty for the vendor default", false).
-		Param(paramFresh, "fresh to start a new conversation under the new account", false).
+		Help(clitext.CmdHelpSessionSetAccount).
+		Param(paramName, clitext.CmdParamSessionSetAccountName, true).
+		Param(paramProfile, clitext.CmdParamSessionSetAccountProfile, false).
+		Param(paramFresh, clitext.CmdParamSessionSetAccountFresh, false).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			return cli.Data(setSessionAccount(lang, store, input.Get(paramName), input.Get(paramProfile), input.Get(paramFresh) == freshMarker))
 		})

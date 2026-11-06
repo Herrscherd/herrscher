@@ -154,6 +154,32 @@ func TestShowNamesTheRoleAndWhatItRuns(t *testing.T) {
 	}
 }
 
+func TestRoleGrantHelpListsTheGrantableRolesInEachLanguage(t *testing.T) {
+	reg, _ := roleRegistry(t)
+	for _, lang := range []i18n.Language{i18n.English, i18n.French} {
+		help := roleGrantParamHelp(t, reg, lang, "role")
+		if !strings.Contains(help, "observer, operator, owner") {
+			t.Fatalf("the role help in %s says %q, without the grantable roles", lang, help)
+		}
+	}
+}
+
+func roleGrantParamHelp(t *testing.T, reg *cli.Registry, lang i18n.Language, name string) string {
+	t.Helper()
+	for _, spec := range reg.Specs(lang) {
+		if strings.Join(spec.Path, " ") != "role grant" {
+			continue
+		}
+		for _, param := range spec.Params {
+			if param.Name == name {
+				return param.Help
+			}
+		}
+	}
+	t.Fatalf("role grant has no %s param in %s", name, lang)
+	return ""
+}
+
 func TestGrantConfirmationNamesThePrincipalAndTheRoleInEachLanguage(t *testing.T) {
 	cases := []struct {
 		lang i18n.Language

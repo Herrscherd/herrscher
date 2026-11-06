@@ -197,7 +197,7 @@ func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, option
 		return fmt.Errorf("build command registry: %w", err)
 	}
 	kinds := contributedKinds(options.ContributedCommands)
-	sup.SetBridgeEnv(hubBridgeEnv(reg.Specs(), kinds))
+	sup.SetBridgeEnv(hubBridgeEnv(reg.Specs(options.Language), kinds))
 	ensureCodexAgent(deps.agents)
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)

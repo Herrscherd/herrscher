@@ -15,6 +15,7 @@ import (
 )
 
 func addRoleCommands(reg *cli.Registry, lang i18n.Language, hostState *state.State) error {
+	reg.SetHelpParams(clitext.CmdParamRoleGrantRole, clitext.Params{"Roles": strings.Join(authz.GrantableRoles(), ", ")})
 	return addVerbs(
 		reg,
 		roleListVerb(lang, hostState),
@@ -26,7 +27,7 @@ func addRoleCommands(reg *cli.Registry, lang i18n.Language, hostState *state.Sta
 
 func roleListVerb(lang i18n.Language, store *state.State) contracts.Cmd {
 	return contracts.New("role", "list").
-		Help("who holds which role, and what each role runs").
+		Help(clitext.CmdHelpRoleList).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
 			return cli.Data(listRoles(lang, store, in.JSON))
 		})
@@ -64,10 +65,10 @@ func writeRoleAssignments(lang i18n.Language, body *strings.Builder, assignments
 
 func roleGrantVerb(lang i18n.Language, store *state.State) contracts.Cmd {
 	return contracts.New("role", "grant").
-		Help("give a principal a role; copy the principal from the refusal it read").
-		ValueParam("principal", "who, as a refusal spells it, e.g. chat:1234; also takes a bare argument", false).
-		ValueParam("role", "one of: "+strings.Join(authz.GrantableRoles(), ", ")+"; also takes a second bare argument", false).
-		ValueParam("label", "a readable name for `role list`; it decides nothing", false).
+		Help(clitext.CmdHelpRoleGrant).
+		ValueParam("principal", clitext.CmdParamRoleGrantPrincipal, false).
+		ValueParam("role", clitext.CmdParamRoleGrantRole, false).
+		ValueParam("label", clitext.CmdParamRoleGrantLabel, false).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
 			return cli.Data(grantRole(lang, store, in))
 		})
@@ -110,8 +111,8 @@ func parseGrantOperands(input contracts.Input) grantOperands {
 
 func roleRevokeVerb(lang i18n.Language, store *state.State) contracts.Cmd {
 	return contracts.New("role", "revoke").
-		Help("take a principal's role back").
-		ValueParam("principal", "who, as `role list` spells it; also takes a bare argument", false).
+		Help(clitext.CmdHelpRoleRevoke).
+		ValueParam("principal", clitext.CmdParamRoleRevokePrincipal, false).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
 			return cli.Data(revokeRole(lang, store, in))
 		})
@@ -137,8 +138,8 @@ func revokeRole(lang i18n.Language, store *state.State, in contracts.Input) (str
 
 func roleShowVerb(lang i18n.Language, store *state.State) contracts.Cmd {
 	return contracts.New("role", "show").
-		Help("what one principal may run").
-		ValueParam("principal", "who, as `role list` spells it; also takes a bare argument", false).
+		Help(clitext.CmdHelpRoleShow).
+		ValueParam("principal", clitext.CmdParamRoleShowPrincipal, false).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
 			return cli.Data(showRole(lang, store, in))
 		})

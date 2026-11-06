@@ -147,20 +147,15 @@ func findCommand(cmds []contracts.Cmd, path ...string) (contracts.Cmd, bool) {
 
 func sessionHandoffVerb(deps handoffDeps) contracts.Cmd {
 	return contracts.New(nsSession, verbHandoff).
-		Help("start a new session whose first message is a brief this session writes; without --to it creates nothing and says how to open this session instead. "+
-			"This is not the ⟢ handoff: trailer, which passes a task to another agent inside the coordination flow. "+
-			"An agent caller attaches the new session under its source, cannot pick --under or --channel_id, and gets at most "+
-			"3 handoffs an hour for its whole session tree, one at a time, and a handoff counts once its brief starts, even if it then fails; a refused account costs neither a brief nor a slot, unless its profile is removed between the check and the creation; the operator has no such bound. When the operator closes a session, its direct children become roots and their quota starts again. "+
-			"This bound is a local guard, not a security boundary: the operator socket is reachable by the same user, "+
-			"and its state resets when the daemon restarts").
-		Param(paramName, "session to hand off (default: the calling session)", false).
-		Param(paramTo, "name of the new session; without it nothing is created", false).
-		Param("project", "workspace sub-dir the new session works on", false).
-		Param("model", "catalog model id for the new session (see `herrscher models list`)", false).
-		Param("vendor", "agent backend vendor for the new session: claude | codex | cursor", false).
-		Param("account", "account profile for the new session, resolved in its vendor (default: the source session's account; --account \"\" starts on the vendor default)", false).
-		Param(paramUnder, "create the new conversation under this category/forum instead of the daemon's home (operator only)", false).
-		Param(paramChannel, "adopt this existing conversation for the new session (operator only)", false).
+		Help(clitext.CmdHelpSessionHandoff).
+		Param(paramName, clitext.CmdParamSessionHandoffName, false).
+		Param(paramTo, clitext.CmdParamSessionHandoffTo, false).
+		Param("project", clitext.CmdParamSessionHandoffProject, false).
+		Param("model", clitext.CmdParamSessionHandoffModel, false).
+		Param("vendor", clitext.CmdParamSessionHandoffVendor, false).
+		Param("account", clitext.CmdParamSessionHandoffAccount, false).
+		Param(paramUnder, clitext.CmdParamSessionHandoffUnder, false).
+		Param(paramChannel, clitext.CmdParamSessionHandoffChannelID, false).
 		Do(cli.Handler(deps.run))
 }
 

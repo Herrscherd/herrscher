@@ -41,8 +41,8 @@ func withFirstMemory(ctx context.Context, run func(contracts.Memory) (contracts.
 
 func memoryLocateVerb() contracts.Cmd {
 	return contracts.New("memory", "locate").
-		Help("print openable URIs (obsidian://, file://) of a memory node's note").
-		Param("key", "node key", true).
+		Help(clitext.CmdHelpMemoryLocate).
+		Param("key", clitext.CmdParamMemoryLocateKey, true).
 		Do(func(cmdCtx context.Context, input contracts.Input) (contracts.Result, error) {
 			return withFirstMemory(cmdCtx, func(mem contracts.Memory) (contracts.Result, error) {
 				return cli.Data(locateMemoryNode(cmdCtx, mem, input))
@@ -71,8 +71,8 @@ func locateMemoryNode(ctx context.Context, mem contracts.Memory, input contracts
 
 func memoryForgetVerb(lang i18n.Language) contracts.Cmd {
 	return contracts.New("memory", "forget").
-		Help("delete a memory node by key (idempotent)").
-		Param("key", "node key", true).
+		Help(clitext.CmdHelpMemoryForget).
+		Param("key", clitext.CmdParamMemoryForgetKey, true).
 		Do(func(cmdCtx context.Context, input contracts.Input) (contracts.Result, error) {
 			return withFirstMemory(cmdCtx, func(mem contracts.Memory) (contracts.Result, error) {
 				return cli.Data(forgetMemoryNode(cmdCtx, lang, mem, input))
@@ -93,11 +93,11 @@ func forgetMemoryNode(ctx context.Context, lang i18n.Language, mem contracts.Mem
 
 func memoryRecordVerb(lang i18n.Language) contracts.Cmd {
 	return contracts.New("memory", "record").
-		Help("upsert a memory node").
-		Param("key", "node key", true).
-		Param("kind", "node kind (decision, project, …)", true).
-		Param("title", "node title", false).
-		Param("body", "node body (markdown)", false).
+		Help(clitext.CmdHelpMemoryRecord).
+		Param("key", clitext.CmdParamMemoryRecordKey, true).
+		Param("kind", clitext.CmdParamMemoryRecordKind, true).
+		Param("title", clitext.CmdParamMemoryRecordTitle, false).
+		Param("body", clitext.CmdParamMemoryRecordBody, false).
 		Do(func(cmdCtx context.Context, input contracts.Input) (contracts.Result, error) {
 			return withFirstMemory(cmdCtx, func(mem contracts.Memory) (contracts.Result, error) {
 				return cli.Data(recordMemoryNode(cmdCtx, lang, mem, input))
@@ -124,9 +124,9 @@ func recordMemoryNode(ctx context.Context, lang i18n.Language, mem contracts.Mem
 
 func memoryRestoreVerb(lang i18n.Language) contracts.Cmd {
 	return contracts.New("memory", "restore").
-		Help("reactivate an archived (or merged) memory node by key").
-		Param("key", "node key", true).
-		Param("force", "detach from its umbrella if the node was merged", false).
+		Help(clitext.CmdHelpMemoryRestore).
+		Param("key", clitext.CmdParamMemoryRestoreKey, true).
+		Param("force", clitext.CmdParamMemoryRestoreForce, false).
 		Do(func(cmdCtx context.Context, input contracts.Input) (contracts.Result, error) {
 			return withFirstMemory(cmdCtx, func(mem contracts.Memory) (contracts.Result, error) {
 				if _, err := orchestrator.Restore(cmdCtx, mem, input.Get("key"), orchestrator.Force(input.Bool("force"))); err != nil {
@@ -139,9 +139,9 @@ func memoryRestoreVerb(lang i18n.Language) contracts.Cmd {
 
 func memoryUnlinkVerb(lang i18n.Language) contracts.Cmd {
 	return contracts.New("memory", "unlink").
-		Help("remove the edge from→to between two memory nodes").
-		Param("from", "source node key", true).
-		Param("to", "target node key", true).
+		Help(clitext.CmdHelpMemoryUnlink).
+		Param("from", clitext.CmdParamMemoryUnlinkFrom, true).
+		Param("to", clitext.CmdParamMemoryUnlinkTo, true).
 		Do(func(cmdCtx context.Context, input contracts.Input) (contracts.Result, error) {
 			return withFirstMemory(cmdCtx, func(mem contracts.Memory) (contracts.Result, error) {
 				if err := mem.Unlink(cmdCtx, input.Get("from"), input.Get("to")); err != nil {
@@ -154,8 +154,8 @@ func memoryUnlinkVerb(lang i18n.Language) contracts.Cmd {
 
 func skillListVerb(lang i18n.Language) contracts.Cmd {
 	return contracts.New("skill", "list").
-		Help("list the skills agents wrote for themselves, with their state, approval and last use").
-		Param("limit", "max rows (default 50)", false).
+		Help(clitext.CmdHelpSkillList).
+		Param("limit", clitext.CmdParamSkillListLimit, false).
 		Do(func(cmdCtx context.Context, input contracts.Input) (contracts.Result, error) {
 			return withFirstMemory(cmdCtx, func(mem contracts.Memory) (contracts.Result, error) {
 				return cli.Data(listSkills(cmdCtx, lang, mem, input))
@@ -210,9 +210,9 @@ func lastSeenOf(n contracts.Node) string {
 
 func skillApproveVerb(lang i18n.Language) contracts.Cmd {
 	return contracts.New("skill", verbApprove).
-		Help("let a learned skill be promoted from its agent's private scope to the shared project scope").
-		Param("key", "skill node key (see `skill list`)", true).
-		Param("revoke", "clear the approval instead; a promotion already made is not undone", false).
+		Help(clitext.CmdHelpSkillApprove).
+		Param("key", clitext.CmdParamSkillApproveKey, true).
+		Param("revoke", clitext.CmdParamSkillApproveRevoke, false).
 		Do(func(cmdCtx context.Context, input contracts.Input) (contracts.Result, error) {
 			return withFirstMemory(cmdCtx, func(mem contracts.Memory) (contracts.Result, error) {
 				return cli.Data(setSkillApproval(cmdCtx, lang, mem, input))
@@ -234,10 +234,10 @@ func setSkillApproval(ctx context.Context, lang i18n.Language, mem contracts.Mem
 
 func memorySearchVerb(lang i18n.Language) contracts.Cmd {
 	return contracts.New("memory", "search").
-		Help("full-text search the memory vault; --raw also searches the raw per-turn transcript tier (G7)").
-		Param("text", "query text", true).
-		Param("raw", "include raw per-turn transcript chunks (G7 archival tier)", false).
-		Param("limit", "max hits (default 10)", false).
+		Help(clitext.CmdHelpMemorySearch).
+		Param("text", clitext.CmdParamMemorySearchText, true).
+		Param("raw", clitext.CmdParamMemorySearchRaw, false).
+		Param("limit", clitext.CmdParamMemorySearchLimit, false).
 		Do(func(cmdCtx context.Context, input contracts.Input) (contracts.Result, error) {
 			return withFirstMemory(cmdCtx, func(mem contracts.Memory) (contracts.Result, error) {
 				return cli.Data(searchMemory(cmdCtx, lang, mem, input))
@@ -274,21 +274,21 @@ func limitOf(raw string, fallback int) int {
 
 func whoamiVerb() contracts.Cmd {
 	return contracts.New("whoami").
-		Help("print who git on this machine says you are").
+		Help(clitext.CmdHelpIdentity).
 		Do(func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
 			return cli.Data(WhoamiOut(ctx, in.JSON))
 		})
 }
 
-func commandsVerb(reg *cli.Registry) contracts.Cmd {
+func commandsVerb(lang i18n.Language, reg *cli.Registry) contracts.Cmd {
 	return contracts.New("commands").
-		Help("list every command this daemon dispatches, with its params").
+		Help(clitext.CmdHelpCommands).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
 			if in.JSON {
-				b, err := json.Marshal(commandSpecsJSON(reg.Specs()))
+				b, err := json.Marshal(commandSpecsJSON(reg.Specs(lang)))
 				return contracts.DataResult(string(b)), err
 			}
-			return contracts.DataResult(reg.Help()), nil
+			return contracts.DataResult(reg.Help(lang)), nil
 		})
 }
 

@@ -28,6 +28,7 @@ func programmerErrors() []programmerError {
 func isProgrammerError(position token.Position, text string) bool {
 	slashed := filepath.ToSlash(position.Filename)
 	return slices.ContainsFunc(programmerErrors(), func(entry programmerError) bool {
-		return entry.text == text && strings.HasSuffix(slashed, entry.directory+"/"+entry.file)
+		suffix := entry.directory + "/" + entry.file
+		return entry.text == text && (slashed == suffix || strings.HasSuffix(slashed, "/"+suffix))
 	})
 }

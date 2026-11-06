@@ -127,6 +127,7 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"remote.stage_agent":            {"Detail", "Name"},
 		"remote.pack_agent":             {"Detail", "Name"},
 		"remote.no_remote":              {"Category", "Detail"},
+		"remote.unavailable":            {"Attempts", "Category", "Detail", "Elapsed"},
 		"seed.consolidate":              {"Detail", "Elapsed", "Name"},
 		"serve.instance_persist":        {"Detail"},
 		"serve.load_state":              {"Detail"},

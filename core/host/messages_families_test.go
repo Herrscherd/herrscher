@@ -51,6 +51,7 @@ func TestHostMessageFamiliesAreFrozen(t *testing.T) {
 		},
 		"remote": {
 			{"remote.no_remote", map[string]any{"Category": "gpu", "Detail": "boom"}, "résolveur : aucun distant gpu n'a annoncé son adresse : boom", "resolver: no remote gpu announced: boom"},
+			{"remote.unavailable", map[string]any{"Attempts": 3, "Category": "gpu", "Detail": "boom", "Elapsed": "2s"}, "résolveur : ressource distante gpu indisponible après 3 tentative(s) en 2s : boom", "resolver: remote gpu unavailable after 3 attempt(s) in 2s: boom"},
 			{"remote.stage_agent", map[string]any{"Name": "scripter", "Detail": "boom"}, `préparation de l'agent "scripter" impossible : boom`, `stage agent "scripter": boom`},
 		},
 		"provision": {

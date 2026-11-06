@@ -3358,6 +3358,11 @@
     "other": "this session has reached its handoff limit for the last hour: the operator can still run the handoff"
   },
   {
+    "id": "cli.host.fault.daemon_events_unreachable",
+    "description": "The daemon events socket is unreachable",
+    "other": "the daemon does not answer on its events socket"
+  },
+  {
     "id": "cli.host.fault.shell_refused",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (shell refused)",
     "other": "command refused"

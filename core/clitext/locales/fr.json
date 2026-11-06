@@ -3358,6 +3358,11 @@
     "other": "cette session a atteint sa limite de passations pour la dernière heure : l'opérateur peut encore lancer la passation"
   },
   {
+    "id": "cli.host.fault.daemon_events_unreachable",
+    "description": "Le socket d'événements du démon est injoignable (daemon events socket unreachable)",
+    "other": "le démon ne répond pas sur sa socket d'événements"
+  },
+  {
     "id": "cli.host.fault.shell_refused",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (shell refused)",
     "other": "commande refusée"

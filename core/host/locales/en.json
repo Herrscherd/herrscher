@@ -340,6 +340,11 @@
     "other": "pack agent \"{{.Name}}\": {{.Detail}}"
   },
   {
+    "id": "remote.unavailable",
+    "description": "A remote category stayed unreachable through the retry budget, Category names it, Attempts and Elapsed report the effort, Detail carries the last cause",
+    "other": "resolver: remote {{.Category}} unavailable after {{.Attempts}} attempt(s) in {{.Elapsed}}: {{.Detail}}"
+  },
+  {
     "id": "remote.no_remote",
     "description": "No remote of this category has announced itself, Category names the category and Detail carries the cause",
     "other": "resolver: no remote {{.Category}} announced: {{.Detail}}"

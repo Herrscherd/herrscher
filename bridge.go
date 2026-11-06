@@ -150,6 +150,11 @@ type backendResolver interface {
 }
 
 func newBackendFor(ctx context.Context, br backendResolver, req host.BackendRequest) (contracts.Backend, error) {
+	backend, err := resolveBackendFor(ctx, br, req)
+	return backend, host.LocalizeError(clitext.ClientLanguage(), err)
+}
+
+func resolveBackendFor(ctx context.Context, br backendResolver, req host.BackendRequest) (contracts.Backend, error) {
 	backend, fromRemote, err := br.Backend(ctx, contracts.Default.Backends())
 	if err != nil {
 		return nil, err

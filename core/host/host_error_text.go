@@ -81,6 +81,7 @@ func hostErrorKeys() []hostErrorKey {
 		{errHandoffBusy, "cli.host.fault.handoff_busy"},
 		{errHandoffQuota, "cli.host.fault.handoff_quota"},
 		{errShellRefused, "cli.host.fault.shell_refused"},
+		{errDaemonEventsUnreachable, "cli.host.fault.daemon_events_unreachable"},
 		{errEmptyShellCommand, "cli.host.fault.empty_shell_command"},
 		{errUnknownShellSession, "cli.host.fault.unknown_shell_session"},
 		{errRemoteShellSession, "cli.host.fault.remote_shell_session"},
@@ -99,8 +100,8 @@ func localizeHostError(lang i18n.Language, err error) error {
 	}
 	resolved := i18n.Resolve(lang)
 	text := errorTextIn(resolved, err)
-	var wrapped hostWrapError
-	isWrapped := errors.As(err, &wrapped)
+	var local localizableError
+	isLocal := errors.As(err, &local)
 	translated := false
 	for _, known := range hostErrorKeys() {
 		if !errors.Is(err, known.sentinel) {
@@ -113,7 +114,7 @@ func localizeHostError(lang i18n.Language, err error) error {
 		text = strings.Replace(text, known.sentinel.Error(), phrase, 1)
 		translated = true
 	}
-	if !translated && !isWrapped {
+	if !translated && !isLocal {
 		return err
 	}
 	return localizedHostError{text: text, cause: err}

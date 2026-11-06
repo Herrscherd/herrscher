@@ -340,6 +340,11 @@
     "other": "empaquetage de l'agent \"{{.Name}}\" impossible : {{.Detail}}"
   },
   {
+    "id": "remote.unavailable",
+    "description": "A remote category stayed unreachable through the retry budget, Category names it, Attempts and Elapsed report the effort, Detail carries the last cause",
+    "other": "résolveur : ressource distante {{.Category}} indisponible après {{.Attempts}} tentative(s) en {{.Elapsed}} : {{.Detail}}"
+  },
+  {
     "id": "remote.no_remote",
     "description": "No remote of this category has announced itself, Category names the category and Detail carries the cause",
     "other": "résolveur : aucun distant {{.Category}} n'a annoncé son adresse : {{.Detail}}"

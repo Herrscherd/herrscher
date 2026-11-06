@@ -81,16 +81,20 @@ func (e hostWrapError) render(lang i18n.Language) string {
 	return newHostMessages().text(lang, e.key, params)
 }
 
+type localizableError interface {
+	error
+	render(lang i18n.Language) string
+}
+
 func errorTextIn(lang i18n.Language, err error) string {
 	if err == nil {
 		return ""
 	}
-	text := err.Error()
-	var wrapped hostWrapError
-	if errors.As(err, &wrapped) {
-		text = strings.Replace(text, wrapped.Error(), wrapped.render(lang), 1)
+	var local localizableError
+	if errors.As(err, &local) {
+		return strings.Replace(err.Error(), local.Error(), local.render(lang), 1)
 	}
-	return text
+	return err.Error()
 }
 
 func wrapHost(cause error, key string, params map[string]any) error {

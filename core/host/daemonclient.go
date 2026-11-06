@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/url"
 	"os"
@@ -79,11 +80,13 @@ func SubscribeDaemonEvents(ctx context.Context, instanceID string) (<-chan Daemo
 	return subscribeAt(ctx, EventsSocketPath(instanceID))
 }
 
+var errDaemonEventsUnreachable = errors.New("the daemon does not answer on its events socket")
+
 func subscribeAt(ctx context.Context, path string) (<-chan DaemonEvent, error) {
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "unix", path)
 	if err != nil {
-		return nil, wrapHost(err, "daemon.events_socket", map[string]any{"Path": path})
+		return nil, wrapHost(errDaemonEventsUnreachable, "daemon.events_socket", map[string]any{"Path": path})
 	}
 	out := make(chan DaemonEvent, daemonEventBuffer)
 	stopClose := closeOnDone(ctx, conn)

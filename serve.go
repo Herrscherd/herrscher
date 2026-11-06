@@ -177,9 +177,13 @@ func lockOrAttach(ctx context.Context, lang i18n.Language, statePath, instanceID
 		if aerr == nil {
 			return nil, true, nil
 		}
-		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeAttachFailed, clitext.Params{clitext.ParamErr: aerr.Error()}))
+		fmt.Fprintln(os.Stderr, attachFailureText(lang, aerr))
 	}
 	return nil, false, host.LocalizeError(lang, err)
+}
+
+func attachFailureText(lang i18n.Language, err error) string {
+	return render(lang, clitext.ServeAttachFailed, clitext.Params{clitext.ParamErr: host.LocalizeError(lang, err).Error()})
 }
 
 func startGateways(ctx context.Context, lang i18n.Language) ([]host.Deps, []contracts.Gateway, contracts.Foreground, []contracts.Cmd, error) {

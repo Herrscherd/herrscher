@@ -210,7 +210,7 @@ func TestRunServeReadsTheLanguageFromTheStateFileItIsGiven(t *testing.T) {
 		return nil
 	}
 	args := []string{"-config", filepath.Join(t.TempDir(), "absent.json"), "-state", custom}
-	if err := runServeWith(context.Background(), args, nil, capture); err != nil {
+	if err := runServe(context.Background(), args, capture); err != nil {
 		t.Fatal(err)
 	}
 	if served != i18n.French {

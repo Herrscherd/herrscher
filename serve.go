@@ -179,7 +179,7 @@ func lockOrAttach(ctx context.Context, lang i18n.Language, statePath, instanceID
 		}
 		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeAttachFailed, clitext.Params{clitext.ParamErr: aerr.Error()}))
 	}
-	return nil, false, err
+	return nil, false, host.LocalizeError(lang, err)
 }
 
 func startGateways(ctx context.Context, lang i18n.Language) ([]host.Deps, []contracts.Gateway, contracts.Foreground, []contracts.Cmd, error) {
@@ -211,7 +211,7 @@ func runHubForeground(ctx context.Context, statePath string, gws []host.Deps, cl
 	if foreground == nil || !term.IsTerminal(int(os.Stdout.Fd())) {
 		return runHub(ctx, gws, closers, opts)
 	}
-	if restore, rerr := redirectStderr(filepath.Join(filepath.Dir(statePath), "serve.log")); rerr == nil {
+	if restore, rerr := redirectStderrCapped(filepath.Join(filepath.Dir(statePath), "serve.log"), maxLogFileBytes); rerr == nil {
 		defer func() {
 			if err := restore(); err != nil {
 				slog.Error("restore stderr", "err", err)

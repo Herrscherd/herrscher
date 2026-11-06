@@ -142,13 +142,13 @@ func clientLogPath() string {
 	return filepath.Join(filepath.Dir(host.DefaultStatePath()), "client.log")
 }
 
-const maxClientLogBytes = 1 << 20
+const maxLogFileBytes = 1 << 20
 
 func withClientLog(log *slog.Logger, path string, run func() error) error {
 	if err := rotateClientLog(path); err != nil {
 		log.Warn("client log rotation failed, appending to the current file", "path", path, "err", err)
 	}
-	restore, err := redirectStderrCapped(path, maxClientLogBytes)
+	restore, err := redirectStderrCapped(path, maxLogFileBytes)
 	if err != nil {
 		log.Warn("client log unavailable, stderr stays on the terminal", "path", path, "err", err)
 		return run()
@@ -164,7 +164,7 @@ func rotateClientLog(path string) error {
 	if err != nil {
 		return err
 	}
-	if info.Size() <= maxClientLogBytes {
+	if info.Size() <= maxLogFileBytes {
 		return nil
 	}
 	return os.Rename(path, path+".1")

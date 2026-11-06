@@ -14,7 +14,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-func addRoleCommands(reg *cli.Registry, lang i18n.Language, hostState *state.State) error {
+func addRoleCommands(reg *cli.Registry, lang languageSource, hostState *state.State) error {
 	reg.SetHelpParams(clitext.CmdParamRoleGrantRole, clitext.Params{"Roles": strings.Join(authz.GrantableRoles(), ", ")})
 	return addVerbs(
 		reg,
@@ -25,11 +25,11 @@ func addRoleCommands(reg *cli.Registry, lang i18n.Language, hostState *state.Sta
 	)
 }
 
-func roleListVerb(lang i18n.Language, store *state.State) contracts.Cmd {
+func roleListVerb(lang languageSource, store *state.State) contracts.Cmd {
 	return contracts.New("role", "list").
 		Help(clitext.CmdHelpRoleList).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(listRoles(lang, store, in.JSON))
+			return cli.Data(listRoles(lang(), store, in.JSON))
 		})
 }
 
@@ -63,14 +63,14 @@ func writeRoleAssignments(lang i18n.Language, body *strings.Builder, assignments
 	_, _ = body.WriteString("\n")
 }
 
-func roleGrantVerb(lang i18n.Language, store *state.State) contracts.Cmd {
+func roleGrantVerb(lang languageSource, store *state.State) contracts.Cmd {
 	return contracts.New("role", "grant").
 		Help(clitext.CmdHelpRoleGrant).
 		ValueParam("principal", clitext.CmdParamRoleGrantPrincipal, false).
 		ValueParam("role", clitext.CmdParamRoleGrantRole, false).
 		ValueParam("label", clitext.CmdParamRoleGrantLabel, false).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(grantRole(lang, store, in))
+			return cli.Data(grantRole(lang(), store, in))
 		})
 }
 
@@ -109,12 +109,12 @@ func parseGrantOperands(input contracts.Input) grantOperands {
 	return grantOperands{principal: principal, role: role}
 }
 
-func roleRevokeVerb(lang i18n.Language, store *state.State) contracts.Cmd {
+func roleRevokeVerb(lang languageSource, store *state.State) contracts.Cmd {
 	return contracts.New("role", "revoke").
 		Help(clitext.CmdHelpRoleRevoke).
 		ValueParam("principal", clitext.CmdParamRoleRevokePrincipal, false).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(revokeRole(lang, store, in))
+			return cli.Data(revokeRole(lang(), store, in))
 		})
 }
 
@@ -136,12 +136,12 @@ func revokeRole(lang i18n.Language, store *state.State, in contracts.Input) (str
 	return replyText(lang).Text(clitext.HostRoleRevoked, clitext.Params{clitext.ParamPrincipal: principal}), nil
 }
 
-func roleShowVerb(lang i18n.Language, store *state.State) contracts.Cmd {
+func roleShowVerb(lang languageSource, store *state.State) contracts.Cmd {
 	return contracts.New("role", "show").
 		Help(clitext.CmdHelpRoleShow).
 		ValueParam("principal", clitext.CmdParamRoleShowPrincipal, false).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(showRole(lang, store, in))
+			return cli.Data(showRole(lang(), store, in))
 		})
 }
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/accounts"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
@@ -26,6 +27,7 @@ type handoffRecord struct {
 
 func fakeHandoff(rec *handoffRecord, clock func() time.Time, known ...string) handoffDeps {
 	return handoffDeps{
+		lang: fixedLanguage(i18n.English),
 		exists: func(name string) bool {
 			for _, k := range known {
 				if k == name {

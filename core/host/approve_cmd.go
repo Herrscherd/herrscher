@@ -23,7 +23,7 @@ const approvalsFile = "APPROVALS"
 
 var errScopeConflict = errors.New("--session and --always are two scopes: pick one")
 
-func addApproveCommands(reg *cli.Registry, lang i18n.Language, hostState *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) error {
+func addApproveCommands(reg *cli.Registry, lang languageSource, hostState *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) error {
 	return addVerbs(
 		reg,
 		approveListVerb(lang, approvals),
@@ -36,11 +36,11 @@ func addApproveCommands(reg *cli.Registry, lang i18n.Language, hostState *state.
 	)
 }
 
-func approveListVerb(lang i18n.Language, approvals *approvalTable) contracts.Cmd {
+func approveListVerb(lang languageSource, approvals *approvalTable) contracts.Cmd {
 	return contracts.New(nsApprove, "list").
 		Help(clitext.CmdHelpApproveList).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(listApprovals(lang, approvals, in.JSON))
+			return cli.Data(listApprovals(lang(), approvals, in.JSON))
 		})
 }
 
@@ -66,7 +66,7 @@ func listApprovals(lang i18n.Language, approvals *approvalTable, asJSON bool) (s
 	return strings.TrimRight(body.String(), "\n"), nil
 }
 
-func approveAllowVerb(lang i18n.Language, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
+func approveAllowVerb(lang languageSource, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsApprove, "allow").
 		Help(clitext.CmdHelpApproveAllow).
 		ValueParam("id", clitext.CmdParamApproveAllowID, false).
@@ -80,7 +80,7 @@ func approveAllowVerb(lang i18n.Language, approvals *approvalTable, sessions *se
 			if !settleApproval(approvals, sessions, approvalID, approvalAnswer{scope: scope}) {
 				return contracts.Result{}, &requestNotWaitingError{ID: approvalID}
 			}
-			return contracts.DataResult(replyText(lang).Text(clitext.HostApproveAllowed, clitext.Params{clitext.ParamID: approvalID})), nil
+			return contracts.DataResult(replyText(lang()).Text(clitext.HostApproveAllowed, clitext.Params{clitext.ParamID: approvalID})), nil
 		})
 }
 
@@ -116,7 +116,7 @@ func allowOperands(input contracts.Input) (string, approvalScope, error) {
 	return operands[0], scope, nil
 }
 
-func approveDenyVerb(lang i18n.Language, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
+func approveDenyVerb(lang languageSource, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsApprove, "deny").
 		Help(clitext.CmdHelpApproveDeny).
 		ValueParam("id", clitext.CmdParamApproveDenyID, false).
@@ -130,24 +130,24 @@ func approveDenyVerb(lang i18n.Language, approvals *approvalTable, sessions *ses
 			if !settleApproval(approvals, sessions, approvalID, answer) {
 				return contracts.Result{}, &requestNotWaitingError{ID: approvalID}
 			}
-			return contracts.DataResult(replyText(lang).Text(clitext.HostApproveDenied, clitext.Params{clitext.ParamID: approvalID})), nil
+			return contracts.DataResult(replyText(lang()).Text(clitext.HostApproveDenied, clitext.Params{clitext.ParamID: approvalID})), nil
 		})
 }
 
-func approveRuleVerb(lang i18n.Language, store *state.State) contracts.Cmd {
+func approveRuleVerb(lang languageSource, store *state.State) contracts.Cmd {
 	return contracts.New(nsApprove, "rule").
 		Help(clitext.CmdHelpApproveRule).
 		ValueParam("rule", clitext.CmdParamApproveRuleRule, false).
 		ValueParam("rm", clitext.CmdParamApproveRuleRm, false).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			if rm := strings.TrimSpace(input.Get("rm")); rm != "" {
-				return cli.Data(removeApprovalRule(lang, store, rm))
+				return cli.Data(removeApprovalRule(lang(), store, rm))
 			}
 			raw := firstOf(input.Get("rule"), input.Rest)
 			if raw == "" {
-				return cli.Data(listApprovalRules(lang, store, input.JSON))
+				return cli.Data(listApprovalRules(lang(), store, input.JSON))
 			}
-			return cli.Data(addApprovalRule(lang, store, raw))
+			return cli.Data(addApprovalRule(lang(), store, raw))
 		})
 }
 
@@ -214,13 +214,13 @@ func approveAskVerb(store *state.State, agents *agent.Store, approvals *approval
 		})
 }
 
-func approveModeVerb(store *state.State, lang i18n.Language) contracts.Cmd {
+func approveModeVerb(store *state.State, lang languageSource) contracts.Cmd {
 	return contracts.New(nsApprove, "mode").
 		Help(clitext.CmdHelpApproveMode).
 		ValueParam(paramSession, clitext.CmdParamApproveModeSession, false).
 		ValueParam("mode", clitext.CmdParamApproveModeMode, false).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(setApprovalMode(store, lang, in))
+			return cli.Data(setApprovalMode(store, lang(), in))
 		})
 }
 

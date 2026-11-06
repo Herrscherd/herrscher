@@ -33,3 +33,5 @@ func (live *operatorLanguage) set(lang i18n.Language) {
 	defer live.mu.Unlock()
 	live.current = lang
 }
+
+type languageSource func() i18n.Language

@@ -91,6 +91,9 @@ func RunOneShot(ctx context.Context, newBackend BackendFactory, orch contracts.O
 				lang = languageOf(event.Value)
 				continue
 			}
+			if event.T != "input" {
+				continue
+			}
 			runOneTurn(ctx, channelSink{done: ctx.Done(), out: out}, resp, orch, event, nil, newSkillEngine(resp), affordances{}, nil, lang)
 			return nil
 		case <-ctx.Done():

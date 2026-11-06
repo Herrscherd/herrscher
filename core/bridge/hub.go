@@ -202,7 +202,7 @@ func runHubTurnsCtl(ctx context.Context, events <-chan contracts.Event, sink con
 				runPick(ctx, sink, backend, event.Value)
 			case compactwire.EventRequest:
 				runCompact(ctx, sink, backend, ctrl, event)
-			default:
+			case "input":
 				runOneTurn(ctx, sink, backend, orch, event, ctrl, eng, aff, pin, lang)
 			}
 		}

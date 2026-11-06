@@ -677,11 +677,17 @@ func (d *sessionDriver) currentLanguage() i18n.Language {
 }
 
 func (d *sessionDriver) announceLanguage(ctx context.Context) bool {
-	lang := d.currentLanguage()
-	if lang == 0 {
+	if d.language == nil {
 		return true
 	}
-	return d.sendToBridge(ctx, contracts.Event{T: eventLanguage, Value: lang.String()})
+	return d.sendToBridge(ctx, contracts.Event{T: eventLanguage, Value: languageTag(d.language())})
+}
+
+func languageTag(lang i18n.Language) string {
+	if lang == 0 {
+		return ""
+	}
+	return lang.String()
 }
 
 func (d *sessionDriver) abandon(ctx context.Context, ev contracts.Event) {

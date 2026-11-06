@@ -179,6 +179,31 @@ func TestDriversWithSameNameRemainDistinguishableByIncarnation(t *testing.T) {
 	}
 }
 
+func TestDriverSendsAnEmptyLanguageFrameWhenTheSessionHasNoLanguage(t *testing.T) {
+	toBridge := make(chan contracts.Event, 1)
+	fromBridge := make(chan contracts.Event, 8)
+	d, _ := identifiedTestDriver(toBridge, fromBridge)
+	d.language = func() i18n.Language { return 0 }
+	d.terms = func() modelTerms { return modelTerms{} }
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go d.pump(ctx)
+
+	frames := make(chan contracts.Event, 2)
+	go func() {
+		frames <- <-toBridge
+		frames <- <-toBridge
+		fromBridge <- contracts.Event{T: eventReply, Text: "done", Done: true}
+	}()
+	if _, ok := d.SeedAndWaitWithTurnID(ctx, "bonjour", "turn-1"); !ok {
+		t.Fatal("the seeded turn must complete")
+	}
+
+	if first := receiveTurnEvent(t, frames); first.T != eventLanguage || first.Value != "" {
+		t.Fatalf("first frame = %q %q, want the language frame with an empty value", first.T, first.Value)
+	}
+}
+
 func TestDriverTellsTheBridgeTheSessionLanguageBeforeEachTurn(t *testing.T) {
 	toBridge := make(chan contracts.Event, 1)
 	fromBridge := make(chan contracts.Event, 8)

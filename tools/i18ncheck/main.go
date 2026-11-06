@@ -1,9 +1,12 @@
-// Command i18ncheck ratchets the human text written in the presentation packages down to its baseline.
+// Command i18ncheck ratchets the sentences shown to a person in the presentation packages down to their baseline.
 //
-// It reads the presentation packages of a module and reports every string literal that reads as a
-// sentence and reaches the user without going through the message catalog: the value assigned to a
-// flash or a notice field, the text of a contracts.DataResult, and the message of a fmt.Errorf or an
-// errors.New. Syntax such as flags, slash commands and single words is not prose and is never reported.
+// It reads the non-test sources of the packages listed in presentationScope and reports each string that
+// reads as a sentence and reaches a person without going through the message catalog. A string counts
+// when it is assigned to a flash or notice field, set as the Text of a contracts.Event or the flash of a
+// model literal, given to contracts.DataResult or as the value of contracts.Text, used as the message of
+// fmt.Errorf or errors.New, or built from such a string by concatenation or from a package-level string
+// constant or variable of the same package. Flags, command syntax, single words, and the programmer
+// messages listed in programmerErrors are never reported.
 //
 // The baseline holds one line per package, "<package> <count>", with the number of literals that package
 // may still carry. A package may only lose literals: a count above its line is a new hard-coded sentence,

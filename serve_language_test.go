@@ -221,3 +221,19 @@ func bufferedLogger(out *bytes.Buffer) *slog.Logger {
 func silentLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }
+
+func TestPrepareLanguagesWarnsThroughTheInjectedLogger(t *testing.T) {
+	clearPublishedLanguage(t)
+	t.Setenv("LANG", "")
+	unreadable := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(unreadable, []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if _, err := prepareLanguages(bufferedLogger(&out), config.Config{}, unreadable); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "operator language setting unreadable") {
+		t.Fatalf("the injected logger missed the unreadable language setting:\n%s", out.String())
+	}
+}

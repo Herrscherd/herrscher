@@ -1,7 +1,6 @@
 package manage
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -10,9 +9,9 @@ import (
 )
 
 var (
-	errMarkerNotFound  = errors.New("marker not found")
-	errDuplicateMarker = errors.New("duplicate marker")
-	errMarkerOrder     = errors.New("end marker precedes begin marker")
+	errMarkerNotFound  = clitext.SentinelError("managed region: marker not found")
+	errDuplicateMarker = clitext.SentinelError("duplicate marker")
+	errMarkerOrder     = clitext.SentinelError("end marker precedes begin marker")
 )
 
 const (

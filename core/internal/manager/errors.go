@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"errors"
 	"fmt"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -11,25 +10,25 @@ import (
 
 var (
 	// ErrCloneUnsupported is returned when a clone is requested on a host that cannot clone.
-	ErrCloneUnsupported = errors.New("clone is not supported on host")
+	ErrCloneUnsupported = clitext.SentinelError("clone is not supported on this host: create the project locally first, then create the session with --host")
 	// ErrConflictingChannel is returned when channel_id and under are both given.
-	ErrConflictingChannel = errors.New("pass either channel_id or under, not both: one adopts a conversation that exists, the other creates one")
+	ErrConflictingChannel = clitext.SentinelError("pass either channel_id or under, not both: one adopts a conversation that exists, the other creates one")
 	// ErrConflictingPlacement is returned when terminal_only and under are both given.
-	ErrConflictingPlacement = errors.New("terminal_only and under contradict each other: one keeps the session in the terminal, the other puts it in a gateway container")
+	ErrConflictingPlacement = clitext.SentinelError("terminal_only and under contradict each other: one keeps the session in the terminal, the other puts it in a gateway container")
 	// ErrExplicitCmdRefused is returned when a session names a cmd under the gateway-only route policy.
 	ErrExplicitCmdRefused = &sentinelError{text: "an explicit cmd is refused under the gateway-only route policy: it bypasses the model catalog; select a model instead", code: contracts.CodeExplicitCmdRefused}
 	// ErrMissingChannel is returned when a command omits the channel it targets.
-	ErrMissingChannel = errors.New("missing channel")
+	ErrMissingChannel = clitext.SentinelError("missing channel")
 	// ErrMissingName is returned when a command omits the session name.
-	ErrMissingName = errors.New("missing name")
+	ErrMissingName = clitext.SentinelError("missing name")
 	// ErrMissingPath is returned when a command omits the path it operates on.
-	ErrMissingPath = errors.New("missing path")
+	ErrMissingPath = clitext.SentinelError("missing path")
 	// ErrMissingSoul is returned when an agent is created without a soul.
-	ErrMissingSoul = errors.New("missing soul")
+	ErrMissingSoul = clitext.SentinelError("missing soul")
 	// ErrUnsupportedLang is returned when /set lang names a language outside en, fr and auto.
-	ErrUnsupportedLang = errors.New("unsupported language, use en, fr or auto")
+	ErrUnsupportedLang = clitext.SentinelError("unsupported language, use en, fr or auto")
 	// ErrMissingTo is returned when a rename omits the new name.
-	ErrMissingTo = errors.New("missing to")
+	ErrMissingTo = clitext.SentinelError("missing to")
 	// ErrModelRequired is returned when a session under the gateway-only route policy names no model.
 	ErrModelRequired = &sentinelError{text: "a model is required under the gateway-only route policy: without one the session would spawn on this machine's own vendor login", code: contracts.CodeModelRequired}
 	// ErrNoHome is returned when a session is created before a home channel is set.
@@ -39,7 +38,7 @@ var (
 	// ErrServiceControlUnavailable is returned when the host cannot control its own service.
 	ErrServiceControlUnavailable = &sentinelError{text: "service control unavailable", code: contracts.CodeServiceControlUnavailable}
 	// ErrSessionLimit is returned when creating a session would exceed the maximum number of sessions.
-	ErrSessionLimit = errors.New("session limit reached")
+	ErrSessionLimit = clitext.SentinelError("session limit reached: close a session before creating another")
 )
 
 // ChannelKindError reports a channel whose kind does not fit the requested placement.
@@ -161,7 +160,11 @@ type SessionLimitError struct {
 }
 
 func (e *SessionLimitError) Error() string {
-	return fmt.Sprintf("%v (%d): close a session before creating another", ErrSessionLimit, e.Max)
+	text, err := clitext.Text(i18n.English, clitext.HostErrSessionLimit, clitext.Params{clitext.ParamCount: e.Max})
+	if err != nil {
+		return ErrSessionLimit.Error()
+	}
+	return text
 }
 
 func (e *SessionLimitError) Unwrap() error {
@@ -184,7 +187,14 @@ func localize(lang i18n.Language, english string, key clitext.Key, params clitex
 	if err != nil {
 		text = english
 	}
+	if catalogEnglish, err := clitext.Text(i18n.English, key, params); err == nil {
+		english = catalogEnglish
+	}
 	return &localizedError{english: english, text: text, causes: causes}
+}
+
+func (h *Handler) keyed(key clitext.Key, params clitext.Params, causes ...error) error {
+	return localize(h.currentLanguage(), string(key), key, params, causes...)
 }
 
 func (h *Handler) localized(sentinel error, key clitext.Key) error {

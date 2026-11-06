@@ -3,16 +3,16 @@ package manage
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 const contractsModule = "github.com/Herrscherd/herrscher-contracts"
 
-var errNoVersions = errors.New("no published versions")
+var errNoVersions = clitext.SentinelError("no published versions")
 
 // PluginVersion is one row of `herrscher plugin list`: what is compiled in, what
 // the operator asked to hold still, and what could be taken instead.
@@ -34,7 +34,7 @@ func (g goToolchain) List(ctx context.Context, args ...string) (string, error) {
 	cmd.Dir = g.dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("go list %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		return "", failure(err, clitext.ManageGoList, clitext.Params{clitext.ParamArgs: strings.Join(args, " "), clitext.ParamErr: err.Error(), clitext.ParamOutput: strings.TrimSpace(string(out))})
 	}
 	return string(out), nil
 }
@@ -63,7 +63,7 @@ func installedVersions(ctx context.Context, tc toolchain, modules []string) (map
 			Version string `json:"Version"`
 		}
 		if err := dec.Decode(&mod); err != nil {
-			return nil, fmt.Errorf("parse go list -m -json: %w", err)
+			return nil, failure(err, clitext.ManageGoListParse, clitext.Params{clitext.ParamErr: err.Error()})
 		}
 		if wanted[mod.Path] {
 			versions[mod.Path] = mod.Version
@@ -79,7 +79,7 @@ func availableVersions(ctx context.Context, tc toolchain, module string) ([]stri
 	}
 	fields := strings.Fields(out)
 	if len(fields) < minVersionParts {
-		return nil, errNoVersions
+		return nil, failure(errNoVersions, clitext.ManageNoVersions, nil)
 	}
 	return fields[1:], nil
 }
@@ -93,14 +93,14 @@ func contractsRequirement(ctx context.Context, tc toolchain, module, version str
 		GoMod string `json:"GoMod"`
 	}
 	if err = json.Unmarshal([]byte(strings.TrimSpace(out)), &mod); err != nil {
-		return "", fmt.Errorf("parse go list -m -json %s@%s: %w", module, version, err)
+		return "", failure(err, clitext.ManageGoListParseModule, clitext.Params{clitext.ParamModule: module, clitext.ParamVersion: version, clitext.ParamErr: err.Error()})
 	}
 	if mod.GoMod == "" {
 		return "", nil
 	}
 	src, err := os.ReadFile(mod.GoMod)
 	if err != nil {
-		return "", fmt.Errorf("read %s: %w", mod.GoMod, err)
+		return "", failure(err, clitext.ManageReadFailed, clitext.Params{clitext.ParamPath: mod.GoMod, clitext.ParamErr: err.Error()})
 	}
 	return requiredVersion(string(src), contractsModule), nil
 }

@@ -2,7 +2,6 @@ package manage
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -17,9 +16,9 @@ import (
 )
 
 var (
-	errUnknownKind       = errors.New("unknown kind")
-	errInvalidModulePath = errors.New("invalid module path")
-	errEmptyStack        = errors.New("empty stack: every category was set to none")
+	errUnknownKind       = clitext.SentinelError("unknown kind")
+	errInvalidModulePath = clitext.SentinelError("invalid module path")
+	errEmptyStack        = clitext.SentinelError("empty stack: every category was set to none")
 )
 
 func catalog() map[string]map[string]string {

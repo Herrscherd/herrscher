@@ -2,7 +2,6 @@ package manage
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -14,10 +13,10 @@ import (
 )
 
 var (
-	errUnknownPolicy   = errors.New("unknown route policy")
-	errNoGatewayCreds  = errors.New("gateway-only with no gateway credentials: every session would fail to start")
-	errIncompleteCreds = errors.New("incomplete gateway credentials")
-	errUnknownModel    = errors.New("unknown model")
+	errUnknownPolicy   = clitext.SentinelError("unknown route policy")
+	errNoGatewayCreds  = clitext.SentinelError("gateway-only with no gateway credentials: every session would fail to start")
+	errIncompleteCreds = clitext.SentinelError("incomplete gateway credentials: the URL and the token go together")
+	errUnknownModel    = clitext.SentinelError("unknown model (not offered under this policy)")
 )
 
 type catalogFn func(contracts.RoutePolicy) ([]host.CatalogEntry, error)

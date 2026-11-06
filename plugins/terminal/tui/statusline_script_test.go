@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -91,5 +92,24 @@ func TestSlowScriptFallsBackToTheBuiltinBarWithAMark(t *testing.T) {
 func TestEmptyScriptOutputIsAFailure(t *testing.T) {
 	if _, err := execStatusline("true", []byte("{}")); err == nil {
 		t.Fatal("a script printing nothing must count as a failure")
+	}
+}
+
+func TestStatuslineJournalLogsEachNewCauseAndTheReturnToSuccess(t *testing.T) {
+	logs := captureWarnings(t)
+	m := &model{}
+	m.receiveScript(scriptDoneMsg{err: errors.New("exit status 2")})
+	m.receiveScript(scriptDoneMsg{err: errors.New("exit status 2")})
+	m.receiveScript(scriptDoneMsg{err: errors.New("timed out after 1s")})
+	m.receiveScript(scriptDoneMsg{line: "bar perso"})
+	m.receiveScript(scriptDoneMsg{err: errors.New("exit status 2")})
+	if n := strings.Count(logs.String(), "statusline script failed"); n != 3 {
+		t.Fatalf("failures logged = %d, want one per new streak or cause (3): %q", n, logs.String())
+	}
+	if n := strings.Count(logs.String(), "statusline script recovered"); n != 1 {
+		t.Fatalf("recoveries logged = %d, want 1: %q", n, logs.String())
+	}
+	if !strings.Contains(logs.String(), "timed out after 1s") {
+		t.Fatalf("the second cause must be logged with its text: %q", logs.String())
 	}
 }

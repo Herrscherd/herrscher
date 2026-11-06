@@ -2,7 +2,6 @@ package manager
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -246,15 +245,15 @@ func (h *Handler) SetRemoteBackend(remote bool) { h.remoteBackend = remote }
 
 // ErrAccountVendor is returned when an account is requested for a session whose
 // backend vendor cannot be determined, so the account cannot be checked.
-var ErrAccountVendor = errors.New("no backend vendor is known for this session: pass --vendor, or set HERRSCHER_BACKEND")
+var ErrAccountVendor = clitext.SentinelError("no backend vendor is known for this session: pass --vendor, or set HERRSCHER_BACKEND")
 
 // ErrAccountHost is returned when an account is requested for a session placed on
 // another host, which resolves accounts in its own store.
-var ErrAccountHost = errors.New("an account cannot be used for a session placed on another host")
+var ErrAccountHost = clitext.SentinelError("an account cannot be used for a session placed on another host; run the session on this host or drop the account")
 
 // ErrAccountRemote is returned when an account is requested while the backend runs
 // on a remote host, which resolves accounts in its own store.
-var ErrAccountRemote = errors.New("an account cannot be used while the backend runs on a remote host, which resolves accounts in its own store")
+var ErrAccountRemote = clitext.SentinelError("an account cannot be used while the backend runs on a remote host, which resolves accounts in its own store; unset HERRSCHER_REMOTE=backend to use accounts on this daemon, or drop the account")
 
 type approvalGate struct {
 	enforced bool
@@ -289,7 +288,8 @@ func (h *Handler) checkAccount(runtime runtimeChoice, profile string) error {
 	}
 	vendor, err := h.launchVendor(runtime)
 	if err != nil {
-		return &localizedError{english: fmt.Sprintf("account %q: %v: %v", profile, ErrAccountVendor, err), text: h.text(clitext.HostErrAccountVendor, clitext.Params{clitext.ParamAccount: profile}) + ": " + err.Error(), causes: []error{ErrAccountVendor, err}}
+		params := clitext.Params{clitext.ParamAccount: profile}
+		return &localizedError{english: h.textIn(i18n.English, clitext.HostErrAccountVendor, params) + ": " + err.Error(), text: h.text(clitext.HostErrAccountVendor, params) + ": " + err.Error(), causes: []error{ErrAccountVendor, err}}
 	}
 	if vendor == "" {
 		return localize(h.currentLanguage(), fmt.Sprintf("account %q: %v", profile, ErrAccountVendor), clitext.HostErrAccountVendor, clitext.Params{clitext.ParamAccount: profile}, ErrAccountVendor)

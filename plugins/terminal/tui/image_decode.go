@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"log/slog"
 
 	_ "image/gif"
 	_ "image/jpeg"
@@ -69,6 +70,7 @@ func downscale(img image.Image) image.Image {
 func encodePNG(img image.Image) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, img); err != nil {
+		slog.Warn("image drawn as blocks, png encoding failed", "err", err)
 		return nil, fmt.Errorf("encode png: %w", err)
 	}
 	return buf.Bytes(), nil

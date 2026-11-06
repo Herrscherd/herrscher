@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"path"
 	"strings"
@@ -88,15 +89,11 @@ func (m *model) fetchEntryImages(tab *tab, idx int) tea.Cmd {
 			continue
 		}
 		cmds = append(cmds, func() tea.Msg {
-			data, err := fetchImage(ctx, get, allow, raw)
+			esc, err := renderFetchedImage(ctx, get, allow, raw, caps)
 			if err != nil {
+				slog.Warn("transcript image dropped", "err", err)
 				return nil
 			}
-			img, err := decodeImage(data)
-			if err != nil {
-				return nil
-			}
-			esc := boundedEscape(img, caps)
 			if esc == "" {
 				return nil
 			}
@@ -104,6 +101,18 @@ func (m *model) fetchEntryImages(tab *tab, idx int) tea.Cmd {
 		})
 	}
 	return tea.Batch(cmds...)
+}
+
+func renderFetchedImage(ctx context.Context, get func(context.Context, string) ([]byte, error), allow []string, rawURL string, caps Capabilities) (string, error) {
+	data, err := fetchImage(ctx, get, allow, rawURL)
+	if err != nil {
+		return "", err
+	}
+	img, err := decodeImage(data)
+	if err != nil {
+		return "", err
+	}
+	return boundedEscape(img, caps), nil
 }
 
 func urlHost(raw string) string {

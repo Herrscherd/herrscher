@@ -51,7 +51,7 @@ func runServe(ctx context.Context, args []string, serve serveFunc) error {
 	if err != nil {
 		return err
 	}
-	langs, err := serveLanguages(cfg, args)
+	langs, err := serveLanguages(slog.Default(), cfg, args)
 	if err != nil {
 		return err
 	}
@@ -62,16 +62,16 @@ func serveDaemon(ctx context.Context, args []string, cfg config.Config, langs la
 	return serveWith(ctx, args, nil, cfg, langs)
 }
 
-func serveLanguages(cfg config.Config, args []string) (language.Languages, error) {
-	return prepareLanguages(cfg, stateFlagPath(args))
+func serveLanguages(log *slog.Logger, cfg config.Config, args []string) (language.Languages, error) {
+	return prepareLanguages(log, cfg, stateFlagPath(args))
 }
 
-func prepareLanguages(cfg config.Config, statePath string) (language.Languages, error) {
+func prepareLanguages(log *slog.Logger, cfg config.Config, statePath string) (language.Languages, error) {
 	stored, err := host.StoredOperatorLanguage(statePath)
 	if err != nil {
-		slog.Default().Warn("operator language setting unreadable, using the configured one", "err", err)
+		log.Warn("operator language setting unreadable, using the configured one", "err", err)
 	}
-	langs := language.Resolve(slog.Default(), cfg.Language, stored)
+	langs := language.Resolve(log, cfg.Language, stored)
 	if !language.Explicit(cfg.Language) && stored == "" {
 		return langs, nil
 	}
@@ -173,7 +173,7 @@ func lockOrAttach(ctx context.Context, lang i18n.Language, statePath, instanceID
 		if open != nil {
 			opts = append(opts, tui.OpenOn(open.session, open.text))
 		}
-		aerr := runAttached(ctx, host.ServedInstanceID(statePath, instanceID), opts...)
+		aerr := newAttachRunner(slog.Default()).runAttached(ctx, host.ServedInstanceID(statePath, instanceID), opts...)
 		if aerr == nil {
 			return nil, true, nil
 		}
@@ -301,7 +301,7 @@ func loadOperator() (config.Config, language.Languages, error) {
 	if err != nil {
 		return config.Config{}, language.Languages{}, err
 	}
-	langs, err := prepareLanguages(cfg, host.DefaultStatePath())
+	langs, err := prepareLanguages(slog.Default(), cfg, host.DefaultStatePath())
 	return cfg, langs, err
 }
 
@@ -383,7 +383,7 @@ func runPromptWindow(ctx context.Context, name, text string) error {
 			return err
 		}
 		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeSessionStarted, clitext.Params{clitext.ParamName: name}))
-		return runAttached(ctx, instance, tui.OpenOn(name, text))
+		return newAttachRunner(slog.Default()).runAttached(ctx, instance, tui.OpenOn(name, text))
 	}
 	unlock()
 	cfg, langs, err := loadOperator()

@@ -388,3 +388,35 @@ func TestLocalBuiltFromAFormatIsResolved(t *testing.T) {
 		t.Fatalf("a local built with fmt.Sprintf was not resolved to its format: %q", got)
 	}
 }
+
+func TestJoinWithALocalAssignedAtRunTimeIsDynamic(t *testing.T) {
+	t.Parallel()
+	found := collectMutant(t, "manage", "mutant.go", "package manage\n\nfunc mutant(m *model, reason func() string) {\n\tmsg := reason()\n\tm.flash = msg + \" now\"\n}\n")
+	got := textsOf(found["manage"])
+	if !slices.Contains(got, dynamicJoinText) {
+		t.Fatalf("a literal joined with a run-time local was not reported as dynamic: %q", got)
+	}
+	if slices.Contains(got, " now") {
+		t.Fatalf("the fragment alone was reported as a sentence: %q", got)
+	}
+}
+
+func TestJoinResolvesTheLocalUnion(t *testing.T) {
+	t.Parallel()
+	found := collectMutant(t, "manage", "mutant.go", "package manage\n\nfunc mutant(m *model, late bool, reason func() string) {\n\tmsg := \"The upload was refused\"\n\tif late {\n\t\tmsg = reason()\n\t}\n\tm.flash = msg + \" now\"\n}\n")
+	got := textsOf(found["manage"])
+	if !slices.Contains(got, "The upload was refused now") {
+		t.Fatalf("the literal alternative of the local was not reported: %q", got)
+	}
+	if slices.Contains(got, " now") {
+		t.Fatalf("the fragment alone was reported as a sentence: %q", got)
+	}
+}
+
+func TestJoinOfRunTimeValuesWithoutProseIsNotReported(t *testing.T) {
+	t.Parallel()
+	found := collectMutant(t, "manage", "mutant.go", "package manage\n\nfunc mutant(m *model, note string, help func() string) {\n\tmsg := help()\n\tm.flash = msg + \"\\n\" + note\n}\n")
+	if got := textsOf(found["manage"]); len(got) != 0 {
+		t.Fatalf("a join of run-time values without words was reported: %q", got)
+	}
+}

@@ -32,7 +32,7 @@ func storeOperatorLanguage(t *testing.T, lang string) {
 func TestPrepareLanguagesHonorsTheOperatorSetLang(t *testing.T) {
 	clearPublishedLanguage(t)
 	storeOperatorLanguage(t, "fr")
-	langs, err := prepareLanguages(config.Config{Language: "en"}, host.DefaultStatePath())
+	langs, err := prepareLanguages(silentLogger(), config.Config{Language: "en"}, host.DefaultStatePath())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestPrepareLanguagesEnvironmentStillBeatsTheOperatorSetLang(t *testing.T) {
 	clearPublishedLanguage(t)
 	t.Setenv(language.EnvVar, "en")
 	storeOperatorLanguage(t, "fr")
-	langs, err := prepareLanguages(config.Config{}, host.DefaultStatePath())
+	langs, err := prepareLanguages(silentLogger(), config.Config{}, host.DefaultStatePath())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestPrepareLanguagesEnvironmentStillBeatsTheOperatorSetLang(t *testing.T) {
 func TestPrepareLanguagesKeepsTheClientLocaleOutOfTheDaemon(t *testing.T) {
 	clearPublishedLanguage(t)
 	t.Setenv("LANG", "fr_FR.UTF-8")
-	langs, err := prepareLanguages(config.Config{}, host.DefaultStatePath())
+	langs, err := prepareLanguages(silentLogger(), config.Config{}, host.DefaultStatePath())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestPrepareLanguagesKeepsTheClientLocaleOutOfTheDaemon(t *testing.T) {
 func TestPrepareLanguagesPublishesTheConfiguredLanguage(t *testing.T) {
 	clearPublishedLanguage(t)
 	t.Setenv("LANG", "en_US.UTF-8")
-	langs, err := prepareLanguages(config.Config{Language: "fr"}, host.DefaultStatePath())
+	langs, err := prepareLanguages(silentLogger(), config.Config{Language: "fr"}, host.DefaultStatePath())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestPrepareLanguagesPublishesTheConfiguredLanguage(t *testing.T) {
 func TestPrepareLanguagesKeepsAPublishedLanguageWithoutConfig(t *testing.T) {
 	clearPublishedLanguage(t)
 	t.Setenv(language.EnvVar, "fr")
-	langs, err := prepareLanguages(config.Config{}, host.DefaultStatePath())
+	langs, err := prepareLanguages(silentLogger(), config.Config{}, host.DefaultStatePath())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestPrepareLanguagesKeepsAPublishedLanguageWithoutConfig(t *testing.T) {
 func TestPrepareLanguagesDefaultsToEnglishWithoutPublishing(t *testing.T) {
 	clearPublishedLanguage(t)
 	t.Setenv("LANG", "")
-	langs, err := prepareLanguages(config.Config{}, host.DefaultStatePath())
+	langs, err := prepareLanguages(silentLogger(), config.Config{}, host.DefaultStatePath())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,10 +128,8 @@ func TestPrepareLanguagesWarnsOnceForAnInvalidHerrscherLang(t *testing.T) {
 	t.Setenv(language.EnvVar, "klingon")
 	t.Setenv("LANG", "")
 	var out bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&out, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
-	langs, err := prepareLanguages(config.Config{}, host.DefaultStatePath())
+	logger := bufferedLogger(&out)
+	langs, err := prepareLanguages(logger, config.Config{}, host.DefaultStatePath())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,14 +141,12 @@ func TestPrepareLanguagesWarnsOnceForAnInvalidHerrscherLang(t *testing.T) {
 	}
 }
 
-func TestPrepareLanguagesWarnsOnceThroughTheProcessLogger(t *testing.T) {
+func TestPrepareLanguagesWarnsOnceForAnInvalidConfigValue(t *testing.T) {
 	clearPublishedLanguage(t)
 	t.Setenv("LANG", "fr_FR.UTF-8")
 	var out bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&out, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
-	if _, err := prepareLanguages(config.Config{Language: "klingon"}, host.DefaultStatePath()); err != nil {
+	logger := bufferedLogger(&out)
+	if _, err := prepareLanguages(logger, config.Config{Language: "klingon"}, host.DefaultStatePath()); err != nil {
 		t.Fatal(err)
 	}
 	if n := strings.Count(out.String(), "language ignored"); n != 1 {
@@ -165,7 +161,7 @@ func TestPrepareLanguagesReadsTheStateFileInUse(t *testing.T) {
 		t.Fatal(err)
 	}
 	storeOperatorLanguage(t, "en")
-	langs, err := prepareLanguages(config.Config{Language: "en"}, custom)
+	langs, err := prepareLanguages(silentLogger(), config.Config{Language: "en"}, custom)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +185,7 @@ func TestStateFlagSelectsTheStateFileServeReads(t *testing.T) {
 	if got := stateFlagPath(nil); got != host.DefaultStatePath() {
 		t.Fatalf("stateFlagPath() = %q, want the default %q", got, host.DefaultStatePath())
 	}
-	langs, err := prepareLanguages(config.Config{Language: "en"}, stateFlagPath([]string{"-state", custom}))
+	langs, err := prepareLanguages(silentLogger(), config.Config{Language: "en"}, stateFlagPath([]string{"-state", custom}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,5 +211,29 @@ func TestRunServeReadsTheLanguageFromTheStateFileItIsGiven(t *testing.T) {
 	}
 	if served != i18n.French {
 		t.Fatalf("runServe served with operator %v, want French from the -state file", served)
+	}
+}
+
+func bufferedLogger(out *bytes.Buffer) *slog.Logger {
+	return slog.New(slog.NewTextHandler(out, nil))
+}
+
+func silentLogger() *slog.Logger {
+	return slog.New(slog.DiscardHandler)
+}
+
+func TestPrepareLanguagesWarnsThroughTheInjectedLogger(t *testing.T) {
+	clearPublishedLanguage(t)
+	t.Setenv("LANG", "")
+	unreadable := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(unreadable, []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if _, err := prepareLanguages(bufferedLogger(&out), config.Config{}, unreadable); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "operator language setting unreadable") {
+		t.Fatalf("the injected logger missed the unreadable language setting:\n%s", out.String())
 	}
 }

@@ -956,6 +956,26 @@
     "other": "end marker precedes begin marker"
   },
   {
+    "id": "cli.manage.go_list_parse_module",
+    "description": "Error: the output of go list -m -json for one module could not be read",
+    "other": "parse go list -m -json {{.Module}}@{{.Version}}: {{.Err}}"
+  },
+  {
+    "id": "cli.manage.go_list_parse",
+    "description": "Error: the output of go list -m -json could not be read",
+    "other": "parse go list -m -json: {{.Err}}"
+  },
+  {
+    "id": "cli.manage.go_list",
+    "description": "Error: the go tool refused a go list call",
+    "other": "go list {{.Args}}: {{.Err}}: {{.Output}}"
+  },
+  {
+    "id": "cli.manage.no_versions",
+    "description": "Error: the module has no published version to take",
+    "other": "no published versions"
+  },
+  {
     "id": "cli.manage.skipped_pinned",
     "description": "Notice: a module was left out of the update because it is pinned",
     "other": "skipped {{.Module}} (pinned {{.Version}})"
@@ -2658,6 +2678,26 @@
     "other": "rebuilt \"{{.Version}}\", restarting the daemon…"
   },
   {
+    "id": "cli.host.session.budget_persist",
+    "description": "Error of a host command, the budget of a session could not be saved",
+    "other": "persist budget for {{.Name}}: {{.Err}}"
+  },
+  {
+    "id": "cli.host.service.rebuilt_restart_failed",
+    "description": "Error of a host command, the daemon was rebuilt but its restart failed",
+    "other": "rebuilt {{.Version}} but restart failed: {{.Err}}"
+  },
+  {
+    "id": "cli.host.service.update_failed",
+    "description": "Error of a host command, the update of the daemon failed",
+    "other": "update: {{.Err}}"
+  },
+  {
+    "id": "cli.host.service.restart_failed",
+    "description": "Error of a host command, the restart of the daemon failed",
+    "other": "restart: {{.Err}}"
+  },
+  {
     "id": "cli.host.session.started_post",
     "description": "Reply of a host command, session started post",
     "other": "Session {{.Name}} started."
@@ -2961,6 +3001,11 @@
     "id": "cli.host.err.account_host",
     "description": "Reply of a host command, err account host",
     "other": "account \"{{.Account}}\" on host \"{{.Host}}\": an account cannot be used for a session placed on another host; run the session on this host or drop the account"
+  },
+  {
+    "id": "cli.host.err.session_limit",
+    "description": "Error: creating a session would exceed the session limit",
+    "other": "session limit reached ({{.Count}}): close a session before creating another"
   },
   {
     "id": "cli.host.schedule.scheduled",

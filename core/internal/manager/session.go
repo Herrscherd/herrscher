@@ -236,7 +236,7 @@ func (h *Handler) applyBudgetTo(target state.Session, patch budgetPatch) error {
 	updated := applyBudget(target, patch, usage.cost, usage.tokens)
 	releaseCohortPause(&updated, cohort)
 	if err := h.st.SetBudget(updated.Name, updated.CostCap, updated.TokenCap, updated.CohortCostCap, updated.CohortTokenCap, updated.PausedReason); err != nil {
-		return fmt.Errorf("persist budget for %q: %w", updated.Name, err)
+		return h.keyed(clitext.HostSessionBudgetPersist, clitext.Params{clitext.ParamName: updated.Name, clitext.ParamErr: err.Error()}, err)
 	}
 	return nil
 }
@@ -741,7 +741,7 @@ func (h *Handler) resolveProject(ctx context.Context, input contracts.Input, hos
 	}
 	if spec, ok := input.Lookup("clone"); ok && spec != "" {
 		if hostName != "" {
-			return "", localize(h.currentLanguage(), fmt.Sprintf("%v %q: create the project locally first, then create the session with --host", ErrCloneUnsupported, hostName), clitext.HostErrCloneUnsupported, clitext.Params{clitext.ParamHost: hostName}, ErrCloneUnsupported)
+			return "", localize(h.currentLanguage(), fmt.Sprintf("%v: %q", ErrCloneUnsupported, hostName), clitext.HostErrCloneUnsupported, clitext.Params{clitext.ParamHost: hostName}, ErrCloneUnsupported)
 		}
 		cctx, cancel := context.WithTimeout(ctx, cloneTimeout)
 		dir, err := h.fg.Clone(cctx, spec, wtRoot)

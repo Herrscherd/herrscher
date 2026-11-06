@@ -101,6 +101,7 @@ type scriptRun struct {
 	busy   bool
 	armed  bool
 	failed bool
+	cause  string
 	line   string
 }
 

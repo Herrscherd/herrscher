@@ -3,6 +3,7 @@ package clitext
 // Parameter names of the manage messages.
 const (
 	ParamModule  = "Module"
+	ParamArgs    = "Args"
 	ParamCurrent = "Current"
 	ParamWant    = "Want"
 	ParamHave    = "Have"
@@ -39,6 +40,10 @@ const (
 	ManageFindingContracts          = "cli.manage.finding.contracts"
 	ManageNoHostModule              = "cli.manage.no_host_module"
 	ManageNotCompiledIn             = "cli.manage.not_compiled_in"
+	ManageNoVersions                = "cli.manage.no_versions"
+	ManageGoList                    = "cli.manage.go_list"
+	ManageGoListParse               = "cli.manage.go_list_parse"
+	ManageGoListParseModule         = "cli.manage.go_list_parse_module"
 	ManageReadFailed                = "cli.manage.read_failed"
 	ManageWriteFailed               = "cli.manage.write_failed"
 	ManageSaveFailed                = "cli.manage.save_failed"
@@ -134,6 +139,10 @@ func manageKeys() map[Key][]string {
 		ManageFindingContracts:          {ParamModule, ParamVersion, ParamWant, ParamHave},
 		ManageNoHostModule:              nil,
 		ManageNotCompiledIn:             {ParamModule},
+		ManageNoVersions:                nil,
+		ManageGoList:                    {ParamArgs, ParamErr, ParamOutput},
+		ManageGoListParse:               {ParamErr},
+		ManageGoListParseModule:         {ParamModule, ParamVersion, ParamErr},
 		ManageReadFailed:                {ParamPath, ParamErr},
 		ManageWriteFailed:               {ParamPath, ParamErr},
 		ManageSaveFailed:                {ParamPath, ParamErr},

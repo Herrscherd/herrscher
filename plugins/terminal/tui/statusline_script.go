@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -273,10 +274,23 @@ func (m *model) handleScriptTick() tea.Cmd {
 func (m *model) receiveScript(msg scriptDoneMsg) {
 	m.bar.script.busy = false
 	if msg.err != nil {
+		m.logScriptFailure(msg.err)
 		m.bar.script.failed = true
+		m.bar.script.cause = msg.err.Error()
 		m.bar.script.line = ""
 		return
 	}
+	if m.bar.script.failed {
+		slog.Info("statusline script recovered")
+	}
 	m.bar.script.failed = false
+	m.bar.script.cause = ""
 	m.bar.script.line = msg.line
+}
+
+func (m *model) logScriptFailure(err error) {
+	if m.bar.script.failed && m.bar.script.cause == err.Error() {
+		return
+	}
+	slog.Warn("statusline script failed", "err", err)
 }

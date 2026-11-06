@@ -6,7 +6,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"testing/fstest"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/service"
 )
 
@@ -38,13 +40,65 @@ func TestDefaultConfigRendersTheRealGatewaySettingsInFrench(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DefaultConfig() with the real plugins: %v", err)
 	}
+	want := map[string]string{
+		"DISCORD_BOT_TOKEN": "jeton du bot Discord",
+		"TERMINAL_LEARN":    "la session qu'un lancement ouvre apprend : false rétablit une session qui n'enregistre rien",
+	}
+	got := make(map[string]string)
 	for _, v := range cfg.EnvVars {
-		if v.Key == "DISCORD_BOT_TOKEN" {
-			if v.Help != "jeton du bot Discord" {
-				t.Fatalf("DISCORD_BOT_TOKEN help = %q, want the French text", v.Help)
-			}
-			return
+		if _, ok := want[v.Key]; ok {
+			got[v.Key] = v.Help
 		}
 	}
-	t.Fatal("DISCORD_BOT_TOKEN missing from the default config")
+	for key, help := range want {
+		if got[key] != help {
+			t.Fatalf("%s help = %q, want %q", key, got[key], help)
+		}
+	}
+}
+
+func TestRunRefusesACatalogCollisionBeforeAnyCommand(t *testing.T) {
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+	contracts.Default.Register(collidingPlugin("alpha", "a"))
+	contracts.Default.Register(collidingPlugin("beta", "b"))
+
+	savedArgs := os.Args
+	t.Cleanup(func() { os.Args = savedArgs })
+	os.Args = []string{"herrscher", "help"}
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	savedStderr := os.Stderr
+	os.Stderr = w
+	code := run()
+	os.Stderr = savedStderr
+	if closeErr := w.Close(); closeErr != nil {
+		t.Fatal(closeErr)
+	}
+	out, readErr := io.ReadAll(r)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	stderr := string(out)
+	if code != 1 {
+		t.Fatalf("run() = %d, want 1 on a catalog collision", code)
+	}
+	for _, name := range []string{"alpha", "beta", "x.dup"} {
+		if !strings.Contains(stderr, name) {
+			t.Fatalf("stderr %q does not name %q", stderr, name)
+		}
+	}
+}
+
+func collidingPlugin(kind, text string) contracts.Plugin {
+	return contracts.Plugin{
+		Manifest: contracts.Manifest{Kind: kind, Category: contracts.CategoryGateway},
+		Catalog: fstest.MapFS{
+			"en.json": &fstest.MapFile{Data: []byte(`[{"id":"x.dup","description":"","other":"` + text + `"}]`)},
+		},
+	}
 }

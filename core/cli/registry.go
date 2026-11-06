@@ -284,8 +284,6 @@ type Spec struct {
 }
 
 // Specs returns every registered command's shape, sorted by path, with its help texts rendered in lang.
-// A help text that no catalog declares stays as its raw key and is reported in the returned error,
-// which names the command, so the caller can warn without dropping the specs.
 func (r *Registry) Specs(lang i18n.Language) ([]Spec, error) {
 	translator := clitext.For(lang)
 	if err := translator.Err(); err != nil {
@@ -332,9 +330,7 @@ func (r *Registry) localizedParams(translator *clitext.Translator, cmd contracts
 	return out, errors.Join(failures...)
 }
 
-// Help renders one usage line per command, sorted by path, for the root help, with
-// its help text rendered in lang. A help text that no catalog declares stays as its raw
-// key and is reported in the returned error, which names the command.
+// Help renders one usage line per command, sorted by path, for the root help, with its help text rendered in lang.
 func (r *Registry) Help(lang i18n.Language) (string, error) {
 	translator := clitext.For(lang)
 	if err := translator.Err(); err != nil {

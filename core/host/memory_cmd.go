@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -284,19 +285,23 @@ func commandsVerb(lang i18n.Language, reg *cli.Registry) contracts.Cmd {
 	return contracts.New("commands").
 		Help(clitext.CmdHelpCommands).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
-			specs, err := reg.Specs(lang)
-			if err != nil {
-				return contracts.Result{}, err
-			}
 			if input.JSON {
+				specs, specsErr := reg.Specs(lang)
+				if specsErr != nil {
+					slog.Warn("command help texts not fully rendered", "err", specsErr)
+				}
 				raw, marshalErr := json.Marshal(commandSpecsJSON(specs))
 				return contracts.DataResult(string(raw)), marshalErr
 			}
-			help, err := reg.Help(lang)
-			if err != nil {
-				return contracts.Result{}, err
+			help, helpErr := reg.Help(lang)
+			if helpErr == nil {
+				return contracts.DataResult(help), nil
 			}
-			return contracts.DataResult(help), nil
+			warning, renderErr := clitext.For(lang).Render(clitext.CmdHelpCommandsWarning, clitext.Params{clitext.ParamErr: helpErr.Error()})
+			if renderErr != nil {
+				return contracts.Result{}, renderErr
+			}
+			return contracts.DataResult(help + "\n" + warning), nil
 		})
 }
 

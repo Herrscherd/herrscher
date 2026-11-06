@@ -284,8 +284,7 @@ func (t *Translator) Text(key Key, params Params) string {
 	return text
 }
 
-// Render renders key with params and returns its failure to the caller instead of
-// keeping it, so a caller can name the message it was rendering.
+// Render renders key with params and returns its failure to the caller instead of keeping it.
 func (t *Translator) Render(key Key, params Params) (string, error) {
 	if t.cat == nil {
 		return "", t.err

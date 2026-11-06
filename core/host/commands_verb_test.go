@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -74,5 +75,27 @@ func TestSkillVerbsAreRegistered(t *testing.T) {
 		if !have[want] {
 			t.Errorf("%q is not dispatched", want)
 		}
+	}
+}
+
+func TestCommandsVerbListsThenWarnsOnARawHelpText(t *testing.T) {
+	var reg cli.Registry
+	raw := contracts.New("rawdemo", "show").Help("rawdemo.help.undeclared").
+		Do(func(context.Context, contracts.Input) (contracts.Result, error) { return contracts.Result{}, nil })
+	if err := reg.Add(raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := reg.Add(commandsVerb(i18n.English, &reg)); err != nil {
+		t.Fatal(err)
+	}
+	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"commands"}))
+	if err != nil {
+		t.Fatalf("commands must not fail on a raw help text: %v", err)
+	}
+	if !strings.Contains(out, "  rawdemo show") {
+		t.Fatalf("commands output misses the listed command:\n%s", out)
+	}
+	if !strings.Contains(out, `command "rawdemo show"`) || !strings.Contains(out, "rawdemo.help.undeclared") {
+		t.Fatalf("commands output does not warn with the command and the key:\n%s", out)
 	}
 }

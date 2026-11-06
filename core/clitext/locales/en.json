@@ -1633,6 +1633,11 @@
     "other": "list every command this daemon dispatches, with its params"
   },
   {
+    "id": "cli.help.commands_warning",
+    "description": "Warning shown under the list of commands when some help texts are not rendered",
+    "other": "some help texts are not rendered, the list above is still complete: {{.Err}}"
+  },
+  {
     "id": "cli.help.param.memory.locate.key",
     "description": "Help of the --key param of the command memory locate",
     "other": "node key"

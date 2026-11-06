@@ -1633,6 +1633,11 @@
     "other": "lister toutes les commandes que ce démon route, avec leurs paramètres"
   },
   {
+    "id": "cli.help.commands_warning",
+    "description": "Avertissement affiché sous la liste des commandes quand des textes d'aide ne sont pas rendus",
+    "other": "certains textes d'aide ne sont pas rendus, la liste ci-dessus reste complète : {{.Err}}"
+  },
+  {
     "id": "cli.help.param.memory.locate.key",
     "description": "Help of the --key param of the command memory locate",
     "other": "clé du nœud"

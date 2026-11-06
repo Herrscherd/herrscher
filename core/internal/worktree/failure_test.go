@@ -48,3 +48,10 @@ func TestEveryFailureKeyRendersInEachLanguage(t *testing.T) {
 		}
 	}
 }
+
+func TestFailureWithAKeyNoCatalogDeclaresShowsTheKey(t *testing.T) {
+	failure := FailureError{Key: clitext.Key("cli.worktree.undeclared")}
+	if text := failure.Text(i18n.French); text != "cli.worktree.undeclared" {
+		t.Fatalf("undeclared key rendered %q", text)
+	}
+}

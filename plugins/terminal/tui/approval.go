@@ -27,8 +27,6 @@ const (
 	approvalShortRows    = 24
 	approvalNoteColumn   = 34
 	approvalLabelWidth   = 10
-	approvalPromptTail   = " (answer with"
-	approvalAllowPrefix  = "allow "
 )
 
 const (
@@ -70,6 +68,7 @@ type approvalPrompt struct {
 	channel    string
 	tool       string
 	command    string
+	statement  string
 	project    string
 	worktree   string
 	risk       string
@@ -127,12 +126,6 @@ func approvalRole(value string) string {
 	return ""
 }
 
-func splitApprovalSubject(prompt string) (string, string) {
-	text, _, _ := strings.Cut(prompt, approvalPromptTail)
-	text = strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(text), approvalAllowPrefix), "?")
-	return splitRequest(text)
-}
-
 func splitRequest(request string) (string, string) {
 	tool, rest, found := strings.Cut(request, "(")
 	if !found {
@@ -148,13 +141,13 @@ func approvalID(value, role string) string {
 
 func newApprovalPrompt(channel string, menu approvalMenu, session contracts.SessionInfo, now time.Time) (approvalPrompt, bool) {
 	prompt := approvalPrompt{
-		channel:  channel,
-		project:  session.Project,
-		worktree: session.Dir,
-		deadline: now.Add(approvalDefaultWait),
-		risk:     menu.Risk,
+		channel:   channel,
+		project:   session.Project,
+		worktree:  session.Dir,
+		deadline:  now.Add(approvalDefaultWait),
+		risk:      menu.Risk,
+		statement: menu.Prompt,
 	}
-	prompt.tool, prompt.command = splitApprovalSubject(menu.Prompt)
 	for _, entry := range approvalCatalog() {
 		for _, option := range menu.Options {
 			if approvalRole(option.Value) != entry.role {
@@ -602,7 +595,11 @@ func (m *model) approvalBorder(head, tail, fill string, width int) string {
 }
 
 func (m *model) approvalCommand(prompt approvalPrompt, inner int) string {
-	lead := m.st.accent.Render(m.st.glyphs.familyGlyph(familyRun)) + " " + m.st.text.Bold(true).Render(prompt.tool)
+	lead := m.st.accent.Render(m.st.glyphs.familyGlyph(familyRun)) + " "
+	if prompt.tool == "" {
+		return lead + m.st.text.Render(middleTruncate(prompt.statement, inner-lipgloss.Width(lead), m.st.glyphs.ellipsis))
+	}
+	lead += m.st.text.Bold(true).Render(prompt.tool)
 	if prompt.command == "" {
 		return lead
 	}

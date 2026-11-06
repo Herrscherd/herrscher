@@ -216,7 +216,7 @@ func runForwarded(ctx context.Context, cmd string, args []string) error {
 	lang := clitext.ClientLanguage()
 	out, code, derr := dispatchUnknown(ctx, lang, cmd, args, forwardUnknownVerb)
 	if code != 0 {
-		fmt.Fprintln(os.Stderr, render(lang, clitext.ErrorLine, clitext.Params{clitext.ParamMessage: derr.Error()}))
+		fmt.Fprintln(os.Stderr, forwardedFailureLine(lang, derr))
 		if err := usage(lang); err != nil {
 			return err
 		}
@@ -230,6 +230,10 @@ func runForwarded(ctx context.Context, cmd string, args []string) error {
 	}
 	_, err := fmt.Fprintln(os.Stdout, out)
 	return err
+}
+
+func forwardedFailureLine(lang i18n.Language, derr error) string {
+	return render(lang, clitext.ErrorLine, clitext.Params{clitext.ParamMessage: host.LocalizeError(lang, derr).Error()})
 }
 
 type exitStatusError struct {

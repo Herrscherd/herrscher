@@ -22,6 +22,14 @@ func replyText(lang i18n.Language) *clitext.Translator {
 	return clitext.For(i18n.Resolve(lang))
 }
 
+func namedSessionLanguage(st *state.State, name string, operator i18n.Language) i18n.Language {
+	sess, ok := st.FindSession(name)
+	if !ok {
+		return i18n.Resolve(operator)
+	}
+	return sessionLanguage(sess, i18n.Resolve(operator))
+}
+
 func addSessionVerbs(reg *cli.Registry, lang i18n.Language, store *state.State, partDir, instID string, approvals *approvalTable, sessions *sessionTable, seedCoord *coordinatorSlot, models *ModelDiscovery) error {
 	seen := newSeenTable(time.Now())
 	return addVerbs(

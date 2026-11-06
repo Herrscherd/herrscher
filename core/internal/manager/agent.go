@@ -20,7 +20,7 @@ import (
 func (h *Handler) agentCreateRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	raw, ok := input.Lookup(nameParam)
 	if !ok {
-		return contracts.Result{}, ErrMissingName
+		return contracts.Result{}, h.localized(ErrMissingName, clitext.HostErrMissingName)
 	}
 	name := slugify(raw)
 	if name == "" || !sessionNameRe.MatchString(name) {
@@ -82,7 +82,7 @@ func (h *Handler) agentListRun(_ context.Context, input contracts.Input) (contra
 func (h *Handler) agentShowRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return contracts.Result{}, ErrMissingName
+		return contracts.Result{}, h.localized(ErrMissingName, clitext.HostErrMissingName)
 	}
 	candidate, ok := h.agents.Get(slugify(name))
 	if !ok {
@@ -90,7 +90,7 @@ func (h *Handler) agentShowRun(_ context.Context, input contracts.Input) (contra
 	}
 	soul, err := os.ReadFile(filepath.Join(candidate.Home, "SOUL.md"))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return contracts.Result{}, fmt.Errorf("read soul: %w", err)
+		return contracts.Result{}, h.labelled("read soul", clitext.HostErrReadSoul, err)
 	}
 	if input.JSON {
 		tags := candidate.Tags
@@ -114,11 +114,11 @@ func (h *Handler) agentShowRun(_ context.Context, input contracts.Input) (contra
 func (h *Handler) agentSetSoulRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return contracts.Result{}, ErrMissingName
+		return contracts.Result{}, h.localized(ErrMissingName, clitext.HostErrMissingName)
 	}
 	soul, ok := input.Lookup("soul")
 	if !ok {
-		return contracts.Result{}, ErrMissingSoul
+		return contracts.Result{}, h.localized(ErrMissingSoul, clitext.HostErrMissingSoul)
 	}
 	if err := h.agents.SetSoul(slugify(name), soul); err != nil {
 		return contracts.Result{}, err

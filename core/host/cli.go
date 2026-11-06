@@ -64,7 +64,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addSessionVerbs(reg, options.Language, hostState, partDir, instID, approvals, sessions, seedCoord, models); err != nil {
 		return nil, hostDeps{}, err
 	}
-	handoff, err := sessionHandoffCmd(hdl.Commands(), hostState, sessions, instID, seedCoord, hdl.PreflightAccount)
+	handoff, err := sessionHandoffCmd(options.Language, hdl.Commands(), hostState, sessions, instID, seedCoord, hdl.PreflightAccount)
 	if err != nil {
 		return nil, hostDeps{}, err
 	}
@@ -77,7 +77,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addMemoryVerbs(reg, options.Language); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addSkillVerbs(reg); err != nil {
+	if err := addSkillVerbs(reg, options.Language); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addScheduleCommands(reg, options.Language, hostState, agents, schedSlot); err != nil {
@@ -92,7 +92,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addRoleCommands(reg, options.Language, hostState); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addVerbs(reg, memorySearchVerb(), whoamiVerb(), commandsVerb(reg)); err != nil {
+	if err := addVerbs(reg, memorySearchVerb(options.Language), whoamiVerb(), commandsVerb(reg)); err != nil {
 		return nil, hostDeps{}, err
 	}
 	return reg, hostDeps{wt: worktrees, agents: agents, handler: hdl, seedCoord: seedCoord, schedSlot: schedSlot}, nil

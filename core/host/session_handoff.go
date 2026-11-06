@@ -13,6 +13,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/accounts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -42,6 +43,8 @@ var (
 )
 
 type handoffDeps struct {
+	lang         i18n.Language
+	sessionLang  func(name string) i18n.Language
 	exists       func(name string) bool
 	root         func(name string) string
 	account      func(name string) string
@@ -96,12 +99,16 @@ func (l *handoffLimiter) forgetIdle(now time.Time) {
 	}
 }
 
-func sessionHandoffCmd(managerCmds []contracts.Cmd, store *state.State, sessions *sessionTable, instID string, seedCoord *coordinatorSlot, checkAccount func(contracts.Input) error) (contracts.Cmd, error) {
+func sessionHandoffCmd(lang i18n.Language, managerCmds []contracts.Cmd, store *state.State, sessions *sessionTable, instID string, seedCoord *coordinatorSlot, checkAccount func(contracts.Input) error) (contracts.Cmd, error) {
 	create, ok := findCommand(managerCmds, nsSession, "create")
 	if !ok {
 		return contracts.Cmd{}, errHandoffNoCreate
 	}
 	return sessionHandoffVerb(handoffDeps{
+		lang: lang,
+		sessionLang: func(name string) i18n.Language {
+			return namedSessionLanguage(store, name, lang)
+		},
 		exists: func(name string) bool {
 			_, ok := store.FindSession(name)
 			return ok
@@ -114,7 +121,7 @@ func sessionHandoffCmd(managerCmds []contracts.Cmd, store *state.State, sessions
 			return session.Account
 		},
 		brief: func(ctx context.Context, source string) (string, error) {
-			in := contracts.Input{Args: map[string]string{paramName: source, "task": handoffBriefTask, "timeout": handoffBriefTimeout}}
+			in := contracts.Input{Args: map[string]string{paramName: source, "task": handoffBriefTaskFor(store, source), "timeout": handoffBriefTimeout}}
 			return runSeedVerb(ctx, in, store, instID, seedCoord.coord)
 		},
 		create: func(ctx context.Context, in contracts.Input) (string, error) {
@@ -166,7 +173,7 @@ func (d handoffDeps) run(ctx context.Context, input contracts.Input) (string, er
 	}
 	target := strings.TrimSpace(input.Get(paramTo))
 	if target == "" {
-		return handoffPointer(source), nil
+		return handoffPointer(d.replyLang(source), source), nil
 	}
 	if err := checkHandoffTargets(input, byAgent); err != nil {
 		return "", err
@@ -290,7 +297,7 @@ func (d handoffDeps) deliver(ctx context.Context, source, target, reply, brief, 
 	if err := d.send(ctx, target, "session "+source, handoffMessage(source, brief)); err != nil {
 		return "", fmt.Errorf("session %q was created but the brief did not reach it: %w", target, err)
 	}
-	return handoffReport(source, target, reply, brief, account), nil
+	return handoffReport(d.replyLang(source), source, target, reply, brief, account), nil
 }
 
 func newSessionArgs(target, account string, input contracts.Input, parent string) map[string]string {
@@ -309,24 +316,59 @@ func newSessionArgs(target, account string, input contracts.Input, parent string
 	return args
 }
 
-func handoffPointer(source string) string {
-	where := "the session"
-	if source != "" {
-		where = "session " + source
+func (d handoffDeps) replyLang(source string) i18n.Language {
+	if d.sessionLang == nil {
+		return i18n.Resolve(d.lang)
 	}
-	return "Nothing was created: " + where + " is already running, and its bound gateways share the same conversation. " +
-		"To open it in the TUI, run `herrscher` on the running daemon, which shows it as a tab. " +
-		"For a new session with a brief of this conversation, pass --" + paramTo + " <name>."
+	return d.sessionLang(source)
+}
+
+func handoffPointer(lang i18n.Language, source string) string {
+	text := replyText(lang)
+	where := text.Text(clitext.HostHandoffSession, nil)
+	if source != "" {
+		where = text.Text(clitext.HostHandoffSessionNamed, clitext.Params{clitext.ParamName: source})
+	}
+	return text.Text(clitext.HostHandoffPointer, clitext.Params{clitext.ParamWhere: where, clitext.ParamTo: paramTo})
 }
 
 func handoffMessage(source, brief string) string {
-	return "[Passation depuis la session " + source + "]\n\n" + brief
+	return "[Handover from session " + source + "]\n\n" + brief
 }
 
-func handoffReport(source, target, reply, brief, account string) string {
+func handoffReport(lang i18n.Language, source, target, reply, brief, account string) string {
+	text := replyText(lang)
 	if account == "" {
-		account = "the vendor default"
+		account = text.Text(clitext.HostHandoffVendorDefault, nil)
 	}
-	return fmt.Sprintf("Session %s created from %s with account %s, brief sent as its first message.\n\n%s\n\nBrief:\n%s",
-		target, source, account, strings.TrimSpace(reply), strings.TrimSpace(brief))
+	return text.Text(clitext.HostHandoffReport, clitext.Params{
+		clitext.ParamTarget:  target,
+		clitext.ParamSource:  source,
+		clitext.ParamAccount: account,
+		clitext.ParamReply:   strings.TrimSpace(reply),
+		clitext.ParamBrief:   strings.TrimSpace(brief),
+	})
+}
+
+func handoffBriefTaskFor(store *state.State, source string) string {
+	session, _ := store.FindSession(source)
+	lang, err := i18n.ParseLanguage(session.Language)
+	if err != nil {
+		return handoffBriefTask
+	}
+	directive := briefLanguageDirective(lang)
+	if directive == "" {
+		return handoffBriefTask
+	}
+	return handoffBriefTask + " " + directive
+}
+
+func briefLanguageDirective(lang i18n.Language) string {
+	switch lang {
+	case i18n.French:
+		return "Write the brief in French."
+	case i18n.English:
+		return "Write the brief in English."
+	}
+	return ""
 }

@@ -7,6 +7,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func describeArgs(args []contracts.Arg) []string {
@@ -173,5 +174,29 @@ func TestLocalizedErrorKeepsEveryCause(t *testing.T) {
 	}
 	if got := renderNotice(t, i18n.French, err); got != "erreur inattendue : red\u00e9marrage échoué ; retour arrière échoué" {
 		t.Fatalf("fr = %q", got)
+	}
+}
+
+func TestLocalizedManagerErrorRendersInTheOperatorLanguage(t *testing.T) {
+	cause := errors.New("disk full")
+	h := &Handler{lang: i18n.French}
+	err := h.labelled("worktree", clitext.HostErrWorktree, cause)
+	if err.Error() != "worktree: disk full" {
+		t.Fatalf("Error() = %q, want the English text", err.Error())
+	}
+	if !errors.Is(err, cause) {
+		t.Fatalf("the cause must stay reachable through errors.Is")
+	}
+	localized, ok := err.(*localizedError)
+	if !ok {
+		t.Fatalf("the error is %T, want a localizedError", err)
+	}
+	notice := localized.Notice()
+	want := clitext.For(i18n.French).Text(clitext.HostErrWorktree, clitext.Params{clitext.ParamErr: "disk full"})
+	if len(notice.Args) != 1 || fmt.Sprint(notice.Args[0].Value()) != want {
+		t.Fatalf("notice detail = %v, want %q", notice.Args, want)
+	}
+	if want == "worktree: disk full" {
+		t.Fatalf("the French text must differ from the English one: %q", want)
 	}
 }

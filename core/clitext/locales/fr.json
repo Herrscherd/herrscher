@@ -1611,5 +1611,245 @@
     "id": "cli.host.models.discovery_static",
     "description": "Reply of a host command, models discovery static",
     "other": "découverte échouée ({{.Err}}), catalogue statique seul"
+  },
+  {
+    "id": "cli.host.memory.forgotten",
+    "description": "Reply of a host command, memory forgotten",
+    "other": "{{.Key}} oublié"
+  },
+  {
+    "id": "cli.host.memory.recorded",
+    "description": "Reply of a host command, memory recorded",
+    "other": "{{.Key}} enregistré"
+  },
+  {
+    "id": "cli.host.memory.skills_none",
+    "description": "Reply of a host command, memory skills none",
+    "other": "aucune compétence apprise pour l'instant"
+  },
+  {
+    "id": "cli.host.memory.skill_last_used",
+    "description": "Reply of a host command, memory skill last used",
+    "other": "dernier usage {{.When}}"
+  },
+  {
+    "id": "cli.host.memory.skill_revoked",
+    "description": "Reply of a host command, memory skill revoked",
+    "other": "{{.Key}} révoqué (une promotion déjà faite reste ; défaites-la avec `memory unlink` puis `memory restore`)"
+  },
+  {
+    "id": "cli.host.memory.skill_approved",
+    "description": "Reply of a host command, memory skill approved",
+    "other": "{{.Key}} approuvé"
+  },
+  {
+    "id": "cli.host.memory.search_none",
+    "description": "Reply of a host command, memory search none",
+    "other": "aucun résultat"
+  },
+  {
+    "id": "cli.host.approve.mode_set",
+    "description": "Reply of a host command, approve mode set",
+    "other": "{{.Name}} passe en mode {{.Mode}}"
+  },
+  {
+    "id": "cli.host.approve.smart_no_backend",
+    "description": "Reply of a host command, approve smart no backend",
+    "other": "{{.Name}} passe en mode {{.Mode}}, mais aucun backend LLM n'est configuré pour évaluer les appels : tant qu'il n'en existe pas, smart décide comme ask, donc un appel qu'aucune règle ne nomme s'exécute sans demander"
+  },
+  {
+    "id": "cli.host.approve.bypass_no_hook",
+    "description": "Reply of a host command, approve bypass no hook",
+    "other": "{{.Name}} passe en mode {{.Mode}} (une session créée avec --approvals bypass n'a pas de hook : recréez-la pour que cela prenne effet)"
+  },
+  {
+    "id": "cli.host.checkpoint.rewound",
+    "description": "Reply of a host command, checkpoint rewound",
+    "other": "{{.Name}} ramené au point de contrôle {{.Position}} ({{.What}})"
+  },
+  {
+    "id": "cli.host.schedule.every",
+    "description": "Reply of a host command, schedule every",
+    "other": "toutes les {{.Every}}"
+  },
+  {
+    "id": "cli.host.schedule.cron",
+    "description": "Reply of a host command, schedule cron",
+    "other": "cron {{.Cron}}"
+  },
+  {
+    "id": "cli.host.handoff.session",
+    "description": "Reply of a host command, handoff session",
+    "other": "la session"
+  },
+  {
+    "id": "cli.host.handoff.session_named",
+    "description": "Reply of a host command, handoff session named",
+    "other": "la session {{.Name}}"
+  },
+  {
+    "id": "cli.host.handoff.vendor_default",
+    "description": "Reply of a host command, handoff vendor default",
+    "other": "le compte par défaut du fournisseur"
+  },
+  {
+    "id": "cli.host.handoff.pointer",
+    "description": "Reply of a host command, handoff pointer",
+    "other": "Rien n'a été créé : {{.Where}} tourne déjà, et ses passerelles liées partagent la même conversation. Pour l'ouvrir dans la TUI, lancez `herrscher` sur le démon en cours, qui l'affiche dans un onglet. Pour une nouvelle session avec un brief de cette conversation, passez --{{.To}} <nom>."
+  },
+  {
+    "id": "cli.host.handoff.report",
+    "description": "Reply of a host command, handoff report",
+    "other": "Session {{.Target}} créée à partir de {{.Source}} avec le compte {{.Account}}, brief envoyé comme premier message.\n\n{{.Reply}}\n\nBrief :\n{{.Brief}}"
+  },
+  {
+    "id": "cli.host.err.missing_channel",
+    "description": "Reply of a host command, err missing channel",
+    "other": "canal manquant"
+  },
+  {
+    "id": "cli.host.err.missing_name",
+    "description": "Reply of a host command, err missing name",
+    "other": "nom manquant"
+  },
+  {
+    "id": "cli.host.err.missing_path",
+    "description": "Reply of a host command, err missing path",
+    "other": "chemin manquant"
+  },
+  {
+    "id": "cli.host.err.missing_soul",
+    "description": "Reply of a host command, err missing soul",
+    "other": "âme manquante"
+  },
+  {
+    "id": "cli.host.err.missing_to",
+    "description": "Reply of a host command, err missing to",
+    "other": "nouveau nom manquant"
+  },
+  {
+    "id": "cli.host.err.conflicting_channel",
+    "description": "Reply of a host command, err conflicting channel",
+    "other": "passez channel_id ou under, pas les deux : l'un adopte une conversation qui existe, l'autre en crée une"
+  },
+  {
+    "id": "cli.host.err.conflicting_placement",
+    "description": "Reply of a host command, err conflicting placement",
+    "other": "terminal_only et under se contredisent : l'un garde la session dans le terminal, l'autre la place dans un conteneur de passerelle"
+  },
+  {
+    "id": "cli.host.err.clone_unsupported",
+    "description": "Reply of a host command, err clone unsupported",
+    "other": "le clonage n'est pas pris en charge sur l'hôte \"{{.Host}}\" : créez d'abord le projet localement, puis la session avec --host"
+  },
+  {
+    "id": "cli.host.err.clone_failed",
+    "description": "Reply of a host command, err clone failed",
+    "other": "clonage : {{.Err}}"
+  },
+  {
+    "id": "cli.host.err.no_host",
+    "description": "Reply of a host command, err no host",
+    "other": "la session veut l'hôte \"{{.Host}}\" mais aucun hôte n'est enregistré"
+  },
+  {
+    "id": "cli.host.err.account_vendor",
+    "description": "Reply of a host command, err account vendor",
+    "other": "compte \"{{.Account}}\" : aucun fournisseur de backend n'est connu pour cette session : passez --vendor, ou réglez HERRSCHER_BACKEND"
+  },
+  {
+    "id": "cli.host.err.account_remote",
+    "description": "Reply of a host command, err account remote",
+    "other": "compte \"{{.Account}}\" : un compte ne peut pas servir pendant que le backend tourne sur un hôte distant, qui résout les comptes dans son propre stockage ; retirez HERRSCHER_REMOTE=backend pour utiliser les comptes de ce démon, ou retirez le compte"
+  },
+  {
+    "id": "cli.host.err.account_host",
+    "description": "Reply of a host command, err account host",
+    "other": "compte \"{{.Account}}\" sur l'hôte \"{{.Host}}\" : un compte ne peut pas servir à une session placée sur un autre hôte ; lancez la session sur cet hôte ou retirez le compte"
+  },
+  {
+    "id": "cli.host.schedule.scheduled",
+    "description": "Reply of a host command, schedule scheduled",
+    "other": "{{.Name}} planifié ({{.Cadence}})"
+  },
+  {
+    "id": "cli.host.schedule.no_session",
+    "description": "Reply of a host command, schedule no session",
+    "other": "; attention : aucune session nommée \"{{.Name}}\" pour l'instant, donc ses créneaux sont ignorés jusqu'à ce qu'elle existe"
+  },
+  {
+    "id": "cli.host.schedule.last_run",
+    "description": "Reply of a host command, schedule last run",
+    "other": "dernier {{.When}}"
+  },
+  {
+    "id": "cli.host.schedule.next_run",
+    "description": "Reply of a host command, schedule next run",
+    "other": "prochain {{.When}}"
+  },
+  {
+    "id": "cli.host.schedule.never",
+    "description": "Reply of a host command, schedule never",
+    "other": "jamais"
+  },
+  {
+    "id": "cli.host.schedule.due",
+    "description": "Reply of a host command, schedule due",
+    "other": "à lancer"
+  },
+  {
+    "id": "cli.host.schedule.unknown",
+    "description": "Reply of a host command, schedule unknown",
+    "other": "inconnu"
+  },
+  {
+    "id": "cli.host.schedule.live",
+    "description": "Reply of a host command, schedule live",
+    "other": "actif"
+  },
+  {
+    "id": "cli.host.schedule.status_paused",
+    "description": "Reply of a host command, schedule status paused",
+    "other": "en pause"
+  },
+  {
+    "id": "cli.host.err.worktree",
+    "description": "Reply of a host command, err worktree",
+    "other": "worktree : {{.Err}}"
+  },
+  {
+    "id": "cli.host.err.provision_agent",
+    "description": "Reply of a host command, err provision agent",
+    "other": "provisionnement de l'agent \"{{.Agent}}\" : {{.Err}}"
+  },
+  {
+    "id": "cli.host.err.create_channel",
+    "description": "Reply of a host command, err create channel",
+    "other": "création du salon : {{.Err}}"
+  },
+  {
+    "id": "cli.host.err.create_forum_post",
+    "description": "Reply of a host command, err create forum post",
+    "other": "création du message de forum : {{.Err}}"
+  },
+  {
+    "id": "cli.host.err.persist",
+    "description": "Reply of a host command, err persist",
+    "other": "enregistrement : {{.Err}}"
+  },
+  {
+    "id": "cli.host.err.inspect_channel",
+    "description": "Reply of a host command, err inspect channel",
+    "other": "inspection du salon : {{.Err}}"
+  },
+  {
+    "id": "cli.host.err.read_soul",
+    "description": "Reply of a host command, err read soul",
+    "other": "lecture de l'âme : {{.Err}}"
+  },
+  {
+    "id": "cli.host.err.account_of_agent",
+    "description": "Reply of a host command, err account of agent",
+    "other": "le compte de l'agent \"{{.Agent}}\" : {{.Err}}"
   }
 ]

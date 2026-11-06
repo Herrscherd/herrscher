@@ -31,7 +31,7 @@ func addApproveCommands(reg *cli.Registry, lang i18n.Language, hostState *state.
 		approveDenyVerb(lang, approvals, sessions),
 		approveRuleVerb(lang, hostState),
 		approveAskVerb(hostState, agents, approvals, sessions),
-		approveModeVerb(hostState),
+		approveModeVerb(hostState, lang),
 		sessionShellVerb(hostState, agents, approvals, sessions),
 	)
 }
@@ -214,17 +214,17 @@ func approveAskVerb(store *state.State, agents *agent.Store, approvals *approval
 		})
 }
 
-func approveModeVerb(store *state.State) contracts.Cmd {
+func approveModeVerb(store *state.State, lang i18n.Language) contracts.Cmd {
 	return contracts.New(nsApprove, "mode").
 		Help("set a session's stance: ask (default), accept-edits, plan, auto, bypass, strict, or smart (a model rates each call)").
 		ValueParam(paramSession, "session name; also takes a bare argument", false).
 		ValueParam("mode", "ask | accept-edits | plan | auto | bypass | strict | smart; also takes a second bare argument", false).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(setApprovalMode(store, in))
+			return cli.Data(setApprovalMode(store, lang, in))
 		})
 }
 
-func setApprovalMode(store *state.State, in contracts.Input) (string, error) {
+func setApprovalMode(store *state.State, operator i18n.Language, in contracts.Input) (string, error) {
 	ops := parseModeOperands(in)
 	name, mode := ops.session, ops.mode
 	if name == "" || mode == "" {
@@ -237,13 +237,15 @@ func setApprovalMode(store *state.State, in contracts.Input) (string, error) {
 	if err := store.SetSessionApprovals(name, mode); err != nil {
 		return "", err
 	}
+	text := replyText(namedSessionLanguage(store, name, operator))
+	params := clitext.Params{clitext.ParamName: name, clitext.ParamMode: mode}
 	if parsed == approval.ModeSmart && !riskModelConfigured() {
-		return fmt.Sprintf("%s is now %s, but no LLM backend is configured to rate the calls: until one is, smart decides as ask does, so a call no rule names runs unasked", name, mode), nil
+		return text.Text(clitext.HostApproveSmartNoBackend, params), nil
 	}
 	if mode != approval.ModeBypass.String() {
-		return fmt.Sprintf("%s is now %s (a session created with --approvals bypass has no hook: recreate it for this to bite)", name, mode), nil
+		return text.Text(clitext.HostApproveBypassNoHook, params), nil
 	}
-	return fmt.Sprintf("%s is now %s", name, mode), nil
+	return text.Text(clitext.HostApproveModeSet, params), nil
 }
 
 type modeOperands struct {

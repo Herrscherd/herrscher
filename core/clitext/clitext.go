@@ -95,6 +95,19 @@ const (
 	ParamRoles     = "Roles"
 	ParamPrincipal = "Principal"
 	ParamRole      = "Role"
+	ParamPosition  = "Position"
+	ParamWhat      = "What"
+	ParamEvery     = "Every"
+	ParamCron      = "Cron"
+	ParamWhen      = "When"
+	ParamTarget    = "Target"
+	ParamSource    = "Source"
+	ParamReply     = "Reply"
+	ParamBrief     = "Brief"
+	ParamHost      = "Host"
+	ParamWhere     = "Where"
+	ParamCadence   = "Cadence"
+	ParamAgent     = "Agent"
 )
 
 // ParamRollbackErr names the error of the rollback that followed a failed session switch.

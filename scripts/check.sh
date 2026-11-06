@@ -44,6 +44,7 @@ go mod verify
 capped go run "$golangci_lint" fmt --diff
 capped go run "$golangci_lint" run ./...
 go run ./tools/commentcheck .
+go run ./tools/i18ncheck -baseline tools/i18ncheck/baseline.txt .
 regenerated_from_scratch
 no_dash_punctuation
 capped go test -race -shuffle=on ./...

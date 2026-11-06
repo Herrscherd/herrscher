@@ -153,3 +153,33 @@ func TestShowNamesTheRoleAndWhatItRuns(t *testing.T) {
 		}
 	}
 }
+
+func TestGrantConfirmationNamesThePrincipalAndTheRoleInEachLanguage(t *testing.T) {
+	cases := []struct {
+		lang i18n.Language
+		want string
+	}{
+		{i18n.English, `chat:2 is now "operator"`},
+		{i18n.French, `chat:2 a maintenant le rôle "operator"`},
+	}
+	for _, tc := range cases {
+		st, err := state.LoadState(t.TempDir() + "/state.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		reg := &cli.Registry{}
+		if err := addRoleCommands(reg, tc.lang, st); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := reg.Dispatch(context.Background(), []string{"role", "grant", "--principal", "chat:1", "--role", "owner"}); err != nil {
+			t.Fatal(err)
+		}
+		out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"role", "grant", "--principal", "chat:2", "--role", "operator"}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out != tc.want {
+			t.Fatalf("grant in %s said %q, want %q", tc.lang, out, tc.want)
+		}
+	}
+}

@@ -32,7 +32,7 @@ func TestEveryDeclaredKeyHasItsTextInEveryLanguage(t *testing.T) {
 }
 
 func TestEveryKeyFileIsDeclaredOnce(t *testing.T) {
-	groups := []map[Key][]string{usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys(), accountKeys(), manageKeys(), helpKeys()}
+	groups := []map[Key][]string{usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys(), accountKeys(), manageKeys(), hostKeys(), helpKeys()}
 	total := 0
 	for _, group := range groups {
 		total += len(group)
@@ -111,6 +111,37 @@ func TestRenderedMessagesInEachLanguage(t *testing.T) {
 			}
 			if got, err := Text(i18n.French, tc.key, tc.params); err != nil || got != tc.fr {
 				t.Fatalf("fr = %q, %v; want %q", got, err, tc.fr)
+			}
+		})
+	}
+}
+
+func TestHostRepliesRenderInEachLanguage(t *testing.T) {
+	cases := []struct {
+		name   string
+		key    Key
+		params Params
+		en, fr string
+	}{
+		{"schedule removed", HostScheduleRemoved, Params{ParamName: "nightly"}, "removed nightly (its session, if any, is still there; close it with `session close`)", "nightly supprimé (sa session, si elle existe, reste en place ; fermez-la avec `session close`)"},
+		{"model discovery kept", HostModelsDiscoveryKept, Params{ParamErr: "timeout"}, "discovery failed (timeout), kept the last known list", "découverte échouée (timeout), dernière liste connue conservée"},
+		{"memory unlinked", HostMemoryUnlinked, Params{ParamFrom: "a", ParamTo: "b"}, "unlinked a -> b", "lien retiré : a -> b"},
+		{"agent created", HostAgentCreated, Params{ParamName: "scout", ParamHome: "/w"}, "agent scout created at \"/w\".", "agent scout créé dans \"/w\"."},
+		{"checkpoint none", HostCheckpointNone, nil, "no checkpoints", "aucun point de contrôle"},
+		{"approve none", HostApproveNone, nil, "nothing is waiting", "rien n'attend de réponse"},
+		{"role holds", HostRoleHolds, Params{ParamPrincipal: "chat:1", ParamRole: "observer"}, "chat:1 holds \"observer\"", "chat:1 a le rôle \"observer\""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			want := map[i18n.Language]string{i18n.English: tc.en, i18n.French: tc.fr}
+			for lang, text := range want {
+				got, err := Text(lang, tc.key, tc.params)
+				if err != nil {
+					t.Fatalf("Text(%s, %s) = %v", lang, tc.key, err)
+				}
+				if got != text {
+					t.Fatalf("Text(%s, %s) = %q, want %q", lang, tc.key, got, text)
+				}
 			}
 		})
 	}

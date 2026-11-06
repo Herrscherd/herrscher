@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/checkpoint"
 	"github.com/Herrscherd/herrscher/core/internal/conversation"
@@ -70,7 +71,7 @@ func checkpointState(t *testing.T, worktree string) *state.State {
 
 func checkpointRegistry(st *state.State, sessions *sessionTable) *cli.Registry {
 	reg := &cli.Registry{}
-	if err := addCheckpointCommands(reg, st, sessions); err != nil {
+	if err := addCheckpointCommands(reg, i18n.English, st, sessions); err != nil {
 		panic(err)
 	}
 	return reg
@@ -330,5 +331,14 @@ func TestForkRefusedWhenTheCheckpointHasNoConversationPosition(t *testing.T) {
 	}
 	if _, ok := st.FindSession("alpha-fork"); ok {
 		t.Fatal("a refused fork must not create a session")
+	}
+}
+
+func TestFormatCheckpointsFollowsTheLanguage(t *testing.T) {
+	if got := formatCheckpoints(i18n.French, nil); got != "aucun point de contrôle" {
+		t.Fatalf("formatCheckpoints(fr, none) = %q", got)
+	}
+	if got := formatCheckpoints(i18n.English, nil); got != "no checkpoints" {
+		t.Fatalf("formatCheckpoints(en, none) = %q", got)
 	}
 }

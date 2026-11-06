@@ -164,7 +164,7 @@ func applyBudget(session state.Session, patch budgetPatch, curCost float64, curT
 func (h *Handler) sessionSetBudgetRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return contracts.Result{}, ErrMissingName
+		return contracts.Result{}, h.localized(ErrMissingName, clitext.HostErrMissingName)
 	}
 	sess, ok := h.st.FindSession(name)
 	if !ok {
@@ -397,7 +397,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, input contracts.Input) (
 		runDir = place.repo
 	}
 	sess := newSessionRecord(req, place.space, place.project, runDir)
-	slot, err := openChannel(ctx, req, h.st.QualifiedName(req.name))
+	slot, err := h.openChannel(ctx, req, h.st.QualifiedName(req.name))
 	if err != nil {
 		if _, unsupported := errors.AsType[*UnsupportedHomeTypeError](err); unsupported {
 			return contracts.Result{}, err
@@ -412,7 +412,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, input contracts.Input) (
 		if note := h.tidyChannel(ctx, sess); note != "" {
 			h.log.Warn("channel rollback", "session", req.name, "note", note)
 		}
-		return contracts.Result{}, fmt.Errorf("persist: %w", err)
+		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)
 	}
 	h.sup.Start(sess)
 	banner := h.sessionBanner(h.noticeLanguage(req.lang), place.repo, req.name, place.space.path, place.wt.Branch(req.name), req.runtime.cmd, req.runtime.model, req.shared)
@@ -435,7 +435,7 @@ func (h *Handler) placeSession(ctx context.Context, input contracts.Input, req *
 			return placement{}, projectErr
 		}
 	}
-	space, err := ensureWorkspace(ctx, worktrees, repo, *req)
+	space, err := h.ensureWorkspace(ctx, worktrees, repo, *req)
 	if err != nil {
 		return placement{}, err
 	}
@@ -454,7 +454,7 @@ func (h *Handler) rollbackPlacement(ctx context.Context, place placement, name s
 func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input) (createRequest, error) {
 	raw, ok := input.Lookup(nameParam)
 	if !ok {
-		return createRequest{}, ErrMissingName
+		return createRequest{}, h.localized(ErrMissingName, clitext.HostErrMissingName)
 	}
 	name := slugify(raw)
 	if name == "" || !sessionNameRe.MatchString(name) {
@@ -526,14 +526,14 @@ func (h *Handler) chooseHome(ctx context.Context, input contracts.Input, adopted
 		return home, admin, nil
 	}
 	if adopted != "" {
-		return state.HomeRef{}, nil, ErrConflictingChannel
+		return state.HomeRef{}, nil, h.localized(ErrConflictingChannel, clitext.HostErrConflictingChannel)
 	}
 	if terminalOnly {
-		return state.HomeRef{}, nil, ErrConflictingPlacement
+		return state.HomeRef{}, nil, h.localized(ErrConflictingPlacement, clitext.HostErrConflictingPlacement)
 	}
 	kind, err := admin.Kind(ctx, under)
 	if err != nil {
-		return state.HomeRef{}, nil, fmt.Errorf("inspect channel: %w", err)
+		return state.HomeRef{}, nil, h.labelled("inspect channel", clitext.HostErrInspectChannel, err)
 	}
 	if kind != categoryKind && kind != forumKind {
 		return state.HomeRef{}, nil, &ChannelKindError{Channel: under, Kind: kind, Need: "under must be a category or forum (to run in an existing conversation, pass channel_id)"}
@@ -551,7 +551,7 @@ func (h *Handler) checkSessionAccount(input contracts.Input, runtime runtimeChoi
 	}
 	if err != nil {
 		if account != explicitAccount {
-			err = fmt.Errorf("the account of agent %q: %w", runtime.agent, err)
+			err = localize(h.lang, fmt.Sprintf("the account of agent %q: %v", runtime.agent, err), clitext.HostErrAccountOfAgent, clitext.Params{clitext.ParamAgent: runtime.agent, clitext.ParamErr: err.Error()}, err)
 		}
 		return "", "", err
 	}
@@ -741,13 +741,13 @@ func (h *Handler) resolveProject(ctx context.Context, input contracts.Input, hos
 	}
 	if spec, ok := input.Lookup("clone"); ok && spec != "" {
 		if hostName != "" {
-			return "", fmt.Errorf("%w %q: create the project locally first, then create the session with --host", ErrCloneUnsupported, hostName)
+			return "", localize(h.lang, fmt.Sprintf("%v %q: create the project locally first, then create the session with --host", ErrCloneUnsupported, hostName), clitext.HostErrCloneUnsupported, clitext.Params{clitext.ParamHost: hostName}, ErrCloneUnsupported)
 		}
 		cctx, cancel := context.WithTimeout(ctx, cloneTimeout)
 		dir, err := h.fg.Clone(cctx, spec, wtRoot)
 		cancel()
 		if err != nil {
-			return "", fmt.Errorf("clone: %w", err)
+			return "", h.labelled("clone", clitext.HostErrCloneFailed, err)
 		}
 		project = filepath.Base(dir)
 	}
@@ -757,14 +757,14 @@ func (h *Handler) resolveProject(ctx context.Context, input contracts.Input, hos
 	return project, nil
 }
 
-func ensureWorkspace(ctx context.Context, worktrees Worktrees, repo string, req createRequest) (workspace, error) {
+func (h *Handler) ensureWorkspace(ctx context.Context, worktrees Worktrees, repo string, req createRequest) (workspace, error) {
 	if req.shared {
 		return workspace{}, nil
 	}
 	reused := worktrees.PreExisting(ctx, repo, req.name)
 	path, err := worktrees.Create(ctx, repo, req.name, req.base)
 	if err != nil {
-		return workspace{}, fmt.Errorf("worktree: %w", err)
+		return workspace{}, h.labelled("worktree", clitext.HostErrWorktree, err)
 	}
 	return workspace{path: path, reused: reused}, nil
 }
@@ -780,7 +780,7 @@ func (h *Handler) provisionAgent(ctx context.Context, req *createRequest, worktr
 		}
 		path, err := worktrees.Scratch(repo, req.name)
 		if err != nil {
-			return fmt.Errorf("provision agent %q: %w", agentName, err)
+			return localize(h.lang, fmt.Sprintf("provision agent %q: %v", agentName, err), clitext.HostErrProvisionAgent, clitext.Params{clitext.ParamAgent: agentName, clitext.ParamErr: err.Error()}, err)
 		}
 		space.path, space.scratch = path, true
 	}
@@ -797,7 +797,7 @@ func (h *Handler) provisionAgent(ctx context.Context, req *createRequest, worktr
 	}
 	if err := h.materializeOn(ctx, req.hostName, agentSpec, space.path, req.mode != approval.ModeBypass.String()); err != nil {
 		h.rollbackWorkspace(ctx, worktrees, repo, req.name, *space)
-		return fmt.Errorf("provision agent %q: %w", agentName, err)
+		return localize(h.lang, fmt.Sprintf("provision agent %q: %v", agentName, err), clitext.HostErrProvisionAgent, clitext.Params{clitext.ParamAgent: agentName, clitext.ParamErr: err.Error()}, err)
 	}
 	return nil
 }
@@ -868,7 +868,7 @@ func parseSessionLanguage(input contracts.Input) (string, error) {
 	return lang.String(), nil
 }
 
-func openChannel(ctx context.Context, req createRequest, title string) (channelSlot, error) {
+func (h *Handler) openChannel(ctx context.Context, req createRequest, title string) (channelSlot, error) {
 	if req.adopted != "" {
 		return channelSlot{id: req.adopted, typ: "text"}, nil
 	}
@@ -876,13 +876,13 @@ func openChannel(ctx context.Context, req createRequest, title string) (channelS
 	case categoryKind, terminalPlace:
 		chID, err := req.admin.CreateUnder(ctx, req.home.ID, title)
 		if err != nil {
-			return channelSlot{}, fmt.Errorf("create channel: %w", err)
+			return channelSlot{}, h.labelled("create channel", clitext.HostErrCreateChannel, err)
 		}
 		return channelSlot{id: chID, owned: true, typ: "text"}, nil
 	case forumKind:
-		chID, err := req.admin.ForumPost(ctx, req.home.ID, title, "Session **"+title+"** started.")
+		chID, err := req.admin.ForumPost(ctx, req.home.ID, title, h.textIn(h.noticeLanguage(req.lang), clitext.HostSessionStartedPost, clitext.Params{clitext.ParamName: title}))
 		if err != nil {
-			return channelSlot{}, fmt.Errorf("create forum post: %w", err)
+			return channelSlot{}, h.labelled("create forum post", clitext.HostErrCreateForumPost, err)
 		}
 		return channelSlot{id: chID, owned: true, typ: forumKind}, nil
 	default:
@@ -900,7 +900,7 @@ func (h *Handler) adminFor(sess state.Session) channelAdmin {
 func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return contracts.Result{}, ErrMissingName
+		return contracts.Result{}, h.localized(ErrMissingName, clitext.HostErrMissingName)
 	}
 	sess, exists := h.st.FindSession(name)
 	if !exists {
@@ -929,7 +929,7 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 	if err := h.st.RemoveSession(name); err != nil {
 		sess.Worktree, sess.Dir = "", repo
 		h.sup.Start(sess)
-		return contracts.Result{}, fmt.Errorf("persist: %w", err)
+		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)
 	}
 	h.warnIfFailed(state.RemoveParticipantJournal(state.ParticipantsPath(h.partDir, name)), "remove participants of "+name)
 	h.warnIfFailed(state.RemoveTranscript(state.TranscriptPath(h.partDir, name)), "remove transcript of "+name)
@@ -942,7 +942,7 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 func (h *Handler) sessionArchiveRun(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return contracts.Result{}, ErrMissingName
+		return contracts.Result{}, h.localized(ErrMissingName, clitext.HostErrMissingName)
 	}
 	sess, exists := h.st.FindSession(name)
 	if !exists {
@@ -951,7 +951,7 @@ func (h *Handler) sessionArchiveRun(ctx context.Context, input contracts.Input) 
 	h.warnIfFailed(h.sup.Stop(name), "stop "+name)
 	note := h.tidyChannel(ctx, sess)
 	if err := h.st.SetArchived(name, true); err != nil {
-		return contracts.Result{}, fmt.Errorf("persist: %w", err)
+		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)
 	}
 	return contracts.DataResult(h.text(clitext.SessionArchived, clitext.Params{clitext.ParamName: name}) + note), nil
 }
@@ -969,11 +969,11 @@ func (h *Handler) tidyChannel(ctx context.Context, sess state.Session) string {
 func (h *Handler) sessionRenameRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return contracts.Result{}, ErrMissingName
+		return contracts.Result{}, h.localized(ErrMissingName, clitext.HostErrMissingName)
 	}
 	raw, ok := input.Lookup("to")
 	if !ok {
-		return contracts.Result{}, ErrMissingTo
+		return contracts.Result{}, h.localized(ErrMissingTo, clitext.HostErrMissingTo)
 	}
 	target := slugify(raw)
 	if target == "" || !sessionNameRe.MatchString(target) {
@@ -992,7 +992,7 @@ func (h *Handler) sessionRenameRun(_ context.Context, input contracts.Input) (co
 	h.warnIfFailed(h.sup.Stop(name), "stop "+name)
 	if err := h.st.RenameSession(name, target); err != nil {
 		h.sup.Start(sess)
-		return contracts.Result{}, fmt.Errorf("persist: %w", err)
+		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)
 	}
 	note := ""
 	if err := state.MoveSessionFile(state.TranscriptPath(h.partDir, name), state.TranscriptPath(h.partDir, target)); err != nil {
@@ -1026,14 +1026,14 @@ func scheduleOwning(schedules []schedule.Schedule, session string) string {
 func (h *Handler) sessionResumeRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return contracts.Result{}, ErrMissingName
+		return contracts.Result{}, h.localized(ErrMissingName, clitext.HostErrMissingName)
 	}
 	sess, exists := h.st.FindSession(name)
 	if !exists {
 		return contracts.Result{}, &SessionNotFoundError{Name: name}
 	}
 	if err := h.st.SetArchived(name, false); err != nil {
-		return contracts.Result{}, fmt.Errorf("persist: %w", err)
+		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)
 	}
 	sess.Archived = false
 	h.sup.Start(sess)
@@ -1043,7 +1043,7 @@ func (h *Handler) sessionResumeRun(_ context.Context, input contracts.Input) (co
 func (h *Handler) sessionSwitchRun(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return contracts.Result{}, ErrMissingName
+		return contracts.Result{}, h.localized(ErrMissingName, clitext.HostErrMissingName)
 	}
 	vendor := input.Get("vendor")
 	cmd, cmdSupplied := input.Lookup("cmd")
@@ -1071,7 +1071,7 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, input contracts.Input) (
 		return contracts.Result{}, &SessionNotFoundError{Name: name}
 	}
 	if persistErr != nil {
-		return contracts.Result{}, fmt.Errorf("persist: %w", persistErr)
+		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, persistErr)
 	}
 	sess, _ := h.st.FindSession(name)
 	switchNote := h.switchApprovalsNote(sess)
@@ -1166,7 +1166,7 @@ func (h *Handler) sessionListRun(_ context.Context, input contracts.Input) (cont
 	out.WriteString(h.text(clitext.SessionListHeader, nil) + "\n")
 	for i := range sessions {
 		s := sessions[i]
-		fmt.Fprintf(&out, "• **%s** (%s) %s\n", s.Name, s.Type, h.adminFor(s).ChannelRef(s.ChannelID))
+		fmt.Fprintf(&out, "• %s (%s) %s\n", s.Name, s.Type, h.adminFor(s).ChannelRef(s.ChannelID))
 	}
 	return contracts.DataResult(out.String()), nil
 }
@@ -1174,7 +1174,7 @@ func (h *Handler) sessionListRun(_ context.Context, input contracts.Input) (cont
 func (h *Handler) sessionWhoRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return contracts.Result{}, ErrMissingName
+		return contracts.Result{}, h.localized(ErrMissingName, clitext.HostErrMissingName)
 	}
 	sess, exists := h.st.FindSession(name)
 	if !exists {
@@ -1211,7 +1211,7 @@ const (
 func (h *Handler) sessionLogRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	raw, ok := input.Lookup(nameParam)
 	if !ok {
-		return contracts.Result{}, ErrMissingName
+		return contracts.Result{}, h.localized(ErrMissingName, clitext.HostErrMissingName)
 	}
 	name := slugify(raw)
 	if name == "" || !sessionNameRe.MatchString(name) {
@@ -1239,7 +1239,7 @@ func (h *Handler) sessionLogRun(_ context.Context, input contracts.Input) (contr
 	}
 	var out strings.Builder
 	for _, e := range entries {
-		fmt.Fprintf(&out, "**%s** %s\n", e.Role, e.Text)
+		fmt.Fprintf(&out, "%s %s\n", e.Role, e.Text)
 	}
 	return contracts.DataResult(out.String()), nil
 }

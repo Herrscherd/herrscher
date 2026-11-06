@@ -72,7 +72,7 @@ func TestHandoffSendsTheBriefAsTheFirstMessageOfTheNewSession(t *testing.T) {
 	if len(rec.created) != 1 || rec.created[0].Get(paramName) != "beta" {
 		t.Fatalf("created = %+v, want one session named beta", rec.created)
 	}
-	if rec.sentTo != "beta" || !strings.HasPrefix(rec.sentText, "[Passation depuis la session alpha]") || !strings.Contains(rec.sentText, "BRIEF of alpha") {
+	if rec.sentTo != "beta" || !strings.HasPrefix(rec.sentText, "[Handover from session alpha]") || !strings.Contains(rec.sentText, "BRIEF of alpha") {
 		t.Fatalf("brief sent to %q as %q, want the brief of alpha first in beta", rec.sentTo, rec.sentText)
 	}
 	if !strings.Contains(out, "created beta") || !strings.Contains(out, "BRIEF of alpha") {

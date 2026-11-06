@@ -68,7 +68,7 @@ func listSessionAccounts(lang i18n.Language, store *state.State, name string) (s
 	if err != nil {
 		return "", err
 	}
-	text := sessionText(lang)
+	text := replyText(lang)
 	lines := []string{sess.Vendor + ": " + text.Text(clitext.AccountNativeLabel, nil)}
 	for _, profile := range profiles {
 		if profile.Vendor != sess.Vendor {
@@ -113,7 +113,7 @@ func setSessionAccount(lang i18n.Language, store *state.State, name, profile str
 }
 
 func accountChangeNotice(lang i18n.Language, name, profile string, fresh bool) string {
-	text := sessionText(lang)
+	text := replyText(lang)
 	var key clitext.Key = clitext.SessionAccountNotice
 	if fresh {
 		key = clitext.SessionAccountNoticeFresh

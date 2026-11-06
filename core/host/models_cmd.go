@@ -10,6 +10,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/envx"
 )
@@ -54,40 +55,40 @@ func modelsListJSON(entries []CatalogEntry) (string, error) {
 	return string(payload), nil
 }
 
-func modelsListText(entries []CatalogEntry) string {
+func modelsListText(lang i18n.Language, entries []CatalogEntry) string {
 	if len(entries) == 0 {
-		return "no models offered under the current route policy"
+		return replyText(lang).Text(clitext.HostModelsNone, nil)
 	}
 	var builder strings.Builder
 	for idx := range entries {
 		entry := &entries[idx]
 		fmt.Fprintf(&builder, "%-32s %-24s %-8s %-10s %s\n", entry.ID, entry.Label, entry.Route, entry.Source, entry.Vendor)
 		if entry.Hidden {
-			builder.WriteString("  hidden: resolves when requested, not offered by the selector\n")
+			builder.WriteString(replyText(lang).Text(clitext.HostModelsHidden, nil) + "\n")
 		}
 	}
 	return strings.TrimRight(builder.String(), "\n")
 }
 
-func modelsRefreshText(outcomes []discoveryOutcome) string {
+func modelsRefreshText(lang i18n.Language, outcomes []discoveryOutcome) string {
 	if len(outcomes) == 0 {
-		return "no vendor is due for discovery (see HERRSCHER_MODELS_DISCOVER and HERRSCHER_ROUTE_POLICY)"
+		return replyText(lang).Text(clitext.HostModelsRefreshNone, nil)
 	}
 	var builder strings.Builder
 	for _, outcome := range outcomes {
-		fmt.Fprintf(&builder, "%-12s %s\n", outcome.Vendor, outcomeSummary(outcome))
+		fmt.Fprintf(&builder, "%-12s %s\n", outcome.Vendor, outcomeSummary(lang, outcome))
 	}
 	return strings.TrimRight(builder.String(), "\n")
 }
 
-func outcomeSummary(outcome discoveryOutcome) string {
+func outcomeSummary(lang i18n.Language, outcome discoveryOutcome) string {
 	switch {
 	case outcome.Refreshed:
-		return fmt.Sprintf("%d model(s) discovered", outcome.Count)
+		return replyText(lang).Text(clitext.HostModelsDiscovered, clitext.Params{clitext.ParamCount: outcome.Count})
 	case outcome.Kept:
-		return fmt.Sprintf("discovery failed (%v), kept the last known list", outcome.Err)
+		return replyText(lang).Text(clitext.HostModelsDiscoveryKept, clitext.Params{clitext.ParamErr: outcome.Err})
 	default:
-		return fmt.Sprintf("discovery failed (%v), static catalog only", outcome.Err)
+		return replyText(lang).Text(clitext.HostModelsDiscoveryStatic, clitext.Params{clitext.ParamErr: outcome.Err})
 	}
 }
 
@@ -106,7 +107,7 @@ func modelDiscoveryFor(input contracts.Input) *ModelDiscovery {
 	return ModelDiscoveryFor(statePath)
 }
 
-func refreshModels(ctx context.Context, plugins []contracts.Plugin, models *ModelDiscovery) (string, error) {
+func refreshModels(ctx context.Context, lang i18n.Language, plugins []contracts.Plugin, models *ModelDiscovery) (string, error) {
 	path := models.cachePath()
 	cache, err := loadDiscoveryCache(path)
 	if err != nil {
@@ -118,11 +119,11 @@ func refreshModels(ctx context.Context, plugins []contracts.Plugin, models *Mode
 			return "", err
 		}
 	}
-	return modelsRefreshText(outcomes), nil
+	return modelsRefreshText(lang, outcomes), nil
 }
 
 // ModelsCommands returns the model catalog verbs.
-func ModelsCommands() []contracts.Cmd {
+func ModelsCommands(lang i18n.Language) []contracts.Cmd {
 	return []contracts.Cmd{
 		contracts.New("models", "list").
 			ValueParam("state", clitext.CmdParamModelsListState, false).
@@ -136,13 +137,13 @@ func ModelsCommands() []contracts.Cmd {
 				if input.JSON {
 					return cli.Data(modelsListJSON(entries))
 				}
-				return contracts.DataResult(modelsListText(entries)), nil
+				return contracts.DataResult(modelsListText(lang, entries)), nil
 			}),
 		contracts.New("models", "refresh").
 			ValueParam("state", clitext.CmdParamModelsRefreshState, false).
 			Help(clitext.CmdHelpModelsRefresh).
 			Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
-				return cli.Data(refreshModels(ctx, contracts.Default.Backends(), modelDiscoveryFor(input)))
+				return cli.Data(refreshModels(ctx, lang, contracts.Default.Backends(), modelDiscoveryFor(input)))
 			}),
 	}
 }

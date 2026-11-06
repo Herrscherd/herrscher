@@ -24,7 +24,7 @@ func (e *planUnsupportedError) Error() string {
 func (h *Handler) sessionSetModeRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return contracts.Result{}, ErrMissingName
+		return contracts.Result{}, h.localized(ErrMissingName, clitext.HostErrMissingName)
 	}
 	rawMode, _ := input.Lookup("mode")
 	mode := strings.TrimSpace(rawMode)
@@ -51,7 +51,7 @@ func (h *Handler) sessionSetModeRun(_ context.Context, input contracts.Input) (c
 func (h *Handler) sessionGetModeRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
-		return contracts.Result{}, ErrMissingName
+		return contracts.Result{}, h.localized(ErrMissingName, clitext.HostErrMissingName)
 	}
 	sess, ok := h.st.FindSession(name)
 	if !ok {

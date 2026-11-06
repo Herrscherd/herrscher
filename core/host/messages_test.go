@@ -212,7 +212,7 @@ func (m recallFailingMemory) Recall(context.Context, string, int) (contracts.Sub
 
 func TestSkillApprovalFailureTravelsAsAnUnexpectedNotice(t *testing.T) {
 	input := contracts.Input{Args: map[string]string{"key": "skill/x"}}
-	_, err := setSkillApproval(context.Background(), recallFailingMemory{err: errors.New("store locked")}, input)
+	_, err := setSkillApproval(context.Background(), i18n.English, recallFailingMemory{err: errors.New("store locked")}, input)
 	noticed, ok := errors.AsType[contracts.NoticeError](err)
 	if !ok {
 		t.Fatal("skill approval failure must be a NoticeError")
@@ -224,7 +224,7 @@ func TestSkillApprovalFailureTravelsAsAnUnexpectedNotice(t *testing.T) {
 
 func TestSkillApprovalFailureRendersInFrenchThroughTheCLI(t *testing.T) {
 	input := contracts.Input{Args: map[string]string{"key": "skill/x"}}
-	_, err := setSkillApproval(context.Background(), recallFailingMemory{err: errors.New("store locked")}, input)
+	_, err := setSkillApproval(context.Background(), i18n.English, recallFailingMemory{err: errors.New("store locked")}, input)
 	got := cli.Localize(err, i18n.French).Error()
 	if !strings.HasPrefix(got, "erreur inattendue : ") || !strings.Contains(got, "store locked") {
 		t.Fatalf("cli.Localize(%v, French) = %q, want the French unexpected notice carrying the cause", err, got)

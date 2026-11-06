@@ -29,10 +29,10 @@ const (
 )
 
 var (
-	errShellRefused        = errors.New("commande refusée")
-	errEmptyShellCommand   = errors.New("session shell : la commande est vide")
-	errUnknownShellSession = errors.New("session shell : session inconnue")
-	errRemoteShellSession  = errors.New("session shell : session distante, commande refusée")
+	errShellRefused        = errors.New("command refused")
+	errEmptyShellCommand   = errors.New("session shell: the command is empty")
+	errUnknownShellSession = errors.New("session shell: unknown session")
+	errRemoteShellSession  = errors.New("session shell: remote session, command refused")
 )
 
 func sessionShellVerb(store *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {

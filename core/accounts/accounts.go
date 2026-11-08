@@ -2,6 +2,7 @@
 package accounts
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -257,7 +258,23 @@ func OSRunner(ctx context.Context, vendor string, env map[string]string) ([]byte
 		return nil, err
 	}
 	cmd.Env = contracts.MergeEnv(os.Environ(), env)
-	return cmd.Output()
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err = cmd.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
+			return nil, fmt.Errorf("run %s status: %w", vendor, err)
+		}
+	}
+	return answerOf(stdout.Bytes(), stderr.Bytes()), nil
+}
+
+func answerOf(stdout, stderr []byte) []byte {
+	if len(bytes.TrimSpace(stdout)) > 0 {
+		return stdout
+	}
+	return stderr
 }
 
 // LoginCommand returns the login command of a vendor CLI, not started yet.

@@ -243,11 +243,44 @@ func TestPoolRetryAfterOverridesCooldown(t *testing.T) {
 		Cooldown: time.Hour,
 	})
 	now := time.Now()
-	pool.cool(0, now, 2*time.Second)
+	pool.cool(0, now, 2*time.Second, http.StatusTooManyRequests)
 
 	index, ok := pool.pick(now.Add(3*time.Second), make(map[int]bool))
 	if !ok || index != 0 {
 		t.Fatalf("pick after Retry-After elapsed = %d %v, want key 0 back", index, ok)
+	}
+}
+
+func TestPoolStateCountsTheCoolingKeysAndTheirStatus(t *testing.T) {
+	pool := NewPool("anthropic", []Secret{{name: "a"}, {name: "b"}, {name: "c"}}, PoolOptions{
+		Strategy: config.StrategyFailover,
+		Cooldown: time.Hour,
+	})
+	now := time.Now()
+	pool.cool(1, now, 4*time.Minute, http.StatusTooManyRequests)
+
+	state := pool.State(now.Add(time.Minute))
+	want := PoolState{Provider: "anthropic", Keys: 3, Usable: 2, LastStatus: http.StatusTooManyRequests, CoolingFor: 3 * time.Minute}
+	if state != want {
+		t.Fatalf("State = %+v, want %+v", state, want)
+	}
+	if later := pool.State(now.Add(5 * time.Minute)); later.Usable != 3 || later.CoolingFor != 0 {
+		t.Fatalf("State once the cooldown is over = %+v, want every key usable", later)
+	}
+}
+
+func TestProxyListsItsPoolsByProvider(t *testing.T) {
+	upstream := &stubUpstream{respond: func(string) (int, string) { return http.StatusOK, "answer" }}
+	server := httptest.NewServer(upstream)
+	t.Cleanup(server.Close)
+	proxy := openProxy(t, server.URL, config.ProviderKeys{}, "first", "second")
+
+	pools := proxy.Pools(time.Now())
+	if len(pools) != 1 || pools[0].Keys != 2 || pools[0].Usable != 2 {
+		t.Fatalf("Pools = %+v, want one pool of two usable keys", pools)
+	}
+	if !strings.HasPrefix(proxy.Listen(), "127.0.0.1:") {
+		t.Fatalf("Listen = %q, want a loopback address", proxy.Listen())
 	}
 }
 

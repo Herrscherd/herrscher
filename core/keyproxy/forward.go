@@ -87,7 +87,7 @@ func (t *rotatingTransport) RoundTrip(outbound *http.Request) (*http.Response, e
 		if !pool.fails(response.StatusCode) || !pool.hasRoom(now, tried) {
 			return response, nil
 		}
-		pool.cool(index, now, retryAfter(response.Header, now))
+		pool.cool(index, now, retryAfter(response.Header, now), response.StatusCode)
 		t.proxy.log.Info("key proxy moved to another key", "provider", pool.name, "key", pool.key(index).Name(), "status", response.StatusCode)
 		discard(response, t.proxy.log)
 	}

@@ -22,9 +22,20 @@ type Pool struct {
 	options  PoolOptions
 	failures map[int]bool
 
-	mu      sync.Mutex
-	cooling []time.Time
-	cursor  int
+	mu         sync.Mutex
+	cooling    []time.Time
+	cursor     int
+	lastStatus int
+}
+
+// PoolState is what a pool looks like at one instant: how many of its keys are
+// usable, and the status that last sent a key to cool down.
+type PoolState struct {
+	Provider   string
+	Keys       int
+	Usable     int
+	LastStatus int
+	CoolingFor time.Duration
 }
 
 // NewPool builds a pool over keys with the given rules.
@@ -101,7 +112,7 @@ func (p *Pool) hasRoom(now time.Time, tried map[int]bool) bool {
 	return false
 }
 
-func (p *Pool) cool(index int, now time.Time, retryAfter time.Duration) {
+func (p *Pool) cool(index int, now time.Time, retryAfter time.Duration, status int) {
 	duration := retryAfter
 	if duration <= 0 {
 		duration = p.options.Cooldown
@@ -109,6 +120,26 @@ func (p *Pool) cool(index int, now time.Time, retryAfter time.Duration) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.cooling[index] = now.Add(duration)
+	p.lastStatus = status
+}
+
+// State returns the pool as it stands at now. CoolingFor is how long until the
+// next cooling key is usable again, zero when none cools.
+func (p *Pool) State(now time.Time) PoolState {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	state := PoolState{Provider: p.name, Keys: len(p.keys), LastStatus: p.lastStatus}
+	for _, until := range p.cooling {
+		wait := until.Sub(now)
+		if wait <= 0 {
+			state.Usable++
+			continue
+		}
+		if state.CoolingFor == 0 || wait < state.CoolingFor {
+			state.CoolingFor = wait
+		}
+	}
+	return state
 }
 
 func (p *Pool) soonestAvailable(now time.Time) time.Duration {

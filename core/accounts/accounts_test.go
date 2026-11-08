@@ -205,3 +205,30 @@ func TestResolveMissingProfileNeverFallsBackToTheDefault(t *testing.T) {
 		t.Fatalf("Resolve of a removed default = %v, want ErrNotFound and no silent fallback", err)
 	}
 }
+
+func TestAnswerFallsBackToStderrWhenStdoutIsEmpty(t *testing.T) {
+	cases := []struct {
+		name   string
+		stdout string
+		stderr string
+		want   string
+	}{
+		{name: "stdout wins", stdout: `{"loggedIn":true}`, stderr: "warning", want: `{"loggedIn":true}`},
+		{name: "stderr when stdout is blank", stdout: " \n", stderr: "Logged in using ChatGPT", want: "Logged in using ChatGPT"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := string(answerOf([]byte(tc.stdout), []byte(tc.stderr))); got != tc.want {
+				t.Errorf("answerOf() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCodexLoggedInOnStderrIsRecognised(t *testing.T) {
+	out := answerOf(nil, []byte("Logged in using ChatGPT\n"))
+	loggedIn, err := parseLoggedIn(contracts.VendorCodex, out)
+	if err != nil || !loggedIn {
+		t.Fatalf("parseLoggedIn(codex, stderr) = %v, %v, want true, nil", loggedIn, err)
+	}
+}

@@ -62,6 +62,8 @@ func TestConnConcurrentWrites(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Accept: %v", err)
 	}
+	scanned := make(chan struct{})
+	defer func() { <-scanned }()
 	defer closeLogged(t, acc)
 	cli, err := control.Dial(sock)
 	if err != nil {
@@ -75,6 +77,7 @@ func TestConnConcurrentWrites(t *testing.T) {
 	var mu sync.Mutex
 	done := make(chan struct{})
 	go func() {
+		defer close(scanned)
 		logErr(t, srvConn.Scan(func(contracts.Event) error {
 			mu.Lock()
 			got++

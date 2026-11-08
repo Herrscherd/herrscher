@@ -168,3 +168,10 @@ func TestFailuresKeepTheirCauseAcrossTheWire(t *testing.T) {
 		t.Fatalf("an untyped failure %v matches a typed cause", plain)
 	}
 }
+
+func TestPruneRefusesEditsPastAFrame(t *testing.T) {
+	_, err := Prune("1", []contracts.HistoryEdit{{CallID: strings.Repeat("c", ChunkLimit), Action: contracts.PruneCall}})
+	if !errors.Is(err, ErrHistoryTooLarge) {
+		t.Fatalf("Prune = %v, want ErrHistoryTooLarge", err)
+	}
+}

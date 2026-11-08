@@ -659,7 +659,9 @@ backend declares it from herrscher-claude-backend v0.12.0, the version this host
 builds with. On another backend the stage gets no editor and leaves the history as
 it is. The bridge sends the history in frames of at most 128 KiB, and the host
 refuses a history past 64 MiB. A read or a prune that the bridge does not answer
-within two minutes fails the stage. When Jev itself fails, the stage leaves a note
+within two minutes fails the stage. The host sends the edits of a prune in
+batches of 1000, each one applied on its own: when a later batch fails, the
+batches before it stay applied. When Jev itself fails, the stage leaves a note
 and the `backend` stage still runs. A backend that declares
 `Capabilities.HistoryEditor` while its running instance does not implement the
 port fails the stage, and the host writes one warning line to stderr the first

@@ -263,3 +263,13 @@ func TestPruneSendsTheEditsInBatchesAndSumsTheOutcome(t *testing.T) {
 		t.Fatalf("outcome = %+v, %v, want every edit counted from the first size to the last", run.outcome, run.err)
 	}
 }
+
+func TestACallerDeadlineIsNotReportedAsAHistoryTimeout(t *testing.T) {
+	f, _, _ := historyFixture(t, true)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	_, err := bridgeHistory{driver: f.driver}.ReadHistory(ctx)
+	if !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errHistoryTimeout) {
+		t.Fatalf("ReadHistory = %v, want the caller's deadline and no history timeout", err)
+	}
+}

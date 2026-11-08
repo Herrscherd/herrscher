@@ -224,7 +224,8 @@ func DecodeHistory(frames []contracts.Event) (contracts.History, error) {
 }
 
 // Prune encodes the edits the host asks the bridge to apply, under the call id
-// its answer carries back.
+// its answer carries back. It fails with ErrHistoryTooLarge when the edits
+// encode to more than ChunkLimit bytes.
 func Prune(callID string, edits []contracts.HistoryEdit) (contracts.Event, error) {
 	frames := make([]editFrame, 0, len(edits))
 	for _, edit := range edits {
@@ -233,6 +234,9 @@ func Prune(callID string, edits []contracts.HistoryEdit) (contracts.Event, error
 	text, err := encode(frames)
 	if err != nil {
 		return contracts.Event{}, err
+	}
+	if len(text) > ChunkLimit {
+		return contracts.Event{}, fmt.Errorf("%w: %d bytes of edits, more than %d", ErrHistoryTooLarge, len(text), ChunkLimit)
 	}
 	return contracts.Event{T: EventPrune, Who: callID, Text: text}, nil
 }

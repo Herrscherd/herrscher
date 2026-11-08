@@ -680,7 +680,7 @@ func (d *sessionDriver) nextHistoryCall() string {
 }
 
 func (d *sessionDriver) historyThroughBridge(ctx context.Context, request contracts.Event, accept func(contracts.Event) (bool, error)) error {
-	ctx, cancel := context.WithTimeout(ctx, historyCallTimeout)
+	ctx, cancel := context.WithTimeoutCause(ctx, historyCallTimeout, errHistoryTimeout)
 	defer cancel()
 	select {
 	case d.toBridge <- request:
@@ -708,7 +708,7 @@ func (d *sessionDriver) historyThroughBridge(ctx context.Context, request contra
 }
 
 func historyCallEnded(ctx context.Context) error {
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+	if errors.Is(context.Cause(ctx), errHistoryTimeout) {
 		return fmt.Errorf("%w: %w", errHistoryTimeout, ctx.Err())
 	}
 	return ctx.Err()

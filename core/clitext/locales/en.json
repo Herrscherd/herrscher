@@ -3174,7 +3174,7 @@
   },
   {
     "id": "cli.host.fault.history_timeout",
-    "description": "The bridge did not answer a history read or prune within its timeout",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (history timeout)",
     "other": "the bridge did not answer a history call in time"
   },
   {

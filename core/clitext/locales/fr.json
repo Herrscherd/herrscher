@@ -3174,8 +3174,8 @@
   },
   {
     "id": "cli.host.fault.history_timeout",
-    "description": "Le bridge n'a pas répondu à temps à une lecture ou un élagage de l'historique",
-    "other": "le relais n'a pas répondu à temps à un appel sur l'historique"
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (history timeout)",
+    "other": "le pont n'a pas répondu à temps à un appel sur l'historique"
   },
   {
     "id": "cli.host.fault.no_compactor_factory",

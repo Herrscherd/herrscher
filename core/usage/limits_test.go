@@ -178,3 +178,18 @@ func readWithDeadline(t *testing.T, cache *LimitsCache, targets []Target) []Acco
 		return nil
 	}
 }
+
+func TestLimitsCacheKeepsNoFailureWhenTheCallerGaveUp(t *testing.T) {
+	read := func(context.Context, contracts.ProbeAccess) ([]contracts.Limit, error) {
+		return []contracts.Limit{{UsedPercent: 10}}, nil
+	}
+	cache := &LimitsCache{Now: clock(testNow())}
+	target := []Target{{Vendor: "claude", Read: read}}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	cache.Read(canceled, target)
+	got := cache.Read(context.Background(), target)
+	if got[0].Status != LimitsReady {
+		t.Fatalf("status = %v, want a fresh ready read", got[0].Status)
+	}
+}

@@ -126,6 +126,9 @@ func (c *LimitsCache) readOne(ctx context.Context, target Target) AccountLimits 
 	readCtx, cancel := context.WithTimeout(ctx, c.timeout())
 	defer cancel()
 	limits, err := readWithin(readCtx, target)
+	if ctx.Err() != nil {
+		return AccountLimits{Vendor: target.Vendor, Account: string(target.Account), Default: target.Default, Status: LimitsFailed, ReadAt: now}
+	}
 	entry := AccountLimits{
 		Vendor:  target.Vendor,
 		Account: string(target.Account),

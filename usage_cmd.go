@@ -73,6 +73,9 @@ func parseUsageArgs(lang i18n.Language, args []string) (usageOptions, error) {
 			if err != nil {
 				return opts, err
 			}
+			if value == "" {
+				return opts, renderError(lang, usagecore.ErrEmptyValue, clitext.FlagNeedsValue, clitext.Params{clitext.ParamCommand: usageVerb, clitext.ParamName: strings.TrimPrefix(name, "--")})
+			}
 			setUsageParam(&opts, name, value)
 		default:
 			if err := applyUsageArg(lang, &opts, name); err != nil {

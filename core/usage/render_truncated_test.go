@@ -3,7 +3,9 @@ package usage
 import (
 	"strings"
 	"testing"
+	"time"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
 
@@ -32,5 +34,12 @@ func TestTruncatedLedgerShowsNoTotals(t *testing.T) {
 		if len(lines) != 1 || !strings.Contains(lines[0], "too large") {
 			t.Errorf("%s lines = %q, want only the truncation notice", name, lines)
 		}
+	}
+}
+
+func TestLimitBarDrawsNoPaceMarkerWithoutAKnownReset(t *testing.T) {
+	limit := contracts.Limit{Window: contracts.LimitWeekly, UsedPercent: 30, Span: 7 * hoursPerDay * time.Hour}
+	if bar := limitBar(limit, PaceOf(limit, time.Now())); strings.Contains(bar, markerCell) {
+		t.Errorf("bar = %q, want no pace marker without a reset time", bar)
 	}
 }

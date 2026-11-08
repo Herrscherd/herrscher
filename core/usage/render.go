@@ -25,6 +25,7 @@ const (
 	percentScale = 100
 	sparkCells   = "▁▂▃▄▅▆▇█"
 	markerCell   = "│"
+	noMarker     = -1
 	fillCell     = "█"
 	emptyCell    = "░"
 	defaultMark  = "★"
@@ -178,7 +179,10 @@ func capitalize(name string) string {
 
 func limitBar(limit contracts.Limit, pace Pace) string {
 	filled := int(math.Round(Remaining(limit) / percentScale * barWidth))
-	marker := int(math.Round(pace.Elapsed / percentScale * barWidth))
+	marker := noMarker
+	if !limit.ResetsAt.IsZero() && limit.Span > 0 {
+		marker = int(math.Round(pace.Elapsed / percentScale * barWidth))
+	}
 	var cells strings.Builder
 	for index := range barWidth {
 		if index == marker {

@@ -58,7 +58,6 @@ type usagePanel struct {
 	account  usage.AccountKey
 	ready    bool
 	failed   bool
-	err      error
 	snapshot usage.Snapshot
 }
 
@@ -116,7 +115,6 @@ func (m *model) handleUsageMsg(msg usageMsg) {
 		return
 	}
 	m.usage.failed = msg.err != nil
-	m.usage.err = msg.err
 	if msg.err == nil {
 		m.usage.snapshot = msg.snapshot
 		m.usage.ready = true
@@ -158,6 +156,7 @@ func (m *model) stepUsageRange(delta int) tea.Cmd {
 	ranges := usage.Ranges()
 	index := slices.Index(ranges, m.usage.rng)
 	m.usage.rng = ranges[(index+delta+len(ranges))%len(ranges)]
+	m.usage.ready = false
 	return m.usageRefresh()
 }
 
@@ -168,6 +167,7 @@ func (m *model) nextUsageAccount() tea.Cmd {
 	}
 	index := slices.Index(accounts, m.usage.account)
 	m.usage.account = accounts[(index+1)%len(accounts)]
+	m.usage.ready = false
 	return m.usageRefresh()
 }
 

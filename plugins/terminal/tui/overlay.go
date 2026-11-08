@@ -14,40 +14,55 @@ type overlayRow struct {
 	tag    string
 }
 
-const overlayLabelWidth = 16
+const (
+	overlayLabelWidth = 16
+	overlayLabelGap   = 2
+	overlayLabelShare = 2
+)
 
 func floatingList(rows []overlayRow, cursor int, footer string, width int, styles uiStyles) string {
 	if len(rows) == 0 {
 		return ""
 	}
+	labelWidth := overlayLabelColumn(rows, width)
 	out := make([]string, 0, len(rows)+1)
 	for index, row := range rows {
-		head := "  "
-		if index == cursor {
-			head = styles.glyphs.cursor + " "
-		}
-		label := row.label
-		if len(row.hot) > 0 {
-			label = highlightFuzzy(row.label, row.hot, lipgloss.NewStyle(), styles.accent)
-		}
-		if pad := overlayLabelWidth - lipgloss.Width(label); pad > 0 {
-			label += strings.Repeat(" ", pad)
-		}
-		tail := row.detail
-		if row.tag != "" {
-			tail += "  " + styles.dim.Render(row.tag)
-		}
-		body := padTo(truncate("  "+head+row.mark+label+tail, width), width)
-		if index == cursor {
-			out = append(out, styles.overlaySel.Render(body))
-			continue
-		}
-		out = append(out, styles.dim.Render(body))
+		out = append(out, overlayLine(row, index == cursor, labelWidth, width, styles))
 	}
 	if footer != "" {
-		out = append(out, padTo(truncate("  "+footer, width), width))
+		out = append(out, padTo(truncate("  "+styles.dim.Render(footer), width), width))
 	}
 	return strings.Join(out, "\n")
+}
+
+func overlayLabelColumn(rows []overlayRow, width int) int {
+	column := overlayLabelWidth
+	for _, row := range rows {
+		column = max(column, lipgloss.Width(row.mark+row.label)+overlayLabelGap)
+	}
+	return min(column, max(overlayLabelWidth, width/overlayLabelShare))
+}
+
+func overlayLine(row overlayRow, selected bool, labelWidth, width int, styles uiStyles) string {
+	head, labelStyle, detailStyle := "  ", styles.text, styles.dim
+	if selected {
+		head = styles.glyphs.cursor + " "
+		labelStyle = styles.accent.Bold(true)
+		detailStyle = styles.accent
+	}
+	label := labelStyle.Render(row.label)
+	if len(row.hot) > 0 {
+		label = highlightFuzzy(row.label, row.hot, labelStyle, labelStyle.Bold(true))
+	}
+	label = labelStyle.Render(row.mark) + label
+	if pad := labelWidth - lipgloss.Width(label); pad > 0 {
+		label += strings.Repeat(" ", pad)
+	}
+	tail := detailStyle.Render(row.detail)
+	if row.tag != "" {
+		tail += "  " + styles.dim.Render(row.tag)
+	}
+	return padTo(truncate("  "+labelStyle.Render(head)+label+tail, width), width)
 }
 
 func padTo(text string, width int) string {

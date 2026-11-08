@@ -29,6 +29,22 @@ func TestFloatingListMarksTheCursorRow(t *testing.T) {
 	}
 }
 
+func TestFloatingListAlignsDetailsPastTheLongestLabel(t *testing.T) {
+	rows := []overlayRow{
+		{label: "/usage", detail: "coût et limites"},
+		{label: "/agents-very-long-name", detail: "agents"},
+	}
+	lines := strings.Split(floatingList(rows, 0, "", 90, testStyles()), "\n")
+	first := strings.Index(lines[0], "coût")
+	second := strings.Index(lines[1], "agents ")
+	if first < 0 || lipgloss.Width(lines[0][:first]) != lipgloss.Width(lines[1][:second]) {
+		t.Fatalf("details are not aligned:\n%q\n%q", lines[0], lines[1])
+	}
+	if lipgloss.Width(lines[1][:second]) <= lipgloss.Width("    /agents-very-long-name") {
+		t.Fatalf("detail overlaps the longest label: %q", lines[1])
+	}
+}
+
 func TestFloatingListRowsAreFullWidth(t *testing.T) {
 	rows := []overlayRow{{label: "/resume", detail: "reprendre"}}
 	for _, line := range strings.Split(floatingList(rows, 0, "", 74, testStyles()), "\n") {

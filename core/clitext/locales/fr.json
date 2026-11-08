@@ -3621,5 +3621,155 @@
     "id": "cli.usage.wrap",
     "description": "A failure to render the usage help, Detail carries the cause",
     "other": "usage : {{.Detail}}"
+  },
+  {
+    "id": "cli.help.cmd.health",
+    "description": "Help of the command health",
+    "other": "afficher la santé des services du démon, par groupe"
+  },
+  {
+    "id": "cli.help.cmd.health.deep",
+    "description": "Help of the health --deep parameter",
+    "other": "lancer de vrais allers-retours au lieu des vérifications rapides"
+  },
+  {
+    "id": "cli.health.summary.down",
+    "description": "Health summary segment, the count of the checks in the state",
+    "one": "{{.Count}} panne",
+    "other": "{{.Count}} pannes"
+  },
+  {
+    "id": "cli.health.summary.degraded",
+    "description": "Health summary segment, the count of the checks in the state",
+    "one": "{{.Count}} dégradé",
+    "other": "{{.Count}} dégradés"
+  },
+  {
+    "id": "cli.health.summary.ok",
+    "description": "Health summary segment, the count of the checks in the state",
+    "one": "{{.Count}} ok",
+    "other": "{{.Count}} ok"
+  },
+  {
+    "id": "cli.health.detail_hint",
+    "description": "Health line of the CLI report: detail hint",
+    "other": "détail : herrscher health {{.Name}}"
+  },
+  {
+    "id": "cli.health.banner",
+    "description": "Health line of the CLI report: banner",
+    "other": "herrscher {{.Version}} · démarré depuis {{.Uptime}} · pid {{.PID}} · sondé en {{.Elapsed}}"
+  },
+  {
+    "id": "cli.health.uptime",
+    "description": "Health line of the CLI report: uptime",
+    "other": "{{.Days}} j {{.Hours}} h {{.Minutes}} min"
+  },
+  {
+    "id": "cli.health.facts.proxy",
+    "description": "Health line of the CLI report: facts.proxy",
+    "one": "écoute sur {{.Listen}}, {{.Count}} fournisseur",
+    "other": "écoute sur {{.Listen}}, {{.Count}} fournisseurs"
+  },
+  {
+    "id": "cli.health.facts.last_status",
+    "description": "Health line of the CLI report: facts.last status",
+    "other": "dernier statut {{.Status}}"
+  },
+  {
+    "id": "cli.health.facts.cooling",
+    "description": "Health line of the CLI report: facts.cooling",
+    "other": "refroidissement {{.Duration}}"
+  },
+  {
+    "id": "cli.health.header",
+    "description": "Column titles of the health table, tab separated",
+    "other": "service\tétat\tlatence\tdétail"
+  },
+  {
+    "id": "cli.health.group.core",
+    "description": "Name of the core group in health",
+    "other": "cœur"
+  },
+  {
+    "id": "cli.health.group.gateways",
+    "description": "Name of the gateways group in health",
+    "other": "passerelles"
+  },
+  {
+    "id": "cli.health.group.backends",
+    "description": "Name of the backends group in health",
+    "other": "backends"
+  },
+  {
+    "id": "cli.health.group.compaction",
+    "description": "Name of the compaction group in health",
+    "other": "compaction"
+  },
+  {
+    "id": "cli.health.group.memory",
+    "description": "Name of the memory group in health",
+    "other": "mémoire"
+  },
+  {
+    "id": "cli.health.group.keys",
+    "description": "Name of the keys group in health",
+    "other": "clés"
+  },
+  {
+    "id": "cli.health.state.ok",
+    "description": "State ok in health",
+    "other": "ok"
+  },
+  {
+    "id": "cli.health.state.degraded",
+    "description": "State degraded in health",
+    "other": "dégradé"
+  },
+  {
+    "id": "cli.health.state.down",
+    "description": "State down in health",
+    "other": "panne"
+  },
+  {
+    "id": "cli.health.state.off",
+    "description": "State off in health",
+    "other": "déconnecté"
+  },
+  {
+    "id": "cli.health.daemon_down",
+    "description": "Error when no daemon answers health, Socket is its socket path",
+    "other": "aucun démon herrscher n'écoute sur {{.Socket}}, démarrez-le avec `herrscher serve`"
+  },
+  {
+    "id": "cli.health.unknown_service",
+    "description": "Error for a health service no check matches, Name is the argument",
+    "other": "health: service {{.Name}} inconnu"
+  },
+  {
+    "id": "cli.health.facts.daemon",
+    "description": "Detail line of the daemon check, PID and Socket",
+    "other": "démon pid {{.PID}} sur {{.Socket}}"
+  },
+  {
+    "id": "cli.health.facts.pool",
+    "description": "Detail line of a key pool, Count usable out of Total keys",
+    "one": "{{.Count}} clés sur {{.Total}} utilisables",
+    "other": "{{.Count}} clés sur {{.Total}} utilisables"
+  },
+  {
+    "id": "cli.health.default_account",
+    "description": "Marker of the default account in health",
+    "other": "défaut"
+  },
+  {
+    "id": "cli.health.watch_refreshed_at",
+    "description": "Footer of health --watch, Time is the refresh time",
+    "other": "rafraîchi à {{.Time}}, toutes les 15 s, ctrl-c pour arrêter"
+  },
+  {
+    "id": "cli.host.fault.health_not_ready",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (health not ready)",
+    "other": "les sondes de santé ne sont pas encore prêtes, le démon démarre encore"
   }
 ]

@@ -9,9 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -197,6 +199,20 @@ func parseBase(configured, fallback string) (*url.URL, error) {
 func (p *Proxy) Provider(name string) (Route, bool) {
 	route, ok := p.providers[name]
 	return route, ok
+}
+
+// Listen returns the loopback address the proxy serves on.
+func (p *Proxy) Listen() string {
+	return p.listener.Addr().String()
+}
+
+// Pools returns the state of every provider pool at now, sorted by provider.
+func (p *Proxy) Pools(now time.Time) []PoolState {
+	states := make([]PoolState, 0, len(p.providers))
+	for _, name := range slices.Sorted(maps.Keys(p.providers)) {
+		states = append(states, p.providers[name].Pool.State(now))
+	}
+	return states
 }
 
 // GatewayRoute builds a route to a single-key upstream such as the gateway.

@@ -93,7 +93,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addRoleCommands(reg, options.live.Get, hostState); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addVerbs(reg, memorySearchVerb(options.live.Get), whoamiVerb(), commandsVerb(options.live.Get, reg)); err != nil {
+	if err := addVerbs(reg, memorySearchVerb(options.live.Get), whoamiVerb(), commandsVerb(options.live.Get, reg), healthVerb(options.health)); err != nil {
 		return nil, hostDeps{}, err
 	}
 	localizeCommandErrors(reg, hostState, options.live)

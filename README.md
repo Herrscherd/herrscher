@@ -403,6 +403,36 @@ the checkout can edit.
 from, and answers without a daemon, because a diagnostic must not sit behind the
 thing it is used to diagnose.
 
+### Health, one command away
+
+`herrscher health` asks the running daemon for a snapshot of everything it depends
+on, and prints it as a table grouped by what the checks cover: the daemon and its
+key proxy, the gateways, the backends with each account and profile, the
+compaction stages, the memory plugins and the key pools. Each line says the state
+(ok, degraded, down or off), how long the probe took, and the facts the host knows
+about the service.
+
+A gateway the daemon does not run reads as off, and so does a memory plugin that is
+not the one in use: the first local memory plugin with a factory is the live one,
+so in remote mode (`HERRSCHER_REMOTE=memory`) the local memories show off.
+
+`herrscher health <service>` shows one service, or every account of it, with its
+cause and the remedy when there is one, for instance the login command to run.
+A service is named by its plugin, or by `plugin:account` for one account of a
+backend. `--json` prints the same snapshot as structured data for a script.
+
+Each probe runs under a bounded pool with a five second limit. `--deep` lifts the
+limit to thirty seconds and asks the plugins that support it for a real round trip
+rather than a local check, which costs requests, so it is opt-in. `--watch`
+refreshes the table every fifteen seconds until interrupted, and `--quiet` prints
+nothing and only sets the exit code.
+
+The exit code tells a script the outcome: `0` when nothing is degraded or down,
+`2` when the worst state is degraded, and `1` when something is down or the
+daemon cannot be reached. An unreachable daemon is reported on stderr with the
+socket it was looked for, so a stopped daemon reads as a finding rather than a
+silent failure.
+
 ### Model routing
 
 Each backend declares the models it offers in its manifest, so the catalog is
@@ -585,6 +615,17 @@ every other floating list.
 An attached window follows the live turn, because every driven session taps the
 daemon's event socket. Esc stops a turn as an interruption rather than an error,
 keeping whatever the agent had already written.
+
+### Health in the window
+
+`/health` opens the same snapshot as an overlay, and the status line carries a dot
+for the worst state of the checks with `santé n/m` beside it, where `n` counts the
+checks that are ok and `m` the ones that can fail. The figures refresh every fifteen
+seconds with a plain probe, overlay open or closed; a deep probe only runs on `d`. Inside
+the overlay `r` probes again, `d` runs one deep probe (it costs round trips) and the
+refresh after it is a plain probe again, `enter` shows the cause and remedy of the
+degraded and down checks, and `esc` closes it. The overlay is also in the command
+palette.
 
 ### Context, and what fills it
 

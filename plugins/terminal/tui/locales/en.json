@@ -2674,5 +2674,51 @@
   {
     "id": "tui.terminal.enhanced_keys_disable_failed",
     "other": "disable enhanced keys: {{.Err}}"
+  },
+  {
+    "id": "tui.health.title",
+    "other": "health"
+  },
+  {
+    "id": "tui.health.deep_mode",
+    "other": "deep"
+  },
+  {
+    "id": "tui.health.unreachable",
+    "other": "daemon unreachable"
+  },
+  {
+    "id": "tui.health.waiting",
+    "other": "checking..."
+  },
+  {
+    "id": "tui.health.refresh",
+    "other": "refresh"
+  },
+  {
+    "id": "tui.health.deep",
+    "other": "deep probe"
+  },
+  {
+    "id": "tui.health.probed",
+    "description": "Line under the health overlay: when the report was probed and when the next refresh is",
+    "other": "probed {{.Ago}} s ago · next in {{.Next}} s"
+  },
+  {
+    "id": "tui.health.detail",
+    "other": "details"
+  },
+  {
+    "id": "tui.health.render_failed",
+    "other": "cannot render the health report"
+  },
+  {
+    "id": "tui.palette.cmd.health",
+    "other": "state of the daemon, accounts and services"
+  },
+  {
+    "id": "tui.health.bar",
+    "one": "health {{.Count}}/{{.Total}}",
+    "other": "health {{.Count}}/{{.Total}}"
   }
 ]

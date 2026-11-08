@@ -2674,5 +2674,51 @@
   {
     "id": "tui.terminal.enhanced_keys_disable_failed",
     "other": "désactivation des touches étendues impossible : {{.Err}}"
+  },
+  {
+    "id": "tui.health.title",
+    "other": "santé"
+  },
+  {
+    "id": "tui.health.deep_mode",
+    "other": "profond"
+  },
+  {
+    "id": "tui.health.unreachable",
+    "other": "démon injoignable"
+  },
+  {
+    "id": "tui.health.waiting",
+    "other": "vérification..."
+  },
+  {
+    "id": "tui.health.refresh",
+    "other": "actualiser"
+  },
+  {
+    "id": "tui.health.deep",
+    "other": "sonde profonde"
+  },
+  {
+    "id": "tui.health.probed",
+    "description": "Line under the health overlay: when the report was probed and when the next refresh is",
+    "other": "sondé il y a {{.Ago}} s · prochain dans {{.Next}} s"
+  },
+  {
+    "id": "tui.health.detail",
+    "other": "détails"
+  },
+  {
+    "id": "tui.health.render_failed",
+    "other": "impossible d'afficher le rapport de santé"
+  },
+  {
+    "id": "tui.palette.cmd.health",
+    "other": "état du démon, des comptes et des services"
+  },
+  {
+    "id": "tui.health.bar",
+    "one": "santé {{.Count}}/{{.Total}}",
+    "other": "santé {{.Count}}/{{.Total}}"
   }
 ]

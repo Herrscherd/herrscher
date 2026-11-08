@@ -56,6 +56,12 @@ func DaemonDispatch(ctx context.Context, instanceID string, argv []string) (stri
 	return out, err
 }
 
+// IsDaemonNotRunning reports whether DaemonDispatch failed because no daemon listens.
+func IsDaemonNotRunning(err error) bool {
+	_, ok := errors.AsType[*daemonNotRunningError](err)
+	return ok
+}
+
 // ForwardToDaemon hands a raw argv to the daemon serving statePath and returns
 // what it answered, without interpreting either end. Plugin-contributed verbs
 // are namespaced into the registry by live gateway instances, so they exist in

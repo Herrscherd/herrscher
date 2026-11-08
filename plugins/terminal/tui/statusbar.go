@@ -233,6 +233,9 @@ func (m *model) barParts(target *tab) []barPart {
 	if target.busy {
 		parts = append(parts, single(m.st.spinner.Render(m.spinnerHint(target)), rankBusy))
 	}
+	if health, ok := m.healthPart(); ok {
+		parts = append(parts, health)
+	}
 	if mouse := m.mouseStatus(); mouse != "" {
 		parts = append(parts, single(mouse, rankExtra))
 	}

@@ -182,6 +182,7 @@ func localCommands(trans translator) []CommandSpec {
 		{Name: verbHandoff, Args: "<nom>", Desc: trans.t("tui.palette.cmd.handoff", nil)},
 		{Name: "usage", Desc: trans.t("tui.palette.cmd.usage", nil)},
 		{Name: "context", Desc: trans.t("tui.palette.cmd.context", nil)},
+		{Name: "health", Desc: trans.t("tui.palette.cmd.health", nil)},
 		{Name: "notify", Desc: trans.t("tui.palette.cmd.notify", nil)},
 		{Name: cmdSkills, Desc: trans.t("tui.palette.cmd.skills", nil)},
 		{Name: cmdTheme, Desc: trans.t("tui.palette.cmd.theme", nil)},

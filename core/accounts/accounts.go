@@ -2,6 +2,7 @@
 package accounts
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -28,7 +29,8 @@ var (
 	// ErrNotFound reports a profile that has no directory.
 	ErrNotFound = errors.New("account profile does not exist")
 	// ErrInUse reports a profile a live session still references.
-	ErrInUse = errors.New("account profile is used by a live session")
+	ErrInUse                   = errors.New("account profile is used by a live session")
+	errUnrecognisedLoginStatus = errors.New("unrecognised login status")
 )
 
 // Profile is one stored account profile of a vendor.
@@ -257,7 +259,23 @@ func OSRunner(ctx context.Context, vendor string, env map[string]string) ([]byte
 		return nil, err
 	}
 	cmd.Env = contracts.MergeEnv(os.Environ(), env)
-	return cmd.Output()
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err = cmd.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
+			return nil, fmt.Errorf("run %s status: %w", vendor, err)
+		}
+	}
+	return answerOf(stdout.Bytes(), stderr.Bytes()), nil
+}
+
+func answerOf(stdout, stderr []byte) []byte {
+	if len(bytes.TrimSpace(stdout)) > 0 {
+		return stdout
+	}
+	return stderr
 }
 
 // LoginCommand returns the login command of a vendor CLI, not started yet.
@@ -269,6 +287,11 @@ func LoginCommand(ctx context.Context, vendor string) (*exec.Cmd, error) {
 		return exec.CommandContext(ctx, "codex", "login"), nil
 	}
 	return nil, fmt.Errorf("vendor %q: %w", vendor, contracts.ErrNoProfileHome)
+}
+
+// AddCommand returns the command line that adds the account name of vendor.
+func AddCommand(vendor string, name contracts.ProfileName) string {
+	return "herrscher account add " + vendor + " " + string(name)
 }
 
 // Status reports whether the vendor CLI is logged in under env.
@@ -304,5 +327,11 @@ func parseLoggedIn(vendor string, out []byte) (bool, error) {
 		return status.LoggedIn, nil
 	}
 	text := strings.TrimSpace(string(out))
-	return strings.HasPrefix(text, "Logged in"), nil
+	switch {
+	case strings.HasPrefix(text, "Logged in"):
+		return true, nil
+	case strings.HasPrefix(text, "Not logged in"):
+		return false, nil
+	}
+	return false, fmt.Errorf("%s login status: %w", vendor, errUnrecognisedLoginStatus)
 }

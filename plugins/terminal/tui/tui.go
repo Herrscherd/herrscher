@@ -336,6 +336,7 @@ type model struct {
 	bar            barState
 
 	ctxOpen bool
+	health  healthPanel
 
 	toast      toast
 	toastSeq   int
@@ -782,6 +783,8 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 		return m.sessionSlash(args)
 	case "context":
 		m.openContext()
+	case "health":
+		return m.openHealth(), true
 	case "compact":
 		return m.compactCmd(), true
 	case cmdAccount:
@@ -1621,6 +1624,9 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 	case compactResultMsg:
 		m.handleCompactResult(msg)
 		return nil, true
+	case healthMsg:
+		m.handleHealthMsg(msg)
+		return nil, true
 	case toastExpiredMsg:
 		m.handleToastExpired(msg)
 		return nil, true
@@ -1643,7 +1649,7 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		m.expireApprovals(time.Now())
 		m.markVisibleSeen()
 		m.refreshSurface()
-		return tea.Batch(syncCmd, tickCmd(), m.gitTick(), m.loadModesCmd(), m.summaryRefresh()), true
+		return tea.Batch(syncCmd, tickCmd(), m.gitTick(), m.loadModesCmd(), m.summaryRefresh(), m.healthTick()), true
 	case summaryMsg:
 		m.summaryBusy = false
 		m.summary = panelSummary(msg)
@@ -1762,6 +1768,8 @@ func (m *model) dispatchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return m.handleDiagKey(msg), true
 	case m.ctxOpen:
 		return m.handleContextKey(msg), true
+	case m.health.open:
+		return m.handleHealthKey(msg), true
 	case m.pluginsOpen:
 		return m.handlePluginsOverlayKey(msg), true
 	case m.skillsOpen:

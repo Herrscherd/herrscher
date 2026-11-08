@@ -205,3 +205,47 @@ func TestResolveMissingProfileNeverFallsBackToTheDefault(t *testing.T) {
 		t.Fatalf("Resolve of a removed default = %v, want ErrNotFound and no silent fallback", err)
 	}
 }
+
+func TestAnswerFallsBackToStderrWhenStdoutIsEmpty(t *testing.T) {
+	cases := []struct {
+		name   string
+		stdout string
+		stderr string
+		want   string
+	}{
+		{name: "stdout wins", stdout: `{"loggedIn":true}`, stderr: "warning", want: `{"loggedIn":true}`},
+		{name: "stderr when stdout is blank", stdout: " \n", stderr: "Logged in using ChatGPT", want: "Logged in using ChatGPT"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := string(answerOf([]byte(tc.stdout), []byte(tc.stderr))); got != tc.want {
+				t.Errorf("answerOf() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCodexLoggedInOnStderrIsRecognised(t *testing.T) {
+	out := answerOf(nil, []byte("Logged in using ChatGPT\n"))
+	loggedIn, err := parseLoggedIn(contracts.VendorCodex, out)
+	if err != nil || !loggedIn {
+		t.Fatalf("parseLoggedIn(codex, stderr) = %v, %v, want true, nil", loggedIn, err)
+	}
+}
+
+func TestCodexErrorAnswerIsNotTakenForLoggedOut(t *testing.T) {
+	run := func(context.Context, string, map[string]string) ([]byte, error) {
+		return answerOf(nil, []byte("error: boom\n")), nil
+	}
+	loggedIn, err := Status(context.Background(), run, contracts.VendorCodex, nil)
+	if !errors.Is(err, errUnrecognisedLoginStatus) || loggedIn {
+		t.Fatalf("Status(codex, error answer) = %v, %v, want false and errUnrecognisedLoginStatus", loggedIn, err)
+	}
+}
+
+func TestAddCommandNamesTheVendorAndTheAccount(t *testing.T) {
+	got := AddCommand("claude", "work")
+	if want := "herrscher account add claude work"; got != want {
+		t.Fatalf("AddCommand() = %q, want %q", got, want)
+	}
+}

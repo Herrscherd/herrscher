@@ -67,6 +67,7 @@ type Options struct {
 	Language        i18n.Language
 	DefaultLanguage i18n.Language
 	live            *operatorLanguage
+	health          *healthSource
 	Models          *ModelDiscovery
 	DefaultCmd      string
 	HealthAddr      string
@@ -207,6 +208,7 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	}
 	approvals := newApprovalTable().withRules(store)
 	sessions := newSessionTable()
+	options.health = &healthSource{}
 	policy, err := newCompactionPolicy(ctx, options.CompactPercent, options.CompactStack, options.ContextLimits)
 	if err != nil {
 		return wrapHost(err, "serve.compaction", nil)
@@ -236,6 +238,7 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 		return wrapHost(err, "serve.key_proxy", nil)
 	}
 	defer CloseKeyProxy(ctx, log, keys)
+	options.health.bind(newHealthInputs(instID, keys, gws, policy))
 	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions)
 	runningHub.lang = options.Language
 	runningHub.models = options.modelDiscovery()

@@ -3173,19 +3173,29 @@
     "other": "the bridge closed during a compaction"
   },
   {
-    "id": "cli.host.fault.no_backend_factory",
-    "description": "Erreur d'une commande hôte rendue à l'opérateur (no backend factory)",
-    "other": "declares Capabilities.Compactor but provides no backend factory"
+    "id": "cli.host.fault.history_timeout",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (history timeout)",
+    "other": "the bridge did not answer a history call in time"
   },
   {
-    "id": "cli.host.fault.not_compactor_port",
-    "description": "Erreur d'une commande hôte rendue à l'opérateur (not compactor port)",
-    "other": "declares Capabilities.Compactor but does not implement the port"
+    "id": "cli.host.fault.no_compactor_factory",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (no compactor factory)",
+    "other": "is a compactor plugin but provides no Compactor factory"
+  },
+  {
+    "id": "cli.host.fault.nil_compactor",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (nil compactor)",
+    "other": "its Compactor factory returned no stage"
   },
   {
     "id": "cli.host.fault.no_compactor_plugin",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (no compactor plugin)",
-    "other": "no plugin declares Capabilities.Compactor under this name"
+    "other": "no compactor plugin is registered under this name"
+  },
+  {
+    "id": "cli.host.fault.compactor_settings",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (compactor settings)",
+    "other": "the compaction stage is missing required settings"
   },
   {
     "id": "cli.host.fault.compact_queue_full",

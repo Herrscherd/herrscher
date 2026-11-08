@@ -76,12 +76,14 @@ func compactPolicy(percent int, names ...string) compactionPolicy {
 		names = []string{contracts.CompactStageBackend}
 	}
 	return compactionPolicy{
-		percent:  percent,
-		names:    names,
-		plugins:  make(map[string]contracts.Compactor),
-		backends: map[string]bool{"claude": true},
-		warnOnce: &sync.Once{},
-		warn:     func(string, ...any) {},
+		percent:        percent,
+		names:          names,
+		plugins:        make(map[string]contracts.Compactor),
+		backends:       map[string]bool{"claude": true},
+		historyEditors: make(map[string]bool),
+		warnOnce:       &sync.Once{},
+		historyOnce:    &sync.Once{},
+		warn:           func(string, ...any) {},
 	}
 }
 

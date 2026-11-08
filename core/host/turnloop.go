@@ -13,6 +13,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/bridge"
+	"github.com/Herrscherd/herrscher/core/historywire"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/checkpoint"
 	"github.com/Herrscherd/herrscher/core/internal/control"
@@ -68,6 +69,7 @@ type sessionDriver struct {
 	activeTurnID  string
 	turn          chan struct{}
 	running       atomic.Bool
+	historyCalls  atomic.Uint64
 	channel       string
 	saidElsewhere bool
 	notices       chan noticeDelivery
@@ -725,13 +727,21 @@ func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
 				d.completeTurn(ctx, event, turnStart, live)
 				return true
 			}
-			d.fanOut(ctx, event)
-			if n := promptSize(event); n > 0 {
-				live = n
-			}
-			d.enforceTokenGuard(ctx, &guard, event)
+			live = d.relayTurnEvent(ctx, &guard, event, live)
 		}
 	}
+}
+
+func (d *sessionDriver) relayTurnEvent(ctx context.Context, guard *tokenGuard, event contracts.Event, live int) int {
+	if historywire.IsFrame(event.T) {
+		return live
+	}
+	d.fanOut(ctx, event)
+	if n := promptSize(event); n > 0 {
+		live = n
+	}
+	d.enforceTokenGuard(ctx, guard, event)
+	return live
 }
 
 func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event, turnStart time.Time, live int) {

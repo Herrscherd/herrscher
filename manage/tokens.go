@@ -8,6 +8,7 @@ const (
 	catOrchestrator = "orchestrator"
 	catExtractor    = "extractor"
 	catSkills       = "skills"
+	catCompactor    = "compactor"
 	kindDiscord     = "discord"
 	kindNone        = "none"
 	verbGet         = "get"

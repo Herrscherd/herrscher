@@ -24,3 +24,8 @@ func skillNativeOf(backend contracts.Backend) (contracts.SkillNative, bool) {
 	native, ok := lease.Unwrap(backend).(contracts.SkillNative)
 	return native, ok
 }
+
+func historyEditorOf(backend contracts.Backend) (contracts.HistoryEditor, bool) {
+	editor, ok := lease.Unwrap(backend).(contracts.HistoryEditor)
+	return editor, ok
+}

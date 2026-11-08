@@ -12,6 +12,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
 	"github.com/Herrscherd/herrscher/core/accounts"
+	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/health"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
 )
@@ -129,7 +130,7 @@ func gatewayRun(plugin contracts.Plugin, live bool) runFunc {
 		return reportRun(contracts.ProbeReport{State: contracts.HealthOff})
 	}
 	if plugin.Probe != nil {
-		return pluginProbeRun(plugin.Manifest.Config, plugin.Probe, "", os.Getenv)
+		return pluginProbeRun(plugin.Manifest.Config, plugin.Probe, "", envx.Getenv)
 	}
 	return reportRun(contracts.ProbeReport{State: contracts.HealthOK})
 }

@@ -7,6 +7,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
+	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/health"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
 )
@@ -229,5 +230,23 @@ func TestProxyProbeIsOffWithoutProviders(t *testing.T) {
 	}
 	if got := proxyProbe(":8787", 2).Run(context.Background(), false); got.State != contracts.HealthOK {
 		t.Fatalf("state = %v, want ok with providers", got.State)
+	}
+}
+
+func TestGatewayProbeSeesTheTokenHiddenFromTheEnvironment(t *testing.T) {
+	t.Setenv("HERRSCHER_TEST_GATEWAY_TOKEN", "hidden-value")
+	restore := envx.Hide([]string{"HERRSCHER_TEST_GATEWAY_TOKEN"})
+	t.Cleanup(restore)
+	var got string
+	plugin := contracts.Plugin{
+		Manifest: contracts.Manifest{Config: []contracts.Setting{{Key: "token", Env: "HERRSCHER_TEST_GATEWAY_TOKEN", Required: true}}},
+		Probe: func(_ context.Context, access contracts.ProbeAccess) contracts.ProbeReport {
+			got = access.Config.Get("token")
+			return contracts.ProbeReport{State: contracts.HealthOK}
+		},
+	}
+	report := gatewayRun(plugin, true)(context.Background(), false)
+	if report.State != contracts.HealthOK || got != "hidden-value" {
+		t.Fatalf("state = %v, token seen = %q, want ok with the hidden token", report.State, got)
 	}
 }

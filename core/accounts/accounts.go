@@ -29,7 +29,8 @@ var (
 	// ErrNotFound reports a profile that has no directory.
 	ErrNotFound = errors.New("account profile does not exist")
 	// ErrInUse reports a profile a live session still references.
-	ErrInUse = errors.New("account profile is used by a live session")
+	ErrInUse                   = errors.New("account profile is used by a live session")
+	errUnrecognisedLoginStatus = errors.New("unrecognised login status")
 )
 
 // Profile is one stored account profile of a vendor.
@@ -326,5 +327,11 @@ func parseLoggedIn(vendor string, out []byte) (bool, error) {
 		return status.LoggedIn, nil
 	}
 	text := strings.TrimSpace(string(out))
-	return strings.HasPrefix(text, "Logged in"), nil
+	switch {
+	case strings.HasPrefix(text, "Logged in"):
+		return true, nil
+	case strings.HasPrefix(text, "Not logged in"):
+		return false, nil
+	}
+	return false, fmt.Errorf("%s login status: %w", vendor, errUnrecognisedLoginStatus)
 }

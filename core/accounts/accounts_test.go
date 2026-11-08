@@ -233,6 +233,16 @@ func TestCodexLoggedInOnStderrIsRecognised(t *testing.T) {
 	}
 }
 
+func TestCodexErrorAnswerIsNotTakenForLoggedOut(t *testing.T) {
+	run := func(context.Context, string, map[string]string) ([]byte, error) {
+		return answerOf(nil, []byte("error: boom\n")), nil
+	}
+	loggedIn, err := Status(context.Background(), run, contracts.VendorCodex, nil)
+	if !errors.Is(err, errUnrecognisedLoginStatus) || loggedIn {
+		t.Fatalf("Status(codex, error answer) = %v, %v, want false and errUnrecognisedLoginStatus", loggedIn, err)
+	}
+}
+
 func TestAddCommandNamesTheVendorAndTheAccount(t *testing.T) {
 	got := AddCommand("claude", "work")
 	if want := "herrscher account add claude work"; got != want {

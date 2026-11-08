@@ -68,7 +68,7 @@ func TestPaletteViewShowsALateSelection(t *testing.T) {
 }
 
 func TestLocalCommandsAreNeverDispatched(t *testing.T) {
-	readVerbs := []string{verbHealth}
+	readVerbs := []string{verbHealth, verbUsage}
 	for _, c := range localCommands(newTranslator()) {
 		be := &fakeBackend{}
 		be.sessions = []contracts.SessionInfo{{Name: "avant", ChannelID: "c1"}}

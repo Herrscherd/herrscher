@@ -19,6 +19,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
+	"github.com/Herrscherd/herrscher/core/usage"
 )
 
 const defaultTeardownGrace = 5 * time.Second
@@ -91,6 +92,7 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 	sctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	bound := boundGateways(h.gws, effectiveKinds(h.gws, sess))
 	terms := liveModelTerms(h.st, h.models, sess.Name)
+	usageLedger := usage.Ledger{Dir: usageDir(h.partDir), Now: time.Now}
 	done := make(chan struct{})
 	h.mu.Lock()
 	h.live[sess.Name] = liveSession{cancel: cancel, done: done}
@@ -116,6 +118,11 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 				},
 				Checkpoint: func(turnID, text string) {
 					h.takeCheckpoint(ctx, sess, turnID, text)
+				},
+				Usage: func(records []usage.Record) {
+					if err := usageLedger.Append(stampUsage(records, h.st, sess)); err != nil {
+						warnStderr("herrscher serve: session %q: usage not recorded: %v\n", sess.Name, err)
+					}
 				},
 			},
 			eventTap(h.eventPublisher, sess.Name),
@@ -329,6 +336,7 @@ func (h *hub) Sessions() []contracts.SessionInfo {
 
 type modelTerms struct {
 	vendor string
+	model  string
 	window int
 	rates  modelRates
 }
@@ -338,7 +346,7 @@ func modelTermsFor(models *ModelDiscovery) func(state.Session) modelTerms {
 	return func(session state.Session) modelTerms {
 		terms, err := resolve(session)
 		if err != nil {
-			return modelTerms{vendor: session.Vendor}
+			return modelTerms{vendor: session.Vendor, model: sessionModel(session)}
 		}
 		return terms
 	}
@@ -349,8 +357,8 @@ func resolvedTermsFor(models *ModelDiscovery) func(state.Session) (modelTerms, e
 	policy := ResolvePolicy(envx.Getenv)
 	plugins := contracts.Default.Backends()
 	return func(session state.Session) (modelTerms, error) {
-		terms := modelTerms{vendor: session.Vendor}
 		modelID := sessionModel(session)
+		terms := modelTerms{vendor: session.Vendor, model: modelID}
 		if modelID == "" {
 			return terms, nil
 		}

@@ -2720,5 +2720,65 @@
     "id": "tui.health.bar",
     "one": "health {{.Count}}/{{.Total}}",
     "other": "health {{.Count}}/{{.Total}}"
+  },
+  {
+    "id": "tui.usage.title",
+    "other": "usage"
+  },
+  {
+    "id": "tui.usage.tab.session",
+    "other": "Session"
+  },
+  {
+    "id": "tui.usage.tab.cost",
+    "other": "Cost"
+  },
+  {
+    "id": "tui.usage.tab.tokens",
+    "other": "Tokens"
+  },
+  {
+    "id": "tui.usage.tab.limits",
+    "other": "Limits"
+  },
+  {
+    "id": "tui.usage.range",
+    "other": "period {{.Range}}"
+  },
+  {
+    "id": "tui.usage.account.all",
+    "other": "all accounts"
+  },
+  {
+    "id": "tui.usage.account.one",
+    "other": "account {{.Account}}"
+  },
+  {
+    "id": "tui.usage.hint.tab",
+    "other": "tab"
+  },
+  {
+    "id": "tui.usage.hint.range",
+    "other": "period"
+  },
+  {
+    "id": "tui.usage.hint.account",
+    "other": "account"
+  },
+  {
+    "id": "tui.usage.hint.refresh",
+    "other": "refresh"
+  },
+  {
+    "id": "tui.usage.waiting",
+    "other": "waiting for the daemon"
+  },
+  {
+    "id": "tui.usage.unreachable",
+    "other": "daemon unreachable"
+  },
+  {
+    "id": "tui.usage.render_failed",
+    "other": "cannot render the usage"
   }
 ]

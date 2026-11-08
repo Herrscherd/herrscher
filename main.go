@@ -208,6 +208,8 @@ func runCommand(ctx context.Context, cmd string, args []string) error {
 		return host.RunWorktree(ctx, args)
 	case healthVerb:
 		return runHealth(ctx, args)
+	case usageVerb:
+		return runUsage(ctx, args)
 	case "whoami":
 		return runWhoami(ctx, args)
 	}

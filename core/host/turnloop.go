@@ -21,6 +21,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/usage"
 )
 
 const (
@@ -60,6 +61,7 @@ type sessionSink struct {
 	Project    func(project string)
 	Transcript func(state.TranscriptEntry)
 	Checkpoint func(turnID, text string)
+	Usage      func([]usage.Record)
 }
 
 type sessionDriver struct {
@@ -191,7 +193,36 @@ type turnUsage struct {
 	CtxTokens                                          int
 }
 
-func (d *sessionDriver) recordEntry(role, text string, cost float64, usage turnUsage) {
+func (d *sessionDriver) recordUsage(event contracts.Event) {
+	if d.sink.Usage == nil {
+		return
+	}
+	records := usageRecords(d.name, time.Now().UTC(), d.modelNow().model, event)
+	if len(records) == 0 {
+		return
+	}
+	d.sink.Usage(records)
+}
+
+func usageRecords(session string, when time.Time, model string, event contracts.Event) []usage.Record {
+	if len(event.Models) == 0 {
+		if !hasTurnUsage(event) {
+			return nil
+		}
+		return []usage.Record{{Time: when, Session: session, Model: model, In: int64(event.TokensIn), Out: int64(event.Tokens), CacheRead: int64(event.CacheRead), CacheCreate: int64(event.CacheCreate), Cost: event.Cost}}
+	}
+	records := make([]usage.Record, 0, len(event.Models))
+	for _, spent := range event.Models {
+		records = append(records, usage.Record{Time: when, Session: session, Model: spent.Model, In: int64(spent.In), Out: int64(spent.Out), CacheRead: int64(spent.CacheRead), CacheCreate: int64(spent.CacheCreate), Cost: spent.Cost})
+	}
+	return records
+}
+
+func hasTurnUsage(event contracts.Event) bool {
+	return event.TokensIn != 0 || event.Tokens != 0 || event.CacheRead != 0 || event.CacheCreate != 0 || event.Cost != 0
+}
+
+func (d *sessionDriver) recordEntry(role, text string, cost float64, turn turnUsage) {
 	if d.sink.Transcript == nil || text == "" {
 		return
 	}
@@ -200,12 +231,12 @@ func (d *sessionDriver) recordEntry(role, text string, cost float64, usage turnU
 		Role:        role,
 		Text:        text,
 		Cost:        cost,
-		TokensIn:    usage.InTokens,
-		TokensOut:   usage.OutTokens,
-		CacheRead:   usage.CacheRead,
-		CacheCreate: usage.CacheCreate,
-		DurMs:       usage.DurMs,
-		CtxTokens:   usage.CtxTokens,
+		TokensIn:    turn.InTokens,
+		TokensOut:   turn.OutTokens,
+		CacheRead:   turn.CacheRead,
+		CacheCreate: turn.CacheCreate,
+		DurMs:       turn.DurMs,
+		CtxTokens:   turn.CtxTokens,
 	})
 }
 
@@ -760,6 +791,7 @@ func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event,
 	if d.sink.Project != nil && event.Project != "" {
 		d.sink.Project(event.Project)
 	}
+	d.recordUsage(event)
 	d.recordEntry("assistant", event.Text, event.Cost, turnUsage{
 		InTokens:    event.TokensIn,
 		OutTokens:   event.Tokens,

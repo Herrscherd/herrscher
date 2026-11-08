@@ -2720,5 +2720,65 @@
     "id": "tui.health.bar",
     "one": "santé {{.Count}}/{{.Total}}",
     "other": "santé {{.Count}}/{{.Total}}"
+  },
+  {
+    "id": "tui.usage.title",
+    "other": "utilisation"
+  },
+  {
+    "id": "tui.usage.tab.session",
+    "other": "Session"
+  },
+  {
+    "id": "tui.usage.tab.cost",
+    "other": "Coût"
+  },
+  {
+    "id": "tui.usage.tab.tokens",
+    "other": "Jetons"
+  },
+  {
+    "id": "tui.usage.tab.limits",
+    "other": "Limites"
+  },
+  {
+    "id": "tui.usage.range",
+    "other": "période {{.Range}}"
+  },
+  {
+    "id": "tui.usage.account.all",
+    "other": "tous les comptes"
+  },
+  {
+    "id": "tui.usage.account.one",
+    "other": "compte {{.Account}}"
+  },
+  {
+    "id": "tui.usage.hint.tab",
+    "other": "onglet"
+  },
+  {
+    "id": "tui.usage.hint.range",
+    "other": "période"
+  },
+  {
+    "id": "tui.usage.hint.account",
+    "other": "compte"
+  },
+  {
+    "id": "tui.usage.hint.refresh",
+    "other": "actualiser"
+  },
+  {
+    "id": "tui.usage.waiting",
+    "other": "en attente du démon"
+  },
+  {
+    "id": "tui.usage.unreachable",
+    "other": "démon injoignable"
+  },
+  {
+    "id": "tui.usage.render_failed",
+    "other": "affichage de l'utilisation impossible"
   }
 ]

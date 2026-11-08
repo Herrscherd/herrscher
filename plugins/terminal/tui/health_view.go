@@ -25,14 +25,15 @@ type healthMsg struct {
 }
 
 type healthPanel struct {
-	open     bool
-	detail   bool
-	deep     bool
-	busy     bool
-	ready    bool
-	failed   bool
-	at       time.Time
-	snapshot health.Snapshot
+	open      bool
+	detail    bool
+	deepNext  bool
+	shownDeep bool
+	busy      bool
+	ready     bool
+	failed    bool
+	at        time.Time
+	snapshot  health.Snapshot
 }
 
 func (m *model) openHealth() tea.Cmd {
@@ -52,7 +53,7 @@ func (m *model) toggleHealthDetail() {
 }
 
 func (m *model) toggleHealthDeep() tea.Cmd {
-	m.health.deep = !m.health.deep
+	m.health.deepNext = true
 	return m.healthRefresh()
 }
 
@@ -62,7 +63,8 @@ func (m *model) healthRefresh() tea.Cmd {
 	}
 	m.health.busy = true
 	backend := m.tm
-	deep := m.health.deep
+	deep := m.health.deepNext
+	m.health.deepNext = false
 	args := []string{verbHealth}
 	if deep {
 		args = append(args, argHealthDeep)
@@ -78,7 +80,7 @@ func (m *model) healthRefresh() tea.Cmd {
 }
 
 func (m *model) healthTick() tea.Cmd {
-	if m.health.busy || time.Since(m.health.at) < healthInterval {
+	if !m.health.open || m.health.busy || time.Since(m.health.at) < healthInterval {
 		return nil
 	}
 	return m.healthRefresh()
@@ -90,6 +92,7 @@ func (m *model) handleHealthMsg(msg healthMsg) {
 	m.health.failed = msg.err != nil
 	if msg.err == nil {
 		m.health.snapshot = msg.snapshot
+		m.health.shownDeep = msg.deep
 		m.health.ready = true
 	}
 }
@@ -120,10 +123,16 @@ func (m *model) healthOverlayView() string {
 		width = defaultWidth
 	}
 	title := m.tr.t("tui.health.title", nil)
-	if m.health.deep {
-		title += "  " + m.tr.t("tui.health.deep_mode", nil)
+	if m.health.shownDeep {
+		title = joinNonEmpty(title, m.tr.t("tui.health.deep_mode", nil))
 	}
-	lines := []string{m.st.dim.Render(title)}
+	keys := joinNonEmpty(
+		m.labelledHint(actHealthRefresh, m.tr.t("tui.health.refresh", nil), ctxHealth),
+		m.labelledHint(actHealthDeep, m.tr.t("tui.health.deep", nil), ctxHealth),
+		m.labelledHint(actHealthDetail, m.tr.t("tui.health.detail", nil), ctxHealth),
+		m.labelledHint(actHealthClose, m.tr.t("tui.common.close", nil), ctxHealth),
+	)
+	lines := []string{m.st.dim.Render(joinNonEmpty(title, keys))}
 	switch {
 	case m.health.failed:
 		lines = append(lines, m.st.red.Render(m.tr.t("tui.health.unreachable", nil)))
@@ -131,16 +140,16 @@ func (m *model) healthOverlayView() string {
 		lines = append(lines, m.st.dim.Render(m.tr.t("tui.health.waiting", nil)))
 	}
 	lines = append(lines, m.healthBody()...)
-	lines = append(lines, m.st.dim.Render(joinNonEmpty(
-		m.labelledHint(actHealthRefresh, m.tr.t("tui.health.refresh", nil), ctxHealth),
-		m.labelledHint(actHealthDeep, m.tr.t("tui.health.deep", nil), ctxHealth),
-		m.labelledHint(actHealthDetail, m.tr.t("tui.health.detail", nil), ctxHealth),
-		m.labelledHint(actHealthClose, m.tr.t("tui.common.close", nil), ctxHealth),
-	)))
-	for i := range lines {
-		lines[i] = cutText(lines[i], width)
+	if m.health.ready {
+		lines = append(lines, m.st.dim.Render(m.healthProbed()))
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(boxLines(lines, width), "\n")
+}
+
+func (m *model) healthProbed() string {
+	ago := max(time.Since(m.health.snapshot.ProbedAt)/time.Second, 0)
+	next := max((healthInterval-time.Since(m.health.at))/time.Second, 0)
+	return m.tr.t("tui.health.probed", map[string]any{"Ago": int(ago), "Next": int(next)})
 }
 
 func (m *model) healthBody() []string {

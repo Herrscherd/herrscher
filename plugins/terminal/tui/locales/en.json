@@ -2697,7 +2697,12 @@
   },
   {
     "id": "tui.health.deep",
-    "other": "deep check"
+    "other": "deep probe"
+  },
+  {
+    "id": "tui.health.probed",
+    "description": "Line under the health overlay: when the report was probed and when the next refresh is",
+    "other": "probed {{.Ago}} s ago · next in {{.Next}} s"
   },
   {
     "id": "tui.health.detail",

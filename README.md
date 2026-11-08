@@ -412,6 +412,10 @@ compaction stages, the memory plugins and the key pools. Each line says the stat
 (ok, degraded, down or off), how long the probe took, and the facts the host knows
 about the service.
 
+A gateway the daemon does not run reads as off, and so does a memory plugin that is
+not the one in use: the first local memory plugin with a factory is the live one,
+so in remote mode (`HERRSCHER_REMOTE=memory`) the local memories show off.
+
 `herrscher health <service>` shows one service, or every account of it, with its
 cause and the remedy when there is one, for instance the login command to run.
 A service is named by its plugin, or by `plugin:account` for one account of a
@@ -616,12 +620,12 @@ keeping whatever the agent had already written.
 
 `/health` opens the same snapshot as an overlay, and the status line carries a dot
 for the worst state of the checks with `santé n/m` beside it, where `n` counts the
-checks that are ok and `m` the ones that can fail. The status line refreshes the
-figures every fifteen seconds, even with the overlay closed, so a backend that
-drops shows up without a command. Inside the overlay `r` probes again, `d` turns
-the deep probe on or off (it stays on across refreshes, and costs round trips),
-`enter` shows the cause and remedy of the degraded and down checks, and `esc`
-closes it. The overlay is also in the command palette.
+checks that are ok and `m` the ones that can fail. The figures refresh every fifteen
+seconds while the overlay is open, and stay as they were once it is closed. Inside
+the overlay `r` probes again, `d` runs one deep probe (it costs round trips) and the
+refresh after it is a plain probe again, `enter` shows the cause and remedy of the
+degraded and down checks, and `esc` closes it. The overlay is also in the command
+palette.
 
 ### Context, and what fills it
 

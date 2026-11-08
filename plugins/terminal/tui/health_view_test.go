@@ -4,6 +4,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -70,5 +71,51 @@ func TestASuccessfulRefreshClearsTheFailure(t *testing.T) {
 	m.handleHealthMsg(healthMsg{snapshot: health.Snapshot{}})
 	if m.health.failed || !m.health.ready {
 		t.Fatalf("after a good refresh: failed=%t ready=%t, want failed=false ready=true", m.health.failed, m.health.ready)
+	}
+}
+
+func TestDeepRefreshIsOneShot(t *testing.T) {
+	encoded, err := health.Encode(health.Snapshot{ProbedAt: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend := &fakeBackend{replies: map[string]string{
+		verbHealth:                       string(encoded),
+		verbHealth + " " + argHealthDeep: string(encoded),
+	}}
+	m := newModel(backend)
+	m.health.open = true
+
+	deepMsg, ok := m.toggleHealthDeep()().(healthMsg)
+	if !ok {
+		t.Fatal("the deep toggle did not answer with a health message")
+	}
+	m.handleHealthMsg(deepMsg)
+	if !deepMsg.deep || !m.health.shownDeep {
+		t.Fatalf("deep refresh = %+v, shownDeep = %v, want a deep probe shown", deepMsg, m.health.shownDeep)
+	}
+
+	plainMsg, ok := m.healthRefresh()().(healthMsg)
+	if !ok {
+		t.Fatal("the plain refresh did not answer with a health message")
+	}
+	m.handleHealthMsg(plainMsg)
+	if plainMsg.deep || m.health.shownDeep {
+		t.Fatalf("next refresh = %+v, shownDeep = %v, want a plain probe after the one-shot", plainMsg, m.health.shownDeep)
+	}
+	if want := []string{verbHealth, argHealthDeep}; !slices.Equal(backend.dispatched[0], want) {
+		t.Fatalf("first dispatch = %q, want %q", backend.dispatched[0], want)
+	}
+	if want := []string{verbHealth}; !slices.Equal(backend.dispatched[1], want) {
+		t.Fatalf("second dispatch = %q, want %q", backend.dispatched[1], want)
+	}
+}
+
+func TestHealthTickStaysSilentWhileTheOverlayIsClosed(t *testing.T) {
+	m := newModel(&fakeBackend{})
+	m.health.open = false
+	m.health.at = time.Now().Add(-time.Hour)
+	if cmd := m.healthTick(); cmd != nil {
+		t.Fatal("healthTick returned a refresh while the overlay is closed")
 	}
 }

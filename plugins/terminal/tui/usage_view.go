@@ -6,6 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/Herrscherd/herrscher/core/usage"
 )
@@ -244,10 +245,27 @@ func (m *model) usageSessionBody() []string {
 func (m *model) usageLines() ([]string, error) {
 	switch m.usage.tab {
 	case usageTabCost:
-		return usage.CostLines(m.usage.snapshot, m.tr.lang, time.Local)
+		return usage.CostLines(m.usage.snapshot, m.tr.lang, time.Local, m.usagePalette())
 	case usageTabTokens:
-		return usage.TokenLines(m.usage.snapshot, m.tr.lang)
+		return usage.TokenLines(m.usage.snapshot, m.tr.lang, m.usagePalette())
 	case usageTabSession, usageTabLimits:
 	}
-	return usage.LimitLines(m.usage.snapshot, m.tr.lang)
+	return usage.LimitLines(m.usage.snapshot, m.tr.lang, m.usagePalette())
+}
+
+func (m *model) usagePalette() usage.Palette {
+	return usage.Palette{
+		Accent: styleOf(m.st.accent),
+		Fill:   styleOf(m.st.accent),
+		Marker: styleOf(m.st.strong),
+		Dim:    styleOf(m.st.dim),
+		Strong: styleOf(m.st.strong),
+		Bad:    styleOf(m.st.red),
+		Warn:   styleOf(m.st.warn),
+		Good:   styleOf(m.st.green),
+	}
+}
+
+func styleOf(style lipgloss.Style) usage.Style {
+	return func(text string) string { return style.Render(text) }
 }

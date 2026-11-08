@@ -13,6 +13,8 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/host"
 	usagecore "github.com/Herrscherd/herrscher/core/usage"
+
+	"golang.org/x/term"
 )
 
 const (
@@ -46,7 +48,14 @@ func runUsage(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	return writeUsage(os.Stdout, snapshot, opts, lang)
+	return writeUsage(os.Stdout, snapshot, opts, lang, usagePalette(os.Stdout))
+}
+
+func usagePalette(out *os.File) usagecore.Palette {
+	if os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb" || !term.IsTerminal(int(out.Fd())) {
+		return usagecore.Palette{}
+	}
+	return usagecore.ANSIPalette()
 }
 
 func usageDaemonDown(lang i18n.Language, instance string) error {
@@ -150,7 +159,7 @@ func fetchUsage(ctx context.Context, instance string, opts usageOptions) (usagec
 	return usagecore.Decode([]byte(out))
 }
 
-func writeUsage(writer io.Writer, snapshot usagecore.Snapshot, opts usageOptions, lang i18n.Language) error {
+func writeUsage(writer io.Writer, snapshot usagecore.Snapshot, opts usageOptions, lang i18n.Language, pal usagecore.Palette) error {
 	if opts.asJSON {
 		raw, err := usagecore.Encode(snapshot)
 		if err != nil {
@@ -159,7 +168,7 @@ func writeUsage(writer io.Writer, snapshot usagecore.Snapshot, opts usageOptions
 		_, err = fmt.Fprintln(writer, string(raw))
 		return err
 	}
-	lines, err := usageLines(snapshot, opts.view, lang)
+	lines, err := usageLines(snapshot, opts.view, lang, pal)
 	if err != nil {
 		return err
 	}
@@ -171,13 +180,13 @@ func writeUsage(writer io.Writer, snapshot usagecore.Snapshot, opts usageOptions
 	return nil
 }
 
-func usageLines(snapshot usagecore.Snapshot, view string, lang i18n.Language) ([]string, error) {
+func usageLines(snapshot usagecore.Snapshot, view string, lang i18n.Language, pal usagecore.Palette) ([]string, error) {
 	switch view {
 	case usageViewCost:
-		return usagecore.CostLines(snapshot, lang, time.Local)
+		return usagecore.CostLines(snapshot, lang, time.Local, pal)
 	case usageViewTokens:
-		return usagecore.TokenLines(snapshot, lang)
+		return usagecore.TokenLines(snapshot, lang, pal)
 	default:
-		return usagecore.LimitLines(snapshot, lang)
+		return usagecore.LimitLines(snapshot, lang, pal)
 	}
 }

@@ -506,9 +506,13 @@ func terminalVerbs() map[string]bool {
 // judgement would be two chances to disagree about what a tab may run.
 func OperatorVerb(verb string) bool { return terminalVerbs()[verb] }
 
-// ReadOnlyCommand reports whether argv is one of the read-only queries the
-// sessions board runs beside its list (skills, schedules, approval rules).
+// ReadOnlyCommand reports whether argv is one of the read-only queries a terminal
+// runs beside its sessions: the board's lists (skills, schedules, approval rules)
+// and the health and usage overlays, whatever flags those two carry.
 func ReadOnlyCommand(args []string) bool {
+	if len(args) > 0 && readOnlyVerbs()[args[0]] {
+		return true
+	}
 	if len(args) != readOnlyCommandWords {
 		return false
 	}
@@ -517,6 +521,10 @@ func ReadOnlyCommand(args []string) bool {
 		return true
 	}
 	return false
+}
+
+func readOnlyVerbs() map[string]bool {
+	return map[string]bool{"health": true, "usage": true}
 }
 
 func allowedVerbs() string {

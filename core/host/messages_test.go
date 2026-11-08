@@ -15,6 +15,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher-contracts/i18n/i18ntest"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/historywire"
 )
 
 func hostLocaleSource(t *testing.T) fs.FS {
@@ -57,21 +58,22 @@ func TestEnglishCatalogDescriptionsAreEnglish(t *testing.T) {
 
 func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 	declared := map[string][]string{
-		"coordination.fanout_partial":    {"Detail", "Launched"},
-		"coordination.route_refused":     {"Detail"},
-		"coordination.seal_refused":      {"Detail"},
-		"coordination.merge_refused":     {"Detail"},
-		"coordination.handoff_refused":   {"Detail"},
-		"compaction.no_effect":           {"Percent"},
-		"compaction.bridge_gone":         nil,
-		"compaction.no_backend_factory":  nil,
-		"compaction.not_compactor_port":  nil,
-		"compaction.no_compactor_plugin": nil,
-		"compaction.failed":              {"Detail"},
-		"coordination.routed":            {"Agent", "Session"},
-		"coordination.sealed":            {"Node"},
-		"coordination.merged":            {"Lead"},
-		"coordination.launched":          {"Count", "Workers"},
+		"coordination.fanout_partial":     {"Detail", "Launched"},
+		"coordination.route_refused":      {"Detail"},
+		"coordination.seal_refused":       {"Detail"},
+		"coordination.merge_refused":      {"Detail"},
+		"coordination.handoff_refused":    {"Detail"},
+		"compaction.no_effect":            {"Percent"},
+		"compaction.bridge_gone":          nil,
+		"compaction.no_compactor_factory": nil,
+		"compaction.nil_compactor":        nil,
+		"compaction.no_compactor_plugin":  nil,
+		"compaction.no_history_port":      nil,
+		"compaction.failed":               {"Detail"},
+		"coordination.routed":             {"Agent", "Session"},
+		"coordination.sealed":             {"Node"},
+		"coordination.merged":             {"Lead"},
+		"coordination.launched":           {"Count", "Workers"},
 
 		"account.home":                  {"Detail"},
 		"account.profile_open":          {"Detail"},
@@ -221,22 +223,28 @@ func TestCompactFailureTextMapsUntypedCauses(t *testing.T) {
 			en:   "the bridge closed during a compaction",
 		},
 		{
-			name: "no backend factory",
-			err:  errNoBackendFactory,
-			fr:   "le plugin déclare Capabilities.Compactor mais ne fournit aucune fabrique de backend",
-			en:   "the plugin declares Capabilities.Compactor but provides no backend factory",
+			name: "no compactor factory",
+			err:  errNoCompactorFactory,
+			fr:   "le plugin compacteur ne fournit aucune fabrique Compactor",
+			en:   "the compactor plugin provides no Compactor factory",
 		},
 		{
-			name: "port not implemented",
-			err:  errNotCompactorPort,
-			fr:   "le plugin déclare Capabilities.Compactor mais n'implémente pas le port",
-			en:   "the plugin declares Capabilities.Compactor but does not implement the port",
+			name: "factory returned no stage",
+			err:  errNilCompactor,
+			fr:   "la fabrique du plugin compacteur n'a renvoyé aucune étape",
+			en:   "the compactor plugin's factory returned no stage",
 		},
 		{
 			name: "no compactor plugin",
 			err:  errNoCompactorPlugin,
-			fr:   "aucun plugin ne déclare Capabilities.Compactor sous ce nom",
-			en:   "no plugin declares Capabilities.Compactor under this name",
+			fr:   "aucun plugin compacteur n'est enregistré sous ce nom",
+			en:   "no compactor plugin is registered under this name",
+		},
+		{
+			name: "history port not implemented",
+			err:  fmt.Errorf("stage: %w", historywire.ErrNoHistoryEditor),
+			fr:   "le backend déclare Capabilities.HistoryEditor mais n'implémente pas le port, son historique ne peut pas être modifié",
+			en:   "the backend declares Capabilities.HistoryEditor but does not implement the port, its history cannot be edited",
 		},
 		{
 			name: "unclassified failure keeps its technical detail",

@@ -69,7 +69,7 @@ func hostPlugin(ctx context.Context, lang i18n.Language, category contracts.Cate
 			register:  func(s *grpc.Server) error { transport.RegisterBackendSkeleton(s, impl); return nil },
 			closeReal: func() error { return impl.Close() },
 		}, nil
-	case contracts.CategoryGateway, contracts.CategorySkills:
+	case contracts.CategoryGateway, contracts.CategorySkills, contracts.CategoryCompactor:
 		return hostedPlugin{}, noSkeletonError(lang, category)
 	}
 	return hostedPlugin{}, noSkeletonError(lang, category)

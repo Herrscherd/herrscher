@@ -24,6 +24,9 @@ func TestSupportedRemoteCategoriesAreMemoryOrchestratorBackend(t *testing.T) {
 	if SupportedRemoteCategory(contracts.CategorySkills) {
 		t.Fatal("skills must not be remote-supported")
 	}
+	if SupportedRemoteCategory(contracts.CategoryCompactor) {
+		t.Fatal("compactor must not be remote-supported")
+	}
 }
 
 func TestStartRemotePluginHostsSkipsUnsupportedWithWarning(t *testing.T) {

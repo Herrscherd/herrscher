@@ -636,8 +636,29 @@ flash naming the file and falls back to the built-in sizes, or to the
 `HERRSCHER_CONTEXT_LIMIT` override when it is set. After a measured compaction still above the threshold, automatic compaction does not retrigger: it rearms once a
 measured turn lands under the threshold. A compaction the backend does not measure
 never retriggers. `compactStack` lists the stages in order, where `backend` is the
-session's own compaction and other names are plugins declaring
-`Capabilities.Compactor`.
+session's own compaction and every other name is the kind of a plugin of the
+`compactor` category, built once at start through its `Compactor` factory.
+
+The `jev` stage, from [herrscher-jev-compactor], prunes the tool calls the
+assistant no longer needs before the backend summarises what is left. List it
+ahead of the backend:
+
+```json
+{ "compactStack": ["jev", "backend"] }
+```
+
+It needs `TYPESAFE_API_KEY` in the environment of `herrscher serve`; the optional
+`JEV_*` settings of that plugin tune it. A required setting that is missing makes
+`herrscher serve` refuse to start with a message naming the variable, there is no
+fallback that would drop the stage quietly. A daemon whose `compactStack` does not
+name `jev` never builds it and starts without the key. The stage edits the history
+only for a session whose backend declares `Capabilities.HistoryEditor`: the host
+then hands plugin stages a history editor that reads and prunes the conversation
+through the bridge, and the `backend` stage never receives one. On another backend
+the stage gets no editor and leaves the history as it is. A backend that declares
+`Capabilities.HistoryEditor` while its running instance does not implement the
+port fails the stage, and the host writes one warning line to stderr the first
+time it happens.
 
 When a backend declares `Capabilities.Compactor` but its running instance does not
 implement the port, the host writes one warning line to stderr the first time that
@@ -1211,6 +1232,7 @@ reinstalls the binary. Restart the service afterwards to run it.
 | Memory | `Memory` | [herrscher-obsidian-memory] |
 | Orchestrator | `Orchestrator` | [herrscher-orchestrator] |
 | Skills | playbooks only | [herrscher-superset-skills] |
+| Compactor | `Compactor` | [herrscher-jev-compactor] |
 
 ### Versions and pins
 
@@ -1304,3 +1326,4 @@ detail rather than a rewrite.
 [herrscher-obsidian-memory]: https://github.com/Herrscherd/herrscher-obsidian-memory
 [herrscher-orchestrator]: https://github.com/Herrscherd/herrscher-orchestrator
 [herrscher-superset-skills]: https://github.com/Herrscherd/herrscher-superset-skills
+[herrscher-jev-compactor]: https://github.com/Herrscherd/herrscher-jev-compactor

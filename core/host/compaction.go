@@ -16,6 +16,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
+	"github.com/Herrscherd/herrscher/core/historywire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -64,30 +65,59 @@ func queueFullCompaction(session string) error {
 var (
 	errCompactUnsupported = errors.New("its backend does not implement Compactor")
 	errBridgeGone         = errors.New("the bridge closed during a compaction")
-	errNoBackendFactory   = errors.New("declares Capabilities.Compactor but provides no backend factory")
-	errNotCompactorPort   = errors.New("declares Capabilities.Compactor but does not implement the port")
-	errNoCompactorPlugin  = errors.New("no plugin declares Capabilities.Compactor under this name")
+	errNoCompactorFactory = errors.New("is a compactor plugin but provides no Compactor factory")
+	errNilCompactor       = errors.New("its Compactor factory returned no stage")
+	errNoCompactorPlugin  = errors.New("no compactor plugin is registered under this name")
+	errCompactorSettings  = errors.New("the compaction stage is missing required settings")
 	errCompactQueueFull   = errors.New("the turn queue is full, the compaction was not queued")
 )
 
+type compactorSettingsError struct {
+	missing *contracts.MissingSettingsError
+}
+
+func (e compactorSettingsError) Error() string {
+	return e.render(i18n.English)
+}
+
+func (e compactorSettingsError) Unwrap() []error {
+	return []error{errCompactorSettings, e.missing}
+}
+
+func (e compactorSettingsError) Notice() contracts.Notice {
+	return contracts.Notice{Code: contracts.CodeSettingMissing, Args: []contracts.Arg{contracts.Text("Settings", strings.Join(e.missing.Missing, ", "))}}
+}
+
+func (e compactorSettingsError) render(lang i18n.Language) string {
+	text, err := contracts.NewRenderer().Render(lang, e.Notice())
+	if err != nil {
+		return e.missing.Error()
+	}
+	return text
+}
+
 type compactionPolicy struct {
-	percent  int
-	limits   contextwindow.Limits
-	names    []string
-	plugins  map[string]contracts.Compactor
-	backends map[string]bool
-	warnOnce *sync.Once
-	warn     func(format string, args ...any)
+	percent        int
+	limits         contextwindow.Limits
+	names          []string
+	plugins        map[string]contracts.Compactor
+	backends       map[string]bool
+	historyEditors map[string]bool
+	warnOnce       *sync.Once
+	historyOnce    *sync.Once
+	warn           func(format string, args ...any)
 }
 
 func newCompactionPolicy(ctx context.Context, percent *int, names []string, perVendor map[string]int) (compactionPolicy, error) {
 	policy := compactionPolicy{
-		percent:  defaultCompactPercent,
-		names:    []string{contracts.CompactStageBackend},
-		plugins:  make(map[string]contracts.Compactor),
-		backends: make(map[string]bool),
-		warnOnce: &sync.Once{},
-		warn:     warnStderr,
+		percent:        defaultCompactPercent,
+		names:          []string{contracts.CompactStageBackend},
+		plugins:        make(map[string]contracts.Compactor),
+		backends:       make(map[string]bool),
+		historyEditors: make(map[string]bool),
+		warnOnce:       &sync.Once{},
+		historyOnce:    &sync.Once{},
+		warn:           warnStderr,
 	}
 	if percent != nil {
 		if err := contracts.ValidateAutoCompactPercent(*percent); err != nil {
@@ -108,8 +138,12 @@ func newCompactionPolicy(ctx context.Context, percent *int, names []string, perV
 	for index := range backends {
 		kind := backends[index].Manifest.Kind
 		kinds = append(kinds, kind)
-		if backends[index].Manifest.Capabilities.Compactor {
+		capabilities := backends[index].Manifest.Capabilities
+		if capabilities.Compactor {
 			policy.backends[kind] = true
+		}
+		if capabilities.HistoryEditor {
+			policy.historyEditors[kind] = true
 		}
 	}
 	warnUnknownContextLimits(policy.warn, perVendor, kinds)
@@ -117,7 +151,7 @@ func newCompactionPolicy(ctx context.Context, percent *int, names []string, perV
 		if name == contracts.CompactStageBackend {
 			continue
 		}
-		compactor, err := customStage(ctx, name)
+		compactor, err := customStage(ctx, name, os.Getenv)
 		if err != nil {
 			return compactionPolicy{}, wrapHost(err, "compaction.stack_named", map[string]any{nameParam: name})
 		}
@@ -140,23 +174,29 @@ func warnUnknownContextLimits(warn func(format string, args ...any), perVendor m
 	}
 }
 
-func customStage(ctx context.Context, name string) (contracts.Compactor, error) {
-	plugins := contracts.Default.Plugins()
+func customStage(ctx context.Context, name string, getenv func(string) string) (contracts.Compactor, error) {
+	plugins := contracts.Default.Compactors()
 	for index := range plugins {
 		plugin := &plugins[index]
-		if plugin.Manifest.Kind != name || !plugin.Manifest.Capabilities.Compactor {
+		if plugin.Manifest.Kind != name {
 			continue
 		}
-		if plugin.Backend == nil {
-			return nil, errNoBackendFactory
+		if plugin.Compactor == nil {
+			return nil, errNoCompactorFactory
 		}
-		backend, err := plugin.Backend(ctx, contracts.PluginConfig{})
+		cfg, err := contracts.Resolve(plugin.Manifest.Config, getenv)
+		if missing, ok := errors.AsType[*contracts.MissingSettingsError](err); ok {
+			return nil, compactorSettingsError{missing: missing}
+		}
 		if err != nil {
 			return nil, err
 		}
-		compactor, ok := backend.(contracts.Compactor)
-		if !ok {
-			return nil, errNotCompactorPort
+		compactor, err := plugin.Compactor(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+		if compactor == nil {
+			return nil, errNilCompactor
 		}
 		return compactor, nil
 	}
@@ -172,6 +212,16 @@ func (p compactionPolicy) percentFor(sess state.Session) int {
 
 func (p compactionPolicy) supports(vendor string) bool {
 	return p.backends[vendor]
+}
+
+func (p compactionPolicy) editsHistory(vendor string) bool {
+	return p.historyEditors[vendor]
+}
+
+func (p compactionPolicy) warnNoHistoryPort(vendor string) {
+	p.historyOnce.Do(func() {
+		p.warn("herrscher serve: backend %q declares Capabilities.HistoryEditor but its instance does not implement the port, its history is not edited\n", vendor)
+	})
 }
 
 func (p compactionPolicy) warnNoPort(vendor string) {
@@ -213,9 +263,29 @@ func (d *sessionDriver) compactStages() ([]contracts.CompactStage, error) {
 			stages = append(stages, contracts.CompactStage{Name: name, Compactor: bridgeCompactor{driver: d}})
 			continue
 		}
-		stages = append(stages, contracts.CompactStage{Name: name, Compactor: d.compaction.plugins[name]})
+		stages = append(stages, contracts.CompactStage{Name: name, Compactor: historyStage{compactor: d.compaction.plugins[name], history: d.sessionHistory()}})
 	}
 	return stages, nil
+}
+
+func (d *sessionDriver) sessionHistory() contracts.HistoryEditor {
+	if !d.compaction.editsHistory(d.modelNow().vendor) {
+		return nil
+	}
+	return bridgeHistory{driver: d}
+}
+
+type historyStage struct {
+	compactor contracts.Compactor
+	history   contracts.HistoryEditor
+}
+
+func (s historyStage) Compact(ctx context.Context, req contracts.CompactRequest, onEvent func(contracts.BackendEvent)) (contracts.CompactResult, error) {
+	if s.compactor == nil {
+		return contracts.CompactResult{}, contracts.ErrNilCompactor
+	}
+	req.History = s.history
+	return s.compactor.Compact(ctx, req, onEvent)
 }
 
 func crossed(used, limit, percent int) bool {
@@ -304,12 +374,14 @@ func knownCompactFailure(err error) (string, bool) {
 	switch {
 	case errors.Is(err, errBridgeGone):
 		return "compaction.bridge_gone", true
-	case errors.Is(err, errNoBackendFactory):
-		return "compaction.no_backend_factory", true
-	case errors.Is(err, errNotCompactorPort):
-		return "compaction.not_compactor_port", true
+	case errors.Is(err, errNoCompactorFactory):
+		return "compaction.no_compactor_factory", true
+	case errors.Is(err, errNilCompactor):
+		return "compaction.nil_compactor", true
 	case errors.Is(err, errNoCompactorPlugin):
 		return "compaction.no_compactor_plugin", true
+	case errors.Is(err, historywire.ErrNoHistoryEditor):
+		return "compaction.no_history_port", true
 	}
 	return "", false
 }
@@ -536,6 +608,62 @@ func (d *sessionDriver) compactThroughBridge(ctx context.Context, req contracts.
 				return contracts.CompactResult{}, compactwire.DecodeFailure(frame)
 			case compactwire.EventProgress:
 				onEvent(contracts.BackendEvent{Kind: "progress", Detail: frame.Text})
+			}
+		}
+	}
+}
+
+type bridgeHistory struct {
+	driver *sessionDriver
+}
+
+func (h bridgeHistory) ReadHistory(ctx context.Context) (contracts.History, error) {
+	frame, err := h.driver.historyThroughBridge(ctx, historywire.Read(), historywire.EventHistory)
+	if err != nil {
+		return contracts.History{}, err
+	}
+	return historywire.DecodeHistory(frame)
+}
+
+func (h bridgeHistory) PruneHistory(ctx context.Context, edits []contracts.HistoryEdit) (contracts.PruneOutcome, error) {
+	request, err := historywire.Prune(edits)
+	if err != nil {
+		return contracts.PruneOutcome{}, err
+	}
+	frame, err := h.driver.historyThroughBridge(ctx, request, historywire.EventPruned)
+	if err != nil {
+		return contracts.PruneOutcome{}, err
+	}
+	return historywire.DecodePruned(frame)
+}
+
+func (d *sessionDriver) historyThroughBridge(ctx context.Context, request contracts.Event, answer string) (contracts.Event, error) {
+	select {
+	case d.toBridge <- request:
+	case <-d.hangup:
+		return contracts.Event{}, errBridgeGone
+	case <-ctx.Done():
+		return contracts.Event{}, ctx.Err()
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			d.Interrupt()
+			return contracts.Event{}, ctx.Err()
+		case <-d.hangup:
+			return contracts.Event{}, errBridgeGone
+		case frame, ok := <-d.from:
+			if !ok {
+				return contracts.Event{}, errBridgeGone
+			}
+			switch frame.T {
+			case answer:
+				return frame, nil
+			case historywire.EventError:
+				if frame.Value == historywire.NoEditor {
+					d.compaction.warnNoHistoryPort(d.modelNow().vendor)
+				}
+				return contracts.Event{}, historywire.DecodeFailure(frame)
 			}
 		}
 	}

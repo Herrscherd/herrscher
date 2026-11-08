@@ -43,6 +43,9 @@ func catalog() map[string]map[string]string {
 		catSkills: {
 			"superset": "github.com/Herrscherd/herrscher-superset-skills",
 		},
+		catCompactor: {
+			"jev": "github.com/Herrscherd/herrscher-jev-compactor",
+		},
 	}
 }
 
@@ -53,7 +56,7 @@ func inTree() []string {
 const hostModule = "github.com/Herrscherd/herrscher"
 
 func categories() []string {
-	return []string{catGateway, catBackend, catMemory, catOrchestrator, catExtractor, catSkills}
+	return []string{catGateway, catBackend, catMemory, catOrchestrator, catExtractor, catSkills, catCompactor}
 }
 
 func defaultStack() map[string]string {
@@ -64,6 +67,7 @@ func defaultStack() map[string]string {
 		catOrchestrator: "basic",
 		catExtractor:    "llm",
 		catSkills:       "superset",
+		catCompactor:    "jev",
 	}
 }
 
@@ -90,6 +94,7 @@ func initHost(ctx context.Context, out, errOut *errwriter.Writer, args []string)
 	orchestrator := flags.String(catOrchestrator, defaultStack()[catOrchestrator], msg(clitext.ManageFlagCategory, clitext.Params{clitext.ParamCategory: catOrchestrator}))
 	extractor := flags.String(catExtractor, defaultStack()[catExtractor], msg(clitext.ManageFlagCategory, clitext.Params{clitext.ParamCategory: catExtractor}))
 	skills := flags.String(catSkills, defaultStack()[catSkills], msg(clitext.ManageFlagCategory, clitext.Params{clitext.ParamCategory: catSkills}))
+	compactor := flags.String(catCompactor, defaultStack()[catCompactor], msg(clitext.ManageFlagCategory, clitext.Params{clitext.ParamCategory: catCompactor}))
 	var extras multiFlag
 	flags.Var(&extras, "with", msg(clitext.ManageFlagWith, nil))
 	if err := flags.Parse(args); err != nil {
@@ -112,6 +117,7 @@ func initHost(ctx context.Context, out, errOut *errwriter.Writer, args []string)
 		catOrchestrator: *orchestrator,
 		catExtractor:    *extractor,
 		catSkills:       *skills,
+		catCompactor:    *compactor,
 	}
 	var secrets map[string]string
 	if interactive {
@@ -264,7 +270,7 @@ func stackFlagsSet(flags *flag.FlagSet) bool {
 	set := false
 	flags.Visit(func(f *flag.Flag) {
 		switch f.Name {
-		case catGateway, catBackend, catMemory, catOrchestrator, catExtractor, catSkills, "with":
+		case catGateway, catBackend, catMemory, catOrchestrator, catExtractor, catSkills, catCompactor, "with":
 			set = true
 		}
 	})

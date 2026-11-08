@@ -34,6 +34,7 @@ func TestResolveStackDefault(t *testing.T) {
 		catalog()["orchestrator"]["basic"],
 		catalog()["extractor"]["llm"],
 		catalog()["skills"]["superset"],
+		catalog()["compactor"]["jev"],
 	}
 	if !slices.Equal(mods, want) {
 		t.Fatalf("got %v, want %v", mods, want)

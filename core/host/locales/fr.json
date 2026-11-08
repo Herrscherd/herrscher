@@ -35,19 +35,24 @@
     "other": "le relais s'est fermé pendant une compaction"
   },
   {
-    "id": "compaction.no_backend_factory",
-    "description": "Un plugin déclare la capacité Compactor mais ne fournit aucune fabrique de backend",
-    "other": "le plugin déclare Capabilities.Compactor mais ne fournit aucune fabrique de backend"
+    "id": "compaction.no_compactor_factory",
+    "description": "A compactor plugin provides no Compactor factory",
+    "other": "le plugin compacteur ne fournit aucune fabrique Compactor"
   },
   {
-    "id": "compaction.not_compactor_port",
-    "description": "Un plugin déclare la capacité Compactor mais n'implémente pas le port correspondant",
-    "other": "le plugin déclare Capabilities.Compactor mais n'implémente pas le port"
+    "id": "compaction.nil_compactor",
+    "description": "The Compactor factory of a compactor plugin returned no stage",
+    "other": "la fabrique du plugin compacteur n'a renvoyé aucune étape"
   },
   {
     "id": "compaction.no_compactor_plugin",
-    "description": "Aucun plugin ne déclare la capacité Compactor sous le nom demandé",
-    "other": "aucun plugin ne déclare Capabilities.Compactor sous ce nom"
+    "description": "No compactor plugin is registered under the requested name",
+    "other": "aucun plugin compacteur n'est enregistré sous ce nom"
+  },
+  {
+    "id": "compaction.no_history_port",
+    "description": "The session backend declares the HistoryEditor capability but its instance does not implement the port",
+    "other": "le backend déclare Capabilities.HistoryEditor mais n'implémente pas le port, son historique ne peut pas être modifié"
   },
   {
     "id": "compaction.failed",

@@ -3173,19 +3173,24 @@
     "other": "le pont s'est fermé pendant une compaction"
   },
   {
-    "id": "cli.host.fault.no_backend_factory",
-    "description": "Erreur d'une commande hôte rendue à l'opérateur (no backend factory)",
-    "other": "déclare Capabilities.Compactor mais ne fournit aucune fabrique de backend"
+    "id": "cli.host.fault.no_compactor_factory",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (no compactor factory)",
+    "other": "est un plugin compacteur mais ne fournit aucune fabrique Compactor"
   },
   {
-    "id": "cli.host.fault.not_compactor_port",
-    "description": "Erreur d'une commande hôte rendue à l'opérateur (not compactor port)",
-    "other": "déclare Capabilities.Compactor mais n'implémente pas le port"
+    "id": "cli.host.fault.nil_compactor",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (nil compactor)",
+    "other": "sa fabrique Compactor n'a renvoyé aucune étape"
   },
   {
     "id": "cli.host.fault.no_compactor_plugin",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (no compactor plugin)",
-    "other": "aucun plugin ne déclare Capabilities.Compactor sous ce nom"
+    "other": "aucun plugin compacteur n'est enregistré sous ce nom"
+  },
+  {
+    "id": "cli.host.fault.compactor_settings",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (compactor settings)",
+    "other": "il manque des réglages requis à l'étape de compaction"
   },
   {
     "id": "cli.host.fault.compact_queue_full",

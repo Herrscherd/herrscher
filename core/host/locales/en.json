@@ -35,19 +35,24 @@
     "other": "the bridge closed during a compaction"
   },
   {
-    "id": "compaction.no_backend_factory",
-    "description": "A plugin declares the Compactor capability but provides no backend factory",
-    "other": "the plugin declares Capabilities.Compactor but provides no backend factory"
+    "id": "compaction.no_compactor_factory",
+    "description": "A compactor plugin provides no Compactor factory",
+    "other": "the compactor plugin provides no Compactor factory"
   },
   {
-    "id": "compaction.not_compactor_port",
-    "description": "A plugin declares the Compactor capability but does not implement the port",
-    "other": "the plugin declares Capabilities.Compactor but does not implement the port"
+    "id": "compaction.nil_compactor",
+    "description": "The Compactor factory of a compactor plugin returned no stage",
+    "other": "the compactor plugin's factory returned no stage"
   },
   {
     "id": "compaction.no_compactor_plugin",
-    "description": "No plugin declares the Compactor capability under the requested name",
-    "other": "no plugin declares Capabilities.Compactor under this name"
+    "description": "No compactor plugin is registered under the requested name",
+    "other": "no compactor plugin is registered under this name"
+  },
+  {
+    "id": "compaction.no_history_port",
+    "description": "The session backend declares the HistoryEditor capability but its instance does not implement the port",
+    "other": "the backend declares Capabilities.HistoryEditor but does not implement the port, its history cannot be edited"
   },
   {
     "id": "compaction.failed",

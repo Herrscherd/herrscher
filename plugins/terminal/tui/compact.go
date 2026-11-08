@@ -83,7 +83,7 @@ func (target *tab) finishCompaction(trans translator) {
 	if target.compaction.measured {
 		after = formatTokens(target.compaction.to)
 	}
-	target.appendEntry(entry{role: roleNotice, text: trans.t("tui.render.compacted", map[string]any{"Range": formatTokens(target.compaction.from) + arrow + after})})
+	target.appendEntry(entry{role: roleNotice, text: trans.t("tui.render.compacted", map[string]any{rangeParam: formatTokens(target.compaction.from) + arrow + after})})
 	target.lastCompact = target.compaction
 	target.compaction = compaction{}
 }
@@ -131,5 +131,5 @@ func (m *model) lastCompactNote() string {
 	if target.lastCompact.measured {
 		after = formatTokens(target.lastCompact.to)
 	}
-	return m.tr.t("tui.render.last_compact", map[string]any{"Range": formatTokens(target.lastCompact.from) + arrow + after})
+	return m.tr.t("tui.render.last_compact", map[string]any{rangeParam: formatTokens(target.lastCompact.from) + arrow + after})
 }

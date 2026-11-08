@@ -19,6 +19,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
+	"github.com/Herrscherd/herrscher/core/usage"
 )
 
 const defaultTeardownGrace = 5 * time.Second
@@ -116,6 +117,9 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 				},
 				Checkpoint: func(turnID, text string) {
 					h.takeCheckpoint(ctx, sess, turnID, text)
+				},
+				Usage: func(records []usage.Record) {
+					h.recordUsage(sess, records)
 				},
 			},
 			eventTap(h.eventPublisher, sess.Name),
@@ -225,6 +229,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 			publish:     h.eventPublisher,
 			backend:     h.seedBackend,
 			models:      h.models,
+			recordUsage: h.recordUsage,
 			record: func(session string, entry state.TranscriptEntry) {
 				if err := state.AppendTranscript(state.TranscriptPath(h.partDir, session), entry); err != nil {
 					warnStderr("herrscher serve: session %q: seed transcript entry dropped: %v\n", session, err)
@@ -329,6 +334,7 @@ func (h *hub) Sessions() []contracts.SessionInfo {
 
 type modelTerms struct {
 	vendor string
+	model  string
 	window int
 	rates  modelRates
 }
@@ -338,7 +344,7 @@ func modelTermsFor(models *ModelDiscovery) func(state.Session) modelTerms {
 	return func(session state.Session) modelTerms {
 		terms, err := resolve(session)
 		if err != nil {
-			return modelTerms{vendor: session.Vendor}
+			return modelTerms{vendor: session.Vendor, model: sessionModel(session)}
 		}
 		return terms
 	}
@@ -349,8 +355,8 @@ func resolvedTermsFor(models *ModelDiscovery) func(state.Session) (modelTerms, e
 	policy := ResolvePolicy(envx.Getenv)
 	plugins := contracts.Default.Backends()
 	return func(session state.Session) (modelTerms, error) {
-		terms := modelTerms{vendor: session.Vendor}
 		modelID := sessionModel(session)
+		terms := modelTerms{vendor: session.Vendor, model: modelID}
 		if modelID == "" {
 			return terms, nil
 		}

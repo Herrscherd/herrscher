@@ -48,6 +48,7 @@ type dispatchTables struct {
 	plan            map[keyAction]keyRun
 	context         map[keyAction]keyRun
 	health          map[keyAction]keyRun
+	usage           map[keyAction]keyRun
 	nav             map[keyAction]navRun
 	diffMessage     map[keyAction]keyRun
 	diffDialog      map[keyAction]keyRun
@@ -108,6 +109,8 @@ func newDispatchTables() (*dispatchTables, error) {
 	tables.context, err = contextRuns()
 	errs = append(errs, err)
 	tables.health, err = healthRuns()
+	errs = append(errs, err)
+	tables.usage, err = usageRuns()
 	errs = append(errs, err)
 	tables.nav, err = navRuns()
 	errs = append(errs, err)

@@ -36,6 +36,7 @@ const (
 	ctxDiagnostics     keyContext = "Diagnostics"
 	ctxContext         keyContext = "Context"
 	ctxHealth          keyContext = "Health"
+	ctxUsage           keyContext = "Usage"
 	ctxStatusline      keyContext = "Statusline"
 	ctxPlan            keyContext = "Plan"
 	ctxSkills          keyContext = "Skills"
@@ -164,6 +165,12 @@ const (
 	actHealthDeep           keyAction = "health:deep"
 	actHealthDetail         keyAction = "health:detail"
 	actHealthClose          keyAction = "health:close"
+	actUsageRefresh         keyAction = "usage:refresh"
+	actUsageTab             keyAction = "usage:tab"
+	actUsageRangePrevious   keyAction = "usage:range-previous"
+	actUsageRangeNext       keyAction = "usage:range-next"
+	actUsageAccount         keyAction = "usage:account"
+	actUsageClose           keyAction = "usage:close"
 	actStatuslineClose      keyAction = "statusline:close"
 	actStatuslineSource     keyAction = "statusline:switchSource"
 	actStatuslineUp         keyAction = "statusline:fieldUp"
@@ -313,6 +320,12 @@ func defaultKeyBindings() []keyDefault {
 	add(ctxHealth, actHealthDeep, "d")
 	add(ctxHealth, actHealthDetail, "enter")
 	add(ctxHealth, actHealthClose, "esc")
+	add(ctxUsage, actUsageRefresh, "r")
+	add(ctxUsage, actUsageTab, "tab")
+	add(ctxUsage, actUsageRangePrevious, "left")
+	add(ctxUsage, actUsageRangeNext, "right")
+	add(ctxUsage, actUsageAccount, "a")
+	add(ctxUsage, actUsageClose, "esc")
 	add(ctxStatusline, actStatuslineClose, "esc")
 	add(ctxStatusline, actStatuslineSource, "s")
 	add(ctxStatusline, actStatuslineUp, "shift+up")
@@ -441,7 +454,7 @@ func knownKeyActions() []keyAction {
 		actThemeEdit, actThemeInstall, actThemeGlyphs, actThemeBorders, actThemeDensity,
 		actThemeBold, actThemeItalic, actThemeAuto, actThemeCopyCommand, actThemeCopyConfig,
 		actSearchClose, actSearchNext, actSearchPrevious, actBoardPanes, actContextCompact,
-		actContextSync, actContextClose, actHealthRefresh, actHealthDeep, actHealthDetail, actHealthClose, actStatuslineClose, actStatuslineSource, actStatuslineUp,
+		actContextSync, actContextClose, actHealthRefresh, actHealthDeep, actHealthDetail, actHealthClose, actUsageRefresh, actUsageTab, actUsageRangePrevious, actUsageRangeNext, actUsageAccount, actUsageClose, actStatuslineClose, actStatuslineSource, actStatuslineUp,
 		actStatuslineDown, actStatuslineToggle, actPlanSkip, actSessionClose, actQueuePrevious,
 		actQueueNext, actQueueMoveUp, actQueueMoveDown, actQueueRemove, actQueueLeave, actRewindFork,
 		actRewindUndo, actConfirmYes, actConfirmNo, actHistoryAccept, actHistoryCancel,

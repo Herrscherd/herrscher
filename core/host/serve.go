@@ -68,6 +68,7 @@ type Options struct {
 	DefaultLanguage i18n.Language
 	live            *operatorLanguage
 	health          *healthSource
+	usage           *usageSource
 	Models          *ModelDiscovery
 	DefaultCmd      string
 	HealthAddr      string
@@ -209,6 +210,7 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	approvals := newApprovalTable().withRules(store)
 	sessions := newSessionTable()
 	options.health = &healthSource{}
+	options.usage = newUsageSource(partDir)
 	policy, err := newCompactionPolicy(ctx, options.CompactPercent, options.CompactStack, options.ContextLimits)
 	if err != nil {
 		return wrapHost(err, "serve.compaction", nil)

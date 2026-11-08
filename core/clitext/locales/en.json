@@ -3213,6 +3213,11 @@
     "other": "usage: approve mode <session> <ask|bypass|strict|smart>"
   },
   {
+    "id": "cli.host.fault.usage_empty_value",
+    "description": "Error of a usage command whose option is empty",
+    "other": "usage: an empty value is not accepted"
+  },
+  {
     "id": "cli.host.fault.memory_locate_unsupported",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (memory locate unsupported)",
     "other": "memory backend does not support locate"
@@ -3771,5 +3776,241 @@
     "id": "cli.host.fault.health_not_ready",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (health not ready)",
     "other": "health probes not ready"
+  },
+  {
+    "id": "cli.quota.col.account",
+    "description": "COMPTE column header of the limits table",
+    "other": "ACCOUNT"
+  },
+  {
+    "id": "cli.quota.col.window",
+    "description": "WINDOW column header of the limits table",
+    "other": "WINDOW"
+  },
+  {
+    "id": "cli.quota.col.remaining",
+    "description": "REMAINING column header of the limits table",
+    "other": "REMAINING"
+  },
+  {
+    "id": "cli.quota.col.reset",
+    "description": "RESET column header of the limits table",
+    "other": "RESET"
+  },
+  {
+    "id": "cli.quota.window.five_hour",
+    "description": "Limits window name: five hours",
+    "other": "5 h"
+  },
+  {
+    "id": "cli.quota.window.weekly",
+    "description": "Limits window name: week",
+    "other": "weekly"
+  },
+  {
+    "id": "cli.quota.window.monthly",
+    "description": "Limits window name: month",
+    "other": "monthly"
+  },
+  {
+    "id": "cli.quota.window.scoped",
+    "description": "Limits window with a model family scope",
+    "other": "{{.Window}} · {{.Scope}}"
+  },
+  {
+    "id": "cli.quota.account.native",
+    "description": "Name of the native account of a vendor",
+    "other": "native"
+  },
+  {
+    "id": "cli.quota.unavailable",
+    "description": "Limits of an account the vendor does not report",
+    "other": "unavailable"
+  },
+  {
+    "id": "cli.quota.failed",
+    "description": "Limits of an account whose read failed",
+    "other": "read failed"
+  },
+  {
+    "id": "cli.quota.empty",
+    "description": "Limits report with no account to read",
+    "other": "no account to read limits from"
+  },
+  {
+    "id": "cli.quota.exhausted",
+    "description": "Limits window with nothing left",
+    "other": "exhausted"
+  },
+  {
+    "id": "cli.quota.reset.now",
+    "description": "Reset delay of a limits window already reset",
+    "other": "now"
+  },
+  {
+    "id": "cli.quota.reset.unknown",
+    "description": "Reset delay of a limits window the vendor gives no time for",
+    "other": "unknown"
+  },
+  {
+    "id": "cli.quota.reset.days",
+    "description": "Reset delay in days and hours",
+    "other": "in {{.Days}} d {{.Hours}} h"
+  },
+  {
+    "id": "cli.quota.reset.hours",
+    "description": "Reset delay in hours and minutes",
+    "other": "in {{.Hours}} h {{.Minutes}}"
+  },
+  {
+    "id": "cli.quota.reset.minutes",
+    "description": "Reset delay in minutes",
+    "other": "in {{.Minutes}} min"
+  },
+  {
+    "id": "cli.quota.pace.faster",
+    "description": "Pace delta when the usage runs ahead of the window",
+    "other": "↗ {{.Delta}} %"
+  },
+  {
+    "id": "cli.quota.pace.slower",
+    "description": "Pace delta when the usage runs behind the window",
+    "other": "↘ {{.Delta}} %"
+  },
+  {
+    "id": "cli.spend.empty",
+    "description": "Usage report with no spend in the period",
+    "other": "no spend over the period"
+  },
+  {
+    "id": "cli.spend.range.24h",
+    "description": "Usage period name: 24 hours",
+    "other": "24 h"
+  },
+  {
+    "id": "cli.spend.range.7d",
+    "description": "Usage period name: 7 days",
+    "other": "7 days"
+  },
+  {
+    "id": "cli.spend.range.30d",
+    "description": "Usage period name: 30 days",
+    "other": "30 days"
+  },
+  {
+    "id": "cli.spend.range.90d",
+    "description": "Usage period name: 90 days",
+    "other": "90 days"
+  },
+  {
+    "id": "cli.spend.estimate",
+    "description": "Usage report note: the cost is an estimate at the API rate",
+    "other": "API rate estimate"
+  },
+  {
+    "id": "cli.spend.ledger_truncated",
+    "description": "Usage report: a day of the ledger exceeds the readable size, totals are not shown",
+    "other": "a day of the usage ledger is too large, totals are not shown rather than wrong"
+  },
+  {
+    "id": "cli.spend.peak",
+    "description": "Usage report: the busiest bucket of the period",
+    "other": "max {{.Cost}} on {{.Day}}"
+  },
+  {
+    "id": "cli.spend.col.account",
+    "description": "ACCOUNT column header of the spend tables",
+    "other": "ACCOUNT"
+  },
+  {
+    "id": "cli.spend.col.model",
+    "description": "MODEL column header of the spend tables",
+    "other": "MODEL"
+  },
+  {
+    "id": "cli.spend.col.cost",
+    "description": "COST column header of the spend tables",
+    "other": "COST"
+  },
+  {
+    "id": "cli.spend.col.share",
+    "description": "SHARE column header of the spend tables",
+    "other": "SHARE"
+  },
+  {
+    "id": "cli.spend.col.tokens",
+    "description": "TOKENS column header of the spend tables",
+    "other": "TOKENS"
+  },
+  {
+    "id": "cli.spend.model.unknown",
+    "description": "Spend row of a model the ledger did not name",
+    "other": "unknown model"
+  },
+  {
+    "id": "cli.spend.tokens.total",
+    "description": "Usage report: the tokens of the period",
+    "other": "tokens {{.Total}} · input {{.In}} · output {{.Out}}"
+  },
+  {
+    "id": "cli.spend.tokens.cache",
+    "description": "Usage report: the cache of the period",
+    "other": "cache read {{.Read}} · written {{.Create}} · {{.Ratio}} of input"
+  },
+  {
+    "id": "cli.spend.unit.kilo",
+    "description": "Token count unit: thousand",
+    "other": "k"
+  },
+  {
+    "id": "cli.spend.unit.mega",
+    "description": "Token count unit: million",
+    "other": "M"
+  },
+  {
+    "id": "cli.spend.unit.giga",
+    "description": "Token count unit: billion",
+    "other": "B"
+  },
+  {
+    "id": "cli.spend.sessions",
+    "description": "Usage report: the count of sessions of the period",
+    "one": "{{.Count}} session",
+    "other": "{{.Count}} sessions"
+  },
+  {
+    "id": "cli.help.cmd.usage",
+    "description": "Help of the command usage",
+    "other": "show the limits of the accounts, the spend and the tokens of a period"
+  },
+  {
+    "id": "cli.help.cmd.usage.range",
+    "description": "Help of the usage --range parameter",
+    "other": "the period to report: 24h, 7d, 30d or 90d"
+  },
+  {
+    "id": "cli.help.cmd.usage.account",
+    "description": "Help of the usage --account parameter",
+    "other": "one account, as vendor:name (native for the vendor's own account)"
+  },
+  {
+    "id": "cli.spend.daemon_down",
+    "description": "Error when no daemon answers the usage command, Socket is its socket path",
+    "other": "no herrscher daemon listens on {{.Socket}}, start it with `herrscher serve`"
+  },
+  {
+    "id": "cli.spend.range_unknown",
+    "description": "Error for a --range value that is not a period, Name is the value given",
+    "other": "unknown period {{.Name}}, use 24h, 7d, 30d or 90d"
+  },
+  {
+    "id": "cli.spend.mode_unknown",
+    "description": "Error for a usage view that is not limits, cost or tokens, Name is the word given",
+    "other": "unknown usage view {{.Name}}, use limits, cost or tokens"
+  },
+  {
+    "id": "cli.spend.account_invalid",
+    "description": "Error for an --account value that is not vendor:name, Name is the value given",
+    "other": "account {{.Name}} must be written vendor:name"
   }
 ]

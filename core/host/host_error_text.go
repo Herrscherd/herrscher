@@ -10,6 +10,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/usage"
 )
 
 type localizedHostError struct {
@@ -89,6 +90,7 @@ func hostErrorKeys() []hostErrorKey {
 		{errUnknownShellSession, "cli.host.fault.unknown_shell_session"},
 		{errRemoteShellSession, "cli.host.fault.remote_shell_session"},
 		{errUnsupportedLang, "cli.host.fault.unsupported_lang"},
+		{usage.ErrEmptyValue, "cli.host.fault.usage_empty_value"},
 	}
 }
 

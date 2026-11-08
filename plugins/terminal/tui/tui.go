@@ -337,6 +337,7 @@ type model struct {
 
 	ctxOpen bool
 	health  healthPanel
+	usage   usagePanel
 
 	toast      toast
 	toastSeq   int
@@ -794,10 +795,7 @@ func (m *model) runLocalSlash(text string, args []string) (tea.Cmd, bool) {
 	case "review":
 		return m.openDiff(true), true
 	case "usage":
-		if tb := m.tabs[m.active]; tb != nil {
-			tb.appendEntry(entry{role: roleNotice, text: m.usageReport(tb)})
-			m.syncViewport()
-		}
+		return m.openUsage(), true
 	case "capabilities":
 		m.openDiagnostics()
 	case cmdSkills:
@@ -1627,6 +1625,9 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 	case healthMsg:
 		m.handleHealthMsg(msg)
 		return nil, true
+	case usageMsg:
+		m.handleUsageMsg(msg)
+		return nil, true
 	case toastExpiredMsg:
 		m.handleToastExpired(msg)
 		return nil, true
@@ -1770,6 +1771,8 @@ func (m *model) dispatchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return m.handleContextKey(msg), true
 	case m.health.open:
 		return m.handleHealthKey(msg), true
+	case m.usage.open:
+		return m.handleUsageKey(msg), true
 	case m.pluginsOpen:
 		return m.handlePluginsOverlayKey(msg), true
 	case m.skillsOpen:

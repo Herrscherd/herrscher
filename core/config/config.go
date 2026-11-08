@@ -59,6 +59,8 @@ type Config struct {
 
 	Skills *SkillsConfig `json:"skills,omitempty"`
 
+	Accounts *AccountsConfig `json:"accounts,omitempty"`
+
 	// Keys configures the local API key proxy. Absent means no proxy.
 	Keys *KeysConfig `json:"keys,omitempty"`
 }
@@ -69,6 +71,18 @@ type Config struct {
 type SkillsConfig struct {
 	Enabled *bool    `json:"enabled,omitempty"`
 	Roots   []string `json:"roots,omitempty"`
+}
+
+// AccountsConfig configures how a new session picks its account. A nil Fallback
+// means off: a new session keeps the account it was planned on.
+type AccountsConfig struct {
+	Fallback *bool `json:"fallback,omitempty"`
+}
+
+// AccountFallback reports whether a new session moves to another account of its
+// vendor when the planned one has no quota left.
+func (c Config) AccountFallback() bool {
+	return c.Accounts != nil && c.Accounts.Fallback != nil && *c.Accounts.Fallback
 }
 
 // DefaultPath returns where the daemon looks for config.json. It sits beside

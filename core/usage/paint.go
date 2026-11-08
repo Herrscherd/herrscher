@@ -3,6 +3,8 @@ package usage
 import (
 	"strings"
 	"unicode/utf8"
+
+	"github.com/mattn/go-runewidth"
 )
 
 const (
@@ -12,6 +14,7 @@ const (
 	csiFinalFirst = '@'
 	csiFinalLast  = '~'
 	ansiReset     = "\x1b[0m"
+	percentSuffix = " %"
 )
 
 // Style paints a piece of text for one role of the usage display.
@@ -63,9 +66,9 @@ func visibleWidth(text string) int {
 			index = skipEscape(text, index+csiPrefixLen)
 			continue
 		}
-		_, size := utf8.DecodeRuneInString(text[index:])
+		char, size := utf8.DecodeRuneInString(text[index:])
 		index += size
-		width++
+		width += runewidth.RuneWidth(char)
 	}
 	return width
 }

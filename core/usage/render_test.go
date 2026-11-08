@@ -34,15 +34,15 @@ func TestLimitLinesPutsClaudeFirstAndAlignsTheColumns(t *testing.T) {
 	if !strings.HasPrefix(lines[0], "✳ CLAUDE") {
 		t.Fatalf("first vendor = %q, want Claude", lines[0])
 	}
-	resets := make(map[int]bool)
+	percentColumns := make(map[int]bool)
 	for _, line := range lines[2:5] {
 		before, _, found := strings.Cut(line, " %")
 		if !found {
 			t.Fatalf("row %q has no percent", line)
 		}
-		resets[visibleWidth(before)] = true
+		percentColumns[visibleWidth(before)] = true
 	}
-	if len(resets) != 1 {
+	if len(percentColumns) != 1 {
 		t.Errorf("the percent column is not aligned:\n%s", strings.Join(lines, "\n"))
 	}
 	joined := strings.Join(lines, "\n")
@@ -91,5 +91,35 @@ func TestCostLinesDrawsAShareBarPerModel(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Errorf("cost misses %q:\n%s", want, joined)
 		}
+	}
+}
+
+func TestLimitBarKeepsItsWidthWithTheMarkerAtEitherEnd(t *testing.T) {
+	limit := contracts.Limit{Window: contracts.LimitWeekly, UsedPercent: 50, Span: time.Hour, ResetsAt: time.Now()}
+	for _, elapsed := range []float64{0, 50, percentScale} {
+		bar := limitBar(limit, Pace{Elapsed: elapsed}, Palette{})
+		if width := visibleWidth(bar); width != barWidth {
+			t.Errorf("bar at %v %% elapsed is %d cells, want %d: %q", elapsed, width, barWidth, bar)
+		}
+		if strings.Count(bar, markerCell) != 1 {
+			t.Errorf("bar at %v %% elapsed has no single marker: %q", elapsed, bar)
+		}
+	}
+}
+
+func TestShareBarDrawsNothingForAZeroShare(t *testing.T) {
+	if bar := shareBar(0, Palette{}); strings.Contains(bar, fillCell) || visibleWidth(bar) != barWidth {
+		t.Fatalf("zero share bar = %q", bar)
+	}
+	if bar := shareBar(0.1, Palette{}); strings.Count(bar, fillCell) != 1 {
+		t.Fatalf("a tiny share must still show one cell: %q", bar)
+	}
+}
+
+func TestLimitPercentShowsTheRoundedZeroAsExhausted(t *testing.T) {
+	bad := func(text string) string { return "<" + text + ">" }
+	text := &renderer{lang: i18n.French, pal: Palette{Bad: bad}}
+	if got := limitPercent(contracts.Limit{UsedPercent: 99.6}, text); got != "<0 %>" {
+		t.Fatalf("limitPercent at 0,4 %% left = %q, want the exhausted style", got)
 	}
 }

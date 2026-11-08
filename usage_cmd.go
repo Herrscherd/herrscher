@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/term"
+
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/host"
 	usagecore "github.com/Herrscherd/herrscher/core/usage"
-
-	"golang.org/x/term"
 )
 
 const (

@@ -508,10 +508,11 @@ func OperatorVerb(verb string) bool { return terminalVerbs()[verb] }
 
 // ReadOnlyCommand reports whether argv is one of the read-only queries a terminal
 // runs beside its sessions: the board's lists (skills, schedules, approval rules)
-// and the health and usage overlays, whatever flags those two carry.
+// and the health and usage overlays, whatever flags those two carry. A bare word
+// after health or usage would name a subcommand, so it is refused.
 func ReadOnlyCommand(args []string) bool {
 	if len(args) > 0 && readOnlyVerbs()[args[0]] {
-		return true
+		return len(args) == 1 || strings.HasPrefix(args[1], flagPrefix)
 	}
 	if len(args) != readOnlyCommandWords {
 		return false
@@ -522,6 +523,8 @@ func ReadOnlyCommand(args []string) bool {
 	}
 	return false
 }
+
+const flagPrefix = "--"
 
 func readOnlyVerbs() map[string]bool {
 	return map[string]bool{"health": true, "usage": true}

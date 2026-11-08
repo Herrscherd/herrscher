@@ -206,8 +206,8 @@ func capitalize(name string) string {
 }
 
 func limitPercent(limit contracts.Limit, text *renderer) string {
-	remaining := Remaining(limit)
-	label := formatNumber(text.lang, math.Round(remaining), 0) + " %"
+	remaining := math.Round(Remaining(limit))
+	label := formatNumber(text.lang, remaining, 0) + percentSuffix
 	if remaining <= 0 {
 		return paint(text.pal.Bad, label)
 	}
@@ -232,9 +232,10 @@ func limitBar(limit contracts.Limit, pace Pace, pal Palette) string {
 		fillRun(0, barWidth)
 		return cells.String()
 	}
+	marker = min(marker, barWidth-1)
 	fillRun(0, marker)
 	cells.WriteString(paint(pal.Marker, markerCell))
-	fillRun(marker, barWidth)
+	fillRun(marker+1, barWidth)
 	return cells.String()
 }
 
@@ -392,7 +393,10 @@ func modelTable(shares []Share, total float64, text *renderer, valueHeader clite
 }
 
 func shareBar(part float64, pal Palette) string {
-	filled := max(int(math.Round(part/percentScale*barWidth)), 1)
+	if part <= 0 {
+		return strings.Repeat(" ", barWidth)
+	}
+	filled := min(max(int(math.Round(part/percentScale*barWidth)), 1), barWidth)
 	return paint(pal.Fill, strings.Repeat(fillCell, filled)) + strings.Repeat(" ", barWidth-filled)
 }
 

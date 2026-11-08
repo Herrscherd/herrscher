@@ -35,6 +35,7 @@ const (
 	ctxSearch          keyContext = "Search"
 	ctxDiagnostics     keyContext = "Diagnostics"
 	ctxContext         keyContext = "Context"
+	ctxHealth          keyContext = "Health"
 	ctxStatusline      keyContext = "Statusline"
 	ctxPlan            keyContext = "Plan"
 	ctxSkills          keyContext = "Skills"
@@ -159,6 +160,10 @@ const (
 	actContextCompact       keyAction = "context:compact"
 	actContextSync          keyAction = "context:syncTabs"
 	actContextClose         keyAction = "context:close"
+	actHealthRefresh        keyAction = "health:refresh"
+	actHealthDeep           keyAction = "health:deep"
+	actHealthDetail         keyAction = "health:detail"
+	actHealthClose          keyAction = "health:close"
 	actStatuslineClose      keyAction = "statusline:close"
 	actStatuslineSource     keyAction = "statusline:switchSource"
 	actStatuslineUp         keyAction = "statusline:fieldUp"
@@ -304,6 +309,10 @@ func defaultKeyBindings() []keyDefault {
 	add(ctxContext, actContextSync, "k")
 	add(ctxContext, actNotifyCycle, "n")
 	add(ctxContext, actContextClose, "z", "esc")
+	add(ctxHealth, actHealthRefresh, "r")
+	add(ctxHealth, actHealthDeep, "d")
+	add(ctxHealth, actHealthDetail, "enter")
+	add(ctxHealth, actHealthClose, "esc")
 	add(ctxStatusline, actStatuslineClose, "esc")
 	add(ctxStatusline, actStatuslineSource, "s")
 	add(ctxStatusline, actStatuslineUp, "shift+up")
@@ -432,7 +441,7 @@ func knownKeyActions() []keyAction {
 		actThemeEdit, actThemeInstall, actThemeGlyphs, actThemeBorders, actThemeDensity,
 		actThemeBold, actThemeItalic, actThemeAuto, actThemeCopyCommand, actThemeCopyConfig,
 		actSearchClose, actSearchNext, actSearchPrevious, actBoardPanes, actContextCompact,
-		actContextSync, actContextClose, actStatuslineClose, actStatuslineSource, actStatuslineUp,
+		actContextSync, actContextClose, actHealthRefresh, actHealthDeep, actHealthDetail, actHealthClose, actStatuslineClose, actStatuslineSource, actStatuslineUp,
 		actStatuslineDown, actStatuslineToggle, actPlanSkip, actSessionClose, actQueuePrevious,
 		actQueueNext, actQueueMoveUp, actQueueMoveDown, actQueueRemove, actQueueLeave, actRewindFork,
 		actRewindUndo, actConfirmYes, actConfirmNo, actHistoryAccept, actHistoryCancel,

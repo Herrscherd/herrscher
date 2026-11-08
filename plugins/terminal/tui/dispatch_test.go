@@ -93,6 +93,7 @@ func handlersByContext(tables *dispatchTables) map[keyContext][]keyAction {
 	handlers[ctxSearch] = keysOf(tables.search)
 	handlers[ctxDiagnostics] = keysOf(tables.diag)
 	handlers[ctxContext] = keysOf(tables.context)
+	handlers[ctxHealth] = keysOf(tables.health)
 	handlers[ctxStatusline] = append(append(keysOf(tables.statusline), keysOf(tables.statuslineField)...), list...)
 	handlers[ctxPlan] = keysOf(tables.plan)
 	handlers[ctxSkills] = append(keysOf(tables.skills), list...)

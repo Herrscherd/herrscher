@@ -175,6 +175,7 @@ func (m *model) frameOverlays() []frameOverlay {
 		{m.skillsOpen, m.skillsView},
 		{m.diagOpen, m.diagView},
 		{m.ctxOpen, m.contextView},
+		{m.health.open, m.healthOverlayView},
 		{m.pluginsOpen, m.pluginsView},
 		{m.searchOpen, m.searchView},
 		{m.showHelp, m.helpView},

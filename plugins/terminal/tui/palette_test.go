@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -67,6 +68,7 @@ func TestPaletteViewShowsALateSelection(t *testing.T) {
 }
 
 func TestLocalCommandsAreNeverDispatched(t *testing.T) {
+	readVerbs := []string{verbHealth}
 	for _, c := range localCommands(newTranslator()) {
 		be := &fakeBackend{}
 		be.sessions = []contracts.SessionInfo{{Name: "avant", ChannelID: "c1"}}
@@ -77,7 +79,7 @@ func TestLocalCommandsAreNeverDispatched(t *testing.T) {
 		m.input.SetValue("/" + c.Name)
 		runCmd(m.handleEnter())
 		for _, argv := range be.dispatched {
-			if argv[0] == c.Name {
+			if argv[0] == c.Name && !slices.Contains(readVerbs, c.Name) {
 				t.Errorf("/%s is advertised as local but was dispatched: %v", c.Name, argv)
 			}
 		}

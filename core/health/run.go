@@ -50,7 +50,7 @@ func (r Runner) Run(ctx context.Context, probes []Probe, deep bool) ([]Check, ti
 		select {
 		case slots <- struct{}{}:
 		case <-ctx.Done():
-			checks[index] = timedOut(probe.Check, contracts.ProbeReport{}, timeout)
+			checks[index] = timedOut(probe.Check, timeout)
 			continue
 		}
 		wg.Go(func() {
@@ -75,13 +75,13 @@ func (r Runner) runOne(ctx context.Context, probe Probe, deep bool, timeout time
 			report.Latency = clock().Sub(started)
 		}
 		if probeCtx.Err() != nil || ctx.Err() != nil {
-			return timedOut(probe.Check, report, timeout)
+			return timedOut(probe.Check, timeout)
 		}
 		check := probe.Check
 		check.Report = Settled(report)
 		return check
 	case <-probeCtx.Done():
-		return timedOut(probe.Check, contracts.ProbeReport{}, timeout)
+		return timedOut(probe.Check, timeout)
 	}
 }
 
@@ -95,8 +95,8 @@ func answerProbe(ctx context.Context, probe Probe, deep bool, answer chan<- cont
 	answer <- probe.Run(ctx, deep)
 }
 
-func timedOut(check Check, report contracts.ProbeReport, timeout time.Duration) Check {
-	check.Report = contracts.ProbeReport{State: contracts.HealthDown, Latency: timeout, Remedy: report.Remedy}
+func timedOut(check Check, timeout time.Duration) Check {
+	check.Report = contracts.ProbeReport{State: contracts.HealthDown, Latency: timeout}
 	check.Facts.TimedOut = timeout
 	return check
 }

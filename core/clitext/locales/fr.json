@@ -3633,21 +3633,6 @@
     "other": "lancer de vrais allers-retours au lieu des vérifications rapides"
   },
   {
-    "id": "cli.flag.health_deep",
-    "description": "Help of the --deep flag of health",
-    "other": "vérifier par un aller-retour réel"
-  },
-  {
-    "id": "cli.flag.health_watch",
-    "description": "Help of the --watch flag of health",
-    "other": "rafraîchir le rapport toutes les 15 secondes"
-  },
-  {
-    "id": "cli.flag.health_quiet",
-    "description": "Help of the --quiet flag of health",
-    "other": "n'afficher rien, le code de sortie donne l'état"
-  },
-  {
     "id": "cli.health.summary.down",
     "description": "Health summary segment, the count of the checks in the state",
     "one": "{{.Count}} panne",

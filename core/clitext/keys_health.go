@@ -4,9 +4,6 @@ package clitext
 const (
 	CmdHelpHealth          = "cli.help.cmd.health"
 	CmdHelpHealthDeep      = "cli.help.cmd.health.deep"
-	FlagHealthDeep         = "cli.flag.health_deep"
-	FlagHealthWatch        = "cli.flag.health_watch"
-	FlagHealthQuiet        = "cli.flag.health_quiet"
 	HealthSummaryDown      = "cli.health.summary.down"
 	HealthSummaryDegraded  = "cli.health.summary.degraded"
 	HealthSummaryOK        = "cli.health.summary.ok"
@@ -39,9 +36,6 @@ func healthKeys() map[Key][]string {
 	return map[Key][]string{
 		CmdHelpHealth:          nil,
 		CmdHelpHealthDeep:      nil,
-		FlagHealthDeep:         nil,
-		FlagHealthWatch:        nil,
-		FlagHealthQuiet:        nil,
 		HealthSummaryDown:      {ParamCount},
 		HealthSummaryDegraded:  {ParamCount},
 		HealthSummaryOK:        {ParamCount},

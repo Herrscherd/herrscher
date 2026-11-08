@@ -3633,21 +3633,6 @@
     "other": "run real round trips instead of the cheap checks"
   },
   {
-    "id": "cli.flag.health_deep",
-    "description": "Help of the --deep flag of health",
-    "other": "check with a real round trip"
-  },
-  {
-    "id": "cli.flag.health_watch",
-    "description": "Help of the --watch flag of health",
-    "other": "refresh the report every 15 seconds"
-  },
-  {
-    "id": "cli.flag.health_quiet",
-    "description": "Help of the --quiet flag of health",
-    "other": "print nothing, the exit code tells the state"
-  },
-  {
     "id": "cli.health.summary.down",
     "description": "Health summary segment, the count of the checks in the state",
     "one": "{{.Count}} down",

@@ -3,6 +3,7 @@ package health
 import (
 	"fmt"
 	"io"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -12,12 +13,18 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
-const tabPadding = 2
+const (
+	tabPadding   = 2
+	summarySep   = " · "
+	daysInterval = 24 * time.Hour
+)
 
-// Table writes the checks grouped as the report lists them, one line each, and
-// the summary line that counts the watched checks that are ok.
+// Table writes the banner of the daemon, the checks grouped as the report lists
+// them, one line each, and the summary line that counts the checks per state and
+// names the worst one when something fails.
 func (s Snapshot) Table(writer io.Writer, lang i18n.Language) error {
 	text := &renderer{lang: lang}
+	text.line(writer, "%s\n", text.key(clitext.HealthBanner, s.bannerParams(text)))
 	tabs := tabwriter.NewWriter(writer, 0, 0, tabPadding, ' ', 0)
 	text.line(tabs, "%s\n", text.key(clitext.HealthHeader, nil))
 	for _, group := range Groups() {
@@ -28,21 +35,22 @@ func (s Snapshot) Table(writer io.Writer, lang i18n.Language) error {
 		text.line(tabs, "%s\n", text.key(groupKey(group), nil))
 		for index := range checks {
 			report := Settled(checks[index].Report)
-			text.line(tabs, "  %s\t%s\t%s\t%s\n", label(checks[index], text), text.key(stateKey(report.State), nil), latency(report), s.facts(checks[index], text, report))
+			text.line(tabs, "  %s\t%s\t%s\t%s\n", label(checks[index], text), stateText(report.State, text), latency(report), s.facts(checks[index], text, report))
 		}
 	}
 	text.keep(tabs.Flush())
-	return text.write(writer, clitext.HealthSummary, s.summaryParams())
+	text.line(writer, "%s\n", s.summary(text))
+	return text.err
 }
 
-// Details writes the detail view of checks: the cause of each one, then the
-// remedy when there is one.
+// Details writes the detail view of checks: the state and facts of each one, then
+// its cause, and its remedy when there is one.
 func (s Snapshot) Details(writer io.Writer, checks []Check, lang i18n.Language) error {
 	text := &renderer{lang: lang}
 	for index := range checks {
 		check := checks[index]
 		report := Settled(check.Report)
-		text.line(writer, "%s  %s  %s\n", label(check, text), text.key(stateKey(report.State), nil), latency(report))
+		text.line(writer, "%s  %s  %s\n", label(check, text), stateText(report.State, text), latency(report))
 		if line := s.facts(check, text, report); line != "" {
 			text.line(writer, "  %s\n", line)
 		}
@@ -56,12 +64,52 @@ func (s Snapshot) Details(writer io.Writer, checks []Check, lang i18n.Language) 
 	return text.err
 }
 
-func (s Snapshot) summaryParams() clitext.Params {
-	summary := Summarize(s.Checks)
+func (s Snapshot) bannerParams(text *renderer) clitext.Params {
 	return clitext.Params{
-		clitext.ParamCount: summary.Count(contracts.HealthOK),
-		clitext.ParamTotal: summary.Watched(),
+		clitext.ParamVersion: s.Daemon.Version,
+		clitext.ParamUptime:  s.uptime(text),
+		clitext.ParamPID:     s.Daemon.PID,
+		clitext.ParamElapsed: s.Elapsed.Round(time.Millisecond).String(),
 	}
+}
+
+func (s Snapshot) uptime(text *renderer) string {
+	var elapsed time.Duration
+	if !s.Daemon.Started.IsZero() && s.ProbedAt.After(s.Daemon.Started) {
+		elapsed = s.ProbedAt.Sub(s.Daemon.Started)
+	}
+	return text.key(clitext.HealthUptime, clitext.Params{
+		clitext.ParamDays:    int(elapsed / daysInterval),
+		clitext.ParamHours:   int(elapsed % daysInterval / time.Hour),
+		clitext.ParamMinutes: int(elapsed % time.Hour / time.Minute),
+	})
+}
+
+func (s Snapshot) summary(text *renderer) string {
+	summary := Summarize(s.Checks)
+	var segments []string
+	if count := summary.Count(contracts.HealthDown); count > 0 {
+		segments = append(segments, text.key(clitext.HealthSummaryDown, clitext.Params{clitext.ParamCount: count}))
+	}
+	if count := summary.Count(contracts.HealthDegraded); count > 0 {
+		segments = append(segments, text.key(clitext.HealthSummaryDegraded, clitext.Params{clitext.ParamCount: count}))
+	}
+	segments = append(segments, text.key(clitext.HealthSummaryOK, clitext.Params{clitext.ParamCount: summary.Count(contracts.HealthOK)}))
+	if worst, found := s.worst(); found {
+		segments = append(segments, text.key(clitext.HealthDetailHint, clitext.Params{clitext.ParamName: worst.Service()}))
+	}
+	return strings.Join(segments, summarySep)
+}
+
+func (s Snapshot) worst() (Check, bool) {
+	for _, state := range []contracts.HealthState{contracts.HealthDown, contracts.HealthDegraded} {
+		for index := range s.Checks {
+			if Settled(s.Checks[index].Report).State == state {
+				return s.Checks[index], true
+			}
+		}
+	}
+	return Check{}, false
 }
 
 func (s Snapshot) inGroup(group Group) []Check {
@@ -80,9 +128,12 @@ func (s Snapshot) facts(check Check, text *renderer, report contracts.ProbeRepor
 		return text.notice(report.Detail)
 	}
 	if check.Facts.Pool != nil {
-		return text.key(clitext.HealthPoolFacts, clitext.Params{
-			clitext.ParamCount: check.Facts.Pool.Usable,
-			clitext.ParamTotal: check.Facts.Pool.Keys,
+		return poolFacts(check.Facts.Pool, text)
+	}
+	if check.Group == GroupCore && check.Name == "proxy" {
+		return text.key(clitext.HealthProxyFacts, clitext.Params{
+			clitext.ParamListen: check.Facts.Listen,
+			clitext.ParamCount:  check.Facts.Providers,
 		})
 	}
 	if check.Group == GroupCore && check.Name == "daemon" {
@@ -92,6 +143,20 @@ func (s Snapshot) facts(check Check, text *renderer, report contracts.ProbeRepor
 		})
 	}
 	return ""
+}
+
+func poolFacts(pool *Pool, text *renderer) string {
+	segments := []string{text.key(clitext.HealthPoolFacts, clitext.Params{
+		clitext.ParamCount: pool.Usable,
+		clitext.ParamTotal: pool.Keys,
+	})}
+	if pool.LastStatus != 0 {
+		segments = append(segments, text.key(clitext.HealthPoolLastStatus, clitext.Params{clitext.ParamStatus: pool.LastStatus}))
+	}
+	if pool.CoolingFor > 0 {
+		segments = append(segments, text.key(clitext.HealthPoolCooling, clitext.Params{clitext.ParamDuration: pool.CoolingFor.Round(time.Second).String()}))
+	}
+	return strings.Join(segments, summarySep)
 }
 
 func label(check Check, text *renderer) string {
@@ -126,6 +191,24 @@ func groupKey(group Group) clitext.Key {
 	return ""
 }
 
+func stateText(state contracts.HealthState, text *renderer) string {
+	return stateGlyph(state) + " " + text.key(stateKey(state), nil)
+}
+
+func stateGlyph(state contracts.HealthState) string {
+	switch state {
+	case contracts.HealthOK:
+		return "●"
+	case contracts.HealthDegraded:
+		return "◐"
+	case contracts.HealthDown:
+		return "✕"
+	case contracts.HealthOff:
+		return "○"
+	}
+	return "○"
+}
+
 func stateKey(state contracts.HealthState) clitext.Key {
 	switch state {
 	case contracts.HealthOK:
@@ -155,14 +238,6 @@ func (r *renderer) notice(notice contracts.Notice) string {
 	value, err := contracts.NewRenderer().Render(r.lang, notice)
 	r.keep(err)
 	return value
-}
-
-func (r *renderer) write(writer io.Writer, key clitext.Key, params clitext.Params) error {
-	value := r.key(key, params)
-	if _, err := fmt.Fprintln(writer, value); err != nil {
-		return err
-	}
-	return r.err
 }
 
 func (r *renderer) line(w io.Writer, format string, args ...any) {

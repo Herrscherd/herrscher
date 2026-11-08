@@ -3648,10 +3648,53 @@
     "other": "n'afficher rien, le code de sortie donne l'état"
   },
   {
-    "id": "cli.health.summary",
-    "description": "Summary line of health: services ok out of services checked",
-    "one": "santé {{.Count}}/{{.Total}}",
-    "other": "santé {{.Count}}/{{.Total}}"
+    "id": "cli.health.summary.down",
+    "description": "Health summary segment, the count of the checks in the state",
+    "one": "{{.Count}} panne",
+    "other": "{{.Count}} pannes"
+  },
+  {
+    "id": "cli.health.summary.degraded",
+    "description": "Health summary segment, the count of the checks in the state",
+    "one": "{{.Count}} dégradé",
+    "other": "{{.Count}} dégradés"
+  },
+  {
+    "id": "cli.health.summary.ok",
+    "description": "Health summary segment, the count of the checks in the state",
+    "one": "{{.Count}} ok",
+    "other": "{{.Count}} ok"
+  },
+  {
+    "id": "cli.health.detail_hint",
+    "description": "Health line of the CLI report: detail hint",
+    "other": "détail : herrscher health {{.Name}}"
+  },
+  {
+    "id": "cli.health.banner",
+    "description": "Health line of the CLI report: banner",
+    "other": "herrscher {{.Version}} · démarré depuis {{.Uptime}} · pid {{.PID}} · sondé en {{.Elapsed}}"
+  },
+  {
+    "id": "cli.health.uptime",
+    "description": "Health line of the CLI report: uptime",
+    "other": "{{.Days}} j {{.Hours}} h {{.Minutes}} min"
+  },
+  {
+    "id": "cli.health.facts.proxy",
+    "description": "Health line of the CLI report: facts.proxy",
+    "one": "écoute sur {{.Listen}}, {{.Count}} fournisseur",
+    "other": "écoute sur {{.Listen}}, {{.Count}} fournisseurs"
+  },
+  {
+    "id": "cli.health.facts.last_status",
+    "description": "Health line of the CLI report: facts.last status",
+    "other": "dernier statut {{.Status}}"
+  },
+  {
+    "id": "cli.health.facts.cooling",
+    "description": "Health line of the CLI report: facts.cooling",
+    "other": "refroidissement {{.Duration}}"
   },
   {
     "id": "cli.health.header",
@@ -3701,12 +3744,12 @@
   {
     "id": "cli.health.state.down",
     "description": "State down in health",
-    "other": "hors service"
+    "other": "panne"
   },
   {
     "id": "cli.health.state.off",
     "description": "State off in health",
-    "other": "désactivé"
+    "other": "déconnecté"
   },
   {
     "id": "cli.health.daemon_down",

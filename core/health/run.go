@@ -2,7 +2,8 @@ package health
 
 import (
 	"context"
-	"errors"
+	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -10,7 +11,7 @@ import (
 )
 
 // Probe is one check to run: the check it fills in, and the function that
-// probes the service. Run stops when its context is done.
+// probes the service. Run should return when its context is done.
 type Probe struct {
 	Check Check
 	Run   func(ctx context.Context, deep bool) contracts.ProbeReport
@@ -25,7 +26,8 @@ const (
 
 // Runner runs probes side by side, at most Workers at a time, each one bounded
 // by Timeout, or DeepTimeout for a deep run. Now is the clock the run is timed
-// with.
+// with. A probe that does not return by its timeout is abandoned, and its
+// goroutine leaks with it: a probe must honour its context.
 type Runner struct {
 	Workers     int
 	Timeout     time.Duration
@@ -53,23 +55,44 @@ func (r Runner) Run(ctx context.Context, probes []Probe, deep bool) ([]Check, ti
 		}
 		wg.Go(func() {
 			defer func() { <-slots }()
-			checks[index] = runOne(ctx, probe, deep, timeout)
+			checks[index] = r.runOne(ctx, probe, deep, timeout)
 		})
 	}
 	wg.Wait()
 	return checks, now().Sub(started)
 }
 
-func runOne(ctx context.Context, probe Probe, deep bool, timeout time.Duration) Check {
+func (r Runner) runOne(ctx context.Context, probe Probe, deep bool, timeout time.Duration) Check {
 	probeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	report := probe.Run(probeCtx, deep)
-	if errors.Is(probeCtx.Err(), context.DeadlineExceeded) || ctx.Err() != nil {
-		return timedOut(probe.Check, report, timeout)
+	clock := r.clock()
+	started := clock()
+	answer := make(chan contracts.ProbeReport, 1)
+	go answerProbe(probeCtx, probe, deep, answer)
+	select {
+	case report := <-answer:
+		if report.Latency == 0 {
+			report.Latency = clock().Sub(started)
+		}
+		if probeCtx.Err() != nil || ctx.Err() != nil {
+			return timedOut(probe.Check, report, timeout)
+		}
+		check := probe.Check
+		check.Report = Settled(report)
+		return check
+	case <-probeCtx.Done():
+		return timedOut(probe.Check, contracts.ProbeReport{}, timeout)
 	}
-	check := probe.Check
-	check.Report = Settled(report)
-	return check
+}
+
+func answerProbe(ctx context.Context, probe Probe, deep bool, answer chan<- contracts.ProbeReport) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			slog.Error("health probe panicked", "check", probe.Check.Service(), "panic_type", fmt.Sprintf("%T", recovered))
+			answer <- contracts.ProbeReport{State: contracts.HealthDown}
+		}
+	}()
+	answer <- probe.Run(ctx, deep)
 }
 
 func timedOut(check Check, report contracts.ProbeReport, timeout time.Duration) Check {

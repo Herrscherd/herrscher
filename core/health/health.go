@@ -47,6 +47,7 @@ type Daemon struct {
 	PID     int
 	Started time.Time
 	Socket  string
+	Version string
 }
 
 // Snapshot is one complete health run, as the daemon answers it.

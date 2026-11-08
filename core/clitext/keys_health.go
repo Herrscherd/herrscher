@@ -7,7 +7,15 @@ const (
 	FlagHealthDeep         = "cli.flag.health_deep"
 	FlagHealthWatch        = "cli.flag.health_watch"
 	FlagHealthQuiet        = "cli.flag.health_quiet"
-	HealthSummary          = "cli.health.summary"
+	HealthSummaryDown      = "cli.health.summary.down"
+	HealthSummaryDegraded  = "cli.health.summary.degraded"
+	HealthSummaryOK        = "cli.health.summary.ok"
+	HealthDetailHint       = "cli.health.detail_hint"
+	HealthBanner           = "cli.health.banner"
+	HealthUptime           = "cli.health.uptime"
+	HealthProxyFacts       = "cli.health.facts.proxy"
+	HealthPoolLastStatus   = "cli.health.facts.last_status"
+	HealthPoolCooling      = "cli.health.facts.cooling"
 	HealthHeader           = "cli.health.header"
 	HealthGroupCore        = "cli.health.group.core"
 	HealthGroupGateways    = "cli.health.group.gateways"
@@ -34,7 +42,15 @@ func healthKeys() map[Key][]string {
 		FlagHealthDeep:         nil,
 		FlagHealthWatch:        nil,
 		FlagHealthQuiet:        nil,
-		HealthSummary:          {ParamCount, ParamTotal},
+		HealthSummaryDown:      {ParamCount},
+		HealthSummaryDegraded:  {ParamCount},
+		HealthSummaryOK:        {ParamCount},
+		HealthDetailHint:       {ParamName},
+		HealthBanner:           {ParamVersion, ParamUptime, ParamPID, ParamElapsed},
+		HealthUptime:           {ParamDays, ParamHours, ParamMinutes},
+		HealthProxyFacts:       {ParamListen, ParamCount},
+		HealthPoolLastStatus:   {ParamStatus},
+		HealthPoolCooling:      {ParamDuration},
 		HealthHeader:           nil,
 		HealthGroupCore:        nil,
 		HealthGroupGateways:    nil,

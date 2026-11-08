@@ -3648,10 +3648,53 @@
     "other": "print nothing, the exit code tells the state"
   },
   {
-    "id": "cli.health.summary",
-    "description": "Summary line of health: services ok out of services checked",
-    "one": "health {{.Count}}/{{.Total}}",
-    "other": "health {{.Count}}/{{.Total}}"
+    "id": "cli.health.summary.down",
+    "description": "Health summary segment, the count of the checks in the state",
+    "one": "{{.Count}} down",
+    "other": "{{.Count}} down"
+  },
+  {
+    "id": "cli.health.summary.degraded",
+    "description": "Health summary segment, the count of the checks in the state",
+    "one": "{{.Count}} degraded",
+    "other": "{{.Count}} degraded"
+  },
+  {
+    "id": "cli.health.summary.ok",
+    "description": "Health summary segment, the count of the checks in the state",
+    "one": "{{.Count}} ok",
+    "other": "{{.Count}} ok"
+  },
+  {
+    "id": "cli.health.detail_hint",
+    "description": "Health line of the CLI report: detail hint",
+    "other": "details: herrscher health {{.Name}}"
+  },
+  {
+    "id": "cli.health.banner",
+    "description": "Health line of the CLI report: banner",
+    "other": "herrscher {{.Version}} · up {{.Uptime}} · pid {{.PID}} · probed in {{.Elapsed}}"
+  },
+  {
+    "id": "cli.health.uptime",
+    "description": "Health line of the CLI report: uptime",
+    "other": "{{.Days}} d {{.Hours}} h {{.Minutes}} min"
+  },
+  {
+    "id": "cli.health.facts.proxy",
+    "description": "Health line of the CLI report: facts.proxy",
+    "one": "listens on {{.Listen}}, {{.Count}} provider",
+    "other": "listens on {{.Listen}}, {{.Count}} providers"
+  },
+  {
+    "id": "cli.health.facts.last_status",
+    "description": "Health line of the CLI report: facts.last status",
+    "other": "last status {{.Status}}"
+  },
+  {
+    "id": "cli.health.facts.cooling",
+    "description": "Health line of the CLI report: facts.cooling",
+    "other": "cooling {{.Duration}}"
   },
   {
     "id": "cli.health.header",

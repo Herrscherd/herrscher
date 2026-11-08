@@ -5,6 +5,8 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"runtime/debug"
+	"strings"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -28,6 +30,8 @@ type healthSource struct {
 	inputs healthInputs
 	ready  bool
 }
+
+type runFunc = func(ctx context.Context, deep bool) contracts.ProbeReport
 
 var errHealthNotReady = errors.New("health probes not ready")
 
@@ -56,9 +60,7 @@ func healthProbes(inputs healthInputs) []health.Probe {
 func daemonProbe(daemon health.Daemon) health.Probe {
 	return health.Probe{
 		Check: health.Check{Group: health.GroupCore, Name: "daemon", Facts: health.Facts{Socket: daemon.Socket}},
-		Run: func(context.Context, bool) contracts.ProbeReport {
-			return contracts.ProbeReport{State: contracts.HealthOK}
-		},
+		Run:   reportRun(contracts.ProbeReport{State: contracts.HealthOK}),
 	}
 }
 
@@ -67,24 +69,33 @@ func keyProbes(inputs healthInputs) []health.Probe {
 		return nil
 	}
 	pools := inputs.keys.Pools(inputs.now())
-	probes := make([]health.Probe, 0, len(pools))
+	probes := make([]health.Probe, 0, len(pools)+1)
+	probes = append(probes, proxyProbe(inputs.keys.Listen(), len(pools)))
 	for _, pool := range pools {
-		report := contracts.ProbeReport{State: poolState(pool)}
-		probes = append(probes, health.Probe{
-			Check: health.Check{
-				Group: health.GroupKeys,
-				Name:  pool.Provider,
-				Facts: health.Facts{Listen: inputs.keys.Listen(), Pool: &health.Pool{
-					Keys:       pool.Keys,
-					Usable:     pool.Usable,
-					LastStatus: pool.LastStatus,
-					CoolingFor: pool.CoolingFor,
-				}},
-			},
-			Run: func(context.Context, bool) contracts.ProbeReport { return report },
-		})
+		check := health.Check{
+			Group: health.GroupKeys,
+			Name:  pool.Provider,
+			Facts: health.Facts{Listen: inputs.keys.Listen(), Pool: &health.Pool{
+				Keys:       pool.Keys,
+				Usable:     pool.Usable,
+				LastStatus: pool.LastStatus,
+				CoolingFor: pool.CoolingFor,
+			}},
+		}
+		probes = append(probes, health.Probe{Check: check, Run: reportRun(contracts.ProbeReport{State: poolState(pool)})})
 	}
 	return probes
+}
+
+func proxyProbe(listen string, providers int) health.Probe {
+	state := contracts.HealthOK
+	if providers == 0 {
+		state = contracts.HealthOff
+	}
+	return health.Probe{
+		Check: health.Check{Group: health.GroupCore, Name: "proxy", Facts: health.Facts{Listen: listen, Providers: providers}},
+		Run:   reportRun(contracts.ProbeReport{State: state}),
+	}
 }
 
 func poolState(pool keyproxy.PoolState) contracts.HealthState {
@@ -113,19 +124,14 @@ func gatewayProbes(inputs healthInputs) []health.Probe {
 	return probes
 }
 
-func gatewayRun(plugin contracts.Plugin, live bool) func(context.Context, bool) contracts.ProbeReport {
+func gatewayRun(plugin contracts.Plugin, live bool) runFunc {
+	if !live {
+		return reportRun(contracts.ProbeReport{State: contracts.HealthOff})
+	}
 	if plugin.Probe != nil {
-		return func(ctx context.Context, deep bool) contracts.ProbeReport {
-			return plugin.Probe(ctx, contracts.ProbeAccess{Getenv: os.Getenv, Deep: deep})
-		}
+		return pluginProbeRun(plugin.Manifest.Config, plugin.Probe, "", os.Getenv)
 	}
-	state := contracts.HealthOff
-	if live {
-		state = contracts.HealthOK
-	}
-	return func(context.Context, bool) contracts.ProbeReport {
-		return contracts.ProbeReport{State: state}
-	}
+	return reportRun(contracts.ProbeReport{State: contracts.HealthOK})
 }
 
 func backendProbes(inputs healthInputs) []health.Probe {
@@ -143,16 +149,17 @@ func backendProbes(inputs healthInputs) []health.Probe {
 			if profile.Vendor != kind {
 				continue
 			}
-			env, envErr := contracts.ProfileEnv(kind, profile.Dir)
-			if envErr != nil {
-				slog.Warn("health: profile env unavailable", "vendor", kind, "err", envErr)
-				continue
-			}
 			check := health.Check{
 				Group:   health.GroupBackends,
 				Name:    kind,
 				Account: contracts.ProfileName(profile.Name),
 				Default: profile.Default,
+			}
+			env, envErr := contracts.ProfileEnv(kind, profile.Dir)
+			if envErr != nil {
+				slog.Warn("health: profile env unavailable", "vendor", kind, "err", envErr)
+				probes = append(probes, health.Probe{Check: check, Run: reportRun(profileEnvReport(envErr))})
+				continue
 			}
 			probes = append(probes, backendProbe(plugin, check, env))
 		}
@@ -160,18 +167,23 @@ func backendProbes(inputs healthInputs) []health.Probe {
 	return probes
 }
 
+func profileEnvReport(err error) contracts.ProbeReport {
+	if errors.Is(err, contracts.ErrNoProfileHome) {
+		return contracts.ProbeReport{State: contracts.HealthOff}
+	}
+	return unreachableReport(err)
+}
+
 func backendProbe(plugin contracts.Plugin, check health.Check, env map[string]string) health.Probe {
 	return health.Probe{Check: check, Run: backendRun(plugin, check.Account, env)}
 }
 
-func backendRun(plugin contracts.Plugin, account contracts.ProfileName, env map[string]string) func(context.Context, bool) contracts.ProbeReport {
+func backendRun(plugin contracts.Plugin, account contracts.ProfileName, env map[string]string) runFunc {
 	if plugin.Probe != nil {
-		return func(probeCtx context.Context, deep bool) contracts.ProbeReport {
-			return plugin.Probe(probeCtx, contracts.ProbeAccess{Getenv: envGetter(env), Account: account, Deep: deep})
-		}
+		return pluginProbeRun(plugin.Manifest.Config, plugin.Probe, account, envGetter(env))
 	}
 	return func(runCtx context.Context, _ bool) contracts.ProbeReport {
-		return loginReport(runCtx, plugin.Manifest.Kind, account, env)
+		return loginReport(runCtx, accounts.OSRunner, plugin.Manifest.Kind, account, env)
 	}
 }
 
@@ -184,16 +196,13 @@ func envGetter(env map[string]string) func(string) string {
 	}
 }
 
-func loginReport(ctx context.Context, vendor string, account contracts.ProfileName, env map[string]string) contracts.ProbeReport {
-	loggedIn, err := accounts.Status(ctx, accounts.OSRunner, vendor, env)
+func loginReport(ctx context.Context, run accounts.Runner, vendor string, account contracts.ProfileName, env map[string]string) contracts.ProbeReport {
+	loggedIn, err := accounts.Status(ctx, run, vendor, env)
 	switch {
 	case errors.Is(err, contracts.ErrNoProfileHome):
 		return contracts.ProbeReport{State: contracts.HealthOff}
 	case err != nil:
-		return contracts.ProbeReport{
-			State:  contracts.HealthDown,
-			Detail: contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", err.Error())}},
-		}
+		return unreachableReport(err)
 	case !loggedIn:
 		return contracts.ProbeReport{
 			State:  contracts.HealthOff,
@@ -216,6 +225,50 @@ func loginRemedy(ctx context.Context, vendor string, account contracts.ProfileNa
 	return contracts.Notice{Code: contracts.CodeHealthRemedyRun, Args: []contracts.Arg{contracts.Text("Command", command)}}
 }
 
+func unreachableReport(err error) contracts.ProbeReport {
+	return contracts.ProbeReport{
+		State:  contracts.HealthDown,
+		Detail: contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", err.Error())}},
+	}
+}
+
+func pluginProbeRun(settings []contracts.Setting, probe contracts.HealthProber, account contracts.ProfileName, getenv func(string) string) runFunc {
+	return func(ctx context.Context, deep bool) contracts.ProbeReport {
+		cfg, err := contracts.Resolve(settings, getenv)
+		if err != nil {
+			return settingsReport(err)
+		}
+		return probe(ctx, contracts.ProbeAccess{Getenv: getenv, Account: account, Config: cfg, Deep: deep})
+	}
+}
+
+func settingsReport(err error) contracts.ProbeReport {
+	missing, ok := errors.AsType[*contracts.MissingSettingsError](err)
+	if !ok || len(missing.Missing) == 0 {
+		return unreachableReport(err)
+	}
+	name, fromEnv := missingEnvName(missing.Missing[0])
+	if !fromEnv {
+		return unreachableReport(err)
+	}
+	return contracts.ProbeReport{
+		State:  contracts.HealthDown,
+		Detail: contracts.Notice{Code: contracts.CodeHealthEnvMissing, Args: []contracts.Arg{contracts.Text("Name", name)}},
+		Remedy: contracts.Notice{Code: contracts.CodeHealthRemedyEnvRestart, Args: []contracts.Arg{contracts.Text("Name", name)}},
+	}
+}
+
+func missingEnvName(entry string) (string, bool) {
+	_, name, found := strings.Cut(entry, " (set ")
+	return strings.TrimSuffix(name, ")"), found
+}
+
+func reportRun(report contracts.ProbeReport) runFunc {
+	return func(context.Context, bool) contracts.ProbeReport {
+		return report
+	}
+}
+
 func memoryProbes(live string) []health.Probe {
 	memories := contracts.Default.Memories()
 	probes := make([]health.Probe, 0, len(memories))
@@ -230,19 +283,15 @@ func memoryProbes(live string) []health.Probe {
 	return probes
 }
 
-func memoryRun(plugin contracts.Plugin, live bool) func(context.Context, bool) contracts.ProbeReport {
+func memoryRun(plugin contracts.Plugin, live bool) runFunc {
 	if plugin.Probe != nil {
-		return func(ctx context.Context, deep bool) contracts.ProbeReport {
-			return plugin.Probe(ctx, contracts.ProbeAccess{Getenv: os.Getenv, Deep: deep})
-		}
+		return pluginProbeRun(plugin.Manifest.Config, plugin.Probe, "", os.Getenv)
 	}
 	state := contracts.HealthOff
 	if live {
 		state = contracts.HealthOK
 	}
-	return func(context.Context, bool) contracts.ProbeReport {
-		return contracts.ProbeReport{State: state}
-	}
+	return reportRun(contracts.ProbeReport{State: state})
 }
 
 func firstMemoryKind() string {
@@ -269,16 +318,12 @@ func compactionProbes(names []string) []health.Probe {
 	return probes
 }
 
-func compactionRun(name string) func(context.Context, bool) contracts.ProbeReport {
+func compactionRun(name string) runFunc {
 	plugin, found := compactorPlugin(name)
 	if !found || plugin.Probe == nil {
-		return func(context.Context, bool) contracts.ProbeReport {
-			return contracts.ProbeReport{State: contracts.HealthOK}
-		}
+		return reportRun(contracts.ProbeReport{State: contracts.HealthOK})
 	}
-	return func(ctx context.Context, deep bool) contracts.ProbeReport {
-		return plugin.Probe(ctx, contracts.ProbeAccess{Getenv: os.Getenv, Deep: deep})
-	}
+	return pluginProbeRun(plugin.Manifest.Config, plugin.Probe, "", os.Getenv)
 }
 
 func compactorPlugin(name string) (contracts.Plugin, bool) {
@@ -297,7 +342,7 @@ func newHealthInputs(instanceID string, keys *keyproxy.Proxy, gws []Deps, policy
 		slog.Warn("health: account store unavailable", "err", err)
 	}
 	return healthInputs{
-		daemon:     health.Daemon{PID: os.Getpid(), Started: time.Now(), Socket: CommandSocketPath(instanceID)},
+		daemon:     health.Daemon{PID: os.Getpid(), Started: time.Now(), Socket: CommandSocketPath(instanceID), Version: daemonVersion()},
 		keys:       keys,
 		live:       liveKinds(gws),
 		memory:     firstMemoryKind(),
@@ -305,6 +350,14 @@ func newHealthInputs(instanceID string, keys *keyproxy.Proxy, gws []Deps, policy
 		compaction: policy,
 		now:        time.Now,
 	}
+}
+
+func daemonVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok || info.Main.Version == "" {
+		return "(devel)"
+	}
+	return info.Main.Version
 }
 
 func liveKinds(gws []Deps) map[string]bool {

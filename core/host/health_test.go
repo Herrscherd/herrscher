@@ -149,3 +149,85 @@ func TestHealthSourceRefusesBeforeItIsBound(t *testing.T) {
 		t.Errorf("nil run() error = %v, want %v", err, errHealthNotReady)
 	}
 }
+
+func TestPluginProbeReceivesItsResolvedConfig(t *testing.T) {
+	settings := []contracts.Setting{{Key: "token", Env: "HERRSCHER_TEST_TOKEN", Required: true}}
+	getenv := func(name string) string {
+		if name == "HERRSCHER_TEST_TOKEN" {
+			return "secret"
+		}
+		return ""
+	}
+	var got string
+	probe := func(_ context.Context, access contracts.ProbeAccess) contracts.ProbeReport {
+		got = access.Config.Get("token")
+		return contracts.ProbeReport{State: contracts.HealthOK}
+	}
+	report := pluginProbeRun(settings, probe, "", getenv)(context.Background(), false)
+	if got != "secret" || report.State != contracts.HealthOK {
+		t.Fatalf("config token = %q, state = %v, want the resolved secret and ok", got, report.State)
+	}
+}
+
+func TestPluginProbeIsDownWhenARequiredSettingIsMissing(t *testing.T) {
+	settings := []contracts.Setting{{Key: "token", Env: "HERRSCHER_TEST_TOKEN", Required: true}}
+	called := false
+	probe := func(context.Context, contracts.ProbeAccess) contracts.ProbeReport {
+		called = true
+		return contracts.ProbeReport{State: contracts.HealthOK}
+	}
+	report := pluginProbeRun(settings, probe, "", func(string) string { return "" })(context.Background(), false)
+	if called {
+		t.Fatal("the probe ran although a required setting is missing")
+	}
+	if report.State != contracts.HealthDown || report.Detail.Code != contracts.CodeHealthEnvMissing {
+		t.Fatalf("report = %+v, want down with the env missing detail", report)
+	}
+	if report.Detail.Args[0].Value() != "HERRSCHER_TEST_TOKEN" || report.Remedy.Code != contracts.CodeHealthRemedyEnvRestart {
+		t.Fatalf("report = %+v, want the env variable name and an env restart remedy", report)
+	}
+}
+
+func TestProfileEnvWithoutAHomeIsOff(t *testing.T) {
+	if got := profileEnvReport(contracts.ErrNoProfileHome); got.State != contracts.HealthOff {
+		t.Fatalf("state = %v, want off", got.State)
+	}
+}
+
+func TestProfileEnvFailureIsDownWithoutTheEnvValue(t *testing.T) {
+	got := profileEnvReport(errors.New("profile dir unreadable"))
+	if got.State != contracts.HealthDown || got.Detail.Code != contracts.CodeHealthUnreachable {
+		t.Fatalf("report = %+v, want down and unreachable", got)
+	}
+}
+
+func TestLoginReportTurnsAnUnreadableCodexAnswerIntoDown(t *testing.T) {
+	run := func(context.Context, string, map[string]string) ([]byte, error) {
+		return []byte("error: boom\n"), nil
+	}
+	got := loginReport(context.Background(), run, "codex", "", nil)
+	if got.State != contracts.HealthDown || got.Detail.Code != contracts.CodeHealthUnreachable {
+		t.Fatalf("report = %+v, want down and unreachable", got)
+	}
+}
+
+func TestGatewayRunOffWhenNotLiveSkipsItsProbe(t *testing.T) {
+	called := false
+	probe := func(context.Context, contracts.ProbeAccess) contracts.ProbeReport {
+		called = true
+		return contracts.ProbeReport{State: contracts.HealthOK}
+	}
+	plugin := contracts.Plugin{Probe: probe}
+	if got := gatewayRun(plugin, false)(context.Background(), false); got.State != contracts.HealthOff || called {
+		t.Fatalf("report = %+v, probe called = %v, want off without the probe", got, called)
+	}
+}
+
+func TestProxyProbeIsOffWithoutProviders(t *testing.T) {
+	if got := proxyProbe(":8787", 0).Run(context.Background(), false); got.State != contracts.HealthOff {
+		t.Fatalf("state = %v, want off without providers", got.State)
+	}
+	if got := proxyProbe(":8787", 2).Run(context.Background(), false); got.State != contracts.HealthOK {
+		t.Fatalf("state = %v, want ok with providers", got.State)
+	}
+}

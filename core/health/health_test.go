@@ -232,8 +232,8 @@ func TestProbePastItsTimeoutIsDown(t *testing.T) {
 		if check.Report.State != contracts.HealthDown || check.Facts.TimedOut != 2*time.Second || elapsed != 2*time.Second {
 			t.Fatalf("check = %+v after %v, want down after the 2 s timeout", check, elapsed)
 		}
-		if check.Report.Remedy.Code != contracts.CodeHealthRemedyRun {
-			t.Fatalf("remedy = %+v, want the probe remedy kept", check.Report.Remedy)
+		if check.Report.Remedy.Code != 0 {
+			t.Fatalf("remedy = %+v, want none from a probe cut off by its timeout", check.Report.Remedy)
 		}
 	})
 }

@@ -18,6 +18,7 @@ type wireSnapshot struct {
 	PID      int         `json:"pid"`
 	Started  time.Time   `json:"started"`
 	Socket   string      `json:"socket"`
+	Version  string      `json:"version,omitempty"`
 	ProbedAt time.Time   `json:"probed_at"`
 	Elapsed  int64       `json:"elapsed_ns"`
 	Checks   []wireCheck `json:"checks"`
@@ -54,6 +55,7 @@ func Encode(snapshot Snapshot) ([]byte, error) {
 		PID:      snapshot.Daemon.PID,
 		Started:  snapshot.Daemon.Started,
 		Socket:   snapshot.Daemon.Socket,
+		Version:  snapshot.Daemon.Version,
 		ProbedAt: snapshot.ProbedAt,
 		Elapsed:  int64(snapshot.Elapsed),
 		Checks:   make([]wireCheck, 0, len(snapshot.Checks)),
@@ -111,7 +113,7 @@ func Decode(data []byte) (Snapshot, error) {
 		return Snapshot{}, errors.Join(ErrMalformed, err)
 	}
 	snapshot := Snapshot{
-		Daemon:   Daemon{PID: wire.PID, Started: wire.Started, Socket: wire.Socket},
+		Daemon:   Daemon{PID: wire.PID, Started: wire.Started, Socket: wire.Socket, Version: wire.Version},
 		ProbedAt: wire.ProbedAt,
 		Elapsed:  time.Duration(wire.Elapsed),
 		Checks:   make([]Check, 0, len(wire.Checks)),

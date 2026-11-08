@@ -111,11 +111,17 @@ func TestDeepRefreshIsOneShot(t *testing.T) {
 	}
 }
 
-func TestHealthTickStaysSilentWhileTheOverlayIsClosed(t *testing.T) {
-	m := newModel(&fakeBackend{})
+func TestHealthTickRefreshesThePlainStateWhileTheOverlayIsClosed(t *testing.T) {
+	backend := &fakeBackend{}
+	m := newModel(backend)
 	m.health.open = false
 	m.health.at = time.Now().Add(-time.Hour)
-	if cmd := m.healthTick(); cmd != nil {
-		t.Fatal("healthTick returned a refresh while the overlay is closed")
+	cmd := m.healthTick()
+	if cmd == nil {
+		t.Fatal("healthTick did not refresh the status line while the overlay is closed")
+	}
+	msg, ok := cmd().(healthMsg)
+	if !ok || msg.deep {
+		t.Fatalf("closed-overlay refresh = %+v, want a plain probe", msg)
 	}
 }

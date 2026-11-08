@@ -621,7 +621,7 @@ keeping whatever the agent had already written.
 `/health` opens the same snapshot as an overlay, and the status line carries a dot
 for the worst state of the checks with `santé n/m` beside it, where `n` counts the
 checks that are ok and `m` the ones that can fail. The figures refresh every fifteen
-seconds while the overlay is open, and stay as they were once it is closed. Inside
+seconds with a plain probe, overlay open or closed; a deep probe only runs on `d`. Inside
 the overlay `r` probes again, `d` runs one deep probe (it costs round trips) and the
 refresh after it is a plain probe again, `enter` shows the cause and remedy of the
 degraded and down checks, and `esc` closes it. The overlay is also in the command

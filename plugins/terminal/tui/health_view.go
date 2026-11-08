@@ -80,7 +80,7 @@ func (m *model) healthRefresh() tea.Cmd {
 }
 
 func (m *model) healthTick() tea.Cmd {
-	if !m.health.open || m.health.busy || time.Since(m.health.at) < healthInterval {
+	if m.health.busy || time.Since(m.health.at) < healthInterval {
 		return nil
 	}
 	return m.healthRefresh()

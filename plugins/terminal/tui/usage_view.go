@@ -157,6 +157,7 @@ func (m *model) stepUsageRange(delta int) tea.Cmd {
 	index := slices.Index(ranges, m.usage.rng)
 	m.usage.rng = ranges[(index+delta+len(ranges))%len(ranges)]
 	m.usage.ready = false
+	m.usage.failed = false
 	return m.usageRefresh()
 }
 
@@ -168,6 +169,7 @@ func (m *model) nextUsageAccount() tea.Cmd {
 	index := slices.Index(accounts, m.usage.account)
 	m.usage.account = accounts[(index+1)%len(accounts)]
 	m.usage.ready = false
+	m.usage.failed = false
 	return m.usageRefresh()
 }
 

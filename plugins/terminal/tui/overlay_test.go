@@ -45,6 +45,14 @@ func TestFloatingListAlignsDetailsPastTheLongestLabel(t *testing.T) {
 	}
 }
 
+func TestFloatingListKeepsAGapWhenTheLabelPassesTheColumnCap(t *testing.T) {
+	rows := []overlayRow{{label: "/agents-very-long-name", detail: "agents"}}
+	line := floatingList(rows, 0, "", 40, testStyles())
+	if !strings.Contains(line, "/agents-very-long-name agents") {
+		t.Fatalf("label runs into its detail: %q", line)
+	}
+}
+
 func TestFloatingListRowsAreFullWidth(t *testing.T) {
 	rows := []overlayRow{{label: "/resume", detail: "reprendre"}}
 	for _, line := range strings.Split(floatingList(rows, 0, "", 74, testStyles()), "\n") {

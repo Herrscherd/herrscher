@@ -50,19 +50,25 @@ func overlayLine(row overlayRow, selected bool, labelWidth, width int, styles ui
 		labelStyle = styles.accent.Bold(true)
 		detailStyle = styles.accent
 	}
-	label := labelStyle.Render(row.label)
-	if len(row.hot) > 0 {
-		label = highlightFuzzy(row.label, row.hot, labelStyle, labelStyle.Bold(true))
-	}
-	label = labelStyle.Render(row.mark) + label
-	if pad := labelWidth - lipgloss.Width(label); pad > 0 {
+	label := labelStyle.Render(row.mark) + highlightFuzzy(row.label, row.hot, labelStyle, matchStyle(labelStyle, selected, styles))
+	switch pad := labelWidth - lipgloss.Width(label); {
+	case pad > 0:
 		label += strings.Repeat(" ", pad)
+	case row.detail != "":
+		label += " "
 	}
 	tail := detailStyle.Render(row.detail)
 	if row.tag != "" {
 		tail += "  " + styles.dim.Render(row.tag)
 	}
 	return padTo(truncate("  "+labelStyle.Render(head)+label+tail, width), width)
+}
+
+func matchStyle(labelStyle lipgloss.Style, selected bool, styles uiStyles) lipgloss.Style {
+	if selected {
+		return labelStyle.Underline(true)
+	}
+	return styles.accent.Bold(true)
 }
 
 func padTo(text string, width int) string {

@@ -43,6 +43,7 @@ func TestHubScrollbackAndResume(t *testing.T) {
 	if err := h.Resume("seam"); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { logCleanup(sup.Stop("seam")) })
 	got, _ := st.FindSession("seam")
 	if got.Archived {
 		t.Fatalf("resume should unarchive")

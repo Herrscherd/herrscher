@@ -13,6 +13,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/compactwire"
+	"github.com/Herrscherd/herrscher/core/historywire"
 	"github.com/Herrscherd/herrscher/core/identity"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/skills"
@@ -202,6 +203,10 @@ func runHubTurnsCtl(ctx context.Context, events <-chan contracts.Event, sink con
 				runPick(ctx, sink, backend, event.Value)
 			case compactwire.EventRequest:
 				runCompact(ctx, sink, backend, ctrl, event)
+			case historywire.EventRead:
+				runHistoryRead(ctx, sink, backend, ctrl)
+			case historywire.EventPrune:
+				runHistoryPrune(ctx, sink, backend, ctrl, event)
 			case "input":
 				runOneTurn(ctx, sink, backend, orch, event, ctrl, eng, aff, pin, lang)
 			}

@@ -235,6 +235,9 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	if err != nil {
 		return wrapHost(err, "serve.config", nil)
 	}
+	if cfg.AccountFallback() {
+		deps.handler.SetAccountFallback(newAccountFallback(options.usage, gws))
+	}
 	keys, err := keyproxy.Open(ctx, cfg.Keys, keyproxy.OSLoader(), log)
 	if err != nil && !errors.Is(err, keyproxy.ErrDisabled) {
 		return wrapHost(err, "serve.key_proxy", nil)
@@ -441,16 +444,23 @@ func firstAdmin(gws []Deps) contracts.ChannelAdmin {
 }
 
 func adminForHome(gws []Deps, home state.HomeRef) contracts.ChannelAdmin {
+	if gateway, ok := gatewayForHome(gws, home); ok {
+		return gateway.Admin
+	}
+	return firstAdmin(gws)
+}
+
+func gatewayForHome(gws []Deps, home state.HomeRef) (Deps, bool) {
 	wantTerminal := home.Type == kindTerminal
 	for _, dep := range gws {
 		if dep.Admin == nil || dep.Gateway == nil {
 			continue
 		}
 		if (dep.Gateway.Manifest().Kind == kindTerminal) == wantTerminal {
-			return dep.Admin
+			return dep, true
 		}
 	}
-	return firstAdmin(gws)
+	return Deps{}, false
 }
 
 func terminalAdmin(gws []Deps) contracts.ChannelAdmin {

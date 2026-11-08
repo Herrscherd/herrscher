@@ -21,6 +21,7 @@ type Handler struct {
 	log             *slog.Logger
 	d               channelAdmin
 	td              channelAdmin
+	fallback        accountFallback
 	sup             supervisor
 	wt              Worktrees
 	fg              forges

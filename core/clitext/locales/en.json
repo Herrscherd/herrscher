@@ -3621,5 +3621,127 @@
     "id": "cli.usage.wrap",
     "description": "A failure to render the usage help, Detail carries the cause",
     "other": "usage: {{.Detail}}"
+  },
+  {
+    "id": "cli.help.cmd.health",
+    "description": "Help of the command health",
+    "other": "show the health of the daemon services, by group"
+  },
+  {
+    "id": "cli.help.cmd.health.deep",
+    "description": "Help of the health --deep parameter",
+    "other": "run real round trips instead of the cheap checks"
+  },
+  {
+    "id": "cli.flag.health_deep",
+    "description": "Help of the --deep flag of health",
+    "other": "check with a real round trip"
+  },
+  {
+    "id": "cli.flag.health_watch",
+    "description": "Help of the --watch flag of health",
+    "other": "refresh the report every 15 seconds"
+  },
+  {
+    "id": "cli.flag.health_quiet",
+    "description": "Help of the --quiet flag of health",
+    "other": "print nothing, the exit code tells the state"
+  },
+  {
+    "id": "cli.health.summary",
+    "description": "Summary line of health: services ok out of services checked",
+    "one": "health {{.Count}}/{{.Total}}",
+    "other": "health {{.Count}}/{{.Total}}"
+  },
+  {
+    "id": "cli.health.header",
+    "description": "Column titles of the health table, tab separated",
+    "other": "service\tstate\tlatency\tdetail"
+  },
+  {
+    "id": "cli.health.group.core",
+    "description": "Name of the core group in health",
+    "other": "core"
+  },
+  {
+    "id": "cli.health.group.gateways",
+    "description": "Name of the gateways group in health",
+    "other": "gateways"
+  },
+  {
+    "id": "cli.health.group.backends",
+    "description": "Name of the backends group in health",
+    "other": "backends"
+  },
+  {
+    "id": "cli.health.group.compaction",
+    "description": "Name of the compaction group in health",
+    "other": "compaction"
+  },
+  {
+    "id": "cli.health.group.memory",
+    "description": "Name of the memory group in health",
+    "other": "memory"
+  },
+  {
+    "id": "cli.health.group.keys",
+    "description": "Name of the keys group in health",
+    "other": "keys"
+  },
+  {
+    "id": "cli.health.state.ok",
+    "description": "State ok in health",
+    "other": "ok"
+  },
+  {
+    "id": "cli.health.state.degraded",
+    "description": "State degraded in health",
+    "other": "degraded"
+  },
+  {
+    "id": "cli.health.state.down",
+    "description": "State down in health",
+    "other": "down"
+  },
+  {
+    "id": "cli.health.state.off",
+    "description": "State off in health",
+    "other": "off"
+  },
+  {
+    "id": "cli.health.daemon_down",
+    "description": "Error when no daemon answers health, Socket is its socket path",
+    "other": "no herrscher daemon listens on {{.Socket}}, start it with `herrscher serve`"
+  },
+  {
+    "id": "cli.health.unknown_service",
+    "description": "Error for a health service no check matches, Name is the argument",
+    "other": "health: unknown service {{.Name}}"
+  },
+  {
+    "id": "cli.health.facts.daemon",
+    "description": "Detail line of the daemon check, PID and Socket",
+    "other": "daemon pid {{.PID}} on {{.Socket}}"
+  },
+  {
+    "id": "cli.health.facts.pool",
+    "description": "Detail line of a key pool, Count usable out of Total keys",
+    "one": "{{.Count}} of {{.Total}} keys usable",
+    "other": "{{.Count}} of {{.Total}} keys usable"
+  },
+  {
+    "id": "cli.health.default_account",
+    "description": "Marker of the default account in health",
+    "other": "default"
+  },
+  {
+    "id": "cli.health.watch_refreshed_at",
+    "description": "Footer of health --watch, Time is the refresh time",
+    "other": "refreshed at {{.Time}}, every 15 s, ctrl-c to stop"
+  },
+  {
+    "id": "cli.host.fault.health_not_ready",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (health not ready)",
+    "other": "health probes not ready"
   }
 ]

@@ -75,9 +75,9 @@ func (c Check) Matches(service string) bool {
 // Find returns the checks service names, in report order.
 func (s Snapshot) Find(service string) []Check {
 	var found []Check
-	for _, check := range s.Checks {
-		if check.Matches(service) {
-			found = append(found, check)
+	for index := range s.Checks {
+		if s.Checks[index].Matches(service) {
+			found = append(found, s.Checks[index])
 		}
 	}
 	return found
@@ -93,8 +93,8 @@ type Summary struct {
 func Summarize(checks []Check) Summary {
 	summary := Summary{Counts: make(map[contracts.HealthState]int, len(contracts.HealthStates())), Worst: contracts.HealthOff}
 	states := make([]contracts.HealthState, 0, len(checks))
-	for _, check := range checks {
-		state := Settled(check.Report).State
+	for index := range checks {
+		state := Settled(checks[index].Report).State
 		summary.Counts[state]++
 		states = append(states, state)
 	}
@@ -126,6 +126,8 @@ func (s Summary) ExitCode() ExitCode {
 		return ExitDown
 	case contracts.HealthDegraded:
 		return ExitDegraded
+	case contracts.HealthOK, contracts.HealthOff:
+		return ExitHealthy
 	}
 	return ExitHealthy
 }

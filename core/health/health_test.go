@@ -193,7 +193,7 @@ func TestRunnerKeepsTheProbeOrder(t *testing.T) {
 func TestRunnerNeverRunsMoreProbesThanItsWorkers(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var running, peak atomic.Int32
-		slow := func(ctx context.Context, _ bool) contracts.ProbeReport {
+		slow := func(_ context.Context, _ bool) contracts.ProbeReport {
 			now := running.Add(1)
 			for {
 				old := peak.Load()

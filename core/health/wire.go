@@ -58,7 +58,8 @@ func Encode(snapshot Snapshot) ([]byte, error) {
 		Elapsed:  int64(snapshot.Elapsed),
 		Checks:   make([]wireCheck, 0, len(snapshot.Checks)),
 	}
-	for _, check := range snapshot.Checks {
+	for index := range snapshot.Checks {
+		check := snapshot.Checks[index]
 		encoded, err := encodeCheck(check)
 		if err != nil {
 			return nil, err
@@ -115,8 +116,8 @@ func Decode(data []byte) (Snapshot, error) {
 		Elapsed:  time.Duration(wire.Elapsed),
 		Checks:   make([]Check, 0, len(wire.Checks)),
 	}
-	for _, encoded := range wire.Checks {
-		check, err := decodeCheck(encoded)
+	for index := range wire.Checks {
+		check, err := decodeCheck(wire.Checks[index])
 		if err != nil {
 			return Snapshot{}, errors.Join(ErrMalformed, err)
 		}

@@ -37,7 +37,7 @@ var (
 )
 
 func declaredKeys() map[Key][]string {
-	return mergeDeclared(usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys(), accountKeys(), manageKeys(), hostKeys(), helpKeys(), hostErrKeys(), settingKeys(), worktreeKeys())
+	return mergeDeclared(usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys(), accountKeys(), manageKeys(), hostKeys(), helpKeys(), hostErrKeys(), settingKeys(), worktreeKeys(), healthKeys())
 }
 
 func loadCatalog() (*i18n.Catalog, error) {
@@ -155,6 +155,10 @@ const (
 	ParamState     = "State"
 	ParamTo        = "To"
 	ParamSchedule  = "Schedule"
+	ParamTotal     = "Total"
+	ParamPID       = "PID"
+	ParamSocket    = "Socket"
+	ParamTime      = "Time"
 	ParamHandoff   = "Handoff"
 	ParamNote      = "Note"
 	ParamBranch    = "Branch"

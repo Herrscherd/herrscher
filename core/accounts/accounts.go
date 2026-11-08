@@ -288,6 +288,11 @@ func LoginCommand(ctx context.Context, vendor string) (*exec.Cmd, error) {
 	return nil, fmt.Errorf("vendor %q: %w", vendor, contracts.ErrNoProfileHome)
 }
 
+// AddCommand returns the command line that adds the account name of vendor.
+func AddCommand(vendor string, name contracts.ProfileName) string {
+	return "herrscher account add " + vendor + " " + string(name)
+}
+
 // Status reports whether the vendor CLI is logged in under env.
 func Status(ctx context.Context, run Runner, vendor string, env map[string]string) (bool, error) {
 	if _, err := contracts.ProfileHomeEnv(vendor); err != nil {

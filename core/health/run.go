@@ -43,7 +43,8 @@ func (r Runner) Run(ctx context.Context, probes []Probe, deep bool) ([]Check, ti
 	checks := make([]Check, len(probes))
 	slots := make(chan struct{}, r.workers())
 	var wg sync.WaitGroup
-	for index, probe := range probes {
+	for index := range probes {
+		probe := probes[index]
 		select {
 		case slots <- struct{}{}:
 		case <-ctx.Done():

@@ -232,3 +232,10 @@ func TestCodexLoggedInOnStderrIsRecognised(t *testing.T) {
 		t.Fatalf("parseLoggedIn(codex, stderr) = %v, %v, want true, nil", loggedIn, err)
 	}
 }
+
+func TestAddCommandNamesTheVendorAndTheAccount(t *testing.T) {
+	got := AddCommand("claude", "work")
+	if want := "herrscher account add claude work"; got != want {
+		t.Fatalf("AddCommand() = %q, want %q", got, want)
+	}
+}

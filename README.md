@@ -654,8 +654,13 @@ fallback that would drop the stage quietly. A daemon whose `compactStack` does n
 name `jev` never builds it and starts without the key. The stage edits the history
 only for a session whose backend declares `Capabilities.HistoryEditor`: the host
 then hands plugin stages a history editor that reads and prunes the conversation
-through the bridge, and the `backend` stage never receives one. On another backend
-the stage gets no editor and leaves the history as it is. A backend that declares
+through the bridge, and the `backend` stage never receives one. The `claude`
+backend declares it from herrscher-claude-backend v0.12.0, the version this host
+builds with. On another backend the stage gets no editor and leaves the history as
+it is. The bridge sends the history in frames of at most 128 KiB, and the host
+refuses a history past 64 MiB. A read or a prune that the bridge does not answer
+within two minutes fails the stage. When Jev itself fails, the stage leaves a note
+and the `backend` stage still runs. A backend that declares
 `Capabilities.HistoryEditor` while its running instance does not implement the
 port fails the stage, and the host writes one warning line to stderr the first
 time it happens.

@@ -27,7 +27,7 @@ func (b editingBackend) PruneHistory(_ context.Context, edits []contracts.Histor
 
 func pruneFrame(t *testing.T, edits ...contracts.HistoryEdit) contracts.Event {
 	t.Helper()
-	frame, err := historywire.Prune(edits)
+	frame, err := historywire.Prune("p1", edits)
 	if err != nil {
 		t.Fatalf("Prune: %v", err)
 	}
@@ -36,11 +36,11 @@ func pruneFrame(t *testing.T, edits ...contracts.HistoryEdit) contracts.Event {
 
 func TestRunHistoryReadAnswersFromALeasedBackend(t *testing.T) {
 	sink := &collectSink{}
-	runHistoryRead(context.Background(), sink, lease.Wrap(editingBackend{pruned: new([]contracts.HistoryEdit)}, func() {}), nil)
-	if len(sink.events) != 1 {
-		t.Fatalf("events = %+v, want one history", sink.events)
+	runHistoryRead(context.Background(), sink, lease.Wrap(editingBackend{pruned: new([]contracts.HistoryEdit)}, func() {}), nil, historywire.Read("r1"))
+	if len(sink.events) != 1 || sink.events[0].Who != "r1" {
+		t.Fatalf("events = %+v, want one history answering r1", sink.events)
 	}
-	history, err := historywire.DecodeHistory(sink.events[0])
+	history, err := historywire.DecodeHistory(sink.events)
 	if err != nil {
 		t.Fatalf("DecodeHistory: %v", err)
 	}
@@ -53,8 +53,8 @@ func TestRunHistoryPruneAppliesValidEdits(t *testing.T) {
 	var pruned []contracts.HistoryEdit
 	sink := &collectSink{}
 	runHistoryPrune(context.Background(), sink, editingBackend{pruned: &pruned}, nil, pruneFrame(t, contracts.HistoryEdit{CallID: "c1", Action: contracts.PruneCall}))
-	if len(sink.events) != 1 || sink.events[0].T != historywire.EventPruned {
-		t.Fatalf("events = %+v, want one pruned outcome", sink.events)
+	if len(sink.events) != 1 || sink.events[0].T != historywire.EventPruned || sink.events[0].Who != "p1" {
+		t.Fatalf("events = %+v, want one pruned outcome answering p1", sink.events)
 	}
 	outcome, err := historywire.DecodePruned(sink.events[0])
 	if err != nil {
@@ -83,13 +83,13 @@ func TestRunHistoryPruneValidatesBeforeTheBackend(t *testing.T) {
 
 func TestRunHistoryRefusesABackendWithoutThePort(t *testing.T) {
 	sink := &collectSink{}
-	runHistoryRead(context.Background(), sink, fakeBackend{}, nil)
+	runHistoryRead(context.Background(), sink, fakeBackend{}, nil, historywire.Read("r1"))
 	runHistoryPrune(context.Background(), sink, fakeBackend{}, nil, pruneFrame(t, contracts.HistoryEdit{CallID: "c1", Action: contracts.PruneCall}))
 	if len(sink.events) != 2 {
 		t.Fatalf("events = %+v, want two refusals", sink.events)
 	}
 	for _, event := range sink.events {
-		if event.T != historywire.EventError || event.Value != historywire.NoEditor {
+		if event.T != historywire.EventError || historywire.CodeOf(event) != historywire.FailureNoEditor {
 			t.Fatalf("event = %+v, want a no-port failure", event)
 		}
 	}

@@ -73,12 +73,15 @@ func expectFrameOf(t *testing.T, f *compactFixture, kind string) contracts.Event
 func TestPluginStageReadsAndPrunesTheSessionHistory(t *testing.T) {
 	f, runs, _ := historyFixture(t, true)
 	f.driver.requestCompaction("", contracts.Conversation{})
-	expectFrameOf(t, f, historywire.EventRead)
+	read := expectFrameOf(t, f, historywire.EventRead)
 	answer, err := historywire.History(contracts.History{Messages: []contracts.HistoryMessage{{Role: contracts.RoleAssistant, Calls: []contracts.HistoryCall{{ID: "c1", Tool: "Read", Result: "long"}}}}})
 	if err != nil {
 		t.Fatalf("History: %v", err)
 	}
-	f.from <- answer
+	f.from <- historywire.Answer(contracts.Event{Who: "stale"}, answer[0])
+	for _, frame := range answer {
+		f.from <- historywire.Answer(read, frame)
+	}
 	prune := expectFrameOf(t, f, historywire.EventPrune)
 	edits, err := historywire.DecodePrune(prune)
 	if err != nil || len(edits) != 1 || edits[0].CallID != "c1" {
@@ -88,7 +91,7 @@ func TestPluginStageReadsAndPrunesTheSessionHistory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Pruned: %v", err)
 	}
-	f.from <- pruned
+	f.from <- historywire.Answer(prune, pruned)
 	run := nextRun(t, runs)
 	if run.err != nil || len(run.history.Calls()) != 1 || run.outcome.Edited != 1 || run.outcome.CharsAfter != 10 {
 		t.Fatalf("stage run = %+v, want the bridge's history and outcome", run)
@@ -113,8 +116,8 @@ func TestBackendWithoutTheHistoryPortFailsTheStageAndWarnsOnce(t *testing.T) {
 	f, runs, warned := historyFixture(t, true)
 	for range 2 {
 		f.driver.requestCompaction("", contracts.Conversation{})
-		expectFrameOf(t, f, historywire.EventRead)
-		f.from <- historywire.NoPort()
+		read := expectFrameOf(t, f, historywire.EventRead)
+		f.from <- historywire.Answer(read, historywire.NoPort())
 		if run := nextRun(t, runs); !errors.Is(run.err, historywire.ErrNoHistoryEditor) {
 			t.Fatalf("stage error = %v, want ErrNoHistoryEditor", run.err)
 		}

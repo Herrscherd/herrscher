@@ -1,12 +1,15 @@
 package historywire
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/internal/control"
 )
 
 func TestHistoryRoundTripsThroughTheWire(t *testing.T) {
@@ -16,14 +19,14 @@ func TestHistoryRoundTripsThroughTheWire(t *testing.T) {
 			{ID: "c1", Tool: "Read", Input: `{"path":"a.go"}`, Result: "package a", ResultIsError: true},
 		}},
 	}}
-	frame, err := History(want)
+	frames, err := History(want)
 	if err != nil {
 		t.Fatalf("History: %v", err)
 	}
-	if frame.T != EventHistory {
-		t.Fatalf("frame type = %q, want %q", frame.T, EventHistory)
+	if len(frames) != 1 || frames[0].T != EventHistory || !frames[0].Done {
+		t.Fatalf("frames = %+v, want one final history frame", frames)
 	}
-	got, err := DecodeHistory(frame)
+	got, err := DecodeHistory(frames)
 	if err != nil {
 		t.Fatalf("DecodeHistory: %v", err)
 	}
@@ -38,7 +41,7 @@ func sameMessage(a, b contracts.HistoryMessage) bool {
 
 func TestPruneAndOutcomeRoundTripThroughTheWire(t *testing.T) {
 	edits := []contracts.HistoryEdit{{CallID: "c1", Action: contracts.PruneResult, KeepChars: 40}, {CallID: "c2", Action: contracts.PruneCall}}
-	frame, err := Prune(edits)
+	frame, err := Prune("7", edits)
 	if err != nil {
 		t.Fatalf("Prune: %v", err)
 	}
@@ -67,6 +70,54 @@ func TestUnknownActionDoesNotDecode(t *testing.T) {
 	_, err := DecodePrune(contracts.Event{T: EventPrune, Text: `[{"call_id":"c1","action":"explode"}]`})
 	if !errors.Is(err, ErrFrameMalformed) || !errors.Is(err, contracts.ErrUnknownPruneAction) {
 		t.Fatalf("DecodePrune = %v, want a malformed frame naming the unknown action", err)
+	}
+}
+
+func TestAHistoryLargerThanAWireLineCrossesTheControlWire(t *testing.T) {
+	result := strings.Repeat("<é\n\x01", 400_000)
+	want := contracts.History{Messages: []contracts.HistoryMessage{{Role: contracts.RoleAssistant, Calls: []contracts.HistoryCall{{ID: "c1", Tool: "Read", Result: result}}}}}
+	frames, err := History(want)
+	if err != nil {
+		t.Fatalf("History: %v", err)
+	}
+	var wire bytes.Buffer
+	for _, frame := range frames {
+		if writeErr := control.WriteEvent(&wire, Answer(Read("9"), frame)); writeErr != nil {
+			t.Fatalf("WriteEvent: %v", writeErr)
+		}
+	}
+	var collector Collector
+	complete := false
+	err = control.ScanEvents(&wire, func(event contracts.Event) error {
+		if event.Who != "9" {
+			t.Fatalf("frame call id = %q, want 9", event.Who)
+		}
+		var addErr error
+		complete, addErr = collector.Add(event)
+		return addErr
+	})
+	if err != nil {
+		t.Fatalf("ScanEvents over %d frames: %v", len(frames), err)
+	}
+	got, err := collector.History()
+	if err != nil || !complete {
+		t.Fatalf("History = %v, complete = %v", err, complete)
+	}
+	if !slices.EqualFunc(got.Messages, want.Messages, sameMessage) {
+		t.Fatal("the history changed across the wire")
+	}
+}
+
+func TestCollectorRefusesAHistoryPastTheLimit(t *testing.T) {
+	var collector Collector
+	piece := contracts.Event{T: EventHistory, Text: strings.Repeat("a", ChunkLimit)}
+	for range HistoryLimit / ChunkLimit {
+		if _, err := collector.Add(piece); err != nil {
+			t.Fatalf("Add under the limit: %v", err)
+		}
+	}
+	if _, err := collector.Add(piece); !errors.Is(err, ErrHistoryTooLarge) {
+		t.Fatalf("Add past the limit = %v, want ErrHistoryTooLarge", err)
 	}
 }
 

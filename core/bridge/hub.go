@@ -204,7 +204,7 @@ func runHubTurnsCtl(ctx context.Context, events <-chan contracts.Event, sink con
 			case compactwire.EventRequest:
 				runCompact(ctx, sink, backend, ctrl, event)
 			case historywire.EventRead:
-				runHistoryRead(ctx, sink, backend, ctrl)
+				runHistoryRead(ctx, sink, backend, ctrl, event)
 			case historywire.EventPrune:
 				runHistoryPrune(ctx, sink, backend, ctrl, event)
 			case "input":

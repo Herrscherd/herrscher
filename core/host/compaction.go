@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -613,58 +614,84 @@ func (d *sessionDriver) compactThroughBridge(ctx context.Context, req contracts.
 	}
 }
 
+const historyCallTimeout = 2 * time.Minute
+
 type bridgeHistory struct {
 	driver *sessionDriver
 }
 
 func (h bridgeHistory) ReadHistory(ctx context.Context) (contracts.History, error) {
-	frame, err := h.driver.historyThroughBridge(ctx, historywire.Read(), historywire.EventHistory)
+	var collector historywire.Collector
+	err := h.driver.historyThroughBridge(ctx, historywire.Read(h.driver.nextHistoryCall()), func(frame contracts.Event) (bool, error) {
+		if frame.T != historywire.EventHistory {
+			return false, nil
+		}
+		return collector.Add(frame)
+	})
 	if err != nil {
 		return contracts.History{}, err
 	}
-	return historywire.DecodeHistory(frame)
+	return collector.History()
 }
 
 func (h bridgeHistory) PruneHistory(ctx context.Context, edits []contracts.HistoryEdit) (contracts.PruneOutcome, error) {
-	request, err := historywire.Prune(edits)
+	request, err := historywire.Prune(h.driver.nextHistoryCall(), edits)
 	if err != nil {
 		return contracts.PruneOutcome{}, err
 	}
-	frame, err := h.driver.historyThroughBridge(ctx, request, historywire.EventPruned)
-	if err != nil {
-		return contracts.PruneOutcome{}, err
-	}
-	return historywire.DecodePruned(frame)
+	var outcome contracts.PruneOutcome
+	err = h.driver.historyThroughBridge(ctx, request, func(frame contracts.Event) (bool, error) {
+		if frame.T != historywire.EventPruned {
+			return false, nil
+		}
+		var decodeErr error
+		outcome, decodeErr = historywire.DecodePruned(frame)
+		return true, decodeErr
+	})
+	return outcome, err
 }
 
-func (d *sessionDriver) historyThroughBridge(ctx context.Context, request contracts.Event, answer string) (contracts.Event, error) {
+func (d *sessionDriver) nextHistoryCall() string {
+	return strconv.FormatUint(d.historyCalls.Add(1), 36)
+}
+
+func (d *sessionDriver) historyThroughBridge(ctx context.Context, request contracts.Event, accept func(contracts.Event) (bool, error)) error {
+	ctx, cancel := context.WithTimeout(ctx, historyCallTimeout)
+	defer cancel()
 	select {
 	case d.toBridge <- request:
 	case <-d.hangup:
-		return contracts.Event{}, errBridgeGone
+		return errBridgeGone
 	case <-ctx.Done():
-		return contracts.Event{}, ctx.Err()
+		return ctx.Err()
 	}
 	for {
 		select {
 		case <-ctx.Done():
 			d.Interrupt()
-			return contracts.Event{}, ctx.Err()
+			return ctx.Err()
 		case <-d.hangup:
-			return contracts.Event{}, errBridgeGone
+			return errBridgeGone
 		case frame, ok := <-d.from:
 			if !ok {
-				return contracts.Event{}, errBridgeGone
+				return errBridgeGone
 			}
-			switch frame.T {
-			case answer:
-				return frame, nil
-			case historywire.EventError:
-				if frame.Value == historywire.NoEditor {
-					d.compaction.warnNoHistoryPort(d.modelNow().vendor)
-				}
-				return contracts.Event{}, historywire.DecodeFailure(frame)
+			if done, err := d.historyAnswer(request, frame, accept); err != nil || done {
+				return err
 			}
 		}
 	}
+}
+
+func (d *sessionDriver) historyAnswer(request, frame contracts.Event, accept func(contracts.Event) (bool, error)) (bool, error) {
+	if !historywire.IsFrame(frame.T) || frame.Who != request.Who {
+		return false, nil
+	}
+	if frame.T != historywire.EventError {
+		return accept(frame)
+	}
+	if historywire.CodeOf(frame) == historywire.FailureNoEditor {
+		d.compaction.warnNoHistoryPort(d.modelNow().vendor)
+	}
+	return true, historywire.DecodeFailure(frame)
 }

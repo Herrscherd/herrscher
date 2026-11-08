@@ -36,22 +36,22 @@
   },
   {
     "id": "compaction.no_compactor_factory",
-    "description": "A compactor plugin provides no Compactor factory",
+    "description": "Un plugin compacteur ne fournit aucune fabrique Compactor",
     "other": "le plugin compacteur ne fournit aucune fabrique Compactor"
   },
   {
     "id": "compaction.nil_compactor",
-    "description": "The Compactor factory of a compactor plugin returned no stage",
+    "description": "La fabrique Compactor d'un plugin compacteur n'a renvoyé aucune étape",
     "other": "la fabrique du plugin compacteur n'a renvoyé aucune étape"
   },
   {
     "id": "compaction.no_compactor_plugin",
-    "description": "No compactor plugin is registered under the requested name",
+    "description": "Aucun plugin compacteur n'est enregistré sous le nom demandé",
     "other": "aucun plugin compacteur n'est enregistré sous ce nom"
   },
   {
     "id": "compaction.no_history_port",
-    "description": "The session backend declares the HistoryEditor capability but its instance does not implement the port",
+    "description": "Le backend de la session déclare la capacité HistoryEditor mais son instance n'implémente pas le port",
     "other": "le backend déclare Capabilities.HistoryEditor mais n'implémente pas le port, son historique ne peut pas être modifié"
   },
   {

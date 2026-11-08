@@ -19,8 +19,6 @@ func TestConnRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Accept: %v", err)
 	}
-	scanned := make(chan struct{})
-	defer func() { <-scanned }()
 	defer closeLogged(t, acc)
 
 	cli, err := control.Dial(sock)
@@ -76,6 +74,8 @@ func TestConnConcurrentWrites(t *testing.T) {
 	var got int
 	var mu sync.Mutex
 	done := make(chan struct{})
+	scanned := make(chan struct{})
+	t.Cleanup(func() { <-scanned })
 	go func() {
 		defer close(scanned)
 		logErr(t, srvConn.Scan(func(contracts.Event) error {

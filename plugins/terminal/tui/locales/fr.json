@@ -2778,10 +2778,6 @@
     "other": "démon injoignable"
   },
   {
-    "id": "tui.usage.ledger_truncated",
-    "other": "journal d'usage trop volumineux pour un jour, totaux non affichés"
-  },
-  {
     "id": "tui.usage.render_failed",
     "other": "affichage de l'utilisation impossible"
   }

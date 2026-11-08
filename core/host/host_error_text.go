@@ -91,7 +91,6 @@ func hostErrorKeys() []hostErrorKey {
 		{errRemoteShellSession, "cli.host.fault.remote_shell_session"},
 		{errUnsupportedLang, "cli.host.fault.unsupported_lang"},
 		{usage.ErrEmptyValue, "cli.host.fault.usage_empty_value"},
-		{usage.ErrLedgerTruncated, "cli.host.fault.usage_ledger_truncated"},
 	}
 }
 

@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"path/filepath"
 	"slices"
@@ -67,16 +68,18 @@ func newUsageSource(partDir string) *usageSource {
 
 func (s *usageSource) run(ctx context.Context, rng usage.Range, key usage.AccountKey) (usage.Snapshot, error) {
 	records, err := s.ledger.Records(rng)
-	if err != nil {
+	truncated := errors.Is(err, usage.ErrLedgerTruncated)
+	if err != nil && !truncated {
 		return usage.Snapshot{}, err
 	}
 	now := s.ledger.Now()
 	return usage.Snapshot{
-		At:      now,
-		Range:   rng,
-		Account: key,
-		Limits:  s.limits.Read(ctx, s.targets(key)),
-		Spend:   usage.Summarize(records, rng, now, key),
+		At:              now,
+		Range:           rng,
+		Account:         key,
+		Limits:          s.limits.Read(ctx, s.targets(key)),
+		Spend:           usage.Summarize(records, rng, now, key),
+		LedgerTruncated: truncated,
 	}, nil
 }
 

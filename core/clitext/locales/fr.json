@@ -3218,11 +3218,6 @@
     "other": "usage : une valeur vide n'est pas acceptée"
   },
   {
-    "id": "cli.host.fault.usage_ledger_truncated",
-    "description": "Erreur de la commande usage : le journal d'un jour dépasse la taille lisible",
-    "other": "usage : un jour du journal est trop volumineux, ses totaux seraient faux"
-  },
-  {
     "id": "cli.host.fault.memory_locate_unsupported",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (memory locate unsupported)",
     "other": "le backend mémoire ne gère pas locate"
@@ -3911,6 +3906,11 @@
     "id": "cli.spend.estimate",
     "description": "Usage report note: the cost is an estimate at the API rate",
     "other": "estimation au tarif API"
+  },
+  {
+    "id": "cli.spend.ledger_truncated",
+    "description": "Rapport d'usage : un jour du journal dépasse la taille lisible, les totaux ne sont pas affichés",
+    "other": "un jour du journal d'usage est trop volumineux, les totaux ne sont pas affichés pour ne pas être faux"
   },
   {
     "id": "cli.spend.peak",

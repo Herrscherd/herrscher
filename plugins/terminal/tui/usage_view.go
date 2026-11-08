@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"errors"
 	"slices"
 	"strings"
 	"time"
@@ -218,9 +217,6 @@ func (m *model) usageFilterLine() string {
 func (m *model) usageBody() []string {
 	if m.usage.tab == usageTabSession {
 		return m.usageSessionBody()
-	}
-	if errors.Is(m.usage.err, usage.ErrLedgerTruncated) {
-		return []string{m.st.red.Render(m.tr.t("tui.usage.ledger_truncated", nil))}
 	}
 	if m.usage.failed {
 		return []string{m.st.red.Render(m.tr.t("tui.usage.unreachable", nil))}

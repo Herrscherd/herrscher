@@ -235,6 +235,9 @@ func paceLabel(limit contracts.Limit, pace Pace, text *renderer) string {
 func CostLines(snapshot Snapshot, lang i18n.Language, zone *time.Location) ([]string, error) {
 	text := &renderer{lang: lang}
 	spend := snapshot.Spend
+	if snapshot.LedgerTruncated {
+		return []string{text.text(clitext.SpendLedgerTruncated, nil)}, text.err
+	}
 	if spend.Sessions == 0 {
 		return []string{text.text(clitext.SpendEmpty, nil)}, text.err
 	}
@@ -257,6 +260,9 @@ func CostLines(snapshot Snapshot, lang i18n.Language, zone *time.Location) ([]st
 func TokenLines(snapshot Snapshot, lang i18n.Language) ([]string, error) {
 	text := &renderer{lang: lang}
 	tokens := snapshot.Spend.Tokens
+	if snapshot.LedgerTruncated {
+		return []string{text.text(clitext.SpendLedgerTruncated, nil)}, text.err
+	}
 	if tokens.Total() == 0 {
 		return []string{text.text(clitext.SpendEmpty, nil)}, text.err
 	}

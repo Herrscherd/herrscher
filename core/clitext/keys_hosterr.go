@@ -28,7 +28,6 @@ func hostErrKeys() map[Key][]string {
 		"cli.host.fault.request_name_missing":          nil,
 		"cli.host.fault.approve_mode_usage":            nil,
 		"cli.host.fault.usage_empty_value":             nil,
-		"cli.host.fault.usage_ledger_truncated":        nil,
 		"cli.host.fault.memory_locate_unsupported":     nil,
 		"cli.host.fault.memory_forget_unsupported":     nil,
 		"cli.host.fault.command_socket_empty":          nil,

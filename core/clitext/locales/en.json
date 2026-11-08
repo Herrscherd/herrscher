@@ -3218,11 +3218,6 @@
     "other": "usage: an empty value is not accepted"
   },
   {
-    "id": "cli.host.fault.usage_ledger_truncated",
-    "description": "Error of the usage command: a day's ledger exceeds the readable size",
-    "other": "usage: a day of the ledger is too large, its totals would be wrong"
-  },
-  {
     "id": "cli.host.fault.memory_locate_unsupported",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (memory locate unsupported)",
     "other": "memory backend does not support locate"
@@ -3911,6 +3906,11 @@
     "id": "cli.spend.estimate",
     "description": "Usage report note: the cost is an estimate at the API rate",
     "other": "API rate estimate"
+  },
+  {
+    "id": "cli.spend.ledger_truncated",
+    "description": "Usage report: a day of the ledger exceeds the readable size, totals are not shown",
+    "other": "a day of the usage ledger is too large, totals are not shown rather than wrong"
   },
   {
     "id": "cli.spend.peak",

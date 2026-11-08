@@ -24,7 +24,7 @@ type Pace struct {
 // window of at least a day, not exhausted, that the usage runs ahead or behind by ten
 // points or more.
 func PaceOf(limit contracts.Limit, now time.Time) Pace {
-	if limit.Span <= 0 {
+	if limit.Span <= 0 || limit.ResetsAt.IsZero() {
 		return Pace{}
 	}
 	left := limit.ResetsAt.Sub(now)

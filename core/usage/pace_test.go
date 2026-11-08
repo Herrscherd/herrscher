@@ -67,3 +67,10 @@ func TestPaceOfZeroSpan(t *testing.T) {
 		t.Fatalf("PaceOf without span = %+v, want zero", pace)
 	}
 }
+
+func TestPaceOfWithoutResetIsHidden(t *testing.T) {
+	limit := contracts.Limit{UsedPercent: 60, Span: 7 * 24 * time.Hour}
+	if got := PaceOf(limit, testNow()); got != (Pace{}) {
+		t.Fatalf("PaceOf without ResetsAt = %+v, want the zero Pace", got)
+	}
+}

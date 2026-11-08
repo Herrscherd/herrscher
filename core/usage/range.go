@@ -9,6 +9,9 @@ import (
 // ErrUnknownValue reports a usage enum value or name that does not exist.
 var ErrUnknownValue = errors.New("unknown usage value")
 
+// ErrEmptyValue reports a usage option given with an empty value.
+var ErrEmptyValue = errors.New("usage: an empty value is not accepted")
+
 // Range is the period a usage report covers, counted back from now.
 type Range int
 

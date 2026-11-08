@@ -3213,6 +3213,16 @@
     "other": "usage : approve mode <session> <ask|bypass|strict|smart>"
   },
   {
+    "id": "cli.host.fault.usage_empty_value",
+    "description": "Erreur d'une commande usage dont une option est vide",
+    "other": "usage : une valeur vide n'est pas acceptée"
+  },
+  {
+    "id": "cli.host.fault.usage_ledger_truncated",
+    "description": "Erreur de la commande usage : le journal d'un jour dépasse la taille lisible",
+    "other": "usage : un jour du journal est trop volumineux, ses totaux seraient faux"
+  },
+  {
     "id": "cli.host.fault.memory_locate_unsupported",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (memory locate unsupported)",
     "other": "le backend mémoire ne gère pas locate"

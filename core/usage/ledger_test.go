@@ -1,6 +1,8 @@
 package usage
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -88,16 +90,54 @@ func TestLedgerRecordsSkipsBadLinesAndOutsideWindow(t *testing.T) {
 	body := `{"time":"2026-11-08T10:00:00Z","vendor":"claude","model":"opus","in":3}
 not json
 {"time":"2026-11-08T11:00:00Z","vendor":"codex","model":"gpt","in":4}
+{"time":"2026-11-07T08:00:00Z","vendor":"claude","model":"opus","in":5}
 `
 	if err := os.WriteFile(filepath.Join(dir, "2026-11-08.jsonl"), []byte(body), fileMode); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	ledger := Ledger{Dir: dir, Now: clock(testNow().Add(-10 * time.Hour))}
+	ledger := Ledger{Dir: dir, Now: clock(testNow())}
 	got, err := ledger.Records(Range24h)
 	if err != nil {
 		t.Fatalf("Records: %v", err)
 	}
 	if len(got) != 2 {
-		t.Fatalf("Records returned %d, want the 2 decodable lines of the window", len(got))
+		t.Fatalf("Records returned %d, want the 2 decodable lines of the window, the day before dropped", len(got))
+	}
+}
+
+func TestLedgerAppendPrunesFilesPastRetention(t *testing.T) {
+	dir := t.TempDir()
+	old := filepath.Join(dir, "2026-01-01.jsonl")
+	if err := os.WriteFile(old, []byte(`{"in":1}`+"\n"), fileMode); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	ledger := Ledger{Dir: dir, Now: clock(testNow())}
+	if err := ledger.Append([]Record{{Time: testNow(), Model: "opus", In: 1}}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if _, err := os.Stat(old); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("file past retention still there: %v", err)
+	}
+}
+
+func TestLedgerRecordsRefusesTruncatedDay(t *testing.T) {
+	dir := t.TempDir()
+	file, err := os.Create(filepath.Join(dir, "2026-11-08.jsonl"))
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err = file.Truncate(maxLedgerFile + 1); err != nil {
+		t.Fatalf("grow: %v", err)
+	}
+	if err = file.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	ledger := Ledger{Dir: dir, Now: clock(testNow())}
+	got, err := ledger.Records(Range24h)
+	if !errors.Is(err, ErrLedgerTruncated) {
+		t.Fatalf("Records error = %v, want ErrLedgerTruncated", err)
+	}
+	if got != nil {
+		t.Fatalf("Records returned %d records with the truncated day, want none", len(got))
 	}
 }

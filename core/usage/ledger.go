@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"maps"
 	"os"
@@ -17,6 +16,10 @@ import (
 
 // Retention is how long a daily ledger file is kept before it is pruned.
 const Retention = 120 * day
+
+// ErrLedgerTruncated reports a daily ledger file too large to be read whole, so that the
+// totals of its day would be wrong.
+var ErrLedgerTruncated = errors.New("usage: a day of the ledger is too large, its totals would be wrong")
 
 const (
 	dayLayout     = time.DateOnly
@@ -146,8 +149,15 @@ func readDay(root *os.Root, name string, since time.Time) ([]Record, error) {
 	return records, errors.Join(readErr, file.Close())
 }
 
-func readLines(file io.Reader, name string, since time.Time) ([]Record, error) {
-	scanner := bufio.NewScanner(io.LimitReader(file, maxLedgerFile))
+func readLines(file *os.File, name string, since time.Time) ([]Record, error) {
+	info, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("usage ledger %s: %w", name, err)
+	}
+	if info.Size() > maxLedgerFile {
+		return nil, ErrLedgerTruncated
+	}
+	scanner := bufio.NewScanner(file)
 	scanner.Buffer(nil, maxLedgerLine)
 	var out []Record
 	for scanner.Scan() {

@@ -17,6 +17,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/lease"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
+	"github.com/Herrscherd/herrscher/core/usage"
 )
 
 const seedConsolidateTimeout = 60 * time.Second
@@ -27,6 +28,7 @@ type oneShotSeedRuntime struct {
 	coordinator contracts.Coordinator
 	publish     func(session string, event contracts.Event)
 	record      func(session string, entry state.TranscriptEntry)
+	recordUsage func(sess state.Session, records []usage.Record)
 	timeout     time.Duration
 	backend     func(context.Context, state.Session) (contracts.Backend, error)
 	models      *ModelDiscovery
@@ -101,7 +103,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	driver.incarnation = sess.Incarnation
 	driver.agent = sess.Agent
 	driver.language = func() i18n.Language { return knownSessionLanguage(sess) }
-	attachOneShotTaps(driver, sess.Name, runtime)
+	attachOneShotTaps(driver, sess, runtime)
 	pumpCtx, pumpCancel := context.WithCancel(seedCtx)
 	defer pumpCancel()
 	pumpDone := make(chan struct{})
@@ -138,12 +140,15 @@ func oneShotTurnTimeout(runtime oneShotSeedRuntime) time.Duration {
 	return runtime.timeout
 }
 
-func attachOneShotTaps(driver *sessionDriver, name string, runtime oneShotSeedRuntime) {
+func attachOneShotTaps(driver *sessionDriver, sess state.Session, runtime oneShotSeedRuntime) {
 	if runtime.record != nil {
-		driver.sink.Transcript = func(entry state.TranscriptEntry) { runtime.record(name, entry) }
+		driver.sink.Transcript = func(entry state.TranscriptEntry) { runtime.record(sess.Name, entry) }
 	}
 	if runtime.publish != nil {
-		driver.emitTap = func(e contracts.Event) { runtime.publish(name, e) }
+		driver.emitTap = func(e contracts.Event) { runtime.publish(sess.Name, e) }
+	}
+	if runtime.recordUsage != nil {
+		driver.sink.Usage = func(records []usage.Record) { runtime.recordUsage(sess, records) }
 	}
 }
 

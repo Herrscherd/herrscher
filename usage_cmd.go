@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
@@ -170,7 +171,7 @@ func writeUsage(writer io.Writer, snapshot usagecore.Snapshot, opts usageOptions
 func usageLines(snapshot usagecore.Snapshot, view string, lang i18n.Language) ([]string, error) {
 	switch view {
 	case usageViewCost:
-		return usagecore.CostLines(snapshot, lang)
+		return usagecore.CostLines(snapshot, lang, time.Local)
 	case usageViewTokens:
 		return usagecore.TokenLines(snapshot, lang)
 	default:

@@ -13,6 +13,9 @@ import (
 // again.
 const LimitsTTL = time.Minute
 
+// LimitsFailureTTL is how long a failed reading is reused, shorter than LimitsTTL.
+const LimitsFailureTTL = 10 * time.Second
+
 const limitsTimeout = 10 * time.Second
 
 // LimitsStatus tells whether the limits of an account could be read.
@@ -67,11 +70,32 @@ type AccountLimits struct {
 	Limits  []contracts.Limit `json:"limits,omitempty"`
 }
 
-// LimitsCache reads the limits of the accounts and reuses each reading for LimitsTTL.
+// LimitsCache reads the limits of the accounts and reuses each reading for LimitsTTL, or
+// for LimitsFailureTTL when the reading failed.
 type LimitsCache struct {
 	Now     func() time.Time
+	Timeout time.Duration
 	mu      sync.Mutex
 	entries map[AccountKey]AccountLimits
+}
+
+type limitsReply struct {
+	limits []contracts.Limit
+	err    error
+}
+
+func (c *LimitsCache) timeout() time.Duration {
+	if c.Timeout > 0 {
+		return c.Timeout
+	}
+	return limitsTimeout
+}
+
+func (e AccountLimits) reusableFor() time.Duration {
+	if e.Status == LimitsFailed {
+		return LimitsFailureTTL
+	}
+	return LimitsTTL
 }
 
 // Read returns the limits of every target, in the order of the targets. Targets are
@@ -96,12 +120,12 @@ func (c *LimitsCache) readOne(ctx context.Context, target Target) AccountLimits 
 	c.mu.Lock()
 	cached, ok := c.entries[key]
 	c.mu.Unlock()
-	if ok && now.Sub(cached.ReadAt) < LimitsTTL {
+	if ok && now.Sub(cached.ReadAt) < cached.reusableFor() {
 		return cached
 	}
-	readCtx, cancel := context.WithTimeout(ctx, limitsTimeout)
+	readCtx, cancel := context.WithTimeout(ctx, c.timeout())
 	defer cancel()
-	limits, err := target.Read(readCtx, target.Access)
+	limits, err := readWithin(readCtx, target)
 	entry := AccountLimits{
 		Vendor:  target.Vendor,
 		Account: string(target.Account),
@@ -125,4 +149,18 @@ func (c *LimitsCache) readOne(ctx context.Context, target Target) AccountLimits 
 	c.entries[key] = entry
 	c.mu.Unlock()
 	return entry
+}
+
+func readWithin(ctx context.Context, target Target) ([]contracts.Limit, error) {
+	reply := make(chan limitsReply, 1)
+	go func() {
+		limits, err := target.Read(ctx, target.Access)
+		reply <- limitsReply{limits: limits, err: err}
+	}()
+	select {
+	case got := <-reply:
+		return got.limits, got.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }

@@ -3213,6 +3213,16 @@
     "other": "usage: approve mode <session> <ask|bypass|strict|smart>"
   },
   {
+    "id": "cli.host.fault.usage_empty_value",
+    "description": "Error of a usage command whose option is empty",
+    "other": "usage: an empty value is not accepted"
+  },
+  {
+    "id": "cli.host.fault.usage_ledger_truncated",
+    "description": "Error of the usage command: a day's ledger exceeds the readable size",
+    "other": "usage: a day of the ledger is too large, its totals would be wrong"
+  },
+  {
     "id": "cli.host.fault.memory_locate_unsupported",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (memory locate unsupported)",
     "other": "memory backend does not support locate"

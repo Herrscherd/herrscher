@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"errors"
 	"slices"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -31,7 +33,10 @@ func (t usageTab) next() usageTab {
 	return t + 1
 }
 
-const rangeParam = "Range"
+const (
+	rangeParam   = "Range"
+	accountParam = "Account"
+)
 
 func (t usageTab) key() string {
 	switch t {
@@ -54,6 +59,7 @@ type usagePanel struct {
 	account  usage.AccountKey
 	ready    bool
 	failed   bool
+	err      error
 	snapshot usage.Snapshot
 }
 
@@ -111,6 +117,7 @@ func (m *model) handleUsageMsg(msg usageMsg) {
 		return
 	}
 	m.usage.failed = msg.err != nil
+	m.usage.err = msg.err
 	if msg.err == nil {
 		m.usage.snapshot = msg.snapshot
 		m.usage.ready = true
@@ -203,7 +210,7 @@ func (m *model) usageFilterLine() string {
 	period := m.tr.t("tui.usage.range", map[string]any{rangeParam: m.usage.rng.String()})
 	account := m.tr.t("tui.usage.account.all", nil)
 	if m.usage.account != (usage.AccountKey{}) {
-		account = m.tr.t("tui.usage.account.one", map[string]any{"Account": m.usage.account.String()})
+		account = m.tr.t("tui.usage.account.one", map[string]any{accountParam: m.usage.account.String()})
 	}
 	return m.st.dim.Render(period + " · " + account)
 }
@@ -211,6 +218,9 @@ func (m *model) usageFilterLine() string {
 func (m *model) usageBody() []string {
 	if m.usage.tab == usageTabSession {
 		return m.usageSessionBody()
+	}
+	if errors.Is(m.usage.err, usage.ErrLedgerTruncated) {
+		return []string{m.st.red.Render(m.tr.t("tui.usage.ledger_truncated", nil))}
 	}
 	if m.usage.failed {
 		return []string{m.st.red.Render(m.tr.t("tui.usage.unreachable", nil))}
@@ -236,7 +246,7 @@ func (m *model) usageSessionBody() []string {
 func (m *model) usageLines() ([]string, error) {
 	switch m.usage.tab {
 	case usageTabCost:
-		return usage.CostLines(m.usage.snapshot, m.tr.lang)
+		return usage.CostLines(m.usage.snapshot, m.tr.lang, time.Local)
 	case usageTabTokens:
 		return usage.TokenLines(m.usage.snapshot, m.tr.lang)
 	case usageTabSession, usageTabLimits:

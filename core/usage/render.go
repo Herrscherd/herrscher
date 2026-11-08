@@ -230,9 +230,9 @@ func paceLabel(limit contracts.Limit, pace Pace, text *renderer) string {
 	return ""
 }
 
-// CostLines writes the total of the spend of the period, its daily sparkline, and its
-// cost by account and by model.
-func CostLines(snapshot Snapshot, lang i18n.Language) ([]string, error) {
+// CostLines writes the total of the spend of the period, its daily sparkline in the zone
+// of the display, and its cost by account and by model.
+func CostLines(snapshot Snapshot, lang i18n.Language, zone *time.Location) ([]string, error) {
 	text := &renderer{lang: lang}
 	spend := snapshot.Spend
 	if spend.Sessions == 0 {
@@ -240,7 +240,7 @@ func CostLines(snapshot Snapshot, lang i18n.Language) ([]string, error) {
 	}
 	sessions := text.text(clitext.SpendSessions, clitext.Params{clitext.ParamCount: spend.Sessions})
 	head := formatMoney(lang, spend.Cost) + "  " + sessions + summarySep + text.text(rangeKeys()[snapshot.Range], nil) + summarySep + text.text(clitext.SpendEstimate, nil)
-	lines := []string{head, sparkline(snapshot, text)}
+	lines := []string{head, sparkline(snapshot, text, zone)}
 	lines = append(lines, "")
 	lines = append(lines, shareTable(spend.Accounts, spend.Cost, text, clitext.SpendColAccount, func(share Share) string {
 		return accountLabel(share, text)
@@ -290,7 +290,7 @@ func cacheRatio(tokens Tokens) float64 {
 	return float64(tokens.CacheRead) / float64(input) * percentScale
 }
 
-func sparkline(snapshot Snapshot, text *renderer) string {
+func sparkline(snapshot Snapshot, text *renderer, zone *time.Location) string {
 	var peak float64
 	var peakAt time.Time
 	for _, bucket := range snapshot.Spend.Buckets {
@@ -311,7 +311,7 @@ func sparkline(snapshot Snapshot, text *renderer) string {
 	if snapshot.Range == Range24h {
 		layout = "15:04"
 	}
-	return cells.String() + "  " + text.text(clitext.SpendPeak, clitext.Params{clitext.ParamCost: formatMoney(text.lang, peak), clitext.ParamDay: peakAt.Format(layout)})
+	return cells.String() + "  " + text.text(clitext.SpendPeak, clitext.Params{clitext.ParamCost: formatMoney(text.lang, peak), clitext.ParamDay: peakAt.In(zone).Format(layout)})
 }
 
 func shareTable(shares []Share, total float64, text *renderer, header clitext.Key, label func(Share) string, value func(Share) float64) []string {

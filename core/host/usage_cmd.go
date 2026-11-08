@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"slices"
+	"sync"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -25,6 +26,13 @@ func usageDir(partDir string) string {
 	return filepath.Join(partDir, "usage")
 }
 
+func (h *hub) recordUsage(sess state.Session, records []usage.Record) {
+	ledger := usage.Ledger{Dir: usageDir(h.partDir), Now: time.Now}
+	if err := ledger.Append(stampUsage(records, h.st, sess)); err != nil {
+		warnStderr("herrscher serve: session %q: usage not recorded: %v\n", sess.Name, err)
+	}
+}
+
 func stampUsage(records []usage.Record, current *state.State, sess state.Session) []usage.Record {
 	vendor, account := sess.Vendor, sess.Account
 	if live, ok := current.FindSession(sess.Name); ok {
@@ -41,6 +49,8 @@ type usageSource struct {
 	ledger   usage.Ledger
 	limits   *usage.LimitsCache
 	accounts accounts.Store
+	mu       sync.Mutex
+	reported map[string]bool
 }
 
 func newUsageSource(partDir string) *usageSource {
@@ -90,7 +100,7 @@ func (s *usageSource) targets(key usage.AccountKey) []usage.Target {
 			}
 			env, envErr := contracts.ProfileEnv(kind, profile.Dir)
 			if envErr != nil {
-				slog.Warn("usage: profile env unavailable", "vendor", kind, "err", envErr)
+				s.reportProfileEnv(kind, profile.Name, envErr)
 				continue
 			}
 			targets = append(targets, limitTarget(plugin, contracts.ProfileName(profile.Name), profile.Default, env))
@@ -99,6 +109,20 @@ func (s *usageSource) targets(key usage.AccountKey) []usage.Target {
 	return slices.DeleteFunc(targets, func(target usage.Target) bool {
 		return !key.Matches(target.Vendor, string(target.Account))
 	})
+}
+
+func (s *usageSource) reportProfileEnv(vendor, profile string, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := vendor + ":" + profile
+	if s.reported[key] {
+		return
+	}
+	if s.reported == nil {
+		s.reported = make(map[string]bool)
+	}
+	s.reported[key] = true
+	slog.Warn("usage: profile env unavailable", "vendor", vendor, "profile", profile, "err", err)
 }
 
 func limitTarget(plugin contracts.Plugin, account contracts.ProfileName, isDefault bool, env map[string]string) usage.Target {
@@ -129,11 +153,11 @@ func usageVerb(source *usageSource) contracts.Cmd {
 		Param(usageParamRange, clitext.CmdHelpUsageRange, false).
 		Param(usageParamAccount, clitext.CmdHelpUsageAccount, false).
 		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
-			rng, err := usageRange(input.Get(usageParamRange))
+			rng, err := usageRange(input)
 			if err != nil {
 				return contracts.Result{}, err
 			}
-			key, err := usage.ParseAccountKey(input.Get(usageParamAccount))
+			key, err := usageAccount(input)
 			if err != nil {
 				return contracts.Result{}, err
 			}
@@ -146,9 +170,21 @@ func usageVerb(source *usageSource) contracts.Cmd {
 		})
 }
 
-func usageRange(text string) (usage.Range, error) {
-	if text == "" {
+func usageRange(input contracts.Input) (usage.Range, error) {
+	text, given := input.Lookup(usageParamRange)
+	if !given {
 		return usage.DefaultRange(), nil
 	}
+	if text == "" {
+		return 0, usage.ErrEmptyValue
+	}
 	return usage.ParseRange(text)
+}
+
+func usageAccount(input contracts.Input) (usage.AccountKey, error) {
+	text, given := input.Lookup(usageParamAccount)
+	if given && text == "" {
+		return usage.AccountKey{}, usage.ErrEmptyValue
+	}
+	return usage.ParseAccountKey(text)
 }

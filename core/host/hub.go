@@ -92,7 +92,6 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 	sctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	bound := boundGateways(h.gws, effectiveKinds(h.gws, sess))
 	terms := liveModelTerms(h.st, h.models, sess.Name)
-	usageLedger := usage.Ledger{Dir: usageDir(h.partDir), Now: time.Now}
 	done := make(chan struct{})
 	h.mu.Lock()
 	h.live[sess.Name] = liveSession{cancel: cancel, done: done}
@@ -120,9 +119,7 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 					h.takeCheckpoint(ctx, sess, turnID, text)
 				},
 				Usage: func(records []usage.Record) {
-					if err := usageLedger.Append(stampUsage(records, h.st, sess)); err != nil {
-						warnStderr("herrscher serve: session %q: usage not recorded: %v\n", sess.Name, err)
-					}
+					h.recordUsage(sess, records)
 				},
 			},
 			eventTap(h.eventPublisher, sess.Name),
@@ -232,6 +229,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 			publish:     h.eventPublisher,
 			backend:     h.seedBackend,
 			models:      h.models,
+			recordUsage: h.recordUsage,
 			record: func(session string, entry state.TranscriptEntry) {
 				if err := state.AppendTranscript(state.TranscriptPath(h.partDir, session), entry); err != nil {
 					warnStderr("herrscher serve: session %q: seed transcript entry dropped: %v\n", session, err)

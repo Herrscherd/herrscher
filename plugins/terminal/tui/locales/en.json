@@ -2778,6 +2778,10 @@
     "other": "daemon unreachable"
   },
   {
+    "id": "tui.usage.ledger_truncated",
+    "other": "usage ledger too large for a day, totals not shown"
+  },
+  {
     "id": "tui.usage.render_failed",
     "other": "cannot render the usage"
   }

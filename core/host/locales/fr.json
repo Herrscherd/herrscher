@@ -55,6 +55,16 @@
     "other": "le backend déclare Capabilities.HistoryEditor mais n'implémente pas le port, son historique ne peut pas être modifié"
   },
   {
+    "id": "compaction.history_timeout",
+    "description": "Le bridge n'a pas répondu à temps à une lecture ou un élagage de l'historique",
+    "other": "le relais n'a pas répondu à temps à un appel sur l'historique"
+  },
+  {
+    "id": "compaction.history_too_large",
+    "description": "L'historique de la session est trop volumineux pour que le bridge l'envoie",
+    "other": "l'historique de la session est trop volumineux pour être modifié"
+  },
+  {
     "id": "compaction.failed",
     "description": "Une compaction échoue pour une raison sans code propre, Detail porte le texte technique",
     "other": "échec de la compaction : {{.Detail}}"

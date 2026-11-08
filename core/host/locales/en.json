@@ -55,6 +55,16 @@
     "other": "the backend declares Capabilities.HistoryEditor but does not implement the port, its history cannot be edited"
   },
   {
+    "id": "compaction.history_timeout",
+    "description": "The bridge did not answer a history read or prune within its timeout",
+    "other": "the bridge did not answer a history call in time"
+  },
+  {
+    "id": "compaction.history_too_large",
+    "description": "The history of the session is too large for the bridge to send",
+    "other": "the history of the session is too large to be edited"
+  },
+  {
     "id": "compaction.failed",
     "description": "A compaction fails for a reason with no code of its own; Detail holds the technical text",
     "other": "compaction failed: {{.Detail}}"

@@ -69,6 +69,8 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"compaction.nil_compactor":        nil,
 		"compaction.no_compactor_plugin":  nil,
 		"compaction.no_history_port":      nil,
+		"compaction.history_timeout":      nil,
+		"compaction.history_too_large":    nil,
 		"compaction.failed":               {"Detail"},
 		"coordination.routed":             {"Agent", "Session"},
 		"coordination.sealed":             {"Node"},
@@ -245,6 +247,18 @@ func TestCompactFailureTextMapsUntypedCauses(t *testing.T) {
 			err:  fmt.Errorf("stage: %w", historywire.ErrNoHistoryEditor),
 			fr:   "le backend déclare Capabilities.HistoryEditor mais n'implémente pas le port, son historique ne peut pas être modifié",
 			en:   "the backend declares Capabilities.HistoryEditor but does not implement the port, its history cannot be edited",
+		},
+		{
+			name: "history call timed out",
+			err:  fmt.Errorf("%w: %w", errHistoryTimeout, context.DeadlineExceeded),
+			fr:   "le relais n'a pas répondu à temps à un appel sur l'historique",
+			en:   "the bridge did not answer a history call in time",
+		},
+		{
+			name: "history too large",
+			err:  fmt.Errorf("stage: %w", historywire.ErrHistoryTooLarge),
+			fr:   "l'historique de la session est trop volumineux pour être modifié",
+			en:   "the history of the session is too large to be edited",
 		},
 		{
 			name: "unclassified failure keeps its technical detail",

@@ -66,6 +66,7 @@ func queueFullCompaction(session string) error {
 var (
 	errCompactUnsupported = errors.New("its backend does not implement Compactor")
 	errBridgeGone         = errors.New("the bridge closed during a compaction")
+	errHistoryTimeout     = errors.New("the bridge did not answer a history call in time")
 	errNoCompactorFactory = errors.New("is a compactor plugin but provides no Compactor factory")
 	errNilCompactor       = errors.New("its Compactor factory returned no stage")
 	errNoCompactorPlugin  = errors.New("no compactor plugin is registered under this name")
@@ -383,6 +384,10 @@ func knownCompactFailure(err error) (string, bool) {
 		return "compaction.no_compactor_plugin", true
 	case errors.Is(err, historywire.ErrNoHistoryEditor):
 		return "compaction.no_history_port", true
+	case errors.Is(err, errHistoryTimeout):
+		return "compaction.history_timeout", true
+	case errors.Is(err, historywire.ErrHistoryTooLarge):
+		return "compaction.history_too_large", true
 	}
 	return "", false
 }
@@ -635,6 +640,25 @@ func (h bridgeHistory) ReadHistory(ctx context.Context) (contracts.History, erro
 }
 
 func (h bridgeHistory) PruneHistory(ctx context.Context, edits []contracts.HistoryEdit) (contracts.PruneOutcome, error) {
+	if err := contracts.ValidateHistoryEdits(edits); err != nil {
+		return contracts.PruneOutcome{}, err
+	}
+	var total contracts.PruneOutcome
+	for start := 0; start < len(edits) || start == 0; start += historywire.PruneBatch {
+		outcome, err := h.pruneBatch(ctx, edits[start:min(start+historywire.PruneBatch, len(edits))])
+		if err != nil {
+			return total, err
+		}
+		if start == 0 {
+			total.CharsBefore = outcome.CharsBefore
+		}
+		total.Edited += outcome.Edited
+		total.CharsAfter = outcome.CharsAfter
+	}
+	return total, nil
+}
+
+func (h bridgeHistory) pruneBatch(ctx context.Context, edits []contracts.HistoryEdit) (contracts.PruneOutcome, error) {
 	request, err := historywire.Prune(h.driver.nextHistoryCall(), edits)
 	if err != nil {
 		return contracts.PruneOutcome{}, err
@@ -663,13 +687,13 @@ func (d *sessionDriver) historyThroughBridge(ctx context.Context, request contra
 	case <-d.hangup:
 		return errBridgeGone
 	case <-ctx.Done():
-		return ctx.Err()
+		return historyCallEnded(ctx)
 	}
 	for {
 		select {
 		case <-ctx.Done():
 			d.Interrupt()
-			return ctx.Err()
+			return historyCallEnded(ctx)
 		case <-d.hangup:
 			return errBridgeGone
 		case frame, ok := <-d.from:
@@ -681,6 +705,13 @@ func (d *sessionDriver) historyThroughBridge(ctx context.Context, request contra
 			}
 		}
 	}
+}
+
+func historyCallEnded(ctx context.Context) error {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return fmt.Errorf("%w: %w", errHistoryTimeout, ctx.Err())
+	}
+	return ctx.Err()
 }
 
 func (d *sessionDriver) historyAnswer(request, frame contracts.Event, accept func(contracts.Event) (bool, error)) (bool, error) {

@@ -26,8 +26,13 @@ const (
 // the frame stays under the line limit of the control wire once escaped again.
 const ChunkLimit = 128 * 1024
 
-// HistoryLimit is the most bytes of encoded history a Collector accepts.
+// HistoryLimit is the most bytes of encoded history a bridge sends and a
+// Collector accepts.
 const HistoryLimit = 64 * 1024 * 1024
+
+// PruneBatch is the most edits one prune frame carries, so the frame stays under
+// the line limit of the control wire.
+const PruneBatch = 1000
 
 // FailureCode names the cause a history_error frame carries in its Value.
 type FailureCode int
@@ -38,6 +43,7 @@ const (
 	FailureNoEditor
 	FailureInvalidEdit
 	FailureUnknownCall
+	FailureTooLarge
 )
 
 // String returns the wire form of the code.
@@ -49,6 +55,8 @@ func (c FailureCode) String() string {
 		return "invalid_edit"
 	case FailureUnknownCall:
 		return "unknown_call"
+	case FailureTooLarge:
+		return "history_too_large"
 	case FailureOther:
 		return "other"
 	}
@@ -58,7 +66,7 @@ func (c FailureCode) String() string {
 // CodeOf returns the failure code of a history_error frame, FailureOther when
 // its Value names no known code.
 func CodeOf(event contracts.Event) FailureCode {
-	for _, code := range []FailureCode{FailureNoEditor, FailureInvalidEdit, FailureUnknownCall} {
+	for _, code := range []FailureCode{FailureNoEditor, FailureInvalidEdit, FailureUnknownCall, FailureTooLarge} {
 		if event.Value == code.String() {
 			return code
 		}
@@ -131,7 +139,8 @@ func Read(callID string) contracts.Event {
 }
 
 // History encodes the history a bridge answers a read with, as frames of at most
-// ChunkLimit bytes of text, the last one marked Done.
+// ChunkLimit bytes of text, the last one marked Done. It fails with
+// ErrHistoryTooLarge when the encoding passes HistoryLimit.
 func History(history contracts.History) ([]contracts.Event, error) {
 	frame := historyFrame{Messages: make([]messageFrame, 0, len(history.Messages))}
 	for _, message := range history.Messages {
@@ -144,6 +153,9 @@ func History(history contracts.History) ([]contracts.Event, error) {
 	text, err := encode(frame)
 	if err != nil {
 		return nil, err
+	}
+	if len(text) > HistoryLimit {
+		return nil, fmt.Errorf("%w: %d bytes, more than %d", ErrHistoryTooLarge, len(text), HistoryLimit)
 	}
 	var frames []contracts.Event
 	for text != "" {
@@ -270,7 +282,7 @@ func NoPort() contracts.Event {
 }
 
 // DecodeFailure returns the error a failure frame carries. It matches
-// ErrNoHistoryEditor, contracts.ErrInvalidHistoryEdit or
+// ErrNoHistoryEditor, ErrHistoryTooLarge, contracts.ErrInvalidHistoryEdit or
 // contracts.ErrUnknownHistoryCall when the frame names that code.
 func DecodeFailure(event contracts.Event) error {
 	return failureError{text: event.Text, cause: causeOf(CodeOf(event))}
@@ -284,6 +296,8 @@ func failureCode(err error) FailureCode {
 		return FailureInvalidEdit
 	case errors.Is(err, contracts.ErrUnknownHistoryCall):
 		return FailureUnknownCall
+	case errors.Is(err, ErrHistoryTooLarge):
+		return FailureTooLarge
 	}
 	return FailureOther
 }
@@ -296,6 +310,8 @@ func causeOf(code FailureCode) error {
 		return contracts.ErrInvalidHistoryEdit
 	case FailureUnknownCall:
 		return contracts.ErrUnknownHistoryCall
+	case FailureTooLarge:
+		return ErrHistoryTooLarge
 	case FailureOther:
 		return nil
 	}

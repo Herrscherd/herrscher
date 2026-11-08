@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -225,5 +226,40 @@ func TestCustomStageRefusesBrokenPlugins(t *testing.T) {
 				t.Fatalf("customStage = %v, want %v", err, tc.want)
 			}
 		})
+	}
+}
+
+func TestPruneSendsTheEditsInBatchesAndSumsTheOutcome(t *testing.T) {
+	f, _, _ := historyFixture(t, true)
+	edits := make([]contracts.HistoryEdit, 2*historywire.PruneBatch+5)
+	for i := range edits {
+		edits[i] = contracts.HistoryEdit{CallID: "c" + strconv.Itoa(i), Action: contracts.PruneCall}
+	}
+	type pruneRun struct {
+		outcome contracts.PruneOutcome
+		err     error
+	}
+	done := make(chan pruneRun, 1)
+	go func() {
+		outcome, err := bridgeHistory{driver: f.driver}.PruneHistory(context.Background(), edits)
+		done <- pruneRun{outcome, err}
+	}()
+	chars := 9000
+	for _, want := range []int{historywire.PruneBatch, historywire.PruneBatch, 5} {
+		request := expectFrameOf(t, f, historywire.EventPrune)
+		batch, err := historywire.DecodePrune(request)
+		if err != nil || len(batch) != want {
+			t.Fatalf("batch = %d edits, %v, want %d", len(batch), err, want)
+		}
+		answer, err := historywire.Pruned(contracts.PruneOutcome{Edited: len(batch), CharsBefore: chars, CharsAfter: chars - 1000})
+		if err != nil {
+			t.Fatalf("Pruned: %v", err)
+		}
+		chars -= 1000
+		f.from <- historywire.Answer(request, answer)
+	}
+	run := <-done
+	if run.err != nil || run.outcome != (contracts.PruneOutcome{Edited: len(edits), CharsBefore: 9000, CharsAfter: 6000}) {
+		t.Fatalf("outcome = %+v, %v, want every edit counted from the first size to the last", run.outcome, run.err)
 	}
 }

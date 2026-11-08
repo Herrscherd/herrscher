@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/control"
@@ -105,6 +106,33 @@ func TestAHistoryLargerThanAWireLineCrossesTheControlWire(t *testing.T) {
 	}
 	if !slices.EqualFunc(got.Messages, want.Messages, sameMessage) {
 		t.Fatal("the history changed across the wire")
+	}
+}
+
+func TestChunksNeverCutARune(t *testing.T) {
+	text := strings.Repeat("a", ChunkLimit-1) + "é" + strings.Repeat("b", 10)
+	end := chunkEnd(text)
+	if end != ChunkLimit-1 {
+		t.Fatalf("chunkEnd = %d, want %d, before the rune that straddles the limit", end, ChunkLimit-1)
+	}
+	frames, err := History(contracts.History{Messages: []contracts.HistoryMessage{{Role: contracts.RoleUser, Text: strings.Repeat("é", ChunkLimit)}}})
+	if err != nil {
+		t.Fatalf("History: %v", err)
+	}
+	for i, frame := range frames {
+		if !utf8.ValidString(frame.Text) {
+			t.Fatalf("frame %d of %d is not valid UTF-8", i, len(frames))
+		}
+	}
+}
+
+func TestHistoryPastTheLimitIsRefusedByItsSender(t *testing.T) {
+	_, err := History(contracts.History{Messages: []contracts.HistoryMessage{{Role: contracts.RoleUser, Text: strings.Repeat("a", HistoryLimit)}}})
+	if !errors.Is(err, ErrHistoryTooLarge) {
+		t.Fatalf("History = %v, want ErrHistoryTooLarge", err)
+	}
+	if !errors.Is(DecodeFailure(Failure(err)), ErrHistoryTooLarge) {
+		t.Fatal("the refusal loses ErrHistoryTooLarge across the wire")
 	}
 }
 

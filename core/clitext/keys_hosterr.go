@@ -18,6 +18,7 @@ func hostErrKeys() map[Key][]string {
 		"cli.host.fault.fork_no_worktree":              nil,
 		"cli.host.fault.compact_unsupported":           nil,
 		"cli.host.fault.bridge_gone":                   nil,
+		"cli.host.fault.history_timeout":               nil,
 		"cli.host.fault.no_compactor_factory":          nil,
 		"cli.host.fault.nil_compactor":                 nil,
 		"cli.host.fault.no_compactor_plugin":           nil,

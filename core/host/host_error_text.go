@@ -43,6 +43,7 @@ func hostErrorKeys() []hostErrorKey {
 		{errForkNoWorktree, "cli.host.fault.fork_no_worktree"},
 		{errCompactUnsupported, "cli.host.fault.compact_unsupported"},
 		{errBridgeGone, "cli.host.fault.bridge_gone"},
+		{errHistoryTimeout, "cli.host.fault.history_timeout"},
 		{errNoCompactorFactory, "cli.host.fault.no_compactor_factory"},
 		{errNilCompactor, "cli.host.fault.nil_compactor"},
 		{errNoCompactorPlugin, "cli.host.fault.no_compactor_plugin"},

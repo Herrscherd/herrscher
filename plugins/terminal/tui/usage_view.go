@@ -261,5 +261,5 @@ func (m *model) usageLines() ([]string, error) {
 		return usage.TokenLines(m.usage.snapshot, m.tr.lang, m.reportPalette())
 	case usageTabSession, usageTabLimits:
 	}
-	return usage.LimitLines(m.usage.snapshot, m.tr.lang, m.reportPalette())
+	return usage.LimitCards(m.usage.snapshot, m.tr.lang, m.reportPalette(), m.cardEdges(), m.frameInner())
 }

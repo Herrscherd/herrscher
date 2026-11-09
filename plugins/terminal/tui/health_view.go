@@ -14,10 +14,11 @@ import (
 )
 
 const (
-	healthColumnGap = "   "
-	verbHealth      = "health"
-	argHealthDeep   = "--deep"
-	healthInterval  = 15 * time.Second
+	healthColumnGap    = "   "
+	healthRemedyIndent = "    "
+	verbHealth         = "health"
+	argHealthDeep      = "--deep"
+	healthInterval     = 15 * time.Second
 )
 
 type healthMsg struct {
@@ -214,6 +215,7 @@ func healthCellNote(row health.Row, pal termpaint.Palette) string {
 	case contracts.HealthOff, contracts.HealthDegraded:
 		return termpaint.Paint(health.StateStyle(row.State, pal), row.StateText)
 	case contracts.HealthOK, contracts.HealthDown:
+		return row.Latency
 	}
 	return row.Latency
 }
@@ -261,10 +263,10 @@ func healthBands(sections []health.Section, pal termpaint.Palette) []string {
 			if cause := joinNonEmpty(row.Cause, row.Facts); cause != "" {
 				band += " " + termpaint.Paint(health.StateStyle(row.State, pal), cause)
 			}
-			if row.Remedy != "" {
-				band += termpaint.Paint(pal.Dim, " · ") + row.Remedy
-			}
 			bands = append(bands, band)
+			if row.Remedy != "" {
+				bands = append(bands, healthRemedyIndent+termpaint.Paint(pal.Dim, "→ ")+row.Remedy)
+			}
 		}
 	}
 	return bands

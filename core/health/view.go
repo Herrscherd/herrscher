@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	factsSep       = " · "
-	daySpan        = 24 * time.Hour
-	secondDecimals = 1
+	factsSep        = " · "
+	daySpan         = 24 * time.Hour
+	secondDecimals  = 1
+	tenthsPerSecond = 10
 )
 
 // Row is one check as a report shows it, every text already rendered in the
@@ -239,11 +240,13 @@ func accountName(check Check, text *renderer) string {
 }
 
 func (r *renderer) latency(elapsed time.Duration) string {
-	switch {
-	case elapsed < time.Second:
-		return r.key(clitext.HealthSpanMillis, clitext.Params{clitext.ParamDuration: int(max(elapsed.Round(time.Millisecond)/time.Millisecond, 1))})
-	case elapsed < time.Minute:
-		seconds := clitext.FormatNumber(r.lang, elapsed.Seconds(), secondDecimals)
+	millis := max(elapsed.Round(time.Millisecond), time.Millisecond)
+	if millis < time.Second {
+		return r.key(clitext.HealthSpanMillis, clitext.Params{clitext.ParamDuration: int(millis / time.Millisecond)})
+	}
+	tenths := elapsed.Round(time.Second / tenthsPerSecond)
+	if tenths < time.Minute {
+		seconds := clitext.FormatNumber(r.lang, tenths.Seconds(), secondDecimals)
 		return r.key(clitext.HealthSpanSeconds, clitext.Params{clitext.ParamSeconds: seconds})
 	}
 	return r.span(elapsed)

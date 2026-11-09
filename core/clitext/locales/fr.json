@@ -3918,6 +3918,11 @@
     "other": "↘ {{.Delta}} %"
   },
   {
+    "id": "cli.quota.card.left",
+    "description": "Part restante du compte principal d'une carte de limites",
+    "other": "{{.Ratio}} restant"
+  },
+  {
     "id": "cli.spend.empty",
     "description": "Usage report with no spend in the period",
     "other": "aucune dépense sur la période"

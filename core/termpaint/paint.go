@@ -5,19 +5,13 @@ package termpaint
 
 import (
 	"strings"
-	"unicode/utf8"
 
-	"github.com/mattn/go-runewidth"
+	"github.com/charmbracelet/x/ansi"
 )
 
 const (
-	escapeByte    = '\x1b'
-	csiOpen       = '['
-	csiPrefixLen  = 2
-	csiFinalFirst = '@'
-	csiFinalLast  = '~'
-	ansiReset     = "\x1b[0m"
-	columnGap     = 2
+	ansiReset = "\x1b[0m"
+	columnGap = 2
 )
 
 // Style paints a piece of text for one role of a report.
@@ -41,20 +35,20 @@ type Palette struct {
 // ANSIPalette is the palette of a true color terminal, the colors of the validated mockup.
 func ANSIPalette() Palette {
 	return Palette{
-		Accent:  ansi("38;2;224;137;106"),
-		Fill:    ansi("38;2;224;137;106"),
-		Marker:  ansi("1;38;2;255;255;255"),
-		Dim:     ansi("38;2;107;114;128"),
-		Strong:  ansi("1;38;2;255;255;255"),
-		Bad:     ansi("38;2;248;113;113"),
-		Warn:    ansi("38;2;251;191;36"),
-		Good:    ansi("38;2;74;222;128"),
-		Group:   ansi("38;2;196;181;253"),
-		Inverse: ansi("1;38;2;11;13;18;48;2;230;232;238"),
+		Accent:  sgr("38;2;224;137;106"),
+		Fill:    sgr("38;2;224;137;106"),
+		Marker:  sgr("1;38;2;255;255;255"),
+		Dim:     sgr("38;2;107;114;128"),
+		Strong:  sgr("1;38;2;255;255;255"),
+		Bad:     sgr("38;2;248;113;113"),
+		Warn:    sgr("38;2;251;191;36"),
+		Good:    sgr("38;2;74;222;128"),
+		Group:   sgr("38;2;196;181;253"),
+		Inverse: sgr("1;38;2;11;13;18;48;2;230;232;238"),
 	}
 }
 
-func ansi(code string) Style {
+func sgr(code string) Style {
 	open := "\x1b[" + code + "m"
 	return func(text string) string { return open + text + ansiReset }
 }
@@ -70,26 +64,7 @@ func Paint(style Style, text string) string {
 
 // Width is the number of terminal cells text takes, its escape sequences left out.
 func Width(text string) int {
-	width := 0
-	for index := 0; index < len(text); {
-		if text[index] == escapeByte && index+1 < len(text) && text[index+1] == csiOpen {
-			index = skipEscape(text, index+csiPrefixLen)
-			continue
-		}
-		char, size := utf8.DecodeRuneInString(text[index:])
-		index += size
-		width += runewidth.RuneWidth(char)
-	}
-	return width
-}
-
-func skipEscape(text string, from int) int {
-	for index := from; index < len(text); index++ {
-		if text[index] >= csiFinalFirst && text[index] <= csiFinalLast {
-			return index + 1
-		}
-	}
-	return len(text)
+	return ansi.StringWidth(text)
 }
 
 // PadRight fills text with spaces up to width cells.

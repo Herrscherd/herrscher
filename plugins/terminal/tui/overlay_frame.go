@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/Herrscherd/herrscher/core/termpaint"
+	"github.com/Herrscherd/herrscher/core/usage"
 )
 
 const (
@@ -44,7 +45,10 @@ func (m *model) renderFrame(frame overlayFrame) string {
 		line = cutText(line, inner)
 		lines = append(lines, side+gutter+termpaint.PadRight(line, inner)+gutter+side)
 	}
-	bottom, _ := frameEdge([2]string{boxes.bl, boxes.br}, "", frame.footer, width, m.st.dim, boxes.h)
+	bottom, footerFitted := frameEdge([2]string{boxes.bl, boxes.br}, "", frame.footer, width, m.st.dim, boxes.h)
+	if !footerFitted && frame.footer != "" {
+		lines = append(lines, side+gutter+termpaint.PadRight(cutText(frame.footer, inner), inner)+gutter+side)
+	}
 	lines = append(lines, bottom)
 	return strings.Join(lines, "\n")
 }
@@ -100,4 +104,15 @@ func styleOf(style lipgloss.Style) termpaint.Style {
 
 func (m *model) frameInner() int {
 	return m.frameWidth() - composerBorderCols - frameSides*frameGutter
+}
+
+func (m *model) cardEdges() usage.CardEdges {
+	boxes := m.st.boxes(m.caps.Boxes)
+	switch boxes.h {
+	case "─":
+		return usage.UnicodeEdges()
+	case " ":
+		return usage.CardEdges{TopLeft: " ", TopRight: " ", BottomLeft: " ", BottomRight: " ", TeeLeft: " ", TeeRight: " ", Horizontal: " ", Vertical: " "}
+	}
+	return usage.CardEdges{TopLeft: "+", TopRight: "+", BottomLeft: "+", BottomRight: "+", TeeLeft: "+", TeeRight: "+", Horizontal: "-", Vertical: "|"}
 }

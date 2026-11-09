@@ -3918,6 +3918,11 @@
     "other": "↘ {{.Delta}} %"
   },
   {
+    "id": "cli.quota.card.left",
+    "description": "Share left of the main account of a limits card",
+    "other": "{{.Ratio}} left"
+  },
+  {
     "id": "cli.spend.empty",
     "description": "Usage report with no spend in the period",
     "other": "no spend over the period"

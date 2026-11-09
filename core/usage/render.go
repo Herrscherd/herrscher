@@ -215,10 +215,14 @@ func limitPercent(limit contracts.Limit, text *renderer) string {
 }
 
 func limitBar(limit contracts.Limit, pace Pace, pal termpaint.Palette) string {
-	filled := int(math.Round(Remaining(limit) / percentScale * barWidth))
+	return sizedBar(limit, pace, pal, barWidth)
+}
+
+func sizedBar(limit contracts.Limit, pace Pace, pal termpaint.Palette, width int) string {
+	filled := int(math.Round(Remaining(limit) / percentScale * float64(width)))
 	marker := noMarker
 	if !limit.ResetsAt.IsZero() && limit.Span > 0 {
-		marker = int(math.Round(pace.Elapsed / percentScale * barWidth))
+		marker = int(math.Round(pace.Elapsed / percentScale * float64(width)))
 	}
 	var cells strings.Builder
 	run := func(count int, cell string, style termpaint.Style) {
@@ -228,14 +232,14 @@ func limitBar(limit contracts.Limit, pace Pace, pal termpaint.Palette) string {
 		run(min(until, filled)-from, fillCell, pal.Fill)
 		run(until-max(from, filled), emptyCell, pal.Dim)
 	}
-	if marker < 0 || marker > barWidth {
-		fillRun(0, barWidth)
+	if marker < 0 || marker > width {
+		fillRun(0, width)
 		return cells.String()
 	}
-	marker = min(marker, barWidth-1)
+	marker = min(marker, width-1)
 	fillRun(0, marker)
 	cells.WriteString(termpaint.Paint(pal.Marker, markerCell))
-	fillRun(marker+1, barWidth)
+	fillRun(marker+1, width)
 	return cells.String()
 }
 
@@ -256,7 +260,7 @@ func resetLabel(limit contracts.Limit, now time.Time, text *renderer) string {
 		minutes := int(left % time.Hour / time.Minute)
 		return text.text(clitext.QuotaResetHours, clitext.Params{clitext.ParamHours: hours, clitext.ParamMinutes: fmt.Sprintf("%02d", minutes)})
 	}
-	return text.text(clitext.QuotaResetMinutes, clitext.Params{clitext.ParamMinutes: int(left / time.Minute)})
+	return text.text(clitext.QuotaResetMinutes, clitext.Params{clitext.ParamMinutes: int((left + time.Minute - 1) / time.Minute)})
 }
 
 func paceLabel(limit contracts.Limit, pace Pace, text *renderer) string {

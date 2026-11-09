@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"log/slog"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -1037,22 +1038,32 @@ func (d *sessionDriver) fanOut(ctx context.Context, event contracts.Event) {
 
 func (d *sessionDriver) fanOutReply(ctx context.Context, event contracts.Event, files outbox.Frame) {
 	if d.saidElsewhere {
-		event = d.withElsewhereNotice(event, files)
-	}
-	event = d.stamp(event)
-	if d.emitTap != nil {
-		d.emitTap(event)
-	}
-	if d.saidElsewhere {
+		d.tapEvent(d.stamp(d.withElsewhereNotice(event, files)))
 		return
 	}
+	d.tapEvent(d.stamp(d.withUnsentFiles(event, files, d.carriesFiles())))
 	d.eachGateway(func(index int, gateway contracts.GatewaySet) {
 		sender, canSend := d.fileSenders[gateway.Gateway.Manifest().Kind]
-		d.emitToGateway(ctx, index, gateway, d.withUnsentFiles(event, files, canSend))
+		d.emitToGateway(ctx, index, gateway, d.stamp(d.withUnsentFiles(event, files, canSend)))
 		if canSend {
 			d.sendReplyFiles(ctx, index, gateway, sender, files.Files)
 		}
 	})
+}
+
+func (d *sessionDriver) tapEvent(event contracts.Event) {
+	if d.emitTap != nil {
+		d.emitTap(event)
+	}
+}
+
+func (d *sessionDriver) carriesFiles() bool {
+	for _, gateway := range d.gateways {
+		if _, ok := d.fileSenders[gateway.Gateway.Manifest().Kind]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func (d *sessionDriver) stamp(event contracts.Event) contracts.Event {
@@ -1101,12 +1112,17 @@ func (d *sessionDriver) withUnsentFiles(event contracts.Event, files outbox.Fram
 }
 
 func (d *sessionDriver) withElsewhereNotice(event contracts.Event, files outbox.Frame) contracts.Event {
-	if len(files.Files) == 0 {
+	names := frameNames(files)
+	if len(names) == 0 {
 		return event
 	}
-	notice := d.hostText("outbound.elsewhere", map[string]any{namesParam: d.noticeNames(fileNames(files.Files))})
+	notice := d.hostText("outbound.elsewhere", map[string]any{namesParam: d.noticeNames(names)})
 	event.Text = strings.TrimSpace(event.Text + "\n\n" + notice)
 	return event
+}
+
+func frameNames(files outbox.Frame) []string {
+	return append(fileNames(files.Files), files.Refused...)
 }
 
 func fileSendersOf(gateways []contracts.Gateway) map[string]contracts.FileSender {
@@ -1139,22 +1155,55 @@ func fileNames(files []contracts.OutboundFile) []string {
 }
 
 const (
-	fileSendTimeout = 2 * time.Minute
-	namesParam      = "Names"
+	fileSendTimeout   = 2 * time.Minute
+	namesParam        = "Names"
+	filesPerSendBatch = 10
+	bytesPerSendBatch = 9 << 20
+	unmeasuredBytes   = bytesPerSendBatch + 1
 )
 
 func (d *sessionDriver) sendReplyFiles(ctx context.Context, index int, gateway contracts.GatewaySet, sender contracts.FileSender, files []contracts.OutboundFile) {
-	if len(files) == 0 {
-		return
+	for _, batch := range sendBatches(files, outboundSize) {
+		d.sendFileBatch(ctx, index, gateway, sender, batch)
 	}
+}
+
+func (d *sessionDriver) sendFileBatch(ctx context.Context, index int, gateway contracts.GatewaySet, sender contracts.FileSender, batch []contracts.OutboundFile) {
 	conv := contracts.Conversation{Gateway: gateway.Gateway.Manifest().Kind, ID: d.renderChannel(gateway)}
 	sendCtx, cancel := context.WithTimeout(ctx, fileSendTimeout)
 	defer cancel()
-	if _, err := sender.SendFiles(sendCtx, conv, "", "", files); err != nil {
+	if _, err := sender.SendFiles(sendCtx, conv, "", "", batch); err != nil {
 		slog.Warn("reply files not sent", "gateway", conv.Gateway, "err", err)
-		notice := d.hostText("outbound.failed", map[string]any{namesParam: d.noticeNames(fileNames(files))})
+		notice := d.hostText("outbound.failed", map[string]any{namesParam: d.noticeNames(fileNames(batch))})
 		d.emitToGateway(ctx, index, gateway, d.stamp(contracts.Event{T: eventStatus, Text: notice}))
 	}
+}
+
+func sendBatches(files []contracts.OutboundFile, sizeOf func(contracts.OutboundFile) int64) [][]contracts.OutboundFile {
+	var batches [][]contracts.OutboundFile
+	var batch []contracts.OutboundFile
+	var batchBytes int64
+	for _, file := range files {
+		size := sizeOf(file)
+		if len(batch) > 0 && (len(batch) == filesPerSendBatch || batchBytes+size > bytesPerSendBatch) {
+			batches = append(batches, batch)
+			batch, batchBytes = nil, 0
+		}
+		batch = append(batch, file)
+		batchBytes += size
+	}
+	if len(batch) > 0 {
+		batches = append(batches, batch)
+	}
+	return batches
+}
+
+func outboundSize(file contracts.OutboundFile) int64 {
+	info, err := os.Stat(file.Path)
+	if err != nil {
+		return unmeasuredBytes
+	}
+	return info.Size()
 }
 
 func (d *sessionDriver) removeTurnFiles(files outbox.Frame) {

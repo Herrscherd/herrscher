@@ -68,21 +68,27 @@ func TestEmitFilesAfterTurnEndDropsTheTurnDir(t *testing.T) {
 	}
 }
 
-func TestBeginTurnOutboxPurgesStaleTurnDirs(t *testing.T) {
+func TestBeginTurnOutboxPurgesOnlyItsOwnSession(t *testing.T) {
 	root := t.TempDir()
-	stale := filepath.Join(root, "other", "turn-stale")
-	if err := os.MkdirAll(stale, 0o700); err != nil {
-		t.Fatal(err)
-	}
 	past := time.Now().Add(-outbox.MaxAge - time.Hour)
-	if err := os.Chtimes(stale, past, past); err != nil {
-		t.Fatal(err)
+	stale := filepath.Join(root, "chan", "turn-stale")
+	liveElsewhere := filepath.Join(root, "other", "turn-live")
+	for _, dir := range []string{stale, liveElsewhere} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(dir, past, past); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	turn := beginTurnOutbox(producingBackend{&recordingBackend{}}, outboundSettings{root: root, session: "chan", maxBytes: outboundTestMaxBytes})
 
 	if _, err := os.Stat(stale); !os.IsNotExist(err) {
-		t.Fatalf("stale turn directory %q survived the start of a turn: %v", stale, err)
+		t.Fatalf("stale turn directory %q of the session survived the start of a turn: %v", stale, err)
+	}
+	if _, err := os.Stat(liveElsewhere); err != nil {
+		t.Fatalf("turn of another session was purged while it may still run: %v", err)
 	}
 	if _, err := os.Stat(turn.dir); err != nil {
 		t.Fatalf("turn directory of the new turn missing: %v", err)

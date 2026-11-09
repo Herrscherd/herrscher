@@ -231,6 +231,7 @@ func TestRemove(t *testing.T) {
 		{name: "turn directory under root is removed", dir: func(root string) string { return filepath.Join(root, "chan", "turn-1") }},
 		{name: "directory outside root is kept", dir: func(string) string { return t.TempDir() }, wantErr: ErrOutsideOutbox, kept: true},
 		{name: "root itself is kept", dir: func(root string) string { return root }, wantErr: ErrOutsideOutbox, kept: true},
+		{name: "session directory is kept", dir: func(root string) string { return filepath.Join(root, "chan") }, wantErr: ErrOutsideOutbox, kept: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -312,6 +313,82 @@ func TestOwnsOnlyTurnDirectoriesOfASession(t *testing.T) {
 func TestPurgeMissingRootIsNotAnError(t *testing.T) {
 	if err := Purge(filepath.Join(t.TempDir(), "absent"), time.Now()); err != nil {
 		t.Fatalf("Purge of a missing root = %v, want nil", err)
+	}
+}
+
+func TestRemoveDeletesTheCleanedPath(t *testing.T) {
+	root := t.TempDir()
+	dir, err := NewTurnDir(root, "chan")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err = Remove(root, dir+string(filepath.Separator)+"."); err != nil {
+		t.Fatalf("Remove of an unclean turn directory: %v", err)
+	}
+
+	if _, err = os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("turn directory survived Remove: %v", err)
+	}
+}
+
+func TestPurgeSessionLeavesOtherSessionsTurns(t *testing.T) {
+	root := t.TempDir()
+	now := time.Now()
+	past := now.Add(-MaxAge - time.Hour)
+	ownStale := filepath.Join(root, "chan", "turn-old")
+	otherLive := filepath.Join(root, "other", "turn-live")
+	for _, dir := range []string{ownStale, otherLive} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(dir, past, past); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := PurgeSession(root, "chan", now); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(ownStale); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stale turn of the session survived: %v", err)
+	}
+	if _, err := os.Stat(otherLive); err != nil {
+		t.Fatalf("turn of another session was purged: %v", err)
+	}
+}
+
+func TestPurgeSessionMissingIsNotAnError(t *testing.T) {
+	if err := PurgeSession(t.TempDir(), "chan", time.Now()); err != nil {
+		t.Fatalf("PurgeSession of a missing session = %v, want nil", err)
+	}
+}
+
+func TestPurgeRemovesOnlyTurnEntries(t *testing.T) {
+	root := t.TempDir()
+	now := time.Now()
+	past := now.Add(-MaxAge - time.Hour)
+	stale := filepath.Join(root, "chan", "turn-old")
+	notes := filepath.Join(root, "chan", "notes")
+	for _, dir := range []string{stale, notes} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(dir, past, past); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := Purge(root, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(stale); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stale turn directory survived the purge: %v", err)
+	}
+	if _, err := os.Stat(notes); err != nil {
+		t.Fatalf("entry without the turn prefix was purged: %v", err)
 	}
 }
 

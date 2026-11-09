@@ -25,7 +25,7 @@ func beginTurnOutbox(backend contracts.Backend, settings outboundSettings) turnO
 	if !ok || settings.root == "" {
 		return turnOutbox{}
 	}
-	if err := outbox.Purge(settings.root, time.Now()); err != nil {
+	if err := outbox.PurgeSession(settings.root, settings.session, time.Now()); err != nil {
 		logger.Warn("stale turn outboxes not purged", "err", err)
 	}
 	dir, err := outbox.NewTurnDir(settings.root, settings.session)

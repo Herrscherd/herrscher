@@ -98,14 +98,10 @@ func Decode(value string) (Frame, error) {
 // NewTurnDir creates a private directory for one turn of session under root, and
 // returns its absolute path.
 func NewTurnDir(root, session string) (string, error) {
-	if session == "" || session == "." || session == ".." || strings.ContainsAny(session, "/\\\x00") {
-		return "", fmt.Errorf("%w: %q", ErrBadSession, session)
-	}
-	absRoot, err := filepath.Abs(root)
+	sessionDir, err := sessionDirOf(root, session)
 	if err != nil {
-		return "", fmt.Errorf("resolve outbox root: %w", err)
+		return "", err
 	}
-	sessionDir := filepath.Join(absRoot, session)
 	if err = os.MkdirAll(sessionDir, privateDirMode); err != nil {
 		return "", fmt.Errorf("create outbox of session %q: %w", session, err)
 	}
@@ -114,6 +110,17 @@ func NewTurnDir(root, session string) (string, error) {
 		return "", fmt.Errorf("create turn outbox: %w", err)
 	}
 	return dir, nil
+}
+
+func sessionDirOf(root, session string) (string, error) {
+	if session == "" || session == "." || session == ".." || strings.ContainsAny(session, "/\\\x00") {
+		return "", fmt.Errorf("%w: %q", ErrBadSession, session)
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve outbox root: %w", err)
+	}
+	return filepath.Join(absRoot, session), nil
 }
 
 // Vet checks the files a backend handed over for one turn held in dir. A file is
@@ -177,23 +184,30 @@ func Owns(root, dir string) bool {
 		return false
 	}
 	parts := strings.Split(rel, string(filepath.Separator))
-	return len(parts) == 2 && parts[0] != "" && strings.HasPrefix(parts[1], turnDirPrefix)
+	return len(parts) == 2 && parts[0] != "" && isTurnDirName(parts[1])
 }
 
-// Remove deletes the turn directory dir, which must lie strictly below root, so a
-// frame can never name a directory outside the outboxes.
+func isTurnDirName(name string) bool {
+	return strings.HasPrefix(name, turnDirPrefix)
+}
+
+// Remove deletes the turn directory dir, which [Owns] must accept, so a frame can
+// never name a directory outside the outboxes. A dir with unclean elements is
+// cleaned first, and the cleaned path is the one removed.
 func Remove(root, dir string) error {
-	if !within(root, dir) {
+	cleaned := filepath.Clean(dir)
+	if !Owns(root, cleaned) {
 		return fmt.Errorf("%w: %q", ErrOutsideOutbox, dir)
 	}
-	if err := os.RemoveAll(dir); err != nil {
+	if err := os.RemoveAll(cleaned); err != nil {
 		return fmt.Errorf("remove turn outbox: %w", err)
 	}
 	return nil
 }
 
-// Purge removes the turn directories under root last modified before now minus
-// [MaxAge], the ones a crash left behind. A missing root is not an error.
+// Purge removes the turn directories of every session under root last modified
+// before now minus [MaxAge], the ones a crash left behind. A missing root is not an
+// error.
 func Purge(root string, now time.Time) error {
 	sessions, err := os.ReadDir(root)
 	if errors.Is(err, os.ErrNotExist) {
@@ -205,18 +219,38 @@ func Purge(root string, now time.Time) error {
 	cutoff := now.Add(-MaxAge)
 	var errs []error
 	for _, session := range sessions {
-		errs = append(errs, purgeSession(filepath.Join(root, session.Name()), cutoff))
+		if session.IsDir() {
+			errs = append(errs, purgeSession(filepath.Join(root, session.Name()), cutoff))
+		}
 	}
 	return errors.Join(errs...)
 }
 
+// PurgeSession removes the turn directories of one session under root last modified
+// before now minus [MaxAge]. The turns of other sessions are left alone, so a turn
+// still running in another session is never removed. A missing session directory is
+// not an error.
+func PurgeSession(root, session string, now time.Time) error {
+	sessionDir, err := sessionDirOf(root, session)
+	if err != nil {
+		return err
+	}
+	return purgeSession(sessionDir, now.Add(-MaxAge))
+}
+
 func purgeSession(sessionDir string, cutoff time.Time) error {
 	turns, err := os.ReadDir(sessionDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("read outbox of session: %w", err)
 	}
 	var errs []error
 	for _, turn := range turns {
+		if !isTurnDirName(turn.Name()) {
+			continue
+		}
 		info, err := turn.Info()
 		if err != nil {
 			errs = append(errs, fmt.Errorf("stat turn outbox: %w", err))

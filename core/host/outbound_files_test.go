@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -290,6 +291,134 @@ func TestReplySaidElsewhereNamesTheFilesThatStayUnsent(t *testing.T) {
 	}
 	if strings.Contains(text, frame.Dir) {
 		t.Fatalf("reply text %q leaks the host path of the outbox", text)
+	}
+}
+
+type batchFileGateway struct {
+	routedFileGateway
+
+	failing string
+	batches [][]string
+}
+
+func (g *batchFileGateway) SendFiles(ctx context.Context, conv contracts.Conversation, replyTo contracts.MessageID, text string, files []contracts.OutboundFile) (contracts.MessageID, error) {
+	names := fileNames(files)
+	g.batches = append(g.batches, names)
+	if slices.Contains(names, g.failing) {
+		return "", errors.New("gateway down")
+	}
+	return g.routedFileGateway.SendFiles(ctx, conv, replyTo, text, files)
+}
+
+func outboundFiles(t *testing.T, dir string, count int) []contracts.OutboundFile {
+	t.Helper()
+	files := make([]contracts.OutboundFile, 0, count)
+	for index := range count {
+		name := fmt.Sprintf("a%d.png", index)
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte("png"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, contracts.OutboundFile{Path: path, Name: name, ContentType: "image/png"})
+	}
+	return files
+}
+
+func TestFailedBatchNamesOnlyItsFiles(t *testing.T) {
+	root := t.TempDir()
+	dir, err := outbox.NewTurnDir(root, "chan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := outboundFiles(t, dir, filesPerSendBatch+1)
+	gw := &batchFileGateway{failing: "a10.png"}
+	d := newOutboundDriver([]contracts.Gateway{gw}, root)
+
+	d.sendReplyFiles(context.Background(), 0, d.gateways[0], gw, files)
+
+	if len(gw.batches) != 2 || len(gw.batches[0]) != filesPerSendBatch || !slices.Equal(gw.batches[1], []string{"a10.png"}) {
+		t.Fatalf("batches = %q, want the eleven files sent as ten then one", gw.batches)
+	}
+	if len(gw.routed) != 1 || gw.routed[0].T != eventStatus {
+		t.Fatalf("routed = %+v, want one status notice for the failed batch", gw.routed)
+	}
+	if notice := gw.routed[0].Text; !strings.Contains(notice, "a10.png") || strings.Contains(notice, "a0.png") {
+		t.Fatalf("notice %q, want only the failed batch named", notice)
+	}
+}
+
+func TestSendBatchesCutsAtTenFilesAndNineMiB(t *testing.T) {
+	cases := []struct {
+		name  string
+		sizes []int64
+		want  []int
+	}{
+		{name: "ten small files stay in one batch", sizes: repeatedSizes(10, 1), want: []int{10}},
+		{name: "an eleventh file opens a second batch", sizes: repeatedSizes(11, 1), want: []int{10, 1}},
+		{name: "bytes past nine MiB open a second batch", sizes: []int64{bytesPerSendBatch - 1, 2, 1}, want: []int{1, 2}},
+		{name: "a file over nine MiB travels alone", sizes: []int64{1, bytesPerSendBatch + 1, 1}, want: []int{1, 1, 1}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			files := make([]contracts.OutboundFile, 0, len(tc.sizes))
+			sizes := make(map[string]int64, len(tc.sizes))
+			for index, size := range tc.sizes {
+				name := fmt.Sprintf("f%d.png", index)
+				files = append(files, contracts.OutboundFile{Name: name})
+				sizes[name] = size
+			}
+
+			batches := sendBatches(files, func(file contracts.OutboundFile) int64 { return sizes[file.Name] })
+
+			got := make([]int, 0, len(batches))
+			for _, batch := range batches {
+				got = append(got, len(batch))
+			}
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("batch sizes = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func repeatedSizes(count int, size int64) []int64 {
+	sizes := make([]int64, count)
+	for index := range sizes {
+		sizes[index] = size
+	}
+	return sizes
+}
+
+func TestRefusedNoticeReachesTheTap(t *testing.T) {
+	root := t.TempDir()
+	frame := turnFrame(t, root)
+	frame.Refused = []string{"big.bin"}
+	d := newOutboundDriver([]contracts.Gateway{&textRecordingGateway{}}, root)
+	var tapped []contracts.Event
+	d.emitTap = func(event contracts.Event) { tapped = append(tapped, event) }
+
+	d.deliverReply(context.Background(), contracts.Event{T: "reply", Text: "hello", Done: true}, frame)
+
+	if len(tapped) != 1 {
+		t.Fatalf("emitTap got %d events, want the reply once", len(tapped))
+	}
+	for _, want := range []string{"hello", "a.png", "big.bin"} {
+		if !strings.Contains(tapped[0].Text, want) {
+			t.Fatalf("tapped reply %q lacks %q", tapped[0].Text, want)
+		}
+	}
+}
+
+func TestReplySaidElsewhereNamesRefusedFilesWithoutSentOnes(t *testing.T) {
+	d := newOutboundDriver([]contracts.Gateway{&routedFileGateway{}}, t.TempDir())
+	d.saidElsewhere = true
+	var tapped []contracts.Event
+	d.emitTap = func(event contracts.Event) { tapped = append(tapped, event) }
+
+	d.deliverReply(context.Background(), contracts.Event{T: "reply", Text: "hello", Done: true}, outbox.Frame{Refused: []string{"big.bin"}})
+
+	if len(tapped) != 1 || !strings.HasPrefix(tapped[0].Text, "hello") || !strings.Contains(tapped[0].Text, "big.bin") {
+		t.Fatalf("emitTap got %+v, want the reply followed by a notice naming big.bin", tapped)
 	}
 }
 

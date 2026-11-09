@@ -1336,7 +1336,7 @@ reinstalls the binary. Restart the service afterwards to run it.
 | Category | Port | Official plugin |
 |----------|------|-----------------|
 | Gateway | `Gateway` | [herrscher-discord-gateway], in-tree `terminal` |
-| Backend | `Backend` | [herrscher-claude-backend], [herrscher-codex-backend], [herrscher-cursor-backend] |
+| Backend | `Backend` | [herrscher-claude-backend], [herrscher-codex-backend], [herrscher-cursor-backend], [herrscher-pixellab-backend] |
 | Memory | `Memory` | [herrscher-obsidian-memory] |
 | Orchestrator | `Orchestrator` | [herrscher-orchestrator] |
 | Skills | playbooks only | [herrscher-superset-skills] |
@@ -1431,6 +1431,7 @@ detail rather than a rewrite.
 [herrscher-claude-backend]: https://github.com/Herrscherd/herrscher-claude-backend
 [herrscher-codex-backend]: https://github.com/Herrscherd/herrscher-codex-backend
 [herrscher-cursor-backend]: https://github.com/Herrscherd/herrscher-cursor-backend
+[herrscher-pixellab-backend]: https://github.com/Herrscherd/herrscher-pixellab-backend
 [herrscher-obsidian-memory]: https://github.com/Herrscherd/herrscher-obsidian-memory
 [herrscher-orchestrator]: https://github.com/Herrscherd/herrscher-orchestrator
 [herrscher-superset-skills]: https://github.com/Herrscherd/herrscher-superset-skills

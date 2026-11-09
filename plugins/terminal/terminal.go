@@ -506,9 +506,17 @@ func terminalVerbs() map[string]bool {
 // judgement would be two chances to disagree about what a tab may run.
 func OperatorVerb(verb string) bool { return terminalVerbs()[verb] }
 
-// ReadOnlyCommand reports whether argv is one of the read-only queries the
-// sessions board runs beside its list (skills, schedules, approval rules).
+// ReadOnlyCommand reports whether argv is one of the read-only queries a terminal
+// runs beside its sessions: the board's lists (skills, schedules, approval rules)
+// and the health and usage overlays, whatever flags those two carry. After health
+// or usage only flags and the names of the usage views are accepted, so a later
+// subcommand of either verb stays closed until it is listed here.
 func ReadOnlyCommand(args []string) bool {
+	if len(args) > 0 {
+		if views, ok := readOnlyVerbs()[args[0]]; ok {
+			return len(args) == 1 || strings.HasPrefix(args[1], flagPrefix) || views[args[1]]
+		}
+	}
 	if len(args) != readOnlyCommandWords {
 		return false
 	}
@@ -517,6 +525,15 @@ func ReadOnlyCommand(args []string) bool {
 		return true
 	}
 	return false
+}
+
+const flagPrefix = "--"
+
+func readOnlyVerbs() map[string]map[string]bool {
+	return map[string]map[string]bool{
+		"health": {},
+		"usage":  {"limits": true, "cost": true, "tokens": true},
+	}
 }
 
 func allowedVerbs() string {

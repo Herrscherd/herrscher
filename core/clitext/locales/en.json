@@ -3850,7 +3850,7 @@
   {
     "id": "cli.quota.reset.unknown",
     "description": "Reset delay of a limits window the vendor gives no time for",
-    "other": "unknown"
+    "other": "─"
   },
   {
     "id": "cli.quota.reset.days",
@@ -3920,12 +3920,12 @@
   {
     "id": "cli.spend.col.account",
     "description": "ACCOUNT column header of the spend tables",
-    "other": "ACCOUNT"
+    "other": "BY ACCOUNT"
   },
   {
     "id": "cli.spend.col.model",
     "description": "MODEL column header of the spend tables",
-    "other": "MODEL"
+    "other": "BY MODEL"
   },
   {
     "id": "cli.spend.col.cost",

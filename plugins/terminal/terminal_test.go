@@ -363,6 +363,42 @@ func TestDispatchAllowsSessionAndAgentVerbs(t *testing.T) {
 	}
 }
 
+func TestReadOnlyCommandAcceptsTheQueriesAndTheirFlagsOnly(t *testing.T) {
+	for _, tc := range []struct {
+		argv []string
+		want bool
+	}{
+		{argv: []string{"health"}, want: true},
+		{argv: []string{"health", "--deep"}, want: true},
+		{argv: []string{"usage"}, want: true},
+		{argv: []string{"usage", "--range", "7d", "--account", "claude:pro"}, want: true},
+		{argv: []string{"skill", "list"}, want: true},
+		{argv: []string{"usage", "cost", "--range", "7d"}, want: true},
+		{argv: []string{"usage", "prune"}, want: false},
+		{argv: []string{"health", "cost"}, want: false},
+		{argv: []string{"health", "reset", "--deep"}, want: false},
+		{argv: []string{"skill", "create"}, want: false},
+		{argv: []string{"skill", "list", "--all"}, want: false},
+		{argv: nil, want: false},
+	} {
+		if got := ReadOnlyCommand(tc.argv); got != tc.want {
+			t.Errorf("ReadOnlyCommand(%v) = %v, want %v", tc.argv, got, tc.want)
+		}
+	}
+}
+
+func TestDispatchLetsTheUsageQueryReachTheDaemon(t *testing.T) {
+	tm := New()
+	fake := &fakeSessionControl{}
+	tm.BindSessionControl(fake)
+	if _, err := tm.Dispatch([]string{"usage", "--range", "7d"}); err != nil {
+		t.Fatalf("Dispatch(usage) rejected: %v", err)
+	}
+	if len(fake.lastArgs) == 0 || fake.lastArgs[0] != "usage" {
+		t.Fatalf("usage did not reach SessionControl: %v", fake.lastArgs)
+	}
+}
+
 var terminalSessionNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 
 func TestOpenDefaultSessionCreatesWhenNone(t *testing.T) {

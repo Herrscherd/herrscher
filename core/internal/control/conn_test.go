@@ -74,7 +74,10 @@ func TestConnConcurrentWrites(t *testing.T) {
 	var got int
 	var mu sync.Mutex
 	done := make(chan struct{})
+	scanned := make(chan struct{})
+	t.Cleanup(func() { <-scanned })
 	go func() {
+		defer close(scanned)
 		logErr(t, srvConn.Scan(func(contracts.Event) error {
 			mu.Lock()
 			got++

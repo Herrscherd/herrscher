@@ -230,6 +230,21 @@ func TestAttachedFrontendRefusesVerbsTheTerminalDoesNotOwn(t *testing.T) {
 	}
 }
 
+func TestAttachedFrontendReachesTheHealthAndUsageOverlays(t *testing.T) {
+	d := startFakeDaemon(t, func([]string) (string, error) { return "{}", nil })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	a, err := newAttachedDaemon(ctx, d.instance, testLang())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, argv := range [][]string{{"health"}, {"health", "--deep"}, {"usage", "--range", "30d"}, {"usage", "--range", "7d", "--account", "claude:pro"}} {
+		if _, err := a.Dispatch(argv); err != nil {
+			t.Errorf("%q was refused from an attached terminal: %v", argv, err)
+		}
+	}
+}
+
 func TestAttachedFrontendBindsANewSessionToTheTerminal(t *testing.T) {
 	if got := strings.Join(withTerminalOnly([]string{"session", "create", "--name", "x"}), " "); got != "session create --name x --terminal_only" {
 		t.Errorf("got %q", got)

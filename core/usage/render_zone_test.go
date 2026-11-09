@@ -16,14 +16,14 @@ func TestCostLinesShowsThePeakInTheDisplayZone(t *testing.T) {
 	}
 	plus3 := time.FixedZone("plus3", 3*60*60)
 
-	inZone, err := CostLines(snapshot, i18n.English, plus3)
+	inZone, err := CostLines(snapshot, i18n.English, plus3, Palette{})
 	if err != nil {
 		t.Fatalf("CostLines: %v", err)
 	}
 	if !strings.Contains(inZone[1], "02:00") {
 		t.Fatalf("peak line %q does not show the hour in the display zone", inZone[1])
 	}
-	inUTC, err := CostLines(snapshot, i18n.English, time.UTC)
+	inUTC, err := CostLines(snapshot, i18n.English, time.UTC, Palette{})
 	if err != nil {
 		t.Fatalf("CostLines: %v", err)
 	}

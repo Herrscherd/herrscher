@@ -62,5 +62,5 @@ func formatPercent(lang i18n.Language, value float64) string {
 	if math.Abs(value) < percentOneDecimalBelow {
 		decimals = 1
 	}
-	return formatNumber(lang, value, decimals) + " %"
+	return formatNumber(lang, value, decimals) + percentSuffix
 }

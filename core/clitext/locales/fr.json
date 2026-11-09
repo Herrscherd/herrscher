@@ -4107,7 +4107,7 @@
   {
     "id": "cli.help.cmd.usage",
     "description": "Aide de la commande usage",
-    "other": "affiche les limites des comptes, la dépense et les jetons d'une période"
+    "other": "affiche les limites des comptes, la dépense, les jetons et la compaction d'une période"
   },
   {
     "id": "cli.help.cmd.usage.range",
@@ -4136,8 +4136,8 @@
   },
   {
     "id": "cli.spend.mode_unknown",
-    "description": "Erreur pour une vue de usage qui n'est ni limits, ni cost, ni tokens, Name est le mot donné",
-    "other": "vue {{.Name}} inconnue, utilise limits, cost ou tokens"
+    "description": "Erreur pour une vue de usage qui n'est ni limits, ni cost, ni tokens, ni compaction, Name est le mot donné",
+    "other": "vue {{.Name}} inconnue, utilise limits, cost, tokens ou compaction"
   },
   {
     "id": "cli.spend.account_invalid",

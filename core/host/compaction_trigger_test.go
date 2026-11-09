@@ -241,6 +241,27 @@ func TestEarlyStageThatLeavesUsageAboveTheHostChainsTheHostPass(t *testing.T) {
 	}
 }
 
+func TestEarlyStageAloneInTheStackChainsNoEmptyPass(t *testing.T) {
+	stage := &steppedStage{}
+	stage.after.Store(170_000)
+	policy := compactPolicy(80, "jev")
+	policy.triggers = map[string]int{"jev": 50}
+	policy.plugins["jev"] = stage
+	f := newCompactFixture(t, "claude", policy)
+
+	openTurn(t, f, 100_000)
+	expectNoFrame(t, f)
+	if got := stage.calls.Load(); got != 1 {
+		t.Fatalf("early stage ran %d times, want once", got)
+	}
+	if started := f.emittedOf(eventCompactStarted); len(started) != 1 {
+		t.Fatalf("compaction_started count = %d, want only the early pass", len(started))
+	}
+	if failed := f.emittedOf(eventCompactFailed); len(failed) != 0 {
+		t.Fatalf("compaction_failed emitted %+v, want none", failed)
+	}
+}
+
 func TestWithoutAnEarlyStageTheHostPassRunsOnceAsBefore(t *testing.T) {
 	f := newCompactFixture(t, "claude", compactPolicy(80))
 

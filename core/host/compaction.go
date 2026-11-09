@@ -402,7 +402,17 @@ func (d *sessionDriver) maybeAutoCompact(ctx context.Context) {
 	if !settled || run.full || d.hostSpent || !crossed(d.turnReading, limit, d.compactPercent()) {
 		return
 	}
-	d.runAutomatic(ctx, compactionPass{names: d.compaction.names, full: true})
+	d.runAutomatic(ctx, compactionPass{names: stagesAfter(d.compaction.names, run.names), full: true})
+}
+
+func stagesAfter(stack, ran []string) []string {
+	rest := make([]string, 0, len(stack))
+	for _, name := range stack {
+		if !slices.Contains(ran, name) {
+			rest = append(rest, name)
+		}
+	}
+	return rest
 }
 
 func (d *sessionDriver) runAutomatic(ctx context.Context, run compactionPass) bool {

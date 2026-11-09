@@ -751,7 +751,8 @@ only the stages whose effective threshold is reached, in the order of the stack.
 stage's effective threshold is its own trigger when that is above zero and below
 `compactAt`, and `compactAt` otherwise. Once `compactAt` is reached, the whole stack
 runs, as before. If the early stages leave the usage at or above `compactAt`, the
-whole stack runs in the same turn, after them. `/compact` always runs the whole stack.
+rest of the stack runs in the same turn, after them, without the stages that just ran.
+`/compact` always runs the whole stack.
 
 A stage that runs early runs once per crossing of its threshold, the anti-loop rule:
 it does not run again while the measured usage stays at or above its threshold,

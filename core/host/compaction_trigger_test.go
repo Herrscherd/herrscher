@@ -236,8 +236,8 @@ func TestEarlyStageThatLeavesUsageAboveTheHostChainsTheHostPass(t *testing.T) {
 	if !compactFrameOrQuiet(t, f, measuredAnswer(t, 20_000)) {
 		t.Fatal("the host pass did not run in the same turn, after the early stage left usage above the host threshold")
 	}
-	if got := stage.calls.Load(); got != 2 {
-		t.Fatalf("early stage ran %d times, want once in the early pass and once in the whole-stack host pass", got)
+	if got := stage.calls.Load(); got != 1 {
+		t.Fatalf("early stage ran %d times, want once: the chained host pass skips the stage that just ran", got)
 	}
 }
 

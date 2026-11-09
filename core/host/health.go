@@ -320,8 +320,10 @@ func compactionProbes(names []string, last map[string]usage.LastCompaction) []he
 	return probes
 }
 
+const compactionProbeRange = usage.Range7d
+
 func lastCompactions(ledger usage.Ledger) map[string]usage.LastCompaction {
-	records, err := ledger.Retained()
+	records, err := ledger.Records(compactionProbeRange)
 	if err != nil && !errors.Is(err, usage.ErrLedgerTruncated) {
 		slog.Warn("health: compaction ledger unreadable", "err", err)
 	}

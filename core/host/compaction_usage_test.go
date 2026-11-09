@@ -210,3 +210,16 @@ func TestLastCompactionsReadsTheRetainedLedger(t *testing.T) {
 		t.Fatalf("last jev run = %+v, %t, want the failed run at %v", got, ok, latest)
 	}
 }
+
+func TestLastCompactionsIgnoresRunsOutsideTheProbeWindow(t *testing.T) {
+	now := time.Now().UTC()
+	ledger := usage.Ledger{Dir: t.TempDir(), Now: time.Now}
+	if err := ledger.Append([]usage.Record{
+		{Time: now.AddDate(0, 0, -30), Session: "s1", Compaction: &usage.Compaction{Stage: "jev", Outcome: contracts.CompactDone}},
+	}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if got, ok := lastCompactions(ledger)["jev"]; ok {
+		t.Fatalf("last jev run = %+v, want none: the run is older than the probe window", got)
+	}
+}

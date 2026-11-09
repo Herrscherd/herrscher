@@ -95,6 +95,11 @@
     "other": "fichier(s) non envoyé(s), la passerelle a échoué : {{.Names}}"
   },
   {
+    "id": "outbound.elsewhere",
+    "description": "Fichiers rendus par un backend pour une réponse qui part vers une autre conversation que celle du tour, donc non envoyés : Names les liste",
+    "other": "fichier(s) non envoyé(s), la réponse part ailleurs que dans cette conversation : {{.Names}}"
+  },
+  {
     "id": "outbound.unnamed",
     "description": "Désigne un fichier sans nom dans les avis qui listent des fichiers",
     "other": "fichier sans nom"

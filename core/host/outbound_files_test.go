@@ -266,3 +266,43 @@ func TestRemoveTurnFilesDeletesTheTurnDirectory(t *testing.T) {
 
 	assertTurnDirRemoved(t, frame.Dir)
 }
+
+func TestReplySaidElsewhereNamesTheFilesThatStayUnsent(t *testing.T) {
+	root := t.TempDir()
+	frame := turnFrame(t, root)
+	gw := &routedFileGateway{}
+	d := newOutboundDriver([]contracts.Gateway{gw}, root)
+	d.saidElsewhere = true
+	var tapped []contracts.Event
+	d.emitTap = func(event contracts.Event) { tapped = append(tapped, event) }
+
+	d.deliverReply(context.Background(), contracts.Event{T: "reply", Text: "hello", Done: true}, frame)
+
+	if len(gw.routed) != 0 || len(gw.calls) != 0 || len(gw.sent) != 0 {
+		t.Fatalf("gateway got routed=%d calls=%q sent=%q, want nothing for a reply said elsewhere", len(gw.routed), gw.calls, gw.sent)
+	}
+	if len(tapped) != 1 {
+		t.Fatalf("emitTap got %d events, want the reply once", len(tapped))
+	}
+	text := tapped[0].Text
+	if !strings.HasPrefix(text, "hello") || !strings.Contains(text, "a.png") {
+		t.Fatalf("reply text %q, want the reply followed by a notice naming a.png", text)
+	}
+	if strings.Contains(text, frame.Dir) {
+		t.Fatalf("reply text %q leaks the host path of the outbox", text)
+	}
+}
+
+func TestReplySaidElsewhereWithoutFilesAddsNoNotice(t *testing.T) {
+	root := t.TempDir()
+	d := newOutboundDriver([]contracts.Gateway{&routedFileGateway{}}, root)
+	d.saidElsewhere = true
+	var tapped []contracts.Event
+	d.emitTap = func(event contracts.Event) { tapped = append(tapped, event) }
+
+	d.deliverReply(context.Background(), contracts.Event{T: "reply", Text: "hello", Done: true}, outbox.Frame{})
+
+	if len(tapped) != 1 || tapped[0].Text != "hello" {
+		t.Fatalf("emitTap got %+v, want the unchanged reply", tapped)
+	}
+}

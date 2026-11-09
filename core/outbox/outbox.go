@@ -31,6 +31,8 @@ const MaxAge = 24 * time.Hour
 
 const privateDirMode os.FileMode = 0o700
 
+const turnDirPrefix = "turn-"
+
 // ErrOutsideOutbox reports a file whose resolved path leaves the turn directory,
 // through a symbolic link. Match it with errors.Is.
 var ErrOutsideOutbox = errors.New("file resolves outside the outbox")
@@ -107,7 +109,7 @@ func NewTurnDir(root, session string) (string, error) {
 	if err = os.MkdirAll(sessionDir, privateDirMode); err != nil {
 		return "", fmt.Errorf("create outbox of session %q: %w", session, err)
 	}
-	dir, err := os.MkdirTemp(sessionDir, "turn-")
+	dir, err := os.MkdirTemp(sessionDir, turnDirPrefix)
 	if err != nil {
 		return "", fmt.Errorf("create turn outbox: %w", err)
 	}
@@ -163,10 +165,19 @@ func vet(dir string, file contracts.OutboundFile, maxBytes int64) error {
 	return nil
 }
 
-// Owns reports whether dir lies strictly below root, so a frame can name only the
+// Owns reports whether dir is a turn directory of a session below root, that is
+// root/<session>/turn-XXXX as [NewTurnDir] creates it, so a frame can name only the
 // turn directories of the outboxes the host keeps.
 func Owns(root, dir string) bool {
-	return within(root, dir)
+	if !within(root, dir) {
+		return false
+	}
+	rel, err := filepath.Rel(root, dir)
+	if err != nil {
+		return false
+	}
+	parts := strings.Split(rel, string(filepath.Separator))
+	return len(parts) == 2 && parts[0] != "" && strings.HasPrefix(parts[1], turnDirPrefix)
 }
 
 // Remove deletes the turn directory dir, which must lie strictly below root, so a

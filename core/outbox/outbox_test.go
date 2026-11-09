@@ -281,6 +281,34 @@ func TestPurgeRemovesOnlyOldTurns(t *testing.T) {
 	}
 }
 
+func TestOwnsOnlyTurnDirectoriesOfASession(t *testing.T) {
+	root := t.TempDir()
+	turn, err := NewTurnDir(root, "chan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name string
+		dir  string
+		want bool
+	}{
+		{name: "turn directory of a session", dir: turn, want: true},
+		{name: "session directory", dir: filepath.Join(root, "chan")},
+		{name: "outbox root", dir: root},
+		{name: "directory outside the root", dir: t.TempDir()},
+		{name: "directory without the turn prefix", dir: filepath.Join(root, "chan", "other")},
+		{name: "directory two levels below a session", dir: filepath.Join(root, "chan", "turn-x", "inner")},
+		{name: "parent of the root", dir: filepath.Dir(root)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := Owns(root, tc.dir); got != tc.want {
+				t.Fatalf("Owns(%q, %q) = %t, want %t", root, tc.dir, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestPurgeMissingRootIsNotAnError(t *testing.T) {
 	if err := Purge(filepath.Join(t.TempDir(), "absent"), time.Now()); err != nil {
 		t.Fatalf("Purge of a missing root = %v, want nil", err)

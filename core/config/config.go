@@ -91,9 +91,15 @@ const bytesPerMegabyte int64 = 1 << 20
 
 const maxOutboundFileMegabytes = 1024
 
-var errOutboundFileTooLarge = errors.New("the largest file is over the maximum")
+var (
+	errOutboundFileTooLarge = errors.New("the largest file is over the maximum")
+	errOutboundFileNegative = errors.New("the largest file cannot be negative")
+)
 
 func validateOutboundFileMaxMB(megabytes int) error {
+	if megabytes < 0 {
+		return fmt.Errorf("%w: %d MB", errOutboundFileNegative, megabytes)
+	}
 	if megabytes > maxOutboundFileMegabytes {
 		return fmt.Errorf("%w: %d MB, the maximum is %d MB", errOutboundFileTooLarge, megabytes, maxOutboundFileMegabytes)
 	}

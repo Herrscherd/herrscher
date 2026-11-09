@@ -1036,6 +1036,9 @@ func (d *sessionDriver) fanOut(ctx context.Context, event contracts.Event) {
 }
 
 func (d *sessionDriver) fanOutReply(ctx context.Context, event contracts.Event, files outbox.Frame) {
+	if d.saidElsewhere {
+		event = d.withElsewhereNotice(event, files)
+	}
 	event = d.stamp(event)
 	if d.emitTap != nil {
 		d.emitTap(event)
@@ -1094,6 +1097,15 @@ func (d *sessionDriver) withUnsentFiles(event contracts.Event, files outbox.Fram
 		return event
 	}
 	event.Text = strings.TrimSpace(strings.Join(append([]string{event.Text}, notices...), "\n\n"))
+	return event
+}
+
+func (d *sessionDriver) withElsewhereNotice(event contracts.Event, files outbox.Frame) contracts.Event {
+	if len(files.Files) == 0 {
+		return event
+	}
+	notice := d.hostText("outbound.elsewhere", map[string]any{namesParam: d.noticeNames(fileNames(files.Files))})
+	event.Text = strings.TrimSpace(event.Text + "\n\n" + notice)
 	return event
 }
 

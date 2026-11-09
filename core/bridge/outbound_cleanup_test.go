@@ -5,8 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/outbox"
 )
 
 type panickingBackend struct {
@@ -63,5 +65,26 @@ func TestEmitFilesAfterTurnEndDropsTheTurnDir(t *testing.T) {
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Fatalf("turn directory %q survived a cancelled turn: %v", dir, err)
+	}
+}
+
+func TestBeginTurnOutboxPurgesStaleTurnDirs(t *testing.T) {
+	root := t.TempDir()
+	stale := filepath.Join(root, "other", "turn-stale")
+	if err := os.MkdirAll(stale, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	past := time.Now().Add(-outbox.MaxAge - time.Hour)
+	if err := os.Chtimes(stale, past, past); err != nil {
+		t.Fatal(err)
+	}
+
+	turn := beginTurnOutbox(producingBackend{&recordingBackend{}}, outboundSettings{root: root, session: "chan", maxBytes: outboundTestMaxBytes})
+
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("stale turn directory %q survived the start of a turn: %v", stale, err)
+	}
+	if _, err := os.Stat(turn.dir); err != nil {
+		t.Fatalf("turn directory of the new turn missing: %v", err)
 	}
 }

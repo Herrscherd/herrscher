@@ -204,9 +204,11 @@ event carries no message ID to reply to. A gateway that does not implement
 `SendFiles` gets a notice that names the files, without their paths. If the send
 fails, the gateway gets a notice that names the files that were not sent. The
 turn directory is removed once the reply is delivered, or once the turn ends
-without files. A directory a crash leaves behind is purged at the next daemon
-start when it is older than 24 hours. A backend without `FileProducer` gets no
-outbox, and its replies are unchanged.
+without files. A directory a crash leaves behind is purged when it is older than
+24 hours, at the daemon start and at the start of each turn that has an outbox.
+When the reply goes to another conversation than the one that sent the turn, its
+files are not sent, and the reply names them in a notice. A backend without
+`FileProducer` gets no outbox, and its replies are unchanged.
 
 ### Sessions that run on another machine
 

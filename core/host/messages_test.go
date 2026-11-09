@@ -77,10 +77,11 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"coordination.merged":             {"Lead"},
 		"coordination.launched":           {"Count", "Workers"},
 
-		"outbound.refused": {"Names"},
-		"outbound.unsent":  {"Names"},
-		"outbound.failed":  {"Names"},
-		"outbound.unnamed": nil,
+		"outbound.refused":   {"Names"},
+		"outbound.unsent":    {"Names"},
+		"outbound.failed":    {"Names"},
+		"outbound.elsewhere": {"Names"},
+		"outbound.unnamed":   nil,
 
 		"account.home":                  {"Detail"},
 		"account.profile_open":          {"Detail"},

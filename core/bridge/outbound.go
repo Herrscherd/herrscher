@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"context"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/outbox"
@@ -23,6 +24,9 @@ func beginTurnOutbox(backend contracts.Backend, settings outboundSettings) turnO
 	producer, ok := fileProducerOf(backend)
 	if !ok || settings.root == "" {
 		return turnOutbox{}
+	}
+	if err := outbox.Purge(settings.root, time.Now()); err != nil {
+		logger.Warn("stale turn outboxes not purged", "err", err)
 	}
 	dir, err := outbox.NewTurnDir(settings.root, settings.session)
 	if err != nil {

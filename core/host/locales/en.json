@@ -95,6 +95,11 @@
     "other": "file(s) not sent, the gateway failed: {{.Names}}"
   },
   {
+    "id": "outbound.elsewhere",
+    "description": "Files a backend rendered for a reply that goes to another conversation than the one that sent the turn, so they are not sent; Names lists them",
+    "other": "file(s) not sent, the reply goes to another conversation than this one: {{.Names}}"
+  },
+  {
     "id": "outbound.unnamed",
     "description": "Stands for a file with an empty name in the notices that list files",
     "other": "unnamed file"

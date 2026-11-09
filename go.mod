@@ -10,7 +10,7 @@ require (
 	github.com/Herrscherd/herrscher-codex-backend v0.9.0
 	github.com/Herrscherd/herrscher-contracts v0.28.0
 	github.com/Herrscherd/herrscher-cursor-backend v0.8.0
-	github.com/Herrscherd/herrscher-discord-gateway v0.30.0
+	github.com/Herrscherd/herrscher-discord-gateway v0.31.0
 	github.com/Herrscherd/herrscher-jev-compactor v0.2.0
 	github.com/Herrscherd/herrscher-llm-extractor v0.4.0
 	github.com/Herrscherd/herrscher-obsidian-memory v0.6.0
@@ -35,7 +35,7 @@ require (
 )
 
 require (
-	github.com/Herrscherd/dctl v1.10.0 // indirect
+	github.com/Herrscherd/dctl v1.11.0 // indirect
 	github.com/alecthomas/chroma/v2 v2.20.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect

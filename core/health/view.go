@@ -218,6 +218,9 @@ func (s Snapshot) facts(check Check, text *renderer) string {
 
 func compactionFacts(facts Facts, text *renderer) string {
 	fact := text.key(clitext.HealthCompactNever, nil)
+	if facts.CompactionUnknown {
+		fact = text.key(clitext.HealthCompactUnknown, nil)
+	}
 	if last := facts.Compaction; last != nil {
 		fact = text.key(clitext.HealthCompactLast, clitext.Params{
 			clitext.ParamOutcome: text.outcome(last.Outcome),

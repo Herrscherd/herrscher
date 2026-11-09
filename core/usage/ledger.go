@@ -121,12 +121,8 @@ func (l Ledger) Prune() error {
 // skips the lines that do not decode. A day too large to read is left out and reported
 // with ErrLedgerTruncated, the readable days are still returned.
 func (l Ledger) Records(rng Range) ([]Record, error) {
-	return l.within(rng.Span())
-}
-
-func (l Ledger) within(span time.Duration) ([]Record, error) {
 	now := l.Now().UTC()
-	since := now.Add(-span)
+	since := now.Add(-rng.Span())
 	root, err := os.OpenRoot(l.Dir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil

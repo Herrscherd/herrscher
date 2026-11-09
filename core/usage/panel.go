@@ -37,10 +37,9 @@ func CostPanel(snapshot Snapshot, lang i18n.Language, zone *time.Location, pal t
 }
 
 func panelBody(snapshot Snapshot, text *renderer, zone *time.Location, width int) []string {
-	pal := text.pal
 	spend := snapshot.Spend
 	if spend.Sessions == 0 {
-		return append([]string{termpaint.Paint(pal.Dim, text.text(clitext.SpendEmpty, nil))}, costNotes(snapshot, text)...)
+		return append([]string{emptyLine(snapshot, clitext.SpendEmpty, text)}, costNotes(snapshot, text)...)
 	}
 	left := panelSummary(spend, text)
 	leftWidth := 0

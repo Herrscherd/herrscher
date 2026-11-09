@@ -36,6 +36,7 @@ type Facts struct {
 	TimedOut          time.Duration
 	Compaction        *Compaction
 	CompactionPartial bool
+	CompactionUnknown bool
 }
 
 // Compaction is the last run of a compaction stage the host recorded.

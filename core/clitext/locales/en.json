@@ -3968,6 +3968,11 @@
     "other": "a day of the usage ledger was too large and was skipped, so the totals below are partial"
   },
   {
+    "id": "cli.spend.unreadable",
+    "description": "Usage report: the ledger could not be read for any day of the period, the views have no data to show",
+    "other": "no readable data over the period"
+  },
+  {
     "id": "cli.spend.peak",
     "description": "Usage report: the busiest bucket of the period",
     "other": "max {{.Cost}} on {{.Day}}"
@@ -4225,7 +4230,12 @@
   },
   {
     "id": "cli.health.facts.compact_partial",
-    "description": "Health: a day of the compaction ledger was skipped, so the facts of the stage may be partial",
-    "other": "partial data, a day of the ledger was skipped"
+    "description": "Health: part of the compaction ledger could not be read, so the facts of the stage may be partial",
+    "other": "partial data, part of the usage ledger is unreadable"
+  },
+  {
+    "id": "cli.health.facts.compact_unknown",
+    "description": "Health: the usage ledger could not be read, so the last run of a compaction stage is not known",
+    "other": "last compaction unknown, the usage ledger is unreadable"
   }
 ]

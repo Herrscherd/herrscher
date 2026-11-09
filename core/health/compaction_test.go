@@ -17,16 +17,24 @@ func TestCompactionFactsNameTheLastRunOrItsAbsence(t *testing.T) {
 		name       string
 		compaction *health.Compaction
 		partial    bool
+		unknown    bool
 		lang       i18n.Language
 		want       string
 	}{
 		{name: "never run, english", lang: i18n.English, want: "no compaction in the last 7 days"},
 		{name: "never run, french", lang: i18n.French, want: "aucune compaction sur les 7 derniers jours"},
 		{
-			name:    "never run, a day of the ledger skipped, french",
+			name:    "never run, part of the ledger unreadable, french",
 			partial: true,
 			lang:    i18n.French,
-			want:    "aucune compaction sur les 7 derniers jours · données partielles, un jour du journal a été ignoré",
+			want:    "aucune compaction sur les 7 derniers jours · données partielles, une partie du journal d'usage est illisible",
+		},
+		{
+			name:    "unknown because the ledger cannot be read, english",
+			unknown: true,
+			partial: true,
+			lang:    i18n.English,
+			want:    "last compaction unknown, the usage ledger is unreadable · partial data, part of the usage ledger is unreadable",
 		},
 		{
 			name:       "last run failed, french",
@@ -44,7 +52,7 @@ func TestCompactionFactsNameTheLastRunOrItsAbsence(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			snapshot := health.Snapshot{Checks: []health.Check{
-				{Group: health.GroupCompaction, Name: "jev", Facts: health.Facts{Compaction: tc.compaction, CompactionPartial: tc.partial}},
+				{Group: health.GroupCompaction, Name: "jev", Facts: health.Facts{Compaction: tc.compaction, CompactionPartial: tc.partial, CompactionUnknown: tc.unknown}},
 			}}
 			rows, err := snapshot.Rows(snapshot.Checks, tc.lang)
 			if err != nil {

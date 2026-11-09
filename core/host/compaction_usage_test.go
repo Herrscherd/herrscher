@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -100,6 +101,51 @@ func TestCompactionUsageBoundsWhatTheBackendSends(t *testing.T) {
 			name:  "negative characters before leave no characters after",
 			stats: contracts.CompactStats{Stage: "jev", Outcome: contracts.CompactDone, CharsBefore: -10, CharsAfter: 40},
 			want:  usage.Compaction{Stage: "jev", Outcome: contracts.CompactDone},
+		},
+		{
+			name:  "a negative call count reads as zero",
+			stats: contracts.CompactStats{Stage: "jev", Outcome: contracts.CompactDone, Calls: -3},
+			want:  usage.Compaction{Stage: "jev", Outcome: contracts.CompactDone},
+		},
+		{
+			name:  "a negative kept count reads as zero",
+			stats: contracts.CompactStats{Stage: "jev", Outcome: contracts.CompactDone, Kept: -3},
+			want:  usage.Compaction{Stage: "jev", Outcome: contracts.CompactDone},
+		},
+		{
+			name:  "a negative truncated count reads as zero",
+			stats: contracts.CompactStats{Stage: "jev", Outcome: contracts.CompactDone, Truncated: -3},
+			want:  usage.Compaction{Stage: "jev", Outcome: contracts.CompactDone},
+		},
+		{
+			name:  "a negative pruned count reads as zero",
+			stats: contracts.CompactStats{Stage: "jev", Outcome: contracts.CompactDone, Pruned: -3},
+			want:  usage.Compaction{Stage: "jev", Outcome: contracts.CompactDone},
+		},
+		{
+			name:  "a negative token count reads as zero",
+			stats: contracts.CompactStats{Stage: "jev", Outcome: contracts.CompactDone, TokensRemoved: -300},
+			want:  usage.Compaction{Stage: "jev", Outcome: contracts.CompactDone},
+		},
+		{
+			name:  "a negative request count reads as zero",
+			stats: contracts.CompactStats{Stage: "jev", Outcome: contracts.CompactDone, Requests: -1},
+			want:  usage.Compaction{Stage: "jev", Outcome: contracts.CompactDone},
+		},
+		{
+			name:  "a negative request token count reads as zero",
+			stats: contracts.CompactStats{Stage: "jev", Outcome: contracts.CompactDone, RequestTokens: -900},
+			want:  usage.Compaction{Stage: "jev", Outcome: contracts.CompactDone},
+		},
+		{
+			name:  "a duration beyond a day is capped at a day",
+			stats: contracts.CompactStats{Stage: "jev", Outcome: contracts.CompactDone, Duration: 1000 * time.Hour},
+			want:  usage.Compaction{Stage: "jev", Outcome: contracts.CompactDone, Duration: maxCompactionDuration},
+		},
+		{
+			name:  "a stage name beyond the cap is cut to its first runes",
+			stats: contracts.CompactStats{Stage: strings.Repeat("é", 100), Outcome: contracts.CompactDone},
+			want:  usage.Compaction{Stage: strings.Repeat("é", maxStageRunes), Outcome: contracts.CompactDone},
 		},
 	}
 	for _, tc := range tests {
@@ -284,7 +330,10 @@ func TestLastCompactionsReadsTheSevenDayWindow(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
-	last, _ := lastCompactions(ledger)
+	last, err := lastCompactions(ledger)
+	if err != nil {
+		t.Fatalf("lastCompactions: %v", err)
+	}
 	got, ok := last["jev"]
 	if !ok || got.Outcome != contracts.CompactFailed || !got.At.Equal(latest) {
 		t.Fatalf("last jev run = %+v, %t, want the failed run at %v", got, ok, latest)
@@ -307,13 +356,36 @@ func TestLastCompactionsKeepsTheReadableDaysBesideATruncatedOne(t *testing.T) {
 	if err := os.Truncate(oversized, 64<<20+1); err != nil {
 		t.Fatalf("grow: %v", err)
 	}
-	last, partial := lastCompactions(ledger)
+	last, err := lastCompactions(ledger)
 	got, ok := last["jev"]
 	if !ok || got.Outcome != contracts.CompactDone {
 		t.Fatalf("last jev run = %+v, %t, want the run of the readable day", got, ok)
 	}
-	if !partial {
-		t.Fatal("partial = false, want the skipped day reported")
+	if !errors.Is(err, usage.ErrLedgerTruncated) {
+		t.Fatalf("error = %v, want ErrLedgerTruncated for the skipped day", err)
+	}
+}
+
+func TestLastCompactionsReportsAHardReadFailureAsUnknown(t *testing.T) {
+	now := time.Now().UTC()
+	dir := t.TempDir()
+	ledger := usage.Ledger{Dir: dir, Now: time.Now}
+	if err := ledger.Append([]usage.Record{
+		{Time: now, Session: "s1", Compaction: &usage.Compaction{Stage: "jev", Outcome: contracts.CompactDone}},
+	}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	unreadable := filepath.Join(dir, now.AddDate(0, 0, -1).Format(time.DateOnly)+".jsonl")
+	if err := os.WriteFile(unreadable, []byte(strings.Repeat("x", 64<<10+1)+"\n"), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	last, err := lastCompactions(ledger)
+	if err == nil || errors.Is(err, usage.ErrLedgerTruncated) {
+		t.Fatalf("error = %v, want a hard read failure, not a skipped day", err)
+	}
+	probe := compactionProbes([]string{"jev"}, last, err)[0].Check.Facts
+	if !probe.CompactionPartial || !probe.CompactionUnknown || probe.Compaction != nil {
+		t.Fatalf("facts = %+v, want partial and unknown, never a run claimed", probe)
 	}
 }
 
@@ -325,7 +397,10 @@ func TestLastCompactionsIgnoresRunsOutsideTheProbeWindow(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
-	last, _ := lastCompactions(ledger)
+	last, err := lastCompactions(ledger)
+	if err != nil {
+		t.Fatalf("lastCompactions: %v", err)
+	}
 	if got, ok := last["jev"]; ok {
 		t.Fatalf("last jev run = %+v, want none: the run is older than the probe window", got)
 	}

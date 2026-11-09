@@ -19,6 +19,7 @@ const (
 	CompactionOutcomeSkip  = "cli.compaction.outcome.skipped"
 	HealthCompactLast      = "cli.health.facts.compact_last"
 	HealthCompactNever     = "cli.health.facts.compact_never"
+	HealthCompactUnknown   = "cli.health.facts.compact_unknown"
 	HealthCompactPartial   = "cli.health.facts.compact_partial"
 )
 
@@ -63,6 +64,7 @@ func compactionKeys() map[Key][]string {
 		CompactionOutcomeSkip:  nil,
 		HealthCompactLast:      {ParamOutcome, ParamDate},
 		HealthCompactNever:     nil,
+		HealthCompactUnknown:   nil,
 		HealthCompactPartial:   nil,
 	}
 }

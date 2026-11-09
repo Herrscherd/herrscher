@@ -3968,6 +3968,11 @@
     "other": "un jour du journal d'usage était trop volumineux et a été ignoré, les totaux ci-dessous sont partiels"
   },
   {
+    "id": "cli.spend.unreadable",
+    "description": "Rapport d'usage : le journal n'a pu être lu pour aucun jour de la période, les vues n'ont aucune donnée à afficher",
+    "other": "aucune donnée lisible sur la période"
+  },
+  {
     "id": "cli.spend.peak",
     "description": "Usage report: the busiest bucket of the period",
     "other": "max {{.Cost}} le {{.Day}}"
@@ -4225,7 +4230,12 @@
   },
   {
     "id": "cli.health.facts.compact_partial",
-    "description": "Santé : un jour du journal de compaction a été ignoré, les faits de l'étage peuvent être partiels",
-    "other": "données partielles, un jour du journal a été ignoré"
+    "description": "Santé : une partie du journal de compaction n'a pas pu être lue, les faits de l'étage peuvent être partiels",
+    "other": "données partielles, une partie du journal d'usage est illisible"
+  },
+  {
+    "id": "cli.health.facts.compact_unknown",
+    "description": "Santé : le journal d'usage n'a pas pu être lu, la dernière exécution d'un étage de compaction est inconnue",
+    "other": "dernière compaction inconnue, le journal d'usage est illisible"
   }
 ]

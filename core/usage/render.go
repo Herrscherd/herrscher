@@ -291,11 +291,19 @@ func truncatedNotice(snapshot Snapshot, text *renderer) []string {
 	return []string{termpaint.Paint(text.pal.Bad, text.text(clitext.SpendLedgerTruncated, nil))}
 }
 
+func emptyLine(snapshot Snapshot, empty clitext.Key, text *renderer) string {
+	key := empty
+	if snapshot.LedgerTruncated {
+		key = clitext.SpendUnreadable
+	}
+	return termpaint.Paint(text.pal.Dim, text.text(key, nil))
+}
+
 func costBody(snapshot Snapshot, text *renderer, zone *time.Location) []string {
 	lang, pal := text.lang, text.pal
 	spend := snapshot.Spend
 	if spend.Sessions == 0 {
-		return append([]string{termpaint.Paint(pal.Dim, text.text(clitext.SpendEmpty, nil))}, costNotes(snapshot, text)...)
+		return append([]string{emptyLine(snapshot, clitext.SpendEmpty, text)}, costNotes(snapshot, text)...)
 	}
 	sessions := text.text(clitext.SpendSessions, clitext.Params{clitext.ParamCount: spend.Sessions})
 	summary := sessions + summarySep + text.text(rangeKeys()[snapshot.Range], nil) + summarySep + text.text(clitext.SpendEstimate, nil)
@@ -377,7 +385,7 @@ func tokenBody(snapshot Snapshot, text *renderer) []string {
 	lang, pal := text.lang, text.pal
 	tokens := snapshot.Spend.Tokens
 	if tokens.Total() == 0 {
-		return append([]string{termpaint.Paint(pal.Dim, text.text(clitext.SpendEmpty, nil))}, costNotes(snapshot, text)...)
+		return append([]string{emptyLine(snapshot, clitext.SpendEmpty, text)}, costNotes(snapshot, text)...)
 	}
 	lines := []string{
 		text.text(clitext.SpendVolumeTotal, clitext.Params{

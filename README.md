@@ -412,7 +412,8 @@ compaction stages, the memory plugins and the key pools. Each line says the stat
 (ok, degraded, down or off), how long the probe took, and the facts the host knows
 about the service. Each compaction stage shows when it last ran and how it ended
 (done, short, failed, dry run or skipped), read from the usage ledger, or that there
-was no compaction in the last 7 days.
+was no compaction in the last 7 days. When the ledger cannot be read, the line says
+the last compaction is unknown instead, and flags the data as partial.
 
 A gateway the daemon does not run reads as off, and so does a memory plugin that is
 not the one in use: the first local memory plugin with a factory is the live one,
@@ -731,9 +732,8 @@ port fails the stage, and the host writes one warning line to stderr the first
 time it happens.
 
 The stage reports its stats to the usage ledger only once [herrscher-jev-compactor]
-fills them, which its next version does (the work is in progress in its PR #4).
-Until then a successful `jev` compaction does not appear in `herrscher usage` or in
-`herrscher health`.
+fills them. Until it does, a successful `jev` compaction does not appear in
+`herrscher usage` or in `herrscher health`.
 
 When a backend declares `Capabilities.Compactor` but its running instance does not
 implement the port, the host writes one warning line to stderr the first time that

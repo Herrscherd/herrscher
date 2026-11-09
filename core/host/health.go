@@ -58,8 +58,8 @@ func healthProbes(inputs healthInputs) []health.Probe {
 	probes = append(probes, gatewayProbes(inputs)...)
 	probes = append(probes, backendProbes(inputs)...)
 	probes = append(probes, memoryProbes(inputs.memory)...)
-	last, partial := lastCompactions(inputs.ledger)
-	return append(probes, compactionProbes(inputs.compaction.names, last, partial)...)
+	last, readErr := lastCompactions(inputs.ledger)
+	return append(probes, compactionProbes(inputs.compaction.names, last, readErr)...)
 }
 
 func daemonProbe(daemon health.Daemon) health.Probe {
@@ -309,12 +309,14 @@ func firstMemoryKind() string {
 	return ""
 }
 
-func compactionProbes(names []string, last map[string]usage.LastCompaction, partial bool) []health.Probe {
+func compactionProbes(names []string, last map[string]usage.LastCompaction, readErr error) []health.Probe {
 	var probes []health.Probe
 	for _, name := range names {
-		check := health.Check{Group: health.GroupCompaction, Name: name, Facts: health.Facts{CompactionPartial: partial}}
+		check := health.Check{Group: health.GroupCompaction, Name: name, Facts: health.Facts{CompactionPartial: readErr != nil}}
 		if run, ok := last[name]; ok {
 			check.Facts.Compaction = &health.Compaction{At: run.At, Outcome: run.Outcome}
+		} else {
+			check.Facts.CompactionUnknown = readErr != nil
 		}
 		probes = append(probes, health.Probe{Check: check, Run: compactionRun(name)})
 	}
@@ -323,12 +325,12 @@ func compactionProbes(names []string, last map[string]usage.LastCompaction, part
 
 const compactionProbeRange = usage.Range7d
 
-func lastCompactions(ledger usage.Ledger) (map[string]usage.LastCompaction, bool) {
+func lastCompactions(ledger usage.Ledger) (map[string]usage.LastCompaction, error) {
 	records, err := ledger.Records(compactionProbeRange)
 	if err != nil {
-		slog.Warn("health: compaction ledger partly unreadable", "err", err)
+		slog.Warn("health: compaction ledger unreadable", "err", err)
 	}
-	return usage.LastCompactions(records), errors.Is(err, usage.ErrLedgerTruncated)
+	return usage.LastCompactions(records), err
 }
 
 func compactionRun(name string) runFunc {

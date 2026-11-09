@@ -2,10 +2,16 @@ package host
 
 import (
 	"time"
+	"unicode/utf8"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
 	"github.com/Herrscherd/herrscher/core/usage"
+)
+
+const (
+	maxStageRunes         = 64
+	maxCompactionDuration = 24 * time.Hour
 )
 
 func (d *sessionDriver) recordCompaction(stats []contracts.CompactStats) {
@@ -28,17 +34,24 @@ func (d *sessionDriver) recordCompaction(stats []contracts.CompactStats) {
 func compactionUsage(stats contracts.CompactStats) *usage.Compaction {
 	charsBefore := max(stats.CharsBefore, 0)
 	return &usage.Compaction{
-		Stage:         stats.Stage,
+		Stage:         boundedStage(stats.Stage),
 		Outcome:       stats.Outcome,
-		Calls:         stats.Calls,
-		Kept:          stats.Kept,
-		Truncated:     stats.Truncated,
-		Pruned:        stats.Pruned,
+		Calls:         max(stats.Calls, 0),
+		Kept:          max(stats.Kept, 0),
+		Truncated:     max(stats.Truncated, 0),
+		Pruned:        max(stats.Pruned, 0),
 		CharsBefore:   charsBefore,
 		CharsAfter:    min(max(stats.CharsAfter, 0), charsBefore),
-		TokensRemoved: stats.TokensRemoved,
-		Requests:      stats.Requests,
-		RequestTokens: stats.RequestTokens,
-		Duration:      max(stats.Duration, 0),
+		TokensRemoved: max(stats.TokensRemoved, 0),
+		Requests:      max(stats.Requests, 0),
+		RequestTokens: max(stats.RequestTokens, 0),
+		Duration:      min(max(stats.Duration, 0), maxCompactionDuration),
 	}
+}
+
+func boundedStage(stage string) string {
+	if utf8.RuneCountInString(stage) <= maxStageRunes {
+		return stage
+	}
+	return string([]rune(stage)[:maxStageRunes])
 }

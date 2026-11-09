@@ -41,6 +41,7 @@ type wireCheck struct {
 	TimedOut   int64                 `json:"timed_out_ns,omitempty"`
 	Compaction *wireCompaction       `json:"compaction,omitempty"`
 	Partial    bool                  `json:"compaction_partial,omitempty"`
+	Unknown    bool                  `json:"compaction_unknown,omitempty"`
 }
 
 type wireCompaction struct {
@@ -108,6 +109,7 @@ func encodeCheck(check Check) (wireCheck, error) {
 		Providers: check.Facts.Providers,
 		TimedOut:  int64(check.Facts.TimedOut),
 		Partial:   check.Facts.CompactionPartial,
+		Unknown:   check.Facts.CompactionUnknown,
 	}
 	if pool := check.Facts.Pool; pool != nil {
 		wire.Pool = &wirePool{Keys: pool.Keys, Usable: pool.Usable, LastStatus: pool.LastStatus, CoolingFor: int64(pool.CoolingFor)}
@@ -163,6 +165,7 @@ func decodeCheck(wire wireCheck) (Check, error) {
 			Providers:         wire.Providers,
 			TimedOut:          time.Duration(wire.TimedOut),
 			CompactionPartial: wire.Partial,
+			CompactionUnknown: wire.Unknown,
 		},
 	}
 	if pool := wire.Pool; pool != nil {

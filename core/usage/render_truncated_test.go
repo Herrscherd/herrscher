@@ -59,6 +59,52 @@ func TestTruncatedLedgerShowsTheNoticeBeforeThePartialData(t *testing.T) {
 	}
 }
 
+func TestTruncatedLedgerWithoutReadableDataSaysSo(t *testing.T) {
+	tests := []struct {
+		name     string
+		lang     i18n.Language
+		readable string
+		empties  []string
+	}{
+		{name: "english", lang: i18n.English, readable: "no readable data over the period", empties: []string{"no spend over the period", "no compaction in this period"}},
+		{name: "french", lang: i18n.French, readable: "aucune donnée lisible sur la période", empties: []string{"aucune dépense sur la période", "aucune compaction sur la période"}},
+	}
+	empty := Snapshot{Range: Range7d, LedgerTruncated: true}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			for name, render := range emptyViews(empty, tc.lang) {
+				assertNoReadableDataLine(t, name, render, tc.readable, tc.empties)
+			}
+		})
+	}
+}
+
+func emptyViews(snapshot Snapshot, lang i18n.Language) map[string]func() ([]string, error) {
+	return map[string]func() ([]string, error){
+		"cost":       func() ([]string, error) { return CostLines(snapshot, lang, nil, termpaint.Palette{}) },
+		"tokens":     func() ([]string, error) { return TokenLines(snapshot, lang, termpaint.Palette{}) },
+		"panel":      func() ([]string, error) { return CostPanel(snapshot, lang, nil, termpaint.Palette{}, 80) },
+		"compaction": func() ([]string, error) { return CompactionLines(snapshot, lang, termpaint.Palette{}) },
+	}
+}
+
+func assertNoReadableDataLine(t *testing.T, name string, render func() ([]string, error), readable string, empties []string) {
+	t.Helper()
+	lines, err := render()
+	if err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	got := strings.Join(lines, "\n")
+	if !strings.Contains(got, readable) {
+		t.Errorf("%s = %q, want the no-readable-data line %q", name, got, readable)
+	}
+	for _, phrase := range empties {
+		if strings.Contains(got, phrase) {
+			t.Errorf("%s = %q, must not call the period empty with %q", name, got, phrase)
+		}
+	}
+}
+
 func TestLimitBarDrawsNoPaceMarkerWithoutAKnownReset(t *testing.T) {
 	limit := contracts.Limit{Window: contracts.LimitWeekly, UsedPercent: 30, Span: 7 * hoursPerDay * time.Hour}
 	if bar := limitBar(limit, PaceOf(limit, time.Now()), termpaint.Palette{}); strings.Contains(bar, markerCell) {

@@ -21,7 +21,7 @@ func CompactionLines(snapshot Snapshot, lang i18n.Language, pal termpaint.Palett
 func compactionBody(snapshot Snapshot, text *renderer) []string {
 	stages := snapshot.Spend.Stages
 	if len(stages) == 0 {
-		return []string{termpaint.Paint(text.pal.Dim, text.text(clitext.CompactionEmpty, nil))}
+		return []string{emptyLine(snapshot, clitext.CompactionEmpty, text)}
 	}
 	var lines []string
 	for index := range stages {

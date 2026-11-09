@@ -4151,7 +4151,7 @@
   },
   {
     "id": "cli.compaction.runs",
-    "description": "Rapport de compaction : le nombre de compactions d un étage",
+    "description": "Rapport de compaction : le nombre de compactions d'un étage",
     "one": "{{.Count}} compaction",
     "other": "{{.Count}} compactions"
   },
@@ -4179,48 +4179,48 @@
   },
   {
     "id": "cli.compaction.requests",
-    "description": "Rapport de compaction : les requêtes du modèle d un étage et leurs jetons",
+    "description": "Rapport de compaction : les requêtes du modèle d'un étage et leurs jetons",
     "one": "{{.Count}} requête, {{.Tokens}} jetons envoyés",
     "other": "{{.Count}} requêtes, {{.Tokens}} jetons envoyés"
   },
   {
     "id": "cli.compaction.average",
-    "description": "Rapport de compaction : la durée moyenne d un étage",
+    "description": "Rapport de compaction : la durée moyenne d'un étage",
     "other": "durée moyenne {{.Duration}}"
   },
   {
     "id": "cli.compaction.outcome.done",
-    "description": "Résultat de compaction : l étage a assez compacté pour arrêter la pile",
+    "description": "Résultat de compaction : l'étage a assez compacté pour arrêter la pile",
     "other": "terminée"
   },
   {
     "id": "cli.compaction.outcome.short",
-    "description": "Résultat de compaction : l étage a raccourci le contexte",
+    "description": "Résultat de compaction : l'étage a raccourci le contexte",
     "other": "courte"
   },
   {
     "id": "cli.compaction.outcome.failed",
-    "description": "Résultat de compaction : l étage n a pas pu compacter",
+    "description": "Résultat de compaction : l'étage n'a pas pu compacter",
     "other": "échouée"
   },
   {
     "id": "cli.compaction.outcome.dry_run",
-    "description": "Résultat de compaction : l étage a mesuré sans rien changer",
+    "description": "Résultat de compaction : l'étage a mesuré sans rien changer",
     "other": "à blanc"
   },
   {
     "id": "cli.compaction.outcome.skipped",
-    "description": "Résultat de compaction : l étage n avait rien à compacter",
+    "description": "Résultat de compaction : l'étage n'avait rien à compacter",
     "other": "ignorée"
   },
   {
     "id": "cli.health.facts.compact_last",
-    "description": "Santé : la dernière exécution d un étage de compaction, son résultat et sa date",
+    "description": "Santé : la dernière exécution d'un étage de compaction, son résultat et sa date",
     "other": "dernière compaction : {{.Outcome}}, {{.Date}}"
   },
   {
     "id": "cli.health.facts.compact_never",
-    "description": "Santé : un étage de compaction qui n a jamais tourné",
+    "description": "Santé : un étage de compaction qui n'a jamais tourné",
     "other": "aucune compaction enregistrée"
   }
 ]

@@ -257,13 +257,13 @@ func TestCompactionLinesRendersEachStage(t *testing.T) {
 			name:     "english stage block",
 			snapshot: Snapshot{Spend: Spend{Stages: []StageUsage{stage}}},
 			lang:     i18n.English,
-			want:     []string{"jev", "2 compactions", "done 1", "failed 1", "6 calls examined, 3 kept, 2 truncated, 1 pruned", "75 % of the characters removed", "about 1.2 k tokens removed", "3 requests", "average 1.5s"},
+			want:     []string{"jev", "2 compactions", "done 1", "failed 1", "6 calls examined, 3 kept, 2 truncated, 1 pruned", "75 % of the characters removed", "about 1.2 k tokens removed", "3 requests", "average 1.5 s"},
 		},
 		{
 			name:     "french stage block",
 			snapshot: Snapshot{Spend: Spend{Stages: []StageUsage{stage}}},
 			lang:     i18n.French,
-			want:     []string{"jev", "2 compactions", "terminée 1", "échouée 1", "6 appels examinés", "75 %", "1,2 k jetons retirés", "durée moyenne 1.5s"},
+			want:     []string{"jev", "2 compactions", "terminée 1", "échouée 1", "6 appels examinés", "75 %", "1,2 k jetons retirés", "durée moyenne 1,5 s"},
 		},
 		{
 			name:     "no stage says so",

@@ -2,7 +2,6 @@ package usage
 
 import (
 	"strings"
-	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
@@ -48,7 +47,7 @@ func compactionBlock(stage StageUsage, text *renderer) []string {
 		"  " + text.text(clitext.CompactionRequests, clitext.Params{
 			clitext.ParamCount:  stage.Requests,
 			clitext.ParamTokens: formatTokens(lang, stage.RequestTokens, text),
-		}) + summarySep + text.text(clitext.CompactionAverage, clitext.Params{clitext.ParamDuration: stage.AverageDuration().Round(time.Millisecond).String()}),
+		}) + summarySep + text.text(clitext.CompactionAverage, clitext.Params{clitext.ParamDuration: clitext.FormatDuration(lang, stage.AverageDuration())}),
 	}
 }
 

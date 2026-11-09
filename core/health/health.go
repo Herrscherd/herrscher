@@ -45,13 +45,11 @@ type Facts struct {
 }
 
 // Compaction is a run of a compaction stage the host recorded. A failed run carries the
-// clitext key of its error class in Key, or, for a note the host did not classify, the
-// raw note in Note.
+// clitext key of its error class in Key, empty when the run left no note.
 type Compaction struct {
 	At      time.Time
 	Outcome contracts.CompactOutcome
 	Key     clitext.Key
-	Note    string
 }
 
 // CompactionKey is the API key a compaction stage reads from the environment: its

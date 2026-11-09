@@ -7,6 +7,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func TestCompactionFactsShowTheKeyTheLastReplyAndTheLastError(t *testing.T) {
@@ -23,8 +24,8 @@ func TestCompactionFactsShowTheKeyTheLastReplyAndTheLastError(t *testing.T) {
 		},
 		{
 			name:  "key present and the error note",
-			facts: Facts{CompactionKey: &CompactionKey{Env: "TYPESAFE_API_KEY", Present: true}, CompactionFailed: &Compaction{At: at, Note: "boom"}},
-			want:  []string{"key TYPESAFE_API_KEY present", "last error:", "boom"},
+			facts: Facts{CompactionKey: &CompactionKey{Env: "TYPESAFE_API_KEY", Present: true}, CompactionFailed: &Compaction{At: at, Key: clitext.HealthNoteUnknown}},
+			want:  []string{"key TYPESAFE_API_KEY present", "last error:", "no code of its own"},
 		},
 	}
 	for _, tc := range tests {

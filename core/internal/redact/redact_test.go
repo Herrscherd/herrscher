@@ -21,6 +21,8 @@ func TestOutputMasksSecrets(t *testing.T) {
 		{"api_key query", "GET https://h.test/v1?api_key=XYZ123&a=1 failed", "XYZ123", "failed"},
 		{"apikey query, any case", "url ?APIKEY=ZZZ9 failed", "ZZZ9", "failed"},
 		{"key query", "https://h.test/x?key=KKK99 bad", "KKK99", "bad"},
+		{"env variable", "OPENAI_API_KEY=sk-live-ABC123 rejected", "sk-live-ABC123", "OPENAI_API_KEY="},
+		{"snake case key", "x_api_key=ZZ1 rejected", "ZZ1", "rejected"},
 		{"x-api-key header", "request headers: X-Api-Key: HDR123 refused", "HDR123", "refused"},
 	}
 	for _, c := range cases {

@@ -360,11 +360,15 @@ func compactNoteKey(class string) (clitext.Key, bool) {
 }
 
 func compactionOf(run usage.LastCompaction) *health.Compaction {
-	entry := &health.Compaction{At: run.At, Outcome: run.Outcome, Note: run.Note}
-	if key, ok := compactNoteKey(run.Note); ok {
-		entry.Key = key
-		entry.Note = ""
+	entry := &health.Compaction{At: run.At, Outcome: run.Outcome}
+	if run.Note == "" {
+		return entry
 	}
+	key, ok := compactNoteKey(run.Note)
+	if !ok {
+		key = clitext.HealthNoteUnknown
+	}
+	entry.Key = key
 	return entry
 }
 

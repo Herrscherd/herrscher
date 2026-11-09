@@ -13,6 +13,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/health"
 	"github.com/Herrscherd/herrscher/core/usage"
 )
@@ -439,8 +440,8 @@ func TestCompactionProbesReportTheKeyTheLastReplyAndTheLastError(t *testing.T) {
 	if facts.CompactionSucceeded == nil || facts.CompactionSucceeded.Outcome != contracts.CompactDone {
 		t.Fatalf("succeeded = %+v, want the done run", facts.CompactionSucceeded)
 	}
-	if facts.CompactionFailed == nil || facts.CompactionFailed.Note != "boom" || !facts.CompactionFailed.At.Equal(now.Add(-time.Hour)) {
-		t.Fatalf("failed = %+v, want the failed run with its note", facts.CompactionFailed)
+	if facts.CompactionFailed == nil || facts.CompactionFailed.Key != clitext.HealthNoteUnknown || !facts.CompactionFailed.At.Equal(now.Add(-time.Hour)) {
+		t.Fatalf("failed = %+v, want the failed run read as an unknown failure", facts.CompactionFailed)
 	}
 }
 

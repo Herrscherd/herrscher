@@ -4220,7 +4220,7 @@
   },
   {
     "id": "cli.health.facts.compact_never",
-    "description": "Santé : un étage de compaction qui n'a jamais tourné",
-    "other": "aucune compaction enregistrée"
+    "description": "Santé : un étage de compaction sans passage sur les 7 derniers jours",
+    "other": "aucune compaction sur les 7 derniers jours"
   }
 ]

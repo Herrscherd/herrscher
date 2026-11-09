@@ -296,11 +296,21 @@ type recordedStage struct {
 }
 
 func (s recordedStage) Compact(ctx context.Context, req contracts.CompactRequest, onEvent func(contracts.BackendEvent)) (contracts.CompactResult, error) {
+	started := time.Now()
 	result, err := s.compactor.Compact(ctx, req, onEvent)
-	if err == nil || result.Stats != nil || errors.Is(err, contracts.ErrNilCompactor) {
+	if errors.Is(err, contracts.ErrNilCompactor) {
 		return result, err
 	}
-	result.Stats = &contracts.CompactStats{Stage: s.name, Outcome: contracts.CompactFailed}
+	if result.Stats != nil {
+		stats := *result.Stats
+		stats.Stage = s.name
+		result.Stats = &stats
+		return result, err
+	}
+	if err == nil {
+		return result, nil
+	}
+	result.Stats = &contracts.CompactStats{Stage: s.name, Outcome: contracts.CompactFailed, Duration: time.Since(started)}
 	return result, err
 }
 

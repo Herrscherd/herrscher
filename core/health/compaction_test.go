@@ -19,8 +19,8 @@ func TestCompactionFactsNameTheLastRunOrItsAbsence(t *testing.T) {
 		lang       i18n.Language
 		want       string
 	}{
-		{name: "never run, english", lang: i18n.English, want: "no compaction recorded"},
-		{name: "never run, french", lang: i18n.French, want: "aucune compaction enregistrée"},
+		{name: "never run, english", lang: i18n.English, want: "no compaction in the last 7 days"},
+		{name: "never run, french", lang: i18n.French, want: "aucune compaction sur les 7 derniers jours"},
 		{
 			name:       "last run failed, french",
 			compaction: &health.Compaction{At: last, Outcome: contracts.CompactFailed},

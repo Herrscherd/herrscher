@@ -120,9 +120,13 @@ func TestLedgerAppendPrunesFilesPastRetention(t *testing.T) {
 	}
 }
 
-func TestLedgerRecordsRefusesTruncatedDay(t *testing.T) {
+func TestLedgerRecordsKeepsTheReadableDaysBesideATruncatedOne(t *testing.T) {
 	dir := t.TempDir()
-	file, err := os.Create(filepath.Join(dir, "2026-11-08.jsonl"))
+	ledger := Ledger{Dir: dir, Now: clock(testNow())}
+	if err := ledger.Append([]Record{{Time: testNow().Add(-time.Hour), Session: "s1", Model: "opus"}}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	file, err := os.Create(filepath.Join(dir, "2026-11-07.jsonl"))
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -132,12 +136,11 @@ func TestLedgerRecordsRefusesTruncatedDay(t *testing.T) {
 	if err = file.Close(); err != nil {
 		t.Fatalf("close: %v", err)
 	}
-	ledger := Ledger{Dir: dir, Now: clock(testNow())}
 	got, err := ledger.Records(Range24h)
 	if !errors.Is(err, ErrLedgerTruncated) {
 		t.Fatalf("Records error = %v, want ErrLedgerTruncated", err)
 	}
-	if got != nil {
-		t.Fatalf("Records returned %d records with the truncated day, want none", len(got))
+	if len(got) != 1 || got[0].Model != "opus" {
+		t.Fatalf("Records = %+v, want the one record of the readable day", got)
 	}
 }

@@ -324,8 +324,8 @@ const compactionProbeRange = usage.Range7d
 
 func lastCompactions(ledger usage.Ledger) map[string]usage.LastCompaction {
 	records, err := ledger.Records(compactionProbeRange)
-	if err != nil && !errors.Is(err, usage.ErrLedgerTruncated) {
-		slog.Warn("health: compaction ledger unreadable", "err", err)
+	if err != nil {
+		slog.Warn("health: compaction ledger partly unreadable", "err", err)
 	}
 	return usage.LastCompactions(records)
 }

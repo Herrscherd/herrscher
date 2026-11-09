@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -138,15 +140,56 @@ func TestRecordCompactionWithoutUsageSinkDoesNotPanic(_ *testing.T) {
 	d.recordCompaction([]contracts.CompactStats{stageStats("jev", contracts.CompactDone)})
 }
 
+type slowFailure struct {
+	wait time.Duration
+}
+
+func (c slowFailure) Compact(_ context.Context, _ contracts.CompactRequest, _ func(contracts.BackendEvent)) (contracts.CompactResult, error) {
+	time.Sleep(c.wait)
+	return contracts.CompactResult{}, errors.New("disque plein")
+}
+
 func TestAFailedStageWithoutStatsLeavesAFailedEntry(t *testing.T) {
-	stages := []contracts.CompactStage{{Name: "jev", Compactor: recordedStage{name: "jev", compactor: statsCompactor{err: errors.New("disque plein")}}}}
+	const wait = 20 * time.Millisecond
+	stages := []contracts.CompactStage{{Name: "jev", Compactor: recordedStage{name: "jev", compactor: slowFailure{wait: wait}}}}
 	result, err := contracts.RunCompactStack(context.Background(), stages, contracts.CompactRequest{}, nil)
 	if err == nil {
 		t.Fatal("RunCompactStack returned no error, want the stage failure")
 	}
-	want := []contracts.CompactStats{{Stage: "jev", Outcome: contracts.CompactFailed}}
-	if jsonOf(t, result.StageStats) != jsonOf(t, want) {
-		t.Fatalf("StageStats = %+v, want %+v", result.StageStats, want)
+	if len(result.StageStats) != 1 {
+		t.Fatalf("StageStats = %+v, want one failed entry", result.StageStats)
+	}
+	got := result.StageStats[0]
+	if got.Stage != "jev" || got.Outcome != contracts.CompactFailed || got.Duration < wait {
+		t.Fatalf("StageStats[0] = %+v, want a failed jev entry timed over the stage's run", got)
+	}
+}
+
+func TestRecordedStageNamesTheStageAfterItsConfiguredName(t *testing.T) {
+	stats := stageStats("autre", contracts.CompactDone)
+	stages := []contracts.CompactStage{{Name: "jev", Compactor: recordedStage{name: "jev", compactor: statsCompactor{stats: &stats}}}}
+	result, err := contracts.RunCompactStack(context.Background(), stages, contracts.CompactRequest{}, nil)
+	if err != nil {
+		t.Fatalf("RunCompactStack: %v", err)
+	}
+	if len(result.StageStats) != 1 || result.StageStats[0].Stage != "jev" {
+		t.Fatalf("StageStats = %+v, want one entry named after the configured stage", result.StageStats)
+	}
+}
+
+func TestCompactionStatsReachTheUsageLedgerThroughTheBridge(t *testing.T) {
+	var capture usageCapture
+	f := newConfiguredCompactFixture(t, "claude", compactPolicy(92), func(d *sessionDriver) {
+		d.sink.Usage = capture.add
+	})
+	f.driver.requestCompaction("", contracts.Conversation{})
+	nextFrame(t, f)
+	stats := stageStats("backend", contracts.CompactShort)
+	f.from <- mustAnswer(t, contracts.CompactResult{TokensAfter: 30_000, TokensMeasured: true, Note: "compacté", Stats: &stats})
+	waitEmitted(t, f, eventCompactDone)
+	records := capture.all()
+	if len(records) != 1 || jsonOf(t, records[0].Compaction) != jsonOf(t, recordedCompaction("backend", contracts.CompactShort)) {
+		t.Fatalf("records = %+v, want the bridge stage recorded as short", records)
 	}
 }
 
@@ -194,7 +237,7 @@ func TestCompactionStageOutcomeReachesTheUsageLedger(t *testing.T) {
 	}
 }
 
-func TestLastCompactionsReadsTheRetainedLedger(t *testing.T) {
+func TestLastCompactionsReadsTheSevenDayWindow(t *testing.T) {
 	now := time.Now().UTC()
 	latest := now.Add(-time.Hour)
 	ledger := usage.Ledger{Dir: t.TempDir(), Now: time.Now}
@@ -208,6 +251,28 @@ func TestLastCompactionsReadsTheRetainedLedger(t *testing.T) {
 	got, ok := lastCompactions(ledger)["jev"]
 	if !ok || got.Outcome != contracts.CompactFailed || !got.At.Equal(latest) {
 		t.Fatalf("last jev run = %+v, %t, want the failed run at %v", got, ok, latest)
+	}
+}
+
+func TestLastCompactionsKeepsTheReadableDaysBesideATruncatedOne(t *testing.T) {
+	now := time.Now().UTC()
+	dir := t.TempDir()
+	ledger := usage.Ledger{Dir: dir, Now: time.Now}
+	if err := ledger.Append([]usage.Record{
+		{Time: now, Session: "s1", Compaction: &usage.Compaction{Stage: "jev", Outcome: contracts.CompactDone}},
+	}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	oversized := filepath.Join(dir, now.AddDate(0, 0, -1).Format(time.DateOnly)+".jsonl")
+	if err := os.WriteFile(oversized, nil, 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := os.Truncate(oversized, 64<<20+1); err != nil {
+		t.Fatalf("grow: %v", err)
+	}
+	got, ok := lastCompactions(ledger)["jev"]
+	if !ok || got.Outcome != contracts.CompactDone {
+		t.Fatalf("last jev run = %+v, %t, want the run of the readable day", got, ok)
 	}
 }
 

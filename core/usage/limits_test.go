@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -191,5 +192,23 @@ func TestLimitsCacheKeepsNoFailureWhenTheCallerGaveUp(t *testing.T) {
 	got := cache.Read(context.Background(), target)
 	if got[0].Status != LimitsReady {
 		t.Fatalf("status = %v, want a fresh ready read", got[0].Status)
+	}
+}
+
+func TestLimitsCacheShareOneReadBetweenConcurrentCallers(t *testing.T) {
+	release := make(chan struct{})
+	var calls atomic.Int32
+	reader := func(context.Context, contracts.ProbeAccess) ([]contracts.Limit, error) {
+		calls.Add(1)
+		<-release
+		return []contracts.Limit{{UsedPercent: 10}}, nil
+	}
+	cache := &LimitsCache{Now: clock(testNow()), Timeout: 20 * time.Millisecond}
+	target := []Target{{Vendor: "claude", Read: reader}}
+	readWithDeadline(t, cache, target)
+	readWithDeadline(t, cache, target)
+	close(release)
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("reads = %d, want one read left running for both callers", got)
 	}
 }

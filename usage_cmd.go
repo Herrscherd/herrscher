@@ -25,6 +25,7 @@ const (
 	usageViewTokens   = "tokens"
 	usageParamRange   = "--range"
 	usageParamAccount = "--account"
+	usageParamVendor  = "--vendor"
 	usageExitDown     = 1
 )
 
@@ -32,6 +33,7 @@ type usageOptions struct {
 	view    string
 	rng     string
 	account string
+	vendor  string
 	asJSON  bool
 }
 
@@ -77,7 +79,7 @@ func parseUsageArgs(lang i18n.Language, args []string) (usageOptions, error) {
 		switch name {
 		case argJSON:
 			opts.asJSON = true
-		case usageParamRange, usageParamAccount:
+		case usageParamRange, usageParamAccount, usageParamVendor:
 			var err error
 			value, index, err = usageFlagValue(lang, args, index, name, value, inline)
 			if err != nil {
@@ -107,11 +109,14 @@ func usageFlagValue(lang i18n.Language, args []string, index int, name, value st
 }
 
 func setUsageParam(opts *usageOptions, name, value string) {
-	if name == usageParamRange {
+	switch name {
+	case usageParamRange:
 		opts.rng = value
-		return
+	case usageParamVendor:
+		opts.vendor = value
+	default:
+		opts.account = value
 	}
-	opts.account = value
 }
 
 func applyUsageArg(lang i18n.Language, opts *usageOptions, name string) error {
@@ -152,6 +157,9 @@ func fetchUsage(ctx context.Context, instance string, opts usageOptions) (usagec
 	}
 	if opts.account != "" {
 		argv = append(argv, usageParamAccount, opts.account)
+	}
+	if opts.vendor != "" {
+		argv = append(argv, usageParamVendor, opts.vendor)
 	}
 	out, err := host.DaemonDispatch(ctx, instance, argv)
 	if err != nil {

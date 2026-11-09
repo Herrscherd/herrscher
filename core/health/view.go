@@ -1,6 +1,8 @@
 package health
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -15,6 +17,8 @@ const (
 	daySpan         = 24 * time.Hour
 	secondDecimals  = 1
 	tenthsPerSecond = 10
+	stackSep        = " → "
+	homeMark        = "~"
 )
 
 // Row is one check as a report shows it, every text already rendered in the
@@ -86,7 +90,7 @@ func (s Snapshot) View(lang i18n.Language) (View, error) {
 		if len(checks) == 0 {
 			continue
 		}
-		view.Sections = append(view.Sections, Section{Group: group, Title: text.key(groupKey(group), nil), Rows: s.rows(checks, text)})
+		view.Sections = append(view.Sections, Section{Group: group, Title: s.groupTitle(group, text), Rows: s.rows(checks, text)})
 	}
 	if worst, found := s.worst(); found {
 		view.Worst = worst.Service()
@@ -137,6 +141,14 @@ func (s Snapshot) row(check Check, text *renderer) Row {
 		row.Remedy = text.notice(report.Remedy)
 	}
 	return row
+}
+
+func (s Snapshot) groupTitle(group Group, text *renderer) string {
+	title := text.key(groupKey(group), nil)
+	if group != GroupCompaction || len(s.CompactStack) == 0 {
+		return title
+	}
+	return title + "  " + text.key(clitext.HealthCompactStack, clitext.Params{clitext.ParamStack: strings.Join(s.CompactStack, stackSep)})
 }
 
 func (s Snapshot) bannerParams(text *renderer) clitext.Params {
@@ -195,9 +207,9 @@ func (s Snapshot) facts(check Check, text *renderer) string {
 		})
 	case check.Group == GroupCore && check.Name == ServiceDaemon:
 		if check.Facts.Socket != "" {
-			return check.Facts.Socket
+			return homeRelative(check.Facts.Socket)
 		}
-		return s.Daemon.Socket
+		return homeRelative(s.Daemon.Socket)
 	}
 	return ""
 }
@@ -275,4 +287,15 @@ func summaryKey(state contracts.HealthState) clitext.Key {
 		return clitext.HealthSummaryDown
 	}
 	return clitext.HealthSummaryDegraded
+}
+
+func homeRelative(path string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return path
+	}
+	if rest, ok := strings.CutPrefix(path, home+string(filepath.Separator)); ok {
+		return homeMark + string(filepath.Separator) + rest
+	}
+	return path
 }

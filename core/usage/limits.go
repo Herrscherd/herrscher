@@ -71,15 +71,18 @@ type AccountLimits struct {
 }
 
 // LimitsCache reads the limits of the accounts and reuses each reading for LimitsTTL, or
-// for LimitsFailureTTL when the reading failed.
+// for LimitsFailureTTL when the reading failed. A reader that outlives its timeout is
+// left to finish, and no second reading of that account starts until it does.
 type LimitsCache struct {
-	Now     func() time.Time
-	Timeout time.Duration
-	mu      sync.Mutex
-	entries map[AccountKey]AccountLimits
+	Now      func() time.Time
+	Timeout  time.Duration
+	mu       sync.Mutex
+	entries  map[AccountKey]AccountLimits
+	inflight map[AccountKey]*pendingRead
 }
 
-type limitsReply struct {
+type pendingRead struct {
+	done   chan struct{}
 	limits []contracts.Limit
 	err    error
 }
@@ -125,7 +128,7 @@ func (c *LimitsCache) readOne(ctx context.Context, target Target) AccountLimits 
 	}
 	readCtx, cancel := context.WithTimeout(ctx, c.timeout())
 	defer cancel()
-	limits, err := readWithin(readCtx, target)
+	limits, err := c.readWithin(readCtx, key, target)
 	if ctx.Err() != nil {
 		return AccountLimits{Vendor: target.Vendor, Account: string(target.Account), Default: target.Default, Status: LimitsFailed, ReadAt: now}
 	}
@@ -154,16 +157,33 @@ func (c *LimitsCache) readOne(ctx context.Context, target Target) AccountLimits 
 	return entry
 }
 
-func readWithin(ctx context.Context, target Target) ([]contracts.Limit, error) {
-	reply := make(chan limitsReply, 1)
-	go func() {
-		limits, err := target.Read(ctx, target.Access)
-		reply <- limitsReply{limits: limits, err: err}
-	}()
+func (c *LimitsCache) readWithin(ctx context.Context, key AccountKey, target Target) ([]contracts.Limit, error) {
+	pending := c.start(ctx, key, target)
 	select {
-	case got := <-reply:
-		return got.limits, got.err
+	case <-pending.done:
+		return pending.limits, pending.err
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+}
+
+func (c *LimitsCache) start(ctx context.Context, key AccountKey, target Target) *pendingRead {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if pending, ok := c.inflight[key]; ok {
+		return pending
+	}
+	if c.inflight == nil {
+		c.inflight = make(map[AccountKey]*pendingRead)
+	}
+	pending := &pendingRead{done: make(chan struct{})}
+	c.inflight[key] = pending
+	go func() {
+		pending.limits, pending.err = target.Read(ctx, target.Access)
+		c.mu.Lock()
+		delete(c.inflight, key)
+		c.mu.Unlock()
+		close(pending.done)
+	}()
+	return pending
 }

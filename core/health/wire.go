@@ -22,6 +22,7 @@ type wireSnapshot struct {
 	ProbedAt time.Time   `json:"probed_at"`
 	Elapsed  int64       `json:"elapsed_ns"`
 	Checks   []wireCheck `json:"checks"`
+	Stack    []string    `json:"compact_stack,omitempty"`
 }
 
 type wireCheck struct {
@@ -58,6 +59,7 @@ func Encode(snapshot Snapshot) ([]byte, error) {
 		Version:  snapshot.Daemon.Version,
 		ProbedAt: snapshot.ProbedAt,
 		Elapsed:  int64(snapshot.Elapsed),
+		Stack:    snapshot.CompactStack,
 		Checks:   make([]wireCheck, 0, len(snapshot.Checks)),
 	}
 	for index := range snapshot.Checks {
@@ -113,10 +115,11 @@ func Decode(data []byte) (Snapshot, error) {
 		return Snapshot{}, errors.Join(ErrMalformed, err)
 	}
 	snapshot := Snapshot{
-		Daemon:   Daemon{PID: wire.PID, Started: wire.Started, Socket: wire.Socket, Version: wire.Version},
-		ProbedAt: wire.ProbedAt,
-		Elapsed:  time.Duration(wire.Elapsed),
-		Checks:   make([]Check, 0, len(wire.Checks)),
+		Daemon:       Daemon{PID: wire.PID, Started: wire.Started, Socket: wire.Socket, Version: wire.Version},
+		ProbedAt:     wire.ProbedAt,
+		Elapsed:      time.Duration(wire.Elapsed),
+		Checks:       make([]Check, 0, len(wire.Checks)),
+		CompactStack: wire.Stack,
 	}
 	for index := range wire.Checks {
 		check, err := decodeCheck(wire.Checks[index])

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -13,14 +14,22 @@ import (
 	"github.com/Herrscherd/herrscher/core/accounts"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/usage"
+)
+
+const (
+	transcriptIndexFile = "transcripts.json"
+	pricesFile          = "prices.json"
+	transcriptScanEvery = time.Minute
 )
 
 const (
 	usageVerbName     = "usage"
 	usageParamRange   = "range"
 	usageParamAccount = "account"
+	usageParamVendor  = "vendor"
 )
 
 func usageDir(partDir string) string {
@@ -47,11 +56,13 @@ func stampUsage(records []usage.Record, current *state.State, sess state.Session
 }
 
 type usageSource struct {
-	ledger   usage.Ledger
-	limits   *usage.LimitsCache
-	accounts accounts.Store
-	mu       sync.Mutex
-	reported map[string]bool
+	ledger      usage.Ledger
+	limits      *usage.LimitsCache
+	accounts    accounts.Store
+	transcripts *usage.TranscriptIndex
+	prices      *usage.PriceSource
+	mu          sync.Mutex
+	reported    map[string]bool
 }
 
 func newUsageSource(partDir string) *usageSource {
@@ -60,30 +71,126 @@ func newUsageSource(partDir string) *usageSource {
 		slog.Warn("usage: account store unavailable", "err", err)
 	}
 	return &usageSource{
-		ledger:   usage.Ledger{Dir: usageDir(partDir), Now: time.Now},
-		limits:   &usage.LimitsCache{Now: time.Now},
-		accounts: store,
+		ledger:      usage.Ledger{Dir: usageDir(partDir), Now: time.Now},
+		limits:      &usage.LimitsCache{Now: time.Now},
+		accounts:    store,
+		transcripts: &usage.TranscriptIndex{Path: filepath.Join(usageDir(partDir), transcriptIndexFile), Now: time.Now},
+		prices:      &usage.PriceSource{Path: filepath.Join(usageDir(partDir), pricesFile), URL: usage.PricesURL, Now: time.Now},
 	}
 }
 
-func (s *usageSource) run(ctx context.Context, rng usage.Range, key usage.AccountKey) (usage.Snapshot, error) {
-	records, err := s.ledger.Records(rng)
+func (s *usageSource) startWatch(ctx context.Context) func() {
+	watchCtx, stop := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.watch(watchCtx)
+	}()
+	return func() {
+		stop()
+		<-done
+	}
+}
+
+func (s *usageSource) watch(ctx context.Context) {
+	ticker := time.NewTicker(transcriptScanEvery)
+	defer ticker.Stop()
+	for {
+		if err := s.prices.Refresh(ctx); err != nil && ctx.Err() == nil {
+			slog.Warn("usage: price list not refreshed", "err", err)
+		}
+		if err := s.transcripts.Scan(ctx, s.transcriptSources()); err != nil && ctx.Err() == nil {
+			slog.Warn("usage: transcripts not read", "err", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func (s *usageSource) transcriptSources() []usage.TranscriptSource {
+	var sources []usage.TranscriptSource
+	for _, vendor := range []string{contracts.VendorClaude, contracts.VendorCodex} {
+		if home := nativeHome(vendor); home != "" {
+			sources = append(sources, usage.TranscriptSource{Vendor: vendor, Home: home})
+		}
+	}
+	profiles, err := s.accounts.List()
+	if err != nil {
+		slog.Warn("usage: account profiles unreadable", "err", err)
+	}
+	for _, profile := range profiles {
+		sources = append(sources, usage.TranscriptSource{Vendor: profile.Vendor, Account: profile.Name, Home: profile.Dir})
+	}
+	return sources
+}
+
+func nativeHome(vendor string) string {
+	name, err := contracts.ProfileHomeEnv(vendor)
+	if err != nil {
+		return ""
+	}
+	if home := envx.Getenv(name); home != "" {
+		return home
+	}
+	user, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(user, "."+vendor)
+}
+
+type usageQuery struct {
+	rng     usage.Range
+	account usage.AccountKey
+	vendor  string
+}
+
+func (q usageQuery) matches(vendor, account string) bool {
+	return (q.vendor == "" || vendor == q.vendor) && q.account.Matches(vendor, account)
+}
+
+func (s *usageSource) run(ctx context.Context, query usageQuery) (usage.Snapshot, error) {
+	records, err := s.ledger.Records(query.rng)
 	truncated := errors.Is(err, usage.ErrLedgerTruncated)
 	if err != nil && !truncated {
 		return usage.Snapshot{}, err
 	}
 	now := s.ledger.Now()
+	records, pending, priced := s.withTranscripts(records, now.Add(-query.rng.Span()))
+	records = slices.DeleteFunc(records, func(record usage.Record) bool {
+		return !query.matches(record.Vendor, record.Account)
+	})
 	return usage.Snapshot{
-		At:              now,
-		Range:           rng,
-		Account:         key,
-		Limits:          s.limits.Read(ctx, s.targets(key)),
-		Spend:           usage.Summarize(records, rng, now, key),
-		LedgerTruncated: truncated,
+		At:                 now,
+		Range:              query.rng,
+		Account:            query.account,
+		Vendor:             query.vendor,
+		Limits:             s.limits.Read(ctx, s.targets(query)),
+		Spend:              usage.Summarize(records, query.rng, now, query.account),
+		LedgerTruncated:    truncated,
+		TranscriptsPending: pending,
+		PricesMissing:      !priced,
 	}, nil
 }
 
-func (s *usageSource) targets(key usage.AccountKey) []usage.Target {
+func (s *usageSource) withTranscripts(ledger []usage.Record, since time.Time) ([]usage.Record, bool, bool) {
+	if s.transcripts == nil || s.prices == nil {
+		return ledger, false, true
+	}
+	covered := s.transcripts.Covered()
+	records := slices.DeleteFunc(ledger, func(record usage.Record) bool {
+		return covered[usage.AccountKey{Vendor: record.Vendor, Account: record.Account}]
+	})
+	read := s.transcripts.Records(since)
+	book := s.prices.Book()
+	book.Price(read)
+	return append(records, read...), !s.transcripts.Scanned(), !book.Empty() || len(read) == 0
+}
+
+func (s *usageSource) targets(query usageQuery) []usage.Target {
 	profiles, err := s.accounts.List()
 	if err != nil {
 		slog.Warn("usage: account profiles unreadable", "err", err)
@@ -110,7 +217,7 @@ func (s *usageSource) targets(key usage.AccountKey) []usage.Target {
 		}
 	}
 	return slices.DeleteFunc(targets, func(target usage.Target) bool {
-		return !key.Matches(target.Vendor, string(target.Account))
+		return !query.matches(target.Vendor, string(target.Account))
 	})
 }
 
@@ -155,6 +262,7 @@ func usageVerb(source *usageSource) contracts.Cmd {
 		Help(clitext.CmdHelpUsage).
 		Param(usageParamRange, clitext.CmdHelpUsageRange, false).
 		Param(usageParamAccount, clitext.CmdHelpUsageAccount, false).
+		Param(usageParamVendor, clitext.CmdHelpUsageVendor, false).
 		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 			rng, err := usageRange(input)
 			if err != nil {
@@ -164,7 +272,11 @@ func usageVerb(source *usageSource) contracts.Cmd {
 			if err != nil {
 				return contracts.Result{}, err
 			}
-			snapshot, err := source.run(ctx, rng, key)
+			vendor, given := input.Lookup(usageParamVendor)
+			if given && vendor == "" {
+				return contracts.Result{}, usage.ErrEmptyValue
+			}
+			snapshot, err := source.run(ctx, usageQuery{rng: rng, account: key, vendor: vendor})
 			if err != nil {
 				return contracts.Result{}, err
 			}

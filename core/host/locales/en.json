@@ -191,8 +191,8 @@
   },
   {
     "id": "compaction.stack_named",
-    "description": "A failure in the compaction stack of a session, Name names the session and Detail carries the cause",
-    "other": "compactStack \"{{.Name}}\": {{.Detail}}"
+    "description": "A stage of the compaction stack fails, Name names the stage and Detail carries the cause; the daemon does not start while it fails",
+    "other": "compactStack \"{{.Name}}\": {{.Detail}}. The daemon does not start while this stage fails: fix it or remove it from compactStack, then herrscher service restart"
   },
   {
     "id": "coordination.wrap",

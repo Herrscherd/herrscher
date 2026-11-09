@@ -9,14 +9,17 @@ import (
 )
 
 // Snapshot is what the daemon answers to the usage verb: the limits of the accounts and
-// the spend of one period, both filtered by the account asked for.
+// the spend of one period, both filtered by the account and the vendor asked for.
 type Snapshot struct {
-	At              time.Time       `json:"at"`
-	Range           Range           `json:"range"`
-	Account         AccountKey      `json:"account,omitempty"`
-	Limits          []AccountLimits `json:"limits"`
-	Spend           Spend           `json:"spend"`
-	LedgerTruncated bool            `json:"ledgerTruncated,omitempty"`
+	At                 time.Time       `json:"at"`
+	Range              Range           `json:"range"`
+	Account            AccountKey      `json:"account,omitempty"`
+	Vendor             string          `json:"vendor,omitempty"`
+	Limits             []AccountLimits `json:"limits"`
+	Spend              Spend           `json:"spend"`
+	LedgerTruncated    bool            `json:"ledgerTruncated,omitempty"`
+	TranscriptsPending bool            `json:"transcriptsPending,omitempty"`
+	PricesMissing      bool            `json:"pricesMissing,omitempty"`
 }
 
 // Encode writes the snapshot in its wire form.
@@ -38,12 +41,15 @@ func Decode(raw []byte) (Snapshot, error) {
 }
 
 type snapshotWire struct {
-	At              time.Time     `json:"at"`
-	Range           Range         `json:"range"`
-	Account         AccountKey    `json:"account,omitempty"`
-	Limits          []accountWire `json:"limits"`
-	Spend           Spend         `json:"spend"`
-	LedgerTruncated bool          `json:"ledgerTruncated,omitempty"`
+	At                 time.Time     `json:"at"`
+	Range              Range         `json:"range"`
+	Account            AccountKey    `json:"account,omitempty"`
+	Vendor             string        `json:"vendor,omitempty"`
+	Limits             []accountWire `json:"limits"`
+	Spend              Spend         `json:"spend"`
+	LedgerTruncated    bool          `json:"ledgerTruncated,omitempty"`
+	TranscriptsPending bool          `json:"transcriptsPending,omitempty"`
+	PricesMissing      bool          `json:"pricesMissing,omitempty"`
 }
 
 type accountWire struct {
@@ -64,7 +70,7 @@ type limitWire struct {
 }
 
 func toWire(snapshot Snapshot) snapshotWire {
-	wire := snapshotWire{At: snapshot.At, Range: snapshot.Range, Account: snapshot.Account, Spend: snapshot.Spend, LedgerTruncated: snapshot.LedgerTruncated}
+	wire := snapshotWire{At: snapshot.At, Range: snapshot.Range, Account: snapshot.Account, Vendor: snapshot.Vendor, Spend: snapshot.Spend, LedgerTruncated: snapshot.LedgerTruncated, TranscriptsPending: snapshot.TranscriptsPending, PricesMissing: snapshot.PricesMissing}
 	for _, account := range snapshot.Limits {
 		item := accountWire{Vendor: account.Vendor, Account: account.Account, Default: account.Default, Status: account.Status, ReadAt: account.ReadAt}
 		for _, limit := range account.Limits {
@@ -76,7 +82,7 @@ func toWire(snapshot Snapshot) snapshotWire {
 }
 
 func fromWire(wire snapshotWire) Snapshot {
-	snapshot := Snapshot{At: wire.At, Range: wire.Range, Account: wire.Account, Spend: wire.Spend, LedgerTruncated: wire.LedgerTruncated}
+	snapshot := Snapshot{At: wire.At, Range: wire.Range, Account: wire.Account, Vendor: wire.Vendor, Spend: wire.Spend, LedgerTruncated: wire.LedgerTruncated, TranscriptsPending: wire.TranscriptsPending, PricesMissing: wire.PricesMissing}
 	for _, item := range wire.Limits {
 		account := AccountLimits{Vendor: item.Vendor, Account: item.Account, Default: item.Default, Status: item.Status, ReadAt: item.ReadAt}
 		for _, limit := range item.Limits {

@@ -3,6 +3,7 @@ package usage
 import (
 	"cmp"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -53,12 +54,15 @@ func (k AccountKey) Matches(vendor, account string) bool {
 // Spend is what the records of a period cost and carry, in total and split by account
 // and by model.
 type Spend struct {
-	Cost     float64  `json:"cost"`
-	Sessions int      `json:"sessions"`
-	Tokens   Tokens   `json:"tokens"`
-	Buckets  []Bucket `json:"buckets"`
-	Accounts []Share  `json:"accounts,omitempty"`
-	Models   []Share  `json:"models,omitempty"`
+	Cost     float64   `json:"cost"`
+	Sessions int       `json:"sessions"`
+	Tokens   Tokens    `json:"tokens"`
+	Buckets  []Bucket  `json:"buckets"`
+	Accounts []Share   `json:"accounts,omitempty"`
+	Models   []Share   `json:"models,omitempty"`
+	Split    CostSplit `json:"split,omitzero"`
+	Saved    float64   `json:"saved,omitempty"`
+	Unpriced []string  `json:"unpriced,omitempty"`
 }
 
 // Tokens counts the tokens of a period by type.
@@ -96,43 +100,71 @@ func Summarize(records []Record, rng Range, now time.Time, key AccountKey) Spend
 	step := bucketStep(rng)
 	start := bucketStart(now.Add(-rng.Span()), rng)
 	count := int(now.Sub(start)/step) + 1
-	spend := Spend{Buckets: make([]Bucket, count)}
-	for index := range spend.Buckets {
-		spend.Buckets[index].Start = start.Add(time.Duration(index) * step)
+	totals := spendTotals{
+		spend:    Spend{Buckets: make([]Bucket, count)},
+		start:    start,
+		step:     step,
+		sessions: make(map[string]bool),
+		unpriced: make(map[string]bool),
+		accounts: make(map[AccountKey]Share),
+		models:   make(map[string]Share),
 	}
-	sessions := make(map[string]bool)
-	accounts := make(map[AccountKey]Share)
-	models := make(map[string]Share)
+	for index := range totals.spend.Buckets {
+		totals.spend.Buckets[index].Start = start.Add(time.Duration(index) * step)
+	}
 	for index := range records {
-		record := records[index]
-		if !key.Matches(record.Vendor, record.Account) {
-			continue
+		if key.Matches(records[index].Vendor, records[index].Account) {
+			totals.add(&records[index])
 		}
-		spend.Cost += record.Cost
-		spend.Tokens.In += record.In
-		spend.Tokens.Out += record.Out
-		spend.Tokens.CacheRead += record.CacheRead
-		spend.Tokens.CacheCreate += record.CacheCreate
-		sessions[record.Session] = true
-		if at := int(record.Time.UTC().Sub(start) / step); at >= 0 && at < count {
-			spend.Buckets[at].Cost += record.Cost
-		}
-		account := AccountKey{Vendor: record.Vendor, Account: record.Account}
-		accountShare := accounts[account]
-		accountShare.Vendor, accountShare.Account = record.Vendor, record.Account
-		accountShare.Cost += record.Cost
-		accountShare.Tokens += tokensOf(record)
-		accounts[account] = accountShare
-		modelShare := models[record.Model]
-		modelShare.Model = record.Model
-		modelShare.Cost += record.Cost
-		modelShare.Tokens += tokensOf(record)
-		models[record.Model] = modelShare
 	}
-	spend.Sessions = len(sessions)
-	spend.Accounts = sortedShares(accounts)
-	spend.Models = sortedShares(models)
-	return spend
+	return totals.done()
+}
+
+type spendTotals struct {
+	spend    Spend
+	start    time.Time
+	step     time.Duration
+	sessions map[string]bool
+	unpriced map[string]bool
+	accounts map[AccountKey]Share
+	models   map[string]Share
+}
+
+func (t *spendTotals) add(record *Record) {
+	spend := &t.spend
+	spend.Cost += record.Cost
+	spend.Split = spend.Split.plus(record.Split)
+	spend.Saved += record.Saved
+	spend.Tokens.In += record.In
+	spend.Tokens.Out += record.Out
+	spend.Tokens.CacheRead += record.CacheRead
+	spend.Tokens.CacheCreate += record.CacheCreate
+	t.sessions[record.Session] = true
+	if record.Unpriced {
+		t.unpriced[record.Model] = true
+	}
+	if at := int(record.Time.UTC().Sub(t.start) / t.step); at >= 0 && at < len(spend.Buckets) {
+		spend.Buckets[at].Cost += record.Cost
+	}
+	account := AccountKey{Vendor: record.Vendor, Account: record.Account}
+	accountShare := t.accounts[account]
+	accountShare.Vendor, accountShare.Account = record.Vendor, record.Account
+	accountShare.Cost += record.Cost
+	accountShare.Tokens += tokensOf(*record)
+	t.accounts[account] = accountShare
+	modelShare := t.models[record.Model]
+	modelShare.Model = record.Model
+	modelShare.Cost += record.Cost
+	modelShare.Tokens += tokensOf(*record)
+	t.models[record.Model] = modelShare
+}
+
+func (t *spendTotals) done() Spend {
+	t.spend.Sessions = len(t.sessions)
+	t.spend.Accounts = sortedShares(t.accounts)
+	t.spend.Models = sortedShares(t.models)
+	t.spend.Unpriced = slices.Sorted(maps.Keys(t.unpriced))
+	return t.spend
 }
 
 func tokensOf(record Record) int64 {

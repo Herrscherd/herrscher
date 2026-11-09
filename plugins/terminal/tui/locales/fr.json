@@ -2742,12 +2742,16 @@
     "other": "Limites"
   },
   {
-    "id": "tui.usage.account.all",
-    "other": "tous les comptes"
+    "id": "tui.usage.filter.all",
+    "other": "tous"
   },
   {
-    "id": "tui.usage.account.one",
-    "other": "compte {{.Account}}"
+    "id": "tui.usage.filter.account",
+    "other": "compte : {{.Account}} ▾"
+  },
+  {
+    "id": "tui.usage.filter.vendor",
+    "other": "fournisseur : {{.Vendor}} ▾"
   },
   {
     "id": "tui.usage.hint.tab",
@@ -2760,6 +2764,10 @@
   {
     "id": "tui.usage.hint.account",
     "other": "compte"
+  },
+  {
+    "id": "tui.usage.hint.vendor",
+    "other": "fournisseur"
   },
   {
     "id": "tui.usage.hint.refresh",

@@ -191,8 +191,8 @@
   },
   {
     "id": "compaction.stack_named",
-    "description": "A failure in the compaction stack of a session, Name names the session and Detail carries the cause",
-    "other": "compactStack \"{{.Name}}\" : {{.Detail}}"
+    "description": "Une étape de la pile de compaction échoue, Name nomme l'étape et Detail porte la cause ; le démon ne démarre pas tant qu'elle échoue",
+    "other": "compactStack \"{{.Name}}\" : {{.Detail}}. Le démon ne démarre pas tant que cette étape échoue : corrige-la ou retire-la de compactStack, puis herrscher service restart"
   },
   {
     "id": "coordination.wrap",

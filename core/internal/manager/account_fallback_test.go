@@ -3,11 +3,14 @@ package manager
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/usage"
 )
@@ -29,7 +32,8 @@ func (f *fakeAccountFallback) Notify(_ context.Context, _ state.HomeRef, _ strin
 
 func newFallbackHandler(t *testing.T, reads ...usage.AccountLimits) (*Handler, *fakeAccountFallback, *state.State) {
 	t.Helper()
-	h, _, _, _, _, st := newTestHandler(t, "forum")
+	h, _, _, wt, _, st := newTestHandler(t, "forum")
+	wt.path = t.TempDir()
 	st.Home = state.HomeRef{ID: "home", Type: "forum"}
 	h.validateAccount = func(_, _ string) error { return nil }
 	fallback := &fakeAccountFallback{reads: reads}
@@ -202,6 +206,26 @@ func TestExplicitSpentAccountIsNeverMovedNorAnnounced(t *testing.T) {
 	sess, _ := st.FindSession("fresh")
 	if sess.Account != "work" || len(fallback.balanced) != 0 || len(fallback.notices) != 0 {
 		t.Fatalf("account %q, balanced %v, notices %+v: a spent explicit account is kept silently", sess.Account, fallback.balanced, fallback.notices)
+	}
+}
+
+func TestAgentAccountIsNeverMovedNorAnnounced(t *testing.T) {
+	h, fallback, st := newFallbackHandler(t, spentDefaultWork(), readOf("perso", 10))
+	created, err := h.agents.Create(agent.CreateSpec{Name: "bob", Backend: "claude"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(created.Home, "account"), []byte("work\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.sessionCreateRun(t.Context(), args("name", "fresh", "agent", "bob")); err != nil {
+		t.Fatal(err)
+	}
+
+	sess, _ := st.FindSession("fresh")
+	if sess.Account != "work" || len(fallback.balanced) != 0 || len(fallback.notices) != 0 {
+		t.Fatalf("account %q, balanced %v, notices %+v: the account of an agent is a deliberate choice", sess.Account, fallback.balanced, fallback.notices)
 	}
 }
 

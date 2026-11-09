@@ -450,9 +450,10 @@ default is the limits of each account:
   requests and their average duration.
 
 `--range` takes `24h`, `7d`, `30d` or `90d`, and `--account` and `--vendor` narrow the
-figures to one account or one vendor. `--json` prints the same figures as
-structured data for a script. A compaction shows its cost as requests and request
-tokens, since the usage ledger records no price for a stage on its own.
+figures to one account or one vendor. A compaction has no vendor, so either filter
+leaves the compactions out. `--json` prints the same figures as structured data for
+a script. A compaction shows its cost as requests and request tokens, since the usage
+ledger records no price for a stage on its own.
 
 ### Model routing
 

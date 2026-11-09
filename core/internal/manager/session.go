@@ -355,6 +355,7 @@ type createRequest struct {
 	options    sessionOptions
 	hostName   string
 	account    string
+	notice     *contracts.Notice
 	mode       string
 	shared     bool
 	lang       string
@@ -417,6 +418,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, input contracts.Input) (
 	h.sup.Start(sess)
 	banner := h.sessionBanner(h.noticeLanguage(req.lang), place.repo, req.name, place.space.path, place.wt.Branch(req.name), req.runtime.cmd, req.runtime.model, req.shared)
 	h.warnIfFailed(req.admin.Send(ctx, sess.ChannelID, banner), "send banner for "+req.name)
+	h.announceAccount(ctx, req, sess.ChannelID)
 	return contracts.DataResult(h.text(clitext.SessionRunning, clitext.Params{clitext.ParamChannel: req.admin.ChannelRef(sess.ChannelID), clitext.ParamBanner: banner, clitext.ParamApprovals: approvalsNote})), nil
 }
 
@@ -480,7 +482,8 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 	if err != nil {
 		return createRequest{}, err
 	}
-	hostName, account, err := h.checkSessionAccount(input, runtime)
+	explicitAccount, _ := input.Lookup("account")
+	hostName, planned, err := h.checkSessionAccount(input, runtime)
 	if err != nil {
 		return createRequest{}, err
 	}
@@ -496,6 +499,8 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 	if err != nil {
 		return createRequest{}, err
 	}
+	chosenAccount := explicitAccount != "" || h.agentAccount(runtime.agent) != ""
+	account, accountNotice := h.balanceAccount(ctx, runtime, hostName, planned, chosenAccount)
 	return createRequest{
 		lang:     lang,
 		name:     name,
@@ -507,6 +512,7 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 		options:  options,
 		hostName: hostName,
 		account:  account,
+		notice:   accountNotice,
 		mode:     mode,
 		shared:   input.Bool("shared"),
 	}, nil

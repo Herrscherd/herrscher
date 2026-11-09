@@ -3,8 +3,11 @@ package manager
 import (
 	"context"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/usage"
 )
 
 type agentStore interface {
@@ -83,4 +86,9 @@ type forges interface {
 type updater interface {
 	Build(ctx context.Context, pull bool) (version string, err error)
 	Restart(ctx context.Context) error
+}
+
+type accountFallback interface {
+	Balance(ctx context.Context, vendor, planned string) usage.Choice
+	Notify(ctx context.Context, home state.HomeRef, channelID string, lang i18n.Language, notice contracts.Notice)
 }

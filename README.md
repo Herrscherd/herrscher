@@ -797,10 +797,12 @@ time it happens.
 
 The stage reports its stats to the usage ledger: [herrscher-jev-compactor] fills
 them from v0.3.0, so a `jev` compaction appears in `herrscher usage` and in
-`herrscher health`. From v0.4.0, the version this host builds with, the stats also
-carry the size of the state Jev read and the reduction that made it fit, and the
-stage implements `StageTrigger`: its `trigger_percent` setting runs the prune
-before the host's threshold, so it passes before the `backend` summary.
+`herrscher health`. From v0.4.0, the version this host builds with, the stage
+implements `StageTrigger`: its `trigger_percent` setting runs the prune alone from
+that share of the window, earlier than the host's threshold, at which the whole
+stack runs. Its stats also carry the size of the state Jev read and the reduction
+that made it fit; the host passes them through but shows them in neither
+`herrscher usage` nor `herrscher health`.
 
 When a backend declares `Capabilities.Compactor` but its running instance does not
 implement the port, the host writes one warning line to stderr the first time that

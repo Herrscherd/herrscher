@@ -65,10 +65,14 @@ type Refusal struct {
 	Cause error
 }
 
-// Root returns the directory that holds the outboxes of every session, next to the
-// daemon state file at statePath.
-func Root(statePath string) string {
-	return filepath.Join(filepath.Dir(statePath), "outbox")
+// Root returns the absolute directory that holds the outboxes of every session, next
+// to the daemon state file at statePath.
+func Root(statePath string) (string, error) {
+	root, err := filepath.Abs(filepath.Join(filepath.Dir(statePath), "outbox"))
+	if err != nil {
+		return "", fmt.Errorf("resolve outbox root: %w", err)
+	}
+	return root, nil
 }
 
 // Encode returns the wire form of a frame, carried in the value of its event.
@@ -95,8 +99,12 @@ func NewTurnDir(root, session string) (string, error) {
 	if session == "" || session == "." || session == ".." || strings.ContainsAny(session, "/\\\x00") {
 		return "", fmt.Errorf("%w: %q", ErrBadSession, session)
 	}
-	sessionDir := filepath.Join(root, session)
-	if err := os.MkdirAll(sessionDir, privateDirMode); err != nil {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve outbox root: %w", err)
+	}
+	sessionDir := filepath.Join(absRoot, session)
+	if err = os.MkdirAll(sessionDir, privateDirMode); err != nil {
 		return "", fmt.Errorf("create outbox of session %q: %w", session, err)
 	}
 	dir, err := os.MkdirTemp(sessionDir, "turn-")

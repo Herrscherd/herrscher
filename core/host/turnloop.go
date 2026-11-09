@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -107,6 +108,8 @@ type sessionDriver struct {
 	emitTap func(contracts.Event)
 
 	gate budgetGate
+
+	outboundMaxBytes int64
 
 	terms             func() modelTerms
 	compaction        compactionPolicy
@@ -401,6 +404,8 @@ type sessionTable struct {
 	compaction  compactionPolicy
 	store       *state.State
 	outboxRoot  string
+
+	outboundMaxBytes int64
 }
 
 func (t *sessionTable) percentOfSession(name string) int {
@@ -1003,6 +1008,10 @@ func sanitizeCoordinationError(err error) string {
 }
 
 func (d *sessionDriver) fanOut(ctx context.Context, event contracts.Event) {
+	d.fanOutReply(ctx, event, outbox.Frame{})
+}
+
+func (d *sessionDriver) fanOutReply(ctx context.Context, event contracts.Event, files outbox.Frame) {
 	event = d.stamp(event)
 	if d.emitTap != nil {
 		d.emitTap(event)
@@ -1011,7 +1020,8 @@ func (d *sessionDriver) fanOut(ctx context.Context, event contracts.Event) {
 		return
 	}
 	d.eachGateway(func(index int, gateway contracts.GatewaySet) {
-		d.emitToGateway(ctx, index, gateway, event)
+		d.emitToGateway(ctx, index, gateway, d.withUnsentFiles(gateway, event, files))
+		d.sendReplyFiles(ctx, gateway, files.Files)
 	})
 }
 
@@ -1029,43 +1039,59 @@ func (d *sessionDriver) stamp(event contracts.Event) contracts.Event {
 }
 
 func (d *sessionDriver) deliverReply(ctx context.Context, event contracts.Event, files outbox.Frame) {
-	if len(files.Files) == 0 && len(files.Refused) == 0 {
-		d.fanOut(ctx, event)
-		return
-	}
-	defer d.removeTurnFiles(files)
-	d.fanOutFiles(ctx, event, files)
+	d.fanOutReply(ctx, event, d.revet(files))
 }
 
-func (d *sessionDriver) fanOutFiles(ctx context.Context, event contracts.Event, files outbox.Frame) {
-	text := event.Text
-	if len(files.Refused) > 0 {
-		notice := d.hostText("outbound.refused", map[string]any{"Names": strings.Join(files.Refused, ", ")})
-		text = strings.TrimSpace(text + "\n\n" + notice)
+func (d *sessionDriver) revet(files outbox.Frame) outbox.Frame {
+	if len(files.Files) == 0 {
+		return files
 	}
-	event = d.stamp(event)
-	if d.emitTap != nil {
-		d.emitTap(event)
+	accepted, refusals := outbox.Vet(files.Dir, files.Files, d.outboundMaxBytes)
+	for _, refusal := range refusals {
+		slog.Warn("outbound file refused at delivery, not sent", "file", refusal.Name, "err", refusal.Cause)
+		files.Refused = append(files.Refused, refusal.Name)
 	}
-	if d.saidElsewhere {
-		return
-	}
-	d.eachGateway(func(_ int, gateway contracts.GatewaySet) {
-		d.sendReplyFiles(ctx, gateway, text, files.Files)
-	})
+	files.Files = accepted
+	return files
 }
 
-func (d *sessionDriver) sendReplyFiles(ctx context.Context, gateway contracts.GatewaySet, text string, files []contracts.OutboundFile) {
-	if gateway.Gateway == nil {
+func (d *sessionDriver) withUnsentFiles(gateway contracts.GatewaySet, event contracts.Event, files outbox.Frame) contracts.Event {
+	unsent := files.Refused
+	if len(files.Files) > 0 && !canSendFiles(gateway) {
+		unsent = slices.Concat(files.Refused, fileNames(files.Files))
+	}
+	if len(unsent) == 0 {
+		return event
+	}
+	notice := d.hostText("outbound.refused", map[string]any{"Names": strings.Join(unsent, ", ")})
+	event.Text = strings.TrimSpace(event.Text + "\n\n" + notice)
+	return event
+}
+
+func canSendFiles(gateway contracts.GatewaySet) bool {
+	_, ok := gateway.Gateway.(contracts.FileSender)
+	return ok
+}
+
+func fileNames(files []contracts.OutboundFile) []string {
+	names := make([]string, 0, len(files))
+	for _, file := range files {
+		names = append(names, file.Name)
+	}
+	return names
+}
+
+const fileSendTimeout = 2 * time.Minute
+
+func (d *sessionDriver) sendReplyFiles(ctx context.Context, gateway contracts.GatewaySet, files []contracts.OutboundFile) {
+	sender, ok := gateway.Gateway.(contracts.FileSender)
+	if !ok || len(files) == 0 {
 		return
 	}
 	conv := contracts.Conversation{Gateway: gateway.Gateway.Manifest().Kind, ID: d.renderChannel(gateway)}
-	sender, ok := contracts.Degrade(gateway.Gateway).(contracts.FileSender)
-	if !ok {
-		slog.Warn("reply files not sent, gateway cannot send them", "gateway", conv.Gateway)
-		return
-	}
-	if _, err := sender.SendFiles(ctx, conv, "", text, files); err != nil {
+	sendCtx, cancel := context.WithTimeout(ctx, fileSendTimeout)
+	defer cancel()
+	if _, err := sender.SendFiles(sendCtx, conv, "", "", files); err != nil {
 		slog.Warn("reply files not sent", "gateway", conv.Gateway, "err", err)
 	}
 }
@@ -1154,6 +1180,7 @@ func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, cha
 	driver.agent = identity.agent
 	driver.channel = channel
 	driver.outboxRoot = sessions.outboxRoot
+	driver.outboundMaxBytes = sessions.outboundMaxBytes
 	driver.participants = participants
 	driver.metrics = registry
 	driver.coordinator = coord

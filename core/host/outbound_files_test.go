@@ -4,12 +4,15 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/outbox"
 )
+
+const outboundTestMaxBytes int64 = 1 << 20
 
 type textRecordingGateway struct {
 	fakeGateway
@@ -27,14 +30,22 @@ func (g *textRecordingGateway) Post(_ context.Context, _ contracts.Conversation,
 	return "", nil
 }
 
-type fileRecordingGateway struct {
+type routedFileGateway struct {
 	textRecordingGateway
 
+	routed    []contracts.Event
+	calls     []string
 	sentFiles []string
 	sentText  []string
 }
 
-func (g *fileRecordingGateway) SendFiles(_ context.Context, _ contracts.Conversation, _ contracts.MessageID, text string, files []contracts.OutboundFile) (contracts.MessageID, error) {
+func (g *routedFileGateway) EmitTo(_ contracts.Conversation, event contracts.Event) {
+	g.routed = append(g.routed, event)
+	g.calls = append(g.calls, "emit")
+}
+
+func (g *routedFileGateway) SendFiles(_ context.Context, _ contracts.Conversation, _ contracts.MessageID, text string, files []contracts.OutboundFile) (contracts.MessageID, error) {
+	g.calls = append(g.calls, "send")
 	g.sentText = append(g.sentText, text)
 	for _, file := range files {
 		g.sentFiles = append(g.sentFiles, file.Name)
@@ -58,6 +69,13 @@ func turnFrame(t *testing.T, root string) outbox.Frame {
 	}
 }
 
+func newOutboundDriver(gws []contracts.GatewaySet, root string) *sessionDriver {
+	d := newSessionDriver("s1", gws, nil, nil)
+	d.outboxRoot = root
+	d.outboundMaxBytes = outboundTestMaxBytes
+	return d
+}
+
 func assertTurnDirRemoved(t *testing.T, dir string) {
 	t.Helper()
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
@@ -65,47 +83,97 @@ func assertTurnDirRemoved(t *testing.T, dir string) {
 	}
 }
 
-func TestReplyFilesFallBackToTextWithoutFileSender(t *testing.T) {
+func TestReplyEmitsNormallyThenSendsFilesThroughFileSender(t *testing.T) {
+	root := t.TempDir()
+	frame := turnFrame(t, root)
+	frame.Refused = []string{"big.bin"}
+	gw := &routedFileGateway{}
+	d := newOutboundDriver([]contracts.GatewaySet{{Gateway: gw}}, root)
+
+	d.deliverReply(context.Background(), contracts.Event{T: "reply", Text: "hello", Done: true}, frame)
+
+	if !slices.Equal(gw.calls, []string{"emit", "send"}) {
+		t.Fatalf("calls = %q, want the reply emitted before the files are sent", gw.calls)
+	}
+	if len(gw.routed) != 1 || !gw.routed[0].Done {
+		t.Fatalf("EmitTo got %+v, want the terminal reply once", gw.routed)
+	}
+	reply := gw.routed[0].Text
+	if !strings.HasPrefix(reply, "hello") || !strings.Contains(reply, "big.bin") {
+		t.Fatalf("reply text %q, want the reply followed by the refused notice", reply)
+	}
+	if strings.Contains(reply, "a.png") {
+		t.Fatalf("reply text %q names a file that SendFiles carries", reply)
+	}
+	if !slices.Equal(gw.sentText, []string{""}) {
+		t.Fatalf("SendFiles texts = %q, want one empty text", gw.sentText)
+	}
+	if !slices.Equal(gw.sentFiles, []string{"a.png"}) {
+		t.Fatalf("SendFiles files = %q, want [a.png]", gw.sentFiles)
+	}
+	if len(gw.sent) != 0 {
+		t.Fatalf("gateway also got plain messages %q, the reply would be duplicated", gw.sent)
+	}
+}
+
+func TestReplyNamesUnsentFilesWithoutFileSenderAndNeverPaths(t *testing.T) {
 	root := t.TempDir()
 	frame := turnFrame(t, root)
 	frame.Refused = []string{"big.bin"}
 	gw := &textRecordingGateway{}
-	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: gw}}, nil, nil)
-	d.outboxRoot = root
+	d := newOutboundDriver([]contracts.GatewaySet{{Gateway: gw}}, root)
 
 	d.deliverReply(context.Background(), contracts.Event{T: "reply", Text: "hello", Done: true}, frame)
 
 	if len(gw.sent) != 1 {
-		t.Fatalf("gateway got %d messages, want one fallback message: %q", len(gw.sent), gw.sent)
+		t.Fatalf("gateway got %d messages, want one reply message: %q", len(gw.sent), gw.sent)
 	}
+	text := gw.sent[0]
 	for _, want := range []string{"hello", "a.png", "big.bin"} {
-		if !strings.Contains(gw.sent[0], want) {
-			t.Fatalf("fallback text %q lacks %q", gw.sent[0], want)
+		if !strings.Contains(text, want) {
+			t.Fatalf("fallback text %q lacks %q", text, want)
 		}
 	}
-	if strings.Count(gw.sent[0], "hello") != 1 {
-		t.Fatalf("reply text duplicated in %q", gw.sent[0])
+	if strings.Count(text, "hello") != 1 {
+		t.Fatalf("reply text duplicated in %q", text)
 	}
-	assertTurnDirRemoved(t, frame.Dir)
+	if strings.Contains(text, frame.Dir) {
+		t.Fatalf("fallback text %q leaks the host path of the outbox", text)
+	}
 }
 
-func TestReplyFilesSentOnceThroughFileSender(t *testing.T) {
+func TestReplyRevetsFilesBeforeSending(t *testing.T) {
 	root := t.TempDir()
 	frame := turnFrame(t, root)
-	gw := &fileRecordingGateway{}
-	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: gw}}, nil, nil)
-	d.outboxRoot = root
+	outside := filepath.Join(t.TempDir(), "secret.png")
+	if err := os.WriteFile(outside, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(frame.Files[0].Path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, frame.Files[0].Path); err != nil {
+		t.Fatal(err)
+	}
+	gw := &routedFileGateway{}
+	d := newOutboundDriver([]contracts.GatewaySet{{Gateway: gw}}, root)
 
 	d.deliverReply(context.Background(), contracts.Event{T: "reply", Text: "hello", Done: true}, frame)
 
-	if len(gw.sentText) != 1 || gw.sentText[0] != "hello" {
-		t.Fatalf("SendFiles texts = %q, want one call with the reply text only", gw.sentText)
+	if len(gw.sentFiles) != 0 {
+		t.Fatalf("SendFiles got %q, want the file swapped for a link refused", gw.sentFiles)
 	}
-	if len(gw.sentFiles) != 1 || gw.sentFiles[0] != "a.png" {
-		t.Fatalf("SendFiles files = %q, want [a.png]", gw.sentFiles)
+	if !strings.Contains(gw.routed[0].Text, "a.png") {
+		t.Fatalf("reply text %q lacks the notice of the refused file", gw.routed[0].Text)
 	}
-	if len(gw.sent) != 0 {
-		t.Fatalf("gateway also got plain messages %q, the text would be duplicated", gw.sent)
-	}
+}
+
+func TestRemoveTurnFilesDeletesTheTurnDirectory(t *testing.T) {
+	root := t.TempDir()
+	frame := turnFrame(t, root)
+	d := newOutboundDriver(nil, root)
+
+	d.removeTurnFiles(frame)
+
 	assertTurnDirRemoved(t, frame.Dir)
 }

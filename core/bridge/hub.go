@@ -266,6 +266,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 		memCtx = orch.Context(turnCtx)
 	}
 	turn := beginTurnOutbox(backend, aff.outbox)
+	defer turn.discard()
 	prompt := contracts.Prompt{Content: event.Text, Context: withIdentity(withCapabilities(withDelegation(withSkills(memCtx, eng), aff.roster), aff.caps), aff.user), Author: event.Who, Attachments: event.Attachments, Language: lang, Outbox: turn.dir}
 	var usage turnUsage
 	onEvent := func(event contracts.BackendEvent) {
@@ -276,7 +277,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	if err != nil {
 		out = settleFailedReply(ctrl, out, err)
 	}
-	emitTurnFiles(sink, turn)
+	turn.emitFiles(sink)
 	out = strings.TrimSpace(out)
 	if eng != nil {
 		reportSkillUse(ctx, orch, eng.Detect(out))

@@ -30,31 +30,36 @@ func beginTurnOutbox(backend contracts.Backend, settings outboundSettings) turnO
 	return turnOutbox{producer: producer, settings: settings, dir: dir}
 }
 
-func emitTurnFiles(sink contracts.EventSink, turn turnOutbox) {
-	if turn.dir == "" {
+func (t *turnOutbox) emitFiles(sink contracts.EventSink) {
+	if t.dir == "" {
 		return
 	}
-	files, refused := outbox.Vet(turn.dir, turn.producer.TakeFiles(), turn.settings.maxBytes)
+	files, refused := outbox.Vet(t.dir, t.producer.TakeFiles(), t.settings.maxBytes)
 	names := make([]string, 0, len(refused))
 	for _, refusal := range refused {
 		logger.Warn("outbound file refused, not sent", "file", refusal.Name, "err", refusal.Cause)
 		names = append(names, refusal.Name)
 	}
 	if len(files) == 0 && len(names) == 0 {
-		removeTurnOutbox(turn.settings.root, turn.dir)
+		t.discard()
 		return
 	}
-	value, err := outbox.Encode(outbox.Frame{Dir: turn.dir, Files: files, Refused: names})
+	value, err := outbox.Encode(outbox.Frame{Dir: t.dir, Files: files, Refused: names})
 	if err != nil {
 		logger.Warn("outbound frame not encoded, files dropped", "err", err)
-		removeTurnOutbox(turn.settings.root, turn.dir)
+		t.discard()
 		return
 	}
+	t.dir = ""
 	sink.Emit(contracts.Event{T: outbox.EventFiles, Value: value})
 }
 
-func removeTurnOutbox(root, dir string) {
-	if err := outbox.Remove(root, dir); err != nil {
+func (t *turnOutbox) discard() {
+	if t.dir == "" {
+		return
+	}
+	if err := outbox.Remove(t.settings.root, t.dir); err != nil {
 		logger.Warn("turn outbox not removed", "err", err)
 	}
+	t.dir = ""
 }

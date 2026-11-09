@@ -81,7 +81,7 @@
   },
   {
     "id": "outbound.refused",
-    "description": "Files a backend rendered for a reply that were refused and not sent; Names lists them",
+    "description": "Fichiers rendus par un backend pour une réponse, refusés ou non envoyés : Names les liste",
     "other": "fichier(s) refusé(s), non envoyé(s) : {{.Names}}"
   },
   {

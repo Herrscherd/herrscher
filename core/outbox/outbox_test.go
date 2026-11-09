@@ -193,6 +193,34 @@ func assertPrivateTurnDir(t *testing.T, root, dir string) {
 	}
 }
 
+func TestRelativeStatePathYieldsAbsoluteOutbox(t *testing.T) {
+	t.Chdir(t.TempDir())
+	root, err := Root(filepath.Join("state", "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !filepath.IsAbs(root) {
+		t.Fatalf("outbox root %q is not absolute", root)
+	}
+	dir, err := NewTurnDir(root, "chan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !filepath.IsAbs(dir) {
+		t.Fatalf("turn directory %q is not absolute", dir)
+	}
+	if err = Remove(root, dir); err != nil {
+		t.Fatalf("Remove refused a turn directory of the absolute root: %v", err)
+	}
+	relDir, err := NewTurnDir(filepath.Join("relative", "root"), "chan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !filepath.IsAbs(relDir) {
+		t.Fatalf("turn directory %q under a relative root is not absolute", relDir)
+	}
+}
+
 func TestRemove(t *testing.T) {
 	cases := []struct {
 		name    string

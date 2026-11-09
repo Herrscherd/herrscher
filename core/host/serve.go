@@ -220,7 +220,15 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	}
 	sessions.compaction = policy
 	sessions.store = store
-	sessions.outboxRoot = outbox.Root(options.StatePath)
+	statePath := options.StatePath
+	if statePath == "" {
+		statePath = DefaultStatePath()
+	}
+	outboxRoot, err := outbox.Root(statePath)
+	if err != nil {
+		return wrapHost(err, "serve.outbox", nil)
+	}
+	sessions.outboxRoot = outboxRoot
 	if purgeErr := outbox.Purge(sessions.outboxRoot, time.Now()); purgeErr != nil {
 		log.Warn("stale turn outboxes not purged", "err", purgeErr)
 	}
@@ -242,6 +250,7 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	if err != nil {
 		return wrapHost(err, "serve.config", nil)
 	}
+	sessions.outboundMaxBytes = cfg.EffectiveOutboundMaxBytes()
 	if fallback := accountFallbackFor(cfg, options.usage, gws); fallback != nil {
 		deps.handler.SetAccountFallback(fallback)
 	}

@@ -155,6 +155,26 @@ func (b PriceBook) Price(records []Record) {
 	}
 }
 
+// PriceCompactions sets the saving of every compaction record: the tokens it removed are
+// no longer read back from the cache on the turns that follow, so they are counted once
+// at the cache read rate of its model, which falls back to the input rate when the list
+// gives none. A record whose model is not in the list, or is priced at zero, is marked
+// unpriced instead, and its saving left at zero.
+func (b PriceBook) PriceCompactions(records []Record) {
+	for index := range records {
+		record := &records[index]
+		if record.Compaction == nil {
+			continue
+		}
+		rates, ok := b.Lookup(record.Model)
+		record.Unpriced = !ok || rates.CacheRead == 0
+		record.Saved = 0
+		if !record.Unpriced {
+			record.Saved = float64(record.Compaction.TokensRemoved) * rates.CacheRead
+		}
+	}
+}
+
 func (r Rates) cost(record Record) (CostSplit, float64) {
 	speed := 1.0
 	if record.Fast {

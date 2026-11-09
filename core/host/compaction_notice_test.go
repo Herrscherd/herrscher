@@ -209,7 +209,7 @@ func TestUnsupportedCompactionFailureTravelsAsANotice(t *testing.T) {
 
 func TestCompactUnavailableNoticeNamesItsReason(t *testing.T) {
 	f := newCompactFixture(t, "codex", compactPolicy(92))
-	_, err := f.driver.compactStages(f.driver.compaction.names)
+	_, err := f.driver.compactStages(f.driver.compaction.names, stageNotes{})
 	notice := contracts.NoticeOf(err)
 	if notice.Code != contracts.CodeCompactUnavailable || len(notice.Args) != 1 {
 		t.Fatalf("notice = %+v, want compact.unavailable with one argument", notice)
@@ -380,7 +380,7 @@ func TestFailureTextIsKeptWhenTheFullQueueDropsItsNotice(t *testing.T) {
 	}
 	f.driver.requestCompaction("", contracts.Conversation{})
 	failed := waitEmitted(t, f, eventCompactFailed)
-	_, err := f.driver.compactStages(f.driver.compaction.names)
+	_, err := f.driver.compactStages(f.driver.compaction.names, stageNotes{})
 	requireRenderedText(t, failed.Text, contracts.NoticeOf(err), i18n.French)
 }
 

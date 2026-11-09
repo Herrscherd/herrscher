@@ -445,7 +445,10 @@ about the service. Each compaction stage shows when it last ran and how it ended
 (done, short, failed, dry run or skipped), read from the usage ledger, or that there
 was no compaction in the last 7 days. When the ledger cannot be read, the line says
 the last compaction is unknown when no readable run is left to show, and flags the
-data as partial.
+data as partial. A compaction stage that reads its API key from the environment also
+shows whether that variable is set, by its name only (`TYPESAFE_API_KEY`), never its
+value, with the time and outcome of its last successful run and the time and note of
+its last failed one.
 
 A gateway the daemon does not run reads as off, and so does a memory plugin that is
 not the one in use: the first local memory plugin with a factory is the live one,
@@ -480,14 +483,37 @@ default is the limits of each account:
 - `compaction`: each compaction stage, with its runs and how they ended (done,
   short, failed, dry run, skipped), the calls it examined, kept, truncated and
   pruned, the share of characters it removed, the tokens it removed, its model
-  requests and their average duration.
+  requests, their average duration and the estimated saving. Above the stages, the
+  Jev share gives the part of Jev runs that succeeded (done or short), and the part of
+  sessions where the backend stage ran behind Jev, linked to the Jev run by the
+  passage both stages share. A Jev run is an attempt: its outcome is done, short or
+  failed, so a dry run or a skipped Jev is in neither count. A session counts once it
+  has an attempt. The backend stage counts as behind Jev when its outcome is anything
+  but skipped, so a dry run of the backend does count.
 
 `--range` takes `24h`, `7d`, `30d` or `90d`, and `--account` and `--vendor` narrow the
-figures to one account or one vendor. A compaction has no vendor and no account, so
-the filters never leave a compaction out: the compactions of the period are shown
-whatever the filter. `--json` prints the same figures as structured data for
-a script. A compaction shows its cost as requests and request tokens, since the usage
-ledger records no price for a stage on its own.
+figures to one account or one vendor, with the same rule as for turns: a compaction is
+kept when its vendor and account match the filter. A compaction recorded before the
+account was stored has no account, so it is counted when no filter is set and left out
+by a filter it cannot match, as an unaccounted turn is. `--json` prints the same
+figures as structured data for a script.
+
+The estimated saving of a compaction is the tokens it removed, priced at the cache-read
+rate of the session's model in the LiteLLM price list, counted once per compaction. The
+session model is stored with the record when the compaction runs. A model missing from
+the price list shows `unknown price` and never `$0`; a model listed without a cache-read
+rate is priced at its input rate, as for turns. When only some
+compactions are unpriced, the line gives the amount and how many runs have no price.
+
+The fast speed is not priced for compactions. The turns are priced at the fast rate
+when their transcript says the fast tier was used, but a compaction record carries no
+speed: the session does not expose it to the host when the compaction runs. The saving
+is therefore priced at the standard cache-read rate even when the session ran fast.
+
+A failed compaction keeps the class of its error in the ledger, never its text: an
+unknown error is recorded as `unknown failure`, a stage that failed without an error
+as `fell back`. `herrscher health` shows that class in words. A note written by an
+earlier version as free text is never shown: it reads as an unknown failure.
 
 ### Model routing
 

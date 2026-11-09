@@ -18,6 +18,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
 	"github.com/Herrscherd/herrscher/core/historywire"
+	"github.com/Herrscherd/herrscher/core/internal/redact"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -273,7 +274,7 @@ func (d *sessionDriver) compactSupported() bool {
 	return d.compaction.supports(d.modelNow().vendor)
 }
 
-func (d *sessionDriver) compactStages(names []string) ([]contracts.CompactStage, error) {
+func (d *sessionDriver) compactStages(names []string, notes stageNotes) ([]contracts.CompactStage, error) {
 	if !d.compactSupported() {
 		return nil, unsupportedCompaction(d.name, d.modelNow().vendor)
 	}
@@ -283,7 +284,7 @@ func (d *sessionDriver) compactStages(names []string) ([]contracts.CompactStage,
 		if name != contracts.CompactStageBackend {
 			compactor = historyStage{compactor: d.compaction.plugins[name], history: d.sessionHistory()}
 		}
-		stages = append(stages, contracts.CompactStage{Name: name, Compactor: recordedStage{name: name, compactor: compactor}})
+		stages = append(stages, contracts.CompactStage{Name: name, Compactor: recordedStage{name: name, compactor: compactor, notes: notes}})
 	}
 	return stages, nil
 }
@@ -311,6 +312,7 @@ func (s historyStage) Compact(ctx context.Context, req contracts.CompactRequest,
 type recordedStage struct {
 	name      string
 	compactor contracts.Compactor
+	notes     stageNotes
 }
 
 func (s recordedStage) Compact(ctx context.Context, req contracts.CompactRequest, onEvent func(contracts.BackendEvent)) (contracts.CompactResult, error) {
@@ -319,6 +321,7 @@ func (s recordedStage) Compact(ctx context.Context, req contracts.CompactRequest
 	if errors.Is(err, contracts.ErrNilCompactor) {
 		return result, err
 	}
+	s.notes.fail(s.name, err)
 	if result.Stats != nil {
 		stats := *result.Stats
 		stats.Stage = s.name
@@ -432,7 +435,8 @@ func (d *sessionDriver) runAutomatic(ctx context.Context, run compactionPass) bo
 }
 
 func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.CompactTrigger, instruction string, run compactionPass) (contracts.CompactResult, error) {
-	stages, err := d.compactStages(run.names)
+	notes := make(stageNotes)
+	stages, err := d.compactStages(run.names, notes)
 	if err != nil {
 		d.failCompaction(ctx, trigger, err)
 		return contracts.CompactResult{}, err
@@ -449,7 +453,7 @@ func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.Com
 	}
 	d.fanOut(ctx, contracts.Event{T: eventCompactStarted, Value: trigger.String(), Tokens: d.turnReading})
 	result, err := contracts.RunCompactStack(ctx, stages, req, d.compactionProgress(ctx))
-	d.recordCompaction(result.StageStats)
+	d.recordCompaction(result.StageStats, notes)
 	if err != nil {
 		d.failCompaction(ctx, trigger, err)
 		return contracts.CompactResult{}, err
@@ -484,7 +488,7 @@ func compactFailureText(messages *hostMessages, lang i18n.Language, err error) s
 	if key, known := knownCompactFailure(err); known {
 		return messages.text(lang, key, nil)
 	}
-	return messages.text(lang, "compaction.failed", map[string]any{detailParam: err.Error()})
+	return messages.text(lang, "compaction.failed", map[string]any{detailParam: redact.Output([]byte(err.Error()))})
 }
 
 func knownCompactFailure(err error) (string, bool) {

@@ -2,6 +2,7 @@ package host
 
 import (
 	"log/slog"
+	"strconv"
 	"time"
 	"unicode/utf8"
 
@@ -13,24 +14,56 @@ import (
 const (
 	maxStageRunes         = 64
 	maxCompactionDuration = 24 * time.Hour
+	fellBackNote          = "compaction.fell_back"
+	unknownFailureNote    = "compaction.unknown_failure"
 )
 
-func (d *sessionDriver) recordCompaction(stats []contracts.CompactStats) {
+type stageNotes map[string]string
+
+func (n stageNotes) fail(stage string, err error) {
+	if n == nil || err == nil {
+		return
+	}
+	n[stage] = failureClass(err)
+}
+
+func failureClass(err error) string {
+	if key, known := knownCompactFailure(err); known {
+		return key
+	}
+	return unknownFailureNote
+}
+
+func (d *sessionDriver) recordCompaction(stats []contracts.CompactStats, notes stageNotes) {
 	if d.sink.Usage == nil || len(stats) == 0 {
 		return
 	}
 	when := time.Now().UTC()
+	passage := strconv.FormatInt(when.UnixNano(), 36)
+	model := d.modelNow().model
 	records := make([]usage.Record, 0, len(stats))
 	for index := range stats {
 		if _, err := stats[index].Outcome.MarshalText(); err != nil {
 			slog.Warn("compaction outcome not recorded", "stage", boundedStage(stats[index].Stage), "err", err)
 			continue
 		}
-		records = append(records, usage.Record{Time: when, Session: d.name, Compaction: compactionUsage(stats[index])})
+		entry := compactionUsage(stats[index])
+		entry.Passage = passage
+		if entry.Outcome == contracts.CompactFailed {
+			entry.Note = failureNote(notes[stats[index].Stage])
+		}
+		records = append(records, usage.Record{Time: when, Session: d.name, Model: model, Compaction: entry})
 	}
 	if len(records) > 0 {
 		d.sink.Usage(records)
 	}
+}
+
+func failureNote(class string) string {
+	if class == "" {
+		return fellBackNote
+	}
+	return class
 }
 
 func compactionUsage(stats contracts.CompactStats) *usage.Compaction {
@@ -52,8 +85,12 @@ func compactionUsage(stats contracts.CompactStats) *usage.Compaction {
 }
 
 func boundedStage(stage string) string {
-	if utf8.RuneCountInString(stage) <= maxStageRunes {
-		return stage
+	return boundedText(stage, maxStageRunes)
+}
+
+func boundedText(text string, limit int) string {
+	if utf8.RuneCountInString(text) <= limit {
+		return text
 	}
-	return string([]rune(stage)[:maxStageRunes])
+	return string([]rune(text)[:limit])
 }

@@ -25,13 +25,24 @@ func TestUsageQueryMatchesTheVendorAndTheAccount(t *testing.T) {
 	}
 }
 
-func TestUsageQueryKeepsCompactionsWhateverTheFilter(t *testing.T) {
+func TestUsageQueryFiltersCompactionsLikeTurns(t *testing.T) {
 	query := usageQuery{vendor: "claude", account: usage.AccountKey{Vendor: "claude", Account: "pro"}}
-	compaction := usage.Record{Compaction: &usage.Compaction{Stage: "jev"}}
-	if !query.keeps(compaction) {
-		t.Fatalf("keeps(compaction) = false, want a compaction kept under --vendor and --account")
+	stage := &usage.Compaction{Stage: "jev"}
+	cases := []struct {
+		name   string
+		record usage.Record
+		want   bool
+	}{
+		{name: "a compaction of the account", record: usage.Record{Vendor: "claude", Account: "pro", Compaction: stage}, want: true},
+		{name: "a compaction of another account", record: usage.Record{Vendor: "claude", Account: "perso", Compaction: stage}},
+		{name: "a compaction of another vendor", record: usage.Record{Vendor: "codex", Account: "pro", Compaction: stage}},
+		{name: "a compaction without account", record: usage.Record{Compaction: stage}},
 	}
-	if query.keeps(usage.Record{Vendor: "codex", Account: "perso"}) {
-		t.Fatalf("keeps(codex record) = true, want the other vendor and account left out")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := query.keeps(tc.record); got != tc.want {
+				t.Fatalf("keeps = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

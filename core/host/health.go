@@ -16,6 +16,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/health"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
+	"github.com/Herrscherd/herrscher/core/usage"
 )
 
 type healthInputs struct {
@@ -25,6 +26,7 @@ type healthInputs struct {
 	memory     string
 	accounts   accounts.Store
 	compaction compactionPolicy
+	ledger     usage.Ledger
 	now        func() time.Time
 }
 
@@ -56,7 +58,7 @@ func healthProbes(inputs healthInputs) []health.Probe {
 	probes = append(probes, gatewayProbes(inputs)...)
 	probes = append(probes, backendProbes(inputs)...)
 	probes = append(probes, memoryProbes(inputs.memory)...)
-	return append(probes, compactionProbes(inputs.compaction.names)...)
+	return append(probes, compactionProbes(inputs.compaction.names, lastCompactions(inputs.ledger))...)
 }
 
 func daemonProbe(daemon health.Daemon) health.Probe {
@@ -306,15 +308,24 @@ func firstMemoryKind() string {
 	return ""
 }
 
-func compactionProbes(names []string) []health.Probe {
+func compactionProbes(names []string, last map[string]usage.LastCompaction) []health.Probe {
 	var probes []health.Probe
 	for _, name := range names {
-		probes = append(probes, health.Probe{
-			Check: health.Check{Group: health.GroupCompaction, Name: name},
-			Run:   compactionRun(name),
-		})
+		check := health.Check{Group: health.GroupCompaction, Name: name}
+		if run, ok := last[name]; ok {
+			check.Facts.Compaction = &health.Compaction{At: run.At, Outcome: run.Outcome}
+		}
+		probes = append(probes, health.Probe{Check: check, Run: compactionRun(name)})
 	}
 	return probes
+}
+
+func lastCompactions(ledger usage.Ledger) map[string]usage.LastCompaction {
+	records, err := ledger.Retained()
+	if err != nil && !errors.Is(err, usage.ErrLedgerTruncated) {
+		slog.Warn("health: compaction ledger unreadable", "err", err)
+	}
+	return usage.LastCompactions(records)
 }
 
 func compactionRun(name string) runFunc {
@@ -335,7 +346,7 @@ func compactorPlugin(name string) (contracts.Plugin, bool) {
 	return contracts.Plugin{}, false
 }
 
-func newHealthInputs(instanceID string, keys *keyproxy.Proxy, gws []Deps, policy compactionPolicy) healthInputs {
+func newHealthInputs(instanceID string, keys *keyproxy.Proxy, gws []Deps, policy compactionPolicy, partDir string) healthInputs {
 	store, err := accountStore(BackendRequest{})
 	if err != nil {
 		slog.Warn("health: account store unavailable", "err", err)
@@ -347,6 +358,7 @@ func newHealthInputs(instanceID string, keys *keyproxy.Proxy, gws []Deps, policy
 		memory:     firstMemoryKind(),
 		accounts:   store,
 		compaction: policy,
+		ledger:     usage.Ledger{Dir: usageDir(partDir), Now: time.Now},
 		now:        time.Now,
 	}
 }

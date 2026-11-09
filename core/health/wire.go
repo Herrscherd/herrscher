@@ -26,19 +26,25 @@ type wireSnapshot struct {
 }
 
 type wireCheck struct {
-	Group     Group                 `json:"group"`
-	Name      string                `json:"name"`
-	Account   string                `json:"account,omitempty"`
-	Default   bool                  `json:"default,omitempty"`
-	State     contracts.HealthState `json:"state"`
-	Latency   int64                 `json:"latency_ns,omitempty"`
-	Detail    string                `json:"detail,omitempty"`
-	Remedy    string                `json:"remedy,omitempty"`
-	Socket    string                `json:"socket,omitempty"`
-	Listen    string                `json:"listen,omitempty"`
-	Providers int                   `json:"providers,omitempty"`
-	Pool      *wirePool             `json:"pool,omitempty"`
-	TimedOut  int64                 `json:"timed_out_ns,omitempty"`
+	Group      Group                 `json:"group"`
+	Name       string                `json:"name"`
+	Account    string                `json:"account,omitempty"`
+	Default    bool                  `json:"default,omitempty"`
+	State      contracts.HealthState `json:"state"`
+	Latency    int64                 `json:"latency_ns,omitempty"`
+	Detail     string                `json:"detail,omitempty"`
+	Remedy     string                `json:"remedy,omitempty"`
+	Socket     string                `json:"socket,omitempty"`
+	Listen     string                `json:"listen,omitempty"`
+	Providers  int                   `json:"providers,omitempty"`
+	Pool       *wirePool             `json:"pool,omitempty"`
+	TimedOut   int64                 `json:"timed_out_ns,omitempty"`
+	Compaction *wireCompaction       `json:"compaction,omitempty"`
+}
+
+type wireCompaction struct {
+	At      time.Time                `json:"at"`
+	Outcome contracts.CompactOutcome `json:"outcome"`
 }
 
 type wirePool struct {
@@ -104,6 +110,9 @@ func encodeCheck(check Check) (wireCheck, error) {
 	if pool := check.Facts.Pool; pool != nil {
 		wire.Pool = &wirePool{Keys: pool.Keys, Usable: pool.Usable, LastStatus: pool.LastStatus, CoolingFor: int64(pool.CoolingFor)}
 	}
+	if last := check.Facts.Compaction; last != nil {
+		wire.Compaction = &wireCompaction{At: last.At, Outcome: last.Outcome}
+	}
 	return wire, nil
 }
 
@@ -155,6 +164,9 @@ func decodeCheck(wire wireCheck) (Check, error) {
 	}
 	if pool := wire.Pool; pool != nil {
 		check.Facts.Pool = &Pool{Keys: pool.Keys, Usable: pool.Usable, LastStatus: pool.LastStatus, CoolingFor: time.Duration(pool.CoolingFor)}
+	}
+	if last := wire.Compaction; last != nil {
+		check.Facts.Compaction = &Compaction{At: last.At, Outcome: last.Outcome}
 	}
 	return check, nil
 }

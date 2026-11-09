@@ -4143,5 +4143,82 @@
     "id": "cli.spend.account_invalid",
     "description": "Error for an --account value that is not vendor:name, Name is the value given",
     "other": "account {{.Name}} must be written vendor:name"
+  },
+  {
+    "id": "cli.compaction.empty",
+    "description": "Compaction, empty",
+    "other": "no compaction in this period"
+  },
+  {
+    "id": "cli.compaction.runs",
+    "description": "Compaction report: the count of compactions of a stage",
+    "one": "{{.Count}} compaction",
+    "other": "{{.Count}} compactions"
+  },
+  {
+    "id": "cli.compaction.outcome_count",
+    "description": "Compaction report: an outcome and its count",
+    "one": "{{.Label}} {{.Count}}",
+    "other": "{{.Label}} {{.Count}}"
+  },
+  {
+    "id": "cli.compaction.calls",
+    "description": "Compaction report: the calls examined, kept, truncated and pruned",
+    "other": "{{.Calls}} calls examined, {{.Kept}} kept, {{.Truncated}} truncated, {{.Pruned}} pruned"
+  },
+  {
+    "id": "cli.compaction.chars",
+    "description": "Compaction report: the share of the characters removed",
+    "other": "{{.Percent}} of the characters removed"
+  },
+  {
+    "id": "cli.compaction.saved",
+    "description": "Compaction report: the estimated tokens removed",
+    "other": "about {{.Tokens}} tokens removed"
+  },
+  {
+    "id": "cli.compaction.requests",
+    "description": "Compaction report: the model requests of a stage and their tokens",
+    "other": "{{.Requests}} requests, {{.Tokens}} request tokens"
+  },
+  {
+    "id": "cli.compaction.average",
+    "description": "Compaction report: the average duration of a stage",
+    "other": "average {{.Duration}}"
+  },
+  {
+    "id": "cli.compaction.outcome.done",
+    "description": "Compaction outcome: the stage compacted enough to stop the stack",
+    "other": "done"
+  },
+  {
+    "id": "cli.compaction.outcome.short",
+    "description": "Compaction outcome: the stage shortened the context",
+    "other": "short"
+  },
+  {
+    "id": "cli.compaction.outcome.failed",
+    "description": "Compaction outcome: the stage could not compact",
+    "other": "failed"
+  },
+  {
+    "id": "cli.compaction.outcome.dry_run",
+    "description": "Compaction outcome: the stage measured without changing anything",
+    "other": "dry run"
+  },
+  {
+    "id": "cli.compaction.outcome.skipped",
+    "description": "Compaction outcome: the stage had nothing to compact",
+    "other": "skipped"
+  },
+  {
+    "id": "cli.health.facts.compact_last",
+    "description": "Health: the last run of a compaction stage, its outcome and date",
+    "other": "last compaction: {{.Outcome}}, {{.Date}}"
+  },
+  {
+    "id": "cli.health.facts.compact_never",
+    "description": "Health: a compaction stage that never ran",
+    "other": "no compaction recorded yet"
   }
 ]

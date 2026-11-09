@@ -43,11 +43,12 @@ type Record struct {
 	CacheCreate int64     `json:"cacheCreate"`
 	Cost        float64   `json:"cost"`
 
-	CacheCreateHour int64     `json:"cacheCreateHour,omitempty"`
-	Fast            bool      `json:"fast,omitempty"`
-	Split           CostSplit `json:"split,omitzero"`
-	Saved           float64   `json:"saved,omitempty"`
-	Unpriced        bool      `json:"-"`
+	CacheCreateHour int64       `json:"cacheCreateHour,omitempty"`
+	Fast            bool        `json:"fast,omitempty"`
+	Split           CostSplit   `json:"split,omitzero"`
+	Saved           float64     `json:"saved,omitempty"`
+	Compaction      *Compaction `json:"compaction,omitempty"`
+	Unpriced        bool        `json:"-"`
 }
 
 // Ledger is the directory of daily JSON lines files, one file per UTC day.
@@ -118,8 +119,17 @@ func (l Ledger) Prune() error {
 // Records reads the records of the period, from the files of its days only, and
 // skips the lines that do not decode.
 func (l Ledger) Records(rng Range) ([]Record, error) {
+	return l.within(rng.Span())
+}
+
+// Retained reads the records of every day the ledger keeps.
+func (l Ledger) Retained() ([]Record, error) {
+	return l.within(Retention)
+}
+
+func (l Ledger) within(span time.Duration) ([]Record, error) {
 	now := l.Now().UTC()
-	since := now.Add(-rng.Span())
+	since := now.Add(-span)
 	root, err := os.OpenRoot(l.Dir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil

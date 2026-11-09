@@ -4143,5 +4143,82 @@
     "id": "cli.spend.account_invalid",
     "description": "Erreur pour une valeur de --account qui n'est pas vendor:nom, Name est la valeur donnée",
     "other": "le compte {{.Name}} doit s'écrire fournisseur:nom"
+  },
+  {
+    "id": "cli.compaction.empty",
+    "description": "Compaction, vide",
+    "other": "aucune compaction sur la période"
+  },
+  {
+    "id": "cli.compaction.runs",
+    "description": "Rapport de compaction : le nombre de compactions d un étage",
+    "one": "{{.Count}} compaction",
+    "other": "{{.Count}} compactions"
+  },
+  {
+    "id": "cli.compaction.outcome_count",
+    "description": "Rapport de compaction : un résultat et son nombre",
+    "one": "{{.Label}} {{.Count}}",
+    "other": "{{.Label}} {{.Count}}"
+  },
+  {
+    "id": "cli.compaction.calls",
+    "description": "Rapport de compaction : les appels examinés, conservés, tronqués et élagués",
+    "other": "{{.Calls}} appels examinés, {{.Kept}} conservés, {{.Truncated}} tronqués, {{.Pruned}} élagués"
+  },
+  {
+    "id": "cli.compaction.chars",
+    "description": "Rapport de compaction : la part des caractères retirés",
+    "other": "{{.Percent}} des caractères retirés"
+  },
+  {
+    "id": "cli.compaction.saved",
+    "description": "Rapport de compaction : les jetons estimés retirés",
+    "other": "environ {{.Tokens}} jetons retirés"
+  },
+  {
+    "id": "cli.compaction.requests",
+    "description": "Rapport de compaction : les requêtes du modèle d un étage et leurs jetons",
+    "other": "{{.Requests}} requêtes, {{.Tokens}} jetons envoyés"
+  },
+  {
+    "id": "cli.compaction.average",
+    "description": "Rapport de compaction : la durée moyenne d un étage",
+    "other": "durée moyenne {{.Duration}}"
+  },
+  {
+    "id": "cli.compaction.outcome.done",
+    "description": "Résultat de compaction : l étage a assez compacté pour arrêter la pile",
+    "other": "terminée"
+  },
+  {
+    "id": "cli.compaction.outcome.short",
+    "description": "Résultat de compaction : l étage a raccourci le contexte",
+    "other": "courte"
+  },
+  {
+    "id": "cli.compaction.outcome.failed",
+    "description": "Résultat de compaction : l étage n a pas pu compacter",
+    "other": "échouée"
+  },
+  {
+    "id": "cli.compaction.outcome.dry_run",
+    "description": "Résultat de compaction : l étage a mesuré sans rien changer",
+    "other": "à blanc"
+  },
+  {
+    "id": "cli.compaction.outcome.skipped",
+    "description": "Résultat de compaction : l étage n avait rien à compacter",
+    "other": "ignorée"
+  },
+  {
+    "id": "cli.health.facts.compact_last",
+    "description": "Santé : la dernière exécution d un étage de compaction, son résultat et sa date",
+    "other": "dernière compaction : {{.Outcome}}, {{.Date}}"
+  },
+  {
+    "id": "cli.health.facts.compact_never",
+    "description": "Santé : un étage de compaction qui n a jamais tourné",
+    "other": "aucune compaction enregistrée"
   }
 ]

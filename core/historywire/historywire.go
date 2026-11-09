@@ -124,6 +124,7 @@ type editFrame struct {
 	CallID    string                `json:"call_id"`
 	Action    contracts.PruneAction `json:"action"`
 	KeepChars int                   `json:"keep_chars,omitempty"`
+	KeepTail  int                   `json:"keep_tail,omitempty"`
 }
 
 type outcomeFrame struct {

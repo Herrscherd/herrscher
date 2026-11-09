@@ -2738,6 +2738,11 @@
     "other": "Tokens"
   },
   {
+    "id": "tui.usage.tab.compaction",
+    "description": "Usage panel: the tab of the compaction stages",
+    "other": "Compaction"
+  },
+  {
     "id": "tui.usage.tab.limits",
     "other": "Limits"
   },

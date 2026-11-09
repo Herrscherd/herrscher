@@ -23,6 +23,7 @@ const (
 	usageTabSession usageTab = iota + 1
 	usageTabCost
 	usageTabTokens
+	usageTabCompaction
 	usageTabLimits
 )
 
@@ -47,6 +48,8 @@ func (t usageTab) key() string {
 		return "tui.usage.tab.cost"
 	case usageTabTokens:
 		return "tui.usage.tab.tokens"
+	case usageTabCompaction:
+		return "tui.usage.tab.compaction"
 	case usageTabLimits:
 		return "tui.usage.tab.limits"
 	}
@@ -242,7 +245,7 @@ func (m *model) usageOverlayView() string {
 }
 
 func (m *model) usageTabsLine() string {
-	tabs := []usageTab{usageTabSession, usageTabCost, usageTabTokens, usageTabLimits}
+	tabs := []usageTab{usageTabSession, usageTabCost, usageTabTokens, usageTabCompaction, usageTabLimits}
 	labels := make([]string, 0, len(tabs))
 	for _, tab := range tabs {
 		labels = append(labels, m.chip(m.tr.t(tab.key(), nil), tab == m.usage.tab))
@@ -251,7 +254,7 @@ func (m *model) usageTabsLine() string {
 }
 
 func (m *model) usageRangeChips() string {
-	if m.usage.tab != usageTabCost && m.usage.tab != usageTabTokens {
+	if m.usage.tab != usageTabCost && m.usage.tab != usageTabTokens && m.usage.tab != usageTabCompaction {
 		return ""
 	}
 	ranges := usage.Ranges()
@@ -312,6 +315,8 @@ func (m *model) usageLines() ([]string, error) {
 		return usage.CostPanel(m.usage.snapshot, m.tr.lang, time.Local, m.reportPalette(), m.frameInner())
 	case usageTabTokens:
 		return usage.TokenLines(m.usage.snapshot, m.tr.lang, m.reportPalette())
+	case usageTabCompaction:
+		return usage.CompactionLines(m.usage.snapshot, m.tr.lang, m.reportPalette())
 	case usageTabSession, usageTabLimits:
 	}
 	return usage.LimitCards(m.usage.snapshot, m.tr.lang, m.reportPalette(), m.cardEdges(), m.frameInner())

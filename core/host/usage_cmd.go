@@ -189,7 +189,7 @@ func (s *usageSource) withTranscripts(ledger []usage.Record, since time.Time) ([
 	}
 	view := s.transcripts.View(since)
 	records := slices.DeleteFunc(ledger, func(record usage.Record) bool {
-		return view.Covered[usage.AccountKey{Vendor: record.Vendor, Account: record.Account}]
+		return record.Compaction == nil && view.Covered[usage.AccountKey{Vendor: record.Vendor, Account: record.Account}]
 	})
 	book := s.prices.Book()
 	book.Price(view.Records)

@@ -117,7 +117,8 @@ type sessionDriver struct {
 	compaction        compactionPolicy
 	percentOf         func() int
 	turnReading       int
-	compactSpent      bool
+	hostSpent         bool
+	stageSpent        map[string]bool
 	compactMu         sync.Mutex
 	compactWaiting    *compactRequest
 	compactRegistered func()
@@ -133,20 +134,21 @@ type queued struct {
 
 func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- contracts.Event, fromBridge <-chan contracts.Event) *sessionDriver {
 	return &sessionDriver{
-		messages:  newHostMessages(),
-		name:      name,
-		gateways:  gws,
-		toBridge:  toBridge,
-		from:      fromBridge,
-		queue:     make(chan queued, turnQueueCapacity),
-		turn:      make(chan struct{}, 1),
-		renderers: make(map[string]*gatewayRenderer),
-		hangup:    make(chan struct{}, 1),
-		seen:      make(map[string]bool),
-		notices:   make(chan noticeDelivery, noticeQueueCapacity),
-		failures:  make(chan compactFailure, noticeQueueCapacity),
-		noticeLog: obs.Stderr(false),
-		gate:      noBudgetGate{},
+		messages:   newHostMessages(),
+		name:       name,
+		gateways:   gws,
+		toBridge:   toBridge,
+		from:       fromBridge,
+		queue:      make(chan queued, turnQueueCapacity),
+		turn:       make(chan struct{}, 1),
+		renderers:  make(map[string]*gatewayRenderer),
+		hangup:     make(chan struct{}, 1),
+		seen:       make(map[string]bool),
+		stageSpent: make(map[string]bool),
+		notices:    make(chan noticeDelivery, noticeQueueCapacity),
+		failures:   make(chan compactFailure, noticeQueueCapacity),
+		noticeLog:  obs.Stderr(false),
+		gate:       noBudgetGate{},
 
 		enqueueTimeout: defaultEnqueueTimeout,
 

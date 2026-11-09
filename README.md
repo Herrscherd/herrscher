@@ -736,6 +736,36 @@ never retriggers. `compactStack` lists the stages in order, where `backend` is t
 session's own compaction and every other name is the kind of a plugin of the
 `compactor` category, built once at start through its `Compactor` factory.
 
+A plugin stage can ask to run before the backend's threshold. A `Compactor` that
+also implements `StageTrigger` returns from `TriggerPercent()` the share of the
+window, in percent, from which it runs. Zero, or a `Compactor` without the
+interface, means the host's `compactAt`, and so does a value above it: that value
+does not delay the stage. The host checks the value at start with
+`ValidateStageTriggerPercent`, and a value outside 0 to 100 makes `herrscher serve`
+refuse to start, naming the stage and the value. The `backend` stage has no
+threshold of its own and runs at `compactAt` only. When `compactAt` is 0, automatic
+compaction is off and no stage turns it back on: the stages run only on `/compact`.
+
+When the usage reaches the lowest effective threshold, the host runs automatically
+only the stages whose effective threshold is reached, in the order of the stack. A
+stage's effective threshold is its own trigger when that is above zero and below
+`compactAt`, and `compactAt` otherwise. Once `compactAt` is reached, the whole stack
+runs, as before. If the early stages leave the usage at or above `compactAt`, the
+rest of the stack runs in the same turn, after them, without the stages that just ran.
+`/compact` always runs the whole stack.
+
+A stage that runs early runs once per crossing of its threshold, the anti-loop rule:
+it does not run again while the measured usage stays at or above its threshold,
+since each run costs requests. It rearms when a measured usage lands under its
+threshold, which a compaction of the host or a new session does. The state is kept
+in memory for each session and is not persisted: a daemon restart rearms every
+stage, so an early stage runs again at the first measured turn over its threshold.
+
+For example, with `"compactStack": ["jev", "backend"]` and `compactAt` at 80, a `jev`
+stage whose `TriggerPercent()` returns 50 prunes the tool calls once the window
+reaches half full, and the backend summarises at 80. When the pruning brings the
+usage under 50, the stage rearms.
+
 The `jev` stage, from [herrscher-jev-compactor], prunes the tool calls the
 assistant no longer needs before the backend summarises what is left. List it
 ahead of the backend:

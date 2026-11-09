@@ -13,6 +13,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
+	"github.com/Herrscherd/herrscher/core/health"
 	"github.com/Herrscherd/herrscher/core/usage"
 )
 
@@ -187,7 +188,7 @@ func TestRecordCompactionKeepsOnlyValidStageStats(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var capture usageCapture
 			d := &sessionDriver{name: "s1", sink: sessionSink{Usage: capture.add}}
-			d.recordCompaction(tc.stats)
+			d.recordCompaction(tc.stats, nil)
 			assertRecorded(t, capture.all(), tc.want)
 		})
 	}
@@ -202,10 +203,20 @@ func assertRecorded(t *testing.T, records []usage.Record, want []*usage.Compacti
 		if records[index].Session != "s1" || records[index].Time.IsZero() {
 			t.Fatalf("record = %+v, want the session and the time of the run", records[index])
 		}
-		if jsonOf(t, records[index].Compaction) != jsonOf(t, want[index]) {
+		if !sameEntry(t, records[index].Compaction, want[index]) {
 			t.Fatalf("compaction = %+v, want %+v", records[index].Compaction, want[index])
 		}
 	}
+}
+
+func sameEntry(t *testing.T, got, want *usage.Compaction) bool {
+	t.Helper()
+	if got == nil || got.Passage == "" {
+		return false
+	}
+	withoutPassage := *got
+	withoutPassage.Passage = ""
+	return jsonOf(t, &withoutPassage) == jsonOf(t, want)
 }
 
 func jsonOf(t *testing.T, value any) string {
@@ -219,7 +230,7 @@ func jsonOf(t *testing.T, value any) string {
 
 func TestRecordCompactionWithoutUsageSinkDoesNotPanic(_ *testing.T) {
 	d := &sessionDriver{name: "s1"}
-	d.recordCompaction([]contracts.CompactStats{stageStats("jev", contracts.CompactDone)})
+	d.recordCompaction([]contracts.CompactStats{stageStats("jev", contracts.CompactDone)}, nil)
 }
 
 type slowFailure struct {
@@ -270,7 +281,7 @@ func TestCompactionStatsReachTheUsageLedgerThroughTheBridge(t *testing.T) {
 	f.from <- mustAnswer(t, contracts.CompactResult{TokensAfter: 30_000, TokensMeasured: true, Note: "compacté", Stats: &stats})
 	waitEmitted(t, f, eventCompactDone)
 	records := capture.all()
-	if len(records) != 1 || jsonOf(t, records[0].Compaction) != jsonOf(t, recordedCompaction("backend", contracts.CompactShort)) {
+	if len(records) != 1 || !sameEntry(t, records[0].Compaction, recordedCompaction("backend", contracts.CompactShort)) {
 		t.Fatalf("records = %+v, want the bridge stage recorded as short", records)
 	}
 }
@@ -292,9 +303,10 @@ func TestCompactionStageOutcomeReachesTheUsageLedger(t *testing.T) {
 		err     error
 		outcome contracts.CompactOutcome
 		kind    string
+		note    string
 	}{
 		{name: "a successful stage", outcome: contracts.CompactDone, kind: eventCompactDone},
-		{name: "a failed stage", err: errors.New("boom"), outcome: contracts.CompactFailed, kind: eventCompactFailed},
+		{name: "a failed stage", err: errors.New("boom"), outcome: contracts.CompactFailed, kind: eventCompactFailed, note: `compaction stage "custom": boom`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -312,8 +324,10 @@ func TestCompactionStageOutcomeReachesTheUsageLedger(t *testing.T) {
 			}
 			waitEmitted(t, f, tc.kind)
 			records := capture.all()
-			if len(records) != 1 || jsonOf(t, records[0].Compaction) != jsonOf(t, recordedCompaction("custom", tc.outcome)) {
-				t.Fatalf("records = %+v, want the custom stage recorded as %s", records, tc.outcome)
+			want := recordedCompaction("custom", tc.outcome)
+			want.Note = tc.note
+			if len(records) != 1 || !sameEntry(t, records[0].Compaction, want) {
+				t.Fatalf("records = %s, want the custom stage recorded as %s", jsonOf(t, records), tc.outcome)
 			}
 		})
 	}
@@ -330,7 +344,8 @@ func TestLastCompactionsReadsTheSevenDayWindow(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
-	last, err := lastCompactions(ledger)
+	history := lastCompactions(ledger)
+	last, err := history.last, history.readErr
 	if err != nil {
 		t.Fatalf("lastCompactions: %v", err)
 	}
@@ -356,7 +371,8 @@ func TestLastCompactionsKeepsTheReadableDaysBesideATruncatedOne(t *testing.T) {
 	if err := os.Truncate(oversized, 64<<20+1); err != nil {
 		t.Fatalf("grow: %v", err)
 	}
-	last, err := lastCompactions(ledger)
+	history := lastCompactions(ledger)
+	last, err := history.last, history.readErr
 	got, ok := last["jev"]
 	if !ok || got.Outcome != contracts.CompactDone {
 		t.Fatalf("last jev run = %+v, %t, want the run of the readable day", got, ok)
@@ -379,7 +395,8 @@ func TestLastCompactionsKeepsTheRunOfADayBesideAHardReadFailure(t *testing.T) {
 	if err := os.WriteFile(unreadable, []byte(strings.Repeat("x", 64<<10+1)+"\n"), 0o600); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	last, err := lastCompactions(ledger)
+	history := lastCompactions(ledger)
+	last, err := history.last, history.readErr
 	if err == nil || errors.Is(err, usage.ErrLedgerTruncated) {
 		t.Fatalf("error = %v, want a hard read failure, not a skipped day", err)
 	}
@@ -387,7 +404,7 @@ func TestLastCompactionsKeepsTheRunOfADayBesideAHardReadFailure(t *testing.T) {
 	if !ok || got.Outcome != contracts.CompactDone {
 		t.Fatalf("last jev run = %+v, %t, want the run of the day read after the unreadable one", got, ok)
 	}
-	probes := compactionProbes([]string{"jev", "autre"}, last, err)
+	probes := compactionProbes([]string{"jev", "autre"}, history, func(string) *health.CompactionKey { return nil })
 	kept := probes[0].Check.Facts
 	if !kept.CompactionPartial || kept.CompactionUnknown || kept.Compaction == nil {
 		t.Fatalf("facts of jev = %+v, want partial with its run kept, not unknown", kept)
@@ -395,6 +412,55 @@ func TestLastCompactionsKeepsTheRunOfADayBesideAHardReadFailure(t *testing.T) {
 	absent := probes[1].Check.Facts
 	if !absent.CompactionPartial || !absent.CompactionUnknown || absent.Compaction != nil {
 		t.Fatalf("facts of autre = %+v, want partial and unknown, no run claimed", absent)
+	}
+}
+
+func TestCompactionProbesReportTheKeyTheLastReplyAndTheLastError(t *testing.T) {
+	now := time.Now().UTC()
+	ledger := usage.Ledger{Dir: t.TempDir(), Now: time.Now}
+	if err := ledger.Append([]usage.Record{
+		{Time: now.Add(-3 * time.Hour), Session: "s1", Compaction: &usage.Compaction{Stage: "jev", Outcome: contracts.CompactDone}},
+		{Time: now.Add(-time.Hour), Session: "s1", Compaction: &usage.Compaction{Stage: "jev", Outcome: contracts.CompactFailed, Note: "boom"}},
+	}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	absent := func(string) *health.CompactionKey { return &health.CompactionKey{Env: "TYPESAFE_API_KEY"} }
+	probes := compactionProbes([]string{"jev"}, lastCompactions(ledger), absent)
+	facts := probes[0].Check.Facts
+	if facts.CompactionKey == nil || facts.CompactionKey.Present || facts.CompactionKey.Env != "TYPESAFE_API_KEY" {
+		t.Fatalf("key = %+v, want the variable named and absent", facts.CompactionKey)
+	}
+	if facts.CompactionSucceeded == nil || facts.CompactionSucceeded.Outcome != contracts.CompactDone {
+		t.Fatalf("succeeded = %+v, want the done run", facts.CompactionSucceeded)
+	}
+	if facts.CompactionFailed == nil || facts.CompactionFailed.Note != "boom" || !facts.CompactionFailed.At.Equal(now.Add(-time.Hour)) {
+		t.Fatalf("failed = %+v, want the failed run with its note", facts.CompactionFailed)
+	}
+}
+
+func TestRequiredEnvNamesTheFirstRequiredVariable(t *testing.T) {
+	cases := []struct {
+		name     string
+		settings []contracts.Setting
+		want     string
+		ok       bool
+	}{
+		{name: "no setting"},
+		{name: "only optional settings", settings: []contracts.Setting{{Key: "pays", Env: "PAYS"}}},
+		{
+			name:     "the required variable",
+			settings: []contracts.Setting{{Key: "pays", Env: "PAYS"}, {Key: "cle", Env: "TYPESAFE_API_KEY", Required: true}},
+			want:     "TYPESAFE_API_KEY",
+			ok:       true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := requiredEnv(tc.settings)
+			if got != tc.want || ok != tc.ok {
+				t.Fatalf("requiredEnv = %q, %t, want %q, %t", got, ok, tc.want, tc.ok)
+			}
+		})
 	}
 }
 
@@ -406,7 +472,8 @@ func TestLastCompactionsIgnoresRunsOutsideTheProbeWindow(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
-	last, err := lastCompactions(ledger)
+	history := lastCompactions(ledger)
+	last, err := history.last, history.readErr
 	if err != nil {
 		t.Fatalf("lastCompactions: %v", err)
 	}

@@ -64,6 +64,7 @@ type Spend struct {
 	Saved    float64      `json:"saved,omitempty"`
 	Unpriced []string     `json:"unpriced,omitempty"`
 	Stages   []StageUsage `json:"stages,omitempty"`
+	Jev      JevUsage     `json:"jev"`
 }
 
 // Tokens counts the tokens of a period by type.
@@ -120,6 +121,7 @@ func Summarize(records []Record, rng Range, now time.Time, key AccountKey) Spend
 	}
 	spend := totals.done()
 	spend.Stages = stageUsages(records, now.Add(-rng.Span()), key)
+	spend.Jev = jevUsages(records, now.Add(-rng.Span()), key)
 	return spend
 }
 

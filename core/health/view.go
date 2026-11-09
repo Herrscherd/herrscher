@@ -217,20 +217,57 @@ func (s Snapshot) facts(check Check, text *renderer) string {
 }
 
 func compactionFacts(facts Facts, text *renderer) string {
-	fact := text.key(clitext.HealthCompactNever, nil)
-	if facts.CompactionUnknown {
-		fact = text.key(clitext.HealthCompactUnknown, nil)
+	segments := []string{compactionLastFact(facts, text)}
+	if key := facts.CompactionKey; key != nil {
+		segments = append(segments, compactionKeyFact(key, text))
 	}
-	if last := facts.Compaction; last != nil {
-		fact = text.key(clitext.HealthCompactLast, clitext.Params{
-			clitext.ParamOutcome: text.outcome(last.Outcome),
-			clitext.ParamDate:    last.At.Local().Format(time.DateTime),
-		})
+	if reply := facts.CompactionSucceeded; reply != nil {
+		segments = append(segments, text.key(clitext.HealthCompactReply, clitext.Params{
+			clitext.ParamOutcome: text.outcome(reply.Outcome),
+			clitext.ParamDate:    compactionDate(reply.At),
+		}))
+	}
+	if failure := facts.CompactionFailed; failure != nil {
+		segments = append(segments, text.key(clitext.HealthCompactError, clitext.Params{
+			clitext.ParamDate: compactionDate(failure.At),
+			clitext.ParamNote: compactionNote(failure.Note, text),
+		}))
 	}
 	if facts.CompactionPartial {
-		return fact + factsSep + text.key(clitext.HealthCompactPartial, nil)
+		segments = append(segments, text.key(clitext.HealthCompactPartial, nil))
 	}
-	return fact
+	return strings.Join(segments, factsSep)
+}
+
+func compactionLastFact(facts Facts, text *renderer) string {
+	if last := facts.Compaction; last != nil {
+		return text.key(clitext.HealthCompactLast, clitext.Params{
+			clitext.ParamOutcome: text.outcome(last.Outcome),
+			clitext.ParamDate:    compactionDate(last.At),
+		})
+	}
+	if facts.CompactionUnknown {
+		return text.key(clitext.HealthCompactUnknown, nil)
+	}
+	return text.key(clitext.HealthCompactNever, nil)
+}
+
+func compactionKeyFact(key *CompactionKey, text *renderer) string {
+	if key.Present {
+		return text.key(clitext.HealthCompactKeyOn, clitext.Params{clitext.ParamName: key.Env})
+	}
+	return text.key(clitext.HealthCompactKeyOff, clitext.Params{clitext.ParamName: key.Env})
+}
+
+func compactionNote(note string, text *renderer) string {
+	if note == "" {
+		return text.key(clitext.HealthCompactNoNote, nil)
+	}
+	return note
+}
+
+func compactionDate(at time.Time) string {
+	return at.Local().Format(time.DateTime)
 }
 
 func (r *renderer) outcome(outcome contracts.CompactOutcome) string {

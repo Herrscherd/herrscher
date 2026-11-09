@@ -4194,6 +4194,32 @@
     "other": "durée moyenne {{.Duration}}"
   },
   {
+    "id": "cli.compaction.jev_share",
+    "description": "Rapport de compaction : la part des compactions Jev réussies (terminées ou courtes)",
+    "other": "Jev réussie {{.Percent}} ({{.Succeeded}} sur {{.Count}})"
+  },
+  {
+    "id": "cli.compaction.jev_behind",
+    "description": "Rapport de compaction : la part des sessions où l'étage backend a dû prendre le relais de Jev",
+    "other": "backend derrière Jev dans {{.Percent}} des sessions ({{.Behind}} sur {{.Sessions}})"
+  },
+  {
+    "id": "cli.compaction.money",
+    "description": "Rapport de compaction : l'économie estimée d'un étage, en dollars",
+    "other": "économie estimée {{.Money}}"
+  },
+  {
+    "id": "cli.compaction.money_unknown",
+    "description": "Rapport de compaction : l'économie d'un étage quand aucun tarif n'est connu pour son modèle",
+    "other": "économie : tarif inconnu"
+  },
+  {
+    "id": "cli.compaction.money_partial",
+    "description": "Rapport de compaction : combien de compactions d'un étage n'ont pas de tarif connu sur le total",
+    "one": "tarif inconnu pour 1 sur {{.Runs}}",
+    "other": "tarif inconnu pour {{.Count}} sur {{.Runs}}"
+  },
+  {
     "id": "cli.compaction.outcome.done",
     "description": "Résultat de compaction : l'étage a assez compacté pour arrêter la pile",
     "other": "terminée"
@@ -4232,6 +4258,31 @@
     "id": "cli.health.facts.compact_partial",
     "description": "Santé : une partie du journal d'usage n'a pas pu être lue, les faits de l'étage peuvent être partiels",
     "other": "données partielles, une partie du journal d'usage n'a pas pu être lue"
+  },
+  {
+    "id": "cli.health.facts.compact_reply",
+    "description": "Santé : la dernière compaction réussie d'un étage, son résultat et sa date",
+    "other": "dernière réponse : {{.Outcome}}, {{.Date}}"
+  },
+  {
+    "id": "cli.health.facts.compact_error",
+    "description": "Santé : la dernière compaction échouée d'un étage, sa date et sa note d'erreur",
+    "other": "dernière erreur : {{.Date}}, {{.Note}}"
+  },
+  {
+    "id": "cli.health.facts.compact_error_no_note",
+    "description": "Santé : la note d'une compaction échouée quand aucun détail n'a été enregistré",
+    "other": "aucun détail"
+  },
+  {
+    "id": "cli.health.facts.compact_key_present",
+    "description": "Santé : la clé d'API d'un compacteur est présente dans l'environnement, son nom seulement",
+    "other": "clé {{.Name}} présente"
+  },
+  {
+    "id": "cli.health.facts.compact_key_absent",
+    "description": "Santé : la clé d'API d'un compacteur est absente de l'environnement, son nom seulement",
+    "other": "clé {{.Name}} absente"
   },
   {
     "id": "cli.health.facts.compact_unknown",

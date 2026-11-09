@@ -359,7 +359,7 @@ func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.Com
 	}
 	d.fanOut(ctx, contracts.Event{T: eventCompactStarted, Value: trigger.String(), Tokens: d.turnReading})
 	result, err := contracts.RunCompactStack(ctx, stages, req, d.compactionProgress(ctx))
-	d.recordCompaction(result.StageStats)
+	d.recordCompaction(result.StageStats, err)
 	if err != nil {
 		d.failCompaction(ctx, trigger, err)
 		return contracts.CompactResult{}, err

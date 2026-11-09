@@ -4194,6 +4194,32 @@
     "other": "average {{.Duration}}"
   },
   {
+    "id": "cli.compaction.jev_share",
+    "description": "Compaction report: the share of Jev compactions that succeeded (done or short)",
+    "other": "Jev succeeded {{.Percent}} ({{.Succeeded}} of {{.Count}})"
+  },
+  {
+    "id": "cli.compaction.jev_behind",
+    "description": "Compaction report: the share of sessions where the backend stage had to run after Jev",
+    "other": "backend behind Jev in {{.Percent}} of sessions ({{.Behind}} of {{.Sessions}})"
+  },
+  {
+    "id": "cli.compaction.money",
+    "description": "Compaction report: the estimated saving of a stage, in dollars",
+    "other": "estimated saving {{.Money}}"
+  },
+  {
+    "id": "cli.compaction.money_unknown",
+    "description": "Compaction report: the saving of a stage when no price is known for its model",
+    "other": "saving: unknown price"
+  },
+  {
+    "id": "cli.compaction.money_partial",
+    "description": "Compaction report: how many runs of a stage have no known price, out of the total",
+    "one": "unknown price for 1 of {{.Runs}}",
+    "other": "unknown price for {{.Count}} of {{.Runs}}"
+  },
+  {
     "id": "cli.compaction.outcome.done",
     "description": "Compaction outcome: the stage compacted enough to stop the stack",
     "other": "done"
@@ -4232,6 +4258,31 @@
     "id": "cli.health.facts.compact_partial",
     "description": "Health: part of the usage ledger could not be read, so the facts of the stage may be partial",
     "other": "partial data, part of the usage ledger could not be read"
+  },
+  {
+    "id": "cli.health.facts.compact_reply",
+    "description": "Health: the last successful compaction run of a stage, its outcome and date",
+    "other": "last reply: {{.Outcome}}, {{.Date}}"
+  },
+  {
+    "id": "cli.health.facts.compact_error",
+    "description": "Health: the last failed compaction run of a stage, its date and error note",
+    "other": "last error: {{.Date}}, {{.Note}}"
+  },
+  {
+    "id": "cli.health.facts.compact_error_no_note",
+    "description": "Health: the note of a failed compaction run when no detail was recorded",
+    "other": "no detail"
+  },
+  {
+    "id": "cli.health.facts.compact_key_present",
+    "description": "Health: the API key of a compactor is set in the environment, its name only",
+    "other": "key {{.Name}} present"
+  },
+  {
+    "id": "cli.health.facts.compact_key_absent",
+    "description": "Health: the API key of a compactor is missing from the environment, its name only",
+    "other": "key {{.Name}} absent"
   },
   {
     "id": "cli.health.facts.compact_unknown",

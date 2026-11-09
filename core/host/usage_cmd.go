@@ -152,7 +152,7 @@ func (q usageQuery) matches(vendor, account string) bool {
 }
 
 func (q usageQuery) keeps(record usage.Record) bool {
-	return record.Compaction != nil || q.matches(record.Vendor, record.Account)
+	return q.matches(record.Vendor, record.Account)
 }
 
 func (s *usageSource) run(ctx context.Context, query usageQuery) usage.Snapshot {
@@ -162,6 +162,7 @@ func (s *usageSource) run(ctx context.Context, query usageQuery) usage.Snapshot 
 	}
 	now := s.ledger.Now()
 	records, notes := s.withTranscripts(records, now.Add(-query.rng.Span()))
+	s.priceCompactions(records)
 	records = slices.DeleteFunc(records, func(record usage.Record) bool {
 		return !query.keeps(record)
 	})
@@ -177,6 +178,14 @@ func (s *usageSource) run(ctx context.Context, query usageQuery) usage.Snapshot 
 		Unreadable:         notes.unreadable,
 		PricesMissing:      !notes.priced,
 	}
+}
+
+func (s *usageSource) priceCompactions(records []usage.Record) {
+	var book usage.PriceBook
+	if s.prices != nil {
+		book = s.prices.Book()
+	}
+	book.PriceCompactions(records)
 }
 
 type transcriptState struct {

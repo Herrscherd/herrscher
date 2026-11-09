@@ -2,6 +2,7 @@ package host
 
 import (
 	"log/slog"
+	"strconv"
 	"time"
 	"unicode/utf8"
 
@@ -12,21 +13,29 @@ import (
 
 const (
 	maxStageRunes         = 64
+	maxNoteRunes          = 160
 	maxCompactionDuration = 24 * time.Hour
 )
 
-func (d *sessionDriver) recordCompaction(stats []contracts.CompactStats) {
+func (d *sessionDriver) recordCompaction(stats []contracts.CompactStats, runErr error) {
 	if d.sink.Usage == nil || len(stats) == 0 {
 		return
 	}
 	when := time.Now().UTC()
+	passage := strconv.FormatInt(when.UnixNano(), 36)
+	model := d.modelNow().model
 	records := make([]usage.Record, 0, len(stats))
 	for index := range stats {
 		if _, err := stats[index].Outcome.MarshalText(); err != nil {
 			slog.Warn("compaction outcome not recorded", "stage", boundedStage(stats[index].Stage), "err", err)
 			continue
 		}
-		records = append(records, usage.Record{Time: when, Session: d.name, Compaction: compactionUsage(stats[index])})
+		entry := compactionUsage(stats[index])
+		entry.Passage = passage
+		if entry.Outcome == contracts.CompactFailed {
+			entry.Note = failureNote(runErr)
+		}
+		records = append(records, usage.Record{Time: when, Session: d.name, Model: model, Compaction: entry})
 	}
 	if len(records) > 0 {
 		d.sink.Usage(records)
@@ -51,9 +60,20 @@ func compactionUsage(stats contracts.CompactStats) *usage.Compaction {
 	}
 }
 
-func boundedStage(stage string) string {
-	if utf8.RuneCountInString(stage) <= maxStageRunes {
-		return stage
+func failureNote(err error) string {
+	if err == nil {
+		return ""
 	}
-	return string([]rune(stage)[:maxStageRunes])
+	return boundedText(err.Error(), maxNoteRunes)
+}
+
+func boundedStage(stage string) string {
+	return boundedText(stage, maxStageRunes)
+}
+
+func boundedText(text string, limit int) string {
+	if utf8.RuneCountInString(text) <= limit {
+		return text
+	}
+	return string([]rune(text)[:limit])
 }

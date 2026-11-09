@@ -4164,7 +4164,8 @@
   {
     "id": "cli.compaction.calls",
     "description": "Compaction report: the calls examined, kept, truncated and pruned",
-    "other": "{{.Calls}} calls examined, {{.Kept}} kept, {{.Truncated}} truncated, {{.Pruned}} pruned"
+    "one": "{{.Count}} call examined, {{.Kept}} kept, {{.Truncated}} truncated, {{.Pruned}} pruned",
+    "other": "{{.Count}} calls examined, {{.Kept}} kept, {{.Truncated}} truncated, {{.Pruned}} pruned"
   },
   {
     "id": "cli.compaction.chars",
@@ -4179,7 +4180,8 @@
   {
     "id": "cli.compaction.requests",
     "description": "Compaction report: the model requests of a stage and their tokens",
-    "other": "{{.Requests}} requests, {{.Tokens}} request tokens"
+    "one": "{{.Count}} request, {{.Tokens}} request tokens",
+    "other": "{{.Count}} requests, {{.Tokens}} request tokens"
   },
   {
     "id": "cli.compaction.average",

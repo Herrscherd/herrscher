@@ -26,13 +26,11 @@ const (
 	ParamOutcome   = "Outcome"
 	ParamDate      = "Date"
 	ParamLabel     = "Label"
-	ParamCalls     = "Calls"
 	ParamKept      = "Kept"
 	ParamTruncated = "Truncated"
 	ParamPruned    = "Pruned"
 	ParamPercent   = "Percent"
 	ParamTokens    = "Tokens"
-	ParamRequests  = "Requests"
 )
 
 // CompactOutcomeKey names the text of a compaction outcome, the zero value naming none.
@@ -52,10 +50,10 @@ func compactionKeys() map[Key][]string {
 		CompactionEmpty:        nil,
 		CompactionRuns:         {ParamCount},
 		CompactionOutcomeCount: {ParamLabel, ParamCount},
-		CompactionCalls:        {ParamCalls, ParamKept, ParamTruncated, ParamPruned},
+		CompactionCalls:        {ParamCount, ParamKept, ParamTruncated, ParamPruned},
 		CompactionChars:        {ParamPercent},
 		CompactionSaved:        {ParamTokens},
-		CompactionRequests:     {ParamRequests, ParamTokens},
+		CompactionRequests:     {ParamCount, ParamTokens},
 		CompactionAverage:      {ParamDuration},
 		CompactionOutcomeDone:  nil,
 		CompactionOutcomeShort: nil,

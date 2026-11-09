@@ -38,7 +38,7 @@ func compactionBlock(stage StageUsage, text *renderer) []string {
 		termpaint.Paint(text.pal.Accent, stage.Stage),
 		"  " + text.text(clitext.CompactionRuns, clitext.Params{clitext.ParamCount: stage.Runs}) + summarySep + outcomeLine(stage, text),
 		"  " + text.text(clitext.CompactionCalls, clitext.Params{
-			clitext.ParamCalls:     stage.Calls,
+			clitext.ParamCount:     stage.Calls,
 			clitext.ParamKept:      stage.Kept,
 			clitext.ParamTruncated: stage.Truncated,
 			clitext.ParamPruned:    stage.Pruned,
@@ -46,8 +46,8 @@ func compactionBlock(stage StageUsage, text *renderer) []string {
 		"  " + text.text(clitext.CompactionChars, clitext.Params{clitext.ParamPercent: formatPercent(lang, stage.CharsRemoved())}) +
 			summarySep + text.text(clitext.CompactionSaved, clitext.Params{clitext.ParamTokens: formatTokens(lang, stage.TokensRemoved, text)}),
 		"  " + text.text(clitext.CompactionRequests, clitext.Params{
-			clitext.ParamRequests: stage.Requests,
-			clitext.ParamTokens:   formatTokens(lang, stage.RequestTokens, text),
+			clitext.ParamCount:  stage.Requests,
+			clitext.ParamTokens: formatTokens(lang, stage.RequestTokens, text),
 		}) + summarySep + text.text(clitext.CompactionAverage, clitext.Params{clitext.ParamDuration: stage.AverageDuration().Round(time.Millisecond).String()}),
 	}
 }

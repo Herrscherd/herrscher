@@ -220,6 +220,11 @@
     "other": "compactStack \"{{.Name}}\" : {{.Detail}}. Le démon ne démarre pas tant que cette étape échoue : corrige-la ou retire-la de compactStack, puis herrscher service restart"
   },
   {
+    "id": "compaction.stage_trigger",
+    "description": "Le seuil de déclenchement d'une étape de la pile de compaction est hors de 0 à 100, Name nomme l'étape et Percent porte la valeur ; le démon ne démarre pas tant qu'il est invalide",
+    "other": "compactStack \"{{.Name}}\" : seuil de déclenchement {{.Percent}} hors de 0 à 100. Le démon ne démarre pas tant que ce seuil est invalide : corrige-le dans l'étape, puis herrscher service restart"
+  },
+  {
     "id": "coordination.wrap",
     "description": "A coordination failure, Detail carries the cause",
     "other": "coordination : {{.Detail}}"

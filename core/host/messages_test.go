@@ -104,6 +104,7 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"compaction.at":                 {"Detail"},
 		"compaction.stack":              {"Detail"},
 		"compaction.stack_named":        {"Detail", "Name"},
+		"compaction.stage_trigger":      {"Name", "Percent"},
 		"coordination.wrap":             {"Detail"},
 		"coordination.refused":          {"Detail"},
 		"coordination.create":           {"Detail", "Name"},

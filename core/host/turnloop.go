@@ -1163,9 +1163,19 @@ const (
 )
 
 func (d *sessionDriver) sendReplyFiles(ctx context.Context, index int, gateway contracts.GatewaySet, sender contracts.FileSender, files []contracts.OutboundFile) {
-	for _, batch := range sendBatches(files, outboundSize) {
+	batches := sendBatches(files, outboundSize)
+	for position, batch := range batches {
+		if ctx.Err() != nil {
+			d.noticeUnsentFiles(ctx, index, gateway, slices.Concat(batches[position:]...))
+			return
+		}
 		d.sendFileBatch(ctx, index, gateway, sender, batch)
 	}
+}
+
+func (d *sessionDriver) noticeUnsentFiles(ctx context.Context, index int, gateway contracts.GatewaySet, files []contracts.OutboundFile) {
+	notice := d.hostText("outbound.failed", map[string]any{namesParam: d.noticeNames(fileNames(files))})
+	d.emitToGateway(ctx, index, gateway, d.stamp(contracts.Event{T: eventStatus, Text: notice}))
 }
 
 func (d *sessionDriver) sendFileBatch(ctx context.Context, index int, gateway contracts.GatewaySet, sender contracts.FileSender, batch []contracts.OutboundFile) {
@@ -1174,8 +1184,7 @@ func (d *sessionDriver) sendFileBatch(ctx context.Context, index int, gateway co
 	defer cancel()
 	if _, err := sender.SendFiles(sendCtx, conv, "", "", batch); err != nil {
 		slog.Warn("reply files not sent", "gateway", conv.Gateway, "err", err)
-		notice := d.hostText("outbound.failed", map[string]any{namesParam: d.noticeNames(fileNames(batch))})
-		d.emitToGateway(ctx, index, gateway, d.stamp(contracts.Event{T: eventStatus, Text: notice}))
+		d.noticeUnsentFiles(ctx, index, gateway, batch)
 	}
 }
 
@@ -1201,6 +1210,7 @@ func sendBatches(files []contracts.OutboundFile, sizeOf func(contracts.OutboundF
 func outboundSize(file contracts.OutboundFile) int64 {
 	info, err := os.Stat(file.Path)
 	if err != nil {
+		slog.Warn("outbound file not measured", "file", file.Name, "err", err)
 		return unmeasuredBytes
 	}
 	return info.Size()

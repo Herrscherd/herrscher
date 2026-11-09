@@ -347,13 +347,57 @@ func TestFailedBatchNamesOnlyItsFiles(t *testing.T) {
 	}
 }
 
+func TestFailedFirstBatchStillSendsTheNextOne(t *testing.T) {
+	root := t.TempDir()
+	dir, err := outbox.NewTurnDir(root, "chan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := outboundFiles(t, dir, filesPerSendBatch+1)
+	gw := &batchFileGateway{failing: "a0.png"}
+	d := newOutboundDriver([]contracts.Gateway{gw}, root)
+
+	d.sendReplyFiles(context.Background(), 0, d.gateways[0], gw, files)
+
+	if len(gw.batches) != 2 || !slices.Equal(gw.batches[1], []string{"a10.png"}) {
+		t.Fatalf("batches = %q, want the second batch sent after the first failed", gw.batches)
+	}
+	if len(gw.routed) != 1 || strings.Contains(gw.routed[0].Text, "a10.png") {
+		t.Fatalf("routed = %+v, want one notice naming only the first batch", gw.routed)
+	}
+}
+
+func TestCancelledTurnNamesTheRemainingFilesOnce(t *testing.T) {
+	root := t.TempDir()
+	dir, err := outbox.NewTurnDir(root, "chan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := outboundFiles(t, dir, filesPerSendBatch+1)
+	gw := &batchFileGateway{}
+	d := newOutboundDriver([]contracts.Gateway{gw}, root)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	d.sendReplyFiles(ctx, 0, d.gateways[0], gw, files)
+
+	if len(gw.batches) != 0 {
+		t.Fatalf("batches = %q, want nothing sent after cancellation", gw.batches)
+	}
+	if len(gw.routed) != 1 || !strings.Contains(gw.routed[0].Text, "a0.png") || !strings.Contains(gw.routed[0].Text, "a10.png") {
+		t.Fatalf("routed = %+v, want one notice naming every remaining file", gw.routed)
+	}
+}
+
 func TestSendBatchesCutsAtTenFilesAndNineMiB(t *testing.T) {
 	cases := []struct {
 		name  string
 		sizes []int64
 		want  []int
 	}{
+		{name: "no file makes no batch", sizes: nil, want: []int{}},
 		{name: "ten small files stay in one batch", sizes: repeatedSizes(10, 1), want: []int{10}},
+		{name: "exactly nine MiB stays in one batch", sizes: []int64{bytesPerSendBatch - 1, 1}, want: []int{2}},
 		{name: "an eleventh file opens a second batch", sizes: repeatedSizes(11, 1), want: []int{10, 1}},
 		{name: "bytes past nine MiB open a second batch", sizes: []int64{bytesPerSendBatch - 1, 2, 1}, want: []int{1, 2}},
 		{name: "a file over nine MiB travels alone", sizes: []int64{1, bytesPerSendBatch + 1, 1}, want: []int{1, 1, 1}},

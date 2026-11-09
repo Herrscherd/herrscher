@@ -487,8 +487,6 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 	if err != nil {
 		return createRequest{}, err
 	}
-	chosenAccount := explicitAccount != "" || h.agentAccount(runtime.agent) != ""
-	account, accountNotice := h.balanceAccount(ctx, runtime, hostName, planned, chosenAccount)
 	if cycleErr := checkParentCycle(name, options.parent, h.st.SnapshotSessions()); cycleErr != nil {
 		return createRequest{}, cycleErr
 	}
@@ -501,6 +499,8 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 	if err != nil {
 		return createRequest{}, err
 	}
+	chosenAccount := explicitAccount != "" || h.agentAccount(runtime.agent) != ""
+	account, accountNotice := h.balanceAccount(ctx, runtime, hostName, planned, chosenAccount)
 	return createRequest{
 		lang:     lang,
 		name:     name,

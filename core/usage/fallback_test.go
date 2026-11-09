@@ -34,6 +34,13 @@ func TestChooseAccount(t *testing.T) {
 			},
 			want: Choice{Outcome: ChoiceKept, From: "work"},
 		},
+		"only account spent says no account has quota": {
+			planned: "work",
+			reads: []AccountLimits{
+				readAccount("claude", "work", false, LimitsReady, 100),
+			},
+			want: Choice{Outcome: ChoiceNoQuota, From: "work"},
+		},
 		"planned spent, next account takes over": {
 			planned: "work",
 			reads: []AccountLimits{

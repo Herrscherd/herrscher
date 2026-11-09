@@ -4275,6 +4275,51 @@
     "other": "aucun détail"
   },
   {
+    "id": "cli.health.facts.compact_note.bridge_gone",
+    "description": "Santé : la cause d'une note de compaction échouée, en clair",
+    "other": "le relais s'est fermé pendant la compaction"
+  },
+  {
+    "id": "cli.health.facts.compact_note.no_compactor_factory",
+    "description": "Santé : la cause d'une note de compaction échouée, en clair",
+    "other": "le plugin de compaction ne fournit pas de fabrique Compactor"
+  },
+  {
+    "id": "cli.health.facts.compact_note.nil_compactor",
+    "description": "Santé : la cause d'une note de compaction échouée, en clair",
+    "other": "la fabrique du plugin de compaction n'a rendu aucun étage"
+  },
+  {
+    "id": "cli.health.facts.compact_note.no_compactor_plugin",
+    "description": "Santé : la cause d'une note de compaction échouée, en clair",
+    "other": "aucun plugin de compaction n'est enregistré sous ce nom"
+  },
+  {
+    "id": "cli.health.facts.compact_note.no_history_port",
+    "description": "Santé : la cause d'une note de compaction échouée, en clair",
+    "other": "le backend déclare Capabilities.HistoryEditor mais n'implémente pas le port"
+  },
+  {
+    "id": "cli.health.facts.compact_note.history_timeout",
+    "description": "Santé : la cause d'une note de compaction échouée, en clair",
+    "other": "le relais n'a pas répondu à temps à un appel sur l'historique"
+  },
+  {
+    "id": "cli.health.facts.compact_note.history_too_large",
+    "description": "Santé : la cause d'une note de compaction échouée, en clair",
+    "other": "l'historique de la session est trop volumineux pour être modifié"
+  },
+  {
+    "id": "cli.health.facts.compact_note.unknown_failure",
+    "description": "Santé : la cause d'une note de compaction échouée, en clair",
+    "other": "l'étage a échoué pour une raison sans code propre, son détail n'est pas conservé"
+  },
+  {
+    "id": "cli.health.facts.compact_note.fell_back",
+    "description": "Santé : la cause d'une note de compaction échouée, en clair",
+    "other": "l'étage a échoué sans erreur"
+  },
+  {
     "id": "cli.health.facts.compact_key_present",
     "description": "Santé : la clé d'API d'un compacteur est présente dans l'environnement, son nom seulement",
     "other": "clé {{.Name}} présente"

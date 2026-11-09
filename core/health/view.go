@@ -3,8 +3,10 @@ package health
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
@@ -230,7 +232,7 @@ func compactionFacts(facts Facts, text *renderer) string {
 	if failure := facts.CompactionFailed; failure != nil {
 		segments = append(segments, text.key(clitext.HealthCompactError, clitext.Params{
 			clitext.ParamDate: compactionDate(failure.At),
-			clitext.ParamNote: compactionNote(failure.Note, text),
+			clitext.ParamNote: compactionNote(failure, text),
 		}))
 	}
 	if facts.CompactionPartial {
@@ -259,11 +261,28 @@ func compactionKeyFact(key *CompactionKey, text *renderer) string {
 	return text.key(clitext.HealthCompactKeyOff, clitext.Params{clitext.ParamName: key.Env})
 }
 
-func compactionNote(note string, text *renderer) string {
+func compactionNote(failure *Compaction, text *renderer) string {
+	if failure.Key != "" {
+		return text.key(failure.Key, nil)
+	}
+	note := sanitizeNote(failure.Note)
 	if note == "" {
 		return text.key(clitext.HealthCompactNoNote, nil)
 	}
 	return note
+}
+
+var escapeSequence = regexp.MustCompile(`\x1b(?:\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]|[\x40-\x5f])`)
+
+func sanitizeNote(note string) string {
+	return strings.TrimSpace(strings.Map(dropControl, escapeSequence.ReplaceAllString(note, "")))
+}
+
+func dropControl(character rune) rune {
+	if unicode.IsControl(character) {
+		return -1
+	}
+	return character
 }
 
 func compactionDate(at time.Time) string {

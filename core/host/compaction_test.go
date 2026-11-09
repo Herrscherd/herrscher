@@ -243,7 +243,7 @@ func TestCompactFailureTextIsKeptWhenNoGatewayIsLinked(t *testing.T) {
 	})
 	f.driver.requestCompaction("", contracts.Conversation{})
 	failed := waitEmitted(t, f, eventCompactFailed)
-	_, err := f.driver.compactStages()
+	_, err := f.driver.compactStages(stageNotes{})
 	requireRenderedText(t, failed.Text, contracts.NoticeOf(err), i18n.French)
 	expectNoFrame(t, f)
 }

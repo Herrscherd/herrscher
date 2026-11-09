@@ -158,6 +158,12 @@ func TestCompactionUsageBoundsWhatTheBackendSends(t *testing.T) {
 	}
 }
 
+func recordedFailure(stage, note string) *usage.Compaction {
+	entry := recordedCompaction(stage, contracts.CompactFailed)
+	entry.Note = note
+	return entry
+}
+
 func TestRecordCompactionKeepsOnlyValidStageStats(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -173,7 +179,7 @@ func TestRecordCompactionKeepsOnlyValidStageStats(t *testing.T) {
 		{
 			name:  "a failed stage is recorded with its outcome",
 			stats: []contracts.CompactStats{stageStats("jev", contracts.CompactFailed)},
-			want:  []*usage.Compaction{recordedCompaction("jev", contracts.CompactFailed)},
+			want:  []*usage.Compaction{recordedFailure("jev", fellBackNote)},
 		},
 		{
 			name: "a stage with an invalid outcome is left out, the others kept",
@@ -306,7 +312,7 @@ func TestCompactionStageOutcomeReachesTheUsageLedger(t *testing.T) {
 		note    string
 	}{
 		{name: "a successful stage", outcome: contracts.CompactDone, kind: eventCompactDone},
-		{name: "a failed stage", err: errors.New("boom"), outcome: contracts.CompactFailed, kind: eventCompactFailed, note: `compaction stage "custom": boom`},
+		{name: "a failed stage", err: errors.New("boom"), outcome: contracts.CompactFailed, kind: eventCompactFailed, note: unknownFailureNote},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

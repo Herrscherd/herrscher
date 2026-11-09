@@ -2,6 +2,7 @@ package usage
 
 import (
 	"math"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +28,14 @@ func TestJevUsageCountsRunsSuccessesAndSessionsBehind(t *testing.T) {
 		stageRecord(at, "claude", "s4", "p4", contracts.CompactStageBackend, contracts.CompactDone),
 		stageRecord(at, "codex", "s5", "p5", jevStage, contracts.CompactDone),
 		stageRecord(at, "codex", "s5", "p5", contracts.CompactStageBackend, contracts.CompactDone),
+		stageRecord(at, "claude", "s6", "p6", jevStage, contracts.CompactSkipped),
+		stageRecord(at, "claude", "s6", "p6", contracts.CompactStageBackend, contracts.CompactDone),
+		stageRecord(at, "claude", "s7", "p7", jevStage, contracts.CompactDryRun),
+		stageRecord(at, "claude", "s7", "p7", contracts.CompactStageBackend, contracts.CompactDone),
+		stageRecord(at, "claude", "s8", "p8", jevStage, contracts.CompactDone),
+		stageRecord(at, "claude", "s8", "p8", contracts.CompactStageBackend, contracts.CompactSkipped),
+		stageRecord(at, "claude", "s9", "p9", jevStage, contracts.CompactFailed),
+		stageRecord(at, "claude", "s9", "p9", contracts.CompactStageBackend, contracts.CompactDryRun),
 	}
 	tests := []struct {
 		name string
@@ -35,12 +44,12 @@ func TestJevUsageCountsRunsSuccessesAndSessionsBehind(t *testing.T) {
 	}{
 		{
 			name: "every vendor counted when the key is zero",
-			want: JevUsage{Runs: 4, Succeeded: 3, Sessions: 4, Behind: 2},
+			want: JevUsage{Runs: 6, Succeeded: 4, Sessions: 6, Behind: 3},
 		},
 		{
 			name: "only the vendor of the key counted",
 			key:  AccountKey{Vendor: "claude"},
-			want: JevUsage{Runs: 3, Succeeded: 2, Sessions: 3, Behind: 1},
+			want: JevUsage{Runs: 5, Succeeded: 3, Sessions: 5, Behind: 2},
 		},
 	}
 	for _, tc := range tests {
@@ -49,6 +58,25 @@ func TestJevUsageCountsRunsSuccessesAndSessionsBehind(t *testing.T) {
 				t.Fatalf("jevUsages = %+v, want %+v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestJevUsageDoesNotDependOnTheOrderOfTheRecords(t *testing.T) {
+	at := testNow().Add(-time.Hour)
+	records := []Record{
+		stageRecord(at, "claude", "s1", "p1", jevStage, contracts.CompactDone),
+		stageRecord(at, "claude", "s1", "p1", contracts.CompactStageBackend, contracts.CompactShort),
+		stageRecord(at, "claude", "s2", "p2", jevStage, contracts.CompactFailed),
+		stageRecord(at, "claude", "s2", "p2", contracts.CompactStageBackend, contracts.CompactDone),
+	}
+	reversed := slices.Clone(records)
+	slices.Reverse(reversed)
+	want := JevUsage{Runs: 2, Succeeded: 1, Sessions: 2, Behind: 2}
+	if got := jevUsages(records, time.Time{}, AccountKey{}); got != want {
+		t.Fatalf("in order: jevUsages = %+v, want %+v", got, want)
+	}
+	if got := jevUsages(reversed, time.Time{}, AccountKey{}); got != want {
+		t.Fatalf("reversed: jevUsages = %+v, want %+v", got, want)
 	}
 }
 

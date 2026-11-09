@@ -486,7 +486,10 @@ default is the limits of each account:
   requests, their average duration and the estimated saving. Above the stages, the
   Jev share gives the part of Jev runs that succeeded (done or short), and the part of
   sessions where the backend stage ran behind Jev, linked to the Jev run by the
-  passage both stages share.
+  passage both stages share. A Jev run is an attempt: its outcome is done, short or
+  failed, so a dry run or a skipped Jev is in neither count. A session counts once it
+  has an attempt. The backend stage counts as behind Jev when its outcome is anything
+  but skipped, so a dry run of the backend does count.
 
 `--range` takes `24h`, `7d`, `30d` or `90d`, and `--account` and `--vendor` narrow the
 figures to one account or one vendor, with the same rule as for turns: a compaction is
@@ -500,6 +503,17 @@ rate of the session's model in the LiteLLM price list, counted once per compacti
 session model is stored with the record when the compaction runs. A model with no known
 price, or with no cache-read rate, shows `unknown price` and never `$0`. When only some
 compactions are unpriced, the line gives the amount and how many runs have no price.
+
+The fast speed is not priced for compactions. The turns are priced at the fast rate
+when their transcript says the fast tier was used, but a compaction record carries no
+speed: the session does not expose it to the host when the compaction runs. The saving
+is therefore priced at the standard cache-read rate even when the session ran fast.
+
+A failed compaction keeps the class of its error in the ledger, never its text: an
+unknown error is recorded as `unknown failure`, a stage that failed without an error
+as `fell back`. `herrscher health` shows that class in words. A note written by an
+earlier version as free text is shown with its control characters and escape
+sequences removed.
 
 ### Model routing
 

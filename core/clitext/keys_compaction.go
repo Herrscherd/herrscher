@@ -26,6 +26,15 @@ const (
 	HealthCompactNoNote    = "cli.health.facts.compact_error_no_note"
 	HealthCompactKeyOn     = "cli.health.facts.compact_key_present"
 	HealthCompactKeyOff    = "cli.health.facts.compact_key_absent"
+	HealthNoteBridgeGone   = "cli.health.facts.compact_note.bridge_gone"
+	HealthNoteNoFactory    = "cli.health.facts.compact_note.no_compactor_factory"
+	HealthNoteNilCompactor = "cli.health.facts.compact_note.nil_compactor"
+	HealthNoteNoPlugin     = "cli.health.facts.compact_note.no_compactor_plugin"
+	HealthNoteNoHistory    = "cli.health.facts.compact_note.no_history_port"
+	HealthNoteHistoryTime  = "cli.health.facts.compact_note.history_timeout"
+	HealthNoteHistoryBig   = "cli.health.facts.compact_note.history_too_large"
+	HealthNoteUnknown      = "cli.health.facts.compact_note.unknown_failure"
+	HealthNoteFellBack     = "cli.health.facts.compact_note.fell_back"
 	CompactionJevShare     = "cli.compaction.jev_share"
 	CompactionJevBehind    = "cli.compaction.jev_behind"
 	CompactionMoney        = "cli.compaction.money"
@@ -85,6 +94,15 @@ func compactionKeys() map[Key][]string {
 		HealthCompactNoNote:    nil,
 		HealthCompactKeyOn:     {ParamName},
 		HealthCompactKeyOff:    {ParamName},
+		HealthNoteBridgeGone:   nil,
+		HealthNoteNoFactory:    nil,
+		HealthNoteNilCompactor: nil,
+		HealthNoteNoPlugin:     nil,
+		HealthNoteNoHistory:    nil,
+		HealthNoteHistoryTime:  nil,
+		HealthNoteHistoryBig:   nil,
+		HealthNoteUnknown:      nil,
+		HealthNoteFellBack:     nil,
 		CompactionJevShare:     {ParamSucceeded, ParamCount, ParamPercent},
 		CompactionJevBehind:    {ParamBehind, ParamSessions, ParamPercent},
 		CompactionMoney:        {ParamMoney},

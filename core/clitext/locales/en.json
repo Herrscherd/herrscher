@@ -4275,6 +4275,51 @@
     "other": "no detail"
   },
   {
+    "id": "cli.health.facts.compact_note.bridge_gone",
+    "description": "Health: the cause of a failed compaction note, in words",
+    "other": "the bridge closed during a compaction"
+  },
+  {
+    "id": "cli.health.facts.compact_note.no_compactor_factory",
+    "description": "Health: the cause of a failed compaction note, in words",
+    "other": "the compactor plugin provides no Compactor factory"
+  },
+  {
+    "id": "cli.health.facts.compact_note.nil_compactor",
+    "description": "Health: the cause of a failed compaction note, in words",
+    "other": "the compactor plugin's factory returned no stage"
+  },
+  {
+    "id": "cli.health.facts.compact_note.no_compactor_plugin",
+    "description": "Health: the cause of a failed compaction note, in words",
+    "other": "no compactor plugin is registered under this name"
+  },
+  {
+    "id": "cli.health.facts.compact_note.no_history_port",
+    "description": "Health: the cause of a failed compaction note, in words",
+    "other": "the backend declares Capabilities.HistoryEditor but does not implement the port"
+  },
+  {
+    "id": "cli.health.facts.compact_note.history_timeout",
+    "description": "Health: the cause of a failed compaction note, in words",
+    "other": "the bridge did not answer a history call in time"
+  },
+  {
+    "id": "cli.health.facts.compact_note.history_too_large",
+    "description": "Health: the cause of a failed compaction note, in words",
+    "other": "the history of the session is too large to be edited"
+  },
+  {
+    "id": "cli.health.facts.compact_note.unknown_failure",
+    "description": "Health: the cause of a failed compaction note, in words",
+    "other": "the stage failed for a reason with no code of its own, its detail is not kept"
+  },
+  {
+    "id": "cli.health.facts.compact_note.fell_back",
+    "description": "Health: the cause of a failed compaction note, in words",
+    "other": "the stage failed without an error"
+  },
+  {
     "id": "cli.health.facts.compact_key_present",
     "description": "Health: the API key of a compactor is set in the environment, its name only",
     "other": "key {{.Name}} present"

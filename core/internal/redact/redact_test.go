@@ -18,6 +18,10 @@ func TestOutputMasksSecrets(t *testing.T) {
 		{"gitlab pat", "401 with glpat-ABCDEFGHIJ1234567890", "glpat-ABCDEFGHIJ1234567890", "401"},
 		{"bearer header", "Authorization: Bearer eyJhbGciOi.foo.bar", "eyJhbGciOi.foo.bar", "Bearer"},
 		{"password field", "url?token=abc123&password=hunter2 nope", "hunter2", "nope"},
+		{"api_key query", "GET https://h.test/v1?api_key=XYZ123&a=1 failed", "XYZ123", "failed"},
+		{"apikey query, any case", "url ?APIKEY=ZZZ9 failed", "ZZZ9", "failed"},
+		{"key query", "https://h.test/x?key=KKK99 bad", "KKK99", "bad"},
+		{"x-api-key header", "request headers: X-Api-Key: HDR123 refused", "HDR123", "refused"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -32,6 +36,13 @@ func TestOutputMasksSecrets(t *testing.T) {
 				t.Fatalf("diagnostic context %q lost from %q", c.wantKeep, got)
 			}
 		})
+	}
+}
+
+func TestOutputLeavesNamesThatOnlyEndInKey(t *testing.T) {
+	got := Output([]byte("monkey=banana turkey=dinde"))
+	if got != "monkey=banana turkey=dinde" {
+		t.Fatalf("unrelated pairs altered: %q", got)
 	}
 }
 

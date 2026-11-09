@@ -27,6 +27,8 @@ var rules = []rule{
 	{regexp.MustCompile(`glpat-[A-Za-z0-9_\-]{16,}`), mask},
 	{regexp.MustCompile(`(?i)(bearer\s+)[A-Za-z0-9._\-~+/=]+`), `${1}` + mask},
 	{regexp.MustCompile(`(?i)((?:access_)?token|password|passwd|pwd)=[^\s&"']+`), `${1}=` + mask},
+	{regexp.MustCompile(`(?i)\b(api_?key|key)=[^\s&"']+`), `${1}=` + mask},
+	{regexp.MustCompile(`(?i)(x-api-key:\s*)[^\s"']+`), `${1}` + mask},
 }
 
 // Output masks credential-shaped substrings in b and caps the result length. It

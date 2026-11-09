@@ -7,6 +7,8 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 const (
@@ -42,11 +44,13 @@ type Facts struct {
 	CompactionUnknown   bool
 }
 
-// Compaction is a run of a compaction stage the host recorded, with the note of its
-// error when it failed.
+// Compaction is a run of a compaction stage the host recorded. A failed run carries the
+// clitext key of its error class in Key, or, for a note the host did not classify, the
+// raw note in Note.
 type Compaction struct {
 	At      time.Time
 	Outcome contracts.CompactOutcome
+	Key     clitext.Key
 	Note    string
 }
 

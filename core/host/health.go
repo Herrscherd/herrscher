@@ -13,6 +13,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
 	"github.com/Herrscherd/herrscher/core/accounts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/health"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
@@ -334,8 +335,37 @@ func compactionCheckFacts(name string, history compactionHistory, keyOf func(str
 	return facts
 }
 
+func compactNoteKey(class string) (clitext.Key, bool) {
+	switch class {
+	case "compaction.bridge_gone":
+		return clitext.HealthNoteBridgeGone, true
+	case "compaction.no_compactor_factory":
+		return clitext.HealthNoteNoFactory, true
+	case "compaction.nil_compactor":
+		return clitext.HealthNoteNilCompactor, true
+	case "compaction.no_compactor_plugin":
+		return clitext.HealthNoteNoPlugin, true
+	case "compaction.no_history_port":
+		return clitext.HealthNoteNoHistory, true
+	case "compaction.history_timeout":
+		return clitext.HealthNoteHistoryTime, true
+	case "compaction.history_too_large":
+		return clitext.HealthNoteHistoryBig, true
+	case unknownFailureNote:
+		return clitext.HealthNoteUnknown, true
+	case fellBackNote:
+		return clitext.HealthNoteFellBack, true
+	}
+	return "", false
+}
+
 func compactionOf(run usage.LastCompaction) *health.Compaction {
-	return &health.Compaction{At: run.At, Outcome: run.Outcome, Note: run.Note}
+	entry := &health.Compaction{At: run.At, Outcome: run.Outcome, Note: run.Note}
+	if key, ok := compactNoteKey(run.Note); ok {
+		entry.Key = key
+		entry.Note = ""
+	}
+	return entry
 }
 
 const compactionProbeRange = usage.Range7d

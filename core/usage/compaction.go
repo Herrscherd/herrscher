@@ -63,8 +63,10 @@ func (s StageUsage) AverageDuration() time.Duration {
 	return s.Duration / time.Duration(s.Runs)
 }
 
-// JevUsage is how the Jev stage fared over a period: its runs, how many of them ended
-// done or short, and in how many sessions the backend stage ran after it.
+// JevUsage is how the Jev stage fared over a period. Runs counts the attempts of the
+// stage, the outcomes done, short and failed, and Succeeded those that ended done or
+// short. Sessions counts the sessions with an attempt, and Behind those where the backend
+// stage ran after such an attempt in the same passage, a backend skipped leaving no mark.
 type JevUsage struct {
 	Runs      int `json:"runs"`
 	Succeeded int `json:"succeeded"`
@@ -123,6 +125,10 @@ func succeeded(outcome contracts.CompactOutcome) bool {
 
 func failed(outcome contracts.CompactOutcome) bool {
 	return outcome == contracts.CompactFailed
+}
+
+func attempted(outcome contracts.CompactOutcome) bool {
+	return succeeded(outcome) || failed(outcome)
 }
 
 func latestRuns(records []Record, keep func(contracts.CompactOutcome) bool) map[string]LastCompaction {
@@ -196,13 +202,23 @@ type jevTally struct {
 }
 
 func jevUsages(records []Record, since time.Time, key AccountKey) JevUsage {
-	tally := jevTally{sessions: make(map[string]bool), behind: make(map[string]bool), ran: make(map[passage]bool)}
+	kept := make([]*Record, 0, len(records))
 	for index := range records {
 		record := &records[index]
-		if record.Compaction == nil || record.Time.Before(since) || !key.Matches(record.Vendor, record.Account) {
-			continue
+		if record.Compaction != nil && !record.Time.Before(since) && key.Matches(record.Vendor, record.Account) {
+			kept = append(kept, record)
 		}
-		tally.add(record)
+	}
+	tally := jevTally{sessions: make(map[string]bool), behind: make(map[string]bool), ran: make(map[passage]bool)}
+	for _, record := range kept {
+		if record.Compaction.Stage == jevStage {
+			tally.addJevRun(record)
+		}
+	}
+	for _, record := range kept {
+		if record.Compaction.Stage == contracts.CompactStageBackend {
+			tally.addBackend(record)
+		}
 	}
 	jev := tally.jev
 	jev.Sessions = len(tally.sessions)
@@ -210,25 +226,27 @@ func jevUsages(records []Record, since time.Time, key AccountKey) JevUsage {
 	return jev
 }
 
-func (t *jevTally) add(record *Record) {
-	where := passage{session: record.Session, id: record.Compaction.Passage}
-	switch record.Compaction.Stage {
-	case jevStage:
-		t.addJevRun(record, where)
-	case contracts.CompactStageBackend:
-		if where.id != "" && t.ran[where] {
-			t.behind[record.Session] = true
-		}
+func (t *jevTally) addJevRun(record *Record) {
+	outcome := record.Compaction.Outcome
+	if !attempted(outcome) {
+		return
 	}
-}
-
-func (t *jevTally) addJevRun(record *Record, where passage) {
 	t.jev.Runs++
-	if succeeded(record.Compaction.Outcome) {
+	if succeeded(outcome) {
 		t.jev.Succeeded++
 	}
 	t.sessions[record.Session] = true
-	if where.id != "" {
-		t.ran[where] = true
+	if id := record.Compaction.Passage; id != "" {
+		t.ran[passage{session: record.Session, id: id}] = true
+	}
+}
+
+func (t *jevTally) addBackend(record *Record) {
+	if record.Compaction.Outcome == contracts.CompactSkipped {
+		return
+	}
+	where := passage{session: record.Session, id: record.Compaction.Passage}
+	if where.id != "" && t.ran[where] {
+		t.behind[record.Session] = true
 	}
 }

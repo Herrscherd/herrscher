@@ -13,11 +13,28 @@ import (
 
 const (
 	maxStageRunes         = 64
-	maxNoteRunes          = 160
 	maxCompactionDuration = 24 * time.Hour
+	fellBackNote          = "compaction.fell_back"
+	unknownFailureNote    = "compaction.unknown_failure"
 )
 
-func (d *sessionDriver) recordCompaction(stats []contracts.CompactStats, runErr error) {
+type stageNotes map[string]string
+
+func (n stageNotes) fail(stage string, err error) {
+	if n == nil || err == nil {
+		return
+	}
+	n[stage] = failureClass(err)
+}
+
+func failureClass(err error) string {
+	if key, known := knownCompactFailure(err); known {
+		return key
+	}
+	return unknownFailureNote
+}
+
+func (d *sessionDriver) recordCompaction(stats []contracts.CompactStats, notes stageNotes) {
 	if d.sink.Usage == nil || len(stats) == 0 {
 		return
 	}
@@ -33,13 +50,20 @@ func (d *sessionDriver) recordCompaction(stats []contracts.CompactStats, runErr 
 		entry := compactionUsage(stats[index])
 		entry.Passage = passage
 		if entry.Outcome == contracts.CompactFailed {
-			entry.Note = failureNote(runErr)
+			entry.Note = failureNote(notes[stats[index].Stage])
 		}
 		records = append(records, usage.Record{Time: when, Session: d.name, Model: model, Compaction: entry})
 	}
 	if len(records) > 0 {
 		d.sink.Usage(records)
 	}
+}
+
+func failureNote(class string) string {
+	if class == "" {
+		return fellBackNote
+	}
+	return class
 }
 
 func compactionUsage(stats contracts.CompactStats) *usage.Compaction {
@@ -58,13 +82,6 @@ func compactionUsage(stats contracts.CompactStats) *usage.Compaction {
 		RequestTokens: max(stats.RequestTokens, 0),
 		Duration:      min(max(stats.Duration, 0), maxCompactionDuration),
 	}
-}
-
-func failureNote(err error) string {
-	if err == nil {
-		return ""
-	}
-	return boundedText(err.Error(), maxNoteRunes)
 }
 
 func boundedStage(stage string) string {

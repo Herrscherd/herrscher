@@ -24,6 +24,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
 	"github.com/Herrscherd/herrscher/core/envx"
+	"github.com/Herrscherd/herrscher/core/outbox"
 )
 
 // HomeRef mirrors state.HomeRef so config.json can declare the session home
@@ -51,6 +52,9 @@ type Config struct {
 	// many days are reported as stale. 0 disables stale detection. Unset (zero)
 	// means the built-in default (14) is applied by the caller.
 	SessionMaxIdleDays int `json:"sessionMaxIdleDays,omitempty"`
+	// Largest file, in megabytes, a backend may send with its reply. Zero means the
+	// built-in default (25) is applied by EffectiveOutboundMaxBytes.
+	OutboundFileMaxMB int `json:"outboundFileMaxMB,omitempty"`
 
 	// Declarative runtime defaults (precedence: live state.json > this > empty).
 	Home      *HomeRef `json:"home"`
@@ -83,6 +87,17 @@ type AccountsConfig struct {
 // vendor when the planned one has no quota left.
 func (c Config) AccountFallback() bool {
 	return c.Accounts != nil && c.Accounts.Fallback != nil && *c.Accounts.Fallback
+}
+
+const bytesPerMegabyte int64 = 1 << 20
+
+// EffectiveOutboundMaxBytes is the largest file, in bytes, a reply may carry: the
+// configured megabytes, or the built-in default when none is set.
+func (c Config) EffectiveOutboundMaxBytes() int64 {
+	if c.OutboundFileMaxMB <= 0 {
+		return outbox.DefaultMaxBytes
+	}
+	return int64(c.OutboundFileMaxMB) * bytesPerMegabyte
 }
 
 // DefaultPath returns where the daemon looks for config.json. It sits beside

@@ -21,6 +21,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
+	"github.com/Herrscherd/herrscher/core/outbox"
 	"github.com/Herrscherd/herrscher/core/service"
 )
 
@@ -219,6 +220,10 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	}
 	sessions.compaction = policy
 	sessions.store = store
+	sessions.outboxRoot = outbox.Root(options.StatePath)
+	if purgeErr := outbox.Purge(sessions.outboxRoot, time.Now()); purgeErr != nil {
+		log.Warn("stale turn outboxes not purged", "err", purgeErr)
+	}
 	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, store.Home)}, options, store, sup, instID, options.ContributedCommands, approvals, sessions)
 	if err != nil {
 		return wrapHost(err, "serve.registry", nil)

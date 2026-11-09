@@ -80,6 +80,11 @@
     "other": "cohorte scellée à {{.Node}}"
   },
   {
+    "id": "outbound.refused",
+    "description": "Files a backend rendered for a reply that were refused and not sent; Names lists them",
+    "other": "fichier(s) refusé(s), non envoyé(s) : {{.Names}}"
+  },
+  {
     "id": "coordination.merged",
     "description": "Le coordinateur fusionne la branche d'un worker, Lead nomme la session pilote qui la reçoit",
     "other": "fusion traitée pour {{.Lead}}"

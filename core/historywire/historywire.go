@@ -124,6 +124,7 @@ type editFrame struct {
 	CallID    string                `json:"call_id"`
 	Action    contracts.PruneAction `json:"action"`
 	KeepChars int                   `json:"keep_chars,omitempty"`
+	KeepTail  int                   `json:"keep_tail,omitempty"`
 }
 
 type outcomeFrame struct {
@@ -229,7 +230,7 @@ func DecodeHistory(frames []contracts.Event) (contracts.History, error) {
 func Prune(callID string, edits []contracts.HistoryEdit) (contracts.Event, error) {
 	frames := make([]editFrame, 0, len(edits))
 	for _, edit := range edits {
-		frames = append(frames, editFrame(edit))
+		frames = append(frames, editFrame{CallID: edit.CallID, Action: edit.Action, KeepChars: edit.KeepChars, KeepTail: edit.KeepTail})
 	}
 	text, err := encode(frames)
 	if err != nil {
@@ -249,7 +250,7 @@ func DecodePrune(event contracts.Event) ([]contracts.HistoryEdit, error) {
 	}
 	edits := make([]contracts.HistoryEdit, 0, len(frames))
 	for _, frame := range frames {
-		edits = append(edits, contracts.HistoryEdit(frame))
+		edits = append(edits, contracts.HistoryEdit{CallID: frame.CallID, Action: frame.Action, KeepChars: frame.KeepChars, KeepTail: frame.KeepTail})
 	}
 	return edits, nil
 }

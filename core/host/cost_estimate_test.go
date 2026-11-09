@@ -7,6 +7,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/outbox"
 )
 
 func sonnetRates() modelRates {
@@ -43,7 +44,7 @@ func TestCompleteTurnStoresEstimatedCostInTranscript(t *testing.T) {
 	d.terms = func() modelTerms { return modelTerms{rates: sonnetRates()} }
 	event := contracts.Event{T: "reply", Text: "hello", Done: true, TokensIn: 1000, Tokens: 500}
 
-	d.completeTurn(context.Background(), event, time.Now(), 0)
+	d.completeTurn(context.Background(), event, time.Now(), 0, outbox.Frame{})
 
 	want := (1000*3.0 + 500*15.0) / 1_000_000
 	if len(entries) != 1 || entries[0].Cost != want {

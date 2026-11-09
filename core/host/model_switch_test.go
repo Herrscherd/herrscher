@@ -12,6 +12,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/outbox"
 )
 
 func switchingPlugins() []contracts.Plugin {
@@ -60,7 +61,7 @@ func TestLiveTermsFollowAModelSwitch(t *testing.T) {
 
 	var entries []state.TranscriptEntry
 	d.sink = sessionSink{Transcript: func(e state.TranscriptEntry) { entries = append(entries, e) }}
-	d.completeTurn(context.Background(), contracts.Event{T: "reply", Text: "hi", Done: true, TokensIn: 1000}, time.Now(), 0)
+	d.completeTurn(context.Background(), contracts.Event{T: "reply", Text: "hi", Done: true, TokensIn: 1000}, time.Now(), 0, outbox.Frame{})
 	want := 1000 * 1.0 / 1_000_000
 	if len(entries) != 1 || entries[0].Cost != want {
 		t.Fatalf("estimate after switch = %+v, want one entry costing %v at the small model's price", entries, want)

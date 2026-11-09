@@ -186,6 +186,25 @@ letting it run unattended.
 
 → `architecture/proactive`
 
+### Files a backend sends back
+
+A backend that writes files during a turn, such as a chart or an image, declares
+`FileProducer`. For each of its turns the bridge makes a private directory
+(0700) under the daemon state directory, in `outbox/<session>/`, and hands its
+path to the backend as `Prompt.Outbox`. After the reply, the bridge takes the
+files the backend lists and vets them: each must be a regular file inside that
+directory, and no larger than the limit. At most 10 files a turn are sent, and a
+refused file is named in the reply with a notice, its content never logged.
+
+The limit is 25 MB by default. `outboundFileMaxMB` in `config.json` sets another
+size in megabytes. The daemon sends the reply text and the valid files together
+through the gateway's `SendFiles` when the gateway implements it. A gateway that
+does not gets the text followed by one `name: path` line per file, so the text is
+never sent twice. The turn directory is removed once the reply is delivered, or
+once the turn ends without files. A directory a crash leaves behind is purged at
+the next daemon start when it is older than 24 hours. A backend without
+`FileProducer` gets no outbox, and its replies are unchanged.
+
 ### Sessions that run on another machine
 
 ```bash

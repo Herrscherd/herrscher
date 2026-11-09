@@ -21,6 +21,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/outbox"
 	"github.com/Herrscherd/herrscher/core/usage"
 )
 
@@ -73,6 +74,7 @@ type sessionDriver struct {
 	running       atomic.Bool
 	historyCalls  atomic.Uint64
 	channel       string
+	outboxRoot    string
 	saidElsewhere bool
 	notices       chan noticeDelivery
 	failures      chan compactFailure
@@ -398,6 +400,7 @@ type sessionTable struct {
 	checkpoints checkpoint.Store
 	compaction  compactionPolicy
 	store       *state.State
+	outboxRoot  string
 }
 
 func (t *sessionTable) percentOfSession(name string) int {
@@ -741,6 +744,8 @@ func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
 	d.metrics.TurnStarted()
 	turnStart := time.Now()
 	live := 0
+	var files outbox.Frame
+	defer func() { d.removeTurnFiles(files) }()
 	for {
 		select {
 		case <-ctx.Done():
@@ -754,8 +759,12 @@ func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
 				d.metrics.TurnAbandoned()
 				return false
 			}
+			if event.T == outbox.EventFiles {
+				files = decodeTurnFiles(event)
+				continue
+			}
 			if event.T == eventReply && event.Done {
-				d.completeTurn(ctx, event, turnStart, live)
+				d.completeTurn(ctx, event, turnStart, live, files)
 				return true
 			}
 			live = d.relayTurnEvent(ctx, &guard, event, live)
@@ -775,7 +784,16 @@ func (d *sessionDriver) relayTurnEvent(ctx context.Context, guard *tokenGuard, e
 	return live
 }
 
-func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event, turnStart time.Time, live int) {
+func decodeTurnFiles(event contracts.Event) outbox.Frame {
+	frame, err := outbox.Decode(event.Value)
+	if err != nil {
+		slog.Warn("outbound files dropped", "err", err)
+		return outbox.Frame{}
+	}
+	return frame
+}
+
+func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event, turnStart time.Time, live int, files outbox.Frame) {
 	d.turnReading = contextReading(live, event)
 	event.Coordination = d.maybeCoordinate(ctx, event.Text)
 	event.Cost = estimateTurnCost(event.Cost, priceableTokens{
@@ -784,7 +802,7 @@ func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event,
 		cacheRead:     event.CacheRead,
 		cacheWrite:    event.CacheCreate,
 	}, d.modelNow().rates)
-	d.fanOut(ctx, event)
+	d.deliverReply(ctx, event, files)
 	if d.sink.Resume != nil && event.Resume != "" {
 		d.sink.Resume(event.Resume)
 	}
@@ -985,15 +1003,7 @@ func sanitizeCoordinationError(err error) string {
 }
 
 func (d *sessionDriver) fanOut(ctx context.Context, event contracts.Event) {
-	if d.activeTurnID != "" {
-		event.SessionIncarnation = d.incarnation
-		event.TurnID = d.activeTurnID
-		event.Agent = d.agent
-	} else {
-		event.SessionIncarnation = ""
-		event.TurnID = ""
-		event.Agent = ""
-	}
+	event = d.stamp(event)
 	if d.emitTap != nil {
 		d.emitTap(event)
 	}
@@ -1003,6 +1013,70 @@ func (d *sessionDriver) fanOut(ctx context.Context, event contracts.Event) {
 	d.eachGateway(func(index int, gateway contracts.GatewaySet) {
 		d.emitToGateway(ctx, index, gateway, event)
 	})
+}
+
+func (d *sessionDriver) stamp(event contracts.Event) contracts.Event {
+	if d.activeTurnID != "" {
+		event.SessionIncarnation = d.incarnation
+		event.TurnID = d.activeTurnID
+		event.Agent = d.agent
+		return event
+	}
+	event.SessionIncarnation = ""
+	event.TurnID = ""
+	event.Agent = ""
+	return event
+}
+
+func (d *sessionDriver) deliverReply(ctx context.Context, event contracts.Event, files outbox.Frame) {
+	if len(files.Files) == 0 && len(files.Refused) == 0 {
+		d.fanOut(ctx, event)
+		return
+	}
+	defer d.removeTurnFiles(files)
+	d.fanOutFiles(ctx, event, files)
+}
+
+func (d *sessionDriver) fanOutFiles(ctx context.Context, event contracts.Event, files outbox.Frame) {
+	text := event.Text
+	if len(files.Refused) > 0 {
+		notice := d.hostText("outbound.refused", map[string]any{"Names": strings.Join(files.Refused, ", ")})
+		text = strings.TrimSpace(text + "\n\n" + notice)
+	}
+	event = d.stamp(event)
+	if d.emitTap != nil {
+		d.emitTap(event)
+	}
+	if d.saidElsewhere {
+		return
+	}
+	d.eachGateway(func(_ int, gateway contracts.GatewaySet) {
+		d.sendReplyFiles(ctx, gateway, text, files.Files)
+	})
+}
+
+func (d *sessionDriver) sendReplyFiles(ctx context.Context, gateway contracts.GatewaySet, text string, files []contracts.OutboundFile) {
+	if gateway.Gateway == nil {
+		return
+	}
+	conv := contracts.Conversation{Gateway: gateway.Gateway.Manifest().Kind, ID: d.renderChannel(gateway)}
+	sender, ok := contracts.Degrade(gateway.Gateway).(contracts.FileSender)
+	if !ok {
+		slog.Warn("reply files not sent, gateway cannot send them", "gateway", conv.Gateway)
+		return
+	}
+	if _, err := sender.SendFiles(ctx, conv, "", text, files); err != nil {
+		slog.Warn("reply files not sent", "gateway", conv.Gateway, "err", err)
+	}
+}
+
+func (d *sessionDriver) removeTurnFiles(files outbox.Frame) {
+	if files.Dir == "" {
+		return
+	}
+	if err := outbox.Remove(d.outboxRoot, files.Dir); err != nil {
+		slog.Warn("turn outbox not removed", "err", err)
+	}
 }
 
 func (d *sessionDriver) eachGateway(visit func(index int, gateway contracts.GatewaySet)) {
@@ -1079,6 +1153,7 @@ func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, cha
 	driver.incarnation = identity.incarnation
 	driver.agent = identity.agent
 	driver.channel = channel
+	driver.outboxRoot = sessions.outboxRoot
 	driver.participants = participants
 	driver.metrics = registry
 	driver.coordinator = coord

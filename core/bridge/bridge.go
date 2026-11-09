@@ -58,6 +58,11 @@ type Options struct {
 	// MemoryAgent is the private memory root, carried so a re-rooted scope keeps
 	// both halves of the tree instead of dropping the agent on the way.
 	MemoryAgent string
+	// OutboxRoot is the directory the host keeps the files of every turn in, and
+	// OutboundMaxBytes the largest file a turn may send. An empty root means the
+	// bridge takes no files from its backend.
+	OutboxRoot       string
+	OutboundMaxBytes int64
 }
 
 // Run is the bridge entry point: a pure backend runner. It requires a hub socket

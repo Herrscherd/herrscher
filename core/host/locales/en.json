@@ -80,6 +80,11 @@
     "other": "cohort sealed at {{.Node}}"
   },
   {
+    "id": "outbound.refused",
+    "description": "Files a backend rendered for a reply that were refused and not sent; Names lists them",
+    "other": "file(s) refused, not sent: {{.Names}}"
+  },
+  {
     "id": "coordination.merged",
     "description": "The coordinator merged a worker branch; Lead names the lead session that receives it",
     "other": "merge handled for {{.Lead}}"

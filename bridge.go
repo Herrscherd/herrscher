@@ -17,6 +17,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
+	"github.com/Herrscherd/herrscher/core/outbox"
 	"github.com/Herrscherd/herrscher/core/scope"
 )
 
@@ -95,13 +96,15 @@ func runBridge(ctx context.Context, args []string) error {
 		rosterRoot = host.DefaultAgentsRoot()
 	}
 	opts := bridge.Options{
-		Channel:       *channel,
-		HubSocket:     *hubSocket,
-		Roster:        host.NewRoster(rosterRoot),
-		Capabilities:  os.Getenv(host.EnvCapabilities),
-		LaunchProject: *project,
-		ProjectPinned: *projectPinned,
-		MemoryAgent:   *agent,
+		Channel:          *channel,
+		HubSocket:        *hubSocket,
+		Roster:           host.NewRoster(rosterRoot),
+		Capabilities:     os.Getenv(host.EnvCapabilities),
+		LaunchProject:    *project,
+		ProjectPinned:    *projectPinned,
+		MemoryAgent:      *agent,
+		OutboxRoot:       outbox.Root(stateFile(*statePath)),
+		OutboundMaxBytes: cfg.EffectiveOutboundMaxBytes(),
 	}
 	if mem != nil {
 		opts.Scope = vaultScopeResolver{mem: mem, log: log}
@@ -136,6 +139,13 @@ func (f backendFlags) request(models *host.ModelDiscovery) host.BackendRequest {
 		Vendor: *f.vendor, Cmd: *f.cmd, Kind: *f.kind, Resume: *f.resume, ModelID: *f.modelID, Account: *f.account,
 		Models: models,
 	}
+}
+
+func stateFile(path string) string {
+	if path == "" {
+		return host.DefaultStatePath()
+	}
+	return path
 }
 
 func bridgeRequests(flags backendFlags, statePath string) func() host.BackendRequest {

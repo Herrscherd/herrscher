@@ -77,6 +77,8 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"coordination.merged":             {"Lead"},
 		"coordination.launched":           {"Count", "Workers"},
 
+		"outbound.refused": {"Names"},
+
 		"account.home":                  {"Detail"},
 		"account.profile_open":          {"Detail"},
 		"account.codex_home":            {"Detail"},

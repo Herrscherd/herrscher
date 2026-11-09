@@ -4164,8 +4164,8 @@
   {
     "id": "cli.compaction.calls",
     "description": "Rapport de compaction : les appels examinés, conservés, tronqués et élagués",
-    "one": "{{.Count}} appel examiné, {{.Kept}} conservé, {{.Truncated}} tronqué, {{.Pruned}} élagué",
-    "other": "{{.Count}} appels examinés, {{.Kept}} conservés, {{.Truncated}} tronqués, {{.Pruned}} élagués"
+    "one": "{{.Count}} appel examiné (conservés : {{.Kept}}, tronqués : {{.Truncated}}, élagués : {{.Pruned}})",
+    "other": "{{.Count}} appels examinés (conservés : {{.Kept}}, tronqués : {{.Truncated}}, élagués : {{.Pruned}})"
   },
   {
     "id": "cli.compaction.chars",

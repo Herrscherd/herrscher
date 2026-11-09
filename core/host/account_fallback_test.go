@@ -3,13 +3,13 @@ package host
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/accounts"
+	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/usage"
 )
@@ -83,6 +83,7 @@ func TestBalanceKeepsAnAccountWhoseLimitsCannotBeRead(t *testing.T) {
 
 func TestBalanceReportsNoQuotaWhenEveryAccountIsSpent(t *testing.T) {
 	source := newFallbackSource(t, readsFrom(map[contracts.ProfileName]limitRead{
+		"":      {used: 100},
 		"work":  {used: 100},
 		"perso": {used: 100},
 	}), "work", "perso")
@@ -94,10 +95,24 @@ func TestBalanceReportsNoQuotaWhenEveryAccountIsSpent(t *testing.T) {
 	}
 }
 
+func TestBalanceKeepsThePlannedAccountWhenAnotherAccountCannotBeRead(t *testing.T) {
+	source := newFallbackSource(t, readsFrom(map[contracts.ProfileName]limitRead{
+		"work":  {used: 100},
+		"perso": {err: errors.New("vendor unreachable")},
+	}), "work", "perso")
+	fallback := newAccountFallback(source, nil)
+
+	got := fallback.Balance(t.Context(), "claude", "work")
+	if got.Outcome != usage.ChoiceKept || got.From != "work" {
+		t.Fatalf("Balance = %+v, want the planned account kept with no no-quota verdict", got)
+	}
+}
+
 func TestBalanceNeverTakesAnAccountOfAnotherVendor(t *testing.T) {
 	saved := contracts.Default
 	t.Cleanup(func() { contracts.Default = saved })
 	source := newFallbackSource(t, readsFrom(map[contracts.ProfileName]limitRead{
+		"":     {used: 100},
 		"work": {used: 100},
 	}), "work")
 	contracts.Default.Register(contracts.Plugin{
@@ -177,15 +192,39 @@ func TestNoticeReachesTheGatewayOfTheHomeAsATypedNotice(t *testing.T) {
 	}
 }
 
-func TestNoticeFallsBackToRenderedTextWhenTheGatewayHasNoSink(t *testing.T) {
+func TestNoticeIsDroppedWhenTheGatewayHasNoSink(t *testing.T) {
 	admin := &sendRecorder{}
 	fallback := newAccountFallback(nil, []Deps{{Gateway: fakeGateway{}, Admin: admin}})
 	notice := contracts.Notice{Code: contracts.CodeAccountFallback, Args: []contracts.Arg{contracts.Text("From", "work"), contracts.Text("To", "perso")}}
 
 	fallback.Notify(t.Context(), state.HomeRef{ID: "home", Type: "forum"}, "chan-1", i18n.English, notice)
 
-	if len(admin.sent) != 1 || !strings.Contains(admin.sent[0], "work") || !strings.Contains(admin.sent[0], "perso") {
-		t.Fatalf("sent %q, want one text naming both accounts", admin.sent)
+	if len(admin.sent) != 0 {
+		t.Fatalf("sent %q, want no text: a gateway without a notice sink gets no account notice", admin.sent)
+	}
+}
+
+func TestAccountFallbackStaysOffWithoutTheConfigFlag(t *testing.T) {
+	reads := 0
+	source := newFallbackSource(t, func(context.Context, contracts.ProbeAccess) ([]contracts.Limit, error) {
+		reads++
+		return []contracts.Limit{{UsedPercent: 100}}, nil
+	}, "work", "perso")
+
+	if fallback := accountFallbackFor(config.Config{}, source, nil); fallback != nil {
+		fallback.Balance(t.Context(), "claude", "work")
+	}
+
+	if reads != 0 {
+		t.Fatalf("limits read %d times with the fallback off, want never", reads)
+	}
+}
+
+func TestAccountFallbackIsWiredWhenTheConfigFlagIsOn(t *testing.T) {
+	on := true
+	cfg := config.Config{Accounts: &config.AccountsConfig{Fallback: &on}}
+	if fallback := accountFallbackFor(cfg, nil, nil); fallback == nil {
+		t.Fatal("fallback is nil with accounts.fallback on, want it wired")
 	}
 }
 

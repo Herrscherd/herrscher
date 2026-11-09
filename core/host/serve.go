@@ -235,8 +235,8 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	if err != nil {
 		return wrapHost(err, "serve.config", nil)
 	}
-	if cfg.AccountFallback() {
-		deps.handler.SetAccountFallback(newAccountFallback(options.usage, gws))
+	if fallback := accountFallbackFor(cfg, options.usage, gws); fallback != nil {
+		deps.handler.SetAccountFallback(fallback)
 	}
 	keys, err := keyproxy.Open(ctx, cfg.Keys, keyproxy.OSLoader(), log)
 	if err != nil && !errors.Is(err, keyproxy.ErrDisabled) {

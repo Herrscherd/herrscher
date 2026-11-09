@@ -9,6 +9,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/usage"
 )
@@ -23,6 +24,13 @@ type accountFallback struct {
 
 func newAccountFallback(source *usageSource, gateways []Deps) *accountFallback {
 	return &accountFallback{source: source, gateways: gateways, timeout: balanceTimeout}
+}
+
+func accountFallbackFor(cfg config.Config, source *usageSource, gateways []Deps) *accountFallback {
+	if !cfg.AccountFallback() {
+		return nil
+	}
+	return newAccountFallback(source, gateways)
 }
 
 func (f *accountFallback) Balance(ctx context.Context, vendor, planned string) usage.Choice {
@@ -65,22 +73,15 @@ func (f *accountFallback) Notify(ctx context.Context, home state.HomeRef, channe
 		slog.Warn("account notice dropped, no gateway for the home", "code", notice.Code)
 		return
 	}
+	sink, ok := gateway.Gateway.(contracts.NoticeSink)
+	if !ok {
+		slog.Warn("account notice dropped, gateway has no notice sink", "code", notice.Code)
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), noticeTimeout)
 	defer cancel()
 	conv := contracts.Conversation{Gateway: gateway.Gateway.Manifest().Kind, ID: channelID}
-	if sink, ok := gateway.Gateway.(contracts.NoticeSink); ok {
-		_, err := sink.Notify(ctx, conv, lang, notice)
-		if err == nil || errors.Is(err, contracts.ErrNoticeFallbackPosted) {
-			return
-		}
+	if _, err := sink.Notify(ctx, conv, lang, notice); err != nil && !errors.Is(err, contracts.ErrNoticeFallbackPosted) {
 		slog.Warn("account notice not rendered by the gateway", "code", notice.Code, "err", err)
-	}
-	text, err := contracts.NewRenderer().Render(lang, notice)
-	if err != nil {
-		slog.Warn("account notice not rendered", "code", notice.Code, "err", err)
-		return
-	}
-	if err := gateway.Admin.Send(ctx, channelID, text); err != nil {
-		slog.Warn("account notice not sent", "code", notice.Code, "err", err)
 	}
 }

@@ -16,6 +16,10 @@ func readAccount(vendor, account string, def bool, status LimitsStatus, usedPerc
 	}
 }
 
+func readWindows(vendor, account string, status LimitsStatus, limits ...contracts.Limit) AccountLimits {
+	return AccountLimits{Vendor: vendor, Account: account, Status: status, Limits: limits}
+}
+
 func TestChooseAccount(t *testing.T) {
 	cases := map[string]struct {
 		planned string
@@ -119,6 +123,54 @@ func TestChooseAccount(t *testing.T) {
 				readAccount("claude", "perso", false, LimitsReady, 0),
 			},
 			want: Choice{Outcome: ChoiceKept, From: "ghost"},
+		},
+		"unavailable candidate blocks the no-quota notice": {
+			planned: "work",
+			reads: []AccountLimits{
+				readAccount("claude", "work", false, LimitsReady, 100),
+				readAccount("claude", "ghost", false, LimitsUnavailable, 0),
+			},
+			want: Choice{Outcome: ChoiceKept, From: "work"},
+		},
+		"failed candidate blocks the no-quota notice": {
+			planned: "work",
+			reads: []AccountLimits{
+				readAccount("claude", "work", false, LimitsReady, 100),
+				readAccount("claude", "perso", false, LimitsFailed, 100),
+			},
+			want: Choice{Outcome: ChoiceKept, From: "work"},
+		},
+		"ready candidate without any window is no replacement": {
+			planned: "work",
+			reads: []AccountLimits{
+				readAccount("claude", "work", false, LimitsReady, 100),
+				{Vendor: "claude", Account: "perso", Status: LimitsReady},
+			},
+			want: Choice{Outcome: ChoiceKept, From: "work"},
+		},
+		"ready candidate with only scoped windows is no replacement": {
+			planned: "work",
+			reads: []AccountLimits{
+				readAccount("claude", "work", false, LimitsReady, 100),
+				readWindows("claude", "perso", LimitsReady, contracts.Limit{Scope: "opus", UsedPercent: 0}),
+			},
+			want: Choice{Outcome: ChoiceKept, From: "work"},
+		},
+		"scoped window at 0 percent does not spend the planned account": {
+			planned: "work",
+			reads: []AccountLimits{
+				readWindows("claude", "work", LimitsReady, contracts.Limit{Scope: "opus", UsedPercent: 100}, contracts.Limit{UsedPercent: 20}),
+				readAccount("claude", "perso", false, LimitsReady, 10),
+			},
+			want: Choice{Outcome: ChoiceKept, From: "work"},
+		},
+		"scoped window at 0 percent on a candidate does not block it": {
+			planned: "work",
+			reads: []AccountLimits{
+				readAccount("claude", "work", false, LimitsReady, 100),
+				readWindows("claude", "perso", LimitsReady, contracts.Limit{Scope: "opus", UsedPercent: 100}, contracts.Limit{UsedPercent: 10}),
+			},
+			want: Choice{Outcome: ChoiceSwitched, From: "work", To: "perso"},
 		},
 	}
 	for name, tc := range cases {

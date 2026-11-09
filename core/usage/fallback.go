@@ -10,11 +10,11 @@ import (
 type ChoiceOutcome uint8
 
 const (
-	// ChoiceKept means the planned account stays: it has quota, or its limits are unknown.
+	// ChoiceKept means the planned account stays: it has quota, its limits are unknown, or no replacement is proven.
 	ChoiceKept ChoiceOutcome = iota + 1
 	// ChoiceSwitched means the planned account is spent and To takes its place.
 	ChoiceSwitched
-	// ChoiceNoQuota means the planned account is spent and no account of its vendor has quota.
+	// ChoiceNoQuota means the planned account is spent and every other account of its vendor is spent too.
 	ChoiceNoQuota
 )
 
@@ -27,10 +27,12 @@ type Choice struct {
 
 // ChooseAccount picks the account a new session starts on from the limits read
 // for every account of one vendor. The planned account moves only when its
-// limits are read and a window is at 0 percent remaining. The first ready
-// account of the vendor with quota left takes its place, in the order of reads,
-// so the caller decides the order. An account whose limits are unavailable or
-// failed is neither spent nor a replacement.
+// limits are read and an account-wide window is at 0 percent remaining. The
+// first ready account of the vendor with an account-wide window left takes its
+// place, in the order of reads, so the caller decides the order. Without such a
+// replacement, the planned account stays: ChoiceNoQuota is reported only when
+// every other account of the vendor is read and spent, and an account whose
+// limits are unavailable, failed or without a window is never proof of no quota.
 func ChooseAccount(planned string, reads []AccountLimits) Choice {
 	own := plannedIndex(planned, reads)
 	if own < 0 {
@@ -40,6 +42,7 @@ func ChooseAccount(planned string, reads []AccountLimits) Choice {
 	if !exhausted(spent) {
 		return Choice{Outcome: ChoiceKept, From: spent.Name()}
 	}
+	allSpent := true
 	for index, candidate := range reads {
 		if index == own || candidate.Vendor != spent.Vendor {
 			continue
@@ -47,6 +50,12 @@ func ChooseAccount(planned string, reads []AccountLimits) Choice {
 		if hasQuota(candidate) {
 			return Choice{Outcome: ChoiceSwitched, From: spent.Name(), To: candidate.Name()}
 		}
+		if !exhausted(candidate) {
+			allSpent = false
+		}
+	}
+	if !allSpent {
+		return Choice{Outcome: ChoiceKept, From: spent.Name()}
 	}
 	return Choice{Outcome: ChoiceNoQuota, From: spent.Name()}
 }
@@ -69,15 +78,13 @@ func plannedIndex(planned string, reads []AccountLimits) int {
 }
 
 func exhausted(a AccountLimits) bool {
-	return a.Status == LimitsReady && windowEmpty(a.Limits)
+	return a.Status == LimitsReady && slices.ContainsFunc(a.Limits, func(limit contracts.Limit) bool {
+		return limit.Scope == "" && Remaining(limit) <= 0
+	})
 }
 
 func hasQuota(a AccountLimits) bool {
-	return a.Status == LimitsReady && !windowEmpty(a.Limits)
-}
-
-func windowEmpty(limits []contracts.Limit) bool {
-	return slices.ContainsFunc(limits, func(limit contracts.Limit) bool {
-		return Remaining(limit) <= 0
+	return a.Status == LimitsReady && slices.ContainsFunc(a.Limits, func(limit contracts.Limit) bool {
+		return limit.Scope == "" && Remaining(limit) > 0
 	})
 }

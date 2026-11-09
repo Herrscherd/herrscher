@@ -66,8 +66,8 @@ func TestTruncatedLedgerWithoutReadableDataSaysSo(t *testing.T) {
 		readable string
 		empties  []string
 	}{
-		{name: "english", lang: i18n.English, readable: "no readable data over the period", empties: []string{"no spend over the period", "no compaction in this period"}},
-		{name: "french", lang: i18n.French, readable: "aucune donnée lisible sur la période", empties: []string{"aucune dépense sur la période", "aucune compaction sur la période"}},
+		{name: "english", lang: i18n.English, readable: "no data on the readable days", empties: []string{"no spend over the period", "no compaction in this period"}},
+		{name: "french", lang: i18n.French, readable: "aucune donnée sur les jours lisibles", empties: []string{"aucune dépense sur la période", "aucune compaction sur la période"}},
 	}
 	empty := Snapshot{Range: Range7d, LedgerTruncated: true}
 	for _, tc := range tests {

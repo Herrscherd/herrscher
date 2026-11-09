@@ -3970,7 +3970,7 @@
   {
     "id": "cli.spend.unreadable",
     "description": "Usage report: empty view of a period whose ledger is partial, replaces the empty-view text (emptyLine)",
-    "other": "no readable data over the period"
+    "other": "no data on the readable days"
   },
   {
     "id": "cli.spend.peak",

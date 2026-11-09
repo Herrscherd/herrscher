@@ -3970,7 +3970,7 @@
   {
     "id": "cli.spend.unreadable",
     "description": "Rapport d'usage : vue vide d'une période dont le journal est partiel, remplace le texte de la vue vide (emptyLine)",
-    "other": "aucune donnée lisible sur la période"
+    "other": "aucune donnée sur les jours lisibles"
   },
   {
     "id": "cli.spend.peak",

@@ -1,6 +1,7 @@
 package host
 
 import (
+	"log/slog"
 	"time"
 	"unicode/utf8"
 
@@ -22,6 +23,7 @@ func (d *sessionDriver) recordCompaction(stats []contracts.CompactStats) {
 	records := make([]usage.Record, 0, len(stats))
 	for index := range stats {
 		if _, err := stats[index].Outcome.MarshalText(); err != nil {
+			slog.Warn("compaction outcome not recorded", "stage", boundedStage(stats[index].Stage), "err", err)
 			continue
 		}
 		records = append(records, usage.Record{Time: when, Session: d.name, Compaction: compactionUsage(stats[index])})

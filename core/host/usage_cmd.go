@@ -157,6 +157,9 @@ func (q usageQuery) keeps(record usage.Record) bool {
 
 func (s *usageSource) run(ctx context.Context, query usageQuery) usage.Snapshot {
 	records, err := s.ledger.Records(query.rng)
+	if err != nil {
+		slog.Warn("usage ledger not read whole", "err", err)
+	}
 	now := s.ledger.Now()
 	records, notes := s.withTranscripts(records, now.Add(-query.rng.Span()))
 	records = slices.DeleteFunc(records, func(record usage.Record) bool {

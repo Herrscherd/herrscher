@@ -15,6 +15,7 @@ require (
 	github.com/Herrscherd/herrscher-llm-extractor v0.4.0
 	github.com/Herrscherd/herrscher-obsidian-memory v0.6.0
 	github.com/Herrscherd/herrscher-orchestrator v0.6.0
+	github.com/Herrscherd/herrscher-pixellab-backend v0.1.1
 	github.com/Herrscherd/herrscher-superset-skills v0.4.0
 	github.com/Herrscherd/herrscher-transport v0.6.0
 	github.com/Microsoft/go-winio v0.6.2

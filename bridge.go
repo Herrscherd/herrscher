@@ -18,7 +18,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
-	"github.com/Herrscherd/herrscher/core/outbox"
 	"github.com/Herrscherd/herrscher/core/scope"
 )
 
@@ -142,19 +141,12 @@ func (f backendFlags) request(models *host.ModelDiscovery) host.BackendRequest {
 }
 
 func runBridgeWithOutbox(ctx context.Context, newBackend bridge.BackendFactory, orch contracts.Orchestrator, opts bridge.Options, statePath string) error {
-	root, err := outbox.Root(stateFile(statePath))
+	root, err := host.OutboxRoot(statePath)
 	if err != nil {
 		return fmt.Errorf("outbox root: %w", err)
 	}
 	opts.OutboxRoot = root
 	return bridge.Run(ctx, newBackend, orch, opts)
-}
-
-func stateFile(path string) string {
-	if path == "" {
-		return host.DefaultStatePath()
-	}
-	return path
 }
 
 func bridgeRequests(flags backendFlags, statePath string) func() host.BackendRequest {

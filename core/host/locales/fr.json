@@ -85,6 +85,21 @@
     "other": "fichier(s) refusé(s), non envoyé(s) : {{.Names}}"
   },
   {
+    "id": "outbound.unsent",
+    "description": "Fichiers rendus par un backend que cette passerelle ne sait pas transporter, nommés sans leur chemin : Names les liste",
+    "other": "fichier(s) non envoyé(s), cette passerelle ne sait pas transporter de fichiers : {{.Names}}"
+  },
+  {
+    "id": "outbound.failed",
+    "description": "Fichiers rendus par un backend que la passerelle n'a pas pu envoyer après la réponse : Names les liste",
+    "other": "fichier(s) non envoyé(s), la passerelle a échoué : {{.Names}}"
+  },
+  {
+    "id": "outbound.unnamed",
+    "description": "Désigne un fichier sans nom dans les avis qui listent des fichiers",
+    "other": "fichier sans nom"
+  },
+  {
     "id": "coordination.merged",
     "description": "Le coordinateur fusionne la branche d'un worker, Lead nomme la session pilote qui la reçoit",
     "other": "fusion traitée pour {{.Lead}}"

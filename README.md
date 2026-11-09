@@ -197,13 +197,16 @@ directory, and no larger than the limit. At most 10 files a turn are sent, and a
 refused file is named in the reply with a notice, its content never logged.
 
 The limit is 25 MB by default. `outboundFileMaxMB` in `config.json` sets another
-size in megabytes. The daemon sends the reply text and the valid files together
-through the gateway's `SendFiles` when the gateway implements it. A gateway that
-does not gets the text followed by one `name: path` line per file, so the text is
-never sent twice. The turn directory is removed once the reply is delivered, or
-once the turn ends without files. A directory a crash leaves behind is purged at
-the next daemon start when it is older than 24 hours. A backend without
-`FileProducer` gets no outbox, and its replies are unchanged.
+size in megabytes, up to 1024. The daemon delivers the reply text first, as a
+normal reply. The valid files then go through the gateway's `SendFiles` when the
+gateway implements it, as a separate message without a reply target, because an
+event carries no message ID to reply to. A gateway that does not implement
+`SendFiles` gets a notice that names the files, without their paths. If the send
+fails, the gateway gets a notice that names the files that were not sent. The
+turn directory is removed once the reply is delivered, or once the turn ends
+without files. A directory a crash leaves behind is purged at the next daemon
+start when it is older than 24 hours. A backend without `FileProducer` gets no
+outbox, and its replies are unchanged.
 
 ### Sessions that run on another machine
 

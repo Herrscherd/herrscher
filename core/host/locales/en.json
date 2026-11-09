@@ -85,6 +85,21 @@
     "other": "file(s) refused, not sent: {{.Names}}"
   },
   {
+    "id": "outbound.unsent",
+    "description": "Files a backend rendered that this gateway cannot carry, so they are named without their path; Names lists them",
+    "other": "file(s) not sent, this gateway cannot carry files: {{.Names}}"
+  },
+  {
+    "id": "outbound.failed",
+    "description": "Files a backend rendered that the gateway failed to send after the reply; Names lists them",
+    "other": "file(s) not sent, the gateway failed: {{.Names}}"
+  },
+  {
+    "id": "outbound.unnamed",
+    "description": "Stands for a file with an empty name in the notices that list files",
+    "other": "unnamed file"
+  },
+  {
     "id": "coordination.merged",
     "description": "The coordinator merged a worker branch; Lead names the lead session that receives it",
     "other": "merge handled for {{.Lead}}"

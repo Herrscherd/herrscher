@@ -45,3 +45,23 @@ func TestTurnOutboxRemovedWhenBackendPanics(t *testing.T) {
 		t.Fatalf("turn outboxes left after a panic: %v", entries)
 	}
 }
+
+func TestEmitFilesAfterTurnEndDropsTheTurnDir(t *testing.T) {
+	root := t.TempDir()
+	rb := &recordingBackend{}
+	turn := beginTurnOutbox(producingBackend{rb}, outboundSettings{root: root, session: "chan", maxBytes: outboundTestMaxBytes})
+	dir := turn.dir
+	rb.files = []contracts.OutboundFile{outboundPNG(t, dir, "a.png", 8)}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	sink := &recordSink{}
+
+	turn.emitFiles(ctx, sink)
+
+	if len(sink.events) != 0 {
+		t.Fatalf("emitted %+v after the turn ended, want no files frame", sink.events)
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("turn directory %q survived a cancelled turn: %v", dir, err)
+	}
+}

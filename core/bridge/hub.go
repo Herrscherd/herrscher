@@ -277,7 +277,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	if err != nil {
 		out = settleFailedReply(ctrl, out, err)
 	}
-	turn.emitFiles(sink)
+	turn.emitFiles(ctx, sink)
 	out = strings.TrimSpace(out)
 	if eng != nil {
 		reportSkillUse(ctx, orch, eng.Detect(out))

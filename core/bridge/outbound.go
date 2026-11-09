@@ -1,6 +1,8 @@
 package bridge
 
 import (
+	"context"
+
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/outbox"
 )
@@ -30,7 +32,7 @@ func beginTurnOutbox(backend contracts.Backend, settings outboundSettings) turnO
 	return turnOutbox{producer: producer, settings: settings, dir: dir}
 }
 
-func (t *turnOutbox) emitFiles(sink contracts.EventSink) {
+func (t *turnOutbox) emitFiles(ctx context.Context, sink contracts.EventSink) {
 	if t.dir == "" {
 		return
 	}
@@ -47,6 +49,11 @@ func (t *turnOutbox) emitFiles(sink contracts.EventSink) {
 	value, err := outbox.Encode(outbox.Frame{Dir: t.dir, Files: files, Refused: names})
 	if err != nil {
 		logger.Warn("outbound frame not encoded, files dropped", "err", err)
+		t.discard()
+		return
+	}
+	if ctx.Err() != nil {
+		logger.Warn("turn ended before its outbound files were emitted, files dropped")
 		t.discard()
 		return
 	}

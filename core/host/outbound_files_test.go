@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -37,6 +38,7 @@ type routedFileGateway struct {
 	calls     []string
 	sentFiles []string
 	sentText  []string
+	sendErr   error
 }
 
 func (g *routedFileGateway) EmitTo(_ contracts.Conversation, event contracts.Event) {
@@ -50,7 +52,7 @@ func (g *routedFileGateway) SendFiles(_ context.Context, _ contracts.Conversatio
 	for _, file := range files {
 		g.sentFiles = append(g.sentFiles, file.Name)
 	}
-	return "", nil
+	return "", g.sendErr
 }
 
 func turnFrame(t *testing.T, root string) outbox.Frame {
@@ -69,10 +71,24 @@ func turnFrame(t *testing.T, root string) outbox.Frame {
 	}
 }
 
-func newOutboundDriver(gws []contracts.GatewaySet, root string) *sessionDriver {
+func framesEvent(t *testing.T, frame outbox.Frame) contracts.Event {
+	t.Helper()
+	value, err := outbox.Encode(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return contracts.Event{T: outbox.EventFiles, Value: value}
+}
+
+func newOutboundDriver(gateways []contracts.Gateway, root string) *sessionDriver {
+	gws := make([]contracts.GatewaySet, 0, len(gateways))
+	for _, gateway := range gateways {
+		gws = append(gws, contracts.GatewaySet{Gateway: contracts.Degrade(gateway)})
+	}
 	d := newSessionDriver("s1", gws, nil, nil)
 	d.outboxRoot = root
 	d.outboundMaxBytes = outboundTestMaxBytes
+	d.fileSenders = fileSendersOf(gateways)
 	return d
 }
 
@@ -88,7 +104,7 @@ func TestReplyEmitsNormallyThenSendsFilesThroughFileSender(t *testing.T) {
 	frame := turnFrame(t, root)
 	frame.Refused = []string{"big.bin"}
 	gw := &routedFileGateway{}
-	d := newOutboundDriver([]contracts.GatewaySet{{Gateway: gw}}, root)
+	d := newOutboundDriver([]contracts.Gateway{gw}, root)
 
 	d.deliverReply(context.Background(), contracts.Event{T: "reply", Text: "hello", Done: true}, frame)
 
@@ -121,7 +137,7 @@ func TestReplyNamesUnsentFilesWithoutFileSenderAndNeverPaths(t *testing.T) {
 	frame := turnFrame(t, root)
 	frame.Refused = []string{"big.bin"}
 	gw := &textRecordingGateway{}
-	d := newOutboundDriver([]contracts.GatewaySet{{Gateway: gw}}, root)
+	d := newOutboundDriver([]contracts.Gateway{gw}, root)
 
 	d.deliverReply(context.Background(), contracts.Event{T: "reply", Text: "hello", Done: true}, frame)
 
@@ -156,7 +172,7 @@ func TestReplyRevetsFilesBeforeSending(t *testing.T) {
 		t.Fatal(err)
 	}
 	gw := &routedFileGateway{}
-	d := newOutboundDriver([]contracts.GatewaySet{{Gateway: gw}}, root)
+	d := newOutboundDriver([]contracts.Gateway{gw}, root)
 
 	d.deliverReply(context.Background(), contracts.Event{T: "reply", Text: "hello", Done: true}, frame)
 
@@ -165,6 +181,79 @@ func TestReplyRevetsFilesBeforeSending(t *testing.T) {
 	}
 	if !strings.Contains(gw.routed[0].Text, "a.png") {
 		t.Fatalf("reply text %q lacks the notice of the refused file", gw.routed[0].Text)
+	}
+}
+
+func TestFailedSendFilesNoticesTheNamesWithoutPaths(t *testing.T) {
+	root := t.TempDir()
+	frame := turnFrame(t, root)
+	gw := &routedFileGateway{sendErr: errors.New("gateway down")}
+	d := newOutboundDriver([]contracts.Gateway{gw}, root)
+
+	d.deliverReply(context.Background(), contracts.Event{T: "reply", Text: "hello", Done: true}, frame)
+
+	last := gw.routed[len(gw.routed)-1]
+	if last.T != eventStatus || !strings.Contains(last.Text, "a.png") {
+		t.Fatalf("last routed event %+v, want a status notice naming a.png", last)
+	}
+	if strings.Contains(last.Text, frame.Dir) {
+		t.Fatalf("status notice %q leaks the host path of the outbox", last.Text)
+	}
+}
+
+func TestTurnFilesOutsideTheOutboxAreDropped(t *testing.T) {
+	root := t.TempDir()
+	foreign := turnFrame(t, t.TempDir())
+	d := newOutboundDriver(nil, root)
+
+	got := d.decodeTurnFiles(framesEvent(t, foreign))
+
+	if got.Dir != "" || len(got.Files) != 0 {
+		t.Fatalf("decodeTurnFiles = %+v, want a frame outside the outbox dropped", got)
+	}
+	if _, err := os.Stat(foreign.Dir); err != nil {
+		t.Fatalf("directory outside the outbox was touched: %v", err)
+	}
+}
+
+func TestSecondTurnDirReplacesTheFirstAndRemovesIt(t *testing.T) {
+	root := t.TempDir()
+	first := turnFrame(t, root)
+	second := turnFrame(t, root)
+	d := newOutboundDriver(nil, root)
+
+	got := d.replaceTurnFiles(first, framesEvent(t, second))
+
+	if got.Dir != second.Dir {
+		t.Fatalf("replaceTurnFiles kept %q, want the later turn directory %q", got.Dir, second.Dir)
+	}
+	assertTurnDirRemoved(t, first.Dir)
+}
+
+func TestFramesOfOneTurnDirMerge(t *testing.T) {
+	root := t.TempDir()
+	first := turnFrame(t, root)
+	second := outbox.Frame{
+		Dir:     first.Dir,
+		Files:   []contracts.OutboundFile{{Path: filepath.Join(first.Dir, "b.png"), Name: "b.png"}},
+		Refused: []string{"big.bin"},
+	}
+	d := newOutboundDriver(nil, root)
+
+	got := d.replaceTurnFiles(first, framesEvent(t, second))
+
+	if got.Dir != first.Dir || len(got.Files) != 2 || !slices.Equal(got.Refused, []string{"big.bin"}) {
+		t.Fatalf("replaceTurnFiles = %+v, want both frames of the turn merged", got)
+	}
+}
+
+func TestUnnamedFileIsLabelledInNotices(t *testing.T) {
+	d := newOutboundDriver(nil, t.TempDir())
+
+	got := d.noticeNames([]string{"", "a.png"})
+
+	if want := d.hostText("outbound.unnamed", nil) + ", a.png"; got != want {
+		t.Fatalf("noticeNames = %q, want %q", got, want)
 	}
 }
 

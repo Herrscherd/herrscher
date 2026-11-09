@@ -110,6 +110,7 @@ type sessionDriver struct {
 	gate budgetGate
 
 	outboundMaxBytes int64
+	fileSenders      map[string]contracts.FileSender
 
 	terms             func() modelTerms
 	compaction        compactionPolicy
@@ -406,6 +407,7 @@ type sessionTable struct {
 	outboxRoot  string
 
 	outboundMaxBytes int64
+	fileSenders      map[string]contracts.FileSender
 }
 
 func (t *sessionTable) percentOfSession(name string) int {
@@ -765,7 +767,7 @@ func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
 				return false
 			}
 			if event.T == outbox.EventFiles {
-				files = decodeTurnFiles(event)
+				files = d.replaceTurnFiles(files, event)
 				continue
 			}
 			if event.T == eventReply && event.Done {
@@ -789,13 +791,35 @@ func (d *sessionDriver) relayTurnEvent(ctx context.Context, guard *tokenGuard, e
 	return live
 }
 
-func decodeTurnFiles(event contracts.Event) outbox.Frame {
+func (d *sessionDriver) decodeTurnFiles(event contracts.Event) outbox.Frame {
 	frame, err := outbox.Decode(event.Value)
 	if err != nil {
 		slog.Warn("outbound files dropped", "err", err)
 		return outbox.Frame{}
 	}
+	if frame.Dir != "" && !outbox.Owns(d.outboxRoot, frame.Dir) {
+		slog.Warn("outbound files dropped, turn directory outside the outbox", "dir", frame.Dir)
+		return outbox.Frame{}
+	}
 	return frame
+}
+
+func (d *sessionDriver) replaceTurnFiles(previous outbox.Frame, event contracts.Event) outbox.Frame {
+	next := d.decodeTurnFiles(event)
+	switch {
+	case next.Dir == "":
+		return previous
+	case previous.Dir == "":
+		return next
+	case previous.Dir == next.Dir:
+		next.Files = slices.Concat(previous.Files, next.Files)
+		next.Refused = slices.Concat(previous.Refused, next.Refused)
+		return next
+	default:
+		slog.Warn("earlier outbound files of the turn dropped", "dir", previous.Dir)
+		d.removeTurnFiles(previous)
+		return next
+	}
 }
 
 func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event, turnStart time.Time, live int, files outbox.Frame) {
@@ -1020,8 +1044,11 @@ func (d *sessionDriver) fanOutReply(ctx context.Context, event contracts.Event, 
 		return
 	}
 	d.eachGateway(func(index int, gateway contracts.GatewaySet) {
-		d.emitToGateway(ctx, index, gateway, d.withUnsentFiles(gateway, event, files))
-		d.sendReplyFiles(ctx, gateway, files.Files)
+		sender, canSend := d.fileSenders[gateway.Gateway.Manifest().Kind]
+		d.emitToGateway(ctx, index, gateway, d.withUnsentFiles(event, files, canSend))
+		if canSend {
+			d.sendReplyFiles(ctx, index, gateway, sender, files.Files)
+		}
 	})
 }
 
@@ -1055,22 +1082,40 @@ func (d *sessionDriver) revet(files outbox.Frame) outbox.Frame {
 	return files
 }
 
-func (d *sessionDriver) withUnsentFiles(gateway contracts.GatewaySet, event contracts.Event, files outbox.Frame) contracts.Event {
-	unsent := files.Refused
-	if len(files.Files) > 0 && !canSendFiles(gateway) {
-		unsent = slices.Concat(files.Refused, fileNames(files.Files))
+func (d *sessionDriver) withUnsentFiles(event contracts.Event, files outbox.Frame, canSend bool) contracts.Event {
+	var notices []string
+	if len(files.Refused) > 0 {
+		notices = append(notices, d.hostText("outbound.refused", map[string]any{namesParam: d.noticeNames(files.Refused)}))
 	}
-	if len(unsent) == 0 {
+	if !canSend && len(files.Files) > 0 {
+		notices = append(notices, d.hostText("outbound.unsent", map[string]any{namesParam: d.noticeNames(fileNames(files.Files))}))
+	}
+	if len(notices) == 0 {
 		return event
 	}
-	notice := d.hostText("outbound.refused", map[string]any{"Names": strings.Join(unsent, ", ")})
-	event.Text = strings.TrimSpace(event.Text + "\n\n" + notice)
+	event.Text = strings.TrimSpace(strings.Join(append([]string{event.Text}, notices...), "\n\n"))
 	return event
 }
 
-func canSendFiles(gateway contracts.GatewaySet) bool {
-	_, ok := gateway.Gateway.(contracts.FileSender)
-	return ok
+func fileSendersOf(gateways []contracts.Gateway) map[string]contracts.FileSender {
+	senders := make(map[string]contracts.FileSender, len(gateways))
+	for _, gateway := range gateways {
+		if sender, ok := gateway.(contracts.FileSender); ok {
+			senders[gateway.Manifest().Kind] = sender
+		}
+	}
+	return senders
+}
+
+func (d *sessionDriver) noticeNames(names []string) string {
+	labelled := make([]string, 0, len(names))
+	for _, name := range names {
+		if name == "" {
+			name = d.hostText("outbound.unnamed", nil)
+		}
+		labelled = append(labelled, name)
+	}
+	return strings.Join(labelled, ", ")
 }
 
 func fileNames(files []contracts.OutboundFile) []string {
@@ -1081,11 +1126,13 @@ func fileNames(files []contracts.OutboundFile) []string {
 	return names
 }
 
-const fileSendTimeout = 2 * time.Minute
+const (
+	fileSendTimeout = 2 * time.Minute
+	namesParam      = "Names"
+)
 
-func (d *sessionDriver) sendReplyFiles(ctx context.Context, gateway contracts.GatewaySet, files []contracts.OutboundFile) {
-	sender, ok := gateway.Gateway.(contracts.FileSender)
-	if !ok || len(files) == 0 {
+func (d *sessionDriver) sendReplyFiles(ctx context.Context, index int, gateway contracts.GatewaySet, sender contracts.FileSender, files []contracts.OutboundFile) {
+	if len(files) == 0 {
 		return
 	}
 	conv := contracts.Conversation{Gateway: gateway.Gateway.Manifest().Kind, ID: d.renderChannel(gateway)}
@@ -1093,6 +1140,8 @@ func (d *sessionDriver) sendReplyFiles(ctx context.Context, gateway contracts.Ga
 	defer cancel()
 	if _, err := sender.SendFiles(sendCtx, conv, "", "", files); err != nil {
 		slog.Warn("reply files not sent", "gateway", conv.Gateway, "err", err)
+		notice := d.hostText("outbound.failed", map[string]any{namesParam: d.noticeNames(fileNames(files))})
+		d.emitToGateway(ctx, index, gateway, d.stamp(contracts.Event{T: eventStatus, Text: notice}))
 	}
 }
 
@@ -1181,6 +1230,7 @@ func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, cha
 	driver.channel = channel
 	driver.outboxRoot = sessions.outboxRoot
 	driver.outboundMaxBytes = sessions.outboundMaxBytes
+	driver.fileSenders = sessions.fileSenders
 	driver.participants = participants
 	driver.metrics = registry
 	driver.coordinator = coord

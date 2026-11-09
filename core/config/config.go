@@ -52,9 +52,7 @@ type Config struct {
 	// many days are reported as stale. 0 disables stale detection. Unset (zero)
 	// means the built-in default (14) is applied by the caller.
 	SessionMaxIdleDays int `json:"sessionMaxIdleDays,omitempty"`
-	// Largest file, in megabytes, a backend may send with its reply. Zero means the
-	// built-in default (25) is applied by EffectiveOutboundMaxBytes.
-	OutboundFileMaxMB int `json:"outboundFileMaxMB,omitempty"`
+	OutboundFileMaxMB  int `json:"outboundFileMaxMB,omitempty"`
 
 	// Declarative runtime defaults (precedence: live state.json > this > empty).
 	Home      *HomeRef `json:"home"`
@@ -90,6 +88,17 @@ func (c Config) AccountFallback() bool {
 }
 
 const bytesPerMegabyte int64 = 1 << 20
+
+const maxOutboundFileMegabytes = 1024
+
+var errOutboundFileTooLarge = errors.New("the largest file is over the maximum")
+
+func validateOutboundFileMaxMB(megabytes int) error {
+	if megabytes > maxOutboundFileMegabytes {
+		return fmt.Errorf("%w: %d MB, the maximum is %d MB", errOutboundFileTooLarge, megabytes, maxOutboundFileMegabytes)
+	}
+	return nil
+}
 
 // EffectiveOutboundMaxBytes is the largest file, in bytes, a reply may carry: the
 // configured megabytes, or the built-in default when none is set.
@@ -142,6 +151,9 @@ func Load(path string) (Config, error) {
 	}
 	if err := ValidateKeys(cfg.Keys); err != nil {
 		return cfg, fmt.Errorf("parse %s: %w", path, err)
+	}
+	if err := validateOutboundFileMaxMB(cfg.OutboundFileMaxMB); err != nil {
+		return cfg, fmt.Errorf("parse %s: outboundFileMaxMB: %w", path, err)
 	}
 	return cfg, nil
 }

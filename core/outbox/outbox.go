@@ -163,6 +163,12 @@ func vet(dir string, file contracts.OutboundFile, maxBytes int64) error {
 	return nil
 }
 
+// Owns reports whether dir lies strictly below root, so a frame can name only the
+// turn directories of the outboxes the host keeps.
+func Owns(root, dir string) bool {
+	return within(root, dir)
+}
+
 // Remove deletes the turn directory dir, which must lie strictly below root, so a
 // frame can never name a directory outside the outboxes.
 func Remove(root, dir string) error {

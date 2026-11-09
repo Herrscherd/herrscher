@@ -6,7 +6,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/Herrscherd/herrscher/core/usage"
 )
@@ -178,10 +177,6 @@ func (m *model) usageOverlayView() string {
 	if !m.usage.open {
 		return ""
 	}
-	width := m.width
-	if width <= 0 {
-		width = defaultWidth
-	}
 	keys := joinNonEmpty(
 		m.labelledHint(actUsageTab, m.tr.t("tui.usage.hint.tab", nil), ctxUsage),
 		m.labelledHint(actUsageRangeNext, m.tr.t("tui.usage.hint.range", nil), ctxUsage),
@@ -189,32 +184,48 @@ func (m *model) usageOverlayView() string {
 		m.labelledHint(actUsageRefresh, m.tr.t("tui.usage.hint.refresh", nil), ctxUsage),
 		m.labelledHint(actUsageClose, m.tr.t("tui.common.close", nil), ctxUsage),
 	)
-	lines := []string{m.st.dim.Render(joinNonEmpty(m.tr.t("tui.usage.title", nil), keys)), m.usageTabsLine(), m.usageFilterLine()}
-	lines = append(lines, m.usageBody()...)
-	return strings.Join(boxLines(lines, width), "\n")
+	body := append([]string{""}, m.usageBody()...)
+	return m.renderFrame(overlayFrame{
+		title:  m.st.strong.Render(m.tr.t("tui.usage.title", nil)) + m.st.dim.Render(" · ") + m.st.accent.Render(m.usageAccountLabel()),
+		right:  joinWith("  ", m.usageRangeChips(), m.usageTabsLine()),
+		footer: m.st.dim.Render(keys),
+		body:   body,
+	})
 }
 
 func (m *model) usageTabsLine() string {
 	tabs := []usageTab{usageTabSession, usageTabCost, usageTabTokens, usageTabLimits}
 	labels := make([]string, 0, len(tabs))
 	for _, tab := range tabs {
-		label := m.tr.t(tab.key(), nil)
-		if tab == m.usage.tab {
-			labels = append(labels, m.st.green.Render("["+label+"]"))
-			continue
-		}
-		labels = append(labels, m.st.dim.Render(label))
+		labels = append(labels, m.chip(m.tr.t(tab.key(), nil), tab == m.usage.tab))
 	}
-	return strings.Join(labels, " ")
+	return strings.Join(labels, "")
 }
 
-func (m *model) usageFilterLine() string {
-	period := m.tr.t("tui.usage.range", map[string]any{rangeParam: m.usage.rng.String()})
-	account := m.tr.t("tui.usage.account.all", nil)
-	if m.usage.account != (usage.AccountKey{}) {
-		account = m.tr.t("tui.usage.account.one", map[string]any{accountParam: m.usage.account.String()})
+func (m *model) usageRangeChips() string {
+	if m.usage.tab != usageTabCost && m.usage.tab != usageTabTokens {
+		return ""
 	}
-	return m.st.dim.Render(period + " · " + account)
+	ranges := usage.Ranges()
+	chips := make([]string, 0, len(ranges))
+	for _, rng := range ranges {
+		chips = append(chips, m.chip(rng.String(), rng == m.usage.rng))
+	}
+	return strings.Join(chips, "")
+}
+
+func (m *model) chip(label string, active bool) string {
+	if active {
+		return m.st.overlaySel.Render(" " + label + " ")
+	}
+	return m.st.dim.Render(" " + label + " ")
+}
+
+func (m *model) usageAccountLabel() string {
+	if m.usage.account == (usage.AccountKey{}) {
+		return m.tr.t("tui.usage.account.all", nil)
+	}
+	return m.tr.t("tui.usage.account.one", map[string]any{accountParam: m.usage.account.String()})
 }
 
 func (m *model) usageBody() []string {
@@ -245,27 +256,10 @@ func (m *model) usageSessionBody() []string {
 func (m *model) usageLines() ([]string, error) {
 	switch m.usage.tab {
 	case usageTabCost:
-		return usage.CostLines(m.usage.snapshot, m.tr.lang, time.Local, m.usagePalette())
+		return usage.CostLines(m.usage.snapshot, m.tr.lang, time.Local, m.reportPalette())
 	case usageTabTokens:
-		return usage.TokenLines(m.usage.snapshot, m.tr.lang, m.usagePalette())
+		return usage.TokenLines(m.usage.snapshot, m.tr.lang, m.reportPalette())
 	case usageTabSession, usageTabLimits:
 	}
-	return usage.LimitLines(m.usage.snapshot, m.tr.lang, m.usagePalette())
-}
-
-func (m *model) usagePalette() usage.Palette {
-	return usage.Palette{
-		Accent: styleOf(m.st.accent),
-		Fill:   styleOf(m.st.accent),
-		Marker: styleOf(m.st.strong),
-		Dim:    styleOf(m.st.dim),
-		Strong: styleOf(m.st.strong),
-		Bad:    styleOf(m.st.red),
-		Warn:   styleOf(m.st.warn),
-		Good:   styleOf(m.st.green),
-	}
-}
-
-func styleOf(style lipgloss.Style) usage.Style {
-	return func(text string) string { return style.Render(text) }
+	return usage.LimitCards(m.usage.snapshot, m.tr.lang, m.reportPalette(), m.cardEdges(), m.frameInner())
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/health"
 	"github.com/Herrscherd/herrscher/core/host"
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 const (
@@ -28,6 +29,7 @@ type healthOptions struct {
 	watch   bool
 	asJSON  bool
 	quiet   bool
+	pal     termpaint.Palette
 }
 
 func runHealth(ctx context.Context, args []string) error {
@@ -36,6 +38,7 @@ func runHealth(ctx context.Context, args []string) error {
 	if unknown != "" {
 		return renderError(lang, errUnknownArgument, clitext.FlagUnknown, clitext.Params{clitext.ParamCommand: healthVerb, clitext.ParamName: strconv.Quote(unknown)})
 	}
+	opts.pal = outputPalette(os.Stdout)
 	instance := host.ServedInstanceID(host.DefaultStatePath(), "")
 	if opts.watch {
 		return watchHealth(ctx, instance, opts, lang)
@@ -117,9 +120,9 @@ func writeHealth(writer io.Writer, snapshot health.Snapshot, checks []health.Che
 		return err
 	}
 	if opts.service != "" {
-		return snapshot.Details(writer, checks, lang)
+		return snapshot.Details(writer, checks, lang, opts.pal)
 	}
-	return snapshot.Table(writer, lang)
+	return snapshot.Table(writer, lang, opts.pal)
 }
 
 func fetchHealth(ctx context.Context, instance string, deep bool) (health.Snapshot, error) {

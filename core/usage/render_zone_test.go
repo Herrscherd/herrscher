@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 func TestCostLinesShowsThePeakInTheDisplayZone(t *testing.T) {
@@ -16,14 +18,14 @@ func TestCostLinesShowsThePeakInTheDisplayZone(t *testing.T) {
 	}
 	plus3 := time.FixedZone("plus3", 3*60*60)
 
-	inZone, err := CostLines(snapshot, i18n.English, plus3, Palette{})
+	inZone, err := CostLines(snapshot, i18n.English, plus3, termpaint.Palette{})
 	if err != nil {
 		t.Fatalf("CostLines: %v", err)
 	}
 	if !strings.Contains(inZone[1], "02:00") {
 		t.Fatalf("peak line %q does not show the hour in the display zone", inZone[1])
 	}
-	inUTC, err := CostLines(snapshot, i18n.English, time.UTC, Palette{})
+	inUTC, err := CostLines(snapshot, i18n.English, time.UTC, termpaint.Palette{})
 	if err != nil {
 		t.Fatalf("CostLines: %v", err)
 	}

@@ -13,11 +13,11 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 const (
 	barWidth     = 20
-	tabPadding   = 2
 	summarySep   = " · "
 	percentScale = 100
 	sparkCells   = "▁▂▃▄▅▆▇█"
@@ -63,7 +63,7 @@ func rangeKeys() map[Range]clitext.Key {
 
 type renderer struct {
 	lang i18n.Language
-	pal  Palette
+	pal  termpaint.Palette
 	err  error
 }
 
@@ -78,17 +78,17 @@ func (r *renderer) text(key clitext.Key, params clitext.Params) string {
 func (r *renderer) dimRow(cells ...string) []string {
 	painted := make([]string, len(cells))
 	for index, cell := range cells {
-		painted[index] = paint(r.pal.Dim, cell)
+		painted[index] = termpaint.Paint(r.pal.Dim, cell)
 	}
 	return painted
 }
 
 // LimitLines writes the limits of the accounts of the snapshot, one table per vendor, each
 // window of an account on a row with its bar, its reset and its pace.
-func LimitLines(snapshot Snapshot, lang i18n.Language, pal Palette) ([]string, error) {
+func LimitLines(snapshot Snapshot, lang i18n.Language, pal termpaint.Palette) ([]string, error) {
 	text := &renderer{lang: lang, pal: pal}
 	if len(snapshot.Limits) == 0 {
-		return []string{paint(pal.Dim, text.text(clitext.QuotaEmpty, nil))}, text.err
+		return []string{termpaint.Paint(pal.Dim, text.text(clitext.QuotaEmpty, nil))}, text.err
 	}
 	var lines []string
 	for index, vendor := range vendorsOf(snapshot.Limits) {
@@ -124,9 +124,9 @@ func vendorRank(vendor string) int {
 func vendorHeader(limits []AccountLimits, vendor string, text *renderer) string {
 	title := vendorGlyph(vendor) + " " + strings.ToUpper(vendor)
 	if vendorReady(limits, vendor) {
-		return paint(text.pal.Accent, title)
+		return termpaint.Paint(text.pal.Accent, title)
 	}
-	return paint(text.pal.Dim, title)
+	return termpaint.Paint(text.pal.Dim, title)
 }
 
 func vendorReady(limits []AccountLimits, vendor string) bool {
@@ -143,9 +143,9 @@ func vendorGlyph(vendor string) string {
 }
 
 func vendorTable(snapshot Snapshot, vendor string, text *renderer) []string {
-	rows := &table{right: map[int]bool{limitPercentColumn: true}}
+	rows := &termpaint.Table{Right: map[int]bool{limitPercentColumn: true}}
 	if vendorReady(snapshot.Limits, vendor) {
-		rows.add(text.dimRow("  "+text.text(clitext.QuotaColAccount, nil), text.text(clitext.QuotaColWindow, nil), text.text(clitext.QuotaColRemaining, nil), "", text.text(clitext.QuotaColReset, nil))...)
+		rows.Add(text.dimRow("  "+text.text(clitext.QuotaColAccount, nil), text.text(clitext.QuotaColWindow, nil), text.text(clitext.QuotaColRemaining, nil), "", text.text(clitext.QuotaColReset, nil))...)
 	}
 	for index := range snapshot.Limits {
 		account := snapshot.Limits[index]
@@ -154,19 +154,19 @@ func vendorTable(snapshot Snapshot, vendor string, text *renderer) []string {
 		}
 		addAccountRows(rows, account, snapshot.At, text)
 	}
-	return rows.lines()
+	return rows.Lines()
 }
 
 const limitPercentColumn = 3
 
-func addAccountRows(rows *table, account AccountLimits, now time.Time, text *renderer) {
+func addAccountRows(rows *termpaint.Table, account AccountLimits, now time.Time, text *renderer) {
 	name := accountName(account, text)
 	if account.Status == LimitsFailed {
-		rows.add("  "+name, paint(text.pal.Bad, text.text(clitext.QuotaFailed, nil)))
+		rows.Add("  "+name, termpaint.Paint(text.pal.Bad, text.text(clitext.QuotaFailed, nil)))
 		return
 	}
 	if account.Status != LimitsReady || len(account.Limits) == 0 {
-		rows.add("  "+name, paint(text.pal.Dim, unavailableCell+" "+text.text(clitext.QuotaUnavailable, nil)))
+		rows.Add("  "+name, termpaint.Paint(text.pal.Dim, unavailableCell+" "+text.text(clitext.QuotaUnavailable, nil)))
 		return
 	}
 	for index, limit := range account.Limits {
@@ -175,7 +175,7 @@ func addAccountRows(rows *table, account AccountLimits, now time.Time, text *ren
 			label = ""
 		}
 		pace := PaceOf(limit, now)
-		rows.add("  "+label, windowLabel(limit, text), limitBar(limit, pace, text.pal), limitPercent(limit, text), resetLabel(limit, now, text)+paceLabel(limit, pace, text))
+		rows.Add("  "+label, windowLabel(limit, text), limitBar(limit, pace, text.pal), limitPercent(limit, text), resetLabel(limit, now, text)+paceLabel(limit, pace, text))
 	}
 }
 
@@ -187,7 +187,7 @@ func accountName(account AccountLimits, text *renderer) string {
 		name = text.text(clitext.QuotaAccountNative, nil)
 	}
 	if account.Default {
-		name += " " + paint(text.pal.Accent, defaultMark)
+		name += " " + termpaint.Paint(text.pal.Accent, defaultMark)
 	}
 	return name
 }
@@ -207,41 +207,45 @@ func capitalize(name string) string {
 
 func limitPercent(limit contracts.Limit, text *renderer) string {
 	remaining := math.Round(Remaining(limit))
-	label := formatNumber(text.lang, remaining, 0) + percentSuffix
+	label := clitext.FormatNumber(text.lang, remaining, 0) + percentSuffix
 	if remaining <= 0 {
-		return paint(text.pal.Bad, label)
+		return termpaint.Paint(text.pal.Bad, label)
 	}
-	return paint(text.pal.Strong, label)
+	return termpaint.Paint(text.pal.Strong, label)
 }
 
-func limitBar(limit contracts.Limit, pace Pace, pal Palette) string {
-	filled := int(math.Round(Remaining(limit) / percentScale * barWidth))
+func limitBar(limit contracts.Limit, pace Pace, pal termpaint.Palette) string {
+	return sizedBar(limit, pace, pal, barWidth)
+}
+
+func sizedBar(limit contracts.Limit, pace Pace, pal termpaint.Palette, width int) string {
+	filled := int(math.Round(Remaining(limit) / percentScale * float64(width)))
 	marker := noMarker
 	if !limit.ResetsAt.IsZero() && limit.Span > 0 {
-		marker = int(math.Round(pace.Elapsed / percentScale * barWidth))
+		marker = int(math.Round(pace.Elapsed / percentScale * float64(width)))
 	}
 	var cells strings.Builder
-	run := func(count int, cell string, style Style) {
-		cells.WriteString(paint(style, strings.Repeat(cell, max(count, 0))))
+	run := func(count int, cell string, style termpaint.Style) {
+		cells.WriteString(termpaint.Paint(style, strings.Repeat(cell, max(count, 0))))
 	}
 	fillRun := func(from, until int) {
 		run(min(until, filled)-from, fillCell, pal.Fill)
 		run(until-max(from, filled), emptyCell, pal.Dim)
 	}
-	if marker < 0 || marker > barWidth {
-		fillRun(0, barWidth)
+	if marker < 0 || marker > width {
+		fillRun(0, width)
 		return cells.String()
 	}
-	marker = min(marker, barWidth-1)
+	marker = min(marker, width-1)
 	fillRun(0, marker)
-	cells.WriteString(paint(pal.Marker, markerCell))
-	fillRun(marker+1, barWidth)
+	cells.WriteString(termpaint.Paint(pal.Marker, markerCell))
+	fillRun(marker+1, width)
 	return cells.String()
 }
 
 func resetLabel(limit contracts.Limit, now time.Time, text *renderer) string {
 	if limit.ResetsAt.IsZero() {
-		return paint(text.pal.Dim, text.text(clitext.QuotaResetUnknown, nil))
+		return termpaint.Paint(text.pal.Dim, text.text(clitext.QuotaResetUnknown, nil))
 	}
 	left := ResetIn(limit, now)
 	switch {
@@ -256,37 +260,37 @@ func resetLabel(limit contracts.Limit, now time.Time, text *renderer) string {
 		minutes := int(left % time.Hour / time.Minute)
 		return text.text(clitext.QuotaResetHours, clitext.Params{clitext.ParamHours: hours, clitext.ParamMinutes: fmt.Sprintf("%02d", minutes)})
 	}
-	return text.text(clitext.QuotaResetMinutes, clitext.Params{clitext.ParamMinutes: int(left / time.Minute)})
+	return text.text(clitext.QuotaResetMinutes, clitext.Params{clitext.ParamMinutes: int((left + time.Minute - 1) / time.Minute)})
 }
 
 func paceLabel(limit contracts.Limit, pace Pace, text *renderer) string {
 	if Remaining(limit) <= 0 {
-		return "  " + paint(text.pal.Bad, text.text(clitext.QuotaExhausted, nil))
+		return "  " + termpaint.Paint(text.pal.Bad, text.text(clitext.QuotaExhausted, nil))
 	}
 	if !pace.Shown {
 		return ""
 	}
-	delta := formatNumber(text.lang, math.Abs(pace.Delta), 0)
+	delta := clitext.FormatNumber(text.lang, math.Abs(pace.Delta), 0)
 	if pace.Delta > 0 {
-		return "  " + paint(text.pal.Warn, text.text(clitext.QuotaPaceFaster, clitext.Params{clitext.ParamDelta: "+" + delta}))
+		return "  " + termpaint.Paint(text.pal.Warn, text.text(clitext.QuotaPaceFaster, clitext.Params{clitext.ParamDelta: "+" + delta}))
 	}
-	return "  " + paint(text.pal.Good, text.text(clitext.QuotaPaceSlower, clitext.Params{clitext.ParamDelta: "-" + delta}))
+	return "  " + termpaint.Paint(text.pal.Good, text.text(clitext.QuotaPaceSlower, clitext.Params{clitext.ParamDelta: "-" + delta}))
 }
 
 // CostLines writes the total of the spend of the period, its daily sparkline in the zone
 // of the display, and its cost by account and by model.
-func CostLines(snapshot Snapshot, lang i18n.Language, zone *time.Location, pal Palette) ([]string, error) {
+func CostLines(snapshot Snapshot, lang i18n.Language, zone *time.Location, pal termpaint.Palette) ([]string, error) {
 	text := &renderer{lang: lang, pal: pal}
 	spend := snapshot.Spend
 	if snapshot.LedgerTruncated {
-		return []string{paint(pal.Bad, text.text(clitext.SpendLedgerTruncated, nil))}, text.err
+		return []string{termpaint.Paint(pal.Bad, text.text(clitext.SpendLedgerTruncated, nil))}, text.err
 	}
 	if spend.Sessions == 0 {
-		return []string{paint(pal.Dim, text.text(clitext.SpendEmpty, nil))}, text.err
+		return []string{termpaint.Paint(pal.Dim, text.text(clitext.SpendEmpty, nil))}, text.err
 	}
 	sessions := text.text(clitext.SpendSessions, clitext.Params{clitext.ParamCount: spend.Sessions})
 	summary := sessions + summarySep + text.text(rangeKeys()[snapshot.Range], nil) + summarySep + text.text(clitext.SpendEstimate, nil)
-	lines := []string{paint(pal.Strong, formatMoney(lang, spend.Cost)) + "  " + paint(pal.Dim, summary)}
+	lines := []string{termpaint.Paint(pal.Strong, formatMoney(lang, spend.Cost)) + "  " + termpaint.Paint(pal.Dim, summary)}
 	if spark := sparkline(snapshot, text, zone); spark != "" {
 		lines = append(lines, spark)
 	}
@@ -301,22 +305,22 @@ func CostLines(snapshot Snapshot, lang i18n.Language, zone *time.Location, pal P
 
 // TokenLines writes the tokens of the period by type, with the share of the cache read in
 // the input, then the tokens by model.
-func TokenLines(snapshot Snapshot, lang i18n.Language, pal Palette) ([]string, error) {
+func TokenLines(snapshot Snapshot, lang i18n.Language, pal termpaint.Palette) ([]string, error) {
 	text := &renderer{lang: lang, pal: pal}
 	tokens := snapshot.Spend.Tokens
 	if snapshot.LedgerTruncated {
-		return []string{paint(pal.Bad, text.text(clitext.SpendLedgerTruncated, nil))}, text.err
+		return []string{termpaint.Paint(pal.Bad, text.text(clitext.SpendLedgerTruncated, nil))}, text.err
 	}
 	if tokens.Total() == 0 {
-		return []string{paint(pal.Dim, text.text(clitext.SpendEmpty, nil))}, text.err
+		return []string{termpaint.Paint(pal.Dim, text.text(clitext.SpendEmpty, nil))}, text.err
 	}
 	lines := []string{
 		text.text(clitext.SpendVolumeTotal, clitext.Params{
-			clitext.ParamTotal: paint(pal.Strong, formatTokens(lang, tokens.Total(), text)),
+			clitext.ParamTotal: termpaint.Paint(pal.Strong, formatTokens(lang, tokens.Total(), text)),
 			clitext.ParamIn:    formatTokens(lang, tokens.In, text),
 			clitext.ParamOut:   formatTokens(lang, tokens.Out, text),
 		}),
-		paint(pal.Dim, text.text(clitext.SpendVolumeCache, clitext.Params{
+		termpaint.Paint(pal.Dim, text.text(clitext.SpendVolumeCache, clitext.Params{
 			clitext.ParamRead:   formatTokens(lang, tokens.CacheRead, text),
 			clitext.ParamCreate: formatTokens(lang, tokens.CacheCreate, text),
 			clitext.ParamRatio:  formatPercent(lang, cacheRatio(tokens)),
@@ -361,7 +365,7 @@ func sparkline(snapshot Snapshot, text *renderer, zone *time.Location) string {
 		layout = "15:04"
 	}
 	peakText := text.text(clitext.SpendPeak, clitext.Params{clitext.ParamCost: formatMoney(text.lang, peak), clitext.ParamDay: peakAt.In(zone).Format(layout)})
-	return paint(text.pal.Accent, cells.String()) + "  " + paint(text.pal.Dim, peakText)
+	return termpaint.Paint(text.pal.Accent, cells.String()) + "  " + termpaint.Paint(text.pal.Dim, peakText)
 }
 
 func shareOf(value, total float64) float64 {
@@ -372,32 +376,32 @@ func shareOf(value, total float64) float64 {
 }
 
 func accountTable(shares []Share, total float64, text *renderer) []string {
-	rows := &table{right: map[int]bool{1: true, 2: true, 3: true}}
-	rows.add(text.dimRow(text.text(clitext.SpendColAccount, nil), text.text(clitext.SpendColCost, nil), text.text(clitext.SpendColShare, nil), text.text(clitext.SpendColVolume, nil))...)
+	rows := &termpaint.Table{Right: map[int]bool{1: true, 2: true, 3: true}}
+	rows.Add(text.dimRow(text.text(clitext.SpendColAccount, nil), text.text(clitext.SpendColCost, nil), text.text(clitext.SpendColShare, nil), text.text(clitext.SpendColVolume, nil))...)
 	for index := range shares {
 		share := shares[index]
-		rows.add("  "+paint(text.pal.Accent, "●")+" "+accountLabel(share, text), formatMoney(text.lang, share.Cost), formatPercent(text.lang, shareOf(share.Cost, total)), formatTokens(text.lang, share.Tokens, text))
+		rows.Add("  "+termpaint.Paint(text.pal.Accent, "●")+" "+accountLabel(share, text), formatMoney(text.lang, share.Cost), formatPercent(text.lang, shareOf(share.Cost, total)), formatTokens(text.lang, share.Tokens, text))
 	}
-	return rows.lines()
+	return rows.Lines()
 }
 
 func modelTable(shares []Share, total float64, text *renderer, valueHeader clitext.Key, amount func(Share) string, value func(Share) float64) []string {
-	rows := &table{right: map[int]bool{1: true, 3: true}}
-	rows.add(text.dimRow(text.text(clitext.SpendColModel, nil), text.text(valueHeader, nil), "", text.text(clitext.SpendColShare, nil))...)
+	rows := &termpaint.Table{Right: map[int]bool{1: true, 3: true}}
+	rows.Add(text.dimRow(text.text(clitext.SpendColModel, nil), text.text(valueHeader, nil), "", text.text(clitext.SpendColShare, nil))...)
 	for index := range shares {
 		share := shares[index]
 		part := shareOf(value(share), total)
-		rows.add("  "+modelLabel(share, text), amount(share), shareBar(part, text.pal), formatPercent(text.lang, part))
+		rows.Add("  "+modelLabel(share, text), amount(share), shareBar(part, text.pal), formatPercent(text.lang, part))
 	}
-	return rows.lines()
+	return rows.Lines()
 }
 
-func shareBar(part float64, pal Palette) string {
+func shareBar(part float64, pal termpaint.Palette) string {
 	if part <= 0 {
 		return strings.Repeat(" ", barWidth)
 	}
 	filled := min(max(int(math.Round(part/percentScale*barWidth)), 1), barWidth)
-	return paint(pal.Fill, strings.Repeat(fillCell, filled)) + strings.Repeat(" ", barWidth-filled)
+	return termpaint.Paint(pal.Fill, strings.Repeat(fillCell, filled)) + strings.Repeat(" ", barWidth-filled)
 }
 
 func accountLabel(share Share, text *renderer) string {
@@ -424,7 +428,7 @@ func formatTokens(lang i18n.Language, count int64, text *renderer) string {
 	case count >= kilo:
 		return scaled(lang, float64(count)/kilo, text.text(clitext.SpendUnitKilo, nil))
 	}
-	return formatNumber(lang, float64(count), 0)
+	return clitext.FormatNumber(lang, float64(count), 0)
 }
 
 func scaled(lang i18n.Language, value float64, unit string) string {
@@ -432,5 +436,5 @@ func scaled(lang i18n.Language, value float64, unit string) string {
 	if value >= wholeFrom {
 		decimals = 0
 	}
-	return formatNumber(lang, value, decimals) + " " + unit
+	return clitext.FormatNumber(lang, value, decimals) + " " + unit
 }

@@ -29,6 +29,7 @@ const (
 	QuotaResetMinutes    = "cli.quota.reset.minutes"
 	QuotaPaceFaster      = "cli.quota.pace.faster"
 	QuotaPaceSlower      = "cli.quota.pace.slower"
+	QuotaCardLeft        = "cli.quota.card.left"
 	SpendEmpty           = "cli.spend.empty"
 	SpendSessions        = "cli.spend.sessions"
 	SpendRange24h        = "cli.spend.range.24h"
@@ -94,6 +95,7 @@ func spendKeys() map[Key][]string {
 		QuotaResetMinutes:    {ParamMinutes},
 		QuotaPaceFaster:      {ParamDelta},
 		QuotaPaceSlower:      {ParamDelta},
+		QuotaCardLeft:        {ParamRatio},
 		SpendEmpty:           nil,
 		SpendSessions:        {ParamCount},
 		SpendRange24h:        nil,

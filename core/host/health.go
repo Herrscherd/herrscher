@@ -60,7 +60,7 @@ func healthProbes(inputs healthInputs) []health.Probe {
 
 func daemonProbe(daemon health.Daemon) health.Probe {
 	return health.Probe{
-		Check: health.Check{Group: health.GroupCore, Name: "daemon", Facts: health.Facts{Socket: daemon.Socket}},
+		Check: health.Check{Group: health.GroupCore, Name: health.ServiceDaemon, Facts: health.Facts{Socket: daemon.Socket}},
 		Run:   reportRun(contracts.ProbeReport{State: contracts.HealthOK}),
 	}
 }
@@ -94,7 +94,7 @@ func proxyProbe(listen string, providers int) health.Probe {
 		state = contracts.HealthOff
 	}
 	return health.Probe{
-		Check: health.Check{Group: health.GroupCore, Name: "proxy", Facts: health.Facts{Listen: listen, Providers: providers}},
+		Check: health.Check{Group: health.GroupCore, Name: health.ServiceProxy, Facts: health.Facts{Listen: listen, Providers: providers}},
 		Run:   reportRun(contracts.ProbeReport{State: state}),
 	}
 }

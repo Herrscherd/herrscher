@@ -2,8 +2,8 @@ github.com/BurntSushi/toml v1.6.0 h1:dRaEfpa2VI55EwlIW72hMRHdWouJeRF7TPYhI+AUQjk
 github.com/BurntSushi/toml v1.6.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
 github.com/Herrscherd/dctl v1.11.0 h1:OZn0IGyGZ0EfvwSz/NhasJylO3NlWCHJxyDrHh3hmnU=
 github.com/Herrscherd/dctl v1.11.0/go.mod h1:7hNu0guJ9n7fA+7oXok/Vcfso+Twc62NuKrdPCX0mXk=
-github.com/Herrscherd/herrscher-claude-backend v0.13.0 h1:TDZm50Px2jT+tzTvzosejrkis63Z8CgcRWRMFRfuEnU=
-github.com/Herrscherd/herrscher-claude-backend v0.13.0/go.mod h1:LvZRQ84O9CK9k7oLePPvRvL7OntIoCj48YC7Sr1XNfU=
+github.com/Herrscherd/herrscher-claude-backend v0.14.0 h1:QSK51yC75lAGPQjYgZ8SQxbVG6D6WxJbci1tQm6lEhY=
+github.com/Herrscherd/herrscher-claude-backend v0.14.0/go.mod h1:KbyldO8oFztAVc8OAgD39MrrsBEtIRmTli18FQ26Md0=
 github.com/Herrscherd/herrscher-codex-backend v0.9.0 h1:Qz1UzuRGmHdJgflQXdZ9UeUFxjdXFyQen7GSQnFQDMc=
 github.com/Herrscherd/herrscher-codex-backend v0.9.0/go.mod h1:B/200TQseiYtTtzTL0Z54PIGgSsWY9voOK6aKvFaYzg=
 github.com/Herrscherd/herrscher-contracts v0.28.0 h1:mNB1/pZyue/zJALCEzwKqbclac+Vp5K8bzWbaboQSAg=
@@ -12,8 +12,8 @@ github.com/Herrscherd/herrscher-cursor-backend v0.8.0 h1:7yDIL6aNVZIu4QqXBfTZ3yq
 github.com/Herrscherd/herrscher-cursor-backend v0.8.0/go.mod h1:RMiLJLSaOGKr1S1gbnVnts4QQ0NwEHzIL4NeVUUoVzM=
 github.com/Herrscherd/herrscher-discord-gateway v0.31.0 h1:xzCk7sOHnIQ+VZ5Kjs/RA9FEKw+H/pa97OwXzSvhUck=
 github.com/Herrscherd/herrscher-discord-gateway v0.31.0/go.mod h1:47eyfrtupJ1BgyOny+qM2DNFebtGgVFeGiWs/NwkB2I=
-github.com/Herrscherd/herrscher-jev-compactor v0.2.0 h1:yRXDvhISI6dRwIcKHaUZhRCAB1GIVrk0ui0eoxLkAEw=
-github.com/Herrscherd/herrscher-jev-compactor v0.2.0/go.mod h1:phY434rUnRqmv05INMB9/N+8WNH3gwUnKNOD+CHjKmo=
+github.com/Herrscherd/herrscher-jev-compactor v0.3.0 h1:AEOfJUVY5Y8naHgTxiM9hOoHL8TLchSTPCnjp83Ob74=
+github.com/Herrscherd/herrscher-jev-compactor v0.3.0/go.mod h1:GuaRw4cQ3SbrBChJ7jm9ji5A+07IalA6mX9NFPMlNUM=
 github.com/Herrscherd/herrscher-llm-extractor v0.4.0 h1:9FfGVgLDKoyHKX1Ffz26PwMqrD12RPtL5XbYNaB+Zpg=
 github.com/Herrscherd/herrscher-llm-extractor v0.4.0/go.mod h1:Rw8kJrn/g3m2ZjRw8kevinI1Q2u0N9JVOQn9AOjApwA=
 github.com/Herrscherd/herrscher-obsidian-memory v0.6.0 h1:Ebzpz7PBHD2yetvpE+s7w8YEU5BxRk85q3Zpe4cpkCg=

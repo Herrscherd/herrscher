@@ -752,8 +752,9 @@ name `jev` never builds it and starts without the key. The stage edits the histo
 only for a session whose backend declares `Capabilities.HistoryEditor`: the host
 then hands plugin stages a history editor that reads and prunes the conversation
 through the bridge, and the `backend` stage never receives one. The `claude`
-backend declares it from herrscher-claude-backend v0.12.0, the version this host
-builds with. On another backend the stage gets no editor and leaves the history as
+backend declares it from herrscher-claude-backend v0.12.0 and, from v0.14.0, the
+version this host builds with, keeps the tail a `truncate_tail` edit asks for. On
+another backend the stage gets no editor and leaves the history as
 it is. The bridge sends the history in frames of at most 128 KiB, and the host
 refuses a history past 64 MiB. A read or a prune that the bridge does not answer
 within two minutes fails the stage. The host sends the edits of a prune in
@@ -764,9 +765,9 @@ and the `backend` stage still runs. A backend that declares
 port fails the stage, and the host writes one warning line to stderr the first
 time it happens.
 
-The stage reports its stats to the usage ledger only once [herrscher-jev-compactor]
-fills them. Until it does, a successful `jev` compaction does not appear in
-`herrscher usage` or in `herrscher health`.
+The stage reports its stats to the usage ledger: [herrscher-jev-compactor] fills
+them from v0.3.0, the version this host builds with, so a `jev` compaction appears
+in `herrscher usage` and in `herrscher health`.
 
 When a backend declares `Capabilities.Compactor` but its running instance does not
 implement the port, the host writes one warning line to stderr the first time that

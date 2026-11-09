@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -95,18 +96,19 @@ func runBridge(ctx context.Context, args []string) error {
 		rosterRoot = host.DefaultAgentsRoot()
 	}
 	opts := bridge.Options{
-		Channel:       *channel,
-		HubSocket:     *hubSocket,
-		Roster:        host.NewRoster(rosterRoot),
-		Capabilities:  os.Getenv(host.EnvCapabilities),
-		LaunchProject: *project,
-		ProjectPinned: *projectPinned,
-		MemoryAgent:   *agent,
+		Channel:          *channel,
+		HubSocket:        *hubSocket,
+		Roster:           host.NewRoster(rosterRoot),
+		Capabilities:     os.Getenv(host.EnvCapabilities),
+		LaunchProject:    *project,
+		ProjectPinned:    *projectPinned,
+		MemoryAgent:      *agent,
+		OutboundMaxBytes: cfg.EffectiveOutboundMaxBytes(),
 	}
 	if mem != nil {
 		opts.Scope = vaultScopeResolver{mem: mem, log: log}
 	}
-	return bridge.Run(ctx, newBackend, orch, opts)
+	return runBridgeWithOutbox(ctx, newBackend, orch, opts, *statePath)
 }
 
 type backendFlags struct {
@@ -136,6 +138,15 @@ func (f backendFlags) request(models *host.ModelDiscovery) host.BackendRequest {
 		Vendor: *f.vendor, Cmd: *f.cmd, Kind: *f.kind, Resume: *f.resume, ModelID: *f.modelID, Account: *f.account,
 		Models: models,
 	}
+}
+
+func runBridgeWithOutbox(ctx context.Context, newBackend bridge.BackendFactory, orch contracts.Orchestrator, opts bridge.Options, statePath string) error {
+	root, err := host.OutboxRoot(statePath)
+	if err != nil {
+		return fmt.Errorf("outbox root: %w", err)
+	}
+	opts.OutboxRoot = root
+	return bridge.Run(ctx, newBackend, orch, opts)
 }
 
 func bridgeRequests(flags backendFlags, statePath string) func() host.BackendRequest {

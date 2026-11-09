@@ -15,6 +15,11 @@ func resumeAwareOf(backend contracts.Backend) (contracts.ResumeAware, bool) {
 	return resumer, ok
 }
 
+func fileProducerOf(backend contracts.Backend) (contracts.FileProducer, bool) {
+	producer, ok := lease.Unwrap(backend).(contracts.FileProducer)
+	return producer, ok
+}
+
 func choiceInjectorOf(backend contracts.Backend) (contracts.ChoiceInjector, bool) {
 	injector, ok := lease.Unwrap(backend).(contracts.ChoiceInjector)
 	return injector, ok

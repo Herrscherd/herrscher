@@ -186,6 +186,37 @@ letting it run unattended.
 
 → `architecture/proactive`
 
+### Files a backend sends back
+
+A backend that writes files during a turn, such as a chart or an image, declares
+`FileProducer`. For each of its turns the bridge makes a private directory
+(0700) under the daemon state directory, in `outbox/<session>/`, and hands its
+path to the backend as `Prompt.Outbox`. After the reply, the bridge takes the
+files the backend lists and vets them: each must be a regular file inside that
+directory, and no larger than the limit. At most 10 files a turn are sent, and a
+refused file is named in the reply with a notice, its content never logged.
+
+The limit is 25 MB by default. `outboundFileMaxMB` in `config.json` sets another
+size in megabytes, up to 1024. The daemon delivers the reply text first, as a
+normal reply. The valid files then go through the gateway's `SendFiles` when the
+gateway implements it, as a separate message without a reply target, because an
+event carries no message ID to reply to. A gateway that does not implement
+`SendFiles` gets a notice that names the files, without their paths. The files
+go in batches of at most 10 files and 9 MiB, the limits of a Discord message.
+The Discord gateway also refuses any single file over 8 MiB and names it in its
+own message, so a limit above 8 MB only helps other gateways. A batch that fails
+gets a notice that names only its own files, and the batches before and after it
+are still sent. A batch whose send times out is named as not sent even when the
+gateway delivered it late. When the turn is cancelled, the batches not yet sent
+are named in a single notice. The turn directory is removed once the reply
+is delivered, or once the turn ends without files. A directory a crash leaves
+behind is purged when it is older than 24 hours: at the daemon start for every
+session, and at the start of each turn for the outbox of that turn's session
+only, so a turn still running in another session is never removed. When the
+reply goes to another conversation than the one that sent the turn, its files
+are not sent, and the reply names them in a notice, refused files included. A
+backend without `FileProducer` gets no outbox, and its replies are unchanged.
+
 ### Sessions that run on another machine
 
 ```bash

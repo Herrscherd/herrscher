@@ -134,7 +134,7 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 		pin = &scopePin{resolve: opts.Scope, current: opts.LaunchProject, agent: opts.MemoryAgent, orch: orch}
 	}
 	runHubTurnsCtl(ctx, events, conn, backend, orch, ctrl, eng,
-		affordances{roster: opts.Roster, caps: opts.Capabilities, user: identity.FromDir(ctx, cwd)}, pin)
+		affordances{roster: opts.Roster, caps: opts.Capabilities, user: identity.FromDir(ctx, cwd), outbox: outboundSettings{root: opts.OutboxRoot, session: opts.Channel, maxBytes: opts.OutboundMaxBytes}}, pin)
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -153,6 +153,7 @@ type affordances struct {
 	roster contracts.RosterProvider
 	caps   string
 	user   identity.Identity
+	outbox outboundSettings
 }
 
 type scopePin struct {
@@ -264,7 +265,9 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	if orch != nil {
 		memCtx = orch.Context(turnCtx)
 	}
-	prompt := contracts.Prompt{Content: event.Text, Context: withIdentity(withCapabilities(withDelegation(withSkills(memCtx, eng), aff.roster), aff.caps), aff.user), Author: event.Who, Attachments: event.Attachments, Language: lang}
+	turn := beginTurnOutbox(backend, aff.outbox)
+	defer turn.discard()
+	prompt := contracts.Prompt{Content: event.Text, Context: withIdentity(withCapabilities(withDelegation(withSkills(memCtx, eng), aff.roster), aff.caps), aff.user), Author: event.Who, Attachments: event.Attachments, Language: lang, Outbox: turn.dir}
 	var usage turnUsage
 	onEvent := func(event contracts.BackendEvent) {
 		usage.absorb(event)
@@ -274,6 +277,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	if err != nil {
 		out = settleFailedReply(ctrl, out, err)
 	}
+	turn.emitFiles(ctx, sink)
 	out = strings.TrimSpace(out)
 	if eng != nil {
 		reportSkillUse(ctx, orch, eng.Detect(out))

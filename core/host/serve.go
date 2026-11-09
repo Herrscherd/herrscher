@@ -21,6 +21,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
+	"github.com/Herrscherd/herrscher/core/outbox"
 	"github.com/Herrscherd/herrscher/core/service"
 )
 
@@ -130,6 +131,15 @@ func StoredOperatorLanguage(statePath string) (string, error) {
 	return persisted.OperatorLang, nil
 }
 
+// OutboxRoot returns the absolute directory of the turn outboxes, next to the state
+// file at statePath, or next to the default state file when statePath is empty.
+func OutboxRoot(statePath string) (string, error) {
+	if statePath == "" {
+		statePath = DefaultStatePath()
+	}
+	return outbox.Root(statePath)
+}
+
 // DefaultStatePath returns the default path to the daemon state file.
 func DefaultStatePath() string {
 	if d := envx.Get("STATE_DIR"); d != "" {
@@ -219,6 +229,14 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	}
 	sessions.compaction = policy
 	sessions.store = store
+	outboxRoot, err := OutboxRoot(options.StatePath)
+	if err != nil {
+		return wrapHost(err, "serve.outbox", nil)
+	}
+	sessions.outboxRoot = outboxRoot
+	if purgeErr := outbox.Purge(sessions.outboxRoot, time.Now()); purgeErr != nil {
+		log.Warn("stale turn outboxes not purged", "err", purgeErr)
+	}
 	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, store.Home)}, options, store, sup, instID, options.ContributedCommands, approvals, sessions)
 	if err != nil {
 		return wrapHost(err, "serve.registry", nil)
@@ -237,6 +255,8 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	if err != nil {
 		return wrapHost(err, "serve.config", nil)
 	}
+	sessions.outboundMaxBytes = cfg.EffectiveOutboundMaxBytes()
+	sessions.fileSenders = fileSendersOf(closers)
 	if fallback := accountFallbackFor(cfg, options.usage, gws); fallback != nil {
 		deps.handler.SetAccountFallback(fallback)
 	}

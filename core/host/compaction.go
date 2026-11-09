@@ -103,6 +103,7 @@ type compactionPolicy struct {
 	limits         contextwindow.Limits
 	names          []string
 	plugins        map[string]contracts.Compactor
+	triggers       map[string]int
 	backends       map[string]bool
 	historyEditors map[string]bool
 	warnOnce       *sync.Once
@@ -115,6 +116,7 @@ func newCompactionPolicy(ctx context.Context, percent *int, names []string, perV
 		percent:        defaultCompactPercent,
 		names:          []string{contracts.CompactStageBackend},
 		plugins:        make(map[string]contracts.Compactor),
+		triggers:       make(map[string]int),
 		backends:       make(map[string]bool),
 		historyEditors: make(map[string]bool),
 		warnOnce:       &sync.Once{},
@@ -153,13 +155,29 @@ func newCompactionPolicy(ctx context.Context, percent *int, names []string, perV
 		if name == contracts.CompactStageBackend {
 			continue
 		}
-		compactor, err := customStage(ctx, name, os.Getenv)
-		if err != nil {
-			return compactionPolicy{}, wrapHost(err, "compaction.stack_named", map[string]any{nameParam: name})
+		if err := policy.addStage(ctx, name); err != nil {
+			return compactionPolicy{}, err
 		}
-		policy.plugins[name] = compactor
 	}
 	return policy, nil
+}
+
+func (p compactionPolicy) addStage(ctx context.Context, name string) error {
+	compactor, err := customStage(ctx, name, os.Getenv)
+	if err != nil {
+		return wrapHost(err, "compaction.stack_named", map[string]any{nameParam: name})
+	}
+	if trigger, ok := compactor.(contracts.StageTrigger); ok {
+		percent := trigger.TriggerPercent()
+		if err := contracts.ValidateStageTriggerPercent(percent); err != nil {
+			return wrapHost(err, "compaction.stage_trigger", map[string]any{nameParam: name, "Percent": percent})
+		}
+		if percent != 0 {
+			p.triggers[name] = percent
+		}
+	}
+	p.plugins[name] = compactor
+	return nil
 }
 
 func warnInvalidContextLimit(warn func(format string, args ...any), raw string) {
@@ -255,12 +273,12 @@ func (d *sessionDriver) compactSupported() bool {
 	return d.compaction.supports(d.modelNow().vendor)
 }
 
-func (d *sessionDriver) compactStages() ([]contracts.CompactStage, error) {
+func (d *sessionDriver) compactStages(names []string) ([]contracts.CompactStage, error) {
 	if !d.compactSupported() {
 		return nil, unsupportedCompaction(d.name, d.modelNow().vendor)
 	}
-	stages := make([]contracts.CompactStage, 0, len(d.compaction.names))
-	for _, name := range d.compaction.names {
+	stages := make([]contracts.CompactStage, 0, len(names))
+	for _, name := range names {
 		var compactor contracts.Compactor = bridgeCompactor{driver: d}
 		if name != contracts.CompactStageBackend {
 			compactor = historyStage{compactor: d.compaction.plugins[name], history: d.sessionHistory()}
@@ -318,31 +336,76 @@ func crossed(used, limit, percent int) bool {
 	return used*percentScale >= percent*limit
 }
 
+type compactionPass struct {
+	names []string
+	full  bool
+}
+
+func (p compactionPolicy) stageThreshold(name string, host int) int {
+	own := p.triggers[name]
+	if host == 0 || own == 0 || own >= host {
+		return host
+	}
+	return own
+}
+
+func (d *sessionDriver) automaticRun(used, limit int) (compactionPass, bool) {
+	host := d.compactPercent()
+	if host == 0 {
+		return compactionPass{}, false
+	}
+	if !crossed(used, limit, host) {
+		d.hostSpent = false
+	} else if !d.hostSpent {
+		return compactionPass{names: d.compaction.names, full: true}, true
+	}
+	var due []string
+	for _, name := range d.compaction.names {
+		threshold := d.compaction.stageThreshold(name, host)
+		if threshold == host {
+			continue
+		}
+		if !crossed(used, limit, threshold) {
+			d.stageSpent[name] = false
+			continue
+		}
+		if !d.stageSpent[name] {
+			due = append(due, name)
+		}
+	}
+	return compactionPass{names: due}, len(due) > 0
+}
+
+func (d *sessionDriver) markSpent(run compactionPass) {
+	if run.full {
+		d.hostSpent = true
+	}
+	for _, name := range run.names {
+		d.stageSpent[name] = true
+	}
+}
+
 func (d *sessionDriver) maybeAutoCompact(ctx context.Context) {
-	percent := d.compactPercent()
+	if d.turnReading == 0 {
+		return
+	}
 	limit := d.contextLimit()
-	if percent == 0 || d.turnReading == 0 {
+	run, due := d.automaticRun(d.turnReading, limit)
+	if !due {
 		return
 	}
-	if !crossed(d.turnReading, limit, percent) {
-		d.compactSpent = false
+	d.markSpent(run)
+	result, err := d.runCompaction(ctx, contracts.TriggerAutomatic, "", run)
+	if err != nil || !result.TokensMeasured || !run.full {
 		return
 	}
-	if d.compactSpent {
-		return
-	}
-	d.compactSpent = true
-	result, err := d.runCompaction(ctx, contracts.TriggerAutomatic, "")
-	if err != nil || !result.TokensMeasured {
-		return
-	}
-	if crossed(result.TokensAfter, limit, percent) {
+	if percent := d.compactPercent(); crossed(result.TokensAfter, limit, percent) {
 		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("compaction.no_effect", map[string]any{"Percent": percent})})
 	}
 }
 
-func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.CompactTrigger, instruction string) (contracts.CompactResult, error) {
-	stages, err := d.compactStages()
+func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.CompactTrigger, instruction string, run compactionPass) (contracts.CompactResult, error) {
+	stages, err := d.compactStages(run.names)
 	if err != nil {
 		d.failCompaction(ctx, trigger, err)
 		return contracts.CompactResult{}, err
@@ -364,7 +427,7 @@ func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.Com
 		d.failCompaction(ctx, trigger, err)
 		return contracts.CompactResult{}, err
 	}
-	d.settleCompaction(result, limit)
+	d.settleCompaction(result, limit, run)
 	d.announceCompaction(ctx, trigger, result)
 	return result, nil
 }
@@ -507,12 +570,18 @@ func (d *sessionDriver) relayNoticeFailure(parent context.Context, failure compa
 	}
 }
 
-func (d *sessionDriver) settleCompaction(result contracts.CompactResult, limit int) {
+func (d *sessionDriver) settleCompaction(result contracts.CompactResult, limit int, run compactionPass) {
 	if !result.TokensMeasured {
 		return
 	}
 	d.turnReading = result.TokensAfter
-	d.compactSpent = crossed(result.TokensAfter, limit, d.compactPercent())
+	host := d.compactPercent()
+	if run.full {
+		d.hostSpent = crossed(result.TokensAfter, limit, host)
+	}
+	for _, name := range run.names {
+		d.stageSpent[name] = crossed(result.TokensAfter, limit, d.compaction.stageThreshold(name, host))
+	}
 }
 
 func measuredTokens(result contracts.CompactResult) int {
@@ -535,7 +604,7 @@ func (d *sessionDriver) sessionInfo() contracts.SessionInfo {
 }
 
 func (d *sessionDriver) runCompactNow(ctx context.Context, instruction string) {
-	if _, err := d.runCompaction(ctx, contracts.TriggerManual, instruction); err != nil {
+	if _, err := d.runCompaction(ctx, contracts.TriggerManual, instruction, compactionPass{names: d.compaction.names, full: true}); err != nil {
 		return
 	}
 }

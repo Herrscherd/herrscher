@@ -220,6 +220,11 @@
     "other": "compactStack \"{{.Name}}\": {{.Detail}}. The daemon does not start while this stage fails: fix it or remove it from compactStack, then herrscher service restart"
   },
   {
+    "id": "compaction.stage_trigger",
+    "description": "The trigger threshold of a compaction stage is outside 0 to 100, Name names the stage and Percent carries the value; the daemon does not start while it is invalid",
+    "other": "compactStack \"{{.Name}}\": trigger threshold {{.Percent}} is outside 0 to 100. The daemon does not start while this threshold is invalid: fix it in the stage, then herrscher service restart"
+  },
+  {
     "id": "coordination.wrap",
     "description": "A coordination failure, Detail carries the cause",
     "other": "coordination: {{.Detail}}"

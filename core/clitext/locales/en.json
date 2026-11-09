@@ -3657,29 +3657,24 @@
   },
   {
     "id": "cli.health.detail_hint",
-    "description": "Health line of the CLI report: detail hint",
-    "other": "details: herrscher health {{.Name}}"
+    "description": "Label before the command that shows the worst check in detail",
+    "other": "details:"
   },
   {
     "id": "cli.health.banner",
-    "description": "Health line of the CLI report: banner",
-    "other": "herrscher {{.Version}} · up {{.Uptime}} · pid {{.PID}} · probed in {{.Elapsed}}"
-  },
-  {
-    "id": "cli.health.uptime",
-    "description": "Health line of the CLI report: uptime",
-    "other": "{{.Days}} d {{.Hours}} h {{.Minutes}} min"
+    "description": "Health banner after the version: uptime, pid and probe time",
+    "other": "· daemon up {{.Uptime}} · pid {{.PID}} · probed in {{.Elapsed}}"
   },
   {
     "id": "cli.health.facts.proxy",
     "description": "Health line of the CLI report: facts.proxy",
-    "one": "listens on {{.Listen}}, {{.Count}} provider",
-    "other": "listens on {{.Listen}}, {{.Count}} providers"
+    "one": "{{.Listen}} · {{.Count}} provider",
+    "other": "{{.Listen}} · {{.Count}} providers"
   },
   {
     "id": "cli.health.facts.last_status",
     "description": "Health line of the CLI report: facts.last status",
-    "other": "last status {{.Status}}"
+    "other": "status {{.Status}}"
   },
   {
     "id": "cli.health.facts.cooling",
@@ -3689,7 +3684,7 @@
   {
     "id": "cli.health.header",
     "description": "Column titles of the health table, tab separated",
-    "other": "service\tstate\tlatency\tdetail"
+    "other": "SERVICE\tSTATE\tLATENCY\tDETAIL"
   },
   {
     "id": "cli.health.group.core",
@@ -3719,7 +3714,7 @@
   {
     "id": "cli.health.group.keys",
     "description": "Name of the keys group in health",
-    "other": "keys"
+    "other": "API keys"
   },
   {
     "id": "cli.health.state.ok",
@@ -3752,25 +3747,70 @@
     "other": "health: unknown service {{.Name}}"
   },
   {
-    "id": "cli.health.facts.daemon",
-    "description": "Detail line of the daemon check, PID and Socket",
-    "other": "daemon pid {{.PID}} on {{.Socket}}"
-  },
-  {
     "id": "cli.health.facts.pool",
     "description": "Detail line of a key pool, Count usable out of Total keys",
-    "one": "{{.Count}} of {{.Total}} keys usable",
-    "other": "{{.Count}} of {{.Total}} keys usable"
-  },
-  {
-    "id": "cli.health.default_account",
-    "description": "Marker of the default account in health",
-    "other": "default"
+    "one": "{{.Count}}/{{.Total}} key usable",
+    "other": "{{.Count}}/{{.Total}} keys usable"
   },
   {
     "id": "cli.health.watch_refreshed_at",
     "description": "Footer of health --watch, Time is the refresh time",
     "other": "refreshed at {{.Time}}, every 15 s, ctrl-c to stop"
+  },
+  {
+    "id": "cli.health.banner_title",
+    "description": "Health banner head, the version of herrscher",
+    "other": "herrscher {{.Version}}"
+  },
+  {
+    "id": "cli.health.span.days",
+    "description": "Compact duration of a day or more",
+    "other": "{{.Days}} d {{.Hours}} h"
+  },
+  {
+    "id": "cli.health.span.hours",
+    "description": "Compact duration of an hour or more",
+    "other": "{{.Hours}} h {{.Minutes}} min"
+  },
+  {
+    "id": "cli.health.span.minutes",
+    "description": "Compact duration of a minute or more",
+    "other": "{{.Minutes}} min"
+  },
+  {
+    "id": "cli.health.span.seconds",
+    "description": "Compact duration under a minute, Seconds may carry a decimal",
+    "other": "{{.Seconds}} s"
+  },
+  {
+    "id": "cli.health.span.millis",
+    "description": "Compact duration under a second, in milliseconds",
+    "other": "{{.Duration}} ms"
+  },
+  {
+    "id": "cli.health.name.daemon",
+    "description": "Name of the daemon check in health",
+    "other": "daemon"
+  },
+  {
+    "id": "cli.health.name.proxy",
+    "description": "Name of the key proxy check in health",
+    "other": "key proxy"
+  },
+  {
+    "id": "cli.health.detail.state",
+    "description": "Row label of the state in the health detail view",
+    "other": "state"
+  },
+  {
+    "id": "cli.health.detail.cause",
+    "description": "Row label of the cause in the health detail view",
+    "other": "cause"
+  },
+  {
+    "id": "cli.health.detail.remedy",
+    "description": "Row label of the remedy in the health detail view",
+    "other": "remedy"
   },
   {
     "id": "cli.host.fault.health_not_ready",

@@ -7,6 +7,8 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 func limitsSnapshot(now time.Time) Snapshot {
@@ -27,7 +29,7 @@ func limitsSnapshot(now time.Time) Snapshot {
 }
 
 func TestLimitLinesPutsClaudeFirstAndAlignsTheColumns(t *testing.T) {
-	lines, err := LimitLines(limitsSnapshot(time.Now()), i18n.French, Palette{})
+	lines, err := LimitLines(limitsSnapshot(time.Now()), i18n.French, termpaint.Palette{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +42,7 @@ func TestLimitLinesPutsClaudeFirstAndAlignsTheColumns(t *testing.T) {
 		if !found {
 			t.Fatalf("row %q has no percent", line)
 		}
-		percentColumns[visibleWidth(before)] = true
+		percentColumns[termpaint.Width(before)] = true
 	}
 	if len(percentColumns) != 1 {
 		t.Errorf("the percent column is not aligned:\n%s", strings.Join(lines, "\n"))
@@ -58,11 +60,11 @@ func TestLimitLinesPutsClaudeFirstAndAlignsTheColumns(t *testing.T) {
 
 func TestPaletteColorsTheRolesWithoutBreakingTheAlignment(t *testing.T) {
 	now := time.Now()
-	plain, err := LimitLines(limitsSnapshot(now), i18n.French, Palette{})
+	plain, err := LimitLines(limitsSnapshot(now), i18n.French, termpaint.Palette{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	colored, err := LimitLines(limitsSnapshot(now), i18n.French, ANSIPalette())
+	colored, err := LimitLines(limitsSnapshot(now), i18n.French, termpaint.ANSIPalette())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,8 +72,8 @@ func TestPaletteColorsTheRolesWithoutBreakingTheAlignment(t *testing.T) {
 		t.Fatal("the ANSI palette painted nothing")
 	}
 	for index := range plain {
-		if visibleWidth(colored[index]) != visibleWidth(plain[index]) {
-			t.Errorf("line %d is %d cells colored, %d plain", index, visibleWidth(colored[index]), visibleWidth(plain[index]))
+		if termpaint.Width(colored[index]) != termpaint.Width(plain[index]) {
+			t.Errorf("line %d is %d cells colored, %d plain", index, termpaint.Width(colored[index]), termpaint.Width(plain[index]))
 		}
 	}
 }
@@ -82,7 +84,7 @@ func TestCostLinesDrawsAShareBarPerModel(t *testing.T) {
 		Accounts: []Share{{Vendor: "claude", Account: "pro", Cost: 10, Tokens: 2000}},
 		Models:   []Share{{Model: "claude-opus-5-5", Cost: 9, Tokens: 1500}, {Model: "claude-haiku-5-5", Cost: 1, Tokens: 500}},
 	}}
-	lines, err := CostLines(snapshot, i18n.French, time.UTC, Palette{})
+	lines, err := CostLines(snapshot, i18n.French, time.UTC, termpaint.Palette{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,8 +99,8 @@ func TestCostLinesDrawsAShareBarPerModel(t *testing.T) {
 func TestLimitBarKeepsItsWidthWithTheMarkerAtEitherEnd(t *testing.T) {
 	limit := contracts.Limit{Window: contracts.LimitWeekly, UsedPercent: 50, Span: time.Hour, ResetsAt: time.Now()}
 	for _, elapsed := range []float64{0, 50, percentScale} {
-		bar := limitBar(limit, Pace{Elapsed: elapsed}, Palette{})
-		if width := visibleWidth(bar); width != barWidth {
+		bar := limitBar(limit, Pace{Elapsed: elapsed}, termpaint.Palette{})
+		if width := termpaint.Width(bar); width != barWidth {
 			t.Errorf("bar at %v %% elapsed is %d cells, want %d: %q", elapsed, width, barWidth, bar)
 		}
 		if strings.Count(bar, markerCell) != 1 {
@@ -108,17 +110,17 @@ func TestLimitBarKeepsItsWidthWithTheMarkerAtEitherEnd(t *testing.T) {
 }
 
 func TestShareBarDrawsNothingForAZeroShare(t *testing.T) {
-	if bar := shareBar(0, Palette{}); strings.Contains(bar, fillCell) || visibleWidth(bar) != barWidth {
+	if bar := shareBar(0, termpaint.Palette{}); strings.Contains(bar, fillCell) || termpaint.Width(bar) != barWidth {
 		t.Fatalf("zero share bar = %q", bar)
 	}
-	if bar := shareBar(0.1, Palette{}); strings.Count(bar, fillCell) != 1 {
+	if bar := shareBar(0.1, termpaint.Palette{}); strings.Count(bar, fillCell) != 1 {
 		t.Fatalf("a tiny share must still show one cell: %q", bar)
 	}
 }
 
 func TestLimitPercentShowsTheRoundedZeroAsExhausted(t *testing.T) {
 	bad := func(text string) string { return "<" + text + ">" }
-	text := &renderer{lang: i18n.French, pal: Palette{Bad: bad}}
+	text := &renderer{lang: i18n.French, pal: termpaint.Palette{Bad: bad}}
 	if got := limitPercent(contracts.Limit{UsedPercent: 99.6}, text); got != "<0 %>" {
 		t.Fatalf("limitPercent at 0,4 %% left = %q, want the exhausted style", got)
 	}

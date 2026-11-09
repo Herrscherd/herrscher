@@ -14,6 +14,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/host"
+	"github.com/Herrscherd/herrscher/core/termpaint"
 	usagecore "github.com/Herrscherd/herrscher/core/usage"
 )
 
@@ -48,14 +49,14 @@ func runUsage(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	return writeUsage(os.Stdout, snapshot, opts, lang, usagePalette(os.Stdout))
+	return writeUsage(os.Stdout, snapshot, opts, lang, outputPalette(os.Stdout))
 }
 
-func usagePalette(out *os.File) usagecore.Palette {
+func outputPalette(out *os.File) termpaint.Palette {
 	if os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb" || !term.IsTerminal(int(out.Fd())) {
-		return usagecore.Palette{}
+		return termpaint.Palette{}
 	}
-	return usagecore.ANSIPalette()
+	return termpaint.ANSIPalette()
 }
 
 func usageDaemonDown(lang i18n.Language, instance string) error {
@@ -159,7 +160,7 @@ func fetchUsage(ctx context.Context, instance string, opts usageOptions) (usagec
 	return usagecore.Decode([]byte(out))
 }
 
-func writeUsage(writer io.Writer, snapshot usagecore.Snapshot, opts usageOptions, lang i18n.Language, pal usagecore.Palette) error {
+func writeUsage(writer io.Writer, snapshot usagecore.Snapshot, opts usageOptions, lang i18n.Language, pal termpaint.Palette) error {
 	if opts.asJSON {
 		raw, err := usagecore.Encode(snapshot)
 		if err != nil {
@@ -180,7 +181,7 @@ func writeUsage(writer io.Writer, snapshot usagecore.Snapshot, opts usageOptions
 	return nil
 }
 
-func usageLines(snapshot usagecore.Snapshot, view string, lang i18n.Language, pal usagecore.Palette) ([]string, error) {
+func usageLines(snapshot usagecore.Snapshot, view string, lang i18n.Language, pal termpaint.Palette) ([]string, error) {
 	switch view {
 	case usageViewCost:
 		return usagecore.CostLines(snapshot, lang, time.Local, pal)

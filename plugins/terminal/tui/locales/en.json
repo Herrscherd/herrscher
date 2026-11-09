@@ -2677,7 +2677,7 @@
   },
   {
     "id": "tui.health.title",
-    "other": "health"
+    "other": "Health"
   },
   {
     "id": "tui.health.deep_mode",
@@ -2723,7 +2723,7 @@
   },
   {
     "id": "tui.usage.title",
-    "other": "usage"
+    "other": "Usage"
   },
   {
     "id": "tui.usage.tab.session",
@@ -2740,10 +2740,6 @@
   {
     "id": "tui.usage.tab.limits",
     "other": "Limits"
-  },
-  {
-    "id": "tui.usage.range",
-    "other": "period {{.Range}}"
   },
   {
     "id": "tui.usage.account.all",

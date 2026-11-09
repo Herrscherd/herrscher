@@ -7,6 +7,8 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 func TestTruncatedLedgerShowsNoTotals(t *testing.T) {
@@ -24,8 +26,8 @@ func TestTruncatedLedgerShowsNoTotals(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, render := range map[string]func(Snapshot) ([]string, error){
-		"cost":   func(s Snapshot) ([]string, error) { return CostLines(s, i18n.English, nil, Palette{}) },
-		"tokens": func(s Snapshot) ([]string, error) { return TokenLines(s, i18n.English, Palette{}) },
+		"cost":   func(s Snapshot) ([]string, error) { return CostLines(s, i18n.English, nil, termpaint.Palette{}) },
+		"tokens": func(s Snapshot) ([]string, error) { return TokenLines(s, i18n.English, termpaint.Palette{}) },
 	} {
 		lines, err := render(decoded)
 		if err != nil {
@@ -39,7 +41,7 @@ func TestTruncatedLedgerShowsNoTotals(t *testing.T) {
 
 func TestLimitBarDrawsNoPaceMarkerWithoutAKnownReset(t *testing.T) {
 	limit := contracts.Limit{Window: contracts.LimitWeekly, UsedPercent: 30, Span: 7 * hoursPerDay * time.Hour}
-	if bar := limitBar(limit, PaceOf(limit, time.Now()), Palette{}); strings.Contains(bar, markerCell) {
+	if bar := limitBar(limit, PaceOf(limit, time.Now()), termpaint.Palette{}); strings.Contains(bar, markerCell) {
 		t.Errorf("bar = %q, want no pace marker without a reset time", bar)
 	}
 }

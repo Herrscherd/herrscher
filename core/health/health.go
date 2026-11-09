@@ -9,6 +9,13 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
+const (
+	// ServiceDaemon names the check of the daemon itself, in [GroupCore].
+	ServiceDaemon = "daemon"
+	// ServiceProxy names the check of the key proxy, in [GroupCore].
+	ServiceProxy = "proxy"
+)
+
 // Check is one service checked, for one account when the service has accounts.
 type Check struct {
 	Group   Group

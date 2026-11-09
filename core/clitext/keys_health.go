@@ -1,6 +1,6 @@
 package clitext
 
-// Keys of the health command: its usage and flags, the groups and states of its report, and the facts and failures it shows.
+// Keys of the health text.
 const (
 	CmdHelpHealth          = "cli.help.cmd.health"
 	CmdHelpHealthDeep      = "cli.help.cmd.health.deep"
@@ -9,7 +9,7 @@ const (
 	HealthSummaryOK        = "cli.health.summary.ok"
 	HealthDetailHint       = "cli.health.detail_hint"
 	HealthBanner           = "cli.health.banner"
-	HealthUptime           = "cli.health.uptime"
+	HealthBannerTitle      = "cli.health.banner_title"
 	HealthProxyFacts       = "cli.health.facts.proxy"
 	HealthPoolLastStatus   = "cli.health.facts.last_status"
 	HealthPoolCooling      = "cli.health.facts.cooling"
@@ -26,10 +26,18 @@ const (
 	HealthStateOff         = "cli.health.state.off"
 	HealthDaemonDown       = "cli.health.daemon_down"
 	HealthUnknownService   = "cli.health.unknown_service"
-	HealthDaemonFacts      = "cli.health.facts.daemon"
 	HealthPoolFacts        = "cli.health.facts.pool"
-	HealthDefaultAccount   = "cli.health.default_account"
 	HealthWatchRefreshedAt = "cli.health.watch_refreshed_at"
+	HealthSpanDays         = "cli.health.span.days"
+	HealthSpanHours        = "cli.health.span.hours"
+	HealthSpanMinutes      = "cli.health.span.minutes"
+	HealthSpanSeconds      = "cli.health.span.seconds"
+	HealthSpanMillis       = "cli.health.span.millis"
+	HealthNameDaemon       = "cli.health.name.daemon"
+	HealthNameProxy        = "cli.health.name.proxy"
+	HealthDetailState      = "cli.health.detail.state"
+	HealthDetailCause      = "cli.health.detail.cause"
+	HealthDetailRemedy     = "cli.health.detail.remedy"
 )
 
 func healthKeys() map[Key][]string {
@@ -39,9 +47,9 @@ func healthKeys() map[Key][]string {
 		HealthSummaryDown:      {ParamCount},
 		HealthSummaryDegraded:  {ParamCount},
 		HealthSummaryOK:        {ParamCount},
-		HealthDetailHint:       {ParamName},
-		HealthBanner:           {ParamVersion, ParamUptime, ParamPID, ParamElapsed},
-		HealthUptime:           {ParamDays, ParamHours, ParamMinutes},
+		HealthDetailHint:       nil,
+		HealthBanner:           {ParamUptime, ParamPID, ParamElapsed},
+		HealthBannerTitle:      {ParamVersion},
 		HealthProxyFacts:       {ParamListen, ParamCount},
 		HealthPoolLastStatus:   {ParamStatus},
 		HealthPoolCooling:      {ParamDuration},
@@ -58,9 +66,17 @@ func healthKeys() map[Key][]string {
 		HealthStateOff:         nil,
 		HealthDaemonDown:       {ParamSocket},
 		HealthUnknownService:   {ParamName},
-		HealthDaemonFacts:      {ParamPID, ParamSocket},
 		HealthPoolFacts:        {ParamCount, ParamTotal},
-		HealthDefaultAccount:   nil,
 		HealthWatchRefreshedAt: {ParamTime},
+		HealthSpanDays:         {ParamDays, ParamHours},
+		HealthSpanHours:        {ParamHours, ParamMinutes},
+		HealthSpanMinutes:      {ParamMinutes},
+		HealthSpanSeconds:      {ParamSeconds},
+		HealthSpanMillis:       {ParamDuration},
+		HealthNameDaemon:       nil,
+		HealthNameProxy:        nil,
+		HealthDetailState:      nil,
+		HealthDetailCause:      nil,
+		HealthDetailRemedy:     nil,
 	}
 }

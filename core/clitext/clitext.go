@@ -164,6 +164,7 @@ const (
 	ParamDays      = "Days"
 	ParamHours     = "Hours"
 	ParamMinutes   = "Minutes"
+	ParamSeconds   = "Seconds"
 	ParamListen    = "Listen"
 	ParamStatus    = "Status"
 	ParamDuration  = "Duration"

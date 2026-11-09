@@ -14,6 +14,7 @@ const (
 	verbUsage     = "usage"
 	argUsageRange = "--range"
 	argUsageAcct  = "--account"
+	argUsageVend  = "--vendor"
 )
 
 type usageTab int
@@ -35,6 +36,7 @@ func (t usageTab) next() usageTab {
 const (
 	rangeParam   = "Range"
 	accountParam = "Account"
+	vendorParam  = "Vendor"
 )
 
 func (t usageTab) key() string {
@@ -56,6 +58,8 @@ type usagePanel struct {
 	tab      usageTab
 	rng      usage.Range
 	account  usage.AccountKey
+	vendor   string
+	vendors  []string
 	ready    bool
 	failed   bool
 	snapshot usage.Snapshot
@@ -64,6 +68,7 @@ type usagePanel struct {
 type usageMsg struct {
 	rng      usage.Range
 	account  usage.AccountKey
+	vendor   string
 	snapshot usage.Snapshot
 	err      error
 }
@@ -85,10 +90,13 @@ func (m *model) closeUsage() {
 	m.relayout()
 }
 
-func usageArgs(rng usage.Range, account usage.AccountKey) []string {
+func usageArgs(rng usage.Range, account usage.AccountKey, vendor string) []string {
 	args := []string{verbUsage, argUsageRange, rng.String()}
 	if account != (usage.AccountKey{}) {
 		args = append(args, argUsageAcct, account.String())
+	}
+	if vendor != "" {
+		args = append(args, argUsageVend, vendor)
 	}
 	return args
 }
@@ -98,26 +106,27 @@ func (m *model) usageRefresh() tea.Cmd {
 		return nil
 	}
 	backend := m.tm
-	rng, account := m.usage.rng, m.usage.account
-	args := usageArgs(rng, account)
+	rng, account, vendor := m.usage.rng, m.usage.account, m.usage.vendor
+	args := usageArgs(rng, account, vendor)
 	return func() tea.Msg {
 		out, err := backend.Dispatch(args)
 		if err != nil {
-			return usageMsg{rng: rng, account: account, err: err}
+			return usageMsg{rng: rng, account: account, vendor: vendor, err: err}
 		}
 		snapshot, err := usage.Decode([]byte(out))
-		return usageMsg{rng: rng, account: account, snapshot: snapshot, err: err}
+		return usageMsg{rng: rng, account: account, vendor: vendor, snapshot: snapshot, err: err}
 	}
 }
 
 func (m *model) handleUsageMsg(msg usageMsg) {
-	if msg.rng != m.usage.rng || msg.account != m.usage.account {
+	if msg.rng != m.usage.rng || msg.account != m.usage.account || msg.vendor != m.usage.vendor {
 		return
 	}
 	m.usage.failed = msg.err != nil
 	if msg.err == nil {
 		m.usage.snapshot = msg.snapshot
 		m.usage.ready = true
+		m.usage.vendors = knownVendors(m.usage.vendors, msg.snapshot)
 	}
 }
 
@@ -136,6 +145,7 @@ func usageRuns() (map[keyAction]keyRun, error) {
 		bind[keyRun](actUsageRangePrevious, cmdKey((*model).previousUsageRange)),
 		bind[keyRun](actUsageRangeNext, cmdKey((*model).nextUsageRange)),
 		bind[keyRun](actUsageAccount, cmdKey((*model).nextUsageAccount)),
+		bind[keyRun](actUsageVendor, cmdKey((*model).nextUsageVendor)),
 		bind[keyRun](actUsageClose, stepKey((*model).closeUsage)),
 	)
 }
@@ -156,21 +166,58 @@ func (m *model) stepUsageRange(delta int) tea.Cmd {
 	ranges := usage.Ranges()
 	index := slices.Index(ranges, m.usage.rng)
 	m.usage.rng = ranges[(index+delta+len(ranges))%len(ranges)]
+	return m.reloadUsage()
+}
+
+func (m *model) nextUsageAccount() tea.Cmd {
+	accounts := []usage.AccountKey{{}}
+	add := func(vendor, account string) {
+		key := usage.AccountKey{Vendor: vendor, Account: account}
+		if (m.usage.vendor == "" || vendor == m.usage.vendor) && !slices.Contains(accounts, key) {
+			accounts = append(accounts, key)
+		}
+	}
+	for _, entry := range m.usage.snapshot.Limits {
+		add(entry.Vendor, entry.Account)
+	}
+	for _, share := range m.usage.snapshot.Spend.Accounts {
+		add(share.Vendor, share.Account)
+	}
+	index := slices.Index(accounts, m.usage.account)
+	m.usage.account = accounts[(index+1)%len(accounts)]
+	return m.reloadUsage()
+}
+
+func (m *model) nextUsageVendor() tea.Cmd {
+	vendors := append([]string{""}, m.usage.vendors...)
+	index := slices.Index(vendors, m.usage.vendor)
+	m.usage.vendor = vendors[(index+1)%len(vendors)]
+	if m.usage.vendor != "" && m.usage.account.Vendor != m.usage.vendor {
+		m.usage.account = usage.AccountKey{}
+	}
+	return m.reloadUsage()
+}
+
+func (m *model) reloadUsage() tea.Cmd {
 	m.usage.ready = false
 	m.usage.failed = false
 	return m.usageRefresh()
 }
 
-func (m *model) nextUsageAccount() tea.Cmd {
-	accounts := []usage.AccountKey{{}}
-	for _, entry := range m.usage.snapshot.Limits {
-		accounts = append(accounts, usage.AccountKey{Vendor: entry.Vendor, Account: entry.Account})
+func knownVendors(known []string, snapshot usage.Snapshot) []string {
+	vendors := slices.Clone(known)
+	add := func(vendor string) {
+		if vendor != "" && !slices.Contains(vendors, vendor) {
+			vendors = append(vendors, vendor)
+		}
 	}
-	index := slices.Index(accounts, m.usage.account)
-	m.usage.account = accounts[(index+1)%len(accounts)]
-	m.usage.ready = false
-	m.usage.failed = false
-	return m.usageRefresh()
+	for index := range snapshot.Limits {
+		add(snapshot.Limits[index].Vendor)
+	}
+	for index := range snapshot.Spend.Accounts {
+		add(snapshot.Spend.Accounts[index].Vendor)
+	}
+	return vendors
 }
 
 func (m *model) usageOverlayView() string {
@@ -181,12 +228,13 @@ func (m *model) usageOverlayView() string {
 		m.labelledHint(actUsageTab, m.tr.t("tui.usage.hint.tab", nil), ctxUsage),
 		m.labelledHint(actUsageRangeNext, m.tr.t("tui.usage.hint.range", nil), ctxUsage),
 		m.labelledHint(actUsageAccount, m.tr.t("tui.usage.hint.account", nil), ctxUsage),
+		m.labelledHint(actUsageVendor, m.tr.t("tui.usage.hint.vendor", nil), ctxUsage),
 		m.labelledHint(actUsageRefresh, m.tr.t("tui.usage.hint.refresh", nil), ctxUsage),
 		m.labelledHint(actUsageClose, m.tr.t("tui.common.close", nil), ctxUsage),
 	)
 	body := append([]string{""}, m.usageBody()...)
 	return m.renderFrame(overlayFrame{
-		title:  m.st.strong.Render(m.tr.t("tui.usage.title", nil)) + m.st.dim.Render(" · ") + m.st.accent.Render(m.usageAccountLabel()),
+		title:  m.st.strong.Render(m.tr.t("tui.usage.title", nil)) + "  " + m.usageFilters(),
 		right:  joinWith("  ", m.usageRangeChips(), m.usageTabsLine()),
 		footer: m.st.dim.Render(keys),
 		body:   body,
@@ -221,11 +269,16 @@ func (m *model) chip(label string, active bool) string {
 	return m.st.dim.Render(" " + label + " ")
 }
 
-func (m *model) usageAccountLabel() string {
-	if m.usage.account == (usage.AccountKey{}) {
-		return m.tr.t("tui.usage.account.all", nil)
+func (m *model) usageFilters() string {
+	account, vendor := m.tr.t("tui.usage.filter.all", nil), m.tr.t("tui.usage.filter.all", nil)
+	if m.usage.account != (usage.AccountKey{}) {
+		account = m.usage.account.String()
 	}
-	return m.tr.t("tui.usage.account.one", map[string]any{accountParam: m.usage.account.String()})
+	if m.usage.vendor != "" {
+		vendor = m.usage.vendor
+	}
+	return m.st.dim.Render(m.tr.t("tui.usage.filter.account", map[string]any{accountParam: m.st.accent.Render(account)})) + "  " +
+		m.st.dim.Render(m.tr.t("tui.usage.filter.vendor", map[string]any{vendorParam: m.st.accent.Render(vendor)}))
 }
 
 func (m *model) usageBody() []string {
@@ -256,7 +309,7 @@ func (m *model) usageSessionBody() []string {
 func (m *model) usageLines() ([]string, error) {
 	switch m.usage.tab {
 	case usageTabCost:
-		return usage.CostLines(m.usage.snapshot, m.tr.lang, time.Local, m.reportPalette())
+		return usage.CostPanel(m.usage.snapshot, m.tr.lang, time.Local, m.reportPalette(), m.frameInner())
 	case usageTabTokens:
 		return usage.TokenLines(m.usage.snapshot, m.tr.lang, m.reportPalette())
 	case usageTabSession, usageTabLimits:

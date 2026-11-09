@@ -211,6 +211,8 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	sessions := newSessionTable()
 	options.health = &healthSource{}
 	options.usage = newUsageSource(partDir)
+	stopUsageWatch := options.usage.startWatch(ctx)
+	defer stopUsageWatch()
 	policy, err := newCompactionPolicy(ctx, options.CompactPercent, options.CompactStack, options.ContextLimits)
 	if err != nil {
 		return wrapHost(err, "serve.compaction", nil)

@@ -28,9 +28,8 @@ const (
 	defaultMark  = "★"
 	hoursPerDay  = 24
 	kilo         = 1_000
-	mega         = 1_000_000
-	giga         = 1_000_000_000
 	wholeFrom    = 100
+	monthsInYear = 12
 )
 
 func vendorOrder() []string {
@@ -286,7 +285,7 @@ func CostLines(snapshot Snapshot, lang i18n.Language, zone *time.Location, pal t
 		return []string{termpaint.Paint(pal.Bad, text.text(clitext.SpendLedgerTruncated, nil))}, text.err
 	}
 	if spend.Sessions == 0 {
-		return []string{termpaint.Paint(pal.Dim, text.text(clitext.SpendEmpty, nil))}, text.err
+		return append([]string{termpaint.Paint(pal.Dim, text.text(clitext.SpendEmpty, nil))}, costNotes(snapshot, text)...), text.err
 	}
 	sessions := text.text(clitext.SpendSessions, clitext.Params{clitext.ParamCount: spend.Sessions})
 	summary := sessions + summarySep + text.text(rangeKeys()[snapshot.Range], nil) + summarySep + text.text(clitext.SpendEstimate, nil)
@@ -300,7 +299,60 @@ func CostLines(snapshot Snapshot, lang i18n.Language, zone *time.Location, pal t
 	lines = append(lines, modelTable(spend.Models, spend.Cost, text, clitext.SpendColCost, func(share Share) string {
 		return formatMoney(lang, share.Cost)
 	}, func(share Share) float64 { return share.Cost })...)
-	return lines, text.err
+	if detail := costDetail(spend, text); len(detail) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, detail...)
+	}
+	return append(lines, costNotes(snapshot, text)...), text.err
+}
+
+func costDetail(spend Spend, text *renderer) []string {
+	rows := &termpaint.Table{}
+	if spend.Split.Total() > 0 {
+		rows.Add(termpaint.Paint(text.pal.Dim, text.text(clitext.SpendByType, nil)), text.text(clitext.SpendTypeSplit, clitext.Params{
+			clitext.ParamIn:     formatMoneyShort(text.lang, spend.Split.In),
+			clitext.ParamRead:   formatMoneyShort(text.lang, spend.Split.CacheRead),
+			clitext.ParamCreate: formatMoneyShort(text.lang, spend.Split.CacheWrite),
+			clitext.ParamOut:    formatMoneyShort(text.lang, spend.Split.Out),
+		}))
+	}
+	if spend.Tokens.CacheRead > 0 {
+		rows.Add(termpaint.Paint(text.pal.Dim, text.text(clitext.SpendCacheTitle, nil)), text.text(clitext.SpendCacheSaved, clitext.Params{
+			clitext.ParamRead:  formatTokens(text.lang, spend.Tokens.CacheRead, text),
+			clitext.ParamSaved: formatMoneyShort(text.lang, spend.Saved),
+		}))
+	}
+	return rows.Lines()
+}
+
+// CostNotes writes what the totals of the snapshot still miss: transcripts not read yet,
+// a price list not loaded yet, and the models no price is known for.
+func CostNotes(snapshot Snapshot, lang i18n.Language, pal termpaint.Palette) ([]string, error) {
+	text := &renderer{lang: lang, pal: pal}
+	return costNotes(snapshot, text), text.err
+}
+
+func costNotes(snapshot Snapshot, text *renderer) []string {
+	var notes []string
+	note := func(key clitext.Key, params clitext.Params) {
+		notes = append(notes, termpaint.Paint(text.pal.Warn, "! ")+termpaint.Paint(text.pal.Dim, text.text(key, params)))
+	}
+	if snapshot.TranscriptsPending {
+		note(clitext.SpendTranscriptsPending, nil)
+	}
+	if snapshot.Unreadable > 0 {
+		note(clitext.SpendTranscriptsUnreadable, clitext.Params{clitext.ParamCount: snapshot.Unreadable})
+	}
+	if snapshot.PricesMissing {
+		note(clitext.SpendPricesMissing, nil)
+	}
+	if len(snapshot.Spend.Unpriced) > 0 {
+		note(clitext.SpendUnpriced, clitext.Params{clitext.ParamModels: strings.Join(snapshot.Spend.Unpriced, ", ")})
+	}
+	if len(notes) == 0 {
+		return nil
+	}
+	return append([]string{""}, notes...)
 }
 
 // TokenLines writes the tokens of the period by type, with the share of the cache read in
@@ -312,7 +364,7 @@ func TokenLines(snapshot Snapshot, lang i18n.Language, pal termpaint.Palette) ([
 		return []string{termpaint.Paint(pal.Bad, text.text(clitext.SpendLedgerTruncated, nil))}, text.err
 	}
 	if tokens.Total() == 0 {
-		return []string{termpaint.Paint(pal.Dim, text.text(clitext.SpendEmpty, nil))}, text.err
+		return append([]string{termpaint.Paint(pal.Dim, text.text(clitext.SpendEmpty, nil))}, costNotes(snapshot, text)...), text.err
 	}
 	lines := []string{
 		text.text(clitext.SpendVolumeTotal, clitext.Params{
@@ -332,7 +384,7 @@ func TokenLines(snapshot Snapshot, lang i18n.Language, pal termpaint.Palette) ([
 	lines = append(lines, modelTable(models, float64(tokens.Total()), text, clitext.SpendColVolume, func(share Share) string {
 		return formatTokens(lang, share.Tokens, text)
 	}, func(share Share) float64 { return float64(share.Tokens) })...)
-	return lines, text.err
+	return append(lines, costNotes(snapshot, text)...), text.err
 }
 
 func cacheRatio(tokens Tokens) float64 {
@@ -360,12 +412,20 @@ func sparkline(snapshot Snapshot, text *renderer, zone *time.Location) string {
 		index := int(math.Round(bucket.Cost / peak * float64(len(runes)-1)))
 		cells.WriteRune(runes[index])
 	}
-	layout := "02/01"
-	if snapshot.Range == Range24h {
-		layout = "15:04"
+	day := peakAt.In(zone).Format("15:04")
+	if snapshot.Range != Range24h {
+		day = text.dayLabel(peakAt.In(zone))
 	}
-	peakText := text.text(clitext.SpendPeak, clitext.Params{clitext.ParamCost: formatMoney(text.lang, peak), clitext.ParamDay: peakAt.In(zone).Format(layout)})
+	peakText := text.text(clitext.SpendPeak, clitext.Params{clitext.ParamCost: formatMoney(text.lang, peak), clitext.ParamDay: day})
 	return termpaint.Paint(text.pal.Accent, cells.String()) + "  " + termpaint.Paint(text.pal.Dim, peakText)
+}
+
+func (r *renderer) dayLabel(day time.Time) string {
+	months := strings.Split(r.text(clitext.SpendMonths, nil), ",")
+	if len(months) != monthsInYear {
+		return day.Format("02/01")
+	}
+	return r.text(clitext.SpendPeakDay, clitext.Params{clitext.ParamDay: day.Day(), clitext.ParamMonth: months[day.Month()-1]})
 }
 
 func shareOf(value, total float64) float64 {
@@ -388,10 +448,14 @@ func accountTable(shares []Share, total float64, text *renderer) []string {
 func modelTable(shares []Share, total float64, text *renderer, valueHeader clitext.Key, amount func(Share) string, value func(Share) float64) []string {
 	rows := &termpaint.Table{Right: map[int]bool{1: true, 3: true}}
 	rows.Add(text.dimRow(text.text(clitext.SpendColModel, nil), text.text(valueHeader, nil), "", text.text(clitext.SpendColShare, nil))...)
+	var largest float64
+	for index := range shares {
+		largest = max(largest, value(shares[index]))
+	}
 	for index := range shares {
 		share := shares[index]
 		part := shareOf(value(share), total)
-		rows.Add("  "+modelLabel(share, text), amount(share), shareBar(part, text.pal), formatPercent(text.lang, part))
+		rows.Add("  "+modelLabel(share, text), amount(share), shareBar(shareOf(value(share), largest), text.pal), formatPercent(text.lang, part))
 	}
 	return rows.Lines()
 }
@@ -420,21 +484,22 @@ func modelLabel(share Share, text *renderer) string {
 }
 
 func formatTokens(lang i18n.Language, count int64, text *renderer) string {
-	switch {
-	case count >= giga:
-		return scaled(lang, float64(count)/giga, text.text(clitext.SpendUnitGiga, nil))
-	case count >= mega:
-		return scaled(lang, float64(count)/mega, text.text(clitext.SpendUnitMega, nil))
-	case count >= kilo:
-		return scaled(lang, float64(count)/kilo, text.text(clitext.SpendUnitKilo, nil))
+	value, unit := float64(count), ""
+	for _, key := range []clitext.Key{clitext.SpendUnitKilo, clitext.SpendUnitMega, clitext.SpendUnitGiga} {
+		if math.Round(value) < kilo {
+			break
+		}
+		value, unit = value/kilo, text.text(key, nil)
 	}
-	return clitext.FormatNumber(lang, float64(count), 0)
+	if unit == "" {
+		return clitext.FormatNumber(lang, value, 0)
+	}
+	return clitext.FormatNumber(lang, value, scaledDecimals(value)) + " " + unit
 }
 
-func scaled(lang i18n.Language, value float64, unit string) string {
-	decimals := 1
-	if value >= wholeFrom {
-		decimals = 0
+func scaledDecimals(value float64) int {
+	if math.Round(value*decimalBase)/decimalBase >= wholeFrom {
+		return 0
 	}
-	return clitext.FormatNumber(lang, value, decimals) + " " + unit
+	return 1
 }

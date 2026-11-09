@@ -3707,6 +3707,11 @@
     "other": "compaction"
   },
   {
+    "id": "cli.health.compact_stack",
+    "description": "Pile de compaction configurée, à côté du titre du groupe compaction",
+    "other": "compactStack = {{.Stack}}"
+  },
+  {
     "id": "cli.health.group.memory",
     "description": "Name of the memory group in health",
     "other": "mémoire"
@@ -3923,6 +3928,11 @@
     "other": "{{.Ratio}} restant"
   },
   {
+    "id": "cli.quota.card.pace",
+    "description": "Écart au rythme de la fenêtre, sous la part restante d'une carte de limites",
+    "other": "◷ {{.Delta}} % vs rythme"
+  },
+  {
     "id": "cli.spend.empty",
     "description": "Usage report with no spend in the period",
     "other": "aucune dépense sur la période"
@@ -4018,6 +4028,77 @@
     "other": "Md"
   },
   {
+    "id": "cli.spend.by_type",
+    "description": "Titre de la ligne du coût par type de jeton",
+    "other": "PAR TYPE"
+  },
+  {
+    "id": "cli.spend.type_split",
+    "description": "Coût de la période par type de jeton",
+    "other": "entrée {{.In}} · lecture cache {{.Read}} · écriture cache {{.Create}} · sortie {{.Out}}"
+  },
+  {
+    "id": "cli.spend.cache_title",
+    "description": "Titre de la ligne du cache",
+    "other": "cache"
+  },
+  {
+    "id": "cli.spend.cache_saved",
+    "description": "Jetons lus en cache et ce que le cache a évité de payer",
+    "other": "{{.Read}} lus · économie {{.Saved}}"
+  },
+  {
+    "id": "cli.spend.peak_day",
+    "description": "Jour du pic de coût, avec le mois abrégé",
+    "other": "{{.Day}} {{.Month}}"
+  },
+  {
+    "id": "cli.spend.months",
+    "description": "Les douze mois abrégés, séparés par des virgules, de janvier à décembre",
+    "other": "janv.,févr.,mars,avr.,mai,juin,juil.,août,sept.,oct.,nov.,déc."
+  },
+  {
+    "id": "cli.spend.transcripts_pending",
+    "description": "Le premier passage sur les transcripts n'est pas fini",
+    "other": "lecture des transcripts Claude et Codex en cours, les totaux vont encore monter"
+  },
+  {
+    "id": "cli.spend.transcripts_unreadable",
+    "description": "Des transcripts ou des dossiers de transcripts n'ont pas pu être lus (droits, fichier abîmé), Count en donne le nombre",
+    "one": "{{.Count}} transcript ou dossier illisible, le total peut être incomplet",
+    "other": "{{.Count}} transcripts ou dossiers illisibles, le total peut être incomplet"
+  },
+  {
+    "id": "cli.spend.prices_missing",
+    "description": "La grille de prix manque, les jetons des transcripts sont à 0 $",
+    "other": "grille de prix LiteLLM pas encore chargée, le coût des transcripts n'est pas compté"
+  },
+  {
+    "id": "cli.spend.unpriced",
+    "description": "Modèles absents de la grille de prix",
+    "other": "sans tarif connu, comptés à 0 $ : {{.Models}}"
+  },
+  {
+    "id": "cli.spend.rate",
+    "description": "Le coût est compté au tarif API",
+    "other": "tarif API"
+  },
+  {
+    "id": "cli.spend.chart_daily",
+    "description": "Titre de l'histogramme du coût par jour",
+    "other": "Coût par jour"
+  },
+  {
+    "id": "cli.spend.chart_hourly",
+    "description": "Titre de l'histogramme du coût par heure",
+    "other": "Coût par heure"
+  },
+  {
+    "id": "cli.spend.panel_volume",
+    "description": "Ligne des jetons sous le panneau de coût",
+    "other": "Jetons {{.Total}} · cache lu {{.Read}} · non caché {{.In}} · sortie {{.Out}} · économie cache {{.Saved}}"
+  },
+  {
     "id": "cli.spend.sessions",
     "description": "Usage report: the count of sessions of the period",
     "one": "{{.Count}} session",
@@ -4037,6 +4118,11 @@
     "id": "cli.help.cmd.usage.account",
     "description": "Aide du paramètre --account de usage",
     "other": "un compte, sous la forme fournisseur:nom (natif pour le compte propre du fournisseur)"
+  },
+  {
+    "id": "cli.help.cmd.usage.vendor",
+    "description": "Aide du paramètre --vendor de usage",
+    "other": "un fournisseur (claude, codex), pour ne garder que ses comptes"
   },
   {
     "id": "cli.spend.daemon_down",

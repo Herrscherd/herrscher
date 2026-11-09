@@ -42,6 +42,12 @@ type Record struct {
 	CacheRead   int64     `json:"cacheRead"`
 	CacheCreate int64     `json:"cacheCreate"`
 	Cost        float64   `json:"cost"`
+
+	CacheCreateHour int64     `json:"cacheCreateHour,omitempty"`
+	Fast            bool      `json:"fast,omitempty"`
+	Split           CostSplit `json:"split,omitzero"`
+	Saved           float64   `json:"saved,omitempty"`
+	Unpriced        bool      `json:"-"`
 }
 
 // Ledger is the directory of daily JSON lines files, one file per UTC day.

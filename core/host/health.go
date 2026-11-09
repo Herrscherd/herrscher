@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"time"
 
@@ -46,7 +47,7 @@ func (s *healthSource) run(ctx context.Context, deep bool) (health.Snapshot, err
 func probeHealth(ctx context.Context, inputs healthInputs, deep bool) health.Snapshot {
 	probedAt := inputs.now()
 	checks, elapsed := health.Runner{Now: inputs.now}.Run(ctx, healthProbes(inputs), deep)
-	return health.Snapshot{Daemon: inputs.daemon, ProbedAt: probedAt, Elapsed: elapsed, Checks: checks}
+	return health.Snapshot{Daemon: inputs.daemon, ProbedAt: probedAt, Elapsed: elapsed, Checks: checks, CompactStack: slices.Clone(inputs.compaction.names)}
 }
 
 func healthProbes(inputs healthInputs) []health.Probe {
@@ -308,9 +309,6 @@ func firstMemoryKind() string {
 func compactionProbes(names []string) []health.Probe {
 	var probes []health.Probe
 	for _, name := range names {
-		if name == contracts.CompactStageBackend {
-			continue
-		}
 		probes = append(probes, health.Probe{
 			Check: health.Check{Group: health.GroupCompaction, Name: name},
 			Run:   compactionRun(name),

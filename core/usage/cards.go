@@ -1,6 +1,7 @@
 package usage
 
 import (
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -20,6 +21,8 @@ const (
 	accountMark   = "▐ "
 	cardSides     = 2
 	cardPadCells  = 2
+	paceUp        = "↗"
+	paceDown      = "↘"
 )
 
 // CardEdges holds the box drawing characters of the limit cards.
@@ -157,14 +160,29 @@ func windowCard(accounts []windowAccount, now time.Time, text *renderer) cardPar
 		termpaint.Paint(text.pal.Strong, capitalize(windowLabel(lead.limit, text))),
 		text.text(clitext.QuotaCardLeft, clitext.Params{clitext.ParamRatio: limitPercent(lead.limit, text)}),
 	}
-	if label := strings.TrimSpace(paceLabel(lead.limit, pace, text)); label != "" {
-		left = append(left, label)
-	}
+	left = append(left[:1], cardPace(lead.limit, pace, left[1], text)...)
 	segments := make([][2]string, 0, len(accounts))
 	for index := range accounts {
 		segments = append(segments, accountSegment(accounts[index], now, text))
 	}
 	return cardParts{left: left, segments: segments}
+}
+
+func cardPace(limit contracts.Limit, pace Pace, remaining string, text *renderer) []string {
+	if Remaining(limit) <= 0 {
+		return []string{remaining, termpaint.Paint(text.pal.Bad, text.text(clitext.QuotaExhausted, nil))}
+	}
+	if !pace.Shown {
+		return []string{remaining}
+	}
+	delta := clitext.FormatNumber(text.lang, math.Abs(pace.Delta), 0)
+	if pace.Delta > 0 {
+		return []string{
+			remaining + " " + termpaint.Paint(text.pal.Warn, paceUp),
+			termpaint.Paint(text.pal.Warn, text.text(clitext.QuotaCardPace, clitext.Params{clitext.ParamDelta: "+" + delta})),
+		}
+	}
+	return []string{remaining + " " + termpaint.Paint(text.pal.Good, paceDown)}
 }
 
 func leadAccount(accounts []windowAccount) windowAccount {

@@ -59,10 +59,11 @@ type Daemon struct {
 
 // Snapshot is one complete health run, as the daemon answers it.
 type Snapshot struct {
-	Daemon   Daemon
-	ProbedAt time.Time
-	Elapsed  time.Duration
-	Checks   []Check
+	Daemon       Daemon
+	ProbedAt     time.Time
+	Elapsed      time.Duration
+	Checks       []Check
+	CompactStack []string
 }
 
 // Service returns the name a client selects the check by: the plugin name, and

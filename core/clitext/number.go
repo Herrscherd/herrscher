@@ -33,11 +33,11 @@ func FormatNumber(lang i18n.Language, value float64, decimals int) string {
 
 // FormatDuration writes d the way lang writes it: whole milliseconds below one second,
 // seconds with one decimal from there on.
-func FormatDuration(lang i18n.Language, d time.Duration) string {
-	if d < time.Second {
-		return FormatNumber(lang, float64(d.Milliseconds()), 0) + " ms"
+func FormatDuration(lang i18n.Language, elapsed time.Duration) string {
+	if elapsed < time.Second {
+		return FormatNumber(lang, float64(elapsed.Milliseconds()), 0) + " ms"
 	}
-	return FormatNumber(lang, d.Seconds(), durationDecimals) + " s"
+	return FormatNumber(lang, elapsed.Seconds(), durationDecimals) + " s"
 }
 
 func groupThousands(lang i18n.Language, whole string) string {

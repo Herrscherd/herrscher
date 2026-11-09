@@ -441,7 +441,11 @@ on, and prints it as a table grouped by what the checks cover: the daemon and it
 key proxy, the gateways, the backends with each account and profile, the
 compaction stages, the memory plugins and the key pools. Each line says the state
 (ok, degraded, down or off), how long the probe took, and the facts the host knows
-about the service.
+about the service. Each compaction stage shows when it last ran and how it ended
+(done, short, failed, dry run or skipped), read from the usage ledger, or that there
+was no compaction in the last 7 days. When the ledger cannot be read, the line says
+the last compaction is unknown when no readable run is left to show, and flags the
+data as partial.
 
 A gateway the daemon does not run reads as off, and so does a memory plugin that is
 not the one in use: the first local memory plugin with a factory is the live one,
@@ -463,6 +467,27 @@ The exit code tells a script the outcome: `0` when nothing is degraded or down,
 daemon cannot be reached. An unreachable daemon is reported on stderr with the
 socket it was looked for, so a stopped daemon reads as a finding rather than a
 silent failure.
+
+### Usage, from the ledger
+
+`herrscher usage` asks the running daemon for the figures it recorded in the usage
+ledger, so the daemon must be up. A view is named after the command, and the
+default is the limits of each account:
+
+- `limits`: the quota windows of each account.
+- `cost`: the spend of the period, by session and by model.
+- `tokens`: the tokens in and out of the period.
+- `compaction`: each compaction stage, with its runs and how they ended (done,
+  short, failed, dry run, skipped), the calls it examined, kept, truncated and
+  pruned, the share of characters it removed, the tokens it removed, its model
+  requests and their average duration.
+
+`--range` takes `24h`, `7d`, `30d` or `90d`, and `--account` and `--vendor` narrow the
+figures to one account or one vendor. A compaction has no vendor and no account, so
+the filters never leave a compaction out: the compactions of the period are shown
+whatever the filter. `--json` prints the same figures as structured data for
+a script. A compaction shows its cost as requests and request tokens, since the usage
+ledger records no price for a stage on its own.
 
 ### Model routing
 
@@ -738,6 +763,10 @@ and the `backend` stage still runs. A backend that declares
 `Capabilities.HistoryEditor` while its running instance does not implement the
 port fails the stage, and the host writes one warning line to stderr the first
 time it happens.
+
+The stage reports its stats to the usage ledger only once [herrscher-jev-compactor]
+fills them. Until it does, a successful `jev` compaction does not appear in
+`herrscher usage` or in `herrscher health`.
 
 When a backend declares `Capabilities.Compactor` but its running instance does not
 implement the port, the host writes one warning line to stderr the first time that

@@ -40,6 +40,7 @@ const (
 	SpendRange90d              = "cli.spend.range.90d"
 	SpendEstimate              = "cli.spend.estimate"
 	SpendLedgerTruncated       = "cli.spend.ledger_truncated"
+	SpendUnreadable            = "cli.spend.unreadable"
 	SpendPeak                  = "cli.spend.peak"
 	SpendColAccount            = "cli.spend.col.account"
 	SpendColModel              = "cli.spend.col.model"
@@ -125,6 +126,7 @@ func spendKeys() map[Key][]string {
 		SpendRange90d:              nil,
 		SpendEstimate:              nil,
 		SpendLedgerTruncated:       nil,
+		SpendUnreadable:            nil,
 		SpendPeak:                  {ParamCost, ParamDay},
 		SpendColAccount:            nil,
 		SpendColModel:              nil,

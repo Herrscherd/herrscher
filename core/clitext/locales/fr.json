@@ -3964,8 +3964,13 @@
   },
   {
     "id": "cli.spend.ledger_truncated",
-    "description": "Rapport d'usage : un jour du journal dépasse la taille lisible, les totaux ne sont pas affichés",
-    "other": "un jour du journal d'usage est trop volumineux, les totaux ne sont pas affichés pour ne pas être faux"
+    "description": "Rapport d'usage : un jour du journal est laissé de côté (trop volumineux ou illisible), les chiffres ci-dessous sont partiels",
+    "other": "une partie du journal d'usage n'a pas pu être lue, les totaux ci-dessous sont partiels"
+  },
+  {
+    "id": "cli.spend.unreadable",
+    "description": "Rapport d'usage : vue vide d'une période dont le journal est partiel, remplace le texte de la vue vide (emptyLine)",
+    "other": "aucune donnée sur les jours lisibles"
   },
   {
     "id": "cli.spend.peak",
@@ -4107,7 +4112,7 @@
   {
     "id": "cli.help.cmd.usage",
     "description": "Aide de la commande usage",
-    "other": "affiche les limites des comptes, la dépense et les jetons d'une période"
+    "other": "affiche les limites des comptes, la dépense, les jetons et la compaction d'une période"
   },
   {
     "id": "cli.help.cmd.usage.range",
@@ -4136,12 +4141,101 @@
   },
   {
     "id": "cli.spend.mode_unknown",
-    "description": "Erreur pour une vue de usage qui n'est ni limits, ni cost, ni tokens, Name est le mot donné",
-    "other": "vue {{.Name}} inconnue, utilise limits, cost ou tokens"
+    "description": "Erreur pour une vue de usage qui n'est ni limits, ni cost, ni tokens, ni compaction, Name est le mot donné",
+    "other": "vue {{.Name}} inconnue, utilise limits, cost, tokens ou compaction"
   },
   {
     "id": "cli.spend.account_invalid",
     "description": "Erreur pour une valeur de --account qui n'est pas vendor:nom, Name est la valeur donnée",
     "other": "le compte {{.Name}} doit s'écrire fournisseur:nom"
+  },
+  {
+    "id": "cli.compaction.empty",
+    "description": "Compaction, vide",
+    "other": "aucune compaction sur la période"
+  },
+  {
+    "id": "cli.compaction.runs",
+    "description": "Rapport de compaction : le nombre de compactions d'un étage",
+    "one": "{{.Count}} compaction",
+    "other": "{{.Count}} compactions"
+  },
+  {
+    "id": "cli.compaction.outcome_count",
+    "description": "Rapport de compaction : un résultat et son nombre",
+    "one": "{{.Label}} {{.Count}}",
+    "other": "{{.Label}} {{.Count}}"
+  },
+  {
+    "id": "cli.compaction.calls",
+    "description": "Rapport de compaction : les appels examinés, conservés, tronqués et élagués",
+    "one": "{{.Count}} appel examiné (conservés : {{.Kept}}, tronqués : {{.Truncated}}, élagués : {{.Pruned}})",
+    "other": "{{.Count}} appels examinés (conservés : {{.Kept}}, tronqués : {{.Truncated}}, élagués : {{.Pruned}})"
+  },
+  {
+    "id": "cli.compaction.chars",
+    "description": "Rapport de compaction : la part des caractères retirés",
+    "other": "{{.Percent}} des caractères retirés"
+  },
+  {
+    "id": "cli.compaction.saved",
+    "description": "Rapport de compaction : les jetons estimés retirés",
+    "other": "environ {{.Tokens}} jetons retirés"
+  },
+  {
+    "id": "cli.compaction.requests",
+    "description": "Rapport de compaction : les requêtes du modèle d'un étage et leurs jetons",
+    "one": "{{.Count}} requête, {{.Tokens}} jetons envoyés",
+    "other": "{{.Count}} requêtes, {{.Tokens}} jetons envoyés"
+  },
+  {
+    "id": "cli.compaction.average",
+    "description": "Rapport de compaction : la durée moyenne d'un étage",
+    "other": "durée moyenne {{.Duration}}"
+  },
+  {
+    "id": "cli.compaction.outcome.done",
+    "description": "Résultat de compaction : l'étage a assez compacté pour arrêter la pile",
+    "other": "terminée"
+  },
+  {
+    "id": "cli.compaction.outcome.short",
+    "description": "Résultat de compaction : l'étage a raccourci le contexte",
+    "other": "courte"
+  },
+  {
+    "id": "cli.compaction.outcome.failed",
+    "description": "Résultat de compaction : l'étage n'a pas pu compacter",
+    "other": "échouée"
+  },
+  {
+    "id": "cli.compaction.outcome.dry_run",
+    "description": "Résultat de compaction : l'étage a mesuré sans rien changer",
+    "other": "à blanc"
+  },
+  {
+    "id": "cli.compaction.outcome.skipped",
+    "description": "Résultat de compaction : l'étage n'avait rien à compacter",
+    "other": "ignorée"
+  },
+  {
+    "id": "cli.health.facts.compact_last",
+    "description": "Santé : la dernière exécution d'un étage de compaction, son résultat et sa date",
+    "other": "dernière compaction : {{.Outcome}}, {{.Date}}"
+  },
+  {
+    "id": "cli.health.facts.compact_never",
+    "description": "Santé : un étage de compaction sans passage sur les 7 derniers jours",
+    "other": "aucune compaction sur les 7 derniers jours"
+  },
+  {
+    "id": "cli.health.facts.compact_partial",
+    "description": "Santé : une partie du journal d'usage n'a pas pu être lue, les faits de l'étage peuvent être partiels",
+    "other": "données partielles, une partie du journal d'usage n'a pas pu être lue"
+  },
+  {
+    "id": "cli.health.facts.compact_unknown",
+    "description": "Santé : aucune exécution de l'étage n'est retrouvée dans le journal lisible, la dernière est inconnue",
+    "other": "dernière compaction inconnue"
   }
 ]

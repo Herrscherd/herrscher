@@ -532,7 +532,7 @@ const flagPrefix = "--"
 func readOnlyVerbs() map[string]map[string]bool {
 	return map[string]map[string]bool{
 		"health": {},
-		"usage":  {"limits": true, "cost": true, "tokens": true},
+		"usage":  {"limits": true, "cost": true, "tokens": true, "compaction": true},
 	}
 }
 

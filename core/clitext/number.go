@@ -4,11 +4,15 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
 
-const thousandsGroup = 3
+const (
+	thousandsGroup   = 3
+	durationDecimals = 1
+)
 
 // FormatNumber writes value with decimals digits after the separator of lang, its
 // thousands grouped the way lang groups them.
@@ -25,6 +29,15 @@ func FormatNumber(lang i18n.Language, value float64, decimals int) string {
 		out.WriteString(fraction)
 	}
 	return out.String()
+}
+
+// FormatDuration writes d the way lang writes it: whole milliseconds below one second,
+// seconds with one decimal from there on.
+func FormatDuration(lang i18n.Language, elapsed time.Duration) string {
+	if elapsed < time.Second {
+		return FormatNumber(lang, float64(elapsed.Milliseconds()), 0) + " ms"
+	}
+	return FormatNumber(lang, elapsed.Seconds(), durationDecimals) + " s"
 }
 
 func groupThousands(lang i18n.Language, whole string) string {

@@ -35,7 +35,7 @@ func TestEveryDeclaredKeyHasItsTextInEveryLanguage(t *testing.T) {
 }
 
 func TestEveryKeyFileIsDeclaredOnce(t *testing.T) {
-	groups := []map[Key][]string{usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys(), accountKeys(), manageKeys(), hostKeys(), helpKeys(), hostErrKeys(), settingKeys(), worktreeKeys(), healthKeys(), spendKeys()}
+	groups := []map[Key][]string{usageKeys(), cliKeys(), serveKeys(), bridgeKeys(), sessionKeys(), pluginKeys(), serviceKeys(), accountKeys(), manageKeys(), hostKeys(), helpKeys(), hostErrKeys(), settingKeys(), worktreeKeys(), healthKeys(), spendKeys(), compactionKeys()}
 	total := 0
 	for _, group := range groups {
 		total += len(group)
@@ -95,6 +95,13 @@ func TestRenderedMessagesInEachLanguage(t *testing.T) {
 		{"bridge env stdin flag", BridgeFlagEnvStdin, nil, "read KEY=VALUE lines from stdin until a blank line and put them in this process's environment (how a remote bridge gets its gateway credentials)", "lit des lignes KEY=VALUE sur l'entrée standard jusqu'à une ligne vide et les place dans l'environnement de ce processus (c'est ainsi qu'un pont distant reçoit ses identifiants de passerelle)"},
 		{"bridge vendor flag", BridgeFlagVendor, nil, "backend vendor: claude | codex | cursor (empty = first registered / HERRSCHER_BACKEND)", "fournisseur du backend : claude | codex | cursor (vide = premier enregistré, ou HERRSCHER_BACKEND)"},
 		{"serve session failed", ServeSessionFailed, Params{"Name": "demo", "Err": "boom"}, "session demo: boom", "session demo : boom"},
+		{"usage view unknown", SpendModeUnknown, Params{"Name": "x"}, "unknown usage view x, use limits, cost, tokens or compaction", "vue x inconnue, utilise limits, cost, tokens ou compaction"},
+		{"usage help", CmdHelpUsage, nil, "show the limits of the accounts, the spend, the tokens and the compaction of a period", "affiche les limites des comptes, la dépense, les jetons et la compaction d'une période"},
+		{"compaction calls one", CompactionCalls, Params{"Count": 1, "Kept": 1, "Truncated": 0, "Pruned": 0}, "1 call examined, 1 kept, 0 truncated, 0 pruned", "1 appel examiné (conservés : 1, tronqués : 0, élagués : 0)"},
+		{"compaction calls many", CompactionCalls, Params{"Count": 3, "Kept": 2, "Truncated": 0, "Pruned": 0}, "3 calls examined, 2 kept, 0 truncated, 0 pruned", "3 appels examinés (conservés : 2, tronqués : 0, élagués : 0)"},
+		{"compaction chars", CompactionChars, Params{"Percent": "75 %"}, "75 % of the characters removed", "75 % des caractères retirés"},
+		{"compaction requests one", CompactionRequests, Params{"Count": 1, "Tokens": "900"}, "1 request, 900 request tokens", "1 requête, 900 jetons envoyés"},
+		{"compaction requests none", CompactionRequests, Params{"Count": 0, "Tokens": "0"}, "0 requests, 0 request tokens", "0 requête, 0 jetons envoyés"},
 		{"account default", AccountDefault, Params{"Vendor": "claude", "Name": "perso"}, "claude default: perso", "claude par défaut : perso"},
 		{"account resuming one", AccountResuming, Params{"Count": 1, "Vendor": "claude", "Sessions": "alpha"}, "attention: 1 session claude will resume under this default: alpha. To keep it on another account, use herrscher session set-account <session> <profile> (or fresh for a new conversation).", "attention : 1 session claude va reprendre sous ce défaut : alpha. Pour la garder sur un autre compte, utilise herrscher session set-account <session> <profil> (ou fresh pour une nouvelle conversation)."},
 		{"account resuming many", AccountResuming, Params{"Count": 2, "Vendor": "claude", "Sessions": "alpha, beta"}, "attention: 2 sessions claude will resume under this default: alpha, beta. To keep them on another account, use herrscher session set-account <session> <profile> (or fresh for a new conversation).", "attention : 2 sessions claude vont reprendre sous ce défaut : alpha, beta. Pour les garder sur un autre compte, utilise herrscher session set-account <session> <profil> (ou fresh pour une nouvelle conversation)."},

@@ -261,11 +261,11 @@ func (d *sessionDriver) compactStages() ([]contracts.CompactStage, error) {
 	}
 	stages := make([]contracts.CompactStage, 0, len(d.compaction.names))
 	for _, name := range d.compaction.names {
-		if name == contracts.CompactStageBackend {
-			stages = append(stages, contracts.CompactStage{Name: name, Compactor: bridgeCompactor{driver: d}})
-			continue
+		var compactor contracts.Compactor = bridgeCompactor{driver: d}
+		if name != contracts.CompactStageBackend {
+			compactor = historyStage{compactor: d.compaction.plugins[name], history: d.sessionHistory()}
 		}
-		stages = append(stages, contracts.CompactStage{Name: name, Compactor: historyStage{compactor: d.compaction.plugins[name], history: d.sessionHistory()}})
+		stages = append(stages, contracts.CompactStage{Name: name, Compactor: recordedStage{name: name, compactor: compactor}})
 	}
 	return stages, nil
 }
@@ -288,6 +288,30 @@ func (s historyStage) Compact(ctx context.Context, req contracts.CompactRequest,
 	}
 	req.History = s.history
 	return s.compactor.Compact(ctx, req, onEvent)
+}
+
+type recordedStage struct {
+	name      string
+	compactor contracts.Compactor
+}
+
+func (s recordedStage) Compact(ctx context.Context, req contracts.CompactRequest, onEvent func(contracts.BackendEvent)) (contracts.CompactResult, error) {
+	started := time.Now()
+	result, err := s.compactor.Compact(ctx, req, onEvent)
+	if errors.Is(err, contracts.ErrNilCompactor) {
+		return result, err
+	}
+	if result.Stats != nil {
+		stats := *result.Stats
+		stats.Stage = s.name
+		result.Stats = &stats
+		return result, err
+	}
+	if err == nil {
+		return result, nil
+	}
+	result.Stats = &contracts.CompactStats{Stage: s.name, Outcome: contracts.CompactFailed, Duration: time.Since(started)}
+	return result, err
 }
 
 func crossed(used, limit, percent int) bool {
@@ -335,6 +359,7 @@ func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.Com
 	}
 	d.fanOut(ctx, contracts.Event{T: eventCompactStarted, Value: trigger.String(), Tokens: d.turnReading})
 	result, err := contracts.RunCompactStack(ctx, stages, req, d.compactionProgress(ctx))
+	d.recordCompaction(result.StageStats)
 	if err != nil {
 		d.failCompaction(ctx, trigger, err)
 		return contracts.CompactResult{}, err

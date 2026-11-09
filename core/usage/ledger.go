@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
@@ -43,11 +44,12 @@ type Record struct {
 	CacheCreate int64     `json:"cacheCreate"`
 	Cost        float64   `json:"cost"`
 
-	CacheCreateHour int64     `json:"cacheCreateHour,omitempty"`
-	Fast            bool      `json:"fast,omitempty"`
-	Split           CostSplit `json:"split,omitzero"`
-	Saved           float64   `json:"saved,omitempty"`
-	Unpriced        bool      `json:"-"`
+	CacheCreateHour int64       `json:"cacheCreateHour,omitempty"`
+	Fast            bool        `json:"fast,omitempty"`
+	Split           CostSplit   `json:"split,omitzero"`
+	Saved           float64     `json:"saved,omitempty"`
+	Compaction      *Compaction `json:"compaction,omitempty"`
+	Unpriced        bool        `json:"-"`
 }
 
 // Ledger is the directory of daily JSON lines files, one file per UTC day.
@@ -116,7 +118,9 @@ func (l Ledger) Prune() error {
 }
 
 // Records reads the records of the period, from the files of its days only, and
-// skips the lines that do not decode.
+// skips the lines that do not decode. A day that cannot be read whole is left out and
+// reported in the error (ErrLedgerTruncated for a day too large), the readable days
+// are still returned.
 func (l Ledger) Records(rng Range) ([]Record, error) {
 	now := l.Now().UTC()
 	since := now.Add(-rng.Span())
@@ -133,14 +137,18 @@ func (l Ledger) Records(rng Range) ([]Record, error) {
 
 func readDays(root *os.Root, since, now time.Time) ([]Record, error) {
 	var out []Record
+	var unreadable error
 	for at := truncDay(since); !at.After(now); at = at.AddDate(0, 0, 1) {
-		records, err := readDay(root, fileName(at), since)
+		name := fileName(at)
+		records, err := readDay(root, name, since)
 		if err != nil {
-			return nil, err
+			slog.Warn("usage ledger: day left out, it could not be read whole", "file", name, "err", err)
+			unreadable = errors.Join(unreadable, err)
+			continue
 		}
 		out = append(out, records...)
 	}
-	return out, nil
+	return out, unreadable
 }
 
 func readDay(root *os.Root, name string, since time.Time) ([]Record, error) {

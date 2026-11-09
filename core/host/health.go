@@ -16,6 +16,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/health"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
+	"github.com/Herrscherd/herrscher/core/usage"
 )
 
 type healthInputs struct {
@@ -25,6 +26,7 @@ type healthInputs struct {
 	memory     string
 	accounts   accounts.Store
 	compaction compactionPolicy
+	ledger     usage.Ledger
 	now        func() time.Time
 }
 
@@ -56,7 +58,8 @@ func healthProbes(inputs healthInputs) []health.Probe {
 	probes = append(probes, gatewayProbes(inputs)...)
 	probes = append(probes, backendProbes(inputs)...)
 	probes = append(probes, memoryProbes(inputs.memory)...)
-	return append(probes, compactionProbes(inputs.compaction.names)...)
+	last, readErr := lastCompactions(inputs.ledger)
+	return append(probes, compactionProbes(inputs.compaction.names, last, readErr)...)
 }
 
 func daemonProbe(daemon health.Daemon) health.Probe {
@@ -306,15 +309,28 @@ func firstMemoryKind() string {
 	return ""
 }
 
-func compactionProbes(names []string) []health.Probe {
+func compactionProbes(names []string, last map[string]usage.LastCompaction, readErr error) []health.Probe {
 	var probes []health.Probe
 	for _, name := range names {
-		probes = append(probes, health.Probe{
-			Check: health.Check{Group: health.GroupCompaction, Name: name},
-			Run:   compactionRun(name),
-		})
+		check := health.Check{Group: health.GroupCompaction, Name: name, Facts: health.Facts{CompactionPartial: readErr != nil}}
+		if run, ok := last[name]; ok {
+			check.Facts.Compaction = &health.Compaction{At: run.At, Outcome: run.Outcome}
+		} else {
+			check.Facts.CompactionUnknown = readErr != nil
+		}
+		probes = append(probes, health.Probe{Check: check, Run: compactionRun(name)})
 	}
 	return probes
+}
+
+const compactionProbeRange = usage.Range7d
+
+func lastCompactions(ledger usage.Ledger) (map[string]usage.LastCompaction, error) {
+	records, err := ledger.Records(compactionProbeRange)
+	if err != nil {
+		slog.Warn("health: compaction ledger unreadable", "err", err)
+	}
+	return usage.LastCompactions(records), err
 }
 
 func compactionRun(name string) runFunc {
@@ -335,7 +351,7 @@ func compactorPlugin(name string) (contracts.Plugin, bool) {
 	return contracts.Plugin{}, false
 }
 
-func newHealthInputs(instanceID string, keys *keyproxy.Proxy, gws []Deps, policy compactionPolicy) healthInputs {
+func newHealthInputs(instanceID string, keys *keyproxy.Proxy, gws []Deps, policy compactionPolicy, partDir string) healthInputs {
 	store, err := accountStore(BackendRequest{})
 	if err != nil {
 		slog.Warn("health: account store unavailable", "err", err)
@@ -347,6 +363,7 @@ func newHealthInputs(instanceID string, keys *keyproxy.Proxy, gws []Deps, policy
 		memory:     firstMemoryKind(),
 		accounts:   store,
 		compaction: policy,
+		ledger:     usage.Ledger{Dir: usageDir(partDir), Now: time.Now},
 		now:        time.Now,
 	}
 }

@@ -29,11 +29,20 @@ type Check struct {
 // Facts are what the host knows about one of its own services, rendered by the
 // client next to the report when the report carries no detail.
 type Facts struct {
-	Socket    string
-	Listen    string
-	Providers int
-	Pool      *Pool
-	TimedOut  time.Duration
+	Socket            string
+	Listen            string
+	Providers         int
+	Pool              *Pool
+	TimedOut          time.Duration
+	Compaction        *Compaction
+	CompactionPartial bool
+	CompactionUnknown bool
+}
+
+// Compaction is the last run of a compaction stage the host recorded.
+type Compaction struct {
+	At      time.Time
+	Outcome contracts.CompactOutcome
 }
 
 // Pool is the state of one provider key pool of the key proxy.

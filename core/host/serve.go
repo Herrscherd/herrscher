@@ -265,7 +265,7 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 		return wrapHost(err, "serve.key_proxy", nil)
 	}
 	defer CloseKeyProxy(ctx, log, keys)
-	options.health.bind(newHealthInputs(instID, keys, gws, policy))
+	options.health.bind(newHealthInputs(instID, keys, gws, policy, partDir))
 	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions)
 	runningHub.lang = options.Language
 	runningHub.models = options.modelDiscovery()

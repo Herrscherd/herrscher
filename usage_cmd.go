@@ -23,6 +23,7 @@ const (
 	usageViewLimits   = "limits"
 	usageViewCost     = "cost"
 	usageViewTokens   = "tokens"
+	usageViewCompact  = "compaction"
 	usageParamRange   = "--range"
 	usageParamAccount = "--account"
 	usageParamVendor  = "--vendor"
@@ -144,7 +145,7 @@ func validateUsageOptions(lang i18n.Language, opts usageOptions) error {
 
 func isUsageView(name string) bool {
 	switch name {
-	case usageViewLimits, usageViewCost, usageViewTokens:
+	case usageViewLimits, usageViewCost, usageViewTokens, usageViewCompact:
 		return true
 	}
 	return false
@@ -195,6 +196,8 @@ func usageLines(snapshot usagecore.Snapshot, view string, lang i18n.Language, pa
 		return usagecore.CostLines(snapshot, lang, time.Local, pal)
 	case usageViewTokens:
 		return usagecore.TokenLines(snapshot, lang, pal)
+	case usageViewCompact:
+		return usagecore.CompactionLines(snapshot, lang, pal)
 	default:
 		return usagecore.LimitLines(snapshot, lang, pal)
 	}

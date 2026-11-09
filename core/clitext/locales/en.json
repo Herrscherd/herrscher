@@ -3964,8 +3964,13 @@
   },
   {
     "id": "cli.spend.ledger_truncated",
-    "description": "Usage report: a day of the ledger exceeds the readable size, totals are not shown",
-    "other": "a day of the usage ledger is too large, totals are not shown rather than wrong"
+    "description": "Usage report: a day of the ledger is left out (too large or unreadable), the figures below are partial",
+    "other": "part of the usage ledger could not be read, so the totals below are partial"
+  },
+  {
+    "id": "cli.spend.unreadable",
+    "description": "Usage report: empty view of a period whose ledger is partial, replaces the empty-view text (emptyLine)",
+    "other": "no data on the readable days"
   },
   {
     "id": "cli.spend.peak",
@@ -4107,7 +4112,7 @@
   {
     "id": "cli.help.cmd.usage",
     "description": "Help of the command usage",
-    "other": "show the limits of the accounts, the spend and the tokens of a period"
+    "other": "show the limits of the accounts, the spend, the tokens and the compaction of a period"
   },
   {
     "id": "cli.help.cmd.usage.range",
@@ -4136,12 +4141,101 @@
   },
   {
     "id": "cli.spend.mode_unknown",
-    "description": "Error for a usage view that is not limits, cost or tokens, Name is the word given",
-    "other": "unknown usage view {{.Name}}, use limits, cost or tokens"
+    "description": "Error for a usage view that is not limits, cost, tokens or compaction, Name is the word given",
+    "other": "unknown usage view {{.Name}}, use limits, cost, tokens or compaction"
   },
   {
     "id": "cli.spend.account_invalid",
     "description": "Error for an --account value that is not vendor:name, Name is the value given",
     "other": "account {{.Name}} must be written vendor:name"
+  },
+  {
+    "id": "cli.compaction.empty",
+    "description": "Compaction, empty",
+    "other": "no compaction in this period"
+  },
+  {
+    "id": "cli.compaction.runs",
+    "description": "Compaction report: the count of compactions of a stage",
+    "one": "{{.Count}} compaction",
+    "other": "{{.Count}} compactions"
+  },
+  {
+    "id": "cli.compaction.outcome_count",
+    "description": "Compaction report: an outcome and its count",
+    "one": "{{.Label}} {{.Count}}",
+    "other": "{{.Label}} {{.Count}}"
+  },
+  {
+    "id": "cli.compaction.calls",
+    "description": "Compaction report: the calls examined, kept, truncated and pruned",
+    "one": "{{.Count}} call examined, {{.Kept}} kept, {{.Truncated}} truncated, {{.Pruned}} pruned",
+    "other": "{{.Count}} calls examined, {{.Kept}} kept, {{.Truncated}} truncated, {{.Pruned}} pruned"
+  },
+  {
+    "id": "cli.compaction.chars",
+    "description": "Compaction report: the share of the characters removed",
+    "other": "{{.Percent}} of the characters removed"
+  },
+  {
+    "id": "cli.compaction.saved",
+    "description": "Compaction report: the estimated tokens removed",
+    "other": "about {{.Tokens}} tokens removed"
+  },
+  {
+    "id": "cli.compaction.requests",
+    "description": "Compaction report: the model requests of a stage and their tokens",
+    "one": "{{.Count}} request, {{.Tokens}} request tokens",
+    "other": "{{.Count}} requests, {{.Tokens}} request tokens"
+  },
+  {
+    "id": "cli.compaction.average",
+    "description": "Compaction report: the average duration of a stage",
+    "other": "average {{.Duration}}"
+  },
+  {
+    "id": "cli.compaction.outcome.done",
+    "description": "Compaction outcome: the stage compacted enough to stop the stack",
+    "other": "done"
+  },
+  {
+    "id": "cli.compaction.outcome.short",
+    "description": "Compaction outcome: the stage shortened the context",
+    "other": "short"
+  },
+  {
+    "id": "cli.compaction.outcome.failed",
+    "description": "Compaction outcome: the stage could not compact",
+    "other": "failed"
+  },
+  {
+    "id": "cli.compaction.outcome.dry_run",
+    "description": "Compaction outcome: the stage measured without changing anything",
+    "other": "dry run"
+  },
+  {
+    "id": "cli.compaction.outcome.skipped",
+    "description": "Compaction outcome: the stage had nothing to compact",
+    "other": "skipped"
+  },
+  {
+    "id": "cli.health.facts.compact_last",
+    "description": "Health: the last run of a compaction stage, its outcome and date",
+    "other": "last compaction: {{.Outcome}}, {{.Date}}"
+  },
+  {
+    "id": "cli.health.facts.compact_never",
+    "description": "Health: a compaction stage with no run in the last 7 days",
+    "other": "no compaction in the last 7 days"
+  },
+  {
+    "id": "cli.health.facts.compact_partial",
+    "description": "Health: part of the usage ledger could not be read, so the facts of the stage may be partial",
+    "other": "partial data, part of the usage ledger could not be read"
+  },
+  {
+    "id": "cli.health.facts.compact_unknown",
+    "description": "Health: no run of the stage is found in the readable ledger, so the last one is not known",
+    "other": "last compaction unknown"
   }
 ]

@@ -3,6 +3,7 @@ package compactwire
 import (
 	"errors"
 	"testing"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -96,6 +97,105 @@ func TestDecodeResultKeepsTheNoteWhenTheNoticeIsMalformed(t *testing.T) {
 		if got.Note != "compacté" || got.TokensAfter != 42 || !got.TokensMeasured || got.Notice.Code != 0 {
 			t.Fatalf("DecodeResult(%q) = %+v, want the note and the figures without a notice", value, got)
 		}
+	}
+}
+
+func TestResultCarriesStatsNextToTheNotice(t *testing.T) {
+	stats := contracts.CompactStats{
+		Stage:         "backend",
+		Outcome:       contracts.CompactShort,
+		Calls:         4,
+		Kept:          1,
+		Truncated:     2,
+		Pruned:        1,
+		Pinned:        3,
+		CharsBefore:   9_000,
+		CharsAfter:    2_000,
+		TokensRemoved: 1_800,
+		Requests:      2,
+		RequestTokens: 5_000,
+		Duration:      1500 * time.Millisecond,
+	}
+	want := contracts.CompactResult{
+		TokensAfter:    12_000,
+		TokensMeasured: true,
+		Note:           "compacté",
+		Notice:         contracts.Notice{Code: contracts.CodeSettingInvalid, Args: []contracts.Arg{contracts.Count(3)}},
+		Stats:          &stats,
+	}
+	got, err := DecodeResult(mustResult(t, want))
+	if err != nil {
+		t.Fatalf("DecodeResult: %v", err)
+	}
+	if got.Stats == nil || *got.Stats != stats {
+		t.Fatalf("stats = %+v, want %+v", got.Stats, stats)
+	}
+	if got.Notice.Code != contracts.CodeSettingInvalid || len(got.Notice.Args) != 1 || got.Notice.Args[0].Value() != 3 {
+		t.Fatalf("notice = %+v, want setting.invalid with its count", got.Notice)
+	}
+	if got.Note != want.Note || got.TokensAfter != want.TokensAfter || !got.TokensMeasured {
+		t.Fatalf("round trip = %+v, want the note and the figures kept", got)
+	}
+}
+
+func TestResultStatsWithoutNoticeRoundTrip(t *testing.T) {
+	stats := contracts.CompactStats{Stage: "jev", Outcome: contracts.CompactFailed, Duration: time.Second}
+	got, err := DecodeResult(mustResult(t, contracts.CompactResult{Stats: &stats}))
+	if err != nil {
+		t.Fatalf("DecodeResult: %v", err)
+	}
+	if got.Stats == nil || *got.Stats != stats || got.Notice.Code != 0 {
+		t.Fatalf("round trip = %+v, want the stats and no notice", got)
+	}
+}
+
+func TestResultWithoutStatsDecodesNilStats(t *testing.T) {
+	notice := contracts.Notice{Code: contracts.CodeSettingInvalid, Args: []contracts.Arg{contracts.Count(3)}}
+	legacy := mustResult(t, contracts.CompactResult{Notice: notice})
+	for _, frame := range []contracts.Event{legacy, mustResult(t, contracts.CompactResult{})} {
+		got, err := DecodeResult(frame)
+		if err != nil {
+			t.Fatalf("DecodeResult(%q): %v", frame.Value, err)
+		}
+		if got.Stats != nil {
+			t.Fatalf("DecodeResult(%q) stats = %+v, want nil for a result without stats", frame.Value, got.Stats)
+		}
+	}
+}
+
+func TestDecodeResultReadsAnOldBackendFrame(t *testing.T) {
+	frame := contracts.Event{
+		T:      EventResult,
+		Text:   "compacté",
+		Value:  `{"code":7,"args":[{"name":"Setting","kind":1,"value":"compactAt"},{"name":"Count","kind":2,"value":3}]}`,
+		Tokens: 12_000,
+		Done:   true,
+	}
+	got, err := DecodeResult(frame)
+	if err != nil {
+		t.Fatalf("DecodeResult: %v", err)
+	}
+	if got.Stats != nil {
+		t.Fatalf("stats = %+v, want nil for a backend that sends no stats", got.Stats)
+	}
+	if got.Notice.Code != contracts.CodeSettingInvalid || len(got.Notice.Args) != 2 {
+		t.Fatalf("notice = %+v, want setting-invalid with two arguments", got.Notice)
+	}
+	if got.Notice.Args[0].Name() != "Setting" || got.Notice.Args[0].Value() != "compactAt" {
+		t.Fatalf("first argument = %s %v, want Setting compactAt", got.Notice.Args[0].Name(), got.Notice.Args[0].Value())
+	}
+	if got.Notice.Args[1].Name() != "Count" || got.Notice.Args[1].Value() != 3 {
+		t.Fatalf("second argument = %s %v, want Count 3", got.Notice.Args[1].Name(), got.Notice.Args[1].Value())
+	}
+	if got.Note != "compacté" || got.TokensAfter != 12_000 || !got.TokensMeasured {
+		t.Fatalf("result = %+v, want the note, the tokens after and the measured flag kept", got)
+	}
+}
+
+func TestResultRefusesStatsWithAnUnknownOutcome(t *testing.T) {
+	_, err := Result(contracts.CompactResult{Stats: &contracts.CompactStats{Stage: "jev"}})
+	if !errors.Is(err, contracts.ErrUnknownCompactOutcome) {
+		t.Fatalf("Result with a zero outcome: %v, want ErrUnknownCompactOutcome", err)
 	}
 }
 

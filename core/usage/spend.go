@@ -54,15 +54,16 @@ func (k AccountKey) Matches(vendor, account string) bool {
 // Spend is what the records of a period cost and carry, in total and split by account
 // and by model.
 type Spend struct {
-	Cost     float64   `json:"cost"`
-	Sessions int       `json:"sessions"`
-	Tokens   Tokens    `json:"tokens"`
-	Buckets  []Bucket  `json:"buckets"`
-	Accounts []Share   `json:"accounts,omitempty"`
-	Models   []Share   `json:"models,omitempty"`
-	Split    CostSplit `json:"split,omitzero"`
-	Saved    float64   `json:"saved,omitempty"`
-	Unpriced []string  `json:"unpriced,omitempty"`
+	Cost     float64      `json:"cost"`
+	Sessions int          `json:"sessions"`
+	Tokens   Tokens       `json:"tokens"`
+	Buckets  []Bucket     `json:"buckets"`
+	Accounts []Share      `json:"accounts,omitempty"`
+	Models   []Share      `json:"models,omitempty"`
+	Split    CostSplit    `json:"split,omitzero"`
+	Saved    float64      `json:"saved,omitempty"`
+	Unpriced []string     `json:"unpriced,omitempty"`
+	Stages   []StageUsage `json:"stages,omitempty"`
 }
 
 // Tokens counts the tokens of a period by type.
@@ -113,11 +114,13 @@ func Summarize(records []Record, rng Range, now time.Time, key AccountKey) Spend
 		totals.spend.Buckets[index].Start = start.Add(time.Duration(index) * step)
 	}
 	for index := range records {
-		if key.Matches(records[index].Vendor, records[index].Account) {
+		if records[index].Compaction == nil && key.Matches(records[index].Vendor, records[index].Account) {
 			totals.add(&records[index])
 		}
 	}
-	return totals.done()
+	spend := totals.done()
+	spend.Stages = stageUsages(records, now.Add(-rng.Span()), key)
+	return spend
 }
 
 type spendTotals struct {

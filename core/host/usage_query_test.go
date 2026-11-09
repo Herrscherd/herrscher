@@ -24,3 +24,14 @@ func TestUsageQueryMatchesTheVendorAndTheAccount(t *testing.T) {
 		}
 	}
 }
+
+func TestUsageQueryKeepsCompactionsWhateverTheFilter(t *testing.T) {
+	query := usageQuery{vendor: "claude", account: usage.AccountKey{Vendor: "claude", Account: "pro"}}
+	compaction := usage.Record{Compaction: &usage.Compaction{Stage: "jev"}}
+	if !query.keeps(compaction) {
+		t.Fatalf("keeps(compaction) = false, want a compaction kept under --vendor and --account")
+	}
+	if query.keeps(usage.Record{Vendor: "codex", Account: "perso"}) {
+		t.Fatalf("keeps(codex record) = true, want the other vendor and account left out")
+	}
+}

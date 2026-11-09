@@ -261,11 +261,11 @@ func (d *sessionDriver) compactStages() ([]contracts.CompactStage, error) {
 	}
 	stages := make([]contracts.CompactStage, 0, len(d.compaction.names))
 	for _, name := range d.compaction.names {
-		if name == contracts.CompactStageBackend {
-			stages = append(stages, contracts.CompactStage{Name: name, Compactor: bridgeCompactor{driver: d}})
-			continue
+		var compactor contracts.Compactor = bridgeCompactor{driver: d}
+		if name != contracts.CompactStageBackend {
+			compactor = historyStage{compactor: d.compaction.plugins[name], history: d.sessionHistory()}
 		}
-		stages = append(stages, contracts.CompactStage{Name: name, Compactor: historyStage{compactor: d.compaction.plugins[name], history: d.sessionHistory()}})
+		stages = append(stages, contracts.CompactStage{Name: name, Compactor: recordedStage{name: name, compactor: compactor}})
 	}
 	return stages, nil
 }
@@ -288,6 +288,20 @@ func (s historyStage) Compact(ctx context.Context, req contracts.CompactRequest,
 	}
 	req.History = s.history
 	return s.compactor.Compact(ctx, req, onEvent)
+}
+
+type recordedStage struct {
+	name      string
+	compactor contracts.Compactor
+}
+
+func (s recordedStage) Compact(ctx context.Context, req contracts.CompactRequest, onEvent func(contracts.BackendEvent)) (contracts.CompactResult, error) {
+	result, err := s.compactor.Compact(ctx, req, onEvent)
+	if err == nil || result.Stats != nil || errors.Is(err, contracts.ErrNilCompactor) {
+		return result, err
+	}
+	result.Stats = &contracts.CompactStats{Stage: s.name, Outcome: contracts.CompactFailed}
+	return result, err
 }
 
 func crossed(used, limit, percent int) bool {

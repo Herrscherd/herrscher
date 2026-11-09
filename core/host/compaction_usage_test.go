@@ -138,6 +138,29 @@ func TestRecordCompactionWithoutUsageSinkDoesNotPanic(_ *testing.T) {
 	d.recordCompaction([]contracts.CompactStats{stageStats("jev", contracts.CompactDone)})
 }
 
+func TestAFailedStageWithoutStatsLeavesAFailedEntry(t *testing.T) {
+	stages := []contracts.CompactStage{{Name: "jev", Compactor: recordedStage{name: "jev", compactor: statsCompactor{err: errors.New("disque plein")}}}}
+	result, err := contracts.RunCompactStack(context.Background(), stages, contracts.CompactRequest{}, nil)
+	if err == nil {
+		t.Fatal("RunCompactStack returned no error, want the stage failure")
+	}
+	want := []contracts.CompactStats{{Stage: "jev", Outcome: contracts.CompactFailed}}
+	if jsonOf(t, result.StageStats) != jsonOf(t, want) {
+		t.Fatalf("StageStats = %+v, want %+v", result.StageStats, want)
+	}
+}
+
+func TestAnUnwiredStageLeavesNoEntry(t *testing.T) {
+	stages := []contracts.CompactStage{{Name: "jev", Compactor: recordedStage{name: "jev", compactor: historyStage{}}}}
+	result, err := contracts.RunCompactStack(context.Background(), stages, contracts.CompactRequest{}, nil)
+	if !errors.Is(err, contracts.ErrNilCompactor) {
+		t.Fatalf("RunCompactStack = %v, want ErrNilCompactor", err)
+	}
+	if len(result.StageStats) != 0 {
+		t.Fatalf("StageStats = %+v, want none for a stage that did not run", result.StageStats)
+	}
+}
+
 func TestCompactionStageOutcomeReachesTheUsageLedger(t *testing.T) {
 	tests := []struct {
 		name    string

@@ -3964,12 +3964,12 @@
   },
   {
     "id": "cli.spend.ledger_truncated",
-    "description": "Usage report: a day of the ledger exceeds the readable size and is skipped, the figures below are partial",
-    "other": "a day of the usage ledger was too large and was skipped, so the totals below are partial"
+    "description": "Usage report: a day of the ledger is left out (too large or unreadable), the figures below are partial",
+    "other": "part of the usage ledger could not be read, so the totals below are partial"
   },
   {
     "id": "cli.spend.unreadable",
-    "description": "Usage report: the ledger could not be read for any day of the period, the views have no data to show",
+    "description": "Usage report: empty view of a period whose ledger is partial, replaces the empty-view text (emptyLine)",
     "other": "no readable data over the period"
   },
   {
@@ -4230,12 +4230,12 @@
   },
   {
     "id": "cli.health.facts.compact_partial",
-    "description": "Health: part of the compaction ledger could not be read, so the facts of the stage may be partial",
-    "other": "partial data, part of the usage ledger is unreadable"
+    "description": "Health: part of the usage ledger could not be read, so the facts of the stage may be partial",
+    "other": "partial data, part of the usage ledger could not be read"
   },
   {
     "id": "cli.health.facts.compact_unknown",
-    "description": "Health: the usage ledger could not be read, so the last run of a compaction stage is not known",
-    "other": "last compaction unknown, the usage ledger is unreadable"
+    "description": "Health: no run of the stage is found in the readable ledger, so the last one is not known",
+    "other": "last compaction unknown"
   }
 ]

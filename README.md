@@ -413,7 +413,8 @@ compaction stages, the memory plugins and the key pools. Each line says the stat
 about the service. Each compaction stage shows when it last ran and how it ended
 (done, short, failed, dry run or skipped), read from the usage ledger, or that there
 was no compaction in the last 7 days. When the ledger cannot be read, the line says
-the last compaction is unknown instead, and flags the data as partial.
+the last compaction is unknown when no readable run is left to show, and flags the
+data as partial.
 
 A gateway the daemon does not run reads as off, and so does a memory plugin that is
 not the one in use: the first local memory plugin with a factory is the live one,
@@ -451,8 +452,9 @@ default is the limits of each account:
   requests and their average duration.
 
 `--range` takes `24h`, `7d`, `30d` or `90d`, and `--account` and `--vendor` narrow the
-figures to one account or one vendor. A compaction has no vendor, so either filter
-leaves the compactions out. `--json` prints the same figures as structured data for
+figures to one account or one vendor. A compaction has no vendor and no account, so
+the filters never leave a compaction out: the compactions of the period are shown
+whatever the filter. `--json` prints the same figures as structured data for
 a script. A compaction shows its cost as requests and request tokens, since the usage
 ledger records no price for a stage on its own.
 

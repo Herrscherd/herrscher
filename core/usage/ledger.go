@@ -118,8 +118,9 @@ func (l Ledger) Prune() error {
 }
 
 // Records reads the records of the period, from the files of its days only, and
-// skips the lines that do not decode. A day too large to read is left out and reported
-// with ErrLedgerTruncated, the readable days are still returned.
+// skips the lines that do not decode. A day that cannot be read whole is left out and
+// reported in the error (ErrLedgerTruncated for a day too large), the readable days
+// are still returned.
 func (l Ledger) Records(rng Range) ([]Record, error) {
 	now := l.Now().UTC()
 	since := now.Add(-rng.Span())
@@ -136,21 +137,18 @@ func (l Ledger) Records(rng Range) ([]Record, error) {
 
 func readDays(root *os.Root, since, now time.Time) ([]Record, error) {
 	var out []Record
-	var truncated error
+	var unreadable error
 	for at := truncDay(since); !at.After(now); at = at.AddDate(0, 0, 1) {
 		name := fileName(at)
 		records, err := readDay(root, name, since)
-		if errors.Is(err, ErrLedgerTruncated) {
-			slog.Warn("usage ledger: day left out, too large to read", "file", name)
-			truncated = err
-			continue
-		}
 		if err != nil {
-			return nil, err
+			slog.Warn("usage ledger: day left out, it could not be read whole", "file", name, "err", err)
+			unreadable = errors.Join(unreadable, err)
+			continue
 		}
 		out = append(out, records...)
 	}
-	return out, truncated
+	return out, unreadable
 }
 
 func readDay(root *os.Root, name string, since time.Time) ([]Record, error) {

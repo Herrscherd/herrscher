@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -142,5 +143,27 @@ func TestLedgerRecordsKeepsTheReadableDaysBesideATruncatedOne(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Model != "opus" {
 		t.Fatalf("Records = %+v, want the one record of the readable day", got)
+	}
+}
+
+func TestLedgerRecordsKeepsTheDaysAfterAHardReadFailure(t *testing.T) {
+	dir := t.TempDir()
+	ledger := Ledger{Dir: dir, Now: clock(testNow())}
+	if err := ledger.Append([]Record{
+		{Time: testNow().AddDate(0, 0, -1), Session: "s1", Model: "opus"},
+		{Time: testNow().Add(-time.Hour), Session: "s2", Model: "sonnet"},
+	}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	unreadable := filepath.Join(dir, testNow().AddDate(0, 0, -3).Format(time.DateOnly)+".jsonl")
+	if err := os.WriteFile(unreadable, []byte(strings.Repeat("x", maxLedgerLine+1)), fileMode); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	got, err := ledger.Records(Range7d)
+	if err == nil || errors.Is(err, ErrLedgerTruncated) {
+		t.Fatalf("Records error = %v, want the hard read failure of the unreadable day", err)
+	}
+	if len(got) != 2 || got[0].Model != "opus" || got[1].Model != "sonnet" {
+		t.Fatalf("Records = %+v, want the records of the days after the unreadable one", got)
 	}
 }

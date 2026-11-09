@@ -27,14 +27,14 @@ func TestCompactionFactsNameTheLastRunOrItsAbsence(t *testing.T) {
 			name:    "never run, part of the ledger unreadable, french",
 			partial: true,
 			lang:    i18n.French,
-			want:    "aucune compaction sur les 7 derniers jours · données partielles, une partie du journal d'usage est illisible",
+			want:    "aucune compaction sur les 7 derniers jours · données partielles, une partie du journal d'usage n'a pas pu être lue",
 		},
 		{
 			name:    "unknown because the ledger cannot be read, english",
 			unknown: true,
 			partial: true,
 			lang:    i18n.English,
-			want:    "last compaction unknown, the usage ledger is unreadable · partial data, part of the usage ledger is unreadable",
+			want:    "last compaction unknown · partial data, part of the usage ledger could not be read",
 		},
 		{
 			name:       "last run failed, french",

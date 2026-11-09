@@ -366,7 +366,7 @@ func TestLastCompactionsKeepsTheReadableDaysBesideATruncatedOne(t *testing.T) {
 	}
 }
 
-func TestLastCompactionsReportsAHardReadFailureAsUnknown(t *testing.T) {
+func TestLastCompactionsKeepsTheRunOfADayBesideAHardReadFailure(t *testing.T) {
 	now := time.Now().UTC()
 	dir := t.TempDir()
 	ledger := usage.Ledger{Dir: dir, Now: time.Now}
@@ -383,9 +383,18 @@ func TestLastCompactionsReportsAHardReadFailureAsUnknown(t *testing.T) {
 	if err == nil || errors.Is(err, usage.ErrLedgerTruncated) {
 		t.Fatalf("error = %v, want a hard read failure, not a skipped day", err)
 	}
-	probe := compactionProbes([]string{"jev"}, last, err)[0].Check.Facts
-	if !probe.CompactionPartial || !probe.CompactionUnknown || probe.Compaction != nil {
-		t.Fatalf("facts = %+v, want partial and unknown, never a run claimed", probe)
+	got, ok := last["jev"]
+	if !ok || got.Outcome != contracts.CompactDone {
+		t.Fatalf("last jev run = %+v, %t, want the run of the day read after the unreadable one", got, ok)
+	}
+	probes := compactionProbes([]string{"jev", "autre"}, last, err)
+	kept := probes[0].Check.Facts
+	if !kept.CompactionPartial || kept.CompactionUnknown || kept.Compaction == nil {
+		t.Fatalf("facts of jev = %+v, want partial with its run kept, not unknown", kept)
+	}
+	absent := probes[1].Check.Facts
+	if !absent.CompactionPartial || !absent.CompactionUnknown || absent.Compaction != nil {
+		t.Fatalf("facts of autre = %+v, want partial and unknown, no run claimed", absent)
 	}
 }
 

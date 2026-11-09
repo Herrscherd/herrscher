@@ -2,7 +2,6 @@ package host
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -152,16 +151,16 @@ func (q usageQuery) matches(vendor, account string) bool {
 	return (q.vendor == "" || vendor == q.vendor) && q.account.Matches(vendor, account)
 }
 
-func (s *usageSource) run(ctx context.Context, query usageQuery) (usage.Snapshot, error) {
+func (q usageQuery) keeps(record usage.Record) bool {
+	return record.Compaction != nil || q.matches(record.Vendor, record.Account)
+}
+
+func (s *usageSource) run(ctx context.Context, query usageQuery) usage.Snapshot {
 	records, err := s.ledger.Records(query.rng)
-	truncated := errors.Is(err, usage.ErrLedgerTruncated)
-	if err != nil && !truncated {
-		return usage.Snapshot{}, err
-	}
 	now := s.ledger.Now()
 	records, notes := s.withTranscripts(records, now.Add(-query.rng.Span()))
 	records = slices.DeleteFunc(records, func(record usage.Record) bool {
-		return !query.matches(record.Vendor, record.Account)
+		return !query.keeps(record)
 	})
 	return usage.Snapshot{
 		At:                 now,
@@ -170,11 +169,11 @@ func (s *usageSource) run(ctx context.Context, query usageQuery) (usage.Snapshot
 		Vendor:             query.vendor,
 		Limits:             s.limits.Read(ctx, s.targets(query)),
 		Spend:              usage.Summarize(records, query.rng, now, query.account),
-		LedgerTruncated:    truncated,
+		LedgerTruncated:    err != nil,
 		TranscriptsPending: notes.pending,
 		Unreadable:         notes.unreadable,
 		PricesMissing:      !notes.priced,
-	}, nil
+	}
 }
 
 type transcriptState struct {
@@ -286,10 +285,7 @@ func usageVerb(source *usageSource) contracts.Cmd {
 			if given && vendor == "" {
 				return contracts.Result{}, usage.ErrEmptyValue
 			}
-			snapshot, err := source.run(ctx, usageQuery{rng: rng, account: key, vendor: vendor})
-			if err != nil {
-				return contracts.Result{}, err
-			}
+			snapshot := source.run(ctx, usageQuery{rng: rng, account: key, vendor: vendor})
 			raw, encodeErr := usage.Encode(snapshot)
 			return cli.Data(string(raw), encodeErr)
 		})

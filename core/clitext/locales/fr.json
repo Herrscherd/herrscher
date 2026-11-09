@@ -3964,12 +3964,12 @@
   },
   {
     "id": "cli.spend.ledger_truncated",
-    "description": "Rapport d'usage : un jour du journal dépasse la taille lisible et est ignoré, les chiffres ci-dessous sont partiels",
-    "other": "un jour du journal d'usage était trop volumineux et a été ignoré, les totaux ci-dessous sont partiels"
+    "description": "Rapport d'usage : un jour du journal est laissé de côté (trop volumineux ou illisible), les chiffres ci-dessous sont partiels",
+    "other": "une partie du journal d'usage n'a pas pu être lue, les totaux ci-dessous sont partiels"
   },
   {
     "id": "cli.spend.unreadable",
-    "description": "Rapport d'usage : le journal n'a pu être lu pour aucun jour de la période, les vues n'ont aucune donnée à afficher",
+    "description": "Rapport d'usage : vue vide d'une période dont le journal est partiel, remplace le texte de la vue vide (emptyLine)",
     "other": "aucune donnée lisible sur la période"
   },
   {
@@ -4230,12 +4230,12 @@
   },
   {
     "id": "cli.health.facts.compact_partial",
-    "description": "Santé : une partie du journal de compaction n'a pas pu être lue, les faits de l'étage peuvent être partiels",
-    "other": "données partielles, une partie du journal d'usage est illisible"
+    "description": "Santé : une partie du journal d'usage n'a pas pu être lue, les faits de l'étage peuvent être partiels",
+    "other": "données partielles, une partie du journal d'usage n'a pas pu être lue"
   },
   {
     "id": "cli.health.facts.compact_unknown",
-    "description": "Santé : le journal d'usage n'a pas pu être lu, la dernière exécution d'un étage de compaction est inconnue",
-    "other": "dernière compaction inconnue, le journal d'usage est illisible"
+    "description": "Santé : aucune exécution de l'étage n'est retrouvée dans le journal lisible, la dernière est inconnue",
+    "other": "dernière compaction inconnue"
   }
 ]

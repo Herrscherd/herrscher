@@ -3964,8 +3964,8 @@
   },
   {
     "id": "cli.spend.ledger_truncated",
-    "description": "Rapport d'usage : un jour du journal dépasse la taille lisible, les totaux ne sont pas affichés",
-    "other": "un jour du journal d'usage est trop volumineux, les totaux ne sont pas affichés pour ne pas être faux"
+    "description": "Rapport d'usage : un jour du journal dépasse la taille lisible et est ignoré, les chiffres ci-dessous sont partiels",
+    "other": "un jour du journal d'usage était trop volumineux et a été ignoré, les totaux ci-dessous sont partiels"
   },
   {
     "id": "cli.spend.peak",
@@ -4222,5 +4222,10 @@
     "id": "cli.health.facts.compact_never",
     "description": "Santé : un étage de compaction sans passage sur les 7 derniers jours",
     "other": "aucune compaction sur les 7 derniers jours"
+  },
+  {
+    "id": "cli.health.facts.compact_partial",
+    "description": "Santé : un jour du journal de compaction a été ignoré, les faits de l'étage peuvent être partiels",
+    "other": "données partielles, un jour du journal a été ignoré"
   }
 ]

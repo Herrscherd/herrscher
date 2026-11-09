@@ -14,12 +14,14 @@ import (
 // and their outcomes, the calls it examined and removed, and what its model requests cost.
 func CompactionLines(snapshot Snapshot, lang i18n.Language, pal termpaint.Palette) ([]string, error) {
 	text := &renderer{lang: lang, pal: pal}
-	if snapshot.LedgerTruncated {
-		return []string{termpaint.Paint(pal.Bad, text.text(clitext.SpendLedgerTruncated, nil))}, text.err
-	}
+	lines := append(truncatedNotice(snapshot, text), compactionBody(snapshot, text)...)
+	return lines, text.err
+}
+
+func compactionBody(snapshot Snapshot, text *renderer) []string {
 	stages := snapshot.Spend.Stages
 	if len(stages) == 0 {
-		return []string{termpaint.Paint(pal.Dim, text.text(clitext.CompactionEmpty, nil))}, text.err
+		return []string{termpaint.Paint(text.pal.Dim, text.text(clitext.CompactionEmpty, nil))}
 	}
 	var lines []string
 	for index := range stages {
@@ -28,7 +30,7 @@ func CompactionLines(snapshot Snapshot, lang i18n.Language, pal termpaint.Palett
 		}
 		lines = append(lines, compactionBlock(stages[index], text)...)
 	}
-	return lines, text.err
+	return lines
 }
 
 func compactionBlock(stage StageUsage, text *renderer) []string {

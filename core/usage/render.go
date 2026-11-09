@@ -280,12 +280,22 @@ func paceLabel(limit contracts.Limit, pace Pace, text *renderer) string {
 // of the display, and its cost by account and by model.
 func CostLines(snapshot Snapshot, lang i18n.Language, zone *time.Location, pal termpaint.Palette) ([]string, error) {
 	text := &renderer{lang: lang, pal: pal}
-	spend := snapshot.Spend
-	if snapshot.LedgerTruncated {
-		return []string{termpaint.Paint(pal.Bad, text.text(clitext.SpendLedgerTruncated, nil))}, text.err
+	lines := append(truncatedNotice(snapshot, text), costBody(snapshot, text, zone)...)
+	return lines, text.err
+}
+
+func truncatedNotice(snapshot Snapshot, text *renderer) []string {
+	if !snapshot.LedgerTruncated {
+		return nil
 	}
+	return []string{termpaint.Paint(text.pal.Bad, text.text(clitext.SpendLedgerTruncated, nil))}
+}
+
+func costBody(snapshot Snapshot, text *renderer, zone *time.Location) []string {
+	lang, pal := text.lang, text.pal
+	spend := snapshot.Spend
 	if spend.Sessions == 0 {
-		return append([]string{termpaint.Paint(pal.Dim, text.text(clitext.SpendEmpty, nil))}, costNotes(snapshot, text)...), text.err
+		return append([]string{termpaint.Paint(pal.Dim, text.text(clitext.SpendEmpty, nil))}, costNotes(snapshot, text)...)
 	}
 	sessions := text.text(clitext.SpendSessions, clitext.Params{clitext.ParamCount: spend.Sessions})
 	summary := sessions + summarySep + text.text(rangeKeys()[snapshot.Range], nil) + summarySep + text.text(clitext.SpendEstimate, nil)
@@ -303,7 +313,7 @@ func CostLines(snapshot Snapshot, lang i18n.Language, zone *time.Location, pal t
 		lines = append(lines, "")
 		lines = append(lines, detail...)
 	}
-	return append(lines, costNotes(snapshot, text)...), text.err
+	return append(lines, costNotes(snapshot, text)...)
 }
 
 func costDetail(spend Spend, text *renderer) []string {
@@ -359,12 +369,15 @@ func costNotes(snapshot Snapshot, text *renderer) []string {
 // the input, then the tokens by model.
 func TokenLines(snapshot Snapshot, lang i18n.Language, pal termpaint.Palette) ([]string, error) {
 	text := &renderer{lang: lang, pal: pal}
+	lines := append(truncatedNotice(snapshot, text), tokenBody(snapshot, text)...)
+	return lines, text.err
+}
+
+func tokenBody(snapshot Snapshot, text *renderer) []string {
+	lang, pal := text.lang, text.pal
 	tokens := snapshot.Spend.Tokens
-	if snapshot.LedgerTruncated {
-		return []string{termpaint.Paint(pal.Bad, text.text(clitext.SpendLedgerTruncated, nil))}, text.err
-	}
 	if tokens.Total() == 0 {
-		return append([]string{termpaint.Paint(pal.Dim, text.text(clitext.SpendEmpty, nil))}, costNotes(snapshot, text)...), text.err
+		return append([]string{termpaint.Paint(pal.Dim, text.text(clitext.SpendEmpty, nil))}, costNotes(snapshot, text)...)
 	}
 	lines := []string{
 		text.text(clitext.SpendVolumeTotal, clitext.Params{
@@ -384,7 +397,7 @@ func TokenLines(snapshot Snapshot, lang i18n.Language, pal termpaint.Palette) ([
 	lines = append(lines, modelTable(models, float64(tokens.Total()), text, clitext.SpendColVolume, func(share Share) string {
 		return formatTokens(lang, share.Tokens, text)
 	}, func(share Share) float64 { return float64(share.Tokens) })...)
-	return append(lines, costNotes(snapshot, text)...), text.err
+	return append(lines, costNotes(snapshot, text)...)
 }
 
 func cacheRatio(tokens Tokens) float64 {

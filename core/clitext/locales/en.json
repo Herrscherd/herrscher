@@ -3964,8 +3964,8 @@
   },
   {
     "id": "cli.spend.ledger_truncated",
-    "description": "Usage report: a day of the ledger exceeds the readable size, totals are not shown",
-    "other": "a day of the usage ledger is too large, totals are not shown rather than wrong"
+    "description": "Usage report: a day of the ledger exceeds the readable size and is skipped, the figures below are partial",
+    "other": "a day of the usage ledger was too large and was skipped, so the totals below are partial"
   },
   {
     "id": "cli.spend.peak",
@@ -4222,5 +4222,10 @@
     "id": "cli.health.facts.compact_never",
     "description": "Health: a compaction stage with no run in the last 7 days",
     "other": "no compaction in the last 7 days"
+  },
+  {
+    "id": "cli.health.facts.compact_partial",
+    "description": "Health: a day of the compaction ledger was skipped, so the facts of the stage may be partial",
+    "other": "partial data, a day of the ledger was skipped"
   }
 ]

@@ -163,6 +163,35 @@ func TestResultWithoutStatsDecodesNilStats(t *testing.T) {
 	}
 }
 
+func TestDecodeResultReadsAnOldBackendFrame(t *testing.T) {
+	frame := contracts.Event{
+		T:      EventResult,
+		Text:   "compacté",
+		Value:  `{"code":7,"args":[{"name":"Setting","kind":1,"value":"compactAt"},{"name":"Count","kind":2,"value":3}]}`,
+		Tokens: 12_000,
+		Done:   true,
+	}
+	got, err := DecodeResult(frame)
+	if err != nil {
+		t.Fatalf("DecodeResult: %v", err)
+	}
+	if got.Stats != nil {
+		t.Fatalf("stats = %+v, want nil for a backend that sends no stats", got.Stats)
+	}
+	if got.Notice.Code != contracts.CodeSettingInvalid || len(got.Notice.Args) != 2 {
+		t.Fatalf("notice = %+v, want setting-invalid with two arguments", got.Notice)
+	}
+	if got.Notice.Args[0].Name() != "Setting" || got.Notice.Args[0].Value() != "compactAt" {
+		t.Fatalf("first argument = %s %v, want Setting compactAt", got.Notice.Args[0].Name(), got.Notice.Args[0].Value())
+	}
+	if got.Notice.Args[1].Name() != "Count" || got.Notice.Args[1].Value() != 3 {
+		t.Fatalf("second argument = %s %v, want Count 3", got.Notice.Args[1].Name(), got.Notice.Args[1].Value())
+	}
+	if got.Note != "compacté" || got.TokensAfter != 12_000 || !got.TokensMeasured {
+		t.Fatalf("result = %+v, want the note, the tokens after and the measured flag kept", got)
+	}
+}
+
 func TestResultRefusesStatsWithAnUnknownOutcome(t *testing.T) {
 	_, err := Result(contracts.CompactResult{Stats: &contracts.CompactStats{Stage: "jev"}})
 	if !errors.Is(err, contracts.ErrUnknownCompactOutcome) {

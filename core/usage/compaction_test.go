@@ -272,10 +272,10 @@ func TestCompactionLinesRendersEachStage(t *testing.T) {
 			want:     []string{"no compaction in this period"},
 		},
 		{
-			name:     "a truncated ledger shows no totals",
+			name:     "a truncated ledger shows the partial notice before the stages",
 			snapshot: Snapshot{LedgerTruncated: true, Spend: Spend{Stages: []StageUsage{stage}}},
 			lang:     i18n.English,
-			want:     []string{"too large"},
+			want:     []string{"partial", "jev"},
 		},
 	}
 	for _, tc := range tests {

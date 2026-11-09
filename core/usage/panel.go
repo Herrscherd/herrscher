@@ -32,12 +32,15 @@ func chartSteps() []float64 {
 // axis on the right, then the tokens and what the cache saved under both.
 func CostPanel(snapshot Snapshot, lang i18n.Language, zone *time.Location, pal termpaint.Palette, width int) ([]string, error) {
 	text := &renderer{lang: lang, pal: pal}
+	lines := append(truncatedNotice(snapshot, text), panelBody(snapshot, text, zone, width)...)
+	return lines, text.err
+}
+
+func panelBody(snapshot Snapshot, text *renderer, zone *time.Location, width int) []string {
+	pal := text.pal
 	spend := snapshot.Spend
-	if snapshot.LedgerTruncated {
-		return []string{termpaint.Paint(pal.Bad, text.text(clitext.SpendLedgerTruncated, nil))}, text.err
-	}
 	if spend.Sessions == 0 {
-		return append([]string{termpaint.Paint(pal.Dim, text.text(clitext.SpendEmpty, nil))}, costNotes(snapshot, text)...), text.err
+		return append([]string{termpaint.Paint(pal.Dim, text.text(clitext.SpendEmpty, nil))}, costNotes(snapshot, text)...)
 	}
 	left := panelSummary(spend, text)
 	leftWidth := 0
@@ -59,7 +62,7 @@ func CostPanel(snapshot Snapshot, lang i18n.Language, zone *time.Location, pal t
 		lines = append(lines, strings.TrimRight(line, " "))
 	}
 	lines = append(lines, "", panelTokens(spend, text))
-	return append(lines, costNotes(snapshot, text)...), text.err
+	return append(lines, costNotes(snapshot, text)...)
 }
 
 func panelSummary(spend Spend, text *renderer) []string {

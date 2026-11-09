@@ -16,11 +16,18 @@ func TestCompactionFactsNameTheLastRunOrItsAbsence(t *testing.T) {
 	tests := []struct {
 		name       string
 		compaction *health.Compaction
+		partial    bool
 		lang       i18n.Language
 		want       string
 	}{
 		{name: "never run, english", lang: i18n.English, want: "no compaction in the last 7 days"},
 		{name: "never run, french", lang: i18n.French, want: "aucune compaction sur les 7 derniers jours"},
+		{
+			name:    "never run, a day of the ledger skipped, french",
+			partial: true,
+			lang:    i18n.French,
+			want:    "aucune compaction sur les 7 derniers jours · données partielles, un jour du journal a été ignoré",
+		},
 		{
 			name:       "last run failed, french",
 			compaction: &health.Compaction{At: last, Outcome: contracts.CompactFailed},
@@ -37,7 +44,7 @@ func TestCompactionFactsNameTheLastRunOrItsAbsence(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			snapshot := health.Snapshot{Checks: []health.Check{
-				{Group: health.GroupCompaction, Name: "jev", Facts: health.Facts{Compaction: tc.compaction}},
+				{Group: health.GroupCompaction, Name: "jev", Facts: health.Facts{Compaction: tc.compaction, CompactionPartial: tc.partial}},
 			}}
 			rows, err := snapshot.Rows(snapshot.Checks, tc.lang)
 			if err != nil {
@@ -53,7 +60,7 @@ func TestCompactionFactsNameTheLastRunOrItsAbsence(t *testing.T) {
 func TestCompactionFactsSurviveTheWire(t *testing.T) {
 	at := time.Date(2026, 11, 8, 14, 30, 0, 0, time.UTC)
 	snapshot := health.Snapshot{Checks: []health.Check{
-		{Group: health.GroupCompaction, Name: "jev", Facts: health.Facts{Compaction: &health.Compaction{At: at, Outcome: contracts.CompactShort}}},
+		{Group: health.GroupCompaction, Name: "jev", Facts: health.Facts{Compaction: &health.Compaction{At: at, Outcome: contracts.CompactShort}, CompactionPartial: true}},
 		{Group: health.GroupCompaction, Name: "backend"},
 	}}
 	data, err := health.Encode(snapshot)
@@ -70,6 +77,9 @@ func TestCompactionFactsSurviveTheWire(t *testing.T) {
 	got := back.Checks[0].Facts.Compaction
 	if got == nil || !got.At.Equal(at) || got.Outcome != contracts.CompactShort {
 		t.Fatalf("compaction = %+v, want the short run of %v", got, at)
+	}
+	if !back.Checks[0].Facts.CompactionPartial {
+		t.Fatal("partial = false, want the partial ledger flag to survive the wire")
 	}
 	if back.Checks[1].Facts.Compaction != nil {
 		t.Fatalf("compaction = %+v, want none for a stage that never ran", back.Checks[1].Facts.Compaction)

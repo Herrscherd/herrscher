@@ -58,7 +58,8 @@ func healthProbes(inputs healthInputs) []health.Probe {
 	probes = append(probes, gatewayProbes(inputs)...)
 	probes = append(probes, backendProbes(inputs)...)
 	probes = append(probes, memoryProbes(inputs.memory)...)
-	return append(probes, compactionProbes(inputs.compaction.names, lastCompactions(inputs.ledger))...)
+	last, partial := lastCompactions(inputs.ledger)
+	return append(probes, compactionProbes(inputs.compaction.names, last, partial)...)
 }
 
 func daemonProbe(daemon health.Daemon) health.Probe {
@@ -308,10 +309,10 @@ func firstMemoryKind() string {
 	return ""
 }
 
-func compactionProbes(names []string, last map[string]usage.LastCompaction) []health.Probe {
+func compactionProbes(names []string, last map[string]usage.LastCompaction, partial bool) []health.Probe {
 	var probes []health.Probe
 	for _, name := range names {
-		check := health.Check{Group: health.GroupCompaction, Name: name}
+		check := health.Check{Group: health.GroupCompaction, Name: name, Facts: health.Facts{CompactionPartial: partial}}
 		if run, ok := last[name]; ok {
 			check.Facts.Compaction = &health.Compaction{At: run.At, Outcome: run.Outcome}
 		}
@@ -322,12 +323,12 @@ func compactionProbes(names []string, last map[string]usage.LastCompaction) []he
 
 const compactionProbeRange = usage.Range7d
 
-func lastCompactions(ledger usage.Ledger) map[string]usage.LastCompaction {
+func lastCompactions(ledger usage.Ledger) (map[string]usage.LastCompaction, bool) {
 	records, err := ledger.Records(compactionProbeRange)
 	if err != nil {
 		slog.Warn("health: compaction ledger partly unreadable", "err", err)
 	}
-	return usage.LastCompactions(records)
+	return usage.LastCompactions(records), errors.Is(err, usage.ErrLedgerTruncated)
 }
 
 func compactionRun(name string) runFunc {

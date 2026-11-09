@@ -75,6 +75,42 @@ func recordedCompaction(stage string, outcome contracts.CompactOutcome) *usage.C
 	}
 }
 
+func TestCompactionUsageBoundsWhatTheBackendSends(t *testing.T) {
+	tests := []struct {
+		name  string
+		stats contracts.CompactStats
+		want  usage.Compaction
+	}{
+		{
+			name:  "a plausible stage is copied as it is",
+			stats: stageStats("jev", contracts.CompactDone),
+			want:  *recordedCompaction("jev", contracts.CompactDone),
+		},
+		{
+			name:  "negative lengths and duration read as zero",
+			stats: contracts.CompactStats{Stage: "jev", Outcome: contracts.CompactDone, CharsBefore: -5, CharsAfter: -3, Duration: -time.Second},
+			want:  usage.Compaction{Stage: "jev", Outcome: contracts.CompactDone},
+		},
+		{
+			name:  "characters after are capped at the characters before",
+			stats: contracts.CompactStats{Stage: "jev", Outcome: contracts.CompactDone, CharsBefore: 100, CharsAfter: 250},
+			want:  usage.Compaction{Stage: "jev", Outcome: contracts.CompactDone, CharsBefore: 100, CharsAfter: 100},
+		},
+		{
+			name:  "negative characters before leave no characters after",
+			stats: contracts.CompactStats{Stage: "jev", Outcome: contracts.CompactDone, CharsBefore: -10, CharsAfter: 40},
+			want:  usage.Compaction{Stage: "jev", Outcome: contracts.CompactDone},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := compactionUsage(tc.stats); *got != tc.want {
+				t.Fatalf("compactionUsage = %+v, want %+v", *got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRecordCompactionKeepsOnlyValidStageStats(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -248,7 +284,8 @@ func TestLastCompactionsReadsTheSevenDayWindow(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
-	got, ok := lastCompactions(ledger)["jev"]
+	last, _ := lastCompactions(ledger)
+	got, ok := last["jev"]
 	if !ok || got.Outcome != contracts.CompactFailed || !got.At.Equal(latest) {
 		t.Fatalf("last jev run = %+v, %t, want the failed run at %v", got, ok, latest)
 	}
@@ -270,9 +307,13 @@ func TestLastCompactionsKeepsTheReadableDaysBesideATruncatedOne(t *testing.T) {
 	if err := os.Truncate(oversized, 64<<20+1); err != nil {
 		t.Fatalf("grow: %v", err)
 	}
-	got, ok := lastCompactions(ledger)["jev"]
+	last, partial := lastCompactions(ledger)
+	got, ok := last["jev"]
 	if !ok || got.Outcome != contracts.CompactDone {
 		t.Fatalf("last jev run = %+v, %t, want the run of the readable day", got, ok)
+	}
+	if !partial {
+		t.Fatal("partial = false, want the skipped day reported")
 	}
 }
 
@@ -284,7 +325,8 @@ func TestLastCompactionsIgnoresRunsOutsideTheProbeWindow(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
-	if got, ok := lastCompactions(ledger)["jev"]; ok {
+	last, _ := lastCompactions(ledger)
+	if got, ok := last["jev"]; ok {
 		t.Fatalf("last jev run = %+v, want none: the run is older than the probe window", got)
 	}
 }

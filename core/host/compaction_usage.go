@@ -26,6 +26,7 @@ func (d *sessionDriver) recordCompaction(stats []contracts.CompactStats) {
 }
 
 func compactionUsage(stats contracts.CompactStats) *usage.Compaction {
+	charsBefore := max(stats.CharsBefore, 0)
 	return &usage.Compaction{
 		Stage:         stats.Stage,
 		Outcome:       stats.Outcome,
@@ -33,11 +34,11 @@ func compactionUsage(stats contracts.CompactStats) *usage.Compaction {
 		Kept:          stats.Kept,
 		Truncated:     stats.Truncated,
 		Pruned:        stats.Pruned,
-		CharsBefore:   stats.CharsBefore,
-		CharsAfter:    stats.CharsAfter,
+		CharsBefore:   charsBefore,
+		CharsAfter:    min(max(stats.CharsAfter, 0), charsBefore),
 		TokensRemoved: stats.TokensRemoved,
 		Requests:      stats.Requests,
 		RequestTokens: stats.RequestTokens,
-		Duration:      stats.Duration,
+		Duration:      max(stats.Duration, 0),
 	}
 }

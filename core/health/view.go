@@ -206,7 +206,7 @@ func (s Snapshot) facts(check Check, text *renderer) string {
 			clitext.ParamCount:  check.Facts.Providers,
 		})
 	case check.Group == GroupCompaction:
-		return compactionFacts(check.Facts.Compaction, text)
+		return compactionFacts(check.Facts, text)
 	case check.Group == GroupCore && check.Name == ServiceDaemon:
 		if check.Facts.Socket != "" {
 			return homeRelative(check.Facts.Socket)
@@ -216,14 +216,18 @@ func (s Snapshot) facts(check Check, text *renderer) string {
 	return ""
 }
 
-func compactionFacts(last *Compaction, text *renderer) string {
-	if last == nil {
-		return text.key(clitext.HealthCompactNever, nil)
+func compactionFacts(facts Facts, text *renderer) string {
+	fact := text.key(clitext.HealthCompactNever, nil)
+	if last := facts.Compaction; last != nil {
+		fact = text.key(clitext.HealthCompactLast, clitext.Params{
+			clitext.ParamOutcome: text.outcome(last.Outcome),
+			clitext.ParamDate:    last.At.Local().Format(time.DateTime),
+		})
 	}
-	return text.key(clitext.HealthCompactLast, clitext.Params{
-		clitext.ParamOutcome: text.outcome(last.Outcome),
-		clitext.ParamDate:    last.At.Local().Format(time.DateTime),
-	})
+	if facts.CompactionPartial {
+		return fact + factsSep + text.key(clitext.HealthCompactPartial, nil)
+	}
+	return fact
 }
 
 func (r *renderer) outcome(outcome contracts.CompactOutcome) string {

@@ -171,10 +171,17 @@ func (m *model) stepUsageRange(delta int) tea.Cmd {
 
 func (m *model) nextUsageAccount() tea.Cmd {
 	accounts := []usage.AccountKey{{}}
-	for _, entry := range m.usage.snapshot.Limits {
-		if m.usage.vendor == "" || entry.Vendor == m.usage.vendor {
-			accounts = append(accounts, usage.AccountKey{Vendor: entry.Vendor, Account: entry.Account})
+	add := func(vendor, account string) {
+		key := usage.AccountKey{Vendor: vendor, Account: account}
+		if (m.usage.vendor == "" || vendor == m.usage.vendor) && !slices.Contains(accounts, key) {
+			accounts = append(accounts, key)
 		}
+	}
+	for _, entry := range m.usage.snapshot.Limits {
+		add(entry.Vendor, entry.Account)
+	}
+	for _, share := range m.usage.snapshot.Spend.Accounts {
+		add(share.Vendor, share.Account)
 	}
 	index := slices.Index(accounts, m.usage.account)
 	m.usage.account = accounts[(index+1)%len(accounts)]

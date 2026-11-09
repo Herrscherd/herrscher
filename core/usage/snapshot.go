@@ -19,6 +19,7 @@ type Snapshot struct {
 	Spend              Spend           `json:"spend"`
 	LedgerTruncated    bool            `json:"ledgerTruncated,omitempty"`
 	TranscriptsPending bool            `json:"transcriptsPending,omitempty"`
+	Unreadable         int             `json:"unreadable,omitempty"`
 	PricesMissing      bool            `json:"pricesMissing,omitempty"`
 }
 
@@ -49,6 +50,7 @@ type snapshotWire struct {
 	Spend              Spend         `json:"spend"`
 	LedgerTruncated    bool          `json:"ledgerTruncated,omitempty"`
 	TranscriptsPending bool          `json:"transcriptsPending,omitempty"`
+	Unreadable         int           `json:"unreadable,omitempty"`
 	PricesMissing      bool          `json:"pricesMissing,omitempty"`
 }
 
@@ -70,7 +72,7 @@ type limitWire struct {
 }
 
 func toWire(snapshot Snapshot) snapshotWire {
-	wire := snapshotWire{At: snapshot.At, Range: snapshot.Range, Account: snapshot.Account, Vendor: snapshot.Vendor, Spend: snapshot.Spend, LedgerTruncated: snapshot.LedgerTruncated, TranscriptsPending: snapshot.TranscriptsPending, PricesMissing: snapshot.PricesMissing}
+	wire := snapshotWire{At: snapshot.At, Range: snapshot.Range, Account: snapshot.Account, Vendor: snapshot.Vendor, Spend: snapshot.Spend, LedgerTruncated: snapshot.LedgerTruncated, TranscriptsPending: snapshot.TranscriptsPending, Unreadable: snapshot.Unreadable, PricesMissing: snapshot.PricesMissing}
 	for _, account := range snapshot.Limits {
 		item := accountWire{Vendor: account.Vendor, Account: account.Account, Default: account.Default, Status: account.Status, ReadAt: account.ReadAt}
 		for _, limit := range account.Limits {
@@ -82,7 +84,7 @@ func toWire(snapshot Snapshot) snapshotWire {
 }
 
 func fromWire(wire snapshotWire) Snapshot {
-	snapshot := Snapshot{At: wire.At, Range: wire.Range, Account: wire.Account, Vendor: wire.Vendor, Spend: wire.Spend, LedgerTruncated: wire.LedgerTruncated, TranscriptsPending: wire.TranscriptsPending, PricesMissing: wire.PricesMissing}
+	snapshot := Snapshot{At: wire.At, Range: wire.Range, Account: wire.Account, Vendor: wire.Vendor, Spend: wire.Spend, LedgerTruncated: wire.LedgerTruncated, TranscriptsPending: wire.TranscriptsPending, Unreadable: wire.Unreadable, PricesMissing: wire.PricesMissing}
 	for _, item := range wire.Limits {
 		account := AccountLimits{Vendor: item.Vendor, Account: item.Account, Default: item.Default, Status: item.Status, ReadAt: item.ReadAt}
 		for _, limit := range item.Limits {

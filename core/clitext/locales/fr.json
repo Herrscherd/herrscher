@@ -4063,6 +4063,12 @@
     "other": "lecture des transcripts Claude et Codex en cours, les totaux vont encore monter"
   },
   {
+    "id": "cli.spend.transcripts_unreadable",
+    "description": "Des transcripts n'ont pas pu être lus (droits, fichier abîmé), Count en donne le nombre",
+    "one": "{{.Count}} transcript illisible, ses jetons ne sont pas comptés",
+    "other": "{{.Count}} transcripts illisibles, leurs jetons ne sont pas comptés"
+  },
+  {
     "id": "cli.spend.prices_missing",
     "description": "La grille de prix manque, les jetons des transcripts sont à 0 $",
     "other": "grille de prix LiteLLM pas encore chargée, le coût des transcripts n'est pas compté"

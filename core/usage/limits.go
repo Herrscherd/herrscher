@@ -16,7 +16,10 @@ const LimitsTTL = time.Minute
 // LimitsFailureTTL is how long a failed reading is reused, shorter than LimitsTTL.
 const LimitsFailureTTL = 10 * time.Second
 
-const limitsTimeout = 10 * time.Second
+const (
+	limitsTimeout       = 10 * time.Second
+	limitsSharedTimeout = time.Minute
+)
 
 // LimitsStatus tells whether the limits of an account could be read.
 type LimitsStatus int
@@ -178,8 +181,10 @@ func (c *LimitsCache) start(ctx context.Context, key AccountKey, target Target) 
 	}
 	pending := &pendingRead{done: make(chan struct{})}
 	c.inflight[key] = pending
+	readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), limitsSharedTimeout)
 	go func() {
-		pending.limits, pending.err = target.Read(ctx, target.Access)
+		defer cancel()
+		pending.limits, pending.err = target.Read(readCtx, target.Access)
 		c.mu.Lock()
 		delete(c.inflight, key)
 		c.mu.Unlock()

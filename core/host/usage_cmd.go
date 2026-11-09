@@ -172,6 +172,7 @@ func (s *usageSource) run(ctx context.Context, query usageQuery) (usage.Snapshot
 		Spend:              usage.Summarize(records, query.rng, now, query.account),
 		LedgerTruncated:    truncated,
 		TranscriptsPending: pending,
+		Unreadable:         s.unreadable(),
 		PricesMissing:      !priced,
 	}, nil
 }
@@ -188,6 +189,13 @@ func (s *usageSource) withTranscripts(ledger []usage.Record, since time.Time) ([
 	book := s.prices.Book()
 	book.Price(read)
 	return append(records, read...), !s.transcripts.Scanned(), !book.Empty() || len(read) == 0
+}
+
+func (s *usageSource) unreadable() int {
+	if s.transcripts == nil {
+		return 0
+	}
+	return s.transcripts.Unreadable()
 }
 
 func (s *usageSource) targets(query usageQuery) []usage.Target {

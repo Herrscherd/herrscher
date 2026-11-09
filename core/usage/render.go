@@ -340,6 +340,9 @@ func costNotes(snapshot Snapshot, text *renderer) []string {
 	if snapshot.TranscriptsPending {
 		note(clitext.SpendTranscriptsPending, nil)
 	}
+	if snapshot.Unreadable > 0 {
+		note(clitext.SpendTranscriptsUnreadable, clitext.Params{clitext.ParamCount: snapshot.Unreadable})
+	}
 	if snapshot.PricesMissing {
 		note(clitext.SpendPricesMissing, nil)
 	}

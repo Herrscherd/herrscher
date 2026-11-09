@@ -212,3 +212,28 @@ func TestLimitsCacheShareOneReadBetweenConcurrentCallers(t *testing.T) {
 		t.Fatalf("reads = %d, want one read left running for both callers", got)
 	}
 }
+
+func TestLimitsCacheKeepsTheSharedReadWhenItsFirstCallerLeaves(t *testing.T) {
+	started, release := make(chan struct{}), make(chan struct{})
+	seen := make(chan error, 1)
+	reader := func(ctx context.Context, _ contracts.ProbeAccess) ([]contracts.Limit, error) {
+		close(started)
+		<-release
+		seen <- ctx.Err()
+		return []contracts.Limit{{UsedPercent: 10}}, ctx.Err()
+	}
+	cache := &LimitsCache{Now: clock(testNow())}
+	caller, leave := context.WithCancel(context.Background())
+	left := make(chan struct{})
+	go func() {
+		defer close(left)
+		cache.Read(caller, []Target{{Vendor: "claude", Read: reader}})
+	}()
+	<-started
+	leave()
+	<-left
+	close(release)
+	if err := <-seen; err != nil {
+		t.Fatalf("shared read context = %v, want it alive once its first caller left", err)
+	}
+}

@@ -58,10 +58,11 @@ type TranscriptIndex struct {
 	seen    map[uint64]struct{}
 	savedAt time.Time
 
-	mu      sync.Mutex
-	view    []Record
-	covered map[AccountKey]bool
-	scanned bool
+	mu         sync.Mutex
+	view       []Record
+	covered    map[AccountKey]bool
+	scanned    bool
+	unreadable int
 }
 
 type transcriptFile struct {
@@ -86,6 +87,13 @@ func (x *TranscriptIndex) Scanned() bool {
 	return x.scanned
 }
 
+// Unreadable is the number of transcripts the last scan could not read.
+func (x *TranscriptIndex) Unreadable() int {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	return x.unreadable
+}
+
 // Covered is the accounts whose transcripts are read, the ledger records of which the
 // transcripts replace.
 func (x *TranscriptIndex) Covered() map[AccountKey]bool {
@@ -94,14 +102,15 @@ func (x *TranscriptIndex) Covered() map[AccountKey]bool {
 	return maps.Clone(x.covered)
 }
 
-// Records is the totals of the hours that end after since.
+// Records is the totals of the hours that end after since, for the covered accounts only.
 func (x *TranscriptIndex) Records(since time.Time) []Record {
 	from := since.UTC().Truncate(time.Hour)
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	var out []Record
 	for index := range x.view {
-		if !x.view[index].Time.Before(from) {
+		record := x.view[index]
+		if x.covered[AccountKey{Vendor: record.Vendor, Account: record.Account}] && !record.Time.Before(from) {
 			out = append(out, x.view[index])
 		}
 	}
@@ -132,7 +141,7 @@ func (x *TranscriptIndex) Scan(ctx context.Context, sources []TranscriptSource) 
 		dirs[resolved] = true
 		covered[AccountKey{Vendor: source.Vendor, Account: source.Account}] = true
 		scanErr = x.scanDir(ctx, source, resolved, cutoff)
-		x.publish(covered, false)
+		x.publish(x.coveredWith(covered), false)
 		if scanErr != nil {
 			break
 		}
@@ -142,14 +151,27 @@ func (x *TranscriptIndex) Scan(ctx context.Context, sources []TranscriptSource) 
 	return errors.Join(scanErr, x.save())
 }
 
+func (x *TranscriptIndex) coveredWith(scanned map[AccountKey]bool) map[AccountKey]bool {
+	merged := x.Covered()
+	if merged == nil {
+		merged = make(map[AccountKey]bool)
+	}
+	maps.Copy(merged, scanned)
+	return merged
+}
+
 func (x *TranscriptIndex) publish(covered map[AccountKey]bool, done bool) {
 	var view []Record
+	unreadable := 0
 	for _, file := range x.files {
 		view = append(view, file.Records...)
+		if file.Size < 0 {
+			unreadable++
+		}
 	}
 	x.mu.Lock()
 	defer x.mu.Unlock()
-	x.view, x.covered = view, maps.Clone(covered)
+	x.view, x.covered, x.unreadable = view, maps.Clone(covered), unreadable
 	x.scanned = x.scanned || done
 }
 
@@ -166,8 +188,9 @@ func (x *TranscriptIndex) scanDir(ctx context.Context, source TranscriptSource, 
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if err := x.scanFile(ctx, source, root, name, info); err != nil {
-			return err
+		x.scanFile(ctx, source, root, name, info)
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
 		return x.saveEvery()
 	})
@@ -187,16 +210,15 @@ func recentTranscript(name string, entry fs.DirEntry, walkErr error, cutoff time
 	return info, err == nil && !info.ModTime().Before(cutoff)
 }
 
-func (x *TranscriptIndex) scanFile(ctx context.Context, source TranscriptSource, root *os.Root, name string, info fs.FileInfo) error {
+func (x *TranscriptIndex) scanFile(ctx context.Context, source TranscriptSource, root *os.Root, name string, info fs.FileInfo) {
 	path := filepath.Join(root.Name(), name)
 	known, ok := x.files[path]
 	if ok && known.Size == info.Size() && known.ModTime.Equal(info.ModTime()) {
-		return nil
+		return
 	}
 	appended := ok && source.Vendor == contracts.VendorClaude
 	if appended && info.Size() < known.Offset {
-		known.Size, known.ModTime, known.Offset = info.Size(), info.ModTime(), info.Size()
-		return nil
+		known.Offset = 0
 	}
 	file := &transcriptFile{Vendor: source.Vendor, Account: source.Account}
 	if appended {
@@ -209,7 +231,6 @@ func (x *TranscriptIndex) scanFile(ctx context.Context, source TranscriptSource,
 		file.Size = -1
 	}
 	x.files[path] = file
-	return err
 }
 
 func (x *TranscriptIndex) readFile(ctx context.Context, root *os.Root, name string, file *transcriptFile) (int64, error) {

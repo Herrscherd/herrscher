@@ -162,7 +162,7 @@ func newCompactionPolicy(ctx context.Context, percent *int, names []string, perV
 	return policy, nil
 }
 
-func (p compactionPolicy) addStage(ctx context.Context, name string) error {
+func (p *compactionPolicy) addStage(ctx context.Context, name string) error {
 	compactor, err := customStage(ctx, name, os.Getenv)
 	if err != nil {
 		return wrapHost(err, "compaction.stack_named", map[string]any{nameParam: name})
@@ -223,28 +223,28 @@ func customStage(ctx context.Context, name string, getenv func(string) string) (
 	return nil, errNoCompactorPlugin
 }
 
-func (p compactionPolicy) percentFor(sess state.Session) int {
+func (p *compactionPolicy) percentFor(sess state.Session) int {
 	if sess.CompactPercent != nil {
 		return *sess.CompactPercent
 	}
 	return p.percent
 }
 
-func (p compactionPolicy) supports(vendor string) bool {
+func (p *compactionPolicy) supports(vendor string) bool {
 	return p.backends[vendor]
 }
 
-func (p compactionPolicy) editsHistory(vendor string) bool {
+func (p *compactionPolicy) editsHistory(vendor string) bool {
 	return p.historyEditors[vendor]
 }
 
-func (p compactionPolicy) warnNoHistoryPort(vendor string) {
+func (p *compactionPolicy) warnNoHistoryPort(vendor string) {
 	p.historyOnce.Do(func() {
 		p.warn("herrscher serve: backend %q declares Capabilities.HistoryEditor but its instance does not implement the port, its history is not edited\n", vendor)
 	})
 }
 
-func (p compactionPolicy) warnNoPort(vendor string) {
+func (p *compactionPolicy) warnNoPort(vendor string) {
 	p.warnOnce.Do(func() {
 		p.warn("herrscher serve: backend %q declares Capabilities.Compactor but its instance does not implement the port, its compaction is refused\n", vendor)
 	})
@@ -341,7 +341,11 @@ type compactionPass struct {
 	full  bool
 }
 
-func (p compactionPolicy) stageThreshold(name string, host int) int {
+func (p compactionPass) due() bool {
+	return p.full || len(p.names) > 0
+}
+
+func (p *compactionPolicy) stageThreshold(name string, host int) int {
 	own := p.triggers[name]
 	if host == 0 || own == 0 || own >= host {
 		return host
@@ -349,15 +353,15 @@ func (p compactionPolicy) stageThreshold(name string, host int) int {
 	return own
 }
 
-func (d *sessionDriver) automaticRun(used, limit int) (compactionPass, bool) {
+func (d *sessionDriver) automaticRun(used, limit int) compactionPass {
 	host := d.compactPercent()
 	if host == 0 {
-		return compactionPass{}, false
+		return compactionPass{}
 	}
 	if !crossed(used, limit, host) {
 		d.hostSpent = false
 	} else if !d.hostSpent {
-		return compactionPass{names: d.compaction.names, full: true}, true
+		return compactionPass{names: d.compaction.names, full: true}
 	}
 	var due []string
 	for _, name := range d.compaction.names {
@@ -373,7 +377,7 @@ func (d *sessionDriver) automaticRun(used, limit int) (compactionPass, bool) {
 			due = append(due, name)
 		}
 	}
-	return compactionPass{names: due}, len(due) > 0
+	return compactionPass{names: due}
 }
 
 func (d *sessionDriver) markSpent(run compactionPass) {
@@ -390,18 +394,27 @@ func (d *sessionDriver) maybeAutoCompact(ctx context.Context) {
 		return
 	}
 	limit := d.contextLimit()
-	run, due := d.automaticRun(d.turnReading, limit)
-	if !due {
+	run := d.automaticRun(d.turnReading, limit)
+	if !run.due() {
 		return
 	}
+	settled := d.runAutomatic(ctx, run)
+	if !settled || run.full || d.hostSpent || !crossed(d.turnReading, limit, d.compactPercent()) {
+		return
+	}
+	d.runAutomatic(ctx, compactionPass{names: d.compaction.names, full: true})
+}
+
+func (d *sessionDriver) runAutomatic(ctx context.Context, run compactionPass) bool {
 	d.markSpent(run)
 	result, err := d.runCompaction(ctx, contracts.TriggerAutomatic, "", run)
-	if err != nil || !result.TokensMeasured || !run.full {
-		return
+	if err != nil || !result.TokensMeasured {
+		return false
 	}
-	if percent := d.compactPercent(); crossed(result.TokensAfter, limit, percent) {
+	if percent := d.compactPercent(); run.full && crossed(result.TokensAfter, d.contextLimit(), percent) {
 		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("compaction.no_effect", map[string]any{"Percent": percent})})
 	}
+	return true
 }
 
 func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.CompactTrigger, instruction string, run compactionPass) (contracts.CompactResult, error) {

@@ -79,46 +79,18 @@ func TestAutomaticRunPicksTheStagesDueAtTheUsage(t *testing.T) {
 		{name: "zero trigger runs the whole stack at the host threshold", host: 80, trigger: 0, used: 160_000, want: triggerNames(), full: true},
 		{name: "trigger above the host does not delay the stage", host: 80, trigger: 90, used: 100_000},
 		{name: "trigger above the host runs at the host threshold", host: 80, trigger: 90, used: 160_000, want: triggerNames(), full: true},
+		{name: "trigger equal to the host waits for the host threshold", host: 80, trigger: 80, used: 100_000},
+		{name: "trigger equal to the host runs the whole stack at the host threshold", host: 80, trigger: 80, used: 160_000, want: triggerNames(), full: true},
 		{name: "host zero never runs automatically", host: 0, trigger: 50, used: 190_000},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := triggerDriver(tt.host, tt.trigger)
-			run, due := d.automaticRun(tt.used, triggerLimit)
-			if due != (len(tt.want) > 0) || run.full != tt.full || !slices.Equal(run.names, tt.want) {
-				t.Fatalf("automaticRun(%d) = %+v, due %v; want %v full %v", tt.used, run, due, tt.want, tt.full)
+			run := d.automaticRun(tt.used, triggerLimit)
+			if run.due() != (len(tt.want) > 0) || run.full != tt.full || !slices.Equal(run.names, tt.want) {
+				t.Fatalf("automaticRun(%d) = %+v; want %v full %v", tt.used, run, tt.want, tt.full)
 			}
 		})
-	}
-}
-
-func TestEarlyStageRunsOncePerCrossingAndRearms(t *testing.T) {
-	steps := []struct {
-		used, after int
-		want        []string
-		full        bool
-	}{
-		{used: 100_000, after: 110_000, want: []string{"jev"}},
-		{used: 110_000},
-		{used: 90_000},
-		{used: 100_000, after: 60_000, want: []string{"jev"}},
-		{used: 170_000, after: 170_000, want: triggerNames(), full: true},
-		{used: 175_000},
-		{used: 90_000},
-		{used: 100_000, after: 60_000, want: []string{"jev"}},
-		{used: 170_000, after: 20_000, want: triggerNames(), full: true},
-	}
-	d := triggerDriver(80, 50)
-	for index, step := range steps {
-		run, due := d.automaticRun(step.used, triggerLimit)
-		if due != (len(step.want) > 0) || run.full != step.full || !slices.Equal(run.names, step.want) {
-			t.Fatalf("step %d: automaticRun(%d) = %+v, due %v; want %v full %v", index, step.used, run, due, step.want, step.full)
-		}
-		if !due {
-			continue
-		}
-		d.markSpent(run)
-		d.settleCompaction(contracts.CompactResult{TokensAfter: step.after, TokensMeasured: true}, triggerLimit, run)
 	}
 }
 
@@ -134,14 +106,14 @@ func TestStackWithoutTriggerKeepsTheHostThreshold(t *testing.T) {
 	for _, tt := range tests {
 		d := newSessionDriver("s1", nil, nil, nil)
 		d.compaction = compactPolicy(80)
-		run, due := d.automaticRun(tt.used, triggerLimit)
-		if due != (len(tt.want) > 0) || run.full != tt.full || !slices.Equal(run.names, tt.want) {
-			t.Fatalf("automaticRun(%d) = %+v, due %v; want %v full %v", tt.used, run, due, tt.want, tt.full)
+		run := d.automaticRun(tt.used, triggerLimit)
+		if run.due() != (len(tt.want) > 0) || run.full != tt.full || !slices.Equal(run.names, tt.want) {
+			t.Fatalf("automaticRun(%d) = %+v; want %v full %v", tt.used, run, tt.want, tt.full)
 		}
 	}
 }
 
-func TestStageTriggerIsReadAndValidatedAtStart(t *testing.T) {
+func TestStageTriggerOutOfRangeRefusesTheStart(t *testing.T) {
 	for _, percent := range []int{-1, 101} {
 		t.Run("refused "+strconv.Itoa(percent), func(t *testing.T) {
 			registerTriggerCompactor(t, percent)
@@ -154,6 +126,9 @@ func TestStageTriggerIsReadAndValidatedAtStart(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestStageTriggerIsReadAtStart(t *testing.T) {
 	for _, percent := range []int{0, 50, 100} {
 		t.Run("accepted "+strconv.Itoa(percent), func(t *testing.T) {
 			registerTriggerCompactor(t, percent)
@@ -161,7 +136,10 @@ func TestStageTriggerIsReadAndValidatedAtStart(t *testing.T) {
 			if err != nil {
 				t.Fatalf("newCompactionPolicy: %v", err)
 			}
-			if policy.triggers["jev"] != percent {
+			if _, ok := policy.triggers["jev"]; ok != (percent != 0) {
+				t.Fatalf("triggers = %v, want jev present only when its percent is not 0", policy.triggers)
+			}
+			if percent != 0 && policy.triggers["jev"] != percent {
 				t.Fatalf("triggers = %v, want jev at %d", policy.triggers, percent)
 			}
 		})
@@ -205,5 +183,77 @@ func TestManualCompactionRunsTheWholeStack(t *testing.T) {
 	waitEmitted(t, f, eventCompactDone)
 	if got := calls.Load(); got != 1 {
 		t.Fatalf("early stage ran %d times in a manual compaction, want once", got)
+	}
+}
+
+type steppedStage struct {
+	calls atomic.Int32
+	after atomic.Int32
+}
+
+func (s *steppedStage) Compact(_ context.Context, _ contracts.CompactRequest, _ func(contracts.BackendEvent)) (contracts.CompactResult, error) {
+	s.calls.Add(1)
+	return contracts.CompactResult{TokensAfter: int(s.after.Load()), TokensMeasured: true}, nil
+}
+
+func TestEarlyStageRearmsWhenUsageFallsAndRunsAgainWhenItClimbs(t *testing.T) {
+	stage := &steppedStage{}
+	policy := compactPolicy(80, triggerNames()...)
+	policy.triggers = map[string]int{"jev": 50}
+	policy.plugins["jev"] = stage
+	f := newCompactFixture(t, "claude", policy)
+
+	stage.after.Store(110_000)
+	openTurn(t, f, 100_000)
+	expectNoFrame(t, f)
+	if got := stage.calls.Load(); got != 1 {
+		t.Fatalf("early stage ran %d times at the crossing, want 1", got)
+	}
+	openTurn(t, f, 110_000)
+	expectNoFrame(t, f)
+	if got := stage.calls.Load(); got != 1 {
+		t.Fatalf("early stage ran %d times while usage stayed above its threshold, want 1", got)
+	}
+	openTurn(t, f, 90_000)
+	expectNoFrame(t, f)
+	stage.after.Store(60_000)
+	openTurn(t, f, 100_000)
+	expectNoFrame(t, f)
+	if got := stage.calls.Load(); got != 2 {
+		t.Fatalf("early stage ran %d times after usage fell under its threshold and climbed back, want 2", got)
+	}
+}
+
+func TestEarlyStageThatLeavesUsageAboveTheHostChainsTheHostPass(t *testing.T) {
+	stage := &steppedStage{}
+	stage.after.Store(170_000)
+	policy := compactPolicy(80, triggerNames()...)
+	policy.triggers = map[string]int{"jev": 50}
+	policy.plugins["jev"] = stage
+	f := newCompactFixture(t, "claude", policy)
+
+	openTurn(t, f, 100_000)
+	if !compactFrameOrQuiet(t, f, measuredAnswer(t, 20_000)) {
+		t.Fatal("the host pass did not run in the same turn, after the early stage left usage above the host threshold")
+	}
+	if got := stage.calls.Load(); got != 2 {
+		t.Fatalf("early stage ran %d times, want once in the early pass and once in the whole-stack host pass", got)
+	}
+}
+
+func TestWithoutAnEarlyStageTheHostPassRunsOnceAsBefore(t *testing.T) {
+	f := newCompactFixture(t, "claude", compactPolicy(80))
+
+	openTurn(t, f, 100_000)
+	expectNoFrame(t, f)
+	openTurn(t, f, 160_000)
+	if !compactFrameOrQuiet(t, f, measuredAnswer(t, 170_000)) {
+		t.Fatal("no host pass at the host threshold")
+	}
+	waitEmitted(t, f, eventStatus)
+	openTurn(t, f, 170_000)
+	expectNoFrame(t, f)
+	if started := f.emittedOf(eventCompactStarted); len(started) != 1 {
+		t.Fatalf("compaction_started count = %d, want exactly one host pass", len(started))
 	}
 }

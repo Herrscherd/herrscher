@@ -11,7 +11,7 @@ require (
 	github.com/Herrscherd/herrscher-contracts v0.29.0
 	github.com/Herrscherd/herrscher-cursor-backend v0.8.0
 	github.com/Herrscherd/herrscher-discord-gateway v0.31.0
-	github.com/Herrscherd/herrscher-jev-compactor v0.3.0
+	github.com/Herrscherd/herrscher-jev-compactor v0.4.0
 	github.com/Herrscherd/herrscher-llm-extractor v0.4.0
 	github.com/Herrscherd/herrscher-obsidian-memory v0.6.0
 	github.com/Herrscherd/herrscher-orchestrator v0.6.0

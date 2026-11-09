@@ -237,3 +237,19 @@ func TestLimitsCacheKeepsTheSharedReadWhenItsFirstCallerLeaves(t *testing.T) {
 		t.Fatalf("shared read context = %v, want it alive once its first caller left", err)
 	}
 }
+
+func TestLimitsCacheStopsTheSharedReadAtItsTimeout(t *testing.T) {
+	stopped := make(chan struct{})
+	reader := func(ctx context.Context, _ contracts.ProbeAccess) ([]contracts.Limit, error) {
+		<-ctx.Done()
+		close(stopped)
+		return []contracts.Limit{{UsedPercent: 10}}, ctx.Err()
+	}
+	cache := &LimitsCache{Now: clock(testNow()), Timeout: 20 * time.Millisecond}
+	readWithDeadline(t, cache, []Target{{Vendor: "claude", Read: reader}})
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the shared read outlived the timeout")
+	}
+}

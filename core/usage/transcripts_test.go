@@ -170,7 +170,8 @@ func TestTranscriptIndexReadsOnlyTheNewLinesAndSkipsALinkedHome(t *testing.T) {
 		t.Fatal(err)
 	}
 	var in int64
-	for _, record := range reopened.Records(written.Add(-24 * time.Hour)) {
+	view := reopened.View(written.Add(-24 * time.Hour))
+	for _, record := range view.Records {
 		in += record.In
 		if record.Account != "pro" {
 			t.Fatalf("record of %q, want the first source only", record.Account)
@@ -179,9 +180,8 @@ func TestTranscriptIndexReadsOnlyTheNewLinesAndSkipsALinkedHome(t *testing.T) {
 	if in != 26 {
 		t.Fatalf("input tokens = %d, want two turns and two advisors", in)
 	}
-	covered := reopened.Covered()
-	if !covered[AccountKey{Vendor: contracts.VendorClaude, Account: "pro"}] || covered[AccountKey{Vendor: contracts.VendorClaude, Account: "perso"}] || !reopened.Scanned() {
-		t.Fatalf("covered = %v, scanned = %v", covered, reopened.Scanned())
+	if !view.Covered[AccountKey{Vendor: contracts.VendorClaude, Account: "pro"}] || view.Covered[AccountKey{Vendor: contracts.VendorClaude, Account: "perso"}] || !view.Scanned {
+		t.Fatalf("covered = %v, scanned = %v", view.Covered, view.Scanned)
 	}
 }
 
@@ -189,7 +189,19 @@ func TestTranscriptIndexSkipsAnUnreadableFileAndDropsAnUncoveredAccount(t *testi
 	root := t.TempDir()
 	written := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
 	now := func() time.Time { return written.Add(time.Hour) }
-	homes := []string{filepath.Join(root, "a"), filepath.Join(root, "b")}
+	homes := []string{filepath.Join(root, "a"), filepath.Join(root, "b"), filepath.Join(root, "c")}
+	shut := filepath.Join(homes[2], claudeTranscripts)
+	if err := os.MkdirAll(shut, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(shut, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(shut, 0o700); err != nil {
+			t.Error(err)
+		}
+	})
 	locked := filepath.Join(homes[0], claudeTranscripts, "p", "locked"+fileExt)
 	writeTranscript(t, locked, claudeTurn)
 	writeTranscript(t, filepath.Join(homes[0], claudeTranscripts, "p", "open"+fileExt), strings.NewReplacer(`"m1"`, `"m2"`, `"r1"`, `"r2"`).Replace(claudeTurn))
@@ -200,18 +212,19 @@ func TestTranscriptIndexSkipsAnUnreadableFileAndDropsAnUncoveredAccount(t *testi
 	sources := []TranscriptSource{
 		{Vendor: contracts.VendorClaude, Account: "a", Home: homes[0]},
 		{Vendor: contracts.VendorClaude, Account: "b", Home: homes[1]},
+		{Vendor: contracts.VendorClaude, Account: "c", Home: homes[2]},
 	}
 	index := &TranscriptIndex{Path: filepath.Join(root, "index.json"), Now: now}
 	if err := index.Scan(context.Background(), sources); err != nil {
 		t.Fatal(err)
 	}
-	if got := len(index.Records(written.Add(-24 * time.Hour))); got != 4 || index.Unreadable() != 1 || !index.Scanned() {
-		t.Fatalf("records = %d, unreadable = %d, scanned = %v", got, index.Unreadable(), index.Scanned())
+	if view := index.View(written.Add(-24 * time.Hour)); len(view.Records) != 4 || view.Unreadable != 2 || !view.Scanned {
+		t.Fatalf("records = %d, unreadable = %d, scanned = %v", len(view.Records), view.Unreadable, view.Scanned)
 	}
-	if err := index.Scan(context.Background(), sources[1:]); err != nil {
+	if err := index.Scan(context.Background(), sources[1:2]); err != nil {
 		t.Fatal(err)
 	}
-	for _, record := range index.Records(written.Add(-24 * time.Hour)) {
+	for _, record := range index.View(written.Add(-24 * time.Hour)).Records {
 		if record.Account != "b" {
 			t.Fatalf("record of %q counted once no source covers it", record.Account)
 		}
@@ -224,23 +237,26 @@ func TestTranscriptIndexReadsAgainATruncatedTranscript(t *testing.T) {
 	transcript := filepath.Join(home, claudeTranscripts, "p", "a"+fileExt)
 	written := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
 	now := func() time.Time { return written.Add(time.Hour) }
-	writeTranscript(t, transcript, claudeTurn, strings.NewReplacer(`"m1"`, `"m2"`, `"r1"`, `"r2"`).Replace(claudeTurn))
+	turn := func(id string) string {
+		return strings.NewReplacer(`"m1"`, `"m`+id+`"`, `"r1"`, `"r`+id+`"`).Replace(claudeTurn)
+	}
+	writeTranscript(t, transcript, claudeTurn, turn("2"), turn("3"))
 	stampTranscript(t, transcript, written)
 	sources := []TranscriptSource{{Vendor: contracts.VendorClaude, Account: "pro", Home: home}}
 	index := &TranscriptIndex{Path: filepath.Join(root, "index.json"), Now: now}
 	if err := index.Scan(context.Background(), sources); err != nil {
 		t.Fatal(err)
 	}
-	writeTranscript(t, transcript, strings.NewReplacer(`"m1"`, `"m9"`, `"r1"`, `"r9"`).Replace(claudeTurn))
+	writeTranscript(t, transcript, claudeTurn, turn("9"))
 	stampTranscript(t, transcript, written.Add(time.Minute))
 	if err := index.Scan(context.Background(), sources); err != nil {
 		t.Fatal(err)
 	}
 	var in int64
-	for _, record := range index.Records(written.Add(-24 * time.Hour)) {
+	for _, record := range index.View(written.Add(-24 * time.Hour)).Records {
 		in += record.In
 	}
-	if in != 39 {
-		t.Fatalf("input tokens = %d, want the two turns kept and the new one read", in)
+	if in != 52 {
+		t.Fatalf("input tokens = %d, want the three turns kept once and the new one read", in)
 	}
 }

@@ -4064,9 +4064,9 @@
   },
   {
     "id": "cli.spend.transcripts_unreadable",
-    "description": "Some transcripts could not be read (permissions, damaged file), Count gives their number",
-    "one": "{{.Count}} transcript could not be read, its tokens are not counted",
-    "other": "{{.Count}} transcripts could not be read, their tokens are not counted"
+    "description": "Some transcripts or transcript directories could not be read (permissions, damaged file), Count gives their number",
+    "one": "{{.Count}} transcript or directory could not be read, the total may be incomplete",
+    "other": "{{.Count}} transcripts or directories could not be read, the total may be incomplete"
   },
   {
     "id": "cli.spend.prices_missing",

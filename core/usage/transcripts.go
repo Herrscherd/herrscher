@@ -46,23 +46,30 @@ func (s TranscriptSource) dir() (string, bool) {
 
 // TranscriptIndex totals the tokens of the vendor transcripts by hour, session and model,
 // and keeps the totals in a file of the state directory, so a transcript is read once
-// and only its new lines afterwards. Scan runs from one goroutine at a time; Records,
-// Covered and Scanned answer from the totals last published, never waiting on a scan.
+// and only its new lines afterwards. Scan runs from one goroutine at a time; View answers
+// from the totals last published, never waiting on a scan.
 type TranscriptIndex struct {
 	Path string
 	Now  func() time.Time
 
-	scanMu  sync.Mutex
-	loaded  bool
-	files   map[string]*transcriptFile
-	seen    map[uint64]struct{}
-	savedAt time.Time
+	scanMu     sync.Mutex
+	loaded     bool
+	files      map[string]*transcriptFile
+	seen       map[uint64]struct{}
+	savedAt    time.Time
+	failedDirs int
 
-	mu         sync.Mutex
-	view       []Record
-	covered    map[AccountKey]bool
-	scanned    bool
-	unreadable int
+	mu        sync.Mutex
+	published TranscriptView
+}
+
+// TranscriptView is what the last published scan knows, read in one piece so the
+// records and the covered accounts always agree.
+type TranscriptView struct {
+	Records    []Record
+	Covered    map[AccountKey]bool
+	Scanned    bool
+	Unreadable int
 }
 
 type transcriptFile struct {
@@ -80,41 +87,23 @@ type indexFile struct {
 	Seen    []byte                     `json:"seen"`
 }
 
-// Scanned tells whether a scan of every source has finished since the daemon started.
-func (x *TranscriptIndex) Scanned() bool {
-	x.mu.Lock()
-	defer x.mu.Unlock()
-	return x.scanned
-}
-
-// Unreadable is the number of transcripts the last scan could not read.
-func (x *TranscriptIndex) Unreadable() int {
-	x.mu.Lock()
-	defer x.mu.Unlock()
-	return x.unreadable
-}
-
-// Covered is the accounts whose transcripts are read, the ledger records of which the
-// transcripts replace.
-func (x *TranscriptIndex) Covered() map[AccountKey]bool {
-	x.mu.Lock()
-	defer x.mu.Unlock()
-	return maps.Clone(x.covered)
-}
-
-// Records is the totals of the hours that end after since, for the covered accounts only.
-func (x *TranscriptIndex) Records(since time.Time) []Record {
+// View is the totals of the hours that end after since, for the covered accounts only,
+// with the covered accounts, whether a full scan has finished since the daemon started,
+// and the number of transcripts or directories the last scan could not read.
+func (x *TranscriptIndex) View(since time.Time) TranscriptView {
 	from := since.UTC().Truncate(time.Hour)
 	x.mu.Lock()
 	defer x.mu.Unlock()
-	var out []Record
-	for index := range x.view {
-		record := x.view[index]
-		if x.covered[AccountKey{Vendor: record.Vendor, Account: record.Account}] && !record.Time.Before(from) {
-			out = append(out, x.view[index])
+	view := x.published
+	view.Covered = maps.Clone(view.Covered)
+	view.Records = nil
+	for index := range x.published.Records {
+		record := x.published.Records[index]
+		if view.Covered[AccountKey{Vendor: record.Vendor, Account: record.Account}] && !record.Time.Before(from) {
+			view.Records = append(view.Records, record)
 		}
 	}
-	return out
+	return view
 }
 
 // Scan reads the new lines of every transcript of the sources, then saves the index. A
@@ -125,6 +114,7 @@ func (x *TranscriptIndex) Scan(ctx context.Context, sources []TranscriptSource) 
 	x.scanMu.Lock()
 	defer x.scanMu.Unlock()
 	x.load()
+	x.failedDirs = 0
 	covered := make(map[AccountKey]bool)
 	dirs := make(map[string]bool)
 	cutoff := x.Now().Add(-Retention)
@@ -135,6 +125,9 @@ func (x *TranscriptIndex) Scan(ctx context.Context, sources []TranscriptSource) 
 			continue
 		}
 		resolved, err := filepath.EvalSymlinks(dir)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			x.failedDirs++
+		}
 		if err != nil || dirs[resolved] {
 			continue
 		}
@@ -152,7 +145,9 @@ func (x *TranscriptIndex) Scan(ctx context.Context, sources []TranscriptSource) 
 }
 
 func (x *TranscriptIndex) coveredWith(scanned map[AccountKey]bool) map[AccountKey]bool {
-	merged := x.Covered()
+	x.mu.Lock()
+	merged := maps.Clone(x.published.Covered)
+	x.mu.Unlock()
 	if merged == nil {
 		merged = make(map[AccountKey]bool)
 	}
@@ -161,27 +156,34 @@ func (x *TranscriptIndex) coveredWith(scanned map[AccountKey]bool) map[AccountKe
 }
 
 func (x *TranscriptIndex) publish(covered map[AccountKey]bool, done bool) {
-	var view []Record
-	unreadable := 0
+	var records []Record
+	unreadable := x.failedDirs
 	for _, file := range x.files {
-		view = append(view, file.Records...)
-		if file.Size < 0 {
+		records = append(records, file.Records...)
+		if file.Size < 0 && covered[AccountKey{Vendor: file.Vendor, Account: file.Account}] {
 			unreadable++
 		}
 	}
 	x.mu.Lock()
 	defer x.mu.Unlock()
-	x.view, x.covered, x.unreadable = view, maps.Clone(covered), unreadable
-	x.scanned = x.scanned || done
+	x.published = TranscriptView{
+		Records:    records,
+		Covered:    maps.Clone(covered),
+		Scanned:    x.published.Scanned || done,
+		Unreadable: unreadable,
+	}
 }
 
 func (x *TranscriptIndex) scanDir(ctx context.Context, source TranscriptSource, dir string, cutoff time.Time) error {
-	root, ok := openTranscripts(dir)
-	if !ok {
+	root, err := os.OpenRoot(dir)
+	if x.failed(err) {
 		return nil
 	}
 	walkErr := fs.WalkDir(root.FS(), ".", func(name string, entry fs.DirEntry, walkErr error) error {
-		info, ok := recentTranscript(name, entry, walkErr, cutoff)
+		if x.failed(walkErr) {
+			return nil
+		}
+		info, ok := recentTranscript(name, entry, cutoff)
 		if !ok {
 			return nil
 		}
@@ -197,13 +199,15 @@ func (x *TranscriptIndex) scanDir(ctx context.Context, source TranscriptSource, 
 	return errors.Join(walkErr, root.Close())
 }
 
-func openTranscripts(dir string) (*os.Root, bool) {
-	root, err := os.OpenRoot(dir)
-	return root, err == nil
+func (x *TranscriptIndex) failed(err error) bool {
+	if err != nil {
+		x.failedDirs++
+	}
+	return err != nil
 }
 
-func recentTranscript(name string, entry fs.DirEntry, walkErr error, cutoff time.Time) (fs.FileInfo, bool) {
-	if walkErr != nil || entry.IsDir() || !strings.HasSuffix(name, fileExt) {
+func recentTranscript(name string, entry fs.DirEntry, cutoff time.Time) (fs.FileInfo, bool) {
+	if entry.IsDir() || !strings.HasSuffix(name, fileExt) {
 		return nil, false
 	}
 	info, err := entry.Info()

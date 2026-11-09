@@ -159,7 +159,7 @@ func (s *usageSource) run(ctx context.Context, query usageQuery) (usage.Snapshot
 		return usage.Snapshot{}, err
 	}
 	now := s.ledger.Now()
-	records, pending, priced := s.withTranscripts(records, now.Add(-query.rng.Span()))
+	records, notes := s.withTranscripts(records, now.Add(-query.rng.Span()))
 	records = slices.DeleteFunc(records, func(record usage.Record) bool {
 		return !query.matches(record.Vendor, record.Account)
 	})
@@ -171,31 +171,33 @@ func (s *usageSource) run(ctx context.Context, query usageQuery) (usage.Snapshot
 		Limits:             s.limits.Read(ctx, s.targets(query)),
 		Spend:              usage.Summarize(records, query.rng, now, query.account),
 		LedgerTruncated:    truncated,
-		TranscriptsPending: pending,
-		Unreadable:         s.unreadable(),
-		PricesMissing:      !priced,
+		TranscriptsPending: notes.pending,
+		Unreadable:         notes.unreadable,
+		PricesMissing:      !notes.priced,
 	}, nil
 }
 
-func (s *usageSource) withTranscripts(ledger []usage.Record, since time.Time) ([]usage.Record, bool, bool) {
-	if s.transcripts == nil || s.prices == nil {
-		return ledger, false, true
-	}
-	covered := s.transcripts.Covered()
-	records := slices.DeleteFunc(ledger, func(record usage.Record) bool {
-		return covered[usage.AccountKey{Vendor: record.Vendor, Account: record.Account}]
-	})
-	read := s.transcripts.Records(since)
-	book := s.prices.Book()
-	book.Price(read)
-	return append(records, read...), !s.transcripts.Scanned(), !book.Empty() || len(read) == 0
+type transcriptState struct {
+	pending    bool
+	unreadable int
+	priced     bool
 }
 
-func (s *usageSource) unreadable() int {
-	if s.transcripts == nil {
-		return 0
+func (s *usageSource) withTranscripts(ledger []usage.Record, since time.Time) ([]usage.Record, transcriptState) {
+	if s.transcripts == nil || s.prices == nil {
+		return ledger, transcriptState{priced: true}
 	}
-	return s.transcripts.Unreadable()
+	view := s.transcripts.View(since)
+	records := slices.DeleteFunc(ledger, func(record usage.Record) bool {
+		return view.Covered[usage.AccountKey{Vendor: record.Vendor, Account: record.Account}]
+	})
+	book := s.prices.Book()
+	book.Price(view.Records)
+	return append(records, view.Records...), transcriptState{
+		pending:    !view.Scanned,
+		unreadable: view.Unreadable,
+		priced:     !book.Empty() || len(view.Records) == 0,
+	}
 }
 
 func (s *usageSource) targets(query usageQuery) []usage.Target {

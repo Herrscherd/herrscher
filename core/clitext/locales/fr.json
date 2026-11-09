@@ -4064,9 +4064,9 @@
   },
   {
     "id": "cli.spend.transcripts_unreadable",
-    "description": "Des transcripts n'ont pas pu être lus (droits, fichier abîmé), Count en donne le nombre",
-    "one": "{{.Count}} transcript illisible, ses jetons ne sont pas comptés",
-    "other": "{{.Count}} transcripts illisibles, leurs jetons ne sont pas comptés"
+    "description": "Des transcripts ou des dossiers de transcripts n'ont pas pu être lus (droits, fichier abîmé), Count en donne le nombre",
+    "one": "{{.Count}} transcript ou dossier illisible, le total peut être incomplet",
+    "other": "{{.Count}} transcripts ou dossiers illisibles, le total peut être incomplet"
   },
   {
     "id": "cli.spend.prices_missing",

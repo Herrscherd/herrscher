@@ -72,9 +72,12 @@ type AccountLimits struct {
 
 // LimitsCache reads the limits of the accounts and reuses each reading for LimitsTTL, or
 // for LimitsFailureTTL when the reading failed. Callers asking for one account while it
-// is read share that reading, which no caller cancels and which stops at the timeout. A
-// reader that ignores its context is left to finish, and no second reading of that
-// account starts until it does.
+// is read share that reading, which no caller cancels and which stops at Timeout, ten
+// seconds when unset, counted from its start. A reading that ends before that cap is
+// kept even when its callers left, so the next caller gets it, and a reader that honors
+// its context fails past the cap. A reader that ignores its context is left to finish,
+// its late reading replaces the failure, and no second reading of that account starts
+// until it does.
 type LimitsCache struct {
 	Now      func() time.Time
 	Timeout  time.Duration
@@ -134,12 +137,18 @@ func (c *LimitsCache) readOne(ctx context.Context, target Target) AccountLimits 
 	if ctx.Err() != nil {
 		return AccountLimits{Vendor: target.Vendor, Account: string(target.Account), Default: target.Default, Status: LimitsFailed, ReadAt: now}
 	}
+	entry := limitsEntry(target, now, limits, err)
+	c.store(key, entry)
+	return entry
+}
+
+func limitsEntry(target Target, readAt time.Time, limits []contracts.Limit, err error) AccountLimits {
 	entry := AccountLimits{
 		Vendor:  target.Vendor,
 		Account: string(target.Account),
 		Default: target.Default,
 		Status:  LimitsReady,
-		ReadAt:  now,
+		ReadAt:  readAt,
 		Limits:  limits,
 	}
 	switch {
@@ -150,13 +159,19 @@ func (c *LimitsCache) readOne(ctx context.Context, target Target) AccountLimits 
 		entry.Status = LimitsFailed
 		entry.Limits = nil
 	}
+	return entry
+}
+
+func (c *LimitsCache) store(key AccountKey, entry AccountLimits) {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.entries == nil {
 		c.entries = make(map[AccountKey]AccountLimits)
 	}
+	if known, ok := c.entries[key]; ok && known.ReadAt.After(entry.ReadAt) {
+		return
+	}
 	c.entries[key] = entry
-	c.mu.Unlock()
-	return entry
 }
 
 func (c *LimitsCache) readWithin(ctx context.Context, key AccountKey, target Target) ([]contracts.Limit, error) {
@@ -184,6 +199,7 @@ func (c *LimitsCache) start(ctx context.Context, key AccountKey, target Target) 
 	go func() {
 		defer cancel()
 		pending.limits, pending.err = target.Read(readCtx, target.Access)
+		c.store(key, limitsEntry(target, c.Now(), pending.limits, pending.err))
 		c.mu.Lock()
 		delete(c.inflight, key)
 		c.mu.Unlock()

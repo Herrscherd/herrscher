@@ -65,7 +65,7 @@ type claudeIteration struct {
 }
 
 type claudeReader struct {
-	seen map[uint64]struct{}
+	seen map[uint64]int64
 }
 
 func (r claudeReader) read(line []byte, emit func(tokenEvent)) {
@@ -84,7 +84,7 @@ func (r claudeReader) read(line []byte, emit func(tokenEvent)) {
 	dedupe := parsed.Message.ID + ":" + parsed.RequestID
 	keyed := parsed.Message.ID != "" || parsed.RequestID != ""
 	fast := usage.Speed == claudeFastSpeed
-	if !keyed || r.first(dedupe) {
+	if !keyed || r.first(dedupe, parsed.Timestamp) {
 		emit(claudeEvent(parsed, model, fast, usage.claudeTokens, usage.CacheCreation))
 	}
 	r.advisors(parsed, usage, dedupe, keyed, emit)
@@ -96,7 +96,7 @@ func (r claudeReader) advisors(parsed claudeLine, usage *claudeUsage, dedupe str
 		if iteration.Type != claudeAdvisorType || !priceableName(iteration.Model) {
 			continue
 		}
-		if keyed && !r.first(dedupe+claudeAdvisorSuffix+strconv.Itoa(index)) {
+		if keyed && !r.first(dedupe+claudeAdvisorSuffix+strconv.Itoa(index), parsed.Timestamp) {
 			continue
 		}
 		emit(claudeEvent(parsed, iteration.Model, fast, iteration.claudeTokens, iteration.CacheCreation))
@@ -117,12 +117,12 @@ func claudeEvent(line claudeLine, model string, fast bool, tokens claudeTokens, 
 	}
 }
 
-func (r claudeReader) first(key string) bool {
+func (r claudeReader) first(key string, seenAt time.Time) bool {
 	sum := fnv64(key)
 	if _, ok := r.seen[sum]; ok {
 		return false
 	}
-	r.seen[sum] = struct{}{}
+	r.seen[sum] = seenAt.Unix()
 	return true
 }
 

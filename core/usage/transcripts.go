@@ -11,6 +11,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -21,7 +22,7 @@ import (
 const (
 	claudeTranscripts = "projects"
 	codexTranscripts  = "sessions"
-	indexVersion      = 1
+	indexVersion      = 2
 	seenKeyBytes      = 8
 	indexSaveEvery    = 30 * time.Second
 )
@@ -55,8 +56,9 @@ type TranscriptIndex struct {
 	scanMu     sync.Mutex
 	loaded     bool
 	files      map[string]*transcriptFile
-	seen       map[uint64]struct{}
+	seen       map[uint64]int64
 	savedAt    time.Time
+	changed    bool
 	failedDirs int
 
 	mu        sync.Mutex
@@ -79,6 +81,8 @@ type transcriptFile struct {
 	ModTime time.Time `json:"modTime"`
 	Offset  int64     `json:"offset"`
 	Records []Record  `json:"records,omitempty"`
+
+	Codex *codexReader `json:"codex,omitempty"`
 }
 
 type indexFile struct {
@@ -106,10 +110,11 @@ func (x *TranscriptIndex) View(since time.Time) TranscriptView {
 	return view
 }
 
-// Scan reads the new lines of every transcript of the sources, then saves the index. A
-// transcript two sources share through a link is read for the first source only. The
-// totals are published after each source, and the index saved at most every
-// indexSaveEvery while a long scan runs, so a stopped scan resumes where it was.
+// Scan reads the new lines of every transcript of the sources, then saves the index when
+// a transcript was read or something was pruned. A transcript two sources share through
+// a link is read for the first source only. The totals are published after each source,
+// and the index saved at most every indexSaveEvery while a long scan runs, so a stopped
+// scan resumes where it was.
 func (x *TranscriptIndex) Scan(ctx context.Context, sources []TranscriptSource) error {
 	x.scanMu.Lock()
 	defer x.scanMu.Unlock()
@@ -141,7 +146,7 @@ func (x *TranscriptIndex) Scan(ctx context.Context, sources []TranscriptSource) 
 	}
 	x.prune(cutoff)
 	x.publish(covered, scanErr == nil)
-	return errors.Join(scanErr, x.save())
+	return errors.Join(scanErr, x.saveChanged())
 }
 
 func (x *TranscriptIndex) coveredWith(scanned map[AccountKey]bool) map[AccountKey]bool {
@@ -220,7 +225,8 @@ func (x *TranscriptIndex) scanFile(ctx context.Context, source TranscriptSource,
 	if ok && known.Size == info.Size() && known.ModTime.Equal(info.ModTime()) {
 		return
 	}
-	appended := ok && source.Vendor == contracts.VendorClaude
+	x.changed = true
+	appended := ok && resumable(known, info.Size())
 	if appended && info.Size() < known.Offset {
 		known.Offset = 0
 	}
@@ -237,6 +243,16 @@ func (x *TranscriptIndex) scanFile(ctx context.Context, source TranscriptSource,
 	x.files[path] = file
 }
 
+func resumable(known *transcriptFile, size int64) bool {
+	switch known.Vendor {
+	case contracts.VendorClaude:
+		return true
+	case contracts.VendorCodex:
+		return known.Codex != nil && size >= known.Offset
+	}
+	return false
+}
+
 func (x *TranscriptIndex) readFile(ctx context.Context, root *os.Root, name string, file *transcriptFile) (int64, error) {
 	handle, err := root.Open(name)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -249,23 +265,38 @@ func (x *TranscriptIndex) readFile(ctx context.Context, root *os.Root, name stri
 		return 0, errors.Join(fmt.Errorf("usage transcript: %w", err), handle.Close())
 	}
 	totals := newTally(file.Vendor, file.Account, file.Records)
-	read := x.lineReader(file.Vendor)
+	read := x.lineReader(file)
 	consumed, scanErr := scanTranscript(ctx, handle, func(line []byte) { read(line, totals.add) })
 	file.Records = totals.records
 	return consumed, errors.Join(scanErr, handle.Close())
 }
 
-func (x *TranscriptIndex) lineReader(vendor string) func([]byte, func(tokenEvent)) {
-	if vendor == contracts.VendorCodex {
-		return (&codexReader{}).read
+func (x *TranscriptIndex) lineReader(file *transcriptFile) func([]byte, func(tokenEvent)) {
+	if file.Vendor == contracts.VendorCodex {
+		if file.Codex == nil {
+			file.Codex = &codexReader{}
+		}
+		return file.Codex.read
 	}
 	return claudeReader{seen: x.seen}.read
 }
 
 func (x *TranscriptIndex) prune(cutoff time.Time) {
+	hour := cutoff.UTC().Truncate(time.Hour)
 	for path, file := range x.files {
 		if file.ModTime.Before(cutoff) {
 			delete(x.files, path)
+			x.changed = true
+			continue
+		}
+		kept := slices.DeleteFunc(file.Records, func(record Record) bool { return record.Time.Before(hour) })
+		x.changed = x.changed || len(kept) != len(file.Records)
+		file.Records = kept
+	}
+	for key, seenAt := range x.seen {
+		if seenAt < hour.Unix() {
+			delete(x.seen, key)
+			x.changed = true
 		}
 	}
 }
@@ -276,7 +307,7 @@ func (x *TranscriptIndex) load() {
 	}
 	x.loaded = true
 	x.files = make(map[string]*transcriptFile)
-	x.seen = make(map[uint64]struct{})
+	x.seen = make(map[uint64]int64)
 	raw, err := os.ReadFile(x.Path)
 	if err != nil {
 		return
@@ -286,8 +317,13 @@ func (x *TranscriptIndex) load() {
 		return
 	}
 	x.files = saved.Files
-	for at := 0; at+seenKeyBytes <= len(saved.Seen); at += seenKeyBytes {
-		x.seen[binary.LittleEndian.Uint64(saved.Seen[at:])] = struct{}{}
+	for rest := saved.Seen; len(rest) > seenKeyBytes; {
+		seenAt, read := binary.Varint(rest[seenKeyBytes:])
+		if read <= 0 {
+			return
+		}
+		x.seen[binary.LittleEndian.Uint64(rest)] = seenAt
+		rest = rest[seenKeyBytes+read:]
 	}
 }
 
@@ -295,18 +331,30 @@ func (x *TranscriptIndex) saveEvery() error {
 	if x.Now().Sub(x.savedAt) < indexSaveEvery {
 		return nil
 	}
+	return x.saveChanged()
+}
+
+func (x *TranscriptIndex) saveChanged() error {
+	if !x.changed {
+		return nil
+	}
 	return x.save()
 }
 
 func (x *TranscriptIndex) save() error {
 	x.savedAt = x.Now()
-	seen := make([]byte, 0, len(x.seen)*seenKeyBytes)
-	for key := range x.seen {
+	seen := make([]byte, 0, len(x.seen)*(seenKeyBytes+binary.MaxVarintLen64))
+	for key, seenAt := range x.seen {
 		seen = binary.LittleEndian.AppendUint64(seen, key)
+		seen = binary.AppendVarint(seen, seenAt)
 	}
 	raw, err := json.Marshal(indexFile{Version: indexVersion, Files: x.files, Seen: seen})
 	if err != nil {
 		return fmt.Errorf("usage transcript index: %w", err)
 	}
-	return writeAtomic(x.Path, raw)
+	if err := writeAtomic(x.Path, raw); err != nil {
+		return err
+	}
+	x.changed = false
+	return nil
 }

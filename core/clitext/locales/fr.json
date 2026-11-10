@@ -370,6 +370,11 @@
     "other": "herrscher : passerelle indisponible : {{.Failure}}"
   },
   {
+    "id": "cli.serve.hub_stopped",
+    "description": "Error when the in-process hub stops while the terminal window is open",
+    "other": "le hub s'est arrêté, la fenêtre s'est donc fermée : {{.Err}}"
+  },
+  {
     "id": "cli.serve.gateway_commands",
     "description": "Erreur quand les commandes des passerelles ne peuvent pas être rattachées",
     "other": "commandes de passerelle : {{.Err}}"

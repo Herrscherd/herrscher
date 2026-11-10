@@ -1512,6 +1512,10 @@ func newRunModel(ctx context.Context, backend Backend) *model {
 	return model
 }
 
+func killedByContext(ctx context.Context, err error) bool {
+	return ctx.Err() != nil && errors.Is(err, tea.ErrProgramKilled)
+}
+
 // Run starts the TUI bound to the given gateway backend, blocking until the user
 // quits; quitting cancels ctx (wired by the caller) so the daemon shuts down
 // cleanly.
@@ -1534,6 +1538,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 		return keyedError{cause: err, key: "tui.terminal.enhanced_keys_enable_failed", params: map[string]any{"Err": err.Error()}}
 	}
 	program := tea.NewProgram(model,
+		tea.WithContext(ctx),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 		tea.WithReportFocus(),
@@ -1553,6 +1558,9 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 		}
 	}()
 	_, runErr = program.Run()
+	if killedByContext(ctx, runErr) {
+		runErr = nil
+	}
 	cancel()
 	if err := writeStdout(enhancedKeysOff); err != nil {
 		return errors.Join(runErr, keyedError{cause: err, key: "tui.terminal.enhanced_keys_disable_failed", params: map[string]any{"Err": err.Error()}})

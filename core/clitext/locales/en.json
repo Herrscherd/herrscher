@@ -370,6 +370,11 @@
     "other": "herrscher: gateway unavailable: {{.Failure}}"
   },
   {
+    "id": "cli.serve.hub_stopped",
+    "description": "Error when the in-process hub stops while the terminal window is open",
+    "other": "the hub stopped, so the window closed: {{.Err}}"
+  },
+  {
     "id": "cli.serve.gateway_commands",
     "description": "Error when the commands of the gateways cannot be bound",
     "other": "gateway commands: {{.Err}}"

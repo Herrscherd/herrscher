@@ -231,13 +231,18 @@ func runHubForeground(ctx context.Context, statePath string, gws []host.Deps, cl
 
 func superviseForeground(ctx context.Context, cancel context.CancelFunc, foreground contracts.Foreground, hub func(context.Context) error) error {
 	hubDone := make(chan error, 1)
-	go func() { hubDone <- hub(ctx) }()
+	go func() {
+		err := hub(ctx)
+		cancel()
+		hubDone <- err
+	}()
 	foregroundErr := foreground.RunForeground(ctx, cancel)
 	cancel()
 	select {
 	case err := <-hubDone:
 		if err != nil && !errors.Is(err, context.Canceled) {
 			slog.Error("hub stopped", "err", err)
+			return errors.Join(foregroundErr, renderError(clitext.ClientLanguage(), err, clitext.ServeHubStopped, clitext.Params{clitext.ParamErr: err.Error()}))
 		}
 	case <-time.After(hubStopTimeout):
 		slog.Error("hub did not stop in time", "timeout", hubStopTimeout)

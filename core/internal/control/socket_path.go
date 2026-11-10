@@ -6,10 +6,16 @@ import (
 	"path"
 )
 
+// MaxUnixSocketPath is the longest socket path, in bytes, that sun_path holds
+// with its terminating NUL on the supported platforms.
 const MaxUnixSocketPath = 103
 
 const socketSuffix = ".sock"
 
+// BoundedSocketPath joins dir and stem into a unix socket path of at most
+// MaxUnixSocketPath bytes. When the plain path is too long, the stem is cut and
+// suffixed with a digest of the full stem, so distinct stems stay distinct. A
+// directory too long to leave room falls back to remoteSocketDir.
 func BoundedSocketPath(dir, stem string) string {
 	dir = path.Clean(dir)
 	full := path.Join(dir, stem+socketSuffix)
@@ -21,7 +27,7 @@ func BoundedSocketPath(dir, stem string) string {
 	tail := "-" + digest[:12] + socketSuffix
 	room := MaxUnixSocketPath - len(dir) - len("/") - len(tail)
 	if room <= 0 {
-		return path.Join(dir, "hs-"+digest[:24]+socketSuffix)
+		return path.Join(remoteSocketDir, "hs-"+digest[:24]+socketSuffix)
 	}
 	head := stem
 	if len(head) > room {

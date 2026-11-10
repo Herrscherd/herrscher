@@ -32,12 +32,7 @@ func TestSocketPathKeepsTwoInstancesApart(t *testing.T) {
 }
 
 func TestSocketPathsFitTheUnixSocketLimit(t *testing.T) {
-	dir, err := os.MkdirTemp("", "hs")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	longDir := filepath.Join(dir, strings.Repeat("d", 30))
+	longDir := filepath.Join(t.TempDir(), strings.Repeat("d", 30))
 	if err := os.Mkdir(longDir, 0o700); err != nil {
 		t.Fatal(err)
 	}

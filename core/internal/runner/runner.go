@@ -116,6 +116,13 @@ func script(dir string, argv []string) string {
 // private runtime directory. It is named by a digest of the target because the
 // target text can be longer than a unix socket path allows.
 func ControlPathFor(target string) string {
+	return controlPathIn(runtimedir.Production(), target)
+}
+
+func controlPathIn(layout runtimedir.Layout, target string) string {
 	sum := sha256.Sum256([]byte(target))
-	return runtimedir.Production().Socket("herrscher-ssh-" + hex.EncodeToString(sum[:])[:12])
+	if _, err := layout.Private(); err != nil {
+		return ""
+	}
+	return layout.Socket("herrscher-ssh-" + hex.EncodeToString(sum[:])[:12])
 }

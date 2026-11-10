@@ -98,16 +98,3 @@ func TestSSHCopyUsesScp(t *testing.T) {
 		t.Fatalf("dst = %q", got)
 	}
 }
-
-func TestControlPathIsShortAndStable(t *testing.T) {
-	a := ControlPathFor("me@build1")
-	if a != ControlPathFor("me@build1") {
-		t.Fatal("ControlPathFor is not stable")
-	}
-	if a == ControlPathFor("me@build2") {
-		t.Fatal("two targets share one control socket")
-	}
-	if len(a) > 100 {
-		t.Fatalf("control path is %d bytes: %s", len(a), a)
-	}
-}

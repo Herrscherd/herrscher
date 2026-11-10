@@ -36,3 +36,32 @@ func TestKilledByContextIsNotAFailure(t *testing.T) {
 		})
 	}
 }
+
+func TestSettleRunCancelsTheRunAndKeepsOnlyRealFailures(t *testing.T) {
+	otherErr := errors.New("boom")
+	tests := []struct {
+		name      string
+		cancelled bool
+		err       error
+		want      error
+	}{
+		{name: "quit by cancellation is not a failure", cancelled: true, err: tea.ErrProgramKilled, want: nil},
+		{name: "a real failure is kept", err: otherErr, want: otherErr},
+		{name: "a clean quit stays clean", want: nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			if tt.cancelled {
+				cancel()
+			}
+			got := settleRun(ctx, cancel, tt.err)
+			if !errors.Is(got, tt.want) || (got == nil) != (tt.want == nil) {
+				t.Fatalf("settleRun() = %v, want %v", got, tt.want)
+			}
+			if ctx.Err() == nil {
+				t.Fatal("settleRun left the run's context live")
+			}
+		})
+	}
+}

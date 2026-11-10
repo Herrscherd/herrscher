@@ -32,6 +32,8 @@ const (
 )
 
 // Record is one line of the ledger: what one model spent during one terminal reply.
+// Above is the largest long context threshold its requests went past, zero when every
+// request stayed under them, so the rates of a long context apply to it.
 type Record struct {
 	Time        time.Time `json:"time"`
 	Session     string    `json:"session"`
@@ -46,6 +48,7 @@ type Record struct {
 
 	CacheCreateHour int64       `json:"cacheCreateHour,omitempty"`
 	Fast            bool        `json:"fast,omitempty"`
+	Above           int64       `json:"above,omitempty"`
 	Split           CostSplit   `json:"split,omitzero"`
 	Saved           float64     `json:"saved,omitempty"`
 	Compaction      *Compaction `json:"compaction,omitempty"`

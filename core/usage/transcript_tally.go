@@ -18,11 +18,23 @@ func (e tokenEvent) empty() bool {
 	return e.in+e.out+e.cacheRead+e.cacheCreate == 0
 }
 
+func (e tokenEvent) contextBand() int64 {
+	context := e.in + e.cacheRead + e.cacheCreate
+	var band int64
+	for _, threshold := range contextThresholds() {
+		if context > threshold {
+			band = threshold
+		}
+	}
+	return band
+}
+
 type tallyKey struct {
 	hour    int64
 	session string
 	model   string
 	fast    bool
+	above   int64
 }
 
 type tally struct {
@@ -41,7 +53,7 @@ func newTally(vendor, account string, records []Record) *tally {
 }
 
 func keyOf(record Record) tallyKey {
-	return tallyKey{hour: record.Time.Unix(), session: record.Session, model: record.Model, fast: record.Fast}
+	return tallyKey{hour: record.Time.Unix(), session: record.Session, model: record.Model, fast: record.Fast, above: record.Above}
 }
 
 func (t *tally) add(event tokenEvent) {
@@ -49,12 +61,13 @@ func (t *tally) add(event tokenEvent) {
 		return
 	}
 	hour := event.at.UTC().Truncate(time.Hour)
-	key := tallyKey{hour: hour.Unix(), session: event.session, model: event.model, fast: event.fast}
+	above := event.contextBand()
+	key := tallyKey{hour: hour.Unix(), session: event.session, model: event.model, fast: event.fast, above: above}
 	slot, ok := t.index[key]
 	if !ok {
 		slot = len(t.records)
 		t.index[key] = slot
-		t.records = append(t.records, Record{Time: hour, Session: event.session, Vendor: t.vendor, Account: t.account, Model: event.model, Fast: event.fast})
+		t.records = append(t.records, Record{Time: hour, Session: event.session, Vendor: t.vendor, Account: t.account, Model: event.model, Fast: event.fast, Above: above})
 	}
 	record := &t.records[slot]
 	record.In += event.in

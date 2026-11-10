@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -14,8 +15,9 @@ type PriceBook struct {
 	rates map[string]Rates
 }
 
-// Rates is what one token of each type costs, in dollars, and the multiplier the fast
-// speed applies to every rate.
+// Rates is what one token of each type costs, in dollars, the multiplier the fast speed
+// applies to every rate, and the rates of the requests whose context goes past a
+// threshold, by threshold.
 type Rates struct {
 	In             float64
 	Out            float64
@@ -23,6 +25,36 @@ type Rates struct {
 	CacheWrite     float64
 	CacheWriteHour float64
 	Fast           float64
+	Long           map[int64]TokenRates
+}
+
+// TokenRates is what one token of each type costs, in dollars.
+type TokenRates struct {
+	In             float64
+	Out            float64
+	CacheRead      float64
+	CacheWrite     float64
+	CacheWriteHour float64
+}
+
+const (
+	longContextInfix  = "_above_"
+	longContextSuffix = "k_tokens"
+	tokensPerK        = 1000
+)
+
+func contextThresholds() []int64 {
+	return []int64{32_000, 100_000, 128_000, 200_000, 256_000, 272_000, 512_000}
+}
+
+func longContextFields() map[string]func(*TokenRates, float64) {
+	return map[string]func(*TokenRates, float64){
+		"input_cost_per_token":                      func(r *TokenRates, v float64) { r.In = v },
+		"output_cost_per_token":                     func(r *TokenRates, v float64) { r.Out = v },
+		"cache_read_input_token_cost":               func(r *TokenRates, v float64) { r.CacheRead = v },
+		"cache_creation_input_token_cost":           func(r *TokenRates, v float64) { r.CacheWrite = v },
+		"cache_creation_input_token_cost_above_1hr": func(r *TokenRates, v float64) { r.CacheWriteHour = v },
+	}
 }
 
 // CostSplit is a cost split by token type.
@@ -75,7 +107,7 @@ func ParsePrices(raw []byte) (PriceBook, error) {
 			continue
 		}
 		name := modelKey(key)
-		rates[name] = entry.rates()
+		rates[name] = entry.rates(entries[key])
 		if _, bare, ok := strings.Cut(name, "/"); ok {
 			aliases[lastSegment(bare)] = append(aliases[lastSegment(bare)], aliasCandidate{provider: entry.Provider, rates: rates[name]})
 		}
@@ -103,7 +135,7 @@ func preferredAlias(candidates []aliasCandidate) Rates {
 	return candidates[0].rates
 }
 
-func (e priceEntry) rates() Rates {
+func (e priceEntry) rates(raw json.RawMessage) Rates {
 	rates := Rates{In: *e.Input, Out: *e.Output, CacheRead: *e.Input, CacheWrite: *e.Input, Fast: 1}
 	if e.CacheRead != nil {
 		rates.CacheRead = *e.CacheRead
@@ -119,7 +151,63 @@ func (e priceEntry) rates() Rates {
 	if json.Unmarshal(e.Specific["fast"], &fast) == nil && fast > 0 {
 		rates.Fast = fast
 	}
+	rates.Long = longContextRates(raw, rates.tokens())
 	return rates
+}
+
+func longContextRates(raw json.RawMessage, base TokenRates) map[int64]TokenRates {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) != nil {
+		return nil
+	}
+	setters := longContextFields()
+	var long map[int64]TokenRates
+	for name, value := range fields {
+		field, threshold, ok := longContextField(name)
+		set, known := setters[field]
+		var rate float64
+		if !ok || !known || json.Unmarshal(value, &rate) != nil {
+			continue
+		}
+		if long == nil {
+			long = make(map[int64]TokenRates)
+		}
+		tier, seen := long[threshold]
+		if !seen {
+			tier = base
+		}
+		set(&tier, rate)
+		long[threshold] = tier
+	}
+	return long
+}
+
+func longContextField(name string) (string, int64, bool) {
+	cut := strings.LastIndex(name, longContextInfix)
+	if cut < 0 || !strings.HasSuffix(name, longContextSuffix) {
+		return "", 0, false
+	}
+	thousands, err := strconv.ParseInt(strings.TrimSuffix(name[cut+len(longContextInfix):], longContextSuffix), 10, 64)
+	threshold := thousands * tokensPerK
+	if err != nil || !slices.Contains(contextThresholds(), threshold) {
+		return "", 0, false
+	}
+	return name[:cut], threshold, true
+}
+
+func (r Rates) tokens() TokenRates {
+	return TokenRates{In: r.In, Out: r.Out, CacheRead: r.CacheRead, CacheWrite: r.CacheWrite, CacheWriteHour: r.CacheWriteHour}
+}
+
+func (r Rates) at(above int64) TokenRates {
+	tokens := r.tokens()
+	var reached int64
+	for threshold, long := range r.Long {
+		if threshold <= above && threshold > reached {
+			tokens, reached = long, threshold
+		}
+	}
+	return tokens
 }
 
 // Lookup finds the rates of a model, by its exact name first, then by its bare name.
@@ -180,14 +268,15 @@ func (r Rates) cost(record Record) (CostSplit, float64) {
 	if record.Fast {
 		speed = r.Fast
 	}
+	rates := r.at(record.Above)
 	hour := min(record.CacheCreateHour, record.CacheCreate)
 	split := CostSplit{
-		In:         float64(record.In) * r.In * speed,
-		Out:        float64(record.Out) * r.Out * speed,
-		CacheRead:  float64(record.CacheRead) * r.CacheRead * speed,
-		CacheWrite: (float64(record.CacheCreate-hour)*r.CacheWrite + float64(hour)*r.CacheWriteHour) * speed,
+		In:         float64(record.In) * rates.In * speed,
+		Out:        float64(record.Out) * rates.Out * speed,
+		CacheRead:  float64(record.CacheRead) * rates.CacheRead * speed,
+		CacheWrite: (float64(record.CacheCreate-hour)*rates.CacheWrite + float64(hour)*rates.CacheWriteHour) * speed,
 	}
-	saved := float64(record.CacheRead) * max(r.In-r.CacheRead, 0) * speed
+	saved := float64(record.CacheRead) * max(rates.In-rates.CacheRead, 0) * speed
 	return split, saved
 }
 

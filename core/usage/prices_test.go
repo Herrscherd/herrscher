@@ -61,3 +61,35 @@ func TestPriceSplitsTheCostAndWhatTheCacheSaved(t *testing.T) {
 		t.Fatalf("unknown model = %+v", records[2])
 	}
 }
+
+func TestPriceAppliesTheRatesOfTheLongestContextReached(t *testing.T) {
+	book, err := ParsePrices([]byte(`{
+		"gemini-2.5-pro": {"input_cost_per_token": 0.00000125, "output_cost_per_token": 0.00001, "cache_read_input_token_cost": 0.000000125,
+			"input_cost_per_token_above_200k_tokens": 0.0000025, "output_cost_per_token_above_200k_tokens": 0.000015,
+			"input_cost_per_token_above_128k_tokens": 0.000002, "input_cost_per_token_above_200k_tokens_priority": 0.1,
+			"input_cost_per_token_above_150k_tokens": 0.2}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	records := []Record{
+		{Model: "gemini-2.5-pro", In: 1000, Out: 100, CacheRead: 1000},
+		{Model: "gemini-2.5-pro", In: 1000, Out: 100, CacheRead: 1000, Above: 128_000},
+		{Model: "gemini-2.5-pro", In: 1000, Out: 100, CacheRead: 1000, Above: 200_000},
+	}
+	book.Price(records)
+	want := []CostSplit{
+		{In: 0.00125, Out: 0.001, CacheRead: 0.000125},
+		{In: 0.002, Out: 0.001, CacheRead: 0.000125},
+		{In: 0.0025, Out: 0.0015, CacheRead: 0.000125},
+	}
+	for i, record := range records {
+		got := record.Split
+		if !near(got.In, want[i].In) || !near(got.Out, want[i].Out) || !near(got.CacheRead, want[i].CacheRead) {
+			t.Errorf("record %d split = %+v, want %+v", i, got, want[i])
+		}
+	}
+	if !near(records[2].Saved, 1000*(0.0000025-0.000000125)) {
+		t.Errorf("saved = %v, want the long context input rate", records[2].Saved)
+	}
+}

@@ -36,7 +36,7 @@ func codexCount(at string, last, total int64) string {
 }
 
 func TestClaudeReaderCountsATurnOnceWithItsAdvisor(t *testing.T) {
-	reader := claudeReader{seen: make(map[uint64]struct{})}
+	reader := claudeReader{seen: make(map[uint64]int64)}
 	events := collect(reader.read, claudeTurn, claudeTurn)
 	if len(events) != 2 {
 		t.Fatalf("events = %d, want the turn and its advisor once", len(events))
@@ -50,7 +50,7 @@ func TestClaudeReaderCountsATurnOnceWithItsAdvisor(t *testing.T) {
 }
 
 func TestClaudeReaderSkipsSyntheticAndUserLines(t *testing.T) {
-	reader := claudeReader{seen: make(map[uint64]struct{})}
+	reader := claudeReader{seen: make(map[uint64]int64)}
 	synthetic := strings.NewReplacer("claude-opus-4-1", "<synthetic>", `"advisor_message"`, `"message"`).Replace(claudeTurn)
 	if events := collect(reader.read, synthetic, `{"type":"user","message":{"usage":{}}}`); len(events) != 0 {
 		t.Fatalf("events = %+v, want none", events)
@@ -111,6 +111,20 @@ func TestTallyAddsTheEventsOfOneHourSessionAndModel(t *testing.T) {
 	totals.add(tokenEvent{at: at, session: "s", model: "m"})
 	totals.add(tokenEvent{at: at.Add(time.Hour), session: "s", model: "m", in: 4})
 	if len(totals.records) != 2 || totals.records[0].In != 1 || totals.records[0].Out != 2 || totals.records[0].Account != "pro" {
+		t.Fatalf("records = %+v", totals.records)
+	}
+}
+
+func TestTallyKeepsTheRequestsPastALongContextApart(t *testing.T) {
+	totals := newTally("claude", "pro", nil)
+	at := time.Date(2026, 11, 8, 10, 5, 0, 0, time.UTC)
+	totals.add(tokenEvent{at: at, session: "s", model: "m", in: 10, cacheRead: 150_000})
+	totals.add(tokenEvent{at: at, session: "s", model: "m", in: 10, cacheRead: 210_000})
+	totals.add(tokenEvent{at: at, session: "s", model: "m", in: 10, cacheRead: 199_990})
+	if len(totals.records) != 2 || totals.records[0].Above != 128_000 || totals.records[1].Above != 200_000 {
+		t.Fatalf("records = %+v", totals.records)
+	}
+	if totals.records[0].CacheRead != 349_990 || totals.records[1].CacheRead != 210_000 {
 		t.Fatalf("records = %+v", totals.records)
 	}
 }
@@ -258,5 +272,110 @@ func TestTranscriptIndexReadsAgainATruncatedTranscript(t *testing.T) {
 	}
 	if in != 52 {
 		t.Fatalf("input tokens = %d, want the three turns kept once and the new one read", in)
+	}
+}
+
+func TestTranscriptIndexResumesACodexTranscriptAtItsOffset(t *testing.T) {
+	root := t.TempDir()
+	home := filepath.Join(root, "codex")
+	transcript := filepath.Join(home, codexTranscripts, "2026", "a"+fileExt)
+	written := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	now := func() time.Time { return written.Add(time.Hour) }
+	writeTranscript(t, transcript, codexMeta, codexContext, codexCount("2026-11-08T10:01:00Z", 5, 5))
+	stampTranscript(t, transcript, written)
+	sources := []TranscriptSource{{Vendor: contracts.VendorCodex, Account: "pro", Home: home}}
+	index := &TranscriptIndex{Path: filepath.Join(root, "index.json"), Now: now}
+	if err := index.Scan(context.Background(), sources); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(transcript)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(transcript, []byte(strings.Replace(string(raw), `"c1"`, `"c9"`, 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	appendTranscript(t, transcript, codexCount("2026-11-08T10:02:00Z", 7, 12))
+	stampTranscript(t, transcript, written.Add(time.Minute))
+	reopened := &TranscriptIndex{Path: index.Path, Now: now}
+	if err := reopened.Scan(context.Background(), sources); err != nil {
+		t.Fatal(err)
+	}
+	var in int64
+	for _, record := range reopened.View(written.Add(-24 * time.Hour)).Records {
+		in += record.In
+		if record.Session != "c1" {
+			t.Fatalf("session = %q, want the earlier lines left unread", record.Session)
+		}
+	}
+	if in != 10 {
+		t.Fatalf("input tokens = %d, want both counts once", in)
+	}
+}
+
+func TestTranscriptIndexSavesOnlyWhatChanged(t *testing.T) {
+	root := t.TempDir()
+	home := filepath.Join(root, "claude")
+	transcript := filepath.Join(home, claudeTranscripts, "p", "a"+fileExt)
+	written := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	writeTranscript(t, transcript, claudeTurn)
+	stampTranscript(t, transcript, written)
+	sources := []TranscriptSource{{Vendor: contracts.VendorClaude, Account: "pro", Home: home}}
+	index := &TranscriptIndex{Path: filepath.Join(root, "index.json"), Now: func() time.Time { return written.Add(time.Hour) }}
+	if err := index.Scan(context.Background(), sources); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(index.Path); err != nil {
+		t.Fatal(err)
+	}
+	if err := index.Scan(context.Background(), sources); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(index.Path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("index written again with nothing new: %v", err)
+	}
+}
+
+func TestTranscriptIndexForgetsWhatIsPastTheRetention(t *testing.T) {
+	root := t.TempDir()
+	home := filepath.Join(root, "claude")
+	transcript := filepath.Join(home, claudeTranscripts, "p", "a"+fileExt)
+	now := time.Date(2026, 11, 8, 10, 0, 0, 0, time.UTC).Add(Retention + 24*time.Hour)
+	writeTranscript(t, transcript, claudeTurn)
+	stampTranscript(t, transcript, now)
+	sources := []TranscriptSource{{Vendor: contracts.VendorClaude, Account: "pro", Home: home}}
+	index := &TranscriptIndex{Path: filepath.Join(root, "index.json"), Now: func() time.Time { return now }}
+	if err := index.Scan(context.Background(), sources); err != nil {
+		t.Fatal(err)
+	}
+	if len(index.seen) != 0 || len(index.files[transcript].Records) != 0 {
+		t.Fatalf("seen = %d keys, records = %d, want both pruned past the retention", len(index.seen), len(index.files[transcript].Records))
+	}
+}
+
+func TestTranscriptIndexCountsAnUnreadableSubdirectory(t *testing.T) {
+	root := t.TempDir()
+	home := filepath.Join(root, "claude")
+	written := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	writeTranscript(t, filepath.Join(home, claudeTranscripts, "open", "a"+fileExt), claudeTurn)
+	shut := filepath.Join(home, claudeTranscripts, "shut")
+	if err := os.MkdirAll(shut, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(shut, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(shut, 0o700); err != nil {
+			t.Error(err)
+		}
+	})
+	sources := []TranscriptSource{{Vendor: contracts.VendorClaude, Account: "pro", Home: home}}
+	index := &TranscriptIndex{Path: filepath.Join(root, "index.json"), Now: func() time.Time { return written.Add(time.Hour) }}
+	if err := index.Scan(context.Background(), sources); err != nil {
+		t.Fatal(err)
+	}
+	if view := index.View(written.Add(-24 * time.Hour)); len(view.Records) != 2 || view.Unreadable != 1 || !view.Scanned {
+		t.Fatalf("records = %d, unreadable = %d, scanned = %v", len(view.Records), view.Unreadable, view.Scanned)
 	}
 }

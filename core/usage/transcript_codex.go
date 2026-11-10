@@ -61,14 +61,14 @@ type codexTokens struct {
 }
 
 type codexReader struct {
-	session    string
-	model      string
-	fast       bool
-	sawMeta    bool
-	forking    bool
-	forkAnchor time.Time
-	lastTotal  *codexTokens
-	lastSeen   *codexTokens
+	Session    string       `json:"session,omitempty"`
+	Model      string       `json:"model,omitempty"`
+	Fast       bool         `json:"fast,omitempty"`
+	SawMeta    bool         `json:"sawMeta,omitempty"`
+	Forking    bool         `json:"forking,omitempty"`
+	ForkAnchor time.Time    `json:"forkAnchor,omitzero"`
+	LastTotal  *codexTokens `json:"lastTotal,omitempty"`
+	LastSeen   *codexTokens `json:"lastSeen,omitempty"`
 }
 
 func (r *codexReader) read(line []byte, emit func(tokenEvent)) {
@@ -84,25 +84,25 @@ func (r *codexReader) read(line []byte, emit func(tokenEvent)) {
 	case parsed.Type == "session_meta":
 		r.meta(parsed)
 	case parsed.Type == "turn_context":
-		r.model = payload.Model
+		r.Model = payload.Model
 	case payload.Type == "thread_settings_applied" && payload.Settings != nil:
-		r.fast = slices.Contains(codexFastTiers(), payload.Settings.Tier)
+		r.Fast = slices.Contains(codexFastTiers(), payload.Settings.Tier)
 	case payload.Type == "token_count" && payload.Info != nil:
 		r.count(parsed.Timestamp, *payload.Info, emit)
 	}
 }
 
 func (r *codexReader) meta(line codexLine) {
-	if r.sawMeta {
+	if r.SawMeta {
 		return
 	}
-	r.sawMeta = true
-	r.session = line.Payload.ID
-	if r.session == "" {
-		r.session = line.Payload.SessionID
+	r.SawMeta = true
+	r.Session = line.Payload.ID
+	if r.Session == "" {
+		r.Session = line.Payload.SessionID
 	}
 	if line.Payload.ForkedFrom != "" || spawnedBy(line.Payload.Source) != "" {
-		r.forking, r.forkAnchor = true, line.Timestamp
+		r.Forking, r.ForkAnchor = true, line.Timestamp
 	}
 }
 
@@ -115,35 +115,35 @@ func spawnedBy(raw json.RawMessage) string {
 }
 
 func (r *codexReader) count(when time.Time, info codexInfo, emit func(tokenEvent)) {
-	if r.model == "" || when.IsZero() {
+	if r.Model == "" || when.IsZero() {
 		return
 	}
 	if r.forkCopy(when) {
 		if info.Total != nil {
-			r.lastTotal = info.Total
+			r.LastTotal = info.Total
 		}
 		return
 	}
-	previous := r.lastTotal
+	previous := r.LastTotal
 	if info.Total != nil {
-		r.lastTotal = info.Total
+		r.LastTotal = info.Total
 	}
 	last := info.Last
 	switch {
 	case last == nil || last.Input+last.Output == 0:
-		r.lastSeen = nil
+		r.LastSeen = nil
 		return
 	case info.Total != nil && previous != nil && *info.Total == *previous:
 		return
-	case info.Total == nil && r.lastSeen != nil && *last == *r.lastSeen:
+	case info.Total == nil && r.LastSeen != nil && *last == *r.LastSeen:
 		return
 	}
-	r.lastSeen = last
+	r.LastSeen = last
 	emit(tokenEvent{
 		at:          when,
-		session:     r.session,
-		model:       r.model,
-		fast:        r.fast,
+		session:     r.Session,
+		model:       r.Model,
+		fast:        r.Fast,
 		in:          max(last.Input-last.Cached-last.CacheWrite, 0),
 		out:         last.Output,
 		cacheRead:   last.Cached,
@@ -152,13 +152,13 @@ func (r *codexReader) count(when time.Time, info codexInfo, emit func(tokenEvent
 }
 
 func (r *codexReader) forkCopy(when time.Time) bool {
-	if !r.forking {
+	if !r.Forking {
 		return false
 	}
-	if when.Sub(r.forkAnchor) < codexForkCopyGap {
-		r.forkAnchor = when
+	if when.Sub(r.ForkAnchor) < codexForkCopyGap {
+		r.ForkAnchor = when
 		return true
 	}
-	r.forking, r.lastSeen = false, nil
+	r.Forking, r.LastSeen = false, nil
 	return false
 }

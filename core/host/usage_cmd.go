@@ -71,7 +71,7 @@ func newUsageSource(partDir string) *usageSource {
 	}
 	return &usageSource{
 		ledger:      usage.Ledger{Dir: usageDir(partDir), Now: time.Now},
-		limits:      &usage.LimitsCache{Now: time.Now},
+		limits:      &usage.LimitsCache{Now: time.Now, Timeout: limitsTimeout(os.Getenv)},
 		accounts:    store,
 		transcripts: &usage.TranscriptIndex{Path: filepath.Join(usageDir(partDir), transcriptIndexFile), Now: time.Now},
 		prices:      &usage.PriceSource{Path: filepath.Join(usageDir(partDir), pricesFile), URL: usage.PricesURL, Now: time.Now},

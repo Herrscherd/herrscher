@@ -253,3 +253,47 @@ func TestLimitsCacheStopsTheSharedReadAtItsTimeout(t *testing.T) {
 		t.Fatal("the shared read outlived the timeout")
 	}
 }
+
+func TestLimitsCacheKeepsASharedReadThatEndsAfterItsCallerLeft(t *testing.T) {
+	started, release := make(chan struct{}), make(chan struct{})
+	var calls atomic.Int32
+	reader := func(context.Context, contracts.ProbeAccess) ([]contracts.Limit, error) {
+		if calls.Add(1) == 1 {
+			close(started)
+			<-release
+		}
+		return []contracts.Limit{{UsedPercent: 10}}, nil
+	}
+	cache := &LimitsCache{Now: clock(testNow())}
+	target := []Target{{Vendor: "claude", Read: reader}}
+	caller, leave := context.WithCancel(context.Background())
+	left := make(chan struct{})
+	go func() {
+		defer close(left)
+		cache.Read(caller, target)
+	}()
+	<-started
+	leave()
+	<-left
+	close(release)
+	waitForEntry(t, cache)
+	got := cache.Read(context.Background(), target)
+	if got[0].Status != LimitsReady || calls.Load() != 1 {
+		t.Fatalf("status = %v after %d reads, want the shared read reused", got[0].Status, calls.Load())
+	}
+}
+
+func waitForEntry(t *testing.T, cache *LimitsCache) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		cache.mu.Lock()
+		stored := len(cache.entries) > 0
+		cache.mu.Unlock()
+		if stored {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("the shared read was never kept")
+}

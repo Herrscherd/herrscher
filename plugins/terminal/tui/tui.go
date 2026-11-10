@@ -129,6 +129,7 @@ type entry struct {
 	failed      bool
 	foldable    bool
 	open        bool
+	markdown    bool
 }
 
 type tab struct {
@@ -1227,7 +1228,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.endStream()
 		target.appendEntry(entry{role: roleNotice, text: m.tr.t("tui.render.turn_reset", nil)})
 	case eventNotice:
-		target.appendEntry(entry{role: roleNotice, text: event.Text})
+		target.appendEntry(entry{role: roleNotice, text: event.Text, markdown: true})
 	case eventCompactionStarted:
 		target.startCompaction(event)
 	case eventCompactionDone:

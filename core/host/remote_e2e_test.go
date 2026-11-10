@@ -199,7 +199,7 @@ func TestE2ERemoteCommandSocketForward(t *testing.T) {
 
 	const instID = "e2efwd"
 	local := filepath.Join(os.TempDir(), "herrscher-e2e-daemon.sock")
-	remote := control.RemoteCommandSocketPath("e2e-session")
+	remote := control.RemoteCommandSocketPath(instID, "e2e-session")
 	serveCommandSocket(ctx, local, &fakeDispatcher{out: "reached the daemon"})
 
 	run := runner.SSH{Target: target, Forwards: []runner.Forward{{Remote: remote, Local: local}}}
@@ -244,7 +244,7 @@ func TestE2ETwoSessionsReachTheDaemonAtOnce(t *testing.T) {
 
 	sessions := []string{"e2e-one", "e2e-two"}
 	for _, name := range sessions {
-		remote := control.RemoteCommandSocketPath(name)
+		remote := control.RemoteCommandSocketPath("", name)
 		run := runner.SSH{Target: target, Forwards: []runner.Forward{{Remote: remote, Local: local}}}
 		if prep := run.PrepareForwards(ctx); prep != nil {
 			logCleanup(prep.Run())
@@ -253,7 +253,7 @@ func TestE2ETwoSessionsReachTheDaemonAtOnce(t *testing.T) {
 	}
 	plain := runner.SSH{Target: target}
 	for _, name := range sessions {
-		remote := control.RemoteCommandSocketPath(name)
+		remote := control.RemoteCommandSocketPath("", name)
 		out, err := capture(ctx, plain, "env",
 			"TMPDIR=/tmp",
 			control.CommandSocketVar+"="+remote,

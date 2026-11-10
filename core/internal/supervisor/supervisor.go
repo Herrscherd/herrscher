@@ -348,7 +348,7 @@ func (s *Supervisor) remoteBridgeCommand(ctx context.Context, sess state.Session
 	args := s.bridgeArgs(sess)
 	for idx := range args {
 		if args[idx] == "--hub-socket" && idx+1 < len(args) {
-			args[idx+1] = control.RemoteSocketPath(sess.Name)
+			args[idx+1] = control.RemoteSocketPath(s.instanceID, sess.Name)
 		}
 	}
 	args = append(args, "--env-stdin")
@@ -378,12 +378,12 @@ func (s *Supervisor) placementFor(sess state.Session) (Placement, error) {
 
 func (s *Supervisor) forwardsFor(sess state.Session) []runner.Forward {
 	fwd := []runner.Forward{{
-		Remote: control.RemoteSocketPath(sess.Name),
+		Remote: control.RemoteSocketPath(s.instanceID, sess.Name),
 		Local:  control.SocketPath(s.instanceID, sess.Name),
 	}}
 	if s.sessionCmdSocket != nil {
 		fwd = append(fwd, runner.Forward{
-			Remote: control.RemoteCommandSocketPath(sess.Name),
+			Remote: control.RemoteCommandSocketPath(s.instanceID, sess.Name),
 			Local:  s.sessionCmdSocket(sess.Name),
 		})
 	}
@@ -415,7 +415,7 @@ func (s *Supervisor) remoteEnvBlock(sess state.Session) string {
 	env["TMPDIR"] = "/tmp"
 	env[control.SessionVar] = sess.Name
 	if s.sessionCmdSocket != nil {
-		env[control.CommandSocketVar] = control.RemoteCommandSocketPath(sess.Name)
+		env[control.CommandSocketVar] = control.RemoteCommandSocketPath(s.instanceID, sess.Name)
 	}
 	if p, err := s.placementFor(sess); err == nil {
 		for k, v := range s.approvalsEnv(sess, p.Bin) {

@@ -432,7 +432,7 @@ func TestRemoteForwardPointsAtTheSessionSocket(t *testing.T) {
 	s.SetCommandSocket(func(session string) string { return "/tmp/sock-" + session })
 	var found bool
 	for _, f := range s.forwardsFor(state.Session{Name: "revue", Host: "build1"}) {
-		if f.Remote != control.RemoteCommandSocketPath("revue") {
+		if f.Remote != control.RemoteCommandSocketPath("", "revue") {
 			continue
 		}
 		found = true
@@ -457,7 +457,7 @@ func TestBridgeOmitsAnUnknownCommandSocket(t *testing.T) {
 		}
 	}
 	for _, f := range s.forwardsFor(state.Session{Name: "s1", Host: "build1"}) {
-		if f.Remote == control.RemoteCommandSocketPath("s1") {
+		if f.Remote == control.RemoteCommandSocketPath("", "s1") {
 			t.Fatal("forwarding a socket nobody set")
 		}
 	}

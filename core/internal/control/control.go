@@ -34,9 +34,11 @@ const instanceSeparator = "."
 
 const remoteSocketDir = "/tmp"
 
-// RemoteSocketPath is SocketPath for another machine.
-func RemoteSocketPath(session string) string {
-	return remoteSocketDir + "/herrscher-control-" + SafeSessionName(session) + ".sock"
+// RemoteSocketPath is SocketPath for another machine. It carries the instance
+// for the same reason SocketPath does: two daemons forwarding a session of one
+// name to one host would otherwise fight over the same path.
+func RemoteSocketPath(instanceID, session string) string {
+	return remoteSocketDir + "/herrscher-control-" + instancePrefix(instanceID) + SafeSessionName(session) + ".sock"
 }
 
 // RemoteCommandSocketPath is where a remote session's `herrscher <verb>` dials
@@ -51,8 +53,8 @@ func RemoteSocketPath(session string) string {
 // finds it taken and dies on ExitOnForwardFailure, and clearing it first cuts
 // the first session's agent off from the daemon. One path per session costs a
 // socket file and makes both failures unrepresentable.
-func RemoteCommandSocketPath(session string) string {
-	return remoteSocketDir + "/herrscher-command-" + SafeSessionName(session) + ".sock"
+func RemoteCommandSocketPath(instanceID, session string) string {
+	return remoteSocketDir + "/herrscher-command-" + instancePrefix(instanceID) + SafeSessionName(session) + ".sock"
 }
 
 // CommandSocketVar is how the far side learns that path: it cannot derive a

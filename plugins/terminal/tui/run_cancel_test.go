@@ -2,33 +2,37 @@ package tui
 
 import (
 	"context"
-	"os"
+	"errors"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
-func TestRunReturnsNilWhenItsContextIsCancelled(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	reader, writer, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
+func TestKilledByContextIsNotAFailure(t *testing.T) {
+	otherErr := errors.New("boom")
+
+	tests := []struct {
+		name      string
+		cancelled bool
+		err       error
+		want      bool
+	}{
+		{name: "quit by cancellation", cancelled: true, err: tea.ErrProgramKilled, want: true},
+		{name: "killed while the context is live", cancelled: false, err: tea.ErrProgramKilled, want: false},
+		{name: "cancelled with another failure", cancelled: true, err: otherErr, want: false},
+		{name: "cancelled without error", cancelled: true, err: nil, want: false},
 	}
-	t.Cleanup(func() {
-		if closeErr := reader.Close(); closeErr != nil {
-			t.Log(closeErr)
-		}
-		if closeErr := writer.Close(); closeErr != nil {
-			t.Log(closeErr)
-		}
-	})
-	previous := os.Stdin
-	os.Stdin = reader
-	t.Cleanup(func() { os.Stdin = previous })
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if err := Run(ctx, cancel, &fakeBackend{}); err != nil {
-		t.Fatalf("Run with a cancelled context = %v, want nil: a quit that cancels the context is not a failure", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			if tt.cancelled {
+				cancel()
+			} else {
+				t.Cleanup(cancel)
+			}
+			if got := killedByContext(ctx, tt.err); got != tt.want {
+				t.Fatalf("killedByContext() = %t, want %t", got, tt.want)
+			}
+		})
 	}
 }

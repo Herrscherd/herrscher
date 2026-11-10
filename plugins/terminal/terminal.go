@@ -54,7 +54,6 @@ const ChannelID = "terminal"
 const Kind = "terminal"
 
 const (
-	eventStatus = "status"
 	eventReply  = "reply"
 	eventMenu   = "menu"
 	eventNotice = "notice"
@@ -112,7 +111,7 @@ var (
 )
 
 func openDefaultSession(ctx context.Context, control contracts.SessionControl, cfg contracts.PluginConfig) (string, error) {
-	name := defaultSessionName(control.Sessions())
+	name := DefaultSessionName(control.Sessions())
 	spec := contracts.CreateSession{Name: name, TerminalOnly: true, Shared: true}
 	scope.LaunchFrom(ctx, cfg).Apply(&spec)
 	if _, err := control.Create(ctx, spec); err != nil {
@@ -123,7 +122,9 @@ func openDefaultSession(ctx context.Context, control contracts.SessionControl, c
 
 var sessionNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 
-func defaultSessionName(taken []contracts.SessionInfo) string {
+// DefaultSessionName names a session after the launch directory, suffixed past
+// the names already taken, so a window opened in a project lands on its name.
+func DefaultSessionName(taken []contracts.SessionInfo) string {
 	workdir, err := os.Getwd()
 	if err != nil {
 		return randomSessionName()
@@ -152,7 +153,28 @@ func randomSessionName() string {
 	return "s-" + strings.ToLower(rand.Text()[:4])
 }
 
-const bootstrapBudget = 5 * time.Second
+const (
+	bootstrapBudget = 5 * time.Second
+	startBudget     = 30 * time.Second
+)
+
+// StartSession opens a fresh session in the launch directory for a message typed
+// while no session is open, and returns its name.
+func (t *Terminal) StartSession() (string, error) {
+	control := t.Control()
+	if control == nil {
+		return "", terminalFailure(errNoSessionControl, clitext.TerminalNoSessionControl, nil)
+	}
+	t.ctrlMu.Lock()
+	ctx := t.baseCtx
+	t.ctrlMu.Unlock()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cctx, cancel := context.WithTimeout(ctx, startBudget)
+	defer cancel()
+	return openDefaultSession(cctx, control, t.cfg)
+}
 
 func (t *Terminal) bootstrapSession(ctx context.Context) string {
 	select {
@@ -291,9 +313,9 @@ func (t *Terminal) Read(_ context.Context, channelID string, _ int, _ string) ([
 // Unreact is a no-op: the terminal shows no reactions.
 func (t *Terminal) Unreact(context.Context, string, string, string) error { return nil }
 
-// UpsertStatusMessage shows content as a status line in the channel tab and returns no message id.
+// UpsertStatusMessage shows content as a notice line in the channel tab and returns no message id.
 func (t *Terminal) UpsertStatusMessage(_ context.Context, channelID, _, content string) (string, error) {
-	t.EmitTo(contracts.Conversation{Gateway: Kind, ID: channelID}, contracts.Event{T: eventStatus, Text: content})
+	t.EmitTo(contracts.Conversation{Gateway: Kind, ID: channelID}, contracts.Event{T: eventNotice, Text: content})
 	return "", nil
 }
 
@@ -634,9 +656,9 @@ func (t *Terminal) Archive(_ context.Context, id string) error {
 	return nil
 }
 
-// Send shows content as a status line in the conversation channelID.
+// Send shows content as a notice line in the conversation channelID.
 func (t *Terminal) Send(_ context.Context, channelID, content string) error {
-	t.EmitTo(contracts.Conversation{Gateway: Kind, ID: channelID}, contracts.Event{T: eventStatus, Text: content})
+	t.EmitTo(contracts.Conversation{Gateway: Kind, ID: channelID}, contracts.Event{T: eventNotice, Text: content})
 	return nil
 }
 

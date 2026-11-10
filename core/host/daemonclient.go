@@ -9,10 +9,12 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/scope"
 )
 
 // DaemonEvent is one line off the events socket: a turn event tagged with the
@@ -21,6 +23,28 @@ type DaemonEvent struct {
 	contracts.Event
 
 	Session string `json:"session"`
+}
+
+var launchProjectRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+
+// LaunchProject names the workspace project dir belongs to, so a client can ask
+// the daemon serving statePath to place a session in the repository it was
+// launched from. It is empty when dir is not a repository directly under that
+// daemon's workspace root, and the daemon then keeps its own default placement.
+func LaunchProject(ctx context.Context, statePath, dir string) string {
+	hostState, err := state.LoadState(statePath)
+	if err != nil || hostState.Workspace == "" || dir == "" {
+		return ""
+	}
+	top := scope.RepoRoot(ctx, dir)
+	if top == "" || filepath.Dir(top) != filepath.Clean(hostState.Workspace) {
+		return ""
+	}
+	name := filepath.Base(top)
+	if !launchProjectRe.MatchString(name) {
+		return ""
+	}
+	return name
 }
 
 // ServedInstanceID reports the instance id the daemon serving statePath actually

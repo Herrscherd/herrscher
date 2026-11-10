@@ -76,7 +76,9 @@ on a conversation of its own, named after the directory you launched in
 (`herrscher-2` if that name is taken, a random `s-xxxx` if the directory cannot
 be one). What came before is still there: a live tab if it is still running,
 `/resume` otherwise. Nothing piles up either, since a session nobody spoke in is
-archived when the window closes.
+archived when the window closes. An attached window opens that conversation on
+the first message you type, in the repository you launched from when it sits
+right under the daemon's workspace, and shared with the daemon's other clients.
 
 One daemon per state file. A second one over the same state answers every message
 twice and bills it twice. So a bare `herrscher` on a TTY **serves when nothing
@@ -86,7 +88,9 @@ Quitting the window has two outcomes. After an attach, the daemon you found keep
 running. After a serve, quitting stops that daemon, and the turns still running
 in it are cancelled. Off a TTY there is nothing to
 attach to, so the second daemon is refused and the process holding the state is
-named. Use `--state` if you really want a separate world.
+named. Use `--state` if you really want a separate world, with its own
+`--instance` too: a daemon refuses to take over a command or events socket that
+another daemon still answers on, and says so instead of cutting that one off.
 
 ## What a session gives you
 

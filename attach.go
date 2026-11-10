@@ -27,6 +27,7 @@ type attachedDaemon struct {
 	lang     i18n.Language
 	done     <-chan struct{}
 	send     func(argv []string) (string, error)
+	launch   func(name string) []string
 	instance string
 	events   chan tui.RoutedEvent
 
@@ -57,6 +58,7 @@ func newAttachedDaemon(ctx context.Context, instance string, lang i18n.Language)
 		defer cancel()
 		return host.DaemonDispatch(call, instance, argv)
 	}
+	daemon.launch = func(name string) []string { return attachedLaunch(ctx, name) }
 	daemon.refresh()
 	go daemon.pump(stream)
 	return daemon, nil
@@ -134,7 +136,7 @@ func (r attachRunner) runAttached(ctx context.Context, instance string, opts ...
 		return err
 	}
 	return withClientLog(r.log, r.logPath, func() error {
-		return r.run(ctx, cancel, daemon, append([]tui.Option{tui.Logger(r.log)}, opts...)...)
+		return r.run(ctx, cancel, daemon, append([]tui.Option{tui.Logger(r.log), tui.Language(daemon.lang)}, opts...)...)
 	})
 }
 
@@ -269,6 +271,27 @@ func (a *attachedDaemon) Seen(name string) {
 	if _, err := a.dispatch([]string{verbSession, "seen", argName, name}); err != nil {
 		slog.Debug("review mark not cleared", "session", name, "error", err)
 	}
+}
+
+func attachedLaunch(ctx context.Context, name string) []string {
+	argv := append(createTaskSession(ctx, name), "--shared")
+	dir, err := os.Getwd()
+	if err != nil {
+		return argv
+	}
+	if project := host.LaunchProject(ctx, host.DefaultStatePath(), dir); project != "" {
+		argv = append(argv, "--project", project)
+	}
+	return argv
+}
+
+func (a *attachedDaemon) StartSession() (string, error) {
+	name := terminal.DefaultSessionName(a.Sessions())
+	if _, err := a.dispatch(a.launch(name)); err != nil {
+		return "", err
+	}
+	a.refresh()
+	return name, nil
 }
 
 func (a *attachedDaemon) Overview() (string, error) {

@@ -119,6 +119,7 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"fanout.wrap":                   {"Detail"},
 		"route.wrap":                    {"Detail"},
 		"daemon.events_socket":          {"Detail", "Path"},
+		"daemon.socket_taken":           {"Detail", "Path"},
 		"daemon.attachments":            {"Detail"},
 		"hosts.clone":                   {"Detail", "Host", "Project"},
 		"lock.dir":                      {"Detail"},

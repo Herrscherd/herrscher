@@ -3383,6 +3383,11 @@
     "other": "commande refusée"
   },
   {
+    "id": "cli.host.fault.socket_taken",
+    "description": "Un autre démon vivant répond déjà sur ce socket, souvent la même instance servant un autre fichier d'état (socket already served)",
+    "other": "un autre démon répond déjà sur ce socket (même instance, autre fichier d'état) : arrête-le ou passe --instance"
+  },
+  {
     "id": "cli.host.fault.empty_shell_command",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (empty shell command)",
     "other": "session shell : la commande est vide"

@@ -86,6 +86,7 @@ func hostErrorKeys() []hostErrorKey {
 		{errHandoffQuota, "cli.host.fault.handoff_quota"},
 		{errShellRefused, "cli.host.fault.shell_refused"},
 		{errDaemonEventsUnreachable, "cli.host.fault.daemon_events_unreachable"},
+		{errSocketTaken, "cli.host.fault.socket_taken"},
 		{errEmptyShellCommand, "cli.host.fault.empty_shell_command"},
 		{errUnknownShellSession, "cli.host.fault.unknown_shell_session"},
 		{errRemoteShellSession, "cli.host.fault.remote_shell_session"},

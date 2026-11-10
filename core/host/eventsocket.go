@@ -165,7 +165,10 @@ func (s *eventSocket) closeAll() {
 }
 
 func serveEventsSocket(ctx context.Context, path string, socket *eventSocket) {
-	logCleanup(os.Remove(path))
+	if err := claimSocketPath(ctx, path); err != nil {
+		warnStderr("events socket: listen %s: %v\n", path, err)
+		return
+	}
 	listener, err := listenCommandSocket(ctx, path)
 	if err != nil {
 		warnStderr("events socket: listen %s: %v\n", path, err)

@@ -3383,6 +3383,11 @@
     "other": "command refused"
   },
   {
+    "id": "cli.host.fault.socket_taken",
+    "description": "Another live daemon already answers on this socket, usually the same instance serving another state file",
+    "other": "another daemon already answers on this socket (same instance, another state file): stop it or pass --instance"
+  },
+  {
     "id": "cli.host.fault.empty_shell_command",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (empty shell command)",
     "other": "session shell: the command is empty"

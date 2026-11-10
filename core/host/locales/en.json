@@ -295,6 +295,11 @@
     "other": "events socket {{.Path}}: {{.Detail}}"
   },
   {
+    "id": "daemon.socket_taken",
+    "description": "A daemon socket path already answers for another live daemon, Path gives the path and Detail carries the cause",
+    "other": "socket {{.Path}}: {{.Detail}}"
+  },
+  {
     "id": "daemon.attachments",
     "description": "An attachment list that is not a JSON array of paths, Detail carries the cause",
     "other": "attachments: expected a JSON array of paths: {{.Detail}}"

@@ -108,13 +108,27 @@ func serveCommandSocket(ctx context.Context, path string, disp dispatcher) {
 }
 
 func serveCommandSocketWithTimeout(ctx context.Context, path string, disp dispatcher, readTimeout time.Duration) {
-	logCleanup(os.Remove(path))
+	if err := claimSocketPath(ctx, path); err != nil {
+		warnStderr("command socket: listen %s: %v\n", path, err)
+		return
+	}
 	listener, err := listenCommandSocket(ctx, path)
 	if err != nil {
 		warnStderr("command socket: listen %s: %v\n", path, err)
 		return
 	}
 	go acceptCommands(ctx, listener, path, disp, readTimeout)
+}
+
+var errSocketTaken = errors.New("another daemon already answers on this socket (same instance, another state file): stop it or pass --instance")
+
+func claimSocketPath(ctx context.Context, path string) error {
+	if conn, err := dialCommandSocket(ctx, path); err == nil {
+		logCleanup(conn.Close())
+		return wrapHost(errSocketTaken, "daemon.socket_taken", map[string]any{pathParam: path})
+	}
+	logCleanup(os.Remove(path))
+	return nil
 }
 
 func acceptCommands(ctx context.Context, listener net.Listener, path string, disp dispatcher, readTimeout time.Duration) {

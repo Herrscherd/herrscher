@@ -498,17 +498,23 @@ account was stored has no account, so it is counted when no filter is set and le
 by a filter it cannot match, as an unaccounted turn is. `--json` prints the same
 figures as structured data for a script.
 
-The turns are priced from the LiteLLM price list. A request whose context (input, cache
+The turns read from the transcripts are priced from the LiteLLM price list. A request whose context (input, cache
 read and cache write together) goes past a long context threshold of its model is priced
 at the long context rates the list gives for that threshold, for example the
 `input_cost_per_token_above_200k_tokens` of a model billed higher past 200k tokens. A
 rate the list leaves out for that threshold stays at the base rate.
 
 The limits view reads the quota windows of every account in parallel, and a reading
-shared by several callers stops after ten seconds. `HERRSCHER_LIMITS_TIMEOUT` sets
-another cap, as a Go duration (`30s`, `1m`); a malformed or non-positive value is
-reported and the default applies. A reading that ends after its callers gave up is still
-kept, so the next call shows it.
+shared by several callers stops after ten seconds: a vendor slower than that shows a
+failed reading. `HERRSCHER_LIMITS_TIMEOUT`, read by the daemon when it starts, sets
+another cap as a Go duration between `1s` and `5m` (`30s`, `1m`), so a change takes a
+restart of the daemon. A malformed value or one out of those bounds is reported in the
+daemon log and the default applies. A reading that ends within the cap after its callers
+gave up is still kept, so the next call shows it.
+
+The transcript index assumes a transcript only grows: a file read before resumes at the
+offset it was left at. The first start after an upgrade that changes the index format
+reads every transcript of the retention again, once.
 
 The estimated saving of a compaction is the tokens it removed, priced at the cache-read
 rate of the session's model in the LiteLLM price list, counted once per compaction. The

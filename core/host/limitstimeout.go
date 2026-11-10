@@ -9,6 +9,11 @@ import (
 // it is reported failed.
 const EnvLimitsTimeout = "HERRSCHER_LIMITS_TIMEOUT"
 
+const (
+	minLimitsTimeout = time.Second
+	maxLimitsTimeout = 5 * time.Minute
+)
+
 func limitsTimeout(getenv func(string) string) time.Duration {
 	value := getenv(EnvLimitsTimeout)
 	if value == "" {
@@ -21,6 +26,9 @@ func limitsTimeout(getenv func(string) string) time.Duration {
 		return 0
 	case duration <= 0:
 		slog.Warn("usage: limits timeout ignored", "err", &nonPositiveDurationError{Source: EnvLimitsTimeout, Duration: duration})
+		return 0
+	case duration < minLimitsTimeout || duration > maxLimitsTimeout:
+		slog.Warn("usage: limits timeout ignored", "err", &durationOutOfRangeError{Source: EnvLimitsTimeout, Duration: duration, Min: minLimitsTimeout, Max: maxLimitsTimeout})
 		return 0
 	}
 	return duration

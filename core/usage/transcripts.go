@@ -294,7 +294,7 @@ func (x *TranscriptIndex) prune(cutoff time.Time) {
 		file.Records = kept
 	}
 	for key, seenAt := range x.seen {
-		if seenAt < cutoff.Unix() {
+		if seenAt < hour.Unix() {
 			delete(x.seen, key)
 			x.changed = true
 		}

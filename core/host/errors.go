@@ -296,6 +296,17 @@ func (e *nonPositiveDurationError) Error() string {
 	return fmt.Sprintf("%s must be positive, got %s", e.Source, e.Duration)
 }
 
+type durationOutOfRangeError struct {
+	Source   string
+	Duration time.Duration
+	Min      time.Duration
+	Max      time.Duration
+}
+
+func (e *durationOutOfRangeError) Error() string {
+	return fmt.Sprintf("%s must be between %s and %s, got %s", e.Source, e.Min, e.Max, e.Duration)
+}
+
 type worktreeFlagsError struct {
 	Sub string
 }

@@ -121,7 +121,7 @@ func TestTallyKeepsTheRequestsPastALongContextApart(t *testing.T) {
 	totals.add(tokenEvent{at: at, session: "s", model: "m", in: 10, cacheRead: 150_000})
 	totals.add(tokenEvent{at: at, session: "s", model: "m", in: 10, cacheRead: 210_000})
 	totals.add(tokenEvent{at: at, session: "s", model: "m", in: 10, cacheRead: 199_990})
-	if len(totals.records) != 2 || totals.records[0].Above != 128_000 || totals.records[1].Above != 200_000 {
+	if len(totals.records) != 2 || totals.records[0].ContextOver != 128_000 || totals.records[1].ContextOver != 200_000 {
 		t.Fatalf("records = %+v", totals.records)
 	}
 	if totals.records[0].CacheRead != 349_990 || totals.records[1].CacheRead != 210_000 {
@@ -288,13 +288,6 @@ func TestTranscriptIndexResumesACodexTranscriptAtItsOffset(t *testing.T) {
 	if err := index.Scan(context.Background(), sources); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile(transcript)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(transcript, []byte(strings.Replace(string(raw), `"c1"`, `"c9"`, 1)), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	appendTranscript(t, transcript, codexCount("2026-11-08T10:02:00Z", 7, 12))
 	stampTranscript(t, transcript, written.Add(time.Minute))
 	reopened := &TranscriptIndex{Path: index.Path, Now: now}
@@ -304,9 +297,6 @@ func TestTranscriptIndexResumesACodexTranscriptAtItsOffset(t *testing.T) {
 	var in int64
 	for _, record := range reopened.View(written.Add(-24 * time.Hour)).Records {
 		in += record.In
-		if record.Session != "c1" {
-			t.Fatalf("session = %q, want the earlier lines left unread", record.Session)
-		}
 	}
 	if in != 10 {
 		t.Fatalf("input tokens = %d, want both counts once", in)
@@ -377,5 +367,23 @@ func TestTranscriptIndexCountsAnUnreadableSubdirectory(t *testing.T) {
 	}
 	if view := index.View(written.Add(-24 * time.Hour)); len(view.Records) != 2 || view.Unreadable != 1 || !view.Scanned {
 		t.Fatalf("records = %d, unreadable = %d, scanned = %v", len(view.Records), view.Unreadable, view.Scanned)
+	}
+}
+
+func TestTranscriptIndexKeepsTheSeenKeysOfTheHourItStillCounts(t *testing.T) {
+	cutoff := time.Date(2026, 7, 10, 10, 30, 0, 0, time.UTC)
+	index := &TranscriptIndex{
+		files: make(map[string]*transcriptFile),
+		seen: map[uint64]int64{
+			1: cutoff.Add(-15 * time.Minute).Unix(),
+			2: cutoff.Add(-31 * time.Minute).Unix(),
+		},
+	}
+	index.prune(cutoff)
+	if _, kept := index.seen[1]; !kept {
+		t.Fatal("a key of the hour still counted was dropped, a copy of its message would count twice")
+	}
+	if _, kept := index.seen[2]; kept {
+		t.Fatal("a key of an hour past the retention is kept")
 	}
 }

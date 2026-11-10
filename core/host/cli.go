@@ -134,12 +134,9 @@ func wireManagerHandler(ctx context.Context, hdl *manager.Handler, hostState *st
 
 func launchVendor(models *ModelDiscovery, vendor, modelID, cmd string) (string, error) {
 	plugins := contracts.Default.Backends()
-	chosen, _, err := chooseVendor(vendor, modelID, plugins, models)
+	chosen, _, err := chooseVendor(vendor, cmd, modelID, plugins, models)
 	if err != nil {
 		return "", err
-	}
-	if chosen == "" {
-		chosen = vendorOfCmd(cmd, plugins)
 	}
 	if chosen != "" {
 		return chosen, nil

@@ -55,12 +55,23 @@ func TestLaunchVendorResolvesTheVendorFromTheRequestThenTheCommand(t *testing.T)
 
 func TestLaunchVendorReadsTheEnvironmentVendorWhenNothingIsRequested(t *testing.T) {
 	registerBackendKinds(t, "claude", "codex")
-	t.Setenv("HERRSCHER_BACKEND", "codex")
-	got, err := launchVendor(nil, "", "", "claude --x")
-	if err != nil {
-		t.Fatalf("launchVendor: %v", err)
+	cases := []struct {
+		name, env, cmd, want string
+	}{
+		{name: "the environment vendor is used when the command names none", env: "codex", want: "codex"},
+		{name: "the command beats the environment vendor", env: "codex", cmd: "claude --x", want: "claude"},
+		{name: "the command behind env beats the environment vendor", env: "codex", cmd: "env FOO=1 claude", want: "claude"},
 	}
-	if got != "codex" {
-		t.Fatalf("launchVendor with HERRSCHER_BACKEND=codex = %q, want codex (the decision left open in the review)", got)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("HERRSCHER_BACKEND", tc.env)
+			got, err := launchVendor(nil, "", "", tc.cmd)
+			if err != nil {
+				t.Fatalf("launchVendor: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("launchVendor(env=%q, cmd=%q) = %q, want %q", tc.env, tc.cmd, got, tc.want)
+			}
+		})
 	}
 }

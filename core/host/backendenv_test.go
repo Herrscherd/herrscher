@@ -414,7 +414,7 @@ func TestBuildBackendForRefusesAccountWithRemoteBackend(t *testing.T) {
 func TestChooseVendorDerivesTheVendorFromTheModel(t *testing.T) {
 	t.Setenv("HERRSCHER_BACKEND", "")
 
-	vendor, entry, err := chooseVendor("", "b-native", fakePlugins(), nil)
+	vendor, entry, err := chooseVendor("", "", "b-native", fakePlugins(), nil)
 	if err != nil {
 		t.Fatalf("chooseVendor: %v", err)
 	}
@@ -424,7 +424,7 @@ func TestChooseVendorDerivesTheVendorFromTheModel(t *testing.T) {
 	if entry.ID != "b-native" {
 		t.Fatalf("entry %q, want b-native", entry.ID)
 	}
-	if _, _, err := chooseVendor("alpha", "b-native", fakePlugins(), nil); err == nil {
+	if _, _, err := chooseVendor("alpha", "", "b-native", fakePlugins(), nil); err == nil {
 		t.Fatal("a model requested on a vendor that does not own it must be refused")
 	}
 }
@@ -432,7 +432,7 @@ func TestChooseVendorDerivesTheVendorFromTheModel(t *testing.T) {
 func TestChooseVendorReadsTheBackendEnvironment(t *testing.T) {
 	t.Setenv("HERRSCHER_BACKEND", "beta")
 
-	vendor, _, err := chooseVendor("", "", fakePlugins(), nil)
+	vendor, _, err := chooseVendor("", "", "", fakePlugins(), nil)
 	if err != nil {
 		t.Fatalf("chooseVendor: %v", err)
 	}

@@ -260,12 +260,9 @@ func buildBackend(ctx context.Context, req BackendRequest) (contracts.Backend, f
 	if req.ModelID == "" && ResolvePolicy(envx.Getenv) == contracts.PolicyGatewayOnly {
 		return nil, noRelease, errGatewayOnlyNoModel
 	}
-	desired, entry, err := chooseVendor(req.Vendor, req.ModelID, plugins, req.Models)
+	desired, entry, err := chooseVendor(req.Vendor, req.Cmd, req.ModelID, plugins, req.Models)
 	if err != nil {
 		return nil, noRelease, err
-	}
-	if desired == "" {
-		desired = vendorOfCmd(req.Cmd, plugins)
 	}
 	route, err := routeFor(req.ModelID, entry, req.Keys)
 	if err != nil {
@@ -323,13 +320,13 @@ func (r modelRoute) lease() func() {
 	return r.grant
 }
 
-func chooseVendor(requested, modelID string, plugins []contracts.Plugin, models *ModelDiscovery) (string, CatalogEntry, error) {
+func chooseVendor(requested, cmd, modelID string, plugins []contracts.Plugin, models *ModelDiscovery) (string, CatalogEntry, error) {
+	if modelID == "" {
+		return firstNonEmpty(requested, vendorOfCmd(cmd, plugins), os.Getenv("HERRSCHER_BACKEND")), CatalogEntry{}, nil
+	}
 	vendor := requested
 	if vendor == "" {
 		vendor = os.Getenv("HERRSCHER_BACKEND")
-	}
-	if modelID == "" {
-		return vendor, CatalogEntry{}, nil
 	}
 	entry, err := LookupModelWith(plugins, ResolvePolicy(envx.Getenv), models.Sources(), modelID)
 	if err != nil {
@@ -479,24 +476,70 @@ func commandWords(cmd string) []string {
 	return words
 }
 
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 func commandBinary(words []string) string {
-	if len(words) == 0 {
+	idx := skipEnvAssignments(words)
+	if idx >= len(words) {
 		return ""
 	}
-	if filepath.Base(words[0]) != "env" {
-		return words[0]
+	if filepath.Base(words[idx]) != "env" {
+		return words[idx]
 	}
-	for _, word := range words[1:] {
-		if !isEnvAssignment(word) {
+	return envCommand(words[idx+1:])
+}
+
+func skipEnvAssignments(words []string) int {
+	idx := 0
+	for idx < len(words) && isEnvAssignment(words[idx]) {
+		idx++
+	}
+	return idx
+}
+
+func envCommand(args []string) string {
+	for idx := 0; idx < len(args); idx++ {
+		word := args[idx]
+		switch {
+		case word == "--":
+			if idx+1 < len(args) {
+				return args[idx+1]
+			}
+			return ""
+		case word == "--unset" || word == "--chdir":
+			idx++
+		case strings.HasPrefix(word, "--"):
+		case strings.HasPrefix(word, "-") && len(word) > 1:
+			if shortEnvOptionTakesNext(word) {
+				idx++
+			}
+		case isEnvAssignment(word):
+		default:
 			return word
 		}
 	}
 	return ""
 }
 
+func shortEnvOptionTakesNext(word string) bool {
+	for idx := 1; idx < len(word); idx++ {
+		if word[idx] == 'u' || word[idx] == 'C' {
+			return idx == len(word)-1
+		}
+	}
+	return false
+}
+
 func isEnvAssignment(word string) bool {
 	name, _, found := strings.Cut(word, "=")
-	return found && name != ""
+	return found && name != "" && !strings.HasPrefix(word, "-")
 }
 
 func selectBackend(desired string, plugins []contracts.Plugin) (contracts.Plugin, error) {

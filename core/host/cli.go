@@ -111,7 +111,7 @@ func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
 
 func newManagerHandler(deps Deps, options Options, partDir string, hostState *state.State, sup *supervisor.Supervisor, worktrees manager.Worktrees, updater serviceUpdater, agents *agent.Store, models *ModelDiscovery) *manager.Handler {
 	options = withOperatorLanguage(options)
-	launch := func(vendor, modelID string) (string, error) { return launchVendor(models, vendor, modelID) }
+	launch := func(vendor, modelID, cmd string) (string, error) { return launchVendor(models, vendor, modelID, cmd) }
 	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, validateProfileChoice, launch)
 	hdl.SetRemoteBackend(options.RemoteCategories[contracts.CategoryBackend])
 	hdl.SetLanguage(options.live.Get())
@@ -132,11 +132,14 @@ func wireManagerHandler(ctx context.Context, hdl *manager.Handler, hostState *st
 	hdl.SetGateResolver(GateFor)
 }
 
-func launchVendor(models *ModelDiscovery, vendor, modelID string) (string, error) {
+func launchVendor(models *ModelDiscovery, vendor, modelID, cmd string) (string, error) {
 	plugins := contracts.Default.Backends()
 	chosen, _, err := chooseVendor(vendor, modelID, plugins, models)
 	if err != nil {
 		return "", err
+	}
+	if chosen == "" {
+		chosen = vendorOfCmd(cmd, plugins)
 	}
 	if chosen != "" {
 		return chosen, nil

@@ -42,7 +42,7 @@ func TestAccountGateRefusesAnUnknownProfileBeforeCreate(t *testing.T) {
 	}
 }
 
-func newAccountHandler(t *testing.T, validate func(vendor, profile string) error, resolve func(vendor, modelID string) (string, error)) *Handler {
+func newAccountHandler(t *testing.T, validate func(vendor, profile string) error, resolve func(vendor, modelID, cmd string) (string, error)) *Handler {
 	t.Helper()
 	return NewHandler(nil, nil, nil, nil, nil, agent.NewStore(t.TempDir()), nil, "", "", nil, validate, resolve)
 }
@@ -52,7 +52,7 @@ func TestAccountWithoutAResolvableVendorIsRefused(t *testing.T) {
 	if err := newAccountHandler(t, accept, nil).checkAccount(runtimeChoice{}, "ghost"); !errors.Is(err, ErrAccountVendor) {
 		t.Fatalf("checkAccount without a vendor: err %v, want ErrAccountVendor", err)
 	}
-	unresolved := func(string, string) (string, error) { return "", errors.New("no backend") }
+	unresolved := func(string, string, string) (string, error) { return "", errors.New("no backend") }
 	if err := newAccountHandler(t, accept, unresolved).checkAccount(runtimeChoice{}, "ghost"); !errors.Is(err, ErrAccountVendor) {
 		t.Fatalf("checkAccount with an unresolved vendor: err %v, want ErrAccountVendor", err)
 	}
@@ -63,12 +63,26 @@ func TestAccountIsCheckedAgainstTheResolvedVendor(t *testing.T) {
 	h := newAccountHandler(t, func(vendor, _ string) error {
 		checked = vendor
 		return nil
-	}, func(string, string) (string, error) { return "codex", nil })
+	}, func(string, string, string) (string, error) { return "codex", nil })
 	if err := h.checkAccount(runtimeChoice{}, "perso"); err != nil {
 		t.Fatal(err)
 	}
 	if checked != "codex" {
 		t.Fatalf("account checked against %q, want the resolved vendor codex", checked)
+	}
+}
+
+func TestAccountResolutionIsGivenTheSessionCommand(t *testing.T) {
+	var given string
+	h := newAccountHandler(t, func(string, string) error { return nil }, func(_, _, cmd string) (string, error) {
+		given = cmd
+		return "claude", nil
+	})
+	if err := h.checkAccount(runtimeChoice{cmd: "claude --effort medium"}, "perso"); err != nil {
+		t.Fatal(err)
+	}
+	if given != "claude --effort medium" {
+		t.Fatalf("vendor resolved from cmd %q, want the session command", given)
 	}
 }
 

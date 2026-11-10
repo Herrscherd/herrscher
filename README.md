@@ -246,6 +246,12 @@ the agent's own shell reaches the daemon that started it. Each session forwards
 its own path and each launch owns its connection, so a second session on the same
 host cannot take the first one's socket away.
 
+The socket paths carry the instance, so a session forwarded by a build from before
+that change keeps dialling the old unscoped `/tmp/herrscher-control-<session>` path
+while the new daemon listens on the instance-scoped one. Restart each remote session
+once after the upgrade to forward the new paths. Until then its bridge cannot reach
+the daemon, and the session shows no answer.
+
 Three refusals replace a blind start: a host that was never provisioned, a host
 running a different build than this daemon would ship, and `--clone` combined
 with `--host`, since the forge client runs here and would clone onto the wrong

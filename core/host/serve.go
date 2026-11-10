@@ -213,6 +213,9 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	if err != nil {
 		return wrapHost(err, "serve.resolve_instance", nil)
 	}
+	if takenErr := refuseTakenInstance(ctx, instID); takenErr != nil {
+		return takenErr
+	}
 
 	if options.DefaultGateways == nil {
 		options.DefaultGateways = nonTerminalKinds(gws)

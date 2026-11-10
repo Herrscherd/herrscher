@@ -23,6 +23,13 @@ func SafeSessionName(session string) string {
 	}, session)
 }
 
+func instancePrefix(instanceID string) string {
+	if instanceID == "" {
+		return ""
+	}
+	return SafeSessionName(instanceID) + "-"
+}
+
 const remoteSocketDir = "/tmp"
 
 // RemoteSocketPath is SocketPath for another machine.

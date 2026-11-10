@@ -48,3 +48,27 @@ func TestClaimSocketPathClearsAStaleSocket(t *testing.T) {
 		t.Fatalf("stale socket still present: %v", err)
 	}
 }
+
+func TestADaemonRefusesAnInstanceAnotherDaemonServes(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	if err := refuseTakenInstance(context.Background(), "t1"); err != nil {
+		t.Fatalf("a free instance was refused: %v", err)
+	}
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", CommandSocketPath("t1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { logCleanup(listener.Close()) })
+	go func() {
+		for {
+			conn, acceptErr := listener.Accept()
+			if acceptErr != nil {
+				return
+			}
+			logCleanup(conn.Close())
+		}
+	}()
+	if err := refuseTakenInstance(context.Background(), "t1"); !errors.Is(err, errSocketTaken) {
+		t.Fatalf("refuseTakenInstance = %v, want errSocketTaken", err)
+	}
+}

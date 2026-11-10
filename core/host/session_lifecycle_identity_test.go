@@ -89,7 +89,7 @@ func TestSameNameSessionCanRebindAfterTeardown(t *testing.T) {
 
 	h.goLive(t.Context(), state.Session{Name: name, Incarnation: "new-incarnation"})
 	awaitRegisteredIncarnation(t, sessionTab, name, "new-incarnation")
-	conn, err := control.Dial(control.SocketPath(name))
+	conn, err := control.Dial(control.SocketPath("", name))
 	if err != nil {
 		t.Fatalf("replacement control listener is not reachable: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestSessionSocketOutlivesTheContextThatCreatedIt(t *testing.T) {
 	h.goLive(ctx, state.Session{Name: name, Incarnation: "incarnation"})
 	cancel()
 	<-time.After(200 * time.Millisecond)
-	conn, err := control.Dial(control.SocketPath(name))
+	conn, err := control.Dial(control.SocketPath("", name))
 	if err != nil {
 		t.Fatalf("the session socket closed with the creating context: %v", err)
 	}

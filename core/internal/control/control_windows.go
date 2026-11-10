@@ -9,8 +9,10 @@ import (
 	"github.com/Microsoft/go-winio"
 )
 
-func SocketPath(session string) string {
-	return `\\.\pipe\herrscher-control-` + SafeSessionName(session)
+// SocketPath returns the named pipe used to control the given session of the
+// daemon instanceID.
+func SocketPath(instanceID, session string) string {
+	return `\\.\pipe\herrscher-control-` + instancePrefix(instanceID) + SafeSessionName(session)
 }
 
 func listenControl(_ context.Context, path string) (net.Listener, error) {

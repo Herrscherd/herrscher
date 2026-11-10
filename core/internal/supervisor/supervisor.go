@@ -90,7 +90,7 @@ type supervisedRun struct {
 func (s *Supervisor) bridgeArgs(sess state.Session) []string {
 	args := []string{
 		"bridge", "-c", sess.ChannelID, "--cmd", sess.Cmd, "--session", sess.Name,
-		"--hub-socket", control.SocketPath(sess.Name),
+		"--hub-socket", control.SocketPath(s.instanceID, sess.Name),
 	}
 	if p := sess.MemoryProject; p != "" {
 		args = append(args, "--project", p)
@@ -379,7 +379,7 @@ func (s *Supervisor) placementFor(sess state.Session) (Placement, error) {
 func (s *Supervisor) forwardsFor(sess state.Session) []runner.Forward {
 	fwd := []runner.Forward{{
 		Remote: control.RemoteSocketPath(sess.Name),
-		Local:  control.SocketPath(sess.Name),
+		Local:  control.SocketPath(s.instanceID, sess.Name),
 	}}
 	if s.sessionCmdSocket != nil {
 		fwd = append(fwd, runner.Forward{

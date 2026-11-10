@@ -119,13 +119,12 @@ func (a *attachedDaemon) dispatch(argv []string) (string, error) {
 
 type attachRunner struct {
 	log     *slog.Logger
-	logPath string
 	connect func(ctx context.Context, instance, statePath string, lang i18n.Language) (*attachedDaemon, error)
 	run     func(ctx context.Context, cancel context.CancelFunc, backend tui.Backend, opts ...tui.Option) error
 }
 
 func newAttachRunner(log *slog.Logger) attachRunner {
-	return attachRunner{log: log, logPath: clientLogPath(), connect: newAttachedDaemon, run: tui.Run}
+	return attachRunner{log: log, connect: newAttachedDaemon, run: tui.Run}
 }
 
 func (r attachRunner) runAttached(ctx context.Context, instance, statePath string, opts ...tui.Option) error {
@@ -135,13 +134,13 @@ func (r attachRunner) runAttached(ctx context.Context, instance, statePath strin
 	if err != nil {
 		return err
 	}
-	return withClientLog(r.log, r.logPath, func() error {
+	return withClientLog(r.log, clientLogPath(statePath), func() error {
 		return r.run(ctx, cancel, daemon, append([]tui.Option{tui.Logger(r.log), tui.Language(daemon.lang)}, opts...)...)
 	})
 }
 
-func clientLogPath() string {
-	return filepath.Join(filepath.Dir(host.DefaultStatePath()), "client.log")
+func clientLogPath(statePath string) string {
+	return filepath.Join(filepath.Dir(statePath), "client.log")
 }
 
 const maxLogFileBytes = 1 << 20

@@ -154,10 +154,11 @@ func TestClientLogAppendsBelowTheCap(t *testing.T) {
 }
 
 func TestRunAttachedRoutesTheTUIThroughTheClientLog(t *testing.T) {
-	clientLog := filepath.Join(t.TempDir(), "client.log")
+	stateDir := t.TempDir()
+	statePath := filepath.Join(stateDir, "state.json")
+	clientLog := filepath.Join(stateDir, "client.log")
 	runner := attachRunner{
-		log:     silentLogger(),
-		logPath: clientLog,
+		log: silentLogger(),
 		connect: func(ctx context.Context, _, _ string, _ i18n.Language) (*attachedDaemon, error) {
 			return &attachedDaemon{done: ctx.Done(), events: make(chan tui.RoutedEvent)}, nil
 		},
@@ -167,7 +168,7 @@ func TestRunAttachedRoutesTheTUIThroughTheClientLog(t *testing.T) {
 		},
 	}
 	onTerminal, err := captureTerminal(t, func() error {
-		return runner.runAttached(context.Background(), "instance", "")
+		return runner.runAttached(context.Background(), "instance", statePath)
 	})
 	if err != nil {
 		t.Fatalf("runAttached: %v", err)

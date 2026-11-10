@@ -79,3 +79,27 @@ func TestNoticeKeepsIdentifierUnderscoresOnScreen(t *testing.T) {
 		t.Fatalf("identifier underscores were eaten: %q", out)
 	}
 }
+
+func TestInlineUnderscoreRuleStylesOnlyDelimitedPhrases(t *testing.T) {
+	plain, strong, code := lipgloss.NewStyle(), lipgloss.NewStyle().Bold(true), lipgloss.NewStyle().Italic(true)
+	cases := []struct {
+		name, text, want string
+	}{
+		{name: "dunder names stay", text: "use __init__ and __main__ blocks", want: "use __init__ and __main__ blocks"},
+		{name: "dunder names around a phrase stay", text: "__file__ ok __name__ here", want: "__file__ ok __name__ here"},
+		{name: "a word before the opening stays", text: "x__a b__", want: "x__a b__"},
+		{name: "a word after the closing stays", text: "a __b c__d", want: "a __b c__d"},
+		{name: "a path after the closing stays", text: "__a b__/c", want: "__a b__/c"},
+		{name: "a dash after the closing stays", text: "__a b__-c", want: "__a b__-c"},
+		{name: "punctuation after the closing is a boundary", text: "see __a b__.", want: "see " + strong.Render("a b") + "."},
+		{name: "a phrase after dunder names is styled", text: "__init__.py and __main__.py run __a b__", want: "__init__.py and __main__.py run " + strong.Render("a b")},
+		{name: "empty dunder pairs stay", text: "__a__ b __c d__", want: "__a__ b " + strong.Render("c d")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := styleInlineLine(tc.text, plain, strong, code); got != tc.want {
+				t.Fatalf("styleInlineLine(%q) = %q, want %q", tc.text, got, tc.want)
+			}
+		})
+	}
+}

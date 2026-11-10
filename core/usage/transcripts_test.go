@@ -121,7 +121,7 @@ func TestTallyKeepsTheRequestsPastALongContextApart(t *testing.T) {
 	totals.add(tokenEvent{at: at, session: "s", model: "m", in: 10, cacheRead: 150_000})
 	totals.add(tokenEvent{at: at, session: "s", model: "m", in: 10, cacheRead: 210_000})
 	totals.add(tokenEvent{at: at, session: "s", model: "m", in: 10, cacheRead: 199_990})
-	if len(totals.records) != 2 || totals.records[0].ContextOver != 128_000 || totals.records[1].ContextOver != 200_000 {
+	if len(totals.records) != 2 || totals.records[0].LongTier != 128_000 || totals.records[1].LongTier != 200_000 {
 		t.Fatalf("records = %+v", totals.records)
 	}
 	if totals.records[0].CacheRead != 349_990 || totals.records[1].CacheRead != 210_000 {

@@ -74,8 +74,8 @@ func TestPriceAppliesTheRatesOfTheLongestContextReached(t *testing.T) {
 	}
 	records := []Record{
 		{Model: "gemini-2.5-pro", In: 1000, Out: 100, CacheRead: 1000},
-		{Model: "gemini-2.5-pro", In: 1000, Out: 100, CacheRead: 1000, ContextOver: 128_000},
-		{Model: "gemini-2.5-pro", In: 1000, Out: 100, CacheRead: 1000, ContextOver: 200_000},
+		{Model: "gemini-2.5-pro", In: 1000, Out: 100, CacheRead: 1000, LongTier: 128_000},
+		{Model: "gemini-2.5-pro", In: 1000, Out: 100, CacheRead: 1000, LongTier: 200_000},
 	}
 	book.Price(records)
 	want := []CostSplit{

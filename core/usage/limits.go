@@ -73,9 +73,10 @@ type AccountLimits struct {
 // LimitsCache reads the limits of the accounts and reuses each reading for LimitsTTL, or
 // for LimitsFailureTTL when the reading failed. Callers asking for one account while it
 // is read share that reading, which no caller cancels and which stops at Timeout, ten
-// seconds when unset. A reading that ends within Timeout after its callers gave up is
-// still kept, so the next caller gets it, while one that runs past Timeout fails. A reader that ignores its context is left to finish, and no
-// second reading of that account starts until it does.
+// seconds when unset, counted from its start. A reading that ends before that cap is
+// kept even when its callers left, so the next caller gets it, while one that runs past
+// the cap fails. A reader that ignores its context is left to finish, and no second
+// reading of that account starts until it does.
 type LimitsCache struct {
 	Now      func() time.Time
 	Timeout  time.Duration

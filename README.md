@@ -509,8 +509,9 @@ shared by several callers stops after ten seconds: a vendor slower than that sho
 failed reading. `HERRSCHER_LIMITS_TIMEOUT`, read by the daemon when it starts, sets
 another cap as a Go duration between `1s` and `5m` (`30s`, `1m`), so a change takes a
 restart of the daemon. A malformed value or one out of those bounds is reported in the
-daemon log and the default applies. A reading that ends within the cap after its callers
-gave up is still kept, so the next call shows it.
+daemon log and the default applies. The cap is counted from the start of the reading, and
+a reading that ends before it is kept even when its callers gave up, so the next call
+shows it.
 
 The transcript index assumes a transcript only grows: a file read before resumes at the
 offset it was left at. The first start after an upgrade that changes the index format

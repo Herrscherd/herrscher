@@ -268,7 +268,7 @@ func (r Rates) cost(record Record) (CostSplit, float64) {
 	if record.Fast {
 		speed = r.Fast
 	}
-	rates := r.at(record.ContextOver)
+	rates := r.at(record.LongTier)
 	hour := min(record.CacheCreateHour, record.CacheCreate)
 	split := CostSplit{
 		In:         float64(record.In) * rates.In * speed,

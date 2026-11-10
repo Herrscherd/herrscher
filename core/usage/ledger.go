@@ -46,7 +46,7 @@ type Record struct {
 
 	CacheCreateHour int64       `json:"cacheCreateHour,omitempty"`
 	Fast            bool        `json:"fast,omitempty"`
-	ContextOver     int64       `json:"context_over,omitempty"`
+	LongTier        int64       `json:"longTier,omitempty"`
 	Split           CostSplit   `json:"split,omitzero"`
 	Saved           float64     `json:"saved,omitempty"`
 	Compaction      *Compaction `json:"compaction,omitempty"`

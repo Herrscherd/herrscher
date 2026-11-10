@@ -127,6 +127,7 @@ func openCommandSocket(ctx context.Context, path string) (ownedListener, error) 
 
 type ownedListener struct {
 	net.Listener
+
 	path string
 	own  os.FileInfo
 }

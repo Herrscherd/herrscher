@@ -303,6 +303,7 @@ func TestSocketPathsAreInstanceScoped(t *testing.T) {
 }
 
 func tempStatePath(t *testing.T) string {
+	t.Helper()
 	return filepath.Join(t.TempDir(), "state.json")
 }
 

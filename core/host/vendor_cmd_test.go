@@ -1,20 +1,13 @@
 package host
 
 import (
-	"context"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 func TestVendorOfCmdReadsTheBinaryBehindEnvAndQuotes(t *testing.T) {
-	plugin := contracts.Plugin{
-		Manifest: contracts.Manifest{Kind: "claude", Category: contracts.CategoryBackend, Config: []contracts.Setting{{Key: "cmd", Default: "claude"}}},
-		Backend: func(context.Context, contracts.PluginConfig) (contracts.Backend, error) {
-			return nil, nil
-		},
-	}
-	plugins := []contracts.Plugin{plugin}
+	plugins := []contracts.Plugin{testBackendPlugin("claude")}
 	cases := map[string]string{
 		"claude --model x":             "claude",
 		"/usr/bin/claude":              "claude",

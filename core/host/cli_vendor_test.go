@@ -2,10 +2,22 @@ package host
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
+
+var errTestBackendNotStarted = errors.New("test backend is not started")
+
+func testBackendPlugin(kind string) contracts.Plugin {
+	return contracts.Plugin{
+		Manifest: contracts.Manifest{Kind: kind, Category: contracts.CategoryBackend, Config: []contracts.Setting{{Key: "cmd", Default: kind}}},
+		Backend: func(context.Context, contracts.PluginConfig) (contracts.Backend, error) {
+			return nil, errTestBackendNotStarted
+		},
+	}
+}
 
 func registerBackendKinds(t *testing.T, kinds ...string) {
 	t.Helper()
@@ -13,12 +25,7 @@ func registerBackendKinds(t *testing.T, kinds ...string) {
 	t.Cleanup(func() { contracts.Default = saved })
 	contracts.Default = contracts.Registry{}
 	for _, kind := range kinds {
-		contracts.Default.Register(contracts.Plugin{
-			Manifest: contracts.Manifest{Kind: kind, Category: contracts.CategoryBackend, Config: []contracts.Setting{{Key: "cmd", Default: kind}}},
-			Backend: func(context.Context, contracts.PluginConfig) (contracts.Backend, error) {
-				return nil, nil
-			},
-		})
+		contracts.Default.Register(testBackendPlugin(kind))
 	}
 }
 

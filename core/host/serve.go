@@ -192,6 +192,30 @@ func (options Options) operatorLanguage() i18n.Language {
 	return options.Language
 }
 
+func claimInstance(ctx context.Context, instID string) (func(), error) {
+	release, err := lockInstance(instID)
+	if err != nil {
+		return nil, err
+	}
+	if takenErr := refuseTakenInstance(ctx, instID); takenErr != nil {
+		release()
+		return nil, takenErr
+	}
+	return release, nil
+}
+
+func prepareTurnOutboxes(log *slog.Logger, sessions *sessionTable, statePath string) error {
+	outboxRoot, err := OutboxRoot(statePath)
+	if err != nil {
+		return wrapHost(err, "serve.outbox", nil)
+	}
+	sessions.outboxRoot = outboxRoot
+	if purgeErr := outbox.Purge(outboxRoot, time.Now()); purgeErr != nil {
+		log.Warn("stale turn outboxes not purged", "err", purgeErr)
+	}
+	return nil
+}
+
 func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, options Options) error {
 	base := obs.Stderr(false)
 	defer closeGateways(ctx, closers, base)
@@ -213,14 +237,11 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	if err != nil {
 		return wrapHost(err, "serve.resolve_instance", nil)
 	}
-	releaseInstance, err := lockInstance(instID)
+	releaseInstance, err := claimInstance(ctx, instID)
 	if err != nil {
 		return err
 	}
 	defer releaseInstance()
-	if takenErr := refuseTakenInstance(ctx, instID); takenErr != nil {
-		return takenErr
-	}
 
 	if options.DefaultGateways == nil {
 		options.DefaultGateways = nonTerminalKinds(gws)
@@ -237,13 +258,8 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	}
 	sessions.compaction = policy
 	sessions.store = store
-	outboxRoot, err := OutboxRoot(options.StatePath)
-	if err != nil {
-		return wrapHost(err, "serve.outbox", nil)
-	}
-	sessions.outboxRoot = outboxRoot
-	if purgeErr := outbox.Purge(sessions.outboxRoot, time.Now()); purgeErr != nil {
-		log.Warn("stale turn outboxes not purged", "err", purgeErr)
+	if outboxErr := prepareTurnOutboxes(log, sessions, options.StatePath); outboxErr != nil {
+		return outboxErr
 	}
 	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, store.Home)}, options, store, sup, instID, options.ContributedCommands, approvals, sessions)
 	if err != nil {

@@ -16,8 +16,12 @@ func TestRunReturnsNilWhenItsContextIsCancelled(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		_ = reader.Close()
-		_ = writer.Close()
+		if closeErr := reader.Close(); closeErr != nil {
+			t.Log(closeErr)
+		}
+		if closeErr := writer.Close(); closeErr != nil {
+			t.Log(closeErr)
+		}
 	})
 	previous := os.Stdin
 	os.Stdin = reader

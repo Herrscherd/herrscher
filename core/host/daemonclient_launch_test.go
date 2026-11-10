@@ -50,12 +50,12 @@ func TestLaunchProjectWithoutAWorkspaceKeepsTheDaemonPlacement(t *testing.T) {
 }
 
 func TestLaunchProjectThroughASymlinkedWorkspace(t *testing.T) {
-	real := t.TempDir()
+	resolved := t.TempDir()
 	workspace := filepath.Join(t.TempDir(), "ws-link")
-	if err := os.Symlink(real, workspace); err != nil {
+	if err := os.Symlink(resolved, workspace); err != nil {
 		t.Fatal(err)
 	}
-	repo := filepath.Join(real, "herrscher")
+	repo := filepath.Join(resolved, "herrscher")
 	if err := os.MkdirAll(repo, 0o755); err != nil {
 		t.Fatal(err)
 	}

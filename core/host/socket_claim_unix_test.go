@@ -106,8 +106,8 @@ func TestLockInstanceRefusesASecondDaemonOfTheSameInstance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first lockInstance: %v", err)
 	}
-	if _, err := lockInstance("t5"); !errors.Is(err, errSocketTaken) {
-		t.Fatalf("second lockInstance = %v, want errSocketTaken", err)
+	if _, secondErr := lockInstance("t5"); !errors.Is(secondErr, errSocketTaken) {
+		t.Fatalf("second lockInstance = %v, want errSocketTaken", secondErr)
 	}
 	release()
 	again, err := lockInstance("t5")
@@ -144,8 +144,8 @@ func TestShutdownLeavesASocketANewerDaemonOwns(t *testing.T) {
 		t.Fatal(err)
 	}
 	go acceptCommands(ctx, listener, &fakeDispatcher{out: "old"}, time.Second)
-	if err := os.Remove(path); err != nil {
-		t.Fatal(err)
+	if removeErr := os.Remove(path); removeErr != nil {
+		t.Fatal(removeErr)
 	}
 	newer, err := listenCommandSocket(context.Background(), path)
 	if err != nil {

@@ -85,7 +85,7 @@ func TestADaemonRefusesAnInstanceWhoseEventsSocketIsTaken(t *testing.T) {
 func TestServeHubSocketsStopsTheDaemonOnATakenEventsSocket(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	answeringListener(t, EventsSocketPath("t3"))
-	err := serveHubSockets(context.Background(), "t3", &hub{})
+	_, err := serveHubSockets(context.Background(), "t3", &hub{})
 	if !errors.Is(err, errSocketTaken) {
 		t.Fatalf("serveHubSockets with a live events socket = %v, want errSocketTaken", err)
 	}
@@ -94,7 +94,7 @@ func TestServeHubSocketsStopsTheDaemonOnATakenEventsSocket(t *testing.T) {
 func TestServeHubSocketsStopsTheDaemonOnATakenCommandSocket(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	answeringListener(t, CommandSocketPath("t4"))
-	err := serveHubSockets(context.Background(), "t4", &hub{})
+	_, err := serveHubSockets(context.Background(), "t4", &hub{})
 	if !errors.Is(err, errSocketTaken) {
 		t.Fatalf("serveHubSockets with a live command socket = %v, want errSocketTaken", err)
 	}
@@ -143,7 +143,7 @@ func TestShutdownLeavesASocketANewerDaemonOwns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	go acceptCommands(ctx, listener, &fakeDispatcher{out: "old"}, time.Second)
+	released := acceptCommands(ctx, listener, &fakeDispatcher{out: "old"}, time.Second)
 	if removeErr := os.Remove(path); removeErr != nil {
 		t.Fatal(removeErr)
 	}
@@ -153,8 +153,32 @@ func TestShutdownLeavesASocketANewerDaemonOwns(t *testing.T) {
 	}
 	t.Cleanup(func() { logCleanup(newer.Close()) })
 	cancel()
-	time.Sleep(50 * time.Millisecond)
+	select {
+	case <-released:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the older daemon did not finish releasing its socket after shutdown")
+	}
 	if !socketAnswers(context.Background(), path) {
 		t.Fatal("the older daemon removed the socket the newer one owns on shutdown")
+	}
+}
+
+func TestServeHubSocketsReportReleasedOnlyOnceTheFilesAreGone(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	ctx, cancel := context.WithCancel(context.Background())
+	released, err := serveHubSockets(ctx, "t6", &hub{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	select {
+	case <-released:
+	case <-time.After(5 * time.Second):
+		t.Fatal("serveHubSockets did not report its sockets released after shutdown")
+	}
+	for _, path := range []string{CommandSocketPath("t6"), EventsSocketPath("t6")} {
+		if _, statErr := os.Stat(path); !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatalf("socket %q is still on disk after its release was reported: %v", path, statErr)
+		}
 	}
 }

@@ -170,17 +170,22 @@ func openEventsSocket(ctx context.Context, path string) (ownedListener, error) {
 	return listenOwned(ctx, path)
 }
 
-func acceptEvents(ctx context.Context, listener ownedListener, socket *eventSocket) {
+func acceptEvents(ctx context.Context, listener ownedListener, socket *eventSocket) <-chan struct{} {
+	released := make(chan struct{})
 	go func() {
 		<-ctx.Done()
 		listener.release()
 		socket.closeAll()
+		close(released)
 	}()
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			return
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			socket.add(conn)
 		}
-		socket.add(conn)
-	}
+	}()
+	return released
 }

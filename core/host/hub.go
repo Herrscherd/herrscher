@@ -75,21 +75,26 @@ func eventTap(publish func(string, contracts.Event), session string) func(contra
 	return func(e contracts.Event) { publish(session, e) }
 }
 
-func (h *hub) goLive(ctx context.Context, sess state.Session) {
+func (h *hub) goLive(ctx context.Context, sess state.Session) error {
 	h.lifecycle.Lock()
 	defer h.lifecycle.Unlock()
 	h.mu.Lock()
 	_, running := h.live[sess.Name]
 	h.mu.Unlock()
 	if running {
-		return
+		return nil
 	}
 	acc, err := control.Accept(context.WithoutCancel(ctx), control.SocketPath(h.instanceID, sess.Name))
 	if err != nil {
-		warnStderr("herrscher serve: session %q: control socket: %v\n", sess.Name, err)
-		return
+		return wrapHost(err, "session.go_live", map[string]any{"Name": sess.Name})
 	}
 	sctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	commands, err := openCommandSocket(sctx, SessionCommandSocketPath(h.instanceID, sess.Name))
+	if err != nil {
+		cancel()
+		logCleanup(acc.Close())
+		return wrapHost(err, "session.go_live", map[string]any{"Name": sess.Name})
+	}
 	bound := boundGateways(h.gws, effectiveKinds(h.gws, sess))
 	terms := liveModelTerms(h.st, h.models, sess.Name)
 	done := make(chan struct{})
@@ -126,7 +131,8 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) {
 			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent, terms: terms, lang: sessionLanguage(sess, h.lang), language: liveSessionLanguage(h.st, sess.Name)}, h.gate)
 	}()
 
-	serveCommandSocket(sctx, SessionCommandSocketPath(h.instanceID, sess.Name), asSession{disp: h, session: sess.Name, lang: h.lang})
+	acceptCommands(sctx, commands, asSession{disp: h, session: sess.Name, lang: h.lang}, defaultCommandReadTimeout)
+	return nil
 }
 
 func sessionLanguage(sess state.Session, operator i18n.Language) i18n.Language {
@@ -213,7 +219,9 @@ func (h *hub) reconcile(ctx context.Context) {
 		if saved.Archived {
 			continue
 		}
-		h.goLive(ctx, saved)
+		if err := h.goLive(ctx, saved); err != nil {
+			warnStderr("herrscher serve: session %q: %v\n", saved.Name, err)
+		}
 	}
 }
 
@@ -492,7 +500,9 @@ func (h *hub) RestartWithResume(name, token string) error {
 		return err
 	}
 	sess.ResumeToken = token
-	h.goLive(context.Background(), sess)
+	if err := h.goLive(context.Background(), sess); err != nil {
+		return err
+	}
 	h.sup.Start(sess)
 	return nil
 }
@@ -508,7 +518,9 @@ func (h *hub) Resume(name string) error {
 		}
 		sess.Archived = false
 	}
-	h.goLive(context.Background(), sess)
+	if err := h.goLive(context.Background(), sess); err != nil {
+		return err
+	}
 	h.sup.Start(sess)
 	return nil
 }

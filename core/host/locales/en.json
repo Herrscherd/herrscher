@@ -290,6 +290,11 @@
     "other": "route: {{.Detail}}"
   },
   {
+    "id": "session.go_live",
+    "description": "A session cannot go live, Name names the session and Detail carries the cause",
+    "other": "session \"{{.Name}}\" cannot go live: {{.Detail}}"
+  },
+  {
     "id": "daemon.events_socket",
     "description": "The daemon events socket is unreachable, Path gives the path and Detail carries the cause",
     "other": "events socket {{.Path}}: {{.Detail}}"

@@ -83,11 +83,15 @@ func TestSameNameSessionCanRebindAfterTeardown(t *testing.T) {
 	)
 	t.Cleanup(func() { h.goDead(name) })
 
-	h.goLive(t.Context(), state.Session{Name: name, Incarnation: "old-incarnation"})
+	if err := h.goLive(t.Context(), state.Session{Name: name, Incarnation: "old-incarnation"}); err != nil {
+		t.Fatal(err)
+	}
 	awaitRegisteredIncarnation(t, sessionTab, name, "old-incarnation")
 	h.goDead(name)
 
-	h.goLive(t.Context(), state.Session{Name: name, Incarnation: "new-incarnation"})
+	if err := h.goLive(t.Context(), state.Session{Name: name, Incarnation: "new-incarnation"}); err != nil {
+		t.Fatal(err)
+	}
 	awaitRegisteredIncarnation(t, sessionTab, name, "new-incarnation")
 	conn, err := control.Dial(control.SocketPath("", name))
 	if err != nil {
@@ -136,7 +140,9 @@ func TestSessionSocketOutlivesTheContextThatCreatedIt(t *testing.T) {
 	t.Cleanup(func() { h.goDead(name) })
 
 	ctx, cancel := context.WithCancel(t.Context())
-	h.goLive(ctx, state.Session{Name: name, Incarnation: "incarnation"})
+	if err := h.goLive(ctx, state.Session{Name: name, Incarnation: "incarnation"}); err != nil {
+		t.Fatal(err)
+	}
 	cancel()
 	<-time.After(200 * time.Millisecond)
 	conn, err := control.Dial(control.SocketPath("", name))

@@ -114,7 +114,7 @@ func serveCommandSocketWithTimeout(ctx context.Context, path string, disp dispat
 	if err != nil {
 		return err
 	}
-	go acceptCommands(ctx, listener, disp, readTimeout)
+	acceptCommands(ctx, listener, disp, readTimeout)
 	return nil
 }
 
@@ -190,15 +190,23 @@ func socketAnswers(ctx context.Context, path string) bool {
 	return true
 }
 
-func acceptCommands(ctx context.Context, listener ownedListener, disp dispatcher, readTimeout time.Duration) {
-	go func() { <-ctx.Done(); listener.release() }()
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			return
+func acceptCommands(ctx context.Context, listener ownedListener, disp dispatcher, readTimeout time.Duration) <-chan struct{} {
+	released := make(chan struct{})
+	go func() {
+		<-ctx.Done()
+		listener.release()
+		close(released)
+	}()
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go handleCommandConn(ctx, conn, disp, readTimeout)
 		}
-		go handleCommandConn(ctx, conn, disp, readTimeout)
-	}
+	}()
+	return released
 }
 
 func handleCommandConn(ctx context.Context, conn net.Conn, disp dispatcher, readTimeout time.Duration) {

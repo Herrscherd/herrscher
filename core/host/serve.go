@@ -303,7 +303,8 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 
 	deps.handler.SetCoordinationReader(coordViewAdapter{c: coord})
 
-	if err := serveHubSockets(ctx, instID, runningHub); err != nil {
+	sockets, err := serveHubSockets(ctx, instID, runningHub)
+	if err != nil {
 		return err
 	}
 	liveStopped := make(chan struct{})
@@ -327,6 +328,7 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	log.Info("hub up; supervising sessions", "gateways", strings.Join(kindsOf(gws), ","))
 	<-ctx.Done()
 	<-liveStopped
+	<-sockets
 	return ctx.Err()
 }
 
@@ -378,21 +380,32 @@ func wireCoordination(hubCore *hub, deps hostDeps, st *state.State, sessions *se
 	return coord
 }
 
-func serveHubSockets(ctx context.Context, instID string, hubCore *hub) error {
+func serveHubSockets(ctx context.Context, instID string, hubCore *hub) (<-chan struct{}, error) {
 	events := newEventSocket()
 	eventsListener, err := openEventsSocket(ctx, EventsSocketPath(instID))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	commandsListener, err := openCommandSocket(ctx, CommandSocketPath(instID))
 	if err != nil {
 		eventsListener.release()
-		return err
+		return nil, err
 	}
 	hubCore.eventPublisher = events.Publish
-	go acceptEvents(ctx, eventsListener, events)
-	go acceptCommands(ctx, commandsListener, asOperator{disp: hubCore, lang: hubCore.lang}, defaultCommandReadTimeout)
-	return nil
+	eventsReleased := acceptEvents(ctx, eventsListener, events)
+	commandsReleased := acceptCommands(ctx, commandsListener, asOperator{disp: hubCore, lang: hubCore.lang}, defaultCommandReadTimeout)
+	return allReleased(eventsReleased, commandsReleased), nil
+}
+
+func allReleased(released ...<-chan struct{}) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		for _, ch := range released {
+			<-ch
+		}
+		close(done)
+	}()
+	return done
 }
 
 func goLiveSessions(ctx context.Context, runningHub *hub, sup *supervisor.Supervisor, hostState *state.State, host *health.Health) {
@@ -402,7 +415,10 @@ func goLiveSessions(ctx context.Context, runningHub *hub, sup *supervisor.Superv
 		if sess.Archived {
 			continue
 		}
-		runningHub.goLive(ctx, sess)
+		if err := runningHub.goLive(ctx, sess); err != nil {
+			warnStderr("herrscher serve: session %q: %v\n", sess.Name, err)
+			continue
+		}
 		sup.StartWith(ctx, sess)
 	}
 	host.SetSessions(len(hostState.SnapshotSessions()))

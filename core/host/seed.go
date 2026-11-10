@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
@@ -426,11 +427,11 @@ func resolveBackendDir(dir string) string {
 }
 
 func vendorOfCmd(cmd string, plugins []contracts.Plugin) string {
-	fields := strings.Fields(cmd)
-	if len(fields) == 0 {
+	first := commandBinary(commandWords(cmd))
+	if first == "" {
 		return ""
 	}
-	binary := filepath.Base(fields[0])
+	binary := filepath.Base(first)
 	for idx := range plugins {
 		plugin := &plugins[idx]
 		if plugin.Backend == nil {
@@ -443,6 +444,59 @@ func vendorOfCmd(cmd string, plugins []contracts.Plugin) string {
 		}
 	}
 	return ""
+}
+
+func commandWords(cmd string) []string {
+	var words []string
+	var word strings.Builder
+	var quote rune
+	inWord := false
+	for _, char := range cmd {
+		switch {
+		case quote != 0:
+			if char == quote {
+				quote = 0
+			} else {
+				word.WriteRune(char)
+			}
+		case char == '\'' || char == '"':
+			quote = char
+			inWord = true
+		case unicode.IsSpace(char):
+			if inWord {
+				words = append(words, word.String())
+				word.Reset()
+				inWord = false
+			}
+		default:
+			word.WriteRune(char)
+			inWord = true
+		}
+	}
+	if inWord {
+		words = append(words, word.String())
+	}
+	return words
+}
+
+func commandBinary(words []string) string {
+	if len(words) == 0 {
+		return ""
+	}
+	if filepath.Base(words[0]) != "env" {
+		return words[0]
+	}
+	for _, word := range words[1:] {
+		if !isEnvAssignment(word) {
+			return word
+		}
+	}
+	return ""
+}
+
+func isEnvAssignment(word string) bool {
+	name, _, found := strings.Cut(word, "=")
+	return found && name != ""
 }
 
 func selectBackend(desired string, plugins []contracts.Plugin) (contracts.Plugin, error) {

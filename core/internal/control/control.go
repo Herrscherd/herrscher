@@ -27,8 +27,10 @@ func instancePrefix(instanceID string) string {
 	if instanceID == "" {
 		return ""
 	}
-	return SafeSessionName(instanceID) + "-"
+	return SafeSessionName(instanceID) + instanceSeparator
 }
+
+const instanceSeparator = "."
 
 const remoteSocketDir = "/tmp"
 

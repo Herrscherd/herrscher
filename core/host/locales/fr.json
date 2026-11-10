@@ -325,6 +325,21 @@
     "other": "fichier de verrou {{.Path}} inutilisable : {{.Detail}}"
   },
   {
+    "id": "runtime.unsafe_dir.symlink",
+    "description": "Le répertoire d'exécution privé est un lien symbolique, Path le nomme",
+    "other": "répertoire d'exécution privé {{.Path}} inutilisable : c'est un lien symbolique. Supprimez le lien, herrscher recrée le répertoire lui-même."
+  },
+  {
+    "id": "runtime.unsafe_dir.foreign_owner",
+    "description": "Le répertoire d'exécution privé appartient à un autre utilisateur, Path le nomme",
+    "other": "répertoire d'exécution privé {{.Path}} inutilisable : il appartient à un autre utilisateur. Herrscher ne le modifiera pas. Demandez à cet utilisateur ou à root de le supprimer."
+  },
+  {
+    "id": "runtime.unsafe_dir.open_access",
+    "description": "Le répertoire d'exécution privé est accessible à son groupe ou à d'autres, Path le nomme",
+    "other": "répertoire d'exécution privé {{.Path}} inutilisable : il est accessible à son groupe ou à d'autres. Lancez chmod 700 {{.Path}} pour le rendre privé."
+  },
+  {
     "id": "runtime.unsafe_dir",
     "description": "Le répertoire d'exécution privé est inutilisable, Path le nomme et Detail donne la raison",
     "other": "répertoire d'exécution privé {{.Path}} inutilisable : {{.Detail}}"

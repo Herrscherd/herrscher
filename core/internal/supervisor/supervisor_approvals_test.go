@@ -97,7 +97,7 @@ func TestRemoteEnvBlockNamesTheBinaryOverThere(t *testing.T) {
 		return Placement{SSH: "me@build1", Bin: "/remote/bin/herrscher"}, true
 	})
 
-	block := s.remoteEnvBlock(state.Session{Name: "api", ChannelID: "c1", Vendor: "codex", Approvals: "strict", Host: "build1"})
+	block := s.remoteEnvBlock(state.Session{Name: "api", ChannelID: "c1", Vendor: "codex", Approvals: "strict", Host: "build1"}, remoteDirForTest)
 	env := contracts.ParseEnvSetting(block)
 	if env[contracts.EnvApprovalsBin] != "/remote/bin/herrscher" {
 		t.Fatalf("binary = %q, want the one on the far machine", env[contracts.EnvApprovalsBin])

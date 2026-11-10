@@ -2,6 +2,8 @@ package control
 
 import "testing"
 
+const remoteDirForTest = "/tmp/herrscher-1000"
+
 func TestSocketPathSeparatesInstanceFromSession(t *testing.T) {
 	first := SocketPath("u1", "x-y")
 	second := SocketPath("u1-x", "y")
@@ -11,13 +13,13 @@ func TestSocketPathSeparatesInstanceFromSession(t *testing.T) {
 }
 
 func TestRemoteSocketPathsAreInstanceScoped(t *testing.T) {
-	if RemoteSocketPath("u1", "s1") == RemoteSocketPath("u2", "s1") {
+	if RemoteSocketPath(remoteDirForTest, "u1", "s1") == RemoteSocketPath(remoteDirForTest, "u2", "s1") {
 		t.Fatal("two instances forward one session to the same remote control socket")
 	}
-	if RemoteCommandSocketPath("u1", "s1") == RemoteCommandSocketPath("u2", "s1") {
+	if RemoteCommandSocketPath(remoteDirForTest, "u1", "s1") == RemoteCommandSocketPath(remoteDirForTest, "u2", "s1") {
 		t.Fatal("two instances forward one session to the same remote command socket")
 	}
-	if RemoteSocketPath("u1", "s1") == RemoteCommandSocketPath("u1", "s1") {
+	if RemoteSocketPath(remoteDirForTest, "u1", "s1") == RemoteCommandSocketPath(remoteDirForTest, "u1", "s1") {
 		t.Fatal("the control and command sockets of one session share a path")
 	}
 }

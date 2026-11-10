@@ -18,7 +18,7 @@ func CommandSocketPath(instanceID string) string {
 	if instanceID != "" {
 		name += "-" + instanceID
 	}
-	return runtimedir.Socket(name)
+	return runtimeLayout.Socket(name)
 }
 
 // SessionCommandSocketPath is the command socket one session's own processes
@@ -39,18 +39,21 @@ func SessionCommandSocketPath(instanceID, session string) string {
 	if instanceID != "" {
 		name += "-" + instanceID
 	}
-	return runtimedir.Socket(name + "-s-" + control.SafeSessionName(session))
+	return runtimeLayout.Socket(name + "-s-" + control.SafeSessionName(session))
 }
 
-// EventsSocketPath is the daemon-level per-session events fan-out socket: a
-// sibling of the command socket (herrscher-command → herrscher-events). It is the path
-// Neublox's HerrscherEventSource connects to, derived there the same way.
+// EventsSocketPath is the unix socket of the daemon's per-session events fan-out
+// for instanceID. It is the contract for Neublox's HerrscherEventSource, which
+// must call this function rather than rebuild the name. The socket lives in the
+// per-user directory /tmp/herrscher-<uid> under the name herrscher-events (with
+// -<instanceID> when one is set), or under its hashed name in that directory
+// when the full path is longer than the unix socket limit.
 func EventsSocketPath(instanceID string) string {
 	name := "herrscher-events"
 	if instanceID != "" {
 		name += "-" + instanceID
 	}
-	return runtimedir.Socket(name)
+	return runtimeLayout.Socket(name)
 }
 
 func listenCommandSocket(ctx context.Context, path string) (net.Listener, error) {
@@ -75,7 +78,7 @@ func listenRestricted(ctx context.Context, path string) (net.Listener, error) {
 	}
 	defer func() { logCleanup(os.RemoveAll(staging)) }()
 	tmp := filepath.Join(staging, "s")
-	if len(tmp) > control.MaxUnixSocketPath {
+	if len(tmp) > runtimedir.MaxUnixSocketPath {
 		return listenAndRestrict(ctx, path)
 	}
 	listener, err := listenAndRestrict(ctx, tmp)

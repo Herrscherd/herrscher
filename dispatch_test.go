@@ -165,7 +165,6 @@ func swapStdio(t *testing.T, payload string) func() (string, string) {
 func TestApproveHookAnswersWithoutBuildingTheRegistry(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HERRSCHER_STATE_DIR", dir)
-	t.Setenv("TMPDIR", t.TempDir())
 	t.Setenv("HERRSCHER_COMMAND_SOCKET", filepath.Join(t.TempDir(), "absent.sock"))
 	t.Setenv(host.SessionVar, "s1")
 	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte("{not json"), 0o600); err != nil {
@@ -190,7 +189,6 @@ func TestApproveHookAnswersWithoutBuildingTheRegistry(t *testing.T) {
 }
 
 func TestForwardUnknownVerbWithoutDaemon(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
 	t.Setenv("HERRSCHER_STATE_DIR", t.TempDir())
 	t.Setenv("HERRSCHER_INSTANCE_ID", "dispatch-test")
 

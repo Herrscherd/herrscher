@@ -9,20 +9,25 @@ import (
 	"syscall"
 
 	"golang.org/x/sys/unix"
-
-	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
-func instanceLockPath(instanceID string) (string, error) {
-	dir, err := runtimedir.Private()
-	if err != nil {
-		return "", runtimeDirError(err)
+func lockInstance(instanceID string) (func(), error) {
+	path := runtimeLayout.Lock(instanceID)
+	if err := ensureRuntimeDir(path); err != nil {
+		return nil, err
 	}
-	return filepath.Join(dir, "lock-"+runtimedir.Key(CommandSocketPath(instanceID))+".lock"), nil
+	release, err := takeLock(path)
+	if _, ok := errors.AsType[*lockTakenError](err); ok {
+		return nil, wrapHost(errSocketTaken, "daemon.socket_taken", map[string]any{pathParam: path})
+	}
+	return release, err
 }
 
 func openLockFile(path string) (*os.File, error) {
 	file, err := os.OpenFile(filepath.Clean(path), os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW, ownerOnlyFileMode)
+	if errors.Is(err, syscall.ELOOP) {
+		return nil, errLockSymlink
+	}
 	if err != nil {
 		return nil, err
 	}

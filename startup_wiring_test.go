@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	reexecMarker      = "HERRSCHER_TEST_REEXEC"
-	reexecAnnounceKey = "0123456789abcdef0123456789abcdef"
+	reexecMarker       = "HERRSCHER_TEST_REEXEC"
+	reexecAnnounceKey  = "0123456789abcdef0123456789abcdef"
+	testRuntimeRootKey = "HERRSCHER_TEST_RUNTIME_ROOT"
 )
 
 func TestMain(m *testing.M) {
@@ -21,10 +22,11 @@ func TestMain(m *testing.M) {
 	case "1":
 		os.Exit(runStartupProbe())
 	case "serve":
+		host.SetRuntimeRoot(os.Getenv(testRuntimeRootKey))
 		os.Args = []string{"herrscher", "serve", "--env-file", os.Getenv("HERRSCHER_ENV_FILE")}
 		os.Exit(run())
 	}
-	os.Exit(m.Run())
+	os.Exit(runWithRuntimeRoot(m))
 }
 
 func runStartupProbe() int {

@@ -12,7 +12,7 @@ import (
 )
 
 func TestGoLiveReportsACommandSocketItCannotOpen(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
+	ensureTestRuntimeDir(t)
 	isolatedRuntimeDir(t)
 	name := "golive-" + newTurnID()
 	if err := ensureRuntimeDir(SessionCommandSocketPath("", name)); err != nil {

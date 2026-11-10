@@ -19,7 +19,6 @@ func (d errDispatcher) Dispatch(context.Context, []string) (string, error) { ret
 
 func serveOneCommand(t *testing.T, instance string, disp dispatcher) {
 	t.Helper()
-	t.Setenv("TMPDIR", t.TempDir())
 	path := CommandSocketPath(instance)
 	ln, err := listenCommandSocket(t.Context(), path)
 	if err != nil {
@@ -101,7 +100,6 @@ func TestForwardToDaemonSurfacesTheDaemonsError(t *testing.T) {
 }
 
 func TestForwardToDaemonReportsNoDaemon(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
 	statePath := filepath.Join(t.TempDir(), "absent.json")
 
 	out, handled, err := ForwardToDaemon(context.Background(), statePath, uniqueInstance(), []string{"whatever"})

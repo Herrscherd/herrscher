@@ -11,7 +11,6 @@ import (
 
 func resumeHubWith(t *testing.T, sess state.Session) (*hub, *state.State) {
 	t.Helper()
-	t.Setenv("TMPDIR", t.TempDir())
 	isolatedRuntimeDir(t)
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	if err := st.AddSession(sess); err != nil {

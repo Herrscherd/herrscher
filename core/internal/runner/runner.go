@@ -4,9 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"os"
 	"os/exec"
-	"path/filepath"
+
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
 // Runner builds the command that runs argv with dir as its working directory,
@@ -112,10 +112,10 @@ func script(dir string, argv []string) string {
 	return "cd " + shellQuote(dir) + " && exec " + quoteArgv(argv)
 }
 
-// ControlPathFor names the multiplexing socket for a target. It is hashed and
-// truncated rather than derived from the target text because a control socket is
-// a unix socket like any other, and sun_path caps a socket path at 108 bytes.
+// ControlPathFor names the multiplexing socket for a target, in the user's
+// private runtime directory. It is named by a digest of the target because the
+// target text can be longer than a unix socket path allows.
 func ControlPathFor(target string) string {
 	sum := sha256.Sum256([]byte(target))
-	return filepath.Join(os.TempDir(), "hs-ssh-"+hex.EncodeToString(sum[:])[:12]+".sock")
+	return runtimedir.Production().Socket("herrscher-ssh-" + hex.EncodeToString(sum[:])[:12])
 }

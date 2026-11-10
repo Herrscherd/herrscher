@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Herrscherd/herrscher/core/internal/control"
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
 type fakeDispatcher struct {
@@ -175,10 +175,11 @@ func TestASessionSocketPathFoldsUnsafeNames(t *testing.T) {
 }
 
 func TestALongSessionNameStillGetsASocketThatBinds(t *testing.T) {
+	isolatedRuntimeDir(t)
 	long := strings.Repeat("b", 64)
 	p := SessionCommandSocketPath(strings.Repeat("a", 16), long)
-	if len(p) > control.MaxUnixSocketPath {
-		t.Fatalf("path is %d bytes, over the %d sun_path holds: %q", len(p), control.MaxUnixSocketPath, p)
+	if len(p) > runtimedir.MaxUnixSocketPath {
+		t.Fatalf("path is %d bytes, over the %d sun_path holds: %q", len(p), runtimedir.MaxUnixSocketPath, p)
 	}
 	if err := ensureRuntimeDir(p); err != nil {
 		t.Fatalf("private runtime dir for %q: %v", p, err)

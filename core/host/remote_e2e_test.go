@@ -185,6 +185,36 @@ func removeE2EWorktree(ctx context.Context, t *testing.T, wt manager.Worktrees, 
 	}
 }
 
+func remoteSocketDir(ctx context.Context, t *testing.T, target string) string {
+	t.Helper()
+	dir, err := runner.RemoteRuntimeDir(ctx, target)
+	if err != nil {
+		t.Fatalf("remote runtime dir: %v", err)
+	}
+	return dir
+}
+
+func TestE2ERemoteRuntimeDirIsPrivateAndPerUser(t *testing.T) {
+	target := e2eTarget(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	dir := remoteSocketDir(ctx, t, target)
+	uid, err := capture(ctx, runner.SSH{Target: target}, "id", "-u")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "/tmp/herrscher-" + strings.TrimSpace(uid); dir != want {
+		t.Fatalf("remote runtime dir = %q, want %q", dir, want)
+	}
+	stat, err := capture(ctx, runner.SSH{Target: target}, "stat", "-c", "%a %u", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := strings.TrimSpace(stat), "700 "+strings.TrimSpace(uid); got != want {
+		t.Fatalf("remote runtime dir mode and owner = %q, want %q", got, want)
+	}
+}
+
 func TestE2ERemoteCommandSocketForward(t *testing.T) {
 	target := e2eTarget(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -199,7 +229,7 @@ func TestE2ERemoteCommandSocketForward(t *testing.T) {
 
 	const instID = "e2efwd"
 	local := filepath.Join(os.TempDir(), "herrscher-e2e-daemon.sock")
-	remote := control.RemoteCommandSocketPath(instID, "e2e-session")
+	remote := control.RemoteCommandSocketPath(remoteSocketDir(ctx, t, target), instID, "e2e-session")
 	serveCommandSocket(ctx, local, &fakeDispatcher{out: "reached the daemon"})
 
 	run := runner.SSH{Target: target, Forwards: []runner.Forward{{Remote: remote, Local: local}}}
@@ -243,8 +273,9 @@ func TestE2ETwoSessionsReachTheDaemonAtOnce(t *testing.T) {
 	serveCommandSocket(ctx, local, &fakeDispatcher{out: "reached the daemon"})
 
 	sessions := []string{"e2e-one", "e2e-two"}
+	dir := remoteSocketDir(ctx, t, target)
 	for _, name := range sessions {
-		remote := control.RemoteCommandSocketPath("", name)
+		remote := control.RemoteCommandSocketPath(dir, "", name)
 		run := runner.SSH{Target: target, Forwards: []runner.Forward{{Remote: remote, Local: local}}}
 		if prep := run.PrepareForwards(ctx); prep != nil {
 			logCleanup(prep.Run())
@@ -253,7 +284,7 @@ func TestE2ETwoSessionsReachTheDaemonAtOnce(t *testing.T) {
 	}
 	plain := runner.SSH{Target: target}
 	for _, name := range sessions {
-		remote := control.RemoteCommandSocketPath("", name)
+		remote := control.RemoteCommandSocketPath(dir, "", name)
 		out, err := capture(ctx, plain, "env",
 			"TMPDIR=/tmp",
 			control.CommandSocketVar+"="+remote,

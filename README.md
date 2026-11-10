@@ -94,6 +94,26 @@ named. Use `--state` if you really want a separate world, with its own
 `--instance` too: a daemon refuses to take over a command or events socket that
 another daemon still answers on, and says so instead of cutting that one off.
 
+### Where the sockets live
+
+Every socket and lock herrscher creates for a user lives in `/tmp/herrscher-<uid>`,
+a directory only that user can enter (mode 0700, checked on every use: not a
+symbolic link, owned by the user, no group or other bits). A socket keeps its
+readable name there when the full path fits the 103 byte unix limit, and takes a
+hashed name (`hs-<key>.sock`) when it does not.
+
+Neublox, or any other client that follows the events of an instance, must call
+`host.EventsSocketPath(instanceID)` to find that socket rather than rebuild the name.
+The function is documented in the `core/host` package godoc.
+
+Upgrade note: sockets moved from `/tmp` to `/tmp/herrscher-<uid>`. Clients built
+before this version must be updated to find the sockets through `host.EventsSocketPath`
+and the command socket helpers, and remote sessions must be restarted once so they
+forward the new paths. A `/tmp/herrscher-<uid>` directory left by an older build with group or
+other access is refused with a message that tells you to run `chmod 700` on it. A
+directory owned by another user is refused too: ask that user or root to remove it,
+herrscher never changes it.
+
 ## What a session gives you
 
 ### Durable sessions
@@ -254,11 +274,13 @@ the agent's own shell reaches the daemon that started it. Each session forwards
 its own path and each launch owns its connection, so a second session on the same
 host cannot take the first one's socket away.
 
-The socket paths carry the instance, so a session forwarded by a build from before
-that change keeps dialling the old unscoped `/tmp/herrscher-control-<session>` path
-while the new daemon listens on the instance-scoped one. Restart each remote session
-once after the upgrade to forward the new paths. Until then its bridge cannot reach
-the daemon, and the session shows no answer.
+Every socket lives in the per-user directory `/tmp/herrscher-<uid>` on the remote
+machine too, which the daemon resolves over ssh once per host and creates with
+mode 0700 if it is missing. A session forwarded by a build from before that change
+keeps dialling the old `/tmp` paths while the new daemon listens in
+`/tmp/herrscher-<uid>`. Restart each remote session once after the upgrade to
+forward the new paths. Until then its bridge cannot reach the daemon, and the
+session shows no answer.
 
 Three refusals replace a blind start: a host that was never provisioned, a host
 running a different build than this daemon would ship, and `--clone` combined

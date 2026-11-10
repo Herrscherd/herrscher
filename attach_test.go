@@ -70,7 +70,9 @@ type fakeDaemon struct {
 
 func startFakeDaemon(t *testing.T, reply func(argv []string) (string, error)) *fakeDaemon {
 	t.Helper()
-	t.Setenv("TMPDIR", t.TempDir())
+	if err := os.MkdirAll(filepath.Dir(host.EventsSocketPath("test")), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	d := &fakeDaemon{instance: "test", argv: make(chan []string, 16), reply: reply}
 
 	cmdLn, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", host.CommandSocketPath(d.instance))
@@ -260,7 +262,6 @@ func TestAttachedFrontendBindsANewSessionToTheTerminal(t *testing.T) {
 }
 
 func TestAttachingWithoutADaemonFails(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
 	if _, err := newAttachedDaemon(context.Background(), "nobody", tempStatePath(t), testLang()); err == nil {
 		t.Fatal("expected an error with no daemon listening")
 	}
@@ -290,15 +291,11 @@ func TestScrollbackComesBackFromTheDaemon(t *testing.T) {
 }
 
 func TestSocketPathsAreInstanceScoped(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
 	if host.CommandSocketPath("a") == host.CommandSocketPath("b") {
 		t.Fatal("two instances share a command socket")
 	}
 	if filepath.Dir(host.CommandSocketPath("a")) != filepath.Dir(host.EventsSocketPath("a")) {
 		t.Fatal("the two sockets of one instance are not siblings")
-	}
-	if _, err := os.Stat(filepath.Dir(host.EventsSocketPath(""))); err != nil {
-		t.Fatal(err)
 	}
 }
 

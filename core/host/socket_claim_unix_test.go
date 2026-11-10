@@ -51,7 +51,7 @@ func TestClaimSocketPathClearsAStaleSocket(t *testing.T) {
 }
 
 func TestADaemonRefusesAnInstanceAnotherDaemonServes(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
+	ensureTestRuntimeDir(t)
 	if err := refuseTakenInstance(context.Background(), "t1"); err != nil {
 		t.Fatalf("a free instance was refused: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestADaemonRefusesAnInstanceAnotherDaemonServes(t *testing.T) {
 }
 
 func TestADaemonRefusesAnInstanceWhoseEventsSocketIsTaken(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
+	ensureTestRuntimeDir(t)
 	answeringListener(t, EventsSocketPath("t2"))
 	if err := refuseTakenInstance(context.Background(), "t2"); !errors.Is(err, errSocketTaken) {
 		t.Fatalf("refuseTakenInstance with a live events socket = %v, want errSocketTaken", err)
@@ -83,7 +83,7 @@ func TestADaemonRefusesAnInstanceWhoseEventsSocketIsTaken(t *testing.T) {
 }
 
 func TestServeHubSocketsStopsTheDaemonOnATakenEventsSocket(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
+	ensureTestRuntimeDir(t)
 	answeringListener(t, EventsSocketPath("t3"))
 	_, err := serveHubSockets(context.Background(), "t3", &hub{})
 	if !errors.Is(err, errSocketTaken) {
@@ -92,7 +92,7 @@ func TestServeHubSocketsStopsTheDaemonOnATakenEventsSocket(t *testing.T) {
 }
 
 func TestServeHubSocketsStopsTheDaemonOnATakenCommandSocket(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
+	ensureTestRuntimeDir(t)
 	answeringListener(t, CommandSocketPath("t4"))
 	_, err := serveHubSockets(context.Background(), "t4", &hub{})
 	if !errors.Is(err, errSocketTaken) {
@@ -101,7 +101,7 @@ func TestServeHubSocketsStopsTheDaemonOnATakenCommandSocket(t *testing.T) {
 }
 
 func TestLockInstanceRefusesASecondDaemonOfTheSameInstance(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
+	ensureTestRuntimeDir(t)
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
 	release, err := lockInstance("t5")
@@ -138,7 +138,7 @@ func answeringListener(t *testing.T, path string) {
 }
 
 func TestShutdownLeavesASocketANewerDaemonOwns(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
+	ensureTestRuntimeDir(t)
 	path := filepath.Join(t.TempDir(), "takeover.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	listener, err := openCommandSocket(ctx, path)
@@ -166,7 +166,7 @@ func TestShutdownLeavesASocketANewerDaemonOwns(t *testing.T) {
 }
 
 func TestServeHubSocketsReportReleasedOnlyOnceTheFilesAreGone(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
+	ensureTestRuntimeDir(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	released, err := serveHubSockets(ctx, "t6", &hub{})
 	if err != nil {

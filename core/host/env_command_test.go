@@ -1,6 +1,9 @@
 package host
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestEnvWrappedCommandName(t *testing.T) {
 	tests := []struct {
@@ -22,6 +25,13 @@ func TestEnvWrappedCommandName(t *testing.T) {
 		{name: "unset option takes its argument", cmd: `env -u FOO claude`, want: "claude"},
 		{name: "split string without argument names nothing", cmd: `env -S`, want: ""},
 		{name: "end of options without command names nothing", cmd: `env --`, want: ""},
+		{name: "nested env inside a split string", cmd: `env -S "env -u X claude"`, want: "claude"},
+		{name: "nested env after end of options", cmd: `env -- env -u X claude`, want: "claude"},
+		{name: "env run by env after an option", cmd: `env -i env claude`, want: "claude"},
+		{name: "doubly nested split string", cmd: `env -S "env -S 'env -u X claude --x'"`, want: "claude"},
+		{name: "nested env with assignment", cmd: `env -S "env FOO=1 claude"`, want: "claude"},
+		{name: "nesting within the limit", cmd: strings.Repeat("env ", 5) + "claude", want: "claude"},
+		{name: "nesting past the limit names nothing", cmd: strings.Repeat("env ", 12) + "claude", want: ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

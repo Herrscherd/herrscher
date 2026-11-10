@@ -2,17 +2,9 @@
 
 package runtimedir
 
-import (
-	"errors"
-	"os"
-	"strconv"
-)
-
-func uidText() string {
-	return strconv.Itoa(os.Getuid())
-}
+import "errors"
 
 // Private reports that no private runtime directory is used on this platform.
-func Private() (string, error) {
+func (l Layout) Private() (string, error) {
 	return "", errors.ErrUnsupported
 }

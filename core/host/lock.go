@@ -9,7 +9,10 @@ import (
 	"strings"
 )
 
-var errLockNotOwned = errors.New("the lock file is not owned by this user")
+var (
+	errLockNotOwned = errors.New("the lock file is not owned by this user")
+	errLockSymlink  = errors.New("the lock file is a symbolic link")
+)
 
 // StateLockPath is the lock a daemon holds for the whole time it serves. It sits
 // beside the state file rather than being the state file, so a stale lock can be
@@ -37,18 +40,6 @@ func LockState(statePath string) (func(), error) {
 	release, err := takeLock(StateLockPath(statePath))
 	if taken, ok := errors.AsType[*lockTakenError](err); ok {
 		return nil, &lockHeldError{StatePath: statePath, Holder: taken.Holder}
-	}
-	return release, err
-}
-
-func lockInstance(instanceID string) (func(), error) {
-	path, err := instanceLockPath(instanceID)
-	if err != nil {
-		return nil, err
-	}
-	release, err := takeLock(path)
-	if _, ok := errors.AsType[*lockTakenError](err); ok {
-		return nil, wrapHost(errSocketTaken, "daemon.socket_taken", map[string]any{pathParam: path})
 	}
 	return release, err
 }

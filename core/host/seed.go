@@ -486,14 +486,7 @@ func firstNonEmpty(values ...string) string {
 }
 
 func commandBinary(words []string) string {
-	idx := skipEnvAssignments(words)
-	if idx >= len(words) {
-		return ""
-	}
-	if filepath.Base(words[idx]) != "env" {
-		return words[idx]
-	}
-	return envCommand(words[idx+1:])
+	return envNamedCommand(words, 0)
 }
 
 func skipEnvAssignments(words []string) int {
@@ -504,54 +497,67 @@ func skipEnvAssignments(words []string) int {
 	return idx
 }
 
-func envCommand(args []string) string {
+const envNestingLimit = 8
+
+func envCommandAt(args []string, depth int) string {
+	if depth > envNestingLimit {
+		return ""
+	}
 	for idx := 0; idx < len(args); idx++ {
 		word := args[idx]
 		switch {
 		case word == "--":
-			return firstCommandWord(args[idx+1:])
+			return envNamedCommand(args[idx+1:], depth)
 		case word == "--unset" || word == "--chdir":
 			idx++
-		case word == "--split-string":
-			if idx+1 >= len(args) {
-				return ""
-			}
-			return envCommand(append(commandWords(args[idx+1]), args[idx+2:]...))
-		case strings.HasPrefix(word, "--split-string="):
-			return envCommand(append(commandWords(strings.TrimPrefix(word, "--split-string=")), args[idx+1:]...))
+		case word == "--split-string" || strings.HasPrefix(word, "--split-string="):
+			return envSplitLong(word, args[idx+1:], depth+1)
 		case strings.HasPrefix(word, "--"):
 		case word == "-":
 		case strings.HasPrefix(word, "-") && len(word) > 1:
 			if at := shortEnvSplitAt(word); at > 0 {
-				return envSplitCommand(word[at+1:], args[idx+1:])
+				return envSplitCommand(word[at+1:], args[idx+1:], depth+1)
 			}
 			if shortEnvOptionTakesNext(word) {
 				idx++
 			}
 		case isEnvAssignment(word):
 		default:
-			return word
+			return envNamedCommand(args[idx:], depth)
 		}
 	}
 	return ""
 }
 
-func envSplitCommand(value string, rest []string) string {
+func envSplitLong(word string, rest []string, depth int) string {
+	if value, inline := strings.CutPrefix(word, "--split-string="); inline {
+		return envCommandAt(append(commandWords(value), rest...), depth)
+	}
+	if len(rest) == 0 {
+		return ""
+	}
+	return envCommandAt(append(commandWords(rest[0]), rest[1:]...), depth)
+}
+
+func envNamedCommand(words []string, depth int) string {
+	idx := skipEnvAssignments(words)
+	if idx >= len(words) {
+		return ""
+	}
+	if filepath.Base(words[idx]) == "env" {
+		return envCommandAt(words[idx+1:], depth+1)
+	}
+	return words[idx]
+}
+
+func envSplitCommand(value string, rest []string, depth int) string {
 	if value == "" {
 		if len(rest) == 0 {
 			return ""
 		}
 		value, rest = rest[0], rest[1:]
 	}
-	return envCommand(append(commandWords(value), rest...))
-}
-
-func firstCommandWord(words []string) string {
-	idx := skipEnvAssignments(words)
-	if idx >= len(words) {
-		return ""
-	}
-	return words[idx]
+	return envCommandAt(append(commandWords(value), rest...), depth)
 }
 
 func shortEnvSplitAt(word string) int {

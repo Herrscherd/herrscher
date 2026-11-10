@@ -4,6 +4,7 @@ package control
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -35,42 +36,38 @@ func TestSocketPathKeepsTwoInstancesApart(t *testing.T) {
 	}
 }
 
-const shortTempRoot = "/tmp"
-
-func shortRuntimeDir(t *testing.T) {
+func useShortRuntimeRoot(t *testing.T) runtimedir.Layout {
 	t.Helper()
-	dir := filepath.Join(shortTempRoot, "rt"+strconv.FormatInt(time.Now().UnixNano(), 10))
-	if err := os.Mkdir(dir, 0o700); err != nil {
+	root := path.Join("/tmp", "rt"+strconv.FormatInt(time.Now().UnixNano(), 10))
+	if err := os.Mkdir(root, 0o700); err != nil {
 		t.Fatal(err)
 	}
+	previous := runtimeLayout
+	runtimeLayout = runtimedir.Layout{Root: root}
 	t.Cleanup(func() {
-		if err := os.RemoveAll(dir); err != nil {
+		runtimeLayout = previous
+		if err := os.RemoveAll(root); err != nil {
 			t.Error(err)
 		}
 	})
-	t.Setenv("XDG_RUNTIME_DIR", dir)
+	return runtimeLayout
 }
 
 func TestSocketPathsFitTheUnixSocketLimit(t *testing.T) {
-	shortRuntimeDir(t)
-	longDir := filepath.Join(t.TempDir(), strings.Repeat("d", 30))
-	if err := os.Mkdir(longDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TMPDIR", longDir)
-	if _, err := runtimedir.Private(); err != nil {
+	useShortRuntimeRoot(t)
+	if _, err := runtimeLayout.Private(); err != nil {
 		t.Fatal(err)
 	}
 	instance := strings.Repeat("i", 16)
 	session := strings.Repeat("s", 64)
 
-	path := SocketPath(instance, session)
-	if len(path) > MaxUnixSocketPath {
-		t.Fatalf("control socket is %d bytes, over the %d sun_path holds: %q", len(path), MaxUnixSocketPath, path)
+	socket := SocketPath(instance, session)
+	if len(socket) > runtimedir.MaxUnixSocketPath {
+		t.Fatalf("control socket is %d bytes, over the %d sun_path holds: %q", len(socket), runtimedir.MaxUnixSocketPath, socket)
 	}
-	listener, err := listenControl(t.Context(), path)
+	listener, err := listenControl(t.Context(), socket)
 	if err != nil {
-		t.Fatalf("binding the control socket %q: %v", path, err)
+		t.Fatalf("binding the control socket %q: %v", socket, err)
 	}
 	t.Cleanup(func() {
 		if closeErr := listener.Close(); closeErr != nil {
@@ -79,11 +76,14 @@ func TestSocketPathsFitTheUnixSocketLimit(t *testing.T) {
 	})
 
 	for _, remote := range []string{
-		RemoteSocketPath(instance, session),
-		RemoteCommandSocketPath(instance, session),
+		RemoteSocketPath(remoteDirForTest, instance, session),
+		RemoteCommandSocketPath(remoteDirForTest, instance, session),
 	} {
-		if len(remote) > MaxUnixSocketPath {
-			t.Fatalf("remote socket is %d bytes, over the %d sun_path holds: %q", len(remote), MaxUnixSocketPath, remote)
+		if len(remote) > runtimedir.MaxUnixSocketPath {
+			t.Fatalf("remote socket is %d bytes, over the %d sun_path holds: %q", len(remote), runtimedir.MaxUnixSocketPath, remote)
+		}
+		if path.Dir(remote) != remoteDirForTest {
+			t.Fatalf("remote socket %q is outside the remote private dir", remote)
 		}
 	}
 }
@@ -93,7 +93,7 @@ func TestSocketPathsOfLongSessionsStayApart(t *testing.T) {
 	if SocketPath("u1", shared+"a") == SocketPath("u1", shared+"b") {
 		t.Fatal("two sessions that only differ past the length limit share a control socket")
 	}
-	if RemoteSocketPath("u1", shared+"a") == RemoteSocketPath("u1", shared+"b") {
+	if RemoteSocketPath(remoteDirForTest, "u1", shared+"a") == RemoteSocketPath(remoteDirForTest, "u1", shared+"b") {
 		t.Fatal("two sessions that only differ past the length limit share a remote control socket")
 	}
 }

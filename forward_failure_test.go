@@ -5,6 +5,7 @@ import (
 	"context"
 	"net"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -19,11 +20,13 @@ func TestForwardDecodeFr(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the command socket is a named pipe on windows")
 	}
-	t.Setenv("TMPDIR", t.TempDir())
 	t.Setenv("HERRSCHER_STATE_DIR", t.TempDir())
 	instance := "fwd" + strconv.FormatInt(time.Now().UnixNano()%1e9, 36)
 	t.Setenv("HERRSCHER_INSTANCE_ID", instance)
 	path := host.CommandSocketPath(instance)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", path)
 	if err != nil {
 		t.Fatalf("listen: %v", err)

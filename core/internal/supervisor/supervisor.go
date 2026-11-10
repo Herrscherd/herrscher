@@ -44,6 +44,9 @@ type Supervisor struct {
 	instanceID       string
 	sessionCmdSocket func(session string) string
 	gate             func(vendor string) string
+	remoteMu         sync.Mutex
+	remoteDirs       map[string]string
+	remoteDirOf      func(ctx context.Context, target string) (string, error)
 }
 
 // Placement is what the supervisor needs to know about a host to launch there.
@@ -345,20 +348,24 @@ func (s *Supervisor) remoteBridgeCommand(ctx context.Context, sess state.Session
 	if err != nil {
 		return nil, err
 	}
+	dir, err := s.remoteRuntimeDir(ctx, placement.SSH)
+	if err != nil {
+		return nil, err
+	}
 	args := s.bridgeArgs(sess)
 	for idx := range args {
 		if args[idx] == "--hub-socket" && idx+1 < len(args) {
-			args[idx+1] = control.RemoteSocketPath(s.instanceID, sess.Name)
+			args[idx+1] = control.RemoteSocketPath(dir, s.instanceID, sess.Name)
 		}
 	}
 	args = append(args, "--env-stdin")
-	ssh := runner.SSH{Target: placement.SSH, Forwards: s.forwardsFor(sess)}
-	dir := sess.Dir
-	if dir == "" {
-		dir = sess.Worktree
+	ssh := runner.SSH{Target: placement.SSH, Forwards: s.forwardsFor(sess, dir)}
+	workDir := sess.Dir
+	if workDir == "" {
+		workDir = sess.Worktree
 	}
-	cmd := ssh.Command(ctx, dir, append([]string{placement.Bin}, args...)...)
-	cmd.Stdin = strings.NewReader(s.remoteEnvBlock(sess))
+	cmd := ssh.Command(ctx, workDir, append([]string{placement.Bin}, args...)...)
+	cmd.Stdin = strings.NewReader(s.remoteEnvBlock(sess, dir))
 	return cmd, nil
 }
 
@@ -376,14 +383,14 @@ func (s *Supervisor) placementFor(sess state.Session) (Placement, error) {
 	return hostPlacement, nil
 }
 
-func (s *Supervisor) forwardsFor(sess state.Session) []runner.Forward {
+func (s *Supervisor) forwardsFor(sess state.Session, remoteDir string) []runner.Forward {
 	fwd := []runner.Forward{{
-		Remote: control.RemoteSocketPath(s.instanceID, sess.Name),
+		Remote: control.RemoteSocketPath(remoteDir, s.instanceID, sess.Name),
 		Local:  control.SocketPath(s.instanceID, sess.Name),
 	}}
 	if s.sessionCmdSocket != nil {
 		fwd = append(fwd, runner.Forward{
-			Remote: control.RemoteCommandSocketPath(s.instanceID, sess.Name),
+			Remote: control.RemoteCommandSocketPath(remoteDir, s.instanceID, sess.Name),
 			Local:  s.sessionCmdSocket(sess.Name),
 		})
 	}
@@ -398,11 +405,15 @@ func (s *Supervisor) prepareRemote(ctx context.Context, sess state.Session) *exe
 	if err != nil {
 		return nil
 	}
-	r := runner.SSH{Target: placement.SSH, ControlPath: runner.ControlPathFor(placement.SSH), Forwards: s.forwardsFor(sess)}
+	dir, err := s.remoteRuntimeDir(ctx, placement.SSH)
+	if err != nil {
+		return nil
+	}
+	r := runner.SSH{Target: placement.SSH, ControlPath: runner.ControlPathFor(placement.SSH), Forwards: s.forwardsFor(sess, dir)}
 	return r.PrepareForwards(ctx)
 }
 
-func (s *Supervisor) remoteEnvBlock(sess state.Session) string {
+func (s *Supervisor) remoteEnvBlock(sess state.Session, remoteDir string) string {
 	env := make(map[string]string)
 	for _, kv := range s.bridgeEnv {
 		if k, v, ok := strings.Cut(kv, "="); ok && k != "" {
@@ -415,7 +426,7 @@ func (s *Supervisor) remoteEnvBlock(sess state.Session) string {
 	env["TMPDIR"] = "/tmp"
 	env[control.SessionVar] = sess.Name
 	if s.sessionCmdSocket != nil {
-		env[control.CommandSocketVar] = control.RemoteCommandSocketPath(s.instanceID, sess.Name)
+		env[control.CommandSocketVar] = control.RemoteCommandSocketPath(remoteDir, s.instanceID, sess.Name)
 	}
 	if p, err := s.placementFor(sess); err == nil {
 		for k, v := range s.approvalsEnv(sess, p.Bin) {

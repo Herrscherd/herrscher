@@ -2,7 +2,11 @@
 // (or named pipe on Windows) the daemon hub accepts on and the bridge dials.
 package control
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
+)
 
 // SafeSessionName folds a session name down to what is safe in a filename:
 // every character outside letters, digits, "-" and "_" becomes "-". Both the
@@ -32,17 +36,18 @@ func instancePrefix(instanceID string) string {
 
 const instanceSeparator = "."
 
-const remoteSocketDir = "/tmp"
-
-// RemoteSocketPath is SocketPath for another machine. It carries the instance
-// for the same reason SocketPath does: two daemons forwarding a session of one
-// name to one host would otherwise fight over the same path.
-func RemoteSocketPath(instanceID, session string) string {
-	return BoundedSocketPath(remoteSocketDir, "herrscher-control-"+instancePrefix(instanceID)+SafeSessionName(session))
+// RemoteSocketPath is SocketPath for another machine, inside remoteDir: the
+// private runtime directory of the remote user, as the supervisor resolves it
+// over ssh. It carries the instance for the same reason SocketPath does: two
+// daemons forwarding a session of one name to one host would otherwise fight
+// over the same path.
+func RemoteSocketPath(remoteDir, instanceID, session string) string {
+	return runtimedir.Name(remoteDir, "herrscher-control-"+instancePrefix(instanceID)+SafeSessionName(session))
 }
 
 // RemoteCommandSocketPath is where a remote session's `herrscher <verb>` dials
-// its own command socket, once the launch has forwarded it there.
+// its own command socket, inside remoteDir, once the launch has forwarded it
+// there.
 //
 // Its own, and not the daemon's operator socket: which socket a connection
 // arrives on is what tells the daemon who is calling, so forwarding the
@@ -53,8 +58,8 @@ func RemoteSocketPath(instanceID, session string) string {
 // finds it taken and dies on ExitOnForwardFailure, and clearing it first cuts
 // the first session's agent off from the daemon. One path per session costs a
 // socket file and makes both failures unrepresentable.
-func RemoteCommandSocketPath(instanceID, session string) string {
-	return BoundedSocketPath(remoteSocketDir, "herrscher-command-"+instancePrefix(instanceID)+SafeSessionName(session))
+func RemoteCommandSocketPath(remoteDir, instanceID, session string) string {
+	return runtimedir.Name(remoteDir, "herrscher-command-"+instancePrefix(instanceID)+SafeSessionName(session))
 }
 
 // CommandSocketVar is how the far side learns that path: it cannot derive a

@@ -15,8 +15,6 @@ import (
 	"time"
 )
 
-const shortTempRoot = "/tmp"
-
 func isolatedRuntimeRoot(t *testing.T) string {
 	t.Helper()
 	dir := filepath.Join(shortTempRoot, "rt"+strconv.FormatInt(time.Now().UnixNano(), 10))
@@ -56,7 +54,7 @@ func serveChild(t *testing.T) (*exec.Cmd, *bufio.Scanner) {
 		"HERRSCHER_ENV_FILE=" + envFile,
 		"HOME=" + dir,
 		"HERRSCHER_STATE_DIR=" + filepath.Join(dir, "state"),
-		"XDG_RUNTIME_DIR=" + runtimeRoot,
+		testRuntimeRootKey + "=" + runtimeRoot,
 		"PATH=" + os.Getenv("PATH"),
 	}
 	startErr := child.Start()

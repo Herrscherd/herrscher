@@ -3343,6 +3343,11 @@
     "other": "le cache des modèles est tenu par un autre écrivain"
   },
   {
+    "id": "cli.host.fault.lock_symlink",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (lock file symlink)",
+    "other": "le fichier de verrou est un lien symbolique"
+  },
+  {
     "id": "cli.host.fault.lock_not_owned",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (lock file not owned)",
     "other": "le fichier de verrou n'appartient pas à cet utilisateur"

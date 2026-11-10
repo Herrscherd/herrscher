@@ -6,39 +6,35 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
-	"time"
+
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
-const shortTempRoot = "/tmp"
-
-func isolatedRuntimeDir(t *testing.T) {
-	t.Helper()
-	dir := filepath.Join(shortTempRoot, "rt"+strconv.FormatInt(time.Now().UnixNano(), 10))
-	if err := os.Mkdir(dir, 0o700); err != nil {
-		t.Fatal(err)
+func TestInstanceLockLivesInThePrivateDirKeyedByInstance(t *testing.T) {
+	layout := isolatedRuntimeDir(t)
+	release, err := lockInstance("t7")
+	if err != nil {
+		t.Fatalf("lockInstance: %v", err)
 	}
-	t.Cleanup(func() {
-		if err := os.RemoveAll(dir); err != nil {
-			t.Error(err)
-		}
-	})
-	t.Setenv("XDG_RUNTIME_DIR", dir)
-	t.Setenv("TMPDIR", t.TempDir())
+	defer release()
+	if _, err := os.Stat(layout.Lock("t7")); err != nil {
+		t.Fatalf("the instance lock is not where the private dir keeps it: %v", err)
+	}
+	if filepath.Dir(layout.Lock("t7")) != layout.Dir() {
+		t.Fatalf("instance lock %q is outside %q", layout.Lock("t7"), layout.Dir())
+	}
 }
 
-func TestInstanceLockIsKeyedByTheCommandSocketNotTheCache(t *testing.T) {
+func TestSecondDaemonOfOneInstanceIsRefused(t *testing.T) {
 	isolatedRuntimeDir(t)
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	first, err := lockInstance("t7")
 	if err != nil {
 		t.Fatalf("lockInstance: %v", err)
 	}
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	_, err = lockInstance("t7")
 	if !errors.Is(err, errSocketTaken) {
-		t.Fatalf("second lockInstance with another cache dir = %v, want errSocketTaken", err)
+		t.Fatalf("second lockInstance = %v, want errSocketTaken", err)
 	}
 	first()
 	second, err := lockInstance("t7")
@@ -49,24 +45,41 @@ func TestInstanceLockIsKeyedByTheCommandSocketNotTheCache(t *testing.T) {
 }
 
 func TestInstanceLockRefusesASymlinkAtItsPath(t *testing.T) {
-	isolatedRuntimeDir(t)
-	path, err := instanceLockPath("t8")
-	if err != nil {
-		t.Fatalf("instanceLockPath: %v", err)
+	layout := isolatedRuntimeDir(t)
+	if _, err := layout.Private(); err != nil {
+		t.Fatal(err)
 	}
 	victim := filepath.Join(t.TempDir(), "victim")
-	if err = os.WriteFile(victim, []byte("keep"), 0o600); err != nil {
+	if err := os.WriteFile(victim, []byte("keep"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err = os.Symlink(victim, path); err != nil {
+	if err := os.Symlink(victim, layout.Lock("t8")); err != nil {
 		t.Fatal(err)
 	}
-	_, err = lockInstance("t8")
-	var wrapped hostWrapError
-	if !errors.As(err, &wrapped) || wrapped.key != "lock.unsafe" {
+	_, err := lockInstance("t8")
+	wrapped, ok := errors.AsType[hostWrapError](err)
+	if !ok || wrapped.key != "lock.unsafe" {
 		t.Fatalf("lockInstance over a symlink = %v, want the lock.unsafe error", err)
+	}
+	if !errors.Is(err, errLockSymlink) {
+		t.Fatalf("lockInstance over a symlink = %v, want errLockSymlink underneath", err)
 	}
 	if content, readErr := os.ReadFile(victim); readErr != nil || string(content) != "keep" {
 		t.Fatalf("the symlink target was touched: %q, %v", content, readErr)
+	}
+}
+
+func TestRuntimeDirErrorNamesTheRemedyForItsKind(t *testing.T) {
+	tests := map[runtimedir.Kind]string{
+		runtimedir.KindSymlink:      "runtime.unsafe_dir.symlink",
+		runtimedir.KindForeignOwner: "runtime.unsafe_dir.foreign_owner",
+		runtimedir.KindOpenAccess:   "runtime.unsafe_dir.open_access",
+		runtimedir.KindNotDir:       "runtime.unsafe_dir",
+		runtimedir.KindOther:        "runtime.unsafe_dir",
+	}
+	for kind, want := range tests {
+		if got := runtimeDirKey(kind); got != want {
+			t.Fatalf("runtimeDirKey(%q) = %q, want %q", kind, got, want)
+		}
 	}
 }

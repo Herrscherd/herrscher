@@ -23,7 +23,7 @@ func TestSubscribeDaemonEventsStreamsTaggedEvents(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	stream, err := subscribeAt(ctx, path)
+	stream, err := subscribeAt(ctx, isolatedRuntimeDir(t), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestSubscribeDaemonEventsClosesWhenTheDaemonGoesAway(t *testing.T) {
 	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	stream, err := subscribeAt(ctx, path)
+	stream, err := subscribeAt(ctx, isolatedRuntimeDir(t), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestSubscribeDaemonEventsClosesWhenTheDaemonGoesAway(t *testing.T) {
 }
 
 func TestSubscribeDaemonEventsFailsWithoutADaemon(t *testing.T) {
-	_, err := subscribeAt(context.Background(), filepath.Join(t.TempDir(), "absent.sock"))
+	_, err := subscribeAt(context.Background(), isolatedRuntimeDir(t), filepath.Join(t.TempDir(), "absent.sock"))
 	if err == nil {
 		t.Fatal("expected an error when nothing is listening")
 	}

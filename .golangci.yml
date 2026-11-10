@@ -287,12 +287,6 @@ linters:
       - path: ^core/host/announcekey\.go$
         linters: [gochecknoglobals]
         text: "capturedAnnounce"
-      - path: ^core/host/runtime_dir\.go$
-        linters: [gochecknoglobals]
-        text: "^runtimeLayout is a global"
-      - path: ^core/internal/control/control_unix\.go$
-        linters: [gochecknoglobals]
-        text: "^runtimeLayout is a global"
 
 formatters:
   enable:

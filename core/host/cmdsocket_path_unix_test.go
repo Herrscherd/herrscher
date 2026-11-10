@@ -3,9 +3,7 @@
 package host
 
 import (
-	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -13,21 +11,29 @@ import (
 )
 
 func TestCommandSocketPathUnix(t *testing.T) {
-	useProductionLayout(t)
-	dir := runtimedir.Production().Dir()
-	if got := CommandSocketPath(""); got != filepath.Join(dir, "herrscher-command.sock") {
-		t.Fatalf("CommandSocketPath(\"\") = %q", got)
+	layout := isolatedRuntimeDir(t)
+	if got := commandSocketPathIn(layout, ""); got != filepath.Join(layout.Dir(), "herrscher-command.sock") {
+		t.Fatalf("commandSocketPathIn(\"\") = %q", got)
 	}
-	if got := CommandSocketPath("instance-1"); got != filepath.Join(dir, "herrscher-command-instance-1.sock") {
-		t.Fatalf("CommandSocketPath(instance-1) = %q", got)
+	if got := commandSocketPathIn(layout, "instance-1"); got != filepath.Join(layout.Dir(), "herrscher-command-instance-1.sock") {
+		t.Fatalf("commandSocketPathIn(instance-1) = %q", got)
 	}
 }
 
 func TestEventsSocketPathIsTheDocumentedLocation(t *testing.T) {
-	useProductionLayout(t)
-	dir := filepath.Join(runtimedir.Production().Root, "herrscher-"+strconv.Itoa(os.Getuid()))
-	if got := EventsSocketPath(""); got != filepath.Join(dir, "herrscher-events.sock") {
-		t.Fatalf("EventsSocketPath(\"\") = %q", got)
+	layout := isolatedRuntimeDir(t)
+	if got := eventsSocketPathIn(layout, ""); got != filepath.Join(layout.Dir(), "herrscher-events.sock") {
+		t.Fatalf("eventsSocketPathIn(\"\") = %q", got)
+	}
+	if got := eventsSocketPathIn(layout, "instance-1"); got != filepath.Join(layout.Dir(), "herrscher-events-instance-1.sock") {
+		t.Fatalf("eventsSocketPathIn(instance-1) = %q", got)
+	}
+}
+
+func TestPublicSocketPathsLiveInTheProductionDir(t *testing.T) {
+	dir := runtimedir.Production().Dir()
+	if got := CommandSocketPath("instance-1"); got != filepath.Join(dir, "herrscher-command-instance-1.sock") {
+		t.Fatalf("CommandSocketPath(instance-1) = %q", got)
 	}
 	if got := EventsSocketPath("instance-1"); got != filepath.Join(dir, "herrscher-events-instance-1.sock") {
 		t.Fatalf("EventsSocketPath(instance-1) = %q", got)
@@ -35,18 +41,15 @@ func TestEventsSocketPathIsTheDocumentedLocation(t *testing.T) {
 }
 
 func TestOperatorSocketsFitTheUnixLimit(t *testing.T) {
-	isolatedRuntimeDir(t)
+	layout := isolatedRuntimeDir(t)
 	instance := strings.Repeat("i", 40)
-	for _, path := range []string{CommandSocketPath(instance), EventsSocketPath(instance), SessionCommandSocketPath(instance, strings.Repeat("s", 80))} {
+	for _, path := range []string{
+		commandSocketPathIn(layout, instance),
+		eventsSocketPathIn(layout, instance),
+		sessionCommandSocketPathIn(layout, instance, strings.Repeat("s", 80)),
+	} {
 		if len(path) > runtimedir.MaxUnixSocketPath {
 			t.Fatalf("socket %q is %d bytes, over the %d sun_path holds", path, len(path), runtimedir.MaxUnixSocketPath)
 		}
 	}
-}
-
-func useProductionLayout(t *testing.T) {
-	t.Helper()
-	previous := runtimeLayout
-	runtimeLayout = runtimedir.Production()
-	t.Cleanup(func() { runtimeLayout = previous })
 }

@@ -44,7 +44,11 @@ func addHost(ctx context.Context, hostState *state.State, input contracts.Input)
 	if err := checkNewHost(hostState, host); err != nil {
 		return "", err
 	}
-	provisioned, err := provisionHost(ctx, runnerFor(host), host, hostState.SourceDir())
+	run, err := runnerFor(host)
+	if err != nil {
+		return "", err
+	}
+	provisioned, err := provisionHost(ctx, run, host, hostState.SourceDir())
 	if err != nil {
 		return "", err
 	}
@@ -112,7 +116,11 @@ func checkRegisteredHost(ctx context.Context, store *state.State, input contract
 	if !ok {
 		return "", unknownHost(store, name)
 	}
-	rep := checkHost(ctx, runnerFor(host), host, sourceVersionOf(ctx, store))
+	run, err := runnerFor(host)
+	if err != nil {
+		return "", err
+	}
+	rep := checkHost(ctx, run, host, sourceVersionOf(ctx, store))
 	if input.JSON {
 		b, err := json.Marshal(rep)
 		return string(b), err
@@ -148,7 +156,11 @@ func provisionRegisteredHost(ctx context.Context, store *state.State, in contrac
 	if !ok {
 		return "", unknownHost(store, name)
 	}
-	provisioned, err := provisionHost(ctx, runnerFor(host), host, store.SourceDir())
+	run, err := runnerFor(host)
+	if err != nil {
+		return "", err
+	}
+	provisioned, err := provisionHost(ctx, run, host, store.SourceDir())
 	if err != nil {
 		return "", err
 	}

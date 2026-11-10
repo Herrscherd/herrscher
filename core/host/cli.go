@@ -12,6 +12,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 	"github.com/Herrscherd/herrscher/core/internal/worktree"
@@ -48,7 +49,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	models := options.modelDiscovery()
 	hdl := newManagerHandler(deps, options, partDir, hostState, sup, worktrees, updater, agents, models)
 	wireManagerHandler(ctx, hdl, hostState, instID, worktrees, sessions, models)
-	wireSupervisor(sup, hostState, instID)
+	wireSupervisor(sup, options.Runtime, hostState, instID)
 	seedCoord := &coordinatorSlot{}
 	schedSlot := &schedulerSlot{}
 
@@ -159,9 +160,10 @@ func validateModelChoice(models *ModelDiscovery, vendor, modelID string) error {
 	return nil
 }
 
-func wireSupervisor(sup *supervisor.Supervisor, store *state.State, instID string) {
+func wireSupervisor(sup *supervisor.Supervisor, layout runtimedir.Layout, store *state.State, instID string) {
 	sup.SetInstanceID(instID)
-	sup.SetCommandSocket(func(session string) string { return SessionCommandSocketPath(instID, session) })
+	sup.SetRuntimeLayout(layout)
+	sup.SetCommandSocket(func(session string) string { return sessionCommandSocketPathIn(layout, instID, session) })
 	sup.SetHostLookup(func(name string) (supervisor.Placement, bool) {
 		host, ok := store.FindHost(name)
 		if !ok {
@@ -215,7 +217,7 @@ func NewRegistry(ctx context.Context, gws []Deps, options Options) (*cli.Registr
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)
 	}
-	forwardDaemonOwnedCommands(reg, instID, dispatchLiveCommand)
+	forwardDaemonOwnedCommands(reg, instID, dispatchToOperatorDaemon)
 	return reg, nil
 }
 

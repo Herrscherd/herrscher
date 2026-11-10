@@ -3398,6 +3398,16 @@
     "other": "command refused"
   },
   {
+    "id": "cli.host.fault.no_runtime_dir",
+    "description": "Le démon a démarré sans répertoire d'exécution pour ses sockets et son verrou",
+    "other": "the daemon was started without a runtime directory"
+  },
+  {
+    "id": "cli.host.fault.instance_locked",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (instance lock held by another daemon)",
+    "other": "another daemon already holds the lock of this instance: stop it or pass --instance"
+  },
+  {
     "id": "cli.host.fault.socket_taken",
     "description": "Another live daemon already answers on this socket, usually the same instance serving another state file",
     "other": "another daemon already answers on this socket (same instance, another state file): stop it or pass --instance"

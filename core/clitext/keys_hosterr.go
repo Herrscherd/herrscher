@@ -63,6 +63,8 @@ func hostErrKeys() map[Key][]string {
 		"cli.host.fault.handoff_quota":                 nil,
 		"cli.host.fault.shell_refused":                 nil,
 		"cli.host.fault.daemon_events_unreachable":     nil,
+		"cli.host.fault.no_runtime_dir":                nil,
+		"cli.host.fault.instance_locked":               nil,
 		"cli.host.fault.socket_taken":                  nil,
 		"cli.host.fault.empty_shell_command":           nil,
 		"cli.host.fault.unknown_shell_session":         nil,

@@ -13,6 +13,7 @@ import (
 )
 
 func TestClaimSocketPathRefusesASocketAnotherDaemonServes(t *testing.T) {
+	layout := isolatedRuntimeDir(t)
 	path := filepath.Join(t.TempDir(), "live.sock")
 	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", path)
 	if err != nil {
@@ -29,7 +30,7 @@ func TestClaimSocketPathRefusesASocketAnotherDaemonServes(t *testing.T) {
 		}
 	}()
 
-	if err := claimSocketPath(context.Background(), path); !errors.Is(err, errSocketTaken) {
+	if err := claimSocketPath(context.Background(), layout, path); !errors.Is(err, errSocketTaken) {
 		t.Fatalf("claimSocketPath on a live socket = %v, want errSocketTaken", err)
 	}
 	if _, err := os.Stat(path); err != nil {
@@ -38,11 +39,12 @@ func TestClaimSocketPathRefusesASocketAnotherDaemonServes(t *testing.T) {
 }
 
 func TestClaimSocketPathClearsAStaleSocket(t *testing.T) {
+	layout := isolatedRuntimeDir(t)
 	path := filepath.Join(t.TempDir(), "stale.sock")
 	if err := os.WriteFile(path, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := claimSocketPath(context.Background(), path); err != nil {
+	if err := claimSocketPath(context.Background(), layout, path); err != nil {
 		t.Fatalf("claimSocketPath on a stale file = %v, want nil", err)
 	}
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
@@ -51,11 +53,11 @@ func TestClaimSocketPathClearsAStaleSocket(t *testing.T) {
 }
 
 func TestADaemonRefusesAnInstanceAnotherDaemonServes(t *testing.T) {
-	ensureTestRuntimeDir(t)
-	if err := refuseTakenInstance(context.Background(), "t1"); err != nil {
+	layout := isolatedRuntimeDir(t)
+	if err := refuseTakenInstance(context.Background(), layout, "t1"); err != nil {
 		t.Fatalf("a free instance was refused: %v", err)
 	}
-	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", CommandSocketPath("t1"))
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", commandSocketPathIn(layout, "t1"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,50 +71,48 @@ func TestADaemonRefusesAnInstanceAnotherDaemonServes(t *testing.T) {
 			logCleanup(conn.Close())
 		}
 	}()
-	if err := refuseTakenInstance(context.Background(), "t1"); !errors.Is(err, errSocketTaken) {
+	if err := refuseTakenInstance(context.Background(), layout, "t1"); !errors.Is(err, errSocketTaken) {
 		t.Fatalf("refuseTakenInstance = %v, want errSocketTaken", err)
 	}
 }
 
 func TestADaemonRefusesAnInstanceWhoseEventsSocketIsTaken(t *testing.T) {
-	ensureTestRuntimeDir(t)
-	answeringListener(t, EventsSocketPath("t2"))
-	if err := refuseTakenInstance(context.Background(), "t2"); !errors.Is(err, errSocketTaken) {
+	layout := isolatedRuntimeDir(t)
+	answeringListener(t, eventsSocketPathIn(layout, "t2"))
+	if err := refuseTakenInstance(context.Background(), layout, "t2"); !errors.Is(err, errSocketTaken) {
 		t.Fatalf("refuseTakenInstance with a live events socket = %v, want errSocketTaken", err)
 	}
 }
 
 func TestServeHubSocketsStopsTheDaemonOnATakenEventsSocket(t *testing.T) {
-	ensureTestRuntimeDir(t)
-	answeringListener(t, EventsSocketPath("t3"))
-	_, err := serveHubSockets(context.Background(), "t3", &hub{})
+	layout := isolatedRuntimeDir(t)
+	answeringListener(t, eventsSocketPathIn(layout, "t3"))
+	_, err := serveHubSockets(context.Background(), layout, "t3", &hub{})
 	if !errors.Is(err, errSocketTaken) {
 		t.Fatalf("serveHubSockets with a live events socket = %v, want errSocketTaken", err)
 	}
 }
 
 func TestServeHubSocketsStopsTheDaemonOnATakenCommandSocket(t *testing.T) {
-	ensureTestRuntimeDir(t)
-	answeringListener(t, CommandSocketPath("t4"))
-	_, err := serveHubSockets(context.Background(), "t4", &hub{})
+	layout := isolatedRuntimeDir(t)
+	answeringListener(t, commandSocketPathIn(layout, "t4"))
+	_, err := serveHubSockets(context.Background(), layout, "t4", &hub{})
 	if !errors.Is(err, errSocketTaken) {
 		t.Fatalf("serveHubSockets with a live command socket = %v, want errSocketTaken", err)
 	}
 }
 
 func TestLockInstanceRefusesASecondDaemonOfTheSameInstance(t *testing.T) {
-	ensureTestRuntimeDir(t)
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	t.Setenv("HOME", t.TempDir())
-	release, err := lockInstance("t5")
+	layout := isolatedRuntimeDir(t)
+	release, err := lockInstance(layout, "t5")
 	if err != nil {
 		t.Fatalf("first lockInstance: %v", err)
 	}
-	if _, secondErr := lockInstance("t5"); !errors.Is(secondErr, errSocketTaken) {
-		t.Fatalf("second lockInstance = %v, want errSocketTaken", secondErr)
+	if _, secondErr := lockInstance(layout, "t5"); !errors.Is(secondErr, errInstanceLocked) {
+		t.Fatalf("second lockInstance = %v, want errInstanceLocked", secondErr)
 	}
 	release()
-	again, err := lockInstance("t5")
+	again, err := lockInstance(layout, "t5")
 	if err != nil {
 		t.Fatalf("lockInstance after release: %v", err)
 	}
@@ -138,10 +138,10 @@ func answeringListener(t *testing.T, path string) {
 }
 
 func TestShutdownLeavesASocketANewerDaemonOwns(t *testing.T) {
-	ensureTestRuntimeDir(t)
+	layout := isolatedRuntimeDir(t)
 	path := filepath.Join(t.TempDir(), "takeover.sock")
 	ctx, cancel := context.WithCancel(context.Background())
-	listener, err := openCommandSocket(ctx, path)
+	listener, err := openCommandSocket(ctx, layout, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestShutdownLeavesASocketANewerDaemonOwns(t *testing.T) {
 	if removeErr := os.Remove(path); removeErr != nil {
 		t.Fatal(removeErr)
 	}
-	newer, err := listenCommandSocket(context.Background(), path)
+	newer, err := listenCommandSocket(context.Background(), layout, path)
 	if err != nil {
 		t.Fatalf("newer daemon listen: %v", err)
 	}
@@ -160,15 +160,15 @@ func TestShutdownLeavesASocketANewerDaemonOwns(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the older daemon did not finish releasing its socket after shutdown")
 	}
-	if !socketAnswers(context.Background(), path) {
+	if !socketAnswers(context.Background(), layout, path) {
 		t.Fatal("the older daemon removed the socket the newer one owns on shutdown")
 	}
 }
 
 func TestServeHubSocketsReportReleasedOnlyOnceTheFilesAreGone(t *testing.T) {
-	ensureTestRuntimeDir(t)
+	layout := isolatedRuntimeDir(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	released, err := serveHubSockets(ctx, "t6", &hub{})
+	released, err := serveHubSockets(ctx, layout, "t6", &hub{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestServeHubSocketsReportReleasedOnlyOnceTheFilesAreGone(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("serveHubSockets did not report its sockets released after shutdown")
 	}
-	for _, path := range []string{CommandSocketPath("t6"), EventsSocketPath("t6")} {
+	for _, path := range []string{commandSocketPathIn(layout, "t6"), eventsSocketPathIn(layout, "t6")} {
 		if _, statErr := os.Stat(path); !errors.Is(statErr, os.ErrNotExist) {
 			t.Fatalf("socket %q is still on disk after its release was reported: %v", path, statErr)
 		}

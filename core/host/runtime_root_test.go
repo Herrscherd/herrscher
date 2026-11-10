@@ -5,17 +5,11 @@ package host
 import (
 	"os"
 	"testing"
+
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir/leakguard"
 )
 
 func TestMain(m *testing.M) {
-	root, err := os.MkdirTemp(shortTempRoot, "rt")
-	if err != nil {
-		panic(err)
-	}
-	SetRuntimeRoot(root)
-	code := m.Run()
-	if err := os.RemoveAll(root); err != nil {
-		panic(err)
-	}
-	os.Exit(code)
+	guard := leakguard.Start()
+	os.Exit(guard.Finish(m.Run()))
 }

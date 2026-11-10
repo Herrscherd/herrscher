@@ -20,7 +20,7 @@ func (d errDispatcher) Dispatch(context.Context, []string) (string, error) { ret
 func serveOneCommand(t *testing.T, instance string, disp dispatcher) {
 	t.Helper()
 	path := CommandSocketPath(instance)
-	ln, err := listenCommandSocket(t.Context(), path)
+	ln, err := listenCommandSocket(t.Context(), isolatedRuntimeDir(t), path)
 	if err != nil {
 		t.Fatalf("listenCommandSocket: %v", err)
 	}

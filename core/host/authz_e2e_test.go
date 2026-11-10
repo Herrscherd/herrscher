@@ -34,12 +34,12 @@ func TestTheSameArgvIsRefusedOnOneSocketAndRunOnTheOther(t *testing.T) {
 	sessionSock := filepath.Join(dir, "s1.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	serveCommandSocket(ctx, operatorSock, asOperator{disp: h, lang: h.lang})
-	serveCommandSocket(ctx, sessionSock, asSession{disp: h, session: "s1", lang: h.lang})
+	serveCommandSocket(ctx, isolatedRuntimeDir(t), operatorSock, asOperator{disp: h, lang: h.lang})
+	serveCommandSocket(ctx, isolatedRuntimeDir(t), sessionSock, asSession{disp: h, session: "s1", lang: h.lang})
 
 	argv := []string{"approve", "rule", "allow Bash(*)"}
 
-	out, _, err := dispatchLiveCommand(ctx, operatorSock, argv)
+	out, _, err := dispatchLiveCommand(ctx, isolatedRuntimeDir(t), operatorSock, argv)
 	if err != nil {
 		t.Fatalf("the operator socket was refused: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestTheSameArgvIsRefusedOnOneSocketAndRunOnTheOther(t *testing.T) {
 		t.Fatal("the operator's call produced nothing")
 	}
 
-	_, _, err = dispatchLiveCommand(ctx, sessionSock, argv)
+	_, _, err = dispatchLiveCommand(ctx, isolatedRuntimeDir(t), sessionSock, argv)
 	if err == nil {
 		t.Fatal("the same argv on the session socket must be refused")
 	}

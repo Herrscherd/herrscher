@@ -96,23 +96,30 @@ another daemon still answers on, and says so instead of cutting that one off.
 
 ### Where the sockets live
 
-Every socket and lock herrscher creates for a user lives in `/tmp/herrscher-<uid>`,
-a directory only that user can enter (mode 0700, checked on every use: not a
-symbolic link, owned by the user, no group or other bits). A socket keeps its
-readable name there when the full path fits the 103 byte unix limit, and takes a
-hashed name (`hs-<key>.sock`) when it does not.
+Every socket and lock herrscher creates for a user lives in one private directory,
+chosen the same way on every run: `/run/user/<uid>/herrscher` when the systemd user
+session has provided a real `/run/user/<uid>` directory owned by the user with mode
+0700, and `/tmp/herrscher-<uid>` otherwise. The directory must be a real directory
+(not a symbolic link), owned by the user, with no group or other bits, and it is
+checked on every use. A socket keeps its readable name there when the full path fits
+the 103 byte unix limit, and takes a hashed name (`hs-<key>.sock`) when it does not.
+
+When the chosen directory exists but cannot be used, the daemon refuses to start and
+says why. A symbolic link, a directory created by another account (only root can
+remove it, and a systemd user session avoids `/tmp` altogether) and a directory open
+to its group or others (`chmod 700` on it fixes that) each get their own message.
+herrscher never changes a directory it does not own.
 
 Neublox, or any other client that follows the events of an instance, must call
 `host.EventsSocketPath(instanceID)` to find that socket rather than rebuild the name.
 The function is documented in the `core/host` package godoc.
 
-Upgrade note: sockets moved from `/tmp` to `/tmp/herrscher-<uid>`. Clients built
-before this version must be updated to find the sockets through `host.EventsSocketPath`
-and the command socket helpers, and remote sessions must be restarted once so they
-forward the new paths. A `/tmp/herrscher-<uid>` directory left by an older build with group or
-other access is refused with a message that tells you to run `chmod 700` on it. A
-directory owned by another user is refused too: ask that user or root to remove it,
-herrscher never changes it.
+Upgrade note: sockets moved from `/tmp` to the per-user directory described above.
+Clients built before this version must be updated to find the sockets through
+`host.EventsSocketPath` and the command socket helpers, and remote sessions must be
+restarted once so they forward the new paths. An older `/tmp/herrscher-<uid>` left with
+group or other access is refused with a message that tells you to run `chmod 700` on it.
+A directory owned by another user is refused too: ask that user or root to remove it.
 
 ## What a session gives you
 
@@ -274,11 +281,12 @@ the agent's own shell reaches the daemon that started it. Each session forwards
 its own path and each launch owns its connection, so a second session on the same
 host cannot take the first one's socket away.
 
-Every socket lives in the per-user directory `/tmp/herrscher-<uid>` on the remote
-machine too, which the daemon resolves over ssh once per host and creates with
-mode 0700 if it is missing. A session forwarded by a build from before that change
-keeps dialling the old `/tmp` paths while the new daemon listens in
-`/tmp/herrscher-<uid>`. Restart each remote session once after the upgrade to
+Every socket lives in the per-user directory on the remote machine too. The daemon
+resolves that directory over ssh once per host, with the same rule as locally
+(`/run/user/<uid>/herrscher` when the systemd user session provides it,
+`/tmp/herrscher-<uid>` otherwise), and creates it with mode 0700 if it is missing.
+A session forwarded by a build from before that change keeps dialling the old `/tmp`
+paths while the new daemon listens in the new directory. Restart each remote session once after the upgrade to
 forward the new paths. Until then its bridge cannot reach the daemon, and the
 session shows no answer.
 

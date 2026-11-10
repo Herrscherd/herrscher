@@ -300,6 +300,11 @@
     "other": "events socket {{.Path}}: {{.Detail}}"
   },
   {
+    "id": "daemon.instance_locked",
+    "description": "The instance lock file or mutex is held by another live daemon, Path names it",
+    "other": "another daemon already holds the lock of this instance: {{.Path}}"
+  },
+  {
     "id": "daemon.socket_taken",
     "description": "A daemon socket path already answers for another live daemon, Path gives the path and Detail carries the cause",
     "other": "socket {{.Path}}: {{.Detail}}"
@@ -327,12 +332,12 @@
   {
     "id": "runtime.unsafe_dir.symlink",
     "description": "The private runtime directory is a symbolic link, Path names it",
-    "other": "private runtime directory {{.Path}} cannot be used: it is a symbolic link. Remove the link, herrscher recreates the directory itself."
+    "other": "private runtime directory {{.Path}} cannot be used: it is a symbolic link. If you created the link, remove it and herrscher recreates the directory. Otherwise only root can remove it."
   },
   {
     "id": "runtime.unsafe_dir.foreign_owner",
     "description": "The private runtime directory belongs to another user, Path names it",
-    "other": "private runtime directory {{.Path}} cannot be used: it is owned by another user. Herrscher will not change it. Ask that user or root to remove it."
+    "other": "private runtime directory {{.Path}} cannot be used: another account created it, so herrscher will not change it and only root can remove it. Ask root to remove it, or start the daemon from a systemd user session, which uses /run/user instead."
   },
   {
     "id": "runtime.unsafe_dir.open_access",

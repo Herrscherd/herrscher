@@ -9,16 +9,18 @@ import (
 	"syscall"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
-func lockInstance(instanceID string) (func(), error) {
-	path := runtimeLayout.Lock(instanceID)
-	if err := ensureRuntimeDir(path); err != nil {
+func lockInstance(layout runtimedir.Layout, instanceID string) (func(), error) {
+	path := layout.Lock(instanceID)
+	if err := ensureRuntimeDir(layout, path); err != nil {
 		return nil, err
 	}
 	release, err := takeLock(path)
 	if _, ok := errors.AsType[*lockTakenError](err); ok {
-		return nil, wrapHost(errSocketTaken, "daemon.socket_taken", map[string]any{pathParam: path})
+		return nil, wrapHost(errInstanceLocked, "daemon.instance_locked", map[string]any{pathParam: path})
 	}
 	return release, err
 }

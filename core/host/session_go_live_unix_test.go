@@ -12,13 +12,12 @@ import (
 )
 
 func TestGoLiveReportsACommandSocketItCannotOpen(t *testing.T) {
-	ensureTestRuntimeDir(t)
-	isolatedRuntimeDir(t)
+	layout := isolatedRuntimeDir(t)
 	name := "golive-" + newTurnID()
-	if err := ensureRuntimeDir(SessionCommandSocketPath("", name)); err != nil {
+	if err := ensureRuntimeDir(layout, sessionCommandSocketPathIn(layout, "", name)); err != nil {
 		t.Fatal(err)
 	}
-	answeringListener(t, SessionCommandSocketPath("", name))
+	answeringListener(t, sessionCommandSocketPathIn(layout, "", name))
 	h := newHub(
 		state.NewState(filepath.Join(t.TempDir(), "state.json")),
 		nil,
@@ -29,6 +28,7 @@ func TestGoLiveReportsACommandSocketItCannotOpen(t *testing.T) {
 		newApprovalTable(),
 		newSessionTable(),
 	)
+	h.runtime = layout
 	err := h.goLive(t.Context(), state.Session{Name: name, Incarnation: "incarnation"})
 	if !errors.Is(err, errSocketTaken) {
 		t.Fatalf("goLive with a taken command socket = %v, want errSocketTaken", err)
@@ -36,7 +36,7 @@ func TestGoLiveReportsACommandSocketItCannotOpen(t *testing.T) {
 	if _, live := h.live[name]; live {
 		t.Fatal("a session whose command socket is taken was reported live")
 	}
-	if conn, dialErr := control.Dial(control.SocketPath("", name)); dialErr == nil {
+	if conn, dialErr := control.Dial(control.SocketPath(layout, "", name)); dialErr == nil {
 		logCleanup(conn.Close())
 		t.Fatal("the control socket stayed open after the session failed to start")
 	}

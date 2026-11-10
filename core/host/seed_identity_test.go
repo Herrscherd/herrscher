@@ -231,6 +231,7 @@ func TestDaemonSeedCoordinatesPersistsAndDoesNotHoldDispatchLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := newHub(st, sup, nil, partDir, reg, nil, approvalTab, sessionTab)
+	h.runtime = isolatedRuntimeDir(t)
 	coord := &reentrantSeedCoordinator{recordingCoord: &recordingCoord{}, hub: h}
 	h.coordinator = coord
 

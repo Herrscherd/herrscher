@@ -13,7 +13,7 @@ import (
 
 func TestInstanceLockLivesInThePrivateDirKeyedByInstance(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
-	release, err := lockInstance("t7")
+	release, err := lockInstance(layout, "t7")
 	if err != nil {
 		t.Fatalf("lockInstance: %v", err)
 	}
@@ -27,17 +27,17 @@ func TestInstanceLockLivesInThePrivateDirKeyedByInstance(t *testing.T) {
 }
 
 func TestSecondDaemonOfOneInstanceIsRefused(t *testing.T) {
-	isolatedRuntimeDir(t)
-	first, err := lockInstance("t7")
+	layout := isolatedRuntimeDir(t)
+	first, err := lockInstance(layout, "t7")
 	if err != nil {
 		t.Fatalf("lockInstance: %v", err)
 	}
-	_, err = lockInstance("t7")
-	if !errors.Is(err, errSocketTaken) {
-		t.Fatalf("second lockInstance = %v, want errSocketTaken", err)
+	_, err = lockInstance(layout, "t7")
+	if !errors.Is(err, errInstanceLocked) {
+		t.Fatalf("second lockInstance = %v, want errInstanceLocked", err)
 	}
 	first()
-	second, err := lockInstance("t7")
+	second, err := lockInstance(layout, "t7")
 	if err != nil {
 		t.Fatalf("lockInstance after release: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestInstanceLockRefusesASymlinkAtItsPath(t *testing.T) {
 	if err := os.Symlink(victim, layout.Lock("t8")); err != nil {
 		t.Fatal(err)
 	}
-	_, err := lockInstance("t8")
+	_, err := lockInstance(layout, "t8")
 	wrapped, ok := errors.AsType[hostWrapError](err)
 	if !ok || wrapped.key != "lock.unsafe" {
 		t.Fatalf("lockInstance over a symlink = %v, want the lock.unsafe error", err)

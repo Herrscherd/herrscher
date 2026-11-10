@@ -17,6 +17,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 	"github.com/Herrscherd/herrscher/core/usage"
@@ -41,6 +42,7 @@ type hub struct {
 	contributedKinds map[string]bool
 
 	instanceID string
+	runtime    runtimedir.Layout
 
 	warnedRoles sync.Map
 
@@ -76,6 +78,9 @@ func eventTap(publish func(string, contracts.Event), session string) func(contra
 }
 
 func (h *hub) goLive(ctx context.Context, sess state.Session) error {
+	if h.runtime.Dir() == "" {
+		return errNoRuntimeLayout
+	}
 	h.lifecycle.Lock()
 	defer h.lifecycle.Unlock()
 	h.mu.Lock()
@@ -84,8 +89,8 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) error {
 	if running {
 		return nil
 	}
-	controlPath := control.SocketPath(h.instanceID, sess.Name)
-	if err := ensureRuntimeDir(controlPath); err != nil {
+	controlPath := control.SocketPath(h.runtime, h.instanceID, sess.Name)
+	if err := ensureRuntimeDir(h.runtime, controlPath); err != nil {
 		return err
 	}
 	acc, err := control.Accept(context.WithoutCancel(ctx), controlPath)
@@ -93,7 +98,7 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) error {
 		return wrapHost(err, "session.go_live", map[string]any{"Name": sess.Name})
 	}
 	sctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	commands, err := openCommandSocket(sctx, SessionCommandSocketPath(h.instanceID, sess.Name))
+	commands, err := openCommandSocket(sctx, h.runtime, sessionCommandSocketPathIn(h.runtime, h.instanceID, sess.Name))
 	if err != nil {
 		cancel()
 		logCleanup(acc.Close())

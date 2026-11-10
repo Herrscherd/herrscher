@@ -65,7 +65,7 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	p := newHostPlacer(st, "e2e", nil, func() string { return service.SourceVersion(ctx, src) })
 	repo := provisioned.Workspace + "/app"
 	t.Cleanup(func() {
-		_, rmErr := capture(context.Background(), runnerFor(provisioned), "rm", "-rf", repo)
+		_, rmErr := capture(context.Background(), runnerForTest(t, provisioned), "rm", "-rf", repo)
 		logCleanup(rmErr)
 	})
 	assertProjectEnsuredTwice(ctx, t, p, repo)
@@ -84,7 +84,7 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 func provisionE2EHost(ctx context.Context, t *testing.T, st *state.State, target, src string) state.Host {
 	t.Helper()
 	h := state.Host{Name: "e2e", SSH: target, Workspace: remoteWorkspace(ctx, t, target)}
-	provisioned, err := provisionHost(ctx, runnerFor(h), h, src)
+	provisioned, err := provisionHost(ctx, runnerForTest(t, h), h, src)
 	if err != nil {
 		t.Fatalf("provision: %v", err)
 	}
@@ -94,7 +94,7 @@ func provisionE2EHost(ctx context.Context, t *testing.T, st *state.State, target
 	if putErr := st.PutHost(provisioned); putErr != nil {
 		t.Fatal(putErr)
 	}
-	rep := checkHost(ctx, runnerFor(provisioned), provisioned, service.SourceVersion(ctx, src))
+	rep := checkHost(ctx, runnerForTest(t, provisioned), provisioned, service.SourceVersion(ctx, src))
 	if !rep.Reachable || !rep.Workspace || !rep.Git || rep.Drift {
 		t.Fatalf("a freshly provisioned host must check clean, got %+v", rep)
 	}
@@ -155,14 +155,14 @@ func assertE2EMaterialized(ctx context.Context, t *testing.T, p hostPlacer, st *
 	if materializeErr := p.Materialize(ctx, "e2e", a, path, true); materializeErr != nil {
 		t.Fatalf("materialize on the host: %v", materializeErr)
 	}
-	soul, err := capture(ctx, runnerFor(provisioned), "cat", path+"/.claude/CLAUDE.md")
+	soul, err := capture(ctx, runnerForTest(t, provisioned), "cat", path+"/.claude/CLAUDE.md")
 	if err != nil {
 		t.Fatalf("read the materialized soul: %v", err)
 	}
 	if !strings.Contains(soul, "# E2E") {
 		t.Fatalf("the agent's soul must land in the remote worktree, got %q", soul)
 	}
-	settings, err := capture(ctx, runnerFor(provisioned), "cat", path+"/.claude/settings.json")
+	settings, err := capture(ctx, runnerForTest(t, provisioned), "cat", path+"/.claude/settings.json")
 	if err != nil {
 		t.Fatalf("read the materialized settings: %v", err)
 	}
@@ -180,7 +180,7 @@ func removeE2EWorktree(ctx context.Context, t *testing.T, wt manager.Worktrees, 
 	if err := wt.Remove(ctx, repo, "demo", true); err != nil {
 		t.Fatalf("remote worktree remove: %v", err)
 	}
-	if _, err := capture(ctx, runnerFor(provisioned), "test", "-d", path); err == nil {
+	if _, err := capture(ctx, runnerForTest(t, provisioned), "test", "-d", path); err == nil {
 		t.Fatal("remove must take the directory with it")
 	}
 }
@@ -222,7 +222,7 @@ func TestE2ERemoteCommandSocketForward(t *testing.T) {
 	src := sourceRoot(t)
 
 	h := state.Host{Name: "e2e", SSH: target, Workspace: remoteWorkspace(ctx, t, target)}
-	provisioned, err := provisionHost(ctx, runnerFor(h), h, src)
+	provisioned, err := provisionHost(ctx, runnerForTest(t, h), h, src)
 	if err != nil {
 		t.Fatalf("provision: %v", err)
 	}
@@ -230,13 +230,13 @@ func TestE2ERemoteCommandSocketForward(t *testing.T) {
 	const instID = "e2efwd"
 	local := filepath.Join(os.TempDir(), "herrscher-e2e-daemon.sock")
 	remote := control.RemoteCommandSocketPath(remoteSocketDir(ctx, t, target), instID, "e2e-session")
-	serveCommandSocket(ctx, local, &fakeDispatcher{out: "reached the daemon"})
+	serveCommandSocket(ctx, isolatedRuntimeDir(t), local, &fakeDispatcher{out: "reached the daemon"})
 
 	run := runner.SSH{Target: target, Forwards: []runner.Forward{{Remote: remote, Local: local}}}
 	if prep := run.PrepareForwards(ctx); prep != nil {
 		logCleanup(prep.Run())
 	}
-	remoteState, err := capture(ctx, runnerFor(provisioned), "mktemp", "-d")
+	remoteState, err := capture(ctx, runnerForTest(t, provisioned), "mktemp", "-d")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,17 +260,17 @@ func TestE2ETwoSessionsReachTheDaemonAtOnce(t *testing.T) {
 	defer cancel()
 
 	h := state.Host{Name: "e2e", SSH: target, Workspace: remoteWorkspace(ctx, t, target)}
-	provisioned, err := provisionHost(ctx, runnerFor(h), h, sourceRoot(t))
+	provisioned, err := provisionHost(ctx, runnerForTest(t, h), h, sourceRoot(t))
 	if err != nil {
 		t.Fatalf("provision: %v", err)
 	}
-	remoteState, err := capture(ctx, runnerFor(provisioned), "mktemp", "-d")
+	remoteState, err := capture(ctx, runnerForTest(t, provisioned), "mktemp", "-d")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	local := filepath.Join(os.TempDir(), "herrscher-e2e-two.sock")
-	serveCommandSocket(ctx, local, &fakeDispatcher{out: "reached the daemon"})
+	serveCommandSocket(ctx, isolatedRuntimeDir(t), local, &fakeDispatcher{out: "reached the daemon"})
 
 	sessions := []string{"e2e-one", "e2e-two"}
 	dir := remoteSocketDir(ctx, t, target)
@@ -350,7 +350,11 @@ func forwardConfirmed(line, remote string) bool {
 
 func remoteWorkspace(ctx context.Context, t *testing.T, target string) string {
 	t.Helper()
-	run := runner.SSH{Target: target, ControlPath: runner.ControlPathFor(target)}
+	controlPath, err := runner.ControlPathFor(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := runner.SSH{Target: target, ControlPath: controlPath}
 	out, err := capture(ctx, run, "sh", "-c", "d=$(mktemp -d)/ws; mkdir -p $d; echo $d")
 	if err != nil {
 		t.Fatalf("make a remote workspace: %v", err)
@@ -367,4 +371,13 @@ func mustGit(t *testing.T, dir string, argv ...string) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %s: %v\n%s", strings.Join(argv, " "), err, out)
 	}
+}
+
+func runnerForTest(t *testing.T, h state.Host) hostRunner {
+	t.Helper()
+	run, err := runnerFor(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return run
 }

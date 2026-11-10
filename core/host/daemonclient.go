@@ -13,6 +13,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/scope"
 )
@@ -79,9 +80,11 @@ func ServedInstanceID(statePath, optID string) string {
 // client that meant to speak to the daemon must hear that it could not, rather
 // than silently acting on a second copy of the state.
 func DaemonDispatch(ctx context.Context, instanceID string, argv []string) (string, error) {
-	out, handled, err := dispatchLiveCommand(ctx, CommandSocketPath(instanceID), argv)
+	layout := runtimedir.Production()
+	socket := commandSocketPathIn(layout, instanceID)
+	out, handled, err := dispatchLiveCommand(ctx, layout, socket, argv)
 	if !handled {
-		return "", &daemonNotRunningError{Socket: CommandSocketPath(instanceID)}
+		return "", &daemonNotRunningError{Socket: socket}
 	}
 	return out, err
 }
@@ -90,6 +93,10 @@ func DaemonDispatch(ctx context.Context, instanceID string, argv []string) (stri
 func IsDaemonNotRunning(err error) bool {
 	_, ok := errors.AsType[*daemonNotRunningError](err)
 	return ok
+}
+
+func dispatchToOperatorDaemon(ctx context.Context, path string, argv []string) (string, bool, error) {
+	return dispatchLiveCommand(ctx, runtimedir.Production(), path, argv)
 }
 
 // ForwardToDaemon hands a raw argv to the daemon serving statePath and returns
@@ -103,7 +110,7 @@ func IsDaemonNotRunning(err error) bool {
 // caller is free to answer as it did before there was a daemon to ask. A verb
 // that lives only inside a daemon must not claim to exist when none is running.
 func ForwardToDaemon(ctx context.Context, statePath, optID string, argv []string) (string, bool, error) {
-	return dispatchLiveCommand(ctx, commandSocketTarget(ServedInstanceID(statePath, optID)), argv)
+	return dispatchToOperatorDaemon(ctx, commandSocketTarget(ServedInstanceID(statePath, optID)), argv)
 }
 
 // SubscribeDaemonEvents dials the daemon's events socket and streams what it
@@ -113,13 +120,14 @@ func ForwardToDaemon(ctx context.Context, statePath, optID string, argv []string
 // The daemon drops a subscriber's lines rather than block a turn on it, so a
 // consumer that falls far enough behind loses telemetry. Read promptly.
 func SubscribeDaemonEvents(ctx context.Context, instanceID string) (<-chan DaemonEvent, error) {
-	return subscribeAt(ctx, EventsSocketPath(instanceID))
+	layout := runtimedir.Production()
+	return subscribeAt(ctx, layout, eventsSocketPathIn(layout, instanceID))
 }
 
 var errDaemonEventsUnreachable = errors.New("the daemon does not answer on its events socket")
 
-func subscribeAt(ctx context.Context, path string) (<-chan DaemonEvent, error) {
-	if err := ensureRuntimeDir(path); err != nil {
+func subscribeAt(ctx context.Context, layout runtimedir.Layout, path string) (<-chan DaemonEvent, error) {
+	if err := ensureRuntimeDir(layout, path); err != nil {
 		return nil, err
 	}
 	var d net.Dialer

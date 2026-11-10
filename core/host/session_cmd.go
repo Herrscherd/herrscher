@@ -95,7 +95,7 @@ func runSeedVerb(ctx context.Context, input contracts.Input, store *state.State,
 	reply, err := runOneShotSeedCommand(
 		ctx, store, input.Get(paramName), input.Get("task"),
 		turnID, runtime,
-		coord, instID, dispatchLiveCommand,
+		coord, instID, dispatchToOperatorDaemon,
 	)
 	if err != nil {
 		return "", err

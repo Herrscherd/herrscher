@@ -253,6 +253,7 @@ func TestGoLiveUsesTheSessionLanguage(t *testing.T) {
 		newApprovalTable(),
 		sessions,
 	)
+	h.runtime = isolatedRuntimeDir(t)
 	h.lang = i18n.French
 	name := "lang-" + newTurnID()
 	t.Cleanup(func() { h.goDead(name) })

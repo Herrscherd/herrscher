@@ -300,6 +300,11 @@
     "other": "socket d'événements {{.Path}} : {{.Detail}}"
   },
   {
+    "id": "daemon.instance_locked",
+    "description": "The instance lock file or mutex is held by another live daemon, Path names it",
+    "other": "un autre démon détient déjà le verrou de cette instance : {{.Path}}"
+  },
+  {
     "id": "daemon.socket_taken",
     "description": "A daemon socket path already answers for another live daemon, Path gives the path and Detail carries the cause",
     "other": "socket {{.Path}} : {{.Detail}}"
@@ -327,12 +332,12 @@
   {
     "id": "runtime.unsafe_dir.symlink",
     "description": "Le répertoire d'exécution privé est un lien symbolique, Path le nomme",
-    "other": "répertoire d'exécution privé {{.Path}} inutilisable : c'est un lien symbolique. Supprimez le lien, herrscher recrée le répertoire lui-même."
+    "other": "répertoire d'exécution privé {{.Path}} inutilisable : c'est un lien symbolique. Si vous avez créé ce lien, supprimez-le et herrscher recrée le répertoire. Sinon, seul root peut le supprimer."
   },
   {
     "id": "runtime.unsafe_dir.foreign_owner",
     "description": "Le répertoire d'exécution privé appartient à un autre utilisateur, Path le nomme",
-    "other": "répertoire d'exécution privé {{.Path}} inutilisable : il appartient à un autre utilisateur. Herrscher ne le modifiera pas. Demandez à cet utilisateur ou à root de le supprimer."
+    "other": "répertoire d'exécution privé {{.Path}} inutilisable : un autre compte l'a créé, herrscher ne le modifiera pas et seul root peut le supprimer. Demandez à root de le supprimer, ou lancez le démon depuis une session utilisateur systemd, qui utilise /run/user à la place."
   },
   {
     "id": "runtime.unsafe_dir.open_access",

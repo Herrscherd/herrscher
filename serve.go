@@ -81,6 +81,13 @@ func prepareLanguages(log *slog.Logger, cfg config.Config, statePath string) (la
 	return langs, nil
 }
 
+func homeRef(cfg config.Config) *host.HomeRef {
+	if cfg.Home == nil || cfg.Home.ID == "" {
+		return nil
+	}
+	return &host.HomeRef{ID: cfg.Home.ID, Type: cfg.Home.Type}
+}
+
 func serveWith(ctx context.Context, args []string, open *openWindow, cfg config.Config, langs language.Languages) error {
 	translator := clitext.For(langs.Operator)
 	platform := platformtext.For(langs.Operator)
@@ -93,6 +100,7 @@ func serveWith(ctx context.Context, args []string, open *openWindow, cfg config.
 	statusChannel := flags.String("status-channel", cfg.StatusChannel, translator.Text(clitext.ServeFlagStatusChannel, nil))
 	instanceID := flags.String("instance", or(envx.Get("INSTANCE_ID"), cfg.Instance), platform.Text(platformtext.ServeFlagInstance))
 	envFile := flags.String("env-file", "", platform.Text(platformtext.ServeFlagEnvFile))
+	runtimeDir := flags.String("runtime-dir", "", "")
 	if err := errors.Join(translator.Err(), platform.Err()); err != nil {
 		return err
 	}
@@ -107,12 +115,13 @@ func serveWith(ctx context.Context, args []string, open *openWindow, cfg config.
 			return loadErr
 		}
 	}
+	layout, err := host.RuntimeFor(*runtimeDir)
+	if err != nil {
+		return err
+	}
 	models := host.ModelDiscoveryFor(*statePath)
 	owner := or(envx.Get("OWNER_ID"), cfg.Owner)
-	var home *host.HomeRef
-	if cfg.Home != nil && cfg.Home.ID != "" {
-		home = &host.HomeRef{ID: cfg.Home.ID, Type: cfg.Home.Type}
-	}
+	home := homeRef(cfg)
 
 	unlock, attached, err := lockOrAttach(ctx, langs.Operator, *statePath, *instanceID, open)
 	if attached || err != nil {
@@ -131,6 +140,7 @@ func serveWith(ctx context.Context, args []string, open *openWindow, cfg config.
 
 	opts := host.Options{
 		StatePath:           *statePath,
+		Runtime:             layout,
 		Language:            langs.Operator,
 		DefaultLanguage:     langs.Default,
 		Models:              models,
@@ -319,10 +329,7 @@ func newOperatorRegistry(ctx context.Context, cfg config.Config, lang i18n.Langu
 	if err != nil {
 		return nil, err
 	}
-	var home *host.HomeRef
-	if cfg.Home != nil && cfg.Home.ID != "" {
-		home = &host.HomeRef{ID: cfg.Home.ID, Type: cfg.Home.Type}
-	}
+	home := homeRef(cfg)
 	return host.NewRegistry(ctx, gws, host.Options{
 		StatePath:  host.DefaultStatePath(),
 		DefaultCmd: or(cfg.Cmd, "claude"),

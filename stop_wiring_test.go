@@ -15,6 +15,8 @@ import (
 	"time"
 )
 
+const shortTempRoot = "/tmp"
+
 func isolatedRuntimeRoot(t *testing.T) string {
 	t.Helper()
 	dir := filepath.Join(shortTempRoot, "rt"+strconv.FormatInt(time.Now().UnixNano(), 10))

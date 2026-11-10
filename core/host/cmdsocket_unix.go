@@ -12,13 +12,18 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
-// CommandSocketPath is the daemon-level operator command socket.
+// CommandSocketPath is the daemon-level operator command socket of the user
+// running this process.
 func CommandSocketPath(instanceID string) string {
+	return commandSocketPathIn(runtimedir.Production(), instanceID)
+}
+
+func commandSocketPathIn(layout runtimedir.Layout, instanceID string) string {
 	name := "herrscher-command"
 	if instanceID != "" {
 		name += "-" + instanceID
 	}
-	return runtimeLayout.Socket(name)
+	return layout.Socket(name)
 }
 
 // SessionCommandSocketPath is the command socket one session's own processes
@@ -35,36 +40,46 @@ func CommandSocketPath(instanceID string) string {
 // real boundary, since ssh forwards this session's socket and no other, so the
 // far machine has no path to anything else.
 func SessionCommandSocketPath(instanceID, session string) string {
+	return sessionCommandSocketPathIn(runtimedir.Production(), instanceID, session)
+}
+
+func sessionCommandSocketPathIn(layout runtimedir.Layout, instanceID, session string) string {
 	name := "herrscher-command"
 	if instanceID != "" {
 		name += "-" + instanceID
 	}
-	return runtimeLayout.Socket(name + "-s-" + control.SafeSessionName(session))
+	return layout.Socket(name + "-s-" + control.SafeSessionName(session))
 }
 
 // EventsSocketPath is the unix socket of the daemon's per-session events fan-out
-// for instanceID. It is the contract for Neublox's HerrscherEventSource, which
-// must call this function rather than rebuild the name. The socket lives in the
-// per-user directory /tmp/herrscher-<uid> under the name herrscher-events (with
-// -<instanceID> when one is set), or under its hashed name in that directory
-// when the full path is longer than the unix socket limit.
+// for instanceID in the per-user directory of the user running this process. It
+// is the contract for Neublox's HerrscherEventSource, which must call this
+// function rather than rebuild the name. The directory is <run user>/<uid>/herrscher
+// when systemd has made a private one for the uid, and /tmp/herrscher-<uid>
+// otherwise. The socket is named herrscher-events (with -<instanceID> when one is
+// set), or takes its hashed name in that directory when the full path is longer
+// than the unix socket limit.
 func EventsSocketPath(instanceID string) string {
+	return eventsSocketPathIn(runtimedir.Production(), instanceID)
+}
+
+func eventsSocketPathIn(layout runtimedir.Layout, instanceID string) string {
 	name := "herrscher-events"
 	if instanceID != "" {
 		name += "-" + instanceID
 	}
-	return runtimeLayout.Socket(name)
+	return layout.Socket(name)
 }
 
-func listenCommandSocket(ctx context.Context, path string) (net.Listener, error) {
-	if err := ensureRuntimeDir(path); err != nil {
+func listenCommandSocket(ctx context.Context, layout runtimedir.Layout, path string) (net.Listener, error) {
+	if err := ensureRuntimeDir(layout, path); err != nil {
 		return nil, err
 	}
 	return listenRestricted(ctx, path)
 }
 
-func dialCommandSocket(ctx context.Context, path string) (net.Conn, error) {
-	if err := ensureRuntimeDir(path); err != nil {
+func dialCommandSocket(ctx context.Context, layout runtimedir.Layout, path string) (net.Conn, error) {
+	if err := ensureRuntimeDir(layout, path); err != nil {
 		return nil, err
 	}
 	var d net.Dialer

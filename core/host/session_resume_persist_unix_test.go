@@ -11,16 +11,17 @@ import (
 
 func resumeHubWith(t *testing.T, sess state.Session) (*hub, *state.State) {
 	t.Helper()
-	isolatedRuntimeDir(t)
+	layout := isolatedRuntimeDir(t)
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	if err := st.AddSession(sess); err != nil {
 		t.Fatalf("AddSession: %v", err)
 	}
-	if err := ensureRuntimeDir(SessionCommandSocketPath("", sess.Name)); err != nil {
+	if err := ensureRuntimeDir(layout, sessionCommandSocketPathIn(layout, "", sess.Name)); err != nil {
 		t.Fatal(err)
 	}
-	answeringListener(t, SessionCommandSocketPath("", sess.Name))
+	answeringListener(t, sessionCommandSocketPathIn(layout, "", sess.Name))
 	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(), newSessionTable())
+	h.runtime = layout
 	return h, st
 }
 

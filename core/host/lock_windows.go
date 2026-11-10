@@ -7,11 +7,13 @@ import (
 	"os"
 
 	"golang.org/x/sys/windows"
+
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
 const lockedOffset = 1 << 20
 
-func lockInstance(instanceID string) (func(), error) {
+func lockInstance(_ runtimedir.Layout, instanceID string) (func(), error) {
 	name := `Local\herrscher-instance-` + instanceID
 	mutexName, err := windows.UTF16PtrFromString(name)
 	if err != nil {
@@ -20,7 +22,7 @@ func lockInstance(instanceID string) (func(), error) {
 	handle, err := windows.CreateMutex(nil, false, mutexName)
 	if errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
 		logCleanup(windows.CloseHandle(handle))
-		return nil, wrapHost(errSocketTaken, "daemon.socket_taken", map[string]any{pathParam: name})
+		return nil, wrapHost(errInstanceLocked, "daemon.instance_locked", map[string]any{pathParam: name})
 	}
 	if err != nil {
 		return nil, wrapHost(err, "lock.state", nil)

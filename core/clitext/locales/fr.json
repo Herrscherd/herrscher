@@ -3398,6 +3398,16 @@
     "other": "commande refusée"
   },
   {
+    "id": "cli.host.fault.no_runtime_dir",
+    "description": "Le démon a démarré sans répertoire d'exécution pour ses sockets et son verrou",
+    "other": "le démon a démarré sans répertoire d'exécution pour ses sockets et son verrou"
+  },
+  {
+    "id": "cli.host.fault.instance_locked",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (instance lock held by another daemon)",
+    "other": "un autre démon détient déjà le verrou de cette instance : arrête-le ou passe --instance"
+  },
+  {
     "id": "cli.host.fault.socket_taken",
     "description": "Un autre démon vivant répond déjà sur ce socket, souvent la même instance servant un autre fichier d'état",
     "other": "un autre démon répond déjà sur ce socket (même instance, autre fichier d'état) : arrête-le ou passe --instance"

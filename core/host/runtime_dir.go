@@ -6,15 +6,20 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
-var runtimeLayout = runtimedir.Production()
+var errNoRuntimeLayout = errors.New("the daemon was started without a runtime directory")
 
-// SetRuntimeRoot moves the directory under which this process creates its sockets and locks.
-func SetRuntimeRoot(root string) {
-	runtimeLayout = runtimedir.Layout{Root: root}
+// RuntimeFor is the per-user runtime layout of a daemon: the production layout
+// when dir is empty, otherwise the layout rooted at dir, which must be an
+// absolute path to a private directory.
+func RuntimeFor(dir string) (runtimedir.Layout, error) {
+	if dir == "" {
+		return runtimedir.Production(), nil
+	}
+	return runtimedir.At(dir)
 }
 
-func ensureRuntimeDir(path string) error {
-	return runtimeDirError(runtimeLayout.Check(path))
+func ensureRuntimeDir(layout runtimedir.Layout, path string) error {
+	return runtimeDirError(layout.Check(path))
 }
 
 func runtimeDirError(err error) error {

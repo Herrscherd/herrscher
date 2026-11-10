@@ -12,6 +12,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
 	"github.com/Herrscherd/herrscher/core/compactwire"
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
 type resultDispatcher interface {
@@ -34,10 +35,10 @@ type cmdResponse struct {
 	Notice string  `json:"notice,omitempty"`
 }
 
-func dispatchLiveCommand(ctx context.Context, path string, argv []string) (string, bool, error) {
+func dispatchLiveCommand(ctx context.Context, layout runtimedir.Layout, path string, argv []string) (string, bool, error) {
 	dialCtx, cancel := context.WithTimeout(ctx, commandDialTimeout)
 	defer cancel()
-	conn, err := dialCommandSocket(dialCtx, path)
+	conn, err := dialCommandSocket(dialCtx, layout, path)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return "", true, ctxErr
@@ -103,14 +104,14 @@ func cancellationOr(ctx context.Context, err error) error {
 	return err
 }
 
-func serveCommandSocket(ctx context.Context, path string, disp dispatcher) {
-	if err := serveCommandSocketWithTimeout(ctx, path, disp, defaultCommandReadTimeout); err != nil {
+func serveCommandSocket(ctx context.Context, layout runtimedir.Layout, path string, disp dispatcher) {
+	if err := serveCommandSocketWithTimeout(ctx, layout, path, disp, defaultCommandReadTimeout); err != nil {
 		warnStderr("command socket: listen %s: %v\n", path, err)
 	}
 }
 
-func serveCommandSocketWithTimeout(ctx context.Context, path string, disp dispatcher, readTimeout time.Duration) error {
-	listener, err := openCommandSocket(ctx, path)
+func serveCommandSocketWithTimeout(ctx context.Context, layout runtimedir.Layout, path string, disp dispatcher, readTimeout time.Duration) error {
+	listener, err := openCommandSocket(ctx, layout, path)
 	if err != nil {
 		return err
 	}
@@ -118,11 +119,11 @@ func serveCommandSocketWithTimeout(ctx context.Context, path string, disp dispat
 	return nil
 }
 
-func openCommandSocket(ctx context.Context, path string) (ownedListener, error) {
-	if err := claimSocketPath(ctx, path); err != nil {
+func openCommandSocket(ctx context.Context, layout runtimedir.Layout, path string) (ownedListener, error) {
+	if err := claimSocketPath(ctx, layout, path); err != nil {
 		return ownedListener{}, err
 	}
-	return listenOwned(ctx, path)
+	return listenOwned(ctx, layout, path)
 }
 
 type ownedListener struct {
@@ -132,8 +133,8 @@ type ownedListener struct {
 	own  os.FileInfo
 }
 
-func listenOwned(ctx context.Context, path string) (ownedListener, error) {
-	listener, err := listenCommandSocket(ctx, path)
+func listenOwned(ctx context.Context, layout runtimedir.Layout, path string) (ownedListener, error) {
+	listener, err := listenCommandSocket(ctx, layout, path)
 	if err != nil {
 		return ownedListener{}, err
 	}
@@ -147,17 +148,19 @@ func (l ownedListener) release() {
 
 var errSocketTaken = errors.New("another daemon already answers on this socket (same instance, another state file): stop it or pass --instance")
 
-func refuseTakenInstance(ctx context.Context, instID string) error {
-	for _, path := range []string{CommandSocketPath(instID), EventsSocketPath(instID)} {
-		if socketAnswers(ctx, path) {
+var errInstanceLocked = errors.New("another daemon already holds the lock of this instance: stop it or pass --instance")
+
+func refuseTakenInstance(ctx context.Context, layout runtimedir.Layout, instID string) error {
+	for _, path := range []string{commandSocketPathIn(layout, instID), eventsSocketPathIn(layout, instID)} {
+		if socketAnswers(ctx, layout, path) {
 			return wrapHost(errSocketTaken, "daemon.socket_taken", map[string]any{pathParam: path})
 		}
 	}
 	return nil
 }
 
-func claimSocketPath(ctx context.Context, path string) error {
-	if socketAnswers(ctx, path) {
+func claimSocketPath(ctx context.Context, layout runtimedir.Layout, path string) error {
+	if socketAnswers(ctx, layout, path) {
 		return wrapHost(errSocketTaken, "daemon.socket_taken", map[string]any{pathParam: path})
 	}
 	logCleanup(os.Remove(path))
@@ -181,8 +184,8 @@ func removeOwnSocket(path string, own os.FileInfo) {
 	logCleanup(os.Remove(path))
 }
 
-func socketAnswers(ctx context.Context, path string) bool {
-	conn, err := dialCommandSocket(ctx, path)
+func socketAnswers(ctx context.Context, layout runtimedir.Layout, path string) bool {
+	conn, err := dialCommandSocket(ctx, layout, path)
 	if err != nil {
 		return false
 	}

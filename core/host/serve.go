@@ -18,6 +18,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/health"
 	"github.com/Herrscherd/herrscher/core/internal/instanceid"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
@@ -65,6 +66,7 @@ type Deps = contracts.GatewaySet
 // Options holds the parsed flags for the serve daemon.
 type Options struct {
 	StatePath       string
+	Runtime         runtimedir.Layout
 	Language        i18n.Language
 	DefaultLanguage i18n.Language
 	live            *operatorLanguage
@@ -192,12 +194,12 @@ func (options Options) operatorLanguage() i18n.Language {
 	return options.Language
 }
 
-func claimInstance(ctx context.Context, instID string) (func(), error) {
-	release, err := lockInstance(instID)
+func claimInstance(ctx context.Context, layout runtimedir.Layout, instID string) (func(), error) {
+	release, err := lockInstance(layout, instID)
 	if err != nil {
 		return nil, err
 	}
-	if takenErr := refuseTakenInstance(ctx, instID); takenErr != nil {
+	if takenErr := refuseTakenInstance(ctx, layout, instID); takenErr != nil {
 		release()
 		return nil, takenErr
 	}
@@ -216,9 +218,19 @@ func prepareTurnOutboxes(log *slog.Logger, sessions *sessionTable, statePath str
 	return nil
 }
 
+func (options Options) withDefaultGateways(gws []Deps) Options {
+	if options.DefaultGateways == nil {
+		options.DefaultGateways = nonTerminalKinds(gws)
+	}
+	return options
+}
+
 func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, options Options) error {
 	base := obs.Stderr(false)
 	defer closeGateways(ctx, closers, base)
+	if options.Runtime.Dir() == "" {
+		return errNoRuntimeLayout
+	}
 	log := base.With("component", "serve")
 	monitor := health.NewHealth(time.Now())
 
@@ -237,15 +249,13 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	if err != nil {
 		return wrapHost(err, "serve.resolve_instance", nil)
 	}
-	releaseInstance, err := claimInstance(ctx, instID)
+	releaseInstance, err := claimInstance(ctx, options.Runtime, instID)
 	if err != nil {
 		return err
 	}
 	defer releaseInstance()
 
-	if options.DefaultGateways == nil {
-		options.DefaultGateways = nonTerminalKinds(gws)
-	}
+	options = options.withDefaultGateways(gws)
 	approvals := newApprovalTable().withRules(store)
 	sessions := newSessionTable()
 	options.health = &healthSource{}
@@ -289,7 +299,7 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 		return wrapHost(err, "serve.key_proxy", nil)
 	}
 	defer CloseKeyProxy(ctx, log, keys)
-	options.health.bind(newHealthInputs(instID, keys, gws, policy, partDir))
+	options.health.bind(newHealthInputs(options.Runtime, instID, keys, gws, policy, partDir))
 	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions)
 	runningHub.lang = options.Language
 	runningHub.models = options.modelDiscovery()
@@ -298,12 +308,13 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	}
 	runningHub.contributedKinds = kinds
 	runningHub.instanceID = instID
+	runningHub.runtime = options.Runtime
 	runningHub.gate = deps.handler.BudgetGate()
 	coord := wireCoordination(runningHub, deps, store, sessions)
 
 	deps.handler.SetCoordinationReader(coordViewAdapter{c: coord})
 
-	sockets, err := serveHubSockets(ctx, instID, runningHub)
+	sockets, err := serveHubSockets(ctx, options.Runtime, instID, runningHub)
 	if err != nil {
 		return err
 	}
@@ -380,13 +391,13 @@ func wireCoordination(hubCore *hub, deps hostDeps, st *state.State, sessions *se
 	return coord
 }
 
-func serveHubSockets(ctx context.Context, instID string, hubCore *hub) (<-chan struct{}, error) {
+func serveHubSockets(ctx context.Context, layout runtimedir.Layout, instID string, hubCore *hub) (<-chan struct{}, error) {
 	events := newEventSocket()
-	eventsListener, err := openEventsSocket(ctx, EventsSocketPath(instID))
+	eventsListener, err := openEventsSocket(ctx, layout, eventsSocketPathIn(layout, instID))
 	if err != nil {
 		return nil, err
 	}
-	commandsListener, err := openCommandSocket(ctx, CommandSocketPath(instID))
+	commandsListener, err := openCommandSocket(ctx, layout, commandSocketPathIn(layout, instID))
 	if err != nil {
 		eventsListener.release()
 		return nil, err

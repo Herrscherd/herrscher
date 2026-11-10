@@ -22,11 +22,10 @@ func TestMain(m *testing.M) {
 	case "1":
 		os.Exit(runStartupProbe())
 	case "serve":
-		host.SetRuntimeRoot(os.Getenv(testRuntimeRootKey))
-		os.Args = []string{"herrscher", "serve", "--env-file", os.Getenv("HERRSCHER_ENV_FILE")}
+		os.Args = []string{"herrscher", "serve", "--env-file", os.Getenv("HERRSCHER_ENV_FILE"), "--runtime-dir", os.Getenv(testRuntimeRootKey)}
 		os.Exit(run())
 	}
-	os.Exit(runWithRuntimeRoot(m))
+	os.Exit(m.Run())
 }
 
 func runStartupProbe() int {

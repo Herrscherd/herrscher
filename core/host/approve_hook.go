@@ -128,7 +128,7 @@ func RunApprovalHook(ctx context.Context, stdin io.Reader, out, errOut io.Writer
 		return commandSocketTargetFrom(func() string { return ServedInstanceID(DefaultStatePath(), "") })
 	})
 	RunPermissionHook(ctx, stdin, out, errOut, target, func(c context.Context, argv []string) (string, bool, error) {
-		return dispatchLiveCommand(c, target(), argv)
+		return dispatchToOperatorDaemon(c, target(), argv)
 	})
 }
 

@@ -8,6 +8,8 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
 type wireEvent struct {
@@ -163,11 +165,11 @@ func (s *eventSocket) closeAll() {
 	s.mu.Unlock()
 }
 
-func openEventsSocket(ctx context.Context, path string) (ownedListener, error) {
-	if err := claimSocketPath(ctx, path); err != nil {
+func openEventsSocket(ctx context.Context, layout runtimedir.Layout, path string) (ownedListener, error) {
+	if err := claimSocketPath(ctx, layout, path); err != nil {
 		return ownedListener{}, err
 	}
-	return listenOwned(ctx, path)
+	return listenOwned(ctx, layout, path)
 }
 
 func acceptEvents(ctx context.Context, listener ownedListener, socket *eventSocket) <-chan struct{} {

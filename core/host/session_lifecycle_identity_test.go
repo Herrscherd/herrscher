@@ -68,6 +68,7 @@ func TestOldDriverCannotUnregisterSameNameReplacement(t *testing.T) {
 }
 
 func TestSameNameSessionCanRebindAfterTeardown(t *testing.T) {
+	layout := isolatedRuntimeDir(t)
 	approvalTab := newApprovalTable()
 	sessionTab := newSessionTable()
 	name := "rebind-" + newTurnID()
@@ -81,6 +82,7 @@ func TestSameNameSessionCanRebindAfterTeardown(t *testing.T) {
 		approvalTab,
 		sessionTab,
 	)
+	h.runtime = layout
 	t.Cleanup(func() { h.goDead(name) })
 
 	if err := h.goLive(t.Context(), state.Session{Name: name, Incarnation: "old-incarnation"}); err != nil {
@@ -93,7 +95,7 @@ func TestSameNameSessionCanRebindAfterTeardown(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitRegisteredIncarnation(t, sessionTab, name, "new-incarnation")
-	conn, err := control.Dial(control.SocketPath("", name))
+	conn, err := control.Dial(control.SocketPath(layout, "", name))
 	if err != nil {
 		t.Fatalf("replacement control listener is not reachable: %v", err)
 	}
@@ -126,6 +128,7 @@ func registeredIncarnation(sessionTab *sessionTable, name string) string {
 }
 
 func TestSessionSocketOutlivesTheContextThatCreatedIt(t *testing.T) {
+	layout := isolatedRuntimeDir(t)
 	name := "outlive-" + newTurnID()
 	h := newHub(
 		state.NewState(filepath.Join(t.TempDir(), "state.json")),
@@ -137,6 +140,7 @@ func TestSessionSocketOutlivesTheContextThatCreatedIt(t *testing.T) {
 		newApprovalTable(),
 		newSessionTable(),
 	)
+	h.runtime = layout
 	t.Cleanup(func() { h.goDead(name) })
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -145,7 +149,7 @@ func TestSessionSocketOutlivesTheContextThatCreatedIt(t *testing.T) {
 	}
 	cancel()
 	<-time.After(200 * time.Millisecond)
-	conn, err := control.Dial(control.SocketPath("", name))
+	conn, err := control.Dial(control.SocketPath(layout, "", name))
 	if err != nil {
 		t.Fatalf("the session socket closed with the creating context: %v", err)
 	}

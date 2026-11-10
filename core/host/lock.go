@@ -44,7 +44,14 @@ func instanceLockPath(instanceID string) string {
 	if instanceID != "" {
 		name = "herrscher-instance-" + instanceID + ".lock"
 	}
-	return filepath.Join(os.TempDir(), name)
+	return filepath.Join(instanceLockDir(), name)
+}
+
+func instanceLockDir() string {
+	if cache, err := os.UserCacheDir(); err == nil {
+		return filepath.Join(cache, "herrscher")
+	}
+	return filepath.Join(os.TempDir(), "herrscher-"+strconv.Itoa(os.Getuid()))
 }
 
 func lockInstance(instanceID string) (func(), error) {

@@ -102,6 +102,8 @@ func TestServeHubSocketsStopsTheDaemonOnATakenCommandSocket(t *testing.T) {
 
 func TestLockInstanceRefusesASecondDaemonOfTheSameInstance(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
 	release, err := lockInstance("t5")
 	if err != nil {
 		t.Fatalf("first lockInstance: %v", err)

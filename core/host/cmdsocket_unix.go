@@ -4,8 +4,6 @@ package host
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"net"
 	"os"
 	"path/filepath"
@@ -40,21 +38,8 @@ func SessionCommandSocketPath(instanceID, session string) string {
 	if instanceID != "" {
 		name += "-" + instanceID
 	}
-	prefix := filepath.Join(os.TempDir(), name+"-s-")
-	short := control.SafeSessionName(session)
-	if p := prefix + short + ".sock"; len(p) <= maxUnixSocketPath {
-		return p
-	}
-	sum := sha256.Sum256([]byte(session))
-	suffix := "-" + hex.EncodeToString(sum[:])[:12] + ".sock"
-	room := max(maxUnixSocketPath-len(prefix)-len(suffix), 0)
-	if len(short) > room {
-		short = short[:room]
-	}
-	return prefix + short + suffix
+	return control.BoundedSocketPath(os.TempDir(), name+"-s-"+control.SafeSessionName(session))
 }
-
-const maxUnixSocketPath = 103
 
 // EventsSocketPath is the daemon-level per-session events fan-out socket: a
 // sibling of the command socket (herrscher-command → herrscher-events). It is the path
@@ -83,7 +68,7 @@ func listenRestricted(ctx context.Context, path string) (net.Listener, error) {
 	}
 	defer func() { logCleanup(os.RemoveAll(staging)) }()
 	tmp := filepath.Join(staging, "s")
-	if len(tmp) > maxUnixSocketPath {
+	if len(tmp) > control.MaxUnixSocketPath {
 		return listenAndRestrict(ctx, path)
 	}
 	listener, err := listenAndRestrict(ctx, tmp)

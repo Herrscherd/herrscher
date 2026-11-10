@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Herrscherd/herrscher/core/internal/control"
 )
 
 type fakeDispatcher struct {
@@ -175,8 +177,8 @@ func TestASessionSocketPathFoldsUnsafeNames(t *testing.T) {
 func TestALongSessionNameStillGetsASocketThatBinds(t *testing.T) {
 	long := strings.Repeat("b", 64)
 	p := SessionCommandSocketPath(strings.Repeat("a", 16), long)
-	if len(p) > maxUnixSocketPath {
-		t.Fatalf("path is %d bytes, over the %d sun_path holds: %q", len(p), maxUnixSocketPath, p)
+	if len(p) > control.MaxUnixSocketPath {
+		t.Fatalf("path is %d bytes, over the %d sun_path holds: %q", len(p), control.MaxUnixSocketPath, p)
 	}
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", p)
 	if err != nil {

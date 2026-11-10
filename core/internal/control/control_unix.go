@@ -6,14 +6,13 @@ import (
 	"context"
 	"net"
 	"os"
-	"path/filepath"
 )
 
 // SocketPath returns the Unix socket path used to control the given session of
 // the daemon instanceID, so two daemons each running a session of one name
 // never share a socket.
 func SocketPath(instanceID, session string) string {
-	return filepath.Join(os.TempDir(), "herrscher-control-"+instancePrefix(instanceID)+SafeSessionName(session)+".sock")
+	return BoundedSocketPath(os.TempDir(), "herrscher-control-"+instancePrefix(instanceID)+SafeSessionName(session))
 }
 
 func listenControl(ctx context.Context, path string) (net.Listener, error) {

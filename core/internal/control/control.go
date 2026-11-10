@@ -38,7 +38,7 @@ const remoteSocketDir = "/tmp"
 // for the same reason SocketPath does: two daemons forwarding a session of one
 // name to one host would otherwise fight over the same path.
 func RemoteSocketPath(instanceID, session string) string {
-	return remoteSocketDir + "/herrscher-control-" + instancePrefix(instanceID) + SafeSessionName(session) + ".sock"
+	return BoundedSocketPath(remoteSocketDir, "herrscher-control-"+instancePrefix(instanceID)+SafeSessionName(session))
 }
 
 // RemoteCommandSocketPath is where a remote session's `herrscher <verb>` dials
@@ -54,7 +54,7 @@ func RemoteSocketPath(instanceID, session string) string {
 // the first session's agent off from the daemon. One path per session costs a
 // socket file and makes both failures unrepresentable.
 func RemoteCommandSocketPath(instanceID, session string) string {
-	return remoteSocketDir + "/herrscher-command-" + instancePrefix(instanceID) + SafeSessionName(session) + ".sock"
+	return BoundedSocketPath(remoteSocketDir, "herrscher-command-"+instancePrefix(instanceID)+SafeSessionName(session))
 }
 
 // CommandSocketVar is how the far side learns that path: it cannot derive a

@@ -371,7 +371,7 @@
   },
   {
     "id": "cli.serve.hub_stopped",
-    "description": "Error when the in-process hub stops while the terminal window is open",
+    "description": "Erreur quand le hub interne s'arrête pendant que la fenêtre du terminal est ouverte",
     "other": "le hub s'est arrêté, la fenêtre s'est donc fermée : {{.Err}}"
   },
   {
@@ -3389,7 +3389,7 @@
   },
   {
     "id": "cli.host.fault.socket_taken",
-    "description": "Un autre démon vivant répond déjà sur ce socket, souvent la même instance servant un autre fichier d'état (socket already served)",
+    "description": "Un autre démon vivant répond déjà sur ce socket, souvent la même instance servant un autre fichier d'état",
     "other": "un autre démon répond déjà sur ce socket (même instance, autre fichier d'état) : arrête-le ou passe --instance"
   },
   {

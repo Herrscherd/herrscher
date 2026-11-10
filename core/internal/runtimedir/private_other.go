@@ -8,3 +8,7 @@ import "errors"
 func (l Layout) Private() (string, error) {
 	return "", errors.ErrUnsupported
 }
+
+func usableRunUserDir(string, int) bool {
+	return false
+}

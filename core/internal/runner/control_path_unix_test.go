@@ -4,34 +4,57 @@ package runner
 
 import (
 	"os"
+	"path"
 	"testing"
 
 	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
 func TestControlPathIsStableAndCreatesItsDirectory(t *testing.T) {
-	layout := runtimedir.Layout{Root: t.TempDir()}
-	a := controlPathIn(layout, "me@build1")
-	if a == "" {
-		t.Fatal("the control path is empty although the private directory is usable")
+	layout := shortLayout(t)
+	a, err := controlPathIn(layout, "me@build1")
+	if err != nil {
+		t.Fatalf("controlPathIn: %v", err)
 	}
-	if a != controlPathIn(layout, "me@build1") {
-		t.Fatal("controlPathIn is not stable")
+	if b, err := controlPathIn(layout, "me@build1"); err != nil || a != b {
+		t.Fatalf("controlPathIn is not stable: %q, %v", b, err)
 	}
-	if a == controlPathIn(layout, "me@build2") {
-		t.Fatal("two targets share one control socket")
+	if other, err := controlPathIn(layout, "me@build2"); err != nil || a == other {
+		t.Fatalf("two targets share one control socket: %q, %v", other, err)
 	}
 	if _, err := os.Stat(layout.Dir()); err != nil {
 		t.Fatalf("the private directory was not created before ssh needs it: %v", err)
 	}
 }
 
-func TestControlPathIsEmptyWhenThePrivateDirectoryIsUnsafe(t *testing.T) {
-	layout := runtimedir.Layout{Root: t.TempDir()}
+func TestControlPathFailsWhenThePrivateDirectoryIsUnsafe(t *testing.T) {
+	layout := shortLayout(t)
 	if err := os.Mkdir(layout.Dir(), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := controlPathIn(layout, "me@build1"); got != "" {
-		t.Fatalf("control path = %q, want none so ssh runs without multiplexing", got)
+	if got, err := controlPathIn(layout, "me@build1"); err == nil || got != "" {
+		t.Fatalf("controlPathIn = %q, %v, want an error and no path so the caller runs without multiplexing", got, err)
 	}
+}
+
+func makeShortRoot() (string, error) {
+	return os.MkdirTemp("/tmp", "rn")
+}
+
+func shortLayout(t *testing.T) runtimedir.Layout {
+	t.Helper()
+	root, err := makeShortRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if removeErr := os.RemoveAll(root); removeErr != nil {
+			t.Error(removeErr)
+		}
+	})
+	layout, err := runtimedir.At(path.Join(root, "h"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return layout
 }

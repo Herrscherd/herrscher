@@ -2,11 +2,10 @@ package runner
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"errors"
+	"fmt"
 	"os/exec"
-
-	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
+	"strings"
 )
 
 // Runner builds the command that runs argv with dir as its working directory,
@@ -77,7 +76,7 @@ func (s SSH) Command(ctx context.Context, dir string, argv ...string) *exec.Cmd 
 	for _, f := range s.Forwards {
 		args = append(args, "-R", f.Remote+":"+f.Local)
 	}
-	return exec.CommandContext(ctx, "ssh", append(args, s.Target, script(dir, argv))...)
+	return exec.CommandContext(ctx, "ssh", append(args, "--", s.Target, script(dir, argv))...)
 }
 
 // PrepareForwards returns the command that clears the far end of every forward,
@@ -95,14 +94,14 @@ func (s SSH) PrepareForwards(ctx context.Context) *exec.Cmd {
 		argv = append(argv, f.Remote)
 	}
 	bare := SSH{Target: s.Target, ControlPath: s.ControlPath}
-	return exec.CommandContext(ctx, "ssh", append(bare.options(), bare.Target, script("", argv))...)
+	return exec.CommandContext(ctx, "ssh", append(bare.options(), "--", bare.Target, script("", argv))...)
 }
 
 // Copy puts a local file at dst on the target, over the same multiplexed
 // connection the commands use.
 func (s SSH) Copy(ctx context.Context, src, dst string) *exec.Cmd {
 	args := append([]string{"-o", "BatchMode=yes"}, s.multiplex()...)
-	return exec.CommandContext(ctx, "scp", append(args, src, s.Target+":"+dst)...)
+	return exec.CommandContext(ctx, "scp", append(args, "--", src, s.Target+":"+dst)...)
 }
 
 func script(dir string, argv []string) string {
@@ -112,17 +111,13 @@ func script(dir string, argv []string) string {
 	return "cd " + shellQuote(dir) + " && exec " + quoteArgv(argv)
 }
 
-// ControlPathFor names the multiplexing socket for a target, in the user's
-// private runtime directory. It is named by a digest of the target because the
-// target text can be longer than a unix socket path allows.
-func ControlPathFor(target string) string {
-	return controlPathIn(runtimedir.Production(), target)
-}
+// ErrTargetDash reports an ssh target that would be read as an option.
+var ErrTargetDash = errors.New("ssh target starts with a dash")
 
-func controlPathIn(layout runtimedir.Layout, target string) string {
-	sum := sha256.Sum256([]byte(target))
-	if _, err := layout.Private(); err != nil {
-		return ""
+// CheckTarget rejects a target that ssh would read as one of its own options.
+func CheckTarget(target string) error {
+	if strings.HasPrefix(target, "-") {
+		return fmt.Errorf("%w: %q", ErrTargetDash, target)
 	}
-	return layout.Socket("herrscher-ssh-" + hex.EncodeToString(sum[:])[:12])
+	return nil
 }

@@ -1,6 +1,9 @@
 // Package runtimedir gives each user one directory for the local sockets and
-// locks of herrscher: /tmp/herrscher-<uid>, created 0700 and verified before use,
-// so no other user can pre-create or substitute an entry in it. A socket keeps a
+// locks of herrscher. Resolve picks it deterministically: <run user>/<uid>/herrscher
+// when systemd has created a private per-user runtime directory for the uid, and
+// /tmp/herrscher-<uid> otherwise, which is where macOS and hosts without a user
+// session put it. The directory is created 0700 and verified before use, so no
+// other user can pre-create or substitute an entry in it. A socket keeps a
 // readable name when its full path fits the unix socket limit and is named by a
 // digest otherwise.
 package runtimedir
@@ -19,7 +22,7 @@ import (
 const MaxUnixSocketPath = 103
 
 const (
-	productionRoot = "/tmp"
+	runUserDirName = "herrscher"
 	dirPrefix      = "herrscher-"
 	plainPrefix    = "herrscher-"
 	hashedPrefix   = "hs-"
@@ -27,37 +30,106 @@ const (
 	socketSuffix   = ".sock"
 	lockSuffix     = ".lock"
 	keyBytes       = 24
+	hashedNameLen  = len("/") + len(hashedPrefix) + keyBytes + len(socketSuffix)
 )
 
-// Layout is where a user's herrscher entries live. Production always uses the
-// shared temp root; a test sets Root to a short directory of its own.
+// Roots are the two parents a per-user directory can live under: RunUser holds
+// the systemd runtime directory of each uid, Tmp the fallback herrscher-<uid>.
+type Roots struct {
+	RunUser string
+	Tmp     string
+}
+
+// ProductionRoots are the parents used by a running herrscher.
+func ProductionRoots() Roots {
+	return Roots{RunUser: "/run/user", Tmp: "/tmp"}
+}
+
+// Layout is the private directory where one user's herrscher entries live.
+// The zero value is not usable; a Layout comes from Production, Resolve or At.
 type Layout struct {
-	Root string
+	dir string
 }
 
-// Production is the layout of a running herrscher.
+// RootError reports a directory or root that cannot host the local entries.
+type RootError struct {
+	Path   string
+	Reason string
+}
+
+// Error renders the rejected path and why it was rejected.
+func (e *RootError) Error() string {
+	return e.Path + ": " + e.Reason
+}
+
+// Production is the layout of the user running this process.
 func Production() Layout {
-	return Layout{Root: productionRoot}
+	return resolve(os.Getuid(), ProductionRoots())
 }
 
-// DirOf is the private directory of the user uid under root.
+// Resolve is the layout for uid under roots. It rejects a root that is empty or
+// relative, and a directory too long to hold a hashed socket name.
+func Resolve(uid int, roots Roots) (Layout, error) {
+	for _, root := range []string{roots.RunUser, roots.Tmp} {
+		if err := checkAbsolute(root); err != nil {
+			return Layout{}, err
+		}
+	}
+	return checkedLayout(resolve(uid, roots))
+}
+
+// At is the layout whose directory is dir itself, for an explicit location such
+// as a test directory or the daemon started with a runtime directory flag.
+func At(dir string) (Layout, error) {
+	if err := checkAbsolute(dir); err != nil {
+		return Layout{}, err
+	}
+	return checkedLayout(Layout{dir: dir})
+}
+
+func resolve(uid int, roots Roots) Layout {
+	uidText := strconv.Itoa(uid)
+	if usableRunUserDir(path.Join(roots.RunUser, uidText), uid) {
+		return Layout{dir: path.Join(roots.RunUser, uidText, runUserDirName)}
+	}
+	return Layout{dir: DirOf(roots.Tmp, uid)}
+}
+
+func checkAbsolute(root string) error {
+	switch {
+	case root == "":
+		return &RootError{Path: root, Reason: "is empty"}
+	case !path.IsAbs(root):
+		return &RootError{Path: root, Reason: "is not an absolute path"}
+	}
+	return nil
+}
+
+func checkedLayout(layout Layout) (Layout, error) {
+	if len(layout.dir)+hashedNameLen > MaxUnixSocketPath {
+		return Layout{}, &RootError{Path: layout.dir, Reason: "is too long for a unix socket name"}
+	}
+	return layout, nil
+}
+
+// DirOf is the private directory of the user uid under the temp root.
 func DirOf(root string, uid int) string {
 	return path.Join(root, dirPrefix+strconv.Itoa(uid))
 }
 
-// Dir is the private directory of the current user.
+// Dir is the private directory this layout names.
 func (l Layout) Dir() string {
-	return DirOf(l.Root, os.Getuid())
+	return l.dir
 }
 
 // Socket is the unix socket path for stem in the private directory.
 func (l Layout) Socket(stem string) string {
-	return Name(l.Dir(), stem)
+	return Name(l.dir, stem)
 }
 
 // Lock is the instance lock path for instanceID in the private directory.
 func (l Layout) Lock(instanceID string) string {
-	return path.Join(l.Dir(), instanceLock+Key(instanceID)+lockSuffix)
+	return path.Join(l.dir, instanceLock+Key(instanceID)+lockSuffix)
 }
 
 // Name is the socket path for stem inside dir. A stem that starts with
@@ -78,10 +150,10 @@ func Key(name string) string {
 	return hex.EncodeToString(sum[:])[:keyBytes]
 }
 
-// Check verifies the private directory when path lives in it, and accepts any
+// Check verifies the private directory when p lives in it, and accepts any
 // other path.
 func (l Layout) Check(p string) error {
-	if path.Dir(p) != l.Dir() {
+	if path.Dir(p) != l.dir {
 		return nil
 	}
 	_, err := l.Private()

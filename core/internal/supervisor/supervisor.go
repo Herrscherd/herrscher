@@ -17,6 +17,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/runner"
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -42,11 +43,12 @@ type Supervisor struct {
 	runBridge        func(context.Context, state.Session)
 	hosts            func(name string) (Placement, bool)
 	instanceID       string
+	runtime          runtimedir.Layout
 	sessionCmdSocket func(session string) string
 	gate             func(vendor string) string
-	remoteMu         sync.Mutex
-	remoteDirs       map[string]string
 	remoteDirOf      func(ctx context.Context, target string) (string, error)
+	controlPathOf    func(target string) (string, error)
+	controlWarn      sync.Once
 }
 
 // Placement is what the supervisor needs to know about a host to launch there.
@@ -66,6 +68,10 @@ func (s *Supervisor) SetGateResolver(f func(vendor string) string) { s.gate = f 
 // SetInstanceID records the daemon's instance, threaded to a remote bridge so
 // its children resolve the same command socket this daemon listens on.
 func (s *Supervisor) SetInstanceID(id string) { s.instanceID = id }
+
+// SetRuntimeLayout installs the private directory where this daemon's local
+// sockets live, the same one the daemon serves its own sockets from.
+func (s *Supervisor) SetRuntimeLayout(layout runtimedir.Layout) { s.runtime = layout }
 
 // SetCommandSocket names, per session, the command socket that session's
 // processes dial. Forwarding it is what keeps the <capabilities> block honest
@@ -93,7 +99,7 @@ type supervisedRun struct {
 func (s *Supervisor) bridgeArgs(sess state.Session) []string {
 	args := []string{
 		"bridge", "-c", sess.ChannelID, "--cmd", sess.Cmd, "--session", sess.Name,
-		"--hub-socket", control.SocketPath(s.instanceID, sess.Name),
+		"--hub-socket", control.SocketPath(s.runtime, s.instanceID, sess.Name),
 	}
 	if p := sess.MemoryProject; p != "" {
 		args = append(args, "--project", p)
@@ -148,6 +154,7 @@ func NewSupervisor(ctx context.Context, selfBin string) *Supervisor {
 		log:     obs.NewLogger(os.Stderr, slog.LevelInfo),
 		sleep:   time.After,
 		now:     time.Now,
+		runtime: runtimedir.Production(),
 	}
 	sup.runBridge = sup.runBridgeCommand
 	sup.run = sup.runLoop
@@ -301,15 +308,26 @@ func (s *Supervisor) runBridgeCommand(ctx context.Context, sess state.Session) {
 		<-ctx.Done()
 		return
 	}
-	if prep := s.prepareRemote(ctx, sess); prep != nil {
-		if err := prep.Run(); err != nil {
-			slog.Warn("remote prepare failed", "err", err)
-		}
+	if sess.Host != "" && !s.runRemotePrepare(ctx, sess) {
+		return
 	}
 	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
 	if err := cmd.Run(); err != nil {
 		slog.Warn("supervised command exited with error", "err", err)
 	}
+}
+
+func (s *Supervisor) runRemotePrepare(ctx context.Context, sess state.Session) bool {
+	prep, err := s.prepareRemote(ctx, sess)
+	if err != nil {
+		s.log.Error("cannot prepare the remote host", "session", sess.Name, "host", sess.Host, "err", err)
+		<-ctx.Done()
+		return false
+	}
+	if err := prep.Run(); err != nil {
+		slog.Warn("remote prepare failed", "err", err)
+	}
+	return true
 }
 
 func (s *Supervisor) bridgeCommand(ctx context.Context, sess state.Session) (*exec.Cmd, error) {
@@ -386,7 +404,7 @@ func (s *Supervisor) placementFor(sess state.Session) (Placement, error) {
 func (s *Supervisor) forwardsFor(sess state.Session, remoteDir string) []runner.Forward {
 	fwd := []runner.Forward{{
 		Remote: control.RemoteSocketPath(remoteDir, s.instanceID, sess.Name),
-		Local:  control.SocketPath(s.instanceID, sess.Name),
+		Local:  control.SocketPath(s.runtime, s.instanceID, sess.Name),
 	}}
 	if s.sessionCmdSocket != nil {
 		fwd = append(fwd, runner.Forward{
@@ -397,20 +415,23 @@ func (s *Supervisor) forwardsFor(sess state.Session, remoteDir string) []runner.
 	return fwd
 }
 
-func (s *Supervisor) prepareRemote(ctx context.Context, sess state.Session) *exec.Cmd {
-	if sess.Host == "" {
-		return nil
-	}
+func (s *Supervisor) prepareRemote(ctx context.Context, sess state.Session) (*exec.Cmd, error) {
 	placement, err := s.placementFor(sess)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	dir, err := s.remoteRuntimeDir(ctx, placement.SSH)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	r := runner.SSH{Target: placement.SSH, ControlPath: runner.ControlPathFor(placement.SSH), Forwards: s.forwardsFor(sess, dir)}
-	return r.PrepareForwards(ctx)
+	controlPath, err := s.controlPathFor(placement.SSH)
+	if err != nil {
+		s.controlWarn.Do(func() {
+			s.log.Warn("ssh multiplexing disabled, continuing without it", "host", placement.SSH, "err", err)
+		})
+	}
+	r := runner.SSH{Target: placement.SSH, ControlPath: controlPath, Forwards: s.forwardsFor(sess, dir)}
+	return r.PrepareForwards(ctx), nil
 }
 
 func (s *Supervisor) remoteEnvBlock(sess state.Session, remoteDir string) string {
@@ -434,4 +455,11 @@ func (s *Supervisor) remoteEnvBlock(sess state.Session, remoteDir string) string
 		}
 	}
 	return contracts.EncodeEnvSetting(env) + "\n"
+}
+
+func (s *Supervisor) controlPathFor(target string) (string, error) {
+	if s.controlPathOf != nil {
+		return s.controlPathOf(target)
+	}
+	return runner.ControlPathFor(target)
 }

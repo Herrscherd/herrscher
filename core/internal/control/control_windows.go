@@ -7,11 +7,13 @@ import (
 	"net"
 
 	"github.com/Microsoft/go-winio"
+
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
 // SocketPath returns the named pipe used to control the given session of the
-// daemon instanceID.
-func SocketPath(instanceID, session string) string {
+// daemon instanceID. Named pipes have no directory, so the layout is unused.
+func SocketPath(_ runtimedir.Layout, instanceID, session string) string {
 	return `\\.\pipe\herrscher-control-` + instancePrefix(instanceID) + SafeSessionName(session)
 }
 

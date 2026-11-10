@@ -7,15 +7,16 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 )
 
-const shortTempRoot = "/tmp"
+func makeShortRoot() (string, error) {
+	return os.MkdirTemp("/tmp", "rt")
+}
 
-func shortLayout(t *testing.T) Layout {
+func shortRoot(t *testing.T) string {
 	t.Helper()
-	root := path.Join(shortTempRoot, "rt"+strconv.FormatInt(time.Now().UnixNano(), 10))
-	if err := os.Mkdir(root, 0o700); err != nil {
+	root, err := makeShortRoot()
+	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
@@ -23,13 +24,104 @@ func shortLayout(t *testing.T) Layout {
 			t.Error(err)
 		}
 	})
-	return Layout{Root: root}
+	return root
 }
 
-func TestProductionRootIsTheSharedTempDirPerUser(t *testing.T) {
-	want := "/tmp/herrscher-" + strconv.Itoa(os.Getuid())
-	if got := Production().Dir(); got != want {
-		t.Fatalf("Production().Dir() = %q, want %q", got, want)
+func shortLayout(t *testing.T) Layout {
+	t.Helper()
+	layout, err := At(path.Join(shortRoot(t), "h"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return layout
+}
+
+func TestResolveUsesTheSystemdRuntimeDirWhenItIsPrivate(t *testing.T) {
+	runUser := shortRoot(t)
+	uidDir := path.Join(runUser, strconv.Itoa(os.Getuid()))
+	if err := os.Mkdir(uidDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	layout, err := Resolve(os.Getuid(), Roots{RunUser: runUser, Tmp: shortRoot(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := path.Join(uidDir, "herrscher"); layout.Dir() != want {
+		t.Fatalf("Resolve().Dir() = %q, want %q", layout.Dir(), want)
+	}
+}
+
+func TestResolveFallsBackToTmpWhenTheRuntimeDirIsOpen(t *testing.T) {
+	runUser := shortRoot(t)
+	uidDir := path.Join(runUser, strconv.Itoa(os.Getuid()))
+	if err := os.Mkdir(uidDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(uidDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tmp := shortRoot(t)
+	layout, err := Resolve(os.Getuid(), Roots{RunUser: runUser, Tmp: tmp})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := DirOf(tmp, os.Getuid()); layout.Dir() != want {
+		t.Fatalf("Resolve().Dir() = %q, want the temp fallback %q", layout.Dir(), want)
+	}
+}
+
+func TestResolveFallsBackToTmpWhenThereIsNoRuntimeDir(t *testing.T) {
+	tmp := shortRoot(t)
+	layout, err := Resolve(os.Getuid(), Roots{RunUser: path.Join(tmp, "missing"), Tmp: tmp})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := DirOf(tmp, os.Getuid()); layout.Dir() != want {
+		t.Fatalf("Resolve().Dir() = %q, want %q", layout.Dir(), want)
+	}
+}
+
+func TestResolveRejectsEmptyAndRelativeRoots(t *testing.T) {
+	good := shortRoot(t)
+	for _, roots := range []Roots{
+		{RunUser: "", Tmp: good},
+		{RunUser: good, Tmp: ""},
+		{RunUser: "run/user", Tmp: good},
+		{RunUser: good, Tmp: "tmp"},
+	} {
+		_, err := Resolve(os.Getuid(), roots)
+		var rootErr *RootError
+		if !errors.As(err, &rootErr) {
+			t.Fatalf("Resolve(%+v) = %v, want a RootError", roots, err)
+		}
+	}
+}
+
+func TestAtRejectsEmptyAndRelativeDirectories(t *testing.T) {
+	for _, dir := range []string{"", "relative/dir"} {
+		_, err := At(dir)
+		var rootErr *RootError
+		if !errors.As(err, &rootErr) {
+			t.Fatalf("At(%q) = %v, want a RootError", dir, err)
+		}
+	}
+}
+
+func TestAtRejectsADirectoryTooLongForASocketName(t *testing.T) {
+	_, err := At("/" + strings.Repeat("d", MaxUnixSocketPath))
+	var rootErr *RootError
+	if !errors.As(err, &rootErr) {
+		t.Fatalf("At over the limit = %v, want a RootError", err)
+	}
+}
+
+func TestProductionIsTheResolvedLayoutOfThisUser(t *testing.T) {
+	want, err := Resolve(os.Getuid(), ProductionRoots())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := Production().Dir(); got != want.Dir() {
+		t.Fatalf("Production().Dir() = %q, want %q", got, want.Dir())
 	}
 }
 
@@ -143,7 +235,7 @@ func TestCheckIgnoresPathsOutsideThePrivateDir(t *testing.T) {
 	if err := os.Mkdir(layout.Dir(), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := layout.Check(path.Join(layout.Root, "elsewhere.sock")); err != nil {
+	if err := layout.Check(path.Join(path.Dir(layout.Dir()), "elsewhere.sock")); err != nil {
 		t.Fatalf("Check of a path outside the private dir = %v, want nil", err)
 	}
 }

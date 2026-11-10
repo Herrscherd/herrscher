@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -96,5 +97,21 @@ func TestSSHCopyUsesScp(t *testing.T) {
 	}
 	if got := cmd.Args[len(cmd.Args)-1]; got != "me@build1:/home/me/.herrscher/bin/herrscher" {
 		t.Fatalf("dst = %q", got)
+	}
+}
+
+func TestSSHPlacesTheTargetAfterOptionTerminator(t *testing.T) {
+	cmd := SSH{Target: "me@build1"}.Command(context.Background(), "", "true")
+	if got := cmd.Args[len(cmd.Args)-3]; got != "--" {
+		t.Fatalf("argv before the target = %q, want --: %v", got, cmd.Args)
+	}
+}
+
+func TestCheckTargetRefusesATargetThatReadsAsAnOption(t *testing.T) {
+	if err := CheckTarget("-oProxyCommand=sh"); !errors.Is(err, ErrTargetDash) {
+		t.Fatalf("CheckTarget = %v, want ErrTargetDash", err)
+	}
+	if err := CheckTarget("me@build1"); err != nil {
+		t.Fatalf("CheckTarget of a plain host = %v", err)
 	}
 }

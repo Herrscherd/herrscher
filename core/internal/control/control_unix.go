@@ -9,13 +9,11 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
-var runtimeLayout = runtimedir.Production()
-
-// SocketPath returns the Unix socket path used to control the given session of
-// the daemon instanceID, so two daemons each running a session of one name
-// never share a socket.
-func SocketPath(instanceID, session string) string {
-	return runtimeLayout.Socket("herrscher-control-" + instancePrefix(instanceID) + SafeSessionName(session))
+// SocketPath returns the Unix socket path in layout used to control the given
+// session of the daemon instanceID, so two daemons each running a session of one
+// name never share a socket.
+func SocketPath(layout runtimedir.Layout, instanceID, session string) string {
+	return layout.Socket("herrscher-control-" + instancePrefix(instanceID) + SafeSessionName(session))
 }
 
 func listenControl(ctx context.Context, path string) (net.Listener, error) {

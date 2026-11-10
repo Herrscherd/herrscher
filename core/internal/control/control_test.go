@@ -5,8 +5,12 @@ package control
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
 func TestSocketPathDeterministicAndSafe(t *testing.T) {
@@ -31,12 +35,32 @@ func TestSocketPathKeepsTwoInstancesApart(t *testing.T) {
 	}
 }
 
+const shortTempRoot = "/tmp"
+
+func shortRuntimeDir(t *testing.T) {
+	t.Helper()
+	dir := filepath.Join(shortTempRoot, "rt"+strconv.FormatInt(time.Now().UnixNano(), 10))
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(dir); err != nil {
+			t.Error(err)
+		}
+	})
+	t.Setenv("XDG_RUNTIME_DIR", dir)
+}
+
 func TestSocketPathsFitTheUnixSocketLimit(t *testing.T) {
+	shortRuntimeDir(t)
 	longDir := filepath.Join(t.TempDir(), strings.Repeat("d", 30))
 	if err := os.Mkdir(longDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("TMPDIR", longDir)
+	if _, err := runtimedir.Private(); err != nil {
+		t.Fatal(err)
+	}
 	instance := strings.Repeat("i", 16)
 	session := strings.Repeat("s", 64)
 

@@ -320,6 +320,16 @@
     "other": "state lock directory: {{.Detail}}"
   },
   {
+    "id": "lock.unsafe",
+    "description": "The lock file cannot be used, Path names it and Detail carries the cause",
+    "other": "lock file {{.Path}} cannot be used: {{.Detail}}"
+  },
+  {
+    "id": "runtime.unsafe_dir",
+    "description": "The private runtime directory cannot be used, Path names it and Detail carries the reason",
+    "other": "private runtime directory {{.Path}} cannot be used: {{.Detail}}"
+  },
+  {
     "id": "lock.state",
     "description": "The state lock cannot be taken, Detail carries the cause",
     "other": "state lock: {{.Detail}}"

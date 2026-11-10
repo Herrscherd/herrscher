@@ -9,15 +9,16 @@ import (
 	"path/filepath"
 
 	"github.com/Herrscherd/herrscher/core/internal/control"
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
 // CommandSocketPath is the daemon-level operator command socket.
 func CommandSocketPath(instanceID string) string {
-	name := "herrscher-command.sock"
+	name := "herrscher-command"
 	if instanceID != "" {
-		name = "herrscher-command-" + instanceID + ".sock"
+		name += "-" + instanceID
 	}
-	return filepath.Join(os.TempDir(), name)
+	return runtimedir.Socket(name)
 }
 
 // SessionCommandSocketPath is the command socket one session's own processes
@@ -38,25 +39,31 @@ func SessionCommandSocketPath(instanceID, session string) string {
 	if instanceID != "" {
 		name += "-" + instanceID
 	}
-	return control.BoundedSocketPath(os.TempDir(), name+"-s-"+control.SafeSessionName(session))
+	return runtimedir.Socket(name + "-s-" + control.SafeSessionName(session))
 }
 
 // EventsSocketPath is the daemon-level per-session events fan-out socket: a
 // sibling of the command socket (herrscher-command → herrscher-events). It is the path
 // Neublox's HerrscherEventSource connects to, derived there the same way.
 func EventsSocketPath(instanceID string) string {
-	name := "herrscher-events.sock"
+	name := "herrscher-events"
 	if instanceID != "" {
-		name = "herrscher-events-" + instanceID + ".sock"
+		name += "-" + instanceID
 	}
-	return filepath.Join(os.TempDir(), name)
+	return runtimedir.Socket(name)
 }
 
 func listenCommandSocket(ctx context.Context, path string) (net.Listener, error) {
+	if err := ensureRuntimeDir(path); err != nil {
+		return nil, err
+	}
 	return listenRestricted(ctx, path)
 }
 
 func dialCommandSocket(ctx context.Context, path string) (net.Conn, error) {
+	if err := ensureRuntimeDir(path); err != nil {
+		return nil, err
+	}
 	var d net.Dialer
 	return d.DialContext(ctx, "unix", path)
 }

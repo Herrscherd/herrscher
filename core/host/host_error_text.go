@@ -77,6 +77,7 @@ func hostErrorKeys() []hostErrorKey {
 		{errSealExpectedPositive, "cli.host.fault.seal_expected_positive"},
 		{errDiscoveryNoAnswer, "cli.host.fault.discovery_no_answer"},
 		{errCacheLockBusy, "cli.host.fault.cache_lock_busy"},
+		{errLockNotOwned, "cli.host.fault.lock_not_owned"},
 		{errNoPendingChoice, "cli.host.fault.no_pending_choice"},
 		{errHandoffTargets, "cli.host.fault.handoff_targets"},
 		{errHandoffAgentTargets, "cli.host.fault.handoff_agent_targets"},

@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build unix
 
 package host
 
@@ -13,7 +13,11 @@ import (
 
 func TestGoLiveReportsACommandSocketItCannotOpen(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
+	isolatedRuntimeDir(t)
 	name := "golive-" + newTurnID()
+	if err := ensureRuntimeDir(SessionCommandSocketPath("", name)); err != nil {
+		t.Fatal(err)
+	}
 	answeringListener(t, SessionCommandSocketPath("", name))
 	h := newHub(
 		state.NewState(filepath.Join(t.TempDir(), "state.json")),

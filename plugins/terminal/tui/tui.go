@@ -1556,13 +1556,21 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 		cancel()
 		return keyedError{cause: err, key: "tui.terminal.enhanced_keys_enable_failed", params: map[string]any{"Err": err.Error()}}
 	}
-	program := tea.NewProgram(model,
+	runErr = runProgram(ctx, cancel, backend, model, tea.WithInput(newFilteredStdin(model.keys)))
+	if err := writeStdout(enhancedKeysOff); err != nil {
+		return errors.Join(runErr, keyedError{cause: err, key: "tui.terminal.enhanced_keys_disable_failed", params: map[string]any{"Err": err.Error()}})
+	}
+	return runErr
+}
+
+func runProgram(ctx context.Context, cancel context.CancelFunc, backend Backend, model *model, extra ...tea.ProgramOption) error {
+	options := []tea.ProgramOption{
 		tea.WithContext(ctx),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 		tea.WithReportFocus(),
-		tea.WithInput(newFilteredStdin(model.keys)),
-	)
+	}
+	program := tea.NewProgram(model, append(options, extra...)...)
 	go func() {
 		for {
 			select {
@@ -1576,12 +1584,8 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 			}
 		}
 	}()
-	_, runErr = program.Run()
-	runErr = settleRun(ctx, cancel, runErr)
-	if err := writeStdout(enhancedKeysOff); err != nil {
-		return errors.Join(runErr, keyedError{cause: err, key: "tui.terminal.enhanced_keys_disable_failed", params: map[string]any{"Err": err.Error()}})
-	}
-	return runErr
+	_, runErr := program.Run()
+	return settleRun(ctx, cancel, runErr)
 }
 
 func (m *model) Init() tea.Cmd {

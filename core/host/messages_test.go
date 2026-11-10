@@ -155,6 +155,8 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"serve.key_proxy":               {"Detail"},
 		"session.percent":               {"Detail", "Raw"},
 		"session.go_live":               {"Detail", "Name"},
+		"lock.unsafe":                   {"Detail", "Path"},
+		"runtime.unsafe_dir":            {"Detail", "Path"},
 		"handoff.brief_from":            {"Detail", "Source"},
 		"handoff.account_inherited":     {"Account", "Command", "Detail", "Source"},
 		"handoff.not_delivered":         {"Detail", "Name"},

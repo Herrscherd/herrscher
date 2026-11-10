@@ -155,6 +155,14 @@ An agent ends a turn with a `⟢` trailer to delegate, fan out, route, merge or
 hand off. Workers inherit their agent's vendor, so one run can mix Claude, Codex
 and Cursor.
 
+### Choosing a session's vendor
+
+Without `--model`, a session's vendor is the first of these that is set:
+`--vendor`, then the vendor whose CLI the `--cmd` binary is (`claude`, `codex`
+or `cursor`), then `HERRSCHER_BACKEND`. With `--model`, the model names its
+vendor: `--vendor` or `HERRSCHER_BACKEND`, when set, must agree with it, and
+without either the model's vendor is used.
+
 → `architecture/coordination`, `reference/trailers`
 
 ### Agents that start their own turns

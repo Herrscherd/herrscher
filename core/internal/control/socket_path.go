@@ -4,11 +4,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"path"
+
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
-// MaxUnixSocketPath is the longest socket path, in bytes, that sun_path holds
-// with its terminating NUL on the supported platforms.
-const MaxUnixSocketPath = 103
+// MaxUnixSocketPath is runtimedir.MaxUnixSocketPath, kept for the callers that
+// bound their own socket names.
+const MaxUnixSocketPath = runtimedir.MaxUnixSocketPath
 
 const socketSuffix = ".sock"
 

@@ -84,7 +84,11 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) error {
 	if running {
 		return nil
 	}
-	acc, err := control.Accept(context.WithoutCancel(ctx), control.SocketPath(h.instanceID, sess.Name))
+	controlPath := control.SocketPath(h.instanceID, sess.Name)
+	if err := ensureRuntimeDir(controlPath); err != nil {
+		return err
+	}
+	acc, err := control.Accept(context.WithoutCancel(ctx), controlPath)
 	if err != nil {
 		return wrapHost(err, "session.go_live", map[string]any{"Name": sess.Name})
 	}
@@ -496,11 +500,12 @@ func (h *hub) RestartWithResume(name, token string) error {
 		return &NotFoundError{Kind: kindSession, Name: name}
 	}
 	h.goDead(name)
-	if err := h.st.SetResumeToken(name, token); err != nil {
-		return err
-	}
 	sess.ResumeToken = token
 	if err := h.goLive(context.Background(), sess); err != nil {
+		return err
+	}
+	if err := h.st.SetResumeToken(name, token); err != nil {
+		h.goDead(name)
 		return err
 	}
 	h.sup.Start(sess)
@@ -512,16 +517,18 @@ func (h *hub) Resume(name string) error {
 	if !ok {
 		return &NotFoundError{Kind: kindSession, Name: name}
 	}
-	if sess.Archived {
-		if err := h.st.SetArchived(name, false); err != nil {
-			return err
-		}
-		sess.Archived = false
-	}
-	if err := h.goLive(context.Background(), sess); err != nil {
+	live := sess
+	live.Archived = false
+	if err := h.goLive(context.Background(), live); err != nil {
 		return err
 	}
-	h.sup.Start(sess)
+	if sess.Archived {
+		if err := h.st.SetArchived(name, false); err != nil {
+			h.goDead(name)
+			return err
+		}
+	}
+	h.sup.Start(live)
 	return nil
 }
 

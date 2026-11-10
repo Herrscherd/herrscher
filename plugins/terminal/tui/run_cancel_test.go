@@ -3,7 +3,9 @@ package tui
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -63,5 +65,23 @@ func TestSettleRunCancelsTheRunAndKeepsOnlyRealFailures(t *testing.T) {
 				t.Fatal("settleRun left the run's context live")
 			}
 		})
+	}
+}
+
+func TestRunProgramStopsWhenItsContextIsCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	backend := &fakeBackend{fe: make(chan RoutedEvent)}
+	done := make(chan error, 1)
+	go func() {
+		done <- runProgram(ctx, cancel, backend, newRunModel(ctx, backend), tea.WithInput(nil), tea.WithOutput(io.Discard))
+	}()
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("runProgram after cancellation = %v, want nil", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("runProgram did not return after its context was cancelled")
 	}
 }

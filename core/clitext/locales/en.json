@@ -467,7 +467,7 @@
   {
     "id": "cli.bridge.flag.vendor",
     "description": "Help of the --vendor flag of bridge",
-    "other": "backend vendor: claude | codex | cursor (empty = first registered / HERRSCHER_BACKEND)"
+    "other": "backend vendor: claude | codex | cursor (empty = the vendor of the cmd binary, then HERRSCHER_BACKEND; with a model, HERRSCHER_BACKEND, then the model's vendor)"
   },
   {
     "id": "cli.bridge.flag.resume",
@@ -3341,6 +3341,11 @@
     "id": "cli.host.fault.cache_lock_busy",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (cache lock busy)",
     "other": "model cache is held by another writer"
+  },
+  {
+    "id": "cli.host.fault.lock_not_owned",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (lock file not owned)",
+    "other": "the lock file is not owned by this user"
   },
   {
     "id": "cli.host.fault.no_pending_choice",

@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+var errLockNotOwned = errors.New("the lock file is not owned by this user")
+
 // StateLockPath is the lock a daemon holds for the whole time it serves. It sits
 // beside the state file rather than being the state file, so a stale lock can be
 // reasoned about without risking the state itself.
@@ -39,23 +41,11 @@ func LockState(statePath string) (func(), error) {
 	return release, err
 }
 
-func instanceLockPath(instanceID string) string {
-	name := "herrscher-instance.lock"
-	if instanceID != "" {
-		name = "herrscher-instance-" + instanceID + ".lock"
-	}
-	return filepath.Join(instanceLockDir(), name)
-}
-
-func instanceLockDir() string {
-	if cache, err := os.UserCacheDir(); err == nil {
-		return filepath.Join(cache, "herrscher")
-	}
-	return filepath.Join(os.TempDir(), "herrscher-"+strconv.Itoa(os.Getuid()))
-}
-
 func lockInstance(instanceID string) (func(), error) {
-	path := instanceLockPath(instanceID)
+	path, err := instanceLockPath(instanceID)
+	if err != nil {
+		return nil, err
+	}
 	release, err := takeLock(path)
 	if _, ok := errors.AsType[*lockTakenError](err); ok {
 		return nil, wrapHost(errSocketTaken, "daemon.socket_taken", map[string]any{pathParam: path})
@@ -75,9 +65,9 @@ func takeLock(path string) (func(), error) {
 	if err := os.MkdirAll(filepath.Dir(path), privateDirMode); err != nil {
 		return nil, wrapHost(err, "lock.dir", nil)
 	}
-	lockFile, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, ownerOnlyFileMode)
+	lockFile, err := openLockFile(path)
 	if err != nil {
-		return nil, wrapHost(err, "lock.state", nil)
+		return nil, wrapHost(err, "lock.unsafe", map[string]any{pathParam: path, "Detail": err.Error()})
 	}
 	locked, err := tryLock(lockFile)
 	if err != nil {

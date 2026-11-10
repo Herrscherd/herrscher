@@ -320,6 +320,16 @@
     "other": "dossier du verrou d'état : {{.Detail}}"
   },
   {
+    "id": "lock.unsafe",
+    "description": "Le fichier de verrou est inutilisable, Path le nomme et Detail donne la cause",
+    "other": "fichier de verrou {{.Path}} inutilisable : {{.Detail}}"
+  },
+  {
+    "id": "runtime.unsafe_dir",
+    "description": "Le répertoire d'exécution privé est inutilisable, Path le nomme et Detail donne la raison",
+    "other": "répertoire d'exécution privé {{.Path}} inutilisable : {{.Detail}}"
+  },
+  {
     "id": "lock.state",
     "description": "The state lock cannot be taken, Detail carries the cause",
     "other": "verrou d'état : {{.Detail}}"

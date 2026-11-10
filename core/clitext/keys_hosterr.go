@@ -52,6 +52,7 @@ func hostErrKeys() map[Key][]string {
 		"cli.host.fault.seal_expected_positive":        nil,
 		"cli.host.fault.discovery_no_answer":           nil,
 		"cli.host.fault.cache_lock_busy":               nil,
+		"cli.host.fault.lock_not_owned":                nil,
 		"cli.host.fault.no_pending_choice":             nil,
 		"cli.host.fault.handoff_targets":               nil,
 		"cli.host.fault.handoff_agent_targets":         nil,

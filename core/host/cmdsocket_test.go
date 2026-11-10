@@ -180,6 +180,9 @@ func TestALongSessionNameStillGetsASocketThatBinds(t *testing.T) {
 	if len(p) > control.MaxUnixSocketPath {
 		t.Fatalf("path is %d bytes, over the %d sun_path holds: %q", len(p), control.MaxUnixSocketPath, p)
 	}
+	if err := ensureRuntimeDir(p); err != nil {
+		t.Fatalf("private runtime dir for %q: %v", p, err)
+	}
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", p)
 	if err != nil {
 		t.Fatalf("listen %q: %v", p, err)

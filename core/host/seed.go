@@ -509,14 +509,22 @@ func envCommand(args []string) string {
 		word := args[idx]
 		switch {
 		case word == "--":
-			if idx+1 < len(args) {
-				return args[idx+1]
-			}
-			return ""
+			return firstCommandWord(args[idx+1:])
 		case word == "--unset" || word == "--chdir":
 			idx++
+		case word == "--split-string":
+			if idx+1 >= len(args) {
+				return ""
+			}
+			return envCommand(append(commandWords(args[idx+1]), args[idx+2:]...))
+		case strings.HasPrefix(word, "--split-string="):
+			return envCommand(append(commandWords(strings.TrimPrefix(word, "--split-string=")), args[idx+1:]...))
 		case strings.HasPrefix(word, "--"):
+		case word == "-":
 		case strings.HasPrefix(word, "-") && len(word) > 1:
+			if at := shortEnvSplitAt(word); at > 0 {
+				return envSplitCommand(word[at+1:], args[idx+1:])
+			}
 			if shortEnvOptionTakesNext(word) {
 				idx++
 			}
@@ -526,6 +534,36 @@ func envCommand(args []string) string {
 		}
 	}
 	return ""
+}
+
+func envSplitCommand(value string, rest []string) string {
+	if value == "" {
+		if len(rest) == 0 {
+			return ""
+		}
+		value, rest = rest[0], rest[1:]
+	}
+	return envCommand(append(commandWords(value), rest...))
+}
+
+func firstCommandWord(words []string) string {
+	idx := skipEnvAssignments(words)
+	if idx >= len(words) {
+		return ""
+	}
+	return words[idx]
+}
+
+func shortEnvSplitAt(word string) int {
+	for idx := 1; idx < len(word); idx++ {
+		switch word[idx] {
+		case 'S':
+			return idx
+		case 'u', 'C':
+			return -1
+		}
+	}
+	return -1
 }
 
 func shortEnvOptionTakesNext(word string) bool {

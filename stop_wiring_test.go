@@ -8,13 +8,32 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 )
+
+const shortTempRoot = "/tmp"
+
+func isolatedRuntimeRoot(t *testing.T) string {
+	t.Helper()
+	dir := filepath.Join(shortTempRoot, "rt"+strconv.FormatInt(time.Now().UnixNano(), 10))
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(dir); err != nil {
+			t.Error(err)
+		}
+	})
+	return dir
+}
 
 func serveChild(t *testing.T) (*exec.Cmd, *bufio.Scanner) {
 	t.Helper()
+	runtimeRoot := isolatedRuntimeRoot(t)
 	dir := t.TempDir()
 	envFile := filepath.Join(dir, "herrscher.env")
 	if err := os.WriteFile(envFile, nil, 0o600); err != nil {
@@ -37,6 +56,7 @@ func serveChild(t *testing.T) (*exec.Cmd, *bufio.Scanner) {
 		"HERRSCHER_ENV_FILE=" + envFile,
 		"HOME=" + dir,
 		"HERRSCHER_STATE_DIR=" + filepath.Join(dir, "state"),
+		"XDG_RUNTIME_DIR=" + runtimeRoot,
 		"PATH=" + os.Getenv("PATH"),
 	}
 	startErr := child.Start()

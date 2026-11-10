@@ -119,6 +119,9 @@ func SubscribeDaemonEvents(ctx context.Context, instanceID string) (<-chan Daemo
 var errDaemonEventsUnreachable = errors.New("the daemon does not answer on its events socket")
 
 func subscribeAt(ctx context.Context, path string) (<-chan DaemonEvent, error) {
+	if err := ensureRuntimeDir(path); err != nil {
+		return nil, err
+	}
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "unix", path)
 	if err != nil {

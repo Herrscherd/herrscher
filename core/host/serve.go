@@ -213,6 +213,11 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	if err != nil {
 		return wrapHost(err, "serve.resolve_instance", nil)
 	}
+	releaseInstance, err := lockInstance(instID)
+	if err != nil {
+		return err
+	}
+	defer releaseInstance()
 	if takenErr := refuseTakenInstance(ctx, instID); takenErr != nil {
 		return takenErr
 	}
@@ -275,24 +280,25 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	runningHub.seedBackend = func(seedCtx context.Context, sess state.Session) (contracts.Backend, error) {
 		return newSeedBackend(seedCtx, sess, keys, runningHub.models)
 	}
+	runningHub.contributedKinds = kinds
+	runningHub.instanceID = instID
+	runningHub.gate = deps.handler.BudgetGate()
+	coord := wireCoordination(runningHub, deps, store, sessions)
+
+	deps.handler.SetCoordinationReader(coordViewAdapter{c: coord})
+
+	if err := serveHubSockets(ctx, instID, runningHub); err != nil {
+		return err
+	}
 	liveStopped := make(chan struct{})
 	go func() {
 		defer close(liveStopped)
 		<-ctx.Done()
 		runningHub.stopLive()
 	}()
-	runningHub.contributedKinds = kinds
-	runningHub.instanceID = instID
-	runningHub.gate = deps.handler.BudgetGate()
-	coord := wireCoordination(runningHub, deps, store, sessions)
-
 	sched := newScheduler(store, store, runningHub, sessions.Seed, time.Now)
 	deps.schedSlot.sched = sched
 	go sched.Run(ctx)
-
-	deps.handler.SetCoordinationReader(coordViewAdapter{c: coord})
-
-	serveHubSockets(ctx, instID, runningHub)
 	goLiveSessions(ctx, runningHub, sup, store, monitor)
 	bindSessionControl(gws, runningHub)
 
@@ -356,11 +362,21 @@ func wireCoordination(hubCore *hub, deps hostDeps, st *state.State, sessions *se
 	return coord
 }
 
-func serveHubSockets(ctx context.Context, instID string, hubCore *hub) {
+func serveHubSockets(ctx context.Context, instID string, hubCore *hub) error {
 	events := newEventSocket()
-	serveEventsSocket(ctx, EventsSocketPath(instID), events)
+	eventsListener, err := openEventsSocket(ctx, EventsSocketPath(instID))
+	if err != nil {
+		return err
+	}
+	commandsListener, err := openCommandSocket(ctx, CommandSocketPath(instID))
+	if err != nil {
+		eventsListener.release()
+		return err
+	}
 	hubCore.eventPublisher = events.Publish
-	serveCommandSocket(ctx, CommandSocketPath(instID), asOperator{disp: hubCore, lang: hubCore.lang})
+	go acceptEvents(ctx, eventsListener, events)
+	go acceptCommands(ctx, commandsListener, asOperator{disp: hubCore, lang: hubCore.lang}, defaultCommandReadTimeout)
+	return nil
 }
 
 func goLiveSessions(ctx context.Context, runningHub *hub, sup *supervisor.Supervisor, hostState *state.State, host *health.Health) {

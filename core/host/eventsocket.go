@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net"
-	"os"
 	"sync"
 	"time"
 
@@ -164,24 +163,17 @@ func (s *eventSocket) closeAll() {
 	s.mu.Unlock()
 }
 
-func serveEventsSocket(ctx context.Context, path string, socket *eventSocket) {
+func openEventsSocket(ctx context.Context, path string) (ownedListener, error) {
 	if err := claimSocketPath(ctx, path); err != nil {
-		warnStderr("events socket: listen %s: %v\n", path, err)
-		return
+		return ownedListener{}, err
 	}
-	listener, err := listenCommandSocket(ctx, path)
-	if err != nil {
-		warnStderr("events socket: listen %s: %v\n", path, err)
-		return
-	}
-	go acceptEvents(ctx, listener, path, socket)
+	return listenOwned(ctx, path)
 }
 
-func acceptEvents(ctx context.Context, listener net.Listener, path string, socket *eventSocket) {
+func acceptEvents(ctx context.Context, listener ownedListener, socket *eventSocket) {
 	go func() {
 		<-ctx.Done()
-		logCleanup(listener.Close())
-		logCleanup(os.Remove(path))
+		listener.release()
 		socket.closeAll()
 	}()
 	for {

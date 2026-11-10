@@ -1,6 +1,7 @@
 package host
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -31,7 +32,39 @@ func StateLockPath(statePath string) string {
 // lock nobody can clear. The pid is written for the error message alone; nothing
 // reads it to make a decision.
 func LockState(statePath string) (func(), error) {
-	path := StateLockPath(statePath)
+	release, err := takeLock(StateLockPath(statePath))
+	if taken, ok := errors.AsType[*lockTakenError](err); ok {
+		return nil, &lockHeldError{StatePath: statePath, Holder: taken.Holder}
+	}
+	return release, err
+}
+
+func instanceLockPath(instanceID string) string {
+	name := "herrscher-instance.lock"
+	if instanceID != "" {
+		name = "herrscher-instance-" + instanceID + ".lock"
+	}
+	return filepath.Join(os.TempDir(), name)
+}
+
+func lockInstance(instanceID string) (func(), error) {
+	path := instanceLockPath(instanceID)
+	release, err := takeLock(path)
+	if _, ok := errors.AsType[*lockTakenError](err); ok {
+		return nil, wrapHost(errSocketTaken, "daemon.socket_taken", map[string]any{pathParam: path})
+	}
+	return release, err
+}
+
+type lockTakenError struct {
+	Holder string
+}
+
+func (e *lockTakenError) Error() string {
+	return "lock held by another process" + e.Holder
+}
+
+func takeLock(path string) (func(), error) {
 	if err := os.MkdirAll(filepath.Dir(path), privateDirMode); err != nil {
 		return nil, wrapHost(err, "lock.dir", nil)
 	}
@@ -47,7 +80,7 @@ func LockState(statePath string) (func(), error) {
 	if !locked {
 		holder := readHolder(lockFile)
 		closeRead(lockFile)
-		return nil, &lockHeldError{StatePath: statePath, Holder: holder}
+		return nil, &lockTakenError{Holder: holder}
 	}
 	if err := lockFile.Truncate(0); err == nil {
 		logWriteFailure(lockFile.WriteAt([]byte(strconv.Itoa(os.Getpid())), 0))

@@ -104,28 +104,53 @@ func cancellationOr(ctx context.Context, err error) error {
 }
 
 func serveCommandSocket(ctx context.Context, path string, disp dispatcher) {
-	serveCommandSocketWithTimeout(ctx, path, disp, defaultCommandReadTimeout)
+	if err := serveCommandSocketWithTimeout(ctx, path, disp, defaultCommandReadTimeout); err != nil {
+		warnStderr("command socket: listen %s: %v\n", path, err)
+	}
 }
 
-func serveCommandSocketWithTimeout(ctx context.Context, path string, disp dispatcher, readTimeout time.Duration) {
-	if err := claimSocketPath(ctx, path); err != nil {
-		warnStderr("command socket: listen %s: %v\n", path, err)
-		return
+func serveCommandSocketWithTimeout(ctx context.Context, path string, disp dispatcher, readTimeout time.Duration) error {
+	listener, err := openCommandSocket(ctx, path)
+	if err != nil {
+		return err
 	}
+	go acceptCommands(ctx, listener, disp, readTimeout)
+	return nil
+}
+
+func openCommandSocket(ctx context.Context, path string) (ownedListener, error) {
+	if err := claimSocketPath(ctx, path); err != nil {
+		return ownedListener{}, err
+	}
+	return listenOwned(ctx, path)
+}
+
+type ownedListener struct {
+	net.Listener
+	path string
+	own  os.FileInfo
+}
+
+func listenOwned(ctx context.Context, path string) (ownedListener, error) {
 	listener, err := listenCommandSocket(ctx, path)
 	if err != nil {
-		warnStderr("command socket: listen %s: %v\n", path, err)
-		return
+		return ownedListener{}, err
 	}
-	go acceptCommands(ctx, listener, path, disp, readTimeout)
+	return ownedListener{Listener: listener, path: path, own: socketIdentity(path)}, nil
+}
+
+func (l ownedListener) release() {
+	closeRead(l.Listener)
+	removeOwnSocket(l.path, l.own)
 }
 
 var errSocketTaken = errors.New("another daemon already answers on this socket (same instance, another state file): stop it or pass --instance")
 
 func refuseTakenInstance(ctx context.Context, instID string) error {
-	path := CommandSocketPath(instID)
-	if socketAnswers(ctx, path) {
-		return wrapHost(errSocketTaken, "daemon.socket_taken", map[string]any{pathParam: path})
+	for _, path := range []string{CommandSocketPath(instID), EventsSocketPath(instID)} {
+		if socketAnswers(ctx, path) {
+			return wrapHost(errSocketTaken, "daemon.socket_taken", map[string]any{pathParam: path})
+		}
 	}
 	return nil
 }
@@ -138,6 +163,23 @@ func claimSocketPath(ctx context.Context, path string) error {
 	return nil
 }
 
+func socketIdentity(path string) os.FileInfo {
+	info, err := os.Lstat(path)
+	logCleanup(err)
+	return info
+}
+
+func removeOwnSocket(path string, own os.FileInfo) {
+	if own == nil {
+		return
+	}
+	current, err := os.Lstat(path)
+	if err != nil || !os.SameFile(current, own) {
+		return
+	}
+	logCleanup(os.Remove(path))
+}
+
 func socketAnswers(ctx context.Context, path string) bool {
 	conn, err := dialCommandSocket(ctx, path)
 	if err != nil {
@@ -147,8 +189,8 @@ func socketAnswers(ctx context.Context, path string) bool {
 	return true
 }
 
-func acceptCommands(ctx context.Context, listener net.Listener, path string, disp dispatcher, readTimeout time.Duration) {
-	go func() { <-ctx.Done(); closeRead(listener); logCleanup(os.Remove(path)) }()
+func acceptCommands(ctx context.Context, listener ownedListener, disp dispatcher, readTimeout time.Duration) {
+	go func() { <-ctx.Done(); listener.release() }()
 	for {
 		conn, err := listener.Accept()
 		if err != nil {

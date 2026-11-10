@@ -86,7 +86,9 @@ else is** and **attaches** when the service already is, driving the same UI over
 the sockets the running daemon exposes. You see the agent that is actually live.
 Quitting the window has two outcomes. After an attach, the daemon you found keeps
 running. After a serve, quitting stops that daemon, and the turns still running
-in it are cancelled. Off a TTY there is nothing to
+in it are cancelled. If the hub stops while the window is open, for instance
+because its command or events socket is already served by another daemon, the
+window closes and says why. Off a TTY there is nothing to
 attach to, so the second daemon is refused and the process holding the state is
 named. Use `--state` if you really want a separate world, with its own
 `--instance` too: a daemon refuses to take over a command or events socket that

@@ -37,7 +37,7 @@ func LaunchProject(ctx context.Context, statePath, dir string) string {
 		return ""
 	}
 	top := scope.RepoRoot(ctx, dir)
-	if top == "" || filepath.Dir(top) != filepath.Clean(hostState.Workspace) {
+	if top == "" || !isDirectlyUnder(top, hostState.Workspace) {
 		return ""
 	}
 	name := filepath.Base(top)
@@ -45,6 +45,12 @@ func LaunchProject(ctx context.Context, statePath, dir string) string {
 		return ""
 	}
 	return name
+}
+
+func isDirectlyUnder(path, root string) bool {
+	realRoot, rootErr := filepath.EvalSymlinks(filepath.Clean(root))
+	realParent, parentErr := filepath.EvalSymlinks(filepath.Dir(path))
+	return rootErr == nil && parentErr == nil && realParent == realRoot
 }
 
 // ServedInstanceID reports the instance id the daemon serving statePath actually

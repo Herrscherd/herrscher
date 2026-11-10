@@ -158,7 +158,7 @@ func TestRunAttachedRoutesTheTUIThroughTheClientLog(t *testing.T) {
 	runner := attachRunner{
 		log:     silentLogger(),
 		logPath: clientLog,
-		connect: func(ctx context.Context, _ string, _ i18n.Language) (*attachedDaemon, error) {
+		connect: func(ctx context.Context, _, _ string, _ i18n.Language) (*attachedDaemon, error) {
 			return &attachedDaemon{done: ctx.Done(), events: make(chan tui.RoutedEvent)}, nil
 		},
 		run: func(_ context.Context, _ context.CancelFunc, _ tui.Backend, _ ...tui.Option) error {
@@ -167,7 +167,7 @@ func TestRunAttachedRoutesTheTUIThroughTheClientLog(t *testing.T) {
 		},
 	}
 	onTerminal, err := captureTerminal(t, func() error {
-		return runner.runAttached(context.Background(), "instance")
+		return runner.runAttached(context.Background(), "instance", "")
 	})
 	if err != nil {
 		t.Fatalf("runAttached: %v", err)

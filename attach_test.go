@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -22,7 +24,7 @@ func TestSubmittingFromAnUnboundTabNoticesInFrench(t *testing.T) {
 	d := startFakeDaemon(t, func([]string) (string, error) { return "", nil })
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, i18n.French)
+	a, err := newAttachedDaemon(ctx, d.instance, tempStatePath(t), i18n.French)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +168,7 @@ func TestAttachedFrontendRoutesAnEventToItsTab(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, testLang())
+	a, err := newAttachedDaemon(ctx, d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +196,7 @@ func TestAttachedFrontendSendsTypedLinesToTheRightSession(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, testLang())
+	a, err := newAttachedDaemon(ctx, d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +218,7 @@ func TestAttachedFrontendRefusesVerbsTheTerminalDoesNotOwn(t *testing.T) {
 	d := startFakeDaemon(t, func([]string) (string, error) { return "", nil })
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, testLang())
+	a, err := newAttachedDaemon(ctx, d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +236,7 @@ func TestAttachedFrontendReachesTheHealthAndUsageOverlays(t *testing.T) {
 	d := startFakeDaemon(t, func([]string) (string, error) { return "{}", nil })
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, testLang())
+	a, err := newAttachedDaemon(ctx, d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +261,7 @@ func TestAttachedFrontendBindsANewSessionToTheTerminal(t *testing.T) {
 
 func TestAttachingWithoutADaemonFails(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
-	if _, err := newAttachedDaemon(context.Background(), "nobody", testLang()); err == nil {
+	if _, err := newAttachedDaemon(context.Background(), "nobody", tempStatePath(t), testLang()); err == nil {
 		t.Fatal("expected an error with no daemon listening")
 	}
 }
@@ -277,7 +279,7 @@ func TestScrollbackComesBackFromTheDaemon(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, testLang())
+	a, err := newAttachedDaemon(ctx, d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -298,4 +300,39 @@ func TestSocketPathsAreInstanceScoped(t *testing.T) {
 	if _, err := os.Stat(filepath.Dir(host.EventsSocketPath(""))); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func tempStatePath(t *testing.T) string {
+	return filepath.Join(t.TempDir(), "state.json")
+}
+
+func TestAttachedLaunchPlacesTheSessionInTheRepositoryOfTheServedState(t *testing.T) {
+	workspace := t.TempDir()
+	repo := filepath.Join(workspace, "herrscher")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.CommandContext(context.Background(), "git", "init", "-q", repo).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+	statePath := tempStatePath(t)
+	if err := os.WriteFile(statePath, []byte(`{"workspace":`+strconv.Quote(workspace)+`}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("STATE_DIR", t.TempDir())
+	t.Chdir(repo)
+
+	argv := attachedLaunch(context.Background(), statePath, "work")
+	if !containsPair(argv, "--project", "herrscher") {
+		t.Fatalf("attachedLaunch = %v, want --project herrscher from the attached state", argv)
+	}
+}
+
+func containsPair(argv []string, flag, value string) bool {
+	for idx := 0; idx+1 < len(argv); idx++ {
+		if argv[idx] == flag && argv[idx+1] == value {
+			return true
+		}
+	}
+	return false
 }

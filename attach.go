@@ -40,7 +40,7 @@ type attachedDaemon struct {
 
 const sessionCacheTTL = time.Second
 
-func newAttachedDaemon(ctx context.Context, instance string, lang i18n.Language) (*attachedDaemon, error) {
+func newAttachedDaemon(ctx context.Context, instance, statePath string, lang i18n.Language) (*attachedDaemon, error) {
 	stream, err := host.SubscribeDaemonEvents(ctx, instance)
 	if err != nil {
 		return nil, err
@@ -58,7 +58,7 @@ func newAttachedDaemon(ctx context.Context, instance string, lang i18n.Language)
 		defer cancel()
 		return host.DaemonDispatch(call, instance, argv)
 	}
-	daemon.launch = func(name string) []string { return attachedLaunch(ctx, name) }
+	daemon.launch = func(name string) []string { return attachedLaunch(ctx, statePath, name) }
 	daemon.refresh()
 	go daemon.pump(stream)
 	return daemon, nil
@@ -120,7 +120,7 @@ func (a *attachedDaemon) dispatch(argv []string) (string, error) {
 type attachRunner struct {
 	log     *slog.Logger
 	logPath string
-	connect func(ctx context.Context, instance string, lang i18n.Language) (*attachedDaemon, error)
+	connect func(ctx context.Context, instance, statePath string, lang i18n.Language) (*attachedDaemon, error)
 	run     func(ctx context.Context, cancel context.CancelFunc, backend tui.Backend, opts ...tui.Option) error
 }
 
@@ -128,10 +128,10 @@ func newAttachRunner(log *slog.Logger) attachRunner {
 	return attachRunner{log: log, logPath: clientLogPath(), connect: newAttachedDaemon, run: tui.Run}
 }
 
-func (r attachRunner) runAttached(ctx context.Context, instance string, opts ...tui.Option) error {
+func (r attachRunner) runAttached(ctx context.Context, instance, statePath string, opts ...tui.Option) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	daemon, err := r.connect(ctx, instance, clitext.ClientLanguage())
+	daemon, err := r.connect(ctx, instance, statePath, clitext.ClientLanguage())
 	if err != nil {
 		return err
 	}
@@ -273,13 +273,13 @@ func (a *attachedDaemon) Seen(name string) {
 	}
 }
 
-func attachedLaunch(ctx context.Context, name string) []string {
+func attachedLaunch(ctx context.Context, statePath, name string) []string {
 	argv := append(createTaskSession(ctx, name), "--shared")
 	dir, err := os.Getwd()
 	if err != nil {
 		return argv
 	}
-	if project := host.LaunchProject(ctx, host.DefaultStatePath(), dir); project != "" {
+	if project := host.LaunchProject(ctx, statePath, dir); project != "" {
 		argv = append(argv, "--project", project)
 	}
 	return argv

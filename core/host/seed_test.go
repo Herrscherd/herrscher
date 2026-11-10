@@ -100,6 +100,33 @@ func TestBuildBackendForSelectsByVendor(t *testing.T) {
 	}
 }
 
+func TestBuildBackendForInfersVendorFromCmd(t *testing.T) {
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+	setBackendEnv(t, "")
+
+	var built string
+	makePlugin := func(kind string) contracts.Plugin {
+		return contracts.Plugin{
+			Manifest: contracts.Manifest{Kind: kind, Category: contracts.CategoryBackend, Config: []contracts.Setting{{Key: "cmd", Default: kind}}},
+			Backend: func(context.Context, contracts.PluginConfig) (contracts.Backend, error) {
+				built = kind
+				return seedBackend{}, nil
+			},
+		}
+	}
+	contracts.Default.Register(makePlugin("codex"))
+	contracts.Default.Register(makePlugin("claude"))
+
+	if _, err := BuildBackendFor(context.Background(), BackendRequest{Cmd: "/usr/bin/claude --model claude-opus-5-5 --effort medium"}); err != nil {
+		t.Fatalf("BuildBackendFor: %v", err)
+	}
+	if built != "claude" {
+		t.Fatalf("built %q, want claude: a vendorless session must run the backend its cmd names, not the first registered one", built)
+	}
+}
+
 func TestNewSeedBackendResolvesRelativeWorktreeOnce(t *testing.T) {
 	saved := contracts.Default
 	t.Cleanup(func() { contracts.Default = saved })

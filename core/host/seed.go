@@ -263,6 +263,9 @@ func buildBackend(ctx context.Context, req BackendRequest) (contracts.Backend, f
 	if err != nil {
 		return nil, noRelease, err
 	}
+	if desired == "" {
+		desired = vendorOfCmd(req.Cmd, plugins)
+	}
 	route, err := routeFor(req.ModelID, entry, req.Keys)
 	if err != nil {
 		return nil, noRelease, err
@@ -420,6 +423,26 @@ func resolveBackendDir(dir string) string {
 		return cwd
 	}
 	return filepath.Join(cwd, dir)
+}
+
+func vendorOfCmd(cmd string, plugins []contracts.Plugin) string {
+	fields := strings.Fields(cmd)
+	if len(fields) == 0 {
+		return ""
+	}
+	binary := filepath.Base(fields[0])
+	for idx := range plugins {
+		plugin := &plugins[idx]
+		if plugin.Backend == nil {
+			continue
+		}
+		for _, setting := range plugin.Manifest.Config {
+			if setting.Key == "cmd" && setting.Default == binary {
+				return plugin.Manifest.Kind
+			}
+		}
+	}
+	return ""
 }
 
 func selectBackend(desired string, plugins []contracts.Plugin) (contracts.Plugin, error) {

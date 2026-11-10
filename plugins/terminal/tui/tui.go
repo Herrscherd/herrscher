@@ -784,7 +784,7 @@ func (m *model) startSessionWith(text string, atts []Attachment) tea.Cmd {
 func (m *model) handleSessionStarted(msg sessionStartedMsg) tea.Cmd {
 	m.starting = false
 	if msg.err != nil {
-		m.input.SetValue(m.openText)
+		m.giveBackFailedStart()
 		m.pending = append(m.openAtts, m.pending...)
 		m.openText, m.openAtts = "", nil
 		m.applySize()
@@ -796,6 +796,17 @@ func (m *model) handleSessionStarted(msg sessionStartedMsg) tea.Cmd {
 	m.openSession = msg.name
 	m.tabSig = ""
 	return m.syncTabs()
+}
+
+func (m *model) giveBackFailedStart() {
+	typed := m.input.Value()
+	switch {
+	case typed == "":
+		m.input.SetValue(m.openText)
+	case m.openText == "":
+	default:
+		m.input.SetValue(m.openText + "\n" + typed)
+	}
 }
 
 func (m *model) runSlash(text string) tea.Cmd {

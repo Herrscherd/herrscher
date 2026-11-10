@@ -254,6 +254,21 @@ func TestFailedSessionStartGivesTheLineBack(t *testing.T) {
 	}
 }
 
+func TestFailedSessionStartKeepsWhatWasTypedWhileOpening(t *testing.T) {
+	f := &fakeBackend{startErr: errors.New("daemon down")}
+	m := newModel(f)
+	m.input.SetValue("hello")
+	started, ok := runCmd(m.handleEnter()).(sessionStartedMsg)
+	if !ok {
+		t.Fatal("enter with no session must start one")
+	}
+	m.input.SetValue("second line typed while opening")
+	runCmd(m.handleSessionStarted(started))
+	if got, want := m.input.Value(), "hello\nsecond line typed while opening"; got != want {
+		t.Fatalf("composer after failed start = %q, want %q: the original line and the one typed meanwhile must both survive", got, want)
+	}
+}
+
 func TestReopenedTabSeedsDimmedScrollback(t *testing.T) {
 	f := &fakeBackend{
 		sessions: []contracts.SessionInfo{{Name: "s", ChannelID: "c"}},

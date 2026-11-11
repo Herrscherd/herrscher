@@ -90,12 +90,31 @@ func (h *hub) warningLanguage() languageSource {
 	return fixedLanguageSource(h.lang)
 }
 
+func (h *hub) sessionLanguageSource(name string) languageSource {
+	recorded := liveSessionLanguage(h.st, name)
+	operator := h.warningLanguage()
+	return func() i18n.Language {
+		if lang := recorded(); lang != 0 {
+			return lang
+		}
+		return operator()
+	}
+}
+
+func (h *hub) operatorCommands() asOperator {
+	return asOperator{disp: h, lang: h.warningLanguage()}
+}
+
+func (h *hub) sessionCommands(name string) asSession {
+	return asSession{disp: h, session: name, lang: h.sessionLanguageSource(name)}
+}
+
 func (h *hub) reportSessionFailure(sess state.Session, stage supervisor.Stage, cause error) {
 	if h.eventPublisher == nil {
 		slog.Warn("session failure not published, no event sink bound yet", "session", sess.Name, "stage", stage, "err", cause)
 		return
 	}
-	lang := sessionLanguage(sess, h.lang)
+	lang := sessionLanguage(sess, h.warningLanguage()())
 	text := LocalizeError(lang, wrapHost(cause, sessionFailureKey(stage), map[string]any{nameParam: sess.Name, detailParam: cause.Error()})).Error()
 	h.eventPublisher(sess.Name, contracts.Event{T: sessionNoticeKind, Text: text})
 }
@@ -173,11 +192,11 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) error {
 				},
 			},
 			eventTap(h.eventPublisher, sess.Name),
-			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent, terms: terms, lang: sessionLanguage(sess, h.lang), language: liveSessionLanguage(h.st, sess.Name)}, h.gate)
+			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent, terms: terms, lang: sessionLanguage(sess, h.warningLanguage()()), language: liveSessionLanguage(h.st, sess.Name), operator: h.warningLanguage()}, h.gate)
 		h.sessionStopped(sess.Name)
 	}()
 
-	released := acceptCommands(sctx, commands, asSession{disp: h, session: sess.Name, lang: h.lang}, defaultCommandReadTimeout)
+	released := acceptCommands(sctx, commands, h.sessionCommands(sess.Name), defaultCommandReadTimeout)
 	releaseSockets := sync.OnceFunc(func() {
 		logCleanup(acc.Close())
 		commands.release()

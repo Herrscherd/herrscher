@@ -702,7 +702,7 @@ func (c bridgeCompactor) Compact(ctx context.Context, req contracts.CompactReque
 func (d *sessionDriver) decodeCompactResult(frame contracts.Event) (contracts.CompactResult, error) {
 	res, err := compactwire.DecodeResult(frame)
 	if errors.Is(err, compactwire.ErrNoticeMalformed) {
-		warnHost(d.lang, "warn.session_compaction_notice", map[string]any{nameParam: d.name, detailParam: err})
+		warnLive(d.warningLanguage(), "warn.session_compaction_notice", map[string]any{nameParam: d.name, detailParam: err.Error()})
 		return res, nil
 	}
 	return res, err

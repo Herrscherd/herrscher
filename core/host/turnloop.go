@@ -124,6 +124,7 @@ type sessionDriver struct {
 	compactRegistered func()
 	lang              i18n.Language
 	language          func() i18n.Language
+	operator          languageSource
 	messages          *hostMessages
 }
 
@@ -729,6 +730,18 @@ func (d *sessionDriver) currentLanguage() i18n.Language {
 	return d.language()
 }
 
+func (d *sessionDriver) warningLanguage() languageSource {
+	return func() i18n.Language {
+		if lang := d.currentLanguage(); lang != 0 {
+			return lang
+		}
+		if d.operator != nil {
+			return d.operator()
+		}
+		return d.lang
+	}
+}
+
 func (d *sessionDriver) announceLanguage(ctx context.Context) bool {
 	if d.language == nil {
 		return true
@@ -1286,6 +1299,7 @@ type sessionIdentity struct {
 	terms       func() modelTerms
 	lang        i18n.Language
 	language    func() i18n.Language
+	operator    languageSource
 }
 
 // RunSession drives a session without a declared identity until ctx is done.
@@ -1312,6 +1326,7 @@ func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, cha
 	driver.terms = identity.terms
 	driver.lang = identity.lang
 	driver.language = identity.language
+	driver.operator = identity.operator
 	driver.compaction = sessions.compaction
 	driver.percentOf = func() int { return sessions.percentOfSession(name) }
 	if gate != nil {

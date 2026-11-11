@@ -402,7 +402,7 @@ func serveHubSockets(ctx context.Context, layout runtimedir.Layout, instID strin
 	}
 	hubCore.eventPublisher = events.Publish
 	eventsReleased := acceptEvents(ctx, eventsListener, events)
-	commandsReleased := acceptCommands(ctx, commandsListener, asOperator{disp: hubCore, lang: hubCore.lang}, defaultCommandReadTimeout)
+	commandsReleased := acceptCommands(ctx, commandsListener, hubCore.operatorCommands(), defaultCommandReadTimeout)
 	return allReleased(eventsReleased, commandsReleased), nil
 }
 

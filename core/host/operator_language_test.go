@@ -178,3 +178,109 @@ func TestHubWarningFollowsALiveLanguageChange(t *testing.T) {
 		t.Fatalf("the hub warned in english after the switch to french: %q", french)
 	}
 }
+
+func missingScheduleRemoval(t *testing.T, disp dispatcher, name string) string {
+	t.Helper()
+	_, err := disp.Dispatch(t.Context(), []string{"schedule", "rm", "--name", name})
+	if err == nil {
+		t.Fatalf("schedule rm %s succeeded, want a not-found error", name)
+	}
+	return err.Error()
+}
+
+func notFoundScheduleText(lang i18n.Language, name string) string {
+	return cli.Localize(&NotFoundError{Kind: kindSchedule, Name: name}, lang).Error()
+}
+
+func TestOperatorCommandReplyFollowsALiveLanguageChange(t *testing.T) {
+	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	live := newOperatorLanguage(i18n.English)
+	reg := &cli.Registry{}
+	if err := addScheduleCommands(reg, live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
+		t.Fatalf("addScheduleCommands: %v", err)
+	}
+	h := &hub{st: st, reg: reg, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)}
+	disp := h.operatorCommands()
+	english := missingScheduleRemoval(t, disp, "digest")
+	live.set(i18n.French)
+	french := missingScheduleRemoval(t, disp, "weekly")
+	wantEnglish := notFoundScheduleText(i18n.English, "digest")
+	wantFrench := notFoundScheduleText(i18n.French, "weekly")
+	if wantFrench == wantEnglish {
+		t.Fatalf("the french and english not-found texts are identical, the test proves nothing")
+	}
+	if english != wantEnglish {
+		t.Fatalf("before set lang fr, the reply was %q, want the english %q", english, wantEnglish)
+	}
+	if french != wantFrench {
+		t.Fatalf("after set lang fr, the command replied %q, want the french %q", french, wantFrench)
+	}
+}
+
+func TestSessionCommandReplyFollowsTheOperatorUnlessItsLanguageIsRecorded(t *testing.T) {
+	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	for _, name := range []string{"s1", "s2"} {
+		if err := st.AddSession(state.Session{Name: name}); err != nil {
+			t.Fatalf("AddSession %s: %v", name, err)
+		}
+	}
+	if _, err := st.SetSessionLanguage("s2", "en"); err != nil {
+		t.Fatalf("SetSessionLanguage: %v", err)
+	}
+	live := newOperatorLanguage(i18n.English)
+	reg := &cli.Registry{}
+	if err := addScheduleCommands(reg, live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
+		t.Fatalf("addScheduleCommands: %v", err)
+	}
+	h := &hub{st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)}
+	live.set(i18n.French)
+	followed := missingScheduleRemoval(t, asSession{disp: reg, session: "s1", lang: h.sessionLanguageSource("s1")}, "weekly")
+	kept := missingScheduleRemoval(t, asSession{disp: reg, session: "s2", lang: h.sessionLanguageSource("s2")}, "daily")
+	wantFrench := notFoundScheduleText(i18n.French, "weekly")
+	wantEnglish := notFoundScheduleText(i18n.English, "daily")
+	if followed != wantFrench {
+		t.Fatalf("session without its own language replied %q after the operator switched, want the french %q", followed, wantFrench)
+	}
+	if kept != wantEnglish {
+		t.Fatalf("session with a recorded english replied %q after the operator switched, want the english %q", kept, wantEnglish)
+	}
+}
+
+func TestCompactionNoticeFollowsTheLiveSessionLanguage(t *testing.T) {
+	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	if err := st.AddSession(state.Session{Name: "s1"}); err != nil {
+		t.Fatalf("AddSession: %v", err)
+	}
+	live := newOperatorLanguage(i18n.English)
+	h := &hub{st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)}
+	d := newSessionDriver("s1", nil, nil, nil)
+	d.lang = i18n.English
+	d.language = liveSessionLanguage(st, "s1")
+	d.operator = h.warningLanguage()
+	if got := d.warningLanguage()(); got != i18n.English {
+		t.Fatalf("before any change, the compaction notice language is %s, want english", got)
+	}
+	if _, err := st.SetSessionLanguage("s1", "fr"); err != nil {
+		t.Fatalf("SetSessionLanguage: %v", err)
+	}
+	if got := d.warningLanguage()(); got != i18n.French {
+		t.Fatalf("after the session switched to french, the compaction notice language is %s, want french", got)
+	}
+}
+
+func TestCompactionNoticeFollowsTheOperatorWithoutASessionLanguage(t *testing.T) {
+	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	if err := st.AddSession(state.Session{Name: "s1"}); err != nil {
+		t.Fatalf("AddSession: %v", err)
+	}
+	live := newOperatorLanguage(i18n.English)
+	h := &hub{st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)}
+	d := newSessionDriver("s1", nil, nil, nil)
+	d.lang = i18n.English
+	d.language = liveSessionLanguage(st, "s1")
+	d.operator = h.warningLanguage()
+	live.set(i18n.French)
+	if got := d.warningLanguage()(); got != i18n.French {
+		t.Fatalf("after the operator switched to french, the compaction notice language is %s, want french", got)
+	}
+}

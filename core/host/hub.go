@@ -76,9 +76,11 @@ func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir str
 
 func (h *hub) reportSessionFailure(sess state.Session, stage supervisor.Stage, cause error) {
 	if h.eventPublisher == nil {
+		slog.Warn("session failure not published, no event sink bound yet", "session", sess.Name, "stage", stage, "err", cause)
 		return
 	}
-	text := LocalizeError(h.lang, wrapHost(cause, sessionFailureKey(stage), map[string]any{nameParam: sess.Name, detailParam: cause.Error()})).Error()
+	lang := sessionLanguage(sess, h.lang)
+	text := LocalizeError(lang, wrapHost(cause, sessionFailureKey(stage), map[string]any{nameParam: sess.Name, detailParam: cause.Error()})).Error()
 	h.eventPublisher(sess.Name, contracts.Event{T: sessionNoticeKind, Text: text})
 }
 

@@ -1,6 +1,6 @@
 //go:build unix
 
-package runner
+package runtimedir
 
 import (
 	"bytes"
@@ -11,20 +11,18 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
 func runRemoteDirScript(t *testing.T, runUser, tmp string) (string, error) {
 	t.Helper()
 	var out bytes.Buffer
-	cmd := exec.CommandContext(context.Background(), "sh", "-c", RemoteRuntimeDirScript(runUser, tmp))
+	cmd := exec.CommandContext(context.Background(), "sh", "-c", remoteDirScript(searchRoots{runUser: runUser, tmp: tmp}))
 	cmd.Stdout = &out
 	err := cmd.Run()
 	return strings.TrimSpace(out.String()), err
 }
 
-func TestRemoteRuntimeDirScriptPrefersAPrivateRuntimeDir(t *testing.T) {
+func TestRemoteDirScriptPrefersAPrivateRuntimeDir(t *testing.T) {
 	runUser, tmp := t.TempDir(), t.TempDir()
 	uidDir := filepath.Join(runUser, strconv.Itoa(os.Getuid()))
 	if err := os.Mkdir(uidDir, 0o700); err != nil {
@@ -39,7 +37,7 @@ func TestRemoteRuntimeDirScriptPrefersAPrivateRuntimeDir(t *testing.T) {
 	}
 }
 
-func TestRemoteRuntimeDirScriptFallsBackToTmpWithoutARuntimeDir(t *testing.T) {
+func TestRemoteDirScriptFallsBackToTmpWithoutARuntimeDir(t *testing.T) {
 	tmp := t.TempDir()
 	got, err := runRemoteDirScript(t, filepath.Join(tmp, "missing"), tmp)
 	if err != nil {
@@ -58,7 +56,7 @@ func TestRemoteRuntimeDirScriptFallsBackToTmpWithoutARuntimeDir(t *testing.T) {
 	}
 }
 
-func TestRemoteRuntimeDirScriptSkipsAnOpenRuntimeDir(t *testing.T) {
+func TestRemoteDirScriptSkipsAnOpenRuntimeDir(t *testing.T) {
 	runUser, tmp := t.TempDir(), t.TempDir()
 	uidDir := filepath.Join(runUser, strconv.Itoa(os.Getuid()))
 	if err := os.Mkdir(uidDir, 0o755); err != nil {
@@ -76,7 +74,7 @@ func TestRemoteRuntimeDirScriptSkipsAnOpenRuntimeDir(t *testing.T) {
 	}
 }
 
-func TestRemoteRuntimeDirScriptRefusesAnOpenDir(t *testing.T) {
+func TestRemoteDirScriptRefusesAnOpenDir(t *testing.T) {
 	tmp := t.TempDir()
 	dir := filepath.Join(tmp, "herrscher-"+strconv.Itoa(os.Getuid()))
 	if err := os.Mkdir(dir, 0o755); err != nil {
@@ -90,7 +88,7 @@ func TestRemoteRuntimeDirScriptRefusesAnOpenDir(t *testing.T) {
 	}
 }
 
-func TestRemoteRuntimeDirScriptRefusesASymlink(t *testing.T) {
+func TestRemoteDirScriptRefusesASymlink(t *testing.T) {
 	tmp := t.TempDir()
 	target := t.TempDir()
 	if err := os.Symlink(target, filepath.Join(tmp, "herrscher-"+strconv.Itoa(os.Getuid()))); err != nil {
@@ -101,8 +99,7 @@ func TestRemoteRuntimeDirScriptRefusesASymlink(t *testing.T) {
 	}
 }
 
-func TestRemoteRuntimeDirAcceptsOnlyTheTwoShapes(t *testing.T) {
-	roots := runtimedir.Roots{RunUser: "/run/user", Tmp: "/tmp"}
+func TestIsRemoteDirAcceptsOnlyTheTwoProductionShapes(t *testing.T) {
 	for dir, want := range map[string]bool{
 		"/run/user/1000/herrscher":  true,
 		"/tmp/herrscher-1000":       true,
@@ -111,8 +108,8 @@ func TestRemoteRuntimeDirAcceptsOnlyTheTwoShapes(t *testing.T) {
 		"/srv/herrscher-1000":       false,
 		"/tmp/herrscher-1000/extra": false,
 	} {
-		if got := isRemoteRuntimeDir(dir, roots); got != want {
-			t.Fatalf("isRemoteRuntimeDir(%q) = %t, want %t", dir, got, want)
+		if got := IsRemoteDir(dir); got != want {
+			t.Fatalf("IsRemoteDir(%q) = %t, want %t", dir, got, want)
 		}
 	}
 }

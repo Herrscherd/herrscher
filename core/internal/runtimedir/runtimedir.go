@@ -1,5 +1,5 @@
 // Package runtimedir gives each user one directory for the local sockets and
-// locks of herrscher. Resolve picks it deterministically: <run user>/<uid>/herrscher
+// locks of herrscher. Production picks it deterministically: <run user>/<uid>/herrscher
 // when systemd has created a private per-user runtime directory for the uid, and
 // /tmp/herrscher-<uid> otherwise, which is where macOS and hosts without a user
 // session put it. The directory is created 0700 and verified before use, so no
@@ -33,20 +33,17 @@ const (
 	hashedNameLen  = len("/") + len(hashedPrefix) + keyBytes + len(socketSuffix)
 )
 
-// Roots are the two parents a per-user directory can live under: RunUser holds
-// the systemd runtime directory of each uid, Tmp the fallback herrscher-<uid>.
-type Roots struct {
-	RunUser string
-	Tmp     string
+type searchRoots struct {
+	runUser string
+	tmp     string
 }
 
-// ProductionRoots are the parents used by a running herrscher.
-func ProductionRoots() Roots {
-	return Roots{RunUser: "/run/user", Tmp: "/tmp"}
+func productionRoots() searchRoots {
+	return searchRoots{runUser: "/run/user", tmp: "/tmp"}
 }
 
 // Layout is the private directory where one user's herrscher entries live.
-// The zero value is not usable; a Layout comes from Production, Resolve or At.
+// The zero value is not usable; a Layout comes from Production or At.
 type Layout struct {
 	dir string
 }
@@ -64,13 +61,11 @@ func (e *RootError) Error() string {
 
 // Production is the layout of the user running this process.
 func Production() Layout {
-	return resolve(os.Getuid(), ProductionRoots())
+	return resolve(os.Getuid(), productionRoots())
 }
 
-// Resolve is the layout for uid under roots. It rejects a root that is empty or
-// relative, and a directory too long to hold a hashed socket name.
-func Resolve(uid int, roots Roots) (Layout, error) {
-	for _, root := range []string{roots.RunUser, roots.Tmp} {
+func resolveUnder(uid int, roots searchRoots) (Layout, error) {
+	for _, root := range []string{roots.runUser, roots.tmp} {
 		if err := checkAbsolute(root); err != nil {
 			return Layout{}, err
 		}
@@ -87,12 +82,12 @@ func At(dir string) (Layout, error) {
 	return checkedLayout(Layout{dir: dir})
 }
 
-func resolve(uid int, roots Roots) Layout {
+func resolve(uid int, roots searchRoots) Layout {
 	uidText := strconv.Itoa(uid)
-	if usableRunUserDir(path.Join(roots.RunUser, uidText), uid) {
-		return Layout{dir: path.Join(roots.RunUser, uidText, runUserDirName)}
+	if usableRunUserDir(path.Join(roots.runUser, uidText), uid) {
+		return Layout{dir: path.Join(roots.runUser, uidText, runUserDirName)}
 	}
-	return Layout{dir: DirOf(roots.Tmp, uid)}
+	return Layout{dir: DirOf(roots.tmp, uid)}
 }
 
 func checkAbsolute(root string) error {
@@ -120,9 +115,9 @@ func DirOf(root string, uid int) string {
 // UnusableLayoutError reports a zero Layout, which names no directory.
 type UnusableLayoutError struct{}
 
-// Error explains that the layout was never built by Production, Resolve or At.
+// Error explains that the layout was never built by Production or At.
 func (*UnusableLayoutError) Error() string {
-	return "runtimedir: a zero Layout names no directory; build it with Production, Resolve or At"
+	return "runtimedir: a zero Layout names no directory; build it with Production or At"
 }
 
 // Dir is the private directory this layout names, empty for a zero Layout.

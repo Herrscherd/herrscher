@@ -42,7 +42,7 @@ func TestResolveUsesTheSystemdRuntimeDirWhenItIsPrivate(t *testing.T) {
 	if err := os.Mkdir(uidDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	layout, err := Resolve(os.Getuid(), Roots{RunUser: runUser, Tmp: shortRoot(t)})
+	layout, err := resolveUnder(os.Getuid(), searchRoots{runUser: runUser, tmp: shortRoot(t)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestResolveFallsBackToTmpWhenTheRuntimeDirIsOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 	tmp := shortRoot(t)
-	layout, err := Resolve(os.Getuid(), Roots{RunUser: runUser, Tmp: tmp})
+	layout, err := resolveUnder(os.Getuid(), searchRoots{runUser: runUser, tmp: tmp})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestResolveFallsBackToTmpWhenTheRuntimeDirIsOpen(t *testing.T) {
 
 func TestResolveFallsBackToTmpWhenThereIsNoRuntimeDir(t *testing.T) {
 	tmp := shortRoot(t)
-	layout, err := Resolve(os.Getuid(), Roots{RunUser: path.Join(tmp, "missing"), Tmp: tmp})
+	layout, err := resolveUnder(os.Getuid(), searchRoots{runUser: path.Join(tmp, "missing"), tmp: tmp})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,13 +83,13 @@ func TestResolveFallsBackToTmpWhenThereIsNoRuntimeDir(t *testing.T) {
 
 func TestResolveRejectsEmptyAndRelativeRoots(t *testing.T) {
 	good := shortRoot(t)
-	for _, roots := range []Roots{
-		{RunUser: "", Tmp: good},
-		{RunUser: good, Tmp: ""},
-		{RunUser: "run/user", Tmp: good},
-		{RunUser: good, Tmp: "tmp"},
+	for _, roots := range []searchRoots{
+		{runUser: "", tmp: good},
+		{runUser: good, tmp: ""},
+		{runUser: "run/user", tmp: good},
+		{runUser: good, tmp: "tmp"},
 	} {
-		_, err := Resolve(os.Getuid(), roots)
+		_, err := resolveUnder(os.Getuid(), roots)
 		var rootErr *RootError
 		if !errors.As(err, &rootErr) {
 			t.Fatalf("Resolve(%+v) = %v, want a RootError", roots, err)
@@ -116,7 +116,7 @@ func TestAtRejectsADirectoryTooLongForASocketName(t *testing.T) {
 }
 
 func TestProductionIsTheResolvedLayoutOfThisUser(t *testing.T) {
-	want, err := Resolve(os.Getuid(), ProductionRoots())
+	want, err := resolveUnder(os.Getuid(), productionRoots())
 	if err != nil {
 		t.Fatal(err)
 	}

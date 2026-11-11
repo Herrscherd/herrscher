@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/Herrscherd/herrscher/core/host"
-	"github.com/Herrscherd/herrscher/core/runtimeguard"
 	"github.com/Herrscherd/herrscher/internal/errwriter"
+	"github.com/Herrscherd/herrscher/internal/runtimeguard"
 )
 
 const (
@@ -41,8 +41,13 @@ func runServeChild() int {
 }
 
 func runStartupProbe() int {
+	layout, err := host.RuntimeAt(os.Getenv(testRuntimeRootKey))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
 	os.Args = []string{"herrscher", "help"}
-	code := run()
+	code := runWith(layout)
 	_, present := os.LookupEnv("HERRSCHER_ANNOUNCE_KEY")
 	captured := host.AnnounceKeySecret() == reexecAnnounceKey
 	out := errwriter.New(os.Stdout)
@@ -51,6 +56,7 @@ func runStartupProbe() int {
 }
 
 func TestRunHidesTheAnnounceKeyFromTheEnvironmentAfterCapturingIt(t *testing.T) {
+	layout := testRuntime(t)
 	envFile := filepath.Join(t.TempDir(), "herrscher.env")
 	if err := os.WriteFile(envFile, nil, 0o600); err != nil {
 		t.Fatal(err)
@@ -58,6 +64,7 @@ func TestRunHidesTheAnnounceKeyFromTheEnvironmentAfterCapturingIt(t *testing.T) 
 	child := exec.CommandContext(t.Context(), os.Args[0])
 	child.Env = append(os.Environ(),
 		reexecMarker+"=1",
+		testRuntimeRootKey+"="+layout.Dir(),
 		"HERRSCHER_ANNOUNCE_KEY="+reexecAnnounceKey,
 		"HERRSCHER_ENV_FILE="+envFile,
 	)
@@ -67,6 +74,6 @@ func TestRunHidesTheAnnounceKeyFromTheEnvironmentAfterCapturingIt(t *testing.T) 
 		t.Fatalf("probe child failed: %v\n%s", err, out)
 	}
 	if !strings.Contains(string(out), "startup probe present=false captured=true") {
-		t.Fatalf("the announce key must leave the environment and stay captured after run():\n%s", out)
+		t.Fatalf("the announce key must leave the environment and stay captured after runWith():\n%s", out)
 	}
 }

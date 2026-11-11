@@ -154,18 +154,19 @@ type stringError string
 func (e stringError) Error() string { return string(e) }
 
 func TestEachSessionGetsItsOwnCommandSocket(t *testing.T) {
-	a := SessionCommandSocketPath("inst", "revue")
-	b := SessionCommandSocketPath("inst", "release")
+	layout := testRuntime(t)
+	a := SessionCommandSocketPathIn(layout, "inst", "revue")
+	b := SessionCommandSocketPathIn(layout, "inst", "release")
 	if a == b {
 		t.Fatalf("two sessions share %q", a)
 	}
-	if a == CommandSocketPath("inst") || b == CommandSocketPath("inst") {
+	if a == CommandSocketPathIn(layout, "inst") || b == CommandSocketPathIn(layout, "inst") {
 		t.Fatal("a session socket must not be the operator socket")
 	}
 }
 
 func TestASessionSocketPathFoldsUnsafeNames(t *testing.T) {
-	got := SessionCommandSocketPath("", "../../etc/passwd")
+	got := SessionCommandSocketPathIn(testRuntime(t), "", "../../etc/passwd")
 	if strings.ContainsAny(filepath.Base(got), "/\\") {
 		t.Fatalf("path %q keeps a separator from the session name", got)
 	}
@@ -200,7 +201,8 @@ func TestALongSessionNameStillGetsASocketThatBinds(t *testing.T) {
 }
 
 func TestSessionSocketsOfTwoInstancesDoNotCollide(t *testing.T) {
-	if SessionCommandSocketPath("a", "revue") == SessionCommandSocketPath("b", "revue") {
+	layout := testRuntime(t)
+	if SessionCommandSocketPathIn(layout, "a", "revue") == SessionCommandSocketPathIn(layout, "b", "revue") {
 		t.Fatal("two daemons on one machine must not share a session socket")
 	}
 }

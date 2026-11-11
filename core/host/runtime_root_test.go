@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Herrscherd/herrscher/core/runtimeguard"
+	"github.com/Herrscherd/herrscher/internal/runtimeguard"
 )
 
 func TestMain(m *testing.M) {

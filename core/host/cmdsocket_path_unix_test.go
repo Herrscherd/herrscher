@@ -30,7 +30,7 @@ func TestEventsSocketPathIsTheDocumentedLocation(t *testing.T) {
 	}
 }
 
-func TestPublicSocketPathsLiveInTheProductionDir(t *testing.T) {
+func TestPublicSocketPathsAreTheProductionDirOnesWithoutTouchingIt(t *testing.T) {
 	dir := ProductionRuntime().Dir()
 	if got := CommandSocketPath("instance-1"); got != filepath.Join(dir, "herrscher-command-instance-1.sock") {
 		t.Fatalf("CommandSocketPath(instance-1) = %q", got)

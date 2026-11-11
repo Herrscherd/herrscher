@@ -22,7 +22,7 @@ func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
-	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
+	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
 	var r cli.Registry
 	cmd := contracts.New(path...).Param("name", "", true).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
@@ -58,7 +58,7 @@ func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
 		}
 	}
 	h := newHub(state.NewState(t.TempDir()+"/s.json"),
-		supervisor.NewSupervisor(ctx, "/nonexistent/herrscher"), nil, t.TempDir(), &r, nil, approvalTab, sessionTab)
+		supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t)), nil, t.TempDir(), &r, nil, approvalTab, sessionTab)
 	h.runtime = isolatedRuntimeDir(t)
 	h.contributedKinds = contributedKinds([]contracts.Cmd{slow})
 
@@ -168,7 +168,7 @@ func TestHubDispatchSetSource(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	st := state.NewState(t.TempDir() + "/s.json")
-	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
+	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
 	o := Options{StatePath: t.TempDir() + "/s.json", DefaultCmd: "claude"}
 	reg, _, err := buildRegistry(ctx, Deps{}, o, st, sup, "", nil, approvalTab, sessionTab)
 	if err != nil {
@@ -192,7 +192,7 @@ func newTestHub(t *testing.T) *hub {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
-	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
+	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
 	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab)
 	h.runtime = isolatedRuntimeDir(t)
 	return h

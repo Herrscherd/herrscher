@@ -20,8 +20,9 @@ func (d *clientDispatcher) Dispatch(_ context.Context, argv []string) (string, e
 }
 
 func TestDispatchLiveCommandRoundTrips(t *testing.T) {
-	path := CommandSocketPath(fmt.Sprintf("client-test-%d-%d", os.Getpid(), time.Now().UnixNano()))
-	ln, err := listenCommandSocket(t.Context(), isolatedRuntimeDir(t), path)
+	layout := testRuntime(t)
+	path := CommandSocketPathIn(layout, fmt.Sprintf("client-test-%d-%d", os.Getpid(), time.Now().UnixNano()))
+	ln, err := listenCommandSocket(t.Context(), layout, path)
 	if err != nil {
 		t.Fatalf("listenCommandSocket: %v", err)
 	}
@@ -60,8 +61,9 @@ func TestDispatchLiveCommandRoundTrips(t *testing.T) {
 }
 
 func TestDispatchLiveCommandUnavailableFallsBack(t *testing.T) {
-	path := CommandSocketPath(fmt.Sprintf("missing-test-%d-%d", os.Getpid(), time.Now().UnixNano()))
-	out, handled, err := dispatchLiveCommand(context.Background(), isolatedRuntimeDir(t), path, []string{"session", "seed"})
+	layout := testRuntime(t)
+	path := CommandSocketPathIn(layout, fmt.Sprintf("missing-test-%d-%d", os.Getpid(), time.Now().UnixNano()))
+	out, handled, err := dispatchLiveCommand(context.Background(), layout, path, []string{"session", "seed"})
 	if err != nil {
 		t.Fatalf("unavailable command socket error = %v, want nil fallback", err)
 	}

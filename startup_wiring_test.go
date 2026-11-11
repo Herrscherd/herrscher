@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Herrscherd/herrscher/core/host"
+	"github.com/Herrscherd/herrscher/core/runtimeguard"
 	"github.com/Herrscherd/herrscher/internal/errwriter"
 )
 
@@ -22,10 +24,20 @@ func TestMain(m *testing.M) {
 	case "1":
 		os.Exit(runStartupProbe())
 	case "serve":
-		os.Args = []string{"herrscher", "serve", "--env-file", os.Getenv("HERRSCHER_ENV_FILE"), "--runtime-dir", os.Getenv(testRuntimeRootKey)}
-		os.Exit(run())
+		os.Exit(runServeChild())
 	}
-	os.Exit(m.Run())
+	guard := runtimeguard.Start(host.ProductionRuntime().Dir())
+	os.Exit(guard.Finish(m.Run()))
+}
+
+func runServeChild() int {
+	layout, err := host.RuntimeAt(os.Getenv(testRuntimeRootKey))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	os.Args = []string{"herrscher", "serve", "--env-file", os.Getenv("HERRSCHER_ENV_FILE")}
+	return runWith(layout)
 }
 
 func runStartupProbe() int {

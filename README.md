@@ -110,6 +110,13 @@ remove it, and a systemd user session avoids `/tmp` altogether) and a directory 
 to its group or others (`chmod 700` on it fixes that) each get their own message.
 herrscher never changes a directory it does not own.
 
+The directory is chosen once, at the entry point of the program, and passed down as a
+value. Library code takes a `host.RuntimeLayout` argument (`CommandSocketPathIn`,
+`EventsSocketPathIn`, `ForwardToDaemon`, and so on), so a caller can point the same code
+at another directory. There is no command line flag for that choice: the hidden
+`--runtime-dir` flag is gone, and the `serve` process that the tests start reads its
+directory from the environment instead.
+
 Neublox, or any other client that follows the events of an instance, must call
 `host.EventsSocketPath(instanceID)` to find that socket rather than rebuild the name.
 The function is documented in the `core/host` package godoc.

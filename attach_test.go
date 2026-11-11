@@ -24,7 +24,7 @@ func TestSubmittingFromAnUnboundTabNoticesInFrench(t *testing.T) {
 	d := startFakeDaemon(t, func([]string) (string, error) { return "", nil })
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, tempStatePath(t), i18n.French)
+	a, err := newAttachedDaemon(ctx, d.layout, d.instance, tempStatePath(t), i18n.French)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,6 +61,7 @@ func TestAttachedRefusalIsRenderedInFrench(t *testing.T) {
 }
 
 type fakeDaemon struct {
+	layout         host.RuntimeLayout
 	instance       string
 	events         net.Conn
 	acceptedEvents chan net.Conn
@@ -70,12 +71,10 @@ type fakeDaemon struct {
 
 func startFakeDaemon(t *testing.T, reply func(argv []string) (string, error)) *fakeDaemon {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(host.EventsSocketPath("test")), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	d := &fakeDaemon{instance: "test", argv: make(chan []string, 16), reply: reply}
+	layout := testRuntime(t)
+	d := &fakeDaemon{instance: "test", layout: layout, argv: make(chan []string, 16), reply: reply}
 
-	cmdLn, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", host.CommandSocketPath(d.instance))
+	cmdLn, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", host.CommandSocketPathIn(layout, d.instance))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +89,7 @@ func startFakeDaemon(t *testing.T, reply func(argv []string) (string, error)) *f
 		}
 	}()
 
-	evLn, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", host.EventsSocketPath(d.instance))
+	evLn, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", host.EventsSocketPathIn(layout, d.instance))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +169,7 @@ func TestAttachedFrontendRoutesAnEventToItsTab(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, tempStatePath(t), testLang())
+	a, err := newAttachedDaemon(ctx, d.layout, d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +197,7 @@ func TestAttachedFrontendSendsTypedLinesToTheRightSession(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, tempStatePath(t), testLang())
+	a, err := newAttachedDaemon(ctx, d.layout, d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,7 +219,7 @@ func TestAttachedFrontendRefusesVerbsTheTerminalDoesNotOwn(t *testing.T) {
 	d := startFakeDaemon(t, func([]string) (string, error) { return "", nil })
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, tempStatePath(t), testLang())
+	a, err := newAttachedDaemon(ctx, d.layout, d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +237,7 @@ func TestAttachedFrontendReachesTheHealthAndUsageOverlays(t *testing.T) {
 	d := startFakeDaemon(t, func([]string) (string, error) { return "{}", nil })
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, tempStatePath(t), testLang())
+	a, err := newAttachedDaemon(ctx, d.layout, d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +261,7 @@ func TestAttachedFrontendBindsANewSessionToTheTerminal(t *testing.T) {
 }
 
 func TestAttachingWithoutADaemonFails(t *testing.T) {
-	if _, err := newAttachedDaemon(context.Background(), "nobody", tempStatePath(t), testLang()); err == nil {
+	if _, err := newAttachedDaemon(context.Background(), testRuntime(t), "nobody", tempStatePath(t), testLang()); err == nil {
 		t.Fatal("expected an error with no daemon listening")
 	}
 }
@@ -280,7 +279,7 @@ func TestScrollbackComesBackFromTheDaemon(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, tempStatePath(t), testLang())
+	a, err := newAttachedDaemon(ctx, d.layout, d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,10 +290,11 @@ func TestScrollbackComesBackFromTheDaemon(t *testing.T) {
 }
 
 func TestSocketPathsAreInstanceScoped(t *testing.T) {
-	if host.CommandSocketPath("a") == host.CommandSocketPath("b") {
+	layout := testRuntime(t)
+	if host.CommandSocketPathIn(layout, "a") == host.CommandSocketPathIn(layout, "b") {
 		t.Fatal("two instances share a command socket")
 	}
-	if filepath.Dir(host.CommandSocketPath("a")) != filepath.Dir(host.EventsSocketPath("a")) {
+	if filepath.Dir(host.CommandSocketPathIn(layout, "a")) != filepath.Dir(host.EventsSocketPathIn(layout, "a")) {
 		t.Fatal("the two sockets of one instance are not siblings")
 	}
 }

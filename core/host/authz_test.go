@@ -198,7 +198,7 @@ func operatorRegistryForTest(t *testing.T) *cli.Registry {
 	t.Cleanup(cancel)
 	dir := t.TempDir()
 	st := state.NewState(dir + "/state.json")
-	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
+	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
 	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: dir + "/state.json", DefaultCmd: "claude"}, st, sup, "", nil, approvalTab, sessionTab)
 	if err != nil {
 		t.Fatal(err)

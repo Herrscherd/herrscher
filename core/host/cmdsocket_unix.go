@@ -15,10 +15,11 @@ import (
 // CommandSocketPath is the daemon-level operator command socket of the user
 // running this process.
 func CommandSocketPath(instanceID string) string {
-	return commandSocketPathIn(runtimedir.Production(), instanceID)
+	return CommandSocketPathIn(ProductionRuntime(), instanceID)
 }
 
-func commandSocketPathIn(layout runtimedir.Layout, instanceID string) string {
+// CommandSocketPathIn is the operator command socket of the daemon serving layout.
+func CommandSocketPathIn(layout RuntimeLayout, instanceID string) string {
 	name := "herrscher-command"
 	if instanceID != "" {
 		name += "-" + instanceID
@@ -40,10 +41,11 @@ func commandSocketPathIn(layout runtimedir.Layout, instanceID string) string {
 // real boundary, since ssh forwards this session's socket and no other, so the
 // far machine has no path to anything else.
 func SessionCommandSocketPath(instanceID, session string) string {
-	return sessionCommandSocketPathIn(runtimedir.Production(), instanceID, session)
+	return SessionCommandSocketPathIn(ProductionRuntime(), instanceID, session)
 }
 
-func sessionCommandSocketPathIn(layout runtimedir.Layout, instanceID, session string) string {
+// SessionCommandSocketPathIn is the command socket of one session under layout.
+func SessionCommandSocketPathIn(layout RuntimeLayout, instanceID, session string) string {
 	name := "herrscher-command"
 	if instanceID != "" {
 		name += "-" + instanceID
@@ -60,10 +62,11 @@ func sessionCommandSocketPathIn(layout runtimedir.Layout, instanceID, session st
 // set), or takes its hashed name in that directory when the full path is longer
 // than the unix socket limit.
 func EventsSocketPath(instanceID string) string {
-	return eventsSocketPathIn(runtimedir.Production(), instanceID)
+	return EventsSocketPathIn(ProductionRuntime(), instanceID)
 }
 
-func eventsSocketPathIn(layout runtimedir.Layout, instanceID string) string {
+// EventsSocketPathIn is the events socket of the daemon serving layout.
+func EventsSocketPathIn(layout RuntimeLayout, instanceID string) string {
 	name := "herrscher-events"
 	if instanceID != "" {
 		name += "-" + instanceID
@@ -71,14 +74,14 @@ func eventsSocketPathIn(layout runtimedir.Layout, instanceID string) string {
 	return layout.Socket(name)
 }
 
-func listenCommandSocket(ctx context.Context, layout runtimedir.Layout, path string) (net.Listener, error) {
+func listenCommandSocket(ctx context.Context, layout RuntimeLayout, path string) (net.Listener, error) {
 	if err := ensureRuntimeDir(layout, path); err != nil {
 		return nil, err
 	}
 	return listenRestricted(ctx, path)
 }
 
-func dialCommandSocket(ctx context.Context, layout runtimedir.Layout, path string) (net.Conn, error) {
+func dialCommandSocket(ctx context.Context, layout RuntimeLayout, path string) (net.Conn, error) {
 	if err := ensureRuntimeDir(layout, path); err != nil {
 		return nil, err
 	}

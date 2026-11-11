@@ -7,13 +7,13 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/control"
 )
 
-func commandSocketTarget(instanceID string) string {
-	return commandSocketTargetFrom(func() string { return instanceID })
+func commandSocketTarget(layout RuntimeLayout, instanceID string) string {
+	return commandSocketTargetFrom(layout, func() string { return instanceID })
 }
 
-func commandSocketTargetFrom(instanceID func() string) string {
+func commandSocketTargetFrom(layout RuntimeLayout, instanceID func() string) string {
 	if p := strings.TrimSpace(os.Getenv(control.CommandSocketVar)); p != "" {
 		return p
 	}
-	return CommandSocketPath(instanceID())
+	return CommandSocketPathIn(layout, instanceID())
 }

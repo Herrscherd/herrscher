@@ -170,12 +170,12 @@ func TestApproveHookAnswersWithoutBuildingTheRegistry(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := runApprove(context.Background(), []string{"list"}); err == nil {
+	if err := runApprove(context.Background(), testRuntime(t), []string{"list"}); err == nil {
 		t.Fatal("`approve list` built a registry out of an unparseable config.json")
 	}
 
 	read := swapStdio(t, `{"tool_name":"Bash","tool_input":{"command":"ls"}}`)
-	err := runApprove(context.Background(), []string{"hook"})
+	err := runApprove(context.Background(), testRuntime(t), []string{"hook"})
 	out, errOut := read()
 	if err != nil {
 		t.Fatalf("the hook failed, which the vendor CLI reads as a crash: %v", err)
@@ -192,7 +192,7 @@ func TestForwardUnknownVerbWithoutDaemon(t *testing.T) {
 	t.Setenv("HERRSCHER_STATE_DIR", t.TempDir())
 	t.Setenv("HERRSCHER_INSTANCE_ID", "dispatch-test")
 
-	out, handled, err := forwardUnknownVerb(context.Background(), []string{"whatever", "list"})
+	out, handled, err := forwardUnknownVerb(context.Background(), testRuntime(t), []string{"whatever", "list"})
 	if handled {
 		t.Fatal("handled = true, want false with no daemon listening")
 	}

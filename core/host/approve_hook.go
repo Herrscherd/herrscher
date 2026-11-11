@@ -123,12 +123,12 @@ func RunPermissionHook(ctx context.Context, stdin io.Reader, out, errOut io.Writ
 // before the operator registry is built: building that registry can fail for
 // reasons that have nothing to do with the tool call, and the hook must never
 // fail.
-func RunApprovalHook(ctx context.Context, stdin io.Reader, out, errOut io.Writer) {
+func RunApprovalHook(ctx context.Context, layout RuntimeLayout, stdin io.Reader, out, errOut io.Writer) {
 	target := sync.OnceValue(func() string {
-		return commandSocketTargetFrom(func() string { return ServedInstanceID(DefaultStatePath(), "") })
+		return commandSocketTargetFrom(layout, func() string { return ServedInstanceID(DefaultStatePath(), "") })
 	})
 	RunPermissionHook(ctx, stdin, out, errOut, target, func(c context.Context, argv []string) (string, bool, error) {
-		return dispatchToOperatorDaemon(c, target(), argv)
+		return dispatchToOperatorDaemon(c, layout, target(), argv)
 	})
 }
 

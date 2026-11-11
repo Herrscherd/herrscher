@@ -16,14 +16,16 @@ import (
 
 type hostPlacer struct {
 	st            *state.State
+	layout        RuntimeLayout
 	local         *worktree.Worktreer
 	sourceVersion func() string
 	newRemote     func(runner.SSH, string) *worktree.Remote
 }
 
-func newHostPlacer(hostState *state.State, instanceID string, local *worktree.Worktreer, sourceVersion func() string) hostPlacer {
+func newHostPlacer(hostState *state.State, layout RuntimeLayout, instanceID string, local *worktree.Worktreer, sourceVersion func() string) hostPlacer {
 	return hostPlacer{
 		st:            hostState,
+		layout:        layout,
 		local:         local,
 		sourceVersion: sourceVersion,
 		newRemote: func(r runner.SSH, bin string) *worktree.Remote {
@@ -40,7 +42,7 @@ func (p hostPlacer) resolve(name string) (state.Host, *worktree.Remote, error) {
 	if host.Bin == "" {
 		return state.Host{}, nil, &hostNotProvisionedError{Name: name}
 	}
-	transport, err := sshRunner(host.SSH)
+	transport, err := sshRunner(p.layout, host.SSH)
 	if err != nil {
 		return state.Host{}, nil, err
 	}
@@ -116,7 +118,7 @@ func (p hostPlacer) EnsureProject(ctx context.Context, name, project, repo strin
 	if err != nil {
 		return err
 	}
-	run, err := runnerFor(host)
+	run, err := runnerFor(p.layout, host)
 	if err != nil {
 		return err
 	}

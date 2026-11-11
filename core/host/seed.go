@@ -60,7 +60,7 @@ func oneShotSeedRuntimeFrom(ctx context.Context) oneShotSeedRuntime {
 
 type seedCommandForwarder func(context.Context, string, []string) (string, bool, error)
 
-func runOneShotSeedCommand(ctx context.Context, hostState *state.State, name, task, turnID string, runtime oneShotSeedRuntime, coord contracts.Coordinator, instID string, forward seedCommandForwarder) (string, error) {
+func runOneShotSeedCommand(ctx context.Context, hostState *state.State, name, task, turnID string, runtime oneShotSeedRuntime, coord contracts.Coordinator, layout RuntimeLayout, instID string, forward seedCommandForwarder) (string, error) {
 	if runtime.coordinator == nil {
 		runtime.coordinator = coord
 	}
@@ -70,7 +70,7 @@ func runOneShotSeedCommand(ctx context.Context, hostState *state.State, name, ta
 		if runtime.timeout > 0 {
 			argv = append(argv, "--timeout", runtime.timeout.String())
 		}
-		if reply, handled, err := forward(ctx, commandSocketTarget(instID), argv); handled {
+		if reply, handled, err := forward(ctx, commandSocketTarget(layout, instID), argv); handled {
 			return reply, err
 		}
 	}

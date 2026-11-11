@@ -1,15 +1,13 @@
-//go:build !windows
-
 package host
 
 import (
 	"os"
 	"testing"
 
-	"github.com/Herrscherd/herrscher/core/internal/runtimedir/leakguard"
+	"github.com/Herrscherd/herrscher/core/runtimeguard"
 )
 
 func TestMain(m *testing.M) {
-	guard := leakguard.Start()
+	guard := runtimeguard.Start(ProductionRuntime().Dir())
 	os.Exit(guard.Finish(m.Run()))
 }

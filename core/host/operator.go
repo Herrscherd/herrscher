@@ -20,14 +20,20 @@ func daemonOwned() [][]string {
 	return [][]string{{nsSession}, {"host"}, {nsApprove}, {"role"}}
 }
 
-func forwardDaemonOwnedCommands(reg *cli.Registry, instID string, forward seedCommandForwarder) {
+func forwarderFor(layout RuntimeLayout) seedCommandForwarder {
+	return func(ctx context.Context, path string, argv []string) (string, bool, error) {
+		return dispatchToOperatorDaemon(ctx, layout, path, argv)
+	}
+}
+
+func forwardDaemonOwnedCommands(reg *cli.Registry, layout RuntimeLayout, instID string, forward seedCommandForwarder) {
 	for _, prefix := range daemonOwned() {
 		reg.Intercept(prefix, func(cmd contracts.Cmd, next cli.Runner) cli.Runner {
 			if len(cmd.Path) > 1 && forwardedLocally()[cmd.Path[1]] {
 				return next
 			}
 			return func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
-				target := commandSocketTarget(instID)
+				target := commandSocketTarget(layout, instID)
 				out, handled, err := forward(ctx, target, argvOf(cmd, input))
 				if handled {
 					return contracts.DataResult(out), err

@@ -12,14 +12,14 @@ import (
 
 func TestControlPathIsStableAndCreatesItsDirectory(t *testing.T) {
 	layout := shortLayout(t)
-	a, err := controlPathIn(layout, "me@build1")
+	a, err := ControlPathFor(layout, "me@build1")
 	if err != nil {
-		t.Fatalf("controlPathIn: %v", err)
+		t.Fatalf("ControlPathFor: %v", err)
 	}
-	if b, err := controlPathIn(layout, "me@build1"); err != nil || a != b {
-		t.Fatalf("controlPathIn is not stable: %q, %v", b, err)
+	if b, err := ControlPathFor(layout, "me@build1"); err != nil || a != b {
+		t.Fatalf("ControlPathFor is not stable: %q, %v", b, err)
 	}
-	if other, err := controlPathIn(layout, "me@build2"); err != nil || a == other {
+	if other, err := ControlPathFor(layout, "me@build2"); err != nil || a == other {
 		t.Fatalf("two targets share one control socket: %q, %v", other, err)
 	}
 	if _, err := os.Stat(layout.Dir()); err != nil {
@@ -32,8 +32,8 @@ func TestControlPathFailsWhenThePrivateDirectoryIsUnsafe(t *testing.T) {
 	if err := os.Mkdir(layout.Dir(), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := controlPathIn(layout, "me@build1"); err == nil || got != "" {
-		t.Fatalf("controlPathIn = %q, %v, want an error and no path so the caller runs without multiplexing", got, err)
+	if got, err := ControlPathFor(layout, "me@build1"); err == nil || got != "" {
+		t.Fatalf("ControlPathFor = %q, %v, want an error and no path so the caller runs without multiplexing", got, err)
 	}
 }
 

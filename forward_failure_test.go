@@ -23,7 +23,8 @@ func TestForwardDecodeFr(t *testing.T) {
 	t.Setenv("HERRSCHER_STATE_DIR", t.TempDir())
 	instance := "fwd" + strconv.FormatInt(time.Now().UnixNano()%1e9, 36)
 	t.Setenv("HERRSCHER_INSTANCE_ID", instance)
-	path := host.CommandSocketPath(instance)
+	layout := testRuntime(t)
+	path := host.CommandSocketPathIn(layout, instance)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +41,7 @@ func TestForwardDecodeFr(t *testing.T) {
 		}
 	})
 	go answerNotJSON(t, ln)
-	_, _, derr := forwardUnknownVerb(context.Background(), []string{"nope"})
+	_, _, derr := forwardUnknownVerb(context.Background(), layout, []string{"nope"})
 	if derr == nil {
 		t.Fatal("want a decode failure from the daemon answer")
 	}

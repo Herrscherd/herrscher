@@ -290,6 +290,16 @@
     "other": "route: {{.Detail}}"
   },
   {
+    "id": "session.launch_failed",
+    "description": "A session's bridge could not be started on this machine, Name names the session and Detail carries the cause",
+    "other": "session {{.Name}} did not start: its bridge could not be launched. {{.Detail}}"
+  },
+  {
+    "id": "session.prepare_failed",
+    "description": "A session's remote host could not be readied for its bridge, Name names the session and Detail carries the cause",
+    "other": "session {{.Name}} did not start: its remote host could not be prepared. {{.Detail}}"
+  },
+  {
     "id": "session.go_live",
     "description": "A session cannot go live, Name names the session and Detail carries the cause",
     "other": "session \"{{.Name}}\" cannot go live: {{.Detail}}"
@@ -337,7 +347,7 @@
   {
     "id": "runtime.unsafe_dir.foreign_owner",
     "description": "The private runtime directory belongs to another user, Path names it",
-    "other": "private runtime directory {{.Path}} cannot be used: another account created it, so herrscher will not change it and only root can remove it. Ask root to remove it, or start the daemon from a systemd user session, which uses /run/user instead."
+    "other": "private runtime directory {{.Path}} cannot be used: another account created it, and only root can remove it. Ask an administrator to remove it, or run herrscher from a systemd user session, which uses /run/user instead."
   },
   {
     "id": "runtime.unsafe_dir.open_access",

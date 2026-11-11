@@ -38,16 +38,16 @@ type usageOptions struct {
 	asJSON  bool
 }
 
-func runUsage(ctx context.Context, args []string) error {
+func runUsage(ctx context.Context, layout host.RuntimeLayout, args []string) error {
 	lang := clitext.ClientLanguage()
 	opts, err := parseUsageArgs(lang, args)
 	if err != nil {
 		return err
 	}
 	instance := host.ServedInstanceID(host.DefaultStatePath(), "")
-	snapshot, err := fetchUsage(ctx, instance, opts)
+	snapshot, err := fetchUsage(ctx, layout, instance, opts)
 	if host.IsDaemonNotRunning(err) {
-		return usageDaemonDown(lang, instance)
+		return usageDaemonDown(layout, lang, instance)
 	}
 	if err != nil {
 		return err
@@ -62,8 +62,8 @@ func outputPalette(out *os.File) termpaint.Palette {
 	return termpaint.ANSIPalette()
 }
 
-func usageDaemonDown(lang i18n.Language, instance string) error {
-	text, err := clitext.Text(lang, clitext.SpendDaemonDown, clitext.Params{clitext.ParamSocket: host.CommandSocketPath(instance)})
+func usageDaemonDown(layout host.RuntimeLayout, lang i18n.Language, instance string) error {
+	text, err := clitext.Text(lang, clitext.SpendDaemonDown, clitext.Params{clitext.ParamSocket: host.CommandSocketPathIn(layout, instance)})
 	if err != nil {
 		return err
 	}
@@ -151,7 +151,7 @@ func isUsageView(name string) bool {
 	return false
 }
 
-func fetchUsage(ctx context.Context, instance string, opts usageOptions) (usagecore.Snapshot, error) {
+func fetchUsage(ctx context.Context, layout host.RuntimeLayout, instance string, opts usageOptions) (usagecore.Snapshot, error) {
 	argv := []string{usageVerb}
 	if opts.rng != "" {
 		argv = append(argv, usageParamRange, opts.rng)
@@ -162,7 +162,7 @@ func fetchUsage(ctx context.Context, instance string, opts usageOptions) (usagec
 	if opts.vendor != "" {
 		argv = append(argv, usageParamVendor, opts.vendor)
 	}
-	out, err := host.DaemonDispatch(ctx, instance, argv)
+	out, err := host.DaemonDispatch(ctx, layout, instance, argv)
 	if err != nil {
 		return usagecore.Snapshot{}, err
 	}

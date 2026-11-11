@@ -14,10 +14,10 @@ import (
 func TestGoLiveReportsACommandSocketItCannotOpen(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
 	name := "golive-" + newTurnID()
-	if err := ensureRuntimeDir(layout, sessionCommandSocketPathIn(layout, "", name)); err != nil {
+	if err := ensureRuntimeDir(layout, SessionCommandSocketPathIn(layout, "", name)); err != nil {
 		t.Fatal(err)
 	}
-	answeringListener(t, sessionCommandSocketPathIn(layout, "", name))
+	answeringListener(t, SessionCommandSocketPathIn(layout, "", name))
 	h := newHub(
 		state.NewState(filepath.Join(t.TempDir(), "state.json")),
 		nil,

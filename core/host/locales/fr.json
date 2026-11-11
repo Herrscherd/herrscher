@@ -290,6 +290,16 @@
     "other": "routage : {{.Detail}}"
   },
   {
+    "id": "session.launch_failed",
+    "description": "Le pont d'une session n'a pas pu être lancé sur cette machine, Name nomme la session et Detail donne la cause",
+    "other": "la session {{.Name}} n'a pas démarré : son pont n'a pas pu être lancé. {{.Detail}}"
+  },
+  {
+    "id": "session.prepare_failed",
+    "description": "L'hôte distant d'une session n'a pas pu être préparé pour son pont, Name nomme la session et Detail donne la cause",
+    "other": "la session {{.Name}} n'a pas démarré : son hôte distant n'a pas pu être préparé. {{.Detail}}"
+  },
+  {
     "id": "session.go_live",
     "description": "A session cannot go live, Name names the session and Detail carries the cause",
     "other": "session \"{{.Name}}\" ne peut pas démarrer : {{.Detail}}"
@@ -337,7 +347,7 @@
   {
     "id": "runtime.unsafe_dir.foreign_owner",
     "description": "Le répertoire d'exécution privé appartient à un autre utilisateur, Path le nomme",
-    "other": "répertoire d'exécution privé {{.Path}} inutilisable : un autre compte l'a créé, herrscher ne le modifiera pas et seul root peut le supprimer. Demandez à root de le supprimer, ou lancez le démon depuis une session utilisateur systemd, qui utilise /run/user à la place."
+    "other": "répertoire d'exécution privé {{.Path}} inutilisable : un autre compte l'a créé, et seul root peut le supprimer. Demandez à un administrateur de le supprimer, ou lancez herrscher depuis une session utilisateur systemd, qui utilise /run/user à la place."
   },
   {
     "id": "runtime.unsafe_dir.open_access",

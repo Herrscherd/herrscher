@@ -175,13 +175,13 @@ func TestASessionSocketPathFoldsUnsafeNames(t *testing.T) {
 }
 
 func TestALongSessionNameStillGetsASocketThatBinds(t *testing.T) {
-	isolatedRuntimeDir(t)
+	layout := testRuntime(t)
 	long := strings.Repeat("b", 64)
-	p := SessionCommandSocketPath(strings.Repeat("a", 16), long)
+	p := SessionCommandSocketPathIn(layout, strings.Repeat("a", 16), long)
 	if len(p) > runtimedir.MaxUnixSocketPath {
 		t.Fatalf("path is %d bytes, over the %d sun_path holds: %q", len(p), runtimedir.MaxUnixSocketPath, p)
 	}
-	if err := ensureRuntimeDir(isolatedRuntimeDir(t), p); err != nil {
+	if err := ensureRuntimeDir(layout, p); err != nil {
 		t.Fatalf("private runtime dir for %q: %v", p, err)
 	}
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", p)
@@ -190,11 +190,11 @@ func TestALongSessionNameStillGetsASocketThatBinds(t *testing.T) {
 	}
 	logCleanup(ln.Close())
 	logCleanup(os.Remove(p))
-	other := SessionCommandSocketPath(strings.Repeat("a", 16), long[:63]+"c")
+	other := SessionCommandSocketPathIn(layout, strings.Repeat("a", 16), long[:63]+"c")
 	if p == other {
 		t.Fatalf("two long names share %q", p)
 	}
-	if again := SessionCommandSocketPath(strings.Repeat("a", 16), long); again != p {
+	if again := SessionCommandSocketPathIn(layout, strings.Repeat("a", 16), long); again != p {
 		t.Fatalf("not stable: %q then %q", p, again)
 	}
 }

@@ -28,3 +28,8 @@ func isolatedRuntimeDir(t *testing.T) runtimedir.Layout {
 	}
 	return layout
 }
+
+func testRuntime(t *testing.T) RuntimeLayout {
+	t.Helper()
+	return isolatedRuntimeDir(t)
+}

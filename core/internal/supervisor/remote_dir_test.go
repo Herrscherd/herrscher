@@ -31,7 +31,7 @@ func TestRemoteSocketsLiveInTheRemotePrivateDir(t *testing.T) {
 func TestRemoteRuntimeDirIsResolvedAtEverySessionStart(t *testing.T) {
 	s := remoteSupervisor(t)
 	calls := 0
-	s.remoteDirOf = func(context.Context, string) (string, error) {
+	s.remoteDirOf = func(context.Context, string, string) (string, error) {
 		calls++
 		return remoteDirForTest, nil
 	}
@@ -47,7 +47,7 @@ func TestRemoteRuntimeDirIsResolvedAtEverySessionStart(t *testing.T) {
 
 func TestALaunchRefusesWhenTheRemoteDirCannotBePrepared(t *testing.T) {
 	s := remoteSupervisor(t)
-	s.remoteDirOf = func(context.Context, string) (string, error) {
+	s.remoteDirOf = func(context.Context, string, string) (string, error) {
 		return "", runner.ErrRemoteRuntimeDir
 	}
 	_, err := s.bridgeCommand(context.Background(), state.Session{Name: "s1", ChannelID: "c1", Cmd: "claude", Host: "build1"})
@@ -58,7 +58,7 @@ func TestALaunchRefusesWhenTheRemoteDirCannotBePrepared(t *testing.T) {
 
 func TestPrepareRemoteFailsTheStartWhenTheRemoteDirCannotBePrepared(t *testing.T) {
 	s := remoteSupervisor(t)
-	s.remoteDirOf = func(context.Context, string) (string, error) {
+	s.remoteDirOf = func(context.Context, string, string) (string, error) {
 		return "", runner.ErrRemoteRuntimeDir
 	}
 	cmd, err := s.prepareRemote(context.Background(), state.Session{Name: "s1", ChannelID: "c1", Cmd: "claude", Host: "build1"})
@@ -89,5 +89,23 @@ func TestControlPathFailureWarnsOnceAndKeepsGoingWithoutMultiplexing(t *testing.
 	}
 	if n := strings.Count(logs.String(), "ssh multiplexing disabled"); n != 1 {
 		t.Fatalf("the multiplexing warning was logged %d times, want once: %s", n, logs.String())
+	}
+}
+
+func TestAnOptionShapedHostIsRefusedBeforeAnySSHCommand(t *testing.T) {
+	s := remoteSupervisor(t)
+	s.SetHostLookup(func(string) (Placement, bool) {
+		return Placement{SSH: "-oProxyCommand=sh", Bin: "/home/me/.herrscher/bin/herrscher"}, true
+	})
+	s.remoteDirOf = func(context.Context, string, string) (string, error) {
+		t.Fatal("the remote directory was probed for a target ssh would read as an option")
+		return "", nil
+	}
+	sess := state.Session{Name: "s1", ChannelID: "c1", Cmd: "claude", Host: "build1"}
+	if cmd, err := s.bridgeCommand(context.Background(), sess); !errors.Is(err, runner.ErrTargetDash) || cmd != nil {
+		t.Fatalf("bridgeCommand = %v, %v, want ErrTargetDash and no command", cmd, err)
+	}
+	if cmd, err := s.prepareRemote(context.Background(), sess); !errors.Is(err, runner.ErrTargetDash) || cmd != nil {
+		t.Fatalf("prepareRemote = %v, %v, want ErrTargetDash and no command", cmd, err)
 	}
 }

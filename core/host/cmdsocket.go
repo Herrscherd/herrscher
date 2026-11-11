@@ -151,7 +151,7 @@ var errSocketTaken = errors.New("another daemon already answers on this socket (
 var errInstanceLocked = errors.New("another daemon already holds the lock of this instance: stop it or pass --instance")
 
 func refuseTakenInstance(ctx context.Context, layout runtimedir.Layout, instID string) error {
-	for _, path := range []string{commandSocketPathIn(layout, instID), eventsSocketPathIn(layout, instID)} {
+	for _, path := range []string{CommandSocketPathIn(layout, instID), EventsSocketPathIn(layout, instID)} {
 		if socketAnswers(ctx, layout, path) {
 			return wrapHost(errSocketTaken, "daemon.socket_taken", map[string]any{pathParam: path})
 		}

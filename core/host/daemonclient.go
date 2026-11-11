@@ -79,9 +79,8 @@ func ServedInstanceID(statePath, optID string) string {
 // operator CLI's own path, which falls back to running the command locally: a
 // client that meant to speak to the daemon must hear that it could not, rather
 // than silently acting on a second copy of the state.
-func DaemonDispatch(ctx context.Context, instanceID string, argv []string) (string, error) {
-	layout := runtimedir.Production()
-	socket := commandSocketPathIn(layout, instanceID)
+func DaemonDispatch(ctx context.Context, layout RuntimeLayout, instanceID string, argv []string) (string, error) {
+	socket := CommandSocketPathIn(layout, instanceID)
 	out, handled, err := dispatchLiveCommand(ctx, layout, socket, argv)
 	if !handled {
 		return "", &daemonNotRunningError{Socket: socket}
@@ -95,8 +94,8 @@ func IsDaemonNotRunning(err error) bool {
 	return ok
 }
 
-func dispatchToOperatorDaemon(ctx context.Context, path string, argv []string) (string, bool, error) {
-	return dispatchLiveCommand(ctx, runtimedir.Production(), path, argv)
+func dispatchToOperatorDaemon(ctx context.Context, layout RuntimeLayout, path string, argv []string) (string, bool, error) {
+	return dispatchLiveCommand(ctx, layout, path, argv)
 }
 
 // ForwardToDaemon hands a raw argv to the daemon serving statePath and returns
@@ -109,8 +108,8 @@ func dispatchToOperatorDaemon(ctx context.Context, path string, argv []string) (
 // error the way DaemonDispatch folds it: false means the dial missed, so the
 // caller is free to answer as it did before there was a daemon to ask. A verb
 // that lives only inside a daemon must not claim to exist when none is running.
-func ForwardToDaemon(ctx context.Context, statePath, optID string, argv []string) (string, bool, error) {
-	return dispatchToOperatorDaemon(ctx, commandSocketTarget(ServedInstanceID(statePath, optID)), argv)
+func ForwardToDaemon(ctx context.Context, layout RuntimeLayout, statePath, optID string, argv []string) (string, bool, error) {
+	return dispatchToOperatorDaemon(ctx, layout, commandSocketTarget(layout, ServedInstanceID(statePath, optID)), argv)
 }
 
 // SubscribeDaemonEvents dials the daemon's events socket and streams what it
@@ -119,9 +118,8 @@ func ForwardToDaemon(ctx context.Context, statePath, optID string, argv []string
 //
 // The daemon drops a subscriber's lines rather than block a turn on it, so a
 // consumer that falls far enough behind loses telemetry. Read promptly.
-func SubscribeDaemonEvents(ctx context.Context, instanceID string) (<-chan DaemonEvent, error) {
-	layout := runtimedir.Production()
-	return subscribeAt(ctx, layout, eventsSocketPathIn(layout, instanceID))
+func SubscribeDaemonEvents(ctx context.Context, layout RuntimeLayout, instanceID string) (<-chan DaemonEvent, error) {
+	return subscribeAt(ctx, layout, EventsSocketPathIn(layout, instanceID))
 }
 
 var errDaemonEventsUnreachable = errors.New("the daemon does not answer on its events socket")

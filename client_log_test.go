@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
 
@@ -159,7 +160,7 @@ func TestRunAttachedRoutesTheTUIThroughTheClientLog(t *testing.T) {
 	clientLog := filepath.Join(stateDir, "client.log")
 	runner := attachRunner{
 		log: silentLogger(),
-		connect: func(ctx context.Context, _, _ string, _ i18n.Language) (*attachedDaemon, error) {
+		connect: func(ctx context.Context, _ host.RuntimeLayout, _, _ string, _ i18n.Language) (*attachedDaemon, error) {
 			return &attachedDaemon{done: ctx.Done(), events: make(chan tui.RoutedEvent)}, nil
 		},
 		run: func(_ context.Context, _ context.CancelFunc, _ tui.Backend, _ ...tui.Option) error {
@@ -168,7 +169,7 @@ func TestRunAttachedRoutesTheTUIThroughTheClientLog(t *testing.T) {
 		},
 	}
 	onTerminal, err := captureTerminal(t, func() error {
-		return runner.runAttached(context.Background(), "instance", statePath)
+		return runner.runAttached(context.Background(), testRuntime(t), "instance", statePath)
 	})
 	if err != nil {
 		t.Fatalf("runAttached: %v", err)

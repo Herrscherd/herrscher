@@ -8,13 +8,19 @@ import (
 
 var errNoRuntimeLayout = errors.New("the daemon was started without a runtime directory")
 
-// RuntimeFor is the per-user runtime layout of a daemon: the production layout
-// when dir is empty, otherwise the layout rooted at dir, which must be an
-// absolute path to a private directory.
-func RuntimeFor(dir string) (runtimedir.Layout, error) {
-	if dir == "" {
-		return runtimedir.Production(), nil
-	}
+// RuntimeLayout is the per-user directory where a daemon and its clients put
+// their sockets and locks. Every function that reaches a socket takes one, so
+// the caller decides which directory is in play.
+type RuntimeLayout = runtimedir.Layout
+
+// ProductionRuntime is the layout of the user running this process, the one a
+// daemon serves and an operator client dials.
+func ProductionRuntime() RuntimeLayout {
+	return runtimedir.Production()
+}
+
+// RuntimeAt is the layout rooted at dir, an absolute path to a private directory.
+func RuntimeAt(dir string) (RuntimeLayout, error) {
 	return runtimedir.At(dir)
 }
 

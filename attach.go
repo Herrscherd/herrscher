@@ -40,8 +40,8 @@ type attachedDaemon struct {
 
 const sessionCacheTTL = time.Second
 
-func newAttachedDaemon(ctx context.Context, instance, statePath string, lang i18n.Language) (*attachedDaemon, error) {
-	stream, err := host.SubscribeDaemonEvents(ctx, instance)
+func newAttachedDaemon(ctx context.Context, layout host.RuntimeLayout, instance, statePath string, lang i18n.Language) (*attachedDaemon, error) {
+	stream, err := host.SubscribeDaemonEvents(ctx, layout, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +56,7 @@ func newAttachedDaemon(ctx context.Context, instance, statePath string, lang i18
 	daemon.send = func(argv []string) (string, error) {
 		call, cancel := context.WithTimeout(ctx, attachTimeout)
 		defer cancel()
-		return host.DaemonDispatch(call, instance, argv)
+		return host.DaemonDispatch(call, layout, instance, argv)
 	}
 	daemon.launch = func(name string) []string { return attachedLaunch(ctx, statePath, name) }
 	daemon.refresh()
@@ -119,7 +119,7 @@ func (a *attachedDaemon) dispatch(argv []string) (string, error) {
 
 type attachRunner struct {
 	log     *slog.Logger
-	connect func(ctx context.Context, instance, statePath string, lang i18n.Language) (*attachedDaemon, error)
+	connect func(ctx context.Context, layout host.RuntimeLayout, instance, statePath string, lang i18n.Language) (*attachedDaemon, error)
 	run     func(ctx context.Context, cancel context.CancelFunc, backend tui.Backend, opts ...tui.Option) error
 }
 
@@ -127,10 +127,10 @@ func newAttachRunner(log *slog.Logger) attachRunner {
 	return attachRunner{log: log, connect: newAttachedDaemon, run: tui.Run}
 }
 
-func (r attachRunner) runAttached(ctx context.Context, instance, statePath string, opts ...tui.Option) error {
+func (r attachRunner) runAttached(ctx context.Context, layout host.RuntimeLayout, instance, statePath string, opts ...tui.Option) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	daemon, err := r.connect(ctx, instance, statePath, clitext.ClientLanguage())
+	daemon, err := r.connect(ctx, layout, instance, statePath, clitext.ClientLanguage())
 	if err != nil {
 		return err
 	}

@@ -57,7 +57,7 @@ func TestADaemonRefusesAnInstanceAnotherDaemonServes(t *testing.T) {
 	if err := refuseTakenInstance(context.Background(), layout, "t1"); err != nil {
 		t.Fatalf("a free instance was refused: %v", err)
 	}
-	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", commandSocketPathIn(layout, "t1"))
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", CommandSocketPathIn(layout, "t1"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestADaemonRefusesAnInstanceAnotherDaemonServes(t *testing.T) {
 
 func TestADaemonRefusesAnInstanceWhoseEventsSocketIsTaken(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
-	answeringListener(t, eventsSocketPathIn(layout, "t2"))
+	answeringListener(t, EventsSocketPathIn(layout, "t2"))
 	if err := refuseTakenInstance(context.Background(), layout, "t2"); !errors.Is(err, errSocketTaken) {
 		t.Fatalf("refuseTakenInstance with a live events socket = %v, want errSocketTaken", err)
 	}
@@ -86,7 +86,7 @@ func TestADaemonRefusesAnInstanceWhoseEventsSocketIsTaken(t *testing.T) {
 
 func TestServeHubSocketsStopsTheDaemonOnATakenEventsSocket(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
-	answeringListener(t, eventsSocketPathIn(layout, "t3"))
+	answeringListener(t, EventsSocketPathIn(layout, "t3"))
 	_, err := serveHubSockets(context.Background(), layout, "t3", &hub{})
 	if !errors.Is(err, errSocketTaken) {
 		t.Fatalf("serveHubSockets with a live events socket = %v, want errSocketTaken", err)
@@ -95,7 +95,7 @@ func TestServeHubSocketsStopsTheDaemonOnATakenEventsSocket(t *testing.T) {
 
 func TestServeHubSocketsStopsTheDaemonOnATakenCommandSocket(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
-	answeringListener(t, commandSocketPathIn(layout, "t4"))
+	answeringListener(t, CommandSocketPathIn(layout, "t4"))
 	_, err := serveHubSockets(context.Background(), layout, "t4", &hub{})
 	if !errors.Is(err, errSocketTaken) {
 		t.Fatalf("serveHubSockets with a live command socket = %v, want errSocketTaken", err)
@@ -178,7 +178,7 @@ func TestServeHubSocketsReportReleasedOnlyOnceTheFilesAreGone(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("serveHubSockets did not report its sockets released after shutdown")
 	}
-	for _, path := range []string{commandSocketPathIn(layout, "t6"), eventsSocketPathIn(layout, "t6")} {
+	for _, path := range []string{CommandSocketPathIn(layout, "t6"), EventsSocketPathIn(layout, "t6")} {
 		if _, statErr := os.Stat(path); !errors.Is(statErr, os.ErrNotExist) {
 			t.Fatalf("socket %q is still on disk after its release was reported: %v", path, statErr)
 		}

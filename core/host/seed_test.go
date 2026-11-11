@@ -219,6 +219,7 @@ func TestRunOneShotSeedWithCoordinatesDelegateTrailer(t *testing.T) {
 func TestRunOneShotSeedCommandForwardsToLiveCoordinator(t *testing.T) {
 	var gotPath string
 	var gotArgv []string
+	layout := testRuntime(t)
 	forward := func(_ context.Context, path string, argv []string) (string, bool, error) {
 		gotPath = path
 		gotArgv = append([]string(nil), argv...)
@@ -227,7 +228,7 @@ func TestRunOneShotSeedCommandForwardsToLiveCoordinator(t *testing.T) {
 
 	got, err := runOneShotSeedCommand(
 		context.Background(), nil, "orchestrator", "lecture seule",
-		"turn-test", oneShotSeedRuntime{}, nil, "instance-test", forward,
+		"turn-test", oneShotSeedRuntime{}, nil, layout, "instance-test", forward,
 	)
 	if err != nil {
 		t.Fatalf("runOneShotSeedCommand: %v", err)
@@ -235,7 +236,7 @@ func TestRunOneShotSeedCommandForwardsToLiveCoordinator(t *testing.T) {
 	if got != "réponse live" {
 		t.Fatalf("reply = %q, want %q", got, "réponse live")
 	}
-	if want := CommandSocketPath("instance-test"); gotPath != want {
+	if want := CommandSocketPathIn(layout, "instance-test"); gotPath != want {
 		t.Fatalf("command path = %q, want %q", gotPath, want)
 	}
 	wantArgv := []string{"session", "seed", "--name", "orchestrator", "--task", "lecture seule", "--turn_id", "turn-test"}

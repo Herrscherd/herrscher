@@ -40,7 +40,7 @@ func TestASessionVerbIsDecidedByTheRunningDaemon(t *testing.T) {
 	var ran []string
 	var sent []string
 	reg := operatorReg(t, &ran)
-	forwardDaemonOwnedCommands(reg, "inst", func(_ context.Context, path string, argv []string) (string, bool, error) {
+	forwardDaemonOwnedCommands(reg, testRuntime(t), "inst", func(_ context.Context, path string, argv []string) (string, bool, error) {
 		sent = argv
 		if path == "" {
 			t.Error("the forward got no socket path")
@@ -67,7 +67,7 @@ func TestAHostVerbIsDecidedByTheRunningDaemon(t *testing.T) {
 	var ran []string
 	var sent []string
 	reg := operatorReg(t, &ran)
-	forwardDaemonOwnedCommands(reg, "inst", func(_ context.Context, _ string, argv []string) (string, bool, error) {
+	forwardDaemonOwnedCommands(reg, testRuntime(t), "inst", func(_ context.Context, _ string, argv []string) (string, bool, error) {
 		sent = argv
 		return "registered build1", true, nil
 	})
@@ -87,7 +87,7 @@ func TestAHostVerbIsDecidedByTheRunningDaemon(t *testing.T) {
 func TestWithNoDaemonListeningTheCommandStillRuns(t *testing.T) {
 	var ran []string
 	reg := operatorReg(t, &ran)
-	forwardDaemonOwnedCommands(reg, "inst", func(context.Context, string, []string) (string, bool, error) {
+	forwardDaemonOwnedCommands(reg, testRuntime(t), "inst", func(context.Context, string, []string) (string, bool, error) {
 		return "", false, nil
 	})
 
@@ -103,7 +103,7 @@ func TestWithNoDaemonListeningTheCommandStillRuns(t *testing.T) {
 func TestApproveAskWithNoDaemonFailsFastInsteadOfWaiting(t *testing.T) {
 	var ran []string
 	reg := operatorReg(t, &ran)
-	forwardDaemonOwnedCommands(reg, "inst", func(context.Context, string, []string) (string, bool, error) {
+	forwardDaemonOwnedCommands(reg, testRuntime(t), "inst", func(context.Context, string, []string) (string, bool, error) {
 		return "", false, nil
 	})
 
@@ -126,7 +126,7 @@ func TestApproveAskWithNoDaemonFailsFastInsteadOfWaiting(t *testing.T) {
 func TestADaemonFailureIsNotRetriedLocally(t *testing.T) {
 	var ran []string
 	reg := operatorReg(t, &ran)
-	forwardDaemonOwnedCommands(reg, "inst", func(context.Context, string, []string) (string, bool, error) {
+	forwardDaemonOwnedCommands(reg, testRuntime(t), "inst", func(context.Context, string, []string) (string, bool, error) {
 		return "", true, errors.New("no session \"gone\"")
 	})
 
@@ -141,7 +141,7 @@ func TestADaemonFailureIsNotRetriedLocally(t *testing.T) {
 func TestSeedAndOtherNamespacesAreLeftAlone(t *testing.T) {
 	var ran []string
 	reg := operatorReg(t, &ran)
-	forwardDaemonOwnedCommands(reg, "inst", func(context.Context, string, []string) (string, bool, error) {
+	forwardDaemonOwnedCommands(reg, testRuntime(t), "inst", func(context.Context, string, []string) (string, bool, error) {
 		t.Error("this command must not be forwarded here")
 		return "", true, nil
 	})
@@ -168,7 +168,7 @@ func TestTheWholeInvocationSurvivesTheTrip(t *testing.T) {
 		Do(func(context.Context, contracts.Input) (contracts.Result, error) { return contracts.Result{}, nil })); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
-	forwardDaemonOwnedCommands(reg, "inst", func(_ context.Context, _ string, argv []string) (string, bool, error) {
+	forwardDaemonOwnedCommands(reg, testRuntime(t), "inst", func(_ context.Context, _ string, argv []string) (string, bool, error) {
 		sent = argv
 		return "ok", true, nil
 	})

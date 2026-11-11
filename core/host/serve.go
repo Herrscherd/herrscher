@@ -243,7 +243,7 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	logCleanup(execErr)
 	startRemotePluginHosts(ctx, self, options.RemoteCategories, base)
 	partDir := filepath.Dir(options.StatePath)
-	sup := newHubSupervisor(ctx, self, base, monitor, partDir, options.StatePath)
+	sup := newHubSupervisor(ctx, self, options.Runtime, base, monitor, partDir, options.StatePath)
 
 	instID, err := resolveInstanceID(store, options.InstanceID, options.Owner, log)
 	if err != nil {
@@ -367,8 +367,8 @@ func loadHubState(opts Options) (*state.State, error) {
 	return store, nil
 }
 
-func newHubSupervisor(ctx context.Context, self string, base *slog.Logger, host *health.Health, partDir, statePath string) *supervisor.Supervisor {
-	sup := supervisor.NewSupervisor(ctx, self)
+func newHubSupervisor(ctx context.Context, self string, layout RuntimeLayout, base *slog.Logger, host *health.Health, partDir, statePath string) *supervisor.Supervisor {
+	sup := supervisor.NewSupervisor(ctx, self, layout)
 	sup.SetStatePath(statePath)
 	sup.SetLogger(base)
 	sup.SetMetrics(host.Metrics())
@@ -393,11 +393,11 @@ func wireCoordination(hubCore *hub, deps hostDeps, st *state.State, sessions *se
 
 func serveHubSockets(ctx context.Context, layout runtimedir.Layout, instID string, hubCore *hub) (<-chan struct{}, error) {
 	events := newEventSocket()
-	eventsListener, err := openEventsSocket(ctx, layout, eventsSocketPathIn(layout, instID))
+	eventsListener, err := openEventsSocket(ctx, layout, EventsSocketPathIn(layout, instID))
 	if err != nil {
 		return nil, err
 	}
-	commandsListener, err := openCommandSocket(ctx, layout, commandSocketPathIn(layout, instID))
+	commandsListener, err := openCommandSocket(ctx, layout, CommandSocketPathIn(layout, instID))
 	if err != nil {
 		eventsListener.release()
 		return nil, err

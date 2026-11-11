@@ -156,6 +156,8 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"serve.key_proxy":                  {"Detail"},
 		"session.percent":                  {"Detail", "Raw"},
 		"session.go_live":                  {"Detail", "Name"},
+		"session.launch_failed":            {"Detail", "Name"},
+		"session.prepare_failed":           {"Detail", "Name"},
 		"lock.unsafe":                      {"Detail", "Path"},
 		"runtime.unsafe_dir":               {"Detail", "Path"},
 		"runtime.unsafe_dir.symlink":       {"Path"},

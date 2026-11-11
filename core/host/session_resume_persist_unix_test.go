@@ -16,10 +16,10 @@ func resumeHubWith(t *testing.T, sess state.Session) (*hub, *state.State) {
 	if err := st.AddSession(sess); err != nil {
 		t.Fatalf("AddSession: %v", err)
 	}
-	if err := ensureRuntimeDir(layout, sessionCommandSocketPathIn(layout, "", sess.Name)); err != nil {
+	if err := ensureRuntimeDir(layout, SessionCommandSocketPathIn(layout, "", sess.Name)); err != nil {
 		t.Fatal(err)
 	}
-	answeringListener(t, sessionCommandSocketPathIn(layout, "", sess.Name))
+	answeringListener(t, SessionCommandSocketPathIn(layout, "", sess.Name))
 	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(), newSessionTable())
 	h.runtime = layout
 	return h, st

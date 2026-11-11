@@ -442,7 +442,7 @@ func newHealthInputs(layout runtimedir.Layout, instanceID string, keys *keyproxy
 		slog.Warn("health: account store unavailable", "err", err)
 	}
 	return healthInputs{
-		daemon:     health.Daemon{PID: os.Getpid(), Started: time.Now(), Socket: commandSocketPathIn(layout, instanceID), Version: daemonVersion()},
+		daemon:     health.Daemon{PID: os.Getpid(), Started: time.Now(), Socket: CommandSocketPathIn(layout, instanceID), Version: daemonVersion()},
 		keys:       keys,
 		live:       liveKinds(gws),
 		memory:     firstMemoryKind(),

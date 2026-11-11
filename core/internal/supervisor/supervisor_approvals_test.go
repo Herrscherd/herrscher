@@ -25,7 +25,7 @@ func bridgeEnvMap(t *testing.T, s *Supervisor, sess state.Session) map[string]st
 }
 
 func TestBridgeCommandCarriesApprovalsForABackendThatGates(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/opt/herrscher")
+	s := NewSupervisor(context.Background(), "/opt/herrscher", testLayout(t))
 	s.SetGateResolver(func(string) string { return "tool" })
 
 	env := bridgeEnvMap(t, s, state.Session{Name: "api", ChannelID: "c1", Vendor: "codex", Approvals: "strict"})
@@ -41,7 +41,7 @@ func TestBridgeCommandCarriesApprovalsForABackendThatGates(t *testing.T) {
 }
 
 func TestBridgeCommandExportsTheSessionNameOnce(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/opt/herrscher")
+	s := NewSupervisor(context.Background(), "/opt/herrscher", testLayout(t))
 	s.SetGateResolver(func(string) string { return "tool" })
 
 	cmd, err := s.bridgeCommand(context.Background(), state.Session{Name: "api", ChannelID: "c1", Vendor: "codex", Approvals: "ask"})
@@ -69,7 +69,7 @@ func TestBridgeCommandOmitsApprovalsWhenNothingWouldEnforceThem(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			s := NewSupervisor(context.Background(), "/opt/herrscher")
+			s := NewSupervisor(context.Background(), "/opt/herrscher", testLayout(t))
 			s.SetGateResolver(func(string) string { return c.grain })
 			env := bridgeEnvMap(t, s, state.Session{Name: "api", ChannelID: "c1", Vendor: "cursor", Approvals: c.mode})
 			if _, ok := env[contracts.EnvApprovalsMode]; ok {
@@ -83,7 +83,7 @@ func TestBridgeCommandOmitsApprovalsWhenNothingWouldEnforceThem(t *testing.T) {
 }
 
 func TestBridgeCommandWithNoResolverCarriesNoApprovals(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/opt/herrscher")
+	s := NewSupervisor(context.Background(), "/opt/herrscher", testLayout(t))
 	env := bridgeEnvMap(t, s, state.Session{Name: "api", ChannelID: "c1", Vendor: "codex", Approvals: "strict"})
 	if _, ok := env[contracts.EnvApprovalsMode]; ok {
 		t.Fatal("an unwired daemon claimed to gate")
@@ -91,7 +91,7 @@ func TestBridgeCommandWithNoResolverCarriesNoApprovals(t *testing.T) {
 }
 
 func TestRemoteEnvBlockNamesTheBinaryOverThere(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/opt/herrscher")
+	s := NewSupervisor(context.Background(), "/opt/herrscher", testLayout(t))
 	s.SetGateResolver(func(string) string { return "tool" })
 	s.SetHostLookup(func(_ string) (Placement, bool) {
 		return Placement{SSH: "me@build1", Bin: "/remote/bin/herrscher"}, true

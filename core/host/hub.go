@@ -67,7 +67,28 @@ type liveSession struct {
 }
 
 func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry, approvals *approvalTable, sessions *sessionTable) *hub {
-	return &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: make(map[string]liveSession), teardownGrace: defaultTeardownGrace, approvals: approvals, sessions: sessions}
+	created := &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: make(map[string]liveSession), teardownGrace: defaultTeardownGrace, approvals: approvals, sessions: sessions}
+	if sup != nil {
+		sup.SetFailureSink(created.reportSessionFailure)
+	}
+	return created
+}
+
+func (h *hub) reportSessionFailure(sess state.Session, stage supervisor.Stage, cause error) {
+	if h.eventPublisher == nil {
+		return
+	}
+	text := LocalizeError(h.lang, wrapHost(cause, sessionFailureKey(stage), map[string]any{nameParam: sess.Name, detailParam: cause.Error()})).Error()
+	h.eventPublisher(sess.Name, contracts.Event{T: sessionNoticeKind, Text: text})
+}
+
+const sessionNoticeKind = "notice"
+
+func sessionFailureKey(stage supervisor.Stage) string {
+	if stage == supervisor.StagePrepare {
+		return "session.prepare_failed"
+	}
+	return "session.launch_failed"
 }
 
 func eventTap(publish func(string, contracts.Event), session string) func(contracts.Event) {
@@ -98,7 +119,7 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) error {
 		return wrapHost(err, "session.go_live", map[string]any{"Name": sess.Name})
 	}
 	sctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	commands, err := openCommandSocket(sctx, h.runtime, sessionCommandSocketPathIn(h.runtime, h.instanceID, sess.Name))
+	commands, err := openCommandSocket(sctx, h.runtime, SessionCommandSocketPathIn(h.runtime, h.instanceID, sess.Name))
 	if err != nil {
 		cancel()
 		logCleanup(acc.Close())

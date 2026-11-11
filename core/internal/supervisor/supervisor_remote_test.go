@@ -13,7 +13,7 @@ import (
 
 func remoteSupervisor(t *testing.T) *Supervisor {
 	t.Helper()
-	s := NewSupervisor(context.Background(), "/usr/local/bin/herrscher")
+	s := NewSupervisor(context.Background(), "/usr/local/bin/herrscher", testLayout(t))
 	s.SetInstanceID("inst")
 	s.SetCommandSocket(func(session string) string { return "/tmp/herrscher-command-inst-s-" + session + ".sock" })
 	s.SetHostLookup(func(name string) (Placement, bool) {
@@ -22,7 +22,7 @@ func remoteSupervisor(t *testing.T) *Supervisor {
 		}
 		return Placement{}, false
 	})
-	s.remoteDirOf = func(context.Context, string) (string, error) { return remoteDirForTest, nil }
+	s.remoteDirOf = func(context.Context, string, string) (string, error) { return remoteDirForTest, nil }
 	return s
 }
 
@@ -62,8 +62,8 @@ func TestRemoteBridgeRunsOverSSHWithTheRemoteBinary(t *testing.T) {
 	if !strings.Contains(joined, "ExitOnForwardFailure=yes") {
 		t.Fatalf("a failed forward would not kill the launch: %s", joined)
 	}
-	if !strings.Contains(joined, "ControlPath=none") || !strings.Contains(joined, "ControlMaster=no") {
-		t.Fatalf("the launch multiplexes its connection: %s", joined)
+	if !strings.Contains(joined, "ControlMaster=auto") || strings.Contains(joined, "ControlPath=none") {
+		t.Fatalf("the launch does not reuse the multiplexed connection of its layout: %s", joined)
 	}
 	if cmd.Dir != "" {
 		t.Fatalf("Dir = %q, want empty", cmd.Dir)

@@ -44,9 +44,9 @@ func withCompactionConfig(opts *host.Options, cfg config.Config) {
 	opts.ContextLimits = cfg.ContextLimits
 }
 
-type serveFunc func(ctx context.Context, args []string, cfg config.Config, langs language.Languages) error
+type serveFunc func(ctx context.Context, layout host.RuntimeLayout, args []string, cfg config.Config, langs language.Languages) error
 
-func runServe(ctx context.Context, args []string, serve serveFunc) error {
+func runServe(ctx context.Context, layout host.RuntimeLayout, args []string, serve serveFunc) error {
 	cfg, err := config.Load(scanFlag(args, "config", config.DefaultPath()))
 	if err != nil {
 		return err
@@ -55,11 +55,11 @@ func runServe(ctx context.Context, args []string, serve serveFunc) error {
 	if err != nil {
 		return err
 	}
-	return serve(ctx, args, cfg, langs)
+	return serve(ctx, layout, args, cfg, langs)
 }
 
-func serveDaemon(ctx context.Context, args []string, cfg config.Config, langs language.Languages) error {
-	return serveWith(ctx, args, nil, cfg, langs)
+func serveDaemon(ctx context.Context, layout host.RuntimeLayout, args []string, cfg config.Config, langs language.Languages) error {
+	return serveWith(ctx, layout, args, nil, cfg, langs)
 }
 
 func serveLanguages(log *slog.Logger, cfg config.Config, args []string) (language.Languages, error) {
@@ -88,7 +88,7 @@ func homeRef(cfg config.Config) *host.HomeRef {
 	return &host.HomeRef{ID: cfg.Home.ID, Type: cfg.Home.Type}
 }
 
-func serveWith(ctx context.Context, args []string, open *openWindow, cfg config.Config, langs language.Languages) error {
+func serveWith(ctx context.Context, layout host.RuntimeLayout, args []string, open *openWindow, cfg config.Config, langs language.Languages) error {
 	translator := clitext.For(langs.Operator)
 	platform := platformtext.For(langs.Operator)
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
@@ -100,7 +100,6 @@ func serveWith(ctx context.Context, args []string, open *openWindow, cfg config.
 	statusChannel := flags.String("status-channel", cfg.StatusChannel, translator.Text(clitext.ServeFlagStatusChannel, nil))
 	instanceID := flags.String("instance", or(envx.Get("INSTANCE_ID"), cfg.Instance), platform.Text(platformtext.ServeFlagInstance))
 	envFile := flags.String("env-file", "", platform.Text(platformtext.ServeFlagEnvFile))
-	runtimeDir := flags.String("runtime-dir", "", "")
 	if err := errors.Join(translator.Err(), platform.Err()); err != nil {
 		return err
 	}
@@ -115,15 +114,11 @@ func serveWith(ctx context.Context, args []string, open *openWindow, cfg config.
 			return loadErr
 		}
 	}
-	layout, err := host.RuntimeFor(*runtimeDir)
-	if err != nil {
-		return err
-	}
 	models := host.ModelDiscoveryFor(*statePath)
 	owner := or(envx.Get("OWNER_ID"), cfg.Owner)
 	home := homeRef(cfg)
 
-	unlock, attached, err := lockOrAttach(ctx, langs.Operator, *statePath, *instanceID, open)
+	unlock, attached, err := lockOrAttach(ctx, layout, langs.Operator, *statePath, *instanceID, open)
 	if attached || err != nil {
 		return err
 	}
@@ -173,7 +168,7 @@ func openOnForeground(open *openWindow, foreground contracts.Foreground) {
 	}
 }
 
-func lockOrAttach(ctx context.Context, lang i18n.Language, statePath, instanceID string, open *openWindow) (func(), bool, error) {
+func lockOrAttach(ctx context.Context, layout host.RuntimeLayout, lang i18n.Language, statePath, instanceID string, open *openWindow) (func(), bool, error) {
 	unlock, err := host.LockState(statePath)
 	if err == nil {
 		return unlock, false, nil
@@ -183,7 +178,7 @@ func lockOrAttach(ctx context.Context, lang i18n.Language, statePath, instanceID
 		if open != nil {
 			opts = append(opts, tui.OpenOn(open.session, open.text))
 		}
-		aerr := newAttachRunner(slog.Default()).runAttached(ctx, host.ServedInstanceID(statePath, instanceID), statePath, opts...)
+		aerr := newAttachRunner(slog.Default()).runAttached(ctx, layout, host.ServedInstanceID(statePath, instanceID), statePath, opts...)
 		if aerr == nil {
 			return nil, true, nil
 		}
@@ -295,9 +290,9 @@ func runHost(ctx context.Context, args []string) error {
 	return runRegistryVerb(ctx, "host", args)
 }
 
-func runApprove(ctx context.Context, args []string) error {
+func runApprove(ctx context.Context, layout host.RuntimeLayout, args []string) error {
 	if len(args) > 0 && args[0] == "hook" {
-		host.RunApprovalHook(ctx, os.Stdin, os.Stdout, os.Stderr)
+		host.RunApprovalHook(ctx, layout, os.Stdin, os.Stdout, os.Stderr)
 		return nil
 	}
 	return runRegistryVerb(ctx, "approve", args)
@@ -368,7 +363,7 @@ type verbDispatcher interface {
 	Dispatch(context.Context, []string) (contracts.Result, error)
 }
 
-func runPrompt(ctx context.Context, task task) error {
+func runPrompt(ctx context.Context, layout host.RuntimeLayout, task task) error {
 	name := sessionNameFor(task.Text)
 	if task.printsTo(term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway()) {
 		cfg, langs, err := loadOperator()
@@ -381,7 +376,7 @@ func runPrompt(ctx context.Context, task task) error {
 		}
 		return runPromptWith(ctx, reg, name, task.Text, langs.Client, os.Stdout, os.Stderr)
 	}
-	return runPromptWindow(ctx, name, task.Text)
+	return runPromptWindow(ctx, layout, name, task.Text)
 }
 
 func createTaskSession(ctx context.Context, name string) []string {
@@ -389,17 +384,17 @@ func createTaskSession(ctx context.Context, name string) []string {
 		scope.LaunchFromEnv(ctx).Args()...)
 }
 
-func runPromptWindow(ctx context.Context, name, text string) error {
+func runPromptWindow(ctx context.Context, layout host.RuntimeLayout, name, text string) error {
 	lang := clitext.ClientLanguage()
 	statePath := host.DefaultStatePath()
 	unlock, lerr := host.LockState(statePath)
 	if lerr != nil {
 		instance := host.ServedInstanceID(statePath, "")
-		if _, err := host.DaemonDispatch(ctx, instance, createTaskSession(ctx, name)); err != nil {
+		if _, err := host.DaemonDispatch(ctx, layout, instance, createTaskSession(ctx, name)); err != nil {
 			return err
 		}
 		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeSessionStarted, clitext.Params{clitext.ParamName: name}))
-		return newAttachRunner(slog.Default()).runAttached(ctx, instance, statePath, tui.OpenOn(name, text))
+		return newAttachRunner(slog.Default()).runAttached(ctx, layout, instance, statePath, tui.OpenOn(name, text))
 	}
 	unlock()
 	cfg, langs, err := loadOperator()
@@ -414,7 +409,7 @@ func runPromptWindow(ctx context.Context, name, text string) error {
 		return err
 	}
 	fmt.Fprintln(os.Stderr, render(lang, clitext.ServeSessionStarted, clitext.Params{clitext.ParamName: name}))
-	return serveWith(ctx, nil, &openWindow{session: name, text: text}, cfg, langs)
+	return serveWith(ctx, layout, nil, &openWindow{session: name, text: text}, cfg, langs)
 }
 
 type openWindow struct {
@@ -454,7 +449,7 @@ func runPromptWith(ctx context.Context, dispatcher verbDispatcher, name, prompt 
 
 const forwardTimeout = 60 * time.Second
 
-func forwardUnknownVerb(ctx context.Context, argv []string) (string, bool, error) {
+func forwardUnknownVerb(ctx context.Context, layout host.RuntimeLayout, argv []string) (string, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, forwardTimeout)
 	defer cancel()
 	instance := envx.Get("INSTANCE_ID")
@@ -463,7 +458,7 @@ func forwardUnknownVerb(ctx context.Context, argv []string) (string, bool, error
 			instance = cfg.Instance
 		}
 	}
-	return host.ForwardToDaemon(ctx, host.DefaultStatePath(), instance, argv)
+	return host.ForwardToDaemon(ctx, layout, host.DefaultStatePath(), instance, argv)
 }
 
 func buildGateways(ctx context.Context, lang i18n.Language) ([]host.Deps, error) {

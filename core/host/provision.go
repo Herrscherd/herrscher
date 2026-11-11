@@ -20,22 +20,22 @@ type hostRunner interface {
 	Describe() string
 }
 
-func runnerFor(host state.Host) (hostRunner, error) {
+func runnerFor(layout RuntimeLayout, host state.Host) (hostRunner, error) {
 	if host.SSH == "" {
 		return runner.Local{}, nil
 	}
-	ssh, err := sshRunner(host.SSH)
+	ssh, err := sshRunner(layout, host.SSH)
 	if err != nil {
 		return nil, err
 	}
 	return ssh, nil
 }
 
-func sshRunner(target string) (runner.SSH, error) {
+func sshRunner(layout RuntimeLayout, target string) (runner.SSH, error) {
 	if err := runner.CheckTarget(target); err != nil {
 		return runner.SSH{}, err
 	}
-	controlPath, err := runner.ControlPathFor(target)
+	controlPath, err := runner.ControlPathFor(layout, target)
 	if err != nil {
 		warnStderr("ssh multiplexing disabled for %s: %v\n", target, err)
 	}

@@ -107,7 +107,7 @@ func cancellationOr(ctx context.Context, err error) error {
 
 func serveCommandSocket(ctx context.Context, layout runtimedir.Layout, path string, disp dispatcher, lang languageSource) {
 	if err := serveCommandSocketWithTimeout(ctx, layout, path, disp, defaultCommandReadTimeout); err != nil {
-		warnLive(lang, "warn.command_socket_listen", map[string]any{pathParam: path, detailParam: err})
+		warnLive(os.Stderr, lang, "warn.command_socket_listen", map[string]any{pathParam: path, detailParam: err})
 	}
 }
 

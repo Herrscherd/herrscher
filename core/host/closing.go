@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
@@ -23,14 +22,10 @@ func logWriteFailure(_ int, err error) {
 	logCleanup(err)
 }
 
-func warnHost(lang i18n.Language, key string, params map[string]any) {
-	warnTo(os.Stderr, lang, key, params)
-}
-
 func warnTo(w io.Writer, lang i18n.Language, key string, params map[string]any) {
 	logWriteFailure(fmt.Fprintln(w, newHostMessages().text(lang, key, params)))
 }
 
-func warnLive(lang languageSource, key string, params map[string]any) {
-	warnHost(lang(), key, params)
+func warnLive(w io.Writer, lang languageSource, key string, params map[string]any) {
+	warnTo(w, lang(), key, params)
 }

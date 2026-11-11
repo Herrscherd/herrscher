@@ -37,7 +37,7 @@ func sshRunner(lang languageSource, layout RuntimeLayout, target string) (runner
 	}
 	controlPath, err := runner.ControlPathFor(layout, target)
 	if err != nil {
-		warnLive(lang, "warn.ssh_multiplexing_disabled", map[string]any{nameParam: target, detailParam: err})
+		warnLive(os.Stderr, lang, "warn.ssh_multiplexing_disabled", map[string]any{nameParam: target, detailParam: err})
 	}
 	return runner.SSH{Target: target, ControlPath: controlPath}, nil
 }

@@ -5,8 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -30,31 +28,16 @@ func testLanguage() languageSource {
 	return fixedLanguage(i18n.English)
 }
 
-func captureStderr(t *testing.T, run func()) string {
-	t.Helper()
-	read, write, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe: %v", err)
-	}
-	saved := os.Stderr
-	os.Stderr = write
-	run()
-	os.Stderr = saved
-	logCleanup(write.Close())
-	out, readErr := io.ReadAll(read)
-	logCleanup(read.Close())
-	if readErr != nil {
-		t.Fatalf("read stderr: %v", readErr)
-	}
-	return string(out)
-}
-
 func TestWarningFollowsALiveLanguageChange(t *testing.T) {
 	live := newOperatorLanguage(i18n.English)
 	params := map[string]any{nameParam: "digest", detailParam: "boom"}
-	english := captureStderr(t, func() { warnLive(live.Get, "warn.session_start", params) })
+	var printed bytes.Buffer
+	warnLive(&printed, live.Get, "warn.session_start", params)
+	english := printed.String()
+	printed.Reset()
 	live.set(i18n.French)
-	french := captureStderr(t, func() { warnLive(live.Get, "warn.session_start", params) })
+	warnLive(&printed, live.Get, "warn.session_start", params)
+	french := printed.String()
 	wantFrench := newHostMessages().text(i18n.French, "warn.session_start", params)
 	if english == french {
 		t.Fatalf("the warning did not change after the operator switched to french: %q", french)
@@ -162,13 +145,18 @@ func TestHubWarningFollowsALiveLanguageChange(t *testing.T) {
 		t.Fatalf("SetRole: %v", err)
 	}
 	live := newOperatorLanguage(i18n.English)
-	h := &hub{st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)}
-	english := captureStderr(t, func() { h.roleNames() })
+	var printed bytes.Buffer
+	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(), newSessionTable(), withWarnings(&printed))
+	h.language = live.Get
+	h.roleNames()
+	english := printed.String()
+	printed.Reset()
 	live.set(i18n.French)
 	if _, err := st.SetRole("bob", "other-ghost", ""); err != nil {
 		t.Fatalf("SetRole: %v", err)
 	}
-	french := captureStderr(t, func() { h.roleNames() })
+	h.roleNames()
+	french := printed.String()
 	params := map[string]any{nameParam: "bob", roleParam: "other-ghost"}
 	wantFrench := newHostMessages().text(i18n.French, "warn.role_undefined", params)
 	wantEnglish := newHostMessages().text(i18n.English, "warn.role_undefined", params)

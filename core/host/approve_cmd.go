@@ -284,13 +284,13 @@ func readAgentPolicy(lang languageSource, home string) approval.Policy {
 	buf, err := os.ReadFile(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			warnLive(lang, "warn.approvals_unreadable", map[string]any{pathParam: path, detailParam: err})
+			warnLive(os.Stderr, lang, "warn.approvals_unreadable", map[string]any{pathParam: path, detailParam: err})
 		}
 		return nil
 	}
 	pol, errs := approval.ParsePolicy(string(buf))
 	for _, e := range errs {
-		warnLive(lang, "warn.approvals_file", map[string]any{pathParam: path, detailParam: e})
+		warnLive(os.Stderr, lang, "warn.approvals_file", map[string]any{pathParam: path, detailParam: e})
 	}
 	return pol
 }
@@ -300,7 +300,7 @@ func sessionPolicy(lang languageSource, hostState *state.State, agents *agent.St
 	for _, raw := range hostState.ApprovalRules() {
 		rule, err := approval.ParseRule(raw)
 		if err != nil {
-			warnLive(lang, "warn.approvals_state_rule", map[string]any{ruleParam: raw, detailParam: err})
+			warnLive(os.Stderr, lang, "warn.approvals_state_rule", map[string]any{ruleParam: raw, detailParam: err})
 			continue
 		}
 		daemon = append(daemon, rule)

@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -34,6 +35,7 @@ type hub struct {
 	partDir  string
 	reg      *cli.Registry
 	metrics  *metrics.Registry
+	warnings io.Writer
 
 	coordinator    contracts.Coordinator
 	eventPublisher func(session string, event contracts.Event)
@@ -72,8 +74,12 @@ type liveSession struct {
 
 type hubOption func(*hub)
 
+func withWarnings(w io.Writer) hubOption {
+	return func(h *hub) { h.warnings = w }
+}
+
 func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry, approvals *approvalTable, sessions *sessionTable, opts ...hubOption) *hub {
-	created := &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: make(map[string]liveSession), teardownGrace: defaultTeardownGrace, approvals: approvals, sessions: sessions, sessionStopped: func(string) {}}
+	created := &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: make(map[string]liveSession), teardownGrace: defaultTeardownGrace, approvals: approvals, sessions: sessions, sessionStopped: func(string) {}, warnings: os.Stderr}
 	for _, opt := range opts {
 		opt(created)
 	}
@@ -81,6 +87,13 @@ func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir str
 		sup.SetFailureSink(created.reportSessionFailure)
 	}
 	return created
+}
+
+func (h *hub) warningWriter() io.Writer {
+	if h.warnings == nil {
+		return os.Stderr
+	}
+	return h.warnings
 }
 
 func (h *hub) textLanguage() languageSource {
@@ -171,17 +184,17 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) error {
 			sessionSink{
 				Resume: func(tok string) {
 					if err := h.st.SetResumeToken(sess.Name, tok); err != nil {
-						warnLive(h.textLanguage(), "warn.session_resume_token", map[string]any{nameParam: sess.Name, detailParam: err})
+						warnLive(h.warningWriter(), h.textLanguage(), "warn.session_resume_token", map[string]any{nameParam: sess.Name, detailParam: err})
 					}
 				},
 				Project: func(p string) {
 					if err := h.st.SetProjectPinned(sess.Name, p); err != nil {
-						warnLive(h.textLanguage(), "warn.session_project_pin", map[string]any{nameParam: sess.Name, detailParam: err})
+						warnLive(h.warningWriter(), h.textLanguage(), "warn.session_project_pin", map[string]any{nameParam: sess.Name, detailParam: err})
 					}
 				},
 				Transcript: func(e state.TranscriptEntry) {
 					if err := state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), e); err != nil {
-						warnLive(h.textLanguage(), "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
+						warnLive(h.warningWriter(), h.textLanguage(), "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
 					}
 				},
 				Checkpoint: func(turnID, text string) {
@@ -275,7 +288,7 @@ func (h *hub) awaitTeardown(name string, live liveSession) {
 		select {
 		case <-finished:
 		case <-grace:
-			warnLive(h.textLanguage(), "warn.session_teardown_overrun", map[string]any{nameParam: name, graceParam: h.teardownGrace.String()})
+			warnLive(h.warningWriter(), h.textLanguage(), "warn.session_teardown_overrun", map[string]any{nameParam: name, graceParam: h.teardownGrace.String()})
 			return
 		}
 	}
@@ -306,7 +319,7 @@ func (h *hub) reconcile(ctx context.Context) {
 			continue
 		}
 		if err := h.goLive(ctx, saved); err != nil {
-			warnLive(h.textLanguage(), "warn.session_start", map[string]any{nameParam: saved.Name, detailParam: err})
+			warnLive(h.warningWriter(), h.textLanguage(), "warn.session_start", map[string]any{nameParam: saved.Name, detailParam: err})
 		}
 	}
 }
@@ -326,7 +339,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 			recordUsage: h.recordUsage,
 			record: func(session string, entry state.TranscriptEntry) {
 				if err := state.AppendTranscript(state.TranscriptPath(h.partDir, session), entry); err != nil {
-					warnLive(h.textLanguage(), "warn.session_seed_transcript", map[string]any{nameParam: session, detailParam: err})
+					warnLive(h.warningWriter(), h.textLanguage(), "warn.session_seed_transcript", map[string]any{nameParam: session, detailParam: err})
 				}
 			},
 		}

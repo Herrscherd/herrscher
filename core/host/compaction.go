@@ -123,7 +123,7 @@ func newCompactionPolicy(ctx context.Context, lang languageSource, percent *int,
 		warnOnce:       &sync.Once{},
 		historyOnce:    &sync.Once{},
 		warn: func(key string, params map[string]any) {
-			warnLive(lang, key, params)
+			warnLive(os.Stderr, lang, key, params)
 		},
 	}
 	if percent != nil {

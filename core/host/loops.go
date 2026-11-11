@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -18,7 +19,7 @@ func serveHealth(ctx context.Context, addr string, monitor *health.Health, lang 
 	srv := newHealthServer(addr, monitor)
 	go func() { <-ctx.Done(); closeRead(srv) }()
 	if err := srv.ListenAndServe(); err != nil && ctx.Err() == nil {
-		warnLive(lang, "warn.health_server", map[string]any{detailParam: err})
+		warnLive(os.Stderr, lang, "warn.health_server", map[string]any{detailParam: err})
 	}
 }
 

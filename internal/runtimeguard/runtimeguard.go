@@ -8,8 +8,15 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"time"
+)
+
+const (
+	instanceLockPrefix = "herrscher-instance-"
+	instanceLockSuffix = ".lock"
 )
 
 // ErrNotDirectory reports that the watched runtime path exists but is not a directory.
@@ -23,9 +30,10 @@ type Guard struct {
 }
 
 type snapshot struct {
-	existed bool
-	modTime time.Time
-	entries map[string]fs.FileInfo
+	existed    bool
+	modTime    time.Time
+	entries    map[string]fs.FileInfo
+	daemonLive bool
 }
 
 // Start records the state of dir before the tests run.
@@ -35,6 +43,8 @@ func Start(dir string) *Guard {
 }
 
 // Changes lists what changed in the directory since Start, or why it could not be read.
+// A herrscher daemon that holds its instance lock, now or during the run, owns the
+// changes it makes there, so they are not attributed to the tests.
 func (g *Guard) Changes() ([]string, error) {
 	if g.err != nil {
 		return nil, g.err
@@ -43,7 +53,23 @@ func (g *Guard) Changes() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	if g.before.daemonLive || after.daemonLive || instanceLockAdded(g.before, after) {
+		return nil, nil
+	}
 	return g.before.diff(after), nil
+}
+
+func instanceLockAdded(before, after snapshot) bool {
+	for name := range after.entries {
+		if _, known := before.entries[name]; !known && isInstanceLock(name) {
+			return true
+		}
+	}
+	return false
+}
+
+func isInstanceLock(name string) bool {
+	return strings.HasPrefix(name, instanceLockPrefix) && strings.HasSuffix(name, instanceLockSuffix)
 }
 
 // Finish returns code when the run changed nothing in the directory, and 1 when
@@ -80,14 +106,18 @@ func takeSnapshot(dir string) (snapshot, error) {
 		return snapshot{}, err
 	}
 	entries := make(map[string]fs.FileInfo, len(items))
+	live := false
 	for _, item := range items {
 		entry, infoErr := item.Info()
 		if infoErr != nil {
 			return snapshot{}, infoErr
 		}
 		entries[item.Name()] = entry
+		if isInstanceLock(item.Name()) && instanceLockHeld(filepath.Join(dir, item.Name())) {
+			live = true
+		}
 	}
-	return snapshot{existed: true, modTime: info.ModTime(), entries: entries}, nil
+	return snapshot{existed: true, modTime: info.ModTime(), entries: entries, daemonLive: live}, nil
 }
 
 func (s snapshot) diff(after snapshot) []string {

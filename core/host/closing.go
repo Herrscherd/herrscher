@@ -24,7 +24,11 @@ func logWriteFailure(_ int, err error) {
 }
 
 func warnHost(lang i18n.Language, key string, params map[string]any) {
-	logWriteFailure(fmt.Fprintln(os.Stderr, newHostMessages().text(lang, key, params)))
+	warnTo(os.Stderr, lang, key, params)
+}
+
+func warnTo(w io.Writer, lang i18n.Language, key string, params map[string]any) {
+	logWriteFailure(fmt.Fprintln(w, newHostMessages().text(lang, key, params)))
 }
 
 func warnLive(lang languageSource, key string, params map[string]any) {

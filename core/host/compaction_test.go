@@ -223,7 +223,7 @@ func TestBackendWithoutCompactorIsRefusedBeforeAnySend(t *testing.T) {
 	gateway := newNoticeGateway()
 	f := newConfiguredCompactFixture(t, "cursor", compactPolicy(92), func(d *sessionDriver) {
 		d.gateways = []contracts.GatewaySet{{Gateway: gateway}}
-		d.lang = i18n.French
+		d.operator = fixedLanguageSource(i18n.French)
 	})
 	f.driver.requestCompaction("", contracts.Conversation{})
 	failed := waitEmitted(t, f, eventCompactFailed)
@@ -239,7 +239,7 @@ func TestBackendWithoutCompactorIsRefusedBeforeAnySend(t *testing.T) {
 
 func TestCompactFailureTextIsKeptWhenNoGatewayIsLinked(t *testing.T) {
 	f := newConfiguredCompactFixture(t, "cursor", compactPolicy(92), func(d *sessionDriver) {
-		d.lang = i18n.French
+		d.operator = fixedLanguageSource(i18n.French)
 	})
 	f.driver.requestCompaction("", contracts.Conversation{})
 	failed := waitEmitted(t, f, eventCompactFailed)
@@ -549,7 +549,7 @@ func TestSessionInfosUseTheResolvedModelWindow(t *testing.T) {
 
 func TestAutomaticCompactionStillAboveThresholdSaysSoInFrench(t *testing.T) {
 	f := newCompactFixture(t, "claude", compactPolicy(50))
-	f.driver.lang = i18n.French
+	f.driver.operator = fixedLanguageSource(i18n.French)
 	openTurn(t, f, 150_000)
 	if !compactFrameOrQuiet(t, f, measuredAnswer(t, 150_000)) {
 		t.Fatal("automatic compaction did not run")

@@ -1,7 +1,10 @@
 package host
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,6 +16,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -246,6 +250,26 @@ func TestSessionCommandReplyFollowsTheOperatorUnlessItsLanguageIsRecorded(t *tes
 	}
 }
 
+func malformedCompactFrame() contracts.Event {
+	return contracts.Event{T: compactwire.EventResult, Text: "compacté", Done: true, Value: "{"}
+}
+
+func compactNoticeLine(t *testing.T, lang i18n.Language) string {
+	t.Helper()
+	_, err := compactwire.DecodeResult(malformedCompactFrame())
+	if err == nil {
+		t.Fatal("the malformed compaction frame decoded without error")
+	}
+	return newHostMessages().text(lang, "warn.session_compaction_notice", map[string]any{nameParam: "s1", detailParam: err}) + "\n"
+}
+
+func decodeMalformedCompactFrame(t *testing.T, d *sessionDriver) {
+	t.Helper()
+	if _, err := d.decodeCompactResult(malformedCompactFrame()); err != nil {
+		t.Fatalf("decodeCompactResult: %v", err)
+	}
+}
+
 func TestCompactionNoticeFollowsTheLiveSessionLanguage(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	if err := st.AddSession(state.Session{Name: "s1"}); err != nil {
@@ -253,18 +277,23 @@ func TestCompactionNoticeFollowsTheLiveSessionLanguage(t *testing.T) {
 	}
 	live := newOperatorLanguage(i18n.English)
 	h := &hub{st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)}
+	var printed bytes.Buffer
 	d := newSessionDriver("s1", nil, nil, nil)
-	d.lang = i18n.English
+	d.warnings = &printed
 	d.language = liveSessionLanguage(st, "s1")
-	d.operator = h.warningLanguage()
-	if got := d.warningLanguage()(); got != i18n.English {
-		t.Fatalf("before any change, the compaction notice language is %s, want english", got)
+	d.operator = h.textLanguage()
+
+	decodeMalformedCompactFrame(t, d)
+	if got, want := printed.String(), compactNoticeLine(t, i18n.English); got != want {
+		t.Fatalf("before the session switched, the notice printed %q, want %q", got, want)
 	}
+	printed.Reset()
 	if _, err := st.SetSessionLanguage("s1", "fr"); err != nil {
 		t.Fatalf("SetSessionLanguage: %v", err)
 	}
-	if got := d.warningLanguage()(); got != i18n.French {
-		t.Fatalf("after the session switched to french, the compaction notice language is %s, want french", got)
+	decodeMalformedCompactFrame(t, d)
+	if got, want := printed.String(), compactNoticeLine(t, i18n.French); got != want {
+		t.Fatalf("after the session switched to french, the notice printed %q, want %q", got, want)
 	}
 }
 
@@ -275,12 +304,34 @@ func TestCompactionNoticeFollowsTheOperatorWithoutASessionLanguage(t *testing.T)
 	}
 	live := newOperatorLanguage(i18n.English)
 	h := &hub{st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)}
+	var printed bytes.Buffer
 	d := newSessionDriver("s1", nil, nil, nil)
-	d.lang = i18n.English
+	d.warnings = &printed
 	d.language = liveSessionLanguage(st, "s1")
-	d.operator = h.warningLanguage()
+	d.operator = h.textLanguage()
+
+	decodeMalformedCompactFrame(t, d)
+	if got, want := printed.String(), compactNoticeLine(t, i18n.English); got != want {
+		t.Fatalf("before the operator switched, the notice printed %q, want %q", got, want)
+	}
+	printed.Reset()
 	live.set(i18n.French)
-	if got := d.warningLanguage()(); got != i18n.French {
-		t.Fatalf("after the operator switched to french, the compaction notice language is %s, want french", got)
+	decodeMalformedCompactFrame(t, d)
+	if got, want := printed.String(), compactNoticeLine(t, i18n.French); got != want {
+		t.Fatalf("after the operator switched to french, the notice printed %q, want %q", got, want)
+	}
+}
+
+func TestWrappedErrorDetailRendersInFrench(t *testing.T) {
+	wrapped := fmt.Errorf("reprise refusée: %w", errors.New("disque plein"))
+	params := map[string]any{nameParam: "digest", detailParam: wrapped}
+	french := newHostMessages().text(i18n.French, "warn.session_start", params)
+	english := newHostMessages().text(i18n.English, "warn.session_start", params)
+	want := newHostMessages().text(i18n.French, "warn.session_start", map[string]any{nameParam: "digest", detailParam: wrapped.Error()})
+	if french != want {
+		t.Fatalf("a wrapped error printed %q in french, want %q", french, want)
+	}
+	if french == english {
+		t.Fatalf("a wrapped error fell back to english: %q", french)
 	}
 }

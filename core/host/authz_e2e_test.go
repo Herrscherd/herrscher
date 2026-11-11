@@ -34,7 +34,7 @@ func TestTheSameArgvIsRefusedOnOneSocketAndRunOnTheOther(t *testing.T) {
 	sessionSock := filepath.Join(dir, "s1.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	serveCommandSocket(ctx, isolatedRuntimeDir(t), operatorSock, asOperator{disp: h, lang: h.warningLanguage()}, testLanguage())
+	serveCommandSocket(ctx, isolatedRuntimeDir(t), operatorSock, asOperator{disp: h, lang: h.textLanguage()}, testLanguage())
 	serveCommandSocket(ctx, isolatedRuntimeDir(t), sessionSock, asSession{disp: h, session: "s1", lang: h.sessionLanguageSource("s1")}, testLanguage())
 
 	argv := []string{"approve", "rule", "allow Bash(*)"}
@@ -57,5 +57,29 @@ func TestTheSameArgvIsRefusedOnOneSocketAndRunOnTheOther(t *testing.T) {
 
 	if got := len(st.ApprovalRules()); got != 1 {
 		t.Fatalf("%d rules stored, want 1", got)
+	}
+}
+
+func TestServedOperatorSocketFollowsTheLiveLanguage(t *testing.T) {
+	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	live := newOperatorLanguage(i18n.English)
+	reg := &cli.Registry{}
+	if err := addScheduleCommands(reg, live.Get, st, fakeAgents{known: make(map[string]bool)}, &schedulerSlot{}); err != nil {
+		t.Fatalf("addScheduleCommands: %v", err)
+	}
+	h := &hub{st: st, reg: reg, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)}
+	layout := isolatedRuntimeDir(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	if _, err := serveHubSockets(ctx, layout, "served", h); err != nil {
+		t.Fatalf("serveHubSockets: %v", err)
+	}
+	live.set(i18n.French)
+	_, _, err := dispatchLiveCommand(ctx, layout, CommandSocketPathIn(layout, "served"), []string{"schedule", "rm", "--name", "fantome"})
+	if err == nil {
+		t.Fatal("schedule rm of an unknown schedule succeeded")
+	}
+	if want := notFoundScheduleText(i18n.French, "fantome"); err.Error() != want {
+		t.Fatalf("the served operator socket replied %q, want the french %q", err.Error(), want)
 	}
 }

@@ -307,7 +307,7 @@ func (h *hub) takeCheckpoint(ctx context.Context, sess state.Session, turnID, te
 	}
 	meta := checkpoint.Meta{Turn: turnID, Text: text, Conversation: conversationPosition(current)}
 	if _, err := h.sessions.checkpoints.Take(context.WithoutCancel(ctx), sess.Worktree, sess.Name, meta); err != nil {
-		warnLive(h.warningLanguage(), "warn.session_checkpoint", map[string]any{nameParam: sess.Name, detailParam: err})
+		warnLive(h.textLanguage(), "warn.session_checkpoint", map[string]any{nameParam: sess.Name, detailParam: err})
 	}
 }
 

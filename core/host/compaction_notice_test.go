@@ -83,7 +83,7 @@ func TestCompactionNoticeReachesTheGatewayTyped(t *testing.T) {
 	gateway := newNoticeGateway()
 	f := newConfiguredCompactFixture(t, "claude", compactPolicy(92), func(d *sessionDriver) {
 		d.gateways = []contracts.GatewaySet{{Gateway: gateway}}
-		d.lang = i18n.French
+		d.operator = fixedLanguageSource(i18n.French)
 	})
 	f.driver.requestCompaction("", contracts.Conversation{})
 	nextFrame(t, f)
@@ -172,7 +172,7 @@ func TestBlockedGatewayDoesNotStallTheTurns(t *testing.T) {
 	t.Cleanup(func() { close(gateway.release) })
 	f := newConfiguredCompactFixture(t, "claude", compactPolicy(92), func(d *sessionDriver) {
 		d.gateways = []contracts.GatewaySet{{Gateway: gateway}}
-		d.lang = i18n.French
+		d.operator = fixedLanguageSource(i18n.French)
 	})
 	f.driver.requestCompaction("", contracts.Conversation{})
 	nextFrame(t, f)
@@ -191,7 +191,7 @@ func TestUnsupportedCompactionFailureTravelsAsANotice(t *testing.T) {
 	gateway := newNoticeGateway()
 	f := newConfiguredCompactFixture(t, "codex", compactPolicy(92), func(d *sessionDriver) {
 		d.gateways = []contracts.GatewaySet{{Gateway: gateway}}
-		d.lang = i18n.French
+		d.operator = fixedLanguageSource(i18n.French)
 	})
 	f.driver.requestCompaction("", contracts.Conversation{})
 	failed := waitEmitted(t, f, eventCompactFailed)
@@ -243,8 +243,13 @@ func TestSessionLanguageFallsBackToTheOperator(t *testing.T) {
 
 func TestGoLiveUsesTheSessionLanguage(t *testing.T) {
 	sessions := newSessionTable()
+	store := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	name := "lang-" + newTurnID()
+	if err := store.AddSession(state.Session{Name: name, Incarnation: "incarnation", Language: "en"}); err != nil {
+		t.Fatalf("AddSession: %v", err)
+	}
 	h := newHub(
-		state.NewState(filepath.Join(t.TempDir(), "state.json")),
+		store,
 		nil,
 		nil,
 		t.TempDir(),
@@ -255,7 +260,6 @@ func TestGoLiveUsesTheSessionLanguage(t *testing.T) {
 	)
 	h.runtime = isolatedRuntimeDir(t)
 	h.lang = i18n.French
-	name := "lang-" + newTurnID()
 	t.Cleanup(func() { h.goDead(name) })
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
@@ -263,7 +267,7 @@ func TestGoLiveUsesTheSessionLanguage(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitRegisteredIncarnation(t, sessions, name, "incarnation")
-	if got := sessions.lookup(name).lang; got != i18n.English {
+	if got := sessions.lookup(name).textLanguage()(); got != i18n.English {
 		t.Fatalf("driver language = %v, want the session language English over the operator French", got)
 	}
 }
@@ -281,7 +285,7 @@ func TestAutomaticCompactionNoticeReachesTheGatewayAfterATurnFromElsewhere(t *te
 	gateway := newNoticeGateway()
 	f := newConfiguredCompactFixture(t, "claude", compactPolicy(50), func(d *sessionDriver) {
 		d.gateways = []contracts.GatewaySet{{Gateway: gateway}}
-		d.lang = i18n.French
+		d.operator = fixedLanguageSource(i18n.French)
 	})
 	openTurnFromElsewhere(t, f, 150_000)
 	if !compactFrameOrQuiet(t, f, mustAnswer(t, contracts.CompactResult{TokensAfter: 20_000, TokensMeasured: true, Note: "compacté", Notice: contracts.Notice{Code: contracts.CodeCompacted}})) {
@@ -296,7 +300,7 @@ func TestManualCompactionNoticeReachesTheGatewayAfterATurnFromElsewhere(t *testi
 	gateway := newNoticeGateway()
 	f := newConfiguredCompactFixture(t, "claude", compactPolicy(92), func(d *sessionDriver) {
 		d.gateways = []contracts.GatewaySet{{Gateway: gateway}}
-		d.lang = i18n.French
+		d.operator = fixedLanguageSource(i18n.French)
 	})
 	openTurnFromElsewhere(t, f, 10)
 	f.driver.requestCompaction("", contracts.Conversation{})
@@ -369,10 +373,10 @@ func TestFailureTextIsKeptWhenTheFullQueueDropsItsNotice(t *testing.T) {
 	t.Cleanup(func() { close(gateway.release) })
 	f := newConfiguredCompactFixture(t, "cursor", compactPolicy(92), func(d *sessionDriver) {
 		d.gateways = []contracts.GatewaySet{{Gateway: gateway}}
-		d.lang = i18n.French
+		d.operator = fixedLanguageSource(i18n.French)
 		d.noticeLog = slog.New(slog.NewTextHandler(&lockedBuffer{}, nil))
 	})
-	blocked := noticeDelivery{sink: gateway, conv: contracts.Conversation{}, lang: i18n.French, notice: contracts.Notice{Code: contracts.CodeCompacted}}
+	blocked := noticeDelivery{sink: gateway, conv: contracts.Conversation{}, lang: fixedLanguageSource(i18n.French), notice: contracts.Notice{Code: contracts.CodeCompacted}}
 	for range noticeQueueCapacity + 1 {
 		f.driver.notices <- blocked
 	}
@@ -395,10 +399,10 @@ func TestFullNoticeQueueDropsTheNoticeAndTheTurnAdvances(t *testing.T) {
 	logs := &lockedBuffer{}
 	f := newConfiguredCompactFixture(t, "claude", compactPolicy(92), func(d *sessionDriver) {
 		d.gateways = []contracts.GatewaySet{{Gateway: gateway}}
-		d.lang = i18n.French
+		d.operator = fixedLanguageSource(i18n.French)
 		d.noticeLog = slog.New(slog.NewTextHandler(logs, nil))
 	})
-	blocked := noticeDelivery{sink: gateway, conv: contracts.Conversation{}, lang: i18n.French, notice: contracts.Notice{Code: contracts.CodeCompacted}}
+	blocked := noticeDelivery{sink: gateway, conv: contracts.Conversation{}, lang: fixedLanguageSource(i18n.French), notice: contracts.Notice{Code: contracts.CodeCompacted}}
 	for range noticeQueueCapacity + 1 {
 		f.driver.notices <- blocked
 	}
@@ -443,7 +447,7 @@ func TestNoticeDeliveryFailureReachesTheSessionOnce(t *testing.T) {
 	second := &failingNoticeGateway{calls: make(chan struct{}, 1)}
 	f := newConfiguredCompactFixture(t, "claude", compactPolicy(92), func(d *sessionDriver) {
 		d.gateways = []contracts.GatewaySet{{Gateway: first}, {Gateway: second}}
-		d.lang = i18n.French
+		d.operator = fixedLanguageSource(i18n.French)
 	})
 	f.driver.requestCompaction("", contracts.Conversation{})
 	nextFrame(t, f)
@@ -485,7 +489,7 @@ func TestPostOnlyGatewayAndNoticeSinkEachReceiveTheNoticeOnce(t *testing.T) {
 	sink := newNoticeGateway()
 	f := newConfiguredCompactFixture(t, "cursor", compactPolicy(92), func(d *sessionDriver) {
 		d.gateways = []contracts.GatewaySet{{Gateway: contracts.Degrade(postOnly)}, {Gateway: sink}}
-		d.lang = i18n.French
+		d.operator = fixedLanguageSource(i18n.French)
 	})
 	f.driver.requestCompaction("", contracts.Conversation{})
 	failed := waitEmitted(t, f, eventCompactFailed)

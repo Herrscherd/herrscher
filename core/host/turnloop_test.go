@@ -987,7 +987,7 @@ func TestCoordinationRefusalStatusUsesStablePublicLabel(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			d := newSessionDriver("worker", nil, nil, nil)
-			d.lang = i18n.French
+			d.operator = fixedLanguageSource(i18n.French)
 			d.coordinator = &erroringCoord{
 				err: errors.New("sensitive " + strings.Repeat("x", 200)),
 			}
@@ -1084,7 +1084,7 @@ func requireCoordinatorStatus(t *testing.T, coord contracts.Coordinator, lang i1
 			[]contracts.GatewaySet{{Gateway: rec}},
 			make(chan contracts.Event, 1), from)
 		d.coordinator = coord
-		d.lang = lang
+		d.operator = fixedLanguageSource(lang)
 
 		from <- contracts.Event{T: "reply", Done: true, Text: "fait.\n" + trailer}
 		if ok := d.awaitTurn(context.Background(), tokenGuard{}); !ok {

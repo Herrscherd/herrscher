@@ -140,7 +140,7 @@ func (h *hub) roleNames() map[string]string {
 			continue
 		}
 		if _, said := h.warnedRoles.LoadOrStore(principal+"\x00"+name, struct{}{}); !said {
-			warnLive(h.warningLanguage(), "warn.role_undefined", map[string]any{nameParam: principal, roleParam: name})
+			warnLive(h.textLanguage(), "warn.role_undefined", map[string]any{nameParam: principal, roleParam: name})
 		}
 	}
 	return names

@@ -45,6 +45,7 @@ func (m *hostMessages) text(lang i18n.Language, key string, params map[string]an
 	if m == nil {
 		m = newHostMessages()
 	}
+	params = renderableParams(params)
 	if lang != i18n.English && lang != i18n.French {
 		lang = i18n.English
 	}
@@ -66,7 +67,7 @@ func (m *hostMessages) text(lang i18n.Language, key string, params map[string]an
 }
 
 func (d *sessionDriver) hostText(key string, params map[string]any) string {
-	return d.messages.text(d.lang, key, params)
+	return d.messages.text(d.textLanguage()(), key, params)
 }
 
 type hostWrapError struct {
@@ -115,4 +116,22 @@ func localizedPart(lang i18n.Language, err error) (string, string, bool) {
 
 func wrapHost(cause error, key string, params map[string]any) error {
 	return hostWrapError{key: key, params: params, cause: cause}
+}
+
+func renderableParams(params map[string]any) map[string]any {
+	var out map[string]any
+	for key, value := range params {
+		err, isErr := value.(error)
+		if !isErr {
+			continue
+		}
+		if out == nil {
+			out = maps.Clone(params)
+		}
+		out[key] = err.Error()
+	}
+	if out == nil {
+		return params
+	}
+	return out
 }

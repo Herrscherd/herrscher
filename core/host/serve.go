@@ -425,7 +425,7 @@ func goLiveSessions(ctx context.Context, runningHub *hub, sup *supervisor.Superv
 			continue
 		}
 		if err := runningHub.goLive(ctx, sess); err != nil {
-			warnLive(runningHub.warningLanguage(), "warn.session_start", map[string]any{nameParam: sess.Name, detailParam: err})
+			warnLive(runningHub.textLanguage(), "warn.session_start", map[string]any{nameParam: sess.Name, detailParam: err})
 			continue
 		}
 		sup.StartWith(ctx, sess)

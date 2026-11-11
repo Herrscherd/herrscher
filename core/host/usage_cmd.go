@@ -38,7 +38,7 @@ func usageDir(partDir string) string {
 func (h *hub) recordUsage(sess state.Session, records []usage.Record) {
 	ledger := usage.Ledger{Dir: usageDir(h.partDir), Now: time.Now}
 	if err := ledger.Append(stampUsage(records, h.st, sess)); err != nil {
-		warnLive(h.warningLanguage(), "warn.session_usage", map[string]any{nameParam: sess.Name, detailParam: err})
+		warnLive(h.textLanguage(), "warn.session_usage", map[string]any{nameParam: sess.Name, detailParam: err})
 	}
 }
 

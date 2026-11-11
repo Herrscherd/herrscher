@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"os"
 	"slices"
@@ -122,9 +123,9 @@ type sessionDriver struct {
 	compactMu         sync.Mutex
 	compactWaiting    *compactRequest
 	compactRegistered func()
-	lang              i18n.Language
 	language          func() i18n.Language
 	operator          languageSource
+	warnings          io.Writer
 	messages          *hostMessages
 }
 
@@ -136,6 +137,7 @@ type queued struct {
 func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- contracts.Event, fromBridge <-chan contracts.Event) *sessionDriver {
 	return &sessionDriver{
 		messages:   newHostMessages(),
+		warnings:   os.Stderr,
 		name:       name,
 		gateways:   gws,
 		toBridge:   toBridge,
@@ -730,7 +732,7 @@ func (d *sessionDriver) currentLanguage() i18n.Language {
 	return d.language()
 }
 
-func (d *sessionDriver) warningLanguage() languageSource {
+func (d *sessionDriver) textLanguage() languageSource {
 	return func() i18n.Language {
 		if lang := d.currentLanguage(); lang != 0 {
 			return lang
@@ -738,7 +740,7 @@ func (d *sessionDriver) warningLanguage() languageSource {
 		if d.operator != nil {
 			return d.operator()
 		}
-		return d.lang
+		return 0
 	}
 }
 
@@ -950,7 +952,7 @@ func (d *sessionDriver) reportDone(ctx context.Context, summary string) *contrac
 		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.report_refused", nil)})
 		return &contracts.CoordinationEvent{
 			Kind: "report_failed", SourceSession: d.name,
-			Summary: sanitizeCoordinationError(localizeHostError(d.lang, err)),
+			Summary: sanitizeCoordinationError(localizeHostError(d.textLanguage()(), err)),
 		}
 	}
 	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.report_delivered", map[string]any{"Parent": parent})})
@@ -968,7 +970,7 @@ func (d *sessionDriver) delegateTask(ctx context.Context, toAgent, task string) 
 		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.delegate_refused", nil)})
 		return &contracts.CoordinationEvent{
 			Kind: "delegate_failed", SourceSession: d.name,
-			Agent: toAgent, Summary: sanitizeCoordinationError(localizeHostError(d.lang, err)),
+			Agent: toAgent, Summary: sanitizeCoordinationError(localizeHostError(d.textLanguage()(), err)),
 		}
 	}
 	return &contracts.CoordinationEvent{
@@ -984,7 +986,7 @@ func (d *sessionDriver) launchCohort(ctx context.Context, toAgent string, tasks 
 	if err != nil {
 		d.fanOut(ctx, contracts.Event{
 			T:    eventStatus,
-			Text: d.hostText("coordination.fanout_partial", map[string]any{"Launched": len(spawned), detailParam: localizeHostError(d.lang, err).Error()}),
+			Text: d.hostText("coordination.fanout_partial", map[string]any{"Launched": len(spawned), detailParam: localizeHostError(d.textLanguage()(), err).Error()}),
 		})
 		return
 	}
@@ -999,7 +1001,7 @@ func (d *sessionDriver) routeTask(ctx context.Context, task string) {
 		FromSession: d.name, Task: task,
 	})
 	if err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.route_refused", map[string]any{detailParam: localizeHostError(d.lang, err).Error()})})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.route_refused", map[string]any{detailParam: localizeHostError(d.textLanguage()(), err).Error()})})
 		return
 	}
 	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.routed", map[string]any{"Agent": toAgent, "Session": session})})
@@ -1009,7 +1011,7 @@ func (d *sessionDriver) sealCohort(ctx context.Context, node int) {
 	if _, err := d.coordinator.Seal(ctx, contracts.SealRequest{
 		FromSession: d.name, Expected: node,
 	}); err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.seal_refused", map[string]any{detailParam: localizeHostError(d.lang, err).Error()})})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.seal_refused", map[string]any{detailParam: localizeHostError(d.textLanguage()(), err).Error()})})
 		return
 	}
 	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.sealed", map[string]any{"Node": node})})
@@ -1020,7 +1022,7 @@ func (d *sessionDriver) mergeWorker(ctx context.Context, worker string) {
 		FromSession: d.name, Worker: worker,
 	})
 	if err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.merge_refused", map[string]any{detailParam: localizeHostError(d.lang, err).Error()})})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.merge_refused", map[string]any{detailParam: localizeHostError(d.textLanguage()(), err).Error()})})
 		return
 	}
 	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.merged", map[string]any{"Lead": lead})})
@@ -1030,7 +1032,7 @@ func (d *sessionDriver) handoffTask(ctx context.Context, toAgent, task string) {
 	if _, err := d.coordinator.Handoff(ctx, contracts.HandoffRequest{
 		FromSession: d.name, ToAgent: toAgent, Task: task,
 	}); err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.handoff_refused", map[string]any{detailParam: localizeHostError(d.lang, err).Error()})})
+		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.handoff_refused", map[string]any{detailParam: localizeHostError(d.textLanguage()(), err).Error()})})
 	}
 }
 
@@ -1297,7 +1299,6 @@ type sessionIdentity struct {
 	incarnation string
 	agent       string
 	terms       func() modelTerms
-	lang        i18n.Language
 	language    func() i18n.Language
 	operator    languageSource
 }
@@ -1324,7 +1325,6 @@ func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, cha
 	driver.sink = sink
 	driver.emitTap = emit
 	driver.terms = identity.terms
-	driver.lang = identity.lang
 	driver.language = identity.language
 	driver.operator = identity.operator
 	driver.compaction = sessions.compaction

@@ -468,7 +468,7 @@ func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.Com
 func (d *sessionDriver) failCompaction(ctx context.Context, trigger contracts.CompactTrigger, err error) {
 	var text string
 	if !d.queueFailureNotice(trigger, err) {
-		text = compactFailureText(d.messages, d.lang, err)
+		text = compactFailureText(d.messages, d.textLanguage()(), err)
 	}
 	d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String(), Text: text})
 }
@@ -523,14 +523,14 @@ func (d *sessionDriver) announceCompaction(ctx context.Context, trigger contract
 }
 
 func (d *sessionDriver) noticeRenders(notice contracts.Notice) bool {
-	_, err := contracts.NewRenderer().Render(d.lang, notice)
+	_, err := contracts.NewRenderer().Render(d.textLanguage()(), notice)
 	return err == nil
 }
 
 type noticeDelivery struct {
 	sink    contracts.NoticeSink
 	conv    contracts.Conversation
-	lang    i18n.Language
+	lang    languageSource
 	notice  contracts.Notice
 	trigger contracts.CompactTrigger
 	report  *sync.Once
@@ -550,7 +550,7 @@ func (d *sessionDriver) notifyGateways(trigger contracts.CompactTrigger, notice 
 			return
 		}
 		conv := contracts.Conversation{Gateway: gateway.Gateway.Manifest().Kind, ID: d.renderChannel(gateway)}
-		delivery := noticeDelivery{sink: sink, conv: conv, lang: d.lang, notice: notice, trigger: trigger, report: report}
+		delivery := noticeDelivery{sink: sink, conv: conv, lang: d.textLanguage(), notice: notice, trigger: trigger, report: report}
 		if d.enqueueNotice(delivery) {
 			queued = true
 		}
@@ -582,16 +582,16 @@ func (d *sessionDriver) deliverNotices(ctx context.Context) {
 func (d *sessionDriver) deliverNotice(parent context.Context, delivery noticeDelivery) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), noticeTimeout)
 	defer cancel()
-	if _, err := delivery.sink.Notify(ctx, delivery.conv, delivery.lang, delivery.notice); err != nil && !errors.Is(err, contracts.ErrNoticeFallbackPosted) {
+	if _, err := delivery.sink.Notify(ctx, delivery.conv, delivery.lang(), delivery.notice); err != nil && !errors.Is(err, contracts.ErrNoticeFallbackPosted) {
 		logCleanup(err)
 		delivery.report.Do(func() { d.relayNoticeFailure(parent, d.noticeFailure(delivery)) })
 	}
 }
 
 func (d *sessionDriver) noticeFailure(delivery noticeDelivery) compactFailure {
-	text, err := contracts.NewRenderer().Render(delivery.lang, delivery.notice)
+	text, err := contracts.NewRenderer().Render(delivery.lang(), delivery.notice)
 	if err != nil {
-		text = compactFailureText(d.messages, delivery.lang, err)
+		text = compactFailureText(d.messages, delivery.lang(), err)
 	}
 	return compactFailure{trigger: delivery.trigger, text: text}
 }
@@ -702,7 +702,7 @@ func (c bridgeCompactor) Compact(ctx context.Context, req contracts.CompactReque
 func (d *sessionDriver) decodeCompactResult(frame contracts.Event) (contracts.CompactResult, error) {
 	res, err := compactwire.DecodeResult(frame)
 	if errors.Is(err, compactwire.ErrNoticeMalformed) {
-		warnLive(d.warningLanguage(), "warn.session_compaction_notice", map[string]any{nameParam: d.name, detailParam: err.Error()})
+		warnTo(d.warnings, d.textLanguage()(), "warn.session_compaction_notice", map[string]any{nameParam: d.name, detailParam: err})
 		return res, nil
 	}
 	return res, err

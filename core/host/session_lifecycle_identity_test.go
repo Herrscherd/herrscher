@@ -155,3 +155,28 @@ func TestSessionSocketOutlivesTheContextThatCreatedIt(t *testing.T) {
 	}
 	logCleanup(conn.Close())
 }
+
+func TestGoDeadWaitsForTheCommandSocketRelease(t *testing.T) {
+	done := make(chan struct{})
+	close(done)
+	released := make(chan struct{})
+	h := &hub{teardownGrace: 5 * time.Second, live: map[string]liveSession{
+		"rebind": {cancel: func() {}, done: done, released: released},
+	}}
+	returned := make(chan struct{})
+	go func() {
+		h.goDead("rebind")
+		close(returned)
+	}()
+	select {
+	case <-returned:
+		t.Fatal("goDead returned before the command socket was released, a rebind would find it still answering")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(released)
+	select {
+	case <-returned:
+	case <-time.After(5 * time.Second):
+		t.Fatal("goDead did not return once the command socket was released")
+	}
+}

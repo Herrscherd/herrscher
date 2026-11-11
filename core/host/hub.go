@@ -62,8 +62,9 @@ type hub struct {
 type forgetter interface{ forget(string) }
 
 type liveSession struct {
-	cancel context.CancelFunc
-	done   <-chan struct{}
+	cancel   context.CancelFunc
+	done     <-chan struct{}
+	released <-chan struct{}
 }
 
 func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry, approvals *approvalTable, sessions *sessionTable) *hub {
@@ -163,7 +164,12 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) error {
 			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent, terms: terms, lang: sessionLanguage(sess, h.lang), language: liveSessionLanguage(h.st, sess.Name)}, h.gate)
 	}()
 
-	acceptCommands(sctx, commands, asSession{disp: h, session: sess.Name, lang: h.lang}, defaultCommandReadTimeout)
+	released := acceptCommands(sctx, commands, asSession{disp: h, session: sess.Name, lang: h.lang}, defaultCommandReadTimeout)
+	h.mu.Lock()
+	live := h.live[sess.Name]
+	live.released = released
+	h.live[sess.Name] = live
+	h.mu.Unlock()
 	return nil
 }
 
@@ -216,14 +222,25 @@ func (h *hub) goDead(name string) {
 	h.lifecycle.Unlock()
 	if ok {
 		live.cancel()
-		select {
-		case <-live.done:
-		case <-time.After(h.teardownGrace):
-			warnStderr("herrscher serve: session %q: teardown still running after %s, releasing the name anyway\n", name, h.teardownGrace)
-		}
+		h.awaitTeardown(name, live)
 	}
 	if f, ok := h.coordinator.(forgetter); ok {
 		f.forget(name)
+	}
+}
+
+func (h *hub) awaitTeardown(name string, live liveSession) {
+	grace := time.After(h.teardownGrace)
+	for _, finished := range []<-chan struct{}{live.done, live.released} {
+		if finished == nil {
+			continue
+		}
+		select {
+		case <-finished:
+		case <-grace:
+			warnStderr("herrscher serve: session %q: teardown still running after %s, releasing the name anyway\n", name, h.teardownGrace)
+			return
+		}
 	}
 }
 

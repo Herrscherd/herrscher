@@ -40,6 +40,7 @@ jobs:
       - name: Remote end-to-end tests over ssh
         env:
           HERRSCHER_E2E_SSH: runner@127.0.0.1
+          HERRSCHER_E2E_DEDICATED: "1"
         run: |
           set -o pipefail
           GOWORK=off go test -v -count=1 -run '^TestE2E' ./core/host/ | tee e2e.log

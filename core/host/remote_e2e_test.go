@@ -203,20 +203,26 @@ func remoteSocketDir(ctx context.Context, t *testing.T, layout RuntimeLayout, ta
 func removeRemoteRuntimeDirOnExitIfCreated(ctx context.Context, t *testing.T, target string) {
 	t.Helper()
 	dir := expectedRemoteRuntimeDir(ctx, t, target)
-	if err := refuseLocalProductionRuntime(dir); err != nil {
+	if err := refuseLocalProductionRuntime(dir, ProductionRuntime().Dir()); err != nil {
 		t.Fatal(err)
 	}
 	presence, err := capture(ctx, runner.SSH{Target: target}, "sh", "-c", `if [ -e "$1" ]; then echo present; else echo absent; fi`, "sh", dir)
 	if err != nil {
 		t.Fatalf("probe the remote runtime dir: %v", err)
 	}
-	if strings.TrimSpace(presence) != "absent" {
+	if strings.TrimSpace(presence) != "absent" || os.Getenv(dedicatedTargetVar) != "1" {
 		return
 	}
 	t.Cleanup(func() {
-		_, rmErr := capture(context.WithoutCancel(ctx), runner.SSH{Target: target}, "rm", "-rf", "--", dir)
+		_, rmErr := capture(context.WithoutCancel(ctx), runner.SSH{Target: target}, "rmdir", "--", dir)
 		logCleanup(rmErr)
 	})
+}
+
+const dedicatedTargetVar = "HERRSCHER_E2E_DEDICATED"
+
+func remoteSocketRemovalArgv(path string) []string {
+	return []string{"sh", "-c", `if [ -S "$1" ]; then rm -f -- "$1"; fi`, "sh", path}
 }
 
 func TestE2ERemoteRuntimeDirIsPrivateAndPerUser(t *testing.T) {
@@ -259,7 +265,7 @@ func TestE2ERemoteCommandSocketForward(t *testing.T) {
 	remote := control.RemoteCommandSocketPath(remoteSocketDir(ctx, t, layout, target), instID, "e2e-session")
 	serveCommandSocket(ctx, layout, local, &fakeDispatcher{out: "reached the daemon"})
 
-	removeRemoteOnExit(t, target, remote)
+	removeRemoteSocketOnExit(t, target, remote)
 	run := runner.SSH{Target: target, Forwards: []runner.Forward{{Remote: remote, Local: local}}}
 	if prep := run.PrepareForwards(ctx); prep != nil {
 		logCleanup(prep.Run())
@@ -305,7 +311,7 @@ func TestE2ETwoSessionsReachTheDaemonAtOnce(t *testing.T) {
 	dir := remoteSocketDir(ctx, t, layout, target)
 	for _, name := range sessions {
 		remote := control.RemoteCommandSocketPath(dir, "", name)
-		removeRemoteOnExit(t, target, remote)
+		removeRemoteSocketOnExit(t, target, remote)
 		run := runner.SSH{Target: target, Forwards: []runner.Forward{{Remote: remote, Local: local}}}
 		if prep := run.PrepareForwards(ctx); prep != nil {
 			logCleanup(prep.Run())
@@ -423,10 +429,10 @@ func expectedRemoteRuntimeDir(ctx context.Context, t *testing.T, target string) 
 	return strings.TrimSpace(out)
 }
 
-func removeRemoteOnExit(t *testing.T, target, path string) {
+func removeRemoteSocketOnExit(t *testing.T, target, path string) {
 	t.Helper()
 	t.Cleanup(func() {
-		_, err := capture(context.Background(), runner.SSH{Target: target}, "rm", "-rf", "--", path)
+		_, err := capture(context.Background(), runner.SSH{Target: target}, remoteSocketRemovalArgv(path)...)
 		logCleanup(err)
 	})
 }

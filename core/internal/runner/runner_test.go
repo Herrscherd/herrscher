@@ -117,6 +117,29 @@ func TestCheckTargetRefusesATargetThatReadsAsAnOption(t *testing.T) {
 	}
 }
 
+func TestCheckTargetRefusesAnEmptyTarget(t *testing.T) {
+	if err := CheckTarget(""); !errors.Is(err, ErrEmptyTarget) {
+		t.Fatalf("CheckTarget(\"\") = %v, want ErrEmptyTarget", err)
+	}
+}
+
+func TestEveryBuilderRefusesAnEmptyTarget(t *testing.T) {
+	empty := SSH{Target: "", Forwards: []Forward{{Remote: "/run/user/1000/herrscher/s.sock", Local: "/tmp/l.sock"}}}
+	builders := map[string]*exec.Cmd{
+		"Command":         empty.Command(t.Context(), "", "true"),
+		"PrepareForwards": empty.PrepareForwards(t.Context()),
+		"Copy":            empty.Copy(t.Context(), "src", "/dst"),
+	}
+	for name, cmd := range builders {
+		if cmd == nil {
+			t.Fatalf("%s returned no command", name)
+		}
+		if err := cmd.Start(); !errors.Is(err, ErrEmptyTarget) {
+			t.Fatalf("%s.Start() = %v, want ErrEmptyTarget before any process runs", name, err)
+		}
+	}
+}
+
 func TestEveryBuilderRefusesAnOptionShapedTarget(t *testing.T) {
 	bad := SSH{Target: "-oProxyCommand=sh", Forwards: []Forward{{Remote: "/run/user/1000/herrscher/s.sock", Local: "/tmp/l.sock"}}}
 	builders := map[string]*exec.Cmd{

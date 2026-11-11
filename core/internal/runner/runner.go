@@ -122,8 +122,14 @@ func script(dir string, argv []string) string {
 // ErrTargetDash reports an ssh target that would be read as an option.
 var ErrTargetDash = errors.New("ssh target starts with a dash")
 
-// CheckTarget rejects a target that ssh would read as one of its own options.
+// ErrEmptyTarget reports an ssh target that names no host.
+var ErrEmptyTarget = errors.New("ssh target is empty")
+
+// CheckTarget rejects a target that names no host or that ssh would read as one of its own options.
 func CheckTarget(target string) error {
+	if target == "" {
+		return ErrEmptyTarget
+	}
 	if strings.HasPrefix(target, "-") {
 		return fmt.Errorf("%w: %q", ErrTargetDash, target)
 	}

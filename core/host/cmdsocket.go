@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -129,8 +130,9 @@ func openCommandSocket(ctx context.Context, layout runtimedir.Layout, path strin
 type ownedListener struct {
 	net.Listener
 
-	path string
-	own  os.FileInfo
+	path     string
+	own      os.FileInfo
+	released *sync.Once
 }
 
 func listenOwned(ctx context.Context, layout runtimedir.Layout, path string) (ownedListener, error) {
@@ -138,12 +140,14 @@ func listenOwned(ctx context.Context, layout runtimedir.Layout, path string) (ow
 	if err != nil {
 		return ownedListener{}, err
 	}
-	return ownedListener{Listener: listener, path: path, own: socketIdentity(path)}, nil
+	return ownedListener{Listener: listener, path: path, own: socketIdentity(path), released: new(sync.Once)}, nil
 }
 
 func (l ownedListener) release() {
-	closeRead(l.Listener)
-	removeOwnSocket(l.path, l.own)
+	l.released.Do(func() {
+		closeRead(l.Listener)
+		removeOwnSocket(l.path, l.own)
+	})
 }
 
 var errSocketTaken = errors.New("another daemon already answers on this socket (same instance, another state file): stop it or pass --instance")

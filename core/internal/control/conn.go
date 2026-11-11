@@ -63,6 +63,7 @@ type Acceptor struct {
 	done      chan struct{}
 	exited    chan struct{}
 	closeOnce sync.Once
+	closeErr  error
 }
 
 var errNoSocketPath = errors.New("the control socket has no path, its runtime layout is zero")
@@ -128,7 +129,12 @@ func (a *Acceptor) Conns() <-chan *Conn { return a.conns }
 
 // Close stops listening and removes the socket file.
 func (a *Acceptor) Close() error {
-	a.closeOnce.Do(func() { close(a.done) })
+	a.closeOnce.Do(func() { a.closeErr = a.shutdown() })
+	return a.closeErr
+}
+
+func (a *Acceptor) shutdown() error {
+	close(a.done)
 	err := a.ln.Close()
 	<-a.exited
 	a.drainPending()

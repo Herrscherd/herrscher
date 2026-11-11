@@ -26,13 +26,14 @@ import (
 const defaultTeardownGrace = 5 * time.Second
 
 type hub struct {
-	lang    i18n.Language
-	st      *state.State
-	sup     *supervisor.Supervisor
-	gws     []Deps
-	partDir string
-	reg     *cli.Registry
-	metrics *metrics.Registry
+	lang     i18n.Language
+	language languageSource
+	st       *state.State
+	sup      *supervisor.Supervisor
+	gws      []Deps
+	partDir  string
+	reg      *cli.Registry
+	metrics  *metrics.Registry
 
 	coordinator    contracts.Coordinator
 	eventPublisher func(session string, event contracts.Event)
@@ -80,6 +81,13 @@ func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir str
 		sup.SetFailureSink(created.reportSessionFailure)
 	}
 	return created
+}
+
+func (h *hub) warningLanguage() languageSource {
+	if h.language != nil {
+		return h.language
+	}
+	return fixedLanguageSource(h.lang)
 }
 
 func (h *hub) reportSessionFailure(sess state.Session, stage supervisor.Stage, cause error) {
@@ -144,17 +152,17 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) error {
 			sessionSink{
 				Resume: func(tok string) {
 					if err := h.st.SetResumeToken(sess.Name, tok); err != nil {
-						warnHost(h.lang, "warn.session_resume_token", map[string]any{nameParam: sess.Name, detailParam: err})
+						warnLive(h.warningLanguage(), "warn.session_resume_token", map[string]any{nameParam: sess.Name, detailParam: err})
 					}
 				},
 				Project: func(p string) {
 					if err := h.st.SetProjectPinned(sess.Name, p); err != nil {
-						warnHost(h.lang, "warn.session_project_pin", map[string]any{nameParam: sess.Name, detailParam: err})
+						warnLive(h.warningLanguage(), "warn.session_project_pin", map[string]any{nameParam: sess.Name, detailParam: err})
 					}
 				},
 				Transcript: func(e state.TranscriptEntry) {
 					if err := state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), e); err != nil {
-						warnHost(h.lang, "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
+						warnLive(h.warningLanguage(), "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
 					}
 				},
 				Checkpoint: func(turnID, text string) {
@@ -248,7 +256,7 @@ func (h *hub) awaitTeardown(name string, live liveSession) {
 		select {
 		case <-finished:
 		case <-grace:
-			warnHost(h.lang, "warn.session_teardown_overrun", map[string]any{nameParam: name, graceParam: h.teardownGrace.String()})
+			warnLive(h.warningLanguage(), "warn.session_teardown_overrun", map[string]any{nameParam: name, graceParam: h.teardownGrace.String()})
 			return
 		}
 	}
@@ -279,7 +287,7 @@ func (h *hub) reconcile(ctx context.Context) {
 			continue
 		}
 		if err := h.goLive(ctx, saved); err != nil {
-			warnHost(h.lang, "warn.session_start", map[string]any{nameParam: saved.Name, detailParam: err})
+			warnLive(h.warningLanguage(), "warn.session_start", map[string]any{nameParam: saved.Name, detailParam: err})
 		}
 	}
 }
@@ -299,7 +307,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 			recordUsage: h.recordUsage,
 			record: func(session string, entry state.TranscriptEntry) {
 				if err := state.AppendTranscript(state.TranscriptPath(h.partDir, session), entry); err != nil {
-					warnHost(h.lang, "warn.session_seed_transcript", map[string]any{nameParam: session, detailParam: err})
+					warnLive(h.warningLanguage(), "warn.session_seed_transcript", map[string]any{nameParam: session, detailParam: err})
 				}
 			},
 		}

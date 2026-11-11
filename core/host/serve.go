@@ -299,6 +299,7 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	options.health.bind(newHealthInputs(options.Runtime, instID, keys, gws, policy, partDir))
 	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions)
 	runningHub.lang = options.Language
+	runningHub.language = options.languageSource()
 	runningHub.models = options.modelDiscovery()
 	runningHub.seedBackend = func(seedCtx context.Context, sess state.Session) (contracts.Backend, error) {
 		return newSeedBackend(seedCtx, sess, keys, runningHub.models)
@@ -424,7 +425,7 @@ func goLiveSessions(ctx context.Context, runningHub *hub, sup *supervisor.Superv
 			continue
 		}
 		if err := runningHub.goLive(ctx, sess); err != nil {
-			warnHost(runningHub.lang, "warn.session_start", map[string]any{nameParam: sess.Name, detailParam: err})
+			warnLive(runningHub.warningLanguage(), "warn.session_start", map[string]any{nameParam: sess.Name, detailParam: err})
 			continue
 		}
 		sup.StartWith(ctx, sess)
@@ -450,7 +451,7 @@ func logCompiledPlugins(log *slog.Logger) {
 
 func startHubProbes(ctx context.Context, gws []Deps, options Options, store *state.State, monitor *health.Health, instID string) {
 	if options.HealthAddr != "" {
-		go serveHealth(ctx, options.HealthAddr, monitor, options.operatorLanguage())
+		go serveHealth(ctx, options.HealthAddr, monitor, options.languageSource())
 	}
 	if pr := firstProber(gws); pr != nil {
 		go pingLoop(ctx, pr, monitor)

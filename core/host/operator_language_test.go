@@ -151,3 +151,30 @@ func TestCommandsFollowsTheLiveLanguageAfterSetLang(t *testing.T) {
 		t.Fatalf("after set lang fr, commands replied %q, want the french help %q", out, want)
 	}
 }
+
+func TestHubWarningFollowsALiveLanguageChange(t *testing.T) {
+	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	if _, err := st.SetRole("alice", "ghost-role", ""); err != nil {
+		t.Fatalf("SetRole: %v", err)
+	}
+	live := newOperatorLanguage(i18n.English)
+	h := &hub{st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)}
+	english := captureStderr(t, func() { h.roleNames() })
+	live.set(i18n.French)
+	if _, err := st.SetRole("bob", "other-ghost", ""); err != nil {
+		t.Fatalf("SetRole: %v", err)
+	}
+	french := captureStderr(t, func() { h.roleNames() })
+	params := map[string]any{nameParam: "bob", roleParam: "other-ghost"}
+	wantFrench := newHostMessages().text(i18n.French, "warn.role_undefined", params)
+	wantEnglish := newHostMessages().text(i18n.English, "warn.role_undefined", params)
+	if english == "" {
+		t.Fatalf("no warning for an undefined role before the language change")
+	}
+	if !strings.Contains(french, wantFrench) {
+		t.Fatalf("after set lang fr, the hub warned %q, want the french %q", french, wantFrench)
+	}
+	if strings.Contains(french, wantEnglish) {
+		t.Fatalf("the hub warned in english after the switch to french: %q", french)
+	}
+}

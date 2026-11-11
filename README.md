@@ -1550,6 +1550,28 @@ in.
 
 → `architecture/hexagonal`
 
+## Testing
+
+Tests must pass an explicit `Layout` (`testRuntime` or `isolatedRuntimeDir`) to every
+function that reaches a socket or a lock. A zero `Layout` names no path, and its checks
+return an error. `runtimedir` exports neither the roots of the production runtime
+directory nor a resolver, so code outside the package cannot build one.
+
+`internal/productionlayout` checks the rest in `go test ./...`. It parses every `.go`
+file of the module with `go/parser`, hidden directories included (only `.git` and
+`node_modules` are skipped), and fails when:
+
+- a file other than `main.go`, `core/host/runtime_dir.go` and the unix socket wrappers names `ProductionRuntime`;
+- a file other than `core/host/runtime_dir.go` and the runtimedir package names `Production`;
+- a test names `CommandSocketPath` or `EventsSocketPath`, except the one read-only contract test;
+- a production file names `CommandSocketPath` or `EventsSocketPath`, except `main.go` and the two wrapper files;
+- a file that imports runtimedir names `Roots`, `ProductionRoots` or `Resolve`, even through a dot import.
+
+What it cannot detect: it matches identifiers by name in the syntax tree, so it does not
+see a socket path built from a string, a call made through reflection, code outside this
+module, or a hand-written path such as `/run/user/1000`. Those are not covered by the
+checker and rely on review.
+
 ## Testing the remote paths
 
 `go test ./core/host/` runs the remote end-to-end tests (the `TestE2E` ones) against
@@ -1557,19 +1579,14 @@ an ssh host when two environment variables are set:
 
 - `HERRSCHER_E2E_SSH` names that host as `user@host`. The host must accept key
   authentication without a prompt. Without this variable the tests skip, and the
-  e2e-ssh CI job fails when any of them skips.
+  e2e-ssh CI job fails when any of them skips. Before running, the tests refuse a host
+  that is the account running them: same uid, and either a loopback address or the same
+  machine id on both sides. The refusal is lifted by `HERRSCHER_E2E_DEDICATED=1`.
 - `HERRSCHER_E2E_DEDICATED=1` allows the tests to remove the remote runtime directory
   with `rmdir` at the end of a run, and only when it did not exist before the run and
   is empty at the end. Set it only on a host whose runtime directory belongs to the
   tests. Without it the directory is left in place. A non-empty directory is never
   removed, and the tests remove only the socket files they created.
-
-Tests must pass an explicit `Layout` (`testRuntime` or `isolatedRuntimeDir`) to every
-function that reaches a socket or a lock. `internal/productionlayout` enforces it in
-`go test ./...`: no file other than `main.go` and the unix socket wrappers may name
-`ProductionRuntime`, no test may call `CommandSocketPath` or `EventsSocketPath` except
-the one read-only contract test, and only `core/internal/runtimedir` may call the
-production constructor. A zero `Layout` names no path, and its checks return an error.
 
 ## Documentation
 

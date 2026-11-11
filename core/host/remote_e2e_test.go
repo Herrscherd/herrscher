@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -21,7 +22,10 @@ import (
 	"github.com/Herrscherd/herrscher/core/service"
 )
 
-const forwardConfirmTimeout = 30 * time.Second
+const (
+	forwardConfirmTimeout = 30 * time.Second
+	accountProbeTimeout   = 30 * time.Second
+)
 
 func e2eTarget(t *testing.T) string {
 	t.Helper()
@@ -29,7 +33,35 @@ func e2eTarget(t *testing.T) string {
 	if target == "" {
 		t.Skip("set HERRSCHER_E2E_SSH=<ssh target> to run the remote end-to-end test")
 	}
+	refuseThisAccount(t, target)
 	return target
+}
+
+func refuseThisAccount(t *testing.T, target string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), accountProbeTimeout)
+	defer cancel()
+	remote := remoteAccount(ctx, t, target)
+	if refusesRemoteAccount(targetHost(target), localAccount(), remote, os.Getenv(dedicatedTargetVar) == "1") {
+		t.Fatalf("HERRSCHER_E2E_SSH=%s is the account running these tests (uid %d on this machine); the remote tests would write the production runtime directory of that account. Point it at another account, or set %s=1 only on a host whose runtime directory belongs to the tests", target, remote.uid, dedicatedTargetVar)
+	}
+}
+
+func remoteAccount(ctx context.Context, t *testing.T, target string) sshAccount {
+	t.Helper()
+	uidText, err := capture(ctx, runner.SSH{Target: target}, "id", "-u")
+	if err != nil {
+		t.Fatalf("read the uid of %s: %v", target, err)
+	}
+	uid, err := strconv.Atoi(strings.TrimSpace(uidText))
+	if err != nil {
+		t.Fatalf("the uid of %s is not a number: %q", target, uidText)
+	}
+	machine, err := capture(ctx, runner.SSH{Target: target}, "sh", "-c", "cat /etc/machine-id 2>/dev/null || true")
+	if err != nil {
+		t.Fatalf("read the machine id of %s: %v", target, err)
+	}
+	return sshAccount{uid: uid, machineID: strings.TrimSpace(machine)}
 }
 
 func sourceRoot(t *testing.T) string {

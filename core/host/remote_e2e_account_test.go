@@ -56,17 +56,29 @@ func dedicatedEscape(getenv func(string) string) bool {
 	return getenv(dedicatedTargetVar) == "1" && getenv(githubActionsVar) == "true"
 }
 
-func refusesRemoteAccount(host string, local, remote sshAccount, dedicated bool) bool {
+type accountRefusal string
+
+const (
+	allowedAccount     accountRefusal = ""
+	loopbackAccount    accountRefusal = "loopback"
+	unreadableAccount  accountRefusal = "unreadable"
+	sameMachineAccount accountRefusal = "same machine"
+)
+
+func refusalOf(host string, local, remote sshAccount, dedicated bool) accountRefusal {
 	if local.uid != remote.uid || dedicated {
-		return false
+		return allowedAccount
 	}
 	if isLoopbackHost(host) {
-		return true
+		return loopbackAccount
 	}
 	if local.machineID == "" || remote.machineID == "" {
-		return true
+		return unreadableAccount
 	}
-	return local.machineID == remote.machineID
+	if local.machineID == remote.machineID {
+		return sameMachineAccount
+	}
+	return allowedAccount
 }
 
 func isLoopbackHost(host string) bool {
@@ -112,27 +124,28 @@ func TestE2ETargetOfThisAccountIsRefused(t *testing.T) {
 		local     sshAccount
 		remote    sshAccount
 		dedicated bool
-		refused   bool
+		want      accountRefusal
 	}{
-		{"loopback IPv4 with the same uid", "127.0.0.1", sshAccount{1000, ""}, sshAccount{1000, ""}, false, true},
-		{"localhost with the same uid", "localhost", sshAccount{1000, ""}, sshAccount{1000, ""}, false, true},
-		{"loopback IPv6 with the same uid", "::1", sshAccount{1000, ""}, sshAccount{1000, ""}, false, true},
-		{"any 127/8 address with the same uid", "127.4.5.6", sshAccount{1000, ""}, sshAccount{1000, ""}, false, true},
-		{"loopback with another uid", "127.0.0.1", sshAccount{1000, thisMachine}, sshAccount{1001, thisMachine}, false, false},
-		{"loopback with the same uid but declared dedicated, the CI target", "127.0.0.1", sshAccount{1001, thisMachine}, sshAccount{1001, thisMachine}, true, false},
-		{"a remote alias of this machine with the same uid", "box.example", sshAccount{1000, thisMachine}, sshAccount{1000, thisMachine}, false, true},
-		{"a LAN address of this machine with the same uid", "192.168.1.20", sshAccount{1000, thisMachine}, sshAccount{1000, thisMachine}, false, true},
-		{"a LAN address of another machine with the same uid", "192.168.1.30", sshAccount{1000, thisMachine}, sshAccount{1000, otherMachine}, false, false},
-		{"a remote host with the same uid on another machine", "box.example", sshAccount{1000, thisMachine}, sshAccount{1000, otherMachine}, false, false},
-		{"a remote host with the same uid and no readable machine id on either side", "box.example", sshAccount{1000, ""}, sshAccount{1000, ""}, false, true},
-		{"a remote host with the same uid and no readable remote machine id", "box.example", sshAccount{1000, thisMachine}, sshAccount{1000, ""}, false, true},
-		{"a remote host with the same uid and no readable local machine id", "box.example", sshAccount{1000, ""}, sshAccount{1000, thisMachine}, false, true},
-		{"a remote host with another uid", "box.example", sshAccount{1000, thisMachine}, sshAccount{1002, thisMachine}, false, false},
+		{"loopback IPv4 with the same uid", "127.0.0.1", sshAccount{1000, ""}, sshAccount{1000, ""}, false, loopbackAccount},
+		{"localhost with the same uid", "localhost", sshAccount{1000, ""}, sshAccount{1000, ""}, false, loopbackAccount},
+		{"loopback IPv6 with the same uid", "::1", sshAccount{1000, ""}, sshAccount{1000, ""}, false, loopbackAccount},
+		{"any 127/8 address with the same uid", "127.4.5.6", sshAccount{1000, ""}, sshAccount{1000, ""}, false, loopbackAccount},
+		{"loopback with another uid", "127.0.0.1", sshAccount{1000, thisMachine}, sshAccount{1001, thisMachine}, false, allowedAccount},
+		{"loopback with the same uid but declared dedicated, the CI target", "127.0.0.1", sshAccount{1001, thisMachine}, sshAccount{1001, thisMachine}, true, allowedAccount},
+		{"a remote alias of this machine with the same uid", "box.example", sshAccount{1000, thisMachine}, sshAccount{1000, thisMachine}, false, sameMachineAccount},
+		{"a LAN address of this machine with the same uid", "192.168.1.20", sshAccount{1000, thisMachine}, sshAccount{1000, thisMachine}, false, sameMachineAccount},
+		{"a LAN address of another machine with the same uid", "192.168.1.30", sshAccount{1000, thisMachine}, sshAccount{1000, otherMachine}, false, allowedAccount},
+		{"a remote host with the same uid on another machine", "box.example", sshAccount{1000, thisMachine}, sshAccount{1000, otherMachine}, false, allowedAccount},
+		{"a remote host with the same uid and no readable machine id on either side", "box.example", sshAccount{1000, ""}, sshAccount{1000, ""}, false, unreadableAccount},
+		{"a remote host with the same uid and no readable remote machine id", "box.example", sshAccount{1000, thisMachine}, sshAccount{1000, ""}, false, unreadableAccount},
+		{"a remote host with the same uid and no readable local machine id", "box.example", sshAccount{1000, ""}, sshAccount{1000, thisMachine}, false, unreadableAccount},
+		{"a remote host with the same uid and no readable machine id, declared dedicated", "box.example", sshAccount{1000, ""}, sshAccount{1000, ""}, true, allowedAccount},
+		{"a remote host with another uid", "box.example", sshAccount{1000, thisMachine}, sshAccount{1002, thisMachine}, false, allowedAccount},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := refusesRemoteAccount(tt.host, tt.local, tt.remote, tt.dedicated); got != tt.refused {
-				t.Fatalf("refusesRemoteAccount(%q) = %t, want %t", tt.host, got, tt.refused)
+			if got := refusalOf(tt.host, tt.local, tt.remote, tt.dedicated); got != tt.want {
+				t.Fatalf("refusalOf(%q) = %q, want %q", tt.host, got, tt.want)
 			}
 		})
 	}

@@ -1565,12 +1565,17 @@ file of the module with `go/parser`, hidden directories included (only `.git` an
 - a file other than `core/host/runtime_dir.go` and the runtimedir package names `Production`;
 - a test names `CommandSocketPath` or `EventsSocketPath`, except the one read-only contract test;
 - a production file names `CommandSocketPath` or `EventsSocketPath`, except `main.go` and the two wrapper files;
-- a file that imports runtimedir names `Roots`, `ProductionRoots` or `Resolve`, even through a dot import.
+- a file that imports runtimedir names `Roots`, `ProductionRoots`, `Resolve` or `DirOf`, even through a dot import;
+- a production file other than `core/host/runtime_dir.go` calls `runtimedir.At` or `RuntimeAt`. Production code builds no layout from an arbitrary path: only tests and that one file may. The production layout comes from `ProductionRuntime`, which only `main.go` and the socket wrappers call.
 
 What it cannot detect: it matches identifiers by name in the syntax tree, so it does not
 see a socket path built from a string, a call made through reflection, code outside this
 module, or a hand-written path such as `/run/user/1000`. Those are not covered by the
 checker and rely on review.
+
+Two more gaps: the arbitrary path rule matches the qualifier `runtimedir` by name, so an
+import alias such as `rt.At` is not seen, and it matches calls only, so a reference
+without a call such as `f := runtimedir.At` is not seen either.
 
 ## Testing the remote paths
 

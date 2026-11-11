@@ -42,8 +42,13 @@ func refuseThisAccount(t *testing.T, target string) {
 	ctx, cancel := context.WithTimeout(context.Background(), accountProbeTimeout)
 	defer cancel()
 	remote := remoteAccount(ctx, t, target)
-	if refusesRemoteAccount(sshHostname(t, target), localAccount(), remote, dedicatedEscape(os.Getenv)) {
+	dedicated := dedicatedEscape(os.Getenv)
+	switch refusalOf(sshHostname(t, target), localAccount(), remote, dedicated) {
+	case loopbackAccount, sameMachineAccount:
 		t.Fatalf("HERRSCHER_E2E_SSH=%s is the account running these tests (uid %d on this machine); the remote tests would write the production runtime directory of that account. Point it at another account, or run under GitHub Actions with %s=1 on a runner whose runtime directory belongs to the tests", target, remote.uid, dedicatedTargetVar)
+	case allowedAccount:
+	case unreadableAccount:
+		t.Fatalf("HERRSCHER_E2E_SSH=%s: the machine identity could not be read on this machine or on the target (uid %d on both sides), so the tests cannot tell whether they share a machine with it. The DEDICATED escape (%s=1) only applies under GitHub Actions (GITHUB_ACTIONS=true)", target, remote.uid, dedicatedTargetVar)
 	}
 }
 

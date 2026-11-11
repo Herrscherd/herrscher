@@ -5,6 +5,7 @@ package control
 import (
 	"context"
 	"net"
+	"os"
 
 	"github.com/Microsoft/go-winio"
 
@@ -25,4 +26,12 @@ func listenControl(_ context.Context, path string) (net.Listener, error) {
 
 func dialControl(ctx context.Context, path string) (net.Conn, error) {
 	return winio.DialPipeContext(ctx, path)
+}
+
+func bindIdentity(string) (os.FileInfo, error) {
+	return nil, nil
+}
+
+func releaseOwnedPath(path string, _ os.FileInfo) error {
+	return removeStaleSocket(path)
 }

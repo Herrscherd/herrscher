@@ -58,6 +58,7 @@ func (c *Conn) Close() error { return c.c.Close() }
 type Acceptor struct {
 	ln        net.Listener
 	path      string
+	own       os.FileInfo
 	conns     chan *Conn
 	done      chan struct{}
 	exited    chan struct{}
@@ -79,7 +80,11 @@ func Accept(ctx context.Context, path string) (*Acceptor, error) {
 	if err != nil {
 		return nil, err
 	}
-	acceptor := &Acceptor{ln: listener, path: path, conns: make(chan *Conn, 1), done: make(chan struct{}), exited: make(chan struct{})}
+	own, err := bindIdentity(path)
+	if err != nil {
+		return nil, errors.Join(err, listener.Close())
+	}
+	acceptor := &Acceptor{ln: listener, path: path, own: own, conns: make(chan *Conn, 1), done: make(chan struct{}), exited: make(chan struct{})}
 	go acceptor.loop()
 	go acceptor.closeWhenDone(ctx)
 	return acceptor, nil
@@ -127,7 +132,7 @@ func (a *Acceptor) Close() error {
 	err := a.ln.Close()
 	<-a.exited
 	a.drainPending()
-	return errors.Join(err, removeStaleSocket(a.path))
+	return errors.Join(err, releaseOwnedPath(a.path, a.own))
 }
 
 func (a *Acceptor) drainPending() {

@@ -51,9 +51,10 @@ type hub struct {
 	mu         sync.Mutex
 	live       map[string]liveSession
 
-	teardownGrace time.Duration
-	seedBackend   func(context.Context, state.Session) (contracts.Backend, error)
-	models        *ModelDiscovery
+	teardownGrace    time.Duration
+	onSessionStopped func()
+	seedBackend      func(context.Context, state.Session) (contracts.Backend, error)
+	models           *ModelDiscovery
 
 	approvals *approvalTable
 	sessions  *sessionTable
@@ -65,6 +66,7 @@ type liveSession struct {
 	cancel   context.CancelFunc
 	done     <-chan struct{}
 	released <-chan struct{}
+	release  func()
 }
 
 func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry, approvals *approvalTable, sessions *sessionTable) *hub {
@@ -131,9 +133,6 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) error {
 	bound := boundGateways(h.gws, effectiveKinds(h.gws, sess))
 	terms := liveModelTerms(h.st, h.models, sess.Name)
 	done := make(chan struct{})
-	h.mu.Lock()
-	h.live[sess.Name] = liveSession{cancel: cancel, done: done}
-	h.mu.Unlock()
 	go func() {
 		defer close(done)
 		runSessionIdentified(sctx, h.sessions, sess.Name, sess.ChannelID, bound, acc, state.ParticipantsPath(h.partDir, sess.Name), h.metrics, h.coordinator,
@@ -159,16 +158,19 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) error {
 				Usage: func(records []usage.Record) {
 					h.recordUsage(sess, records)
 				},
+				Stopped: h.onSessionStopped,
 			},
 			eventTap(h.eventPublisher, sess.Name),
 			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent, terms: terms, lang: sessionLanguage(sess, h.lang), language: liveSessionLanguage(h.st, sess.Name)}, h.gate)
 	}()
 
 	released := acceptCommands(sctx, commands, asSession{disp: h, session: sess.Name, lang: h.lang}, defaultCommandReadTimeout)
+	releaseSockets := sync.OnceFunc(func() {
+		logCleanup(acc.Close())
+		commands.release()
+	})
 	h.mu.Lock()
-	live := h.live[sess.Name]
-	live.released = released
-	h.live[sess.Name] = live
+	h.live[sess.Name] = liveSession{cancel: cancel, done: done, released: released, release: releaseSockets}
 	h.mu.Unlock()
 	return nil
 }
@@ -222,6 +224,7 @@ func (h *hub) goDead(name string) {
 	h.lifecycle.Unlock()
 	if ok {
 		live.cancel()
+		live.release()
 		h.awaitTeardown(name, live)
 	}
 	if f, ok := h.coordinator.(forgetter); ok {

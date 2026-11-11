@@ -347,7 +347,7 @@
   {
     "id": "runtime.unsafe_dir.foreign_owner",
     "description": "Le répertoire d'exécution privé appartient à un autre utilisateur, Path le nomme",
-    "other": "répertoire d'exécution privé {{.Path}} inutilisable : un autre compte l'a créé, et seul root peut le supprimer. Demandez à un administrateur de le supprimer, ou lancez herrscher depuis une session utilisateur systemd, qui utilise /run/user à la place."
+    "other": "répertoire d'exécution privé {{.Path}} inutilisable : un autre compte l'a créé, et seul ce compte ou root peut le supprimer. Demandez à un administrateur de le supprimer, ou lancez herrscher depuis une session utilisateur systemd, qui utilise /run/user à la place."
   },
   {
     "id": "runtime.unsafe_dir.open_access",

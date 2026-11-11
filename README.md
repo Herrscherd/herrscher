@@ -105,8 +105,8 @@ checked on every use. A socket keeps its readable name there when the full path 
 the 103 byte unix limit, and takes a hashed name (`hs-<key>.sock`) when it does not.
 
 When the chosen directory exists but cannot be used, the daemon refuses to start and
-says why. A symbolic link, a directory created by another account (only root can
-remove it, and a systemd user session avoids `/tmp` altogether) and a directory open
+says why. A symbolic link, a directory created by another account (only that account
+or root can remove it, and a systemd user session avoids `/tmp` altogether) and a directory open
 to its group or others (`chmod 700` on it fixes that) each get their own message.
 herrscher never changes a directory it does not own.
 
@@ -1549,6 +1549,20 @@ Purity tests (`TestHostPurity`, `TestCorePurity`,
 in.
 
 → `architecture/hexagonal`
+
+## Testing the remote paths
+
+`go test ./core/host/` runs the remote end-to-end tests (the `TestE2E` ones) against
+an ssh host when two environment variables are set:
+
+- `HERRSCHER_E2E_SSH` names that host as `user@host`. The host must accept key
+  authentication without a prompt. Without this variable the tests skip, and the
+  e2e-ssh CI job fails when any of them skips.
+- `HERRSCHER_E2E_DEDICATED=1` allows the tests to remove the remote runtime directory
+  with `rmdir` at the end of a run, and only when it did not exist before the run and
+  is empty at the end. Set it only on a host whose runtime directory belongs to the
+  tests. Without it the directory is left in place. A non-empty directory is never
+  removed, and the tests remove only the socket files they created.
 
 ## Documentation
 

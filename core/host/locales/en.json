@@ -347,7 +347,7 @@
   {
     "id": "runtime.unsafe_dir.foreign_owner",
     "description": "The private runtime directory belongs to another user, Path names it",
-    "other": "private runtime directory {{.Path}} cannot be used: another account created it, and only root can remove it. Ask an administrator to remove it, or run herrscher from a systemd user session, which uses /run/user instead."
+    "other": "private runtime directory {{.Path}} cannot be used: another account created it, and only that account or root can remove it. Ask an administrator to remove it, or run herrscher from a systemd user session, which uses /run/user instead."
   },
   {
     "id": "runtime.unsafe_dir.open_access",

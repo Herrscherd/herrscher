@@ -76,7 +76,9 @@ on a conversation of its own, named after the directory you launched in
 (`herrscher-2` if that name is taken, a random `s-xxxx` if the directory cannot
 be one). What came before is still there: a live tab if it is still running,
 `/resume` otherwise. Nothing piles up either, since a session nobody spoke in is
-archived when the window closes.
+archived when the window closes. An attached window opens that conversation on
+the first message you type, in the repository you launched from when it sits
+right under the daemon's workspace, and shared with the daemon's other clients.
 
 One daemon per state file. A second one over the same state answers every message
 twice and bills it twice. So a bare `herrscher` on a TTY **serves when nothing
@@ -84,9 +86,47 @@ else is** and **attaches** when the service already is, driving the same UI over
 the sockets the running daemon exposes. You see the agent that is actually live.
 Quitting the window has two outcomes. After an attach, the daemon you found keeps
 running. After a serve, quitting stops that daemon, and the turns still running
-in it are cancelled. Off a TTY there is nothing to
+in it are cancelled. If the hub stops while the window is open, for instance
+because its command or events socket is already served by another daemon, the
+window closes and says why. Off a TTY there is nothing to
 attach to, so the second daemon is refused and the process holding the state is
-named. Use `--state` if you really want a separate world.
+named. Use `--state` if you really want a separate world, with its own
+`--instance` too: a daemon refuses to take over a command or events socket that
+another daemon still answers on, and says so instead of cutting that one off.
+
+### Where the sockets live
+
+Every socket and lock herrscher creates for a user lives in one private directory,
+chosen the same way on every run: `/run/user/<uid>/herrscher` when the systemd user
+session has provided a real `/run/user/<uid>` directory owned by the user with mode
+0700, and `/tmp/herrscher-<uid>` otherwise. The directory must be a real directory
+(not a symbolic link), owned by the user, with no group or other bits, and it is
+checked on every use. A socket keeps its readable name there when the full path fits
+the 103 byte unix limit, and takes a hashed name (`hs-<key>.sock`) when it does not.
+
+When the chosen directory exists but cannot be used, the daemon refuses to start and
+says why. A symbolic link, a directory created by another account (only that account
+or root can remove it, and a systemd user session avoids `/tmp` altogether) and a directory open
+to its group or others (`chmod 700` on it fixes that) each get their own message.
+herrscher never changes a directory it does not own.
+
+The directory is chosen once, at the entry point of the program, and passed down as a
+value. Library code takes a `host.RuntimeLayout` argument (`CommandSocketPathIn`,
+`EventsSocketPathIn`, `ForwardToDaemon`, and so on), so a caller can point the same code
+at another directory. There is no command line flag for that choice: the hidden
+`--runtime-dir` flag is gone, and the `serve` process that the tests start reads its
+directory from the environment instead.
+
+Neublox, or any other client that follows the events of an instance, must call
+`host.EventsSocketPath(instanceID)` to find that socket rather than rebuild the name.
+The function is documented in the `core/host` package godoc.
+
+Upgrade note: sockets moved from `/tmp` to the per-user directory described above.
+Clients built before this version must be updated to find the sockets through
+`host.EventsSocketPath` and the command socket helpers, and remote sessions must be
+restarted once so they forward the new paths. An older `/tmp/herrscher-<uid>` left with
+group or other access is refused with a message that tells you to run `chmod 700` on it.
+A directory owned by another user is refused too: ask that user or root to remove it.
 
 ## What a session gives you
 
@@ -148,6 +188,14 @@ Off by default: `MEMORY_LEARNED_SKILLS`.
 An agent ends a turn with a `⟢` trailer to delegate, fan out, route, merge or
 hand off. Workers inherit their agent's vendor, so one run can mix Claude, Codex
 and Cursor.
+
+### Choosing a session's vendor
+
+Without `--model`, a session's vendor is the first of these that is set:
+`--vendor`, then the vendor whose CLI the `--cmd` binary is (`claude`, `codex`
+or `cursor`), then `HERRSCHER_BACKEND`. With `--model`, the model names its
+vendor: `--vendor` or `HERRSCHER_BACKEND`, when set, must agree with it, and
+without either the model's vendor is used.
 
 → `architecture/coordination`, `reference/trailers`
 
@@ -239,6 +287,15 @@ over there dials a unix socket exactly as it does here, and `herrscher <verb>` i
 the agent's own shell reaches the daemon that started it. Each session forwards
 its own path and each launch owns its connection, so a second session on the same
 host cannot take the first one's socket away.
+
+Every socket lives in the per-user directory on the remote machine too. The daemon
+resolves that directory over ssh once per host, with the same rule as locally
+(`/run/user/<uid>/herrscher` when the systemd user session provides it,
+`/tmp/herrscher-<uid>` otherwise), and creates it with mode 0700 if it is missing.
+A session forwarded by a build from before that change keeps dialling the old `/tmp`
+paths while the new daemon listens in the new directory. Restart each remote session once after the upgrade to
+forward the new paths. Until then its bridge cannot reach the daemon, and the
+session shows no answer.
 
 Three refusals replace a blind start: a host that was never provisioned, a host
 running a different build than this daemon would ship, and `--clone` combined
@@ -1492,6 +1549,55 @@ Purity tests (`TestHostPurity`, `TestCorePurity`,
 in.
 
 → `architecture/hexagonal`
+
+## Testing
+
+Tests must pass an explicit `Layout` (`testRuntime` or `isolatedRuntimeDir`) to every
+function that reaches a socket or a lock. A zero `Layout` names no path, and its checks
+return an error. `runtimedir` exports neither the roots of the production runtime
+directory nor a resolver, so code outside the package cannot build one.
+
+`internal/productionlayout` checks the rest in `go test ./...`. It parses every `.go`
+file of the module with `go/parser`, hidden directories included (only `.git` and
+`node_modules` are skipped), and fails when:
+
+- a file other than `main.go`, `core/host/runtime_dir.go` and the unix socket wrappers names `ProductionRuntime`;
+- a file other than `core/host/runtime_dir.go` and the runtimedir package names `Production`;
+- a test names `CommandSocketPath` or `EventsSocketPath`, except the one read-only contract test;
+- a production file names `CommandSocketPath` or `EventsSocketPath`, except `main.go` and the two wrapper files;
+- a file that imports runtimedir names `Roots`, `ProductionRoots`, `Resolve` or `DirOf`, even through a dot import;
+- a production file other than `core/host/runtime_dir.go` and the runtimedir package itself calls `runtimedir.At` or `RuntimeAt`. Production code builds no layout from an arbitrary path: only tests, that one file and the runtimedir package may. The production layout comes from `ProductionRuntime`, which only `main.go` and the socket wrappers call.
+
+What it cannot detect: it matches identifiers by name in the syntax tree, so it does not
+see a socket path built from a string, a call made through reflection, code outside this
+module, or a hand-written path such as `/run/user/1000`. Those are not covered by the
+checker and rely on review.
+
+Two more gaps: the arbitrary path rule matches the qualifier `runtimedir` by name, so an
+import alias such as `rt.At` is not seen, and it matches calls only, so a reference
+without a call such as `f := runtimedir.At` is not seen either.
+
+## Testing the remote paths
+
+`go test ./core/host/` runs the remote end-to-end tests (the `TestE2E` ones) against
+an ssh host when two environment variables are set:
+
+- `HERRSCHER_E2E_SSH` names that host as `user@host`, or as an alias from `~/.ssh/config`.
+  The host must accept key authentication without a prompt. Without this variable the
+  tests skip, and the e2e-ssh CI job fails when any of them skips. Before running, the
+  tests resolve the target with `ssh -G` and refuse a host that is the account running
+  them: same uid, and either a loopback address (after alias resolution), or an identity
+  that cannot be read on either side, or the same machine id on both sides. Machine ids
+  come from `/etc/machine-id` on Linux and from `sysctl -n kern.uuid` on macOS. An
+  unreadable identity is refused, not assumed to be another machine.
+- `HERRSCHER_E2E_DEDICATED=1` lifts that refusal, but only under GitHub Actions, where
+  `GITHUB_ACTIONS=true` is set by the runner itself. On a developer machine the variable
+  alone is ignored and the refusal stays.
+- Under the same GitHub Actions condition, `HERRSCHER_E2E_DEDICATED=1` also allows the tests to remove the remote runtime directory
+  with `rmdir` at the end of a run, and only when it did not exist before the run and
+  is empty at the end. Set it only on a host whose runtime directory belongs to the
+  tests. Without it the directory is left in place. A non-empty directory is never
+  removed, and the tests remove only the socket files they created.
 
 ## Documentation
 

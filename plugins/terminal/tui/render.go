@@ -153,7 +153,7 @@ func renderEntry(item entry, width int, view view) string {
 	case roleTool:
 		return indent(renderTool(item, body, view))
 	case roleNotice:
-		return indent(wrapWith(view.st.dim, view.st.glyphs.notice+" "+item.text, body))
+		return indent(renderNotice(item, body, view))
 	case roleError:
 		return block(view.st, view.st.red, view.st.glyphs.failure+" "+view.tr.t("tui.render.error_label", nil), wrapWith(view.st.red, item.text, body), width)
 	case roleCost:
@@ -163,6 +163,15 @@ func renderEntry(item entry, width int, view view) string {
 	default:
 		return indent(wrapWith(view.st.dim, item.text, body))
 	}
+}
+
+func renderNotice(item entry, width int, view view) string {
+	text := view.st.glyphs.notice + " " + item.text
+	if !item.markdown {
+		return wrapWith(view.st.dim, text, width)
+	}
+	styled := styleInlineMarkdown(text, view.st.dim, view.st.dim.Bold(true), view.st.accent)
+	return lipgloss.NewStyle().Width(max(width, 1)).Render(styled)
 }
 
 func renderAgent(item entry, width int, view view) string {

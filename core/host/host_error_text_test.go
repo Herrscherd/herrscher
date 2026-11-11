@@ -189,7 +189,7 @@ func recordTableEntry(node ast.Node, names map[string]bool) {
 }
 
 func TestRegistryCommandErrorsAreWrittenInTheHostLanguage(t *testing.T) {
-	reg, err := NewRegistry(context.Background(), nil, Options{StatePath: t.TempDir() + "/s.json", Language: i18n.French})
+	reg, err := NewRegistry(context.Background(), nil, Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json", Language: i18n.French})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +204,7 @@ func TestRegistryCommandErrorsAreWrittenInTheHostLanguage(t *testing.T) {
 
 func TestRegistryErrorsFollowTheLiveOperatorLanguage(t *testing.T) {
 	live := newOperatorLanguage(i18n.English)
-	reg, err := NewRegistry(context.Background(), nil, Options{StatePath: t.TempDir() + "/s.json", Language: i18n.English, live: live})
+	reg, err := NewRegistry(context.Background(), nil, Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json", Language: i18n.English, live: live})
 	if err != nil {
 		t.Fatal(err)
 	}

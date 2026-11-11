@@ -68,6 +68,7 @@ type Backend interface {
 	Pick(channel, value string) bool
 	Overview() (string, error)
 	Seen(name string)
+	StartSession() (string, error)
 }
 
 const (
@@ -128,6 +129,7 @@ type entry struct {
 	failed      bool
 	foldable    bool
 	open        bool
+	markdown    bool
 }
 
 type tab struct {
@@ -223,6 +225,11 @@ func (tb *tab) endStream() {
 	}
 }
 
+type sessionStartedMsg struct {
+	name string
+	err  error
+}
+
 type dispatchResultMsg struct {
 	origin string
 	out    string
@@ -287,6 +294,8 @@ type model struct {
 
 	openSession string
 	openText    string
+	openAtts    []Attachment
+	starting    bool
 
 	resumeOpen bool
 	resumeIdx  int
@@ -713,13 +722,15 @@ func (m *model) focusOpen(infos []contracts.SessionInfo) tea.Cmd {
 	if channel == "" || m.tabs[channel] == nil {
 		return nil
 	}
-	text := m.openText
-	m.openSession, m.openText = "", ""
+	text, atts := m.openText, m.openAtts
+	m.openSession, m.openText, m.openAtts = "", "", nil
 	m.active = channel
-	if text == "" {
+	m.applySize()
+	m.syncViewport()
+	if text == "" && len(atts) == 0 {
 		return nil
 	}
-	return m.submitTo(channel, text, nil)
+	return m.submitTo(channel, text, atts)
 }
 
 func (m *model) continueLine() bool {
@@ -737,6 +748,10 @@ func (m *model) handleEnter() tea.Cmd {
 	if text == "" && len(m.pending) == 0 {
 		return nil
 	}
+	if m.starting {
+		m.flash = m.tr.t("tui.session.starting", nil)
+		return nil
+	}
 	m.input.Reset()
 	m.resizeComposer()
 	if command, ok := shellCommand(text); ok {
@@ -745,14 +760,53 @@ func (m *model) handleEnter() tea.Cmd {
 	if strings.HasPrefix(text, "/") {
 		return m.runSlash(text)
 	}
-	if m.active == "" {
-		return nil
-	}
 	atts := m.pending
 	m.pending = nil
 	m.applySize()
 	m.recordHistory(text)
+	if m.tabs[m.active] == nil {
+		return m.startSessionWith(text, atts)
+	}
 	return m.submitTo(m.active, text, atts)
+}
+
+func (m *model) startSessionWith(text string, atts []Attachment) tea.Cmd {
+	m.starting = true
+	m.openText, m.openAtts = text, atts
+	m.flash = m.tr.t("tui.session.starting", nil)
+	backend := m.tm
+	return func() tea.Msg {
+		name, err := backend.StartSession()
+		return sessionStartedMsg{name: name, err: err}
+	}
+}
+
+func (m *model) handleSessionStarted(msg sessionStartedMsg) tea.Cmd {
+	m.starting = false
+	if msg.err != nil {
+		m.giveBackFailedStart()
+		m.pending = append(m.openAtts, m.pending...)
+		m.openText, m.openAtts = "", nil
+		m.applySize()
+		m.resizeComposer()
+		m.flash = m.tr.t("tui.session.start_failed", map[string]any{tplArgReason: localizedReason(m.tr, msg.err)})
+		return nil
+	}
+	m.flash = ""
+	m.openSession = msg.name
+	m.tabSig = ""
+	return m.syncTabs()
+}
+
+func (m *model) giveBackFailedStart() {
+	typed := m.input.Value()
+	switch {
+	case typed == "":
+		m.input.SetValue(m.openText)
+	case m.openText == "":
+	default:
+		m.input.SetValue(m.openText + "\n" + typed)
+	}
 }
 
 func (m *model) runSlash(text string) tea.Cmd {
@@ -1185,7 +1239,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.endStream()
 		target.appendEntry(entry{role: roleNotice, text: m.tr.t("tui.render.turn_reset", nil)})
 	case eventNotice:
-		target.appendEntry(entry{role: roleNotice, text: event.Text})
+		target.appendEntry(entry{role: roleNotice, text: event.Text, markdown: true})
 	case eventCompactionStarted:
 		target.startCompaction(event)
 	case eventCompactionDone:
@@ -1294,7 +1348,7 @@ func (m *model) syncViewport() {
 		return
 	}
 	if m.tabs[m.active] == nil {
-		m.vp.SetContent("")
+		m.vp.SetContent(m.emptyState(m.vp.Width))
 		return
 	}
 	atBottom := m.vp.AtBottom()
@@ -1323,10 +1377,7 @@ func (m *model) baseContent() string { return m.contentWith("") }
 
 func (m *model) contentWith(query string) string {
 	tab := m.tabs[m.active]
-	if tab == nil {
-		return ""
-	}
-	if len(tab.entries) == 0 && !tab.busy {
+	if tab == nil || (len(tab.entries) == 0 && !tab.busy) {
 		return m.emptyState(m.vp.Width)
 	}
 	content := m.cachedTranscript(tab)
@@ -1472,6 +1523,18 @@ func newRunModel(ctx context.Context, backend Backend) *model {
 	return model
 }
 
+func killedByContext(ctx context.Context, err error) bool {
+	return ctx.Err() != nil && errors.Is(err, tea.ErrProgramKilled)
+}
+
+func settleRun(ctx context.Context, cancel context.CancelFunc, runErr error) error {
+	if killedByContext(ctx, runErr) {
+		runErr = nil
+	}
+	cancel()
+	return runErr
+}
+
 // Run starts the TUI bound to the given gateway backend, blocking until the user
 // quits; quitting cancels ctx (wired by the caller) so the daemon shuts down
 // cleanly.
@@ -1493,12 +1556,21 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 		cancel()
 		return keyedError{cause: err, key: "tui.terminal.enhanced_keys_enable_failed", params: map[string]any{"Err": err.Error()}}
 	}
-	program := tea.NewProgram(model,
+	runErr = runProgram(ctx, cancel, backend, model, tea.WithInput(newFilteredStdin(model.keys)))
+	if err := writeStdout(enhancedKeysOff); err != nil {
+		return errors.Join(runErr, keyedError{cause: err, key: "tui.terminal.enhanced_keys_disable_failed", params: map[string]any{"Err": err.Error()}})
+	}
+	return runErr
+}
+
+func runProgram(ctx context.Context, cancel context.CancelFunc, backend Backend, model *model, extra ...tea.ProgramOption) error {
+	options := []tea.ProgramOption{
+		tea.WithContext(ctx),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 		tea.WithReportFocus(),
-		tea.WithInput(newFilteredStdin(model.keys)),
-	)
+	}
+	program := tea.NewProgram(model, append(options, extra...)...)
 	go func() {
 		for {
 			select {
@@ -1512,12 +1584,8 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 			}
 		}
 	}()
-	_, runErr = program.Run()
-	cancel()
-	if err := writeStdout(enhancedKeysOff); err != nil {
-		return errors.Join(runErr, keyedError{cause: err, key: "tui.terminal.enhanced_keys_disable_failed", params: map[string]any{"Err": err.Error()}})
-	}
-	return runErr
+	_, runErr := program.Run()
+	return settleRun(ctx, cancel, runErr)
 }
 
 func (m *model) Init() tea.Cmd {
@@ -1599,6 +1667,8 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		return nil, true
 	case dispatchResultMsg:
 		return m.handleDispatchResult(msg), true
+	case sessionStartedMsg:
+		return m.handleSessionStarted(msg), true
 	case modeResultMsg:
 		return m.handleModeResult(msg), true
 	case modeLoadedMsg:

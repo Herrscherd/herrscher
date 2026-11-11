@@ -2,6 +2,8 @@ package runner
 
 import (
 	"context"
+	"errors"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -99,15 +101,58 @@ func TestSSHCopyUsesScp(t *testing.T) {
 	}
 }
 
-func TestControlPathIsShortAndStable(t *testing.T) {
-	a := ControlPathFor("me@build1")
-	if a != ControlPathFor("me@build1") {
-		t.Fatal("ControlPathFor is not stable")
+func TestSSHPlacesTheTargetAfterOptionTerminator(t *testing.T) {
+	cmd := SSH{Target: "me@build1"}.Command(context.Background(), "", "true")
+	if got := cmd.Args[len(cmd.Args)-3]; got != "--" {
+		t.Fatalf("argv before the target = %q, want --: %v", got, cmd.Args)
 	}
-	if a == ControlPathFor("me@build2") {
-		t.Fatal("two targets share one control socket")
+}
+
+func TestCheckTargetRefusesATargetThatReadsAsAnOption(t *testing.T) {
+	if err := CheckTarget("-oProxyCommand=sh"); !errors.Is(err, ErrTargetDash) {
+		t.Fatalf("CheckTarget = %v, want ErrTargetDash", err)
 	}
-	if len(a) > 100 {
-		t.Fatalf("control path is %d bytes: %s", len(a), a)
+	if err := CheckTarget("me@build1"); err != nil {
+		t.Fatalf("CheckTarget of a plain host = %v", err)
+	}
+}
+
+func TestCheckTargetRefusesAnEmptyTarget(t *testing.T) {
+	if err := CheckTarget(""); !errors.Is(err, ErrEmptyTarget) {
+		t.Fatalf("CheckTarget(\"\") = %v, want ErrEmptyTarget", err)
+	}
+}
+
+func TestEveryBuilderRefusesAnEmptyTarget(t *testing.T) {
+	empty := SSH{Target: "", Forwards: []Forward{{Remote: "/run/user/1000/herrscher/s.sock", Local: "/tmp/l.sock"}}}
+	builders := map[string]*exec.Cmd{
+		"Command":         empty.Command(t.Context(), "", "true"),
+		"PrepareForwards": empty.PrepareForwards(t.Context()),
+		"Copy":            empty.Copy(t.Context(), "src", "/dst"),
+	}
+	for name, cmd := range builders {
+		if cmd == nil {
+			t.Fatalf("%s returned no command", name)
+		}
+		if err := cmd.Start(); !errors.Is(err, ErrEmptyTarget) {
+			t.Fatalf("%s.Start() = %v, want ErrEmptyTarget before any process runs", name, err)
+		}
+	}
+}
+
+func TestEveryBuilderRefusesAnOptionShapedTarget(t *testing.T) {
+	bad := SSH{Target: "-oProxyCommand=sh", Forwards: []Forward{{Remote: "/run/user/1000/herrscher/s.sock", Local: "/tmp/l.sock"}}}
+	builders := map[string]*exec.Cmd{
+		"Command":         bad.Command(t.Context(), "", "true"),
+		"PrepareForwards": bad.PrepareForwards(t.Context()),
+		"Copy":            bad.Copy(t.Context(), "src", "/dst"),
+	}
+	for name, cmd := range builders {
+		if cmd == nil {
+			t.Fatalf("%s returned no command", name)
+		}
+		if err := cmd.Start(); !errors.Is(err, ErrTargetDash) {
+			t.Fatalf("%s.Start() = %v, want ErrTargetDash before any process runs", name, err)
+		}
 	}
 }

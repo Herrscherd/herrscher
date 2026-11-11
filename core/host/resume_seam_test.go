@@ -15,9 +15,10 @@ func TestHubScrollbackAndResume(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
-	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
+	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
 	partDir := t.TempDir()
 	h := newHub(st, sup, nil, partDir, &cli.Registry{}, nil, approvalTab, sessionTab)
+	h.runtime = isolatedRuntimeDir(t)
 
 	if err := st.AddSession(state.Session{Name: "seam", ChannelID: "c", Type: "text", Archived: true, ResumeToken: "tok", Vendor: "claude", Project: "alpha"}); err != nil {
 		t.Fatal(err)

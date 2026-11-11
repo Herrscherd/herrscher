@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -21,7 +22,10 @@ import (
 	"github.com/Herrscherd/herrscher/core/service"
 )
 
-const forwardConfirmTimeout = 30 * time.Second
+const (
+	forwardConfirmTimeout = 30 * time.Second
+	accountProbeTimeout   = 30 * time.Second
+)
 
 func e2eTarget(t *testing.T) string {
 	t.Helper()
@@ -29,7 +33,40 @@ func e2eTarget(t *testing.T) string {
 	if target == "" {
 		t.Skip("set HERRSCHER_E2E_SSH=<ssh target> to run the remote end-to-end test")
 	}
+	refuseThisAccount(t, target)
 	return target
+}
+
+func refuseThisAccount(t *testing.T, target string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), accountProbeTimeout)
+	defer cancel()
+	remote := remoteAccount(ctx, t, target)
+	dedicated := dedicatedEscape(os.Getenv)
+	switch refusalOf(sshHostname(t, target), localAccount(), remote, dedicated) {
+	case loopbackAccount, sameMachineAccount:
+		t.Fatalf("HERRSCHER_E2E_SSH=%s is the account running these tests (uid %d on this machine); the remote tests would write the production runtime directory of that account. Point it at another account, or run under GitHub Actions with %s=1 on a runner whose runtime directory belongs to the tests", target, remote.uid, dedicatedTargetVar)
+	case allowedAccount:
+	case unreadableAccount:
+		t.Fatalf("HERRSCHER_E2E_SSH=%s: the machine identity could not be read on this machine or on the target (uid %d on both sides), so the tests cannot tell whether they share a machine with it. The DEDICATED escape (%s=1) only applies under GitHub Actions (GITHUB_ACTIONS=true)", target, remote.uid, dedicatedTargetVar)
+	}
+}
+
+func remoteAccount(ctx context.Context, t *testing.T, target string) sshAccount {
+	t.Helper()
+	uidText, err := capture(ctx, runner.SSH{Target: target}, "id", "-u")
+	if err != nil {
+		t.Fatalf("read the uid of %s: %v", target, err)
+	}
+	uid, err := strconv.Atoi(strings.TrimSpace(uidText))
+	if err != nil {
+		t.Fatalf("the uid of %s is not a number: %q", target, uidText)
+	}
+	machine, err := capture(ctx, runner.SSH{Target: target}, "sh", "-c", remoteMachineIDScript)
+	if err != nil {
+		machine = ""
+	}
+	return sshAccount{uid: uid, machineID: strings.TrimSpace(machine)}
 }
 
 func sourceRoot(t *testing.T) string {
@@ -49,6 +86,7 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	target := e2eTarget(t)
 	ctx := context.Background()
 	src := sourceRoot(t)
+	layout := testRuntime(t)
 
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	if err := st.SetSource(src); err != nil {
@@ -59,13 +97,13 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	provisioned := provisionE2EHost(ctx, t, st, target, src)
+	provisioned := provisionE2EHost(ctx, t, layout, st, target, src)
 	initE2EProject(t, local)
 
-	p := newHostPlacer(st, "e2e", nil, func() string { return service.SourceVersion(ctx, src) })
+	p := newHostPlacer(st, layout, "e2e", nil, func() string { return service.SourceVersion(ctx, src) })
 	repo := provisioned.Workspace + "/app"
 	t.Cleanup(func() {
-		_, rmErr := capture(context.Background(), runnerFor(provisioned), "rm", "-rf", repo)
+		_, rmErr := capture(context.Background(), runnerForTest(t, layout, provisioned), "rm", "-rf", repo)
 		logCleanup(rmErr)
 	})
 	assertProjectEnsuredTwice(ctx, t, p, repo)
@@ -77,14 +115,14 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	path := createE2EWorktree(ctx, t, wt, repo)
 	defer func() { logCleanup(wt.Remove(ctx, repo, "demo", true)) }()
 
-	assertE2EMaterialized(ctx, t, p, st, provisioned, path)
-	removeE2EWorktree(ctx, t, wt, provisioned, repo, path)
+	assertE2EMaterialized(ctx, t, layout, p, st, provisioned, path)
+	removeE2EWorktree(ctx, t, layout, wt, provisioned, repo, path)
 }
 
-func provisionE2EHost(ctx context.Context, t *testing.T, st *state.State, target, src string) state.Host {
+func provisionE2EHost(ctx context.Context, t *testing.T, layout RuntimeLayout, st *state.State, target, src string) state.Host {
 	t.Helper()
-	h := state.Host{Name: "e2e", SSH: target, Workspace: remoteWorkspace(ctx, t, target)}
-	provisioned, err := provisionHost(ctx, runnerFor(h), h, src)
+	h := state.Host{Name: "e2e", SSH: target, Workspace: remoteWorkspace(ctx, t, layout, target)}
+	provisioned, err := provisionHost(ctx, runnerForTest(t, layout, h), h, src)
 	if err != nil {
 		t.Fatalf("provision: %v", err)
 	}
@@ -94,7 +132,7 @@ func provisionE2EHost(ctx context.Context, t *testing.T, st *state.State, target
 	if putErr := st.PutHost(provisioned); putErr != nil {
 		t.Fatal(putErr)
 	}
-	rep := checkHost(ctx, runnerFor(provisioned), provisioned, service.SourceVersion(ctx, src))
+	rep := checkHost(ctx, runnerForTest(t, layout, provisioned), provisioned, service.SourceVersion(ctx, src))
 	if !rep.Reachable || !rep.Workspace || !rep.Git || rep.Drift {
 		t.Fatalf("a freshly provisioned host must check clean, got %+v", rep)
 	}
@@ -146,7 +184,7 @@ func createE2EWorktree(ctx context.Context, t *testing.T, wt manager.Worktrees, 
 	return path
 }
 
-func assertE2EMaterialized(ctx context.Context, t *testing.T, p hostPlacer, st *state.State, provisioned state.Host, path string) {
+func assertE2EMaterialized(ctx context.Context, t *testing.T, layout RuntimeLayout, p hostPlacer, st *state.State, provisioned state.Host, path string) {
 	t.Helper()
 	a, err := agent.NewStore(t.TempDir()).Create(agent.CreateSpec{Name: "e2e", Soul: "# E2E\n"})
 	if err != nil {
@@ -155,14 +193,14 @@ func assertE2EMaterialized(ctx context.Context, t *testing.T, p hostPlacer, st *
 	if materializeErr := p.Materialize(ctx, "e2e", a, path, true); materializeErr != nil {
 		t.Fatalf("materialize on the host: %v", materializeErr)
 	}
-	soul, err := capture(ctx, runnerFor(provisioned), "cat", path+"/.claude/CLAUDE.md")
+	soul, err := capture(ctx, runnerForTest(t, layout, provisioned), "cat", path+"/.claude/CLAUDE.md")
 	if err != nil {
 		t.Fatalf("read the materialized soul: %v", err)
 	}
 	if !strings.Contains(soul, "# E2E") {
 		t.Fatalf("the agent's soul must land in the remote worktree, got %q", soul)
 	}
-	settings, err := capture(ctx, runnerFor(provisioned), "cat", path+"/.claude/settings.json")
+	settings, err := capture(ctx, runnerForTest(t, layout, provisioned), "cat", path+"/.claude/settings.json")
 	if err != nil {
 		t.Fatalf("read the materialized settings: %v", err)
 	}
@@ -175,13 +213,84 @@ func assertE2EMaterialized(ctx context.Context, t *testing.T, p hostPlacer, st *
 	}
 }
 
-func removeE2EWorktree(ctx context.Context, t *testing.T, wt manager.Worktrees, provisioned state.Host, repo, path string) {
+func removeE2EWorktree(ctx context.Context, t *testing.T, layout RuntimeLayout, wt manager.Worktrees, provisioned state.Host, repo, path string) {
 	t.Helper()
 	if err := wt.Remove(ctx, repo, "demo", true); err != nil {
 		t.Fatalf("remote worktree remove: %v", err)
 	}
-	if _, err := capture(ctx, runnerFor(provisioned), "test", "-d", path); err == nil {
+	if _, err := capture(ctx, runnerForTest(t, layout, provisioned), "test", "-d", path); err == nil {
 		t.Fatal("remove must take the directory with it")
+	}
+}
+
+func remoteSocketDir(ctx context.Context, t *testing.T, layout RuntimeLayout, target string) string {
+	t.Helper()
+	controlPath, err := runner.ControlPathFor(layout, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	removeRemoteRuntimeDirOnExitIfCreated(ctx, t, target)
+	dir, err := runner.RemoteRuntimeDir(ctx, target, controlPath)
+	if err != nil {
+		t.Fatalf("remote runtime dir: %v", err)
+	}
+	return dir
+}
+
+func removeRemoteRuntimeDirOnExitIfCreated(ctx context.Context, t *testing.T, target string) {
+	t.Helper()
+	dir := expectedRemoteRuntimeDir(ctx, t, target)
+	presence, err := capture(ctx, runner.SSH{Target: target}, "sh", "-c", `if [ -e "$1" ]; then echo present; else echo absent; fi`, "sh", dir)
+	if err != nil {
+		t.Fatalf("probe the remote runtime dir: %v", err)
+	}
+	if strings.TrimSpace(presence) != "absent" || !dedicatedEscape(os.Getenv) {
+		return
+	}
+	t.Cleanup(func() {
+		reportRemoteRuntimeDirLeft(context.WithoutCancel(ctx), t, target, dir)
+	})
+}
+
+func reportRemoteRuntimeDirLeft(ctx context.Context, t *testing.T, target, dir string) {
+	t.Helper()
+	_, rmErr := capture(ctx, runner.SSH{Target: target}, "rmdir", "--", dir)
+	if rmErr == nil {
+		return
+	}
+	left, lsErr := capture(ctx, runner.SSH{Target: target}, "ls", "-A", dir)
+	if lsErr != nil {
+		logCleanup(rmErr)
+		return
+	}
+	t.Errorf("the remote runtime dir %s was not removed (%v); entries left: %q", dir, rmErr, strings.Fields(left))
+}
+
+const dedicatedTargetVar = "HERRSCHER_E2E_DEDICATED"
+
+func remoteSocketRemovalArgv(path string) []string {
+	return []string{"sh", "-c", `if [ -S "$1" ]; then rm -f -- "$1"; fi`, "sh", path}
+}
+
+func TestE2ERemoteRuntimeDirIsPrivateAndPerUser(t *testing.T) {
+	target := e2eTarget(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	layout := testRuntime(t)
+	dir := remoteSocketDir(ctx, t, layout, target)
+	uid, err := capture(ctx, runner.SSH{Target: target}, "id", "-u")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := expectedRemoteRuntimeDir(ctx, t, target); dir != want {
+		t.Fatalf("remote runtime dir = %q, want %q", dir, want)
+	}
+	stat, err := capture(ctx, runner.SSH{Target: target}, "stat", "-c", "%a %u", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := strings.TrimSpace(stat), "700 "+strings.TrimSpace(uid); got != want {
+		t.Fatalf("remote runtime dir mode and owner = %q, want %q", got, want)
 	}
 }
 
@@ -190,23 +299,25 @@ func TestE2ERemoteCommandSocketForward(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	src := sourceRoot(t)
+	layout := testRuntime(t)
 
-	h := state.Host{Name: "e2e", SSH: target, Workspace: remoteWorkspace(ctx, t, target)}
-	provisioned, err := provisionHost(ctx, runnerFor(h), h, src)
+	h := state.Host{Name: "e2e", SSH: target, Workspace: remoteWorkspace(ctx, t, layout, target)}
+	provisioned, err := provisionHost(ctx, runnerForTest(t, layout, h), h, src)
 	if err != nil {
 		t.Fatalf("provision: %v", err)
 	}
 
 	const instID = "e2efwd"
-	local := filepath.Join(os.TempDir(), "herrscher-e2e-daemon.sock")
-	remote := control.RemoteCommandSocketPath("e2e-session")
-	serveCommandSocket(ctx, local, &fakeDispatcher{out: "reached the daemon"})
+	local := layout.Socket("herrscher-e2e-daemon.sock")
+	remote := control.RemoteCommandSocketPath(remoteSocketDir(ctx, t, layout, target), instID, "e2e-session")
+	serveCommandSocket(ctx, layout, local, &fakeDispatcher{out: "reached the daemon"})
 
+	removeRemoteSocketOnExit(t, target, remote)
 	run := runner.SSH{Target: target, Forwards: []runner.Forward{{Remote: remote, Local: local}}}
 	if prep := run.PrepareForwards(ctx); prep != nil {
 		logCleanup(prep.Run())
 	}
-	remoteState, err := capture(ctx, runnerFor(provisioned), "mktemp", "-d")
+	remoteState, err := capture(ctx, runnerForTest(t, layout, provisioned), "mktemp", "-d")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,23 +339,26 @@ func TestE2ETwoSessionsReachTheDaemonAtOnce(t *testing.T) {
 	target := e2eTarget(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	layout := testRuntime(t)
 
-	h := state.Host{Name: "e2e", SSH: target, Workspace: remoteWorkspace(ctx, t, target)}
-	provisioned, err := provisionHost(ctx, runnerFor(h), h, sourceRoot(t))
+	h := state.Host{Name: "e2e", SSH: target, Workspace: remoteWorkspace(ctx, t, layout, target)}
+	provisioned, err := provisionHost(ctx, runnerForTest(t, layout, h), h, sourceRoot(t))
 	if err != nil {
 		t.Fatalf("provision: %v", err)
 	}
-	remoteState, err := capture(ctx, runnerFor(provisioned), "mktemp", "-d")
+	remoteState, err := capture(ctx, runnerForTest(t, layout, provisioned), "mktemp", "-d")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	local := filepath.Join(os.TempDir(), "herrscher-e2e-two.sock")
-	serveCommandSocket(ctx, local, &fakeDispatcher{out: "reached the daemon"})
+	local := layout.Socket("herrscher-e2e-two.sock")
+	serveCommandSocket(ctx, layout, local, &fakeDispatcher{out: "reached the daemon"})
 
 	sessions := []string{"e2e-one", "e2e-two"}
+	dir := remoteSocketDir(ctx, t, layout, target)
 	for _, name := range sessions {
-		remote := control.RemoteCommandSocketPath(name)
+		remote := control.RemoteCommandSocketPath(dir, "", name)
+		removeRemoteSocketOnExit(t, target, remote)
 		run := runner.SSH{Target: target, Forwards: []runner.Forward{{Remote: remote, Local: local}}}
 		if prep := run.PrepareForwards(ctx); prep != nil {
 			logCleanup(prep.Run())
@@ -253,7 +367,7 @@ func TestE2ETwoSessionsReachTheDaemonAtOnce(t *testing.T) {
 	}
 	plain := runner.SSH{Target: target}
 	for _, name := range sessions {
-		remote := control.RemoteCommandSocketPath(name)
+		remote := control.RemoteCommandSocketPath(dir, "", name)
 		out, err := capture(ctx, plain, "env",
 			"TMPDIR=/tmp",
 			control.CommandSocketVar+"="+remote,
@@ -317,9 +431,13 @@ func forwardConfirmed(line, remote string) bool {
 	return strings.HasPrefix(next, ":") || strings.HasPrefix(next, ",")
 }
 
-func remoteWorkspace(ctx context.Context, t *testing.T, target string) string {
+func remoteWorkspace(ctx context.Context, t *testing.T, layout RuntimeLayout, target string) string {
 	t.Helper()
-	run := runner.SSH{Target: target, ControlPath: runner.ControlPathFor(target)}
+	controlPath, err := runner.ControlPathFor(layout, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := runner.SSH{Target: target, ControlPath: controlPath}
 	out, err := capture(ctx, run, "sh", "-c", "d=$(mktemp -d)/ws; mkdir -p $d; echo $d")
 	if err != nil {
 		t.Fatalf("make a remote workspace: %v", err)
@@ -336,4 +454,32 @@ func mustGit(t *testing.T, dir string, argv ...string) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %s: %v\n%s", strings.Join(argv, " "), err, out)
 	}
+}
+
+func runnerForTest(t *testing.T, layout RuntimeLayout, h state.Host) hostRunner {
+	t.Helper()
+	run, err := runnerFor(layout, h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return run
+}
+
+const remoteRuntimeDirRule = `uid=$(id -u); p=/run/user/$uid; if [ -d "$p" ] && [ ! -L "$p" ] && [ "$(stat -c '%a %u' "$p")" = "700 $uid" ]; then echo "$p/herrscher"; else echo "/tmp/herrscher-$uid"; fi`
+
+func expectedRemoteRuntimeDir(ctx context.Context, t *testing.T, target string) string {
+	t.Helper()
+	out, err := capture(ctx, runner.SSH{Target: target}, "sh", "-c", remoteRuntimeDirRule)
+	if err != nil {
+		t.Fatalf("work out the expected remote runtime dir: %v", err)
+	}
+	return strings.TrimSpace(out)
+}
+
+func removeRemoteSocketOnExit(t *testing.T, target, path string) {
+	t.Helper()
+	t.Cleanup(func() {
+		_, err := capture(context.Background(), runner.SSH{Target: target}, remoteSocketRemovalArgv(path)...)
+		logCleanup(err)
+	})
 }

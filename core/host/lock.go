@@ -1,11 +1,17 @@
 package host
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+)
+
+var (
+	errLockNotOwned = errors.New("the lock file is not owned by this user")
+	errLockSymlink  = errors.New("the lock file is a symbolic link")
 )
 
 // StateLockPath is the lock a daemon holds for the whole time it serves. It sits
@@ -31,13 +37,28 @@ func StateLockPath(statePath string) string {
 // lock nobody can clear. The pid is written for the error message alone; nothing
 // reads it to make a decision.
 func LockState(statePath string) (func(), error) {
-	path := StateLockPath(statePath)
+	release, err := takeLock(StateLockPath(statePath))
+	if taken, ok := errors.AsType[*lockTakenError](err); ok {
+		return nil, &lockHeldError{StatePath: statePath, Holder: taken.Holder}
+	}
+	return release, err
+}
+
+type lockTakenError struct {
+	Holder string
+}
+
+func (e *lockTakenError) Error() string {
+	return "lock held by another process" + e.Holder
+}
+
+func takeLock(path string) (func(), error) {
 	if err := os.MkdirAll(filepath.Dir(path), privateDirMode); err != nil {
 		return nil, wrapHost(err, "lock.dir", nil)
 	}
-	lockFile, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, ownerOnlyFileMode)
+	lockFile, err := openLockFile(path)
 	if err != nil {
-		return nil, wrapHost(err, "lock.state", nil)
+		return nil, wrapHost(err, "lock.unsafe", map[string]any{pathParam: path, "Detail": err.Error()})
 	}
 	locked, err := tryLock(lockFile)
 	if err != nil {
@@ -47,7 +68,7 @@ func LockState(statePath string) (func(), error) {
 	if !locked {
 		holder := readHolder(lockFile)
 		closeRead(lockFile)
-		return nil, &lockHeldError{StatePath: statePath, Holder: holder}
+		return nil, &lockTakenError{Holder: holder}
 	}
 	if err := lockFile.Truncate(0); err == nil {
 		logWriteFailure(lockFile.WriteAt([]byte(strconv.Itoa(os.Getpid())), 0))

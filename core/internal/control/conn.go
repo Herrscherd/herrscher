@@ -64,9 +64,14 @@ type Acceptor struct {
 	closeOnce sync.Once
 }
 
+var errNoSocketPath = errors.New("the control socket has no path, its runtime layout is zero")
+
 // Accept binds the control socket at path (removing a stale socket first) and
 // starts accepting bridge connections. Each appears on Conns().
 func Accept(ctx context.Context, path string) (*Acceptor, error) {
+	if path == "" {
+		return nil, errNoSocketPath
+	}
 	if err := removeStaleSocket(path); err != nil {
 		return nil, err
 	}

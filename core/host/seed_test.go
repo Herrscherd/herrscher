@@ -100,6 +100,33 @@ func TestBuildBackendForSelectsByVendor(t *testing.T) {
 	}
 }
 
+func TestBuildBackendForInfersVendorFromCmd(t *testing.T) {
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+	setBackendEnv(t, "")
+
+	var built string
+	makePlugin := func(kind string) contracts.Plugin {
+		return contracts.Plugin{
+			Manifest: contracts.Manifest{Kind: kind, Category: contracts.CategoryBackend, Config: []contracts.Setting{{Key: "cmd", Default: kind}}},
+			Backend: func(context.Context, contracts.PluginConfig) (contracts.Backend, error) {
+				built = kind
+				return seedBackend{}, nil
+			},
+		}
+	}
+	contracts.Default.Register(makePlugin("codex"))
+	contracts.Default.Register(makePlugin("claude"))
+
+	if _, err := BuildBackendFor(context.Background(), BackendRequest{Cmd: "/usr/bin/claude --model claude-opus-5-5 --effort medium"}); err != nil {
+		t.Fatalf("BuildBackendFor: %v", err)
+	}
+	if built != "claude" {
+		t.Fatalf("built %q, want claude: a vendorless session must run the backend its cmd names, not the first registered one", built)
+	}
+}
+
 func TestNewSeedBackendResolvesRelativeWorktreeOnce(t *testing.T) {
 	saved := contracts.Default
 	t.Cleanup(func() { contracts.Default = saved })
@@ -192,6 +219,7 @@ func TestRunOneShotSeedWithCoordinatesDelegateTrailer(t *testing.T) {
 func TestRunOneShotSeedCommandForwardsToLiveCoordinator(t *testing.T) {
 	var gotPath string
 	var gotArgv []string
+	layout := testRuntime(t)
 	forward := func(_ context.Context, path string, argv []string) (string, bool, error) {
 		gotPath = path
 		gotArgv = append([]string(nil), argv...)
@@ -200,7 +228,7 @@ func TestRunOneShotSeedCommandForwardsToLiveCoordinator(t *testing.T) {
 
 	got, err := runOneShotSeedCommand(
 		context.Background(), nil, "orchestrator", "lecture seule",
-		"turn-test", oneShotSeedRuntime{}, nil, "instance-test", forward,
+		"turn-test", oneShotSeedRuntime{}, nil, layout, "instance-test", forward,
 	)
 	if err != nil {
 		t.Fatalf("runOneShotSeedCommand: %v", err)
@@ -208,7 +236,7 @@ func TestRunOneShotSeedCommandForwardsToLiveCoordinator(t *testing.T) {
 	if got != "réponse live" {
 		t.Fatalf("reply = %q, want %q", got, "réponse live")
 	}
-	if want := CommandSocketPath("instance-test"); gotPath != want {
+	if want := CommandSocketPathIn(layout, "instance-test"); gotPath != want {
 		t.Fatalf("command path = %q, want %q", gotPath, want)
 	}
 	wantArgv := []string{"session", "seed", "--name", "orchestrator", "--task", "lecture seule", "--turn_id", "turn-test"}

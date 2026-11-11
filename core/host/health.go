@@ -18,6 +18,8 @@ import (
 	"github.com/Herrscherd/herrscher/core/health"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
 	"github.com/Herrscherd/herrscher/core/usage"
+
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
 type healthInputs struct {
@@ -434,13 +436,13 @@ func compactorPlugin(name string) (contracts.Plugin, bool) {
 	return contracts.Plugin{}, false
 }
 
-func newHealthInputs(instanceID string, keys *keyproxy.Proxy, gws []Deps, policy compactionPolicy, partDir string) healthInputs {
+func newHealthInputs(layout runtimedir.Layout, instanceID string, keys *keyproxy.Proxy, gws []Deps, policy compactionPolicy, partDir string) healthInputs {
 	store, err := accountStore(BackendRequest{})
 	if err != nil {
 		slog.Warn("health: account store unavailable", "err", err)
 	}
 	return healthInputs{
-		daemon:     health.Daemon{PID: os.Getpid(), Started: time.Now(), Socket: CommandSocketPath(instanceID), Version: daemonVersion()},
+		daemon:     health.Daemon{PID: os.Getpid(), Started: time.Now(), Socket: CommandSocketPathIn(layout, instanceID), Version: daemonVersion()},
 		keys:       keys,
 		live:       liveKinds(gws),
 		memory:     firstMemoryKind(),

@@ -8,7 +8,7 @@ import (
 )
 
 func TestLocalBridgeReceivesTheDaemonStatePath(t *testing.T) {
-	s := NewSupervisor(context.Background(), "herrscher")
+	s := NewSupervisor(context.Background(), "herrscher", testLayout(t))
 	s.SetStatePath("/daemon/state.json")
 
 	cmd, err := s.bridgeCommand(context.Background(), state.Session{Name: "main", ChannelID: "c1", Cmd: "claude"})

@@ -45,6 +45,10 @@ func main() {
 }
 
 func run() int {
+	return runWith(host.ProductionRuntime())
+}
+
+func runWith(layout host.RuntimeLayout) int {
 	if os.Getenv("HERRSCHER_GIT_ASKPASS") == "1" {
 		return answerGitAskpass(os.Args)
 	}
@@ -67,7 +71,7 @@ func run() int {
 	defer stop()
 
 	if len(os.Args) < minArgsWithCommand {
-		return reportOutcome(ctx, runWithoutCommand(ctx))
+		return reportOutcome(ctx, runWithoutCommand(ctx, layout))
 	}
 
 	cmd := os.Args[1]
@@ -78,7 +82,7 @@ func run() int {
 			fmt.Fprintln(os.Stderr, render(clitext.ClientLanguage(), clitext.TaskNeedsText, clitext.Params{clitext.ParamVerb: cmd}))
 			return exitUsage
 		}
-		return reportOutcome(ctx, runPrompt(ctx, task))
+		return reportOutcome(ctx, runPrompt(ctx, layout, task))
 	}
 
 	if code, ok := runManageCmd(cmd, args); ok {
@@ -93,7 +97,7 @@ func run() int {
 		return 0
 	}
 
-	return outcomeReporterFor(cmd)(ctx, runCommand(ctx, cmd, args))
+	return outcomeReporterFor(cmd)(ctx, runCommand(ctx, layout, cmd, args))
 }
 
 func refuseBrokenCatalogs(stderr io.Writer) bool {
@@ -148,9 +152,9 @@ func loadHostEnv() error {
 	return nil
 }
 
-func runWithoutCommand(ctx context.Context) error {
+func runWithoutCommand(ctx context.Context, layout host.RuntimeLayout) error {
 	if term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway() {
-		return runServe(ctx, nil, serveDaemon)
+		return runServe(ctx, layout, nil, serveDaemon)
 	}
 	if err := usage(clitext.ClientLanguage()); err != nil {
 		return err
@@ -178,12 +182,12 @@ func runManageCmd(cmd string, args []string) (int, bool) {
 	}
 }
 
-func runCommand(ctx context.Context, cmd string, args []string) error {
+func runCommand(ctx context.Context, layout host.RuntimeLayout, cmd string, args []string) error {
 	switch cmd {
 	case "bridge":
 		return runBridge(ctx, args)
 	case "serve":
-		return runServe(ctx, args, serveDaemon)
+		return runServe(ctx, layout, args, serveDaemon)
 	case "session":
 		return runSession(ctx, args)
 	case "agent":
@@ -193,7 +197,7 @@ func runCommand(ctx context.Context, cmd string, args []string) error {
 	case "host":
 		return runHost(ctx, args)
 	case "approve":
-		return runApprove(ctx, args)
+		return runApprove(ctx, layout, args)
 	case "role":
 		return runRole(ctx, args)
 	case "memory":
@@ -207,18 +211,20 @@ func runCommand(ctx context.Context, cmd string, args []string) error {
 	case "worktree":
 		return host.RunWorktree(ctx, args)
 	case healthVerb:
-		return runHealth(ctx, args)
+		return runHealth(ctx, layout, args)
 	case usageVerb:
-		return runUsage(ctx, args)
+		return runUsage(ctx, layout, args)
 	case "whoami":
 		return runWhoami(ctx, args)
 	}
-	return runForwarded(ctx, cmd, args)
+	return runForwarded(ctx, layout, cmd, args)
 }
 
-func runForwarded(ctx context.Context, cmd string, args []string) error {
+func runForwarded(ctx context.Context, layout host.RuntimeLayout, cmd string, args []string) error {
 	lang := clitext.ClientLanguage()
-	out, code, derr := dispatchUnknown(ctx, lang, cmd, args, forwardUnknownVerb)
+	out, code, derr := dispatchUnknown(ctx, lang, cmd, args, func(ctx context.Context, argv []string) (string, bool, error) {
+		return forwardUnknownVerb(ctx, layout, argv)
+	})
 	if code != 0 {
 		fmt.Fprintln(os.Stderr, forwardedFailureLine(lang, derr))
 		if err := usage(lang); err != nil {

@@ -370,6 +370,11 @@
     "other": "herrscher : passerelle indisponible : {{.Failure}}"
   },
   {
+    "id": "cli.serve.hub_stopped",
+    "description": "Erreur quand le hub interne s'arrête pendant que la fenêtre du terminal est ouverte",
+    "other": "le hub s'est arrêté, la fenêtre s'est donc fermée : {{.Err}}"
+  },
+  {
     "id": "cli.serve.gateway_commands",
     "description": "Erreur quand les commandes des passerelles ne peuvent pas être rattachées",
     "other": "commandes de passerelle : {{.Err}}"
@@ -462,7 +467,7 @@
   {
     "id": "cli.bridge.flag.vendor",
     "description": "Aide de l'option --vendor de bridge",
-    "other": "fournisseur du backend : claude | codex | cursor (vide = premier enregistré, ou HERRSCHER_BACKEND)"
+    "other": "fournisseur du backend : claude | codex | cursor (vide = le fournisseur du binaire de la commande, puis HERRSCHER_BACKEND ; avec un modèle, HERRSCHER_BACKEND, puis le fournisseur du modèle)"
   },
   {
     "id": "cli.bridge.flag.resume",
@@ -3338,6 +3343,16 @@
     "other": "le cache des modèles est tenu par un autre écrivain"
   },
   {
+    "id": "cli.host.fault.lock_symlink",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (lock file symlink)",
+    "other": "le fichier de verrou est un lien symbolique"
+  },
+  {
+    "id": "cli.host.fault.lock_not_owned",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (lock file not owned)",
+    "other": "le fichier de verrou n'appartient pas à cet utilisateur"
+  },
+  {
     "id": "cli.host.fault.no_pending_choice",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (no pending choice)",
     "other": "n'a aucun choix en attente"
@@ -3381,6 +3396,21 @@
     "id": "cli.host.fault.shell_refused",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (shell refused)",
     "other": "commande refusée"
+  },
+  {
+    "id": "cli.host.fault.no_runtime_dir",
+    "description": "Le démon a démarré sans répertoire d'exécution pour ses sockets et son verrou",
+    "other": "le démon a démarré sans répertoire d'exécution pour ses sockets et son verrou"
+  },
+  {
+    "id": "cli.host.fault.instance_locked",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (instance lock held by another daemon)",
+    "other": "un autre démon détient déjà le verrou de cette instance : arrête-le ou passe --instance"
+  },
+  {
+    "id": "cli.host.fault.socket_taken",
+    "description": "Un autre démon vivant répond déjà sur ce socket, souvent la même instance servant un autre fichier d'état",
+    "other": "un autre démon répond déjà sur ce socket (même instance, autre fichier d'état) : arrête-le ou passe --instance"
   },
   {
     "id": "cli.host.fault.empty_shell_command",

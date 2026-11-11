@@ -13,7 +13,7 @@ import (
 
 func remoteSupervisor(t *testing.T) *Supervisor {
 	t.Helper()
-	s := NewSupervisor(context.Background(), "/usr/local/bin/herrscher")
+	s := NewSupervisor(context.Background(), "/usr/local/bin/herrscher", testLayout(t))
 	s.SetInstanceID("inst")
 	s.SetCommandSocket(func(session string) string { return "/tmp/herrscher-command-inst-s-" + session + ".sock" })
 	s.SetHostLookup(func(name string) (Placement, bool) {
@@ -22,8 +22,11 @@ func remoteSupervisor(t *testing.T) *Supervisor {
 		}
 		return Placement{}, false
 	})
+	s.remoteDirOf = func(context.Context, string, string) (string, error) { return remoteDirForTest, nil }
 	return s
 }
+
+const remoteDirForTest = "/tmp/herrscher-1000"
 
 func TestRemoteBridgeRunsOverSSHWithTheRemoteBinary(t *testing.T) {
 	s := remoteSupervisor(t)
@@ -47,20 +50,20 @@ func TestRemoteBridgeRunsOverSSHWithTheRemoteBinary(t *testing.T) {
 	if !strings.Contains(script, "'--env-stdin'") {
 		t.Fatalf("a remote bridge must be told to read its environment from stdin: %s", script)
 	}
-	if !strings.Contains(script, "'--hub-socket' '/tmp/herrscher-control-s1.sock'") {
+	if !strings.Contains(script, "'--hub-socket' '/tmp/herrscher-1000/herrscher-control-inst.s1.sock'") {
 		t.Fatalf("hub socket is not the remote path: %s", script)
 	}
-	if !strings.Contains(joined, "-R /tmp/herrscher-control-s1.sock:") {
+	if !strings.Contains(joined, "-R /tmp/herrscher-1000/herrscher-control-inst.s1.sock:") {
 		t.Fatalf("the control socket is not forwarded: %s", joined)
 	}
-	if !strings.Contains(joined, "-R /tmp/herrscher-command-s1.sock:/tmp/herrscher-command-inst-s-s1.sock") {
+	if !strings.Contains(joined, "-R /tmp/herrscher-1000/herrscher-command-inst.s1.sock:/tmp/herrscher-command-inst-s-s1.sock") {
 		t.Fatalf("the command socket is not forwarded: %s", joined)
 	}
 	if !strings.Contains(joined, "ExitOnForwardFailure=yes") {
 		t.Fatalf("a failed forward would not kill the launch: %s", joined)
 	}
-	if !strings.Contains(joined, "ControlPath=none") || !strings.Contains(joined, "ControlMaster=no") {
-		t.Fatalf("the launch multiplexes its connection: %s", joined)
+	if !strings.Contains(joined, "ControlMaster=auto") || strings.Contains(joined, "ControlPath=none") {
+		t.Fatalf("the launch does not reuse the multiplexed connection of its layout: %s", joined)
 	}
 	if cmd.Dir != "" {
 		t.Fatalf("Dir = %q, want empty", cmd.Dir)
@@ -109,7 +112,7 @@ func TestRemoteBridgeSendsItsEnvironmentOnStdin(t *testing.T) {
 	if !strings.Contains(block, "TMPDIR=/tmp\n") {
 		t.Fatalf("stdin block misses TMPDIR: %q", block)
 	}
-	if !strings.Contains(block, control.CommandSocketVar+"=/tmp/herrscher-command-s1.sock\n") {
+	if !strings.Contains(block, control.CommandSocketVar+"=/tmp/herrscher-1000/herrscher-command-inst.s1.sock\n") {
 		t.Fatalf("stdin block misses the command socket path: %q", block)
 	}
 	if !strings.Contains(block, control.SessionVar+"=s1\n") {
@@ -125,12 +128,12 @@ func TestTwoSessionsOnOneHostGetDistinctCommandSockets(t *testing.T) {
 			t.Fatal(err)
 		}
 		joined := strings.Join(cmd.Args, " ")
-		want := "-R " + control.RemoteCommandSocketPath(name) + ":/tmp/herrscher-command-inst-s-" + name + ".sock"
+		want := "-R " + control.RemoteCommandSocketPath(remoteDirForTest, "inst", name) + ":/tmp/herrscher-command-inst-s-" + name + ".sock"
 		if !strings.Contains(joined, want) {
 			t.Fatalf("session %s does not forward its own command socket back to this daemon: %s", name, joined)
 		}
 	}
-	if control.RemoteCommandSocketPath("s1") == control.RemoteCommandSocketPath("s2") {
+	if control.RemoteCommandSocketPath(remoteDirForTest, "inst", "s1") == control.RemoteCommandSocketPath(remoteDirForTest, "inst", "s2") {
 		t.Fatal("two sessions share one remote command socket path")
 	}
 }

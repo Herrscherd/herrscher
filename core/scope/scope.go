@@ -55,6 +55,25 @@ func ProjectFromDir(ctx context.Context, dir string) string {
 	return nameOf(filepath.Base(filepath.Clean(root)))
 }
 
+// RepoRoot is the top directory of the git worktree dir is in, or "" when dir
+// is in no repository.
+func RepoRoot(ctx context.Context, dir string) string {
+	if dir == "" {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return ""
+	}
+	top := strings.TrimSpace(string(out))
+	if top == "" {
+		return ""
+	}
+	return filepath.Clean(top)
+}
+
 // MatchProject picks, among the projects the vault already knows, the one a
 // prompt is about. It answers "" when the prompt names none of them, which means
 // "keep whatever the session launched with".

@@ -68,6 +68,7 @@ func TestOldDriverCannotUnregisterSameNameReplacement(t *testing.T) {
 }
 
 func TestSameNameSessionCanRebindAfterTeardown(t *testing.T) {
+	layout := isolatedRuntimeDir(t)
 	approvalTab := newApprovalTable()
 	sessionTab := newSessionTable()
 	name := "rebind-" + newTurnID()
@@ -81,15 +82,20 @@ func TestSameNameSessionCanRebindAfterTeardown(t *testing.T) {
 		approvalTab,
 		sessionTab,
 	)
+	h.runtime = layout
 	t.Cleanup(func() { h.goDead(name) })
 
-	h.goLive(t.Context(), state.Session{Name: name, Incarnation: "old-incarnation"})
+	if err := h.goLive(t.Context(), state.Session{Name: name, Incarnation: "old-incarnation"}); err != nil {
+		t.Fatal(err)
+	}
 	awaitRegisteredIncarnation(t, sessionTab, name, "old-incarnation")
 	h.goDead(name)
 
-	h.goLive(t.Context(), state.Session{Name: name, Incarnation: "new-incarnation"})
+	if err := h.goLive(t.Context(), state.Session{Name: name, Incarnation: "new-incarnation"}); err != nil {
+		t.Fatal(err)
+	}
 	awaitRegisteredIncarnation(t, sessionTab, name, "new-incarnation")
-	conn, err := control.Dial(control.SocketPath(name))
+	conn, err := control.Dial(control.SocketPath(layout, "", name))
 	if err != nil {
 		t.Fatalf("replacement control listener is not reachable: %v", err)
 	}
@@ -122,6 +128,7 @@ func registeredIncarnation(sessionTab *sessionTable, name string) string {
 }
 
 func TestSessionSocketOutlivesTheContextThatCreatedIt(t *testing.T) {
+	layout := isolatedRuntimeDir(t)
 	name := "outlive-" + newTurnID()
 	h := newHub(
 		state.NewState(filepath.Join(t.TempDir(), "state.json")),
@@ -133,15 +140,43 @@ func TestSessionSocketOutlivesTheContextThatCreatedIt(t *testing.T) {
 		newApprovalTable(),
 		newSessionTable(),
 	)
+	h.runtime = layout
 	t.Cleanup(func() { h.goDead(name) })
 
 	ctx, cancel := context.WithCancel(t.Context())
-	h.goLive(ctx, state.Session{Name: name, Incarnation: "incarnation"})
+	if err := h.goLive(ctx, state.Session{Name: name, Incarnation: "incarnation"}); err != nil {
+		t.Fatal(err)
+	}
 	cancel()
 	<-time.After(200 * time.Millisecond)
-	conn, err := control.Dial(control.SocketPath(name))
+	conn, err := control.Dial(control.SocketPath(layout, "", name))
 	if err != nil {
 		t.Fatalf("the session socket closed with the creating context: %v", err)
 	}
 	logCleanup(conn.Close())
+}
+
+func TestGoDeadWaitsForTheCommandSocketRelease(t *testing.T) {
+	done := make(chan struct{})
+	close(done)
+	released := make(chan struct{})
+	h := &hub{teardownGrace: 5 * time.Second, live: map[string]liveSession{
+		"rebind": {cancel: func() {}, done: done, released: released},
+	}}
+	returned := make(chan struct{})
+	go func() {
+		h.goDead("rebind")
+		close(returned)
+	}()
+	select {
+	case <-returned:
+		t.Fatal("goDead returned before the command socket was released, a rebind would find it still answering")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(released)
+	select {
+	case <-returned:
+	case <-time.After(5 * time.Second):
+		t.Fatal("goDead did not return once the command socket was released")
+	}
 }

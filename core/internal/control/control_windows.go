@@ -7,10 +7,14 @@ import (
 	"net"
 
 	"github.com/Microsoft/go-winio"
+
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
-func SocketPath(session string) string {
-	return `\\.\pipe\herrscher-control-` + SafeSessionName(session)
+// SocketPath returns the named pipe used to control the given session of the
+// daemon instanceID. Named pipes have no directory, so the layout is unused.
+func SocketPath(_ runtimedir.Layout, instanceID, session string) string {
+	return `\\.\pipe\herrscher-control-` + instancePrefix(instanceID) + SafeSessionName(session)
 }
 
 func listenControl(_ context.Context, path string) (net.Listener, error) {

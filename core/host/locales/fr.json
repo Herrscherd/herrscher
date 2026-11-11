@@ -290,9 +290,34 @@
     "other": "routage : {{.Detail}}"
   },
   {
+    "id": "session.launch_failed",
+    "description": "Le pont d'une session n'a pas pu être lancé sur cette machine, Name nomme la session et Detail donne la cause",
+    "other": "la session {{.Name}} n'a pas démarré : son pont n'a pas pu être lancé. {{.Detail}}"
+  },
+  {
+    "id": "session.prepare_failed",
+    "description": "L'hôte distant d'une session n'a pas pu être préparé pour son pont, Name nomme la session et Detail donne la cause",
+    "other": "la session {{.Name}} n'a pas démarré : son hôte distant n'a pas pu être préparé. {{.Detail}}"
+  },
+  {
+    "id": "session.go_live",
+    "description": "A session cannot go live, Name names the session and Detail carries the cause",
+    "other": "session \"{{.Name}}\" ne peut pas démarrer : {{.Detail}}"
+  },
+  {
     "id": "daemon.events_socket",
     "description": "The daemon events socket is unreachable, Path gives the path and Detail carries the cause",
     "other": "socket d'événements {{.Path}} : {{.Detail}}"
+  },
+  {
+    "id": "daemon.instance_locked",
+    "description": "The instance lock file or mutex is held by another live daemon, Path names it",
+    "other": "un autre démon détient déjà le verrou de cette instance : {{.Path}}"
+  },
+  {
+    "id": "daemon.socket_taken",
+    "description": "A daemon socket path already answers for another live daemon, Path gives the path and Detail carries the cause",
+    "other": "socket {{.Path}} : {{.Detail}}"
   },
   {
     "id": "daemon.attachments",
@@ -308,6 +333,31 @@
     "id": "lock.dir",
     "description": "The state lock directory is unreachable, Detail carries the cause",
     "other": "dossier du verrou d'état : {{.Detail}}"
+  },
+  {
+    "id": "lock.unsafe",
+    "description": "Le fichier de verrou est inutilisable, Path le nomme et Detail donne la cause",
+    "other": "fichier de verrou {{.Path}} inutilisable : {{.Detail}}"
+  },
+  {
+    "id": "runtime.unsafe_dir.symlink",
+    "description": "Le répertoire d'exécution privé est un lien symbolique, Path le nomme",
+    "other": "répertoire d'exécution privé {{.Path}} inutilisable : c'est un lien symbolique. Si vous avez créé ce lien, supprimez-le et herrscher recrée le répertoire. Sinon, seul son propriétaire ou root peut le supprimer."
+  },
+  {
+    "id": "runtime.unsafe_dir.foreign_owner",
+    "description": "Le répertoire d'exécution privé appartient à un autre utilisateur, Path le nomme",
+    "other": "répertoire d'exécution privé {{.Path}} inutilisable : un autre compte l'a créé, et seul ce compte ou root peut le supprimer. Demandez à un administrateur de le supprimer, ou lancez herrscher depuis une session utilisateur systemd, qui utilise /run/user à la place."
+  },
+  {
+    "id": "runtime.unsafe_dir.open_access",
+    "description": "Le répertoire d'exécution privé est accessible à son groupe ou à d'autres, Path le nomme",
+    "other": "répertoire d'exécution privé {{.Path}} inutilisable : il est accessible à son groupe ou à d'autres. Lancez chmod 700 {{.Path}} pour le rendre privé."
+  },
+  {
+    "id": "runtime.unsafe_dir",
+    "description": "Le répertoire d'exécution privé est inutilisable, Path le nomme et Detail donne la raison",
+    "other": "répertoire d'exécution privé {{.Path}} inutilisable : {{.Detail}}"
   },
   {
     "id": "lock.state",

@@ -13,16 +13,21 @@ import (
 
 // CommandSocketPath is the daemon-level operator command pipe.
 func CommandSocketPath(instanceID string) string {
+	return CommandSocketPathIn(RuntimeLayout{}, instanceID)
+}
+
+// CommandSocketPathIn is the operator command pipe; pipes have no directory, so
+// the layout is not used on this platform.
+func CommandSocketPathIn(_ RuntimeLayout, instanceID string) string {
 	if instanceID != "" {
 		return `\\.\pipe\herrscher-command-` + instanceID
 	}
 	return `\\.\pipe\herrscher-command`
 }
 
-// SessionCommandSocketPath is the command pipe one session's own processes
-// dial, distinct from the operator's. See the unix file for why identity comes
-// from which listener a connection arrives on rather than from a secret.
-func SessionCommandSocketPath(instanceID, session string) string {
+// SessionCommandSocketPathIn is the per-session command pipe; the layout is not
+// used on this platform.
+func SessionCommandSocketPathIn(_ RuntimeLayout, instanceID, session string) string {
 	name := `\\.\pipe\herrscher-command`
 	if instanceID != "" {
 		name += "-" + instanceID
@@ -33,18 +38,24 @@ func SessionCommandSocketPath(instanceID, session string) string {
 // EventsSocketPath is the daemon-level per-session events fan-out pipe: a sibling
 // of the command pipe (herrscher-command → herrscher-events).
 func EventsSocketPath(instanceID string) string {
+	return EventsSocketPathIn(RuntimeLayout{}, instanceID)
+}
+
+// EventsSocketPathIn is the per-session events pipe; the layout is not used on
+// this platform.
+func EventsSocketPathIn(_ RuntimeLayout, instanceID string) string {
 	if instanceID != "" {
 		return `\\.\pipe\herrscher-events-` + instanceID
 	}
 	return `\\.\pipe\herrscher-events`
 }
 
-func listenCommandSocket(_ context.Context, path string) (net.Listener, error) {
+func listenCommandSocket(_ context.Context, _ RuntimeLayout, path string) (net.Listener, error) {
 	return winio.ListenPipe(path, &winio.PipeConfig{
 		SecurityDescriptor: "D:P(A;;GA;;;OW)",
 	})
 }
 
-func dialCommandSocket(ctx context.Context, path string) (net.Conn, error) {
+func dialCommandSocket(ctx context.Context, _ RuntimeLayout, path string) (net.Conn, error) {
 	return winio.DialPipeContext(ctx, path)
 }

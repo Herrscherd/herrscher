@@ -15,8 +15,9 @@ func TestReconcileStopsTheBridgeOfARemovedSession(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
-	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
+	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
 	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab)
+	h.runtime = isolatedRuntimeDir(t)
 
 	sess := state.Session{Name: "orphan", ChannelID: "c1", Type: "text"}
 	if err := st.AddSession(sess); err != nil {
@@ -43,8 +44,9 @@ func TestReconcileStopsTheBridgeOfAnArchivedSession(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
-	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
+	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
 	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab)
+	h.runtime = isolatedRuntimeDir(t)
 
 	sess := state.Session{Name: "shelved", ChannelID: "c1", Type: "text"}
 	if err := st.AddSession(sess); err != nil {

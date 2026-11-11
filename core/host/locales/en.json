@@ -290,9 +290,34 @@
     "other": "route: {{.Detail}}"
   },
   {
+    "id": "session.launch_failed",
+    "description": "A session's bridge could not be started on this machine, Name names the session and Detail carries the cause",
+    "other": "session {{.Name}} did not start: its bridge could not be launched. {{.Detail}}"
+  },
+  {
+    "id": "session.prepare_failed",
+    "description": "A session's remote host could not be readied for its bridge, Name names the session and Detail carries the cause",
+    "other": "session {{.Name}} did not start: its remote host could not be prepared. {{.Detail}}"
+  },
+  {
+    "id": "session.go_live",
+    "description": "A session cannot go live, Name names the session and Detail carries the cause",
+    "other": "session \"{{.Name}}\" cannot go live: {{.Detail}}"
+  },
+  {
     "id": "daemon.events_socket",
     "description": "The daemon events socket is unreachable, Path gives the path and Detail carries the cause",
     "other": "events socket {{.Path}}: {{.Detail}}"
+  },
+  {
+    "id": "daemon.instance_locked",
+    "description": "The instance lock file or mutex is held by another live daemon, Path names it",
+    "other": "another daemon already holds the lock of this instance: {{.Path}}"
+  },
+  {
+    "id": "daemon.socket_taken",
+    "description": "A daemon socket path already answers for another live daemon, Path gives the path and Detail carries the cause",
+    "other": "socket {{.Path}}: {{.Detail}}"
   },
   {
     "id": "daemon.attachments",
@@ -308,6 +333,31 @@
     "id": "lock.dir",
     "description": "The state lock directory is unreachable, Detail carries the cause",
     "other": "state lock directory: {{.Detail}}"
+  },
+  {
+    "id": "lock.unsafe",
+    "description": "The lock file cannot be used, Path names it and Detail carries the cause",
+    "other": "lock file {{.Path}} cannot be used: {{.Detail}}"
+  },
+  {
+    "id": "runtime.unsafe_dir.symlink",
+    "description": "The private runtime directory is a symbolic link, Path names it",
+    "other": "private runtime directory {{.Path}} cannot be used: it is a symbolic link. If you created the link, remove it and herrscher recreates the directory. Otherwise only its owner or root can remove it."
+  },
+  {
+    "id": "runtime.unsafe_dir.foreign_owner",
+    "description": "The private runtime directory belongs to another user, Path names it",
+    "other": "private runtime directory {{.Path}} cannot be used: another account created it, and only that account or root can remove it. Ask an administrator to remove it, or run herrscher from a systemd user session, which uses /run/user instead."
+  },
+  {
+    "id": "runtime.unsafe_dir.open_access",
+    "description": "The private runtime directory is open to its group or others, Path names it",
+    "other": "private runtime directory {{.Path}} cannot be used: it is accessible to its group or others. Run chmod 700 {{.Path}} to make it private."
+  },
+  {
+    "id": "runtime.unsafe_dir",
+    "description": "The private runtime directory cannot be used, Path names it and Detail carries the reason",
+    "other": "private runtime directory {{.Path}} cannot be used: {{.Detail}}"
   },
   {
     "id": "lock.state",

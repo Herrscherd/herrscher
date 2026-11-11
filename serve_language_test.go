@@ -201,12 +201,12 @@ func TestRunServeReadsTheLanguageFromTheStateFileItIsGiven(t *testing.T) {
 		t.Fatal(err)
 	}
 	var served i18n.Language
-	capture := func(_ context.Context, _ []string, _ config.Config, langs language.Languages) error {
+	capture := func(_ context.Context, _ host.RuntimeLayout, _ []string, _ config.Config, langs language.Languages) error {
 		served = langs.Operator
 		return nil
 	}
 	args := []string{"-config", filepath.Join(t.TempDir(), "absent.json"), "-state", custom}
-	if err := runServe(context.Background(), args, capture); err != nil {
+	if err := runServe(context.Background(), testRuntime(t), args, capture); err != nil {
 		t.Fatal(err)
 	}
 	if served != i18n.French {

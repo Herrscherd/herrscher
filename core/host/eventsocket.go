@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"net"
-	"os"
 	"sync"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
 type wireEvent struct {
@@ -164,28 +165,29 @@ func (s *eventSocket) closeAll() {
 	s.mu.Unlock()
 }
 
-func serveEventsSocket(ctx context.Context, path string, socket *eventSocket) {
-	logCleanup(os.Remove(path))
-	listener, err := listenCommandSocket(ctx, path)
-	if err != nil {
-		warnStderr("events socket: listen %s: %v\n", path, err)
-		return
+func openEventsSocket(ctx context.Context, layout runtimedir.Layout, path string) (ownedListener, error) {
+	if err := claimSocketPath(ctx, layout, path); err != nil {
+		return ownedListener{}, err
 	}
-	go acceptEvents(ctx, listener, path, socket)
+	return listenOwned(ctx, layout, path)
 }
 
-func acceptEvents(ctx context.Context, listener net.Listener, path string, socket *eventSocket) {
+func acceptEvents(ctx context.Context, listener ownedListener, socket *eventSocket) <-chan struct{} {
+	released := make(chan struct{})
 	go func() {
 		<-ctx.Done()
-		logCleanup(listener.Close())
-		logCleanup(os.Remove(path))
+		listener.release()
 		socket.closeAll()
+		close(released)
 	}()
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			return
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			socket.add(conn)
 		}
-		socket.add(conn)
-	}
+	}()
+	return released
 }

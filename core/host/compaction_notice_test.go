@@ -253,12 +253,15 @@ func TestGoLiveUsesTheSessionLanguage(t *testing.T) {
 		newApprovalTable(),
 		sessions,
 	)
+	h.runtime = isolatedRuntimeDir(t)
 	h.lang = i18n.French
 	name := "lang-" + newTurnID()
 	t.Cleanup(func() { h.goDead(name) })
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	h.goLive(ctx, state.Session{Name: name, Incarnation: "incarnation", Language: "en"})
+	if err := h.goLive(ctx, state.Session{Name: name, Incarnation: "incarnation", Language: "en"}); err != nil {
+		t.Fatal(err)
+	}
 	awaitRegisteredIncarnation(t, sessions, name, "incarnation")
 	if got := sessions.lookup(name).lang; got != i18n.English {
 		t.Fatalf("driver language = %v, want the session language English over the operator French", got)

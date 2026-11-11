@@ -846,6 +846,18 @@
     "other": "/rename <nom> : donne le nouveau nom de la session"
   },
   {
+    "id": "tui.session.starting",
+    "other": "ouverture de la session…"
+  },
+  {
+    "id": "tui.session.start_failed",
+    "other": "session impossible à ouvrir : {{.Reason}}"
+  },
+  {
+    "id": "tui.chrome.start_hint",
+    "other": "écris un message pour ouvrir une session ici"
+  },
+  {
     "id": "tui.session.rename_none",
     "other": "aucune session à renommer ici"
   },

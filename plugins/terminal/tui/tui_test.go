@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"log/slog"
 	"strings"
 	"testing"
@@ -109,6 +110,9 @@ type fakeBackend struct {
 	picks           []pickedChoice
 	overview        string
 	overviewErr     error
+	startName       string
+	startChannel    string
+	startErr        error
 }
 
 type pickedChoice struct {
@@ -117,6 +121,14 @@ type pickedChoice struct {
 }
 
 func (f *fakeBackend) Overview() (string, error) { return f.overview, f.overviewErr }
+
+func (f *fakeBackend) StartSession() (string, error) {
+	if f.startErr != nil {
+		return "", f.startErr
+	}
+	f.sessions = append(f.sessions, contracts.SessionInfo{Name: f.startName, ChannelID: f.startChannel})
+	return f.startName, nil
+}
 
 type submittedTurn struct {
 	channel string
@@ -202,6 +214,58 @@ func TestPlainLineSubmits(t *testing.T) {
 	runCmd(m.handleEnter())
 	if len(f.dispatched) != 0 {
 		t.Fatalf("plain line must not dispatch: %+v", f.dispatched)
+	}
+}
+
+func TestFirstLineWithoutSessionStartsOneAndSubmitsIt(t *testing.T) {
+	f := &fakeBackend{startName: "herrscher", startChannel: "c1"}
+	m := newModel(f)
+	m.input.SetValue("hello")
+	started, ok := runCmd(m.handleEnter()).(sessionStartedMsg)
+	if !ok {
+		t.Fatal("enter with no session must start one")
+	}
+	m.handleSessionStarted(started)
+	if m.active != "c1" {
+		t.Fatalf("active tab = %q, want the started session c1", m.active)
+	}
+	if queued := m.tabs["c1"].queued; len(queued) != 1 || queued[0].text != "hello" {
+		t.Fatalf("queued = %+v, want hello on c1", queued)
+	}
+}
+
+func TestFailedSessionStartGivesTheLineBack(t *testing.T) {
+	f := &fakeBackend{startErr: errors.New("daemon down")}
+	m := newModel(f)
+	m.input.SetValue("hello")
+	started, ok := runCmd(m.handleEnter()).(sessionStartedMsg)
+	if !ok {
+		t.Fatal("enter with no session must start one")
+	}
+	runCmd(m.handleSessionStarted(started))
+	if got := m.input.Value(); got != "hello" {
+		t.Fatalf("composer = %q, want the line given back", got)
+	}
+	if !strings.Contains(m.flash, "daemon down") {
+		t.Fatalf("flash = %q, want the failure reason", m.flash)
+	}
+	if len(f.submitted) != 0 {
+		t.Fatalf("nothing may be submitted after a failed start: %+v", f.submitted)
+	}
+}
+
+func TestFailedSessionStartKeepsWhatWasTypedWhileOpening(t *testing.T) {
+	f := &fakeBackend{startErr: errors.New("daemon down")}
+	m := newModel(f)
+	m.input.SetValue("hello")
+	started, ok := runCmd(m.handleEnter()).(sessionStartedMsg)
+	if !ok {
+		t.Fatal("enter with no session must start one")
+	}
+	m.input.SetValue("second line typed while opening")
+	runCmd(m.handleSessionStarted(started))
+	if got, want := m.input.Value(), "hello\nsecond line typed while opening"; got != want {
+		t.Fatalf("composer after failed start = %q, want %q: the original line and the one typed meanwhile must both survive", got, want)
 	}
 }
 

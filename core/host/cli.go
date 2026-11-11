@@ -47,8 +47,8 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	}
 	models := options.modelDiscovery()
 	hdl := newManagerHandler(deps, options, partDir, hostState, sup, worktrees, updater, agents, models)
-	wireManagerHandler(ctx, hdl, hostState, instID, worktrees, sessions, models)
-	wireSupervisor(sup, hostState, instID)
+	wireManagerHandler(ctx, hdl, hostState, options.Runtime, instID, worktrees, sessions, models)
+	wireSupervisor(sup, options.Runtime, hostState, instID)
 	seedCoord := &coordinatorSlot{}
 	schedSlot := &schedulerSlot{}
 
@@ -62,10 +62,10 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addVerbs(reg, extra...); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addSessionVerbs(reg, options.live.Get, hostState, partDir, instID, approvals, sessions, seedCoord, models); err != nil {
+	if err := addSessionVerbs(reg, options.live.Get, hostState, options.Runtime, partDir, instID, approvals, sessions, seedCoord, models); err != nil {
 		return nil, hostDeps{}, err
 	}
-	handoff, err := sessionHandoffCmd(options.live.Get, hdl.Commands(), hostState, sessions, instID, seedCoord, hdl.PreflightAccount)
+	handoff, err := sessionHandoffCmd(options.live.Get, hdl.Commands(), hostState, sessions, options.Runtime, instID, seedCoord, hdl.PreflightAccount)
 	if err != nil {
 		return nil, hostDeps{}, err
 	}
@@ -84,7 +84,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addScheduleCommands(reg, options.live.Get, hostState, agents, schedSlot); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addHostCommands(reg, hostState); err != nil {
+	if err := addHostCommands(reg, hostState, options.Runtime); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addApproveCommands(reg, options.live.Get, hostState, agents, approvals, sessions); err != nil {
@@ -111,7 +111,7 @@ func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
 
 func newManagerHandler(deps Deps, options Options, partDir string, hostState *state.State, sup *supervisor.Supervisor, worktrees manager.Worktrees, updater serviceUpdater, agents *agent.Store, models *ModelDiscovery) *manager.Handler {
 	options = withOperatorLanguage(options)
-	launch := func(vendor, modelID string) (string, error) { return launchVendor(models, vendor, modelID) }
+	launch := func(vendor, modelID, cmd string) (string, error) { return launchVendor(models, vendor, modelID, cmd) }
 	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, validateProfileChoice, launch)
 	hdl.SetRemoteBackend(options.RemoteCategories[contracts.CategoryBackend])
 	hdl.SetLanguage(options.live.Get())
@@ -120,9 +120,9 @@ func newManagerHandler(deps Deps, options Options, partDir string, hostState *st
 	return hdl
 }
 
-func wireManagerHandler(ctx context.Context, hdl *manager.Handler, hostState *state.State, instID string, worktrees *worktree.Worktreer, sessions *sessionTable, models *ModelDiscovery) {
+func wireManagerHandler(ctx context.Context, hdl *manager.Handler, hostState *state.State, layout RuntimeLayout, instID string, worktrees *worktree.Worktreer, sessions *sessionTable, models *ModelDiscovery) {
 	hdl.SetSeeder(sessions.Seed)
-	hdl.SetHosts(newHostPlacer(hostState, instID, worktrees, func() string { return sourceVersionOf(ctx, hostState) }))
+	hdl.SetHosts(newHostPlacer(hostState, layout, instID, worktrees, func() string { return sourceVersionOf(ctx, hostState) }))
 	hdl.SetGatewayOnly(func() bool { return ResolvePolicy(envx.Getenv) == contracts.PolicyGatewayOnly })
 	hdl.SetDefaultModel(envx.Getenv(EnvDefaultModel))
 	hdl.SetVendorDefaultModel(func(vendor string) string { return envx.Getenv(VendorDefaultModelEnv(vendor)) })
@@ -132,9 +132,9 @@ func wireManagerHandler(ctx context.Context, hdl *manager.Handler, hostState *st
 	hdl.SetGateResolver(GateFor)
 }
 
-func launchVendor(models *ModelDiscovery, vendor, modelID string) (string, error) {
+func launchVendor(models *ModelDiscovery, vendor, modelID, cmd string) (string, error) {
 	plugins := contracts.Default.Backends()
-	chosen, _, err := chooseVendor(vendor, modelID, plugins, models)
+	chosen, _, err := chooseVendor(vendor, cmd, modelID, plugins, models)
 	if err != nil {
 		return "", err
 	}
@@ -159,9 +159,9 @@ func validateModelChoice(models *ModelDiscovery, vendor, modelID string) error {
 	return nil
 }
 
-func wireSupervisor(sup *supervisor.Supervisor, store *state.State, instID string) {
+func wireSupervisor(sup *supervisor.Supervisor, layout RuntimeLayout, store *state.State, instID string) {
 	sup.SetInstanceID(instID)
-	sup.SetCommandSocket(func(session string) string { return SessionCommandSocketPath(instID, session) })
+	sup.SetCommandSocket(func(session string) string { return SessionCommandSocketPathIn(layout, instID, session) })
 	sup.SetHostLookup(func(name string) (supervisor.Placement, bool) {
 		host, ok := store.FindHost(name)
 		if !ok {
@@ -202,7 +202,7 @@ func NewRegistry(ctx context.Context, gws []Deps, options Options) (*cli.Registr
 
 	self, execErr := os.Executable()
 	logCleanup(execErr)
-	sup := supervisor.NewSupervisor(ctx, self)
+	sup := supervisor.NewSupervisor(ctx, self, options.Runtime)
 	sup.SetStatePath(options.StatePath)
 	sup.SetBridgeEnv(append(GatewayEnvPairs(), AnnounceKeyEnvPairs()...))
 	if options.DefaultGateways == nil {
@@ -215,7 +215,7 @@ func NewRegistry(ctx context.Context, gws []Deps, options Options) (*cli.Registr
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)
 	}
-	forwardDaemonOwnedCommands(reg, instID, dispatchLiveCommand)
+	forwardDaemonOwnedCommands(reg, options.Runtime, instID, forwarderFor(options.Runtime))
 	return reg, nil
 }
 

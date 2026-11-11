@@ -37,7 +37,10 @@ func TestSidebarAppearsFromTheColumnThreshold(t *testing.T) {
 
 func sizedTestModelVisible(t *testing.T, width int) bool {
 	t.Helper()
-	return sizedTestModel(t, width).sidebarVisible()
+	m := sizedTestModel(t, width)
+	m.ensureTab("alfa")
+	m.active = "alfa"
+	return m.sidebarVisible()
 }
 
 func TestSidebarShowsItsSectionsWhenVisible(t *testing.T) {
@@ -180,5 +183,11 @@ func TestSidebarContextGaugeHasSixteenCellsWithoutBrackets(t *testing.T) {
 	}
 	if !strings.Contains(ansi.Strip(lines[2]), "compacts alone at 92%") {
 		t.Fatalf("the sidebar must say compaction happens at 92%%: %q", ansi.Strip(lines[2]))
+	}
+}
+
+func TestSidebarStaysHiddenWithoutASession(t *testing.T) {
+	if sizedTestModel(t, sidebarAutoWidth+20).sidebarVisible() {
+		t.Fatal("the sidebar must stay hidden while no session is open")
 	}
 }

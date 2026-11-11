@@ -34,11 +34,11 @@ func namedSessionLanguage(st *state.State, name string, operator i18n.Language) 
 	return sessionLanguage(sess, i18n.Resolve(operator))
 }
 
-func addSessionVerbs(reg *cli.Registry, lang languageSource, store *state.State, partDir, instID string, approvals *approvalTable, sessions *sessionTable, seedCoord *coordinatorSlot, models *ModelDiscovery) error {
+func addSessionVerbs(reg *cli.Registry, lang languageSource, store *state.State, layout RuntimeLayout, partDir, instID string, approvals *approvalTable, sessions *sessionTable, seedCoord *coordinatorSlot, models *ModelDiscovery) error {
 	seen := newSeenTable(time.Now())
 	return addVerbs(
 		reg,
-		seedVerb(store, instID, seedCoord),
+		seedVerb(store, layout, instID, seedCoord),
 		sessionSendVerb(sessions),
 		sessionPickVerb(lang, approvals, sessions),
 		sessionInfoVerb(store, partDir, sessions, models),
@@ -68,7 +68,7 @@ func addCheckpointCommands(reg *cli.Registry, lang languageSource, store *state.
 	return addVerbs(reg, addCheckpointVerbs(lang, store, sessions)...)
 }
 
-func seedVerb(store *state.State, instID string, seedCoord *coordinatorSlot) contracts.Cmd {
+func seedVerb(store *state.State, layout RuntimeLayout, instID string, seedCoord *coordinatorSlot) contracts.Cmd {
 	return contracts.New(nsSession, verbSeed).
 		Help(clitext.CmdHelpSessionSeed).
 		Param(paramName, clitext.CmdParamSessionSeedName, true).
@@ -76,11 +76,11 @@ func seedVerb(store *state.State, instID string, seedCoord *coordinatorSlot) con
 		ValueParam("turn_id", clitext.CmdParamSessionSeedTurnID, false).
 		ValueParam("timeout", clitext.CmdParamSessionSeedTimeout, false).
 		Do(func(cmdCtx context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(runSeedVerb(cmdCtx, in, store, instID, seedCoord.coord))
+			return cli.Data(runSeedVerb(cmdCtx, in, store, layout, instID, seedCoord.coord))
 		})
 }
 
-func runSeedVerb(ctx context.Context, input contracts.Input, store *state.State, instID string, coord contracts.Coordinator) (string, error) {
+func runSeedVerb(ctx context.Context, input contracts.Input, store *state.State, layout RuntimeLayout, instID string, coord contracts.Coordinator) (string, error) {
 	rawTurnID, supplied := input.Lookup("turn_id")
 	turnID, err := resolveTurnID(rawTurnID, supplied)
 	if err != nil {
@@ -95,7 +95,7 @@ func runSeedVerb(ctx context.Context, input contracts.Input, store *state.State,
 	reply, err := runOneShotSeedCommand(
 		ctx, store, input.Get(paramName), input.Get("task"),
 		turnID, runtime,
-		coord, instID, dispatchLiveCommand,
+		coord, layout, instID, forwarderFor(layout),
 	)
 	if err != nil {
 		return "", err

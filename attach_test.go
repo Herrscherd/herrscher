@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -22,7 +24,7 @@ func TestSubmittingFromAnUnboundTabNoticesInFrench(t *testing.T) {
 	d := startFakeDaemon(t, func([]string) (string, error) { return "", nil })
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, i18n.French)
+	a, err := newAttachedDaemon(ctx, d.layout, d.instance, tempStatePath(t), i18n.French)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,6 +61,7 @@ func TestAttachedRefusalIsRenderedInFrench(t *testing.T) {
 }
 
 type fakeDaemon struct {
+	layout         host.RuntimeLayout
 	instance       string
 	events         net.Conn
 	acceptedEvents chan net.Conn
@@ -68,10 +71,10 @@ type fakeDaemon struct {
 
 func startFakeDaemon(t *testing.T, reply func(argv []string) (string, error)) *fakeDaemon {
 	t.Helper()
-	t.Setenv("TMPDIR", t.TempDir())
-	d := &fakeDaemon{instance: "test", argv: make(chan []string, 16), reply: reply}
+	layout := testRuntime(t)
+	d := &fakeDaemon{instance: "test", layout: layout, argv: make(chan []string, 16), reply: reply}
 
-	cmdLn, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", host.CommandSocketPath(d.instance))
+	cmdLn, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", host.CommandSocketPathIn(layout, d.instance))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +89,7 @@ func startFakeDaemon(t *testing.T, reply func(argv []string) (string, error)) *f
 		}
 	}()
 
-	evLn, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", host.EventsSocketPath(d.instance))
+	evLn, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", host.EventsSocketPathIn(layout, d.instance))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +169,7 @@ func TestAttachedFrontendRoutesAnEventToItsTab(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, testLang())
+	a, err := newAttachedDaemon(ctx, d.layout, d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +197,7 @@ func TestAttachedFrontendSendsTypedLinesToTheRightSession(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, testLang())
+	a, err := newAttachedDaemon(ctx, d.layout, d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +219,7 @@ func TestAttachedFrontendRefusesVerbsTheTerminalDoesNotOwn(t *testing.T) {
 	d := startFakeDaemon(t, func([]string) (string, error) { return "", nil })
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, testLang())
+	a, err := newAttachedDaemon(ctx, d.layout, d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +237,7 @@ func TestAttachedFrontendReachesTheHealthAndUsageOverlays(t *testing.T) {
 	d := startFakeDaemon(t, func([]string) (string, error) { return "{}", nil })
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, testLang())
+	a, err := newAttachedDaemon(ctx, d.layout, d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,8 +261,7 @@ func TestAttachedFrontendBindsANewSessionToTheTerminal(t *testing.T) {
 }
 
 func TestAttachingWithoutADaemonFails(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
-	if _, err := newAttachedDaemon(context.Background(), "nobody", testLang()); err == nil {
+	if _, err := newAttachedDaemon(context.Background(), testRuntime(t), "nobody", tempStatePath(t), testLang()); err == nil {
 		t.Fatal("expected an error with no daemon listening")
 	}
 }
@@ -277,7 +279,7 @@ func TestScrollbackComesBackFromTheDaemon(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.instance, testLang())
+	a, err := newAttachedDaemon(ctx, d.layout, d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,14 +290,47 @@ func TestScrollbackComesBackFromTheDaemon(t *testing.T) {
 }
 
 func TestSocketPathsAreInstanceScoped(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
-	if host.CommandSocketPath("a") == host.CommandSocketPath("b") {
+	layout := testRuntime(t)
+	if host.CommandSocketPathIn(layout, "a") == host.CommandSocketPathIn(layout, "b") {
 		t.Fatal("two instances share a command socket")
 	}
-	if filepath.Dir(host.CommandSocketPath("a")) != filepath.Dir(host.EventsSocketPath("a")) {
+	if filepath.Dir(host.CommandSocketPathIn(layout, "a")) != filepath.Dir(host.EventsSocketPathIn(layout, "a")) {
 		t.Fatal("the two sockets of one instance are not siblings")
 	}
-	if _, err := os.Stat(filepath.Dir(host.EventsSocketPath(""))); err != nil {
+}
+
+func tempStatePath(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(t.TempDir(), "state.json")
+}
+
+func TestAttachedLaunchPlacesTheSessionInTheRepositoryOfTheServedState(t *testing.T) {
+	workspace := t.TempDir()
+	repo := filepath.Join(workspace, "herrscher")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if out, err := exec.CommandContext(context.Background(), "git", "init", "-q", repo).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+	statePath := tempStatePath(t)
+	if err := os.WriteFile(statePath, []byte(`{"workspace":`+strconv.Quote(workspace)+`}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("STATE_DIR", t.TempDir())
+	t.Chdir(repo)
+
+	argv := attachedLaunch(context.Background(), statePath, "work")
+	if !containsPair(argv, "--project", "herrscher") {
+		t.Fatalf("attachedLaunch = %v, want --project herrscher from the attached state", argv)
+	}
+}
+
+func containsPair(argv []string, flag, value string) bool {
+	for idx := 0; idx+1 < len(argv); idx++ {
+		if argv[idx] == flag && argv[idx+1] == value {
+			return true
+		}
+	}
+	return false
 }

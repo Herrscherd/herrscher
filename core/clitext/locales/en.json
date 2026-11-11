@@ -370,6 +370,11 @@
     "other": "herrscher: gateway unavailable: {{.Failure}}"
   },
   {
+    "id": "cli.serve.hub_stopped",
+    "description": "Error when the in-process hub stops while the terminal window is open",
+    "other": "the hub stopped, so the window closed: {{.Err}}"
+  },
+  {
     "id": "cli.serve.gateway_commands",
     "description": "Error when the commands of the gateways cannot be bound",
     "other": "gateway commands: {{.Err}}"
@@ -462,7 +467,7 @@
   {
     "id": "cli.bridge.flag.vendor",
     "description": "Help of the --vendor flag of bridge",
-    "other": "backend vendor: claude | codex | cursor (empty = first registered / HERRSCHER_BACKEND)"
+    "other": "backend vendor: claude | codex | cursor (empty = the vendor of the cmd binary, then HERRSCHER_BACKEND; with a model, HERRSCHER_BACKEND, then the model's vendor)"
   },
   {
     "id": "cli.bridge.flag.resume",
@@ -3338,6 +3343,16 @@
     "other": "model cache is held by another writer"
   },
   {
+    "id": "cli.host.fault.lock_symlink",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (lock file symlink)",
+    "other": "the lock file is a symbolic link"
+  },
+  {
+    "id": "cli.host.fault.lock_not_owned",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (lock file not owned)",
+    "other": "the lock file is not owned by this user"
+  },
+  {
     "id": "cli.host.fault.no_pending_choice",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (no pending choice)",
     "other": "has no pending choice"
@@ -3381,6 +3396,21 @@
     "id": "cli.host.fault.shell_refused",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (shell refused)",
     "other": "command refused"
+  },
+  {
+    "id": "cli.host.fault.no_runtime_dir",
+    "description": "Le démon a démarré sans répertoire d'exécution pour ses sockets et son verrou",
+    "other": "the daemon was started without a runtime directory"
+  },
+  {
+    "id": "cli.host.fault.instance_locked",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (instance lock held by another daemon)",
+    "other": "another daemon already holds the lock of this instance: stop it or pass --instance"
+  },
+  {
+    "id": "cli.host.fault.socket_taken",
+    "description": "Another live daemon already answers on this socket, usually the same instance serving another state file",
+    "other": "another daemon already answers on this socket (same instance, another state file): stop it or pass --instance"
   },
   {
     "id": "cli.host.fault.empty_shell_command",

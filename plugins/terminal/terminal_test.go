@@ -162,6 +162,27 @@ func TestNotifyRendersTheNoticeInTheLanguage(t *testing.T) {
 	}
 }
 
+func TestSendAndStatusLinesReachTheTabAsNotices(t *testing.T) {
+	tm := New()
+	got := make(chan tui.RoutedEvent, 2)
+	go func() {
+		got <- <-tm.Frontend()
+		got <- <-tm.Frontend()
+	}()
+	if err := tm.Send(context.Background(), "c1", "sent"); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if _, err := tm.UpsertStatusMessage(context.Background(), "c1", "", "status"); err != nil {
+		t.Fatalf("UpsertStatusMessage: %v", err)
+	}
+	for _, want := range []string{"sent", "status"} {
+		re := <-got
+		if re.Event.T != eventNotice || re.Event.Text != want || re.Conv.ID != "c1" {
+			t.Fatalf("emitted %+v, want a notice %q on c1", re.Event, want)
+		}
+	}
+}
+
 func TestTerminalImplementsChannelAdmin(_ *testing.T) {
 	var _ contracts.ChannelAdmin = New()
 }
@@ -451,18 +472,18 @@ func TestDefaultSessionNameIsTheWorkingDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := slug(filepath.Base(wd))
-	if got := defaultSessionName(nil); got != dir {
-		t.Fatalf("defaultSessionName = %q, want the directory %q", got, dir)
+	if got := DefaultSessionName(nil); got != dir {
+		t.Fatalf("DefaultSessionName = %q, want the directory %q", got, dir)
 	}
 	taken := []contracts.SessionInfo{{Name: dir, Gateways: []string{"discord"}}}
-	if got := defaultSessionName(taken); got != dir+"-2" {
-		t.Fatalf("defaultSessionName = %q, want the numbered %q", got, dir+"-2")
+	if got := DefaultSessionName(taken); got != dir+"-2" {
+		t.Fatalf("DefaultSessionName = %q, want the numbered %q", got, dir+"-2")
 	}
 	taken = append(taken, contracts.SessionInfo{Name: dir + "-2"})
-	if got := defaultSessionName(taken); got != dir+"-3" {
-		t.Fatalf("defaultSessionName = %q, want the numbered %q", got, dir+"-3")
+	if got := DefaultSessionName(taken); got != dir+"-3" {
+		t.Fatalf("DefaultSessionName = %q, want the numbered %q", got, dir+"-3")
 	}
-	for _, name := range []string{defaultSessionName(taken), randomSessionName()} {
+	for _, name := range []string{DefaultSessionName(taken), randomSessionName()} {
 		if !terminalSessionNameRe.MatchString(name) {
 			t.Fatalf("minted name %q is not a valid session slug", name)
 		}

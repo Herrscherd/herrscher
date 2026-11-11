@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
 type fakeDispatcher struct {
@@ -53,7 +55,7 @@ func TestCommandSocketDispatchesOk(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	disp := &fakeDispatcher{out: `[{"name":"lead1"}]`}
-	serveCommandSocket(ctx, path, disp)
+	serveCommandSocket(ctx, isolatedRuntimeDir(t), path, disp)
 
 	resp := sendCommand(t, path, cmdRequest{Argv: []string{"session", "list", "--json"}})
 	if resp.Ok == nil || *resp.Ok != disp.out {
@@ -72,7 +74,7 @@ func TestCommandSocketReportsDispatchError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	disp := &fakeDispatcher{err: stringError("boom")}
-	serveCommandSocket(ctx, path, disp)
+	serveCommandSocket(ctx, isolatedRuntimeDir(t), path, disp)
 
 	resp := sendCommand(t, path, cmdRequest{Argv: []string{"session", "list"}})
 	if resp.Ok != nil {
@@ -88,7 +90,7 @@ func TestCommandSocketRejectsMalformed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	disp := &fakeDispatcher{out: "unused"}
-	serveCommandSocket(ctx, path, disp)
+	serveCommandSocket(ctx, isolatedRuntimeDir(t), path, disp)
 
 	c, err := (&net.Dialer{}).DialContext(t.Context(), "unix", path)
 	if err != nil {
@@ -116,7 +118,7 @@ func TestCommandSocketRestrictedToOwner(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cmd.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	serveCommandSocket(ctx, path, &fakeDispatcher{out: "unused"})
+	serveCommandSocket(ctx, isolatedRuntimeDir(t), path, &fakeDispatcher{out: "unused"})
 
 	info, err := os.Stat(path)
 	if err != nil {
@@ -131,7 +133,9 @@ func TestCommandSocketClosesSilentConnection(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cmd.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	serveCommandSocketWithTimeout(ctx, path, &fakeDispatcher{out: "unused"}, 50*time.Millisecond)
+	if err := serveCommandSocketWithTimeout(ctx, isolatedRuntimeDir(t), path, &fakeDispatcher{out: "unused"}, 50*time.Millisecond); err != nil {
+		t.Fatalf("serve: %v", err)
+	}
 
 	c, err := (&net.Dialer{}).DialContext(t.Context(), "unix", path)
 	if err != nil {
@@ -150,18 +154,19 @@ type stringError string
 func (e stringError) Error() string { return string(e) }
 
 func TestEachSessionGetsItsOwnCommandSocket(t *testing.T) {
-	a := SessionCommandSocketPath("inst", "revue")
-	b := SessionCommandSocketPath("inst", "release")
+	layout := testRuntime(t)
+	a := SessionCommandSocketPathIn(layout, "inst", "revue")
+	b := SessionCommandSocketPathIn(layout, "inst", "release")
 	if a == b {
 		t.Fatalf("two sessions share %q", a)
 	}
-	if a == CommandSocketPath("inst") || b == CommandSocketPath("inst") {
+	if a == CommandSocketPathIn(layout, "inst") || b == CommandSocketPathIn(layout, "inst") {
 		t.Fatal("a session socket must not be the operator socket")
 	}
 }
 
 func TestASessionSocketPathFoldsUnsafeNames(t *testing.T) {
-	got := SessionCommandSocketPath("", "../../etc/passwd")
+	got := SessionCommandSocketPathIn(testRuntime(t), "", "../../etc/passwd")
 	if strings.ContainsAny(filepath.Base(got), "/\\") {
 		t.Fatalf("path %q keeps a separator from the session name", got)
 	}
@@ -171,10 +176,14 @@ func TestASessionSocketPathFoldsUnsafeNames(t *testing.T) {
 }
 
 func TestALongSessionNameStillGetsASocketThatBinds(t *testing.T) {
+	layout := testRuntime(t)
 	long := strings.Repeat("b", 64)
-	p := SessionCommandSocketPath(strings.Repeat("a", 16), long)
-	if len(p) > maxUnixSocketPath {
-		t.Fatalf("path is %d bytes, over the %d sun_path holds: %q", len(p), maxUnixSocketPath, p)
+	p := SessionCommandSocketPathIn(layout, strings.Repeat("a", 16), long)
+	if len(p) > runtimedir.MaxUnixSocketPath {
+		t.Fatalf("path is %d bytes, over the %d sun_path holds: %q", len(p), runtimedir.MaxUnixSocketPath, p)
+	}
+	if err := ensureRuntimeDir(layout, p); err != nil {
+		t.Fatalf("private runtime dir for %q: %v", p, err)
 	}
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", p)
 	if err != nil {
@@ -182,17 +191,18 @@ func TestALongSessionNameStillGetsASocketThatBinds(t *testing.T) {
 	}
 	logCleanup(ln.Close())
 	logCleanup(os.Remove(p))
-	other := SessionCommandSocketPath(strings.Repeat("a", 16), long[:63]+"c")
+	other := SessionCommandSocketPathIn(layout, strings.Repeat("a", 16), long[:63]+"c")
 	if p == other {
 		t.Fatalf("two long names share %q", p)
 	}
-	if again := SessionCommandSocketPath(strings.Repeat("a", 16), long); again != p {
+	if again := SessionCommandSocketPathIn(layout, strings.Repeat("a", 16), long); again != p {
 		t.Fatalf("not stable: %q then %q", p, again)
 	}
 }
 
 func TestSessionSocketsOfTwoInstancesDoNotCollide(t *testing.T) {
-	if SessionCommandSocketPath("a", "revue") == SessionCommandSocketPath("b", "revue") {
+	layout := testRuntime(t)
+	if SessionCommandSocketPathIn(layout, "a", "revue") == SessionCommandSocketPathIn(layout, "b", "revue") {
 		t.Fatal("two daemons on one machine must not share a session socket")
 	}
 }
@@ -201,7 +211,7 @@ func TestASessionSocketIsNotWorldReachable(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "s.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	serveCommandSocket(ctx, sock, dispatcherFunc(func(context.Context, []string) (string, error) {
+	serveCommandSocket(ctx, isolatedRuntimeDir(t), sock, dispatcherFunc(func(context.Context, []string) (string, error) {
 		return "", nil
 	}))
 	fi, err := os.Stat(sock)

@@ -23,11 +23,12 @@ func TestEventTapAddressesTheSession(t *testing.T) {
 }
 
 func TestDrivenSessionTapsTheEventSocket(t *testing.T) {
+	layout := isolatedRuntimeDir(t)
 	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	const name = "driventap-test"
-	sock := control.SocketPath(name)
+	sock := control.SocketPath(layout, "", name)
 	acc, err := control.Accept(ctx, sock)
 	if err != nil {
 		t.Fatalf("accept: %v", err)

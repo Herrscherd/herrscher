@@ -165,3 +165,21 @@ func stale() { _, _ = runtimedir.At("/tmp/herrscher-1000") }
 `)}
 	expectViolations(t, arbitraryLayoutViolations(files), 0)
 }
+
+func TestRegressionQualifiedRuntimeAtInAnotherPackageIsFlagged(t *testing.T) {
+	files := []sourceFile{fixture(t, "core/outbox/stale.go", `package outbox
+
+import "github.com/Herrscherd/herrscher/core/host"
+
+func stale() { _, _ = host.RuntimeAt("/tmp/herrscher-1000") }
+`)}
+	expectViolations(t, arbitraryLayoutViolations(files), 1)
+}
+
+func TestRegressionUnqualifiedRuntimeAtInHostIsFlagged(t *testing.T) {
+	files := []sourceFile{fixture(t, "core/host/stale.go", `package host
+
+func stale() { _, _ = RuntimeAt("/tmp/herrscher-1000") }
+`)}
+	expectViolations(t, arbitraryLayoutViolations(files), 1)
+}

@@ -344,7 +344,7 @@ func awaitHubStop(ctx context.Context, runningHub *hub, liveStopped, sockets <-c
 	<-ctx.Done()
 	<-liveStopped
 	<-sockets
-	if err := runningHub.removeSockets(); err != nil {
+	if err := runningHub.closeAndRemoveSockets(); err != nil {
 		log.Warn("socket files of this instance not removed", "err", err)
 	}
 	return ctx.Err()
@@ -434,6 +434,9 @@ func goLiveSessions(ctx context.Context, runningHub *hub, sup *supervisor.Superv
 			continue
 		}
 		if err := runningHub.goLive(ctx, sess); err != nil {
+			if errors.Is(err, errHubClosed) {
+				break
+			}
 			warnLive(runningHub.warnings, runningHub.sessionLanguageSource(sess.Name), "warn.session_start", map[string]any{nameParam: sess.Name, detailParam: err})
 			continue
 		}

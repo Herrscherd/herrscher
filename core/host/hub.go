@@ -279,7 +279,7 @@ func (h *hub) noteListened(session string) {
 	h.listenedSessions[session] = struct{}{}
 }
 
-func (h *hub) removeSockets() error {
+func (h *hub) closeAndRemoveSockets() error {
 	h.lifecycle.Lock()
 	h.closed = true
 	h.mu.Lock()

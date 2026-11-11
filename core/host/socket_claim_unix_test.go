@@ -200,8 +200,8 @@ func TestRemoveSocketsRemovesOnlyTheSocketsOfThisInstance(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := h.removeSockets(); err != nil {
-		t.Fatalf("removeSockets: %v", err)
+	if err := h.closeAndRemoveSockets(); err != nil {
+		t.Fatalf("closeAndRemoveSockets: %v", err)
 	}
 	for _, path := range owned {
 		assertAbsent(t, path)
@@ -226,8 +226,8 @@ func TestInstanceStopRemovesItsOwnSocketFiles(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("serveHubSockets did not report its sockets released after shutdown")
 	}
-	if err := h.removeSockets(); err != nil {
-		t.Fatalf("removeSockets at instance stop: %v", err)
+	if err := h.closeAndRemoveSockets(); err != nil {
+		t.Fatalf("closeAndRemoveSockets at instance stop: %v", err)
 	}
 	for _, path := range []string{CommandSocketPathIn(layout, "t15"), EventsSocketPathIn(layout, "t15")} {
 		assertAbsent(t, path)
@@ -263,8 +263,8 @@ func TestGoLiveAfterStopLiveOpensNothing(t *testing.T) {
 	}
 	assertAbsent(t, control.SocketPath(layout, "t16", "alpha"))
 	assertAbsent(t, SessionCommandSocketPathIn(layout, "t16", "alpha"))
-	if err := h.removeSockets(); err != nil {
-		t.Fatalf("removeSockets: %v", err)
+	if err := h.closeAndRemoveSockets(); err != nil {
+		t.Fatalf("closeAndRemoveSockets: %v", err)
 	}
 	assertAbsent(t, control.SocketPath(layout, "t16", "alpha"))
 	assertAbsent(t, SessionCommandSocketPathIn(layout, "t16", "alpha"))
@@ -273,12 +273,12 @@ func TestGoLiveAfterStopLiveOpensNothing(t *testing.T) {
 func TestGoLiveAfterRemoveSocketsOpensNothing(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
 	h := &hub{runtime: layout, instanceID: "t17", warnings: io.Discard, live: make(map[string]liveSession)}
-	if err := h.removeSockets(); err != nil {
-		t.Fatalf("removeSockets: %v", err)
+	if err := h.closeAndRemoveSockets(); err != nil {
+		t.Fatalf("closeAndRemoveSockets: %v", err)
 	}
 	err := h.goLive(context.Background(), state.Session{Name: "alpha"})
 	if !errors.Is(err, errHubClosed) {
-		t.Fatalf("goLive after removeSockets = %v, want errHubClosed", err)
+		t.Fatalf("goLive after closeAndRemoveSockets = %v, want errHubClosed", err)
 	}
 	assertAbsent(t, control.SocketPath(layout, "t17", "alpha"))
 }

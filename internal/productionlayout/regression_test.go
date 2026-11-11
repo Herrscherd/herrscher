@@ -271,3 +271,23 @@ var build = RuntimeAt
 `)}
 	expectViolations(t, arbitraryLayoutViolations(files), 0)
 }
+
+func TestRegressionDotImportedHostRuntimeAtIsFlagged(t *testing.T) {
+	files := []sourceFile{fixture(t, "core/outbox/dothost.go", `package outbox
+
+import . "github.com/Herrscherd/herrscher/core/host"
+
+func dothost() { _, _ = RuntimeAt("/tmp/x") }
+`)}
+	expectViolations(t, arbitraryLayoutViolations(files), 1)
+}
+
+func TestRegressionUncalledDotImportedHostRuntimeAtIsFlagged(t *testing.T) {
+	files := []sourceFile{fixture(t, "core/outbox/dotbuild.go", `package outbox
+
+import . "github.com/Herrscherd/herrscher/core/host"
+
+var build = RuntimeAt
+`)}
+	expectViolations(t, arbitraryLayoutViolations(files), 1)
+}

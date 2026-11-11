@@ -127,6 +127,7 @@ type layoutImports struct {
 	runtimedir    map[string]bool
 	host          map[string]bool
 	dotRuntimedir bool
+	dotHost       bool
 }
 
 func layoutImportsOf(tree *ast.File) layoutImports {
@@ -144,6 +145,10 @@ func layoutImportsOf(tree *ast.File) layoutImports {
 			}
 			imports.runtimedir[importQualifier(spec, runtimedirName)] = true
 		case hostImport:
+			if spec.Name != nil && spec.Name.Name == "." {
+				imports.dotHost = true
+				continue
+			}
 			imports.host[importQualifier(spec, hostName)] = true
 		}
 	}
@@ -173,7 +178,7 @@ func (imports layoutImports) namesArbitraryLayout(sel *ast.SelectorExpr) bool {
 
 func (imports layoutImports) bareArbitraryLayout(name string, inHost bool) bool {
 	if name == hostRuntimeAt {
-		return inHost
+		return inHost || imports.dotHost
 	}
 	return name == runtimedirAt && imports.dotRuntimedir
 }

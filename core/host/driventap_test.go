@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"testing"
 	"time"
 
@@ -38,7 +39,7 @@ func TestDrivenSessionTapsTheEventSocket(t *testing.T) {
 	got := make(chan contracts.Event, 8)
 	go runSessionIdentified(ctx, sessionTab, name, "", []contracts.GatewaySet{{Gateway: gw, Reader: gw}}, acc, "", nil, nil, sessionSink{},
 		eventTap(func(_ string, e contracts.Event) { got <- e }, name),
-		sessionIdentity{}, nil)
+		sessionIdentity{}, nil, io.Discard)
 
 	c := dialCtl(t, sock)
 	defer closeRead(c)

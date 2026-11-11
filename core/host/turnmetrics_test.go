@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -12,7 +13,7 @@ func TestTurnMetricsCountStartCompleteAbandon(t *testing.T) {
 	a := &fanRecorder{}
 	toBridge := make(chan contracts.Event, 4)
 	fromBridge := make(chan contracts.Event, 4)
-	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 	m := metrics.NewRegistry()
 	d.metrics = m
 

@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"testing"
 	"time"
 
@@ -39,7 +40,7 @@ func TestEstimateTurnCostBlocksOnUnknownPrice(t *testing.T) {
 
 func TestCompleteTurnStoresEstimatedCostInTranscript(t *testing.T) {
 	var entries []state.TranscriptEntry
-	d := newSessionDriver("s1", nil, nil, nil)
+	d := newSessionDriver("s1", nil, nil, nil, io.Discard)
 	d.sink = sessionSink{Transcript: func(e state.TranscriptEntry) { entries = append(entries, e) }}
 	d.terms = func() modelTerms { return modelTerms{rates: sonnetRates()} }
 	event := contracts.Event{T: "reply", Text: "hello", Done: true, TokensIn: 1000, Tokens: 500}

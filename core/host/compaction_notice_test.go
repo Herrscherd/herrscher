@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -255,7 +256,7 @@ func TestGoLiveUsesTheSessionLanguage(t *testing.T) {
 		t.TempDir(),
 		nil,
 		nil,
-		newApprovalTable(),
+		newApprovalTable(io.Discard),
 		sessions,
 	)
 	h.runtime = isolatedRuntimeDir(t)
@@ -315,7 +316,7 @@ func TestNoticeIsDeliveredWhenTheParentContextIsCancelledDuringANotify(t *testin
 	gateway := newNoticeGateway()
 	gateway.entered = make(chan struct{}, 1)
 	gateway.release = make(chan struct{})
-	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: gateway}}, nil, nil)
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: gateway}}, nil, nil, io.Discard)
 	parent, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go d.deliverNotices(parent)
@@ -334,7 +335,7 @@ func TestNoticeIsDeliveredWhenTheParentContextIsCancelledDuringANotify(t *testin
 
 func TestNoticesReachTheGatewayInTheOrderTheyWereRaised(t *testing.T) {
 	gateway := newNoticeGateway()
-	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: gateway}}, nil, nil)
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: gateway}}, nil, nil, io.Discard)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go d.deliverNotices(ctx)

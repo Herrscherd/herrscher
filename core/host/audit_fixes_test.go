@@ -2,6 +2,7 @@ package host
 
 import (
 	"encoding/hex"
+	"io"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -11,7 +12,7 @@ import (
 )
 
 func TestAnswerApprovalPickIsSessionScoped(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	cases := []struct {
 		name     string
 		owner    string
@@ -77,7 +78,7 @@ func TestDriverEnqueueIsBounded(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			d := newSessionDriver("full", nil, make(chan contracts.Event, 1), make(chan contracts.Event))
+			d := newSessionDriver("full", nil, make(chan contracts.Event, 1), make(chan contracts.Event), io.Discard)
 			d.enqueueTimeout = 50 * time.Millisecond
 			for len(d.queue) < cap(d.queue) {
 				d.queue <- queued{ev: contracts.Event{T: "input"}}
@@ -99,7 +100,7 @@ func TestDriverEnqueueIsBounded(t *testing.T) {
 func TestGoDeadDoesNotHoldTheHubLockWhileWaiting(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		stuck := make(chan struct{})
-		h := &hub{live: make(map[string]liveSession), teardownGrace: 100 * time.Millisecond}
+		h := &hub{warnings: io.Discard, live: make(map[string]liveSession), teardownGrace: 100 * time.Millisecond}
 		h.live["wedged"] = liveSession{cancel: func() {}, done: stuck, release: func() {}}
 
 		returned := make(chan struct{})

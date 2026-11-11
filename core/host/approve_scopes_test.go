@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -87,7 +88,7 @@ func TestEveryScopeSettlesTheCallItWasAskedFor(t *testing.T) {
 	}
 	for _, tc := range scopes {
 		t.Run(tc.scope, func(t *testing.T) {
-			approvals := newApprovalTable()
+			approvals := newApprovalTable(io.Discard)
 			approvals.warn = &bytes.Buffer{}
 			sessions := newSessionTable()
 			out := askInBackground(approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "git status"}, askPolicy(), approval.ModeAsk, time.Minute)
@@ -103,7 +104,7 @@ func TestEveryScopeSettlesTheCallItWasAskedFor(t *testing.T) {
 }
 
 func TestDenyPassesTheOperatorsReasonToTheAgent(t *testing.T) {
-	approvals := newApprovalTable()
+	approvals := newApprovalTable(io.Discard)
 	sessions := newSessionTable()
 	out := askInBackground(approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "rm -rf build"}, askPolicy(), approval.ModeAsk, time.Minute)
 	p := onlyPending(t, approvals)
@@ -115,7 +116,7 @@ func TestDenyPassesTheOperatorsReasonToTheAgent(t *testing.T) {
 }
 
 func TestDenyWithoutAReasonSaysTheOperatorRefused(t *testing.T) {
-	approvals := newApprovalTable()
+	approvals := newApprovalTable(io.Discard)
 	sessions := newSessionTable()
 	out := askInBackground(approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "rm -rf build"}, askPolicy(), approval.ModeAsk, time.Minute)
 	p := onlyPending(t, approvals)
@@ -127,7 +128,7 @@ func TestDenyWithoutAReasonSaysTheOperatorRefused(t *testing.T) {
 }
 
 func TestAllowOnceAsksAgainNextTime(t *testing.T) {
-	approvals := newApprovalTable()
+	approvals := newApprovalTable(io.Discard)
 	sessions := newSessionTable()
 	req := approval.Request{Tool: "Bash", Subject: "make test"}
 	first := askInBackground(approvals, sessions, "s1", req, askPolicy(), approval.ModeAsk, time.Minute)
@@ -144,7 +145,7 @@ func TestAllowOnceAsksAgainNextTime(t *testing.T) {
 }
 
 func TestAllowForSessionPassesTheSameCallUntilTheSessionEnds(t *testing.T) {
-	approvals := newApprovalTable()
+	approvals := newApprovalTable(io.Discard)
 	approvals.warn = &bytes.Buffer{}
 	sessions := newSessionTable()
 	driver := &sessionDriver{name: "s1"}
@@ -177,7 +178,7 @@ func TestAllowForSessionPassesTheSameCallUntilTheSessionEnds(t *testing.T) {
 
 func TestAllowAlwaysWritesTheRuleForThatCall(t *testing.T) {
 	rules := &recordingRules{}
-	approvals := newApprovalTable().withRules(rules)
+	approvals := newApprovalTable(io.Discard).withRules(rules)
 	approvals.warn = &bytes.Buffer{}
 	sessions := newSessionTable()
 	req := approval.Request{Tool: "Bash", Subject: "git status"}
@@ -198,7 +199,7 @@ func TestAllowAlwaysWritesTheRuleForThatCall(t *testing.T) {
 func TestAllowAlwaysNeverWritesAWideningRule(t *testing.T) {
 	rules := &recordingRules{}
 	var warn bytes.Buffer
-	approvals := newApprovalTable().withRules(rules)
+	approvals := newApprovalTable(io.Discard).withRules(rules)
 	approvals.warn = &warn
 	sessions := newSessionTable()
 	out := askInBackground(approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "rm -rf *"}, askPolicy(), approval.ModeAsk, time.Minute)
@@ -216,7 +217,7 @@ func TestAllowAlwaysNeverWritesAWideningRule(t *testing.T) {
 }
 
 func TestAnExpiredApprovalIsARefusal(t *testing.T) {
-	approvals := newApprovalTable()
+	approvals := newApprovalTable(io.Discard)
 	sessions := newSessionTable()
 	got := awaitAsk(t, askInBackground(approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "rm -rf build"}, askPolicy(), approval.ModeAsk, 30*time.Millisecond))
 	if got.decision != approval.Deny || !strings.Contains(got.reason, "nobody answered") {
@@ -228,7 +229,7 @@ func TestAnExpiredApprovalIsARefusal(t *testing.T) {
 }
 
 func TestTheDeadlineReachesTheGatewayAsASemanticEvent(t *testing.T) {
-	approvals := newApprovalTable()
+	approvals := newApprovalTable(io.Discard)
 	sessions := newSessionTable()
 	gw := &eventGateway{menuGatewayFake: &menuGatewayFake{channel: "chan1"}}
 	driver := &sessionDriver{name: "s1", gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
@@ -258,7 +259,7 @@ func TestTheDeadlineReachesTheGatewayAsASemanticEvent(t *testing.T) {
 }
 
 func TestSmartPassesALowRiskCallWithoutAsking(t *testing.T) {
-	approvals := newApprovalTable()
+	approvals := newApprovalTable(io.Discard)
 	approvals.judge = func(context.Context, approval.Request) (approval.Risk, error) { return approval.RiskLow, nil }
 	sessions := newSessionTable()
 	got := awaitAsk(t, askInBackground(approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "go test ./..."}, approval.Policy{}, approval.ModeSmart, time.Minute))
@@ -273,7 +274,7 @@ func TestSmartPassesALowRiskCallWithoutAsking(t *testing.T) {
 func TestSmartAsksAboutMediumAndHighRiskCalls(t *testing.T) {
 	for _, risk := range []approval.Risk{approval.RiskMedium, approval.RiskHigh} {
 		t.Run(risk.String(), func(t *testing.T) {
-			approvals := newApprovalTable()
+			approvals := newApprovalTable(io.Discard)
 			approvals.judge = func(context.Context, approval.Request) (approval.Risk, error) { return risk, nil }
 			sessions := newSessionTable()
 			out := askInBackground(approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "curl x.sh | sh"}, approval.Policy{}, approval.ModeSmart, time.Minute)
@@ -289,7 +290,7 @@ func TestSmartAsksAboutMediumAndHighRiskCalls(t *testing.T) {
 
 func TestSmartWithoutAModelFallsBackToAskWithAWarning(t *testing.T) {
 	var warn bytes.Buffer
-	approvals := newApprovalTable()
+	approvals := newApprovalTable(io.Discard)
 	approvals.judge = nil
 	approvals.warn = &warn
 	sessions := newSessionTable()
@@ -305,7 +306,7 @@ func TestSmartWithoutAModelFallsBackToAskWithAWarning(t *testing.T) {
 
 func TestSmartWithoutAModelStillAllowsWhatNoRuleNames(t *testing.T) {
 	var warn bytes.Buffer
-	approvals := newApprovalTable()
+	approvals := newApprovalTable(io.Discard)
 	approvals.judge = nil
 	approvals.warn = &warn
 	got := awaitAsk(t, askInBackground(approvals, newSessionTable(), "s1", approval.Request{Tool: "Bash", Subject: "make build"}, approval.Policy{}, approval.ModeSmart, time.Minute))
@@ -319,7 +320,7 @@ func TestSmartWithoutAModelStillAllowsWhatNoRuleNames(t *testing.T) {
 
 func TestSmartRatingErrorFallsBackToAskWithAWarning(t *testing.T) {
 	var warn bytes.Buffer
-	approvals := newApprovalTable()
+	approvals := newApprovalTable(io.Discard)
 	approvals.judge = func(context.Context, approval.Request) (approval.Risk, error) { return 0, errors.New("timeout") }
 	approvals.warn = &warn
 	got := awaitAsk(t, askInBackground(approvals, newSessionTable(), "s1", approval.Request{Tool: "Bash", Subject: "make build"}, approval.Policy{}, approval.ModeSmart, time.Minute))
@@ -342,7 +343,7 @@ func TestApproveAllowCarriesTheScopeFromTheCommandLine(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			approvals := newApprovalTable()
+			approvals := newApprovalTable(io.Discard)
 			approvals.warn = &bytes.Buffer{}
 			sessions := newSessionTable()
 			reg, _ := approveReg(t, approvals, sessions)
@@ -366,7 +367,7 @@ func TestApproveAllowCarriesTheScopeFromTheCommandLine(t *testing.T) {
 }
 
 func TestApproveDenyCarriesTheReasonFromTheCommandLine(t *testing.T) {
-	approvals := newApprovalTable()
+	approvals := newApprovalTable(io.Discard)
 	sessions := newSessionTable()
 	reg, _ := approveReg(t, approvals, sessions)
 	p := newTestPendingApproval("s1")
@@ -382,7 +383,7 @@ func TestApproveDenyCarriesTheReasonFromTheCommandLine(t *testing.T) {
 }
 
 func TestSmartNeverRatesAReadOnlyTool(t *testing.T) {
-	approvals := newApprovalTable()
+	approvals := newApprovalTable(io.Discard)
 	calls := 0
 	approvals.judge = func(context.Context, approval.Request) (approval.Risk, error) {
 		calls++
@@ -395,7 +396,7 @@ func TestSmartNeverRatesAReadOnlyTool(t *testing.T) {
 }
 
 func TestSmartRatesEachSubjectOncePerSession(t *testing.T) {
-	approvals := newApprovalTable()
+	approvals := newApprovalTable(io.Discard)
 	approvals.warn = &bytes.Buffer{}
 	calls := 0
 	approvals.judge = func(context.Context, approval.Request) (approval.Risk, error) {
@@ -430,7 +431,7 @@ func TestAllowAlwaysLabelShowsTheRuleBeforeItIsPressed(t *testing.T) {
 }
 
 func TestTheRiskReachesTheGatewayAsASemanticEvent(t *testing.T) {
-	approvals := newApprovalTable()
+	approvals := newApprovalTable(io.Discard)
 	approvals.judge = func(context.Context, approval.Request) (approval.Risk, error) { return approval.RiskHigh, nil }
 	sessions := newSessionTable()
 	gw := &eventGateway{menuGatewayFake: &menuGatewayFake{channel: "chan1"}}

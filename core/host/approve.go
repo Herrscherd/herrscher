@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -107,11 +106,7 @@ type approvalTable struct {
 	warn  io.Writer
 }
 
-func newApprovalTable() *approvalTable {
-	return newApprovalTableWith(os.Stderr)
-}
-
-func newApprovalTableWith(warn io.Writer) *approvalTable {
+func newApprovalTable(warn io.Writer) *approvalTable {
 	return &approvalTable{m: make(map[string]*pendingApproval), judge: registryRiskJudge, warn: warn}
 }
 

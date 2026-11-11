@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"slices"
@@ -112,7 +113,7 @@ type compactionPolicy struct {
 	warn           func(key string, params map[string]any)
 }
 
-func newCompactionPolicy(ctx context.Context, lang languageSource, percent *int, names []string, perVendor map[string]int) (compactionPolicy, error) {
+func newCompactionPolicy(ctx context.Context, lang languageSource, warn io.Writer, percent *int, names []string, perVendor map[string]int) (compactionPolicy, error) {
 	policy := compactionPolicy{
 		percent:        defaultCompactPercent,
 		names:          []string{contracts.CompactStageBackend},
@@ -123,7 +124,7 @@ func newCompactionPolicy(ctx context.Context, lang languageSource, percent *int,
 		warnOnce:       &sync.Once{},
 		historyOnce:    &sync.Once{},
 		warn: func(key string, params map[string]any) {
-			warnLive(os.Stderr, lang, key, params)
+			warnLive(warn, lang, key, params)
 		},
 	}
 	if percent != nil {

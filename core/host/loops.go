@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
-	"os"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -15,11 +15,11 @@ import (
 
 const healthWindow = 90 * time.Second
 
-func serveHealth(ctx context.Context, addr string, monitor *health.Health, lang languageSource) {
+func serveHealth(ctx context.Context, addr string, monitor *health.Health, lang languageSource, warn io.Writer) {
 	srv := newHealthServer(addr, monitor)
 	go func() { <-ctx.Done(); closeRead(srv) }()
 	if err := srv.ListenAndServe(); err != nil && ctx.Err() == nil {
-		warnLive(os.Stderr, lang, "warn.health_server", map[string]any{detailParam: err})
+		warnLive(warn, lang, "warn.health_server", map[string]any{detailParam: err})
 	}
 }
 

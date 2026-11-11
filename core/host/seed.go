@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -26,13 +27,15 @@ const seedConsolidateTimeout = 60 * time.Second
 const seedTurnTimeout = 120 * time.Second
 
 type oneShotSeedRuntime struct {
-	coordinator contracts.Coordinator
-	publish     func(session string, event contracts.Event)
-	record      func(session string, entry state.TranscriptEntry)
-	recordUsage func(sess state.Session, records []usage.Record)
-	timeout     time.Duration
-	backend     func(context.Context, state.Session) (contracts.Backend, error)
-	models      *ModelDiscovery
+	warnings        io.Writer
+	sessionLanguage func(name string) languageSource
+	coordinator     contracts.Coordinator
+	publish         func(session string, event contracts.Event)
+	record          func(session string, entry state.TranscriptEntry)
+	recordUsage     func(sess state.Session, records []usage.Record)
+	timeout         time.Duration
+	backend         func(context.Context, state.Session) (contracts.Backend, error)
+	models          *ModelDiscovery
 }
 
 func (r oneShotSeedRuntime) backendFactory() func(context.Context, state.Session) (contracts.Backend, error) {
@@ -100,7 +103,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	defer cancel()
 	toBridge := make(chan contracts.Event, 1)
 	fromBridge := make(chan contracts.Event, bridgeEventBuffer)
-	driver := newSessionDriver(sess.Name, nil, toBridge, fromBridge)
+	driver := newSessionDriver(sess.Name, nil, toBridge, fromBridge, runtime.warnings)
 	driver.incarnation = sess.Incarnation
 	driver.agent = sess.Agent
 	driver.language = func() i18n.Language { return knownSessionLanguage(sess) }
@@ -130,7 +133,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 		}
 		driver.activeTurnID = ""
 	}
-	consolidateOneShot(ctx, orch, sess)
+	consolidateOneShot(ctx, orch, sess, runtime.warnings, runtime.languageOf(sess))
 	return reply, nil
 }
 
@@ -174,7 +177,14 @@ func oneShotTimeoutError(bridgeErr <-chan error) error {
 	return errSeedTimeout
 }
 
-func consolidateOneShot(ctx context.Context, orch contracts.Orchestrator, sess state.Session) {
+func (r oneShotSeedRuntime) languageOf(sess state.Session) languageSource {
+	if r.sessionLanguage != nil {
+		return r.sessionLanguage(sess.Name)
+	}
+	return func() i18n.Language { return knownSessionLanguage(sess) }
+}
+
+func consolidateOneShot(ctx context.Context, orch contracts.Orchestrator, sess state.Session, warn io.Writer, lang languageSource) {
 	if orch == nil || sess.ConsolidateEvery > 0 {
 		return
 	}
@@ -183,7 +193,7 @@ func consolidateOneShot(ctx context.Context, orch contracts.Orchestrator, sess s
 	err := orch.Consolidate(consCtx)
 	consCancel()
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, newHostMessages().text(i18n.English, "seed.consolidate", map[string]any{nameParam: sess.Name, "Elapsed": time.Since(started).Round(time.Millisecond).String(), detailParam: fmt.Sprint(err)}))
+		warnTo(warn, lang(), "seed.consolidate", map[string]any{nameParam: sess.Name, "Elapsed": time.Since(started).Round(time.Millisecond).String(), detailParam: fmt.Sprint(err)})
 	}
 }
 

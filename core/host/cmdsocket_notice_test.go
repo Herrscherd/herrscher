@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"path/filepath"
 	"testing"
 
@@ -20,7 +21,8 @@ func renderAcrossSocket(t *testing.T, serverErr error, lang i18n.Language) strin
 	defer cancel()
 	serveCommandSocket(ctx, isolatedRuntimeDir(t), sock, dispatcherFunc(func(context.Context, []string) (string, error) {
 		return "", serverErr
-	}), testLanguage())
+	}), testLanguage(), io.Discard)
+
 	_, handled, err := dispatchLiveCommand(ctx, isolatedRuntimeDir(t), sock, []string{"session", "close", "revue"})
 	if !handled || err == nil {
 		t.Fatalf("socket returned handled=%v err=%v, want a failure", handled, err)

@@ -1535,6 +1535,10 @@ not installed returns nothing, and the daemon says which plugin declined and why
 
 → `plugins/model`, `plugins/writing`
 
+## Languages
+
+Warnings follow the operator language, read live at the moment they are printed. A warning about a named session uses the language recorded for that session, or the live operator language when none is recorded; operator-level warnings always use the operator language.
+
 ## Architecture
 
 Hexagonal.

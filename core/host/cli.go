@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -47,7 +48,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	}
 	models := options.modelDiscovery()
 	hdl := newManagerHandler(deps, options, partDir, hostState, sup, worktrees, updater, agents, models)
-	wireManagerHandler(ctx, options.live.Get, hdl, hostState, options.Runtime, instID, worktrees, sessions, models)
+	wireManagerHandler(ctx, options.live.Get, options.Warnings, hdl, hostState, options.Runtime, instID, worktrees, sessions, models)
 	wireSupervisor(sup, options.Runtime, hostState, instID)
 	seedCoord := &coordinatorSlot{}
 	schedSlot := &schedulerSlot{}
@@ -84,10 +85,10 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addScheduleCommands(reg, options.live.Get, hostState, agents, schedSlot); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addHostCommands(reg, options.live.Get, hostState, options.Runtime); err != nil {
+	if err := addHostCommands(reg, options.live.Get, options.Warnings, hostState, options.Runtime); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addApproveCommands(reg, options.live.Get, hostState, agents, approvals, sessions); err != nil {
+	if err := addApproveCommands(reg, options.live.Get, options.Warnings, hostState, agents, approvals, sessions); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addRoleCommands(reg, options.live.Get, hostState); err != nil {
@@ -120,9 +121,9 @@ func newManagerHandler(deps Deps, options Options, partDir string, hostState *st
 	return hdl
 }
 
-func wireManagerHandler(ctx context.Context, lang languageSource, hdl *manager.Handler, hostState *state.State, layout RuntimeLayout, instID string, worktrees *worktree.Worktreer, sessions *sessionTable, models *ModelDiscovery) {
+func wireManagerHandler(ctx context.Context, lang languageSource, warn io.Writer, hdl *manager.Handler, hostState *state.State, layout RuntimeLayout, instID string, worktrees *worktree.Worktreer, sessions *sessionTable, models *ModelDiscovery) {
 	hdl.SetSeeder(sessions.Seed)
-	hdl.SetHosts(newHostPlacer(lang, hostState, layout, instID, worktrees, func() string { return sourceVersionOf(ctx, hostState) }))
+	hdl.SetHosts(newHostPlacer(lang, warn, hostState, layout, instID, worktrees, func() string { return sourceVersionOf(ctx, hostState) }))
 	hdl.SetGatewayOnly(func() bool { return ResolvePolicy(envx.Getenv) == contracts.PolicyGatewayOnly })
 	hdl.SetDefaultModel(envx.Getenv(EnvDefaultModel))
 	hdl.SetVendorDefaultModel(func(vendor string) string { return envx.Getenv(VendorDefaultModelEnv(vendor)) })
@@ -208,7 +209,7 @@ func NewRegistry(ctx context.Context, gws []Deps, options Options) (*cli.Registr
 	if options.DefaultGateways == nil {
 		options.DefaultGateways = nonTerminalKinds(gws)
 	}
-	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, hostState.Home)}, options, hostState, sup, instID, nil, newApprovalTable(), newSessionTable())
+	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, hostState.Home)}, options, hostState, sup, instID, nil, newApprovalTable(options.Warnings), newSessionTable())
 	if err != nil {
 		return nil, err
 	}

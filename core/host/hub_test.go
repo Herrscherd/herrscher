@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +18,7 @@ import (
 
 func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
 	t.Helper()
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -38,7 +39,7 @@ func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
 }
 
 func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -163,7 +164,7 @@ func TestHubCloseOmitsForceWhenFalse(t *testing.T) {
 }
 
 func TestHubDispatchSetSource(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -187,7 +188,7 @@ func TestHubDispatchSetSource(t *testing.T) {
 
 func newTestHub(t *testing.T) *hub {
 	t.Helper()
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -286,6 +287,7 @@ func (s *stubForgetCoord) forget(name string) { s.forgotten = append(s.forgotten
 func TestGoDeadCallsForget(t *testing.T) {
 	stub := &stubForgetCoord{}
 	h := &hub{
+		warnings:      io.Discard,
 		coordinator:   stub,
 		live:          make(map[string]liveSession),
 		teardownGrace: defaultTeardownGrace,

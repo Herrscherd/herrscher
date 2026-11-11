@@ -3,6 +3,7 @@
 package host
 
 import (
+	"io"
 	"path/filepath"
 	"testing"
 
@@ -20,7 +21,7 @@ func resumeHubWith(t *testing.T, sess state.Session) (*hub, *state.State) {
 		t.Fatal(err)
 	}
 	answeringListener(t, SessionCommandSocketPathIn(layout, "", sess.Name))
-	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(), newSessionTable())
+	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable())
 	h.runtime = layout
 	return h, st
 }

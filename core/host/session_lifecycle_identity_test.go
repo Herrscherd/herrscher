@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -16,7 +17,7 @@ func TestGoDeadWaitsForRunSessionTeardown(t *testing.T) {
 	cancelled := make(chan struct{})
 	tornDown := make(chan struct{})
 	returned := make(chan struct{})
-	h := &hub{teardownGrace: defaultTeardownGrace, live: map[string]liveSession{
+	h := &hub{warnings: io.Discard, teardownGrace: defaultTeardownGrace, live: map[string]liveSession{
 		"same-name": {
 			cancel:  func() { close(cancelled) },
 			done:    tornDown,
@@ -56,8 +57,8 @@ func TestGoDeadWaitsForRunSessionTeardown(t *testing.T) {
 func TestOldDriverCannotUnregisterSameNameReplacement(t *testing.T) {
 	sessionTab := newSessionTable()
 	name := "registry-" + newTurnID()
-	oldDriver := newSessionDriver(name, nil, nil, nil)
-	newDriver := newSessionDriver(name, nil, nil, nil)
+	oldDriver := newSessionDriver(name, nil, nil, nil, io.Discard)
+	newDriver := newSessionDriver(name, nil, nil, nil, io.Discard)
 	sessionTab.register(name, oldDriver)
 	t.Cleanup(func() { sessionTab.unregister(name, newDriver) })
 
@@ -72,7 +73,7 @@ func TestOldDriverCannotUnregisterSameNameReplacement(t *testing.T) {
 
 func TestSameNameSessionCanRebindAfterTeardown(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	name := "rebind-" + newTurnID()
 	h := newHub(
@@ -140,7 +141,7 @@ func TestSessionSocketOutlivesTheContextThatCreatedIt(t *testing.T) {
 		t.TempDir(),
 		nil,
 		nil,
-		newApprovalTable(),
+		newApprovalTable(io.Discard),
 		newSessionTable(),
 	)
 	h.runtime = layout
@@ -163,7 +164,7 @@ func TestGoDeadWaitsForTheCommandSocketRelease(t *testing.T) {
 	done := make(chan struct{})
 	close(done)
 	released := make(chan struct{})
-	h := &hub{teardownGrace: 5 * time.Second, live: map[string]liveSession{
+	h := &hub{warnings: io.Discard, teardownGrace: 5 * time.Second, live: map[string]liveSession{
 		"rebind": {cancel: func() {}, done: done, released: released, release: func() {}},
 	}}
 	returned := make(chan struct{})
@@ -194,7 +195,7 @@ func TestGoDeadReleasesTheSocketsWhileHoldingTheLifecycle(t *testing.T) {
 		t.TempDir(),
 		nil,
 		nil,
-		newApprovalTable(),
+		newApprovalTable(io.Discard),
 		newSessionTable(),
 	)
 	h.runtime = layout
@@ -229,7 +230,7 @@ func TestRebindSurvivesAnOverrunTeardown(t *testing.T) {
 		t.TempDir(),
 		nil,
 		nil,
-		newApprovalTable(),
+		newApprovalTable(io.Discard),
 		sessionTab,
 		withSessionStopped(func(string) {
 			enterOnce.Do(func() { close(entered) })

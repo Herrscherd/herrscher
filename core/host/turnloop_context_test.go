@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"testing"
 	"time"
 
@@ -15,7 +16,7 @@ func recordedTurn(t *testing.T, events ...contracts.Event) state.TranscriptEntry
 	a.feed("vas-y")
 	toBridge := make(chan contracts.Event, 8)
 	fromBridge := make(chan contracts.Event, 8)
-	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 	entries := make(chan state.TranscriptEntry, 8)
 	d.sink.Transcript = func(e state.TranscriptEntry) { entries <- e }
 	ctx, cancel := context.WithCancel(context.Background())

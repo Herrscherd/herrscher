@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -60,7 +61,7 @@ func newConfiguredCompactFixture(t *testing.T, vendor string, policy compactionP
 	t.Helper()
 	t.Setenv(contextwindow.EnvVar(), "")
 	f := &compactFixture{toBridge: make(chan contracts.Event, 16), from: make(chan contracts.Event, 16), seen: make(chan struct{}, 64)}
-	f.driver = newSessionDriver("s1", nil, f.toBridge, f.from)
+	f.driver = newSessionDriver("s1", nil, f.toBridge, f.from, io.Discard)
 	f.driver.terms = func() modelTerms { return modelTerms{vendor: vendor} }
 	f.driver.compaction = policy
 	f.driver.emitTap = f.tap
@@ -403,7 +404,7 @@ func TestNoPortWarningIsWrittenOnce(t *testing.T) {
 
 func TestCompactStackRefusesDuplicateStages(t *testing.T) {
 	for _, names := range [][]string{{contracts.CompactStageBackend, contracts.CompactStageBackend}, {"stage", "stage"}} {
-		if _, err := newCompactionPolicy(context.Background(), testLanguage(), nil, names, nil); err == nil {
+		if _, err := newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, names, nil); err == nil {
 			t.Fatalf("newCompactionPolicy(%v) accepted a stage listed twice", names)
 		}
 	}
@@ -439,7 +440,7 @@ func TestCompactionPolicyTakesCodexFromItsManifest(t *testing.T) {
 			return seedBackend{}, nil
 		},
 	})
-	policy, err := newCompactionPolicy(context.Background(), testLanguage(), nil, nil, nil)
+	policy, err := newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("newCompactionPolicy: %v", err)
 	}
@@ -465,7 +466,7 @@ func TestContextLimitTableMovesTheAutomaticThreshold(t *testing.T) {
 
 func TestNewCompactionPolicyEnvWinsOverContextLimits(t *testing.T) {
 	t.Setenv(contextwindow.EnvVar(), "")
-	policy, err := newCompactionPolicy(context.Background(), testLanguage(), nil, nil, map[string]int{"codex": 400_000})
+	policy, err := newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, nil, map[string]int{"codex": 400_000})
 	if err != nil {
 		t.Fatalf("newCompactionPolicy: %v", err)
 	}
@@ -473,7 +474,7 @@ func TestNewCompactionPolicyEnvWinsOverContextLimits(t *testing.T) {
 		t.Fatalf("Limit(codex) = %d, want the table's 400000", got)
 	}
 	t.Setenv(contextwindow.EnvVar(), "12345")
-	policy, err = newCompactionPolicy(context.Background(), testLanguage(), nil, nil, map[string]int{"codex": 400_000})
+	policy, err = newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, nil, map[string]int{"codex": 400_000})
 	if err != nil {
 		t.Fatalf("newCompactionPolicy: %v", err)
 	}

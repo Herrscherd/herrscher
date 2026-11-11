@@ -134,6 +134,7 @@ func serveWith(ctx context.Context, layout host.RuntimeLayout, args []string, op
 	}
 
 	opts := host.Options{
+		Warnings:            os.Stderr,
 		StatePath:           *statePath,
 		Runtime:             layout,
 		Language:            langs.Operator,
@@ -326,6 +327,7 @@ func newOperatorRegistry(ctx context.Context, cfg config.Config, lang i18n.Langu
 	}
 	home := homeRef(cfg)
 	return host.NewRegistry(ctx, gws, host.Options{
+		Warnings:   os.Stderr,
 		StatePath:  host.DefaultStatePath(),
 		DefaultCmd: or(cfg.Cmd, "claude"),
 		InstanceID: or(envx.Get("INSTANCE_ID"), cfg.Instance),

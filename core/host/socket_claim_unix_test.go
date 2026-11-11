@@ -5,6 +5,7 @@ package host
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -87,7 +88,7 @@ func TestADaemonRefusesAnInstanceWhoseEventsSocketIsTaken(t *testing.T) {
 func TestServeHubSocketsStopsTheDaemonOnATakenEventsSocket(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
 	answeringListener(t, EventsSocketPathIn(layout, "t3"))
-	_, err := serveHubSockets(context.Background(), layout, "t3", &hub{})
+	_, err := serveHubSockets(context.Background(), layout, "t3", &hub{warnings: io.Discard})
 	if !errors.Is(err, errSocketTaken) {
 		t.Fatalf("serveHubSockets with a live events socket = %v, want errSocketTaken", err)
 	}
@@ -96,7 +97,7 @@ func TestServeHubSocketsStopsTheDaemonOnATakenEventsSocket(t *testing.T) {
 func TestServeHubSocketsStopsTheDaemonOnATakenCommandSocket(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
 	answeringListener(t, CommandSocketPathIn(layout, "t4"))
-	_, err := serveHubSockets(context.Background(), layout, "t4", &hub{})
+	_, err := serveHubSockets(context.Background(), layout, "t4", &hub{warnings: io.Discard})
 	if !errors.Is(err, errSocketTaken) {
 		t.Fatalf("serveHubSockets with a live command socket = %v, want errSocketTaken", err)
 	}
@@ -168,7 +169,7 @@ func TestShutdownLeavesASocketANewerDaemonOwns(t *testing.T) {
 func TestServeHubSocketsReportReleasedOnlyOnceTheFilesAreGone(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	released, err := serveHubSockets(ctx, layout, "t6", &hub{})
+	released, err := serveHubSockets(ctx, layout, "t6", &hub{warnings: io.Discard})
 	if err != nil {
 		t.Fatal(err)
 	}

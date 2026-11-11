@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,12 +28,12 @@ func shellFixture(t *testing.T, mode string) (*state.State, *approvalTable, *ses
 			t.Fatalf("SetSessionApprovals: %v", err)
 		}
 	}
-	return st, newApprovalTable(), newSessionTable(), dir
+	return st, newApprovalTable(io.Discard), newSessionTable(), dir
 }
 
 func TestSessionShellRunsInTheSessionDirAndReturnsOutput(t *testing.T) {
 	st, approvals, sessions, dir := shellFixture(t, "bypass")
-	out, err := runSessionShell(context.Background(), testLanguage(), st, nil, approvals, sessions, "s1", "pwd; echo bonjour")
+	out, err := runSessionShell(context.Background(), testLanguage(), io.Discard, st, nil, approvals, sessions, "s1", "pwd; echo bonjour")
 	if err != nil {
 		t.Fatalf("runSessionShell: %v", err)
 	}
@@ -43,7 +44,7 @@ func TestSessionShellRunsInTheSessionDirAndReturnsOutput(t *testing.T) {
 
 func TestSessionShellReportsExitCode(t *testing.T) {
 	st, approvals, sessions, _ := shellFixture(t, "bypass")
-	out, err := runSessionShell(context.Background(), testLanguage(), st, nil, approvals, sessions, "s1", "echo oops; exit 3")
+	out, err := runSessionShell(context.Background(), testLanguage(), io.Discard, st, nil, approvals, sessions, "s1", "echo oops; exit 3")
 	if err != nil {
 		t.Fatalf("runSessionShell: %v", err)
 	}
@@ -56,7 +57,7 @@ func TestSessionShellGoesThroughTheApprovalPolicy(t *testing.T) {
 	st, approvals, sessions, dir := shellFixture(t, "strict")
 	unanswered, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
-	_, err := runSessionShell(unanswered, testLanguage(), st, nil, approvals, sessions, "s1", "touch "+filepath.Join(dir, "x"))
+	_, err := runSessionShell(unanswered, testLanguage(), io.Discard, st, nil, approvals, sessions, "s1", "touch "+filepath.Join(dir, "x"))
 	if !errors.Is(err, errShellRefused) {
 		t.Fatalf("a strict session must refuse an unapproved command, got %v", err)
 	}
@@ -64,10 +65,10 @@ func TestSessionShellGoesThroughTheApprovalPolicy(t *testing.T) {
 
 func TestSessionShellRefusesEmptyAndUnknown(t *testing.T) {
 	st, approvals, sessions, _ := shellFixture(t, "bypass")
-	if _, err := runSessionShell(context.Background(), testLanguage(), st, nil, approvals, sessions, "s1", "   "); err == nil {
+	if _, err := runSessionShell(context.Background(), testLanguage(), io.Discard, st, nil, approvals, sessions, "s1", "   "); err == nil {
 		t.Fatal("an empty command must be refused")
 	}
-	if _, err := runSessionShell(context.Background(), testLanguage(), st, nil, approvals, sessions, "nope", "ls"); err == nil {
+	if _, err := runSessionShell(context.Background(), testLanguage(), io.Discard, st, nil, approvals, sessions, "nope", "ls"); err == nil {
 		t.Fatal("an unknown session must be refused")
 	}
 }
@@ -78,7 +79,7 @@ func TestSessionShellRefusesARemoteSessionBeforeAnyApproval(t *testing.T) {
 		t.Fatalf("AddSession: %v", err)
 	}
 	marker := filepath.Join(dir, "touched")
-	_, err := runSessionShell(t.Context(), testLanguage(), st, nil, approvals, sessions, "distante", "touch "+marker)
+	_, err := runSessionShell(t.Context(), testLanguage(), io.Discard, st, nil, approvals, sessions, "distante", "touch "+marker)
 	if !errors.Is(err, errRemoteShellSession) {
 		t.Fatalf("a remote session must be refused, got %v", err)
 	}
@@ -90,7 +91,7 @@ func TestSessionShellRefusesARemoteSessionBeforeAnyApproval(t *testing.T) {
 func TestSessionShellReturnsWhenABackgroundChildHoldsOutput(t *testing.T) {
 	st, approvals, sessions, _ := shellFixture(t, "bypass")
 	started := time.Now()
-	out, err := runSessionShell(t.Context(), testLanguage(), st, nil, approvals, sessions, "s1", "sleep 6 & echo lance")
+	out, err := runSessionShell(t.Context(), testLanguage(), io.Discard, st, nil, approvals, sessions, "s1", "sleep 6 & echo lance")
 	if err != nil {
 		t.Fatalf("runSessionShell: %v", err)
 	}

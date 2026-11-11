@@ -134,10 +134,10 @@ type queued struct {
 	origin contracts.Conversation
 }
 
-func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- contracts.Event, fromBridge <-chan contracts.Event) *sessionDriver {
+func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- contracts.Event, fromBridge <-chan contracts.Event, warnings io.Writer) *sessionDriver {
 	return &sessionDriver{
 		messages:   newHostMessages(),
-		warnings:   os.Stderr,
+		warnings:   warnings,
 		name:       name,
 		gateways:   gws,
 		toBridge:   toBridge,
@@ -1304,15 +1304,15 @@ type sessionIdentity struct {
 }
 
 // RunSession drives a session without a declared identity until ctx is done.
-func RunSession(ctx context.Context, sessions *sessionTable, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, sink sessionSink, gate budgetGate) {
-	runSessionIdentified(ctx, sessions, name, channel, gws, acc, participants, m, coord, sink, nil, sessionIdentity{}, gate)
+func RunSession(ctx context.Context, sessions *sessionTable, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, sink sessionSink, gate budgetGate, warnings io.Writer) {
+	runSessionIdentified(ctx, sessions, name, channel, gws, acc, participants, m, coord, sink, nil, sessionIdentity{}, gate, warnings)
 }
 
-func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, registry *metrics.Registry, coord contracts.Coordinator, sink sessionSink, emit func(contracts.Event), identity sessionIdentity, gate budgetGate) {
+func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, registry *metrics.Registry, coord contracts.Coordinator, sink sessionSink, emit func(contracts.Event), identity sessionIdentity, gate budgetGate, warnings io.Writer) {
 	defer closeRead(acc)
 	toBridge := make(chan contracts.Event)
 	fromBridge := make(chan contracts.Event)
-	driver := newSessionDriver(name, gws, toBridge, fromBridge)
+	driver := newSessionDriver(name, gws, toBridge, fromBridge, warnings)
 	driver.incarnation = identity.incarnation
 	driver.agent = identity.agent
 	driver.channel = channel

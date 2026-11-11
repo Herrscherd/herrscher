@@ -4,6 +4,7 @@ package host
 
 import (
 	"errors"
+	"io"
 	"path/filepath"
 	"testing"
 
@@ -25,7 +26,7 @@ func TestGoLiveReportsACommandSocketItCannotOpen(t *testing.T) {
 		t.TempDir(),
 		nil,
 		nil,
-		newApprovalTable(),
+		newApprovalTable(io.Discard),
 		newSessionTable(),
 	)
 	h.runtime = layout

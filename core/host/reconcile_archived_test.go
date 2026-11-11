@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"testing"
 
 	"github.com/Herrscherd/herrscher/core/cli"
@@ -10,7 +11,7 @@ import (
 )
 
 func TestReconcileSkipsArchived(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -40,7 +41,7 @@ func TestReconcileSkipsArchived(t *testing.T) {
 }
 
 func TestReconcileReapsInPlaceArchived(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)

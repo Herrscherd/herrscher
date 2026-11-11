@@ -362,6 +362,24 @@ func TestTypedNilErrorParamRendersAsNil(t *testing.T) {
 	}
 }
 
+func TestGoLiveSessionsStaysSilentOnceTheHubIsClosed(t *testing.T) {
+	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	for _, name := range []string{"alpha", "beta"} {
+		if err := st.AddSession(state.Session{Name: name, Incarnation: name}); err != nil {
+			t.Fatalf("AddSession: %v", err)
+		}
+	}
+	var printed bytes.Buffer
+	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(), withWarnings(&printed))
+	h.runtime = isolatedRuntimeDir(t)
+	h.instanceID = "t18"
+	h.stopLive()
+	goLiveSessions(context.Background(), h, nil, st, health.NewHealth(time.Now()))
+	if printed.Len() != 0 {
+		t.Fatalf("a closed hub printed %q while its sessions were refused, want no warning", printed.String())
+	}
+}
+
 func TestSessionStartWarningFollowsTheSessionLanguage(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	if err := st.AddSession(state.Session{Name: "revue", Incarnation: "incarnation", Language: "en"}); err != nil {

@@ -104,6 +104,16 @@ session has provided a real `/run/user/<uid>` directory owned by the user with m
 checked on every use. A socket keeps its readable name there when the full path fits
 the 103 byte unix limit, and takes a hashed name (`hs-<key>.sock`) when it does not.
 
+A socket file is created by binding it under a temporary name in the same directory and
+then renaming it onto its final name, so a file left by a crash is replaced in one step.
+Closing a listener never removes its file: a stopped daemon leaves its socket on disk,
+dead, and a client decides whether a daemon is there by dialing it, where a refused
+connection means that no daemon is running. When a daemon stops for good, it first refuses
+to start any further session, then ends the running ones, closes its listeners and
+removes the socket files of its own instance (command, events and session sockets),
+all while it still holds the instance lock. Files of other instances are never
+touched. On Windows the sockets are named pipes, which have no file and need no cleanup.
+
 When the chosen directory exists but cannot be used, the daemon refuses to start and
 says why. A symbolic link, a directory created by another account (only that account
 or root can remove it, and a systemd user session avoids `/tmp` altogether) and a directory open

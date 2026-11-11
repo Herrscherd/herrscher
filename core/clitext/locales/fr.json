@@ -3403,6 +3403,11 @@
     "other": "le démon a démarré sans répertoire d'exécution pour ses sockets et son verrou"
   },
   {
+    "id": "cli.host.fault.hub_closed",
+    "description": "Le démon s'arrête et ne démarre plus de session (goLive refusé après l'arrêt)",
+    "other": "le démon s'arrête et ne démarre plus de session"
+  },
+  {
     "id": "cli.host.fault.instance_locked",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (instance lock held by another daemon)",
     "other": "un autre démon détient déjà le verrou de cette instance : arrête-le ou passe --instance"

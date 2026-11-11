@@ -5,9 +5,9 @@ package control
 import (
 	"context"
 	"net"
-	"os"
 
 	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
+	"github.com/Herrscherd/herrscher/core/internal/sockfile"
 )
 
 // SocketPath returns the Unix socket path in layout used to control the given
@@ -17,30 +17,10 @@ func SocketPath(layout runtimedir.Layout, instanceID, session string) string {
 	return layout.Socket("herrscher-control-" + instancePrefix(instanceID) + SafeSessionName(session))
 }
 
+const controlSocketMode = 0o600
+
 func listenControl(ctx context.Context, path string) (net.Listener, error) {
-	listener, err := new(net.ListenConfig).Listen(ctx, "unix", path)
-	if err != nil {
-		return nil, err
-	}
-	if ul, ok := listener.(*net.UnixListener); ok {
-		ul.SetUnlinkOnClose(false)
-	}
-	return listener, nil
-}
-
-func bindIdentity(path string) (os.FileInfo, error) {
-	return os.Lstat(path)
-}
-
-func releaseOwnedPath(path string, own os.FileInfo) error {
-	if own == nil {
-		return nil
-	}
-	current, err := os.Lstat(path)
-	if err == nil && os.SameFile(current, own) {
-		return removeStaleSocket(path)
-	}
-	return nil
+	return sockfile.Listen(ctx, path, controlSocketMode)
 }
 
 func dialControl(ctx context.Context, path string) (net.Conn, error) {

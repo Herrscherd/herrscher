@@ -2,10 +2,13 @@ package host
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -53,6 +56,9 @@ type hub struct {
 	lifecycle  sync.Mutex
 	mu         sync.Mutex
 	live       map[string]liveSession
+
+	listenedSessions map[string]struct{}
+	closed           bool
 
 	teardownGrace  time.Duration
 	sessionStopped func(name string)
@@ -141,12 +147,17 @@ func eventTap(publish func(string, contracts.Event), session string) func(contra
 	return func(e contracts.Event) { publish(session, e) }
 }
 
+var errHubClosed = errors.New("the daemon is shutting down and starts no session")
+
 func (h *hub) goLive(ctx context.Context, sess state.Session) error {
 	if h.runtime.Dir() == "" {
 		return errNoRuntimeLayout
 	}
 	h.lifecycle.Lock()
 	defer h.lifecycle.Unlock()
+	if h.closed {
+		return errHubClosed
+	}
 	h.mu.Lock()
 	_, running := h.live[sess.Name]
 	h.mu.Unlock()
@@ -161,8 +172,9 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) error {
 	if err != nil {
 		return wrapHost(err, "session.go_live", map[string]any{"Name": sess.Name})
 	}
+	h.noteListened(sess.Name)
 	sctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	commands, err := openCommandSocket(sctx, h.runtime, SessionCommandSocketPathIn(h.runtime, h.instanceID, sess.Name))
+	commands, err := openSocket(sctx, h.runtime, SessionCommandSocketPathIn(h.runtime, h.instanceID, sess.Name))
 	if err != nil {
 		cancel()
 		logCleanup(acc.Close())
@@ -205,7 +217,7 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) error {
 	released := acceptCommands(sctx, commands, h.sessionCommands(sess.Name), defaultCommandReadTimeout)
 	releaseSockets := sync.OnceFunc(func() {
 		logCleanup(acc.Close())
-		commands.release()
+		closeRead(commands)
 	})
 	h.mu.Lock()
 	h.live[sess.Name] = liveSession{cancel: cancel, done: done, released: released, release: releaseSockets}
@@ -242,15 +254,39 @@ func liveSessionLanguage(store *state.State, name string) func() i18n.Language {
 }
 
 func (h *hub) stopLive() {
+	h.lifecycle.Lock()
+	h.closed = true
 	h.mu.Lock()
-	lives := make([]liveSession, 0, len(h.live))
-	for _, live := range h.live {
-		lives = append(lives, live)
-	}
+	lives := make(map[string]liveSession, len(h.live))
+	maps.Copy(lives, h.live)
 	h.mu.Unlock()
+	h.lifecycle.Unlock()
 	for _, live := range lives {
 		live.cancel()
+		live.release()
 	}
+	for name, live := range lives {
+		h.awaitTeardown(name, live)
+	}
+}
+
+func (h *hub) noteListened(session string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.listenedSessions == nil {
+		h.listenedSessions = make(map[string]struct{})
+	}
+	h.listenedSessions[session] = struct{}{}
+}
+
+func (h *hub) closeAndRemoveSockets() error {
+	h.lifecycle.Lock()
+	h.closed = true
+	h.mu.Lock()
+	sessions := slices.Collect(maps.Keys(h.listenedSessions))
+	h.mu.Unlock()
+	h.lifecycle.Unlock()
+	return removeSocketFiles(h.runtime, h.instanceID, sessions)
 }
 
 func (h *hub) goDead(name string) {
@@ -315,6 +351,9 @@ func (h *hub) reconcile(ctx context.Context) {
 			continue
 		}
 		if err := h.goLive(ctx, saved); err != nil {
+			if errors.Is(err, errHubClosed) {
+				break
+			}
 			warnLive(h.warnings, h.sessionLanguageSource(saved.Name), "warn.session_start", map[string]any{nameParam: saved.Name, detailParam: err})
 		}
 	}

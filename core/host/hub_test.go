@@ -1,6 +1,7 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -217,6 +218,22 @@ func TestHubSessionsSnapshot(t *testing.T) {
 	}
 	if len(got[0].Gateways) != 1 || got[0].Gateways[0] != "chat" {
 		t.Fatalf("gateways not surfaced: %+v", got[0].Gateways)
+	}
+}
+
+func TestReconcileStaysSilentOnceTheHubIsClosed(t *testing.T) {
+	h := newTestHub(t)
+	var printed bytes.Buffer
+	h.warnings = &printed
+	for _, name := range []string{"alpha", "beta"} {
+		if err := h.st.AddSession(state.Session{Name: name, Incarnation: name}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h.stopLive()
+	h.reconcile(t.Context())
+	if printed.Len() != 0 {
+		t.Fatalf("reconcile on a closed hub printed %q, want no warning", printed.String())
 	}
 }
 

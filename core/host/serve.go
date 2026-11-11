@@ -427,7 +427,7 @@ func goLiveSessions(ctx context.Context, runningHub *hub, sup *supervisor.Superv
 			continue
 		}
 		if err := runningHub.goLive(ctx, sess); err != nil {
-			warnStderr("herrscher serve: session %q: %v\n", sess.Name, err)
+			warnHost(runningHub.lang, "warn.session_start", map[string]any{nameParam: sess.Name, detailParam: err})
 			continue
 		}
 		sup.StartWith(ctx, sess)
@@ -453,7 +453,7 @@ func logCompiledPlugins(log *slog.Logger) {
 
 func startHubProbes(ctx context.Context, gws []Deps, options Options, store *state.State, monitor *health.Health, instID string) {
 	if options.HealthAddr != "" {
-		go serveHealth(ctx, options.HealthAddr, monitor)
+		go serveHealth(ctx, options.HealthAddr, monitor, options.operatorLanguage())
 	}
 	if pr := firstProber(gws); pr != nil {
 		go pingLoop(ctx, pr, monitor)

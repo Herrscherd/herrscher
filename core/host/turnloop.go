@@ -65,7 +65,6 @@ type sessionSink struct {
 	Transcript func(state.TranscriptEntry)
 	Checkpoint func(turnID, text string)
 	Usage      func([]usage.Record)
-	Stopped    func()
 }
 
 type sessionDriver struct {
@@ -1296,11 +1295,6 @@ func RunSession(ctx context.Context, sessions *sessionTable, name, channel strin
 
 func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, registry *metrics.Registry, coord contracts.Coordinator, sink sessionSink, emit func(contracts.Event), identity sessionIdentity, gate budgetGate) {
 	defer closeRead(acc)
-	defer func() {
-		if sink.Stopped != nil {
-			sink.Stopped()
-		}
-	}()
 	toBridge := make(chan contracts.Event)
 	fromBridge := make(chan contracts.Event)
 	driver := newSessionDriver(name, gws, toBridge, fromBridge)

@@ -141,7 +141,7 @@ func (h *hub) roleNames() map[string]string {
 			continue
 		}
 		if _, said := h.warnedRoles.LoadOrStore(principal+"\x00"+name, struct{}{}); !said {
-			warnStderr("herrscher serve: %s holds role %q, which herrscher does not define; treating it as `observer`\n", principal, name)
+			warnHost(h.lang, "warn.role_undefined", map[string]any{nameParam: principal, roleParam: name})
 		}
 	}
 	return names

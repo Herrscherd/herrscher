@@ -5,6 +5,9 @@ import (
 	"io"
 	"log/slog"
 	"os"
+
+	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func closeRead(closer io.Closer) {
@@ -21,6 +24,10 @@ func logWriteFailure(_ int, err error) {
 	logCleanup(err)
 }
 
-func warnStderr(format string, args ...any) {
-	logWriteFailure(fmt.Fprintf(os.Stderr, format, args...))
+func warnHost(lang i18n.Language, key string, params map[string]any) {
+	logWriteFailure(fmt.Fprintln(os.Stderr, newHostMessages().text(lang, key, params)))
+}
+
+func warnClient(key string, params map[string]any) {
+	warnHost(clitext.ClientLanguage(), key, params)
 }

@@ -47,7 +47,7 @@ func historyFixture(t *testing.T, declared bool) (*compactFixture, chan historyR
 	policy.plugins["jev"] = pruningCompactor{runs: runs}
 	policy.historyEditors["claude"] = declared
 	warned := new([]string)
-	policy.warn = func(format string, _ ...any) { *warned = append(*warned, format) }
+	policy.warn = func(key string, _ map[string]any) { *warned = append(*warned, key) }
 	return newCompactFixture(t, "claude", policy), runs, warned
 }
 
@@ -124,7 +124,7 @@ func TestBackendWithoutTheHistoryPortFailsTheStageAndWarnsOnce(t *testing.T) {
 		}
 		waitEmitted(t, f, eventCompactFailed)
 	}
-	if len(*warned) != 1 || !strings.Contains((*warned)[0], "HistoryEditor") {
+	if len(*warned) != 1 || (*warned)[0] != "warn.history_port_missing" {
 		t.Fatalf("warnings = %q, want one line about the missing history port", *warned)
 	}
 }

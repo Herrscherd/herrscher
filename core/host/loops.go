@@ -8,17 +8,18 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/internal/health"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 const healthWindow = 90 * time.Second
 
-func serveHealth(ctx context.Context, addr string, monitor *health.Health) {
+func serveHealth(ctx context.Context, addr string, monitor *health.Health, lang i18n.Language) {
 	srv := newHealthServer(addr, monitor)
 	go func() { <-ctx.Done(); closeRead(srv) }()
 	if err := srv.ListenAndServe(); err != nil && ctx.Err() == nil {
-		warnStderr("health server: %v\n", err)
+		warnHost(lang, "warn.health_server", map[string]any{detailParam: err})
 	}
 }
 

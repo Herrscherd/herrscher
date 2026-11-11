@@ -109,7 +109,7 @@ type compactionPolicy struct {
 	historyEditors map[string]bool
 	warnOnce       *sync.Once
 	historyOnce    *sync.Once
-	warn           func(format string, args ...any)
+	warn           func(key string, params map[string]any)
 }
 
 func newCompactionPolicy(ctx context.Context, percent *int, names []string, perVendor map[string]int) (compactionPolicy, error) {
@@ -122,7 +122,7 @@ func newCompactionPolicy(ctx context.Context, percent *int, names []string, perV
 		historyEditors: make(map[string]bool),
 		warnOnce:       &sync.Once{},
 		historyOnce:    &sync.Once{},
-		warn:           warnStderr,
+		warn:           warnClient,
 	}
 	if percent != nil {
 		if err := contracts.ValidateAutoCompactPercent(*percent); err != nil {
@@ -181,16 +181,16 @@ func (p *compactionPolicy) addStage(ctx context.Context, name string) error {
 	return nil
 }
 
-func warnInvalidContextLimit(warn func(format string, args ...any), raw string) {
+func warnInvalidContextLimit(warn func(key string, params map[string]any), raw string) {
 	if err := contextwindow.CheckOverride(raw); err != nil {
-		warn("herrscher serve: %s ignored, %v: the vendor default window applies\n", contextwindow.EnvVar(), err)
+		warn("warn.context_limit_env", map[string]any{nameParam: contextwindow.EnvVar(), detailParam: err})
 	}
 }
 
-func warnUnknownContextLimits(warn func(format string, args ...any), perVendor map[string]int, kinds []string) {
+func warnUnknownContextLimits(warn func(key string, params map[string]any), perVendor map[string]int, kinds []string) {
 	for _, vendor := range slices.Sorted(maps.Keys(perVendor)) {
 		if !slices.ContainsFunc(kinds, func(kind string) bool { return strings.EqualFold(kind, vendor) }) {
-			warn("herrscher serve: contextLimits: no backend %q in this daemon, its window size is unused\n", vendor)
+			warn("warn.context_limit_unknown_vendor", map[string]any{nameParam: vendor})
 		}
 	}
 }
@@ -241,13 +241,13 @@ func (p *compactionPolicy) editsHistory(vendor string) bool {
 
 func (p *compactionPolicy) warnNoHistoryPort(vendor string) {
 	p.historyOnce.Do(func() {
-		p.warn("herrscher serve: backend %q declares Capabilities.HistoryEditor but its instance does not implement the port, its history is not edited\n", vendor)
+		p.warn("warn.history_port_missing", map[string]any{nameParam: vendor})
 	})
 }
 
 func (p *compactionPolicy) warnNoPort(vendor string) {
 	p.warnOnce.Do(func() {
-		p.warn("herrscher serve: backend %q declares Capabilities.Compactor but its instance does not implement the port, its compaction is refused\n", vendor)
+		p.warn("warn.compactor_port_missing", map[string]any{nameParam: vendor})
 	})
 }
 
@@ -700,7 +700,7 @@ func (c bridgeCompactor) Compact(ctx context.Context, req contracts.CompactReque
 func (d *sessionDriver) decodeCompactResult(frame contracts.Event) (contracts.CompactResult, error) {
 	res, err := compactwire.DecodeResult(frame)
 	if errors.Is(err, compactwire.ErrNoticeMalformed) {
-		warnStderr("herrscher serve: session %q: compaction notice dropped, its note and figures are kept: %v\n", d.name, err)
+		warnHost(d.lang, "warn.session_compaction_notice", map[string]any{nameParam: d.name, detailParam: err})
 		return res, nil
 	}
 	return res, err

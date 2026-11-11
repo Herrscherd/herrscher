@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -183,10 +184,44 @@ func TestGoDeadWaitsForTheCommandSocketRelease(t *testing.T) {
 	}
 }
 
+func TestGoDeadReleasesTheSocketsWhileHoldingTheLifecycle(t *testing.T) {
+	layout := isolatedRuntimeDir(t)
+	name := "lifecycle-" + newTurnID()
+	h := newHub(
+		state.NewState(filepath.Join(t.TempDir(), "state.json")),
+		nil,
+		nil,
+		t.TempDir(),
+		nil,
+		nil,
+		newApprovalTable(),
+		newSessionTable(),
+	)
+	h.runtime = layout
+	t.Cleanup(func() { h.goDead(name) })
+
+	if err := h.goLive(t.Context(), state.Session{Name: name, Incarnation: "incarnation"}); err != nil {
+		t.Fatal(err)
+	}
+	probe := probeRelease(h, name)
+	h.goDead(name)
+
+	if got := probe.calls.Load(); got != 1 {
+		t.Fatalf("goDead released the sockets %d times, want 1", got)
+	}
+	if probe.unlocked.Load() {
+		t.Fatal("goDead released the sockets without holding the lifecycle lock, a concurrent goLive could still find the old socket answering")
+	}
+}
+
 func TestRebindSurvivesAnOverrunTeardown(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
 	name := "overrun-" + newTurnID()
 	sessionTab := newSessionTable()
+	entered := make(chan struct{})
+	holdTeardown := make(chan struct{})
+	releaseTeardown := sync.OnceFunc(func() { close(holdTeardown) })
+	var enterOnce sync.Once
 	h := newHub(
 		state.NewState(filepath.Join(t.TempDir(), "state.json")),
 		nil,
@@ -196,17 +231,13 @@ func TestRebindSurvivesAnOverrunTeardown(t *testing.T) {
 		nil,
 		newApprovalTable(),
 		sessionTab,
+		withSessionStopped(func(string) {
+			enterOnce.Do(func() { close(entered) })
+			<-holdTeardown
+		}),
 	)
 	h.runtime = layout
 	h.teardownGrace = 0
-	entered := make(chan struct{})
-	holdTeardown := make(chan struct{})
-	releaseTeardown := sync.OnceFunc(func() { close(holdTeardown) })
-	var enterOnce sync.Once
-	h.onSessionStopped = func() {
-		enterOnce.Do(func() { close(entered) })
-		<-holdTeardown
-	}
 	t.Cleanup(func() { h.goDead(name) })
 	t.Cleanup(releaseTeardown)
 
@@ -217,6 +248,7 @@ func TestRebindSurvivesAnOverrunTeardown(t *testing.T) {
 	h.mu.Lock()
 	oldDone := h.live[name].done
 	h.mu.Unlock()
+	probe := probeRelease(h, name)
 
 	overrun := make(chan struct{})
 	go func() {
@@ -228,6 +260,12 @@ func TestRebindSurvivesAnOverrunTeardown(t *testing.T) {
 	case <-overrun:
 	case <-time.After(5 * time.Second):
 		t.Fatal("goDead did not return once the teardown overran its grace")
+	}
+	if got := probe.calls.Load(); got != 1 {
+		t.Fatalf("goDead returned after %d releases of the overrun session, want 1", got)
+	}
+	if socketAnswers(t.Context(), layout, SessionCommandSocketPathIn(layout, h.instanceID, name)) {
+		t.Fatal("the command socket still answers once goDead has returned")
 	}
 
 	if err := h.goLive(t.Context(), state.Session{Name: name, Incarnation: "new-incarnation"}); err != nil {
@@ -241,4 +279,33 @@ func TestRebindSurvivesAnOverrunTeardown(t *testing.T) {
 		t.Fatalf("the late teardown of the old session removed the replacement control socket: %v", err)
 	}
 	logCleanup(conn.Close())
+}
+
+type releaseProbe struct {
+	calls    atomic.Int32
+	unlocked atomic.Bool
+}
+
+func probeRelease(h *hub, name string) *releaseProbe {
+	probe := &releaseProbe{}
+	h.mu.Lock()
+	live := h.live[name]
+	h.mu.Unlock()
+	original := live.release
+	live.release = func() {
+		probe.calls.Add(1)
+		if h.lifecycle.TryLock() {
+			h.lifecycle.Unlock()
+			probe.unlocked.Store(true)
+		}
+		original()
+	}
+	h.mu.Lock()
+	h.live[name] = live
+	h.mu.Unlock()
+	return probe
+}
+
+func withSessionStopped(fn func(name string)) hubOption {
+	return func(h *hub) { h.sessionStopped = fn }
 }

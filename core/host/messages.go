@@ -20,6 +20,9 @@ const (
 	detailParam = "Detail"
 	nameParam   = "Name"
 	pathParam   = "Path"
+	graceParam  = "Grace"
+	roleParam   = "Role"
+	ruleParam   = "Rule"
 )
 
 type hostMessages struct {

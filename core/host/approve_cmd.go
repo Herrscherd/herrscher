@@ -284,13 +284,13 @@ func readAgentPolicy(home string) approval.Policy {
 	buf, err := os.ReadFile(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			warnStderr("approvals: %s: unreadable, its rules do not apply: %v\n", path, err)
+			warnClient("warn.approvals_unreadable", map[string]any{pathParam: path, detailParam: err})
 		}
 		return nil
 	}
 	pol, errs := approval.ParsePolicy(string(buf))
 	for _, e := range errs {
-		warnStderr("approvals: %s: %v\n", path, e)
+		warnClient("warn.approvals_file", map[string]any{pathParam: path, detailParam: e})
 	}
 	return pol
 }
@@ -300,7 +300,7 @@ func sessionPolicy(hostState *state.State, agents *agent.Store, session string) 
 	for _, raw := range hostState.ApprovalRules() {
 		rule, err := approval.ParseRule(raw)
 		if err != nil {
-			warnStderr("approvals: state rule %q dropped, it no longer applies: %v\n", raw, err)
+			warnClient("warn.approvals_state_rule", map[string]any{ruleParam: raw, detailParam: err})
 			continue
 		}
 		daemon = append(daemon, rule)

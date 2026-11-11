@@ -192,11 +192,28 @@ func remoteSocketDir(ctx context.Context, t *testing.T, layout RuntimeLayout, ta
 	if err != nil {
 		t.Fatal(err)
 	}
+	removeRemoteRuntimeDirOnExitIfCreated(ctx, t, target)
 	dir, err := runner.RemoteRuntimeDir(ctx, target, controlPath)
 	if err != nil {
 		t.Fatalf("remote runtime dir: %v", err)
 	}
 	return dir
+}
+
+func removeRemoteRuntimeDirOnExitIfCreated(ctx context.Context, t *testing.T, target string) {
+	t.Helper()
+	dir := expectedRemoteRuntimeDir(ctx, t, target)
+	presence, err := capture(ctx, runner.SSH{Target: target}, "sh", "-c", `if [ -e "$1" ]; then echo present; else echo absent; fi`, "sh", dir)
+	if err != nil {
+		t.Fatalf("probe the remote runtime dir: %v", err)
+	}
+	if strings.TrimSpace(presence) != "absent" {
+		return
+	}
+	t.Cleanup(func() {
+		_, rmErr := capture(context.WithoutCancel(ctx), runner.SSH{Target: target}, "rm", "-rf", "--", dir)
+		logCleanup(rmErr)
+	})
 }
 
 func TestE2ERemoteRuntimeDirIsPrivateAndPerUser(t *testing.T) {

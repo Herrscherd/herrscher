@@ -42,8 +42,8 @@ func refuseThisAccount(t *testing.T, target string) {
 	ctx, cancel := context.WithTimeout(context.Background(), accountProbeTimeout)
 	defer cancel()
 	remote := remoteAccount(ctx, t, target)
-	if refusesRemoteAccount(targetHost(target), localAccount(), remote, os.Getenv(dedicatedTargetVar) == "1") {
-		t.Fatalf("HERRSCHER_E2E_SSH=%s is the account running these tests (uid %d on this machine); the remote tests would write the production runtime directory of that account. Point it at another account, or set %s=1 only on a host whose runtime directory belongs to the tests", target, remote.uid, dedicatedTargetVar)
+	if refusesRemoteAccount(sshHostname(t, target), localAccount(), remote, dedicatedEscape(os.Getenv)) {
+		t.Fatalf("HERRSCHER_E2E_SSH=%s is the account running these tests (uid %d on this machine); the remote tests would write the production runtime directory of that account. Point it at another account, or run under GitHub Actions with %s=1 on a runner whose runtime directory belongs to the tests", target, remote.uid, dedicatedTargetVar)
 	}
 }
 
@@ -57,9 +57,9 @@ func remoteAccount(ctx context.Context, t *testing.T, target string) sshAccount 
 	if err != nil {
 		t.Fatalf("the uid of %s is not a number: %q", target, uidText)
 	}
-	machine, err := capture(ctx, runner.SSH{Target: target}, "sh", "-c", "cat /etc/machine-id 2>/dev/null || true")
+	machine, err := capture(ctx, runner.SSH{Target: target}, "sh", "-c", remoteMachineIDScript)
 	if err != nil {
-		t.Fatalf("read the machine id of %s: %v", target, err)
+		machine = ""
 	}
 	return sshAccount{uid: uid, machineID: strings.TrimSpace(machine)}
 }
@@ -239,7 +239,7 @@ func removeRemoteRuntimeDirOnExitIfCreated(ctx context.Context, t *testing.T, ta
 	if err != nil {
 		t.Fatalf("probe the remote runtime dir: %v", err)
 	}
-	if strings.TrimSpace(presence) != "absent" || os.Getenv(dedicatedTargetVar) != "1" {
+	if strings.TrimSpace(presence) != "absent" || !dedicatedEscape(os.Getenv) {
 		return
 	}
 	t.Cleanup(func() {

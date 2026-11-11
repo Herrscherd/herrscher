@@ -1577,12 +1577,18 @@ checker and rely on review.
 `go test ./core/host/` runs the remote end-to-end tests (the `TestE2E` ones) against
 an ssh host when two environment variables are set:
 
-- `HERRSCHER_E2E_SSH` names that host as `user@host`. The host must accept key
-  authentication without a prompt. Without this variable the tests skip, and the
-  e2e-ssh CI job fails when any of them skips. Before running, the tests refuse a host
-  that is the account running them: same uid, and either a loopback address or the same
-  machine id on both sides. The refusal is lifted by `HERRSCHER_E2E_DEDICATED=1`.
-- `HERRSCHER_E2E_DEDICATED=1` allows the tests to remove the remote runtime directory
+- `HERRSCHER_E2E_SSH` names that host as `user@host`, or as an alias from `~/.ssh/config`.
+  The host must accept key authentication without a prompt. Without this variable the
+  tests skip, and the e2e-ssh CI job fails when any of them skips. Before running, the
+  tests resolve the target with `ssh -G` and refuse a host that is the account running
+  them: same uid, and either a loopback address (after alias resolution), or an identity
+  that cannot be read on either side, or the same machine id on both sides. Machine ids
+  come from `/etc/machine-id` on Linux and from `sysctl -n kern.uuid` on macOS. An
+  unreadable identity is refused, not assumed to be another machine.
+- `HERRSCHER_E2E_DEDICATED=1` lifts that refusal, but only under GitHub Actions, where
+  `GITHUB_ACTIONS=true` is set by the runner itself. On a developer machine the variable
+  alone is ignored and the refusal stays.
+- Under the same GitHub Actions condition, `HERRSCHER_E2E_DEDICATED=1` also allows the tests to remove the remote runtime directory
   with `rmdir` at the end of a run, and only when it did not exist before the run and
   is empty at the end. Set it only on a host whose runtime directory belongs to the
   tests. Without it the directory is left in place. A non-empty directory is never

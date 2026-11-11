@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"testing"
 	"testing/synctest"
@@ -74,7 +75,7 @@ func TestPublishNilSocketNoop(_ *testing.T) {
 
 func TestFanOutFiresEmitTap(t *testing.T) {
 	var got []contracts.Event
-	d := newSessionDriver("s", nil, nil, nil)
+	d := newSessionDriver("s", nil, nil, nil, io.Discard)
 	d.emitTap = func(e contracts.Event) { got = append(got, e) }
 	d.fanOut(context.Background(), contracts.Event{T: "thinking", Text: "hmm"})
 	d.fanOut(context.Background(), contracts.Event{T: "reply", Text: "done", Done: true})

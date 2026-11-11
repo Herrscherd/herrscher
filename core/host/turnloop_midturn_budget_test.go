@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"strings"
 	"sync"
 	"testing"
@@ -43,8 +44,8 @@ func startBudgetedTurn(t *testing.T, headroom uint64) *budgetedTurn {
 
 	toBridge := make(chan contracts.Event, 8)
 	fromBridge := make(chan contracts.Event, 8)
-	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
-	d.lang = i18n.French
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+	d.operator = fixedLanguageSource(i18n.French)
 	d.gate = fixedGate{headroom: headroom, capped: true}
 	b := &budgetedTurn{toBridge: toBridge, fromBridge: fromBridge}
 	d.emitTap = func(e contracts.Event) {

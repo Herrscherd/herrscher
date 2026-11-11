@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"path/filepath"
 	"strings"
@@ -115,7 +116,7 @@ func (c *reentrantSeedCoordinator) Delegate(_ context.Context, req contracts.Del
 
 func identitySeedRegistry(t *testing.T) (*cli.Registry, state.Session, *[]contracts.Event, context.Context) {
 	t.Helper()
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "state.json")
@@ -212,7 +213,7 @@ func TestSeedTurnIDRoundTripsThroughShellAndCommandSocket(t *testing.T) {
 }
 
 func TestDaemonSeedCoordinatesPersistsAndDoesNotHoldDispatchLock(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)

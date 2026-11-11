@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -14,11 +15,11 @@ import (
 
 const healthWindow = 90 * time.Second
 
-func serveHealth(ctx context.Context, addr string, monitor *health.Health) {
+func serveHealth(ctx context.Context, addr string, monitor *health.Health, lang languageSource, warn io.Writer) {
 	srv := newHealthServer(addr, monitor)
 	go func() { <-ctx.Done(); closeRead(srv) }()
 	if err := srv.ListenAndServe(); err != nil && ctx.Err() == nil {
-		warnStderr("health server: %v\n", err)
+		warnLive(warn, lang, "warn.health_server", map[string]any{detailParam: err})
 	}
 }
 

@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -68,6 +69,7 @@ type Options struct {
 	StatePath       string
 	Runtime         runtimedir.Layout
 	Language        i18n.Language
+	Warnings        io.Writer
 	DefaultLanguage i18n.Language
 	live            *operatorLanguage
 	health          *healthSource
@@ -188,10 +190,7 @@ func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, option
 }
 
 func (options Options) operatorLanguage() i18n.Language {
-	if options.live != nil {
-		return options.live.Get()
-	}
-	return options.Language
+	return options.languageSource()()
 }
 
 func claimInstance(ctx context.Context, layout runtimedir.Layout, instID string) (func(), error) {
@@ -256,13 +255,13 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	defer releaseInstance()
 
 	options = options.withDefaultGateways(gws)
-	approvals := newApprovalTable().withRules(store)
+	approvals := newApprovalTable(options.Warnings).withRules(store)
 	sessions := newSessionTable()
 	options.health = &healthSource{}
 	options.usage = newUsageSource(partDir)
 	stopUsageWatch := options.usage.startWatch(ctx)
 	defer stopUsageWatch()
-	policy, err := newCompactionPolicy(ctx, options.CompactPercent, options.CompactStack, options.ContextLimits)
+	policy, err := newCompactionPolicy(ctx, options.languageSource(), options.Warnings, options.CompactPercent, options.CompactStack, options.ContextLimits)
 	if err != nil {
 		return wrapHost(err, "serve.compaction", nil)
 	}
@@ -300,8 +299,9 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	}
 	defer CloseKeyProxy(ctx, log, keys)
 	options.health.bind(newHealthInputs(options.Runtime, instID, keys, gws, policy, partDir))
-	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions)
+	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions, withWarnings(options.Warnings))
 	runningHub.lang = options.Language
+	runningHub.language = options.languageSource()
 	runningHub.models = options.modelDiscovery()
 	runningHub.seedBackend = func(seedCtx context.Context, sess state.Session) (contracts.Backend, error) {
 		return newSeedBackend(seedCtx, sess, keys, runningHub.models)
@@ -404,7 +404,7 @@ func serveHubSockets(ctx context.Context, layout runtimedir.Layout, instID strin
 	}
 	hubCore.eventPublisher = events.Publish
 	eventsReleased := acceptEvents(ctx, eventsListener, events)
-	commandsReleased := acceptCommands(ctx, commandsListener, asOperator{disp: hubCore, lang: hubCore.lang}, defaultCommandReadTimeout)
+	commandsReleased := acceptCommands(ctx, commandsListener, hubCore.operatorCommands(), defaultCommandReadTimeout)
 	return allReleased(eventsReleased, commandsReleased), nil
 }
 
@@ -427,7 +427,7 @@ func goLiveSessions(ctx context.Context, runningHub *hub, sup *supervisor.Superv
 			continue
 		}
 		if err := runningHub.goLive(ctx, sess); err != nil {
-			warnStderr("herrscher serve: session %q: %v\n", sess.Name, err)
+			warnLive(runningHub.warnings, runningHub.sessionLanguageSource(sess.Name), "warn.session_start", map[string]any{nameParam: sess.Name, detailParam: err})
 			continue
 		}
 		sup.StartWith(ctx, sess)
@@ -453,7 +453,7 @@ func logCompiledPlugins(log *slog.Logger) {
 
 func startHubProbes(ctx context.Context, gws []Deps, options Options, store *state.State, monitor *health.Health, instID string) {
 	if options.HealthAddr != "" {
-		go serveHealth(ctx, options.HealthAddr, monitor)
+		go serveHealth(ctx, options.HealthAddr, monitor, options.languageSource(), options.Warnings)
 	}
 	if pr := firstProber(gws); pr != nil {
 		go pingLoop(ctx, pr, monitor)

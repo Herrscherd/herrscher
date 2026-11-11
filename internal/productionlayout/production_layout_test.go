@@ -19,8 +19,11 @@ const (
 	windowsWrappersFile = "core/host/cmdsocket_windows.go"
 	runtimeDirFile      = "core/host/runtime_dir.go"
 	runtimedirPackage   = "core/internal/runtimedir/"
+	hostPackageDir      = "core/host/"
 	runtimedirImport    = "github.com/Herrscherd/herrscher/core/internal/runtimedir"
 	runtimedirName      = "runtimedir"
+	hostImport          = "github.com/Herrscherd/herrscher/core/host"
+	hostName            = "host"
 	productionRuntime   = "ProductionRuntime"
 	productionLayout    = "Production"
 	runtimedirAt        = "At"
@@ -89,28 +92,95 @@ func arbitraryLayoutViolations(files []sourceFile) []string {
 		if strings.HasSuffix(file.rel, testFileSuffix) || file.rel == runtimeDirFile || strings.HasPrefix(file.rel, runtimedirPackage) {
 			continue
 		}
-		ast.Inspect(file.tree, func(n ast.Node) bool {
-			if call, ok := n.(*ast.CallExpr); ok && isArbitraryLayoutCall(call.Fun) {
-				out = append(out, file.position(call.Pos())+fmt.Sprintf(": builds a layout from an arbitrary path; only tests and %s may, production takes the layout that main passes", runtimeDirFile))
-			}
-			return true
-		})
+		out = append(out, arbitraryLayoutRefs(file)...)
 	}
 	return out
 }
 
-func isArbitraryLayoutCall(fun ast.Expr) bool {
-	switch callee := fun.(type) {
-	case *ast.Ident:
-		return callee.Name == hostRuntimeAt
-	case *ast.SelectorExpr:
-		if callee.Sel.Name == hostRuntimeAt {
-			return true
+func arbitraryLayoutRefs(file sourceFile) []string {
+	imports := layoutImportsOf(file.tree)
+	inHost := strings.HasPrefix(file.rel, hostPackageDir)
+	selectors := make(map[*ast.Ident]bool)
+	var out []string
+	ast.Inspect(file.tree, func(n ast.Node) bool {
+		switch node := n.(type) {
+		case *ast.SelectorExpr:
+			selectors[node.Sel] = true
+			if imports.namesArbitraryLayout(node) {
+				out = append(out, file.position(node.Pos())+arbitraryLayoutReason())
+			}
+		case *ast.Ident:
+			if !selectors[node] && imports.bareArbitraryLayout(node.Name, inHost) {
+				out = append(out, file.position(node.Pos())+arbitraryLayoutReason())
+			}
 		}
-		qualifier, ok := callee.X.(*ast.Ident)
-		return ok && qualifier.Name == runtimedirName && callee.Sel.Name == runtimedirAt
+		return true
+	})
+	return out
+}
+
+func arbitraryLayoutReason() string {
+	return fmt.Sprintf(": refers to a layout builder from an arbitrary path; only tests and %s may, production takes the layout that main passes", runtimeDirFile)
+}
+
+type layoutImports struct {
+	runtimedir    map[string]bool
+	host          map[string]bool
+	dotRuntimedir bool
+	dotHost       bool
+}
+
+func layoutImportsOf(tree *ast.File) layoutImports {
+	imports := layoutImports{runtimedir: make(map[string]bool), host: make(map[string]bool)}
+	for _, spec := range tree.Imports {
+		path, err := strconv.Unquote(spec.Path.Value)
+		if err != nil {
+			continue
+		}
+		switch path {
+		case runtimedirImport:
+			if spec.Name != nil && spec.Name.Name == "." {
+				imports.dotRuntimedir = true
+				continue
+			}
+			imports.runtimedir[importQualifier(spec, runtimedirName)] = true
+		case hostImport:
+			if spec.Name != nil && spec.Name.Name == "." {
+				imports.dotHost = true
+				continue
+			}
+			imports.host[importQualifier(spec, hostName)] = true
+		}
+	}
+	return imports
+}
+
+func importQualifier(spec *ast.ImportSpec, defaultName string) string {
+	if spec.Name != nil {
+		return spec.Name.Name
+	}
+	return defaultName
+}
+
+func (imports layoutImports) namesArbitraryLayout(sel *ast.SelectorExpr) bool {
+	qualifier, ok := sel.X.(*ast.Ident)
+	if !ok {
+		return false
+	}
+	switch sel.Sel.Name {
+	case runtimedirAt:
+		return imports.runtimedir[qualifier.Name]
+	case hostRuntimeAt:
+		return imports.host[qualifier.Name]
 	}
 	return false
+}
+
+func (imports layoutImports) bareArbitraryLayout(name string, inHost bool) bool {
+	if name == hostRuntimeAt {
+		return inHost || imports.dotHost
+	}
+	return name == runtimedirAt && imports.dotRuntimedir
 }
 
 func productionLayoutViolations(files []sourceFile) []string {

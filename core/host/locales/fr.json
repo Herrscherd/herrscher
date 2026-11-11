@@ -553,5 +553,105 @@
     "id": "coordination.delegate_refused",
     "description": "A task delegation refused, shown as an event",
     "other": "delegate refusé"
+  },
+  {
+    "id": "warn.session_start",
+    "description": "A session fails to come live or to be restored at start; Name is the session, Detail the cause",
+    "other": "herrscher serve : session \"{{.Name}}\" : {{.Detail}}"
+  },
+  {
+    "id": "warn.session_checkpoint",
+    "description": "A turn's checkpoint could not be written; /rewind cannot return to that message",
+    "other": "herrscher serve : session \"{{.Name}}\" : point de contrôle non pris, /rewind ne pourra pas revenir à ce message : {{.Detail}}"
+  },
+  {
+    "id": "warn.session_resume_token",
+    "description": "The resume token of a session could not be saved; a restart loses its conversation",
+    "other": "herrscher serve : session \"{{.Name}}\" : jeton de reprise non enregistré, un redémarrage perdra la conversation : {{.Detail}}"
+  },
+  {
+    "id": "warn.session_project_pin",
+    "description": "The pinned memory project of a session could not be saved",
+    "other": "herrscher serve : session \"{{.Name}}\" : projet de mémoire non enregistré, le prochain démarrage devinera à nouveau : {{.Detail}}"
+  },
+  {
+    "id": "warn.session_transcript",
+    "description": "A transcript entry of a session could not be written",
+    "other": "herrscher serve : session \"{{.Name}}\" : entrée de transcription perdue : {{.Detail}}"
+  },
+  {
+    "id": "warn.session_teardown_overrun",
+    "description": "A session teardown outlives its grace period; the name is released anyway",
+    "other": "herrscher serve : session \"{{.Name}}\" : l'arrêt est toujours en cours après {{.Grace}}, le nom est libéré quand même"
+  },
+  {
+    "id": "warn.session_seed_transcript",
+    "description": "A transcript entry of a seeded session could not be written",
+    "other": "herrscher serve : session \"{{.Name}}\" : entrée de transcription initiale perdue : {{.Detail}}"
+  },
+  {
+    "id": "warn.session_usage",
+    "description": "The usage records of a session turn could not be appended to the ledger",
+    "other": "herrscher serve : session \"{{.Name}}\" : usage non enregistré : {{.Detail}}"
+  },
+  {
+    "id": "warn.session_compaction_notice",
+    "description": "A malformed compaction notice is dropped; its note and figures are kept",
+    "other": "herrscher serve : session \"{{.Name}}\" : avis de compaction perdu, sa note et ses chiffres sont conservés : {{.Detail}}"
+  },
+  {
+    "id": "warn.role_undefined",
+    "description": "A principal holds a role name herrscher does not define",
+    "other": "herrscher serve : {{.Name}} porte le rôle \"{{.Role}}\", que herrscher ne définit pas ; il est traité comme `observer`"
+  },
+  {
+    "id": "warn.ssh_multiplexing_disabled",
+    "description": "SSH connection multiplexing is disabled for a remote host",
+    "other": "multiplexage ssh désactivé pour {{.Name}} : {{.Detail}}"
+  },
+  {
+    "id": "warn.health_server",
+    "description": "The health endpoint could not serve",
+    "other": "serveur de santé : {{.Detail}}"
+  },
+  {
+    "id": "warn.command_socket_listen",
+    "description": "The command socket could not listen on its path",
+    "other": "socket de commandes : écoute sur {{.Path}} : {{.Detail}}"
+  },
+  {
+    "id": "warn.approvals_unreadable",
+    "description": "The approvals file cannot be read, so its rules are ignored",
+    "other": "approbations : {{.Path}} illisible, ses règles ne s'appliquent pas : {{.Detail}}"
+  },
+  {
+    "id": "warn.approvals_file",
+    "description": "The approvals file has a malformed line",
+    "other": "approbations : {{.Path}} : {{.Detail}}"
+  },
+  {
+    "id": "warn.approvals_state_rule",
+    "description": "A stored approval rule no longer parses and is dropped",
+    "other": "approbations : règle d'état \"{{.Rule}}\" retirée, elle ne s'applique plus : {{.Detail}}"
+  },
+  {
+    "id": "warn.context_limit_env",
+    "description": "The context window override in the environment is invalid",
+    "other": "herrscher serve : {{.Name}} ignoré, {{.Detail}} : la fenêtre par défaut du fournisseur s'applique"
+  },
+  {
+    "id": "warn.context_limit_unknown_vendor",
+    "description": "A context window is configured for a vendor with no backend in this daemon",
+    "other": "herrscher serve : contextLimits : aucun backend \"{{.Name}}\" dans ce démon, sa taille de fenêtre n'est pas utilisée"
+  },
+  {
+    "id": "warn.history_port_missing",
+    "description": "A backend declares the history editor capability without implementing its port",
+    "other": "herrscher serve : le backend \"{{.Name}}\" déclare Capabilities.HistoryEditor mais son instance n'implémente pas le port, son historique n'est pas modifié"
+  },
+  {
+    "id": "warn.compactor_port_missing",
+    "description": "A backend declares the compactor capability without implementing its port",
+    "other": "herrscher serve : le backend \"{{.Name}}\" déclare Capabilities.Compactor mais son instance n'implémente pas le port, sa compaction est refusée"
   }
 ]

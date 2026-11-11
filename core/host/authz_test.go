@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"strings"
 	"testing"
 
@@ -30,7 +31,7 @@ func authzHub(t *testing.T, st *state.State, verbs ...[]string) *hub {
 			t.Fatal(err)
 		}
 	}
-	return &hub{st: st, reg: reg, live: make(map[string]liveSession)}
+	return &hub{warnings: io.Discard, st: st, reg: reg, live: make(map[string]liveSession)}
 }
 
 func authzState(t *testing.T, sessions []state.Session, roles map[string]string) *state.State {
@@ -166,7 +167,7 @@ func TestDispatchRefusesBeforeReachingTheRegistry(t *testing.T) {
 		})); err != nil {
 		t.Fatal(err)
 	}
-	h := &hub{st: st, reg: reg, live: make(map[string]liveSession)}
+	h := &hub{warnings: io.Discard, st: st, reg: reg, live: make(map[string]liveSession)}
 	if _, err := h.Dispatch(withSessionPrincipal(context.Background(), "revue"), []string{"approve", "rule"}); err == nil {
 		t.Fatal("Dispatch must refuse")
 	}
@@ -192,7 +193,7 @@ func TestAnUnknownVerbIsDispatchsErrorAndNotARefusal(t *testing.T) {
 
 func operatorRegistryForTest(t *testing.T) *cli.Registry {
 	t.Helper()
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)

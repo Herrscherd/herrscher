@@ -22,6 +22,17 @@ func withOperatorLanguage(options Options) Options {
 	return options
 }
 
+func (options Options) languageSource() languageSource {
+	if options.live != nil {
+		return options.live.Get
+	}
+	return fixedLanguageSource(options.Language)
+}
+
+func fixedLanguageSource(lang i18n.Language) languageSource {
+	return func() i18n.Language { return lang }
+}
+
 func (live *operatorLanguage) Get() i18n.Language {
 	live.mu.RLock()
 	defer live.mu.RUnlock()

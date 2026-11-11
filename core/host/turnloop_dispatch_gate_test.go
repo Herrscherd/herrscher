@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"strings"
 	"sync"
 	"testing"
@@ -27,9 +28,8 @@ func TestDispatchRefusedWhilePaused(t *testing.T) {
 
 	toBridge := make(chan contracts.Event, 4)
 	fromBridge := make(chan contracts.Event, 4)
-	d := newSessionDriver("s1",
-		[]contracts.GatewaySet{{Gateway: a, Reader: a}},
-		toBridge, fromBridge)
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+
 	d.gate = fixedGate{reason: "cost"}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -56,9 +56,8 @@ func TestPausedReachesEmitTap(t *testing.T) {
 
 	toBridge := make(chan contracts.Event, 4)
 	fromBridge := make(chan contracts.Event, 4)
-	d := newSessionDriver("s1",
-		[]contracts.GatewaySet{{Gateway: a, Reader: a}},
-		toBridge, fromBridge)
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+
 	d.gate = fixedGate{reason: "cost"}
 	var tapped []contracts.Event
 	var mu sync.Mutex
@@ -96,9 +95,8 @@ func TestRefusedInputAcknowledgedNotSilentlyDropped(t *testing.T) {
 
 	toBridge := make(chan contracts.Event, 4)
 	fromBridge := make(chan contracts.Event, 4)
-	d := newSessionDriver("s1",
-		[]contracts.GatewaySet{{Gateway: a, Reader: a}},
-		toBridge, fromBridge)
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+
 	d.gate = fixedGate{reason: "cost"}
 	tap := &refusalTap{}
 	d.emitTap = tap.record
@@ -164,9 +162,8 @@ func TestDispatchProceedsWhenNotPaused(t *testing.T) {
 
 	toBridge := make(chan contracts.Event, 4)
 	fromBridge := make(chan contracts.Event, 4)
-	d := newSessionDriver("s1",
-		[]contracts.GatewaySet{{Gateway: a, Reader: a}},
-		toBridge, fromBridge)
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+
 	d.gate = fixedGate{reason: ""}
 
 	ctx, cancel := context.WithCancel(context.Background())

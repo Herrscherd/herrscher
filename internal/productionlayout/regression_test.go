@@ -183,3 +183,111 @@ func stale() { _, _ = RuntimeAt("/tmp/herrscher-1000") }
 `)}
 	expectViolations(t, arbitraryLayoutViolations(files), 1)
 }
+
+func TestRegressionAliasedRuntimedirAtIsFlagged(t *testing.T) {
+	files := []sourceFile{fixture(t, "core/host/aliased.go", `package host
+
+import rt "github.com/Herrscherd/herrscher/core/internal/runtimedir"
+
+func aliased() { _, _ = rt.At("/tmp/herrscher-1000") }
+`)}
+	expectViolations(t, arbitraryLayoutViolations(files), 1)
+}
+
+func TestRegressionDotImportedRuntimedirAtIsFlagged(t *testing.T) {
+	files := []sourceFile{fixture(t, "core/host/dotted.go", `package host
+
+import . "github.com/Herrscherd/herrscher/core/internal/runtimedir"
+
+func dotted() { _, _ = At("/tmp/herrscher-1000") }
+`)}
+	expectViolations(t, arbitraryLayoutViolations(files), 1)
+}
+
+func TestRegressionAliasedHostRuntimeAtIsFlagged(t *testing.T) {
+	files := []sourceFile{fixture(t, "core/outbox/aliased.go", `package outbox
+
+import h "github.com/Herrscherd/herrscher/core/host"
+
+func aliased() { _, _ = h.RuntimeAt("/tmp/herrscher-1000") }
+`)}
+	expectViolations(t, arbitraryLayoutViolations(files), 1)
+}
+
+func TestRegressionLocalNameRuntimedirOfAnotherPackageIsAllowed(t *testing.T) {
+	files := []sourceFile{fixture(t, "core/outbox/other.go", `package outbox
+
+import runtimedir "example.com/other/runtimedir"
+
+func other() { _, _ = runtimedir.At("/tmp/herrscher-1000") }
+`)}
+	expectViolations(t, arbitraryLayoutViolations(files), 0)
+}
+
+func TestRegressionUncalledRuntimedirAtReferenceIsFlagged(t *testing.T) {
+	files := []sourceFile{fixture(t, "core/host/build.go", `package host
+
+import "github.com/Herrscherd/herrscher/core/internal/runtimedir"
+
+var build = runtimedir.At
+`)}
+	expectViolations(t, arbitraryLayoutViolations(files), 1)
+}
+
+func TestRegressionUncalledQualifiedRuntimeAtIsFlagged(t *testing.T) {
+	files := []sourceFile{fixture(t, "core/outbox/build.go", `package outbox
+
+import "github.com/Herrscherd/herrscher/core/host"
+
+var build = host.RuntimeAt
+`)}
+	expectViolations(t, arbitraryLayoutViolations(files), 1)
+}
+
+func TestRegressionUncalledBareRuntimeAtInHostIsFlagged(t *testing.T) {
+	files := []sourceFile{fixture(t, "core/host/build.go", `package host
+
+var build = RuntimeAt
+`)}
+	expectViolations(t, arbitraryLayoutViolations(files), 1)
+}
+
+func TestRegressionUncalledDotImportedRuntimedirAtIsFlagged(t *testing.T) {
+	files := []sourceFile{fixture(t, "core/host/dotbuild.go", `package host
+
+import . "github.com/Herrscherd/herrscher/core/internal/runtimedir"
+
+var build = At
+`)}
+	expectViolations(t, arbitraryLayoutViolations(files), 1)
+}
+
+func TestRegressionBareRuntimeAtOutsideHostIsAllowed(t *testing.T) {
+	files := []sourceFile{fixture(t, "core/outbox/local.go", `package outbox
+
+func RuntimeAt(dir string) string { return dir }
+
+var build = RuntimeAt
+`)}
+	expectViolations(t, arbitraryLayoutViolations(files), 0)
+}
+
+func TestRegressionDotImportedHostRuntimeAtIsFlagged(t *testing.T) {
+	files := []sourceFile{fixture(t, "core/outbox/dothost.go", `package outbox
+
+import . "github.com/Herrscherd/herrscher/core/host"
+
+func dothost() { _, _ = RuntimeAt("/tmp/x") }
+`)}
+	expectViolations(t, arbitraryLayoutViolations(files), 1)
+}
+
+func TestRegressionUncalledDotImportedHostRuntimeAtIsFlagged(t *testing.T) {
+	files := []sourceFile{fixture(t, "core/outbox/dotbuild.go", `package outbox
+
+import . "github.com/Herrscherd/herrscher/core/host"
+
+var build = RuntimeAt
+`)}
+	expectViolations(t, arbitraryLayoutViolations(files), 1)
+}

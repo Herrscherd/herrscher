@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
 	"time"
@@ -35,17 +36,17 @@ var (
 	errRemoteShellSession  = errors.New("session shell: remote session, command refused")
 )
 
-func sessionShellVerb(store *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
+func sessionShellVerb(lang languageSource, warn io.Writer, store *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, "shell").
 		Help(clitext.CmdHelpSessionShell).
 		Param(paramName, clitext.CmdParamSessionShellName, true).
 		Param(paramCommand, clitext.CmdParamSessionShellCmd, true).
 		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
-			return cli.Data(runSessionShell(ctx, store, agents, approvals, sessions, input.Get(paramName), input.Get(paramCommand)))
+			return cli.Data(runSessionShell(ctx, lang, warn, store, agents, approvals, sessions, input.Get(paramName), input.Get(paramCommand)))
 		})
 }
 
-func runSessionShell(ctx context.Context, store *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable, name, command string) (string, error) {
+func runSessionShell(ctx context.Context, lang languageSource, warn io.Writer, store *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable, name, command string) (string, error) {
 	command = strings.TrimSpace(command)
 	if command == "" {
 		return "", errEmptyShellCommand
@@ -57,7 +58,7 @@ func runSessionShell(ctx context.Context, store *state.State, agents *agent.Stor
 	if session.Host != "" {
 		return "", fmt.Errorf("%w %q", errRemoteShellSession, name)
 	}
-	pol, mode := sessionPolicy(store, agents, name)
+	pol, mode := sessionPolicy(lang, warn, store, agents, name)
 	req := approval.Request{Tool: shellToolName, Subject: command}
 	decision, reason := askApproval(ctx, approvals, sessions, name, req, pol, mode, store.ApprovalWait())
 	if decision != approval.Allow {

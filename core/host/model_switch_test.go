@@ -3,6 +3,7 @@ package host
 import (
 	"bytes"
 	"context"
+	"io"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -38,7 +39,7 @@ func TestLiveTermsFollowAModelSwitch(t *testing.T) {
 	}
 	policy := compactPolicy(50)
 	policy.limits = contextwindow.NewLimits("", nil)
-	d := newSessionDriver("s1", nil, nil, nil)
+	d := newSessionDriver("s1", nil, nil, nil, io.Discard)
 	d.terms = liveModelTerms(st, nil, "s1")
 	d.compaction = policy
 
@@ -89,7 +90,7 @@ func TestUnofferedModelWarnsOnceForTheSession(t *testing.T) {
 	if _, err := st.SetBackendTarget("s1", "alpha", "", "gone"); err != nil {
 		t.Fatalf("SetBackendTarget: %v", err)
 	}
-	d := newSessionDriver("s1", nil, nil, nil)
+	d := newSessionDriver("s1", nil, nil, nil, io.Discard)
 	d.terms = liveModelTerms(st, nil, "s1")
 	for range 5 {
 		d.contextLimit()

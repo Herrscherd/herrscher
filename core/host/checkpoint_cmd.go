@@ -307,7 +307,7 @@ func (h *hub) takeCheckpoint(ctx context.Context, sess state.Session, turnID, te
 	}
 	meta := checkpoint.Meta{Turn: turnID, Text: text, Conversation: conversationPosition(current)}
 	if _, err := h.sessions.checkpoints.Take(context.WithoutCancel(ctx), sess.Worktree, sess.Name, meta); err != nil {
-		warnStderr("herrscher serve: session %q: checkpoint not taken, /rewind cannot return to this message: %v\n", sess.Name, err)
+		warnLive(h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_checkpoint", map[string]any{nameParam: sess.Name, detailParam: err})
 	}
 }
 

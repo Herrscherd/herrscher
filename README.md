@@ -1535,6 +1535,10 @@ not installed returns nothing, and the daemon says which plugin declined and why
 
 → `plugins/model`, `plugins/writing`
 
+## Languages
+
+Operator warnings follow the operator language, read live at the moment they are printed. A warning about a named session uses the language recorded for that session, or the live operator language when none is recorded; operator-level warnings always use the operator language.
+
 ## Architecture
 
 Hexagonal.
@@ -1566,16 +1570,15 @@ file of the module with `go/parser`, hidden directories included (only `.git` an
 - a test names `CommandSocketPath` or `EventsSocketPath`, except the one read-only contract test;
 - a production file names `CommandSocketPath` or `EventsSocketPath`, except `main.go` and the two wrapper files;
 - a file that imports runtimedir names `Roots`, `ProductionRoots`, `Resolve` or `DirOf`, even through a dot import;
-- a production file other than `core/host/runtime_dir.go` and the runtimedir package itself calls `runtimedir.At` or `RuntimeAt`. Production code builds no layout from an arbitrary path: only tests, that one file and the runtimedir package may. The production layout comes from `ProductionRuntime`, which only `main.go` and the socket wrappers call.
+- a production file other than `core/host/runtime_dir.go` and the runtimedir package itself refers to `runtimedir.At` or `host.RuntimeAt`, called or not, under whatever local name the file imports them (an alias or a dot import included, the import path decides), or refers to a bare `RuntimeAt` in `core/host` or in a file that dot-imports `core/host`. Production code builds no layout from an arbitrary path: only tests, that one file and the runtimedir package may. The production layout comes from `ProductionRuntime`, which only `main.go` and the socket wrappers call.
 
 What it cannot detect: it matches identifiers by name in the syntax tree, so it does not
 see a socket path built from a string, a call made through reflection, code outside this
 module, or a hand-written path such as `/run/user/1000`. Those are not covered by the
 checker and rely on review.
 
-Two more gaps: the arbitrary path rule matches the qualifier `runtimedir` by name, so an
-import alias such as `rt.At` is not seen, and it matches calls only, so a reference
-without a call such as `f := runtimedir.At` is not seen either.
+One more gap: the arbitrary path rule matches calls only, so a reference without a call
+such as `f := runtimedir.At` is not seen.
 
 ## Testing the remote paths
 

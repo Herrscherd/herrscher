@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -60,7 +61,7 @@ func newConfiguredCompactFixture(t *testing.T, vendor string, policy compactionP
 	t.Helper()
 	t.Setenv(contextwindow.EnvVar(), "")
 	f := &compactFixture{toBridge: make(chan contracts.Event, 16), from: make(chan contracts.Event, 16), seen: make(chan struct{}, 64)}
-	f.driver = newSessionDriver("s1", nil, f.toBridge, f.from)
+	f.driver = newSessionDriver("s1", nil, f.toBridge, f.from, io.Discard)
 	f.driver.terms = func() modelTerms { return modelTerms{vendor: vendor} }
 	f.driver.compaction = policy
 	f.driver.emitTap = f.tap
@@ -83,7 +84,7 @@ func compactPolicy(percent int, names ...string) compactionPolicy {
 		historyEditors: make(map[string]bool),
 		warnOnce:       &sync.Once{},
 		historyOnce:    &sync.Once{},
-		warn:           func(string, ...any) {},
+		warn:           func(string, map[string]any) {},
 	}
 }
 
@@ -223,7 +224,7 @@ func TestBackendWithoutCompactorIsRefusedBeforeAnySend(t *testing.T) {
 	gateway := newNoticeGateway()
 	f := newConfiguredCompactFixture(t, "cursor", compactPolicy(92), func(d *sessionDriver) {
 		d.gateways = []contracts.GatewaySet{{Gateway: gateway}}
-		d.lang = i18n.French
+		d.operator = fixedLanguageSource(i18n.French)
 	})
 	f.driver.requestCompaction("", contracts.Conversation{})
 	failed := waitEmitted(t, f, eventCompactFailed)
@@ -239,7 +240,7 @@ func TestBackendWithoutCompactorIsRefusedBeforeAnySend(t *testing.T) {
 
 func TestCompactFailureTextIsKeptWhenNoGatewayIsLinked(t *testing.T) {
 	f := newConfiguredCompactFixture(t, "cursor", compactPolicy(92), func(d *sessionDriver) {
-		d.lang = i18n.French
+		d.operator = fixedLanguageSource(i18n.French)
 	})
 	f.driver.requestCompaction("", contracts.Conversation{})
 	failed := waitEmitted(t, f, eventCompactFailed)
@@ -393,7 +394,7 @@ func TestAbortedTurnDoesNotReuseThePreviousReading(t *testing.T) {
 func TestNoPortWarningIsWrittenOnce(t *testing.T) {
 	policy := compactPolicy(92)
 	var warned []string
-	policy.warn = func(format string, _ ...any) { warned = append(warned, format) }
+	policy.warn = func(key string, _ map[string]any) { warned = append(warned, key) }
 	policy.warnNoPort("claude")
 	policy.warnNoPort("claude")
 	if len(warned) != 1 {
@@ -403,7 +404,7 @@ func TestNoPortWarningIsWrittenOnce(t *testing.T) {
 
 func TestCompactStackRefusesDuplicateStages(t *testing.T) {
 	for _, names := range [][]string{{contracts.CompactStageBackend, contracts.CompactStageBackend}, {"stage", "stage"}} {
-		if _, err := newCompactionPolicy(context.Background(), nil, names, nil); err == nil {
+		if _, err := newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, names, nil); err == nil {
 			t.Fatalf("newCompactionPolicy(%v) accepted a stage listed twice", names)
 		}
 	}
@@ -411,7 +412,7 @@ func TestCompactStackRefusesDuplicateStages(t *testing.T) {
 
 func TestInvalidContextLimitIsWarnedAboutOnce(t *testing.T) {
 	warnings := 0
-	warn := func(string, ...any) { warnings++ }
+	warn := func(string, map[string]any) { warnings++ }
 	warnInvalidContextLimit(warn, "many")
 	if warnings != 1 {
 		t.Fatalf("invalid HERRSCHER_CONTEXT_LIMIT wrote %d warnings, want 1", warnings)
@@ -439,7 +440,7 @@ func TestCompactionPolicyTakesCodexFromItsManifest(t *testing.T) {
 			return seedBackend{}, nil
 		},
 	})
-	policy, err := newCompactionPolicy(context.Background(), nil, nil, nil)
+	policy, err := newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("newCompactionPolicy: %v", err)
 	}
@@ -465,7 +466,7 @@ func TestContextLimitTableMovesTheAutomaticThreshold(t *testing.T) {
 
 func TestNewCompactionPolicyEnvWinsOverContextLimits(t *testing.T) {
 	t.Setenv(contextwindow.EnvVar(), "")
-	policy, err := newCompactionPolicy(context.Background(), nil, nil, map[string]int{"codex": 400_000})
+	policy, err := newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, nil, map[string]int{"codex": 400_000})
 	if err != nil {
 		t.Fatalf("newCompactionPolicy: %v", err)
 	}
@@ -473,7 +474,7 @@ func TestNewCompactionPolicyEnvWinsOverContextLimits(t *testing.T) {
 		t.Fatalf("Limit(codex) = %d, want the table's 400000", got)
 	}
 	t.Setenv(contextwindow.EnvVar(), "12345")
-	policy, err = newCompactionPolicy(context.Background(), nil, nil, map[string]int{"codex": 400_000})
+	policy, err = newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, nil, map[string]int{"codex": 400_000})
 	if err != nil {
 		t.Fatalf("newCompactionPolicy: %v", err)
 	}
@@ -484,9 +485,9 @@ func TestNewCompactionPolicyEnvWinsOverContextLimits(t *testing.T) {
 
 func TestUnknownContextLimitVendorIsWarnedAboutOnce(t *testing.T) {
 	var warned []string
-	warn := func(format string, args ...any) { warned = append(warned, fmt.Sprintf(format, args...)) }
+	warn := func(_ string, params map[string]any) { warned = append(warned, fmt.Sprint(params[nameParam])) }
 	warnUnknownContextLimits(warn, map[string]int{"codex": 400_000, "Claude": 300_000, "ghost": 1}, []string{"codex", "claude"})
-	if len(warned) != 1 || !strings.Contains(warned[0], `"ghost"`) {
+	if len(warned) != 1 || warned[0] != "ghost" {
 		t.Fatalf("warnings = %q, want one line naming the unknown vendor ghost", warned)
 	}
 }
@@ -549,7 +550,7 @@ func TestSessionInfosUseTheResolvedModelWindow(t *testing.T) {
 
 func TestAutomaticCompactionStillAboveThresholdSaysSoInFrench(t *testing.T) {
 	f := newCompactFixture(t, "claude", compactPolicy(50))
-	f.driver.lang = i18n.French
+	f.driver.operator = fixedLanguageSource(i18n.French)
 	openTurn(t, f, 150_000)
 	if !compactFrameOrQuiet(t, f, measuredAnswer(t, 150_000)) {
 		t.Fatal("automatic compaction did not run")

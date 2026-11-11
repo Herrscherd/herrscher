@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -45,7 +46,7 @@ func TestTurnSaidOutsideTheBoundChannelsIsNotPostedThere(t *testing.T) {
 		a := &fanRecorder{}
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		d.channel = "chan-1"
 		tapped, stop := tapping(d)
 		defer stop()
@@ -81,7 +82,7 @@ func TestTurnSaidInABoundChannelIsPostedThere(t *testing.T) {
 		a := &fanRecorder{}
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		_, stop := tapping(d)
 		defer stop()
 
@@ -102,7 +103,7 @@ func TestTurnSaidInABoundChannelIsPostedThere(t *testing.T) {
 }
 
 func TestSessionSendCarriesTheOriginItWasTypedIn(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -113,7 +114,7 @@ func TestSessionSendCarriesTheOriginItWasTypedIn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := newSessionDriver("s1", nil, nil, nil)
+	d := newSessionDriver("s1", nil, nil, nil, io.Discard)
 	sessionTab.register("s1", d)
 	defer sessionTab.unregister("s1", d)
 
@@ -147,7 +148,7 @@ func TestTurnWithNoOriginIsPostedToTheBoundChannels(t *testing.T) {
 		a := &fanRecorder{}
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		_, stop := tapping(d)
 		defer stop()
 

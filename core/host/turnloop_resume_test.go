@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -9,7 +10,7 @@ import (
 
 func TestAwaitTurnPersistsResumeToken(t *testing.T) {
 	from := make(chan contracts.Event, 1)
-	d := newSessionDriver("s", nil, make(chan contracts.Event, 1), from)
+	d := newSessionDriver("s", nil, make(chan contracts.Event, 1), from, io.Discard)
 	var got string
 	d.sink.Resume = func(tok string) { got = tok }
 
@@ -24,7 +25,7 @@ func TestAwaitTurnPersistsResumeToken(t *testing.T) {
 
 func TestAwaitTurnSkipsEmptyResumeToken(t *testing.T) {
 	from := make(chan contracts.Event, 1)
-	d := newSessionDriver("s", nil, make(chan contracts.Event, 1), from)
+	d := newSessionDriver("s", nil, make(chan contracts.Event, 1), from, io.Discard)
 	called := false
 	d.sink.Resume = func(string) { called = true }
 

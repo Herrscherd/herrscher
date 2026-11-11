@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"errors"
+	"io"
 	"strconv"
 	"strings"
 	"testing"
@@ -47,7 +48,7 @@ func historyFixture(t *testing.T, declared bool) (*compactFixture, chan historyR
 	policy.plugins["jev"] = pruningCompactor{runs: runs}
 	policy.historyEditors["claude"] = declared
 	warned := new([]string)
-	policy.warn = func(format string, _ ...any) { *warned = append(*warned, format) }
+	policy.warn = func(key string, _ map[string]any) { *warned = append(*warned, key) }
 	return newCompactFixture(t, "claude", policy), runs, warned
 }
 
@@ -124,7 +125,7 @@ func TestBackendWithoutTheHistoryPortFailsTheStageAndWarnsOnce(t *testing.T) {
 		}
 		waitEmitted(t, f, eventCompactFailed)
 	}
-	if len(*warned) != 1 || !strings.Contains((*warned)[0], "HistoryEditor") {
+	if len(*warned) != 1 || (*warned)[0] != "warn.history_port_missing" {
 		t.Fatalf("warnings = %q, want one line about the missing history port", *warned)
 	}
 }
@@ -162,7 +163,7 @@ func TestCompactorStageResolvesItsSettings(t *testing.T) {
 	var keys []string
 	registerSettingsCompactor(t, keyedFactory(&keys))
 	t.Setenv(typesafeEnv, "sk-test")
-	policy, err := newCompactionPolicy(context.Background(), nil, []string{"jev", contracts.CompactStageBackend}, nil)
+	policy, err := newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, []string{"jev", contracts.CompactStageBackend}, nil)
 	if err != nil {
 		t.Fatalf("newCompactionPolicy: %v", err)
 	}
@@ -175,7 +176,7 @@ func TestMissingCompactorSettingRefusesStartup(t *testing.T) {
 	var keys []string
 	registerSettingsCompactor(t, keyedFactory(&keys))
 	t.Setenv(typesafeEnv, "")
-	_, err := newCompactionPolicy(context.Background(), nil, []string{"jev", contracts.CompactStageBackend}, nil)
+	_, err := newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, []string{"jev", contracts.CompactStageBackend}, nil)
 	if !errors.Is(err, errCompactorSettings) {
 		t.Fatalf("newCompactionPolicy = %v, want errCompactorSettings", err)
 	}
@@ -194,7 +195,7 @@ func TestStackWithoutTheCompactorNeedsNoSetting(t *testing.T) {
 	var keys []string
 	registerSettingsCompactor(t, keyedFactory(&keys))
 	t.Setenv(typesafeEnv, "")
-	if _, err := newCompactionPolicy(context.Background(), nil, nil, nil); err != nil {
+	if _, err := newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, nil, nil); err != nil {
 		t.Fatalf("newCompactionPolicy without jev in the stack = %v, want a clean start without %s", err, typesafeEnv)
 	}
 	if len(keys) != 0 {

@@ -3,6 +3,7 @@ package host
 import (
 	"embed"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"maps"
@@ -20,6 +21,9 @@ const (
 	detailParam = "Detail"
 	nameParam   = "Name"
 	pathParam   = "Path"
+	graceParam  = "Grace"
+	roleParam   = "Role"
+	ruleParam   = "Rule"
 )
 
 type hostMessages struct {
@@ -45,6 +49,7 @@ func (m *hostMessages) text(lang i18n.Language, key string, params map[string]an
 	if lang != i18n.English && lang != i18n.French {
 		lang = i18n.English
 	}
+	params = renderableParams(lang, params)
 	catalog, err := m.catalog()
 	if err != nil {
 		slog.Error("host message catalog unavailable", "key", key, "err", err)
@@ -63,7 +68,7 @@ func (m *hostMessages) text(lang i18n.Language, key string, params map[string]an
 }
 
 func (d *sessionDriver) hostText(key string, params map[string]any) string {
-	return d.messages.text(d.lang, key, params)
+	return d.messages.text(d.textLanguage()(), key, params)
 }
 
 type hostWrapError struct {
@@ -93,23 +98,45 @@ func errorTextIn(lang i18n.Language, err error) string {
 		return ""
 	}
 	if english, local, ok := localizedPart(lang, err); ok {
-		return strings.Replace(err.Error(), english, local, 1)
+		return strings.Replace(fmt.Sprint(err), english, local, 1)
 	}
-	return err.Error()
+	return fmt.Sprint(err)
 }
 
 func localizedPart(lang i18n.Language, err error) (string, string, bool) {
+	var wrapped *hostWrapError
+	if errors.As(err, &wrapped) && wrapped == nil {
+		return "", "", false
+	}
 	var local localizableError
 	if errors.As(err, &local) {
-		return local.Error(), local.render(lang), true
+		return fmt.Sprint(local), local.render(lang), true
 	}
 	var failure worktree.FailureError
 	if errors.As(err, &failure) {
-		return failure.Error(), failure.Text(lang), true
+		return fmt.Sprint(failure), failure.Text(lang), true
 	}
 	return "", "", false
 }
 
 func wrapHost(cause error, key string, params map[string]any) error {
 	return hostWrapError{key: key, params: params, cause: cause}
+}
+
+func renderableParams(lang i18n.Language, params map[string]any) map[string]any {
+	var out map[string]any
+	for key, value := range params {
+		err, isErr := value.(error)
+		if !isErr {
+			continue
+		}
+		if out == nil {
+			out = maps.Clone(params)
+		}
+		out[key] = errorTextIn(lang, err)
+	}
+	if out == nil {
+		return params
+	}
+	return out
 }

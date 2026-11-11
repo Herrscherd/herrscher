@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"slices"
@@ -109,10 +110,10 @@ type compactionPolicy struct {
 	historyEditors map[string]bool
 	warnOnce       *sync.Once
 	historyOnce    *sync.Once
-	warn           func(format string, args ...any)
+	warn           func(key string, params map[string]any)
 }
 
-func newCompactionPolicy(ctx context.Context, percent *int, names []string, perVendor map[string]int) (compactionPolicy, error) {
+func newCompactionPolicy(ctx context.Context, lang languageSource, warn io.Writer, percent *int, names []string, perVendor map[string]int) (compactionPolicy, error) {
 	policy := compactionPolicy{
 		percent:        defaultCompactPercent,
 		names:          []string{contracts.CompactStageBackend},
@@ -122,7 +123,9 @@ func newCompactionPolicy(ctx context.Context, percent *int, names []string, perV
 		historyEditors: make(map[string]bool),
 		warnOnce:       &sync.Once{},
 		historyOnce:    &sync.Once{},
-		warn:           warnStderr,
+		warn: func(key string, params map[string]any) {
+			warnLive(warn, lang, key, params)
+		},
 	}
 	if percent != nil {
 		if err := contracts.ValidateAutoCompactPercent(*percent); err != nil {
@@ -181,16 +184,16 @@ func (p *compactionPolicy) addStage(ctx context.Context, name string) error {
 	return nil
 }
 
-func warnInvalidContextLimit(warn func(format string, args ...any), raw string) {
+func warnInvalidContextLimit(warn func(key string, params map[string]any), raw string) {
 	if err := contextwindow.CheckOverride(raw); err != nil {
-		warn("herrscher serve: %s ignored, %v: the vendor default window applies\n", contextwindow.EnvVar(), err)
+		warn("warn.context_limit_env", map[string]any{nameParam: contextwindow.EnvVar(), detailParam: err})
 	}
 }
 
-func warnUnknownContextLimits(warn func(format string, args ...any), perVendor map[string]int, kinds []string) {
+func warnUnknownContextLimits(warn func(key string, params map[string]any), perVendor map[string]int, kinds []string) {
 	for _, vendor := range slices.Sorted(maps.Keys(perVendor)) {
 		if !slices.ContainsFunc(kinds, func(kind string) bool { return strings.EqualFold(kind, vendor) }) {
-			warn("herrscher serve: contextLimits: no backend %q in this daemon, its window size is unused\n", vendor)
+			warn("warn.context_limit_unknown_vendor", map[string]any{nameParam: vendor})
 		}
 	}
 }
@@ -241,13 +244,13 @@ func (p *compactionPolicy) editsHistory(vendor string) bool {
 
 func (p *compactionPolicy) warnNoHistoryPort(vendor string) {
 	p.historyOnce.Do(func() {
-		p.warn("herrscher serve: backend %q declares Capabilities.HistoryEditor but its instance does not implement the port, its history is not edited\n", vendor)
+		p.warn("warn.history_port_missing", map[string]any{nameParam: vendor})
 	})
 }
 
 func (p *compactionPolicy) warnNoPort(vendor string) {
 	p.warnOnce.Do(func() {
-		p.warn("herrscher serve: backend %q declares Capabilities.Compactor but its instance does not implement the port, its compaction is refused\n", vendor)
+		p.warn("warn.compactor_port_missing", map[string]any{nameParam: vendor})
 	})
 }
 
@@ -466,7 +469,7 @@ func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.Com
 func (d *sessionDriver) failCompaction(ctx context.Context, trigger contracts.CompactTrigger, err error) {
 	var text string
 	if !d.queueFailureNotice(trigger, err) {
-		text = compactFailureText(d.messages, d.lang, err)
+		text = compactFailureText(d.messages, d.textLanguage()(), err)
 	}
 	d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String(), Text: text})
 }
@@ -521,14 +524,14 @@ func (d *sessionDriver) announceCompaction(ctx context.Context, trigger contract
 }
 
 func (d *sessionDriver) noticeRenders(notice contracts.Notice) bool {
-	_, err := contracts.NewRenderer().Render(d.lang, notice)
+	_, err := contracts.NewRenderer().Render(d.textLanguage()(), notice)
 	return err == nil
 }
 
 type noticeDelivery struct {
 	sink    contracts.NoticeSink
 	conv    contracts.Conversation
-	lang    i18n.Language
+	lang    languageSource
 	notice  contracts.Notice
 	trigger contracts.CompactTrigger
 	report  *sync.Once
@@ -548,7 +551,7 @@ func (d *sessionDriver) notifyGateways(trigger contracts.CompactTrigger, notice 
 			return
 		}
 		conv := contracts.Conversation{Gateway: gateway.Gateway.Manifest().Kind, ID: d.renderChannel(gateway)}
-		delivery := noticeDelivery{sink: sink, conv: conv, lang: d.lang, notice: notice, trigger: trigger, report: report}
+		delivery := noticeDelivery{sink: sink, conv: conv, lang: d.textLanguage(), notice: notice, trigger: trigger, report: report}
 		if d.enqueueNotice(delivery) {
 			queued = true
 		}
@@ -580,16 +583,16 @@ func (d *sessionDriver) deliverNotices(ctx context.Context) {
 func (d *sessionDriver) deliverNotice(parent context.Context, delivery noticeDelivery) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), noticeTimeout)
 	defer cancel()
-	if _, err := delivery.sink.Notify(ctx, delivery.conv, delivery.lang, delivery.notice); err != nil && !errors.Is(err, contracts.ErrNoticeFallbackPosted) {
+	if _, err := delivery.sink.Notify(ctx, delivery.conv, delivery.lang(), delivery.notice); err != nil && !errors.Is(err, contracts.ErrNoticeFallbackPosted) {
 		logCleanup(err)
 		delivery.report.Do(func() { d.relayNoticeFailure(parent, d.noticeFailure(delivery)) })
 	}
 }
 
 func (d *sessionDriver) noticeFailure(delivery noticeDelivery) compactFailure {
-	text, err := contracts.NewRenderer().Render(delivery.lang, delivery.notice)
+	text, err := contracts.NewRenderer().Render(delivery.lang(), delivery.notice)
 	if err != nil {
-		text = compactFailureText(d.messages, delivery.lang, err)
+		text = compactFailureText(d.messages, delivery.lang(), err)
 	}
 	return compactFailure{trigger: delivery.trigger, text: text}
 }
@@ -700,7 +703,7 @@ func (c bridgeCompactor) Compact(ctx context.Context, req contracts.CompactReque
 func (d *sessionDriver) decodeCompactResult(frame contracts.Event) (contracts.CompactResult, error) {
 	res, err := compactwire.DecodeResult(frame)
 	if errors.Is(err, compactwire.ErrNoticeMalformed) {
-		warnStderr("herrscher serve: session %q: compaction notice dropped, its note and figures are kept: %v\n", d.name, err)
+		warnTo(d.warnings, d.textLanguage()(), "warn.session_compaction_notice", map[string]any{nameParam: d.name, detailParam: err})
 		return res, nil
 	}
 	return res, err

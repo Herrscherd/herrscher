@@ -1,8 +1,10 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,6 +15,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/accounts"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -316,7 +319,7 @@ func TestASeedKeepsItsReplyWhenConsolidationFails(t *testing.T) {
 
 	sess := state.Session{Name: "solo", ChannelID: "channel"}
 	spy := &consolidateSpy{err: context.DeadlineExceeded}
-	got, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{backend: backend})
+	got, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{backend: backend, warnings: io.Discard})
 	if err != nil {
 		t.Fatalf("runOneShotSeedWith: %v", err)
 	}
@@ -437,5 +440,21 @@ func TestSeedBackendNeverCarriesTheGatewayTokenWithAProxy(t *testing.T) {
 	}
 	if base := contracts.ParseEnvSetting(settings["env"])[contracts.EnvOpenAIBaseURL]; !strings.HasPrefix(base, "http://127.0.0.1") {
 		t.Fatalf("gateway base = %q, want the local key proxy", base)
+	}
+}
+
+func TestConsolidationFailureIsWarnedInTheSessionLanguage(t *testing.T) {
+	spy := &consolidateSpy{err: errors.New("disque plein")}
+	var printed bytes.Buffer
+	consolidateOneShot(context.Background(), spy, state.Session{Name: "solo"}, &printed, fixedLanguageSource(i18n.French))
+	if !spy.called {
+		t.Fatal("consolidation was not attempted")
+	}
+	got := printed.String()
+	if !strings.Contains(got, `session "solo" : consolidation après`) {
+		t.Fatalf("consolidation failure printed %q, want the french warning", got)
+	}
+	if strings.Contains(got, "consolidate after") {
+		t.Fatalf("consolidation failure fell back to english: %q", got)
 	}
 }

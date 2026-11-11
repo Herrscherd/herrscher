@@ -351,6 +351,9 @@ func (h *hub) reconcile(ctx context.Context) {
 			continue
 		}
 		if err := h.goLive(ctx, saved); err != nil {
+			if errors.Is(err, errHubClosed) {
+				break
+			}
 			warnLive(h.warnings, h.sessionLanguageSource(saved.Name), "warn.session_start", map[string]any{nameParam: saved.Name, detailParam: err})
 		}
 	}

@@ -1,12 +1,9 @@
-//go:build !unix
+//go:build !linux
 
 package runtimeguard
 
-const (
-	daemonSockets = false
-	holdersKnown  = false
-)
+import "io/fs"
 
-func socketHolders(string) (map[string]bool, error) {
-	return nil, nil
+func platformOwners(string, map[string]fs.FileInfo) (owners, error) {
+	return owners{}, nil
 }

@@ -26,7 +26,10 @@ type Guard struct {
 	dir    string
 	before snapshot
 	err    error
+	owners ownersFunc
 }
+
+type ownersFunc func(dir string, entries map[string]fs.FileInfo) (owners, error)
 
 type snapshot struct {
 	existed bool
@@ -34,17 +37,27 @@ type snapshot struct {
 	entries map[string]fs.FileInfo
 }
 
+type owners struct {
+	known   bool
+	sockets map[string]bool
+	locks   map[string]bool
+}
+
 // Start records the state of dir before the tests run.
 func Start(dir string) *Guard {
+	return start(dir, platformOwners)
+}
+
+func start(dir string, attribute ownersFunc) *Guard {
 	before, err := takeSnapshot(dir)
-	return &Guard{dir: dir, before: before, err: err}
+	return &Guard{dir: dir, before: before, err: err, owners: attribute}
 }
 
 // Changes lists what changed in the directory since Start, or why it could not be
-// read. A daemon sharing the directory creates and removes its own sockets and
-// instance locks there: a socket that another process holds open, and an instance
-// lock, are the daemon's and are not reported. Anything else the run left behind
-// is, including a socket that no process holds.
+// read. An entry added or modified during the run is tolerated only when a process
+// outside the test's own process tree holds it: a socket that such a process has
+// open, or an instance lock it has locked, or an instance lock that already existed
+// at Start. Removing an entry is always a change.
 func (g *Guard) Changes() ([]string, error) {
 	if g.err != nil {
 		return nil, g.err
@@ -53,11 +66,11 @@ func (g *Guard) Changes() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	held, err := socketHolders(g.dir)
+	owned, err := g.owners(g.dir, after.entries)
 	if err != nil {
 		return nil, err
 	}
-	return g.before.diff(after, held), nil
+	return g.before.diff(after, owned), nil
 }
 
 func isInstanceLock(name string) bool {
@@ -108,20 +121,34 @@ func takeSnapshot(dir string) (snapshot, error) {
 	return snapshot{existed: true, modTime: info.ModTime(), entries: entries}, nil
 }
 
-func (s snapshot) diff(after snapshot, held map[string]bool) []string {
+func (s snapshot) diff(after snapshot, owned owners) []string {
 	var changes []string
 	tolerated := 0
 	for _, name := range entryNames(s.entries, after.entries) {
 		entryDiff := entryChanges(name, s.entries, after.entries)
-		switch {
-		case len(entryDiff) == 0:
-		case isDaemonEntry(name, s.entries[name], after.entries[name], held):
+		if len(entryDiff) == 0 {
+			continue
+		}
+		if owned.tolerates(name, s.entries[name], after.entries[name]) {
 			tolerated++
-		default:
-			changes = append(changes, entryDiff...)
+			continue
+		}
+		changes = append(changes, entryDiff...)
+		if now := after.entries[name]; now != nil && isSocket(now) && !owned.known {
+			changes = append(changes, name+": no holder attribution on this platform, run the tests without a herrscher daemon")
 		}
 	}
 	return append(s.directoryChanges(after, tolerated > 0), changes...)
+}
+
+func (o owners) tolerates(name string, old, now fs.FileInfo) bool {
+	if now == nil {
+		return false
+	}
+	if isInstanceLock(name) {
+		return old != nil || o.locks[name]
+	}
+	return isSocket(now) && o.sockets[name]
 }
 
 func (s snapshot) directoryChanges(after snapshot, ignoreMtime bool) []string {
@@ -137,25 +164,8 @@ func (s snapshot) directoryChanges(after snapshot, ignoreMtime bool) []string {
 	return nil
 }
 
-func isDaemonEntry(name string, old, now fs.FileInfo, held map[string]bool) bool {
-	if isInstanceLock(name) {
-		return true
-	}
-	if !daemonSockets {
-		return false
-	}
-	if now == nil {
-		return isSocket(old)
-	}
-	return isSocket(now) && socketHeld(name, held)
-}
-
 func isSocket(entry fs.FileInfo) bool {
 	return entry.Mode()&fs.ModeSocket != 0
-}
-
-func socketHeld(name string, held map[string]bool) bool {
-	return !holdersKnown || held[name]
 }
 
 func entryNames(before, after map[string]fs.FileInfo) []string {

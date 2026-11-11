@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -30,10 +29,9 @@ type Guard struct {
 }
 
 type snapshot struct {
-	existed    bool
-	modTime    time.Time
-	entries    map[string]fs.FileInfo
-	daemonLive bool
+	existed bool
+	modTime time.Time
+	entries map[string]fs.FileInfo
 }
 
 // Start records the state of dir before the tests run.
@@ -42,9 +40,11 @@ func Start(dir string) *Guard {
 	return &Guard{dir: dir, before: before, err: err}
 }
 
-// Changes lists what changed in the directory since Start, or why it could not be read.
-// A herrscher daemon that holds its instance lock, now or during the run, owns the
-// changes it makes there, so they are not attributed to the tests.
+// Changes lists what changed in the directory since Start, or why it could not be
+// read. A daemon sharing the directory creates and removes its own sockets and
+// instance locks there: a socket that another process holds open, and an instance
+// lock, are the daemon's and are not reported. Anything else the run left behind
+// is, including a socket that no process holds.
 func (g *Guard) Changes() ([]string, error) {
 	if g.err != nil {
 		return nil, g.err
@@ -53,19 +53,11 @@ func (g *Guard) Changes() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	if g.before.daemonLive || after.daemonLive || instanceLockAdded(g.before, after) {
-		return nil, nil
+	held, err := socketHolders(g.dir)
+	if err != nil {
+		return nil, err
 	}
-	return g.before.diff(after), nil
-}
-
-func instanceLockAdded(before, after snapshot) bool {
-	for name := range after.entries {
-		if _, known := before.entries[name]; !known && isInstanceLock(name) {
-			return true
-		}
-	}
-	return false
+	return g.before.diff(after, held), nil
 }
 
 func isInstanceLock(name string) bool {
@@ -106,35 +98,64 @@ func takeSnapshot(dir string) (snapshot, error) {
 		return snapshot{}, err
 	}
 	entries := make(map[string]fs.FileInfo, len(items))
-	live := false
 	for _, item := range items {
 		entry, infoErr := item.Info()
 		if infoErr != nil {
 			return snapshot{}, infoErr
 		}
 		entries[item.Name()] = entry
-		if isInstanceLock(item.Name()) && instanceLockHeld(filepath.Join(dir, item.Name())) {
-			live = true
-		}
 	}
-	return snapshot{existed: true, modTime: info.ModTime(), entries: entries, daemonLive: live}, nil
+	return snapshot{existed: true, modTime: info.ModTime(), entries: entries}, nil
 }
 
-func (s snapshot) diff(after snapshot) []string {
+func (s snapshot) diff(after snapshot, held map[string]bool) []string {
 	var changes []string
+	tolerated := 0
+	for _, name := range entryNames(s.entries, after.entries) {
+		entryDiff := entryChanges(name, s.entries, after.entries)
+		switch {
+		case len(entryDiff) == 0:
+		case isDaemonEntry(name, s.entries[name], after.entries[name], held):
+			tolerated++
+		default:
+			changes = append(changes, entryDiff...)
+		}
+	}
+	return append(s.directoryChanges(after, tolerated > 0), changes...)
+}
+
+func (s snapshot) directoryChanges(after snapshot, ignoreMtime bool) []string {
 	switch {
 	case s.existed && !after.existed:
-		changes = append(changes, "the directory was removed")
+		return []string{"the directory was removed"}
 	case !s.existed && after.existed:
-		changes = append(changes, "the directory was created")
-	case s.existed && !s.modTime.Equal(after.modTime):
-		changes = append(changes, fmt.Sprintf("the directory mtime moved from %s to %s",
-			s.modTime.Format(time.RFC3339Nano), after.modTime.Format(time.RFC3339Nano)))
+		return []string{"the directory was created"}
+	case s.existed && !ignoreMtime && !s.modTime.Equal(after.modTime):
+		return []string{fmt.Sprintf("the directory mtime moved from %s to %s",
+			s.modTime.Format(time.RFC3339Nano), after.modTime.Format(time.RFC3339Nano))}
 	}
-	for _, name := range entryNames(s.entries, after.entries) {
-		changes = append(changes, entryChanges(name, s.entries, after.entries)...)
+	return nil
+}
+
+func isDaemonEntry(name string, old, now fs.FileInfo, held map[string]bool) bool {
+	if isInstanceLock(name) {
+		return true
 	}
-	return changes
+	if !daemonSockets {
+		return false
+	}
+	if now == nil {
+		return isSocket(old)
+	}
+	return isSocket(now) && socketHeld(name, held)
+}
+
+func isSocket(entry fs.FileInfo) bool {
+	return entry.Mode()&fs.ModeSocket != 0
+}
+
+func socketHeld(name string, held map[string]bool) bool {
+	return !holdersKnown || held[name]
 }
 
 func entryNames(before, after map[string]fs.FileInfo) []string {

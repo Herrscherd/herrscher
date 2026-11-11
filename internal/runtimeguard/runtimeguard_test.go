@@ -134,3 +134,23 @@ func containsChange(changes []string, want string) bool {
 	}
 	return false
 }
+
+func TestATestLeakWithNoDaemonFailsTheGuard(t *testing.T) {
+	dir := t.TempDir()
+	guard := Start(dir)
+	if err := writeFile(filepath.Join(dir, "leak.txt"), "leak", oldTime()); err != nil {
+		t.Fatal(err)
+	}
+	if changes := changesOf(t, guard); !containsChange(changes, "leak.txt: added") {
+		t.Fatalf("changes = %q, want the leaked file reported", changes)
+	}
+}
+
+func changesOf(t *testing.T, guard *Guard) []string {
+	t.Helper()
+	changes, err := guard.Changes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return changes
+}

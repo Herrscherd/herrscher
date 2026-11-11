@@ -117,7 +117,7 @@ func TestStageTriggerOutOfRangeRefusesTheStart(t *testing.T) {
 	for _, percent := range []int{-1, 101} {
 		t.Run("refused "+strconv.Itoa(percent), func(t *testing.T) {
 			registerTriggerCompactor(t, percent)
-			_, err := newCompactionPolicy(context.Background(), nil, triggerNames(), nil)
+			_, err := newCompactionPolicy(context.Background(), testLanguage(), nil, triggerNames(), nil)
 			if !errors.Is(err, contracts.ErrStageTriggerPercentOutOfRange) {
 				t.Fatalf("newCompactionPolicy = %v, want ErrStageTriggerPercentOutOfRange", err)
 			}
@@ -132,7 +132,7 @@ func TestStageTriggerIsReadAtStart(t *testing.T) {
 	for _, percent := range []int{0, 50, 100} {
 		t.Run("accepted "+strconv.Itoa(percent), func(t *testing.T) {
 			registerTriggerCompactor(t, percent)
-			policy, err := newCompactionPolicy(context.Background(), nil, triggerNames(), nil)
+			policy, err := newCompactionPolicy(context.Background(), testLanguage(), nil, triggerNames(), nil)
 			if err != nil {
 				t.Fatalf("newCompactionPolicy: %v", err)
 			}

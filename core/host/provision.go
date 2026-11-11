@@ -20,24 +20,24 @@ type hostRunner interface {
 	Describe() string
 }
 
-func runnerFor(layout RuntimeLayout, host state.Host) (hostRunner, error) {
+func runnerFor(lang languageSource, layout RuntimeLayout, host state.Host) (hostRunner, error) {
 	if host.SSH == "" {
 		return runner.Local{}, nil
 	}
-	ssh, err := sshRunner(layout, host.SSH)
+	ssh, err := sshRunner(lang, layout, host.SSH)
 	if err != nil {
 		return nil, err
 	}
 	return ssh, nil
 }
 
-func sshRunner(layout RuntimeLayout, target string) (runner.SSH, error) {
+func sshRunner(lang languageSource, layout RuntimeLayout, target string) (runner.SSH, error) {
 	if err := runner.CheckTarget(target); err != nil {
 		return runner.SSH{}, err
 	}
 	controlPath, err := runner.ControlPathFor(layout, target)
 	if err != nil {
-		warnClient("warn.ssh_multiplexing_disabled", map[string]any{nameParam: target, detailParam: err})
+		warnLive(lang, "warn.ssh_multiplexing_disabled", map[string]any{nameParam: target, detailParam: err})
 	}
 	return runner.SSH{Target: target, ControlPath: controlPath}, nil
 }

@@ -5,10 +5,8 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"sync"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
-	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func closeRead(closer io.Closer) {
@@ -29,8 +27,6 @@ func warnHost(lang i18n.Language, key string, params map[string]any) {
 	logWriteFailure(fmt.Fprintln(os.Stderr, newHostMessages().text(lang, key, params)))
 }
 
-var clientLanguage = sync.OnceValue(clitext.ClientLanguage)
-
-func warnClient(key string, params map[string]any) {
-	warnHost(clientLanguage(), key, params)
+func warnLive(lang languageSource, key string, params map[string]any) {
+	warnHost(lang(), key, params)
 }

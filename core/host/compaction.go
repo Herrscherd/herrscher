@@ -112,7 +112,7 @@ type compactionPolicy struct {
 	warn           func(key string, params map[string]any)
 }
 
-func newCompactionPolicy(ctx context.Context, percent *int, names []string, perVendor map[string]int) (compactionPolicy, error) {
+func newCompactionPolicy(ctx context.Context, lang languageSource, percent *int, names []string, perVendor map[string]int) (compactionPolicy, error) {
 	policy := compactionPolicy{
 		percent:        defaultCompactPercent,
 		names:          []string{contracts.CompactStageBackend},
@@ -122,7 +122,9 @@ func newCompactionPolicy(ctx context.Context, percent *int, names []string, perV
 		historyEditors: make(map[string]bool),
 		warnOnce:       &sync.Once{},
 		historyOnce:    &sync.Once{},
-		warn:           warnClient,
+		warn: func(key string, params map[string]any) {
+			warnLive(lang, key, params)
+		},
 	}
 	if percent != nil {
 		if err := contracts.ValidateAutoCompactPercent(*percent); err != nil {

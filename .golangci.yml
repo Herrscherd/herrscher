@@ -213,9 +213,6 @@ linters:
       - path: ^core/internal/redact/redact\.go$
         linters: [gochecknoglobals]
         text: "^rules is a global variable"
-      - path: ^core/host/closing\.go$
-        linters: [gochecknoglobals]
-        text: "^clientLanguage is a global variable"
       - path: ^plugins/terminal/register\.go$
         linters: [gochecknoinits]
       - path: ^plugins/terminal/tui/image_decode\.go$

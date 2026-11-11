@@ -188,10 +188,7 @@ func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, option
 }
 
 func (options Options) operatorLanguage() i18n.Language {
-	if options.live != nil {
-		return options.live.Get()
-	}
-	return options.Language
+	return options.languageSource()()
 }
 
 func claimInstance(ctx context.Context, layout runtimedir.Layout, instID string) (func(), error) {
@@ -262,7 +259,7 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	options.usage = newUsageSource(partDir)
 	stopUsageWatch := options.usage.startWatch(ctx)
 	defer stopUsageWatch()
-	policy, err := newCompactionPolicy(ctx, options.CompactPercent, options.CompactStack, options.ContextLimits)
+	policy, err := newCompactionPolicy(ctx, options.languageSource(), options.CompactPercent, options.CompactStack, options.ContextLimits)
 	if err != nil {
 		return wrapHost(err, "serve.compaction", nil)
 	}

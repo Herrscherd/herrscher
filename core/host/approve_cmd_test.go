@@ -146,7 +146,7 @@ func TestSessionPolicyMergesAgentFile(t *testing.T) {
 		t.Fatalf("AddSession: %v", err)
 	}
 
-	pol, mode := sessionPolicy(st, agent.NewStore(root), "s1")
+	pol, mode := sessionPolicy(testLanguage(), st, agent.NewStore(root), "s1")
 	if mode != approval.ModeStrict {
 		t.Fatalf("mode = %q, want the session's own stance", mode)
 	}
@@ -166,7 +166,7 @@ func TestSessionPolicyOfAnUnknownSession(t *testing.T) {
 	if err := st.AddApprovalRule("deny Bash(rm -rf*)"); err != nil {
 		t.Fatalf("AddApprovalRule: %v", err)
 	}
-	pol, mode := sessionPolicy(st, nil, "never-created")
+	pol, mode := sessionPolicy(testLanguage(), st, nil, "never-created")
 	if mode != 0 {
 		t.Fatalf("mode = %v, want the unset mode of a session that is not there", mode)
 	}
@@ -220,7 +220,7 @@ func TestApproveAllowUnknownIDReportsIt(t *testing.T) {
 }
 
 func TestReadAgentPolicyMissingFile(t *testing.T) {
-	if p := readAgentPolicy(t.TempDir()); len(p) != 0 {
+	if p := readAgentPolicy(testLanguage(), t.TempDir()); len(p) != 0 {
 		t.Fatal("an agent with no APPROVALS file adds no rule")
 	}
 }

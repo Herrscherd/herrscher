@@ -2,6 +2,8 @@ package host
 
 import (
 	"context"
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -18,6 +20,44 @@ import (
 
 func fixedLanguage(lang i18n.Language) languageSource {
 	return func() i18n.Language { return lang }
+}
+
+func testLanguage() languageSource {
+	return fixedLanguage(i18n.English)
+}
+
+func captureStderr(t *testing.T, run func()) string {
+	t.Helper()
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	saved := os.Stderr
+	os.Stderr = write
+	run()
+	os.Stderr = saved
+	logCleanup(write.Close())
+	out, readErr := io.ReadAll(read)
+	logCleanup(read.Close())
+	if readErr != nil {
+		t.Fatalf("read stderr: %v", readErr)
+	}
+	return string(out)
+}
+
+func TestWarningFollowsALiveLanguageChange(t *testing.T) {
+	live := newOperatorLanguage(i18n.English)
+	params := map[string]any{nameParam: "digest", detailParam: "boom"}
+	english := captureStderr(t, func() { warnLive(live.Get, "warn.session_start", params) })
+	live.set(i18n.French)
+	french := captureStderr(t, func() { warnLive(live.Get, "warn.session_start", params) })
+	wantFrench := newHostMessages().text(i18n.French, "warn.session_start", params)
+	if english == french {
+		t.Fatalf("the warning did not change after the operator switched to french: %q", french)
+	}
+	if !strings.Contains(french, wantFrench) {
+		t.Fatalf("after set lang fr, the warning printed %q, want the french %q", french, wantFrench)
+	}
 }
 
 func TestBuilderRepliesFollowTheLiveOperatorLanguage(t *testing.T) {

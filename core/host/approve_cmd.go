@@ -30,9 +30,9 @@ func addApproveCommands(reg *cli.Registry, lang languageSource, hostState *state
 		approveAllowVerb(lang, approvals, sessions),
 		approveDenyVerb(lang, approvals, sessions),
 		approveRuleVerb(lang, hostState),
-		approveAskVerb(hostState, agents, approvals, sessions),
+		approveAskVerb(lang, hostState, agents, approvals, sessions),
 		approveModeVerb(hostState, lang),
-		sessionShellVerb(hostState, agents, approvals, sessions),
+		sessionShellVerb(lang, hostState, agents, approvals, sessions),
 	)
 }
 
@@ -192,7 +192,7 @@ func addApprovalRule(lang i18n.Language, store *state.State, raw string) (string
 	return replyText(lang).Text(clitext.HostApproveRuleAdded, clitext.Params{clitext.ParamRule: parsed.String()}), nil
 }
 
-func approveAskVerb(store *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
+func approveAskVerb(lang languageSource, store *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsApprove, "ask").
 		Help(clitext.CmdHelpApproveAsk).
 		ValueParam(paramSession, clitext.CmdParamApproveAskSession, true).
@@ -204,7 +204,7 @@ func approveAskVerb(store *state.State, agents *agent.Store, approvals *approval
 				Tool:    strings.TrimSpace(input.Get("tool")),
 				Subject: input.Get("subject"),
 			}
-			pol, mode := sessionPolicy(store, agents, session)
+			pol, mode := sessionPolicy(lang, store, agents, session)
 			decision, reason := askApproval(ctx, approvals, sessions, session, req, pol, mode, store.ApprovalWait())
 			payload, err := json.Marshal(struct {
 				Decision string `json:"decision"`
@@ -276,7 +276,7 @@ func firstOf(flag string, rest []string) string {
 	return ""
 }
 
-func readAgentPolicy(home string) approval.Policy {
+func readAgentPolicy(lang languageSource, home string) approval.Policy {
 	if home == "" {
 		return nil
 	}
@@ -284,23 +284,23 @@ func readAgentPolicy(home string) approval.Policy {
 	buf, err := os.ReadFile(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			warnClient("warn.approvals_unreadable", map[string]any{pathParam: path, detailParam: err})
+			warnLive(lang, "warn.approvals_unreadable", map[string]any{pathParam: path, detailParam: err})
 		}
 		return nil
 	}
 	pol, errs := approval.ParsePolicy(string(buf))
 	for _, e := range errs {
-		warnClient("warn.approvals_file", map[string]any{pathParam: path, detailParam: e})
+		warnLive(lang, "warn.approvals_file", map[string]any{pathParam: path, detailParam: e})
 	}
 	return pol
 }
 
-func sessionPolicy(hostState *state.State, agents *agent.Store, session string) (approval.Policy, approval.Mode) {
+func sessionPolicy(lang languageSource, hostState *state.State, agents *agent.Store, session string) (approval.Policy, approval.Mode) {
 	var daemon approval.Policy
 	for _, raw := range hostState.ApprovalRules() {
 		rule, err := approval.ParseRule(raw)
 		if err != nil {
-			warnClient("warn.approvals_state_rule", map[string]any{ruleParam: raw, detailParam: err})
+			warnLive(lang, "warn.approvals_state_rule", map[string]any{ruleParam: raw, detailParam: err})
 			continue
 		}
 		daemon = append(daemon, rule)
@@ -320,5 +320,5 @@ func sessionPolicy(hostState *state.State, agents *agent.Store, session string) 
 			break
 		}
 	}
-	return approval.Merge(daemon, readAgentPolicy(home)), mode
+	return approval.Merge(daemon, readAgentPolicy(lang, home)), mode
 }

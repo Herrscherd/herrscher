@@ -55,7 +55,7 @@ func TestCommandSocketDispatchesOk(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	disp := &fakeDispatcher{out: `[{"name":"lead1"}]`}
-	serveCommandSocket(ctx, isolatedRuntimeDir(t), path, disp)
+	serveCommandSocket(ctx, isolatedRuntimeDir(t), path, disp, testLanguage())
 
 	resp := sendCommand(t, path, cmdRequest{Argv: []string{"session", "list", "--json"}})
 	if resp.Ok == nil || *resp.Ok != disp.out {
@@ -74,7 +74,7 @@ func TestCommandSocketReportsDispatchError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	disp := &fakeDispatcher{err: stringError("boom")}
-	serveCommandSocket(ctx, isolatedRuntimeDir(t), path, disp)
+	serveCommandSocket(ctx, isolatedRuntimeDir(t), path, disp, testLanguage())
 
 	resp := sendCommand(t, path, cmdRequest{Argv: []string{"session", "list"}})
 	if resp.Ok != nil {
@@ -90,7 +90,7 @@ func TestCommandSocketRejectsMalformed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	disp := &fakeDispatcher{out: "unused"}
-	serveCommandSocket(ctx, isolatedRuntimeDir(t), path, disp)
+	serveCommandSocket(ctx, isolatedRuntimeDir(t), path, disp, testLanguage())
 
 	c, err := (&net.Dialer{}).DialContext(t.Context(), "unix", path)
 	if err != nil {
@@ -118,7 +118,7 @@ func TestCommandSocketRestrictedToOwner(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cmd.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	serveCommandSocket(ctx, isolatedRuntimeDir(t), path, &fakeDispatcher{out: "unused"})
+	serveCommandSocket(ctx, isolatedRuntimeDir(t), path, &fakeDispatcher{out: "unused"}, testLanguage())
 
 	info, err := os.Stat(path)
 	if err != nil {
@@ -213,7 +213,7 @@ func TestASessionSocketIsNotWorldReachable(t *testing.T) {
 	defer cancel()
 	serveCommandSocket(ctx, isolatedRuntimeDir(t), sock, dispatcherFunc(func(context.Context, []string) (string, error) {
 		return "", nil
-	}))
+	}), testLanguage())
 	fi, err := os.Stat(sock)
 	if err != nil {
 		t.Fatal(err)

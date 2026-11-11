@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Herrscherd/herrscher/core/internal/control"
+	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 func TestEnsureSocketFreeRefusesASocketAnotherDaemonServes(t *testing.T) {
@@ -250,6 +251,36 @@ func TestStopLiveReleasesEachSessionSocket(t *testing.T) {
 	if cancelled != 1 || released != 1 {
 		t.Fatalf("stopLive cancelled %d and released %d sessions, want 1 and 1", cancelled, released)
 	}
+}
+
+func TestGoLiveAfterStopLiveOpensNothing(t *testing.T) {
+	layout := isolatedRuntimeDir(t)
+	h := &hub{runtime: layout, instanceID: "t16", warnings: io.Discard, live: make(map[string]liveSession)}
+	h.stopLive()
+	err := h.goLive(context.Background(), state.Session{Name: "alpha"})
+	if !errors.Is(err, errHubClosed) {
+		t.Fatalf("goLive after stopLive = %v, want errHubClosed", err)
+	}
+	assertAbsent(t, control.SocketPath(layout, "t16", "alpha"))
+	assertAbsent(t, SessionCommandSocketPathIn(layout, "t16", "alpha"))
+	if err := h.removeSockets(); err != nil {
+		t.Fatalf("removeSockets: %v", err)
+	}
+	assertAbsent(t, control.SocketPath(layout, "t16", "alpha"))
+	assertAbsent(t, SessionCommandSocketPathIn(layout, "t16", "alpha"))
+}
+
+func TestGoLiveAfterRemoveSocketsOpensNothing(t *testing.T) {
+	layout := isolatedRuntimeDir(t)
+	h := &hub{runtime: layout, instanceID: "t17", warnings: io.Discard, live: make(map[string]liveSession)}
+	if err := h.removeSockets(); err != nil {
+		t.Fatalf("removeSockets: %v", err)
+	}
+	err := h.goLive(context.Background(), state.Session{Name: "alpha"})
+	if !errors.Is(err, errHubClosed) {
+		t.Fatalf("goLive after removeSockets = %v, want errHubClosed", err)
+	}
+	assertAbsent(t, control.SocketPath(layout, "t17", "alpha"))
 }
 
 func TestDeadDaemonSocketsAreReadAsAnAbsentDaemon(t *testing.T) {

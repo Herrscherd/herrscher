@@ -3403,6 +3403,11 @@
     "other": "the daemon was started without a runtime directory"
   },
   {
+    "id": "cli.host.fault.hub_closed",
+    "description": "Le démon s'arrête et ne démarre plus de session (goLive refusé après l'arrêt)",
+    "other": "the daemon is shutting down and starts no session"
+  },
+  {
     "id": "cli.host.fault.instance_locked",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (instance lock held by another daemon)",
     "other": "another daemon already holds the lock of this instance: stop it or pass --instance"

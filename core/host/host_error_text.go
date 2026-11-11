@@ -91,6 +91,7 @@ func hostErrorKeys() []hostErrorKey {
 		{errSocketTaken, "cli.host.fault.socket_taken"},
 		{errInstanceLocked, "cli.host.fault.instance_locked"},
 		{errNoRuntimeLayout, "cli.host.fault.no_runtime_dir"},
+		{errHubClosed, "cli.host.fault.hub_closed"},
 		{errEmptyShellCommand, "cli.host.fault.empty_shell_command"},
 		{errUnknownShellSession, "cli.host.fault.unknown_shell_session"},
 		{errRemoteShellSession, "cli.host.fault.remote_shell_session"},

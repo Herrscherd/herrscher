@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"maps"
@@ -57,6 +58,7 @@ type hub struct {
 	live       map[string]liveSession
 
 	listenedSessions map[string]struct{}
+	closed           bool
 
 	teardownGrace  time.Duration
 	sessionStopped func(name string)
@@ -145,12 +147,17 @@ func eventTap(publish func(string, contracts.Event), session string) func(contra
 	return func(e contracts.Event) { publish(session, e) }
 }
 
+var errHubClosed = errors.New("the daemon is shutting down and starts no session")
+
 func (h *hub) goLive(ctx context.Context, sess state.Session) error {
 	if h.runtime.Dir() == "" {
 		return errNoRuntimeLayout
 	}
 	h.lifecycle.Lock()
 	defer h.lifecycle.Unlock()
+	if h.closed {
+		return errHubClosed
+	}
 	h.mu.Lock()
 	_, running := h.live[sess.Name]
 	h.mu.Unlock()
@@ -247,10 +254,13 @@ func liveSessionLanguage(store *state.State, name string) func() i18n.Language {
 }
 
 func (h *hub) stopLive() {
+	h.lifecycle.Lock()
+	h.closed = true
 	h.mu.Lock()
 	lives := make(map[string]liveSession, len(h.live))
 	maps.Copy(lives, h.live)
 	h.mu.Unlock()
+	h.lifecycle.Unlock()
 	for _, live := range lives {
 		live.cancel()
 		live.release()
@@ -270,9 +280,12 @@ func (h *hub) noteListened(session string) {
 }
 
 func (h *hub) removeSockets() error {
+	h.lifecycle.Lock()
+	h.closed = true
 	h.mu.Lock()
 	sessions := slices.Collect(maps.Keys(h.listenedSessions))
 	h.mu.Unlock()
+	h.lifecycle.Unlock()
 	return removeSocketFiles(h.runtime, h.instanceID, sessions)
 }
 

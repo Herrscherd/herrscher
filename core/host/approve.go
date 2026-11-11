@@ -107,7 +107,7 @@ type approvalTable struct {
 }
 
 func newApprovalTable(warn io.Writer) *approvalTable {
-	return &approvalTable{m: make(map[string]*pendingApproval), judge: registryRiskJudge, warn: warn}
+	return &approvalTable{m: make(map[string]*pendingApproval), judge: registryRiskJudge, warn: warningWriter(warn)}
 }
 
 func (t *approvalTable) withRules(rules approvalRules) *approvalTable {
@@ -226,7 +226,7 @@ func warnWaitOutlivesTheHook(out io.Writer, wait time.Duration) {
 	if wait <= agent.HookWait/2 {
 		return
 	}
-	logWriteFailure(fmt.Fprintf(out, "approvals: a %s wait can hold the hook for twice that (a slow menu post, then the timer), longer than the %s the CLI gives it: past %s the tool call runs and nobody is told\n", wait, agent.HookWait, agent.HookWait))
+	logWriteFailure(fmt.Fprintf(warningWriter(out), "approvals: a %s wait can hold the hook for twice that (a slow menu post, then the timer), longer than the %s the CLI gives it: past %s the tool call runs and nobody is told\n", wait, agent.HookWait, agent.HookWait))
 }
 
 func settleApproval(approvals *approvalTable, sessions *sessionTable, approvalID string, answer approvalAnswer) bool {

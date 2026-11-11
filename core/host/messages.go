@@ -104,6 +104,10 @@ func errorTextIn(lang i18n.Language, err error) string {
 }
 
 func localizedPart(lang i18n.Language, err error) (string, string, bool) {
+	var wrapped *hostWrapError
+	if errors.As(err, &wrapped) && wrapped == nil {
+		return "", "", false
+	}
 	var local localizableError
 	if errors.As(err, &local) {
 		return fmt.Sprint(local), local.render(lang), true

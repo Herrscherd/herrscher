@@ -349,12 +349,15 @@ func (e *dereferencingError) Error() string { return e.text }
 
 func TestTypedNilErrorParamRendersAsNil(t *testing.T) {
 	var nilErr *dereferencingError
-	params := map[string]any{nameParam: "digest", detailParam: error(nilErr)}
-	for _, lang := range []i18n.Language{i18n.French, i18n.English} {
-		got := newHostMessages().text(lang, "warn.session_start", params)
-		want := newHostMessages().text(lang, "warn.session_start", map[string]any{nameParam: "digest", detailParam: "<nil>"})
-		if got != want {
-			t.Fatalf("a typed nil error printed %q in %v, want %q", got, lang, want)
+	var nilWrap *hostWrapError
+	for _, typedNil := range []error{nilErr, nilWrap} {
+		params := map[string]any{nameParam: "digest", detailParam: typedNil}
+		for _, lang := range []i18n.Language{i18n.French, i18n.English} {
+			got := newHostMessages().text(lang, "warn.session_start", params)
+			want := newHostMessages().text(lang, "warn.session_start", map[string]any{nameParam: "digest", detailParam: "<nil>"})
+			if got != want {
+				t.Fatalf("a typed nil %T printed %q in %v, want %q", typedNil, got, lang, want)
+			}
 		}
 	}
 }

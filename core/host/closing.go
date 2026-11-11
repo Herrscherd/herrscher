@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"sync"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
@@ -28,6 +29,8 @@ func warnHost(lang i18n.Language, key string, params map[string]any) {
 	logWriteFailure(fmt.Fprintln(os.Stderr, newHostMessages().text(lang, key, params)))
 }
 
+var clientLanguage = sync.OnceValue(clitext.ClientLanguage)
+
 func warnClient(key string, params map[string]any) {
-	warnHost(clitext.ClientLanguage(), key, params)
+	warnHost(clientLanguage(), key, params)
 }

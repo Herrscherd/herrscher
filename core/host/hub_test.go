@@ -85,7 +85,7 @@ func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
 }
 
 func TestSessionSeedRegisteredRequiresNameAndTask(t *testing.T) {
-	reg, err := NewRegistry(context.Background(), nil, Options{StatePath: t.TempDir() + "/s.json"})
+	reg, err := NewRegistry(context.Background(), nil, Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +169,7 @@ func TestHubDispatchSetSource(t *testing.T) {
 	defer cancel()
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
-	o := Options{StatePath: t.TempDir() + "/s.json", DefaultCmd: "claude"}
+	o := Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json", DefaultCmd: "claude"}
 	reg, _, err := buildRegistry(ctx, Deps{}, o, st, sup, "", nil, approvalTab, sessionTab)
 	if err != nil {
 		t.Fatal(err)

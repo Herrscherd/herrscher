@@ -25,13 +25,6 @@ func CommandSocketPathIn(_ RuntimeLayout, instanceID string) string {
 	return `\\.\pipe\herrscher-command`
 }
 
-// SessionCommandSocketPath is the command pipe one session's own processes
-// dial, distinct from the operator's. See the unix file for why identity comes
-// from which listener a connection arrives on rather than from a secret.
-func SessionCommandSocketPath(instanceID, session string) string {
-	return SessionCommandSocketPathIn(RuntimeLayout{}, instanceID, session)
-}
-
 // SessionCommandSocketPathIn is the per-session command pipe; the layout is not
 // used on this platform.
 func SessionCommandSocketPathIn(_ RuntimeLayout, instanceID, session string) string {

@@ -203,9 +203,6 @@ func remoteSocketDir(ctx context.Context, t *testing.T, layout RuntimeLayout, ta
 func removeRemoteRuntimeDirOnExitIfCreated(ctx context.Context, t *testing.T, target string) {
 	t.Helper()
 	dir := expectedRemoteRuntimeDir(ctx, t, target)
-	if err := refuseLocalProductionRuntime(dir, ProductionRuntime().Dir()); err != nil {
-		t.Fatal(err)
-	}
 	presence, err := capture(ctx, runner.SSH{Target: target}, "sh", "-c", `if [ -e "$1" ]; then echo present; else echo absent; fi`, "sh", dir)
 	if err != nil {
 		t.Fatalf("probe the remote runtime dir: %v", err)

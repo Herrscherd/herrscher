@@ -27,23 +27,6 @@ func CommandSocketPathIn(layout RuntimeLayout, instanceID string) string {
 	return layout.Socket(name)
 }
 
-// SessionCommandSocketPath is the command socket one session's own processes
-// dial, distinct from the operator's.
-//
-// It is what tells the daemon who is calling. Locally the agent and the daemon
-// share a uid, so no secret the agent can read distinguishes it from the
-// operator: any token it could present, it could also have replayed. Where the
-// connection arrives is the one thing an agent does not get to author, because
-// the daemon chose which listener serves which caller.
-//
-// Locally that is a guardrail, not a wall: nothing stops a determined agent
-// from looking for the operator socket in the same directory. Remotely it is a
-// real boundary, since ssh forwards this session's socket and no other, so the
-// far machine has no path to anything else.
-func SessionCommandSocketPath(instanceID, session string) string {
-	return SessionCommandSocketPathIn(ProductionRuntime(), instanceID, session)
-}
-
 // SessionCommandSocketPathIn is the command socket of one session under layout.
 func SessionCommandSocketPathIn(layout RuntimeLayout, instanceID, session string) string {
 	name := "herrscher-command"

@@ -117,18 +117,34 @@ func DirOf(root string, uid int) string {
 	return path.Join(root, dirPrefix+strconv.Itoa(uid))
 }
 
-// Dir is the private directory this layout names.
+// UnusableLayoutError reports a zero Layout, which names no directory.
+type UnusableLayoutError struct{}
+
+// Error explains that the layout was never built by Production, Resolve or At.
+func (*UnusableLayoutError) Error() string {
+	return "runtimedir: a zero Layout names no directory; build it with Production, Resolve or At"
+}
+
+// Dir is the private directory this layout names, empty for a zero Layout.
 func (l Layout) Dir() string {
 	return l.dir
 }
 
-// Socket is the unix socket path for stem in the private directory.
+// Socket is the unix socket path for stem in the private directory, empty for a
+// zero Layout.
 func (l Layout) Socket(stem string) string {
+	if l.dir == "" {
+		return ""
+	}
 	return Name(l.dir, stem)
 }
 
-// Lock is the instance lock path for instanceID in the private directory.
+// Lock is the instance lock path for instanceID in the private directory, empty
+// for a zero Layout.
 func (l Layout) Lock(instanceID string) string {
+	if l.dir == "" {
+		return ""
+	}
 	return path.Join(l.dir, instanceLock+Key(instanceID)+lockSuffix)
 }
 
@@ -152,8 +168,11 @@ func Key(name string) string {
 
 // Check verifies the private directory when p lives in it, and accepts any
 // other path.
-func (l Layout) Check(p string) error {
-	if path.Dir(p) != l.dir {
+func (l Layout) Check(file string) error {
+	if l.dir == "" {
+		return &UnusableLayoutError{}
+	}
+	if path.Dir(file) != l.dir {
 		return nil
 	}
 	_, err := l.Private()

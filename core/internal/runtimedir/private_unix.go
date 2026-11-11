@@ -18,13 +18,17 @@ const (
 // it is a symlink, another user's, not a directory, or open to its group or
 // others. It never changes an existing directory.
 func (l Layout) Private() (string, error) {
-	if err := os.Mkdir(l.dir, privateDirMode); err != nil && !errors.Is(err, fs.ErrExist) {
-		return "", &UnsafeError{Path: l.dir, Kind: KindOther, Reason: err.Error()}
+	if l.dir == "" {
+		return "", &UnusableLayoutError{}
 	}
-	if err := verifyPrivate(l.dir); err != nil {
+	dir := l.dir
+	if err := os.Mkdir(dir, privateDirMode); err != nil && !errors.Is(err, fs.ErrExist) {
+		return "", &UnsafeError{Path: dir, Kind: KindOther, Reason: err.Error()}
+	}
+	if err := verifyPrivate(dir); err != nil {
 		return "", err
 	}
-	return l.dir, nil
+	return dir, nil
 }
 
 func verifyPrivate(dir string) error {

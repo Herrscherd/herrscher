@@ -10,7 +10,6 @@ import (
 
 	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/internal/errwriter"
-	"github.com/Herrscherd/herrscher/internal/runtimeguard"
 )
 
 const (
@@ -26,8 +25,7 @@ func TestMain(m *testing.M) {
 	case "serve":
 		os.Exit(runServeChild())
 	}
-	guard := runtimeguard.Start(host.ProductionRuntime().Dir())
-	os.Exit(guard.Finish(m.Run()))
+	os.Exit(m.Run())
 }
 
 func runServeChild() int {

@@ -30,13 +30,17 @@ func TestEventsSocketPathIsTheDocumentedLocation(t *testing.T) {
 	}
 }
 
-func TestPublicSocketPathsAreTheProductionDirOnesWithoutTouchingIt(t *testing.T) {
-	dir := ProductionRuntime().Dir()
-	if got := CommandSocketPath("instance-1"); got != filepath.Join(dir, "herrscher-command-instance-1.sock") {
-		t.Fatalf("CommandSocketPath(instance-1) = %q", got)
+func TestPublicSocketPathsShareOneDirectory(t *testing.T) {
+	command := CommandSocketPath("instance-1")
+	events := EventsSocketPath("instance-1")
+	if filepath.Dir(command) != filepath.Dir(events) {
+		t.Fatalf("CommandSocketPath and EventsSocketPath live in %q and %q", filepath.Dir(command), filepath.Dir(events))
 	}
-	if got := EventsSocketPath("instance-1"); got != filepath.Join(dir, "herrscher-events-instance-1.sock") {
-		t.Fatalf("EventsSocketPath(instance-1) = %q", got)
+	if filepath.Base(command) != "herrscher-command-instance-1.sock" {
+		t.Fatalf("CommandSocketPath(instance-1) base = %q", filepath.Base(command))
+	}
+	if filepath.Base(events) != "herrscher-events-instance-1.sock" {
+		t.Fatalf("EventsSocketPath(instance-1) base = %q", filepath.Base(events))
 	}
 }
 

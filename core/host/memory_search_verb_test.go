@@ -14,7 +14,7 @@ func TestMemorySearchVerbReturnsFormattedHits(t *testing.T) {
 	useRestoreMem(t, &restoreVerbMem{nodes: map[string]contracts.Node{
 		"facts/a": {Key: "facts/a", Kind: contracts.KindDecision, Title: "Some Decision"},
 	}})
-	reg, err := NewRegistry(context.Background(), nil, Options{StatePath: t.TempDir() + "/s.json"})
+	reg, err := NewRegistry(context.Background(), nil, Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestMemorySearchVerbReturnsFormattedHits(t *testing.T) {
 
 func TestMemorySearchVerbRawFlag(t *testing.T) {
 	mem := useRestoreMem(t, &restoreVerbMem{nodes: make(map[string]contracts.Node)})
-	reg, err := NewRegistry(context.Background(), nil, Options{StatePath: t.TempDir() + "/s.json"})
+	reg, err := NewRegistry(context.Background(), nil, Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)
 	}

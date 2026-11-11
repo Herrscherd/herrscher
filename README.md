@@ -1564,6 +1564,13 @@ an ssh host when two environment variables are set:
   tests. Without it the directory is left in place. A non-empty directory is never
   removed, and the tests remove only the socket files they created.
 
+Tests must pass an explicit `Layout` (`testRuntime` or `isolatedRuntimeDir`) to every
+function that reaches a socket or a lock. `internal/productionlayout` enforces it in
+`go test ./...`: no file other than `main.go` and the unix socket wrappers may name
+`ProductionRuntime`, no test may call `CommandSocketPath` or `EventsSocketPath` except
+the one read-only contract test, and only `core/internal/runtimedir` may call the
+production constructor. A zero `Layout` names no path, and its checks return an error.
+
 ## Documentation
 
 Full docs:

@@ -23,6 +23,8 @@ const (
 	runtimedirName      = "runtimedir"
 	productionRuntime   = "ProductionRuntime"
 	productionLayout    = "Production"
+	runtimedirAt        = "At"
+	hostRuntimeAt       = "RuntimeAt"
 	commandSocketCall   = "CommandSocketPath"
 	eventsSocketCall    = "EventsSocketPath"
 	contractTestFile    = "core/host/cmdsocket_path_unix_test.go"
@@ -58,6 +60,10 @@ func TestTheRuntimeDirectoryExportsNoRootsOrResolver(t *testing.T) {
 	reportAll(t, runtimedirSurfaceViolations(parseModule(t)))
 }
 
+func TestProductionCodeBuildsNoLayoutFromAnArbitraryPath(t *testing.T) {
+	reportAll(t, arbitraryLayoutViolations(parseModule(t)))
+}
+
 func reportAll(t *testing.T, violations []string) {
 	t.Helper()
 	for _, violation := range violations {
@@ -75,6 +81,36 @@ func productionRuntimeViolations(files []sourceFile) []string {
 			fmt.Sprintf("references ProductionRuntime; only %s, %s and %s may", entryPointFile, unixWrappersFile, runtimeDirFile))...)
 	}
 	return out
+}
+
+func arbitraryLayoutViolations(files []sourceFile) []string {
+	var out []string
+	for _, file := range files {
+		if strings.HasSuffix(file.rel, testFileSuffix) || file.rel == runtimeDirFile || strings.HasPrefix(file.rel, runtimedirPackage) {
+			continue
+		}
+		ast.Inspect(file.tree, func(n ast.Node) bool {
+			if call, ok := n.(*ast.CallExpr); ok && isArbitraryLayoutCall(call.Fun) {
+				out = append(out, file.position(call.Pos())+fmt.Sprintf(": builds a layout from an arbitrary path; only tests and %s may, production takes the layout that main passes", runtimeDirFile))
+			}
+			return true
+		})
+	}
+	return out
+}
+
+func isArbitraryLayoutCall(fun ast.Expr) bool {
+	switch callee := fun.(type) {
+	case *ast.Ident:
+		return callee.Name == hostRuntimeAt
+	case *ast.SelectorExpr:
+		if callee.Sel.Name == hostRuntimeAt {
+			return true
+		}
+		qualifier, ok := callee.X.(*ast.Ident)
+		return ok && qualifier.Name == runtimedirName && callee.Sel.Name == runtimedirAt
+	}
+	return false
 }
 
 func productionLayoutViolations(files []sourceFile) []string {
@@ -159,7 +195,7 @@ func importedSurfaceViolations(file sourceFile, spec *ast.ImportSpec) []string {
 
 func isForbiddenRuntimedirName(name string) bool {
 	switch name {
-	case "Roots", "ProductionRoots", "Resolve":
+	case "Roots", "ProductionRoots", "Resolve", "DirOf":
 		return true
 	}
 	return false

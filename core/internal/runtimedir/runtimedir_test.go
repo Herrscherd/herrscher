@@ -65,7 +65,7 @@ func TestResolveFallsBackToTmpWhenTheRuntimeDirIsOpen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := DirOf(tmp, os.Getuid()); layout.Dir() != want {
+	if want := dirOf(tmp, os.Getuid()); layout.Dir() != want {
 		t.Fatalf("Resolve().Dir() = %q, want the temp fallback %q", layout.Dir(), want)
 	}
 }
@@ -76,7 +76,7 @@ func TestResolveFallsBackToTmpWhenThereIsNoRuntimeDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := DirOf(tmp, os.Getuid()); layout.Dir() != want {
+	if want := dirOf(tmp, os.Getuid()); layout.Dir() != want {
 		t.Fatalf("Resolve().Dir() = %q, want %q", layout.Dir(), want)
 	}
 }

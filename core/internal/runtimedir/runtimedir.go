@@ -87,7 +87,7 @@ func resolve(uid int, roots searchRoots) Layout {
 	if usableRunUserDir(path.Join(roots.runUser, uidText), uid) {
 		return Layout{dir: path.Join(roots.runUser, uidText, runUserDirName)}
 	}
-	return Layout{dir: DirOf(roots.tmp, uid)}
+	return Layout{dir: dirOf(roots.tmp, uid)}
 }
 
 func checkAbsolute(root string) error {
@@ -107,8 +107,7 @@ func checkedLayout(layout Layout) (Layout, error) {
 	return layout, nil
 }
 
-// DirOf is the private directory of the user uid under the temp root.
-func DirOf(root string, uid int) string {
+func dirOf(root string, uid int) string {
 	return path.Join(root, dirPrefix+strconv.Itoa(uid))
 }
 

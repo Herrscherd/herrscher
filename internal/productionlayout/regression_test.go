@@ -131,3 +131,37 @@ var _ = Roots{}
 	}
 	expectViolations(t, runtimedirSurfaceViolations(files), 0)
 }
+
+func TestRegressionDirOfProbeIsFlagged(t *testing.T) {
+	files := []sourceFile{fixture(t, "core/host/probe_test.go", `package host
+
+import (
+	"os"
+
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
+)
+
+var _ = runtimedir.At(runtimedir.DirOf("/tmp", os.Getuid()))
+`)}
+	expectViolations(t, runtimedirSurfaceViolations(files), 1)
+}
+
+func TestRegressionProductionLayoutFromAnArbitraryPathIsFlagged(t *testing.T) {
+	files := []sourceFile{fixture(t, "core/host/stale.go", `package host
+
+import "github.com/Herrscherd/herrscher/core/internal/runtimedir"
+
+func stale() { _, _ = runtimedir.At("/tmp/herrscher-1000") }
+`)}
+	expectViolations(t, arbitraryLayoutViolations(files), 1)
+}
+
+func TestRegressionTestLayoutFromAnArbitraryPathIsAllowed(t *testing.T) {
+	files := []sourceFile{fixture(t, "core/host/stale_test.go", `package host
+
+import "github.com/Herrscherd/herrscher/core/internal/runtimedir"
+
+func stale() { _, _ = runtimedir.At("/tmp/herrscher-1000") }
+`)}
+	expectViolations(t, arbitraryLayoutViolations(files), 0)
+}

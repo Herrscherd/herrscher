@@ -342,7 +342,7 @@
   {
     "id": "runtime.unsafe_dir.symlink",
     "description": "The private runtime directory is a symbolic link, Path names it",
-    "other": "private runtime directory {{.Path}} cannot be used: it is a symbolic link. If you created the link, remove it and herrscher recreates the directory. Otherwise only root can remove it."
+    "other": "private runtime directory {{.Path}} cannot be used: it is a symbolic link. If you created the link, remove it and herrscher recreates the directory. Otherwise only its owner or root can remove it."
   },
   {
     "id": "runtime.unsafe_dir.foreign_owner",

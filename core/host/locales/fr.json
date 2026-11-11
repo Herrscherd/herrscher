@@ -342,7 +342,7 @@
   {
     "id": "runtime.unsafe_dir.symlink",
     "description": "Le répertoire d'exécution privé est un lien symbolique, Path le nomme",
-    "other": "répertoire d'exécution privé {{.Path}} inutilisable : c'est un lien symbolique. Si vous avez créé ce lien, supprimez-le et herrscher recrée le répertoire. Sinon, seul root peut le supprimer."
+    "other": "répertoire d'exécution privé {{.Path}} inutilisable : c'est un lien symbolique. Si vous avez créé ce lien, supprimez-le et herrscher recrée le répertoire. Sinon, seul son propriétaire ou root peut le supprimer."
   },
   {
     "id": "runtime.unsafe_dir.foreign_owner",

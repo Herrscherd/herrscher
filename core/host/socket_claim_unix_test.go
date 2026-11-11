@@ -11,9 +11,11 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/Herrscherd/herrscher/core/internal/control"
 )
 
-func TestClaimSocketPathRefusesASocketAnotherDaemonServes(t *testing.T) {
+func TestEnsureSocketFreeRefusesASocketAnotherDaemonServes(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
 	path := filepath.Join(t.TempDir(), "live.sock")
 	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", path)
@@ -31,25 +33,35 @@ func TestClaimSocketPathRefusesASocketAnotherDaemonServes(t *testing.T) {
 		}
 	}()
 
-	if err := claimSocketPath(context.Background(), layout, path); !errors.Is(err, errSocketTaken) {
-		t.Fatalf("claimSocketPath on a live socket = %v, want errSocketTaken", err)
+	if err := ensureSocketFree(context.Background(), layout, path); !errors.Is(err, errSocketTaken) {
+		t.Fatalf("ensureSocketFree on a live socket = %v, want errSocketTaken", err)
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("the live daemon's socket was removed: %v", err)
 	}
 }
 
-func TestClaimSocketPathClearsAStaleSocket(t *testing.T) {
+func TestEnsureSocketFreeLeavesADeadSocketInPlace(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
-	path := filepath.Join(t.TempDir(), "stale.sock")
-	if err := os.WriteFile(path, nil, 0o600); err != nil {
-		t.Fatal(err)
+	path := filepath.Join(t.TempDir(), "dead.sock")
+	deadSocket(t, path)
+	if err := ensureSocketFree(context.Background(), layout, path); err != nil {
+		t.Fatalf("ensureSocketFree on a dead socket = %v, want nil", err)
 	}
-	if err := claimSocketPath(context.Background(), layout, path); err != nil {
-		t.Fatalf("claimSocketPath on a stale file = %v, want nil", err)
+	assertSocketFile(t, path)
+}
+
+func TestCreatingACommandSocketReplacesADeadFile(t *testing.T) {
+	layout := isolatedRuntimeDir(t)
+	path := CommandSocketPathIn(layout, "t14")
+	deadSocket(t, path)
+	listener, err := openSocket(context.Background(), layout, path)
+	if err != nil {
+		t.Fatalf("openSocket over a dead file: %v", err)
 	}
-	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("stale socket still present: %v", err)
+	t.Cleanup(func() { logCleanup(listener.Close()) })
+	if !socketAnswers(context.Background(), layout, path) {
+		t.Fatal("the socket created over a dead file does not answer")
 	}
 }
 
@@ -120,6 +132,144 @@ func TestLockInstanceRefusesASecondDaemonOfTheSameInstance(t *testing.T) {
 	again()
 }
 
+func TestReleaseLeavesASocketANewerListenerBoundAtThePath(t *testing.T) {
+	layout := isolatedRuntimeDir(t)
+	path := filepath.Join(t.TempDir(), "takeover.sock")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	older, err := openSocket(ctx, layout, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	released := acceptCommands(ctx, older, &fakeDispatcher{out: "old"}, time.Second)
+	newer, err := listenCommandSocket(context.Background(), layout, path)
+	if err != nil {
+		t.Fatalf("newer listen over the older socket: %v", err)
+	}
+	t.Cleanup(func() { logCleanup(newer.Close()) })
+	cancel()
+	select {
+	case <-released:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the older listener did not finish releasing after shutdown")
+	}
+	if !socketAnswers(context.Background(), layout, path) {
+		t.Fatal("releasing the older listener disturbed the socket the newer one bound")
+	}
+}
+
+func TestServeHubSocketsReleaseKeepsItsFilesInPlace(t *testing.T) {
+	layout := isolatedRuntimeDir(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	released, err := serveHubSockets(ctx, layout, "t6", &hub{warnings: io.Discard})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	select {
+	case <-released:
+	case <-time.After(5 * time.Second):
+		t.Fatal("serveHubSockets did not report its sockets released after shutdown")
+	}
+	for _, path := range []string{CommandSocketPathIn(layout, "t6"), EventsSocketPathIn(layout, "t6")} {
+		assertSocketFile(t, path)
+		if socketAnswers(context.Background(), layout, path) {
+			t.Fatalf("socket %q still answers after its release was reported", path)
+		}
+	}
+}
+
+func TestRemoveSocketsRemovesOnlyTheSocketsOfThisInstance(t *testing.T) {
+	layout := isolatedRuntimeDir(t)
+	h := &hub{runtime: layout, instanceID: "t12"}
+	h.noteListened("alpha")
+	h.noteListened("absent")
+	owned := []string{
+		CommandSocketPathIn(layout, "t12"),
+		SessionCommandSocketPathIn(layout, "t12", "alpha"),
+		control.SocketPath(layout, "t12", "alpha"),
+	}
+	for _, path := range owned {
+		deadSocket(t, path)
+	}
+	outsider := CommandSocketPathIn(layout, "t13")
+	deadSocket(t, outsider)
+	regular := EventsSocketPathIn(layout, "t12")
+	if err := os.WriteFile(regular, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.removeSockets(); err != nil {
+		t.Fatalf("removeSockets: %v", err)
+	}
+	for _, path := range owned {
+		assertAbsent(t, path)
+	}
+	assertSocketFile(t, outsider)
+	if _, err := os.Lstat(regular); err != nil {
+		t.Fatalf("a regular file at a socket path was removed: %v", err)
+	}
+}
+
+func TestInstanceStopRemovesItsOwnSocketFiles(t *testing.T) {
+	layout := isolatedRuntimeDir(t)
+	h := &hub{runtime: layout, instanceID: "t15", warnings: io.Discard}
+	ctx, cancel := context.WithCancel(context.Background())
+	released, err := serveHubSockets(ctx, layout, "t15", h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	select {
+	case <-released:
+	case <-time.After(5 * time.Second):
+		t.Fatal("serveHubSockets did not report its sockets released after shutdown")
+	}
+	if err := h.removeSockets(); err != nil {
+		t.Fatalf("removeSockets at instance stop: %v", err)
+	}
+	for _, path := range []string{CommandSocketPathIn(layout, "t15"), EventsSocketPathIn(layout, "t15")} {
+		assertAbsent(t, path)
+	}
+}
+
+func TestStopLiveReleasesEachSessionSocket(t *testing.T) {
+	layout := isolatedRuntimeDir(t)
+	done := make(chan struct{})
+	close(done)
+	var cancelled, released int
+	h := &hub{runtime: layout, instanceID: "t11", teardownGrace: time.Second, live: map[string]liveSession{
+		"alpha": {
+			cancel:   func() { cancelled++ },
+			done:     done,
+			released: done,
+			release:  func() { released++ },
+		},
+	}}
+	h.stopLive()
+	if cancelled != 1 || released != 1 {
+		t.Fatalf("stopLive cancelled %d and released %d sessions, want 1 and 1", cancelled, released)
+	}
+}
+
+func TestDeadDaemonSocketsAreReadAsAnAbsentDaemon(t *testing.T) {
+	layout := isolatedRuntimeDir(t)
+	deadSocket(t, CommandSocketPathIn(layout, "t10"))
+	deadSocket(t, EventsSocketPathIn(layout, "t10"))
+	ctx := context.Background()
+
+	if _, err := DaemonDispatch(ctx, layout, "t10", []string{"status"}); !IsDaemonNotRunning(err) {
+		t.Fatalf("DaemonDispatch on a dead command socket = %v, want daemon not running", err)
+	}
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if _, handled, err := ForwardToDaemon(ctx, layout, statePath, "t10", []string{"status"}); handled || err != nil {
+		t.Fatalf("ForwardToDaemon on a dead command socket = handled %v, err %v, want not handled and no error", handled, err)
+	}
+	if _, err := SubscribeDaemonEvents(ctx, layout, "t10"); !errors.Is(err, errDaemonEventsUnreachable) {
+		t.Fatalf("SubscribeDaemonEvents on a dead events socket = %v, want errDaemonEventsUnreachable", err)
+	}
+}
+
 func answeringListener(t *testing.T, path string) {
 	t.Helper()
 	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", path)
@@ -138,50 +288,36 @@ func answeringListener(t *testing.T, path string) {
 	}()
 }
 
-func TestShutdownLeavesASocketANewerDaemonOwns(t *testing.T) {
-	layout := isolatedRuntimeDir(t)
-	path := filepath.Join(t.TempDir(), "takeover.sock")
-	ctx, cancel := context.WithCancel(context.Background())
-	listener, err := openCommandSocket(ctx, layout, path)
+func deadSocket(t *testing.T, path string) {
+	t.Helper()
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	released := acceptCommands(ctx, listener, &fakeDispatcher{out: "old"}, time.Second)
-	if removeErr := os.Remove(path); removeErr != nil {
-		t.Fatal(removeErr)
+	unix, ok := listener.(*net.UnixListener)
+	if !ok {
+		t.Fatalf("listener at %q is %T, want *net.UnixListener", path, listener)
 	}
-	newer, err := listenCommandSocket(context.Background(), layout, path)
-	if err != nil {
-		t.Fatalf("newer daemon listen: %v", err)
-	}
-	t.Cleanup(func() { logCleanup(newer.Close()) })
-	cancel()
-	select {
-	case <-released:
-	case <-time.After(5 * time.Second):
-		t.Fatal("the older daemon did not finish releasing its socket after shutdown")
-	}
-	if !socketAnswers(context.Background(), layout, path) {
-		t.Fatal("the older daemon removed the socket the newer one owns on shutdown")
+	unix.SetUnlinkOnClose(false)
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
 
-func TestServeHubSocketsReportReleasedOnlyOnceTheFilesAreGone(t *testing.T) {
-	layout := isolatedRuntimeDir(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	released, err := serveHubSockets(ctx, layout, "t6", &hub{warnings: io.Discard})
+func assertSocketFile(t *testing.T, path string) {
+	t.Helper()
+	info, err := os.Lstat(path)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("socket file %q is gone: %v", path, err)
 	}
-	cancel()
-	select {
-	case <-released:
-	case <-time.After(5 * time.Second):
-		t.Fatal("serveHubSockets did not report its sockets released after shutdown")
+	if info.Mode()&os.ModeSocket == 0 {
+		t.Fatalf("%q is not a socket file: mode %v", path, info.Mode())
 	}
-	for _, path := range []string{CommandSocketPathIn(layout, "t6"), EventsSocketPathIn(layout, "t6")} {
-		if _, statErr := os.Stat(path); !errors.Is(statErr, os.ErrNotExist) {
-			t.Fatalf("socket %q is still on disk after its release was reported: %v", path, statErr)
-		}
+}
+
+func assertAbsent(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("%q is still on disk: %v", path, err)
 	}
 }

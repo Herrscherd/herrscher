@@ -3,12 +3,9 @@ package control
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
-	"io/fs"
 	"log/slog"
 	"net"
-	"os"
 	"sync"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -57,8 +54,6 @@ func (c *Conn) Close() error { return c.c.Close() }
 // dialing bridge, keeping each connection open for the session's life.
 type Acceptor struct {
 	ln        net.Listener
-	path      string
-	own       os.FileInfo
 	conns     chan *Conn
 	done      chan struct{}
 	exited    chan struct{}
@@ -68,24 +63,18 @@ type Acceptor struct {
 
 var errNoSocketPath = errors.New("the control socket has no path, its runtime layout is zero")
 
-// Accept binds the control socket at path (removing a stale socket first) and
-// starts accepting bridge connections. Each appears on Conns().
+// Accept binds the control socket at path, replacing a dead socket file left
+// there by a crash, and starts accepting bridge connections. Each appears on
+// Conns().
 func Accept(ctx context.Context, path string) (*Acceptor, error) {
 	if path == "" {
 		return nil, errNoSocketPath
-	}
-	if err := removeStaleSocket(path); err != nil {
-		return nil, err
 	}
 	listener, err := listenControl(ctx, path)
 	if err != nil {
 		return nil, err
 	}
-	own, err := bindIdentity(path)
-	if err != nil {
-		return nil, errors.Join(err, listener.Close())
-	}
-	acceptor := &Acceptor{ln: listener, path: path, own: own, conns: make(chan *Conn, 1), done: make(chan struct{}), exited: make(chan struct{})}
+	acceptor := &Acceptor{ln: listener, conns: make(chan *Conn, 1), done: make(chan struct{}), exited: make(chan struct{})}
 	go acceptor.loop()
 	go acceptor.closeWhenDone(ctx)
 	return acceptor, nil
@@ -127,7 +116,8 @@ func (a *Acceptor) loop() {
 // Conns yields each bridge connection; it closes when the Acceptor is closed.
 func (a *Acceptor) Conns() <-chan *Conn { return a.conns }
 
-// Close stops listening and removes the socket file.
+// Close stops listening. The socket file stays in place, dead, until the
+// daemon's clean stop removes it.
 func (a *Acceptor) Close() error {
 	a.closeOnce.Do(func() { a.closeErr = a.shutdown() })
 	return a.closeErr
@@ -138,7 +128,7 @@ func (a *Acceptor) shutdown() error {
 	err := a.ln.Close()
 	<-a.exited
 	a.drainPending()
-	return errors.Join(err, releaseOwnedPath(a.path, a.own))
+	return err
 }
 
 func (a *Acceptor) drainPending() {
@@ -170,13 +160,6 @@ func DialContext(ctx context.Context, path string) (*Conn, error) {
 		return nil, err
 	}
 	return newConn(conn), nil
-}
-
-func removeStaleSocket(path string) error {
-	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("remove control socket %s: %w", path, err)
-	}
-	return nil
 }
 
 func closeConn(closer io.Closer) {

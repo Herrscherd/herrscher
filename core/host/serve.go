@@ -337,9 +337,16 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	startHubProbes(ctx, gws, options, store, monitor, instID)
 
 	log.Info("hub up; supervising sessions", "gateways", strings.Join(kindsOf(gws), ","))
+	return awaitHubStop(ctx, runningHub, liveStopped, sockets, log)
+}
+
+func awaitHubStop(ctx context.Context, runningHub *hub, liveStopped, sockets <-chan struct{}, log *slog.Logger) error {
 	<-ctx.Done()
 	<-liveStopped
 	<-sockets
+	if err := runningHub.removeSockets(); err != nil {
+		log.Warn("socket files of this instance not removed", "err", err)
+	}
 	return ctx.Err()
 }
 
@@ -393,13 +400,13 @@ func wireCoordination(hubCore *hub, deps hostDeps, st *state.State, sessions *se
 
 func serveHubSockets(ctx context.Context, layout runtimedir.Layout, instID string, hubCore *hub) (<-chan struct{}, error) {
 	events := newEventSocket()
-	eventsListener, err := openEventsSocket(ctx, layout, EventsSocketPathIn(layout, instID))
+	eventsListener, err := openSocket(ctx, layout, EventsSocketPathIn(layout, instID))
 	if err != nil {
 		return nil, err
 	}
-	commandsListener, err := openCommandSocket(ctx, layout, CommandSocketPathIn(layout, instID))
+	commandsListener, err := openSocket(ctx, layout, CommandSocketPathIn(layout, instID))
 	if err != nil {
-		eventsListener.release()
+		closeRead(eventsListener)
 		return nil, err
 	}
 	hubCore.eventPublisher = events.Publish

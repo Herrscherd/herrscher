@@ -4,12 +4,13 @@ package host
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"net"
 	"os"
-	"path/filepath"
 
 	"github.com/Herrscherd/herrscher/core/internal/control"
-	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
+	"github.com/Herrscherd/herrscher/core/internal/sockfile"
 )
 
 // CommandSocketPath is the daemon-level operator command socket of the user
@@ -61,7 +62,35 @@ func listenCommandSocket(ctx context.Context, layout RuntimeLayout, path string)
 	if err := ensureRuntimeDir(layout, path); err != nil {
 		return nil, err
 	}
-	return listenRestricted(ctx, path)
+	return sockfile.Listen(ctx, path, ownerOnlyFileMode)
+}
+
+func removeSocketFiles(layout RuntimeLayout, instanceID string, sessions []string) error {
+	paths := []string{CommandSocketPathIn(layout, instanceID), EventsSocketPathIn(layout, instanceID)}
+	for _, session := range sessions {
+		paths = append(paths, SessionCommandSocketPathIn(layout, instanceID, session), control.SocketPath(layout, instanceID, session))
+	}
+	var errs []error
+	for _, path := range paths {
+		if err := removeSocketFile(path); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func removeSocketFile(path string) error {
+	info, err := os.Lstat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.Mode().Type() != fs.ModeSocket {
+		return nil
+	}
+	return os.Remove(path)
 }
 
 func dialCommandSocket(ctx context.Context, layout RuntimeLayout, path string) (net.Conn, error) {
@@ -70,44 +99,4 @@ func dialCommandSocket(ctx context.Context, layout RuntimeLayout, path string) (
 	}
 	var d net.Dialer
 	return d.DialContext(ctx, "unix", path)
-}
-
-func listenRestricted(ctx context.Context, path string) (net.Listener, error) {
-	staging, err := os.MkdirTemp(filepath.Dir(path), ".hs-sock-")
-	if err != nil {
-		return listenAndRestrict(ctx, path)
-	}
-	defer func() { logCleanup(os.RemoveAll(staging)) }()
-	tmp := filepath.Join(staging, "s")
-	if len(tmp) > runtimedir.MaxUnixSocketPath {
-		return listenAndRestrict(ctx, path)
-	}
-	listener, err := listenAndRestrict(ctx, tmp)
-	if err != nil {
-		return nil, err
-	}
-	if ul, ok := listener.(*net.UnixListener); ok {
-		ul.SetUnlinkOnClose(false)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		logCleanup(listener.Close())
-		return nil, err
-	}
-	return listener, nil
-}
-
-func listenAndRestrict(ctx context.Context, path string) (net.Listener, error) {
-	listener, err := (&net.ListenConfig{}).Listen(ctx, "unix", path)
-	if err != nil {
-		return nil, err
-	}
-	if ul, ok := listener.(*net.UnixListener); ok {
-		ul.SetUnlinkOnClose(false)
-	}
-	if err := os.Chmod(path, ownerOnlyFileMode); err != nil {
-		logCleanup(listener.Close())
-		logCleanup(os.Remove(path))
-		return nil, err
-	}
-	return listener, nil
 }

@@ -56,6 +56,10 @@ func listenCommandSocket(_ context.Context, _ RuntimeLayout, path string) (net.L
 	})
 }
 
+func removeSocketFiles(_ RuntimeLayout, _ string, _ []string) error {
+	return nil
+}
+
 func dialCommandSocket(ctx context.Context, _ RuntimeLayout, path string) (net.Conn, error) {
 	return winio.DialPipeContext(ctx, path)
 }

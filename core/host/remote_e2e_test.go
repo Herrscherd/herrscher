@@ -214,9 +214,22 @@ func removeRemoteRuntimeDirOnExitIfCreated(ctx context.Context, t *testing.T, ta
 		return
 	}
 	t.Cleanup(func() {
-		_, rmErr := capture(context.WithoutCancel(ctx), runner.SSH{Target: target}, "rmdir", "--", dir)
-		logCleanup(rmErr)
+		reportRemoteRuntimeDirLeft(context.WithoutCancel(ctx), t, target, dir)
 	})
+}
+
+func reportRemoteRuntimeDirLeft(ctx context.Context, t *testing.T, target, dir string) {
+	t.Helper()
+	_, rmErr := capture(ctx, runner.SSH{Target: target}, "rmdir", "--", dir)
+	if rmErr == nil {
+		return
+	}
+	left, lsErr := capture(ctx, runner.SSH{Target: target}, "ls", "-A", dir)
+	if lsErr != nil {
+		logCleanup(rmErr)
+		return
+	}
+	t.Errorf("the remote runtime dir %s was not removed (%v); entries left: %q", dir, rmErr, strings.Fields(left))
 }
 
 const dedicatedTargetVar = "HERRSCHER_E2E_DEDICATED"

@@ -66,11 +66,9 @@ type Deps = contracts.GatewaySet
 
 // Options holds the parsed flags for the serve daemon.
 type Options struct {
-	StatePath string
-	Runtime   runtimedir.Layout
-	Language  i18n.Language
-	// Warnings receives the operator-visible warnings. Nil means os.Stderr, so
-	// every warning is printed even when the caller leaves it unset.
+	StatePath       string
+	Runtime         runtimedir.Layout
+	Language        i18n.Language
 	Warnings        io.Writer
 	DefaultLanguage i18n.Language
 	live            *operatorLanguage

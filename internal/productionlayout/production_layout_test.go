@@ -21,6 +21,8 @@ const (
 	runtimedirPackage   = "core/internal/runtimedir/"
 	runtimedirImport    = "github.com/Herrscherd/herrscher/core/internal/runtimedir"
 	runtimedirName      = "runtimedir"
+	hostImport          = "github.com/Herrscherd/herrscher/core/host"
+	hostName            = "host"
 	productionRuntime   = "ProductionRuntime"
 	productionLayout    = "Production"
 	runtimedirAt        = "At"
@@ -89,8 +91,9 @@ func arbitraryLayoutViolations(files []sourceFile) []string {
 		if strings.HasSuffix(file.rel, testFileSuffix) || file.rel == runtimeDirFile || strings.HasPrefix(file.rel, runtimedirPackage) {
 			continue
 		}
+		imports := layoutImportsOf(file.tree)
 		ast.Inspect(file.tree, func(n ast.Node) bool {
-			if call, ok := n.(*ast.CallExpr); ok && isArbitraryLayoutCall(call.Fun) {
+			if call, ok := n.(*ast.CallExpr); ok && imports.buildsArbitraryLayout(call.Fun) {
 				out = append(out, file.position(call.Pos())+fmt.Sprintf(": builds a layout from an arbitrary path; only tests and %s may, production takes the layout that main passes", runtimeDirFile))
 			}
 			return true
@@ -99,16 +102,55 @@ func arbitraryLayoutViolations(files []sourceFile) []string {
 	return out
 }
 
-func isArbitraryLayoutCall(fun ast.Expr) bool {
+type layoutImports struct {
+	runtimedir    map[string]bool
+	host          map[string]bool
+	dotRuntimedir bool
+}
+
+func layoutImportsOf(tree *ast.File) layoutImports {
+	imports := layoutImports{runtimedir: make(map[string]bool), host: make(map[string]bool)}
+	for _, spec := range tree.Imports {
+		path, err := strconv.Unquote(spec.Path.Value)
+		if err != nil {
+			continue
+		}
+		switch path {
+		case runtimedirImport:
+			if spec.Name != nil && spec.Name.Name == "." {
+				imports.dotRuntimedir = true
+				continue
+			}
+			imports.runtimedir[importQualifier(spec, runtimedirName)] = true
+		case hostImport:
+			imports.host[importQualifier(spec, hostName)] = true
+		}
+	}
+	return imports
+}
+
+func importQualifier(spec *ast.ImportSpec, defaultName string) string {
+	if spec.Name != nil {
+		return spec.Name.Name
+	}
+	return defaultName
+}
+
+func (imports layoutImports) buildsArbitraryLayout(fun ast.Expr) bool {
 	switch callee := fun.(type) {
 	case *ast.Ident:
-		return callee.Name == hostRuntimeAt
+		return callee.Name == hostRuntimeAt || (imports.dotRuntimedir && callee.Name == runtimedirAt)
 	case *ast.SelectorExpr:
-		if callee.Sel.Name == hostRuntimeAt {
-			return true
-		}
 		qualifier, ok := callee.X.(*ast.Ident)
-		return ok && qualifier.Name == runtimedirName && callee.Sel.Name == runtimedirAt
+		if !ok {
+			return false
+		}
+		switch callee.Sel.Name {
+		case runtimedirAt:
+			return imports.runtimedir[qualifier.Name]
+		case hostRuntimeAt:
+			return imports.host[qualifier.Name]
+		}
 	}
 	return false
 }

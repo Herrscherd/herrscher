@@ -76,7 +76,15 @@ func (s SSH) Command(ctx context.Context, dir string, argv ...string) *exec.Cmd 
 	for _, f := range s.Forwards {
 		args = append(args, "-R", f.Remote+":"+f.Local)
 	}
-	return exec.CommandContext(ctx, "ssh", append(args, "--", s.Target, script(dir, argv))...)
+	return s.command(ctx, "ssh", append(args, "--", s.Target, script(dir, argv))...)
+}
+
+func (s SSH) command(ctx context.Context, name string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, name, args...)
+	if err := CheckTarget(s.Target); err != nil {
+		cmd.Err = err
+	}
+	return cmd
 }
 
 // PrepareForwards returns the command that clears the far end of every forward,
@@ -94,14 +102,14 @@ func (s SSH) PrepareForwards(ctx context.Context) *exec.Cmd {
 		argv = append(argv, f.Remote)
 	}
 	bare := SSH{Target: s.Target, ControlPath: s.ControlPath}
-	return exec.CommandContext(ctx, "ssh", append(bare.options(), "--", bare.Target, script("", argv))...)
+	return s.command(ctx, "ssh", append(bare.options(), "--", bare.Target, script("", argv))...)
 }
 
 // Copy puts a local file at dst on the target, over the same multiplexed
 // connection the commands use.
 func (s SSH) Copy(ctx context.Context, src, dst string) *exec.Cmd {
 	args := append([]string{"-o", "BatchMode=yes"}, s.multiplex()...)
-	return exec.CommandContext(ctx, "scp", append(args, "--", src, s.Target+":"+dst)...)
+	return s.command(ctx, "scp", append(args, "--", src, s.Target+":"+dst)...)
 }
 
 func script(dir string, argv []string) string {

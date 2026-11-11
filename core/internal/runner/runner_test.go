@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"errors"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -113,5 +114,22 @@ func TestCheckTargetRefusesATargetThatReadsAsAnOption(t *testing.T) {
 	}
 	if err := CheckTarget("me@build1"); err != nil {
 		t.Fatalf("CheckTarget of a plain host = %v", err)
+	}
+}
+
+func TestEveryBuilderRefusesAnOptionShapedTarget(t *testing.T) {
+	bad := SSH{Target: "-oProxyCommand=sh", Forwards: []Forward{{Remote: "/run/user/1000/herrscher/s.sock", Local: "/tmp/l.sock"}}}
+	builders := map[string]*exec.Cmd{
+		"Command":         bad.Command(t.Context(), "", "true"),
+		"PrepareForwards": bad.PrepareForwards(t.Context()),
+		"Copy":            bad.Copy(t.Context(), "src", "/dst"),
+	}
+	for name, cmd := range builders {
+		if cmd == nil {
+			t.Fatalf("%s returned no command", name)
+		}
+		if err := cmd.Start(); !errors.Is(err, ErrTargetDash) {
+			t.Fatalf("%s.Start() = %v, want ErrTargetDash before any process runs", name, err)
+		}
 	}
 }

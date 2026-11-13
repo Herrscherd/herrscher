@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -161,21 +162,58 @@ func (r *replay) nextTurn() (Turn, error) {
 	if r.files.Turns == "" {
 		return r.script.Turn(0), nil
 	}
+	unlock, err := lockTurns(r.files.Turns)
+	if err != nil {
+		return Turn{}, err
+	}
+	done, countErr := countTurn(r.files.Turns)
+	if err := errors.Join(countErr, unlock()); err != nil {
+		return Turn{}, err
+	}
+	return r.script.Turn(done), nil
+}
+
+const (
+	lockRetry    = 5 * time.Millisecond
+	lockPatience = 10 * time.Second
+)
+
+var errTurnsLocked = errors.New("the turn count stayed locked")
+
+func lockTurns(path string) (func() error, error) {
+	lock := filepath.Clean(path + ".lock")
+	deadline := time.Now().Add(lockPatience)
+	for {
+		file, err := os.OpenFile(lock, os.O_CREATE|os.O_EXCL|os.O_WRONLY, privateFile)
+		if err == nil {
+			return func() error { return errors.Join(file.Close(), os.Remove(lock)) }, nil
+		}
+		if !errors.Is(err, fs.ErrExist) {
+			return nil, fmt.Errorf("cannot lock the turn count: %w", err)
+		}
+		if time.Now().After(deadline) {
+			return nil, errTurnsLocked
+		}
+		time.Sleep(lockRetry)
+	}
+}
+
+func countTurn(path string) (int, error) {
 	done := 0
-	data, err := os.ReadFile(r.files.Turns)
+	data, err := os.ReadFile(filepath.Clean(path))
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 	case err != nil:
-		return Turn{}, fmt.Errorf("cannot read the turn count: %w", err)
+		return 0, fmt.Errorf("cannot read the turn count: %w", err)
 	default:
 		if done, err = strconv.Atoi(strings.TrimSpace(string(data))); err != nil {
-			return Turn{}, fmt.Errorf("cannot parse the turn count: %w", err)
+			return 0, fmt.Errorf("cannot parse the turn count: %w", err)
 		}
 	}
-	if err := os.WriteFile(r.files.Turns, []byte(strconv.Itoa(done+1)), privateFile); err != nil {
-		return Turn{}, fmt.Errorf("cannot write the turn count: %w", err)
+	if err := os.WriteFile(path, []byte(strconv.Itoa(done+1)), privateFile); err != nil {
+		return 0, fmt.Errorf("cannot write the turn count: %w", err)
 	}
-	return r.script.Turn(done), nil
+	return done, nil
 }
 
 type turnOutcome uint8

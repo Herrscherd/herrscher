@@ -7,3 +7,4 @@ exec herrscher session overview
 stdout '"name":"relayed"'
 kill -INT daemon
 wait daemon
+! waitdaemon

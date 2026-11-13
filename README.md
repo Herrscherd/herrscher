@@ -1603,9 +1603,12 @@ Linux, and says it skips the step anywhere else.
   on the machine.
 - `waitdaemon` waits until the daemon of the scenario answers, and `! waitdaemon` until
   it is gone. `waitlog <regexp>` waits until the log of the fake vendor matches.
-- `herrscher serve` exits with status 130 on SIGINT, so a scenario starts it as
-  `! exec herrscher serve &daemon&` and stops it with `kill -INT daemon` then
-  `wait daemon`.
+- `herrscher serve` exits with status 130 on SIGINT, and testscript sends no other
+  signal than SIGINT and SIGKILL, so a scenario starts it as
+  `! exec herrscher serve &daemon&` and stops it with `kill -INT daemon`, `wait daemon`
+  then `! waitdaemon`.
+- These waits poll with a short sleep: they wait on other processes, which a
+  `testing/synctest` bubble cannot control.
 - A process that still carries the instance of the scenario after it ends fails the
   run and is killed.
 - `claude` on the `PATH` of a scenario is the fake of `e2e/vendortest`. It is a whole
@@ -1614,7 +1617,8 @@ Linux, and says it skips the step anywhere else.
   `$WORK/claude.script`: a `claude.script` file in the archive of the scenario provides
   it. The script holds one block per turn, separated by `---`, and each line is one
   step: `text <words>`, `tool <Name> <json input>`, `error <message>`, `echo`, `hang`
-  or `crash`. The turn count is shared by every process of the scenario. A turn past
+  or `crash`. The turn count is shared by every process of the scenario, under a lock file
+  beside it. A turn past
   the end of the script, a missing script, and every one-shot `-p` call (the health
   probe) echo the last line of the prompt as `echo: <line>`. Every start and every
   prompt is appended to `$VENDORTEST_LOG`.

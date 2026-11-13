@@ -3,10 +3,14 @@ package vendortest
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"testing/synctest"
 )
 
 type event struct {
@@ -15,10 +19,11 @@ type event struct {
 	Result  string `json:"result"`
 	Message struct {
 		Content []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-			ID   string `json:"id"`
-			Name string `json:"name"`
+			Type  string          `json:"type"`
+			Text  string          `json:"text"`
+			ID    string          `json:"id"`
+			Name  string          `json:"name"`
+			Input json.RawMessage `json:"input"`
 		} `json:"content"`
 	} `json:"message"`
 }
@@ -67,7 +72,7 @@ func summary(events []event) []string {
 		switch e.Type {
 		case "assistant":
 			for _, block := range e.Message.Content {
-				got = append(got, block.Type+":"+block.Text+block.Name+block.ID)
+				got = append(got, block.Type+":"+block.Text+block.Name+block.ID+string(block.Input))
 			}
 		case "result":
 			if e.IsError {
@@ -89,11 +94,10 @@ func TestClaudeReplaysEachStep(t *testing.T) {
 		want   []string
 	}{
 		{"text", "text hi\ntext there", []string{"go"}, 0, []string{"text:hi", "text:there", "result:hi\n\nthere"}},
-		{"tool", "tool Bash {\"command\":\"ls\"}\ntext done", []string{"go"}, 0, []string{"tool_use:Bashtoolu_1", "text:done", "result:done"}},
+		{"tool", "tool Bash {\"command\":\"ls\"}\ntext done", []string{"go"}, 0, []string{"tool_use:Bashtoolu_1{\"command\":\"ls\"}", "text:done", "result:done"}},
 		{"error", "error quota exhausted", []string{"go"}, 0, []string{"failed:quota exhausted"}},
 		{"echo past the end", "", []string{"first line\nlast line"}, 0, []string{"text:echo: last line", "result:echo: last line"}},
 		{"crash", "text partial\ncrash", []string{"go"}, exitFailure, []string{"text:partial"}},
-		{"hang", "hang", []string{"go", "again"}, 0, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var input strings.Builder
@@ -124,5 +128,60 @@ func TestClaudeCountsTurnsAcrossProcesses(t *testing.T) {
 	}
 	if strings.Count(string(logged), "prompt \"go\"") != 2 {
 		t.Fatalf("log: %q", logged)
+	}
+}
+
+func TestClaudeHangsUntilStdinCloses(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		files := scriptFiles(t, "hang")
+		stdin, feed := io.Pipe()
+		var out bytes.Buffer
+		done := make(chan int, 1)
+		go func() {
+			done <- Claude(streamArgs(), Streams{In: stdin, Out: &out, Err: io.Discard}, files)
+		}()
+		for _, text := range []string{"go", "again"} {
+			if _, err := io.WriteString(feed, promptLine(t, text)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		synctest.Wait()
+		select {
+		case code := <-done:
+			t.Fatalf("returned %d while stdin was still open", code)
+		default:
+		}
+		if err := feed.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if code := <-done; code != 0 || out.Len() != 0 {
+			t.Fatalf("got exit %d and %q, want a silent exit 0", code, out.String())
+		}
+	})
+}
+
+func TestClaudeGivesConcurrentProcessesDistinctTurns(t *testing.T) {
+	const fakes = 8
+	var script strings.Builder
+	for turn := range fakes {
+		fmt.Fprintf(&script, "text t%d\n---\n", turn)
+	}
+	files := scriptFiles(t, script.String())
+	replies := make(chan string, fakes)
+	var group sync.WaitGroup
+	for range fakes {
+		group.Go(func() {
+			_, events := run(t, files, promptLine(t, "go"))
+			replies <- strings.Join(summary(events), "|")
+		})
+	}
+	group.Wait()
+	close(replies)
+	seen := make(map[string]bool, fakes)
+	for reply := range replies {
+		seen[reply] = true
+	}
+	if len(seen) != fakes {
+		t.Fatalf("got %d distinct turns out of %d: %v", len(seen), fakes, seen)
 	}
 }

@@ -101,18 +101,21 @@ func isolate(env *testscript.Env, binDir string) error {
 	}
 	env.Cd = repo
 	env.Defer(func() {
-		leaked, err := reapInstance(instance, reapGrace)
-		if err != nil {
-			env.T().Fatal(err)
-		}
-		if len(leaked) > 0 {
-			env.T().Fatal("processes outlived the scenario: " + strings.Join(leaked, "; "))
-		}
-		if err := removeRuntimeEntries(instance); err != nil {
+		if err := settle(instance); err != nil {
 			env.T().Fatal(err)
 		}
 	})
 	return nil
+}
+
+var errLeaked = errors.New("processes outlived the scenario")
+
+func settle(instance string) error {
+	leaked, reapErr := reapInstance(instance, reapGrace)
+	if len(leaked) > 0 {
+		reapErr = errors.Join(reapErr, fmt.Errorf("%w: %s", errLeaked, strings.Join(leaked, "; ")))
+	}
+	return errors.Join(reapErr, removeRuntimeEntries(instance))
 }
 
 func newInstanceID() (string, error) {
@@ -149,10 +152,13 @@ func removeRuntimeEntries(instance string) error {
 
 func removeInstanceEntries(dir, instance string) []error {
 	entries, err := os.ReadDir(dir)
-	if errors.Is(err, fs.ErrNotExist) || !ownedByUs(dir) {
+	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
+		return []error{err}
+	}
+	if err := ownedByUs(dir); err != nil {
 		return []error{err}
 	}
 	lock := instanceLockName(instance)
@@ -169,13 +175,24 @@ func removeInstanceEntries(dir, instance string) []error {
 	return failures
 }
 
-func ownedByUs(dir string) bool {
+type foreignDirError struct {
+	Dir string
+}
+
+func (e *foreignDirError) Error() string {
+	return "the runtime directory " + e.Dir + " is not a directory owned by this user"
+}
+
+func ownedByUs(dir string) error {
 	info, err := os.Lstat(dir)
-	if err != nil || !info.IsDir() {
-		return false
+	if err != nil {
+		return err
 	}
 	stat, ok := info.Sys().(*syscall.Stat_t)
-	return ok && int(stat.Uid) == os.Getuid()
+	if !info.IsDir() || !ok || int(stat.Uid) != os.Getuid() {
+		return &foreignDirError{Dir: dir}
+	}
+	return nil
 }
 
 func commandSocket(instance string) (string, error) {
@@ -188,7 +205,21 @@ func commandSocket(instance string) (string, error) {
 	return "", errNoSocket
 }
 
-var errNoSocket = errors.New("no command socket yet")
+var (
+	errNoSocket = errors.New("no command socket yet")
+	errNoLock   = errors.New("the daemon answers but its lock is not where the cleanup looks")
+)
+
+func lockBeside(instance string) error {
+	socket, err := commandSocket(instance)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(socket), instanceLockName(instance))); err != nil {
+		return fmt.Errorf("%w: %w", errNoLock, err)
+	}
+	return nil
+}
 
 const daemonWait = 30 * time.Second
 
@@ -200,6 +231,9 @@ func waitDaemon(ts *testscript.TestScript, neg bool, args []string) {
 	deadline := time.Now().Add(daemonWait)
 	for time.Now().Before(deadline) {
 		if answering(instance) != neg {
+			if !neg {
+				ts.Check(lockBeside(instance))
+			}
 			return
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -268,7 +302,11 @@ func killAll(pids []int) []string {
 }
 
 func processesWith(marker []byte) ([]int, error) {
-	entries, err := os.ReadDir(procRoot)
+	return processesIn(procRoot, marker)
+}
+
+func processesIn(root string, marker []byte) ([]int, error) {
+	entries, err := os.ReadDir(root)
 	if err != nil {
 		return nil, fmt.Errorf("cannot list the processes: %w", err)
 	}
@@ -279,7 +317,7 @@ func processesWith(marker []byte) ([]int, error) {
 		if err != nil || pid == self {
 			continue
 		}
-		environ, err := os.ReadFile(filepath.Join(procRoot, entry.Name(), "environ"))
+		environ, err := os.ReadFile(filepath.Join(root, entry.Name(), "environ"))
 		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrPermission) || errors.Is(err, syscall.ESRCH) {
 			continue
 		}

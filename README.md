@@ -1590,6 +1590,28 @@ checker and rely on review.
 One more gap: the arbitrary path rule matches calls only, so a reference without a call
 such as `f := runtimedir.At` is not seen.
 
+## Scenarios on the real binary
+
+`e2e/` drives the built `herrscher` binary the way a user does, with no network and no
+vendor account. `scripts/check.sh` runs it with `go test -tags e2e ./e2e/...` (Linux only).
+
+- Each `.txtar` file in `e2e/testdata/scenarios` is a
+  [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) scenario.
+  It gets its own `HOME`, a fresh git repository as its work directory and a unique
+  `HERRSCHER_INSTANCE_ID`, so its sockets and lock never touch a daemon already running
+  on the machine. `waitdaemon` waits until the daemon of the scenario answers, and
+  `! waitdaemon` until it is gone. A process that still carries the instance of the
+  scenario after it ends fails the run and is killed.
+- `claude` on the `PATH` of a scenario is the fake of `e2e/vendortest`. It replays the
+  script at `$VENDORTEST_SCRIPT`, which is the `claude.script` file of the archive, one block per turn separated by `---`, each line one
+  step: `text <words>`, `tool <Name> <json input>`, `error <message>`, `echo`, `hang` or
+  `crash`. A turn past the end of the script, or a missing script, echoes the last line
+  of the prompt as `echo: <line>`. Every start and every prompt is appended to
+  `$VENDORTEST_LOG`.
+
+Every bug found by hand becomes a scenario before it is fixed: the scenario is written
+first, fails on the bug, and passes with the fix.
+
 ## Testing the remote paths
 
 `go test ./core/host/` runs the remote end-to-end tests (the `TestE2E` ones) against

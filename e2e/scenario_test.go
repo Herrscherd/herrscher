@@ -153,7 +153,7 @@ func instanceLockName(instance string) string {
 
 func socketPath(dir, stem string) string {
 	plain := filepath.Join(dir, stem+".sock")
-	if len(plain) <= maxUnixSocketPath {
+	if strings.HasPrefix(stem, "herrscher-") && len(plain) <= maxUnixSocketPath {
 		return plain
 	}
 	return filepath.Join(dir, "hs-"+runtimeKey(stem)+".sock")
@@ -172,14 +172,13 @@ func removeRuntimeEntries(instance string) error {
 }
 
 func removeInstanceEntries(dir, instance string) []error {
-	entries, err := os.ReadDir(dir)
-	if errors.Is(err, fs.ErrNotExist) {
+	if err := requireOwnedByUs(dir); errors.Is(err, fs.ErrNotExist) {
 		return nil
-	}
-	if err != nil {
+	} else if err != nil {
 		return []error{err}
 	}
-	if err := requireOwnedByUs(dir); err != nil {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
 		return []error{err}
 	}
 	owned := map[string]bool{instanceLockName(instance): true}
@@ -208,12 +207,16 @@ func (e *foreignDirError) Error() string {
 }
 
 func requireOwnedByUs(dir string) error {
+	return requireOwnedBy(dir, os.Getuid())
+}
+
+func requireOwnedBy(dir string, uid int) error {
 	info, err := os.Lstat(dir)
 	if err != nil {
 		return err
 	}
 	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !info.IsDir() || !ok || int(stat.Uid) != os.Getuid() {
+	if !info.IsDir() || !ok || int(stat.Uid) != uid {
 		return &foreignDirError{Dir: dir}
 	}
 	return nil

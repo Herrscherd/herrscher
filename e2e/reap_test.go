@@ -108,6 +108,9 @@ func TestRequireOwnedByUsRefusesWhatIsNotOurDirectory(t *testing.T) {
 	if err := requireOwnedByUs(root); err != nil {
 		t.Fatalf("our own directory was refused: %v", err)
 	}
+	if _, isForeign := errors.AsType[*foreignDirError](requireOwnedBy(root, os.Getuid()+1)); !isForeign {
+		t.Fatal("a directory owned by another uid was accepted")
+	}
 	for _, foreign := range []string{file, link} {
 		refused, isForeign := errors.AsType[*foreignDirError](requireOwnedByUs(foreign))
 		if !isForeign || refused.Dir != foreign {
@@ -148,9 +151,12 @@ func TestRemoveInstanceEntriesTakesTheHashedSocketsAndOnlyThem(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	ours := socketPath(dir, daemonSocketStems(instance)[0])
+	var ours []string
+	for _, stem := range daemonSocketStems(instance) {
+		ours = append(ours, socketPath(dir, stem))
+	}
 	theirs := socketPath(dir, "herrscher-command-e2e-00000000")
-	for _, path := range []string{ours, theirs} {
+	for _, path := range append([]string{theirs}, ours...) {
 		if err := os.WriteFile(path, nil, 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -158,7 +164,31 @@ func TestRemoveInstanceEntriesTakesTheHashedSocketsAndOnlyThem(t *testing.T) {
 	if failures := removeInstanceEntries(dir, instance); len(failures) != 0 {
 		t.Fatal(failures)
 	}
-	if exists(ours) || !exists(theirs) {
-		t.Fatalf("ours left: %t, theirs removed: %t", exists(ours), !exists(theirs))
+	for _, path := range ours {
+		if exists(path) {
+			t.Errorf("%s was left behind", path)
+		}
+	}
+	if !exists(theirs) {
+		t.Error("the socket of another instance was removed")
+	}
+}
+
+func TestSocketPathNamesLikeTheRuntimeDirectory(t *testing.T) {
+	short := t.TempDir()
+	long := filepath.Join(short, strings.Repeat("d", maxUnixSocketPath))
+	cases := []struct {
+		dir, stem string
+		hashed    bool
+	}{
+		{short, "herrscher-command-e2e-00000000", false},
+		{long, "herrscher-command-e2e-00000000", true},
+		{short, "command-e2e-00000000", true},
+	}
+	for _, tc := range cases {
+		name := filepath.Base(socketPath(tc.dir, tc.stem))
+		if hashed := name == "hs-"+runtimeKey(tc.stem)+".sock"; hashed != tc.hashed || (!hashed && name != tc.stem+".sock") {
+			t.Errorf("socketPath(%d bytes, %q) = %q, want hashed %t", len(tc.dir), tc.stem, name, tc.hashed)
+		}
 	}
 }

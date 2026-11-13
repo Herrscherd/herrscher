@@ -216,7 +216,7 @@ func TestLockTurnsNamesAStaleLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := lockTurnsWithin(turns, 0)
-	locked, isLocked := errors.AsType[*TurnsLockedError](err)
+	locked, isLocked := errors.AsType[*turnsLockedError](err)
 	if !isLocked || locked.Lock != turns+".lock" {
 		t.Fatalf("got %v, want the stale lock named", err)
 	}

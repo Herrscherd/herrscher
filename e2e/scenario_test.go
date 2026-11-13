@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -44,18 +45,19 @@ func TestScenarios(t *testing.T) {
 		},
 		Cmds: map[string]func(*testscript.TestScript, bool, []string){
 			"waitdaemon": waitDaemon,
+			"waitlog":    waitLog,
 		},
 	})
 }
 
-func buildHerrscher(t *testing.T) string {
-	t.Helper()
-	binDir := t.TempDir()
-	build := exec.CommandContext(t.Context(), "go", "build", "-o", filepath.Join(binDir, "herrscher"), ".")
+func buildHerrscher(tb testing.TB) string {
+	tb.Helper()
+	binDir := tb.TempDir()
+	build := exec.CommandContext(tb.Context(), "go", "build", "-o", filepath.Join(binDir, "herrscher"), ".")
 	build.Dir = ".."
 	build.Env = append(os.Environ(), "CGO_ENABLED=0", "GOWORK=off")
 	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("go build herrscher: %v\n%s", err, out)
+		tb.Fatalf("go build herrscher: %v\n%s", err, out)
 	}
 	return binDir
 }
@@ -99,7 +101,11 @@ func isolate(env *testscript.Env, binDir string) error {
 	}
 	env.Cd = repo
 	env.Defer(func() {
-		if leaked := reapInstance(instance); len(leaked) > 0 {
+		leaked, err := reapInstance(instance, reapGrace)
+		if err != nil {
+			env.T().Fatal(err)
+		}
+		if len(leaked) > 0 {
 			env.T().Fatal("processes outlived the scenario: " + strings.Join(leaked, "; "))
 		}
 		if err := removeRuntimeEntries(instance); err != nil {
@@ -134,22 +140,42 @@ func instanceLockName(instance string) string {
 }
 
 func removeRuntimeEntries(instance string) error {
-	lock := instanceLockName(instance)
 	var failures []error
 	for _, dir := range runtimeDirs() {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			continue
-		}
-		for _, entry := range entries {
-			if name := entry.Name(); strings.Contains(name, instance) || name == lock {
-				if err := os.Remove(filepath.Join(dir, name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
-					failures = append(failures, err)
-				}
-			}
-		}
+		failures = append(failures, removeInstanceEntries(dir, instance)...)
 	}
 	return errors.Join(failures...)
+}
+
+func removeInstanceEntries(dir, instance string) []error {
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, fs.ErrNotExist) || !ownedByUs(dir) {
+		return nil
+	}
+	if err != nil {
+		return []error{err}
+	}
+	lock := instanceLockName(instance)
+	var failures []error
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.Contains(name, instance) && name != lock {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			failures = append(failures, err)
+		}
+	}
+	return failures
+}
+
+func ownedByUs(dir string) bool {
+	info, err := os.Lstat(dir)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	return ok && int(stat.Uid) == os.Getuid()
 }
 
 func commandSocket(instance string) (string, error) {
@@ -184,6 +210,22 @@ func waitDaemon(ts *testscript.TestScript, neg bool, args []string) {
 	ts.Fatalf("no daemon of %s answered within %s", instance, daemonWait)
 }
 
+func waitLog(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) != 1 {
+		ts.Fatalf("usage: waitlog <regexp>")
+	}
+	pattern, err := regexp.Compile(args[0])
+	ts.Check(err)
+	deadline := time.Now().Add(daemonWait)
+	for time.Now().Before(deadline) {
+		if logged, err := os.ReadFile(vendortest.FilesFrom(ts.Getenv).Log); err == nil && pattern.Match(logged) {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	ts.Fatalf("the vendor log never matched %q within %s", args[0], daemonWait)
+}
+
 func answering(instance string) bool {
 	path, err := commandSocket(instance)
 	if err != nil {
@@ -199,32 +241,36 @@ func answering(instance string) bool {
 
 const reapGrace = 5 * time.Second
 
-func reapInstance(instance string) []string {
+func reapInstance(instance string, grace time.Duration) ([]string, error) {
 	marker := []byte(instanceEnv + "=" + instance + "\x00")
-	deadline := time.Now().Add(reapGrace)
+	deadline := time.Now().Add(grace)
 	for {
-		pids := processesWith(marker)
-		if len(pids) == 0 {
-			return nil
+		pids, err := processesWith(marker)
+		if err != nil || len(pids) == 0 {
+			return nil, err
 		}
 		if time.Now().After(deadline) {
-			leaked := make([]string, 0, len(pids))
-			for _, pid := range pids {
-				leaked = append(leaked, describe(pid))
-				if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
-					leaked = append(leaked, "cannot kill "+strconv.Itoa(pid)+": "+err.Error())
-				}
-			}
-			return leaked
+			return killAll(pids), nil
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 }
 
-func processesWith(marker []byte) []int {
+func killAll(pids []int) []string {
+	leaked := make([]string, 0, len(pids))
+	for _, pid := range pids {
+		leaked = append(leaked, describe(pid))
+		if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+			leaked = append(leaked, "cannot kill "+strconv.Itoa(pid)+": "+err.Error())
+		}
+	}
+	return leaked
+}
+
+func processesWith(marker []byte) ([]int, error) {
 	entries, err := os.ReadDir(procRoot)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("cannot list the processes: %w", err)
 	}
 	self := os.Getpid()
 	var pids []int
@@ -234,12 +280,17 @@ func processesWith(marker []byte) []int {
 			continue
 		}
 		environ, err := os.ReadFile(filepath.Join(procRoot, entry.Name(), "environ"))
-		if err != nil || !bytes.Contains(append(environ, 0), marker) {
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrPermission) || errors.Is(err, syscall.ESRCH) {
 			continue
 		}
-		pids = append(pids, pid)
+		if err != nil {
+			return nil, fmt.Errorf("cannot read the environment of %d: %w", pid, err)
+		}
+		if bytes.Contains(append(environ, 0), marker) {
+			pids = append(pids, pid)
+		}
 	}
-	return pids
+	return pids, nil
 }
 
 func describe(pid int) string {

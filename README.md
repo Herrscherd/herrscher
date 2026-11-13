@@ -1592,22 +1592,32 @@ such as `f := runtimedir.At` is not seen.
 
 ## Scenarios on the real binary
 
-`e2e/` drives the built `herrscher` binary the way a user does, with no network and no
-vendor account. `scripts/check.sh` runs it with `go test -tags e2e ./e2e/...` (Linux only).
+`e2e/` drives the built `herrscher` binary from its command line, with no network and
+no vendor account. `scripts/check.sh` runs it with `go test -tags e2e ./e2e/...` on
+Linux, and says it skips the step anywhere else.
 
 - Each `.txtar` file in `e2e/testdata/scenarios` is a
   [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) scenario.
   It gets its own `HOME`, a fresh git repository as its work directory and a unique
   `HERRSCHER_INSTANCE_ID`, so its sockets and lock never touch a daemon already running
-  on the machine. `waitdaemon` waits until the daemon of the scenario answers, and
-  `! waitdaemon` until it is gone. A process that still carries the instance of the
-  scenario after it ends fails the run and is killed.
-- `claude` on the `PATH` of a scenario is the fake of `e2e/vendortest`. It replays the
-  script at `$VENDORTEST_SCRIPT`, which is the `claude.script` file of the archive, one block per turn separated by `---`, each line one
-  step: `text <words>`, `tool <Name> <json input>`, `error <message>`, `echo`, `hang` or
-  `crash`. A turn past the end of the script, or a missing script, echoes the last line
-  of the prompt as `echo: <line>`. Every start and every prompt is appended to
-  `$VENDORTEST_LOG`.
+  on the machine.
+- `waitdaemon` waits until the daemon of the scenario answers, and `! waitdaemon` until
+  it is gone. `waitlog <regexp>` waits until the log of the fake vendor matches.
+- `herrscher serve` exits with status 130 on SIGINT, so a scenario starts it as
+  `! exec herrscher serve &daemon&` and stops it with `kill -INT daemon` then
+  `wait daemon`.
+- A process that still carries the instance of the scenario after it ends fails the
+  run and is killed.
+- `claude` on the `PATH` of a scenario is the fake of `e2e/vendortest`. It is a whole
+  process standing in for the vendor CLI, so it speaks the stream-json protocol rather
+  than recording calls. In stream-json mode it replays `$VENDORTEST_SCRIPT`, which is
+  `$WORK/claude.script`: a `claude.script` file in the archive of the scenario provides
+  it. The script holds one block per turn, separated by `---`, and each line is one
+  step: `text <words>`, `tool <Name> <json input>`, `error <message>`, `echo`, `hang`
+  or `crash`. The turn count is shared by every process of the scenario. A turn past
+  the end of the script, a missing script, and every one-shot `-p` call (the health
+  probe) echo the last line of the prompt as `echo: <line>`. Every start and every
+  prompt is appended to `$VENDORTEST_LOG`.
 
 Every bug found by hand becomes a scenario before it is fixed: the scenario is written
 first, fails on the bug, and passes with the fix.

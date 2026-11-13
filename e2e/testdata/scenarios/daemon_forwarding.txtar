@@ -1,0 +1,9 @@
+! exec herrscher serve &daemon&
+waitdaemon
+exec herrscher session create --name relayed
+exec herrscher session send --name relayed --text 'hello relay'
+waitlog 'prompt .*hello relay'
+exec herrscher session overview
+stdout '"name":"relayed"'
+kill -INT daemon
+wait daemon

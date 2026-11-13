@@ -209,7 +209,7 @@ func (r *replay) stream(streams Streams) int {
 	return exitOf(streams.Err, lines.Err())
 }
 
-const errCrashed scriptError = "crashed as scripted"
+var errCrashed = errors.New("crashed as scripted")
 
 type userLine struct {
 	Message struct {

@@ -7,6 +7,7 @@ package vendortest
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -93,15 +94,11 @@ func ParseScript(source io.Reader) (Script, error) {
 	return script, nil
 }
 
-type scriptError string
-
-func (e scriptError) Error() string { return string(e) }
-
-const (
-	errUnknownStep  scriptError = "unknown step, want text, tool, error, echo, hang or crash"
-	errToolNeedsArg scriptError = "tool wants a name and a JSON input"
-	errToolInput    scriptError = "tool input is not valid JSON"
-	errNeedsText    scriptError = "step wants text after its name"
+var (
+	errUnknownStep  = errors.New("unknown step, want text, tool, error, echo, hang or crash")
+	errToolNeedsArg = errors.New("tool wants a name and a JSON input")
+	errToolInput    = errors.New("tool input is not valid JSON")
+	errNeedsText    = errors.New("step wants text after its name")
 )
 
 func parseStep(line string) (step, error) {

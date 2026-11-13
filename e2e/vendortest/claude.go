@@ -178,11 +178,24 @@ const (
 	lockPatience = 10 * time.Second
 )
 
-var errTurnsLocked = errors.New("the turn count stayed locked")
+// TurnsLockedError reports a turn lock that stayed held past the patience of
+// the fake, which happens when a fake was killed while it held the lock.
+type TurnsLockedError struct {
+	Lock string
+}
+
+// Error names the lock and how to release it.
+func (e *TurnsLockedError) Error() string {
+	return "the turn count stayed locked by " + e.Lock + ", remove it if no fake is running"
+}
 
 func lockTurns(path string) (func() error, error) {
+	return lockTurnsWithin(path, lockPatience)
+}
+
+func lockTurnsWithin(path string, patience time.Duration) (func() error, error) {
 	lock := filepath.Clean(path + ".lock")
-	deadline := time.Now().Add(lockPatience)
+	deadline := time.Now().Add(patience)
 	for {
 		file, err := os.OpenFile(lock, os.O_CREATE|os.O_EXCL|os.O_WRONLY, privateFile)
 		if err == nil {
@@ -192,7 +205,7 @@ func lockTurns(path string) (func() error, error) {
 			return nil, fmt.Errorf("cannot lock the turn count: %w", err)
 		}
 		if time.Now().After(deadline) {
-			return nil, errTurnsLocked
+			return nil, &TurnsLockedError{Lock: lock}
 		}
 		time.Sleep(lockRetry)
 	}

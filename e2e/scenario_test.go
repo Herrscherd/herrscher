@@ -137,9 +137,30 @@ func runtimeDirs() []string {
 	return []string{filepath.Join(userRuntimeRoot, uid, "herrscher"), filepath.Join(tmpRoot, "herrscher-"+uid)}
 }
 
+const (
+	runtimeKeyLen     = 24
+	maxUnixSocketPath = 103
+)
+
+func runtimeKey(name string) string {
+	sum := sha256.Sum256([]byte(name))
+	return hex.EncodeToString(sum[:])[:runtimeKeyLen]
+}
+
 func instanceLockName(instance string) string {
-	sum := sha256.Sum256([]byte(instance))
-	return "herrscher-instance-" + hex.EncodeToString(sum[:])[:24] + ".lock"
+	return "herrscher-instance-" + runtimeKey(instance) + ".lock"
+}
+
+func socketPath(dir, stem string) string {
+	plain := filepath.Join(dir, stem+".sock")
+	if len(plain) <= maxUnixSocketPath {
+		return plain
+	}
+	return filepath.Join(dir, "hs-"+runtimeKey(stem)+".sock")
+}
+
+func daemonSocketStems(instance string) []string {
+	return []string{"herrscher-command-" + instance, "herrscher-events-" + instance}
 }
 
 func removeRuntimeEntries(instance string) error {
@@ -158,14 +179,17 @@ func removeInstanceEntries(dir, instance string) []error {
 	if err != nil {
 		return []error{err}
 	}
-	if err := ownedByUs(dir); err != nil {
+	if err := requireOwnedByUs(dir); err != nil {
 		return []error{err}
 	}
-	lock := instanceLockName(instance)
+	owned := map[string]bool{instanceLockName(instance): true}
+	for _, stem := range daemonSocketStems(instance) {
+		owned[filepath.Base(socketPath(dir, stem))] = true
+	}
 	var failures []error
 	for _, entry := range entries {
 		name := entry.Name()
-		if !strings.Contains(name, instance) && name != lock {
+		if !strings.Contains(name, instance) && !owned[name] {
 			continue
 		}
 		if err := os.Remove(filepath.Join(dir, name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -183,7 +207,7 @@ func (e *foreignDirError) Error() string {
 	return "the runtime directory " + e.Dir + " is not a directory owned by this user"
 }
 
-func ownedByUs(dir string) error {
+func requireOwnedByUs(dir string) error {
 	info, err := os.Lstat(dir)
 	if err != nil {
 		return err
@@ -196,13 +220,18 @@ func ownedByUs(dir string) error {
 }
 
 func commandSocket(instance string) (string, error) {
-	name := "herrscher-command-" + instance + ".sock"
+	stem := daemonSocketStems(instance)[0]
 	for _, dir := range runtimeDirs() {
-		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
-			return filepath.Join(dir, name), nil
+		if path := socketPath(dir, stem); exists(path) {
+			return path, nil
 		}
 	}
 	return "", errNoSocket
+}
+
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 var (

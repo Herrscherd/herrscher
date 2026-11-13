@@ -76,3 +76,89 @@ func TestProcessesInReportsAnUnreadableEnvironment(t *testing.T) {
 		t.Fatalf("got %v, want the listing failure", err)
 	}
 }
+
+func TestSettleFailsOnALeakAndKillsIt(t *testing.T) {
+	instance, err := newInstanceID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaker := exec.CommandContext(t.Context(), "sleep", "60")
+	leaker.Env = []string{instanceEnv + "=" + instance}
+	if startErr := leaker.Start(); startErr != nil {
+		t.Fatal(startErr)
+	}
+	if err := settle(instance); !errors.Is(err, errLeaked) {
+		t.Fatalf("got %v, want the leak reported", err)
+	}
+	if waitErr := leaker.Wait(); waitErr == nil {
+		t.Fatal("the leaked process was not killed")
+	}
+}
+
+func TestRequireOwnedByUsRefusesWhatIsNotOurDirectory(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "file")
+	link := filepath.Join(root, "link")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(root, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := requireOwnedByUs(root); err != nil {
+		t.Fatalf("our own directory was refused: %v", err)
+	}
+	for _, foreign := range []string{file, link} {
+		refused, isForeign := errors.AsType[*foreignDirError](requireOwnedByUs(foreign))
+		if !isForeign || refused.Dir != foreign {
+			t.Fatalf("%s: got %v, want it refused", foreign, refused)
+		}
+	}
+}
+
+func TestRemoveInstanceEntriesLeavesAForeignDirectoryAlone(t *testing.T) {
+	instance, err := newInstanceID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := t.TempDir()
+	entry := filepath.Join(target, "herrscher-command-"+instance+".sock")
+	if err := os.WriteFile(entry, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	failures := removeInstanceEntries(link, instance)
+	if _, isForeign := errors.AsType[*foreignDirError](errors.Join(failures...)); !isForeign {
+		t.Fatalf("got %v, want the link refused", failures)
+	}
+	if _, err := os.Stat(entry); err != nil {
+		t.Fatalf("an entry behind the link was removed: %v", err)
+	}
+}
+
+func TestRemoveInstanceEntriesTakesTheHashedSocketsAndOnlyThem(t *testing.T) {
+	instance, err := newInstanceID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(t.TempDir(), strings.Repeat("d", maxUnixSocketPath))
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ours := socketPath(dir, daemonSocketStems(instance)[0])
+	theirs := socketPath(dir, "herrscher-command-e2e-00000000")
+	for _, path := range []string{ours, theirs} {
+		if err := os.WriteFile(path, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if failures := removeInstanceEntries(dir, instance); len(failures) != 0 {
+		t.Fatal(failures)
+	}
+	if exists(ours) || !exists(theirs) {
+		t.Fatalf("ours left: %t, theirs removed: %t", exists(ours), !exists(theirs))
+	}
+}

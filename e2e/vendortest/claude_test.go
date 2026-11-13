@@ -3,6 +3,7 @@ package vendortest
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -53,17 +54,27 @@ func scriptFiles(tb testing.TB, script string) Files {
 
 func run(tb testing.TB, files Files, input string) (int, []event) {
 	tb.Helper()
+	code, events, err := replayed(files, input)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	return code, events
+}
+
+var errNotEvent = errors.New("the fake wrote a line that is not an event")
+
+func replayed(files Files, input string) (int, []event, error) {
 	var out, errOut bytes.Buffer
 	code := Claude(streamArgs(), Streams{In: strings.NewReader(input), Out: &out, Err: &errOut}, files)
 	var events []event
 	for line := range strings.Lines(out.String()) {
 		var decoded event
 		if err := json.Unmarshal([]byte(line), &decoded); err != nil {
-			tb.Fatalf("not an event: %q", line)
+			return code, nil, fmt.Errorf("%w: %q", errNotEvent, line)
 		}
 		events = append(events, decoded)
 	}
-	return code, events
+	return code, events, nil
 }
 
 func summary(events []event) []string {
@@ -140,16 +151,20 @@ func TestClaudeHangsUntilStdinCloses(t *testing.T) {
 		go func() {
 			done <- Claude(streamArgs(), Streams{In: stdin, Out: &out, Err: io.Discard}, files)
 		}()
-		for _, text := range []string{"go", "again"} {
-			if _, err := io.WriteString(feed, promptLine(t, text)); err != nil {
-				t.Fatal(err)
-			}
-		}
+		prompts := promptLine(t, "go") + promptLine(t, "again")
+		written := make(chan error, 1)
+		go func() {
+			_, err := io.WriteString(feed, prompts)
+			written <- err
+		}()
 		synctest.Wait()
 		select {
 		case code := <-done:
 			t.Fatalf("returned %d while stdin was still open", code)
 		default:
+		}
+		if err := <-written; err != nil {
+			t.Fatal(err)
 		}
 		if err := feed.Close(); err != nil {
 			t.Fatal(err)
@@ -167,21 +182,42 @@ func TestClaudeGivesConcurrentProcessesDistinctTurns(t *testing.T) {
 		fmt.Fprintf(&script, "text t%d\n---\n", turn)
 	}
 	files := scriptFiles(t, script.String())
+	prompt := promptLine(t, "go")
 	replies := make(chan string, fakes)
+	failures := make(chan error, fakes)
 	var group sync.WaitGroup
 	for range fakes {
 		group.Go(func() {
-			_, events := run(t, files, promptLine(t, "go"))
+			_, events, err := replayed(files, prompt)
+			failures <- err
 			replies <- strings.Join(summary(events), "|")
 		})
 	}
 	group.Wait()
 	close(replies)
+	close(failures)
+	for err := range failures {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 	seen := make(map[string]bool, fakes)
 	for reply := range replies {
 		seen[reply] = true
 	}
 	if len(seen) != fakes {
 		t.Fatalf("got %d distinct turns out of %d: %v", len(seen), fakes, seen)
+	}
+}
+
+func TestLockTurnsNamesAStaleLock(t *testing.T) {
+	turns := filepath.Join(t.TempDir(), "claude.turns")
+	if err := os.WriteFile(turns+".lock", nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := lockTurnsWithin(turns, 0)
+	locked, isLocked := errors.AsType[*TurnsLockedError](err)
+	if !isLocked || locked.Lock != turns+".lock" {
+		t.Fatalf("got %v, want the stale lock named", err)
 	}
 }

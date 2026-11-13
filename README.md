@@ -1617,11 +1617,12 @@ Linux, and says it skips the step anywhere else.
   `$WORK/claude.script`: a `claude.script` file in the archive of the scenario provides
   it. The script holds one block per turn, separated by `---`, and each line is one
   step: `text <words>`, `tool <Name> <json input>`, `error <message>`, `echo`, `hang`
-  or `crash`. The turn count is shared by every process of the scenario, under a lock file
-  beside it. A turn past
-  the end of the script, a missing script, and every one-shot `-p` call (the health
-  probe) echo the last line of the prompt as `echo: <line>`. Every start and every
-  prompt is appended to `$VENDORTEST_LOG`.
+  or `crash`. The turn count is shared by every process of the scenario, under a lock
+  file beside it. A fake killed while it holds that lock leaves it behind, and the next
+  turn fails after ten seconds with an error that names the lock. A turn past the end
+  of the script, a missing script, and every one-shot `-p` call (the health probe)
+  echo the last line of the prompt as `echo: <line>`. Every start and every prompt is
+  appended to `$VENDORTEST_LOG`.
 
 Every bug found by hand becomes a scenario before it is fixed: the scenario is written
 first, fails on the bug, and passes with the fix.

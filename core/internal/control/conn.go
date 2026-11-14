@@ -73,18 +73,6 @@ type Acceptor struct {
 
 var errNoSocketPath = errors.New("the control socket has no path, its runtime layout is zero")
 
-// Accept binds the control socket at path, replacing a dead socket file left
-// there by a crash, and starts accepting bridge connections. Each appears on
-// Conns(). Conns also closes when the accept loop ends on a terminal error,
-// which Err reports.
-func Accept(ctx context.Context, path string) (*Acceptor, error) {
-	listener, err := Listen(ctx, path)
-	if err != nil {
-		return nil, err
-	}
-	return Serve(ctx, listener), nil
-}
-
 // Listen binds the control socket at path, replacing a dead socket file left
 // there by a crash.
 func Listen(ctx context.Context, path string) (net.Listener, error) {

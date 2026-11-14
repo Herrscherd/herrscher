@@ -15,7 +15,7 @@ import (
 func TestAcceptReplacesADeadControlSocketFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "control.sock")
 	deadControlSocket(t, path)
-	acceptor, err := control.Accept(context.Background(), path)
+	acceptor, err := serveSocket(context.Background(), path)
 	if err != nil {
 		t.Fatalf("Accept over a dead socket file: %v", err)
 	}
@@ -35,7 +35,7 @@ func TestAcceptReplacesADeadControlSocketFile(t *testing.T) {
 
 func TestCloseLeavesTheControlSocketFileInPlace(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "control.sock")
-	acceptor, err := control.Accept(context.Background(), path)
+	acceptor, err := serveSocket(context.Background(), path)
 	if err != nil {
 		t.Fatal(err)
 	}

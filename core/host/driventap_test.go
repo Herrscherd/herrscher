@@ -30,10 +30,11 @@ func TestDrivenSessionTapsTheEventSocket(t *testing.T) {
 	defer cancel()
 	const name = "driventap-test"
 	sock := control.SocketPath(layout, "", name)
-	acc, err := control.Accept(ctx, sock)
+	ln, err := control.Listen(ctx, sock)
 	if err != nil {
-		t.Fatalf("accept: %v", err)
+		t.Fatalf("listen: %v", err)
 	}
+	acc := control.Serve(ctx, ln)
 	gw := &fanRecorder{}
 	gw.feed("ping")
 	got := make(chan contracts.Event, 8)

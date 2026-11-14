@@ -5,12 +5,12 @@ import (
 	"testing"
 )
 
-func TestAcceptRefusesAnEmptyPath(t *testing.T) {
-	acceptor, err := Accept(t.Context(), "")
+func TestListenRefusesAnEmptyPath(t *testing.T) {
+	listener, err := Listen(t.Context(), "")
 	if !errors.Is(err, errNoSocketPath) {
-		t.Fatalf("Accept(\"\") = %v, want errNoSocketPath", err)
+		t.Fatalf("Listen(\"\") = %v, want errNoSocketPath", err)
 	}
-	if acceptor != nil {
-		t.Fatal("Accept(\"\") returned a listener")
+	if listener != nil {
+		t.Fatal("Listen(\"\") returned a listener")
 	}
 }

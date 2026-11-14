@@ -7,8 +7,14 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+)
+
+const (
+	initialAcceptRetryDelay = 5 * time.Millisecond
+	maxAcceptRetryDelay     = time.Second
 )
 
 // Conn is a persistent bidirectional event connection over a net.Conn. The
@@ -96,16 +102,24 @@ func (a *Acceptor) closeWhenDone(ctx context.Context) {
 
 func (a *Acceptor) loop() {
 	defer close(a.exited)
+	var retryDelay time.Duration
 	for {
 		conn, err := a.ln.Accept()
 		if err != nil {
-			return
+			if errors.Is(err, net.ErrClosed) || a.isDone() {
+				return
+			}
+			retryDelay = nextAcceptRetryDelay(retryDelay)
+			slog.Warn("control accept failed, retrying", "err", err, "delay", retryDelay)
+			if !a.pause(retryDelay) {
+				return
+			}
+			continue
 		}
-		select {
-		case <-a.done:
+		retryDelay = 0
+		if a.isDone() {
 			closeConn(conn)
 			return
-		default:
 		}
 		select {
 		case a.conns <- newConn(conn):
@@ -113,6 +127,33 @@ func (a *Acceptor) loop() {
 			closeConn(conn)
 			return
 		}
+	}
+}
+
+func nextAcceptRetryDelay(previous time.Duration) time.Duration {
+	if previous == 0 {
+		return initialAcceptRetryDelay
+	}
+	return min(previous*2, maxAcceptRetryDelay)
+}
+
+func (a *Acceptor) isDone() bool {
+	select {
+	case <-a.done:
+		return true
+	default:
+		return false
+	}
+}
+
+func (a *Acceptor) pause(d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return true
+	case <-a.done:
+		return false
 	}
 }
 

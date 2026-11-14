@@ -103,7 +103,7 @@ func TestCloseInterruptsAcceptBackoff(t *testing.T) {
 		if err := acc.Close(); err != nil {
 			t.Fatalf("Close: %v", err)
 		}
-		if waited := time.Since(start); waited >= 5*time.Millisecond {
+		if waited := time.Since(start); waited >= initialAcceptRetryDelay {
 			t.Fatalf("Close waited %s for the accept backoff, want it to return at once", waited)
 		}
 		requireConnsClosed(t, acc, "Conns stayed open after Close during the backoff")

@@ -165,7 +165,7 @@ func (h *hub) goLiveStarted(ctx context.Context, sess state.Session) error {
 	if err := h.goLiveLocked(ctx, sess); err != nil {
 		return err
 	}
-	h.sup.Start(sess)
+	h.withinGrace(sess.Name, func() { h.sup.Start(sess) })
 	return nil
 }
 
@@ -343,8 +343,27 @@ func (h *hub) retireFailed(name string, done <-chan struct{}) bool {
 	if _, ok := h.dropLocked(name, done); !ok {
 		return false
 	}
-	h.haltBridge(name)
+	h.haltBridgeWithin(name)
 	return true
+}
+
+func (h *hub) haltBridgeWithin(name string) {
+	if h.stopBridge != nil {
+		h.withinGrace(name, func() { h.haltBridge(name) })
+	}
+}
+
+func (h *hub) withinGrace(name string, step func()) {
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		step()
+	}()
+	select {
+	case <-finished:
+	case <-time.After(h.teardownGrace):
+		warnLive(h.warnings, h.sessionLanguageSource(name), "warn.session_teardown_overrun", map[string]any{nameParam: name, graceParam: h.teardownGrace.String()})
+	}
 }
 
 func (h *hub) drop(name string, only <-chan struct{}) (liveSession, bool) {

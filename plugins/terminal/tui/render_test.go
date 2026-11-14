@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 
@@ -156,17 +157,65 @@ func TestFragmentsOpenTheEntryWithTheirIndent(t *testing.T) {
 		{"newline then spaces fragments", []string{"\n", "    ", "code"}, "    code"},
 		{"spaces fragment then word", []string{"   ", "code"}, "   code"},
 		{"newline and tab fragments", []string{"\n\t", "code"}, "\tcode"},
+		{"space and newline", []string{" \n", "code"}, "code"},
+		{"ideographic space and newline", []string{"　\n", "code"}, "code"},
+		{"form feed and newline", []string{"\f\n", "code"}, "code"},
+		{"vertical tab and newline", []string{"\v\n", "code"}, "code"},
+		{"next line and newline", []string{"\u0085\n", "code"}, "code"},
+		{"carriage return then indent", []string{"\r   ", "code"}, "   code"},
+		{"carriage return and newline then indent", []string{"\r\n   ", "code"}, "   code"},
 	} {
-		for _, chunks := range [][]string{tc.chunks, {strings.Join(tc.chunks, "")}} {
-			tb := openedFrom(chunks)
-			if len(tb.entries) != 1 {
-				t.Fatalf("%s: the next non-empty chunk must open one entry from %q: %d entries", tc.name, chunks, len(tb.entries))
+		t.Run(tc.name, func(t *testing.T) {
+			for _, split := range []struct {
+				label  string
+				chunks []string
+			}{
+				{"fragments", tc.chunks},
+				{"joined", []string{strings.Join(tc.chunks, "")}},
+			} {
+				t.Run(split.label, func(t *testing.T) {
+					tb := openedFrom(split.chunks)
+					if len(tb.entries) != 1 {
+						t.Errorf("the next non-empty chunk must open one entry from %q: %d entries", split.chunks, len(tb.entries))
+						return
+					}
+					if got := tb.entries[0].text; got != tc.want || !tb.entries[0].streaming {
+						t.Errorf("the entry from %q must open on %q: %+v", split.chunks, tc.want, tb.entries[0])
+					}
+				})
 			}
-			if got := tb.entries[0].text; got != tc.want || !tb.entries[0].streaming {
-				t.Fatalf("%s: the entry from %q must open on %q: %+v", tc.name, chunks, tc.want, tb.entries[0])
-			}
+		})
+	}
+}
+
+func TestBlankFragmentsAreNotRecopiedPerChunk(t *testing.T) {
+	tb := &tab{}
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	for range 40000 {
+		tb.appendChunk("\n")
+	}
+	runtime.ReadMemStats(&after)
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 16<<20 {
+		t.Fatalf("40000 blank fragments must not recopy their pending blanks: %d bytes allocated", allocated)
+	}
+	tb.appendChunk("code")
+	if len(tb.entries) != 1 || tb.entries[0].text != "code" {
+		t.Fatalf("the blank fragments must open the entry on the next text alone: %+v", tb.entries)
+	}
+}
+
+func TestBlankStreamDoesNotHideTheFinalReply(t *testing.T) {
+	m := newTestModel()
+	tb := m.ensureTab("a")
+	m.renderInto(tb, contracts.Event{T: "chunk", Text: "\n\n"})
+	m.renderInto(tb, contracts.Event{T: eventReply, Text: "Réponse finale", Done: true})
+	for _, item := range tb.entries {
+		if item.role == roleAgent && item.text == "Réponse finale" {
+			return
 		}
 	}
+	t.Fatalf("a turn whose stream held only blank lines must still show its final reply: %+v", tb.entries)
 }
 
 func TestPendingBlankOpensNoEntryAtTurnEnd(t *testing.T) {

@@ -63,7 +63,8 @@ type hub struct {
 	startBridge   func(sess state.Session, grace time.Duration) error
 	stopBridge    func(name string) error
 	stopping      func(name string) <-chan struct{}
-	refused       map[string]struct{}
+	refused       map[string]string
+	relaunching   map[string]struct{}
 	relaunchStop  chan struct{}
 	relaunches    sync.WaitGroup
 	seedBackend   func(context.Context, state.Session) (contracts.Backend, error)

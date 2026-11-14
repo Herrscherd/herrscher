@@ -79,18 +79,28 @@ func (h *hub) journalStart(name string, err error) {
 		return
 	}
 	lang := h.sessionLanguageSource(name)
-	_, refused := h.refused[name]
+	incarnation := h.incarnationOf(name)
+	refusedIncarnation, known := h.refused[name]
+	refused := known && refusedIncarnation == incarnation
 	switch {
 	case err == nil && refused:
 		delete(h.refused, name)
 		warnLive(h.warnings, lang, "warn.session_start_recovered", map[string]any{nameParam: name})
 	case err != nil && !refused:
 		if h.refused == nil {
-			h.refused = make(map[string]struct{})
+			h.refused = make(map[string]string)
 		}
-		h.refused[name] = struct{}{}
+		h.refused[name] = incarnation
 		warnLive(h.warnings, lang, "warn.session_start", map[string]any{nameParam: name, detailParam: err})
 	}
+}
+
+func (h *hub) incarnationOf(name string) string {
+	sess, ok := h.st.FindSession(name)
+	if !ok {
+		return ""
+	}
+	return sess.Incarnation
 }
 
 func (h *hub) stoppingBridge(name string) <-chan struct{} {
@@ -101,6 +111,13 @@ func (h *hub) stoppingBridge(name string) <-chan struct{} {
 }
 
 func (h *hub) relaunchWhenSettled(ctx context.Context, name string, settled <-chan struct{}) {
+	if _, pending := h.relaunching[name]; pending {
+		return
+	}
+	if h.relaunching == nil {
+		h.relaunching = make(map[string]struct{})
+	}
+	h.relaunching[name] = struct{}{}
 	h.relaunches.Add(1)
 	go func() {
 		defer h.relaunches.Done()
@@ -109,12 +126,36 @@ func (h *hub) relaunchWhenSettled(ctx context.Context, name string, settled <-ch
 		case <-h.relaunchStop:
 			return
 		}
-		sess, ok := h.st.FindSession(name)
-		if !ok || sess.Archived {
-			return
-		}
-		logCleanup(h.goLiveBridged(ctx, sess))
+		h.relaunchSettled(ctx, name)
 	}()
+}
+
+func (h *hub) relaunchSettled(ctx context.Context, name string) {
+	h.lifecycle.Lock()
+	defer h.lifecycle.Unlock()
+	delete(h.relaunching, name)
+	if h.isLive(name) {
+		return
+	}
+	sess, ok := h.st.FindSession(name)
+	if !ok || sess.Archived {
+		return
+	}
+	err := h.goLiveBridgedLocked(ctx, sess)
+	h.journalStart(name, err)
+	logCleanup(err)
+}
+
+func (h *hub) reviveIfActive(ctx context.Context, name string) error {
+	h.lifecycle.Lock()
+	defer h.lifecycle.Unlock()
+	sess, ok := h.st.FindSession(name)
+	if !ok || sess.Archived {
+		return nil
+	}
+	err := h.goLiveBridgedLocked(ctx, sess)
+	h.journalStart(name, err)
+	return err
 }
 
 func (h *hub) closeLifecycleLocked() {
@@ -192,7 +233,8 @@ func (h *hub) goLiveLocked(ctx context.Context, sess state.Session) error {
 	released := acceptCommands(sctx, commands, h.sessionCommands(sess.Name), defaultCommandReadTimeout)
 	releaseSockets := sync.OnceFunc(func() {
 		logCleanup(acc.Close())
-		closeRead(commands)
+		cancel()
+		<-released
 	})
 	h.mu.Lock()
 	h.live[sess.Name] = liveSession{cancel: cancel, done: done, released: released, release: releaseSockets}
@@ -249,9 +291,9 @@ func (h *hub) goDead(name string) {
 func (h *hub) goDeadWithin(name string, window teardownWindow) {
 	h.lifecycle.Lock()
 	live, ok := h.dropLocked(name, nil)
-	h.haltBridgeWithin(name, window)
+	halted := h.haltBridgeWithin(name, window)
 	h.lifecycle.Unlock()
-	if ok {
+	if ok && halted {
 		h.awaitTeardown(name, live, window)
 	}
 	h.forget(name)
@@ -336,21 +378,24 @@ func (h *hub) haltBridgeWithinGrace(name string) {
 	h.haltBridgeWithin(name, window)
 }
 
-func (h *hub) haltBridgeWithin(name string, window teardownWindow) {
-	if h.stopBridge != nil {
-		h.withinGrace(name, window, func() { h.haltBridge(name) })
+func (h *hub) haltBridgeWithin(name string, window teardownWindow) bool {
+	if h.stopBridge == nil {
+		return true
 	}
+	return h.withinGrace(name, window, func() { h.haltBridge(name) })
 }
 
-func (h *hub) withinGrace(name string, window teardownWindow, step func()) {
+func (h *hub) withinGrace(name string, window teardownWindow, step func()) bool {
 	finished := make(chan struct{})
 	go func() {
 		defer close(finished)
 		step()
 	}()
-	if !window.finished(finished) {
-		h.warnOverrun(name)
+	if window.finished(finished) {
+		return true
 	}
+	h.warnOverrun(name)
+	return false
 }
 
 func (h *hub) warnOverrun(name string) {
@@ -413,12 +458,11 @@ func (h *hub) reconcile(ctx context.Context) {
 			h.goDeadWithin(name, window)
 		}
 	}
-	for idx := range persisted {
-		saved := persisted[idx]
-		if saved.Archived {
+	for name := range persisted {
+		if persisted[name].Archived {
 			continue
 		}
-		if errors.Is(h.goLiveBridged(ctx, saved), errHubClosed) {
+		if errors.Is(h.reviveIfActive(ctx, name), errHubClosed) {
 			break
 		}
 	}

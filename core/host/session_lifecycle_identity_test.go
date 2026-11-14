@@ -299,3 +299,29 @@ func probeRelease(h *hub, name string) *releaseProbe {
 	h.mu.Unlock()
 	return probe
 }
+
+func TestReleasedCommandSocketIsUnreachableOnceGoDeadReturns(t *testing.T) {
+	layout := isolatedRuntimeDir(t)
+	h := newHub(
+		state.NewState(filepath.Join(t.TempDir(), "state.json")),
+		nil,
+		nil,
+		t.TempDir(),
+		nil,
+		nil,
+		newApprovalTable(io.Discard),
+		newSessionTable(),
+	)
+	h.runtime = layout
+	h.teardownGrace = 0
+	for range 3000 {
+		name := "released-" + newTurnID()
+		if err := h.goLive(t.Context(), state.Session{Name: name, Incarnation: "incarnation"}); err != nil {
+			t.Fatal(err)
+		}
+		h.goDead(name)
+		if socketAnswers(t.Context(), layout, SessionCommandSocketPathIn(layout, h.instanceID, name)) {
+			t.Fatalf("session %s: the command socket still answers once goDead has returned", name)
+		}
+	}
+}

@@ -197,6 +197,7 @@ func newTestHub(t *testing.T) *hub {
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
 	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab)
 	h.runtime = isolatedRuntimeDir(t)
+	t.Cleanup(h.stopLive)
 	return h
 }
 

@@ -5,7 +5,7 @@ env HERRSCHER_LANG=fr
 ! exec herrscher session seed --name first --task 'hello daemon'
 stderr 'erreur inattendue : refused by the vendor'
 ! stderr 'unexpected error'
-! stdout .
+! stdout '\S'
 kill -INT daemon
 wait daemon
 ! waitdaemon

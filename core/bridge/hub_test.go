@@ -25,9 +25,9 @@ type fakeBackend struct {
 
 func (b fakeBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
 	if onEvent != nil {
-		onEvent(contracts.BackendEvent{Kind: "text", Detail: "thinking"})
+		onEvent(contracts.BackendEvent{Kind: backendKindText, Detail: "thinking"})
 		if b.cost > 0 {
-			onEvent(contracts.BackendEvent{Kind: "result", Cost: b.cost})
+			onEvent(contracts.BackendEvent{Kind: backendKindResult, Cost: b.cost})
 		}
 	}
 	return b.reply, nil
@@ -55,7 +55,7 @@ func TestRunHubReplyCarriesCost(t *testing.T) {
 
 func TestEmitBackendEventThinking(t *testing.T) {
 	sink := &recordSink{}
-	emitBackendEvent(sink, contracts.BackendEvent{Kind: "thinking", Detail: "je réfléchis"}, 0, 0, 0, 0)
+	emitBackendEvent(sink, contracts.BackendEvent{Kind: backendKindThinking, Detail: "je réfléchis"}, 0, 0, 0, 0)
 	want := []contracts.Event{{T: wireEventThinking, Text: "je réfléchis"}}
 	if !slices.EqualFunc(sink.events, want, sameEvent) {
 		t.Fatalf("emitted %+v, want %+v", sink.events, want)
@@ -67,9 +67,9 @@ func TestEmitBackendEventPanels(t *testing.T) {
 	agent := contracts.Subagent{ID: "a1", Name: "chercher", Kind: "Explore", State: "active"}
 
 	sink := &recordSink{}
-	emitBackendEvent(sink, contracts.BackendEvent{Kind: "todos", Todos: todos}, 0, 0, 0, 0)
-	emitBackendEvent(sink, contracts.BackendEvent{Kind: "subagent", Subagent: &agent}, 0, 0, 0, 0)
-	emitBackendEvent(sink, contracts.BackendEvent{Kind: "subagent"}, 0, 0, 0, 0)
+	emitBackendEvent(sink, contracts.BackendEvent{Kind: backendKindTodos, Todos: todos}, 0, 0, 0, 0)
+	emitBackendEvent(sink, contracts.BackendEvent{Kind: backendKindSubagent, Subagent: &agent}, 0, 0, 0, 0)
+	emitBackendEvent(sink, contracts.BackendEvent{Kind: backendKindSubagent}, 0, 0, 0, 0)
 
 	want := []contracts.Event{{T: wireEventTodos, Todos: todos}, {T: wireEventSubagent, Subagent: &agent}}
 	if !slices.EqualFunc(sink.events, want, sameEvent) {
@@ -80,9 +80,9 @@ func TestEmitBackendEventPanels(t *testing.T) {
 type tokenBackend struct{ reply string }
 
 func (b tokenBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
-	onEvent(contracts.BackendEvent{Kind: "usage", InTokens: 10, OutTokens: 20})
-	onEvent(contracts.BackendEvent{Kind: "text", Detail: "working"})
-	onEvent(contracts.BackendEvent{Kind: "result", InTokens: 30, OutTokens: 55, Cost: 0.001})
+	onEvent(contracts.BackendEvent{Kind: backendKindUsage, InTokens: 10, OutTokens: 20})
+	onEvent(contracts.BackendEvent{Kind: backendKindText, Detail: "working"})
+	onEvent(contracts.BackendEvent{Kind: backendKindResult, InTokens: 30, OutTokens: 55, Cost: 0.001})
 	return b.reply, nil
 }
 func (tokenBackend) Close() error { return nil }
@@ -114,10 +114,10 @@ type agenticBackend struct{ reply string }
 
 func (b agenticBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
 	for range 3 {
-		onEvent(contracts.BackendEvent{Kind: "usage", InTokens: 100, OutTokens: 20})
-		onEvent(contracts.BackendEvent{Kind: "text", Detail: "step"})
+		onEvent(contracts.BackendEvent{Kind: backendKindUsage, InTokens: 100, OutTokens: 20})
+		onEvent(contracts.BackendEvent{Kind: backendKindText, Detail: "step"})
 	}
-	onEvent(contracts.BackendEvent{Kind: "result", InTokens: 300, OutTokens: 60, Cost: 0.002})
+	onEvent(contracts.BackendEvent{Kind: backendKindResult, InTokens: 300, OutTokens: 60, Cost: 0.002})
 	return b.reply, nil
 }
 func (agenticBackend) Close() error { return nil }
@@ -148,9 +148,9 @@ func TestRunOneTurn_AccumulatesUsageAcrossMessages(t *testing.T) {
 type cacheBackend struct{ reply string }
 
 func (b cacheBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
-	onEvent(contracts.BackendEvent{Kind: "usage", InTokens: 10, OutTokens: 20, CacheRead: 12, CacheCreate: 3})
-	onEvent(contracts.BackendEvent{Kind: "text", Detail: "working"})
-	onEvent(contracts.BackendEvent{Kind: "result", InTokens: 30, OutTokens: 55, CacheRead: 12, CacheCreate: 3, Cost: 0.001})
+	onEvent(contracts.BackendEvent{Kind: backendKindUsage, InTokens: 10, OutTokens: 20, CacheRead: 12, CacheCreate: 3})
+	onEvent(contracts.BackendEvent{Kind: backendKindText, Detail: "working"})
+	onEvent(contracts.BackendEvent{Kind: backendKindResult, InTokens: 30, OutTokens: 55, CacheRead: 12, CacheCreate: 3, Cost: 0.001})
 	return b.reply, nil
 }
 func (cacheBackend) Close() error { return nil }
@@ -332,7 +332,7 @@ type hangingBackend struct{ calls int }
 func (b *hangingBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
 	b.calls++
 	if b.calls == 1 {
-		onEvent(contracts.BackendEvent{Kind: "text", Detail: "partial"})
+		onEvent(contracts.BackendEvent{Kind: backendKindText, Detail: "partial"})
 		return "", errors.New("backend: stream ended before reply{done}")
 	}
 	return "second ok", nil

@@ -37,7 +37,7 @@ func TestEnterWhileBusyQueuesUntilTurnEnds(t *testing.T) {
 	if len(f.submitted) != 0 {
 		t.Fatal("a queued item must not be sent during the turn")
 	}
-	settle(m, m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "fini", Done: true}}))
+	settle(m, m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventReply, Text: "fini", Done: true}}))
 	if len(f.submitted) != 1 || f.submitted[0].text != "premier" {
 		t.Fatalf("queued item must be sent when the turn ends: %+v", f.submitted)
 	}

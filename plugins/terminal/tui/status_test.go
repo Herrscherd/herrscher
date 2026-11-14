@@ -20,7 +20,7 @@ func TestContextOccupancyDerivesFromTheThreeCounters(t *testing.T) {
 	m := newTestModel()
 	m.route(RoutedEvent{
 		Conv:  contracts.Conversation{ID: "a"},
-		Event: contracts.Event{T: "chunk", Text: "…", TokensIn: 30_000, CacheRead: 12_000, CacheCreate: 3_000},
+		Event: contracts.Event{T: eventChunk, Text: "…", TokensIn: 30_000, CacheRead: 12_000, CacheCreate: 3_000},
 	})
 	if got := m.tabs["a"].ctxTokens; got != 45_000 {
 		t.Fatalf("ctxTokens = %d, want 45000", got)
@@ -30,8 +30,8 @@ func TestContextOccupancyDerivesFromTheThreeCounters(t *testing.T) {
 func TestContextOccupancyIgnoresTheTurnTotals(t *testing.T) {
 	m := newTestModel()
 	conv := contracts.Conversation{ID: "a"}
-	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: "chunk", Text: "…", TokensIn: 40_000, CacheRead: 50_000}})
-	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: "reply", Done: true, Text: "done", TokensIn: 600_000, CacheRead: 652_200}})
+	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: eventChunk, Text: "…", TokensIn: 40_000, CacheRead: 50_000}})
+	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: eventReply, Done: true, Text: "done", TokensIn: 600_000, CacheRead: 652_200}})
 	if got := m.tabs["a"].ctxTokens; got != 90_000 {
 		t.Fatalf("ctxTokens = %d, want the last mid-turn reading (90000)", got)
 	}
@@ -40,13 +40,13 @@ func TestContextOccupancyIgnoresTheTurnTotals(t *testing.T) {
 func TestContextOccupancyTakesTheTotalsOfAOneMessageTurn(t *testing.T) {
 	m := newTestModel()
 	conv := contracts.Conversation{ID: "a"}
-	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: "chunk", Text: "hi"}})
-	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: "reply", Done: true, Text: "hi", TokensIn: 12_000, CacheRead: 3_000}})
+	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: eventChunk, Text: "hi"}})
+	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: eventReply, Done: true, Text: "hi", TokensIn: 12_000, CacheRead: 3_000}})
 	if got := m.tabs["a"].ctxTokens; got != 15_000 {
 		t.Fatalf("ctxTokens = %d, want the single message's prompt (15000)", got)
 	}
-	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: "chunk", Text: "…", TokensIn: 20_000}})
-	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: "reply", Done: true, Text: "done", TokensIn: 900_000}})
+	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: eventChunk, Text: "…", TokensIn: 20_000}})
+	m.route(RoutedEvent{Conv: conv, Event: contracts.Event{T: eventReply, Done: true, Text: "done", TokensIn: 900_000}})
 	if got := m.tabs["a"].ctxTokens; got != 20_000 {
 		t.Fatalf("ctxTokens = %d, want the mid-turn reading (20000)", got)
 	}
@@ -169,7 +169,7 @@ func TestCostAccumulatesAcrossTurns(t *testing.T) {
 	for _, c := range []float64{0.01, 0.02, 0.03} {
 		m.route(RoutedEvent{
 			Conv:  contracts.Conversation{ID: "a"},
-			Event: contracts.Event{T: "reply", Done: true, Cost: c},
+			Event: contracts.Event{T: eventReply, Done: true, Cost: c},
 		})
 	}
 	if got := m.tabs["a"].costTotal; got < 0.0599 || got > 0.0601 {

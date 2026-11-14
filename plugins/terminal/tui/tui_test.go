@@ -25,8 +25,8 @@ func runCmd(cmd tea.Cmd) tea.Msg {
 
 func TestRoutedEventLandsInOwnTab(t *testing.T) {
 	m := newTestModel()
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "chunk", Text: "hello-a"}})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "b"}, Event: contracts.Event{T: "chunk", Text: "hello-b"}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventChunk, Text: "hello-a"}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "b"}, Event: contracts.Event{T: eventChunk, Text: "hello-b"}})
 
 	if got := tabText(m.tabs["a"]); !strings.Contains(got, "hello-a") {
 		t.Fatalf("tab a missing its line: %q", got)
@@ -39,7 +39,7 @@ func TestRoutedEventLandsInOwnTab(t *testing.T) {
 func TestUnreadSetOnInactiveTab(t *testing.T) {
 	m := newTestModel()
 	m.ensureTab("a")
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "b"}, Event: contracts.Event{T: "chunk", Text: "x"}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "b"}, Event: contracts.Event{T: eventChunk, Text: "x"}})
 	if !m.tabs["b"].unread {
 		t.Fatal("event on inactive tab b must mark it unread")
 	}
@@ -65,7 +65,7 @@ func TestSwitchTabClearsUnread(t *testing.T) {
 
 func TestRenderEventShowsCostPerTab(t *testing.T) {
 	m := newTestModel()
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "done", Done: true, Cost: 0.0042}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventReply, Text: "done", Done: true, Cost: 0.0042}})
 	joined := tabText(m.tabs["a"])
 	if !strings.Contains(joined, "done") || !strings.Contains(joined, "$0.0042") {
 		t.Fatalf("cost/reply dropped: %q", joined)
@@ -74,7 +74,7 @@ func TestRenderEventShowsCostPerTab(t *testing.T) {
 
 func TestRenderEventOmitsZeroCost(t *testing.T) {
 	m := newModel(&fakeBackend{})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "done", Done: true}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventReply, Text: "done", Done: true}})
 	for _, e := range m.tabs["a"].entries {
 		if strings.Contains(e.text, "$") {
 			t.Fatalf("zero-cost turn must not show a cost line; got %q", e.text)
@@ -84,7 +84,7 @@ func TestRenderEventOmitsZeroCost(t *testing.T) {
 
 func TestRenderEventMarksAbandonedPerTab(t *testing.T) {
 	m := newTestModel()
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "abandoned"}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventAbandoned}})
 	if !strings.Contains(tabText(m.tabs["a"]), "turn abandoned") {
 		t.Fatal("abandoned not surfaced")
 	}
@@ -277,7 +277,7 @@ func TestReopenedTabSeedsDimmedScrollback(t *testing.T) {
 		},
 	}
 	m := newModel(f)
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: "chunk", Text: "live"}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventChunk, Text: "live"}})
 	joined := tabText(m.tabs["c"])
 	if !strings.Contains(joined, "old-q") || !strings.Contains(joined, "old-a") {
 		t.Fatalf("scrollback not seeded: %q", joined)
@@ -397,7 +397,7 @@ func TestTabBusyLifecycle(t *testing.T) {
 	if !m.tabs["a"].busy {
 		t.Fatal("status must mark tab busy")
 	}
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "done", Done: true, Cost: 0.01}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventReply, Text: "done", Done: true, Cost: 0.01}})
 	if m.tabs["a"].busy {
 		t.Fatal("done reply must clear busy")
 	}
@@ -502,11 +502,11 @@ func TestSlashSessionCloseHonoursAnExplicitName(t *testing.T) {
 
 func TestAbandonedSetsDisconnected(t *testing.T) {
 	m := newModel(&fakeBackend{})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "abandoned"}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventAbandoned}})
 	if !m.tabs["a"].disconnected {
 		t.Fatal("abandoned must set disconnected")
 	}
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "chunk", Text: "hi"}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventChunk, Text: "hi"}})
 	if m.tabs["a"].disconnected {
 		t.Fatal("chunk must clear disconnected")
 	}
@@ -715,8 +715,8 @@ func TestSubmitMarksBusyImmediately(t *testing.T) {
 func TestStreamedReplyNotDuplicated(t *testing.T) {
 	m := newModel(&fakeBackend{})
 	m.ensureTab("a")
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "chunk", Text: "the answer"}})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "the answer", Done: true}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventChunk, Text: "the answer"}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventReply, Text: "the answer", Done: true}})
 	if got := tabLineCount(m.tabs["a"], "the answer"); got != 1 {
 		t.Fatalf("streamed reply must render once, not per-event: got %d\n%+v", got, m.tabs["a"].entries)
 	}
@@ -728,7 +728,7 @@ func TestStreamedReplyNotDuplicated(t *testing.T) {
 func TestNonStreamedReplyRendersOnce(t *testing.T) {
 	m := newModel(&fakeBackend{})
 	m.ensureTab("a")
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "direct answer", Done: true}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventReply, Text: "direct answer", Done: true}})
 	if got := tabLineCount(m.tabs["a"], "direct answer"); got != 1 {
 		t.Fatalf("non-streamed reply must render exactly once: got %d\n%+v", got, m.tabs["a"].entries)
 	}
@@ -739,7 +739,7 @@ func TestThinkingLineDerivedWhileBusyNoStream(t *testing.T) {
 	tb := m.ensureTab("a")
 	tb.busy = true
 	tb.streamed = false
-	if tabLineCount(tb, "thinking") != 0 {
+	if tabLineCount(tb, roleThinking) != 0 {
 		t.Fatal("thinking indicator must not be appended to tab.lines")
 	}
 	if !strings.Contains(m.thinkingContent(), newTranslator().t("tui.common.working", nil)) {
@@ -819,7 +819,7 @@ func TestPaletteEscClosesWithoutQuitting(t *testing.T) {
 func TestThinkingEventReachesTheTranscript(t *testing.T) {
 	m := newTestModel()
 	tb := m.ensureTab("a")
-	m.renderInto(tb, contracts.Event{T: "thinking", Text: "weighing two options"})
+	m.renderInto(tb, contracts.Event{T: eventThinking, Text: "weighing two options"})
 	if len(tb.entries) != 1 || tb.entries[0].role != roleThinking {
 		t.Fatalf("a thinking event must append a thinking entry: %+v", tb.entries)
 	}
@@ -845,7 +845,7 @@ func TestHostFailureOnReplyRendersAsAnError(t *testing.T) {
 	m := newTestModel()
 	m.route(RoutedEvent{
 		Conv:  contracts.Conversation{ID: "a"},
-		Event: contracts.Event{T: "reply", Done: true, Text: hostErrPrefix + "backend exited 1"},
+		Event: contracts.Event{T: eventReply, Done: true, Text: hostErrPrefix + "backend exited 1"},
 	})
 	entries := m.tabs["a"].entries
 	if len(entries) != 1 || entries[0].role != roleError {
@@ -858,7 +858,7 @@ func TestHostFailureOnReplyRendersAsAnError(t *testing.T) {
 
 func TestEmptyThinkingIsDropped(t *testing.T) {
 	m := newTestModel()
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "thinking", Text: "  "}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventThinking, Text: "  "}})
 	if n := len(m.tabs["a"].entries); n != 0 {
 		t.Fatalf("an empty thinking event must add no entry, got %d", n)
 	}

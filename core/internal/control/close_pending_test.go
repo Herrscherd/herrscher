@@ -32,7 +32,7 @@ func TestCloseReleasesPendingConns(t *testing.T) {
 				t.Fatalf("Accept: %v", err)
 			}
 			clients := dialClients(t, sock, tc.dials)
-			if err := acc.Close(); err != nil {
+			if err := closeBounded(t, acc); err != nil {
 				t.Fatalf("Close: %v", err)
 			}
 			for _, c := range clients {

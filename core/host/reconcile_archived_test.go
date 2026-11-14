@@ -19,6 +19,7 @@ func TestReconcileSkipsArchived(t *testing.T) {
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
 	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab)
 	h.runtime = isolatedRuntimeDir(t)
+	t.Cleanup(h.stopLive)
 
 	if err := st.AddSession(state.Session{Name: "recon-live", ChannelID: "c1", Type: "text"}); err != nil {
 		t.Fatal(err)
@@ -49,6 +50,7 @@ func TestReconcileReapsInPlaceArchived(t *testing.T) {
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
 	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab)
 	h.runtime = isolatedRuntimeDir(t)
+	t.Cleanup(h.stopLive)
 
 	if err := st.AddSession(state.Session{Name: "s", ChannelID: "c1", Type: "text"}); err != nil {
 		t.Fatal(err)

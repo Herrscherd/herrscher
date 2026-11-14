@@ -74,25 +74,28 @@ func Accept(ctx context.Context, path string) (*Acceptor, error) {
 	if err != nil {
 		return nil, err
 	}
-	acceptor := &Acceptor{ln: listener, conns: make(chan *Conn, 1), done: make(chan struct{}), exited: make(chan struct{})}
+	acceptor := newAcceptor(listener)
 	go acceptor.loop()
 	go acceptor.closeWhenDone(ctx)
 	return acceptor, nil
 }
 
+func newAcceptor(ln net.Listener) *Acceptor {
+	return &Acceptor{ln: ln, conns: make(chan *Conn, 1), done: make(chan struct{}), exited: make(chan struct{})}
+}
+
 func (a *Acceptor) closeWhenDone(ctx context.Context) {
 	select {
 	case <-ctx.Done():
-		if err := a.Close(); err != nil {
-			slog.Debug("control acceptor close", "err", err)
-		}
 	case <-a.exited:
+	}
+	if err := a.Close(); err != nil {
+		slog.Debug("control acceptor close", "err", err)
 	}
 }
 
 func (a *Acceptor) loop() {
 	defer close(a.exited)
-	defer close(a.conns)
 	for {
 		conn, err := a.ln.Accept()
 		if err != nil {
@@ -116,8 +119,9 @@ func (a *Acceptor) loop() {
 // Conns yields each bridge connection; it closes when the Acceptor is closed.
 func (a *Acceptor) Conns() <-chan *Conn { return a.conns }
 
-// Close stops listening. The socket file stays in place, dead, until the
-// daemon's clean stop removes it.
+// Close stops listening, waits for the accept loop to exit and then closes
+// Conns. The socket file stays in place, dead, until the daemon's clean stop
+// removes it.
 func (a *Acceptor) Close() error {
 	a.closeOnce.Do(func() { a.closeErr = a.shutdown() })
 	return a.closeErr
@@ -128,19 +132,15 @@ func (a *Acceptor) shutdown() error {
 	err := a.ln.Close()
 	<-a.exited
 	a.drainPending()
+	close(a.conns)
 	return err
 }
 
 func (a *Acceptor) drainPending() {
 	for {
 		select {
-		case conn, ok := <-a.conns:
-			if !ok {
-				return
-			}
-			if conn != nil {
-				closeConn(conn)
-			}
+		case conn := <-a.conns:
+			closeConn(conn)
 		default:
 			return
 		}

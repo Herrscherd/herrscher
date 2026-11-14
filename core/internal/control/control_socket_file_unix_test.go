@@ -20,7 +20,7 @@ func TestAcceptReplacesADeadControlSocketFile(t *testing.T) {
 		t.Fatalf("Accept over a dead socket file: %v", err)
 	}
 	t.Cleanup(func() {
-		if closeErr := acceptor.Close(); closeErr != nil {
+		if closeErr := closeBounded(t, acceptor); closeErr != nil {
 			t.Error(closeErr)
 		}
 	})
@@ -39,7 +39,7 @@ func TestCloseLeavesTheControlSocketFileInPlace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if closeErr := acceptor.Close(); closeErr != nil {
+	if closeErr := closeBounded(t, acceptor); closeErr != nil {
 		t.Fatalf("Close: %v", closeErr)
 	}
 	info, err := os.Lstat(path)

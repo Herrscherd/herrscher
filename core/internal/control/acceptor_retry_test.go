@@ -212,7 +212,7 @@ func TestAcceptLoopEndsOnClosedListener(t *testing.T) {
 var errPermanentAccept = errors.New("permanent accept failure")
 
 func TestAcceptLoopEndsOnPermanentError(t *testing.T) {
-	logs := captureLog(t)
+	captureLog(t)
 	synctest.Test(t, func(t *testing.T) {
 		ln := &retryListener{repeat: errPermanentAccept}
 		acc := newAcceptor(ln)
@@ -227,10 +227,52 @@ func TestAcceptLoopEndsOnPermanentError(t *testing.T) {
 			t.Fatalf("Err after a permanent accept error = %v, want %v", err, errPermanentAccept)
 		}
 	})
-	if out := logs.String(); !strings.Contains(out, "level=ERROR") || !strings.Contains(out, errPermanentAccept.Error()) {
-		t.Fatalf("the permanent accept error was not logged at error level with its cause: %q", out)
+}
+
+func TestAcceptFailureLogIsBoundedPerInterval(t *testing.T) {
+	logs := captureLog(t)
+	synctest.Test(t, func(t *testing.T) {
+		ln := &retryListener{repeat: transientError()}
+		acc := newAcceptor(ln)
+		defer closeConn(acc)
+		go acc.loop()
+
+		time.Sleep(100 * time.Second)
+		if err := acc.Close(); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+	})
+	if got := strings.Count(logs.String(), acceptFailureLogLine); got != 4 {
+		t.Fatalf("%d accept failures logged over 100s of persistent temporary errors, want 4: the first, then at most one per 30s", got)
 	}
 }
+
+func TestAcceptFailureLogRestartsAfterASuccessfulAccept(t *testing.T) {
+	logs := captureLog(t)
+	synctest.Test(t, func(t *testing.T) {
+		client, server := net.Pipe()
+		defer closeConn(client)
+		defer closeConn(server)
+
+		ln := &retryListener{
+			script: []acceptResult{{err: transientError()}, {conn: server}, {err: transientError()}},
+			repeat: transientError(),
+		}
+		acc := newAcceptor(ln)
+		defer closeConn(acc)
+		go acc.loop()
+
+		time.Sleep(50 * time.Millisecond)
+		if err := acc.Close(); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+	})
+	if got := strings.Count(logs.String(), acceptFailureLogLine); got != 2 {
+		t.Fatalf("%d accept failures logged, want 2: the first failure of each run after a successful Accept is logged, the others within 30s are not", got)
+	}
+}
+
+const acceptFailureLogLine = "control accept failed, retrying"
 
 func TestBackoffRestartsAfterASuccessfulAccept(t *testing.T) {
 	captureLog(t)

@@ -16,6 +16,7 @@ const (
 	initialAcceptRetryDelay = 5 * time.Millisecond
 	acceptRetryGrowth       = 2
 	maxAcceptRetryDelay     = time.Second
+	acceptFailureLogEvery   = 30 * time.Second
 )
 
 // Conn is a persistent bidirectional event connection over a net.Conn. The
@@ -118,36 +119,55 @@ func (a *Acceptor) closeWhenDone(ctx context.Context) {
 
 func (a *Acceptor) loop() {
 	defer close(a.exited)
-	var retryDelay time.Duration
+	var backoff acceptBackoff
 	for {
 		conn, err := a.ln.Accept()
 		if err != nil {
-			delay, resume := a.recoverAccept(err, retryDelay)
-			if !resume {
+			if !a.recoverAccept(err, &backoff) {
 				return
 			}
-			retryDelay = delay
 			continue
 		}
-		retryDelay = 0
+		backoff.succeeded()
 		if !a.deliver(conn) {
 			return
 		}
 	}
 }
 
-func (a *Acceptor) recoverAccept(err error, previous time.Duration) (time.Duration, bool) {
+func (a *Acceptor) recoverAccept(err error, backoff *acceptBackoff) bool {
 	if errors.Is(err, net.ErrClosed) || a.isDone() {
-		return previous, false
+		return false
 	}
 	if !isTransientAcceptError(err) {
 		a.fail(err)
-		slog.Error("control accept failed, stopping", "err", err)
-		return previous, false
+		return false
 	}
-	delay := nextAcceptRetryDelay(previous)
-	slog.Warn("control accept failed, retrying", "err", err, "delay", delay)
-	return delay, a.pause(delay)
+	return a.pause(backoff.failed(err))
+}
+
+type acceptBackoff struct {
+	delay    time.Duration
+	failures int
+	lastLog  time.Time
+}
+
+func (b *acceptBackoff) failed(err error) time.Duration {
+	b.delay = nextAcceptRetryDelay(b.delay)
+	b.failures++
+	if now := time.Now(); b.logDue(now) {
+		b.lastLog = now
+		slog.Warn("control accept failed, retrying", "err", err, "delay", b.delay, "attempts", b.failures)
+	}
+	return b.delay
+}
+
+func (b *acceptBackoff) logDue(now time.Time) bool {
+	return b.failures == 1 || now.Sub(b.lastLog) >= acceptFailureLogEvery
+}
+
+func (b *acceptBackoff) succeeded() {
+	*b = acceptBackoff{}
 }
 
 func (a *Acceptor) deliver(conn net.Conn) bool {

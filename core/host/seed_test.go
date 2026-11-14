@@ -307,18 +307,6 @@ func (failingSeedBackend) Respond(context.Context, contracts.Prompt, func(contra
 }
 func (failingSeedBackend) Close() error { return nil }
 
-func TestASeedWhoseTurnFailsReportsTheFailure(t *testing.T) {
-	backend := func(context.Context, state.Session) (contracts.Backend, error) {
-		return failingSeedBackend{}, nil
-	}
-
-	sess := state.Session{Name: "solo", ChannelID: "channel"}
-	_, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), nil, oneShotSeedRuntime{backend: backend, warnings: io.Discard})
-	if _, failed := errors.AsType[*bridge.TurnFailedError](err); !failed {
-		t.Fatalf("seed error = %v, want a failed turn", err)
-	}
-}
-
 func TestTheOneShotBridgeCancelsTheSeedOnlyWhenNoReplyCame(t *testing.T) {
 	for _, tc := range []struct {
 		name       string

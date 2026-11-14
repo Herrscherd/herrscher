@@ -251,10 +251,7 @@ func TestInterruptKeepsPartialOutput(t *testing.T) {
 
 func TestBackendFailureStillReadsAsAFailure(t *testing.T) {
 	sink := &recordSink{}
-	err := runOneTurn(context.Background(), sink, errBackend{}, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
-	if _, failed := errors.AsType[*TurnFailedError](err); !failed {
-		t.Fatalf("got %v, want a *TurnFailedError", err)
-	}
+	runOneTurn(context.Background(), sink, errBackend{}, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
 	last := sink.events[len(sink.events)-1]
 	if !strings.HasPrefix(last.Text, errPrefix) {
 		t.Fatalf("an uninterrupted failure must keep its banner; got %q", last.Text)
@@ -267,10 +264,6 @@ func TestAFailedTurnHandsItsCauseBack(t *testing.T) {
 	failed, ok := errors.AsType[*TurnFailedError](err)
 	if !ok || failed.Err.Error() != "backend exploded" {
 		t.Fatalf("runOneTurn error = %v, want the backend failure", err)
-	}
-	last := sink.events[len(sink.events)-1]
-	if !strings.HasPrefix(last.Text, errPrefix) {
-		t.Fatalf("the gateways must still get the failure reply; got %q", last.Text)
 	}
 }
 

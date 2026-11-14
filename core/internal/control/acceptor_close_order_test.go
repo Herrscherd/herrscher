@@ -11,7 +11,7 @@ import (
 func TestConnsCloseOnlyAfterTheListenerIsClosed(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ln := &gatedListener{release: make(chan struct{})}
-		acc := newBareAcceptor(ln)
+		acc := newAcceptor(ln)
 		go acc.loop()
 		synctest.Wait()
 
@@ -39,7 +39,7 @@ func TestConnsCloseOnlyAfterTheListenerIsClosed(t *testing.T) {
 func TestCloseReturnsOnlyOnceTheAcceptLoopExited(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ln := &gatedListener{acceptGate: make(chan struct{})}
-		acc := newBareAcceptor(ln)
+		acc := newAcceptor(ln)
 		go acc.loop()
 		closed := make(chan error, 1)
 		go func() { closed <- acc.Close() }()
@@ -60,15 +60,11 @@ func TestCloseReturnsOnlyOnceTheAcceptLoopExited(t *testing.T) {
 
 func TestConnsClosesWhenTheLoopExitsOnItsOwn(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		acc := newBareAcceptor(&gatedListener{})
+		acc := newAcceptor(failingListener{})
 		go acc.loop()
 		go acc.closeWhenDone(context.Background())
 		requireConnsClosed(t, acc, "Conns stayed open after the loop exited on its own")
 	})
-}
-
-func newBareAcceptor(ln net.Listener) *Acceptor {
-	return &Acceptor{ln: ln, conns: make(chan *Conn, 1), done: make(chan struct{}), exited: make(chan struct{})}
 }
 
 func requireConnsClosed(tb testing.TB, acc *Acceptor, stayedOpen string) {
@@ -103,3 +99,11 @@ func (l *gatedListener) Close() error {
 }
 
 func (l *gatedListener) Addr() net.Addr { return nil }
+
+type failingListener struct{}
+
+func (failingListener) Accept() (net.Conn, error) { return nil, net.ErrClosed }
+
+func (failingListener) Close() error { return nil }
+
+func (failingListener) Addr() net.Addr { return nil }

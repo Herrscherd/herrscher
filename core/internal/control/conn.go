@@ -74,10 +74,14 @@ func Accept(ctx context.Context, path string) (*Acceptor, error) {
 	if err != nil {
 		return nil, err
 	}
-	acceptor := &Acceptor{ln: listener, conns: make(chan *Conn, 1), done: make(chan struct{}), exited: make(chan struct{})}
+	acceptor := newAcceptor(listener)
 	go acceptor.loop()
 	go acceptor.closeWhenDone(ctx)
 	return acceptor, nil
+}
+
+func newAcceptor(ln net.Listener) *Acceptor {
+	return &Acceptor{ln: ln, conns: make(chan *Conn, 1), done: make(chan struct{}), exited: make(chan struct{})}
 }
 
 func (a *Acceptor) closeWhenDone(ctx context.Context) {

@@ -24,8 +24,9 @@ const errPrefix = "⚠️ "
 const interruptNotice = "⏹ interrupted"
 
 const (
-	textKind  = "text"
-	resetKind = "reset"
+	textKind   = "text"
+	resetKind  = "reset"
+	eventReset = "reset"
 )
 
 type turnController struct {
@@ -398,7 +399,7 @@ func emitBackendEvent(sink contracts.EventSink, event contracts.BackendEvent, to
 			sink.Emit(contracts.Event{T: "subagent", Subagent: event.Subagent})
 		}
 	case resetKind:
-		sink.Emit(contracts.Event{T: resetKind})
+		sink.Emit(contracts.Event{T: eventReset})
 	}
 }
 

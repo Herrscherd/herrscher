@@ -31,4 +31,21 @@ func TestAcceptClosesTheSocketWhenItsContextEnds(t *testing.T) {
 		closeLogged(t, conn)
 		t.Fatal("the socket still accepts after the context ended")
 	}
+	if err := acc.Err(); err != nil {
+		t.Fatalf("Err after the context ended = %v, want nil", err)
+	}
+}
+
+func TestAcceptErrIsNilAfterClose(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "close.sock")
+	acc, err := control.Accept(t.Context(), sock)
+	if err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+	if err = closeBounded(t, acc); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if err = acc.Err(); err != nil {
+		t.Fatalf("Err after Close = %v, want nil", err)
+	}
 }

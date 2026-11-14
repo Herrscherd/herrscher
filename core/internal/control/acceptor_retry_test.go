@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -94,20 +93,21 @@ func captureLog(t *testing.T) *syncBuffer {
 	return logs
 }
 
-func emfileError() error {
-	return fmt.Errorf("accept tcp: %w", syscall.EMFILE)
+func transientError() error {
+	return fmt.Errorf("accept: %w", transientAcceptFailure())
 }
 
-func TestAcceptRetriesEachTransientErrno(t *testing.T) {
+func testAcceptRetriesEachTransientError(t *testing.T, errs []error) {
+	t.Helper()
 	captureLog(t)
-	for _, errno := range []syscall.Errno{syscall.EMFILE, syscall.ENFILE, syscall.ECONNABORTED, syscall.ENOBUFS, syscall.ENOMEM} {
-		t.Run(errno.Error(), func(t *testing.T) {
+	for _, failure := range errs {
+		t.Run(failure.Error(), func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				client, server := net.Pipe()
 				defer closeConn(client)
 				defer closeConn(server)
 
-				ln := &retryListener{script: []acceptResult{{err: fmt.Errorf("accept tcp: %w", errno)}, {conn: server}}}
+				ln := &retryListener{script: []acceptResult{{err: fmt.Errorf("accept: %w", failure)}, {conn: server}}}
 				acc := newAcceptor(ln)
 				defer closeConn(acc)
 				go acc.loop()
@@ -131,7 +131,7 @@ func TestAcceptRetriesEachTransientErrno(t *testing.T) {
 func TestAcceptBackoffDoublesUpToTheCap(t *testing.T) {
 	captureLog(t)
 	synctest.Test(t, func(t *testing.T) {
-		ln := &retryListener{repeat: emfileError()}
+		ln := &retryListener{repeat: transientError()}
 		acc := newAcceptor(ln)
 		defer closeConn(acc)
 		go acc.loop()
@@ -169,7 +169,7 @@ func TestAcceptBackoffDoublesUpToTheCap(t *testing.T) {
 func TestCloseInterruptsAcceptBackoff(t *testing.T) {
 	captureLog(t)
 	synctest.Test(t, func(t *testing.T) {
-		ln := &retryListener{repeat: emfileError()}
+		ln := &retryListener{repeat: transientError()}
 		acc := newAcceptor(ln)
 		defer closeConn(acc)
 		go acc.loop()
@@ -203,6 +203,9 @@ func TestAcceptLoopEndsOnClosedListener(t *testing.T) {
 		if calls := len(ln.recordedCalls()); calls != 1 {
 			t.Fatalf("Accept called %d times after net.ErrClosed, want 1", calls)
 		}
+		if err := acc.Err(); err != nil {
+			t.Fatalf("Err after the listener was closed normally = %v, want nil", err)
+		}
 	})
 }
 
@@ -220,6 +223,9 @@ func TestAcceptLoopEndsOnPermanentError(t *testing.T) {
 		if calls := len(ln.recordedCalls()); calls != 1 {
 			t.Fatalf("Accept called %d times after a permanent error, want 1", calls)
 		}
+		if err := acc.Err(); !errors.Is(err, errPermanentAccept) {
+			t.Fatalf("Err after a permanent accept error = %v, want %v", err, errPermanentAccept)
+		}
 	})
 	if out := logs.String(); !strings.Contains(out, "level=ERROR") || !strings.Contains(out, errPermanentAccept.Error()) {
 		t.Fatalf("the permanent accept error was not logged at error level with its cause: %q", out)
@@ -234,8 +240,8 @@ func TestBackoffRestartsAfterASuccessfulAccept(t *testing.T) {
 		defer closeConn(server)
 
 		ln := &retryListener{
-			script: []acceptResult{{err: emfileError()}, {conn: server}, {err: emfileError()}},
-			repeat: emfileError(),
+			script: []acceptResult{{err: transientError()}, {conn: server}, {err: transientError()}},
+			repeat: transientError(),
 		}
 		acc := newAcceptor(ln)
 		defer closeConn(acc)

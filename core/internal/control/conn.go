@@ -66,25 +66,40 @@ type Acceptor struct {
 	exited    chan struct{}
 	closeOnce sync.Once
 	closeErr  error
+	failMu    sync.Mutex
+	failure   error
 }
 
 var errNoSocketPath = errors.New("the control socket has no path, its runtime layout is zero")
 
 // Accept binds the control socket at path, replacing a dead socket file left
 // there by a crash, and starts accepting bridge connections. Each appears on
-// Conns().
+// Conns(). Conns also closes when the accept loop ends on a terminal error,
+// which Err reports.
 func Accept(ctx context.Context, path string) (*Acceptor, error) {
-	if path == "" {
-		return nil, errNoSocketPath
-	}
-	listener, err := listenControl(ctx, path)
+	listener, err := Listen(ctx, path)
 	if err != nil {
 		return nil, err
 	}
-	acceptor := newAcceptor(listener)
+	return Serve(ctx, listener), nil
+}
+
+// Listen binds the control socket at path, replacing a dead socket file left
+// there by a crash.
+func Listen(ctx context.Context, path string) (net.Listener, error) {
+	if path == "" {
+		return nil, errNoSocketPath
+	}
+	return listenControl(ctx, path)
+}
+
+// Serve accepts bridge connections on ln until ln is closed, ctx ends or the
+// accept loop fails terminally. Each appears on Conns().
+func Serve(ctx context.Context, ln net.Listener) *Acceptor {
+	acceptor := newAcceptor(ln)
 	go acceptor.loop()
 	go acceptor.closeWhenDone(ctx)
-	return acceptor, nil
+	return acceptor
 }
 
 func newAcceptor(ln net.Listener) *Acceptor {
@@ -126,6 +141,7 @@ func (a *Acceptor) recoverAccept(err error, previous time.Duration) (time.Durati
 		return previous, false
 	}
 	if !isTransientAcceptError(err) {
+		a.fail(err)
 		slog.Error("control accept failed, stopping", "err", err)
 		return previous, false
 	}
@@ -175,8 +191,24 @@ func (a *Acceptor) pause(d time.Duration) bool {
 	}
 }
 
-// Conns yields each bridge connection; it closes when the Acceptor is closed.
+// Conns yields each bridge connection; it closes when the Acceptor is closed or
+// its accept loop fails terminally.
 func (a *Acceptor) Conns() <-chan *Conn { return a.conns }
+
+// Err returns the terminal error that ended the accept loop, or nil after a
+// Close or a cancelled context. Conns closes after a terminal error, so Err is
+// meaningful once Conns is closed.
+func (a *Acceptor) Err() error {
+	a.failMu.Lock()
+	defer a.failMu.Unlock()
+	return a.failure
+}
+
+func (a *Acceptor) fail(err error) {
+	a.failMu.Lock()
+	defer a.failMu.Unlock()
+	a.failure = err
+}
 
 // Close stops listening, waits for the accept loop to exit and then closes
 // Conns. The socket file stays in place, dead, until the daemon's clean stop

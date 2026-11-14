@@ -122,7 +122,10 @@ func settle(instance string, before map[string]bool) error {
 	return errors.Join(reapErr, removeRuntimeEntries(instance), appearedUnreadable(before))
 }
 
-var errUnreadableEntry = errors.New("an entry with a hashed name appeared during the scenario, so a socket path passed the unix limit and the cleanup cannot tell whose it is; shorten the session names")
+var (
+	errUnreadableEntry = errors.New("a socket with a hashed name appeared in the runtime directory during the scenario and was left there; a session name of this scenario or of another herrscher on this machine is too long for the unix limit, shorten it and remove the socket")
+	hashedSocket       = regexp.MustCompile(`^hs-[0-9a-f]{24}\.sock$`)
+)
 
 func unreadableEntries() (map[string]bool, error) {
 	return unreadableEntriesIn(runtimeDirs())
@@ -139,7 +142,7 @@ func unreadableEntriesIn(dirs []string) (map[string]bool, error) {
 			return nil, err
 		}
 		for _, entry := range entries {
-			if !strings.HasPrefix(entry.Name(), "herrscher-") {
+			if hashedSocket.MatchString(entry.Name()) {
 				found[filepath.Join(dir, entry.Name())] = true
 			}
 		}
@@ -220,8 +223,12 @@ func removeRuntimeEntries(instance string) error {
 }
 
 func removeInstanceEntries(dir, instance string) []error {
-	if _, err := os.Lstat(dir); errors.Is(err, fs.ErrNotExist) {
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, fs.ErrNotExist) {
 		return nil
+	}
+	if err != nil {
+		return []error{err}
 	}
 	known, err := entriesOf(dir, instance)
 	if err != nil {
@@ -229,10 +236,6 @@ func removeInstanceEntries(dir, instance string) []error {
 	}
 	if unsafe := known.layout.Check(known.command); unsafe != nil {
 		return []error{unsafe}
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return []error{err}
 	}
 	owned := make(map[string]bool, len(known.paths()))
 	for _, path := range known.paths() {

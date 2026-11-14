@@ -148,9 +148,23 @@ func TestRemoveInstanceEntriesLeavesWhatIsNotAPrivateDirectoryAlone(t *testing.T
 	}
 }
 
+func shortPrivateDir(t *testing.T, instance string) string {
+	t.Helper()
+	dir := filepath.Join(tmpRoot, "e2e-"+instance)
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(dir); err != nil {
+			t.Error(err)
+		}
+	})
+	return dir
+}
+
 func hashedRuntimeDir(t *testing.T, instance string) string {
 	t.Helper()
-	base := privateDir(t)
+	base := shortPrivateDir(t, instance)
 	for pad := 1; ; pad++ {
 		dir := filepath.Join(base, strings.Repeat("d", pad))
 		known, err := entriesOf(dir, instance)
@@ -211,17 +225,18 @@ func touch(t *testing.T, path string) {
 
 func TestSettleNamesAHashedEntryThatAppeared(t *testing.T) {
 	dir := privateDir(t)
-	touch(t, filepath.Join(dir, "hs-old.sock"))
+	touch(t, filepath.Join(dir, "hs-000000000000000000000000.sock"))
 	dirs := []string{dir, filepath.Join(dir, "missing")}
 	before, err := unreadableEntriesIn(dirs)
 	if err != nil {
 		t.Fatal(err)
 	}
 	touch(t, filepath.Join(dir, "herrscher-command-x.sock"))
+	touch(t, filepath.Join(dir, "3f9a0c1d2e4b5a6978"))
 	if quiet := appearedUnreadableIn(dirs, before); quiet != nil {
-		t.Fatalf("a readable name or an older entry was reported: %v", quiet)
+		t.Fatalf("a readable name, a staged name or an older entry was reported: %v", quiet)
 	}
-	fresh := filepath.Join(dir, "hs-new.sock")
+	fresh := filepath.Join(dir, "hs-0123456789abcdef01234567.sock")
 	touch(t, fresh)
 	reported := appearedUnreadableIn(dirs, before)
 	if !errors.Is(reported, errUnreadableEntry) || !strings.Contains(reported.Error(), fresh) {

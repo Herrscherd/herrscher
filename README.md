@@ -1614,9 +1614,12 @@ Linux, and says it skips the step anywhere else.
 - The cleanup removes every runtime entry named after the instance, and the names
   `core/host` gives its command and events sockets and its lock, hashed ones
   included. It only touches a runtime directory that `core/host` accepts as private
-  to the user. A session socket whose path passes 103 bytes takes a hashed name the
-  cleanup cannot tell apart, so a scenario fails when an entry with a hashed name
-  appears during it: shorten its session names.
+  to the user, and a directory removed while the cleanup reads it comes back empty
+  and private, as the daemon would create it. A session socket whose path passes 103
+  bytes takes a hashed name, `hs-<24 hex>.sock`, the cleanup cannot tell apart, so a
+  scenario fails when such a socket appears in a runtime directory during it, from
+  this scenario or another herrscher of the machine. The socket stays there: shorten
+  the session name and remove it.
 - `claude` on the `PATH` of a scenario is the fake of `e2e/vendortest`. It is a whole
   process standing in for the vendor CLI, so it speaks the stream-json protocol rather
   than recording calls. In stream-json mode it replays `$VENDORTEST_SCRIPT`, which is

@@ -15,7 +15,7 @@ func TestLateCloseLeavesTheReboundSocketAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = old.Close(); err != nil {
+	if err = closeBounded(t, old); err != nil {
 		t.Fatal(err)
 	}
 	replacement, err := control.Accept(t.Context(), sock)
@@ -23,12 +23,12 @@ func TestLateCloseLeavesTheReboundSocketAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err = replacement.Close(); err != nil {
+		if err = closeBounded(t, replacement); err != nil {
 			t.Error(err)
 		}
 	})
 
-	if err = old.Close(); err != nil {
+	if err = closeBounded(t, old); err != nil {
 		t.Fatal(err)
 	}
 	conn, err := control.Dial(sock)

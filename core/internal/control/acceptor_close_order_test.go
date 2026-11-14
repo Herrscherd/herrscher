@@ -10,8 +10,7 @@ import (
 
 func TestConnsCloseOnlyAfterTheListenerIsClosed(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		ln := newGatedListener()
-		ln.release = make(chan struct{})
+		ln := &gatedListener{release: make(chan struct{})}
 		acc := newBareAcceptor(ln)
 		go acc.loop()
 		synctest.Wait()
@@ -23,6 +22,7 @@ func TestConnsCloseOnlyAfterTheListenerIsClosed(t *testing.T) {
 		select {
 		case _, ok := <-acc.Conns():
 			if !ok {
+				close(ln.release)
 				t.Fatal("Conns closed while the listener was still closing")
 			}
 		default:
@@ -38,8 +38,7 @@ func TestConnsCloseOnlyAfterTheListenerIsClosed(t *testing.T) {
 
 func TestCloseReturnsOnlyOnceTheAcceptLoopExited(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		ln := newGatedListener()
-		ln.acceptGate = make(chan struct{})
+		ln := &gatedListener{acceptGate: make(chan struct{})}
 		acc := newBareAcceptor(ln)
 		go acc.loop()
 		closed := make(chan error, 1)
@@ -47,6 +46,7 @@ func TestCloseReturnsOnlyOnceTheAcceptLoopExited(t *testing.T) {
 		synctest.Wait()
 		select {
 		case err := <-closed:
+			close(ln.acceptGate)
 			t.Fatalf("Close returned %v while the accept loop was still running", err)
 		default:
 		}
@@ -60,7 +60,7 @@ func TestCloseReturnsOnlyOnceTheAcceptLoopExited(t *testing.T) {
 
 func TestConnsClosesWhenTheLoopExitsOnItsOwn(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		acc := newBareAcceptor(newGatedListener())
+		acc := newBareAcceptor(&gatedListener{})
 		go acc.loop()
 		go acc.closeWhenDone(context.Background())
 		requireConnsClosed(t, acc, "Conns stayed open after the loop exited on its own")
@@ -71,25 +71,21 @@ func newBareAcceptor(ln net.Listener) *Acceptor {
 	return &Acceptor{ln: ln, conns: make(chan *Conn, 1), done: make(chan struct{}), exited: make(chan struct{})}
 }
 
-func requireConnsClosed(t *testing.T, acc *Acceptor, stayedOpen string) {
-	t.Helper()
+func requireConnsClosed(tb testing.TB, acc *Acceptor, stayedOpen string) {
+	tb.Helper()
 	select {
 	case _, ok := <-acc.Conns():
 		if ok {
-			t.Fatal("a conn was delivered after Close")
+			tb.Fatal("a conn was delivered after Close")
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal(stayedOpen)
+		tb.Fatal(stayedOpen)
 	}
 }
 
 type gatedListener struct {
 	acceptGate chan struct{}
 	release    chan struct{}
-}
-
-func newGatedListener() *gatedListener {
-	return &gatedListener{}
 }
 
 func (l *gatedListener) Accept() (net.Conn, error) {

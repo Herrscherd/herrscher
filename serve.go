@@ -435,8 +435,8 @@ func runPromptWith(ctx context.Context, dispatcher verbDispatcher, name, prompt 
 	argv = append(argv, "--timeout", promptTimeout.String())
 	res, err := dispatcher.Dispatch(ctx, argv)
 	if err != nil {
-		if partial, ok := errors.AsType[cli.PartialError](err); ok && partial.PartialOutput() != "" {
-			if _, werr := fmt.Fprintln(stdout, partial.PartialOutput()); werr != nil {
+		if partial := cli.PartialOutputOf(err); partial != "" {
+			if _, werr := fmt.Fprintln(stdout, partial); werr != nil {
 				return werr
 			}
 		}

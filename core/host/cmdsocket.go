@@ -89,14 +89,6 @@ func commandFailure(resp cmdResponse) error {
 	return &noticedSocketError{commandSocketError: plain, notice: notice}
 }
 
-func partialOutput(err error) string {
-	partial, ok := errors.AsType[cli.PartialError](err)
-	if !ok {
-		return ""
-	}
-	return partial.PartialOutput()
-}
-
 func encodedNotice(err error) string {
 	noticed, ok := errors.AsType[contracts.NoticeError](err)
 	if !ok {
@@ -202,7 +194,7 @@ func handleCommandConn(ctx context.Context, conn net.Conn, disp dispatcher, read
 			msg := derr.Error()
 			resp.Err = &msg
 			resp.Notice = encodedNotice(derr)
-			resp.Output = partialOutput(derr)
+			resp.Output = cli.PartialOutputOf(derr)
 		} else {
 			resp.Ok = &out
 		}

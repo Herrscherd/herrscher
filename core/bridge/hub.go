@@ -248,8 +248,10 @@ type TurnFailedError struct {
 	partial string
 }
 
+// Error returns the message of the backend failure that ended the turn.
 func (e *TurnFailedError) Error() string { return e.Err.Error() }
 
+// Unwrap returns the backend failure, so errors.Is and errors.AsType reach its cause.
 func (e *TurnFailedError) Unwrap() error { return e.Err }
 
 // Notice is the notice the operator reads for the failed turn.

@@ -146,8 +146,8 @@ func (h *hub) stopLive() {
 		live.release()
 	}
 	for name, live := range lives {
-		expired, cancel := h.newGrace()
-		h.awaitTeardown(name, live, expired)
+		window, cancel := h.newGrace()
+		h.awaitTeardown(name, live, window)
 		cancel()
 	}
 }
@@ -172,18 +172,18 @@ func (h *hub) closeAndRemoveSockets() error {
 }
 
 func (h *hub) goDead(name string) {
-	expired, cancel := h.newGrace()
-	h.goDeadWithin(name, expired)
+	window, cancel := h.newGrace()
+	h.goDeadWithin(name, window)
 	cancel()
 }
 
-func (h *hub) goDeadWithin(name string, expired <-chan struct{}) {
+func (h *hub) goDeadWithin(name string, window teardownWindow) {
 	h.lifecycle.Lock()
 	live, ok := h.dropLocked(name, nil)
-	h.haltBridgeWithin(name, expired)
+	h.haltBridgeWithin(name, window)
 	h.lifecycle.Unlock()
 	if ok {
-		h.awaitTeardown(name, live, expired)
+		h.awaitTeardown(name, live, window)
 	}
 	h.forget(name)
 }
@@ -212,34 +212,80 @@ func (h *hub) retireFailed(name string, done <-chan struct{}) bool {
 	return true
 }
 
-func (h *hub) newGrace() (<-chan struct{}, context.CancelFunc) {
-	ctx, cancel := context.WithTimeout(context.Background(), h.teardownGrace)
-	return ctx.Done(), cancel
+type teardownWindow struct {
+	expired <-chan struct{}
+	ends    <-chan struct{}
 }
 
-func (h *hub) haltBridgeWithinGrace(name string) {
-	expired, cancel := h.newGrace()
-	defer cancel()
-	h.haltBridgeWithin(name, expired)
-}
+const teardownLateShare = 3
 
-func (h *hub) haltBridgeWithin(name string, expired <-chan struct{}) {
-	if h.stopBridge != nil {
-		h.withinGrace(name, expired, func() { h.haltBridge(name) })
+func (h *hub) newGrace() (teardownWindow, context.CancelFunc) {
+	budget, cancelBudget := context.WithTimeout(context.Background(), h.teardownGrace-h.teardownGrace/teardownLateShare)
+	ends, cancelEnds := context.WithTimeout(context.Background(), h.teardownGrace)
+	return teardownWindow{expired: budget.Done(), ends: ends.Done()}, func() {
+		cancelBudget()
+		cancelEnds()
 	}
 }
 
-func (h *hub) withinGrace(name string, expired <-chan struct{}, step func()) {
+func (w teardownWindow) finished(done <-chan struct{}) bool {
+	if isClosed(done) {
+		return true
+	}
+	if isClosed(w.expired) {
+		return finishedBefore(done, w.ends)
+	}
+	select {
+	case <-done:
+		return true
+	case <-w.expired:
+		return isClosed(done)
+	}
+}
+
+func finishedBefore(done <-chan struct{}, ends <-chan struct{}) bool {
+	select {
+	case <-done:
+		return true
+	case <-ends:
+		return isClosed(done)
+	}
+}
+
+func isClosed(c <-chan struct{}) bool {
+	select {
+	case <-c:
+		return true
+	default:
+		return false
+	}
+}
+
+func (h *hub) haltBridgeWithinGrace(name string) {
+	window, cancel := h.newGrace()
+	defer cancel()
+	h.haltBridgeWithin(name, window)
+}
+
+func (h *hub) haltBridgeWithin(name string, window teardownWindow) {
+	if h.stopBridge != nil {
+		h.withinGrace(name, window, func() { h.haltBridge(name) })
+	}
+}
+
+func (h *hub) withinGrace(name string, window teardownWindow, step func()) {
 	finished := make(chan struct{})
 	go func() {
 		defer close(finished)
 		step()
 	}()
-	select {
-	case <-finished:
-	case <-expired:
-		warnLive(h.warnings, h.sessionLanguageSource(name), "warn.session_teardown_overrun", map[string]any{nameParam: name, graceParam: h.teardownGrace.String()})
+	if !window.finished(finished) {
+		h.warnOverrun(name)
 	}
+}
+
+func (h *hub) warnOverrun(name string) {
+	warnLive(h.warnings, h.sessionLanguageSource(name), "warn.session_teardown_overrun", map[string]any{nameParam: name, graceParam: h.teardownGrace.String()})
 }
 
 func (h *hub) dropLocked(name string, only <-chan struct{}) (liveSession, bool) {
@@ -265,15 +311,13 @@ func (h *hub) forget(name string) {
 	}
 }
 
-func (h *hub) awaitTeardown(name string, live liveSession, expired <-chan struct{}) {
+func (h *hub) awaitTeardown(name string, live liveSession, window teardownWindow) {
 	for _, finished := range []<-chan struct{}{live.done, live.released} {
 		if finished == nil {
 			continue
 		}
-		select {
-		case <-finished:
-		case <-expired:
-			warnLive(h.warnings, h.sessionLanguageSource(name), "warn.session_teardown_overrun", map[string]any{nameParam: name, graceParam: h.teardownGrace.String()})
+		if !window.finished(finished) {
+			h.warnOverrun(name)
 			return
 		}
 	}
@@ -292,12 +336,12 @@ func (h *hub) reconcile(ctx context.Context) {
 		liveNames = append(liveNames, n)
 	}
 	h.mu.Unlock()
-	expired, cancel := h.newGrace()
+	window, cancel := h.newGrace()
 	defer cancel()
 	for _, name := range liveNames {
 		s, ok := persisted[name]
 		if !ok || s.Archived {
-			h.goDeadWithin(name, expired)
+			h.goDeadWithin(name, window)
 		}
 	}
 	for idx := range persisted {

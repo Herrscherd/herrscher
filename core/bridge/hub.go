@@ -23,6 +23,8 @@ const errPrefix = "⚠️ "
 
 const interruptNotice = "⏹ interrupted"
 
+const resetKind = "reset"
+
 type turnController struct {
 	mu      sync.Mutex
 	cancel  context.CancelFunc
@@ -257,7 +259,7 @@ func (e *TurnFailedError) Unwrap() error { return e.Err }
 // Notice is the notice the operator reads for the failed turn.
 func (e *TurnFailedError) Notice() contracts.Notice { return contracts.NoticeOf(e.Err) }
 
-// PartialOutput is the text the backend streamed before it failed, empty when it streamed none.
+// PartialOutput is the text the backend streamed in the attempt that failed, since its last reset, empty when it streamed none.
 func (e *TurnFailedError) PartialOutput() string { return e.partial }
 
 func settleFailedReply(ctrl *turnController, out string, err error) string {
@@ -293,8 +295,11 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	var streamed []string
 	onEvent := func(event contracts.BackendEvent) {
 		usage.absorb(event)
-		if event.Kind == "text" {
+		switch event.Kind {
+		case "text":
 			streamed = append(streamed, event.Detail)
+		case resetKind:
+			streamed = nil
 		}
 		emitBackendEvent(sink, event, usage.outTok, usage.inTok, usage.cacheRd, usage.cacheCr)
 	}
@@ -389,8 +394,8 @@ func emitBackendEvent(sink contracts.EventSink, event contracts.BackendEvent, to
 		if event.Subagent != nil {
 			sink.Emit(contracts.Event{T: "subagent", Subagent: event.Subagent})
 		}
-	case "reset":
-		sink.Emit(contracts.Event{T: "reset"})
+	case resetKind:
+		sink.Emit(contracts.Event{T: resetKind})
 	}
 }
 

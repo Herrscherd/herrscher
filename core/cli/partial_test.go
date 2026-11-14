@@ -8,10 +8,10 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 )
 
-type partialFailure string
+type partialFailureError string
 
-func (f partialFailure) Error() string         { return "command failed" }
-func (f partialFailure) PartialOutput() string { return string(f) }
+func (f partialFailureError) Error() string         { return "command failed" }
+func (f partialFailureError) PartialOutput() string { return string(f) }
 
 func TestPartialOutputOfReadsTheOutputThroughWrapping(t *testing.T) {
 	t.Parallel()
@@ -20,8 +20,8 @@ func TestPartialOutputOfReadsTheOutputThroughWrapping(t *testing.T) {
 		err  error
 		want string
 	}{
-		{name: "a partial failure yields its output", err: partialFailure("partial answer"), want: "partial answer"},
-		{name: "a wrapped partial failure yields its output", err: fmt.Errorf("dispatch: %w", partialFailure("partial answer")), want: "partial answer"},
+		{name: "a partial failure yields its output", err: partialFailureError("partial answer"), want: "partial answer"},
+		{name: "a wrapped partial failure yields its output", err: fmt.Errorf("dispatch: %w", partialFailureError("partial answer")), want: "partial answer"},
 		{name: "a plain failure yields nothing", err: errors.New("refused"), want: ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

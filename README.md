@@ -1612,25 +1612,27 @@ Linux, and says it skips the step anywhere else.
 - A process that still carries the instance of the scenario after it ends fails the
   run and is killed.
 - The cleanup removes every runtime entry named after the instance, and the names
-  `core/host` gives its command and events sockets and its lock, hashed ones
-  included. It only touches a runtime directory that `core/host` accepts as private
-  to the user, and a directory removed while the cleanup checks it comes back empty
-  and private, as the daemon would create it. A session socket whose path passes 103
-  bytes takes a hashed name, `hs-<24 hex>.sock`, the cleanup cannot tell apart, so a
-  scenario fails when such a socket appears in a runtime directory during it, from
-  this scenario or another herrscher of the machine, since both run as the same user
-  and nothing tells their sockets apart. The socket stays there: shorten the session
-  name and remove it. Tests may not name the production layout, so the two candidate
-  runtime directories are written in the harness, and the daemon scenarios fail when
-  they drift because they find no socket.
+  `core/host` gives its command and events sockets and its lock, hashed ones included.
+  It only touches a runtime directory that `core/host` accepts as private to the user.
+  The check creates a missing directory, so if the directory vanishes between the
+  moment the cleanup sees it and the check, it comes back empty and private, as the
+  daemon would create it. A session socket whose path passes 103 bytes takes a hashed
+  name, `hs-<24 hex>.sock`, the cleanup cannot tell apart, so a scenario fails when
+  such a socket appears in a runtime directory during it, from this scenario or
+  another herrscher of the machine, since both run as the same user and nothing tells
+  their sockets apart. The socket stays there: shorten the session name, and remove
+  the socket only once no running herrscher holds it. Tests may not name the
+  production layout, so the two candidate runtime directories are written in the
+  harness, and the daemon scenarios fail when they drift because they find no socket.
 - `claude` on the `PATH` of a scenario is the fake of `e2e/vendortest`. It is a whole
   process standing in for the vendor CLI, so it speaks the stream-json protocol rather
   than recording calls. In stream-json mode it replays `$VENDORTEST_SCRIPT`, which is
-  `$WORK/claude.script`: a `claude.script` file in the archive of the scenario provides
-  it. The script holds one block per turn, separated by `---`, and each line is one
-  step: `text <words>`, `tool <Name> <json input>`, `error <message>`, `echo`, `hang`
-  or `crash`. The turn count is shared by every process of the scenario, under a lock
-  file beside it. A fake killed while it holds that lock leaves it behind, and the next
+  `$WORK/claude.script`: a `claude.script` file in the archive of the scenario
+  provides it. The script holds one block per turn, separated by `---`, and each line
+  is one step: `text <words>`, `tool <Name> <json input>`, `error <message>`, `echo`,
+  `hang` or `crash`, the last three alone on their line. A turn with no step is an
+  error. The turn count is shared by every process of the scenario, under a lock file
+  beside it. A fake killed while it holds that lock leaves it behind, and the next
   turn fails after ten seconds with an error that names the lock. A turn past the end
   of the script, a missing script, and every one-shot `-p` call (the health probe)
   echo the last line of the prompt as `echo: <line>`. Every start and every prompt is

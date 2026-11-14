@@ -100,7 +100,7 @@ func isolate(env *testscript.Env, binDir string) error {
 		return fmt.Errorf("git init: %w: %s", err, out)
 	}
 	env.Cd = repo
-	before, snapshotErr := unreadableEntries()
+	before, snapshotErr := hashedEntries()
 	if snapshotErr != nil {
 		return snapshotErr
 	}
@@ -119,19 +119,19 @@ func settle(instance string, before map[string]bool) error {
 	if len(leaked) > 0 {
 		reapErr = errors.Join(reapErr, fmt.Errorf("%w: %s", errLeaked, strings.Join(leaked, "; ")))
 	}
-	return errors.Join(reapErr, removeRuntimeEntries(instance), appearedUnreadable(before))
+	return errors.Join(reapErr, removeRuntimeEntries(instance), appearedHashed(before))
 }
 
 var (
-	errUnreadableEntry = errors.New("a socket with a hashed name, hs-<24 hex>.sock, appeared in the runtime directory during the scenario and was left there; a session name of this scenario or of another herrscher on this machine is too long for the unix limit, shorten it and remove the socket")
-	hashedSocket       = regexp.MustCompile(`^hs-[0-9a-f]{24}\.sock$`)
+	errHashedEntry = errors.New("a socket with a hashed name, hs-<24 hex>.sock, appeared in the runtime directory during the scenario and was left there; a session name of this scenario or of another herrscher of this user is too long for the unix limit: shorten it, and remove the socket only once no running herrscher holds it")
+	hashedSocket   = regexp.MustCompile(`^hs-[0-9a-f]{24}\.sock$`)
 )
 
-func unreadableEntries() (map[string]bool, error) {
-	return unreadableEntriesIn(runtimeDirs())
+func hashedEntries() (map[string]bool, error) {
+	return hashedEntriesIn(runtimeDirs())
 }
 
-func unreadableEntriesIn(dirs []string) (map[string]bool, error) {
+func hashedEntriesIn(dirs []string) (map[string]bool, error) {
 	found := make(map[string]bool)
 	for _, dir := range dirs {
 		entries, err := os.ReadDir(dir)
@@ -150,12 +150,12 @@ func unreadableEntriesIn(dirs []string) (map[string]bool, error) {
 	return found, nil
 }
 
-func appearedUnreadable(before map[string]bool) error {
-	return appearedUnreadableIn(runtimeDirs(), before)
+func appearedHashed(before map[string]bool) error {
+	return appearedHashedIn(runtimeDirs(), before)
 }
 
-func appearedUnreadableIn(dirs []string, before map[string]bool) error {
-	after, err := unreadableEntriesIn(dirs)
+func appearedHashedIn(dirs []string, before map[string]bool) error {
+	after, err := hashedEntriesIn(dirs)
 	if err != nil {
 		return err
 	}
@@ -168,7 +168,7 @@ func appearedUnreadableIn(dirs []string, before map[string]bool) error {
 	if len(appeared) == 0 {
 		return nil
 	}
-	return fmt.Errorf("%w: %s", errUnreadableEntry, strings.Join(appeared, ", "))
+	return fmt.Errorf("%w: %s", errHashedEntry, strings.Join(appeared, ", "))
 }
 
 func newInstanceID() (string, error) {

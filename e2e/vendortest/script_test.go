@@ -47,6 +47,9 @@ func TestParseScriptNamesTheBadLine(t *testing.T) {
 		{"tool Bash\n", 1, errToolNeedsArg},
 		{"tool Bash {nope\n", 1, errToolInput},
 		{"\ntext\n", 2, errNeedsText},
+		{"text ok\nhang forever\n", 2, errTakesNoText},
+		{"---\ntext ok\n", 1, errEmptyTurn},
+		{"text ok\n---\n---\ntext ok\n", 3, errEmptyTurn},
 	} {
 		_, err := ParseScript(strings.NewReader(tc.source))
 		lineErr, ok := errors.AsType[*LineError](err)

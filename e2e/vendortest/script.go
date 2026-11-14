@@ -62,8 +62,8 @@ func (e *LineError) Unwrap() error {
 }
 
 // ParseScript reads a script. Each line is one step: "text <words>", "tool
-// <Name> <json input>", "error <message>", "echo", "hang" or "crash". Blank
-// lines are skipped.
+// <Name> <json input>", "error <message>", "echo", "hang" or "crash", the last
+// three alone. Blank lines are skipped and a turn with no step is refused.
 func ParseScript(source io.Reader) (Script, error) {
 	var script Script
 	current := Turn{}
@@ -76,6 +76,9 @@ func ParseScript(source io.Reader) (Script, error) {
 		case "":
 			continue
 		case turnSeparator:
+			if len(current.steps) == 0 {
+				return Script{}, &LineError{Line: lineNo, Text: line, Err: errEmptyTurn}
+			}
 			script.turns = append(script.turns, current)
 			current = Turn{}
 			continue
@@ -100,6 +103,8 @@ var (
 	errToolNeedsArg = errors.New("tool wants a name and a JSON input")
 	errToolInput    = errors.New("tool input is not valid JSON")
 	errNeedsText    = errors.New("step wants text after its name")
+	errTakesNoText  = errors.New("echo, hang and crash take nothing after their name")
+	errEmptyTurn    = errors.New("a turn needs at least one step before its separator")
 )
 
 func parseStep(line string) (step, error) {
@@ -112,13 +117,20 @@ func parseStep(line string) (step, error) {
 	case "tool":
 		return toolStep(rest)
 	case "echo":
-		return step{kind: stepEcho}, nil
+		return bareStep(stepEcho, rest)
 	case "hang":
-		return step{kind: stepHang}, nil
+		return bareStep(stepHang, rest)
 	case "crash":
-		return step{kind: stepCrash}, nil
+		return bareStep(stepCrash, rest)
 	}
 	return step{}, errUnknownStep
+}
+
+func bareStep(kind stepKind, rest string) (step, error) {
+	if rest != "" {
+		return step{}, errTakesNoText
+	}
+	return step{kind: kind}, nil
 }
 
 func cutWord(line string) (string, string) {

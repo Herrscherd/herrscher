@@ -89,7 +89,7 @@ func TestSettleFailsOnALeakAndKillsIt(t *testing.T) {
 	if startErr := leaker.Start(); startErr != nil {
 		t.Fatal(startErr)
 	}
-	before, err := unreadableEntries()
+	before, err := hashedEntries()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,19 +262,19 @@ func TestSettleNamesAHashedEntryThatAppeared(t *testing.T) {
 	dir := privateDir(t)
 	touch(t, filepath.Join(dir, "hs-000000000000000000000000.sock"))
 	dirs := []string{dir, filepath.Join(dir, "missing")}
-	before, err := unreadableEntriesIn(dirs)
+	before, err := hashedEntriesIn(dirs)
 	if err != nil {
 		t.Fatal(err)
 	}
 	touch(t, filepath.Join(dir, "herrscher-command-x.sock"))
 	touch(t, filepath.Join(dir, "3f9a0c1d2e4b5a6978"))
-	if quiet := appearedUnreadableIn(dirs, before); quiet != nil {
+	if quiet := appearedHashedIn(dirs, before); quiet != nil {
 		t.Fatalf("a readable name, a staged name or an older entry was reported: %v", quiet)
 	}
 	fresh := hashedSocketIn(t, dir)
 	touch(t, fresh)
-	reported := appearedUnreadableIn(dirs, before)
-	if !errors.Is(reported, errUnreadableEntry) || !strings.Contains(reported.Error(), fresh) {
+	reported := appearedHashedIn(dirs, before)
+	if !errors.Is(reported, errHashedEntry) || !strings.Contains(reported.Error(), fresh) {
 		t.Fatalf("got %v, want %s reported", reported, fresh)
 	}
 }

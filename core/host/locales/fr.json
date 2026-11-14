@@ -475,11 +475,6 @@
     "other": "herrscher : session \"{{.Name}}\" : consolidation après {{.Elapsed}} : {{.Detail}}"
   },
   {
-    "id": "seed.turn_failed",
-    "description": "A one-shot seed whose turn the backend ended in error, Detail carries the cause",
-    "other": "le tour a échoué : {{.Detail}}"
-  },
-  {
     "id": "serve.instance_persist",
     "description": "The instance identifier cannot be saved, Detail carries the cause",
     "other": "enregistrement de l'identifiant d'instance impossible : {{.Detail}}"

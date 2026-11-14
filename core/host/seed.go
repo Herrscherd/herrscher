@@ -2,7 +2,6 @@ package host
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -122,7 +121,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 		return "", oneShotTimeoutError(bridgeErr)
 	}
 	if err := <-bridgeErr; err != nil {
-		return "", oneShotBridgeError(err)
+		return "", err
 	}
 	if runtime.coordinator != nil {
 		pumpCancel()
@@ -165,13 +164,6 @@ func runOneShotBridge(ctx context.Context, cancel context.CancelFunc, sess state
 	if err != nil {
 		cancel()
 	}
-}
-
-func oneShotBridgeError(err error) error {
-	if _, failed := errors.AsType[*bridge.TurnFailedError](err); failed {
-		return wrapHost(err, "seed.turn_failed", nil)
-	}
-	return err
 }
 
 func oneShotTimeoutError(bridgeErr <-chan error) error {

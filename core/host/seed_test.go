@@ -18,6 +18,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/accounts"
 	"github.com/Herrscherd/herrscher/core/bridge"
+	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -319,24 +320,17 @@ func TestASeedWhoseTurnFailsReportsTheFailure(t *testing.T) {
 }
 
 func TestAFailedSeedTurnReadsInTheOperatorLanguage(t *testing.T) {
-	err := oneShotBridgeError(&bridge.TurnFailedError{Err: errors.New("refused by the vendor")})
+	err := &bridge.TurnFailedError{Err: errors.New("refused by the vendor")}
 	for _, tc := range []struct {
 		lang i18n.Language
 		want string
 	}{
-		{i18n.English, "the turn failed: refused by the vendor"},
-		{i18n.French, "le tour a échoué : refused by the vendor"},
+		{i18n.English, "unexpected error: refused by the vendor"},
+		{i18n.French, "erreur inattendue : refused by the vendor"},
 	} {
-		if got := LocalizeError(tc.lang, err).Error(); !strings.Contains(got, tc.want) {
+		if got := cli.Localize(err, tc.lang).Error(); !strings.Contains(got, tc.want) {
 			t.Errorf("%s: got %q, want it to contain %q", tc.lang, got, tc.want)
 		}
-	}
-}
-
-func TestOneShotBridgeErrorLeavesOtherErrorsAlone(t *testing.T) {
-	cause := errors.New("backend: no model")
-	if got := oneShotBridgeError(cause); !errors.Is(got, cause) {
-		t.Fatalf("got %v, want the error unchanged", got)
 	}
 }
 

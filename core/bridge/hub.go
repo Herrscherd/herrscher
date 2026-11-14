@@ -251,6 +251,8 @@ func (e *TurnFailedError) Error() string { return e.Err.Error() }
 
 func (e *TurnFailedError) Unwrap() error { return e.Err }
 
+func (e *TurnFailedError) Notice() contracts.Notice { return contracts.NoticeOf(e.Err) }
+
 func settleFailedReply(ctrl *turnController, out string, err error) string {
 	switch {
 	case ctrl.wasInterrupted():

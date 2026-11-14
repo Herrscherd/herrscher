@@ -1,0 +1,14 @@
+! exec herrscher serve &daemon&
+waitdaemon
+exec herrscher session create --name first
+env HERRSCHER_LANG=fr
+! exec herrscher session seed --name first --task 'hello daemon'
+stderr 'erreur inattendue : refused by the vendor'
+! stderr 'unexpected error'
+! stdout .
+kill -INT daemon
+wait daemon
+! waitdaemon
+
+-- claude.script --
+error refused by the vendor

@@ -200,7 +200,7 @@ func TestRunOneShotSeedWithConsolidatesAndCloses(t *testing.T) {
 
 func TestRunOneShotSeedWithCoordinatesDelegateTrailer(t *testing.T) {
 	backend := func(context.Context, state.Session) (contracts.Backend, error) {
-		return seedBackend{reply: "travail préparé\n⟢ delegate: roblox-scripter \u2014 inspection en lecture seule"}, nil
+		return seedBackend{reply: "travail préparé\n⟢ delegate: roblox-scripter " + trailerSeparator + " inspection en lecture seule"}, nil
 	}
 
 	sess := state.Session{Name: "orchestrator", ChannelID: "channel"}
@@ -352,11 +352,11 @@ func TestTheOneShotBridgeCancelsTheSeedOnlyWhenNoReplyCame(t *testing.T) {
 type refusedWithTrailerBackend struct{}
 
 func (refusedWithTrailerBackend) Respond(context.Context, contracts.Prompt, func(contracts.BackendEvent)) (string, error) {
-	return "travail préparé\n⟢ delegate: roblox-scripter \u2014 inspection en lecture seule", errors.New("refused by the vendor")
+	return "travail préparé\n⟢ delegate: roblox-scripter " + trailerSeparator + " inspection en lecture seule", errors.New("refused by the vendor")
 }
 func (refusedWithTrailerBackend) Close() error { return nil }
 
-func TestAFailedOneShotTurnConsolidatesButDoesNotCoordinate(t *testing.T) {
+func TestAFailedOneShotTurnNeitherCoordinatesNorConsolidates(t *testing.T) {
 	backend := func(context.Context, state.Session) (contracts.Backend, error) {
 		return refusedWithTrailerBackend{}, nil
 	}
@@ -367,8 +367,8 @@ func TestAFailedOneShotTurnConsolidatesButDoesNotCoordinate(t *testing.T) {
 	if _, failed := errors.AsType[*bridge.TurnFailedError](err); !failed {
 		t.Fatalf("seed error = %v, want a failed turn", err)
 	}
-	if !orch.called {
-		t.Fatal("the failed turn was observed, so its conversation must still be consolidated")
+	if orch.called {
+		t.Fatal("a failed turn returned no reply, so consolidating would only call the provider that just failed")
 	}
 	if len(coord.delegates) != 0 {
 		t.Fatalf("delegate calls = %d, want none after a failed turn", len(coord.delegates))
@@ -376,7 +376,10 @@ func TestAFailedOneShotTurnConsolidatesButDoesNotCoordinate(t *testing.T) {
 }
 
 func TestAFailedSeedTurnReadsInTheOperatorLanguage(t *testing.T) {
-	err := &bridge.TurnFailedError{Err: errors.New("refused by the vendor")}
+	backend := func(context.Context, state.Session) (contracts.Backend, error) {
+		return failingSeedBackend{}, nil
+	}
+	_, err := runOneShotSeedWithIDRuntime(context.Background(), state.Session{Name: "solo", ChannelID: "channel"}, "tâche", newTurnID(), nil, oneShotSeedRuntime{backend: backend, warnings: io.Discard})
 	for _, tc := range []struct {
 		lang i18n.Language
 		want string

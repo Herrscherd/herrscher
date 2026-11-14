@@ -122,9 +122,6 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 		return "", oneShotTimeoutError(bridgeErr)
 	}
 	if err := <-bridgeErr; err != nil {
-		if _, failedTurn := errors.AsType[*bridge.TurnFailedError](err); failedTurn {
-			consolidateOneShot(ctx, orch, sess, runtime.warnings, runtime.languageOf(sess))
-		}
 		return "", err
 	}
 	if runtime.coordinator != nil {

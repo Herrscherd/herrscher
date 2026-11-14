@@ -225,3 +225,32 @@ func TestAcceptLoopEndsOnPermanentError(t *testing.T) {
 		t.Fatalf("the permanent accept error was not logged at error level with its cause: %q", out)
 	}
 }
+
+func TestBackoffRestartsAfterASuccessfulAccept(t *testing.T) {
+	captureLog(t)
+	synctest.Test(t, func(t *testing.T) {
+		client, server := net.Pipe()
+		defer closeConn(client)
+		defer closeConn(server)
+
+		ln := &retryListener{
+			script: []acceptResult{{err: emfileError()}, {conn: server}, {err: emfileError()}},
+			repeat: emfileError(),
+		}
+		acc := newAcceptor(ln)
+		defer closeConn(acc)
+		go acc.loop()
+
+		time.Sleep(50 * time.Millisecond)
+		calls := ln.recordedCalls()
+		if len(calls) < 4 {
+			t.Fatalf("Accept called %d times in 50ms, want at least 4 to reach the retry after the second EMFILE", len(calls))
+		}
+		if got := retryIntervals(calls)[2]; got != initialAcceptRetryDelay {
+			t.Fatalf("the retry after an EMFILE that followed a successful Accept waited %s, want %s: a success restarts the backoff", got, initialAcceptRetryDelay)
+		}
+		if err := acc.Close(); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+	})
+}

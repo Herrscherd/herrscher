@@ -158,12 +158,18 @@ func TestFragmentsOpenTheEntryWithTheirIndent(t *testing.T) {
 		{"spaces fragment then word", []string{"   ", "code"}, "   code"},
 		{"newline and tab fragments", []string{"\n\t", "code"}, "\tcode"},
 		{"space and newline", []string{" \n", "code"}, "code"},
-		{"ideographic space and newline", []string{"　\n", "code"}, "code"},
+		{"ideographic space and newline", []string{"\u3000\n", "code"}, "code"},
 		{"form feed and newline", []string{"\f\n", "code"}, "code"},
 		{"vertical tab and newline", []string{"\v\n", "code"}, "code"},
 		{"next line and newline", []string{"\u0085\n", "code"}, "code"},
 		{"carriage return then indent", []string{"\r   ", "code"}, "   code"},
 		{"carriage return and newline then indent", []string{"\r\n   ", "code"}, "   code"},
+		{"next line alone then indent", []string{"\u0085   code"}, "   code"},
+		{"form feed alone then indent", []string{"\f   code"}, "   code"},
+		{"vertical tab alone then indent", []string{"\v   code"}, "   code"},
+		{"line separator alone then indent", []string{"\u2028   code"}, "   code"},
+		{"paragraph separator alone then indent", []string{"\u2029   code"}, "   code"},
+		{"next line fragment then indent", []string{"\u0085", "   ", "code"}, "   code"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, split := range []struct {

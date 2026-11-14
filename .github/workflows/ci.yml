@@ -58,3 +58,5 @@ jobs:
           cache: true
       - name: Lock tests on Windows (LockFileEx)
         run: go test -v -count=1 -run '^(TestLock|TestReleasedLock|TestStateLock|TestCacheLock)' ./core/host/
+      - name: Accept retry tests on Windows (transient Win32 codes)
+        run: go test -v -count=1 -run '^TestAcceptRetriesEachTransientErrno$' ./core/internal/control/

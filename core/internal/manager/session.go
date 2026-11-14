@@ -23,6 +23,8 @@ import (
 
 const cloneTimeout = 10 * time.Minute
 
+const supervisorGrace = 5 * time.Second
+
 const maxSessions = 64
 
 type sessionJSON struct {
@@ -415,7 +417,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, input contracts.Input) (
 		}
 		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)
 	}
-	h.sup.Start(sess)
+	h.warnIfFailed(h.sup.StartWithin(sess, supervisorGrace), "start "+req.name)
 	banner := h.sessionBanner(h.noticeLanguage(req.lang), place.repo, req.name, place.space.path, place.wt.Branch(req.name), req.runtime.cmd, req.runtime.model, req.shared)
 	h.warnIfFailed(req.admin.Send(ctx, sess.ChannelID, banner), "send banner for "+req.name)
 	h.announceAccount(ctx, req, sess.ChannelID)
@@ -916,25 +918,27 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 	if err != nil {
 		return contracts.Result{}, err
 	}
-	h.warnIfFailed(h.sup.Stop(name), "stop "+name)
+	if err := h.sup.StopWithin(name, supervisorGrace); err != nil {
+		return contracts.Result{}, err
+	}
 	repo := repoFor(repoRoot, sess.Project)
 	if sess.Worktree != "" && sess.Scratch {
 		if err := wtRoot.RemoveScratch(repo, name); err != nil {
-			h.sup.Start(sess)
+			h.warnIfFailed(h.sup.StartWithin(sess, supervisorGrace), "start "+name)
 			return contracts.Result{}, err
 		}
 	}
 	if sess.Worktree != "" && !sess.Scratch {
 		force := input.Bool("force")
 		if err := wtRoot.Remove(ctx, repo, name, force); err != nil {
-			h.sup.Start(sess)
+			h.warnIfFailed(h.sup.StartWithin(sess, supervisorGrace), "start "+name)
 			return contracts.Result{}, newDirtyWorktreeError(name, err)
 		}
 	}
 	note := h.tidyChannel(ctx, sess)
 	if err := h.st.RemoveSession(name); err != nil {
 		sess.Worktree, sess.Dir = "", repo
-		h.sup.Start(sess)
+		h.warnIfFailed(h.sup.StartWithin(sess, supervisorGrace), "start "+name)
 		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)
 	}
 	h.warnIfFailed(state.RemoveParticipantJournal(state.ParticipantsPath(h.partDir, name)), "remove participants of "+name)
@@ -954,7 +958,9 @@ func (h *Handler) sessionArchiveRun(ctx context.Context, input contracts.Input) 
 	if !exists {
 		return contracts.Result{}, &SessionNotFoundError{Name: name}
 	}
-	h.warnIfFailed(h.sup.Stop(name), "stop "+name)
+	if err := h.sup.StopWithin(name, supervisorGrace); err != nil {
+		return contracts.Result{}, err
+	}
 	note := h.tidyChannel(ctx, sess)
 	if err := h.st.SetArchived(name, true); err != nil {
 		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)
@@ -995,9 +1001,11 @@ func (h *Handler) sessionRenameRun(_ context.Context, input contracts.Input) (co
 	if _, taken := h.st.FindSession(target); taken {
 		return contracts.Result{}, &SessionExistsError{Name: target}
 	}
-	h.warnIfFailed(h.sup.Stop(name), "stop "+name)
+	if err := h.sup.StopWithin(name, supervisorGrace); err != nil {
+		return contracts.Result{}, err
+	}
 	if err := h.st.RenameSession(name, target); err != nil {
-		h.sup.Start(sess)
+		h.warnIfFailed(h.sup.StartWithin(sess, supervisorGrace), "start "+name)
 		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)
 	}
 	note := ""
@@ -1011,7 +1019,7 @@ func (h *Handler) sessionRenameRun(_ context.Context, input contracts.Input) (co
 		note += "\n" + h.text(clitext.SessionScheduleOwnsSession, clitext.Params{clitext.ParamSchedule: quoted(sc), clitext.ParamName: quoted(name)})
 	}
 	sess.Name = target
-	h.sup.Start(sess)
+	h.warnIfFailed(h.sup.StartWithin(sess, supervisorGrace), "start "+target)
 	return contracts.DataResult(h.text(clitext.SessionRenamed, clitext.Params{clitext.ParamName: name, clitext.ParamTo: target}) + note), nil
 }
 
@@ -1042,7 +1050,7 @@ func (h *Handler) sessionResumeRun(_ context.Context, input contracts.Input) (co
 		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)
 	}
 	sess.Archived = false
-	h.sup.Start(sess)
+	h.warnIfFailed(h.sup.StartWithin(sess, supervisorGrace), "start "+name)
 	return contracts.DataResult(h.text(clitext.SessionResumed, clitext.Params{clitext.ParamName: name})), nil
 }
 
@@ -1081,7 +1089,7 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, input contracts.Input) (
 	}
 	sess, _ := h.st.FindSession(name)
 	switchNote := h.switchApprovalsNote(sess)
-	if err := h.sup.Restart(sess); err != nil {
+	if err := h.sup.RestartWithin(sess, supervisorGrace); err != nil {
 		return contracts.Result{}, h.revertSwitch(name, prior, err)
 	}
 	return contracts.DataResult(h.switchReply(ctx, name, vendor, handoff, switchNote)), nil
@@ -1140,7 +1148,7 @@ func (h *Handler) rollbackSwitch(name, oldVendor, oldCmd, oldModelID, oldToken s
 	_, persistErr := h.st.SetBackendTarget(name, oldVendor, oldCmd, oldModelID)
 	persistErr = errors.Join(persistErr, h.st.SetResumeToken(name, oldToken))
 	sess, _ := h.st.FindSession(name)
-	return errors.Join(persistErr, h.sup.Restart(sess))
+	return errors.Join(persistErr, h.sup.RestartWithin(sess, supervisorGrace))
 }
 
 func (h *Handler) sessionListRun(_ context.Context, input contracts.Input) (contracts.Result, error) {

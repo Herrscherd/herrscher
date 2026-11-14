@@ -559,6 +559,11 @@
     "description": "A session fails to come live or to be restored at start; Name is the session, Detail the cause",
     "other": "herrscher serve: session \"{{.Name}}\": {{.Detail}}"
   },
+{
+    "id": "warn.session_start_recovered",
+    "description": "A session whose start was refused starts again; Name is the session",
+    "other": "herrscher serve: session \"{{.Name}}\": started again after a refused start"
+  },
   {
     "id": "warn.session_checkpoint",
     "description": "A turn's checkpoint could not be written; /rewind cannot return to that message",
@@ -578,6 +583,11 @@
     "id": "warn.session_transcript",
     "description": "A transcript entry of a session could not be written",
     "other": "herrscher serve: session \"{{.Name}}\": transcript entry dropped: {{.Detail}}"
+  },
+  {
+    "id": "warn.session_accept_failed",
+    "description": "A session control socket failed for good; the session is stopped and bridges cannot reach it until it starts again. Name is the session, Detail the cause",
+    "other": "herrscher serve: session \"{{.Name}}\": control socket stopped accepting, the session is stopped until it starts again: {{.Detail}}"
   },
   {
     "id": "warn.session_teardown_overrun",

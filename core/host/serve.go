@@ -327,7 +327,8 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	sched := newScheduler(store, store, runningHub, sessions.Seed, time.Now)
 	deps.schedSlot.sched = sched
 	go sched.Run(ctx)
-	goLiveSessions(ctx, runningHub, sup, store, monitor)
+	runningHub.reconcile(ctx)
+	monitor.SetSessions(len(store.SnapshotSessions()))
 	bindSessionControl(gws, runningHub)
 
 	if instID != "" {
@@ -424,25 +425,6 @@ func allReleased(released ...<-chan struct{}) <-chan struct{} {
 		close(done)
 	}()
 	return done
-}
-
-func goLiveSessions(ctx context.Context, runningHub *hub, sup *supervisor.Supervisor, hostState *state.State, host *health.Health) {
-	sessions := hostState.SnapshotSessions()
-	for idx := range sessions {
-		sess := sessions[idx]
-		if sess.Archived {
-			continue
-		}
-		if err := runningHub.goLive(ctx, sess); err != nil {
-			if errors.Is(err, errHubClosed) {
-				break
-			}
-			warnLive(runningHub.warnings, runningHub.sessionLanguageSource(sess.Name), "warn.session_start", map[string]any{nameParam: sess.Name, detailParam: err})
-			continue
-		}
-		sup.StartWith(ctx, sess)
-	}
-	host.SetSessions(len(hostState.SnapshotSessions()))
 }
 
 func bindSessionControl(gws []Deps, hubCore *hub) {

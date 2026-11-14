@@ -26,6 +26,10 @@ var (
 	errHostNotProvisioned = errors.New("not provisioned")
 )
 
+// ErrStillStopping means the previous bridge loop of a session has not returned
+// within the grace the caller allowed, so no new bridge was started for it.
+var ErrStillStopping = errors.New("the previous bridge of this session is still stopping")
+
 // Supervisor manages one child `herrscher bridge` process per session.
 type Supervisor struct {
 	ctx              context.Context
@@ -216,11 +220,24 @@ func (s *Supervisor) SetBridgeEnv(kv []string) {
 // here would only be a nil every caller has to pretend to handle, which is what
 // it was, at six call sites, two of them with an unreachable error branch.
 func (s *Supervisor) Start(sess state.Session) {
-	s.StartWith(s.ctx, sess)
+	s.startWithin(s.ctx, sess, nil)
 }
 
-// StartWith is Start for a run that stops when ctx is done.
-func (s *Supervisor) StartWith(ctx context.Context, sess state.Session) {
+// StartWithin is Start for a caller holding a lock it cannot keep past grace: a
+// loop of the same name still stopping after grace yields ErrStillStopping and
+// nothing is launched.
+func (s *Supervisor) StartWithin(sess state.Session, grace time.Duration) error {
+	return s.startUntil(sess, time.After(grace))
+}
+
+func (s *Supervisor) startUntil(sess state.Session, expired <-chan time.Time) error {
+	if !s.startWithin(s.ctx, sess, expired) {
+		return ErrStillStopping
+	}
+	return nil
+}
+
+func (s *Supervisor) startWithin(ctx context.Context, sess state.Session, expired <-chan time.Time) bool {
 	for {
 		s.mu.Lock()
 		run, running := s.runs[sess.Name]
@@ -234,13 +251,17 @@ func (s *Supervisor) StartWith(ctx context.Context, sess state.Session) {
 				defer close(run.done)
 				s.run(cctx, sess)
 			}()
-			return
+			return true
 		case !run.stopping:
 			s.mu.Unlock()
-			return
+			return true
 		default:
 			s.mu.Unlock()
-			<-run.done
+			select {
+			case <-run.done:
+			case <-expired:
+				return false
+			}
 			s.mu.Lock()
 			if s.runs[sess.Name] == run {
 				delete(s.runs, sess.Name)
@@ -253,6 +274,17 @@ func (s *Supervisor) StartWith(ctx context.Context, sess state.Session) {
 // Stop terminates the bridge for name and waits until its supervised loop has
 // returned. Callers may safely remove the bridge's working directory after Stop.
 func (s *Supervisor) Stop(name string) error {
+	return s.stopUntil(name, nil)
+}
+
+// StopWithin is Stop for a caller holding a lock it cannot keep past grace: a
+// loop still running after grace yields ErrStillStopping, and it keeps stopping
+// in the background.
+func (s *Supervisor) StopWithin(name string, grace time.Duration) error {
+	return s.stopUntil(name, time.After(grace))
+}
+
+func (s *Supervisor) stopUntil(name string, expired <-chan time.Time) error {
 	s.mu.Lock()
 	run, ok := s.runs[name]
 	if !ok {
@@ -263,7 +295,11 @@ func (s *Supervisor) Stop(name string) error {
 	run.cancel()
 	s.mu.Unlock()
 
-	<-run.done
+	select {
+	case <-run.done:
+	case <-expired:
+		return ErrStillStopping
+	}
 
 	s.mu.Lock()
 	if s.runs[name] == run {
@@ -271,6 +307,24 @@ func (s *Supervisor) Stop(name string) error {
 	}
 	s.mu.Unlock()
 	return nil
+}
+
+// Stopping returns the channel that closes when the loop held for name returns,
+// while that loop is still stopping. It returns nil when no loop is stopping for
+// name, including once the stop has finished.
+func (s *Supervisor) Stopping(name string) <-chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	run, ok := s.runs[name]
+	if !ok || !run.stopping {
+		return nil
+	}
+	select {
+	case <-run.done:
+		return nil
+	default:
+		return run.done
+	}
 }
 
 // Running reports whether a supervised loop is currently held for name. It is
@@ -291,6 +345,17 @@ func (s *Supervisor) Restart(sess state.Session) error {
 	}
 	s.Start(sess)
 	return nil
+}
+
+// RestartWithin is Restart for a caller holding a lock it cannot keep past grace:
+// the stop and the launch share one grace, and a loop still stopping when it runs
+// out yields ErrStillStopping with nothing launched.
+func (s *Supervisor) RestartWithin(sess state.Session, grace time.Duration) error {
+	expired := time.After(grace)
+	if err := s.stopUntil(sess.Name, expired); err != nil {
+		return err
+	}
+	return s.startUntil(sess, expired)
 }
 
 func (s *Supervisor) runLoop(ctx context.Context, sess state.Session) {

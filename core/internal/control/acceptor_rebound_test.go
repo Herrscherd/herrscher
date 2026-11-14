@@ -11,14 +11,14 @@ import (
 
 func TestLateCloseLeavesTheReboundSocketAlone(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "rebound.sock")
-	old, err := control.Accept(t.Context(), sock)
+	old, err := serveSocket(t.Context(), sock)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err = closeBounded(t, old); err != nil {
 		t.Fatal(err)
 	}
-	replacement, err := control.Accept(t.Context(), sock)
+	replacement, err := serveSocket(t.Context(), sock)
 	if err != nil {
 		t.Fatal(err)
 	}

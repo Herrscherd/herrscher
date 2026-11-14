@@ -119,7 +119,8 @@ func settle(instance string, before map[string]bool) error {
 	if len(leaked) > 0 {
 		reapErr = errors.Join(reapErr, fmt.Errorf("%w: %s", errLeaked, strings.Join(leaked, "; ")))
 	}
-	return errors.Join(reapErr, removeRuntimeEntries(instance), appearedHashed(before))
+	removeErr := removeRuntimeEntries(instance)
+	return errors.Join(reapErr, removeErr, appearedHashed(before))
 }
 
 var (

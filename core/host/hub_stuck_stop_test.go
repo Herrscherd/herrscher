@@ -42,3 +42,36 @@ func TestStuckStopCannotHoldTheLifecycleBeyondTheGrace(t *testing.T) {
 		h.lifecycle.Unlock()
 	})
 }
+
+func TestStuckStopCannotFreezeGoDead(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		grace := time.Second
+		stuck := make(chan struct{})
+		defer close(stuck)
+		name := "stuck-dead"
+		done := make(chan struct{})
+		close(done)
+		h := &hub{warnings: io.Discard, teardownGrace: grace, live: map[string]liveSession{
+			name: {cancel: func() {}, done: done, release: func() {}},
+		}}
+		h.stopBridge = func(string) error {
+			<-stuck
+			return nil
+		}
+
+		returned := make(chan struct{})
+		go func() {
+			h.goDead(name)
+			close(returned)
+		}()
+		synctest.Wait()
+
+		time.Sleep(2 * grace)
+		synctest.Wait()
+		select {
+		case <-returned:
+		default:
+			t.Fatal("goDead still holds the hub after the grace: a stuck Stop froze every Dispatch that reconciles")
+		}
+	})
+}

@@ -150,7 +150,7 @@ func (h *hub) closeAndRemoveSockets() error {
 }
 
 func (h *hub) goDead(name string) {
-	h.haltBridge(name)
+	h.haltBridgeWithin(name)
 	if live, ok := h.drop(name, nil); ok {
 		h.awaitTeardown(name, live)
 	}

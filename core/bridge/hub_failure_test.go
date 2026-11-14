@@ -151,7 +151,7 @@ type streamResetThenFailBackend struct{}
 
 func (streamResetThenFailBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
 	onEvent(contracts.BackendEvent{Kind: "text", Detail: "Je regarde."})
-	onEvent(contracts.BackendEvent{Kind: resetKind})
+	onEvent(contracts.BackendEvent{Kind: backendKindReset})
 	onEvent(contracts.BackendEvent{Kind: "text", Detail: "Voici"})
 	return "", errors.New("refused by the vendor")
 }

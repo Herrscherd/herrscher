@@ -24,9 +24,22 @@ const errPrefix = "⚠️ "
 const interruptNotice = "⏹ interrupted"
 
 const (
-	textKind   = "text"
-	resetKind  = "reset"
-	eventReset = "reset"
+	backendKindText     = "text"
+	backendKindThinking = "thinking"
+	backendKindTool     = "tool"
+	backendKindTodos    = "todos"
+	backendKindSubagent = "subagent"
+	backendKindReset    = "reset"
+)
+
+const (
+	wireEventChunk    = "chunk"
+	wireEventThinking = "thinking"
+	wireEventStatus   = "status"
+	wireEventTodos    = "todos"
+	wireEventSubagent = "subagent"
+	wireEventReset    = "reset"
+	wireEventReply    = "reply"
 )
 
 type turnController struct {
@@ -300,9 +313,9 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	onEvent := func(event contracts.BackendEvent) {
 		usage.absorb(event)
 		switch event.Kind {
-		case textKind:
+		case backendKindText:
 			streamed = append(streamed, event.Detail)
-		case resetKind:
+		case backendKindReset:
 			streamed = nil
 		}
 		emitBackendEvent(sink, event, usage.outTok, usage.inTok, usage.cacheRd, usage.cacheCr)
@@ -324,7 +337,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	if tr, ok := orch.(contracts.TurnReactor); ok {
 		out = tr.React(ctx, out)
 	}
-	sink.Emit(contracts.Event{T: "reply", Text: out, Done: true, Cost: usage.cost, Tokens: usage.outTok, TokensIn: usage.inTok, CacheRead: usage.cacheRd, CacheCreate: usage.cacheCr, Resume: resumeToken(backend), Project: settledProject})
+	sink.Emit(contracts.Event{T: wireEventReply, Text: out, Done: true, Cost: usage.cost, Tokens: usage.outTok, TokensIn: usage.inTok, CacheRead: usage.cacheRd, CacheCreate: usage.cacheCr, Resume: resumeToken(backend), Project: settledProject})
 	if orch != nil {
 		if err := orch.Observe(ctx, prompt, out); err != nil {
 			logger.Warn("memory observe failed; this turn was not recorded to memory", "err", err)
@@ -379,27 +392,27 @@ func runPick(ctx context.Context, sink contracts.EventSink, backend contracts.Ba
 	if err != nil {
 		out = errPrefix + err.Error()
 	}
-	sink.Emit(contracts.Event{T: "reply", Text: strings.TrimSpace(out), Done: true})
+	sink.Emit(contracts.Event{T: wireEventReply, Text: strings.TrimSpace(out), Done: true})
 }
 
 func emitBackendEvent(sink contracts.EventSink, event contracts.BackendEvent, tokens, tokensIn, cacheRead, cacheCreate int) {
 	switch event.Kind {
-	case "thinking":
-		sink.Emit(contracts.Event{T: "thinking", Text: event.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
-	case textKind:
-		sink.Emit(contracts.Event{T: "chunk", Text: event.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
-	case "tool":
+	case backendKindThinking:
+		sink.Emit(contracts.Event{T: wireEventThinking, Text: event.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
+	case backendKindText:
+		sink.Emit(contracts.Event{T: wireEventChunk, Text: event.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
+	case backendKindTool:
 		if text := strings.TrimSpace(event.Tool + " " + event.Detail); text != "" {
-			sink.Emit(contracts.Event{T: "status", Text: text, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
+			sink.Emit(contracts.Event{T: wireEventStatus, Text: text, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
 		}
-	case "todos":
-		sink.Emit(contracts.Event{T: "todos", Todos: event.Todos})
-	case "subagent":
+	case backendKindTodos:
+		sink.Emit(contracts.Event{T: wireEventTodos, Todos: event.Todos})
+	case backendKindSubagent:
 		if event.Subagent != nil {
-			sink.Emit(contracts.Event{T: "subagent", Subagent: event.Subagent})
+			sink.Emit(contracts.Event{T: wireEventSubagent, Subagent: event.Subagent})
 		}
-	case resetKind:
-		sink.Emit(contracts.Event{T: eventReset})
+	case backendKindReset:
+		sink.Emit(contracts.Event{T: wireEventReset})
 	}
 }
 

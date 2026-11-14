@@ -132,21 +132,76 @@ func TestBlankOpeningChunkOpensNoEntry(t *testing.T) {
 			t.Fatalf("a chunk that is only whitespace must open no entry, got %d entries for %q", len(tb.entries), blank)
 		}
 	}
-	for _, tc := range []struct{ chunk, want string }{
-		{"\n\nVoici", "Voici"},
-		{"  \n\nVoici", "Voici"},
-		{" \t\n  \nVoici", "Voici"},
-		{"\n    code", "    code"},
-		{"   code", "   code"},
+}
+
+func openedFrom(chunks []string) *tab {
+	tb := &tab{}
+	for _, chunk := range chunks {
+		tb.appendChunk(chunk)
+	}
+	return tb
+}
+
+func TestFragmentsOpenTheEntryWithTheirIndent(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		chunks []string
+		want   string
+	}{
+		{"blank lines", []string{"\n\nVoici"}, "Voici"},
+		{"blank lines and spaces", []string{"  \n\nVoici"}, "Voici"},
+		{"tabs and newlines", []string{" \t\n  \nVoici"}, "Voici"},
+		{"indent after a newline", []string{"\n    code"}, "    code"},
+		{"indent without a newline", []string{"   code"}, "   code"},
+		{"newline then spaces fragments", []string{"\n", "    ", "code"}, "    code"},
+		{"spaces fragment then word", []string{"   ", "code"}, "   code"},
+		{"newline and tab fragments", []string{"\n\t", "code"}, "\tcode"},
+	} {
+		for _, chunks := range [][]string{tc.chunks, {strings.Join(tc.chunks, "")}} {
+			tb := openedFrom(chunks)
+			if len(tb.entries) != 1 {
+				t.Fatalf("%s: the next non-empty chunk must open one entry from %q: %d entries", tc.name, chunks, len(tb.entries))
+			}
+			if got := tb.entries[0].text; got != tc.want || !tb.entries[0].streaming {
+				t.Fatalf("%s: the entry from %q must open on %q: %+v", tc.name, chunks, tc.want, tb.entries[0])
+			}
+		}
+	}
+}
+
+func TestPendingBlankOpensNoEntryAtTurnEnd(t *testing.T) {
+	tb := &tab{}
+	tb.appendChunk("\n")
+	tb.appendChunk("   ")
+	tb.endStream()
+	if len(tb.entries) != 0 {
+		t.Fatalf("blank fragments closed by the end of the turn must open no entry: %d entries", len(tb.entries))
+	}
+}
+
+func TestPendingBlankDoesNotCarryPastAClosingEvent(t *testing.T) {
+	for name, closing := range map[string]func(*tab){
+		"end of turn": (*tab).endStream,
+		"tool entry":  func(tb *tab) { tb.appendEntry(entry{role: roleTool, text: "read"}) },
 	} {
 		tb := &tab{}
-		tb.appendChunk(tc.chunk)
-		if len(tb.entries) != 1 {
-			t.Fatalf("the next non-empty chunk %q must open one entry: %d entries", tc.chunk, len(tb.entries))
+		tb.appendChunk("   ")
+		closing(tb)
+		tb.appendChunk("code")
+		if got := tb.entries[len(tb.entries)-1].text; got != "code" {
+			t.Fatalf("%s must drop the pending blanks, got %q", name, got)
 		}
-		if got := tb.entries[0].text; got != tc.want || !tb.entries[0].streaming {
-			t.Fatalf("the entry for %q must open on %q: %+v", tc.chunk, tc.want, tb.entries[0])
-		}
+	}
+}
+
+func TestPendingBlankIsDroppedByReset(t *testing.T) {
+	m := newTestModel()
+	tb := m.ensureTab("a")
+	m.renderInto(tb, contracts.Event{T: "chunk", Text: "   "})
+	m.renderInto(tb, contracts.Event{T: "reset"})
+	m.renderInto(tb, contracts.Event{T: "chunk", Text: "code"})
+	if got := tb.entries[len(tb.entries)-1].text; got != "code" {
+		t.Fatalf("a reset must drop the pending blanks, got %q", got)
 	}
 }
 

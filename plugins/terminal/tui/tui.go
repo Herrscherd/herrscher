@@ -141,6 +141,7 @@ type tab struct {
 	busy               bool
 	interruptRequested bool
 	streamed           bool
+	pendingBlank       string
 	lastCost           float64
 	disconnected       bool
 	tokens             int
@@ -206,6 +207,7 @@ func (tb *tab) appendEntry(item entry) {
 	if item.role == roleYou {
 		tb.trail = nil
 	}
+	tb.pendingBlank = ""
 	tb.entries = append(tb.entries, item)
 	if len(tb.entries) > maxTabLines {
 		tb.entries = append([]entry(nil), tb.entries[len(tb.entries)-maxTabLines:]...)
@@ -217,10 +219,12 @@ func (tb *tab) appendChunk(text string) {
 		tb.entries[n-1].text += text
 		return
 	}
-	if strings.TrimSpace(text) == "" {
+	pending := tb.pendingBlank + text
+	if strings.TrimSpace(pending) == "" {
+		tb.pendingBlank = pending
 		return
 	}
-	tb.appendEntry(entry{role: roleAgent, text: dropBlankLeadingLines(text), streaming: true})
+	tb.appendEntry(entry{role: roleAgent, text: dropBlankLeadingLines(pending), streaming: true})
 }
 
 func dropBlankLeadingLines(text string) string {
@@ -234,6 +238,7 @@ func dropBlankLeadingLines(text string) string {
 }
 
 func (tb *tab) endStream() {
+	tb.pendingBlank = ""
 	if n := len(tb.entries); n > 0 && tb.entries[n-1].role == roleAgent {
 		tb.entries[n-1].streaming = false
 	}

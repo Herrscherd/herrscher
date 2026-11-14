@@ -247,35 +247,8 @@ func TestAcceptFailureLogIsBoundedPerInterval(t *testing.T) {
 	}
 }
 
-func TestAcceptFailureLogRestartsAfterASuccessfulAccept(t *testing.T) {
+func TestSuccessfulAcceptRestartsBackoffAndLogBudget(t *testing.T) {
 	logs := captureLog(t)
-	synctest.Test(t, func(t *testing.T) {
-		client, server := net.Pipe()
-		defer closeConn(client)
-		defer closeConn(server)
-
-		ln := &retryListener{
-			script: []acceptResult{{err: transientError()}, {conn: server}, {err: transientError()}},
-			repeat: transientError(),
-		}
-		acc := newAcceptor(ln)
-		defer closeConn(acc)
-		go acc.loop()
-
-		time.Sleep(50 * time.Millisecond)
-		if err := acc.Close(); err != nil {
-			t.Fatalf("Close: %v", err)
-		}
-	})
-	if got := strings.Count(logs.String(), acceptFailureLogLine); got != 2 {
-		t.Fatalf("%d accept failures logged, want 2: the first failure of each run after a successful Accept is logged, the others within 30s are not", got)
-	}
-}
-
-const acceptFailureLogLine = "control accept failed, retrying"
-
-func TestBackoffRestartsAfterASuccessfulAccept(t *testing.T) {
-	captureLog(t)
 	synctest.Test(t, func(t *testing.T) {
 		client, server := net.Pipe()
 		defer closeConn(client)
@@ -301,4 +274,9 @@ func TestBackoffRestartsAfterASuccessfulAccept(t *testing.T) {
 			t.Fatalf("Close: %v", err)
 		}
 	})
+	if got := strings.Count(logs.String(), acceptFailureLogLine); got != 2 {
+		t.Fatalf("%d accept failures logged, want 2: a success restarts the log budget, so the failure after it is logged and the ones within 30s are not", got)
+	}
 }
+
+const acceptFailureLogLine = "control accept failed, retrying"

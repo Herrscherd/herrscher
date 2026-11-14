@@ -381,11 +381,13 @@ type resultFields struct {
 
 type resultEvent struct {
 	resultFields
+
 	Result string `json:"result"`
 }
 
 type failedResultEvent struct {
 	resultFields
+
 	Errors []string `json:"errors"`
 }
 

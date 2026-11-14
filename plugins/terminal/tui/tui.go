@@ -91,6 +91,7 @@ const (
 	stateDone   = "done"
 	stateActive = "active"
 	eventReply  = "reply"
+	eventReset  = "reset"
 	eventStatus = "status"
 	eventNotice = "notice"
 
@@ -1234,7 +1235,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 	case "subagent":
 		target.busy = true
 		target.applySubagent(event.Subagent)
-	case "reset":
+	case eventReset:
 		target.busy = false
 		target.interruptRequested = false
 		target.streamed = false

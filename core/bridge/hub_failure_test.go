@@ -75,14 +75,30 @@ func TestAFailedTurnWithOnlyBlankDeltasHasNoPartialOutput(t *testing.T) {
 	}
 }
 
+func TestAResetDropsThePartialOfTheAbandonedAttempt(t *testing.T) {
+	sink := &recordSink{}
+	err := runOneTurn(context.Background(), sink, streamResetThenFailBackend{}, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
+	failed, ok := errors.AsType[*TurnFailedError](err)
+	if !ok {
+		t.Fatalf("runOneTurn error = %v, want a TurnFailedError", err)
+	}
+	if got := failed.PartialOutput(); got != "Voici" {
+		t.Fatalf("PartialOutput() = %q, want only the retry's text after the reset", got)
+	}
+}
+
 func TestAFailedTurnIsLoggedAsAWarning(t *testing.T) {
 	logs := captureLog(t)
 	in := make(chan contracts.Event, 1)
 	in <- contracts.Event{T: "input", Text: "go"}
 	close(in)
 	runHubTurns(context.Background(), in, &recordSink{}, errBackend{})
-	if got := logs.String(); !strings.Contains(got, "level=WARN") || !strings.Contains(got, "backend turn failed") {
+	got := logs.String()
+	if !strings.Contains(got, "level=WARN") || !strings.Contains(got, "backend turn failed") {
 		t.Fatalf("a failed turn must be logged as a warning; got log %q", got)
+	}
+	if strings.Contains(got, "reply already") {
+		t.Fatalf("the warning must not promise that the reply went out, the emission may be dropped at shutdown; got log %q", got)
 	}
 }
 
@@ -130,3 +146,13 @@ func (streamThenFailBackend) Respond(_ context.Context, _ contracts.Prompt, onEv
 	return "refused by the vendor", errors.New("refused by the vendor")
 }
 func (streamThenFailBackend) Close() error { return nil }
+
+type streamResetThenFailBackend struct{}
+
+func (streamResetThenFailBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
+	onEvent(contracts.BackendEvent{Kind: "text", Detail: "Je regarde."})
+	onEvent(contracts.BackendEvent{Kind: resetKind})
+	onEvent(contracts.BackendEvent{Kind: "text", Detail: "Voici"})
+	return "", errors.New("refused by the vendor")
+}
+func (streamResetThenFailBackend) Close() error { return nil }

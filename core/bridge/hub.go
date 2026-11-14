@@ -23,6 +23,25 @@ const errPrefix = "⚠️ "
 
 const interruptNotice = "⏹ interrupted"
 
+const (
+	backendKindText     = "text"
+	backendKindThinking = "thinking"
+	backendKindTool     = "tool"
+	backendKindTodos    = "todos"
+	backendKindSubagent = "subagent"
+	backendKindReset    = "reset"
+)
+
+const (
+	wireEventChunk    = "chunk"
+	wireEventThinking = "thinking"
+	wireEventStatus   = "status"
+	wireEventTodos    = "todos"
+	wireEventSubagent = "subagent"
+	wireEventReset    = "reset"
+	wireEventReply    = "reply"
+)
+
 type turnController struct {
 	mu      sync.Mutex
 	cancel  context.CancelFunc
@@ -209,7 +228,9 @@ func runHubTurnsCtl(ctx context.Context, events <-chan contracts.Event, sink con
 			case historywire.EventPrune:
 				runHistoryPrune(ctx, sink, backend, ctrl, event)
 			case "input":
-				runOneTurn(ctx, sink, backend, orch, event, ctrl, eng, aff, pin, lang)
+				if err := runOneTurn(ctx, sink, backend, orch, event, ctrl, eng, aff, pin, lang); err != nil {
+					logger.Warn("backend turn failed", "err", err)
+				}
 			}
 		}
 	}
@@ -238,6 +259,26 @@ func (u *turnUsage) setInputSide(event contracts.BackendEvent) {
 	u.cacheCr = event.CacheCreate
 }
 
+// TurnFailedError reports that the backend ended a turn in error. The gateways
+// still receive the reply, which carries the failure; this error is what a caller
+// with no gateway, such as a one-shot seed, reports to its operator.
+type TurnFailedError struct {
+	Err     error
+	partial string
+}
+
+// Error returns the message of the backend failure that ended the turn.
+func (e *TurnFailedError) Error() string { return e.Err.Error() }
+
+// Unwrap returns the backend failure, so errors.Is and errors.AsType reach its cause.
+func (e *TurnFailedError) Unwrap() error { return e.Err }
+
+// Notice is the notice the operator reads for the failed turn.
+func (e *TurnFailedError) Notice() contracts.Notice { return contracts.NoticeOf(e.Err) }
+
+// PartialOutput is the text the backend streamed in the attempt that failed, since its last reset, empty when it streamed none.
+func (e *TurnFailedError) PartialOutput() string { return e.partial }
+
 func settleFailedReply(ctrl *turnController, out string, err error) string {
 	switch {
 	case ctrl.wasInterrupted():
@@ -248,12 +289,11 @@ func settleFailedReply(ctrl *turnController, out string, err error) string {
 	case out == "":
 		return errPrefix + err.Error()
 	default:
-		logger.Warn("backend failed after partial output; keeping what it produced", "err", err, "chars", len(out))
 		return out
 	}
 }
 
-func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, event contracts.Event, ctrl *turnController, eng *skills.Engine, aff affordances, pin *scopePin, lang i18n.Language) {
+func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, event contracts.Event, ctrl *turnController, eng *skills.Engine, aff affordances, pin *scopePin, lang i18n.Language) error {
 	turnCtx, endTurn := ctrl.begin(ctx)
 	defer endTurn()
 	if eng != nil {
@@ -269,13 +309,24 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	defer turn.discard()
 	prompt := contracts.Prompt{Content: event.Text, Context: withIdentity(withCapabilities(withDelegation(withSkills(memCtx, eng), aff.roster), aff.caps), aff.user), Author: event.Who, Attachments: event.Attachments, Language: lang, Outbox: turn.dir}
 	var usage turnUsage
+	var streamed []string
 	onEvent := func(event contracts.BackendEvent) {
 		usage.absorb(event)
+		switch event.Kind {
+		case backendKindText:
+			streamed = append(streamed, event.Detail)
+		case backendKindReset:
+			streamed = nil
+		}
 		emitBackendEvent(sink, event, usage.outTok, usage.inTok, usage.cacheRd, usage.cacheCr)
 	}
 	out, err := backend.Respond(turnCtx, prompt, onEvent)
+	var failure error
 	if err != nil {
 		out = settleFailedReply(ctrl, out, err)
+		if !ctrl.wasInterrupted() {
+			failure = &TurnFailedError{Err: err, partial: strings.TrimSpace(strings.Join(streamed, ""))}
+		}
 	}
 	turn.emitFiles(ctx, sink)
 	out = strings.TrimSpace(out)
@@ -286,12 +337,13 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	if tr, ok := orch.(contracts.TurnReactor); ok {
 		out = tr.React(ctx, out)
 	}
-	sink.Emit(contracts.Event{T: "reply", Text: out, Done: true, Cost: usage.cost, Tokens: usage.outTok, TokensIn: usage.inTok, CacheRead: usage.cacheRd, CacheCreate: usage.cacheCr, Resume: resumeToken(backend), Project: settledProject})
+	sink.Emit(contracts.Event{T: wireEventReply, Text: out, Done: true, Cost: usage.cost, Tokens: usage.outTok, TokensIn: usage.inTok, CacheRead: usage.cacheRd, CacheCreate: usage.cacheCr, Resume: resumeToken(backend), Project: settledProject})
 	if orch != nil {
 		if err := orch.Observe(ctx, prompt, out); err != nil {
 			logger.Warn("memory observe failed; this turn was not recorded to memory", "err", err)
 		}
 	}
+	return failure
 }
 
 func withSkills(memCtx string, eng *skills.Engine) string {
@@ -340,27 +392,27 @@ func runPick(ctx context.Context, sink contracts.EventSink, backend contracts.Ba
 	if err != nil {
 		out = errPrefix + err.Error()
 	}
-	sink.Emit(contracts.Event{T: "reply", Text: strings.TrimSpace(out), Done: true})
+	sink.Emit(contracts.Event{T: wireEventReply, Text: strings.TrimSpace(out), Done: true})
 }
 
 func emitBackendEvent(sink contracts.EventSink, event contracts.BackendEvent, tokens, tokensIn, cacheRead, cacheCreate int) {
 	switch event.Kind {
-	case "thinking":
-		sink.Emit(contracts.Event{T: "thinking", Text: event.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
-	case "text":
-		sink.Emit(contracts.Event{T: "chunk", Text: event.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
-	case "tool":
+	case backendKindThinking:
+		sink.Emit(contracts.Event{T: wireEventThinking, Text: event.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
+	case backendKindText:
+		sink.Emit(contracts.Event{T: wireEventChunk, Text: event.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
+	case backendKindTool:
 		if text := strings.TrimSpace(event.Tool + " " + event.Detail); text != "" {
-			sink.Emit(contracts.Event{T: "status", Text: text, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
+			sink.Emit(contracts.Event{T: wireEventStatus, Text: text, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
 		}
-	case "todos":
-		sink.Emit(contracts.Event{T: "todos", Todos: event.Todos})
-	case "subagent":
+	case backendKindTodos:
+		sink.Emit(contracts.Event{T: wireEventTodos, Todos: event.Todos})
+	case backendKindSubagent:
 		if event.Subagent != nil {
-			sink.Emit(contracts.Event{T: "subagent", Subagent: event.Subagent})
+			sink.Emit(contracts.Event{T: wireEventSubagent, Subagent: event.Subagent})
 		}
-	case "reset":
-		sink.Emit(contracts.Event{T: "reset"})
+	case backendKindReset:
+		sink.Emit(contracts.Event{T: wireEventReset})
 	}
 }
 

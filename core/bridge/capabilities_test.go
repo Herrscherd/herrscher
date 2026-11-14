@@ -19,8 +19,10 @@ func TestWithCapabilitiesNamesTheDaemonAndItsVerbs(t *testing.T) {
 
 func TestTurnPromptCarriesTheCapabilities(t *testing.T) {
 	resp := &captureBackend{reply: "ok"}
-	runOneTurn(context.Background(), &recordSink{}, resp, nil, contracts.Event{T: "input", Text: "hi"}, nil, nil,
-		affordances{caps: "  session: close, list"}, nil, 0)
+	if err := runOneTurn(context.Background(), &recordSink{}, resp, nil, contracts.Event{T: "input", Text: "hi"}, nil, nil,
+		affordances{caps: "  session: close, list"}, nil, 0); err != nil {
+		t.Fatalf("turn failed: %v", err)
+	}
 	if !strings.Contains(resp.contexts[0], "<capabilities>") || !strings.Contains(resp.contexts[0], "session: close, list") {
 		t.Fatalf("turn context missing the capabilities block:\n%s", resp.contexts[0])
 	}

@@ -435,6 +435,11 @@ func runPromptWith(ctx context.Context, dispatcher verbDispatcher, name, prompt 
 	argv = append(argv, "--timeout", promptTimeout.String())
 	res, err := dispatcher.Dispatch(ctx, argv)
 	if err != nil {
+		if partial := cli.PartialOutputOf(err); partial != "" {
+			if _, werr := fmt.Fprintln(stdout, partial); werr != nil {
+				return werr
+			}
+		}
 		localized := cli.Localize(err, lang)
 		return renderError(lang, localized, clitext.ServeSessionFailed, clitext.Params{clitext.ParamName: name, clitext.ParamErr: localized.Error()})
 	}

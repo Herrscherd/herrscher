@@ -198,7 +198,7 @@ func TestRunOneShotSeedWithConsolidatesAndCloses(t *testing.T) {
 
 func TestRunOneShotSeedWithCoordinatesDelegateTrailer(t *testing.T) {
 	backend := func(context.Context, state.Session) (contracts.Backend, error) {
-		return seedBackend{reply: "travail préparé\n⟢ delegate: roblox-scripter \u2014 inspection en lecture seule"}, nil
+		return seedBackend{reply: "travail préparé\n⟢ delegate: roblox-scripter " + trailerSeparator + " inspection en lecture seule"}, nil
 	}
 
 	sess := state.Session{Name: "orchestrator", ChannelID: "channel"}

@@ -21,6 +21,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -91,6 +93,7 @@ const (
 	stateDone   = "done"
 	stateActive = "active"
 	eventReply  = "reply"
+	eventReset  = "reset"
 	eventStatus = "status"
 	eventNotice = "notice"
 
@@ -140,6 +143,7 @@ type tab struct {
 	busy               bool
 	interruptRequested bool
 	streamed           bool
+	pendingBlank       strings.Builder
 	lastCost           float64
 	disconnected       bool
 	tokens             int
@@ -205,21 +209,48 @@ func (tb *tab) appendEntry(item entry) {
 	if item.role == roleYou {
 		tb.trail = nil
 	}
+	tb.pendingBlank.Reset()
 	tb.entries = append(tb.entries, item)
 	if len(tb.entries) > maxTabLines {
 		tb.entries = append([]entry(nil), tb.entries[len(tb.entries)-maxTabLines:]...)
 	}
 }
 
-func (tb *tab) appendChunk(text string) {
+func (tb *tab) appendChunk(text string) bool {
 	if n := len(tb.entries); n > 0 && tb.entries[n-1].role == roleAgent && tb.entries[n-1].streaming {
 		tb.entries[n-1].text += text
-		return
+		return true
 	}
-	tb.appendEntry(entry{role: roleAgent, text: text, streaming: true})
+	if strings.TrimSpace(text) == "" {
+		tb.pendingBlank.WriteString(text)
+		return false
+	}
+	pending := tb.pendingBlank.String() + text
+	tb.appendEntry(entry{role: roleAgent, text: dropBlankLeadingLines(pending), streaming: true})
+	return true
+}
+
+func dropBlankLeadingLines(text string) string {
+	body := strings.TrimLeftFunc(text, unicode.IsSpace)
+	blank := text[:len(text)-len(body)]
+	last := strings.LastIndexFunc(blank, isLineBreak)
+	if last < 0 {
+		return text
+	}
+	_, size := utf8.DecodeRuneInString(blank[last:])
+	return text[last+size:]
+}
+
+func isLineBreak(r rune) bool {
+	switch r {
+	case '\n', '\r', '\v', '\f', '\u0085', ' ', ' ':
+		return true
+	}
+	return false
 }
 
 func (tb *tab) endStream() {
+	tb.pendingBlank.Reset()
 	if n := len(tb.entries); n > 0 && tb.entries[n-1].role == roleAgent {
 		tb.entries[n-1].streaming = false
 	}
@@ -1212,8 +1243,9 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		m.renderInto(target, contracts.Event{T: eventStatus, Text: event.Text})
 	case "chunk":
 		target.busy = true
-		target.streamed = true
-		target.appendChunk(event.Text)
+		if target.appendChunk(event.Text) {
+			target.streamed = true
+		}
 	case "thinking":
 		target.busy = true
 		target.appendThinking(event.Text, target.tokens, previous)
@@ -1231,7 +1263,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 	case "subagent":
 		target.busy = true
 		target.applySubagent(event.Subagent)
-	case "reset":
+	case eventReset:
 		target.busy = false
 		target.interruptRequested = false
 		target.streamed = false

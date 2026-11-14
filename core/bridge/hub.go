@@ -288,11 +288,11 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	defer turn.discard()
 	prompt := contracts.Prompt{Content: event.Text, Context: withIdentity(withCapabilities(withDelegation(withSkills(memCtx, eng), aff.roster), aff.caps), aff.user), Author: event.Who, Attachments: event.Attachments, Language: lang, Outbox: turn.dir}
 	var usage turnUsage
-	var streamed strings.Builder
+	var streamed []string
 	onEvent := func(event contracts.BackendEvent) {
 		usage.absorb(event)
 		if event.Kind == "text" {
-			streamed.WriteString(event.Detail)
+			streamed = append(streamed, event.Detail)
 		}
 		emitBackendEvent(sink, event, usage.outTok, usage.inTok, usage.cacheRd, usage.cacheCr)
 	}
@@ -301,7 +301,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	if err != nil {
 		out = settleFailedReply(ctrl, out, err)
 		if !ctrl.wasInterrupted() {
-			failure = &TurnFailedError{Err: err, partial: strings.TrimSpace(streamed.String())}
+			failure = &TurnFailedError{Err: err, partial: strings.TrimSpace(strings.Join(streamed, ""))}
 		}
 	}
 	turn.emitFiles(ctx, sink)

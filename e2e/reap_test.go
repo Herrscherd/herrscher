@@ -103,11 +103,29 @@ func TestSettleFailsOnALeakAndKillsIt(t *testing.T) {
 
 func privateDir(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	if err := os.Chmod(dir, 0o700); err != nil {
+	id, err := newInstanceID()
+	if err != nil {
 		t.Fatal(err)
 	}
+	dir := filepath.Join(tmpRoot, id)
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(dir); err != nil {
+			t.Error(err)
+		}
+	})
 	return dir
+}
+
+func requireShortEnough(t *testing.T, dirs ...string) {
+	t.Helper()
+	for _, dir := range dirs {
+		if _, err := host.RuntimeAt(dir); err != nil {
+			t.Fatalf("the fixture %s is refused for its length before any check: %v", dir, err)
+		}
+	}
 }
 
 func refusedRuntimeDirs(t *testing.T) (string, []string) {
@@ -135,6 +153,7 @@ func TestRemoveInstanceEntriesLeavesWhatIsNotAPrivateDirectoryAlone(t *testing.T
 		t.Fatal(err)
 	}
 	file, dirs := refusedRuntimeDirs(t)
+	requireShortEnough(t, append(dirs, file)...)
 	if failures := removeInstanceEntries(file, instance); len(failures) == 0 || errors.Is(errors.Join(failures...), syscall.ENOTDIR) {
 		t.Errorf("the file %s was not refused as an unsafe runtime directory: %v", file, failures)
 	}
@@ -150,23 +169,9 @@ func TestRemoveInstanceEntriesLeavesWhatIsNotAPrivateDirectoryAlone(t *testing.T
 	}
 }
 
-func shortPrivateDir(t *testing.T, instance string) string {
-	t.Helper()
-	dir := filepath.Join(tmpRoot, "e2e-"+instance)
-	if err := os.Mkdir(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if err := os.RemoveAll(dir); err != nil {
-			t.Error(err)
-		}
-	})
-	return dir
-}
-
 func hashedRuntimeDir(t *testing.T, instance string) string {
 	t.Helper()
-	base := shortPrivateDir(t, instance)
+	base := privateDir(t)
 	for pad := 1; ; pad++ {
 		dir := filepath.Join(base, strings.Repeat("d", pad))
 		known, err := entriesOf(dir, instance)
@@ -231,6 +236,7 @@ func TestRemoveInstanceEntriesCreatesNoMissingDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	missing := filepath.Join(privateDir(t), "missing")
+	requireShortEnough(t, missing)
 	if failures := removeInstanceEntries(missing, instance); len(failures) != 0 {
 		t.Fatal(failures)
 	}
@@ -245,7 +251,7 @@ func hashedSocketIn(t *testing.T, dir string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	name := layout.Socket("herrscher-command-" + strings.Repeat("s", 120))
+	name := host.CommandSocketPathIn(layout, strings.Repeat("s", 120))
 	if !hashedSocket.MatchString(filepath.Base(name)) {
 		t.Fatalf("the guard does not know the hashed name %s that core/host gives", name)
 	}

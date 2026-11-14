@@ -14,6 +14,8 @@ const (
 	EventClosed            = "closed"
 	EventNotice            = "notice"
 	EventInput             = "input"
+	EventHuman             = "human"
+	EventPaused            = "paused"
 	EventInterrupt         = "interrupt"
 	EventPick              = "pick"
 	EventLanguage          = "language"

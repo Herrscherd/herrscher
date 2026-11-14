@@ -10,6 +10,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
@@ -34,7 +35,7 @@ func tapping(d *sessionDriver) (func() []contracts.Event, context.CancelFunc) {
 func sawReply(events []contracts.Event, text string) bool {
 	for idx := range events {
 		e := events[idx]
-		if e.T == "reply" && e.Done && e.Text == text {
+		if e.T == eventwire.EventReply && e.Done && e.Text == text {
 			return true
 		}
 	}
@@ -60,13 +61,13 @@ func TestTurnSaidOutsideTheBoundChannelsIsNotPostedThere(t *testing.T) {
 		}
 		select {
 		case in := <-toBridge:
-			if in.T != "input" || in.Text != "reprends ici" {
+			if in.T != eventwire.EventInput || in.Text != "reprends ici" {
 				t.Fatalf("driver wrote %+v, want the pushed input", in)
 			}
 		case <-time.After(time.Second):
 			t.Fatal("driver did not pump the pushed input to the bridge")
 		}
-		fromBridge <- contracts.Event{T: "reply", Text: "done", Done: true}
+		fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "done", Done: true}
 
 		requireSettled(t, func() bool { return sawReply(tapped(), "done") }, "the pushing client sees the reply on the event stream")
 		a.mu.Lock()
@@ -92,7 +93,7 @@ func TestTurnSaidInABoundChannelIsPostedThere(t *testing.T) {
 			Conversation: contracts.Conversation{Gateway: "rec", ID: "c"},
 		})
 		<-toBridge
-		fromBridge <- contracts.Event{T: "reply", Text: "done", Done: true}
+		fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "done", Done: true}
 
 		requireSettled(t, func() bool {
 			a.mu.Lock()
@@ -154,7 +155,7 @@ func TestTurnWithNoOriginIsPostedToTheBoundChannels(t *testing.T) {
 
 		d.submit(context.Background(), contracts.Inbound{Author: "script", Text: "vas-y"})
 		<-toBridge
-		fromBridge <- contracts.Event{T: "reply", Text: "done", Done: true}
+		fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "done", Done: true}
 
 		requireSettled(t, func() bool {
 			a.mu.Lock()

@@ -43,12 +43,12 @@ func TestMenuRendersChoices(t *testing.T) {
 func TestEmitDeliversControlEventUnderBackpressure(_ *testing.T) {
 	tm := New()
 	for range cap(tm.out) {
-		tm.emit(tui.RoutedEvent{Event: contracts.Event{T: "chunk", Text: "x"}})
+		tm.emit(tui.RoutedEvent{Event: contracts.Event{T: eventwire.EventChunk, Text: "x"}})
 	}
 	go func() { <-tm.Frontend() }()
 	done := make(chan struct{})
 	go func() {
-		tm.emit(tui.RoutedEvent{Event: contracts.Event{T: "reply", Done: true, Text: "final"}})
+		tm.emit(tui.RoutedEvent{Event: contracts.Event{T: eventwire.EventReply, Done: true, Text: "final"}})
 		close(done)
 	}()
 	<-done
@@ -106,7 +106,7 @@ func TestEmitToRoutesToFrontend(t *testing.T) {
 	tm := New()
 	got := make(chan tui.RoutedEvent, 1)
 	go func() { got <- <-tm.Frontend() }()
-	tm.EmitTo(contracts.Conversation{Gateway: "terminal", ID: "chX"}, contracts.Event{T: "chunk", Text: "a"})
+	tm.EmitTo(contracts.Conversation{Gateway: "terminal", ID: "chX"}, contracts.Event{T: eventwire.EventChunk, Text: "a"})
 	re := <-got
 	if re.Conv.ID != "chX" || re.Event.Text != "a" {
 		t.Fatalf("frontend got %+v", re)
@@ -117,7 +117,7 @@ func TestEmitUsesDefaultChannel(t *testing.T) {
 	tm := New()
 	got := make(chan tui.RoutedEvent, 1)
 	go func() { got <- <-tm.Frontend() }()
-	tm.Emit(contracts.Event{T: "reply", Text: "b", Done: true})
+	tm.Emit(contracts.Event{T: eventwire.EventReply, Text: "b", Done: true})
 	re := <-got
 	if re.Conv.ID != ChannelID || re.Event.Text != "b" {
 		t.Fatalf("Emit default-channel routing wrong: %+v", re)
@@ -136,7 +136,7 @@ func TestPostEmitsReplyEvent(t *testing.T) {
 		t.Fatalf("Post: %v", err)
 	}
 	re := <-got
-	if re.Event.T != "reply" {
+	if re.Event.T != eventwire.EventReply {
 		t.Fatalf("Post emitted %+v, want reply", re)
 	}
 	if re.Event.Text != "hi" {
@@ -214,7 +214,7 @@ func TestArchiveEmitsCloseToTab(t *testing.T) {
 		t.Fatal(err)
 	}
 	re := <-got
-	if re.Conv.ID != "terminal/x" || re.Event.T != "closed" {
+	if re.Conv.ID != "terminal/x" || re.Event.T != eventwire.EventClosed {
 		t.Fatalf("Archive must emit a 'closed' event to the tab: %+v", re)
 	}
 }

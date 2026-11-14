@@ -10,6 +10,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 )
 
@@ -31,7 +32,7 @@ func TestConnRoundTrip(t *testing.T) {
 
 	srvConn := <-acc.Conns()
 
-	if err := srvConn.Write(contracts.Event{T: "input", Who: "alice", Text: "hi"}); err != nil {
+	if err := srvConn.Write(contracts.Event{T: eventwire.EventInput, Who: "alice", Text: "hi"}); err != nil {
 		t.Fatalf("server Write: %v", err)
 	}
 	var got contracts.Event
@@ -45,7 +46,7 @@ func TestConnRoundTrip(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for input frame")
 	}
-	if got.T != "input" || got.Text != "hi" || got.Who != "alice" {
+	if got.T != eventwire.EventInput || got.Text != "hi" || got.Who != "alice" {
 		t.Fatalf("client got %+v, want input/alice/hi", got)
 	}
 }
@@ -93,7 +94,7 @@ func TestConnConcurrentWrites(t *testing.T) {
 	var wg sync.WaitGroup
 	for range n {
 		wg.Add(1)
-		go func() { defer wg.Done(); logErr(t, cli.Write(contracts.Event{T: "chunk", Text: "x"})) }()
+		go func() { defer wg.Done(); logErr(t, cli.Write(contracts.Event{T: eventwire.EventChunk, Text: "x"})) }()
 	}
 	wg.Wait()
 	select {

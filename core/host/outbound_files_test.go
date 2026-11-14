@@ -109,7 +109,7 @@ func TestReplyEmitsNormallyThenSendsFilesThroughFileSender(t *testing.T) {
 	gw := &routedFileGateway{}
 	d := newOutboundDriver([]contracts.Gateway{gw}, root)
 
-	d.deliverReply(context.Background(), contracts.Event{T: "reply", Text: "hello", Done: true}, frame)
+	d.deliverReply(context.Background(), contracts.Event{T: eventwire.EventReply, Text: "hello", Done: true}, frame)
 
 	if !slices.Equal(gw.calls, []string{"emit", "send"}) {
 		t.Fatalf("calls = %q, want the reply emitted before the files are sent", gw.calls)
@@ -142,7 +142,7 @@ func TestReplyNamesUnsentFilesWithoutFileSenderAndNeverPaths(t *testing.T) {
 	gw := &textRecordingGateway{}
 	d := newOutboundDriver([]contracts.Gateway{gw}, root)
 
-	d.deliverReply(context.Background(), contracts.Event{T: "reply", Text: "hello", Done: true}, frame)
+	d.deliverReply(context.Background(), contracts.Event{T: eventwire.EventReply, Text: "hello", Done: true}, frame)
 
 	if len(gw.sent) != 1 {
 		t.Fatalf("gateway got %d messages, want one reply message: %q", len(gw.sent), gw.sent)
@@ -177,7 +177,7 @@ func TestReplyRevetsFilesBeforeSending(t *testing.T) {
 	gw := &routedFileGateway{}
 	d := newOutboundDriver([]contracts.Gateway{gw}, root)
 
-	d.deliverReply(context.Background(), contracts.Event{T: "reply", Text: "hello", Done: true}, frame)
+	d.deliverReply(context.Background(), contracts.Event{T: eventwire.EventReply, Text: "hello", Done: true}, frame)
 
 	if len(gw.sentFiles) != 0 {
 		t.Fatalf("SendFiles got %q, want the file swapped for a link refused", gw.sentFiles)
@@ -193,7 +193,7 @@ func TestFailedSendFilesNoticesTheNamesWithoutPaths(t *testing.T) {
 	gw := &routedFileGateway{sendErr: errors.New("gateway down")}
 	d := newOutboundDriver([]contracts.Gateway{gw}, root)
 
-	d.deliverReply(context.Background(), contracts.Event{T: "reply", Text: "hello", Done: true}, frame)
+	d.deliverReply(context.Background(), contracts.Event{T: eventwire.EventReply, Text: "hello", Done: true}, frame)
 
 	last := gw.routed[len(gw.routed)-1]
 	if last.T != eventwire.EventStatus || !strings.Contains(last.Text, "a.png") {
@@ -279,7 +279,7 @@ func TestReplySaidElsewhereNamesTheFilesThatStayUnsent(t *testing.T) {
 	var tapped []contracts.Event
 	d.emitTap = func(event contracts.Event) { tapped = append(tapped, event) }
 
-	d.deliverReply(context.Background(), contracts.Event{T: "reply", Text: "hello", Done: true}, frame)
+	d.deliverReply(context.Background(), contracts.Event{T: eventwire.EventReply, Text: "hello", Done: true}, frame)
 
 	if len(gw.routed) != 0 || len(gw.calls) != 0 || len(gw.sent) != 0 {
 		t.Fatalf("gateway got routed=%d calls=%q sent=%q, want nothing for a reply said elsewhere", len(gw.routed), gw.calls, gw.sent)
@@ -443,7 +443,7 @@ func TestRefusedNoticeReachesTheTap(t *testing.T) {
 	var tapped []contracts.Event
 	d.emitTap = func(event contracts.Event) { tapped = append(tapped, event) }
 
-	d.deliverReply(context.Background(), contracts.Event{T: "reply", Text: "hello", Done: true}, frame)
+	d.deliverReply(context.Background(), contracts.Event{T: eventwire.EventReply, Text: "hello", Done: true}, frame)
 
 	if len(tapped) != 1 {
 		t.Fatalf("emitTap got %d events, want the reply once", len(tapped))
@@ -461,7 +461,7 @@ func TestReplySaidElsewhereNamesRefusedFilesWithoutSentOnes(t *testing.T) {
 	var tapped []contracts.Event
 	d.emitTap = func(event contracts.Event) { tapped = append(tapped, event) }
 
-	d.deliverReply(context.Background(), contracts.Event{T: "reply", Text: "hello", Done: true}, outbox.Frame{Refused: []string{"big.bin"}})
+	d.deliverReply(context.Background(), contracts.Event{T: eventwire.EventReply, Text: "hello", Done: true}, outbox.Frame{Refused: []string{"big.bin"}})
 
 	if len(tapped) != 1 || !strings.HasPrefix(tapped[0].Text, "hello") || !strings.Contains(tapped[0].Text, "big.bin") {
 		t.Fatalf("emitTap got %+v, want the reply followed by a notice naming big.bin", tapped)
@@ -475,7 +475,7 @@ func TestReplySaidElsewhereWithoutFilesAddsNoNotice(t *testing.T) {
 	var tapped []contracts.Event
 	d.emitTap = func(event contracts.Event) { tapped = append(tapped, event) }
 
-	d.deliverReply(context.Background(), contracts.Event{T: "reply", Text: "hello", Done: true}, outbox.Frame{})
+	d.deliverReply(context.Background(), contracts.Event{T: eventwire.EventReply, Text: "hello", Done: true}, outbox.Frame{})
 
 	if len(tapped) != 1 || tapped[0].Text != "hello" {
 		t.Fatalf("emitTap got %+v, want the unchanged reply", tapped)

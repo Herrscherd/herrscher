@@ -10,6 +10,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 )
 
@@ -243,7 +244,7 @@ func TestTheDeadlineReachesTheGatewayAsASemanticEvent(t *testing.T) {
 	gw.mu.Lock()
 	defer gw.mu.Unlock()
 	for _, event := range gw.emitted {
-		if event.T != approvalEventKind || event.Value != p.ID {
+		if event.T != eventwire.EventApproval || event.Value != p.ID {
 			continue
 		}
 		deadline, err := time.Parse(time.RFC3339, event.Text)
@@ -445,7 +446,7 @@ func TestTheRiskReachesTheGatewayAsASemanticEvent(t *testing.T) {
 	gw.mu.Lock()
 	defer gw.mu.Unlock()
 	for _, event := range gw.emitted {
-		if event.T == approvalRiskEventKind && event.Value == p.ID && event.Text == approval.RiskHigh.String() {
+		if event.T == eventwire.EventApprovalRisk && event.Value == p.ID && event.Text == approval.RiskHigh.String() {
 			return
 		}
 	}

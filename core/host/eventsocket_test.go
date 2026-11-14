@@ -12,11 +12,13 @@ import (
 	"testing/synctest"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 func TestMarshalSessionEvent(t *testing.T) {
 	line, err := marshalSessionEvent("sess-1", contracts.Event{
-		T: "thinking", Who: "seed", Text: "je réfléchis", Value: "", Done: false, Cost: 0,
+		T: eventwire.EventThinking, Who: "seed", Text: "je réfléchis", Value: "", Done: false, Cost: 0,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -35,7 +37,7 @@ func TestMarshalSessionEvent(t *testing.T) {
 	if err := json.Unmarshal(line, &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Session != "sess-1" || got.T != "thinking" || got.Who != "seed" || got.Text != "je réfléchis" {
+	if got.Session != "sess-1" || got.T != eventwire.EventThinking || got.Who != "seed" || got.Text != "je réfléchis" {
 		t.Fatalf("wire event = %+v", got)
 	}
 }
@@ -48,7 +50,7 @@ func TestEventSocketPublishReachesSubscriber(t *testing.T) {
 		defer closeRead(client)
 		es.add(server)
 
-		es.Publish("sess-1", contracts.Event{T: "chunk", Text: "hello"})
+		es.Publish("sess-1", contracts.Event{T: eventwire.EventChunk, Text: "hello"})
 
 		line, err := bufio.NewReader(client).ReadString('\n')
 		if err != nil {
@@ -62,7 +64,7 @@ func TestEventSocketPublishReachesSubscriber(t *testing.T) {
 		if err := json.Unmarshal([]byte(line), &got); err != nil {
 			t.Fatalf("unmarshal %q: %v", line, err)
 		}
-		if got.Session != "sess-1" || got.T != "chunk" || got.Text != "hello" {
+		if got.Session != "sess-1" || got.T != eventwire.EventChunk || got.Text != "hello" {
 			t.Fatalf("received %+v", got)
 		}
 	})
@@ -70,16 +72,16 @@ func TestEventSocketPublishReachesSubscriber(t *testing.T) {
 
 func TestPublishNilSocketNoop(_ *testing.T) {
 	var es *eventSocket
-	es.Publish("s", contracts.Event{T: "chunk"})
+	es.Publish("s", contracts.Event{T: eventwire.EventChunk})
 }
 
 func TestFanOutFiresEmitTap(t *testing.T) {
 	var got []contracts.Event
 	d := newSessionDriver("s", nil, nil, nil, io.Discard)
 	d.emitTap = func(e contracts.Event) { got = append(got, e) }
-	d.fanOut(context.Background(), contracts.Event{T: "thinking", Text: "hmm"})
-	d.fanOut(context.Background(), contracts.Event{T: "reply", Text: "done", Done: true})
-	if len(got) != 2 || got[0].T != "thinking" || got[1].T != "reply" || !got[1].Done {
+	d.fanOut(context.Background(), contracts.Event{T: eventwire.EventThinking, Text: "hmm"})
+	d.fanOut(context.Background(), contracts.Event{T: eventwire.EventReply, Text: "done", Done: true})
+	if len(got) != 2 || got[0].T != eventwire.EventThinking || got[1].T != eventwire.EventReply || !got[1].Done {
 		t.Fatalf("tap saw %+v", got)
 	}
 }

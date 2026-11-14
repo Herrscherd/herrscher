@@ -325,15 +325,15 @@ func (d *sessionDriver) askApproval(ctx context.Context, approvalID string, req 
 }
 
 func announceApprovalDeadline(gateway contracts.Gateway, conv contracts.Conversation, approvalID string, deadline time.Time) {
-	emitApprovalEvent(gateway, conv, contracts.Event{T: approvalEventKind, Value: approvalID, Text: deadline.UTC().Format(time.RFC3339)})
+	emitApprovalEvent(gateway, conv, contracts.Event{T: eventwire.EventApproval, Value: approvalID, Text: deadline.UTC().Format(time.RFC3339)})
 }
 
 func announceApprovalRisk(gateway contracts.Gateway, conv contracts.Conversation, approvalID string, risk approval.Risk) {
-	emitApprovalEvent(gateway, conv, contracts.Event{T: approvalRiskEventKind, Value: approvalID, Text: risk.String()})
+	emitApprovalEvent(gateway, conv, contracts.Event{T: eventwire.EventApprovalRisk, Value: approvalID, Text: risk.String()})
 }
 
 func announceApprovalSubject(gateway contracts.Gateway, conv contracts.Conversation, approvalID, subject string) {
-	emitApprovalEvent(gateway, conv, contracts.Event{T: approvalSubjectEventKind, Value: approvalID, Text: subject})
+	emitApprovalEvent(gateway, conv, contracts.Event{T: eventwire.EventApprovalSubject, Value: approvalID, Text: subject})
 }
 
 func emitApprovalEvent(gateway contracts.Gateway, conv contracts.Conversation, event contracts.Event) {
@@ -365,7 +365,7 @@ func (d *sessionDriver) Interrupt() {
 }
 
 func (d *sessionDriver) emitPaused(ctx context.Context, reason string) {
-	d.fanOut(ctx, contracts.Event{T: "paused", Text: reason})
+	d.fanOut(ctx, contracts.Event{T: eventwire.EventPaused, Text: reason})
 }
 
 func (d *sessionDriver) Seed(task string) bool {
@@ -697,7 +697,7 @@ func (d *sessionDriver) prepareTurn(ctx context.Context, item queued) (contracts
 		d.sink.Checkpoint(event.TurnID, event.Text)
 	}
 	d.recordEntry("user", event.Text, 0, turnUsage{})
-	d.fanOut(ctx, contracts.Event{T: "human", Who: event.Who, Text: event.Text})
+	d.fanOut(ctx, contracts.Event{T: eventwire.EventHuman, Who: event.Who, Text: event.Text})
 	return event, tokenGuard{headroom: verdict.Headroom, capped: verdict.Capped}, true
 }
 

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -25,7 +26,7 @@ func recordedTurn(t *testing.T, events ...contracts.Event) state.TranscriptEntry
 
 	select {
 	case in := <-toBridge:
-		if in.T != "input" {
+		if in.T != eventwire.EventInput {
 			t.Fatalf("first frame to the bridge = %+v, want input", in)
 		}
 	case <-time.After(time.Second):
@@ -50,9 +51,9 @@ func recordedTurn(t *testing.T, events ...contracts.Event) state.TranscriptEntry
 
 func TestTurnRecordsTheLiveContextNotTheBillingTotals(t *testing.T) {
 	got := recordedTurn(t,
-		contracts.Event{T: "chunk", Text: "un", TokensIn: 5, CacheRead: 40_000},
-		contracts.Event{T: "chunk", Text: "deux", TokensIn: 5, CacheRead: 60_000},
-		contracts.Event{T: "reply", Text: "fini", Done: true, TokensIn: 11, CacheRead: 334_662, CacheCreate: 5_831},
+		contracts.Event{T: eventwire.EventChunk, Text: "un", TokensIn: 5, CacheRead: 40_000},
+		contracts.Event{T: eventwire.EventChunk, Text: "deux", TokensIn: 5, CacheRead: 60_000},
+		contracts.Event{T: eventwire.EventReply, Text: "fini", Done: true, TokensIn: 11, CacheRead: 334_662, CacheCreate: 5_831},
 	)
 	if got.CtxTokens != 60_005 {
 		t.Fatalf("ctx_tokens = %d, want the last mid-turn prompt (60005)", got.CtxTokens)
@@ -64,7 +65,7 @@ func TestTurnRecordsTheLiveContextNotTheBillingTotals(t *testing.T) {
 
 func TestASingleMessageTurnRecordsItsOwnPrompt(t *testing.T) {
 	got := recordedTurn(t,
-		contracts.Event{T: "reply", Text: "fini", Done: true, TokensIn: 11, CacheRead: 40_000, CacheCreate: 500},
+		contracts.Event{T: eventwire.EventReply, Text: "fini", Done: true, TokensIn: 11, CacheRead: 40_000, CacheCreate: 500},
 	)
 	if got.CtxTokens != 40_511 {
 		t.Fatalf("ctx_tokens = %d, want the turn's only prompt (40511)", got.CtxTokens)

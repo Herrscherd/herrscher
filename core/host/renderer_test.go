@@ -7,17 +7,19 @@ import (
 	"unicode/utf8"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 func TestRendererPostsOnlyFinalReply(t *testing.T) {
 	g := &fanRecorder{}
 	r := newGatewayRenderer(g, "c1")
 
-	r.handle(context.Background(), contracts.Event{T: "human", Who: "alice", Text: "hi"})
-	r.handle(context.Background(), contracts.Event{T: "status", Text: "Edit file.go"})
-	r.handle(context.Background(), contracts.Event{T: "chunk", Text: "thinking"})
-	r.handle(context.Background(), contracts.Event{T: "reset"})
-	r.handle(context.Background(), contracts.Event{T: "reply", Text: "done", Done: true})
+	r.handle(context.Background(), contracts.Event{T: eventwire.EventHuman, Who: "alice", Text: "hi"})
+	r.handle(context.Background(), contracts.Event{T: eventwire.EventStatus, Text: "Edit file.go"})
+	r.handle(context.Background(), contracts.Event{T: eventwire.EventChunk, Text: "thinking"})
+	r.handle(context.Background(), contracts.Event{T: eventwire.EventReset})
+	r.handle(context.Background(), contracts.Event{T: eventwire.EventReply, Text: "done", Done: true})
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -32,7 +34,7 @@ func TestRendererPostsOnlyFinalReply(t *testing.T) {
 func TestRendererSkipsEmptyReply(t *testing.T) {
 	g := &fanRecorder{}
 	r := newGatewayRenderer(g, "c1")
-	r.handle(context.Background(), contracts.Event{T: "reply", Done: true})
+	r.handle(context.Background(), contracts.Event{T: eventwire.EventReply, Done: true})
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if len(g.posted) != 0 {
@@ -43,7 +45,7 @@ func TestRendererSkipsEmptyReply(t *testing.T) {
 func TestRendererPostsChoiceAsText(t *testing.T) {
 	g := &fanRecorder{}
 	r := newGatewayRenderer(g, "c1")
-	r.handle(context.Background(), contracts.Event{T: "reply", Text: "Pick:\n1) yes\n2) no", Done: true})
+	r.handle(context.Background(), contracts.Event{T: eventwire.EventReply, Text: "Pick:\n1) yes\n2) no", Done: true})
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if len(g.posted) != 1 || !strings.Contains(g.posted[0], "Pick:") {
@@ -55,7 +57,7 @@ func TestRendererChunksLongReply(t *testing.T) {
 	g := &fanRecorder{}
 	r := newGatewayRenderer(g, "c1")
 	long := strings.Repeat("x", gatewayMaxLen+50)
-	r.handle(context.Background(), contracts.Event{T: "reply", Text: long, Done: true})
+	r.handle(context.Background(), contracts.Event{T: eventwire.EventReply, Text: long, Done: true})
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if len(g.posted) != 2 {

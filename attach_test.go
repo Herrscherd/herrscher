@@ -16,6 +16,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
@@ -173,7 +174,7 @@ func TestAttachedFrontendRoutesAnEventToItsTab(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d.publish(t, "alpha", contracts.Event{T: "reply", Text: "hi", Done: true})
+	d.publish(t, "alpha", contracts.Event{T: eventwire.EventReply, Text: "hi", Done: true})
 
 	select {
 	case re := <-a.Frontend():

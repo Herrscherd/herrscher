@@ -9,6 +9,7 @@ import (
 	claude "github.com/Herrscherd/herrscher-claude-backend"
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/bridge"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 func TestAFrenchTurnReachesTheClaudeBackendInFrench(t *testing.T) {
@@ -23,8 +24,8 @@ func TestAFrenchTurnReachesTheClaudeBackendInFrench(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := make(chan contracts.Event, 2)
-	input <- contracts.Event{T: "language", Value: "fr"}
-	input <- contracts.Event{T: "input", Text: "bonjour"}
+	input <- contracts.Event{T: eventwire.EventLanguage, Value: "fr"}
+	input <- contracts.Event{T: eventwire.EventInput, Text: "bonjour"}
 	out := make(chan contracts.Event, 8)
 	newBackend := func(string) (contracts.Backend, error) { return backend, nil }
 	if err = bridge.RunOneShot(context.Background(), newBackend, nil, "channel", input, out); err != nil {

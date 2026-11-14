@@ -9,6 +9,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
 )
 
@@ -41,7 +42,7 @@ loop:
 	for {
 		select {
 		case ev := <-toBridge:
-			if ev.T == "input" {
+			if ev.T == eventwire.EventInput {
 				t.Fatalf("driver opened a turn while paused: wrote %+v", ev)
 			}
 		case <-deadline:
@@ -75,7 +76,7 @@ func TestPausedReachesEmitTap(t *testing.T) {
 	for {
 		mu.Lock()
 		for _, e := range tapped {
-			if e.T == "paused" && e.Text == "cost" {
+			if e.T == eventwire.EventPaused && e.Text == "cost" {
 				mu.Unlock()
 				return
 			}
@@ -131,11 +132,11 @@ func (k *refusalTap) scanRefusal(t *testing.T) refusalScan {
 	var scan refusalScan
 	for i := range k.events {
 		e := k.events[i]
-		if e.T == "human" {
+		if e.T == eventwire.EventHuman {
 			t.Fatalf("a turn was opened for input refused by the budget gate: %+v", e)
 		}
-		scan.paused = scan.paused || e.T == "paused"
-		scan.refused = scan.refused || (e.T == "status" && strings.Contains(e.Text, "refus"))
+		scan.paused = scan.paused || e.T == eventwire.EventPaused
+		scan.refused = scan.refused || (e.T == eventwire.EventStatus && strings.Contains(e.Text, "refus"))
 	}
 	return scan
 }
@@ -172,7 +173,7 @@ func TestDispatchProceedsWhenNotPaused(t *testing.T) {
 
 	select {
 	case in := <-toBridge:
-		if in.T != "input" || in.Text != "hello" {
+		if in.T != eventwire.EventInput || in.Text != "hello" {
 			t.Fatalf("driver wrote %+v, want input/hello", in)
 		}
 	case <-time.After(time.Second):

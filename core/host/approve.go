@@ -18,12 +18,6 @@ import (
 
 const approvalPickPrefix = "herrscher-approval:"
 
-const approvalEventKind = "approval"
-
-const approvalRiskEventKind = "approval_risk"
-
-const approvalSubjectEventKind = "approval_subject"
-
 const subjectMaxLen = 200
 
 const (

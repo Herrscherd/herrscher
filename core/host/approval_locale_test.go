@@ -7,6 +7,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 )
 
@@ -63,7 +64,7 @@ func TestApprovalMenuAndHelpFollowTheSessionLanguage(t *testing.T) {
 
 func hasSubjectEvent(events []contracts.Event, id, subject string) bool {
 	for index := range events {
-		if events[index].T == approvalSubjectEventKind && events[index].Value == id && events[index].Text == subject {
+		if events[index].T == eventwire.EventApprovalSubject && events[index].Value == id && events[index].Text == subject {
 			return true
 		}
 	}

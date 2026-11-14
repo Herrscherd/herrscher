@@ -1,0 +1,7 @@
+exec herrscher --print 'say ping please'
+stdout '^echo: say ping please$'
+stderr 'session: '
+! stderr 'hub-socket'
+! stderr 'restarting'
+exec cat $VENDORTEST_LOG
+stdout 'prompt .*say ping please'

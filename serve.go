@@ -279,16 +279,16 @@ func bindGateways(sets []host.Deps, lang i18n.Language) ([]host.Deps, []contract
 	return gws, closers, foreground, extra, nil
 }
 
-func runSession(ctx context.Context, args []string) error {
-	return runRegistryVerb(ctx, verbSession, args)
+func runSession(ctx context.Context, layout host.RuntimeLayout, args []string) error {
+	return runRegistryVerb(ctx, layout, verbSession, args)
 }
 
-func runAgent(ctx context.Context, args []string) error {
-	return runRegistryVerb(ctx, "agent", args)
+func runAgent(ctx context.Context, layout host.RuntimeLayout, args []string) error {
+	return runRegistryVerb(ctx, layout, "agent", args)
 }
 
-func runHost(ctx context.Context, args []string) error {
-	return runRegistryVerb(ctx, "host", args)
+func runHost(ctx context.Context, layout host.RuntimeLayout, args []string) error {
+	return runRegistryVerb(ctx, layout, "host", args)
 }
 
 func runApprove(ctx context.Context, layout host.RuntimeLayout, args []string) error {
@@ -296,19 +296,19 @@ func runApprove(ctx context.Context, layout host.RuntimeLayout, args []string) e
 		host.RunApprovalHook(ctx, layout, os.Stdin, os.Stdout, os.Stderr)
 		return nil
 	}
-	return runRegistryVerb(ctx, "approve", args)
+	return runRegistryVerb(ctx, layout, "approve", args)
 }
 
-func runRole(ctx context.Context, args []string) error {
-	return runRegistryVerb(ctx, "role", args)
+func runRole(ctx context.Context, layout host.RuntimeLayout, args []string) error {
+	return runRegistryVerb(ctx, layout, "role", args)
 }
 
-func runMemory(ctx context.Context, args []string) error {
-	return runRegistryVerb(ctx, "memory", args)
+func runMemory(ctx context.Context, layout host.RuntimeLayout, args []string) error {
+	return runRegistryVerb(ctx, layout, "memory", args)
 }
 
-func runModels(ctx context.Context, args []string) error {
-	return runRegistryVerb(ctx, "models", args)
+func runModels(ctx context.Context, layout host.RuntimeLayout, args []string) error {
+	return runRegistryVerb(ctx, layout, "models", args)
 }
 
 func loadOperator() (config.Config, language.Languages, error) {
@@ -320,7 +320,7 @@ func loadOperator() (config.Config, language.Languages, error) {
 	return cfg, langs, err
 }
 
-func newOperatorRegistry(ctx context.Context, cfg config.Config, lang i18n.Language) (*cli.Registry, error) {
+func newOperatorRegistry(ctx context.Context, layout host.RuntimeLayout, cfg config.Config, lang i18n.Language) (*cli.Registry, error) {
 	gws, err := buildGateways(ctx, lang)
 	if err != nil {
 		return nil, err
@@ -328,6 +328,7 @@ func newOperatorRegistry(ctx context.Context, cfg config.Config, lang i18n.Langu
 	home := homeRef(cfg)
 	return host.NewRegistry(ctx, gws, host.Options{
 		Warnings:   os.Stderr,
+		Runtime:    layout,
 		StatePath:  host.DefaultStatePath(),
 		DefaultCmd: or(cfg.Cmd, "claude"),
 		InstanceID: or(envx.Get("INSTANCE_ID"), cfg.Instance),
@@ -338,12 +339,12 @@ func newOperatorRegistry(ctx context.Context, cfg config.Config, lang i18n.Langu
 	})
 }
 
-func runRegistryVerb(ctx context.Context, verb string, args []string) error {
+func runRegistryVerb(ctx context.Context, layout host.RuntimeLayout, verb string, args []string) error {
 	cfg, langs, err := loadOperator()
 	if err != nil {
 		return err
 	}
-	reg, err := newOperatorRegistry(ctx, cfg, langs.Client)
+	reg, err := newOperatorRegistry(ctx, layout, cfg, langs.Client)
 	if err != nil {
 		return err
 	}
@@ -372,7 +373,7 @@ func runPrompt(ctx context.Context, layout host.RuntimeLayout, task task) error 
 		if err != nil {
 			return err
 		}
-		reg, err := newOperatorRegistry(ctx, cfg, langs.Client)
+		reg, err := newOperatorRegistry(ctx, layout, cfg, langs.Client)
 		if err != nil {
 			return err
 		}
@@ -403,7 +404,7 @@ func runPromptWindow(ctx context.Context, layout host.RuntimeLayout, name, text 
 	if err != nil {
 		return err
 	}
-	reg, err := newOperatorRegistry(ctx, cfg, langs.Client)
+	reg, err := newOperatorRegistry(ctx, layout, cfg, langs.Client)
 	if err != nil {
 		return err
 	}

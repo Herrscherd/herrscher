@@ -209,7 +209,9 @@ func runHubTurnsCtl(ctx context.Context, events <-chan contracts.Event, sink con
 			case historywire.EventPrune:
 				runHistoryPrune(ctx, sink, backend, ctrl, event)
 			case "input":
-				runOneTurn(ctx, sink, backend, orch, event, ctrl, eng, aff, pin, lang)
+				if err := runOneTurn(ctx, sink, backend, orch, event, ctrl, eng, aff, pin, lang); err != nil {
+					logger.Debug("turn ended in error; its reply already went out", "err", err)
+				}
 			}
 		}
 	}
@@ -238,6 +240,17 @@ func (u *turnUsage) setInputSide(event contracts.BackendEvent) {
 	u.cacheCr = event.CacheCreate
 }
 
+// TurnFailedError reports that the backend ended a turn in error. The gateways
+// still receive the reply, which carries the failure; this error is what a caller
+// with no gateway, such as a one-shot seed, reports to its operator.
+type TurnFailedError struct {
+	Err error
+}
+
+func (e *TurnFailedError) Error() string { return e.Err.Error() }
+
+func (e *TurnFailedError) Unwrap() error { return e.Err }
+
 func settleFailedReply(ctrl *turnController, out string, err error) string {
 	switch {
 	case ctrl.wasInterrupted():
@@ -253,7 +266,7 @@ func settleFailedReply(ctrl *turnController, out string, err error) string {
 	}
 }
 
-func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, event contracts.Event, ctrl *turnController, eng *skills.Engine, aff affordances, pin *scopePin, lang i18n.Language) {
+func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, event contracts.Event, ctrl *turnController, eng *skills.Engine, aff affordances, pin *scopePin, lang i18n.Language) error {
 	turnCtx, endTurn := ctrl.begin(ctx)
 	defer endTurn()
 	if eng != nil {
@@ -274,7 +287,9 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 		emitBackendEvent(sink, event, usage.outTok, usage.inTok, usage.cacheRd, usage.cacheCr)
 	}
 	out, err := backend.Respond(turnCtx, prompt, onEvent)
+	var failure error
 	if err != nil {
+		failure = &TurnFailedError{Err: err}
 		out = settleFailedReply(ctrl, out, err)
 	}
 	turn.emitFiles(ctx, sink)
@@ -292,6 +307,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 			logger.Warn("memory observe failed; this turn was not recorded to memory", "err", err)
 		}
 	}
+	return failure
 }
 
 func withSkills(memCtx string, eng *skills.Engine) string {

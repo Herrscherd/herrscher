@@ -99,8 +99,7 @@ func RunOneShot(ctx context.Context, newBackend BackendFactory, orch contracts.O
 			if event.T != "input" {
 				continue
 			}
-			runOneTurn(ctx, channelSink{done: ctx.Done(), out: out}, resp, orch, event, nil, newSkillEngine(resp), affordances{}, nil, lang)
-			return nil
+			return runOneTurn(ctx, channelSink{done: ctx.Done(), out: out}, resp, orch, event, nil, newSkillEngine(resp), affordances{}, nil, lang)
 		case <-ctx.Done():
 			return ctx.Err()
 		}

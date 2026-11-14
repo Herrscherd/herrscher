@@ -25,7 +25,9 @@ func TestHubCallsReactWhenOrchIsReactor(t *testing.T) {
 	orch := &reactingOrch{}
 	resp := &captureBackend{reply: "hello <mark>world"}
 	sink := &recordSink{}
-	runOneTurn(context.Background(), sink, resp, orch, contracts.Event{T: "input", Text: "hi"}, nil, nil, affordances{}, nil, 0)
+	if err := runOneTurn(context.Background(), sink, resp, orch, contracts.Event{T: "input", Text: "hi"}, nil, nil, affordances{}, nil, 0); err != nil {
+		t.Fatalf("turn failed: %v", err)
+	}
 	if !orch.reacted {
 		t.Fatalf("React was not invoked")
 	}
@@ -45,7 +47,9 @@ func (plainOrch) Close() error                                            { retu
 func TestHubUnaffectedByPlainOrchestrator(t *testing.T) {
 	resp := &captureBackend{reply: "just text"}
 	sink := &recordSink{}
-	runOneTurn(context.Background(), sink, resp, plainOrch{}, contracts.Event{T: "input", Text: "hi"}, nil, nil, affordances{}, nil, 0)
+	if err := runOneTurn(context.Background(), sink, resp, plainOrch{}, contracts.Event{T: "input", Text: "hi"}, nil, nil, affordances{}, nil, 0); err != nil {
+		t.Fatalf("turn failed: %v", err)
+	}
 	last := sink.events[len(sink.events)-1]
 	if last.Text != "just text" {
 		t.Fatalf("plain orchestrator reply altered: %+v", last)

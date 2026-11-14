@@ -64,7 +64,8 @@ it, `session close` ends it.
 `--print` is the non-interactive form: one turn, the reply on stdout and the
 session name on stderr, so `herrscher --print "…" > out.md` holds the answer
 alone. A run with no terminal takes that form on its own, since there is nothing
-there to draw a window on.
+there to draw a window on. When the vendor ends the turn in error, the command
+exits with a failure and the error goes to stderr, nothing on stdout.
 
 A single unrecognised word stays a verb, so a typo is still a typo. Use `-p` to
 force a one-word task.

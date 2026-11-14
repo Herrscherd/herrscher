@@ -17,6 +17,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/accounts"
+	"github.com/Herrscherd/herrscher/core/bridge"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -297,6 +298,47 @@ func (b seedBackend) Respond(context.Context, contracts.Prompt, func(contracts.B
 	return "reply", nil
 }
 func (seedBackend) Close() error { return nil }
+
+type failingSeedBackend struct{}
+
+func (failingSeedBackend) Respond(context.Context, contracts.Prompt, func(contracts.BackendEvent)) (string, error) {
+	return "", errors.New("refused by the vendor")
+}
+func (failingSeedBackend) Close() error { return nil }
+
+func TestASeedWhoseTurnFailsReportsTheFailure(t *testing.T) {
+	backend := func(context.Context, state.Session) (contracts.Backend, error) {
+		return failingSeedBackend{}, nil
+	}
+
+	sess := state.Session{Name: "solo", ChannelID: "channel"}
+	_, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), nil, oneShotSeedRuntime{backend: backend, warnings: io.Discard})
+	if _, failed := errors.AsType[*bridge.TurnFailedError](err); !failed {
+		t.Fatalf("seed error = %v, want a failed turn", err)
+	}
+}
+
+func TestAFailedSeedTurnReadsInTheOperatorLanguage(t *testing.T) {
+	err := oneShotBridgeError(&bridge.TurnFailedError{Err: errors.New("refused by the vendor")})
+	for _, tc := range []struct {
+		lang i18n.Language
+		want string
+	}{
+		{i18n.English, "the turn failed: refused by the vendor"},
+		{i18n.French, "le tour a échoué : refused by the vendor"},
+	} {
+		if got := LocalizeError(tc.lang, err).Error(); !strings.Contains(got, tc.want) {
+			t.Errorf("%s: got %q, want it to contain %q", tc.lang, got, tc.want)
+		}
+	}
+}
+
+func TestOneShotBridgeErrorLeavesOtherErrorsAlone(t *testing.T) {
+	cause := errors.New("backend: no model")
+	if got := oneShotBridgeError(cause); !errors.Is(got, cause) {
+		t.Fatalf("got %v, want the error unchanged", got)
+	}
+}
 
 type consolidateSpy struct {
 	err    error

@@ -70,7 +70,9 @@ func runOutboundTurn(t *testing.T, backend contracts.Backend, root string) *reco
 	t.Helper()
 	sink := &recordSink{}
 	aff := affordances{outbox: outboundSettings{root: root, session: "chan", maxBytes: outboundTestMaxBytes}}
-	runOneTurn(context.Background(), sink, backend, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, aff, nil, 0)
+	if err := runOneTurn(context.Background(), sink, backend, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, aff, nil, 0); err != nil {
+		t.Fatalf("turn failed: %v", err)
+	}
 	return sink
 }
 

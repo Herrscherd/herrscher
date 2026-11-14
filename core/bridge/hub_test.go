@@ -251,10 +251,44 @@ func TestInterruptKeepsPartialOutput(t *testing.T) {
 
 func TestBackendFailureStillReadsAsAFailure(t *testing.T) {
 	sink := &recordSink{}
-	runOneTurn(context.Background(), sink, errBackend{}, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
+	err := runOneTurn(context.Background(), sink, errBackend{}, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
+	if _, failed := errors.AsType[*TurnFailedError](err); !failed {
+		t.Fatalf("got %v, want a *TurnFailedError", err)
+	}
 	last := sink.events[len(sink.events)-1]
 	if !strings.HasPrefix(last.Text, errPrefix) {
 		t.Fatalf("an uninterrupted failure must keep its banner; got %q", last.Text)
+	}
+}
+
+func TestAFailedTurnHandsItsCauseBack(t *testing.T) {
+	sink := &recordSink{}
+	err := runOneTurn(context.Background(), sink, errBackend{}, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
+	failed, ok := errors.AsType[*TurnFailedError](err)
+	if !ok || failed.Err.Error() != "backend exploded" {
+		t.Fatalf("runOneTurn error = %v, want the backend failure", err)
+	}
+	last := sink.events[len(sink.events)-1]
+	if !strings.HasPrefix(last.Text, errPrefix) {
+		t.Fatalf("the gateways must still get the failure reply; got %q", last.Text)
+	}
+}
+
+func TestASuccessfulTurnHandsBackNoError(t *testing.T) {
+	sink := &recordSink{}
+	err := runOneTurn(context.Background(), sink, fakeBackend{reply: "done"}, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
+	if err != nil {
+		t.Fatalf("runOneTurn: %v", err)
+	}
+}
+
+func TestRunOneShotReportsAFailedTurn(t *testing.T) {
+	in := make(chan contracts.Event, 1)
+	in <- contracts.Event{T: "input", Text: "go"}
+	out := make(chan contracts.Event, 8)
+	err := RunOneShot(context.Background(), func(string) (contracts.Backend, error) { return errBackend{}, nil }, nil, "channel", in, out)
+	if _, ok := errors.AsType[*TurnFailedError](err); !ok {
+		t.Fatalf("RunOneShot error = %v, want a TurnFailedError", err)
 	}
 }
 

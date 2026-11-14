@@ -290,12 +290,12 @@ func (r *replay) play(out io.Writer, turn Turn, prompt string) (turnOutcome, err
 		case stepCrash:
 			return outcomeCrashed, nil
 		case stepFail:
-			return outcomeAnswered, writeJSON(out, r.result(current.text, prompt, true))
+			return outcomeAnswered, writeJSON(out, r.failure(current.text, prompt))
 		case stepAPIError:
 			if err := writeJSON(out, apiErrorText(current.text)); err != nil {
 				return 0, err
 			}
-			return outcomeAnswered, writeJSON(out, r.result(current.text, prompt, true))
+			return outcomeAnswered, writeJSON(out, r.failure(current.text, prompt))
 		case stepEcho:
 			text := echoPrefix + lastLine(prompt)
 			reply = append(reply, text)
@@ -314,14 +314,14 @@ func (r *replay) play(out io.Writer, turn Turn, prompt string) (turnOutcome, err
 			}
 		}
 	}
-	return outcomeAnswered, writeJSON(out, r.result(strings.Join(reply, "\n\n"), prompt, false))
+	return outcomeAnswered, writeJSON(out, r.result(strings.Join(reply, "\n\n"), prompt))
 }
 
 func (r *replay) oneShot(out io.Writer, prompt string) error {
 	if err := r.record("prompt " + strconv.Quote(prompt)); err != nil {
 		return err
 	}
-	return writeJSON(out, r.result(echoPrefix+lastLine(prompt), prompt, false))
+	return writeJSON(out, r.result(echoPrefix+lastLine(prompt), prompt))
 }
 
 func lastLine(text string) string {
@@ -370,31 +370,43 @@ type tokenUsage struct {
 	OutputTokens int `json:"output_tokens"`
 }
 
-type resultEvent struct {
+type resultFields struct {
 	Type      string     `json:"type"`
 	Subtype   string     `json:"subtype"`
 	IsError   bool       `json:"is_error"`
 	SessionID string     `json:"session_id"`
-	Result    string     `json:"result"`
 	CostUSD   float64    `json:"total_cost_usd"`
 	Usage     tokenUsage `json:"usage"`
 }
 
+type resultEvent struct {
+	resultFields
+	Result string `json:"result"`
+}
+
+type failedResultEvent struct {
+	resultFields
+	Errors []string `json:"errors"`
+}
+
 const charsPerToken = 4
 
-func (r *replay) result(text, prompt string, failed bool) resultEvent {
-	subtype := "success"
-	if failed {
-		subtype = "error_during_execution"
-	}
-	return resultEvent{
+func (r *replay) fields(subtype string, isError bool, prompt, text string) resultFields {
+	return resultFields{
 		Type:      "result",
 		Subtype:   subtype,
-		IsError:   failed,
+		IsError:   isError,
 		SessionID: r.sessionID,
-		Result:    text,
 		Usage:     tokenUsage{InputTokens: len(prompt)/charsPerToken + 1, OutputTokens: len(text)/charsPerToken + 1},
 	}
+}
+
+func (r *replay) result(text, prompt string) resultEvent {
+	return resultEvent{resultFields: r.fields("success", false, prompt, text), Result: text}
+}
+
+func (r *replay) failure(text, prompt string) failedResultEvent {
+	return failedResultEvent{resultFields: r.fields("error_during_execution", true, prompt, text), Errors: []string{text}}
 }
 
 func writeJSON(out io.Writer, event any) error {

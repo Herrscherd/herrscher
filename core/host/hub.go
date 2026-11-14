@@ -64,6 +64,7 @@ type hub struct {
 	teardownGrace  time.Duration
 	sessionStopped func(name string)
 	listen         func(ctx context.Context, path string) (net.Listener, error)
+	stopBridge     func(name string) error
 	seedBackend    func(context.Context, state.Session) (contracts.Backend, error)
 	models         *ModelDiscovery
 
@@ -93,6 +94,7 @@ func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir str
 	}
 	if sup != nil {
 		sup.SetFailureSink(created.reportSessionFailure)
+		created.stopBridge = sup.Stop
 	}
 	return created
 }
@@ -152,11 +154,25 @@ func eventTap(publish func(string, contracts.Event), session string) func(contra
 var errHubClosed = errors.New("the daemon is shutting down and starts no session")
 
 func (h *hub) goLive(ctx context.Context, sess state.Session) error {
+	h.lifecycle.Lock()
+	defer h.lifecycle.Unlock()
+	return h.goLiveLocked(ctx, sess)
+}
+
+func (h *hub) goLiveStarted(ctx context.Context, sess state.Session) error {
+	h.lifecycle.Lock()
+	defer h.lifecycle.Unlock()
+	if err := h.goLiveLocked(ctx, sess); err != nil {
+		return err
+	}
+	h.sup.Start(sess)
+	return nil
+}
+
+func (h *hub) goLiveLocked(ctx context.Context, sess state.Session) error {
 	if h.runtime.Dir() == "" {
 		return errNoRuntimeLayout
 	}
-	h.lifecycle.Lock()
-	defer h.lifecycle.Unlock()
 	if h.closed {
 		return errHubClosed
 	}
@@ -310,19 +326,32 @@ func (h *hub) goDead(name string) {
 }
 
 func (h *hub) acceptFailed(name string, done <-chan struct{}, cause error) {
-	if _, ok := h.drop(name, done); !ok {
+	if !h.retireFailed(name, done) {
 		return
-	}
-	if h.sup != nil {
-		logCleanup(h.sup.Stop(name))
 	}
 	h.forget(name)
 	warnLive(h.warnings, h.sessionLanguageSource(name), "warn.session_accept_failed", map[string]any{nameParam: name, detailParam: cause})
 }
 
+func (h *hub) retireFailed(name string, done <-chan struct{}) bool {
+	h.lifecycle.Lock()
+	defer h.lifecycle.Unlock()
+	if _, ok := h.dropLocked(name, done); !ok {
+		return false
+	}
+	if h.stopBridge != nil {
+		logCleanup(h.stopBridge(name))
+	}
+	return true
+}
+
 func (h *hub) drop(name string, only <-chan struct{}) (liveSession, bool) {
 	h.lifecycle.Lock()
 	defer h.lifecycle.Unlock()
+	return h.dropLocked(name, only)
+}
+
+func (h *hub) dropLocked(name string, only <-chan struct{}) (liveSession, bool) {
 	h.mu.Lock()
 	live, ok := h.live[name]
 	if ok && only != nil && live.done != only {
@@ -667,14 +696,13 @@ func (h *hub) RestartWithResume(name, token string) error {
 	}
 	h.goDead(name)
 	sess.ResumeToken = token
-	if err := h.goLive(context.Background(), sess); err != nil {
+	if err := h.goLiveStarted(context.Background(), sess); err != nil {
 		return err
 	}
 	if err := h.st.SetResumeToken(name, token); err != nil {
 		h.goDead(name)
 		return err
 	}
-	h.sup.Start(sess)
 	return nil
 }
 
@@ -685,7 +713,7 @@ func (h *hub) Resume(name string) error {
 	}
 	live := sess
 	live.Archived = false
-	if err := h.goLive(context.Background(), live); err != nil {
+	if err := h.goLiveStarted(context.Background(), live); err != nil {
 		return err
 	}
 	if sess.Archived {
@@ -694,7 +722,6 @@ func (h *hub) Resume(name string) error {
 			return err
 		}
 	}
-	h.sup.Start(live)
 	return nil
 }
 

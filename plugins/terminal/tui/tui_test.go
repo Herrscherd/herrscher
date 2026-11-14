@@ -370,7 +370,7 @@ func TestClosedEventRemovesTab(t *testing.T) {
 	m := newModel(&fakeBackend{})
 	m.ensureTab("a")
 	m.ensureTab("b")
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "b"}, Event: contracts.Event{T: "closed"}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "b"}, Event: contracts.Event{T: eventClosed}})
 	if _, ok := m.tabs["b"]; ok {
 		t.Fatal("closed event must remove tab b")
 	}
@@ -393,7 +393,7 @@ func TestSyncTabsFromSessions(t *testing.T) {
 
 func TestTabBusyLifecycle(t *testing.T) {
 	m := newModel(&fakeBackend{})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "status", Text: "working"}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventStatus, Text: "working"}})
 	if !m.tabs["a"].busy {
 		t.Fatal("status must mark tab busy")
 	}
@@ -831,8 +831,8 @@ func TestThinkingEventReachesTheTranscript(t *testing.T) {
 func TestHostErrorRendersAsAnError(t *testing.T) {
 	m := newTestModel()
 	tb := m.ensureTab("a")
-	m.renderInto(tb, contracts.Event{T: "status", Text: hostErrPrefix + "the worktree is dirty"})
-	m.renderInto(tb, contracts.Event{T: "status", Text: "Read core/parse.go"})
+	m.renderInto(tb, contracts.Event{T: eventStatus, Text: hostErrPrefix + "the worktree is dirty"})
+	m.renderInto(tb, contracts.Event{T: eventStatus, Text: "Read core/parse.go"})
 	if tb.entries[0].role != roleError {
 		t.Fatalf("a flagged line must be an error, got %q", tb.entries[0].role)
 	}

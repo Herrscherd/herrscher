@@ -99,6 +99,7 @@ const (
 	eventAbandoned = "abandoned"
 	eventStatus    = "status"
 	eventNotice    = "notice"
+	eventClosed    = "closed"
 
 	stateFailed = "failed"
 	stateError  = "error"
@@ -602,7 +603,7 @@ func (m *model) successorTab() string {
 }
 
 func (m *model) route(routed RoutedEvent) tea.Cmd {
-	if routed.Event.T == "closed" {
+	if routed.Event.T == eventClosed {
 		m.removeTab(routed.Conv.ID)
 		return nil
 	}

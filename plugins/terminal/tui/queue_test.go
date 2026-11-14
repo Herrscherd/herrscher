@@ -51,7 +51,7 @@ func TestAltEnterSteersAfterNextTool(t *testing.T) {
 	if len(m.tabs["a"].queue) != 1 || !m.tabs["a"].queue[0].steer {
 		t.Fatalf("alt+enter must queue a steer item: %+v", m.tabs["a"].queue)
 	}
-	settle(m, m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "status", Text: "bash"}}))
+	settle(m, m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventStatus, Text: "bash"}}))
 	if len(f.submitted) != 1 || f.submitted[0].text != "réoriente" {
 		t.Fatalf("steer item must be sent after the next tool: %+v", f.submitted)
 	}

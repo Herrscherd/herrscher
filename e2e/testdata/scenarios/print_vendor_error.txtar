@@ -1,0 +1,7 @@
+! exec herrscher --print 'say ping please'
+! stdout '\S'
+stderr 'unexpected error: refused by the vendor$'
+! stderr 'hub-socket'
+
+-- claude.script --
+error refused by the vendor

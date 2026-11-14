@@ -11,6 +11,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
+	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
@@ -33,6 +34,7 @@ type cmdResponse struct {
 	Ok     *string `json:"ok,omitempty"`
 	Err    *string `json:"err,omitempty"`
 	Notice string  `json:"notice,omitempty"`
+	Output string  `json:"output,omitempty"`
 }
 
 func dispatchLiveCommand(ctx context.Context, layout runtimedir.Layout, path string, argv []string) (string, bool, error) {
@@ -76,7 +78,7 @@ func dispatchLiveCommand(ctx context.Context, layout runtimedir.Layout, path str
 }
 
 func commandFailure(resp cmdResponse) error {
-	plain := commandSocketError{Message: *resp.Err}
+	plain := commandSocketError{Message: *resp.Err, output: resp.Output}
 	if resp.Notice == "" {
 		return &plain
 	}
@@ -192,6 +194,7 @@ func handleCommandConn(ctx context.Context, conn net.Conn, disp dispatcher, read
 			msg := derr.Error()
 			resp.Err = &msg
 			resp.Notice = encodedNotice(derr)
+			resp.Output = cli.PartialOutputOf(derr)
 		} else {
 			resp.Ok = &out
 		}

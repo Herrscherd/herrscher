@@ -1,0 +1,10 @@
+! exec herrscher --print 'say ping please'
+stdout '^Je regarde\.\n\nVoici$'
+! stdout 'regarde\.Voici'
+stderr 'unexpected error: refused by the vendor$'
+! stderr 'hub-socket'
+
+-- claude.script --
+text Je regarde.
+text Voici
+error refused by the vendor

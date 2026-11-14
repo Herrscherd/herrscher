@@ -15,9 +15,10 @@ import (
 )
 
 type event struct {
-	Type    string `json:"type"`
-	IsError bool   `json:"is_error"`
-	Result  string `json:"result"`
+	Type    string   `json:"type"`
+	IsError bool     `json:"is_error"`
+	Result  string   `json:"result"`
+	Errors  []string `json:"errors"`
 	Message struct {
 		Content []struct {
 			Type  string          `json:"type"`
@@ -87,7 +88,7 @@ func summary(events []event) []string {
 			}
 		case "result":
 			if e.IsError {
-				got = append(got, "failed:"+e.Result)
+				got = append(got, "failed:"+strings.Join(e.Errors, "|"))
 			} else {
 				got = append(got, "result:"+e.Result)
 			}

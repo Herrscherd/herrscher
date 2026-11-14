@@ -85,14 +85,21 @@ const (
 const hostErrPrefix = "⚠️ "
 
 const (
-	sessionVerb = "session"
-	verbRename  = "rename"
-	verbHandoff = "handoff"
-	stateDone   = "done"
-	stateActive = "active"
-	eventReply  = "reply"
-	eventStatus = "status"
-	eventNotice = "notice"
+	sessionVerb    = "session"
+	verbRename     = "rename"
+	verbHandoff    = "handoff"
+	stateDone      = "done"
+	stateActive    = "active"
+	eventReply     = "reply"
+	eventReset     = "reset"
+	eventChunk     = "chunk"
+	eventThinking  = "thinking"
+	eventTodos     = "todos"
+	eventSubagent  = "subagent"
+	eventAbandoned = "abandoned"
+	eventStatus    = "status"
+	eventNotice    = "notice"
+	eventClosed    = "closed"
 
 	stateFailed = "failed"
 	stateError  = "error"
@@ -140,6 +147,7 @@ type tab struct {
 	busy               bool
 	interruptRequested bool
 	streamed           bool
+	pendingBlank       strings.Builder
 	lastCost           float64
 	disconnected       bool
 	tokens             int
@@ -205,29 +213,11 @@ func (tb *tab) appendEntry(item entry) {
 	if item.role == roleYou {
 		tb.trail = nil
 	}
+	tb.pendingBlank.Reset()
 	tb.entries = append(tb.entries, item)
 	if len(tb.entries) > maxTabLines {
 		tb.entries = append([]entry(nil), tb.entries[len(tb.entries)-maxTabLines:]...)
 	}
-}
-
-func (tb *tab) appendChunk(text string) {
-	if n := len(tb.entries); n > 0 && tb.entries[n-1].role == roleAgent && tb.entries[n-1].streaming {
-		tb.entries[n-1].text += text
-		return
-	}
-	tb.appendEntry(entry{role: roleAgent, text: text, streaming: true})
-}
-
-func (tb *tab) endStream() {
-	if n := len(tb.entries); n > 0 && tb.entries[n-1].role == roleAgent {
-		tb.entries[n-1].streaming = false
-	}
-}
-
-type sessionStartedMsg struct {
-	name string
-	err  error
 }
 
 type dispatchResultMsg struct {
@@ -613,7 +603,7 @@ func (m *model) successorTab() string {
 }
 
 func (m *model) route(routed RoutedEvent) tea.Cmd {
-	if routed.Event.T == "closed" {
+	if routed.Event.T == eventClosed {
 		m.removeTab(routed.Conv.ID)
 		return nil
 	}
@@ -768,45 +758,6 @@ func (m *model) handleEnter() tea.Cmd {
 		return m.startSessionWith(text, atts)
 	}
 	return m.submitTo(m.active, text, atts)
-}
-
-func (m *model) startSessionWith(text string, atts []Attachment) tea.Cmd {
-	m.starting = true
-	m.openText, m.openAtts = text, atts
-	m.flash = m.tr.t("tui.session.starting", nil)
-	backend := m.tm
-	return func() tea.Msg {
-		name, err := backend.StartSession()
-		return sessionStartedMsg{name: name, err: err}
-	}
-}
-
-func (m *model) handleSessionStarted(msg sessionStartedMsg) tea.Cmd {
-	m.starting = false
-	if msg.err != nil {
-		m.giveBackFailedStart()
-		m.pending = append(m.openAtts, m.pending...)
-		m.openText, m.openAtts = "", nil
-		m.applySize()
-		m.resizeComposer()
-		m.flash = m.tr.t("tui.session.start_failed", map[string]any{tplArgReason: localizedReason(m.tr, msg.err)})
-		return nil
-	}
-	m.flash = ""
-	m.openSession = msg.name
-	m.tabSig = ""
-	return m.syncTabs()
-}
-
-func (m *model) giveBackFailedStart() {
-	typed := m.input.Value()
-	switch {
-	case typed == "":
-		m.input.SetValue(m.openText)
-	case m.openText == "":
-	default:
-		m.input.SetValue(m.openText + "\n" + typed)
-	}
 }
 
 func (m *model) runSlash(text string) tea.Cmd {
@@ -1190,7 +1141,7 @@ func (m *model) activate(channel string) {
 }
 
 func (m *model) renderInto(target *tab, event contracts.Event) {
-	if event.T != "abandoned" {
+	if event.T != eventAbandoned {
 		target.disconnected = false
 	}
 	previous := target.tokens
@@ -1210,11 +1161,12 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 			return
 		}
 		m.renderInto(target, contracts.Event{T: eventStatus, Text: event.Text})
-	case "chunk":
+	case eventChunk:
 		target.busy = true
-		target.streamed = true
-		target.appendChunk(event.Text)
-	case "thinking":
+		if target.appendChunk(event.Text) {
+			target.streamed = true
+		}
+	case eventThinking:
 		target.busy = true
 		target.appendThinking(event.Text, target.tokens, previous)
 	case eventStatus:
@@ -1225,13 +1177,13 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.appendEntry(entry{role: statusRole(event.Text), text: text})
 	case eventReply:
 		target.appendReply(m.tr, event)
-	case "todos":
+	case eventTodos:
 		target.busy = true
 		target.todos = event.Todos
-	case "subagent":
+	case eventSubagent:
 		target.busy = true
 		target.applySubagent(event.Subagent)
-	case "reset":
+	case eventReset:
 		target.busy = false
 		target.interruptRequested = false
 		target.streamed = false
@@ -1246,7 +1198,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.completeCompaction(m.tr, event)
 	case eventCompactionFailed:
 		target.failCompaction(event)
-	case "abandoned":
+	case eventAbandoned:
 		target.busy = false
 		target.interruptRequested = false
 		target.streamed = false
@@ -1523,18 +1475,6 @@ func newRunModel(ctx context.Context, backend Backend) *model {
 	return model
 }
 
-func killedByContext(ctx context.Context, err error) bool {
-	return ctx.Err() != nil && errors.Is(err, tea.ErrProgramKilled)
-}
-
-func settleRun(ctx context.Context, cancel context.CancelFunc, runErr error) error {
-	if killedByContext(ctx, runErr) {
-		runErr = nil
-	}
-	cancel()
-	return runErr
-}
-
 // Run starts the TUI bound to the given gateway backend, blocking until the user
 // quits; quitting cancels ctx (wired by the caller) so the daemon shuts down
 // cleanly.
@@ -1561,31 +1501,6 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 		return errors.Join(runErr, keyedError{cause: err, key: "tui.terminal.enhanced_keys_disable_failed", params: map[string]any{"Err": err.Error()}})
 	}
 	return runErr
-}
-
-func runProgram(ctx context.Context, cancel context.CancelFunc, backend Backend, model *model, extra ...tea.ProgramOption) error {
-	options := []tea.ProgramOption{
-		tea.WithContext(ctx),
-		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
-		tea.WithReportFocus(),
-	}
-	program := tea.NewProgram(model, append(options, extra...)...)
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case entry, ok := <-backend.Frontend():
-				if !ok {
-					return
-				}
-				program.Send(eventMsg(entry))
-			}
-		}
-	}()
-	_, runErr := program.Run()
-	return settleRun(ctx, cancel, runErr)
 }
 
 func (m *model) Init() tea.Cmd {

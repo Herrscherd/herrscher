@@ -119,7 +119,7 @@ func TestModeSlashSetsAModeOrCycles(t *testing.T) {
 func TestPlanReplyOpensTheValidationMenuOnlyInPlanMode(t *testing.T) {
 	f := &fakeBackend{sessions: namedSession()}
 	m := modeSession(f)
-	reply := RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "1. read the code", Done: true}}
+	reply := RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventReply, Text: "1. read the code", Done: true}}
 
 	m.route(reply)
 	if m.planMenu != nil {
@@ -137,7 +137,7 @@ func TestPlanMenuFirstChoiceSwitchesToAcceptEditsThenSubmits(t *testing.T) {
 	f := &fakeBackend{sessions: namedSession()}
 	m := modeSession(f)
 	m.tabs["a"].setMode(modePlan)
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "1. read", Done: true}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventReply, Text: "1. read", Done: true}})
 
 	cmd, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
 	settle(m, cmd)
@@ -157,7 +157,7 @@ func TestPlanMenuSecondChoiceValidatesInManual(t *testing.T) {
 	f := &fakeBackend{sessions: namedSession()}
 	m := modeSession(f)
 	m.tabs["a"].setMode(modePlan)
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "1. read", Done: true}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventReply, Text: "1. read", Done: true}})
 
 	pressKey(m, tea.KeyMsg{Type: tea.KeyDown})
 	pressKey(m, tea.KeyMsg{Type: tea.KeyEnter})
@@ -174,7 +174,7 @@ func TestPlanMenuEscKeepsPlanningWithoutTouchingTheHost(t *testing.T) {
 	f := &fakeBackend{sessions: namedSession()}
 	m := modeSession(f)
 	m.tabs["a"].setMode(modePlan)
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "1. read", Done: true}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventReply, Text: "1. read", Done: true}})
 	before := len(f.dispatched)
 
 	pressKey(m, tea.KeyMsg{Type: tea.KeyEsc})
@@ -322,7 +322,7 @@ func TestPlanMenuShiftTabLeavesTheMenuForTheNextMode(t *testing.T) {
 	f := &fakeBackend{sessions: namedSession()}
 	m := modeSession(f)
 	m.tabs["a"].setMode(modePlan)
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "1. read", Done: true}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventReply, Text: "1. read", Done: true}})
 	if !strings.Contains(ansi.Strip(m.planMenuView()), "⇧⇥ change mode") {
 		t.Fatalf("the plan menu footer must offer ⇧⇥: %q", ansi.Strip(m.planMenuView()))
 	}

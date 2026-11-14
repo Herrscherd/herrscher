@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 func TestUserEntryIsOneUnruledRow(t *testing.T) {
@@ -96,6 +98,29 @@ func TestChunkCoalescingRendersOneBlock(t *testing.T) {
 	tb.appendChunk("again")
 	if len(tb.entries) != 3 {
 		t.Fatalf("interrupted stream must open a fresh block: %d entries", len(tb.entries))
+	}
+}
+
+func TestResetLeavesTheAbandonedAttemptClosed(t *testing.T) {
+	m := newTestModel()
+	tb := m.ensureTab("a")
+	m.renderInto(tb, contracts.Event{T: eventChunk, Text: "Je regarde."})
+	m.renderInto(tb, contracts.Event{T: eventReset})
+	m.renderInto(tb, contracts.Event{T: eventChunk, Text: "Voici"})
+	var agents []entry
+	for _, item := range tb.entries {
+		if item.role == roleAgent {
+			agents = append(agents, item)
+		}
+	}
+	if len(agents) != 2 {
+		t.Fatalf("the retry must open its own entry after the reset: %d agent entries", len(agents))
+	}
+	if agents[0].text != "Je regarde." || agents[0].streaming {
+		t.Fatalf("the abandoned attempt must stay as it was, closed: %+v", agents[0])
+	}
+	if agents[1].text != "Voici" {
+		t.Fatalf("the retry must hold only its own text: %q", agents[1].text)
 	}
 }
 

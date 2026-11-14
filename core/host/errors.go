@@ -153,10 +153,15 @@ func (e *noTurnInFlightError) Error() string {
 
 type commandSocketError struct {
 	Message string
+	output  string
 }
 
 func (e *commandSocketError) Error() string {
 	return e.Message
+}
+
+func (e *commandSocketError) PartialOutput() string {
+	return e.output
 }
 
 type noticedSocketError struct {

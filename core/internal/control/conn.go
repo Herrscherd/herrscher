@@ -139,10 +139,7 @@ func (a *Acceptor) shutdown() error {
 func (a *Acceptor) drainPending() {
 	for {
 		select {
-		case conn, ok := <-a.conns:
-			if !ok {
-				return
-			}
+		case conn := <-a.conns:
 			closeConn(conn)
 		default:
 			return

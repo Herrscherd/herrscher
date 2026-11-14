@@ -109,6 +109,10 @@ func (a *Acceptor) loop() {
 			if errors.Is(err, net.ErrClosed) || a.isDone() {
 				return
 			}
+			if !isTransientAcceptError(err) {
+				slog.Error("control accept failed, stopping", "err", err)
+				return
+			}
 			retryDelay = nextAcceptRetryDelay(retryDelay)
 			slog.Warn("control accept failed, retrying", "err", err, "delay", retryDelay)
 			if !a.pause(retryDelay) {

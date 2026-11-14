@@ -132,13 +132,21 @@ func TestBlankOpeningChunkOpensNoEntry(t *testing.T) {
 			t.Fatalf("a chunk that is only whitespace must open no entry, got %d entries for %q", len(tb.entries), blank)
 		}
 	}
-	tb := &tab{}
-	tb.appendChunk("\n\nVoici")
-	if len(tb.entries) != 1 {
-		t.Fatalf("the next non-empty chunk must open one entry: %d entries", len(tb.entries))
-	}
-	if got := tb.entries[0].text; got != "Voici" || !tb.entries[0].streaming {
-		t.Fatalf("the entry must open on the text without leading newlines: %+v", tb.entries[0])
+	for _, tc := range []struct{ chunk, want string }{
+		{"\n\nVoici", "Voici"},
+		{"  \n\nVoici", "Voici"},
+		{" \t\n  \nVoici", "Voici"},
+		{"\n    code", "    code"},
+		{"   code", "   code"},
+	} {
+		tb := &tab{}
+		tb.appendChunk(tc.chunk)
+		if len(tb.entries) != 1 {
+			t.Fatalf("the next non-empty chunk %q must open one entry: %d entries", tc.chunk, len(tb.entries))
+		}
+		if got := tb.entries[0].text; got != tc.want || !tb.entries[0].streaming {
+			t.Fatalf("the entry for %q must open on %q: %+v", tc.chunk, tc.want, tb.entries[0])
+		}
 	}
 }
 

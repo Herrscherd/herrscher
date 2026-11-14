@@ -220,7 +220,17 @@ func (tb *tab) appendChunk(text string) {
 	if strings.TrimSpace(text) == "" {
 		return
 	}
-	tb.appendEntry(entry{role: roleAgent, text: strings.TrimLeft(text, "\n"), streaming: true})
+	tb.appendEntry(entry{role: roleAgent, text: dropBlankLeadingLines(text), streaming: true})
+}
+
+func dropBlankLeadingLines(text string) string {
+	body := strings.TrimLeft(text, " \t\r\n")
+	blank := text[:len(text)-len(body)]
+	last := strings.LastIndexByte(blank, '\n')
+	if last < 0 {
+		return text
+	}
+	return text[last+1:]
 }
 
 func (tb *tab) endStream() {

@@ -50,7 +50,9 @@ func (h *hub) goLiveAndPersist(ctx context.Context, sess state.Session, persist 
 		h.haltBridgeWithin(sess.Name)
 		return true, err
 	}
-	h.withinGrace(sess.Name, func() { h.sup.Start(sess) })
+	if h.startBridge != nil {
+		h.startBridge(sess)
+	}
 	return false, nil
 }
 
@@ -150,8 +152,11 @@ func (h *hub) closeAndRemoveSockets() error {
 }
 
 func (h *hub) goDead(name string) {
+	h.lifecycle.Lock()
+	live, ok := h.dropLocked(name, nil)
 	h.haltBridgeWithin(name)
-	if live, ok := h.drop(name, nil); ok {
+	h.lifecycle.Unlock()
+	if ok {
 		h.awaitTeardown(name, live)
 	}
 	h.forget(name)
@@ -198,12 +203,6 @@ func (h *hub) withinGrace(name string, step func()) {
 	case <-time.After(h.teardownGrace):
 		warnLive(h.warnings, h.sessionLanguageSource(name), "warn.session_teardown_overrun", map[string]any{nameParam: name, graceParam: h.teardownGrace.String()})
 	}
-}
-
-func (h *hub) drop(name string, only <-chan struct{}) (liveSession, bool) {
-	h.lifecycle.Lock()
-	defer h.lifecycle.Unlock()
-	return h.dropLocked(name, only)
 }
 
 func (h *hub) dropLocked(name string, only <-chan struct{}) (liveSession, bool) {

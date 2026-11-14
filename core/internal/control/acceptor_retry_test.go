@@ -98,30 +98,34 @@ func emfileError() error {
 	return fmt.Errorf("accept tcp: %w", syscall.EMFILE)
 }
 
-func TestAcceptRetriesTemporaryErrors(t *testing.T) {
+func TestAcceptRetriesEachTransientErrno(t *testing.T) {
 	captureLog(t)
-	synctest.Test(t, func(t *testing.T) {
-		client, server := net.Pipe()
-		defer closeConn(client)
-		defer closeConn(server)
+	for _, errno := range []syscall.Errno{syscall.EMFILE, syscall.ENFILE, syscall.ECONNABORTED, syscall.ENOBUFS, syscall.ENOMEM} {
+		t.Run(errno.Error(), func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				client, server := net.Pipe()
+				defer closeConn(client)
+				defer closeConn(server)
 
-		ln := &retryListener{script: []acceptResult{{err: emfileError()}, {conn: server}}}
-		acc := newAcceptor(ln)
-		defer closeConn(acc)
-		go acc.loop()
+				ln := &retryListener{script: []acceptResult{{err: fmt.Errorf("accept tcp: %w", errno)}, {conn: server}}}
+				acc := newAcceptor(ln)
+				defer closeConn(acc)
+				go acc.loop()
 
-		select {
-		case c, ok := <-acc.Conns():
-			if !ok || c.c != server {
-				t.Fatal("the conn accepted after a temporary error was not delivered")
-			}
-		case <-time.After(time.Second):
-			t.Fatal("the accept loop gave up on a temporary error instead of retrying")
-		}
-		if err := acc.Close(); err != nil {
-			t.Fatalf("Close: %v", err)
-		}
-	})
+				select {
+				case c, ok := <-acc.Conns():
+					if !ok || c.c != server {
+						t.Fatal("the conn accepted after a transient error was not delivered")
+					}
+				case <-time.After(time.Second):
+					t.Fatal("the accept loop gave up on a transient error instead of retrying")
+				}
+				if err := acc.Close(); err != nil {
+					t.Fatalf("Close: %v", err)
+				}
+			})
+		})
+	}
 }
 
 func TestAcceptBackoffDoublesUpToTheCap(t *testing.T) {

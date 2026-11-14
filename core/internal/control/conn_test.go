@@ -142,5 +142,5 @@ func logErr(t *testing.T, err error) {
 
 func closeLogged(t *testing.T, closer io.Closer) {
 	t.Helper()
-	logErr(t, closer.Close())
+	logErr(t, closeBounded(t, closer))
 }

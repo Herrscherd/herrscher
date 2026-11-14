@@ -15,7 +15,7 @@ func TestCloseReleasesAConnBlockedOnHandoff(t *testing.T) {
 		first, second = newCloseRecorder(), newCloseRecorder()
 		ln.conns <- first
 		ln.conns <- second
-		acc := &Acceptor{ln: ln, conns: make(chan *Conn, 1), done: make(chan struct{}), exited: make(chan struct{})}
+		acc := newAcceptor(ln)
 		go acc.loop()
 		synctest.Wait()
 		if err := acc.Close(); err != nil {

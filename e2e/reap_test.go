@@ -105,11 +105,24 @@ func TestRequireOwnedByUsRefusesWhatIsNotOurDirectory(t *testing.T) {
 	if err := os.Symlink(root, link); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Chmod(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	if err := requireOwnedByUs(root); err != nil {
 		t.Fatalf("our own directory was refused: %v", err)
 	}
 	if _, isForeign := errors.AsType[*foreignDirError](requireOwnedBy(root, os.Getuid()+1)); !isForeign {
 		t.Fatal("a directory owned by another uid was accepted")
+	}
+	shared := filepath.Join(root, "shared")
+	if err := os.Mkdir(shared, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(shared, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, isForeign := errors.AsType[*foreignDirError](requireOwnedByUs(shared)); !isForeign {
+		t.Fatal("a directory other users can enter was accepted")
 	}
 	for _, foreign := range []string{file, link} {
 		refused, isForeign := errors.AsType[*foreignDirError](requireOwnedByUs(foreign))
@@ -142,23 +155,48 @@ func TestRemoveInstanceEntriesLeavesAForeignDirectoryAlone(t *testing.T) {
 	}
 }
 
+const longRuntimeDir = 69
+
+func longPrivateDir(t *testing.T, instance string) string {
+	t.Helper()
+	base := filepath.Join(tmpRoot, "e2e-"+instance)
+	dir := filepath.Join(base, strings.Repeat("d", longRuntimeDir-len(base)-1))
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(base); err != nil {
+			t.Error(err)
+		}
+	})
+	return dir
+}
+
+func entriesIn(t *testing.T, dir, instance string) []string {
+	t.Helper()
+	entries, err := daemonEntries(dir, instance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range entries {
+		if err := os.WriteFile(path, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return entries
+}
+
 func TestRemoveInstanceEntriesTakesTheHashedSocketsAndOnlyThem(t *testing.T) {
 	instance, err := newInstanceID()
 	if err != nil {
 		t.Fatal(err)
 	}
-	dir := filepath.Join(t.TempDir(), strings.Repeat("d", maxUnixSocketPath))
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	var ours []string
-	for _, stem := range daemonSocketStems(instance) {
-		ours = append(ours, socketPath(dir, stem))
-	}
-	theirs := socketPath(dir, "herrscher-command-e2e-00000000")
-	for _, path := range append([]string{theirs}, ours...) {
-		if err := os.WriteFile(path, nil, 0o600); err != nil {
-			t.Fatal(err)
+	dir := longPrivateDir(t, instance)
+	ours := entriesIn(t, dir, instance)
+	theirs := entriesIn(t, dir, "e2e-00000000")
+	for _, socket := range ours[:2] {
+		if !strings.HasPrefix(filepath.Base(socket), "hs-") {
+			t.Fatalf("%s is not hashed, the directory is too short to test the hashed names", socket)
 		}
 	}
 	if failures := removeInstanceEntries(dir, instance); len(failures) != 0 {
@@ -169,26 +207,9 @@ func TestRemoveInstanceEntriesTakesTheHashedSocketsAndOnlyThem(t *testing.T) {
 			t.Errorf("%s was left behind", path)
 		}
 	}
-	if !exists(theirs) {
-		t.Error("the socket of another instance was removed")
-	}
-}
-
-func TestSocketPathNamesLikeTheRuntimeDirectory(t *testing.T) {
-	short := t.TempDir()
-	long := filepath.Join(short, strings.Repeat("d", maxUnixSocketPath))
-	cases := []struct {
-		dir, stem string
-		hashed    bool
-	}{
-		{short, "herrscher-command-e2e-00000000", false},
-		{long, "herrscher-command-e2e-00000000", true},
-		{short, "command-e2e-00000000", true},
-	}
-	for _, tc := range cases {
-		name := filepath.Base(socketPath(tc.dir, tc.stem))
-		if hashed := name == "hs-"+runtimeKey(tc.stem)+".sock"; hashed != tc.hashed || (!hashed && name != tc.stem+".sock") {
-			t.Errorf("socketPath(%d bytes, %q) = %q, want hashed %t", len(tc.dir), tc.stem, name, tc.hashed)
+	for _, path := range theirs {
+		if !exists(path) {
+			t.Errorf("%s of another instance was removed", path)
 		}
 	}
 }

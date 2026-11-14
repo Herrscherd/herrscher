@@ -1611,10 +1611,13 @@ Linux, and says it skips the step anywhere else.
   `testing/synctest` bubble cannot control.
 - A process that still carries the instance of the scenario after it ends fails the
   run and is killed.
-- The cleanup removes every runtime entry named after the instance, and the hashed
-  names its command and events sockets take when their path passes 103 bytes. A
-  session socket whose path passes that limit takes a hashed name the cleanup cannot
-  tell apart, so scenarios keep their session names short.
+- The cleanup removes every runtime entry named after the instance, and the names
+  `core/host` gives its command and events sockets and its lock, hashed ones
+  included. It only touches a runtime directory that is private to the user. A
+  session socket whose path passes 103 bytes takes a hashed name the cleanup cannot
+  tell apart, so a session name in a scenario stays within 40 bytes: the longest
+  session socket is `<runtime dir>/herrscher-command-<instance>-s-<session>.sock`,
+  and `/run/user/<uid>/herrscher` with a four-digit uid leaves 40 bytes to the name.
 - `claude` on the `PATH` of a scenario is the fake of `e2e/vendortest`. It is a whole
   process standing in for the vendor CLI, so it speaks the stream-json protocol rather
   than recording calls. In stream-json mode it replays `$VENDORTEST_SCRIPT`, which is

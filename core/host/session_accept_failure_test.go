@@ -8,7 +8,6 @@ import (
 	"net"
 	"path/filepath"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -37,12 +36,24 @@ func brokenFirstListen() func(context.Context, string) (net.Listener, error) {
 	}
 }
 
+func awaitWarning(t *testing.T, warnings *lockedBuffer, want string) {
+	t.Helper()
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.After(5 * time.Second)
+	for !strings.Contains(warnings.String(), want) {
+		select {
+		case <-ticker.C:
+		case <-deadline:
+			t.Fatalf("no warning mentioning %q within 5s: %q", want, warnings.String())
+		}
+	}
+}
+
 func TestTerminalAcceptErrorRetiresTheSessionAndRebinds(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
 	name := "accept-failure-" + newTurnID()
-	var warnings bytes.Buffer
-	stopped := make(chan struct{})
-	var stopOnce sync.Once
+	warnings := &lockedBuffer{}
 	h := newHub(
 		state.NewState(filepath.Join(t.TempDir(), "state.json")),
 		nil,
@@ -52,8 +63,7 @@ func TestTerminalAcceptErrorRetiresTheSessionAndRebinds(t *testing.T) {
 		nil,
 		newApprovalTable(io.Discard),
 		newSessionTable(),
-		withWarnings(&warnings),
-		withSessionStopped(func(string) { stopOnce.Do(func() { close(stopped) }) }),
+		withWarnings(warnings),
 	)
 	h.runtime = layout
 	h.teardownGrace = time.Minute
@@ -63,11 +73,7 @@ func TestTerminalAcceptErrorRetiresTheSessionAndRebinds(t *testing.T) {
 	if err := h.goLive(t.Context(), state.Session{Name: name, Incarnation: "first"}); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case <-stopped:
-	case <-time.After(5 * time.Second):
-		t.Fatal("the session did not stop after its control socket failed for good")
-	}
+	awaitWarning(t, warnings, errTerminalAccept.Error())
 	h.mu.Lock()
 	_, stillLive := h.live[name]
 	h.mu.Unlock()
@@ -98,9 +104,7 @@ func TestNormalStopReportsNothing(t *testing.T) {
 		t.Run(stop, func(t *testing.T) {
 			layout := isolatedRuntimeDir(t)
 			name := "normal-stop-" + newTurnID()
-			var warnings bytes.Buffer
-			stopped := make(chan struct{})
-			var stopOnce sync.Once
+			warnings := &lockedBuffer{}
 			h := newHub(
 				state.NewState(filepath.Join(t.TempDir(), "state.json")),
 				nil,
@@ -110,8 +114,7 @@ func TestNormalStopReportsNothing(t *testing.T) {
 				nil,
 				newApprovalTable(io.Discard),
 				newSessionTable(),
-				withWarnings(&warnings),
-				withSessionStopped(func(string) { stopOnce.Do(func() { close(stopped) }) }),
+				withWarnings(warnings),
 			)
 			h.runtime = layout
 			t.Cleanup(func() { h.goDead(name) })
@@ -120,11 +123,6 @@ func TestNormalStopReportsNothing(t *testing.T) {
 				t.Fatal(err)
 			}
 			run(h, name)
-			select {
-			case <-stopped:
-			case <-time.After(5 * time.Second):
-				t.Fatalf("the session did not stop after %s", stop)
-			}
 			if out := warnings.String(); out != "" {
 				t.Fatalf("a normal stop through %s reported %q, want nothing", stop, out)
 			}

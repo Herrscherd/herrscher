@@ -61,12 +61,11 @@ type hub struct {
 	listenedSessions map[string]struct{}
 	closed           bool
 
-	teardownGrace  time.Duration
-	sessionStopped func(name string)
-	listen         func(ctx context.Context, path string) (net.Listener, error)
-	stopBridge     func(name string) error
-	seedBackend    func(context.Context, state.Session) (contracts.Backend, error)
-	models         *ModelDiscovery
+	teardownGrace time.Duration
+	listen        func(ctx context.Context, path string) (net.Listener, error)
+	stopBridge    func(name string) error
+	seedBackend   func(context.Context, state.Session) (contracts.Backend, error)
+	models        *ModelDiscovery
 
 	approvals *approvalTable
 	sessions  *sessionTable
@@ -88,7 +87,7 @@ func withWarnings(w io.Writer) hubOption {
 }
 
 func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry, approvals *approvalTable, sessions *sessionTable, opts ...hubOption) *hub {
-	created := &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: make(map[string]liveSession), teardownGrace: defaultTeardownGrace, approvals: approvals, sessions: sessions, sessionStopped: func(string) {}, listen: control.Listen}
+	created := &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: make(map[string]liveSession), teardownGrace: defaultTeardownGrace, approvals: approvals, sessions: sessions, listen: control.Listen}
 	for _, opt := range opts {
 		opt(created)
 	}
@@ -232,7 +231,6 @@ func (h *hub) goLiveLocked(ctx context.Context, sess state.Session) error {
 		if err := acc.Err(); err != nil {
 			h.acceptFailed(sess.Name, done, err)
 		}
-		h.sessionStopped(sess.Name)
 	}()
 
 	released := acceptCommands(sctx, commands, h.sessionCommands(sess.Name), defaultCommandReadTimeout)

@@ -219,10 +219,6 @@ func TestRebindSurvivesAnOverrunTeardown(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
 	name := "overrun-" + newTurnID()
 	sessionTab := newSessionTable()
-	entered := make(chan struct{})
-	holdTeardown := make(chan struct{})
-	releaseTeardown := sync.OnceFunc(func() { close(holdTeardown) })
-	var enterOnce sync.Once
 	h := newHub(
 		state.NewState(filepath.Join(t.TempDir(), "state.json")),
 		nil,
@@ -232,20 +228,18 @@ func TestRebindSurvivesAnOverrunTeardown(t *testing.T) {
 		nil,
 		newApprovalTable(io.Discard),
 		sessionTab,
-		withSessionStopped(func(string) {
-			enterOnce.Do(func() { close(entered) })
-			<-holdTeardown
-		}),
 	)
 	h.runtime = layout
 	h.teardownGrace = 0
 	t.Cleanup(func() { h.goDead(name) })
+	releaseTeardown := sync.OnceFunc(sessionTab.mu.Unlock)
 	t.Cleanup(releaseTeardown)
 
 	if err := h.goLive(t.Context(), state.Session{Name: name, Incarnation: "old-incarnation"}); err != nil {
 		t.Fatal(err)
 	}
 	awaitRegisteredIncarnation(t, sessionTab, name, "old-incarnation")
+	sessionTab.mu.Lock()
 	h.mu.Lock()
 	oldDone := h.live[name].done
 	h.mu.Unlock()
@@ -256,7 +250,6 @@ func TestRebindSurvivesAnOverrunTeardown(t *testing.T) {
 		h.goDead(name)
 		close(overrun)
 	}()
-	<-entered
 	select {
 	case <-overrun:
 	case <-time.After(5 * time.Second):
@@ -305,8 +298,4 @@ func probeRelease(h *hub, name string) *releaseProbe {
 	h.live[name] = live
 	h.mu.Unlock()
 	return probe
-}
-
-func withSessionStopped(fn func(name string)) hubOption {
-	return func(h *hub) { h.sessionStopped = fn }
 }

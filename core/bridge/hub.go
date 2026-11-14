@@ -228,12 +228,20 @@ func runHubTurnsCtl(ctx context.Context, events <-chan contracts.Event, sink con
 			case historywire.EventPrune:
 				runHistoryPrune(ctx, sink, backend, ctrl, event)
 			case "input":
-				if err := runOneTurn(ctx, sink, backend, orch, event, ctrl, eng, aff, pin, lang); err != nil && ctx.Err() == nil {
-					logger.Warn("backend turn failed", "err", err)
+				if err := runOneTurn(ctx, sink, backend, orch, event, ctrl, eng, aff, pin, lang); err != nil {
+					logTurnFailure(ctx, err)
 				}
 			}
 		}
 	}
+}
+
+func logTurnFailure(ctx context.Context, err error) {
+	if ctx.Err() != nil {
+		logger.Info("backend turn ended by hub shutdown", "err", err)
+		return
+	}
+	logger.Warn("backend turn failed", "err", err)
 }
 
 type turnUsage struct {

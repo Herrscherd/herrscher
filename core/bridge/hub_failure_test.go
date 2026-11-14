@@ -156,6 +156,46 @@ func TestACancelledHubIsNotLoggedAsAFailedTurn(t *testing.T) {
 	}
 }
 
+func TestAFailureWhileTheHubStopsIsKeptAtInfo(t *testing.T) {
+	logs := captureLog(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctrl := &turnController{}
+	in := make(chan contracts.Event)
+	be := cancelThenFailBackend{cancel: cancel, cause: errors.New("vendor boom")}
+
+	done := make(chan struct{})
+	go func() {
+		runHubTurnsCtl(ctx, in, &recordSink{}, be, nil, ctrl, nil, affordances{}, nil)
+		close(done)
+	}()
+
+	in <- contracts.Event{T: "input", Text: "go"}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the hub did not end after its turn failed")
+	}
+	got := logs.String()
+	if strings.Contains(got, "WARN") {
+		t.Fatalf("a turn failing while the hub stops must not be a warning, got log %q", got)
+	}
+	if !strings.Contains(got, "backend turn ended by hub shutdown") || !strings.Contains(got, "vendor boom") {
+		t.Fatalf("the failure must stay in the log at info level with its error, got log %q", got)
+	}
+}
+
+type cancelThenFailBackend struct {
+	cancel context.CancelFunc
+	cause  error
+}
+
+func (b cancelThenFailBackend) Respond(_ context.Context, _ contracts.Prompt, _ func(contracts.BackendEvent)) (string, error) {
+	b.cancel()
+	return "", b.cause
+}
+func (cancelThenFailBackend) Close() error { return nil }
+
 type streamDeltasThenFailBackend struct{ deltas []string }
 
 func (b streamDeltasThenFailBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {

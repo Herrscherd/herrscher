@@ -159,14 +159,38 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) error {
 	return h.goLiveLocked(ctx, sess)
 }
 
-func (h *hub) goLiveStarted(ctx context.Context, sess state.Session) error {
+func (h *hub) goLiveStarted(ctx context.Context, sess state.Session, persist func() error) error {
+	retired, err := h.goLiveAndPersist(ctx, sess, persist)
+	if retired {
+		h.forget(sess.Name)
+	}
+	return err
+}
+
+func (h *hub) goLiveAndPersist(ctx context.Context, sess state.Session, persist func() error) (bool, error) {
 	h.lifecycle.Lock()
 	defer h.lifecycle.Unlock()
+	wasLive := h.isLive(sess.Name)
 	if err := h.goLiveLocked(ctx, sess); err != nil {
-		return err
+		return false, err
+	}
+	if err := persist(); err != nil {
+		if wasLive {
+			return false, err
+		}
+		h.dropLocked(sess.Name, nil)
+		h.haltBridgeWithin(sess.Name)
+		return true, err
 	}
 	h.withinGrace(sess.Name, func() { h.sup.Start(sess) })
-	return nil
+	return false, nil
+}
+
+func (h *hub) isLive(name string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	_, ok := h.live[name]
+	return ok
 }
 
 func (h *hub) goLiveLocked(ctx context.Context, sess state.Session) error {
@@ -176,10 +200,7 @@ func (h *hub) goLiveLocked(ctx context.Context, sess state.Session) error {
 	if h.closed {
 		return errHubClosed
 	}
-	h.mu.Lock()
-	_, running := h.live[sess.Name]
-	h.mu.Unlock()
-	if running {
+	if h.isLive(sess.Name) {
 		return nil
 	}
 	controlPath := control.SocketPath(h.runtime, h.instanceID, sess.Name)
@@ -717,14 +738,9 @@ func (h *hub) RestartWithResume(name, token string) error {
 	}
 	h.goDead(name)
 	sess.ResumeToken = token
-	if err := h.goLiveStarted(context.Background(), sess); err != nil {
-		return err
-	}
-	if err := h.st.SetResumeToken(name, token); err != nil {
-		h.goDead(name)
-		return err
-	}
-	return nil
+	return h.goLiveStarted(context.Background(), sess, func() error {
+		return h.st.SetResumeToken(name, token)
+	})
 }
 
 func (h *hub) Resume(name string) error {
@@ -734,16 +750,12 @@ func (h *hub) Resume(name string) error {
 	}
 	live := sess
 	live.Archived = false
-	if err := h.goLiveStarted(context.Background(), live); err != nil {
-		return err
-	}
-	if sess.Archived {
-		if err := h.st.SetArchived(name, false); err != nil {
-			h.goDead(name)
-			return err
+	return h.goLiveStarted(context.Background(), live, func() error {
+		if !sess.Archived {
+			return nil
 		}
-	}
-	return nil
+		return h.st.SetArchived(name, false)
+	})
 }
 
 func (h *hub) Interrupt(name string) bool {

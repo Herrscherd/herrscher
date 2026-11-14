@@ -162,9 +162,17 @@ func runOneShotBridge(ctx context.Context, cancel context.CancelFunc, sess state
 		return runtime.backendFactory()(ctx, sess)
 	}, orch, sess.ChannelID, toBridge, fromBridge)
 	bridgeErr <- err
-	if _, failedTurn := errors.AsType[*bridge.TurnFailedError](err); err != nil && !failedTurn {
+	if cancelsSeed(err) {
 		cancel()
 	}
+}
+
+func cancelsSeed(err error) bool {
+	if err == nil {
+		return false
+	}
+	_, failedTurn := errors.AsType[*bridge.TurnFailedError](err)
+	return !failedTurn
 }
 
 func oneShotTimeoutError(bridgeErr <-chan error) error {

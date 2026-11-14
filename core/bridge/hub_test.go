@@ -37,17 +37,17 @@ func (fakeBackend) Close() error { return nil }
 func TestRunHubReplyCarriesCost(t *testing.T) {
 	sink := &recordSink{}
 	in := make(chan contracts.Event, 1)
-	in <- contracts.Event{T: "input", Text: "go"}
+	in <- contracts.Event{T: wireEventInput, Text: "go"}
 	close(in)
 
 	runHubTurns(context.Background(), in, sink, fakeBackend{reply: "ok", cost: 0.0042})
 
 	last := sink.events[len(sink.events)-1]
-	if last.T != "reply" || !last.Done || last.Cost != 0.0042 {
+	if last.T != wireEventReply || !last.Done || last.Cost != 0.0042 {
 		t.Fatalf("reply must carry cost 0.0042; got %+v", last)
 	}
 	for _, e := range sink.events {
-		if e.T == "result" {
+		if e.T == backendKindResult {
 			t.Fatalf("result event must not be forwarded over the bus; got %+v", e)
 		}
 	}
@@ -56,7 +56,7 @@ func TestRunHubReplyCarriesCost(t *testing.T) {
 func TestEmitBackendEventThinking(t *testing.T) {
 	sink := &recordSink{}
 	emitBackendEvent(sink, contracts.BackendEvent{Kind: "thinking", Detail: "je réfléchis"}, 0, 0, 0, 0)
-	want := []contracts.Event{{T: "thinking", Text: "je réfléchis"}}
+	want := []contracts.Event{{T: wireEventThinking, Text: "je réfléchis"}}
 	if !slices.EqualFunc(sink.events, want, sameEvent) {
 		t.Fatalf("emitted %+v, want %+v", sink.events, want)
 	}
@@ -71,7 +71,7 @@ func TestEmitBackendEventPanels(t *testing.T) {
 	emitBackendEvent(sink, contracts.BackendEvent{Kind: "subagent", Subagent: &agent}, 0, 0, 0, 0)
 	emitBackendEvent(sink, contracts.BackendEvent{Kind: "subagent"}, 0, 0, 0, 0)
 
-	want := []contracts.Event{{T: "todos", Todos: todos}, {T: "subagent", Subagent: &agent}}
+	want := []contracts.Event{{T: wireEventTodos, Todos: todos}, {T: wireEventSubagent, Subagent: &agent}}
 	if !slices.EqualFunc(sink.events, want, sameEvent) {
 		t.Fatalf("emitted %+v, want %+v", sink.events, want)
 	}
@@ -90,14 +90,14 @@ func (tokenBackend) Close() error { return nil }
 func TestRunOneTurn_StampsTokens(t *testing.T) {
 	sink := &recordSink{}
 	in := make(chan contracts.Event, 1)
-	in <- contracts.Event{T: "input", Text: "go"}
+	in <- contracts.Event{T: wireEventInput, Text: "go"}
 	close(in)
 
 	runHubTurns(context.Background(), in, sink, tokenBackend{reply: "done"})
 
 	var chunkTokens int
 	for _, e := range sink.events {
-		if e.T == "chunk" {
+		if e.T == wireEventChunk {
 			chunkTokens = e.Tokens
 		}
 	}
@@ -105,7 +105,7 @@ func TestRunOneTurn_StampsTokens(t *testing.T) {
 		t.Fatalf("chunk should carry live tokens 20; got %d", chunkTokens)
 	}
 	last := sink.events[len(sink.events)-1]
-	if last.T != "reply" || last.Tokens != 55 {
+	if last.T != wireEventReply || last.Tokens != 55 {
 		t.Fatalf("reply must carry final tokens 55; got %+v", last)
 	}
 }
@@ -125,14 +125,14 @@ func (agenticBackend) Close() error { return nil }
 func TestRunOneTurn_AccumulatesUsageAcrossMessages(t *testing.T) {
 	sink := &recordSink{}
 	in := make(chan contracts.Event, 1)
-	in <- contracts.Event{T: "input", Text: "go"}
+	in <- contracts.Event{T: wireEventInput, Text: "go"}
 	close(in)
 
 	runHubTurns(context.Background(), in, sink, agenticBackend{reply: "done"})
 
 	var chunks []int
 	for _, e := range sink.events {
-		if e.T == "chunk" {
+		if e.T == wireEventChunk {
 			chunks = append(chunks, e.Tokens)
 		}
 	}
@@ -140,7 +140,7 @@ func TestRunOneTurn_AccumulatesUsageAcrossMessages(t *testing.T) {
 		t.Fatalf("live output tokens = %v, want %v (a running sum)", chunks, want)
 	}
 	last := sink.events[len(sink.events)-1]
-	if last.T != "reply" || last.Tokens != 60 || last.TokensIn != 300 {
+	if last.T != wireEventReply || last.Tokens != 60 || last.TokensIn != 300 {
 		t.Fatalf("reply must carry the result's authoritative totals, not the sum; got %+v", last)
 	}
 }
@@ -158,13 +158,13 @@ func (cacheBackend) Close() error { return nil }
 func TestRunOneTurn_StampsTokenBreakdown(t *testing.T) {
 	sink := &recordSink{}
 	in := make(chan contracts.Event, 1)
-	in <- contracts.Event{T: "input", Text: "go"}
+	in <- contracts.Event{T: wireEventInput, Text: "go"}
 	close(in)
 
 	runHubTurns(context.Background(), in, sink, cacheBackend{reply: "done"})
 
 	last := sink.events[len(sink.events)-1]
-	if last.T != "reply" || last.TokensIn != 30 || last.CacheRead != 12 || last.CacheCreate != 3 {
+	if last.T != wireEventReply || last.TokensIn != 30 || last.CacheRead != 12 || last.CacheCreate != 3 {
 		t.Fatalf("reply must carry token breakdown; got %+v", last)
 	}
 }
@@ -190,7 +190,7 @@ func TestInbound_InterruptCancelsTurn(t *testing.T) {
 		close(done)
 	}()
 
-	in <- contracts.Event{T: "input", Text: "go"}
+	in <- contracts.Event{T: wireEventInput, Text: "go"}
 	<-be.started
 	ctrl.interrupt()
 
@@ -201,7 +201,7 @@ func TestInbound_InterruptCancelsTurn(t *testing.T) {
 		t.Fatal("interrupt did not cancel the in-flight turn")
 	}
 	last := sink.events[len(sink.events)-1]
-	if last.T != "reply" || !last.Done {
+	if last.T != wireEventReply || !last.Done {
 		t.Fatalf("interrupted turn must still emit reply{done}; got %+v", last)
 	}
 	if last.Text != interruptNotice {
@@ -230,7 +230,7 @@ func TestInterruptKeepsPartialOutput(t *testing.T) {
 		close(done)
 	}()
 
-	in <- contracts.Event{T: "input", Text: "go"}
+	in <- contracts.Event{T: wireEventInput, Text: "go"}
 	<-be.started
 	ctrl.interrupt()
 	close(in)
@@ -251,7 +251,7 @@ func TestInterruptKeepsPartialOutput(t *testing.T) {
 
 func TestBackendFailureStillReadsAsAFailure(t *testing.T) {
 	sink := &recordSink{}
-	err := runOneTurn(context.Background(), sink, errBackend{}, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
+	err := runOneTurn(context.Background(), sink, errBackend{}, nil, contracts.Event{T: wireEventInput, Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
 	if _, failed := errors.AsType[*TurnFailedError](err); !failed {
 		t.Fatalf("got %v, want a *TurnFailedError", err)
 	}
@@ -271,15 +271,15 @@ func (errBackend) Close() error { return nil }
 func TestRunHubOneTurn(t *testing.T) {
 	sink := &recordSink{}
 	in := make(chan contracts.Event, 2)
-	in <- contracts.Event{T: "input", Who: "alice", Text: "refactor"}
+	in <- contracts.Event{T: wireEventInput, Who: "alice", Text: "refactor"}
 	close(in)
 
 	be := fakeBackend{reply: "done · 4 files"}
 	runHubTurns(context.Background(), in, sink, be)
 
 	want := []contracts.Event{
-		{T: "chunk", Text: "thinking"},
-		{T: "reply", Text: "done · 4 files", Done: true},
+		{T: wireEventChunk, Text: "thinking"},
+		{T: wireEventReply, Text: "done · 4 files", Done: true},
 	}
 	if len(sink.events) != len(want) {
 		t.Fatalf("emitted %+v, want %+v", sink.events, want)
@@ -295,7 +295,7 @@ func TestRunHubTurnEventsPreserveInputIdentity(t *testing.T) {
 	sink := &recordSink{}
 	in := make(chan contracts.Event, 1)
 	in <- contracts.Event{
-		T: "input", Text: "go",
+		T: wireEventInput, Text: "go",
 		SessionIncarnation: "incarnation-a",
 		TurnID:             "turn-a",
 		Agent:              "reviewer",
@@ -317,12 +317,12 @@ func TestRunHubTurnEventsPreserveInputIdentity(t *testing.T) {
 func TestRunHubEmptyReplyStillTerminates(t *testing.T) {
 	sink := &recordSink{}
 	in := make(chan contracts.Event, 1)
-	in <- contracts.Event{T: "input", Text: "noop"}
+	in <- contracts.Event{T: wireEventInput, Text: "noop"}
 	close(in)
 
 	runHubTurns(context.Background(), in, sink, fakeBackend{reply: ""})
 
-	if len(sink.events) == 0 || !sameEvent(sink.events[len(sink.events)-1], contracts.Event{T: "reply", Done: true}) {
+	if len(sink.events) == 0 || !sameEvent(sink.events[len(sink.events)-1], contracts.Event{T: wireEventReply, Done: true}) {
 		t.Fatalf("empty reply must still emit a terminal reply{done}; got %+v", sink.events)
 	}
 }
@@ -342,8 +342,8 @@ func (*hangingBackend) Close() error { return nil }
 func TestRunHubBackendStreamLossAbandonsTurnThenContinues(t *testing.T) {
 	sink := &recordSink{}
 	in := make(chan contracts.Event, 2)
-	in <- contracts.Event{T: "input", Text: "first"}
-	in <- contracts.Event{T: "input", Text: "second"}
+	in <- contracts.Event{T: wireEventInput, Text: "first"}
+	in <- contracts.Event{T: wireEventInput, Text: "second"}
 	close(in)
 
 	be := &hangingBackend{}
@@ -351,7 +351,7 @@ func TestRunHubBackendStreamLossAbandonsTurnThenContinues(t *testing.T) {
 
 	var dones []contracts.Event
 	for _, e := range sink.events {
-		if e.T == "reply" && e.Done {
+		if e.T == wireEventReply && e.Done {
 			dones = append(dones, e)
 		}
 	}
@@ -388,9 +388,9 @@ func sameEvent(a, b contracts.Event) bool {
 func TestBridgeAnswersWithNoLanguageAfterAnEmptyLanguageFrame(t *testing.T) {
 	in := make(chan contracts.Event, 4)
 	be := &captureBackend{reply: "ok"}
-	in <- contracts.Event{T: "language", Value: "fr"}
-	in <- contracts.Event{T: "language", Value: ""}
-	in <- contracts.Event{T: "input", Text: "hello"}
+	in <- contracts.Event{T: wireEventLanguage, Value: "fr"}
+	in <- contracts.Event{T: wireEventLanguage, Value: ""}
+	in <- contracts.Event{T: wireEventInput, Text: "hello"}
 	close(in)
 
 	runHubTurns(context.Background(), in, &recordSink{}, be)
@@ -403,9 +403,9 @@ func TestBridgeAnswersWithNoLanguageAfterAnEmptyLanguageFrame(t *testing.T) {
 func TestRunOneShotAnswersOnlyTheInputAfterControlFrames(t *testing.T) {
 	in := make(chan contracts.Event, 3)
 	be := &captureBackend{reply: "ok"}
-	in <- contracts.Event{T: "interrupt"}
-	in <- contracts.Event{T: "language", Value: "fr"}
-	in <- contracts.Event{T: "input", Text: "bonjour"}
+	in <- contracts.Event{T: wireEventInterrupt}
+	in <- contracts.Event{T: wireEventLanguage, Value: "fr"}
+	in <- contracts.Event{T: wireEventInput, Text: "bonjour"}
 	out := make(chan contracts.Event, 8)
 
 	err := RunOneShot(context.Background(), func(string) (contracts.Backend, error) { return be, nil }, nil, "channel", in, out)
@@ -420,11 +420,13 @@ func TestRunOneShotAnswersOnlyTheInputAfterControlFrames(t *testing.T) {
 	}
 }
 
+const wireEventUnknown = "mystery"
+
 func TestBridgeIgnoresUnknownFrameTypes(t *testing.T) {
 	in := make(chan contracts.Event, 3)
 	be := &captureBackend{reply: "ok"}
-	in <- contracts.Event{T: "mystery", Text: "not a turn"}
-	in <- contracts.Event{T: "input", Text: "bonjour"}
+	in <- contracts.Event{T: wireEventUnknown, Text: "not a turn"}
+	in <- contracts.Event{T: wireEventInput, Text: "bonjour"}
 	close(in)
 
 	sink := &recordSink{}
@@ -438,10 +440,10 @@ func TestBridgeIgnoresUnknownFrameTypes(t *testing.T) {
 func TestBridgeAnswersEachTurnInTheLanguageLastSet(t *testing.T) {
 	in := make(chan contracts.Event, 4)
 	be := &captureBackend{reply: "ok"}
-	in <- contracts.Event{T: "language", Value: "fr"}
-	in <- contracts.Event{T: "input", Text: "bonjour"}
-	in <- contracts.Event{T: "language", Value: "en"}
-	in <- contracts.Event{T: "input", Text: "hello"}
+	in <- contracts.Event{T: wireEventLanguage, Value: "fr"}
+	in <- contracts.Event{T: wireEventInput, Text: "bonjour"}
+	in <- contracts.Event{T: wireEventLanguage, Value: "en"}
+	in <- contracts.Event{T: wireEventInput, Text: "hello"}
 	close(in)
 
 	runHubTurns(context.Background(), in, &recordSink{}, be)

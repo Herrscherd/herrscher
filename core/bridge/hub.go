@@ -30,16 +30,22 @@ const (
 	backendKindTodos    = "todos"
 	backendKindSubagent = "subagent"
 	backendKindReset    = "reset"
+	backendKindUsage    = "usage"
+	backendKindResult   = "result"
 )
 
 const (
-	wireEventChunk    = "chunk"
-	wireEventThinking = "thinking"
-	wireEventStatus   = "status"
-	wireEventTodos    = "todos"
-	wireEventSubagent = "subagent"
-	wireEventReset    = "reset"
-	wireEventReply    = "reply"
+	wireEventChunk     = "chunk"
+	wireEventThinking  = "thinking"
+	wireEventStatus    = "status"
+	wireEventTodos     = "todos"
+	wireEventSubagent  = "subagent"
+	wireEventReset     = "reset"
+	wireEventReply     = "reply"
+	wireEventInput     = "input"
+	wireEventInterrupt = "interrupt"
+	wireEventLanguage  = "language"
+	wireEventPick      = "pick"
 )
 
 type turnController struct {
@@ -129,7 +135,7 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 	go func() {
 		defer close(events)
 		scanErr <- conn.Scan(func(event contracts.Event) error {
-			if event.T == "interrupt" {
+			if event.T == wireEventInterrupt {
 				ctrl.interrupt()
 				return nil
 			}
@@ -217,9 +223,9 @@ func runHubTurnsCtl(ctx context.Context, events <-chan contracts.Event, sink con
 				return
 			}
 			switch event.T {
-			case "language":
+			case wireEventLanguage:
 				lang = languageOf(event.Value)
-			case "pick":
+			case wireEventPick:
 				runPick(ctx, sink, backend, event.Value)
 			case compactwire.EventRequest:
 				runCompact(ctx, sink, backend, ctrl, event)
@@ -227,7 +233,7 @@ func runHubTurnsCtl(ctx context.Context, events <-chan contracts.Event, sink con
 				runHistoryRead(ctx, sink, backend, ctrl, event)
 			case historywire.EventPrune:
 				runHistoryPrune(ctx, sink, backend, ctrl, event)
-			case "input":
+			case wireEventInput:
 				if err := runOneTurn(ctx, sink, backend, orch, event, ctrl, eng, aff, pin, lang); err != nil {
 					logTurnFailure(ctx, err)
 				}
@@ -251,10 +257,10 @@ type turnUsage struct {
 
 func (u *turnUsage) absorb(event contracts.BackendEvent) {
 	switch event.Kind {
-	case "usage":
+	case backendKindUsage:
 		u.outTok += event.OutTokens
 		u.setInputSide(event)
-	case "result":
+	case backendKindResult:
 		u.outTok = event.OutTokens
 		u.setInputSide(event)
 		u.cost = event.Cost

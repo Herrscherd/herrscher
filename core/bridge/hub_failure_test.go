@@ -12,7 +12,7 @@ import (
 
 func TestAFailedTurnHandsItsCauseBack(t *testing.T) {
 	sink := &recordSink{}
-	err := runOneTurn(context.Background(), sink, errBackend{}, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
+	err := runOneTurn(context.Background(), sink, errBackend{}, nil, contracts.Event{T: wireEventInput, Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
 	failed, ok := errors.AsType[*TurnFailedError](err)
 	if !ok || failed.Err.Error() != "backend exploded" {
 		t.Fatalf("runOneTurn error = %v, want the backend failure", err)
@@ -21,7 +21,7 @@ func TestAFailedTurnHandsItsCauseBack(t *testing.T) {
 
 func TestASuccessfulTurnHandsBackNoError(t *testing.T) {
 	sink := &recordSink{}
-	err := runOneTurn(context.Background(), sink, fakeBackend{reply: "done"}, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
+	err := runOneTurn(context.Background(), sink, fakeBackend{reply: "done"}, nil, contracts.Event{T: wireEventInput, Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
 	if err != nil {
 		t.Fatalf("runOneTurn: %v", err)
 	}
@@ -29,7 +29,7 @@ func TestASuccessfulTurnHandsBackNoError(t *testing.T) {
 
 func TestRunOneShotReportsAFailedTurn(t *testing.T) {
 	in := make(chan contracts.Event, 1)
-	in <- contracts.Event{T: "input", Text: "go"}
+	in <- contracts.Event{T: wireEventInput, Text: "go"}
 	out := make(chan contracts.Event, 8)
 	err := RunOneShot(context.Background(), func(string) (contracts.Backend, error) { return errBackend{}, nil }, nil, "channel", in, out)
 	if _, ok := errors.AsType[*TurnFailedError](err); !ok {
@@ -39,7 +39,7 @@ func TestRunOneShotReportsAFailedTurn(t *testing.T) {
 
 func TestAFailedTurnKeepsWhatTheBackendStreamed(t *testing.T) {
 	sink := &recordSink{}
-	err := runOneTurn(context.Background(), sink, streamThenFailBackend{}, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
+	err := runOneTurn(context.Background(), sink, streamThenFailBackend{}, nil, contracts.Event{T: wireEventInput, Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
 	failed, ok := errors.AsType[*TurnFailedError](err)
 	if !ok {
 		t.Fatalf("runOneTurn error = %v, want a TurnFailedError", err)
@@ -52,7 +52,7 @@ func TestAFailedTurnKeepsWhatTheBackendStreamed(t *testing.T) {
 func TestAFailedTurnJoinsItsDeltasAsTheBackendSentThem(t *testing.T) {
 	sink := &recordSink{}
 	backend := streamDeltasThenFailBackend{deltas: []string{"Je", " regarde", "."}}
-	err := runOneTurn(context.Background(), sink, backend, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
+	err := runOneTurn(context.Background(), sink, backend, nil, contracts.Event{T: wireEventInput, Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
 	failed, ok := errors.AsType[*TurnFailedError](err)
 	if !ok {
 		t.Fatalf("runOneTurn error = %v, want a TurnFailedError", err)
@@ -65,7 +65,7 @@ func TestAFailedTurnJoinsItsDeltasAsTheBackendSentThem(t *testing.T) {
 func TestAFailedTurnWithOnlyBlankDeltasHasNoPartialOutput(t *testing.T) {
 	sink := &recordSink{}
 	backend := streamDeltasThenFailBackend{deltas: []string{"\n", "  ", "\n"}}
-	err := runOneTurn(context.Background(), sink, backend, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
+	err := runOneTurn(context.Background(), sink, backend, nil, contracts.Event{T: wireEventInput, Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
 	failed, ok := errors.AsType[*TurnFailedError](err)
 	if !ok {
 		t.Fatalf("runOneTurn error = %v, want a TurnFailedError", err)
@@ -77,7 +77,7 @@ func TestAFailedTurnWithOnlyBlankDeltasHasNoPartialOutput(t *testing.T) {
 
 func TestAResetDropsThePartialOfTheAbandonedAttempt(t *testing.T) {
 	sink := &recordSink{}
-	err := runOneTurn(context.Background(), sink, streamResetThenFailBackend{}, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
+	err := runOneTurn(context.Background(), sink, streamResetThenFailBackend{}, nil, contracts.Event{T: wireEventInput, Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
 	failed, ok := errors.AsType[*TurnFailedError](err)
 	if !ok {
 		t.Fatalf("runOneTurn error = %v, want a TurnFailedError", err)
@@ -90,7 +90,7 @@ func TestAResetDropsThePartialOfTheAbandonedAttempt(t *testing.T) {
 func TestAFailedTurnIsLoggedAsAWarning(t *testing.T) {
 	logs := captureLog(t)
 	in := make(chan contracts.Event, 1)
-	in <- contracts.Event{T: "input", Text: "go"}
+	in <- contracts.Event{T: wireEventInput, Text: "go"}
 	close(in)
 	runHubTurns(context.Background(), in, &recordSink{}, errBackend{})
 	got := logs.String()
@@ -115,7 +115,7 @@ func TestAnInterruptedTurnIsNotLoggedAsAFailure(t *testing.T) {
 		close(done)
 	}()
 
-	in <- contracts.Event{T: "input", Text: "go"}
+	in <- contracts.Event{T: wireEventInput, Text: "go"}
 	<-be.started
 	ctrl.interrupt()
 	close(in)
@@ -143,7 +143,7 @@ func TestACancelledHubIsNotLoggedAsAFailedTurn(t *testing.T) {
 		close(done)
 	}()
 
-	in <- contracts.Event{T: "input", Text: "go"}
+	in <- contracts.Event{T: wireEventInput, Text: "go"}
 	<-be.started
 	cancel()
 	select {
@@ -170,7 +170,7 @@ func TestAFailureWhileTheHubStopsIsKeptAtInfo(t *testing.T) {
 		close(done)
 	}()
 
-	in <- contracts.Event{T: "input", Text: "go"}
+	in <- contracts.Event{T: wireEventInput, Text: "go"}
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):

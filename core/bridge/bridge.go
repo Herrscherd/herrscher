@@ -92,11 +92,11 @@ func RunOneShot(ctx context.Context, newBackend BackendFactory, orch contracts.O
 	for {
 		select {
 		case event := <-input:
-			if event.T == "language" {
+			if event.T == wireEventLanguage {
 				lang = languageOf(event.Value)
 				continue
 			}
-			if event.T != "input" {
+			if event.T != wireEventInput {
 				continue
 			}
 			return runOneTurn(ctx, channelSink{done: ctx.Done(), out: out}, resp, orch, event, nil, newSkillEngine(resp), affordances{}, nil, lang)

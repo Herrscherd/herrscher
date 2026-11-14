@@ -31,11 +31,14 @@ func TestResumeDuringAcceptFailureKeepsItsBridge(t *testing.T) {
 	t.Cleanup(func() { h.goDead(name) })
 
 	resumed := make(chan struct{})
+	stopped := make(chan struct{})
 	var resumeErr error
 	var interpose sync.Once
 	stop := h.stopBridge
 	h.stopBridge = func(stopping string) error {
+		var interposed bool
 		interpose.Do(func() {
+			interposed = true
 			go func() {
 				defer close(resumed)
 				resumeErr = h.Resume(stopping)
@@ -45,7 +48,11 @@ func TestResumeDuringAcceptFailureKeepsItsBridge(t *testing.T) {
 			case <-time.After(time.Second):
 			}
 		})
-		return stop(stopping)
+		err := stop(stopping)
+		if interposed {
+			close(stopped)
+		}
+		return err
 	}
 
 	sup.Start(state.Session{Name: name, ChannelID: "c1"})
@@ -58,9 +65,9 @@ func TestResumeDuringAcceptFailureKeepsItsBridge(t *testing.T) {
 		t.Fatal("Resume did not return once the failed incarnation was retired")
 	}
 	select {
-	case <-resumed:
+	case <-stopped:
 	case <-time.After(5 * time.Second):
-		t.Fatal("Resume did not return once the failed incarnation was retired")
+		t.Fatal("the failed incarnation was never retired")
 	}
 	if resumeErr != nil {
 		t.Fatalf("Resume: %v", resumeErr)

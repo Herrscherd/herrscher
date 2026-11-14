@@ -189,21 +189,21 @@ func runCommand(ctx context.Context, layout host.RuntimeLayout, cmd string, args
 	case "serve":
 		return runServe(ctx, layout, args, serveDaemon)
 	case "session":
-		return runSession(ctx, args)
+		return runSession(ctx, layout, args)
 	case "agent":
-		return runAgent(ctx, args)
+		return runAgent(ctx, layout, args)
 	case "account":
 		return runAccount(ctx, args)
 	case "host":
-		return runHost(ctx, args)
+		return runHost(ctx, layout, args)
 	case "approve":
 		return runApprove(ctx, layout, args)
 	case "role":
-		return runRole(ctx, args)
+		return runRole(ctx, layout, args)
 	case "memory":
-		return runMemory(ctx, args)
+		return runMemory(ctx, layout, args)
 	case "models":
-		return runModels(ctx, args)
+		return runModels(ctx, layout, args)
 	case "service":
 		return runService(ctx, args)
 	case "plugin-host":

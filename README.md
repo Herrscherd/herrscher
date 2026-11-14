@@ -1590,6 +1590,57 @@ checker and rely on review.
 One more gap: the arbitrary path rule matches calls only, so a reference without a call
 such as `f := runtimedir.At` is not seen.
 
+## Scenarios on the real binary
+
+`e2e/` drives the built `herrscher` binary from its command line, with no network and
+no vendor account. `scripts/check.sh` runs it with `go test -tags e2e ./e2e/...` on
+Linux, and says it skips the step anywhere else.
+
+- Each `.txtar` file in `e2e/testdata/scenarios` is a
+  [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) scenario.
+  It gets its own `HOME`, a fresh git repository as its work directory and a unique
+  `HERRSCHER_INSTANCE_ID`, so its sockets and lock never touch a daemon already running
+  on the machine.
+- `waitdaemon` waits until the daemon of the scenario answers, and `! waitdaemon` until
+  it is gone. `waitlog <regexp>` waits until the log of the fake vendor matches.
+- `herrscher serve` exits with status 130 on SIGINT, and testscript sends no other
+  signal than SIGINT and SIGKILL, so a scenario starts it as
+  `! exec herrscher serve &daemon&` and stops it with `kill -INT daemon`, `wait daemon`
+  then `! waitdaemon`.
+- These waits poll with a short sleep: they wait on other processes, which a
+  `testing/synctest` bubble cannot control.
+- A process that still carries the instance of the scenario after it ends fails the
+  run and is killed.
+- The cleanup removes every runtime entry named after the instance, and the names
+  `core/host` gives its command and events sockets and its lock, hashed ones included.
+  It only touches a runtime directory that `core/host` accepts as private to the user.
+  The check creates a missing directory, so if the directory vanishes between the
+  moment the cleanup sees it and the check, it comes back empty and private, as the
+  daemon would create it. A session socket whose path passes 103 bytes takes a hashed
+  name, `hs-<24 hex>.sock`, the cleanup cannot tell apart, so a scenario fails when
+  such a socket appears in a runtime directory during it, from this scenario or
+  another herrscher of the machine, since both run as the same user and nothing tells
+  their sockets apart. The socket stays there: shorten the session name, and remove
+  the socket only once no running herrscher holds it. Tests may not name the
+  production layout, so the two candidate runtime directories are written in the
+  harness, and the daemon scenarios fail when they drift because they find no socket.
+- `claude` on the `PATH` of a scenario is the fake of `e2e/vendortest`. It is a whole
+  process standing in for the vendor CLI, so it speaks the stream-json protocol rather
+  than recording calls. In stream-json mode it replays `$VENDORTEST_SCRIPT`, which is
+  `$WORK/claude.script`: a `claude.script` file in the archive of the scenario
+  provides it. The script holds one block per turn, separated by `---`, and each line
+  is one step: `text <words>`, `tool <Name> <json input>`, `error <message>`, `echo`,
+  `hang` or `crash`, the last three alone on their line. A turn with no step is an
+  error. The turn count is shared by every process of the scenario, under a lock file
+  beside it. A fake killed while it holds that lock leaves it behind, and the next
+  turn fails after ten seconds with an error that names the lock. A turn past the end
+  of the script, a missing script, and every one-shot `-p` call (the health probe)
+  echo the last line of the prompt as `echo: <line>`. Every start and every prompt is
+  appended to `$VENDORTEST_LOG`.
+
+Every bug found by hand becomes a scenario before it is fixed: the scenario is written
+first, fails on the bug, and passes with the fix.
+
 ## Testing the remote paths
 
 `go test ./core/host/` runs the remote end-to-end tests (the `TestE2E` ones) against

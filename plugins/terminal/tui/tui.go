@@ -30,6 +30,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/skills"
 )
 
@@ -85,21 +86,11 @@ const (
 const hostErrPrefix = "⚠️ "
 
 const (
-	sessionVerb    = "session"
-	verbRename     = "rename"
-	verbHandoff    = "handoff"
-	stateDone      = "done"
-	stateActive    = "active"
-	eventReply     = "reply"
-	eventReset     = "reset"
-	eventChunk     = "chunk"
-	eventThinking  = "thinking"
-	eventTodos     = "todos"
-	eventSubagent  = "subagent"
-	eventAbandoned = "abandoned"
-	eventStatus    = "status"
-	eventNotice    = "notice"
-	eventClosed    = "closed"
+	sessionVerb = "session"
+	verbRename  = "rename"
+	verbHandoff = "handoff"
+	stateDone   = "done"
+	stateActive = "active"
 
 	stateFailed = "failed"
 	stateError  = "error"
@@ -603,7 +594,7 @@ func (m *model) successorTab() string {
 }
 
 func (m *model) route(routed RoutedEvent) tea.Cmd {
-	if routed.Event.T == eventClosed {
+	if routed.Event.T == eventwire.EventClosed {
 		m.removeTab(routed.Conv.ID)
 		return nil
 	}
@@ -611,7 +602,7 @@ func (m *model) route(routed RoutedEvent) tea.Cmd {
 	before := len(tab.entries)
 	m.renderInto(tab, routed.Event)
 	flushCmd := m.flushQueue(tab, routed.Event.T)
-	isReply := routed.Event.T == eventReply
+	isReply := routed.Event.T == eventwire.EventReply
 	isTurnDone := isReply && routed.Event.Done
 	if tab.channel != m.active {
 		if len(tab.entries) != before {
@@ -625,7 +616,7 @@ func (m *model) route(routed RoutedEvent) tea.Cmd {
 	var gitCmd tea.Cmd
 	if tab.channel == m.active {
 		m.syncViewport()
-		if routed.Event.T == eventStatus {
+		if routed.Event.T == eventwire.EventStatus {
 			gitCmd = m.gitAfterTool(routed.Event.Text)
 		}
 	}
@@ -1141,7 +1132,7 @@ func (m *model) activate(channel string) {
 }
 
 func (m *model) renderInto(target *tab, event contracts.Event) {
-	if event.T != eventAbandoned {
+	if event.T != eventwire.EventAbandoned {
 		target.disconnected = false
 	}
 	previous := target.tokens
@@ -1150,55 +1141,55 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 	}
 	target.measureContext(event)
 	switch event.T {
-	case eventApproval:
+	case eventwire.EventApproval:
 		m.rememberApprovalDeadline(event, time.Now())
-	case eventApprovalRisk:
+	case eventwire.EventApprovalRisk:
 		m.rememberApprovalRisk(event, time.Now())
-	case eventApprovalSubject:
+	case eventwire.EventApprovalSubject:
 		m.rememberApprovalSubject(event, time.Now())
-	case eventMenu:
+	case eventwire.EventMenu:
 		if m.openApproval(target, event) {
 			return
 		}
-		m.renderInto(target, contracts.Event{T: eventStatus, Text: event.Text})
-	case eventChunk:
+		m.renderInto(target, contracts.Event{T: eventwire.EventStatus, Text: event.Text})
+	case eventwire.EventChunk:
 		target.busy = true
 		if target.appendChunk(event.Text) {
 			target.streamed = true
 		}
-	case eventThinking:
+	case eventwire.EventThinking:
 		target.busy = true
 		target.appendThinking(event.Text, target.tokens, previous)
-	case eventStatus:
+	case eventwire.EventStatus:
 		target.busy = true
 		target.endStream()
 		target.noteToolFile(event.Text)
 		text, _ := hostError(event.Text)
 		target.appendEntry(entry{role: statusRole(event.Text), text: text})
-	case eventReply:
+	case eventwire.EventReply:
 		target.appendReply(m.tr, event)
-	case eventTodos:
+	case eventwire.EventTodos:
 		target.busy = true
 		target.todos = event.Todos
-	case eventSubagent:
+	case eventwire.EventSubagent:
 		target.busy = true
 		target.applySubagent(event.Subagent)
-	case eventReset:
+	case eventwire.EventReset:
 		target.busy = false
 		target.interruptRequested = false
 		target.streamed = false
 		target.ctxMeasured = false
 		target.endStream()
 		target.appendEntry(entry{role: roleNotice, text: m.tr.t("tui.render.turn_reset", nil)})
-	case eventNotice:
+	case eventwire.EventNotice:
 		target.appendEntry(entry{role: roleNotice, text: event.Text, markdown: true})
-	case eventCompactionStarted:
+	case eventwire.EventCompactionStarted:
 		target.startCompaction(event)
-	case eventCompactionDone:
+	case eventwire.EventCompactionDone:
 		target.completeCompaction(m.tr, event)
-	case eventCompactionFailed:
+	case eventwire.EventCompactionFailed:
 		target.failCompaction(event)
-	case eventAbandoned:
+	case eventwire.EventAbandoned:
 		target.busy = false
 		target.interruptRequested = false
 		target.streamed = false

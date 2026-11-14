@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 type resumableBackend struct {
@@ -18,13 +19,13 @@ func (b resumableBackend) ResumeToken() string { return b.token }
 func TestRunHubReplyCarriesResumeToken(t *testing.T) {
 	sink := &recordSink{}
 	in := make(chan contracts.Event, 1)
-	in <- contracts.Event{T: wireEventInput, Text: "go"}
+	in <- contracts.Event{T: eventwire.EventInput, Text: "go"}
 	close(in)
 
 	runHubTurns(context.Background(), in, sink, resumableBackend{fakeBackend: fakeBackend{reply: "ok"}, token: "sid-1"})
 
 	last := sink.events[len(sink.events)-1]
-	if last.T != wireEventReply || !last.Done || last.Resume != "sid-1" {
+	if last.T != eventwire.EventReply || !last.Done || last.Resume != "sid-1" {
 		t.Fatalf("reply must carry resume sid-1; got %+v", last)
 	}
 }
@@ -32,7 +33,7 @@ func TestRunHubReplyCarriesResumeToken(t *testing.T) {
 func TestRunHubReplyResumeEmptyWhenNotResumeAware(t *testing.T) {
 	sink := &recordSink{}
 	in := make(chan contracts.Event, 1)
-	in <- contracts.Event{T: wireEventInput, Text: "go"}
+	in <- contracts.Event{T: eventwire.EventInput, Text: "go"}
 	close(in)
 
 	runHubTurns(context.Background(), in, sink, fakeBackend{reply: "ok"})

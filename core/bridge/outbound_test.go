@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/outbox"
 )
 
@@ -70,7 +71,7 @@ func runOutboundTurn(t *testing.T, backend contracts.Backend, root string) *reco
 	t.Helper()
 	sink := &recordSink{}
 	aff := affordances{outbox: outboundSettings{root: root, session: "chan", maxBytes: outboundTestMaxBytes}}
-	if err := runOneTurn(context.Background(), sink, backend, nil, contracts.Event{T: wireEventInput, Text: "go"}, &turnController{}, nil, aff, nil, 0); err != nil {
+	if err := runOneTurn(context.Background(), sink, backend, nil, contracts.Event{T: eventwire.EventInput, Text: "go"}, &turnController{}, nil, aff, nil, 0); err != nil {
 		t.Fatalf("turn failed: %v", err)
 	}
 	return sink

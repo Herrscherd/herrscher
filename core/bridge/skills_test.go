@@ -9,6 +9,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/skills"
 )
 
@@ -80,11 +81,11 @@ func TestHubInjectsSkillMenuAndExpandsOnMarker(t *testing.T) {
 	resp := &captureBackend{reply: "ok <use-skill>demo</use-skill>"}
 
 	sink := &recordSink{}
-	if err := runOneTurn(context.Background(), sink, resp, nil, contracts.Event{T: wireEventInput, Text: "hi"}, nil, eng, affordances{}, nil, 0); err != nil {
+	if err := runOneTurn(context.Background(), sink, resp, nil, contracts.Event{T: eventwire.EventInput, Text: "hi"}, nil, eng, affordances{}, nil, 0); err != nil {
 		t.Fatalf("turn failed: %v", err)
 	}
 	last := sink.events[len(sink.events)-1]
-	if last.T != wireEventReply || last.Text != "ok" {
+	if last.T != eventwire.EventReply || last.Text != "ok" {
 		t.Fatalf("marker must be stripped from the delivered reply, got %+v", last)
 	}
 	if !strings.Contains(resp.contexts[0], "demo: a demo") {
@@ -94,7 +95,7 @@ func TestHubInjectsSkillMenuAndExpandsOnMarker(t *testing.T) {
 		t.Fatalf("turn 1 must not carry body yet:\n%s", resp.contexts[0])
 	}
 
-	if err := runOneTurn(context.Background(), &recordSink{}, resp, nil, contracts.Event{T: wireEventInput, Text: "again"}, nil, eng, affordances{}, nil, 0); err != nil {
+	if err := runOneTurn(context.Background(), &recordSink{}, resp, nil, contracts.Event{T: eventwire.EventInput, Text: "again"}, nil, eng, affordances{}, nil, 0); err != nil {
 		t.Fatalf("turn 2 failed: %v", err)
 	}
 	if !strings.Contains(resp.contexts[1], "DEMO BODY") {
@@ -104,7 +105,7 @@ func TestHubInjectsSkillMenuAndExpandsOnMarker(t *testing.T) {
 
 func TestHubSkipsInjectionWhenEngineNil(t *testing.T) {
 	resp := &captureBackend{reply: "ok"}
-	if err := runOneTurn(context.Background(), &recordSink{}, resp, nil, contracts.Event{T: wireEventInput, Text: "hi"}, nil, nil, affordances{}, nil, 0); err != nil {
+	if err := runOneTurn(context.Background(), &recordSink{}, resp, nil, contracts.Event{T: eventwire.EventInput, Text: "hi"}, nil, nil, affordances{}, nil, 0); err != nil {
 		t.Fatalf("turn failed: %v", err)
 	}
 	if resp.contexts[0] != "" {

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 func TestWithCapabilitiesNamesTheDaemonAndItsVerbs(t *testing.T) {
@@ -19,7 +20,7 @@ func TestWithCapabilitiesNamesTheDaemonAndItsVerbs(t *testing.T) {
 
 func TestTurnPromptCarriesTheCapabilities(t *testing.T) {
 	resp := &captureBackend{reply: "ok"}
-	if err := runOneTurn(context.Background(), &recordSink{}, resp, nil, contracts.Event{T: wireEventInput, Text: "hi"}, nil, nil,
+	if err := runOneTurn(context.Background(), &recordSink{}, resp, nil, contracts.Event{T: eventwire.EventInput, Text: "hi"}, nil, nil,
 		affordances{caps: "  session: close, list"}, nil, 0); err != nil {
 		t.Fatalf("turn failed: %v", err)
 	}

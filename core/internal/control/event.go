@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 // WriteEvent encodes e as a single JSON line (newline-terminated). encoding/json
@@ -47,7 +48,7 @@ func ScanEvents(r io.Reader, handle func(contracts.Event) error) error {
 			}
 			continue
 		}
-		if err := handle(contracts.Event{T: "pick", Value: line}); err != nil {
+		if err := handle(contracts.Event{T: eventwire.EventPick, Value: line}); err != nil {
 			return err
 		}
 	}

@@ -8,6 +8,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 func receiveTurnEvent(t *testing.T, ch <-chan contracts.Event) contracts.Event {
@@ -31,7 +32,7 @@ func relayTurnFrames(cancel context.CancelFunc, toBridge <-chan contracts.Event,
 			return
 		}
 	}
-	fromBridge <- contracts.Event{T: eventReply, Text: "done", Done: true}
+	fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "done", Done: true}
 }
 
 func identifiedTestDriver(to chan<- contracts.Event, from <-chan contracts.Event) (*sessionDriver, <-chan contracts.Event) {
@@ -209,7 +210,7 @@ func TestDriverSendsAnEmptyLanguageFrameWhenTheSessionHasNoLanguage(t *testing.T
 		t.Fatal("the seeded turn must complete")
 	}
 
-	if first := receiveTurnEvent(t, frames); first.T != eventLanguage || first.Value != "" {
+	if first := receiveTurnEvent(t, frames); first.T != eventwire.EventLanguage || first.Value != "" {
 		t.Fatalf("first frame = %q %q, want the language frame with an empty value", first.T, first.Value)
 	}
 }
@@ -230,10 +231,10 @@ func TestDriverTellsTheBridgeTheSessionLanguageBeforeEachTurn(t *testing.T) {
 		t.Fatal("the seeded turn must complete")
 	}
 
-	if first := receiveTurnEvent(t, frames); first.T != eventLanguage || first.Value != i18n.French.String() {
+	if first := receiveTurnEvent(t, frames); first.T != eventwire.EventLanguage || first.Value != i18n.French.String() {
 		t.Fatalf("first frame = %q %q, want the language frame fr", first.T, first.Value)
 	}
-	if second := receiveTurnEvent(t, frames); second.T != eventInput || second.Text != "bonjour" {
+	if second := receiveTurnEvent(t, frames); second.T != eventwire.EventInput || second.Text != "bonjour" {
 		t.Fatalf("second frame = %q %q, want the input", second.T, second.Text)
 	}
 	if got := d.sessionInfo().Language; got != i18n.French {

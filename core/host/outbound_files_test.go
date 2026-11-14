@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/outbox"
 )
 
@@ -195,7 +196,7 @@ func TestFailedSendFilesNoticesTheNamesWithoutPaths(t *testing.T) {
 	d.deliverReply(context.Background(), contracts.Event{T: "reply", Text: "hello", Done: true}, frame)
 
 	last := gw.routed[len(gw.routed)-1]
-	if last.T != eventStatus || !strings.Contains(last.Text, "a.png") {
+	if last.T != eventwire.EventStatus || !strings.Contains(last.Text, "a.png") {
 		t.Fatalf("last routed event %+v, want a status notice naming a.png", last)
 	}
 	if strings.Contains(last.Text, frame.Dir) {
@@ -340,7 +341,7 @@ func TestFailedBatchNamesOnlyItsFiles(t *testing.T) {
 	if len(gw.batches) != 2 || len(gw.batches[0]) != filesPerSendBatch || !slices.Equal(gw.batches[1], []string{"a10.png"}) {
 		t.Fatalf("batches = %q, want the eleven files sent as ten then one", gw.batches)
 	}
-	if len(gw.routed) != 1 || gw.routed[0].T != eventStatus {
+	if len(gw.routed) != 1 || gw.routed[0].T != eventwire.EventStatus {
 		t.Fatalf("routed = %+v, want one status notice for the failed batch", gw.routed)
 	}
 	if notice := gw.routed[0].Text; !strings.Contains(notice, "a10.png") || strings.Contains(notice, "a0.png") {

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 func TestNewTextBlockOpensWithoutItsSeparator(t *testing.T) {
@@ -120,8 +121,8 @@ func TestBlankFragmentsAreNotRecopiedPerChunk(t *testing.T) {
 func TestBlankStreamDoesNotHideTheFinalReply(t *testing.T) {
 	m := newTestModel()
 	tb := m.ensureTab("a")
-	m.renderInto(tb, contracts.Event{T: eventChunk, Text: "\n\n"})
-	m.renderInto(tb, contracts.Event{T: eventReply, Text: "Réponse finale", Done: true})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventChunk, Text: "\n\n"})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventReply, Text: "Réponse finale", Done: true})
 	for _, item := range tb.entries {
 		if item.role == roleAgent && item.text == "Réponse finale" {
 			return
@@ -158,9 +159,9 @@ func TestPendingBlankDoesNotCarryPastAClosingEvent(t *testing.T) {
 func TestPendingBlankIsDroppedByReset(t *testing.T) {
 	m := newTestModel()
 	tb := m.ensureTab("a")
-	m.renderInto(tb, contracts.Event{T: eventChunk, Text: "   "})
-	m.renderInto(tb, contracts.Event{T: eventReset})
-	m.renderInto(tb, contracts.Event{T: eventChunk, Text: "code"})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventChunk, Text: "   "})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventReset})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventChunk, Text: "code"})
 	if got := tb.entries[len(tb.entries)-1].text; got != "code" {
 		t.Fatalf("a reset must drop the pending blanks, got %q", got)
 	}

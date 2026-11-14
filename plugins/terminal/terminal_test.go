@@ -11,6 +11,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
 
@@ -157,7 +158,7 @@ func TestNotifyRendersTheNoticeInTheLanguage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	if re.Event.T != eventNotice || re.Event.Text != inFrench {
+	if re.Event.T != eventwire.EventNotice || re.Event.Text != inFrench {
 		t.Fatalf("Notify emitted %+v, want a notice event with %q", re.Event, inFrench)
 	}
 }
@@ -177,7 +178,7 @@ func TestSendAndStatusLinesReachTheTabAsNotices(t *testing.T) {
 	}
 	for _, want := range []string{"sent", "status"} {
 		re := <-got
-		if re.Event.T != eventNotice || re.Event.Text != want || re.Conv.ID != "c1" {
+		if re.Event.T != eventwire.EventNotice || re.Event.Text != want || re.Conv.ID != "c1" {
 			t.Fatalf("emitted %+v, want a notice %q on c1", re.Event, want)
 		}
 	}

@@ -12,6 +12,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/compactwire"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 const triggerLimit = 200_000
@@ -181,7 +182,7 @@ func TestManualCompactionRunsTheWholeStack(t *testing.T) {
 		t.Fatalf("frame = %+v, want the backend stage of the manual compaction", got)
 	}
 	f.from <- measuredAnswer(t, 4_000)
-	waitEmitted(t, f, eventCompactDone)
+	waitEmitted(t, f, eventwire.EventCompactionDone)
 	if got := calls.Load(); got != 1 {
 		t.Fatalf("early stage ran %d times in a manual compaction, want once", got)
 	}
@@ -255,10 +256,10 @@ func TestEarlyStageAloneInTheStackChainsNoEmptyPass(t *testing.T) {
 	if got := stage.calls.Load(); got != 1 {
 		t.Fatalf("early stage ran %d times, want once", got)
 	}
-	if started := f.emittedOf(eventCompactStarted); len(started) != 1 {
+	if started := f.emittedOf(eventwire.EventCompactionStarted); len(started) != 1 {
 		t.Fatalf("compaction_started count = %d, want only the early pass", len(started))
 	}
-	if failed := f.emittedOf(eventCompactFailed); len(failed) != 0 {
+	if failed := f.emittedOf(eventwire.EventCompactionFailed); len(failed) != 0 {
 		t.Fatalf("compaction_failed emitted %+v, want none", failed)
 	}
 }
@@ -272,10 +273,10 @@ func TestWithoutAnEarlyStageTheHostPassRunsOnceAsBefore(t *testing.T) {
 	if !compactFrameOrQuiet(t, f, measuredAnswer(t, 170_000)) {
 		t.Fatal("no host pass at the host threshold")
 	}
-	waitEmitted(t, f, eventStatus)
+	waitEmitted(t, f, eventwire.EventStatus)
 	openTurn(t, f, 170_000)
 	expectNoFrame(t, f)
-	if started := f.emittedOf(eventCompactStarted); len(started) != 1 {
+	if started := f.emittedOf(eventwire.EventCompactionStarted); len(started) != 1 {
 		t.Fatalf("compaction_started count = %d, want exactly one host pass", len(started))
 	}
 }

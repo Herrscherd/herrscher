@@ -10,7 +10,7 @@ import (
 
 func TestConnsCloseOnlyAfterTheListenerIsClosed(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		ln := &gatedListener{release: make(chan struct{})}
+		ln := &closeBlockingListener{release: make(chan struct{})}
 		acc := newAcceptor(ln)
 		go acc.loop()
 		synctest.Wait()
@@ -38,7 +38,7 @@ func TestConnsCloseOnlyAfterTheListenerIsClosed(t *testing.T) {
 
 func TestCloseReturnsOnlyOnceTheAcceptLoopExited(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		ln := &gatedListener{acceptGate: make(chan struct{})}
+		ln := &acceptBlockingListener{gate: make(chan struct{})}
 		acc := newAcceptor(ln)
 		go acc.loop()
 		closed := make(chan error, 1)
@@ -46,11 +46,11 @@ func TestCloseReturnsOnlyOnceTheAcceptLoopExited(t *testing.T) {
 		synctest.Wait()
 		select {
 		case err := <-closed:
-			close(ln.acceptGate)
+			close(ln.gate)
 			t.Fatalf("Close returned %v while the accept loop was still running", err)
 		default:
 		}
-		close(ln.acceptGate)
+		close(ln.gate)
 		if err := <-closed; err != nil {
 			t.Fatalf("Close: %v", err)
 		}
@@ -79,26 +79,27 @@ func requireConnsClosed(tb testing.TB, acc *Acceptor, stayedOpen string) {
 	}
 }
 
-type gatedListener struct {
-	acceptGate chan struct{}
-	release    chan struct{}
+type closeBlockingListener struct {
+	failingListener
+
+	release chan struct{}
 }
 
-func (l *gatedListener) Accept() (net.Conn, error) {
-	if l.acceptGate != nil {
-		<-l.acceptGate
-	}
-	return nil, net.ErrClosed
-}
-
-func (l *gatedListener) Close() error {
-	if l.release != nil {
-		<-l.release
-	}
+func (l *closeBlockingListener) Close() error {
+	<-l.release
 	return nil
 }
 
-func (l *gatedListener) Addr() net.Addr { return nil }
+type acceptBlockingListener struct {
+	failingListener
+
+	gate chan struct{}
+}
+
+func (l *acceptBlockingListener) Accept() (net.Conn, error) {
+	<-l.gate
+	return nil, net.ErrClosed
+}
 
 type failingListener struct{}
 

@@ -119,8 +119,9 @@ func (a *Acceptor) loop() {
 // Conns yields each bridge connection; it closes when the Acceptor is closed.
 func (a *Acceptor) Conns() <-chan *Conn { return a.conns }
 
-// Close stops listening. The socket file stays in place, dead, until the
-// daemon's clean stop removes it.
+// Close stops listening, waits for the accept loop to exit and then closes
+// Conns. The socket file stays in place, dead, until the daemon's clean stop
+// removes it.
 func (a *Acceptor) Close() error {
 	a.closeOnce.Do(func() { a.closeErr = a.shutdown() })
 	return a.closeErr
@@ -138,7 +139,10 @@ func (a *Acceptor) shutdown() error {
 func (a *Acceptor) drainPending() {
 	for {
 		select {
-		case conn := <-a.conns:
+		case conn, ok := <-a.conns:
+			if !ok {
+				return
+			}
 			closeConn(conn)
 		default:
 			return

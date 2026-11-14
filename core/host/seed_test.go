@@ -349,6 +349,32 @@ func TestTheOneShotBridgeCancelsTheSeedOnlyWhenNoReplyCame(t *testing.T) {
 	}
 }
 
+type refusedWithTrailerBackend struct{}
+
+func (refusedWithTrailerBackend) Respond(context.Context, contracts.Prompt, func(contracts.BackendEvent)) (string, error) {
+	return "travail préparé\n⟢ delegate: roblox-scripter \u2014 inspection en lecture seule", errors.New("refused by the vendor")
+}
+func (refusedWithTrailerBackend) Close() error { return nil }
+
+func TestAFailedOneShotTurnConsolidatesButDoesNotCoordinate(t *testing.T) {
+	backend := func(context.Context, state.Session) (contracts.Backend, error) {
+		return refusedWithTrailerBackend{}, nil
+	}
+	sess := state.Session{Name: "orchestrator", ChannelID: "channel"}
+	orch := &consolidateSpy{}
+	coord := &recordingCoord{}
+	_, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "délègue", newTurnID(), orch, oneShotSeedRuntime{backend: backend, coordinator: coord})
+	if _, failed := errors.AsType[*bridge.TurnFailedError](err); !failed {
+		t.Fatalf("seed error = %v, want a failed turn", err)
+	}
+	if !orch.called {
+		t.Fatal("the failed turn was observed, so its conversation must still be consolidated")
+	}
+	if len(coord.delegates) != 0 {
+		t.Fatalf("delegate calls = %d, want none after a failed turn", len(coord.delegates))
+	}
+}
+
 func TestAFailedSeedTurnReadsInTheOperatorLanguage(t *testing.T) {
 	err := &bridge.TurnFailedError{Err: errors.New("refused by the vendor")}
 	for _, tc := range []struct {

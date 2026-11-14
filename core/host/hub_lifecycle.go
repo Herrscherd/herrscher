@@ -68,6 +68,9 @@ func (h *hub) goLiveBridgedLocked(ctx context.Context, sess state.Session) error
 	if err == nil {
 		err = h.startBridgeLocked(sess, wasLive, 0)
 	}
+	if settled := h.stoppingBridge(sess.Name); errors.Is(err, supervisor.ErrStillStopping) && settled != nil {
+		h.relaunchWhenSettled(ctx, sess.Name, settled)
+	}
 	return err
 }
 
@@ -95,6 +98,33 @@ func (h *hub) stoppingBridge(name string) <-chan struct{} {
 		return nil
 	}
 	return h.stopping(name)
+}
+
+func (h *hub) relaunchWhenSettled(ctx context.Context, name string, settled <-chan struct{}) {
+	h.relaunches.Add(1)
+	go func() {
+		defer h.relaunches.Done()
+		select {
+		case <-settled:
+		case <-h.relaunchStop:
+			return
+		}
+		sess, ok := h.st.FindSession(name)
+		if !ok || sess.Archived {
+			return
+		}
+		_ = h.goLiveBridged(ctx, sess)
+	}()
+}
+
+func (h *hub) closeLifecycleLocked() {
+	if h.closed {
+		return
+	}
+	h.closed = true
+	if h.relaunchStop != nil {
+		close(h.relaunchStop)
+	}
 }
 
 func (h *hub) startBridgeLocked(sess state.Session, wasLive bool, grace time.Duration) error {
@@ -172,7 +202,7 @@ func (h *hub) goLiveLocked(ctx context.Context, sess state.Session) error {
 
 func (h *hub) stopLive() {
 	h.lifecycle.Lock()
-	h.closed = true
+	h.closeLifecycleLocked()
 	h.mu.Lock()
 	lives := make(map[string]liveSession, len(h.live))
 	maps.Copy(lives, h.live)
@@ -187,6 +217,7 @@ func (h *hub) stopLive() {
 		h.awaitTeardown(name, live, window)
 		cancel()
 	}
+	h.relaunches.Wait()
 }
 
 func (h *hub) noteListened(session string) {
@@ -200,11 +231,12 @@ func (h *hub) noteListened(session string) {
 
 func (h *hub) closeAndRemoveSockets() error {
 	h.lifecycle.Lock()
-	h.closed = true
+	h.closeLifecycleLocked()
 	h.mu.Lock()
 	sessions := slices.Collect(maps.Keys(h.listenedSessions))
 	h.mu.Unlock()
 	h.lifecycle.Unlock()
+	h.relaunches.Wait()
 	return removeSocketFiles(h.runtime, h.instanceID, sessions)
 }
 

@@ -92,3 +92,69 @@ func TestRefusedSessionJournalsOnlyItsTransitions(t *testing.T) {
 		t.Fatal("the session did not come live once its start stopped being refused")
 	}
 }
+
+func TestRefusedSessionComesLiveWhenItsOldBridgeSettles(t *testing.T) {
+	h := newTestHub(t)
+	name := "relaunch-" + newTurnID()
+	addRefusalSession(t, h, name)
+	settled := make(chan struct{})
+	var stillStopping atomic.Bool
+	stillStopping.Store(true)
+	h.stopping = func(string) <-chan struct{} {
+		if stillStopping.Load() {
+			return settled
+		}
+		return nil
+	}
+	h.startBridge = func(state.Session, time.Duration) error { return nil }
+
+	h.reconcile(t.Context())
+	if h.isLive(name) {
+		t.Fatal("the session went live while its old bridge was still stopping")
+	}
+
+	stillStopping.Store(false)
+	close(settled)
+	deadline := time.Now().Add(5 * time.Second)
+	for !h.isLive(name) {
+		if time.Now().After(deadline) {
+			t.Fatal("the refused session did not come live after its old bridge settled, and no command was sent")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestRefusedSessionIsNotRelaunchedAfterTheHubCloses(t *testing.T) {
+	h := newTestHub(t)
+	name := "closed-" + newTurnID()
+	addRefusalSession(t, h, name)
+	settled := make(chan struct{})
+	var stillStopping atomic.Bool
+	stillStopping.Store(true)
+	h.stopping = func(string) <-chan struct{} {
+		if stillStopping.Load() {
+			return settled
+		}
+		return nil
+	}
+	var listened atomic.Int32
+	listen := h.listen
+	h.listen = func(ctx context.Context, path string) (net.Listener, error) {
+		listened.Add(1)
+		return listen(ctx, path)
+	}
+	h.startBridge = func(state.Session, time.Duration) error { return nil }
+
+	h.reconcile(t.Context())
+	h.stopLive()
+	stillStopping.Store(false)
+	close(settled)
+	time.Sleep(100 * time.Millisecond)
+
+	if h.isLive(name) {
+		t.Fatal("a hub closed while the session was refused relaunched it")
+	}
+	if n := listened.Load(); n != 0 {
+		t.Fatalf("a closed hub opened %d control socket(s) for a refused session, want none", n)
+	}
+}

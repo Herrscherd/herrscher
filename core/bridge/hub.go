@@ -292,6 +292,9 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	onEvent := func(event contracts.BackendEvent) {
 		usage.absorb(event)
 		if event.Kind == "text" {
+			if streamed.Len() > 0 {
+				streamed.WriteString("\n\n")
+			}
 			streamed.WriteString(event.Detail)
 		}
 		emitBackendEvent(sink, event, usage.outTok, usage.inTok, usage.cacheRd, usage.cacheCr)
@@ -299,8 +302,10 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	out, err := backend.Respond(turnCtx, prompt, onEvent)
 	var failure error
 	if err != nil {
-		failure = &TurnFailedError{Err: err, partial: streamed.String()}
 		out = settleFailedReply(ctrl, out, err)
+		if !ctrl.wasInterrupted() {
+			failure = &TurnFailedError{Err: err, partial: streamed.String()}
+		}
 	}
 	turn.emitFiles(ctx, sink)
 	out = strings.TrimSpace(out)

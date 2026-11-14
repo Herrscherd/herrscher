@@ -304,6 +304,65 @@ func TestAFailedTurnKeepsWhatTheBackendStreamed(t *testing.T) {
 	}
 }
 
+func TestAFailedTurnSeparatesItsStreamedBlocks(t *testing.T) {
+	sink := &recordSink{}
+	err := runOneTurn(context.Background(), sink, streamBlocksThenFailBackend{}, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
+	failed, ok := errors.AsType[*TurnFailedError](err)
+	if !ok {
+		t.Fatalf("runOneTurn error = %v, want a TurnFailedError", err)
+	}
+	if got, want := failed.PartialOutput(), "Je regarde.\n\nVoici"; got != want {
+		t.Fatalf("PartialOutput() = %q, want the text blocks separated by a blank line: %q", got, want)
+	}
+}
+
+func TestAFailedTurnIsLoggedAsAWarning(t *testing.T) {
+	logs := captureLog(t)
+	in := make(chan contracts.Event, 1)
+	in <- contracts.Event{T: "input", Text: "go"}
+	close(in)
+	runHubTurns(context.Background(), in, &recordSink{}, errBackend{})
+	if got := logs.String(); !strings.Contains(got, "level=WARN") || !strings.Contains(got, "backend turn failed") {
+		t.Fatalf("a failed turn must be logged as a warning; got log %q", got)
+	}
+}
+
+func TestAnInterruptedTurnIsNotLoggedAsAFailure(t *testing.T) {
+	logs := captureLog(t)
+	ctrl := &turnController{}
+	sink := &recordSink{}
+	in := make(chan contracts.Event)
+	be := partialBackend{started: make(chan struct{})}
+
+	done := make(chan struct{})
+	go func() {
+		runHubTurnsCtl(context.Background(), in, sink, be, nil, ctrl, nil, affordances{}, nil)
+		close(done)
+	}()
+
+	in <- contracts.Event{T: "input", Text: "go"}
+	<-be.started
+	ctrl.interrupt()
+	close(in)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("interrupt did not cancel the in-flight turn")
+	}
+	if got := logs.String(); strings.Contains(got, "backend turn failed") {
+		t.Fatalf("an interrupted turn is the operator's choice, not a failure; got log %q", got)
+	}
+}
+
+type streamBlocksThenFailBackend struct{}
+
+func (streamBlocksThenFailBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
+	onEvent(contracts.BackendEvent{Kind: "text", Detail: "Je regarde."})
+	onEvent(contracts.BackendEvent{Kind: "text", Detail: "Voici"})
+	return "", errors.New("refused by the vendor")
+}
+func (streamBlocksThenFailBackend) Close() error { return nil }
+
 type errBackend struct{}
 
 func (errBackend) Respond(context.Context, contracts.Prompt, func(contracts.BackendEvent)) (string, error) {

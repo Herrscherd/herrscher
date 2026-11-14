@@ -14,6 +14,7 @@ import (
 
 const (
 	initialAcceptRetryDelay = 5 * time.Millisecond
+	acceptRetryGrowth       = 2
 	maxAcceptRetryDelay     = time.Second
 )
 
@@ -138,7 +139,7 @@ func nextAcceptRetryDelay(previous time.Duration) time.Duration {
 	if previous == 0 {
 		return initialAcceptRetryDelay
 	}
-	return min(previous+previous, maxAcceptRetryDelay)
+	return min(previous*acceptRetryGrowth, maxAcceptRetryDelay)
 }
 
 func (a *Acceptor) isDone() bool {

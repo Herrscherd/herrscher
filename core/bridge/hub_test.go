@@ -304,15 +304,29 @@ func TestAFailedTurnKeepsWhatTheBackendStreamed(t *testing.T) {
 	}
 }
 
-func TestAFailedTurnSeparatesItsStreamedBlocks(t *testing.T) {
+func TestAFailedTurnJoinsItsDeltasAsTheBackendSentThem(t *testing.T) {
 	sink := &recordSink{}
-	err := runOneTurn(context.Background(), sink, streamBlocksThenFailBackend{}, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
+	backend := streamDeltasThenFailBackend{deltas: []string{"Je", " regarde", "."}}
+	err := runOneTurn(context.Background(), sink, backend, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
 	failed, ok := errors.AsType[*TurnFailedError](err)
 	if !ok {
 		t.Fatalf("runOneTurn error = %v, want a TurnFailedError", err)
 	}
-	if got, want := failed.PartialOutput(), "Je regarde.\n\nVoici"; got != want {
-		t.Fatalf("PartialOutput() = %q, want the text blocks separated by a blank line: %q", got, want)
+	if got, want := failed.PartialOutput(), "Je regarde."; got != want {
+		t.Fatalf("PartialOutput() = %q, want the deltas concatenated as sent: %q", got, want)
+	}
+}
+
+func TestAFailedTurnWithOnlyBlankDeltasHasNoPartialOutput(t *testing.T) {
+	sink := &recordSink{}
+	backend := streamDeltasThenFailBackend{deltas: []string{"\n", "  ", "\n"}}
+	err := runOneTurn(context.Background(), sink, backend, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
+	failed, ok := errors.AsType[*TurnFailedError](err)
+	if !ok {
+		t.Fatalf("runOneTurn error = %v, want a TurnFailedError", err)
+	}
+	if got := failed.PartialOutput(); got != "" {
+		t.Fatalf("PartialOutput() = %q, want no partial output for blank deltas", got)
 	}
 }
 
@@ -354,14 +368,15 @@ func TestAnInterruptedTurnIsNotLoggedAsAFailure(t *testing.T) {
 	}
 }
 
-type streamBlocksThenFailBackend struct{}
+type streamDeltasThenFailBackend struct{ deltas []string }
 
-func (streamBlocksThenFailBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
-	onEvent(contracts.BackendEvent{Kind: "text", Detail: "Je regarde."})
-	onEvent(contracts.BackendEvent{Kind: "text", Detail: "Voici"})
+func (b streamDeltasThenFailBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
+	for _, delta := range b.deltas {
+		onEvent(contracts.BackendEvent{Kind: "text", Detail: delta})
+	}
 	return "", errors.New("refused by the vendor")
 }
-func (streamBlocksThenFailBackend) Close() error { return nil }
+func (streamDeltasThenFailBackend) Close() error { return nil }
 
 type errBackend struct{}
 

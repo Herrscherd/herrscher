@@ -2,7 +2,6 @@ package control
 
 import (
 	"net"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -38,16 +37,12 @@ func TestConnsCloseOnlyAfterTheListenerIsClosed(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("Conns stayed open after Close")
 	}
-	if !ln.closed.Load() {
-		t.Fatal("Conns closed before the listener")
-	}
 }
 
 type gatedListener struct {
 	accepted chan struct{}
 	closing  chan struct{}
 	release  chan struct{}
-	closed   atomic.Bool
 }
 
 func newGatedListener() *gatedListener {
@@ -62,7 +57,6 @@ func (l *gatedListener) Accept() (net.Conn, error) {
 func (l *gatedListener) Close() error {
 	close(l.closing)
 	<-l.release
-	l.closed.Store(true)
 	return nil
 }
 

@@ -23,7 +23,10 @@ const errPrefix = "⚠️ "
 
 const interruptNotice = "⏹ interrupted"
 
-const resetKind = "reset"
+const (
+	textKind  = "text"
+	resetKind = "reset"
+)
 
 type turnController struct {
 	mu      sync.Mutex
@@ -212,7 +215,7 @@ func runHubTurnsCtl(ctx context.Context, events <-chan contracts.Event, sink con
 				runHistoryPrune(ctx, sink, backend, ctrl, event)
 			case "input":
 				if err := runOneTurn(ctx, sink, backend, orch, event, ctrl, eng, aff, pin, lang); err != nil {
-					logger.Warn("backend turn failed; its reply already went out", "err", err)
+					logger.Warn("backend turn failed", "err", err)
 				}
 			}
 		}
@@ -296,7 +299,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	onEvent := func(event contracts.BackendEvent) {
 		usage.absorb(event)
 		switch event.Kind {
-		case "text":
+		case textKind:
 			streamed = append(streamed, event.Detail)
 		case resetKind:
 			streamed = nil
@@ -382,7 +385,7 @@ func emitBackendEvent(sink contracts.EventSink, event contracts.BackendEvent, to
 	switch event.Kind {
 	case "thinking":
 		sink.Emit(contracts.Event{T: "thinking", Text: event.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
-	case "text":
+	case textKind:
 		sink.Emit(contracts.Event{T: "chunk", Text: event.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
 	case "tool":
 		if text := strings.TrimSpace(event.Tool + " " + event.Detail); text != "" {

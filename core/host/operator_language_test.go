@@ -373,9 +373,15 @@ func TestClosedHubReconcileOpensNoSessionQuietly(t *testing.T) {
 	h.runtime = isolatedRuntimeDir(t)
 	h.instanceID = "t18"
 	h.stopLive()
+	t.Cleanup(h.stopLive)
 	h.reconcile(context.Background())
 	if printed.Len() != 0 {
 		t.Fatalf("a closed hub printed %q while its sessions were refused, want no warning", printed.String())
+	}
+	for _, name := range []string{"alpha", "beta"} {
+		if h.isLive(name) {
+			t.Fatalf("a closed hub brought session %s live", name)
+		}
 	}
 }
 

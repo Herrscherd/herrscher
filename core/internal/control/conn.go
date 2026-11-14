@@ -83,16 +83,15 @@ func Accept(ctx context.Context, path string) (*Acceptor, error) {
 func (a *Acceptor) closeWhenDone(ctx context.Context) {
 	select {
 	case <-ctx.Done():
-		if err := a.Close(); err != nil {
-			slog.Debug("control acceptor close", "err", err)
-		}
 	case <-a.exited:
+	}
+	if err := a.Close(); err != nil {
+		slog.Debug("control acceptor close", "err", err)
 	}
 }
 
 func (a *Acceptor) loop() {
 	defer close(a.exited)
-	defer close(a.conns)
 	for {
 		conn, err := a.ln.Accept()
 		if err != nil {
@@ -128,19 +127,15 @@ func (a *Acceptor) shutdown() error {
 	err := a.ln.Close()
 	<-a.exited
 	a.drainPending()
+	close(a.conns)
 	return err
 }
 
 func (a *Acceptor) drainPending() {
 	for {
 		select {
-		case conn, ok := <-a.conns:
-			if !ok {
-				return
-			}
-			if conn != nil {
-				closeConn(conn)
-			}
+		case conn := <-a.conns:
+			closeConn(conn)
 		default:
 			return
 		}

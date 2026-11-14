@@ -87,7 +87,11 @@ func TestSettleFailsOnALeakAndKillsIt(t *testing.T) {
 	if startErr := leaker.Start(); startErr != nil {
 		t.Fatal(startErr)
 	}
-	if err := settle(instance); !errors.Is(err, errLeaked) {
+	before, err := unreadableEntries()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := settle(instance, before); !errors.Is(err, errLeaked) {
 		t.Fatalf("got %v, want the leak reported", err)
 	}
 	if waitErr := leaker.Wait(); waitErr == nil {
@@ -95,25 +99,20 @@ func TestSettleFailsOnALeakAndKillsIt(t *testing.T) {
 	}
 }
 
-func TestRequireOwnedByUsRefusesWhatIsNotOurDirectory(t *testing.T) {
-	root := t.TempDir()
+func privateDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func refusedRuntimeDirs(t *testing.T) (string, []string) {
+	t.Helper()
+	root := privateDir(t)
 	file := filepath.Join(root, "file")
-	link := filepath.Join(root, "link")
-	if err := os.WriteFile(file, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(root, link); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chmod(root, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := requireOwnedByUs(root); err != nil {
-		t.Fatalf("our own directory was refused: %v", err)
-	}
-	if _, isForeign := errors.AsType[*foreignDirError](requireOwnedBy(root, os.Getuid()+1)); !isForeign {
-		t.Fatal("a directory owned by another uid was accepted")
-	}
+	touch(t, file)
 	shared := filepath.Join(root, "shared")
 	if err := os.Mkdir(shared, 0o700); err != nil {
 		t.Fatal(err)
@@ -121,84 +120,73 @@ func TestRequireOwnedByUsRefusesWhatIsNotOurDirectory(t *testing.T) {
 	if err := os.Chmod(shared, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, isForeign := errors.AsType[*foreignDirError](requireOwnedByUs(shared)); !isForeign {
-		t.Fatal("a directory other users can enter was accepted")
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(privateDir(t), link); err != nil {
+		t.Fatal(err)
 	}
-	for _, foreign := range []string{file, link} {
-		refused, isForeign := errors.AsType[*foreignDirError](requireOwnedByUs(foreign))
-		if !isForeign || refused.Dir != foreign {
-			t.Fatalf("%s: got %v, want it refused", foreign, refused)
-		}
-	}
+	return file, []string{shared, link}
 }
 
-func TestRemoveInstanceEntriesLeavesAForeignDirectoryAlone(t *testing.T) {
+func TestRemoveInstanceEntriesLeavesWhatIsNotAPrivateDirectoryAlone(t *testing.T) {
 	instance, err := newInstanceID()
 	if err != nil {
 		t.Fatal(err)
 	}
-	target := t.TempDir()
-	entry := filepath.Join(target, "herrscher-command-"+instance+".sock")
-	if err := os.WriteFile(entry, nil, 0o600); err != nil {
-		t.Fatal(err)
+	file, dirs := refusedRuntimeDirs(t)
+	if failures := removeInstanceEntries(file, instance); len(failures) == 0 {
+		t.Errorf("the file %s was accepted as a runtime directory", file)
 	}
-	link := filepath.Join(t.TempDir(), "link")
-	if err := os.Symlink(target, link); err != nil {
-		t.Fatal(err)
-	}
-	failures := removeInstanceEntries(link, instance)
-	if _, isForeign := errors.AsType[*foreignDirError](errors.Join(failures...)); !isForeign {
-		t.Fatalf("got %v, want the link refused", failures)
-	}
-	if _, err := os.Stat(entry); err != nil {
-		t.Fatalf("an entry behind the link was removed: %v", err)
+	for _, dir := range dirs {
+		entry := filepath.Join(dir, "herrscher-command-"+instance+".sock")
+		touch(t, entry)
+		if failures := removeInstanceEntries(dir, instance); len(failures) == 0 {
+			t.Errorf("%s was accepted as a private runtime directory", dir)
+		}
+		if !exists(entry) {
+			t.Errorf("%s was removed", entry)
+		}
 	}
 }
 
-const longRuntimeDir = 69
-
-func longPrivateDir(t *testing.T, instance string) string {
+func hashedRuntimeDir(t *testing.T, instance string) string {
 	t.Helper()
-	base := filepath.Join(tmpRoot, "e2e-"+instance)
-	dir := filepath.Join(base, strings.Repeat("d", longRuntimeDir-len(base)-1))
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if err := os.RemoveAll(base); err != nil {
-			t.Error(err)
+	base := privateDir(t)
+	for pad := 1; ; pad++ {
+		dir := filepath.Join(base, strings.Repeat("d", pad))
+		known, err := entriesOf(dir, instance)
+		if err != nil {
+			t.Fatalf("no directory under %s gives hashed socket names before it is too long: %v", base, err)
 		}
-	})
-	return dir
+		if strings.HasPrefix(filepath.Base(known.command), "herrscher-") || strings.HasPrefix(filepath.Base(known.events), "herrscher-") {
+			continue
+		}
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		return dir
+	}
 }
 
 func entriesIn(t *testing.T, dir, instance string) []string {
 	t.Helper()
-	entries, err := daemonEntries(dir, instance)
+	known, err := entriesOf(dir, instance)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range entries {
-		if err := os.WriteFile(path, nil, 0o600); err != nil {
-			t.Fatal(err)
-		}
+	for _, path := range known.paths() {
+		touch(t, path)
 	}
-	return entries
+	return known.paths()
 }
 
-func TestRemoveInstanceEntriesTakesTheHashedSocketsAndOnlyThem(t *testing.T) {
+func TestRemoveHashedEntries(t *testing.T) {
 	instance, err := newInstanceID()
 	if err != nil {
 		t.Fatal(err)
 	}
-	dir := longPrivateDir(t, instance)
+	dir := hashedRuntimeDir(t, instance)
 	ours := entriesIn(t, dir, instance)
 	theirs := entriesIn(t, dir, "e2e-00000000")
-	for _, socket := range ours[:2] {
-		if !strings.HasPrefix(filepath.Base(socket), "hs-") {
-			t.Fatalf("%s is not hashed, the directory is too short to test the hashed names", socket)
-		}
-	}
 	if failures := removeInstanceEntries(dir, instance); len(failures) != 0 {
 		t.Fatal(failures)
 	}
@@ -211,5 +199,32 @@ func TestRemoveInstanceEntriesTakesTheHashedSocketsAndOnlyThem(t *testing.T) {
 		if !exists(path) {
 			t.Errorf("%s of another instance was removed", path)
 		}
+	}
+}
+
+func touch(t *testing.T, path string) {
+	t.Helper()
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSettleNamesAHashedEntryThatAppeared(t *testing.T) {
+	dir := privateDir(t)
+	touch(t, filepath.Join(dir, "hs-old.sock"))
+	dirs := []string{dir, filepath.Join(dir, "missing")}
+	before, err := unreadableEntriesIn(dirs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	touch(t, filepath.Join(dir, "herrscher-command-x.sock"))
+	if quiet := appearedUnreadableIn(dirs, before); quiet != nil {
+		t.Fatalf("a readable name or an older entry was reported: %v", quiet)
+	}
+	fresh := filepath.Join(dir, "hs-new.sock")
+	touch(t, fresh)
+	reported := appearedUnreadableIn(dirs, before)
+	if !errors.Is(reported, errUnreadableEntry) || !strings.Contains(reported.Error(), fresh) {
+		t.Fatalf("got %v, want %s reported", reported, fresh)
 	}
 }

@@ -100,8 +100,12 @@ func isolate(env *testscript.Env, binDir string) error {
 		return fmt.Errorf("git init: %w: %s", err, out)
 	}
 	env.Cd = repo
+	before, snapshotErr := unreadableEntries()
+	if snapshotErr != nil {
+		return snapshotErr
+	}
 	env.Defer(func() {
-		if err := settle(instance); err != nil {
+		if err := settle(instance, before); err != nil {
 			env.T().Fatal(err)
 		}
 	})
@@ -110,12 +114,58 @@ func isolate(env *testscript.Env, binDir string) error {
 
 var errLeaked = errors.New("processes outlived the scenario")
 
-func settle(instance string) error {
+func settle(instance string, before map[string]bool) error {
 	leaked, reapErr := reapInstance(instance, reapGrace)
 	if len(leaked) > 0 {
 		reapErr = errors.Join(reapErr, fmt.Errorf("%w: %s", errLeaked, strings.Join(leaked, "; ")))
 	}
-	return errors.Join(reapErr, removeRuntimeEntries(instance))
+	return errors.Join(reapErr, removeRuntimeEntries(instance), appearedUnreadable(before))
+}
+
+var errUnreadableEntry = errors.New("an entry with a hashed name appeared during the scenario, so a socket path passed the unix limit and the cleanup cannot tell whose it is; shorten the session names")
+
+func unreadableEntries() (map[string]bool, error) {
+	return unreadableEntriesIn(runtimeDirs())
+}
+
+func unreadableEntriesIn(dirs []string) (map[string]bool, error) {
+	found := make(map[string]bool)
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		for _, entry := range entries {
+			if !strings.HasPrefix(entry.Name(), "herrscher-") {
+				found[filepath.Join(dir, entry.Name())] = true
+			}
+		}
+	}
+	return found, nil
+}
+
+func appearedUnreadable(before map[string]bool) error {
+	return appearedUnreadableIn(runtimeDirs(), before)
+}
+
+func appearedUnreadableIn(dirs []string, before map[string]bool) error {
+	after, err := unreadableEntriesIn(dirs)
+	if err != nil {
+		return err
+	}
+	var appeared []string
+	for path := range after {
+		if !before[path] {
+			appeared = append(appeared, path)
+		}
+	}
+	if len(appeared) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%w: %s", errUnreadableEntry, strings.Join(appeared, ", "))
 }
 
 func newInstanceID() (string, error) {
@@ -137,16 +187,28 @@ func runtimeDirs() []string {
 	return []string{filepath.Join(userRuntimeRoot, uid, "herrscher"), filepath.Join(tmpRoot, "herrscher-"+uid)}
 }
 
-func daemonEntries(dir, instance string) ([]string, error) {
+type daemonEntries struct {
+	layout  host.RuntimeLayout
+	command string
+	events  string
+	lock    string
+}
+
+func entriesOf(dir, instance string) (daemonEntries, error) {
 	layout, err := host.RuntimeAt(dir)
 	if err != nil {
-		return nil, err
+		return daemonEntries{}, err
 	}
-	return []string{
-		host.CommandSocketPathIn(layout, instance),
-		host.EventsSocketPathIn(layout, instance),
-		layout.Lock(instance),
+	return daemonEntries{
+		layout:  layout,
+		command: host.CommandSocketPathIn(layout, instance),
+		events:  host.EventsSocketPathIn(layout, instance),
+		lock:    layout.Lock(instance),
 	}, nil
+}
+
+func (d daemonEntries) paths() []string {
+	return []string{d.command, d.events, d.lock}
 }
 
 func removeRuntimeEntries(instance string) error {
@@ -158,23 +220,22 @@ func removeRuntimeEntries(instance string) error {
 }
 
 func removeInstanceEntries(dir, instance string) []error {
-	err := requireOwnedByUs(dir)
-	if errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Lstat(dir); errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
+	known, err := entriesOf(dir, instance)
 	if err != nil {
 		return []error{err}
+	}
+	if unsafe := known.layout.Check(known.command); unsafe != nil {
+		return []error{unsafe}
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return []error{err}
 	}
-	known, err := daemonEntries(dir, instance)
-	if err != nil {
-		return []error{err}
-	}
-	owned := make(map[string]bool, len(known))
-	for _, path := range known {
+	owned := make(map[string]bool, len(known.paths()))
+	for _, path := range known.paths() {
 		owned[filepath.Base(path)] = true
 	}
 	var failures []error
@@ -190,40 +251,14 @@ func removeInstanceEntries(dir, instance string) []error {
 	return failures
 }
 
-type foreignDirError struct {
-	Dir string
-}
-
-func (e *foreignDirError) Error() string {
-	return "the runtime directory " + e.Dir + " is not a private directory owned by this user"
-}
-
-const sharedAccess fs.FileMode = 0o077
-
-func requireOwnedByUs(dir string) error {
-	return requireOwnedBy(dir, os.Getuid())
-}
-
-func requireOwnedBy(dir string, uid int) error {
-	info, err := os.Lstat(dir)
-	if err != nil {
-		return err
-	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !info.IsDir() || !ok || int(stat.Uid) != uid || info.Mode().Perm()&sharedAccess != 0 {
-		return &foreignDirError{Dir: dir}
-	}
-	return nil
-}
-
 func commandSocket(instance string) (string, error) {
 	for _, dir := range runtimeDirs() {
-		known, err := daemonEntries(dir, instance)
+		known, err := entriesOf(dir, instance)
 		if err != nil {
 			return "", err
 		}
-		if exists(known[0]) {
-			return known[0], nil
+		if exists(known.command) {
+			return known.command, nil
 		}
 	}
 	return "", errNoSocket
@@ -244,11 +279,11 @@ func lockBeside(instance string) error {
 	if err != nil {
 		return err
 	}
-	known, err := daemonEntries(filepath.Dir(socket), instance)
+	known, err := entriesOf(filepath.Dir(socket), instance)
 	if err != nil {
 		return err
 	}
-	if _, err := os.Stat(known[len(known)-1]); err != nil {
+	if _, err := os.Stat(known.lock); err != nil {
 		return fmt.Errorf("%w: %w", errNoLock, err)
 	}
 	return nil

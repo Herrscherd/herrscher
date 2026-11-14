@@ -291,6 +291,11 @@ func (r *replay) play(out io.Writer, turn Turn, prompt string) (turnOutcome, err
 			return outcomeCrashed, nil
 		case stepFail:
 			return outcomeAnswered, writeJSON(out, r.result(current.text, prompt, true))
+		case stepAPIError:
+			if err := writeJSON(out, apiErrorText(current.text)); err != nil {
+				return 0, err
+			}
+			return outcomeAnswered, writeJSON(out, r.result(current.text, prompt, true))
 		case stepEcho:
 			text := echoPrefix + lastLine(prompt)
 			reply = append(reply, text)
@@ -333,8 +338,10 @@ type contentBlock struct {
 }
 
 type assistantEvent struct {
-	Type    string `json:"type"`
-	Message struct {
+	Type       string `json:"type"`
+	IsAPIError bool   `json:"isApiErrorMessage,omitempty"`
+	Message    struct {
+		Model   string         `json:"model,omitempty"`
 		Content []contentBlock `json:"content"`
 	} `json:"message"`
 }
@@ -342,6 +349,13 @@ type assistantEvent struct {
 func assistantText(text string) assistantEvent {
 	event := assistantEvent{Type: "assistant"}
 	event.Message.Content = []contentBlock{{Type: "text", Text: text}}
+	return event
+}
+
+func apiErrorText(text string) assistantEvent {
+	event := assistantText(text)
+	event.IsAPIError = true
+	event.Message.Model = "<synthetic>"
 	return event
 }
 

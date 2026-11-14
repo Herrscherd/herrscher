@@ -62,6 +62,7 @@ type hub struct {
 	listen        func(ctx context.Context, path string) (net.Listener, error)
 	startBridge   func(sess state.Session, grace time.Duration) error
 	stopBridge    func(name string) error
+	refused       map[string]struct{}
 	seedBackend   func(context.Context, state.Session) (contracts.Backend, error)
 	models        *ModelDiscovery
 

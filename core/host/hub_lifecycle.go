@@ -56,11 +56,37 @@ func (h *hub) goLiveAndPersist(ctx context.Context, sess state.Session, persist 
 func (h *hub) goLiveBridged(ctx context.Context, sess state.Session) error {
 	h.lifecycle.Lock()
 	defer h.lifecycle.Unlock()
+	err := h.goLiveBridgedLocked(ctx, sess)
+	h.journalStart(sess.Name, err)
+	return err
+}
+
+func (h *hub) goLiveBridgedLocked(ctx context.Context, sess state.Session) error {
 	wasLive := h.isLive(sess.Name)
-	if err := h.goLiveLocked(ctx, sess); err != nil {
-		return err
+	err := h.goLiveLocked(ctx, sess)
+	if err == nil {
+		err = h.startBridgeLocked(sess, wasLive, 0)
 	}
-	return h.startBridgeLocked(sess, wasLive, 0)
+	return err
+}
+
+func (h *hub) journalStart(name string, err error) {
+	if errors.Is(err, errHubClosed) {
+		return
+	}
+	lang := h.sessionLanguageSource(name)
+	_, refused := h.refused[name]
+	switch {
+	case err == nil && refused:
+		delete(h.refused, name)
+		warnLive(h.warnings, lang, "warn.session_start_recovered", map[string]any{nameParam: name})
+	case err != nil && !refused:
+		if h.refused == nil {
+			h.refused = make(map[string]struct{})
+		}
+		h.refused[name] = struct{}{}
+		warnLive(h.warnings, lang, "warn.session_start", map[string]any{nameParam: name, detailParam: err})
+	}
 }
 
 func (h *hub) startBridgeLocked(sess state.Session, wasLive bool, grace time.Duration) error {
@@ -349,11 +375,8 @@ func (h *hub) reconcile(ctx context.Context) {
 		if saved.Archived {
 			continue
 		}
-		if err := h.goLiveBridged(ctx, saved); err != nil {
-			if errors.Is(err, errHubClosed) {
-				break
-			}
-			warnLive(h.warnings, h.sessionLanguageSource(saved.Name), "warn.session_start", map[string]any{nameParam: saved.Name, detailParam: err})
+		if errors.Is(h.goLiveBridged(ctx, saved), errHubClosed) {
+			break
 		}
 	}
 }

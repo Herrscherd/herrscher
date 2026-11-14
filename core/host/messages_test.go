@@ -173,6 +173,7 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"coordination.report_delivered":     {"Parent"},
 		"coordination.delegate_refused":     nil,
 		"warn.session_start":                {"Detail", "Name"},
+		"warn.session_start_recovered":      {"Name"},
 		"warn.session_checkpoint":           {"Detail", "Name"},
 		"warn.session_resume_token":         {"Detail", "Name"},
 		"warn.session_project_pin":          {"Detail", "Name"},

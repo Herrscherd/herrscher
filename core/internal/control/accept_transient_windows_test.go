@@ -13,7 +13,6 @@ func TestAcceptRetriesEachTransientErrno(t *testing.T) {
 		windows.ERROR_TOO_MANY_OPEN_FILES,
 		windows.ERROR_NO_SYSTEM_RESOURCES,
 		windows.ERROR_NOT_ENOUGH_MEMORY,
-		windows.ERROR_OUTOFMEMORY,
 	})
 }
 

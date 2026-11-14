@@ -216,7 +216,7 @@ func (tb *tab) appendChunk(text string) {
 		tb.entries[n-1].text += text
 		return
 	}
-	tb.appendEntry(entry{role: roleAgent, text: text, streaming: true})
+	tb.appendEntry(entry{role: roleAgent, text: strings.TrimLeft(text, "\n"), streaming: true})
 }
 
 func (tb *tab) endStream() {

@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 func TestUserEntryIsOneUnruledRow(t *testing.T) {
@@ -96,6 +98,52 @@ func TestChunkCoalescingRendersOneBlock(t *testing.T) {
 	tb.appendChunk("again")
 	if len(tb.entries) != 3 {
 		t.Fatalf("interrupted stream must open a fresh block: %d entries", len(tb.entries))
+	}
+}
+
+func TestNewTextBlockOpensWithoutItsSeparator(t *testing.T) {
+	tb := &tab{}
+	tb.appendChunk("Je regarde.")
+	tb.endStream()
+	tb.appendEntry(entry{role: roleTool, text: "read"})
+	tb.appendChunk("\n\nVoici")
+	if len(tb.entries) != 3 {
+		t.Fatalf("a text block after a tool block must open its own entry: %d entries", len(tb.entries))
+	}
+	if got := tb.entries[2].text; got != "Voici" {
+		t.Fatalf("a new text entry must not open on blank lines: %q", got)
+	}
+}
+
+func TestContinuedTextKeepsItsSeparator(t *testing.T) {
+	tb := &tab{}
+	tb.appendChunk("Je regarde.")
+	tb.appendChunk("\n\nVoici")
+	if got := tb.entries[0].text; got != "Je regarde.\n\nVoici" {
+		t.Fatalf("a chunk that extends a streaming entry must keep its separator: %q", got)
+	}
+}
+
+func TestResetLeavesTheAbandonedAttemptClosed(t *testing.T) {
+	m := newTestModel()
+	tb := m.ensureTab("a")
+	m.renderInto(tb, contracts.Event{T: "chunk", Text: "Je regarde."})
+	m.renderInto(tb, contracts.Event{T: "reset"})
+	m.renderInto(tb, contracts.Event{T: "chunk", Text: "Voici"})
+	var agents []entry
+	for _, item := range tb.entries {
+		if item.role == roleAgent {
+			agents = append(agents, item)
+		}
+	}
+	if len(agents) != 2 {
+		t.Fatalf("the retry must open its own entry after the reset: %d agent entries", len(agents))
+	}
+	if agents[0].text != "Je regarde." || agents[0].streaming {
+		t.Fatalf("the abandoned attempt must stay as it was, closed: %+v", agents[0])
+	}
+	if agents[1].text != "Voici" {
+		t.Fatalf("the retry must hold only its own text: %q", agents[1].text)
 	}
 }
 

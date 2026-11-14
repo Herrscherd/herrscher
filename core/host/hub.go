@@ -62,6 +62,7 @@ type hub struct {
 	listen        func(ctx context.Context, path string) (net.Listener, error)
 	startBridge   func(sess state.Session, grace time.Duration) error
 	stopBridge    func(name string) error
+	stopping      func(name string) <-chan struct{}
 	refused       map[string]struct{}
 	seedBackend   func(context.Context, state.Session) (contracts.Backend, error)
 	models        *ModelDiscovery
@@ -87,6 +88,7 @@ func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir str
 		sup.SetFailureSink(created.reportSessionFailure)
 		created.startBridge = sup.StartWithin
 		created.stopBridge = sup.Stop
+		created.stopping = sup.Stopping
 	}
 	return created
 }

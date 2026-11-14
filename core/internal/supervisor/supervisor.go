@@ -309,6 +309,24 @@ func (s *Supervisor) stopUntil(name string, expired <-chan time.Time) error {
 	return nil
 }
 
+// Stopping returns the channel that closes when the loop held for name returns,
+// while that loop is still stopping. It returns nil when no loop is stopping for
+// name, including once the stop has finished.
+func (s *Supervisor) Stopping(name string) <-chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	run, ok := s.runs[name]
+	if !ok || !run.stopping {
+		return nil
+	}
+	select {
+	case <-run.done:
+		return nil
+	default:
+		return run.done
+	}
+}
+
 // Running reports whether a supervised loop is currently held for name. It is
 // the one question an operator (or a test) can ask about a bridge that is not
 // answering: whether the daemon still believes it is running one.

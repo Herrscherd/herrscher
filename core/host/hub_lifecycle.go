@@ -10,6 +10,7 @@ import (
 
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
 
 type liveSession struct {
@@ -89,6 +90,13 @@ func (h *hub) journalStart(name string, err error) {
 	}
 }
 
+func (h *hub) stoppingBridge(name string) <-chan struct{} {
+	if h.stopping == nil {
+		return nil
+	}
+	return h.stopping(name)
+}
+
 func (h *hub) startBridgeLocked(sess state.Session, wasLive bool, grace time.Duration) error {
 	if h.startBridge == nil {
 		return nil
@@ -116,6 +124,9 @@ func (h *hub) goLiveLocked(ctx context.Context, sess state.Session) error {
 	}
 	if h.isLive(sess.Name) {
 		return nil
+	}
+	if h.stoppingBridge(sess.Name) != nil {
+		return supervisor.ErrStillStopping
 	}
 	controlPath := control.SocketPath(h.runtime, h.instanceID, sess.Name)
 	if err := ensureRuntimeDir(h.runtime, controlPath); err != nil {

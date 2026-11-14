@@ -113,7 +113,7 @@ func (h *hub) relaunchWhenSettled(ctx context.Context, name string, settled <-ch
 		if !ok || sess.Archived {
 			return
 		}
-		_ = h.goLiveBridged(ctx, sess)
+		logCleanup(h.goLiveBridged(ctx, sess))
 	}()
 }
 
@@ -312,7 +312,7 @@ func (w teardownWindow) finished(done <-chan struct{}) bool {
 	}
 }
 
-func finishedBefore(done <-chan struct{}, ends <-chan struct{}) bool {
+func finishedBefore(done, ends <-chan struct{}) bool {
 	select {
 	case <-done:
 		return true
@@ -321,9 +321,9 @@ func finishedBefore(done <-chan struct{}, ends <-chan struct{}) bool {
 	}
 }
 
-func isClosed(c <-chan struct{}) bool {
+func isClosed(signal <-chan struct{}) bool {
 	select {
-	case <-c:
+	case <-signal:
 		return true
 	default:
 		return false

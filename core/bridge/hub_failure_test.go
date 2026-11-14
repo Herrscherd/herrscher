@@ -133,7 +133,7 @@ type streamDeltasThenFailBackend struct{ deltas []string }
 
 func (b streamDeltasThenFailBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
 	for _, delta := range b.deltas {
-		onEvent(contracts.BackendEvent{Kind: "text", Detail: delta})
+		onEvent(contracts.BackendEvent{Kind: backendKindText, Detail: delta})
 	}
 	return "", errors.New("refused by the vendor")
 }
@@ -142,7 +142,7 @@ func (streamDeltasThenFailBackend) Close() error { return nil }
 type streamThenFailBackend struct{}
 
 func (streamThenFailBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
-	onEvent(contracts.BackendEvent{Kind: "text", Detail: "partial answer"})
+	onEvent(contracts.BackendEvent{Kind: backendKindText, Detail: "partial answer"})
 	return "refused by the vendor", errors.New("refused by the vendor")
 }
 func (streamThenFailBackend) Close() error { return nil }
@@ -150,9 +150,9 @@ func (streamThenFailBackend) Close() error { return nil }
 type streamResetThenFailBackend struct{}
 
 func (streamResetThenFailBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
-	onEvent(contracts.BackendEvent{Kind: "text", Detail: "Je regarde."})
+	onEvent(contracts.BackendEvent{Kind: backendKindText, Detail: "Je regarde."})
 	onEvent(contracts.BackendEvent{Kind: backendKindReset})
-	onEvent(contracts.BackendEvent{Kind: "text", Detail: "Voici"})
+	onEvent(contracts.BackendEvent{Kind: backendKindText, Detail: "Voici"})
 	return "", errors.New("refused by the vendor")
 }
 func (streamResetThenFailBackend) Close() error { return nil }

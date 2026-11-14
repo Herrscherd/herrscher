@@ -124,6 +124,21 @@ func TestContinuedTextKeepsItsSeparator(t *testing.T) {
 	}
 }
 
+func TestBlankOpeningChunkOpensNoEntry(t *testing.T) {
+	tb := &tab{}
+	tb.appendChunk("\n")
+	if len(tb.entries) != 0 {
+		t.Fatalf("a chunk that is only newlines must open no entry: %d entries", len(tb.entries))
+	}
+	tb.appendChunk("\n\nVoici")
+	if len(tb.entries) != 1 {
+		t.Fatalf("the next non-empty chunk must open one entry: %d entries", len(tb.entries))
+	}
+	if got := tb.entries[0].text; got != "Voici" || !tb.entries[0].streaming {
+		t.Fatalf("the entry must open on the text without leading newlines: %+v", tb.entries[0])
+	}
+}
+
 func TestResetLeavesTheAbandonedAttemptClosed(t *testing.T) {
 	m := newTestModel()
 	tb := m.ensureTab("a")

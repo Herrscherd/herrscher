@@ -49,13 +49,28 @@ func (h *hub) goLiveAndPersist(ctx context.Context, sess state.Session, persist 
 		h.haltBridgeWithinGrace(sess.Name)
 		return true, err
 	}
-	if h.startBridge != nil {
-		if err := h.startBridge(sess, h.teardownGrace); err != nil {
-			h.dropLocked(sess.Name, nil)
-			return false, err
-		}
+	return false, h.startBridgeLocked(sess, wasLive)
+}
+
+func (h *hub) goLiveBridged(ctx context.Context, sess state.Session) error {
+	h.lifecycle.Lock()
+	defer h.lifecycle.Unlock()
+	wasLive := h.isLive(sess.Name)
+	if err := h.goLiveLocked(ctx, sess); err != nil {
+		return err
 	}
-	return false, nil
+	return h.startBridgeLocked(sess, wasLive)
+}
+
+func (h *hub) startBridgeLocked(sess state.Session, wasLive bool) error {
+	if h.startBridge == nil {
+		return nil
+	}
+	err := h.startBridge(sess, h.teardownGrace)
+	if err != nil && !wasLive {
+		h.dropLocked(sess.Name, nil)
+	}
+	return err
 }
 
 func (h *hub) isLive(name string) bool {
@@ -283,7 +298,7 @@ func (h *hub) reconcile(ctx context.Context) {
 		if saved.Archived {
 			continue
 		}
-		if err := h.goLive(ctx, saved); err != nil {
+		if err := h.goLiveBridged(ctx, saved); err != nil {
 			if errors.Is(err, errHubClosed) {
 				break
 			}

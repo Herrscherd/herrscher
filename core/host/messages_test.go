@@ -15,6 +15,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher-contracts/i18n/i18ntest"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/historywire"
 )
 
@@ -196,6 +197,17 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 	i18ntest.CheckDeclared(t, declared, hostLocaleSource(t))
 }
 
+func renderedHostText(lang i18n.Language, key string, params map[string]any) string {
+	if strings.HasPrefix(key, "cli.") {
+		text, err := clitext.Text(lang, clitext.Key(key), clitext.Params(params))
+		if err != nil {
+			return err.Error()
+		}
+		return text
+	}
+	return newHostMessages().text(lang, key, params)
+}
+
 func TestHostTextRendersEachLanguage(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -233,6 +245,18 @@ func TestHostTextRendersEachLanguage(t *testing.T) {
 			want:   "automatic compaction had no effect: the context stays above 92 %, no new attempt until it drops below the threshold",
 		},
 		{
+			name: "still stopping in french",
+			lang: i18n.French,
+			key:  "cli.host.fault.still_stopping",
+			want: "l'ancien pont de cette session est encore en arrêt",
+		},
+		{
+			name: "still stopping in english",
+			lang: i18n.English,
+			key:  "cli.host.fault.still_stopping",
+			want: "the previous bridge of this session is still stopping",
+		},
+		{
 			name:   "unset language falls back to english",
 			lang:   i18n.Language(0),
 			key:    "compaction.failed",
@@ -242,7 +266,7 @@ func TestHostTextRendersEachLanguage(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := newHostMessages().text(tt.lang, tt.key, tt.params); got != tt.want {
+			if got := renderedHostText(tt.lang, tt.key, tt.params); got != tt.want {
 				t.Fatalf("text(%v, %q) = %q, want %q", tt.lang, tt.key, got, tt.want)
 			}
 		})

@@ -61,8 +61,8 @@ func TestDispatchOfAnotherSessionReturnsWhileAResumeIsRefused(t *testing.T) {
 	if out != "listed" {
 		t.Fatalf("Dispatch output = %q during a refused resume, want %q", out, "listed")
 	}
-	if elapsed > 4*grace {
-		t.Fatalf("Dispatch took %v during a refused resume, want it bounded by the grace %v", elapsed, grace)
+	if bound := grace + 150*time.Millisecond; elapsed > bound {
+		t.Fatalf("Dispatch took %v during a refused resume, want it bounded by the grace %v plus a margin (%v)", elapsed, grace, bound)
 	}
 	if !h.isLive(other) {
 		t.Fatal("the other session was not brought live by the dispatch")

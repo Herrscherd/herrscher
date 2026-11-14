@@ -6,6 +6,7 @@ import (
 	"maps"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -49,7 +50,7 @@ func (h *hub) goLiveAndPersist(ctx context.Context, sess state.Session, persist 
 		h.haltBridgeWithinGrace(sess.Name)
 		return true, err
 	}
-	return false, h.startBridgeLocked(sess, wasLive)
+	return false, h.startBridgeLocked(sess, wasLive, h.teardownGrace)
 }
 
 func (h *hub) goLiveBridged(ctx context.Context, sess state.Session) error {
@@ -59,14 +60,14 @@ func (h *hub) goLiveBridged(ctx context.Context, sess state.Session) error {
 	if err := h.goLiveLocked(ctx, sess); err != nil {
 		return err
 	}
-	return h.startBridgeLocked(sess, wasLive)
+	return h.startBridgeLocked(sess, wasLive, 0)
 }
 
-func (h *hub) startBridgeLocked(sess state.Session, wasLive bool) error {
+func (h *hub) startBridgeLocked(sess state.Session, wasLive bool, grace time.Duration) error {
 	if h.startBridge == nil {
 		return nil
 	}
-	err := h.startBridge(sess, h.teardownGrace)
+	err := h.startBridge(sess, grace)
 	if err != nil && !wasLive {
 		h.dropLocked(sess.Name, nil)
 	}
@@ -171,15 +172,19 @@ func (h *hub) closeAndRemoveSockets() error {
 }
 
 func (h *hub) goDead(name string) {
-	h.lifecycle.Lock()
 	expired, cancel := h.newGrace()
+	h.goDeadWithin(name, expired)
+	cancel()
+}
+
+func (h *hub) goDeadWithin(name string, expired <-chan struct{}) {
+	h.lifecycle.Lock()
 	live, ok := h.dropLocked(name, nil)
 	h.haltBridgeWithin(name, expired)
 	h.lifecycle.Unlock()
 	if ok {
 		h.awaitTeardown(name, live, expired)
 	}
-	cancel()
 	h.forget(name)
 }
 
@@ -287,10 +292,12 @@ func (h *hub) reconcile(ctx context.Context) {
 		liveNames = append(liveNames, n)
 	}
 	h.mu.Unlock()
+	expired, cancel := h.newGrace()
+	defer cancel()
 	for _, name := range liveNames {
 		s, ok := persisted[name]
 		if !ok || s.Archived {
-			h.goDead(name)
+			h.goDeadWithin(name, expired)
 		}
 	}
 	for idx := range persisted {

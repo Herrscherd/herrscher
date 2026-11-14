@@ -129,6 +129,33 @@ func TestAnInterruptedTurnIsNotLoggedAsAFailure(t *testing.T) {
 	}
 }
 
+func TestACancelledHubIsNotLoggedAsAFailedTurn(t *testing.T) {
+	logs := captureLog(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctrl := &turnController{}
+	in := make(chan contracts.Event)
+	be := partialBackend{started: make(chan struct{})}
+
+	done := make(chan struct{})
+	go func() {
+		runHubTurnsCtl(ctx, in, &recordSink{}, be, nil, ctrl, nil, affordances{}, nil)
+		close(done)
+	}()
+
+	in <- contracts.Event{T: "input", Text: "go"}
+	<-be.started
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("cancelling the hub did not end its turn loop")
+	}
+	if got := logs.String(); strings.Contains(got, "backend turn failed") {
+		t.Fatalf("a turn cut short by the daemon stopping is not a failure, nothing must be logged as one; got log %q", got)
+	}
+}
+
 type streamDeltasThenFailBackend struct{ deltas []string }
 
 func (b streamDeltasThenFailBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {

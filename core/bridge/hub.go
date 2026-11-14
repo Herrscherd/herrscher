@@ -228,7 +228,7 @@ func runHubTurnsCtl(ctx context.Context, events <-chan contracts.Event, sink con
 			case historywire.EventPrune:
 				runHistoryPrune(ctx, sink, backend, ctrl, event)
 			case "input":
-				if err := runOneTurn(ctx, sink, backend, orch, event, ctrl, eng, aff, pin, lang); err != nil {
+				if err := runOneTurn(ctx, sink, backend, orch, event, ctrl, eng, aff, pin, lang); err != nil && ctx.Err() == nil {
 					logger.Warn("backend turn failed", "err", err)
 				}
 			}

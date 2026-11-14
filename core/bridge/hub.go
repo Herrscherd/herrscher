@@ -210,7 +210,7 @@ func runHubTurnsCtl(ctx context.Context, events <-chan contracts.Event, sink con
 				runHistoryPrune(ctx, sink, backend, ctrl, event)
 			case "input":
 				if err := runOneTurn(ctx, sink, backend, orch, event, ctrl, eng, aff, pin, lang); err != nil {
-					logger.Debug("turn ended in error; its reply already went out", "err", err)
+					logger.Warn("backend turn failed; its reply already went out", "err", err)
 				}
 			}
 		}
@@ -244,14 +244,19 @@ func (u *turnUsage) setInputSide(event contracts.BackendEvent) {
 // still receive the reply, which carries the failure; this error is what a caller
 // with no gateway, such as a one-shot seed, reports to its operator.
 type TurnFailedError struct {
-	Err error
+	Err     error
+	partial string
 }
 
 func (e *TurnFailedError) Error() string { return e.Err.Error() }
 
 func (e *TurnFailedError) Unwrap() error { return e.Err }
 
+// Notice is the notice the operator reads for the failed turn.
 func (e *TurnFailedError) Notice() contracts.Notice { return contracts.NoticeOf(e.Err) }
+
+// PartialOutput is the text the backend streamed before it failed, empty when it streamed none.
+func (e *TurnFailedError) PartialOutput() string { return e.partial }
 
 func settleFailedReply(ctrl *turnController, out string, err error) string {
 	switch {
@@ -263,7 +268,6 @@ func settleFailedReply(ctrl *turnController, out string, err error) string {
 	case out == "":
 		return errPrefix + err.Error()
 	default:
-		logger.Warn("backend failed after partial output; keeping what it produced", "err", err, "chars", len(out))
 		return out
 	}
 }
@@ -284,14 +288,18 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	defer turn.discard()
 	prompt := contracts.Prompt{Content: event.Text, Context: withIdentity(withCapabilities(withDelegation(withSkills(memCtx, eng), aff.roster), aff.caps), aff.user), Author: event.Who, Attachments: event.Attachments, Language: lang, Outbox: turn.dir}
 	var usage turnUsage
+	var streamed strings.Builder
 	onEvent := func(event contracts.BackendEvent) {
 		usage.absorb(event)
+		if event.Kind == "text" {
+			streamed.WriteString(event.Detail)
+		}
 		emitBackendEvent(sink, event, usage.outTok, usage.inTok, usage.cacheRd, usage.cacheCr)
 	}
 	out, err := backend.Respond(turnCtx, prompt, onEvent)
 	var failure error
 	if err != nil {
-		failure = &TurnFailedError{Err: err}
+		failure = &TurnFailedError{Err: err, partial: streamed.String()}
 		out = settleFailedReply(ctrl, out, err)
 	}
 	turn.emitFiles(ctx, sink)

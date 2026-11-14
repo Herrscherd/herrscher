@@ -65,7 +65,9 @@ it, `session close` ends it.
 session name on stderr, so `herrscher --print "…" > out.md` holds the answer
 alone. A run with no terminal takes that form on its own, since there is nothing
 there to draw a window on. When the vendor ends the turn in error, the command
-exits with a failure and the error goes to stderr, nothing on stdout.
+exits with a failure and the error goes to stderr. The text the vendor streamed
+before the failure goes to stdout, so `> out.md` keeps whatever was produced, and
+nothing else on stdout.
 
 A single unrecognised word stays a verb, so a typo is still a typo. Use `-p` to
 force a one-word task.

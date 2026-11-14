@@ -292,12 +292,32 @@ func TestRunOneShotReportsAFailedTurn(t *testing.T) {
 	}
 }
 
+func TestAFailedTurnKeepsWhatTheBackendStreamed(t *testing.T) {
+	sink := &recordSink{}
+	err := runOneTurn(context.Background(), sink, streamThenFailBackend{}, nil, contracts.Event{T: "input", Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
+	failed, ok := errors.AsType[*TurnFailedError](err)
+	if !ok {
+		t.Fatalf("runOneTurn error = %v, want a TurnFailedError", err)
+	}
+	if got := failed.PartialOutput(); got != "partial answer" {
+		t.Fatalf("PartialOutput() = %q, want the text streamed before the failure", got)
+	}
+}
+
 type errBackend struct{}
 
 func (errBackend) Respond(context.Context, contracts.Prompt, func(contracts.BackendEvent)) (string, error) {
 	return "", errors.New("backend exploded")
 }
 func (errBackend) Close() error { return nil }
+
+type streamThenFailBackend struct{}
+
+func (streamThenFailBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
+	onEvent(contracts.BackendEvent{Kind: "text", Detail: "partial answer"})
+	return "refused by the vendor", errors.New("refused by the vendor")
+}
+func (streamThenFailBackend) Close() error { return nil }
 
 func TestRunHubOneTurn(t *testing.T) {
 	sink := &recordSink{}

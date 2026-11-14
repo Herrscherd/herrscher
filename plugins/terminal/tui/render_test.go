@@ -125,11 +125,14 @@ func TestContinuedTextKeepsItsSeparator(t *testing.T) {
 }
 
 func TestBlankOpeningChunkOpensNoEntry(t *testing.T) {
-	tb := &tab{}
-	tb.appendChunk("\n")
-	if len(tb.entries) != 0 {
-		t.Fatalf("a chunk that is only newlines must open no entry: %d entries", len(tb.entries))
+	for _, blank := range []string{"\n", "  \n", " \t\n\n"} {
+		tb := &tab{}
+		tb.appendChunk(blank)
+		if len(tb.entries) != 0 {
+			t.Fatalf("a chunk that is only whitespace must open no entry, got %d entries for %q", len(tb.entries), blank)
+		}
 	}
+	tb := &tab{}
 	tb.appendChunk("\n\nVoici")
 	if len(tb.entries) != 1 {
 		t.Fatalf("the next non-empty chunk must open one entry: %d entries", len(tb.entries))

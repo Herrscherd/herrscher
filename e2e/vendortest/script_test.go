@@ -26,6 +26,17 @@ func TestParseScriptSplitsTurnsAndEchoesPastTheEnd(t *testing.T) {
 	}
 }
 
+func TestParseScriptTakesAnyBlankAfterTheStepName(t *testing.T) {
+	script, err := ParseScript(strings.NewReader("text\tone two\ntool\tBash\t{\"command\":\"ls\"}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := script.Turn(0).steps
+	if len(steps) != 2 || steps[0].text != "one two" || steps[1].tool != "Bash" || string(steps[1].input) != `{"command":"ls"}` {
+		t.Fatalf("got %+v", steps)
+	}
+}
+
 func TestParseScriptNamesTheBadLine(t *testing.T) {
 	for _, tc := range []struct {
 		source string

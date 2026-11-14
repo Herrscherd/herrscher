@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode"
 )
 
 const turnSeparator = "---"
@@ -102,8 +103,7 @@ var (
 )
 
 func parseStep(line string) (step, error) {
-	name, rest, _ := strings.Cut(line, " ")
-	rest = strings.TrimSpace(rest)
+	name, rest := cutWord(line)
 	switch name {
 	case "text":
 		return textStep(stepText, rest)
@@ -121,6 +121,14 @@ func parseStep(line string) (step, error) {
 	return step{}, errUnknownStep
 }
 
+func cutWord(line string) (string, string) {
+	end := strings.IndexFunc(line, unicode.IsSpace)
+	if end < 0 {
+		return line, ""
+	}
+	return line[:end], strings.TrimSpace(line[end:])
+}
+
 func textStep(kind stepKind, text string) (step, error) {
 	if text == "" {
 		return step{}, errNeedsText
@@ -129,8 +137,8 @@ func textStep(kind stepKind, text string) (step, error) {
 }
 
 func toolStep(rest string) (step, error) {
-	tool, input, found := strings.Cut(rest, " ")
-	if !found || tool == "" {
+	tool, input := cutWord(rest)
+	if input == "" || tool == "" {
 		return step{}, errToolNeedsArg
 	}
 	if !json.Valid([]byte(input)) {

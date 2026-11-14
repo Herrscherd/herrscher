@@ -1618,8 +1618,11 @@ Linux, and says it skips the step anywhere else.
   and private, as the daemon would create it. A session socket whose path passes 103
   bytes takes a hashed name, `hs-<24 hex>.sock`, the cleanup cannot tell apart, so a
   scenario fails when such a socket appears in a runtime directory during it, from
-  this scenario or another herrscher of the machine. The socket stays there: shorten
-  the session name and remove it.
+  this scenario or another herrscher of the machine, since both run as the same user
+  and nothing tells their sockets apart. The socket stays there: shorten the session
+  name and remove it. Tests may not name the production layout, so the two candidate
+  runtime directories are written in the harness, and the daemon scenarios fail when
+  they drift because they find no socket.
 - `claude` on the `PATH` of a scenario is the fake of `e2e/vendortest`. It is a whole
   process standing in for the vendor CLI, so it speaks the stream-json protocol rather
   than recording calls. In stream-json mode it replays `$VENDORTEST_SCRIPT`, which is

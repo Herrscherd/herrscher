@@ -107,31 +107,44 @@ func (a *Acceptor) loop() {
 	for {
 		conn, err := a.ln.Accept()
 		if err != nil {
-			if errors.Is(err, net.ErrClosed) || a.isDone() {
+			delay, resume := a.recoverAccept(err, retryDelay)
+			if !resume {
 				return
 			}
-			if !isTransientAcceptError(err) {
-				slog.Error("control accept failed, stopping", "err", err)
-				return
-			}
-			retryDelay = nextAcceptRetryDelay(retryDelay)
-			slog.Warn("control accept failed, retrying", "err", err, "delay", retryDelay)
-			if !a.pause(retryDelay) {
-				return
-			}
+			retryDelay = delay
 			continue
 		}
 		retryDelay = 0
-		if a.isDone() {
-			closeConn(conn)
+		if !a.deliver(conn) {
 			return
 		}
-		select {
-		case a.conns <- newConn(conn):
-		case <-a.done:
-			closeConn(conn)
-			return
-		}
+	}
+}
+
+func (a *Acceptor) recoverAccept(err error, previous time.Duration) (time.Duration, bool) {
+	if errors.Is(err, net.ErrClosed) || a.isDone() {
+		return previous, false
+	}
+	if !isTransientAcceptError(err) {
+		slog.Error("control accept failed, stopping", "err", err)
+		return previous, false
+	}
+	delay := nextAcceptRetryDelay(previous)
+	slog.Warn("control accept failed, retrying", "err", err, "delay", delay)
+	return delay, a.pause(delay)
+}
+
+func (a *Acceptor) deliver(conn net.Conn) bool {
+	if a.isDone() {
+		closeConn(conn)
+		return false
+	}
+	select {
+	case a.conns <- newConn(conn):
+		return true
+	case <-a.done:
+		closeConn(conn)
+		return false
 	}
 }
 

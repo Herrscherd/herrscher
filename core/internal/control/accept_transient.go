@@ -5,19 +5,10 @@ import (
 	"syscall"
 )
 
-var transientAcceptErrnos = []syscall.Errno{
-	syscall.EMFILE,
-	syscall.ENFILE,
-	syscall.ECONNABORTED,
-	syscall.ENOBUFS,
-	syscall.ENOMEM,
-}
-
 func isTransientAcceptError(err error) bool {
-	for _, errno := range transientAcceptErrnos {
-		if errors.Is(err, errno) {
-			return true
-		}
-	}
-	return false
+	return errors.Is(err, syscall.EMFILE) ||
+		errors.Is(err, syscall.ENFILE) ||
+		errors.Is(err, syscall.ECONNABORTED) ||
+		errors.Is(err, syscall.ENOBUFS) ||
+		errors.Is(err, syscall.ENOMEM)
 }

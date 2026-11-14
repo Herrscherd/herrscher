@@ -134,7 +134,7 @@ func nextAcceptRetryDelay(previous time.Duration) time.Duration {
 	if previous == 0 {
 		return initialAcceptRetryDelay
 	}
-	return min(previous*2, maxAcceptRetryDelay)
+	return min(previous+previous, maxAcceptRetryDelay)
 }
 
 func (a *Acceptor) isDone() bool {

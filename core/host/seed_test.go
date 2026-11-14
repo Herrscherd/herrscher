@@ -319,6 +319,36 @@ func TestASeedWhoseTurnFailsReportsTheFailure(t *testing.T) {
 	}
 }
 
+func TestTheOneShotBridgeCancelsTheSeedOnlyWhenNoReplyCame(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		backend    error
+		turn       contracts.Backend
+		wantCancel bool
+	}{
+		{name: "a failed turn still hands its reply back", turn: failingSeedBackend{}, wantCancel: false},
+		{name: "a backend that cannot start hands no reply", backend: errors.New("no model"), wantCancel: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cancelled := false
+			toBridge := make(chan contracts.Event, 1)
+			fromBridge := make(chan contracts.Event, bridgeEventBuffer)
+			bridgeErr := make(chan error, 1)
+			toBridge <- contracts.Event{T: "input", Text: "tâche"}
+			runtime := oneShotSeedRuntime{backend: func(context.Context, state.Session) (contracts.Backend, error) {
+				return tc.turn, tc.backend
+			}}
+			runOneShotBridge(context.Background(), func() { cancelled = true }, state.Session{Name: "solo", ChannelID: "channel"}, nil, runtime, toBridge, fromBridge, bridgeErr)
+			if cancelled != tc.wantCancel {
+				t.Fatalf("cancelled = %t, want %t", cancelled, tc.wantCancel)
+			}
+			if err := <-bridgeErr; err == nil {
+				t.Fatal("bridge error = nil, want the failure")
+			}
+		})
+	}
+}
+
 func TestAFailedSeedTurnReadsInTheOperatorLanguage(t *testing.T) {
 	err := &bridge.TurnFailedError{Err: errors.New("refused by the vendor")}
 	for _, tc := range []struct {

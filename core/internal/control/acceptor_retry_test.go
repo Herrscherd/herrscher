@@ -3,10 +3,12 @@ package control
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"slices"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -198,4 +200,24 @@ func TestAcceptLoopEndsOnClosedListener(t *testing.T) {
 			t.Fatalf("Accept called %d times after net.ErrClosed, want 1", calls)
 		}
 	})
+}
+
+var errPermanentAccept = errors.New("permanent accept failure")
+
+func TestAcceptLoopEndsOnPermanentError(t *testing.T) {
+	logs := captureLog(t)
+	synctest.Test(t, func(t *testing.T) {
+		ln := &retryListener{repeat: errPermanentAccept}
+		acc := newAcceptor(ln)
+		defer closeConn(acc)
+		go acc.loop()
+		go acc.closeWhenDone(context.Background())
+		requireConnsClosed(t, acc, "Conns stayed open after a permanent accept error")
+		if calls := len(ln.recordedCalls()); calls != 1 {
+			t.Fatalf("Accept called %d times after a permanent error, want 1", calls)
+		}
+	})
+	if out := logs.String(); !strings.Contains(out, "level=ERROR") || !strings.Contains(out, errPermanentAccept.Error()) {
+		t.Fatalf("the permanent accept error was not logged at error level with its cause: %q", out)
+	}
 }

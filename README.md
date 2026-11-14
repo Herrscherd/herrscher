@@ -1614,7 +1614,7 @@ Linux, and says it skips the step anywhere else.
 - The cleanup removes every runtime entry named after the instance, and the names
   `core/host` gives its command and events sockets and its lock, hashed ones
   included. It only touches a runtime directory that `core/host` accepts as private
-  to the user, and a directory removed while the cleanup reads it comes back empty
+  to the user, and a directory removed while the cleanup checks it comes back empty
   and private, as the daemon would create it. A session socket whose path passes 103
   bytes takes a hashed name, `hs-<24 hex>.sock`, the cleanup cannot tell apart, so a
   scenario fails when such a socket appears in a runtime directory during it, from

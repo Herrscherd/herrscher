@@ -123,7 +123,7 @@ func settle(instance string, before map[string]bool) error {
 }
 
 var (
-	errUnreadableEntry = errors.New("a socket with a hashed name appeared in the runtime directory during the scenario and was left there; a session name of this scenario or of another herrscher on this machine is too long for the unix limit, shorten it and remove the socket")
+	errUnreadableEntry = errors.New("a socket with a hashed name, hs-<24 hex>.sock, appeared in the runtime directory during the scenario and was left there; a session name of this scenario or of another herrscher on this machine is too long for the unix limit, shorten it and remove the socket")
 	hashedSocket       = regexp.MustCompile(`^hs-[0-9a-f]{24}\.sock$`)
 )
 
@@ -223,12 +223,8 @@ func removeRuntimeEntries(instance string) error {
 }
 
 func removeInstanceEntries(dir, instance string) []error {
-	entries, err := os.ReadDir(dir)
-	if errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Lstat(dir); errors.Is(err, fs.ErrNotExist) {
 		return nil
-	}
-	if err != nil {
-		return []error{err}
 	}
 	known, err := entriesOf(dir, instance)
 	if err != nil {
@@ -236,6 +232,10 @@ func removeInstanceEntries(dir, instance string) []error {
 	}
 	if unsafe := known.layout.Check(known.command); unsafe != nil {
 		return []error{unsafe}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return []error{err}
 	}
 	owned := make(map[string]bool, len(known.paths()))
 	for _, path := range known.paths() {

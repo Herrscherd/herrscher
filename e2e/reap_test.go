@@ -11,6 +11,8 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+
+	"github.com/Herrscherd/herrscher/core/host"
 )
 
 func TestReapInstanceKillsAndNamesWhatCarriesTheInstance(t *testing.T) {
@@ -133,8 +135,8 @@ func TestRemoveInstanceEntriesLeavesWhatIsNotAPrivateDirectoryAlone(t *testing.T
 		t.Fatal(err)
 	}
 	file, dirs := refusedRuntimeDirs(t)
-	if failures := removeInstanceEntries(file, instance); len(failures) == 0 {
-		t.Errorf("the file %s was accepted as a runtime directory", file)
+	if failures := removeInstanceEntries(file, instance); len(failures) == 0 || errors.Is(errors.Join(failures...), syscall.ENOTDIR) {
+		t.Errorf("the file %s was not refused as an unsafe runtime directory: %v", file, failures)
 	}
 	for _, dir := range dirs {
 		entry := filepath.Join(dir, "herrscher-command-"+instance+".sock")
@@ -223,6 +225,33 @@ func touch(t *testing.T, path string) {
 	}
 }
 
+func TestRemoveInstanceEntriesCreatesNoMissingDirectory(t *testing.T) {
+	instance, err := newInstanceID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	missing := filepath.Join(privateDir(t), "missing")
+	if failures := removeInstanceEntries(missing, instance); len(failures) != 0 {
+		t.Fatal(failures)
+	}
+	if exists(missing) {
+		t.Errorf("%s was created", missing)
+	}
+}
+
+func hashedSocketIn(t *testing.T, dir string) string {
+	t.Helper()
+	layout, err := host.RuntimeAt(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := layout.Socket("herrscher-command-" + strings.Repeat("s", 120))
+	if !hashedSocket.MatchString(filepath.Base(name)) {
+		t.Fatalf("the guard does not know the hashed name %s that core/host gives", name)
+	}
+	return name
+}
+
 func TestSettleNamesAHashedEntryThatAppeared(t *testing.T) {
 	dir := privateDir(t)
 	touch(t, filepath.Join(dir, "hs-000000000000000000000000.sock"))
@@ -236,7 +265,7 @@ func TestSettleNamesAHashedEntryThatAppeared(t *testing.T) {
 	if quiet := appearedUnreadableIn(dirs, before); quiet != nil {
 		t.Fatalf("a readable name, a staged name or an older entry was reported: %v", quiet)
 	}
-	fresh := filepath.Join(dir, "hs-0123456789abcdef01234567.sock")
+	fresh := hashedSocketIn(t, dir)
 	touch(t, fresh)
 	reported := appearedUnreadableIn(dirs, before)
 	if !errors.Is(reported, errUnreadableEntry) || !strings.Contains(reported.Error(), fresh) {

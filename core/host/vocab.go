@@ -23,7 +23,6 @@ const (
 	keySession      = "session"
 	keySchedule     = "schedule"
 	keyStatus       = "status"
-	keyReply        = "reply"
 	authorSeed      = "seed"
 	valueTrue       = "true"
 	backendCodex    = "codex"

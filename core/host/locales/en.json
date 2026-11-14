@@ -580,6 +580,11 @@
     "other": "herrscher serve: session \"{{.Name}}\": transcript entry dropped: {{.Detail}}"
   },
   {
+    "id": "warn.session_accept_failed",
+    "description": "A session control socket failed for good; the session is stopped and bridges cannot reach it until it starts again. Name is the session, Detail the cause",
+    "other": "herrscher serve: session \"{{.Name}}\": control socket stopped accepting, the session is stopped until it starts again: {{.Detail}}"
+  },
+  {
     "id": "warn.session_teardown_overrun",
     "description": "A session teardown outlives its grace period; the name is released anyway",
     "other": "herrscher serve: session \"{{.Name}}\": teardown still running after {{.Grace}}, releasing the name anyway"

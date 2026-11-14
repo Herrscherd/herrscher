@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -62,6 +63,7 @@ type hub struct {
 
 	teardownGrace  time.Duration
 	sessionStopped func(name string)
+	listen         func(ctx context.Context, path string) (net.Listener, error)
 	seedBackend    func(context.Context, state.Session) (contracts.Backend, error)
 	models         *ModelDiscovery
 
@@ -85,7 +87,7 @@ func withWarnings(w io.Writer) hubOption {
 }
 
 func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry, approvals *approvalTable, sessions *sessionTable, opts ...hubOption) *hub {
-	created := &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: make(map[string]liveSession), teardownGrace: defaultTeardownGrace, approvals: approvals, sessions: sessions, sessionStopped: func(string) {}}
+	created := &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: make(map[string]liveSession), teardownGrace: defaultTeardownGrace, approvals: approvals, sessions: sessions, sessionStopped: func(string) {}, listen: control.Listen}
 	for _, opt := range opts {
 		opt(created)
 	}
@@ -168,10 +170,11 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) error {
 	if err := ensureRuntimeDir(h.runtime, controlPath); err != nil {
 		return err
 	}
-	acc, err := control.Accept(context.WithoutCancel(ctx), controlPath)
+	listener, err := h.listen(context.WithoutCancel(ctx), controlPath)
 	if err != nil {
 		return wrapHost(err, "session.go_live", map[string]any{"Name": sess.Name})
 	}
+	acc := control.Serve(context.WithoutCancel(ctx), listener)
 	h.noteListened(sess.Name)
 	sctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	commands, err := openSocket(sctx, h.runtime, SessionCommandSocketPathIn(h.runtime, h.instanceID, sess.Name))
@@ -186,31 +189,12 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) error {
 	go func() {
 		defer close(done)
 		runSessionIdentified(sctx, h.sessions, sess.Name, sess.ChannelID, bound, acc, state.ParticipantsPath(h.partDir, sess.Name), h.metrics, h.coordinator,
-			sessionSink{
-				Resume: func(tok string) {
-					if err := h.st.SetResumeToken(sess.Name, tok); err != nil {
-						warnLive(h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_resume_token", map[string]any{nameParam: sess.Name, detailParam: err})
-					}
-				},
-				Project: func(p string) {
-					if err := h.st.SetProjectPinned(sess.Name, p); err != nil {
-						warnLive(h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_project_pin", map[string]any{nameParam: sess.Name, detailParam: err})
-					}
-				},
-				Transcript: func(e state.TranscriptEntry) {
-					if err := state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), e); err != nil {
-						warnLive(h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
-					}
-				},
-				Checkpoint: func(turnID, text string) {
-					h.takeCheckpoint(ctx, sess, turnID, text)
-				},
-				Usage: func(records []usage.Record) {
-					h.recordUsage(sess, records)
-				},
-			},
+			h.liveSink(ctx, sess),
 			eventTap(h.eventPublisher, sess.Name),
 			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent, terms: terms, language: liveSessionLanguage(h.st, sess.Name), operator: h.textLanguage()}, h.gate, h.warnings)
+		if err := acc.Err(); err != nil {
+			h.acceptFailed(sess.Name, done, err)
+		}
 		h.sessionStopped(sess.Name)
 	}()
 
@@ -223,6 +207,32 @@ func (h *hub) goLive(ctx context.Context, sess state.Session) error {
 	h.live[sess.Name] = liveSession{cancel: cancel, done: done, released: released, release: releaseSockets}
 	h.mu.Unlock()
 	return nil
+}
+
+func (h *hub) liveSink(ctx context.Context, sess state.Session) sessionSink {
+	return sessionSink{
+		Resume: func(tok string) {
+			if err := h.st.SetResumeToken(sess.Name, tok); err != nil {
+				warnLive(h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_resume_token", map[string]any{nameParam: sess.Name, detailParam: err})
+			}
+		},
+		Project: func(p string) {
+			if err := h.st.SetProjectPinned(sess.Name, p); err != nil {
+				warnLive(h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_project_pin", map[string]any{nameParam: sess.Name, detailParam: err})
+			}
+		},
+		Transcript: func(e state.TranscriptEntry) {
+			if err := state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), e); err != nil {
+				warnLive(h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
+			}
+		},
+		Checkpoint: func(turnID, text string) {
+			h.takeCheckpoint(ctx, sess, turnID, text)
+		},
+		Usage: func(records []usage.Record) {
+			h.recordUsage(sess, records)
+		},
+	}
 }
 
 func sessionLanguage(sess state.Session, operator i18n.Language) i18n.Language {
@@ -293,19 +303,43 @@ func (h *hub) goDead(name string) {
 	if h.sup != nil {
 		logCleanup(h.sup.Stop(name))
 	}
+	if live, ok := h.drop(name, nil); ok {
+		h.awaitTeardown(name, live)
+	}
+	h.forget(name)
+}
+
+func (h *hub) acceptFailed(name string, done <-chan struct{}, cause error) {
+	if _, ok := h.drop(name, done); !ok {
+		return
+	}
+	if h.sup != nil {
+		logCleanup(h.sup.Stop(name))
+	}
+	h.forget(name)
+	warnLive(h.warnings, h.sessionLanguageSource(name), "warn.session_accept_failed", map[string]any{nameParam: name, detailParam: cause})
+}
+
+func (h *hub) drop(name string, only <-chan struct{}) (liveSession, bool) {
 	h.lifecycle.Lock()
+	defer h.lifecycle.Unlock()
 	h.mu.Lock()
 	live, ok := h.live[name]
-	delete(h.live, name)
+	if ok && only != nil && live.done != only {
+		ok = false
+	}
+	if ok {
+		delete(h.live, name)
+	}
 	h.mu.Unlock()
 	if ok {
 		live.cancel()
 		live.release()
 	}
-	h.lifecycle.Unlock()
-	if ok {
-		h.awaitTeardown(name, live)
-	}
+	return live, ok
+}
+
+func (h *hub) forget(name string) {
 	if f, ok := h.coordinator.(forgetter); ok {
 		f.forget(name)
 	}

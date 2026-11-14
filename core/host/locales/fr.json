@@ -580,6 +580,11 @@
     "other": "herrscher serve : session \"{{.Name}}\" : entrée de transcription perdue : {{.Detail}}"
   },
   {
+    "id": "warn.session_accept_failed",
+    "description": "Le socket de contrôle d'une session a échoué durablement ; la session est arrêtée et les ponts ne l'atteignent plus avant son redémarrage. Name est la session, Detail la cause",
+    "other": "herrscher serve : session \"{{.Name}}\" : le socket de contrôle a cessé d'accepter, la session est arrêtée jusqu'à son redémarrage : {{.Detail}}"
+  },
+  {
     "id": "warn.session_teardown_overrun",
     "description": "A session teardown outlives its grace period; the name is released anyway",
     "other": "herrscher serve : session \"{{.Name}}\" : l'arrêt est toujours en cours après {{.Grace}}, le nom est libéré quand même"

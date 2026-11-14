@@ -176,6 +176,7 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"warn.session_resume_token":         {"Detail", "Name"},
 		"warn.session_project_pin":          {"Detail", "Name"},
 		"warn.session_transcript":           {"Detail", "Name"},
+		"warn.session_accept_failed":        {"Detail", "Name"},
 		"warn.session_teardown_overrun":     {"Grace", "Name"},
 		"warn.session_seed_transcript":      {"Detail", "Name"},
 		"warn.session_usage":                {"Detail", "Name"},

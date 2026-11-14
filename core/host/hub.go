@@ -316,13 +316,17 @@ func (h *hub) closeAndRemoveSockets() error {
 }
 
 func (h *hub) goDead(name string) {
-	if h.sup != nil {
-		logCleanup(h.sup.Stop(name))
-	}
+	h.haltBridge(name)
 	if live, ok := h.drop(name, nil); ok {
 		h.awaitTeardown(name, live)
 	}
 	h.forget(name)
+}
+
+func (h *hub) haltBridge(name string) {
+	if h.stopBridge != nil {
+		logCleanup(h.stopBridge(name))
+	}
 }
 
 func (h *hub) acceptFailed(name string, done <-chan struct{}, cause error) {
@@ -339,9 +343,7 @@ func (h *hub) retireFailed(name string, done <-chan struct{}) bool {
 	if _, ok := h.dropLocked(name, done); !ok {
 		return false
 	}
-	if h.stopBridge != nil {
-		logCleanup(h.stopBridge(name))
-	}
+	h.haltBridge(name)
 	return true
 }
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -30,21 +31,21 @@ func TestResumeDuringAcceptFailureKeepsItsBridge(t *testing.T) {
 	t.Cleanup(func() { h.goDead(name) })
 
 	resumed := make(chan struct{})
-	stopped := make(chan struct{})
 	var resumeErr error
+	var interpose sync.Once
 	stop := h.stopBridge
 	h.stopBridge = func(stopping string) error {
-		go func() {
-			defer close(resumed)
-			resumeErr = h.Resume(stopping)
-		}()
-		select {
-		case <-resumed:
-		case <-time.After(time.Second):
-		}
-		err := stop(stopping)
-		close(stopped)
-		return err
+		interpose.Do(func() {
+			go func() {
+				defer close(resumed)
+				resumeErr = h.Resume(stopping)
+			}()
+			select {
+			case <-resumed:
+			case <-time.After(time.Second):
+			}
+		})
+		return stop(stopping)
 	}
 
 	sup.Start(state.Session{Name: name, ChannelID: "c1"})
@@ -52,9 +53,9 @@ func TestResumeDuringAcceptFailureKeepsItsBridge(t *testing.T) {
 		t.Fatal(err)
 	}
 	select {
-	case <-stopped:
+	case <-resumed:
 	case <-time.After(5 * time.Second):
-		t.Fatal("the failed incarnation was never retired")
+		t.Fatal("Resume did not return once the failed incarnation was retired")
 	}
 	select {
 	case <-resumed:

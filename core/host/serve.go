@@ -440,7 +440,10 @@ func goLiveSessions(ctx context.Context, runningHub *hub, sup *supervisor.Superv
 			warnLive(runningHub.warnings, runningHub.sessionLanguageSource(sess.Name), "warn.session_start", map[string]any{nameParam: sess.Name, detailParam: err})
 			continue
 		}
-		sup.StartWith(ctx, sess)
+		if err := sup.StartWithin(sess, runningHub.teardownGrace); err != nil {
+			warnLive(runningHub.warnings, runningHub.sessionLanguageSource(sess.Name), "warn.session_start", map[string]any{nameParam: sess.Name, detailParam: err})
+			runningHub.goDead(sess.Name)
+		}
 	}
 	host.SetSessions(len(hostState.SnapshotSessions()))
 }

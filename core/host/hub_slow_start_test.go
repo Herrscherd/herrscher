@@ -20,11 +20,12 @@ func TestSlowStartCannotResurrectAStoppedSession(t *testing.T) {
 	releaseStart := sync.OnceFunc(func() { close(release) })
 	started := make(chan struct{})
 	realStart := h.startBridge
-	h.startBridge = func(bridged state.Session) {
+	h.startBridge = func(bridged state.Session, grace time.Duration) error {
 		enteredOnce()
 		<-release
-		realStart(bridged)
+		err := realStart(bridged, grace)
 		close(started)
+		return err
 	}
 	t.Cleanup(func() { h.goDead(name) })
 	t.Cleanup(releaseStart)

@@ -26,6 +26,10 @@ var (
 	errHostNotProvisioned = errors.New("not provisioned")
 )
 
+// ErrStillStopping means the previous bridge loop of a session has not returned
+// within the grace the caller allowed, so no new bridge was started for it.
+var ErrStillStopping = errors.New("the previous bridge of this session is still stopping")
+
 // Supervisor manages one child `herrscher bridge` process per session.
 type Supervisor struct {
 	ctx              context.Context
@@ -216,11 +220,20 @@ func (s *Supervisor) SetBridgeEnv(kv []string) {
 // here would only be a nil every caller has to pretend to handle, which is what
 // it was, at six call sites, two of them with an unreachable error branch.
 func (s *Supervisor) Start(sess state.Session) {
-	s.StartWith(s.ctx, sess)
+	s.startWithin(s.ctx, sess, nil)
 }
 
-// StartWith is Start for a run that stops when ctx is done.
-func (s *Supervisor) StartWith(ctx context.Context, sess state.Session) {
+// StartWithin is Start for a caller holding a lock it cannot keep past grace: a
+// loop of the same name still stopping after grace yields ErrStillStopping and
+// nothing is launched.
+func (s *Supervisor) StartWithin(sess state.Session, grace time.Duration) error {
+	if !s.startWithin(s.ctx, sess, time.After(grace)) {
+		return ErrStillStopping
+	}
+	return nil
+}
+
+func (s *Supervisor) startWithin(ctx context.Context, sess state.Session, expired <-chan time.Time) bool {
 	for {
 		s.mu.Lock()
 		run, running := s.runs[sess.Name]
@@ -234,13 +247,17 @@ func (s *Supervisor) StartWith(ctx context.Context, sess state.Session) {
 				defer close(run.done)
 				s.run(cctx, sess)
 			}()
-			return
+			return true
 		case !run.stopping:
 			s.mu.Unlock()
-			return
+			return true
 		default:
 			s.mu.Unlock()
-			<-run.done
+			select {
+			case <-run.done:
+			case <-expired:
+				return false
+			}
 			s.mu.Lock()
 			if s.runs[sess.Name] == run {
 				delete(s.runs, sess.Name)

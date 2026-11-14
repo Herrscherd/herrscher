@@ -3408,6 +3408,11 @@
     "other": "the daemon is shutting down and starts no session"
   },
   {
+    "id": "cli.host.fault.still_stopping",
+    "description": "The previous bridge of a session is still stopping when a new start asks for it within the grace",
+    "other": "the previous bridge of this session is still stopping"
+  },
+  {
     "id": "cli.host.fault.instance_locked",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (instance lock held by another daemon)",
     "other": "another daemon already holds the lock of this instance: stop it or pass --instance"

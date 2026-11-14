@@ -60,7 +60,7 @@ type hub struct {
 
 	teardownGrace time.Duration
 	listen        func(ctx context.Context, path string) (net.Listener, error)
-	startBridge   func(sess state.Session)
+	startBridge   func(sess state.Session, grace time.Duration) error
 	stopBridge    func(name string) error
 	seedBackend   func(context.Context, state.Session) (contracts.Backend, error)
 	models        *ModelDiscovery
@@ -84,7 +84,7 @@ func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir str
 	}
 	if sup != nil {
 		sup.SetFailureSink(created.reportSessionFailure)
-		created.startBridge = sup.Start
+		created.startBridge = sup.StartWithin
 		created.stopBridge = sup.Stop
 	}
 	return created

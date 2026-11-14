@@ -6,7 +6,6 @@ import (
 	"maps"
 	"slices"
 	"sync"
-	"time"
 
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -47,11 +46,14 @@ func (h *hub) goLiveAndPersist(ctx context.Context, sess state.Session, persist 
 			return false, err
 		}
 		h.dropLocked(sess.Name, nil)
-		h.haltBridgeWithin(sess.Name)
+		h.haltBridgeWithinGrace(sess.Name)
 		return true, err
 	}
 	if h.startBridge != nil {
-		h.startBridge(sess)
+		if err := h.startBridge(sess, h.teardownGrace); err != nil {
+			h.dropLocked(sess.Name, nil)
+			return false, err
+		}
 	}
 	return false, nil
 }
@@ -128,7 +130,9 @@ func (h *hub) stopLive() {
 		live.release()
 	}
 	for name, live := range lives {
-		h.awaitTeardown(name, live)
+		expired, cancel := h.newGrace()
+		h.awaitTeardown(name, live, expired)
+		cancel()
 	}
 }
 
@@ -153,12 +157,14 @@ func (h *hub) closeAndRemoveSockets() error {
 
 func (h *hub) goDead(name string) {
 	h.lifecycle.Lock()
+	expired, cancel := h.newGrace()
 	live, ok := h.dropLocked(name, nil)
-	h.haltBridgeWithin(name)
+	h.haltBridgeWithin(name, expired)
 	h.lifecycle.Unlock()
 	if ok {
-		h.awaitTeardown(name, live)
+		h.awaitTeardown(name, live, expired)
 	}
+	cancel()
 	h.forget(name)
 }
 
@@ -182,17 +188,28 @@ func (h *hub) retireFailed(name string, done <-chan struct{}) bool {
 	if _, ok := h.dropLocked(name, done); !ok {
 		return false
 	}
-	h.haltBridgeWithin(name)
+	h.haltBridgeWithinGrace(name)
 	return true
 }
 
-func (h *hub) haltBridgeWithin(name string) {
+func (h *hub) newGrace() (<-chan struct{}, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.Background(), h.teardownGrace)
+	return ctx.Done(), cancel
+}
+
+func (h *hub) haltBridgeWithinGrace(name string) {
+	expired, cancel := h.newGrace()
+	defer cancel()
+	h.haltBridgeWithin(name, expired)
+}
+
+func (h *hub) haltBridgeWithin(name string, expired <-chan struct{}) {
 	if h.stopBridge != nil {
-		h.withinGrace(name, func() { h.haltBridge(name) })
+		h.withinGrace(name, expired, func() { h.haltBridge(name) })
 	}
 }
 
-func (h *hub) withinGrace(name string, step func()) {
+func (h *hub) withinGrace(name string, expired <-chan struct{}, step func()) {
 	finished := make(chan struct{})
 	go func() {
 		defer close(finished)
@@ -200,7 +217,7 @@ func (h *hub) withinGrace(name string, step func()) {
 	}()
 	select {
 	case <-finished:
-	case <-time.After(h.teardownGrace):
+	case <-expired:
 		warnLive(h.warnings, h.sessionLanguageSource(name), "warn.session_teardown_overrun", map[string]any{nameParam: name, graceParam: h.teardownGrace.String()})
 	}
 }
@@ -228,15 +245,14 @@ func (h *hub) forget(name string) {
 	}
 }
 
-func (h *hub) awaitTeardown(name string, live liveSession) {
-	grace := time.After(h.teardownGrace)
+func (h *hub) awaitTeardown(name string, live liveSession, expired <-chan struct{}) {
 	for _, finished := range []<-chan struct{}{live.done, live.released} {
 		if finished == nil {
 			continue
 		}
 		select {
 		case <-finished:
-		case <-grace:
+		case <-expired:
 			warnLive(h.warnings, h.sessionLanguageSource(name), "warn.session_teardown_overrun", map[string]any{nameParam: name, graceParam: h.teardownGrace.String()})
 			return
 		}

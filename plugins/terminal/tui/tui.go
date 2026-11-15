@@ -30,6 +30,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/skills"
 )
 
@@ -68,6 +69,7 @@ type Backend interface {
 	Pick(channel, value string) bool
 	Overview() (string, error)
 	Seen(name string)
+	StartSession() (string, error)
 }
 
 const (
@@ -89,9 +91,6 @@ const (
 	verbHandoff = "handoff"
 	stateDone   = "done"
 	stateActive = "active"
-	eventReply  = "reply"
-	eventStatus = "status"
-	eventNotice = "notice"
 
 	stateFailed = "failed"
 	stateError  = "error"
@@ -128,6 +127,7 @@ type entry struct {
 	failed      bool
 	foldable    bool
 	open        bool
+	markdown    bool
 }
 
 type tab struct {
@@ -138,6 +138,7 @@ type tab struct {
 	busy               bool
 	interruptRequested bool
 	streamed           bool
+	pendingBlank       strings.Builder
 	lastCost           float64
 	disconnected       bool
 	tokens             int
@@ -203,23 +204,10 @@ func (tb *tab) appendEntry(item entry) {
 	if item.role == roleYou {
 		tb.trail = nil
 	}
+	tb.pendingBlank.Reset()
 	tb.entries = append(tb.entries, item)
 	if len(tb.entries) > maxTabLines {
 		tb.entries = append([]entry(nil), tb.entries[len(tb.entries)-maxTabLines:]...)
-	}
-}
-
-func (tb *tab) appendChunk(text string) {
-	if n := len(tb.entries); n > 0 && tb.entries[n-1].role == roleAgent && tb.entries[n-1].streaming {
-		tb.entries[n-1].text += text
-		return
-	}
-	tb.appendEntry(entry{role: roleAgent, text: text, streaming: true})
-}
-
-func (tb *tab) endStream() {
-	if n := len(tb.entries); n > 0 && tb.entries[n-1].role == roleAgent {
-		tb.entries[n-1].streaming = false
 	}
 }
 
@@ -287,6 +275,8 @@ type model struct {
 
 	openSession string
 	openText    string
+	openAtts    []Attachment
+	starting    bool
 
 	resumeOpen bool
 	resumeIdx  int
@@ -604,7 +594,7 @@ func (m *model) successorTab() string {
 }
 
 func (m *model) route(routed RoutedEvent) tea.Cmd {
-	if routed.Event.T == "closed" {
+	if routed.Event.T == eventwire.EventClosed {
 		m.removeTab(routed.Conv.ID)
 		return nil
 	}
@@ -612,7 +602,7 @@ func (m *model) route(routed RoutedEvent) tea.Cmd {
 	before := len(tab.entries)
 	m.renderInto(tab, routed.Event)
 	flushCmd := m.flushQueue(tab, routed.Event.T)
-	isReply := routed.Event.T == eventReply
+	isReply := routed.Event.T == eventwire.EventReply
 	isTurnDone := isReply && routed.Event.Done
 	if tab.channel != m.active {
 		if len(tab.entries) != before {
@@ -626,7 +616,7 @@ func (m *model) route(routed RoutedEvent) tea.Cmd {
 	var gitCmd tea.Cmd
 	if tab.channel == m.active {
 		m.syncViewport()
-		if routed.Event.T == eventStatus {
+		if routed.Event.T == eventwire.EventStatus {
 			gitCmd = m.gitAfterTool(routed.Event.Text)
 		}
 	}
@@ -713,13 +703,15 @@ func (m *model) focusOpen(infos []contracts.SessionInfo) tea.Cmd {
 	if channel == "" || m.tabs[channel] == nil {
 		return nil
 	}
-	text := m.openText
-	m.openSession, m.openText = "", ""
+	text, atts := m.openText, m.openAtts
+	m.openSession, m.openText, m.openAtts = "", "", nil
 	m.active = channel
-	if text == "" {
+	m.applySize()
+	m.syncViewport()
+	if text == "" && len(atts) == 0 {
 		return nil
 	}
-	return m.submitTo(channel, text, nil)
+	return m.submitTo(channel, text, atts)
 }
 
 func (m *model) continueLine() bool {
@@ -737,6 +729,10 @@ func (m *model) handleEnter() tea.Cmd {
 	if text == "" && len(m.pending) == 0 {
 		return nil
 	}
+	if m.starting {
+		m.flash = m.tr.t("tui.session.starting", nil)
+		return nil
+	}
 	m.input.Reset()
 	m.resizeComposer()
 	if command, ok := shellCommand(text); ok {
@@ -745,13 +741,13 @@ func (m *model) handleEnter() tea.Cmd {
 	if strings.HasPrefix(text, "/") {
 		return m.runSlash(text)
 	}
-	if m.active == "" {
-		return nil
-	}
 	atts := m.pending
 	m.pending = nil
 	m.applySize()
 	m.recordHistory(text)
+	if m.tabs[m.active] == nil {
+		return m.startSessionWith(text, atts)
+	}
 	return m.submitTo(m.active, text, atts)
 }
 
@@ -1136,7 +1132,7 @@ func (m *model) activate(channel string) {
 }
 
 func (m *model) renderInto(target *tab, event contracts.Event) {
-	if event.T != "abandoned" {
+	if event.T != eventwire.EventAbandoned {
 		target.disconnected = false
 	}
 	previous := target.tokens
@@ -1145,54 +1141,55 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 	}
 	target.measureContext(event)
 	switch event.T {
-	case eventApproval:
+	case eventwire.EventApproval:
 		m.rememberApprovalDeadline(event, time.Now())
-	case eventApprovalRisk:
+	case eventwire.EventApprovalRisk:
 		m.rememberApprovalRisk(event, time.Now())
-	case eventApprovalSubject:
+	case eventwire.EventApprovalSubject:
 		m.rememberApprovalSubject(event, time.Now())
-	case eventMenu:
+	case eventwire.EventMenu:
 		if m.openApproval(target, event) {
 			return
 		}
-		m.renderInto(target, contracts.Event{T: eventStatus, Text: event.Text})
-	case "chunk":
+		m.renderInto(target, contracts.Event{T: eventwire.EventStatus, Text: event.Text})
+	case eventwire.EventChunk:
 		target.busy = true
-		target.streamed = true
-		target.appendChunk(event.Text)
-	case "thinking":
+		if target.appendChunk(event.Text) {
+			target.streamed = true
+		}
+	case eventwire.EventThinking:
 		target.busy = true
 		target.appendThinking(event.Text, target.tokens, previous)
-	case eventStatus:
+	case eventwire.EventStatus:
 		target.busy = true
 		target.endStream()
 		target.noteToolFile(event.Text)
 		text, _ := hostError(event.Text)
 		target.appendEntry(entry{role: statusRole(event.Text), text: text})
-	case eventReply:
+	case eventwire.EventReply:
 		target.appendReply(m.tr, event)
-	case "todos":
+	case eventwire.EventTodos:
 		target.busy = true
 		target.todos = event.Todos
-	case "subagent":
+	case eventwire.EventSubagent:
 		target.busy = true
 		target.applySubagent(event.Subagent)
-	case "reset":
+	case eventwire.EventReset:
 		target.busy = false
 		target.interruptRequested = false
 		target.streamed = false
 		target.ctxMeasured = false
 		target.endStream()
 		target.appendEntry(entry{role: roleNotice, text: m.tr.t("tui.render.turn_reset", nil)})
-	case eventNotice:
-		target.appendEntry(entry{role: roleNotice, text: event.Text})
-	case eventCompactionStarted:
+	case eventwire.EventNotice:
+		target.appendEntry(entry{role: roleNotice, text: event.Text, markdown: true})
+	case eventwire.EventCompactionStarted:
 		target.startCompaction(event)
-	case eventCompactionDone:
+	case eventwire.EventCompactionDone:
 		target.completeCompaction(m.tr, event)
-	case eventCompactionFailed:
+	case eventwire.EventCompactionFailed:
 		target.failCompaction(event)
-	case "abandoned":
+	case eventwire.EventAbandoned:
 		target.busy = false
 		target.interruptRequested = false
 		target.streamed = false
@@ -1294,7 +1291,7 @@ func (m *model) syncViewport() {
 		return
 	}
 	if m.tabs[m.active] == nil {
-		m.vp.SetContent("")
+		m.vp.SetContent(m.emptyState(m.vp.Width))
 		return
 	}
 	atBottom := m.vp.AtBottom()
@@ -1323,10 +1320,7 @@ func (m *model) baseContent() string { return m.contentWith("") }
 
 func (m *model) contentWith(query string) string {
 	tab := m.tabs[m.active]
-	if tab == nil {
-		return ""
-	}
-	if len(tab.entries) == 0 && !tab.busy {
+	if tab == nil || (len(tab.entries) == 0 && !tab.busy) {
 		return m.emptyState(m.vp.Width)
 	}
 	content := m.cachedTranscript(tab)
@@ -1493,27 +1487,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 		cancel()
 		return keyedError{cause: err, key: "tui.terminal.enhanced_keys_enable_failed", params: map[string]any{"Err": err.Error()}}
 	}
-	program := tea.NewProgram(model,
-		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
-		tea.WithReportFocus(),
-		tea.WithInput(newFilteredStdin(model.keys)),
-	)
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case entry, ok := <-backend.Frontend():
-				if !ok {
-					return
-				}
-				program.Send(eventMsg(entry))
-			}
-		}
-	}()
-	_, runErr = program.Run()
-	cancel()
+	runErr = runProgram(ctx, cancel, backend, model, tea.WithInput(newFilteredStdin(model.keys)))
 	if err := writeStdout(enhancedKeysOff); err != nil {
 		return errors.Join(runErr, keyedError{cause: err, key: "tui.terminal.enhanced_keys_disable_failed", params: map[string]any{"Err": err.Error()}})
 	}
@@ -1599,6 +1573,8 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		return nil, true
 	case dispatchResultMsg:
 		return m.handleDispatchResult(msg), true
+	case sessionStartedMsg:
+		return m.handleSessionStarted(msg), true
 	case modeResultMsg:
 		return m.handleModeResult(msg), true
 	case modeLoadedMsg:

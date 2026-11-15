@@ -2,7 +2,9 @@ package host
 
 import (
 	"context"
+	"io"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -14,9 +16,11 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/envx"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 	"github.com/Herrscherd/herrscher/core/usage"
@@ -25,13 +29,15 @@ import (
 const defaultTeardownGrace = 5 * time.Second
 
 type hub struct {
-	lang    i18n.Language
-	st      *state.State
-	sup     *supervisor.Supervisor
-	gws     []Deps
-	partDir string
-	reg     *cli.Registry
-	metrics *metrics.Registry
+	lang     i18n.Language
+	language languageSource
+	st       *state.State
+	sup      *supervisor.Supervisor
+	gws      []Deps
+	partDir  string
+	reg      *cli.Registry
+	metrics  *metrics.Registry
+	warnings io.Writer
 
 	coordinator    contracts.Coordinator
 	eventPublisher func(session string, event contracts.Event)
@@ -41,6 +47,7 @@ type hub struct {
 	contributedKinds map[string]bool
 
 	instanceID string
+	runtime    runtimedir.Layout
 
 	warnedRoles sync.Map
 
@@ -49,7 +56,18 @@ type hub struct {
 	mu         sync.Mutex
 	live       map[string]liveSession
 
+	listenedSessions map[string]struct{}
+	closed           bool
+
 	teardownGrace time.Duration
+	listen        func(ctx context.Context, path string) (net.Listener, error)
+	startBridge   func(sess state.Session, grace time.Duration) error
+	stopBridge    func(name string) error
+	stopping      func(name string) <-chan struct{}
+	refused       map[string]string
+	relaunching   map[string]struct{}
+	relaunchStop  chan struct{}
+	relaunches    sync.WaitGroup
 	seedBackend   func(context.Context, state.Session) (contracts.Backend, error)
 	models        *ModelDiscovery
 
@@ -59,13 +77,67 @@ type hub struct {
 
 type forgetter interface{ forget(string) }
 
-type liveSession struct {
-	cancel context.CancelFunc
-	done   <-chan struct{}
+type hubOption func(*hub)
+
+func withWarnings(w io.Writer) hubOption {
+	return func(h *hub) { h.warnings = w }
 }
 
-func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry, approvals *approvalTable, sessions *sessionTable) *hub {
-	return &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: make(map[string]liveSession), teardownGrace: defaultTeardownGrace, approvals: approvals, sessions: sessions}
+func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry, approvals *approvalTable, sessions *sessionTable, opts ...hubOption) *hub {
+	created := &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: make(map[string]liveSession), teardownGrace: defaultTeardownGrace, approvals: approvals, sessions: sessions, listen: control.Listen, relaunchStop: make(chan struct{})}
+	for _, opt := range opts {
+		opt(created)
+	}
+	if sup != nil {
+		sup.SetFailureSink(created.reportSessionFailure)
+		created.startBridge = sup.StartWithin
+		created.stopBridge = sup.Stop
+		created.stopping = sup.Stopping
+	}
+	return created
+}
+
+func (h *hub) textLanguage() languageSource {
+	if h.language != nil {
+		return h.language
+	}
+	return fixedLanguageSource(h.lang)
+}
+
+func (h *hub) sessionLanguageSource(name string) languageSource {
+	recorded := liveSessionLanguage(h.st, name)
+	operator := h.textLanguage()
+	return func() i18n.Language {
+		if lang := recorded(); lang != 0 {
+			return lang
+		}
+		return operator()
+	}
+}
+
+func (h *hub) operatorCommands() asOperator {
+	return asOperator{disp: h, lang: h.textLanguage()}
+}
+
+func (h *hub) sessionCommands(name string) asSession {
+	return asSession{disp: h, session: name, lang: h.sessionLanguageSource(name)}
+}
+
+func (h *hub) reportSessionFailure(sess state.Session, stage supervisor.Stage, cause error) {
+	if h.eventPublisher == nil {
+		slog.Warn("session failure not published, no event sink bound yet", "session", sess.Name, "stage", stage, "err", cause)
+		return
+	}
+	lang := sessionLanguage(sess, h.textLanguage()())
+	text := LocalizeError(lang, wrapHost(cause, sessionFailureKey(stage), map[string]any{nameParam: sess.Name, detailParam: cause.Error()})).Error()
+	h.eventPublisher(sess.Name, contracts.Event{T: eventwire.EventNotice, Text: text})
+}
+
+func sessionFailureKey(stage supervisor.Stage) string {
+	if stage == supervisor.StagePrepare {
+		return "session.prepare_failed"
+	}
+	return "session.launch_failed"
 }
 
 func eventTap(publish func(string, contracts.Event), session string) func(contracts.Event) {
@@ -75,58 +147,30 @@ func eventTap(publish func(string, contracts.Event), session string) func(contra
 	return func(e contracts.Event) { publish(session, e) }
 }
 
-func (h *hub) goLive(ctx context.Context, sess state.Session) {
-	h.lifecycle.Lock()
-	defer h.lifecycle.Unlock()
-	h.mu.Lock()
-	_, running := h.live[sess.Name]
-	h.mu.Unlock()
-	if running {
-		return
+func (h *hub) liveSink(ctx context.Context, sess state.Session) sessionSink {
+	return sessionSink{
+		Resume: func(tok string) {
+			if err := h.st.SetResumeToken(sess.Name, tok); err != nil {
+				warnLive(h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_resume_token", map[string]any{nameParam: sess.Name, detailParam: err})
+			}
+		},
+		Project: func(p string) {
+			if err := h.st.SetProjectPinned(sess.Name, p); err != nil {
+				warnLive(h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_project_pin", map[string]any{nameParam: sess.Name, detailParam: err})
+			}
+		},
+		Transcript: func(e state.TranscriptEntry) {
+			if err := state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), e); err != nil {
+				warnLive(h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
+			}
+		},
+		Checkpoint: func(turnID, text string) {
+			h.takeCheckpoint(ctx, sess, turnID, text)
+		},
+		Usage: func(records []usage.Record) {
+			h.recordUsage(sess, records)
+		},
 	}
-	acc, err := control.Accept(context.WithoutCancel(ctx), control.SocketPath(sess.Name))
-	if err != nil {
-		warnStderr("herrscher serve: session %q: control socket: %v\n", sess.Name, err)
-		return
-	}
-	sctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	bound := boundGateways(h.gws, effectiveKinds(h.gws, sess))
-	terms := liveModelTerms(h.st, h.models, sess.Name)
-	done := make(chan struct{})
-	h.mu.Lock()
-	h.live[sess.Name] = liveSession{cancel: cancel, done: done}
-	h.mu.Unlock()
-	go func() {
-		defer close(done)
-		runSessionIdentified(sctx, h.sessions, sess.Name, sess.ChannelID, bound, acc, state.ParticipantsPath(h.partDir, sess.Name), h.metrics, h.coordinator,
-			sessionSink{
-				Resume: func(tok string) {
-					if err := h.st.SetResumeToken(sess.Name, tok); err != nil {
-						warnStderr("herrscher serve: session %q: resume token not persisted, a restart will lose the conversation: %v\n", sess.Name, err)
-					}
-				},
-				Project: func(p string) {
-					if err := h.st.SetProjectPinned(sess.Name, p); err != nil {
-						warnStderr("herrscher serve: session %q: memory project not persisted, the next start will guess again: %v\n", sess.Name, err)
-					}
-				},
-				Transcript: func(e state.TranscriptEntry) {
-					if err := state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), e); err != nil {
-						warnStderr("herrscher serve: session %q: transcript entry dropped: %v\n", sess.Name, err)
-					}
-				},
-				Checkpoint: func(turnID, text string) {
-					h.takeCheckpoint(ctx, sess, turnID, text)
-				},
-				Usage: func(records []usage.Record) {
-					h.recordUsage(sess, records)
-				},
-			},
-			eventTap(h.eventPublisher, sess.Name),
-			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent, terms: terms, lang: sessionLanguage(sess, h.lang), language: liveSessionLanguage(h.st, sess.Name)}, h.gate)
-	}()
-
-	serveCommandSocket(sctx, SessionCommandSocketPath(h.instanceID, sess.Name), asSession{disp: h, session: sess.Name, lang: h.lang})
 }
 
 func sessionLanguage(sess state.Session, operator i18n.Language) i18n.Language {
@@ -146,74 +190,14 @@ func knownSessionLanguage(sess state.Session) i18n.Language {
 
 func liveSessionLanguage(store *state.State, name string) func() i18n.Language {
 	return func() i18n.Language {
+		if store == nil {
+			return 0
+		}
 		session, ok := store.FindSession(name)
 		if !ok {
 			return 0
 		}
 		return knownSessionLanguage(session)
-	}
-}
-
-func (h *hub) stopLive() {
-	h.mu.Lock()
-	lives := make([]liveSession, 0, len(h.live))
-	for _, live := range h.live {
-		lives = append(lives, live)
-	}
-	h.mu.Unlock()
-	for _, live := range lives {
-		live.cancel()
-	}
-}
-
-func (h *hub) goDead(name string) {
-	if h.sup != nil {
-		logCleanup(h.sup.Stop(name))
-	}
-	h.lifecycle.Lock()
-	h.mu.Lock()
-	live, ok := h.live[name]
-	delete(h.live, name)
-	h.mu.Unlock()
-	h.lifecycle.Unlock()
-	if ok {
-		live.cancel()
-		select {
-		case <-live.done:
-		case <-time.After(h.teardownGrace):
-			warnStderr("herrscher serve: session %q: teardown still running after %s, releasing the name anyway\n", name, h.teardownGrace)
-		}
-	}
-	if f, ok := h.coordinator.(forgetter); ok {
-		f.forget(name)
-	}
-}
-
-func (h *hub) reconcile(ctx context.Context) {
-	persisted := make(map[string]state.Session)
-	sessions := h.st.SnapshotSessions()
-	for idx := range sessions {
-		s := sessions[idx]
-		persisted[s.Name] = s
-	}
-	h.mu.Lock()
-	liveNames := make([]string, 0, len(h.live))
-	for n := range h.live {
-		liveNames = append(liveNames, n)
-	}
-	h.mu.Unlock()
-	for _, name := range liveNames {
-		s, ok := persisted[name]
-		if !ok || s.Archived {
-			h.goDead(name)
-		}
-	}
-	for idx := range persisted {
-		saved := persisted[idx]
-		if saved.Archived {
-			continue
-		}
-		h.goLive(ctx, saved)
 	}
 }
 
@@ -225,14 +209,16 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 
 	if isSessionSeedCommand(args) {
 		runtime := oneShotSeedRuntime{
-			coordinator: h.coordinator,
-			publish:     h.eventPublisher,
-			backend:     h.seedBackend,
-			models:      h.models,
-			recordUsage: h.recordUsage,
+			warnings:        h.warnings,
+			sessionLanguage: h.sessionLanguageSource,
+			coordinator:     h.coordinator,
+			publish:         h.eventPublisher,
+			backend:         h.seedBackend,
+			models:          h.models,
+			recordUsage:     h.recordUsage,
 			record: func(session string, entry state.TranscriptEntry) {
 				if err := state.AppendTranscript(state.TranscriptPath(h.partDir, session), entry); err != nil {
-					warnStderr("herrscher serve: session %q: seed transcript entry dropped: %v\n", session, err)
+					warnLive(h.warnings, h.sessionLanguageSource(session), "warn.session_seed_transcript", map[string]any{nameParam: session, detailParam: err})
 				}
 			},
 		}
@@ -251,11 +237,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 		return h.reg.Dispatch(ctx, args)
 	}
 
-	h.dispatchMu.Lock()
-	defer h.dispatchMu.Unlock()
-	out, err := h.reg.Dispatch(ctx, args)
-	h.reconcile(ctx)
-	return out, err
+	return h.reconciling(ctx, func() (contracts.Result, error) { return h.reg.Dispatch(ctx, args) })
 }
 
 func (h *hub) isContributedCommand(args []string) bool {
@@ -309,11 +291,9 @@ func (h *hub) create(ctx context.Context, spec contracts.CreateSession, vendor s
 	if spec.ConsolidateEvery != 0 {
 		args["consolidate_every"] = strconv.Itoa(spec.ConsolidateEvery)
 	}
-	h.dispatchMu.Lock()
-	defer h.dispatchMu.Unlock()
-	out, err := h.reg.Run(ctx, []string{nsSession, "create"}, contracts.Input{Args: args})
-	h.reconcile(ctx)
-	return out, err
+	return h.reconciling(ctx, func() (contracts.Result, error) {
+		return h.reg.Run(ctx, []string{nsSession, "create"}, contracts.Input{Args: args})
+	})
 }
 
 func (h *hub) Close(ctx context.Context, name string, force bool) (contracts.Result, error) {
@@ -321,11 +301,9 @@ func (h *hub) Close(ctx context.Context, name string, force bool) (contracts.Res
 	if force {
 		args["force"] = valueTrue
 	}
-	h.dispatchMu.Lock()
-	defer h.dispatchMu.Unlock()
-	out, err := h.reg.Run(ctx, []string{nsSession, "close"}, contracts.Input{Args: args})
-	h.reconcile(ctx)
-	return out, err
+	return h.reconciling(ctx, func() (contracts.Result, error) {
+		return h.reg.Run(ctx, []string{nsSession, "close"}, contracts.Input{Args: args})
+	})
 }
 
 func (h *hub) Sessions() []contracts.SessionInfo {
@@ -488,13 +466,10 @@ func (h *hub) RestartWithResume(name, token string) error {
 		return &NotFoundError{Kind: kindSession, Name: name}
 	}
 	h.goDead(name)
-	if err := h.st.SetResumeToken(name, token); err != nil {
-		return err
-	}
 	sess.ResumeToken = token
-	h.goLive(context.Background(), sess)
-	h.sup.Start(sess)
-	return nil
+	return h.goLiveStarted(context.Background(), sess, func() error {
+		return h.st.SetResumeToken(name, token)
+	})
 }
 
 func (h *hub) Resume(name string) error {
@@ -502,15 +477,14 @@ func (h *hub) Resume(name string) error {
 	if !ok {
 		return &NotFoundError{Kind: kindSession, Name: name}
 	}
-	if sess.Archived {
-		if err := h.st.SetArchived(name, false); err != nil {
-			return err
+	live := sess
+	live.Archived = false
+	return h.goLiveStarted(context.Background(), live, func() error {
+		if !sess.Archived {
+			return nil
 		}
-		sess.Archived = false
-	}
-	h.goLive(context.Background(), sess)
-	h.sup.Start(sess)
-	return nil
+		return h.st.SetArchived(name, false)
+	})
 }
 
 func (h *hub) Interrupt(name string) bool {

@@ -278,7 +278,7 @@ func TestRefusedTargetKeepsThePlannedAccount(t *testing.T) {
 
 func TestLaunchVendorErrorKeepsThePlannedAccount(t *testing.T) {
 	h, fallback, st := newFallbackHandler(t, spentDefaultWork(), readOf("perso", 10))
-	h.resolveVendor = func(_, _ string) (string, error) {
+	h.resolveVendor = func(_, _, _ string) (string, error) {
 		return "", errors.New("vendor unresolved")
 	}
 

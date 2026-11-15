@@ -9,7 +9,7 @@ license=('MIT')
 depends=('glibc')
 makedepends=('go' 'git')
 # Pure-upstream build from GitHub master. For a local-checkout build instead,
-# swap to: git+file:///home/shan/dev/herrscher#branch=master
+# swap to: git+file:///path/to/herrscher#branch=master
 source=("$pkgname::git+https://github.com/Herrscherd/herrscher.git#branch=master")
 sha256sums=('SKIP')
 options=('!debug')

@@ -2,11 +2,14 @@ package host
 
 import (
 	"context"
+	"io"
 	"testing"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/outbox"
 )
 
 func sonnetRates() modelRates {
@@ -38,12 +41,12 @@ func TestEstimateTurnCostBlocksOnUnknownPrice(t *testing.T) {
 
 func TestCompleteTurnStoresEstimatedCostInTranscript(t *testing.T) {
 	var entries []state.TranscriptEntry
-	d := newSessionDriver("s1", nil, nil, nil)
+	d := newSessionDriver("s1", nil, nil, nil, io.Discard)
 	d.sink = sessionSink{Transcript: func(e state.TranscriptEntry) { entries = append(entries, e) }}
 	d.terms = func() modelTerms { return modelTerms{rates: sonnetRates()} }
-	event := contracts.Event{T: "reply", Text: "hello", Done: true, TokensIn: 1000, Tokens: 500}
+	event := contracts.Event{T: eventwire.EventReply, Text: "hello", Done: true, TokensIn: 1000, Tokens: 500}
 
-	d.completeTurn(context.Background(), event, time.Now(), 0)
+	d.completeTurn(context.Background(), event, time.Now(), 0, outbox.Frame{})
 
 	want := (1000*3.0 + 500*15.0) / 1_000_000
 	if len(entries) != 1 || entries[0].Cost != want {

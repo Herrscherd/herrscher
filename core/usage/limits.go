@@ -71,15 +71,23 @@ type AccountLimits struct {
 }
 
 // LimitsCache reads the limits of the accounts and reuses each reading for LimitsTTL, or
-// for LimitsFailureTTL when the reading failed.
+// for LimitsFailureTTL when the reading failed. Callers asking for one account while it
+// is read share that reading, which no caller cancels and which stops at Timeout, ten
+// seconds when unset, counted from its start. A reading that ends before that cap is
+// kept even when its callers left, so the next caller gets it, and a reader that honors
+// its context fails past the cap. A reader that ignores its context is left to finish,
+// its late reading replaces the failure, and no second reading of that account starts
+// until it does.
 type LimitsCache struct {
-	Now     func() time.Time
-	Timeout time.Duration
-	mu      sync.Mutex
-	entries map[AccountKey]AccountLimits
+	Now      func() time.Time
+	Timeout  time.Duration
+	mu       sync.Mutex
+	entries  map[AccountKey]AccountLimits
+	inflight map[AccountKey]*pendingRead
 }
 
-type limitsReply struct {
+type pendingRead struct {
+	done   chan struct{}
 	limits []contracts.Limit
 	err    error
 }
@@ -125,16 +133,22 @@ func (c *LimitsCache) readOne(ctx context.Context, target Target) AccountLimits 
 	}
 	readCtx, cancel := context.WithTimeout(ctx, c.timeout())
 	defer cancel()
-	limits, err := readWithin(readCtx, target)
+	limits, err := c.readWithin(readCtx, key, target)
 	if ctx.Err() != nil {
 		return AccountLimits{Vendor: target.Vendor, Account: string(target.Account), Default: target.Default, Status: LimitsFailed, ReadAt: now}
 	}
+	entry := limitsEntry(target, now, limits, err)
+	c.store(key, entry)
+	return entry
+}
+
+func limitsEntry(target Target, readAt time.Time, limits []contracts.Limit, err error) AccountLimits {
 	entry := AccountLimits{
 		Vendor:  target.Vendor,
 		Account: string(target.Account),
 		Default: target.Default,
 		Status:  LimitsReady,
-		ReadAt:  now,
+		ReadAt:  readAt,
 		Limits:  limits,
 	}
 	switch {
@@ -145,25 +159,51 @@ func (c *LimitsCache) readOne(ctx context.Context, target Target) AccountLimits 
 		entry.Status = LimitsFailed
 		entry.Limits = nil
 	}
-	c.mu.Lock()
-	if c.entries == nil {
-		c.entries = make(map[AccountKey]AccountLimits)
-	}
-	c.entries[key] = entry
-	c.mu.Unlock()
 	return entry
 }
 
-func readWithin(ctx context.Context, target Target) ([]contracts.Limit, error) {
-	reply := make(chan limitsReply, 1)
-	go func() {
-		limits, err := target.Read(ctx, target.Access)
-		reply <- limitsReply{limits: limits, err: err}
-	}()
+func (c *LimitsCache) store(key AccountKey, entry AccountLimits) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.entries == nil {
+		c.entries = make(map[AccountKey]AccountLimits)
+	}
+	if known, ok := c.entries[key]; ok && known.ReadAt.After(entry.ReadAt) {
+		return
+	}
+	c.entries[key] = entry
+}
+
+func (c *LimitsCache) readWithin(ctx context.Context, key AccountKey, target Target) ([]contracts.Limit, error) {
+	pending := c.start(ctx, key, target)
 	select {
-	case got := <-reply:
-		return got.limits, got.err
+	case <-pending.done:
+		return pending.limits, pending.err
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+}
+
+func (c *LimitsCache) start(ctx context.Context, key AccountKey, target Target) *pendingRead {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if pending, ok := c.inflight[key]; ok {
+		return pending
+	}
+	if c.inflight == nil {
+		c.inflight = make(map[AccountKey]*pendingRead)
+	}
+	pending := &pendingRead{done: make(chan struct{})}
+	c.inflight[key] = pending
+	readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.timeout())
+	go func() {
+		defer cancel()
+		pending.limits, pending.err = target.Read(readCtx, target.Access)
+		c.store(key, limitsEntry(target, c.Now(), pending.limits, pending.err))
+		c.mu.Lock()
+		delete(c.inflight, key)
+		c.mu.Unlock()
+		close(pending.done)
+	}()
+	return pending
 }

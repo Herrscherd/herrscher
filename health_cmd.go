@@ -32,7 +32,7 @@ type healthOptions struct {
 	pal     termpaint.Palette
 }
 
-func runHealth(ctx context.Context, args []string) error {
+func runHealth(ctx context.Context, layout host.RuntimeLayout, args []string) error {
 	lang := clitext.ClientLanguage()
 	opts, unknown := parseHealthArgs(args)
 	if unknown != "" {
@@ -41,9 +41,9 @@ func runHealth(ctx context.Context, args []string) error {
 	opts.pal = outputPalette(os.Stdout)
 	instance := host.ServedInstanceID(host.DefaultStatePath(), "")
 	if opts.watch {
-		return watchHealth(ctx, instance, opts, lang)
+		return watchHealth(ctx, layout, instance, opts, lang)
 	}
-	code, err := checkHealth(ctx, instance, opts, lang, os.Stdout)
+	code, err := checkHealth(ctx, layout, instance, opts, lang, os.Stdout)
 	if err != nil {
 		return err
 	}
@@ -53,11 +53,11 @@ func runHealth(ctx context.Context, args []string) error {
 	return nil
 }
 
-func watchHealth(ctx context.Context, instance string, opts healthOptions, lang i18n.Language) error {
+func watchHealth(ctx context.Context, layout host.RuntimeLayout, instance string, opts healthOptions, lang i18n.Language) error {
 	ticker := time.NewTicker(healthWatchInterval)
 	defer ticker.Stop()
 	for {
-		if _, err := checkHealth(ctx, instance, opts, lang, os.Stdout); err != nil {
+		if _, err := checkHealth(ctx, layout, instance, opts, lang, os.Stdout); err != nil {
 			return err
 		}
 		if err := writeRefreshed(os.Stdout, lang); err != nil {
@@ -80,10 +80,10 @@ func writeRefreshed(writer io.Writer, lang i18n.Language) error {
 	return err
 }
 
-func checkHealth(ctx context.Context, instance string, opts healthOptions, lang i18n.Language, writer io.Writer) (int, error) {
-	snapshot, err := fetchHealth(ctx, instance, opts.deep)
+func checkHealth(ctx context.Context, layout host.RuntimeLayout, instance string, opts healthOptions, lang i18n.Language, writer io.Writer) (int, error) {
+	snapshot, err := fetchHealth(ctx, layout, instance, opts.deep)
 	if host.IsDaemonNotRunning(err) {
-		text, textErr := clitext.Text(lang, clitext.HealthDaemonDown, clitext.Params{clitext.ParamSocket: host.CommandSocketPath(instance)})
+		text, textErr := clitext.Text(lang, clitext.HealthDaemonDown, clitext.Params{clitext.ParamSocket: host.CommandSocketPathIn(layout, instance)})
 		if textErr != nil {
 			return 0, textErr
 		}
@@ -125,12 +125,12 @@ func writeHealth(writer io.Writer, snapshot health.Snapshot, checks []health.Che
 	return snapshot.Table(writer, lang, opts.pal)
 }
 
-func fetchHealth(ctx context.Context, instance string, deep bool) (health.Snapshot, error) {
+func fetchHealth(ctx context.Context, layout host.RuntimeLayout, instance string, deep bool) (health.Snapshot, error) {
 	argv := []string{healthVerb}
 	if deep {
 		argv = append(argv, healthParamDeep)
 	}
-	out, err := host.DaemonDispatch(ctx, instance, argv)
+	out, err := host.DaemonDispatch(ctx, layout, instance, argv)
 	if err != nil {
 		return health.Snapshot{}, err
 	}

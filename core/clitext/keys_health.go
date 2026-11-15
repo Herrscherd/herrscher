@@ -18,6 +18,7 @@ const (
 	HealthGroupGateways    = "cli.health.group.gateways"
 	HealthGroupBackends    = "cli.health.group.backends"
 	HealthGroupCompaction  = "cli.health.group.compaction"
+	HealthCompactStack     = "cli.health.compact_stack"
 	HealthGroupMemory      = "cli.health.group.memory"
 	HealthGroupKeys        = "cli.health.group.keys"
 	HealthStateOK          = "cli.health.state.ok"
@@ -58,6 +59,7 @@ func healthKeys() map[Key][]string {
 		HealthGroupGateways:    nil,
 		HealthGroupBackends:    nil,
 		HealthGroupCompaction:  nil,
+		HealthCompactStack:     {ParamStack},
 		HealthGroupMemory:      nil,
 		HealthGroupKeys:        nil,
 		HealthStateOK:          nil,

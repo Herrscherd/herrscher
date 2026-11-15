@@ -2,18 +2,22 @@ package host
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/bridge"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/envx"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/lease"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
@@ -25,13 +29,15 @@ const seedConsolidateTimeout = 60 * time.Second
 const seedTurnTimeout = 120 * time.Second
 
 type oneShotSeedRuntime struct {
-	coordinator contracts.Coordinator
-	publish     func(session string, event contracts.Event)
-	record      func(session string, entry state.TranscriptEntry)
-	recordUsage func(sess state.Session, records []usage.Record)
-	timeout     time.Duration
-	backend     func(context.Context, state.Session) (contracts.Backend, error)
-	models      *ModelDiscovery
+	warnings        io.Writer
+	sessionLanguage func(name string) languageSource
+	coordinator     contracts.Coordinator
+	publish         func(session string, event contracts.Event)
+	record          func(session string, entry state.TranscriptEntry)
+	recordUsage     func(sess state.Session, records []usage.Record)
+	timeout         time.Duration
+	backend         func(context.Context, state.Session) (contracts.Backend, error)
+	models          *ModelDiscovery
 }
 
 func (r oneShotSeedRuntime) backendFactory() func(context.Context, state.Session) (contracts.Backend, error) {
@@ -59,7 +65,7 @@ func oneShotSeedRuntimeFrom(ctx context.Context) oneShotSeedRuntime {
 
 type seedCommandForwarder func(context.Context, string, []string) (string, bool, error)
 
-func runOneShotSeedCommand(ctx context.Context, hostState *state.State, name, task, turnID string, runtime oneShotSeedRuntime, coord contracts.Coordinator, instID string, forward seedCommandForwarder) (string, error) {
+func runOneShotSeedCommand(ctx context.Context, hostState *state.State, name, task, turnID string, runtime oneShotSeedRuntime, coord contracts.Coordinator, layout RuntimeLayout, instID string, forward seedCommandForwarder) (string, error) {
 	if runtime.coordinator == nil {
 		runtime.coordinator = coord
 	}
@@ -69,7 +75,7 @@ func runOneShotSeedCommand(ctx context.Context, hostState *state.State, name, ta
 		if runtime.timeout > 0 {
 			argv = append(argv, "--timeout", runtime.timeout.String())
 		}
-		if reply, handled, err := forward(ctx, commandSocketTarget(instID), argv); handled {
+		if reply, handled, err := forward(ctx, commandSocketTarget(layout, instID), argv); handled {
 			return reply, err
 		}
 	}
@@ -99,7 +105,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	defer cancel()
 	toBridge := make(chan contracts.Event, 1)
 	fromBridge := make(chan contracts.Event, bridgeEventBuffer)
-	driver := newSessionDriver(sess.Name, nil, toBridge, fromBridge)
+	driver := newSessionDriver(sess.Name, nil, toBridge, fromBridge, runtime.warnings)
 	driver.incarnation = sess.Incarnation
 	driver.agent = sess.Agent
 	driver.language = func() i18n.Language { return knownSessionLanguage(sess) }
@@ -125,11 +131,11 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 		driver.coordinator = runtime.coordinator
 		driver.activeTurnID = turnID
 		if coordination := driver.maybeCoordinate(seedCtx, reply); coordination != nil {
-			driver.fanOut(seedCtx, contracts.Event{T: eventReply, Done: true, Text: reply, Coordination: coordination})
+			driver.fanOut(seedCtx, contracts.Event{T: eventwire.EventReply, Done: true, Text: reply, Coordination: coordination})
 		}
 		driver.activeTurnID = ""
 	}
-	consolidateOneShot(ctx, orch, sess)
+	consolidateOneShot(ctx, orch, sess, runtime.warnings, runtime.languageOf(sess))
 	return reply, nil
 }
 
@@ -157,9 +163,17 @@ func runOneShotBridge(ctx context.Context, cancel context.CancelFunc, sess state
 		return runtime.backendFactory()(ctx, sess)
 	}, orch, sess.ChannelID, toBridge, fromBridge)
 	bridgeErr <- err
-	if err != nil {
+	if cancelsSeed(err) {
 		cancel()
 	}
+}
+
+func cancelsSeed(err error) bool {
+	if err == nil {
+		return false
+	}
+	_, failedTurn := errors.AsType[*bridge.TurnFailedError](err)
+	return !failedTurn
 }
 
 func oneShotTimeoutError(bridgeErr <-chan error) error {
@@ -173,7 +187,14 @@ func oneShotTimeoutError(bridgeErr <-chan error) error {
 	return errSeedTimeout
 }
 
-func consolidateOneShot(ctx context.Context, orch contracts.Orchestrator, sess state.Session) {
+func (r oneShotSeedRuntime) languageOf(sess state.Session) languageSource {
+	if r.sessionLanguage != nil {
+		return r.sessionLanguage(sess.Name)
+	}
+	return func() i18n.Language { return knownSessionLanguage(sess) }
+}
+
+func consolidateOneShot(ctx context.Context, orch contracts.Orchestrator, sess state.Session, warn io.Writer, lang languageSource) {
 	if orch == nil || sess.ConsolidateEvery > 0 {
 		return
 	}
@@ -182,7 +203,7 @@ func consolidateOneShot(ctx context.Context, orch contracts.Orchestrator, sess s
 	err := orch.Consolidate(consCtx)
 	consCancel()
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, newHostMessages().text(i18n.English, "seed.consolidate", map[string]any{nameParam: sess.Name, "Elapsed": time.Since(started).Round(time.Millisecond).String(), detailParam: fmt.Sprint(err)}))
+		warnTo(warn, lang(), "seed.consolidate", map[string]any{nameParam: sess.Name, "Elapsed": time.Since(started).Round(time.Millisecond).String(), detailParam: fmt.Sprint(err)})
 	}
 }
 
@@ -259,7 +280,7 @@ func buildBackend(ctx context.Context, req BackendRequest) (contracts.Backend, f
 	if req.ModelID == "" && ResolvePolicy(envx.Getenv) == contracts.PolicyGatewayOnly {
 		return nil, noRelease, errGatewayOnlyNoModel
 	}
-	desired, entry, err := chooseVendor(req.Vendor, req.ModelID, plugins, req.Models)
+	desired, entry, err := chooseVendor(req.Vendor, req.Cmd, req.ModelID, plugins, req.Models)
 	if err != nil {
 		return nil, noRelease, err
 	}
@@ -319,13 +340,13 @@ func (r modelRoute) lease() func() {
 	return r.grant
 }
 
-func chooseVendor(requested, modelID string, plugins []contracts.Plugin, models *ModelDiscovery) (string, CatalogEntry, error) {
+func chooseVendor(requested, cmd, modelID string, plugins []contracts.Plugin, models *ModelDiscovery) (string, CatalogEntry, error) {
+	if modelID == "" {
+		return firstNonEmpty(requested, vendorOfCmd(cmd, plugins), os.Getenv("HERRSCHER_BACKEND")), CatalogEntry{}, nil
+	}
 	vendor := requested
 	if vendor == "" {
 		vendor = os.Getenv("HERRSCHER_BACKEND")
-	}
-	if modelID == "" {
-		return vendor, CatalogEntry{}, nil
 	}
 	entry, err := LookupModelWith(plugins, ResolvePolicy(envx.Getenv), models.Sources(), modelID)
 	if err != nil {
@@ -420,6 +441,169 @@ func resolveBackendDir(dir string) string {
 		return cwd
 	}
 	return filepath.Join(cwd, dir)
+}
+
+func vendorOfCmd(cmd string, plugins []contracts.Plugin) string {
+	first := commandBinary(commandWords(cmd))
+	if first == "" {
+		return ""
+	}
+	binary := filepath.Base(first)
+	for idx := range plugins {
+		plugin := &plugins[idx]
+		if plugin.Backend == nil {
+			continue
+		}
+		for _, setting := range plugin.Manifest.Config {
+			if setting.Key == "cmd" && setting.Default == binary {
+				return plugin.Manifest.Kind
+			}
+		}
+	}
+	return ""
+}
+
+func commandWords(cmd string) []string {
+	var words []string
+	var word strings.Builder
+	var quote rune
+	inWord := false
+	for _, char := range cmd {
+		switch {
+		case quote != 0:
+			if char == quote {
+				quote = 0
+			} else {
+				word.WriteRune(char)
+			}
+		case char == '\'' || char == '"':
+			quote = char
+			inWord = true
+		case unicode.IsSpace(char):
+			if inWord {
+				words = append(words, word.String())
+				word.Reset()
+				inWord = false
+			}
+		default:
+			word.WriteRune(char)
+			inWord = true
+		}
+	}
+	if inWord {
+		words = append(words, word.String())
+	}
+	return words
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func commandBinary(words []string) string {
+	return envNamedCommand(words, 0)
+}
+
+func skipEnvAssignments(words []string) int {
+	idx := 0
+	for idx < len(words) && isEnvAssignment(words[idx]) {
+		idx++
+	}
+	return idx
+}
+
+const envNestingLimit = 8
+
+func envCommandAt(args []string, depth int) string {
+	if depth > envNestingLimit {
+		return ""
+	}
+	for idx := 0; idx < len(args); idx++ {
+		word := args[idx]
+		switch {
+		case word == "--":
+			return envNamedCommand(args[idx+1:], depth)
+		case word == "--unset" || word == "--chdir":
+			idx++
+		case word == "--split-string" || strings.HasPrefix(word, "--split-string="):
+			return envSplitLong(word, args[idx+1:], depth+1)
+		case strings.HasPrefix(word, "--"):
+		case word == "-":
+		case strings.HasPrefix(word, "-") && len(word) > 1:
+			if at := shortEnvSplitAt(word); at > 0 {
+				return envSplitCommand(word[at+1:], args[idx+1:], depth+1)
+			}
+			if shortEnvOptionTakesNext(word) {
+				idx++
+			}
+		case isEnvAssignment(word):
+		default:
+			return envNamedCommand(args[idx:], depth)
+		}
+	}
+	return ""
+}
+
+func envSplitLong(word string, rest []string, depth int) string {
+	if value, inline := strings.CutPrefix(word, "--split-string="); inline {
+		return envCommandAt(append(commandWords(value), rest...), depth)
+	}
+	if len(rest) == 0 {
+		return ""
+	}
+	return envCommandAt(append(commandWords(rest[0]), rest[1:]...), depth)
+}
+
+func envNamedCommand(words []string, depth int) string {
+	idx := skipEnvAssignments(words)
+	if idx >= len(words) {
+		return ""
+	}
+	if filepath.Base(words[idx]) == "env" {
+		return envCommandAt(words[idx+1:], depth+1)
+	}
+	return words[idx]
+}
+
+func envSplitCommand(value string, rest []string, depth int) string {
+	if value == "" {
+		if len(rest) == 0 {
+			return ""
+		}
+		value, rest = rest[0], rest[1:]
+	}
+	return envCommandAt(append(commandWords(value), rest...), depth)
+}
+
+func shortEnvSplitAt(word string) int {
+	for idx := 1; idx < len(word); idx++ {
+		switch word[idx] {
+		case 'S':
+			return idx
+		case 'u', 'C':
+			return -1
+		}
+	}
+	return -1
+}
+
+func shortEnvOptionTakesNext(word string) bool {
+	for idx := 1; idx < len(word); idx++ {
+		if word[idx] == 'u' || word[idx] == 'C' {
+			return idx == len(word)-1
+		}
+	}
+	return false
+}
+
+func isEnvAssignment(word string) bool {
+	name, _, found := strings.Cut(word, "=")
+	return found && name != "" && !strings.HasPrefix(word, "-")
 }
 
 func selectBackend(desired string, plugins []contracts.Plugin) (contracts.Plugin, error) {

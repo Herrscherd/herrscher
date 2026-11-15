@@ -3,6 +3,7 @@ package host
 import (
 	"bytes"
 	"context"
+	"io"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -15,15 +16,21 @@ import (
 )
 
 type hostPlacer struct {
+	lang          languageSource
+	warn          io.Writer
 	st            *state.State
+	layout        RuntimeLayout
 	local         *worktree.Worktreer
 	sourceVersion func() string
 	newRemote     func(runner.SSH, string) *worktree.Remote
 }
 
-func newHostPlacer(hostState *state.State, instanceID string, local *worktree.Worktreer, sourceVersion func() string) hostPlacer {
+func newHostPlacer(lang languageSource, warn io.Writer, hostState *state.State, layout RuntimeLayout, instanceID string, local *worktree.Worktreer, sourceVersion func() string) hostPlacer {
 	return hostPlacer{
+		lang:          lang,
+		warn:          warn,
 		st:            hostState,
+		layout:        layout,
 		local:         local,
 		sourceVersion: sourceVersion,
 		newRemote: func(r runner.SSH, bin string) *worktree.Remote {
@@ -40,8 +47,11 @@ func (p hostPlacer) resolve(name string) (state.Host, *worktree.Remote, error) {
 	if host.Bin == "" {
 		return state.Host{}, nil, &hostNotProvisionedError{Name: name}
 	}
-	r := runner.SSH{Target: host.SSH, ControlPath: runner.ControlPathFor(host.SSH)}
-	return host, p.newRemote(r, host.Bin), nil
+	transport, err := sshRunner(p.lang, p.warn, p.layout, host.SSH)
+	if err != nil {
+		return state.Host{}, nil, err
+	}
+	return host, p.newRemote(transport, host.Bin), nil
 }
 
 func (p hostPlacer) Ready(name string) error {
@@ -113,7 +123,10 @@ func (p hostPlacer) EnsureProject(ctx context.Context, name, project, repo strin
 	if err != nil {
 		return err
 	}
-	run := runnerFor(host)
+	run, err := runnerFor(p.lang, p.warn, p.layout, host)
+	if err != nil {
+		return err
+	}
 	if _, captureErr := capture(ctx, run, "test", "-d", repo+"/.git"); captureErr == nil {
 		return nil
 	}

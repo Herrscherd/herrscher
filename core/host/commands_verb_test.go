@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"strings"
 	"testing"
@@ -16,13 +17,13 @@ import (
 )
 
 func TestCommandsVerbDescribesTheRegistry(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	st := state.NewState(t.TempDir() + "/s.json")
-	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: t.TempDir() + "/s.json", DefaultCmd: "claude", Language: i18n.English}, st, sup, "", nil, approvalTab, sessionTab)
+	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
+	reg, _, err := buildRegistry(ctx, Deps{}, Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json", DefaultCmd: "claude", Language: i18n.English}, st, sup, "", nil, approvalTab, sessionTab)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,13 +55,13 @@ func TestCommandsVerbDescribesTheRegistry(t *testing.T) {
 }
 
 func TestSkillVerbsAreRegistered(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	st := state.NewState(t.TempDir() + "/s.json")
-	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: t.TempDir() + "/s.json", DefaultCmd: "claude", Language: i18n.English}, st, sup, "", nil, approvalTab, sessionTab)
+	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
+	reg, _, err := buildRegistry(ctx, Deps{}, Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json", DefaultCmd: "claude", Language: i18n.English}, st, sup, "", nil, approvalTab, sessionTab)
 	if err != nil {
 		t.Fatal(err)
 	}

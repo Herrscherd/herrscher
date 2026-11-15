@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"strings"
 	"sync"
 	"testing"
@@ -10,6 +11,8 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 type budgetedTurn struct {
@@ -24,7 +27,7 @@ func (b *budgetedTurn) sawStatus(want string) bool {
 	defer b.mu.Unlock()
 	for idx := range b.tapped {
 		e := b.tapped[idx]
-		if e.T == "status" && strings.Contains(e.Text, want) {
+		if e.T == eventwire.EventStatus && strings.Contains(e.Text, want) {
 			return true
 		}
 	}
@@ -43,8 +46,8 @@ func startBudgetedTurn(t *testing.T, headroom uint64) *budgetedTurn {
 
 	toBridge := make(chan contracts.Event, 8)
 	fromBridge := make(chan contracts.Event, 8)
-	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
-	d.lang = i18n.French
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+	d.operator = fixedLanguageSource(i18n.French)
 	d.gate = fixedGate{headroom: headroom, capped: true}
 	b := &budgetedTurn{toBridge: toBridge, fromBridge: fromBridge}
 	d.emitTap = func(e contracts.Event) {
@@ -59,7 +62,7 @@ func startBudgetedTurn(t *testing.T, headroom uint64) *budgetedTurn {
 
 	select {
 	case in := <-toBridge:
-		if in.T != "input" {
+		if in.T != eventwire.EventInput {
 			t.Fatalf("first frame to the bridge = %+v, want input", in)
 		}
 	case <-time.After(time.Second):
@@ -73,13 +76,13 @@ func TestRunawayTurnInterruptedOnTokenCap(t *testing.T) {
 		b := startBudgetedTurn(t, 100)
 		defer b.stop()
 
-		b.fromBridge <- contracts.Event{T: "chunk", Text: "thinking hard", Tokens: 80, TokensIn: 40}
+		b.fromBridge <- contracts.Event{T: eventwire.EventChunk, Text: "thinking hard", Tokens: 80, TokensIn: 40}
 
 		deadline := time.After(time.Second)
 		for {
 			select {
 			case ev := <-b.toBridge:
-				if ev.T == "interrupt" {
+				if ev.T == eventwire.EventInterrupt {
 					b.awaitStatus(t, "interrompu")
 					return
 				}
@@ -95,9 +98,9 @@ func TestBudgetedTurnUnderHeadroomRunsOn(t *testing.T) {
 		b := startBudgetedTurn(t, 100)
 		defer b.stop()
 
-		b.fromBridge <- contracts.Event{T: "chunk", Text: "cheap", Tokens: 10, TokensIn: 5}
-		b.fromBridge <- contracts.Event{T: "status", Text: "no usage reported"}
-		b.fromBridge <- contracts.Event{T: "reply", Text: "done", Done: true, Tokens: 10, TokensIn: 5}
+		b.fromBridge <- contracts.Event{T: eventwire.EventChunk, Text: "cheap", Tokens: 10, TokensIn: 5}
+		b.fromBridge <- contracts.Event{T: eventwire.EventStatus, Text: "no usage reported"}
+		b.fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "done", Done: true, Tokens: 10, TokensIn: 5}
 
 		select {
 		case ev := <-b.toBridge:
@@ -113,7 +116,7 @@ func TestRunawayTurnInterruptedOnce(t *testing.T) {
 		defer b.stop()
 
 		for range 3 {
-			b.fromBridge <- contracts.Event{T: "chunk", Text: "more", Tokens: 200, TokensIn: 100}
+			b.fromBridge <- contracts.Event{T: eventwire.EventChunk, Text: "more", Tokens: 200, TokensIn: 100}
 		}
 
 		interrupts := 0
@@ -121,7 +124,7 @@ func TestRunawayTurnInterruptedOnce(t *testing.T) {
 		for {
 			select {
 			case ev := <-b.toBridge:
-				if ev.T == "interrupt" {
+				if ev.T == eventwire.EventInterrupt {
 					interrupts++
 				}
 			case <-deadline:

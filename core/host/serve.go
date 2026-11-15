@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -18,9 +19,11 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/health"
 	"github.com/Herrscherd/herrscher/core/internal/instanceid"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
+	"github.com/Herrscherd/herrscher/core/outbox"
 	"github.com/Herrscherd/herrscher/core/service"
 )
 
@@ -64,7 +67,9 @@ type Deps = contracts.GatewaySet
 // Options holds the parsed flags for the serve daemon.
 type Options struct {
 	StatePath       string
+	Runtime         runtimedir.Layout
 	Language        i18n.Language
+	Warnings        io.Writer
 	DefaultLanguage i18n.Language
 	live            *operatorLanguage
 	health          *healthSource
@@ -130,6 +135,15 @@ func StoredOperatorLanguage(statePath string) (string, error) {
 	return persisted.OperatorLang, nil
 }
 
+// OutboxRoot returns the absolute directory of the turn outboxes, next to the state
+// file at statePath, or next to the default state file when statePath is empty.
+func OutboxRoot(statePath string) (string, error) {
+	if statePath == "" {
+		statePath = DefaultStatePath()
+	}
+	return outbox.Root(statePath)
+}
+
 // DefaultStatePath returns the default path to the daemon state file.
 func DefaultStatePath() string {
 	if d := envx.Get("STATE_DIR"); d != "" {
@@ -176,15 +190,46 @@ func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, option
 }
 
 func (options Options) operatorLanguage() i18n.Language {
-	if options.live != nil {
-		return options.live.Get()
+	return options.languageSource()()
+}
+
+func claimInstance(ctx context.Context, layout runtimedir.Layout, instID string) (func(), error) {
+	release, err := lockInstance(layout, instID)
+	if err != nil {
+		return nil, err
 	}
-	return options.Language
+	if takenErr := refuseTakenInstance(ctx, layout, instID); takenErr != nil {
+		release()
+		return nil, takenErr
+	}
+	return release, nil
+}
+
+func prepareTurnOutboxes(log *slog.Logger, sessions *sessionTable, statePath string) error {
+	outboxRoot, err := OutboxRoot(statePath)
+	if err != nil {
+		return wrapHost(err, "serve.outbox", nil)
+	}
+	sessions.outboxRoot = outboxRoot
+	if purgeErr := outbox.Purge(outboxRoot, time.Now()); purgeErr != nil {
+		log.Warn("stale turn outboxes not purged", "err", purgeErr)
+	}
+	return nil
+}
+
+func (options Options) withDefaultGateways(gws []Deps) Options {
+	if options.DefaultGateways == nil {
+		options.DefaultGateways = nonTerminalKinds(gws)
+	}
+	return options
 }
 
 func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, options Options) error {
 	base := obs.Stderr(false)
 	defer closeGateways(ctx, closers, base)
+	if options.Runtime.Dir() == "" {
+		return errNoRuntimeLayout
+	}
 	log := base.With("component", "serve")
 	monitor := health.NewHealth(time.Now())
 
@@ -197,26 +242,34 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	logCleanup(execErr)
 	startRemotePluginHosts(ctx, self, options.RemoteCategories, base)
 	partDir := filepath.Dir(options.StatePath)
-	sup := newHubSupervisor(ctx, self, base, monitor, partDir, options.StatePath)
+	sup := newHubSupervisor(ctx, self, options.Runtime, base, monitor, partDir, options.StatePath)
 
 	instID, err := resolveInstanceID(store, options.InstanceID, options.Owner, log)
 	if err != nil {
 		return wrapHost(err, "serve.resolve_instance", nil)
 	}
-
-	if options.DefaultGateways == nil {
-		options.DefaultGateways = nonTerminalKinds(gws)
+	releaseInstance, err := claimInstance(ctx, options.Runtime, instID)
+	if err != nil {
+		return err
 	}
-	approvals := newApprovalTable().withRules(store)
+	defer releaseInstance()
+
+	options = options.withDefaultGateways(gws)
+	approvals := newApprovalTable(options.Warnings).withRules(store)
 	sessions := newSessionTable()
 	options.health = &healthSource{}
 	options.usage = newUsageSource(partDir)
-	policy, err := newCompactionPolicy(ctx, options.CompactPercent, options.CompactStack, options.ContextLimits)
+	stopUsageWatch := options.usage.startWatch(ctx)
+	defer stopUsageWatch()
+	policy, err := newCompactionPolicy(ctx, options.languageSource(), options.Warnings, options.CompactPercent, options.CompactStack, options.ContextLimits)
 	if err != nil {
 		return wrapHost(err, "serve.compaction", nil)
 	}
 	sessions.compaction = policy
 	sessions.store = store
+	if outboxErr := prepareTurnOutboxes(log, sessions, options.StatePath); outboxErr != nil {
+		return outboxErr
+	}
 	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, store.Home)}, options, store, sup, instID, options.ContributedCommands, approvals, sessions)
 	if err != nil {
 		return wrapHost(err, "serve.registry", nil)
@@ -235,6 +288,8 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	if err != nil {
 		return wrapHost(err, "serve.config", nil)
 	}
+	sessions.outboundMaxBytes = cfg.EffectiveOutboundMaxBytes()
+	sessions.fileSenders = fileSendersOf(closers)
 	if fallback := accountFallbackFor(cfg, options.usage, gws); fallback != nil {
 		deps.handler.SetAccountFallback(fallback)
 	}
@@ -243,12 +298,25 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 		return wrapHost(err, "serve.key_proxy", nil)
 	}
 	defer CloseKeyProxy(ctx, log, keys)
-	options.health.bind(newHealthInputs(instID, keys, gws, policy))
-	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions)
+	options.health.bind(newHealthInputs(options.Runtime, instID, keys, gws, policy, partDir))
+	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions, withWarnings(options.Warnings))
 	runningHub.lang = options.Language
+	runningHub.language = options.languageSource()
 	runningHub.models = options.modelDiscovery()
 	runningHub.seedBackend = func(seedCtx context.Context, sess state.Session) (contracts.Backend, error) {
 		return newSeedBackend(seedCtx, sess, keys, runningHub.models)
+	}
+	runningHub.contributedKinds = kinds
+	runningHub.instanceID = instID
+	runningHub.runtime = options.Runtime
+	runningHub.gate = deps.handler.BudgetGate()
+	coord := wireCoordination(runningHub, deps, store, sessions)
+
+	deps.handler.SetCoordinationReader(coordViewAdapter{c: coord})
+
+	sockets, err := serveHubSockets(ctx, options.Runtime, instID, runningHub)
+	if err != nil {
+		return err
 	}
 	liveStopped := make(chan struct{})
 	go func() {
@@ -256,19 +324,11 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 		<-ctx.Done()
 		runningHub.stopLive()
 	}()
-	runningHub.contributedKinds = kinds
-	runningHub.instanceID = instID
-	runningHub.gate = deps.handler.BudgetGate()
-	coord := wireCoordination(runningHub, deps, store, sessions)
-
 	sched := newScheduler(store, store, runningHub, sessions.Seed, time.Now)
 	deps.schedSlot.sched = sched
 	go sched.Run(ctx)
-
-	deps.handler.SetCoordinationReader(coordViewAdapter{c: coord})
-
-	serveHubSockets(ctx, instID, runningHub)
-	goLiveSessions(ctx, runningHub, sup, store, monitor)
+	runningHub.startReconcile(ctx)
+	monitor.SetSessions(len(store.SnapshotSessions()))
 	bindSessionControl(gws, runningHub)
 
 	if instID != "" {
@@ -278,8 +338,16 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	startHubProbes(ctx, gws, options, store, monitor, instID)
 
 	log.Info("hub up; supervising sessions", "gateways", strings.Join(kindsOf(gws), ","))
+	return awaitHubStop(ctx, runningHub, liveStopped, sockets, log)
+}
+
+func awaitHubStop(ctx context.Context, runningHub *hub, liveStopped, sockets <-chan struct{}, log *slog.Logger) error {
 	<-ctx.Done()
 	<-liveStopped
+	<-sockets
+	if err := runningHub.closeAndRemoveSockets(); err != nil {
+		log.Warn("socket files of this instance not removed", "err", err)
+	}
 	return ctx.Err()
 }
 
@@ -307,8 +375,8 @@ func loadHubState(opts Options) (*state.State, error) {
 	return store, nil
 }
 
-func newHubSupervisor(ctx context.Context, self string, base *slog.Logger, host *health.Health, partDir, statePath string) *supervisor.Supervisor {
-	sup := supervisor.NewSupervisor(ctx, self)
+func newHubSupervisor(ctx context.Context, self string, layout RuntimeLayout, base *slog.Logger, host *health.Health, partDir, statePath string) *supervisor.Supervisor {
+	sup := supervisor.NewSupervisor(ctx, self, layout)
 	sup.SetStatePath(statePath)
 	sup.SetLogger(base)
 	sup.SetMetrics(host.Metrics())
@@ -331,24 +399,32 @@ func wireCoordination(hubCore *hub, deps hostDeps, st *state.State, sessions *se
 	return coord
 }
 
-func serveHubSockets(ctx context.Context, instID string, hubCore *hub) {
+func serveHubSockets(ctx context.Context, layout runtimedir.Layout, instID string, hubCore *hub) (<-chan struct{}, error) {
 	events := newEventSocket()
-	serveEventsSocket(ctx, EventsSocketPath(instID), events)
+	eventsListener, err := openSocket(ctx, layout, EventsSocketPathIn(layout, instID))
+	if err != nil {
+		return nil, err
+	}
+	commandsListener, err := openSocket(ctx, layout, CommandSocketPathIn(layout, instID))
+	if err != nil {
+		closeRead(eventsListener)
+		return nil, err
+	}
 	hubCore.eventPublisher = events.Publish
-	serveCommandSocket(ctx, CommandSocketPath(instID), asOperator{disp: hubCore, lang: hubCore.lang})
+	eventsReleased := acceptEvents(ctx, eventsListener, events)
+	commandsReleased := acceptCommands(ctx, commandsListener, hubCore.operatorCommands(), defaultCommandReadTimeout)
+	return allReleased(eventsReleased, commandsReleased), nil
 }
 
-func goLiveSessions(ctx context.Context, runningHub *hub, sup *supervisor.Supervisor, hostState *state.State, host *health.Health) {
-	sessions := hostState.SnapshotSessions()
-	for idx := range sessions {
-		sess := sessions[idx]
-		if sess.Archived {
-			continue
+func allReleased(released ...<-chan struct{}) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		for _, ch := range released {
+			<-ch
 		}
-		runningHub.goLive(ctx, sess)
-		sup.StartWith(ctx, sess)
-	}
-	host.SetSessions(len(hostState.SnapshotSessions()))
+		close(done)
+	}()
+	return done
 }
 
 func bindSessionControl(gws []Deps, hubCore *hub) {
@@ -369,7 +445,7 @@ func logCompiledPlugins(log *slog.Logger) {
 
 func startHubProbes(ctx context.Context, gws []Deps, options Options, store *state.State, monitor *health.Health, instID string) {
 	if options.HealthAddr != "" {
-		go serveHealth(ctx, options.HealthAddr, monitor)
+		go serveHealth(ctx, options.HealthAddr, monitor, options.languageSource(), options.Warnings)
 	}
 	if pr := firstProber(gws); pr != nil {
 		go pingLoop(ctx, pr, monitor)

@@ -17,7 +17,7 @@ func TestListenCommandSocketNeverPublishesARelaxedSocket(t *testing.T) {
 			watched := make(chan os.FileMode, 1)
 			stop := make(chan struct{})
 			go watchSocketMode(path, watched, stop)
-			l, err := listenCommandSocket(t.Context(), path)
+			l, err := listenCommandSocket(t.Context(), isolatedRuntimeDir(t), path)
 			close(stop)
 			if err != nil {
 				t.Fatalf("listenCommandSocket: %v", err)

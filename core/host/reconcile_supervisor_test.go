@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"testing"
 
 	"github.com/Herrscherd/herrscher/core/cli"
@@ -10,13 +11,15 @@ import (
 )
 
 func TestReconcileStopsTheBridgeOfARemovedSession(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
-	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
+	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
 	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab)
+	h.runtime = isolatedRuntimeDir(t)
+	t.Cleanup(h.stopLive)
 
 	sess := state.Session{Name: "orphan", ChannelID: "c1", Type: "text"}
 	if err := st.AddSession(sess); err != nil {
@@ -38,13 +41,15 @@ func TestReconcileStopsTheBridgeOfARemovedSession(t *testing.T) {
 }
 
 func TestReconcileStopsTheBridgeOfAnArchivedSession(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
-	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
+	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
 	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab)
+	h.runtime = isolatedRuntimeDir(t)
+	t.Cleanup(h.stopLive)
 
 	sess := state.Session{Name: "shelved", ChannelID: "c1", Type: "text"}
 	if err := st.AddSession(sess); err != nil {

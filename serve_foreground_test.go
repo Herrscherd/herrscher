@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -31,6 +32,24 @@ func TestSuperviseForegroundJoinsTheHubBeforeReturning(t *testing.T) {
 	case <-stopped:
 	default:
 		t.Fatal("the hub must have stopped before the foreground returned")
+	}
+}
+
+type waitingForeground struct{}
+
+func (waitingForeground) RunForeground(ctx context.Context, _ context.CancelFunc) error {
+	<-ctx.Done()
+	return nil
+}
+
+func TestAHubThatStopsClosesTheWindowAndSaysWhy(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	broken := errors.New("state locked")
+
+	err := superviseForeground(ctx, cancel, waitingForeground{}, func(context.Context) error { return broken })
+	if !errors.Is(err, broken) {
+		t.Fatalf("superviseForeground = %v, want the hub failure", err)
 	}
 }
 

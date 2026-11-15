@@ -2,18 +2,21 @@ package host
 
 import (
 	"context"
+	"io"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 func TestAwaitTurnPersistsResumeToken(t *testing.T) {
 	from := make(chan contracts.Event, 1)
-	d := newSessionDriver("s", nil, make(chan contracts.Event, 1), from)
+	d := newSessionDriver("s", nil, make(chan contracts.Event, 1), from, io.Discard)
 	var got string
 	d.sink.Resume = func(tok string) { got = tok }
 
-	from <- contracts.Event{T: "reply", Text: "ok", Done: true, Resume: "sid-1"}
+	from <- contracts.Event{T: eventwire.EventReply, Text: "ok", Done: true, Resume: "sid-1"}
 	if !d.awaitTurn(context.Background(), tokenGuard{}) {
 		t.Fatal("awaitTurn should return true on reply{done}")
 	}
@@ -24,11 +27,11 @@ func TestAwaitTurnPersistsResumeToken(t *testing.T) {
 
 func TestAwaitTurnSkipsEmptyResumeToken(t *testing.T) {
 	from := make(chan contracts.Event, 1)
-	d := newSessionDriver("s", nil, make(chan contracts.Event, 1), from)
+	d := newSessionDriver("s", nil, make(chan contracts.Event, 1), from, io.Discard)
 	called := false
 	d.sink.Resume = func(string) { called = true }
 
-	from <- contracts.Event{T: "reply", Text: "ok", Done: true}
+	from <- contracts.Event{T: eventwire.EventReply, Text: "ok", Done: true}
 	_ = d.awaitTurn(context.Background(), tokenGuard{})
 	if called {
 		t.Fatal("persistResume must not fire for an empty token")

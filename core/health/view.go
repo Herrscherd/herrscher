@@ -1,6 +1,8 @@
 package health
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -15,6 +17,8 @@ const (
 	daySpan         = 24 * time.Hour
 	secondDecimals  = 1
 	tenthsPerSecond = 10
+	stackSep        = " → "
+	homeMark        = "~"
 )
 
 // Row is one check as a report shows it, every text already rendered in the
@@ -86,7 +90,7 @@ func (s Snapshot) View(lang i18n.Language) (View, error) {
 		if len(checks) == 0 {
 			continue
 		}
-		view.Sections = append(view.Sections, Section{Group: group, Title: text.key(groupKey(group), nil), Rows: s.rows(checks, text)})
+		view.Sections = append(view.Sections, Section{Group: group, Title: s.groupTitle(group, text), Rows: s.rows(checks, text)})
 	}
 	if worst, found := s.worst(); found {
 		view.Worst = worst.Service()
@@ -137,6 +141,14 @@ func (s Snapshot) row(check Check, text *renderer) Row {
 		row.Remedy = text.notice(report.Remedy)
 	}
 	return row
+}
+
+func (s Snapshot) groupTitle(group Group, text *renderer) string {
+	title := text.key(groupKey(group), nil)
+	if group != GroupCompaction || len(s.CompactStack) == 0 {
+		return title
+	}
+	return title + "  " + text.key(clitext.HealthCompactStack, clitext.Params{clitext.ParamStack: strings.Join(s.CompactStack, stackSep)})
 }
 
 func (s Snapshot) bannerParams(text *renderer) clitext.Params {
@@ -193,13 +205,77 @@ func (s Snapshot) facts(check Check, text *renderer) string {
 			clitext.ParamListen: check.Facts.Listen,
 			clitext.ParamCount:  check.Facts.Providers,
 		})
+	case check.Group == GroupCompaction:
+		return compactionFacts(check.Facts, text)
 	case check.Group == GroupCore && check.Name == ServiceDaemon:
 		if check.Facts.Socket != "" {
-			return check.Facts.Socket
+			return homeRelative(check.Facts.Socket)
 		}
-		return s.Daemon.Socket
+		return homeRelative(s.Daemon.Socket)
 	}
 	return ""
+}
+
+func compactionFacts(facts Facts, text *renderer) string {
+	segments := []string{compactionLastFact(facts, text)}
+	if key := facts.CompactionKey; key != nil {
+		segments = append(segments, compactionKeyFact(key, text))
+	}
+	if reply := facts.CompactionSucceeded; reply != nil {
+		segments = append(segments, text.key(clitext.HealthCompactReply, clitext.Params{
+			clitext.ParamOutcome: text.outcome(reply.Outcome),
+			clitext.ParamDate:    compactionDate(reply.At),
+		}))
+	}
+	if failure := facts.CompactionFailed; failure != nil {
+		segments = append(segments, text.key(clitext.HealthCompactError, clitext.Params{
+			clitext.ParamDate: compactionDate(failure.At),
+			clitext.ParamNote: compactionNote(failure, text),
+		}))
+	}
+	if facts.CompactionPartial {
+		segments = append(segments, text.key(clitext.HealthCompactPartial, nil))
+	}
+	return strings.Join(segments, factsSep)
+}
+
+func compactionLastFact(facts Facts, text *renderer) string {
+	if last := facts.Compaction; last != nil {
+		return text.key(clitext.HealthCompactLast, clitext.Params{
+			clitext.ParamOutcome: text.outcome(last.Outcome),
+			clitext.ParamDate:    compactionDate(last.At),
+		})
+	}
+	if facts.CompactionUnknown {
+		return text.key(clitext.HealthCompactUnknown, nil)
+	}
+	return text.key(clitext.HealthCompactNever, nil)
+}
+
+func compactionKeyFact(key *CompactionKey, text *renderer) string {
+	if key.Present {
+		return text.key(clitext.HealthCompactKeyOn, clitext.Params{clitext.ParamName: key.Env})
+	}
+	return text.key(clitext.HealthCompactKeyOff, clitext.Params{clitext.ParamName: key.Env})
+}
+
+func compactionNote(failure *Compaction, text *renderer) string {
+	if failure.Key != "" {
+		return text.key(failure.Key, nil)
+	}
+	return text.key(clitext.HealthCompactNoNote, nil)
+}
+
+func compactionDate(at time.Time) string {
+	return at.Local().Format(time.DateTime)
+}
+
+func (r *renderer) outcome(outcome contracts.CompactOutcome) string {
+	key, known := clitext.CompactOutcomeKey(outcome)
+	if !known {
+		return outcome.String()
+	}
+	return r.key(key, nil)
 }
 
 func poolFacts(pool *Pool, text *renderer) string {
@@ -275,4 +351,15 @@ func summaryKey(state contracts.HealthState) clitext.Key {
 		return clitext.HealthSummaryDown
 	}
 	return clitext.HealthSummaryDegraded
+}
+
+func homeRelative(path string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return path
+	}
+	if rest, ok := strings.CutPrefix(path, home+string(filepath.Separator)); ok {
+		return homeMark + string(filepath.Separator) + rest
+	}
+	return path
 }

@@ -2,11 +2,13 @@ package host
 
 import (
 	"context"
+	"io"
 	"testing"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 func receiveTurnEvent(t *testing.T, ch <-chan contracts.Event) contracts.Event {
@@ -30,11 +32,11 @@ func relayTurnFrames(cancel context.CancelFunc, toBridge <-chan contracts.Event,
 			return
 		}
 	}
-	fromBridge <- contracts.Event{T: eventReply, Text: "done", Done: true}
+	fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "done", Done: true}
 }
 
 func identifiedTestDriver(to chan<- contracts.Event, from <-chan contracts.Event) (*sessionDriver, <-chan contracts.Event) {
-	d := newSessionDriver("same-name", nil, to, from)
+	d := newSessionDriver("same-name", nil, to, from, io.Discard)
 	d.incarnation = "incarnation-a"
 	d.agent = "reviewer"
 	emitted := make(chan contracts.Event, 32)
@@ -61,14 +63,14 @@ func TestDriverPreservesSuppliedTurnIdentityAcrossEveryTurnEvent(t *testing.T) {
 	inputSeen := make(chan contracts.Event, 1)
 	go func() {
 		inputSeen <- <-toBridge
-		fromBridge <- contracts.Event{T: "thinking", Text: "hmm"}
+		fromBridge <- contracts.Event{T: eventwire.EventThinking, Text: "hmm"}
 		fromBridge <- contracts.Event{
-			T: "status", Text: "working",
+			T: eventwire.EventStatus, Text: "working",
 			SessionIncarnation: "spoofed", TurnID: "spoofed", Agent: "spoofed",
 		}
-		fromBridge <- contracts.Event{T: "chunk", Text: "partial"}
-		fromBridge <- contracts.Event{T: "reset"}
-		fromBridge <- contracts.Event{T: "reply", Text: "done", Done: true}
+		fromBridge <- contracts.Event{T: eventwire.EventChunk, Text: "partial"}
+		fromBridge <- contracts.Event{T: eventwire.EventReset}
+		fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "done", Done: true}
 	}()
 
 	const supplied = "client.turn-01"
@@ -79,7 +81,7 @@ func TestDriverPreservesSuppliedTurnIdentityAcrossEveryTurnEvent(t *testing.T) {
 	input := receiveTurnEvent(t, inputSeen)
 	assertTurnIdentity(t, input, "incarnation-a", supplied, "reviewer")
 
-	wantTypes := []string{"human", "thinking", "status", "chunk", "reset", "reply"}
+	wantTypes := []string{eventwire.EventHuman, eventwire.EventThinking, eventwire.EventStatus, eventwire.EventChunk, eventwire.EventReset, eventwire.EventReply}
 	for _, wantType := range wantTypes {
 		event := receiveTurnEvent(t, emitted)
 		if event.T != wantType {
@@ -97,14 +99,14 @@ func TestDriverAutoTurnIDIsStableWithinTurnAndDifferentAcrossTurns(t *testing.T)
 	defer cancel()
 	go d.pump(ctx)
 
-	d.queue <- queued{ev: contracts.Event{T: "input", Who: "alice", Text: "first"}}
-	d.queue <- queued{ev: contracts.Event{T: "input", Who: "alice", Text: "second"}}
+	d.queue <- queued{ev: contracts.Event{T: eventwire.EventInput, Who: "alice", Text: "first"}}
+	d.queue <- queued{ev: contracts.Event{T: eventwire.EventInput, Who: "alice", Text: "second"}}
 
 	firstInput := receiveTurnEvent(t, toBridge)
 	if firstInput.TurnID == "" {
 		t.Fatal("first auto-generated turn id is empty")
 	}
-	fromBridge <- contracts.Event{T: "reply", Text: "one", Done: true}
+	fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "one", Done: true}
 	secondInput := receiveTurnEvent(t, toBridge)
 	if secondInput.TurnID == "" {
 		t.Fatal("second auto-generated turn id is empty")
@@ -112,7 +114,7 @@ func TestDriverAutoTurnIDIsStableWithinTurnAndDifferentAcrossTurns(t *testing.T)
 	if secondInput.TurnID == firstInput.TurnID {
 		t.Fatalf("two turns reused auto-generated id %q", firstInput.TurnID)
 	}
-	fromBridge <- contracts.Event{T: "reply", Text: "two", Done: true}
+	fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "two", Done: true}
 
 	firstHuman := receiveTurnEvent(t, emitted)
 	firstReply := receiveTurnEvent(t, emitted)
@@ -135,13 +137,13 @@ func TestDriverAbandonedEventCarriesTurnIdentity(t *testing.T) {
 	defer cancel()
 	go d.pump(ctx)
 
-	d.queue <- queued{ev: contracts.Event{T: "input", Who: "alice", Text: "will fail", TurnID: "turn-abandoned"}}
+	d.queue <- queued{ev: contracts.Event{T: eventwire.EventInput, Who: "alice", Text: "will fail", TurnID: "turn-abandoned"}}
 	input := receiveTurnEvent(t, toBridge)
 	assertTurnIdentity(t, input, "incarnation-a", "turn-abandoned", "reviewer")
 
 	human := receiveTurnEvent(t, emitted)
 	abandoned := receiveTurnEvent(t, emitted)
-	if human.T != "human" || abandoned.T != "abandoned" {
+	if human.T != eventwire.EventHuman || abandoned.T != eventwire.EventAbandoned {
 		t.Fatalf("events = [%s, %s], want [human, abandoned]", human.T, abandoned.T)
 	}
 	assertTurnIdentity(t, abandoned, "incarnation-a", "turn-abandoned", "reviewer")
@@ -161,7 +163,7 @@ func TestDriverClearsIdentityForPickOutsideTurn(t *testing.T) {
 		t.Fatalf("pick input has dishonest identity: %+v", pick)
 	}
 	fromBridge <- contracts.Event{
-		T: "reply", Text: "picked", Done: true,
+		T: eventwire.EventReply, Text: "picked", Done: true,
 		SessionIncarnation: "spoofed", TurnID: "spoofed", Agent: "spoofed",
 	}
 	reply := receiveTurnEvent(t, emitted)
@@ -179,9 +181,9 @@ func TestDriversWithSameNameRemainDistinguishableByIncarnation(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		go d.pump(ctx)
-		d.queue <- queued{ev: contracts.Event{T: "input", Text: "task", TurnID: "same-turn"}}
+		d.queue <- queued{ev: contracts.Event{T: eventwire.EventInput, Text: "task", TurnID: "same-turn"}}
 		_ = receiveTurnEvent(t, toBridge)
-		fromBridge <- contracts.Event{T: "reply", Text: "done", Done: true}
+		fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "done", Done: true}
 		return receiveTurnEvent(t, emitted)
 	}
 
@@ -208,7 +210,7 @@ func TestDriverSendsAnEmptyLanguageFrameWhenTheSessionHasNoLanguage(t *testing.T
 		t.Fatal("the seeded turn must complete")
 	}
 
-	if first := receiveTurnEvent(t, frames); first.T != eventLanguage || first.Value != "" {
+	if first := receiveTurnEvent(t, frames); first.T != eventwire.EventLanguage || first.Value != "" {
 		t.Fatalf("first frame = %q %q, want the language frame with an empty value", first.T, first.Value)
 	}
 }
@@ -229,10 +231,10 @@ func TestDriverTellsTheBridgeTheSessionLanguageBeforeEachTurn(t *testing.T) {
 		t.Fatal("the seeded turn must complete")
 	}
 
-	if first := receiveTurnEvent(t, frames); first.T != eventLanguage || first.Value != i18n.French.String() {
+	if first := receiveTurnEvent(t, frames); first.T != eventwire.EventLanguage || first.Value != i18n.French.String() {
 		t.Fatalf("first frame = %q %q, want the language frame fr", first.T, first.Value)
 	}
-	if second := receiveTurnEvent(t, frames); second.T != eventInput || second.Text != "bonjour" {
+	if second := receiveTurnEvent(t, frames); second.T != eventwire.EventInput || second.Text != "bonjour" {
 		t.Fatalf("second frame = %q %q, want the input", second.T, second.Text)
 	}
 	if got := d.sessionInfo().Language; got != i18n.French {

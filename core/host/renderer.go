@@ -4,6 +4,7 @@ import (
 	"context"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 const gatewayMaxLen = 2000
@@ -21,7 +22,7 @@ func newGatewayRenderer(gateway contracts.Gateway, channel string) *gatewayRende
 }
 
 func (r *gatewayRenderer) handle(ctx context.Context, event contracts.Event) {
-	if event.T != eventReply || !event.Done || event.Text == "" {
+	if event.T != eventwire.EventReply || !event.Done || event.Text == "" {
 		return
 	}
 	for _, part := range chunk(event.Text, gatewayMaxLen) {

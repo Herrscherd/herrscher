@@ -370,6 +370,11 @@
     "other": "herrscher : passerelle indisponible : {{.Failure}}"
   },
   {
+    "id": "cli.serve.hub_stopped",
+    "description": "Erreur quand le hub interne s'arrête pendant que la fenêtre du terminal est ouverte",
+    "other": "le hub s'est arrêté, la fenêtre s'est donc fermée : {{.Err}}"
+  },
+  {
     "id": "cli.serve.gateway_commands",
     "description": "Erreur quand les commandes des passerelles ne peuvent pas être rattachées",
     "other": "commandes de passerelle : {{.Err}}"
@@ -462,7 +467,7 @@
   {
     "id": "cli.bridge.flag.vendor",
     "description": "Aide de l'option --vendor de bridge",
-    "other": "fournisseur du backend : claude | codex | cursor (vide = premier enregistré, ou HERRSCHER_BACKEND)"
+    "other": "fournisseur du backend : claude | codex | cursor (vide = le fournisseur du binaire de la commande, puis HERRSCHER_BACKEND ; avec un modèle, HERRSCHER_BACKEND, puis le fournisseur du modèle)"
   },
   {
     "id": "cli.bridge.flag.resume",
@@ -3338,6 +3343,16 @@
     "other": "le cache des modèles est tenu par un autre écrivain"
   },
   {
+    "id": "cli.host.fault.lock_symlink",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (lock file symlink)",
+    "other": "le fichier de verrou est un lien symbolique"
+  },
+  {
+    "id": "cli.host.fault.lock_not_owned",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (lock file not owned)",
+    "other": "le fichier de verrou n'appartient pas à cet utilisateur"
+  },
+  {
     "id": "cli.host.fault.no_pending_choice",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (no pending choice)",
     "other": "n'a aucun choix en attente"
@@ -3381,6 +3396,31 @@
     "id": "cli.host.fault.shell_refused",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (shell refused)",
     "other": "commande refusée"
+  },
+  {
+    "id": "cli.host.fault.no_runtime_dir",
+    "description": "Le démon a démarré sans répertoire d'exécution pour ses sockets et son verrou",
+    "other": "le démon a démarré sans répertoire d'exécution pour ses sockets et son verrou"
+  },
+  {
+    "id": "cli.host.fault.hub_closed",
+    "description": "Le démon s'arrête et ne démarre plus de session (goLive refusé après l'arrêt)",
+    "other": "le démon s'arrête et ne démarre plus de session"
+  },
+  {
+    "id": "cli.host.fault.still_stopping",
+    "description": "L'ancien pont d'une session est encore en arrêt quand un nouveau démarrage le demande dans la grâce",
+    "other": "l'ancien pont de cette session est encore en arrêt"
+  },
+  {
+    "id": "cli.host.fault.instance_locked",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (instance lock held by another daemon)",
+    "other": "un autre démon détient déjà le verrou de cette instance : arrête-le ou passe --instance"
+  },
+  {
+    "id": "cli.host.fault.socket_taken",
+    "description": "Un autre démon vivant répond déjà sur ce socket, souvent la même instance servant un autre fichier d'état",
+    "other": "un autre démon répond déjà sur ce socket (même instance, autre fichier d'état) : arrête-le ou passe --instance"
   },
   {
     "id": "cli.host.fault.empty_shell_command",
@@ -3707,6 +3747,11 @@
     "other": "compaction"
   },
   {
+    "id": "cli.health.compact_stack",
+    "description": "Pile de compaction configurée, à côté du titre du groupe compaction",
+    "other": "compactStack = {{.Stack}}"
+  },
+  {
     "id": "cli.health.group.memory",
     "description": "Name of the memory group in health",
     "other": "mémoire"
@@ -3923,6 +3968,11 @@
     "other": "{{.Ratio}} restant"
   },
   {
+    "id": "cli.quota.card.pace",
+    "description": "Écart au rythme de la fenêtre, sous la part restante d'une carte de limites",
+    "other": "◷ {{.Delta}} % vs rythme"
+  },
+  {
     "id": "cli.spend.empty",
     "description": "Usage report with no spend in the period",
     "other": "aucune dépense sur la période"
@@ -3954,8 +4004,13 @@
   },
   {
     "id": "cli.spend.ledger_truncated",
-    "description": "Rapport d'usage : un jour du journal dépasse la taille lisible, les totaux ne sont pas affichés",
-    "other": "un jour du journal d'usage est trop volumineux, les totaux ne sont pas affichés pour ne pas être faux"
+    "description": "Rapport d'usage : un jour du journal est laissé de côté (trop volumineux ou illisible), les chiffres ci-dessous sont partiels",
+    "other": "une partie du journal d'usage n'a pas pu être lue, les totaux ci-dessous sont partiels"
+  },
+  {
+    "id": "cli.spend.unreadable",
+    "description": "Rapport d'usage : vue vide d'une période dont le journal est partiel, remplace le texte de la vue vide (emptyLine)",
+    "other": "aucune donnée sur les jours lisibles"
   },
   {
     "id": "cli.spend.peak",
@@ -4018,6 +4073,77 @@
     "other": "Md"
   },
   {
+    "id": "cli.spend.by_type",
+    "description": "Titre de la ligne du coût par type de jeton",
+    "other": "PAR TYPE"
+  },
+  {
+    "id": "cli.spend.type_split",
+    "description": "Coût de la période par type de jeton",
+    "other": "entrée {{.In}} · lecture cache {{.Read}} · écriture cache {{.Create}} · sortie {{.Out}}"
+  },
+  {
+    "id": "cli.spend.cache_title",
+    "description": "Titre de la ligne du cache",
+    "other": "cache"
+  },
+  {
+    "id": "cli.spend.cache_saved",
+    "description": "Jetons lus en cache et ce que le cache a évité de payer",
+    "other": "{{.Read}} lus · économie {{.Saved}}"
+  },
+  {
+    "id": "cli.spend.peak_day",
+    "description": "Jour du pic de coût, avec le mois abrégé",
+    "other": "{{.Day}} {{.Month}}"
+  },
+  {
+    "id": "cli.spend.months",
+    "description": "Les douze mois abrégés, séparés par des virgules, de janvier à décembre",
+    "other": "janv.,févr.,mars,avr.,mai,juin,juil.,août,sept.,oct.,nov.,déc."
+  },
+  {
+    "id": "cli.spend.transcripts_pending",
+    "description": "Le premier passage sur les transcripts n'est pas fini",
+    "other": "lecture des transcripts Claude et Codex en cours, les totaux vont encore monter"
+  },
+  {
+    "id": "cli.spend.transcripts_unreadable",
+    "description": "Des transcripts ou des dossiers de transcripts n'ont pas pu être lus (droits, fichier abîmé), Count en donne le nombre",
+    "one": "{{.Count}} transcript ou dossier illisible, le total peut être incomplet",
+    "other": "{{.Count}} transcripts ou dossiers illisibles, le total peut être incomplet"
+  },
+  {
+    "id": "cli.spend.prices_missing",
+    "description": "La grille de prix manque, les jetons des transcripts sont à 0 $",
+    "other": "grille de prix LiteLLM pas encore chargée, le coût des transcripts n'est pas compté"
+  },
+  {
+    "id": "cli.spend.unpriced",
+    "description": "Modèles absents de la grille de prix",
+    "other": "sans tarif connu, comptés à 0 $ : {{.Models}}"
+  },
+  {
+    "id": "cli.spend.rate",
+    "description": "Le coût est compté au tarif API",
+    "other": "tarif API"
+  },
+  {
+    "id": "cli.spend.chart_daily",
+    "description": "Titre de l'histogramme du coût par jour",
+    "other": "Coût par jour"
+  },
+  {
+    "id": "cli.spend.chart_hourly",
+    "description": "Titre de l'histogramme du coût par heure",
+    "other": "Coût par heure"
+  },
+  {
+    "id": "cli.spend.panel_volume",
+    "description": "Ligne des jetons sous le panneau de coût",
+    "other": "Jetons {{.Total}} · cache lu {{.Read}} · non caché {{.In}} · sortie {{.Out}} · économie cache {{.Saved}}"
+  },
+  {
     "id": "cli.spend.sessions",
     "description": "Usage report: the count of sessions of the period",
     "one": "{{.Count}} session",
@@ -4026,7 +4152,7 @@
   {
     "id": "cli.help.cmd.usage",
     "description": "Aide de la commande usage",
-    "other": "affiche les limites des comptes, la dépense et les jetons d'une période"
+    "other": "affiche les limites des comptes, la dépense, les jetons et la compaction d'une période"
   },
   {
     "id": "cli.help.cmd.usage.range",
@@ -4037,6 +4163,11 @@
     "id": "cli.help.cmd.usage.account",
     "description": "Aide du paramètre --account de usage",
     "other": "un compte, sous la forme fournisseur:nom (natif pour le compte propre du fournisseur)"
+  },
+  {
+    "id": "cli.help.cmd.usage.vendor",
+    "description": "Aide du paramètre --vendor de usage",
+    "other": "un fournisseur (claude, codex), pour ne garder que ses comptes"
   },
   {
     "id": "cli.spend.daemon_down",
@@ -4050,12 +4181,197 @@
   },
   {
     "id": "cli.spend.mode_unknown",
-    "description": "Erreur pour une vue de usage qui n'est ni limits, ni cost, ni tokens, Name est le mot donné",
-    "other": "vue {{.Name}} inconnue, utilise limits, cost ou tokens"
+    "description": "Erreur pour une vue de usage qui n'est ni limits, ni cost, ni tokens, ni compaction, Name est le mot donné",
+    "other": "vue {{.Name}} inconnue, utilise limits, cost, tokens ou compaction"
   },
   {
     "id": "cli.spend.account_invalid",
     "description": "Erreur pour une valeur de --account qui n'est pas vendor:nom, Name est la valeur donnée",
     "other": "le compte {{.Name}} doit s'écrire fournisseur:nom"
+  },
+  {
+    "id": "cli.compaction.empty",
+    "description": "Compaction, vide",
+    "other": "aucune compaction sur la période"
+  },
+  {
+    "id": "cli.compaction.runs",
+    "description": "Rapport de compaction : le nombre de compactions d'un étage",
+    "one": "{{.Count}} compaction",
+    "other": "{{.Count}} compactions"
+  },
+  {
+    "id": "cli.compaction.outcome_count",
+    "description": "Rapport de compaction : un résultat et son nombre",
+    "one": "{{.Label}} {{.Count}}",
+    "other": "{{.Label}} {{.Count}}"
+  },
+  {
+    "id": "cli.compaction.calls",
+    "description": "Rapport de compaction : les appels examinés, conservés, tronqués et élagués",
+    "one": "{{.Count}} appel examiné (conservés : {{.Kept}}, tronqués : {{.Truncated}}, élagués : {{.Pruned}})",
+    "other": "{{.Count}} appels examinés (conservés : {{.Kept}}, tronqués : {{.Truncated}}, élagués : {{.Pruned}})"
+  },
+  {
+    "id": "cli.compaction.chars",
+    "description": "Rapport de compaction : la part des caractères retirés",
+    "other": "{{.Percent}} des caractères retirés"
+  },
+  {
+    "id": "cli.compaction.saved",
+    "description": "Rapport de compaction : les jetons estimés retirés",
+    "other": "environ {{.Tokens}} jetons retirés"
+  },
+  {
+    "id": "cli.compaction.requests",
+    "description": "Rapport de compaction : les requêtes du modèle d'un étage et leurs jetons",
+    "one": "{{.Count}} requête, {{.Tokens}} jetons envoyés",
+    "other": "{{.Count}} requêtes, {{.Tokens}} jetons envoyés"
+  },
+  {
+    "id": "cli.compaction.average",
+    "description": "Rapport de compaction : la durée moyenne d'un étage",
+    "other": "durée moyenne {{.Duration}}"
+  },
+  {
+    "id": "cli.compaction.jev_share",
+    "description": "Rapport de compaction : la part des compactions Jev réussies (terminées ou courtes)",
+    "other": "Jev réussie {{.Percent}} ({{.Succeeded}} sur {{.Count}})"
+  },
+  {
+    "id": "cli.compaction.jev_behind",
+    "description": "Rapport de compaction : la part des sessions où l'étage backend a dû prendre le relais de Jev",
+    "other": "backend derrière Jev dans {{.Percent}} des sessions ({{.Behind}} sur {{.Sessions}})"
+  },
+  {
+    "id": "cli.compaction.money",
+    "description": "Rapport de compaction : l'économie estimée d'un étage, en dollars",
+    "other": "économie estimée {{.Money}}"
+  },
+  {
+    "id": "cli.compaction.money_unknown",
+    "description": "Rapport de compaction : l'économie d'un étage quand aucun tarif n'est connu pour son modèle",
+    "other": "économie : tarif inconnu"
+  },
+  {
+    "id": "cli.compaction.money_partial",
+    "description": "Rapport de compaction : combien de compactions d'un étage n'ont pas de tarif connu sur le total",
+    "one": "tarif inconnu pour 1 sur {{.Runs}}",
+    "other": "tarif inconnu pour {{.Count}} sur {{.Runs}}"
+  },
+  {
+    "id": "cli.compaction.outcome.done",
+    "description": "Résultat de compaction : l'étage a assez compacté pour arrêter la pile",
+    "other": "terminée"
+  },
+  {
+    "id": "cli.compaction.outcome.short",
+    "description": "Résultat de compaction : l'étage a raccourci le contexte",
+    "other": "courte"
+  },
+  {
+    "id": "cli.compaction.outcome.failed",
+    "description": "Résultat de compaction : l'étage n'a pas pu compacter",
+    "other": "échouée"
+  },
+  {
+    "id": "cli.compaction.outcome.dry_run",
+    "description": "Résultat de compaction : l'étage a mesuré sans rien changer",
+    "other": "à blanc"
+  },
+  {
+    "id": "cli.compaction.outcome.skipped",
+    "description": "Résultat de compaction : l'étage n'avait rien à compacter",
+    "other": "ignorée"
+  },
+  {
+    "id": "cli.health.facts.compact_last",
+    "description": "Santé : la dernière exécution d'un étage de compaction, son résultat et sa date",
+    "other": "dernière compaction : {{.Outcome}}, {{.Date}}"
+  },
+  {
+    "id": "cli.health.facts.compact_never",
+    "description": "Santé : un étage de compaction sans passage sur les 7 derniers jours",
+    "other": "aucune compaction sur les 7 derniers jours"
+  },
+  {
+    "id": "cli.health.facts.compact_partial",
+    "description": "Santé : une partie du journal d'usage n'a pas pu être lue, les faits de l'étage peuvent être partiels",
+    "other": "données partielles, une partie du journal d'usage n'a pas pu être lue"
+  },
+  {
+    "id": "cli.health.facts.compact_reply",
+    "description": "Santé : la dernière compaction réussie d'un étage, son résultat et sa date",
+    "other": "dernière réponse : {{.Outcome}}, {{.Date}}"
+  },
+  {
+    "id": "cli.health.facts.compact_error",
+    "description": "Santé : la dernière compaction échouée d'un étage, sa date et sa note d'erreur",
+    "other": "dernière erreur : {{.Date}}, {{.Note}}"
+  },
+  {
+    "id": "cli.health.facts.compact_error_no_note",
+    "description": "Santé : la note d'une compaction échouée quand aucun détail n'a été enregistré",
+    "other": "aucun détail"
+  },
+  {
+    "id": "cli.health.facts.compact_note.bridge_gone",
+    "description": "Santé : la cause d'une note de compaction échouée, en clair",
+    "other": "le relais s'est fermé pendant la compaction"
+  },
+  {
+    "id": "cli.health.facts.compact_note.no_compactor_factory",
+    "description": "Santé : la cause d'une note de compaction échouée, en clair",
+    "other": "le plugin de compaction ne fournit pas de fabrique Compactor"
+  },
+  {
+    "id": "cli.health.facts.compact_note.nil_compactor",
+    "description": "Santé : la cause d'une note de compaction échouée, en clair",
+    "other": "la fabrique du plugin de compaction n'a rendu aucun étage"
+  },
+  {
+    "id": "cli.health.facts.compact_note.no_compactor_plugin",
+    "description": "Santé : la cause d'une note de compaction échouée, en clair",
+    "other": "aucun plugin de compaction n'est enregistré sous ce nom"
+  },
+  {
+    "id": "cli.health.facts.compact_note.no_history_port",
+    "description": "Santé : la cause d'une note de compaction échouée, en clair",
+    "other": "le backend déclare Capabilities.HistoryEditor mais n'implémente pas le port"
+  },
+  {
+    "id": "cli.health.facts.compact_note.history_timeout",
+    "description": "Santé : la cause d'une note de compaction échouée, en clair",
+    "other": "le relais n'a pas répondu à temps à un appel sur l'historique"
+  },
+  {
+    "id": "cli.health.facts.compact_note.history_too_large",
+    "description": "Santé : la cause d'une note de compaction échouée, en clair",
+    "other": "l'historique de la session est trop volumineux pour être modifié"
+  },
+  {
+    "id": "cli.health.facts.compact_note.unknown_failure",
+    "description": "Santé : la cause d'une note de compaction échouée, en clair",
+    "other": "l'étage a échoué pour une raison sans code propre, son détail n'est pas conservé"
+  },
+  {
+    "id": "cli.health.facts.compact_note.fell_back",
+    "description": "Santé : la cause d'une note de compaction échouée, en clair",
+    "other": "l'étage a échoué sans erreur"
+  },
+  {
+    "id": "cli.health.facts.compact_key_present",
+    "description": "Santé : la clé d'API d'un compacteur est présente dans l'environnement, son nom seulement",
+    "other": "clé {{.Name}} présente"
+  },
+  {
+    "id": "cli.health.facts.compact_key_absent",
+    "description": "Santé : la clé d'API d'un compacteur est absente de l'environnement, son nom seulement",
+    "other": "clé {{.Name}} absente"
+  },
+  {
+    "id": "cli.health.facts.compact_unknown",
+    "description": "Santé : aucune exécution de l'étage n'est retrouvée dans le journal lisible, la dernière est inconnue",
+    "other": "dernière compaction inconnue"
   }
 ]

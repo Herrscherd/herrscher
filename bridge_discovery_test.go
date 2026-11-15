@@ -19,7 +19,7 @@ func (u unreachableBackends) Backend(context.Context, []contracts.Plugin, ...str
 func TestBridgeRemoteDiscoveryFailureReachesTheFrenchClientInFrench(t *testing.T) {
 	t.Setenv("HERRSCHER_LANG", "fr")
 	t.Setenv("HERRSCHER_STATE_DIR", t.TempDir())
-	_, cause := host.SubscribeDaemonEvents(context.Background(), "instance-absente")
+	_, cause := host.SubscribeDaemonEvents(context.Background(), testRuntime(t), "instance-absente")
 	if cause == nil {
 		t.Fatal("a daemon that is not running must refuse the events socket")
 	}

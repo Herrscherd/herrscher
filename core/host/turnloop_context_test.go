@@ -2,10 +2,12 @@ package host
 
 import (
 	"context"
+	"io"
 	"testing"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -15,7 +17,7 @@ func recordedTurn(t *testing.T, events ...contracts.Event) state.TranscriptEntry
 	a.feed("vas-y")
 	toBridge := make(chan contracts.Event, 8)
 	fromBridge := make(chan contracts.Event, 8)
-	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 	entries := make(chan state.TranscriptEntry, 8)
 	d.sink.Transcript = func(e state.TranscriptEntry) { entries <- e }
 	ctx, cancel := context.WithCancel(context.Background())
@@ -24,7 +26,7 @@ func recordedTurn(t *testing.T, events ...contracts.Event) state.TranscriptEntry
 
 	select {
 	case in := <-toBridge:
-		if in.T != "input" {
+		if in.T != eventwire.EventInput {
 			t.Fatalf("first frame to the bridge = %+v, want input", in)
 		}
 	case <-time.After(time.Second):
@@ -49,9 +51,9 @@ func recordedTurn(t *testing.T, events ...contracts.Event) state.TranscriptEntry
 
 func TestTurnRecordsTheLiveContextNotTheBillingTotals(t *testing.T) {
 	got := recordedTurn(t,
-		contracts.Event{T: "chunk", Text: "un", TokensIn: 5, CacheRead: 40_000},
-		contracts.Event{T: "chunk", Text: "deux", TokensIn: 5, CacheRead: 60_000},
-		contracts.Event{T: "reply", Text: "fini", Done: true, TokensIn: 11, CacheRead: 334_662, CacheCreate: 5_831},
+		contracts.Event{T: eventwire.EventChunk, Text: "un", TokensIn: 5, CacheRead: 40_000},
+		contracts.Event{T: eventwire.EventChunk, Text: "deux", TokensIn: 5, CacheRead: 60_000},
+		contracts.Event{T: eventwire.EventReply, Text: "fini", Done: true, TokensIn: 11, CacheRead: 334_662, CacheCreate: 5_831},
 	)
 	if got.CtxTokens != 60_005 {
 		t.Fatalf("ctx_tokens = %d, want the last mid-turn prompt (60005)", got.CtxTokens)
@@ -63,7 +65,7 @@ func TestTurnRecordsTheLiveContextNotTheBillingTotals(t *testing.T) {
 
 func TestASingleMessageTurnRecordsItsOwnPrompt(t *testing.T) {
 	got := recordedTurn(t,
-		contracts.Event{T: "reply", Text: "fini", Done: true, TokensIn: 11, CacheRead: 40_000, CacheCreate: 500},
+		contracts.Event{T: eventwire.EventReply, Text: "fini", Done: true, TokensIn: 11, CacheRead: 40_000, CacheCreate: 500},
 	)
 	if got.CtxTokens != 40_511 {
 		t.Fatalf("ctx_tokens = %d, want the turn's only prompt (40511)", got.CtxTokens)

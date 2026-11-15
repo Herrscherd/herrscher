@@ -31,7 +31,7 @@ type Handler struct {
 	defaultCmd      string
 	defaultGateways []string
 	partDir         string
-	resolveVendor   func(vendor, modelID string) (string, error)
+	resolveVendor   func(vendor, modelID, cmd string) (string, error)
 	coord           coordinationReader
 	seed            func(name, task string) bool
 	validateModel   func(vendor, modelID string) error
@@ -323,7 +323,7 @@ func (h *Handler) launchVendor(runtime runtimeChoice) (string, error) {
 	if h.resolveVendor == nil {
 		return desired, nil
 	}
-	return h.resolveVendor(desired, runtime.model)
+	return h.resolveVendor(desired, runtime.model, runtime.cmd)
 }
 
 // CoordView mirrors host.CoordinationView so the manager stays decoupled from
@@ -345,7 +345,7 @@ type coordinationReader interface {
 // session is created without an explicit cmd. partDir is the directory under
 // which per-session participant journals live (participants/<name>.log). agents
 // owns the durable agent homes used to provision sessions.
-func NewHandler(d channelAdmin, sup supervisor, wt Worktrees, fg forges, up updater, agents agentStore, st *state.State, defaultCmd, partDir string, defaultGateways []string, validateAccount func(vendor, profile string) error, resolveVendor func(vendor, modelID string) (string, error)) *Handler {
+func NewHandler(d channelAdmin, sup supervisor, wt Worktrees, fg forges, up updater, agents agentStore, st *state.State, defaultCmd, partDir string, defaultGateways []string, validateAccount func(vendor, profile string) error, resolveVendor func(vendor, modelID, cmd string) (string, error)) *Handler {
 	return &Handler{log: obs.NewLogger(os.Stderr, slog.LevelInfo), lang: i18n.English, d: d, sup: sup, wt: wt, fg: fg, up: up, agents: agents, st: st, defaultCmd: defaultCmd, partDir: partDir, defaultGateways: defaultGateways, validateAccount: validateAccount, resolveVendor: resolveVendor}
 }
 

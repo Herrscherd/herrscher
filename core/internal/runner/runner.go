@@ -2,11 +2,10 @@ package runner
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"os"
+	"errors"
+	"fmt"
 	"os/exec"
-	"path/filepath"
+	"strings"
 )
 
 // Runner builds the command that runs argv with dir as its working directory,
@@ -77,7 +76,15 @@ func (s SSH) Command(ctx context.Context, dir string, argv ...string) *exec.Cmd 
 	for _, f := range s.Forwards {
 		args = append(args, "-R", f.Remote+":"+f.Local)
 	}
-	return exec.CommandContext(ctx, "ssh", append(args, s.Target, script(dir, argv))...)
+	return s.command(ctx, "ssh", append(args, "--", s.Target, script(dir, argv))...)
+}
+
+func (s SSH) command(ctx context.Context, name string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, name, args...)
+	if err := CheckTarget(s.Target); err != nil {
+		cmd.Err = err
+	}
+	return cmd
 }
 
 // PrepareForwards returns the command that clears the far end of every forward,
@@ -95,14 +102,14 @@ func (s SSH) PrepareForwards(ctx context.Context) *exec.Cmd {
 		argv = append(argv, f.Remote)
 	}
 	bare := SSH{Target: s.Target, ControlPath: s.ControlPath}
-	return exec.CommandContext(ctx, "ssh", append(bare.options(), bare.Target, script("", argv))...)
+	return s.command(ctx, "ssh", append(bare.options(), "--", bare.Target, script("", argv))...)
 }
 
 // Copy puts a local file at dst on the target, over the same multiplexed
 // connection the commands use.
 func (s SSH) Copy(ctx context.Context, src, dst string) *exec.Cmd {
 	args := append([]string{"-o", "BatchMode=yes"}, s.multiplex()...)
-	return exec.CommandContext(ctx, "scp", append(args, src, s.Target+":"+dst)...)
+	return s.command(ctx, "scp", append(args, "--", src, s.Target+":"+dst)...)
 }
 
 func script(dir string, argv []string) string {
@@ -112,10 +119,19 @@ func script(dir string, argv []string) string {
 	return "cd " + shellQuote(dir) + " && exec " + quoteArgv(argv)
 }
 
-// ControlPathFor names the multiplexing socket for a target. It is hashed and
-// truncated rather than derived from the target text because a control socket is
-// a unix socket like any other, and sun_path caps a socket path at 108 bytes.
-func ControlPathFor(target string) string {
-	sum := sha256.Sum256([]byte(target))
-	return filepath.Join(os.TempDir(), "hs-ssh-"+hex.EncodeToString(sum[:])[:12]+".sock")
+// ErrTargetDash reports an ssh target that would be read as an option.
+var ErrTargetDash = errors.New("ssh target starts with a dash")
+
+// ErrEmptyTarget reports an ssh target that names no host.
+var ErrEmptyTarget = errors.New("ssh target is empty")
+
+// CheckTarget rejects a target that names no host or that ssh would read as one of its own options.
+func CheckTarget(target string) error {
+	if target == "" {
+		return ErrEmptyTarget
+	}
+	if strings.HasPrefix(target, "-") {
+		return fmt.Errorf("%w: %q", ErrTargetDash, target)
+	}
+	return nil
 }

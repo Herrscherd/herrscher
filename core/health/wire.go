@@ -22,22 +22,31 @@ type wireSnapshot struct {
 	ProbedAt time.Time   `json:"probed_at"`
 	Elapsed  int64       `json:"elapsed_ns"`
 	Checks   []wireCheck `json:"checks"`
+	Stack    []string    `json:"compact_stack,omitempty"`
 }
 
 type wireCheck struct {
-	Group     Group                 `json:"group"`
-	Name      string                `json:"name"`
-	Account   string                `json:"account,omitempty"`
-	Default   bool                  `json:"default,omitempty"`
-	State     contracts.HealthState `json:"state"`
-	Latency   int64                 `json:"latency_ns,omitempty"`
-	Detail    string                `json:"detail,omitempty"`
-	Remedy    string                `json:"remedy,omitempty"`
-	Socket    string                `json:"socket,omitempty"`
-	Listen    string                `json:"listen,omitempty"`
-	Providers int                   `json:"providers,omitempty"`
-	Pool      *wirePool             `json:"pool,omitempty"`
-	TimedOut  int64                 `json:"timed_out_ns,omitempty"`
+	Group      Group                 `json:"group"`
+	Name       string                `json:"name"`
+	Account    string                `json:"account,omitempty"`
+	Default    bool                  `json:"default,omitempty"`
+	State      contracts.HealthState `json:"state"`
+	Latency    int64                 `json:"latency_ns,omitempty"`
+	Detail     string                `json:"detail,omitempty"`
+	Remedy     string                `json:"remedy,omitempty"`
+	Socket     string                `json:"socket,omitempty"`
+	Listen     string                `json:"listen,omitempty"`
+	Providers  int                   `json:"providers,omitempty"`
+	Pool       *wirePool             `json:"pool,omitempty"`
+	TimedOut   int64                 `json:"timed_out_ns,omitempty"`
+	Compaction *wireCompaction       `json:"compaction,omitempty"`
+	Partial    bool                  `json:"compaction_partial,omitempty"`
+	Unknown    bool                  `json:"compaction_unknown,omitempty"`
+}
+
+type wireCompaction struct {
+	At      time.Time                `json:"at"`
+	Outcome contracts.CompactOutcome `json:"outcome"`
 }
 
 type wirePool struct {
@@ -58,6 +67,7 @@ func Encode(snapshot Snapshot) ([]byte, error) {
 		Version:  snapshot.Daemon.Version,
 		ProbedAt: snapshot.ProbedAt,
 		Elapsed:  int64(snapshot.Elapsed),
+		Stack:    snapshot.CompactStack,
 		Checks:   make([]wireCheck, 0, len(snapshot.Checks)),
 	}
 	for index := range snapshot.Checks {
@@ -98,9 +108,14 @@ func encodeCheck(check Check) (wireCheck, error) {
 		Listen:    check.Facts.Listen,
 		Providers: check.Facts.Providers,
 		TimedOut:  int64(check.Facts.TimedOut),
+		Partial:   check.Facts.CompactionPartial,
+		Unknown:   check.Facts.CompactionUnknown,
 	}
 	if pool := check.Facts.Pool; pool != nil {
 		wire.Pool = &wirePool{Keys: pool.Keys, Usable: pool.Usable, LastStatus: pool.LastStatus, CoolingFor: int64(pool.CoolingFor)}
+	}
+	if last := check.Facts.Compaction; last != nil {
+		wire.Compaction = &wireCompaction{At: last.At, Outcome: last.Outcome}
 	}
 	return wire, nil
 }
@@ -113,10 +128,11 @@ func Decode(data []byte) (Snapshot, error) {
 		return Snapshot{}, errors.Join(ErrMalformed, err)
 	}
 	snapshot := Snapshot{
-		Daemon:   Daemon{PID: wire.PID, Started: wire.Started, Socket: wire.Socket, Version: wire.Version},
-		ProbedAt: wire.ProbedAt,
-		Elapsed:  time.Duration(wire.Elapsed),
-		Checks:   make([]Check, 0, len(wire.Checks)),
+		Daemon:       Daemon{PID: wire.PID, Started: wire.Started, Socket: wire.Socket, Version: wire.Version},
+		ProbedAt:     wire.ProbedAt,
+		Elapsed:      time.Duration(wire.Elapsed),
+		Checks:       make([]Check, 0, len(wire.Checks)),
+		CompactStack: wire.Stack,
 	}
 	for index := range wire.Checks {
 		check, err := decodeCheck(wire.Checks[index])
@@ -144,14 +160,19 @@ func decodeCheck(wire wireCheck) (Check, error) {
 		Default: wire.Default,
 		Report:  contracts.ProbeReport{State: wire.State, Latency: time.Duration(wire.Latency), Detail: detail, Remedy: remedy},
 		Facts: Facts{
-			Socket:    wire.Socket,
-			Listen:    wire.Listen,
-			Providers: wire.Providers,
-			TimedOut:  time.Duration(wire.TimedOut),
+			Socket:            wire.Socket,
+			Listen:            wire.Listen,
+			Providers:         wire.Providers,
+			TimedOut:          time.Duration(wire.TimedOut),
+			CompactionPartial: wire.Partial,
+			CompactionUnknown: wire.Unknown,
 		},
 	}
 	if pool := wire.Pool; pool != nil {
 		check.Facts.Pool = &Pool{Keys: pool.Keys, Usable: pool.Usable, LastStatus: pool.LastStatus, CoolingFor: time.Duration(pool.CoolingFor)}
+	}
+	if last := wire.Compaction; last != nil {
+		check.Facts.Compaction = &Compaction{At: last.At, Outcome: last.Outcome}
 	}
 	return check, nil
 }

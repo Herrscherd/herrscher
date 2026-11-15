@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -60,7 +62,7 @@ func newConfiguredCompactFixture(t *testing.T, vendor string, policy compactionP
 	t.Helper()
 	t.Setenv(contextwindow.EnvVar(), "")
 	f := &compactFixture{toBridge: make(chan contracts.Event, 16), from: make(chan contracts.Event, 16), seen: make(chan struct{}, 64)}
-	f.driver = newSessionDriver("s1", nil, f.toBridge, f.from)
+	f.driver = newSessionDriver("s1", nil, f.toBridge, f.from, io.Discard)
 	f.driver.terms = func() modelTerms { return modelTerms{vendor: vendor} }
 	f.driver.compaction = policy
 	f.driver.emitTap = f.tap
@@ -83,7 +85,7 @@ func compactPolicy(percent int, names ...string) compactionPolicy {
 		historyEditors: make(map[string]bool),
 		warnOnce:       &sync.Once{},
 		historyOnce:    &sync.Once{},
-		warn:           func(string, ...any) {},
+		warn:           func(string, map[string]any) {},
 	}
 }
 
@@ -109,11 +111,11 @@ func expectNoFrame(t *testing.T, f *compactFixture) {
 
 func openTurn(t *testing.T, f *compactFixture, tokensIn int) {
 	t.Helper()
-	f.driver.queue <- queued{ev: contracts.Event{T: eventInput, Text: "vas-y"}}
-	if in := nextFrame(t, f); in.T != eventInput {
+	f.driver.queue <- queued{ev: contracts.Event{T: eventwire.EventInput, Text: "vas-y"}}
+	if in := nextFrame(t, f); in.T != eventwire.EventInput {
 		t.Fatalf("frame = %+v, want the input turn", in)
 	}
-	f.from <- contracts.Event{T: eventReply, Text: "fini", Done: true, TokensIn: tokensIn}
+	f.from <- contracts.Event{T: eventwire.EventReply, Text: "fini", Done: true, TokensIn: tokensIn}
 }
 
 func compactFrameOrQuiet(t *testing.T, f *compactFixture, answer contracts.Event) bool {
@@ -167,18 +169,18 @@ func mustAnswer(t *testing.T, result contracts.CompactResult) contracts.Event {
 
 func TestCompactionNeverOverlapsATurn(t *testing.T) {
 	f := newCompactFixture(t, "claude", compactPolicy(92))
-	f.driver.queue <- queued{ev: contracts.Event{T: eventInput, Text: "vas-y"}}
-	if in := nextFrame(t, f); in.T != eventInput {
+	f.driver.queue <- queued{ev: contracts.Event{T: eventwire.EventInput, Text: "vas-y"}}
+	if in := nextFrame(t, f); in.T != eventwire.EventInput {
 		t.Fatalf("frame = %+v, want the input turn", in)
 	}
 	f.driver.requestCompaction("", contracts.Conversation{})
 	expectNoFrame(t, f)
-	f.from <- contracts.Event{T: eventReply, Text: "fini", Done: true, TokensIn: 10}
+	f.from <- contracts.Event{T: eventwire.EventReply, Text: "fini", Done: true, TokensIn: 10}
 	if got := nextFrame(t, f); got.T != compactwire.EventRequest || got.Value != contracts.TriggerManual.String() {
 		t.Fatalf("frame after the turn = %+v, want the queued manual compaction", got)
 	}
 	f.from <- measuredAnswer(t, 4_000)
-	if done := waitEmitted(t, f, eventCompactDone); done.Tokens != 4_000 {
+	if done := waitEmitted(t, f, eventwire.EventCompactionDone); done.Tokens != 4_000 {
 		t.Fatalf("compaction_done = %+v, want 4000 measured", done)
 	}
 }
@@ -189,7 +191,7 @@ func TestAutomaticCompactionRunsOnceTheThresholdIsCrossed(t *testing.T) {
 	if !compactFrameOrQuiet(t, f, measuredAnswer(t, 20_000)) {
 		t.Fatal("no automatic compaction after a turn at 75 percent of the window, threshold 50")
 	}
-	if done := waitEmitted(t, f, eventCompactDone); done.Value != contracts.TriggerAutomatic.String() || done.Tokens != 20_000 {
+	if done := waitEmitted(t, f, eventwire.EventCompactionDone); done.Value != contracts.TriggerAutomatic.String() || done.Tokens != 20_000 {
 		t.Fatalf("compaction_done = %+v, want automatic down to 20000", done)
 	}
 }
@@ -223,10 +225,10 @@ func TestBackendWithoutCompactorIsRefusedBeforeAnySend(t *testing.T) {
 	gateway := newNoticeGateway()
 	f := newConfiguredCompactFixture(t, "cursor", compactPolicy(92), func(d *sessionDriver) {
 		d.gateways = []contracts.GatewaySet{{Gateway: gateway}}
-		d.lang = i18n.French
+		d.operator = fixedLanguageSource(i18n.French)
 	})
 	f.driver.requestCompaction("", contracts.Conversation{})
-	failed := waitEmitted(t, f, eventCompactFailed)
+	failed := waitEmitted(t, f, eventwire.EventCompactionFailed)
 	got := awaitNotice(t, gateway)
 	if got.notice.Code != contracts.CodeCompactUnavailable {
 		t.Fatalf("notice code = %v, want %v", got.notice.Code, contracts.CodeCompactUnavailable)
@@ -239,11 +241,11 @@ func TestBackendWithoutCompactorIsRefusedBeforeAnySend(t *testing.T) {
 
 func TestCompactFailureTextIsKeptWhenNoGatewayIsLinked(t *testing.T) {
 	f := newConfiguredCompactFixture(t, "cursor", compactPolicy(92), func(d *sessionDriver) {
-		d.lang = i18n.French
+		d.operator = fixedLanguageSource(i18n.French)
 	})
 	f.driver.requestCompaction("", contracts.Conversation{})
-	failed := waitEmitted(t, f, eventCompactFailed)
-	_, err := f.driver.compactStages()
+	failed := waitEmitted(t, f, eventwire.EventCompactionFailed)
+	_, err := f.driver.compactStages(f.driver.compaction.names, stageNotes{})
 	requireRenderedText(t, failed.Text, contracts.NoticeOf(err), i18n.French)
 	expectNoFrame(t, f)
 }
@@ -268,7 +270,7 @@ func TestCodexWithCompactorIsCompacted(t *testing.T) {
 		t.Fatalf("frame = %+v, want a compaction request", got)
 	}
 	f.from <- measuredAnswer(t, 30_000)
-	if done := waitEmitted(t, f, eventCompactDone); done.Tokens != 30_000 {
+	if done := waitEmitted(t, f, eventwire.EventCompactionDone); done.Tokens != 30_000 {
 		t.Fatalf("compaction_done = %+v, want 30000 measured", done)
 	}
 }
@@ -280,7 +282,7 @@ func TestNoPortAnswerFailsTheCompaction(t *testing.T) {
 		t.Fatalf("frame = %+v, want a compaction request", got)
 	}
 	f.from <- compactwire.NoPort()
-	waitEmitted(t, f, eventCompactFailed)
+	waitEmitted(t, f, eventwire.EventCompactionFailed)
 }
 
 type recordingCompactor struct {
@@ -307,7 +309,7 @@ func TestCustomStagesRunInConfiguredOrderBeforeTheBackend(t *testing.T) {
 		t.Fatalf("custom stage ran %v before the backend, want once", order)
 	}
 	f.from <- measuredAnswer(t, 30_000)
-	if done := waitEmitted(t, f, eventCompactDone); done.Tokens != 30_000 {
+	if done := waitEmitted(t, f, eventwire.EventCompactionDone); done.Tokens != 30_000 {
 		t.Fatalf("compaction_done = %+v, want the backend result last", done)
 	}
 }
@@ -318,18 +320,18 @@ func TestCompactionEventsCarryTokensOnlyWhenMeasured(t *testing.T) {
 	if got := nextFrame(t, f); got.T != compactwire.EventRequest {
 		t.Fatalf("frame = %+v, want the compaction request", got)
 	}
-	if started := waitEmitted(t, f, eventCompactStarted); started.Done || started.Tokens != 0 || started.TokensIn != 0 {
+	if started := waitEmitted(t, f, eventwire.EventCompactionStarted); started.Done || started.Tokens != 0 || started.TokensIn != 0 {
 		t.Fatalf("compaction_started = %+v, want no Done and no tokens without a measured turn", started)
 	}
 	f.from <- mustAnswer(t, contracts.CompactResult{TokensAfter: 50_000, Note: "compacté"})
-	if done := waitEmitted(t, f, eventCompactDone); done.Done || done.Tokens != 0 || done.TokensIn != 0 {
+	if done := waitEmitted(t, f, eventwire.EventCompactionDone); done.Done || done.Tokens != 0 || done.TokensIn != 0 {
 		t.Fatalf("compaction_done = %+v, want no Done and no tokens for a size the stage did not measure", done)
 	}
 }
 
 func TestMergedRequestIsNotAcceptedWhenTheFirstEnqueueFails(t *testing.T) {
 	queue := make(chan queued, 1)
-	queue <- queued{ev: contracts.Event{T: eventInput}}
+	queue <- queued{ev: contracts.Event{T: eventwire.EventInput}}
 	d := &sessionDriver{queue: queue, enqueueTimeout: 100 * time.Millisecond}
 	first := make(chan [2]bool, 1)
 	registered := make(chan struct{})
@@ -379,13 +381,13 @@ func TestAbortedTurnDoesNotReuseThePreviousReading(t *testing.T) {
 	openTurn(t, f, 150_000)
 	expectNoFrame(t, f)
 	percent.Store(50)
-	f.driver.queue <- queued{ev: contracts.Event{T: eventInput, Text: "tour coupé"}}
-	if in := nextFrame(t, f); in.T != eventInput {
+	f.driver.queue <- queued{ev: contracts.Event{T: eventwire.EventInput, Text: "tour coupé"}}
+	if in := nextFrame(t, f); in.T != eventwire.EventInput {
 		t.Fatalf("frame = %+v, want the input turn", in)
 	}
 	close(f.driver.hangup)
 	expectNoFrame(t, f)
-	if started := f.emittedOf(eventCompactStarted); len(started) != 0 {
+	if started := f.emittedOf(eventwire.EventCompactionStarted); len(started) != 0 {
 		t.Fatalf("an aborted turn started a compaction on the reading of the previous turn: %+v", started)
 	}
 }
@@ -393,7 +395,7 @@ func TestAbortedTurnDoesNotReuseThePreviousReading(t *testing.T) {
 func TestNoPortWarningIsWrittenOnce(t *testing.T) {
 	policy := compactPolicy(92)
 	var warned []string
-	policy.warn = func(format string, _ ...any) { warned = append(warned, format) }
+	policy.warn = func(key string, _ map[string]any) { warned = append(warned, key) }
 	policy.warnNoPort("claude")
 	policy.warnNoPort("claude")
 	if len(warned) != 1 {
@@ -403,7 +405,7 @@ func TestNoPortWarningIsWrittenOnce(t *testing.T) {
 
 func TestCompactStackRefusesDuplicateStages(t *testing.T) {
 	for _, names := range [][]string{{contracts.CompactStageBackend, contracts.CompactStageBackend}, {"stage", "stage"}} {
-		if _, err := newCompactionPolicy(context.Background(), nil, names, nil); err == nil {
+		if _, err := newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, names, nil); err == nil {
 			t.Fatalf("newCompactionPolicy(%v) accepted a stage listed twice", names)
 		}
 	}
@@ -411,7 +413,7 @@ func TestCompactStackRefusesDuplicateStages(t *testing.T) {
 
 func TestInvalidContextLimitIsWarnedAboutOnce(t *testing.T) {
 	warnings := 0
-	warn := func(string, ...any) { warnings++ }
+	warn := func(string, map[string]any) { warnings++ }
 	warnInvalidContextLimit(warn, "many")
 	if warnings != 1 {
 		t.Fatalf("invalid HERRSCHER_CONTEXT_LIMIT wrote %d warnings, want 1", warnings)
@@ -439,7 +441,7 @@ func TestCompactionPolicyTakesCodexFromItsManifest(t *testing.T) {
 			return seedBackend{}, nil
 		},
 	})
-	policy, err := newCompactionPolicy(context.Background(), nil, nil, nil)
+	policy, err := newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("newCompactionPolicy: %v", err)
 	}
@@ -465,7 +467,7 @@ func TestContextLimitTableMovesTheAutomaticThreshold(t *testing.T) {
 
 func TestNewCompactionPolicyEnvWinsOverContextLimits(t *testing.T) {
 	t.Setenv(contextwindow.EnvVar(), "")
-	policy, err := newCompactionPolicy(context.Background(), nil, nil, map[string]int{"codex": 400_000})
+	policy, err := newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, nil, map[string]int{"codex": 400_000})
 	if err != nil {
 		t.Fatalf("newCompactionPolicy: %v", err)
 	}
@@ -473,7 +475,7 @@ func TestNewCompactionPolicyEnvWinsOverContextLimits(t *testing.T) {
 		t.Fatalf("Limit(codex) = %d, want the table's 400000", got)
 	}
 	t.Setenv(contextwindow.EnvVar(), "12345")
-	policy, err = newCompactionPolicy(context.Background(), nil, nil, map[string]int{"codex": 400_000})
+	policy, err = newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, nil, map[string]int{"codex": 400_000})
 	if err != nil {
 		t.Fatalf("newCompactionPolicy: %v", err)
 	}
@@ -484,9 +486,9 @@ func TestNewCompactionPolicyEnvWinsOverContextLimits(t *testing.T) {
 
 func TestUnknownContextLimitVendorIsWarnedAboutOnce(t *testing.T) {
 	var warned []string
-	warn := func(format string, args ...any) { warned = append(warned, fmt.Sprintf(format, args...)) }
+	warn := func(_ string, params map[string]any) { warned = append(warned, fmt.Sprint(params[nameParam])) }
 	warnUnknownContextLimits(warn, map[string]int{"codex": 400_000, "Claude": 300_000, "ghost": 1}, []string{"codex", "claude"})
-	if len(warned) != 1 || !strings.Contains(warned[0], `"ghost"`) {
+	if len(warned) != 1 || warned[0] != "ghost" {
 		t.Fatalf("warnings = %q, want one line naming the unknown vendor ghost", warned)
 	}
 }
@@ -549,12 +551,12 @@ func TestSessionInfosUseTheResolvedModelWindow(t *testing.T) {
 
 func TestAutomaticCompactionStillAboveThresholdSaysSoInFrench(t *testing.T) {
 	f := newCompactFixture(t, "claude", compactPolicy(50))
-	f.driver.lang = i18n.French
+	f.driver.operator = fixedLanguageSource(i18n.French)
 	openTurn(t, f, 150_000)
 	if !compactFrameOrQuiet(t, f, measuredAnswer(t, 150_000)) {
 		t.Fatal("automatic compaction did not run")
 	}
-	status := waitEmitted(t, f, eventStatus)
+	status := waitEmitted(t, f, eventwire.EventStatus)
 	want := "compaction automatique sans effet : le contexte reste au-dessus de 50 %, pas de nouvelle tentative avant qu'il repasse sous le seuil"
 	if status.Text != want {
 		t.Fatalf("status = %q, want %q", status.Text, want)

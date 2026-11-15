@@ -2,7 +2,10 @@ package host
 
 import (
 	"context"
+	"io"
 	"log/slog"
+	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,6 +16,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/bridge"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/historywire"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/checkpoint"
@@ -21,6 +25,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/outbox"
 	"github.com/Herrscherd/herrscher/core/usage"
 )
 
@@ -73,6 +78,7 @@ type sessionDriver struct {
 	running       atomic.Bool
 	historyCalls  atomic.Uint64
 	channel       string
+	outboxRoot    string
 	saidElsewhere bool
 	notices       chan noticeDelivery
 	failures      chan compactFailure
@@ -106,16 +112,21 @@ type sessionDriver struct {
 
 	gate budgetGate
 
+	outboundMaxBytes int64
+	fileSenders      map[string]contracts.FileSender
+
 	terms             func() modelTerms
 	compaction        compactionPolicy
 	percentOf         func() int
 	turnReading       int
-	compactSpent      bool
+	hostSpent         bool
+	stageSpent        map[string]bool
 	compactMu         sync.Mutex
 	compactWaiting    *compactRequest
 	compactRegistered func()
-	lang              i18n.Language
 	language          func() i18n.Language
+	operator          languageSource
+	warnings          io.Writer
 	messages          *hostMessages
 }
 
@@ -124,22 +135,24 @@ type queued struct {
 	origin contracts.Conversation
 }
 
-func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- contracts.Event, fromBridge <-chan contracts.Event) *sessionDriver {
+func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- contracts.Event, fromBridge <-chan contracts.Event, warnings io.Writer) *sessionDriver {
 	return &sessionDriver{
-		messages:  newHostMessages(),
-		name:      name,
-		gateways:  gws,
-		toBridge:  toBridge,
-		from:      fromBridge,
-		queue:     make(chan queued, turnQueueCapacity),
-		turn:      make(chan struct{}, 1),
-		renderers: make(map[string]*gatewayRenderer),
-		hangup:    make(chan struct{}, 1),
-		seen:      make(map[string]bool),
-		notices:   make(chan noticeDelivery, noticeQueueCapacity),
-		failures:  make(chan compactFailure, noticeQueueCapacity),
-		noticeLog: obs.Stderr(false),
-		gate:      noBudgetGate{},
+		messages:   newHostMessages(),
+		warnings:   warnings,
+		name:       name,
+		gateways:   gws,
+		toBridge:   toBridge,
+		from:       fromBridge,
+		queue:      make(chan queued, turnQueueCapacity),
+		turn:       make(chan struct{}, 1),
+		renderers:  make(map[string]*gatewayRenderer),
+		hangup:     make(chan struct{}, 1),
+		seen:       make(map[string]bool),
+		stageSpent: make(map[string]bool),
+		notices:    make(chan noticeDelivery, noticeQueueCapacity),
+		failures:   make(chan compactFailure, noticeQueueCapacity),
+		noticeLog:  obs.Stderr(false),
+		gate:       noBudgetGate{},
 
 		enqueueTimeout: defaultEnqueueTimeout,
 
@@ -241,7 +254,7 @@ func (d *sessionDriver) recordEntry(role, text string, cost float64, turn turnUs
 }
 
 func (d *sessionDriver) Pick(value string) bool {
-	return d.enqueue(queued{ev: contracts.Event{T: "pick", Value: value}})
+	return d.enqueue(queued{ev: contracts.Event{T: eventwire.EventPick, Value: value}})
 }
 
 func (d *sessionDriver) enqueue(item queued) bool {
@@ -312,15 +325,15 @@ func (d *sessionDriver) askApproval(ctx context.Context, approvalID string, req 
 }
 
 func announceApprovalDeadline(gateway contracts.Gateway, conv contracts.Conversation, approvalID string, deadline time.Time) {
-	emitApprovalEvent(gateway, conv, contracts.Event{T: approvalEventKind, Value: approvalID, Text: deadline.UTC().Format(time.RFC3339)})
+	emitApprovalEvent(gateway, conv, contracts.Event{T: eventwire.EventApproval, Value: approvalID, Text: deadline.UTC().Format(time.RFC3339)})
 }
 
 func announceApprovalRisk(gateway contracts.Gateway, conv contracts.Conversation, approvalID string, risk approval.Risk) {
-	emitApprovalEvent(gateway, conv, contracts.Event{T: approvalRiskEventKind, Value: approvalID, Text: risk.String()})
+	emitApprovalEvent(gateway, conv, contracts.Event{T: eventwire.EventApprovalRisk, Value: approvalID, Text: risk.String()})
 }
 
 func announceApprovalSubject(gateway contracts.Gateway, conv contracts.Conversation, approvalID, subject string) {
-	emitApprovalEvent(gateway, conv, contracts.Event{T: approvalSubjectEventKind, Value: approvalID, Text: subject})
+	emitApprovalEvent(gateway, conv, contracts.Event{T: eventwire.EventApprovalSubject, Value: approvalID, Text: subject})
 }
 
 func emitApprovalEvent(gateway contracts.Gateway, conv contracts.Conversation, event contracts.Event) {
@@ -345,18 +358,18 @@ const interruptSendTimeout = 2 * time.Second
 func (d *sessionDriver) Interrupt() {
 	go func() {
 		select {
-		case d.toBridge <- contracts.Event{T: "interrupt"}:
+		case d.toBridge <- contracts.Event{T: eventwire.EventInterrupt}:
 		case <-time.After(interruptSendTimeout):
 		}
 	}()
 }
 
 func (d *sessionDriver) emitPaused(ctx context.Context, reason string) {
-	d.fanOut(ctx, contracts.Event{T: "paused", Text: reason})
+	d.fanOut(ctx, contracts.Event{T: eventwire.EventPaused, Text: reason})
 }
 
 func (d *sessionDriver) Seed(task string) bool {
-	return d.enqueue(queued{ev: contracts.Event{T: eventInput, Who: "handoff", Text: task, TurnID: newTurnID()}})
+	return d.enqueue(queued{ev: contracts.Event{T: eventwire.EventInput, Who: "handoff", Text: task, TurnID: newTurnID()}})
 }
 
 func (d *sessionDriver) SeedAndWait(ctx context.Context, task string) (string, bool) {
@@ -369,7 +382,7 @@ func (d *sessionDriver) SeedAndWaitWithTurnID(ctx context.Context, task, turnID 
 	d.pendingReply = reply
 	d.seenMu.Unlock()
 	select {
-	case d.queue <- queued{ev: contracts.Event{T: eventInput, Who: authorSeed, Text: task, TurnID: turnID}}:
+	case d.queue <- queued{ev: contracts.Event{T: eventwire.EventInput, Who: authorSeed, Text: task, TurnID: turnID}}:
 	case <-ctx.Done():
 		d.seenMu.Lock()
 		d.pendingReply = nil
@@ -398,6 +411,10 @@ type sessionTable struct {
 	checkpoints checkpoint.Store
 	compaction  compactionPolicy
 	store       *state.State
+	outboxRoot  string
+
+	outboundMaxBytes int64
+	fileSenders      map[string]contracts.FileSender
 }
 
 func (t *sessionTable) percentOfSession(name string) int {
@@ -583,7 +600,7 @@ func (d *sessionDriver) submit(ctx context.Context, inbound contracts.Inbound) b
 	})
 	select {
 	case d.queue <- queued{
-		ev:     contracts.Event{T: eventInput, Who: inbound.Author, Text: inbound.Text, Attachments: atts},
+		ev:     contracts.Event{T: eventwire.EventInput, Who: inbound.Author, Text: inbound.Text, Attachments: atts},
 		origin: inbound.Conversation,
 	}:
 		return true
@@ -598,12 +615,12 @@ func (d *sessionDriver) pump(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case failure := <-d.failures:
-			d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: failure.trigger.String(), Text: failure.text})
+			d.fanOut(ctx, contracts.Event{T: eventwire.EventCompactionFailed, Value: failure.trigger.String(), Text: failure.text})
 		case item := <-d.queue:
 			if !d.enterTurn(ctx) {
 				return
 			}
-			if item.ev.T == eventCompactNow {
+			if item.ev.T == eventwire.EventCompactNow {
 				d.runCompactNow(ctx, d.takeCompactInstruction())
 				d.releaseTurn()
 				continue
@@ -656,8 +673,8 @@ func (d *sessionDriver) inTurn() bool {
 
 func (d *sessionDriver) prepareTurn(ctx context.Context, item queued) (contracts.Event, tokenGuard, bool) {
 	event := item.ev
-	d.saidElsewhere = event.T == eventInput && outsideBoundGateways(item.origin, d.gateways)
-	if event.T != eventInput {
+	d.saidElsewhere = event.T == eventwire.EventInput && outsideBoundGateways(item.origin, d.gateways)
+	if event.T != eventwire.EventInput {
 		event.SessionIncarnation = ""
 		event.TurnID = ""
 		event.Agent = ""
@@ -667,7 +684,7 @@ func (d *sessionDriver) prepareTurn(ctx context.Context, item queued) (contracts
 	verdict := d.gate.Check(d.name)
 	if verdict.Reason != "" {
 		d.emitPaused(ctx, verdict.Reason)
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("turn.budget_refused", map[string]any{"Reason": verdict.Reason})})
+		d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("turn.budget_refused", map[string]any{"Reason": verdict.Reason})})
 		return event, tokenGuard{}, false
 	}
 	if event.TurnID == "" {
@@ -680,7 +697,7 @@ func (d *sessionDriver) prepareTurn(ctx context.Context, item queued) (contracts
 		d.sink.Checkpoint(event.TurnID, event.Text)
 	}
 	d.recordEntry("user", event.Text, 0, turnUsage{})
-	d.fanOut(ctx, contracts.Event{T: "human", Who: event.Who, Text: event.Text})
+	d.fanOut(ctx, contracts.Event{T: eventwire.EventHuman, Who: event.Who, Text: event.Text})
 	return event, tokenGuard{headroom: verdict.Headroom, capped: verdict.Capped}, true
 }
 
@@ -716,11 +733,23 @@ func (d *sessionDriver) currentLanguage() i18n.Language {
 	return d.language()
 }
 
+func (d *sessionDriver) textLanguage() languageSource {
+	return func() i18n.Language {
+		if lang := d.currentLanguage(); lang != 0 {
+			return lang
+		}
+		if d.operator != nil {
+			return d.operator()
+		}
+		return 0
+	}
+}
+
 func (d *sessionDriver) announceLanguage(ctx context.Context) bool {
 	if d.language == nil {
 		return true
 	}
-	return d.sendToBridge(ctx, contracts.Event{T: eventLanguage, Value: languageTag(d.language())})
+	return d.sendToBridge(ctx, contracts.Event{T: eventwire.EventLanguage, Value: languageTag(d.language())})
 }
 
 func languageTag(lang i18n.Language) string {
@@ -731,16 +760,18 @@ func languageTag(lang i18n.Language) string {
 }
 
 func (d *sessionDriver) abandon(ctx context.Context, ev contracts.Event) {
-	if ev.T != eventInput {
+	if ev.T != eventwire.EventInput {
 		return
 	}
-	d.fanOut(ctx, contracts.Event{T: "abandoned"})
+	d.fanOut(ctx, contracts.Event{T: eventwire.EventAbandoned})
 }
 
 func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
 	d.metrics.TurnStarted()
 	turnStart := time.Now()
 	live := 0
+	var files outbox.Frame
+	defer func() { d.removeTurnFiles(files) }()
 	for {
 		select {
 		case <-ctx.Done():
@@ -754,8 +785,12 @@ func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
 				d.metrics.TurnAbandoned()
 				return false
 			}
-			if event.T == eventReply && event.Done {
-				d.completeTurn(ctx, event, turnStart, live)
+			if event.T == outbox.EventFiles {
+				files = d.replaceTurnFiles(files, event)
+				continue
+			}
+			if event.T == eventwire.EventReply && event.Done {
+				d.completeTurn(ctx, event, turnStart, live, files)
 				return true
 			}
 			live = d.relayTurnEvent(ctx, &guard, event, live)
@@ -775,7 +810,38 @@ func (d *sessionDriver) relayTurnEvent(ctx context.Context, guard *tokenGuard, e
 	return live
 }
 
-func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event, turnStart time.Time, live int) {
+func (d *sessionDriver) decodeTurnFiles(event contracts.Event) outbox.Frame {
+	frame, err := outbox.Decode(event.Value)
+	if err != nil {
+		slog.Warn("outbound files dropped", "err", err)
+		return outbox.Frame{}
+	}
+	if frame.Dir != "" && !outbox.Owns(d.outboxRoot, frame.Dir) {
+		slog.Warn("outbound files dropped, turn directory outside the outbox", "dir", frame.Dir)
+		return outbox.Frame{}
+	}
+	return frame
+}
+
+func (d *sessionDriver) replaceTurnFiles(previous outbox.Frame, event contracts.Event) outbox.Frame {
+	next := d.decodeTurnFiles(event)
+	switch {
+	case next.Dir == "":
+		return previous
+	case previous.Dir == "":
+		return next
+	case previous.Dir == next.Dir:
+		next.Files = slices.Concat(previous.Files, next.Files)
+		next.Refused = slices.Concat(previous.Refused, next.Refused)
+		return next
+	default:
+		slog.Warn("earlier outbound files of the turn dropped", "dir", previous.Dir)
+		d.removeTurnFiles(previous)
+		return next
+	}
+}
+
+func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event, turnStart time.Time, live int, files outbox.Frame) {
 	d.turnReading = contextReading(live, event)
 	event.Coordination = d.maybeCoordinate(ctx, event.Text)
 	event.Cost = estimateTurnCost(event.Cost, priceableTokens{
@@ -784,7 +850,7 @@ func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event,
 		cacheRead:     event.CacheRead,
 		cacheWrite:    event.CacheCreate,
 	}, d.modelNow().rates)
-	d.fanOut(ctx, event)
+	d.deliverReply(ctx, event, files)
 	if d.sink.Resume != nil && event.Resume != "" {
 		d.sink.Resume(event.Resume)
 	}
@@ -822,7 +888,7 @@ func (d *sessionDriver) enforceTokenGuard(ctx context.Context, guard *tokenGuard
 		return
 	}
 	d.Interrupt()
-	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("turn.token_ceiling", map[string]any{"Spent": strconv.FormatUint(spent, 10), "Margin": strconv.FormatUint(guard.headroom, 10)})})
+	d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("turn.token_ceiling", map[string]any{"Spent": strconv.FormatUint(spent, 10), "Margin": strconv.FormatUint(guard.headroom, 10)})})
 }
 
 func promptSize(e contracts.Event) int {
@@ -884,13 +950,13 @@ func (d *sessionDriver) reportDone(ctx context.Context, summary string) *contrac
 		FromSession: d.name, Summary: summary,
 	})
 	if err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.report_refused", nil)})
+		d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.report_refused", nil)})
 		return &contracts.CoordinationEvent{
 			Kind: "report_failed", SourceSession: d.name,
-			Summary: sanitizeCoordinationError(localizeHostError(d.lang, err)),
+			Summary: sanitizeCoordinationError(localizeHostError(d.textLanguage()(), err)),
 		}
 	}
-	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.report_delivered", map[string]any{"Parent": parent})})
+	d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.report_delivered", map[string]any{"Parent": parent})})
 	return &contracts.CoordinationEvent{
 		Kind: "reported", SourceSession: d.name,
 		ParentSession: parent, Summary: summary,
@@ -902,10 +968,10 @@ func (d *sessionDriver) delegateTask(ctx context.Context, toAgent, task string) 
 		FromSession: d.name, ToAgent: toAgent, Task: task,
 	})
 	if err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.delegate_refused", nil)})
+		d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.delegate_refused", nil)})
 		return &contracts.CoordinationEvent{
 			Kind: "delegate_failed", SourceSession: d.name,
-			Agent: toAgent, Summary: sanitizeCoordinationError(localizeHostError(d.lang, err)),
+			Agent: toAgent, Summary: sanitizeCoordinationError(localizeHostError(d.textLanguage()(), err)),
 		}
 	}
 	return &contracts.CoordinationEvent{
@@ -920,13 +986,13 @@ func (d *sessionDriver) launchCohort(ctx context.Context, toAgent string, tasks 
 	})
 	if err != nil {
 		d.fanOut(ctx, contracts.Event{
-			T:    eventStatus,
-			Text: d.hostText("coordination.fanout_partial", map[string]any{"Launched": len(spawned), detailParam: localizeHostError(d.lang, err).Error()}),
+			T:    eventwire.EventStatus,
+			Text: d.hostText("coordination.fanout_partial", map[string]any{"Launched": len(spawned), detailParam: localizeHostError(d.textLanguage()(), err).Error()}),
 		})
 		return
 	}
 	d.fanOut(ctx, contracts.Event{
-		T:    eventStatus,
+		T:    eventwire.EventStatus,
 		Text: d.hostText("coordination.launched", map[string]any{"Count": len(spawned), "Workers": strings.Join(spawned, ", ")}),
 	})
 }
@@ -936,20 +1002,20 @@ func (d *sessionDriver) routeTask(ctx context.Context, task string) {
 		FromSession: d.name, Task: task,
 	})
 	if err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.route_refused", map[string]any{detailParam: localizeHostError(d.lang, err).Error()})})
+		d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.route_refused", map[string]any{detailParam: localizeHostError(d.textLanguage()(), err).Error()})})
 		return
 	}
-	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.routed", map[string]any{"Agent": toAgent, "Session": session})})
+	d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.routed", map[string]any{"Agent": toAgent, "Session": session})})
 }
 
 func (d *sessionDriver) sealCohort(ctx context.Context, node int) {
 	if _, err := d.coordinator.Seal(ctx, contracts.SealRequest{
 		FromSession: d.name, Expected: node,
 	}); err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.seal_refused", map[string]any{detailParam: localizeHostError(d.lang, err).Error()})})
+		d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.seal_refused", map[string]any{detailParam: localizeHostError(d.textLanguage()(), err).Error()})})
 		return
 	}
-	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.sealed", map[string]any{"Node": node})})
+	d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.sealed", map[string]any{"Node": node})})
 }
 
 func (d *sessionDriver) mergeWorker(ctx context.Context, worker string) {
@@ -957,17 +1023,17 @@ func (d *sessionDriver) mergeWorker(ctx context.Context, worker string) {
 		FromSession: d.name, Worker: worker,
 	})
 	if err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.merge_refused", map[string]any{detailParam: localizeHostError(d.lang, err).Error()})})
+		d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.merge_refused", map[string]any{detailParam: localizeHostError(d.textLanguage()(), err).Error()})})
 		return
 	}
-	d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.merged", map[string]any{"Lead": lead})})
+	d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.merged", map[string]any{"Lead": lead})})
 }
 
 func (d *sessionDriver) handoffTask(ctx context.Context, toAgent, task string) {
 	if _, err := d.coordinator.Handoff(ctx, contracts.HandoffRequest{
 		FromSession: d.name, ToAgent: toAgent, Task: task,
 	}); err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("coordination.handoff_refused", map[string]any{detailParam: localizeHostError(d.lang, err).Error()})})
+		d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.handoff_refused", map[string]any{detailParam: localizeHostError(d.textLanguage()(), err).Error()})})
 	}
 }
 
@@ -985,24 +1051,196 @@ func sanitizeCoordinationError(err error) string {
 }
 
 func (d *sessionDriver) fanOut(ctx context.Context, event contracts.Event) {
+	d.fanOutReply(ctx, event, outbox.Frame{})
+}
+
+func (d *sessionDriver) fanOutReply(ctx context.Context, event contracts.Event, files outbox.Frame) {
+	if d.saidElsewhere {
+		d.tapEvent(d.stamp(d.withElsewhereNotice(event, files)))
+		return
+	}
+	d.tapEvent(d.stamp(d.withUnsentFiles(event, files, d.carriesFiles())))
+	d.eachGateway(func(index int, gateway contracts.GatewaySet) {
+		sender, canSend := d.fileSenders[gateway.Gateway.Manifest().Kind]
+		d.emitToGateway(ctx, index, gateway, d.stamp(d.withUnsentFiles(event, files, canSend)))
+		if canSend {
+			d.sendReplyFiles(ctx, index, gateway, sender, files.Files)
+		}
+	})
+}
+
+func (d *sessionDriver) tapEvent(event contracts.Event) {
+	if d.emitTap != nil {
+		d.emitTap(event)
+	}
+}
+
+func (d *sessionDriver) carriesFiles() bool {
+	for _, gateway := range d.gateways {
+		if _, ok := d.fileSenders[gateway.Gateway.Manifest().Kind]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func (d *sessionDriver) stamp(event contracts.Event) contracts.Event {
 	if d.activeTurnID != "" {
 		event.SessionIncarnation = d.incarnation
 		event.TurnID = d.activeTurnID
 		event.Agent = d.agent
-	} else {
-		event.SessionIncarnation = ""
-		event.TurnID = ""
-		event.Agent = ""
+		return event
 	}
-	if d.emitTap != nil {
-		d.emitTap(event)
+	event.SessionIncarnation = ""
+	event.TurnID = ""
+	event.Agent = ""
+	return event
+}
+
+func (d *sessionDriver) deliverReply(ctx context.Context, event contracts.Event, files outbox.Frame) {
+	d.fanOutReply(ctx, event, d.revet(files))
+}
+
+func (d *sessionDriver) revet(files outbox.Frame) outbox.Frame {
+	if len(files.Files) == 0 {
+		return files
 	}
-	if d.saidElsewhere {
+	accepted, refusals := outbox.Vet(files.Dir, files.Files, d.outboundMaxBytes)
+	for _, refusal := range refusals {
+		slog.Warn("outbound file refused at delivery, not sent", "file", refusal.Name, "err", refusal.Cause)
+		files.Refused = append(files.Refused, refusal.Name)
+	}
+	files.Files = accepted
+	return files
+}
+
+func (d *sessionDriver) withUnsentFiles(event contracts.Event, files outbox.Frame, canSend bool) contracts.Event {
+	var notices []string
+	if len(files.Refused) > 0 {
+		notices = append(notices, d.hostText("outbound.refused", map[string]any{namesParam: d.noticeNames(files.Refused)}))
+	}
+	if !canSend && len(files.Files) > 0 {
+		notices = append(notices, d.hostText("outbound.unsent", map[string]any{namesParam: d.noticeNames(fileNames(files.Files))}))
+	}
+	if len(notices) == 0 {
+		return event
+	}
+	event.Text = strings.TrimSpace(strings.Join(append([]string{event.Text}, notices...), "\n\n"))
+	return event
+}
+
+func (d *sessionDriver) withElsewhereNotice(event contracts.Event, files outbox.Frame) contracts.Event {
+	names := frameNames(files)
+	if len(names) == 0 {
+		return event
+	}
+	notice := d.hostText("outbound.elsewhere", map[string]any{namesParam: d.noticeNames(names)})
+	event.Text = strings.TrimSpace(event.Text + "\n\n" + notice)
+	return event
+}
+
+func frameNames(files outbox.Frame) []string {
+	return append(fileNames(files.Files), files.Refused...)
+}
+
+func fileSendersOf(gateways []contracts.Gateway) map[string]contracts.FileSender {
+	senders := make(map[string]contracts.FileSender, len(gateways))
+	for _, gateway := range gateways {
+		if sender, ok := gateway.(contracts.FileSender); ok {
+			senders[gateway.Manifest().Kind] = sender
+		}
+	}
+	return senders
+}
+
+func (d *sessionDriver) noticeNames(names []string) string {
+	labelled := make([]string, 0, len(names))
+	for _, name := range names {
+		if name == "" {
+			name = d.hostText("outbound.unnamed", nil)
+		}
+		labelled = append(labelled, name)
+	}
+	return strings.Join(labelled, ", ")
+}
+
+func fileNames(files []contracts.OutboundFile) []string {
+	names := make([]string, 0, len(files))
+	for _, file := range files {
+		names = append(names, file.Name)
+	}
+	return names
+}
+
+const (
+	fileSendTimeout   = 2 * time.Minute
+	namesParam        = "Names"
+	filesPerSendBatch = 10
+	bytesPerSendBatch = 9 << 20
+	unmeasuredBytes   = bytesPerSendBatch + 1
+)
+
+func (d *sessionDriver) sendReplyFiles(ctx context.Context, index int, gateway contracts.GatewaySet, sender contracts.FileSender, files []contracts.OutboundFile) {
+	batches := sendBatches(files, outboundSize)
+	for position, batch := range batches {
+		if ctx.Err() != nil {
+			d.noticeUnsentFiles(ctx, index, gateway, slices.Concat(batches[position:]...))
+			return
+		}
+		d.sendFileBatch(ctx, index, gateway, sender, batch)
+	}
+}
+
+func (d *sessionDriver) noticeUnsentFiles(ctx context.Context, index int, gateway contracts.GatewaySet, files []contracts.OutboundFile) {
+	notice := d.hostText("outbound.failed", map[string]any{namesParam: d.noticeNames(fileNames(files))})
+	d.emitToGateway(ctx, index, gateway, d.stamp(contracts.Event{T: eventwire.EventStatus, Text: notice}))
+}
+
+func (d *sessionDriver) sendFileBatch(ctx context.Context, index int, gateway contracts.GatewaySet, sender contracts.FileSender, batch []contracts.OutboundFile) {
+	conv := contracts.Conversation{Gateway: gateway.Gateway.Manifest().Kind, ID: d.renderChannel(gateway)}
+	sendCtx, cancel := context.WithTimeout(ctx, fileSendTimeout)
+	defer cancel()
+	if _, err := sender.SendFiles(sendCtx, conv, "", "", batch); err != nil {
+		slog.Warn("reply files not sent", "gateway", conv.Gateway, "err", err)
+		d.noticeUnsentFiles(ctx, index, gateway, batch)
+	}
+}
+
+func sendBatches(files []contracts.OutboundFile, sizeOf func(contracts.OutboundFile) int64) [][]contracts.OutboundFile {
+	var batches [][]contracts.OutboundFile
+	var batch []contracts.OutboundFile
+	var batchBytes int64
+	for _, file := range files {
+		size := sizeOf(file)
+		if len(batch) > 0 && (len(batch) == filesPerSendBatch || batchBytes+size > bytesPerSendBatch) {
+			batches = append(batches, batch)
+			batch, batchBytes = nil, 0
+		}
+		batch = append(batch, file)
+		batchBytes += size
+	}
+	if len(batch) > 0 {
+		batches = append(batches, batch)
+	}
+	return batches
+}
+
+func outboundSize(file contracts.OutboundFile) int64 {
+	info, err := os.Stat(file.Path)
+	if err != nil {
+		slog.Warn("outbound file not measured", "file", file.Name, "err", err)
+		return unmeasuredBytes
+	}
+	return info.Size()
+}
+
+func (d *sessionDriver) removeTurnFiles(files outbox.Frame) {
+	if files.Dir == "" {
 		return
 	}
-	d.eachGateway(func(index int, gateway contracts.GatewaySet) {
-		d.emitToGateway(ctx, index, gateway, event)
-	})
+	if err := outbox.Remove(d.outboxRoot, files.Dir); err != nil {
+		slog.Warn("turn outbox not removed", "err", err)
+	}
 }
 
 func (d *sessionDriver) eachGateway(visit func(index int, gateway contracts.GatewaySet)) {
@@ -1062,31 +1300,34 @@ type sessionIdentity struct {
 	incarnation string
 	agent       string
 	terms       func() modelTerms
-	lang        i18n.Language
 	language    func() i18n.Language
+	operator    languageSource
 }
 
 // RunSession drives a session without a declared identity until ctx is done.
-func RunSession(ctx context.Context, sessions *sessionTable, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, sink sessionSink, gate budgetGate) {
-	runSessionIdentified(ctx, sessions, name, channel, gws, acc, participants, m, coord, sink, nil, sessionIdentity{}, gate)
+func RunSession(ctx context.Context, sessions *sessionTable, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, m *metrics.Registry, coord contracts.Coordinator, sink sessionSink, gate budgetGate, warnings io.Writer) {
+	runSessionIdentified(ctx, sessions, name, channel, gws, acc, participants, m, coord, sink, nil, sessionIdentity{}, gate, warnings)
 }
 
-func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, registry *metrics.Registry, coord contracts.Coordinator, sink sessionSink, emit func(contracts.Event), identity sessionIdentity, gate budgetGate) {
+func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, channel string, gws []contracts.GatewaySet, acc *control.Acceptor, participants string, registry *metrics.Registry, coord contracts.Coordinator, sink sessionSink, emit func(contracts.Event), identity sessionIdentity, gate budgetGate, warnings io.Writer) {
 	defer closeRead(acc)
 	toBridge := make(chan contracts.Event)
 	fromBridge := make(chan contracts.Event)
-	driver := newSessionDriver(name, gws, toBridge, fromBridge)
+	driver := newSessionDriver(name, gws, toBridge, fromBridge, warnings)
 	driver.incarnation = identity.incarnation
 	driver.agent = identity.agent
 	driver.channel = channel
+	driver.outboxRoot = sessions.outboxRoot
+	driver.outboundMaxBytes = sessions.outboundMaxBytes
+	driver.fileSenders = sessions.fileSenders
 	driver.participants = participants
 	driver.metrics = registry
 	driver.coordinator = coord
 	driver.sink = sink
 	driver.emitTap = emit
 	driver.terms = identity.terms
-	driver.lang = identity.lang
 	driver.language = identity.language
+	driver.operator = identity.operator
 	driver.compaction = sessions.compaction
 	driver.percentOf = func() int { return sessions.percentOfSession(name) }
 	if gate != nil {

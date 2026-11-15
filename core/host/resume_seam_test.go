@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"testing"
 
 	"github.com/Herrscherd/herrscher/core/cli"
@@ -10,14 +11,16 @@ import (
 )
 
 func TestHubScrollbackAndResume(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
-	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
+	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
 	partDir := t.TempDir()
 	h := newHub(st, sup, nil, partDir, &cli.Registry{}, nil, approvalTab, sessionTab)
+	h.runtime = isolatedRuntimeDir(t)
+	t.Cleanup(h.stopLive)
 
 	if err := st.AddSession(state.Session{Name: "seam", ChannelID: "c", Type: "text", Archived: true, ResumeToken: "tok", Vendor: "claude", Project: "alpha"}); err != nil {
 		t.Fatal(err)

@@ -71,7 +71,7 @@ func TestRunRefusesACatalogCollisionBeforeAnyCommand(t *testing.T) {
 
 	code, stdout, stderr := runCaptured(t, "help")
 	if code != 1 {
-		t.Fatalf("run() = %d, want 1 on a catalog collision", code)
+		t.Fatalf("runWith() = %d, want 1 on a catalog collision", code)
 	}
 	if stdout != "" {
 		t.Fatalf("stdout %q: the command was dispatched after the refusal", stdout)
@@ -96,7 +96,7 @@ func runCaptured(t *testing.T, args ...string) (int, string, string) {
 	}
 	savedOut, savedErr := os.Stdout, os.Stderr
 	os.Stdout, os.Stderr = outW, errW
-	code := run()
+	code := runWith(testRuntime(t))
 	os.Stdout, os.Stderr = savedOut, savedErr
 	for _, w := range []*os.File{outW, errW} {
 		if closeErr := w.Close(); closeErr != nil {

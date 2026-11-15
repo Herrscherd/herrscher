@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
@@ -115,7 +117,7 @@ func (c *reentrantSeedCoordinator) Delegate(_ context.Context, req contracts.Del
 
 func identitySeedRegistry(t *testing.T) (*cli.Registry, state.Session, *[]contracts.Event, context.Context) {
 	t.Helper()
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "state.json")
@@ -124,8 +126,8 @@ func identitySeedRegistry(t *testing.T) (*cli.Registry, state.Session, *[]contra
 		t.Fatal(err)
 	}
 	sess, _ := st.FindSession("solo")
-	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: path}, st, sup, "", nil, approvalTab, sessionTab)
+	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
+	reg, _, err := buildRegistry(ctx, Deps{}, Options{Runtime: testRuntime(t), StatePath: path}, st, sup, "", nil, approvalTab, sessionTab)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +177,7 @@ func assertSeedEventIdentity(t *testing.T, events []contracts.Event, sess state.
 	if len(events) != 3 {
 		t.Fatalf("seed events = %+v, want human/status/reply", events)
 	}
-	wantTypes := []string{"human", "status", "reply"}
+	wantTypes := []string{eventwire.EventHuman, eventwire.EventStatus, eventwire.EventReply}
 	for i := range events {
 		event := events[i]
 		if event.T != wantTypes[i] {
@@ -212,7 +214,7 @@ func TestSeedTurnIDRoundTripsThroughShellAndCommandSocket(t *testing.T) {
 }
 
 func TestDaemonSeedCoordinatesPersistsAndDoesNotHoldDispatchLock(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -225,12 +227,13 @@ func TestDaemonSeedCoordinatesPersistsAndDoesNotHoldDispatchLock(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: statePath}, st, sup, "", nil, approvalTab, sessionTab)
+	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
+	reg, _, err := buildRegistry(ctx, Deps{}, Options{Runtime: testRuntime(t), StatePath: statePath}, st, sup, "", nil, approvalTab, sessionTab)
 	if err != nil {
 		t.Fatal(err)
 	}
 	h := newHub(st, sup, nil, partDir, reg, nil, approvalTab, sessionTab)
+	h.runtime = isolatedRuntimeDir(t)
 	coord := &reentrantSeedCoordinator{recordingCoord: &recordingCoord{}, hub: h}
 	h.coordinator = coord
 
@@ -260,7 +263,7 @@ func TestDaemonSeedCoordinatesPersistsAndDoesNotHoldDispatchLock(t *testing.T) {
 
 	var terminal *contracts.Event
 	for i := range events {
-		if events[i].T == "reply" && events[i].Done {
+		if events[i].T == eventwire.EventReply && events[i].Done {
 			terminal = &events[i]
 		}
 	}

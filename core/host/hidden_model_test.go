@@ -49,7 +49,7 @@ func TestHiddenModelFromEnvResolvesWithWarningAndNeverSwitches(t *testing.T) {
 	t.Setenv(envModelsHidden, "a-visible")
 	models := ModelDiscoveryFor(filepath.Join(t.TempDir(), "state.json"))
 
-	vendor, entry, err := chooseVendor("", "a-visible", pluginsWithRetiredModel(), models)
+	vendor, entry, err := chooseVendor("", "", "a-visible", pluginsWithRetiredModel(), models)
 	if err != nil {
 		t.Fatalf("chooseVendor on an env-hidden model: %v", err)
 	}

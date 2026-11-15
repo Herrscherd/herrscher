@@ -1,3 +1,5 @@
+//go:build !windows
+
 package host
 
 import (
@@ -10,7 +12,8 @@ import (
 )
 
 func TestDispatchLiveCommandReturnsWhenItsContextIsCancelled(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "cmd.sock")
+	layout := isolatedRuntimeDir(t)
+	path := layout.Socket("cmd")
 	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", path)
 	if err != nil {
 		t.Fatal(err)
@@ -21,7 +24,7 @@ func TestDispatchLiveCommandReturnsWhenItsContextIsCancelled(t *testing.T) {
 	defer cancel()
 	result := make(chan error, 1)
 	go func() {
-		_, _, dispatchErr := dispatchLiveCommand(ctx, path, []string{"status"})
+		_, _, dispatchErr := dispatchLiveCommand(ctx, layout, path, []string{"status"})
 		result <- dispatchErr
 	}()
 
@@ -52,7 +55,7 @@ func TestDispatchLiveCommandReportsCancellationBeforeDial(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, handled, dispatchErr := dispatchLiveCommand(ctx, path, []string{"status"})
+	_, handled, dispatchErr := dispatchLiveCommand(ctx, isolatedRuntimeDir(t), path, []string{"status"})
 	if !handled {
 		t.Fatal("a cancelled dial must stay handled, or the caller would run the command locally")
 	}

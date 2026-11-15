@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,11 +21,26 @@ type hostRunner interface {
 	Describe() string
 }
 
-func runnerFor(host state.Host) hostRunner {
+func runnerFor(lang languageSource, warn io.Writer, layout RuntimeLayout, host state.Host) (hostRunner, error) {
 	if host.SSH == "" {
-		return runner.Local{}
+		return runner.Local{}, nil
 	}
-	return runner.SSH{Target: host.SSH, ControlPath: runner.ControlPathFor(host.SSH)}
+	ssh, err := sshRunner(lang, warn, layout, host.SSH)
+	if err != nil {
+		return nil, err
+	}
+	return ssh, nil
+}
+
+func sshRunner(lang languageSource, warn io.Writer, layout RuntimeLayout, target string) (runner.SSH, error) {
+	if err := runner.CheckTarget(target); err != nil {
+		return runner.SSH{}, err
+	}
+	controlPath, err := runner.ControlPathFor(layout, target)
+	if err != nil {
+		warnLive(warn, lang, "warn.ssh_multiplexing_disabled", map[string]any{nameParam: target, detailParam: err})
+	}
+	return runner.SSH{Target: target, ControlPath: controlPath}, nil
 }
 
 func capture(ctx context.Context, run hostRunner, argv ...string) (string, error) {

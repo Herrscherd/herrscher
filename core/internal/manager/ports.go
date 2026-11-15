@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
@@ -26,10 +27,12 @@ type channelAdmin interface {
 	ChannelRef(id string) string
 }
 
+const supervisorGrace = 5 * time.Second
+
 type supervisor interface {
-	Start(s state.Session)
-	Stop(name string) error
-	Restart(s state.Session) error
+	StartWithin(s state.Session, grace time.Duration) error
+	StopWithin(name string, grace time.Duration) error
+	RestartWithin(s state.Session, grace time.Duration) error
 }
 
 // Worktrees owns per-session git worktree lifecycle. Create returns the worktree

@@ -1,0 +1,14 @@
+! exec herrscher serve &daemon&
+waitdaemon
+exec herrscher session create --name first
+! stderr 'hub-socket'
+exec herrscher session seed --name first --task 'hello daemon'
+stdout '^echo: hello daemon$'
+! exec herrscher serve
+stderr 'already serving .*pid [0-9]+'
+kill -INT daemon
+wait daemon
+! waitdaemon
+exec cat $VENDORTEST_LOG
+stdout 'start .*--input-format stream-json'
+stdout 'prompt .*hello daemon'

@@ -8,11 +8,13 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 func TestMarshalSessionEventPreservesCompleteEventIdentity(t *testing.T) {
 	want := contracts.Event{
-		T: "status", Text: "working", Resume: "resume-token",
+		T: eventwire.EventStatus, Text: "working", Resume: "resume-token",
 		Attachments:        []string{"image.png"},
 		SessionIncarnation: "incarnation-a",
 		TurnID:             "turn-a",
@@ -51,7 +53,7 @@ func TestEventSocketMarshalsNestedCoordinationUnchanged(t *testing.T) {
 		Summary:       "modifier les nametags",
 	}
 	line, err := marshalSessionEvent("lead", contracts.Event{
-		T: "reply", Text: "Je délègue.", Done: true, Coordination: &want,
+		T: eventwire.EventReply, Text: "Je délègue.", Done: true, Coordination: &want,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -79,7 +81,7 @@ func TestEventSocketPrioritizesCoordinationWhenTelemetryQueueFull(t *testing.T) 
 	})
 
 	for range subscriberBuffer {
-		es.Publish("lead", contracts.Event{T: "chunk", Text: "backlog"})
+		es.Publish("lead", contracts.Event{T: eventwire.EventChunk, Text: "backlog"})
 	}
 	want := contracts.CoordinationEvent{
 		Kind:          "delegated",
@@ -87,7 +89,7 @@ func TestEventSocketPrioritizesCoordinationWhenTelemetryQueueFull(t *testing.T) 
 		TargetSession: "worker",
 	}
 	es.Publish("lead", contracts.Event{
-		T: "reply", Done: true, Coordination: &want,
+		T: eventwire.EventReply, Done: true, Coordination: &want,
 	})
 
 	go es.serve(sub)
@@ -116,8 +118,8 @@ func TestEventSocketPreservesFIFOAndTurnIdentity(t *testing.T) {
 		logCleanup(client.Close())
 	})
 
-	es.Publish("solo", contracts.Event{T: "status", Text: "one", TurnID: "turn-1"})
-	es.Publish("solo", contracts.Event{T: "reply", Text: "two", Done: true, TurnID: "turn-2"})
+	es.Publish("solo", contracts.Event{T: eventwire.EventStatus, Text: "one", TurnID: "turn-1"})
+	es.Publish("solo", contracts.Event{T: eventwire.EventReply, Text: "two", Done: true, TurnID: "turn-2"})
 
 	logCleanup(client.SetReadDeadline(time.Now().Add(time.Second)))
 	reader := bufio.NewReader(client)
@@ -139,8 +141,8 @@ func TestEventSocketPreservesFIFOAndTurnIdentity(t *testing.T) {
 		}
 		got = append(got, event)
 	}
-	if got[0].T != "status" || got[0].TurnID != "turn-1" ||
-		got[1].T != "reply" || got[1].TurnID != "turn-2" {
+	if got[0].T != eventwire.EventStatus || got[0].TurnID != "turn-1" ||
+		got[1].T != eventwire.EventReply || got[1].TurnID != "turn-2" {
 		t.Fatalf("event socket reordered or dropped identity: %+v", got)
 	}
 }

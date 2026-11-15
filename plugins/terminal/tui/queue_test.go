@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 func queueFixture(t *testing.T) (*model, *fakeBackend) {
@@ -37,7 +38,7 @@ func TestEnterWhileBusyQueuesUntilTurnEnds(t *testing.T) {
 	if len(f.submitted) != 0 {
 		t.Fatal("a queued item must not be sent during the turn")
 	}
-	settle(m, m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "reply", Text: "fini", Done: true}}))
+	settle(m, m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventReply, Text: "fini", Done: true}}))
 	if len(f.submitted) != 1 || f.submitted[0].text != "premier" {
 		t.Fatalf("queued item must be sent when the turn ends: %+v", f.submitted)
 	}
@@ -51,7 +52,7 @@ func TestAltEnterSteersAfterNextTool(t *testing.T) {
 	if len(m.tabs["a"].queue) != 1 || !m.tabs["a"].queue[0].steer {
 		t.Fatalf("alt+enter must queue a steer item: %+v", m.tabs["a"].queue)
 	}
-	settle(m, m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: "status", Text: "bash"}}))
+	settle(m, m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventStatus, Text: "bash"}}))
 	if len(f.submitted) != 1 || f.submitted[0].text != "réoriente" {
 		t.Fatalf("steer item must be sent after the next tool: %+v", f.submitted)
 	}

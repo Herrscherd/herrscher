@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"errors"
+	"io"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -251,14 +252,14 @@ func TestScheduleRunNeedsALiveDaemon(t *testing.T) {
 }
 
 func TestScheduleVerbsAreInTheRealRegistry(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	dir := t.TempDir()
 	st := state.NewState(filepath.Join(dir, "s.json"))
-	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: filepath.Join(dir, "s.json"), DefaultCmd: "claude"}, st, sup, "", nil, approvalTab, sessionTab)
+	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
+	reg, _, err := buildRegistry(ctx, Deps{}, Options{Runtime: testRuntime(t), StatePath: filepath.Join(dir, "s.json"), DefaultCmd: "claude"}, st, sup, "", nil, approvalTab, sessionTab)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -35,7 +35,7 @@ const (
 )
 
 func (m *model) sidebarVisible() bool {
-	if m.surface != surfaceChat || m.innerWidth() < narrowStatus {
+	if m.surface != surfaceChat || m.innerWidth() < narrowStatus || m.tabs[m.active] == nil {
 		return false
 	}
 	switch m.sidebar {

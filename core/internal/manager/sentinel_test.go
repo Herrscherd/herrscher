@@ -28,7 +28,7 @@ func TestSentinelsReadAsEnglishSentences(t *testing.T) {
 }
 
 func TestAccountVendorErrorIsFrozenInEnglishAndFrench(t *testing.T) {
-	unresolved := func(string, string) (string, error) { return "", errors.New("no backend") }
+	unresolved := func(string, string, string) (string, error) { return "", errors.New("no backend") }
 	english := newAccountHandler(t, func(_, _ string) error { return nil }, unresolved)
 	err := english.checkAccount(runtimeChoice{}, "ghost")
 	if want := `account "ghost": no backend vendor is known for this session: pass --vendor, or set HERRSCHER_BACKEND: no backend`; err == nil || err.Error() != want {

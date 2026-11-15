@@ -170,6 +170,7 @@ const (
 	actUsageRangePrevious   keyAction = "usage:range-previous"
 	actUsageRangeNext       keyAction = "usage:range-next"
 	actUsageAccount         keyAction = "usage:account"
+	actUsageVendor          keyAction = "usage:vendor"
 	actUsageClose           keyAction = "usage:close"
 	actStatuslineClose      keyAction = "statusline:close"
 	actStatuslineSource     keyAction = "statusline:switchSource"
@@ -325,6 +326,7 @@ func defaultKeyBindings() []keyDefault {
 	add(ctxUsage, actUsageRangePrevious, "left")
 	add(ctxUsage, actUsageRangeNext, "right")
 	add(ctxUsage, actUsageAccount, "a")
+	add(ctxUsage, actUsageVendor, "f")
 	add(ctxUsage, actUsageClose, "esc")
 	add(ctxStatusline, actStatuslineClose, "esc")
 	add(ctxStatusline, actStatuslineSource, "s")
@@ -454,7 +456,7 @@ func knownKeyActions() []keyAction {
 		actThemeEdit, actThemeInstall, actThemeGlyphs, actThemeBorders, actThemeDensity,
 		actThemeBold, actThemeItalic, actThemeAuto, actThemeCopyCommand, actThemeCopyConfig,
 		actSearchClose, actSearchNext, actSearchPrevious, actBoardPanes, actContextCompact,
-		actContextSync, actContextClose, actHealthRefresh, actHealthDeep, actHealthDetail, actHealthClose, actUsageRefresh, actUsageTab, actUsageRangePrevious, actUsageRangeNext, actUsageAccount, actUsageClose, actStatuslineClose, actStatuslineSource, actStatuslineUp,
+		actContextSync, actContextClose, actHealthRefresh, actHealthDeep, actHealthDetail, actHealthClose, actUsageRefresh, actUsageTab, actUsageRangePrevious, actUsageRangeNext, actUsageAccount, actUsageVendor, actUsageClose, actStatuslineClose, actStatuslineSource, actStatuslineUp,
 		actStatuslineDown, actStatuslineToggle, actPlanSkip, actSessionClose, actQueuePrevious,
 		actQueueNext, actQueueMoveUp, actQueueMoveDown, actQueueRemove, actQueueLeave, actRewindFork,
 		actRewindUndo, actConfirmYes, actConfirmNo, actHistoryAccept, actHistoryCancel,

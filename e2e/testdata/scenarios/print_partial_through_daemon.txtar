@@ -1,0 +1,13 @@
+! exec herrscher serve &daemon&
+waitdaemon
+! exec herrscher --print 'say ping please'
+stdout '^partial answer$'
+! stdout 'refused by the vendor'
+stderr 'unexpected error: refused by the vendor$'
+kill -INT daemon
+wait daemon
+! waitdaemon
+
+-- claude.script --
+text partial answer
+error refused by the vendor

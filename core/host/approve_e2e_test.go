@@ -16,13 +16,14 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 func TestHookThroughTheCommandSocket(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	menus := &menuRecorder{menus: make(chan []contracts.Choice, 4)}
 	reg := newApprovalRegistry(t, approvalTab, menus)
 	sock := startApprovalSocket(ctx, t, reg)
@@ -30,7 +31,7 @@ func TestHookThroughTheCommandSocket(t *testing.T) {
 	t.Setenv(SessionVar, "s1")
 	in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"git push origin master"}}`)
 	var out, errOut bytes.Buffer
-	done := runHookAsync(ctx, in, &out, &errOut, sock)
+	done := runHookAsync(ctx, isolatedRuntimeDir(t), in, &out, &errOut, sock)
 
 	id := awaitPendingApproval(t, menus.menus)
 	if _, err := reg.Dispatch(ctx, []string{"approve", "deny", id, "--reason", "not today"}); err != nil {
@@ -72,9 +73,9 @@ func newApprovalRegistry(t *testing.T, approvalTab *approvalTable, menus *menuRe
 		t.Fatalf("AddApprovalRule: %v", err)
 	}
 	sessionTab := newSessionTable()
-	sessionTab.register("s1", newSessionDriver("s1", []contracts.GatewaySet{{Gateway: menus, Reader: menus}}, nil, nil))
+	sessionTab.register("s1", newSessionDriver("s1", []contracts.GatewaySet{{Gateway: menus, Reader: menus}}, nil, nil, io.Discard))
 	reg := &cli.Registry{}
-	if err := addApproveCommands(reg, fixedLanguage(i18n.English), st, nil, approvalTab, sessionTab); err != nil {
+	if err := addApproveCommands(reg, fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); err != nil {
 		t.Fatalf("addApproveCommands: %v", err)
 	}
 	return reg
@@ -83,16 +84,16 @@ func newApprovalRegistry(t *testing.T, approvalTab *approvalTable, menus *menuRe
 func startApprovalSocket(ctx context.Context, t *testing.T, reg *cli.Registry) string {
 	t.Helper()
 	sock := filepath.Join(t.TempDir(), "cmd.sock")
-	serveCommandSocket(ctx, sock, textDispatch(reg))
+	serveCommandSocket(ctx, isolatedRuntimeDir(t), sock, textDispatch(reg), testLanguage(), io.Discard)
 	return sock
 }
 
-func runHookAsync(ctx context.Context, in io.Reader, out, errOut io.Writer, sock string) <-chan struct{} {
+func runHookAsync(ctx context.Context, layout runtimedir.Layout, in io.Reader, out, errOut io.Writer, sock string) <-chan struct{} {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		RunPermissionHook(ctx, in, out, errOut, func() string { return sock }, func(c context.Context, argv []string) (string, bool, error) {
-			return dispatchLiveCommand(c, sock, argv)
+			return dispatchLiveCommand(c, layout, sock, argv)
 		})
 	}()
 	return done

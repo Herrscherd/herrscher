@@ -6,15 +6,20 @@ import (
 	"log/slog"
 	"os"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
 	"github.com/Herrscherd/herrscher/core/accounts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/health"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
+	"github.com/Herrscherd/herrscher/core/usage"
+
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
 type healthInputs struct {
@@ -24,6 +29,7 @@ type healthInputs struct {
 	memory     string
 	accounts   accounts.Store
 	compaction compactionPolicy
+	ledger     usage.Ledger
 	now        func() time.Time
 }
 
@@ -46,7 +52,7 @@ func (s *healthSource) run(ctx context.Context, deep bool) (health.Snapshot, err
 func probeHealth(ctx context.Context, inputs healthInputs, deep bool) health.Snapshot {
 	probedAt := inputs.now()
 	checks, elapsed := health.Runner{Now: inputs.now}.Run(ctx, healthProbes(inputs), deep)
-	return health.Snapshot{Daemon: inputs.daemon, ProbedAt: probedAt, Elapsed: elapsed, Checks: checks}
+	return health.Snapshot{Daemon: inputs.daemon, ProbedAt: probedAt, Elapsed: elapsed, Checks: checks, CompactStack: slices.Clone(inputs.compaction.names)}
 }
 
 func healthProbes(inputs healthInputs) []health.Probe {
@@ -55,7 +61,8 @@ func healthProbes(inputs healthInputs) []health.Probe {
 	probes = append(probes, gatewayProbes(inputs)...)
 	probes = append(probes, backendProbes(inputs)...)
 	probes = append(probes, memoryProbes(inputs.memory)...)
-	return append(probes, compactionProbes(inputs.compaction.names)...)
+	history := lastCompactions(inputs.ledger)
+	return append(probes, compactionProbes(inputs.compaction.names, history, compactionKey)...)
 }
 
 func daemonProbe(daemon health.Daemon) health.Probe {
@@ -305,18 +312,110 @@ func firstMemoryKind() string {
 	return ""
 }
 
-func compactionProbes(names []string) []health.Probe {
+func compactionProbes(names []string, history compactionHistory, keyOf func(string) *health.CompactionKey) []health.Probe {
 	var probes []health.Probe
 	for _, name := range names {
-		if name == contracts.CompactStageBackend {
-			continue
-		}
-		probes = append(probes, health.Probe{
-			Check: health.Check{Group: health.GroupCompaction, Name: name},
-			Run:   compactionRun(name),
-		})
+		check := health.Check{Group: health.GroupCompaction, Name: name, Facts: compactionCheckFacts(name, history, keyOf)}
+		probes = append(probes, health.Probe{Check: check, Run: compactionRun(name)})
 	}
 	return probes
+}
+
+func compactionCheckFacts(name string, history compactionHistory, keyOf func(string) *health.CompactionKey) health.Facts {
+	facts := health.Facts{CompactionPartial: history.readErr != nil, CompactionKey: keyOf(name)}
+	if run, ok := history.last[name]; ok {
+		facts.Compaction = compactionOf(run)
+	} else {
+		facts.CompactionUnknown = history.readErr != nil
+	}
+	if run, ok := history.succeeded[name]; ok {
+		facts.CompactionSucceeded = compactionOf(run)
+	}
+	if run, ok := history.failed[name]; ok {
+		facts.CompactionFailed = compactionOf(run)
+	}
+	return facts
+}
+
+func compactNoteKey(class string) (clitext.Key, bool) {
+	switch class {
+	case "compaction.bridge_gone":
+		return clitext.HealthNoteBridgeGone, true
+	case "compaction.no_compactor_factory":
+		return clitext.HealthNoteNoFactory, true
+	case "compaction.nil_compactor":
+		return clitext.HealthNoteNilCompactor, true
+	case "compaction.no_compactor_plugin":
+		return clitext.HealthNoteNoPlugin, true
+	case "compaction.no_history_port":
+		return clitext.HealthNoteNoHistory, true
+	case "compaction.history_timeout":
+		return clitext.HealthNoteHistoryTime, true
+	case "compaction.history_too_large":
+		return clitext.HealthNoteHistoryBig, true
+	case unknownFailureNote:
+		return clitext.HealthNoteUnknown, true
+	case fellBackNote:
+		return clitext.HealthNoteFellBack, true
+	}
+	return "", false
+}
+
+func compactionOf(run usage.LastCompaction) *health.Compaction {
+	entry := &health.Compaction{At: run.At, Outcome: run.Outcome}
+	if run.Note == "" {
+		return entry
+	}
+	key, ok := compactNoteKey(run.Note)
+	if !ok {
+		key = clitext.HealthNoteUnknown
+	}
+	entry.Key = key
+	return entry
+}
+
+const compactionProbeRange = usage.Range7d
+
+type compactionHistory struct {
+	last      map[string]usage.LastCompaction
+	succeeded map[string]usage.LastCompaction
+	failed    map[string]usage.LastCompaction
+	readErr   error
+}
+
+func lastCompactions(ledger usage.Ledger) compactionHistory {
+	records, err := ledger.Records(compactionProbeRange)
+	if err != nil {
+		slog.Warn("health: compaction ledger unreadable", "err", err)
+	}
+	return compactionHistory{
+		last:      usage.LastCompactions(records),
+		succeeded: usage.LastSucceeded(records),
+		failed:    usage.LastFailed(records),
+		readErr:   err,
+	}
+}
+
+func compactionKey(name string) *health.CompactionKey {
+	plugin, found := compactorPlugin(name)
+	if !found {
+		return nil
+	}
+	env, ok := requiredEnv(plugin.Manifest.Config)
+	if !ok {
+		return nil
+	}
+	_, present := os.LookupEnv(env)
+	return &health.CompactionKey{Env: env, Present: present}
+}
+
+func requiredEnv(settings []contracts.Setting) (string, bool) {
+	for _, setting := range settings {
+		if setting.Required && setting.Env != "" {
+			return setting.Env, true
+		}
+	}
+	return "", false
 }
 
 func compactionRun(name string) runFunc {
@@ -337,18 +436,19 @@ func compactorPlugin(name string) (contracts.Plugin, bool) {
 	return contracts.Plugin{}, false
 }
 
-func newHealthInputs(instanceID string, keys *keyproxy.Proxy, gws []Deps, policy compactionPolicy) healthInputs {
+func newHealthInputs(layout runtimedir.Layout, instanceID string, keys *keyproxy.Proxy, gws []Deps, policy compactionPolicy, partDir string) healthInputs {
 	store, err := accountStore(BackendRequest{})
 	if err != nil {
 		slog.Warn("health: account store unavailable", "err", err)
 	}
 	return healthInputs{
-		daemon:     health.Daemon{PID: os.Getpid(), Started: time.Now(), Socket: CommandSocketPath(instanceID), Version: daemonVersion()},
+		daemon:     health.Daemon{PID: os.Getpid(), Started: time.Now(), Socket: CommandSocketPathIn(layout, instanceID), Version: daemonVersion()},
 		keys:       keys,
 		live:       liveKinds(gws),
 		memory:     firstMemoryKind(),
 		accounts:   store,
 		compaction: policy,
+		ledger:     usage.Ledger{Dir: usageDir(partDir), Now: time.Now},
 		now:        time.Now,
 	}
 }

@@ -10,7 +10,7 @@ import (
 )
 
 func TestAttachFailureReachesTheFrenchOperatorInFrench(t *testing.T) {
-	_, err := host.SubscribeDaemonEvents(context.Background(), "instance-absente")
+	_, err := host.SubscribeDaemonEvents(context.Background(), testRuntime(t), "instance-absente")
 	if err == nil {
 		t.Fatal("a daemon that is not running must refuse the events socket")
 	}

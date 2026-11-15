@@ -11,6 +11,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 var errNoHubSocket = errors.New("bridge requires --hub-socket (pure-runner mode)")
@@ -58,6 +59,11 @@ type Options struct {
 	// MemoryAgent is the private memory root, carried so a re-rooted scope keeps
 	// both halves of the tree instead of dropping the agent on the way.
 	MemoryAgent string
+	// OutboxRoot is the directory the host keeps the files of every turn in, and
+	// OutboundMaxBytes the largest file a turn may send. An empty root means the
+	// bridge takes no files from its backend.
+	OutboxRoot       string
+	OutboundMaxBytes int64
 }
 
 // Run is the bridge entry point: a pure backend runner. It requires a hub socket
@@ -87,15 +93,14 @@ func RunOneShot(ctx context.Context, newBackend BackendFactory, orch contracts.O
 	for {
 		select {
 		case event := <-input:
-			if event.T == "language" {
+			if event.T == eventwire.EventLanguage {
 				lang = languageOf(event.Value)
 				continue
 			}
-			if event.T != "input" {
+			if event.T != eventwire.EventInput {
 				continue
 			}
-			runOneTurn(ctx, channelSink{done: ctx.Done(), out: out}, resp, orch, event, nil, newSkillEngine(resp), affordances{}, nil, lang)
-			return nil
+			return runOneTurn(ctx, channelSink{done: ctx.Done(), out: out}, resp, orch, event, nil, newSkillEngine(resp), affordances{}, nil, lang)
 		case <-ctx.Done():
 			return ctx.Err()
 		}

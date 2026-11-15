@@ -504,7 +504,7 @@ func TestChooseVendorHonoursAHiddenRoutePolicy(t *testing.T) {
 	t.Setenv(EnvRoutePolicy, string(contracts.PolicyGatewayOnly))
 	restore := envx.Hide([]string{EnvRoutePolicy})
 	defer restore()
-	if _, _, err := chooseVendor("", "a-native", fakePlugins(), nil); err == nil {
+	if _, _, err := chooseVendor("", "", "a-native", fakePlugins(), nil); err == nil {
 		t.Fatal("a native model resolved under a gateway-only policy that is only hidden from the process environment")
 	}
 }

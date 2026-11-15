@@ -171,7 +171,7 @@ func composerEdgeLines(lines []string, corner string) []string {
 
 func TestShellTopEdgeFoldsWholeSegmentsAtSixtyColumns(t *testing.T) {
 	m, f := queueFixture(t)
-	f.sessions[0].Dir = "/home/shan/dev/herrscher/.worktrees/tui-v2"
+	f.sessions[0].Dir = "/home/ada/dev/herrscher/.worktrees/tui-v2"
 	m.Update(tea.WindowSizeMsg{Width: 60, Height: composerRenderRows})
 	m.infoAt = time.Time{}
 	typeLine(m, "!ls")

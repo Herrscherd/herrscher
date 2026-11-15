@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
-	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/authz"
 )
@@ -37,22 +36,22 @@ func principalOf(ctx context.Context) authz.Principal {
 type asSession struct {
 	disp    resultDispatcher
 	session string
-	lang    i18n.Language
+	lang    languageSource
 }
 
 func (a asSession) Dispatch(ctx context.Context, args []string) (string, error) {
 	res, err := a.disp.Dispatch(withSessionPrincipal(ctx, a.session), args)
-	return cli.Render(res, err, a.lang)
+	return cli.Render(res, err, a.lang())
 }
 
 type asOperator struct {
 	disp resultDispatcher
-	lang i18n.Language
+	lang languageSource
 }
 
 func (a asOperator) Dispatch(ctx context.Context, args []string) (string, error) {
 	res, err := a.disp.Dispatch(withLocalPrincipal(ctx), args)
-	return cli.Render(res, err, a.lang)
+	return cli.Render(res, err, a.lang())
 }
 
 func sessionArgs() map[string]string {
@@ -141,7 +140,7 @@ func (h *hub) roleNames() map[string]string {
 			continue
 		}
 		if _, said := h.warnedRoles.LoadOrStore(principal+"\x00"+name, struct{}{}); !said {
-			warnStderr("herrscher serve: %s holds role %q, which herrscher does not define; treating it as `observer`\n", principal, name)
+			warnLive(h.warnings, h.textLanguage(), "warn.role_undefined", map[string]any{nameParam: principal, roleParam: name})
 		}
 	}
 	return names

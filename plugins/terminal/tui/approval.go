@@ -13,10 +13,6 @@ import (
 )
 
 const (
-	eventMenu            = "menu"
-	eventApproval        = "approval"
-	eventApprovalRisk    = "approval_risk"
-	eventApprovalSubject = "approval_subject"
 	approvalDefaultWait  = 5 * time.Minute
 	approvalQuickWait    = 5 * time.Second
 	approvalUrgentWindow = time.Minute

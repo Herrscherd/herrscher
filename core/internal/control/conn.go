@@ -3,15 +3,20 @@ package control
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
-	"io/fs"
 	"log/slog"
 	"net"
-	"os"
 	"sync"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+)
+
+const (
+	initialAcceptRetryDelay = 5 * time.Millisecond
+	acceptRetryGrowth       = 2
+	maxAcceptRetryDelay     = time.Second
+	acceptFailureLogEvery   = 30 * time.Second
 )
 
 // Conn is a persistent bidirectional event connection over a net.Conn. The
@@ -57,84 +62,184 @@ func (c *Conn) Close() error { return c.c.Close() }
 // dialing bridge, keeping each connection open for the session's life.
 type Acceptor struct {
 	ln        net.Listener
-	path      string
 	conns     chan *Conn
 	done      chan struct{}
 	exited    chan struct{}
 	closeOnce sync.Once
+	closeErr  error
+	failMu    sync.Mutex
+	failure   error
 }
 
-// Accept binds the control socket at path (removing a stale socket first) and
-// starts accepting bridge connections. Each appears on Conns().
-func Accept(ctx context.Context, path string) (*Acceptor, error) {
-	if err := removeStaleSocket(path); err != nil {
-		return nil, err
+var errNoSocketPath = errors.New("the control socket has no path, its runtime layout is zero")
+
+// Listen binds the control socket at path, replacing a dead socket file left
+// there by a crash.
+func Listen(ctx context.Context, path string) (net.Listener, error) {
+	if path == "" {
+		return nil, errNoSocketPath
 	}
-	listener, err := listenControl(ctx, path)
-	if err != nil {
-		return nil, err
-	}
-	acceptor := &Acceptor{ln: listener, path: path, conns: make(chan *Conn, 1), done: make(chan struct{}), exited: make(chan struct{})}
+	return listenControl(ctx, path)
+}
+
+// Serve accepts bridge connections on ln until ln is closed, ctx ends or the
+// accept loop fails terminally. Each appears on Conns().
+func Serve(ctx context.Context, ln net.Listener) *Acceptor {
+	acceptor := newAcceptor(ln)
 	go acceptor.loop()
 	go acceptor.closeWhenDone(ctx)
-	return acceptor, nil
+	return acceptor
+}
+
+func newAcceptor(ln net.Listener) *Acceptor {
+	return &Acceptor{ln: ln, conns: make(chan *Conn, 1), done: make(chan struct{}), exited: make(chan struct{})}
 }
 
 func (a *Acceptor) closeWhenDone(ctx context.Context) {
 	select {
 	case <-ctx.Done():
-		if err := a.Close(); err != nil {
-			slog.Debug("control acceptor close", "err", err)
-		}
 	case <-a.exited:
+	}
+	if err := a.Close(); err != nil {
+		slog.Debug("control acceptor close", "err", err)
 	}
 }
 
 func (a *Acceptor) loop() {
 	defer close(a.exited)
-	defer close(a.conns)
+	var backoff acceptBackoff
 	for {
 		conn, err := a.ln.Accept()
 		if err != nil {
-			return
+			if !a.recoverAccept(err, &backoff) {
+				return
+			}
+			continue
 		}
-		select {
-		case <-a.done:
-			closeConn(conn)
-			return
-		default:
-		}
-		select {
-		case a.conns <- newConn(conn):
-		case <-a.done:
-			closeConn(conn)
+		backoff.succeeded()
+		if !a.deliver(conn) {
 			return
 		}
 	}
 }
 
-// Conns yields each bridge connection; it closes when the Acceptor is closed.
+func (a *Acceptor) recoverAccept(err error, backoff *acceptBackoff) bool {
+	if errors.Is(err, net.ErrClosed) || a.isDone() {
+		return false
+	}
+	if !isTransientAcceptError(err) {
+		a.fail(err)
+		return false
+	}
+	return a.pause(backoff.failed(err))
+}
+
+type acceptBackoff struct {
+	delay    time.Duration
+	failures int
+	lastLog  time.Time
+}
+
+func (b *acceptBackoff) failed(err error) time.Duration {
+	b.delay = nextAcceptRetryDelay(b.delay)
+	b.failures++
+	if now := time.Now(); b.logDue(now) {
+		b.lastLog = now
+		slog.Warn("control accept failed, retrying", "err", err, "delay", b.delay, "attempts", b.failures)
+	}
+	return b.delay
+}
+
+func (b *acceptBackoff) logDue(now time.Time) bool {
+	return b.failures == 1 || now.Sub(b.lastLog) >= acceptFailureLogEvery
+}
+
+func (b *acceptBackoff) succeeded() {
+	*b = acceptBackoff{}
+}
+
+func (a *Acceptor) deliver(conn net.Conn) bool {
+	if a.isDone() {
+		closeConn(conn)
+		return false
+	}
+	select {
+	case a.conns <- newConn(conn):
+		return true
+	case <-a.done:
+		closeConn(conn)
+		return false
+	}
+}
+
+func nextAcceptRetryDelay(previous time.Duration) time.Duration {
+	if previous == 0 {
+		return initialAcceptRetryDelay
+	}
+	return min(previous*acceptRetryGrowth, maxAcceptRetryDelay)
+}
+
+func (a *Acceptor) isDone() bool {
+	select {
+	case <-a.done:
+		return true
+	default:
+		return false
+	}
+}
+
+func (a *Acceptor) pause(d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return true
+	case <-a.done:
+		return false
+	}
+}
+
+// Conns yields each bridge connection; it closes when the Acceptor is closed or
+// its accept loop fails terminally.
 func (a *Acceptor) Conns() <-chan *Conn { return a.conns }
 
-// Close stops listening and removes the socket file.
+// Err returns the terminal error that ended the accept loop, or nil after a
+// Close or a cancelled context. Conns closes after a terminal error, so Err is
+// meaningful once Conns is closed.
+func (a *Acceptor) Err() error {
+	a.failMu.Lock()
+	defer a.failMu.Unlock()
+	return a.failure
+}
+
+func (a *Acceptor) fail(err error) {
+	a.failMu.Lock()
+	defer a.failMu.Unlock()
+	a.failure = err
+}
+
+// Close stops listening, waits for the accept loop to exit and then closes
+// Conns. The socket file stays in place, dead, until the daemon's clean stop
+// removes it.
 func (a *Acceptor) Close() error {
-	a.closeOnce.Do(func() { close(a.done) })
+	a.closeOnce.Do(func() { a.closeErr = a.shutdown() })
+	return a.closeErr
+}
+
+func (a *Acceptor) shutdown() error {
+	close(a.done)
 	err := a.ln.Close()
 	<-a.exited
 	a.drainPending()
-	return errors.Join(err, removeStaleSocket(a.path))
+	close(a.conns)
+	return err
 }
 
 func (a *Acceptor) drainPending() {
 	for {
 		select {
-		case conn, ok := <-a.conns:
-			if !ok {
-				return
-			}
-			if conn != nil {
-				closeConn(conn)
-			}
+		case conn := <-a.conns:
+			closeConn(conn)
 		default:
 			return
 		}
@@ -154,13 +259,6 @@ func DialContext(ctx context.Context, path string) (*Conn, error) {
 		return nil, err
 	}
 	return newConn(conn), nil
-}
-
-func removeStaleSocket(path string) error {
-	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("remove control socket %s: %w", path, err)
-	}
-	return nil
 }
 
 func closeConn(closer io.Closer) {

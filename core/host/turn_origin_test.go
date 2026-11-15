@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
@@ -33,7 +35,7 @@ func tapping(d *sessionDriver) (func() []contracts.Event, context.CancelFunc) {
 func sawReply(events []contracts.Event, text string) bool {
 	for idx := range events {
 		e := events[idx]
-		if e.T == "reply" && e.Done && e.Text == text {
+		if e.T == eventwire.EventReply && e.Done && e.Text == text {
 			return true
 		}
 	}
@@ -45,7 +47,7 @@ func TestTurnSaidOutsideTheBoundChannelsIsNotPostedThere(t *testing.T) {
 		a := &fanRecorder{}
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		d.channel = "chan-1"
 		tapped, stop := tapping(d)
 		defer stop()
@@ -59,13 +61,13 @@ func TestTurnSaidOutsideTheBoundChannelsIsNotPostedThere(t *testing.T) {
 		}
 		select {
 		case in := <-toBridge:
-			if in.T != "input" || in.Text != "reprends ici" {
+			if in.T != eventwire.EventInput || in.Text != "reprends ici" {
 				t.Fatalf("driver wrote %+v, want the pushed input", in)
 			}
 		case <-time.After(time.Second):
 			t.Fatal("driver did not pump the pushed input to the bridge")
 		}
-		fromBridge <- contracts.Event{T: "reply", Text: "done", Done: true}
+		fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "done", Done: true}
 
 		requireSettled(t, func() bool { return sawReply(tapped(), "done") }, "the pushing client sees the reply on the event stream")
 		a.mu.Lock()
@@ -81,7 +83,7 @@ func TestTurnSaidInABoundChannelIsPostedThere(t *testing.T) {
 		a := &fanRecorder{}
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		_, stop := tapping(d)
 		defer stop()
 
@@ -91,7 +93,7 @@ func TestTurnSaidInABoundChannelIsPostedThere(t *testing.T) {
 			Conversation: contracts.Conversation{Gateway: "rec", ID: "c"},
 		})
 		<-toBridge
-		fromBridge <- contracts.Event{T: "reply", Text: "done", Done: true}
+		fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "done", Done: true}
 
 		requireSettled(t, func() bool {
 			a.mu.Lock()
@@ -102,18 +104,18 @@ func TestTurnSaidInABoundChannelIsPostedThere(t *testing.T) {
 }
 
 func TestSessionSendCarriesTheOriginItWasTypedIn(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	dir := t.TempDir()
 	st := state.NewState(filepath.Join(dir, "s.json"))
-	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
-	reg, _, err := buildRegistry(ctx, Deps{}, Options{StatePath: filepath.Join(dir, "s.json"), DefaultCmd: "claude"}, st, sup, "", nil, approvalTab, sessionTab)
+	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
+	reg, _, err := buildRegistry(ctx, Deps{}, Options{Runtime: testRuntime(t), StatePath: filepath.Join(dir, "s.json"), DefaultCmd: "claude"}, st, sup, "", nil, approvalTab, sessionTab)
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := newSessionDriver("s1", nil, nil, nil)
+	d := newSessionDriver("s1", nil, nil, nil, io.Discard)
 	sessionTab.register("s1", d)
 	defer sessionTab.unregister("s1", d)
 
@@ -147,13 +149,13 @@ func TestTurnWithNoOriginIsPostedToTheBoundChannels(t *testing.T) {
 		a := &fanRecorder{}
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		_, stop := tapping(d)
 		defer stop()
 
 		d.submit(context.Background(), contracts.Inbound{Author: "script", Text: "vas-y"})
 		<-toBridge
-		fromBridge <- contracts.Event{T: "reply", Text: "done", Done: true}
+		fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "done", Done: true}
 
 		requireSettled(t, func() bool {
 			a.mu.Lock()

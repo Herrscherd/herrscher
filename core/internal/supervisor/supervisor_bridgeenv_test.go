@@ -15,7 +15,7 @@ const (
 )
 
 func TestBridgeCommandCarriesTheGatewayPairInItsEnvironment(t *testing.T) {
-	s := NewSupervisor(context.Background(), "herrscher")
+	s := NewSupervisor(context.Background(), "herrscher", testLayout(t))
 	s.SetBridgeEnv([]string{gatewayURLVar + "=https://gw", gatewayTokenVar + "=" + secretToken})
 
 	cmd, err := s.bridgeCommand(context.Background(), state.Session{Name: "main", ChannelID: "c1", Cmd: "claude"})
@@ -37,7 +37,7 @@ func TestBridgeCommandCarriesTheGatewayPairInItsEnvironment(t *testing.T) {
 }
 
 func TestBridgeArgvNeverCarriesTheGatewayToken(t *testing.T) {
-	s := NewSupervisor(context.Background(), "herrscher")
+	s := NewSupervisor(context.Background(), "herrscher", testLayout(t))
 	s.SetBridgeEnv([]string{gatewayURLVar + "=https://gw", gatewayTokenVar + "=" + secretToken})
 
 	sess := state.Session{
@@ -59,7 +59,7 @@ func TestBridgeArgvNeverCarriesTheGatewayToken(t *testing.T) {
 }
 
 func TestBridgeCommandInheritsEnvironmentWithoutExtras(t *testing.T) {
-	s := NewSupervisor(context.Background(), "herrscher")
+	s := NewSupervisor(context.Background(), "herrscher", testLayout(t))
 	cmd, err := s.bridgeCommand(context.Background(), state.Session{Name: "main", ChannelID: "c1", Cmd: "claude"})
 	if err != nil {
 		t.Fatal(err)

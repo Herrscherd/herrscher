@@ -27,8 +27,9 @@ var (
 var ErrNoticeMalformed = errors.New("compaction notice malformed")
 
 type noticeFrame struct {
-	Code uint16     `json:"code"`
-	Args []argFrame `json:"args,omitempty"`
+	Code  uint16                  `json:"code"`
+	Args  []argFrame              `json:"args,omitempty"`
+	Stats *contracts.CompactStats `json:"stats,omitempty"`
 }
 
 type argFrame struct {
@@ -73,33 +74,41 @@ func Progress(line string) contracts.Event {
 	return contracts.Event{T: EventProgress, Text: line}
 }
 
-// Result encodes the outcome of a compaction.
+// Result encodes the outcome of a compaction. The stats of the stage travel in the value
+// next to the notice, so a result without stats is the notice alone, as older backends
+// send it.
 func Result(res contracts.CompactResult) (contracts.Event, error) {
-	notice, err := EncodeNotice(res.Notice)
-	if err != nil {
-		return contracts.Event{}, err
+	value := ""
+	if res.Notice.Code != 0 || res.Stats != nil {
+		encoded, err := encodeFrame(res.Notice, res.Stats)
+		if err != nil {
+			return contracts.Event{}, err
+		}
+		value = encoded
 	}
 	return contracts.Event{
 		T:      EventResult,
 		Text:   res.Note,
-		Value:  notice,
+		Value:  value,
 		Tokens: res.TokensAfter,
 		Done:   res.TokensMeasured,
 	}, nil
 }
 
-// DecodeResult decodes the outcome of a compaction.
+// DecodeResult decodes the outcome of a compaction. A result that carries no stats decodes
+// with nil Stats.
 func DecodeResult(frame contracts.Event) (contracts.CompactResult, error) {
 	res := contracts.CompactResult{
 		TokensAfter:    frame.Tokens,
 		TokensMeasured: frame.Done,
 		Note:           frame.Text,
 	}
-	notice, err := DecodeNotice(frame.Value)
+	decoded, err := decodeFrame(frame.Value)
 	if err != nil {
 		return res, fmt.Errorf("%w: %w", ErrNoticeMalformed, err)
 	}
-	res.Notice = notice
+	res.Notice = decoded.notice
+	res.Stats = decoded.stats
 	return res, nil
 }
 
@@ -109,7 +118,11 @@ func EncodeNotice(notice contracts.Notice) (string, error) {
 	if notice.Code == 0 {
 		return "", nil
 	}
-	frame := noticeFrame{Code: uint16(notice.Code), Args: make([]argFrame, 0, len(notice.Args))}
+	return encodeFrame(notice, nil)
+}
+
+func encodeFrame(notice contracts.Notice, stats *contracts.CompactStats) (string, error) {
+	frame := noticeFrame{Code: uint16(notice.Code), Args: make([]argFrame, 0, len(notice.Args)), Stats: stats}
 	for _, arg := range notice.Args {
 		value, err := json.Marshal(arg.Value())
 		if err != nil {
@@ -119,7 +132,7 @@ func EncodeNotice(notice contracts.Notice) (string, error) {
 	}
 	encoded, err := json.Marshal(frame)
 	if err != nil {
-		return "", fmt.Errorf("notice code %d: %w", notice.Code, err)
+		return "", fmt.Errorf("compaction notice code %d: %w", notice.Code, err)
 	}
 	return string(encoded), nil
 }
@@ -127,22 +140,35 @@ func EncodeNotice(notice contracts.Notice) (string, error) {
 // DecodeNotice decodes a notice encoded by EncodeNotice. The empty string decodes to the
 // zero notice.
 func DecodeNotice(value string) (contracts.Notice, error) {
+	decoded, err := decodeFrame(value)
+	return decoded.notice, err
+}
+
+type decodedFrame struct {
+	notice contracts.Notice
+	stats  *contracts.CompactStats
+}
+
+func decodeFrame(value string) (decodedFrame, error) {
 	if value == "" {
-		return contracts.Notice{}, nil
+		return decodedFrame{}, nil
 	}
 	var frame noticeFrame
 	if err := json.Unmarshal([]byte(value), &frame); err != nil {
-		return contracts.Notice{}, fmt.Errorf("compaction notice: %w", err)
+		return decodedFrame{}, fmt.Errorf("compaction notice: %w", err)
 	}
 	args := make([]contracts.Arg, 0, len(frame.Args))
 	for _, raw := range frame.Args {
 		arg, err := decodeArg(raw)
 		if err != nil {
-			return contracts.Notice{}, err
+			return decodedFrame{}, err
 		}
 		args = append(args, arg)
 	}
-	return contracts.Notice{Code: contracts.Code(frame.Code), Args: args}, nil
+	return decodedFrame{
+		notice: contracts.Notice{Code: contracts.Code(frame.Code), Args: args},
+		stats:  frame.Stats,
+	}, nil
 }
 
 func decodeArg(frame argFrame) (contracts.Arg, error) {

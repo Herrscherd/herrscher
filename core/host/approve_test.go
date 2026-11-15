@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,7 +39,7 @@ func (m *menuGatewayFake) RouteMenu(_ context.Context, _, _, prompt, _ string, _
 }
 
 func TestAskApprovalAnswersWithoutAskingAnyone(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	pol := approval.Policy{{Decision: approval.Deny, Tool: "Bash", Pattern: "sudo*"}}
 	req := approval.Request{Tool: "Bash", Subject: "sudo rm"}
@@ -56,7 +57,7 @@ func TestAskApprovalAnswersWithoutAskingAnyone(t *testing.T) {
 
 func TestAskApprovalWaitsThenIsAnswered(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		approvalTab := newApprovalTable()
+		approvalTab := newApprovalTable(io.Discard)
 		sessionTab := newSessionTable()
 		pol := approval.Policy{{Decision: approval.Ask, Tool: "Bash", Pattern: "git push*"}}
 		req := approval.Request{Tool: "Bash", Subject: "git push origin master"}
@@ -79,7 +80,7 @@ func TestAskApprovalWaitsThenIsAnswered(t *testing.T) {
 }
 
 func TestAskApprovalTimesOutIntoADenial(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 	req := approval.Request{Tool: "Bash", Subject: "git push"}
@@ -148,7 +149,7 @@ func fillApprovals(t *testing.T, approvalTab *approvalTable, sessionTab *session
 
 func TestOneSessionCannotFillTheRegistry(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		approvalTab := newApprovalTable()
+		approvalTab := newApprovalTable(io.Discard)
 		sessionTab := newSessionTable()
 		full := make([]string, 0, maxPendingPerSession)
 		for range maxPendingPerSession {
@@ -184,7 +185,7 @@ func TestOneSessionCannotFillTheRegistry(t *testing.T) {
 
 func TestTheRegistryIsBoundedAcrossSessions(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		approvalTab := newApprovalTable()
+		approvalTab := newApprovalTable(io.Discard)
 		sessionTab := newSessionTable()
 		sessions := make([]string, 0, maxPendingApprovals)
 		for i := range maxPendingApprovals {
@@ -207,7 +208,7 @@ func TestTheRegistryIsBoundedAcrossSessions(t *testing.T) {
 }
 
 func TestATimedOutRequestFreesItsSlot(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 	var reason string
@@ -227,7 +228,7 @@ func TestATimedOutRequestFreesItsSlot(t *testing.T) {
 }
 
 func TestAnswerApprovalUnknownID(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	if answerApproval(approvalTab, "nope", approval.Allow) {
 		t.Fatal("answering an unknown id must report false")
 	}
@@ -235,7 +236,7 @@ func TestAnswerApprovalUnknownID(t *testing.T) {
 
 func TestTwoSessionsWaitIndependently(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		approvalTab := newApprovalTable()
+		approvalTab := newApprovalTable(io.Discard)
 		sessionTab := newSessionTable()
 		pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 		got := make(chan string, 2)
@@ -346,7 +347,7 @@ func TestSessionDriverAskApproval(t *testing.T) {
 
 func TestPickRoutesApprovalValuesAwayFromTheBackend(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		approvalTab := newApprovalTable()
+		approvalTab := newApprovalTable(io.Discard)
 		sessionTab := newSessionTable()
 		pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 		done := make(chan approval.Decision, 1)
@@ -355,7 +356,7 @@ func TestPickRoutesApprovalValuesAwayFromTheBackend(t *testing.T) {
 			done <- d
 		}()
 		id := awaitPending(t, approvalTab, 1)[0].ID
-		if !(&hub{approvals: approvalTab, sessions: sessionTab}).Pick("s-no-driver", approvalPickPrefix+id+":deny") {
+		if !(&hub{warnings: io.Discard, approvals: approvalTab, sessions: sessionTab}).Pick("s-no-driver", approvalPickPrefix+id+":deny") {
 			t.Fatal("an approval pick must be handled even with no live driver")
 		}
 		if d := <-done; d != approval.Deny {
@@ -366,7 +367,7 @@ func TestPickRoutesApprovalValuesAwayFromTheBackend(t *testing.T) {
 
 func TestALongWaitIsCalledOutButNotShortened(t *testing.T) {
 	var warnings bytes.Buffer
-	approvalTab := newApprovalTableWith(&warnings)
+	approvalTab := newApprovalTable(&warnings)
 	sessionTab := newSessionTable()
 	ask := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 	req := approval.Request{Tool: "Bash", Subject: "git push"}

@@ -17,7 +17,7 @@ import (
 )
 
 func TestBridgeArgsIncludesHubSocket(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	s := NewSupervisor(context.Background(), "/bin/herrscher", testLayout(t))
 	args := s.bridgeArgs(state.Session{Name: "demo", ChannelID: "c1", Cmd: "claude"})
 	joined := strings.Join(args, " ")
 	if !strings.Contains(joined, "--hub-socket") {
@@ -26,7 +26,7 @@ func TestBridgeArgsIncludesHubSocket(t *testing.T) {
 }
 
 func TestRestartWaitsForOldBridgeAndStartsTargetedSession(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	s := NewSupervisor(context.Background(), "/bin/herrscher", testLayout(t))
 	oldStarted := make(chan struct{})
 	allowOldExit := make(chan struct{})
 	oldExited := make(chan struct{})
@@ -84,7 +84,7 @@ func TestRestartWaitsForOldBridgeAndStartsTargetedSession(t *testing.T) {
 }
 
 func TestStopWaitsForRunLoopCompletionWithoutHoldingMutex(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	s := NewSupervisor(context.Background(), "/bin/herrscher", testLayout(t))
 	started := make(chan struct{})
 	cancelled := make(chan struct{})
 	release := make(chan struct{})
@@ -165,7 +165,7 @@ func TestStopWaitsForRunLoopCompletionWithoutHoldingMutex(t *testing.T) {
 }
 
 func TestBridgeArgsIncludeSession(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	s := NewSupervisor(context.Background(), "/bin/herrscher", testLayout(t))
 	args := s.bridgeArgs(state.Session{Name: "demo", ChannelID: "c1"})
 	if !strings.Contains(strings.Join(args, " "), "--session demo") {
 		t.Fatalf("expected --session <name> in args: %v", args)
@@ -173,7 +173,7 @@ func TestBridgeArgsIncludeSession(t *testing.T) {
 }
 
 func TestBridgeArgsIncludeBackend(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	s := NewSupervisor(context.Background(), "/bin/herrscher", testLayout(t))
 	args := s.bridgeArgs(state.Session{Name: "demo", ChannelID: "c1", Backend: "oneshot"})
 	if !strings.Contains(strings.Join(args, " "), "--backend oneshot") {
 		t.Fatalf("expected --backend oneshot in args: %v", args)
@@ -181,7 +181,7 @@ func TestBridgeArgsIncludeBackend(t *testing.T) {
 }
 
 func TestBridgeArgsThreadsVendor(t *testing.T) {
-	s := NewSupervisor(context.Background(), "herrscher")
+	s := NewSupervisor(context.Background(), "herrscher", testLayout(t))
 	args := s.bridgeArgs(state.Session{Name: "w", ChannelID: "c", Vendor: "codex"})
 	joined := strings.Join(args, " ")
 	if !strings.Contains(joined, "--vendor codex") {
@@ -195,7 +195,7 @@ func TestBridgeArgsThreadsVendor(t *testing.T) {
 }
 
 func TestBridgeArgsThreadsMemoryScope(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	s := NewSupervisor(context.Background(), "/bin/herrscher", testLayout(t))
 	args := s.bridgeArgs(state.Session{Name: "demo", ChannelID: "c1", Project: "obby", Agent: "roblox"})
 	joined := strings.Join(args, " ")
 	if !strings.Contains(joined, "--project obby") {
@@ -207,7 +207,7 @@ func TestBridgeArgsThreadsMemoryScope(t *testing.T) {
 }
 
 func TestBridgeArgsOmitsScopeWhenUnset(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	s := NewSupervisor(context.Background(), "/bin/herrscher", testLayout(t))
 	args := s.bridgeArgs(state.Session{Name: "demo", ChannelID: "c1"})
 	joined := strings.Join(args, " ")
 	if strings.Contains(joined, "--project") || strings.Contains(joined, "--agent") {
@@ -216,7 +216,7 @@ func TestBridgeArgsOmitsScopeWhenUnset(t *testing.T) {
 }
 
 func TestBridgeArgsThreadsLearningConfig(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	s := NewSupervisor(context.Background(), "/bin/herrscher", testLayout(t))
 	args := s.bridgeArgs(state.Session{
 		Name: "demo", ChannelID: "c1",
 		Extractor: "roblox", Journal: ".neublox/calls.log", ConsolidateEvery: 5,
@@ -234,7 +234,7 @@ func TestBridgeArgsThreadsLearningConfig(t *testing.T) {
 }
 
 func TestBridgeArgsOmitsLearningConfigWhenUnset(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	s := NewSupervisor(context.Background(), "/bin/herrscher", testLayout(t))
 	args := s.bridgeArgs(state.Session{Name: "demo", ChannelID: "c1"})
 	joined := strings.Join(args, " ")
 	if strings.Contains(joined, "--extractor") || strings.Contains(joined, "--journal") ||
@@ -248,7 +248,7 @@ func TestRunLoopLogsRestartAsStructuredWarn(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	s := NewSupervisor(ctx, "/herrscher/does-not-exist")
+	s := NewSupervisor(ctx, "/herrscher/does-not-exist", testLayout(t))
 	s.SetLogger(obs.NewLogger(&buf, slog.LevelDebug))
 	s.sleep = func(time.Duration) <-chan time.Time {
 		cancel()
@@ -273,7 +273,7 @@ func captureDelays(t *testing.T, wantN int, now func() time.Time) []time.Duratio
 	var delays []time.Duration
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s := NewSupervisor(ctx, "/herrscher/does-not-exist")
+	s := NewSupervisor(ctx, "/herrscher/does-not-exist", testLayout(t))
 	s.SetLogger(obs.NewLogger(io.Discard, slog.LevelInfo))
 	s.now = now
 	s.sleep = func(d time.Duration) <-chan time.Time {
@@ -293,7 +293,7 @@ func TestRunLoopCountsBridgeRestart(t *testing.T) {
 	var delays []time.Duration
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s := NewSupervisor(ctx, "/herrscher/does-not-exist")
+	s := NewSupervisor(ctx, "/herrscher/does-not-exist", testLayout(t))
 	s.SetLogger(obs.NewLogger(io.Discard, slog.LevelInfo))
 	m := metrics.NewRegistry()
 	s.SetMetrics(m)
@@ -340,7 +340,7 @@ func TestRunLoopResetsBackoffAfterHealthyRun(t *testing.T) {
 }
 
 func TestBridgeArgsNoBackendWhenStream(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	s := NewSupervisor(context.Background(), "/bin/herrscher", testLayout(t))
 	for _, b := range []string{"", "stream"} {
 		args := s.bridgeArgs(state.Session{Name: "demo", ChannelID: "c1", Backend: b})
 		if strings.Contains(strings.Join(args, " "), "--backend") {
@@ -350,7 +350,7 @@ func TestBridgeArgsNoBackendWhenStream(t *testing.T) {
 }
 
 func TestBridgeArgsThreadsModelID(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	s := NewSupervisor(context.Background(), "/bin/herrscher", testLayout(t))
 	args := s.bridgeArgs(state.Session{Name: "demo", ChannelID: "c1", ModelID: "gw-claude-opus-5"})
 	if !strings.Contains(strings.Join(args, " "), "--model gw-claude-opus-5") {
 		t.Fatalf("expected --model to carry the catalog model id: %v", args)
@@ -393,7 +393,7 @@ func TestMemoryAgentBeatsTheProvisionedAgent(t *testing.T) {
 }
 
 func TestBridgeCarriesTheSessionName(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	s := NewSupervisor(context.Background(), "/bin/herrscher", testLayout(t))
 	cmd, err := s.bridgeCommand(context.Background(), state.Session{Name: "s1", ChannelID: "c1", Cmd: "claude"})
 	if err != nil {
 		t.Fatalf("bridgeCommand: %v", err)
@@ -410,7 +410,7 @@ func TestBridgeCarriesTheSessionName(t *testing.T) {
 }
 
 func TestBridgeIsGivenItsOwnSessionSocket(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	s := NewSupervisor(context.Background(), "/bin/herrscher", testLayout(t))
 	s.SetCommandSocket(func(session string) string { return "/tmp/herrscher-command-alt-s-" + session + ".sock" })
 	cmd, err := s.bridgeCommand(context.Background(), state.Session{Name: "s1", ChannelID: "c1", Cmd: "claude"})
 	if err != nil {
@@ -428,11 +428,11 @@ func TestBridgeIsGivenItsOwnSessionSocket(t *testing.T) {
 }
 
 func TestRemoteForwardPointsAtTheSessionSocket(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	s := NewSupervisor(context.Background(), "/bin/herrscher", testLayout(t))
 	s.SetCommandSocket(func(session string) string { return "/tmp/sock-" + session })
 	var found bool
-	for _, f := range s.forwardsFor(state.Session{Name: "revue", Host: "build1"}) {
-		if f.Remote != control.RemoteCommandSocketPath("revue") {
+	for _, f := range s.forwardsFor(state.Session{Name: "revue", Host: "build1"}, remoteDirForTest) {
+		if f.Remote != control.RemoteCommandSocketPath(remoteDirForTest, "", "revue") {
 			continue
 		}
 		found = true
@@ -446,7 +446,7 @@ func TestRemoteForwardPointsAtTheSessionSocket(t *testing.T) {
 }
 
 func TestBridgeOmitsAnUnknownCommandSocket(t *testing.T) {
-	s := NewSupervisor(context.Background(), "/bin/herrscher")
+	s := NewSupervisor(context.Background(), "/bin/herrscher", testLayout(t))
 	cmd, err := s.bridgeCommand(context.Background(), state.Session{Name: "s1", ChannelID: "c1", Cmd: "claude"})
 	if err != nil {
 		t.Fatalf("bridgeCommand: %v", err)
@@ -456,8 +456,8 @@ func TestBridgeOmitsAnUnknownCommandSocket(t *testing.T) {
 			t.Fatalf("env names a socket nobody set: %q", kv)
 		}
 	}
-	for _, f := range s.forwardsFor(state.Session{Name: "s1", Host: "build1"}) {
-		if f.Remote == control.RemoteCommandSocketPath("s1") {
+	for _, f := range s.forwardsFor(state.Session{Name: "s1", Host: "build1"}, remoteDirForTest) {
+		if f.Remote == control.RemoteCommandSocketPath(remoteDirForTest, "", "s1") {
 			t.Fatal("forwarding a socket nobody set")
 		}
 	}

@@ -67,6 +67,24 @@ func TestPruneAndOutcomeRoundTripThroughTheWire(t *testing.T) {
 	}
 }
 
+func TestPruneCarriesKeepTailBothWays(t *testing.T) {
+	edits := []contracts.HistoryEdit{{CallID: "c3", Action: contracts.PruneResult, KeepChars: 10, KeepTail: 25}}
+	frame, err := Prune("9", edits)
+	if err != nil {
+		t.Fatalf("Prune: %v", err)
+	}
+	if !strings.Contains(frame.Text, `"keep_tail":25`) {
+		t.Fatalf("wire = %s, want the keep_tail of the edit on it", frame.Text)
+	}
+	gotEdits, err := DecodePrune(frame)
+	if err != nil {
+		t.Fatalf("DecodePrune: %v", err)
+	}
+	if !slices.Equal(gotEdits, edits) {
+		t.Fatalf("edits = %+v, want %+v", gotEdits, edits)
+	}
+}
+
 func TestUnknownActionDoesNotDecode(t *testing.T) {
 	_, err := DecodePrune(contracts.Event{T: EventPrune, Text: `[{"call_id":"c1","action":"explode"}]`})
 	if !errors.Is(err, ErrFrameMalformed) || !errors.Is(err, contracts.ErrUnknownPruneAction) {

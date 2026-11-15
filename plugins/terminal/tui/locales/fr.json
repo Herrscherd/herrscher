@@ -846,6 +846,18 @@
     "other": "/rename <nom> : donne le nouveau nom de la session"
   },
   {
+    "id": "tui.session.starting",
+    "other": "ouverture de la session…"
+  },
+  {
+    "id": "tui.session.start_failed",
+    "other": "session impossible à ouvrir : {{.Reason}}"
+  },
+  {
+    "id": "tui.chrome.start_hint",
+    "other": "écris un message pour ouvrir une session ici"
+  },
+  {
     "id": "tui.session.rename_none",
     "other": "aucune session à renommer ici"
   },
@@ -2738,16 +2750,25 @@
     "other": "Jetons"
   },
   {
+    "id": "tui.usage.tab.compaction",
+    "description": "Usage panel: the tab of the compaction stages",
+    "other": "Compaction"
+  },
+  {
     "id": "tui.usage.tab.limits",
     "other": "Limites"
   },
   {
-    "id": "tui.usage.account.all",
-    "other": "tous les comptes"
+    "id": "tui.usage.filter.all",
+    "other": "tous"
   },
   {
-    "id": "tui.usage.account.one",
-    "other": "compte {{.Account}}"
+    "id": "tui.usage.filter.account",
+    "other": "compte : {{.Account}} ▾"
+  },
+  {
+    "id": "tui.usage.filter.vendor",
+    "other": "fournisseur : {{.Vendor}} ▾"
   },
   {
     "id": "tui.usage.hint.tab",
@@ -2760,6 +2781,10 @@
   {
     "id": "tui.usage.hint.account",
     "other": "compte"
+  },
+  {
+    "id": "tui.usage.hint.vendor",
+    "other": "fournisseur"
   },
   {
     "id": "tui.usage.hint.refresh",

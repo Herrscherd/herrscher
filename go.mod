@@ -2,19 +2,20 @@ module github.com/Herrscherd/herrscher
 
 go 1.27.0
 
-toolchain go1.27.3
+toolchain go1.27.4
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/Herrscherd/herrscher-claude-backend v0.13.0
+	github.com/Herrscherd/herrscher-claude-backend v0.15.5
 	github.com/Herrscherd/herrscher-codex-backend v0.9.0
-	github.com/Herrscherd/herrscher-contracts v0.27.0
-	github.com/Herrscherd/herrscher-cursor-backend v0.8.0
-	github.com/Herrscherd/herrscher-discord-gateway v0.30.0
-	github.com/Herrscherd/herrscher-jev-compactor v0.2.0
+	github.com/Herrscherd/herrscher-contracts v0.29.0
+	github.com/Herrscherd/herrscher-cursor-backend v0.8.1
+	github.com/Herrscherd/herrscher-discord-gateway v0.31.0
+	github.com/Herrscherd/herrscher-jev-compactor v0.4.0
 	github.com/Herrscherd/herrscher-llm-extractor v0.4.0
 	github.com/Herrscherd/herrscher-obsidian-memory v0.6.0
 	github.com/Herrscherd/herrscher-orchestrator v0.6.0
+	github.com/Herrscherd/herrscher-pixellab-backend v0.1.1
 	github.com/Herrscherd/herrscher-superset-skills v0.4.0
 	github.com/Herrscherd/herrscher-transport v0.6.0
 	github.com/Microsoft/go-winio v0.6.2
@@ -27,6 +28,7 @@ require (
 	github.com/nats-io/nats-server/v2 v2.10.22
 	github.com/nats-io/nats.go v1.37.0
 	github.com/rivo/uniseg v0.4.7
+	github.com/rogpeppe/go-internal v1.14.1
 	golang.org/x/image v0.45.0
 	golang.org/x/sys v0.48.0
 	golang.org/x/term v0.46.0
@@ -35,7 +37,7 @@ require (
 )
 
 require (
-	github.com/Herrscherd/dctl v1.10.0 // indirect
+	github.com/Herrscherd/dctl v1.11.0 // indirect
 	github.com/alecthomas/chroma/v2 v2.20.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
@@ -71,6 +73,7 @@ require (
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/time v0.7.0 // indirect
+	golang.org/x/tools v0.51.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )

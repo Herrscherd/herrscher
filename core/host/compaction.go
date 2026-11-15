@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"slices"
@@ -17,7 +18,9 @@ import (
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/historywire"
+	"github.com/Herrscherd/herrscher/core/internal/redact"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -26,10 +29,6 @@ const (
 	percentScale          = 100
 	noticeTimeout         = 10 * time.Second
 	noticeQueueCapacity   = 32
-	eventCompactNow       = "compact_now"
-	eventCompactStarted   = "compaction_started"
-	eventCompactDone      = "compaction_done"
-	eventCompactFailed    = "compaction_failed"
 )
 
 type compactUnavailableError struct {
@@ -103,23 +102,27 @@ type compactionPolicy struct {
 	limits         contextwindow.Limits
 	names          []string
 	plugins        map[string]contracts.Compactor
+	triggers       map[string]int
 	backends       map[string]bool
 	historyEditors map[string]bool
 	warnOnce       *sync.Once
 	historyOnce    *sync.Once
-	warn           func(format string, args ...any)
+	warn           func(key string, params map[string]any)
 }
 
-func newCompactionPolicy(ctx context.Context, percent *int, names []string, perVendor map[string]int) (compactionPolicy, error) {
+func newCompactionPolicy(ctx context.Context, lang languageSource, warn io.Writer, percent *int, names []string, perVendor map[string]int) (compactionPolicy, error) {
 	policy := compactionPolicy{
 		percent:        defaultCompactPercent,
 		names:          []string{contracts.CompactStageBackend},
 		plugins:        make(map[string]contracts.Compactor),
+		triggers:       make(map[string]int),
 		backends:       make(map[string]bool),
 		historyEditors: make(map[string]bool),
 		warnOnce:       &sync.Once{},
 		historyOnce:    &sync.Once{},
-		warn:           warnStderr,
+		warn: func(key string, params map[string]any) {
+			warnLive(warn, lang, key, params)
+		},
 	}
 	if percent != nil {
 		if err := contracts.ValidateAutoCompactPercent(*percent); err != nil {
@@ -153,25 +156,41 @@ func newCompactionPolicy(ctx context.Context, percent *int, names []string, perV
 		if name == contracts.CompactStageBackend {
 			continue
 		}
-		compactor, err := customStage(ctx, name, os.Getenv)
-		if err != nil {
-			return compactionPolicy{}, wrapHost(err, "compaction.stack_named", map[string]any{nameParam: name})
+		if err := policy.addStage(ctx, name); err != nil {
+			return compactionPolicy{}, err
 		}
-		policy.plugins[name] = compactor
 	}
 	return policy, nil
 }
 
-func warnInvalidContextLimit(warn func(format string, args ...any), raw string) {
+func (p *compactionPolicy) addStage(ctx context.Context, name string) error {
+	compactor, err := customStage(ctx, name, os.Getenv)
+	if err != nil {
+		return wrapHost(err, "compaction.stack_named", map[string]any{nameParam: name})
+	}
+	if trigger, ok := compactor.(contracts.StageTrigger); ok {
+		percent := trigger.TriggerPercent()
+		if err := contracts.ValidateStageTriggerPercent(percent); err != nil {
+			return wrapHost(err, "compaction.stage_trigger", map[string]any{nameParam: name, "Percent": percent})
+		}
+		if percent != 0 {
+			p.triggers[name] = percent
+		}
+	}
+	p.plugins[name] = compactor
+	return nil
+}
+
+func warnInvalidContextLimit(warn func(key string, params map[string]any), raw string) {
 	if err := contextwindow.CheckOverride(raw); err != nil {
-		warn("herrscher serve: %s ignored, %v: the vendor default window applies\n", contextwindow.EnvVar(), err)
+		warn("warn.context_limit_env", map[string]any{nameParam: contextwindow.EnvVar(), detailParam: err})
 	}
 }
 
-func warnUnknownContextLimits(warn func(format string, args ...any), perVendor map[string]int, kinds []string) {
+func warnUnknownContextLimits(warn func(key string, params map[string]any), perVendor map[string]int, kinds []string) {
 	for _, vendor := range slices.Sorted(maps.Keys(perVendor)) {
 		if !slices.ContainsFunc(kinds, func(kind string) bool { return strings.EqualFold(kind, vendor) }) {
-			warn("herrscher serve: contextLimits: no backend %q in this daemon, its window size is unused\n", vendor)
+			warn("warn.context_limit_unknown_vendor", map[string]any{nameParam: vendor})
 		}
 	}
 }
@@ -205,30 +224,30 @@ func customStage(ctx context.Context, name string, getenv func(string) string) (
 	return nil, errNoCompactorPlugin
 }
 
-func (p compactionPolicy) percentFor(sess state.Session) int {
+func (p *compactionPolicy) percentFor(sess state.Session) int {
 	if sess.CompactPercent != nil {
 		return *sess.CompactPercent
 	}
 	return p.percent
 }
 
-func (p compactionPolicy) supports(vendor string) bool {
+func (p *compactionPolicy) supports(vendor string) bool {
 	return p.backends[vendor]
 }
 
-func (p compactionPolicy) editsHistory(vendor string) bool {
+func (p *compactionPolicy) editsHistory(vendor string) bool {
 	return p.historyEditors[vendor]
 }
 
-func (p compactionPolicy) warnNoHistoryPort(vendor string) {
+func (p *compactionPolicy) warnNoHistoryPort(vendor string) {
 	p.historyOnce.Do(func() {
-		p.warn("herrscher serve: backend %q declares Capabilities.HistoryEditor but its instance does not implement the port, its history is not edited\n", vendor)
+		p.warn("warn.history_port_missing", map[string]any{nameParam: vendor})
 	})
 }
 
-func (p compactionPolicy) warnNoPort(vendor string) {
+func (p *compactionPolicy) warnNoPort(vendor string) {
 	p.warnOnce.Do(func() {
-		p.warn("herrscher serve: backend %q declares Capabilities.Compactor but its instance does not implement the port, its compaction is refused\n", vendor)
+		p.warn("warn.compactor_port_missing", map[string]any{nameParam: vendor})
 	})
 }
 
@@ -255,17 +274,17 @@ func (d *sessionDriver) compactSupported() bool {
 	return d.compaction.supports(d.modelNow().vendor)
 }
 
-func (d *sessionDriver) compactStages() ([]contracts.CompactStage, error) {
+func (d *sessionDriver) compactStages(names []string, notes stageNotes) ([]contracts.CompactStage, error) {
 	if !d.compactSupported() {
 		return nil, unsupportedCompaction(d.name, d.modelNow().vendor)
 	}
-	stages := make([]contracts.CompactStage, 0, len(d.compaction.names))
-	for _, name := range d.compaction.names {
-		if name == contracts.CompactStageBackend {
-			stages = append(stages, contracts.CompactStage{Name: name, Compactor: bridgeCompactor{driver: d}})
-			continue
+	stages := make([]contracts.CompactStage, 0, len(names))
+	for _, name := range names {
+		var compactor contracts.Compactor = bridgeCompactor{driver: d}
+		if name != contracts.CompactStageBackend {
+			compactor = historyStage{compactor: d.compaction.plugins[name], history: d.sessionHistory()}
 		}
-		stages = append(stages, contracts.CompactStage{Name: name, Compactor: historyStage{compactor: d.compaction.plugins[name], history: d.sessionHistory()}})
+		stages = append(stages, contracts.CompactStage{Name: name, Compactor: recordedStage{name: name, compactor: compactor, notes: notes}})
 	}
 	return stages, nil
 }
@@ -290,35 +309,134 @@ func (s historyStage) Compact(ctx context.Context, req contracts.CompactRequest,
 	return s.compactor.Compact(ctx, req, onEvent)
 }
 
+type recordedStage struct {
+	name      string
+	compactor contracts.Compactor
+	notes     stageNotes
+}
+
+func (s recordedStage) Compact(ctx context.Context, req contracts.CompactRequest, onEvent func(contracts.BackendEvent)) (contracts.CompactResult, error) {
+	started := time.Now()
+	result, err := s.compactor.Compact(ctx, req, onEvent)
+	if errors.Is(err, contracts.ErrNilCompactor) {
+		return result, err
+	}
+	s.notes.fail(s.name, err)
+	if result.Stats != nil {
+		stats := *result.Stats
+		stats.Stage = s.name
+		result.Stats = &stats
+		return result, err
+	}
+	if err == nil {
+		return result, nil
+	}
+	result.Stats = &contracts.CompactStats{Stage: s.name, Outcome: contracts.CompactFailed, Duration: time.Since(started)}
+	return result, err
+}
+
 func crossed(used, limit, percent int) bool {
 	return used*percentScale >= percent*limit
 }
 
-func (d *sessionDriver) maybeAutoCompact(ctx context.Context) {
-	percent := d.compactPercent()
-	limit := d.contextLimit()
-	if percent == 0 || d.turnReading == 0 {
-		return
+type compactionPass struct {
+	names []string
+	full  bool
+}
+
+func (p compactionPass) due() bool {
+	return p.full || len(p.names) > 0
+}
+
+func (p *compactionPolicy) stageThreshold(name string, host int) int {
+	own := p.triggers[name]
+	if host == 0 || own == 0 || own >= host {
+		return host
 	}
-	if !crossed(d.turnReading, limit, percent) {
-		d.compactSpent = false
-		return
+	return own
+}
+
+func (d *sessionDriver) automaticRun(used, limit int) compactionPass {
+	host := d.compactPercent()
+	if host == 0 {
+		return compactionPass{}
 	}
-	if d.compactSpent {
-		return
+	if !crossed(used, limit, host) {
+		d.hostSpent = false
+	} else if !d.hostSpent {
+		return compactionPass{names: d.compaction.names, full: true}
 	}
-	d.compactSpent = true
-	result, err := d.runCompaction(ctx, contracts.TriggerAutomatic, "")
-	if err != nil || !result.TokensMeasured {
-		return
+	var due []string
+	for _, name := range d.compaction.names {
+		threshold := d.compaction.stageThreshold(name, host)
+		if threshold == host {
+			continue
+		}
+		if !crossed(used, limit, threshold) {
+			d.stageSpent[name] = false
+			continue
+		}
+		if !d.stageSpent[name] {
+			due = append(due, name)
+		}
 	}
-	if crossed(result.TokensAfter, limit, percent) {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("compaction.no_effect", map[string]any{"Percent": percent})})
+	return compactionPass{names: due}
+}
+
+func (d *sessionDriver) markSpent(run compactionPass) {
+	if run.full {
+		d.hostSpent = true
+	}
+	for _, name := range run.names {
+		d.stageSpent[name] = true
 	}
 }
 
-func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.CompactTrigger, instruction string) (contracts.CompactResult, error) {
-	stages, err := d.compactStages()
+func (d *sessionDriver) maybeAutoCompact(ctx context.Context) {
+	if d.turnReading == 0 {
+		return
+	}
+	limit := d.contextLimit()
+	run := d.automaticRun(d.turnReading, limit)
+	if !run.due() {
+		return
+	}
+	settled := d.runAutomatic(ctx, run)
+	if !settled || run.full || d.hostSpent || !crossed(d.turnReading, limit, d.compactPercent()) {
+		return
+	}
+	rest := stagesAfter(d.compaction.names, run.names)
+	if len(rest) == 0 {
+		return
+	}
+	d.runAutomatic(ctx, compactionPass{names: rest, full: true})
+}
+
+func stagesAfter(stack, ran []string) []string {
+	rest := make([]string, 0, len(stack))
+	for _, name := range stack {
+		if !slices.Contains(ran, name) {
+			rest = append(rest, name)
+		}
+	}
+	return rest
+}
+
+func (d *sessionDriver) runAutomatic(ctx context.Context, run compactionPass) bool {
+	d.markSpent(run)
+	result, err := d.runCompaction(ctx, contracts.TriggerAutomatic, "", run)
+	if err != nil || !result.TokensMeasured {
+		return false
+	}
+	if percent := d.compactPercent(); run.full && crossed(result.TokensAfter, d.contextLimit(), percent) {
+		d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("compaction.no_effect", map[string]any{"Percent": percent})})
+	}
+	return true
+}
+
+func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.CompactTrigger, instruction string, run compactionPass) (contracts.CompactResult, error) {
+	notes := make(stageNotes)
+	stages, err := d.compactStages(run.names, notes)
 	if err != nil {
 		d.failCompaction(ctx, trigger, err)
 		return contracts.CompactResult{}, err
@@ -333,13 +451,14 @@ func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.Com
 		TokenLimit:    limit,
 		Instruction:   instruction,
 	}
-	d.fanOut(ctx, contracts.Event{T: eventCompactStarted, Value: trigger.String(), Tokens: d.turnReading})
+	d.fanOut(ctx, contracts.Event{T: eventwire.EventCompactionStarted, Value: trigger.String(), Tokens: d.turnReading})
 	result, err := contracts.RunCompactStack(ctx, stages, req, d.compactionProgress(ctx))
+	d.recordCompaction(result.StageStats, notes)
 	if err != nil {
 		d.failCompaction(ctx, trigger, err)
 		return contracts.CompactResult{}, err
 	}
-	d.settleCompaction(result, limit)
+	d.settleCompaction(result, limit, run)
 	d.announceCompaction(ctx, trigger, result)
 	return result, nil
 }
@@ -347,9 +466,9 @@ func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.Com
 func (d *sessionDriver) failCompaction(ctx context.Context, trigger contracts.CompactTrigger, err error) {
 	var text string
 	if !d.queueFailureNotice(trigger, err) {
-		text = compactFailureText(d.messages, d.lang, err)
+		text = compactFailureText(d.messages, d.textLanguage()(), err)
 	}
-	d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String(), Text: text})
+	d.fanOut(ctx, contracts.Event{T: eventwire.EventCompactionFailed, Value: trigger.String(), Text: text})
 }
 
 func (d *sessionDriver) queueFailureNotice(trigger contracts.CompactTrigger, err error) bool {
@@ -369,7 +488,7 @@ func compactFailureText(messages *hostMessages, lang i18n.Language, err error) s
 	if key, known := knownCompactFailure(err); known {
 		return messages.text(lang, key, nil)
 	}
-	return messages.text(lang, "compaction.failed", map[string]any{detailParam: err.Error()})
+	return messages.text(lang, "compaction.failed", map[string]any{detailParam: redact.Output([]byte(err.Error()))})
 }
 
 func knownCompactFailure(err error) (string, bool) {
@@ -394,22 +513,22 @@ func knownCompactFailure(err error) (string, bool) {
 
 func (d *sessionDriver) announceCompaction(ctx context.Context, trigger contracts.CompactTrigger, result contracts.CompactResult) {
 	if result.Notice.Code == 0 || !d.noticeRenders(result.Notice) {
-		d.fanOut(ctx, contracts.Event{T: eventCompactDone, Value: trigger.String(), Text: result.Note, Tokens: measuredTokens(result)})
+		d.fanOut(ctx, contracts.Event{T: eventwire.EventCompactionDone, Value: trigger.String(), Text: result.Note, Tokens: measuredTokens(result)})
 		return
 	}
 	d.notifyGateways(trigger, result.Notice)
-	d.fanOut(ctx, contracts.Event{T: eventCompactDone, Value: trigger.String(), Tokens: measuredTokens(result)})
+	d.fanOut(ctx, contracts.Event{T: eventwire.EventCompactionDone, Value: trigger.String(), Tokens: measuredTokens(result)})
 }
 
 func (d *sessionDriver) noticeRenders(notice contracts.Notice) bool {
-	_, err := contracts.NewRenderer().Render(d.lang, notice)
+	_, err := contracts.NewRenderer().Render(d.textLanguage()(), notice)
 	return err == nil
 }
 
 type noticeDelivery struct {
 	sink    contracts.NoticeSink
 	conv    contracts.Conversation
-	lang    i18n.Language
+	lang    languageSource
 	notice  contracts.Notice
 	trigger contracts.CompactTrigger
 	report  *sync.Once
@@ -429,7 +548,7 @@ func (d *sessionDriver) notifyGateways(trigger contracts.CompactTrigger, notice 
 			return
 		}
 		conv := contracts.Conversation{Gateway: gateway.Gateway.Manifest().Kind, ID: d.renderChannel(gateway)}
-		delivery := noticeDelivery{sink: sink, conv: conv, lang: d.lang, notice: notice, trigger: trigger, report: report}
+		delivery := noticeDelivery{sink: sink, conv: conv, lang: d.textLanguage(), notice: notice, trigger: trigger, report: report}
 		if d.enqueueNotice(delivery) {
 			queued = true
 		}
@@ -461,16 +580,16 @@ func (d *sessionDriver) deliverNotices(ctx context.Context) {
 func (d *sessionDriver) deliverNotice(parent context.Context, delivery noticeDelivery) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), noticeTimeout)
 	defer cancel()
-	if _, err := delivery.sink.Notify(ctx, delivery.conv, delivery.lang, delivery.notice); err != nil && !errors.Is(err, contracts.ErrNoticeFallbackPosted) {
+	if _, err := delivery.sink.Notify(ctx, delivery.conv, delivery.lang(), delivery.notice); err != nil && !errors.Is(err, contracts.ErrNoticeFallbackPosted) {
 		logCleanup(err)
 		delivery.report.Do(func() { d.relayNoticeFailure(parent, d.noticeFailure(delivery)) })
 	}
 }
 
 func (d *sessionDriver) noticeFailure(delivery noticeDelivery) compactFailure {
-	text, err := contracts.NewRenderer().Render(delivery.lang, delivery.notice)
+	text, err := contracts.NewRenderer().Render(delivery.lang(), delivery.notice)
 	if err != nil {
-		text = compactFailureText(d.messages, delivery.lang, err)
+		text = compactFailureText(d.messages, delivery.lang(), err)
 	}
 	return compactFailure{trigger: delivery.trigger, text: text}
 }
@@ -482,12 +601,18 @@ func (d *sessionDriver) relayNoticeFailure(parent context.Context, failure compa
 	}
 }
 
-func (d *sessionDriver) settleCompaction(result contracts.CompactResult, limit int) {
+func (d *sessionDriver) settleCompaction(result contracts.CompactResult, limit int, run compactionPass) {
 	if !result.TokensMeasured {
 		return
 	}
 	d.turnReading = result.TokensAfter
-	d.compactSpent = crossed(result.TokensAfter, limit, d.compactPercent())
+	host := d.compactPercent()
+	if run.full {
+		d.hostSpent = crossed(result.TokensAfter, limit, host)
+	}
+	for _, name := range run.names {
+		d.stageSpent[name] = crossed(result.TokensAfter, limit, d.compaction.stageThreshold(name, host))
+	}
 }
 
 func measuredTokens(result contracts.CompactResult) int {
@@ -500,7 +625,7 @@ func measuredTokens(result contracts.CompactResult) int {
 func (d *sessionDriver) compactionProgress(ctx context.Context) func(contracts.BackendEvent) {
 	return func(event contracts.BackendEvent) {
 		if event.Detail != "" {
-			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: event.Detail})
+			d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: event.Detail})
 		}
 	}
 }
@@ -510,7 +635,7 @@ func (d *sessionDriver) sessionInfo() contracts.SessionInfo {
 }
 
 func (d *sessionDriver) runCompactNow(ctx context.Context, instruction string) {
-	if _, err := d.runCompaction(ctx, contracts.TriggerManual, instruction); err != nil {
+	if _, err := d.runCompaction(ctx, contracts.TriggerManual, instruction, compactionPass{names: d.compaction.names, full: true}); err != nil {
 		return
 	}
 }
@@ -537,7 +662,7 @@ func (d *sessionDriver) requestCompaction(instruction string, origin contracts.C
 	if d.compactRegistered != nil {
 		d.compactRegistered()
 	}
-	request.queued = d.enqueue(queued{ev: contracts.Event{T: eventCompactNow}, origin: origin})
+	request.queued = d.enqueue(queued{ev: contracts.Event{T: eventwire.EventCompactNow}, origin: origin})
 	if !request.queued {
 		d.clearCompactWaiting(request)
 	}
@@ -575,7 +700,7 @@ func (c bridgeCompactor) Compact(ctx context.Context, req contracts.CompactReque
 func (d *sessionDriver) decodeCompactResult(frame contracts.Event) (contracts.CompactResult, error) {
 	res, err := compactwire.DecodeResult(frame)
 	if errors.Is(err, compactwire.ErrNoticeMalformed) {
-		warnStderr("herrscher serve: session %q: compaction notice dropped, its note and figures are kept: %v\n", d.name, err)
+		warnTo(d.warnings, d.textLanguage()(), "warn.session_compaction_notice", map[string]any{nameParam: d.name, detailParam: err})
 		return res, nil
 	}
 	return res, err

@@ -32,6 +32,7 @@ const (
 	ServeNoGateway          = "cli.serve.no_gateway"
 	ServeSessionStarted     = "cli.serve.session_started"
 	ServeSessionFailed      = "cli.serve.session_failed"
+	ServeHubStopped         = "cli.serve.hub_stopped"
 )
 
 func serveKeys() map[Key][]string {
@@ -49,6 +50,7 @@ func serveKeys() map[Key][]string {
 		ServeNoGateway:          nil,
 		ServeSessionStarted:     {ParamName},
 		ServeSessionFailed:      {ParamName, ParamErr},
+		ServeHubStopped:         {ParamErr},
 		SkillsRetireFailed:      {ParamErr},
 		SkillRemoved:            {ParamName},
 		SkillRetiredDiverged:    {ParamName, ParamPath},

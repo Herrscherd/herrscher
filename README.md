@@ -64,7 +64,16 @@ it, `session close` ends it.
 `--print` is the non-interactive form: one turn, the reply on stdout and the
 session name on stderr, so `herrscher --print "…" > out.md` holds the answer
 alone. A run with no terminal takes that form on its own, since there is nothing
-there to draw a window on.
+there to draw a window on. When the vendor ends the turn in error, the command
+exits with a failure and the error goes to stderr. The text the vendor streamed
+before the failure goes to stdout, so `> out.md` keeps whatever was produced, and
+nothing else on stdout. Text blocks are joined as the backend sends them, its
+blank line between blocks included. When the backend retries an attempt, the text
+of the abandoned attempt is dropped, so stdout holds only the attempt that failed.
+The claude backend retries only before the vendor has taken the turn, which an
+assistant or user line takes, and so does a system line of subtype init or
+api_retry: once it is taken, a stream that ends is a failed turn, with the text
+so far on stdout and no second attempt.
 
 A single unrecognised word stays a verb, so a typo is still a typo. Use `-p` to
 force a one-word task.
@@ -76,7 +85,9 @@ on a conversation of its own, named after the directory you launched in
 (`herrscher-2` if that name is taken, a random `s-xxxx` if the directory cannot
 be one). What came before is still there: a live tab if it is still running,
 `/resume` otherwise. Nothing piles up either, since a session nobody spoke in is
-archived when the window closes.
+archived when the window closes. An attached window opens that conversation on
+the first message you type, in the repository you launched from when it sits
+right under the daemon's workspace, and shared with the daemon's other clients.
 
 One daemon per state file. A second one over the same state answers every message
 twice and bills it twice. So a bare `herrscher` on a TTY **serves when nothing
@@ -84,9 +95,57 @@ else is** and **attaches** when the service already is, driving the same UI over
 the sockets the running daemon exposes. You see the agent that is actually live.
 Quitting the window has two outcomes. After an attach, the daemon you found keeps
 running. After a serve, quitting stops that daemon, and the turns still running
-in it are cancelled. Off a TTY there is nothing to
+in it are cancelled. If the hub stops while the window is open, for instance
+because its command or events socket is already served by another daemon, the
+window closes and says why. Off a TTY there is nothing to
 attach to, so the second daemon is refused and the process holding the state is
-named. Use `--state` if you really want a separate world.
+named. Use `--state` if you really want a separate world, with its own
+`--instance` too: a daemon refuses to take over a command or events socket that
+another daemon still answers on, and says so instead of cutting that one off.
+
+### Where the sockets live
+
+Every socket and lock herrscher creates for a user lives in one private directory,
+chosen the same way on every run: `/run/user/<uid>/herrscher` when the systemd user
+session has provided a real `/run/user/<uid>` directory owned by the user with mode
+0700, and `/tmp/herrscher-<uid>` otherwise. The directory must be a real directory
+(not a symbolic link), owned by the user, with no group or other bits, and it is
+checked on every use. A socket keeps its readable name there when the full path fits
+the 103 byte unix limit, and takes a hashed name (`hs-<key>.sock`) when it does not.
+
+A socket file is created by binding it under a temporary name in the same directory and
+then renaming it onto its final name, so a file left by a crash is replaced in one step.
+Closing a listener never removes its file: a stopped daemon leaves its socket on disk,
+dead, and a client decides whether a daemon is there by dialing it, where a refused
+connection means that no daemon is running. When a daemon stops for good, it first refuses
+to start any further session, then ends the running ones, closes its listeners and
+removes the socket files of its own instance (command, events and session sockets),
+all while it still holds the instance lock. Files of other instances are never
+touched. On Windows the sockets are named pipes, which have no file and need no cleanup.
+
+When the chosen directory exists but cannot be used, the daemon refuses to start and
+says why. A symbolic link, a directory created by another account (only that account
+or root can remove it, and a systemd user session avoids `/tmp` altogether) and a directory open
+to its group or others (`chmod 700` on it fixes that) each get their own message.
+herrscher never changes a directory it does not own.
+
+The directory is chosen once, at the entry point of the program, and passed down as a
+value. Library code takes a `host.RuntimeLayout` argument (`CommandSocketPathIn`,
+`EventsSocketPathIn`, `ForwardToDaemon`, and so on), so a caller can point the same code
+at another directory. There is no command line flag for that choice: the hidden
+`--runtime-dir` flag is gone, and the `serve` process that the tests start reads its
+directory from the environment instead.
+
+Neublox, or any other client that follows the events of an instance, must call
+`host.EventsSocketPath(instanceID)` to find that socket rather than rebuild the name.
+The function is documented in the `core/host` package godoc.
+
+Upgrade note: sockets moved from `/tmp` to the per-user directory described above.
+Clients built before this version must be updated to find the sockets through
+`host.EventsSocketPath` and the command socket helpers, and remote sessions must be
+restarted once so they forward the new paths. An older `/tmp/herrscher-<uid>` left with
+group or other access is refused with a message that tells you to run `chmod 700` on it.
+A directory owned by another user is refused too: ask that user or root to remove it.
 
 ## What a session gives you
 
@@ -149,6 +208,14 @@ An agent ends a turn with a `⟢` trailer to delegate, fan out, route, merge or
 hand off. Workers inherit their agent's vendor, so one run can mix Claude, Codex
 and Cursor.
 
+### Choosing a session's vendor
+
+Without `--model`, a session's vendor is the first of these that is set:
+`--vendor`, then the vendor whose CLI the `--cmd` binary is (`claude`, `codex`
+or `cursor`), then `HERRSCHER_BACKEND`. With `--model`, the model names its
+vendor: `--vendor` or `HERRSCHER_BACKEND`, when set, must agree with it, and
+without either the model's vendor is used.
+
 → `architecture/coordination`, `reference/trailers`
 
 ### Agents that start their own turns
@@ -186,6 +253,37 @@ letting it run unattended.
 
 → `architecture/proactive`
 
+### Files a backend sends back
+
+A backend that writes files during a turn, such as a chart or an image, declares
+`FileProducer`. For each of its turns the bridge makes a private directory
+(0700) under the daemon state directory, in `outbox/<session>/`, and hands its
+path to the backend as `Prompt.Outbox`. After the reply, the bridge takes the
+files the backend lists and vets them: each must be a regular file inside that
+directory, and no larger than the limit. At most 10 files a turn are sent, and a
+refused file is named in the reply with a notice, its content never logged.
+
+The limit is 25 MB by default. `outboundFileMaxMB` in `config.json` sets another
+size in megabytes, up to 1024. The daemon delivers the reply text first, as a
+normal reply. The valid files then go through the gateway's `SendFiles` when the
+gateway implements it, as a separate message without a reply target, because an
+event carries no message ID to reply to. A gateway that does not implement
+`SendFiles` gets a notice that names the files, without their paths. The files
+go in batches of at most 10 files and 9 MiB, the limits of a Discord message.
+The Discord gateway also refuses any single file over 8 MiB and names it in its
+own message, so a limit above 8 MB only helps other gateways. A batch that fails
+gets a notice that names only its own files, and the batches before and after it
+are still sent. A batch whose send times out is named as not sent even when the
+gateway delivered it late. When the turn is cancelled, the batches not yet sent
+are named in a single notice. The turn directory is removed once the reply
+is delivered, or once the turn ends without files. A directory a crash leaves
+behind is purged when it is older than 24 hours: at the daemon start for every
+session, and at the start of each turn for the outbox of that turn's session
+only, so a turn still running in another session is never removed. When the
+reply goes to another conversation than the one that sent the turn, its files
+are not sent, and the reply names them in a notice, refused files included. A
+backend without `FileProducer` gets no outbox, and its replies are unchanged.
+
 ### Sessions that run on another machine
 
 ```bash
@@ -208,6 +306,15 @@ over there dials a unix socket exactly as it does here, and `herrscher <verb>` i
 the agent's own shell reaches the daemon that started it. Each session forwards
 its own path and each launch owns its connection, so a second session on the same
 host cannot take the first one's socket away.
+
+Every socket lives in the per-user directory on the remote machine too. The daemon
+resolves that directory over ssh once per host, with the same rule as locally
+(`/run/user/<uid>/herrscher` when the systemd user session provides it,
+`/tmp/herrscher-<uid>` otherwise), and creates it with mode 0700 if it is missing.
+A session forwarded by a build from before that change keeps dialling the old `/tmp`
+paths while the new daemon listens in the new directory. Restart each remote session once after the upgrade to
+forward the new paths. Until then its bridge cannot reach the daemon, and the
+session shows no answer.
 
 Three refusals replace a blind start: a host that was never provisioned, a host
 running a different build than this daemon would ship, and `--clone` combined
@@ -410,7 +517,14 @@ on, and prints it as a table grouped by what the checks cover: the daemon and it
 key proxy, the gateways, the backends with each account and profile, the
 compaction stages, the memory plugins and the key pools. Each line says the state
 (ok, degraded, down or off), how long the probe took, and the facts the host knows
-about the service.
+about the service. Each compaction stage shows when it last ran and how it ended
+(done, short, failed, dry run or skipped), read from the usage ledger, or that there
+was no compaction in the last 7 days. When the ledger cannot be read, the line says
+the last compaction is unknown when no readable run is left to show, and flags the
+data as partial. A compaction stage that reads its API key from the environment also
+shows whether that variable is set, by its name only (`TYPESAFE_API_KEY`), never its
+value, with the time and outcome of its last successful run and the time and note of
+its last failed one.
 
 A gateway the daemon does not run reads as off, and so does a memory plugin that is
 not the one in use: the first local memory plugin with a factory is the live one,
@@ -432,6 +546,69 @@ The exit code tells a script the outcome: `0` when nothing is degraded or down,
 daemon cannot be reached. An unreachable daemon is reported on stderr with the
 socket it was looked for, so a stopped daemon reads as a finding rather than a
 silent failure.
+
+### Usage, from the ledger
+
+`herrscher usage` asks the running daemon for the figures it recorded in the usage
+ledger, so the daemon must be up. A view is named after the command, and the
+default is the limits of each account:
+
+- `limits`: the quota windows of each account.
+- `cost`: the spend of the period, by session and by model.
+- `tokens`: the tokens in and out of the period.
+- `compaction`: each compaction stage, with its runs and how they ended (done,
+  short, failed, dry run, skipped), the calls it examined, kept, truncated and
+  pruned, the share of characters it removed, the tokens it removed, its model
+  requests, their average duration and the estimated saving. Above the stages, the
+  Jev share gives the part of Jev runs that succeeded (done or short), and the part of
+  sessions where the backend stage ran behind Jev, linked to the Jev run by the
+  passage both stages share. A Jev run is an attempt: its outcome is done, short or
+  failed, so a dry run or a skipped Jev is in neither count. A session counts once it
+  has an attempt. The backend stage counts as behind Jev when its outcome is anything
+  but skipped, so a dry run of the backend does count.
+
+`--range` takes `24h`, `7d`, `30d` or `90d`, and `--account` and `--vendor` narrow the
+figures to one account or one vendor, with the same rule as for turns: a compaction is
+kept when its vendor and account match the filter. A compaction recorded before the
+account was stored has no account, so it is counted when no filter is set and left out
+by a filter it cannot match, as an unaccounted turn is. `--json` prints the same
+figures as structured data for a script.
+
+The turns read from the transcripts are priced from the LiteLLM price list. A request whose context (input, cache
+read and cache write together) goes past a long context threshold of its model is priced
+at the long context rates the list gives for that threshold, for example the
+`input_cost_per_token_above_200k_tokens` of a model billed higher past 200k tokens. A
+rate the list leaves out for that threshold stays at the base rate.
+
+The limits view reads the quota windows of every account in parallel, and a reading
+shared by several callers stops after ten seconds: a vendor slower than that shows a
+failed reading. `HERRSCHER_LIMITS_TIMEOUT`, read by the daemon when it starts, sets
+another cap as a Go duration between `1s` and `5m` (`30s`, `1m`), so a change takes a
+restart of the daemon. A malformed value or one out of those bounds is reported in the
+daemon log and the default applies. The cap is counted from the start of the reading, and
+a reading that ends before it is kept even when its callers gave up, so the next call
+shows it.
+
+The transcript index assumes a transcript only grows: a file read before resumes at the
+offset it was left at. The first start after an upgrade that changes the index format
+reads every transcript of the retention again, once.
+
+The estimated saving of a compaction is the tokens it removed, priced at the cache-read
+rate of the session's model in the LiteLLM price list, counted once per compaction. The
+session model is stored with the record when the compaction runs. A model missing from
+the price list shows `unknown price` and never `$0`; a model listed without a cache-read
+rate is priced at its input rate, as for turns. When only some
+compactions are unpriced, the line gives the amount and how many runs have no price.
+
+The fast speed is not priced for compactions. The turns are priced at the fast rate
+when their transcript says the fast tier was used, but a compaction record carries no
+speed: the session does not expose it to the host when the compaction runs. The saving
+is therefore priced at the standard cache-read rate even when the session ran fast.
+
+A failed compaction keeps the class of its error in the ledger, never its text: an
+unknown error is recorded as `unknown failure`, a stage that failed without an error
+as `fell back`. `herrscher health` shows that class in words. A note written by an
+earlier version as free text is never shown: it reads as an unknown failure.
 
 ### Model routing
 
@@ -680,6 +857,36 @@ never retriggers. `compactStack` lists the stages in order, where `backend` is t
 session's own compaction and every other name is the kind of a plugin of the
 `compactor` category, built once at start through its `Compactor` factory.
 
+A plugin stage can ask to run before the backend's threshold. A `Compactor` that
+also implements `StageTrigger` returns from `TriggerPercent()` the share of the
+window, in percent, from which it runs. Zero, or a `Compactor` without the
+interface, means the host's `compactAt`, and so does a value above it: that value
+does not delay the stage. The host checks the value at start with
+`ValidateStageTriggerPercent`, and a value outside 0 to 100 makes `herrscher serve`
+refuse to start, naming the stage and the value. The `backend` stage has no
+threshold of its own and runs at `compactAt` only. When `compactAt` is 0, automatic
+compaction is off and no stage turns it back on: the stages run only on `/compact`.
+
+When the usage reaches the lowest effective threshold, the host runs automatically
+only the stages whose effective threshold is reached, in the order of the stack. A
+stage's effective threshold is its own trigger when that is above zero and below
+`compactAt`, and `compactAt` otherwise. Once `compactAt` is reached, the whole stack
+runs, as before. If the early stages leave the usage at or above `compactAt`, the
+rest of the stack runs in the same turn, after them, without the stages that just ran.
+`/compact` always runs the whole stack.
+
+A stage that runs early runs once per crossing of its threshold, the anti-loop rule:
+it does not run again while the measured usage stays at or above its threshold,
+since each run costs requests. It rearms when a measured usage lands under its
+threshold, which a compaction of the host or a new session does. The state is kept
+in memory for each session and is not persisted: a daemon restart rearms every
+stage, so an early stage runs again at the first measured turn over its threshold.
+
+For example, with `"compactStack": ["jev", "backend"]` and `compactAt` at 80, a `jev`
+stage whose `TriggerPercent()` returns 50 prunes the tool calls once the window
+reaches half full, and the backend summarises at 80. When the pruning brings the
+usage under 50, the stage rearms.
+
 The `jev` stage, from [herrscher-jev-compactor], prunes the tool calls the
 assistant no longer needs before the backend summarises what is left. List it
 ahead of the backend:
@@ -696,8 +903,9 @@ name `jev` never builds it and starts without the key. The stage edits the histo
 only for a session whose backend declares `Capabilities.HistoryEditor`: the host
 then hands plugin stages a history editor that reads and prunes the conversation
 through the bridge, and the `backend` stage never receives one. The `claude`
-backend declares it from herrscher-claude-backend v0.12.0, the version this host
-builds with. On another backend the stage gets no editor and leaves the history as
+backend declares it from herrscher-claude-backend v0.12.0 and, from v0.14.0, the
+version this host builds with, keeps the tail a `truncate_tail` edit asks for. On
+another backend the stage gets no editor and leaves the history as
 it is. The bridge sends the history in frames of at most 128 KiB, and the host
 refuses a history past 64 MiB. A read or a prune that the bridge does not answer
 within two minutes fails the stage. The host sends the edits of a prune in
@@ -707,6 +915,15 @@ and the `backend` stage still runs. A backend that declares
 `Capabilities.HistoryEditor` while its running instance does not implement the
 port fails the stage, and the host writes one warning line to stderr the first
 time it happens.
+
+The stage reports its stats to the usage ledger: [herrscher-jev-compactor] fills
+them from v0.3.0, so a `jev` compaction appears in `herrscher usage` and in
+`herrscher health`. From v0.4.0, the version this host builds with, the stage
+implements `StageTrigger`: when `compactAt` is set and its `trigger_percent` is
+below it, the prune runs alone from that share of the window, earlier than
+`compactAt`, at which the whole stack runs. Its stats also carry the size of the
+state the stage sent to Jev and the reduction that made it fit; the host passes them through but shows them in neither
+`herrscher usage` nor `herrscher health`.
 
 When a backend declares `Capabilities.Compactor` but its running instance does not
 implement the port, the host writes one warning line to stderr the first time that
@@ -1276,7 +1493,7 @@ reinstalls the binary. Restart the service afterwards to run it.
 | Category | Port | Official plugin |
 |----------|------|-----------------|
 | Gateway | `Gateway` | [herrscher-discord-gateway], in-tree `terminal` |
-| Backend | `Backend` | [herrscher-claude-backend], [herrscher-codex-backend], [herrscher-cursor-backend] |
+| Backend | `Backend` | [herrscher-claude-backend], [herrscher-codex-backend], [herrscher-cursor-backend], [herrscher-pixellab-backend] |
 | Memory | `Memory` | [herrscher-obsidian-memory] |
 | Orchestrator | `Orchestrator` | [herrscher-orchestrator] |
 | Skills | playbooks only | [herrscher-superset-skills] |
@@ -1337,6 +1554,10 @@ not installed returns nothing, and the daemon says which plugin declined and why
 
 → `plugins/model`, `plugins/writing`
 
+## Languages
+
+Operator warnings follow the operator language, read live at the moment they are printed. A warning about a named session uses the language recorded for that session, or the live operator language when none is recorded; operator-level warnings always use the operator language.
+
 ## Architecture
 
 Hexagonal.
@@ -1351,6 +1572,105 @@ Purity tests (`TestHostPurity`, `TestCorePurity`,
 in.
 
 → `architecture/hexagonal`
+
+## Testing
+
+Tests must pass an explicit `Layout` (`testRuntime` or `isolatedRuntimeDir`) to every
+function that reaches a socket or a lock. A zero `Layout` names no path, and its checks
+return an error. `runtimedir` exports neither the roots of the production runtime
+directory nor a resolver, so code outside the package cannot build one.
+
+`internal/productionlayout` checks the rest in `go test ./...`. It parses every `.go`
+file of the module with `go/parser`, hidden directories included (only `.git` and
+`node_modules` are skipped), and fails when:
+
+- a file other than `main.go`, `core/host/runtime_dir.go` and the unix socket wrappers names `ProductionRuntime`;
+- a file other than `core/host/runtime_dir.go` and the runtimedir package names `Production`;
+- a test names `CommandSocketPath` or `EventsSocketPath`, except the one read-only contract test;
+- a production file names `CommandSocketPath` or `EventsSocketPath`, except `main.go` and the two wrapper files;
+- a file that imports runtimedir names `Roots`, `ProductionRoots`, `Resolve` or `DirOf`, even through a dot import;
+- a production file other than `core/host/runtime_dir.go` and the runtimedir package itself refers to `runtimedir.At` or `host.RuntimeAt`, called or not, under whatever local name the file imports them (an alias or a dot import included, the import path decides), or refers to a bare `RuntimeAt` in `core/host` or in a file that dot-imports `core/host`. Production code builds no layout from an arbitrary path: only tests, that one file and the runtimedir package may. The production layout comes from `ProductionRuntime`, which only `main.go` and the socket wrappers call.
+
+What it cannot detect: it matches identifiers by name in the syntax tree, so it does not
+see a socket path built from a string, a call made through reflection, code outside this
+module, or a hand-written path such as `/run/user/1000`. Those are not covered by the
+checker and rely on review.
+
+One more gap: the arbitrary path rule matches calls only, so a reference without a call
+such as `f := runtimedir.At` is not seen.
+
+## Scenarios on the real binary
+
+`e2e/` drives the built `herrscher` binary from its command line, with no network and
+no vendor account. `scripts/check.sh` runs it with `go test -tags e2e ./e2e/...` on
+Linux, and says it skips the step anywhere else.
+
+- Each `.txtar` file in `e2e/testdata/scenarios` is a
+  [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) scenario.
+  It gets its own `HOME`, a fresh git repository as its work directory and a unique
+  `HERRSCHER_INSTANCE_ID`, so its sockets and lock never touch a daemon already running
+  on the machine.
+- `waitdaemon` waits until the daemon of the scenario answers, and `! waitdaemon` until
+  it is gone. `waitlog <regexp>` waits until the log of the fake vendor matches.
+- `herrscher serve` exits with status 130 on SIGINT, and testscript sends no other
+  signal than SIGINT and SIGKILL, so a scenario starts it as
+  `! exec herrscher serve &daemon&` and stops it with `kill -INT daemon`, `wait daemon`
+  then `! waitdaemon`.
+- These waits poll with a short sleep: they wait on other processes, which a
+  `testing/synctest` bubble cannot control.
+- A process that still carries the instance of the scenario after it ends fails the
+  run and is killed.
+- The cleanup removes every runtime entry named after the instance, and the names
+  `core/host` gives its command and events sockets and its lock, hashed ones included.
+  It only touches a runtime directory that `core/host` accepts as private to the user.
+  The check creates a missing directory, so if the directory vanishes between the
+  moment the cleanup sees it and the check, it comes back empty and private, as the
+  daemon would create it. A session socket whose path passes 103 bytes takes a hashed
+  name, `hs-<24 hex>.sock`, the cleanup cannot tell apart, so a scenario fails when
+  such a socket appears in a runtime directory during it, from this scenario or
+  another herrscher of the machine, since both run as the same user and nothing tells
+  their sockets apart. The socket stays there: shorten the session name, and remove
+  the socket only once no running herrscher holds it. Tests may not name the
+  production layout, so the two candidate runtime directories are written in the
+  harness, and the daemon scenarios fail when they drift because they find no socket.
+- `claude` on the `PATH` of a scenario is the fake of `e2e/vendortest`. It is a whole
+  process standing in for the vendor CLI, so it speaks the stream-json protocol rather
+  than recording calls. In stream-json mode it replays `$VENDORTEST_SCRIPT`, which is
+  `$WORK/claude.script`: a `claude.script` file in the archive of the scenario
+  provides it. The script holds one block per turn, separated by `---`, and each line
+  is one step: `text <words>`, `tool <Name> <json input>`, `error <message>`, `echo`,
+  `hang` or `crash`, the last three alone on their line. A turn with no step is an
+  error. The turn count is shared by every process of the scenario, under a lock file
+  beside it. A fake killed while it holds that lock leaves it behind, and the next
+  turn fails after ten seconds with an error that names the lock. A turn past the end
+  of the script, a missing script, and every one-shot `-p` call (the health probe)
+  echo the last line of the prompt as `echo: <line>`. Every start and every prompt is
+  appended to `$VENDORTEST_LOG`.
+
+Every bug found by hand becomes a scenario before it is fixed: the scenario is written
+first, fails on the bug, and passes with the fix.
+
+## Testing the remote paths
+
+`go test ./core/host/` runs the remote end-to-end tests (the `TestE2E` ones) against
+an ssh host when two environment variables are set:
+
+- `HERRSCHER_E2E_SSH` names that host as `user@host`, or as an alias from `~/.ssh/config`.
+  The host must accept key authentication without a prompt. Without this variable the
+  tests skip, and the e2e-ssh CI job fails when any of them skips. Before running, the
+  tests resolve the target with `ssh -G` and refuse a host that is the account running
+  them: same uid, and either a loopback address (after alias resolution), or an identity
+  that cannot be read on either side, or the same machine id on both sides. Machine ids
+  come from `/etc/machine-id` on Linux and from `sysctl -n kern.uuid` on macOS. An
+  unreadable identity is refused, not assumed to be another machine.
+- `HERRSCHER_E2E_DEDICATED=1` lifts that refusal, but only under GitHub Actions, where
+  `GITHUB_ACTIONS=true` is set by the runner itself. On a developer machine the variable
+  alone is ignored and the refusal stays.
+- Under the same GitHub Actions condition, `HERRSCHER_E2E_DEDICATED=1` also allows the tests to remove the remote runtime directory
+  with `rmdir` at the end of a run, and only when it did not exist before the run and
+  is empty at the end. Set it only on a host whose runtime directory belongs to the
+  tests. Without it the directory is left in place. A non-empty directory is never
+  removed, and the tests remove only the socket files they created.
 
 ## Documentation
 
@@ -1371,6 +1691,7 @@ detail rather than a rewrite.
 [herrscher-claude-backend]: https://github.com/Herrscherd/herrscher-claude-backend
 [herrscher-codex-backend]: https://github.com/Herrscherd/herrscher-codex-backend
 [herrscher-cursor-backend]: https://github.com/Herrscherd/herrscher-cursor-backend
+[herrscher-pixellab-backend]: https://github.com/Herrscherd/herrscher-pixellab-backend
 [herrscher-obsidian-memory]: https://github.com/Herrscherd/herrscher-obsidian-memory
 [herrscher-orchestrator]: https://github.com/Herrscherd/herrscher-orchestrator
 [herrscher-superset-skills]: https://github.com/Herrscherd/herrscher-superset-skills

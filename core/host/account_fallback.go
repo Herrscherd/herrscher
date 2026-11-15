@@ -40,7 +40,7 @@ func (f *accountFallback) Balance(ctx context.Context, vendor, planned string) u
 }
 
 func (f *accountFallback) readVendor(ctx context.Context, vendor string) []usage.AccountLimits {
-	targets := slices.DeleteFunc(f.source.targets(usage.AccountKey{}), func(target usage.Target) bool {
+	targets := slices.DeleteFunc(f.source.targets(usageQuery{}), func(target usage.Target) bool {
 		return target.Vendor != vendor
 	})
 	return f.source.limits.Read(ctx, defaultFirst(targets))

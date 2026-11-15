@@ -35,6 +35,9 @@ func (m *model) emptyState(width int) string {
 	lines := []string{m.st.accent.Render(m.st.glyphs.brand), ""}
 	lines = append(lines, m.sessionFacts()...)
 	lines = append(lines, m.otherSessions()...)
+	if m.tabs[m.active] == nil {
+		lines = append(lines, "", m.st.text.Render("  "+m.tr.t("tui.chrome.start_hint", nil)))
+	}
 	lines = append(lines, "", m.shortcutRow())
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {

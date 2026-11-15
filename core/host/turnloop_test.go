@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -16,6 +17,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/bridge"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -110,9 +112,7 @@ func TestDriverFanOutToAllBoundGateways(t *testing.T) {
 
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1",
-			[]contracts.GatewaySet{{Gateway: a, Reader: a}, {Gateway: b, Reader: b}},
-			toBridge, fromBridge)
+		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}, {Gateway: b, Reader: b}}, toBridge, fromBridge, io.Discard)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -120,13 +120,13 @@ func TestDriverFanOutToAllBoundGateways(t *testing.T) {
 
 		select {
 		case in := <-toBridge:
-			if in.T != "input" || in.Text != "hello" {
+			if in.T != eventwire.EventInput || in.Text != "hello" {
 				t.Fatalf("driver wrote %+v, want input/hello", in)
 			}
 		case <-time.After(time.Second):
 			t.Fatal("driver did not pump input to bridge")
 		}
-		fromBridge <- contracts.Event{T: "reply", Text: "world", Done: true}
+		fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "world", Done: true}
 
 		requireSettled(t, func() bool {
 			a.mu.Lock()
@@ -146,7 +146,7 @@ func TestDriverPollsSessionChannel(t *testing.T) {
 		a := &fanRecorder{}
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		d.channel = "sess-chan"
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -184,7 +184,7 @@ func TestDriverDoesNotReplayHistoryWhenCursorInitFails(t *testing.T) {
 		a.feed("marrant tu fonctionne encore?")
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		d.channel = "sess-chan"
 
 		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
@@ -205,16 +205,16 @@ func TestDriverNonEventSinkPostsOnlyFinalReply(t *testing.T) {
 		a.feed("hello")
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		go d.run(ctx)
 
-		if got := <-toBridge; got.T != "input" || got.Text != "hello" {
+		if got := <-toBridge; got.T != eventwire.EventInput || got.Text != "hello" {
 			t.Fatalf("driver wrote %+v, want input/hello", got)
 		}
-		fromBridge <- contracts.Event{T: "status", Text: "running"}
-		fromBridge <- contracts.Event{T: "reply", Text: "world", Done: true}
+		fromBridge <- contracts.Event{T: eventwire.EventStatus, Text: "running"}
+		fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "world", Done: true}
 
 		requireSettled(t, func() bool {
 			a.mu.Lock()
@@ -255,13 +255,13 @@ func TestDriverResolvesAttachmentsOntoInput(t *testing.T) {
 	})
 	toBridge := make(chan contracts.Event, 4)
 	fromBridge := make(chan contracts.Event, 4)
-	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go d.run(ctx)
 
 	got := <-toBridge
-	if got.T != "input" || got.Text != "look" {
+	if got.T != eventwire.EventInput || got.Text != "look" {
 		t.Fatalf("want input/look, got %+v", got)
 	}
 	if len(got.Attachments) != 1 || got.Attachments[0] != img {
@@ -277,14 +277,13 @@ func TestDriverEmitsAbandonedOnHangup(t *testing.T) {
 
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1",
-			[]contracts.GatewaySet{{Gateway: a, Reader: a}, {Gateway: rec, Reader: rec}},
-			toBridge, fromBridge)
+		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}, {Gateway: rec, Reader: rec}}, toBridge, fromBridge, io.Discard)
+
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		go d.run(ctx)
 
-		if got := <-toBridge; got.T != "input" || got.Text != "hello" {
+		if got := <-toBridge; got.T != eventwire.EventInput || got.Text != "hello" {
 			t.Fatalf("driver wrote %+v, want input/hello", got)
 		}
 		d.hangup <- struct{}{}
@@ -293,7 +292,7 @@ func TestDriverEmitsAbandonedOnHangup(t *testing.T) {
 			rec.mu.Lock()
 			defer rec.mu.Unlock()
 			n := len(rec.emitted)
-			return n >= 2 && rec.emitted[0].T == "human" && rec.emitted[n-1].T == "abandoned"
+			return n >= 2 && rec.emitted[0].T == eventwire.EventHuman && rec.emitted[n-1].T == eventwire.EventAbandoned
 		}, "abandoned signal fanned to the EventSink gateway")
 
 		a.mu.Lock()
@@ -309,7 +308,7 @@ func TestDriverPickForwardsWithoutOpeningTurn(t *testing.T) {
 		a := &fanRecorder{}
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		go d.run(ctx)
@@ -317,13 +316,13 @@ func TestDriverPickForwardsWithoutOpeningTurn(t *testing.T) {
 		d.Pick("2")
 		select {
 		case got := <-toBridge:
-			if got.T != "pick" || got.Value != "2" {
+			if got.T != eventwire.EventPick || got.Value != "2" {
 				t.Fatalf("driver forwarded %+v, want pick/2", got)
 			}
 		case <-time.After(time.Second):
 			t.Fatal("Pick was not forwarded to the bridge")
 		}
-		fromBridge <- contracts.Event{T: "reply", Text: "picked", Done: true}
+		fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "picked", Done: true}
 		requireSettled(t, func() bool {
 			a.mu.Lock()
 			defer a.mu.Unlock()
@@ -333,7 +332,7 @@ func TestDriverPickForwardsWithoutOpeningTurn(t *testing.T) {
 }
 
 func TestPickRegistryRoutesToLiveSession(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	a := &fanRecorder{}
 	a.feed("ping")
@@ -345,22 +344,22 @@ func TestPickRegistryRoutesToLiveSession(t *testing.T) {
 	defer closeRead(acc)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go RunSession(ctx, sessionTab, "pickreg", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil)
+	go RunSession(ctx, sessionTab, "pickreg", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil, io.Discard)
 
 	c := dialCtl(t, sock)
 	defer closeRead(c)
 	gotInput(t, c, "ping")
-	if !(&hub{approvals: approvalTab, sessions: sessionTab}).Pick("pickreg", "1") {
+	if !(&hub{warnings: io.Discard, approvals: approvalTab, sessions: sessionTab}).Pick("pickreg", "1") {
 		t.Fatal("Pick must route to the session that is serving its control socket")
 	}
-	if (&hub{approvals: approvalTab, sessions: sessionTab}).Pick("does-not-exist", "1") {
+	if (&hub{warnings: io.Discard, approvals: approvalTab, sessions: sessionTab}).Pick("does-not-exist", "1") {
 		t.Fatal("Pick must report false for an unknown session")
 	}
 }
 
 func TestSeedEnqueuesInput(t *testing.T) {
 	sessionTab := newSessionTable()
-	d := newSessionDriver("beta", nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1))
+	d := newSessionDriver("beta", nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1), io.Discard)
 	sessionTab.register("beta", d)
 	defer sessionTab.unregister("beta", d)
 
@@ -369,7 +368,7 @@ func TestSeedEnqueuesInput(t *testing.T) {
 	}
 	select {
 	case q := <-d.queue:
-		if q.ev.T != "input" || q.ev.Text != "finir le module" || q.ev.Who != "handoff" {
+		if q.ev.T != eventwire.EventInput || q.ev.Text != "finir le module" || q.ev.Who != "handoff" {
 			t.Fatalf("unexpected frame: %+v", q.ev)
 		}
 	default:
@@ -384,14 +383,14 @@ func TestSeedAndWaitReturnsReply(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		toBridge := make(chan contracts.Event, 8)
 		from := make(chan contracts.Event, 8)
-		d := newSessionDriver("solo", nil, toBridge, from)
+		d := newSessionDriver("solo", nil, toBridge, from, io.Discard)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		go d.pump(ctx)
 
 		go func() {
 			<-toBridge
-			from <- contracts.Event{T: "reply", Done: true, Text: "j'ai appris X"}
+			from <- contracts.Event{T: eventwire.EventReply, Done: true, Text: "j'ai appris X"}
 		}()
 
 		reply, ok := d.SeedAndWait(ctx, "crée un ModuleScript Greeter")
@@ -404,7 +403,7 @@ func TestSeedAndWaitReturnsReply(t *testing.T) {
 func TestSeedAndWaitAbandonOnCancel(t *testing.T) {
 	toBridge := make(chan contracts.Event, 8)
 	from := make(chan contracts.Event, 8)
-	d := newSessionDriver("solo", nil, toBridge, from)
+	d := newSessionDriver("solo", nil, toBridge, from, io.Discard)
 	ctx, cancel := context.WithCancel(context.Background())
 	go d.pump(ctx)
 	go func() {
@@ -424,7 +423,7 @@ func TestDriverJournalsParticipants(t *testing.T) {
 		journal := filepath.Join(t.TempDir(), "demo.log")
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		d.participants = journal
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -444,7 +443,7 @@ func TestDriverFIFOSerializesTurns(t *testing.T) {
 		a.feed("second")
 		toBridge := make(chan contracts.Event, 8)
 		fromBridge := make(chan contracts.Event, 8)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge)
+		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		go d.run(ctx)
@@ -457,7 +456,7 @@ func TestDriverFIFOSerializesTurns(t *testing.T) {
 			t.Fatalf("second frame %+v pumped before first turn completed", got)
 		case <-time.After(150 * time.Millisecond):
 		}
-		fromBridge <- contracts.Event{T: "reply", Text: "r1", Done: true}
+		fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "r1", Done: true}
 		if got := <-toBridge; got.Text != "second" {
 			t.Fatalf("second frame = %+v, want second after reply{done}", got)
 		}
@@ -473,9 +472,8 @@ func TestDriverResetMidTurnDoesNotEndTurn(t *testing.T) {
 
 		toBridge := make(chan contracts.Event, 8)
 		fromBridge := make(chan contracts.Event, 8)
-		d := newSessionDriver("s1",
-			[]contracts.GatewaySet{{Gateway: a, Reader: a}, {Gateway: rec, Reader: rec}},
-			toBridge, fromBridge)
+		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}, {Gateway: rec, Reader: rec}}, toBridge, fromBridge, io.Discard)
+
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		go d.run(ctx)
@@ -484,15 +482,15 @@ func TestDriverResetMidTurnDoesNotEndTurn(t *testing.T) {
 			t.Fatalf("first frame = %+v", got)
 		}
 
-		fromBridge <- contracts.Event{T: "reset"}
-		fromBridge <- contracts.Event{T: "chunk", Text: "x"}
+		fromBridge <- contracts.Event{T: eventwire.EventReset}
+		fromBridge <- contracts.Event{T: eventwire.EventChunk, Text: "x"}
 
 		requireSettled(t, func() bool {
 			rec.mu.Lock()
 			defer rec.mu.Unlock()
 			return len(rec.emitted) == 3 &&
-				rec.emitted[0].T == "human" &&
-				rec.emitted[1].T == "reset" && rec.emitted[2].T == "chunk"
+				rec.emitted[0].T == eventwire.EventHuman &&
+				rec.emitted[1].T == eventwire.EventReset && rec.emitted[2].T == eventwire.EventChunk
 		}, "human, reset and chunk fanned to EventSink before reply")
 
 		select {
@@ -501,7 +499,7 @@ func TestDriverResetMidTurnDoesNotEndTurn(t *testing.T) {
 		case <-time.After(150 * time.Millisecond):
 		}
 
-		fromBridge <- contracts.Event{T: "reply", Text: "r1", Done: true}
+		fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "r1", Done: true}
 		if got := <-toBridge; got.Text != "second" {
 			t.Fatalf("second frame = %+v, want second after reply{done}", got)
 		}
@@ -529,7 +527,7 @@ func TestRunSessionReconnectsAndResumes(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go RunSession(ctx, sessionTab, "s1", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil)
+	go RunSession(ctx, sessionTab, "s1", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil, io.Discard)
 
 	c1 := dialCtl(t, sock)
 	gotInput(t, c1, "q1")
@@ -554,11 +552,11 @@ func TestRunSessionReconnectsAfterCompletedTurn(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go RunSession(ctx, sessionTab, "s1", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil)
+	go RunSession(ctx, sessionTab, "s1", "", []contracts.GatewaySet{{Gateway: a, Reader: a}}, acc, "", nil, nil, sessionSink{}, nil, io.Discard)
 
 	c1 := dialCtl(t, sock)
 	gotInput(t, c1, "q1")
-	if err := c1.Write(contracts.Event{T: "reply", Text: "r1", Done: true}); err != nil {
+	if err := c1.Write(contracts.Event{T: eventwire.EventReply, Text: "r1", Done: true}); err != nil {
 		t.Fatalf("write reply: %v", err)
 	}
 	closeRead(c1)
@@ -570,10 +568,6 @@ func TestRunSessionReconnectsAfterCompletedTurn(t *testing.T) {
 }
 
 func tmpSock(t *testing.T) string { t.Helper(); return filepath.Join(t.TempDir(), "h.sock") }
-
-func acceptCtl(sock string) (*control.Acceptor, error) {
-	return control.Accept(context.Background(), sock)
-}
 
 func dialCtl(t *testing.T, sock string) *control.Conn {
 	t.Helper()
@@ -589,7 +583,7 @@ func gotInput(t *testing.T, c *control.Conn, want string) {
 	got := make(chan string, 1)
 	go func() {
 		logCleanup(c.Scan(func(e contracts.Event) error {
-			if e.T == "input" {
+			if e.T == eventwire.EventInput {
 				got <- e.Text
 				return errStopScan
 			}
@@ -614,10 +608,10 @@ func (stopScanError) Error() string { return "stop" }
 
 func TestFanOutPrefersRoutedEventSink(t *testing.T) {
 	rec := &routedRec{}
-	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: rec}}, nil, nil)
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: rec}}, nil, nil, io.Discard)
 	d.channel = "chan-1"
 
-	d.fanOut(context.Background(), contracts.Event{T: "chunk", Text: "hi"})
+	d.fanOut(context.Background(), contracts.Event{T: eventwire.EventChunk, Text: "hi"})
 
 	if len(rec.convs) != 1 {
 		t.Fatalf("EmitTo not called once: %+v", rec.convs)
@@ -707,12 +701,12 @@ func (r *recordingCoord) Route(_ context.Context, req contracts.RouteRequest) (s
 
 func TestDriverInvokesCoordinatorOnHandoffTrailer(t *testing.T) {
 	from := make(chan contracts.Event, 2)
-	d := newSessionDriver("alpha", nil, make(chan contracts.Event, 1), from)
+	d := newSessionDriver("alpha", nil, make(chan contracts.Event, 1), from, io.Discard)
 	rc := &recordingCoord{}
 	d.coordinator = rc
 
 	from <- contracts.Event{
-		T: "reply", Done: true,
+		T: eventwire.EventReply, Done: true,
 		Text: "fait.\n⟢ handoff: scripter \u2014 finir le module",
 	}
 	if ok := d.awaitTurn(context.Background(), tokenGuard{}); !ok {
@@ -729,10 +723,10 @@ func TestDriverInvokesCoordinatorOnHandoffTrailer(t *testing.T) {
 
 func TestDriverNoHandoffWithoutTrailer(t *testing.T) {
 	from := make(chan contracts.Event, 1)
-	d := newSessionDriver("alpha", nil, make(chan contracts.Event, 1), from)
+	d := newSessionDriver("alpha", nil, make(chan contracts.Event, 1), from, io.Discard)
 	rc := &recordingCoord{}
 	d.coordinator = rc
-	from <- contracts.Event{T: "reply", Done: true, Text: "réponse normale"}
+	from <- contracts.Event{T: eventwire.EventReply, Done: true, Text: "réponse normale"}
 	_ = d.awaitTurn(context.Background(), tokenGuard{})
 	if len(rc.reqs) != 0 {
 		t.Fatalf("no handoff expected, got %d", len(rc.reqs))
@@ -751,7 +745,7 @@ func TestMaybeCoordinateDispatchesByTrailer(t *testing.T) {
 	}
 	for _, tc := range cases {
 		from := make(chan contracts.Event, 1)
-		d := newSessionDriver("sess", nil, make(chan contracts.Event, 1), from)
+		d := newSessionDriver("sess", nil, make(chan contracts.Event, 1), from, io.Discard)
 		rc := &recordingCoord{}
 		d.coordinator = rc
 		d.maybeCoordinate(context.Background(), tc.reply)
@@ -794,7 +788,7 @@ func (e *erroringCoord) Route(context.Context, contracts.RouteRequest) (string, 
 
 func TestTerminalReplyCarriesAcceptedDelegationBeforeSeedRelease(t *testing.T) {
 	from := make(chan contracts.Event, 1)
-	d := newSessionDriver("lead", nil, make(chan contracts.Event, 1), from)
+	d := newSessionDriver("lead", nil, make(chan contracts.Event, 1), from, io.Discard)
 	d.agent = "orchestrator"
 	d.activeTurnID = "turn-user"
 	d.coordinator = &recordingCoord{}
@@ -802,7 +796,7 @@ func TestTerminalReplyCarriesAcceptedDelegationBeforeSeedRelease(t *testing.T) {
 	replyCh := make(chan string, 1)
 	releasedBeforeTerminal := false
 	d.emitTap = func(e contracts.Event) {
-		if e.T == "reply" && e.Done {
+		if e.T == eventwire.EventReply && e.Done {
 			select {
 			case <-replyCh:
 				releasedBeforeTerminal = true
@@ -814,7 +808,7 @@ func TestTerminalReplyCarriesAcceptedDelegationBeforeSeedRelease(t *testing.T) {
 	d.pendingReply = replyCh
 
 	from <- contracts.Event{
-		T: "reply", Done: true,
+		T: eventwire.EventReply, Done: true,
 		Text: "Je délègue.\n⟢ delegate: roblox-scripter \u2014 modifier les nametags",
 	}
 	if !d.awaitTurn(context.Background(), tokenGuard{}) {
@@ -895,7 +889,7 @@ type terminalCapture struct {
 }
 
 func (c *terminalCapture) observe(e contracts.Event) {
-	if e.T != "reply" || !e.Done {
+	if e.T != eventwire.EventReply || !e.Done {
 		return
 	}
 	select {
@@ -909,13 +903,13 @@ func (c *terminalCapture) observe(e contracts.Event) {
 func runTerminalReplyCase(t *testing.T, tc terminalReplyCase) {
 	t.Helper()
 	from := make(chan contracts.Event, 1)
-	d := newSessionDriver(tc.session, nil, make(chan contracts.Event, 1), from)
+	d := newSessionDriver(tc.session, nil, make(chan contracts.Event, 1), from, io.Discard)
 	d.coordinator = tc.coordinator
 	capture := &terminalCapture{replyCh: make(chan string, 1)}
 	d.emitTap = capture.observe
 	d.pendingReply = capture.replyCh
 
-	from <- contracts.Event{T: "reply", Done: true, Text: tc.reply}
+	from <- contracts.Event{T: eventwire.EventReply, Done: true, Text: tc.reply}
 	if !d.awaitTurn(context.Background(), tokenGuard{}) {
 		t.Fatal("turn abandoned")
 	}
@@ -986,8 +980,8 @@ func TestCoordinationRefusalStatusUsesStablePublicLabel(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			d := newSessionDriver("worker", nil, nil, nil)
-			d.lang = i18n.French
+			d := newSessionDriver("worker", nil, nil, nil, io.Discard)
+			d.operator = fixedLanguageSource(i18n.French)
 			d.coordinator = &erroringCoord{
 				err: errors.New("sensitive " + strings.Repeat("x", 200)),
 			}
@@ -996,7 +990,7 @@ func TestCoordinationRefusalStatusUsesStablePublicLabel(t *testing.T) {
 
 			outcome := d.maybeCoordinate(context.Background(), tc.reply)
 
-			if len(emitted) != 1 || emitted[0].T != "status" || emitted[0].Text != tc.wantStatus {
+			if len(emitted) != 1 || emitted[0].T != eventwire.EventStatus || emitted[0].Text != tc.wantStatus {
 				t.Fatalf("public status = %+v, want %q", emitted, tc.wantStatus)
 			}
 			wantSummary := "sensitive " + strings.Repeat("x", 150)
@@ -1080,13 +1074,12 @@ func requireCoordinatorStatus(t *testing.T, coord contracts.Coordinator, lang i1
 	synctest.Test(t, func(t *testing.T) {
 		rec := &sinkRecorder{}
 		from := make(chan contracts.Event, 2)
-		d := newSessionDriver("alpha",
-			[]contracts.GatewaySet{{Gateway: rec}},
-			make(chan contracts.Event, 1), from)
-		d.coordinator = coord
-		d.lang = lang
+		d := newSessionDriver("alpha", []contracts.GatewaySet{{Gateway: rec}}, make(chan contracts.Event, 1), from, io.Discard)
 
-		from <- contracts.Event{T: "reply", Done: true, Text: "fait.\n" + trailer}
+		d.coordinator = coord
+		d.operator = fixedLanguageSource(lang)
+
+		from <- contracts.Event{T: eventwire.EventReply, Done: true, Text: "fait.\n" + trailer}
 		if ok := d.awaitTurn(context.Background(), tokenGuard{}); !ok {
 			t.Fatal("awaitTurn should complete on reply{done}")
 		}
@@ -1095,7 +1088,7 @@ func requireCoordinatorStatus(t *testing.T, coord contracts.Coordinator, lang i1
 			rec.mu.Lock()
 			defer rec.mu.Unlock()
 			for index := range rec.emitted {
-				if rec.emitted[index].T == "status" && rec.emitted[index].Text == want {
+				if rec.emitted[index].T == eventwire.EventStatus && rec.emitted[index].Text == want {
 					return true
 				}
 			}
@@ -1106,11 +1099,11 @@ func requireCoordinatorStatus(t *testing.T, coord contracts.Coordinator, lang i1
 
 func TestDriverInvokesCoordinatorOnSealTrailer(t *testing.T) {
 	from := make(chan contracts.Event, 2)
-	d := newSessionDriver("lead", nil, make(chan contracts.Event, 1), from)
+	d := newSessionDriver("lead", nil, make(chan contracts.Event, 1), from, io.Discard)
 	rc := &recordingCoord{}
 	d.coordinator = rc
 
-	from <- contracts.Event{T: "reply", Done: true, Text: "cohorte lancée.\n⟢ seal: 4"}
+	from <- contracts.Event{T: eventwire.EventReply, Done: true, Text: "cohorte lancée.\n⟢ seal: 4"}
 	if ok := d.awaitTurn(context.Background(), tokenGuard{}); !ok {
 		t.Fatal("awaitTurn should complete on reply{done}")
 	}
@@ -1124,12 +1117,12 @@ func TestDriverInvokesCoordinatorOnSealTrailer(t *testing.T) {
 
 func TestDriverInvokesCoordinatorOnFanOutTrailer(t *testing.T) {
 	from := make(chan contracts.Event, 2)
-	d := newSessionDriver("lead", nil, make(chan contracts.Event, 1), from)
+	d := newSessionDriver("lead", nil, make(chan contracts.Event, 1), from, io.Discard)
 	rc := &recordingCoord{}
 	d.coordinator = rc
 
 	from <- contracts.Event{
-		T: "reply", Done: true,
+		T: eventwire.EventReply, Done: true,
 		Text: "je lance.\n⟢ fanout: scripter \u2014 a ;; b",
 	}
 	if ok := d.awaitTurn(context.Background(), tokenGuard{}); !ok {
@@ -1159,7 +1152,7 @@ func TestDriverInvokesCoordinatorOnRouteTrailer(t *testing.T) {
 
 func TestSubmitEnqueuesAnInputFrame(t *testing.T) {
 	sessionTab := newSessionTable()
-	d := newSessionDriver("s1", nil, nil, nil)
+	d := newSessionDriver("s1", nil, nil, nil, io.Discard)
 	sessionTab.register("s1", d)
 	defer sessionTab.unregister("s1", d)
 
@@ -1168,7 +1161,7 @@ func TestSubmitEnqueuesAnInputFrame(t *testing.T) {
 	}
 	select {
 	case q := <-d.queue:
-		if q.ev.T != "input" || q.ev.Who != "leo" || q.ev.Text != "fix the login bug" {
+		if q.ev.T != eventwire.EventInput || q.ev.Who != "leo" || q.ev.Text != "fix the login bug" {
 			t.Fatalf("queued %+v, want an input frame from leo", q.ev)
 		}
 	default:
@@ -1186,7 +1179,7 @@ func TestSubmitOnUnknownSessionReportsFalse(t *testing.T) {
 func TestSubmitJournalsTheAuthor(t *testing.T) {
 	sessionTab := newSessionTable()
 	dir := t.TempDir()
-	d := newSessionDriver("s2", nil, nil, nil)
+	d := newSessionDriver("s2", nil, nil, nil, io.Discard)
 	d.participants = filepath.Join(dir, "participants")
 	sessionTab.register("s2", d)
 	defer sessionTab.unregister("s2", d)

@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"testing"
 
 	"github.com/Herrscherd/herrscher/core/cli"
@@ -10,13 +11,15 @@ import (
 )
 
 func TestReconcileSkipsArchived(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
-	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
+	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
 	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab)
+	h.runtime = isolatedRuntimeDir(t)
+	t.Cleanup(h.stopLive)
 
 	if err := st.AddSession(state.Session{Name: "recon-live", ChannelID: "c1", Type: "text"}); err != nil {
 		t.Fatal(err)
@@ -39,13 +42,15 @@ func TestReconcileSkipsArchived(t *testing.T) {
 }
 
 func TestReconcileReapsInPlaceArchived(t *testing.T) {
-	approvalTab := newApprovalTable()
+	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
-	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher")
+	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
 	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab)
+	h.runtime = isolatedRuntimeDir(t)
+	t.Cleanup(h.stopLive)
 
 	if err := st.AddSession(state.Session{Name: "s", ChannelID: "c1", Type: "text"}); err != nil {
 		t.Fatal(err)

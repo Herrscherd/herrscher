@@ -115,3 +115,28 @@ func TestLatencyWritesMillisecondsThenSecondsWithTheDecimalOfTheLanguage(t *test
 		}
 	}
 }
+
+func TestTableShortensTheSocketAndNamesTheCompactionStack(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	snapshot := health.Snapshot{
+		Daemon:       health.Daemon{Socket: home + "/.herrscher/host.sock"},
+		CompactStack: []string{"jev", "backend"},
+		Checks: []health.Check{
+			{Group: health.GroupCore, Name: health.ServiceDaemon, Report: contracts.ProbeReport{State: contracts.HealthOK}},
+			{Group: health.GroupCompaction, Name: "jev", Report: contracts.ProbeReport{State: contracts.HealthOK}},
+		},
+	}
+	var out bytes.Buffer
+	if err := snapshot.Table(&out, i18n.French, termpaint.Palette{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"~/.herrscher/host.sock", "compactStack = jev → backend"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("table misses %q:\n%s", want, out.String())
+		}
+	}
+	if strings.Contains(out.String(), home) {
+		t.Errorf("table keeps the home path:\n%s", out.String())
+	}
+}

@@ -2,12 +2,14 @@ package host
 
 import (
 	"context"
+	"io"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
 )
 
@@ -27,9 +29,8 @@ func TestDispatchRefusedWhilePaused(t *testing.T) {
 
 	toBridge := make(chan contracts.Event, 4)
 	fromBridge := make(chan contracts.Event, 4)
-	d := newSessionDriver("s1",
-		[]contracts.GatewaySet{{Gateway: a, Reader: a}},
-		toBridge, fromBridge)
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+
 	d.gate = fixedGate{reason: "cost"}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -41,7 +42,7 @@ loop:
 	for {
 		select {
 		case ev := <-toBridge:
-			if ev.T == "input" {
+			if ev.T == eventwire.EventInput {
 				t.Fatalf("driver opened a turn while paused: wrote %+v", ev)
 			}
 		case <-deadline:
@@ -56,9 +57,8 @@ func TestPausedReachesEmitTap(t *testing.T) {
 
 	toBridge := make(chan contracts.Event, 4)
 	fromBridge := make(chan contracts.Event, 4)
-	d := newSessionDriver("s1",
-		[]contracts.GatewaySet{{Gateway: a, Reader: a}},
-		toBridge, fromBridge)
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+
 	d.gate = fixedGate{reason: "cost"}
 	var tapped []contracts.Event
 	var mu sync.Mutex
@@ -76,7 +76,7 @@ func TestPausedReachesEmitTap(t *testing.T) {
 	for {
 		mu.Lock()
 		for _, e := range tapped {
-			if e.T == "paused" && e.Text == "cost" {
+			if e.T == eventwire.EventPaused && e.Text == "cost" {
 				mu.Unlock()
 				return
 			}
@@ -96,9 +96,8 @@ func TestRefusedInputAcknowledgedNotSilentlyDropped(t *testing.T) {
 
 	toBridge := make(chan contracts.Event, 4)
 	fromBridge := make(chan contracts.Event, 4)
-	d := newSessionDriver("s1",
-		[]contracts.GatewaySet{{Gateway: a, Reader: a}},
-		toBridge, fromBridge)
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+
 	d.gate = fixedGate{reason: "cost"}
 	tap := &refusalTap{}
 	d.emitTap = tap.record
@@ -133,11 +132,11 @@ func (k *refusalTap) scanRefusal(t *testing.T) refusalScan {
 	var scan refusalScan
 	for i := range k.events {
 		e := k.events[i]
-		if e.T == "human" {
+		if e.T == eventwire.EventHuman {
 			t.Fatalf("a turn was opened for input refused by the budget gate: %+v", e)
 		}
-		scan.paused = scan.paused || e.T == "paused"
-		scan.refused = scan.refused || (e.T == "status" && strings.Contains(e.Text, "refus"))
+		scan.paused = scan.paused || e.T == eventwire.EventPaused
+		scan.refused = scan.refused || (e.T == eventwire.EventStatus && strings.Contains(e.Text, "refus"))
 	}
 	return scan
 }
@@ -164,9 +163,8 @@ func TestDispatchProceedsWhenNotPaused(t *testing.T) {
 
 	toBridge := make(chan contracts.Event, 4)
 	fromBridge := make(chan contracts.Event, 4)
-	d := newSessionDriver("s1",
-		[]contracts.GatewaySet{{Gateway: a, Reader: a}},
-		toBridge, fromBridge)
+	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+
 	d.gate = fixedGate{reason: ""}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -175,7 +173,7 @@ func TestDispatchProceedsWhenNotPaused(t *testing.T) {
 
 	select {
 	case in := <-toBridge:
-		if in.T != "input" || in.Text != "hello" {
+		if in.T != eventwire.EventInput || in.Text != "hello" {
 			t.Fatalf("driver wrote %+v, want input/hello", in)
 		}
 	case <-time.After(time.Second):

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 func TestSubscribeDaemonEventsStreamsTaggedEvents(t *testing.T) {
@@ -23,7 +25,7 @@ func TestSubscribeDaemonEventsStreamsTaggedEvents(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	stream, err := subscribeAt(ctx, path)
+	stream, err := subscribeAt(ctx, isolatedRuntimeDir(t), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,14 +40,14 @@ func serveDaemonEventLines(ln net.Listener) {
 	}
 	defer closeRead(c)
 	events := []DaemonEvent{
-		{Session: "alpha", Event: contracts.Event{T: "reply", Text: "hello"}},
-		{Session: "beta", Event: contracts.Event{T: "status", Text: "working"}},
+		{Session: "alpha", Event: contracts.Event{T: eventwire.EventReply, Text: "hello"}},
+		{Session: "beta", Event: contracts.Event{T: eventwire.EventStatus, Text: "working"}},
 	}
 	for i := range events {
 		writeDaemonEventLine(c, events[i])
 	}
 	logWriteFailure(c.Write([]byte("{not json\n")))
-	writeDaemonEventLine(c, DaemonEvent{Session: "alpha", Event: contracts.Event{T: "reply", Text: "still here", Done: true}})
+	writeDaemonEventLine(c, DaemonEvent{Session: "alpha", Event: contracts.Event{T: eventwire.EventReply, Text: "still here", Done: true}})
 	<-time.After(200 * time.Millisecond)
 }
 
@@ -100,7 +102,7 @@ func TestSubscribeDaemonEventsClosesWhenTheDaemonGoesAway(t *testing.T) {
 	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	stream, err := subscribeAt(ctx, path)
+	stream, err := subscribeAt(ctx, isolatedRuntimeDir(t), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +117,7 @@ func TestSubscribeDaemonEventsClosesWhenTheDaemonGoesAway(t *testing.T) {
 }
 
 func TestSubscribeDaemonEventsFailsWithoutADaemon(t *testing.T) {
-	_, err := subscribeAt(context.Background(), filepath.Join(t.TempDir(), "absent.sock"))
+	_, err := subscribeAt(context.Background(), isolatedRuntimeDir(t), filepath.Join(t.TempDir(), "absent.sock"))
 	if err == nil {
 		t.Fatal("expected an error when nothing is listening")
 	}

@@ -27,6 +27,7 @@ type attachedDaemon struct {
 	lang     i18n.Language
 	done     <-chan struct{}
 	send     func(argv []string) (string, error)
+	launch   func(name string) []string
 	instance string
 	events   chan tui.RoutedEvent
 
@@ -39,8 +40,8 @@ type attachedDaemon struct {
 
 const sessionCacheTTL = time.Second
 
-func newAttachedDaemon(ctx context.Context, instance string, lang i18n.Language) (*attachedDaemon, error) {
-	stream, err := host.SubscribeDaemonEvents(ctx, instance)
+func newAttachedDaemon(ctx context.Context, layout host.RuntimeLayout, instance, statePath string, lang i18n.Language) (*attachedDaemon, error) {
+	stream, err := host.SubscribeDaemonEvents(ctx, layout, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -55,8 +56,9 @@ func newAttachedDaemon(ctx context.Context, instance string, lang i18n.Language)
 	daemon.send = func(argv []string) (string, error) {
 		call, cancel := context.WithTimeout(ctx, attachTimeout)
 		defer cancel()
-		return host.DaemonDispatch(call, instance, argv)
+		return host.DaemonDispatch(call, layout, instance, argv)
 	}
+	daemon.launch = func(name string) []string { return attachedLaunch(ctx, statePath, name) }
 	daemon.refresh()
 	go daemon.pump(stream)
 	return daemon, nil
@@ -117,29 +119,28 @@ func (a *attachedDaemon) dispatch(argv []string) (string, error) {
 
 type attachRunner struct {
 	log     *slog.Logger
-	logPath string
-	connect func(ctx context.Context, instance string, lang i18n.Language) (*attachedDaemon, error)
+	connect func(ctx context.Context, layout host.RuntimeLayout, instance, statePath string, lang i18n.Language) (*attachedDaemon, error)
 	run     func(ctx context.Context, cancel context.CancelFunc, backend tui.Backend, opts ...tui.Option) error
 }
 
 func newAttachRunner(log *slog.Logger) attachRunner {
-	return attachRunner{log: log, logPath: clientLogPath(), connect: newAttachedDaemon, run: tui.Run}
+	return attachRunner{log: log, connect: newAttachedDaemon, run: tui.Run}
 }
 
-func (r attachRunner) runAttached(ctx context.Context, instance string, opts ...tui.Option) error {
+func (r attachRunner) runAttached(ctx context.Context, layout host.RuntimeLayout, instance, statePath string, opts ...tui.Option) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	daemon, err := r.connect(ctx, instance, clitext.ClientLanguage())
+	daemon, err := r.connect(ctx, layout, instance, statePath, clitext.ClientLanguage())
 	if err != nil {
 		return err
 	}
-	return withClientLog(r.log, r.logPath, func() error {
-		return r.run(ctx, cancel, daemon, append([]tui.Option{tui.Logger(r.log)}, opts...)...)
+	return withClientLog(r.log, clientLogPath(statePath), func() error {
+		return r.run(ctx, cancel, daemon, append([]tui.Option{tui.Logger(r.log), tui.Language(daemon.lang)}, opts...)...)
 	})
 }
 
-func clientLogPath() string {
-	return filepath.Join(filepath.Dir(host.DefaultStatePath()), "client.log")
+func clientLogPath(statePath string) string {
+	return filepath.Join(filepath.Dir(statePath), "client.log")
 }
 
 const maxLogFileBytes = 1 << 20
@@ -269,6 +270,27 @@ func (a *attachedDaemon) Seen(name string) {
 	if _, err := a.dispatch([]string{verbSession, "seen", argName, name}); err != nil {
 		slog.Debug("review mark not cleared", "session", name, "error", err)
 	}
+}
+
+func attachedLaunch(ctx context.Context, statePath, name string) []string {
+	argv := append(createTaskSession(ctx, name), "--shared")
+	dir, err := os.Getwd()
+	if err != nil {
+		return argv
+	}
+	if project := host.LaunchProject(ctx, statePath, dir); project != "" {
+		argv = append(argv, "--project", project)
+	}
+	return argv
+}
+
+func (a *attachedDaemon) StartSession() (string, error) {
+	name := terminal.DefaultSessionName(a.Sessions())
+	if _, err := a.dispatch(a.launch(name)); err != nil {
+		return "", err
+	}
+	a.refresh()
+	return name, nil
 }
 
 func (a *attachedDaemon) Overview() (string, error) {

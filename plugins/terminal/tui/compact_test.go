@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 func compactModel(t *testing.T, backend *fakeBackend) *model {
@@ -59,7 +60,7 @@ func TestCompactReportsBeforeAndAfterAndGaugeFollows(t *testing.T) {
 	m.tabs["c"].measureContext(contracts.Event{TokensIn: 82_000})
 	runCmd(m.runSlash("/compact"))
 	m.handleCompactResult(compactResultMsg{channel: "c"})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: "reply", Done: true, TokensIn: 25_000}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventReply, Done: true, TokensIn: 25_000}})
 
 	if got := m.contextTokens(m.tabs["c"]); got != 25_000 {
 		t.Fatalf("gauge source = %d after compaction, want 25000", got)
@@ -75,7 +76,7 @@ func TestCompactWithoutUsageReportsUnavailableAfter(t *testing.T) {
 	m := compactModel(t, backend)
 	m.tabs["c"].measureContext(contracts.Event{TokensIn: 82_000})
 	runCmd(m.runSlash("/compact"))
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: "reply", Done: true}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventReply, Done: true}})
 	transcript := strings.Join(entryTexts(m.tabs["c"]), "\n")
 	if !strings.Contains(transcript, "82.0k → n/a") {
 		t.Fatalf("a compaction without backend usage must say n/a, got:\n%s", transcript)

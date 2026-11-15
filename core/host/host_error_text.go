@@ -10,6 +10,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 	"github.com/Herrscherd/herrscher/core/usage"
 )
 
@@ -77,6 +78,8 @@ func hostErrorKeys() []hostErrorKey {
 		{errSealExpectedPositive, "cli.host.fault.seal_expected_positive"},
 		{errDiscoveryNoAnswer, "cli.host.fault.discovery_no_answer"},
 		{errCacheLockBusy, "cli.host.fault.cache_lock_busy"},
+		{errLockNotOwned, "cli.host.fault.lock_not_owned"},
+		{errLockSymlink, "cli.host.fault.lock_symlink"},
 		{errNoPendingChoice, "cli.host.fault.no_pending_choice"},
 		{errHandoffTargets, "cli.host.fault.handoff_targets"},
 		{errHandoffAgentTargets, "cli.host.fault.handoff_agent_targets"},
@@ -86,6 +89,11 @@ func hostErrorKeys() []hostErrorKey {
 		{errHandoffQuota, "cli.host.fault.handoff_quota"},
 		{errShellRefused, "cli.host.fault.shell_refused"},
 		{errDaemonEventsUnreachable, "cli.host.fault.daemon_events_unreachable"},
+		{errSocketTaken, "cli.host.fault.socket_taken"},
+		{errInstanceLocked, "cli.host.fault.instance_locked"},
+		{errNoRuntimeLayout, "cli.host.fault.no_runtime_dir"},
+		{errHubClosed, "cli.host.fault.hub_closed"},
+		{supervisor.ErrStillStopping, "cli.host.fault.still_stopping"},
 		{errEmptyShellCommand, "cli.host.fault.empty_shell_command"},
 		{errUnknownShellSession, "cli.host.fault.unknown_shell_session"},
 		{errRemoteShellSession, "cli.host.fault.remote_shell_session"},

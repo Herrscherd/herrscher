@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -147,7 +148,7 @@ func TestRewindRefusedWhileTurnInFlight(t *testing.T) {
 		t.Fatal(err)
 	}
 	sessions := newSessionTable()
-	driver := newSessionDriver("alpha", nil, nil, nil)
+	driver := newSessionDriver("alpha", nil, nil, nil, io.Discard)
 	if !driver.claimTurn() {
 		t.Fatal("the fixture must put a turn in flight")
 	}

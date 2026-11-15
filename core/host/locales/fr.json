@@ -80,6 +80,31 @@
     "other": "cohorte scellée à {{.Node}}"
   },
   {
+    "id": "outbound.refused",
+    "description": "Fichiers rendus par un backend pour une réponse, refusés ou non envoyés : Names les liste",
+    "other": "fichier(s) refusé(s), non envoyé(s) : {{.Names}}"
+  },
+  {
+    "id": "outbound.unsent",
+    "description": "Fichiers rendus par un backend que cette passerelle ne sait pas transporter, nommés sans leur chemin : Names les liste",
+    "other": "fichier(s) non envoyé(s), cette passerelle ne sait pas transporter de fichiers : {{.Names}}"
+  },
+  {
+    "id": "outbound.failed",
+    "description": "Fichiers rendus par un backend que la passerelle n'a pas pu envoyer après la réponse : Names les liste",
+    "other": "fichier(s) non envoyé(s), la passerelle a échoué : {{.Names}}"
+  },
+  {
+    "id": "outbound.elsewhere",
+    "description": "Fichiers rendus par un backend pour une réponse qui part vers une autre conversation que celle du tour, donc non envoyés : Names les liste",
+    "other": "fichier(s) non envoyé(s), la réponse part ailleurs que dans cette conversation : {{.Names}}"
+  },
+  {
+    "id": "outbound.unnamed",
+    "description": "Désigne un fichier sans nom dans les avis qui listent des fichiers",
+    "other": "fichier sans nom"
+  },
+  {
     "id": "coordination.merged",
     "description": "Le coordinateur fusionne la branche d'un worker, Lead nomme la session pilote qui la reçoit",
     "other": "fusion traitée pour {{.Lead}}"
@@ -191,8 +216,13 @@
   },
   {
     "id": "compaction.stack_named",
-    "description": "A failure in the compaction stack of a session, Name names the session and Detail carries the cause",
-    "other": "compactStack \"{{.Name}}\" : {{.Detail}}"
+    "description": "Une étape de la pile de compaction échoue, Name nomme l'étape et Detail porte la cause ; le démon ne démarre pas tant qu'elle échoue",
+    "other": "compactStack \"{{.Name}}\" : {{.Detail}}. Le démon ne démarre pas tant que cette étape échoue : corrige-la ou retire-la de compactStack, puis herrscher service restart"
+  },
+  {
+    "id": "compaction.stage_trigger",
+    "description": "Le seuil de déclenchement d'une étape de la pile de compaction est hors de 0 à 100, Name nomme l'étape et Percent porte la valeur ; le démon ne démarre pas tant qu'il est invalide",
+    "other": "compactStack \"{{.Name}}\" : seuil de déclenchement {{.Percent}} hors de 0 à 100. Le démon ne démarre pas tant que ce seuil est invalide : corrige-le dans l'étape, puis herrscher service restart"
   },
   {
     "id": "coordination.wrap",
@@ -260,9 +290,34 @@
     "other": "routage : {{.Detail}}"
   },
   {
+    "id": "session.launch_failed",
+    "description": "Le pont d'une session n'a pas pu être lancé sur cette machine, Name nomme la session et Detail donne la cause",
+    "other": "la session {{.Name}} n'a pas démarré : son pont n'a pas pu être lancé. {{.Detail}}"
+  },
+  {
+    "id": "session.prepare_failed",
+    "description": "L'hôte distant d'une session n'a pas pu être préparé pour son pont, Name nomme la session et Detail donne la cause",
+    "other": "la session {{.Name}} n'a pas démarré : son hôte distant n'a pas pu être préparé. {{.Detail}}"
+  },
+  {
+    "id": "session.go_live",
+    "description": "A session cannot go live, Name names the session and Detail carries the cause",
+    "other": "session \"{{.Name}}\" ne peut pas démarrer : {{.Detail}}"
+  },
+  {
     "id": "daemon.events_socket",
     "description": "The daemon events socket is unreachable, Path gives the path and Detail carries the cause",
     "other": "socket d'événements {{.Path}} : {{.Detail}}"
+  },
+  {
+    "id": "daemon.instance_locked",
+    "description": "The instance lock file or mutex is held by another live daemon, Path names it",
+    "other": "un autre démon détient déjà le verrou de cette instance : {{.Path}}"
+  },
+  {
+    "id": "daemon.socket_taken",
+    "description": "A daemon socket path already answers for another live daemon, Path gives the path and Detail carries the cause",
+    "other": "socket {{.Path}} : {{.Detail}}"
   },
   {
     "id": "daemon.attachments",
@@ -278,6 +333,31 @@
     "id": "lock.dir",
     "description": "The state lock directory is unreachable, Detail carries the cause",
     "other": "dossier du verrou d'état : {{.Detail}}"
+  },
+  {
+    "id": "lock.unsafe",
+    "description": "Le fichier de verrou est inutilisable, Path le nomme et Detail donne la cause",
+    "other": "fichier de verrou {{.Path}} inutilisable : {{.Detail}}"
+  },
+  {
+    "id": "runtime.unsafe_dir.symlink",
+    "description": "Le répertoire d'exécution privé est un lien symbolique, Path le nomme",
+    "other": "répertoire d'exécution privé {{.Path}} inutilisable : c'est un lien symbolique. Si vous avez créé ce lien, supprimez-le et herrscher recrée le répertoire. Sinon, seul son propriétaire ou root peut le supprimer."
+  },
+  {
+    "id": "runtime.unsafe_dir.foreign_owner",
+    "description": "Le répertoire d'exécution privé appartient à un autre utilisateur, Path le nomme",
+    "other": "répertoire d'exécution privé {{.Path}} inutilisable : un autre compte l'a créé, et seul ce compte ou root peut le supprimer. Demandez à un administrateur de le supprimer, ou lancez herrscher depuis une session utilisateur systemd, qui utilise /run/user à la place."
+  },
+  {
+    "id": "runtime.unsafe_dir.open_access",
+    "description": "Le répertoire d'exécution privé est accessible à son groupe ou à d'autres, Path le nomme",
+    "other": "répertoire d'exécution privé {{.Path}} inutilisable : il est accessible à son groupe ou à d'autres. Lancez chmod 700 {{.Path}} pour le rendre privé."
+  },
+  {
+    "id": "runtime.unsafe_dir",
+    "description": "Le répertoire d'exécution privé est inutilisable, Path le nomme et Detail donne la raison",
+    "other": "répertoire d'exécution privé {{.Path}} inutilisable : {{.Detail}}"
   },
   {
     "id": "lock.state",
@@ -473,5 +553,115 @@
     "id": "coordination.delegate_refused",
     "description": "A task delegation refused, shown as an event",
     "other": "delegate refusé"
+  },
+  {
+    "id": "warn.session_start",
+    "description": "A session fails to come live or to be restored at start; Name is the session, Detail the cause",
+    "other": "herrscher serve : session \"{{.Name}}\" : {{.Detail}}"
+  },
+{
+    "id": "warn.session_start_recovered",
+    "description": "Une session dont le démarrage avait été refusé démarre de nouveau ; Name est la session",
+    "other": "herrscher serve : session \"{{.Name}}\" : démarrée de nouveau après un démarrage refusé"
+  },
+  {
+    "id": "warn.session_checkpoint",
+    "description": "A turn's checkpoint could not be written; /rewind cannot return to that message",
+    "other": "herrscher serve : session \"{{.Name}}\" : point de contrôle non pris, /rewind ne pourra pas revenir à ce message : {{.Detail}}"
+  },
+  {
+    "id": "warn.session_resume_token",
+    "description": "The resume token of a session could not be saved; a restart loses its conversation",
+    "other": "herrscher serve : session \"{{.Name}}\" : jeton de reprise non enregistré, un redémarrage perdra la conversation : {{.Detail}}"
+  },
+  {
+    "id": "warn.session_project_pin",
+    "description": "The pinned memory project of a session could not be saved",
+    "other": "herrscher serve : session \"{{.Name}}\" : projet de mémoire non enregistré, le prochain démarrage devinera à nouveau : {{.Detail}}"
+  },
+  {
+    "id": "warn.session_transcript",
+    "description": "A transcript entry of a session could not be written",
+    "other": "herrscher serve : session \"{{.Name}}\" : entrée de transcription perdue : {{.Detail}}"
+  },
+  {
+    "id": "warn.session_accept_failed",
+    "description": "Le socket de contrôle d'une session a échoué durablement ; la session est arrêtée et les ponts ne l'atteignent plus avant son redémarrage. Name est la session, Detail la cause",
+    "other": "herrscher serve : session \"{{.Name}}\" : le socket de contrôle a cessé d'accepter, la session est arrêtée jusqu'à son redémarrage : {{.Detail}}"
+  },
+  {
+    "id": "warn.session_teardown_overrun",
+    "description": "A session teardown outlives its grace period; the name is released anyway",
+    "other": "herrscher serve : session \"{{.Name}}\" : l'arrêt est toujours en cours après {{.Grace}}, le nom est libéré quand même"
+  },
+  {
+    "id": "warn.session_seed_transcript",
+    "description": "A transcript entry of a seeded session could not be written",
+    "other": "herrscher serve : session \"{{.Name}}\" : entrée de transcription initiale perdue : {{.Detail}}"
+  },
+  {
+    "id": "warn.session_usage",
+    "description": "The usage records of a session turn could not be appended to the ledger",
+    "other": "herrscher serve : session \"{{.Name}}\" : usage non enregistré : {{.Detail}}"
+  },
+  {
+    "id": "warn.session_compaction_notice",
+    "description": "A malformed compaction notice is dropped; its note and figures are kept",
+    "other": "herrscher serve : session \"{{.Name}}\" : avis de compaction perdu, sa note et ses chiffres sont conservés : {{.Detail}}"
+  },
+  {
+    "id": "warn.role_undefined",
+    "description": "A principal holds a role name herrscher does not define",
+    "other": "herrscher serve : {{.Name}} porte le rôle \"{{.Role}}\", que herrscher ne définit pas ; il est traité comme `observer`"
+  },
+  {
+    "id": "warn.ssh_multiplexing_disabled",
+    "description": "SSH connection multiplexing is disabled for a remote host",
+    "other": "multiplexage ssh désactivé pour {{.Name}} : {{.Detail}}"
+  },
+  {
+    "id": "warn.health_server",
+    "description": "The health endpoint could not serve",
+    "other": "serveur de santé : {{.Detail}}"
+  },
+  {
+    "id": "warn.command_socket_listen",
+    "description": "The command socket could not listen on its path",
+    "other": "socket de commandes : écoute sur {{.Path}} : {{.Detail}}"
+  },
+  {
+    "id": "warn.approvals_unreadable",
+    "description": "The approvals file cannot be read, so its rules are ignored",
+    "other": "approbations : {{.Path}} illisible, ses règles ne s'appliquent pas : {{.Detail}}"
+  },
+  {
+    "id": "warn.approvals_file",
+    "description": "The approvals file has a malformed line",
+    "other": "approbations : {{.Path}} : {{.Detail}}"
+  },
+  {
+    "id": "warn.approvals_state_rule",
+    "description": "A stored approval rule no longer parses and is dropped",
+    "other": "approbations : règle d'état \"{{.Rule}}\" retirée, elle ne s'applique plus : {{.Detail}}"
+  },
+  {
+    "id": "warn.context_limit_env",
+    "description": "The context window override in the environment is invalid",
+    "other": "herrscher serve : {{.Name}} ignoré, {{.Detail}} : la fenêtre par défaut du fournisseur s'applique"
+  },
+  {
+    "id": "warn.context_limit_unknown_vendor",
+    "description": "A context window is configured for a vendor with no backend in this daemon",
+    "other": "herrscher serve : contextLimits : aucun backend \"{{.Name}}\" dans ce démon, sa taille de fenêtre n'est pas utilisée"
+  },
+  {
+    "id": "warn.history_port_missing",
+    "description": "A backend declares the history editor capability without implementing its port",
+    "other": "herrscher serve : le backend \"{{.Name}}\" déclare Capabilities.HistoryEditor mais son instance n'implémente pas le port, son historique n'est pas modifié"
+  },
+  {
+    "id": "warn.compactor_port_missing",
+    "description": "A backend declares the compactor capability without implementing its port",
+    "other": "herrscher serve : le backend \"{{.Name}}\" déclare Capabilities.Compactor mais son instance n'implémente pas le port, sa compaction est refusée"
   }
 ]

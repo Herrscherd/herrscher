@@ -14,7 +14,7 @@ import (
 func TestAcceptClosesTheSocketWhenItsContextEnds(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "ctx.sock")
 	ctx, cancel := context.WithCancel(t.Context())
-	acc, err := control.Accept(ctx, sock)
+	acc, err := serveSocket(ctx, sock)
 	if err != nil {
 		t.Fatalf("Accept: %v", err)
 	}
@@ -30,5 +30,22 @@ func TestAcceptClosesTheSocketWhenItsContextEnds(t *testing.T) {
 	if conn, err := control.Dial(sock); err == nil {
 		closeLogged(t, conn)
 		t.Fatal("the socket still accepts after the context ended")
+	}
+	if err := acc.Err(); err != nil {
+		t.Fatalf("Err after the context ended = %v, want nil", err)
+	}
+}
+
+func TestAcceptErrIsNilAfterClose(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "close.sock")
+	acc, err := serveSocket(t.Context(), sock)
+	if err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+	if err = closeBounded(t, acc); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if err = acc.Err(); err != nil {
+		t.Fatalf("Err after Close = %v, want nil", err)
 	}
 }

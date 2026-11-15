@@ -2,13 +2,14 @@ package host
 
 import (
 	"context"
+	"io"
 	"testing"
 	"time"
 )
 
 func TestClaimIdleRefusesASessionWithATurnOrAQueuedMessage(t *testing.T) {
 	sessions := newSessionTable()
-	driver := newSessionDriver("s1", nil, nil, nil)
+	driver := newSessionDriver("s1", nil, nil, nil, io.Discard)
 	sessions.register("s1", driver)
 
 	release, ok := sessions.claimIdle("s1")
@@ -41,7 +42,7 @@ func TestClaimIdleRefusesASessionWithATurnOrAQueuedMessage(t *testing.T) {
 
 func TestPumpExitsOnTeardownWhileAClaimIsHeld(t *testing.T) {
 	sessions := newSessionTable()
-	driver := newSessionDriver("s1", nil, nil, nil)
+	driver := newSessionDriver("s1", nil, nil, nil, io.Discard)
 	sessions.register("s1", driver)
 	release, ok := sessions.claimIdle("s1")
 	if !ok {
@@ -64,7 +65,7 @@ func TestPumpExitsOnTeardownWhileAClaimIsHeld(t *testing.T) {
 }
 
 func TestInTurnFollowsTheTurnToken(t *testing.T) {
-	driver := newSessionDriver("s1", nil, nil, nil)
+	driver := newSessionDriver("s1", nil, nil, nil, io.Discard)
 	if driver.inTurn() {
 		t.Fatal("an idle driver must not report a turn")
 	}
@@ -82,7 +83,7 @@ func TestInTurnFollowsTheTurnToken(t *testing.T) {
 
 func TestAClaimedSessionIsRefusedButNotWorking(t *testing.T) {
 	sessions := newSessionTable()
-	driver := newSessionDriver("s1", nil, nil, nil)
+	driver := newSessionDriver("s1", nil, nil, nil, io.Discard)
 	sessions.register("s1", driver)
 	release, ok := sessions.claimIdle("s1")
 	if !ok {

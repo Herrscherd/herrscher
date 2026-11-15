@@ -11,6 +11,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
 
@@ -42,12 +43,12 @@ func TestMenuRendersChoices(t *testing.T) {
 func TestEmitDeliversControlEventUnderBackpressure(_ *testing.T) {
 	tm := New()
 	for range cap(tm.out) {
-		tm.emit(tui.RoutedEvent{Event: contracts.Event{T: "chunk", Text: "x"}})
+		tm.emit(tui.RoutedEvent{Event: contracts.Event{T: eventwire.EventChunk, Text: "x"}})
 	}
 	go func() { <-tm.Frontend() }()
 	done := make(chan struct{})
 	go func() {
-		tm.emit(tui.RoutedEvent{Event: contracts.Event{T: "reply", Done: true, Text: "final"}})
+		tm.emit(tui.RoutedEvent{Event: contracts.Event{T: eventwire.EventReply, Done: true, Text: "final"}})
 		close(done)
 	}()
 	<-done
@@ -105,7 +106,7 @@ func TestEmitToRoutesToFrontend(t *testing.T) {
 	tm := New()
 	got := make(chan tui.RoutedEvent, 1)
 	go func() { got <- <-tm.Frontend() }()
-	tm.EmitTo(contracts.Conversation{Gateway: "terminal", ID: "chX"}, contracts.Event{T: "chunk", Text: "a"})
+	tm.EmitTo(contracts.Conversation{Gateway: "terminal", ID: "chX"}, contracts.Event{T: eventwire.EventChunk, Text: "a"})
 	re := <-got
 	if re.Conv.ID != "chX" || re.Event.Text != "a" {
 		t.Fatalf("frontend got %+v", re)
@@ -116,7 +117,7 @@ func TestEmitUsesDefaultChannel(t *testing.T) {
 	tm := New()
 	got := make(chan tui.RoutedEvent, 1)
 	go func() { got <- <-tm.Frontend() }()
-	tm.Emit(contracts.Event{T: "reply", Text: "b", Done: true})
+	tm.Emit(contracts.Event{T: eventwire.EventReply, Text: "b", Done: true})
 	re := <-got
 	if re.Conv.ID != ChannelID || re.Event.Text != "b" {
 		t.Fatalf("Emit default-channel routing wrong: %+v", re)
@@ -135,7 +136,7 @@ func TestPostEmitsReplyEvent(t *testing.T) {
 		t.Fatalf("Post: %v", err)
 	}
 	re := <-got
-	if re.Event.T != "reply" {
+	if re.Event.T != eventwire.EventReply {
 		t.Fatalf("Post emitted %+v, want reply", re)
 	}
 	if re.Event.Text != "hi" {
@@ -157,8 +158,29 @@ func TestNotifyRendersTheNoticeInTheLanguage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	if re.Event.T != eventNotice || re.Event.Text != inFrench {
+	if re.Event.T != eventwire.EventNotice || re.Event.Text != inFrench {
 		t.Fatalf("Notify emitted %+v, want a notice event with %q", re.Event, inFrench)
+	}
+}
+
+func TestSendAndStatusLinesReachTheTabAsNotices(t *testing.T) {
+	tm := New()
+	got := make(chan tui.RoutedEvent, 2)
+	go func() {
+		got <- <-tm.Frontend()
+		got <- <-tm.Frontend()
+	}()
+	if err := tm.Send(context.Background(), "c1", "sent"); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if _, err := tm.UpsertStatusMessage(context.Background(), "c1", "", "status"); err != nil {
+		t.Fatalf("UpsertStatusMessage: %v", err)
+	}
+	for _, want := range []string{"sent", "status"} {
+		re := <-got
+		if re.Event.T != eventwire.EventNotice || re.Event.Text != want || re.Conv.ID != "c1" {
+			t.Fatalf("emitted %+v, want a notice %q on c1", re.Event, want)
+		}
 	}
 }
 
@@ -192,7 +214,7 @@ func TestArchiveEmitsCloseToTab(t *testing.T) {
 		t.Fatal(err)
 	}
 	re := <-got
-	if re.Conv.ID != "terminal/x" || re.Event.T != "closed" {
+	if re.Conv.ID != "terminal/x" || re.Event.T != eventwire.EventClosed {
 		t.Fatalf("Archive must emit a 'closed' event to the tab: %+v", re)
 	}
 }
@@ -451,18 +473,18 @@ func TestDefaultSessionNameIsTheWorkingDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := slug(filepath.Base(wd))
-	if got := defaultSessionName(nil); got != dir {
-		t.Fatalf("defaultSessionName = %q, want the directory %q", got, dir)
+	if got := DefaultSessionName(nil); got != dir {
+		t.Fatalf("DefaultSessionName = %q, want the directory %q", got, dir)
 	}
 	taken := []contracts.SessionInfo{{Name: dir, Gateways: []string{"discord"}}}
-	if got := defaultSessionName(taken); got != dir+"-2" {
-		t.Fatalf("defaultSessionName = %q, want the numbered %q", got, dir+"-2")
+	if got := DefaultSessionName(taken); got != dir+"-2" {
+		t.Fatalf("DefaultSessionName = %q, want the numbered %q", got, dir+"-2")
 	}
 	taken = append(taken, contracts.SessionInfo{Name: dir + "-2"})
-	if got := defaultSessionName(taken); got != dir+"-3" {
-		t.Fatalf("defaultSessionName = %q, want the numbered %q", got, dir+"-3")
+	if got := DefaultSessionName(taken); got != dir+"-3" {
+		t.Fatalf("DefaultSessionName = %q, want the numbered %q", got, dir+"-3")
 	}
-	for _, name := range []string{defaultSessionName(taken), randomSessionName()} {
+	for _, name := range []string{DefaultSessionName(taken), randomSessionName()} {
 		if !terminalSessionNameRe.MatchString(name) {
 			t.Fatalf("minted name %q is not a valid session slug", name)
 		}

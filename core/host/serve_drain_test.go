@@ -8,18 +8,17 @@ import (
 	"time"
 )
 
+const (
+	drainQuietWindow = 100 * time.Millisecond
+	drainWait        = 10 * time.Second
+)
+
 type recordingDrainer struct {
-	shutdown    <-chan struct{}
-	liveStopped <-chan struct{}
-	calls       int
-	ctxDone     bool
-	liveDone    bool
+	called chan struct{}
 }
 
 func (d *recordingDrainer) DrainBridges() error {
-	d.calls++
-	d.ctxDone = isClosed(d.shutdown)
-	d.liveDone = isClosed(d.liveStopped)
+	d.called <- struct{}{}
 	return nil
 }
 
@@ -29,7 +28,7 @@ func TestAwaitHubStopDrainsBridgesAfterSessionsStop(t *testing.T) {
 	liveStopped := make(chan struct{})
 	sockets := make(chan struct{})
 	close(sockets)
-	drainer := &recordingDrainer{shutdown: ctx.Done(), liveStopped: liveStopped}
+	drainer := &recordingDrainer{called: make(chan struct{}, 4)}
 	runningHub := &hub{runtime: testRuntime(t)}
 
 	returned := make(chan error, 1)
@@ -38,20 +37,31 @@ func TestAwaitHubStopDrainsBridgesAfterSessionsStop(t *testing.T) {
 	}()
 
 	cancel()
+	select {
+	case <-drainer.called:
+		t.Fatal("DrainBridges ran while the sessions were still stopping")
+	case <-time.After(drainQuietWindow):
+	}
+
 	close(liveStopped)
+	select {
+	case <-drainer.called:
+	case <-time.After(drainWait):
+		t.Fatal("DrainBridges was not called once the sessions stopped")
+	}
 
 	select {
 	case err := <-returned:
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("awaitHubStop returned %v, want context.Canceled", err)
 		}
-	case <-time.After(10 * time.Second):
+	case <-time.After(drainWait):
 		t.Fatal("awaitHubStop did not return after shutdown")
 	}
-	if drainer.calls != 1 {
-		t.Fatalf("DrainBridges called %d times at shutdown, want exactly once", drainer.calls)
-	}
-	if !drainer.ctxDone || !drainer.liveDone {
-		t.Fatalf("DrainBridges ran before shutdown finished: ctx done = %v, sessions stopped = %v", drainer.ctxDone, drainer.liveDone)
+
+	select {
+	case <-drainer.called:
+		t.Fatal("DrainBridges called more than once at shutdown")
+	default:
 	}
 }

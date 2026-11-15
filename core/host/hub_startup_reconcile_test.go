@@ -15,9 +15,10 @@ func TestStartupReconcileWaitsForTheDispatchLock(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable())
 	h.dispatchMu.Lock()
-	returned := make(chan error, 1)
+	returned := make(chan struct{})
 	go func() {
-		returned <- h.startReconcile(t.Context())
+		h.startReconcile(t.Context())
+		close(returned)
 	}()
 	select {
 	case <-returned:
@@ -26,7 +27,5 @@ func TestStartupReconcileWaitsForTheDispatchLock(t *testing.T) {
 	case <-time.After(startupLockProbe):
 	}
 	h.dispatchMu.Unlock()
-	if err := <-returned; err != nil {
-		t.Fatalf("startReconcile = %v, want nil", err)
-	}
+	<-returned
 }

@@ -38,7 +38,6 @@ type warningSink struct {
 	idle        chan struct{}
 }
 
-// newWarningSink wraps out, which must accept concurrent Write calls as os.File does, since the drain goroutine and a direct write can run at once.
 func newWarningSink(out io.Writer, lostLine func(lost int) string) *warningSink {
 	return &warningSink{out: out, lostLine: lostLine}
 }

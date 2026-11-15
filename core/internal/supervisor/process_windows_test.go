@@ -59,7 +59,7 @@ func runProcessTreeChildHelper() int {
 	if err != nil {
 		return 5
 	}
-	_, err = windows.CreateFile(
+	lockHandle, err := windows.CreateFile(
 		lockPath,
 		windows.GENERIC_READ,
 		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE,
@@ -77,6 +77,9 @@ func runProcessTreeChildHelper() int {
 	stop, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 	<-stop.Done()
+	if err := windows.CloseHandle(lockHandle); err != nil {
+		return 8
+	}
 	return 0
 }
 

@@ -17,13 +17,16 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-const drainPIDWait = 10 * time.Second
+const (
+	drainPIDWait       = 10 * time.Second
+	fakeBridgeLifetime = BridgeTermGrace + 3*time.Second
+)
 
 func TestDrainBridgesReapsBridgeThatIgnoresSIGTERM(t *testing.T) {
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "pid")
 	script := filepath.Join(dir, "bridge.sh")
-	body := fmt.Sprintf("#!/bin/sh\ntrap '' TERM\necho $$ > '%s'\nexec sleep 30\n", pidPath)
+	body := fmt.Sprintf("#!/bin/sh\ntrap '' TERM\necho $$ > '%s'\nexec sleep %d\n", pidPath, int(fakeBridgeLifetime/time.Second))
 	if err := os.WriteFile(script, []byte(body), 0o700); err != nil {
 		t.Fatalf("write fake bridge: %v", err)
 	}

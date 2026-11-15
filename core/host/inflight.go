@@ -60,9 +60,6 @@ func (h *hub) awaitInFlightWithin(window teardownWindow, groups ...*inflight) bo
 }
 
 func (h *hub) flushWarningsWithin(window teardownWindow) {
-	if h.sink == nil {
-		return
-	}
 	if !h.sink.flush(window) {
 		h.warnHubOverrun()
 	}
@@ -71,9 +68,5 @@ func (h *hub) flushWarningsWithin(window teardownWindow) {
 func (h *hub) warnHubOverrun() {
 	lang := h.textLanguage()()
 	params := map[string]any{graceParam: h.teardownGrace.String()}
-	if h.sink == nil {
-		warnTo(h.warnings, lang, "warn.hub_teardown_overrun", params)
-		return
-	}
 	h.sink.announce(newHostMessages().text(lang, "warn.hub_teardown_overrun", params))
 }

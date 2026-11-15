@@ -192,7 +192,7 @@ func TestOperatorCommandReplyFollowsALiveLanguageChange(t *testing.T) {
 	if err := addScheduleCommands(reg, live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
-	h := &hub{warnings: io.Discard, st: st, reg: reg, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)}
+	h := testHub(&hub{warnings: io.Discard, st: st, reg: reg, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)})
 	disp := h.operatorCommands()
 	english := missingScheduleRemoval(t, disp, "digest")
 	live.set(i18n.French)
@@ -225,7 +225,7 @@ func TestSessionCommandReplyFollowsTheOperatorUnlessItsLanguageIsRecorded(t *tes
 	if err := addScheduleCommands(reg, live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
-	h := &hub{warnings: io.Discard, st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)}
+	h := testHub(&hub{warnings: io.Discard, st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)})
 	live.set(i18n.French)
 	followed := missingScheduleRemoval(t, asSession{disp: reg, session: "s1", lang: h.sessionLanguageSource("s1")}, "weekly")
 	kept := missingScheduleRemoval(t, asSession{disp: reg, session: "s2", lang: h.sessionLanguageSource("s2")}, "daily")
@@ -265,7 +265,7 @@ func TestCompactionNoticeFollowsTheLiveSessionLanguage(t *testing.T) {
 		t.Fatalf("AddSession: %v", err)
 	}
 	live := newOperatorLanguage(i18n.English)
-	h := &hub{warnings: io.Discard, st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)}
+	h := testHub(&hub{warnings: io.Discard, st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)})
 	var printed bytes.Buffer
 	d := newSessionDriver("s1", nil, nil, nil, &printed)
 	d.language = liveSessionLanguage(st, "s1")
@@ -291,7 +291,7 @@ func TestCompactionNoticeFollowsTheOperatorWithoutASessionLanguage(t *testing.T)
 		t.Fatalf("AddSession: %v", err)
 	}
 	live := newOperatorLanguage(i18n.English)
-	h := &hub{warnings: io.Discard, st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)}
+	h := testHub(&hub{warnings: io.Discard, st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)})
 	var printed bytes.Buffer
 	d := newSessionDriver("s1", nil, nil, nil, &printed)
 	d.language = liveSessionLanguage(st, "s1")

@@ -10,11 +10,13 @@ import (
 
 func TestDeferredWarningsKeepTheOrderOfTheLockHolders(t *testing.T) {
 	var out lockedBuffer
-	sink := newWarningSink(&out, englishLostLine)
-	h := &hub{warnings: sink, sink: sink, teardownGrace: time.Second}
+	h := testHub(&hub{warnings: &out, teardownGrace: time.Second})
 
 	h.lifecycle.Lock()
 	h.deferWarning(i18n.English, "warn.session_start_recovered", map[string]any{nameParam: "first"})
+	if queued := queuedWarnings(h.sink); queued != 1 {
+		t.Fatalf("the warning deferred under the lock is queued %d times before the lock is released, want 1", queued)
+	}
 	second := runInBackground(func() {
 		h.lifecycle.Lock()
 		h.deferWarning(i18n.English, "warn.session_start_recovered", map[string]any{nameParam: "second"})

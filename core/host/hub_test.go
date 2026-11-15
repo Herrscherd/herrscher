@@ -303,12 +303,12 @@ func (s *stubForgetCoord) forget(name string) { s.forgotten = append(s.forgotten
 
 func TestGoDeadCallsForget(t *testing.T) {
 	stub := &stubForgetCoord{}
-	h := &hub{
+	h := testHub(&hub{
 		warnings:      io.Discard,
 		coordinator:   stub,
 		live:          make(map[string]liveSession),
 		teardownGrace: defaultTeardownGrace,
-	}
+	})
 	h.goDead("worker")
 	if len(stub.forgotten) != 1 || stub.forgotten[0] != "worker" {
 		t.Fatalf("goDead devrait appeler forget(\"worker\"): %v", stub.forgotten)

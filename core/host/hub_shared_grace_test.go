@@ -13,9 +13,9 @@ func TestGoDeadSharesOneGraceBetweenHaltAndTeardown(t *testing.T) {
 		stuck := make(chan struct{})
 		defer close(stuck)
 		name := "shared-grace"
-		h := &hub{warnings: io.Discard, teardownGrace: grace, live: map[string]liveSession{
+		h := testHub(&hub{warnings: io.Discard, teardownGrace: grace, live: map[string]liveSession{
 			name: {cancel: func() {}, done: make(chan struct{}), release: func() {}},
-		}}
+		}})
 		h.stopBridge = func(string) error {
 			<-stuck
 			return nil

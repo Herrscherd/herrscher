@@ -3,6 +3,8 @@ package host
 import (
 	"bytes"
 	"errors"
+	"io"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -22,6 +24,22 @@ func (b *blockedForever) Write(p []byte) (int, error) {
 
 func englishLostLine(lost int) string {
 	return newHostMessages().text(i18n.English, "warn.warnings_dropped", map[string]any{countParam: lost})
+}
+
+func testHub(h *hub) *hub {
+	out := h.warnings
+	if out == nil {
+		out = io.Discard
+	}
+	h.sink = newWarningSink(out, englishLostLine)
+	h.warnings = h.sink
+	return h
+}
+
+func queuedWarnings(s *warningSink) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.queue)
 }
 
 func TestWarningSinkDoesNotBlockWritersAndCountsDrops(t *testing.T) {
@@ -80,7 +98,7 @@ func assertLostSummaryFollowsUnblock(t *testing.T, lang i18n.Language) {
 	}
 
 	writer.open()
-	h := &hub{teardownGrace: 10 * time.Second}
+	h := testHub(&hub{teardownGrace: 10 * time.Second})
 	window, cancel := h.newGrace()
 	defer cancel()
 	if !sink.flush(window) {
@@ -171,7 +189,7 @@ func TestWarningSinkFlushIsBoundedByAStalledWriter(t *testing.T) {
 	if _, err := sink.Write([]byte("stuck\n")); err != nil {
 		t.Fatal(err)
 	}
-	h := &hub{teardownGrace: 5 * time.Second}
+	h := testHub(&hub{teardownGrace: 5 * time.Second})
 	window, cancel := h.newGrace()
 	defer cancel()
 
@@ -224,5 +242,44 @@ func TestWarningSinkCountsAnEntryOverTheByteBudgetAsLost(t *testing.T) {
 	}
 	if got := sink.droppedCount(); got != 1 {
 		t.Fatalf("dropped %d entries past the byte budget, want 1", got)
+	}
+}
+
+func TestDrainAndOverrunShareAConcurrentSafeWriter(t *testing.T) {
+	writer := newGatedWarnings("slow")
+	t.Cleanup(writer.open)
+	h := testHub(&hub{warnings: writer, teardownGrace: 100 * time.Millisecond})
+	if _, err := h.warnings.Write([]byte("slow\n")); err != nil {
+		t.Fatal(err)
+	}
+	awaitGatedWrite(t, writer)
+
+	h.closeWarnings()
+	awaitWarning(t, &writer.out, hubOverrunText(h, ""))
+	writer.open()
+	awaitWarning(t, &writer.out, "slow")
+}
+
+func TestLateWritesBehindAFrozenWriterAddAtMostOneGoroutine(t *testing.T) {
+	writer := newGatedWarnings("stuck")
+	t.Cleanup(writer.open)
+	sink := newWarningSink(writer, englishLostLine)
+	if _, err := sink.Write([]byte("stuck\n")); err != nil {
+		t.Fatal(err)
+	}
+	awaitGatedWrite(t, writer)
+	sink.Close()
+
+	before := runtime.NumGoroutine()
+	for range 20 {
+		if _, err := sink.Write([]byte("stuck late\n")); !errors.Is(err, errWarningAbandoned) {
+			t.Fatalf("a late write behind a frozen writer returned %v, want errWarningAbandoned", err)
+		}
+	}
+	if grown := runtime.NumGoroutine() - before; grown > 1 {
+		t.Fatalf("20 late writes behind a frozen writer added %d goroutines, want at most 1", grown)
+	}
+	if dropped := sink.droppedCount(); dropped != 20 {
+		t.Fatalf("%d late writes were abandoned without being counted as lost, want 20", dropped)
 	}
 }

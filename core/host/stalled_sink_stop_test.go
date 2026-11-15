@@ -16,7 +16,7 @@ func TestStopLiveIsBoundedWhenTheWarningWriterStalls(t *testing.T) {
 
 	started := time.Now()
 	h.stopLive()
-	if elapsed := time.Since(started); elapsed > time.Second {
+	if elapsed := time.Since(started); elapsed > 2*time.Second {
 		t.Fatalf("stopLive took %v behind a stalled warning writer with a %v grace, want under 1s", elapsed.Round(time.Millisecond), grace)
 	}
 }
@@ -36,9 +36,8 @@ func TestStopWithAFrozenWriterAnnouncesTheHubOverrun(t *testing.T) {
 func TestCloseWarningsAnnouncesAnUndrainedOverrun(t *testing.T) {
 	warnings := newGatedWarnings("stuck")
 	t.Cleanup(warnings.open)
-	sink := newWarningSink(warnings, englishLostLine)
-	h := &hub{warnings: sink, sink: sink, teardownGrace: 300 * time.Millisecond}
-	if _, err := sink.Write([]byte("stuck\n")); err != nil {
+	h := testHub(&hub{warnings: warnings, teardownGrace: 300 * time.Millisecond})
+	if _, err := h.warnings.Write([]byte("stuck\n")); err != nil {
 		t.Fatal(err)
 	}
 

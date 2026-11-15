@@ -152,13 +152,6 @@ func (h *hub) journalStart(name string, err error) {
 
 func (h *hub) deferWarning(lang i18n.Language, key string, params map[string]any) {
 	line := []byte(newHostMessages().text(lang, key, params) + "\n")
-	if h.sink == nil {
-		h.deferred = append(h.deferred, func() error {
-			_, err := warningWriter(h.warnings).Write(line)
-			return err
-		})
-		return
-	}
 	h.deferred = append(h.deferred, h.sink.Enqueue(line))
 }
 
@@ -365,9 +358,6 @@ func (h *hub) closeAndRemoveSockets() error {
 }
 
 func (h *hub) closeWarnings() {
-	if h.sink == nil {
-		return
-	}
 	window, cancel := h.newGrace()
 	defer cancel()
 	h.flushWarningsWithin(window)

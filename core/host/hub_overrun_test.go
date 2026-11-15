@@ -1,17 +1,16 @@
 package host
 
 import (
-	"bytes"
 	"strings"
 	"testing"
 	"time"
 )
 
 func TestTeardownOverrunWarnsOnlyForTheSessionStillStopping(t *testing.T) {
-	var warnings bytes.Buffer
+	var warnings lockedBuffer
 	stuck := make(chan struct{})
 	t.Cleanup(func() { close(stuck) })
-	h := &hub{warnings: &warnings, teardownGrace: 300 * time.Millisecond, live: make(map[string]liveSession)}
+	h := testHub(&hub{warnings: &warnings, teardownGrace: 300 * time.Millisecond, live: make(map[string]liveSession)})
 	h.stopBridge = func(name string) error {
 		if name == "blocked" {
 			<-stuck
@@ -34,6 +33,7 @@ func TestTeardownOverrunWarnsOnlyForTheSessionStillStopping(t *testing.T) {
 	}
 	h.releaseLifecycle()
 	h.awaitRetired(window, retired)
+	h.sink.flush(window)
 
 	out := warnings.String()
 	if n := strings.Count(out, `"blocked"`); n != 1 {

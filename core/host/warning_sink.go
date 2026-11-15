@@ -34,9 +34,11 @@ type warningSink struct {
 	writing     bool
 	stalled     bool
 	closed      bool
+	direct      bool
 	idle        chan struct{}
 }
 
+// newWarningSink wraps out, which must accept concurrent Write calls as os.File does, since the drain goroutine and a direct write can run at once.
 func newWarningSink(out io.Writer, lostLine func(lost int) string) *warningSink {
 	return &warningSink{out: out, lostLine: lostLine}
 }
@@ -175,9 +177,14 @@ func (s *warningSink) announce(text string) {
 }
 
 func (s *warningSink) writeNow(data []byte) error {
+	if !s.claimDirect() {
+		slog.Warn("a warning was abandoned because an earlier direct write is still blocked", "budget", warningWriteBudget)
+		return errWarningAbandoned
+	}
 	written := make(chan error, 1)
 	go func() {
 		_, err := warningWriter(s.out).Write(data)
+		s.releaseDirect()
 		written <- err
 	}()
 	timer := time.NewTimer(warningWriteBudget)
@@ -186,9 +193,33 @@ func (s *warningSink) writeNow(data []byte) error {
 	case err := <-written:
 		return err
 	case <-timer.C:
+		s.countDropped()
 		slog.Warn("a warning was abandoned because its writer stayed blocked", "budget", warningWriteBudget)
 		return errWarningAbandoned
 	}
+}
+
+func (s *warningSink) countDropped() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.dropped++
+}
+
+func (s *warningSink) claimDirect() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.direct {
+		s.dropped++
+		return false
+	}
+	s.direct = true
+	return true
+}
+
+func (s *warningSink) releaseDirect() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.direct = false
 }
 
 func (s *warningSink) droppedCount() int {

@@ -1,6 +1,12 @@
 package eventwire
 
-import "testing"
+import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"strconv"
+	"testing"
+)
 
 func TestEventValuesAreFrozen(t *testing.T) {
 	cases := []struct {
@@ -40,4 +46,75 @@ func TestEventValuesAreFrozen(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestEventTableCoversEveryConstant(t *testing.T) {
+	declared := declaredConstants(t, "eventwire.go")
+	listed := tableConstants(t, "eventwire_test.go")
+	for name := range declared {
+		if !listed[name] {
+			t.Errorf("constant %s has no row in TestEventValuesAreFrozen", name)
+		}
+	}
+	for name := range listed {
+		if !declared[name] {
+			t.Errorf("row names %s, which is not a constant of the package", name)
+		}
+	}
+}
+
+func parseSource(t *testing.T, path string) *ast.File {
+	t.Helper()
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+	return file
+}
+
+func declaredConstants(t *testing.T, path string) map[string]bool {
+	t.Helper()
+	names := make(map[string]bool)
+	for _, decl := range parseSource(t, path).Decls {
+		gen, ok := decl.(*ast.GenDecl)
+		if !ok || gen.Tok != token.CONST {
+			continue
+		}
+		for _, spec := range gen.Specs {
+			value, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			for _, ident := range value.Names {
+				names[ident.Name] = true
+			}
+		}
+	}
+	return names
+}
+
+func tableConstants(t *testing.T, path string) map[string]bool {
+	t.Helper()
+	names := make(map[string]bool)
+	ast.Inspect(parseSource(t, path), func(node ast.Node) bool {
+		row, ok := node.(*ast.CompositeLit)
+		if !ok || len(row.Elts) != 3 {
+			return true
+		}
+		label, okLabel := row.Elts[0].(*ast.BasicLit)
+		ident, okIdent := row.Elts[1].(*ast.Ident)
+		if !okLabel || !okIdent {
+			return true
+		}
+		quoted, err := strconv.Unquote(label.Value)
+		if err != nil {
+			t.Fatalf("row label %s: %v", label.Value, err)
+		}
+		if quoted != ident.Name {
+			t.Errorf("row labelled %q tests constant %s", quoted, ident.Name)
+		}
+		names[ident.Name] = true
+		return true
+	})
+	return names
 }

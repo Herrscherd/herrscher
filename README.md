@@ -70,9 +70,10 @@ before the failure goes to stdout, so `> out.md` keeps whatever was produced, an
 nothing else on stdout. Text blocks are joined as the backend sends them, its
 blank line between blocks included. When the backend retries an attempt, the text
 of the abandoned attempt is dropped, so stdout holds only the attempt that failed.
-The claude backend retries only before the vendor has taken the turn: once the
-reply has started, a stream that ends is a failed turn, with the text so far on
-stdout and no second attempt.
+The claude backend retries only before the vendor has taken the turn, which an
+assistant or user line takes, and so does a system line of subtype init or
+api_retry: once it is taken, a stream that ends is a failed turn, with the text
+so far on stdout and no second attempt.
 
 A single unrecognised word stays a verb, so a typo is still a typo. Use `-p` to
 force a one-word task.

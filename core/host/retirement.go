@@ -21,8 +21,13 @@ func (h *hub) newBatch() retiredBatch {
 
 func (b retiredBatch) await(owner *hub) {
 	defer b.cancel()
-	owner.awaitInFlightWithin(b.window, &owner.acceptFails)
-	owner.awaitRetired(b.window, b.retired)
+	settled := owner.awaitInFlightWithin(b.window, &owner.acceptFails)
+	window, cancel := owner.newGrace()
+	defer cancel()
+	owner.awaitRetired(window, b.retired)
+	if settled {
+		owner.flushWarningsWithin(window)
+	}
 }
 
 func (h *hub) awaitRetired(window teardownWindow, retired []retirement) {

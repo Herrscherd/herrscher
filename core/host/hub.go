@@ -38,6 +38,7 @@ type hub struct {
 	reg      *cli.Registry
 	metrics  *metrics.Registry
 	warnings io.Writer
+	sink     *warningSink
 
 	coordinator    contracts.Coordinator
 	eventPublisher func(session string, event contracts.Event)
@@ -67,8 +68,8 @@ type hub struct {
 	refused       map[string]string
 	relaunching   map[string]struct{}
 	relaunchStop  chan struct{}
-	relaunches    sync.WaitGroup
-	acceptFails   sync.WaitGroup
+	relaunches    inflight
+	acceptFails   inflight
 	seedBackend   func(context.Context, state.Session) (contracts.Backend, error)
 	models        *ModelDiscovery
 
@@ -89,6 +90,8 @@ func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir str
 	for _, opt := range opts {
 		opt(created)
 	}
+	created.sink = newWarningSink(created.warnings)
+	created.warnings = created.sink
 	if sup != nil {
 		sup.SetFailureSink(created.reportSessionFailure)
 		created.startBridge = sup.StartWithin

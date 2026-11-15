@@ -377,6 +377,9 @@ func (h *hub) acceptFailed(name string, done <-chan struct{}, cause error) {
 func (h *hub) retireFailed(name string, done <-chan struct{}) bool {
 	h.lifecycle.Lock()
 	defer h.lifecycle.Unlock()
+	if h.closed {
+		return false
+	}
 	if _, ok := h.dropLocked(name, done); !ok {
 		return false
 	}

@@ -3,6 +3,7 @@ package host
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"path/filepath"
 	"strings"
@@ -52,10 +53,9 @@ func (g *gatedWarnings) open() {
 	g.openOnce.Do(func() { close(g.release) })
 }
 
-func startAcceptFailure(t *testing.T, grace time.Duration, warnings io.Writer) (*hub, string) {
+func newInflightHub(t *testing.T, name string, grace time.Duration, warnings io.Writer) *hub {
 	t.Helper()
 	layout := isolatedRuntimeDir(t)
-	name := "inflight-" + newTurnID()
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	if err := st.AddSession(state.Session{Name: name, ChannelID: "c1"}); err != nil {
 		t.Fatal(err)
@@ -66,6 +66,13 @@ func startAcceptFailure(t *testing.T, grace time.Duration, warnings io.Writer) (
 	h := newHub(st, sup, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(), withWarnings(warnings))
 	h.runtime = layout
 	h.teardownGrace = grace
+	return h
+}
+
+func startAcceptFailure(t *testing.T, grace time.Duration, warnings io.Writer) (*hub, string) {
+	t.Helper()
+	name := "inflight-" + newTurnID()
+	h := newInflightHub(t, name, grace, warnings)
 	h.listen = brokenFirstListen()
 	if err := h.goLive(t.Context(), state.Session{Name: name, ChannelID: "c1"}); err != nil {
 		t.Fatal(err)
@@ -78,7 +85,7 @@ func awaitGatedWrite(t *testing.T, warnings *gatedWarnings) {
 	select {
 	case <-warnings.entered:
 	case <-time.After(5 * time.Second):
-		t.Fatal("the accept failure warning was never written")
+		t.Fatal("the warning was never written")
 	}
 }
 
@@ -89,6 +96,14 @@ func runInBackground(run func()) <-chan struct{} {
 		run()
 	}()
 	return returned
+}
+
+func hubOverrunText(h *hub, _ string) string {
+	return newHostMessages().text(h.textLanguage()(), "warn.hub_teardown_overrun", map[string]any{graceParam: h.teardownGrace.String()})
+}
+
+func sessionOverrunText(h *hub, name string) string {
+	return newHostMessages().text(h.sessionLanguageSource(name)(), "warn.session_teardown_overrun", map[string]any{nameParam: name, graceParam: h.teardownGrace.String()})
 }
 
 func TestStopWaitsForTheAcceptFailureWarningToBeWritten(t *testing.T) {
@@ -119,22 +134,83 @@ func TestStopWaitsForTheAcceptFailureWarningToBeWritten(t *testing.T) {
 	}
 }
 
-func TestBlockedWarningWriterDoesNotHoldStopPastTheBudget(t *testing.T) {
-	for _, path := range inflightPaths() {
-		t.Run(path.name, func(t *testing.T) {
-			warnings := newGatedWarnings(errTerminalAccept.Error())
-			t.Cleanup(warnings.open)
-			h, name := startAcceptFailure(t, 300*time.Millisecond, warnings)
-			awaitGatedWrite(t, warnings)
+type blockedWriterCase struct {
+	name  string
+	paths []inflightPath
+	start func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings) *hub
+	want  func(h *hub, name string) string
+}
 
-			returned := runInBackground(func() { path.run(h, name) })
-			select {
-			case <-returned:
-			case <-time.After(5 * time.Second):
-				t.Fatal("a blocked warning writer held the stop past the teardown budget")
-			}
-			overrun := newHostMessages().text(h.textLanguage()(), "warn.hub_teardown_overrun", map[string]any{graceParam: h.teardownGrace.String()})
-			awaitWarning(t, &warnings.out, overrun)
-		})
+func blockedWriterCases() []blockedWriterCase {
+	return []blockedWriterCase{
+		{
+			name:  "accept failure",
+			paths: inflightPaths(),
+			start: func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings) *hub {
+				h := newInflightHub(t, name, grace, warnings)
+				h.listen = brokenFirstListen()
+				if err := h.goLive(t.Context(), state.Session{Name: name, ChannelID: "c1"}); err != nil {
+					t.Fatal(err)
+				}
+				awaitGatedWrite(t, warnings)
+				return h
+			},
+			want: hubOverrunText,
+		},
+		{
+			name:  "teardown overrun",
+			paths: []inflightPath{{name: "goDead", run: func(h *hub, session string) { h.goDead(session) }}},
+			start: func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings) *hub {
+				h := newInflightHub(t, name, grace, warnings)
+				if err := h.goLive(t.Context(), state.Session{Name: name, ChannelID: "c1"}); err != nil {
+					t.Fatal(err)
+				}
+				release := make(chan struct{})
+				t.Cleanup(func() { close(release) })
+				h.stopBridge = func(string) error {
+					<-release
+					return nil
+				}
+				return h
+			},
+			want: sessionOverrunText,
+		},
+		{
+			name:  "session start",
+			paths: inflightPaths(),
+			start: func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings) *hub {
+				h := newInflightHub(t, name, grace, warnings)
+				h.startBridge = func(state.Session, time.Duration) error { return errors.New("bridge refused") }
+				sess := state.Session{Name: name, ChannelID: "c1"}
+				_ = runInBackground(func() { logCleanup(h.goLiveBridged(t.Context(), sess)) })
+				awaitGatedWrite(t, warnings)
+				return h
+			},
+			want: hubOverrunText,
+		},
+	}
+}
+
+func TestBlockedWarningWriterDoesNotHoldStopPastTheBudget(t *testing.T) {
+	for _, c := range blockedWriterCases() {
+		for _, path := range c.paths {
+			t.Run(c.name+"/"+path.name, func(t *testing.T) {
+				name := "inflight-" + newTurnID()
+				warnings := newGatedWarnings(name)
+				t.Cleanup(warnings.open)
+				h := c.start(t, name, 300*time.Millisecond, warnings)
+
+				returned := runInBackground(func() { path.run(h, name) })
+				awaitGatedWrite(t, warnings)
+				select {
+				case <-returned:
+				case <-time.After(5 * time.Second):
+					t.Fatal("a blocked warning writer held the stop past the teardown budget")
+				}
+
+				warnings.open()
+				awaitWarning(t, &warnings.out, c.want(h, name))
+			})
+		}
 	}
 }

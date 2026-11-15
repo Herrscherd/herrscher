@@ -568,14 +568,6 @@ func TestRunSessionReconnectsAfterCompletedTurn(t *testing.T) {
 
 func tmpSock(t *testing.T) string { t.Helper(); return filepath.Join(t.TempDir(), "h.sock") }
 
-func acceptCtl(sock string) (*control.Acceptor, error) {
-	ln, err := control.Listen(context.Background(), sock)
-	if err != nil {
-		return nil, err
-	}
-	return control.Serve(context.Background(), ln), nil
-}
-
 func dialCtl(t *testing.T, sock string) *control.Conn {
 	t.Helper()
 	c, err := control.Dial(sock)

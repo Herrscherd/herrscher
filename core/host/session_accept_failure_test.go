@@ -149,3 +149,11 @@ func TestStaleAcceptFailureLeavesTheReplacementLive(t *testing.T) {
 		t.Fatalf("a late accept failure of a retired incarnation reported %q, want nothing", out)
 	}
 }
+
+func acceptCtl(sock string) (*control.Acceptor, error) {
+	ln, err := control.Listen(context.Background(), sock)
+	if err != nil {
+		return nil, err
+	}
+	return control.Serve(context.Background(), ln), nil
+}

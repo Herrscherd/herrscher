@@ -23,8 +23,6 @@ import (
 
 const cloneTimeout = 10 * time.Minute
 
-const supervisorGrace = 5 * time.Second
-
 const maxSessions = 64
 
 type sessionJSON struct {

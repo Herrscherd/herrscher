@@ -27,6 +27,8 @@ type channelAdmin interface {
 	ChannelRef(id string) string
 }
 
+const supervisorGrace = 5 * time.Second
+
 type supervisor interface {
 	StartWithin(s state.Session, grace time.Duration) error
 	StopWithin(name string, grace time.Duration) error

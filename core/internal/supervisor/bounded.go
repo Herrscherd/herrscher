@@ -87,24 +87,6 @@ func (s *Supervisor) stopUntil(name string, expired <-chan time.Time) error {
 	return nil
 }
 
-// Stopping returns the channel that closes when the loop held for name returns,
-// while that loop is still stopping. It returns nil when no loop is stopping for
-// name, including once the stop has finished.
-func (s *Supervisor) Stopping(name string) <-chan struct{} {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	run, ok := s.runs[name]
-	if !ok || !run.stopping {
-		return nil
-	}
-	select {
-	case <-run.done:
-		return nil
-	default:
-		return run.done
-	}
-}
-
 // RestartWithin is Restart for a caller holding a lock it cannot keep past grace:
 // the stop and the launch share one grace, and a loop still stopping when it runs
 // out yields ErrStillStopping with nothing launched.

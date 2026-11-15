@@ -44,8 +44,9 @@ func TestScenarios(t *testing.T) {
 			return isolate(env, binDir)
 		},
 		Cmds: map[string]func(*testscript.TestScript, bool, []string){
-			"waitdaemon": waitDaemon,
-			"waitlog":    waitLog,
+			"waitdaemon":     waitDaemon,
+			"waitlog":        waitLog,
+			"descendantgone": descendantGone,
 		},
 	})
 }
@@ -330,6 +331,61 @@ func waitLog(ts *testscript.TestScript, neg bool, args []string) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	ts.Fatalf("the vendor log never matched %q within %s", args[0], daemonWait)
+}
+
+const descendantWait = 5 * time.Second
+
+func descendantGone(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) != 1 {
+		ts.Fatalf("usage: descendantgone <pid file>")
+	}
+	pid, err := readPid(ts.MkAbs(args[0]))
+	ts.Check(err)
+	ts.Defer(func() { ts.Check(killDescendant(pid)) })
+	deadline := time.Now().Add(descendantWait)
+	for time.Now().Before(deadline) {
+		if !running(pid) {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	ts.Fatalf("the descendant %d of the fake claude still runs %s after the turn ended", pid, descendantWait)
+}
+
+func readPid(path string) (int, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	return strconv.Atoi(strings.TrimSpace(string(data)))
+}
+
+func running(pid int) bool {
+	stat, err := os.ReadFile(filepath.Join(procRoot, strconv.Itoa(pid), "stat"))
+	if err != nil {
+		return false
+	}
+	end := bytes.LastIndexByte(stat, ')')
+	if end < 0 {
+		return false
+	}
+	fields := strings.Fields(string(stat[end+1:]))
+	return len(fields) > 0 && fields[0] != "Z" && fields[0] != "X"
+}
+
+func isSleep(pid int) bool {
+	cmdline, err := os.ReadFile(filepath.Join(procRoot, strconv.Itoa(pid), "cmdline"))
+	return err == nil && strings.Contains(string(cmdline), "sleep")
+}
+
+func killDescendant(pid int) error {
+	if !running(pid) || !isSleep(pid) {
+		return nil
+	}
+	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+		return err
+	}
+	return nil
 }
 
 func answering(instance string) bool {

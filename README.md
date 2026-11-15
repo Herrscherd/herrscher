@@ -74,6 +74,8 @@ The claude backend retries only before the vendor has taken the turn, which an
 assistant or user line takes, and so does a system line of subtype init or
 api_retry: once it is taken, a stream that ends is a failed turn, with the text
 so far on stdout and no second attempt.
+When a session closes, or a one-shot turn returns, the claude backend kills the whole
+process group of the CLI, so no process the CLI started outlives it.
 
 A single unrecognised word stays a verb, so a typo is still a typo. Use `-p` to
 force a one-word task.
@@ -1616,6 +1618,9 @@ Linux, and says it skips the step anywhere else.
   signal than SIGINT and SIGKILL, so a scenario starts it as
   `! exec herrscher serve &daemon&` and stops it with `kill -INT daemon`, `wait daemon`
   then `! waitdaemon`.
+- `descendantgone <pid file>` waits up to five seconds for the process named in the
+  file, one the fake started with `spawn`, to be gone, and kills it at the end of the
+  scenario if it still runs.
 - These waits poll with a short sleep: they wait on other processes, which a
   `testing/synctest` bubble cannot control.
 - A process that still carries the instance of the scenario after it ends fails the
@@ -1638,8 +1643,10 @@ Linux, and says it skips the step anywhere else.
   than recording calls. In stream-json mode it replays `$VENDORTEST_SCRIPT`, which is
   `$WORK/claude.script`: a `claude.script` file in the archive of the scenario
   provides it. The script holds one block per turn, separated by `---`, and each line
-  is one step: `text <words>`, `tool <Name> <json input>`, `error <message>`, `echo`,
-  `hang` or `crash`, the last three alone on their line. A turn with no step is an
+  is one step: `text <words>`, `tool <Name> <json input>`, `error <message>`,
+  `apierror <message>`, `spawn <file>`, `echo`, `hang` or `crash`, the last three alone
+  on their line. `spawn` starts a `sleep` the fake does not wait for, and writes its pid
+  to `<file>` in the work directory. A turn with no step is an
   error. The turn count is shared by every process of the scenario, under a lock file
   beside it. A fake killed while it holds that lock leaves it behind, and the next
   turn fails after ten seconds with an error that names the lock. A turn past the end

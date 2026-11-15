@@ -26,6 +26,7 @@ const (
 	stepCrash
 	stepEcho
 	stepAPIError
+	stepSpawn
 )
 
 type step struct {
@@ -63,9 +64,9 @@ func (e *LineError) Unwrap() error {
 }
 
 // ParseScript reads a script. Each line is one step: "text <words>", "tool
-// <Name> <json input>", "error <message>", "apierror <message>", "echo",
-// "hang" or "crash", the last three alone. Blank lines are skipped and a turn
-// with no step is refused.
+// <Name> <json input>", "error <message>", "apierror <message>", "spawn <file>",
+// "echo", "hang" or "crash", the last three alone. Blank lines are skipped and a
+// turn with no step is refused.
 func ParseScript(source io.Reader) (Script, error) {
 	var script Script
 	current := Turn{}
@@ -101,7 +102,7 @@ func ParseScript(source io.Reader) (Script, error) {
 }
 
 var (
-	errUnknownStep  = errors.New("unknown step, want text, tool, error, apierror, echo, hang or crash")
+	errUnknownStep  = errors.New("unknown step, want text, tool, error, apierror, spawn, echo, hang or crash")
 	errToolNeedsArg = errors.New("tool wants a name and a JSON input")
 	errToolInput    = errors.New("tool input is not valid JSON")
 	errNeedsText    = errors.New("step wants text after its name")
@@ -118,6 +119,8 @@ func parseStep(line string) (step, error) {
 		return textStep(stepFail, rest)
 	case "apierror":
 		return textStep(stepAPIError, rest)
+	case "spawn":
+		return textStep(stepSpawn, rest)
 	case "tool":
 		return toolStep(rest)
 	case "echo":

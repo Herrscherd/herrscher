@@ -1,0 +1,139 @@
+package manager
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/internal/approval"
+)
+
+type workspace struct {
+	path    string
+	reused  bool
+	scratch bool
+}
+
+type placement struct {
+	wt      Worktrees
+	repo    string
+	project string
+	space   workspace
+}
+
+func (h *Handler) placeSession(ctx context.Context, input contracts.Input, req *createRequest) (placement, error) {
+	worktrees, wtRoot, err := h.worktreesOn(req.hostName)
+	if err != nil {
+		return placement{}, err
+	}
+	project, err := h.resolveProject(ctx, input, req.hostName, wtRoot)
+	if err != nil {
+		return placement{}, err
+	}
+	repo := repoFor(wtRoot, project)
+	if h.hs != nil {
+		if projectErr := h.hs.EnsureProject(ctx, req.hostName, project, repo); projectErr != nil {
+			return placement{}, projectErr
+		}
+	}
+	space, err := h.ensureWorkspace(ctx, worktrees, repo, *req)
+	if err != nil {
+		return placement{}, err
+	}
+	if req.runtime.agent != "" {
+		if provisionErr := h.provisionAgent(ctx, req, worktrees, repo, &space); provisionErr != nil {
+			return placement{}, provisionErr
+		}
+	}
+	return placement{wt: worktrees, repo: repo, project: project, space: space}, nil
+}
+
+func (h *Handler) rollbackPlacement(ctx context.Context, place placement, name string) {
+	h.rollbackWorkspace(ctx, place.wt, place.repo, name, place.space)
+}
+
+func (h *Handler) resolveProject(ctx context.Context, input contracts.Input, hostName, wtRoot string) (string, error) {
+	project, _ := input.Lookup("project")
+	if wtRoot == "" {
+		return project, nil
+	}
+	if spec, ok := input.Lookup("clone"); ok && spec != "" {
+		if hostName != "" {
+			return "", localize(h.currentLanguage(), fmt.Sprintf("%v: %q", ErrCloneUnsupported, hostName), clitext.HostErrCloneUnsupported, clitext.Params{clitext.ParamHost: hostName}, ErrCloneUnsupported)
+		}
+		cctx, cancel := context.WithTimeout(ctx, cloneTimeout)
+		dir, err := h.fg.Clone(cctx, spec, wtRoot)
+		cancel()
+		if err != nil {
+			return "", h.labelled("clone", clitext.HostErrCloneFailed, err)
+		}
+		project = filepath.Base(dir)
+	}
+	if project != "" && !projectRe.MatchString(project) {
+		return "", &InvalidValueError{Field: "project", Value: project, Hint: "use a single name (no /, spaces, or ..)"}
+	}
+	return project, nil
+}
+
+func (h *Handler) ensureWorkspace(ctx context.Context, worktrees Worktrees, repo string, req createRequest) (workspace, error) {
+	if req.shared {
+		return workspace{}, nil
+	}
+	reused := worktrees.PreExisting(ctx, repo, req.name)
+	path, err := worktrees.Create(ctx, repo, req.name, req.base)
+	if err != nil {
+		return workspace{}, h.labelled("worktree", clitext.HostErrWorktree, err)
+	}
+	return workspace{path: path, reused: reused}, nil
+}
+
+func (h *Handler) provisionAgent(ctx context.Context, req *createRequest, worktrees Worktrees, repo string, space *workspace) error {
+	agentName := req.runtime.agent
+	if req.shared {
+		return &SharedAgentError{Agent: agentName}
+	}
+	if space.path == "" {
+		if _, statErr := os.Stat(worktrees.ScratchPath(repo, req.name)); statErr == nil {
+			space.reused = true
+		}
+		path, err := worktrees.Scratch(repo, req.name)
+		if err != nil {
+			return localize(h.currentLanguage(), fmt.Sprintf("provision agent %q: %v", agentName, err), clitext.HostErrProvisionAgent, clitext.Params{clitext.ParamAgent: agentName, clitext.ParamErr: err.Error()}, err)
+		}
+		space.path, space.scratch = path, true
+	}
+	agentSpec, found := h.agents.Get(agentName)
+	if !found {
+		h.rollbackWorkspace(ctx, worktrees, repo, req.name, *space)
+		return &UnknownAgentError{Name: agentName}
+	}
+	if req.runtime.vendor == "" {
+		req.runtime.vendor = agentSpec.Backend
+	}
+	if !req.runtime.explicit && agentSpec.Cmd != "" {
+		req.runtime.cmd = agentSpec.Cmd
+	}
+	if err := h.materializeOn(ctx, req.hostName, agentSpec, space.path, req.mode != approval.ModeBypass.String()); err != nil {
+		h.rollbackWorkspace(ctx, worktrees, repo, req.name, *space)
+		return localize(h.currentLanguage(), fmt.Sprintf("provision agent %q: %v", agentName, err), clitext.HostErrProvisionAgent, clitext.Params{clitext.ParamAgent: agentName, clitext.ParamErr: err.Error()}, err)
+	}
+	return nil
+}
+
+func (h *Handler) rollbackWorkspace(ctx context.Context, worktrees Worktrees, repo, name string, space workspace) {
+	if space.reused {
+		return
+	}
+	if space.scratch {
+		if rmErr := worktrees.RemoveScratch(repo, name); rmErr != nil {
+			h.log.Warn("scratch rollback failed", "session", name, "err", rmErr)
+		}
+		return
+	}
+	if rmErr := worktrees.Remove(context.WithoutCancel(ctx), repo, name, true); rmErr != nil {
+		h.log.Warn("worktree rollback failed", "session", name, "err", rmErr)
+	}
+}

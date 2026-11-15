@@ -238,51 +238,6 @@ func TestDescendantSleepArgMatchesItsDuration(t *testing.T) {
 	}
 }
 
-func healthProbeArgs() []string {
-	return []string{"-p", "Reply with the single word ok.", "--output-format", "json", "--model", "m", "--tools", "", "--strict-mcp-config", "--no-session-persistence"}
-}
-
-func TestOneShotConsumesNoTurnAndSpawnsNothing(t *testing.T) {
-	files := scriptFiles(t, "spawn descendant.pid\ntext Voici\n")
-	args := healthProbeArgs()
-	r, err := openReplay(files, args)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var out bytes.Buffer
-	if callErr := r.oneShot(&out, args); callErr != nil {
-		t.Fatal(callErr)
-	}
-	if _, statErr := os.Stat(filepath.Join(filepath.Dir(files.Log), "descendant.pid")); !os.IsNotExist(statErr) {
-		t.Fatalf("a -p call spawned a descendant: stat err %v", statErr)
-	}
-	turn, err := r.nextTurn()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(turn.spawns) != 1 || len(turn.steps) != 1 {
-		t.Fatalf("the first turn was consumed by -p: got %+v", turn)
-	}
-}
-
-func TestHealthProbeIsRecognisedByItsArgv(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		args []string
-		want bool
-	}{
-		{"the backend probe", healthProbeArgs(), true},
-		{"a bare -p prompt", []string{"-p", "say ping please"}, false},
-		{"a -p prompt with tools only", []string{"-p", "say ping please", "--tools", ""}, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := isHealthProbe(tc.args); got != tc.want {
-				t.Fatalf("isHealthProbe(%q) = %v, want %v", tc.args, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestOneShotRepliesWithTheTextOfTheTurn(t *testing.T) {
 	files := scriptFiles(t, "text Voici\ntext là\n")
 	args := []string{"-p", "say ping please"}

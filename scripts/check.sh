@@ -13,8 +13,7 @@ capped() {
 }
 
 regenerated_copy=$(mktemp -d)
-production_lint_config=$(mktemp --suffix=.yml)
-trap 'rm -rf "$regenerated_copy" "$production_lint_config"' EXIT
+trap 'rm -rf "$regenerated_copy"' EXIT
 
 regenerated_from_scratch() {
 	cp -a . "$regenerated_copy"
@@ -43,13 +42,8 @@ govulncheck=golang.org/x/vuln/cmd/govulncheck@v1.9.0
 go mod tidy -diff
 go mod verify
 capped go run "$golangci_lint" fmt --diff
+capped go run "$golangci_lint" run --build-tags e2e ./...
 capped go run "$golangci_lint" run ./...
-sed '/^  build-tags:$/,/^    - e2e$/d' .golangci.yml > "$production_lint_config"
-if grep -q 'build-tags' "$production_lint_config"; then
-	echo "the production lint config still sets build tags" >&2
-	exit 1
-fi
-capped go run "$golangci_lint" run -c "$production_lint_config" ./core/internal/runtimedir/...
 go run ./tools/commentcheck .
 go run ./tools/i18ncheck .
 regenerated_from_scratch

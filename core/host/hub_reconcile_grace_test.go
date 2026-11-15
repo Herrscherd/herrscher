@@ -5,6 +5,7 @@ import (
 	"io"
 	"path/filepath"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -59,42 +60,39 @@ func TestStuckBridgesDoNotAddAGracePerSessionToAnUnrelatedCommand(t *testing.T) 
 }
 
 func TestStuckStopsOfArchivedSessionsShareOneGraceInReconcile(t *testing.T) {
-	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
-	names := []string{"dead-a", "dead-b", "dead-c"}
-	for _, name := range names {
-		if err := st.AddSession(state.Session{Name: name, ChannelID: "c1", Incarnation: name}); err != nil {
-			t.Fatal(err)
+	synctest.Test(t, func(t *testing.T) {
+		st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+		names := []string{"dead-a", "dead-b", "dead-c"}
+		h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable())
+		h.teardownGrace = reconcileGrace
+		release := make(chan struct{})
+		defer close(release)
+		h.stopBridge = func(string) error {
+			<-release
+			return nil
 		}
-	}
-	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable())
-	h.runtime = isolatedRuntimeDir(t)
-	h.teardownGrace = reconcileGrace
-	release := make(chan struct{})
-	t.Cleanup(func() { close(release) })
-	h.stopBridge = func(string) error {
-		<-release
-		return nil
-	}
-	t.Cleanup(h.stopLive)
-	for _, name := range names {
-		sess, _ := st.FindSession(name)
-		if _, err := h.goLiveAndPersist(t.Context(), sess, func() error { return nil }); err != nil {
-			t.Fatalf("bring %s live: %v", name, err)
+		for _, name := range names {
+			if err := st.AddSession(state.Session{Name: name, ChannelID: "c1", Incarnation: name}); err != nil {
+				t.Fatal(err)
+			}
+			if err := st.SetArchived(name, true); err != nil {
+				t.Fatal(err)
+			}
+			finished := make(chan struct{})
+			close(finished)
+			h.live[name] = liveSession{cancel: func() {}, done: finished, release: func() {}}
 		}
-		if err := st.SetArchived(name, true); err != nil {
-			t.Fatal(err)
-		}
-	}
 
-	started := time.Now()
-	h.reconcile(t.Context())
-	elapsed := time.Since(started)
-	if bound := reconcileGrace + reconcileGrace/2; elapsed > bound {
-		t.Fatalf("reconcile took %v retiring three stuck bridges, want at most %v: each retirement waited its own grace", elapsed, bound)
-	}
-	for _, name := range names {
-		if h.isLive(name) {
-			t.Fatalf("archived session %s stayed live after reconcile", name)
+		started := time.Now()
+		h.reconcile(t.Context())
+		elapsed := time.Since(started)
+		if bound := reconcileGrace + reconcileGrace/2; elapsed > bound {
+			t.Fatalf("reconcile took %v retiring three stuck bridges, want at most %v: each retirement waited its own grace", elapsed, bound)
 		}
-	}
+		for _, name := range names {
+			if h.isLive(name) {
+				t.Fatalf("archived session %s stayed live after reconcile", name)
+			}
+		}
+	})
 }

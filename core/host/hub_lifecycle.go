@@ -8,10 +8,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
+
+type lifecycleWarning struct {
+	lang   i18n.Language
+	key    string
+	params map[string]any
+}
 
 type liveSession struct {
 	cancel   context.CancelFunc
@@ -24,7 +31,7 @@ var errHubClosed = errors.New("the daemon is shutting down and starts no session
 
 func (h *hub) goLive(ctx context.Context, sess state.Session) error {
 	h.lifecycle.Lock()
-	defer h.lifecycle.Unlock()
+	defer h.releaseLifecycle()
 	return h.goLiveLocked(ctx, sess)
 }
 
@@ -44,7 +51,7 @@ func (h *hub) goLiveAndPersist(ctx context.Context, sess state.Session, persist 
 
 func (h *hub) goLiveAndPersistLocked(ctx context.Context, sess state.Session, persist func() error) (retiredBatch, error) {
 	h.lifecycle.Lock()
-	defer h.lifecycle.Unlock()
+	defer h.releaseLifecycle()
 	batch := h.newBatch()
 	wasLive := h.isLive(sess.Name)
 	if err := h.goLiveLocked(ctx, sess); err != nil {
@@ -69,7 +76,7 @@ func (h *hub) goLiveBridged(ctx context.Context, sess state.Session) error {
 
 func (h *hub) goLiveBridgedDeferred(ctx context.Context, sess state.Session) (retiredBatch, error) {
 	h.lifecycle.Lock()
-	defer h.lifecycle.Unlock()
+	defer h.releaseLifecycle()
 	batch := h.newBatch()
 	retired, err := h.goLiveBridgedLocked(ctx, sess, batch.window)
 	h.journalStart(sess.Name, err)
@@ -132,20 +139,33 @@ func (h *hub) journalStart(name string, err error) {
 	if errors.Is(err, errHubClosed) {
 		return
 	}
-	lang := h.sessionLanguageSource(name)
+	lang := h.sessionLanguageSource(name)()
 	incarnation := h.incarnationOf(name)
 	refusedIncarnation, known := h.refused[name]
 	refused := known && refusedIncarnation == incarnation
 	switch {
 	case err == nil && refused:
 		delete(h.refused, name)
-		warnLive(h.warnings, lang, "warn.session_start_recovered", map[string]any{nameParam: name})
+		h.deferWarning(lang, "warn.session_start_recovered", map[string]any{nameParam: name})
 	case err != nil && !refused:
 		if h.refused == nil {
 			h.refused = make(map[string]string)
 		}
 		h.refused[name] = incarnation
-		warnLive(h.warnings, lang, "warn.session_start", map[string]any{nameParam: name, detailParam: err})
+		h.deferWarning(lang, "warn.session_start", map[string]any{nameParam: name, detailParam: err})
+	}
+}
+
+func (h *hub) deferWarning(lang i18n.Language, key string, params map[string]any) {
+	h.deferred = append(h.deferred, lifecycleWarning{lang: lang, key: key, params: params})
+}
+
+func (h *hub) releaseLifecycle() {
+	pending := h.deferred
+	h.deferred = nil
+	h.lifecycle.Unlock()
+	for _, w := range pending {
+		warnTo(h.warnings, w.lang, w.key, w.params)
 	}
 }
 
@@ -192,7 +212,7 @@ func (h *hub) relaunchSettled(ctx context.Context, name string) {
 
 func (h *hub) relaunchLocked(ctx context.Context, name string) (retiredBatch, error) {
 	h.lifecycle.Lock()
-	defer h.lifecycle.Unlock()
+	defer h.releaseLifecycle()
 	batch := h.newBatch()
 	delete(h.relaunching, name)
 	if h.isLive(name) {
@@ -338,14 +358,24 @@ func (h *hub) closeAndRemoveSockets() error {
 	h.mu.Unlock()
 	h.lifecycle.Unlock()
 	h.awaitInFlight()
+	h.closeWarnings()
 	return removeSocketFiles(h.runtime, h.instanceID, sessions)
+}
+
+func (h *hub) closeWarnings() {
+	if h.sink == nil {
+		return
+	}
+	window, cancel := h.newGrace()
+	defer cancel()
+	logCleanup(h.sink.Close(window))
 }
 
 func (h *hub) goDead(name string) {
 	h.lifecycle.Lock()
 	batch := h.newBatch()
 	batch.retired = h.goDeadLocked(name, batch.window)
-	h.lifecycle.Unlock()
+	h.releaseLifecycle()
 	batch.await(h)
 }
 
@@ -377,7 +407,7 @@ func (h *hub) acceptFailed(name string, done <-chan struct{}, cause error) {
 
 func (h *hub) retireFailed(name string, done <-chan struct{}) (func(), bool) {
 	h.lifecycle.Lock()
-	defer h.lifecycle.Unlock()
+	defer h.releaseLifecycle()
 	if h.closed {
 		return nil, false
 	}
@@ -411,12 +441,16 @@ func (h *hub) withinGrace(name string, window teardownWindow, step func()) bool 
 	if window.finished(finished) {
 		return true
 	}
-	h.warnOverrun(name)
+	h.deferWarning(h.sessionLanguageSource(name)(), "warn.session_teardown_overrun", h.overrunParams(name))
 	return false
 }
 
 func (h *hub) warnOverrun(name string) {
-	warnLive(h.warnings, h.sessionLanguageSource(name), "warn.session_teardown_overrun", map[string]any{nameParam: name, graceParam: h.teardownGrace.String()})
+	warnTo(h.warnings, h.sessionLanguageSource(name)(), "warn.session_teardown_overrun", h.overrunParams(name))
+}
+
+func (h *hub) overrunParams(name string) map[string]any {
+	return map[string]any{nameParam: name, graceParam: h.teardownGrace.String()}
 }
 
 func (h *hub) dropLocked(name string, only <-chan struct{}) (liveSession, bool) {

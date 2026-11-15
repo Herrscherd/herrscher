@@ -7,7 +7,7 @@ import (
 
 func TestRetireesGetAFreshWindowAfterTheInFlightWait(t *testing.T) {
 	var out lockedBuffer
-	h := newInflightHub(t, "retiree-"+newTurnID(), 200*time.Millisecond, &out)
+	h := newInflightHub(t, "retiree-"+newTurnID(), time.Second, &out)
 	batch := h.newBatch()
 	t.Cleanup(batch.cancel)
 

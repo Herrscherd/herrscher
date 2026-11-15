@@ -267,8 +267,7 @@ func TestCompactionNoticeFollowsTheLiveSessionLanguage(t *testing.T) {
 	live := newOperatorLanguage(i18n.English)
 	h := &hub{warnings: io.Discard, st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)}
 	var printed bytes.Buffer
-	d := newSessionDriver("s1", nil, nil, nil, io.Discard)
-	d.warnings = &printed
+	d := newSessionDriver("s1", nil, nil, nil, &printed)
 	d.language = liveSessionLanguage(st, "s1")
 	d.operator = h.textLanguage()
 
@@ -294,8 +293,7 @@ func TestCompactionNoticeFollowsTheOperatorWithoutASessionLanguage(t *testing.T)
 	live := newOperatorLanguage(i18n.English)
 	h := &hub{warnings: io.Discard, st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)}
 	var printed bytes.Buffer
-	d := newSessionDriver("s1", nil, nil, nil, io.Discard)
-	d.warnings = &printed
+	d := newSessionDriver("s1", nil, nil, nil, &printed)
 	d.language = liveSessionLanguage(st, "s1")
 	d.operator = h.textLanguage()
 

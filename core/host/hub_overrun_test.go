@@ -32,7 +32,7 @@ func TestTeardownOverrunWarnsOnlyForTheSessionStillStopping(t *testing.T) {
 	for _, name := range names {
 		retired = append(retired, h.goDeadLocked(name, window)...)
 	}
-	h.lifecycle.Unlock()
+	h.releaseLifecycle()
 	h.awaitRetired(window, retired)
 
 	out := warnings.String()

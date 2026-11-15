@@ -187,7 +187,7 @@ func TestHubDispatchSetSource(t *testing.T) {
 	}
 }
 
-func newTestHub(t *testing.T) *hub {
+func newTestHub(t *testing.T, opts ...hubOption) *hub {
 	t.Helper()
 	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable()
@@ -195,7 +195,7 @@ func newTestHub(t *testing.T) *hub {
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
-	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab)
+	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab, opts...)
 	h.runtime = isolatedRuntimeDir(t)
 	t.Cleanup(h.stopLive)
 	return h
@@ -223,9 +223,8 @@ func TestHubSessionsSnapshot(t *testing.T) {
 }
 
 func TestReconcileStaysSilentOnceTheHubIsClosed(t *testing.T) {
-	h := newTestHub(t)
 	var printed bytes.Buffer
-	h.warnings = &printed
+	h := newTestHub(t, withWarnings(&printed))
 	for _, name := range []string{"alpha", "beta"} {
 		if err := h.st.AddSession(state.Session{Name: name, Incarnation: name}); err != nil {
 			t.Fatal(err)

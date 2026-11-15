@@ -3208,6 +3208,16 @@
     "other": "the turn queue is full, the compaction was not queued"
   },
   {
+    "id": "cli.host.fault.warning_sink_closed",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (warning sink closed)",
+    "other": "the warning sink is closed: the hub writes no more warnings"
+  },
+  {
+    "id": "cli.host.fault.warnings_undrained",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (warnings undrained)",
+    "other": "warnings were still waiting for their writer when the sink closed"
+  },
+  {
     "id": "cli.host.fault.request_name_missing",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (request name missing)",
     "other": "name a request (see `approve list`)"

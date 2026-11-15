@@ -24,6 +24,7 @@ const (
 	graceParam  = "Grace"
 	roleParam   = "Role"
 	ruleParam   = "Rule"
+	countParam  = "Count"
 )
 
 type hostMessages struct {

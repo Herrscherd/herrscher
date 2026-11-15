@@ -3208,6 +3208,16 @@
     "other": "la file des tours est pleine, la compaction n'a pas été mise en file"
   },
   {
+    "id": "cli.host.fault.warning_sink_closed",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (warning sink closed)",
+    "other": "le puits d'avertissements est fermé : l'hôte n'écrit plus d'avertissement"
+  },
+  {
+    "id": "cli.host.fault.warnings_undrained",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (warnings undrained)",
+    "other": "des avertissements attendaient encore leur écrivain à la fermeture du puits"
+  },
+  {
     "id": "cli.host.fault.request_name_missing",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (request name missing)",
     "other": "nommez une demande (voir `approve list`)"

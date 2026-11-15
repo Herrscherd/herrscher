@@ -22,7 +22,7 @@ func (h *hub) reconcile(ctx context.Context) retiredBatch {
 	}
 	h.mu.Unlock()
 	h.lifecycle.Lock()
-	defer h.lifecycle.Unlock()
+	defer h.releaseLifecycle()
 	batch := h.newBatch()
 	h.forgetGoneRefusalsLocked()
 	for _, name := range liveNames {

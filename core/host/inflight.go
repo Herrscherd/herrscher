@@ -30,10 +30,6 @@ func (f *inflight) finish() {
 	}
 }
 
-func (f *inflight) Wait() {
-	<-f.settled()
-}
-
 func (f *inflight) settled() <-chan struct{} {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -64,7 +60,10 @@ func (h *hub) awaitInFlightWithin(window teardownWindow, groups ...*inflight) bo
 }
 
 func (h *hub) flushWarningsWithin(window teardownWindow) {
-	if h.sink != nil && !h.sink.flush(window) {
+	if h.sink == nil {
+		return
+	}
+	if _, graceExpired := h.sink.flush(window); graceExpired {
 		h.warnHubOverrun()
 	}
 }

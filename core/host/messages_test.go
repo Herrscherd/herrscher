@@ -181,6 +181,7 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"warn.session_accept_failed":        {"Detail", "Name"},
 		"warn.session_teardown_overrun":     {"Grace", "Name"},
 		"warn.hub_teardown_overrun":         {"Grace"},
+		"warn.warnings_dropped":             {"Count"},
 		"warn.session_seed_transcript":      {"Detail", "Name"},
 		"warn.session_usage":                {"Detail", "Name"},
 		"warn.session_compaction_notice":    {"Detail", "Name"},

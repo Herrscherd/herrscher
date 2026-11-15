@@ -59,6 +59,7 @@ type hub struct {
 
 	listenedSessions map[string]struct{}
 	closed           bool
+	deferred         []lifecycleWarning
 
 	teardownGrace time.Duration
 	listen        func(ctx context.Context, path string) (net.Listener, error)
@@ -90,7 +91,7 @@ func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir str
 	for _, opt := range opts {
 		opt(created)
 	}
-	created.sink = newWarningSink(created.warnings)
+	created.sink = newWarningSink(created.warnings, created.lostWarningLine)
 	created.warnings = created.sink
 	if sup != nil {
 		sup.SetFailureSink(created.reportSessionFailure)
@@ -106,6 +107,10 @@ func (h *hub) textLanguage() languageSource {
 		return h.language
 	}
 	return fixedLanguageSource(h.lang)
+}
+
+func (h *hub) lostWarningLine(lost int) string {
+	return newHostMessages().text(h.textLanguage()(), "warn.warnings_dropped", map[string]any{countParam: lost})
 }
 
 func (h *hub) sessionLanguageSource(name string) languageSource {

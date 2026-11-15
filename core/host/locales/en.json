@@ -596,8 +596,13 @@
   },
   {
     "id": "warn.hub_teardown_overrun",
-    "description": "The hub stop waits for in-flight session work past its grace period and goes on anyway",
-    "other": "herrscher serve: stop still waiting for in-flight session work after {{.Grace}}, stopping anyway"
+    "description": "The hub stop does not finish within its grace period and goes on anyway; work or warnings may still complete after it",
+    "other": "herrscher serve: stop did not finish within {{.Grace}}, in-flight work or warnings may still complete after it, stopping anyway"
+  },
+  {
+    "id": "warn.warnings_dropped",
+    "description": "A summary line: Count warnings were dropped while the output was blocked, written once it unblocks",
+    "other": "herrscher serve: {{.Count}} warnings lost while the output was blocked"
   },
   {
     "id": "warn.session_seed_transcript",

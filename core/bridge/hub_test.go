@@ -421,12 +421,12 @@ func TestRunOneShotAnswersOnlyTheInputAfterControlFrames(t *testing.T) {
 	}
 }
 
-const wireEventUnknown = "mystery"
+const unknownEventType = "mystery"
 
 func TestBridgeIgnoresUnknownFrameTypes(t *testing.T) {
 	in := make(chan contracts.Event, 3)
 	be := &captureBackend{reply: "ok"}
-	in <- contracts.Event{T: wireEventUnknown, Text: "not a turn"}
+	in <- contracts.Event{T: unknownEventType, Text: "not a turn"}
 	in <- contracts.Event{T: eventwire.EventInput, Text: "bonjour"}
 	close(in)
 

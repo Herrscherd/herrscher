@@ -9,8 +9,8 @@ import (
 func TestRepeatedStopsDoNotAccumulateWaiters(t *testing.T) {
 	var out lockedBuffer
 	h := newInflightHub(t, "stop-"+newTurnID(), 20*time.Millisecond, &out)
-	h.acceptFails.Add(1)
-	defer h.acceptFails.Done()
+	end := h.acceptFails.Begin()
+	defer end()
 
 	h.awaitInFlight()
 	before := runtime.NumGoroutine()

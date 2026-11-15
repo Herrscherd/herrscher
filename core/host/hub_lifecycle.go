@@ -172,9 +172,9 @@ func (h *hub) relaunchWhenSettled(ctx context.Context, name string, settled <-ch
 		h.relaunching = make(map[string]struct{})
 	}
 	h.relaunching[name] = struct{}{}
-	h.relaunches.Add(1)
+	end := h.relaunches.Begin()
 	go func() {
-		defer h.relaunches.Done()
+		defer end()
 		select {
 		case <-settled:
 		case <-h.relaunchStop:
@@ -366,26 +366,27 @@ func (h *hub) haltBridge(name string) {
 }
 
 func (h *hub) acceptFailed(name string, done <-chan struct{}, cause error) {
-	if !h.retireFailed(name, done) {
+	end, retired := h.retireFailed(name, done)
+	if !retired {
 		return
 	}
-	defer h.acceptFails.Done()
+	defer end()
 	h.forget(name)
 	warnLive(h.warnings, h.sessionLanguageSource(name), "warn.session_accept_failed", map[string]any{nameParam: name, detailParam: cause})
 }
 
-func (h *hub) retireFailed(name string, done <-chan struct{}) bool {
+func (h *hub) retireFailed(name string, done <-chan struct{}) (func(), bool) {
 	h.lifecycle.Lock()
 	defer h.lifecycle.Unlock()
 	if h.closed {
-		return false
+		return nil, false
 	}
 	if _, ok := h.dropLocked(name, done); !ok {
-		return false
+		return nil, false
 	}
-	h.acceptFails.Add(1)
+	end := h.acceptFails.Begin()
 	h.haltBridgeWithinGrace(name)
-	return true
+	return end, true
 }
 
 func (h *hub) haltBridgeWithinGrace(name string) {

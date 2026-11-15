@@ -23,7 +23,10 @@ func TestStuckStopCannotHoldTheLifecycleBeyondTheGrace(t *testing.T) {
 		}
 
 		retired := make(chan bool, 1)
-		go func() { retired <- h.retireFailed(name, done) }()
+		go func() {
+			_, ok := h.retireFailed(name, done)
+			retired <- ok
+		}()
 		synctest.Wait()
 
 		time.Sleep(2 * grace)

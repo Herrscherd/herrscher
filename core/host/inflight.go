@@ -8,21 +8,26 @@ type inflight struct {
 	zero  chan struct{}
 }
 
-func (f *inflight) Add(delta int) {
+func (f *inflight) Begin() func() {
 	f.mu.Lock()
-	defer f.mu.Unlock()
-	previous := f.count
-	f.count = max(previous+delta, 0)
-	if previous == 0 && f.count > 0 {
+	if f.count == 0 {
 		f.zero = make(chan struct{})
 	}
-	if previous > 0 && f.count == 0 {
-		close(f.zero)
+	f.count++
+	f.mu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(f.finish)
 	}
 }
 
-func (f *inflight) Done() {
-	f.Add(-1)
+func (f *inflight) finish() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.count--
+	if f.count == 0 {
+		close(f.zero)
+	}
 }
 
 func (f *inflight) Wait() {

@@ -89,7 +89,7 @@ func TestStuckStopsOfArchivedSessionsShareOneGraceInReconcile(t *testing.T) {
 	started := time.Now()
 	h.reconcile(t.Context())
 	elapsed := time.Since(started)
-	if bound := 2 * reconcileGrace; elapsed > bound {
+	if bound := reconcileGrace + reconcileGrace/2; elapsed > bound {
 		t.Fatalf("reconcile took %v retiring three stuck bridges, want at most %v: each retirement waited its own grace", elapsed, bound)
 	}
 	for _, name := range names {

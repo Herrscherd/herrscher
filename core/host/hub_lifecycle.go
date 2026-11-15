@@ -63,15 +63,47 @@ func (h *hub) goLiveBridged(ctx context.Context, sess state.Session) error {
 }
 
 func (h *hub) goLiveBridgedLocked(ctx context.Context, sess state.Session) error {
-	wasLive := h.isLive(sess.Name)
-	err := h.goLiveLocked(ctx, sess)
-	if err == nil {
-		err = h.startBridgeLocked(sess, wasLive, 0)
+	err := h.goLiveBridgedOnce(ctx, sess)
+	if errors.Is(err, supervisor.ErrStillStopping) && h.stoppingBridge(sess.Name) == nil {
+		err = h.goLiveBridgedOnce(ctx, sess)
 	}
 	if settled := h.stoppingBridge(sess.Name); errors.Is(err, supervisor.ErrStillStopping) && settled != nil {
 		h.relaunchWhenSettled(ctx, sess.Name, settled)
 	}
 	return err
+}
+
+func (h *hub) goLiveBridgedOnce(ctx context.Context, sess state.Session) error {
+	wasLive := h.isLive(sess.Name)
+	if err := h.goLiveLocked(ctx, sess); err != nil {
+		return err
+	}
+	if err := h.startBridgeLocked(sess, wasLive, 0); err != nil {
+		return err
+	}
+	h.retireIfArchivedLocked(sess.Name)
+	return nil
+}
+
+func (h *hub) retireIfArchivedLocked(name string) {
+	sess, ok := h.st.FindSession(name)
+	if !ok || !sess.Archived {
+		return
+	}
+	if _, dropped := h.dropLocked(name, nil); dropped {
+		h.haltBridgeWithinGrace(name)
+	}
+	h.forget(name)
+}
+
+func (h *hub) forgetGoneRefusals() {
+	h.lifecycle.Lock()
+	defer h.lifecycle.Unlock()
+	for name, incarnation := range h.refused {
+		if sess, ok := h.st.FindSession(name); !ok || sess.Incarnation != incarnation {
+			delete(h.refused, name)
+		}
+	}
 }
 
 func (h *hub) journalStart(name string, err error) {
@@ -438,6 +470,7 @@ func (h *hub) awaitTeardown(name string, live liveSession, window teardownWindow
 }
 
 func (h *hub) reconcile(ctx context.Context) {
+	h.forgetGoneRefusals()
 	persisted := make(map[string]state.Session)
 	sessions := h.st.SnapshotSessions()
 	for idx := range sessions {

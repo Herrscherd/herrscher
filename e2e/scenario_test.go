@@ -15,7 +15,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -343,8 +342,10 @@ func descendantGone(ts *testscript.TestScript, neg bool, args []string) {
 	if len(args) != 1 {
 		ts.Fatalf("usage: descendantgone <pid file>")
 	}
-	pid, err := readPid(ts.MkAbs(args[0]))
+	pidPath := ts.MkAbs(args[0])
+	pid, err := readPid(pidPath)
 	ts.Check(err)
+	ts.Check(descendantNotExpired(pidPath))
 	marker := instanceMarker(ts.Getenv(instanceEnv))
 	ts.Defer(func() { ts.Check(killDescendant(pid, marker)) })
 	deadline := time.Now().Add(descendantWait)
@@ -357,6 +358,23 @@ func descendantGone(ts *testscript.TestScript, neg bool, args []string) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	ts.Fatalf("the descendant %d of the fake claude still runs %s after the turn ended", pid, descendantWait)
+}
+
+var errDescendantExpired = errors.New("the check starts too late to see the descendant die: it may have ended on its own")
+
+func descendantNotExpired(pidPath string) error {
+	info, err := os.Stat(pidPath)
+	if err != nil {
+		return err
+	}
+	life, err := time.ParseDuration(vendortest.DescendantSleep + "s")
+	if err != nil {
+		return err
+	}
+	if time.Since(info.ModTime()) > life-descendantWait {
+		return errDescendantExpired
+	}
+	return nil
 }
 
 func readPid(path string) (int, error) {
@@ -372,14 +390,28 @@ func instanceMarker(instance string) []byte {
 }
 
 func descendantAlive(pid int, marker []byte) (bool, error) {
-	pids, err := processesWith(marker)
-	if err != nil {
-		return false, err
-	}
-	if !slices.Contains(pids, pid) {
+	environ, err := os.ReadFile(filepath.Join(procRoot, strconv.Itoa(pid), "environ"))
+	if gone(err) {
 		return false, nil
 	}
-	return describe(pid) == strconv.Itoa(pid)+" sleep "+vendortest.DescendantSleep, nil
+	if err != nil {
+		return false, fmt.Errorf("cannot read the environment of %d: %w", pid, err)
+	}
+	if !bytes.Contains(append(environ, 0), marker) {
+		return false, nil
+	}
+	line, err := commandLine(pid)
+	if gone(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("cannot read the command of %d: %w", pid, err)
+	}
+	return line == "sleep "+vendortest.DescendantSleep, nil
+}
+
+func gone(err error) bool {
+	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ESRCH)
 }
 
 func killDescendant(pid int, marker []byte) error {
@@ -465,9 +497,17 @@ func processesIn(root string, marker []byte) ([]int, error) {
 }
 
 func describe(pid int) string {
-	cmdline, err := os.ReadFile(filepath.Join(procRoot, strconv.Itoa(pid), "cmdline"))
+	line, err := commandLine(pid)
 	if err != nil {
 		return strconv.Itoa(pid)
 	}
-	return strconv.Itoa(pid) + " " + strings.Join(strings.Split(strings.TrimRight(string(cmdline), "\x00"), "\x00"), " ")
+	return strconv.Itoa(pid) + " " + line
+}
+
+func commandLine(pid int) (string, error) {
+	cmdline, err := os.ReadFile(filepath.Join(procRoot, strconv.Itoa(pid), "cmdline"))
+	if err != nil {
+		return "", err
+	}
+	return strings.Join(strings.Split(strings.TrimRight(string(cmdline), "\x00"), "\x00"), " "), nil
 }

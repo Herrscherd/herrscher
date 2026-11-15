@@ -229,3 +229,25 @@ func TestSpawnRefusesToRunWithoutTheLogPath(t *testing.T) {
 		t.Fatalf("got %v, want %v", err, errNoLog)
 	}
 }
+
+func TestOneShotConsumesNoTurnAndSpawnsNothing(t *testing.T) {
+	files := scriptFiles(t, "spawn descendant.pid\ntext Voici\n")
+	r, err := openReplay(files, []string{"-p", "ping"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if callErr := r.oneShot(&out, "ping"); callErr != nil {
+		t.Fatal(callErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(filepath.Dir(files.Log), "descendant.pid")); !os.IsNotExist(statErr) {
+		t.Fatalf("a -p call spawned a descendant: stat err %v", statErr)
+	}
+	turn, err := r.nextTurn()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(turn.spawns) != 1 || len(turn.steps) != 1 {
+		t.Fatalf("the first turn was consumed by -p: got %+v", turn)
+	}
+}

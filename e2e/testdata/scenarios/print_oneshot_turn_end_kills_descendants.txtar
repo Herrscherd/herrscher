@@ -1,9 +1,0 @@
-env CLAUDE_KIND=oneshot
-env 'CLAUDE_CMD=claude -p'
-exec herrscher --print 'say ping please'
-grep 'say ping please' $WORK/claude.log
-! stderr 'unexpected error'
-descendantgone $WORK/descendant.pid
-
--- claude.script --
-spawn descendant.pid

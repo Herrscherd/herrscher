@@ -19,7 +19,7 @@ import (
 )
 
 // DescendantSleep is the number of seconds a descendant started by spawn lives at most.
-const DescendantSleep = "10"
+const DescendantSleep = "60"
 
 const (
 	envScript = "VENDORTEST_SCRIPT"
@@ -324,9 +324,6 @@ func (r *replay) play(out io.Writer, turn Turn, prompt string) (turnOutcome, err
 
 func (r *replay) oneShot(out io.Writer, prompt string) error {
 	if err := r.record("prompt " + strconv.Quote(prompt)); err != nil {
-		return err
-	}
-	if _, err := r.beginTurn(); err != nil {
 		return err
 	}
 	return writeJSON(out, r.result(echoPrefix+lastLine(prompt), prompt))

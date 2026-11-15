@@ -1622,7 +1622,10 @@ Linux, and says it skips the step anywhere else.
 - `descendantgone <pid file>` waits up to five seconds for the `sleep` named in the file,
   one the fake started with `spawn`, to be gone. It recognises that process by the
   instance marker of the scenario and its exact argv, so a recycled pid does not pass,
-  and it fails the scenario if the process still runs. It kills that process at the end
+  and it fails the scenario if the process still runs. A pid whose environment or
+  command cannot be read fails the scenario too, instead of counting as gone. It fails
+  at once if the file is older than the sleep's sixty seconds less the five-second wait,
+  since the sleep may already have ended on its own. It kills that process at the end
   of the scenario if it still runs. `! descendantgone` is refused.
 - These waits poll with a short sleep: they wait on other processes, which a
   `testing/synctest` bubble cannot control.
@@ -1648,15 +1651,17 @@ Linux, and says it skips the step anywhere else.
   provides it. The script holds one block per turn, separated by `---`, and each line
   is one step: `text <words>`, `tool <Name> <json input>`, `error <message>`,
   `apierror <message>`, `spawn <file>`, `echo`, `hang` or `crash`, the last three alone
-  on their line. `spawn` starts a `sleep` of ten seconds that the fake does not wait for,
-  and writes its pid to `<file>` in the work directory. Both the stream and the one-shot
-  mode run the spawns of a turn: `CLAUDE_KIND=oneshot` with `CLAUDE_CMD='claude -p'`
-  selects the one-shot mode. A turn with neither a step nor a spawn is an error. The turn count is shared by every process of the scenario, under a lock file
-  beside it. A fake killed while it holds that lock leaves it behind, and the next
-  turn fails after ten seconds with an error that names the lock. A turn past the end
-  of the script, a missing script, and every one-shot `-p` call (the health probe)
-  echo the last line of the prompt as `echo: <line>`. Every start and every prompt is
-  appended to `$VENDORTEST_LOG`.
+  on their line. `spawn` starts a `sleep` of sixty seconds that the fake does not wait
+  for, and writes its pid to `<file>` in the work directory. The stream mode runs the
+  spawns of a turn. A turn with neither a step nor a spawn is an error. The turn count
+  is shared by every process of the scenario, under a lock file beside it. A fake
+  killed while it holds that lock leaves it behind, and the next turn fails after ten
+  seconds with an error that names the lock. A turn past the end of the script, a
+  missing script, and every one-shot `-p` call (the health probe) echo the last line of
+  the prompt as `echo: <line>`. A `-p` call consumes no turn and spawns nothing. The
+  one-shot mode is reached with `herrscher session create --backend oneshot`, not with
+  `CLAUDE_KIND`, which the stream backend of a session overrides. Every start and every
+  prompt is appended to `$VENDORTEST_LOG`.
 
 Every bug found by hand becomes a scenario before it is fixed: the scenario is written
 first, fails on the bug, and passes with the fix.

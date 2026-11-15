@@ -31,7 +31,7 @@ func TestRetirementWaitingForTheLockKeepsItsGrace(t *testing.T) {
 				defer close(finished)
 				op()
 			}()
-			time.Sleep(2 * lockWaitGrace)
+			time.Sleep(lockWaitGrace + 300*time.Millisecond)
 			h.lifecycle.Unlock()
 			<-finished
 

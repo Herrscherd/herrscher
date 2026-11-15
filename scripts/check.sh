@@ -13,7 +13,7 @@ capped() {
 }
 
 regenerated_copy=$(mktemp -d)
-production_lint_config=$(mktemp)
+production_lint_config=$(mktemp --suffix=.yml)
 trap 'rm -rf "$regenerated_copy" "$production_lint_config"' EXIT
 
 regenerated_from_scratch() {

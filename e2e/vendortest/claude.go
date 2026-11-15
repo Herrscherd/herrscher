@@ -18,8 +18,12 @@ import (
 	"time"
 )
 
-// DescendantSleep is the number of seconds a descendant started by spawn lives at most.
-const DescendantSleep = "60"
+// DescendantSleep is how long a descendant started by spawn lives at most.
+const DescendantSleep = 60 * time.Second
+
+const descendantSleepArg = "60"
+
+const healthProbePrompt = "Reply with the single word ok."
 
 const (
 	envScript = "VENDORTEST_SCRIPT"
@@ -326,6 +330,11 @@ func (r *replay) oneShot(out io.Writer, prompt string) error {
 	if err := r.record("prompt " + strconv.Quote(prompt)); err != nil {
 		return err
 	}
+	if !strings.Contains(prompt, healthProbePrompt) {
+		if _, err := r.beginTurn(); err != nil {
+			return err
+		}
+	}
 	return writeJSON(out, r.result(echoPrefix+lastLine(prompt), prompt))
 }
 
@@ -355,7 +364,7 @@ func (r *replay) spawn(pidFile string) error {
 	if r.files.Log == "" {
 		return errNoLog
 	}
-	child := exec.CommandContext(context.Background(), "sleep", DescendantSleep)
+	child := exec.CommandContext(context.Background(), "sleep", descendantSleepArg)
 	if err := child.Start(); err != nil {
 		return fmt.Errorf("cannot start the descendant: %w", err)
 	}

@@ -1651,17 +1651,19 @@ Linux, and says it skips the step anywhere else.
   provides it. The script holds one block per turn, separated by `---`, and each line
   is one step: `text <words>`, `tool <Name> <json input>`, `error <message>`,
   `apierror <message>`, `spawn <file>`, `echo`, `hang` or `crash`, the last three alone
-  on their line. `spawn` starts a `sleep` of sixty seconds that the fake does not wait
-  for, and writes its pid to `<file>` in the work directory. The stream mode runs the
-  spawns of a turn. A turn with neither a step nor a spawn is an error. The turn count
-  is shared by every process of the scenario, under a lock file beside it. A fake
-  killed while it holds that lock leaves it behind, and the next turn fails after ten
-  seconds with an error that names the lock. A turn past the end of the script, a
-  missing script, and every one-shot `-p` call (the health probe) echo the last line of
-  the prompt as `echo: <line>`. A `-p` call consumes no turn and spawns nothing. The
-  one-shot mode is reached with `herrscher session create --backend oneshot`, not with
-  `CLAUDE_KIND`, which the stream backend of a session overrides. Every start and every
-  prompt is appended to `$VENDORTEST_LOG`.
+  on their line. `spawn` starts a `sleep` of sixty seconds (`DescendantSleep` in
+  `e2e/vendortest`) that the fake does not wait for, and writes its pid to `<file>` in
+  the work directory. Stream and one-shot turns run the spawns of their turn. A turn with
+  neither a step nor a spawn is an error. The turn count is shared by every process of
+  the scenario, under a lock file beside it. A fake killed while it holds that lock
+  leaves it behind, and the next turn fails after ten seconds with an error that names
+  the lock. A turn past the end of the script, and a missing script, echo the last line
+  of the prompt as `echo: <line>`. A `-p` call answers the same way, but the health
+  probe's prompt, `Reply with the single word ok.` (as sent by herrscher-claude-backend
+  v0.15.6), consumes no turn and spawns nothing: any other `-p` call is a one-shot turn.
+  The one-shot mode is reached with `herrscher session create --backend oneshot` or
+  `herrscher bridge --backend oneshot`, not with `CLAUDE_KIND`, which the stream backend
+  of a session overrides. Every start and every prompt is appended to `$VENDORTEST_LOG`.
 
 Every bug found by hand becomes a scenario before it is fixed: the scenario is written
 first, fails on the bug, and passes with the fix.

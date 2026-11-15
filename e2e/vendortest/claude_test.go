@@ -8,10 +8,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"testing/synctest"
+	"time"
 )
 
 type event struct {
@@ -230,6 +232,12 @@ func TestSpawnRefusesToRunWithoutTheLogPath(t *testing.T) {
 	}
 }
 
+func TestDescendantSleepArgMatchesItsDuration(t *testing.T) {
+	if got := strconv.Itoa(int(DescendantSleep / time.Second)); got != descendantSleepArg {
+		t.Fatalf("the sleep argument %q does not match %v (%q)", descendantSleepArg, DescendantSleep, got)
+	}
+}
+
 func TestOneShotConsumesNoTurnAndSpawnsNothing(t *testing.T) {
 	files := scriptFiles(t, "spawn descendant.pid\ntext Voici\n")
 	r, err := openReplay(files, []string{"-p", "ping"})
@@ -237,7 +245,7 @@ func TestOneShotConsumesNoTurnAndSpawnsNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if callErr := r.oneShot(&out, "ping"); callErr != nil {
+	if callErr := r.oneShot(&out, healthProbePrompt); callErr != nil {
 		t.Fatal(callErr)
 	}
 	if _, statErr := os.Stat(filepath.Join(filepath.Dir(files.Log), "descendant.pid")); !os.IsNotExist(statErr) {
@@ -249,5 +257,49 @@ func TestOneShotConsumesNoTurnAndSpawnsNothing(t *testing.T) {
 	}
 	if len(turn.spawns) != 1 || len(turn.steps) != 1 {
 		t.Fatalf("the first turn was consumed by -p: got %+v", turn)
+	}
+}
+
+func killRecordedDescendant(t *testing.T, pidPath string) {
+	t.Helper()
+	data, err := os.ReadFile(pidPath)
+	if err != nil {
+		return
+	}
+	pid, err := strconv.Atoi(string(data))
+	if err != nil {
+		return
+	}
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		t.Errorf("find the stray descendant %d: %v", pid, err)
+		return
+	}
+	if killErr := process.Kill(); killErr != nil && !errors.Is(killErr, os.ErrProcessDone) {
+		t.Errorf("kill the stray descendant %d: %v", pid, killErr)
+	}
+}
+
+func TestOneShotRealPromptConsumesATurn(t *testing.T) {
+	files := scriptFiles(t, "spawn descendant.pid\ntext Voici\n---\ntext second\n")
+	r, err := openReplay(files, []string{"-p", "say ping please"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pidPath := filepath.Join(filepath.Dir(files.Log), "descendant.pid")
+	t.Cleanup(func() { killRecordedDescendant(t, pidPath) })
+	var out bytes.Buffer
+	if callErr := r.oneShot(&out, "say ping please"); callErr != nil {
+		t.Fatal(callErr)
+	}
+	if _, statErr := os.Stat(pidPath); statErr != nil {
+		t.Fatalf("a real -p turn spawned no descendant: %v", statErr)
+	}
+	turn, err := r.nextTurn()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(turn.steps) != 1 || turn.steps[0].text != "second" {
+		t.Fatalf("the real -p prompt did not consume turn 0: got %+v", turn)
 	}
 }

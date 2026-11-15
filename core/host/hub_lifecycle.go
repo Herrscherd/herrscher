@@ -318,8 +318,7 @@ func (h *hub) stopLive() {
 		h.awaitTeardown(name, live, window)
 		cancel()
 	}
-	h.relaunches.Wait()
-	h.acceptFails.Wait()
+	h.awaitInFlight()
 }
 
 func (h *hub) noteListened(session string) {
@@ -338,8 +337,7 @@ func (h *hub) closeAndRemoveSockets() error {
 	sessions := slices.Collect(maps.Keys(h.listenedSessions))
 	h.mu.Unlock()
 	h.lifecycle.Unlock()
-	h.relaunches.Wait()
-	h.acceptFails.Wait()
+	h.awaitInFlight()
 	return removeSocketFiles(h.runtime, h.instanceID, sessions)
 }
 

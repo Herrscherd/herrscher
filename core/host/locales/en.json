@@ -595,6 +595,11 @@
     "other": "herrscher serve: session \"{{.Name}}\": teardown still running after {{.Grace}}, releasing the name anyway"
   },
   {
+    "id": "warn.hub_teardown_overrun",
+    "description": "The hub stop waits for in-flight session work past its grace period and goes on anyway",
+    "other": "herrscher serve: stop still waiting for in-flight session work after {{.Grace}}, stopping anyway"
+  },
+  {
     "id": "warn.session_seed_transcript",
     "description": "A transcript entry of a seeded session could not be written",
     "other": "herrscher serve: session \"{{.Name}}\": seed transcript entry dropped: {{.Detail}}"

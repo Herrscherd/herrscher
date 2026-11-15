@@ -222,3 +222,10 @@ func TestLockTurnsNamesAStaleLock(t *testing.T) {
 		t.Fatalf("got %v, want the stale lock named", err)
 	}
 }
+
+func TestSpawnRefusesToRunWithoutTheLogPath(t *testing.T) {
+	err := (&replay{}).spawn("descendant.pid")
+	if !errors.Is(err, errNoLog) {
+		t.Fatalf("got %v, want %v", err, errNoLog)
+	}
+}

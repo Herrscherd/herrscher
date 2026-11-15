@@ -18,6 +18,9 @@ import (
 	"time"
 )
 
+// DescendantSleep is the number of seconds a descendant started by spawn lives at most.
+const DescendantSleep = "10"
+
 const (
 	envScript = "VENDORTEST_SCRIPT"
 	envLog    = "VENDORTEST_LOG"
@@ -26,7 +29,6 @@ const (
 	claudeVersion    = "2.1.0 (Claude Code)"
 	defaultSessionID = "vendortest-session"
 	echoPrefix       = "echo: "
-	descendantSleep  = "300"
 	privateFile      = 0o600
 	exitFailure      = 1
 	exitUnreported   = 2
@@ -277,11 +279,8 @@ func (r *replay) answer(out io.Writer, line []byte) (turnOutcome, error) {
 	if err := r.record("prompt " + strconv.Quote(prompt)); err != nil {
 		return 0, err
 	}
-	turn, err := r.nextTurn()
+	turn, err := r.beginTurn()
 	if err != nil {
-		return 0, err
-	}
-	if err := r.spawnDescendants(turn); err != nil {
 		return 0, err
 	}
 	return r.play(out, turn, prompt)
@@ -302,7 +301,6 @@ func (r *replay) play(out io.Writer, turn Turn, prompt string) (turnOutcome, err
 				return 0, err
 			}
 			return outcomeAnswered, writeJSON(out, r.failure(current.text, prompt))
-		case stepSpawn:
 		case stepEcho:
 			text := echoPrefix + lastLine(prompt)
 			reply = append(reply, text)
@@ -328,17 +326,28 @@ func (r *replay) oneShot(out io.Writer, prompt string) error {
 	if err := r.record("prompt " + strconv.Quote(prompt)); err != nil {
 		return err
 	}
+	if _, err := r.beginTurn(); err != nil {
+		return err
+	}
 	return writeJSON(out, r.result(echoPrefix+lastLine(prompt), prompt))
 }
 
-var errNoLog = errors.New("spawn needs $VENDORTEST_LOG, which names the work directory of the scenario")
+func (r *replay) beginTurn() (Turn, error) {
+	turn, err := r.nextTurn()
+	if err != nil {
+		return Turn{}, err
+	}
+	if err := r.spawnDescendants(turn); err != nil {
+		return Turn{}, err
+	}
+	return turn, nil
+}
+
+var errNoLog = errors.New("spawn needs $VENDORTEST_LOG, which names a file in the work directory of the scenario")
 
 func (r *replay) spawnDescendants(turn Turn) error {
-	for _, current := range turn.steps {
-		if current.kind != stepSpawn {
-			continue
-		}
-		if err := r.spawn(current.text); err != nil {
+	for _, pidFile := range turn.spawns {
+		if err := r.spawn(pidFile); err != nil {
 			return err
 		}
 	}
@@ -349,7 +358,7 @@ func (r *replay) spawn(pidFile string) error {
 	if r.files.Log == "" {
 		return errNoLog
 	}
-	child := exec.CommandContext(context.Background(), "sleep", descendantSleep)
+	child := exec.CommandContext(context.Background(), "sleep", DescendantSleep)
 	if err := child.Start(); err != nil {
 		return fmt.Errorf("cannot start the descendant: %w", err)
 	}

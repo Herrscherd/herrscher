@@ -74,8 +74,9 @@ The claude backend retries only before the vendor has taken the turn, which an
 assistant or user line takes, and so does a system line of subtype init or
 api_retry: once it is taken, a stream that ends is a failed turn, with the text
 so far on stdout and no second attempt.
-When a session closes, or a one-shot turn returns, the claude backend kills the whole
-process group of the CLI, so no process the CLI started outlives it.
+On Unix, when a session closes or a one-shot turn returns, the claude backend kills the
+whole process group of the CLI, so a process the CLI started outlives it only if it left
+that group itself (setsid). On Windows the backend kills only the CLI process.
 
 A single unrecognised word stays a verb, so a typo is still a typo. Use `-p` to
 force a one-word task.
@@ -1618,9 +1619,11 @@ Linux, and says it skips the step anywhere else.
   signal than SIGINT and SIGKILL, so a scenario starts it as
   `! exec herrscher serve &daemon&` and stops it with `kill -INT daemon`, `wait daemon`
   then `! waitdaemon`.
-- `descendantgone <pid file>` waits up to five seconds for the process named in the
-  file, one the fake started with `spawn`, to be gone, and kills it at the end of the
-  scenario if it still runs.
+- `descendantgone <pid file>` waits up to five seconds for the `sleep` named in the file,
+  one the fake started with `spawn`, to be gone. It recognises that process by the
+  instance marker of the scenario and its exact argv, so a recycled pid does not pass,
+  and it fails the scenario if the process still runs. It kills that process at the end
+  of the scenario if it still runs. `! descendantgone` is refused.
 - These waits poll with a short sleep: they wait on other processes, which a
   `testing/synctest` bubble cannot control.
 - A process that still carries the instance of the scenario after it ends fails the
@@ -1645,9 +1648,10 @@ Linux, and says it skips the step anywhere else.
   provides it. The script holds one block per turn, separated by `---`, and each line
   is one step: `text <words>`, `tool <Name> <json input>`, `error <message>`,
   `apierror <message>`, `spawn <file>`, `echo`, `hang` or `crash`, the last three alone
-  on their line. `spawn` starts a `sleep` the fake does not wait for, and writes its pid
-  to `<file>` in the work directory. A turn with no step is an
-  error. The turn count is shared by every process of the scenario, under a lock file
+  on their line. `spawn` starts a `sleep` of ten seconds that the fake does not wait for,
+  and writes its pid to `<file>` in the work directory. Both the stream and the one-shot
+  mode run the spawns of a turn: `CLAUDE_KIND=oneshot` with `CLAUDE_CMD='claude -p'`
+  selects the one-shot mode. A turn with neither a step nor a spawn is an error. The turn count is shared by every process of the scenario, under a lock file
   beside it. A fake killed while it holds that lock leaves it behind, and the next
   turn fails after ten seconds with an error that names the lock. A turn past the end
   of the script, a missing script, and every one-shot `-p` call (the health probe)

@@ -26,7 +26,6 @@ const (
 	stepCrash
 	stepEcho
 	stepAPIError
-	stepSpawn
 )
 
 type step struct {
@@ -38,7 +37,8 @@ type step struct {
 
 // Turn is the scripted reply to one prompt.
 type Turn struct {
-	steps []step
+	steps  []step
+	spawns []string
 }
 
 // Script is the parsed list of turns, replayed in order.
@@ -79,23 +79,21 @@ func ParseScript(source io.Reader) (Script, error) {
 		case "":
 			continue
 		case turnSeparator:
-			if len(current.steps) == 0 {
+			if current.empty() {
 				return Script{}, &LineError{Line: lineNo, Text: line, Err: errEmptyTurn}
 			}
 			script.turns = append(script.turns, current)
 			current = Turn{}
 			continue
 		}
-		parsed, err := parseStep(line)
-		if err != nil {
+		if err := current.add(line); err != nil {
 			return Script{}, &LineError{Line: lineNo, Text: line, Err: err}
 		}
-		current.steps = append(current.steps, parsed)
 	}
 	if err := scanner.Err(); err != nil {
 		return Script{}, fmt.Errorf("cannot read the script: %w", err)
 	}
-	if len(current.steps) > 0 {
+	if !current.empty() {
 		script.turns = append(script.turns, current)
 	}
 	return script, nil
@@ -107,8 +105,33 @@ var (
 	errToolInput    = errors.New("tool input is not valid JSON")
 	errNeedsText    = errors.New("step wants text after its name")
 	errTakesNoText  = errors.New("echo, hang and crash take nothing after their name")
-	errEmptyTurn    = errors.New("a turn needs at least one step before its separator")
+	errEmptyTurn    = errors.New("a turn needs at least one step or spawn before its separator")
 )
+
+func (t *Turn) add(line string) error {
+	name, rest := cutWord(line)
+	if name == "spawn" {
+		return t.addSpawn(rest)
+	}
+	parsed, err := parseStep(line)
+	if err != nil {
+		return err
+	}
+	t.steps = append(t.steps, parsed)
+	return nil
+}
+
+func (t *Turn) addSpawn(pidFile string) error {
+	if pidFile == "" {
+		return errNeedsText
+	}
+	t.spawns = append(t.spawns, pidFile)
+	return nil
+}
+
+func (t *Turn) empty() bool {
+	return len(t.steps) == 0 && len(t.spawns) == 0
+}
 
 func parseStep(line string) (step, error) {
 	name, rest := cutWord(line)
@@ -119,8 +142,6 @@ func parseStep(line string) (step, error) {
 		return textStep(stepFail, rest)
 	case "apierror":
 		return textStep(stepAPIError, rest)
-	case "spawn":
-		return textStep(stepSpawn, rest)
 	case "tool":
 		return toolStep(rest)
 	case "echo":

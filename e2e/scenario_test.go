@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -336,15 +337,21 @@ func waitLog(ts *testscript.TestScript, neg bool, args []string) {
 const descendantWait = 5 * time.Second
 
 func descendantGone(ts *testscript.TestScript, neg bool, args []string) {
-	if neg || len(args) != 1 {
+	if neg {
+		ts.Fatalf("descendantgone cannot be negated: it waits for the descendant to exit")
+	}
+	if len(args) != 1 {
 		ts.Fatalf("usage: descendantgone <pid file>")
 	}
 	pid, err := readPid(ts.MkAbs(args[0]))
 	ts.Check(err)
-	ts.Defer(func() { ts.Check(killDescendant(pid)) })
+	marker := instanceMarker(ts.Getenv(instanceEnv))
+	ts.Defer(func() { ts.Check(killDescendant(pid, marker)) })
 	deadline := time.Now().Add(descendantWait)
 	for time.Now().Before(deadline) {
-		if !running(pid) {
+		alive, err := descendantAlive(pid, marker)
+		ts.Check(err)
+		if !alive {
 			return
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -360,30 +367,28 @@ func readPid(path string) (int, error) {
 	return strconv.Atoi(strings.TrimSpace(string(data)))
 }
 
-func running(pid int) bool {
-	stat, err := os.ReadFile(filepath.Join(procRoot, strconv.Itoa(pid), "stat"))
+func instanceMarker(instance string) []byte {
+	return []byte(instanceEnv + "=" + instance + "\x00")
+}
+
+func descendantAlive(pid int, marker []byte) (bool, error) {
+	pids, err := processesWith(marker)
 	if err != nil {
-		return false
+		return false, err
 	}
-	end := bytes.LastIndexByte(stat, ')')
-	if end < 0 {
-		return false
+	if !slices.Contains(pids, pid) {
+		return false, nil
 	}
-	fields := strings.Fields(string(stat[end+1:]))
-	return len(fields) > 0 && fields[0] != "Z" && fields[0] != "X"
+	return describe(pid) == strconv.Itoa(pid)+" sleep "+vendortest.DescendantSleep, nil
 }
 
-func isSleep(pid int) bool {
-	cmdline, err := os.ReadFile(filepath.Join(procRoot, strconv.Itoa(pid), "cmdline"))
-	return err == nil && strings.Contains(string(cmdline), "sleep")
-}
-
-func killDescendant(pid int) error {
-	if !running(pid) || !isSleep(pid) {
-		return nil
-	}
-	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+func killDescendant(pid int, marker []byte) error {
+	alive, err := descendantAlive(pid, marker)
+	if err != nil || !alive {
 		return err
+	}
+	if killErr := syscall.Kill(pid, syscall.SIGKILL); killErr != nil && !errors.Is(killErr, syscall.ESRCH) {
+		return killErr
 	}
 	return nil
 }
@@ -404,7 +409,7 @@ func answering(instance string) bool {
 const reapGrace = 5 * time.Second
 
 func reapInstance(instance string, grace time.Duration) ([]string, error) {
-	marker := []byte(instanceEnv + "=" + instance + "\x00")
+	marker := instanceMarker(instance)
 	deadline := time.Now().Add(grace)
 	for {
 		pids, err := processesWith(marker)

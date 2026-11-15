@@ -62,6 +62,7 @@ func TestWarningSinkReportsHowManyWarningsItLostWhenTheWriterUnblocks(t *testing
 }
 
 func assertLostSummaryFollowsUnblock(t *testing.T, lang i18n.Language) {
+	t.Helper()
 	writer := newGatedWarnings("blocked")
 	sink := newWarningSink(writer, func(lost int) string {
 		return newHostMessages().text(lang, "warn.warnings_dropped", map[string]any{countParam: lost})

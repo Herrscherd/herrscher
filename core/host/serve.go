@@ -338,12 +338,19 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	startHubProbes(ctx, gws, options, store, monitor, instID)
 
 	log.Info("hub up; supervising sessions", "gateways", strings.Join(kindsOf(gws), ","))
-	return awaitHubStop(ctx, runningHub, liveStopped, sockets, log)
+	return awaitHubStop(ctx, runningHub, sup, liveStopped, sockets, log)
 }
 
-func awaitHubStop(ctx context.Context, runningHub *hub, liveStopped, sockets <-chan struct{}, log *slog.Logger) error {
+type bridgeDrainer interface {
+	DrainBridges() error
+}
+
+func awaitHubStop(ctx context.Context, runningHub *hub, drainer bridgeDrainer, liveStopped, sockets <-chan struct{}, log *slog.Logger) error {
 	<-ctx.Done()
 	<-liveStopped
+	if err := drainer.DrainBridges(); err != nil {
+		log.Warn("bridge processes still stopping at shutdown", "err", err)
+	}
 	<-sockets
 	if err := runningHub.closeAndRemoveSockets(); err != nil {
 		log.Warn("socket files of this instance not removed", "err", err)

@@ -26,9 +26,9 @@ var (
 	errHostNotProvisioned = errors.New("not provisioned")
 )
 
-// ErrStillStopping means a bridge loop of a session has not returned within the
-// grace the caller allowed: a start was refused and no new bridge launched, or a
-// stop was reported unfinished while the loop keeps stopping in the background.
+// ErrStillStopping means a bridge loop has not returned within the grace the caller allowed:
+// a start was refused and no new bridge launched, a stop was reported unfinished while the
+// loop keeps stopping in the background, or a drain at shutdown ran out while a loop was still alive.
 var ErrStillStopping = errors.New("the previous bridge of this session is still stopping")
 
 // Supervisor manages one child `herrscher bridge` process per session.

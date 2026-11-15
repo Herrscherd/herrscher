@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"sync"
+	"time"
 )
 
 type teardownWindow struct {
@@ -12,8 +13,12 @@ type teardownWindow struct {
 
 const teardownLateShare = 3
 
+func (h *hub) teardownBudget() time.Duration {
+	return h.teardownGrace - h.teardownGrace/teardownLateShare
+}
+
 func (h *hub) newGrace() (teardownWindow, context.CancelFunc) {
-	budget, cancelBudget := context.WithTimeout(context.Background(), h.teardownGrace-h.teardownGrace/teardownLateShare)
+	budget, cancelBudget := context.WithTimeout(context.Background(), h.teardownBudget())
 	ends, cancelEnds := context.WithTimeout(context.Background(), h.teardownGrace)
 	return teardownWindow{expired: budget.Done(), ends: ends.Done()}, func() {
 		cancelBudget()

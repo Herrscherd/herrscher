@@ -29,7 +29,6 @@ var (
 	// ErrKeyFileOpen reports a key file readable or writable by anyone but its owner.
 	ErrKeyFileOpen       = errors.New("key file is readable by others than its owner, chmod 600 it")
 	errKeyFileNotRegular = errors.New("key file must be a regular file, not a link, pipe or device")
-	errKeyDirUnsafe      = errors.New("key file directory must belong to the user or root, and must not be writable by its group or others")
 	// ErrKeyEmpty reports a key source that yields a blank key.
 	ErrKeyEmpty = errors.New("key source yields an empty key")
 	// ErrKeyCommand reports a key_cmd that failed; its output is never included.

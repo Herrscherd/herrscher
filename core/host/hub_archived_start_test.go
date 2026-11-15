@@ -11,12 +11,14 @@ import (
 func TestSessionArchivedWhileItsBridgeStartsIsNotLeftLive(t *testing.T) {
 	h := newTestHub(t)
 	name := "archived-mid-start-" + newTurnID()
-	if err := h.st.AddSession(state.Session{Name: name, ChannelID: "c1", Incarnation: name}); err != nil {
+	sess := state.Session{Name: name, ChannelID: "c1", Incarnation: name}
+	if err := h.st.AddSession(sess); err != nil {
 		t.Fatal(err)
 	}
 	var archiveErr error
 	var done <-chan struct{}
 	h.startBridge = func(state.Session, time.Duration) error {
+		holdSessionExit(t, h.sessions, name)
 		archiveErr = h.st.SetArchived(name, true)
 		h.mu.Lock()
 		done = h.live[name].done
@@ -29,8 +31,8 @@ func TestSessionArchivedWhileItsBridgeStartsIsNotLeftLive(t *testing.T) {
 		return nil
 	}
 
-	if err := h.reviveIfActive(t.Context(), name); err != nil {
-		t.Fatalf("reviveIfActive = %v", err)
+	if err := h.goLiveBridged(t.Context(), sess); err != nil {
+		t.Fatalf("goLiveBridged = %v", err)
 	}
 	if archiveErr != nil {
 		t.Fatal(archiveErr)
@@ -47,9 +49,9 @@ func TestSessionArchivedWhileItsBridgeStartsIsNotLeftLive(t *testing.T) {
 	select {
 	case <-done:
 	default:
-		t.Fatal("the session goroutine of an archived session was still running when reviveIfActive returned")
+		t.Fatal("the session goroutine of an archived session was still running when goLiveBridged returned")
 	}
 	if socketAnswers(t.Context(), h.runtime, SessionCommandSocketPathIn(h.runtime, h.instanceID, name)) {
-		t.Fatal("the command socket of an archived session still answers once reviveIfActive has returned")
+		t.Fatal("the command socket of an archived session still answers once goLiveBridged has returned")
 	}
 }

@@ -11,7 +11,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/state"
-	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
 
 const reconcileGrace = 300 * time.Millisecond
@@ -29,34 +28,42 @@ func sessionListRegistry(t *testing.T) *cli.Registry {
 }
 
 func TestStuckBridgesDoNotAddAGracePerSessionToAnUnrelatedCommand(t *testing.T) {
-	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
-	for _, name := range []string{"stuck-a", "stuck-b", "stuck-c"} {
-		if err := st.AddSession(state.Session{Name: name, ChannelID: "c1"}); err != nil {
-			t.Fatal(err)
+	synctest.Test(t, func(t *testing.T) {
+		st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+		names := []string{"stuck-a", "stuck-b", "stuck-c"}
+		h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable())
+		h.teardownGrace = reconcileGrace
+		release := make(chan struct{})
+		defer close(release)
+		h.stopBridge = func(string) error {
+			<-release
+			return nil
 		}
-	}
-	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable())
-	h.runtime = isolatedRuntimeDir(t)
-	h.teardownGrace = reconcileGrace
-	h.startBridge = func(_ state.Session, wait time.Duration) error {
-		time.Sleep(wait)
-		return supervisor.ErrStillStopping
-	}
-	h.stopBridge = func(string) error { return nil }
-	t.Cleanup(h.stopLive)
+		for _, name := range names {
+			if err := st.AddSession(state.Session{Name: name, ChannelID: "c1", Incarnation: name}); err != nil {
+				t.Fatal(err)
+			}
+			if err := st.SetArchived(name, true); err != nil {
+				t.Fatal(err)
+			}
+			finished := make(chan struct{})
+			close(finished)
+			h.live[name] = liveSession{cancel: func() {}, done: finished, release: func() {}}
+		}
 
-	started := time.Now()
-	out, err := cli.Plain(h.Dispatch(withLocalPrincipal(t.Context()), []string{"session", "list"}))
-	elapsed := time.Since(started)
-	if err != nil {
-		t.Fatalf("Dispatch beside three stuck bridges: %v", err)
-	}
-	if out != "listed" {
-		t.Fatalf("Dispatch output = %q, want %q", out, "listed")
-	}
-	if bound := reconcileGrace + 150*time.Millisecond; elapsed > bound {
-		t.Fatalf("an unrelated command took %v beside three stuck bridges, want at most %v: each stuck start waited a grace", elapsed, bound)
-	}
+		started := time.Now()
+		out, err := cli.Plain(h.Dispatch(withLocalPrincipal(t.Context()), []string{"session", "list"}))
+		elapsed := time.Since(started)
+		if err != nil {
+			t.Fatalf("Dispatch beside three stuck bridges: %v", err)
+		}
+		if out != "listed" {
+			t.Fatalf("Dispatch output = %q, want %q", out, "listed")
+		}
+		if bound := reconcileGrace + reconcileGrace/2; elapsed > bound {
+			t.Fatalf("an unrelated command took %v beside three stuck bridges, want at most %v: each stuck bridge waited its own grace", elapsed, bound)
+		}
+	})
 }
 
 func TestStuckStopsOfArchivedSessionsShareOneGraceInReconcile(t *testing.T) {

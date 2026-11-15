@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
@@ -38,12 +37,14 @@ func (h *hub) goLiveStarted(ctx context.Context, sess state.Session, persist fun
 }
 
 func (h *hub) goLiveAndPersist(ctx context.Context, sess state.Session, persist func() error) (bool, error) {
-	retired, err := h.goLiveAndPersistLocked(ctx, sess, persist)
-	h.awaitRetired(retired)
+	window, cancel := h.newGrace()
+	defer cancel()
+	retired, err := h.goLiveAndPersistLocked(ctx, sess, persist, window)
+	h.awaitRetired(window, retired)
 	return len(retired) > 0, err
 }
 
-func (h *hub) goLiveAndPersistLocked(ctx context.Context, sess state.Session, persist func() error) ([]retirement, error) {
+func (h *hub) goLiveAndPersistLocked(ctx context.Context, sess state.Session, persist func() error, window teardownWindow) ([]retirement, error) {
 	h.lifecycle.Lock()
 	defer h.lifecycle.Unlock()
 	wasLive := h.isLive(sess.Name)
@@ -54,29 +55,32 @@ func (h *hub) goLiveAndPersistLocked(ctx context.Context, sess state.Session, pe
 		if wasLive {
 			return nil, err
 		}
-		return h.retireLocked(sess.Name), err
+		return h.retireLocked(sess.Name, window), err
 	}
-	return nil, h.startBridgeLocked(sess, wasLive, h.teardownGrace)
+	return h.startBridgeLocked(sess, wasLive, h.teardownGrace)
 }
 
 func (h *hub) goLiveBridged(ctx context.Context, sess state.Session) error {
-	retired, err := h.goLiveBridgedDeferred(ctx, sess)
-	h.awaitRetired(retired)
+	window, cancel := h.newGrace()
+	defer cancel()
+	retired, err := h.goLiveBridgedDeferred(ctx, sess, window)
+	h.awaitRetired(window, retired)
 	return err
 }
 
-func (h *hub) goLiveBridgedDeferred(ctx context.Context, sess state.Session) ([]retirement, error) {
+func (h *hub) goLiveBridgedDeferred(ctx context.Context, sess state.Session, window teardownWindow) ([]retirement, error) {
 	h.lifecycle.Lock()
 	defer h.lifecycle.Unlock()
-	retired, err := h.goLiveBridgedLocked(ctx, sess)
+	retired, err := h.goLiveBridgedLocked(ctx, sess, window)
 	h.journalStart(sess.Name, err)
 	return retired, err
 }
 
-func (h *hub) goLiveBridgedLocked(ctx context.Context, sess state.Session) ([]retirement, error) {
-	retired, err := h.goLiveBridgedOnce(ctx, sess)
+func (h *hub) goLiveBridgedLocked(ctx context.Context, sess state.Session, window teardownWindow) ([]retirement, error) {
+	retired, err := h.goLiveBridgedOnce(ctx, sess, window)
 	if errors.Is(err, supervisor.ErrStillStopping) && h.stoppingBridge(sess.Name) == nil {
-		retired, err = h.goLiveBridgedOnce(ctx, sess)
+		again, retryErr := h.goLiveBridgedOnce(ctx, sess, window)
+		retired, err = append(retired, again...), retryErr
 	}
 	if settled := h.stoppingBridge(sess.Name); errors.Is(err, supervisor.ErrStillStopping) && settled != nil {
 		h.relaunchWhenSettled(ctx, sess.Name, settled)
@@ -84,56 +88,34 @@ func (h *hub) goLiveBridgedLocked(ctx context.Context, sess state.Session) ([]re
 	return retired, err
 }
 
-func (h *hub) goLiveBridgedOnce(ctx context.Context, sess state.Session) ([]retirement, error) {
+func (h *hub) goLiveBridgedOnce(ctx context.Context, sess state.Session, window teardownWindow) ([]retirement, error) {
 	wasLive := h.isLive(sess.Name)
 	if err := h.goLiveLocked(ctx, sess); err != nil {
 		return nil, err
 	}
-	if err := h.startBridgeLocked(sess, wasLive, 0); err != nil {
-		return nil, err
+	retired, err := h.startBridgeLocked(sess, wasLive, 0)
+	if err != nil {
+		return retired, err
 	}
-	return h.retireIfArchivedLocked(sess.Name), nil
+	return append(retired, h.retireIfArchivedLocked(sess.Name, window)...), nil
 }
 
-type retirement struct {
-	name string
-	live liveSession
-}
-
-type retiredBatch struct {
-	window  teardownWindow
-	cancel  context.CancelFunc
-	retired []retirement
-}
-
-func (b retiredBatch) await(owner *hub) {
-	defer b.cancel()
-	for _, retiree := range b.retired {
-		owner.awaitTeardown(retiree.name, retiree.live, b.window)
-	}
-}
-
-func (h *hub) awaitRetired(retired []retirement) {
-	window, cancel := h.newGrace()
-	retiredBatch{window: window, cancel: cancel, retired: retired}.await(h)
-}
-
-func (h *hub) retireIfArchivedLocked(name string) []retirement {
+func (h *hub) retireIfArchivedLocked(name string, window teardownWindow) []retirement {
 	sess, ok := h.st.FindSession(name)
 	if !ok || !sess.Archived {
 		return nil
 	}
-	retired := h.retireLocked(name)
+	retired := h.retireLocked(name, window)
 	h.forget(name)
 	return retired
 }
 
-func (h *hub) retireLocked(name string) []retirement {
+func (h *hub) retireLocked(name string, window teardownWindow) []retirement {
 	live, dropped := h.dropLocked(name, nil)
 	if !dropped {
 		return nil
 	}
-	h.haltBridgeWithinGrace(name)
+	h.haltBridgeWithin(name, window)
 	return []retirement{{name: name, live: live}}
 }
 
@@ -204,39 +186,35 @@ func (h *hub) relaunchWhenSettled(ctx context.Context, name string, settled <-ch
 }
 
 func (h *hub) relaunchSettled(ctx context.Context, name string) {
-	retired, err := h.relaunchLocked(ctx, name)
-	h.awaitRetired(retired)
+	window, cancel := h.newGrace()
+	defer cancel()
+	retired, err := h.relaunchLocked(ctx, name, window)
+	h.awaitRetired(window, retired)
 	logCleanup(err)
 }
 
-func (h *hub) relaunchLocked(ctx context.Context, name string) ([]retirement, error) {
+func (h *hub) relaunchLocked(ctx context.Context, name string, window teardownWindow) ([]retirement, error) {
 	h.lifecycle.Lock()
 	defer h.lifecycle.Unlock()
 	delete(h.relaunching, name)
 	if h.isLive(name) {
 		return nil, nil
 	}
-	return h.reviveLocked(ctx, name)
+	return h.reviveLocked(ctx, name, window)
 }
 
-func (h *hub) reviveIfActive(ctx context.Context, name string) error {
-	retired, err := h.reviveDeferred(ctx, name)
-	h.awaitRetired(retired)
-	return err
-}
-
-func (h *hub) reviveDeferred(ctx context.Context, name string) ([]retirement, error) {
+func (h *hub) reviveDeferred(ctx context.Context, name string, window teardownWindow) ([]retirement, error) {
 	h.lifecycle.Lock()
 	defer h.lifecycle.Unlock()
-	return h.reviveLocked(ctx, name)
+	return h.reviveLocked(ctx, name, window)
 }
 
-func (h *hub) reviveLocked(ctx context.Context, name string) ([]retirement, error) {
+func (h *hub) reviveLocked(ctx context.Context, name string, window teardownWindow) ([]retirement, error) {
 	sess, ok := h.st.FindSession(name)
 	if !ok || sess.Archived {
 		return nil, nil
 	}
-	retired, err := h.goLiveBridgedLocked(ctx, sess)
+	retired, err := h.goLiveBridgedLocked(ctx, sess, window)
 	h.journalStart(name, err)
 	return retired, err
 }
@@ -251,15 +229,19 @@ func (h *hub) closeLifecycleLocked() {
 	}
 }
 
-func (h *hub) startBridgeLocked(sess state.Session, wasLive bool, grace time.Duration) error {
+func (h *hub) startBridgeLocked(sess state.Session, wasLive bool, grace time.Duration) ([]retirement, error) {
 	if h.startBridge == nil {
-		return nil
+		return nil, nil
 	}
 	err := h.startBridge(sess, grace)
-	if err != nil && !wasLive {
-		h.dropLocked(sess.Name, nil)
+	if err == nil || wasLive {
+		return nil, err
 	}
-	return err
+	live, dropped := h.dropLocked(sess.Name, nil)
+	if !dropped {
+		return nil, err
+	}
+	return []retirement{{name: sess.Name, live: live}}, err
 }
 
 func (h *hub) isLive(name string) bool {
@@ -406,55 +388,6 @@ func (h *hub) retireFailed(name string, done <-chan struct{}) bool {
 	return true
 }
 
-type teardownWindow struct {
-	expired <-chan struct{}
-	ends    <-chan struct{}
-}
-
-const teardownLateShare = 3
-
-func (h *hub) newGrace() (teardownWindow, context.CancelFunc) {
-	budget, cancelBudget := context.WithTimeout(context.Background(), h.teardownGrace-h.teardownGrace/teardownLateShare)
-	ends, cancelEnds := context.WithTimeout(context.Background(), h.teardownGrace)
-	return teardownWindow{expired: budget.Done(), ends: ends.Done()}, func() {
-		cancelBudget()
-		cancelEnds()
-	}
-}
-
-func (w teardownWindow) finished(done <-chan struct{}) bool {
-	if isClosed(done) {
-		return true
-	}
-	if isClosed(w.expired) {
-		return finishedBefore(done, w.ends)
-	}
-	select {
-	case <-done:
-		return true
-	case <-w.expired:
-		return isClosed(done)
-	}
-}
-
-func finishedBefore(done, ends <-chan struct{}) bool {
-	select {
-	case <-done:
-		return true
-	case <-ends:
-		return isClosed(done)
-	}
-}
-
-func isClosed(signal <-chan struct{}) bool {
-	select {
-	case <-signal:
-		return true
-	default:
-		return false
-	}
-}
-
 func (h *hub) haltBridgeWithinGrace(name string) {
 	window, cancel := h.newGrace()
 	defer cancel()
@@ -518,52 +451,4 @@ func (h *hub) awaitTeardown(name string, live liveSession, window teardownWindow
 			return
 		}
 	}
-}
-
-func (h *hub) reconcile(ctx context.Context) retiredBatch {
-	h.forgetGoneRefusals()
-	persisted := make(map[string]state.Session)
-	sessions := h.st.SnapshotSessions()
-	for idx := range sessions {
-		s := sessions[idx]
-		persisted[s.Name] = s
-	}
-	h.mu.Lock()
-	liveNames := make([]string, 0, len(h.live))
-	for n := range h.live {
-		liveNames = append(liveNames, n)
-	}
-	h.mu.Unlock()
-	window, cancel := h.newGrace()
-	batch := retiredBatch{window: window, cancel: cancel}
-	for _, name := range liveNames {
-		s, ok := persisted[name]
-		if !ok || s.Archived {
-			h.goDeadWithin(name, window)
-		}
-	}
-	for name := range persisted {
-		if persisted[name].Archived {
-			continue
-		}
-		retired, err := h.reviveDeferred(ctx, name)
-		batch.retired = append(batch.retired, retired...)
-		if errors.Is(err, errHubClosed) {
-			break
-		}
-	}
-	return batch
-}
-
-func (h *hub) reconciling(ctx context.Context, run func() (contracts.Result, error)) (contracts.Result, error) {
-	out, batch, err := h.runThenReconcile(ctx, run)
-	batch.await(h)
-	return out, err
-}
-
-func (h *hub) runThenReconcile(ctx context.Context, run func() (contracts.Result, error)) (contracts.Result, retiredBatch, error) {
-	h.dispatchMu.Lock()
-	defer h.dispatchMu.Unlock()
-	out, err := run()
-	return out, h.reconcile(ctx), err
 }

@@ -21,6 +21,7 @@ func TestFailedPersistOfALiveSessionJoinsItsGoroutine(t *testing.T) {
 	h.stopBridge = func(string) error { return nil }
 
 	_, err := h.goLiveAndPersist(t.Context(), sess, func() error {
+		holdSessionExit(t, h.sessions, name)
 		h.mu.Lock()
 		done = h.live[name].done
 		h.mu.Unlock()

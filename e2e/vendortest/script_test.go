@@ -74,8 +74,8 @@ func TestParseScriptNamesTheBadLine(t *testing.T) {
 		{"text ok\nhang forever\n", 2, errTakesNoText},
 		{"---\ntext ok\n", 1, errEmptyTurn},
 		{"text ok\n---\n---\ntext ok\n", 3, errEmptyTurn},
-		{"spawn\n", 1, errNeedsText},
-		{"spawn   \n", 1, errNeedsText},
+		{"spawn\n", 1, errSpawnNoFile},
+		{"spawn   \n", 1, errSpawnNoFile},
 	} {
 		_, err := ParseScript(strings.NewReader(tc.source))
 		lineErr, ok := errors.AsType[*LineError](err)

@@ -104,6 +104,7 @@ var (
 	errToolNeedsArg = errors.New("tool wants a name and a JSON input")
 	errToolInput    = errors.New("tool input is not valid JSON")
 	errNeedsText    = errors.New("step wants text after its name")
+	errSpawnNoFile  = errors.New("spawn is missing the pid file to write, as in: spawn descendant.pid")
 	errTakesNoText  = errors.New("echo, hang and crash take nothing after their name")
 	errEmptyTurn    = errors.New("a turn needs at least one step or spawn before its separator")
 )
@@ -123,7 +124,7 @@ func (t *Turn) add(line string) error {
 
 func (t *Turn) addSpawn(pidFile string) error {
 	if pidFile == "" {
-		return errNeedsText
+		return errSpawnNoFile
 	}
 	t.spawns = append(t.spawns, pidFile)
 	return nil

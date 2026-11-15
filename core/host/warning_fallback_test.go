@@ -1,10 +1,11 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"errors"
-	"io"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -15,46 +16,45 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-func captureProcessStderr(t *testing.T, emit func()) string {
-	t.Helper()
-	reader, writer, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	old := os.Stderr
-	os.Stderr = writer
-	defer func() { os.Stderr = old }()
-
-	done := make(chan string)
-	go func() {
-		var buf strings.Builder
-		_, copyErr := io.Copy(&buf, reader)
-		logCleanup(copyErr)
-		logCleanup(reader.Close())
-		done <- buf.String()
-	}()
-	emit()
-	logCleanup(writer.Close())
-	os.Stderr = old
-	return <-done
-}
+const nilWarningsChildEnv = "HERRSCHER_NIL_WARNINGS_CHILD"
 
 func TestNilWarningsReachStderrWithoutPanicking(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	consolidated := errors.New("probe-consolidate")
-
-	printed := captureProcessStderr(t, func() {
-		warnTo(nil, i18n.English, "warn.health_server", map[string]any{detailParam: "probe-warnto"})
-		newApprovalTable(nil).warnf("approvals: probe-warnf\n")
-		warnWaitOutlivesTheHook(nil, agent.HookWait)
-		serveHealth(ctx, "bad addr", health.NewHealth(time.Now()), fixedLanguageSource(i18n.English), nil)
-		consolidateOneShot(ctx, &consolidateSpy{err: consolidated}, state.Session{Name: "nil-writer"}, nil, fixedLanguageSource(i18n.English))
-	})
-
+	if os.Getenv(nilWarningsChildEnv) != "" {
+		emitNilWarnings()
+		return
+	}
+	printed := runNilWarningsChild(t)
 	for _, marker := range []string{"probe-warnto", "approvals: probe-warnf", "approvals: a ", "bad addr", "probe-consolidate"} {
 		if !strings.Contains(printed, marker) {
 			t.Fatalf("stderr = %q, want it to contain %q", printed, marker)
 		}
 	}
+}
+
+func runNilWarningsChild(t *testing.T) string {
+	t.Helper()
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(t.Context(), executable, "-test.run=^TestNilWarningsReachStderrWithoutPanicking$")
+	cmd.Env = append(os.Environ(), nilWarningsChildEnv+"=1")
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("nil-writer child failed: %v\n%s", err, stderr.String())
+	}
+	return stderr.String()
+}
+
+func emitNilWarnings() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	consolidated := errors.New("probe-consolidate")
+
+	warnTo(nil, i18n.English, "warn.health_server", map[string]any{detailParam: "probe-warnto"})
+	newApprovalTable(nil).warnf("approvals: probe-warnf\n")
+	warnWaitOutlivesTheHook(nil, agent.HookWait)
+	serveHealth(ctx, "bad addr", health.NewHealth(time.Now()), fixedLanguageSource(i18n.English), nil)
+	consolidateOneShot(ctx, &consolidateSpy{err: consolidated}, state.Session{Name: "nil-writer"}, nil, fixedLanguageSource(i18n.English))
 }

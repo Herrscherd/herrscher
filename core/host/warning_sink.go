@@ -21,20 +21,20 @@ func newWarningSink(out io.Writer) *warningSink {
 	return &warningSink{out: out}
 }
 
-func (s *warningSink) Write(p []byte) (int, error) {
+func (s *warningSink) Write(data []byte) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.queue) >= warningQueueLimit {
 		s.dropped++
-		return len(p), nil
+		return len(data), nil
 	}
-	s.queue = append(s.queue, bytes.Clone(p))
+	s.queue = append(s.queue, bytes.Clone(data))
 	if !s.writing {
 		s.writing = true
 		s.idle = make(chan struct{})
 		go s.drain()
 	}
-	return len(p), nil
+	return len(data), nil
 }
 
 func (s *warningSink) drain() {

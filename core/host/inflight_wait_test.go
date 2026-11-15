@@ -147,6 +147,7 @@ func blockedWriterCases() []blockedWriterCase {
 			name:  "accept failure",
 			paths: inflightPaths(),
 			start: func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings) *hub {
+				t.Helper()
 				h := newInflightHub(t, name, grace, warnings)
 				h.listen = brokenFirstListen()
 				if err := h.goLive(t.Context(), state.Session{Name: name, ChannelID: "c1"}); err != nil {
@@ -161,6 +162,7 @@ func blockedWriterCases() []blockedWriterCase {
 			name:  "teardown overrun",
 			paths: []inflightPath{{name: "goDead", run: func(h *hub, session string) { h.goDead(session) }}},
 			start: func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings) *hub {
+				t.Helper()
 				h := newInflightHub(t, name, grace, warnings)
 				if err := h.goLive(t.Context(), state.Session{Name: name, ChannelID: "c1"}); err != nil {
 					t.Fatal(err)
@@ -179,6 +181,7 @@ func blockedWriterCases() []blockedWriterCase {
 			name:  "session start",
 			paths: inflightPaths(),
 			start: func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings) *hub {
+				t.Helper()
 				h := newInflightHub(t, name, grace, warnings)
 				h.startBridge = func(state.Session, time.Duration) error { return errors.New("bridge refused") }
 				sess := state.Session{Name: name, ChannelID: "c1"}

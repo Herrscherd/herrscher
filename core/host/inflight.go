@@ -11,14 +11,12 @@ type inflight struct {
 func (f *inflight) Add(delta int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.count == 0 && delta > 0 {
+	previous := f.count
+	f.count = max(previous+delta, 0)
+	if previous == 0 && f.count > 0 {
 		f.zero = make(chan struct{})
 	}
-	f.count += delta
-	if f.count < 0 {
-		panic("host: in-flight count below zero")
-	}
-	if f.count == 0 && delta < 0 {
+	if previous > 0 && f.count == 0 {
 		close(f.zero)
 	}
 }

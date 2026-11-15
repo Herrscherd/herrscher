@@ -41,7 +41,7 @@ func runProcessTreeRootHelper() int {
 	if err != nil {
 		return 2
 	}
-	cmd := exec.Command(exe)
+	cmd := exec.CommandContext(context.Background(), exe)
 	cmd.Dir = os.Getenv(processHelperLockEnv)
 	cmd.Env = helperEnvironment("child")
 	cmd.Stdout = os.Stdout
@@ -59,7 +59,7 @@ func runProcessTreeChildHelper() int {
 	if err != nil {
 		return 5
 	}
-	handle, err := windows.CreateFile(
+	_, err = windows.CreateFile(
 		lockPath,
 		windows.GENERIC_READ,
 		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE,
@@ -71,7 +71,6 @@ func runProcessTreeChildHelper() int {
 	if err != nil {
 		return 6
 	}
-	defer windows.CloseHandle(handle)
 	if _, err := fmt.Fprintln(os.Stdout, os.Getpid()); err != nil {
 		return 7
 	}
@@ -94,16 +93,23 @@ func helperEnvironment(role string) []string {
 
 func waitForHelperPID(t *testing.T, ready io.Reader) int {
 	t.Helper()
-	line := make(chan string, 1)
+	type helperLine struct {
+		text string
+		err  error
+	}
+	line := make(chan helperLine, 1)
 	go func() {
-		text, _ := bufio.NewReader(ready).ReadString('\n')
-		line <- text
+		text, err := bufio.NewReader(ready).ReadString('\n')
+		line <- helperLine{text: text, err: err}
 	}()
 	select {
-	case text := <-line:
-		pid, err := strconv.Atoi(strings.TrimSpace(text))
+	case got := <-line:
+		if got.err != nil {
+			t.Fatalf("read helper pid: %v", got.err)
+		}
+		pid, err := strconv.Atoi(strings.TrimSpace(got.text))
 		if err != nil {
-			t.Fatalf("parse helper pid %q: %v", text, err)
+			t.Fatalf("parse helper pid %q: %v", got.text, err)
 		}
 		return pid
 	case <-time.After(5 * time.Second):
@@ -112,15 +118,28 @@ func waitForHelperPID(t *testing.T, ready io.Reader) int {
 	return 0
 }
 
-func killTestProcessTree(pid int) {
+func killTestProcessTree(tb testing.TB, pid int) {
+	tb.Helper()
 	systemDir, err := windows.GetSystemDirectory()
 	if err != nil {
+		tb.Logf("locate system directory: %v", err)
 		return
 	}
-	_ = exec.Command(
+	killer := exec.CommandContext(
+		context.Background(),
 		filepath.Join(systemDir, "taskkill.exe"),
 		"/PID", strconv.Itoa(pid), "/T", "/F",
-	).Run()
+	)
+	if err := killer.Run(); err != nil {
+		tb.Logf("taskkill process tree %d: %v", pid, err)
+	}
+}
+
+func closeTestResource(tb testing.TB, closer io.Closer) {
+	tb.Helper()
+	if err := closer.Close(); err != nil {
+		tb.Errorf("close %T: %v", closer, err)
+	}
 }
 
 func TestConfiguredBridgeCancellationTerminatesDescendantHoldingWorktree(t *testing.T) {
@@ -136,22 +155,26 @@ func TestConfiguredBridgeCancellationTerminatesDescendantHoldingWorktree(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer readyReader.Close()
+	defer closeTestResource(t, readyReader)
 
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, os.Args[0])
+	cmd := exec.CommandContext(ctx, exe)
 	cmd.Dir = lockDir
 	cmd.Stdout = readyWriter
-	configureBridgeCommand(cmd)
+	configureBridgeCommand(ctx, cmd)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	readyWriter.Close()
+	closeTestResource(t, readyWriter)
 	childPID := waitForHelperPID(t, readyReader)
 	defer func() {
 		cancel()
-		killTestProcessTree(cmd.Process.Pid)
-		killTestProcessTree(childPID)
+		killTestProcessTree(t, cmd.Process.Pid)
+		killTestProcessTree(t, childPID)
 	}()
 
 	if err := os.Remove(lockDir); err == nil {
@@ -162,7 +185,8 @@ func TestConfiguredBridgeCancellationTerminatesDescendantHoldingWorktree(t *test
 	waited := make(chan error, 1)
 	go func() { waited <- cmd.Wait() }()
 	select {
-	case <-waited:
+	case waitErr := <-waited:
+		t.Logf("bridge process exited after cancellation: %v", waitErr)
 	case <-time.After(5 * time.Second):
 		t.Fatal("bridge process did not exit after cancellation")
 	}
@@ -183,9 +207,9 @@ func waitForProcessExit(pid int, timeout time.Duration) error {
 	if err != nil {
 		return err
 	}
-	defer windows.CloseHandle(handle)
-	event, err := windows.WaitForSingleObject(handle, uint32(timeout/time.Millisecond))
-	if err != nil {
+	event, waitErr := windows.WaitForSingleObject(handle, uint32(timeout/time.Millisecond))
+	closeErr := windows.CloseHandle(handle)
+	if err := errors.Join(waitErr, closeErr); err != nil {
 		return err
 	}
 	if event != windows.WAIT_OBJECT_0 {

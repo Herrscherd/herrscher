@@ -3,31 +3,32 @@
 package worktree
 
 import (
+	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/sys/windows"
 )
 
 func resolveExistingPath(path string) (string, error) {
-	file, err := os.Open(path)
+	file, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	resolved, resolveErr := finalPathName(file)
+	return resolved, errors.Join(resolveErr, file.Close())
+}
 
+func finalPathName(file *os.File) (string, error) {
 	handle := windows.Handle(file.Fd())
 	size, err := windows.GetFinalPathNameByHandle(handle, nil, 0, 0)
 	if err != nil {
 		return "", err
 	}
-	buffer := make([]uint16, size+1)
-	size, err = windows.GetFinalPathNameByHandle(
-		handle,
-		&buffer[0],
-		uint32(len(buffer)),
-		0,
-	)
+	bufferLen := size + 1
+	buffer := make([]uint16, bufferLen)
+	size, err = windows.GetFinalPathNameByHandle(handle, &buffer[0], bufferLen, 0)
 	if err != nil {
 		return "", err
 	}

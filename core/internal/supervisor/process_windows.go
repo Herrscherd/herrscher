@@ -17,37 +17,40 @@ import (
 
 const processTreeKillTimeout = 10 * time.Second
 
-func configureBridgeCommand(cmd *exec.Cmd) {
+func configureBridgeCommand(ctx context.Context, cmd *exec.Cmd) {
 	directCancel := cmd.Cancel
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
 			return os.ErrProcessDone
 		}
 
-		systemDir, pathErr := windows.GetSystemDirectory()
-		if pathErr == nil {
-			killCtx, cancel := context.WithTimeout(context.Background(), processTreeKillTimeout)
-			killer := exec.CommandContext(
-				killCtx,
-				filepath.Join(systemDir, "taskkill.exe"),
-				"/PID", strconv.Itoa(cmd.Process.Pid), "/T", "/F",
-			)
-			killer.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-			killErr := killer.Run()
-			cancel()
-			if killErr == nil {
-				return nil
-			}
-			pathErr = killErr
+		treeErr := killProcessTree(ctx, cmd.Process.Pid)
+		if treeErr == nil {
+			return nil
 		}
-
 		if directCancel != nil {
 			directErr := directCancel()
 			if directErr == nil || errors.Is(directErr, os.ErrProcessDone) {
 				return directErr
 			}
-			return errors.Join(pathErr, directErr)
+			return errors.Join(treeErr, directErr)
 		}
-		return pathErr
+		return treeErr
 	}
+}
+
+func killProcessTree(ctx context.Context, pid int) error {
+	systemDir, err := windows.GetSystemDirectory()
+	if err != nil {
+		return err
+	}
+	killCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), processTreeKillTimeout)
+	defer cancel()
+	killer := exec.CommandContext(
+		killCtx,
+		filepath.Join(systemDir, "taskkill.exe"),
+		"/PID", strconv.Itoa(pid), "/T", "/F",
+	)
+	killer.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	return killer.Run()
 }

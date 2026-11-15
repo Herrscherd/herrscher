@@ -172,13 +172,16 @@ func TestConfiguredBridgeCancellationTerminatesDescendantHoldingWorktree(t *test
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	closeTestResource(t, readyWriter)
-	childPID := waitForHelperPID(t, readyReader)
+	var childPID int
 	defer func() {
 		cancel()
 		killTestProcessTree(t, cmd.Process.Pid)
-		killTestProcessTree(t, childPID)
+		if childPID != 0 {
+			killTestProcessTree(t, childPID)
+		}
 	}()
+	closeTestResource(t, readyWriter)
+	childPID = waitForHelperPID(t, readyReader)
 
 	if err := os.Remove(lockDir); err == nil {
 		t.Fatal("helper did not lock its worktree directory")

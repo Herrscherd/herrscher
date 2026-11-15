@@ -29,7 +29,7 @@ const (
 func TestBridgeSignalHelper(t *testing.T) {
 	role := os.Getenv(bridgeHelperRoleEnv)
 	if role == "" {
-		t.Skip("bridge signal helper runs only when spawned by a test")
+		t.Skip("local bridge signal helper runs only when spawned by a test")
 	}
 	switch role {
 	case bridgeHelperTrap:

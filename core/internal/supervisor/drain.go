@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// BridgeTermGrace is how long a bridge may take to exit after SIGTERM before the supervisor kills it.
+// BridgeTermGrace is how long a local bridge may take to exit after SIGTERM before the supervisor kills it.
 const BridgeTermGrace = 3 * time.Second
 
 // ErrDrainBeforeCancel means DrainBridges was called while the supervisor's context was still live, so no loop was asked to stop and waiting would only run out the clock.

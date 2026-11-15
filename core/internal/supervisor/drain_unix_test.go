@@ -28,7 +28,7 @@ func TestDrainBridgesReapsBridgeThatIgnoresSIGTERM(t *testing.T) {
 	script := filepath.Join(dir, "bridge.sh")
 	body := fmt.Sprintf("#!/bin/sh\ntrap '' TERM\necho $$ > '%s'\nexec sleep %d\n", pidPath, int(fakeBridgeLifetime/time.Second))
 	if err := os.WriteFile(script, []byte(body), 0o700); err != nil {
-		t.Fatalf("write fake bridge: %v", err)
+		t.Fatalf("write fake local bridge: %v", err)
 	}
 
 	parent, cancelParent := context.WithCancel(context.Background())
@@ -39,7 +39,7 @@ func TestDrainBridgesReapsBridgeThatIgnoresSIGTERM(t *testing.T) {
 	pid := waitForBridgePID(t, pidPath)
 	t.Cleanup(func() {
 		if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
-			t.Errorf("kill leftover bridge %d: %v", pid, err)
+			t.Errorf("kill leftover local bridge %d: %v", pid, err)
 		}
 	})
 
@@ -48,7 +48,7 @@ func TestDrainBridgesReapsBridgeThatIgnoresSIGTERM(t *testing.T) {
 		t.Fatalf("DrainBridges returned %v, want every bridge loop to have returned", err)
 	}
 	if bridgeAlive(pid) {
-		t.Fatalf("bridge %d outlived the supervisor drain", pid)
+		t.Fatalf("local bridge %d outlived the supervisor drain", pid)
 	}
 }
 
@@ -66,7 +66,7 @@ func waitForBridgePID(t *testing.T, pidPath string) int {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatal("fake bridge never wrote its pid")
+	t.Fatal("fake local bridge never wrote its pid")
 	return 0
 }
 

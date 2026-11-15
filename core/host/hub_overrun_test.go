@@ -27,9 +27,13 @@ func TestTeardownOverrunWarnsOnlyForTheSessionStillStopping(t *testing.T) {
 
 	window, cancel := h.newGrace()
 	defer cancel()
+	var retired []retirement
+	h.lifecycle.Lock()
 	for _, name := range names {
-		h.goDeadWithin(name, window)
+		retired = append(retired, h.goDeadLocked(name, window)...)
 	}
+	h.lifecycle.Unlock()
+	h.awaitRetired(window, retired)
 
 	out := warnings.String()
 	if n := strings.Count(out, `"blocked"`); n != 1 {

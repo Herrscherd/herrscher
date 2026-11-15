@@ -9,23 +9,30 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-const startupLockProbe = 200 * time.Millisecond
-
-func TestStartupReconcileWaitsForTheDispatchLock(t *testing.T) {
+func TestStartupReconcileBridgesUnderTheDispatchLock(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
-	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable())
-	h.dispatchMu.Lock()
-	returned := make(chan struct{})
-	go func() {
-		h.startReconcile(t.Context())
-		close(returned)
-	}()
-	select {
-	case <-returned:
-		h.dispatchMu.Unlock()
-		t.Fatal("the startup reconcile ran while a dispatch held the lock: a command socket already served could reconcile at the same time")
-	case <-time.After(startupLockProbe):
+	if err := st.AddSession(state.Session{Name: "resumed", ChannelID: "c1", Incarnation: "resumed"}); err != nil {
+		t.Fatal(err)
 	}
-	h.dispatchMu.Unlock()
-	<-returned
+	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable())
+	h.runtime = isolatedRuntimeDir(t)
+	t.Cleanup(h.stopLive)
+	var dispatchFreeWhileBridging []bool
+	h.startBridge = func(state.Session, time.Duration) error {
+		acquired := h.dispatchMu.TryLock()
+		if acquired {
+			h.dispatchMu.Unlock()
+		}
+		dispatchFreeWhileBridging = append(dispatchFreeWhileBridging, acquired)
+		return nil
+	}
+	h.startReconcile(t.Context())
+	if len(dispatchFreeWhileBridging) == 0 {
+		t.Fatal("the startup reconcile never bridged the resumed session: the probe did not run")
+	}
+	for _, free := range dispatchFreeWhileBridging {
+		if free {
+			t.Fatal("the startup reconcile bridged a session while no dispatch held the lock: a command socket already served could reconcile at the same time")
+		}
+	}
 }

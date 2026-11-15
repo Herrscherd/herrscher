@@ -14,6 +14,11 @@ type retiredBatch struct {
 	retired []retirement
 }
 
+func (h *hub) newBatch() retiredBatch {
+	window, cancel := h.newGrace()
+	return retiredBatch{window: window, cancel: cancel}
+}
+
 func (b retiredBatch) await(owner *hub) {
 	defer b.cancel()
 	owner.awaitRetired(b.window, b.retired)

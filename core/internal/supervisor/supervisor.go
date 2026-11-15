@@ -26,8 +26,9 @@ var (
 	errHostNotProvisioned = errors.New("not provisioned")
 )
 
-// ErrStillStopping means the previous bridge loop of a session has not returned
-// within the grace the caller allowed, so no new bridge was started for it.
+// ErrStillStopping means a bridge loop of a session has not returned within the
+// grace the caller allowed: a start was refused and no new bridge launched, or a
+// stop was reported unfinished while the loop keeps stopping in the background.
 var ErrStillStopping = errors.New("the previous bridge of this session is still stopping")
 
 // Supervisor manages one child `herrscher bridge` process per session.
@@ -219,6 +220,9 @@ func (s *Supervisor) SetBridgeEnv(kv []string) {
 // where the supervisor's job is to retry rather than to report. An error return
 // here would only be a nil every caller has to pretend to handle, which is what
 // it was, at six call sites, two of them with an unreachable error branch.
+//
+// When a loop of the same name is still stopping, Start waits without bound for
+// it to return before launching; StartWithin bounds that wait.
 func (s *Supervisor) Start(sess state.Session) {
 	s.startWithin(s.ctx, sess, nil)
 }

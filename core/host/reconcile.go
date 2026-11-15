@@ -9,7 +9,6 @@ import (
 )
 
 func (h *hub) reconcile(ctx context.Context) retiredBatch {
-	h.forgetGoneRefusals()
 	persisted := make(map[string]state.Session)
 	sessions := h.st.SnapshotSessions()
 	for idx := range sessions {
@@ -22,19 +21,21 @@ func (h *hub) reconcile(ctx context.Context) retiredBatch {
 		liveNames = append(liveNames, n)
 	}
 	h.mu.Unlock()
-	window, cancel := h.newGrace()
-	batch := retiredBatch{window: window, cancel: cancel}
+	h.lifecycle.Lock()
+	defer h.lifecycle.Unlock()
+	batch := h.newBatch()
+	h.forgetGoneRefusalsLocked()
 	for _, name := range liveNames {
 		s, ok := persisted[name]
 		if !ok || s.Archived {
-			h.goDeadWithin(name, window)
+			batch.retired = append(batch.retired, h.goDeadLocked(name, batch.window)...)
 		}
 	}
 	for name := range persisted {
 		if persisted[name].Archived {
 			continue
 		}
-		retired, err := h.reviveDeferred(ctx, name, window)
+		retired, err := h.reviveLocked(ctx, name, batch.window)
 		batch.retired = append(batch.retired, retired...)
 		if errors.Is(err, errHubClosed) {
 			break
@@ -44,8 +45,13 @@ func (h *hub) reconcile(ctx context.Context) retiredBatch {
 }
 
 func (h *hub) startReconcile(ctx context.Context) {
-	_, err := h.reconciling(ctx, func() (contracts.Result, error) { return contracts.Result{}, nil })
-	logCleanup(err)
+	h.reconcileUnderDispatch(ctx).await(h)
+}
+
+func (h *hub) reconcileUnderDispatch(ctx context.Context) retiredBatch {
+	h.dispatchMu.Lock()
+	defer h.dispatchMu.Unlock()
+	return h.reconcile(ctx)
 }
 
 func (h *hub) reconciling(ctx context.Context, run func() (contracts.Result, error)) (contracts.Result, error) {

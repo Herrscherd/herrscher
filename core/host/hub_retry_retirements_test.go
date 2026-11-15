@@ -25,10 +25,9 @@ func TestRetryKeepsTheRetirementOfItsFirstAttempt(t *testing.T) {
 		return errBridgeRefusedStart
 	}
 	h.stopBridge = func(string) error { return nil }
-	window, cancel := h.newGrace()
-	defer cancel()
-
-	retired, err := h.goLiveBridgedDeferred(t.Context(), sess, window)
+	batch, err := h.goLiveBridgedDeferred(t.Context(), sess)
+	defer batch.cancel()
+	retired := batch.retired
 	if attempts != 2 {
 		t.Fatalf("startBridge ran %d times, want 2: the retry after a settled stop did not happen", attempts)
 	}
@@ -43,7 +42,7 @@ func TestRetryKeepsTheRetirementOfItsFirstAttempt(t *testing.T) {
 			t.Fatalf("retirement names %q, want %q", retiree.name, name)
 		}
 	}
-	h.awaitRetired(window, retired)
+	h.awaitRetired(batch.window, retired)
 	for i, retiree := range retired {
 		select {
 		case <-retiree.live.done:

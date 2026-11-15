@@ -7,6 +7,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 )
 
@@ -17,7 +18,7 @@ func TestEventTapAddressesTheSession(t *testing.T) {
 	var gotSess string
 	var gotEv contracts.Event
 	tap := eventTap(func(s string, e contracts.Event) { gotSess, gotEv = s, e }, "main")
-	tap(contracts.Event{T: "reply", Text: "pong"})
+	tap(contracts.Event{T: eventwire.EventReply, Text: "pong"})
 	if gotSess != "main" || gotEv.Text != "pong" {
 		t.Fatalf("tap delivered %q / %+v", gotSess, gotEv)
 	}
@@ -44,13 +45,13 @@ func TestDrivenSessionTapsTheEventSocket(t *testing.T) {
 	c := dialCtl(t, sock)
 	defer closeRead(c)
 	gotInput(t, c, "ping")
-	if err := c.Write(contracts.Event{T: "reply", Text: "pong", Done: true}); err != nil {
+	if err := c.Write(contracts.Event{T: eventwire.EventReply, Text: "pong", Done: true}); err != nil {
 		t.Fatalf("write reply: %v", err)
 	}
 	for {
 		select {
 		case e := <-got:
-			if e.T != "reply" {
+			if e.T != eventwire.EventReply {
 				continue
 			}
 			if e.Text != "pong" {

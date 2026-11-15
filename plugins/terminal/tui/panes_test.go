@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 func paneModel(t *testing.T) (*fakeBackend, *model) {
@@ -276,7 +277,7 @@ func TestClosingTheFocusedPaneLeavesNoGhostForTab(t *testing.T) {
 	_, m := paneModel(t)
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	focusPaneChannel(t, m, "ch-beta")
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "ch-beta"}, Event: contracts.Event{T: eventClosed}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "ch-beta"}, Event: contracts.Event{T: eventwire.EventClosed}})
 	if focused := m.focusedChannel(); focused != m.active {
 		t.Fatalf("the focused pane %q must be the active session %q", focused, m.active)
 	}

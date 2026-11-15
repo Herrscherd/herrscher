@@ -11,6 +11,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/compactwire"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/historywire"
 )
 
@@ -100,7 +101,7 @@ func TestPluginStageReadsAndPrunesTheSessionHistory(t *testing.T) {
 	}
 	expectFrameOf(t, f, compactwire.EventRequest)
 	f.from <- measuredAnswer(t, 20_000)
-	waitEmitted(t, f, eventCompactDone)
+	waitEmitted(t, f, eventwire.EventCompactionDone)
 }
 
 func TestPluginStageGetsNoEditorWhenTheBackendDeclaresNone(t *testing.T) {
@@ -111,7 +112,7 @@ func TestPluginStageGetsNoEditorWhenTheBackendDeclaresNone(t *testing.T) {
 	}
 	expectFrameOf(t, f, compactwire.EventRequest)
 	f.from <- measuredAnswer(t, 20_000)
-	waitEmitted(t, f, eventCompactDone)
+	waitEmitted(t, f, eventwire.EventCompactionDone)
 }
 
 func TestBackendWithoutTheHistoryPortFailsTheStageAndWarnsOnce(t *testing.T) {
@@ -123,7 +124,7 @@ func TestBackendWithoutTheHistoryPortFailsTheStageAndWarnsOnce(t *testing.T) {
 		if run := nextRun(t, runs); !errors.Is(run.err, historywire.ErrNoHistoryEditor) {
 			t.Fatalf("stage error = %v, want ErrNoHistoryEditor", run.err)
 		}
-		waitEmitted(t, f, eventCompactFailed)
+		waitEmitted(t, f, eventwire.EventCompactionFailed)
 	}
 	if len(*warned) != 1 || (*warned)[0] != "warn.history_port_missing" {
 		t.Fatalf("warnings = %q, want one line about the missing history port", *warned)

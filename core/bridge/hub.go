@@ -13,6 +13,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/compactwire"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/historywire"
 	"github.com/Herrscherd/herrscher/core/identity"
 	"github.com/Herrscherd/herrscher/core/internal/control"
@@ -32,20 +33,6 @@ const (
 	backendKindReset    = "reset"
 	backendKindUsage    = "usage"
 	backendKindResult   = "result"
-)
-
-const (
-	wireEventChunk     = "chunk"
-	wireEventThinking  = "thinking"
-	wireEventStatus    = "status"
-	wireEventTodos     = "todos"
-	wireEventSubagent  = "subagent"
-	wireEventReset     = "reset"
-	wireEventReply     = "reply"
-	wireEventInput     = "input"
-	wireEventInterrupt = "interrupt"
-	wireEventLanguage  = "language"
-	wireEventPick      = "pick"
 )
 
 type turnController struct {
@@ -135,7 +122,7 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 	go func() {
 		defer close(events)
 		scanErr <- conn.Scan(func(event contracts.Event) error {
-			if event.T == wireEventInterrupt {
+			if event.T == eventwire.EventInterrupt {
 				ctrl.interrupt()
 				return nil
 			}
@@ -223,9 +210,9 @@ func runHubTurnsCtl(ctx context.Context, events <-chan contracts.Event, sink con
 				return
 			}
 			switch event.T {
-			case wireEventLanguage:
+			case eventwire.EventLanguage:
 				lang = languageOf(event.Value)
-			case wireEventPick:
+			case eventwire.EventPick:
 				runPick(ctx, sink, backend, event.Value)
 			case compactwire.EventRequest:
 				runCompact(ctx, sink, backend, ctrl, event)
@@ -233,7 +220,7 @@ func runHubTurnsCtl(ctx context.Context, events <-chan contracts.Event, sink con
 				runHistoryRead(ctx, sink, backend, ctrl, event)
 			case historywire.EventPrune:
 				runHistoryPrune(ctx, sink, backend, ctrl, event)
-			case wireEventInput:
+			case eventwire.EventInput:
 				if err := runOneTurn(ctx, sink, backend, orch, event, ctrl, eng, aff, pin, lang); err != nil {
 					logTurnFailure(ctx, err)
 				}
@@ -351,7 +338,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	if tr, ok := orch.(contracts.TurnReactor); ok {
 		out = tr.React(ctx, out)
 	}
-	sink.Emit(contracts.Event{T: wireEventReply, Text: out, Done: true, Cost: usage.cost, Tokens: usage.outTok, TokensIn: usage.inTok, CacheRead: usage.cacheRd, CacheCreate: usage.cacheCr, Resume: resumeToken(backend), Project: settledProject})
+	sink.Emit(contracts.Event{T: eventwire.EventReply, Text: out, Done: true, Cost: usage.cost, Tokens: usage.outTok, TokensIn: usage.inTok, CacheRead: usage.cacheRd, CacheCreate: usage.cacheCr, Resume: resumeToken(backend), Project: settledProject})
 	if orch != nil {
 		if err := orch.Observe(ctx, prompt, out); err != nil {
 			logger.Warn("memory observe failed; this turn was not recorded to memory", "err", err)
@@ -406,27 +393,27 @@ func runPick(ctx context.Context, sink contracts.EventSink, backend contracts.Ba
 	if err != nil {
 		out = errPrefix + err.Error()
 	}
-	sink.Emit(contracts.Event{T: wireEventReply, Text: strings.TrimSpace(out), Done: true})
+	sink.Emit(contracts.Event{T: eventwire.EventReply, Text: strings.TrimSpace(out), Done: true})
 }
 
 func emitBackendEvent(sink contracts.EventSink, event contracts.BackendEvent, tokens, tokensIn, cacheRead, cacheCreate int) {
 	switch event.Kind {
 	case backendKindThinking:
-		sink.Emit(contracts.Event{T: wireEventThinking, Text: event.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
+		sink.Emit(contracts.Event{T: eventwire.EventThinking, Text: event.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
 	case backendKindText:
-		sink.Emit(contracts.Event{T: wireEventChunk, Text: event.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
+		sink.Emit(contracts.Event{T: eventwire.EventChunk, Text: event.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
 	case backendKindTool:
 		if text := strings.TrimSpace(event.Tool + " " + event.Detail); text != "" {
-			sink.Emit(contracts.Event{T: wireEventStatus, Text: text, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
+			sink.Emit(contracts.Event{T: eventwire.EventStatus, Text: text, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
 		}
 	case backendKindTodos:
-		sink.Emit(contracts.Event{T: wireEventTodos, Todos: event.Todos})
+		sink.Emit(contracts.Event{T: eventwire.EventTodos, Todos: event.Todos})
 	case backendKindSubagent:
 		if event.Subagent != nil {
-			sink.Emit(contracts.Event{T: wireEventSubagent, Subagent: event.Subagent})
+			sink.Emit(contracts.Event{T: eventwire.EventSubagent, Subagent: event.Subagent})
 		}
 	case backendKindReset:
-		sink.Emit(contracts.Event{T: wireEventReset})
+		sink.Emit(contracts.Event{T: eventwire.EventReset})
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/bridge"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -119,13 +120,13 @@ func TestDriverFanOutToAllBoundGateways(t *testing.T) {
 
 		select {
 		case in := <-toBridge:
-			if in.T != "input" || in.Text != "hello" {
+			if in.T != eventwire.EventInput || in.Text != "hello" {
 				t.Fatalf("driver wrote %+v, want input/hello", in)
 			}
 		case <-time.After(time.Second):
 			t.Fatal("driver did not pump input to bridge")
 		}
-		fromBridge <- contracts.Event{T: "reply", Text: "world", Done: true}
+		fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "world", Done: true}
 
 		requireSettled(t, func() bool {
 			a.mu.Lock()
@@ -209,11 +210,11 @@ func TestDriverNonEventSinkPostsOnlyFinalReply(t *testing.T) {
 		defer cancel()
 		go d.run(ctx)
 
-		if got := <-toBridge; got.T != "input" || got.Text != "hello" {
+		if got := <-toBridge; got.T != eventwire.EventInput || got.Text != "hello" {
 			t.Fatalf("driver wrote %+v, want input/hello", got)
 		}
-		fromBridge <- contracts.Event{T: "status", Text: "running"}
-		fromBridge <- contracts.Event{T: "reply", Text: "world", Done: true}
+		fromBridge <- contracts.Event{T: eventwire.EventStatus, Text: "running"}
+		fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "world", Done: true}
 
 		requireSettled(t, func() bool {
 			a.mu.Lock()
@@ -260,7 +261,7 @@ func TestDriverResolvesAttachmentsOntoInput(t *testing.T) {
 	go d.run(ctx)
 
 	got := <-toBridge
-	if got.T != "input" || got.Text != "look" {
+	if got.T != eventwire.EventInput || got.Text != "look" {
 		t.Fatalf("want input/look, got %+v", got)
 	}
 	if len(got.Attachments) != 1 || got.Attachments[0] != img {
@@ -282,7 +283,7 @@ func TestDriverEmitsAbandonedOnHangup(t *testing.T) {
 		defer cancel()
 		go d.run(ctx)
 
-		if got := <-toBridge; got.T != "input" || got.Text != "hello" {
+		if got := <-toBridge; got.T != eventwire.EventInput || got.Text != "hello" {
 			t.Fatalf("driver wrote %+v, want input/hello", got)
 		}
 		d.hangup <- struct{}{}
@@ -291,7 +292,7 @@ func TestDriverEmitsAbandonedOnHangup(t *testing.T) {
 			rec.mu.Lock()
 			defer rec.mu.Unlock()
 			n := len(rec.emitted)
-			return n >= 2 && rec.emitted[0].T == "human" && rec.emitted[n-1].T == "abandoned"
+			return n >= 2 && rec.emitted[0].T == eventwire.EventHuman && rec.emitted[n-1].T == eventwire.EventAbandoned
 		}, "abandoned signal fanned to the EventSink gateway")
 
 		a.mu.Lock()
@@ -315,13 +316,13 @@ func TestDriverPickForwardsWithoutOpeningTurn(t *testing.T) {
 		d.Pick("2")
 		select {
 		case got := <-toBridge:
-			if got.T != "pick" || got.Value != "2" {
+			if got.T != eventwire.EventPick || got.Value != "2" {
 				t.Fatalf("driver forwarded %+v, want pick/2", got)
 			}
 		case <-time.After(time.Second):
 			t.Fatal("Pick was not forwarded to the bridge")
 		}
-		fromBridge <- contracts.Event{T: "reply", Text: "picked", Done: true}
+		fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "picked", Done: true}
 		requireSettled(t, func() bool {
 			a.mu.Lock()
 			defer a.mu.Unlock()
@@ -367,7 +368,7 @@ func TestSeedEnqueuesInput(t *testing.T) {
 	}
 	select {
 	case q := <-d.queue:
-		if q.ev.T != "input" || q.ev.Text != "finir le module" || q.ev.Who != "handoff" {
+		if q.ev.T != eventwire.EventInput || q.ev.Text != "finir le module" || q.ev.Who != "handoff" {
 			t.Fatalf("unexpected frame: %+v", q.ev)
 		}
 	default:
@@ -389,7 +390,7 @@ func TestSeedAndWaitReturnsReply(t *testing.T) {
 
 		go func() {
 			<-toBridge
-			from <- contracts.Event{T: "reply", Done: true, Text: "j'ai appris X"}
+			from <- contracts.Event{T: eventwire.EventReply, Done: true, Text: "j'ai appris X"}
 		}()
 
 		reply, ok := d.SeedAndWait(ctx, "crée un ModuleScript Greeter")
@@ -455,7 +456,7 @@ func TestDriverFIFOSerializesTurns(t *testing.T) {
 			t.Fatalf("second frame %+v pumped before first turn completed", got)
 		case <-time.After(150 * time.Millisecond):
 		}
-		fromBridge <- contracts.Event{T: "reply", Text: "r1", Done: true}
+		fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "r1", Done: true}
 		if got := <-toBridge; got.Text != "second" {
 			t.Fatalf("second frame = %+v, want second after reply{done}", got)
 		}
@@ -481,15 +482,15 @@ func TestDriverResetMidTurnDoesNotEndTurn(t *testing.T) {
 			t.Fatalf("first frame = %+v", got)
 		}
 
-		fromBridge <- contracts.Event{T: "reset"}
-		fromBridge <- contracts.Event{T: "chunk", Text: "x"}
+		fromBridge <- contracts.Event{T: eventwire.EventReset}
+		fromBridge <- contracts.Event{T: eventwire.EventChunk, Text: "x"}
 
 		requireSettled(t, func() bool {
 			rec.mu.Lock()
 			defer rec.mu.Unlock()
 			return len(rec.emitted) == 3 &&
-				rec.emitted[0].T == "human" &&
-				rec.emitted[1].T == "reset" && rec.emitted[2].T == "chunk"
+				rec.emitted[0].T == eventwire.EventHuman &&
+				rec.emitted[1].T == eventwire.EventReset && rec.emitted[2].T == eventwire.EventChunk
 		}, "human, reset and chunk fanned to EventSink before reply")
 
 		select {
@@ -498,7 +499,7 @@ func TestDriverResetMidTurnDoesNotEndTurn(t *testing.T) {
 		case <-time.After(150 * time.Millisecond):
 		}
 
-		fromBridge <- contracts.Event{T: "reply", Text: "r1", Done: true}
+		fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "r1", Done: true}
 		if got := <-toBridge; got.Text != "second" {
 			t.Fatalf("second frame = %+v, want second after reply{done}", got)
 		}
@@ -555,7 +556,7 @@ func TestRunSessionReconnectsAfterCompletedTurn(t *testing.T) {
 
 	c1 := dialCtl(t, sock)
 	gotInput(t, c1, "q1")
-	if err := c1.Write(contracts.Event{T: "reply", Text: "r1", Done: true}); err != nil {
+	if err := c1.Write(contracts.Event{T: eventwire.EventReply, Text: "r1", Done: true}); err != nil {
 		t.Fatalf("write reply: %v", err)
 	}
 	closeRead(c1)
@@ -586,7 +587,7 @@ func gotInput(t *testing.T, c *control.Conn, want string) {
 	got := make(chan string, 1)
 	go func() {
 		logCleanup(c.Scan(func(e contracts.Event) error {
-			if e.T == "input" {
+			if e.T == eventwire.EventInput {
 				got <- e.Text
 				return errStopScan
 			}
@@ -614,7 +615,7 @@ func TestFanOutPrefersRoutedEventSink(t *testing.T) {
 	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: rec}}, nil, nil, io.Discard)
 	d.channel = "chan-1"
 
-	d.fanOut(context.Background(), contracts.Event{T: "chunk", Text: "hi"})
+	d.fanOut(context.Background(), contracts.Event{T: eventwire.EventChunk, Text: "hi"})
 
 	if len(rec.convs) != 1 {
 		t.Fatalf("EmitTo not called once: %+v", rec.convs)
@@ -709,7 +710,7 @@ func TestDriverInvokesCoordinatorOnHandoffTrailer(t *testing.T) {
 	d.coordinator = rc
 
 	from <- contracts.Event{
-		T: "reply", Done: true,
+		T: eventwire.EventReply, Done: true,
 		Text: "fait.\n⟢ handoff: scripter \u2014 finir le module",
 	}
 	if ok := d.awaitTurn(context.Background(), tokenGuard{}); !ok {
@@ -729,7 +730,7 @@ func TestDriverNoHandoffWithoutTrailer(t *testing.T) {
 	d := newSessionDriver("alpha", nil, make(chan contracts.Event, 1), from, io.Discard)
 	rc := &recordingCoord{}
 	d.coordinator = rc
-	from <- contracts.Event{T: "reply", Done: true, Text: "réponse normale"}
+	from <- contracts.Event{T: eventwire.EventReply, Done: true, Text: "réponse normale"}
 	_ = d.awaitTurn(context.Background(), tokenGuard{})
 	if len(rc.reqs) != 0 {
 		t.Fatalf("no handoff expected, got %d", len(rc.reqs))
@@ -799,7 +800,7 @@ func TestTerminalReplyCarriesAcceptedDelegationBeforeSeedRelease(t *testing.T) {
 	replyCh := make(chan string, 1)
 	releasedBeforeTerminal := false
 	d.emitTap = func(e contracts.Event) {
-		if e.T == "reply" && e.Done {
+		if e.T == eventwire.EventReply && e.Done {
 			select {
 			case <-replyCh:
 				releasedBeforeTerminal = true
@@ -811,7 +812,7 @@ func TestTerminalReplyCarriesAcceptedDelegationBeforeSeedRelease(t *testing.T) {
 	d.pendingReply = replyCh
 
 	from <- contracts.Event{
-		T: "reply", Done: true,
+		T: eventwire.EventReply, Done: true,
 		Text: "Je délègue.\n⟢ delegate: roblox-scripter \u2014 modifier les nametags",
 	}
 	if !d.awaitTurn(context.Background(), tokenGuard{}) {
@@ -892,7 +893,7 @@ type terminalCapture struct {
 }
 
 func (c *terminalCapture) observe(e contracts.Event) {
-	if e.T != "reply" || !e.Done {
+	if e.T != eventwire.EventReply || !e.Done {
 		return
 	}
 	select {
@@ -912,7 +913,7 @@ func runTerminalReplyCase(t *testing.T, tc terminalReplyCase) {
 	d.emitTap = capture.observe
 	d.pendingReply = capture.replyCh
 
-	from <- contracts.Event{T: "reply", Done: true, Text: tc.reply}
+	from <- contracts.Event{T: eventwire.EventReply, Done: true, Text: tc.reply}
 	if !d.awaitTurn(context.Background(), tokenGuard{}) {
 		t.Fatal("turn abandoned")
 	}
@@ -993,7 +994,7 @@ func TestCoordinationRefusalStatusUsesStablePublicLabel(t *testing.T) {
 
 			outcome := d.maybeCoordinate(context.Background(), tc.reply)
 
-			if len(emitted) != 1 || emitted[0].T != "status" || emitted[0].Text != tc.wantStatus {
+			if len(emitted) != 1 || emitted[0].T != eventwire.EventStatus || emitted[0].Text != tc.wantStatus {
 				t.Fatalf("public status = %+v, want %q", emitted, tc.wantStatus)
 			}
 			wantSummary := "sensitive " + strings.Repeat("x", 150)
@@ -1082,7 +1083,7 @@ func requireCoordinatorStatus(t *testing.T, coord contracts.Coordinator, lang i1
 		d.coordinator = coord
 		d.operator = fixedLanguageSource(lang)
 
-		from <- contracts.Event{T: "reply", Done: true, Text: "fait.\n" + trailer}
+		from <- contracts.Event{T: eventwire.EventReply, Done: true, Text: "fait.\n" + trailer}
 		if ok := d.awaitTurn(context.Background(), tokenGuard{}); !ok {
 			t.Fatal("awaitTurn should complete on reply{done}")
 		}
@@ -1091,7 +1092,7 @@ func requireCoordinatorStatus(t *testing.T, coord contracts.Coordinator, lang i1
 			rec.mu.Lock()
 			defer rec.mu.Unlock()
 			for index := range rec.emitted {
-				if rec.emitted[index].T == "status" && rec.emitted[index].Text == want {
+				if rec.emitted[index].T == eventwire.EventStatus && rec.emitted[index].Text == want {
 					return true
 				}
 			}
@@ -1106,7 +1107,7 @@ func TestDriverInvokesCoordinatorOnSealTrailer(t *testing.T) {
 	rc := &recordingCoord{}
 	d.coordinator = rc
 
-	from <- contracts.Event{T: "reply", Done: true, Text: "cohorte lancée.\n⟢ seal: 4"}
+	from <- contracts.Event{T: eventwire.EventReply, Done: true, Text: "cohorte lancée.\n⟢ seal: 4"}
 	if ok := d.awaitTurn(context.Background(), tokenGuard{}); !ok {
 		t.Fatal("awaitTurn should complete on reply{done}")
 	}
@@ -1125,7 +1126,7 @@ func TestDriverInvokesCoordinatorOnFanOutTrailer(t *testing.T) {
 	d.coordinator = rc
 
 	from <- contracts.Event{
-		T: "reply", Done: true,
+		T: eventwire.EventReply, Done: true,
 		Text: "je lance.\n⟢ fanout: scripter \u2014 a ;; b",
 	}
 	if ok := d.awaitTurn(context.Background(), tokenGuard{}); !ok {
@@ -1164,7 +1165,7 @@ func TestSubmitEnqueuesAnInputFrame(t *testing.T) {
 	}
 	select {
 	case q := <-d.queue:
-		if q.ev.T != "input" || q.ev.Who != "leo" || q.ev.Text != "fix the login bug" {
+		if q.ev.T != eventwire.EventInput || q.ev.Who != "leo" || q.ev.Text != "fix the login bug" {
 			t.Fatalf("queued %+v, want an input frame from leo", q.ev)
 		}
 	default:

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 func TestSubscribeDaemonEventsStreamsTaggedEvents(t *testing.T) {
@@ -38,14 +40,14 @@ func serveDaemonEventLines(ln net.Listener) {
 	}
 	defer closeRead(c)
 	events := []DaemonEvent{
-		{Session: "alpha", Event: contracts.Event{T: "reply", Text: "hello"}},
-		{Session: "beta", Event: contracts.Event{T: "status", Text: "working"}},
+		{Session: "alpha", Event: contracts.Event{T: eventwire.EventReply, Text: "hello"}},
+		{Session: "beta", Event: contracts.Event{T: eventwire.EventStatus, Text: "working"}},
 	}
 	for i := range events {
 		writeDaemonEventLine(c, events[i])
 	}
 	logWriteFailure(c.Write([]byte("{not json\n")))
-	writeDaemonEventLine(c, DaemonEvent{Session: "alpha", Event: contracts.Event{T: "reply", Text: "still here", Done: true}})
+	writeDaemonEventLine(c, DaemonEvent{Session: "alpha", Event: contracts.Event{T: eventwire.EventReply, Text: "still here", Done: true}})
 	<-time.After(200 * time.Millisecond)
 }
 

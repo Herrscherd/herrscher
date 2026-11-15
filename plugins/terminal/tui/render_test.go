@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 func TestUserEntryIsOneUnruledRow(t *testing.T) {
@@ -104,9 +105,9 @@ func TestChunkCoalescingRendersOneBlock(t *testing.T) {
 func TestResetLeavesTheAbandonedAttemptClosed(t *testing.T) {
 	m := newTestModel()
 	tb := m.ensureTab("a")
-	m.renderInto(tb, contracts.Event{T: eventChunk, Text: "Je regarde."})
-	m.renderInto(tb, contracts.Event{T: eventReset})
-	m.renderInto(tb, contracts.Event{T: eventChunk, Text: "Voici"})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventChunk, Text: "Je regarde."})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventReset})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventChunk, Text: "Voici"})
 	var agents []entry
 	for _, item := range tb.entries {
 		if item.role == roleAgent {

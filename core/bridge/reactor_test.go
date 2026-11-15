@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 type reactingOrch struct{ reacted bool }
@@ -25,14 +26,14 @@ func TestHubCallsReactWhenOrchIsReactor(t *testing.T) {
 	orch := &reactingOrch{}
 	resp := &captureBackend{reply: "hello <mark>world"}
 	sink := &recordSink{}
-	if err := runOneTurn(context.Background(), sink, resp, orch, contracts.Event{T: wireEventInput, Text: "hi"}, nil, nil, affordances{}, nil, 0); err != nil {
+	if err := runOneTurn(context.Background(), sink, resp, orch, contracts.Event{T: eventwire.EventInput, Text: "hi"}, nil, nil, affordances{}, nil, 0); err != nil {
 		t.Fatalf("turn failed: %v", err)
 	}
 	if !orch.reacted {
 		t.Fatalf("React was not invoked")
 	}
 	last := sink.events[len(sink.events)-1]
-	if last.T != wireEventReply || last.Text != "hello world" {
+	if last.T != eventwire.EventReply || last.Text != "hello world" {
 		t.Fatalf("reply not passed through React, got %+v", last)
 	}
 }
@@ -47,7 +48,7 @@ func (plainOrch) Close() error                                            { retu
 func TestHubUnaffectedByPlainOrchestrator(t *testing.T) {
 	resp := &captureBackend{reply: "just text"}
 	sink := &recordSink{}
-	if err := runOneTurn(context.Background(), sink, resp, plainOrch{}, contracts.Event{T: wireEventInput, Text: "hi"}, nil, nil, affordances{}, nil, 0); err != nil {
+	if err := runOneTurn(context.Background(), sink, resp, plainOrch{}, contracts.Event{T: eventwire.EventInput, Text: "hi"}, nil, nil, affordances{}, nil, 0); err != nil {
 		t.Fatalf("turn failed: %v", err)
 	}
 	last := sink.events[len(sink.events)-1]

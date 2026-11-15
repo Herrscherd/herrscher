@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 const testApprovalID = "7"
@@ -29,7 +30,7 @@ func approvalMenuEvent(t *testing.T, command string, roles ...string) contracts.
 	if err != nil {
 		t.Fatal(err)
 	}
-	return contracts.Event{T: eventMenu, Text: menu.Prompt, Value: string(encoded)}
+	return contracts.Event{T: eventwire.EventMenu, Text: menu.Prompt, Value: string(encoded)}
 }
 
 func newApprovalModel(t *testing.T, width int, command string, roles ...string) (*model, *fakeBackend) {
@@ -191,7 +192,7 @@ func TestApprovalMenuWithoutApprovalRolesStaysStatusText(t *testing.T) {
 	fb := &fakeBackend{}
 	m := newModel(fb)
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventMenu, Text: "pick: first"}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventMenu, Text: "pick: first"}})
 	if m.tabs["a"].pendingApproval {
 		t.Fatal("a menu without approval roles must not open the approval box")
 	}
@@ -204,7 +205,7 @@ func TestApprovalRendersAtEveryWidth(t *testing.T) {
 			fb := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "work", ChannelID: "a", Project: "herrscher", Dir: "/home/shan/dev/wt/tui"}}}
 			m := newModel(fb)
 			m.Update(tea.WindowSizeMsg{Width: width, Height: 40})
-			m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventApprovalSubject, Value: testApprovalID, Text: "Bash(" + long + ")"}})
+			m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventApprovalSubject, Value: testApprovalID, Text: "Bash(" + long + ")"}})
 			m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: approvalMenuEvent(t, long, allApprovalRoles()...)})
 			m.active = "a"
 			checkApprovalFits(t, m.View(), width)
@@ -261,7 +262,7 @@ func TestMiddleTruncateKeepsBothEnds(t *testing.T) {
 func TestApprovalEventSetsTheRealDeadline(t *testing.T) {
 	m, _ := newApprovalModel(t, 120, "git push", allApprovalRoles()...)
 	due := time.Now().Add(42 * time.Second).UTC().Format(time.RFC3339)
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventApproval, Value: testApprovalID, Text: due}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventApproval, Value: testApprovalID, Text: due}})
 	if view := m.View(); !strings.Contains(view, "deny in 0:4") {
 		t.Fatalf("the host deadline must drive the countdown:\n%s", view)
 	}
@@ -279,7 +280,7 @@ func TestApprovalAlwaysShowsTheExactRule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventMenu, Value: string(encoded)}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventMenu, Value: string(encoded)}})
 	m.active = "a"
 	if !strings.Contains(m.View(), "bash:git push*") {
 		t.Fatalf("allow-always must show the rule the host will write:\n%s", m.View())
@@ -291,7 +292,7 @@ func TestApprovalDeadlineArrivingBeforeTheMenuApplies(t *testing.T) {
 	m := newModel(fb)
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	due := time.Now().Add(42 * time.Second).UTC().Format(time.RFC3339)
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventApproval, Value: testApprovalID, Text: due}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventApproval, Value: testApprovalID, Text: due}})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: approvalMenuEvent(t, "git push", allApprovalRoles()...)})
 	m.active = "a"
 	if view := m.View(); !strings.Contains(view, "deny in 0:4") {
@@ -304,7 +305,7 @@ func TestApprovalDeadlineExpiresWhenTheMenuNeverComes(t *testing.T) {
 	m := newModel(fb)
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	due := time.Now().Add(42 * time.Second).UTC().Format(time.RFC3339)
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventApproval, Value: testApprovalID, Text: due}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventApproval, Value: testApprovalID, Text: due}})
 	m.expireApprovals(time.Now().Add(approvalEarlyTTL + time.Second))
 	if _, ok := m.approvalDues[testApprovalID]; ok {
 		t.Fatal("an unmatched approval deadline must be forgotten after its retention")
@@ -322,7 +323,7 @@ func TestApprovalShowsTheJudgeRisk(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c1"}, Event: contracts.Event{T: eventMenu, Text: menu.Prompt, Value: string(encoded)}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c1"}, Event: contracts.Event{T: eventwire.EventMenu, Text: menu.Prompt, Value: string(encoded)}})
 	if !strings.Contains(strings.Join(m.approvalLines(time.Now(), unboundedRows), "\n"), "high risk") {
 		t.Errorf("the approval must show the judge risk when the host sends one")
 	}
@@ -341,7 +342,7 @@ func TestApprovalRiskSentBeforeTheMenuIsShown(t *testing.T) {
 	fb := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "work", ChannelID: "a"}}}
 	m := newModel(fb)
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventApprovalRisk, Value: testApprovalID, Text: riskHighName}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventApprovalRisk, Value: testApprovalID, Text: riskHighName}})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: approvalMenuEvent(t, "git push", allApprovalRoles()...)})
 	m.active = "a"
 	if view := m.View(); !strings.Contains(view, "high risk") {
@@ -353,7 +354,7 @@ func TestApprovalSubjectEventNamesTheToolWhenTheMenuIsFrench(t *testing.T) {
 	fb := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "work", ChannelID: "a", Project: "herrscher", Dir: "/home/shan/dev/wt/tui"}}}
 	m := newModel(fb)
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	subject := contracts.Event{T: eventApprovalSubject, Value: testApprovalID, Text: "Bash(go test ./...)"}
+	subject := contracts.Event{T: eventwire.EventApprovalSubject, Value: testApprovalID, Text: "Bash(go test ./...)"}
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: subject})
 	menu := approvalMenu{Prompt: "autoriser Bash(go test ./...) ? (répondez avec `approve allow " + testApprovalID + "`, voir `approve allow --help`)"}
 	menu.Options = append(menu.Options, approvalMenuOption{Label: approvalAllow, Value: testApprovalValue(approvalAllow)})
@@ -361,7 +362,7 @@ func TestApprovalSubjectEventNamesTheToolWhenTheMenuIsFrench(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventMenu, Text: menu.Prompt, Value: string(encoded)}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventMenu, Text: menu.Prompt, Value: string(encoded)}})
 	target := m.tabs["a"]
 	if !target.pendingApproval {
 		t.Fatal("the French menu did not open an approval")
@@ -381,7 +382,7 @@ func TestApprovalWithoutSubjectShowsTheFrenchPromptAsIs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventMenu, Text: prompt, Value: string(encoded)}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventMenu, Text: prompt, Value: string(encoded)}})
 	m.active = "a"
 	target := m.tabs["a"]
 	if !target.pendingApproval {

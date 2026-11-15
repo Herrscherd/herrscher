@@ -18,6 +18,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/envx"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
@@ -128,10 +129,8 @@ func (h *hub) reportSessionFailure(sess state.Session, stage supervisor.Stage, c
 	}
 	lang := sessionLanguage(sess, h.textLanguage()())
 	text := LocalizeError(lang, wrapHost(cause, sessionFailureKey(stage), map[string]any{nameParam: sess.Name, detailParam: cause.Error()})).Error()
-	h.eventPublisher(sess.Name, contracts.Event{T: sessionNoticeKind, Text: text})
+	h.eventPublisher(sess.Name, contracts.Event{T: eventwire.EventNotice, Text: text})
 }
-
-const sessionNoticeKind = "notice"
 
 func sessionFailureKey(stage supervisor.Stage) string {
 	if stage == supervisor.StagePrepare {

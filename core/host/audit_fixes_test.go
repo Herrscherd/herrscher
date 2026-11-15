@@ -8,6 +8,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 )
 
@@ -81,7 +82,7 @@ func TestDriverEnqueueIsBounded(t *testing.T) {
 			d := newSessionDriver("full", nil, make(chan contracts.Event, 1), make(chan contracts.Event), io.Discard)
 			d.enqueueTimeout = 50 * time.Millisecond
 			for len(d.queue) < cap(d.queue) {
-				d.queue <- queued{ev: contracts.Event{T: "input"}}
+				d.queue <- queued{ev: contracts.Event{T: eventwire.EventInput}}
 			}
 			done := make(chan bool, 1)
 			go func() { done <- tc.call(d) }()

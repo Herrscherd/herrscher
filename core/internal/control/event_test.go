@@ -7,18 +7,20 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 func TestWriteThenScanRoundTrip(t *testing.T) {
 	want := []contracts.Event{
 		{
-			T: "human", Who: "alice", Text: "refactor the env loader",
+			T: eventwire.EventHuman, Who: "alice", Text: "refactor the env loader",
 			SessionIncarnation: "incarnation-a", TurnID: "turn-a", Agent: "reviewer",
 		},
-		{T: "status", Text: "reading envfile.go"},
-		{T: "chunk", Text: "proposing 3 changes"},
-		{T: "reply", Text: "done", Done: true},
-		{T: "pick", Value: "2"},
+		{T: eventwire.EventStatus, Text: "reading envfile.go"},
+		{T: eventwire.EventChunk, Text: "proposing 3 changes"},
+		{T: eventwire.EventReply, Text: "done", Done: true},
+		{T: eventwire.EventPick, Value: "2"},
 	}
 	var buf bytes.Buffer
 	for _, e := range want {
@@ -42,7 +44,7 @@ func TestWriteThenScanRoundTrip(t *testing.T) {
 
 func TestWriteEventOneLinePerEvent(t *testing.T) {
 	var buf bytes.Buffer
-	if err := WriteEvent(&buf, contracts.Event{T: "chunk", Text: "a\nb"}); err != nil {
+	if err := WriteEvent(&buf, contracts.Event{T: eventwire.EventChunk, Text: "a\nb"}); err != nil {
 		t.Fatal(err)
 	}
 	if n := strings.Count(buf.String(), "\n"); n != 1 {
@@ -56,7 +58,7 @@ func TestScanLegacyBareValueBecomesPick(t *testing.T) {
 	if err := ScanEvents(r, func(e contracts.Event) error { got = append(got, e); return nil }); err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || got[0].T != "pick" || got[0].Value != "2" {
+	if len(got) != 1 || got[0].T != eventwire.EventPick || got[0].Value != "2" {
 		t.Fatalf("legacy bare value decoded as %+v, want a single pick with value 2", got)
 	}
 }

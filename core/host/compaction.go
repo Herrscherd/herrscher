@@ -18,6 +18,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/historywire"
 	"github.com/Herrscherd/herrscher/core/internal/redact"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -28,10 +29,6 @@ const (
 	percentScale          = 100
 	noticeTimeout         = 10 * time.Second
 	noticeQueueCapacity   = 32
-	eventCompactNow       = "compact_now"
-	eventCompactStarted   = "compaction_started"
-	eventCompactDone      = "compaction_done"
-	eventCompactFailed    = "compaction_failed"
 )
 
 type compactUnavailableError struct {
@@ -432,7 +429,7 @@ func (d *sessionDriver) runAutomatic(ctx context.Context, run compactionPass) bo
 		return false
 	}
 	if percent := d.compactPercent(); run.full && crossed(result.TokensAfter, d.contextLimit(), percent) {
-		d.fanOut(ctx, contracts.Event{T: eventStatus, Text: d.hostText("compaction.no_effect", map[string]any{"Percent": percent})})
+		d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("compaction.no_effect", map[string]any{"Percent": percent})})
 	}
 	return true
 }
@@ -454,7 +451,7 @@ func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.Com
 		TokenLimit:    limit,
 		Instruction:   instruction,
 	}
-	d.fanOut(ctx, contracts.Event{T: eventCompactStarted, Value: trigger.String(), Tokens: d.turnReading})
+	d.fanOut(ctx, contracts.Event{T: eventwire.EventCompactionStarted, Value: trigger.String(), Tokens: d.turnReading})
 	result, err := contracts.RunCompactStack(ctx, stages, req, d.compactionProgress(ctx))
 	d.recordCompaction(result.StageStats, notes)
 	if err != nil {
@@ -471,7 +468,7 @@ func (d *sessionDriver) failCompaction(ctx context.Context, trigger contracts.Co
 	if !d.queueFailureNotice(trigger, err) {
 		text = compactFailureText(d.messages, d.textLanguage()(), err)
 	}
-	d.fanOut(ctx, contracts.Event{T: eventCompactFailed, Value: trigger.String(), Text: text})
+	d.fanOut(ctx, contracts.Event{T: eventwire.EventCompactionFailed, Value: trigger.String(), Text: text})
 }
 
 func (d *sessionDriver) queueFailureNotice(trigger contracts.CompactTrigger, err error) bool {
@@ -516,11 +513,11 @@ func knownCompactFailure(err error) (string, bool) {
 
 func (d *sessionDriver) announceCompaction(ctx context.Context, trigger contracts.CompactTrigger, result contracts.CompactResult) {
 	if result.Notice.Code == 0 || !d.noticeRenders(result.Notice) {
-		d.fanOut(ctx, contracts.Event{T: eventCompactDone, Value: trigger.String(), Text: result.Note, Tokens: measuredTokens(result)})
+		d.fanOut(ctx, contracts.Event{T: eventwire.EventCompactionDone, Value: trigger.String(), Text: result.Note, Tokens: measuredTokens(result)})
 		return
 	}
 	d.notifyGateways(trigger, result.Notice)
-	d.fanOut(ctx, contracts.Event{T: eventCompactDone, Value: trigger.String(), Tokens: measuredTokens(result)})
+	d.fanOut(ctx, contracts.Event{T: eventwire.EventCompactionDone, Value: trigger.String(), Tokens: measuredTokens(result)})
 }
 
 func (d *sessionDriver) noticeRenders(notice contracts.Notice) bool {
@@ -628,7 +625,7 @@ func measuredTokens(result contracts.CompactResult) int {
 func (d *sessionDriver) compactionProgress(ctx context.Context) func(contracts.BackendEvent) {
 	return func(event contracts.BackendEvent) {
 		if event.Detail != "" {
-			d.fanOut(ctx, contracts.Event{T: eventStatus, Text: event.Detail})
+			d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: event.Detail})
 		}
 	}
 }
@@ -665,7 +662,7 @@ func (d *sessionDriver) requestCompaction(instruction string, origin contracts.C
 	if d.compactRegistered != nil {
 		d.compactRegistered()
 	}
-	request.queued = d.enqueue(queued{ev: contracts.Event{T: eventCompactNow}, origin: origin})
+	request.queued = d.enqueue(queued{ev: contracts.Event{T: eventwire.EventCompactNow}, origin: origin})
 	if !request.queued {
 		d.clearCompactWaiting(request)
 	}

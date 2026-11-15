@@ -11,6 +11,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/bridge"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -36,7 +37,7 @@ func TestTheOneShotBridgeCancelsTheSeedOnlyWhenNoReplyCame(t *testing.T) {
 			toBridge := make(chan contracts.Event, 1)
 			fromBridge := make(chan contracts.Event, bridgeEventBuffer)
 			bridgeErr := make(chan error, 1)
-			toBridge <- contracts.Event{T: "input", Text: "tâche"}
+			toBridge <- contracts.Event{T: eventwire.EventInput, Text: "tâche"}
 			runtime := oneShotSeedRuntime{backend: func(context.Context, state.Session) (contracts.Backend, error) {
 				return tc.turn, tc.backend
 			}}

@@ -28,6 +28,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/config"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/language"
 	"github.com/Herrscherd/herrscher/core/scope"
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
@@ -54,9 +55,6 @@ const ChannelID = "terminal"
 const Kind = "terminal"
 
 const (
-	eventReply  = "reply"
-	eventMenu   = "menu"
-	eventNotice = "notice"
 	sessionVerb = "session"
 )
 
@@ -315,7 +313,7 @@ func (t *Terminal) Unreact(context.Context, string, string, string) error { retu
 
 // UpsertStatusMessage shows content as a notice line in the channel tab and returns no message id.
 func (t *Terminal) UpsertStatusMessage(_ context.Context, channelID, _, content string) (string, error) {
-	t.EmitTo(contracts.Conversation{Gateway: Kind, ID: channelID}, contracts.Event{T: eventNotice, Text: content})
+	t.EmitTo(contracts.Conversation{Gateway: Kind, ID: channelID}, contracts.Event{T: eventwire.EventNotice, Text: content})
 	return "", nil
 }
 
@@ -326,13 +324,13 @@ func (t *Terminal) Manifest() contracts.Manifest {
 
 // Post emits text as a finished reply in the conversation and returns no message id.
 func (t *Terminal) Post(_ context.Context, conv contracts.Conversation, text string) (contracts.MessageID, error) {
-	t.EmitTo(conv, contracts.Event{T: eventReply, Text: text, Done: true})
+	t.EmitTo(conv, contracts.Event{T: eventwire.EventReply, Text: text, Done: true})
 	return "", nil
 }
 
 // Reply emits text as a finished reply in the conversation and returns no message id.
 func (t *Terminal) Reply(_ context.Context, conv contracts.Conversation, _ contracts.MessageID, text string) (contracts.MessageID, error) {
-	t.EmitTo(conv, contracts.Event{T: eventReply, Text: text, Done: true})
+	t.EmitTo(conv, contracts.Event{T: eventwire.EventReply, Text: text, Done: true})
 	return "", nil
 }
 
@@ -342,7 +340,7 @@ func (t *Terminal) Notify(_ context.Context, conv contracts.Conversation, lang i
 	if err != nil {
 		return "", err
 	}
-	t.EmitTo(conv, contracts.Event{T: eventNotice, Text: text})
+	t.EmitTo(conv, contracts.Event{T: eventwire.EventNotice, Text: text})
 	return "", nil
 }
 
@@ -375,7 +373,7 @@ func (t *Terminal) Menu(_ context.Context, conv contracts.Conversation, _ contra
 	if err != nil {
 		return err
 	}
-	t.EmitTo(conv, contracts.Event{T: eventMenu, Text: text.String(), Value: string(encoded)})
+	t.EmitTo(conv, contracts.Event{T: eventwire.EventMenu, Text: text.String(), Value: string(encoded)})
 	return nil
 }
 
@@ -396,7 +394,7 @@ func (t *Terminal) emit(routed tui.RoutedEvent) {
 		return
 	default:
 	}
-	if routed.Event.T == "closed" || routed.Event.T == eventMenu || (routed.Event.T == eventReply && routed.Event.Done) {
+	if routed.Event.T == eventwire.EventClosed || routed.Event.T == eventwire.EventMenu || (routed.Event.T == eventwire.EventReply && routed.Event.Done) {
 		select {
 		case t.out <- routed:
 		case <-time.After(frontendCloseWait):
@@ -652,13 +650,13 @@ func (t *Terminal) ForumPost(ctx context.Context, parentID, name, _ string) (str
 
 // Archive reports the conversation id as closed to its tab.
 func (t *Terminal) Archive(_ context.Context, id string) error {
-	t.EmitTo(contracts.Conversation{Gateway: Kind, ID: id}, contracts.Event{T: "closed"})
+	t.EmitTo(contracts.Conversation{Gateway: Kind, ID: id}, contracts.Event{T: eventwire.EventClosed})
 	return nil
 }
 
 // Send shows content as a notice line in the conversation channelID.
 func (t *Terminal) Send(_ context.Context, channelID, content string) error {
-	t.EmitTo(contracts.Conversation{Gateway: Kind, ID: channelID}, contracts.Event{T: eventNotice, Text: content})
+	t.EmitTo(contracts.Conversation{Gateway: Kind, ID: channelID}, contracts.Event{T: eventwire.EventNotice, Text: content})
 	return nil
 }
 

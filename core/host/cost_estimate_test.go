@@ -7,6 +7,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/outbox"
 )
@@ -43,7 +44,7 @@ func TestCompleteTurnStoresEstimatedCostInTranscript(t *testing.T) {
 	d := newSessionDriver("s1", nil, nil, nil, io.Discard)
 	d.sink = sessionSink{Transcript: func(e state.TranscriptEntry) { entries = append(entries, e) }}
 	d.terms = func() modelTerms { return modelTerms{rates: sonnetRates()} }
-	event := contracts.Event{T: "reply", Text: "hello", Done: true, TokensIn: 1000, Tokens: 500}
+	event := contracts.Event{T: eventwire.EventReply, Text: "hello", Done: true, TokensIn: 1000, Tokens: 500}
 
 	d.completeTurn(context.Background(), event, time.Now(), 0, outbox.Frame{})
 

@@ -14,6 +14,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
@@ -176,7 +177,7 @@ func assertSeedEventIdentity(t *testing.T, events []contracts.Event, sess state.
 	if len(events) != 3 {
 		t.Fatalf("seed events = %+v, want human/status/reply", events)
 	}
-	wantTypes := []string{"human", "status", "reply"}
+	wantTypes := []string{eventwire.EventHuman, eventwire.EventStatus, eventwire.EventReply}
 	for i := range events {
 		event := events[i]
 		if event.T != wantTypes[i] {
@@ -262,7 +263,7 @@ func TestDaemonSeedCoordinatesPersistsAndDoesNotHoldDispatchLock(t *testing.T) {
 
 	var terminal *contracts.Event
 	for i := range events {
-		if events[i].T == "reply" && events[i].Done {
+		if events[i].T == eventwire.EventReply && events[i].Done {
 			terminal = &events[i]
 		}
 	}

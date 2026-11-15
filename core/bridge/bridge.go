@@ -11,6 +11,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 var errNoHubSocket = errors.New("bridge requires --hub-socket (pure-runner mode)")
@@ -92,11 +93,11 @@ func RunOneShot(ctx context.Context, newBackend BackendFactory, orch contracts.O
 	for {
 		select {
 		case event := <-input:
-			if event.T == wireEventLanguage {
+			if event.T == eventwire.EventLanguage {
 				lang = languageOf(event.Value)
 				continue
 			}
-			if event.T != wireEventInput {
+			if event.T != eventwire.EventInput {
 				continue
 			}
 			return runOneTurn(ctx, channelSink{done: ctx.Done(), out: out}, resp, orch, event, nil, newSkillEngine(resp), affordances{}, nil, lang)

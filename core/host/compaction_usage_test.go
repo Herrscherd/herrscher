@@ -12,6 +12,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/health"
@@ -286,7 +287,7 @@ func TestCompactionStatsReachTheUsageLedgerThroughTheBridge(t *testing.T) {
 	nextFrame(t, f)
 	stats := stageStats("backend", contracts.CompactShort)
 	f.from <- mustAnswer(t, contracts.CompactResult{TokensAfter: 30_000, TokensMeasured: true, Note: "compacté", Stats: &stats})
-	waitEmitted(t, f, eventCompactDone)
+	waitEmitted(t, f, eventwire.EventCompactionDone)
 	records := capture.all()
 	if len(records) != 1 || !sameEntry(t, records[0].Compaction, recordedCompaction("backend", contracts.CompactShort)) {
 		t.Fatalf("records = %+v, want the bridge stage recorded as short", records)
@@ -312,8 +313,8 @@ func TestCompactionStageOutcomeReachesTheUsageLedger(t *testing.T) {
 		kind    string
 		note    string
 	}{
-		{name: "a successful stage", outcome: contracts.CompactDone, kind: eventCompactDone},
-		{name: "a failed stage", err: errors.New("boom"), outcome: contracts.CompactFailed, kind: eventCompactFailed, note: unknownFailureNote},
+		{name: "a successful stage", outcome: contracts.CompactDone, kind: eventwire.EventCompactionDone},
+		{name: "a failed stage", err: errors.New("boom"), outcome: contracts.CompactFailed, kind: eventwire.EventCompactionFailed, note: unknownFailureNote},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

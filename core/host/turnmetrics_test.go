@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
 )
 
@@ -17,7 +18,7 @@ func TestTurnMetricsCountStartCompleteAbandon(t *testing.T) {
 	m := metrics.NewRegistry()
 	d.metrics = m
 
-	fromBridge <- contracts.Event{T: "reply", Text: "ok", Done: true}
+	fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "ok", Done: true}
 	d.awaitTurn(context.Background(), tokenGuard{})
 
 	d.hangup <- struct{}{}

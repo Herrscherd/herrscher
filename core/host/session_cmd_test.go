@@ -9,6 +9,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -38,8 +39,8 @@ func TestCompactQueuesAManualCompactionWithItsInstruction(t *testing.T) {
 		t.Fatalf("compactSession: %v", err)
 	}
 	got := <-queue
-	if got.ev.T != eventCompactNow {
-		t.Fatalf("queued event = %q, want %q", got.ev.T, eventCompactNow)
+	if got.ev.T != eventwire.EventCompactNow {
+		t.Fatalf("queued event = %q, want %q", got.ev.T, eventwire.EventCompactNow)
 	}
 	if instruction := sessions.lookup("api").takeCompactInstruction(); instruction != "garde les décisions" {
 		t.Fatalf("queued instruction = %q, want the typed one", instruction)
@@ -132,7 +133,7 @@ func TestCompactAcceptsCodexWhenItDeclaresCompactor(t *testing.T) {
 	if _, err := compactSession(context.Background(), i18n.French, store, sessions, input); err != nil {
 		t.Fatalf("compactSession: %v", err)
 	}
-	if got := <-queue; got.ev.T != eventCompactNow {
-		t.Fatalf("queued event = %q, want %q", got.ev.T, eventCompactNow)
+	if got := <-queue; got.ev.T != eventwire.EventCompactNow {
+		t.Fatalf("queued event = %q, want %q", got.ev.T, eventwire.EventCompactNow)
 	}
 }

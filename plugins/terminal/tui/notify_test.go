@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 func captureStdout(t *testing.T, run func()) string {
@@ -139,7 +140,7 @@ func TestCtrlPJumpsToTheNotifyingSessionWhileToastShows(t *testing.T) {
 	m := notifyModel(t, false)
 	m.ensureTab("a")
 	m.active = "a"
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventReply, Done: true}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventReply, Done: true}})
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
 	if m.active != "c" {
 		t.Fatalf("ctrl+p with a toast must go to the notifying session, active = %q", m.active)
@@ -176,7 +177,7 @@ func TestCtrlPWithoutToastKeepsItsRole(t *testing.T) {
 func TestTurnEndToastAppearsAndExpires(t *testing.T) {
 	m := notifyModel(t, false)
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventReply, Done: true}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventReply, Done: true}})
 	if !strings.Contains(ansi.Strip(m.View()), "Turn finished") {
 		t.Fatal("the turn-end toast must show in the window")
 	}
@@ -214,7 +215,7 @@ func TestToastShowsAgeDeliveryAndJumpHint(t *testing.T) {
 func TestTurnEndToastWithoutStartTimeDoesNotPanic(t *testing.T) {
 	m := notifyModel(t, false)
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventReply, Done: true}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventReply, Done: true}})
 	if !strings.Contains(ansi.Strip(m.View()), "Turn finished") {
 		t.Fatal("a turn without a start time must still raise the toast")
 	}
@@ -330,17 +331,17 @@ func retourFixtureModel(t *testing.T, width, height int) *model {
 	fb := &fakeBackend{sessions: retourFixtureSessions(), overview: retourFixtureOverview(t)}
 	m := newModel(fb)
 	m.Update(tea.WindowSizeMsg{Width: width, Height: height})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventChunk, Text: "Entrée pendant un tour met maintenant le message en file."}})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventThinking, Text: "La file vit côté TUI : l’hôte accepte Submit à tout moment."}})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventStatus, Text: "Read tui/tui.go · 1 842 lignes"}})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventStatus, Text: "Grep \"tb.busy\" dans tui/ · 14 résultats"}})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventStatus, Text: "Edit tui/tui.go +6 −1"}})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventStatus, Text: "Bash go test ./plugins/terminal/tui/..."}})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "b"}, Event: contracts.Event{T: eventChunk, Text: "approbation requise"}})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventChunk, Text: "diff à relire"}})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "d"}, Event: contracts.Event{T: eventReply, Text: "terminé", Done: true, Cost: 0.12}})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventChunk, Text: "", TokensIn: 82000, Tokens: 4200}})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventTodos, Todos: []contracts.TodoItem{
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventChunk, Text: "Entrée pendant un tour met maintenant le message en file."}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventThinking, Text: "La file vit côté TUI : l’hôte accepte Submit à tout moment."}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventStatus, Text: "Read tui/tui.go · 1 842 lignes"}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventStatus, Text: "Grep \"tb.busy\" dans tui/ · 14 résultats"}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventStatus, Text: "Edit tui/tui.go +6 −1"}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventStatus, Text: "Bash go test ./plugins/terminal/tui/..."}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "b"}, Event: contracts.Event{T: eventwire.EventChunk, Text: "approbation requise"}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventChunk, Text: "diff à relire"}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "d"}, Event: contracts.Event{T: eventwire.EventReply, Text: "terminé", Done: true, Cost: 0.12}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventChunk, Text: "", TokensIn: 82000, Tokens: 4200}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventTodos, Todos: []contracts.TodoItem{
 		{Text: "lire composer et frame", State: "done"},
 		{Text: "concevoir la file", State: "done"},
 		{Text: "brancher Entrée sur la file", State: "done"},
@@ -348,9 +349,9 @@ func retourFixtureModel(t *testing.T, width, height int) *model {
 		{Text: "tests du mode étroit", State: "pending"},
 		{Text: "mettre à jour docs/tui.md", State: "pending"},
 	}}})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventSubagent, Subagent: &contracts.Subagent{ID: "1", Name: "explore", Kind: "haiku", State: "done"}}})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventSubagent, Subagent: &contracts.Subagent{ID: "2", Name: "explore", Kind: "haiku", State: "active"}}})
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventSubagent, Subagent: &contracts.Subagent{ID: "3", Name: "review", Kind: "codex", State: "failed"}}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventSubagent, Subagent: &contracts.Subagent{ID: "1", Name: "explore", Kind: "haiku", State: "done"}}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventSubagent, Subagent: &contracts.Subagent{ID: "2", Name: "explore", Kind: "haiku", State: "active"}}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventSubagent, Subagent: &contracts.Subagent{ID: "3", Name: "review", Kind: "codex", State: "failed"}}})
 	m.syncTabs()
 	m.active = "a"
 	for _, channel := range []string{"a", "b", "c", "d"} {

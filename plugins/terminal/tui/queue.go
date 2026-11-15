@@ -6,6 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 const (
@@ -52,7 +54,7 @@ func (m *model) flushQueue(current *tab, event string) tea.Cmd {
 	switch {
 	case !current.busy:
 		index = 0
-	case event == eventStatus:
+	case event == eventwire.EventStatus:
 		index = steerIndex(current.queue)
 	}
 	if index < 0 {

@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 func TestCompactionEventsDriveTheTabFromStartToNotice(t *testing.T) {
@@ -17,12 +18,12 @@ func TestCompactionEventsDriveTheTabFromStartToNotice(t *testing.T) {
 	tb := m.ensureTab("c")
 	m.active = "c"
 
-	m.renderInto(tb, contracts.Event{T: eventCompactionStarted, Value: "automatic", Tokens: 184_000})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionStarted, Value: "automatic", Tokens: 184_000})
 	if !tb.busy || !tb.compaction.active {
 		t.Fatal("a started compaction must mark the tab busy and active")
 	}
 
-	m.renderInto(tb, contracts.Event{T: eventCompactionDone, Value: "automatic", Text: "résumé", Tokens: 90_000})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionDone, Value: "automatic", Text: "résumé", Tokens: 90_000})
 	if tb.busy || tb.compaction.active {
 		t.Fatal("a finished compaction must release the tab")
 	}
@@ -30,8 +31,8 @@ func TestCompactionEventsDriveTheTabFromStartToNotice(t *testing.T) {
 		t.Fatalf("ctxTokens = %d, want the measured 90000 after compaction", tb.ctxTokens)
 	}
 
-	m.renderInto(tb, contracts.Event{T: eventCompactionStarted, Value: "manual", Tokens: 90_000})
-	m.renderInto(tb, contracts.Event{T: eventCompactionFailed, Value: "manual", Text: "le backend a refusé"})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionStarted, Value: "manual", Tokens: 90_000})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionFailed, Value: "manual", Text: "le backend a refusé"})
 	if tb.busy {
 		t.Fatal("a failed compaction must release the tab")
 	}
@@ -57,8 +58,8 @@ func TestCompactionNoticeShowsTheFiguresOnlyWhenMeasured(t *testing.T) {
 			m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
 			tb := m.ensureTab("c")
 			m.active = "c"
-			m.renderInto(tb, contracts.Event{T: eventCompactionStarted, Value: "automatic", Tokens: tc.started})
-			m.renderInto(tb, contracts.Event{T: eventCompactionDone, Value: "automatic", Tokens: tc.done})
+			m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionStarted, Value: "automatic", Tokens: tc.started})
+			m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionDone, Value: "automatic", Tokens: tc.done})
 			last := tb.entries[len(tb.entries)-1]
 			if last.role != roleNotice || last.text != "compacted: "+tc.want {
 				t.Fatalf("notice = %+v, want %q", last, "compacted: "+tc.want)
@@ -74,8 +75,8 @@ func TestCompactionEventsDoNotOverwriteTheTokenCounter(t *testing.T) {
 	tb := m.ensureTab("c")
 	m.active = "c"
 	tb.tokens = 1234
-	m.renderInto(tb, contracts.Event{T: eventCompactionStarted, Value: "automatic", Tokens: 184_000})
-	m.renderInto(tb, contracts.Event{T: eventCompactionDone, Value: "automatic", Tokens: 90_000})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionStarted, Value: "automatic", Tokens: 184_000})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionDone, Value: "automatic", Tokens: 90_000})
 	if tb.tokens != 1234 {
 		t.Fatalf("tokens = %d after a compaction, want the thinking and tool counter kept at 1234", tb.tokens)
 	}
@@ -89,8 +90,8 @@ func TestUnmeasuredCompactionReturnsTheGaugeToItsEstimate(t *testing.T) {
 		tb := m.ensureTab("c")
 		m.active = "c"
 		tb.measureContext(contracts.Event{TokensIn: 150_000})
-		m.renderInto(tb, contracts.Event{T: eventCompactionStarted, Value: "manual"})
-		m.renderInto(tb, contracts.Event{T: eventCompactionDone, Value: "manual", Text: "compacté"})
+		m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionStarted, Value: "manual"})
+		m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionDone, Value: "manual", Text: "compacté"})
 		if tb.ctxMeasured || tb.ctxTokens != 0 {
 			t.Fatalf("%dx%d: gauge still holds the pre-compaction reading: measured %t, tokens %d", size.Width, size.Height, tb.ctxMeasured, tb.ctxTokens)
 		}
@@ -134,7 +135,7 @@ func TestNoticeEventAddsANoticeLine(t *testing.T) {
 	tb := m.ensureTab("c")
 	m.active = "c"
 
-	m.renderInto(tb, contracts.Event{T: eventNotice, Text: "context compacted"})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventNotice, Text: "context compacted"})
 	if len(tb.entries) == 0 {
 		t.Fatal("no entry rendered for the notice")
 	}
@@ -152,7 +153,7 @@ func TestFailureWithoutTextAddsNoErrorLine(t *testing.T) {
 	m.active = "c"
 
 	before := len(tb.entries)
-	m.renderInto(tb, contracts.Event{T: eventCompactionFailed, Value: "manual"})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionFailed, Value: "manual"})
 	if tb.busy || len(tb.entries) != before {
 		t.Fatalf("a failure without text must release the tab and add no line, entries %d -> %d", before, len(tb.entries))
 	}

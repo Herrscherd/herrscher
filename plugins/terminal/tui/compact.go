@@ -4,17 +4,15 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 const (
-	verbCompact            = "compact"
-	eventCompactionStarted = "compaction_started"
-	eventCompactionDone    = "compaction_done"
-	eventCompactionFailed  = "compaction_failed"
-	originTerminal         = "terminal"
-	argName                = "--name"
-	argOrigin              = "--origin"
-	arrow                  = " → "
+	verbCompact    = "compact"
+	originTerminal = "terminal"
+	argName        = "--name"
+	argOrigin      = "--origin"
+	arrow          = " → "
 )
 
 type compaction struct {
@@ -89,7 +87,7 @@ func (target *tab) finishCompaction(trans translator) {
 }
 
 func isCompactionEvent(kind string) bool {
-	return kind == eventCompactionStarted || kind == eventCompactionDone || kind == eventCompactionFailed
+	return kind == eventwire.EventCompactionStarted || kind == eventwire.EventCompactionDone || kind == eventwire.EventCompactionFailed
 }
 
 func (target *tab) startCompaction(event contracts.Event) {

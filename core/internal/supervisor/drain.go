@@ -14,7 +14,7 @@ var ErrDrainBeforeCancel = errors.New("bridges drained before the supervisor con
 const bridgeDrainSlack = time.Second
 
 // DrainBridges waits for every bridge loop to return, for at most BridgeTermGrace plus a second.
-// Call it after the supervisor's context is cancelled, so that no bridge outlives the daemon.
+// Call it after the supervisor's context is cancelled, so that no local bridge outlives the daemon.
 func (s *Supervisor) DrainBridges() error {
 	if s.ctx == nil || s.ctx.Err() == nil {
 		return ErrDrainBeforeCancel

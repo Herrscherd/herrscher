@@ -319,6 +319,7 @@ func (h *hub) stopLive() {
 		cancel()
 	}
 	h.relaunches.Wait()
+	h.acceptFails.Wait()
 }
 
 func (h *hub) noteListened(session string) {
@@ -338,6 +339,7 @@ func (h *hub) closeAndRemoveSockets() error {
 	h.mu.Unlock()
 	h.lifecycle.Unlock()
 	h.relaunches.Wait()
+	h.acceptFails.Wait()
 	return removeSocketFiles(h.runtime, h.instanceID, sessions)
 }
 
@@ -369,6 +371,7 @@ func (h *hub) acceptFailed(name string, done <-chan struct{}, cause error) {
 	if !h.retireFailed(name, done) {
 		return
 	}
+	defer h.acceptFails.Done()
 	h.forget(name)
 	warnLive(h.warnings, h.sessionLanguageSource(name), "warn.session_accept_failed", map[string]any{nameParam: name, detailParam: cause})
 }
@@ -379,6 +382,7 @@ func (h *hub) retireFailed(name string, done <-chan struct{}) bool {
 	if _, ok := h.dropLocked(name, done); !ok {
 		return false
 	}
+	h.acceptFails.Add(1)
 	h.haltBridgeWithinGrace(name)
 	return true
 }

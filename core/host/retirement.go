@@ -21,6 +21,7 @@ func (h *hub) newBatch() retiredBatch {
 
 func (b retiredBatch) await(owner *hub) {
 	defer b.cancel()
+	owner.acceptFails.Wait()
 	owner.awaitRetired(b.window, b.retired)
 }
 

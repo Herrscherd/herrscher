@@ -68,6 +68,7 @@ type hub struct {
 	relaunching   map[string]struct{}
 	relaunchStop  chan struct{}
 	relaunches    sync.WaitGroup
+	acceptFails   sync.WaitGroup
 	seedBackend   func(context.Context, state.Session) (contracts.Backend, error)
 	models        *ModelDiscovery
 

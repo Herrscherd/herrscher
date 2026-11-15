@@ -13,7 +13,8 @@ capped() {
 }
 
 regenerated_copy=$(mktemp -d)
-trap 'rm -rf "$regenerated_copy"' EXIT
+lint_tools=$(mktemp -d)
+trap 'rm -rf "$regenerated_copy" "$lint_tools"' EXIT
 
 regenerated_from_scratch() {
 	cp -a . "$regenerated_copy"
@@ -39,11 +40,13 @@ no_dash_punctuation() {
 golangci_lint=github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 govulncheck=golang.org/x/vuln/cmd/govulncheck@v1.9.0
 
+GOBIN=$lint_tools capped go install "$golangci_lint"
 go mod tidy -diff
 go mod verify
 capped go run "$golangci_lint" fmt --diff
 capped go run "$golangci_lint" run --build-tags e2e ./...
 capped go run "$golangci_lint" run ./...
+GOOS=windows capped "$lint_tools/golangci-lint" run ./...
 go run ./tools/commentcheck .
 go run ./tools/i18ncheck .
 regenerated_from_scratch

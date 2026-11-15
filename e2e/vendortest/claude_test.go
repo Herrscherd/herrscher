@@ -238,14 +238,19 @@ func TestDescendantSleepArgMatchesItsDuration(t *testing.T) {
 	}
 }
 
+func healthProbeArgs() []string {
+	return []string{"-p", "Reply with the single word ok.", "--output-format", "json", "--model", "m", "--tools", "", "--strict-mcp-config", "--no-session-persistence"}
+}
+
 func TestOneShotConsumesNoTurnAndSpawnsNothing(t *testing.T) {
 	files := scriptFiles(t, "spawn descendant.pid\ntext Voici\n")
-	r, err := openReplay(files, []string{"-p", "ping"})
+	args := healthProbeArgs()
+	r, err := openReplay(files, args)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if callErr := r.oneShot(&out, healthProbePrompt); callErr != nil {
+	if callErr := r.oneShot(&out, args); callErr != nil {
 		t.Fatal(callErr)
 	}
 	if _, statErr := os.Stat(filepath.Join(filepath.Dir(files.Log), "descendant.pid")); !os.IsNotExist(statErr) {
@@ -260,46 +265,40 @@ func TestOneShotConsumesNoTurnAndSpawnsNothing(t *testing.T) {
 	}
 }
 
-func killRecordedDescendant(t *testing.T, pidPath string) {
-	t.Helper()
-	data, err := os.ReadFile(pidPath)
-	if err != nil {
-		return
-	}
-	pid, err := strconv.Atoi(string(data))
-	if err != nil {
-		return
-	}
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		t.Errorf("find the stray descendant %d: %v", pid, err)
-		return
-	}
-	if killErr := process.Kill(); killErr != nil && !errors.Is(killErr, os.ErrProcessDone) {
-		t.Errorf("kill the stray descendant %d: %v", pid, killErr)
+func TestHealthProbeIsRecognisedByItsArgv(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{"the backend probe", healthProbeArgs(), true},
+		{"a bare -p prompt", []string{"-p", "say ping please"}, false},
+		{"a -p prompt with tools only", []string{"-p", "say ping please", "--tools", ""}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isHealthProbe(tc.args); got != tc.want {
+				t.Fatalf("isHealthProbe(%q) = %v, want %v", tc.args, got, tc.want)
+			}
+		})
 	}
 }
 
-func TestOneShotRealPromptConsumesATurn(t *testing.T) {
-	files := scriptFiles(t, "spawn descendant.pid\ntext Voici\n---\ntext second\n")
-	r, err := openReplay(files, []string{"-p", "say ping please"})
+func TestOneShotRepliesWithTheTextOfTheTurn(t *testing.T) {
+	files := scriptFiles(t, "text Voici\ntext là\n")
+	args := []string{"-p", "say ping please"}
+	r, err := openReplay(files, args)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pidPath := filepath.Join(filepath.Dir(files.Log), "descendant.pid")
-	t.Cleanup(func() { killRecordedDescendant(t, pidPath) })
 	var out bytes.Buffer
-	if callErr := r.oneShot(&out, "say ping please"); callErr != nil {
+	if callErr := r.oneShot(&out, args); callErr != nil {
 		t.Fatal(callErr)
 	}
-	if _, statErr := os.Stat(pidPath); statErr != nil {
-		t.Fatalf("a real -p turn spawned no descendant: %v", statErr)
+	var reply event
+	if decodeErr := json.Unmarshal(out.Bytes(), &reply); decodeErr != nil {
+		t.Fatal(decodeErr)
 	}
-	turn, err := r.nextTurn()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(turn.steps) != 1 || turn.steps[0].text != "second" {
-		t.Fatalf("the real -p prompt did not consume turn 0: got %+v", turn)
+	if reply.Result != "Voici\n\nlà" {
+		t.Fatalf("got reply %q, want the text steps of the turn", reply.Result)
 	}
 }

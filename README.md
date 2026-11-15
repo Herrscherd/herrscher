@@ -1615,6 +1615,17 @@ Linux, and says it skips the step anywhere else.
   on the machine.
 - `waitdaemon` waits until the daemon of the scenario answers, and `! waitdaemon` until
   it is gone. `waitlog <regexp>` waits until the log of the fake vendor matches.
+- Runtime root: each scenario runs its daemon under its own runtime root, `$WORK/run`,
+  which the harness exports as `HERRSCHER_E2E_RUNTIME_ROOT`. The harness creates
+  `<root>/<uid>` with mode 0700, and the daemon creates its `herrscher` directory inside
+  it, so sockets, locks and the cleanup stay in the work directory. When that directory
+  would leave no room for a socket name within the 103-byte limit, the scenario takes a
+  short directory from `os.MkdirTemp` instead and removes it at the end. The binary is
+  built with `-tags e2e`: `core/internal/runtimedir/roots_e2e.go` reads the variable,
+  and `roots_production.go` (build tag `!e2e`) keeps `/run/user/<uid>` and `/tmp` for
+  every other build. The variable must be absolute. When it is missing, the daemon
+  targets a path that does not exist and fails, rather than fall back to the real
+  directory.
 - `herrscher serve` exits with status 130 on SIGINT, and testscript sends no other
   signal than SIGINT and SIGKILL, so a scenario starts it as
   `! exec herrscher serve &daemon&` and stops it with `kill -INT daemon`, `wait daemon`
@@ -1641,9 +1652,8 @@ Linux, and says it skips the step anywhere else.
   such a socket appears in a runtime directory during it, from this scenario or
   another herrscher of the machine, since both run as the same user and nothing tells
   their sockets apart. The socket stays there: shorten the session name, and remove
-  the socket only once no running herrscher holds it. Tests may not name the
-  production layout, so the two candidate runtime directories are written in the
-  harness, and the daemon scenarios fail when they drift because they find no socket.
+  the socket only once no running herrscher holds it. The harness looks for the
+  daemon of a scenario in that scenario's runtime root only (see below).
 - `claude` on the `PATH` of a scenario is the fake of `e2e/vendortest`. It is a whole
   process standing in for the vendor CLI, so it speaks the stream-json protocol rather
   than recording calls. In stream-json mode it replays `$VENDORTEST_SCRIPT`, which is
@@ -1658,9 +1668,12 @@ Linux, and says it skips the step anywhere else.
   the scenario, under a lock file beside it. A fake killed while it holds that lock
   leaves it behind, and the next turn fails after ten seconds with an error that names
   the lock. A turn past the end of the script, and a missing script, echo the last line
-  of the prompt as `echo: <line>`. A `-p` call answers the same way, but the health
-  probe's prompt, `Reply with the single word ok.` (as sent by herrscher-claude-backend
-  v0.15.6), consumes no turn and spawns nothing: any other `-p` call is a one-shot turn.
+  of the prompt as `echo: <line>`. A `-p` call is a one-shot turn: it consumes a turn and
+  runs its spawns, and it answers with the `text` steps of that turn joined by a blank
+  line, or with the `echo` line when the turn has no text. Its other steps (`tool`,
+  `error`, `apierror`, `hang`, `crash`) are ignored. The health probe is the exception:
+  it is recognised by its argv, `--tools` and `--no-session-persistence`, as
+  herrscher-claude-backend v0.15.6 sends it, and it consumes no turn and spawns nothing.
   The one-shot mode is reached with `herrscher session create --backend oneshot` or
   `herrscher bridge --backend oneshot`, not with `CLAUDE_KIND`, which the stream backend
   of a session overrides. Every start and every prompt is appended to `$VENDORTEST_LOG`.

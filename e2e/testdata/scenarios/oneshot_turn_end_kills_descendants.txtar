@@ -1,5 +1,6 @@
 exec herrscher session create --name oneshot --backend oneshot --cmd 'claude -p' --terminal_only
 exec herrscher session seed --name oneshot --task 'say ping please'
+stdout '"result":"Voici"'
 grep 'start -p' $WORK/claude.log
 ! grep 'stream-json' $WORK/claude.log
 grep 'say ping please' $WORK/claude.log
@@ -7,3 +8,4 @@ descendantgone $WORK/descendant.pid
 
 -- claude.script --
 spawn descendant.pid
+text Voici

@@ -54,7 +54,7 @@ func TestScenarios(t *testing.T) {
 func buildHerrscher(tb testing.TB) string {
 	tb.Helper()
 	binDir := tb.TempDir()
-	build := exec.CommandContext(tb.Context(), "go", "build", "-o", filepath.Join(binDir, "herrscher"), ".")
+	build := exec.CommandContext(tb.Context(), "go", "build", "-tags", "e2e", "-o", filepath.Join(binDir, "herrscher"), ".")
 	build.Dir = ".."
 	build.Env = append(os.Environ(), "CGO_ENABLED=0", "GOWORK=off")
 	if out, err := build.CombinedOutput(); err != nil {
@@ -67,6 +67,10 @@ const instanceEnv = "HERRSCHER_INSTANCE_ID"
 
 func isolate(env *testscript.Env, binDir string) error {
 	instance, err := newInstanceID()
+	if err != nil {
+		return err
+	}
+	root, err := scenarioRuntimeRoot(env)
 	if err != nil {
 		return err
 	}
@@ -92,6 +96,7 @@ func isolate(env *testscript.Env, binDir string) error {
 		"GIT_COMMITTER_NAME=e2e", "GIT_COMMITTER_EMAIL=e2e@example.invalid",
 		"INSTANCE=" + instance,
 		"REPO=" + repo,
+		runtimeRootEnv + "=" + root,
 	}, files.Environ()...)
 	for _, pair := range vars {
 		name, value, _ := strings.Cut(pair, "=")
@@ -101,27 +106,55 @@ func isolate(env *testscript.Env, binDir string) error {
 		return fmt.Errorf("git init: %w: %s", err, out)
 	}
 	env.Cd = repo
-	before, snapshotErr := hashedEntries()
+	before, snapshotErr := hashedEntries(root)
 	if snapshotErr != nil {
 		return snapshotErr
 	}
 	env.Defer(func() {
-		if err := settle(instance, before); err != nil {
+		if err := settle(root, instance, before); err != nil {
 			env.T().Fatal(err)
 		}
 	})
 	return nil
 }
 
+func scenarioRuntimeRoot(env *testscript.Env) (string, error) {
+	root := filepath.Join(env.WorkDir, "run")
+	if _, err := host.RuntimeAt(herrscherDir(root)); err != nil {
+		short, mkErr := os.MkdirTemp("", "hsr")
+		if mkErr != nil {
+			return "", mkErr
+		}
+		env.Defer(func() {
+			if rmErr := os.RemoveAll(short); rmErr != nil {
+				env.T().Fatal(rmErr)
+			}
+		})
+		root = short
+	}
+	if err := os.MkdirAll(userDirOf(root), 0o700); err != nil {
+		return "", err
+	}
+	return root, nil
+}
+
+func userDirOf(root string) string {
+	return filepath.Join(root, strconv.Itoa(os.Getuid()))
+}
+
+func herrscherDir(root string) string {
+	return filepath.Join(userDirOf(root), "herrscher")
+}
+
 var errLeaked = errors.New("processes outlived the scenario")
 
-func settle(instance string, before map[string]bool) error {
+func settle(root, instance string, before map[string]bool) error {
 	leaked, reapErr := reapInstance(instance, reapGrace)
 	if len(leaked) > 0 {
 		reapErr = errors.Join(reapErr, fmt.Errorf("%w: %s", errLeaked, strings.Join(leaked, "; ")))
 	}
-	removeErr := removeRuntimeEntries(instance)
-	return errors.Join(reapErr, removeErr, appearedHashed(before))
+	removeErr := removeRuntimeEntries(root, instance)
+	return errors.Join(reapErr, removeErr, appearedHashed(root, before))
 }
 
 var (
@@ -129,8 +162,8 @@ var (
 	hashedSocket   = regexp.MustCompile(`^hs-[0-9a-f]{24}\.sock$`)
 )
 
-func hashedEntries() (map[string]bool, error) {
-	return hashedEntriesIn(runtimeDirs())
+func hashedEntries(root string) (map[string]bool, error) {
+	return hashedEntriesIn(runtimeDirs(root))
 }
 
 func hashedEntriesIn(dirs []string) (map[string]bool, error) {
@@ -152,8 +185,8 @@ func hashedEntriesIn(dirs []string) (map[string]bool, error) {
 	return found, nil
 }
 
-func appearedHashed(before map[string]bool) error {
-	return appearedHashedIn(runtimeDirs(), before)
+func appearedHashed(root string, before map[string]bool) error {
+	return appearedHashedIn(runtimeDirs(root), before)
 }
 
 func appearedHashedIn(dirs []string, before map[string]bool) error {
@@ -182,14 +215,13 @@ func newInstanceID() (string, error) {
 }
 
 const (
-	userRuntimeRoot = "/run/user"
-	procRoot        = "/proc"
-	tmpRoot         = "/tmp"
+	runtimeRootEnv = "HERRSCHER_E2E_RUNTIME_ROOT"
+	procRoot       = "/proc"
+	tmpRoot        = "/tmp"
 )
 
-func runtimeDirs() []string {
-	uid := strconv.Itoa(os.Getuid())
-	return []string{filepath.Join(userRuntimeRoot, uid, "herrscher"), filepath.Join(tmpRoot, "herrscher-"+uid)}
+func runtimeDirs(root string) []string {
+	return []string{herrscherDir(root), filepath.Join(root, "herrscher-"+strconv.Itoa(os.Getuid()))}
 }
 
 type daemonEntries struct {
@@ -216,9 +248,9 @@ func (d daemonEntries) paths() []string {
 	return []string{d.command, d.events, d.lock}
 }
 
-func removeRuntimeEntries(instance string) error {
+func removeRuntimeEntries(root, instance string) error {
 	var failures []error
-	for _, dir := range runtimeDirs() {
+	for _, dir := range runtimeDirs(root) {
 		failures = append(failures, removeInstanceEntries(dir, instance)...)
 	}
 	return errors.Join(failures...)
@@ -256,8 +288,8 @@ func removeInstanceEntries(dir, instance string) []error {
 	return failures
 }
 
-func commandSocket(instance string) (string, error) {
-	for _, dir := range runtimeDirs() {
+func commandSocket(root, instance string) (string, error) {
+	for _, dir := range runtimeDirs(root) {
 		known, err := entriesOf(dir, instance)
 		if err != nil {
 			return "", err
@@ -279,8 +311,8 @@ var (
 	errNoLock   = errors.New("the daemon answers but its lock is not where the cleanup looks")
 )
 
-func lockBeside(instance string) error {
-	socket, err := commandSocket(instance)
+func lockBeside(root, instance string) error {
+	socket, err := commandSocket(root, instance)
 	if err != nil {
 		return err
 	}
@@ -300,12 +332,13 @@ func waitDaemon(ts *testscript.TestScript, neg bool, args []string) {
 	if len(args) != 0 {
 		ts.Fatalf("usage: [!] waitdaemon")
 	}
+	root := ts.Getenv(runtimeRootEnv)
 	instance := ts.Getenv(instanceEnv)
 	deadline := time.Now().Add(daemonWait)
 	for time.Now().Before(deadline) {
-		if answering(instance) != neg {
+		if answering(root, instance) != neg {
 			if !neg {
-				ts.Check(lockBeside(instance))
+				ts.Check(lockBeside(root, instance))
 			}
 			return
 		}
@@ -337,8 +370,8 @@ func instanceMarker(instance string) []byte {
 	return []byte(instanceEnv + "=" + instance + "\x00")
 }
 
-func answering(instance string) bool {
-	path, err := commandSocket(instance)
+func answering(root, instance string) bool {
+	path, err := commandSocket(root, instance)
 	if err != nil {
 		return false
 	}

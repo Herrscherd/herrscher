@@ -341,10 +341,14 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	return awaitHubStop(ctx, runningHub, sup, liveStopped, sockets, log)
 }
 
-func awaitHubStop(ctx context.Context, runningHub *hub, sup *supervisor.Supervisor, liveStopped, sockets <-chan struct{}, log *slog.Logger) error {
+type bridgeDrainer interface {
+	DrainBridges() error
+}
+
+func awaitHubStop(ctx context.Context, runningHub *hub, drainer bridgeDrainer, liveStopped, sockets <-chan struct{}, log *slog.Logger) error {
 	<-ctx.Done()
 	<-liveStopped
-	if err := sup.DrainBridges(); err != nil {
+	if err := drainer.DrainBridges(); err != nil {
 		log.Warn("bridge processes still stopping at shutdown", "err", err)
 	}
 	<-sockets

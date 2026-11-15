@@ -17,7 +17,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
-	"github.com/Herrscherd/herrscher/core/internal/health"
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -362,7 +361,7 @@ func TestTypedNilErrorParamRendersAsNil(t *testing.T) {
 	}
 }
 
-func TestGoLiveSessionsStaysSilentOnceTheHubIsClosed(t *testing.T) {
+func TestClosedHubReconcileOpensNoSessionQuietly(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	for _, name := range []string{"alpha", "beta"} {
 		if err := st.AddSession(state.Session{Name: name, Incarnation: name}); err != nil {
@@ -374,9 +373,15 @@ func TestGoLiveSessionsStaysSilentOnceTheHubIsClosed(t *testing.T) {
 	h.runtime = isolatedRuntimeDir(t)
 	h.instanceID = "t18"
 	h.stopLive()
-	goLiveSessions(context.Background(), h, nil, st, health.NewHealth(time.Now()))
+	t.Cleanup(h.stopLive)
+	h.reconcile(context.Background())
 	if printed.Len() != 0 {
 		t.Fatalf("a closed hub printed %q while its sessions were refused, want no warning", printed.String())
+	}
+	for _, name := range []string{"alpha", "beta"} {
+		if h.isLive(name) {
+			t.Fatalf("a closed hub brought session %s live", name)
+		}
 	}
 }
 
@@ -389,7 +394,7 @@ func TestSessionStartWarningFollowsTheSessionLanguage(t *testing.T) {
 	var printed bytes.Buffer
 	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(), withWarnings(&printed))
 	h.language = live.Get
-	goLiveSessions(context.Background(), h, nil, st, health.NewHealth(time.Now()))
+	h.reconcile(context.Background())
 	params := map[string]any{nameParam: "revue", detailParam: errNoRuntimeLayout}
 	want := newHostMessages().text(i18n.English, "warn.session_start", params)
 	french := newHostMessages().text(i18n.French, "warn.session_start", params)

@@ -16,7 +16,7 @@ import (
 
 func TestConnRoundTrip(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "rt.sock")
-	acc, err := control.Accept(t.Context(), sock)
+	acc, err := serveSocket(t.Context(), sock)
 	if err != nil {
 		t.Fatalf("Accept: %v", err)
 	}
@@ -59,7 +59,7 @@ func (stopError) Error() string { return "stop" }
 
 func TestConnConcurrentWrites(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "cw.sock")
-	acc, err := control.Accept(t.Context(), sock)
+	acc, err := serveSocket(t.Context(), sock)
 	if err != nil {
 		t.Fatalf("Accept: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestConnConcurrentWrites(t *testing.T) {
 
 func TestAcceptorYieldsSecondConnAfterFirstCloses(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "rc.sock")
-	acc, err := control.Accept(t.Context(), sock)
+	acc, err := serveSocket(t.Context(), sock)
 	if err != nil {
 		t.Fatalf("Accept: %v", err)
 	}

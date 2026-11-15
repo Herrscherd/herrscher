@@ -27,7 +27,7 @@ func TestCloseReleasesPendingConns(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			sock := filepath.Join(t.TempDir(), "p.sock")
-			acc, err := control.Accept(t.Context(), sock)
+			acc, err := serveSocket(t.Context(), sock)
 			if err != nil {
 				t.Fatalf("Accept: %v", err)
 			}

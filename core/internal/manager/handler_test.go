@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Herrscherd/herrscher/core/cli"
 
@@ -259,12 +260,13 @@ type fakeSup struct {
 	stopErrs         []error
 }
 
-func (f *fakeSup) Start(s state.Session) {
+func (f *fakeSup) StartWithin(s state.Session, _ time.Duration) error {
 	f.started = append(f.started, s.Name)
 	f.startedCmds = append(f.startedCmds, s.Cmd)
+	return nil
 }
 
-func (f *fakeSup) Stop(name string) error {
+func (f *fakeSup) StopWithin(name string, _ time.Duration) error {
 	f.stopped = append(f.stopped, name)
 	if len(f.stopErrs) > 0 {
 		err := f.stopErrs[0]
@@ -274,13 +276,12 @@ func (f *fakeSup) Stop(name string) error {
 	return nil
 }
 
-func (f *fakeSup) Restart(s state.Session) error {
+func (f *fakeSup) RestartWithin(s state.Session, grace time.Duration) error {
 	f.restarted = append(f.restarted, s)
-	if err := f.Stop(s.Name); err != nil {
+	if err := f.StopWithin(s.Name, grace); err != nil {
 		return err
 	}
-	f.Start(s)
-	return nil
+	return f.StartWithin(s, grace)
 }
 
 type fakeWT struct {

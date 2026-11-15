@@ -26,6 +26,11 @@ var (
 	errHostNotProvisioned = errors.New("not provisioned")
 )
 
+// ErrStillStopping means a bridge loop of a session has not returned within the
+// grace the caller allowed: a start was refused and no new bridge launched, or a
+// stop was reported unfinished while the loop keeps stopping in the background.
+var ErrStillStopping = errors.New("the previous bridge of this session is still stopping")
+
 // Supervisor manages one child `herrscher bridge` process per session.
 type Supervisor struct {
 	ctx              context.Context
@@ -215,62 +220,35 @@ func (s *Supervisor) SetBridgeEnv(kv []string) {
 // where the supervisor's job is to retry rather than to report. An error return
 // here would only be a nil every caller has to pretend to handle, which is what
 // it was, at six call sites, two of them with an unreachable error branch.
+//
+// When a loop of the same name is still stopping, Start waits without bound for
+// it to return before launching; StartWithin bounds that wait.
 func (s *Supervisor) Start(sess state.Session) {
-	s.StartWith(s.ctx, sess)
-}
-
-// StartWith is Start for a run that stops when ctx is done.
-func (s *Supervisor) StartWith(ctx context.Context, sess state.Session) {
-	for {
-		s.mu.Lock()
-		run, running := s.runs[sess.Name]
-		switch {
-		case !running:
-			cctx, cancel := context.WithCancel(ctx)
-			run = &supervisedRun{cancel: cancel, done: make(chan struct{})}
-			s.runs[sess.Name] = run
-			s.mu.Unlock()
-			go func() {
-				defer close(run.done)
-				s.run(cctx, sess)
-			}()
-			return
-		case !run.stopping:
-			s.mu.Unlock()
-			return
-		default:
-			s.mu.Unlock()
-			<-run.done
-			s.mu.Lock()
-			if s.runs[sess.Name] == run {
-				delete(s.runs, sess.Name)
-			}
-			s.mu.Unlock()
-		}
-	}
+	s.startWithin(s.ctx, sess, nil)
 }
 
 // Stop terminates the bridge for name and waits until its supervised loop has
 // returned. Callers may safely remove the bridge's working directory after Stop.
 func (s *Supervisor) Stop(name string) error {
+	return s.stopUntil(name, nil)
+}
+
+// Stopping returns the channel that closes when the loop held for name returns,
+// while that loop is still stopping. It returns nil when no loop is stopping for
+// name, including once the stop has finished.
+func (s *Supervisor) Stopping(name string) <-chan struct{} {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	run, ok := s.runs[name]
-	if !ok {
-		s.mu.Unlock()
+	if !ok || !run.stopping {
 		return nil
 	}
-	run.stopping = true
-	run.cancel()
-	s.mu.Unlock()
-
-	<-run.done
-
-	s.mu.Lock()
-	if s.runs[name] == run {
-		delete(s.runs, name)
+	select {
+	case <-run.done:
+		return nil
+	default:
+		return run.done
 	}
-	s.mu.Unlock()
-	return nil
 }
 
 // Running reports whether a supervised loop is currently held for name. It is

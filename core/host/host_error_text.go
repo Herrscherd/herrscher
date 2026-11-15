@@ -10,6 +10,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 	"github.com/Herrscherd/herrscher/core/usage"
 )
 
@@ -92,6 +93,7 @@ func hostErrorKeys() []hostErrorKey {
 		{errInstanceLocked, "cli.host.fault.instance_locked"},
 		{errNoRuntimeLayout, "cli.host.fault.no_runtime_dir"},
 		{errHubClosed, "cli.host.fault.hub_closed"},
+		{supervisor.ErrStillStopping, "cli.host.fault.still_stopping"},
 		{errEmptyShellCommand, "cli.host.fault.empty_shell_command"},
 		{errUnknownShellSession, "cli.host.fault.unknown_shell_session"},
 		{errRemoteShellSession, "cli.host.fault.remote_shell_session"},

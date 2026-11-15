@@ -3408,6 +3408,11 @@
     "other": "le démon s'arrête et ne démarre plus de session"
   },
   {
+    "id": "cli.host.fault.still_stopping",
+    "description": "L'ancien pont d'une session est encore en arrêt quand un nouveau démarrage le demande dans la grâce",
+    "other": "l'ancien pont de cette session est encore en arrêt"
+  },
+  {
     "id": "cli.host.fault.instance_locked",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (instance lock held by another daemon)",
     "other": "un autre démon détient déjà le verrou de cette instance : arrête-le ou passe --instance"

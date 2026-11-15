@@ -43,6 +43,11 @@ func (h *hub) reconcile(ctx context.Context) retiredBatch {
 	return batch
 }
 
+func (h *hub) startReconcile(ctx context.Context) error {
+	_, err := h.reconciling(ctx, func() (contracts.Result, error) { return contracts.Result{}, nil })
+	return err
+}
+
 func (h *hub) reconciling(ctx context.Context, run func() (contracts.Result, error)) (contracts.Result, error) {
 	out, batch, err := h.runThenReconcile(ctx, run)
 	batch.await(h)

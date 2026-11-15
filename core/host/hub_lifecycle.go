@@ -115,8 +115,8 @@ func (h *hub) retireLocked(name string, window teardownWindow) []retirement {
 	if !dropped {
 		return nil
 	}
-	h.haltBridgeWithin(name, window)
-	return []retirement{{name: name, live: live}}
+	halted := h.haltBridgeWithin(name, window)
+	return []retirement{{name: name, live: live, haltOverran: !halted}}
 }
 
 func (h *hub) forgetGoneRefusals() {

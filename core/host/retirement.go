@@ -3,8 +3,9 @@ package host
 import "context"
 
 type retirement struct {
-	name string
-	live liveSession
+	name        string
+	live        liveSession
+	haltOverran bool
 }
 
 type retiredBatch struct {
@@ -20,6 +21,9 @@ func (b retiredBatch) await(owner *hub) {
 
 func (h *hub) awaitRetired(window teardownWindow, retired []retirement) {
 	for _, retiree := range retired {
+		if retiree.haltOverran {
+			continue
+		}
 		h.awaitTeardown(retiree.name, retiree.live, window)
 	}
 }

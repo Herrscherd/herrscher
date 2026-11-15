@@ -11,6 +11,13 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
+type fakeCoordReader struct{ views map[string]CoordView }
+
+func (f fakeCoordReader) CoordinationView(name string) (CoordView, bool) {
+	v, ok := f.views[name]
+	return v, ok
+}
+
 func TestSessionListUsesGatewayChannelRef(t *testing.T) {
 	h, d, _, _, _, st := newTestHandler(t, "category")
 	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {

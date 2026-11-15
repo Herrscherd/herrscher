@@ -1,21 +1,14 @@
 package manager
 
-import (
-	"time"
-)
-
-const cloneTimeout = 10 * time.Minute
-
 const maxSessions = 64
 
 const sessionLogTranscriptCap = 200
 
 const (
-	nameParam       = "name"
-	terminalPlace   = "terminal"
-	categoryKind    = "category"
-	forumKind       = "forum"
-	nonNegativeHint = "use a non-negative integer"
+	nameParam     = "name"
+	terminalPlace = "terminal"
+	categoryKind  = "category"
+	forumKind     = "forum"
 )
 
 func (h *Handler) warnIfFailed(err error, action string) {

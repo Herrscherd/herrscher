@@ -10,6 +10,8 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
+const nonNegativeHint = "use a non-negative integer"
+
 type budgetCaps struct {
 	cost, cohortCost     float64
 	tokens, cohortTokens uint64

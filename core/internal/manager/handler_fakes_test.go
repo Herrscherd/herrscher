@@ -71,13 +71,6 @@ func (f *fakeChannelAdmin) Send(_ context.Context, channelID, content string) er
 
 func (f *fakeChannelAdmin) ChannelRef(id string) string { return "REF(" + id + ")" }
 
-type fakeCoordReader struct{ views map[string]CoordView }
-
-func (f fakeCoordReader) CoordinationView(name string) (CoordView, bool) {
-	v, ok := f.views[name]
-	return v, ok
-}
-
 type fakeSup struct {
 	started, stopped []string
 	startedCmds      []string

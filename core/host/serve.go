@@ -327,7 +327,7 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	sched := newScheduler(store, store, runningHub, sessions.Seed, time.Now)
 	deps.schedSlot.sched = sched
 	go sched.Run(ctx)
-	runningHub.reconcile(ctx)
+	runningHub.reconcile(ctx).await(runningHub)
 	monitor.SetSessions(len(store.SnapshotSessions()))
 	bindSessionControl(gws, runningHub)
 

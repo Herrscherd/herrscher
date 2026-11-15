@@ -238,11 +238,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 		return h.reg.Dispatch(ctx, args)
 	}
 
-	h.dispatchMu.Lock()
-	defer h.dispatchMu.Unlock()
-	out, err := h.reg.Dispatch(ctx, args)
-	h.reconcile(ctx)
-	return out, err
+	return h.reconciling(ctx, func() (contracts.Result, error) { return h.reg.Dispatch(ctx, args) })
 }
 
 func (h *hub) isContributedCommand(args []string) bool {
@@ -296,11 +292,9 @@ func (h *hub) create(ctx context.Context, spec contracts.CreateSession, vendor s
 	if spec.ConsolidateEvery != 0 {
 		args["consolidate_every"] = strconv.Itoa(spec.ConsolidateEvery)
 	}
-	h.dispatchMu.Lock()
-	defer h.dispatchMu.Unlock()
-	out, err := h.reg.Run(ctx, []string{nsSession, "create"}, contracts.Input{Args: args})
-	h.reconcile(ctx)
-	return out, err
+	return h.reconciling(ctx, func() (contracts.Result, error) {
+		return h.reg.Run(ctx, []string{nsSession, "create"}, contracts.Input{Args: args})
+	})
 }
 
 func (h *hub) Close(ctx context.Context, name string, force bool) (contracts.Result, error) {
@@ -308,11 +302,9 @@ func (h *hub) Close(ctx context.Context, name string, force bool) (contracts.Res
 	if force {
 		args["force"] = valueTrue
 	}
-	h.dispatchMu.Lock()
-	defer h.dispatchMu.Unlock()
-	out, err := h.reg.Run(ctx, []string{nsSession, "close"}, contracts.Input{Args: args})
-	h.reconcile(ctx)
-	return out, err
+	return h.reconciling(ctx, func() (contracts.Result, error) {
+		return h.reg.Run(ctx, []string{nsSession, "close"}, contracts.Input{Args: args})
+	})
 }
 
 func (h *hub) Sessions() []contracts.SessionInfo {

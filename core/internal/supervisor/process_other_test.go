@@ -142,8 +142,8 @@ func TestBridgeCancelKillsIgnoringHelperAfterGrace(t *testing.T) {
 	started := time.Now()
 	err := runBridgeHelperUntilCancel(t, bridgeHelperIgnore, marker)
 	elapsed := time.Since(started)
-	if elapsed < bridgeTermGrace {
-		t.Fatalf("helper was killed after %v, before the %v grace delay", elapsed, bridgeTermGrace)
+	if elapsed < BridgeTermGrace {
+		t.Fatalf("helper was killed after %v, before the %v grace delay", elapsed, BridgeTermGrace)
 	}
 	exitErr, ok := errors.AsType[*exec.ExitError](err)
 	if !ok {

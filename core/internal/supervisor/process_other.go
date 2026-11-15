@@ -7,10 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
-	"time"
 )
-
-const bridgeTermGrace = 3 * time.Second
 
 func configureBridgeCommand(cmd *exec.Cmd) {
 	cmd.Cancel = func() error {
@@ -19,5 +16,5 @@ func configureBridgeCommand(cmd *exec.Cmd) {
 		}
 		return cmd.Process.Signal(syscall.SIGTERM)
 	}
-	cmd.WaitDelay = bridgeTermGrace
+	cmd.WaitDelay = BridgeTermGrace
 }

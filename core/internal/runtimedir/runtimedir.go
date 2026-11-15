@@ -38,10 +38,6 @@ type searchRoots struct {
 	tmp     string
 }
 
-func productionRoots() searchRoots {
-	return searchRoots{runUser: "/run/user", tmp: "/tmp"}
-}
-
 // Layout is the private directory where one user's herrscher entries live.
 // The zero value is not usable; a Layout comes from Production or At.
 type Layout struct {

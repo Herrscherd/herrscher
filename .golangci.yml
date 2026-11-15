@@ -3,8 +3,6 @@ version: "2"
 run:
   go: "1.27"
   tests: true
-  build-tags:
-    - e2e
   relative-path-mode: gomod
 
 linters:

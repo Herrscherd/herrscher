@@ -3,18 +3,25 @@ package vendortest
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// DescendantSleep is how long a descendant started by spawn lives at most.
+const DescendantSleep = 60 * time.Second
+
+const descendantSleepArg = "60"
 
 const (
 	envScript = "VENDORTEST_SCRIPT"
@@ -67,7 +74,7 @@ func Claude(args []string, streams Streams, files Files) int {
 		return exitOf(streams.Err, err)
 	}
 	if !streamJSON(args) {
-		return exitOf(streams.Err, replay.oneShot(streams.Out, oneShotPrompt(args)))
+		return exitOf(streams.Err, replay.oneShot(streams.Out, args))
 	}
 	return replay.stream(streams)
 }
@@ -110,10 +117,11 @@ func flagValue(args []string, name string) string {
 }
 
 type replay struct {
-	script    Script
-	files     Files
-	sessionID string
-	toolCalls int
+	script      Script
+	files       Files
+	sessionID   string
+	toolCalls   int
+	descendants []*exec.Cmd
 }
 
 func openReplay(files Files, args []string) (*replay, error) {
@@ -274,7 +282,7 @@ func (r *replay) answer(out io.Writer, line []byte) (turnOutcome, error) {
 	if err := r.record("prompt " + strconv.Quote(prompt)); err != nil {
 		return 0, err
 	}
-	turn, err := r.nextTurn()
+	turn, err := r.beginTurn()
 	if err != nil {
 		return 0, err
 	}
@@ -317,11 +325,96 @@ func (r *replay) play(out io.Writer, turn Turn, prompt string) (turnOutcome, err
 	return outcomeAnswered, writeJSON(out, r.result(strings.Join(reply, "\n\n"), prompt))
 }
 
-func (r *replay) oneShot(out io.Writer, prompt string) error {
+func isHealthProbe(args []string) bool {
+	return slices.Contains(args, "--tools") && slices.Contains(args, "--no-session-persistence")
+}
+
+func (r *replay) oneShot(out io.Writer, args []string) error {
+	prompt := oneShotPrompt(args)
 	if err := r.record("prompt " + strconv.Quote(prompt)); err != nil {
 		return err
 	}
-	return writeJSON(out, r.result(echoPrefix+lastLine(prompt), prompt))
+	if isHealthProbe(args) {
+		return writeJSON(out, r.result(echoPrefix+lastLine(prompt), prompt))
+	}
+	turn, err := r.beginTurn()
+	if err != nil {
+		return err
+	}
+	return writeJSON(out, r.result(oneShotReply(turn, prompt), prompt))
+}
+
+func oneShotReply(turn Turn, prompt string) string {
+	var texts []string
+	for _, current := range turn.steps {
+		if current.kind == stepText {
+			texts = append(texts, current.text)
+		}
+	}
+	if len(texts) == 0 {
+		return echoPrefix + lastLine(prompt)
+	}
+	return strings.Join(texts, "\n\n")
+}
+
+func (r *replay) stopDescendants() error {
+	var failures []error
+	for _, child := range r.descendants {
+		if err := stopDescendant(child); err != nil {
+			failures = append(failures, err)
+		}
+	}
+	return errors.Join(failures...)
+}
+
+func stopDescendant(child *exec.Cmd) error {
+	if err := child.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		return err
+	}
+	if err := child.Wait(); err != nil {
+		if _, killed := errors.AsType[*exec.ExitError](err); !killed {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *replay) beginTurn() (Turn, error) {
+	turn, err := r.nextTurn()
+	if err != nil {
+		return Turn{}, err
+	}
+	if err := r.spawnDescendants(turn); err != nil {
+		return Turn{}, err
+	}
+	return turn, nil
+}
+
+var errNoLog = errors.New("spawn needs $VENDORTEST_LOG, which names a file in the work directory of the scenario")
+
+func (r *replay) spawnDescendants(turn Turn) error {
+	for _, pidFile := range turn.spawns {
+		if err := r.spawn(pidFile); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *replay) spawn(pidFile string) error {
+	if r.files.Log == "" {
+		return errNoLog
+	}
+	child := exec.CommandContext(context.Background(), "sleep", descendantSleepArg)
+	if err := child.Start(); err != nil {
+		return fmt.Errorf("cannot start the descendant: %w", err)
+	}
+	r.descendants = append(r.descendants, child)
+	pidPath := filepath.Join(filepath.Dir(r.files.Log), filepath.Base(pidFile))
+	if err := os.WriteFile(pidPath, []byte(strconv.Itoa(child.Process.Pid)), privateFile); err != nil {
+		return errors.Join(fmt.Errorf("cannot record the descendant: %w", err), child.Process.Kill())
+	}
+	return nil
 }
 
 func lastLine(text string) string {

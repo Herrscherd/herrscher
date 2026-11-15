@@ -42,6 +42,7 @@ govulncheck=golang.org/x/vuln/cmd/govulncheck@v1.9.0
 go mod tidy -diff
 go mod verify
 capped go run "$golangci_lint" fmt --diff
+capped go run "$golangci_lint" run --build-tags e2e ./...
 capped go run "$golangci_lint" run ./...
 go run ./tools/commentcheck .
 go run ./tools/i18ncheck .

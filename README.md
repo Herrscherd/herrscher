@@ -74,6 +74,9 @@ The claude backend retries only before the vendor has taken the turn, which an
 assistant or user line takes, and so does a system line of subtype init or
 api_retry: once it is taken, a stream that ends is a failed turn, with the text
 so far on stdout and no second attempt.
+On Unix, when a session closes or a one-shot turn returns, the claude backend kills the
+whole process group of the CLI, so a process the CLI started outlives it only if it left
+that group itself (setsid). On Windows the backend kills only the CLI process.
 
 A single unrecognised word stays a verb, so a typo is still a typo. Use `-p` to
 force a one-word task.
@@ -1612,10 +1615,29 @@ Linux, and says it skips the step anywhere else.
   on the machine.
 - `waitdaemon` waits until the daemon of the scenario answers, and `! waitdaemon` until
   it is gone. `waitlog <regexp>` waits until the log of the fake vendor matches.
+- Runtime root: each scenario runs its daemon under its own runtime root, `$WORK/run`,
+  which the harness exports as `HERRSCHER_E2E_RUNTIME_ROOT`. The harness creates
+  `<root>/<uid>` with mode 0700, and the daemon creates its `herrscher` directory inside
+  it, so sockets, locks and the cleanup stay in the work directory. When that directory
+  would leave no room for a socket name within the 103-byte limit, the scenario takes a
+  short directory from `os.MkdirTemp` instead and removes it at the end. The binary is
+  built with `-tags e2e`: `core/internal/runtimedir/roots_e2e.go` reads the variable,
+  and `roots_production.go` (build tag `!e2e`) keeps `/run/user/<uid>` and `/tmp` for
+  every other build. The variable must be absolute. When it is missing, the daemon
+  targets a path that does not exist and fails, rather than fall back to the real
+  directory.
 - `herrscher serve` exits with status 130 on SIGINT, and testscript sends no other
   signal than SIGINT and SIGKILL, so a scenario starts it as
   `! exec herrscher serve &daemon&` and stops it with `kill -INT daemon`, `wait daemon`
   then `! waitdaemon`.
+- `descendantgone <pid file>` waits up to five seconds for the `sleep` named in the file,
+  one the fake started with `spawn`, to be gone. It recognises that process by the
+  instance marker of the scenario and its exact argv, so a recycled pid does not pass,
+  and it fails the scenario if the process still runs. A pid whose environment or
+  command cannot be read fails the scenario too, instead of counting as gone. It fails
+  at once if the file is older than the sleep's sixty seconds less the five-second wait,
+  since the sleep may already have ended on its own. It kills that process at the end
+  of the scenario if it still runs. `! descendantgone` is refused.
 - These waits poll with a short sleep: they wait on other processes, which a
   `testing/synctest` bubble cannot control.
 - A process that still carries the instance of the scenario after it ends fails the
@@ -1630,22 +1652,31 @@ Linux, and says it skips the step anywhere else.
   such a socket appears in a runtime directory during it, from this scenario or
   another herrscher of the machine, since both run as the same user and nothing tells
   their sockets apart. The socket stays there: shorten the session name, and remove
-  the socket only once no running herrscher holds it. Tests may not name the
-  production layout, so the two candidate runtime directories are written in the
-  harness, and the daemon scenarios fail when they drift because they find no socket.
+  the socket only once no running herrscher holds it. The harness looks for the
+  daemon of a scenario in that scenario's runtime root only (see below).
 - `claude` on the `PATH` of a scenario is the fake of `e2e/vendortest`. It is a whole
   process standing in for the vendor CLI, so it speaks the stream-json protocol rather
   than recording calls. In stream-json mode it replays `$VENDORTEST_SCRIPT`, which is
   `$WORK/claude.script`: a `claude.script` file in the archive of the scenario
   provides it. The script holds one block per turn, separated by `---`, and each line
-  is one step: `text <words>`, `tool <Name> <json input>`, `error <message>`, `echo`,
-  `hang` or `crash`, the last three alone on their line. A turn with no step is an
-  error. The turn count is shared by every process of the scenario, under a lock file
-  beside it. A fake killed while it holds that lock leaves it behind, and the next
-  turn fails after ten seconds with an error that names the lock. A turn past the end
-  of the script, a missing script, and every one-shot `-p` call (the health probe)
-  echo the last line of the prompt as `echo: <line>`. Every start and every prompt is
-  appended to `$VENDORTEST_LOG`.
+  is one step: `text <words>`, `tool <Name> <json input>`, `error <message>`,
+  `apierror <message>`, `spawn <file>`, `echo`, `hang` or `crash`, the last three alone
+  on their line. `spawn` starts a `sleep` of sixty seconds (`DescendantSleep` in
+  `e2e/vendortest`) that the fake does not wait for, and writes its pid to `<file>` in
+  the work directory. Stream and one-shot turns run the spawns of their turn. A turn with
+  neither a step nor a spawn is an error. The turn count is shared by every process of
+  the scenario, under a lock file beside it. A fake killed while it holds that lock
+  leaves it behind, and the next turn fails after ten seconds with an error that names
+  the lock. A turn past the end of the script, and a missing script, echo the last line
+  of the prompt as `echo: <line>`. A `-p` call is a one-shot turn: it consumes a turn and
+  runs its spawns, and it answers with the `text` steps of that turn joined by a blank
+  line, or with the `echo` line when the turn has no text. Its other steps (`tool`,
+  `error`, `apierror`, `hang`, `crash`) are ignored. The health probe is the exception:
+  it is recognised by its argv, `--tools` and `--no-session-persistence`, as
+  herrscher-claude-backend v0.15.6 sends it, and it consumes no turn and spawns nothing.
+  The one-shot mode is reached with `herrscher session create --backend oneshot` or
+  `herrscher bridge --backend oneshot`, not with `CLAUDE_KIND`, which the stream backend
+  of a session overrides. Every start and every prompt is appended to `$VENDORTEST_LOG`.
 
 Every bug found by hand becomes a scenario before it is fixed: the scenario is written
 first, fails on the bug, and passes with the fix.

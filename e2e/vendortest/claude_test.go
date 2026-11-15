@@ -8,10 +8,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"testing/synctest"
+	"time"
 )
 
 type event struct {
@@ -220,5 +222,38 @@ func TestLockTurnsNamesAStaleLock(t *testing.T) {
 	locked, isLocked := errors.AsType[*turnsLockedError](err)
 	if !isLocked || locked.Lock != turns+".lock" {
 		t.Fatalf("got %v, want the stale lock named", err)
+	}
+}
+
+func TestSpawnRefusesToRunWithoutTheLogPath(t *testing.T) {
+	err := (&replay{}).spawn("descendant.pid")
+	if !errors.Is(err, errNoLog) {
+		t.Fatalf("got %v, want %v", err, errNoLog)
+	}
+}
+
+func TestDescendantSleepArgMatchesItsDuration(t *testing.T) {
+	if got := strconv.Itoa(int(DescendantSleep / time.Second)); got != descendantSleepArg {
+		t.Fatalf("the sleep argument %q does not match %v (%q)", descendantSleepArg, DescendantSleep, got)
+	}
+}
+
+func TestOneShotRepliesWithTheTextOfTheTurn(t *testing.T) {
+	files := scriptFiles(t, "text Voici\ntext là\n")
+	args := []string{"-p", "say ping please"}
+	r, err := openReplay(files, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if callErr := r.oneShot(&out, args); callErr != nil {
+		t.Fatal(callErr)
+	}
+	var reply event
+	if decodeErr := json.Unmarshal(out.Bytes(), &reply); decodeErr != nil {
+		t.Fatal(decodeErr)
+	}
+	if reply.Result != "Voici\n\nlà" {
+		t.Fatalf("got reply %q, want the text steps of the turn", reply.Result)
 	}
 }

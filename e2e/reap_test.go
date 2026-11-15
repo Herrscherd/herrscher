@@ -89,11 +89,12 @@ func TestSettleFailsOnALeakAndKillsIt(t *testing.T) {
 	if startErr := leaker.Start(); startErr != nil {
 		t.Fatal(startErr)
 	}
-	before, err := hashedEntries()
+	root := t.TempDir()
+	before, err := hashedEntries(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := settle(instance, before); !errors.Is(err, errLeaked) {
+	if err := settle(root, instance, before); !errors.Is(err, errLeaked) {
 		t.Fatalf("got %v, want the leak reported", err)
 	}
 	if waitErr := leaker.Wait(); waitErr == nil {

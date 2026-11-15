@@ -37,7 +37,8 @@ type step struct {
 
 // Turn is the scripted reply to one prompt.
 type Turn struct {
-	steps []step
+	steps  []step
+	spawns []string
 }
 
 // Script is the parsed list of turns, replayed in order.
@@ -63,9 +64,9 @@ func (e *LineError) Unwrap() error {
 }
 
 // ParseScript reads a script. Each line is one step: "text <words>", "tool
-// <Name> <json input>", "error <message>", "apierror <message>", "echo",
-// "hang" or "crash", the last three alone. Blank lines are skipped and a turn
-// with no step is refused.
+// <Name> <json input>", "error <message>", "apierror <message>", "spawn <file>",
+// "echo", "hang" or "crash", the last three alone. Blank lines are skipped and a
+// turn with no step is refused.
 func ParseScript(source io.Reader) (Script, error) {
 	var script Script
 	current := Turn{}
@@ -78,36 +79,60 @@ func ParseScript(source io.Reader) (Script, error) {
 		case "":
 			continue
 		case turnSeparator:
-			if len(current.steps) == 0 {
+			if current.empty() {
 				return Script{}, &LineError{Line: lineNo, Text: line, Err: errEmptyTurn}
 			}
 			script.turns = append(script.turns, current)
 			current = Turn{}
 			continue
 		}
-		parsed, err := parseStep(line)
-		if err != nil {
+		if err := current.add(line); err != nil {
 			return Script{}, &LineError{Line: lineNo, Text: line, Err: err}
 		}
-		current.steps = append(current.steps, parsed)
 	}
 	if err := scanner.Err(); err != nil {
 		return Script{}, fmt.Errorf("cannot read the script: %w", err)
 	}
-	if len(current.steps) > 0 {
+	if !current.empty() {
 		script.turns = append(script.turns, current)
 	}
 	return script, nil
 }
 
 var (
-	errUnknownStep  = errors.New("unknown step, want text, tool, error, apierror, echo, hang or crash")
+	errUnknownStep  = errors.New("unknown step, want text, tool, error, apierror, spawn, echo, hang or crash")
 	errToolNeedsArg = errors.New("tool wants a name and a JSON input")
 	errToolInput    = errors.New("tool input is not valid JSON")
 	errNeedsText    = errors.New("step wants text after its name")
+	errSpawnNoFile  = errors.New("spawn is missing the pid file to write, as in: spawn descendant.pid")
 	errTakesNoText  = errors.New("echo, hang and crash take nothing after their name")
-	errEmptyTurn    = errors.New("a turn needs at least one step before its separator")
+	errEmptyTurn    = errors.New("a turn needs at least one step or spawn before its separator")
 )
+
+func (t *Turn) add(line string) error {
+	name, rest := cutWord(line)
+	if name == "spawn" {
+		return t.addSpawn(rest)
+	}
+	parsed, err := parseStep(line)
+	if err != nil {
+		return err
+	}
+	t.steps = append(t.steps, parsed)
+	return nil
+}
+
+func (t *Turn) addSpawn(pidFile string) error {
+	if pidFile == "" {
+		return errSpawnNoFile
+	}
+	t.spawns = append(t.spawns, pidFile)
+	return nil
+}
+
+func (t *Turn) empty() bool {
+	return len(t.steps) == 0 && len(t.spawns) == 0
+}
 
 func parseStep(line string) (step, error) {
 	name, rest := cutWord(line)

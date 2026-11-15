@@ -56,44 +56,58 @@ func TestWarningSinkReportsHowManyWarningsItLostWhenTheWriterUnblocks(t *testing
 		{name: "french", lang: i18n.French},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			writer := newGatedWarnings("blocked")
-			sink := newWarningSink(writer, func(lost int) string {
-				return newHostMessages().text(c.lang, "warn.warnings_dropped", map[string]any{countParam: lost})
-			})
-			if _, err := sink.Write([]byte("blocked\n")); err != nil {
-				t.Fatal(err)
-			}
-			awaitGatedWrite(t, writer)
-			for i := range warningQueueLimit {
-				if _, err := sink.Write([]byte("item " + strconv.Itoa(i) + "\n")); err != nil {
-					t.Fatal(err)
-				}
-			}
-			const lost = 10
-			for range lost {
-				if _, err := sink.Write([]byte("overflow\n")); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if got := sink.droppedCount(); got != lost {
-				t.Fatalf("dropped %d warnings behind a full queue, want %d", got, lost)
-			}
-
-			writer.open()
-			h := &hub{teardownGrace: 10 * time.Second}
-			window, cancel := h.newGrace()
-			defer cancel()
-			if err := sink.Close(window); err != nil {
-				t.Fatalf("Close after the writer unblocked: %v", err)
-			}
-			want := newHostMessages().text(c.lang, "warn.warnings_dropped", map[string]any{countParam: lost}) + "\n"
-			if !strings.HasPrefix(writer.out.String(), "blocked\n"+want) {
-				t.Fatalf("the summary of the %d lost warnings does not follow the write that unblocked:\n%s", lost, writer.out.String())
-			}
-			if strings.Contains(writer.out.String(), "overflow") {
-				t.Fatal("a dropped warning reached the output")
-			}
+			assertLostSummaryFollowsUnblock(t, c.lang)
 		})
+	}
+}
+
+func assertLostSummaryFollowsUnblock(t *testing.T, lang i18n.Language) {
+	writer := newGatedWarnings("blocked")
+	sink := newWarningSink(writer, func(lost int) string {
+		return newHostMessages().text(lang, "warn.warnings_dropped", map[string]any{countParam: lost})
+	})
+	if _, err := sink.Write([]byte("blocked\n")); err != nil {
+		t.Fatal(err)
+	}
+	awaitGatedWrite(t, writer)
+	fillQueueBehindBlockedWrite(t, sink)
+	const lost = 10
+	writeOverflow(t, sink, lost)
+	if got := sink.droppedCount(); got != lost {
+		t.Fatalf("dropped %d warnings behind a full queue, want %d", got, lost)
+	}
+
+	writer.open()
+	h := &hub{teardownGrace: 10 * time.Second}
+	window, cancel := h.newGrace()
+	defer cancel()
+	if err := sink.Close(window); err != nil {
+		t.Fatalf("Close after the writer unblocked: %v", err)
+	}
+	want := newHostMessages().text(lang, "warn.warnings_dropped", map[string]any{countParam: lost}) + "\n"
+	if !strings.HasPrefix(writer.out.String(), "blocked\n"+want) {
+		t.Fatalf("the summary of the %d lost warnings does not follow the write that unblocked:\n%s", lost, writer.out.String())
+	}
+	if strings.Contains(writer.out.String(), "overflow") {
+		t.Fatal("a dropped warning reached the output")
+	}
+}
+
+func fillQueueBehindBlockedWrite(t *testing.T, sink *warningSink) {
+	t.Helper()
+	for i := range warningQueueLimit {
+		if _, err := sink.Write([]byte("item " + strconv.Itoa(i) + "\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func writeOverflow(t *testing.T, sink *warningSink, count int) {
+	t.Helper()
+	for range count {
+		if _, err := sink.Write([]byte("overflow\n")); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

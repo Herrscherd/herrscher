@@ -127,7 +127,7 @@ func (s *warningSink) clearStalled() {
 	s.stalled = false
 }
 
-func (s *warningSink) flush(window teardownWindow) (drained, graceExpired bool) {
+func (s *warningSink) flush(window teardownWindow) (bool, bool) {
 	s.mu.Lock()
 	if !s.writing {
 		s.mu.Unlock()

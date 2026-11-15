@@ -1,0 +1,10 @@
+exec herrscher --print 'say ping please'
+stdout '^Voici$'
+! stderr 'unexpected error'
+! stderr 'hub-socket'
+grep -count=2 '^prompt .*say ping please' $WORK/claude.log
+
+-- claude.script --
+crash
+---
+text Voici

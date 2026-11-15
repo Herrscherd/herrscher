@@ -67,7 +67,7 @@ func TestDecideStarToolAndEmptyPattern(t *testing.T) {
 
 func TestGlobCrossesSlashes(t *testing.T) {
 	p := Policy{{Deny, "Bash", "rm -rf *"}}
-	if d, _ := p.Decide(Request{Tool: "Bash", Subject: "rm -rf /home/shan/dev"}); d != Deny {
+	if d, _ := p.Decide(Request{Tool: "Bash", Subject: "rm -rf /home/ada/dev"}); d != Deny {
 		t.Fatalf("got %q, want deny: a glob must cross path separators", d)
 	}
 }

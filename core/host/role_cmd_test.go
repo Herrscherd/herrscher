@@ -100,17 +100,17 @@ func TestGrantTakesItsArgumentsBareOrAsFlags(t *testing.T) {
 
 func TestGrantStoresTheLabelAndListShowsIt(t *testing.T) {
 	reg, st := roleRegistry(t)
-	if _, err := reg.Dispatch(context.Background(), []string{"role", "grant", "--principal", "chat:1", "--role", "owner", "--label", "shan"}); err != nil {
+	if _, err := reg.Dispatch(context.Background(), []string{"role", "grant", "--principal", "chat:1", "--role", "owner", "--label", "ada"}); err != nil {
 		t.Fatal(err)
 	}
-	if got := st.RoleAssignments()["chat:1"].Label; got != "shan" {
-		t.Fatalf("label = %q, want shan", got)
+	if got := st.RoleAssignments()["chat:1"].Label; got != "ada" {
+		t.Fatalf("label = %q, want ada", got)
 	}
 	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"role", "list"}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"chat:1", "owner", "shan"} {
+	for _, want := range []string{"chat:1", "owner", "ada"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("role list %q must mention %q", out, want)
 		}

@@ -379,7 +379,7 @@ func TestRolesRoundTripThroughTheFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := st.SetRole("chat:1234", "owner", "shan")
+	first, err := st.SetRole("chat:1234", "owner", "ada")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -402,8 +402,8 @@ func TestRolesRoundTripThroughTheFile(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("RoleAssignments = %v, want two entries", got)
 	}
-	if got["chat:1234"].Role != "owner" || got["chat:1234"].Label != "shan" {
-		t.Fatalf("chat:1234 = %+v, want owner/shan", got["chat:1234"])
+	if got["chat:1234"].Role != "owner" || got["chat:1234"].Label != "ada" {
+		t.Fatalf("chat:1234 = %+v, want owner/ada", got["chat:1234"])
 	}
 	if got["chat:5678"].Label != "" {
 		t.Fatalf("chat:5678 label = %q, want empty", got["chat:5678"].Label)
@@ -415,7 +415,7 @@ func TestRoleNamesDropsTheLabel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.SetRole("chat:1234", "owner", "shan"); err != nil {
+	if _, err := st.SetRole("chat:1234", "owner", "ada"); err != nil {
 		t.Fatal(err)
 	}
 	names := st.RoleNames()

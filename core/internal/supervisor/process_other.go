@@ -1,15 +1,15 @@
 //go:build !windows
 
-// Package supervisor runs and supervises the bridge processes of herrscher sessions.
 package supervisor
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"syscall"
 )
 
-func configureBridgeCommand(cmd *exec.Cmd) {
+func configureBridgeCommand(_ context.Context, cmd *exec.Cmd) {
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
 			return os.ErrProcessDone

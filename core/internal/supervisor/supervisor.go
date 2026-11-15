@@ -331,7 +331,7 @@ func (s *Supervisor) bridgeCommand(ctx context.Context, sess state.Session) (*ex
 		args = append(args, "--state", s.statePath)
 	}
 	cmd := exec.CommandContext(ctx, s.selfBin, args...)
-	configureBridgeCommand(cmd)
+	configureBridgeCommand(ctx, cmd)
 	if dir := sess.Dir; dir != "" {
 		cmd.Dir = dir
 	} else if sess.Worktree != "" {

@@ -77,7 +77,7 @@ func runBridgeHelperUntilCancel(t *testing.T, role, markerPath string) error {
 
 	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestBridgeSignalHelper$")
 	cmd.Env = append(os.Environ(), bridgeHelperRoleEnv+"="+role, bridgeHelperMarkerEnv+"="+markerPath)
-	configureBridgeCommand(cmd)
+	configureBridgeCommand(ctx, cmd)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		t.Fatalf("stdout pipe: %v", err)

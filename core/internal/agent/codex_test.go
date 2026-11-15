@@ -6,7 +6,7 @@ import (
 )
 
 func TestRenderCodexMCP(t *testing.T) {
-	worktree := `C:\Users\Kara\Work Trees\session`
+	worktree := `C:\Users\Ada\Work Trees\session`
 	tests := []struct {
 		name    string
 		raw     string
@@ -28,11 +28,11 @@ func TestRenderCodexMCP(t *testing.T) {
 }`,
 			want: `[mcp_servers.roblox]
 command = "C:\\Program Files\\Roblox Tools\\mcp.exe"
-args = ["serve", "--project", "C:\\Users\\Kara\\Work Trees\\session"]
+args = ["serve", "--project", "C:\\Users\\Ada\\Work Trees\\session"]
 
 [mcp_servers.roblox.env]
 API_KEY = "value with spaces"
-Z_LAST = "C:\\Users\\Kara\\Work Trees\\session"
+Z_LAST = "C:\\Users\\Ada\\Work Trees\\session"
 
 [mcp_servers.zeta]
 command = "zeta"

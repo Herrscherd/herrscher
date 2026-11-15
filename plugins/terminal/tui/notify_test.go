@@ -303,10 +303,10 @@ func TestComposerPromptShowsDollarInShellMode(t *testing.T) {
 
 func retourFixtureSessions() []contracts.SessionInfo {
 	return []contracts.SessionInfo{
-		{Name: "tui-v2", ChannelID: "a", Vendor: "claude", Model: "claude-opus-5", Project: "herrscher", Dir: "/home/shan/dev/wt/tui-v2", Gateways: []string{"terminal", "discord"}},
-		{Name: "docs-site", ChannelID: "b", Vendor: "codex", Project: "herrscher", Dir: "/home/shan/dev/wt/docs-site", Gateways: []string{"terminal"}},
-		{Name: "gobook", ChannelID: "c", Vendor: "cursor", Project: "herrscher", Dir: "/home/shan/dev/wt/gobook", Gateways: []string{"terminal"}},
-		{Name: "review", ChannelID: "d", Vendor: "claude", Project: "herrscher", Dir: "/home/shan/dev/wt/review", Gateways: []string{"terminal"}},
+		{Name: "tui-v2", ChannelID: "a", Vendor: "claude", Model: "claude-opus-5", Project: "herrscher", Dir: "/home/ada/dev/wt/tui-v2", Gateways: []string{"terminal", "discord"}},
+		{Name: "docs-site", ChannelID: "b", Vendor: "codex", Project: "herrscher", Dir: "/home/ada/dev/wt/docs-site", Gateways: []string{"terminal"}},
+		{Name: "gobook", ChannelID: "c", Vendor: "cursor", Project: "herrscher", Dir: "/home/ada/dev/wt/gobook", Gateways: []string{"terminal"}},
+		{Name: "review", ChannelID: "d", Vendor: "claude", Project: "herrscher", Dir: "/home/ada/dev/wt/review", Gateways: []string{"terminal"}},
 	}
 }
 

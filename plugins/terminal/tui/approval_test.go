@@ -35,7 +35,7 @@ func approvalMenuEvent(t *testing.T, command string, roles ...string) contracts.
 
 func newApprovalModel(t *testing.T, width int, command string, roles ...string) (*model, *fakeBackend) {
 	t.Helper()
-	fb := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "work", ChannelID: "a", Project: "herrscher", Dir: "/home/shan/dev/wt/tui"}}}
+	fb := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "work", ChannelID: "a", Project: "herrscher", Dir: "/home/ada/dev/wt/tui"}}}
 	m := newModel(fb)
 	m.Update(tea.WindowSizeMsg{Width: width, Height: 40})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: approvalMenuEvent(t, command, roles...)})
@@ -202,7 +202,7 @@ func TestApprovalRendersAtEveryWidth(t *testing.T) {
 	long := "go test " + strings.Repeat("./plugins/terminal/tui/some/deep/path ", 6) + "END"
 	for _, width := range []int{60, 80, 120, 200} {
 		t.Run(fmt.Sprintf("%dcols", width), func(t *testing.T) {
-			fb := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "work", ChannelID: "a", Project: "herrscher", Dir: "/home/shan/dev/wt/tui"}}}
+			fb := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "work", ChannelID: "a", Project: "herrscher", Dir: "/home/ada/dev/wt/tui"}}}
 			m := newModel(fb)
 			m.Update(tea.WindowSizeMsg{Width: width, Height: 40})
 			m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventApprovalSubject, Value: testApprovalID, Text: "Bash(" + long + ")"}})
@@ -351,7 +351,7 @@ func TestApprovalRiskSentBeforeTheMenuIsShown(t *testing.T) {
 }
 
 func TestApprovalSubjectEventNamesTheToolWhenTheMenuIsFrench(t *testing.T) {
-	fb := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "work", ChannelID: "a", Project: "herrscher", Dir: "/home/shan/dev/wt/tui"}}}
+	fb := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "work", ChannelID: "a", Project: "herrscher", Dir: "/home/ada/dev/wt/tui"}}}
 	m := newModel(fb)
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	subject := contracts.Event{T: eventwire.EventApprovalSubject, Value: testApprovalID, Text: "Bash(go test ./...)"}
@@ -373,7 +373,7 @@ func TestApprovalSubjectEventNamesTheToolWhenTheMenuIsFrench(t *testing.T) {
 }
 
 func TestApprovalWithoutSubjectShowsTheFrenchPromptAsIs(t *testing.T) {
-	fb := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "work", ChannelID: "a", Project: "herrscher", Dir: "/home/shan/dev/wt/tui"}}}
+	fb := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "work", ChannelID: "a", Project: "herrscher", Dir: "/home/ada/dev/wt/tui"}}}
 	m := newModel(fb)
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	prompt := "autoriser Bash(go test ./...) ? (répondez avec `approve allow " + testApprovalID + "`, voir `approve allow --help`)"

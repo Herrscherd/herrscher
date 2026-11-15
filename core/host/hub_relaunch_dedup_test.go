@@ -43,7 +43,7 @@ func TestSettledStopStartsEachStuckSessionOnce(t *testing.T) {
 	}
 	stillStopping = false
 	close(settled)
-	h.relaunches.Wait()
+	<-h.relaunches.settled()
 	if got := starts.Load(); got != 1 {
 		t.Fatalf("the bridge was started %d times after its stop settled, want 1", got)
 	}

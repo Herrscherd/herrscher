@@ -63,11 +63,17 @@ func (h *hub) flushWarningsWithin(window teardownWindow) {
 	if h.sink == nil {
 		return
 	}
-	if _, graceExpired := h.sink.flush(window); graceExpired {
+	if !h.sink.flush(window) {
 		h.warnHubOverrun()
 	}
 }
 
 func (h *hub) warnHubOverrun() {
-	warnLive(h.warnings, h.textLanguage(), "warn.hub_teardown_overrun", map[string]any{graceParam: h.teardownGrace.String()})
+	lang := h.textLanguage()()
+	params := map[string]any{graceParam: h.teardownGrace.String()}
+	if h.sink == nil {
+		warnTo(h.warnings, lang, "warn.hub_teardown_overrun", params)
+		return
+	}
+	h.sink.announce(newHostMessages().text(lang, "warn.hub_teardown_overrun", params))
 }

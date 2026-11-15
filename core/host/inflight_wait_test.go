@@ -53,10 +53,6 @@ func (g *gatedWarnings) open() {
 	g.openOnce.Do(func() { close(g.release) })
 }
 
-func (f *inflight) Wait() {
-	<-f.settled()
-}
-
 func newInflightHub(t *testing.T, name string, grace time.Duration, warnings io.Writer) *hub {
 	t.Helper()
 	layout := isolatedRuntimeDir(t)

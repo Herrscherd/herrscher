@@ -14,12 +14,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
 
-type lifecycleWarning struct {
-	lang   i18n.Language
-	key    string
-	params map[string]any
-}
-
 type liveSession struct {
 	cancel   context.CancelFunc
 	done     <-chan struct{}
@@ -157,15 +151,23 @@ func (h *hub) journalStart(name string, err error) {
 }
 
 func (h *hub) deferWarning(lang i18n.Language, key string, params map[string]any) {
-	h.deferred = append(h.deferred, lifecycleWarning{lang: lang, key: key, params: params})
+	line := []byte(newHostMessages().text(lang, key, params) + "\n")
+	if h.sink == nil {
+		h.deferred = append(h.deferred, func() error {
+			_, err := warningWriter(h.warnings).Write(line)
+			return err
+		})
+		return
+	}
+	h.deferred = append(h.deferred, h.sink.Enqueue(line))
 }
 
 func (h *hub) releaseLifecycle() {
 	pending := h.deferred
 	h.deferred = nil
 	h.lifecycle.Unlock()
-	for _, w := range pending {
-		warnTo(h.warnings, w.lang, w.key, w.params)
+	for _, await := range pending {
+		logCleanup(await())
 	}
 }
 
@@ -368,7 +370,8 @@ func (h *hub) closeWarnings() {
 	}
 	window, cancel := h.newGrace()
 	defer cancel()
-	logCleanup(h.sink.Close(window))
+	h.flushWarningsWithin(window)
+	h.sink.Close()
 }
 
 func (h *hub) goDead(name string) {

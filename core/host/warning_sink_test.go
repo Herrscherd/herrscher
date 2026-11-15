@@ -1,6 +1,7 @@
 package host
 
 import (
+	"bytes"
 	"errors"
 	"strconv"
 	"strings"
@@ -82,8 +83,8 @@ func assertLostSummaryFollowsUnblock(t *testing.T, lang i18n.Language) {
 	h := &hub{teardownGrace: 10 * time.Second}
 	window, cancel := h.newGrace()
 	defer cancel()
-	if err := sink.Close(window); err != nil {
-		t.Fatalf("Close after the writer unblocked: %v", err)
+	if !sink.flush(window) {
+		t.Fatal("the sink did not drain once the writer unblocked")
 	}
 	want := newHostMessages().text(lang, "warn.warnings_dropped", map[string]any{countParam: lost}) + "\n"
 	if !strings.HasPrefix(writer.out.String(), "blocked\n"+want) {
@@ -91,6 +92,27 @@ func assertLostSummaryFollowsUnblock(t *testing.T, lang i18n.Language) {
 	}
 	if strings.Contains(writer.out.String(), "overflow") {
 		t.Fatal("a dropped warning reached the output")
+	}
+}
+
+func TestLostSummaryUsesTheSingularForOneWarning(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		lang i18n.Language
+		lost int
+		want string
+	}{
+		{name: "english one", lang: i18n.English, lost: 1, want: "herrscher serve: 1 warning lost"},
+		{name: "english many", lang: i18n.English, lost: 2, want: "herrscher serve: 2 warnings lost"},
+		{name: "french one", lang: i18n.French, lost: 1, want: "herrscher serve : 1 avertissement perdu"},
+		{name: "french many", lang: i18n.French, lost: 2, want: "herrscher serve : 2 avertissements perdus"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			got := newHostMessages().text(c.lang, "warn.warnings_dropped", map[string]any{countParam: c.lost})
+			if !strings.HasPrefix(got, c.want) {
+				t.Fatalf("summary of %d lost warnings = %q, want it to start with %q", c.lost, got, c.want)
+			}
+		})
 	}
 }
 
@@ -112,27 +134,37 @@ func writeOverflow(t *testing.T, sink *warningSink, count int) {
 	}
 }
 
-func TestWarningSinkRefusesWritesOnceClosed(t *testing.T) {
+func TestWarningSinkWritesAfterCloseReachTheOutput(t *testing.T) {
 	var out lockedBuffer
 	sink := newWarningSink(&out, englishLostLine)
 	if _, err := sink.Write([]byte("before\n")); err != nil {
 		t.Fatal(err)
 	}
-	h := &hub{teardownGrace: time.Second}
-	window, cancel := h.newGrace()
-	defer cancel()
-	if err := sink.Close(window); err != nil {
-		t.Fatalf("Close with an idle writer: %v", err)
+	sink.Close()
+	if _, err := sink.Write([]byte("after\n")); err != nil {
+		t.Fatalf("a write after Close returned %v, want it written", err)
 	}
-	if _, err := sink.Write([]byte("after\n")); !errors.Is(err, errWarningSinkClosed) {
-		t.Fatalf("a write after Close returned %v, want errWarningSinkClosed", err)
-	}
-	if got := out.String(); got != "before\n" {
-		t.Fatalf("output after Close = %q, want only the write before it", got)
+	if got := out.String(); got != "before\nafter\n" {
+		t.Fatalf("output after Close = %q, want the write before it then the write after it", got)
 	}
 }
 
-func TestWarningSinkCloseIsBoundedByAStalledWriter(t *testing.T) {
+func TestWarningSinkAfterCloseIsBoundedByAStalledWriter(t *testing.T) {
+	writer := newGatedWarnings("stuck")
+	t.Cleanup(writer.open)
+	sink := newWarningSink(writer, englishLostLine)
+	sink.Close()
+
+	started := time.Now()
+	if _, err := sink.Write([]byte("stuck\n")); !errors.Is(err, errWarningAbandoned) {
+		t.Fatalf("a write behind a stalled writer after Close returned %v, want errWarningAbandoned", err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("a write after Close held %v behind a stalled writer, want under 1s", elapsed.Round(time.Millisecond))
+	}
+}
+
+func TestWarningSinkFlushIsBoundedByAStalledWriter(t *testing.T) {
 	writer := newGatedWarnings("stuck")
 	t.Cleanup(writer.open)
 	sink := newWarningSink(writer, englishLostLine)
@@ -144,10 +176,53 @@ func TestWarningSinkCloseIsBoundedByAStalledWriter(t *testing.T) {
 	defer cancel()
 
 	started := time.Now()
-	if err := sink.Close(window); !errors.Is(err, errWarningsUndrained) {
-		t.Fatalf("Close behind a stalled writer returned %v, want errWarningsUndrained", err)
+	if sink.flush(window) {
+		t.Fatal("flush reported drained behind a stalled writer")
 	}
 	if elapsed := time.Since(started); elapsed > time.Second {
-		t.Fatalf("Close held %v behind a stalled writer with a 5s grace, want under 1s", elapsed.Round(time.Millisecond))
+		t.Fatalf("flush held %v behind a stalled writer with a 5s grace, want under 1s", elapsed.Round(time.Millisecond))
+	}
+}
+
+func TestWarningSinkCountsAnOversizedEntryAsLost(t *testing.T) {
+	var out lockedBuffer
+	sink := newWarningSink(&out, englishLostLine)
+	oversized := bytes.Repeat([]byte("x"), warningEntryBytes+1)
+	if _, err := sink.Write(oversized); err != nil {
+		t.Fatal(err)
+	}
+	if got := sink.droppedCount(); got != 1 {
+		t.Fatalf("dropped %d entries for one oversized warning, want 1", got)
+	}
+	if _, err := sink.Write([]byte("after\n")); err != nil {
+		t.Fatal(err)
+	}
+	if want := englishLostLine(1) + "\nafter\n"; out.String() != want {
+		t.Fatalf("output = %q, want the summary of the lost warning then the next one %q", out.String(), want)
+	}
+}
+
+func TestWarningSinkCountsAnEntryOverTheByteBudgetAsLost(t *testing.T) {
+	writer := newGatedWarnings("blocked")
+	t.Cleanup(writer.open)
+	sink := newWarningSink(writer, englishLostLine)
+	if _, err := sink.Write([]byte("blocked\n")); err != nil {
+		t.Fatal(err)
+	}
+	awaitGatedWrite(t, writer)
+	entry := bytes.Repeat([]byte("y"), warningEntryBytes)
+	for range warningQueueBytes / warningEntryBytes {
+		if _, err := sink.Write(entry); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := sink.droppedCount(); got != 0 {
+		t.Fatalf("dropped %d entries within the byte budget, want 0", got)
+	}
+	if _, err := sink.Write(entry); err != nil {
+		t.Fatal(err)
+	}
+	if got := sink.droppedCount(); got != 1 {
+		t.Fatalf("dropped %d entries past the byte budget, want 1", got)
 	}
 }

@@ -4,19 +4,19 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"log/slog"
 	"sync"
 	"time"
 )
 
 const (
 	warningQueueLimit  = 256
+	warningQueueBytes  = 256 << 10
+	warningEntryBytes  = 4 << 10
 	warningWriteBudget = 250 * time.Millisecond
 )
 
-var (
-	errWarningSinkClosed = errors.New("the warning sink is closed: the hub writes no more warnings")
-	errWarningsUndrained = errors.New("warnings were still waiting for their writer when the sink closed")
-)
+var errWarningAbandoned = errors.New("the warning writer stayed blocked: the warning was abandoned")
 
 type pendingWarning struct {
 	data    []byte
@@ -24,16 +24,17 @@ type pendingWarning struct {
 }
 
 type warningSink struct {
-	out      io.Writer
-	lostLine func(lost int) string
-	mu       sync.Mutex
-	queue    []pendingWarning
-	dropped  int
-	reported int
-	writing  bool
-	stalled  bool
-	closed   bool
-	idle     chan struct{}
+	out         io.Writer
+	lostLine    func(lost int) string
+	mu          sync.Mutex
+	queue       []pendingWarning
+	queuedBytes int
+	dropped     int
+	reported    int
+	writing     bool
+	stalled     bool
+	closed      bool
+	idle        chan struct{}
 }
 
 func newWarningSink(out io.Writer, lostLine func(lost int) string) *warningSink {
@@ -41,34 +42,43 @@ func newWarningSink(out io.Writer, lostLine func(lost int) string) *warningSink 
 }
 
 func (s *warningSink) Write(data []byte) (int, error) {
-	pending, mustWait, err := s.enqueue(data)
-	if err != nil {
+	if err := s.Enqueue(data)(); err != nil {
 		return 0, err
-	}
-	if mustWait {
-		s.awaitWritten(pending.written)
 	}
 	return len(data), nil
 }
 
-func (s *warningSink) enqueue(data []byte) (pendingWarning, bool, error) {
+func (s *warningSink) Enqueue(data []byte) func() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
-		return pendingWarning{}, false, errWarningSinkClosed
+		return func() error { return s.writeNow(data) }
 	}
-	if len(s.queue) >= warningQueueLimit {
+	if !s.fits(data) {
 		s.dropped++
-		return pendingWarning{}, false, nil
+		return nothingToAwait
 	}
 	pending := pendingWarning{data: bytes.Clone(data), written: make(chan struct{})}
 	s.queue = append(s.queue, pending)
+	s.queuedBytes += len(data)
 	if !s.writing {
 		s.writing = true
 		s.idle = make(chan struct{})
 		go s.drain()
 	}
-	return pending, !s.stalled, nil
+	if s.stalled {
+		return nothingToAwait
+	}
+	return func() error {
+		s.awaitWritten(pending.written)
+		return nil
+	}
+}
+
+func nothingToAwait() error { return nil }
+
+func (s *warningSink) fits(data []byte) bool {
+	return len(data) <= warningEntryBytes && len(s.queue) < warningQueueLimit && s.queuedBytes+len(data) <= warningQueueBytes
 }
 
 func (s *warningSink) awaitWritten(written <-chan struct{}) {
@@ -116,6 +126,7 @@ func (s *warningSink) takeNext() (pendingWarning, int, bool) {
 	}
 	next := s.queue[0]
 	s.queue = s.queue[1:]
+	s.queuedBytes -= len(next.data)
 	lost := s.dropped - s.reported
 	s.reported = s.dropped
 	return next, lost, true
@@ -127,22 +138,19 @@ func (s *warningSink) clearStalled() {
 	s.stalled = false
 }
 
-func (s *warningSink) flush(window teardownWindow) (bool, bool) {
+func (s *warningSink) flush(window teardownWindow) bool {
 	s.mu.Lock()
 	if !s.writing {
 		s.mu.Unlock()
-		return true, false
+		return true
 	}
 	idle := s.idle
 	stalled := s.stalled
 	s.mu.Unlock()
 	if stalled {
-		return waitWithin(idle, warningWriteBudget), false
+		return waitWithin(idle, warningWriteBudget)
 	}
-	if window.finished(idle) {
-		return true, false
-	}
-	return false, true
+	return window.finished(idle)
 }
 
 func waitWithin(done <-chan struct{}, budget time.Duration) bool {
@@ -156,14 +164,31 @@ func waitWithin(done <-chan struct{}, budget time.Duration) bool {
 	}
 }
 
-func (s *warningSink) Close(window teardownWindow) error {
+func (s *warningSink) Close() {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.closed = true
-	s.mu.Unlock()
-	if drained, _ := s.flush(window); !drained {
-		return errWarningsUndrained
+}
+
+func (s *warningSink) announce(text string) {
+	logCleanup(s.writeNow([]byte(text + "\n")))
+}
+
+func (s *warningSink) writeNow(data []byte) error {
+	written := make(chan error, 1)
+	go func() {
+		_, err := warningWriter(s.out).Write(data)
+		written <- err
+	}()
+	timer := time.NewTimer(warningWriteBudget)
+	defer timer.Stop()
+	select {
+	case err := <-written:
+		return err
+	case <-timer.C:
+		slog.Warn("a warning was abandoned because its writer stayed blocked", "budget", warningWriteBudget)
+		return errWarningAbandoned
 	}
-	return nil
 }
 
 func (s *warningSink) droppedCount() int {

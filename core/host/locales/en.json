@@ -602,6 +602,7 @@
   {
     "id": "warn.warnings_dropped",
     "description": "A summary line: Count warnings were dropped while the output was blocked, written once it unblocks",
+    "one": "herrscher serve: 1 warning lost while the output was blocked",
     "other": "herrscher serve: {{.Count}} warnings lost while the output was blocked"
   },
   {

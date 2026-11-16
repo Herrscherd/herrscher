@@ -290,49 +290,73 @@ func (r *replay) answer(streams Streams, line []byte) (turnOutcome, error) {
 	return r.play(streams, turn, prompt)
 }
 
+type turnState struct {
+	reply   []string
+	decided *verdict
+}
+
 func (r *replay) play(streams Streams, turn Turn, prompt string) (turnOutcome, error) {
-	var reply []string
-	var decided *verdict
+	var state turnState
 	for _, current := range turn.steps {
-		switch current.kind {
-		case stepHang:
-			return outcomeHung, nil
-		case stepCrash:
-			return outcomeCrashed, nil
-		case stepFail:
-			return outcomeAnswered, writeJSON(streams.Out, r.failure(current.text, prompt))
-		case stepAPIError:
-			if err := writeJSON(streams.Out, apiErrorText(current.text)); err != nil {
-				return 0, err
-			}
-			return outcomeAnswered, writeJSON(streams.Out, r.failure(current.text, prompt))
-		case stepEcho:
-			text := echoPrefix + lastLine(prompt)
-			reply = append(reply, text)
-			if err := writeJSON(streams.Out, assistantText(text)); err != nil {
-				return 0, err
-			}
-		case stepText:
-			reply = append(reply, current.text)
-			if err := writeJSON(streams.Out, assistantText(current.text)); err != nil {
-				return 0, err
-			}
-		case stepTool:
-			outcome, err := r.callTool(streams, current)
-			if err != nil {
-				return 0, err
-			}
-			decided = &outcome
-		case stepExpect:
-			if err := expectation(decided, current.text); err != nil {
-				if logErr := r.record("failed: " + err.Error()); logErr != nil {
-					return 0, logErr
-				}
-				return outcomeAnswered, writeJSON(streams.Out, r.failure(err.Error(), prompt))
-			}
+		outcome, finished, err := r.runStep(streams, current, prompt, &state)
+		if err != nil {
+			return 0, err
+		}
+		if finished {
+			return outcome, nil
 		}
 	}
-	return outcomeAnswered, writeJSON(streams.Out, r.result(strings.Join(reply, "\n\n"), prompt))
+	return outcomeAnswered, writeJSON(streams.Out, r.result(strings.Join(state.reply, "\n\n"), prompt))
+}
+
+func (r *replay) runStep(streams Streams, current step, prompt string, state *turnState) (turnOutcome, bool, error) {
+	switch current.kind {
+	case stepHang:
+		return outcomeHung, true, nil
+	case stepCrash:
+		return outcomeCrashed, true, nil
+	case stepFail:
+		return outcomeAnswered, true, writeJSON(streams.Out, r.failure(current.text, prompt))
+	case stepAPIError:
+		return r.apiError(streams.Out, current.text, prompt)
+	case stepEcho:
+		return say(streams.Out, state, echoPrefix+lastLine(prompt))
+	case stepText:
+		return say(streams.Out, state, current.text)
+	case stepTool:
+		outcome, err := r.callTool(streams, current)
+		if err != nil {
+			return 0, false, err
+		}
+		state.decided = &outcome
+		return outcomeAnswered, false, nil
+	case stepExpect:
+		return r.judge(streams.Out, state.decided, current.text, prompt)
+	}
+	return outcomeAnswered, false, nil
+}
+
+func (r *replay) apiError(out io.Writer, text, prompt string) (turnOutcome, bool, error) {
+	if err := writeJSON(out, apiErrorText(text)); err != nil {
+		return 0, true, err
+	}
+	return outcomeAnswered, true, writeJSON(out, r.failure(text, prompt))
+}
+
+func say(out io.Writer, state *turnState, text string) (turnOutcome, bool, error) {
+	state.reply = append(state.reply, text)
+	return outcomeAnswered, false, writeJSON(out, assistantText(text))
+}
+
+func (r *replay) judge(out io.Writer, decided *verdict, want, prompt string) (turnOutcome, bool, error) {
+	err := expectation(decided, want)
+	if err == nil {
+		return outcomeAnswered, false, nil
+	}
+	if logErr := r.record("failed: " + err.Error()); logErr != nil {
+		return 0, true, logErr
+	}
+	return outcomeAnswered, true, writeJSON(out, r.failure(err.Error(), prompt))
 }
 
 func (r *replay) callTool(streams Streams, tool step) (verdict, error) {
@@ -352,18 +376,18 @@ func (r *replay) callTool(streams Streams, tool step) (verdict, error) {
 }
 
 func (r *replay) settle(out io.Writer, call int, outcome verdict) error {
-	id := toolUseID(call)
-	if err := r.record(outcomeLine(id, outcome)); err != nil {
+	callID := toolUseID(call)
+	if err := r.record(outcomeLine(callID, outcome)); err != nil {
 		return err
 	}
-	return writeJSON(out, toolResultOf(id, outcome))
+	return writeJSON(out, toolResultOf(callID, outcome))
 }
 
-func outcomeLine(id string, outcome verdict) string {
+func outcomeLine(callID string, outcome verdict) string {
 	if outcome.allowed {
-		return "result " + id + " " + wordAllowed
+		return "result " + callID + " " + wordAllowed
 	}
-	return "result " + id + " " + wordDenied + ": " + outcome.reason
+	return "result " + callID + " " + wordDenied + ": " + outcome.reason
 }
 
 func isHealthProbe(args []string) bool {

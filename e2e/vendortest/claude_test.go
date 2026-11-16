@@ -88,11 +88,13 @@ func summary(events []event) []string {
 	for _, e := range events {
 		switch e.Type {
 		case "assistant":
-			for _, block := range e.Message.Content {
+			for index := range e.Message.Content {
+				block := &e.Message.Content[index]
 				got = append(got, block.Type+":"+block.Text+block.Name+block.ID+string(block.Input))
 			}
 		case "user":
-			for _, block := range e.Message.Content {
+			for index := range e.Message.Content {
+				block := &e.Message.Content[index]
 				got = append(got, fmt.Sprintf("%s:%s:%t:%s", block.Type, block.ToolUseID, block.IsError, block.Content))
 			}
 		case "result":

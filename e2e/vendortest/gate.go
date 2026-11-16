@@ -21,7 +21,9 @@ const (
 	hookShellScript = `eval "$VENDORTEST_HOOK"`
 )
 
-var settingsPaths = []string{".claude/settings.json", ".claude/settings.local.json"}
+func settingsPaths() []string {
+	return []string{".claude/settings.json", ".claude/settings.local.json"}
+}
 
 var (
 	errHookFailed    = errors.New("the hook failed")
@@ -88,7 +90,7 @@ func preToolUseCommands() ([]string, error) {
 		return nil, fmt.Errorf("cannot find the work directory: %w", err)
 	}
 	var commands []string
-	for _, name := range settingsPaths {
+	for _, name := range settingsPaths() {
 		found, err := hooksIn(filepath.Clean(filepath.Join(workdir, name)))
 		if err != nil {
 			return nil, err
@@ -99,7 +101,7 @@ func preToolUseCommands() ([]string, error) {
 }
 
 func hooksIn(path string) ([]string, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}

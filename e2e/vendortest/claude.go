@@ -358,7 +358,7 @@ func apiErrorText(text string) assistantEvent {
 
 func assistantTool(call int, tool step) assistantEvent {
 	event := assistantEvent{Type: wordAssistant}
-	event.Message.Content = []contentBlock{{Type: "tool_use", ID: "toolu_" + strconv.Itoa(call), Name: tool.tool, Input: tool.input}}
+	event.Message.Content = []contentBlock{{Type: valueToolUse, ID: "toolu_" + strconv.Itoa(call), Name: tool.tool, Input: tool.input}}
 	return event
 }
 
@@ -392,7 +392,7 @@ const charsPerToken = 4
 
 func (r *replay) fields(subtype string, isError bool, prompt, text string) resultFields {
 	return resultFields{
-		Type:      "result",
+		Type:      wordResult,
 		Subtype:   subtype,
 		IsError:   isError,
 		SessionID: r.sessionID,
@@ -401,11 +401,11 @@ func (r *replay) fields(subtype string, isError bool, prompt, text string) resul
 }
 
 func (r *replay) result(text, prompt string) resultEvent {
-	return resultEvent{resultFields: r.fields("success", false, prompt, text), Result: text}
+	return resultEvent{resultFields: r.fields(valueSuccess, false, prompt, text), Result: text}
 }
 
 func (r *replay) failure(text, prompt string) failedResultEvent {
-	return failedResultEvent{resultFields: r.fields("error_during_execution", true, prompt, text), Errors: []string{text}}
+	return failedResultEvent{resultFields: r.fields(valueErrorDuringExecute, true, prompt, text), Errors: []string{text}}
 }
 
 func writeJSON(out io.Writer, event any) error {

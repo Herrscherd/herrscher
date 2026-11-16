@@ -99,7 +99,7 @@ func (v *vendor) handleRPC(out io.Writer, line []byte) error {
 		return fmt.Errorf("cannot decode a request: %w", err)
 	}
 	switch message.Method {
-	case "thread/start", "thread/resume":
+	case methodThreadStart, methodThreadResume:
 		return respondThread(out, message)
 	case methodTurnStart:
 		return v.startTurn(out, message)
@@ -119,7 +119,7 @@ func respondThread(out io.Writer, message rpcMessage) error {
 	if threadID == "" {
 		threadID = codexThreadID
 	}
-	return writeJSON(out, rpcResponse{ID: message.ID, Result: map[string]any{"thread": map[string]any{keyID: threadID}}})
+	return writeJSON(out, rpcResponse{ID: message.ID, Result: map[string]any{keyThread: map[string]any{keyID: threadID}}})
 }
 
 func decodeParams(raw json.RawMessage, into any) error {

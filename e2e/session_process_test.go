@@ -39,7 +39,7 @@ func sessionStopped(ts *testscript.TestScript, neg bool, args []string) {
 }
 
 func sessionProcesses(ts *testscript.TestScript, session, vendorCommand string) []int {
-	pids, err := processesWith(instanceMarker(ts.Getenv(instanceEnv)))
+	pids, err := processesIn(procRoot, instanceEntry(ts.Getenv(instanceEnv)))
 	ts.Check(err)
 	sessionFlag := " --session " + session + " "
 	commandFlag := " --cmd " + vendorCommand + " "

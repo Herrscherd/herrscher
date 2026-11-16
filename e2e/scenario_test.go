@@ -158,7 +158,7 @@ var (
 )
 
 func settle(root, instance string, before map[string]bool) error {
-	stopped, survivors, reapErr := reapInstance(instance, reapGrace)
+	stopped, survivors, reapErr := reapInstance(procRoot, instance, reapGrace)
 	var stoppedErr, leakErr error
 	if len(stopped) > 0 {
 		stoppedErr = fmt.Errorf("%w: %s", errStopped, strings.Join(stopped, "; "))

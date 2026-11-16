@@ -12,13 +12,22 @@ const (
 )
 
 const (
-	valueText      = "text"
-	valueError     = "error"
-	valueFailed    = "failed"
-	valueCompleted = "completed"
+	valueText               = "text"
+	valueError              = "error"
+	valueFailed             = "failed"
+	valueCompleted          = "completed"
+	valueSuccess            = "success"
+	valueToolUse            = "tool_use"
+	valueErrorDuringExecute = "error_during_execution"
 )
 
 const (
+	methodThreadStart  = "thread/start"
+	methodThreadResume = "thread/resume"
+)
+
+const (
+	keyThread   = "thread"
 	keyThreadID = "threadId"
 	keyTurnID   = "turnId"
 	keyItem     = "item"

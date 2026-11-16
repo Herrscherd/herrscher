@@ -110,6 +110,7 @@ func TestClaudeReplaysEachStep(t *testing.T) {
 		{"text", "text hi\ntext there", []string{"go"}, 0, []string{"text:hi", "text:there", "result:hi\n\nthere"}},
 		{"tool", "tool Bash {\"command\":\"ls\"}\ntext done", []string{"go"}, 0, []string{"tool_use:Bashtoolu_1{\"command\":\"ls\"}", "text:done", "result:done"}},
 		{"error", "error quota exhausted", []string{"go"}, 0, []string{"failed:quota exhausted"}},
+		{"error after text", "text partial\nerror boom", []string{"go"}, 0, []string{"text:partial", "failed:boom"}},
 		{"echo past the end", "", []string{"first line\nlast line"}, 0, []string{"text:echo: last line", "result:echo: last line"}},
 		{"crash", "text partial\ncrash", []string{"go"}, exitFailure, []string{"text:partial"}},
 	} {

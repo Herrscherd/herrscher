@@ -31,7 +31,7 @@ func TestReapInstanceKillsAndNamesWhatCarriesTheInstance(t *testing.T) {
 			t.Fatal(startErr)
 		}
 	}
-	stopped, survivors, err := reapInstance(instance, reapGrace)
+	stopped, survivors, err := reapInstance(procRoot, instance, reapGrace)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestReapInstanceGivesASurvivorTheGraceBeforeSIGKILL(t *testing.T) {
 	}
 	survivor := ignoringINT(t, instance)
 	started := time.Now()
-	stopped, survivors, err := reapInstance(instance, reapGrace)
+	stopped, survivors, err := reapInstance(procRoot, instance, reapGrace)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,10 +133,10 @@ func TestProcessesInReportsAnUnreadableEnvironment(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "7", "environ"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := processesIn(root, []byte("x")); !errors.Is(err, syscall.EISDIR) {
+	if _, err := processesIn(root, "x"); !errors.Is(err, syscall.EISDIR) {
 		t.Fatalf("got %v, want the read failure", err)
 	}
-	if _, err := processesIn(filepath.Join(root, "missing"), []byte("x")); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := processesIn(filepath.Join(root, "missing"), "x"); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("got %v, want the listing failure", err)
 	}
 }
@@ -346,7 +346,7 @@ func TestReapInstanceHonorsAGraceOtherThanTheDefault(t *testing.T) {
 	survivor := ignoringINT(t, instance)
 	grace := 300 * time.Millisecond
 	started := time.Now()
-	stopped, survivors, err := reapInstance(instance, grace)
+	stopped, survivors, err := reapInstance(procRoot, instance, grace)
 	if err != nil {
 		t.Fatal(err)
 	}

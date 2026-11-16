@@ -27,7 +27,7 @@ func Cursor(args []string, streams Streams, files Files) int {
 	if slices.Contains(args, flagVersion) {
 		return exitOf(streams.Err, writeLine(streams.Out, cursorVersion))
 	}
-	if len(args) > 0 && args[0] == wordStatus {
+	if isStatusProbe(args) {
 		return exitOf(streams.Err, writeLine(streams.Out, cursorStatusLine))
 	}
 	if !slices.Contains(args, cursorStreamFormat) {
@@ -92,5 +92,9 @@ func (v *vendor) cursorTurn(out io.Writer, resume, prompt string) error {
 	if reply.failed {
 		return writeJSON(out, cursorResult{Type: wordResult, Subtype: valueError, SessionID: sessionID, IsError: true, Result: reply.failure})
 	}
-	return writeJSON(out, cursorResult{Type: wordResult, Subtype: "success", SessionID: sessionID, Result: reply.text})
+	return writeJSON(out, cursorResult{Type: wordResult, Subtype: valueSuccess, SessionID: sessionID, Result: reply.text})
+}
+
+func isStatusProbe(args []string) bool {
+	return len(args) > 0 && args[0] == wordStatus
 }

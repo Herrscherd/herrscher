@@ -3,121 +3,273 @@
 package e2e_test
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 const procRoot = "/proc"
 
-func instanceMarker(instance string) []byte {
-	return []byte(instanceEnv + "=" + instance + "\x00")
+const (
+	reapGrace = 5 * time.Second
+	pollEvery = 100 * time.Millisecond
+)
+
+var instanceIDPattern = regexp.MustCompile(`^e2e-[0-9a-f]{8}$`)
+
+func instanceEntry(instance string) string {
+	return instanceEnv + "=" + instance
 }
 
-const reapGrace = 5 * time.Second
-
-func reapInstance(instance string, grace time.Duration) ([]string, []string, error) {
-	marker := instanceMarker(instance)
-	found, err := processesWith(marker)
+func reapInstance(root, instance string, grace time.Duration) ([]string, []string, error) {
+	if !instanceIDPattern.MatchString(instance) {
+		return nil, nil, fmt.Errorf("refusing to reap %q: it is not an instance id", instance)
+	}
+	entry := instanceEntry(instance)
+	found, err := processesIn(root, entry)
 	if err != nil || len(found) == 0 {
 		return nil, nil, err
 	}
-	names := make(map[int]string, len(found))
+	set := newPinSet(entry)
+	stopped, survivors, reapErr := reapPinned(root, set, found, grace)
+	return stopped, survivors, errors.Join(reapErr, set.close())
+}
+
+func reapPinned(root string, set *pinSet, found []int, grace time.Duration) ([]string, []string, error) {
 	for _, pid := range found {
-		names[pid] = describe(pid)
-	}
-	interruptErr := signalAll(found, syscall.SIGINT)
-	remaining, waitErr := awaitGone(marker, grace)
-	if waitErr != nil {
-		return nil, nil, errors.Join(interruptErr, waitErr, signalAll(found, syscall.SIGKILL))
-	}
-	var stopped []string
-	for _, pid := range found {
-		if !slices.Contains(remaining, pid) {
-			stopped = append(stopped, names[pid])
+		if err := set.add(pid); err != nil {
+			return nil, nil, err
 		}
 	}
-	if len(remaining) == 0 {
+	targets := set.all()
+	interruptErr := signalAll(targets, syscall.SIGINT)
+	survivors, waitErr := waitFor(grace, func() ([]pinned, error) {
+		if err := set.collect(root); err != nil {
+			return nil, err
+		}
+		return set.live()
+	})
+	if waitErr != nil {
+		return nil, nil, errors.Join(interruptErr, waitErr)
+	}
+	stopped := namesExcept(targets, survivors)
+	if len(survivors) == 0 {
 		return stopped, nil, interruptErr
 	}
-	survivors := namesOf(names, remaining)
-	killErr := signalAll(remaining, syscall.SIGKILL)
-	unkilled, killWaitErr := awaitGone(marker, grace)
-	return stopped, survivors, errors.Join(interruptErr, killErr, killWaitErr, unkilledError(names, unkilled))
+	killErr := signalAll(survivors, syscall.SIGKILL)
+	unkilled, killWaitErr := waitFor(grace, func() ([]pinned, error) {
+		return liveOf(survivors)
+	})
+	return stopped, names(survivors), errors.Join(interruptErr, killErr, killWaitErr, unkilledError(unkilled))
 }
 
-func unkilledError(names map[int]string, unkilled []int) error {
-	if len(unkilled) == 0 {
+type pinned struct {
+	pid   int
+	fd    int
+	name  string
+	entry string
+}
+
+type pinSet struct {
+	entry string
+	byPID map[int]pinned
+}
+
+func newPinSet(entry string) *pinSet {
+	return &pinSet{entry: entry, byPID: make(map[int]pinned)}
+}
+
+func (s *pinSet) add(pid int) error {
+	if _, known := s.byPID[pid]; known {
 		return nil
 	}
-	return fmt.Errorf("processes survived SIGKILL: %s", strings.Join(namesOf(names, unkilled), "; "))
+	p, ok, err := pin(pid, s.entry)
+	if err != nil || !ok {
+		return err
+	}
+	s.byPID[pid] = p
+	return nil
 }
 
-func signalAll(pids []int, signo syscall.Signal) error {
-	var errs []error
+func (s *pinSet) collect(root string) error {
+	pids, err := processesIn(root, s.entry)
+	if err != nil {
+		return err
+	}
 	for _, pid := range pids {
-		if err := syscall.Kill(pid, signo); err != nil && !errors.Is(err, syscall.ESRCH) {
-			errs = append(errs, fmt.Errorf("cannot send %v to %d: %w", signo, pid, err))
+		if err := s.add(pid); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *pinSet) all() []pinned {
+	pinnedAll := make([]pinned, 0, len(s.byPID))
+	for _, p := range s.byPID {
+		pinnedAll = append(pinnedAll, p)
+	}
+	sort.Slice(pinnedAll, func(i, j int) bool { return pinnedAll[i].pid < pinnedAll[j].pid })
+	return pinnedAll
+}
+
+func (s *pinSet) live() ([]pinned, error) {
+	return liveOf(s.all())
+}
+
+func (s *pinSet) close() error {
+	var errs []error
+	for _, p := range s.byPID {
+		errs = append(errs, p.release())
+	}
+	return errors.Join(errs...)
+}
+
+func (p pinned) release() error {
+	return unix.Close(p.fd)
+}
+
+func pin(pid int, entry string) (pinned, bool, error) {
+	fd, err := unix.PidfdOpen(pid, 0)
+	if errors.Is(err, syscall.ESRCH) {
+		return pinned{}, false, nil
+	}
+	if err != nil {
+		return pinned{}, false, fmt.Errorf("cannot pin process %d: %w", pid, err)
+	}
+	candidate := pinned{pid: pid, fd: fd, entry: entry}
+	environ, err := environOf(pid)
+	if err != nil {
+		return pinned{}, false, errors.Join(fmt.Errorf("cannot verify process %d: %w", pid, err), candidate.release())
+	}
+	if len(environ) == 0 {
+		return pinned{}, false, candidate.release()
+	}
+	if !carries(environ, entry) {
+		return pinned{}, false, errors.Join(fmt.Errorf("process %d no longer carries %s: refusing to signal it", pid, entry), candidate.release())
+	}
+	candidate.name = describe(pid)
+	return candidate, true, nil
+}
+
+func liveOf(targets []pinned) ([]pinned, error) {
+	var live []pinned
+	for _, p := range targets {
+		alive, err := p.alive()
+		if err != nil {
+			return nil, err
+		}
+		if alive {
+			live = append(live, p)
+		}
+	}
+	return live, nil
+}
+
+func (p pinned) alive() (bool, error) {
+	err := unix.PidfdSendSignal(p.fd, 0, nil, 0)
+	if errors.Is(err, syscall.ESRCH) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("cannot probe %d: %w", p.pid, err)
+	}
+	environ, err := environOf(p.pid)
+	if err != nil {
+		return false, fmt.Errorf("cannot verify %d: %w", p.pid, err)
+	}
+	return carries(environ, p.entry), nil
+}
+
+func signalAll(targets []pinned, signo syscall.Signal) error {
+	var errs []error
+	for _, p := range targets {
+		if err := unix.PidfdSendSignal(p.fd, signo, nil, 0); err != nil && !errors.Is(err, syscall.ESRCH) {
+			errs = append(errs, fmt.Errorf("cannot send %v to %d: %w", signo, p.pid, err))
 		}
 	}
 	return errors.Join(errs...)
 }
 
-func awaitGone(marker []byte, grace time.Duration) ([]int, error) {
+func waitFor(grace time.Duration, poll func() ([]pinned, error)) ([]pinned, error) {
 	deadline := time.Now().Add(grace)
 	for {
-		pids, err := processesWith(marker)
-		if err != nil || len(pids) == 0 || time.Now().After(deadline) {
-			return pids, err
+		live, err := poll()
+		if err != nil || len(live) == 0 || time.Now().After(deadline) {
+			return live, err
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(pollEvery)
 	}
 }
 
-func namesOf(names map[int]string, pids []int) []string {
-	lines := make([]string, 0, len(pids))
-	for _, pid := range pids {
-		if name, known := names[pid]; known {
-			lines = append(lines, name)
-			continue
+func namesExcept(targets, survivors []pinned) []string {
+	var stopped []string
+	for _, p := range targets {
+		if !slices.ContainsFunc(survivors, func(s pinned) bool { return s.pid == p.pid }) {
+			stopped = append(stopped, p.name)
 		}
-		lines = append(lines, describe(pid))
+	}
+	return stopped
+}
+
+func names(targets []pinned) []string {
+	lines := make([]string, 0, len(targets))
+	for _, p := range targets {
+		lines = append(lines, p.name)
 	}
 	return lines
 }
 
-func processesWith(marker []byte) ([]int, error) {
-	return processesIn(procRoot, marker)
+func unkilledError(unkilled []pinned) error {
+	if len(unkilled) == 0 {
+		return nil
+	}
+	return fmt.Errorf("processes survived SIGKILL: %s", strings.Join(names(unkilled), "; "))
 }
 
-func processesIn(root string, marker []byte) ([]int, error) {
+func environOf(pid int) ([]byte, error) {
+	data, err := os.ReadFile(filepath.Join(procRoot, strconv.Itoa(pid), "environ"))
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ESRCH) {
+		return nil, nil
+	}
+	return data, err
+}
+
+func carries(environ []byte, entry string) bool {
+	return slices.Contains(strings.Split(string(environ), "\x00"), entry)
+}
+
+func processesIn(root, entry string) ([]int, error) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return nil, fmt.Errorf("cannot list the processes: %w", err)
 	}
 	self := os.Getpid()
 	var pids []int
-	for _, entry := range entries {
-		pid, err := strconv.Atoi(entry.Name())
+	for _, dirEntry := range entries {
+		pid, err := strconv.Atoi(dirEntry.Name())
 		if err != nil || pid == self {
 			continue
 		}
-		environ, err := os.ReadFile(filepath.Join(root, entry.Name(), "environ"))
+		environ, err := os.ReadFile(filepath.Join(root, dirEntry.Name(), "environ"))
 		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrPermission) || errors.Is(err, syscall.ESRCH) {
 			continue
 		}
 		if err != nil {
 			return nil, fmt.Errorf("cannot read the environment of %d: %w", pid, err)
 		}
-		if bytes.Contains(append(environ, 0), marker) {
+		if carries(environ, entry) {
 			pids = append(pids, pid)
 		}
 	}

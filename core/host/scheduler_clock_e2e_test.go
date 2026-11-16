@@ -3,6 +3,7 @@
 package host
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -38,13 +39,21 @@ func TestSchedulerIntervalReadsTheInjectedSpan(t *testing.T) {
 	}
 }
 
-func TestSchedulerIntervalRefusesAMalformedOrNonPositiveSpan(t *testing.T) {
-	for _, raw := range []string{"soon", "0s", "-5s"} {
+func TestSchedulerIntervalRefusesAMalformedSpan(t *testing.T) {
+	t.Setenv(envSchedulerTick, "soon")
+	_, err := schedulerInterval()
+	if err == nil || !strings.Contains(err.Error(), envSchedulerTick) {
+		t.Fatalf("schedulerInterval() error = %v, want one naming %s", err, envSchedulerTick)
+	}
+}
+
+func TestSchedulerSettingsRefusesANonPositiveSpan(t *testing.T) {
+	for _, raw := range []string{"0s", "-5s"} {
 		t.Run(raw, func(t *testing.T) {
 			t.Setenv(envSchedulerTick, raw)
-			_, err := schedulerInterval()
-			if err == nil || !strings.Contains(err.Error(), envSchedulerTick) {
-				t.Fatalf("schedulerInterval() error = %v, want one naming %s", err, envSchedulerTick)
+			_, _, err := schedulerSettings()
+			if !errors.Is(err, errNonPositive) {
+				t.Fatalf("schedulerSettings() error = %v, want errNonPositive", err)
 			}
 		})
 	}

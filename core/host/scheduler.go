@@ -142,11 +142,15 @@ func (s *scheduler) current(name string) (schedule.Schedule, bool) {
 func schedulerSettings() (func() time.Time, time.Duration, error) {
 	clock, err := schedulerClock()
 	if err != nil {
-		return nil, 0, wrapHost(err, "serve.scheduler_clock", nil)
+		return nil, 0, wrapHost(err, "serve.scheduler_clock", map[string]any{"Detail": err.Error()})
 	}
 	tick, err := schedulerInterval()
 	if err != nil {
-		return nil, 0, wrapHost(err, "serve.scheduler_tick", nil)
+		return nil, 0, wrapHost(err, "serve.scheduler_tick", map[string]any{"Detail": err.Error()})
+	}
+	if tick <= 0 {
+		err = fmt.Errorf("%v: %w", tick, errNonPositive)
+		return nil, 0, wrapHost(err, "serve.scheduler_tick", map[string]any{"Detail": err.Error()})
 	}
 	return clock, tick, nil
 }

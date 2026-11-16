@@ -17,11 +17,13 @@ import (
 )
 
 type event struct {
-	Type    string   `json:"type"`
-	IsError bool     `json:"is_error"`
-	Result  string   `json:"result"`
-	Errors  []string `json:"errors"`
-	Message struct {
+	Type      string   `json:"type"`
+	Subtype   string   `json:"subtype"`
+	SessionID string   `json:"session_id"`
+	IsError   bool     `json:"is_error"`
+	Result    string   `json:"result"`
+	Errors    []string `json:"errors"`
+	Message   struct {
 		Content []struct {
 			Type  string          `json:"type"`
 			Text  string          `json:"text"`
@@ -123,6 +125,27 @@ func TestClaudeReplaysEachStep(t *testing.T) {
 				t.Fatalf("got exit %d %q, want exit %d %q", code, got, tc.code, tc.want)
 			}
 		})
+	}
+}
+
+func TestClaudeAnnouncesTheSessionIDOnInitAndResult(t *testing.T) {
+	files := scriptFiles(t, "session tok-1\ntext hi\n")
+	_, events := run(t, files, promptLine(t, "go"))
+	if len(events) < 2 {
+		t.Fatalf("got %d events, want an init and a result", len(events))
+	}
+	if first := events[0]; first.Type != "system" || first.Subtype != "init" || first.SessionID != "tok-1" {
+		t.Errorf("init: got %+v, want system init with session tok-1", first)
+	}
+	if last := events[len(events)-1]; last.Type != "result" || last.SessionID != "tok-1" {
+		t.Errorf("result: got %+v, want a result with session tok-1", last)
+	}
+	recorded, err := os.ReadFile(files.Log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(recorded), "session tok-1\n") {
+		t.Errorf("log: got %q, want the session step recorded", recorded)
 	}
 }
 

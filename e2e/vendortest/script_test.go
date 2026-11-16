@@ -37,6 +37,17 @@ func TestParseScriptTakesAnyBlankAfterTheStepName(t *testing.T) {
 	}
 }
 
+func TestParseScriptReadsTheSessionStep(t *testing.T) {
+	script, err := ParseScript(strings.NewReader("session tok-9\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := script.Turn(0).steps
+	if len(steps) != 1 || steps[0].kind != stepSession || steps[0].text != "tok-9" {
+		t.Fatalf("got %+v, want one session step tok-9", steps)
+	}
+}
+
 func TestParseScriptKeepsSpawnsApartFromSteps(t *testing.T) {
 	script, err := ParseScript(strings.NewReader("spawn descendant.pid\ntext Voici\n"))
 	if err != nil {

@@ -292,37 +292,49 @@ func (r *replay) answer(out io.Writer, line []byte) (turnOutcome, error) {
 func (r *replay) play(out io.Writer, turn Turn, prompt string) (turnOutcome, error) {
 	var reply []string
 	for _, current := range turn.steps {
-		switch current.kind {
-		case stepHang:
-			return outcomeHung, nil
-		case stepCrash:
-			return outcomeCrashed, nil
-		case stepFail:
-			return outcomeAnswered, writeJSON(out, r.failure(current.text, prompt))
-		case stepAPIError:
-			if err := writeJSON(out, apiErrorText(current.text)); err != nil {
-				return 0, err
-			}
-			return outcomeAnswered, writeJSON(out, r.failure(current.text, prompt))
-		case stepEcho:
-			text := echoPrefix + lastLine(prompt)
-			reply = append(reply, text)
-			if err := writeJSON(out, assistantText(text)); err != nil {
-				return 0, err
-			}
-		case stepText:
-			reply = append(reply, current.text)
-			if err := writeJSON(out, assistantText(current.text)); err != nil {
-				return 0, err
-			}
-		case stepTool:
-			r.toolCalls++
-			if err := writeJSON(out, assistantTool(r.toolCalls, current)); err != nil {
-				return 0, err
-			}
+		outcome, ended, err := r.playStep(out, current, prompt, &reply)
+		if err != nil || ended {
+			return outcome, err
 		}
 	}
 	return outcomeAnswered, writeJSON(out, r.result(strings.Join(reply, "\n\n"), prompt))
+}
+
+func (r *replay) playStep(out io.Writer, current step, prompt string, reply *[]string) (turnOutcome, bool, error) {
+	switch current.kind {
+	case stepHang:
+		return outcomeHung, true, nil
+	case stepCrash:
+		return outcomeCrashed, true, nil
+	case stepFail:
+		return outcomeAnswered, true, writeJSON(out, r.failure(current.text, prompt))
+	case stepAPIError:
+		if err := writeJSON(out, apiErrorText(current.text)); err != nil {
+			return 0, true, err
+		}
+		return outcomeAnswered, true, writeJSON(out, r.failure(current.text, prompt))
+	case stepSession:
+		return 0, false, r.announceSession(out, current.text)
+	case stepEcho:
+		text := echoPrefix + lastLine(prompt)
+		*reply = append(*reply, text)
+		return 0, false, writeJSON(out, assistantText(text))
+	case stepText:
+		*reply = append(*reply, current.text)
+		return 0, false, writeJSON(out, assistantText(current.text))
+	case stepTool:
+		r.toolCalls++
+		return 0, false, writeJSON(out, assistantTool(r.toolCalls, current))
+	}
+	return 0, false, nil
+}
+
+func (r *replay) announceSession(out io.Writer, sessionID string) error {
+	r.sessionID = sessionID
+	if err := r.record("session " + sessionID); err != nil {
+		return err
+	}
+	return writeJSON(out, sessionInit(sessionID))
 }
 
 func isHealthProbe(args []string) bool {
@@ -421,6 +433,16 @@ func assistantText(text string) assistantEvent {
 	event := assistantEvent{Type: "assistant"}
 	event.Message.Content = []contentBlock{{Type: "text", Text: text}}
 	return event
+}
+
+type sessionEvent struct {
+	Type      string `json:"type"`
+	Subtype   string `json:"subtype"`
+	SessionID string `json:"session_id"`
+}
+
+func sessionInit(id string) sessionEvent {
+	return sessionEvent{Type: "system", Subtype: "init", SessionID: id}
 }
 
 func apiErrorText(text string) assistantEvent {

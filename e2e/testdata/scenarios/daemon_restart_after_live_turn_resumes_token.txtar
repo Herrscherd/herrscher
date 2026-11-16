@@ -1,0 +1,27 @@
+! exec herrscher serve &daemon&
+waitdaemon
+exec herrscher session create --name resumed
+exec herrscher session send --name resumed --text 'premier tour'
+exec herrscher session send --name resumed --text 'tour interrompu'
+waitlog 'prompt .*tour interrompu'
+waitlog 'session tok-live-7'
+kill -INT daemon
+wait daemon
+! waitdaemon
+! exec herrscher serve &daemon2&
+waitdaemon
+exec herrscher session seed --name resumed --task 'après redémarrage'
+stdout '^reprise ok$'
+waitlog 'start .*--resume tok-live-7'
+kill -INT daemon2
+wait daemon2
+! waitdaemon
+
+-- claude.script --
+session tok-live-7
+text premier, réponse
+---
+session tok-live-7
+hang
+---
+text reprise ok

@@ -3210,12 +3210,12 @@
   {
     "id": "cli.host.fault.warning_abandoned",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (warning abandoned)",
-    "other": "the warning writer stayed blocked: the warning was abandoned"
+    "other": "the warning writer stayed blocked: the warning was lost"
   },
   {
     "id": "cli.host.fault.warning_late",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (warning late)",
-    "other": "the warning writer stayed blocked: the warning was written late"
+    "other": "the warning writer stayed blocked: the warning is not confirmed"
   },
   {
     "id": "cli.host.fault.request_name_missing",

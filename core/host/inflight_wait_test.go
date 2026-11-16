@@ -156,7 +156,6 @@ func blockedWriterCases() []blockedWriterCase {
 				awaitGatedWrite(t, warnings)
 				return h
 			},
-			want: hubOverrunText,
 		},
 		{
 			name:  "teardown overrun",
@@ -189,7 +188,6 @@ func blockedWriterCases() []blockedWriterCase {
 				awaitGatedWrite(t, warnings)
 				return h
 			},
-			want: hubOverrunText,
 		},
 	}
 }
@@ -199,6 +197,7 @@ func TestBlockedWarningWriterDoesNotHoldStopPastTheBudget(t *testing.T) {
 		for _, path := range c.paths {
 			t.Run(c.name+"/"+path.name, func(t *testing.T) {
 				name := "inflight-" + newTurnID()
+				logs := captureDefaultLog(t)
 				warnings := newGatedWarnings(name)
 				t.Cleanup(warnings.open)
 				h := c.start(t, name, 300*time.Millisecond, warnings)
@@ -211,6 +210,12 @@ func TestBlockedWarningWriterDoesNotHoldStopPastTheBudget(t *testing.T) {
 					t.Fatal("a blocked warning writer held the stop past the teardown budget")
 				}
 
+				if c.want == nil {
+					if !strings.Contains(logs.String(), "a warning was abandoned") {
+						t.Fatal("the hub overrun behind a frozen writer was neither written nor counted as abandoned")
+					}
+					return
+				}
 				warnings.open()
 				awaitWarning(t, &warnings.out, c.want(h, name))
 			})

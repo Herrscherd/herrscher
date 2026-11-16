@@ -22,7 +22,8 @@ func TestStopLiveIsBoundedWhenTheWarningWriterStalls(t *testing.T) {
 	}
 }
 
-func TestStopWithAFrozenWriterNeverBothWritesAndCountsTheHubOverrun(t *testing.T) {
+func TestStopWithAFrozenWriterLosesOrLogsTheHubOverrun(t *testing.T) {
+	logs := captureDefaultLog(t)
 	warnings := newGatedWarnings("stalled-warning")
 	t.Cleanup(warnings.open)
 	h := newInflightHub(t, "stalled-"+newTurnID(), 5*time.Second, warnings)
@@ -31,16 +32,21 @@ func TestStopWithAFrozenWriterNeverBothWritesAndCountsTheHubOverrun(t *testing.T
 	}
 
 	h.stopLive()
+	h.closeWarnings()
+	lost := h.sink.droppedCount()
+	unconfirmed := unconfirmedAtClose(t, logs.String())
+	if lost == 0 && unconfirmed == 0 {
+		t.Fatal("the hub overrun behind a frozen writer was neither counted lost nor reported unconfirmed at Close")
+	}
 	warnings.open()
 	time.Sleep(200 * time.Millisecond)
-	written := strings.Contains(warnings.out.String(), hubOverrunText(h, ""))
-	counted := h.sink.droppedCount() > 0
-	if written == counted {
-		t.Fatalf("the hub overrun behind a frozen writer was written=%v and counted as lost=%v, want exactly one of the two", written, counted)
+	if written := strings.Contains(warnings.out.String(), hubOverrunText(h, "")); written && lost > 0 {
+		t.Fatalf("the hub overrun was written and counted as lost=%d", lost)
 	}
 }
 
-func TestCloseWarningsNeverBothWritesAndCountsAnUndrainedOverrun(t *testing.T) {
+func TestCloseWarningsLosesOrLogsAnUndrainedOverrun(t *testing.T) {
+	logs := captureDefaultLog(t)
 	warnings := newGatedWarnings("stuck")
 	t.Cleanup(warnings.open)
 	h := testHub(&hub{warnings: warnings, teardownGrace: 300 * time.Millisecond})
@@ -49,11 +55,14 @@ func TestCloseWarningsNeverBothWritesAndCountsAnUndrainedOverrun(t *testing.T) {
 	}
 
 	h.closeWarnings()
+	lost := h.sink.droppedCount()
+	unconfirmed := unconfirmedAtClose(t, logs.String())
+	if lost == 0 && unconfirmed == 0 {
+		t.Fatal("the undrained overrun behind a frozen writer was neither counted lost nor reported unconfirmed at Close")
+	}
 	warnings.open()
 	time.Sleep(200 * time.Millisecond)
-	written := strings.Contains(warnings.out.String(), hubOverrunText(h, ""))
-	counted := h.sink.droppedCount() > 0
-	if written == counted {
-		t.Fatalf("the undrained overrun behind a frozen writer was written=%v and counted as lost=%v, want exactly one of the two", written, counted)
+	if written := strings.Contains(warnings.out.String(), hubOverrunText(h, "")); written && lost > 0 {
+		t.Fatalf("the undrained overrun was written and counted as lost=%d", lost)
 	}
 }

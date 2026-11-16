@@ -263,7 +263,7 @@ func TestFailedSessionStartKeepsWhatWasTypedWhileOpening(t *testing.T) {
 	if !ok {
 		t.Fatal("enter with no session must start one")
 	}
-	m.input.SetValue("second line typed while opening")
+	m.input.SetValue(m.input.Value() + "\nsecond line typed while opening")
 	runCmd(m.handleSessionStarted(started))
 	if got, want := m.input.Value(), "hello\nsecond line typed while opening"; got != want {
 		t.Fatalf("composer after failed start = %q, want %q: the original line and the one typed meanwhile must both survive", got, want)

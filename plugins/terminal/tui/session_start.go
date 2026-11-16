@@ -7,9 +7,14 @@ type sessionStartedMsg struct {
 	err  error
 }
 
-func (m *model) startSessionWith(text string, atts []Attachment) tea.Cmd {
+func (m *model) startFromComposer(text string) tea.Cmd {
+	m.recordHistory(text)
+	return m.startSessionWith(text)
+}
+
+func (m *model) startSessionWith(text string) tea.Cmd {
 	m.starting = true
-	m.open.text, m.open.atts, m.open.queued = text, atts, true
+	m.open.text, m.open.queued = text, true
 	m.flash = m.tr.t("tui.session.starting", nil)
 	backend := m.tm
 	return func() tea.Msg {
@@ -21,8 +26,6 @@ func (m *model) startSessionWith(text string, atts []Attachment) tea.Cmd {
 func (m *model) handleSessionStarted(msg sessionStartedMsg) tea.Cmd {
 	m.starting = false
 	if msg.err != nil {
-		m.giveBackFailedStart()
-		m.pending = append(m.open.atts, m.pending...)
 		m.clearOpen()
 		m.applySize()
 		m.resizeComposer()
@@ -33,15 +36,4 @@ func (m *model) handleSessionStarted(msg sessionStartedMsg) tea.Cmd {
 	m.open.session = msg.name
 	m.tabSig = ""
 	return m.syncTabs()
-}
-
-func (m *model) giveBackFailedStart() {
-	typed := m.input.Value()
-	switch {
-	case typed == "":
-		m.input.SetValue(m.open.text)
-	case m.open.text == "":
-	default:
-		m.input.SetValue(m.open.text + "\n" + typed)
-	}
 }

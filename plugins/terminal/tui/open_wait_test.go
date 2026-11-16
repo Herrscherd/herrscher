@@ -196,8 +196,8 @@ func TestQueuedAttachmentStaysVisibleAndIsSentOnce(t *testing.T) {
 	if len(be.submitted) != 1 || be.submitted[0].text != "hello" || len(be.submitted[0].atts) != 1 {
 		t.Fatalf("submitted = %+v, want hello with one attachment sent exactly once", be.submitted)
 	}
-	if len(m.stagedAttachments()) != 0 {
-		t.Fatalf("staged = %+v after delivery, want none left to resend", m.stagedAttachments())
+	if len(m.pending) != 0 {
+		t.Fatalf("pending = %+v after delivery, want none left to resend", m.pending)
 	}
 }
 
@@ -287,7 +287,7 @@ func TestStartingSessionKeepsItsAttachmentsVisibleAndSentOnce(t *testing.T) {
 	if len(f.submitted) != 1 || f.submitted[0].channel != "c9" || f.submitted[0].text != "hello" || len(f.submitted[0].atts) != 1 {
 		t.Fatalf("submitted = %+v, want hello with the attachment sent once to c9", f.submitted)
 	}
-	if len(m.stagedAttachments()) != 0 {
-		t.Fatalf("staged = %+v after delivery, want none left to resend", m.stagedAttachments())
+	if len(m.pending) != 0 {
+		t.Fatalf("pending = %+v after delivery, want none left to resend", m.pending)
 	}
 }

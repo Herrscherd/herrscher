@@ -720,6 +720,9 @@ func (m *model) handleEnter() tea.Cmd {
 		m.flash = m.tr.t("tui.session.starting", nil)
 		return nil
 	}
+	if m.tabs[m.active] == nil && !isCommandLine(text) {
+		return m.startFromComposer(text)
+	}
 	m.input.Reset()
 	m.resizeComposer()
 	if command, ok := shellCommand(text); ok {
@@ -732,9 +735,6 @@ func (m *model) handleEnter() tea.Cmd {
 	m.pending = nil
 	m.applySize()
 	m.recordHistory(text)
-	if m.tabs[m.active] == nil {
-		return m.startSessionWith(text, atts)
-	}
 	return m.submitTo(m.active, text, atts)
 }
 
@@ -1102,7 +1102,7 @@ func (m *model) activate(channel string) {
 	if m.tabs[channel] == nil {
 		return
 	}
-	m.noteUserMoved()
+	m.abandonOpen()
 	if channel == m.active {
 		return
 	}

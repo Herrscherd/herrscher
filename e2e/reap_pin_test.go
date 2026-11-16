@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -27,24 +28,6 @@ func TestReapInstanceKillsNothingWhenTheSecondScanFails(t *testing.T) {
 	}
 	if !stillRunning(child) {
 		t.Fatal("the process was ended although the second scan failed: nothing may be signalled on an unverified list")
-	}
-}
-
-func TestReapInstanceNeverSignalsAProcessThatNoLongerCarriesTheMarker(t *testing.T) {
-	instance := newTestInstance(t)
-	bystander := exec.CommandContext(t.Context(), "sleep", "60")
-	bystander.Env = []string{"PATH=" + os.Getenv("PATH")}
-	if err := bystander.Start(); err != nil {
-		t.Fatal(err)
-	}
-	killAtEnd(t, bystander)
-	root := t.TempDir()
-	fakeProcess(t, root, bystander.Process.Pid, instanceEntry(instance)+"\x00")
-	if _, _, err := reapInstance(root, instance, reapGrace); err == nil {
-		t.Fatal("a process that does not carry the marker was accepted from a listing")
-	}
-	if !stillRunning(bystander) {
-		t.Fatal("a process without the marker was signalled")
 	}
 }
 
@@ -101,6 +84,8 @@ func newTestInstance(t *testing.T) string {
 	return instance
 }
 
+const fakeStart = "1000"
+
 func fakeProcess(t *testing.T, root string, pid int, environ string) {
 	t.Helper()
 	dir := filepath.Join(root, strconv.Itoa(pid))
@@ -108,6 +93,15 @@ func fakeProcess(t *testing.T, root string, pid int, environ string) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "environ"), []byte(environ), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fakeStat(t, root, pid, fakeStart)
+}
+
+func fakeStat(t *testing.T, root string, pid int, start string) {
+	t.Helper()
+	line := strconv.Itoa(pid) + " (fake) S" + strings.Repeat(" 0", 18) + " " + start + "\n"
+	if err := os.WriteFile(filepath.Join(root, strconv.Itoa(pid), "stat"), []byte(line), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }

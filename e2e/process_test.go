@@ -32,23 +32,59 @@ func instanceEntry(instance string) string {
 	return instanceEnv + "=" + instance
 }
 
+type processRef struct {
+	pid   int
+	start string
+}
+
+type procStat struct {
+	state string
+	start string
+}
+
+func (s procStat) exited() bool {
+	return s.state == "Z" || s.state == "X"
+}
+
+const startTimeIndex = 19
+
+func parseStat(data string) (procStat, error) {
+	end := strings.LastIndexByte(data, ')')
+	if end < 0 {
+		return procStat{}, fmt.Errorf("malformed stat line %q", data)
+	}
+	fields := strings.Fields(data[end+1:])
+	if len(fields) <= startTimeIndex {
+		return procStat{}, fmt.Errorf("stat line too short: %q", data)
+	}
+	return procStat{state: fields[0], start: fields[startTimeIndex]}, nil
+}
+
+func readStat(root string, pid int) (procStat, error) {
+	data, err := os.ReadFile(filepath.Join(root, strconv.Itoa(pid), "stat"))
+	if err != nil {
+		return procStat{}, err
+	}
+	return parseStat(string(data))
+}
+
 func reapInstance(root, instance string, grace time.Duration) ([]string, []string, error) {
 	if !instanceIDPattern.MatchString(instance) {
 		return nil, nil, fmt.Errorf("refusing to reap %q: it is not an instance id", instance)
 	}
 	entry := instanceEntry(instance)
-	found, err := processesIn(root, entry)
-	if err != nil || len(found) == 0 {
+	listed, err := scanInstance(root, entry)
+	if err != nil || len(listed) == 0 {
 		return nil, nil, err
 	}
-	set := newPinSet(entry)
-	stopped, survivors, reapErr := reapPinned(root, set, found, grace)
+	set := newPinSet(root, entry)
+	stopped, survivors, reapErr := reapPinned(root, set, listed, grace)
 	return stopped, survivors, errors.Join(reapErr, set.close())
 }
 
-func reapPinned(root string, set *pinSet, found []int, grace time.Duration) ([]string, []string, error) {
-	for _, pid := range found {
-		if err := set.add(pid); err != nil {
+func reapPinned(root string, set *pinSet, listed []processRef, grace time.Duration) ([]string, []string, error) {
+	for _, ref := range listed {
+		if err := set.add(ref); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -75,40 +111,43 @@ func reapPinned(root string, set *pinSet, found []int, grace time.Duration) ([]s
 }
 
 type pinned struct {
+	root  string
 	pid   int
 	fd    int
 	name  string
+	start string
 	entry string
 }
 
 type pinSet struct {
+	root  string
 	entry string
 	byPID map[int]pinned
 }
 
-func newPinSet(entry string) *pinSet {
-	return &pinSet{entry: entry, byPID: make(map[int]pinned)}
+func newPinSet(root, entry string) *pinSet {
+	return &pinSet{root: root, entry: entry, byPID: make(map[int]pinned)}
 }
 
-func (s *pinSet) add(pid int) error {
-	if _, known := s.byPID[pid]; known {
+func (s *pinSet) add(ref processRef) error {
+	if _, known := s.byPID[ref.pid]; known {
 		return nil
 	}
-	p, ok, err := pin(pid, s.entry)
+	p, ok, err := pin(s.root, ref, s.entry)
 	if err != nil || !ok {
 		return err
 	}
-	s.byPID[pid] = p
+	s.byPID[ref.pid] = p
 	return nil
 }
 
 func (s *pinSet) collect(root string) error {
-	pids, err := processesIn(root, s.entry)
+	listed, err := scanInstance(root, s.entry)
 	if err != nil {
 		return err
 	}
-	for _, pid := range pids {
-		if err := s.add(pid); err != nil {
+	for _, ref := range listed {
+		if err := s.add(ref); err != nil {
 			return err
 		}
 	}
@@ -140,26 +179,26 @@ func (p pinned) release() error {
 	return unix.Close(p.fd)
 }
 
-func pin(pid int, entry string) (pinned, bool, error) {
-	fd, err := unix.PidfdOpen(pid, 0)
+func pin(root string, ref processRef, entry string) (pinned, bool, error) {
+	fd, err := unix.PidfdOpen(ref.pid, 0)
 	if errors.Is(err, syscall.ESRCH) {
 		return pinned{}, false, nil
 	}
 	if err != nil {
-		return pinned{}, false, fmt.Errorf("cannot pin process %d: %w", pid, err)
+		return pinned{}, false, fmt.Errorf("cannot pin process %d: %w", ref.pid, err)
 	}
-	candidate := pinned{pid: pid, fd: fd, entry: entry}
-	environ, err := environOf(pid)
-	if err != nil {
-		return pinned{}, false, errors.Join(fmt.Errorf("cannot verify process %d: %w", pid, err), candidate.release())
-	}
-	if len(environ) == 0 {
+	candidate := pinned{root: root, pid: ref.pid, fd: fd, start: ref.start, entry: entry}
+	current, err := readStat(root, ref.pid)
+	if gone(err) {
 		return pinned{}, false, candidate.release()
 	}
-	if !carries(environ, entry) {
-		return pinned{}, false, errors.Join(fmt.Errorf("process %d no longer carries %s: refusing to signal it", pid, entry), candidate.release())
+	if err != nil {
+		return pinned{}, false, errors.Join(fmt.Errorf("cannot verify process %d: %w", ref.pid, err), candidate.release())
 	}
-	candidate.name = describe(pid)
+	if current.start != ref.start || current.exited() {
+		return pinned{}, false, candidate.release()
+	}
+	candidate.name = describe(root, ref.pid)
 	return candidate, true, nil
 }
 
@@ -185,11 +224,14 @@ func (p pinned) alive() (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("cannot probe %d: %w", p.pid, err)
 	}
-	environ, err := environOf(p.pid)
-	if err != nil {
-		return false, fmt.Errorf("cannot verify %d: %w", p.pid, err)
+	current, err := readStat(p.root, p.pid)
+	if gone(err) {
+		return false, nil
 	}
-	return carries(environ, p.entry), nil
+	if err != nil {
+		return false, fmt.Errorf("cannot read the state of %d: %w", p.pid, err)
+	}
+	return current.start == p.start && !current.exited(), nil
 }
 
 func signalAll(targets []pinned, signo syscall.Signal) error {
@@ -251,41 +293,73 @@ func carries(environ []byte, entry string) bool {
 }
 
 func processesIn(root, entry string) ([]int, error) {
-	entries, err := os.ReadDir(root)
+	listed, err := scanInstance(root, entry)
 	if err != nil {
-		return nil, fmt.Errorf("cannot list the processes: %w", err)
+		return nil, err
 	}
-	self := os.Getpid()
-	var pids []int
-	for _, dirEntry := range entries {
-		pid, err := strconv.Atoi(dirEntry.Name())
-		if err != nil || pid == self {
-			continue
-		}
-		environ, err := os.ReadFile(filepath.Join(root, dirEntry.Name(), "environ"))
-		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrPermission) || errors.Is(err, syscall.ESRCH) {
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("cannot read the environment of %d: %w", pid, err)
-		}
-		if carries(environ, entry) {
-			pids = append(pids, pid)
-		}
+	pids := make([]int, 0, len(listed))
+	for _, ref := range listed {
+		pids = append(pids, ref.pid)
 	}
 	return pids, nil
 }
 
-func describe(pid int) string {
-	line, err := commandLine(pid)
+func scanInstance(root, entry string) ([]processRef, error) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil, fmt.Errorf("cannot list the processes: %w", err)
+	}
+	var listed []processRef
+	for _, dirEntry := range entries {
+		ref, found, err := instanceRef(root, dirEntry.Name(), entry)
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			listed = append(listed, ref)
+		}
+	}
+	return listed, nil
+}
+
+func scannedPid(name string) (int, bool) {
+	pid, err := strconv.Atoi(name)
+	return pid, err == nil && pid != os.Getpid()
+}
+
+func instanceRef(root, name, entry string) (processRef, bool, error) {
+	pid, ok := scannedPid(name)
+	if !ok {
+		return processRef{}, false, nil
+	}
+	stat, err := readStat(root, pid)
+	if err != nil {
+		return processRef{}, false, unlistable(pid, err)
+	}
+	environ, err := os.ReadFile(filepath.Join(root, name, "environ"))
+	if err != nil {
+		return processRef{}, false, unlistable(pid, err)
+	}
+	return processRef{pid: pid, start: stat.start}, carries(environ, entry), nil
+}
+
+func unlistable(pid int, err error) error {
+	if gone(err) || errors.Is(err, fs.ErrPermission) {
+		return nil
+	}
+	return fmt.Errorf("cannot read process %d: %w", pid, err)
+}
+
+func describe(root string, pid int) string {
+	line, err := commandLine(root, pid)
 	if err != nil {
 		return strconv.Itoa(pid)
 	}
 	return strconv.Itoa(pid) + " " + line
 }
 
-func commandLine(pid int) (string, error) {
-	cmdline, err := os.ReadFile(filepath.Join(procRoot, strconv.Itoa(pid), "cmdline"))
+func commandLine(root string, pid int) (string, error) {
+	cmdline, err := os.ReadFile(filepath.Join(root, strconv.Itoa(pid), "cmdline"))
 	if err != nil {
 		return "", err
 	}

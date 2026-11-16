@@ -45,7 +45,7 @@ func sessionProcesses(ts *testscript.TestScript, session, vendorCommand string) 
 	commandFlag := " --cmd " + vendorCommand + " "
 	var matched []int
 	for _, pid := range pids {
-		line, err := commandLine(pid)
+		line, err := commandLine(procRoot, pid)
 		if gone(err) {
 			continue
 		}

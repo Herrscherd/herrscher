@@ -133,6 +133,7 @@ func TestProcessesInReportsAnUnreadableEnvironment(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "7", "environ"), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	fakeStat(t, root, 7, fakeStart)
 	if _, err := processesIn(root, "x"); !errors.Is(err, syscall.EISDIR) {
 		t.Fatalf("got %v, want the read failure", err)
 	}

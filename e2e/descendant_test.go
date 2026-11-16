@@ -75,7 +75,7 @@ func descendantAlive(pid int, entry string) (bool, error) {
 	if !carries(environ, entry) {
 		return false, nil
 	}
-	line, err := commandLine(pid)
+	line, err := commandLine(procRoot, pid)
 	if gone(err) {
 		return false, nil
 	}
@@ -94,7 +94,14 @@ func killDescendant(pid int, entry string) error {
 	if err != nil || !alive {
 		return err
 	}
-	p, pinnedOK, err := pin(pid, entry)
+	stat, err := readStat(procRoot, pid)
+	if gone(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	p, pinnedOK, err := pin(procRoot, processRef{pid: pid, start: stat.start}, entry)
 	if err != nil || !pinnedOK {
 		return err
 	}

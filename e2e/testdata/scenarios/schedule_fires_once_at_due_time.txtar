@@ -10,6 +10,10 @@ exec sleep 1
 exec cat $VENDORTEST_LOG
 stdout -count=1 'write the digest"$'
 ! stdout 'write the later note"$'
+exec herrscher schedule list
+stdout 'later\s.*last never'
+stdout 'later\s.*next 2036-'
 kill -INT daemon
 wait daemon
+! stderr 'longer ago than its grace'
 ! waitdaemon

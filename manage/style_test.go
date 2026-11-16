@@ -6,6 +6,7 @@ func TestServeCommandNamesTheInvokedBinary(t *testing.T) {
 	cases := map[string]string{
 		"/usr/bin/herrscherd": "herrscherd serve",
 		"herrscher":           "herrscher serve",
+		"herrscher.exe":       "herrscher serve",
 	}
 	for invoked, want := range cases {
 		if got := serveCommand(invoked); got != want {

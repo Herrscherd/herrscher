@@ -61,7 +61,7 @@ func summaryConfig(path string, count int) {
 }
 
 func serveCommand(invoked string) string {
-	return filepath.Base(invoked) + " serve"
+	return strings.TrimSuffix(filepath.Base(invoked), ".exe") + " serve"
 }
 
 func shortModule(m string) string {

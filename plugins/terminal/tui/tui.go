@@ -536,6 +536,10 @@ func (m *model) ensureTab(channel string) *tab {
 		m.applySize()
 	}
 	m.seedScrollback(tab)
+	if m.active == channel {
+		m.syncViewport()
+		m.vp.GotoBottom()
+	}
 	return tab
 }
 
@@ -727,6 +731,9 @@ func (m *model) continueLine() bool {
 func (m *model) handleEnter() tea.Cmd {
 	text := strings.TrimSpace(m.input.Value())
 	if text == "" && len(m.pending) == 0 {
+		return nil
+	}
+	if m.openSession != "" && m.tabs[m.active] == nil {
 		return nil
 	}
 	if m.starting {
@@ -1492,7 +1499,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 }
 
 func (m *model) Init() tea.Cmd {
-	return tea.Batch(textarea.Blink, tickCmd(), themeWatchTick(), enableEnhancedKeys, m.armStatusline(), fontProbeCmd())
+	return tea.Batch(m.syncTabs(), textarea.Blink, tickCmd(), themeWatchTick(), enableEnhancedKeys, m.armStatusline(), fontProbeCmd())
 }
 
 func (m *model) ensureSpin() tea.Cmd {

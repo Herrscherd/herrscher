@@ -16,14 +16,25 @@ func newWindow(ctx context.Context, backend Backend, opts []Option) *model {
 }
 
 // NewWindow returns the window Run starts, for a host that drives the Bubble Tea
-// program itself. The host feeds the backend's routed events to it as Event messages.
+// program itself. The host forwards the backend's routed events to it with Pump.
 func NewWindow(ctx context.Context, backend Backend, opts ...Option) tea.Model {
 	return newWindow(ctx, backend, opts)
 }
 
-// Event wraps a routed event of the backend as the message the window renders.
-func Event(routed RoutedEvent) tea.Msg {
-	return eventMsg(routed)
+// Pump forwards the backend's routed events to send as window messages until ctx
+// ends or the backend closes its stream.
+func Pump(ctx context.Context, backend Backend, send func(tea.Msg)) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case entry, ok := <-backend.Frontend():
+			if !ok {
+				return
+			}
+			send(eventMsg(entry))
+		}
+	}
 }
 
 func killedByContext(ctx context.Context, err error) bool {
@@ -46,19 +57,7 @@ func runProgram(ctx context.Context, cancel context.CancelFunc, backend Backend,
 		tea.WithReportFocus(),
 	}
 	program := tea.NewProgram(model, append(options, extra...)...)
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case entry, ok := <-backend.Frontend():
-				if !ok {
-					return
-				}
-				program.Send(eventMsg(entry))
-			}
-		}
-	}()
+	go Pump(ctx, backend, program.Send)
 	_, runErr := program.Run()
 	return settleRun(ctx, cancel, runErr)
 }

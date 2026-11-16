@@ -38,8 +38,8 @@ type tuiDaemon struct {
 }
 
 func TestE2EAttachedWindowFirstMessage(t *testing.T) {
-	daemon := startTUIDaemon(t)
-	window := attachTUIWindow(t, daemon)
+	daemon := startTUIDaemon(t, "")
+	window, _ := attachTUIWindow(t, daemon)
 
 	window.Type("hello daemon")
 	window.Send(tea.KeyMsg{Type: tea.KeyEnter})
@@ -48,25 +48,26 @@ func TestE2EAttachedWindowFirstMessage(t *testing.T) {
 }
 
 func TestE2EAttachedWindowRereadsHistory(t *testing.T) {
-	daemon := startTUIDaemon(t)
-	first := attachTUIWindow(t, daemon)
+	daemon := startTUIDaemon(t, "text answer one\n---\ntext answer two\n")
+	first, stopFirst := attachTUIWindow(t, daemon)
 
-	first.Type("hello daemon")
+	first.Type("first question")
 	first.Send(tea.KeyMsg{Type: tea.KeyEnter})
-	awaitTUIScreen(t, first, "echo: hello daemon")
+	awaitTUIScreen(t, first, "answer one")
 
-	first.Type("second turn")
+	first.Type("second question")
 	first.Send(tea.KeyMsg{Type: tea.KeyEnter})
-	awaitTUIScreen(t, first, "echo: second turn")
+	awaitTUIScreen(t, first, "answer two")
 
 	first.Send(tea.KeyMsg{Type: tea.KeyCtrlD})
 	first.WaitFinished(t, teatest.WithFinalTimeout(tuiScreenWait))
+	stopFirst()
 
-	reopened := attachTUIWindow(t, daemon, tui.OpenOn(onlySessionName(t, daemon), ""))
-	awaitTUIScreen(t, reopened, "hello daemon", "echo: hello daemon", "second turn", "echo: second turn")
+	reopened, _ := attachTUIWindow(t, daemon)
+	awaitTUIScreen(t, reopened, onlySessionName(t, daemon), "first question", "answer one", "second question", "answer two")
 }
 
-func startTUIDaemon(t *testing.T) tuiDaemon {
+func startTUIDaemon(t *testing.T, vendorScript string) tuiDaemon {
 	t.Helper()
 	binDir := t.TempDir()
 	buildTUIBinary(t, filepath.Join(binDir, "claude"), "./e2e/vendortest/cmd/claude")
@@ -86,7 +87,14 @@ func startTUIDaemon(t *testing.T) tuiDaemon {
 	if out, err := exec.CommandContext(t.Context(), "git", "init", "-q", repo).CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v: %s", err, out)
 	}
-	env := tuiEnv(home, root, binDir)
+	scriptPath := ""
+	if vendorScript != "" {
+		scriptPath = filepath.Join(home, "claude.script")
+		if err := os.WriteFile(scriptPath, []byte(vendorScript), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	env := tuiEnv(home, root, binDir, scriptPath)
 	for _, pair := range env {
 		name, value, _ := strings.Cut(pair, "=")
 		t.Setenv(name, value)
@@ -111,7 +119,7 @@ func startTUIDaemon(t *testing.T) tuiDaemon {
 	return tuiDaemon{layout: layout, instance: tuiInstance, statePath: host.DefaultStatePath()}
 }
 
-func tuiEnv(home, root, binDir string) []string {
+func tuiEnv(home, root, binDir, scriptPath string) []string {
 	return []string{
 		"HOME=" + home,
 		"XDG_CONFIG_HOME=" + filepath.Join(home, ".config"),
@@ -125,7 +133,7 @@ func tuiEnv(home, root, binDir string) []string {
 		"HERRSCHER_MODELS_DISCOVER=none",
 		"GIT_AUTHOR_NAME=e2e", "GIT_AUTHOR_EMAIL=e2e@example.invalid",
 		"GIT_COMMITTER_NAME=e2e", "GIT_COMMITTER_EMAIL=e2e@example.invalid",
-		"VENDORTEST_SCRIPT=",
+		"VENDORTEST_SCRIPT=" + scriptPath,
 		"VENDORTEST_LOG=" + filepath.Join(home, "claude.log"),
 		"VENDORTEST_TURNS=" + filepath.Join(home, "claude.turns"),
 	}
@@ -199,7 +207,7 @@ func onlySessionName(t *testing.T, daemon tuiDaemon) string {
 	return sessions[0].Name
 }
 
-func attachTUIWindow(t *testing.T, daemon tuiDaemon, opts ...tui.Option) *teatest.TestModel {
+func attachTUIWindow(t *testing.T, daemon tuiDaemon) (*teatest.TestModel, context.CancelFunc) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
@@ -207,25 +215,10 @@ func attachTUIWindow(t *testing.T, daemon tuiDaemon, opts ...tui.Option) *teates
 	if err != nil {
 		t.Fatal(err)
 	}
-	opts = append([]tui.Option{tui.Language(backend.lang)}, opts...)
-	window := tui.NewWindow(ctx, backend, opts...)
+	window := tui.NewWindow(ctx, backend, tui.Language(backend.lang))
 	model := teatest.NewTestModel(t, window, teatest.WithInitialTermSize(120, 40))
-	go relayTUIEvents(ctx, backend.Frontend(), model)
-	return model
-}
-
-func relayTUIEvents(ctx context.Context, events <-chan tui.RoutedEvent, model *teatest.TestModel) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case routed, ok := <-events:
-			if !ok {
-				return
-			}
-			model.Send(tui.Event(routed))
-		}
-	}
+	go tui.Pump(ctx, backend, model.Send)
+	return model, cancel
 }
 
 func awaitTUIScreen(t *testing.T, window *teatest.TestModel, want ...string) {

@@ -41,9 +41,13 @@ func TestDeferredWarningsKeepTheOrderOfTheLockHolders(t *testing.T) {
 
 func TestReleaseLifecycleSharesOneBudgetAcrossDeferredWarnings(t *testing.T) {
 	const deferred = 20
-	writer := &blockedForever{release: make(chan struct{})}
-	t.Cleanup(func() { close(writer.release) })
-	h := testHub(&hub{warnings: writer, teardownGrace: time.Second})
+	gate := newGatedWarnings("frozen")
+	t.Cleanup(gate.open)
+	h := testHub(&hub{warnings: gate, teardownGrace: time.Second})
+	if _, err := h.warnings.Write([]byte("frozen\n")); !errors.Is(err, errWarningLate) {
+		t.Fatalf("write returned %v, want errWarningLate", err)
+	}
+	awaitGatedWrite(t, gate)
 
 	h.lifecycle.Lock()
 	for range deferred {

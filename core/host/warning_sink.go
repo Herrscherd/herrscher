@@ -71,6 +71,7 @@ type warningSink struct {
 	closed      bool
 	finalized   bool
 	idle        chan struct{}
+	quiet       chan struct{}
 }
 
 func newWarningSink(out io.Writer, lostLine func(lost int) string) *warningSink {
@@ -193,24 +194,33 @@ func (s *warningSink) reserve() {
 	s.unconfirmed++
 }
 
-func (s *warningSink) settleWrite(err error) {
-	s.mu.Lock()
+func (s *warningSink) settledLocked() {
 	s.unconfirmed--
-	if err != nil {
-		s.dropped++
-	}
-	announce := err != nil && s.finalized
-	s.mu.Unlock()
-	if announce {
-		s.logUnsettled()
+	if s.unconfirmed == 0 && s.quiet != nil {
+		close(s.quiet)
+		s.quiet = nil
 	}
 }
 
-func (s *warningSink) abandonWrite() {
+func (s *warningSink) settleWrite(err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.unconfirmed--
+	s.settledLocked()
+	if err == nil {
+		return
+	}
 	s.dropped++
+	if s.finalized {
+		s.reported++
+	}
+}
+
+func (s *warningSink) abandonWrite() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.settledLocked()
+	s.dropped++
+	return !s.closed
 }
 
 func (s *warningSink) reportLost() {
@@ -221,9 +231,6 @@ func (s *warningSink) reportLost() {
 	s.reserve()
 	_, err := s.out.w.Write([]byte(s.lostLine(lost) + "\n"))
 	s.settleSummary(lost, err == nil)
-	if err != nil {
-		logSummaryFailure(s.unreported())
-	}
 }
 
 func (s *warningSink) claimSummary() (int, bool) {
@@ -237,25 +244,14 @@ func (s *warningSink) claimSummary() (int, bool) {
 	return lost, true
 }
 
-func (s *warningSink) settleSummary(lost int, written bool) bool {
+func (s *warningSink) settleSummary(lost int, written bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.summarizing = false
-	s.unconfirmed--
-	if written {
+	s.settledLocked()
+	if written && !s.finalized {
 		s.reported += lost
 	}
-	return !written && s.finalized
-}
-
-func logSummaryFailure(lost int) {
-	slog.Warn("warnings were lost and their summary could not be written", "lost", lost)
-}
-
-func (s *warningSink) unreported() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.dropped - s.reported
 }
 
 func (s *warningSink) clearStalled() {
@@ -308,13 +304,32 @@ func (s *warningSink) Close() {
 	budget, stop := writeBudget()
 	defer stop()
 	s.announceLost(budget)
+	s.awaitQuiet(budget)
 	s.finalize()
+}
+
+func (s *warningSink) awaitQuiet(budget <-chan struct{}) {
+	s.mu.Lock()
+	if s.unconfirmed == 0 {
+		s.mu.Unlock()
+		return
+	}
+	if s.quiet == nil {
+		s.quiet = make(chan struct{})
+	}
+	quiet := s.quiet
+	s.mu.Unlock()
+	select {
+	case <-quiet:
+	case <-budget:
+	}
 }
 
 func (s *warningSink) finalize() {
 	s.mu.Lock()
 	s.finalized = true
 	lost, unconfirmed := s.unsettledLocked()
+	s.reported = s.dropped
 	s.mu.Unlock()
 	logNotConfirmed(lost, unconfirmed)
 }
@@ -333,9 +348,7 @@ func (s *warningSink) announceLost(budget <-chan struct{}) {
 	go func() {
 		_, err := s.out.w.Write([]byte(s.lostLine(lost) + "\n"))
 		s.out.release()
-		if s.settleSummary(lost, err == nil) {
-			logSummaryFailure(s.unreported())
-		}
+		s.settleSummary(lost, err == nil)
 		close(written)
 	}()
 	select {
@@ -344,9 +357,14 @@ func (s *warningSink) announceLost(budget <-chan struct{}) {
 	}
 }
 
-func (s *warningSink) logUnsettled() {
+func (s *warningSink) announceAfterFinal() {
 	s.mu.Lock()
+	if !s.finalized {
+		s.mu.Unlock()
+		return
+	}
 	lost, unconfirmed := s.unsettledLocked()
+	s.reported = s.dropped
 	s.mu.Unlock()
 	logNotConfirmed(lost, unconfirmed)
 }
@@ -372,11 +390,8 @@ func (s *warningSink) lateWrite(data []byte, budget <-chan struct{}) error {
 }
 
 func (s *warningSink) afterClose(err error) error {
-	s.mu.Lock()
-	closed := s.closed
-	s.mu.Unlock()
-	if closed && (errors.Is(err, errWarningAbandoned) || errors.Is(err, errWarningLate)) {
-		s.logUnsettled()
+	if errors.Is(err, errWarningAbandoned) {
+		s.announceAfterFinal()
 	}
 	return err
 }
@@ -395,8 +410,9 @@ func (s *warningSink) directBudget(budget <-chan struct{}) <-chan struct{} {
 func (s *warningSink) directWrite(data []byte, budget <-chan struct{}) error {
 	s.reserve()
 	if !s.out.acquire(budget) {
-		s.abandonWrite()
-		slog.Warn("a warning was abandoned because its writer stayed blocked", "budget", warningWriteBudget)
+		if s.abandonWrite() {
+			slog.Warn("a warning was abandoned because its writer stayed blocked", "budget", warningWriteBudget)
+		}
 		return errWarningAbandoned
 	}
 	written := make(chan error, 1)

@@ -69,10 +69,7 @@ func (e *LineError) Unwrap() error {
 	return e.Err
 }
 
-// ParseScript reads a script. Each line is one step: "text <words>", "tool
-// <Name> <json input>", "expect allowed|denied", "error <message>", "apierror
-// <message>", "spawn <file>", "echo", "hang" or "crash", the last three alone.
-// Blank lines are skipped and a turn with no step is refused.
+// ParseScript reads a script of steps, one per line, and refuses an empty turn.
 func ParseScript(source io.Reader) (Script, error) {
 	var script Script
 	current := Turn{}

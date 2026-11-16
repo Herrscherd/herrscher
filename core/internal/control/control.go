@@ -74,5 +74,5 @@ const CommandSocketVar = "HERRSCHER_COMMAND_SOCKET"
 // supervisor, not the other way round.
 const SessionVar = "HERRSCHER_SESSION"
 
-// ApprovalKeyVar carries the key the daemon issued to a session at launch.
+// ApprovalKeyVar carries the token the daemon issued to a session at launch.
 const ApprovalKeyVar = "HERRSCHER_SESSION_TOKEN"

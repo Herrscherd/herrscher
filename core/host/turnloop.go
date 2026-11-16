@@ -442,6 +442,7 @@ func (t *sessionTable) unregister(name string, driver *sessionDriver) {
 	t.mu.Lock()
 	if t.m[name] == driver {
 		delete(t.m, name)
+		delete(t.tokens, name)
 	}
 	t.mu.Unlock()
 }

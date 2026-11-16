@@ -39,7 +39,7 @@ func forwardDaemonOwnedCommands(reg *cli.Registry, layout RuntimeLayout, instID 
 					return contracts.DataResult(out), err
 				}
 				if path := strings.Join(cmd.Path, " "); daemonOnly()[path] {
-					return contracts.Result{}, &daemonRequiredError{Command: path, Target: target}
+					return contracts.Result{}, errDaemonRequired
 				}
 				return next(ctx, input)
 			}

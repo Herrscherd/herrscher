@@ -58,6 +58,7 @@ func hostErrorKeys() []hostErrorKey {
 		{errMemoryLocateUnsupported, "cli.host.fault.memory_locate_unsupported"},
 		{errMemoryForgetUnsupported, "cli.host.fault.memory_forget_unsupported"},
 		{errCommandSocketEmpty, "cli.host.fault.command_socket_empty"},
+		{errDaemonRequired, "cli.host.fault.daemon_required"},
 		{errNoGatewayPlugin, "cli.host.fault.no_gateway_plugin"},
 		{errGatewayFactoryEmpty, "cli.host.fault.gateway_factory_empty"},
 		{errHostNameMissing, "cli.host.fault.host_name_missing"},

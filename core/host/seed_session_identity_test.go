@@ -18,6 +18,15 @@ func TestSeedBackendCarriesTheSessionIdentity(t *testing.T) {
 	}
 }
 
+func TestSeedBackendCarriesTheSessionToken(t *testing.T) {
+	settings := make(map[string]string)
+	applyBackendRequest(settings, BackendRequest{Session: "first", SessionToken: "tok-first"}, modelRoute{})
+	want := contracts.EncodeEnvSetting(map[string]string{control.SessionVar: "first", control.ApprovalKeyVar: "tok-first"})
+	if settings["env"] != want {
+		t.Fatalf("env setting %q, want the session and its token %q", settings["env"], want)
+	}
+}
+
 func TestBuildBackendForRefusesASessionOnARemoteBackend(t *testing.T) {
 	fake := &fakeRemoteResolver{}
 	_, err := BuildBackendFor(context.Background(), BackendRequest{Vendor: "claude", Cmd: "claude", Session: "first", resolver: fake})

@@ -10,6 +10,7 @@ func hostErrKeys() map[Key][]string {
 		"cli.host.fault.no_risk_model":                 nil,
 		"cli.host.fault.risk_unreadable":               nil,
 		"cli.host.fault.what_invalid":                  nil,
+		"cli.host.fault.daemon_required":               nil,
 		"cli.host.fault.rewind_needs_daemon":           nil,
 		"cli.host.fault.fork_needs_daemon":             nil,
 		"cli.host.fault.turn_in_flight":                nil,

@@ -3,6 +3,7 @@ package host
 import (
 	"bufio"
 	"context"
+	"errors"
 	"io"
 	"net"
 	"strings"
@@ -56,6 +57,33 @@ func TestApproveAskRefusesASessionWithoutAToken(t *testing.T) {
 	sessionTab := newSessionTable()
 	if _, err := approveAskWithToken(t, sessionTab, "", "ghost"); err == nil {
 		t.Fatal("approve ask answered for a session nobody issued a token to")
+	}
+}
+
+func TestApproveAskRefusesAnEmptyTokenForAKnownSession(t *testing.T) {
+	sessionTab := newSessionTable()
+	sessionTab.issueToken("s1")
+	_, err := approveAskWithToken(t, sessionTab, "", "s1")
+	if !errors.Is(err, errApproveAskUnauthenticated) {
+		t.Fatalf("err = %v, want approve.ask_unauthenticated for a known session with an empty token", err)
+	}
+}
+
+func TestClosedSessionTokenIsRevoked(t *testing.T) {
+	sessionTab := newSessionTable()
+	driver := &sessionDriver{}
+	sessionTab.register("s1", driver)
+	old := sessionTab.issueToken("s1")
+	sessionTab.unregister("s1", driver)
+	if sessionTab.tokenMatches("s1", old) {
+		t.Fatal("the token of a closed session still answers approvals")
+	}
+	recreated := sessionTab.issueToken("s1")
+	if recreated == old {
+		t.Fatal("a session recreated under the same name kept the token of the closed one")
+	}
+	if sessionTab.tokenMatches("s1", old) {
+		t.Fatal("the closed session's token is accepted again after the name is reused")
 	}
 }
 

@@ -202,6 +202,7 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"hook.no_token":                     {"Variable"},
 		"approve.ask_unauthenticated":       {"Name"},
 		"hook.payload_unreadable":           {"Detail"},
+		"hook.payload_too_large":            nil,
 		"hook.names_no_tool":                nil,
 		"hook.no_daemon":                    {"Socket"},
 		"hook.cancelled":                    nil,

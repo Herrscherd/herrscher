@@ -705,6 +705,11 @@
     "other": "herrscher: could not read the hook payload, so this tool call is refused: {{.Detail}}"
   },
   {
+    "id": "hook.payload_too_large",
+    "description": "The approval hook refuses a tool call whose payload exceeds the size it reads",
+    "other": "herrscher: the hook payload is over the size limit, so this tool call is refused"
+  },
+  {
     "id": "hook.names_no_tool",
     "description": "The approval hook refuses a PreToolUse payload that names no tool",
     "other": "herrscher: the hook payload names no tool, so this tool call is refused"

@@ -705,6 +705,11 @@
     "other": "herrscher : impossible de lire la charge utile du hook, cet appel d'outil est donc refusé : {{.Detail}}"
   },
   {
+    "id": "hook.payload_too_large",
+    "description": "The approval hook refuses a tool call whose payload exceeds the size it reads",
+    "other": "herrscher : la charge utile du hook dépasse la taille limite, cet appel d'outil est donc refusé"
+  },
+  {
     "id": "hook.names_no_tool",
     "description": "The approval hook refuses a PreToolUse payload that names no tool",
     "other": "herrscher : la charge utile du hook ne nomme aucun outil, cet appel d'outil est donc refusé"

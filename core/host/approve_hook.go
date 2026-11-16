@@ -26,6 +26,7 @@ const (
 	hookNoSession          = "hook.no_session"
 	hookNoToken            = "hook.no_token"
 	hookPayloadUnreadable  = "hook.payload_unreadable"
+	hookPayloadTooLarge    = "hook.payload_too_large"
 	hookNamesNoTool        = "hook.names_no_tool"
 	hookNoDaemon           = "hook.no_daemon"
 	hookCancelled          = "hook.cancelled"
@@ -58,7 +59,10 @@ type hookAsker func(ctx context.Context, argv []string) (string, bool, error)
 func RunPermissionHook(ctx context.Context, stdin io.Reader, out, errOut io.Writer, target func() string, ask hookAsker) error {
 	lang := language.Client(slog.Default(), "")
 	var payload hookInput
-	raw, err := io.ReadAll(io.LimitReader(stdin, maxHookInput))
+	raw, err := io.ReadAll(io.LimitReader(stdin, maxHookInput+1))
+	if err == nil && len(raw) > maxHookInput {
+		return refuseHook(out, errOut, lang, hookPayloadTooLarge, nil)
+	}
 	if err == nil {
 		err = json.Unmarshal(raw, &payload)
 	}

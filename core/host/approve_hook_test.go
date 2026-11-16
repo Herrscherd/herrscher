@@ -351,3 +351,19 @@ func TestHookRefusesAPayloadOverTheLimit(t *testing.T) {
 		t.Fatalf("got %q, want deny", d)
 	}
 }
+
+func TestHookRefusesAPayloadOneByteOverTheLimit(t *testing.T) {
+	pinEnglish(t)
+	hookSession(t)
+	ask := func(context.Context, []string) (string, bool, error) {
+		t.Fatal("the daemon must not be asked about a payload one byte over the limit")
+		return "", false, nil
+	}
+	valid := `{"tool_name":"Bash"}`
+	padded := valid + strings.Repeat(" ", maxHookInput+1-len(valid))
+	var out, errOut bytes.Buffer
+	mustRunHook(context.Background(), t, strings.NewReader(padded), &out, &errOut, testTarget, ask)
+	if d, _ := hookDecision(t, out.String()); d != "deny" {
+		t.Fatalf("got %q, want deny: a valid payload cut at the limit must not pass as a complete one", d)
+	}
+}

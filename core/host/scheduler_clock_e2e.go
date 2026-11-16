@@ -34,5 +34,17 @@ func schedulerInterval() (time.Duration, error) {
 	if err != nil {
 		return 0, fmt.Errorf("%s=%q: %w", envSchedulerTick, raw, err)
 	}
+	if span <= 0 {
+		return 0, nonPositiveSpanError{name: envSchedulerTick, raw: raw}
+	}
 	return span, nil
+}
+
+type nonPositiveSpanError struct {
+	name string
+	raw  string
+}
+
+func (e nonPositiveSpanError) Error() string {
+	return fmt.Sprintf("%s=%q: the span must be positive", e.name, e.raw)
 }

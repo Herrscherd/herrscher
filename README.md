@@ -1608,6 +1608,10 @@ such as `f := runtimedir.At` is not seen.
 no vendor account. `scripts/check.sh` runs it with `go test -tags e2e ./e2e/...` on
 Linux, and says it skips the step anywhere else.
 
+The `e2e` build also reads two variables that the production binary ignores:
+`HERRSCHER_E2E_CLOCK` (an RFC 3339 instant the scheduler takes as now) and
+`HERRSCHER_E2E_SCHEDULER_TICK` (a positive duration in place of the one-minute tick).
+
 - Each `.txtar` file in `e2e/testdata/scenarios` is a
   [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) scenario.
   It gets its own `HOME`, a fresh git repository as its work directory and a unique

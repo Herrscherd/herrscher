@@ -149,10 +149,6 @@ func schedulerSettings() (func() time.Time, time.Duration, error) {
 	if err != nil {
 		return nil, 0, wrapHost(err, "serve.scheduler_tick", map[string]any{detailParam: err.Error()})
 	}
-	if tick <= 0 {
-		err = fmt.Errorf("%v: %w", tick, errNonPositive)
-		return nil, 0, wrapHost(err, "serve.scheduler_tick", map[string]any{detailParam: err.Error()})
-	}
 	return clock, tick, nil
 }
 

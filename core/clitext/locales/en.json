@@ -3158,11 +3158,6 @@
     "other": "checkpoint number must be a positive integer"
   },
   {
-    "id": "cli.host.fault.non_positive",
-    "description": "Erreur d'une commande hôte rendue à l'opérateur (non-positive duration)",
-    "other": "duration must be positive"
-  },
-  {
     "id": "cli.host.fault.not_checkpointable",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (not checkpointable)",
     "other": "has no checkpoints: it runs in no worktree of its own"

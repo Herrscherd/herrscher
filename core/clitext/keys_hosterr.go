@@ -14,7 +14,6 @@ func hostErrKeys() map[Key][]string {
 		"cli.host.fault.fork_needs_daemon":             nil,
 		"cli.host.fault.turn_in_flight":                nil,
 		"cli.host.fault.checkpoint_number":             nil,
-		"cli.host.fault.non_positive":                  nil,
 		"cli.host.fault.not_checkpointable":            nil,
 		"cli.host.fault.fork_no_worktree":              nil,
 		"cli.host.fault.compact_unsupported":           nil,

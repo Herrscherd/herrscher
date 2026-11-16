@@ -3158,11 +3158,6 @@
     "other": "le numéro de point de contrôle doit être un entier positif"
   },
   {
-    "id": "cli.host.fault.non_positive",
-    "description": "Erreur d'une commande hôte rendue à l'opérateur (non-positive duration)",
-    "other": "la durée doit être strictement positive"
-  },
-  {
     "id": "cli.host.fault.not_checkpointable",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (not checkpointable)",
     "other": "n'a aucun point de contrôle : elle ne tourne dans aucun worktree propre"

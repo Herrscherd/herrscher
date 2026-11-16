@@ -95,21 +95,30 @@ func (s *scheduler) wait() { s.wg.Wait() }
 
 func (s *scheduler) tick(ctx context.Context) {
 	now := s.now()
-	schedules := s.store.SnapshotSchedules()
-	for idx := range schedules {
-		name := schedules[idx].Name
+	for _, candidate := range dueCandidates(s.store.SnapshotSchedules(), now) {
+		name := candidate.Name
 		if !s.claim(name) {
 			continue
 		}
-		if !s.fireIfDue(ctx, name, now) {
+		definition, found := s.current(name)
+		if !found || !s.fireIfDue(ctx, definition, now) {
 			s.release(name)
 		}
 	}
 }
 
-func (s *scheduler) fireIfDue(ctx context.Context, name string, now time.Time) bool {
-	definition, found := s.current(name)
-	if !found || definition.Paused || !schedule.Due(definition, now) {
+func dueCandidates(schedules []schedule.Schedule, now time.Time) []schedule.Schedule {
+	var due []schedule.Schedule
+	for idx := range schedules {
+		if !schedules[idx].Paused && schedule.Due(schedules[idx], now) {
+			due = append(due, schedules[idx])
+		}
+	}
+	return due
+}
+
+func (s *scheduler) fireIfDue(ctx context.Context, definition schedule.Schedule, now time.Time) bool {
+	if definition.Paused || !schedule.Due(definition, now) {
 		return false
 	}
 	if schedule.Stale(definition, now) {

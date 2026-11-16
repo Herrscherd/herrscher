@@ -35,6 +35,7 @@ type oneShotSeedRuntime struct {
 	publish         func(session string, event contracts.Event)
 	record          func(session string, entry state.TranscriptEntry)
 	recordUsage     func(sess state.Session, records []usage.Record)
+	resume          func(session, token string)
 	timeout         time.Duration
 	backend         func(context.Context, state.Session) (contracts.Backend, error)
 	models          *ModelDiscovery
@@ -155,6 +156,9 @@ func attachOneShotTaps(driver *sessionDriver, sess state.Session, runtime oneSho
 	}
 	if runtime.recordUsage != nil {
 		driver.sink.Usage = func(records []usage.Record) { runtime.recordUsage(sess, records) }
+	}
+	if runtime.resume != nil {
+		driver.sink.Resume = func(token string) { runtime.resume(sess.Name, token) }
 	}
 }
 

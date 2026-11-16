@@ -216,6 +216,11 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 			backend:         h.seedBackend,
 			models:          h.models,
 			recordUsage:     h.recordUsage,
+			resume: func(session, token string) {
+				if err := h.st.SetResumeToken(session, token); err != nil {
+					warnLive(h.warnings, h.sessionLanguageSource(session), "warn.session_resume_token", map[string]any{nameParam: session, detailParam: err})
+				}
+			},
 			record: func(session string, entry state.TranscriptEntry) {
 				if err := state.AppendTranscript(state.TranscriptPath(h.partDir, session), entry); err != nil {
 					warnLive(h.warnings, h.sessionLanguageSource(session), "warn.session_seed_transcript", map[string]any{nameParam: session, detailParam: err})

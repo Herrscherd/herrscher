@@ -418,6 +418,7 @@ func (t *Terminal) Sessions() []contracts.SessionInfo {
 	return control.Sessions()
 }
 
+// SessionRevision returns how many session listings this terminal has served.
 func (t *Terminal) SessionRevision() uint64 {
 	t.ctrlMu.Lock()
 	defer t.ctrlMu.Unlock()

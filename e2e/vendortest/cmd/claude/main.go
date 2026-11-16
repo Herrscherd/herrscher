@@ -1,3 +1,4 @@
+// Command claude runs the vendortest fake Claude CLI that the e2e suite puts on PATH.
 package main
 
 import (

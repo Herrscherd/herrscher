@@ -118,6 +118,25 @@ func TestNoQuotaKeepsThePlannedAccountAndSaysSo(t *testing.T) {
 	}
 }
 
+func TestTheOnlySpentAccountIsAnnouncedToTheHomeGateway(t *testing.T) {
+	h, fallback, st := newFallbackHandler(t, spentDefaultWork())
+
+	if _, err := h.sessionCreateRun(t.Context(), args("name", "stuck", "vendor", "claude")); err != nil {
+		t.Fatal(err)
+	}
+
+	sess, _ := st.FindSession("stuck")
+	if sess.Account != "" {
+		t.Fatalf("session account = %q, want the only planned account kept", sess.Account)
+	}
+	if len(fallback.notices) != 1 || fallback.notices[0].Code != contracts.CodeAccountNoQuota {
+		t.Fatalf("notices = %+v, want the only spent account announced once as no-quota", fallback.notices)
+	}
+	if text := renderedNotice(t, fallback.notices[0]); !strings.Contains(text, "work") {
+		t.Fatalf("rendered notice %q does not name the only spent account", text)
+	}
+}
+
 func TestUnreadableLimitsKeepThePlannedAccountSilently(t *testing.T) {
 	unavailable := usage.AccountLimits{Vendor: "claude", Account: "work", Default: true, Status: usage.LimitsUnavailable}
 	h, fallback, st := newFallbackHandler(t, unavailable, readOf("perso", 10))

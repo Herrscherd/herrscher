@@ -28,13 +28,14 @@ func TestASuccessfulTurnHandsBackNoError(t *testing.T) {
 	}
 }
 
-func TestRunOneShotReportsAFailedTurn(t *testing.T) {
+func TestRunUntilClosedReportsAFailedTurn(t *testing.T) {
 	in := make(chan contracts.Event, 1)
 	in <- contracts.Event{T: eventwire.EventInput, Text: "go"}
+	close(in)
 	out := make(chan contracts.Event, 8)
-	err := RunOneShot(context.Background(), func(string) (contracts.Backend, error) { return errBackend{}, nil }, nil, "channel", in, out)
+	err := RunUntilClosed(context.Background(), func(string) (contracts.Backend, error) { return errBackend{}, nil }, nil, "channel", in, out)
 	if _, ok := errors.AsType[*TurnFailedError](err); !ok {
-		t.Fatalf("RunOneShot error = %v, want a TurnFailedError", err)
+		t.Fatalf("RunUntilClosed error = %v, want a TurnFailedError", err)
 	}
 }
 

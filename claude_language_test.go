@@ -26,9 +26,10 @@ func TestAFrenchTurnReachesTheClaudeBackendInFrench(t *testing.T) {
 	input := make(chan contracts.Event, 2)
 	input <- contracts.Event{T: eventwire.EventLanguage, Value: "fr"}
 	input <- contracts.Event{T: eventwire.EventInput, Text: "bonjour"}
+	close(input)
 	out := make(chan contracts.Event, 8)
 	newBackend := func(string) (contracts.Backend, error) { return backend, nil }
-	if err = bridge.RunOneShot(context.Background(), newBackend, nil, "channel", input, out); err != nil {
+	if err = bridge.RunUntilClosed(context.Background(), newBackend, nil, "channel", input, out); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(recorded)

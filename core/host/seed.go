@@ -119,16 +119,18 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	pumpDone := make(chan struct{})
 	go func() { defer close(pumpDone); driver.pump(pumpCtx) }()
 
+	bridgeCtx, stopBridge := context.WithCancel(seedCtx)
+	defer stopBridge()
 	bridgeErr := make(chan error, 1)
-	go runOneShotBridge(seedCtx, cancel, sess, orch, runtime, toBridge, fromBridge, bridgeErr)
+	go runOneShotBridge(bridgeCtx, cancel, sess, orch, runtime, toBridge, fromBridge, bridgeErr)
 
 	reply, ok := driver.SeedAndWaitWithTurnID(seedCtx, task, turnID)
 	if !ok {
 		return "", oneShotTimeoutError(bridgeErr)
 	}
 	driver.awaitTurnRelease(seedCtx)
-	close(toBridge)
-	if err := <-bridgeErr; err != nil {
+	stopBridge()
+	if err := <-bridgeErr; reportsFailedTurn(err) {
 		return "", err
 	}
 	if runtime.coordinator != nil {
@@ -169,17 +171,18 @@ func runOneShotBridge(ctx context.Context, cancel context.CancelFunc, sess state
 		return runtime.backendFactory()(ctx, sess)
 	}, orch, sess.ChannelID, toBridge, fromBridge)
 	bridgeErr <- err
-	if cancelsSeed(err) {
+	if cancelsSeed(err) && ctx.Err() == nil {
 		cancel()
 	}
 }
 
 func cancelsSeed(err error) bool {
-	if err == nil {
-		return false
-	}
+	return err != nil && !reportsFailedTurn(err)
+}
+
+func reportsFailedTurn(err error) bool {
 	_, failedTurn := errors.AsType[*bridge.TurnFailedError](err)
-	return !failedTurn
+	return failedTurn
 }
 
 func oneShotTimeoutError(bridgeErr <-chan error) error {

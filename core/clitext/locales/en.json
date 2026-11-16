@@ -3183,6 +3183,11 @@
     "other": "the bridge did not answer a history call in time"
   },
   {
+    "id": "cli.host.fault.too_many_edits",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (too many edits)",
+    "other": "the compaction would edit too many tool calls at once, so it edited none"
+  },
+  {
     "id": "cli.host.fault.no_compactor_factory",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (no compactor factory)",
     "other": "is a compactor plugin but provides no Compactor factory"

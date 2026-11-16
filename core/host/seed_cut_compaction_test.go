@@ -114,9 +114,13 @@ func (s *seedEmissions) kinds() []string {
 }
 
 func seedWithHistoryStage(backend contracts.Backend, budget time.Duration, emissions *seedEmissions) (string, error) {
+	return seedWithStage(historyPruningStage{}, backend, budget, emissions)
+}
+
+func seedWithStage(stage contracts.Compactor, backend contracts.Backend, budget time.Duration, emissions *seedEmissions) (string, error) {
 	table := newSessionTable()
 	policy := compactPolicy(50, "jev")
-	policy.plugins["jev"] = historyPruningStage{}
+	policy.plugins["jev"] = stage
 	policy.historyEditors["claude"] = true
 	policy.limits = contextwindow.NewLimits("1000", nil)
 	table.compaction = policy

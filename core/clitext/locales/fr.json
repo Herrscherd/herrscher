@@ -3183,6 +3183,11 @@
     "other": "le pont n'a pas répondu à temps à un appel sur l'historique"
   },
   {
+    "id": "cli.host.fault.too_many_edits",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (too many edits)",
+    "other": "la compaction voudrait modifier trop d'appels d'outils à la fois, elle n'en modifie aucun"
+  },
+  {
     "id": "cli.host.fault.no_compactor_factory",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (no compactor factory)",
     "other": "est un plugin compacteur mais ne fournit aucune fabrique Compactor"

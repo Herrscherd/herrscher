@@ -231,12 +231,26 @@ func TestCustomStageRefusesBrokenPlugins(t *testing.T) {
 	}
 }
 
-func TestPruneSendsTheEditsInBatchesAndSumsTheOutcome(t *testing.T) {
-	f, _, _ := historyFixture(t, true)
-	edits := make([]contracts.HistoryEdit, 2*historywire.PruneBatch+5)
+func numberedEdits(count int) []contracts.HistoryEdit {
+	edits := make([]contracts.HistoryEdit, count)
 	for i := range edits {
 		edits[i] = contracts.HistoryEdit{CallID: "c" + strconv.Itoa(i), Action: contracts.PruneCall}
 	}
+	return edits
+}
+
+func TestPruneRefusesMoreEditsThanOneFrameBeforeAnySend(t *testing.T) {
+	f, _, _ := historyFixture(t, true)
+	_, err := bridgeHistory{driver: f.driver}.PruneHistory(context.Background(), numberedEdits(historywire.MaxPruneEdits+1))
+	if !errors.Is(err, errTooManyEdits) {
+		t.Fatalf("PruneHistory = %v, want errTooManyEdits", err)
+	}
+	expectNoFrame(t, f)
+}
+
+func TestPruneSendsTheMaximumOfEditsInOneFrame(t *testing.T) {
+	f, _, _ := historyFixture(t, true)
+	edits := numberedEdits(historywire.MaxPruneEdits)
 	type pruneRun struct {
 		outcome contracts.PruneOutcome
 		err     error
@@ -246,24 +260,21 @@ func TestPruneSendsTheEditsInBatchesAndSumsTheOutcome(t *testing.T) {
 		outcome, err := bridgeHistory{driver: f.driver}.PruneHistory(context.Background(), edits)
 		done <- pruneRun{outcome, err}
 	}()
-	chars := 9000
-	for _, want := range []int{historywire.PruneBatch, historywire.PruneBatch, 5} {
-		request := expectFrameOf(t, f, historywire.EventPrune)
-		batch, err := historywire.DecodePrune(request)
-		if err != nil || len(batch) != want {
-			t.Fatalf("batch = %d edits, %v, want %d", len(batch), err, want)
-		}
-		answer, err := historywire.Pruned(contracts.PruneOutcome{Edited: len(batch), CharsBefore: chars, CharsAfter: chars - 1000})
-		if err != nil {
-			t.Fatalf("Pruned: %v", err)
-		}
-		chars -= 1000
-		f.from <- historywire.Answer(request, answer)
+	request := expectFrameOf(t, f, historywire.EventPrune)
+	sent, err := historywire.DecodePrune(request)
+	if err != nil || len(sent) != historywire.MaxPruneEdits {
+		t.Fatalf("frame = %d edits, %v, want all %d in one frame", len(sent), err, historywire.MaxPruneEdits)
 	}
+	answer, err := historywire.Pruned(contracts.PruneOutcome{Edited: len(sent), CharsBefore: 9000, CharsAfter: 6000})
+	if err != nil {
+		t.Fatalf("Pruned: %v", err)
+	}
+	f.from <- historywire.Answer(request, answer)
 	run := <-done
 	if run.err != nil || run.outcome != (contracts.PruneOutcome{Edited: len(edits), CharsBefore: 9000, CharsAfter: 6000}) {
-		t.Fatalf("outcome = %+v, %v, want every edit counted from the first size to the last", run.outcome, run.err)
+		t.Fatalf("outcome = %+v, %v, want the outcome of the one frame", run.outcome, run.err)
 	}
+	expectNoFrame(t, f)
 }
 
 func TestACallerDeadlineIsNotReportedAsAHistoryTimeout(t *testing.T) {

@@ -30,9 +30,8 @@ const ChunkLimit = 128 * 1024
 // Collector accepts.
 const HistoryLimit = 64 * 1024 * 1024
 
-// PruneBatch is the most edits one prune frame carries, so the frame stays under
-// the line limit of the control wire.
-const PruneBatch = 1000
+// MaxPruneEdits is the most edits one prune frame carries; a longer list is refused before it is sent.
+const MaxPruneEdits = 1000
 
 // FailureCode names the cause a history_error frame carries in its Value.
 type FailureCode int

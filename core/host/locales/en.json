@@ -65,6 +65,11 @@
     "other": "the history of the session is too large to be edited"
   },
   {
+    "id": "compaction.too_many_edits",
+    "description": "The compaction would edit more tool calls than one frame carries, so it edited none",
+    "other": "the compaction would edit too many tool calls at once, so it edited none"
+  },
+  {
     "id": "compaction.failed",
     "description": "A compaction fails for a reason with no code of its own; Detail holds the technical text",
     "other": "compaction failed: {{.Detail}}"

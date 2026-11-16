@@ -72,6 +72,7 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"compaction.no_history_port":      nil,
 		"compaction.history_timeout":      nil,
 		"compaction.history_too_large":    nil,
+		"compaction.too_many_edits":       nil,
 		"compaction.failed":               {"Detail"},
 		"coordination.routed":             {"Agent", "Session"},
 		"coordination.sealed":             {"Node"},

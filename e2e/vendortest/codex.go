@@ -20,6 +20,9 @@ const (
 	appServerVerb       = "app-server"
 	methodTurnStart     = "turn/start"
 	methodItemCompleted = "item/completed"
+	methodTurnStarted   = "turn/started"
+	methodTurnCompleted = "turn/completed"
+	methodAgentDelta    = "item/agentMessage/delta"
 )
 
 var errCodexArgs = errors.New("the codex fake speaks only app-server, login status and --version")
@@ -154,19 +157,19 @@ func (v *vendor) startTurn(out io.Writer, message rpcMessage) error {
 }
 
 func writeTurnEvents(out io.Writer, threadID string, reply vendorReply) error {
-	events := []rpcNotification{{Method: "turn/started", Params: turnPayload(threadID, map[string]any{"id": codexTurnID})}}
+	events := []rpcNotification{{Method: methodTurnStarted, Params: turnPayload(threadID, map[string]any{"id": codexTurnID})}}
 	if reply.failed {
 		failed := map[string]any{"id": codexTurnID, wordStatus: "failed", wordError: map[string]any{"message": reply.failure}}
-		events = append(events, rpcNotification{Method: "turn/completed", Params: turnPayload(threadID, failed)})
+		events = append(events, rpcNotification{Method: methodTurnCompleted, Params: turnPayload(threadID, failed)})
 	} else {
 		delta := map[string]any{keyThreadID: threadID, keyTurnID: codexTurnID, "delta": reply.text}
 		item := map[string]any{"id": codexItemID, keyType: wordAgent, wordText: reply.text}
 		itemDone := map[string]any{keyThreadID: threadID, keyTurnID: codexTurnID, keyItem: item}
 		completed := map[string]any{"id": codexTurnID, wordStatus: "completed"}
 		events = append(events,
-			rpcNotification{Method: "item/agentMessage/delta", Params: delta},
+			rpcNotification{Method: methodAgentDelta, Params: delta},
 			rpcNotification{Method: methodItemCompleted, Params: itemDone},
-			rpcNotification{Method: "turn/completed", Params: turnPayload(threadID, completed)},
+			rpcNotification{Method: methodTurnCompleted, Params: turnPayload(threadID, completed)},
 		)
 	}
 	for _, event := range events {

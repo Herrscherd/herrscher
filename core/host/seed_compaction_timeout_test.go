@@ -99,7 +99,8 @@ func TestSeedReturnsWhenACompactionIgnoresItsContext(t *testing.T) {
 	if err != nil || reply != "reply" {
 		t.Fatalf("seed = (%q, %v), want the reply the turn produced", reply, err)
 	}
-	if elapsed := time.Since(started); elapsed > cutSeedBudget+2*seedJoinGrace+time.Second {
-		t.Fatalf("seed returned after %v, want it bounded by its budget and its join grace", elapsed)
+	waits := cutSeedBudget + 2*seedJoinGrace
+	if elapsed := time.Since(started); elapsed > 2*waits {
+		t.Fatalf("seed returned after %v, want it within twice its waits (%v)", elapsed, waits)
 	}
 }

@@ -68,7 +68,7 @@ func TestHookSpellsASubjectThatLooksLikeAFlag(t *testing.T) {
 	}
 }
 
-func TestHookAllowsWithNoSessionInTheEnvironment(t *testing.T) {
+func TestHookRefusesWithNoSessionInTheEnvironment(t *testing.T) {
 	t.Setenv(SessionVar, "")
 	ask := func(context.Context, []string) (string, bool, error) {
 		t.Error("the daemon must not be asked about a call that belongs to no session")
@@ -77,8 +77,8 @@ func TestHookAllowsWithNoSessionInTheEnvironment(t *testing.T) {
 	in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}`)
 	var out, errOut bytes.Buffer
 	RunPermissionHook(context.Background(), in, &out, &errOut, testTarget, ask)
-	if d, reason := hookDecision(t, out.String()); d != "allow" || reason != "" {
-		t.Fatalf("got %q/%q, want a bare allow", d, reason)
+	if d, reason := hookDecision(t, out.String()); d != "deny" || reason != noSessionReason {
+		t.Fatalf("got %q/%q, want a refusal naming the missing session", d, reason)
 	}
 	if !strings.Contains(errOut.String(), SessionVar) {
 		t.Fatalf("stderr was %q, want the variable whose absence turned the hook off", errOut.String())

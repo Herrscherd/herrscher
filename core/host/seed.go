@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -18,6 +19,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/eventwire"
+	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/lease"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
@@ -248,6 +250,7 @@ type BackendRequest struct {
 	AccountRoot string
 	Keys        *keyproxy.Proxy
 	Models      *ModelDiscovery
+	Session     string
 
 	resolver remoteBackendResolver
 }
@@ -393,9 +396,19 @@ func applyBackendRequest(settings map[string]string, req BackendRequest, route m
 	setIfPresent(settings, "dir", req.Dir)
 	setIfPresent(settings, "resume", req.Resume)
 	setIfPresent(settings, "model", route.arg)
-	if len(route.env) > 0 {
-		settings["env"] = contracts.EncodeEnvSetting(route.env)
+	if env := withSessionIdentity(route.env, req.Session); len(env) > 0 {
+		settings["env"] = contracts.EncodeEnvSetting(env)
 	}
+}
+
+func withSessionIdentity(env map[string]string, session string) map[string]string {
+	if session == "" {
+		return env
+	}
+	identity := make(map[string]string, len(env)+1)
+	maps.Copy(identity, env)
+	identity[control.SessionVar] = session
+	return identity
 }
 
 func setIfPresent(settings map[string]string, key, value string) {
@@ -419,6 +432,7 @@ func newSeedBackend(ctx context.Context, sess state.Session, keys *keyproxy.Prox
 		Account: sess.Account,
 		Keys:    keys,
 		Models:  models,
+		Session: sess.Name,
 	})
 }
 

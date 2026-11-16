@@ -18,6 +18,8 @@ import (
 // control.SessionVar for why it is declared over there.
 const SessionVar = control.SessionVar
 
+const noSessionReason = "herrscher: this tool call has no session identity, so it is refused"
+
 const hookEvent = "PreToolUse"
 
 type hookInput struct {
@@ -71,8 +73,8 @@ func RunPermissionHook(ctx context.Context, stdin io.Reader, out, errOut io.Writ
 
 	session := strings.TrimSpace(os.Getenv(SessionVar))
 	if session == "" {
-		logWriteFailure(fmt.Fprintf(errOut, "herrscher: no %s in the environment, allowing\n", SessionVar))
-		writeHookDecision(out, errOut, "allow", "")
+		logWriteFailure(fmt.Fprintf(errOut, "herrscher: no %s in the environment, refusing\n", SessionVar))
+		writeHookDecision(out, errOut, "deny", noSessionReason)
 		return
 	}
 

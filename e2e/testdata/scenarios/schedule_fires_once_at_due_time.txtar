@@ -4,12 +4,12 @@ env HERRSCHER_E2E_SCHEDULER_TICK=20ms
 waitdaemon
 exec herrscher session create --name desk
 exec herrscher schedule add --name digest --session desk --cron '0 9 * * *' --task 'write the digest'
-exec herrscher schedule add --name evening --session desk --cron '0 18 * * *' --task 'write the evening note'
+exec herrscher schedule add --name later --session desk --every 87600h --task 'write the later note'
 waitlog 'prompt .*write the digest'
 exec sleep 1
 exec cat $VENDORTEST_LOG
-stdout -count=1 'prompt .*write the digest'
-! stdout 'write the evening note'
+stdout -count=1 'write the digest"$'
+! stdout 'write the later note"$'
 kill -INT daemon
 wait daemon
 ! waitdaemon

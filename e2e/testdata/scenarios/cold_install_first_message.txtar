@@ -1,6 +1,8 @@
 cp $WORK/plugins.go $WORK/.env.example .
 exec herrscher init --yes --no-build --host .
 cmp .env .env.example
+exec cat plugins.go
+stdout 'github.com/Herrscherd/herrscher-claude-backend'
 ! exec herrscher serve &daemon&
 waitdaemon
 exec herrscher session create --name cold

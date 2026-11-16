@@ -57,7 +57,11 @@ func summaryConfig(path string, count int) {
 		fmt.Fprintf(os.Stderr, "  %s %s\n", sty.wrap(sty.dim, "·"), msg(clitext.ManageNothingEntered, clitext.Params{clitext.ParamPath: path}))
 	}
 	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.dim, msg(clitext.ManageInstalledNote, nil)))
-	fmt.Fprintf(os.Stderr, "  %s\n\n", msg(clitext.ManageStartWith, clitext.Params{clitext.ParamCommand: sty.wrap(sty.bold, "herrscherd serve")}))
+	fmt.Fprintf(os.Stderr, "  %s\n\n", msg(clitext.ManageStartWith, clitext.Params{clitext.ParamCommand: sty.wrap(sty.bold, serveCommand(os.Args[0]))}))
+}
+
+func serveCommand(invoked string) string {
+	return filepath.Base(invoked) + " serve"
 }
 
 func shortModule(m string) string {

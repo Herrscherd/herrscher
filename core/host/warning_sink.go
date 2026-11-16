@@ -30,10 +30,10 @@ type serializedWriter struct {
 	w  io.Writer
 }
 
-func (s *serializedWriter) Write(p []byte) (int, error) {
+func (s *serializedWriter) Write(data []byte) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.w.Write(p)
+	return s.w.Write(data)
 }
 
 type warningSink struct {

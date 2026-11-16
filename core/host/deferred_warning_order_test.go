@@ -9,8 +9,13 @@ import (
 )
 
 func TestDeferredWarningsKeepTheOrderOfTheLockHolders(t *testing.T) {
-	var out lockedBuffer
-	h := testHub(&hub{warnings: &out, teardownGrace: time.Second})
+	gate := newGatedWarnings("blocker")
+	t.Cleanup(gate.open)
+	h := testHub(&hub{warnings: gate, teardownGrace: time.Second})
+	if _, err := h.warnings.Write([]byte("blocker\n")); err != nil {
+		t.Fatal(err)
+	}
+	awaitGatedWrite(t, gate)
 
 	h.lifecycle.Lock()
 	h.deferWarning(i18n.English, "warn.session_start_recovered", map[string]any{nameParam: "first"})
@@ -23,11 +28,29 @@ func TestDeferredWarningsKeepTheOrderOfTheLockHolders(t *testing.T) {
 		h.releaseLifecycle()
 	})
 	h.releaseLifecycle()
-	awaitWarning(t, &out, "second")
+	gate.open()
+	awaitWarning(t, &gate.out, "second")
 	<-second
 
-	got := out.String()
+	got := gate.out.String()
 	if first, last := strings.Index(got, "first"), strings.Index(got, "second"); first < 0 || first > last {
 		t.Fatalf("the warning deferred under the lock came out after a later one:\n%s", got)
+	}
+}
+
+func TestReleaseLifecycleSharesOneBudgetAcrossDeferredWarnings(t *testing.T) {
+	const deferred = 20
+	writer := &blockedForever{release: make(chan struct{})}
+	t.Cleanup(func() { close(writer.release) })
+	h := testHub(&hub{warnings: writer, teardownGrace: time.Second})
+
+	h.lifecycle.Lock()
+	for range deferred {
+		h.deferWarning(i18n.English, "warn.session_start_recovered", map[string]any{nameParam: "stalled"})
+	}
+	started := time.Now()
+	h.releaseLifecycle()
+	if elapsed := time.Since(started); elapsed > 2*time.Second {
+		t.Fatalf("releaseLifecycle took %v to release %d deferred warnings behind a frozen writer, want one budget of about %v", elapsed.Round(time.Millisecond), deferred, warningWriteBudget)
 	}
 }

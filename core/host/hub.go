@@ -59,7 +59,7 @@ type hub struct {
 
 	listenedSessions map[string]struct{}
 	closed           bool
-	deferred         []func() error
+	deferred         []warningAwait
 
 	teardownGrace time.Duration
 	listen        func(ctx context.Context, path string) (net.Listener, error)

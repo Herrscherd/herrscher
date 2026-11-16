@@ -138,13 +138,14 @@ func (s Session) IsLegacy() bool {
 
 // State is the daemon's persisted configuration. All access is mutex-guarded.
 type State struct {
-	mu           sync.Mutex `json:"-"`
-	path         string     `json:"-"`
-	Home         HomeRef    `json:"home"`
-	Repo         string     `json:"repo,omitempty"`
-	Workspace    string     `json:"workspace,omitempty"`
-	Source       string     `json:"source,omitempty"`
-	OperatorLang string     `json:"operator_lang,omitempty"`
+	mu           sync.Mutex                                             `json:"-"`
+	path         string                                                 `json:"-"`
+	write        func(name string, data []byte, perm os.FileMode) error `json:"-"`
+	Home         HomeRef                                                `json:"home"`
+	Repo         string                                                 `json:"repo,omitempty"`
+	Workspace    string                                                 `json:"workspace,omitempty"`
+	Source       string                                                 `json:"source,omitempty"`
+	OperatorLang string                                                 `json:"operator_lang,omitempty"`
 	// Approvals is the daemon-wide rule set, stored rendered ("ask Bash(git
 	// push*)") rather than structured: it is what the operator typed, it reads
 	// back out of the file, and parsing is already the check that runs before a
@@ -188,7 +189,7 @@ type RoleAssignment struct {
 }
 
 // NewState returns an empty state bound to path (not yet written).
-func NewState(path string) *State { return &State{path: path} }
+func NewState(path string) *State { return &State{path: path, write: os.WriteFile} }
 
 // ApplyDefaults seeds declarative config.json values into the in-memory state
 // for any field not already set, WITHOUT persisting. This keeps config.json the
@@ -292,7 +293,7 @@ func (s *State) saveLocked() error {
 		return err
 	}
 	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, buf, privateFileMode); err != nil {
+	if err := s.write(tmp, buf, privateFileMode); err != nil {
 		return err
 	}
 	return os.Rename(tmp, s.path)
@@ -388,22 +389,6 @@ func (s *State) SetResumeToken(name, token string) error {
 	return s.setSessionField(name, func(sess *Session) *string { return &sess.ResumeToken }, token)
 }
 
-func (s *State) setSessionField(name string, field func(*Session) *string, value string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for idx := range s.Sessions {
-		if s.Sessions[idx].Name == name {
-			current := field(&s.Sessions[idx])
-			if *current == value {
-				return nil
-			}
-			*current = value
-			return s.saveLocked()
-		}
-	}
-	return nil
-}
-
 // MemoryRoots answers which project and agent this session files what it learns
 // under. A memory root wins over the placement field of the same name: Project
 // may be steering the session into a workspace sub-directory and Agent may be
@@ -494,7 +479,7 @@ func (s *State) SetCompactPercent(name string, percent *int) (bool, error) {
 	return false, nil
 }
 
-// SetAccount sets a session account profile, dropping its resume token when fresh; false when no session matches.
+// SetAccount sets a session account profile, dropping its resume token and interrupted-turn mark when fresh; false when no session matches.
 func (s *State) SetAccount(name, account string, fresh bool) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -514,7 +499,8 @@ func (s *State) SetAccount(name, account string, fresh bool) (bool, error) {
 
 // SetBackendTarget re-points a live session's backend: it rewrites Vendor and the
 // opaque Cmd string (which carries model+effort) and clears the resume token,
-// which is backend-specific and meaningless once the vendor/model changes. The
+// which is backend-specific and meaningless once the vendor/model changes. It also
+// drops the interrupted-turn mark, which belongs to the previous backend. The
 // caller restarts the supervised child so the new values take effect. Returns
 // false when no session matches name, and the persistence error when the new
 // target could not be written.

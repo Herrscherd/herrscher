@@ -465,29 +465,8 @@ func scrollbackOf(partDir, name string) []contracts.ScrollbackLine {
 	return out
 }
 
-func (h *hub) RestartWithResume(name, token string) error {
-	sess, ok := h.st.FindSession(name)
-	if !ok {
-		return &NotFoundError{Kind: kindSession, Name: name}
-	}
-	h.goDead(name)
-	sess.ResumeToken = token
-	sess.InterruptedTurn = ""
-	return h.goLiveStarted(context.Background(), sess, func() error {
-		if err := h.persistResumeToken(name, token); err != nil {
-			return err
-		}
-		h.clearTurnMark(name)
-		return nil
-	})
-}
-
-func (h *hub) persistResumeToken(session, token string) error {
-	return h.st.SetResumeToken(session, token)
-}
-
 func (h *hub) keepResumeToken(session, token string) {
-	if err := h.persistResumeToken(session, token); err != nil {
+	if err := h.st.SetResumeToken(session, token); err != nil {
 		warnLive(h.warnings, h.sessionLanguageSource(session), "warn.session_resume_token", map[string]any{nameParam: session, detailParam: err})
 	}
 }

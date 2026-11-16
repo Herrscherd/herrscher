@@ -241,9 +241,20 @@ func numberedEdits(count int) []contracts.HistoryEdit {
 
 func TestPruneRefusesMoreEditsThanOneFrameBeforeAnySend(t *testing.T) {
 	f, _, _ := historyFixture(t, true)
-	_, err := bridgeHistory{driver: f.driver}.PruneHistory(context.Background(), numberedEdits(historywire.MaxPruneEdits+1))
-	if !errors.Is(err, errTooManyEdits) {
-		t.Fatalf("PruneHistory = %v, want errTooManyEdits", err)
+	refusal := make(chan error, 1)
+	go func() {
+		_, err := bridgeHistory{driver: f.driver}.PruneHistory(context.Background(), numberedEdits(historywire.MaxPruneEdits+1))
+		refusal <- err
+	}()
+	select {
+	case err := <-refusal:
+		if !errors.Is(err, errTooManyEdits) {
+			t.Fatalf("PruneHistory = %v, want errTooManyEdits", err)
+		}
+	case frame := <-f.toBridge:
+		t.Fatalf("frame %+v reached the bridge, want the refusal before any send", frame)
+	case <-time.After(2 * time.Second):
+		t.Fatal("PruneHistory neither refused nor sent a frame")
 	}
 	expectNoFrame(t, f)
 }

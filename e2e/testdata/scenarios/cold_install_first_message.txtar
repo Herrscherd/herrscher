@@ -1,0 +1,23 @@
+cp $WORK/plugins.go $WORK/.env.example .
+exec herrscher init --yes --no-build --host .
+cmp .env .env.example
+! exec herrscher serve &daemon&
+waitdaemon
+exec herrscher session create --name cold
+exec herrscher session seed --name cold --task 'hello cold install'
+stdout '^echo: hello cold install$'
+kill -INT daemon
+wait daemon
+! waitdaemon
+exec cat $VENDORTEST_LOG
+stdout 'prompt .*hello cold install'
+-- .env.example --
+# seeded by init
+CLAUDE_CMD=claude
+-- plugins.go --
+package main
+
+import (
+	// herrscher:plugins
+	// herrscher:end
+)

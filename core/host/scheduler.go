@@ -55,7 +55,7 @@ func newScheduler(store scheduleStore, sessions sessionLister, creator scheduleC
 }
 
 func (s *scheduler) Run(ctx context.Context) {
-	ticker := time.NewTicker(schedulerTick)
+	ticker := time.NewTicker(schedulerInterval())
 	defer ticker.Stop()
 	caughtUp := false
 	for {

@@ -324,7 +324,7 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 		<-ctx.Done()
 		runningHub.stopLive()
 	}()
-	sched := newScheduler(store, store, runningHub, sessions.Seed, time.Now)
+	sched := newScheduler(store, store, runningHub, sessions.Seed, schedulerClock())
 	deps.schedSlot.sched = sched
 	go sched.Run(ctx)
 	runningHub.startReconcile(ctx)

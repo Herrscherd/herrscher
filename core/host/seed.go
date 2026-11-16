@@ -124,18 +124,23 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	bridgeErr := make(chan error, 1)
 	go runOneShotBridge(bridgeCtx, cancel, sess, orch, runtime, toBridge, fromBridge, bridgeErr)
 
+	stopSeedWork := func() {
+		pumpCancel()
+		<-pumpDone
+		stopBridge()
+	}
 	reply, ok := driver.SeedAndWaitWithTurnID(seedCtx, task, turnID)
 	if !ok {
-		return "", oneShotTimeoutError(bridgeErr)
+		timeoutErr := oneShotTimeoutError(bridgeErr)
+		stopSeedWork()
+		return "", timeoutErr
 	}
 	driver.awaitTurnRelease(seedCtx)
-	stopBridge()
+	stopSeedWork()
 	if err := <-bridgeErr; reportsFailedTurn(err) {
 		return "", err
 	}
 	if runtime.coordinator != nil {
-		pumpCancel()
-		<-pumpDone
 		driver.coordinator = runtime.coordinator
 		driver.activeTurnID = turnID
 		if coordination := driver.maybeCoordinate(seedCtx, reply); coordination != nil {

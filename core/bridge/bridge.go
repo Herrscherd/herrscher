@@ -13,6 +13,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/eventwire"
+	"github.com/Herrscherd/herrscher/core/historywire"
 )
 
 var errNoHubSocket = errors.New("bridge requires --hub-socket (pure-runner mode)")
@@ -115,6 +116,10 @@ func serveInput(ctx context.Context, out chan<- contracts.Event, resp contracts.
 	switch event.T {
 	case compactwire.EventRequest:
 		runCompact(ctx, channelSink{done: ctx.Done(), out: out}, resp, nil, event)
+	case historywire.EventRead:
+		runHistoryRead(ctx, channelSink{done: ctx.Done(), out: out}, resp, nil, event)
+	case historywire.EventPrune:
+		runHistoryPrune(ctx, channelSink{done: ctx.Done(), out: out}, resp, nil, event)
 	case eventwire.EventInput:
 		return runOneTurn(ctx, channelSink{done: ctx.Done(), out: out}, resp, orch, event, nil, newSkillEngine(resp), affordances{}, nil, lang)
 	}

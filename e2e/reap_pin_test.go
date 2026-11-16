@@ -26,7 +26,7 @@ func TestReapInstanceKillsNothingWhenTheSecondScanFails(t *testing.T) {
 	if !errors.Is(err, syscall.EISDIR) {
 		t.Fatalf("got %v, want the second scan to fail on the replaced environment", err)
 	}
-	if !stillRunning(child) {
+	if !stillRunningAfter(child, signalSettle) {
 		t.Fatal("the process was ended although the second scan failed: nothing may be signalled on an unverified list")
 	}
 }
@@ -104,6 +104,19 @@ func fakeStat(t *testing.T, root string, pid int, start string) {
 	if err := os.WriteFile(filepath.Join(root, strconv.Itoa(pid), "stat"), []byte(line), 0o600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+const signalSettle = 300 * time.Millisecond
+
+func stillRunningAfter(cmd *exec.Cmd, window time.Duration) bool {
+	deadline := time.Now().Add(window)
+	for time.Now().Before(deadline) {
+		if !stillRunning(cmd) {
+			return false
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return stillRunning(cmd)
 }
 
 func stillRunning(cmd *exec.Cmd) bool {

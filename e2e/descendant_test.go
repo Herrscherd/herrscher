@@ -101,7 +101,7 @@ func killDescendant(pid int, entry string) error {
 	if err != nil {
 		return err
 	}
-	p, pinnedOK, err := pin(procRoot, processRef{pid: pid, start: stat.start}, entry)
+	p, pinnedOK, err := pin(procRoot, openPidfd, processRef{pid: pid, start: stat.start}, entry)
 	if err != nil || !pinnedOK {
 		return err
 	}

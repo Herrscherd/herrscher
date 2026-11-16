@@ -68,7 +68,17 @@ func readStat(root string, pid int) (procStat, error) {
 	return parseStat(string(data))
 }
 
+type pidfdOpener func(pid int) (int, error)
+
+func openPidfd(pid int) (int, error) {
+	return unix.PidfdOpen(pid, 0)
+}
+
 func reapInstance(root, instance string, grace time.Duration) ([]string, []string, error) {
+	return reapInstanceWith(root, instance, grace, openPidfd)
+}
+
+func reapInstanceWith(root, instance string, grace time.Duration, open pidfdOpener) ([]string, []string, error) {
 	if !instanceIDPattern.MatchString(instance) {
 		return nil, nil, fmt.Errorf("refusing to reap %q: it is not an instance id", instance)
 	}
@@ -77,7 +87,7 @@ func reapInstance(root, instance string, grace time.Duration) ([]string, []strin
 	if err != nil || len(listed) == 0 {
 		return nil, nil, err
 	}
-	set := newPinSet(root, entry)
+	set := newPinSet(root, entry, open)
 	stopped, survivors, reapErr := reapPinned(root, set, listed, grace)
 	return stopped, survivors, errors.Join(reapErr, set.close())
 }
@@ -122,18 +132,19 @@ type pinned struct {
 type pinSet struct {
 	root  string
 	entry string
+	open  pidfdOpener
 	byPID map[int]pinned
 }
 
-func newPinSet(root, entry string) *pinSet {
-	return &pinSet{root: root, entry: entry, byPID: make(map[int]pinned)}
+func newPinSet(root, entry string, open pidfdOpener) *pinSet {
+	return &pinSet{root: root, entry: entry, open: open, byPID: make(map[int]pinned)}
 }
 
 func (s *pinSet) add(ref processRef) error {
 	if _, known := s.byPID[ref.pid]; known {
 		return nil
 	}
-	p, ok, err := pin(s.root, ref, s.entry)
+	p, ok, err := pin(s.root, s.open, ref, s.entry)
 	if err != nil || !ok {
 		return err
 	}
@@ -179,8 +190,8 @@ func (p pinned) release() error {
 	return unix.Close(p.fd)
 }
 
-func pin(root string, ref processRef, entry string) (pinned, bool, error) {
-	fd, err := unix.PidfdOpen(ref.pid, 0)
+func pin(root string, open pidfdOpener, ref processRef, entry string) (pinned, bool, error) {
+	fd, err := open(ref.pid)
 	if errors.Is(err, syscall.ESRCH) {
 		return pinned{}, false, nil
 	}

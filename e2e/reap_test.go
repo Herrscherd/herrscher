@@ -394,8 +394,17 @@ func TestSettleDoesNotWaitForAProcessToExitByItself(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	running := exec.CommandContext(t.Context(), "sleep", "1")
+	running := exec.CommandContext(t.Context(), "cat")
 	running.Env = []string{instanceEnv + "=" + instance}
+	stdin, err := running.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if closeErr := stdin.Close(); closeErr != nil && !errors.Is(closeErr, os.ErrClosed) {
+			t.Error(closeErr)
+		}
+	})
 	if startErr := running.Start(); startErr != nil {
 		t.Fatal(startErr)
 	}

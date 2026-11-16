@@ -27,9 +27,7 @@ const (
 
 var errCodexArgs = errors.New("the codex fake speaks only app-server, login status and --version")
 
-// Codex runs the fake codex CLI on args. It answers the login probe and serves the
-// JSON-RPC app-server that the codex backend drives in stream mode, replaying one
-// turn per turn/start request.
+// Codex runs the fake codex CLI on args and returns its exit status.
 func Codex(args []string, streams Streams, files Files) int {
 	if slices.Contains(args, flagVersion) {
 		return exitOf(streams.Err, writeLine(streams.Out, codexVersion))

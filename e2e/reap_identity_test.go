@@ -21,7 +21,7 @@ func TestPinRefusesAProcessWhoseStartTimeChanged(t *testing.T) {
 	root := t.TempDir()
 	fakeProcess(t, root, child.Process.Pid, entry+"\x00")
 	fakeStat(t, root, child.Process.Pid, "2000")
-	_, pinnedOK, err := pin(root, processRef{pid: child.Process.Pid, start: fakeStart}, entry)
+	_, pinnedOK, err := pin(root, openPidfd, processRef{pid: child.Process.Pid, start: fakeStart}, entry)
 	if err != nil || pinnedOK {
 		t.Fatalf("got pinned=%v err=%v, want a refusal without error when the start time changed", pinnedOK, err)
 	}
@@ -39,7 +39,7 @@ func TestPinCountsAProcessWhoseStatVanishedAsStopped(t *testing.T) {
 	if err := os.Remove(filepath.Join(root, strconv.Itoa(child.Process.Pid), "stat")); err != nil {
 		t.Fatal(err)
 	}
-	_, pinnedOK, err := pin(root, processRef{pid: child.Process.Pid, start: fakeStart}, entry)
+	_, pinnedOK, err := pin(root, openPidfd, processRef{pid: child.Process.Pid, start: fakeStart}, entry)
 	if err != nil || pinnedOK {
 		t.Fatalf("got pinned=%v err=%v, want a process whose stat vanished counted as stopped", pinnedOK, err)
 	}
@@ -88,6 +88,20 @@ func TestSignalGoesThroughThePinnedDescriptor(t *testing.T) {
 	}
 	if !stillRunning(other) {
 		t.Fatal("the signal went to the pid stored beside the descriptor instead of the pinned process")
+	}
+}
+
+func TestReapInstanceSignalsNothingWithoutPidfd(t *testing.T) {
+	instance := newTestInstance(t)
+	child := startSleeper(t)
+	root := t.TempDir()
+	fakeProcess(t, root, child.Process.Pid, instanceEntry(instance)+"\x00")
+	noPidfd := func(int) (int, error) { return -1, syscall.ENOSYS }
+	if _, _, err := reapInstanceWith(root, instance, reapGrace, noPidfd); !errors.Is(err, syscall.ENOSYS) {
+		t.Fatalf("got %v, want the refusal to pin reported as ENOSYS", err)
+	}
+	if !stillRunningAfter(child, signalSettle) {
+		t.Fatal("a process was signalled without a pinned descriptor")
 	}
 }
 

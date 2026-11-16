@@ -63,10 +63,7 @@ func (e *LineError) Unwrap() error {
 	return e.Err
 }
 
-// ParseScript reads a script. Each line is one step: "text <words>", "tool
-// <Name> <json input>", "error <message>", "apierror <message>", "spawn <file>",
-// "echo", "hang" or "crash", the last three alone. Blank lines are skipped and a
-// turn with no step is refused.
+// ParseScript reads a script, one step per line.
 func ParseScript(source io.Reader) (Script, error) {
 	var script Script
 	current := Turn{}
@@ -137,7 +134,7 @@ func (t *Turn) empty() bool {
 func parseStep(line string) (step, error) {
 	name, rest := cutWord(line)
 	switch name {
-	case wordText:
+	case scriptKeywordText:
 		return textStep(stepText, rest)
 	case wordError:
 		return textStep(stepFail, rest)
@@ -188,8 +185,7 @@ func toolStep(rest string) (step, error) {
 	return step{kind: stepTool, tool: tool, input: json.RawMessage(input)}, nil
 }
 
-// Turn returns the reply scripted for the turn at index, counted from zero
-// across every process that replayed this script. A turn past the end echoes.
+// Turn returns the reply scripted for the turn at index, counted across processes.
 func (s Script) Turn(index int) Turn {
 	if index < len(s.turns) {
 		return s.turns[index]

@@ -20,9 +20,7 @@ var (
 	errCursorPrint = errors.New("the cursor fake needs -p, which the cursor backend always passes")
 )
 
-// Cursor runs the fake cursor-agent CLI on args. It answers the status probe and
-// replays one turn per invocation in the stream-json format the cursor backend
-// reads: the prompt arrives raw on stdin and the reply leaves as JSON lines.
+// Cursor runs the fake cursor-agent CLI on args and returns its exit status.
 func Cursor(args []string, streams Streams, files Files) int {
 	if slices.Contains(args, flagVersion) {
 		return exitOf(streams.Err, writeLine(streams.Out, cursorVersion))
@@ -85,7 +83,7 @@ func (v *vendor) cursorTurn(out io.Writer, resume, prompt string) error {
 	}
 	var message cursorAssistant
 	message.Type = wordAssistant
-	message.Message.Content = []cursorBlock{{Type: valueText, Text: reply.text}}
+	message.Message.Content = []cursorBlock{{Type: contentBlockTypeText, Text: reply.text}}
 	if err := writeJSON(out, message); err != nil {
 		return err
 	}

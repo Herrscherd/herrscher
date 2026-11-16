@@ -44,9 +44,7 @@ type Files struct {
 	Turns  string
 }
 
-// FilesFrom reads the paths from the VENDORTEST_SCRIPT, VENDORTEST_LOG and
-// VENDORTEST_TURNS variables of getenv. An empty script path makes every turn an
-// echo.
+// FilesFrom reads the fake CLI file paths from the VENDORTEST variables of getenv.
 func FilesFrom(getenv func(string) string) Files {
 	return Files{Script: getenv(envScript), Log: getenv(envLog), Turns: getenv(envTurns)}
 }
@@ -63,8 +61,7 @@ type Streams struct {
 	Err io.Writer
 }
 
-// Claude runs the fake claude CLI on args and returns its exit status. It speaks
-// stream-json when args ask for it, and answers one prompt in JSON otherwise.
+// Claude runs the fake claude CLI on args and returns its exit status.
 func Claude(args []string, streams Streams, files Files) int {
 	if slices.Contains(args, flagVersion) {
 		return exitOf(streams.Err, writeLine(streams.Out, claudeVersion))
@@ -345,7 +342,7 @@ type assistantEvent struct {
 
 func assistantText(text string) assistantEvent {
 	event := assistantEvent{Type: wordAssistant}
-	event.Message.Content = []contentBlock{{Type: valueText, Text: text}}
+	event.Message.Content = []contentBlock{{Type: contentBlockTypeText, Text: text}}
 	return event
 }
 

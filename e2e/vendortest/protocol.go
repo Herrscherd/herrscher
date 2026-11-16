@@ -1,18 +1,18 @@
 package vendortest
 
 const (
-	wordAssistant = "assistant"
-	wordResult    = "result"
-	wordLogin     = "login"
-	wordStatus    = "status"
-	wordText      = "text"
-	wordError     = "error"
-	wordAgent     = "agentMessage"
-	flagVersion   = "--version"
+	wordAssistant     = "assistant"
+	wordResult        = "result"
+	wordLogin         = "login"
+	wordStatus        = "status"
+	scriptKeywordText = "text"
+	wordError         = "error"
+	wordAgent         = "agentMessage"
+	flagVersion       = "--version"
 )
 
 const (
-	valueText               = "text"
+	contentBlockTypeText    = "text"
 	valueError              = "error"
 	valueFailed             = "failed"
 	valueCompleted          = "completed"

@@ -52,8 +52,22 @@ go run ./tools/i18ncheck .
 regenerated_from_scratch
 no_dash_punctuation
 capped go test -race -shuffle=on ./...
+require_tests_only_under_e2e() {
+	local pkg=$1
+	local only
+	only=$(comm -13 \
+		<(capped go test -list '^Test' "$pkg" | grep '^Test' | sort -u) \
+		<(capped go test -tags e2e -list '^Test' "$pkg" | grep '^Test' | sort -u))
+	if [ -z "$only" ]; then
+		echo "$pkg: no test exists only under -tags e2e, the e2e pass would run nothing" >&2
+		return 1
+	fi
+}
+
 if [ "$(uname -s)" = Linux ]; then
+	require_tests_only_under_e2e ./e2e/...
 	capped go test -tags e2e -count=1 ./e2e/...
+	require_tests_only_under_e2e ./core/host/
 	capped go test -tags e2e -count=1 -v ./core/host/
 else
 	echo "skipping the e2e scenarios: they run on Linux only" >&2

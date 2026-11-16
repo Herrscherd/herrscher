@@ -701,7 +701,11 @@ func TestQueuedWarningLostAtCloseReturnsAbandonedAndWritesNothing(t *testing.T) 
 	writer := newGatedWarnings("frozen")
 	t.Cleanup(writer.open)
 	sink := newWarningSink(writer, englishLostLine)
-	frozen := runInBackground(func() { _, _ = sink.Write([]byte("frozen\n")) })
+	frozen := runInBackground(func() {
+		if _, err := sink.Write([]byte("frozen\n")); !errors.Is(err, errWarningLate) {
+			t.Errorf("write returned %v, want errWarningLate", err)
+		}
+	})
 	awaitGatedWrite(t, writer)
 
 	var n int
@@ -717,8 +721,8 @@ func TestQueuedWarningLostAtCloseReturnsAbandonedAndWritesNothing(t *testing.T) 
 	if !errors.Is(err, errWarningAbandoned) || n != 0 {
 		t.Fatalf("the queued warning dropped at Close returned (%d, %v), want (0, errWarningAbandoned)", n, err)
 	}
-	writer.open()
 	<-frozen
+	writer.open()
 	time.Sleep(50 * time.Millisecond)
 	if strings.Contains(writer.out.String(), "QUEUEDMSG") {
 		t.Fatalf("a warning reported as abandoned reached the output: %q", writer.out.String())
@@ -729,7 +733,11 @@ func TestQueuedWarningUnconfirmedAtBudgetReturnsLateWithoutCount(t *testing.T) {
 	writer := newGatedWarnings("frozen")
 	t.Cleanup(writer.open)
 	sink := newWarningSink(writer, englishLostLine)
-	frozen := runInBackground(func() { _, _ = sink.Write([]byte("frozen\n")) })
+	frozen := runInBackground(func() {
+		if _, err := sink.Write([]byte("frozen\n")); !errors.Is(err, errWarningLate) {
+			t.Errorf("write returned %v, want errWarningLate", err)
+		}
+	})
 	awaitGatedWrite(t, writer)
 
 	n, err := sink.Write([]byte("QUEUEDMSG\n"))
@@ -739,6 +747,6 @@ func TestQueuedWarningUnconfirmedAtBudgetReturnsLateWithoutCount(t *testing.T) {
 	if got := sink.droppedCount(); got != 0 {
 		t.Fatalf("dropped = %d for an unconfirmed warning, want 0", got)
 	}
-	writer.open()
 	<-frozen
+	writer.open()
 }

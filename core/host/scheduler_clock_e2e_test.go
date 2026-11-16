@@ -3,7 +3,7 @@
 package host
 
 import (
-	"strings"
+	"errors"
 	"testing"
 	"time"
 )
@@ -22,8 +22,9 @@ func TestSchedulerClockReadsTheInjectedInstant(t *testing.T) {
 func TestSchedulerClockRefusesAMalformedInstant(t *testing.T) {
 	t.Setenv(envSchedulerClock, "tomorrow at nine")
 	_, err := schedulerClock()
-	if err == nil || !strings.Contains(err.Error(), envSchedulerClock) {
-		t.Fatalf("schedulerClock() error = %v, want one naming %s", err, envSchedulerClock)
+	parseErr, ok := errors.AsType[*time.ParseError](err)
+	if !ok || parseErr.Value != "tomorrow at nine" {
+		t.Fatalf("schedulerClock() error = %v, want a *time.ParseError on the malformed instant", err)
 	}
 }
 
@@ -38,13 +39,28 @@ func TestSchedulerIntervalReadsTheInjectedSpan(t *testing.T) {
 	}
 }
 
-func TestSchedulerIntervalRefusesAMalformedOrNonPositiveSpan(t *testing.T) {
-	for _, raw := range []string{"soon", "0s", "-5s"} {
+func TestSchedulerIntervalRefusesAMalformedSpan(t *testing.T) {
+	t.Setenv(envSchedulerTick, "soon")
+	_, err := schedulerInterval()
+	if err == nil {
+		t.Fatal("schedulerInterval() error = nil, want a refusal of the malformed span")
+	}
+	if _, nonPositive := errors.AsType[nonPositiveSpanError](err); nonPositive {
+		t.Fatalf("schedulerInterval() error = %v, want a parse error, not a non-positive span", err)
+	}
+}
+
+func TestSchedulerIntervalRefusesANonPositiveSpan(t *testing.T) {
+	for _, raw := range []string{"0s", "-5s"} {
 		t.Run(raw, func(t *testing.T) {
 			t.Setenv(envSchedulerTick, raw)
 			_, err := schedulerInterval()
-			if err == nil || !strings.Contains(err.Error(), envSchedulerTick) {
-				t.Fatalf("schedulerInterval() error = %v, want one naming %s", err, envSchedulerTick)
+			spanErr, ok := errors.AsType[nonPositiveSpanError](err)
+			if !ok {
+				t.Fatalf("schedulerInterval() error = %v, want a nonPositiveSpanError", err)
+			}
+			if spanErr.name != envSchedulerTick || spanErr.raw != raw {
+				t.Fatalf("nonPositiveSpanError = %+v, want name %s and raw %q", spanErr, envSchedulerTick, raw)
 			}
 		})
 	}

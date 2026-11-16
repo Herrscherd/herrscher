@@ -259,6 +259,31 @@ func TestPruneRefusesMoreEditsThanOneFrameBeforeAnySend(t *testing.T) {
 	expectNoFrame(t, f)
 }
 
+func TestPruneRefusesAFrameLargerThanTheChunkLimitBeforeAnySend(t *testing.T) {
+	f, _, _ := historyFixture(t, true)
+	edits := numberedEdits(historywire.MaxPruneEdits)
+	wideID := strings.Repeat("x", 200)
+	for i := range edits {
+		edits[i].CallID = wideID + strconv.Itoa(i)
+	}
+	refusal := make(chan error, 1)
+	go func() {
+		_, err := bridgeHistory{driver: f.driver}.PruneHistory(context.Background(), edits)
+		refusal <- err
+	}()
+	select {
+	case err := <-refusal:
+		if !errors.Is(err, historywire.ErrHistoryTooLarge) {
+			t.Fatalf("PruneHistory = %v, want ErrHistoryTooLarge for a frame over the chunk limit", err)
+		}
+	case frame := <-f.toBridge:
+		t.Fatalf("frame %+v reached the bridge, want the refusal before any send", frame)
+	case <-time.After(2 * time.Second):
+		t.Fatal("PruneHistory neither refused nor sent a frame")
+	}
+	expectNoFrame(t, f)
+}
+
 func TestPruneSendsTheMaximumOfEditsInOneFrame(t *testing.T) {
 	f, _, _ := historyFixture(t, true)
 	edits := numberedEdits(historywire.MaxPruneEdits)

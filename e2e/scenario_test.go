@@ -53,6 +53,8 @@ func TestScenarios(t *testing.T) {
 			"waitdaemon":     waitDaemon,
 			"waitlog":        waitLog,
 			"descendantgone": descendantGone,
+			"sessionrunning": sessionRunning,
+			"sessionstopped": sessionStopped,
 		},
 	})
 }

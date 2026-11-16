@@ -3,12 +3,28 @@ waitdaemon
 exec herrscher session create --name switching
 exec herrscher session seed --name switching --task 'first with claude'
 stdout '^from claude$'
+exec herrscher session overview
+cp stdout $WORK/overview-claude.json
+grep -count=1 '"name":"switching"' $WORK/overview-claude.json
+grep -count=1 '"name":' $WORK/overview-claude.json
+sessionrunning switching claude
 exec herrscher session switch --name switching --vendor codex --cmd codex
+sessionstopped switching claude
+exec herrscher session overview
+cp stdout $WORK/overview-codex.json
+grep -count=1 '"name":"switching","vendor":"codex"' $WORK/overview-codex.json
+grep -count=1 '"name":' $WORK/overview-codex.json
 exec herrscher session seed --name switching --task 'second with codex'
 stdout '^echo: second with codex$'
 exec cat $VENDORTEST_LOG
 stdout 'codex prompt .*second with codex'
+sessionrunning switching codex
 exec herrscher session switch --name switching --vendor cursor --cmd cursor-agent
+sessionstopped switching codex
+exec herrscher session overview
+cp stdout $WORK/overview-cursor.json
+grep -count=1 '"name":"switching","vendor":"cursor"' $WORK/overview-cursor.json
+grep -count=1 '"name":' $WORK/overview-cursor.json
 exec herrscher session seed --name switching --task 'third with cursor'
 stdout '^echo: third with cursor$'
 exec cat $VENDORTEST_LOG

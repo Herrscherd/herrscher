@@ -157,20 +157,14 @@ func (v *vendor) startTurn(out io.Writer, message rpcMessage) error {
 }
 
 func writeTurnEvents(out io.Writer, threadID string, reply vendorReply) error {
-	events := []rpcNotification{{Method: methodTurnStarted, Params: turnPayload(threadID, map[string]any{keyID: codexTurnID})}}
-	if reply.failed {
-		failed := map[string]any{keyID: codexTurnID, keyStatus: "failed", keyError: map[string]any{"message": reply.failure}}
-		events = append(events, rpcNotification{Method: methodTurnCompleted, Params: turnPayload(threadID, failed)})
-	} else {
-		delta := map[string]any{keyThreadID: threadID, keyTurnID: codexTurnID, keyDelta: reply.text}
-		item := map[string]any{keyID: codexItemID, keyType: wordAgent, keyText: reply.text}
-		itemDone := map[string]any{keyThreadID: threadID, keyTurnID: codexTurnID, keyItem: item}
-		completed := map[string]any{keyID: codexTurnID, keyStatus: "completed"}
-		events = append(events,
-			rpcNotification{Method: methodAgentDelta, Params: delta},
-			rpcNotification{Method: methodItemCompleted, Params: itemDone},
-			rpcNotification{Method: methodTurnCompleted, Params: turnPayload(threadID, completed)},
-		)
+	delta := map[string]any{keyThreadID: threadID, keyTurnID: codexTurnID, keyDelta: reply.text}
+	item := map[string]any{keyID: codexItemID, keyType: wordAgent, keyText: reply.text}
+	itemDone := map[string]any{keyThreadID: threadID, keyTurnID: codexTurnID, keyItem: item}
+	events := []rpcNotification{
+		{Method: methodTurnStarted, Params: turnPayload(threadID, map[string]any{keyID: codexTurnID})},
+		{Method: methodAgentDelta, Params: delta},
+		{Method: methodItemCompleted, Params: itemDone},
+		{Method: methodTurnCompleted, Params: turnPayload(threadID, turnEnd(reply))},
 	}
 	for _, event := range events {
 		if err := writeJSON(out, event); err != nil {
@@ -178,6 +172,13 @@ func writeTurnEvents(out io.Writer, threadID string, reply vendorReply) error {
 		}
 	}
 	return nil
+}
+
+func turnEnd(reply vendorReply) map[string]any {
+	if reply.failed {
+		return map[string]any{keyID: codexTurnID, keyStatus: valueFailed, keyError: map[string]any{keyMessage: reply.failure}}
+	}
+	return map[string]any{keyID: codexTurnID, keyStatus: valueCompleted}
 }
 
 func turnPayload(threadID string, turn map[string]any) map[string]any {

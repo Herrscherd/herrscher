@@ -71,3 +71,38 @@ func TestCodexSendsTheFinalTextAsAnAgentMessageItemBeforeTurnCompleted(t *testin
 		t.Fatalf("item/completed params = %v, want the thread and turn ids", params)
 	}
 }
+
+func TestCodexFailedTurnKeepsTheTextBeforeTheFailure(t *testing.T) {
+	files := scriptFiles(t, "text partial answer\nerror boom\n")
+	request := `{"id":7,"method":"turn/start","params":{"threadId":"thread-1","input":[{"type":"text","text":"hi"}]}}` + "\n"
+	var out, errOut bytes.Buffer
+	code := Codex([]string{appServerVerb}, Streams{In: strings.NewReader(request), Out: &out, Err: &errOut}, files)
+	if code != 0 {
+		t.Fatalf("exit %d with stderr %q", code, errOut.String())
+	}
+
+	itemAt, failedAt := -1, -1
+	var failedTurn map[string]any
+	for index, message := range decodeRPCLines(t, out.String()) {
+		switch message["method"] {
+		case methodItemCompleted:
+			itemAt = index
+			item := objectField(t, objectField(t, message, "params"), keyItem)
+			if item[keyText] != "partial answer" {
+				t.Fatalf("item text = %v, want the text spoken before the failure", item[keyText])
+			}
+		case methodTurnCompleted:
+			failedAt = index
+			failedTurn = objectField(t, objectField(t, message, "params"), keyTurn)
+		}
+	}
+	if itemAt < 0 || failedAt < itemAt {
+		t.Fatalf("%s at %d must come before turn/completed at %d", methodItemCompleted, itemAt, failedAt)
+	}
+	if failedTurn[keyStatus] != valueFailed {
+		t.Fatalf("turn status = %v, want %s", failedTurn[keyStatus], valueFailed)
+	}
+	if objectField(t, failedTurn, keyError)[keyMessage] != "boom" {
+		t.Fatalf("turn error = %v, want the failure message", failedTurn[keyError])
+	}
+}

@@ -56,7 +56,7 @@ func (v *vendor) scripted(turn Turn, prompt string) (vendorReply, error) {
 		case stepText, stepEcho:
 			texts = append(texts, spokenText(current, prompt))
 		case stepFail:
-			return vendorReply{failure: current.text, failed: true}, nil
+			return vendorReply{text: joinReplies(texts), failure: current.text, failed: true}, nil
 		case stepTool, stepHang, stepCrash, stepAPIError:
 			return vendorReply{}, errUnsupportedStep
 		}

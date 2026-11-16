@@ -12,8 +12,10 @@ const (
 )
 
 const (
-	valueText  = "text"
-	valueError = "error"
+	valueText      = "text"
+	valueError     = "error"
+	valueFailed    = "failed"
+	valueCompleted = "completed"
 )
 
 const (
@@ -27,4 +29,5 @@ const (
 	keyStatus   = "status"
 	keyError    = "error"
 	keyTurn     = "turn"
+	keyMessage  = "message"
 )

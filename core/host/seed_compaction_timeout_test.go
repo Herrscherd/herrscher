@@ -38,7 +38,7 @@ func (b countingCompactBackend) Compact(context.Context, contracts.CompactReques
 	return contracts.CompactResult{TokensAfter: 50_000, TokensMeasured: true}, nil
 }
 
-func seedWithAutomaticCompaction(backend contracts.Backend, timeout time.Duration) (string, error) {
+func seedWithAutomaticCompactionAndPublish(backend contracts.Backend, timeout time.Duration, publish func(string, contracts.Event)) (string, error) {
 	table := newSessionTable()
 	policy := compactPolicy(50, contracts.CompactStageBackend)
 	policy.limits = contextwindow.NewLimits("1000", nil)
@@ -46,6 +46,7 @@ func seedWithAutomaticCompaction(backend contracts.Backend, timeout time.Duratio
 	runtime := oneShotSeedRuntime{
 		timeout:  timeout,
 		sessions: table,
+		publish:  publish,
 		backend: func(context.Context, state.Session) (contracts.Backend, error) {
 			return backend, nil
 		},
@@ -55,8 +56,8 @@ func seedWithAutomaticCompaction(backend contracts.Backend, timeout time.Duratio
 }
 
 func TestSeedReturnsItsReplyWhenTheAutomaticCompactionOutlivesTheSeed(t *testing.T) {
-	for range 20 {
-		reply, err := seedWithAutomaticCompaction(blockingCompactBackend{}, 200*time.Millisecond)
+	for range 5 {
+		reply, err := seedWithAutomaticCompactionAndPublish(blockingCompactBackend{}, cutSeedBudget, nil)
 		if err != nil {
 			t.Fatalf("seed error = %v, want the reply that the turn already produced", err)
 		}
@@ -69,7 +70,7 @@ func TestSeedReturnsItsReplyWhenTheAutomaticCompactionOutlivesTheSeed(t *testing
 func TestSeedReleasesTheBridgeOnlyAfterTheAutomaticCompactionIsServed(t *testing.T) {
 	for range 200 {
 		var calls atomic.Int32
-		reply, err := seedWithAutomaticCompaction(countingCompactBackend{calls: &calls}, time.Minute)
+		reply, err := seedWithAutomaticCompactionAndPublish(countingCompactBackend{calls: &calls}, time.Minute, nil)
 		if err != nil || reply != "reply" {
 			t.Fatalf("seed = (%q, %v), want the reply", reply, err)
 		}

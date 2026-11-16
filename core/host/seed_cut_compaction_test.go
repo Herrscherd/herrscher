@@ -90,8 +90,8 @@ func (s *seedEmissions) kinds() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	kinds := make([]string, 0, len(s.events))
-	for _, event := range s.events {
-		kinds = append(kinds, event.T)
+	for index := range s.events {
+		kinds = append(kinds, s.events[index].T)
 	}
 	return kinds
 }

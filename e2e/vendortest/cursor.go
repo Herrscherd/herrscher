@@ -11,9 +11,14 @@ const (
 	cursorVersion        = "cursor-agent 0.0.0 (vendortest)"
 	cursorStatusLine     = `{"status":"authenticated","userInfo":{"email":"vendortest@example.invalid"}}`
 	defaultCursorSession = "vendortest-cursor-session"
+	cursorPrintFlag      = "-p"
+	cursorStreamFormat   = "stream-json"
 )
 
-var errCursorArgs = errors.New("the cursor fake speaks only stream-json, status and --version")
+var (
+	errCursorArgs  = errors.New("the cursor fake speaks only stream-json, status and --version")
+	errCursorPrint = errors.New("the cursor fake needs -p, which the cursor backend always passes")
+)
 
 // Cursor runs the fake cursor-agent CLI on args. It answers the status probe and
 // replays one turn per invocation in the stream-json format the cursor backend
@@ -25,8 +30,11 @@ func Cursor(args []string, streams Streams, files Files) int {
 	if len(args) > 0 && args[0] == wordStatus {
 		return exitOf(streams.Err, writeLine(streams.Out, cursorStatusLine))
 	}
-	if !slices.Contains(args, "stream-json") {
+	if !slices.Contains(args, cursorStreamFormat) {
 		return exitOf(streams.Err, errCursorArgs)
+	}
+	if !slices.Contains(args, cursorPrintFlag) {
+		return exitOf(streams.Err, errCursorPrint)
 	}
 	fake, err := openVendor(cursorLabel, files)
 	if err != nil {

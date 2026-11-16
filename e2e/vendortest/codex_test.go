@@ -1,0 +1,64 @@
+package vendortest
+
+import (
+	"bytes"
+	"encoding/json"
+	"strings"
+	"testing"
+)
+
+func decodeRPCLines(t *testing.T, text string) []map[string]any {
+	t.Helper()
+	var messages []map[string]any
+	for line := range strings.Lines(text) {
+		var message map[string]any
+		if err := json.Unmarshal([]byte(line), &message); err != nil {
+			t.Fatalf("the codex fake wrote %q, which is not JSON: %v", line, err)
+		}
+		messages = append(messages, message)
+	}
+	return messages
+}
+
+func TestCodexSendsTheFinalTextAsAnAgentMessageItemBeforeTurnCompleted(t *testing.T) {
+	files := scriptFiles(t, "text reply text\n")
+	request := `{"id":7,"method":"turn/start","params":{"threadId":"thread-1","input":[{"type":"text","text":"hi"}]}}` + "\n"
+	var out, errOut bytes.Buffer
+	code := Codex([]string{appServerVerb}, Streams{In: strings.NewReader(request), Out: &out, Err: &errOut}, files)
+	if code != 0 {
+		t.Fatalf("exit %d with stderr %q", code, errOut.String())
+	}
+
+	var completed map[string]any
+	completedAt, turnDoneAt := -1, -1
+	for index, message := range decodeRPCLines(t, out.String()) {
+		switch message["method"] {
+		case methodItemCompleted:
+			completed = message
+			completedAt = index
+		case "turn/completed":
+			turnDoneAt = index
+		}
+	}
+	if completed == nil {
+		t.Fatalf("no %s notification in %q", methodItemCompleted, out.String())
+	}
+	if turnDoneAt < 0 || completedAt > turnDoneAt {
+		t.Fatalf("%s at %d must come before turn/completed at %d", methodItemCompleted, completedAt, turnDoneAt)
+	}
+
+	params, _ := completed["params"].(map[string]any)
+	item, _ := params[keyItem].(map[string]any)
+	if item[keyType] != wordAgent {
+		t.Fatalf("item type = %v, want %s", item[keyType], wordAgent)
+	}
+	if item[wordText] != "reply text" {
+		t.Fatalf("item text = %v, want the full reply", item[wordText])
+	}
+	if id, _ := item["id"].(string); id == "" {
+		t.Fatalf("item carries no id: %v", item)
+	}
+	if params[keyThreadID] != "thread-1" || params[keyTurnID] != codexTurnID {
+		t.Fatalf("item/completed params = %v, want the thread and turn ids", params)
+	}
+}

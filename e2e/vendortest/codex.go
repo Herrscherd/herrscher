@@ -11,13 +11,15 @@ import (
 )
 
 const (
-	codexLabel      = "codex"
-	codexVersion    = "codex-cli 0.0.0 (vendortest)"
-	codexLoginLine  = "Logged in using vendortest"
-	codexThreadID   = "vendortest-codex-thread"
-	codexTurnID     = "vendortest-codex-turn"
-	appServerVerb   = "app-server"
-	methodTurnStart = "turn/start"
+	codexLabel          = "codex"
+	codexVersion        = "codex-cli 0.0.0 (vendortest)"
+	codexLoginLine      = "Logged in using vendortest"
+	codexThreadID       = "vendortest-codex-thread"
+	codexTurnID         = "vendortest-codex-turn"
+	codexItemID         = "vendortest-codex-item"
+	appServerVerb       = "app-server"
+	methodTurnStart     = "turn/start"
+	methodItemCompleted = "item/completed"
 )
 
 var errCodexArgs = errors.New("the codex fake speaks only app-server, login status and --version")
@@ -157,10 +159,13 @@ func writeTurnEvents(out io.Writer, threadID string, reply vendorReply) error {
 		failed := map[string]any{"id": codexTurnID, wordStatus: "failed", wordError: map[string]any{"message": reply.failure}}
 		events = append(events, rpcNotification{Method: "turn/completed", Params: turnPayload(threadID, failed)})
 	} else {
-		delta := map[string]any{keyThreadID: threadID, "turnId": codexTurnID, "delta": reply.text}
+		delta := map[string]any{keyThreadID: threadID, keyTurnID: codexTurnID, "delta": reply.text}
+		item := map[string]any{"id": codexItemID, keyType: wordAgent, wordText: reply.text}
+		itemDone := map[string]any{keyThreadID: threadID, keyTurnID: codexTurnID, keyItem: item}
 		completed := map[string]any{"id": codexTurnID, wordStatus: "completed"}
 		events = append(events,
 			rpcNotification{Method: "item/agentMessage/delta", Params: delta},
+			rpcNotification{Method: methodItemCompleted, Params: itemDone},
 			rpcNotification{Method: "turn/completed", Params: turnPayload(threadID, completed)},
 		)
 	}

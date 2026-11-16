@@ -423,6 +423,46 @@ its mode.
 The hook binds the agent herrscher started and nothing else on the machine, which
 is both its guarantee and the whole of its reach.
 
+### Who may change the approvals
+
+`approve allow`, `approve deny`, `approve rule`, `approve mode` and the `role` verbs
+run on the daemon's operator socket. Whoever connects there is
+the operator, with the `owner` role. Herrscher does not ask for a second proof:
+a process running under the daemon's user account is the operator, as far as the
+daemon can tell.
+
+That is the trust model, and it has a consequence. A shell command the approval
+hook allowed runs with the operator's rights. It can unset
+`HERRSCHER_COMMAND_SOCKET`, so that `herrscher approve allow` dials the operator
+socket instead of the session's, or it can dial that socket directly. Either way
+it can grant itself an approval, or switch its session to `bypass`, which removes
+the hook. The hook sees a command string, not what the command does, so it cannot
+tell that call from any other.
+
+What #232 protects is narrower. Each session holds its own token, sent in
+`HERRSCHER_SESSION_TOKEN` and checked in constant time. `approve ask` answers only
+for the session whose token it carries, so one session cannot answer an approval
+in another's name, nor guess its token. The hook fails closed: a missing session
+name, a missing token, no daemon, an answer that is neither `allow` nor `deny`, or
+a payload over the size limit each refuse the tool call. None of that stops an
+approved command from reaching the operator's socket.
+
+For the operator, the rule is this: never grant a broad rule on `Bash`. A rule
+such as `allow Bash(*)`, `allow Bash(herrscher*)`, or an allow on a general shell
+or interpreter (`sh`, `bash`, `python`, `node`, `env`, `xargs`) gives every session
+the operator's rights, because it lets the command run that calls the socket.
+Grant the exact command you mean (`allow Bash(make build)`), and keep `ask` on
+anything that can run another program.
+
+A real boundary needs one of two things, and herrscher has neither today. Either
+approval changes are confirmed out of band, on a channel the session cannot write
+to, such as the gateway or the TUI answered by you, so a shell call cannot
+complete one alone. Or the sessions run under another user account, or in a
+sandbox that hides the runtime directory, the operator's socket and the state, so
+the shell cannot reach them at all. Until one of these exists, the approval system
+guards against the model's mistakes and against rules you wrote. It does not
+guard against a command you approved.
+
 Every failure allows and says why, on both paths. This is a guardrail against
 mistakes, not a sandbox, and a daemon that has gone away must not stop a `claude`
 run by hand.
@@ -438,9 +478,11 @@ behaved before this existed.
 
 Identity comes from the entry point, never from the message.
 
-A session talks to its own command socket, not the operator's, so it can no
-longer widen the policy that decides its own tool calls, answer its own approval
-requests, or speak in another session's name. It cannot open a session either,
+A session talks to its own command socket, which carries that session's rights
+only, so through it a session cannot widen the policy that decides its own tool
+calls, answer its own approval requests, or speak in another session's name. The
+operator's socket is not closed to a session's shell: see who may change the
+approvals above. It cannot open a session either,
 which is the same refusal wearing a different hat: a session created from the
 command line carries whatever flags the command line chose, and one with no agent
 or `--approvals bypass` is a second session where the caller's own policy does

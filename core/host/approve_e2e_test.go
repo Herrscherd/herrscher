@@ -37,7 +37,9 @@ func TestHookThroughTheCommandSocket(t *testing.T) {
 	if _, err := reg.Dispatch(ctx, []string{"approve", "deny", id, "--reason", "not today"}); err != nil {
 		t.Fatalf("deny: %v", err)
 	}
-	<-done
+	if err := <-done; err != nil {
+		t.Fatalf("the hook could not deliver its decision: %v", err)
+	}
 	assertHookDeniedWithReason(t, out.Bytes(), "not today")
 }
 
@@ -73,6 +75,7 @@ func newApprovalRegistry(t *testing.T, approvalTab *approvalTable, menus *menuRe
 		t.Fatalf("AddApprovalRule: %v", err)
 	}
 	sessionTab := newSessionTable()
+	t.Setenv(TokenVar, sessionTab.issueToken("s1"))
 	sessionTab.register("s1", newSessionDriver("s1", []contracts.GatewaySet{{Gateway: menus, Reader: menus}}, nil, nil, io.Discard))
 	reg := &cli.Registry{}
 	if err := addApproveCommands(reg, fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); err != nil {
@@ -88,11 +91,10 @@ func startApprovalSocket(ctx context.Context, t *testing.T, reg *cli.Registry) s
 	return sock
 }
 
-func runHookAsync(ctx context.Context, layout runtimedir.Layout, in io.Reader, out, errOut io.Writer, sock string) <-chan struct{} {
-	done := make(chan struct{})
+func runHookAsync(ctx context.Context, layout runtimedir.Layout, in io.Reader, out, errOut io.Writer, sock string) <-chan error {
+	done := make(chan error, 1)
 	go func() {
-		defer close(done)
-		RunPermissionHook(ctx, in, out, errOut, func() string { return sock }, func(c context.Context, argv []string) (string, bool, error) {
+		done <- RunPermissionHook(ctx, in, out, errOut, func() string { return sock }, func(c context.Context, argv []string) (string, bool, error) {
 			return dispatchLiveCommand(c, layout, sock, argv)
 		})
 	}()

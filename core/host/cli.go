@@ -49,7 +49,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	models := options.modelDiscovery()
 	hdl := newManagerHandler(deps, options, partDir, hostState, sup, worktrees, updater, agents, models)
 	wireManagerHandler(ctx, options.live.Get, options.Warnings, hdl, hostState, options.Runtime, instID, worktrees, sessions, models)
-	wireSupervisor(sup, options.Runtime, hostState, instID)
+	wireSupervisor(sup, options.Runtime, hostState, instID, sessions)
 	seedCoord := &coordinatorSlot{}
 	schedSlot := &schedulerSlot{}
 
@@ -160,9 +160,10 @@ func validateModelChoice(models *ModelDiscovery, vendor, modelID string) error {
 	return nil
 }
 
-func wireSupervisor(sup *supervisor.Supervisor, layout RuntimeLayout, store *state.State, instID string) {
+func wireSupervisor(sup *supervisor.Supervisor, layout RuntimeLayout, store *state.State, instID string, sessions *sessionTable) {
 	sup.SetInstanceID(instID)
 	sup.SetCommandSocket(func(session string) string { return SessionCommandSocketPathIn(layout, instID, session) })
+	sup.SetSessionToken(sessions.issueToken)
 	sup.SetHostLookup(func(name string) (supervisor.Placement, bool) {
 		host, ok := store.FindHost(name)
 		if !ok {

@@ -304,7 +304,7 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	runningHub.language = options.languageSource()
 	runningHub.models = options.modelDiscovery()
 	runningHub.seedBackend = func(seedCtx context.Context, sess state.Session) (contracts.Backend, error) {
-		return newSeedBackend(seedCtx, sess, keys, runningHub.models)
+		return newSeedBackendWithToken(seedCtx, sess, keys, runningHub.models, sessions.issueToken(sess.Name))
 	}
 	runningHub.contributedKinds = kinds
 	runningHub.instanceID = instID

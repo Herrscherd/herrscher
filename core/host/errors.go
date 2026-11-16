@@ -17,6 +17,7 @@ var (
 	errMemoryLocateUnsupported     = errors.New("memory backend does not support locate")
 	errMemoryForgetUnsupported     = errors.New("memory backend does not support forget")
 	errCommandSocketEmpty          = errors.New("command socket: empty response")
+	errDaemonRequired              = errors.New("this command needs the running herrscher daemon, and none answered on the command socket")
 	errNoGatewayPlugin             = errors.New("no gateway plugin registered")
 	errGatewayFactoryEmpty         = errors.New("factory returned no gateway")
 	errHostNameMissing             = errors.New("a host needs a name")
@@ -189,15 +190,6 @@ type daemonNotRunningError struct {
 
 func (e *daemonNotRunningError) Error() string {
 	return "no herrscher daemon is listening on " + e.Socket
-}
-
-type daemonRequiredError struct {
-	Command string
-	Target  string
-}
-
-func (e *daemonRequiredError) Error() string {
-	return fmt.Sprintf("%#q needs a running herrscher daemon, and none answered on %s", e.Command, e.Target)
 }
 
 type noGatewayError struct {

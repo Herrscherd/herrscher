@@ -92,7 +92,7 @@ func scheduleListVerb(lang languageSource, store *state.State) contracts.Cmd {
 		Do(func(_ context.Context, _ contracts.Input) (contracts.Result, error) {
 			clock, err := schedulerClock()
 			if err != nil {
-				return contracts.Result{}, wrapHost(err, "serve.scheduler_clock", map[string]any{"Detail": err.Error()})
+				return contracts.Result{}, wrapHost(err, "serve.scheduler_clock", map[string]any{detailParam: err.Error()})
 			}
 			return contracts.DataResult(listSchedules(lang(), store, clock())), nil
 		})

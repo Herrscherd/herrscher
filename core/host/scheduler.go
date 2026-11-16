@@ -95,8 +95,9 @@ func (s *scheduler) wait() { s.wg.Wait() }
 
 func (s *scheduler) tick(ctx context.Context) {
 	now := s.now()
-	for _, candidate := range dueCandidates(s.store.SnapshotSchedules(), now) {
-		name := candidate.Name
+	due := dueCandidates(s.store.SnapshotSchedules(), now)
+	for idx := range due {
+		name := due[idx].Name
 		if !s.claim(name) {
 			continue
 		}
@@ -142,15 +143,15 @@ func (s *scheduler) current(name string) (schedule.Schedule, bool) {
 func schedulerSettings() (func() time.Time, time.Duration, error) {
 	clock, err := schedulerClock()
 	if err != nil {
-		return nil, 0, wrapHost(err, "serve.scheduler_clock", map[string]any{"Detail": err.Error()})
+		return nil, 0, wrapHost(err, "serve.scheduler_clock", map[string]any{detailParam: err.Error()})
 	}
 	tick, err := schedulerInterval()
 	if err != nil {
-		return nil, 0, wrapHost(err, "serve.scheduler_tick", map[string]any{"Detail": err.Error()})
+		return nil, 0, wrapHost(err, "serve.scheduler_tick", map[string]any{detailParam: err.Error()})
 	}
 	if tick <= 0 {
 		err = fmt.Errorf("%v: %w", tick, errNonPositive)
-		return nil, 0, wrapHost(err, "serve.scheduler_tick", map[string]any{"Detail": err.Error()})
+		return nil, 0, wrapHost(err, "serve.scheduler_tick", map[string]any{detailParam: err.Error()})
 	}
 	return clock, tick, nil
 }

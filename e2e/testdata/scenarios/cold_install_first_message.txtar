@@ -14,7 +14,6 @@ wait daemon
 exec cat $VENDORTEST_LOG
 stdout 'prompt .*hello cold install'
 -- .env.example --
-# seeded by init
 CLAUDE_CMD=claude
 -- plugins.go --
 package main

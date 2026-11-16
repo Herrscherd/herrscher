@@ -197,6 +197,8 @@ func (tb *tab) clearPanels() {
 
 const maxTabLines = 5000
 
+const openMissLimit = 3
+
 func (tb *tab) appendEntry(item entry) {
 	tb.nextEntryID++
 	item.id = tb.nextEntryID
@@ -276,6 +278,7 @@ type model struct {
 	openSession string
 	openText    string
 	openAtts    []Attachment
+	openMisses  int
 	starting    bool
 
 	resumeOpen bool
@@ -669,7 +672,7 @@ func (m *model) syncTabs() tea.Cmd {
 	}
 	sig := builder.String()
 	if sig == m.tabSig {
-		return nil
+		return m.focusOpen(infos)
 	}
 	m.tabSig = sig
 	live := make(map[string]bool)
@@ -705,17 +708,53 @@ func (m *model) focusOpen(infos []contracts.SessionInfo) tea.Cmd {
 		}
 	}
 	if channel == "" || m.tabs[channel] == nil {
+		m.openMisses++
+		if m.openMisses >= openMissLimit {
+			return m.releaseOpen()
+		}
 		return nil
 	}
 	text, atts := m.openText, m.openAtts
 	m.openSession, m.openText, m.openAtts = "", "", nil
+	m.openMisses = 0
 	m.active = channel
 	m.applySize()
 	m.syncViewport()
+	if text != "" && strings.TrimSpace(m.input.Value()) == text {
+		m.input.Reset()
+		m.resizeComposer()
+	}
 	if text == "" && len(atts) == 0 {
 		return nil
 	}
 	return m.submitTo(channel, text, atts)
+}
+
+func (m *model) awaitingOpen() bool {
+	return m.openSession != "" && m.tabs[m.active] == nil
+}
+
+func isCommandLine(text string) bool {
+	_, isShell := shellCommand(text)
+	return isShell || strings.HasPrefix(text, "/")
+}
+
+func (m *model) queueForOpen(text string) tea.Cmd {
+	m.flash = m.tr.t("tui.session.open_pending", map[string]any{tplArgName: m.openSession})
+	if m.openText != "" || len(m.openAtts) > 0 {
+		return nil
+	}
+	m.openText, m.openAtts, m.pending = text, m.pending, nil
+	return nil
+}
+
+func (m *model) releaseOpen() tea.Cmd {
+	name := m.openSession
+	m.pending = append(m.openAtts, m.pending...)
+	m.openSession, m.openText, m.openAtts = "", "", nil
+	m.openMisses = 0
+	m.flash = m.tr.t("tui.session.open_missing", map[string]any{tplArgName: name})
+	return nil
 }
 
 func (m *model) continueLine() bool {
@@ -733,8 +772,8 @@ func (m *model) handleEnter() tea.Cmd {
 	if text == "" && len(m.pending) == 0 {
 		return nil
 	}
-	if m.openSession != "" && m.tabs[m.active] == nil {
-		return nil
+	if m.awaitingOpen() && !isCommandLine(text) {
+		return m.queueForOpen(text)
 	}
 	if m.starting {
 		m.flash = m.tr.t("tui.session.starting", nil)

@@ -850,6 +850,14 @@
     "other": "opening a session…"
   },
   {
+    "id": "tui.session.open_pending",
+    "other": "session {{.Name}} is not ready yet, your message waits for it"
+  },
+  {
+    "id": "tui.session.open_missing",
+    "other": "session {{.Name}} was not found, your message stays in the composer"
+  },
+  {
     "id": "tui.session.start_failed",
     "other": "could not open a session: {{.Reason}}"
   },

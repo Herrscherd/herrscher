@@ -45,7 +45,7 @@ func TestEnterBeforeFirstTickSendsToTheRequestedSession(t *testing.T) {
 }
 
 func TestEnterWaitsWhileTheRequestedSessionIsMissing(t *testing.T) {
-	be := &fakeBackend{}
+	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
 	m := newModel(be)
 	OpenOn("later", "")(m)
 	m.Init()
@@ -56,8 +56,67 @@ func TestEnterWaitsWhileTheRequestedSessionIsMissing(t *testing.T) {
 	if m.starting {
 		t.Fatal("Enter started a new session while the requested one was still missing")
 	}
+	if want := m.tr.t("tui.session.open_pending", map[string]any{tplArgName: "later"}); m.flash != want {
+		t.Fatalf("flash = %q while waiting, want %q", m.flash, want)
+	}
 	if got := m.input.Value(); got != "hello" {
 		t.Fatalf("composer = %q, want the text kept while waiting", got)
+	}
+}
+
+func TestSlashCommandsStillRunWhileTheRequestedSessionIsMissing(t *testing.T) {
+	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
+	m := newModel(be)
+	OpenOn("later", "")(m)
+	m.Init()
+	m.input.SetValue("/bogus")
+
+	settle(m, m.handleEnter())
+
+	if len(be.dispatched) != 1 || be.dispatched[0][0] != "bogus" {
+		t.Fatalf("dispatched = %+v, want the slash command to run", be.dispatched)
+	}
+}
+
+func TestQueuedTextIsSentOnceTheSessionAppears(t *testing.T) {
+	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
+	m := newModel(be)
+	OpenOn("later", "")(m)
+	m.Init()
+	m.input.SetValue("hello")
+	m.handleEnter()
+
+	be.sessions = append(be.sessions, contracts.SessionInfo{Name: "later", ChannelID: "c2"})
+	settle(m, m.syncTabs())
+
+	if len(be.submitted) != 1 || be.submitted[0].channel != "c2" || be.submitted[0].text != "hello" {
+		t.Fatalf("submitted = %+v, want %q once on c2", be.submitted, "hello")
+	}
+	if got := m.input.Value(); got != "" {
+		t.Fatalf("composer = %q after the send, want it cleared", got)
+	}
+}
+
+func TestMissingSessionIsReleasedWithNoticeAndTextKept(t *testing.T) {
+	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
+	m := newModel(be)
+	OpenOn("ghost", "")(m)
+	m.Init()
+	m.input.SetValue("hello")
+	m.handleEnter()
+
+	for range openMissLimit {
+		settle(m, m.syncTabs())
+	}
+
+	if m.openSession != "" {
+		t.Fatalf("openSession = %q, want it released after fresh lists lacked the session", m.openSession)
+	}
+	if want := m.tr.t("tui.session.open_missing", map[string]any{tplArgName: "ghost"}); m.flash != want {
+		t.Fatalf("flash = %q after release, want %q", m.flash, want)
+	}
+	if got := m.input.Value(); got != "hello" {
+		t.Fatalf("composer = %q after release, want the text kept", got)
 	}
 }
 

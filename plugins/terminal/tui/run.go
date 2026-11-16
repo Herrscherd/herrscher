@@ -15,8 +15,9 @@ func newWindow(ctx context.Context, backend Backend, opts []Option) *model {
 	return model
 }
 
-// NewWindow returns the window Run starts, for a host that drives the Bubble Tea
-// program itself. The host forwards the backend's routed events to it with Pump.
+// NewWindow returns the window Run builds, with the same options, for a caller that
+// runs the Bubble Tea program itself. The end-to-end harness uses it: it hands the
+// window to teatest and forwards the backend's routed events to it with Pump.
 func NewWindow(ctx context.Context, backend Backend, opts ...Option) tea.Model {
 	return newWindow(ctx, backend, opts)
 }

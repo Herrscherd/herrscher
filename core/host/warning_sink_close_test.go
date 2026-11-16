@@ -127,6 +127,9 @@ func TestInFlightWriteFailingAfterCloseIsNotAnnouncedTwice(t *testing.T) {
 	}
 	awaitBackground(t, writer.entered, "the warning was never handed to the writer")
 	sink.Close()
+	if err := sink.announce("HOLD"); !errors.Is(err, errWarningAbandoned) {
+		t.Fatalf("the announce behind the in-flight write returned %v, want errWarningAbandoned", err)
+	}
 	writer.unblock()
 	h := testHub(&hub{teardownGrace: 10 * time.Second})
 	window, cancel := h.newGrace()
@@ -134,9 +137,10 @@ func TestInFlightWriteFailingAfterCloseIsNotAnnouncedTwice(t *testing.T) {
 	if !sink.flush(window) {
 		t.Fatal("the sink did not settle the in-flight write")
 	}
+	sink.announceAfterFinal()
 	lines := notConfirmedLines(logs.String())
-	if len(lines) != 1 || logField(lines[0], "lost") != "0" || logField(lines[0], "unconfirmed") != "1" {
-		t.Fatalf("Close logged %q, want exactly one line with lost=0 unconfirmed=1: the in-flight write is reported once at the bilan, and its later failure is not announced again", lines)
+	if len(lines) != 2 || logField(lines[0], "lost") != "0" || logField(lines[0], "unconfirmed") != "1" || logField(lines[1], "lost") != "1" || logField(lines[1], "unconfirmed") != "0" {
+		t.Fatalf("Close logged %q, want the bilan (lost=0 unconfirmed=1) then the abandoned announce (lost=1 unconfirmed=0), and nothing once the in-flight write failed: the failure after the bilan is counted, not announced again", lines)
 	}
 }
 
@@ -245,7 +249,7 @@ func TestSecondCloseIsSilentAndRecountsNothing(t *testing.T) {
 	}
 }
 
-func TestWarningAfterCloseIsAnnouncedWithItsLostAndUnconfirmedCounts(t *testing.T) {
+func TestWarningAfterCloseIsAnnouncedOnlyWithItsNewLoss(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := newGatedWarnings("frozen")
 	t.Cleanup(writer.open)
@@ -262,8 +266,12 @@ func TestWarningAfterCloseIsAnnouncedWithItsLostAndUnconfirmedCounts(t *testing.
 	if got := strings.Count(logs.String(), "not all confirmed"); got != before+1 {
 		t.Fatalf("the lost overrun after Close logged %d new lines, want 1", got-before)
 	}
-	if line := lastUnconfirmedLine(logs.String()); logField(line, "lost") != "1" || logField(line, "unconfirmed") != "1" {
-		t.Fatalf("the lost overrun after Close logged %q, want lost=1 and unconfirmed=1", line)
+	line := lastUnconfirmedLine(logs.String())
+	if logField(line, "lost") != "1" || logField(line, "unconfirmed") != "0" {
+		t.Fatalf("the lost overrun after Close logged %q, want lost=1 and unconfirmed=0: the bilan already announced the frozen write as unconfirmed", line)
+	}
+	if !strings.HasSuffix(line, `msg="warnings were not all confirmed when the sink closed" lost=1 unconfirmed=0`) {
+		t.Fatalf("the lost overrun after Close logged %q, want the exact summary line with lost=1 unconfirmed=0", line)
 	}
 }
 

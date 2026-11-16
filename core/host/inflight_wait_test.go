@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -192,6 +193,15 @@ func blockedWriterCases() []blockedWriterCase {
 	}
 }
 
+const (
+	blockedGrace      = 300 * time.Millisecond
+	blockedStopMargin = 250 * time.Millisecond
+)
+
+func blockedStopBound() time.Duration {
+	return 2*blockedGrace + 4*warningWriteBudget + blockedStopMargin
+}
+
 func TestBlockedWarningWriterDoesNotHoldStopPastTheBudget(t *testing.T) {
 	for _, c := range blockedWriterCases() {
 		for _, path := range c.paths {
@@ -200,14 +210,17 @@ func TestBlockedWarningWriterDoesNotHoldStopPastTheBudget(t *testing.T) {
 				logs := captureDefaultLog(t)
 				warnings := newGatedWarnings(name)
 				t.Cleanup(warnings.open)
-				h := c.start(t, name, 300*time.Millisecond, warnings)
+				h := c.start(t, name, blockedGrace, warnings)
 
+				started := time.Now()
 				returned := runInBackground(func() { path.run(h, name) })
 				awaitGatedWrite(t, warnings)
 				select {
 				case <-returned:
-				case <-time.After(5 * time.Second):
-					t.Fatal("a blocked warning writer held the stop past the teardown budget")
+				case <-time.After(blockedStopBound()):
+				}
+				if elapsed := time.Since(started); elapsed > blockedStopBound() {
+					t.Fatalf("a blocked warning writer held the stop for %v, past its worst case of %v", elapsed.Round(time.Millisecond), blockedStopBound())
 				}
 
 				assertBlockedWriterOutcome(t, c, h, name, warnings, logs)
@@ -219,11 +232,44 @@ func TestBlockedWarningWriterDoesNotHoldStopPastTheBudget(t *testing.T) {
 func assertBlockedWriterOutcome(t *testing.T, c blockedWriterCase, h *hub, name string, warnings *gatedWarnings, logs *lockedBuffer) {
 	t.Helper()
 	if c.want == nil {
-		if !strings.Contains(logs.String(), "a warning was abandoned") {
-			t.Fatal("the hub overrun behind a frozen writer was neither written nor counted as abandoned")
+		warnings.open()
+		window, cancel := h.newGrace()
+		defer cancel()
+		if !h.sink.flush(window) {
+			t.Fatal("the frozen write did not settle within the grace window")
+		}
+		h.sink.Close()
+		if warnLines, bilanLines := strings.Count(logs.String(), "level=WARN"), len(notConfirmedLines(logs.String())); warnLines != bilanLines {
+			t.Fatalf("a loss was logged outside the bilan: %d warnings, %d of them the bilan: %q", warnLines, bilanLines, logs.String())
+		}
+		dropped := droppedWarnings(h.sink)
+		announced := announcedLostOnOutput(warnings.out.String(), dropped) + announcedLostTotal(t, logs.String())
+		if dropped < 1 || announced != dropped {
+			t.Fatalf("the sink counted %d lost warnings but announced %d on the output %q and in the logs %q, want each lost warning announced exactly once", dropped, announced, warnings.out.String(), notConfirmedLines(logs.String()))
 		}
 		return
 	}
 	warnings.open()
 	awaitWarning(t, &warnings.out, c.want(h, name))
+}
+
+func announcedLostOnOutput(out string, dropped int) int {
+	total := 0
+	for lost := 1; lost <= dropped; lost++ {
+		total += lost * strings.Count(out, englishLostLine(lost)+"\n")
+	}
+	return total
+}
+
+func announcedLostTotal(t *testing.T, logs string) int {
+	t.Helper()
+	total := 0
+	for _, line := range notConfirmedLines(logs) {
+		lost, err := strconv.Atoi(logField(line, "lost"))
+		if err != nil {
+			t.Fatalf("the lost count in %q is not a number: %v", line, err)
+		}
+		total += lost
+	}
+	return total
 }

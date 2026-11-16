@@ -215,12 +215,11 @@ func (s *warningSink) settleWrite(err error) {
 	}
 }
 
-func (s *warningSink) abandonWrite() bool {
+func (s *warningSink) abandonWrite() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.settledLocked()
 	s.dropped++
-	return !s.closed
 }
 
 func (s *warningSink) reportLost() {
@@ -328,7 +327,7 @@ func (s *warningSink) awaitQuiet(budget <-chan struct{}) {
 func (s *warningSink) finalize() {
 	s.mu.Lock()
 	s.finalized = true
-	lost, unconfirmed := s.unsettledLocked()
+	lost, unconfirmed := s.dropped-s.reported, s.unconfirmed
 	s.reported = s.dropped
 	s.mu.Unlock()
 	logNotConfirmed(lost, unconfirmed)
@@ -363,14 +362,10 @@ func (s *warningSink) announceAfterFinal() {
 		s.mu.Unlock()
 		return
 	}
-	lost, unconfirmed := s.unsettledLocked()
+	lost := s.dropped - s.reported
 	s.reported = s.dropped
 	s.mu.Unlock()
-	logNotConfirmed(lost, unconfirmed)
-}
-
-func (s *warningSink) unsettledLocked() (int, int) {
-	return s.dropped - s.reported, s.unconfirmed
+	logNotConfirmed(lost, 0)
 }
 
 func logNotConfirmed(lost, unconfirmed int) {
@@ -410,9 +405,7 @@ func (s *warningSink) directBudget(budget <-chan struct{}) <-chan struct{} {
 func (s *warningSink) directWrite(data []byte, budget <-chan struct{}) error {
 	s.reserve()
 	if !s.out.acquire(budget) {
-		if s.abandonWrite() {
-			slog.Warn("a warning was abandoned because its writer stayed blocked", "budget", warningWriteBudget)
-		}
+		s.abandonWrite()
 		return errWarningAbandoned
 	}
 	written := make(chan error, 1)

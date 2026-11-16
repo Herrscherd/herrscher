@@ -29,6 +29,7 @@ func (blockingCompactBackend) Compact(ctx context.Context, _ contracts.CompactRe
 
 type countingCompactBackend struct {
 	usageReplyBackend
+
 	calls *atomic.Int32
 }
 

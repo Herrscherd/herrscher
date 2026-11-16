@@ -66,7 +66,7 @@ type Streams struct {
 // Claude runs the fake claude CLI on args and returns its exit status. It speaks
 // stream-json when args ask for it, and answers one prompt in JSON otherwise.
 func Claude(args []string, streams Streams, files Files) int {
-	if slices.Contains(args, "--version") {
+	if slices.Contains(args, flagVersion) {
 		return exitOf(streams.Err, writeLine(streams.Out, claudeVersion))
 	}
 	replay, err := openReplay(files, args)
@@ -162,7 +162,7 @@ func (r *replay) record(line string) error {
 }
 
 func appendLine(path, line string) error {
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, privateFile)
+	file, err := os.OpenFile(filepath.Clean(path), os.O_APPEND|os.O_CREATE|os.O_WRONLY, privateFile)
 	if err != nil {
 		return fmt.Errorf("cannot open the log: %w", err)
 	}
@@ -426,8 +426,8 @@ type assistantEvent struct {
 }
 
 func assistantText(text string) assistantEvent {
-	event := assistantEvent{Type: "assistant"}
-	event.Message.Content = []contentBlock{{Type: "text", Text: text}}
+	event := assistantEvent{Type: wordAssistant}
+	event.Message.Content = []contentBlock{{Type: wordText, Text: text}}
 	return event
 }
 
@@ -439,7 +439,7 @@ func apiErrorText(text string) assistantEvent {
 }
 
 func assistantTool(call int, tool step) assistantEvent {
-	event := assistantEvent{Type: "assistant"}
+	event := assistantEvent{Type: wordAssistant}
 	event.Message.Content = []contentBlock{{Type: "tool_use", ID: "toolu_" + strconv.Itoa(call), Name: tool.tool, Input: tool.input}}
 	return event
 }

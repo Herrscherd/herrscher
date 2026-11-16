@@ -137,9 +137,9 @@ func (t *Turn) empty() bool {
 func parseStep(line string) (step, error) {
 	name, rest := cutWord(line)
 	switch name {
-	case "text":
+	case wordText:
 		return textStep(stepText, rest)
-	case "error":
+	case wordError:
 		return textStep(stepFail, rest)
 	case "apierror":
 		return textStep(stepAPIError, rest)

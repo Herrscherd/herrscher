@@ -26,20 +26,20 @@ var errCodexArgs = errors.New("the codex fake speaks only app-server, login stat
 // JSON-RPC app-server that the codex backend drives in stream mode, replaying one
 // turn per turn/start request.
 func Codex(args []string, streams Streams, files Files) int {
-	if slices.Contains(args, "--version") {
+	if slices.Contains(args, flagVersion) {
 		return exitOf(streams.Err, writeLine(streams.Out, codexVersion))
 	}
-	if slices.Equal(args, []string{"login", "status"}) {
+	if slices.Equal(args, []string{wordLogin, wordStatus}) {
 		return exitOf(streams.Err, writeLine(streams.Out, codexLoginLine))
 	}
 	if !slices.Contains(args, appServerVerb) {
 		return exitOf(streams.Err, errCodexArgs)
 	}
-	v, err := openVendor(codexLabel, files)
+	fake, err := openVendor(codexLabel, files)
 	if err != nil {
 		return exitOf(streams.Err, err)
 	}
-	return exitOf(streams.Err, v.serveCodex(streams))
+	return exitOf(streams.Err, fake.serveCodex(streams))
 }
 
 type rpcMessage struct {
@@ -102,7 +102,7 @@ func (v *vendor) handleRPC(out io.Writer, line []byte) error {
 	if len(message.ID) == 0 {
 		return nil
 	}
-	return writeJSON(out, rpcResponse{ID: message.ID, Result: map[string]any{}})
+	return writeJSON(out, rpcResponse{ID: message.ID, Result: make(map[string]any)})
 }
 
 func respondThread(out io.Writer, message rpcMessage) error {
@@ -144,7 +144,7 @@ func (v *vendor) startTurn(out io.Writer, message rpcMessage) error {
 	if err != nil {
 		return err
 	}
-	started := map[string]any{"turn": map[string]any{"id": codexTurnID}}
+	started := map[string]any{wordTurn: map[string]any{"id": codexTurnID}}
 	if err := writeJSON(out, rpcResponse{ID: message.ID, Result: started}); err != nil {
 		return err
 	}
@@ -152,22 +152,26 @@ func (v *vendor) startTurn(out io.Writer, message rpcMessage) error {
 }
 
 func writeTurnEvents(out io.Writer, threadID string, reply vendorReply) error {
-	notes := []rpcNotification{{Method: "turn/started", Params: map[string]any{"threadId": threadID, "turn": map[string]any{"id": codexTurnID}}}}
+	events := []rpcNotification{{Method: "turn/started", Params: turnPayload(threadID, map[string]any{"id": codexTurnID})}}
 	if reply.failed {
-		notes = append(notes, rpcNotification{Method: "turn/completed", Params: map[string]any{
-			"threadId": threadID,
-			"turn":     map[string]any{"id": codexTurnID, "status": "failed", "error": map[string]any{"message": reply.failure}},
-		}})
+		failed := map[string]any{"id": codexTurnID, wordStatus: "failed", wordError: map[string]any{"message": reply.failure}}
+		events = append(events, rpcNotification{Method: "turn/completed", Params: turnPayload(threadID, failed)})
 	} else {
-		notes = append(notes,
-			rpcNotification{Method: "item/agentMessage/delta", Params: map[string]any{"threadId": threadID, "turnId": codexTurnID, "delta": reply.text}},
-			rpcNotification{Method: "turn/completed", Params: map[string]any{"threadId": threadID, "turn": map[string]any{"id": codexTurnID, "status": "completed"}}},
+		delta := map[string]any{keyThreadID: threadID, "turnId": codexTurnID, "delta": reply.text}
+		completed := map[string]any{"id": codexTurnID, wordStatus: "completed"}
+		events = append(events,
+			rpcNotification{Method: "item/agentMessage/delta", Params: delta},
+			rpcNotification{Method: "turn/completed", Params: turnPayload(threadID, completed)},
 		)
 	}
-	for _, note := range notes {
-		if err := writeJSON(out, note); err != nil {
+	for _, event := range events {
+		if err := writeJSON(out, event); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func turnPayload(threadID string, turn map[string]any) map[string]any {
+	return map[string]any{keyThreadID: threadID, wordTurn: turn}
 }

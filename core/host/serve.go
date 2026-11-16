@@ -230,6 +230,14 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	if options.Runtime.Dir() == "" {
 		return errNoRuntimeLayout
 	}
+	clock, clockErr := schedulerClock()
+	if clockErr != nil {
+		return wrapHost(clockErr, "serve.scheduler_clock", nil)
+	}
+	tick, tickErr := schedulerInterval()
+	if tickErr != nil {
+		return wrapHost(tickErr, "serve.scheduler_tick", nil)
+	}
 	log := base.With("component", "serve")
 	monitor := health.NewHealth(time.Now())
 
@@ -324,7 +332,7 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 		<-ctx.Done()
 		runningHub.stopLive()
 	}()
-	sched := newScheduler(store, store, runningHub, sessions.Seed, schedulerClock())
+	sched := newScheduler(store, store, runningHub, sessions.Seed, clock, tick)
 	deps.schedSlot.sched = sched
 	go sched.Run(ctx)
 	runningHub.startReconcile(ctx)

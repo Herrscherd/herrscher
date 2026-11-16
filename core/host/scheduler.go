@@ -35,6 +35,7 @@ type scheduler struct {
 	creator  scheduleCreator
 	seed     func(session, task string) bool
 	now      func() time.Time
+	interval time.Duration
 
 	mu       sync.Mutex
 	inflight map[string]bool
@@ -42,7 +43,7 @@ type scheduler struct {
 }
 
 func newScheduler(store scheduleStore, sessions sessionLister, creator scheduleCreator,
-	seed func(string, string) bool, now func() time.Time,
+	seed func(string, string) bool, now func() time.Time, interval time.Duration,
 ) *scheduler {
 	return &scheduler{
 		store:    store,
@@ -50,12 +51,13 @@ func newScheduler(store scheduleStore, sessions sessionLister, creator scheduleC
 		creator:  creator,
 		seed:     seed,
 		now:      now,
+		interval: interval,
 		inflight: make(map[string]bool),
 	}
 }
 
 func (s *scheduler) Run(ctx context.Context) {
-	ticker := time.NewTicker(schedulerInterval())
+	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
 	caughtUp := false
 	for {
@@ -89,31 +91,43 @@ func (s *scheduler) release(name string) {
 	s.mu.Unlock()
 }
 
-func (s *scheduler) busy(name string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.inflight[name]
-}
-
 func (s *scheduler) wait() { s.wg.Wait() }
 
 func (s *scheduler) tick(ctx context.Context) {
 	now := s.now()
 	schedules := s.store.SnapshotSchedules()
 	for idx := range schedules {
-		definition := schedules[idx]
-		if definition.Paused || s.busy(definition.Name) {
+		name := schedules[idx].Name
+		if !s.claim(name) {
 			continue
 		}
-		if !schedule.Due(definition, now) {
-			continue
+		if !s.fireIfDue(ctx, name, now) {
+			s.release(name)
 		}
-		if schedule.Stale(definition, now) {
-			s.realign(definition, now)
-			continue
-		}
-		s.dispatch(ctx, definition, "", stampFor(definition, now))
 	}
+}
+
+func (s *scheduler) fireIfDue(ctx context.Context, name string, now time.Time) bool {
+	definition, found := s.current(name)
+	if !found || definition.Paused || !schedule.Due(definition, now) {
+		return false
+	}
+	if schedule.Stale(definition, now) {
+		s.realign(definition, now)
+		return false
+	}
+	s.launch(ctx, definition, "", stampFor(definition, now))
+	return true
+}
+
+func (s *scheduler) current(name string) (schedule.Schedule, bool) {
+	schedules := s.store.SnapshotSchedules()
+	for idx := range schedules {
+		if schedules[idx].Name == name {
+			return schedules[idx], true
+		}
+	}
+	return schedule.Schedule{}, false
 }
 
 func stampFor(sc schedule.Schedule, now time.Time) time.Time {
@@ -178,6 +192,10 @@ func (s *scheduler) dispatch(ctx context.Context, definition schedule.Schedule, 
 		slog.Debug("schedule: previous turn still in flight, skipping this window", keySchedule, definition.Name)
 		return
 	}
+	s.launch(ctx, definition, prefix, when)
+}
+
+func (s *scheduler) launch(ctx context.Context, definition schedule.Schedule, prefix string, when time.Time) {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()

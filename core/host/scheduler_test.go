@@ -71,7 +71,7 @@ func newTestScheduler(store *fakeScheduleStore, sessions *fakeScheduleSessions,
 	return newScheduler(store, sessions, creator, func(sess, task string) bool {
 		*seeded = append(*seeded, sess+"|"+task)
 		return true
-	}, func() time.Time { return now })
+	}, func() time.Time { return now }, schedulerTick)
 }
 
 func TestTickSeedsTheNamedSession(t *testing.T) {
@@ -425,5 +425,48 @@ func TestRunStopsWithItsContext(t *testing.T) {
 	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("Run did not return when its context was cancelled")
+	}
+}
+
+type releasingScheduleStore struct {
+	fakeScheduleStore
+	afterSnapshot func()
+}
+
+func (r *releasingScheduleStore) SnapshotSchedules() []schedule.Schedule {
+	rows := r.fakeScheduleStore.SnapshotSchedules()
+	if hook := r.afterSnapshot; hook != nil {
+		r.afterSnapshot = nil
+		hook()
+	}
+	return rows
+}
+
+func TestTickDoesNotFireAgainAWindowThatFinishedWhileItSnapshotted(t *testing.T) {
+	store := &releasingScheduleStore{fakeScheduleStore: fakeScheduleStore{rows: []schedule.Schedule{{
+		Name: "digest", Session: "live", Every: "30m", Task: "t",
+		LastRun: mustStamp(t, "2026-08-25 09:00"),
+	}}}}
+	sessions := &fakeScheduleSessions{rows: []state.Session{{Name: "live"}}}
+	var seeded []string
+	sch := newScheduler(store, sessions, &fakeScheduleCreator{}, func(sess, task string) bool {
+		seeded = append(seeded, sess+"|"+task)
+		return true
+	}, func() time.Time { return mkHostTime(t, "2026-08-25 09:30") }, schedulerTick)
+	if !sch.claim("digest") {
+		t.Fatal("claim refused on a free schedule")
+	}
+	store.afterSnapshot = func() {
+		at := mustStamp(t, "2026-08-25 09:30")
+		store.rows[0].LastRun = at
+		if err := store.StampScheduleRun("digest", at); err != nil {
+			t.Fatal(err)
+		}
+		sch.release("digest")
+	}
+	sch.tick(context.Background())
+	sch.wait()
+	if len(seeded) != 0 {
+		t.Fatalf("seeded = %v, want no second turn for the 09:30 window that already fired", seeded)
 	}
 }

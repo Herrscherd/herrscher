@@ -61,7 +61,14 @@ func summaryConfig(path string, count int) {
 }
 
 func serveCommand(invoked string) string {
-	return strings.TrimSuffix(filepath.Base(invoked), ".exe") + " serve"
+	name := filepath.Base(invoked)
+	if ext := filepath.Ext(name); strings.EqualFold(ext, ".exe") {
+		name = strings.TrimSuffix(name, ext)
+	}
+	if name == "" || name == "." || name == string(filepath.Separator) {
+		name = "herrscher"
+	}
+	return name + " serve"
 }
 
 func shortModule(m string) string {

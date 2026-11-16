@@ -17,3 +17,12 @@ func TestServeCommandNamesTheInvokedBinary(t *testing.T) {
 		}
 	}
 }
+
+func TestInvokedBinaryWithoutArguments(t *testing.T) {
+	if got := invokedBinary(nil); got != "" {
+		t.Errorf("invokedBinary(nil) = %q, want empty", got)
+	}
+	if got := invokedBinary([]string{"/usr/bin/herrscher", "serve"}); got != "/usr/bin/herrscher" {
+		t.Errorf("invokedBinary(args) = %q, want the program name", got)
+	}
+}

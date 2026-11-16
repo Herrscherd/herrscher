@@ -98,6 +98,12 @@ func isolate(env *testscript.Env, binDir string) error {
 		"REPO=" + repo,
 		runtimeRootEnv + "=" + root,
 	}, files.Environ()...)
+	proxy, listener, err := startUsageProxy(env.WorkDir)
+	if err != nil {
+		return fmt.Errorf("start the usage proxy: %w", err)
+	}
+	stopUsageProxy(env, listener)
+	vars = append(vars, usageProxyEnv(proxy)...)
 	for _, pair := range vars {
 		name, value, _ := strings.Cut(pair, "=")
 		env.Setenv(name, value)

@@ -1,0 +1,26 @@
+env HERRSCHER_CONTEXT_LIMIT=1000
+! exec herrscher serve &daemon&
+waitdaemon
+exec herrscher session create --name long --vendor claude
+exec herrscher session seed --name long --task 'first question'
+stdout '^first answer$'
+exec herrscher session send --name long --text 'second question'
+waitlog 'prompt "/compact"'
+exec herrscher session send --name long --text 'third question'
+waitlog 'prompt .*third question'
+kill -INT daemon
+wait daemon
+! waitdaemon
+exec cat $VENDORTEST_LOG
+stdout '(?s)prompt .*first question.*prompt .*second question.*prompt "/compact".*prompt .*third question'
+grep -count=1 '^prompt "/compact"$' $VENDORTEST_LOG
+
+-- claude.script --
+text first answer
+---
+text second answer
+usage 950
+---
+text compacted
+---
+text third answer

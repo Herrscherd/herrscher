@@ -1,0 +1,18 @@
+! exec herrscher serve &daemon&
+waitdaemon
+exec herrscher session create --name stuck
+exec herrscher session seed --name stuck --task 'hello with no quota'
+stdout '^echo: hello with no quota$'
+kill -INT daemon
+wait daemon
+! waitdaemon
+exec cat $VENDORTEST_LOG
+stdout '(?m)^account .*/claude/only$'
+stdout '(?m)^prompt .*hello with no quota"$'
+
+-- home/.config/herrscher/config.json --
+{"accounts":{"fallback":true}}
+-- home/.config/herrscher/accounts/defaults.json --
+{"claude":"only"}
+-- home/.config/herrscher/accounts/claude/only/.credentials.json --
+{"claudeAiOauth":{"accessToken":"exhausted-token"}}

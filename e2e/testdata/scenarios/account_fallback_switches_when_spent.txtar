@@ -1,0 +1,23 @@
+! exec herrscher serve &daemon&
+waitdaemon
+exec herrscher session create --name switched
+exec herrscher session seed --name switched --task 'hello after the switch'
+stdout '^ok from the second account$'
+kill -INT daemon
+wait daemon
+! waitdaemon
+exec cat $VENDORTEST_LOG
+stdout '(?m)^account .*/claude/second$'
+! stdout '(?m)^account .*/claude/first$'
+stdout '(?m)^prompt .*hello after the switch"$'
+
+-- home/.config/herrscher/config.json --
+{"accounts":{"fallback":true}}
+-- home/.config/herrscher/accounts/defaults.json --
+{"claude":"first"}
+-- home/.config/herrscher/accounts/claude/first/.credentials.json --
+{"claudeAiOauth":{"accessToken":"exhausted-token"}}
+-- home/.config/herrscher/accounts/claude/second/.credentials.json --
+{"claudeAiOauth":{"accessToken":"fresh-token"}}
+-- claude.script --
+text ok from the second account

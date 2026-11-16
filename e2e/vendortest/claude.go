@@ -24,9 +24,10 @@ const DescendantSleep = 60 * time.Second
 const descendantSleepArg = "60"
 
 const (
-	envScript = "VENDORTEST_SCRIPT"
-	envLog    = "VENDORTEST_LOG"
-	envTurns  = "VENDORTEST_TURNS"
+	envScript    = "VENDORTEST_SCRIPT"
+	envLog       = "VENDORTEST_LOG"
+	envTurns     = "VENDORTEST_TURNS"
+	envConfigDir = "CLAUDE_CONFIG_DIR"
 
 	claudeVersion    = "2.1.0 (Claude Code)"
 	defaultSessionID = "vendortest-session"
@@ -136,6 +137,11 @@ func openReplay(files Files, args []string) (*replay, error) {
 	player := &replay{script: script, files: files, sessionID: sessionID}
 	if err := player.record("start " + strings.Join(args, " ")); err != nil {
 		return nil, err
+	}
+	if dir := os.Getenv(envConfigDir); dir != "" {
+		if err := player.record("account " + dir); err != nil {
+			return nil, err
+		}
 	}
 	return player, nil
 }
@@ -291,6 +297,7 @@ func (r *replay) answer(out io.Writer, line []byte) (turnOutcome, error) {
 
 func (r *replay) play(out io.Writer, turn Turn, prompt string) (turnOutcome, error) {
 	var reply []string
+	reported := 0
 	for _, current := range turn.steps {
 		switch current.kind {
 		case stepHang:
@@ -304,6 +311,11 @@ func (r *replay) play(out io.Writer, turn Turn, prompt string) (turnOutcome, err
 				return 0, err
 			}
 			return outcomeAnswered, writeJSON(out, r.failure(current.text, prompt))
+		case stepUsage:
+			reported = current.tokens
+			if err := writeJSON(out, assistantUsage(current.tokens)); err != nil {
+				return 0, err
+			}
 		case stepEcho:
 			text := echoPrefix + lastLine(prompt)
 			reply = append(reply, text)
@@ -322,7 +334,7 @@ func (r *replay) play(out io.Writer, turn Turn, prompt string) (turnOutcome, err
 			}
 		}
 	}
-	return outcomeAnswered, writeJSON(out, r.result(strings.Join(reply, "\n\n"), prompt))
+	return outcomeAnswered, writeJSON(out, r.result(strings.Join(reply, "\n\n"), prompt, reported))
 }
 
 func isHealthProbe(args []string) bool {
@@ -335,13 +347,13 @@ func (r *replay) oneShot(out io.Writer, args []string) error {
 		return err
 	}
 	if isHealthProbe(args) {
-		return writeJSON(out, r.result(echoPrefix+lastLine(prompt), prompt))
+		return writeJSON(out, r.result(echoPrefix+lastLine(prompt), prompt, 0))
 	}
 	turn, err := r.beginTurn()
 	if err != nil {
 		return err
 	}
-	return writeJSON(out, r.result(oneShotReply(turn, prompt), prompt))
+	return writeJSON(out, r.result(oneShotReply(turn, prompt), prompt, 0))
 }
 
 func oneShotReply(turn Turn, prompt string) string {
@@ -414,6 +426,7 @@ type assistantEvent struct {
 	Message    struct {
 		Model   string         `json:"model,omitempty"`
 		Content []contentBlock `json:"content"`
+		Usage   *messageUsage  `json:"usage,omitempty"`
 	} `json:"message"`
 }
 
@@ -430,10 +443,21 @@ func apiErrorText(text string) assistantEvent {
 	return event
 }
 
+func assistantUsage(tokens int) assistantEvent {
+	event := assistantEvent{Type: "assistant"}
+	event.Message.Content = []contentBlock{}
+	event.Message.Usage = &messageUsage{InputTokens: tokens}
+	return event
+}
+
 func assistantTool(call int, tool step) assistantEvent {
 	event := assistantEvent{Type: "assistant"}
 	event.Message.Content = []contentBlock{{Type: "tool_use", ID: "toolu_" + strconv.Itoa(call), Name: tool.tool, Input: tool.input}}
 	return event
+}
+
+type messageUsage struct {
+	InputTokens int `json:"input_tokens"`
 }
 
 type tokenUsage struct {
@@ -464,22 +488,26 @@ type failedResultEvent struct {
 
 const charsPerToken = 4
 
-func (r *replay) fields(subtype string, isError bool, prompt, text string) resultFields {
+func (r *replay) fields(subtype string, isError bool, prompt, text string, reported int) resultFields {
+	usage := tokenUsage{InputTokens: len(prompt)/charsPerToken + 1, OutputTokens: len(text)/charsPerToken + 1}
+	if reported > 0 {
+		usage.InputTokens = reported
+	}
 	return resultFields{
 		Type:      "result",
 		Subtype:   subtype,
 		IsError:   isError,
 		SessionID: r.sessionID,
-		Usage:     tokenUsage{InputTokens: len(prompt)/charsPerToken + 1, OutputTokens: len(text)/charsPerToken + 1},
+		Usage:     usage,
 	}
 }
 
-func (r *replay) result(text, prompt string) resultEvent {
-	return resultEvent{resultFields: r.fields("success", false, prompt, text), Result: text}
+func (r *replay) result(text, prompt string, reported int) resultEvent {
+	return resultEvent{resultFields: r.fields("success", false, prompt, text, reported), Result: text}
 }
 
 func (r *replay) failure(text, prompt string) failedResultEvent {
-	return failedResultEvent{resultFields: r.fields("error_during_execution", true, prompt, text), Errors: []string{text}}
+	return failedResultEvent{resultFields: r.fields("error_during_execution", true, prompt, text, 0), Errors: []string{text}}
 }
 
 func writeJSON(out io.Writer, event any) error {

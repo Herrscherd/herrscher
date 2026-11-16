@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -26,13 +27,15 @@ const (
 	stepCrash
 	stepEcho
 	stepAPIError
+	stepUsage
 )
 
 type step struct {
-	kind  stepKind
-	text  string
-	tool  string
-	input json.RawMessage
+	kind   stepKind
+	text   string
+	tool   string
+	input  json.RawMessage
+	tokens int
 }
 
 // Turn is the scripted reply to one prompt.
@@ -65,8 +68,8 @@ func (e *LineError) Unwrap() error {
 
 // ParseScript reads a script. Each line is one step: "text <words>", "tool
 // <Name> <json input>", "error <message>", "apierror <message>", "spawn <file>",
-// "echo", "hang" or "crash", the last three alone. Blank lines are skipped and a
-// turn with no step is refused.
+// "usage <tokens>", "echo", "hang" or "crash", the last three alone. Blank
+// lines are skipped and a turn with no step is refused.
 func ParseScript(source io.Reader) (Script, error) {
 	var script Script
 	current := Turn{}
@@ -100,7 +103,8 @@ func ParseScript(source io.Reader) (Script, error) {
 }
 
 var (
-	errUnknownStep  = errors.New("unknown step, want text, tool, error, apierror, spawn, echo, hang or crash")
+	errUnknownStep  = errors.New("unknown step, want text, tool, error, apierror, usage, spawn, echo, hang or crash")
+	errUsageCount   = errors.New("usage wants a whole number of input tokens, as in: usage 950")
 	errToolNeedsArg = errors.New("tool wants a name and a JSON input")
 	errToolInput    = errors.New("tool input is not valid JSON")
 	errNeedsText    = errors.New("step wants text after its name")
@@ -145,6 +149,8 @@ func parseStep(line string) (step, error) {
 		return textStep(stepAPIError, rest)
 	case "tool":
 		return toolStep(rest)
+	case "usage":
+		return usageStep(rest)
 	case "echo":
 		return bareStep(stepEcho, rest)
 	case "hang":
@@ -175,6 +181,14 @@ func textStep(kind stepKind, text string) (step, error) {
 		return step{}, errNeedsText
 	}
 	return step{kind: kind, text: text}, nil
+}
+
+func usageStep(rest string) (step, error) {
+	tokens, err := strconv.Atoi(rest)
+	if err != nil || tokens <= 0 {
+		return step{}, errUsageCount
+	}
+	return step{kind: stepUsage, tokens: tokens}, nil
 }
 
 func toolStep(rest string) (step, error) {

@@ -7,6 +7,25 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+func newWindow(ctx context.Context, backend Backend, opts []Option) *model {
+	model := newRunModel(ctx, backend)
+	for _, opt := range opts {
+		opt(model)
+	}
+	return model
+}
+
+// NewWindow returns the window Run starts, for a host that drives the Bubble Tea
+// program itself. The host feeds the backend's routed events to it as Event messages.
+func NewWindow(ctx context.Context, backend Backend, opts ...Option) tea.Model {
+	return newWindow(ctx, backend, opts)
+}
+
+// Event wraps a routed event of the backend as the message the window renders.
+func Event(routed RoutedEvent) tea.Msg {
+	return eventMsg(routed)
+}
+
 func killedByContext(ctx context.Context, err error) bool {
 	return ctx.Err() != nil && errors.Is(err, tea.ErrProgramKilled)
 }

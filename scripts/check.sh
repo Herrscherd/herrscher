@@ -54,6 +54,7 @@ no_dash_punctuation
 capped go test -race -shuffle=on ./...
 if [ "$(uname -s)" = Linux ]; then
 	capped go test -tags e2e -count=1 ./e2e/...
+	capped go test -tags e2e -count=1 -run '^TestE2EAttachedWindow' .
 else
 	echo "skipping the e2e scenarios: they run on Linux only" >&2
 fi

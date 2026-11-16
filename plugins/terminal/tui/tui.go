@@ -1470,13 +1470,10 @@ func newRunModel(ctx context.Context, backend Backend) *model {
 // quits; quitting cancels ctx (wired by the caller) so the daemon shuts down
 // cleanly.
 func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts ...Option) (runErr error) {
-	model := newRunModel(ctx, backend)
+	model := newWindow(ctx, backend, opts)
 	defer func() {
 		runErr = errors.Join(runErr, model.releaseDrafts())
 	}()
-	for _, opt := range opts {
-		opt(model)
-	}
 	if err := sweepDraftsAtStart(); err != nil {
 		model.flash = model.tr.t("tui.drafts.orphans", map[string]any{tplArgReason: localizedReason(model.tr, err)})
 	}

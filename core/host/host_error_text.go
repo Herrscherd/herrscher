@@ -53,6 +53,7 @@ func hostErrorKeys() []hostErrorKey {
 		{errCompactorSettings, "cli.host.fault.compactor_settings"},
 		{errCompactQueueFull, "cli.host.fault.compact_queue_full"},
 		{errWarningAbandoned, "cli.host.fault.warning_abandoned"},
+		{errWarningLate, "cli.host.fault.warning_late"},
 		{errRequestNameMissing, "cli.host.fault.request_name_missing"},
 		{errApproveModeUsage, "cli.host.fault.approve_mode_usage"},
 		{errMemoryLocateUnsupported, "cli.host.fault.memory_locate_unsupported"},

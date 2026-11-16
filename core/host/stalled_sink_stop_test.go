@@ -22,7 +22,7 @@ func TestStopLiveIsBoundedWhenTheWarningWriterStalls(t *testing.T) {
 	}
 }
 
-func TestStopWithAFrozenWriterCountsTheHubOverrunAsLost(t *testing.T) {
+func TestStopWithAFrozenWriterNeverBothWritesAndCountsTheHubOverrun(t *testing.T) {
 	warnings := newGatedWarnings("stalled-warning")
 	t.Cleanup(warnings.open)
 	h := newInflightHub(t, "stalled-"+newTurnID(), 5*time.Second, warnings)
@@ -31,15 +31,16 @@ func TestStopWithAFrozenWriterCountsTheHubOverrunAsLost(t *testing.T) {
 	}
 
 	h.stopLive()
-	if got := h.sink.droppedCount(); got < 1 {
-		t.Fatalf("the hub overrun behind a writer frozen for the whole budget was not counted as lost, dropped = %d", got)
-	}
-	if out := warnings.out.String(); strings.Contains(out, hubOverrunText(h, "")) {
-		t.Fatalf("the hub overrun reached a writer that stayed frozen: %q", out)
+	warnings.open()
+	time.Sleep(200 * time.Millisecond)
+	written := strings.Contains(warnings.out.String(), hubOverrunText(h, ""))
+	counted := h.sink.droppedCount() > 0
+	if written == counted {
+		t.Fatalf("the hub overrun behind a frozen writer was written=%v and counted as lost=%v, want exactly one of the two", written, counted)
 	}
 }
 
-func TestCloseWarningsCountsAnUndrainedOverrunAsLost(t *testing.T) {
+func TestCloseWarningsNeverBothWritesAndCountsAnUndrainedOverrun(t *testing.T) {
 	warnings := newGatedWarnings("stuck")
 	t.Cleanup(warnings.open)
 	h := testHub(&hub{warnings: warnings, teardownGrace: 300 * time.Millisecond})
@@ -48,7 +49,11 @@ func TestCloseWarningsCountsAnUndrainedOverrunAsLost(t *testing.T) {
 	}
 
 	h.closeWarnings()
-	if got := h.sink.droppedCount(); got < 1 {
-		t.Fatalf("the undrained overrun behind a frozen writer was not counted as lost, dropped = %d", got)
+	warnings.open()
+	time.Sleep(200 * time.Millisecond)
+	written := strings.Contains(warnings.out.String(), hubOverrunText(h, ""))
+	counted := h.sink.droppedCount() > 0
+	if written == counted {
+		t.Fatalf("the undrained overrun behind a frozen writer was written=%v and counted as lost=%v, want exactly one of the two", written, counted)
 	}
 }

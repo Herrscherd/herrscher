@@ -3213,6 +3213,11 @@
     "other": "l'écrivain des avertissements est resté bloqué : l'avertissement a été abandonné"
   },
   {
+    "id": "cli.host.fault.warning_late",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (warning late)",
+    "other": "l'écrivain des avertissements est resté bloqué : l'avertissement a été écrit en retard"
+  },
+  {
     "id": "cli.host.fault.request_name_missing",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (request name missing)",
     "other": "nommez une demande (voir `approve list`)"

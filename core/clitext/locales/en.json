@@ -3213,6 +3213,11 @@
     "other": "the warning writer stayed blocked: the warning was abandoned"
   },
   {
+    "id": "cli.host.fault.warning_late",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (warning late)",
+    "other": "the warning writer stayed blocked: the warning was written late"
+  },
+  {
     "id": "cli.host.fault.request_name_missing",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (request name missing)",
     "other": "name a request (see `approve list`)"

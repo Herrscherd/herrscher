@@ -472,8 +472,13 @@ func (h *hub) RestartWithResume(name, token string) error {
 	}
 	h.goDead(name)
 	sess.ResumeToken = token
+	sess.InterruptedTurn = ""
 	return h.goLiveStarted(context.Background(), sess, func() error {
-		return h.persistResumeToken(name, token)
+		if err := h.persistResumeToken(name, token); err != nil {
+			return err
+		}
+		h.clearTurnMark(name)
+		return nil
 	})
 }
 

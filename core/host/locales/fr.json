@@ -576,8 +576,8 @@
   },
   {
     "id": "warn.session_turn_interrupted",
-    "description": "Un tour pris par le backend a été coupé par l'arrêt du démon ; le journal le consigne comme une notice",
-    "other": "le démon s'est arrêté pendant ce tour, qui est resté sans réponse"
+    "description": "Un tour envoyé au backend s'est terminé sans réponse lorsque la session a été interrompue ; le journal le consigne comme une notice",
+    "other": "le dernier message est resté sans réponse, renvoie-le si besoin"
   },
   {
     "id": "warn.session_turn_mark_set",

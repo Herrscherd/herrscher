@@ -576,8 +576,8 @@
   },
   {
     "id": "warn.session_turn_interrupted",
-    "description": "A turn the backend had taken was cut short by a daemon stop; the transcript records it as a notice",
-    "other": "the daemon stopped during this turn, which got no reply"
+    "description": "A turn sent to the backend ended without a reply when the session was interrupted; the transcript records it as a notice",
+    "other": "the last message got no reply, send it again if needed"
   },
   {
     "id": "warn.session_turn_mark_set",

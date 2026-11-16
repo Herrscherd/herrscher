@@ -430,6 +430,7 @@ func TestRunStopsWithItsContext(t *testing.T) {
 
 type releasingScheduleStore struct {
 	fakeScheduleStore
+
 	afterSnapshot func()
 }
 

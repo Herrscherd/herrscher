@@ -186,7 +186,12 @@ func resolveInstanceID(hostState *state.State, optID, ownerID string, log *slog.
 // registry by the caller). Command dispatch no longer runs here.
 // Session/service commands run through the operator CLI (see NewRegistry).
 func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, options Options) error {
-	return localizeHostError(options.operatorLanguage(), serveHub(ctx, gws, closers, options))
+	clock, tick, settingsErr := schedulerSettings()
+	if settingsErr != nil {
+		closeGateways(ctx, closers, obs.Stderr(false))
+		return localizeHostError(options.operatorLanguage(), settingsErr)
+	}
+	return localizeHostError(options.operatorLanguage(), serveHub(ctx, gws, closers, options, clock, tick))
 }
 
 func (options Options) operatorLanguage() i18n.Language {
@@ -224,19 +229,11 @@ func (options Options) withDefaultGateways(gws []Deps) Options {
 	return options
 }
 
-func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, options Options) error {
+func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, options Options, clock func() time.Time, tick time.Duration) error {
 	base := obs.Stderr(false)
 	defer closeGateways(ctx, closers, base)
 	if options.Runtime.Dir() == "" {
 		return errNoRuntimeLayout
-	}
-	clock, clockErr := schedulerClock()
-	if clockErr != nil {
-		return wrapHost(clockErr, "serve.scheduler_clock", nil)
-	}
-	tick, tickErr := schedulerInterval()
-	if tickErr != nil {
-		return wrapHost(tickErr, "serve.scheduler_tick", nil)
 	}
 	log := base.With("component", "serve")
 	monitor := health.NewHealth(time.Now())

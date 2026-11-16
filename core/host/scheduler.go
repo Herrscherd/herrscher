@@ -130,6 +130,18 @@ func (s *scheduler) current(name string) (schedule.Schedule, bool) {
 	return schedule.Schedule{}, false
 }
 
+func schedulerSettings() (func() time.Time, time.Duration, error) {
+	clock, err := schedulerClock()
+	if err != nil {
+		return nil, 0, wrapHost(err, "serve.scheduler_clock", nil)
+	}
+	tick, err := schedulerInterval()
+	if err != nil {
+		return nil, 0, wrapHost(err, "serve.scheduler_tick", nil)
+	}
+	return clock, tick, nil
+}
+
 func stampFor(sc schedule.Schedule, now time.Time) time.Time {
 	if w, ok := schedule.Window(sc, now); ok {
 		return w

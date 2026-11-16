@@ -3,6 +3,7 @@
 package host
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -12,6 +13,8 @@ const (
 	envSchedulerClock = "HERRSCHER_E2E_CLOCK"
 	envSchedulerTick  = "HERRSCHER_E2E_SCHEDULER_TICK"
 )
+
+var errSchedulerTickNotPositive = errors.New("scheduler tick must be positive")
 
 func schedulerClock() (func() time.Time, error) {
 	raw := os.Getenv(envSchedulerClock)
@@ -35,7 +38,7 @@ func schedulerInterval() (time.Duration, error) {
 		return 0, fmt.Errorf("%s=%q: want a duration: %w", envSchedulerTick, raw, err)
 	}
 	if span <= 0 {
-		return 0, fmt.Errorf("%s=%q: want a positive duration", envSchedulerTick, raw)
+		return 0, fmt.Errorf("%w: %s=%q", errSchedulerTickNotPositive, envSchedulerTick, raw)
 	}
 	return span, nil
 }

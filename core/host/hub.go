@@ -152,10 +152,11 @@ func (h *hub) liveSink(ctx context.Context, sess state.Session) sessionSink {
 		Resume: func(tok string) {
 			h.keepResumeToken(sess.Name, tok)
 		},
-		TurnInterrupted: func(turnID string) {
-			if err := h.st.SetInterruptedTurn(sess.Name, turnID); err != nil {
-				slog.Warn("interrupted turn not recorded", "session", sess.Name, "err", err)
-			}
+		TurnOpened: func(turnID string) {
+			h.openTurnMark(sess.Name, turnID)
+		},
+		TurnSettled: func() {
+			h.clearTurnMark(sess.Name)
 		},
 		Project: func(p string) {
 			if err := h.st.SetProjectPinned(sess.Name, p); err != nil {
@@ -477,16 +478,12 @@ func (h *hub) RestartWithResume(name, token string) error {
 }
 
 func (h *hub) persistResumeToken(session, token string) error {
-	err := h.st.SetResumeToken(session, token)
-	if err != nil {
-		warnLive(h.warnings, h.sessionLanguageSource(session), "warn.session_resume_token", map[string]any{nameParam: session, detailParam: err})
-	}
-	return err
+	return h.st.SetResumeToken(session, token)
 }
 
 func (h *hub) keepResumeToken(session, token string) {
 	if err := h.persistResumeToken(session, token); err != nil {
-		slog.Warn("resume token not kept", "session", session, "err", err)
+		warnLive(h.warnings, h.sessionLanguageSource(session), "warn.session_resume_token", map[string]any{nameParam: session, detailParam: err})
 	}
 }
 

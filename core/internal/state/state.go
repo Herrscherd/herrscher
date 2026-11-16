@@ -388,9 +388,10 @@ func (s *State) SetResumeToken(name, token string) error {
 	return s.setSessionField(name, func(sess *Session) *string { return &sess.ResumeToken }, token)
 }
 
-// SetInterruptedTurn marks the turn the daemon was running when it stopped, so
-// the next start can announce it. A missing session or an unchanged mark is a
-// no-op.
+// SetInterruptedTurn records the turn a session has sent to its backend and not
+// yet settled, or clears it when turnID is empty. A daemon stop during that
+// turn leaves the mark behind, so the next start can announce it. A missing
+// session or an unchanged mark is a no-op.
 func (s *State) SetInterruptedTurn(name, turnID string) error {
 	return s.setSessionField(name, func(sess *Session) *string { return &sess.InterruptedTurn }, turnID)
 }
@@ -512,6 +513,7 @@ func (s *State) SetAccount(name, account string, fresh bool) (bool, error) {
 		s.Sessions[idx].Account = account
 		if fresh {
 			s.Sessions[idx].ResumeToken = ""
+			s.Sessions[idx].InterruptedTurn = ""
 		}
 		return true, s.saveLocked()
 	}
@@ -535,6 +537,7 @@ func (s *State) SetBackendTarget(name, vendor, cmd, modelID string) (bool, error
 		s.Sessions[idx].Cmd = cmd
 		s.Sessions[idx].ModelID = modelID
 		s.Sessions[idx].ResumeToken = ""
+		s.Sessions[idx].InterruptedTurn = ""
 		return true, s.saveLocked()
 	}
 	return false, nil

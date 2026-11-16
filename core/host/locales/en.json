@@ -576,8 +576,18 @@
   },
   {
     "id": "warn.session_turn_interrupted",
-    "description": "A turn the backend had taken was cut short by a daemon stop; the last message got no reply and the user must send it again",
-    "other": "the last message got no reply when the daemon stopped, send it again"
+    "description": "A turn the backend had taken was cut short by a daemon stop; the transcript records it as a notice",
+    "other": "the daemon stopped during this turn, which got no reply"
+  },
+  {
+    "id": "warn.session_turn_mark_set",
+    "description": "The interrupted turn mark of a session could not be written; a daemon stop during this turn would go unannounced",
+    "other": "herrscher serve: session \"{{.Name}}\": interrupted turn not marked, a stop during it will go unannounced: {{.Detail}}"
+  },
+  {
+    "id": "warn.session_turn_mark_clear",
+    "description": "The interrupted turn mark of a session could not be cleared; the next start would announce a turn that was settled",
+    "other": "herrscher serve: session \"{{.Name}}\": interrupted turn mark not cleared, the next start will announce it again: {{.Detail}}"
   },
   {
     "id": "warn.session_project_pin",

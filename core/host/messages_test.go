@@ -177,6 +177,8 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"warn.session_checkpoint":           {"Detail", "Name"},
 		"warn.session_resume_token":         {"Detail", "Name"},
 		"warn.session_turn_interrupted":     nil,
+		"warn.session_turn_mark_set":        {"Detail", "Name"},
+		"warn.session_turn_mark_clear":      {"Detail", "Name"},
 		"warn.session_project_pin":          {"Detail", "Name"},
 		"warn.session_transcript":           {"Detail", "Name"},
 		"warn.session_accept_failed":        {"Detail", "Name"},

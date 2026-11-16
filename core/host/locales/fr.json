@@ -576,8 +576,18 @@
   },
   {
     "id": "warn.session_turn_interrupted",
-    "description": "Un tour pris par le backend a été coupé par l'arrêt du démon ; le dernier message est resté sans réponse et l'utilisateur doit le renvoyer",
-    "other": "le dernier message est resté sans réponse à l'arrêt du démon, renvoie-le"
+    "description": "Un tour pris par le backend a été coupé par l'arrêt du démon ; le journal le consigne comme une notice",
+    "other": "le démon s'est arrêté pendant ce tour, qui est resté sans réponse"
+  },
+  {
+    "id": "warn.session_turn_mark_set",
+    "description": "La marque de tour interrompu d'une session n'a pas pu être écrite ; un arrêt du démon pendant ce tour passerait sans annonce",
+    "other": "herrscher serve : session \"{{.Name}}\" : tour non marqué, un arrêt pendant ce tour passera sans annonce : {{.Detail}}"
+  },
+  {
+    "id": "warn.session_turn_mark_clear",
+    "description": "La marque de tour interrompu d'une session n'a pas pu être effacée ; le prochain démarrage annoncerait un tour déjà réglé",
+    "other": "herrscher serve : session \"{{.Name}}\" : marque de tour interrompu non effacée, le prochain démarrage l'annoncera à nouveau : {{.Detail}}"
   },
   {
     "id": "warn.session_project_pin",

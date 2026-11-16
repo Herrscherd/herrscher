@@ -287,6 +287,9 @@ linters:
       - path: ^core/host/announcekey\.go$
         linters: [gochecknoglobals]
         text: "capturedAnnounce"
+      - path: ^core/host/messages\.go$
+        linters: [gochecknoglobals]
+        text: "^hostCatalog is a global variable"
 
 formatters:
   enable:

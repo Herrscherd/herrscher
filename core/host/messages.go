@@ -30,8 +30,10 @@ type hostMessages struct {
 	catalog func() (*i18n.Catalog, error)
 }
 
+var hostCatalog = sync.OnceValues(buildHostCatalog)
+
 func newHostMessages() *hostMessages {
-	return &hostMessages{catalog: sync.OnceValues(buildHostCatalog)}
+	return &hostMessages{catalog: hostCatalog}
 }
 
 func buildHostCatalog() (*i18n.Catalog, error) {

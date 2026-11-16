@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -151,12 +152,35 @@ func herrscherDir(root string) string {
 var errLeaked = errors.New("processes outlived the scenario")
 
 func settle(root, instance string, before map[string]bool) error {
+	interruptErr := interruptDaemons(instance)
 	leaked, reapErr := reapInstance(instance, reapGrace)
 	if len(leaked) > 0 {
 		reapErr = errors.Join(reapErr, fmt.Errorf("%w: %s", errLeaked, strings.Join(leaked, "; ")))
 	}
 	removeErr := removeRuntimeEntries(root, instance)
-	return errors.Join(reapErr, removeErr, appearedHashed(root, before))
+	return errors.Join(interruptErr, reapErr, removeErr, appearedHashed(root, before))
+}
+
+func interruptDaemons(instance string) error {
+	pids, err := processesWith(instanceMarker(instance))
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, pid := range pids {
+		line, lineErr := commandLine(pid)
+		if lineErr != nil || !isDaemonCommand(line) {
+			continue
+		}
+		if killErr := syscall.Kill(pid, syscall.SIGINT); killErr != nil && !errors.Is(killErr, syscall.ESRCH) {
+			errs = append(errs, killErr)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func isDaemonCommand(line string) bool {
+	return slices.Contains(strings.Fields(line), "serve")
 }
 
 var (

@@ -31,6 +31,8 @@ var errNoGateway = errors.New("no gateway built")
 
 const hubStopTimeout = 15 * time.Second
 
+const hookBlockingExit = 2
+
 func or(first, second string) string {
 	if first != "" {
 		return first
@@ -293,7 +295,9 @@ func runHost(ctx context.Context, layout host.RuntimeLayout, args []string) erro
 
 func runApprove(ctx context.Context, layout host.RuntimeLayout, args []string) error {
 	if len(args) > 0 && args[0] == "hook" {
-		host.RunApprovalHook(ctx, layout, os.Stdin, os.Stdout, os.Stderr)
+		if err := host.RunApprovalHook(ctx, layout, os.Stdin, os.Stdout, os.Stderr); err != nil {
+			return exitStatusError{code: hookBlockingExit}
+		}
 		return nil
 	}
 	return runRegistryVerb(ctx, layout, "approve", args)

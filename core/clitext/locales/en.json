@@ -3218,6 +3218,11 @@
     "other": "usage: approve mode <session> <ask|bypass|strict|smart>"
   },
   {
+    "id": "cli.host.fault.approve_ask_unauthenticated",
+    "description": "Erreur d'une demande d'approbation refusée car l'appelant ne détient pas le jeton de la session",
+    "other": "approve ask refused: the caller does not hold this session's approval token"
+  },
+  {
     "id": "cli.host.fault.usage_empty_value",
     "description": "Error of a usage command whose option is empty",
     "other": "usage: an empty value is not accepted"

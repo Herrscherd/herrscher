@@ -240,17 +240,18 @@ func ApplyOrchestratorScope(cfg *contracts.PluginConfig, session, project, agent
 // positional parameters; routing would have added a seventh, which made call
 // sites unreadable.
 type BackendRequest struct {
-	Vendor      string
-	Cmd         string
-	Kind        string
-	Dir         string
-	Resume      string
-	ModelID     string
-	Account     string
-	AccountRoot string
-	Keys        *keyproxy.Proxy
-	Models      *ModelDiscovery
-	Session     string
+	Vendor       string
+	Cmd          string
+	Kind         string
+	Dir          string
+	Resume       string
+	ModelID      string
+	Account      string
+	AccountRoot  string
+	Keys         *keyproxy.Proxy
+	Models       *ModelDiscovery
+	Session      string
+	SessionToken string
 
 	resolver remoteBackendResolver
 }
@@ -399,18 +400,21 @@ func applyBackendRequest(settings map[string]string, req BackendRequest, route m
 	setIfPresent(settings, "dir", req.Dir)
 	setIfPresent(settings, "resume", req.Resume)
 	setIfPresent(settings, "model", route.arg)
-	if env := withSessionIdentity(route.env, req.Session); len(env) > 0 {
+	if env := withSessionIdentity(route.env, req.Session, req.SessionToken); len(env) > 0 {
 		settings["env"] = contracts.EncodeEnvSetting(env)
 	}
 }
 
-func withSessionIdentity(env map[string]string, session string) map[string]string {
+func withSessionIdentity(env map[string]string, session, token string) map[string]string {
 	if session == "" {
 		return env
 	}
 	identity := make(map[string]string, len(env)+1)
 	maps.Copy(identity, env)
 	identity[control.SessionVar] = session
+	if token != "" {
+		identity[control.ApprovalKeyVar] = token
+	}
 	return identity
 }
 
@@ -421,21 +425,26 @@ func setIfPresent(settings map[string]string, key, value string) {
 }
 
 func newSeedBackend(ctx context.Context, sess state.Session, keys *keyproxy.Proxy, models *ModelDiscovery) (contracts.Backend, error) {
+	return newSeedBackendWithToken(ctx, sess, keys, models, "")
+}
+
+func newSeedBackendWithToken(ctx context.Context, sess state.Session, keys *keyproxy.Proxy, models *ModelDiscovery, token string) (contracts.Backend, error) {
 	dir := sess.Dir
 	if dir == "" {
 		dir = sess.Worktree
 	}
 	return BuildBackendFor(ctx, BackendRequest{
-		Vendor:  sess.Vendor,
-		Cmd:     sess.Cmd,
-		Kind:    sess.Backend,
-		Dir:     resolveBackendDir(dir),
-		Resume:  sess.ResumeToken,
-		ModelID: sess.ModelID,
-		Account: sess.Account,
-		Keys:    keys,
-		Models:  models,
-		Session: sess.Name,
+		Vendor:       sess.Vendor,
+		Cmd:          sess.Cmd,
+		Kind:         sess.Backend,
+		Dir:          resolveBackendDir(dir),
+		Resume:       sess.ResumeToken,
+		ModelID:      sess.ModelID,
+		Account:      sess.Account,
+		Keys:         keys,
+		Models:       models,
+		Session:      sess.Name,
+		SessionToken: token,
 	})
 }
 

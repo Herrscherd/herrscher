@@ -168,6 +168,7 @@ func TestApproveHookAnswersWithoutBuildingTheRegistry(t *testing.T) {
 	t.Setenv("HERRSCHER_COMMAND_SOCKET", filepath.Join(t.TempDir(), "absent.sock"))
 	t.Setenv("HERRSCHER_LANG", "en")
 	t.Setenv(host.SessionVar, "s1")
+	t.Setenv(host.TokenVar, "token-s1")
 	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}

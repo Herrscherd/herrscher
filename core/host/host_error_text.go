@@ -54,6 +54,7 @@ func hostErrorKeys() []hostErrorKey {
 		{errCompactQueueFull, "cli.host.fault.compact_queue_full"},
 		{errRequestNameMissing, "cli.host.fault.request_name_missing"},
 		{errApproveModeUsage, "cli.host.fault.approve_mode_usage"},
+		{errApproveAskUnauthenticated, "cli.host.fault.approve_ask_unauthenticated"},
 		{errMemoryLocateUnsupported, "cli.host.fault.memory_locate_unsupported"},
 		{errMemoryForgetUnsupported, "cli.host.fault.memory_forget_unsupported"},
 		{errCommandSocketEmpty, "cli.host.fault.command_socket_empty"},

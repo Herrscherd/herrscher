@@ -450,6 +450,26 @@
     "other": "élément d'archive refusé : {{.Member}} sortirait de {{.Root}}"
   },
   {
+    "id": "remote.gateway_env_unsupported",
+    "description": "Un modèle a besoin d'un environnement de lancement de passerelle que le résolveur du backend distant ne peut pas transporter, Model le nomme",
+    "other": "le modèle « {{.Model}} » a besoin d'un environnement de lancement de passerelle, que le résolveur du backend distant ne peut pas transporter ; désactiver HERRSCHER_REMOTE=backend ou choisir un modèle natif"
+  },
+  {
+    "id": "remote.session_unsupported",
+    "description": "Une session ne peut pas encore tourner sur un backend distant, Session la nomme",
+    "other": "la session « {{.Session}} » ne peut pas tourner sur un backend distant : son identité d'approbation ne peut pas encore atteindre l'hôte distant ; désactiver HERRSCHER_REMOTE=backend ou retirer la session"
+  },
+  {
+    "id": "remote.account_unsupported",
+    "description": "Un compte ne peut pas être appliqué sur un backend distant, Account le nomme",
+    "other": "le compte « {{.Account}} » ne peut pas être appliqué : le backend tourne sur un hôte distant, qui résout les comptes dans son propre magasin ; retirer le compte ou désactiver HERRSCHER_REMOTE=backend"
+  },
+  {
+    "id": "serve.instance_id_mismatch",
+    "description": "L'identifiant d'instance de l'état diffère de celui demandé, Have est celui stocké et Want celui demandé",
+    "other": "incohérence d'instanceID : l'état contient « {{.Have}} » mais « {{.Want}} » a été demandé ; le changer orphelinerait les sessions existantes"
+  },
+  {
     "id": "remote.stage_agent",
     "description": "An agent cannot be staged for a remote host, Name names the agent and Detail carries the cause",
     "other": "préparation de l'agent \"{{.Name}}\" impossible : {{.Detail}}"
@@ -668,6 +688,16 @@
     "id": "hook.no_session",
     "description": "The approval hook refuses a tool call whose process carries no session identity, Variable names the environment variable that is missing",
     "other": "herrscher : {{.Variable}} absent de l'environnement, cet appel d'outil n'a donc aucune identité de session et il est refusé"
+  },
+  {
+    "id": "hook.no_token",
+    "description": "The approval hook refuses a tool call whose process carries no approval token, so it cannot prove which session it speaks for; Variable names the environment variable that is missing",
+    "other": "herrscher : {{.Variable}} absent de l'environnement, cet appel d'outil ne peut pas prouver sa session et il est refusé"
+  },
+  {
+    "id": "approve.ask_unauthenticated",
+    "description": "approve ask refuses a request whose caller does not hold the approval token of the session it names; Name is that session",
+    "other": "herrscher : l'appelant ne détient pas le jeton d'approbation de la session {{.Name}}, il ne peut donc pas demander une approbation en son nom"
   },
   {
     "id": "hook.payload_unreadable",

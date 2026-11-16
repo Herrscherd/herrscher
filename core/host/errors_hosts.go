@@ -11,7 +11,11 @@ type gatewayEnvUnsupportedError struct {
 }
 
 func (e *gatewayEnvUnsupportedError) Error() string {
-	return fmt.Sprintf("model %q needs a gateway spawn environment, which the remote backend resolver cannot carry; unset HERRSCHER_REMOTE=backend or pick a native model", e.Model)
+	return e.render(i18n.English)
+}
+
+func (e *gatewayEnvUnsupportedError) render(lang i18n.Language) string {
+	return newHostMessages().text(lang, "remote.gateway_env_unsupported", map[string]any{modelParam: e.Model})
 }
 
 type hostNeedsSSHError struct {
@@ -204,7 +208,11 @@ type instanceIDMismatchError struct {
 }
 
 func (e *instanceIDMismatchError) Error() string {
-	return fmt.Sprintf("instanceID mismatch: state has %q but %q was requested; changing it would orphan existing sessions", e.Have, e.Want)
+	return e.render(i18n.English)
+}
+
+func (e *instanceIDMismatchError) render(lang i18n.Language) string {
+	return newHostMessages().text(lang, "serve.instance_id_mismatch", map[string]any{"Have": e.Have, "Want": e.Want})
 }
 
 type remoteSessionError struct {
@@ -212,7 +220,11 @@ type remoteSessionError struct {
 }
 
 func (e *remoteSessionError) Error() string {
-	return fmt.Sprintf("session %q cannot run on a remote backend: its approval identity cannot reach the remote host yet; unset HERRSCHER_REMOTE=backend or drop the session", e.Session)
+	return e.render(i18n.English)
+}
+
+func (e *remoteSessionError) render(lang i18n.Language) string {
+	return newHostMessages().text(lang, "remote.session_unsupported", map[string]any{"Session": e.Session})
 }
 
 type remoteAccountError struct {
@@ -220,5 +232,9 @@ type remoteAccountError struct {
 }
 
 func (e *remoteAccountError) Error() string {
-	return fmt.Sprintf("account %q cannot be applied: the backend runs on a remote host, which resolves accounts in its own store; drop the account or unset HERRSCHER_REMOTE=backend", e.Account)
+	return e.render(i18n.English)
+}
+
+func (e *remoteAccountError) render(lang i18n.Language) string {
+	return newHostMessages().text(lang, "remote.account_unsupported", map[string]any{"Account": e.Account})
 }

@@ -450,6 +450,26 @@
     "other": "refusing archive member {{.Member}}: it lands outside {{.Root}}"
   },
   {
+    "id": "remote.gateway_env_unsupported",
+    "description": "A model needs a gateway spawn environment the remote backend resolver cannot carry, Model names it",
+    "other": "model \"{{.Model}}\" needs a gateway spawn environment, which the remote backend resolver cannot carry; unset HERRSCHER_REMOTE=backend or pick a native model"
+  },
+  {
+    "id": "remote.session_unsupported",
+    "description": "A session cannot run on a remote backend yet, Session names it",
+    "other": "session \"{{.Session}}\" cannot run on a remote backend: its approval identity cannot reach the remote host yet; unset HERRSCHER_REMOTE=backend or drop the session"
+  },
+  {
+    "id": "remote.account_unsupported",
+    "description": "An account cannot be applied on a remote backend, Account names it",
+    "other": "account \"{{.Account}}\" cannot be applied: the backend runs on a remote host, which resolves accounts in its own store; drop the account or unset HERRSCHER_REMOTE=backend"
+  },
+  {
+    "id": "serve.instance_id_mismatch",
+    "description": "The instance id in the state differs from the one requested, Have is the stored one and Want the requested one",
+    "other": "instanceID mismatch: state has \"{{.Have}}\" but \"{{.Want}}\" was requested; changing it would orphan existing sessions"
+  },
+  {
     "id": "remote.stage_agent",
     "description": "An agent cannot be staged for a remote host, Name names the agent and Detail carries the cause",
     "other": "stage agent \"{{.Name}}\": {{.Detail}}"
@@ -668,6 +688,16 @@
     "id": "hook.no_session",
     "description": "The approval hook refuses a tool call whose process carries no session identity, Variable names the environment variable that is missing",
     "other": "herrscher: no {{.Variable}} in the environment, so this tool call has no session identity and is refused"
+  },
+  {
+    "id": "hook.no_token",
+    "description": "The approval hook refuses a tool call whose process carries no approval token, so it cannot prove which session it speaks for; Variable names the environment variable that is missing",
+    "other": "herrscher: no {{.Variable}} in the environment, so this tool call cannot prove its session and is refused"
+  },
+  {
+    "id": "approve.ask_unauthenticated",
+    "description": "approve ask refuses a request whose caller does not hold the approval token of the session it names; Name is that session",
+    "other": "herrscher: the caller does not hold the approval token of session {{.Name}}, so it cannot ask for an approval on its behalf"
   },
   {
     "id": "hook.payload_unreadable",

@@ -50,6 +50,7 @@ type Supervisor struct {
 	instanceID       string
 	runtime          runtimedir.Layout
 	sessionCmdSocket func(session string) string
+	sessionToken     func(session string) string
 	gate             func(vendor string) string
 	remoteDirOf      func(ctx context.Context, target, controlPath string) (string, error)
 	controlPathOf    func(target string) (string, error)
@@ -90,6 +91,11 @@ func (s *Supervisor) SetInstanceID(id string) { s.instanceID = id }
 // state file happens to name.
 func (s *Supervisor) SetCommandSocket(resolve func(session string) string) {
 	s.sessionCmdSocket = resolve
+}
+
+// SetSessionToken installs the issuer of each session's approval token.
+func (s *Supervisor) SetSessionToken(issue func(session string) string) {
+	s.sessionToken = issue
 }
 
 type supervisedRun struct {
@@ -339,6 +345,9 @@ func (s *Supervisor) bridgeCommand(ctx context.Context, sess state.Session) (*ex
 	}
 	cmd.Env = append(os.Environ(), s.bridgeEnv...)
 	cmd.Env = append(cmd.Env, control.SessionVar+"="+sess.Name)
+	if s.sessionToken != nil {
+		cmd.Env = append(cmd.Env, control.ApprovalKeyVar+"="+s.sessionToken(sess.Name))
+	}
 	if s.sessionCmdSocket != nil {
 		cmd.Env = append(cmd.Env, control.CommandSocketVar+"="+s.sessionCmdSocket(sess.Name))
 	}
@@ -435,6 +444,9 @@ func (s *Supervisor) remoteEnvBlock(sess state.Session, remoteDir string) string
 	}
 	env["TMPDIR"] = "/tmp"
 	env[control.SessionVar] = sess.Name
+	if s.sessionToken != nil {
+		env[control.ApprovalKeyVar] = s.sessionToken(sess.Name)
+	}
 	if s.sessionCmdSocket != nil {
 		env[control.CommandSocketVar] = control.RemoteCommandSocketPath(remoteDir, s.instanceID, sess.Name)
 	}

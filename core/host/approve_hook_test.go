@@ -6,11 +6,18 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/Herrscherd/herrscher/core/language"
 )
 
 const testSocket = "/run/herrscher/test.sock"
 
 func testTarget() string { return testSocket }
+
+func pinEnglish(t *testing.T) {
+	t.Helper()
+	t.Setenv(language.EnvVar, "en")
+}
 
 func hookDecision(t *testing.T, out string) (string, string) {
 	t.Helper()
@@ -31,6 +38,7 @@ func hookDecision(t *testing.T, out string) (string, string) {
 }
 
 func TestHookAsksTheDaemonWithTheRightArgv(t *testing.T) {
+	pinEnglish(t)
 	t.Setenv(SessionVar, "s1")
 	var seen []string
 	ask := func(_ context.Context, argv []string) (string, bool, error) {
@@ -51,6 +59,7 @@ func TestHookAsksTheDaemonWithTheRightArgv(t *testing.T) {
 }
 
 func TestHookSpellsASubjectThatLooksLikeAFlag(t *testing.T) {
+	pinEnglish(t)
 	t.Setenv(SessionVar, "s1")
 	var seen []string
 	ask := func(_ context.Context, argv []string) (string, bool, error) {
@@ -69,6 +78,7 @@ func TestHookSpellsASubjectThatLooksLikeAFlag(t *testing.T) {
 }
 
 func TestHookRefusesWithNoSessionInTheEnvironment(t *testing.T) {
+	pinEnglish(t)
 	t.Setenv(SessionVar, "")
 	ask := func(context.Context, []string) (string, bool, error) {
 		t.Error("the daemon must not be asked about a call that belongs to no session")
@@ -77,7 +87,8 @@ func TestHookRefusesWithNoSessionInTheEnvironment(t *testing.T) {
 	in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}`)
 	var out, errOut bytes.Buffer
 	RunPermissionHook(context.Background(), in, &out, &errOut, testTarget, ask)
-	if d, reason := hookDecision(t, out.String()); d != "deny" || reason != noSessionReason {
+	d, reason := hookDecision(t, out.String())
+	if d != "deny" || !strings.Contains(reason, SessionVar) {
 		t.Fatalf("got %q/%q, want a refusal naming the missing session", d, reason)
 	}
 	if !strings.Contains(errOut.String(), SessionVar) {
@@ -86,6 +97,7 @@ func TestHookRefusesWithNoSessionInTheEnvironment(t *testing.T) {
 }
 
 func TestHookDoesNotResolveTheSocketItNeverDials(t *testing.T) {
+	pinEnglish(t)
 	t.Setenv(SessionVar, "s1")
 	resolved := 0
 	target := func() string {
@@ -104,44 +116,48 @@ func TestHookDoesNotResolveTheSocketItNeverDials(t *testing.T) {
 	}
 }
 
-func TestHookAllowsWhenNoDaemonListens(t *testing.T) {
+func TestHookRefusesWhenNoDaemonListens(t *testing.T) {
+	pinEnglish(t)
 	t.Setenv(SessionVar, "s1")
 	ask := func(context.Context, []string) (string, bool, error) { return "", false, nil }
 	in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"ls"}}`)
 	var out, errOut bytes.Buffer
 	RunPermissionHook(context.Background(), in, &out, &errOut, testTarget, ask)
-	if d, _ := hookDecision(t, out.String()); d != "allow" {
-		t.Fatalf("got %q, want allow: no daemon must not mean no claude", d)
+	d, reason := hookDecision(t, out.String())
+	if d != "deny" || !strings.Contains(reason, testSocket) {
+		t.Fatalf("got %q/%q, want a refusal naming the socket it dialled", d, reason)
 	}
 	if !strings.Contains(errOut.String(), testSocket) {
 		t.Fatalf("stderr was %q, want the socket it dialled", errOut.String())
 	}
 }
 
-func TestHookAllowsOnGarbageInput(t *testing.T) {
+func TestHookRefusesOnGarbageInput(t *testing.T) {
+	pinEnglish(t)
 	ask := func(context.Context, []string) (string, bool, error) {
 		t.Fatal("the daemon must not be asked about input we could not read")
 		return "", false, nil
 	}
 	var out, errOut bytes.Buffer
 	RunPermissionHook(context.Background(), strings.NewReader("{not json"), &out, &errOut, testTarget, ask)
-	if d, _ := hookDecision(t, out.String()); d != "allow" {
-		t.Fatalf("got %q, want allow", d)
+	if d, _ := hookDecision(t, out.String()); d != "deny" {
+		t.Fatalf("got %q, want deny", d)
 	}
 	if !strings.Contains(errOut.String(), "could not read the hook payload") {
 		t.Fatalf("stderr was %q, want the note naming the unreadable payload", errOut.String())
 	}
 }
 
-func TestHookAllowsWhenThePayloadNamesNoTool(t *testing.T) {
+func TestHookRefusesWhenThePayloadNamesNoTool(t *testing.T) {
+	pinEnglish(t)
 	ask := func(context.Context, []string) (string, bool, error) {
 		t.Fatal("the daemon must not be asked about a payload with no tool")
 		return "", false, nil
 	}
 	var out, errOut bytes.Buffer
 	RunPermissionHook(context.Background(), strings.NewReader(`{"hook_event_name":"PreToolUse"}`), &out, &errOut, testTarget, ask)
-	if d, _ := hookDecision(t, out.String()); d != "allow" {
-		t.Fatalf("got %q, want allow", d)
+	if d, _ := hookDecision(t, out.String()); d != "deny" {
+		t.Fatalf("got %q, want deny", d)
 	}
 	if !strings.Contains(errOut.String(), "names no tool") {
 		t.Fatalf("stderr was %q, want the note naming the missing tool", errOut.String())
@@ -149,6 +165,7 @@ func TestHookAllowsWhenThePayloadNamesNoTool(t *testing.T) {
 }
 
 func TestHookAllowsOnAnotherEvent(t *testing.T) {
+	pinEnglish(t)
 	t.Setenv(SessionVar, "s1")
 	ask := func(context.Context, []string) (string, bool, error) {
 		t.Fatal("only PreToolUse asks a question the daemon can answer")
@@ -165,7 +182,8 @@ func TestHookAllowsOnAnotherEvent(t *testing.T) {
 	}
 }
 
-func TestHookAllowsWhenTheDaemonErrors(t *testing.T) {
+func TestHookRefusesWhenTheDaemonErrors(t *testing.T) {
+	pinEnglish(t)
 	t.Setenv(SessionVar, "s1")
 	ask := func(context.Context, []string) (string, bool, error) {
 		return "", true, context.DeadlineExceeded
@@ -173,12 +191,30 @@ func TestHookAllowsWhenTheDaemonErrors(t *testing.T) {
 	in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"ls"}}`)
 	var out, errOut bytes.Buffer
 	RunPermissionHook(context.Background(), in, &out, &errOut, testTarget, ask)
-	if d, _ := hookDecision(t, out.String()); d != "allow" {
-		t.Fatalf("got %q, want allow", d)
+	if d, _ := hookDecision(t, out.String()); d != "deny" {
+		t.Fatalf("got %q, want deny", d)
+	}
+}
+
+func TestHookRefusesAnAnswerItCannotRead(t *testing.T) {
+	pinEnglish(t)
+	t.Setenv(SessionVar, "s1")
+	ask := func(context.Context, []string) (string, bool, error) {
+		return "maybe", true, nil
+	}
+	in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"ls"}}`)
+	var out, errOut bytes.Buffer
+	RunPermissionHook(context.Background(), in, &out, &errOut, testTarget, ask)
+	if d, _ := hookDecision(t, out.String()); d != "deny" {
+		t.Fatalf("got %q, want deny", d)
+	}
+	if !strings.Contains(errOut.String(), "could not read the daemon's answer") {
+		t.Fatalf("stderr was %q, want the note naming the unreadable answer", errOut.String())
 	}
 }
 
 func TestHookImposesNoDeadlineOfItsOwn(t *testing.T) {
+	pinEnglish(t)
 	t.Setenv(SessionVar, "s1")
 	hadDeadline := true
 	ask := func(ctx context.Context, _ []string) (string, bool, error) {
@@ -193,7 +229,8 @@ func TestHookImposesNoDeadlineOfItsOwn(t *testing.T) {
 	}
 }
 
-func TestHookNamesACancelledApprovalApartFromAnUnansweredOne(t *testing.T) {
+func TestHookRefusesACancelledApprovalApartFromAnUnansweredOne(t *testing.T) {
+	pinEnglish(t)
 	t.Setenv(SessionVar, "s1")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -203,8 +240,8 @@ func TestHookNamesACancelledApprovalApartFromAnUnansweredOne(t *testing.T) {
 	in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"ls"}}`)
 	var out, errOut bytes.Buffer
 	RunPermissionHook(ctx, in, &out, &errOut, testTarget, ask)
-	if d, _ := hookDecision(t, out.String()); d != "allow" {
-		t.Fatalf("got %q, want allow: a cancelled approval must not block the call", d)
+	if d, _ := hookDecision(t, out.String()); d != "deny" {
+		t.Fatalf("got %q, want deny: a cancelled approval must not run the call", d)
 	}
 	msg := errOut.String()
 	if !strings.Contains(msg, "cancelled") {
@@ -218,6 +255,7 @@ func TestHookNamesACancelledApprovalApartFromAnUnansweredOne(t *testing.T) {
 func TestHookAppliesAnAnswerThatArrivesAfterCancellation(t *testing.T) {
 	for _, decision := range []string{"deny", "allow"} {
 		t.Run(decision, func(t *testing.T) {
+			pinEnglish(t)
 			t.Setenv(SessionVar, "s1")
 			ctx, cancel := context.WithCancel(context.Background())
 			ask := func(context.Context, []string) (string, bool, error) {
@@ -232,5 +270,21 @@ func TestHookAppliesAnAnswerThatArrivesAfterCancellation(t *testing.T) {
 				t.Fatalf("got %q/%q, want %q: a delivered answer must not be replaced by the cancellation", d, reason, decision)
 			}
 		})
+	}
+}
+
+func TestHookRefusalIsWrittenInTheOperatorLanguage(t *testing.T) {
+	t.Setenv(language.EnvVar, "fr")
+	t.Setenv(SessionVar, "s1")
+	ask := func(context.Context, []string) (string, bool, error) { return "", false, nil }
+	in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"ls"}}`)
+	var out, errOut bytes.Buffer
+	RunPermissionHook(context.Background(), in, &out, &errOut, testTarget, ask)
+	_, reason := hookDecision(t, out.String())
+	if !strings.Contains(reason, "aucun démon") {
+		t.Fatalf("reason %q, want the french refusal", reason)
+	}
+	if !strings.Contains(errOut.String(), "aucun démon") {
+		t.Fatalf("stderr %q, want the french note", errOut.String())
 	}
 }

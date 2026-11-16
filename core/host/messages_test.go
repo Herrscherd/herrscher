@@ -194,6 +194,15 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"warn.context_limit_unknown_vendor": {"Name"},
 		"warn.history_port_missing":         {"Name"},
 		"warn.compactor_port_missing":       {"Name"},
+		"hook.no_session":                   {"Variable"},
+		"hook.payload_unreadable":           {"Detail"},
+		"hook.names_no_tool":                nil,
+		"hook.no_daemon":                    {"Socket"},
+		"hook.cancelled":                    nil,
+		"hook.daemon_failed":                {"Detail"},
+		"hook.answer_unreadable":            {"Answer"},
+		"hook.other_event":                  {"Event", "Expected"},
+		"hook.decision_unwritable":          {"Decision", "Detail"},
 	}
 	i18ntest.CheckDeclared(t, declared, hostLocaleSource(t))
 }

@@ -207,6 +207,14 @@ func (e *instanceIDMismatchError) Error() string {
 	return fmt.Sprintf("instanceID mismatch: state has %q but %q was requested; changing it would orphan existing sessions", e.Have, e.Want)
 }
 
+type remoteSessionError struct {
+	Session string
+}
+
+func (e *remoteSessionError) Error() string {
+	return fmt.Sprintf("session %q cannot run on a remote backend: its approval identity cannot reach the remote host yet; unset HERRSCHER_REMOTE=backend or drop the session", e.Session)
+}
+
 type remoteAccountError struct {
 	Account string
 }

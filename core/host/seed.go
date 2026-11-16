@@ -376,6 +376,9 @@ func routeFor(modelID string, entry CatalogEntry, keys *keyproxy.Proxy) (modelRo
 }
 
 func (req BackendRequest) remoteRefusal(route modelRoute) error {
+	if req.Session != "" {
+		return &remoteSessionError{Session: req.Session}
+	}
 	if len(route.env) > 0 {
 		return &gatewayEnvUnsupportedError{Model: req.ModelID}
 	}

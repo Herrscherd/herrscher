@@ -663,5 +663,50 @@
     "id": "warn.compactor_port_missing",
     "description": "A backend declares the compactor capability without implementing its port",
     "other": "herrscher serve : le backend \"{{.Name}}\" déclare Capabilities.Compactor mais son instance n'implémente pas le port, sa compaction est refusée"
+  },
+  {
+    "id": "hook.no_session",
+    "description": "The approval hook refuses a tool call whose process carries no session identity, Variable names the environment variable that is missing",
+    "other": "herrscher : {{.Variable}} absent de l'environnement, cet appel d'outil n'a donc aucune identité de session et il est refusé"
+  },
+  {
+    "id": "hook.payload_unreadable",
+    "description": "The approval hook refuses a tool call whose payload it cannot parse, Detail carries the parse error",
+    "other": "herrscher : impossible de lire la charge utile du hook, cet appel d'outil est donc refusé : {{.Detail}}"
+  },
+  {
+    "id": "hook.names_no_tool",
+    "description": "The approval hook refuses a PreToolUse payload that names no tool",
+    "other": "herrscher : la charge utile du hook ne nomme aucun outil, cet appel d'outil est donc refusé"
+  },
+  {
+    "id": "hook.no_daemon",
+    "description": "The approval hook refuses a tool call because no daemon listens on the command socket, Socket names the socket it dialled",
+    "other": "herrscher : aucun démon n'écoute sur {{.Socket}}, cet appel d'outil est donc refusé"
+  },
+  {
+    "id": "hook.cancelled",
+    "description": "The approval hook refuses a tool call whose approval was cancelled before the daemon answered",
+    "other": "herrscher : l'approbation a été annulée avant la réponse du démon, cet appel d'outil est donc refusé"
+  },
+  {
+    "id": "hook.daemon_failed",
+    "description": "The approval hook refuses a tool call because the daemon returned an error, Detail carries it",
+    "other": "herrscher : le démon n'a pas pu répondre, cet appel d'outil est donc refusé : {{.Detail}}"
+  },
+  {
+    "id": "hook.answer_unreadable",
+    "description": "The approval hook refuses a tool call whose daemon answer it cannot parse, Answer carries the raw answer",
+    "other": "herrscher : impossible de lire la réponse du démon {{.Answer}}, cet appel d'outil est donc refusé"
+  },
+  {
+    "id": "hook.other_event",
+    "description": "The approval hook allows a payload for another event than PreToolUse, Expected names the event it serves and Event the one it was handed",
+    "other": "herrscher : ce hook répond à {{.Expected}}, pas à {{.Event}}, autorisé"
+  },
+  {
+    "id": "hook.decision_unwritable",
+    "description": "The approval hook could not write its decision to stdout, Decision names it and Detail carries the error",
+    "other": "herrscher : impossible d'écrire la décision {{.Decision}} : {{.Detail}}"
   }
 ]

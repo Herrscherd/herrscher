@@ -5,22 +5,44 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
 
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/control"
+	"github.com/Herrscherd/herrscher/core/language"
 )
 
 // SessionVar is re-exported for callers already holding this package. See
 // control.SessionVar for why it is declared over there.
 const SessionVar = control.SessionVar
 
-const noSessionReason = "herrscher: this tool call has no session identity, so it is refused"
-
 const hookEvent = "PreToolUse"
+
+const (
+	hookNoSession          = "hook.no_session"
+	hookPayloadUnreadable  = "hook.payload_unreadable"
+	hookNamesNoTool        = "hook.names_no_tool"
+	hookNoDaemon           = "hook.no_daemon"
+	hookCancelled          = "hook.cancelled"
+	hookDaemonFailed       = "hook.daemon_failed"
+	hookAnswerUnreadable   = "hook.answer_unreadable"
+	hookOtherEvent         = "hook.other_event"
+	hookDecisionUnwritable = "hook.decision_unwritable"
+)
+
+const (
+	variableParam = "Variable"
+	socketParam   = "Socket"
+	expectedParam = "Expected"
+	eventParam    = "Event"
+	answerParam   = "Answer"
+	decisionParam = "Decision"
+)
 
 type hookInput struct {
 	HookEventName string         `json:"hook_event_name"`
@@ -35,12 +57,12 @@ type hookAsker func(ctx context.Context, argv []string) (string, bool, error)
 // failure to its caller: a non-zero exit is read by Claude Code as the hook
 // crashing, which is not what we mean by any of our outcomes.
 //
-// Every failure allows, with a note on errOut naming what went wrong. A hook
-// that refuses when it cannot reach the daemon would break `claude` run by hand
-// in a materialized worktree, where no daemon watches anything. This is a
-// guardrail against mistakes, not a sandbox.
+// Every failure denies, and the text written to errOut is also the reason the
+// model reads: a tool call that cannot be judged does not run. The one allow is
+// a payload for another event, which is not a tool call and gives the daemon
+// nothing to decide.
 //
-// target names the command socket ask dials, carried here only so the note
+// target names the command socket ask dials, carried here only so the refusal
 // written when nothing is listening names the path that was tried. It is a
 // function and not a string because resolving that path can cost a read of the
 // daemon's state file, and this runs once per tool call: the payloads answered
@@ -48,9 +70,11 @@ type hookAsker func(ctx context.Context, argv []string) (string, bool, error)
 //
 // ctx is handed to ask untouched, with no deadline of its own. `approve ask`
 // legitimately blocks for as long as the daemon's approval wait while a human
-// decides, so a timeout here would allow every call the operator was too slow
-// to answer, which is the one outcome this feature exists to prevent.
+// decides, so a timeout here would refuse every call the operator was too slow
+// to answer, which is the outcome an approval exists to give a human the chance
+// to change.
 func RunPermissionHook(ctx context.Context, stdin io.Reader, out, errOut io.Writer, target func() string, ask hookAsker) {
+	lang := language.Client(slog.Default(), "")
 	var payload hookInput
 	raw, err := io.ReadAll(io.LimitReader(stdin, maxHookInput))
 	if err == nil {
@@ -58,23 +82,21 @@ func RunPermissionHook(ctx context.Context, stdin io.Reader, out, errOut io.Writ
 	}
 	switch {
 	case err != nil:
-		logWriteFailure(fmt.Fprintf(errOut, "herrscher: could not read the hook payload, allowing: %v\n", err))
-		writeHookDecision(out, errOut, "allow", "")
+		refuseHook(out, errOut, lang, hookPayloadUnreadable, map[string]any{detailParam: err.Error()})
 		return
 	case payload.HookEventName != "" && payload.HookEventName != hookEvent:
-		logWriteFailure(fmt.Fprintf(errOut, "herrscher: this hook answers %s, not %q, allowing\n", hookEvent, payload.HookEventName))
-		writeHookDecision(out, errOut, "allow", "")
+		note := hookText(lang, hookOtherEvent, map[string]any{expectedParam: hookEvent, eventParam: payload.HookEventName})
+		logWriteFailure(fmt.Fprintln(errOut, note))
+		writeHookDecision(out, errOut, lang, "allow", "")
 		return
 	case payload.ToolName == "":
-		logWriteFailure(fmt.Fprintln(errOut, "herrscher: the hook payload names no tool, allowing"))
-		writeHookDecision(out, errOut, "allow", "")
+		refuseHook(out, errOut, lang, hookNamesNoTool, nil)
 		return
 	}
 
 	session := strings.TrimSpace(os.Getenv(SessionVar))
 	if session == "" {
-		logWriteFailure(fmt.Fprintf(errOut, "herrscher: no %s in the environment, refusing\n", SessionVar))
-		writeHookDecision(out, errOut, "deny", noSessionReason)
+		refuseHook(out, errOut, lang, hookNoSession, map[string]any{variableParam: SessionVar})
 		return
 	}
 
@@ -84,16 +106,13 @@ func RunPermissionHook(ctx context.Context, stdin io.Reader, out, errOut io.Writ
 	answer, handled, err := ask(ctx, argv)
 	switch {
 	case !handled:
-		logWriteFailure(fmt.Fprintf(errOut, "herrscher: no daemon is listening on %s, allowing\n", target()))
-		writeHookDecision(out, errOut, "allow", "")
+		refuseHook(out, errOut, lang, hookNoDaemon, map[string]any{socketParam: target()})
 		return
 	case err != nil && ctx.Err() != nil:
-		logWriteFailure(fmt.Fprintln(errOut, "herrscher: the approval was cancelled before the daemon answered, allowing"))
-		writeHookDecision(out, errOut, "allow", "")
+		refuseHook(out, errOut, lang, hookCancelled, nil)
 		return
 	case err != nil:
-		logWriteFailure(fmt.Fprintf(errOut, "herrscher: the daemon could not answer, allowing: %v\n", err))
-		writeHookDecision(out, errOut, "allow", "")
+		refuseHook(out, errOut, lang, hookDaemonFailed, map[string]any{detailParam: err.Error()})
 		return
 	}
 
@@ -102,11 +121,10 @@ func RunPermissionHook(ctx context.Context, stdin io.Reader, out, errOut io.Writ
 		Reason   string `json:"reason"`
 	}
 	if err := json.Unmarshal([]byte(answer), &verdict); err != nil || verdict.Decision == "" {
-		logWriteFailure(fmt.Fprintf(errOut, "herrscher: could not read the daemon's answer %q, allowing\n", answer))
-		writeHookDecision(out, errOut, "allow", "")
+		refuseHook(out, errOut, lang, hookAnswerUnreadable, map[string]any{answerParam: answer})
 		return
 	}
-	writeHookDecision(out, errOut, verdict.Decision, verdict.Reason)
+	writeHookDecision(out, errOut, lang, verdict.Decision, verdict.Reason)
 }
 
 // RunApprovalHook is RunPermissionHook wired to the daemon, which is what every
@@ -134,7 +152,17 @@ func RunApprovalHook(ctx context.Context, layout RuntimeLayout, stdin io.Reader,
 	})
 }
 
-func writeHookDecision(out, errOut io.Writer, decision, reason string) {
+func refuseHook(out, errOut io.Writer, lang i18n.Language, key string, params map[string]any) {
+	reason := hookText(lang, key, params)
+	logWriteFailure(fmt.Fprintln(errOut, reason))
+	writeHookDecision(out, errOut, lang, "deny", reason)
+}
+
+func hookText(lang i18n.Language, key string, params map[string]any) string {
+	return newHostMessages().text(lang, key, params)
+}
+
+func writeHookDecision(out, errOut io.Writer, lang i18n.Language, decision, reason string) {
 	type specific struct {
 		HookEventName            string `json:"hookEventName"`
 		PermissionDecision       string `json:"permissionDecision"`
@@ -144,7 +172,7 @@ func writeHookDecision(out, errOut io.Writer, decision, reason string) {
 		HookSpecificOutput specific `json:"hookSpecificOutput"`
 	}{specific{HookEventName: hookEvent, PermissionDecision: decision, PermissionDecisionReason: reason}})
 	if err != nil {
-		logWriteFailure(fmt.Fprintf(errOut, "herrscher: could not write the %s decision, allowing: %v\n", decision, err))
+		logWriteFailure(fmt.Fprintln(errOut, hookText(lang, hookDecisionUnwritable, map[string]any{decisionParam: decision, detailParam: err.Error()})))
 		return
 	}
 	logWriteFailure(fmt.Fprintf(out, "%s\n", payload))

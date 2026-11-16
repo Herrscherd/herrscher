@@ -158,7 +158,11 @@ func (r *replay) record(line string) error {
 	if r.files.Log == "" {
 		return nil
 	}
-	file, err := os.OpenFile(r.files.Log, os.O_APPEND|os.O_CREATE|os.O_WRONLY, privateFile)
+	return appendLine(r.files.Log, line)
+}
+
+func appendLine(path, line string) error {
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, privateFile)
 	if err != nil {
 		return fmt.Errorf("cannot open the log: %w", err)
 	}
@@ -167,18 +171,22 @@ func (r *replay) record(line string) error {
 }
 
 func (r *replay) nextTurn() (Turn, error) {
-	if r.files.Turns == "" {
-		return r.script.Turn(0), nil
+	return nextTurnOf(r.script, r.files)
+}
+
+func nextTurnOf(script Script, files Files) (Turn, error) {
+	if files.Turns == "" {
+		return script.Turn(0), nil
 	}
-	unlock, err := lockTurns(r.files.Turns)
+	unlock, err := lockTurns(files.Turns)
 	if err != nil {
 		return Turn{}, err
 	}
-	done, countErr := countTurn(r.files.Turns)
+	done, countErr := countTurn(files.Turns)
 	if err := errors.Join(countErr, unlock()); err != nil {
 		return Turn{}, err
 	}
-	return r.script.Turn(done), nil
+	return script.Turn(done), nil
 }
 
 const (

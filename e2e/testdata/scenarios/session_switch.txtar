@@ -1,0 +1,21 @@
+! exec herrscher serve &daemon&
+waitdaemon
+exec herrscher session create --name switching
+exec herrscher session seed --name switching --task 'first with claude'
+stdout '^from claude$'
+exec herrscher session switch --name switching --vendor codex --cmd codex
+exec herrscher session seed --name switching --task 'second with codex'
+stdout '^echo: second with codex$'
+exec cat $VENDORTEST_LOG
+stdout 'codex prompt .*second with codex'
+exec herrscher session switch --name switching --vendor cursor --cmd cursor-agent
+exec herrscher session seed --name switching --task 'third with cursor'
+stdout '^echo: third with cursor$'
+exec cat $VENDORTEST_LOG
+stdout 'cursor prompt .*third with cursor'
+kill -INT daemon
+wait daemon
+! waitdaemon
+
+-- claude.script --
+text from claude

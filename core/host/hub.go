@@ -55,6 +55,7 @@ type hub struct {
 	lifecycle  sync.Mutex
 	mu         sync.Mutex
 	live       map[string]liveSession
+	startups   map[<-chan struct{}]startupRun
 
 	listenedSessions map[string]struct{}
 	closed           bool

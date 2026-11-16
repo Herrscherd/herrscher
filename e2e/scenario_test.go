@@ -47,6 +47,7 @@ func TestScenarios(t *testing.T) {
 			"waitdaemon":     waitDaemon,
 			"waitlog":        waitLog,
 			"descendantgone": descendantGone,
+			"instancegone":   instanceGone,
 		},
 	})
 }
@@ -327,6 +328,17 @@ func lockBeside(root, instance string) error {
 }
 
 const daemonWait = 30 * time.Second
+
+func instanceGone(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) != 0 {
+		ts.Fatalf("usage: instancegone")
+	}
+	leaked, err := reapInstance(ts.Getenv(instanceEnv), reapGrace)
+	ts.Check(err)
+	if len(leaked) > 0 {
+		ts.Fatalf("processes of the daemon outlived it, now killed: %s", strings.Join(leaked, "; "))
+	}
+}
 
 func waitDaemon(ts *testscript.TestScript, neg bool, args []string) {
 	if len(args) != 0 {

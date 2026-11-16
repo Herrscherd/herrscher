@@ -20,6 +20,15 @@ func decodeRPCLines(t *testing.T, text string) []map[string]any {
 	return messages
 }
 
+func objectField(t *testing.T, parent map[string]any, key string) map[string]any {
+	t.Helper()
+	value, ok := parent[key].(map[string]any)
+	if !ok {
+		t.Fatalf("%s is missing or not an object in %v", key, parent)
+	}
+	return value
+}
+
 func TestCodexSendsTheFinalTextAsAnAgentMessageItemBeforeTurnCompleted(t *testing.T) {
 	files := scriptFiles(t, "text reply text\n")
 	request := `{"id":7,"method":"turn/start","params":{"threadId":"thread-1","input":[{"type":"text","text":"hi"}]}}` + "\n"
@@ -47,15 +56,15 @@ func TestCodexSendsTheFinalTextAsAnAgentMessageItemBeforeTurnCompleted(t *testin
 		t.Fatalf("%s at %d must come before turn/completed at %d", methodItemCompleted, completedAt, turnDoneAt)
 	}
 
-	params, _ := completed["params"].(map[string]any)
-	item, _ := params[keyItem].(map[string]any)
+	params := objectField(t, completed, "params")
+	item := objectField(t, params, keyItem)
 	if item[keyType] != wordAgent {
 		t.Fatalf("item type = %v, want %s", item[keyType], wordAgent)
 	}
 	if item[wordText] != "reply text" {
 		t.Fatalf("item text = %v, want the full reply", item[wordText])
 	}
-	if id, _ := item["id"].(string); id == "" {
+	if id, ok := item["id"].(string); !ok || id == "" {
 		t.Fatalf("item carries no id: %v", item)
 	}
 	if params[keyThreadID] != "thread-1" || params[keyTurnID] != codexTurnID {

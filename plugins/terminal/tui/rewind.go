@@ -368,8 +368,7 @@ func (m *model) handleForkDone(msg forkDoneMsg) {
 		return
 	}
 	m.ensureTab(channel)
-	m.active = channel
-	m.syncViewport()
+	m.activate(channel)
 	m.flash = m.tr.t("tui.rewind.fork_opened", map[string]any{tplArgName: msg.name})
 }
 

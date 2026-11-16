@@ -50,7 +50,6 @@ type Backend interface {
 	Frontend() <-chan RoutedEvent
 	Submit(channel, text string, attachments []Attachment)
 	Sessions() []contracts.SessionInfo
-	SessionRevision() uint64
 	Dispatch(args []string) (string, error)
 	// Close tears a session down by name through the typed control seam, so the
 	// UI's close action never assembles "session close" flag argv.
@@ -198,8 +197,6 @@ func (tb *tab) clearPanels() {
 
 const maxTabLines = 5000
 
-const openMissLimit = 3
-
 func (tb *tab) appendEntry(item entry) {
 	tb.nextEntryID++
 	item.id = tb.nextEntryID
@@ -276,13 +273,9 @@ type model struct {
 	infoChannel string
 	infoAt      time.Time
 
-	openSession   string
-	openText      string
-	openAtts      []Attachment
-	openMisses    int
-	openRevision  uint64
-	openUserMoved bool
-	starting      bool
+	open     openWait
+	clock    func() time.Time
+	starting bool
 
 	resumeOpen bool
 	resumeIdx  int
@@ -698,78 +691,9 @@ func (m *model) syncTabs() tea.Cmd {
 	return m.focusOpen(infos)
 }
 
-func (m *model) focusOpen(infos []contracts.SessionInfo) tea.Cmd {
-	if m.openSession == "" {
-		return nil
-	}
-	channel := ""
-	for i := range infos {
-		info := &infos[i]
-		if info.Name == m.openSession {
-			channel = info.ChannelID
-			break
-		}
-	}
-	if channel == "" || m.tabs[channel] == nil {
-		m.countOpenMiss()
-		if m.openMisses >= openMissLimit {
-			m.releaseOpen()
-		}
-		return nil
-	}
-	text, atts, userMoved := m.openText, m.openAtts, m.openUserMoved
-	m.clearOpen()
-	if !userMoved {
-		m.active = channel
-		m.applySize()
-		m.syncViewport()
-	}
-	if text != "" && strings.TrimSpace(m.input.Value()) == text {
-		m.input.Reset()
-		m.resizeComposer()
-	}
-	if text == "" && len(atts) == 0 {
-		return nil
-	}
-	return m.submitTo(channel, text, atts)
-}
-
-func (m *model) awaitingOpen() bool {
-	return m.openSession != "" && !m.openUserMoved
-}
-
-func (m *model) countOpenMiss() {
-	revision := m.tm.SessionRevision()
-	if revision == m.openRevision {
-		return
-	}
-	m.openRevision = revision
-	m.openMisses++
-}
-
 func isCommandLine(text string) bool {
 	_, isShell := shellCommand(text)
 	return isShell || strings.HasPrefix(text, "/")
-}
-
-func (m *model) queueForOpen(text string) {
-	m.flash = m.tr.t("tui.session.open_pending", map[string]any{tplArgName: m.openSession})
-	m.openText = text
-	m.openAtts = append(m.openAtts, m.pending...)
-	m.pending = nil
-}
-
-func (m *model) releaseOpen() {
-	name := m.openSession
-	m.pending = append(m.openAtts, m.pending...)
-	m.clearOpen()
-	m.flash = m.tr.t("tui.session.open_missing", map[string]any{tplArgName: name})
-}
-
-func (m *model) clearOpen() {
-	m.openSession, m.openText, m.openAtts = "", "", nil
-	m.openMisses = 0
-	m.openUserMoved = false
 }
 
 func (m *model) continueLine() bool {
@@ -784,11 +708,11 @@ func (m *model) continueLine() bool {
 
 func (m *model) handleEnter() tea.Cmd {
 	text := strings.TrimSpace(m.input.Value())
-	if text == "" && len(m.pending) == 0 {
-		return nil
-	}
 	if m.awaitingOpen() && !isCommandLine(text) {
 		m.queueForOpen(text)
+		return nil
+	}
+	if text == "" && len(m.pending) == 0 {
 		return nil
 	}
 	if m.starting {
@@ -964,14 +888,6 @@ func (m *model) stageAttachment(path string) {
 	m.pending = append(m.pending, att)
 	m.applySize()
 	m.syncViewport()
-}
-
-func (m *model) removeLastPending() bool {
-	if len(m.pending) == 0 {
-		return false
-	}
-	m.pending = m.pending[:len(m.pending)-1]
-	return true
 }
 
 func (m *model) accountCmd(args []string) tea.Cmd {
@@ -1182,11 +1098,12 @@ func (m *model) switchTab(delta int) {
 }
 
 func (m *model) activate(channel string) {
-	if channel == m.active || m.tabs[channel] == nil {
+	if m.tabs[channel] == nil {
 		return
 	}
-	if m.openSession != "" {
-		m.openUserMoved = true
+	m.noteUserMoved()
+	if channel == m.active {
+		return
 	}
 	m.active = channel
 	m.tabs[channel].unread = false
@@ -1516,7 +1433,7 @@ func (m *model) logger() *slog.Logger {
 // message. An empty text opens the session and sends nothing, which is how a
 // caller says "show me this one" without starting a turn.
 func OpenOn(session, text string) Option {
-	return func(m *model) { m.openSession, m.openText = session, text }
+	return func(m *model) { m.beginOpen(session, text) }
 }
 
 func newRunModel(ctx context.Context, backend Backend) *model {

@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -99,19 +100,20 @@ func TestQueuedTextIsSentOnceTheSessionAppears(t *testing.T) {
 
 func TestMissingSessionIsReleasedWithNoticeAndTextKept(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
+	now := time.Unix(0, 0)
 	m := newModel(be)
+	m.clock = func() time.Time { return now }
 	OpenOn("ghost", "")(m)
 	m.Init()
 	m.input.SetValue("hello")
 	m.handleEnter()
 
-	for range openMissLimit {
-		be.revision++
-		settle(m, m.syncTabs())
-	}
+	m.syncTabs()
+	now = now.Add(openWaitLimit)
+	settle(m, m.syncTabs())
 
-	if m.openSession != "" {
-		t.Fatalf("openSession = %q, want it released after fresh lists lacked the session", m.openSession)
+	if m.open.session != "" {
+		t.Fatalf("open.session = %q, want it released once the deadline passed with the session still missing", m.open.session)
 	}
 	if want := m.tr.t("tui.session.open_missing", map[string]any{tplArgName: "ghost"}); m.flash != want {
 		t.Fatalf("flash = %q after release, want %q", m.flash, want)

@@ -18,8 +18,6 @@ func (b *countingBackend) Sessions() []contracts.SessionInfo {
 	return b.sessions
 }
 
-func (b *countingBackend) SessionRevision() uint64 { return b.revision }
-
 func TestActiveInfoIsReadOncePerFrame(t *testing.T) {
 	be := &countingBackend{}
 	be.sessions = []contracts.SessionInfo{{Name: "a", ChannelID: "c1", Vendor: "claude"}}

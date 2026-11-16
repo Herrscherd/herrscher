@@ -107,7 +107,7 @@ func fitEachLine(lines []string, width int) []string {
 }
 
 func (m *model) chipsView() string {
-	chips := chipRow(m.pending, m.st)
+	chips := chipRow(m.stagedAttachments(), m.st)
 	if chips == "" {
 		return ""
 	}

@@ -34,7 +34,6 @@ type attachedDaemon struct {
 	mu        sync.Mutex
 	sessions  []contracts.SessionInfo
 	fetched   time.Time
-	revision  uint64
 	channelOf map[string]string
 	nameOf    map[string]string
 }
@@ -109,13 +108,6 @@ func (a *attachedDaemon) refresh() {
 		nameOf[info.ChannelID] = info.Name
 	}
 	a.sessions, a.channelOf, a.nameOf = infos, channelOf, nameOf
-	a.revision++
-}
-
-func (a *attachedDaemon) SessionRevision() uint64 {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.revision
 }
 
 func (a *attachedDaemon) fetchSessions() ([]contracts.SessionInfo, error) {

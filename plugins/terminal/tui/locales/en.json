@@ -858,6 +858,10 @@
     "other": "session {{.Name}} was not found, your message stays in the composer"
   },
   {
+    "id": "tui.session.open_cancelled",
+    "other": "queued message for session {{.Name}} cancelled"
+  },
+  {
     "id": "tui.session.start_failed",
     "other": "could not open a session: {{.Reason}}"
   },

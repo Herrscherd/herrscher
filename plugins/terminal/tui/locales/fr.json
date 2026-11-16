@@ -858,6 +858,10 @@
     "other": "la session {{.Name}} est introuvable, le message reste dans la saisie"
   },
   {
+    "id": "tui.session.open_cancelled",
+    "other": "message en attente pour la session {{.Name}} annulé"
+  },
+  {
     "id": "tui.session.start_failed",
     "other": "session impossible à ouvrir : {{.Reason}}"
   },

@@ -3185,7 +3185,7 @@
   {
     "id": "cli.host.fault.too_many_edits",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (too many edits)",
-    "other": "the compaction would edit too many tool calls at once, so it edited none"
+    "other": "the compaction would edit too many tool calls at once"
   },
   {
     "id": "cli.host.fault.no_compactor_factory",

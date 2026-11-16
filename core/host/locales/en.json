@@ -67,7 +67,7 @@
   {
     "id": "compaction.too_many_edits",
     "description": "The compaction would edit more tool calls than one frame carries, so it edited none",
-    "other": "the compaction would edit too many tool calls at once, so it edited none"
+    "other": "the compaction would edit too many tool calls at once"
   },
   {
     "id": "compaction.failed",

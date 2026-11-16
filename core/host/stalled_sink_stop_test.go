@@ -1,6 +1,7 @@
 package host
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -11,8 +12,8 @@ func TestStopLiveIsBoundedWhenTheWarningWriterStalls(t *testing.T) {
 	warnings := newGatedWarnings("stalled-warning")
 	t.Cleanup(warnings.open)
 	h := newInflightHub(t, "stalled-"+newTurnID(), grace, warnings)
-	if _, err := h.warnings.Write([]byte("stalled-warning\n")); err != nil {
-		t.Fatal(err)
+	if _, err := h.warnings.Write([]byte("stalled-warning\n")); !errors.Is(err, errWarningLate) {
+		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
 
 	started := time.Now()
@@ -27,8 +28,8 @@ func TestStopWithAFrozenWriterLosesOrLogsTheHubOverrun(t *testing.T) {
 	warnings := newGatedWarnings("stalled-warning")
 	t.Cleanup(warnings.open)
 	h := newInflightHub(t, "stalled-"+newTurnID(), 5*time.Second, warnings)
-	if _, err := h.warnings.Write([]byte("stalled-warning\n")); err != nil {
-		t.Fatal(err)
+	if _, err := h.warnings.Write([]byte("stalled-warning\n")); !errors.Is(err, errWarningLate) {
+		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
 
 	h.stopLive()
@@ -50,8 +51,8 @@ func TestCloseWarningsLosesOrLogsAnUndrainedOverrun(t *testing.T) {
 	warnings := newGatedWarnings("stuck")
 	t.Cleanup(warnings.open)
 	h := testHub(&hub{warnings: warnings, teardownGrace: 300 * time.Millisecond})
-	if _, err := h.warnings.Write([]byte("stuck\n")); err != nil {
-		t.Fatal(err)
+	if _, err := h.warnings.Write([]byte("stuck\n")); !errors.Is(err, errWarningLate) {
+		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
 
 	h.closeWarnings()

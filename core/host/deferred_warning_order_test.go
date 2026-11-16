@@ -1,6 +1,7 @@
 package host
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -12,8 +13,8 @@ func TestDeferredWarningsKeepTheOrderOfTheLockHolders(t *testing.T) {
 	gate := newGatedWarnings("blocker")
 	t.Cleanup(gate.open)
 	h := testHub(&hub{warnings: gate, teardownGrace: time.Second})
-	if _, err := h.warnings.Write([]byte("blocker\n")); err != nil {
-		t.Fatal(err)
+	if _, err := h.warnings.Write([]byte("blocker\n")); !errors.Is(err, errWarningLate) {
+		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
 	awaitGatedWrite(t, gate)
 

@@ -24,6 +24,7 @@ var (
 type pendingWarning struct {
 	data    []byte
 	written chan struct{}
+	err     error
 }
 
 type warningAwait func(budget <-chan struct{}) error
@@ -59,7 +60,7 @@ type warningSink struct {
 	out         *serializedWriter
 	lostLine    func(lost int) string
 	mu          sync.Mutex
-	queue       []pendingWarning
+	queue       []*pendingWarning
 	queuedBytes int
 	dropped     int
 	reported    int
@@ -96,9 +97,9 @@ func (s *warningSink) Enqueue(data []byte) warningAwait {
 	}
 	if !s.fits(data) {
 		s.dropped++
-		return nothingToAwait
+		return warningAbandoned
 	}
-	pending := pendingWarning{data: data, written: make(chan struct{})}
+	pending := &pendingWarning{data: data, written: make(chan struct{})}
 	s.queue = append(s.queue, pending)
 	s.queuedBytes += len(data)
 	if !s.writing {
@@ -107,40 +108,47 @@ func (s *warningSink) Enqueue(data []byte) warningAwait {
 		go s.drain()
 	}
 	if s.stalled {
-		return nothingToAwait
+		return warningUnconfirmed
 	}
 	return func(budget <-chan struct{}) error {
-		s.awaitWritten(pending.written, budget)
-		return nil
+		if s.awaitWritten(pending.written, budget) {
+			return pending.err
+		}
+		return errWarningLate
 	}
 }
 
-func nothingToAwait(<-chan struct{}) error { return nil }
+func warningAbandoned(<-chan struct{}) error { return errWarningAbandoned }
+
+func warningUnconfirmed(<-chan struct{}) error { return errWarningLate }
 
 func (s *warningSink) fits(data []byte) bool {
 	return len(data) <= warningEntryBytes && len(s.queue) < warningQueueLimit && s.queuedBytes+len(data) <= warningQueueBytes
 }
 
-func (s *warningSink) awaitWritten(written, budget <-chan struct{}) {
+func (s *warningSink) awaitWritten(written, budget <-chan struct{}) bool {
 	select {
 	case <-written:
-		return
+		return true
 	default:
 	}
 	select {
 	case <-written:
+		return true
 	case <-budget:
-		s.markStalledUnless(written)
+		return s.markStalledUnless(written)
 	}
 }
 
-func (s *warningSink) markStalledUnless(written <-chan struct{}) {
+func (s *warningSink) markStalledUnless(written <-chan struct{}) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	select {
 	case <-written:
+		return true
 	default:
 		s.stalled = true
+		return false
 	}
 }
 
@@ -157,18 +165,19 @@ func (s *warningSink) drain() {
 		s.settleWrite(err)
 		logWriteFailure(written, err)
 		s.out.release()
+		next.err = err
 		close(next.written)
 		s.clearStalled()
 	}
 }
 
-func (s *warningSink) takeNext() (pendingWarning, bool) {
+func (s *warningSink) takeNext() (*pendingWarning, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.queue) == 0 {
 		s.writing = false
 		close(s.idle)
-		return pendingWarning{}, false
+		return nil, false
 	}
 	next := s.queue[0]
 	s.queue = s.queue[1:]
@@ -273,9 +282,14 @@ func waitWithin(done <-chan struct{}, budget time.Duration) bool {
 
 func (s *warningSink) Close() {
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return
+	}
 	s.closed = true
 	s.dropped += len(s.queue)
 	for _, pending := range s.queue {
+		pending.err = errWarningAbandoned
 		close(pending.written)
 	}
 	s.queue = nil
@@ -323,11 +337,21 @@ func (s *warningSink) logUnsettled() {
 func (s *warningSink) announce(text string) error {
 	budget, stop := writeBudget()
 	defer stop()
-	return s.directWrite([]byte(text+"\n"), s.directBudget(budget))
+	return s.afterClose(s.directWrite([]byte(text+"\n"), s.directBudget(budget)))
 }
 
 func (s *warningSink) lateWrite(data []byte, budget <-chan struct{}) error {
-	return s.directWrite(data, s.directBudget(budget))
+	return s.afterClose(s.directWrite(data, s.directBudget(budget)))
+}
+
+func (s *warningSink) afterClose(err error) error {
+	s.mu.Lock()
+	closed := s.closed
+	s.mu.Unlock()
+	if err != nil && closed {
+		s.logUnsettled()
+	}
+	return err
 }
 
 func (s *warningSink) directBudget(budget <-chan struct{}) <-chan struct{} {

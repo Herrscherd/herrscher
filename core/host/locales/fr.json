@@ -575,6 +575,11 @@
     "other": "herrscher serve : session \"{{.Name}}\" : jeton de reprise non enregistré, un redémarrage perdra la conversation : {{.Detail}}"
   },
   {
+    "id": "warn.session_turn_interrupted",
+    "description": "Un tour pris par le backend a été coupé par l'arrêt du démon ; le dernier message est resté sans réponse et l'utilisateur doit le renvoyer",
+    "other": "le dernier message est resté sans réponse à l'arrêt du démon, renvoie-le"
+  },
+  {
     "id": "warn.session_project_pin",
     "description": "The pinned memory project of a session could not be saved",
     "other": "herrscher serve : session \"{{.Name}}\" : projet de mémoire non enregistré, le prochain démarrage devinera à nouveau : {{.Detail}}"

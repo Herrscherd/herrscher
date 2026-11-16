@@ -575,6 +575,11 @@
     "other": "herrscher serve: session \"{{.Name}}\": resume token not persisted, a restart will lose the conversation: {{.Detail}}"
   },
   {
+    "id": "warn.session_turn_interrupted",
+    "description": "A turn the backend had taken was cut short by a daemon stop; the last message got no reply and the user must send it again",
+    "other": "the last message got no reply when the daemon stopped, send it again"
+  },
+  {
     "id": "warn.session_project_pin",
     "description": "The pinned memory project of a session could not be saved",
     "other": "herrscher serve: session \"{{.Name}}\": memory project not persisted, the next start will guess again: {{.Detail}}"

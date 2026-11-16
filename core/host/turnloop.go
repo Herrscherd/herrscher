@@ -62,11 +62,12 @@ func (g *tokenGuard) trips(event contracts.Event) (uint64, bool) {
 }
 
 type sessionSink struct {
-	Resume     func(token string)
-	Project    func(project string)
-	Transcript func(state.TranscriptEntry)
-	Checkpoint func(turnID, text string)
-	Usage      func([]usage.Record)
+	Resume          func(token string)
+	Project         func(project string)
+	Transcript      func(state.TranscriptEntry)
+	Checkpoint      func(turnID, text string)
+	Usage           func([]usage.Record)
+	TurnInterrupted func(turnID string)
 }
 
 type sessionDriver struct {
@@ -715,6 +716,12 @@ func (d *sessionDriver) runTurn(ctx context.Context, event contracts.Event, guar
 	}
 }
 
+func (d *sessionDriver) markInterrupted() {
+	if d.sink.TurnInterrupted != nil && d.activeTurnID != "" {
+		d.sink.TurnInterrupted(d.activeTurnID)
+	}
+}
+
 func (d *sessionDriver) sendToBridge(ctx context.Context, event contracts.Event) bool {
 	select {
 	case d.toBridge <- event:
@@ -776,6 +783,7 @@ func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
 		select {
 		case <-ctx.Done():
 			d.metrics.TurnAbandoned()
+			d.markInterrupted()
 			return false
 		case <-d.hangup:
 			d.metrics.TurnAbandoned()

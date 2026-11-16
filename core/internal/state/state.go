@@ -73,7 +73,8 @@ type Session struct {
 	// ResumeToken is the backend's opaque resume id, folded in from each turn's
 	// reply so a restart can resume the conversation with --resume. Empty =
 	// start fresh.
-	ResumeToken string `json:"resumeToken,omitempty"`
+	ResumeToken     string `json:"resumeToken,omitempty"`
+	InterruptedTurn string `json:"interruptedTurn,omitempty"`
 
 	// Archived marks a session closed-but-kept (session archive): its row,
 	// transcript and ResumeToken are retained so /resume can revive it, but the
@@ -384,14 +385,23 @@ func (s *State) RenameSession(oldName, newName string) error {
 // rewriting state.json every turn. A missing session or an unchanged token is a
 // no-op.
 func (s *State) SetResumeToken(name, token string) error {
+	return s.setSessionField(name, func(sess *Session) *string { return &sess.ResumeToken }, token)
+}
+
+func (s *State) SetInterruptedTurn(name, turnID string) error {
+	return s.setSessionField(name, func(sess *Session) *string { return &sess.InterruptedTurn }, turnID)
+}
+
+func (s *State) setSessionField(name string, field func(*Session) *string, value string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for idx := range s.Sessions {
 		if s.Sessions[idx].Name == name {
-			if s.Sessions[idx].ResumeToken == token {
+			current := field(&s.Sessions[idx])
+			if *current == value {
 				return nil
 			}
-			s.Sessions[idx].ResumeToken = token
+			*current = value
 			return s.saveLocked()
 		}
 	}

@@ -150,8 +150,11 @@ func eventTap(publish func(string, contracts.Event), session string) func(contra
 func (h *hub) liveSink(ctx context.Context, sess state.Session) sessionSink {
 	return sessionSink{
 		Resume: func(tok string) {
-			if err := h.st.SetResumeToken(sess.Name, tok); err != nil {
-				warnLive(h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_resume_token", map[string]any{nameParam: sess.Name, detailParam: err})
+			_ = h.persistResumeToken(sess.Name, tok)
+		},
+		TurnInterrupted: func(turnID string) {
+			if err := h.st.SetInterruptedTurn(sess.Name, turnID); err != nil {
+				slog.Warn("interrupted turn not recorded", "session", sess.Name, "err", err)
 			}
 		},
 		Project: func(p string) {
@@ -217,9 +220,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 			models:          h.models,
 			recordUsage:     h.recordUsage,
 			resume: func(session, token string) {
-				if err := h.st.SetResumeToken(session, token); err != nil {
-					warnLive(h.warnings, h.sessionLanguageSource(session), "warn.session_resume_token", map[string]any{nameParam: session, detailParam: err})
-				}
+				_ = h.persistResumeToken(session, token)
 			},
 			record: func(session string, entry state.TranscriptEntry) {
 				if err := state.AppendTranscript(state.TranscriptPath(h.partDir, session), entry); err != nil {
@@ -473,8 +474,16 @@ func (h *hub) RestartWithResume(name, token string) error {
 	h.goDead(name)
 	sess.ResumeToken = token
 	return h.goLiveStarted(context.Background(), sess, func() error {
-		return h.st.SetResumeToken(name, token)
+		return h.persistResumeToken(name, token)
 	})
+}
+
+func (h *hub) persistResumeToken(session, token string) error {
+	err := h.st.SetResumeToken(session, token)
+	if err != nil {
+		warnLive(h.warnings, h.sessionLanguageSource(session), "warn.session_resume_token", map[string]any{nameParam: session, detailParam: err})
+	}
+	return err
 }
 
 func (h *hub) Resume(name string) error {

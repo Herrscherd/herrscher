@@ -90,16 +90,19 @@ func scheduleListVerb(lang languageSource, store *state.State) contracts.Cmd {
 	return contracts.New(nsSchedule, "list").
 		Help(clitext.CmdHelpScheduleList).
 		Do(func(_ context.Context, _ contracts.Input) (contracts.Result, error) {
-			return contracts.DataResult(listSchedules(lang(), store)), nil
+			clock, err := schedulerClock()
+			if err != nil {
+				return contracts.Result{}, wrapHost(err, "serve.scheduler_clock", map[string]any{"Detail": err.Error()})
+			}
+			return contracts.DataResult(listSchedules(lang(), store, clock())), nil
 		})
 }
 
-func listSchedules(lang i18n.Language, st *state.State) string {
+func listSchedules(lang i18n.Language, st *state.State, now time.Time) string {
 	rows := st.SnapshotSchedules()
 	if len(rows) == 0 {
 		return replyText(lang).Text(clitext.HostScheduleNone, nil)
 	}
-	now := time.Now()
 	var body strings.Builder
 	for index := range rows {
 		row := rows[index]

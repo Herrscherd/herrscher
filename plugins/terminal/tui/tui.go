@@ -581,7 +581,8 @@ func (m *model) removeTab(channel string) {
 	}
 	m.order = out
 	if m.active == channel {
-		m.active = m.successorTab()
+		m.active = ""
+		m.activate(m.successorTab())
 		m.syncViewport()
 	}
 }

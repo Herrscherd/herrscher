@@ -224,6 +224,31 @@ func TestQueuedAttachmentCanBeRemovedBeforeDelivery(t *testing.T) {
 	}
 }
 
+func TestActiveTabRemovedDuringTheWaitDoesNotLetTheTargetTakeFocus(t *testing.T) {
+	be := &fakeBackend{sessions: []contracts.SessionInfo{
+		{Name: "main", ChannelID: "c1"},
+		{Name: "two", ChannelID: "c2"},
+	}}
+	m := newModel(be)
+	OpenOn("later", "")(m)
+	m.Init()
+	if m.active != "c1" {
+		t.Fatalf("active = %q before the removal, want c1", m.active)
+	}
+
+	be.sessions = []contracts.SessionInfo{{Name: "two", ChannelID: "c2"}}
+	settle(m, m.syncTabs())
+	if m.active != "c2" {
+		t.Fatalf("active = %q after its tab went away, want the successor c2", m.active)
+	}
+
+	be.sessions = append(be.sessions, contracts.SessionInfo{Name: "later", ChannelID: "c3"})
+	settle(m, m.syncTabs())
+	if m.active != "c2" {
+		t.Fatalf("active = %q after the requested session appeared, want c2 kept", m.active)
+	}
+}
+
 func TestOpenWaitReleasesWhenNoListEverArrives(t *testing.T) {
 	be := &fakeBackend{}
 	now := time.Unix(0, 0)

@@ -634,7 +634,7 @@ type blockedRefusingWriter struct {
 	openOnce  sync.Once
 }
 
-func (w *blockedRefusingWriter) Write(p []byte) (int, error) {
+func (w *blockedRefusingWriter) Write(_ []byte) (int, error) {
 	w.enterOnce.Do(func() { close(w.entered) })
 	<-w.release
 	return 0, errEntryRefused

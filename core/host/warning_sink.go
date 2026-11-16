@@ -98,7 +98,7 @@ func (s *warningSink) fits(data []byte) bool {
 	return len(data) <= warningEntryBytes && len(s.queue) < warningQueueLimit && s.queuedBytes+len(data) <= warningQueueBytes
 }
 
-func (s *warningSink) awaitWritten(written <-chan struct{}, budget <-chan struct{}) {
+func (s *warningSink) awaitWritten(written, budget <-chan struct{}) {
 	select {
 	case <-written:
 		return

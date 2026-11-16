@@ -3,7 +3,6 @@
 package host
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -13,8 +12,6 @@ const (
 	envSchedulerClock = "HERRSCHER_E2E_CLOCK"
 	envSchedulerTick  = "HERRSCHER_E2E_SCHEDULER_TICK"
 )
-
-var errNonPositive = errors.New("non-positive")
 
 func schedulerClock() (func() time.Time, error) {
 	raw := os.Getenv(envSchedulerClock)

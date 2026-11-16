@@ -23,6 +23,8 @@ func (e localizedHostError) Error() string { return e.text }
 
 func (e localizedHostError) Unwrap() error { return e.cause }
 
+var errNonPositive = errors.New("duration must be positive")
+
 type hostErrorKey struct {
 	sentinel error
 	key      string
@@ -41,6 +43,7 @@ func hostErrorKeys() []hostErrorKey {
 		{errForkNeedsDaemon, "cli.host.fault.fork_needs_daemon"},
 		{errTurnInFlight, "cli.host.fault.turn_in_flight"},
 		{errCheckpointNumber, "cli.host.fault.checkpoint_number"},
+		{errNonPositive, "cli.host.fault.non_positive"},
 		{errNotCheckpointable, "cli.host.fault.not_checkpointable"},
 		{errForkNoWorktree, "cli.host.fault.fork_no_worktree"},
 		{errCompactUnsupported, "cli.host.fault.compact_unsupported"},

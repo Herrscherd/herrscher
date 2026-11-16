@@ -153,6 +153,8 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"serve.resolve_instance":            {"Detail"},
 		"serve.compaction":                  {"Detail"},
 		"serve.registry":                    {"Detail"},
+		"serve.scheduler_clock":             {"Detail"},
+		"serve.scheduler_tick":              {"Detail"},
 		"serve.config":                      {"Detail"},
 		"serve.key_proxy":                   {"Detail"},
 		"session.percent":                   {"Detail", "Raw"},

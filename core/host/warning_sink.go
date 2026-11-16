@@ -69,6 +69,7 @@ type warningSink struct {
 	writing     bool
 	stalled     bool
 	closed      bool
+	finalized   bool
 	idle        chan struct{}
 }
 
@@ -198,9 +199,9 @@ func (s *warningSink) settleWrite(err error) {
 	if err != nil {
 		s.dropped++
 	}
-	closed := s.closed
+	announce := err != nil && s.finalized
 	s.mu.Unlock()
-	if err != nil && closed {
+	if announce {
 		s.logUnsettled()
 	}
 }
@@ -221,7 +222,7 @@ func (s *warningSink) reportLost() {
 	_, err := s.out.w.Write([]byte(s.lostLine(lost) + "\n"))
 	s.settleSummary(lost, err == nil)
 	if err != nil {
-		slog.Warn("warnings were lost and their summary could not be written", "lost", s.unreported())
+		logSummaryFailure(s.unreported())
 	}
 }
 
@@ -236,7 +237,7 @@ func (s *warningSink) claimSummary() (int, bool) {
 	return lost, true
 }
 
-func (s *warningSink) settleSummary(lost int, written bool) {
+func (s *warningSink) settleSummary(lost int, written bool) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.summarizing = false
@@ -244,6 +245,11 @@ func (s *warningSink) settleSummary(lost int, written bool) {
 	if written {
 		s.reported += lost
 	}
+	return !written && s.finalized
+}
+
+func logSummaryFailure(lost int) {
+	slog.Warn("warnings were lost and their summary could not be written", "lost", lost)
 }
 
 func (s *warningSink) unreported() int {
@@ -302,7 +308,15 @@ func (s *warningSink) Close() {
 	budget, stop := writeBudget()
 	defer stop()
 	s.announceLost(budget)
-	s.logUnsettled()
+	s.finalize()
+}
+
+func (s *warningSink) finalize() {
+	s.mu.Lock()
+	s.finalized = true
+	lost, unconfirmed := s.unsettledLocked()
+	s.mu.Unlock()
+	logNotConfirmed(lost, unconfirmed)
 }
 
 func (s *warningSink) announceLost(budget <-chan struct{}) {
@@ -319,7 +333,9 @@ func (s *warningSink) announceLost(budget <-chan struct{}) {
 	go func() {
 		_, err := s.out.w.Write([]byte(s.lostLine(lost) + "\n"))
 		s.out.release()
-		s.settleSummary(lost, err == nil)
+		if s.settleSummary(lost, err == nil) {
+			logSummaryFailure(s.unreported())
+		}
 		close(written)
 	}()
 	select {
@@ -330,9 +346,16 @@ func (s *warningSink) announceLost(budget <-chan struct{}) {
 
 func (s *warningSink) logUnsettled() {
 	s.mu.Lock()
-	lost := s.dropped - s.reported
-	unconfirmed := s.unconfirmed
+	lost, unconfirmed := s.unsettledLocked()
 	s.mu.Unlock()
+	logNotConfirmed(lost, unconfirmed)
+}
+
+func (s *warningSink) unsettledLocked() (int, int) {
+	return s.dropped - s.reported, s.unconfirmed
+}
+
+func logNotConfirmed(lost, unconfirmed int) {
 	if lost > 0 || unconfirmed > 0 {
 		slog.Warn("warnings were not all confirmed when the sink closed", "lost", lost, "unconfirmed", unconfirmed)
 	}
@@ -389,12 +412,6 @@ func (s *warningSink) directWrite(data []byte, budget <-chan struct{}) error {
 	case <-budget:
 		return errWarningLate
 	}
-}
-
-func (s *warningSink) droppedCount() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.dropped
 }
 
 func writeBudget() (<-chan struct{}, func()) {

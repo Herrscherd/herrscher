@@ -34,7 +34,7 @@ func TestStopWithAFrozenWriterLosesOrLogsTheHubOverrun(t *testing.T) {
 
 	h.stopLive()
 	h.closeWarnings()
-	lost := h.sink.droppedCount()
+	lost := droppedWarnings(h.sink)
 	unconfirmed := unconfirmedAtClose(t, logs.String())
 	if lost == 0 && unconfirmed == 0 {
 		t.Fatal("the hub overrun behind a frozen writer was neither counted lost nor reported unconfirmed at Close")
@@ -56,7 +56,7 @@ func TestCloseWarningsLosesOrLogsAnUndrainedOverrun(t *testing.T) {
 	}
 
 	h.closeWarnings()
-	lost := h.sink.droppedCount()
+	lost := droppedWarnings(h.sink)
 	unconfirmed := unconfirmedAtClose(t, logs.String())
 	if lost == 0 && unconfirmed == 0 {
 		t.Fatal("the undrained overrun behind a frozen writer was neither counted lost nor reported unconfirmed at Close")

@@ -37,8 +37,36 @@ no_dash_punctuation() {
 	fi
 }
 
+e2e_only_tests() {
+	local pkg=$1
+	local untagged tagged only
+	if ! untagged=$(capped go test -list '^Test' "$pkg"); then
+		echo "$pkg: go test -list failed without tags" >&2
+		return 1
+	fi
+	if ! tagged=$(capped go test -tags e2e -list '^Test' "$pkg"); then
+		echo "$pkg: go test -list failed with -tags e2e" >&2
+		return 1
+	fi
+	only=$(comm -13 <(grep '^Test' <<<"$untagged" | sort -u) <(grep '^Test' <<<"$tagged" | sort -u))
+	if [ -z "$only" ]; then
+		echo "$pkg: no test exists only under -tags e2e, the e2e pass would run nothing" >&2
+		return 1
+	fi
+	printf '%s\n' "$only"
+}
+
 golangci_lint=github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 govulncheck=golang.org/x/vuln/cmd/govulncheck@v1.9.0
+
+if [ "$(uname -s)" = Linux ]; then
+	host_only=$(e2e_only_tests ./core/host/)
+	e2e_only_tests ./e2e/... > /dev/null
+	capped go test -tags e2e -count=1 ./e2e/...
+	capped go test -tags e2e -count=1 -v -run "^($(paste -sd'|' <<<"$host_only"))\$" ./core/host/
+else
+	echo "skipping the e2e scenarios: they run on Linux only" >&2
+fi
 
 GOBIN=$lint_tools capped go install "$golangci_lint"
 go mod tidy -diff
@@ -52,26 +80,6 @@ go run ./tools/i18ncheck .
 regenerated_from_scratch
 no_dash_punctuation
 capped go test -race -shuffle=on ./...
-require_tests_only_under_e2e() {
-	local pkg=$1
-	local only
-	only=$(comm -13 \
-		<(capped go test -list '^Test' "$pkg" | grep '^Test' | sort -u) \
-		<(capped go test -tags e2e -list '^Test' "$pkg" | grep '^Test' | sort -u))
-	if [ -z "$only" ]; then
-		echo "$pkg: no test exists only under -tags e2e, the e2e pass would run nothing" >&2
-		return 1
-	fi
-}
-
-if [ "$(uname -s)" = Linux ]; then
-	require_tests_only_under_e2e ./e2e/...
-	capped go test -tags e2e -count=1 ./e2e/...
-	require_tests_only_under_e2e ./core/host/
-	capped go test -tags e2e -count=1 -v ./core/host/
-else
-	echo "skipping the e2e scenarios: they run on Linux only" >&2
-fi
 CGO_ENABLED=0 capped go build ./...
 CGO_ENABLED=0 GOOS=windows capped go vet ./...
 CGO_ENABLED=0 GOOS=darwin capped go build ./...

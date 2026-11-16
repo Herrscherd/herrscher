@@ -2,19 +2,16 @@ package host
 
 import (
 	"context"
-	"errors"
 	"io"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
-	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/internal/health"
 	"github.com/Herrscherd/herrscher/core/internal/instanceid"
@@ -179,21 +176,6 @@ func resolveInstanceID(hostState *state.State, optID, ownerID string, log *slog.
 	return resolved, nil
 }
 
-// RunHub is the always-on multi-gateway daemon: it supervises one pure-runner
-// bridge per persisted session, drives each session's turns over a control
-// Acceptor (fanning events out to every bound gateway), and serves
-// health/liveness. gws are the gateway sets the daemon owns (built from the
-// registry by the caller). Command dispatch no longer runs here.
-// Session/service commands run through the operator CLI (see NewRegistry).
-func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, options Options) error {
-	clock, tick, settingsErr := schedulerSettings()
-	if settingsErr != nil {
-		closeGateways(ctx, closers, obs.Stderr(false))
-		return localizeHostError(options.operatorLanguage(), settingsErr)
-	}
-	return localizeHostError(options.operatorLanguage(), serveHub(ctx, gws, closers, options, clock, tick))
-}
-
 func (options Options) operatorLanguage() i18n.Language {
 	return options.languageSource()()
 }
@@ -220,130 +202,6 @@ func prepareTurnOutboxes(log *slog.Logger, sessions *sessionTable, statePath str
 		log.Warn("stale turn outboxes not purged", "err", purgeErr)
 	}
 	return nil
-}
-
-func (options Options) withDefaultGateways(gws []Deps) Options {
-	if options.DefaultGateways == nil {
-		options.DefaultGateways = nonTerminalKinds(gws)
-	}
-	return options
-}
-
-func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, options Options, clock func() time.Time, tick time.Duration) error {
-	base := obs.Stderr(false)
-	defer closeGateways(ctx, closers, base)
-	if options.Runtime.Dir() == "" {
-		return errNoRuntimeLayout
-	}
-	log := base.With("component", "serve")
-	monitor := health.NewHealth(time.Now())
-
-	store, err := loadHubState(options)
-	if err != nil {
-		return wrapHost(err, "serve.load_state", nil)
-	}
-
-	self, execErr := os.Executable()
-	logCleanup(execErr)
-	startRemotePluginHosts(ctx, self, options.RemoteCategories, base)
-	partDir := filepath.Dir(options.StatePath)
-	sup := newHubSupervisor(ctx, self, options.Runtime, base, monitor, partDir, options.StatePath)
-
-	instID, err := resolveInstanceID(store, options.InstanceID, options.Owner, log)
-	if err != nil {
-		return wrapHost(err, "serve.resolve_instance", nil)
-	}
-	releaseInstance, err := claimInstance(ctx, options.Runtime, instID)
-	if err != nil {
-		return err
-	}
-	defer releaseInstance()
-
-	options = options.withDefaultGateways(gws)
-	approvals := newApprovalTable(options.Warnings).withRules(store)
-	sessions := newSessionTable()
-	options.health = &healthSource{}
-	options.usage = newUsageSource(partDir)
-	stopUsageWatch := options.usage.startWatch(ctx)
-	defer stopUsageWatch()
-	policy, err := newCompactionPolicy(ctx, options.languageSource(), options.Warnings, options.CompactPercent, options.CompactStack, options.ContextLimits)
-	if err != nil {
-		return wrapHost(err, "serve.compaction", nil)
-	}
-	sessions.compaction = policy
-	sessions.store = store
-	if outboxErr := prepareTurnOutboxes(log, sessions, options.StatePath); outboxErr != nil {
-		return outboxErr
-	}
-	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, store.Home)}, options, store, sup, instID, options.ContributedCommands, approvals, sessions)
-	if err != nil {
-		return wrapHost(err, "serve.registry", nil)
-	}
-	kinds := contributedKinds(options.ContributedCommands)
-	specs, specsErr := reg.Specs(options.Language)
-	if specsErr != nil {
-		log.Warn("command help texts not fully rendered", "err", specsErr)
-	}
-	sup.SetBridgeEnv(hubBridgeEnv(specs, kinds))
-	ensureCodexAgent(deps.agents)
-	if ta := terminalAdmin(gws); ta != nil {
-		deps.handler.SetTerminalAdmin(ta)
-	}
-	cfg, err := config.Load(config.DefaultPath())
-	if err != nil {
-		return wrapHost(err, "serve.config", nil)
-	}
-	sessions.outboundMaxBytes = cfg.EffectiveOutboundMaxBytes()
-	sessions.fileSenders = fileSendersOf(closers)
-	if fallback := accountFallbackFor(cfg, options.usage, gws); fallback != nil {
-		deps.handler.SetAccountFallback(fallback)
-	}
-	keys, err := keyproxy.Open(ctx, cfg.Keys, keyproxy.OSLoader(), log)
-	if err != nil && !errors.Is(err, keyproxy.ErrDisabled) {
-		return wrapHost(err, "serve.key_proxy", nil)
-	}
-	defer CloseKeyProxy(ctx, log, keys)
-	options.health.bind(newHealthInputs(options.Runtime, instID, keys, gws, policy, partDir))
-	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions, withWarnings(options.Warnings))
-	runningHub.lang = options.Language
-	runningHub.language = options.languageSource()
-	runningHub.models = options.modelDiscovery()
-	runningHub.seedBackend = func(seedCtx context.Context, sess state.Session) (contracts.Backend, error) {
-		return newSeedBackend(seedCtx, sess, keys, runningHub.models)
-	}
-	runningHub.contributedKinds = kinds
-	runningHub.instanceID = instID
-	runningHub.runtime = options.Runtime
-	runningHub.gate = deps.handler.BudgetGate()
-	coord := wireCoordination(runningHub, deps, store, sessions)
-
-	deps.handler.SetCoordinationReader(coordViewAdapter{c: coord})
-
-	sockets, err := serveHubSockets(ctx, options.Runtime, instID, runningHub)
-	if err != nil {
-		return err
-	}
-	liveStopped := make(chan struct{})
-	go func() {
-		defer close(liveStopped)
-		<-ctx.Done()
-		runningHub.stopLive()
-	}()
-	sched := newScheduler(store, store, runningHub, sessions.Seed, clock, tick)
-	deps.schedSlot.sched = sched
-	go sched.Run(ctx)
-	runningHub.startReconcile(ctx)
-	monitor.SetSessions(len(store.SnapshotSessions()))
-	bindSessionControl(gws, runningHub)
-
-	if instID != "" {
-		log.Info("instance resolved", "instance", instID)
-	}
-	logCompiledPlugins(log)
-	startHubProbes(ctx, gws, options, store, monitor, instID)
-
-	log.Info("hub up; supervising sessions", "gateways", strings.Join(kindsOf(gws), ","))
-	return awaitHubStop(ctx, runningHub, sup, liveStopped, sockets, log)
 }
 
 type bridgeDrainer interface {

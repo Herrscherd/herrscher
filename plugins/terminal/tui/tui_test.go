@@ -97,6 +97,7 @@ type closedSession struct {
 }
 
 type fakeBackend struct {
+	revision        uint64
 	refuseInterrupt bool
 	dispatched      [][]string
 	replies         map[string]string
@@ -142,6 +143,7 @@ func (f *fakeBackend) Submit(channel, text string, atts []Attachment) {
 	f.submitted = append(f.submitted, submittedTurn{channel: channel, text: text, atts: atts})
 }
 func (f *fakeBackend) Sessions() []contracts.SessionInfo { return f.sessions }
+func (f *fakeBackend) SessionRevision() uint64           { return f.revision }
 func (f *fakeBackend) Dispatch(args []string) (string, error) {
 	f.dispatched = append(f.dispatched, args)
 	if reply, ok := f.replies[strings.Join(args, " ")]; ok {

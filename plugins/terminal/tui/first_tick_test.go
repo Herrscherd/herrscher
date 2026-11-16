@@ -106,6 +106,7 @@ func TestMissingSessionIsReleasedWithNoticeAndTextKept(t *testing.T) {
 	m.handleEnter()
 
 	for range openMissLimit {
+		be.revision++
 		settle(m, m.syncTabs())
 	}
 

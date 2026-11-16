@@ -79,6 +79,7 @@ type Terminal struct {
 
 	ctrlMu    sync.Mutex
 	ctrl      contracts.SessionControl
+	listed    uint64
 	ctrlReady chan struct{}
 	bindOnce  sync.Once
 
@@ -407,11 +408,20 @@ func (t *Terminal) emit(routed tui.RoutedEvent) {
 func (t *Terminal) Sessions() []contracts.SessionInfo {
 	t.ctrlMu.Lock()
 	control := t.ctrl
+	if control != nil {
+		t.listed++
+	}
 	t.ctrlMu.Unlock()
 	if control == nil {
 		return nil
 	}
 	return control.Sessions()
+}
+
+func (t *Terminal) SessionRevision() uint64 {
+	t.ctrlMu.Lock()
+	defer t.ctrlMu.Unlock()
+	return t.listed
 }
 
 // Scrollback returns a session's recorded history lines through the bound

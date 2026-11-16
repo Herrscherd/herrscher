@@ -50,6 +50,7 @@ type Backend interface {
 	Frontend() <-chan RoutedEvent
 	Submit(channel, text string, attachments []Attachment)
 	Sessions() []contracts.SessionInfo
+	SessionRevision() uint64
 	Dispatch(args []string) (string, error)
 	// Close tears a session down by name through the typed control seam, so the
 	// UI's close action never assembles "session close" flag argv.
@@ -275,11 +276,13 @@ type model struct {
 	infoChannel string
 	infoAt      time.Time
 
-	openSession string
-	openText    string
-	openAtts    []Attachment
-	openMisses  int
-	starting    bool
+	openSession   string
+	openText      string
+	openAtts      []Attachment
+	openMisses    int
+	openRevision  uint64
+	openUserMoved bool
+	starting      bool
 
 	resumeOpen bool
 	resumeIdx  int
@@ -708,18 +711,19 @@ func (m *model) focusOpen(infos []contracts.SessionInfo) tea.Cmd {
 		}
 	}
 	if channel == "" || m.tabs[channel] == nil {
-		m.openMisses++
+		m.countOpenMiss()
 		if m.openMisses >= openMissLimit {
-			return m.releaseOpen()
+			m.releaseOpen()
 		}
 		return nil
 	}
-	text, atts := m.openText, m.openAtts
-	m.openSession, m.openText, m.openAtts = "", "", nil
-	m.openMisses = 0
-	m.active = channel
-	m.applySize()
-	m.syncViewport()
+	text, atts, userMoved := m.openText, m.openAtts, m.openUserMoved
+	m.clearOpen()
+	if !userMoved {
+		m.active = channel
+		m.applySize()
+		m.syncViewport()
+	}
 	if text != "" && strings.TrimSpace(m.input.Value()) == text {
 		m.input.Reset()
 		m.resizeComposer()
@@ -731,7 +735,16 @@ func (m *model) focusOpen(infos []contracts.SessionInfo) tea.Cmd {
 }
 
 func (m *model) awaitingOpen() bool {
-	return m.openSession != "" && m.tabs[m.active] == nil
+	return m.openSession != "" && !m.openUserMoved
+}
+
+func (m *model) countOpenMiss() {
+	revision := m.tm.SessionRevision()
+	if revision == m.openRevision {
+		return
+	}
+	m.openRevision = revision
+	m.openMisses++
 }
 
 func isCommandLine(text string) bool {
@@ -739,22 +752,24 @@ func isCommandLine(text string) bool {
 	return isShell || strings.HasPrefix(text, "/")
 }
 
-func (m *model) queueForOpen(text string) tea.Cmd {
+func (m *model) queueForOpen(text string) {
 	m.flash = m.tr.t("tui.session.open_pending", map[string]any{tplArgName: m.openSession})
-	if m.openText != "" || len(m.openAtts) > 0 {
-		return nil
-	}
-	m.openText, m.openAtts, m.pending = text, m.pending, nil
-	return nil
+	m.openText = text
+	m.openAtts = append(m.openAtts, m.pending...)
+	m.pending = nil
 }
 
-func (m *model) releaseOpen() tea.Cmd {
+func (m *model) releaseOpen() {
 	name := m.openSession
 	m.pending = append(m.openAtts, m.pending...)
+	m.clearOpen()
+	m.flash = m.tr.t("tui.session.open_missing", map[string]any{tplArgName: name})
+}
+
+func (m *model) clearOpen() {
 	m.openSession, m.openText, m.openAtts = "", "", nil
 	m.openMisses = 0
-	m.flash = m.tr.t("tui.session.open_missing", map[string]any{tplArgName: name})
-	return nil
+	m.openUserMoved = false
 }
 
 func (m *model) continueLine() bool {
@@ -773,7 +788,8 @@ func (m *model) handleEnter() tea.Cmd {
 		return nil
 	}
 	if m.awaitingOpen() && !isCommandLine(text) {
-		return m.queueForOpen(text)
+		m.queueForOpen(text)
+		return nil
 	}
 	if m.starting {
 		m.flash = m.tr.t("tui.session.starting", nil)
@@ -1168,6 +1184,9 @@ func (m *model) switchTab(delta int) {
 func (m *model) activate(channel string) {
 	if channel == m.active || m.tabs[channel] == nil {
 		return
+	}
+	if m.openSession != "" {
+		m.openUserMoved = true
 	}
 	m.active = channel
 	m.tabs[channel].unread = false

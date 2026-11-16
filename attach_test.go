@@ -351,3 +351,30 @@ func TestUnansweredSessionListIsNotRequestedTwiceInAGivenSecond(t *testing.T) {
 		t.Fatalf("the daemon was asked %d times within one cache window, want 1", asked)
 	}
 }
+
+func TestSessionRevisionAdvancesOnlyOnAFreshRead(t *testing.T) {
+	daemonDown := false
+	a := &attachedDaemon{lang: i18n.English, send: func([]string) (string, error) {
+		if daemonDown {
+			return "", errors.New("daemon down")
+		}
+		return "[]", nil
+	}}
+
+	a.Sessions()
+	if got := a.SessionRevision(); got != 1 {
+		t.Fatalf("revision = %d after one fresh read, want 1", got)
+	}
+
+	a.Sessions()
+	if got := a.SessionRevision(); got != 1 {
+		t.Fatalf("revision = %d when the cache answered, want it unchanged at 1", got)
+	}
+
+	daemonDown = true
+	a.fetched = time.Time{}
+	a.Sessions()
+	if got := a.SessionRevision(); got != 1 {
+		t.Fatalf("revision = %d after a failed read, want it unchanged at 1", got)
+	}
+}

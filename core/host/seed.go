@@ -38,6 +38,7 @@ type oneShotSeedRuntime struct {
 	timeout         time.Duration
 	backend         func(context.Context, state.Session) (contracts.Backend, error)
 	models          *ModelDiscovery
+	sessions        *sessionTable
 }
 
 func (r oneShotSeedRuntime) backendFactory() func(context.Context, state.Session) (contracts.Backend, error) {
@@ -110,6 +111,9 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	driver.agent = sess.Agent
 	driver.language = func() i18n.Language { return knownSessionLanguage(sess) }
 	attachOneShotTaps(driver, sess, runtime)
+	runtime.sessions.attachCompaction(driver, sess.Name)
+	terms := modelTermsFor(runtime.models)
+	driver.terms = func() modelTerms { return terms(sess) }
 	pumpCtx, pumpCancel := context.WithCancel(seedCtx)
 	defer pumpCancel()
 	pumpDone := make(chan struct{})
@@ -122,6 +126,8 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	if !ok {
 		return "", oneShotTimeoutError(bridgeErr)
 	}
+	driver.awaitTurnRelease(seedCtx)
+	close(toBridge)
 	if err := <-bridgeErr; err != nil {
 		return "", err
 	}
@@ -159,7 +165,7 @@ func attachOneShotTaps(driver *sessionDriver, sess state.Session, runtime oneSho
 }
 
 func runOneShotBridge(ctx context.Context, cancel context.CancelFunc, sess state.Session, orch contracts.Orchestrator, runtime oneShotSeedRuntime, toBridge, fromBridge chan contracts.Event, bridgeErr chan<- error) {
-	err := bridge.RunOneShot(ctx, func(string) (contracts.Backend, error) {
+	err := bridge.RunUntilClosed(ctx, func(string) (contracts.Backend, error) {
 		return runtime.backendFactory()(ctx, sess)
 	}, orch, sess.ChannelID, toBridge, fromBridge)
 	bridgeErr <- err

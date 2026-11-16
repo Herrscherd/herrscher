@@ -426,6 +426,14 @@ func (t *sessionTable) percentOfSession(name string) int {
 	return t.compaction.percent
 }
 
+func (t *sessionTable) attachCompaction(driver *sessionDriver, name string) {
+	if t == nil {
+		return
+	}
+	driver.compaction = t.compaction
+	driver.percentOf = func() int { return t.percentOfSession(name) }
+}
+
 func newSessionTable() *sessionTable {
 	return &sessionTable{m: make(map[string]*sessionDriver)}
 }
@@ -661,6 +669,14 @@ func (d *sessionDriver) claimTurn() bool {
 func (d *sessionDriver) releaseTurn() {
 	d.running.Store(false)
 	<-d.turn
+}
+
+func (d *sessionDriver) awaitTurnRelease(ctx context.Context) {
+	select {
+	case d.turn <- struct{}{}:
+		<-d.turn
+	case <-ctx.Done():
+	}
 }
 
 func (d *sessionDriver) releaseClaim() {
@@ -1328,8 +1344,7 @@ func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, cha
 	driver.terms = identity.terms
 	driver.language = identity.language
 	driver.operator = identity.operator
-	driver.compaction = sessions.compaction
-	driver.percentOf = func() int { return sessions.percentOfSession(name) }
+	sessions.attachCompaction(driver, name)
 	if gate != nil {
 		driver.gate = gate
 	}

@@ -11,6 +11,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
@@ -83,6 +84,17 @@ func Run(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestr
 // socket or gateway is involved, but the same backend turn machinery (including
 // orchestrator context/observation) is exercised.
 func RunOneShot(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestrator, channel string, input <-chan contracts.Event, out chan<- contracts.Event) error {
+	return runInputs(ctx, newBackend, orch, channel, input, out, true)
+}
+
+// RunUntilClosed serves compaction requests and input turns until input closes.
+// The seed path uses it because a seeded session can receive follow-up turns
+// and compaction requests after its first reply.
+func RunUntilClosed(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestrator, channel string, input <-chan contracts.Event, out chan<- contracts.Event) error {
+	return runInputs(ctx, newBackend, orch, channel, input, out, false)
+}
+
+func runInputs(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestrator, channel string, input <-chan contracts.Event, out chan<- contracts.Event, stopAfterTurn bool) error {
 	resp, err := newBackend(channel)
 	if err != nil {
 		return fmt.Errorf("backend: %w", err)
@@ -92,19 +104,32 @@ func RunOneShot(ctx context.Context, newBackend BackendFactory, orch contracts.O
 	var lang i18n.Language
 	for {
 		select {
-		case event := <-input:
+		case event, open := <-input:
+			if !open {
+				return nil
+			}
 			if event.T == eventwire.EventLanguage {
 				lang = languageOf(event.Value)
 				continue
 			}
-			if event.T != eventwire.EventInput {
-				continue
+			ran, turnErr := serveInput(ctx, out, resp, orch, event, lang)
+			if turnErr != nil || (ran && stopAfterTurn) {
+				return turnErr
 			}
-			return runOneTurn(ctx, channelSink{done: ctx.Done(), out: out}, resp, orch, event, nil, newSkillEngine(resp), affordances{}, nil, lang)
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
+}
+
+func serveInput(ctx context.Context, out chan<- contracts.Event, resp contracts.Backend, orch contracts.Orchestrator, event contracts.Event, lang i18n.Language) (bool, error) {
+	switch event.T {
+	case compactwire.EventRequest:
+		runCompact(ctx, channelSink{done: ctx.Done(), out: out}, resp, nil, event)
+	case eventwire.EventInput:
+		return true, runOneTurn(ctx, channelSink{done: ctx.Done(), out: out}, resp, orch, event, nil, newSkillEngine(resp), affordances{}, nil, lang)
+	}
+	return false, nil
 }
 
 type channelSink struct {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -27,6 +28,8 @@ import (
 const seedConsolidateTimeout = 60 * time.Second
 
 const seedTurnTimeout = 120 * time.Second
+
+const seedJoinGrace = 2 * time.Second
 
 type oneShotSeedRuntime struct {
 	warnings        io.Writer
@@ -126,7 +129,9 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 
 	stopSeedWork := func() {
 		pumpCancel()
-		<-pumpDone
+		if !joinWithin(pumpDone, seedJoinGrace) {
+			slog.Warn("seed pump outlived its grace", "session", sess.Name)
+		}
 		stopBridge()
 	}
 	reply, ok := driver.SeedAndWaitWithTurnID(seedCtx, task, turnID)
@@ -137,8 +142,12 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	}
 	driver.awaitTurnRelease(seedCtx)
 	stopSeedWork()
-	if err := <-bridgeErr; reportsFailedTurn(err) {
-		return "", err
+	ended, bridgeRunErr := bridgeEndWithin(bridgeErr, seedJoinGrace)
+	if !ended {
+		slog.Warn("seed bridge outlived its grace", "session", sess.Name)
+	}
+	if reportsFailedTurn(bridgeRunErr) {
+		return "", bridgeRunErr
 	}
 	if runtime.coordinator != nil {
 		driver.coordinator = runtime.coordinator
@@ -188,6 +197,24 @@ func cancelsSeed(err error) bool {
 func reportsFailedTurn(err error) bool {
 	_, failedTurn := errors.AsType[*bridge.TurnFailedError](err)
 	return failedTurn
+}
+
+func joinWithin(done <-chan struct{}, grace time.Duration) bool {
+	select {
+	case <-done:
+		return true
+	case <-time.After(grace):
+		return false
+	}
+}
+
+func bridgeEndWithin(bridgeErr <-chan error, grace time.Duration) (bool, error) {
+	select {
+	case err := <-bridgeErr:
+		return true, err
+	case <-time.After(grace):
+		return false, nil
+	}
 }
 
 func oneShotTimeoutError(bridgeErr <-chan error) error {

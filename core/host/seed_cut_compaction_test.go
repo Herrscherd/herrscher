@@ -15,30 +15,26 @@ import (
 )
 
 const (
-	cutSeedBudget    = 2 * time.Second
-	lateWriteDelay   = 300 * time.Millisecond
-	cutHistoryResult = "long tool output"
+	cutSeedBudget       = 2 * time.Second
+	lateWriteDelay      = 300 * time.Millisecond
+	cutHistoryResult    = "long tool output"
+	prunedHistoryResult = "long tool [pruned]"
+	pruneKeepChars      = 9
 )
 
 type historyEditingBackend struct {
-	mu             sync.Mutex
-	result         string
-	answered       bool
-	pruneAttempted atomic.Bool
+	mu        sync.Mutex
+	committed string
+	prunes    int
+	cutLanded atomic.Bool
 }
 
 func newHistoryEditingBackend() *historyEditingBackend {
-	return &historyEditingBackend{result: cutHistoryResult}
+	return &historyEditingBackend{committed: cutHistoryResult}
 }
 
 func (b *historyEditingBackend) Respond(_ context.Context, _ contracts.Prompt, onEvent func(contracts.BackendEvent)) (string, error) {
-	b.mu.Lock()
-	first := !b.answered
-	b.answered = true
-	b.mu.Unlock()
-	if first {
-		onEvent(contracts.BackendEvent{Kind: "usage", InTokens: 950})
-	}
+	onEvent(contracts.BackendEvent{Kind: "usage", InTokens: 950})
 	return "reply", nil
 }
 
@@ -51,16 +47,37 @@ func (b *historyEditingBackend) ReadHistory(context.Context) (contracts.History,
 	}}}, nil
 }
 
-func (b *historyEditingBackend) PruneHistory(ctx context.Context, _ []contracts.HistoryEdit) (contracts.PruneOutcome, error) {
-	b.pruneAttempted.Store(true)
-	<-ctx.Done()
-	return contracts.PruneOutcome{}, ctx.Err()
+func (b *historyEditingBackend) PruneHistory(ctx context.Context, edits []contracts.HistoryEdit) (contracts.PruneOutcome, error) {
+	b.mu.Lock()
+	b.prunes++
+	cut := b.prunes == 1
+	staged := pruneText(b.committed, edits)
+	b.mu.Unlock()
+	if cut {
+		b.cutLanded.Store(true)
+		<-ctx.Done()
+		return contracts.PruneOutcome{}, ctx.Err()
+	}
+	b.mu.Lock()
+	b.committed = staged
+	b.mu.Unlock()
+	return contracts.PruneOutcome{Edited: len(edits)}, nil
+}
+
+func pruneText(text string, edits []contracts.HistoryEdit) string {
+	for _, edit := range edits {
+		runes := []rune(text)
+		if len(runes) > edit.KeepChars {
+			text = string(runes[:edit.KeepChars]) + " [pruned]"
+		}
+	}
+	return text
 }
 
 func (b *historyEditingBackend) stored() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.result
+	return b.committed
 }
 
 type historyPruningStage struct{}
@@ -69,7 +86,7 @@ func (historyPruningStage) Compact(ctx context.Context, req contracts.CompactReq
 	if _, err := req.History.ReadHistory(ctx); err != nil {
 		return contracts.CompactResult{}, err
 	}
-	_, err := req.History.PruneHistory(ctx, []contracts.HistoryEdit{{CallID: "c1", Action: contracts.PruneResult, KeepChars: 10}})
+	_, err := req.History.PruneHistory(ctx, []contracts.HistoryEdit{{CallID: "c1", Action: contracts.PruneResult, KeepChars: pruneKeepChars}})
 	return contracts.CompactResult{}, err
 }
 
@@ -122,11 +139,11 @@ func TestSeedCutDuringAHistoryEditLeavesTheSessionUsable(t *testing.T) {
 	if err != nil || reply != "reply" {
 		t.Fatalf("seed = (%q, %v), want the reply the turn produced", reply, err)
 	}
-	if !backend.pruneAttempted.Load() {
+	if !backend.cutLanded.Load() {
 		t.Fatal("the budget ran out before the history edit started, so the cut did not land inside it")
 	}
 	if got := backend.stored(); got != cutHistoryResult {
-		t.Fatalf("history after the cut = %q, want it untouched", got)
+		t.Fatalf("history after the cut = %q, want the edit unpublished and the history as it was", got)
 	}
 	kinds := emissions.kinds()
 	if !slices.Contains(kinds, eventwire.EventCompactionFailed) {
@@ -139,8 +156,11 @@ func TestSeedCutDuringAHistoryEditLeavesTheSessionUsable(t *testing.T) {
 	if err != nil || reply != "reply" {
 		t.Fatalf("next seed = (%q, %v), want the session to answer after the cut", reply, err)
 	}
-	if got := backend.stored(); got != cutHistoryResult {
-		t.Fatalf("history after the next turn = %q, want it still untouched", got)
+	if got := backend.stored(); got != prunedHistoryResult {
+		t.Fatalf("history after the next turn = %q, want the next compaction to apply its edit", got)
+	}
+	if !slices.Contains(emissions.kinds(), eventwire.EventCompactionDone) {
+		t.Fatalf("events = %v, want the next compaction to report itself done", emissions.kinds())
 	}
 }
 

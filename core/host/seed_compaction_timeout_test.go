@@ -79,3 +79,27 @@ func TestSeedReleasesTheBridgeOnlyAfterTheAutomaticCompactionIsServed(t *testing
 		}
 	}
 }
+
+type contextDeafCompactBackend struct {
+	usageReplyBackend
+
+	release <-chan struct{}
+}
+
+func (b contextDeafCompactBackend) Compact(context.Context, contracts.CompactRequest, func(contracts.BackendEvent)) (contracts.CompactResult, error) {
+	<-b.release
+	return contracts.CompactResult{}, context.Canceled
+}
+
+func TestSeedReturnsWhenACompactionIgnoresItsContext(t *testing.T) {
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	started := time.Now()
+	reply, err := seedWithAutomaticCompactionAndPublish(contextDeafCompactBackend{release: release}, cutSeedBudget, nil)
+	if err != nil || reply != "reply" {
+		t.Fatalf("seed = (%q, %v), want the reply the turn produced", reply, err)
+	}
+	if elapsed := time.Since(started); elapsed > cutSeedBudget+2*seedJoinGrace+time.Second {
+		t.Fatalf("seed returned after %v, want it bounded by its budget and its join grace", elapsed)
+	}
+}

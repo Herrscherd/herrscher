@@ -14,6 +14,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/historywire"
+	"github.com/Herrscherd/herrscher/core/skills"
 )
 
 var errNoHubSocket = errors.New("bridge requires --hub-socket (pure-runner mode)")
@@ -80,11 +81,12 @@ func Run(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestr
 	return runHub(ctx, newBackend, orch, opts)
 }
 
-// RunUntilClosed serves compaction requests and input turns until input closes
-// or ctx ends. It is the bridge seam used by the operator's short-lived session
-// seed path: no control socket or gateway is involved, but the same backend turn
-// machinery (including orchestrator context/observation) is exercised. A seeded
-// session can receive follow-up turns and compaction requests after its first reply.
+// RunUntilClosed serves compaction requests, history reads and prunes, and input
+// turns until input closes or ctx ends. It is the bridge seam used by the
+// operator's short-lived session seed path: no control socket or gateway is
+// involved, but the same backend turn machinery (including orchestrator
+// context/observation) is exercised. A seeded session can receive follow-up
+// turns, compaction requests and history edits after its first reply.
 func RunUntilClosed(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestrator, channel string, input <-chan contracts.Event, out chan<- contracts.Event) error {
 	resp, err := newBackend(channel)
 	if err != nil {
@@ -103,7 +105,8 @@ func RunUntilClosed(ctx context.Context, newBackend BackendFactory, orch contrac
 				lang = languageOf(event.Value)
 				continue
 			}
-			if turnErr := serveInput(ctx, out, resp, orch, event, lang); turnErr != nil {
+			router := turnRouter{sink: channelSink{done: ctx.Done(), out: out}, backend: resp, orch: orch, eng: newSkillEngine(resp)}
+			if turnErr := router.route(ctx, event, lang); turnErr != nil {
 				return turnErr
 			}
 		case <-ctx.Done():
@@ -112,16 +115,26 @@ func RunUntilClosed(ctx context.Context, newBackend BackendFactory, orch contrac
 	}
 }
 
-func serveInput(ctx context.Context, out chan<- contracts.Event, resp contracts.Backend, orch contracts.Orchestrator, event contracts.Event, lang i18n.Language) error {
+type turnRouter struct {
+	sink    contracts.EventSink
+	backend contracts.Backend
+	orch    contracts.Orchestrator
+	ctrl    *turnController
+	eng     *skills.Engine
+	aff     affordances
+	pin     *scopePin
+}
+
+func (r turnRouter) route(ctx context.Context, event contracts.Event, lang i18n.Language) error {
 	switch event.T {
 	case compactwire.EventRequest:
-		runCompact(ctx, channelSink{done: ctx.Done(), out: out}, resp, nil, event)
+		runCompact(ctx, r.sink, r.backend, r.ctrl, event)
 	case historywire.EventRead:
-		runHistoryRead(ctx, channelSink{done: ctx.Done(), out: out}, resp, nil, event)
+		runHistoryRead(ctx, r.sink, r.backend, r.ctrl, event)
 	case historywire.EventPrune:
-		runHistoryPrune(ctx, channelSink{done: ctx.Done(), out: out}, resp, nil, event)
+		runHistoryPrune(ctx, r.sink, r.backend, r.ctrl, event)
 	case eventwire.EventInput:
-		return runOneTurn(ctx, channelSink{done: ctx.Done(), out: out}, resp, orch, event, nil, newSkillEngine(resp), affordances{}, nil, lang)
+		return runOneTurn(ctx, r.sink, r.backend, r.orch, event, r.ctrl, r.eng, r.aff, r.pin, lang)
 	}
 	return nil
 }

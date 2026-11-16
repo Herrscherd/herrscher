@@ -31,6 +31,7 @@ const (
 	claudeVersion    = "2.1.0 (Claude Code)"
 	defaultSessionID = "vendortest-session"
 	echoPrefix       = "echo: "
+	toolDoneText     = "done"
 	privateFile      = 0o600
 	exitFailure      = 1
 	exitUnreported   = 2
@@ -250,7 +251,7 @@ func (r *replay) stream(streams Streams) int {
 		if hung {
 			continue
 		}
-		outcome, err := r.answer(streams.Out, lines.Bytes())
+		outcome, err := r.answer(streams, lines.Bytes())
 		if err != nil {
 			return exitOf(streams.Err, err)
 		}
@@ -273,7 +274,7 @@ type userLine struct {
 	} `json:"message"`
 }
 
-func (r *replay) answer(out io.Writer, line []byte) (turnOutcome, error) {
+func (r *replay) answer(streams Streams, line []byte) (turnOutcome, error) {
 	var user userLine
 	if err := json.Unmarshal(line, &user); err != nil {
 		return 0, fmt.Errorf("cannot decode a user line: %w", err)
@@ -286,11 +287,12 @@ func (r *replay) answer(out io.Writer, line []byte) (turnOutcome, error) {
 	if err != nil {
 		return 0, err
 	}
-	return r.play(out, turn, prompt)
+	return r.play(streams, turn, prompt)
 }
 
-func (r *replay) play(out io.Writer, turn Turn, prompt string) (turnOutcome, error) {
+func (r *replay) play(streams Streams, turn Turn, prompt string) (turnOutcome, error) {
 	var reply []string
+	var decided *verdict
 	for _, current := range turn.steps {
 		switch current.kind {
 		case stepHang:
@@ -298,31 +300,70 @@ func (r *replay) play(out io.Writer, turn Turn, prompt string) (turnOutcome, err
 		case stepCrash:
 			return outcomeCrashed, nil
 		case stepFail:
-			return outcomeAnswered, writeJSON(out, r.failure(current.text, prompt))
+			return outcomeAnswered, writeJSON(streams.Out, r.failure(current.text, prompt))
 		case stepAPIError:
-			if err := writeJSON(out, apiErrorText(current.text)); err != nil {
+			if err := writeJSON(streams.Out, apiErrorText(current.text)); err != nil {
 				return 0, err
 			}
-			return outcomeAnswered, writeJSON(out, r.failure(current.text, prompt))
+			return outcomeAnswered, writeJSON(streams.Out, r.failure(current.text, prompt))
 		case stepEcho:
 			text := echoPrefix + lastLine(prompt)
 			reply = append(reply, text)
-			if err := writeJSON(out, assistantText(text)); err != nil {
+			if err := writeJSON(streams.Out, assistantText(text)); err != nil {
 				return 0, err
 			}
 		case stepText:
 			reply = append(reply, current.text)
-			if err := writeJSON(out, assistantText(current.text)); err != nil {
+			if err := writeJSON(streams.Out, assistantText(current.text)); err != nil {
 				return 0, err
 			}
 		case stepTool:
-			r.toolCalls++
-			if err := writeJSON(out, assistantTool(r.toolCalls, current)); err != nil {
+			outcome, err := r.callTool(streams, current)
+			if err != nil {
 				return 0, err
+			}
+			decided = &outcome
+		case stepExpect:
+			if err := expectation(decided, current.text); err != nil {
+				if logErr := r.record("failed: " + err.Error()); logErr != nil {
+					return 0, logErr
+				}
+				return outcomeAnswered, writeJSON(streams.Out, r.failure(err.Error(), prompt))
 			}
 		}
 	}
-	return outcomeAnswered, writeJSON(out, r.result(strings.Join(reply, "\n\n"), prompt))
+	return outcomeAnswered, writeJSON(streams.Out, r.result(strings.Join(reply, "\n\n"), prompt))
+}
+
+func (r *replay) callTool(streams Streams, tool step) (verdict, error) {
+	r.toolCalls++
+	call := r.toolCalls
+	if err := writeJSON(streams.Out, assistantTool(call, tool)); err != nil {
+		return verdict{}, err
+	}
+	outcome, err := gateTool(tool, streams.Err)
+	if err != nil {
+		return verdict{}, err
+	}
+	if err := r.settle(streams.Out, call, outcome); err != nil {
+		return verdict{}, err
+	}
+	return outcome, nil
+}
+
+func (r *replay) settle(out io.Writer, call int, outcome verdict) error {
+	id := toolUseID(call)
+	if err := r.record(outcomeLine(id, outcome)); err != nil {
+		return err
+	}
+	return writeJSON(out, toolResultOf(id, outcome))
+}
+
+func outcomeLine(id string, outcome verdict) string {
+	if outcome.allowed {
+		return "result " + id + " " + wordAllowed
+	}
+	return "result " + id + " " + wordDenied + ": " + outcome.reason
 }
 
 func isHealthProbe(args []string) bool {
@@ -430,9 +471,39 @@ func apiErrorText(text string) assistantEvent {
 	return event
 }
 
+func toolUseID(call int) string {
+	return "toolu_" + strconv.Itoa(call)
+}
+
 func assistantTool(call int, tool step) assistantEvent {
 	event := assistantEvent{Type: "assistant"}
-	event.Message.Content = []contentBlock{{Type: "tool_use", ID: "toolu_" + strconv.Itoa(call), Name: tool.tool, Input: tool.input}}
+	event.Message.Content = []contentBlock{{Type: "tool_use", ID: toolUseID(call), Name: tool.tool, Input: tool.input}}
+	return event
+}
+
+type toolResultBlock struct {
+	Type      string `json:"type"`
+	ToolUseID string `json:"tool_use_id"`
+	Content   string `json:"content"`
+	IsError   bool   `json:"is_error"`
+}
+
+type toolResultEvent struct {
+	Type    string `json:"type"`
+	Message struct {
+		Role    string            `json:"role"`
+		Content []toolResultBlock `json:"content"`
+	} `json:"message"`
+}
+
+func toolResultOf(id string, outcome verdict) toolResultEvent {
+	block := toolResultBlock{Type: "tool_result", ToolUseID: id, Content: toolDoneText, IsError: !outcome.allowed}
+	if !outcome.allowed {
+		block.Content = outcome.reason
+	}
+	event := toolResultEvent{Type: "user"}
+	event.Message.Role = "user"
+	event.Message.Content = []toolResultBlock{block}
 	return event
 }
 

@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -46,6 +47,7 @@ func TestScenarios(t *testing.T) {
 		Cmds: map[string]func(*testscript.TestScript, bool, []string){
 			"waitdaemon":     waitDaemon,
 			"waitlog":        waitLog,
+			"waitapproval":   waitApproval,
 			"descendantgone": descendantGone,
 		},
 	})
@@ -364,6 +366,40 @@ func waitLog(ts *testscript.TestScript, neg bool, args []string) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	ts.Fatalf("the vendor log never matched %q within %s", args[0], daemonWait)
+}
+
+const pendingFile = "pending.json"
+
+func waitApproval(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) != 1 {
+		ts.Fatalf("usage: waitapproval <variable>")
+	}
+	deadline := time.Now().Add(daemonWait)
+	for time.Now().Before(deadline) {
+		if id, ok := onlyPendingApproval(ts); ok {
+			ts.Setenv(args[0], id)
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	ts.Fatalf("no single approval waited for within %s", daemonWait)
+}
+
+func onlyPendingApproval(ts *testscript.TestScript) (string, bool) {
+	if err := ts.Exec("sh", "-c", "herrscher approve list --json > "+pendingFile); err != nil {
+		return "", false
+	}
+	data, err := os.ReadFile(ts.MkAbs(pendingFile))
+	if err != nil {
+		return "", false
+	}
+	var pending []struct {
+		ID string `json:"id"`
+	}
+	if json.Unmarshal(data, &pending) != nil || len(pending) != 1 {
+		return "", false
+	}
+	return pending[0].ID, true
 }
 
 func instanceMarker(instance string) []byte {

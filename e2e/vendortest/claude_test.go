@@ -23,11 +23,14 @@ type event struct {
 	Errors  []string `json:"errors"`
 	Message struct {
 		Content []struct {
-			Type  string          `json:"type"`
-			Text  string          `json:"text"`
-			ID    string          `json:"id"`
-			Name  string          `json:"name"`
-			Input json.RawMessage `json:"input"`
+			Type      string          `json:"type"`
+			Text      string          `json:"text"`
+			ID        string          `json:"id"`
+			Name      string          `json:"name"`
+			Input     json.RawMessage `json:"input"`
+			ToolUseID string          `json:"tool_use_id"`
+			IsError   bool            `json:"is_error"`
+			Content   string          `json:"content"`
 		} `json:"content"`
 	} `json:"message"`
 }
@@ -88,6 +91,10 @@ func summary(events []event) []string {
 			for _, block := range e.Message.Content {
 				got = append(got, block.Type+":"+block.Text+block.Name+block.ID+string(block.Input))
 			}
+		case "user":
+			for _, block := range e.Message.Content {
+				got = append(got, fmt.Sprintf("%s:%s:%t:%s", block.Type, block.ToolUseID, block.IsError, block.Content))
+			}
 		case "result":
 			if e.IsError {
 				got = append(got, "failed:"+strings.Join(e.Errors, "|"))
@@ -108,7 +115,7 @@ func TestClaudeReplaysEachStep(t *testing.T) {
 		want   []string
 	}{
 		{"text", "text hi\ntext there", []string{"go"}, 0, []string{"text:hi", "text:there", "result:hi\n\nthere"}},
-		{"tool", "tool Bash {\"command\":\"ls\"}\ntext done", []string{"go"}, 0, []string{"tool_use:Bashtoolu_1{\"command\":\"ls\"}", "text:done", "result:done"}},
+		{"tool", "tool Bash {\"command\":\"ls\"}\ntext done", []string{"go"}, 0, []string{"tool_use:Bashtoolu_1{\"command\":\"ls\"}", "tool_result:toolu_1:false:done", "text:done", "result:done"}},
 		{"error", "error quota exhausted", []string{"go"}, 0, []string{"failed:quota exhausted"}},
 		{"echo past the end", "", []string{"first line\nlast line"}, 0, []string{"text:echo: last line", "result:echo: last line"}},
 		{"crash", "text partial\ncrash", []string{"go"}, exitFailure, []string{"text:partial"}},

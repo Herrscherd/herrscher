@@ -4,7 +4,6 @@ exec herrscher session create --name resumed
 exec herrscher session send --name resumed --text 'premier tour'
 exec herrscher session send --name resumed --text 'tour interrompu'
 waitlog 'prompt .*tour interrompu'
-waitlog 'session tok-live-7'
 kill -INT daemon
 wait daemon
 ! waitdaemon
@@ -12,6 +11,9 @@ wait daemon
 waitdaemon
 exec herrscher session seed --name resumed --task 'après redémarrage'
 stdout '^reprise ok$'
+exec herrscher session scrollback --name resumed
+stdout 'notice'
+stdout 'sans réponse|no reply'
 waitlog 'start .*--resume tok-live-7'
 kill -INT daemon2
 wait daemon2

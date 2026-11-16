@@ -96,6 +96,11 @@ func ignoringINT(t *testing.T, instance string) *exec.Cmd {
 	t.Helper()
 	cmd := exec.CommandContext(t.Context(), "sh", "-c", `trap "" INT; echo ready; exec sleep 60`)
 	cmd.Env = []string{instanceEnv + "=" + instance}
+	return startReady(t, cmd)
+}
+
+func startReady(t *testing.T, cmd *exec.Cmd) *exec.Cmd {
+	t.Helper()
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -330,5 +335,78 @@ func TestSettleNamesAHashedEntryThatAppeared(t *testing.T) {
 	reported := appearedHashedIn(dirs, before)
 	if !errors.Is(reported, errHashedEntry) || !strings.Contains(reported.Error(), fresh) {
 		t.Fatalf("got %v, want %s reported", reported, fresh)
+	}
+}
+
+func TestReapInstanceHonorsAGraceOtherThanTheDefault(t *testing.T) {
+	instance, err := newInstanceID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	survivor := ignoringINT(t, instance)
+	grace := 300 * time.Millisecond
+	started := time.Now()
+	stopped, survivors, err := reapInstance(instance, grace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stopped) != 0 || len(survivors) != 1 {
+		t.Fatalf("got stopped %q and survivors %q, want the one survivor of SIGINT", stopped, survivors)
+	}
+	if elapsed := time.Since(started); elapsed < grace || elapsed >= reapGrace {
+		t.Fatalf("got %v, want the first wait to last the grace %v rather than %v", elapsed, grace, reapGrace)
+	}
+	if signo := stoppedBy(t, survivor); signo != syscall.SIGKILL {
+		t.Fatalf("survivor: got %v, want SIGKILL", signo)
+	}
+}
+
+func TestSettleReportsAProcessThatExitsAfterSIGINTAsStopped(t *testing.T) {
+	instance, err := newInstanceID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	exiting := exitingAfterINT(t, instance)
+	root := t.TempDir()
+	before, err := hashedEntries(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settleErr := settle(root, instance, before)
+	if !errors.Is(settleErr, errStopped) || errors.Is(settleErr, errLeaked) {
+		t.Fatalf("got %v, want the process reported as stopped, not as leaked", settleErr)
+	}
+	if waitErr := exiting.Wait(); waitErr != nil {
+		t.Fatalf("the process ended with %v, want its own exit after SIGINT", waitErr)
+	}
+}
+
+func exitingAfterINT(t *testing.T, instance string) *exec.Cmd {
+	t.Helper()
+	cmd := exec.CommandContext(t.Context(), "sh", "-c", `trap 'sleep 1; exit 0' INT; echo ready; while :; do sleep 0.05; done`)
+	cmd.Env = []string{instanceEnv + "=" + instance}
+	return startReady(t, cmd)
+}
+
+func TestSettleDoesNotWaitForAProcessToExitByItself(t *testing.T) {
+	instance, err := newInstanceID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	running := exec.CommandContext(t.Context(), "sleep", "1")
+	running.Env = []string{instanceEnv + "=" + instance}
+	if startErr := running.Start(); startErr != nil {
+		t.Fatal(startErr)
+	}
+	root := t.TempDir()
+	before, err := hashedEntries(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settleErr := settle(root, instance, before); !errors.Is(settleErr, errStopped) {
+		t.Fatalf("got %v, want the process still running at the end reported as stopped", settleErr)
+	}
+	if signo := stoppedBy(t, running); signo != syscall.SIGINT {
+		t.Fatalf("got %v, want the process stopped by SIGINT", signo)
 	}
 }

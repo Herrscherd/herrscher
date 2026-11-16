@@ -15,16 +15,7 @@ func newWindow(ctx context.Context, backend Backend, opts []Option) *model {
 	return model
 }
 
-// NewWindow returns the window Run builds, with the same options, for a caller that
-// runs the Bubble Tea program itself. The end-to-end harness uses it: it hands the
-// window to teatest and forwards the backend's routed events to it with Pump.
-func NewWindow(ctx context.Context, backend Backend, opts ...Option) tea.Model {
-	return newWindow(ctx, backend, opts)
-}
-
-// Pump forwards the backend's routed events to send as window messages until ctx
-// ends or the backend closes its stream.
-func Pump(ctx context.Context, backend Backend, send func(tea.Msg)) {
+func pump(ctx context.Context, backend Backend, send func(tea.Msg)) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -58,7 +49,7 @@ func runProgram(ctx context.Context, cancel context.CancelFunc, backend Backend,
 		tea.WithReportFocus(),
 	}
 	program := tea.NewProgram(model, append(options, extra...)...)
-	go Pump(ctx, backend, program.Send)
+	go pump(ctx, backend, program.Send)
 	_, runErr := program.Run()
 	return settleRun(ctx, cancel, runErr)
 }

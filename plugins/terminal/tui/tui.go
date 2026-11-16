@@ -530,7 +530,7 @@ func (m *model) ensureTab(channel string) *tab {
 	tab := &tab{channel: channel, label: channel, openedAt: time.Now()}
 	m.tabs[channel] = tab
 	m.order = append(m.order, channel)
-	if m.active == "" {
+	if m.active == "" && !m.open.unfocused {
 		m.active = channel
 		m.applySize()
 	}
@@ -1099,10 +1099,10 @@ func (m *model) switchTab(delta int) {
 }
 
 func (m *model) activate(channel string) {
+	m.noteTabChange(channel)
 	if m.tabs[channel] == nil {
 		return
 	}
-	m.abandonOpen()
 	if channel == m.active {
 		return
 	}

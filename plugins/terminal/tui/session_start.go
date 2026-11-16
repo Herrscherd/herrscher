@@ -8,13 +8,16 @@ type sessionStartedMsg struct {
 }
 
 func (m *model) startFromComposer(text string) tea.Cmd {
+	if text == "" {
+		return nil
+	}
 	m.recordHistory(text)
-	return m.startSessionWith(text)
+	return m.startSession()
 }
 
-func (m *model) startSessionWith(text string) tea.Cmd {
+func (m *model) startSession() tea.Cmd {
 	m.starting = true
-	m.open.text, m.open.queued = text, true
+	m.open.queued = true
 	m.flash = m.tr.t("tui.session.starting", nil)
 	backend := m.tm
 	return func() tea.Msg {

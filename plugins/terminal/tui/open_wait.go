@@ -12,10 +12,10 @@ import (
 const openWaitLimit = 5 * time.Second
 
 type openWait struct {
-	session  string
-	queued   bool
-	text     string
-	deadline time.Time
+	session   string
+	queued    bool
+	unfocused bool
+	deadline  time.Time
 }
 
 func (m *model) now() time.Time {
@@ -26,7 +26,7 @@ func (m *model) now() time.Time {
 }
 
 func (m *model) beginOpen(session, text string) {
-	m.open = openWait{session: session, queued: text != "", text: text}
+	m.open = openWait{session: session, queued: text != ""}
 	if text != "" {
 		m.input.SetValue(text)
 	}
@@ -49,7 +49,7 @@ func (m *model) queueForOpen(text string) {
 		m.cancelQueuedText()
 		return
 	}
-	m.open.queued, m.open.text = true, text
+	m.open.queued = true
 	m.flash = m.tr.t("tui.session.open_pending", map[string]any{tplArgName: m.open.session})
 }
 
@@ -57,7 +57,7 @@ func (m *model) cancelQueuedText() {
 	if !m.open.queued {
 		return
 	}
-	m.open.queued, m.open.text = false, ""
+	m.open.queued = false
 	m.flash = m.tr.t("tui.session.open_cancelled", map[string]any{tplArgName: m.open.session})
 }
 
@@ -75,8 +75,13 @@ func (m *model) releaseOpen() {
 	m.flash = m.tr.t("tui.session.open_missing", map[string]any{tplArgName: name})
 }
 
+func (m *model) noteTabChange(channel string) {
+	m.abandonOpen()
+	m.open.unfocused = channel == ""
+}
+
 func (m *model) clearOpen() {
-	m.open = openWait{}
+	m.open = openWait{unfocused: m.open.unfocused}
 }
 
 func (m *model) focusOpen(infos []contracts.SessionInfo) tea.Cmd {
@@ -103,15 +108,18 @@ func (m *model) deliverOpen(channel string) tea.Cmd {
 	if !open.queued {
 		return nil
 	}
-	if strings.TrimSpace(m.input.Value()) == open.text {
-		m.input.Reset()
-		m.resizeComposer()
+	text := strings.TrimSpace(m.input.Value())
+	if text == "" {
+		m.flash = m.tr.t("tui.session.open_cancelled", map[string]any{tplArgName: open.session})
+		return nil
+	}
+	if isCommandLine(text) {
+		return nil
 	}
 	atts := m.pending
 	m.pending = nil
+	m.input.Reset()
+	m.resizeComposer()
 	m.applySize()
-	if open.text == "" && len(atts) == 0 {
-		return nil
-	}
-	return m.submitTo(channel, open.text, atts)
+	return m.submitTo(channel, text, atts)
 }

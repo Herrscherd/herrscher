@@ -39,8 +39,62 @@ func TestTabDuringTheWaitCancelsTheQueueSoTheTextIsSentOnce(t *testing.T) {
 	}
 }
 
+func TestEditedComposerDuringTheWaitIsWhatGoesOut(t *testing.T) {
+	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
+	m := newModel(be)
+	OpenOn("later", "")(m)
+	m.Init()
+	m.input.SetValue("hello")
+	m.handleEnter()
+	m.input.SetValue("hello!")
+
+	be.sessions = append(be.sessions, contracts.SessionInfo{Name: "later", ChannelID: "c2"})
+	settle(m, m.syncTabs())
+
+	if len(be.submitted) != 1 || be.submitted[0].text != "hello!" || m.input.Value() != "" {
+		t.Fatalf("submitted = %+v, composer after arrival = %q, want the edited text %q sent once and the composer cleared", be.submitted, m.input.Value(), "hello!")
+	}
+}
+
+func TestEmptiedComposerDuringTheWaitSendsNothing(t *testing.T) {
+	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
+	m := newModel(be)
+	OpenOn("later", "")(m)
+	m.Init()
+	m.input.SetValue("hello")
+	m.handleEnter()
+	m.input.SetValue("")
+
+	be.sessions = append(be.sessions, contracts.SessionInfo{Name: "later", ChannelID: "c2"})
+	settle(m, m.syncTabs())
+
+	if len(be.submitted) != 0 {
+		t.Fatalf("submitted = %+v after the user emptied the composer, want nothing sent", be.submitted)
+	}
+	if want := m.tr.t("tui.session.open_cancelled", map[string]any{tplArgName: "later"}); m.flash != want {
+		t.Fatalf("flash = %q at arrival of an emptied composer, want %q", m.flash, want)
+	}
+}
+
+func TestCommandLineInTheComposerAtArrivalIsNotSent(t *testing.T) {
+	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
+	m := newModel(be)
+	OpenOn("later", "")(m)
+	m.Init()
+	m.input.SetValue("hello")
+	m.handleEnter()
+	m.input.SetValue("/help")
+
+	be.sessions = append(be.sessions, contracts.SessionInfo{Name: "later", ChannelID: "c2"})
+	settle(m, m.syncTabs())
+
+	if len(be.submitted) != 0 || m.input.Value() != "/help" {
+		t.Fatalf("submitted = %+v, composer = %q, want the command line left in the composer and nothing sent", be.submitted, m.input.Value())
+	}
+}
+
 func TestStartedSessionThatNeverGetsATabReleasesTheTextIntoTheComposer(t *testing.T) {
-	be := &fakeBackend{startName: "fresh"}
+	be := &fakeBackend{startName: "fresh", startChannel: "c9"}
 	now := time.Unix(0, 0)
 	m := newModel(be)
 	m.clock = func() time.Time { return now }
@@ -50,6 +104,7 @@ func TestStartedSessionThatNeverGetsATabReleasesTheTextIntoTheComposer(t *testin
 	if !ok {
 		t.Fatal("enter with no session must start one")
 	}
+	be.sessions[len(be.sessions)-1].Archived = true
 	settle(m, m.handleSessionStarted(started))
 	m.input.SetValue(m.input.Value() + "\nsecond")
 
@@ -67,6 +122,42 @@ func TestStartedSessionThatNeverGetsATabReleasesTheTextIntoTheComposer(t *testin
 	}
 	if len(be.submitted) != 0 {
 		t.Fatalf("submitted = %+v, want nothing sent", be.submitted)
+	}
+}
+
+func TestTabChangeDuringTheStartKeepsTheTextForTheStartedSession(t *testing.T) {
+	f := &fakeBackend{startName: "fresh", startChannel: "c9", sessions: []contracts.SessionInfo{{Name: "two", ChannelID: "c2"}}}
+	m := newModel(f)
+	m.Init()
+	m.active = ""
+	m.input.SetValue("hello")
+	started, ok := runCmd(m.handleEnter()).(sessionStartedMsg)
+	if !ok {
+		t.Fatal("enter with no session must start one")
+	}
+	m.activate("c2")
+	settle(m, m.handleSessionStarted(started))
+	settle(m, m.syncTabs())
+
+	if len(f.submitted) != 1 || f.submitted[0].channel != "c9" || f.submitted[0].text != "hello" {
+		t.Fatalf("submitted = %+v, want hello once on c9 after a tab change during the start", f.submitted)
+	}
+}
+
+func TestAttachmentsNeverStartASessionOrGoAloneWithoutText(t *testing.T) {
+	f := &fakeBackend{startName: "fresh", startChannel: "c9"}
+	m := newModel(f)
+	m.pending = []Attachment{{Name: "a.png", Path: "/x/a.png"}}
+	if cmd := m.handleEnter(); cmd != nil {
+		t.Fatal("enter with no session, an empty composer and an attachment must do nothing")
+	}
+	settle(m, m.syncTabs())
+
+	if len(f.sessions) != 0 || len(f.submitted) != 0 {
+		t.Fatalf("sessions = %+v, submitted = %+v, want nothing started or sent", f.sessions, f.submitted)
+	}
+	if len(m.pending) != 1 {
+		t.Fatalf("pending = %+v, want the attachment kept", m.pending)
 	}
 }
 
@@ -91,5 +182,44 @@ func TestEmptyEnterCancelsTheTextAndKeepsTheAttachmentsPending(t *testing.T) {
 	settle(m, m.syncTabs())
 	if len(be.submitted) != 0 {
 		t.Fatalf("submitted = %+v after the text was cancelled, want nothing sent", be.submitted)
+	}
+}
+
+func TestRemovingTheOnlyActiveTabEndsTheWait(t *testing.T) {
+	be := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "main", ChannelID: "c1"}}}
+	m := newModel(be)
+	OpenOn("later", "")(m)
+	m.Init()
+	be.sessions = []contracts.SessionInfo{}
+	settle(m, m.syncTabs())
+	if m.awaitingOpen() {
+		t.Fatal("the wait is still on after the active tab was removed with no successor")
+	}
+	be.sessions = append(be.sessions, contracts.SessionInfo{Name: "later", ChannelID: "c3"})
+	settle(m, m.syncTabs())
+	if m.active == "c3" {
+		t.Fatal("the awaited session took focus after the user's active tab was removed")
+	}
+}
+
+func TestCancelledWaitKeepsItsNoticeAtTheDeadline(t *testing.T) {
+	be := &fakeBackend{sessions: []contracts.SessionInfo{
+		{Name: "main", ChannelID: "c1"},
+		{Name: "two", ChannelID: "c2"},
+	}}
+	now := time.Unix(0, 0)
+	m := newModel(be)
+	m.clock = func() time.Time { return now }
+	OpenOn("later", "")(m)
+	m.Init()
+	m.input.SetValue("hello")
+	m.handleEnter()
+	m.activate("c2")
+
+	now = now.Add(openWaitLimit)
+	settle(m, m.syncTabs())
+
+	if want := m.tr.t("tui.session.open_cancelled", map[string]any{tplArgName: "later"}); m.flash != want {
+		t.Fatalf("flash = %q at the deadline of a cancelled wait, want the cancellation notice %q kept", m.flash, want)
 	}
 }

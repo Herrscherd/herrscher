@@ -1,7 +1,4 @@
-// Package vendortest stands in for the vendor CLIs a backend runs, so a scenario
-// drives the real herrscher binary with no network and no vendor account. Each
-// fake replays a script: one block of steps per turn, the blocks separated by a
-// line that holds only "---".
+// Package vendortest stands in for the vendor CLIs a backend runs, with no network.
 package vendortest
 
 import (
@@ -66,10 +63,7 @@ func (e *LineError) Unwrap() error {
 	return e.Err
 }
 
-// ParseScript reads a script. Each line is one step: "text <words>", "tool
-// <Name> <json input>", "error <message>", "apierror <message>", "spawn <file>",
-// "usage <tokens>", "echo", "hang" or "crash", the last three alone. Blank
-// lines are skipped and a turn with no step is refused.
+// ParseScript reads a script, one step per line, and refuses a turn with no step.
 func ParseScript(source io.Reader) (Script, error) {
 	var script Script
 	current := Turn{}
@@ -202,8 +196,7 @@ func toolStep(rest string) (step, error) {
 	return step{kind: stepTool, tool: tool, input: json.RawMessage(input)}, nil
 }
 
-// Turn returns the reply scripted for the turn at index, counted from zero
-// across every process that replayed this script. A turn past the end echoes.
+// Turn returns the scripted reply at index, counted from zero; a turn past the end echoes.
 func (s Script) Turn(index int) Turn {
 	if index < len(s.turns) {
 		return s.turns[index]

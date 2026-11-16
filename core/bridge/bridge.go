@@ -81,12 +81,7 @@ func Run(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestr
 	return runHub(ctx, newBackend, orch, opts)
 }
 
-// RunUntilClosed serves compaction requests, history reads and prunes, and input
-// turns until input closes or ctx ends. It is the bridge seam used by the
-// operator's short-lived session seed path: no control socket or gateway is
-// involved, but the same backend turn machinery (including orchestrator
-// context/observation) is exercised. A seeded session can receive follow-up
-// turns, compaction requests and history edits after its first reply.
+// RunUntilClosed serves compaction requests, history reads and prunes, and input turns until input closes or ctx ends.
 func RunUntilClosed(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestrator, channel string, input <-chan contracts.Event, out chan<- contracts.Event) error {
 	resp, err := newBackend(channel)
 	if err != nil {

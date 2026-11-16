@@ -410,7 +410,7 @@ func TestCloseReportsTheFinalCountWhenItsSummaryCannotBeWritten(t *testing.T) {
 		t.Fatal(err)
 	}
 	sink.Close()
-	line := lineContaining(logs.String(), "not all confirmed")
+	line := unconfirmedLine(logs.String())
 	if !strings.Contains(line, "lost=2") || !strings.Contains(line, "unconfirmed=1") {
 		t.Fatalf("Close logged %q, want lost=2 and unconfirmed=1: the announce and the oversized warning are lost, the frozen write is unconfirmed", line)
 	}
@@ -456,9 +456,9 @@ func captureDefaultLog(t *testing.T) *lockedBuffer {
 	return logs
 }
 
-func lineContaining(text, marker string) string {
+func unconfirmedLine(text string) string {
 	for _, line := range strings.Split(text, "\n") {
-		if strings.Contains(line, marker) {
+		if strings.Contains(line, "not all confirmed") {
 			return line
 		}
 	}
@@ -502,7 +502,7 @@ func TestSummaryInFlightAtCloseIsReportedAsLostAndUnconfirmed(t *testing.T) {
 	}
 	awaitGatedWrite(t, writer)
 	sink.Close()
-	line := lineContaining(logs.String(), "not all confirmed")
+	line := unconfirmedLine(logs.String())
 	if !strings.Contains(line, "lost=1") || unconfirmedAtClose(t, logs.String()) < 1 {
 		t.Fatalf("Close logged %q, want lost=1 and unconfirmed>=1 while the summary is in flight", line)
 	}
@@ -518,7 +518,7 @@ func TestCloseNamesAnUnconfirmedWriteEvenWhenNothingWasLost(t *testing.T) {
 	}
 	awaitGatedWrite(t, writer)
 	sink.Close()
-	line := lineContaining(logs.String(), "not all confirmed")
+	line := unconfirmedLine(logs.String())
 	if !strings.Contains(line, "lost=0") || !strings.Contains(line, "unconfirmed=1") {
 		t.Fatalf("Close logged %q, want lost=0 and unconfirmed=1: the frozen write is in flight and nothing was dropped", line)
 	}
@@ -540,7 +540,7 @@ func TestQueuedBehindAFrozenWriterIsLostAtCloseAndNeverWritten(t *testing.T) {
 	if got := sink.droppedCount(); got != 1 {
 		t.Fatalf("dropped %d warnings at Close, want 1: the queued warning was never handed to the writer", got)
 	}
-	line := lineContaining(logs.String(), "not all confirmed")
+	line := unconfirmedLine(logs.String())
 	if !strings.Contains(line, "lost=1") || !strings.Contains(line, "unconfirmed=1") {
 		t.Fatalf("Close logged %q, want lost=1 and unconfirmed=1", line)
 	}
@@ -554,7 +554,7 @@ func TestQueuedBehindAFrozenWriterIsLostAtCloseAndNeverWritten(t *testing.T) {
 
 func unconfirmedAtClose(t *testing.T, logs string) int {
 	t.Helper()
-	line := lineContaining(logs, "not all confirmed")
+	line := unconfirmedLine(logs)
 	_, value, found := strings.Cut(line, "unconfirmed=")
 	if !found {
 		return 0

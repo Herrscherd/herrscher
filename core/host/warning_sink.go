@@ -80,7 +80,7 @@ func newWarningSink(out io.Writer, lostLine func(lost int) string) *warningSink 
 
 func (s *warningSink) Write(data []byte) (int, error) {
 	owned := bytes.Clone(data)
-	budget, stop := budgetWithin(warningWriteBudget)
+	budget, stop := writeBudget()
 	defer stop()
 	if err := s.Enqueue(owned)(budget); err != nil {
 		return 0, err
@@ -281,7 +281,7 @@ func (s *warningSink) Close() {
 	s.queue = nil
 	s.queuedBytes = 0
 	s.mu.Unlock()
-	budget, stop := budgetWithin(warningWriteBudget)
+	budget, stop := writeBudget()
 	defer stop()
 	s.announceLost(budget)
 	s.logUnsettled()
@@ -321,7 +321,7 @@ func (s *warningSink) logUnsettled() {
 }
 
 func (s *warningSink) announce(text string) error {
-	budget, stop := budgetWithin(warningWriteBudget)
+	budget, stop := writeBudget()
 	defer stop()
 	return s.directWrite([]byte(text+"\n"), s.directBudget(budget))
 }
@@ -369,8 +369,8 @@ func (s *warningSink) droppedCount() int {
 	return s.dropped
 }
 
-func budgetWithin(budget time.Duration) (<-chan struct{}, func()) {
+func writeBudget() (<-chan struct{}, func()) {
 	expired := make(chan struct{})
-	timer := time.AfterFunc(budget, func() { close(expired) })
+	timer := time.AfterFunc(warningWriteBudget, func() { close(expired) })
 	return expired, func() { timer.Stop() }
 }

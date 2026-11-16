@@ -210,15 +210,20 @@ func TestBlockedWarningWriterDoesNotHoldStopPastTheBudget(t *testing.T) {
 					t.Fatal("a blocked warning writer held the stop past the teardown budget")
 				}
 
-				if c.want == nil {
-					if !strings.Contains(logs.String(), "a warning was abandoned") {
-						t.Fatal("the hub overrun behind a frozen writer was neither written nor counted as abandoned")
-					}
-					return
-				}
-				warnings.open()
-				awaitWarning(t, &warnings.out, c.want(h, name))
+				assertBlockedWriterOutcome(t, c, h, name, warnings, logs)
 			})
 		}
 	}
+}
+
+func assertBlockedWriterOutcome(t *testing.T, c blockedWriterCase, h *hub, name string, warnings *gatedWarnings, logs *lockedBuffer) {
+	t.Helper()
+	if c.want == nil {
+		if !strings.Contains(logs.String(), "a warning was abandoned") {
+			t.Fatal("the hub overrun behind a frozen writer was neither written nor counted as abandoned")
+		}
+		return
+	}
+	warnings.open()
+	awaitWarning(t, &warnings.out, c.want(h, name))
 }

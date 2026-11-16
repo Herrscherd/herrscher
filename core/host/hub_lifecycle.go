@@ -159,7 +159,7 @@ func (h *hub) releaseLifecycle() {
 	pending := h.deferred
 	h.deferred = nil
 	h.lifecycle.Unlock()
-	budget, stop := budgetWithin(warningWriteBudget)
+	budget, stop := writeBudget()
 	defer stop()
 	for _, await := range pending {
 		logCleanup(await(budget))

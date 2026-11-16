@@ -388,6 +388,9 @@ func (s *State) SetResumeToken(name, token string) error {
 	return s.setSessionField(name, func(sess *Session) *string { return &sess.ResumeToken }, token)
 }
 
+// SetInterruptedTurn marks the turn the daemon was running when it stopped, so
+// the next start can announce it. A missing session or an unchanged mark is a
+// no-op.
 func (s *State) SetInterruptedTurn(name, turnID string) error {
 	return s.setSessionField(name, func(sess *Session) *string { return &sess.InterruptedTurn }, turnID)
 }

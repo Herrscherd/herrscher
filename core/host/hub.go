@@ -150,7 +150,7 @@ func eventTap(publish func(string, contracts.Event), session string) func(contra
 func (h *hub) liveSink(ctx context.Context, sess state.Session) sessionSink {
 	return sessionSink{
 		Resume: func(tok string) {
-			_ = h.persistResumeToken(sess.Name, tok)
+			h.keepResumeToken(sess.Name, tok)
 		},
 		TurnInterrupted: func(turnID string) {
 			if err := h.st.SetInterruptedTurn(sess.Name, turnID); err != nil {
@@ -219,9 +219,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 			backend:         h.seedBackend,
 			models:          h.models,
 			recordUsage:     h.recordUsage,
-			resume: func(session, token string) {
-				_ = h.persistResumeToken(session, token)
-			},
+			resume:          h.keepResumeToken,
 			record: func(session string, entry state.TranscriptEntry) {
 				if err := state.AppendTranscript(state.TranscriptPath(h.partDir, session), entry); err != nil {
 					warnLive(h.warnings, h.sessionLanguageSource(session), "warn.session_seed_transcript", map[string]any{nameParam: session, detailParam: err})
@@ -484,6 +482,12 @@ func (h *hub) persistResumeToken(session, token string) error {
 		warnLive(h.warnings, h.sessionLanguageSource(session), "warn.session_resume_token", map[string]any{nameParam: session, detailParam: err})
 	}
 	return err
+}
+
+func (h *hub) keepResumeToken(session, token string) {
+	if err := h.persistResumeToken(session, token); err != nil {
+		slog.Warn("resume token not kept", "session", session, "err", err)
+	}
 }
 
 func (h *hub) Resume(name string) error {

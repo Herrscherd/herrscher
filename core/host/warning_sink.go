@@ -194,10 +194,14 @@ func (s *warningSink) reserve() {
 
 func (s *warningSink) settleWrite(err error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.unconfirmed--
 	if err != nil {
 		s.dropped++
+	}
+	closed := s.closed
+	s.mu.Unlock()
+	if err != nil && closed {
+		s.logUnsettled()
 	}
 }
 
@@ -348,7 +352,7 @@ func (s *warningSink) afterClose(err error) error {
 	s.mu.Lock()
 	closed := s.closed
 	s.mu.Unlock()
-	if err != nil && closed {
+	if closed && (errors.Is(err, errWarningAbandoned) || errors.Is(err, errWarningLate)) {
 		s.logUnsettled()
 	}
 	return err

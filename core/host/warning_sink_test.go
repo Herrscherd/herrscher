@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -611,7 +612,7 @@ func (w *refusingEntryWriter) Write(p []byte) (int, error) {
 	return w.out.Write(p)
 }
 
-func TestQueuedWriterErrorIsCountedLostAtClose(t *testing.T) {
+func TestQueuedWriterErrorIsCountedLostBeforeTheNextWrite(t *testing.T) {
 	writer := &refusingEntryWriter{marker: "REFUSED"}
 	sink := newWarningSink(writer, englishLostLine)
 	if _, err := sink.Write([]byte("REFUSED\n")); !errors.Is(err, errEntryRefused) {
@@ -623,6 +624,54 @@ func TestQueuedWriterErrorIsCountedLostAtClose(t *testing.T) {
 	sink.Close()
 	if want := englishLostLine(1) + "\nafter\n"; writer.out.String() != want {
 		t.Fatalf("output = %q, want %q: the refused queued warning must be counted lost and announced before the next write", writer.out.String(), want)
+	}
+}
+
+type blockedRefusingWriter struct {
+	entered   chan struct{}
+	release   chan struct{}
+	enterOnce sync.Once
+	openOnce  sync.Once
+}
+
+func (w *blockedRefusingWriter) Write(p []byte) (int, error) {
+	w.enterOnce.Do(func() { close(w.entered) })
+	<-w.release
+	return 0, errEntryRefused
+}
+
+func (w *blockedRefusingWriter) unblock() {
+	w.openOnce.Do(func() { close(w.release) })
+}
+
+func awaitBackground(t *testing.T, done <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the background write did not return")
+	}
+}
+
+func TestWriteFailureAfterCloseIsAnnounced(t *testing.T) {
+	logs := captureDefaultLog(t)
+	writer := &blockedRefusingWriter{entered: make(chan struct{}), release: make(chan struct{})}
+	t.Cleanup(writer.unblock)
+	sink := newWarningSink(writer, englishLostLine)
+	if _, err := sink.Write([]byte("INFLIGHT\n")); !errors.Is(err, errWarningLate) {
+		t.Fatalf("write returned %v, want errWarningLate", err)
+	}
+	select {
+	case <-writer.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the warning was never handed to the writer")
+	}
+	sink.Close()
+	writer.unblock()
+	waitUntil(t, "the failed in-flight write to be announced", func() bool { return strings.Contains(logs.String(), "lost=1") })
+	line := lastUnconfirmedLine(logs.String())
+	if !strings.Contains(line, "lost=1") || !strings.Contains(line, "unconfirmed=0") {
+		t.Fatalf("the in-flight write failing after Close logged %q, want lost=1 and unconfirmed=0", line)
 	}
 }
 
@@ -721,7 +770,7 @@ func TestQueuedWarningLostAtCloseReturnsAbandonedAndWritesNothing(t *testing.T) 
 	if !errors.Is(err, errWarningAbandoned) || n != 0 {
 		t.Fatalf("the queued warning dropped at Close returned (%d, %v), want (0, errWarningAbandoned)", n, err)
 	}
-	<-frozen
+	awaitBackground(t, frozen)
 	writer.open()
 	time.Sleep(50 * time.Millisecond)
 	if strings.Contains(writer.out.String(), "QUEUEDMSG") {
@@ -747,6 +796,6 @@ func TestQueuedWarningUnconfirmedAtBudgetReturnsLateWithoutCount(t *testing.T) {
 	if got := sink.droppedCount(); got != 0 {
 		t.Fatalf("dropped = %d for an unconfirmed warning, want 0", got)
 	}
-	<-frozen
+	awaitBackground(t, frozen)
 	writer.open()
 }

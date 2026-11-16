@@ -224,6 +224,25 @@ func TestQueuedAttachmentCanBeRemovedBeforeDelivery(t *testing.T) {
 	}
 }
 
+func TestOpenWaitReleasesWhenNoListEverArrives(t *testing.T) {
+	be := &fakeBackend{}
+	now := time.Unix(0, 0)
+	m := newModel(be)
+	m.clock = func() time.Time { return now }
+	OpenOn("ghost", "")(m)
+	m.Init()
+
+	now = now.Add(openWaitLimit)
+	m.syncTabs()
+
+	if m.open.session != "" {
+		t.Fatalf("open.session = %q with no session list ever read, want it released at the deadline", m.open.session)
+	}
+	if want := m.tr.t("tui.session.open_missing", map[string]any{tplArgName: "ghost"}); m.flash != want {
+		t.Fatalf("flash = %q, want %q", m.flash, want)
+	}
+}
+
 func TestStartingSessionKeepsItsAttachmentsVisibleAndSentOnce(t *testing.T) {
 	f := &fakeBackend{startName: "fresh", startChannel: "c9"}
 	m := newModel(f)

@@ -656,7 +656,7 @@ func lastAgentIndex(entries []entry) int {
 func (m *model) syncTabs() tea.Cmd {
 	infos := m.tm.Sessions()
 	if infos == nil {
-		return nil
+		return m.focusOpen(nil)
 	}
 	var builder strings.Builder
 	for i := range infos {

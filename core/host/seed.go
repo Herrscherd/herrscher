@@ -113,7 +113,8 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	driver.incarnation = sess.Incarnation
 	driver.agent = sess.Agent
 	driver.language = func() i18n.Language { return knownSessionLanguage(sess) }
-	attachOneShotTaps(driver, sess, runtime)
+	gate := attachOneShotTaps(driver, sess, runtime)
+	defer gate.shut()
 	runtime.sessions.attachCompaction(driver, sess.Name)
 	terms := modelTermsFor(runtime.models)
 	driver.terms = func() modelTerms { return terms(sess) }
@@ -168,16 +169,24 @@ func oneShotTurnTimeout(runtime oneShotSeedRuntime) time.Duration {
 	return runtime.timeout
 }
 
-func attachOneShotTaps(driver *sessionDriver, sess state.Session, runtime oneShotSeedRuntime) {
+func attachOneShotTaps(driver *sessionDriver, sess state.Session, runtime oneShotSeedRuntime) *seedGate {
+	gate := &seedGate{}
 	if runtime.record != nil {
-		driver.sink.Transcript = func(entry state.TranscriptEntry) { runtime.record(sess.Name, entry) }
+		driver.sink.Transcript = func(entry state.TranscriptEntry) {
+			gate.admit(func() { runtime.record(sess.Name, entry) })
+		}
 	}
 	if runtime.publish != nil {
-		driver.emitTap = func(e contracts.Event) { runtime.publish(sess.Name, e) }
+		driver.emitTap = func(e contracts.Event) {
+			gate.admit(func() { runtime.publish(sess.Name, e) })
+		}
 	}
 	if runtime.recordUsage != nil {
-		driver.sink.Usage = func(records []usage.Record) { runtime.recordUsage(sess, records) }
+		driver.sink.Usage = func(records []usage.Record) {
+			gate.admit(func() { runtime.recordUsage(sess, records) })
+		}
 	}
+	return gate
 }
 
 func runOneShotBridge(ctx context.Context, cancel context.CancelFunc, sess state.Session, orch contracts.Orchestrator, runtime oneShotSeedRuntime, toBridge, fromBridge chan contracts.Event, bridgeErr chan<- error) {

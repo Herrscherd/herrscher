@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -154,15 +155,22 @@ func herrscherDir(root string) string {
 	return filepath.Join(userDirOf(root), "herrscher")
 }
 
-var errLeaked = errors.New("processes outlived the scenario")
+var (
+	errStopped = errors.New("processes were still running when the scenario ended and were stopped with SIGINT")
+	errLeaked  = errors.New("processes outlived the scenario, ignored SIGINT and were killed with SIGKILL")
+)
 
 func settle(root, instance string, before map[string]bool) error {
-	leaked, reapErr := reapInstance(instance, reapGrace)
-	if len(leaked) > 0 {
-		reapErr = errors.Join(reapErr, fmt.Errorf("%w: %s", errLeaked, strings.Join(leaked, "; ")))
+	stopped, survivors, reapErr := reapInstance(instance, reapGrace)
+	var stoppedErr, leakErr error
+	if len(stopped) > 0 {
+		stoppedErr = fmt.Errorf("%w: %s", errStopped, strings.Join(stopped, "; "))
+	}
+	if len(survivors) > 0 {
+		leakErr = fmt.Errorf("%w: %s", errLeaked, strings.Join(survivors, "; "))
 	}
 	removeErr := removeRuntimeEntries(root, instance)
-	return errors.Join(reapErr, removeErr, appearedHashed(root, before))
+	return errors.Join(stoppedErr, leakErr, reapErr, removeErr, appearedHashed(root, before))
 }
 
 var (
@@ -393,30 +401,74 @@ func answering(root, instance string) bool {
 
 const reapGrace = 5 * time.Second
 
-func reapInstance(instance string, grace time.Duration) ([]string, error) {
+func reapInstance(instance string, grace time.Duration) ([]string, []string, error) {
 	marker := instanceMarker(instance)
+	found, err := processesWith(marker)
+	if err != nil || len(found) == 0 {
+		return nil, nil, err
+	}
+	names := make(map[int]string, len(found))
+	for _, pid := range found {
+		names[pid] = describe(pid)
+	}
+	if sigErr := signalAll(found, syscall.SIGINT); sigErr != nil {
+		return nil, nil, sigErr
+	}
+	remaining, err := awaitGone(marker, grace)
+	if err != nil {
+		return nil, nil, err
+	}
+	var stopped []string
+	for _, pid := range found {
+		if !slices.Contains(remaining, pid) {
+			stopped = append(stopped, names[pid])
+		}
+	}
+	if len(remaining) == 0 {
+		return stopped, nil, nil
+	}
+	survivors := namesOf(names, remaining)
+	if sigErr := signalAll(remaining, syscall.SIGKILL); sigErr != nil {
+		return stopped, survivors, sigErr
+	}
+	unkilled, err := awaitGone(marker, reapGrace)
+	if err != nil || len(unkilled) == 0 {
+		return stopped, survivors, err
+	}
+	return stopped, survivors, fmt.Errorf("processes survived SIGKILL: %s", strings.Join(namesOf(names, unkilled), "; "))
+}
+
+func signalAll(pids []int, signo syscall.Signal) error {
+	var errs []error
+	for _, pid := range pids {
+		if err := syscall.Kill(pid, signo); err != nil && !errors.Is(err, syscall.ESRCH) {
+			errs = append(errs, fmt.Errorf("cannot send %v to %d: %w", signo, pid, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func awaitGone(marker []byte, grace time.Duration) ([]int, error) {
 	deadline := time.Now().Add(grace)
 	for {
 		pids, err := processesWith(marker)
-		if err != nil || len(pids) == 0 {
-			return nil, err
-		}
-		if time.Now().After(deadline) {
-			return killAll(pids), nil
+		if err != nil || len(pids) == 0 || time.Now().After(deadline) {
+			return pids, err
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 }
 
-func killAll(pids []int) []string {
-	leaked := make([]string, 0, len(pids))
+func namesOf(names map[int]string, pids []int) []string {
+	lines := make([]string, 0, len(pids))
 	for _, pid := range pids {
-		leaked = append(leaked, describe(pid))
-		if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
-			leaked = append(leaked, "cannot kill "+strconv.Itoa(pid)+": "+err.Error())
+		if name, known := names[pid]; known {
+			lines = append(lines, name)
+			continue
 		}
+		lines = append(lines, describe(pid))
 	}
-	return leaked
+	return lines
 }
 
 func processesWith(marker []byte) ([]int, error) {

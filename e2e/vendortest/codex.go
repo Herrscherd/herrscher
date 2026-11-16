@@ -149,7 +149,7 @@ func (v *vendor) startTurn(out io.Writer, message rpcMessage) error {
 	if err != nil {
 		return err
 	}
-	started := map[string]any{wordTurn: map[string]any{keyID: codexTurnID}}
+	started := map[string]any{keyTurn: map[string]any{keyID: codexTurnID}}
 	if err := writeJSON(out, rpcResponse{ID: message.ID, Result: started}); err != nil {
 		return err
 	}
@@ -159,13 +159,13 @@ func (v *vendor) startTurn(out io.Writer, message rpcMessage) error {
 func writeTurnEvents(out io.Writer, threadID string, reply vendorReply) error {
 	events := []rpcNotification{{Method: methodTurnStarted, Params: turnPayload(threadID, map[string]any{keyID: codexTurnID})}}
 	if reply.failed {
-		failed := map[string]any{keyID: codexTurnID, wordStatus: "failed", wordError: map[string]any{"message": reply.failure}}
+		failed := map[string]any{keyID: codexTurnID, keyStatus: "failed", keyError: map[string]any{"message": reply.failure}}
 		events = append(events, rpcNotification{Method: methodTurnCompleted, Params: turnPayload(threadID, failed)})
 	} else {
 		delta := map[string]any{keyThreadID: threadID, keyTurnID: codexTurnID, keyDelta: reply.text}
-		item := map[string]any{keyID: codexItemID, keyType: wordAgent, wordText: reply.text}
+		item := map[string]any{keyID: codexItemID, keyType: wordAgent, keyText: reply.text}
 		itemDone := map[string]any{keyThreadID: threadID, keyTurnID: codexTurnID, keyItem: item}
-		completed := map[string]any{keyID: codexTurnID, wordStatus: "completed"}
+		completed := map[string]any{keyID: codexTurnID, keyStatus: "completed"}
 		events = append(events,
 			rpcNotification{Method: methodAgentDelta, Params: delta},
 			rpcNotification{Method: methodItemCompleted, Params: itemDone},
@@ -181,5 +181,5 @@ func writeTurnEvents(out io.Writer, threadID string, reply vendorReply) error {
 }
 
 func turnPayload(threadID string, turn map[string]any) map[string]any {
-	return map[string]any{keyThreadID: threadID, wordTurn: turn}
+	return map[string]any{keyThreadID: threadID, keyTurn: turn}
 }

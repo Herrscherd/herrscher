@@ -3,6 +3,7 @@
 package e2e_test
 
 import (
+	"bufio"
 	"errors"
 	"io/fs"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/Herrscherd/herrscher/core/host"
 )
@@ -29,41 +31,96 @@ func TestReapInstanceKillsAndNamesWhatCarriesTheInstance(t *testing.T) {
 			t.Fatal(startErr)
 		}
 	}
-	leaked, err := reapInstance(instance, 0)
+	stopped, survivors, err := reapInstance(instance, reapGrace)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(leaked) != 1 || !strings.Contains(leaked[0], "sleep 60") {
-		t.Fatalf("got %q, want the one carrier named", leaked)
+	if len(stopped) != 1 || !strings.Contains(stopped[0], "sleep 60") || len(survivors) != 0 {
+		t.Fatalf("got stopped %q and survivors %q, want the one carrier stopped", stopped, survivors)
 	}
-	waitErr := carrier.Wait()
-	if exit, ok := errors.AsType[*exec.ExitError](waitErr); !ok || exit.ExitCode() != -1 {
-		t.Fatalf("carrier: got %v, want killed", waitErr)
+	if signo := stoppedBy(t, carrier); signo != syscall.SIGINT {
+		t.Fatalf("carrier: got %v, want SIGINT", signo)
 	}
 	if err := bystander.Process.Signal(syscall.Signal(0)); err != nil {
 		t.Fatalf("the bystander was touched: %v", err)
 	}
 }
 
-func TestReapInstanceWaitsOutTheGrace(t *testing.T) {
+func TestReapInstanceGivesASurvivorTheGraceBeforeSIGKILL(t *testing.T) {
 	instance, err := newInstanceID()
 	if err != nil {
 		t.Fatal(err)
 	}
-	brief := exec.CommandContext(t.Context(), "sleep", "0.2")
-	brief.Env = []string{instanceEnv + "=" + instance}
-	if startErr := brief.Start(); startErr != nil {
+	survivor := ignoringINT(t, instance)
+	started := time.Now()
+	stopped, survivors, err := reapInstance(instance, reapGrace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stopped) != 0 || len(survivors) != 1 {
+		t.Fatalf("got stopped %q and survivors %q, want the one survivor of SIGINT", stopped, survivors)
+	}
+	if elapsed := time.Since(started); elapsed < reapGrace {
+		t.Fatalf("got %v, want the grace waited out before SIGKILL", elapsed)
+	}
+	if signo := stoppedBy(t, survivor); signo != syscall.SIGKILL {
+		t.Fatalf("survivor: got %v, want SIGKILL", signo)
+	}
+}
+
+func TestSettleStopsAStillRunningProcessWithSIGINTBeforeAnySIGKILL(t *testing.T) {
+	instance, err := newInstanceID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	running := exec.CommandContext(t.Context(), "sleep", "60")
+	running.Env = []string{instanceEnv + "=" + instance}
+	if startErr := running.Start(); startErr != nil {
 		t.Fatal(startErr)
 	}
-	exited := make(chan error, 1)
-	go func() { exited <- brief.Wait() }()
-	leaked, err := reapInstance(instance, reapGrace)
-	if err != nil || len(leaked) != 0 {
-		t.Fatalf("got %q, %v, want nothing leaked", leaked, err)
+	root := t.TempDir()
+	before, err := hashedEntries(root)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if waitErr := <-exited; waitErr != nil {
-		t.Fatalf("the process was killed instead of waited for: %v", waitErr)
+	settleErr := settle(root, instance, before)
+	if !errors.Is(settleErr, errStopped) || errors.Is(settleErr, errLeaked) {
+		t.Fatalf("got %v, want the process reported as stopped, not as leaked", settleErr)
 	}
+	if signo := stoppedBy(t, running); signo != syscall.SIGINT {
+		t.Fatalf("got %v, want the process stopped by SIGINT", signo)
+	}
+}
+
+func ignoringINT(t *testing.T, instance string) *exec.Cmd {
+	t.Helper()
+	cmd := exec.CommandContext(t.Context(), "sh", "-c", `trap "" INT; echo ready; exec sleep 60`)
+	cmd.Env = []string{instanceEnv + "=" + instance}
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if startErr := cmd.Start(); startErr != nil {
+		t.Fatal(startErr)
+	}
+	line, err := bufio.NewReader(out).ReadString('\n')
+	if err != nil || line != "ready\n" {
+		t.Fatalf("the process did not install its SIGINT trap: %q, %v", line, err)
+	}
+	return cmd
+}
+
+func stoppedBy(t *testing.T, cmd *exec.Cmd) syscall.Signal {
+	t.Helper()
+	exit, ok := errors.AsType[*exec.ExitError](cmd.Wait())
+	if !ok {
+		t.Fatal("the process exited on its own instead of being signalled")
+	}
+	status, ok := exit.Sys().(syscall.WaitStatus)
+	if !ok || !status.Signaled() {
+		t.Fatalf("the process was not ended by a signal: %v", exit)
+	}
+	return status.Signal()
 }
 
 func TestProcessesInReportsAnUnreadableEnvironment(t *testing.T) {
@@ -84,11 +141,7 @@ func TestSettleFailsOnALeakAndKillsIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	leaker := exec.CommandContext(t.Context(), "sleep", "60")
-	leaker.Env = []string{instanceEnv + "=" + instance}
-	if startErr := leaker.Start(); startErr != nil {
-		t.Fatal(startErr)
-	}
+	leaker := ignoringINT(t, instance)
 	root := t.TempDir()
 	before, err := hashedEntries(root)
 	if err != nil {
@@ -97,8 +150,8 @@ func TestSettleFailsOnALeakAndKillsIt(t *testing.T) {
 	if err := settle(root, instance, before); !errors.Is(err, errLeaked) {
 		t.Fatalf("got %v, want the leak reported", err)
 	}
-	if waitErr := leaker.Wait(); waitErr == nil {
-		t.Fatal("the leaked process was not killed")
+	if signo := stoppedBy(t, leaker); signo != syscall.SIGKILL {
+		t.Fatalf("the leaked process: got %v, want SIGKILL after SIGINT was ignored", signo)
 	}
 }
 

@@ -84,11 +84,11 @@ func (v *vendor) cursorTurn(out io.Writer, resume, prompt string) error {
 		sessionID = defaultCursorSession
 	}
 	if reply.failed {
-		return writeJSON(out, cursorResult{Type: wordResult, Subtype: wordError, SessionID: sessionID, IsError: true, Result: reply.failure})
+		return writeJSON(out, cursorResult{Type: wordResult, Subtype: valueError, SessionID: sessionID, IsError: true, Result: reply.failure})
 	}
 	var message cursorAssistant
 	message.Type = wordAssistant
-	message.Message.Content = []cursorBlock{{Type: wordText, Text: reply.text}}
+	message.Message.Content = []cursorBlock{{Type: valueText, Text: reply.text}}
 	if err := writeJSON(out, message); err != nil {
 		return err
 	}

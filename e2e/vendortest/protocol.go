@@ -3,17 +3,28 @@ package vendortest
 const (
 	wordAssistant = "assistant"
 	wordResult    = "result"
+	wordLogin     = "login"
+	wordStatus    = "status"
 	wordText      = "text"
 	wordError     = "error"
-	wordStatus    = "status"
-	wordLogin     = "login"
-	wordTurn      = "turn"
-	keyThreadID   = "threadId"
-	keyTurnID     = "turnId"
-	keyItem       = "item"
-	keyType       = "type"
-	keyID         = "id"
-	keyDelta      = "delta"
 	wordAgent     = "agentMessage"
 	flagVersion   = "--version"
+)
+
+const (
+	valueText  = "text"
+	valueError = "error"
+)
+
+const (
+	keyThreadID = "threadId"
+	keyTurnID   = "turnId"
+	keyItem     = "item"
+	keyType     = "type"
+	keyID       = "id"
+	keyDelta    = "delta"
+	keyText     = "text"
+	keyStatus   = "status"
+	keyError    = "error"
+	keyTurn     = "turn"
 )

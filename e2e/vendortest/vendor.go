@@ -53,15 +53,24 @@ func (v *vendor) scripted(turn Turn, prompt string) (vendorReply, error) {
 	var texts []string
 	for _, current := range turn.steps {
 		switch current.kind {
-		case stepText:
-			texts = append(texts, current.text)
-		case stepEcho:
-			texts = append(texts, echoPrefix+lastLine(prompt))
+		case stepText, stepEcho:
+			texts = append(texts, spokenText(current, prompt))
 		case stepFail:
 			return vendorReply{failure: current.text, failed: true}, nil
 		case stepTool, stepHang, stepCrash, stepAPIError:
 			return vendorReply{}, errUnsupportedStep
 		}
 	}
-	return vendorReply{text: strings.Join(texts, "\n\n")}, nil
+	return vendorReply{text: joinReplies(texts)}, nil
+}
+
+func spokenText(current step, prompt string) string {
+	if current.kind == stepEcho {
+		return echoPrefix + lastLine(prompt)
+	}
+	return current.text
+}
+
+func joinReplies(texts []string) string {
+	return strings.Join(texts, "\n\n")
 }

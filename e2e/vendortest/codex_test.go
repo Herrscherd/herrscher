@@ -61,8 +61,8 @@ func TestCodexSendsTheFinalTextAsAnAgentMessageItemBeforeTurnCompleted(t *testin
 	if item[keyType] != wordAgent {
 		t.Fatalf("item type = %v, want %s", item[keyType], wordAgent)
 	}
-	if item[wordText] != "reply text" {
-		t.Fatalf("item text = %v, want the full reply", item[wordText])
+	if item[keyText] != "reply text" {
+		t.Fatalf("item text = %v, want the full reply", item[keyText])
 	}
 	if id, ok := item["id"].(string); !ok || id == "" {
 		t.Fatalf("item carries no id: %v", item)

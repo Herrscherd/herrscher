@@ -12,6 +12,8 @@ const (
 	keyTurnID     = "turnId"
 	keyItem       = "item"
 	keyType       = "type"
+	keyID         = "id"
+	keyDelta      = "delta"
 	wordAgent     = "agentMessage"
 	flagVersion   = "--version"
 )

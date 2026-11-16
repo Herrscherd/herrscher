@@ -96,12 +96,16 @@ func (s *scheduler) wait() { s.wg.Wait() }
 func (s *scheduler) tick(ctx context.Context) {
 	now := s.now()
 	due := dueCandidates(s.store.SnapshotSchedules(), now)
+	if len(due) == 0 {
+		return
+	}
+	fresh := s.store.SnapshotSchedules()
 	for idx := range due {
 		name := due[idx].Name
 		if !s.claim(name) {
 			continue
 		}
-		definition, found := s.current(name)
+		definition, found := findSchedule(fresh, name)
 		if !found || !s.fireIfDue(ctx, definition, now) {
 			s.release(name)
 		}
@@ -130,8 +134,7 @@ func (s *scheduler) fireIfDue(ctx context.Context, definition schedule.Schedule,
 	return true
 }
 
-func (s *scheduler) current(name string) (schedule.Schedule, bool) {
-	schedules := s.store.SnapshotSchedules()
+func findSchedule(schedules []schedule.Schedule, name string) (schedule.Schedule, bool) {
 	for idx := range schedules {
 		if schedules[idx].Name == name {
 			return schedules[idx], true

@@ -77,8 +77,8 @@ func isolate(env *testscript.Env, binDir string) error {
 	home := filepath.Join(env.WorkDir, "home")
 	repo := filepath.Join(env.WorkDir, "repo")
 	for _, dir := range []string{home, repo} {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return err
+		if mkErr := os.MkdirAll(dir, 0o700); mkErr != nil {
+			return mkErr
 		}
 	}
 	files := vendortest.Files{
@@ -102,7 +102,7 @@ func isolate(env *testscript.Env, binDir string) error {
 	if err != nil {
 		return fmt.Errorf("start the usage proxy: %w", err)
 	}
-	stopUsageProxy(env, listener)
+	stopUsageProxy(env, proxy, listener)
 	vars = append(vars, usageProxyEnv(proxy)...)
 	for _, pair := range vars {
 		name, value, _ := strings.Cut(pair, "=")

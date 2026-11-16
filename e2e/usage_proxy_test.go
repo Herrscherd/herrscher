@@ -4,6 +4,7 @@ package e2e_test
 
 import (
 	"bufio"
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -14,6 +15,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
 	"net/http"
@@ -34,12 +36,14 @@ const (
 	freshPercent    = 10
 	usageCAFileName = "usage-ca.pem"
 	usageCertYears  = 1
+	faultBuffer     = 16
 )
 
 type usageProxy struct {
 	address string
 	caFile  string
 	tls     *tls.Config
+	faults  chan error
 }
 
 func startUsageProxy(dir string) (*usageProxy, net.Listener, error) {
@@ -48,14 +52,20 @@ func startUsageProxy(dir string) (*usageProxy, net.Listener, error) {
 		return nil, nil, err
 	}
 	caFile := filepath.Join(dir, usageCAFileName)
-	if err := os.WriteFile(caFile, authority.caPEM, 0o600); err != nil {
-		return nil, nil, err
+	if writeErr := os.WriteFile(caFile, authority.caPEM, 0o600); writeErr != nil {
+		return nil, nil, writeErr
 	}
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	var listenConfig net.ListenConfig
+	listener, err := listenConfig.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, nil, err
 	}
-	proxy := &usageProxy{address: listener.Addr().String(), caFile: caFile, tls: authority.serverConfig()}
+	proxy := &usageProxy{
+		address: listener.Addr().String(),
+		caFile:  caFile,
+		tls:     authority.serverConfig(),
+		faults:  make(chan error, faultBuffer),
+	}
 	go proxy.accept(listener)
 	return proxy, listener, nil
 }
@@ -70,24 +80,41 @@ func (p *usageProxy) accept(listener net.Listener) {
 	}
 }
 
+func (p *usageProxy) fault(err error) {
+	if err == nil || errors.Is(err, net.ErrClosed) {
+		return
+	}
+	select {
+	case p.faults <- err:
+	default:
+	}
+}
+
+func (p *usageProxy) closeConn(conn io.Closer) {
+	p.fault(conn.Close())
+}
+
 func (p *usageProxy) serveConnect(conn net.Conn) {
 	request, err := http.ReadRequest(bufio.NewReader(conn))
 	if err != nil || request.Method != http.MethodConnect || request.Host != usageHost+":443" {
-		_, _ = fmt.Fprint(conn, "HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
-		_ = conn.Close()
+		_, writeErr := fmt.Fprint(conn, "HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+		p.fault(writeErr)
+		p.closeConn(conn)
 		return
 	}
-	if _, err := fmt.Fprint(conn, "HTTP/1.1 200 Connection established\r\n\r\n"); err != nil {
-		_ = conn.Close()
+	if _, err = fmt.Fprint(conn, "HTTP/1.1 200 Connection established\r\n\r\n"); err != nil {
+		p.fault(err)
+		p.closeConn(conn)
 		return
 	}
 	closed := make(chan struct{})
 	secured := tls.Server(&notifyClose{Conn: conn, closed: closed}, p.tls)
-	if err := secured.Handshake(); err != nil {
-		_ = secured.Close()
+	if err = secured.HandshakeContext(context.Background()); err != nil {
+		p.fault(err)
+		p.closeConn(secured)
 		return
 	}
-	_ = http.Serve(&singleConn{conn: secured, closed: closed}, http.HandlerFunc(serveUsage))
+	p.fault(http.Serve(&singleConn{conn: secured, closed: closed}, http.HandlerFunc(serveUsage)))
 }
 
 func serveUsage(out http.ResponseWriter, request *http.Request) {
@@ -113,6 +140,7 @@ func serveUsage(out http.ResponseWriter, request *http.Request) {
 
 type notifyClose struct {
 	net.Conn
+
 	closed chan struct{}
 	once   sync.Once
 }
@@ -208,10 +236,18 @@ func usageProxyEnv(proxy *usageProxy) []string {
 	}
 }
 
-func stopUsageProxy(env *testscript.Env, listener net.Listener) {
+func stopUsageProxy(env *testscript.Env, proxy *usageProxy, listener net.Listener) {
 	env.Defer(func() {
 		if err := listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 			env.T().Fatal(err)
+		}
+		for {
+			select {
+			case err := <-proxy.faults:
+				env.T().Fatal(err)
+			default:
+				return
+			}
 		}
 	})
 }

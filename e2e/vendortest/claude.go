@@ -29,6 +29,8 @@ const (
 	envTurns     = "VENDORTEST_TURNS"
 	envConfigDir = "CLAUDE_CONFIG_DIR"
 
+	assistantType = "assistant"
+
 	claudeVersion    = "2.1.0 (Claude Code)"
 	defaultSessionID = "vendortest-session"
 	echoPrefix       = "echo: "
@@ -295,46 +297,52 @@ func (r *replay) answer(out io.Writer, line []byte) (turnOutcome, error) {
 	return r.play(out, turn, prompt)
 }
 
+type playedTurn struct {
+	reply    []string
+	reported int
+}
+
+func (p *playedTurn) say(out io.Writer, text string) error {
+	p.reply = append(p.reply, text)
+	return writeJSON(out, assistantText(text))
+}
+
 func (r *replay) play(out io.Writer, turn Turn, prompt string) (turnOutcome, error) {
-	var reply []string
-	reported := 0
+	var played playedTurn
 	for _, current := range turn.steps {
-		switch current.kind {
-		case stepHang:
-			return outcomeHung, nil
-		case stepCrash:
-			return outcomeCrashed, nil
-		case stepFail:
-			return outcomeAnswered, writeJSON(out, r.failure(current.text, prompt))
-		case stepAPIError:
-			if err := writeJSON(out, apiErrorText(current.text)); err != nil {
-				return 0, err
-			}
-			return outcomeAnswered, writeJSON(out, r.failure(current.text, prompt))
-		case stepUsage:
-			reported = current.tokens
-			if err := writeJSON(out, assistantUsage(current.tokens)); err != nil {
-				return 0, err
-			}
-		case stepEcho:
-			text := echoPrefix + lastLine(prompt)
-			reply = append(reply, text)
-			if err := writeJSON(out, assistantText(text)); err != nil {
-				return 0, err
-			}
-		case stepText:
-			reply = append(reply, current.text)
-			if err := writeJSON(out, assistantText(current.text)); err != nil {
-				return 0, err
-			}
-		case stepTool:
-			r.toolCalls++
-			if err := writeJSON(out, assistantTool(r.toolCalls, current)); err != nil {
-				return 0, err
-			}
+		outcome, finished, err := r.playStep(out, current, prompt, &played)
+		if finished || err != nil {
+			return outcome, err
 		}
 	}
-	return outcomeAnswered, writeJSON(out, r.result(strings.Join(reply, "\n\n"), prompt, reported))
+	return outcomeAnswered, writeJSON(out, r.result(strings.Join(played.reply, "\n\n"), prompt, played.reported))
+}
+
+func (r *replay) playStep(out io.Writer, current step, prompt string, played *playedTurn) (turnOutcome, bool, error) {
+	switch current.kind {
+	case stepHang:
+		return outcomeHung, true, nil
+	case stepCrash:
+		return outcomeCrashed, true, nil
+	case stepFail:
+		return outcomeAnswered, true, writeJSON(out, r.failure(current.text, prompt))
+	case stepAPIError:
+		if err := writeJSON(out, apiErrorText(current.text)); err != nil {
+			return 0, true, err
+		}
+		return outcomeAnswered, true, writeJSON(out, r.failure(current.text, prompt))
+	case stepUsage:
+		played.reported = current.tokens
+		return 0, false, writeJSON(out, assistantUsage(current.tokens))
+	case stepEcho:
+		return 0, false, played.say(out, echoPrefix+lastLine(prompt))
+	case stepText:
+		return 0, false, played.say(out, current.text)
+	case stepTool:
+		r.toolCalls++
+		return 0, false, writeJSON(out, assistantTool(r.toolCalls, current))
+	}
+	return 0, false, nil
 }
 
 func isHealthProbe(args []string) bool {
@@ -431,7 +439,7 @@ type assistantEvent struct {
 }
 
 func assistantText(text string) assistantEvent {
-	event := assistantEvent{Type: "assistant"}
+	event := assistantEvent{Type: assistantType}
 	event.Message.Content = []contentBlock{{Type: "text", Text: text}}
 	return event
 }
@@ -444,14 +452,14 @@ func apiErrorText(text string) assistantEvent {
 }
 
 func assistantUsage(tokens int) assistantEvent {
-	event := assistantEvent{Type: "assistant"}
+	event := assistantEvent{Type: assistantType}
 	event.Message.Content = []contentBlock{}
 	event.Message.Usage = &messageUsage{InputTokens: tokens}
 	return event
 }
 
 func assistantTool(call int, tool step) assistantEvent {
-	event := assistantEvent{Type: "assistant"}
+	event := assistantEvent{Type: assistantType}
 	event.Message.Content = []contentBlock{{Type: "tool_use", ID: "toolu_" + strconv.Itoa(call), Name: tool.tool, Input: tool.input}}
 	return event
 }

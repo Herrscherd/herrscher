@@ -216,10 +216,11 @@ func instanceGone(ts *testscript.TestScript, neg bool, args []string) {
 	if neg || len(args) != 0 {
 		ts.Fatalf("usage: instancegone")
 	}
-	leaked, err := reapInstance(ts.Getenv(instanceEnv), reapGrace)
+	stopped, survivors, err := reapInstance(procRoot, ts.Getenv(instanceEnv), reapGrace)
 	ts.Check(err)
+	leaked := append(stopped, survivors...)
 	if len(leaked) > 0 {
-		ts.Fatalf("processes of the daemon outlived it, now killed: %s", strings.Join(leaked, "; "))
+		ts.Fatalf("processes of the daemon outlived it, now stopped: %s", strings.Join(leaked, "; "))
 	}
 }
 

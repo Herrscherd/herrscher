@@ -60,7 +60,6 @@ func awaitHubLogs(t *testing.T, h *hub) {
 	if h.sink != nil {
 		awaitSinkLog(t, h.sink)
 	}
-	awaitLogIdle(t, &h.errPort.log)
 }
 
 func announcedAbandons(out string) int {

@@ -197,7 +197,6 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"warn.hub_teardown_overrun":         {"Grace"},
 		"warn.warnings_dropped":             {"Count"},
 		"warn.write_still_running":          nil,
-		"warn.stderr_abandoned":             nil,
 		"warn.session_seed_transcript":      {"Detail", "Name"},
 		"warn.session_usage":                {"Detail", "Name"},
 		"warn.session_compaction_notice":    {"Detail", "Name"},

@@ -108,6 +108,10 @@ func sessionOverrunText(h *hub, name string) string {
 	return newHostMessages().text(h.sessionLanguageSource(name)(), "warn.session_teardown_overrun", map[string]any{nameParam: name, graceParam: h.teardownGrace.String()})
 }
 
+func stuckStartupMarker(string) string {
+	return stuckStartupName
+}
+
 func stuckStartupOverrunText(h *hub, _ string) string {
 	return sessionOverrunText(h, stuckStartupName)
 }
@@ -141,11 +145,12 @@ func TestStopWaitsForTheAcceptFailureWarningToBeWritten(t *testing.T) {
 }
 
 type blockedWriterCase struct {
-	name  string
-	paths []inflightPath
-	bound time.Duration
-	start func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings) *hub
-	want  func(h *hub, name string) string
+	name   string
+	paths  []inflightPath
+	bound  time.Duration
+	start  func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings) *hub
+	marker func(name string) string
+	want   func(h *hub, name string) string
 }
 
 func blockedWriterCases() []blockedWriterCase {
@@ -211,10 +216,10 @@ func blockedWriterCases() []blockedWriterCase {
 					t.Fatal(err)
 				}
 				h.trackStartup(startupRun{name: stuckStartupName, cancel: func() {}, done: make(chan struct{})})
-				awaitGatedWrite(t, warnings)
 				return h
 			},
-			want: stuckStartupOverrunText,
+			marker: stuckStartupMarker,
+			want:   stuckStartupOverrunText,
 		},
 	}
 }
@@ -235,7 +240,11 @@ func TestBlockedWarningWriterDoesNotHoldStopPastTheBudget(t *testing.T) {
 			t.Run(c.name+"/"+path.name, func(t *testing.T) {
 				name := "inflight-" + newTurnID()
 				logs := captureDefaultLog(t)
-				warnings := newGatedWarnings(name)
+				marker := name
+				if c.marker != nil {
+					marker = c.marker(name)
+				}
+				warnings := newGatedWarnings(marker)
 				t.Cleanup(warnings.open)
 				h := c.start(t, name, blockedGrace, warnings)
 
@@ -261,13 +270,12 @@ func TestBlockedWarningWriterDoesNotHoldStopPastTheBudget(t *testing.T) {
 func assertBlockedWriterOutcome(t *testing.T, c blockedWriterCase, h *hub, name string, warnings *gatedWarnings, logs *hookedLog) {
 	t.Helper()
 	if c.want != nil {
+		awaitGatedWrite(t, warnings)
 		warnings.open()
 		awaitSinkQuiet(t, h.sink)
-		if strings.Contains(warnings.out.String(), c.want(h, name)) {
-			return
-		}
-		if droppedWarnings(h.sink) < 1 {
-			t.Fatalf("the overrun line was neither written to the warnings nor counted as lost: %q", warnings.out.String())
+		want := c.want(h, name)
+		if !strings.Contains(warnings.out.String(), want) {
+			t.Fatalf("the overrun line never reached the warnings writer once it unblocked: want %q in %q", want, warnings.out.String())
 		}
 		return
 	}

@@ -402,7 +402,6 @@ func (h *hub) closeAndRemoveSockets() error {
 	h.awaitInFlight()
 	h.stopStartups(starts)
 	h.closeWarnings()
-	h.closeStderr()
 	return removeSocketFiles(h.runtime, h.instanceID, sessions)
 }
 

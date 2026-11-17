@@ -195,15 +195,20 @@ func TestEnvironVerdictTreatsARefusedEnvironAsForeign(t *testing.T) {
 
 func TestDescendantAliveSeesALiveDescendantOfOurs(t *testing.T) {
 	entry := instanceEntry("probe-" + strconv.Itoa(os.Getpid()))
-	cmd := exec.Command("sleep", strconv.Itoa(int(vendortest.DescendantSleep/time.Second)))
+	cmd := exec.CommandContext(t.Context(), "sleep", strconv.Itoa(int(vendortest.DescendantSleep/time.Second)))
 	cmd.Env = append(os.Environ(), entry)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer func() {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
-	}()
+	t.Cleanup(func() {
+		if killErr := cmd.Process.Kill(); killErr != nil && !errors.Is(killErr, os.ErrProcessDone) {
+			t.Errorf("kill the probe: %v", killErr)
+		}
+		var exitErr *exec.ExitError
+		if waitErr := cmd.Wait(); waitErr != nil && !(errors.As(waitErr, &exitErr) && exitErr.String() == "signal: killed") {
+			t.Errorf("wait for the probe: %v", waitErr)
+		}
+	})
 	alive, err := descendantAlive(cmd.Process.Pid, entry)
 	if err != nil || !alive {
 		t.Fatalf("a live descendant of ours carrying the marker was not seen: alive=%v err=%v: the scan would report a surviving descendant as gone", alive, err)

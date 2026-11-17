@@ -365,7 +365,7 @@ func (s *warningSink) Close() {
 	taken := ask(s, s.seal)
 	logNotConfirmed(taken.lost, taken.unconfirmed)
 	if !s.joinLastWrite() {
-		slog.Warn(s.stillRunning())
+		slog.Warn("write still running at close", "note", s.stillRunning())
 	}
 }
 

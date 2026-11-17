@@ -96,6 +96,6 @@ func (h *hub) closeStderr() {
 	defer stop()
 	joined := h.errPort.shutdown(budget)
 	if dropped := h.errPort.droppedCount(); dropped > 0 || !joined {
-		slog.Warn(newHostMessages().text(h.textLanguage()(), "warn.stderr_abandoned", nil), "dropped", dropped, "writer_joined", joined)
+		slog.Warn("stderr lines abandoned at shutdown", "note", newHostMessages().text(h.textLanguage()(), "warn.stderr_abandoned", nil), "dropped", dropped, "writer_joined", joined)
 	}
 }

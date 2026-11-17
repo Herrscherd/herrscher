@@ -213,7 +213,7 @@ func TestReadTranscriptTailSkipsTheLineCutAtTheWindowStart(t *testing.T) {
 	}
 	const total = 1000
 	var file []byte
-	for i := 0; i < total; i++ {
+	for i := range total {
 		payload, err := json.Marshal(TranscriptEntry{Ts: "t", Role: "user", Text: fmt.Sprintf("%04d-%s", i, strings.Repeat("x", 280))})
 		if err != nil {
 			t.Fatal(err)

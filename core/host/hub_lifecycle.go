@@ -373,11 +373,11 @@ func (h *hub) stopLive() {
 		live.cancel()
 		live.release()
 	}
+	window, cancel := h.newGrace()
 	for name, live := range lives {
-		window, cancel := h.newGrace()
 		h.awaitTeardown(name, live, window)
-		cancel()
 	}
+	cancel()
 	h.awaitInFlight()
 	h.stopStartups(starts)
 }

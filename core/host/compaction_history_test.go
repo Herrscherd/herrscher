@@ -198,7 +198,7 @@ func TestMissingCompactorSettingRendersInFrench(t *testing.T) {
 	t.Setenv(typesafeEnv, "")
 	owner := newHostMessages()
 	_, err := newCompactionPolicy(context.Background(), owner, testLanguage(), io.Discard, nil, []string{"jev", contracts.CompactStageBackend}, nil)
-	const want = `compactStack "jev" : ces réglages doivent être définis : TYPESAFE_API_KEY. Le démon ne démarre pas tant que cette étape échoue : corrige-la ou retire-la de compactStack, puis herrscher service restart`
+	const want = `compactStack "jev" : ces réglages doivent être définis : api_key (set TYPESAFE_API_KEY)`
 	if got := errorTextIn(owner, i18n.French, err); got != want {
 		t.Fatalf("French rendering = %q, want %q", got, want)
 	}

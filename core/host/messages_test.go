@@ -582,6 +582,7 @@ func TestErrorsIsSurvivesEveryLocalizableTypedNil(t *testing.T) {
 	owner := newHostMessages()
 	foreign := errors.New("cible")
 	params := map[string]any{nameParam: "digest"}
+	plainWrap := wrapHost(owner, errors.New("<nil>"), "warn.session_start", params)
 	for _, typedNil := range typedNilLocalizables() {
 		if errors.Is(typedNil, foreign) {
 			t.Fatalf("a typed nil %T matched a foreign target", typedNil)
@@ -589,9 +590,36 @@ func TestErrorsIsSurvivesEveryLocalizableTypedNil(t *testing.T) {
 		if errors.Is(fmt.Errorf("contexte: %w", typedNil), foreign) {
 			t.Fatalf("a typed nil %T inside a %%w wrap matched a foreign target", typedNil)
 		}
-		if errors.Is(wrapHost(owner, typedNil, "warn.session_start", params), foreign) {
+		wrapped := wrapHost(owner, typedNil, "warn.session_start", params)
+		if errors.Is(wrapped, foreign) {
 			t.Fatalf("a typed nil %T inside a host wrap matched a foreign target", typedNil)
 		}
+		for _, lang := range []i18n.Language{i18n.French, i18n.English} {
+			if got, want := localizeHostError(owner, lang, typedNil).Error(), "<nil>"; got != want {
+				t.Fatalf("a bare typed nil %T rendered %q in %v, want %q", typedNil, got, lang, want)
+			}
+			if got, want := localizeHostError(owner, lang, fmt.Errorf("contexte: %w", typedNil)).Error(), "contexte: <nil>"; got != want {
+				t.Fatalf("a typed nil %T under %%w rendered %q in %v, want %q", typedNil, got, lang, want)
+			}
+			if got, want := localizeHostError(owner, lang, errors.Join(errors.New("a"), typedNil)).Error(), "a\n<nil>"; got != want {
+				t.Fatalf("a typed nil %T under errors.Join rendered %q in %v, want %q", typedNil, got, lang, want)
+			}
+			if got, want := localizeHostError(owner, lang, wrapped).Error(), localizeHostError(owner, lang, plainWrap).Error(); got != want {
+				t.Fatalf("a typed nil %T in a host wrap rendered %q in %v, want %q", typedNil, got, lang, want)
+			}
+		}
+	}
+}
+
+func TestLocalizeHostErrorTranslatesASentinelBesideATypedNil(t *testing.T) {
+	owner := newHostMessages()
+	var nilWrap *hostWrapError
+	err := errors.Join(fmt.Errorf("a: %w", errHubClosed), nilWrap)
+	if got, want := localizeHostError(owner, i18n.French, err).Error(), "a: le démon s'arrête et ne démarre plus de session\n<nil>"; got != want {
+		t.Fatalf("a sentinel beside a typed nil rendered %q in French, want %q", got, want)
+	}
+	if got, want := localizeHostError(owner, i18n.English, err).Error(), "a: the daemon is shutting down and starts no session\n<nil>"; got != want {
+		t.Fatalf("a sentinel beside a typed nil rendered %q in English, want %q", got, want)
 	}
 }
 

@@ -223,7 +223,12 @@ type RemoteResolveError struct {
 	Err      error
 }
 
-func (e *RemoteResolveError) Error() string { return e.render(e.messages, i18n.English) }
+func (e *RemoteResolveError) Error() string {
+	if e == nil {
+		return "<nil>"
+	}
+	return e.render(e.messages, i18n.English)
+}
 
 func (e *RemoteResolveError) render(messages *hostMessages, lang i18n.Language) string {
 	return messages.text(lang, "remote.unavailable", map[string]any{

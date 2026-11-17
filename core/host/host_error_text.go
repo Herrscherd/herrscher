@@ -3,7 +3,6 @@ package host
 import (
 	"context"
 	"errors"
-	"slices"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -117,9 +116,8 @@ func localizeHostError(messages *hostMessages, lang i18n.Language, err error) er
 	text := errorTextIn(messages, resolved, err)
 	isLocal := isLocalized(err)
 	translated := false
-	nilInChain := holdsNilLocalizable(err)
 	for _, known := range hostErrorKeys() {
-		if nilInChain || !errors.Is(err, known.sentinel) {
+		if !errors.Is(err, known.sentinel) {
 			continue
 		}
 		phrase, textErr := clitext.Text(resolved, clitext.Key(known.key), nil)
@@ -133,19 +131,6 @@ func localizeHostError(messages *hostMessages, lang i18n.Language, err error) er
 		return err
 	}
 	return localizedHostError{text: text, cause: err}
-}
-
-func holdsNilLocalizable(err error) bool {
-	if localizable, found := errors.AsType[localizableError](err); found && isNilLocalizable(localizable) {
-		return true
-	}
-	if next := errors.Unwrap(err); next != nil {
-		return holdsNilLocalizable(next)
-	}
-	if multi, ok := err.(interface{ Unwrap() []error }); ok {
-		return slices.ContainsFunc(multi.Unwrap(), holdsNilLocalizable)
-	}
-	return false
 }
 
 func localizeCommandErrors(messages *hostMessages, reg *cli.Registry, store *state.State, live *operatorLanguage) {

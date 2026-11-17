@@ -1,6 +1,7 @@
 package health
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -271,7 +272,7 @@ func fallsBackToArguments(err error) bool {
 func unrenderedNotice(notice contracts.Notice) string {
 	texts := make([]string, 0, len(notice.Args))
 	for _, arg := range notice.Args {
-		if text, isText := arg.Value().(string); isText && text != "" {
+		if text, shown := argumentText(arg.Value()); shown {
 			texts = append(texts, text)
 		}
 	}
@@ -279,6 +280,20 @@ func unrenderedNotice(notice contracts.Notice) string {
 		return strconv.FormatUint(uint64(notice.Code), 10)
 	}
 	return strings.Join(texts, factsSep)
+}
+
+func argumentText(value any) (string, bool) {
+	switch typed := value.(type) {
+	case string:
+		return typed, typed != ""
+	case json.RawMessage:
+		var text string
+		if err := json.Unmarshal(typed, &text); err == nil {
+			return text, text != ""
+		}
+		return string(typed), len(typed) > 0
+	}
+	return "", false
 }
 
 func (r *renderer) keep(err error) {

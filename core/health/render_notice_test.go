@@ -1,6 +1,7 @@
 package health
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -8,6 +9,31 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
+
+func TestArgumentTextShowsTheTextOfEachValue(t *testing.T) {
+	cases := []struct {
+		name  string
+		value any
+		want  string
+		shown bool
+	}{
+		{"text", "zeta", "zeta", true},
+		{"empty text", "", "", false},
+		{"unknown kind holding a JSON string", json.RawMessage(`"zeta"`), "zeta", true},
+		{"unknown kind holding an empty JSON string", json.RawMessage(`""`), "", false},
+		{"unknown kind holding a JSON number", json.RawMessage(`3`), "3", true},
+		{"count keeps its number out of the text", 3, "", false},
+		{"no value", nil, "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, shown := argumentText(tc.value)
+			if got != tc.want || shown != tc.shown {
+				t.Fatalf("argumentText(%v) = (%q, %t), want (%q, %t)", tc.value, got, shown, tc.want, tc.shown)
+			}
+		})
+	}
+}
 
 func TestNoticeKeepsAnErrorTheRendererReturnsForAnUnsupportedLanguage(t *testing.T) {
 	r := newRenderer(i18n.Language(200))

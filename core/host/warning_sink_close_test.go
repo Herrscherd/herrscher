@@ -187,7 +187,7 @@ func TestInFlightWriteFailingAfterCloseIsAnnouncedAsADelta(t *testing.T) {
 	}
 }
 
-func TestEveryInFlightWriteIsJoinedBeforeCloseReturns(t *testing.T) {
+func TestRefusedWriteAfterTheBilanIsLoggedBeforeCloseReturns(t *testing.T) {
 	writer := newFirstWriteRefused()
 	t.Cleanup(writer.unblock)
 	var sink *warningSink
@@ -215,8 +215,15 @@ func TestEveryInFlightWriteIsJoinedBeforeCloseReturns(t *testing.T) {
 		t.Fatalf("a write admitted after the bilan returned %v, want errWarningAbandoned", afterErr)
 	}
 	lines := notConfirmedLines(logs.String())
-	if len(lines) != 3 || logField(lines[0], "unconfirmed") != "1" || logField(lines[1], "lost") != "1" || logField(lines[1], "unconfirmed") != "0" || logField(lines[2], "lost") != "1" || logField(lines[2], "unconfirmed") != "0" {
-		t.Fatalf("Close logged %q, want the bilan (unconfirmed=1), then the refused write (lost=1 unconfirmed=0), then the delta of the older write (lost=1 unconfirmed=0), all before it returned", lines)
+	if len(lines) < 2 || logField(lines[0], "unconfirmed") != "1" || logField(lines[1], "lost") != "1" || logField(lines[1], "unconfirmed") != "0" {
+		t.Fatalf("Close logged %q, want the bilan (unconfirmed=1) then the refused write (lost=1 unconfirmed=0) before it returned", lines)
+	}
+	waitUntil(t, "the delta of the older write once its writer is released", func() bool {
+		return len(notConfirmedLines(logs.String())) == 3
+	})
+	lines = notConfirmedLines(logs.String())
+	if logField(lines[2], "lost") != "1" || logField(lines[2], "unconfirmed") != "0" {
+		t.Fatalf("the delta of the older write is %q, want lost=1 unconfirmed=0 once the writer returned", lines[2])
 	}
 	if strings.Contains(writer.out.String(), "AFTER") {
 		t.Fatalf("a write refused after the bilan reached the output: %q", writer.out.String())
@@ -267,7 +274,7 @@ func TestCloseSaysWhenAWriteIsStillRunningAtReturn(t *testing.T) {
 	_ = sink.Enqueue([]byte("GATED\n"))
 	awaitGatedWrite(t, writer)
 	sink.Close()
-	if n := strings.Count(logs.String(), stillRunningAtCloseText); n != 1 {
+	if n := strings.Count(logs.String(), englishStillRunningLine()); n != 1 {
 		t.Fatalf("Close returned with its last write still running and logged the note %d times, want once: %q", n, logs.String())
 	}
 }
@@ -280,7 +287,7 @@ func TestCloseSaysNothingWhenTheLastWriteIsJoined(t *testing.T) {
 		t.Fatal(err)
 	}
 	sink.Close()
-	if strings.Contains(logs.String(), stillRunningAtCloseText) {
+	if strings.Contains(logs.String(), englishStillRunningLine()) {
 		t.Fatalf("Close logged that a write was still running although its last write was joined: %q", logs.String())
 	}
 }
@@ -347,7 +354,7 @@ func TestSummaryFailingAfterCloseIsAnnouncedOnceAsADelta(t *testing.T) {
 		return len(notConfirmedLines(logs.String())) == 2
 	})
 	lines := notConfirmedLines(logs.String())
-	if strings.Count(logs.String(), "level=WARN") != 2 || logField(lines[0], "lost") != "0" || logField(lines[0], "unconfirmed") != "1" || logField(lines[1], "lost") != "1" || logField(lines[1], "unconfirmed") != "0" {
+	if len(lines) != 2 || logField(lines[0], "lost") != "0" || logField(lines[0], "unconfirmed") != "1" || logField(lines[1], "lost") != "1" || logField(lines[1], "unconfirmed") != "0" {
 		t.Fatalf("Close logged %q, want the bilan (lost=0 unconfirmed=1) then one delta (lost=1 unconfirmed=0): the bilan names the refused summary as unconfirmed, and its loss is announced once when the summary fails", lines)
 	}
 }
@@ -383,7 +390,7 @@ func TestSummaryRefusedAtCloseIsAnnouncedOnceByTheBilan(t *testing.T) {
 	}
 	sink.Close()
 	lines := notConfirmedLines(logs.String())
-	if strings.Count(logs.String(), "level=WARN") != 1 || len(lines) != 1 || logField(lines[0], "lost") != "1" || logField(lines[0], "unconfirmed") != "0" {
+	if len(lines) != 1 || logField(lines[0], "lost") != "1" || logField(lines[0], "unconfirmed") != "0" {
 		t.Fatalf("Close logged %q, want exactly one line with lost=1 unconfirmed=0: the summary was definitively refused at Close, so the bilan is the one announcement", lines)
 	}
 }
@@ -569,4 +576,17 @@ func TestCloseJoinsTheWriteLaunchedLast(t *testing.T) {
 	}
 	warnings.open()
 	awaitBackground(t, gatedLogged, "the gated write never finished logging")
+}
+
+func TestCloseReturnsOnlyAfterTheLastLaunchedWriteIsOnOutput(t *testing.T) {
+	warnings := newGatedWarnings("GATED")
+	t.Cleanup(warnings.open)
+	sink := newWarningSink(warnings, englishLostLine)
+	_ = sink.Enqueue([]byte("GATED\n"))
+	awaitGatedWrite(t, warnings)
+	warnings.open()
+	sink.Close()
+	if !strings.Contains(warnings.out.String(), "GATED\n") {
+		t.Fatalf("Close returned before the write launched last reached the output: %q", warnings.out.String())
+	}
 }

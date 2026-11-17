@@ -646,6 +646,16 @@
     "other": "herrscher serve : {{.Count}} avertissements perdus pendant que la sortie était bloquée"
   },
   {
+    "id": "warn.write_still_running",
+    "description": "A warning write was still running when the warning sink closed; its outcome may be logged after the close returns",
+    "other": "herrscher serve : une écriture d'avertissement tournait encore au retour de Close"
+  },
+  {
+    "id": "warn.stderr_abandoned",
+    "description": "Stderr lines were dropped or left behind when the hub stopped",
+    "other": "herrscher serve : des lignes stderr ont été abandonnées à l'arrêt"
+  },
+  {
     "id": "warn.session_seed_transcript",
     "description": "A transcript entry of a seeded session could not be written",
     "other": "herrscher serve : session \"{{.Name}}\" : entrée de transcription initiale perdue : {{.Detail}}"

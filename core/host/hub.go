@@ -38,6 +38,7 @@ type hub struct {
 	metrics  *metrics.Registry
 	warnings io.Writer
 	stderr   io.Writer
+	errPort  stderrPort
 	sink     *warningSink
 
 	coordinator    contracts.Coordinator
@@ -96,7 +97,7 @@ func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir str
 	for _, opt := range opts {
 		opt(created)
 	}
-	created.sink = newWarningSink(created.warnings, created.lostWarningLine)
+	created.sink = newWarningSink(created.warnings, created.lostWarningLine, withStillRunningLine(created.writeStillRunningLine))
 	created.warnings = created.sink
 	if sup != nil {
 		sup.SetFailureSink(created.reportSessionFailure)
@@ -109,6 +110,10 @@ func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir str
 
 func (h *hub) lostWarningLine(lost int) string {
 	return newHostMessages().text(h.textLanguage()(), "warn.warnings_dropped", map[string]any{countParam: lost})
+}
+
+func (h *hub) writeStillRunningLine() string {
+	return newHostMessages().text(h.textLanguage()(), "warn.write_still_running", nil)
 }
 
 func (h *hub) operatorCommands() asOperator {

@@ -401,6 +401,7 @@ func (h *hub) closeAndRemoveSockets() error {
 	h.awaitInFlight()
 	h.stopStartups(starts)
 	h.closeWarnings()
+	h.closeStderr()
 	return removeSocketFiles(h.runtime, h.instanceID, sessions)
 }
 
@@ -486,11 +487,8 @@ func (h *hub) withinGrace(name string, window teardownWindow, step func()) bool 
 }
 
 func (h *hub) warnSessionOverrun(name string) {
-	written := make(chan struct{})
-	go func() {
-		defer close(written)
-		warnTo(h.stderr, h.sessionLanguageSource(name)(), "warn.session_teardown_overrun", h.overrunParams(name))
-	}()
+	text := newHostMessages().text(h.sessionLanguageSource(name)(), "warn.session_teardown_overrun", h.overrunParams(name))
+	written := h.errPort.offer(warningWriter(h.stderr), text)
 	waitWithin(written, warningWriteBudget)
 }
 

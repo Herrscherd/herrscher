@@ -646,6 +646,16 @@
     "other": "herrscher serve: {{.Count}} warnings lost while the output was blocked"
   },
   {
+    "id": "warn.write_still_running",
+    "description": "A warning write was still running when the warning sink closed; its outcome may be logged after the close returns",
+    "other": "herrscher serve: a warning write was still running when Close returned"
+  },
+  {
+    "id": "warn.stderr_abandoned",
+    "description": "Stderr lines were dropped or left behind when the hub stopped",
+    "other": "herrscher serve: stderr lines were abandoned at shutdown"
+  },
+  {
     "id": "warn.session_seed_transcript",
     "description": "A transcript entry of a seeded session could not be written",
     "other": "herrscher serve: session \"{{.Name}}\": seed transcript entry dropped: {{.Detail}}"

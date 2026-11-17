@@ -226,7 +226,7 @@ const (
 )
 
 func blockedStopBound() time.Duration {
-	return 3*blockedGrace + 6*warningWriteBudget + blockedStopMargin
+	return 3*blockedGrace + 7*warningWriteBudget + blockedStopMargin
 }
 
 func TestBlockedWarningWriterDoesNotHoldStopPastTheBudget(t *testing.T) {
@@ -271,8 +271,8 @@ func assertBlockedWriterOutcome(t *testing.T, c blockedWriterCase, h *hub, name 
 		t.Fatal("the frozen write did not settle within the grace window")
 	}
 	h.sink.Close()
-	if warnLines, bilanLines := strings.Count(logs.String(), "level=WARN"), len(notConfirmedLines(logs.String())); warnLines != bilanLines {
-		t.Fatalf("a loss was logged outside the bilan: %d warnings, %d of them the bilan: %q", warnLines, bilanLines, logs.String())
+	if outside := warnLinesOutsideBilan(logs.String()); len(outside) != 0 {
+		t.Fatalf("a loss was logged outside the bilan: %q", outside)
 	}
 	dropped := droppedWarnings(h.sink)
 	announced := announcedLostOnOutput(warnings.out.String(), dropped) + announcedLostTotal(t, logs.String())

@@ -193,6 +193,16 @@ func notConfirmedLines(text string) []string {
 	return lines
 }
 
+func warnLinesOutsideBilan(text string) []string {
+	var lines []string
+	for _, line := range strings.Split(text, "\n") {
+		if strings.Contains(line, "level=WARN") && !strings.Contains(line, "not all confirmed") && !strings.Contains(line, englishStillRunningLine()) {
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
 type hookedLog struct {
 	buf  lockedBuffer
 	hook func(line string)

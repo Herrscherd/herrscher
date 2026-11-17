@@ -8,6 +8,8 @@ import (
 	"slices"
 	"sync/atomic"
 	"time"
+
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
 
 const (
@@ -58,21 +60,22 @@ type sinkQuiet struct {
 }
 
 type warningSink struct {
-	out         io.Writer
-	lostLine    func(lost int) string
-	commands    chan func()
-	running     atomic.Bool
-	queue       []*warning
-	queuedBytes int
-	inflight    *inflightWrite
-	idle        []chan struct{}
-	dropped     int
-	reported    int
-	closed      bool
-	sealed      bool
-	finished    chan struct{}
-	lastLogged  chan struct{}
-	idleWait    time.Duration
+	out          io.Writer
+	lostLine     func(lost int) string
+	commands     chan func()
+	running      atomic.Bool
+	queue        []*warning
+	queuedBytes  int
+	inflight     *inflightWrite
+	idle         []chan struct{}
+	dropped      int
+	reported     int
+	closed       bool
+	sealed       bool
+	finished     chan struct{}
+	lastLogged   chan struct{}
+	idleWait     time.Duration
+	stillRunning func() string
 }
 
 type sinkOption func(*warningSink)
@@ -81,13 +84,18 @@ func withIdleWait(wait time.Duration) sinkOption {
 	return func(s *warningSink) { s.idleWait = wait }
 }
 
+func withStillRunningLine(line func() string) sinkOption {
+	return func(s *warningSink) { s.stillRunning = line }
+}
+
 func newWarningSink(out io.Writer, lostLine func(lost int) string, opts ...sinkOption) *warningSink {
 	created := &warningSink{
-		out:      warningWriter(out),
-		lostLine: lostLine,
-		commands: make(chan func(), warningCommandLimit),
-		finished: make(chan struct{}),
-		idleWait: warningWriteBudget,
+		out:          warningWriter(out),
+		lostLine:     lostLine,
+		commands:     make(chan func(), warningCommandLimit),
+		finished:     make(chan struct{}),
+		idleWait:     warningWriteBudget,
+		stillRunning: englishStillRunningLine,
 	}
 	for _, opt := range opts {
 		opt(created)
@@ -357,14 +365,12 @@ func (s *warningSink) Close() {
 	taken := ask(s, s.seal)
 	logNotConfirmed(taken.lost, taken.unconfirmed)
 	if !s.joinLastWrite() {
-		logWriteStillRunning()
+		slog.Warn(s.stillRunning())
 	}
 }
 
-const stillRunningAtCloseText = "a warning write was still running when Close returned"
-
-func logWriteStillRunning() {
-	slog.Info(stillRunningAtCloseText)
+func englishStillRunningLine() string {
+	return newHostMessages().text(i18n.English, "warn.write_still_running", nil)
 }
 
 func (s *warningSink) joinLastWrite() bool {

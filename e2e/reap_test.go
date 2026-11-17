@@ -171,8 +171,7 @@ func stopDaemon(tb testing.TB, daemon *exec.Cmd) {
 		tb.Error(err)
 	}
 	if err := daemon.Wait(); err != nil {
-		exit, ok := errors.AsType[*exec.ExitError](err)
-		if !ok || exit.Exited() {
+		if _, isExit := errors.AsType[*exec.ExitError](err); !isExit {
 			tb.Error(err)
 		}
 	}

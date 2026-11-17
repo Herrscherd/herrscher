@@ -44,7 +44,7 @@ func TestSubmittingFromAnUnboundTabNoticesInFrench(t *testing.T) {
 
 func TestAttachedNoticeIsRenderedInFrench(t *testing.T) {
 	events := make(chan tui.RoutedEvent, 1)
-	a := newAttachedDaemonState(testMessages(), i18n.French, nil, events)
+	a := newAttachedDaemonState(testMessages(), host.NewMessages(), i18n.French, nil, events)
 	a.notify("tab-1", clitext.AttachNoSession, nil)
 	ev := <-events
 	const want = "herrscher : aucune session n'est plus liée à cet onglet"
@@ -54,7 +54,7 @@ func TestAttachedNoticeIsRenderedInFrench(t *testing.T) {
 }
 
 func TestAttachedRefusalIsRenderedInFrench(t *testing.T) {
-	a := newAttachedDaemonState(testMessages(), i18n.French, nil, nil)
+	a := newAttachedDaemonState(testMessages(), host.NewMessages(), i18n.French, nil, nil)
 	_, err := a.Dispatch([]string{"bogus"})
 	const want = `commande "bogus" indisponible depuis le terminal (autorisées : session, agent)`
 	if err == nil || err.Error() != want {
@@ -342,7 +342,7 @@ func containsPair(argv []string, flag, value string) bool {
 
 func TestUnansweredSessionListIsNotRequestedTwiceInAGivenSecond(t *testing.T) {
 	asked := 0
-	attached := newAttachedDaemonState(testMessages(), i18n.English, nil, nil)
+	attached := newAttachedDaemonState(testMessages(), host.NewMessages(), i18n.English, nil, nil)
 	attached.send = func([]string) (string, error) {
 		asked++
 		return "", errors.New("daemon down")

@@ -161,7 +161,7 @@ func TestRunAttachedRoutesTheTUIThroughTheClientLog(t *testing.T) {
 	runner := attachRunner{
 		log: silentLogger(),
 		connect: func(ctx context.Context, _ host.RuntimeLayout, _, _ string, _ i18n.Language) (*attachedDaemon, error) {
-			return newAttachedDaemonState(testMessages(), i18n.English, ctx.Done(), make(chan tui.RoutedEvent)), nil
+			return newAttachedDaemonState(testMessages(), host.NewMessages(), i18n.English, ctx.Done(), make(chan tui.RoutedEvent)), nil
 		},
 		run: func(_ context.Context, _ context.CancelFunc, _ tui.Backend, _ ...tui.Option) error {
 			fmt.Fprintln(os.Stderr, "tui stderr line")

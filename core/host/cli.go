@@ -197,8 +197,8 @@ func wireSupervisor(sup *supervisor.Supervisor, layout RuntimeLayout, store *sta
 // does: which admin a session channel is minted on is a question about the set:
 // the home's owner for a normal session, the terminal gateway for a
 // terminal-only one. One set can only ever answer the first.
-func NewRegistry(ctx context.Context, cliMessages *clitext.Messages, gws []Deps, options Options) (*cli.Registry, error) {
-	messages := newHostMessages()
+func NewRegistry(ctx context.Context, cliMessages *clitext.Messages, hostMessages *Messages, gws []Deps, options Options) (*cli.Registry, error) {
+	messages := hostMessages.owner
 	hostState, err := state.LoadState(options.StatePath)
 	if err != nil {
 		return nil, err

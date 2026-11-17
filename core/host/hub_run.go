@@ -23,8 +23,8 @@ import (
 // health/liveness. gws are the gateway sets the daemon owns (built from the
 // registry by the caller). Command dispatch no longer runs here.
 // Session/service commands run through the operator CLI (see NewRegistry).
-func RunHub(ctx context.Context, cliMessages *clitext.Messages, gws []Deps, closers []contracts.Gateway, options Options) error {
-	messages := newHostMessages()
+func RunHub(ctx context.Context, cliMessages *clitext.Messages, hostMessages *Messages, gws []Deps, closers []contracts.Gateway, options Options) error {
+	messages := hostMessages.owner
 	clock, tick, settingsErr := schedulerSettings(messages)
 	if settingsErr != nil {
 		closeGateways(ctx, closers, obs.Stderr(false))

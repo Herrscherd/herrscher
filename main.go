@@ -196,27 +196,27 @@ func runCommand(ctx context.Context, layout host.RuntimeLayout, messages *clitex
 	case "serve":
 		return runServe(ctx, layout, messages, hostMessages, args, serveDaemon)
 	case "session":
-		return runSession(ctx, layout, messages, args)
+		return runSession(ctx, layout, messages, hostMessages, args)
 	case "agent":
-		return runAgent(ctx, layout, messages, args)
+		return runAgent(ctx, layout, messages, hostMessages, args)
 	case "account":
 		return runAccount(ctx, messages, hostMessages, args)
 	case "host":
-		return runHost(ctx, layout, messages, args)
+		return runHost(ctx, layout, messages, hostMessages, args)
 	case "approve":
-		return runApprove(ctx, layout, messages, args)
+		return runApprove(ctx, layout, messages, hostMessages, args)
 	case "role":
-		return runRole(ctx, layout, messages, args)
+		return runRole(ctx, layout, messages, hostMessages, args)
 	case "memory":
-		return runMemory(ctx, layout, messages, args)
+		return runMemory(ctx, layout, messages, hostMessages, args)
 	case "models":
-		return runModels(ctx, layout, messages, args)
+		return runModels(ctx, layout, messages, hostMessages, args)
 	case "service":
 		return runService(ctx, messages, args)
 	case "plugin-host":
 		return runPluginHost(ctx, messages, hostMessages, args)
 	case "worktree":
-		return host.RunWorktree(ctx, args)
+		return host.RunWorktree(ctx, messages, hostMessages, args)
 	case healthVerb:
 		return runHealth(ctx, layout, messages, hostMessages, args)
 	case usageVerb:

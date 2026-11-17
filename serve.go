@@ -157,7 +157,7 @@ func serveWith(ctx context.Context, layout host.RuntimeLayout, messages *clitext
 
 	openOnForeground(open, foreground)
 	models.StartBackground(ctx, contracts.Default.Backends())
-	return runHubForeground(ctx, messages, *statePath, gws, closers, foreground, opts)
+	return runHubForeground(ctx, messages, hostMessages, *statePath, gws, closers, foreground, opts)
 }
 
 func openOnForeground(open *openWindow, foreground contracts.Foreground) {
@@ -235,9 +235,9 @@ func startGateways(ctx context.Context, messages *clitext.Messages, lang i18n.La
 	return bindGateways(messages, raw, lang)
 }
 
-func runHubForeground(ctx context.Context, messages *clitext.Messages, statePath string, gws []host.Deps, closers []contracts.Gateway, foreground contracts.Foreground, opts host.Options) error {
+func runHubForeground(ctx context.Context, messages *clitext.Messages, hostMessages *host.Messages, statePath string, gws []host.Deps, closers []contracts.Gateway, foreground contracts.Foreground, opts host.Options) error {
 	if foreground == nil || !term.IsTerminal(int(os.Stdout.Fd())) {
-		return runHub(ctx, messages, gws, closers, opts)
+		return runHub(ctx, messages, hostMessages, gws, closers, opts)
 	}
 	if restore, rerr := redirectStderrCapped(filepath.Join(filepath.Dir(statePath), "serve.log"), maxLogFileBytes); rerr == nil {
 		defer func() {
@@ -249,7 +249,7 @@ func runHubForeground(ctx context.Context, messages *clitext.Messages, statePath
 	hubCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	return superviseForeground(hubCtx, messages, cancel, foreground, func(ctx context.Context) error {
-		return runHub(ctx, messages, gws, closers, opts)
+		return runHub(ctx, messages, hostMessages, gws, closers, opts)
 	})
 }
 
@@ -274,8 +274,8 @@ func superviseForeground(ctx context.Context, messages *clitext.Messages, cancel
 	return foregroundErr
 }
 
-func runHub(ctx context.Context, messages *clitext.Messages, gws []host.Deps, closers []contracts.Gateway, opts host.Options) error {
-	return host.RunHub(ctx, messages, gws, closers, opts)
+func runHub(ctx context.Context, messages *clitext.Messages, hostMessages *host.Messages, gws []host.Deps, closers []contracts.Gateway, opts host.Options) error {
+	return host.RunHub(ctx, messages, hostMessages, gws, closers, opts)
 }
 
 func bindGateways(messages *clitext.Messages, sets []host.Deps, lang i18n.Language) ([]host.Deps, []contracts.Gateway, contracts.Foreground, []contracts.Cmd, error) {
@@ -306,13 +306,13 @@ func loadOperator() (config.Config, language.Languages, error) {
 	return cfg, langs, err
 }
 
-func newOperatorRegistry(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, cfg config.Config, lang i18n.Language) (*cli.Registry, error) {
+func newOperatorRegistry(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, cfg config.Config, lang i18n.Language) (*cli.Registry, error) {
 	gws, err := buildGateways(ctx, messages, lang)
 	if err != nil {
 		return nil, err
 	}
 	home := homeRef(cfg)
-	return host.NewRegistry(ctx, messages, gws, host.Options{
+	return host.NewRegistry(ctx, messages, hostMessages, gws, host.Options{
 		Warnings:   os.Stderr,
 		Runtime:    layout,
 		StatePath:  host.DefaultStatePath(),
@@ -325,12 +325,12 @@ func newOperatorRegistry(ctx context.Context, layout host.RuntimeLayout, message
 	})
 }
 
-func runRegistryVerb(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, verb string, args []string) error {
+func runRegistryVerb(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, verb string, args []string) error {
 	cfg, langs, err := loadOperator()
 	if err != nil {
 		return err
 	}
-	reg, err := newOperatorRegistry(ctx, layout, messages, cfg, langs.Client)
+	reg, err := newOperatorRegistry(ctx, layout, messages, hostMessages, cfg, langs.Client)
 	if err != nil {
 		return err
 	}
@@ -358,7 +358,7 @@ func runPrompt(ctx context.Context, layout host.RuntimeLayout, messages *clitext
 		if err != nil {
 			return err
 		}
-		reg, err := newOperatorRegistry(ctx, layout, messages, cfg, langs.Client)
+		reg, err := newOperatorRegistry(ctx, layout, messages, hostMessages, cfg, langs.Client)
 		if err != nil {
 			return err
 		}
@@ -389,7 +389,7 @@ func runPromptWindow(ctx context.Context, layout host.RuntimeLayout, messages *c
 	if err != nil {
 		return err
 	}
-	reg, err := newOperatorRegistry(ctx, layout, messages, cfg, langs.Client)
+	reg, err := newOperatorRegistry(ctx, layout, messages, hostMessages, cfg, langs.Client)
 	if err != nil {
 		return err
 	}

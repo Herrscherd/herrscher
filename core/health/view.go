@@ -78,11 +78,11 @@ type View struct {
 // fails.
 func (s Snapshot) View(lang i18n.Language) (View, error) {
 	text := newRenderer(lang)
-	view := s.view(text)
+	view := s.buildView(text)
 	return view, text.err
 }
 
-func (s Snapshot) view(text *renderer) View {
+func (s Snapshot) buildView(text *renderer) View {
 	view := View{
 		Title:  text.key(clitext.HealthBannerTitle, clitext.Params{clitext.ParamVersion: s.Daemon.Version}),
 		Banner: text.key(clitext.HealthBanner, s.bannerParams(text)),
@@ -95,7 +95,7 @@ func (s Snapshot) view(text *renderer) View {
 		if len(checks) == 0 {
 			continue
 		}
-		view.Sections = append(view.Sections, Section{Group: group, Title: s.groupTitle(group, text), Rows: s.rows(checks, text)})
+		view.Sections = append(view.Sections, Section{Group: group, Title: s.groupTitle(group, text), Rows: s.buildRows(checks, text)})
 	}
 	if worst, found := s.worst(); found {
 		view.Worst = worst.Service()
@@ -106,7 +106,7 @@ func (s Snapshot) view(text *renderer) View {
 // Rows renders checks in lang, one row each, in the order given.
 func (s Snapshot) Rows(checks []Check, lang i18n.Language) ([]Row, error) {
 	text := newRenderer(lang)
-	return s.rows(checks, text), text.err
+	return s.buildRows(checks, text), text.err
 }
 
 // Latency renders a measured duration the way a report shows it: milliseconds
@@ -116,7 +116,7 @@ func Latency(lang i18n.Language, elapsed time.Duration) (string, error) {
 	return text.latency(elapsed), text.err
 }
 
-func (s Snapshot) rows(checks []Check, text *renderer) []Row {
+func (s Snapshot) buildRows(checks []Check, text *renderer) []Row {
 	rows := make([]Row, 0, len(checks))
 	for index := range checks {
 		rows = append(rows, s.row(checks[index], text))

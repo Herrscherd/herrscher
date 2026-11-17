@@ -29,7 +29,7 @@ const (
 // zero Palette writes plain text with the same alignment.
 func (s Snapshot) Table(writer io.Writer, lang i18n.Language, pal termpaint.Palette) error {
 	text := newRenderer(lang)
-	view := s.view(text)
+	view := s.buildView(text)
 	if text.err != nil {
 		return text.err
 	}
@@ -58,7 +58,7 @@ func (s Snapshot) Table(writer io.Writer, lang i18n.Language, pal termpaint.Pale
 // rows.
 func (s Snapshot) Details(writer io.Writer, checks []Check, lang i18n.Language, pal termpaint.Palette) error {
 	text := newRenderer(lang)
-	rows := s.rows(checks, text)
+	rows := s.buildRows(checks, text)
 	labels := [...]string{
 		text.key(clitext.HealthDetailState, nil),
 		text.key(clitext.HealthDetailCause, nil),

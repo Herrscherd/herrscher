@@ -24,7 +24,7 @@ func TestBridgeRemoteDiscoveryFailureReachesTheFrenchClientInFrench(t *testing.T
 		t.Fatal("a daemon that is not running must refuse the events socket")
 	}
 	discovery := &host.RemoteResolveError{Category: contracts.CategoryBackend, Attempts: 3, Elapsed: 2 * time.Second, Err: cause}
-	_, err := newBackendFor(context.Background(), unreachableBackends{err: discovery}, host.BackendRequest{})
+	_, err := newBackendFor(context.Background(), testMessages(), unreachableBackends{err: discovery}, host.BackendRequest{})
 	if err == nil {
 		t.Fatal("a remote discovery that gave up must fail the bridge")
 	}

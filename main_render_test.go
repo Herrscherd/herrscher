@@ -21,7 +21,7 @@ func TestReportErrorPrintsTheFrenchErrorLine(t *testing.T) {
 	old := os.Stderr
 	os.Stderr = w
 	t.Setenv("HERRSCHER_LANG", "fr")
-	code := reportError(errors.New("boom"))
+	code := reportError(testMessages(), errors.New("boom"))
 	os.Stderr = old
 	if closeErr := w.Close(); closeErr != nil {
 		t.Fatal(closeErr)

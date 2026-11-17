@@ -8,7 +8,7 @@ import (
 )
 
 func TestDaemonDownTextNeutralisesTheSocketPath(t *testing.T) {
-	text, err := daemonDownText(i18n.English, "/run/user/1000/herrscher/\x1b]52;c;ZQ==\a.sock")
+	text, err := daemonDownText(testMessages(), i18n.English, "/run/user/1000/herrscher/\x1b]52;c;ZQ==\a.sock")
 	if err != nil {
 		t.Fatalf("daemonDownText() error = %v", err)
 	}

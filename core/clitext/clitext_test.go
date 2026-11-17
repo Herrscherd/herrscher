@@ -46,21 +46,21 @@ func TestEveryKeyFileIsDeclaredOnce(t *testing.T) {
 }
 
 func TestTextRefusesAnUndeclaredKey(t *testing.T) {
-	_, err := Text(i18n.English, Key("cli.nowhere"), nil)
+	_, err := NewMessages().Text(i18n.English, Key("cli.nowhere"), nil)
 	if !errors.Is(err, ErrUndeclaredKey) {
 		t.Fatalf("Text on an undeclared key = %v, want ErrUndeclaredKey", err)
 	}
 }
 
 func TestTextRefusesParamsThatDoNotMatchTheKey(t *testing.T) {
-	_, err := Text(i18n.English, UsageGroupStart, Params{"Unused": "x"})
+	_, err := NewMessages().Text(i18n.English, UsageGroupStart, Params{"Unused": "x"})
 	if !errors.Is(err, ErrParamsMismatch) {
 		t.Fatalf("Text with an undeclared param = %v, want ErrParamsMismatch", err)
 	}
 }
 
 func TestTranslatorKeepsTheFirstFailure(t *testing.T) {
-	tr := For(i18n.French)
+	tr := NewMessages().For(i18n.French)
 	got := tr.Text(Key("cli.nowhere"), nil)
 	_ = tr.Text(Key("cli.elsewhere"), nil)
 	if got != "cli.nowhere" {
@@ -114,12 +114,13 @@ func TestRenderedMessagesInEachLanguage(t *testing.T) {
 		{"session renamed", SessionRenamed, Params{"Name": "demo", "To": "neuf"}, "✎ Session **demo** renamed to **neuf**.", "✎ Session **demo** renommée en **neuf**."},
 		{"session schedule owns", SessionScheduleOwnsSession, Params{"Schedule": "`nightly`", "Name": "`demo`"}, "⚠️ the schedule `nightly` owns this session by its name: its next window will reopen one under `demo`.", "⚠️ l'horaire `nightly` possède cette session par son nom : sa prochaine fenêtre en rouvrira une sous `demo`."},
 	}
+	messages := NewMessages()
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got, err := Text(i18n.English, tc.key, tc.params); err != nil || got != tc.en {
+			if got, err := messages.Text(i18n.English, tc.key, tc.params); err != nil || got != tc.en {
 				t.Fatalf("en = %q, %v; want %q", got, err, tc.en)
 			}
-			if got, err := Text(i18n.French, tc.key, tc.params); err != nil || got != tc.fr {
+			if got, err := messages.Text(i18n.French, tc.key, tc.params); err != nil || got != tc.fr {
 				t.Fatalf("fr = %q, %v; want %q", got, err, tc.fr)
 			}
 		})
@@ -141,11 +142,12 @@ func TestHostRepliesRenderInEachLanguage(t *testing.T) {
 		{"approve none", HostApproveNone, nil, "nothing is waiting", "rien n'attend de réponse"},
 		{"role holds", HostRoleHolds, Params{ParamPrincipal: "chat:1", ParamRole: "observer"}, "chat:1 holds \"observer\"", "chat:1 a le rôle \"observer\""},
 	}
+	messages := NewMessages()
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			want := map[i18n.Language]string{i18n.English: tc.en, i18n.French: tc.fr}
 			for lang, text := range want {
-				got, err := Text(lang, tc.key, tc.params)
+				got, err := messages.Text(lang, tc.key, tc.params)
 				if err != nil {
 					t.Fatalf("Text(%s, %s) = %v", lang, tc.key, err)
 				}
@@ -187,7 +189,7 @@ func verbPlugin(kind, en, fr string) contracts.Plugin {
 
 func TestPluginVerbHelpRendersInFrench(t *testing.T) {
 	registerPlugins(t, verbPlugin("fake", "Do the thing", "Fais la chose"))
-	translator := For(i18n.French)
+	translator := NewMessages().For(i18n.French)
 	if got := translator.Text("fake.verb.help", nil); got != "Fais la chose" {
 		t.Fatalf("plugin verb help in French = %q, want %q", got, "Fais la chose")
 	}
@@ -198,7 +200,7 @@ func TestPluginVerbHelpRendersInFrench(t *testing.T) {
 
 func TestPluginKeyRefusesParams(t *testing.T) {
 	registerPlugins(t, verbPlugin("fake", "Do the thing", "Fais la chose"))
-	translator := For(i18n.French)
+	translator := NewMessages().For(i18n.French)
 	translator.Text("fake.verb.help", Params{ParamErr: "boom"})
 	if !errors.Is(translator.Err(), ErrParamsMismatch) {
 		t.Fatalf("Err() = %v, want ErrParamsMismatch", translator.Err())
@@ -206,11 +208,12 @@ func TestPluginKeyRefusesParams(t *testing.T) {
 }
 
 func TestPluginKeyCollisionIsRefused(t *testing.T) {
-	registerPlugins(t,
+	registerPlugins(
+		t,
 		verbPlugin("alpha", "Do the thing", "Fais la chose"),
 		verbPlugin("beta", "Do it again", "Refais-la"),
 	)
-	err := For(i18n.French).Err()
+	err := NewMessages().Err()
 	if !errors.Is(err, i18n.ErrDuplicateKey) {
 		t.Fatalf("Err() = %v, want i18n.ErrDuplicateKey", err)
 	}
@@ -226,8 +229,64 @@ func TestPluginCatalogErrorNamesThePlugin(t *testing.T) {
 		Manifest: contracts.Manifest{Kind: "broken", Category: contracts.CategorySkills},
 		Catalog:  fstest.MapFS{"en.json": &fstest.MapFile{Data: []byte("not json")}, "fr.json": &fstest.MapFile{Data: []byte("[]")}},
 	})
-	err := For(i18n.French).Err()
+	err := NewMessages().Err()
 	if err == nil || !strings.Contains(err.Error(), "broken") {
 		t.Fatalf("Err() = %v, want an error naming the plugin broken", err)
+	}
+}
+
+type countingCatalog struct {
+	fsys  fs.FS
+	opens *int
+}
+
+func (c countingCatalog) Open(name string) (fs.File, error) {
+	*c.opens++
+	return c.fsys.Open(name)
+}
+
+func TestMessagesAreBuiltOncePerOwner(t *testing.T) {
+	opens := 0
+	registerPlugins(t, contracts.Plugin{
+		Manifest: contracts.Manifest{Kind: "counted", Category: contracts.CategorySkills},
+		Catalog:  countingCatalog{fsys: pluginLocales("fake.verb.help", "Do the thing", "Fais la chose"), opens: &opens},
+	})
+	messages := NewMessages()
+	built := opens
+	if built == 0 {
+		t.Fatal("NewMessages read no plugin catalog, so the count below would prove nothing")
+	}
+	for range 5 {
+		if _, err := messages.Text(i18n.French, Key("fake.verb.help"), nil); err != nil {
+			t.Fatal(err)
+		}
+		messages.For(i18n.English).Text("fake.verb.help", nil)
+		messages.Failure(i18n.English, errors.New("cause"), Key("fake.verb.help"), nil)
+	}
+	if opens != built {
+		t.Fatalf("rendering read the plugin catalog %d more times: the catalog must be built once per owner", opens-built)
+	}
+}
+
+func TestTextFacadeRebuildsTheCatalogOnEachCall(t *testing.T) {
+	opens := 0
+	registerPlugins(t, contracts.Plugin{
+		Manifest: contracts.Manifest{Kind: "counted", Category: contracts.CategorySkills},
+		Catalog:  countingCatalog{fsys: pluginLocales("fake.verb.help", "Do the thing", "Fais la chose"), opens: &opens},
+	})
+	before := opens
+	NewMessages()
+	oneBuild := opens - before
+	if oneBuild == 0 {
+		t.Fatal("NewMessages read no plugin catalog, so the count below would prove nothing")
+	}
+	before = opens
+	for range 2 {
+		if _, err := Text(i18n.French, Key("fake.verb.help"), nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := opens - before; got != 2*oneBuild {
+		t.Fatalf("two façade calls read the plugin catalog %d times, want %d: the façade rebuilds per call by design", got, 2*oneBuild)
 	}
 }

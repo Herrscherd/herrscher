@@ -44,9 +44,9 @@ func withCompactionConfig(opts *host.Options, cfg config.Config) {
 	opts.ContextLimits = cfg.ContextLimits
 }
 
-type serveFunc func(ctx context.Context, layout host.RuntimeLayout, args []string, cfg config.Config, langs language.Languages) error
+type serveFunc func(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, args []string, cfg config.Config, langs language.Languages) error
 
-func runServe(ctx context.Context, layout host.RuntimeLayout, args []string, serve serveFunc) error {
+func runServe(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, args []string, serve serveFunc) error {
 	cfg, err := config.Load(scanFlag(args, "config", config.DefaultPath()))
 	if err != nil {
 		return err
@@ -55,11 +55,11 @@ func runServe(ctx context.Context, layout host.RuntimeLayout, args []string, ser
 	if err != nil {
 		return err
 	}
-	return serve(ctx, layout, args, cfg, langs)
+	return serve(ctx, layout, messages, args, cfg, langs)
 }
 
-func serveDaemon(ctx context.Context, layout host.RuntimeLayout, args []string, cfg config.Config, langs language.Languages) error {
-	return serveWith(ctx, layout, args, nil, cfg, langs)
+func serveDaemon(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, args []string, cfg config.Config, langs language.Languages) error {
+	return serveWith(ctx, layout, messages, args, nil, cfg, langs)
 }
 
 func serveLanguages(log *slog.Logger, cfg config.Config, args []string) (language.Languages, error) {
@@ -88,8 +88,8 @@ func homeRef(cfg config.Config) *host.HomeRef {
 	return &host.HomeRef{ID: cfg.Home.ID, Type: cfg.Home.Type}
 }
 
-func serveWith(ctx context.Context, layout host.RuntimeLayout, args []string, open *openWindow, cfg config.Config, langs language.Languages) error {
-	translator := clitext.For(langs.Operator)
+func serveWith(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, args []string, open *openWindow, cfg config.Config, langs language.Languages) error {
+	translator := messages.For(langs.Operator)
 	platform := platformtext.For(langs.Operator)
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	flags.String("config", config.DefaultPath(), translator.Text(clitext.ServeFlagConfig, nil))
@@ -110,7 +110,7 @@ func serveWith(ctx context.Context, layout host.RuntimeLayout, args []string, op
 		return err
 	}
 	if *envFile != "" {
-		if loadErr := loadEnvFile(*envFile, langs.Operator); loadErr != nil {
+		if loadErr := loadEnvFile(messages, *envFile, langs.Operator); loadErr != nil {
 			return loadErr
 		}
 	}
@@ -118,17 +118,17 @@ func serveWith(ctx context.Context, layout host.RuntimeLayout, args []string, op
 	owner := or(envx.Get("OWNER_ID"), cfg.Owner)
 	home := homeRef(cfg)
 
-	unlock, attached, err := lockOrAttach(ctx, layout, langs.Operator, *statePath, *instanceID, open)
+	unlock, attached, err := lockOrAttach(ctx, layout, messages, langs.Operator, *statePath, *instanceID, open)
 	if attached || err != nil {
 		return err
 	}
 	defer unlock()
 
-	if skillsErr := installShippedSkills(ctx, langs.Operator); skillsErr != nil {
+	if skillsErr := installShippedSkills(ctx, messages, langs.Operator); skillsErr != nil {
 		return skillsErr
 	}
 
-	gws, closers, foreground, extra, err := startGateways(ctx, langs.Operator)
+	gws, closers, foreground, extra, err := startGateways(ctx, messages, langs.Operator)
 	if err != nil {
 		return err
 	}
@@ -157,7 +157,7 @@ func serveWith(ctx context.Context, layout host.RuntimeLayout, args []string, op
 
 	openOnForeground(open, foreground)
 	models.StartBackground(ctx, contracts.Default.Backends())
-	return runHubForeground(ctx, *statePath, gws, closers, foreground, opts)
+	return runHubForeground(ctx, messages, *statePath, gws, closers, foreground, opts)
 }
 
 func openOnForeground(open *openWindow, foreground contracts.Foreground) {
@@ -169,7 +169,7 @@ func openOnForeground(open *openWindow, foreground contracts.Foreground) {
 	}
 }
 
-func lockOrAttach(ctx context.Context, layout host.RuntimeLayout, lang i18n.Language, statePath, instanceID string, open *openWindow) (func(), bool, error) {
+func lockOrAttach(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, lang i18n.Language, statePath, instanceID string, open *openWindow) (func(), bool, error) {
 	unlock, err := host.LockState(statePath)
 	if err == nil {
 		return unlock, false, nil
@@ -179,34 +179,34 @@ func lockOrAttach(ctx context.Context, layout host.RuntimeLayout, lang i18n.Lang
 		if open != nil {
 			opts = append(opts, tui.OpenOn(open.session, open.text))
 		}
-		aerr := newAttachRunner(slog.Default()).runAttached(ctx, layout, host.ServedInstanceID(statePath, instanceID), statePath, opts...)
+		aerr := newAttachRunner(messages, slog.Default()).runAttached(ctx, layout, host.ServedInstanceID(statePath, instanceID), statePath, opts...)
 		if aerr == nil {
 			return nil, true, nil
 		}
-		fmt.Fprintln(os.Stderr, attachFailureText(lang, aerr))
+		fmt.Fprintln(os.Stderr, attachFailureText(messages, lang, aerr))
 	}
 	return nil, false, host.LocalizeError(lang, err)
 }
 
-func attachFailureText(lang i18n.Language, err error) string {
-	return render(lang, clitext.ServeAttachFailed, clitext.Params{clitext.ParamErr: host.LocalizeError(lang, err).Error()})
+func attachFailureText(messages *clitext.Messages, lang i18n.Language, err error) string {
+	return render(messages, lang, clitext.ServeAttachFailed, clitext.Params{clitext.ParamErr: host.LocalizeError(lang, err).Error()})
 }
 
-func startGateways(ctx context.Context, lang i18n.Language) ([]host.Deps, []contracts.Gateway, contracts.Foreground, []contracts.Cmd, error) {
+func startGateways(ctx context.Context, messages *clitext.Messages, lang i18n.Language) ([]host.Deps, []contracts.Gateway, contracts.Foreground, []contracts.Cmd, error) {
 	hub, err := host.BuildHub(ctx, contracts.Default.Gateways(), os.Getenv)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
 	for _, f := range hub.Unconfigured() {
-		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeGatewaySkipped, clitext.Params{clitext.ParamFailure: f}))
+		fmt.Fprintln(os.Stderr, render(messages, lang, clitext.ServeGatewaySkipped, clitext.Params{clitext.ParamFailure: f}))
 	}
 	hub.AwaitPending(ctx, host.GatewayRetryWindow, func(failures []string, wait time.Duration) {
 		for _, f := range failures {
-			fmt.Fprintln(os.Stderr, render(lang, clitext.ServeGatewayRetrying, clitext.Params{clitext.ParamFailure: f, clitext.ParamWait: wait.String()}))
+			fmt.Fprintln(os.Stderr, render(messages, lang, clitext.ServeGatewayRetrying, clitext.Params{clitext.ParamFailure: f, clitext.ParamWait: wait.String()}))
 		}
 	})
 	for _, f := range hub.Failures() {
-		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeGatewayUnavailable, clitext.Params{clitext.ParamFailure: f}))
+		fmt.Fprintln(os.Stderr, render(messages, lang, clitext.ServeGatewayUnavailable, clitext.Params{clitext.ParamFailure: f}))
 	}
 	var raw []host.Deps
 	for _, kind := range hub.Kinds() {
@@ -214,10 +214,10 @@ func startGateways(ctx context.Context, lang i18n.Language) ([]host.Deps, []cont
 			raw = append(raw, set)
 		}
 	}
-	return bindGateways(raw, lang)
+	return bindGateways(messages, raw, lang)
 }
 
-func runHubForeground(ctx context.Context, statePath string, gws []host.Deps, closers []contracts.Gateway, foreground contracts.Foreground, opts host.Options) error {
+func runHubForeground(ctx context.Context, messages *clitext.Messages, statePath string, gws []host.Deps, closers []contracts.Gateway, foreground contracts.Foreground, opts host.Options) error {
 	if foreground == nil || !term.IsTerminal(int(os.Stdout.Fd())) {
 		return runHub(ctx, gws, closers, opts)
 	}
@@ -230,12 +230,12 @@ func runHubForeground(ctx context.Context, statePath string, gws []host.Deps, cl
 	}
 	hubCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	return superviseForeground(hubCtx, cancel, foreground, func(ctx context.Context) error {
+	return superviseForeground(hubCtx, messages, cancel, foreground, func(ctx context.Context) error {
 		return runHub(ctx, gws, closers, opts)
 	})
 }
 
-func superviseForeground(ctx context.Context, cancel context.CancelFunc, foreground contracts.Foreground, hub func(context.Context) error) error {
+func superviseForeground(ctx context.Context, messages *clitext.Messages, cancel context.CancelFunc, foreground contracts.Foreground, hub func(context.Context) error) error {
 	hubDone := make(chan error, 1)
 	go func() {
 		err := hub(ctx)
@@ -248,7 +248,7 @@ func superviseForeground(ctx context.Context, cancel context.CancelFunc, foregro
 	case err := <-hubDone:
 		if err != nil && !errors.Is(err, context.Canceled) {
 			slog.Error("hub stopped", "err", err)
-			return errors.Join(foregroundErr, renderError(clitext.ClientLanguage(), err, clitext.ServeHubStopped, clitext.Params{clitext.ParamErr: err.Error()}))
+			return errors.Join(foregroundErr, renderError(messages, clitext.ClientLanguage(), err, clitext.ServeHubStopped, clitext.Params{clitext.ParamErr: err.Error()}))
 		}
 	case <-time.After(hubStopTimeout):
 		slog.Error("hub did not stop in time", "timeout", hubStopTimeout)
@@ -260,10 +260,10 @@ func runHub(ctx context.Context, gws []host.Deps, closers []contracts.Gateway, o
 	return host.RunHub(ctx, gws, closers, opts)
 }
 
-func bindGateways(sets []host.Deps, lang i18n.Language) ([]host.Deps, []contracts.Gateway, contracts.Foreground, []contracts.Cmd, error) {
+func bindGateways(messages *clitext.Messages, sets []host.Deps, lang i18n.Language) ([]host.Deps, []contracts.Gateway, contracts.Foreground, []contracts.Cmd, error) {
 	extra, err := host.CollectCommands(sets)
 	if err != nil {
-		return nil, nil, nil, nil, renderError(lang, err, clitext.ServeGatewayCommands, clitext.Params{clitext.ParamErr: err.Error()})
+		return nil, nil, nil, nil, renderError(messages, lang, err, clitext.ServeGatewayCommands, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	var foreground contracts.Foreground
 	gws := make([]host.Deps, 0, len(sets))
@@ -288,8 +288,8 @@ func loadOperator() (config.Config, language.Languages, error) {
 	return cfg, langs, err
 }
 
-func newOperatorRegistry(ctx context.Context, layout host.RuntimeLayout, cfg config.Config, lang i18n.Language) (*cli.Registry, error) {
-	gws, err := buildGateways(ctx, lang)
+func newOperatorRegistry(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, cfg config.Config, lang i18n.Language) (*cli.Registry, error) {
+	gws, err := buildGateways(ctx, messages, lang)
 	if err != nil {
 		return nil, err
 	}
@@ -307,12 +307,12 @@ func newOperatorRegistry(ctx context.Context, layout host.RuntimeLayout, cfg con
 	})
 }
 
-func runRegistryVerb(ctx context.Context, layout host.RuntimeLayout, verb string, args []string) error {
+func runRegistryVerb(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, verb string, args []string) error {
 	cfg, langs, err := loadOperator()
 	if err != nil {
 		return err
 	}
-	reg, err := newOperatorRegistry(ctx, layout, cfg, langs.Client)
+	reg, err := newOperatorRegistry(ctx, layout, messages, cfg, langs.Client)
 	if err != nil {
 		return err
 	}
@@ -334,20 +334,20 @@ type verbDispatcher interface {
 	Dispatch(context.Context, []string) (contracts.Result, error)
 }
 
-func runPrompt(ctx context.Context, layout host.RuntimeLayout, task task) error {
+func runPrompt(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, task task) error {
 	name := sessionNameFor(task.Text)
 	if task.printsTo(term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway()) {
 		cfg, langs, err := loadOperator()
 		if err != nil {
 			return err
 		}
-		reg, err := newOperatorRegistry(ctx, layout, cfg, langs.Client)
+		reg, err := newOperatorRegistry(ctx, layout, messages, cfg, langs.Client)
 		if err != nil {
 			return err
 		}
-		return runPromptWith(ctx, reg, name, task.Text, langs.Client, os.Stdout, os.Stderr)
+		return runPromptWith(ctx, messages, reg, name, task.Text, langs.Client, os.Stdout, os.Stderr)
 	}
-	return runPromptWindow(ctx, layout, name, task.Text)
+	return runPromptWindow(ctx, layout, messages, name, task.Text)
 }
 
 func createTaskSession(ctx context.Context, name string) []string {
@@ -355,7 +355,7 @@ func createTaskSession(ctx context.Context, name string) []string {
 		scope.LaunchFromEnv(ctx).Args()...)
 }
 
-func runPromptWindow(ctx context.Context, layout host.RuntimeLayout, name, text string) error {
+func runPromptWindow(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, name, text string) error {
 	lang := clitext.ClientLanguage()
 	statePath := host.DefaultStatePath()
 	unlock, lerr := host.LockState(statePath)
@@ -364,23 +364,23 @@ func runPromptWindow(ctx context.Context, layout host.RuntimeLayout, name, text 
 		if _, err := host.DaemonDispatch(ctx, layout, instance, createTaskSession(ctx, name)); err != nil {
 			return err
 		}
-		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeSessionStarted, clitext.Params{clitext.ParamName: name}))
-		return newAttachRunner(slog.Default()).runAttached(ctx, layout, instance, statePath, tui.OpenOn(name, text))
+		fmt.Fprintln(os.Stderr, render(messages, lang, clitext.ServeSessionStarted, clitext.Params{clitext.ParamName: name}))
+		return newAttachRunner(messages, slog.Default()).runAttached(ctx, layout, instance, statePath, tui.OpenOn(name, text))
 	}
 	unlock()
 	cfg, langs, err := loadOperator()
 	if err != nil {
 		return err
 	}
-	reg, err := newOperatorRegistry(ctx, layout, cfg, langs.Client)
+	reg, err := newOperatorRegistry(ctx, layout, messages, cfg, langs.Client)
 	if err != nil {
 		return err
 	}
 	if _, err := reg.Dispatch(ctx, createTaskSession(ctx, name)); err != nil {
 		return err
 	}
-	fmt.Fprintln(os.Stderr, render(lang, clitext.ServeSessionStarted, clitext.Params{clitext.ParamName: name}))
-	return serveWith(ctx, layout, nil, &openWindow{session: name, text: text}, cfg, langs)
+	fmt.Fprintln(os.Stderr, render(messages, lang, clitext.ServeSessionStarted, clitext.Params{clitext.ParamName: name}))
+	return serveWith(ctx, layout, messages, nil, &openWindow{session: name, text: text}, cfg, langs)
 }
 
 type openWindow struct {
@@ -392,11 +392,11 @@ type foregroundOpener interface {
 	OpenOn(session, text string)
 }
 
-func runPromptWith(ctx context.Context, dispatcher verbDispatcher, name, prompt string, lang i18n.Language, stdout, stderr io.Writer) error {
+func runPromptWith(ctx context.Context, messages *clitext.Messages, dispatcher verbDispatcher, name, prompt string, lang i18n.Language, stdout, stderr io.Writer) error {
 	if _, err := dispatcher.Dispatch(ctx, createTaskSession(ctx, name)); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintln(stderr, render(lang, clitext.ServeSessionStarted, clitext.Params{clitext.ParamName: name})); err != nil {
+	if _, err := fmt.Fprintln(stderr, render(messages, lang, clitext.ServeSessionStarted, clitext.Params{clitext.ParamName: name})); err != nil {
 		return err
 	}
 	argv := append([]string{verbSession, "seed", argName, name}, cli.FlagArg("task", prompt)...)
@@ -409,7 +409,7 @@ func runPromptWith(ctx context.Context, dispatcher verbDispatcher, name, prompt 
 			}
 		}
 		localized := cli.Localize(err, lang)
-		return renderError(lang, localized, clitext.ServeSessionFailed, clitext.Params{clitext.ParamName: name, clitext.ParamErr: localized.Error()})
+		return renderError(messages, lang, localized, clitext.ServeSessionFailed, clitext.Params{clitext.ParamName: name, clitext.ParamErr: localized.Error()})
 	}
 	reply, err := cli.Text(res, lang)
 	if err != nil {
@@ -437,7 +437,7 @@ func forwardUnknownVerb(ctx context.Context, layout host.RuntimeLayout, argv []s
 	return host.ForwardToDaemon(ctx, layout, host.DefaultStatePath(), instance, argv)
 }
 
-func buildGateways(ctx context.Context, lang i18n.Language) ([]host.Deps, error) {
+func buildGateways(ctx context.Context, messages *clitext.Messages, lang i18n.Language) ([]host.Deps, error) {
 	hub, err := host.BuildHub(ctx, contracts.Default.Gateways(), os.Getenv)
 	if err != nil {
 		return nil, err
@@ -449,7 +449,7 @@ func buildGateways(ctx context.Context, lang i18n.Language) ([]host.Deps, error)
 		}
 	}
 	if len(sets) == 0 {
-		return nil, renderError(lang, errNoGateway, clitext.ServeNoGateway, nil)
+		return nil, renderError(messages, lang, errNoGateway, clitext.ServeNoGateway, nil)
 	}
 	return sets, nil
 }

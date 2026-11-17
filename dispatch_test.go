@@ -172,12 +172,12 @@ func TestApproveHookAnswersWithoutBuildingTheRegistry(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := runApprove(context.Background(), testRuntime(t), []string{"list"}); err == nil {
+	if err := runApprove(context.Background(), testRuntime(t), testMessages(), []string{"list"}); err == nil {
 		t.Fatal("`approve list` built a registry out of an unparseable config.json")
 	}
 
 	read := swapStdio(t, `{"tool_name":"Bash","tool_input":{"command":"ls"}}`)
-	err := runApprove(context.Background(), testRuntime(t), []string{"hook"})
+	err := runApprove(context.Background(), testRuntime(t), testMessages(), []string{"hook"})
 	out, errOut := read()
 	if err != nil {
 		t.Fatalf("the hook failed, which the vendor CLI reads as a crash: %v", err)
@@ -218,7 +218,7 @@ func (s *stubForward) fwd(_ context.Context, argv []string) (string, bool, error
 func TestDispatchUnknownForwardsTheWholeArgv(t *testing.T) {
 	s := &stubForward{out: "two messages", handled: true}
 	args := []string{"channel", "read", "--limit", "5"}
-	out, exit, err := dispatchUnknown(context.Background(), testLang(), "some-kind", args, s.fwd)
+	out, exit, err := dispatchUnknown(context.Background(), testMessages(), testLang(), "some-kind", args, s.fwd)
 
 	want := []string{"some-kind", "channel", "read", "--limit", "5"}
 	if !slices.Equal(s.argv, want) {
@@ -232,7 +232,7 @@ func TestDispatchUnknownForwardsTheWholeArgv(t *testing.T) {
 func TestDispatchUnknownKeepsTheDaemonsFailure(t *testing.T) {
 	boom := errors.New(`plugin: channel "nope" not found`)
 	s := &stubForward{handled: true, err: boom}
-	out, exit, err := dispatchUnknown(context.Background(), testLang(), "some-kind", []string{"channel", "read"}, s.fwd)
+	out, exit, err := dispatchUnknown(context.Background(), testMessages(), testLang(), "some-kind", []string{"channel", "read"}, s.fwd)
 	if !errors.Is(err, boom) {
 		t.Fatalf("error = %v, want the daemon's own %v", err, boom)
 	}
@@ -246,7 +246,7 @@ func TestDispatchUnknownKeepsTheDaemonsFailure(t *testing.T) {
 
 func TestUnknownCommandIsRenderedInFrenchAndStillMatchable(t *testing.T) {
 	s := &stubForward{handled: false}
-	_, _, err := dispatchUnknown(context.Background(), i18n.French, "some-kind", nil, s.fwd)
+	_, _, err := dispatchUnknown(context.Background(), testMessages(), i18n.French, "some-kind", nil, s.fwd)
 	if err == nil || err.Error() != `commande inconnue "some-kind"` {
 		t.Fatalf("error = %v, want the French unknown command", err)
 	}
@@ -257,7 +257,7 @@ func TestUnknownCommandIsRenderedInFrenchAndStillMatchable(t *testing.T) {
 
 func TestDispatchUnknownWithoutDaemonIsAnUnknownCommand(t *testing.T) {
 	s := &stubForward{handled: false}
-	out, exit, err := dispatchUnknown(context.Background(), testLang(), "some-kind", []string{"channel"}, s.fwd)
+	out, exit, err := dispatchUnknown(context.Background(), testMessages(), testLang(), "some-kind", []string{"channel"}, s.fwd)
 	if exit != 2 {
 		t.Fatalf("exit = %d, want 2: the unchanged unknown-command outcome", exit)
 	}

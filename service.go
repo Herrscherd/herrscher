@@ -19,16 +19,16 @@ var (
 	errUnexpectedArgument = errors.New("unexpected argument")
 )
 
-func runService(ctx context.Context, args []string) error {
+func runService(ctx context.Context, messages *clitext.Messages, args []string) error {
 	lang := clitext.ClientLanguage()
 	if len(args) == 0 {
-		return serviceUsageError(lang)
+		return serviceUsageError(messages, lang)
 	}
 	sub := args[0]
 	switch sub {
 	case cmdInstall, "uninstall", cmdStatus, "restart", cmdUpdate:
 	default:
-		return unknownSubcommand(lang, sub)
+		return unknownSubcommand(messages, lang, sub)
 	}
 
 	cfg, err := service.DefaultConfig()
@@ -41,13 +41,13 @@ func runService(ctx context.Context, args []string) error {
 		if err := service.Restart(ctx, cfg); err != nil {
 			return err
 		}
-		fmt.Fprintln(os.Stderr, render(lang, clitext.ServiceRestarted, nil))
+		fmt.Fprintln(os.Stderr, render(messages, lang, clitext.ServiceRestarted, nil))
 		return nil
 	case cmdUpdate:
-		return runServiceUpdate(ctx, cfg, args[1:])
+		return runServiceUpdate(ctx, messages, cfg, args[1:])
 	}
 
-	translator := clitext.For(lang)
+	translator := messages.For(lang)
 	flags := flag.NewFlagSet("service", flag.ContinueOnError)
 	healthAddr := flags.String("health-addr", cfg.HealthAddr, translator.Text(clitext.ServiceFlagHealthAddr, nil))
 	envFile := flags.String("env-file", cfg.EnvFile, translator.Text(clitext.ServiceFlagEnvFile, nil))
@@ -59,7 +59,7 @@ func runService(ctx context.Context, args []string) error {
 		return err
 	}
 	if flags.NArg() > 0 {
-		return unexpectedArgument(lang, sub, flags.Arg(0))
+		return unexpectedArgument(messages, lang, sub, flags.Arg(0))
 	}
 	cfg.HealthAddr = *healthAddr
 	cfg.EnvFile = *envFile
@@ -72,38 +72,38 @@ func runService(ctx context.Context, args []string) error {
 		if err := service.Uninstall(ctx, cfg); err != nil {
 			return err
 		}
-		fmt.Fprintln(os.Stderr, render(lang, clitext.ServiceRemoved, nil))
+		fmt.Fprintln(os.Stderr, render(messages, lang, clitext.ServiceRemoved, nil))
 		return nil
 	case cmdStatus:
 		return service.Status(ctx, cfg)
 	default:
-		return unknownSubcommand(lang, sub)
+		return unknownSubcommand(messages, lang, sub)
 	}
 }
 
-func serviceUsageError(lang i18n.Language) error {
-	return clitext.Failure(lang, errServiceUsage, clitext.ServiceUsage, nil)
+func serviceUsageError(messages *clitext.Messages, lang i18n.Language) error {
+	return messages.Failure(lang, errServiceUsage, clitext.ServiceUsage, nil)
 }
 
-func unknownSubcommand(lang i18n.Language, sub string) error {
-	return clitext.Failure(lang, errUnknownSubcommand, clitext.ServiceUnknownSubcommand, clitext.Params{clitext.ParamName: strconv.Quote(sub)})
+func unknownSubcommand(messages *clitext.Messages, lang i18n.Language, sub string) error {
+	return messages.Failure(lang, errUnknownSubcommand, clitext.ServiceUnknownSubcommand, clitext.Params{clitext.ParamName: strconv.Quote(sub)})
 }
 
-func unexpectedArgument(lang i18n.Language, sub, arg string) error {
-	return clitext.Failure(lang, errUnexpectedArgument, clitext.ServiceUnexpectedArgument, clitext.Params{
+func unexpectedArgument(messages *clitext.Messages, lang i18n.Language, sub, arg string) error {
+	return messages.Failure(lang, errUnexpectedArgument, clitext.ServiceUnexpectedArgument, clitext.Params{
 		clitext.ParamVerb:  sub,
 		clitext.ParamArg:   strconv.Quote(arg),
-		clitext.ParamUsage: render(lang, clitext.ServiceUsage, nil),
+		clitext.ParamUsage: render(messages, lang, clitext.ServiceUsage, nil),
 	})
 }
 
-func runServiceUpdate(ctx context.Context, cfg service.Config, args []string) error {
+func runServiceUpdate(ctx context.Context, messages *clitext.Messages, cfg service.Config, args []string) error {
 	lang := clitext.ClientLanguage()
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
-	translator := clitext.For(lang)
+	translator := messages.For(lang)
 	flags := flag.NewFlagSet("service update", flag.ContinueOnError)
 	source := flags.String("source", cwd, translator.Text(clitext.ServiceFlagSource, nil))
 	noPull := flags.Bool("no-pull", false, translator.Text(clitext.ServiceFlagNoPull, nil))
@@ -114,16 +114,16 @@ func runServiceUpdate(ctx context.Context, cfg service.Config, args []string) er
 		return err
 	}
 	if flags.NArg() > 0 {
-		return clitext.Failure(lang, errUnexpectedArgument, clitext.ServiceUpdateUnexpectedArg, clitext.Params{clitext.ParamArg: strconv.Quote(flags.Arg(0))})
+		return messages.Failure(lang, errUnexpectedArgument, clitext.ServiceUpdateUnexpectedArg, clitext.Params{clitext.ParamArg: strconv.Quote(flags.Arg(0))})
 	}
 	if installed, ok := service.InstalledBinPath(cfg); ok && installed != cfg.BinPath {
-		fmt.Fprintln(os.Stderr, render(lang, clitext.ServiceUpdateRebuilding, clitext.Params{clitext.ParamInstalled: installed, clitext.ParamRan: cfg.BinPath}))
+		fmt.Fprintln(os.Stderr, render(messages, lang, clitext.ServiceUpdateRebuilding, clitext.Params{clitext.ParamInstalled: installed, clitext.ParamRan: cfg.BinPath}))
 		cfg.BinPath = installed
 	}
 	if err := service.Update(ctx, cfg, *source, !*noPull); err != nil {
 		return err
 	}
 	v := service.SourceVersion(ctx, *source)
-	fmt.Fprintln(os.Stderr, render(lang, clitext.ServiceUpdateRebuilt, clitext.Params{clitext.ParamVersion: v}))
+	fmt.Fprintln(os.Stderr, render(messages, lang, clitext.ServiceUpdateRebuilt, clitext.Params{clitext.ParamVersion: v}))
 	return nil
 }

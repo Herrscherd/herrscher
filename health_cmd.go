@@ -32,18 +32,18 @@ type healthOptions struct {
 	pal     termpaint.Palette
 }
 
-func runHealth(ctx context.Context, layout host.RuntimeLayout, args []string) error {
+func runHealth(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, args []string) error {
 	lang := clitext.ClientLanguage()
 	opts, unknown := parseHealthArgs(args)
 	if unknown != "" {
-		return renderError(lang, errUnknownArgument, clitext.FlagUnknown, clitext.Params{clitext.ParamCommand: healthVerb, clitext.ParamName: strconv.Quote(unknown)})
+		return renderError(messages, lang, errUnknownArgument, clitext.FlagUnknown, clitext.Params{clitext.ParamCommand: healthVerb, clitext.ParamName: strconv.Quote(unknown)})
 	}
 	opts.pal = outputPalette(os.Stdout)
 	instance := host.ServedInstanceID(host.DefaultStatePath(), "")
 	if opts.watch {
-		return watchHealth(ctx, layout, instance, opts, lang)
+		return watchHealth(ctx, layout, messages, instance, opts, lang)
 	}
-	code, err := checkHealth(ctx, layout, instance, opts, lang, os.Stdout)
+	code, err := checkHealth(ctx, layout, messages, instance, opts, lang, os.Stdout)
 	if err != nil {
 		return err
 	}
@@ -53,14 +53,14 @@ func runHealth(ctx context.Context, layout host.RuntimeLayout, args []string) er
 	return nil
 }
 
-func watchHealth(ctx context.Context, layout host.RuntimeLayout, instance string, opts healthOptions, lang i18n.Language) error {
+func watchHealth(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, instance string, opts healthOptions, lang i18n.Language) error {
 	ticker := time.NewTicker(healthWatchInterval)
 	defer ticker.Stop()
 	for {
-		if _, err := checkHealth(ctx, layout, instance, opts, lang, os.Stdout); err != nil {
+		if _, err := checkHealth(ctx, layout, messages, instance, opts, lang, os.Stdout); err != nil {
 			return err
 		}
-		if err := writeRefreshed(os.Stdout, lang); err != nil {
+		if err := writeRefreshed(messages, os.Stdout, lang); err != nil {
 			return err
 		}
 		select {
@@ -71,8 +71,8 @@ func watchHealth(ctx context.Context, layout host.RuntimeLayout, instance string
 	}
 }
 
-func writeRefreshed(writer io.Writer, lang i18n.Language) error {
-	text, err := clitext.Text(lang, clitext.HealthWatchRefreshedAt, clitext.Params{clitext.ParamTime: time.Now().Format(time.TimeOnly)})
+func writeRefreshed(messages *clitext.Messages, writer io.Writer, lang i18n.Language) error {
+	text, err := messages.Text(lang, clitext.HealthWatchRefreshedAt, clitext.Params{clitext.ParamTime: time.Now().Format(time.TimeOnly)})
 	if err != nil {
 		return err
 	}
@@ -80,14 +80,14 @@ func writeRefreshed(writer io.Writer, lang i18n.Language) error {
 	return err
 }
 
-func daemonDownText(lang i18n.Language, socket string) (string, error) {
-	return clitext.Text(lang, clitext.HealthDaemonDown, clitext.Params{clitext.ParamSocket: termpaint.Escape(socket).String()})
+func daemonDownText(messages *clitext.Messages, lang i18n.Language, socket string) (string, error) {
+	return messages.Text(lang, clitext.HealthDaemonDown, clitext.Params{clitext.ParamSocket: termpaint.Escape(socket).String()})
 }
 
-func checkHealth(ctx context.Context, layout host.RuntimeLayout, instance string, opts healthOptions, lang i18n.Language, writer io.Writer) (int, error) {
+func checkHealth(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, instance string, opts healthOptions, lang i18n.Language, writer io.Writer) (int, error) {
 	snapshot, err := fetchHealth(ctx, layout, instance, opts.deep)
 	if host.IsDaemonNotRunning(err) {
-		text, textErr := daemonDownText(lang, host.CommandSocketPathIn(layout, instance))
+		text, textErr := daemonDownText(messages, lang, host.CommandSocketPathIn(layout, instance))
 		if textErr != nil {
 			return 0, textErr
 		}
@@ -103,7 +103,7 @@ func checkHealth(ctx context.Context, layout host.RuntimeLayout, instance string
 	if opts.service != "" {
 		checks = snapshot.Find(opts.service)
 		if len(checks) == 0 {
-			return 0, renderError(lang, errUnknownArgument, clitext.HealthUnknownService, clitext.Params{clitext.ParamName: strconv.Quote(opts.service)})
+			return 0, renderError(messages, lang, errUnknownArgument, clitext.HealthUnknownService, clitext.Params{clitext.ParamName: strconv.Quote(opts.service)})
 		}
 	}
 	code := int(health.Summarize(checks).ExitCode())

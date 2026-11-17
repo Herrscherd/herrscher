@@ -33,7 +33,7 @@ type hostedPlugin struct {
 	closeReal func() error
 }
 
-func hostPlugin(ctx context.Context, lang i18n.Language, category contracts.Category) (hostedPlugin, error) {
+func hostPlugin(ctx context.Context, messages *clitext.Messages, lang i18n.Language, category contracts.Category) (hostedPlugin, error) {
 	switch category {
 	case contracts.CategoryMemory:
 		impl, manifest, err := firstMemory(ctx)
@@ -48,7 +48,7 @@ func hostPlugin(ctx context.Context, lang i18n.Language, category contracts.Cate
 			closeReal: func() error { return impl.Close() },
 		}, nil
 	case contracts.CategoryOrchestrator:
-		impl, manifest, err := firstOrchestrator(ctx, lang)
+		impl, manifest, err := firstOrchestrator(ctx, messages, lang)
 		if err != nil {
 			return hostedPlugin{}, err
 		}
@@ -60,7 +60,7 @@ func hostPlugin(ctx context.Context, lang i18n.Language, category contracts.Cate
 			closeReal: func() error { return impl.Close() },
 		}, nil
 	case contracts.CategoryBackend:
-		impl, manifest, err := firstBackend(ctx, lang)
+		impl, manifest, err := firstBackend(ctx, messages, lang)
 		if err != nil {
 			return hostedPlugin{}, err
 		}
@@ -70,22 +70,22 @@ func hostPlugin(ctx context.Context, lang i18n.Language, category contracts.Cate
 			closeReal: func() error { return impl.Close() },
 		}, nil
 	case contracts.CategoryGateway, contracts.CategorySkills, contracts.CategoryCompactor:
-		return hostedPlugin{}, noSkeletonError(lang, category)
+		return hostedPlugin{}, noSkeletonError(messages, lang, category)
 	}
-	return hostedPlugin{}, noSkeletonError(lang, category)
+	return hostedPlugin{}, noSkeletonError(messages, lang, category)
 }
 
-func noSkeletonError(lang i18n.Language, category contracts.Category) error {
-	return renderError(lang, errNoSkeleton, clitext.PluginHostNoSkeleton, clitext.Params{clitext.ParamCategory: strconv.Quote(string(category))})
+func noSkeletonError(messages *clitext.Messages, lang i18n.Language, category contracts.Category) error {
+	return renderError(messages, lang, errNoSkeleton, clitext.PluginHostNoSkeleton, clitext.Params{clitext.ParamCategory: strconv.Quote(string(category))})
 }
 
-func newPluginServer(lang i18n.Language, tlsCfg transport.TLSConfig) (*grpc.Server, error) {
+func newPluginServer(messages *clitext.Messages, lang i18n.Language, tlsCfg transport.TLSConfig) (*grpc.Server, error) {
 	if !tlsCfg.Enabled() {
 		return grpc.NewServer(), nil
 	}
 	creds, err := tlsCfg.ServerCredentials()
 	if err != nil {
-		return nil, renderError(lang, err, clitext.PluginHostFailed, clitext.Params{clitext.ParamErr: err.Error()})
+		return nil, renderError(messages, lang, err, clitext.PluginHostFailed, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	return grpc.NewServer(grpc.Creds(creds)), nil
 }
@@ -105,9 +105,9 @@ func announceEvery(ctx context.Context, conn *nats.Conn, ann transport.Announcem
 	}
 }
 
-func runPluginHost(ctx context.Context, args []string) error {
+func runPluginHost(ctx context.Context, messages *clitext.Messages, args []string) error {
 	lang := clitext.ClientLanguage()
-	translator := clitext.For(lang)
+	translator := messages.For(lang)
 	flags := flag.NewFlagSet("plugin-host", flag.ContinueOnError)
 	category := flags.String("category", "", translator.Text(clitext.PluginHostFlagCategory, nil))
 	natsURL := flags.String("nats", nats.DefaultURL, translator.Text(clitext.PluginHostFlagNATS, nil))
@@ -119,21 +119,21 @@ func runPluginHost(ctx context.Context, args []string) error {
 		return err
 	}
 	if !host.SupportedRemoteCategory(contracts.Category(*category)) {
-		return renderError(lang, errUnsupportedCategory, clitext.PluginHostUnsupported, clitext.Params{clitext.ParamCategory: strconv.Quote(*category)})
+		return renderError(messages, lang, errUnsupportedCategory, clitext.PluginHostUnsupported, clitext.Params{clitext.ParamCategory: strconv.Quote(*category)})
 	}
 
 	tlsCfg := tlsConfigFromEnv()
 	if err := tlsCfg.Validate(); err != nil {
-		return renderError(lang, err, clitext.PluginHostFailed, clitext.Params{clitext.ParamErr: err.Error()})
+		return renderError(messages, lang, err, clitext.PluginHostFailed, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 
 	host.CaptureAnnounceKey()
-	announceKey, err := announceKeyFromEnv()
+	announceKey, err := announceKeyFromEnv(messages)
 	if err != nil {
-		return renderError(lang, err, clitext.PluginHostFailed, clitext.Params{clitext.ParamErr: err.Error()})
+		return renderError(messages, lang, err, clitext.PluginHostFailed, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 
-	hosted, err := hostPlugin(ctx, lang, contracts.Category(*category))
+	hosted, err := hostPlugin(ctx, messages, lang, contracts.Category(*category))
 	if err != nil {
 		return err
 	}
@@ -150,7 +150,7 @@ func runPluginHost(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	server, err := newPluginServer(lang, tlsCfg)
+	server, err := newPluginServer(messages, lang, tlsCfg)
 	if err != nil {
 		return err
 	}
@@ -174,7 +174,7 @@ func firstMemory(ctx context.Context) (contracts.Memory, contracts.Manifest, err
 	return host.BuildFirstMemoryWithManifest(ctx)
 }
 
-func firstOrchestrator(ctx context.Context, lang i18n.Language) (contracts.Orchestrator, contracts.Manifest, error) {
+func firstOrchestrator(ctx context.Context, messages *clitext.Messages, lang i18n.Language) (contracts.Orchestrator, contracts.Manifest, error) {
 	orchestrators := contracts.Default.Orchestrators()
 	for i := range orchestrators {
 		plugin := &orchestrators[i]
@@ -183,18 +183,18 @@ func firstOrchestrator(ctx context.Context, lang i18n.Language) (contracts.Orche
 		}
 		cfg, err := contracts.Resolve(plugin.Manifest.Config, os.Getenv)
 		if err != nil {
-			return nil, contracts.Manifest{}, renderError(lang, err, clitext.PluginHostOrchestrator, clitext.Params{clitext.ParamErr: err.Error()})
+			return nil, contracts.Manifest{}, renderError(messages, lang, err, clitext.PluginHostOrchestrator, clitext.Params{clitext.ParamErr: err.Error()})
 		}
 		orch, err := plugin.Orchestrator(ctx, cfg, nil)
 		if err != nil {
-			return nil, contracts.Manifest{}, renderError(lang, err, clitext.PluginHostOrchestrator, clitext.Params{clitext.ParamErr: err.Error()})
+			return nil, contracts.Manifest{}, renderError(messages, lang, err, clitext.PluginHostOrchestrator, clitext.Params{clitext.ParamErr: err.Error()})
 		}
 		return orch, plugin.Manifest, nil
 	}
-	return nil, contracts.Manifest{}, renderError(lang, errNoOrchestratorPlugin, clitext.PluginHostNoOrchestrator, nil)
+	return nil, contracts.Manifest{}, renderError(messages, lang, errNoOrchestratorPlugin, clitext.PluginHostNoOrchestrator, nil)
 }
 
-func firstBackend(ctx context.Context, lang i18n.Language) (contracts.Backend, contracts.Manifest, error) {
+func firstBackend(ctx context.Context, messages *clitext.Messages, lang i18n.Language) (contracts.Backend, contracts.Manifest, error) {
 	backends := contracts.Default.Backends()
 	for i := range backends {
 		plugin := &backends[i]
@@ -203,15 +203,15 @@ func firstBackend(ctx context.Context, lang i18n.Language) (contracts.Backend, c
 		}
 		cfg, err := contracts.Resolve(plugin.Manifest.Config, os.Getenv)
 		if err != nil {
-			return nil, contracts.Manifest{}, renderError(lang, err, clitext.PluginHostBackend, clitext.Params{clitext.ParamErr: err.Error()})
+			return nil, contracts.Manifest{}, renderError(messages, lang, err, clitext.PluginHostBackend, clitext.Params{clitext.ParamErr: err.Error()})
 		}
 		backend, err := plugin.Backend(ctx, cfg)
 		if err != nil {
-			return nil, contracts.Manifest{}, renderError(lang, err, clitext.PluginHostBackend, clitext.Params{clitext.ParamErr: err.Error()})
+			return nil, contracts.Manifest{}, renderError(messages, lang, err, clitext.PluginHostBackend, clitext.Params{clitext.ParamErr: err.Error()})
 		}
 		return backend, plugin.Manifest, nil
 	}
-	return nil, contracts.Manifest{}, renderError(lang, errNoBackendPlugin, clitext.PluginHostNoBackend, nil)
+	return nil, contracts.Manifest{}, renderError(messages, lang, errNoBackendPlugin, clitext.PluginHostNoBackend, nil)
 }
 
 func registerOnRouter(server *grpc.Server, registerSkeleton func(*transport.PluginRouter) error) error {

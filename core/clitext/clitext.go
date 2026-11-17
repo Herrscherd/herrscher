@@ -206,25 +206,64 @@ const (
 // ParamRollbackErr names the error of the rollback that followed a failed session switch.
 const ParamRollbackErr = "RollbackErr"
 
+// Messages is the catalog of the command line: the locales of herrscher and the
+// catalogs of the plugins registered when it was built. Its owner builds it once,
+// after its registrations, and passes it to every caller that renders a message.
+type Messages struct {
+	cat      *i18n.Catalog
+	declared map[Key][]string
+	err      error
+}
+
+// NewMessages reads the catalog of the command line from the locales and from the
+// plugins registered in contracts.Default at the time of the call.
+func NewMessages() *Messages {
+	cat, err := loadCatalog()
+	return &Messages{cat: cat, declared: declaredKeys(), err: err}
+}
+
+// Err returns the failure that kept the catalog from being built, or nil.
+func (m *Messages) Err() error {
+	return m.err
+}
+
 // Text renders key in lang with params. It refuses an undeclared key, and params
 // that do not name exactly the fields the key declares.
-func Text(lang i18n.Language, key Key, params Params) (string, error) {
-	cat, err := loadCatalog()
-	if err != nil {
-		return "", err
+func (m *Messages) Text(lang i18n.Language, key Key, params Params) (string, error) {
+	if m.err != nil {
+		return "", m.err
 	}
-	return render(cat, declaredKeys(), lang, key, params)
+	return render(m.cat, m.declared, lang, key, params)
 }
 
 // Failure returns an error that reads as key rendered in lang with params, and
 // that still matches cause through errors.Is and errors.As. When key cannot be
 // rendered, it returns that rendering error instead.
-func Failure(lang i18n.Language, cause error, key Key, params Params) error {
-	text, err := Text(lang, key, params)
+func (m *Messages) Failure(lang i18n.Language, cause error, key Key, params Params) error {
+	text, err := m.Text(lang, key, params)
 	if err != nil {
 		return err
 	}
 	return failureError{text: text, cause: cause}
+}
+
+// Text renders key in lang with params against a catalog built for this call. It
+// rebuilds the catalog on every call, so it is reserved for the parameterless
+// Error paths that cannot reach a *Messages; other callers hold their owner.
+func Text(lang i18n.Language, key Key, params Params) (string, error) {
+	return NewMessages().Text(lang, key, params)
+}
+
+// Failure returns an error that reads as key rendered in lang, built against a
+// catalog constructed for this call. See Text for when it is reserved.
+func Failure(lang i18n.Language, cause error, key Key, params Params) error {
+	return NewMessages().Failure(lang, cause, key, params)
+}
+
+// For returns a translator that renders in lang, built against a catalog constructed
+// for this call. See Text for when it is reserved.
+func For(lang i18n.Language) *Translator {
+	return NewMessages().For(lang)
 }
 
 type failureError struct {
@@ -278,17 +317,13 @@ func allNamed(fields []string, params Params) bool {
 // at the end.
 type Translator struct {
 	lang     i18n.Language
-	cat      *i18n.Catalog
-	declared map[Key][]string
+	messages *Messages
 	err      error
 }
 
 // For returns a translator that renders in lang.
-func For(lang i18n.Language) *Translator {
-	cat, err := loadCatalog()
-	translator := &Translator{lang: lang, cat: cat, declared: declaredKeys()}
-	translator.fail(err)
-	return translator
+func (m *Messages) For(lang i18n.Language) *Translator {
+	return &Translator{lang: lang, messages: m, err: m.err}
 }
 
 // Text renders key with params. After a failure it returns the key itself, and
@@ -304,10 +339,7 @@ func (t *Translator) Text(key Key, params Params) string {
 
 // Render renders key with params and returns its failure to the caller instead of keeping it.
 func (t *Translator) Render(key Key, params Params) (string, error) {
-	if t.cat == nil {
-		return "", t.err
-	}
-	return render(t.cat, t.declared, t.lang, key, params)
+	return t.messages.Text(t.lang, key, params)
 }
 
 // Err returns the first failure of the translator, or nil.

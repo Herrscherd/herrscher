@@ -23,10 +23,10 @@ import (
 
 var errModelNotRoutable = errors.New("cannot be routed through the remote backend resolver")
 
-func runBridge(ctx context.Context, args []string) error {
-	translator := clitext.For(clitext.ClientLanguage())
+func runBridge(ctx context.Context, messages *clitext.Messages, args []string) error {
+	translator := messages.For(clitext.ClientLanguage())
 	flags := flag.NewFlagSet("bridge", flag.ContinueOnError)
-	channel := channelFlag(flags)
+	channel := channelFlag(messages, flags)
 	backendFlags := declareBackendFlags(flags, translator)
 	session := flags.String("session", "", translator.Text(clitext.BridgeFlagSession, nil))
 	project := flags.String("project", "", translator.Text(clitext.BridgeFlagProject, nil))
@@ -51,7 +51,7 @@ func runBridge(ctx context.Context, args []string) error {
 	}
 
 	if *envStdin {
-		if err := applyEnvFromStdin(os.Stdin); err != nil {
+		if err := applyEnvFromStdin(messages, os.Stdin); err != nil {
 			return err
 		}
 	}
@@ -61,7 +61,7 @@ func runBridge(ctx context.Context, args []string) error {
 
 	log := host.Logger(*verbose).With("component", "bridge", "session", *session)
 
-	resolver, err := newResolver(log)
+	resolver, err := newResolver(messages, log)
 	if err != nil {
 		return err
 	}
@@ -78,15 +78,15 @@ func runBridge(ctx context.Context, args []string) error {
 	newBackend := func(_ string) (contracts.Backend, error) {
 		req := requestFor()
 		req.Keys = keys
-		return newBackendFor(ctx, resolver, req)
+		return newBackendFor(ctx, messages, resolver, req)
 	}
 
-	mem := buildMemory(ctx, log)
+	mem := buildMemory(ctx, messages, log)
 	if mem != nil {
 		defer closeLogged(log, "memory", mem)
 		provisionScope(ctx, mem, *project, *agent, log)
 	}
-	orch := buildOrchestrator(ctx, mem, *session, *project, *agent,
+	orch := buildOrchestrator(ctx, messages, mem, *session, *project, *agent,
 		learnConfig{extractor: *extractor, journal: *journal, consolidateEvery: *consolidateEvery}, log)
 	if orch != nil {
 		defer closeLogged(log, "orchestrator", orch)
@@ -160,12 +160,12 @@ type backendResolver interface {
 	Backend(context.Context, []contracts.Plugin, ...string) (contracts.Backend, bool, error)
 }
 
-func newBackendFor(ctx context.Context, br backendResolver, req host.BackendRequest) (contracts.Backend, error) {
-	backend, err := resolveBackendFor(ctx, br, req)
+func newBackendFor(ctx context.Context, messages *clitext.Messages, br backendResolver, req host.BackendRequest) (contracts.Backend, error) {
+	backend, err := resolveBackendFor(ctx, messages, br, req)
 	return backend, host.LocalizeError(clitext.ClientLanguage(), err)
 }
 
-func resolveBackendFor(ctx context.Context, br backendResolver, req host.BackendRequest) (contracts.Backend, error) {
+func resolveBackendFor(ctx context.Context, messages *clitext.Messages, br backendResolver, req host.BackendRequest) (contracts.Backend, error) {
 	backend, fromRemote, err := br.Backend(ctx, contracts.Default.Backends())
 	if err != nil {
 		return nil, err
@@ -175,19 +175,19 @@ func resolveBackendFor(ctx context.Context, br backendResolver, req host.Backend
 			return nil, err
 		}
 		if req.ModelID != "" {
-			return nil, renderError(clitext.ClientLanguage(), errModelNotRoutable, clitext.BridgeModelNotRoutable, clitext.Params{clitext.ParamModel: strconv.Quote(req.ModelID)})
+			return nil, renderError(messages, clitext.ClientLanguage(), errModelNotRoutable, clitext.BridgeModelNotRoutable, clitext.Params{clitext.ParamModel: strconv.Quote(req.ModelID)})
 		}
 		return backend, nil
 	}
 	return host.BuildBackendFor(ctx, req)
 }
 
-func buildMemory(ctx context.Context, log *slog.Logger) contracts.Memory {
+func buildMemory(ctx context.Context, messages *clitext.Messages, log *slog.Logger) contracts.Memory {
 	disabled := func(kind string, err error) contracts.Memory {
 		log.Debug("memory disabled", "kind", kind, "err", err)
 		return nil
 	}
-	resolver, err := newResolver(log)
+	resolver, err := newResolver(messages, log)
 	if err != nil {
 		return disabled("memory", err)
 	}
@@ -248,12 +248,12 @@ type learnConfig struct {
 	consolidateEvery int
 }
 
-func buildOrchestrator(ctx context.Context, mem contracts.Memory, session, project, agent string, learn learnConfig, log *slog.Logger) contracts.Orchestrator {
+func buildOrchestrator(ctx context.Context, messages *clitext.Messages, mem contracts.Memory, session, project, agent string, learn learnConfig, log *slog.Logger) contracts.Orchestrator {
 	disabled := func(kind string, err error) contracts.Orchestrator {
 		log.Debug("orchestrator disabled", "kind", kind, "err", err)
 		return nil
 	}
-	resolver, err := newResolver(log)
+	resolver, err := newResolver(messages, log)
 	if err != nil {
 		return disabled("orchestrator", err)
 	}
@@ -282,7 +282,7 @@ func buildOrchestrator(ctx context.Context, mem contracts.Memory, session, proje
 	return nil
 }
 
-func applyEnvFromStdin(r io.Reader) error {
+func applyEnvFromStdin(messages *clitext.Messages, r io.Reader) error {
 	reader := bufio.NewReader(r)
 	var block strings.Builder
 	for {
@@ -300,7 +300,7 @@ func applyEnvFromStdin(r io.Reader) error {
 	}
 	for key, v := range contracts.ParseEnvSetting(block.String()) {
 		if err := os.Setenv(key, v); err != nil {
-			return renderError(clitext.ClientLanguage(), err, clitext.BridgeEnvStdinFailed, clitext.Params{clitext.ParamKey: key, clitext.ParamErr: err.Error()})
+			return renderError(messages, clitext.ClientLanguage(), err, clitext.BridgeEnvStdinFailed, clitext.Params{clitext.ParamKey: key, clitext.ParamErr: err.Error()})
 		}
 	}
 	return nil

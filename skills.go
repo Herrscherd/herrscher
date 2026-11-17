@@ -14,14 +14,14 @@ import (
 	"github.com/Herrscherd/herrscher/core/skills"
 )
 
-func installShippedSkills(ctx context.Context, lang i18n.Language) error {
+func installShippedSkills(ctx context.Context, messages *clitext.Messages, lang i18n.Language) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		slog.Warn("shipped skills not installed, no home directory", "err", err)
 		return nil
 	}
 	dst := filepath.Join(home, ".claude", "skills")
-	translator := clitext.For(lang)
+	translator := messages.For(lang)
 	plug, notes := installPluginSkills(ctx, translator, contracts.Default.Plugins(), os.Getenv, dst)
 	for _, n := range notes {
 		fmt.Fprintln(os.Stderr, n)

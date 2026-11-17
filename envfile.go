@@ -14,19 +14,19 @@ import (
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
-func loadEnvFile(path string, lang i18n.Language) error {
+func loadEnvFile(messages *clitext.Messages, path string, lang i18n.Language) error {
 	defer hideGatewayKeys()
 	file, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return renderError(lang, err, clitext.EnvOpenFailed, clitext.Params{clitext.ParamErr: err.Error()})
+		return renderError(messages, lang, err, clitext.EnvOpenFailed, clitext.Params{clitext.ParamErr: err.Error()})
 	}
-	return errors.Join(scanEnvFile(file, lang), file.Close())
+	return errors.Join(scanEnvFile(messages, file, lang), file.Close())
 }
 
-func scanEnvFile(r io.Reader, lang i18n.Language) error {
+func scanEnvFile(messages *clitext.Messages, r io.Reader, lang i18n.Language) error {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, envLineInitial), envLineLimit)
 	for scanner.Scan() {
@@ -38,11 +38,11 @@ func scanEnvFile(r io.Reader, lang i18n.Language) error {
 			continue
 		}
 		if err := os.Setenv(key, unquoteEnv(val)); err != nil {
-			return renderError(lang, err, clitext.EnvSetFailed, clitext.Params{clitext.ParamKey: key, clitext.ParamErr: err.Error()})
+			return renderError(messages, lang, err, clitext.EnvSetFailed, clitext.Params{clitext.ParamKey: key, clitext.ParamErr: err.Error()})
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return renderError(lang, err, clitext.EnvReadFailed, clitext.Params{clitext.ParamErr: err.Error()})
+		return renderError(messages, lang, err, clitext.EnvReadFailed, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	return nil
 }

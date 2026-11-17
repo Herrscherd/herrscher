@@ -90,23 +90,24 @@ func replayed(files Files, input string) (int, []event, error) {
 
 func summary(events []event) []string {
 	var got []string
-	for _, e := range events {
-		switch e.Type {
+	for index := range events {
+		current := &events[index]
+		switch current.Type {
 		case wordAssistant:
-			for index := range e.Message.Content {
-				block := &e.Message.Content[index]
+			for blockIndex := range current.Message.Content {
+				block := &current.Message.Content[blockIndex]
 				got = append(got, block.Type+":"+block.Text+block.Name+block.ID+string(block.Input))
 			}
 		case "user":
-			for index := range e.Message.Content {
-				block := &e.Message.Content[index]
+			for blockIndex := range current.Message.Content {
+				block := &current.Message.Content[blockIndex]
 				got = append(got, fmt.Sprintf("%s:%s:%t:%s", block.Type, block.ToolUseID, block.IsError, block.Content))
 			}
 		case "result":
-			if e.IsError {
-				got = append(got, "failed:"+strings.Join(e.Errors, "|"))
+			if current.IsError {
+				got = append(got, "failed:"+strings.Join(current.Errors, "|"))
 			} else {
-				got = append(got, "result:"+e.Result)
+				got = append(got, "result:"+current.Result)
 			}
 		}
 	}

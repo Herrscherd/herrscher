@@ -2100,7 +2100,7 @@
   {
     "id": "cli.help.cmd.approve.rule",
     "description": "Help of the command approve rule",
-    "other": "add a rule, remove one with --rm, or list them with no argument"
+    "other": "add a rule, remove one with --rm, or list them with no argument; never a broad Bash rule (Bash(*), Bash(herrscher*), a shell or an interpreter): it gives every session the operator's rights"
   },
   {
     "id": "cli.help.cmd.approve.ask",

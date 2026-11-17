@@ -32,16 +32,11 @@ const (
 	RoleOperator Role = "operator"
 	// RoleObserver runs only what reads.
 	RoleObserver Role = "observer"
-	// RoleAgent is what a session holds. It is structural: never granted,
-	// never revoked, because the daemon knows a connection came from a session
-	// by having opened that listener itself.
+	// RoleAgent is what a connection on a session's command socket holds.
 	RoleAgent Role = "agent"
 )
 
-// LocalPrincipal is the caller on the daemon's own operator socket. Opening it
-// already needs the daemon's uid, so arriving there is the proof: whoever can
-// do it can also read the state, rewrite it, and relaunch the binary. Asking
-// them for one more proof would be theatre.
+// LocalPrincipal is the caller on the daemon's operator socket, which any process of the daemon's uid reaches, an approved agent shell included.
 const LocalPrincipal = "local"
 
 // SessionPrefix marks a principal minted for a session. Only the core mints

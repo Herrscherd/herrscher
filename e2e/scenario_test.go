@@ -23,6 +23,12 @@ func TestMain(m *testing.M) {
 		"claude": func() {
 			os.Exit(vendortest.Claude(os.Args[1:], vendortest.Streams{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}, vendortest.FilesFrom(os.Getenv)))
 		},
+		"cursor-agent": func() {
+			os.Exit(vendortest.Cursor(os.Args[1:], vendortest.Streams{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}, vendortest.FilesFrom(os.Getenv)))
+		},
+		"codex": func() {
+			os.Exit(vendortest.Codex(os.Args[1:], vendortest.Streams{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}, vendortest.FilesFrom(os.Getenv)))
+		},
 	})
 }
 
@@ -39,6 +45,8 @@ func TestScenarios(t *testing.T) {
 			"waitlog":        waitLog,
 			"waitapproval":   waitApproval,
 			"descendantgone": descendantGone,
+			"sessionrunning": sessionRunning,
+			"sessionstopped": sessionStopped,
 		},
 	})
 }

@@ -142,9 +142,9 @@ func (t *Turn) empty() bool {
 func parseStep(line string) (step, error) {
 	name, rest := cutWord(line)
 	switch name {
-	case "text":
+	case scriptKeywordText:
 		return textStep(stepText, rest)
-	case "error":
+	case scriptKeywordError:
 		return textStep(stepFail, rest)
 	case "apierror":
 		return textStep(stepAPIError, rest)
@@ -212,7 +212,7 @@ func toolStep(rest string) (step, error) {
 	return step{kind: stepTool, tool: tool, input: json.RawMessage(input)}, nil
 }
 
-// Turn returns the scripted reply at index, counted from zero; a turn past the end echoes.
+// Turn returns the reply scripted for the turn at index, counted across processes.
 func (s Script) Turn(index int) Turn {
 	if index < len(s.turns) {
 		return s.turns[index]

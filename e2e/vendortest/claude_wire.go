@@ -25,8 +25,8 @@ type assistantEvent struct {
 }
 
 func assistantText(text string) assistantEvent {
-	event := assistantEvent{Type: "assistant"}
-	event.Message.Content = []contentBlock{{Type: "text", Text: text}}
+	event := assistantEvent{Type: wordAssistant}
+	event.Message.Content = []contentBlock{{Type: contentBlockTypeText, Text: text}}
 	return event
 }
 
@@ -42,8 +42,8 @@ func toolUseID(call int) string {
 }
 
 func assistantTool(call int, tool step) assistantEvent {
-	event := assistantEvent{Type: "assistant"}
-	event.Message.Content = []contentBlock{{Type: "tool_use", ID: toolUseID(call), Name: tool.tool, Input: tool.input}}
+	event := assistantEvent{Type: wordAssistant}
+	event.Message.Content = []contentBlock{{Type: valueToolUse, ID: toolUseID(call), Name: tool.tool, Input: tool.input}}
 	return event
 }
 
@@ -103,7 +103,7 @@ const charsPerToken = 4
 
 func (r *replay) fields(subtype string, isError bool, prompt, text string) resultFields {
 	return resultFields{
-		Type:      "result",
+		Type:      wordResult,
 		Subtype:   subtype,
 		IsError:   isError,
 		SessionID: r.sessionID,
@@ -112,7 +112,7 @@ func (r *replay) fields(subtype string, isError bool, prompt, text string) resul
 }
 
 func (r *replay) result(text, prompt string) resultEvent {
-	return resultEvent{resultFields: r.fields("success", false, prompt, text), Result: text}
+	return resultEvent{resultFields: r.fields(valueSuccess, false, prompt, text), Result: text}
 }
 
 func (r *replay) failure(text, prompt string) failedResultEvent {

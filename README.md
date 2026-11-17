@@ -1741,8 +1741,11 @@ Linux, and says it skips the step anywhere else.
   of the scenario if it still runs. `! descendantgone` is refused.
 - These waits poll with a short sleep: they wait on other processes, which a
   `testing/synctest` bubble cannot control.
-- A process that still carries the instance of the scenario after it ends fails the
-  run and is killed.
+- At the end of a scenario, `settle` sends SIGINT to every process still alive that
+  carries the instance of the scenario (the daemon, the fakes and their descendants),
+  then SIGKILL to the survivors once `reapGrace` has passed. A process that this SIGINT
+  stops fails the scenario with `errStopped`, a process that already ended is neither
+  signalled nor counted, and a survivor of both signals is a leak (`errLeaked`).
 - The cleanup removes every runtime entry named after the instance, and the names
   `core/host` gives its command and events sockets and its lock, hashed ones included.
   It only touches a runtime directory that `core/host` accepts as private to the user.
@@ -1762,7 +1765,7 @@ Linux, and says it skips the step anywhere else.
   provides it. The script holds one block per turn, separated by `---`, and each line
   is one step: `text <words>`, `tool <Name> <json input>`, `error <message>`,
   `apierror <message>`, `spawn <file>`, `echo`, `hang` or `crash`, the last three alone
-  on their line. `spawn` starts a `sleep` of sixty seconds (`DescendantSleep` in
+  on their line, and blank lines are skipped. `spawn` starts a `sleep` of sixty seconds (`DescendantSleep` in
   `e2e/vendortest`) that the fake does not wait for, and writes its pid to `<file>` in
   the work directory. Stream and one-shot turns run the spawns of their turn. A turn with
   neither a step nor a spawn is an error. The turn count is shared by every process of
@@ -1778,6 +1781,25 @@ Linux, and says it skips the step anywhere else.
   The one-shot mode is reached with `herrscher session create --backend oneshot` or
   `herrscher bridge --backend oneshot`, not with `CLAUDE_KIND`, which the stream backend
   of a session overrides. Every start and every prompt is appended to `$VENDORTEST_LOG`.
+
+The `codex` and `cursor-agent` fakes of the same package read that script and share its
+turn count, so each turn goes to whichever vendor asks for it next. `codex` answers the
+`login status` probe and serves the JSON-RPC app-server that the codex backend drives in
+stream mode, one turn per `turn/start` request. `cursor-agent` answers the `status` probe
+and replays one turn per invocation, with the prompt on its standard input. Both record
+their prompts in `$VENDORTEST_LOG` as `codex prompt "<text>"` and `cursor prompt "<text>"`.
+
+`sessionrunning <session> <vendor command>` fails the scenario unless a process of its
+instance has `--session <session>` and `--cmd <vendor command>` on its command line, so a
+switch that proves nothing cannot pass. `sessionstopped` takes the same arguments and waits
+up to five seconds for no such process, failing otherwise. Neither can be negated.
+
+`session_switch.txtar` covers a vendor switch on one session. It seeds a prompt through
+`claude`, checks the overview, then switches the session to `codex` and then to
+`cursor-agent`. Before each switch `sessionrunning` checks that the previous vendor process
+runs, and after it `sessionstopped` waits for that process to stop. The `codex` and
+`cursor-agent` prompts get `echo: <prompt>` back. Its `claude.script` holds one turn, so the
+later turns are past the end of the script and echo.
 
 Every bug found by hand becomes a scenario before it is fixed: the scenario is written
 first, fails on the bug, and passes with the fix.

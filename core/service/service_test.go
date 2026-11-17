@@ -826,7 +826,7 @@ func TestValidateSource(t *testing.T) {
 }
 
 func TestBuildRejectsNonSource(t *testing.T) {
-	if err := Build(context.Background(), t.TempDir(), "/tmp/out"); err == nil {
+	if err := Build(context.Background(), clitext.NewMessages(), t.TempDir(), "/tmp/out"); err == nil {
 		t.Fatal("Build must reject a non-checkout before invoking go")
 	}
 }

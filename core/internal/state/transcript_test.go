@@ -1,9 +1,11 @@
 package state
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -202,4 +204,60 @@ func TestReadTranscriptTailKeepsOnlyTheLastEntries(t *testing.T) {
 	if missing := ReadTranscriptTail(filepath.Join(t.TempDir(), "absent.jsonl"), 2); len(missing) != 0 {
 		t.Fatalf("missing transcript read as %+v, want nothing", missing)
 	}
+}
+
+func TestReadTranscriptTailSkipsTheLineCutAtTheWindowStart(t *testing.T) {
+	p := TranscriptPath(t.TempDir(), "window")
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	const total = 1000
+	var file []byte
+	for i := 0; i < total; i++ {
+		payload, err := json.Marshal(TranscriptEntry{Ts: "t", Role: "user", Text: fmt.Sprintf("%04d-%s", i, strings.Repeat("x", 280))})
+		if err != nil {
+			t.Fatal(err)
+		}
+		file = append(append(file, payload...), '\n')
+	}
+	if err := os.WriteFile(p, file, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if len(file) <= transcriptTailBytes {
+		t.Fatalf("fixture is %d bytes, want more than the %d-byte tail window", len(file), transcriptTailBytes)
+	}
+
+	capped := ReadTranscriptTail(p, 200)
+	if len(capped) != 200 {
+		t.Fatalf("got %d entries, want the cap of 200", len(capped))
+	}
+	assertContiguousEndingAt(t, capped, total-1)
+
+	window := ReadTranscriptTail(p, 0)
+	if len(window) == 0 || len(window) >= total {
+		t.Fatalf("window holds %d entries, want some but not all of the %d written", len(window), total)
+	}
+	assertContiguousEndingAt(t, window, total-1)
+	if first := indexOf(t, window[0]); first == 0 {
+		t.Fatalf("window starts at entry 0, so the tail never reached the cut line")
+	}
+}
+
+func assertContiguousEndingAt(t *testing.T, entries []TranscriptEntry, last int) {
+	t.Helper()
+	for i := range entries {
+		want := last - (len(entries) - 1 - i)
+		if got := indexOf(t, entries[i]); got != want {
+			t.Fatalf("entry %d is %d, want %d: a cut or missing line leaked into the tail", i, got, want)
+		}
+	}
+}
+
+func indexOf(t *testing.T, entry TranscriptEntry) int {
+	t.Helper()
+	index, err := strconv.Atoi(entry.Text[:4])
+	if err != nil {
+		t.Fatalf("entry text %q does not start with its index: %v", entry.Text, err)
+	}
+	return index
 }

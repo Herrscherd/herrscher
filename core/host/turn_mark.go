@@ -14,13 +14,6 @@ func renderTurnInterrupted(lang i18n.Language) (string, error) {
 	return contracts.NewRenderer().Render(effectiveLanguage(lang), contracts.Notice{Code: contracts.CodeTurnInterrupted})
 }
 
-func effectiveLanguage(lang i18n.Language) i18n.Language {
-	if lang != i18n.English && lang != i18n.French {
-		return i18n.English
-	}
-	return lang
-}
-
 func (h *hub) openTurnMark(session, turnID string) {
 	if err := h.st.SetInterruptedTurn(session, turnID); err != nil {
 		warnLive(h.warnings, h.sessionLanguageSource(session), "warn.session_turn_mark_set", map[string]any{nameParam: session, detailParam: err})

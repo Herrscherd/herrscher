@@ -16,8 +16,7 @@ func TestBlockedStopWithAFrozenJournalStaysWithinItsBound(t *testing.T) {
 				awaitBackground(t, frozen.entered, "the frozen journal never received a line")
 				warnings := newGatedWarnings(name)
 				t.Cleanup(warnings.open)
-				var stderr lockedBuffer
-				h := c.start(t, name, blockedGrace, warnings, &stderr)
+				h := c.start(t, name, blockedGrace, warnings)
 				started := time.Now()
 				returned := runInBackground(func() { path.run(h, name) })
 				select {

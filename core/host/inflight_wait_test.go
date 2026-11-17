@@ -231,7 +231,7 @@ const (
 )
 
 func blockedStopBound() time.Duration {
-	return 3*blockedGrace + 9*warningWriteBudget + blockedStopMargin
+	return 3*blockedGrace + 7*warningWriteBudget + blockedStopMargin
 }
 
 func TestBlockedWarningWriterDoesNotHoldStopPastTheBudget(t *testing.T) {

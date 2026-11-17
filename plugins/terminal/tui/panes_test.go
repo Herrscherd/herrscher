@@ -202,7 +202,7 @@ func TestPaneToolRowCutsTheTargetBeforeItsState(t *testing.T) {
 func TestPaneComposerShowsThePanePlaceholder(t *testing.T) {
 	_, m := paneModel(t)
 	m.buildFrame()
-	if m.input.Placeholder != newTranslator().t("tui.compose.placeholder_panes", nil) {
+	if m.input.Placeholder != testTranslator().t("tui.compose.placeholder_panes", nil) {
 		t.Fatalf("the panes composer must say where the message goes, got %q", m.input.Placeholder)
 	}
 }

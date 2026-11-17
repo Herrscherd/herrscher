@@ -39,25 +39,25 @@ func (s style) header(title, sub string) {
 	}
 }
 
-func summaryStack(modules []string) {
+func summaryStack(messages *clitext.Messages, modules []string) {
 	sty := newStyle()
-	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, msg(clitext.ManageStackHeader, nil)))
+	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, msg(messages, clitext.ManageStackHeader, nil)))
 	for _, m := range modules {
 		fmt.Fprintf(os.Stderr, "    %s %s\n", sty.wrap(sty.green, "+"), shortModule(m))
 	}
 	fmt.Fprintln(os.Stderr)
 }
 
-func summaryConfig(path string, count int) {
+func summaryConfig(messages *clitext.Messages, path string, count int) {
 	sty := newStyle()
 	fmt.Fprintln(os.Stderr)
 	if count > 0 {
-		fmt.Fprintf(os.Stderr, "  %s %s\n", sty.wrap(sty.green, "✓"), msg(clitext.ManageWroteSettings, clitext.Params{clitext.ParamCount: count, clitext.ParamPath: path}))
+		fmt.Fprintf(os.Stderr, "  %s %s\n", sty.wrap(sty.green, "✓"), msg(messages, clitext.ManageWroteSettings, clitext.Params{clitext.ParamCount: count, clitext.ParamPath: path}))
 	} else {
-		fmt.Fprintf(os.Stderr, "  %s %s\n", sty.wrap(sty.dim, "·"), msg(clitext.ManageNothingEntered, clitext.Params{clitext.ParamPath: path}))
+		fmt.Fprintf(os.Stderr, "  %s %s\n", sty.wrap(sty.dim, "·"), msg(messages, clitext.ManageNothingEntered, clitext.Params{clitext.ParamPath: path}))
 	}
-	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.dim, msg(clitext.ManageInstalledNote, nil)))
-	fmt.Fprintf(os.Stderr, "  %s\n\n", msg(clitext.ManageStartWith, clitext.Params{clitext.ParamCommand: sty.wrap(sty.bold, serveCommand(invokedBinary(os.Args)))}))
+	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.dim, msg(messages, clitext.ManageInstalledNote, nil)))
+	fmt.Fprintf(os.Stderr, "  %s\n\n", msg(messages, clitext.ManageStartWith, clitext.Params{clitext.ParamCommand: sty.wrap(sty.bold, serveCommand(invokedBinary(os.Args)))}))
 }
 
 func invokedBinary(args []string) string {

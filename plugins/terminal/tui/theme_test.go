@@ -339,8 +339,8 @@ func TestAsciiViewIsPureAtEveryWidth(t *testing.T) {
 }
 
 func TestWorkingVerbIsEnglish(t *testing.T) {
-	if newTranslator().t("tui.common.working", nil) != "working…" {
-		t.Fatalf("workingVerb = %q", newTranslator().t("tui.common.working", nil))
+	if testTranslator().t("tui.common.working", nil) != "working…" {
+		t.Fatalf("workingVerb = %q", testTranslator().t("tui.common.working", nil))
 	}
 }
 

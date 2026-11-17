@@ -73,7 +73,7 @@ func TestRunProgramStopsWhenItsContextIsCancelled(t *testing.T) {
 	backend := &fakeBackend{fe: make(chan RoutedEvent)}
 	done := make(chan error, 1)
 	go func() {
-		done <- runProgram(ctx, cancel, backend, newRunModel(ctx, backend), tea.WithInput(nil), tea.WithOutput(io.Discard))
+		done <- runProgram(ctx, cancel, backend, newRunModel(ctx, testMessages(), backend), tea.WithInput(nil), tea.WithOutput(io.Discard))
 	}()
 	cancel()
 	select {

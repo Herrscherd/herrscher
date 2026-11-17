@@ -77,6 +77,8 @@ type Terminal struct {
 	nextID  int
 	out     chan tui.RoutedEvent
 
+	messages *clitext.Messages
+
 	ctrlMu    sync.Mutex
 	ctrl      contracts.SessionControl
 	ctrlReady chan struct{}
@@ -161,7 +163,7 @@ const (
 func (t *Terminal) StartSession() (string, error) {
 	control := t.Control()
 	if control == nil {
-		return "", terminalFailure(errNoSessionControl, clitext.TerminalNoSessionControl, nil)
+		return "", t.terminalFailure(errNoSessionControl, clitext.TerminalNoSessionControl, nil)
 	}
 	t.ctrlMu.Lock()
 	ctx := t.baseCtx
@@ -240,14 +242,15 @@ func (t *Terminal) RunForeground(ctx context.Context, cancel context.CancelFunc)
 		cancel()
 	}
 	if t.openSession == "" {
-		return tui.Run(ctx, quit, t, tui.Language(clientLanguage()))
+		return tui.Run(ctx, quit, t.messages, t, tui.Language(clientLanguage()))
 	}
-	return tui.Run(ctx, quit, t, tui.Language(clientLanguage()), tui.OpenOn(t.openSession, t.openText))
+	return tui.Run(ctx, quit, t.messages, t, tui.Language(clientLanguage()), tui.OpenOn(t.openSession, t.openText))
 }
 
 // New builds an unbound terminal gateway.
 func New() *Terminal {
 	return &Terminal{
+		messages:  clitext.NewMessages(),
 		pending:   make(map[string][]contracts.Message),
 		out:       make(chan tui.RoutedEvent, routeEventBufferSize),
 		ctrlReady: make(chan struct{}),
@@ -443,7 +446,7 @@ func (t *Terminal) Overview() (string, error) {
 func (t *Terminal) Resume(name string) (string, error) {
 	control := t.Control()
 	if control == nil {
-		return "", terminalFailure(errNoSessionControl, clitext.TerminalNoSessionControl, nil)
+		return "", t.terminalFailure(errNoSessionControl, clitext.TerminalNoSessionControl, nil)
 	}
 	if err := control.Resume(name); err != nil {
 		return "", err
@@ -604,13 +607,13 @@ func (t *Terminal) Dispatch(args []string) (string, error) {
 		if len(args) > 0 {
 			verb = args[0]
 		}
-		return "", terminalFailure(errNotAvailableFromTerminal, clitext.TerminalNotAvailable, clitext.Params{clitext.ParamCommand: strconv.Quote(verb), clitext.ParamAllowed: allowedVerbs()})
+		return "", t.terminalFailure(errNotAvailableFromTerminal, clitext.TerminalNotAvailable, clitext.Params{clitext.ParamCommand: strconv.Quote(verb), clitext.ParamAllowed: allowedVerbs()})
 	}
 	t.ctrlMu.Lock()
 	call, ctx := t.ctrl, t.baseCtx
 	t.ctrlMu.Unlock()
 	if call == nil {
-		return "", terminalFailure(errSessionControlUnbound, clitext.TerminalSessionUnbound, nil)
+		return "", t.terminalFailure(errSessionControlUnbound, clitext.TerminalSessionUnbound, nil)
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -625,7 +628,7 @@ func (t *Terminal) Close(name string, force bool) (string, error) {
 	control, ctx := t.ctrl, t.baseCtx
 	t.ctrlMu.Unlock()
 	if control == nil {
-		return "", terminalFailure(errSessionControlUnbound, clitext.TerminalSessionUnbound, nil)
+		return "", t.terminalFailure(errSessionControlUnbound, clitext.TerminalSessionUnbound, nil)
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -688,8 +691,8 @@ func textResult(res contracts.Result, err error) (string, error) {
 	return cli.Render(res, err, clientLanguage())
 }
 
-func terminalFailure(cause error, key clitext.Key, params clitext.Params) error {
-	return clitext.Failure(clientLanguage(), cause, key, params)
+func (t *Terminal) terminalFailure(cause error, key clitext.Key, params clitext.Params) error {
+	return t.messages.Failure(clientLanguage(), cause, key, params)
 }
 
 func clientLanguage() i18n.Language {

@@ -12,7 +12,7 @@ import (
 )
 
 func startModel(backend Backend) (*model, tea.Cmd) {
-	m := newModel(backend)
+	m := newModel(testMessages(), backend)
 	if backend == nil {
 		return m, nil
 	}
@@ -120,8 +120,8 @@ func TestNewModelGuardFlagsEveryReferenceButNilCalls(t *testing.T) {
 func fixtures(be Backend) {
 	_ = (newModel)(be)
 	build := newModel
-	_ = newModel(nil)
-	_ = newModel(be)
+	_ = newModel(testMessages(), nil)
+	_ = newModel(testMessages(), be)
 }
 `
 	fset := token.NewFileSet()
@@ -140,15 +140,15 @@ func TestNewModelGuardExemptsOnlyTheNamedFunction(t *testing.T) {
 	const snippet = `package tui
 
 func startModel(backend Backend) {
-	_ = newModel(backend)
+	_ = newModel(testMessages(), backend)
 }
 
 func other(be Backend) {
-	_ = newModel(be)
+	_ = newModel(testMessages(), be)
 }
 
 func (m *model) startModel(be Backend) {
-	_ = newModel(be)
+	_ = newModel(testMessages(), be)
 }
 `
 	fset := token.NewFileSet()

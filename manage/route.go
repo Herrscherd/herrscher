@@ -41,18 +41,18 @@ func currentRoute() routeCurrent {
 	}
 }
 
-func routeStep(sty style, input *bufio.Reader, cat catalogFn, cur routeCurrent, askModel bool) (map[string]string, error) {
+func routeStep(messages *clitext.Messages, sty style, input *bufio.Reader, cat catalogFn, cur routeCurrent, askModel bool) (map[string]string, error) {
 	out := make(map[string]string)
 
-	fmt.Fprintf(os.Stderr, "\n  %s  %s\n", sty.wrap(sty.bold+sty.cyan, msg(clitext.ManageRoutingHeader, nil)), sty.wrap(sty.dim, msg(clitext.ManageRoutingNote, nil)))
-	policy, err := choosePolicy(sty, input, cur.policy)
+	fmt.Fprintf(os.Stderr, "\n  %s  %s\n", sty.wrap(sty.bold+sty.cyan, msg(messages, clitext.ManageRoutingHeader, nil)), sty.wrap(sty.dim, msg(messages, clitext.ManageRoutingNote, nil)))
+	policy, err := choosePolicy(messages, sty, input, cur.policy)
 	if err != nil {
 		return nil, err
 	}
 	out[host.EnvRoutePolicy] = string(policy)
 
 	if policy == contracts.PolicyGatewayOnly {
-		creds, credsErr := askGatewayCreds(sty, input, cur.haveCred)
+		creds, credsErr := askGatewayCreds(messages, sty, input, cur.haveCred)
 		if credsErr != nil {
 			return nil, credsErr
 		}
@@ -62,26 +62,26 @@ func routeStep(sty style, input *bufio.Reader, cat catalogFn, cur routeCurrent, 
 	}
 
 	if !askModel {
-		fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.dim, msg(clitext.ManageDefaultModelLater, nil)))
+		fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.dim, msg(messages, clitext.ManageDefaultModelLater, nil)))
 		return out, nil
 	}
 
 	entries, err := cat(policy)
 	if err != nil {
-		return nil, failure(err, clitext.ManageCatalogFailed, clitext.Params{clitext.ParamErr: err.Error()})
+		return nil, failure(messages, err, clitext.ManageCatalogFailed, clitext.Params{clitext.ParamErr: err.Error()})
 	}
-	model, err := chooseDefaultModel(sty, input, entries, cur.model)
+	model, err := chooseDefaultModel(messages, sty, input, entries, cur.model)
 	if err != nil {
 		return nil, err
 	}
 	out[host.EnvDefaultModel] = model
 	if model == "" && policy == contracts.PolicyGatewayOnly {
-		fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.red, msg(clitext.ManageGatewayNoModel, nil)))
+		fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.red, msg(messages, clitext.ManageGatewayNoModel, nil)))
 	}
 	return out, nil
 }
 
-func policyChoices() []struct {
+func policyChoices(messages *clitext.Messages) []struct {
 	policy contracts.RoutePolicy
 	label  string
 	help   string
@@ -91,15 +91,15 @@ func policyChoices() []struct {
 		label  string
 		help   string
 	}{
-		{contracts.PolicyAll, "all", msg(clitext.ManagePolicyAllHelp, nil)},
-		{contracts.PolicyGatewayOnly, "gateway-only", msg(clitext.ManagePolicyGatewayHelp, nil)},
+		{contracts.PolicyAll, "all", msg(messages, clitext.ManagePolicyAllHelp, nil)},
+		{contracts.PolicyGatewayOnly, "gateway-only", msg(messages, clitext.ManagePolicyGatewayHelp, nil)},
 	}
 }
 
-func choosePolicy(sty style, input *bufio.Reader, cur contracts.RoutePolicy) (contracts.RoutePolicy, error) {
-	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, msg(clitext.ManageRoutePolicyHeader, nil)))
-	translator := clitext.For(clitext.ClientLanguage())
-	for idx, choice := range policyChoices() {
+func choosePolicy(messages *clitext.Messages, sty style, input *bufio.Reader, cur contracts.RoutePolicy) (contracts.RoutePolicy, error) {
+	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, msg(messages, clitext.ManageRoutePolicyHeader, nil)))
+	translator := messages.For(clitext.ClientLanguage())
+	for idx, choice := range policyChoices(messages) {
 		name, tag := fmt.Sprintf("%-14s", choice.label), fmt.Sprintf("%-8s", "")
 		if choice.policy == cur {
 			name = sty.wrap(sty.green, name)
@@ -114,25 +114,25 @@ func choosePolicy(sty style, input *bufio.Reader, cur contracts.RoutePolicy) (co
 		return cur, nil
 	}
 	if choice, err := strconv.Atoi(ans); err == nil {
-		if choice < 1 || choice > len(policyChoices()) {
-			return "", failure(errChoiceOutOfRange, clitext.ManageChoiceOutOfRange, clitext.Params{clitext.ParamName: msg(clitext.ManageRoutePolicyHeader, nil), clitext.ParamChoice: choice})
+		if choice < 1 || choice > len(policyChoices(messages)) {
+			return "", failure(messages, errChoiceOutOfRange, clitext.ManageChoiceOutOfRange, clitext.Params{clitext.ParamName: msg(messages, clitext.ManageRoutePolicyHeader, nil), clitext.ParamChoice: choice})
 		}
-		return policyChoices()[choice-1].policy, nil
+		return policyChoices(messages)[choice-1].policy, nil
 	}
-	for _, choice := range policyChoices() {
+	for _, choice := range policyChoices(messages) {
 		if ans == choice.label {
 			return choice.policy, nil
 		}
 	}
-	return "", failure(errUnknownPolicy, clitext.ManageUnknownPolicy, clitext.Params{clitext.ParamPolicy: strconv.Quote(ans)})
+	return "", failure(messages, errUnknownPolicy, clitext.ManageUnknownPolicy, clitext.Params{clitext.ParamPolicy: strconv.Quote(ans)})
 }
 
-func askGatewayCreds(sty style, input *bufio.Reader, have bool) (map[string]string, error) {
-	note := msg(clitext.ManageGatewayPairRequired, nil)
+func askGatewayCreds(messages *clitext.Messages, sty style, input *bufio.Reader, have bool) (map[string]string, error) {
+	note := msg(messages, clitext.ManageGatewayPairRequired, nil)
 	if have {
-		note = msg(clitext.ManageGatewayPairKeep, nil)
+		note = msg(messages, clitext.ManageGatewayPairKeep, nil)
 	}
-	fmt.Fprintf(os.Stderr, "  %s  %s\n", sty.wrap(sty.bold, msg(clitext.ManageGatewayPairHeader, nil)), sty.wrap(sty.dim, note))
+	fmt.Fprintf(os.Stderr, "  %s  %s\n", sty.wrap(sty.bold, msg(messages, clitext.ManageGatewayPairHeader, nil)), sty.wrap(sty.dim, note))
 
 	url := promptLine(input, secretLabel(sty, host.EnvGatewayURL))
 	token, err := readSecret(input, secretLabel(sty, host.EnvGatewayToken))
@@ -143,21 +143,21 @@ func askGatewayCreds(sty style, input *bufio.Reader, have bool) (map[string]stri
 	switch {
 	case url == "" && token == "":
 		if !have {
-			return nil, failure(errNoGatewayCreds, clitext.ManageGatewayPairMissing, clitext.Params{clitext.ParamURL: host.EnvGatewayURL, clitext.ParamToken: host.EnvGatewayToken})
+			return nil, failure(messages, errNoGatewayCreds, clitext.ManageGatewayPairMissing, clitext.Params{clitext.ParamURL: host.EnvGatewayURL, clitext.ParamToken: host.EnvGatewayToken})
 		}
 		return make(map[string]string), nil
 	case url == "" || token == "":
-		return nil, failure(errIncompleteCreds, clitext.ManageGatewayPairPartial, clitext.Params{clitext.ParamURL: host.EnvGatewayURL, clitext.ParamToken: host.EnvGatewayToken})
+		return nil, failure(messages, errIncompleteCreds, clitext.ManageGatewayPairPartial, clitext.Params{clitext.ParamURL: host.EnvGatewayURL, clitext.ParamToken: host.EnvGatewayToken})
 	}
 	return map[string]string{host.EnvGatewayURL: url, host.EnvGatewayToken: token}, nil
 }
 
-func chooseDefaultModel(sty style, input *bufio.Reader, entries []host.CatalogEntry, cur string) (string, error) {
+func chooseDefaultModel(messages *clitext.Messages, sty style, input *bufio.Reader, entries []host.CatalogEntry, cur string) (string, error) {
 	if len(entries) == 0 {
-		fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.dim, msg(clitext.ManageNoModelOffered, nil)))
+		fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.dim, msg(messages, clitext.ManageNoModelOffered, nil)))
 		return "", nil
 	}
-	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, msg(clitext.ManageDefaultModelHeader, nil)))
+	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, msg(messages, clitext.ManageDefaultModelHeader, nil)))
 	for idx := range entries {
 		entry := &entries[idx]
 		padded, tag := fmt.Sprintf("%-24s", entry.ID), ""
@@ -182,12 +182,12 @@ func chooseDefaultModel(sty style, input *bufio.Reader, entries []host.CatalogEn
 		case choice == len(entries)+1:
 			return "", nil
 		}
-		return "", failure(errChoiceOutOfRange, clitext.ManageChoiceOutOfRange, clitext.Params{clitext.ParamName: msg(clitext.ManageDefaultModelHeader, nil), clitext.ParamChoice: choice})
+		return "", failure(messages, errChoiceOutOfRange, clitext.ManageChoiceOutOfRange, clitext.Params{clitext.ParamName: msg(messages, clitext.ManageDefaultModelHeader, nil), clitext.ParamChoice: choice})
 	}
 	for idx := range entries {
 		if entries[idx].ID == ans {
 			return ans, nil
 		}
 	}
-	return "", failure(errUnknownModel, clitext.ManageUnknownModel, clitext.Params{clitext.ParamModel: strconv.Quote(ans)})
+	return "", failure(messages, errUnknownModel, clitext.ManageUnknownModel, clitext.Params{clitext.ParamModel: strconv.Quote(ans)})
 }

@@ -28,6 +28,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
 	"github.com/Herrscherd/herrscher/core/eventwire"
@@ -540,8 +541,8 @@ func (m *model) runContext() context.Context {
 	return m.ctx
 }
 
-func newModel(backend Backend) *model {
-	trans := newTranslator()
+func newModel(messages *clitext.Messages, backend Backend) *model {
+	trans := newTranslator(messages)
 	field := textarea.New()
 	field.Placeholder = idlePlaceholder(trans)
 	field.SetPromptFunc(len(composerPrompt), promptAt(composerPrompt))
@@ -1558,8 +1559,8 @@ func OpenOn(session, text string) Option {
 	return func(m *model) { m.beginOpen(session, text) }
 }
 
-func newRunModel(ctx context.Context, backend Backend) *model {
-	model := newModel(backend)
+func newRunModel(ctx context.Context, messages *clitext.Messages, backend Backend) *model {
+	model := newModel(messages, backend)
 	model.ctx = ctx
 	model.loadTheme(filepath.Dir(config.DefaultPath()), lipgloss.HasDarkBackground)
 	model.loadContextLimits(config.DefaultPath(), os.Getenv)
@@ -1573,15 +1574,15 @@ func newRunModel(ctx context.Context, backend Backend) *model {
 // Run starts the TUI bound to the given gateway backend, blocking until the user
 // quits; quitting cancels ctx (wired by the caller) so the daemon shuts down
 // cleanly.
-func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts ...Option) (runErr error) {
-	model := newWindow(ctx, backend, opts)
+func Run(ctx context.Context, cancel context.CancelFunc, messages *clitext.Messages, backend Backend, opts ...Option) (runErr error) {
+	model := newWindow(ctx, messages, backend, opts)
 	defer func() {
 		runErr = errors.Join(runErr, model.releaseDrafts())
 	}()
 	if err := sweepDraftsAtStart(); err != nil {
 		model.flash = model.tr.t("tui.drafts.orphans", map[string]any{tplArgReason: localizedReason(model.tr, err)})
 	}
-	if seam, err := newManageSeam(); err == nil {
+	if seam, err := newManageSeam(messages); err == nil {
 		model.SetPluginSeam(seam)
 	}
 	if err := writeStdout(enhancedKeysOn); err != nil {

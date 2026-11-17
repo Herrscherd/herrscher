@@ -13,7 +13,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
-func newTestModel() *model { return newModel(nil) }
+func newTestModel() *model { return newModel(testMessages(), nil) }
 
 func quietLog() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
@@ -747,11 +747,11 @@ func TestThinkingLineDerivedWhileBusyNoStream(t *testing.T) {
 	if tabLineCount(tb, roleThinking) != 0 {
 		t.Fatal("thinking indicator must not be appended to tab.lines")
 	}
-	if !strings.Contains(m.thinkingContent(), newTranslator().t("tui.common.working", nil)) {
+	if !strings.Contains(m.thinkingContent(), testTranslator().t("tui.common.working", nil)) {
 		t.Fatal("thinkingContent must show the busy line while the turn runs")
 	}
 	tb.busy = false
-	if strings.Contains(m.thinkingContent(), newTranslator().t("tui.common.working", nil)) {
+	if strings.Contains(m.thinkingContent(), testTranslator().t("tui.common.working", nil)) {
 		t.Fatal("the busy line must disappear once the turn is over")
 	}
 }

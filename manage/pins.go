@@ -12,7 +12,7 @@ var errNotModulePath = clitext.SentinelError("not a module path")
 
 const pinFile = ".herrscher-pins"
 
-func readPins(src string) (map[string]bool, error) {
+func readPins(messages *clitext.Messages, src string) (map[string]bool, error) {
 	pins := make(map[string]bool)
 	for idx, line := range strings.Split(src, "\n") {
 		mod := strings.TrimSpace(line)
@@ -20,7 +20,7 @@ func readPins(src string) (map[string]bool, error) {
 			continue
 		}
 		if strings.ContainsAny(mod, " \t") {
-			return nil, failure(errNotModulePath, clitext.ManagePinsLine, clitext.Params{clitext.ParamFile: pinFile, clitext.ParamLine: idx + 1, clitext.ParamModule: strconv.Quote(mod)})
+			return nil, failure(messages, errNotModulePath, clitext.ManagePinsLine, clitext.Params{clitext.ParamFile: pinFile, clitext.ParamLine: idx + 1, clitext.ParamModule: strconv.Quote(mod)})
 		}
 		pins[mod] = true
 	}

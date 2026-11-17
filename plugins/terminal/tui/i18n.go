@@ -34,15 +34,19 @@ const (
 var localeFiles embed.FS
 
 type translator struct {
-	lang    i18n.Language
-	catalog func() (*i18n.Catalog, error)
-	cli     *clitext.Translator
-	cliOnce *sync.Once
-	log     *slog.Logger
+	lang     i18n.Language
+	catalog  func() (*i18n.Catalog, error)
+	messages *clitext.Messages
+	cliOnce  *sync.Once
+	log      *slog.Logger
 }
 
-func newTranslator() translator {
-	return translator{lang: i18n.English, catalog: sync.OnceValues(loadLocales), cli: clitext.For(i18n.English), cliOnce: new(sync.Once), log: slog.Default()}
+func newTranslator(messages *clitext.Messages) translator {
+	return translator{lang: i18n.English, catalog: sync.OnceValues(loadLocales), messages: messages, cliOnce: new(sync.Once), log: slog.Default()}
+}
+
+func newCatalogTranslator() translator {
+	return translator{lang: i18n.English, catalog: sync.OnceValues(loadLocales), log: slog.Default()}
 }
 
 func loadLocales() (*i18n.Catalog, error) {
@@ -55,7 +59,6 @@ func loadLocales() (*i18n.Catalog, error) {
 
 func (trans translator) in(lang i18n.Language) translator {
 	trans.lang = lang
-	trans.cli = clitext.For(lang)
 	trans.cliOnce = new(sync.Once)
 	return trans
 }
@@ -82,11 +85,12 @@ func (trans translator) t(key string, params map[string]any) string {
 }
 
 func (trans translator) shared(key clitext.Key) string {
-	text := trans.cli.Text(key, nil)
-	if err := trans.cli.Err(); err != nil {
+	text, err := trans.messages.Text(trans.lang, key, nil)
+	if err != nil {
 		trans.cliOnce.Do(func() {
 			trans.logger().Error("tui shared message not rendered", "key", key, "err", err)
 		})
+		return string(key)
 	}
 	return text
 }

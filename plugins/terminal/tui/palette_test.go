@@ -69,7 +69,7 @@ func TestPaletteViewShowsALateSelection(t *testing.T) {
 
 func TestLocalCommandsAreNeverDispatched(t *testing.T) {
 	readVerbs := []string{verbHealth, verbUsage}
-	for _, c := range localCommands(newTranslator()) {
+	for _, c := range localCommands(testTranslator()) {
 		be := &fakeBackend{}
 		be.sessions = []contracts.SessionInfo{{Name: "avant", ChannelID: "c1"}}
 		m := startedModel(be)
@@ -87,7 +87,7 @@ func TestLocalCommandsAreNeverDispatched(t *testing.T) {
 }
 
 func TestMergeCommandsKeepsTheLocalOnes(t *testing.T) {
-	got := mergeCommands(localCommands(newTranslator()), []CommandSpec{
+	got := mergeCommands(localCommands(testTranslator()), []CommandSpec{
 		{Name: "session create"},
 		{Name: "help", Desc: "the daemon's own help"},
 	})

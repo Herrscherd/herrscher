@@ -7,7 +7,7 @@ type keyedError struct {
 }
 
 func (e keyedError) Error() string {
-	return newTranslator().t(e.key, e.params)
+	return newCatalogTranslator().t(e.key, e.params)
 }
 
 func (e keyedError) Unwrap() error {

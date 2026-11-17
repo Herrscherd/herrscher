@@ -192,7 +192,7 @@ func TestPluginsScreenNavClamps(t *testing.T) {
 
 func TestPluginsScreenPaletteEntry(t *testing.T) {
 	found := false
-	for _, c := range localCommands(newTranslator()) {
+	for _, c := range localCommands(testTranslator()) {
 		if c.Name == "plugins" {
 			found = true
 		}
@@ -212,7 +212,7 @@ func indexOf(rows []string, want string) int {
 }
 
 func TestPluginsViewScrollsToSelection(t *testing.T) {
-	m := &model{tr: newTranslator(), pluginsOpen: true}
+	m := &model{tr: testTranslator(), pluginsOpen: true}
 	for i := range pluginsMax + 5 {
 		m.pluginsRows = append(m.pluginsRows, PluginRow{Module: fmt.Sprintf("mod/%d", i), Installed: "v1.0.0", Latest: "v1.0.0"})
 	}

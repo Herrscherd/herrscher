@@ -44,7 +44,7 @@ func typeInto(t *testing.T, m *model, msgs ...tea.Msg) *model {
 func runeKey(r rune) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}} }
 
 func TestComposerKeepsEveryLineOnANewline(t *testing.T) {
-	m := typeInto(t, newModel(nil), tea.WindowSizeMsg{Width: 100, Height: 20},
+	m := typeInto(t, newModel(testMessages(), nil), tea.WindowSizeMsg{Width: 100, Height: 20},
 		runeKey('A'), tea.KeyMsg{Type: tea.KeyEnter, Alt: true}, runeKey('B'))
 
 	if got := m.input.Value(); got != "A\nB" {
@@ -63,7 +63,7 @@ func TestComposerKeepsEveryLineOnANewline(t *testing.T) {
 }
 
 func TestComposerKeepsEveryLineWhenTheDraftWraps(t *testing.T) {
-	m := typeInto(t, newModel(nil), tea.WindowSizeMsg{Width: 20, Height: 20})
+	m := typeInto(t, newModel(testMessages(), nil), tea.WindowSizeMsg{Width: 20, Height: 20})
 	for _, r := range "aaaaaaaaaa bbbbbbbbbb cc" {
 		m = typeInto(t, m, runeKey(r))
 	}
@@ -77,7 +77,7 @@ func TestComposerKeepsEveryLineWhenTheDraftWraps(t *testing.T) {
 }
 
 func TestComposerStopsGrowingAtItsCap(t *testing.T) {
-	m := typeInto(t, newModel(nil), tea.WindowSizeMsg{Width: 100, Height: 40})
+	m := typeInto(t, newModel(testMessages(), nil), tea.WindowSizeMsg{Width: 100, Height: 40})
 	for range maxComposerLines + 4 {
 		m = typeInto(t, m, runeKey('x'), tea.KeyMsg{Type: tea.KeyEnter, Alt: true})
 	}

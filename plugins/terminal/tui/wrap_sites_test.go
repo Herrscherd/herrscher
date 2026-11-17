@@ -87,7 +87,7 @@ func TestShownWrapSitesKeepTheirSentinel(t *testing.T) {
 			if !errors.Is(err, tc.sentinel) {
 				t.Fatalf("%q does not wrap its sentinel %q", err, tc.sentinel)
 			}
-			french := localizedReason(newTranslator().in(i18n.French), err)
+			french := localizedReason(testTranslator().in(i18n.French), err)
 			if french == err.Error() || strings.Contains(french, tc.sentinel.Error()) {
 				t.Fatalf("the French reason %q was not translated from %q", french, err)
 			}
@@ -101,7 +101,7 @@ func TestAttachFailureKeepsTheOSCause(t *testing.T) {
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("the attach failure %q must keep the OS cause", err)
 	}
-	french := localizedReason(newTranslator().in(i18n.French), err)
+	french := localizedReason(testTranslator().in(i18n.French), err)
 	if want := "impossible de joindre " + path + ": "; !strings.HasPrefix(french, want) {
 		t.Fatalf("localizedReason = %q, want prefix %q", french, want)
 	}

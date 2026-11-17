@@ -16,7 +16,7 @@ import (
 `
 
 func TestListPlugins(t *testing.T) {
-	mods, err := listPlugins(sample)
+	mods, err := listPlugins(testMessages(), sample)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,11 +26,11 @@ func TestListPlugins(t *testing.T) {
 }
 
 func TestAddPluginInserts(t *testing.T) {
-	out, changed, err := addPlugin(sample, "github.com/acme/telegram-gateway")
+	out, changed, err := addPlugin(testMessages(), sample, "github.com/acme/telegram-gateway")
 	if err != nil || !changed {
 		t.Fatalf("add failed: changed=%v err=%v", changed, err)
 	}
-	mods, err := listPlugins(out)
+	mods, err := listPlugins(testMessages(), out)
 	if err != nil {
 		t.Fatalf("list plugins: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestAddPluginInserts(t *testing.T) {
 }
 
 func TestAddPluginIdempotent(t *testing.T) {
-	_, changed, err := addPlugin(sample, "github.com/Herrscherd/herrscher-discord-gateway")
+	_, changed, err := addPlugin(testMessages(), sample, "github.com/Herrscherd/herrscher-discord-gateway")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,11 +53,11 @@ func TestAddPluginIdempotent(t *testing.T) {
 }
 
 func TestRemovePlugin(t *testing.T) {
-	out, changed, err := removePlugin(sample, "github.com/Herrscherd/herrscher-discord-gateway")
+	out, changed, err := removePlugin(testMessages(), sample, "github.com/Herrscherd/herrscher-discord-gateway")
 	if err != nil || !changed {
 		t.Fatalf("remove failed: changed=%v err=%v", changed, err)
 	}
-	mods, err := listPlugins(out)
+	mods, err := listPlugins(testMessages(), out)
 	if err != nil {
 		t.Fatalf("list plugins: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestRemovePlugin(t *testing.T) {
 }
 
 func TestRemovePluginAbsent(t *testing.T) {
-	_, changed, err := removePlugin(sample, "github.com/acme/nope")
+	_, changed, err := removePlugin(testMessages(), sample, "github.com/acme/nope")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestRemovePluginAbsent(t *testing.T) {
 }
 
 func TestMissingMarkersError(t *testing.T) {
-	if _, err := listPlugins("package main\n"); err == nil {
+	if _, err := listPlugins(testMessages(), "package main\n"); err == nil {
 		t.Fatal("expected error when markers are missing")
 	}
 }

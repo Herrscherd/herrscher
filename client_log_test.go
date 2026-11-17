@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
@@ -163,7 +164,7 @@ func TestRunAttachedRoutesTheTUIThroughTheClientLog(t *testing.T) {
 		connect: func(ctx context.Context, _ host.RuntimeLayout, _, _ string, _ i18n.Language) (*attachedDaemon, error) {
 			return &attachedDaemon{messages: testMessages(), done: ctx.Done(), events: make(chan tui.RoutedEvent)}, nil
 		},
-		run: func(_ context.Context, _ context.CancelFunc, _ tui.Backend, _ ...tui.Option) error {
+		run: func(_ context.Context, _ context.CancelFunc, _ *clitext.Messages, _ tui.Backend, _ ...tui.Option) error {
 			fmt.Fprintln(os.Stderr, "tui stderr line")
 			return nil
 		},

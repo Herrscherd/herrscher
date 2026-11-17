@@ -21,7 +21,7 @@ func isTerminal(f *os.File) bool {
 	return err == nil && st.Mode()&os.ModeCharDevice != 0
 }
 
-func runWizard(compose bool, cat catalogFn, cur routeCurrent) (map[string]string, map[string]string, error) {
+func runWizard(messages *clitext.Messages, compose bool, cat catalogFn, cur routeCurrent) (map[string]string, map[string]string, error) {
 	sty := newStyle()
 	input := bufio.NewReader(os.Stdin)
 	choices := make(map[string]string)
@@ -30,22 +30,22 @@ func runWizard(compose bool, cat catalogFn, cur routeCurrent) (map[string]string
 	}
 
 	if compose {
-		sty.header("init", msg(clitext.ManageWizardCompose, nil))
-		if err := chooseEveryCategory(sty, input, choices); err != nil {
+		sty.header("init", msg(messages, clitext.ManageWizardCompose, nil))
+		if err := chooseEveryCategory(messages, sty, input, choices); err != nil {
 			return nil, nil, err
 		}
 	} else {
-		sty.header("init", msg(clitext.ManageWizardConfigure, nil))
+		sty.header("init", msg(messages, clitext.ManageWizardConfigure, nil))
 	}
 
 	secrets := make(map[string]string)
 	if choices[catGateway] == kindDiscord {
-		if err := promptDiscordSecrets(sty, input, secrets); err != nil {
+		if err := promptDiscordSecrets(messages, sty, input, secrets); err != nil {
 			return nil, nil, err
 		}
 	}
 
-	route, err := routeStep(sty, input, cat, cur, !compose)
+	route, err := routeStep(messages, sty, input, cat, cur, !compose)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -55,9 +55,9 @@ func runWizard(compose bool, cat catalogFn, cur routeCurrent) (map[string]string
 	return choices, secrets, nil
 }
 
-func chooseEveryCategory(sty style, input *bufio.Reader, choices map[string]string) error {
+func chooseEveryCategory(messages *clitext.Messages, sty style, input *bufio.Reader, choices map[string]string) error {
 	for _, cat := range categories() {
-		kind, err := chooseKind(sty, input, cat)
+		kind, err := chooseKind(messages, sty, input, cat)
 		if err != nil {
 			return err
 		}
@@ -66,8 +66,8 @@ func chooseEveryCategory(sty style, input *bufio.Reader, choices map[string]stri
 	return nil
 }
 
-func promptDiscordSecrets(sty style, input *bufio.Reader, secrets map[string]string) error {
-	fmt.Fprintf(os.Stderr, "  %s  %s\n", sty.wrap(sty.bold+sty.cyan, msg(clitext.ManageEnvHeader, clitext.Params{clitext.ParamKind: kindDiscord})), sty.wrap(sty.dim, msg(clitext.ManageTokenHidden, nil)))
+func promptDiscordSecrets(messages *clitext.Messages, sty style, input *bufio.Reader, secrets map[string]string) error {
+	fmt.Fprintf(os.Stderr, "  %s  %s\n", sty.wrap(sty.bold+sty.cyan, msg(messages, clitext.ManageEnvHeader, clitext.Params{clitext.ParamKind: kindDiscord})), sty.wrap(sty.dim, msg(messages, clitext.ManageTokenHidden, nil)))
 	tok, err := readSecret(input, secretLabel(sty, "DISCORD_BOT_TOKEN"))
 	if err != nil {
 		return err
@@ -88,7 +88,7 @@ func secretLabel(s style, key string) string {
 	return fmt.Sprintf("    %-21s %s ", key, s.wrap(s.dim, "›"))
 }
 
-func chooseKind(sty style, input *bufio.Reader, cat string) (string, error) {
+func chooseKind(messages *clitext.Messages, sty style, input *bufio.Reader, cat string) (string, error) {
 	kinds := make([]string, 0, len(catalog()[cat]))
 	for k := range catalog()[cat] {
 		kinds = append(kinds, k)
@@ -97,7 +97,7 @@ func chooseKind(sty style, input *bufio.Reader, cat string) (string, error) {
 	def := defaultStack()[cat]
 
 	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, cat))
-	translator := clitext.For(clitext.ClientLanguage())
+	translator := messages.For(clitext.ClientLanguage())
 	for idx, kind := range kinds {
 		name := kind
 		tag := ""
@@ -124,12 +124,12 @@ func chooseKind(sty style, input *bufio.Reader, cat string) (string, error) {
 		case choice == len(kinds)+1:
 			return kindNone, nil
 		}
-		return "", failure(errChoiceOutOfRange, clitext.ManageChoiceOutOfRange, clitext.Params{clitext.ParamName: cat, clitext.ParamChoice: choice})
+		return "", failure(messages, errChoiceOutOfRange, clitext.ManageChoiceOutOfRange, clitext.Params{clitext.ParamName: cat, clitext.ParamChoice: choice})
 	}
 	if _, ok := catalog()[cat][ans]; ok {
 		return ans, nil
 	}
-	return "", failure(errUnknownKind, clitext.ManageUnknownKind, clitext.Params{clitext.ParamCategory: cat, clitext.ParamKind: strconv.Quote(ans)})
+	return "", failure(messages, errUnknownKind, clitext.ManageUnknownKind, clitext.Params{clitext.ParamCategory: cat, clitext.ParamKind: strconv.Quote(ans)})
 }
 
 func promptLine(input *bufio.Reader, label string) string {

@@ -215,7 +215,7 @@ func attachTUIWindow(t *testing.T, daemon tuiDaemon) (*teatest.TestModel, contex
 	if err != nil {
 		t.Fatal(err)
 	}
-	window := tui.NewWindow(ctx, backend, tui.Language(backend.lang))
+	window := tui.NewWindow(ctx, backend.messages, backend, tui.Language(backend.lang))
 	model := teatest.NewTestModel(t, window, teatest.WithInitialTermSize(120, 40))
 	go tui.Pump(ctx, backend, model.Send)
 	return model, cancel

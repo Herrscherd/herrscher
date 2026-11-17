@@ -193,7 +193,9 @@ func attachOneShotTaps(driver *sessionDriver, sess state.Session, runtime oneSho
 		}
 	}
 	if runtime.resume != nil {
-		driver.sink.Resume = func(token string) { runtime.resume(sess.Name, token) }
+		driver.sink.Resume = func(token string) {
+			gate.admit(func() { runtime.resume(sess.Name, token) })
+		}
 	}
 	return gate
 }

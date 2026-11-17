@@ -28,6 +28,24 @@ func TestATapIsRefusedOnceTheSeedShutsItsGate(t *testing.T) {
 	}
 }
 
+func TestAResumeTokenIsRefusedOnceTheSeedShutsItsGate(t *testing.T) {
+	var resumed []string
+	runtime := oneShotSeedRuntime{resume: func(_, token string) {
+		resumed = append(resumed, token)
+	}}
+	sess := state.Session{Name: "window"}
+	driver := newSessionDriver(sess.Name, nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1), io.Discard)
+	gate := attachOneShotTaps(driver, sess, runtime)
+
+	driver.sink.Resume("before")
+	gate.shut()
+	driver.sink.Resume("during consolidation")
+
+	if len(resumed) != 1 || resumed[0] != "before" {
+		t.Fatalf("resumed = %v, want only the token admitted before the gate shut", resumed)
+	}
+}
+
 type probeOrchestrator struct {
 	contracts.Orchestrator
 

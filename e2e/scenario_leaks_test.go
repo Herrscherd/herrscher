@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -219,9 +218,8 @@ func instanceGone(ts *testscript.TestScript, neg bool, args []string) {
 	}
 	stopped, survivors, err := reapInstance(procRoot, ts.Getenv(instanceEnv), reapGrace)
 	ts.Check(err)
-	leaked := slices.Concat(stopped, survivors)
-	if len(leaked) > 0 {
-		ts.Fatalf("processes of the daemon outlived it, now stopped: %s", strings.Join(leaked, "; "))
+	if len(stopped)+len(survivors) > 0 {
+		ts.Fatalf("processes of the daemon outlived it: stopped with SIGINT [%s], killed with SIGKILL [%s]", strings.Join(stopped, "; "), strings.Join(survivors, "; "))
 	}
 }
 

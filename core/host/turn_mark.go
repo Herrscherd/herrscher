@@ -11,10 +11,7 @@ import (
 const turnInterruptedKind = "turn_interrupted"
 
 func renderTurnInterrupted(lang i18n.Language) (string, error) {
-	if lang != i18n.English && lang != i18n.French {
-		lang = i18n.English
-	}
-	return contracts.NewRenderer().Render(lang, contracts.Notice{Code: contracts.CodeTurnInterrupted})
+	return contracts.NewRenderer().Render(effectiveLanguage(lang), contracts.Notice{Code: contracts.CodeTurnInterrupted})
 }
 
 func (h *hub) openTurnMark(session, turnID string) {
@@ -30,19 +27,25 @@ func (h *hub) clearTurnMark(session string) {
 }
 
 func (h *hub) announceInterruptedTurn(sess state.Session) {
+	h.announceInterruptedTurnWith(sess, renderTurnInterrupted)
+}
+
+func (h *hub) announceInterruptedTurnWith(sess state.Session, render func(i18n.Language) (string, error)) {
 	if sess.InterruptedTurn == "" {
 		return
 	}
 	lang := h.sessionLanguageSource(sess.Name)
-	text, err := renderTurnInterrupted(lang())
+	text, err := render(lang())
 	if err != nil {
 		warnLive(h.warnings, lang, "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
+		return
 	}
 	entry := state.TranscriptEntry{
-		Ts:   time.Now().UTC().Format(time.RFC3339),
-		Role: "notice",
-		Kind: turnInterruptedKind,
-		Text: text,
+		Ts:     time.Now().UTC().Format(time.RFC3339),
+		Role:   "notice",
+		Kind:   turnInterruptedKind,
+		Text:   text,
+		TurnID: sess.InterruptedTurn,
 	}
 	if err := state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), entry); err != nil {
 		warnLive(h.warnings, lang, "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})

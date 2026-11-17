@@ -115,12 +115,15 @@ func answerGitAskpass(args []string) int {
 		prompt = args[1]
 	}
 	out := errwriter.New(os.Stdout)
-	writeGitCredential(prompt, out)
+	if err := writeGitCredential(prompt, out); err != nil {
+		return 1
+	}
 	return writeFailureCode(out)
 }
 
-func writeGitCredential(prompt string, out *errwriter.Writer) {
-	_, _ = out.Write([]byte(gitCredential(prompt) + "\n"))
+func writeGitCredential(prompt string, out *errwriter.Writer) error {
+	_, err := out.Write([]byte(gitCredential(prompt) + "\n"))
+	return err
 }
 
 func gitCredential(prompt string) string {
@@ -267,7 +270,10 @@ func reportErrorTo(stderr io.Writer, err error) int {
 	if errors.As(err, &status) {
 		return status.code
 	}
-	fmt.Fprintln(stderr, cliErrorLine(render(clitext.ClientLanguage(), clitext.ErrorLine, clitext.Params{clitext.ParamMessage: err.Error()})))
+	line := cliErrorLine(render(clitext.ClientLanguage(), clitext.ErrorLine, clitext.Params{clitext.ParamMessage: err.Error()}))
+	if _, writeErr := fmt.Fprintln(stderr, line); writeErr != nil {
+		slog.Warn("write error line", "err", writeErr)
+	}
 	return 1
 }
 

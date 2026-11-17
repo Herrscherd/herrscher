@@ -3,6 +3,7 @@ package manage
 import (
 	"bufio"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -11,12 +12,19 @@ import (
 	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
-var colouredStyle = style{
-	reset: "\x1b[0m",
-	bold:  "\x1b[1m",
-	dim:   "\x1b[2m",
-	green: "\x1b[32m",
-	red:   "\x1b[31m",
+func colouredStyle() style {
+	return style{
+		reset: "\x1b[0m",
+		bold:  "\x1b[1m",
+		dim:   "\x1b[2m",
+		green: "\x1b[32m",
+		red:   "\x1b[31m",
+	}
+}
+
+type captureResult struct {
+	text string
+	err  error
 }
 
 func captureStderr(t *testing.T, run func()) string {
@@ -25,21 +33,35 @@ func captureStderr(t *testing.T, run func()) string {
 	if err != nil {
 		t.Fatalf("pipe: %v", err)
 	}
-	defer reader.Close()
 	saved := os.Stderr
 	os.Stderr = writer
-	defer func() { os.Stderr = saved }()
-	captured := make(chan string, 1)
+	defer func() {
+		os.Stderr = saved
+		closePipeEnd(t, writer)
+		closePipeEnd(t, reader)
+	}()
+	captured := make(chan captureResult, 1)
 	go func() {
-		data, _ := io.ReadAll(reader)
-		captured <- string(data)
+		data, readErr := io.ReadAll(reader)
+		captured <- captureResult{text: string(data), err: readErr}
 	}()
 	run()
 	os.Stderr = saved
 	if err := writer.Close(); err != nil {
-		t.Fatalf("close pipe: %v", err)
+		t.Fatalf("close pipe writer: %v", err)
 	}
-	return <-captured
+	result := <-captured
+	if result.err != nil {
+		t.Fatalf("read stderr: %v", result.err)
+	}
+	return result.text
+}
+
+func closePipeEnd(t *testing.T, closer io.Closer) {
+	t.Helper()
+	if err := closer.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
+		t.Errorf("close pipe end: %v", err)
+	}
 }
 
 func answering(line string) *bufio.Reader {
@@ -68,7 +90,7 @@ func TestChooseKindListsPlainKindsWithoutColour(t *testing.T) {
 
 func TestChooseKindColoursTheDefaultKind(t *testing.T) {
 	out := captureStderr(t, func() {
-		if _, err := chooseKind(colouredStyle, answering("\n"), catGateway); err != nil {
+		if _, err := chooseKind(colouredStyle(), answering("\n"), catGateway); err != nil {
 			t.Errorf("chooseKind: %v", err)
 		}
 	})
@@ -84,7 +106,7 @@ func TestChooseKindColoursTheDefaultKind(t *testing.T) {
 func TestChooseKindEscapesHostileCategory(t *testing.T) {
 	hostile := "gateway\x1b]0;pwn\a"
 	out := captureStderr(t, func() {
-		if _, err := chooseKind(colouredStyle, answering("\n"), hostile); err != nil {
+		if _, err := chooseKind(colouredStyle(), answering("\n"), hostile); err != nil {
 			t.Errorf("chooseKind: %v", err)
 		}
 	})
@@ -112,7 +134,7 @@ func TestWarnListsEscapedFindingsWithoutColour(t *testing.T) {
 func TestWarnKeepsColourAroundEscapedFinding(t *testing.T) {
 	hostile := "risque \x1b]0;pwn\a"
 	out := captureStderr(t, func() {
-		newPromptDecider(answering("n\n"), colouredStyle).Warn(context.Background(), []string{hostile})
+		newPromptDecider(answering("n\n"), colouredStyle()).Warn(context.Background(), []string{hostile})
 	})
 	if !strings.Contains(out, "\x1b[31m!\x1b[0m") {
 		t.Fatalf("output = %q, want the red marker kept", out)
@@ -125,7 +147,7 @@ func TestWarnKeepsColourAroundEscapedFinding(t *testing.T) {
 func TestFailedEscapesBuildOutputLineByLine(t *testing.T) {
 	build := "compile ok\n\x1b]0;pwn\a\nfin\n"
 	out := captureStderr(t, func() {
-		newPromptDecider(answering("n\n"), colouredStyle).Failed(context.Background(), build)
+		newPromptDecider(answering("n\n"), colouredStyle()).Failed(context.Background(), build)
 	})
 	if strings.Contains(out, "\x1b]") || strings.Contains(out, "\a") {
 		t.Fatalf("output = %q, want no raw control from the build output", out)

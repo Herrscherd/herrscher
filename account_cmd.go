@@ -114,7 +114,7 @@ func listAccounts(ctx context.Context, store accounts.Store, output io.Writer) e
 		if profile.Default {
 			marker = " " + translator.Text(clitext.AccountDefaultMarker, nil)
 		}
-		if err := emitf(output, "%-8s %-10s %s%s\n", termpaint.Escape(string(profile.Vendor)).String(), termpaint.Escape(string(profile.Name)).String(), loginState(ctx, translator, profile.Vendor, env), marker); err != nil {
+		if err := emitf(output, "%-8s %-10s %s%s\n", termpaint.Escape(profile.Vendor).String(), termpaint.Escape(profile.Name).String(), loginState(ctx, translator, profile.Vendor, env), marker); err != nil {
 			return err
 		}
 	}

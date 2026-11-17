@@ -54,7 +54,7 @@ func (g *gatedWarnings) open() {
 	g.openOnce.Do(func() { close(g.release) })
 }
 
-func newInflightHub(t *testing.T, name string, grace time.Duration, warnings io.Writer, opts ...hubOption) *hub {
+func newInflightHub(t *testing.T, name string, grace time.Duration, warnings io.Writer) *hub {
 	t.Helper()
 	layout := isolatedRuntimeDir(t)
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
@@ -64,8 +64,7 @@ func newInflightHub(t *testing.T, name string, grace time.Duration, warnings io.
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	sup := supervisor.NewSupervisor(ctx, filepath.Join(t.TempDir(), "no-such-bridge"), layout)
-	options := append([]hubOption{withWarnings(warnings)}, opts...)
-	h := newHub(st, sup, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(), options...)
+	h := newHub(st, sup, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(), withWarnings(warnings))
 	h.runtime = layout
 	h.teardownGrace = grace
 	return h
@@ -238,33 +237,40 @@ func TestBlockedWarningWriterDoesNotHoldStopPastTheBudget(t *testing.T) {
 	for _, c := range blockedWriterCases() {
 		for _, path := range c.paths {
 			t.Run(c.name+"/"+path.name, func(t *testing.T) {
-				name := "inflight-" + newTurnID()
-				logs := captureDefaultLog(t)
-				marker := name
-				if c.marker != nil {
-					marker = c.marker(name)
-				}
-				warnings := newGatedWarnings(marker)
-				t.Cleanup(warnings.open)
-				h := c.start(t, name, blockedGrace, warnings)
-
-				started := time.Now()
-				returned := runInBackground(func() { path.run(h, name) })
-				if c.want == nil {
-					awaitGatedWrite(t, warnings)
-				}
-				select {
-				case <-returned:
-				case <-time.After(c.bound):
-				}
-				if elapsed := time.Since(started); elapsed > c.bound {
-					t.Fatalf("a blocked warning writer held the stop for %v, past its worst case of %v", elapsed.Round(time.Millisecond), c.bound)
-				}
-
-				assertBlockedWriterOutcome(t, c, h, name, warnings, logs)
+				runBlockedWriterCase(t, c, path)
 			})
 		}
 	}
+}
+
+func runBlockedWriterCase(t *testing.T, c blockedWriterCase, path inflightPath) {
+	name := "inflight-" + newTurnID()
+	logs := captureDefaultLog(t)
+	warnings := newGatedWarnings(blockedWriterMarker(c, name))
+	t.Cleanup(warnings.open)
+	h := c.start(t, name, blockedGrace, warnings)
+
+	started := time.Now()
+	returned := runInBackground(func() { path.run(h, name) })
+	if c.want == nil {
+		awaitGatedWrite(t, warnings)
+	}
+	select {
+	case <-returned:
+	case <-time.After(c.bound):
+	}
+	if elapsed := time.Since(started); elapsed > c.bound {
+		t.Fatalf("a blocked warning writer held the stop for %v, past its worst case of %v", elapsed.Round(time.Millisecond), c.bound)
+	}
+
+	assertBlockedWriterOutcome(t, c, h, name, warnings, logs)
+}
+
+func blockedWriterMarker(c blockedWriterCase, name string) string {
+	if c.marker != nil {
+		return c.marker(name)
+	}
+	return name
 }
 
 func assertBlockedWriterOutcome(t *testing.T, c blockedWriterCase, h *hub, name string, warnings *gatedWarnings, logs *hookedLog) {

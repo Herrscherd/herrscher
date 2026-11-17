@@ -716,6 +716,11 @@
     "other": "serveur de santé : {{.Detail}}"
   },
   {
+    "id": "warn.command_handler_overrun",
+    "description": "A command handler of the command socket is still running when its join grace ends; the stop goes on and that command may be cut short",
+    "other": "herrscher serve : une commande tourne encore après {{.Grace}}, l'arrêt continue quand même : cette commande peut être interrompue"
+  },
+  {
     "id": "warn.command_socket_listen",
     "description": "The command socket could not listen on its path",
     "other": "socket de commandes : écoute sur {{.Path}} : {{.Detail}}"

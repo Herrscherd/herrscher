@@ -309,11 +309,10 @@ func (h *hub) goLiveLocked(ctx context.Context, sess state.Session) error {
 		}
 	}()
 
-	released := acceptCommands(sctx, commands, h.sessionCommands(sess.Name), defaultCommandReadTimeout)
+	released := acceptCommands(sctx, commands, h.sessionCommands(sess.Name), defaultCommandReadTimeout, h.teardownGrace/teardownLateShare, h.warnCommandHandlerOverrun)
 	releaseSockets := sync.OnceFunc(func() {
 		logCleanup(acc.Close())
 		cancel()
-		<-released
 	})
 	h.mu.Lock()
 	h.live[sess.Name] = liveSession{cancel: cancel, done: done, released: released, release: releaseSockets}
@@ -403,6 +402,7 @@ func (h *hub) closeAndRemoveSockets() error {
 	h.awaitInFlight()
 	h.stopStartups(starts)
 	h.awaitPersists()
+	h.persists.stop()
 	h.closeWarnings()
 	return removeSocketFiles(h.runtime, h.instanceID, sessions)
 }

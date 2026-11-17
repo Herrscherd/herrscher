@@ -117,6 +117,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	fromBridge := make(chan contracts.Event, bridgeEventBuffer)
 	driver := newSessionDriver(sess.Name, nil, toBridge, fromBridge, runtime.warnings)
 	runtime.sessions.attachPersists(driver)
+	defer awaitOneShotWrites(driver.persists, runtime.warnings, runtime.languageOf(sess))
 	driver.incarnation = sess.Incarnation
 	driver.agent = sess.Agent
 	driver.language = func() i18n.Language { return knownSessionLanguage(sess) }
@@ -167,6 +168,14 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	}
 	consolidateOneShot(ctx, orch, gate, sess, runtime.warnings, runtime.languageOf(sess))
 	return reply, nil
+}
+
+func awaitOneShotWrites(persists *persistWrites, warnings io.Writer, lang languageSource) {
+	select {
+	case <-persists.group.settled():
+	case <-time.After(persistWriteGrace):
+		warnLive(warnings, lang, "warn.persist_overrun", map[string]any{graceParam: persistWriteGrace.String()})
+	}
 }
 
 func oneShotTurnTimeout(runtime oneShotSeedRuntime) time.Duration {

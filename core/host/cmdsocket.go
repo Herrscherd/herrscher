@@ -109,17 +109,20 @@ func cancellationOr(ctx context.Context, err error) error {
 }
 
 func serveCommandSocket(ctx context.Context, layout runtimedir.Layout, path string, disp dispatcher, lang languageSource, warn io.Writer) {
-	if err := serveCommandSocketWithTimeout(ctx, layout, path, disp, defaultCommandReadTimeout); err != nil {
+	onOverrun := func() {
+		warnLive(warn, lang, "warn.command_handler_overrun", map[string]any{graceParam: defaultTeardownGrace.String()})
+	}
+	if err := serveCommandSocketWithTimeout(ctx, layout, path, disp, defaultCommandReadTimeout, defaultTeardownGrace, onOverrun); err != nil {
 		warnLive(warn, lang, "warn.command_socket_listen", map[string]any{pathParam: path, detailParam: err})
 	}
 }
 
-func serveCommandSocketWithTimeout(ctx context.Context, layout runtimedir.Layout, path string, disp dispatcher, readTimeout time.Duration) error {
+func serveCommandSocketWithTimeout(ctx context.Context, layout runtimedir.Layout, path string, disp dispatcher, readTimeout, joinBudget time.Duration, onOverrun func()) error {
 	listener, err := openSocket(ctx, layout, path)
 	if err != nil {
 		return err
 	}
-	acceptCommands(ctx, listener, disp, readTimeout)
+	acceptCommands(ctx, listener, disp, readTimeout, joinBudget, onOverrun)
 	return nil
 }
 
@@ -159,7 +162,7 @@ func socketAnswers(ctx context.Context, layout runtimedir.Layout, path string) b
 	return true
 }
 
-func acceptCommands(ctx context.Context, listener net.Listener, disp dispatcher, readTimeout time.Duration) <-chan struct{} {
+func acceptCommands(ctx context.Context, listener net.Listener, disp dispatcher, readTimeout, joinBudget time.Duration, onOverrun func()) <-chan struct{} {
 	released := make(chan struct{})
 	accepting := make(chan struct{})
 	var handlers sync.WaitGroup
@@ -181,10 +184,28 @@ func acceptCommands(ctx context.Context, listener net.Listener, disp dispatcher,
 		<-ctx.Done()
 		closeRead(listener)
 		<-accepting
-		handlers.Wait()
+		if !joinWithin(&handlers, joinBudget) {
+			onOverrun()
+		}
 		close(released)
 	}()
 	return released
+}
+
+func joinWithin(handlers *sync.WaitGroup, budget time.Duration) bool {
+	finished := make(chan struct{})
+	go func() {
+		handlers.Wait()
+		close(finished)
+	}()
+	timer := time.NewTimer(budget)
+	defer timer.Stop()
+	select {
+	case <-finished:
+		return true
+	case <-timer.C:
+		return false
+	}
 }
 
 func handleCommandConn(ctx context.Context, conn net.Conn, disp dispatcher, readTimeout time.Duration) {

@@ -244,4 +244,8 @@ func TestWriteStartedAfterThePersistDeadlineIsAnnounced(t *testing.T) {
 	if got := strings.Count(warnings.String(), persistOverrunText(h)); got != 1 {
 		t.Fatalf("a write started after the deadline was announced %d times, want exactly once: %q", got, warnings.String())
 	}
+	landed := state.ReadTranscript(state.TranscriptPath(h.partDir, name), 10)
+	if len(landed) != 2 {
+		t.Fatalf("the writes started after the deadline left %d entries in the transcript, want 2: they are performed, not cut", len(landed))
+	}
 }

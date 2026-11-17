@@ -543,7 +543,8 @@ func volatileFree(dir string) bool {
 	return true
 }
 
-const StopTimeout = 45 * time.Second
+// StopTimeout is the grace the service manager gives the daemon to stop before it kills it.
+const StopTimeout = 36 * time.Second
 
 func stopSeconds() string {
 	return strconv.Itoa(int(StopTimeout / time.Second))

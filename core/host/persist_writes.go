@@ -13,6 +13,7 @@ type persistWrites struct {
 	group   inflight
 	mu      sync.Mutex
 	expired chan struct{}
+	timer   *time.Timer
 	warned  bool
 	onLate  func()
 }
@@ -22,6 +23,9 @@ func newPersistWrites() *persistWrites {
 }
 
 func (p *persistWrites) begin() func() {
+	if p == nil {
+		return func() {}
+	}
 	if p.pastDeadline() && p.onLate != nil {
 		p.onLate()
 	}
@@ -32,11 +36,37 @@ func (p *persistWrites) deadline() <-chan struct{} {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.expired == nil {
-		expired := make(chan struct{})
-		p.expired = expired
-		time.AfterFunc(persistWriteGrace, func() { close(expired) })
+		p.expired = make(chan struct{})
+		p.timer = time.AfterFunc(persistWriteGrace, p.expire)
 	}
 	return p.expired
+}
+
+func (p *persistWrites) expire() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.closeExpiredLocked()
+}
+
+func (p *persistWrites) stop() {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.timer != nil {
+		p.timer.Stop()
+	}
+	p.closeExpiredLocked()
+}
+
+func (p *persistWrites) closeExpiredLocked() {
+	if p.expired == nil {
+		p.expired = make(chan struct{})
+	}
+	if !isClosed(p.expired) {
+		close(p.expired)
+	}
 }
 
 func (p *persistWrites) pastDeadline() bool {

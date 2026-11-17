@@ -53,7 +53,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, input contracts.Input) (
 	}
 	sess.ChannelID, sess.Owned, sess.Type = slot.id, slot.owned, slot.typ
 	sess.Approvals = req.mode
-	if err := h.st.AddSession(sess); err != nil {
+	if err := h.persisted(func() error { return h.st.AddSession(sess) }); err != nil {
 		h.rollbackPlacement(ctx, place, req.name)
 		if note := h.tidyChannel(ctx, sess); note != "" {
 			h.log.Warn("channel rollback", "session", req.name, "note", note)

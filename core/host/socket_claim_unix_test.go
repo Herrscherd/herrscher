@@ -142,7 +142,7 @@ func TestReleaseLeavesASocketANewerListenerBoundAtThePath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	released := acceptCommands(ctx, older, &fakeDispatcher{out: "old"}, time.Second)
+	released := acceptCommands(ctx, older, &fakeDispatcher{out: "old"}, time.Second, time.Second, func() {})
 	newer, err := listenCommandSocket(context.Background(), layout, path)
 	if err != nil {
 		t.Fatalf("newer listen over the older socket: %v", err)

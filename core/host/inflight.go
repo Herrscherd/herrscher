@@ -79,6 +79,10 @@ func (h *hub) warnHubOverrun() {
 	h.warnOverrun("warn.hub_teardown_overrun", h.teardownGrace)
 }
 
+func (h *hub) warnCommandHandlerOverrun() {
+	h.warnOverrun("warn.command_handler_overrun", h.teardownGrace)
+}
+
 func (h *hub) warnOverrun(key string, grace time.Duration) {
 	lang := h.textLanguage()()
 	params := map[string]any{graceParam: grace.String()}

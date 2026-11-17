@@ -58,28 +58,28 @@ type sinkQuiet struct {
 }
 
 type warningSink struct {
-	out          io.Writer
-	lostLine     func(lost int) string
-	commands     chan func()
-	running      atomic.Bool
-	queue        []*warning
-	queuedBytes  int
-	inflight     *inflightWrite
-	idle         []chan struct{}
-	dropped      int
-	reported     int
-	closed       bool
-	sealed       bool
-	sealedSignal chan struct{}
-	lastLogged   chan struct{}
+	out         io.Writer
+	lostLine    func(lost int) string
+	commands    chan func()
+	running     atomic.Bool
+	queue       []*warning
+	queuedBytes int
+	inflight    *inflightWrite
+	idle        []chan struct{}
+	dropped     int
+	reported    int
+	closed      bool
+	sealed      bool
+	finished    chan struct{}
+	writes      []chan struct{}
 }
 
 func newWarningSink(out io.Writer, lostLine func(lost int) string) *warningSink {
 	return &warningSink{
-		out:          warningWriter(out),
-		lostLine:     lostLine,
-		commands:     make(chan func(), warningCommandLimit),
-		sealedSignal: make(chan struct{}),
+		out:      warningWriter(out),
+		lostLine: lostLine,
+		commands: make(chan func(), warningCommandLimit),
+		finished: make(chan struct{}),
 	}
 }
 
@@ -252,7 +252,7 @@ func (s *warningSink) startSummary() {
 func (s *warningSink) start(write *inflightWrite, data []byte) {
 	s.inflight = write
 	logged := make(chan struct{})
-	s.lastLogged = logged
+	s.writes = append(s.openWrites(), logged)
 	go func() {
 		defer close(logged)
 		written, err := s.out.Write(data)
@@ -332,27 +332,47 @@ func waitWithin(done <-chan struct{}, budget time.Duration) bool {
 
 func (s *warningSink) Close() {
 	if !ask(s, s.beginClose) {
-		<-s.sealedSignal
+		<-s.finished
 		return
 	}
+	defer close(s.finished)
 	budget, stop := writeBudget()
 	defer stop()
 	s.waitIdle(budget)
 	taken := ask(s, s.seal)
 	logNotConfirmed(taken.lost, taken.unconfirmed)
-	s.joinWriter()
+	s.joinWriters()
 }
 
-func (s *warningSink) joinWriter() {
-	logged := ask(s, func() chan struct{} { return s.lastLogged })
-	if logged == nil {
-		return
-	}
+func (s *warningSink) joinWriters() {
 	budget, stop := writeBudget()
 	defer stop()
+	for {
+		pending := ask(s, s.openWrites)
+		if len(pending) == 0 {
+			return
+		}
+		for _, logged := range pending {
+			select {
+			case <-logged:
+			case <-budget:
+				return
+			}
+		}
+	}
+}
+
+func (s *warningSink) openWrites() []chan struct{} {
+	s.writes = slices.DeleteFunc(s.writes, isLogged)
+	return slices.Clone(s.writes)
+}
+
+func isLogged(logged chan struct{}) bool {
 	select {
 	case <-logged:
-	case <-budget:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -385,7 +405,6 @@ func (s *warningSink) seal() bilan {
 	}
 	s.reported = s.dropped
 	s.sealed = true
-	close(s.sealedSignal)
 	return taken
 }
 

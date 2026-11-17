@@ -38,7 +38,7 @@ func captureStdout(t *testing.T, run func()) string {
 
 func notifyModel(t *testing.T, osc9 bool) *model {
 	t.Helper()
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.caps.OSC9 = osc9
 	m.ensureTab("c")
 	m.active = "c"
@@ -329,7 +329,7 @@ func retourFixtureOverview(t *testing.T) string {
 func retourFixtureModel(t *testing.T, width, height int) *model {
 	t.Helper()
 	fb := &fakeBackend{sessions: retourFixtureSessions(), overview: retourFixtureOverview(t)}
-	m := newModel(fb)
+	m := startedModel(fb)
 	m.Update(tea.WindowSizeMsg{Width: width, Height: height})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventChunk, Text: "Entrée pendant un tour met maintenant le message en file."}})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventThinking, Text: "La file vit côté TUI : l’hôte accepte Submit à tout moment."}})
@@ -352,7 +352,7 @@ func retourFixtureModel(t *testing.T, width, height int) *model {
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventSubagent, Subagent: &contracts.Subagent{ID: "1", Name: "explore", Kind: "haiku", State: "done"}}})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventSubagent, Subagent: &contracts.Subagent{ID: "2", Name: "explore", Kind: "haiku", State: "active"}}})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventSubagent, Subagent: &contracts.Subagent{ID: "3", Name: "review", Kind: "codex", State: "failed"}}})
-	m.syncTabs()
+	syncLoaded(m)
 	m.active = "a"
 	for _, channel := range []string{"a", "b", "c", "d"} {
 		m.tabs[channel].startedAt = time.Now().Add(-2 * time.Minute)

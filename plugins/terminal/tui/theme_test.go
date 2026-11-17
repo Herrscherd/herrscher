@@ -30,7 +30,7 @@ func writeFile(t *testing.T, path, body string) {
 func themeModel(t *testing.T, width int) (*model, string) {
 	t.Helper()
 	dir := t.TempDir()
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.keys = &keyLog{}
 	m.handleWindowSize(tea.WindowSizeMsg{Width: width, Height: 40})
 	m.loadTheme(dir, func() bool { return true })

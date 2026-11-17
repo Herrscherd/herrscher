@@ -416,11 +416,12 @@ func (t *Terminal) Sessions() []contracts.SessionInfo {
 
 // Scrollback returns a session's recorded history lines through the bound
 // SessionControl (nil until bound), so a reopened tab can seed its scrollback.
-func (t *Terminal) Scrollback(name string) []contracts.ScrollbackLine {
+func (t *Terminal) Scrollback(name string) ([]contracts.ScrollbackLine, error) {
+	var lines []contracts.ScrollbackLine
 	if c := t.Control(); c != nil {
-		return c.Scrollback(name)
+		lines = c.Scrollback(name)
 	}
-	return nil
+	return lines, nil
 }
 
 // Seen records that the operator is looking at a session, which clears its

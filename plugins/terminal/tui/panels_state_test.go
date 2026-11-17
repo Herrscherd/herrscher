@@ -9,7 +9,7 @@ import (
 
 func panelTab(t *testing.T, events ...contracts.Event) *tab {
 	t.Helper()
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	tb := m.ensureTab("c1")
 	for i := range events {
 		m.renderInto(tb, events[i])

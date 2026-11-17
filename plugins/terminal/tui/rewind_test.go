@@ -45,7 +45,7 @@ func rewindModel(t *testing.T) (*model, *rewindBackend) {
 	t.Helper()
 	backend := &rewindBackend{checkpoints: sampleCheckpoints()}
 	backend.sessions = []contracts.SessionInfo{{Name: "alpha", ChannelID: "a"}}
-	m := newModel(backend)
+	m := startedModel(backend)
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m.ensureTab("a")
 	m.active = "a"
@@ -249,7 +249,8 @@ func TestForkOpensNewTabForTheForkedSession(t *testing.T) {
 	if !ok {
 		t.Fatalf("fork must report back, got %T", msg)
 	}
-	m.Update(forked)
+	_, forkCmd := m.Update(forked)
+	settleAll(m, forkCmd)
 	if m.active != "f" {
 		t.Fatalf("the fork must open its own tab, active = %q", m.active)
 	}

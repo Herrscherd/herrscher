@@ -24,7 +24,7 @@ func approveReg(t *testing.T, approvalTab *approvalTable, sessionTab *sessionTab
 		t.Fatalf("LoadState: %v", err)
 	}
 	reg := &cli.Registry{}
-	if err := addApproveCommands(reg, fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); err != nil {
+	if err := addApproveCommands(reg, newHostMessages(), fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); err != nil {
 		t.Fatalf("addApproveCommands: %v", err)
 	}
 	return reg, st
@@ -32,7 +32,7 @@ func approveReg(t *testing.T, approvalTab *approvalTable, sessionTab *sessionTab
 
 func TestApproveRuleAddsListsRemoves(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	reg, _ := approveReg(t, approvalTab, sessionTab)
 	ctx := context.Background()
 	if _, err := reg.Dispatch(ctx, []string{"approve", "rule", "ask Bash(git push*)"}); err != nil {
@@ -57,7 +57,7 @@ func TestApproveRuleAddsListsRemoves(t *testing.T) {
 
 func TestApproveRuleRefusesNonsense(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	reg, st := approveReg(t, approvalTab, sessionTab)
 	if _, err := reg.Dispatch(context.Background(), []string{"approve", "rule", "maybe Bash(ls)"}); err == nil {
 		t.Fatal("an unparseable rule must be refused")
@@ -69,7 +69,7 @@ func TestApproveRuleRefusesNonsense(t *testing.T) {
 
 func TestApproveModeRefusesUnknownMode(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	reg, st := approveReg(t, approvalTab, sessionTab)
 	if err := st.AddSession(state.Session{Name: "s1", ChannelID: "c1"}); err != nil {
 		t.Fatalf("AddSession: %v", err)
@@ -90,7 +90,7 @@ func TestApproveModeRefusesUnknownMode(t *testing.T) {
 
 func TestApproveEmptyJSONIsAnEmptyList(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	reg, _ := approveReg(t, approvalTab, sessionTab)
 	for _, argv := range [][]string{{"approve", "rule", "--json"}, {"approve", "list", "--json"}} {
 		out, err := cli.Plain(reg.Dispatch(context.Background(), argv))
@@ -105,7 +105,7 @@ func TestApproveEmptyJSONIsAnEmptyList(t *testing.T) {
 
 func TestApproveHookIsNotAVerbTheDaemonAnswers(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	reg, _ := approveReg(t, approvalTab, sessionTab)
 	if _, err := reg.Dispatch(context.Background(), []string{"approve", "hook"}); err == nil {
 		t.Fatal("`approve hook` must not be reachable through the registry")
@@ -114,7 +114,7 @@ func TestApproveHookIsNotAVerbTheDaemonAnswers(t *testing.T) {
 
 func TestApproveListEmpty(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	reg, _ := approveReg(t, approvalTab, sessionTab)
 	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"approve", "list"}))
 	if err != nil {
@@ -147,7 +147,7 @@ func TestSessionPolicyMergesAgentFile(t *testing.T) {
 		t.Fatalf("AddSession: %v", err)
 	}
 
-	pol, mode := sessionPolicy(testLanguage(), io.Discard, st, agent.NewStore(root), "s1")
+	pol, mode := sessionPolicy(newHostMessages(), testLanguage(), io.Discard, st, agent.NewStore(root), "s1")
 	if mode != approval.ModeStrict {
 		t.Fatalf("mode = %q, want the session's own stance", mode)
 	}
@@ -167,7 +167,7 @@ func TestSessionPolicyOfAnUnknownSession(t *testing.T) {
 	if err := st.AddApprovalRule("deny Bash(rm -rf*)"); err != nil {
 		t.Fatalf("AddApprovalRule: %v", err)
 	}
-	pol, mode := sessionPolicy(testLanguage(), io.Discard, st, nil, "never-created")
+	pol, mode := sessionPolicy(newHostMessages(), testLanguage(), io.Discard, st, nil, "never-created")
 	if mode != 0 {
 		t.Fatalf("mode = %v, want the unset mode of a session that is not there", mode)
 	}
@@ -179,7 +179,7 @@ func TestSessionPolicyOfAnUnknownSession(t *testing.T) {
 func TestApproveAllowSettlesAWaitingRequest(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		approvalTab := newApprovalTable(io.Discard)
-		sessionTab := newSessionTable()
+		sessionTab := newSessionTable(newHostMessages())
 		reg, _ := approveReg(t, approvalTab, sessionTab)
 		pol := approval.Policy{{Decision: approval.Ask, Tool: "Bash", Pattern: "git push*"}}
 		done := make(chan approval.Decision, 1)
@@ -209,7 +209,7 @@ func TestApproveAllowSettlesAWaitingRequest(t *testing.T) {
 
 func TestApproveAllowUnknownIDReportsIt(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	reg, _ := approveReg(t, approvalTab, sessionTab)
 	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"approve", "allow", "nope"}))
 	if err == nil {
@@ -221,7 +221,7 @@ func TestApproveAllowUnknownIDReportsIt(t *testing.T) {
 }
 
 func TestReadAgentPolicyMissingFile(t *testing.T) {
-	if p := readAgentPolicy(testLanguage(), io.Discard, t.TempDir()); len(p) != 0 {
+	if p := readAgentPolicy(newHostMessages(), testLanguage(), io.Discard, t.TempDir()); len(p) != 0 {
 		t.Fatal("an agent with no APPROVALS file adds no rule")
 	}
 }

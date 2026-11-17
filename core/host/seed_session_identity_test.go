@@ -29,7 +29,7 @@ func TestSeedBackendCarriesTheSessionToken(t *testing.T) {
 
 func TestBuildBackendForRefusesASessionOnARemoteBackend(t *testing.T) {
 	fake := &fakeRemoteResolver{}
-	_, err := BuildBackendFor(context.Background(), BackendRequest{Vendor: "claude", Cmd: "claude", Session: "first", resolver: fake})
+	_, err := BuildBackendFor(context.Background(), NewMessages(), BackendRequest{Vendor: "claude", Cmd: "claude", Session: "first", resolver: fake})
 	if err == nil {
 		t.Fatal("a session on a remote backend must be refused: its identity cannot reach the remote side, so its approvals would be silently absent")
 	}

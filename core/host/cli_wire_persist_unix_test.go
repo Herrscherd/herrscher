@@ -25,13 +25,13 @@ func TestWiredManagerWriteIsAwaitedByTheStopPath(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	sup := supervisor.NewSupervisor(ctx, filepath.Join(t.TempDir(), "no-such-bridge"), layout)
-	sessions := newSessionTable()
+	sessions := newSessionTable(newHostMessages())
 	warnings := &lockedBuffer{}
 	h := newHub(st, sup, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), sessions, withWarnings(warnings))
 	h.runtime = layout
 	h.teardownGrace = grace
 
-	hdl := newManagerHandler(Deps{}, Options{DefaultCmd: "claude"}, t.TempDir(), st, sup, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
+	hdl := newManagerHandler(newHostMessages(), Deps{}, Options{DefaultCmd: "claude"}, t.TempDir(), st, sup, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
 	wireManagerHandler(ctx, nil, io.Discard, hdl, st, layout, "wired", nil, sessions, nil)
 
 	tmp := statePath + ".tmp"

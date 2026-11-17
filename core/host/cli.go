@@ -46,8 +46,8 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if n, ok := agent.UserBudgetFromEnv(os.Getenv); ok {
 		agents.SetUserBudget(n)
 	}
-	models := options.modelDiscovery()
-	hdl := newManagerHandler(deps, options, partDir, hostState, sup, worktrees, updater, agents, models)
+	models := options.modelDiscovery(sessions.messages)
+	hdl := newManagerHandler(sessions.messages, deps, options, partDir, hostState, sup, worktrees, updater, agents, models)
 	wireManagerHandler(ctx, options.live.Get, options.Warnings, hdl, hostState, options.Runtime, instID, worktrees, sessions, models)
 	wireSupervisor(sup, options.Runtime, hostState, instID, sessions)
 	seedCoord := &coordinatorSlot{}
@@ -57,7 +57,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addVerbs(reg, hdl.Commands()...); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addVerbs(reg, ModelsCommands(options.live.Get)...); err != nil {
+	if err := addVerbs(reg, ModelsCommands(sessions.messages, options.live.Get)...); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addSessionVerbs(reg, options.live.Get, hostState, options.Runtime, partDir, instID, approvals, sessions, seedCoord, models); err != nil {
@@ -73,39 +73,39 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addCheckpointCommands(reg, options.live.Get, hostState, sessions); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addMemoryVerbs(reg, options.live.Get); err != nil {
+	if err := addMemoryVerbs(reg, sessions.messages, options.live.Get); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addSkillVerbs(reg, options.live.Get); err != nil {
+	if err := addSkillVerbs(reg, sessions.messages, options.live.Get); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addScheduleCommands(reg, options.live.Get, hostState, agents, schedSlot); err != nil {
+	if err := addScheduleCommands(reg, sessions.messages, options.live.Get, hostState, agents, schedSlot); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addHostCommands(reg, options.live.Get, options.Warnings, hostState, options.Runtime); err != nil {
+	if err := addHostCommands(reg, sessions.messages, options.live.Get, options.Warnings, hostState, options.Runtime); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addApproveCommands(reg, options.live.Get, options.Warnings, hostState, agents, approvals, sessions); err != nil {
+	if err := addApproveCommands(reg, sessions.messages, options.live.Get, options.Warnings, hostState, agents, approvals, sessions); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addRoleCommands(reg, options.live.Get, hostState); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addVerbs(reg, memorySearchVerb(options.live.Get), whoamiVerb(), commandsVerb(options.live.Get, reg), healthVerb(options.health), usageVerb(options.usage)); err != nil {
+	if err := addVerbs(reg, memorySearchVerb(sessions.messages, options.live.Get), whoamiVerb(), commandsVerb(options.live.Get, reg), healthVerb(options.health), usageVerb(options.usage)); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addPluginVerbs(reg, extra); err != nil {
+	if err := addPluginVerbs(sessions.messages, reg, extra); err != nil {
 		return nil, hostDeps{}, err
 	}
-	localizeCommandErrors(reg, hostState, options.live)
+	localizeCommandErrors(sessions.messages, reg, hostState, options.live)
 	return reg, hostDeps{wt: worktrees, agents: agents, handler: hdl, seedCoord: seedCoord, schedSlot: schedSlot}, nil
 }
 
-func addPluginVerbs(reg *cli.Registry, extra []contracts.Cmd) error {
+func addPluginVerbs(messages *hostMessages, reg *cli.Registry, extra []contracts.Cmd) error {
 	families := reg.Families()
 	for _, cmd := range extra {
 		if len(cmd.Path) > 0 && families[cmd.Path[0]] {
-			return &pluginKindReservedError{Kind: cmd.Path[0]}
+			return &pluginKindReservedError{messages: messages, Kind: cmd.Path[0]}
 		}
 	}
 	return addVerbs(reg, extra...)
@@ -120,10 +120,10 @@ func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
 	return nil
 }
 
-func newManagerHandler(deps Deps, options Options, partDir string, hostState *state.State, sup *supervisor.Supervisor, worktrees manager.Worktrees, updater serviceUpdater, agents *agent.Store, models *ModelDiscovery) *manager.Handler {
+func newManagerHandler(messages *hostMessages, deps Deps, options Options, partDir string, hostState *state.State, sup *supervisor.Supervisor, worktrees manager.Worktrees, updater serviceUpdater, agents *agent.Store, models *ModelDiscovery) *manager.Handler {
 	options = withOperatorLanguage(options)
 	launch := func(vendor, modelID, cmd string) (string, error) { return launchVendor(models, vendor, modelID, cmd) }
-	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, validateProfileChoice, launch)
+	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, func(vendor, profile string) error { return validateProfileChoice(messages, vendor, profile) }, launch)
 	hdl.SetRemoteBackend(options.RemoteCategories[contracts.CategoryBackend])
 	hdl.SetLanguage(options.live.Get())
 	hdl.SetDefaultLanguage(options.DefaultLanguage)
@@ -133,7 +133,7 @@ func newManagerHandler(deps Deps, options Options, partDir string, hostState *st
 
 func wireManagerHandler(ctx context.Context, lang languageSource, warn io.Writer, hdl *manager.Handler, hostState *state.State, layout RuntimeLayout, instID string, worktrees *worktree.Worktreer, sessions *sessionTable, models *ModelDiscovery) {
 	hdl.SetSeeder(sessions.Seed)
-	hdl.SetHosts(newHostPlacer(lang, warn, hostState, layout, instID, worktrees, func() string { return sourceVersionOf(ctx, hostState) }))
+	hdl.SetHosts(newHostPlacer(sessions.messages, lang, warn, hostState, layout, instID, worktrees, func() string { return sourceVersionOf(ctx, hostState) }))
 	hdl.SetGatewayOnly(func() bool { return ResolvePolicy(envx.Getenv) == contracts.PolicyGatewayOnly })
 	hdl.SetDefaultModel(envx.Getenv(EnvDefaultModel))
 	hdl.SetVendorDefaultModel(func(vendor string) string { return envx.Getenv(VendorDefaultModelEnv(vendor)) })
@@ -208,6 +208,7 @@ func wireSupervisor(sup *supervisor.Supervisor, layout RuntimeLayout, store *sta
 // the home's owner for a normal session, the terminal gateway for a
 // terminal-only one. One set can only ever answer the first.
 func NewRegistry(ctx context.Context, gws []Deps, options Options) (*cli.Registry, error) {
+	messages := newHostMessages()
 	hostState, err := state.LoadState(options.StatePath)
 	if err != nil {
 		return nil, err
@@ -218,9 +219,9 @@ func NewRegistry(ctx context.Context, gws []Deps, options Options) (*cli.Registr
 	}
 	hostState.ApplyDefaults(home, options.Workspace, options.Source)
 
-	instID, err := resolveInstanceID(hostState, options.InstanceID, options.Owner, obs.Stderr(false))
+	instID, err := resolveInstanceID(messages, hostState, options.InstanceID, options.Owner, obs.Stderr(false))
 	if err != nil {
-		return nil, localizeHostError(options.operatorLanguage(), err)
+		return nil, localizeHostError(messages, options.operatorLanguage(), err)
 	}
 
 	self, execErr := os.Executable()
@@ -231,14 +232,14 @@ func NewRegistry(ctx context.Context, gws []Deps, options Options) (*cli.Registr
 	if options.DefaultGateways == nil {
 		options.DefaultGateways = nonTerminalKinds(gws)
 	}
-	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, hostState.Home)}, options, hostState, sup, instID, nil, newApprovalTable(options.Warnings), newSessionTable())
+	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, hostState.Home)}, options, hostState, sup, instID, nil, newApprovalTable(options.Warnings), newSessionTable(messages))
 	if err != nil {
 		return nil, err
 	}
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)
 	}
-	forwardDaemonOwnedCommands(reg, options.Runtime, instID, forwarderFor(options.Runtime))
+	forwardDaemonOwnedCommands(reg, options.Runtime, instID, forwarderFor(messages, options.Runtime))
 	return reg, nil
 }
 

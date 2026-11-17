@@ -47,7 +47,7 @@ func TestHiddenModelFromEnvResolvesWithWarningAndNeverSwitches(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
 	t.Cleanup(func() { slog.SetDefault(previous) })
 	t.Setenv(envModelsHidden, "a-visible")
-	models := ModelDiscoveryFor(filepath.Join(t.TempDir(), "state.json"))
+	models := ModelDiscoveryFor(NewMessages(), filepath.Join(t.TempDir(), "state.json"))
 
 	vendor, entry, err := chooseVendor("", "", "a-visible", pluginsWithRetiredModel(), models)
 	if err != nil {

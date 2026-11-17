@@ -187,13 +187,19 @@ func (e *contributionClashError) Error() string {
 }
 
 type pluginKindReservedError struct {
-	Kind string
+	messages *hostMessages
+	Kind     string
 }
 
-func (e *pluginKindReservedError) Error() string { return e.render(i18n.English) }
+func (e *pluginKindReservedError) Error() string {
+	if e == nil {
+		return nilErrorText
+	}
+	return e.render(e.messages, i18n.English)
+}
 
-func (e *pluginKindReservedError) render(lang i18n.Language) string {
-	return newHostMessages().text(lang, "plugin.kind_reserved", map[string]any{nameParam: e.Kind})
+func (e *pluginKindReservedError) render(messages *hostMessages, lang i18n.Language) string {
+	return messages.text(lang, "plugin.kind_reserved", map[string]any{nameParam: e.Kind})
 }
 
 type daemonNotRunningError struct {

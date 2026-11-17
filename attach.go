@@ -41,7 +41,8 @@ type attachedDaemon struct {
 const sessionCacheTTL = time.Second
 
 func newAttachedDaemon(ctx context.Context, layout host.RuntimeLayout, instance, statePath string, lang i18n.Language) (*attachedDaemon, error) {
-	stream, err := host.SubscribeDaemonEvents(ctx, layout, instance)
+	messages := host.NewMessages()
+	stream, err := host.SubscribeDaemonEvents(ctx, messages, layout, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +57,7 @@ func newAttachedDaemon(ctx context.Context, layout host.RuntimeLayout, instance,
 	daemon.send = func(argv []string) (string, error) {
 		call, cancel := context.WithTimeout(ctx, attachTimeout)
 		defer cancel()
-		return host.DaemonDispatch(call, layout, instance, argv)
+		return host.DaemonDispatch(call, messages, layout, instance, argv)
 	}
 	daemon.launch = func(name string) []string { return attachedLaunch(ctx, statePath, name) }
 	daemon.refresh()

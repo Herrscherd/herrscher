@@ -11,13 +11,13 @@ import (
 
 func TestLockStateRefusesASecondDaemon(t *testing.T) {
 	state := filepath.Join(t.TempDir(), "state.json")
-	release, err := LockState(state)
+	release, err := LockState(NewMessages(), state)
 	if err != nil {
 		t.Fatalf("first LockState: %v", err)
 	}
 	defer release()
 
-	if _, err := LockState(state); err == nil {
+	if _, err := LockState(NewMessages(), state); err == nil {
 		t.Fatal("second LockState succeeded; two daemons would serve the same state")
 	} else if !strings.Contains(err.Error(), state) {
 		t.Errorf("error = %q, want it to name the state file being contended", err)
@@ -26,13 +26,13 @@ func TestLockStateRefusesASecondDaemon(t *testing.T) {
 
 func TestLockStateNamesTheHoldingProcess(t *testing.T) {
 	state := filepath.Join(t.TempDir(), "state.json")
-	release, err := LockState(state)
+	release, err := LockState(NewMessages(), state)
 	if err != nil {
 		t.Fatalf("LockState: %v", err)
 	}
 	defer release()
 
-	_, err = LockState(state)
+	_, err = LockState(NewMessages(), state)
 	if err == nil {
 		t.Fatal("second LockState succeeded")
 	}
@@ -43,13 +43,13 @@ func TestLockStateNamesTheHoldingProcess(t *testing.T) {
 
 func TestReleasedLockCanBeRetaken(t *testing.T) {
 	state := filepath.Join(t.TempDir(), "state.json")
-	release, err := LockState(state)
+	release, err := LockState(NewMessages(), state)
 	if err != nil {
 		t.Fatalf("LockState: %v", err)
 	}
 	release()
 
-	release2, err := LockState(state)
+	release2, err := LockState(NewMessages(), state)
 	if err != nil {
 		t.Fatalf("LockState after release: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestReleasedLockCanBeRetaken(t *testing.T) {
 
 func TestLockStateCreatesTheStateDirectory(t *testing.T) {
 	state := filepath.Join(t.TempDir(), "fresh", "state.json")
-	release, err := LockState(state)
+	release, err := LockState(NewMessages(), state)
 	if err != nil {
 		t.Fatalf("LockState in a missing directory: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestCacheLockHoldsOffASecondWriter(t *testing.T) {
 	release := make(chan struct{})
 	first := make(chan error, 1)
 	go func() {
-		first <- withCacheLock(path, func() error {
+		first <- withCacheLock(newHostMessages(), path, func() error {
 			close(entered)
 			<-release
 			return nil
@@ -91,7 +91,7 @@ func TestCacheLockHoldsOffASecondWriter(t *testing.T) {
 	<-entered
 	second := make(chan error, 1)
 	go func() {
-		second <- withCacheLock(path, func() error { return nil })
+		second <- withCacheLock(newHostMessages(), path, func() error { return nil })
 	}()
 	select {
 	case err := <-second:

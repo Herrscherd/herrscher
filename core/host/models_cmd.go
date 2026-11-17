@@ -99,23 +99,23 @@ func listCatalog(all bool, plugins []contracts.Plugin, policy contracts.RoutePol
 	return CatalogWith(plugins, policy, sources)
 }
 
-func modelDiscoveryFor(input contracts.Input) *ModelDiscovery {
+func modelDiscoveryFor(messages *hostMessages, input contracts.Input) *ModelDiscovery {
 	statePath := input.Get("state")
 	if statePath == "" {
 		statePath = DefaultStatePath()
 	}
-	return ModelDiscoveryFor(statePath)
+	return newModelDiscovery(messages, statePath)
 }
 
 func refreshModels(ctx context.Context, lang i18n.Language, plugins []contracts.Plugin, models *ModelDiscovery) (string, error) {
 	path := models.cachePath()
-	cache, err := loadDiscoveryCache(path)
+	cache, err := loadDiscoveryCache(models.messages, path)
 	if err != nil {
 		return "", err
 	}
 	next, outcomes := refreshDiscovery(ctx, plugins, cache, resolveDiscoverySettings(), time.Now(), true)
 	if anyRefreshed(outcomes) {
-		if err := persistRefreshed(path, next, outcomes); err != nil {
+		if err := persistRefreshed(models.messages, path, next, outcomes); err != nil {
 			return "", err
 		}
 	}
@@ -123,14 +123,14 @@ func refreshModels(ctx context.Context, lang i18n.Language, plugins []contracts.
 }
 
 // ModelsCommands returns the model catalog verbs.
-func ModelsCommands(lang languageSource) []contracts.Cmd {
+func ModelsCommands(messages *hostMessages, lang languageSource) []contracts.Cmd {
 	return []contracts.Cmd{
 		contracts.New("models", "list").
 			ValueParam("state", clitext.CmdParamModelsListState, false).
 			Param("all", clitext.CmdParamModelsListAll, false).
 			Help(clitext.CmdHelpModelsList).
 			Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
-				entries, err := listCatalog(input.Bool("all"), contracts.Default.Backends(), ResolvePolicy(envx.Getenv), modelDiscoveryFor(input).Sources())
+				entries, err := listCatalog(input.Bool("all"), contracts.Default.Backends(), ResolvePolicy(envx.Getenv), modelDiscoveryFor(messages, input).Sources())
 				if err != nil {
 					return contracts.Result{}, err
 				}
@@ -143,7 +143,7 @@ func ModelsCommands(lang languageSource) []contracts.Cmd {
 			ValueParam("state", clitext.CmdParamModelsRefreshState, false).
 			Help(clitext.CmdHelpModelsRefresh).
 			Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
-				return cli.Data(refreshModels(ctx, lang(), contracts.Default.Backends(), modelDiscoveryFor(input)))
+				return cli.Data(refreshModels(ctx, lang(), contracts.Default.Backends(), modelDiscoveryFor(messages, input)))
 			}),
 	}
 }

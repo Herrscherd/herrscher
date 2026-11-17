@@ -16,7 +16,7 @@ func TestAStuckTeardownWarnsOnceForItsWindow(t *testing.T) {
 		t.Fatal(err)
 	}
 	var warnings lockedBuffer
-	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(), withWarnings(&warnings))
+	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()), withWarnings(&warnings))
 	h.runtime = isolatedRuntimeDir(t)
 	h.teardownGrace = 30 * time.Millisecond
 	release := make(chan struct{})

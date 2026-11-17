@@ -114,11 +114,12 @@ func serveWith(ctx context.Context, layout host.RuntimeLayout, args []string, op
 			return loadErr
 		}
 	}
-	models := host.ModelDiscoveryFor(*statePath)
+	messages := host.NewMessages()
+	models := host.ModelDiscoveryFor(messages, *statePath)
 	owner := or(envx.Get("OWNER_ID"), cfg.Owner)
 	home := homeRef(cfg)
 
-	unlock, attached, err := lockOrAttach(ctx, layout, langs.Operator, *statePath, *instanceID, open)
+	unlock, attached, err := lockOrAttach(ctx, messages, layout, langs.Operator, *statePath, *instanceID, open)
 	if attached || err != nil {
 		return err
 	}
@@ -169,8 +170,8 @@ func openOnForeground(open *openWindow, foreground contracts.Foreground) {
 	}
 }
 
-func lockOrAttach(ctx context.Context, layout host.RuntimeLayout, lang i18n.Language, statePath, instanceID string, open *openWindow) (func(), bool, error) {
-	unlock, err := host.LockState(statePath)
+func lockOrAttach(ctx context.Context, messages *host.Messages, layout host.RuntimeLayout, lang i18n.Language, statePath, instanceID string, open *openWindow) (func(), bool, error) {
+	unlock, err := host.LockState(messages, statePath)
 	if err == nil {
 		return unlock, false, nil
 	}
@@ -183,13 +184,39 @@ func lockOrAttach(ctx context.Context, layout host.RuntimeLayout, lang i18n.Lang
 		if aerr == nil {
 			return nil, true, nil
 		}
-		fmt.Fprintln(os.Stderr, attachFailureText(lang, aerr))
+		fmt.Fprintln(os.Stderr, attachFailureText(messages, lang, aerr))
 	}
-	return nil, false, host.LocalizeError(lang, err)
+	return nil, false, messages.Localize(lang, err)
 }
 
-func attachFailureText(lang i18n.Language, err error) string {
-	return render(lang, clitext.ServeAttachFailed, clitext.Params{clitext.ParamErr: host.LocalizeError(lang, err).Error()})
+func attachFailureText(messages *host.Messages, lang i18n.Language, err error) string {
+	return render(lang, clitext.ServeAttachFailed, attachFailureParams(messages, lang, err))
+}
+
+func attachFailureParams(messages *host.Messages, lang i18n.Language, err error) clitext.Params {
+	return escapedParam(clitext.ParamErr, messages.Localize(lang, err).Error())
+}
+
+type gatewayStatus interface {
+	Unconfigured() []string
+	AwaitPending(ctx context.Context, window time.Duration, note func(failures []string, in time.Duration)) int
+	Failures() []string
+}
+
+func gatewayNotices(ctx context.Context, hub gatewayStatus, emit func(clitext.Key, clitext.Params)) {
+	for _, f := range hub.Unconfigured() {
+		emit(clitext.ServeGatewaySkipped, escapedParam(clitext.ParamFailure, f))
+	}
+	hub.AwaitPending(ctx, host.GatewayRetryWindow, func(failures []string, wait time.Duration) {
+		for _, f := range failures {
+			params := escapedParam(clitext.ParamFailure, f)
+			params[clitext.ParamWait] = wait.String()
+			emit(clitext.ServeGatewayRetrying, params)
+		}
+	})
+	for _, f := range hub.Failures() {
+		emit(clitext.ServeGatewayUnavailable, escapedParam(clitext.ParamFailure, f))
+	}
 }
 
 func startGateways(ctx context.Context, lang i18n.Language) ([]host.Deps, []contracts.Gateway, contracts.Foreground, []contracts.Cmd, error) {
@@ -197,17 +224,9 @@ func startGateways(ctx context.Context, lang i18n.Language) ([]host.Deps, []cont
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	for _, f := range hub.Unconfigured() {
-		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeGatewaySkipped, clitext.Params{clitext.ParamFailure: f}))
-	}
-	hub.AwaitPending(ctx, host.GatewayRetryWindow, func(failures []string, wait time.Duration) {
-		for _, f := range failures {
-			fmt.Fprintln(os.Stderr, render(lang, clitext.ServeGatewayRetrying, clitext.Params{clitext.ParamFailure: f, clitext.ParamWait: wait.String()}))
-		}
+	gatewayNotices(ctx, hub, func(key clitext.Key, params clitext.Params) {
+		fmt.Fprintln(os.Stderr, render(lang, key, params))
 	})
-	for _, f := range hub.Failures() {
-		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeGatewayUnavailable, clitext.Params{clitext.ParamFailure: f}))
-	}
 	var raw []host.Deps
 	for _, kind := range hub.Kinds() {
 		if set, ok := hub.Get(kind); ok {
@@ -322,8 +341,7 @@ func runRegistryVerb(ctx context.Context, layout host.RuntimeLayout, verb string
 		return err
 	}
 	if out != "" {
-		_, err := fmt.Fprintln(os.Stdout, out)
-		return err
+		return writeCLIText(os.Stdout, out)
 	}
 	return nil
 }
@@ -358,10 +376,11 @@ func createTaskSession(ctx context.Context, name string) []string {
 func runPromptWindow(ctx context.Context, layout host.RuntimeLayout, name, text string) error {
 	lang := clitext.ClientLanguage()
 	statePath := host.DefaultStatePath()
-	unlock, lerr := host.LockState(statePath)
+	messages := host.NewMessages()
+	unlock, lerr := host.LockState(messages, statePath)
 	if lerr != nil {
 		instance := host.ServedInstanceID(statePath, "")
-		if _, err := host.DaemonDispatch(ctx, layout, instance, createTaskSession(ctx, name)); err != nil {
+		if _, err := host.DaemonDispatch(ctx, messages, layout, instance, createTaskSession(ctx, name)); err != nil {
 			return err
 		}
 		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeSessionStarted, clitext.Params{clitext.ParamName: name}))
@@ -404,7 +423,7 @@ func runPromptWith(ctx context.Context, dispatcher verbDispatcher, name, prompt 
 	res, err := dispatcher.Dispatch(ctx, argv)
 	if err != nil {
 		if partial := cli.PartialOutputOf(err); partial != "" {
-			if _, werr := fmt.Fprintln(stdout, partial); werr != nil {
+			if werr := writeCLIText(stdout, partial); werr != nil {
 				return werr
 			}
 		}
@@ -416,7 +435,7 @@ func runPromptWith(ctx context.Context, dispatcher verbDispatcher, name, prompt 
 		return err
 	}
 	if reply != "" {
-		if _, err := fmt.Fprintln(stdout, reply); err != nil {
+		if err := writeCLIText(stdout, reply); err != nil {
 			return err
 		}
 	}
@@ -434,7 +453,7 @@ func forwardUnknownVerb(ctx context.Context, layout host.RuntimeLayout, argv []s
 			instance = cfg.Instance
 		}
 	}
-	return host.ForwardToDaemon(ctx, layout, host.DefaultStatePath(), instance, argv)
+	return host.ForwardToDaemon(ctx, host.NewMessages(), layout, host.DefaultStatePath(), instance, argv)
 }
 
 func buildGateways(ctx context.Context, lang i18n.Language) ([]host.Deps, error) {

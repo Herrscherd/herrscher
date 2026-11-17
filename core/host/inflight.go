@@ -88,5 +88,5 @@ func (h *hub) warnCommandHandlerOverrun(budget time.Duration) {
 func (h *hub) warnOverrun(key string, grace time.Duration) {
 	lang := h.textLanguage()()
 	params := map[string]any{graceParam: grace.String()}
-	logCleanup(h.sink.announce(newHostMessages().text(lang, key, params)))
+	logCleanup(h.sink.announce(h.messages.text(lang, key, params)))
 }

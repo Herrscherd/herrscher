@@ -151,7 +151,7 @@ func (h *hub) journalStart(name string, err error) {
 }
 
 func (h *hub) deferWarning(lang i18n.Language, key string, params map[string]any) {
-	line := []byte(newHostMessages().text(lang, key, params) + "\n")
+	line := []byte(h.messages.text(lang, key, params) + "\n")
 	h.deferred = append(h.deferred, h.sink.Enqueue(line))
 }
 
@@ -276,21 +276,21 @@ func (h *hub) goLiveLocked(ctx context.Context, sess state.Session) error {
 		return supervisor.ErrStillStopping
 	}
 	controlPath := control.SocketPath(h.runtime, h.instanceID, sess.Name)
-	if err := ensureRuntimeDir(h.runtime, controlPath); err != nil {
+	if err := ensureRuntimeDir(h.messages, h.runtime, controlPath); err != nil {
 		return err
 	}
 	listener, err := h.listen(context.WithoutCancel(ctx), controlPath)
 	if err != nil {
-		return wrapHost(err, "session.go_live", map[string]any{"Name": sess.Name})
+		return wrapHost(h.messages, err, "session.go_live", map[string]any{"Name": sess.Name})
 	}
 	acc := control.Serve(context.WithoutCancel(ctx), listener)
 	h.noteListened(sess.Name)
 	sctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	commands, err := openSocket(sctx, h.runtime, SessionCommandSocketPathIn(h.runtime, h.instanceID, sess.Name))
+	commands, err := openSocket(sctx, h.messages, h.runtime, SessionCommandSocketPathIn(h.runtime, h.instanceID, sess.Name))
 	if err != nil {
 		cancel()
 		logCleanup(acc.Close())
-		return wrapHost(err, "session.go_live", map[string]any{"Name": sess.Name})
+		return wrapHost(h.messages, err, "session.go_live", map[string]any{"Name": sess.Name})
 	}
 	bound := boundGateways(h.gws, effectiveKinds(h.gws, sess))
 	terms := liveModelTerms(h.st, h.models, sess.Name)
@@ -446,7 +446,7 @@ func (h *hub) acceptFailed(name string, done <-chan struct{}, cause error) {
 	}
 	defer end()
 	h.forget(name)
-	warnLive(h.warnings, h.sessionLanguageSource(name), "warn.session_accept_failed", map[string]any{nameParam: name, detailParam: cause})
+	warnLive(h.messages, h.warnings, h.sessionLanguageSource(name), "warn.session_accept_failed", map[string]any{nameParam: name, detailParam: cause})
 }
 
 func (h *hub) retireFailed(name string, done <-chan struct{}) (func(), bool) {
@@ -490,7 +490,7 @@ func (h *hub) withinGrace(name string, window teardownWindow, step func()) bool 
 }
 
 func (h *hub) warnSessionOverrun(name string) {
-	text := newHostMessages().text(h.sessionLanguageSource(name)(), "warn.session_teardown_overrun", h.overrunParams(name))
+	text := h.messages.text(h.sessionLanguageSource(name)(), "warn.session_teardown_overrun", h.overrunParams(name))
 	logCleanup(h.sink.announce(text))
 }
 

@@ -13,7 +13,7 @@ func TestOneShotDoesNotWaitForAnUnrelatedDaemonWrite(t *testing.T) {
 
 	oneShot := shared.child()
 	started := time.Now()
-	awaitOneShotWrites(oneShot, io.Discard, testLanguage())
+	awaitOneShotWrites(newHostMessages(), oneShot, io.Discard, testLanguage())
 	if elapsed := time.Since(started); elapsed > time.Second {
 		t.Fatalf("the one-shot waited %v for a daemon write it did not start, want none", elapsed)
 	}

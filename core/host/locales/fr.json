@@ -570,6 +570,11 @@
     "other": "proxy de clés : {{.Detail}}"
   },
   {
+    "id": "serve.outbox",
+    "description": "The turn outbox root cannot be resolved, Detail carries the cause",
+    "other": "résolution de la boîte de sortie des tours impossible : {{.Detail}}"
+  },
+  {
     "id": "session.percent",
     "description": "An invalid compaction percentage, Raw gives the value received and Detail carries the cause",
     "other": "pourcentage \"{{.Raw}}\" : {{.Detail}}"
@@ -670,6 +675,11 @@
     "other": "herrscher serve : l'arrêt n'a pas fini dans {{.Grace}}, du travail en cours ou des avertissements peuvent encore se terminer après lui, il continue quand même"
   },
   {
+    "id": "warn.command_handler_overrun",
+    "description": "A command handler of the command socket is still running when its join grace ends; the stop goes on and that command may be cut short",
+    "other": "herrscher serve : une commande tourne encore après {{.Grace}}, l'arrêt continue quand même : cette commande peut être interrompue"
+  },
+  {
     "id": "warn.persist_overrun",
     "description": "A transcript, resume token or checkpoint write is still running when the stop grace of persistent writes ends; the stop goes on and that write may be lost",
     "other": "herrscher serve : une écriture de transcript, de jeton de reprise ou de checkpoint est toujours en cours après {{.Grace}}, l'arrêt continue quand même et cette écriture peut être perdue"
@@ -714,16 +724,6 @@
     "id": "warn.health_server",
     "description": "The health endpoint could not serve",
     "other": "serveur de santé : {{.Detail}}"
-  },
-  {
-    "id": "warn.command_handler_overrun",
-    "description": "A command handler of the command socket is still running when its join grace ends; the stop goes on and that command may be cut short",
-    "other": "herrscher serve : une commande tourne encore après {{.Grace}}, l'arrêt continue quand même : cette commande peut être interrompue"
-  },
-  {
-    "id": "warn.command_socket_listen",
-    "description": "The command socket could not listen on its path",
-    "other": "socket de commandes : écoute sur {{.Path}} : {{.Detail}}"
   },
   {
     "id": "warn.approvals_unreadable",

@@ -14,11 +14,11 @@ import (
 
 func TestATapIsRefusedOnceTheSeedShutsItsGate(t *testing.T) {
 	var published []string
-	runtime := oneShotSeedRuntime{publish: func(_ string, event contracts.Event) {
+	runtime := oneShotSeedRuntime{messages: newHostMessages(), publish: func(_ string, event contracts.Event) {
 		published = append(published, event.T)
 	}}
 	sess := state.Session{Name: "window"}
-	driver := newSessionDriver(sess.Name, nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1), io.Discard)
+	driver := newSessionDriver(newHostMessages(), sess.Name, nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1), io.Discard)
 	gate := attachOneShotTaps(driver, sess, runtime)
 
 	driver.tapEvent(contracts.Event{T: "before"})
@@ -32,11 +32,11 @@ func TestATapIsRefusedOnceTheSeedShutsItsGate(t *testing.T) {
 
 func TestAResumeTokenIsRefusedOnceTheSeedShutsItsGate(t *testing.T) {
 	var resumed []string
-	runtime := oneShotSeedRuntime{resume: func(_, token string) {
+	runtime := oneShotSeedRuntime{messages: newHostMessages(), resume: func(_, token string) {
 		resumed = append(resumed, token)
 	}}
 	sess := state.Session{Name: "window"}
-	driver := newSessionDriver(sess.Name, nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1), io.Discard)
+	driver := newSessionDriver(newHostMessages(), sess.Name, nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1), io.Discard)
 	gate := attachOneShotTaps(driver, sess, runtime)
 
 	driver.sink.Resume("before")
@@ -50,7 +50,7 @@ func TestAResumeTokenIsRefusedOnceTheSeedShutsItsGate(t *testing.T) {
 
 func TestARefusedDeliveryWarnsOncePerKindWithTheSession(t *testing.T) {
 	var warned bytes.Buffer
-	gate := newSeedGate("window", &warned, fixedLanguageSource(i18n.English))
+	gate := newSeedGate(newHostMessages(), "window", &warned, fixedLanguageSource(i18n.English))
 	gate.shut()
 	refused := func() { t.Fatal("a delivery reached the session after the gate shut") }
 	gate.admit(lateEventKey, refused)
@@ -83,13 +83,13 @@ func (p probeOrchestrator) Consolidate(ctx context.Context) error {
 }
 
 func TestConsolidationRunsWithTheGateShut(t *testing.T) {
-	gate := newSeedGate("window", io.Discard, fixedLanguageSource(i18n.English))
+	gate := newSeedGate(newHostMessages(), "window", io.Discard, fixedLanguageSource(i18n.English))
 	delivered := false
 	orch := probeOrchestrator{consolidate: func(context.Context) error {
 		gate.admit(lateEventKey, func() { delivered = true })
 		return nil
 	}}
-	consolidateOneShot(context.Background(), orch, gate, state.Session{Name: "window"}, io.Discard, fixedLanguageSource(i18n.English))
+	consolidateOneShot(context.Background(), orch, gate, state.Session{Name: "window"}, newHostMessages(), io.Discard, fixedLanguageSource(i18n.English))
 	if delivered {
 		t.Fatal("a tap reached the session during the consolidation: the gate must be shut before Consolidate")
 	}

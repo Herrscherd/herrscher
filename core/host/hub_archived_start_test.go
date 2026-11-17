@@ -51,7 +51,7 @@ func TestSessionArchivedWhileItsBridgeStartsIsNotLeftLive(t *testing.T) {
 	default:
 		t.Fatal("the session goroutine of an archived session was still running when goLiveBridged returned")
 	}
-	if socketAnswers(t.Context(), h.runtime, SessionCommandSocketPathIn(h.runtime, h.instanceID, name)) {
+	if socketAnswers(t.Context(), newHostMessages(), h.runtime, SessionCommandSocketPathIn(h.runtime, h.instanceID, name)) {
 		t.Fatal("the command socket of an archived session still answers once goLiveBridged has returned")
 	}
 }

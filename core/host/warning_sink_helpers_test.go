@@ -14,8 +14,14 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
 
-func englishLostLine(lost int) string {
-	return newHostMessages().text(i18n.English, "warn.warnings_dropped", map[string]any{countParam: lost})
+func englishLostLine(messages *hostMessages) func(lost int) string {
+	return func(lost int) string {
+		return messages.text(i18n.English, "warn.warnings_dropped", map[string]any{countParam: lost})
+	}
+}
+
+func englishStillRunningLine(messages *hostMessages) string {
+	return messages.text(i18n.English, "warn.write_still_running", nil)
 }
 
 func testHub(h *hub) *hub {
@@ -23,7 +29,7 @@ func testHub(h *hub) *hub {
 	if out == nil {
 		out = io.Discard
 	}
-	h.sink = newWarningSink(out, englishLostLine)
+	h.sink = newWarningSink(h.messages, out, englishLostLine(h.messages))
 	h.warnings = h.sink
 	return h
 }
@@ -193,10 +199,10 @@ func notConfirmedLines(text string) []string {
 	return lines
 }
 
-func warnLinesOutsideBilan(text string) []string {
+func warnLinesOutsideBilan(messages *hostMessages, text string) []string {
 	var lines []string
 	for _, line := range strings.Split(text, "\n") {
-		if strings.Contains(line, "level=WARN") && !strings.Contains(line, "not all confirmed") && !strings.Contains(line, englishStillRunningLine()) {
+		if strings.Contains(line, "level=WARN") && !strings.Contains(line, "not all confirmed") && !strings.Contains(line, englishStillRunningLine(messages)) {
 			lines = append(lines, line)
 		}
 	}

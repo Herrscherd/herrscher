@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 
@@ -167,6 +169,7 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"serve.scheduler_tick":              {"Detail"},
 		"serve.config":                      {"Detail"},
 		"serve.key_proxy":                   {"Detail"},
+		"serve.outbox":                      {"Detail"},
 		"session.percent":                   {"Detail", "Raw"},
 		"session.go_live":                   {"Detail", "Name"},
 		"session.launch_failed":             {"Detail", "Name"},
@@ -195,6 +198,7 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"warn.session_accept_failed":        {"Detail", "Name"},
 		"warn.session_teardown_overrun":     {"Grace", "Name"},
 		"warn.hub_teardown_overrun":         {"Grace"},
+		"warn.command_handler_overrun":      {"Grace"},
 		"warn.persist_overrun":              {"Grace"},
 		"warn.warnings_dropped":             {"Count"},
 		"warn.write_still_running":          nil,
@@ -204,7 +208,6 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"warn.role_undefined":               {"Name", "Role"},
 		"warn.ssh_multiplexing_disabled":    {"Detail", "Name"},
 		"warn.health_server":                {"Detail"},
-		"warn.command_socket_listen":        {"Detail", "Path"},
 		"warn.approvals_unreadable":         {"Detail", "Path"},
 		"warn.approvals_file":               {"Detail", "Path"},
 		"warn.approvals_state_rule":         {"Detail", "Rule"},
@@ -453,5 +456,296 @@ func TestHostTextFallsBackToEnglishWhenFrenchDoesNotRender(t *testing.T) {
 	}
 	if got := messages.text(i18n.French, "broken", params); got == "broken" || got == "" {
 		t.Fatalf("text of a key that renders in no language = %q, want the render error", got)
+	}
+}
+
+func countingOwner() (*hostMessages, *int) {
+	built := sync.OnceValues(buildHostCatalog)
+	catalogueLookups := 0
+	owner := &hostMessages{catalog: func() (*i18n.Catalog, error) {
+		catalogueLookups++
+		return built()
+	}}
+	return owner, &catalogueLookups
+}
+
+func wrapChain(owner *hostMessages, depth int) error {
+	err := errors.New("disque plein")
+	return wrapLevels(owner, err, depth)
+}
+
+func wrapLevels(owner *hostMessages, err error, depth int) error {
+	for range depth {
+		err = wrapHost(owner, err, "serve.load_state", nil)
+	}
+	return err
+}
+
+func TestOneOwnerKeepsOneCatalogueAcrossEveryRenderPath(t *testing.T) {
+	owner, catalogueLookups := countingOwner()
+	expectLookups := func(path string, want int, render func()) {
+		t.Helper()
+		before := *catalogueLookups
+		render()
+		if got := *catalogueLookups - before; got != want {
+			t.Fatalf("%s looked up the owner's catalogue %d times, want exactly %d: a render that goes through another owner changes this count", path, got, want)
+		}
+	}
+
+	driver := newSessionDriver(owner, "alpha", nil, nil, nil, io.Discard)
+	driver.operator = fixedLanguage(i18n.French)
+	expectLookups("the session driver", 1, func() {
+		driver.hostText("warn.session_start", map[string]any{nameParam: "alpha"})
+	})
+	expectLookups("warnTo", 1, func() {
+		warnTo(owner, io.Discard, i18n.French, "warn.session_start", map[string]any{nameParam: "alpha", detailParam: errors.New("boom")})
+	})
+	top := wrapHost(owner, wrapChain(owner, 1), "warn.session_start", map[string]any{nameParam: "digest"})
+	var englishTop, frenchTop error
+	expectLookups("localizeHostError in English over two levels", 2, func() {
+		englishTop = localizeHostError(owner, i18n.English, top)
+	})
+	expectLookups("localizeHostError in French over two levels", 8, func() {
+		frenchTop = localizeHostError(owner, i18n.French, top)
+	})
+	const wantEnglish = `herrscher serve: session "digest": load state: disque plein`
+	const wantFrench = `herrscher serve : session "digest" : chargement de l'état impossible : disque plein`
+	if got := englishTop.Error(); got != wantEnglish {
+		t.Fatalf("localizeHostError in English rendered %q, want %q", got, wantEnglish)
+	}
+	if got := frenchTop.Error(); got != wantFrench {
+		t.Fatalf("localizeHostError in French rendered %q, want %q", got, wantFrench)
+	}
+	expectLookups("Error() over two levels", 2, func() {
+		_ = top.Error()
+	})
+	expectLookups("errorTextIn in French over two levels", 8, func() {
+		errorTextIn(owner, i18n.French, top)
+	})
+}
+
+func TestCatalogueLookupsGrowAsDepthSquaredInFrench(t *testing.T) {
+	for depth := 1; depth <= 4; depth++ {
+		t.Run(fmt.Sprintf("depth %d", depth), func(t *testing.T) {
+			owner, catalogueLookups := countingOwner()
+			chain := wrapChain(owner, depth)
+			*catalogueLookups = 0
+			_ = chain.Error()
+			if got := *catalogueLookups; got != depth {
+				t.Fatalf("English over %d levels looked up the catalogue %d times, want %d (one per level)", depth, got, depth)
+			}
+			*catalogueLookups = 0
+			errorTextIn(owner, i18n.French, chain)
+			if want := depth*depth + 2*depth; *catalogueLookups != want {
+				t.Fatalf("French over %d levels looked up the catalogue %d times, want %d (n² + 2n)", depth, *catalogueLookups, want)
+			}
+		})
+	}
+}
+
+func TestErrorsIsSurvivesATypedNilRemoteResolveError(t *testing.T) {
+	var nilRemote *RemoteResolveError
+	var err error = nilRemote
+	if errors.Is(err, errors.New("cible")) {
+		t.Fatal("a typed nil RemoteResolveError matched a foreign target")
+	}
+	if errors.Is(fmt.Errorf("contexte: %w", err), errors.New("cible")) {
+		t.Fatal("a typed nil RemoteResolveError inside a wrap matched a foreign target")
+	}
+}
+
+func typedNilLocalizables() []error {
+	return []error{
+		(*hostWrapError)(nil),
+		(*pluginKindReservedError)(nil),
+		(*RemoteResolveError)(nil),
+		(*gatewayEnvUnsupportedError)(nil),
+		(*unsafeTarMemberError)(nil),
+		(*instanceIDMismatchError)(nil),
+		(*remoteSessionError)(nil),
+		(*remoteAccountError)(nil),
+	}
+}
+
+func TestNilLocalizableInsideAJoinKeepsTheTextOfItsBranches(t *testing.T) {
+	owner := newHostMessages()
+	cause := wrapHost(owner, errors.New("disque plein"), "serve.load_state", nil)
+	var nilWrap *hostWrapError
+	err := errors.Join(fmt.Errorf("a: %w", cause), nilWrap)
+	if got, want := localizeHostError(owner, i18n.English, err).Error(), "a: load state: disque plein\n<nil>"; got != want {
+		t.Fatalf("a typed nil under errors.Join rendered %q in English, want %q", got, want)
+	}
+	if got, want := localizeHostError(owner, i18n.French, err).Error(), "a: chargement de l'état impossible : disque plein\n<nil>"; got != want {
+		t.Fatalf("a typed nil under errors.Join rendered %q in French, want %q", got, want)
+	}
+}
+
+func TestErrorsIsSurvivesEveryLocalizableTypedNil(t *testing.T) {
+	owner := newHostMessages()
+	foreign := errors.New("cible")
+	params := map[string]any{nameParam: "digest"}
+	plainWrap := wrapHost(owner, errors.New("<nil>"), "warn.session_start", params)
+	for _, typedNil := range typedNilLocalizables() {
+		wrapped := wrapHost(owner, typedNil, "warn.session_start", params)
+		assertTypedNilMatchesNothing(t, typedNil, wrapped, foreign)
+		for _, lang := range []i18n.Language{i18n.French, i18n.English} {
+			assertTypedNilRendersAsNilText(t, owner, lang, typedNil, wrapped, plainWrap)
+		}
+	}
+}
+
+func assertTypedNilMatchesNothing(t *testing.T, typedNil, wrapped, foreign error) {
+	t.Helper()
+	if errors.Is(typedNil, foreign) {
+		t.Fatalf("a typed nil %T matched a foreign target", typedNil)
+	}
+	if errors.Is(fmt.Errorf("contexte: %w", typedNil), foreign) {
+		t.Fatalf("a typed nil %T inside a %%w wrap matched a foreign target", typedNil)
+	}
+	if errors.Is(wrapped, foreign) {
+		t.Fatalf("a typed nil %T inside a host wrap matched a foreign target", typedNil)
+	}
+}
+
+func assertTypedNilRendersAsNilText(t *testing.T, owner *hostMessages, lang i18n.Language, typedNil, wrapped, plainWrap error) {
+	t.Helper()
+	if got, want := localizeHostError(owner, lang, typedNil).Error(), "<nil>"; got != want {
+		t.Fatalf("a bare typed nil %T rendered %q in %v, want %q", typedNil, got, lang, want)
+	}
+	if got, want := localizeHostError(owner, lang, fmt.Errorf("contexte: %w", typedNil)).Error(), "contexte: <nil>"; got != want {
+		t.Fatalf("a typed nil %T under %%w rendered %q in %v, want %q", typedNil, got, lang, want)
+	}
+	if got, want := localizeHostError(owner, lang, errors.Join(errors.New("a"), typedNil)).Error(), "a\n<nil>"; got != want {
+		t.Fatalf("a typed nil %T under errors.Join rendered %q in %v, want %q", typedNil, got, lang, want)
+	}
+	if got, want := localizeHostError(owner, lang, wrapped).Error(), localizeHostError(owner, lang, plainWrap).Error(); got != want {
+		t.Fatalf("a typed nil %T in a host wrap rendered %q in %v, want %q", typedNil, got, lang, want)
+	}
+}
+
+func TestLocalizeHostErrorTranslatesASentinelBesideATypedNil(t *testing.T) {
+	owner := newHostMessages()
+	var nilWrap *hostWrapError
+	err := errors.Join(fmt.Errorf("a: %w", errHubClosed), nilWrap)
+	if got, want := localizeHostError(owner, i18n.French, err).Error(), "a: le démon s'arrête et ne démarre plus de session\n<nil>"; got != want {
+		t.Fatalf("a sentinel beside a typed nil rendered %q in French, want %q", got, want)
+	}
+	if got, want := localizeHostError(owner, i18n.English, err).Error(), "a: the daemon is shutting down and starts no session\n<nil>"; got != want {
+		t.Fatalf("a sentinel beside a typed nil rendered %q in English, want %q", got, want)
+	}
+}
+
+func TestLocalizeHostErrorTranslatesALocalizableAfterATypedNil(t *testing.T) {
+	owner := newHostMessages()
+	var nilWrap *hostWrapError
+	err := errors.Join(nilWrap, wrapHost(owner, errors.New("disque plein"), "serve.load_state", nil))
+	if got, want := localizeHostError(owner, i18n.French, err).Error(), "<nil>\nchargement de l'état impossible : disque plein"; got != want {
+		t.Fatalf("a typed nil before a localizable rendered %q in French, want %q", got, want)
+	}
+	if got, want := localizeHostError(owner, i18n.English, err).Error(), "<nil>\nload state: disque plein"; got != want {
+		t.Fatalf("a typed nil before a localizable rendered %q in English, want %q", got, want)
+	}
+}
+
+func TestLocalizeHostErrorTranslatesANestedJoinBehindATypedNil(t *testing.T) {
+	owner := newHostMessages()
+	var nilWrap *hostWrapError
+	inner := errors.Join(nilWrap, wrapHost(owner, errors.New("disque plein"), "serve.load_state", nil))
+	err := errors.Join(errors.New("a"), inner)
+	if got, want := localizeHostError(owner, i18n.French, err).Error(), "a\n<nil>\nchargement de l'état impossible : disque plein"; got != want {
+		t.Fatalf("a localizable in a nested join rendered %q in French, want %q", got, want)
+	}
+	if got, want := localizeHostError(owner, i18n.English, err).Error(), "a\n<nil>\nload state: disque plein"; got != want {
+		t.Fatalf("a localizable in a nested join rendered %q in English, want %q", got, want)
+	}
+}
+
+func TestLocalizeHostErrorFallsBackToEnglishWhenEveryLocalizableIsATypedNil(t *testing.T) {
+	owner := newHostMessages()
+	var nilWrap *hostWrapError
+	var nilRemote *RemoteResolveError
+	err := errors.Join(nilWrap, nilRemote)
+	for _, lang := range []i18n.Language{i18n.French, i18n.English} {
+		if got, want := localizeHostError(owner, lang, err).Error(), "<nil>\n<nil>"; got != want {
+			t.Fatalf("a join of typed nils rendered %q in %v, want the english text %q", got, lang, want)
+		}
+	}
+}
+
+func TestEveryLocalizableTypedNilRendersAsNilText(t *testing.T) {
+	owner := newHostMessages()
+	params := map[string]any{nameParam: "digest"}
+	for _, typedNil := range typedNilLocalizables() {
+		for _, lang := range []i18n.Language{i18n.French, i18n.English} {
+			got := errorTextIn(owner, lang, wrapHost(owner, typedNil, "warn.session_start", params))
+			want := errorTextIn(owner, lang, wrapHost(owner, errors.New("<nil>"), "warn.session_start", params))
+			if got != want {
+				t.Fatalf("a typed nil %T rendered %q in %v, want the text of a nil cause %q", typedNil, got, lang, want)
+			}
+		}
+	}
+}
+
+func TestLocalizeHostErrorSurvivesATypedNilInTheChain(t *testing.T) {
+	owner := newHostMessages()
+	params := map[string]any{nameParam: "digest"}
+	var nilWrap *hostWrapError
+	nested := wrapHost(owner, nilWrap, "warn.session_start", params)
+	plain := wrapHost(owner, errors.New("<nil>"), "warn.session_start", params)
+	for _, lang := range []i18n.Language{i18n.French, i18n.English} {
+		got := fmt.Sprint(localizeHostError(owner, lang, nested))
+		want := fmt.Sprint(localizeHostError(owner, lang, plain))
+		if got != want {
+			t.Fatalf("a typed nil in the chain rendered %q in %v, want %q", got, lang, want)
+		}
+		if top := fmt.Sprint(localizeHostError(owner, lang, nilWrap)); top != "<nil>" {
+			t.Fatalf("a top-level typed nil rendered %q in %v, want <nil>", top, lang)
+		}
+	}
+}
+
+func TestWrapHostErrorRendersThroughItsOwnerCatalog(t *testing.T) {
+	owner := &hostMessages{catalog: func() (*i18n.Catalog, error) {
+		return nil, errors.New("catalogue indisponible")
+	}}
+	err := wrapHost(owner, errors.New("boom"), "serve.load_state", nil)
+	if got := err.Error(); got != "catalogue indisponible" {
+		t.Fatalf("Error() = %q, want the text of its own owner's catalog", got)
+	}
+}
+
+func TestErrorTextKeepsTheWrapperPrefix(t *testing.T) {
+	messages := newHostMessages()
+	inner := &hostWrapError{messages: messages, key: "serve.load_state", cause: errors.New("boom")}
+	err := fmt.Errorf("ctx: %w", inner)
+	want := "ctx: " + inner.render(messages, i18n.French)
+	if got := errorTextIn(messages, i18n.French, err); got != want {
+		t.Fatalf("errorTextIn = %q, want %q", got, want)
+	}
+	repeated := fmt.Errorf("%s: %w", inner.render(messages, i18n.English), inner)
+	wantRepeated := inner.render(messages, i18n.English) + ": " + inner.render(messages, i18n.French)
+	if got := errorTextIn(messages, i18n.French, repeated); got != wantRepeated {
+		t.Fatalf("errorTextIn with the english text repeated = %q, want %q", got, wantRepeated)
+	}
+}
+
+func TestErrorTextLocalisesOnlyTheFirstOfTwoSiblingErrors(t *testing.T) {
+	messages := newHostMessages()
+	first := &hostWrapError{messages: messages, key: "serve.load_state", cause: errors.New("premier")}
+	second := &hostWrapError{messages: messages, key: "serve.load_state", cause: errors.New("second")}
+	err := fmt.Errorf("%w: %w", first, second)
+	want := first.render(messages, i18n.French) + ": " + second.Error()
+	if got := errorTextIn(messages, i18n.French, err); got != want {
+		t.Fatalf("errorTextIn of two wrapped errors = %q, want %q", got, want)
+	}
+}
+
+func TestErrorTextKeepsTheTextOfEveryJoinedBranch(t *testing.T) {
+	messages := newHostMessages()
+	inner := &hostWrapError{messages: messages, key: "serve.load_state", cause: errors.New("boom")}
+	err := errors.Join(inner, errors.New("close"))
+	want := inner.render(messages, i18n.French) + "\n" + "close"
+	if got := errorTextIn(messages, i18n.French, err); got != want {
+		t.Fatalf("errorTextIn of a join = %q, want %q", got, want)
 	}
 }

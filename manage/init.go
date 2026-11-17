@@ -155,7 +155,7 @@ func initHost(ctx context.Context, out, errOut *errwriter.Writer, args []string)
 }
 
 func runInitWizard(errOut *errwriter.Writer, compose bool, choices map[string]string) (map[string]string, map[string]string, bool) {
-	wizardChoices, wizardSecrets, err := runWizard(compose, liveCatalog(host.DefaultModelDiscovery()), currentRoute())
+	wizardChoices, wizardSecrets, err := runWizard(compose, liveCatalog(host.DefaultModelDiscovery(host.NewMessages())), currentRoute())
 	if err != nil {
 		errOut.Println(err)
 		return choices, nil, false

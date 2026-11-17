@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 const (
@@ -31,7 +33,7 @@ func (m *model) statusZone() []string {
 
 func (m *model) statusLeft(budget int) string {
 	if m.flash != "" {
-		return truncate(m.st.dim.Render("· "+m.flash), budget)
+		return truncate(m.st.dim.Render("· "+termpaint.Escape(m.flash).String()), budget)
 	}
 	return m.footer(budget)
 }

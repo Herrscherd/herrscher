@@ -20,7 +20,7 @@ func buildRegistryWithPluginCommands(t *testing.T, extra ...contracts.Cmd) error
 	store := state.NewState(filepath.Join(dir, "state.json"))
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
 	options := Options{Runtime: testRuntime(t), StatePath: filepath.Join(dir, "state.json"), DefaultCmd: "claude", Language: i18n.English}
-	_, _, err := buildRegistry(ctx, Deps{}, options, store, sup, "", extra, newApprovalTable(io.Discard), newSessionTable())
+	_, _, err := buildRegistry(ctx, Deps{}, options, store, sup, "", extra, newApprovalTable(io.Discard), newSessionTable(newHostMessages()))
 	return err
 }
 

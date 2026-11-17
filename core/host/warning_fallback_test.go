@@ -51,10 +51,11 @@ func emitNilWarnings() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	consolidated := errors.New("probe-consolidate")
+	messages := newHostMessages()
 
-	warnTo(nil, i18n.English, "warn.health_server", map[string]any{detailParam: "probe-warnto"})
+	warnTo(messages, nil, i18n.English, "warn.health_server", map[string]any{detailParam: "probe-warnto"})
 	newApprovalTable(nil).warnf("approvals: probe-warnf\n")
 	warnWaitOutlivesTheHook(nil, agent.HookWait)
-	serveHealth(ctx, "bad addr", health.NewHealth(time.Now()), fixedLanguageSource(i18n.English), nil)
-	consolidateOneShot(ctx, &consolidateSpy{err: consolidated}, newSeedGate("nil-writer", nil, fixedLanguageSource(i18n.English)), state.Session{Name: "nil-writer"}, nil, fixedLanguageSource(i18n.English))
+	serveHealth(ctx, "bad addr", health.NewHealth(time.Now()), messages, fixedLanguageSource(i18n.English), nil)
+	consolidateOneShot(ctx, &consolidateSpy{err: consolidated}, newSeedGate(messages, "nil-writer", nil, fixedLanguageSource(i18n.English)), state.Session{Name: "nil-writer"}, messages, nil, fixedLanguageSource(i18n.English))
 }

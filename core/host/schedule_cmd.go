@@ -14,19 +14,19 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-func addScheduleCommands(reg *cli.Registry, lang languageSource, hostState *state.State, agents agentLookup, slot *schedulerSlot) error {
+func addScheduleCommands(reg *cli.Registry, messages *hostMessages, lang languageSource, hostState *state.State, agents agentLookup, slot *schedulerSlot) error {
 	return addVerbs(
 		reg,
-		scheduleAddVerb(lang, hostState, agents),
-		scheduleListVerb(lang, hostState),
+		scheduleAddVerb(messages, lang, hostState, agents),
+		scheduleListVerb(messages, lang, hostState),
 		scheduleRmVerb(lang, hostState),
-		schedulePauseVerb(lang, hostState, "pause", true, clitext.CmdHelpSchedulePause),
-		schedulePauseVerb(lang, hostState, "resume", false, clitext.CmdHelpScheduleResume),
+		schedulePauseVerb(messages, lang, hostState, "pause", true, clitext.CmdHelpSchedulePause),
+		schedulePauseVerb(messages, lang, hostState, "resume", false, clitext.CmdHelpScheduleResume),
 		scheduleRunVerb(lang, slot),
 	)
 }
 
-func scheduleAddVerb(lang languageSource, store *state.State, agents agentLookup) contracts.Cmd {
+func scheduleAddVerb(messages *hostMessages, lang languageSource, store *state.State, agents agentLookup) contracts.Cmd {
 	return contracts.New(nsSchedule, "add").
 		Help(clitext.CmdHelpScheduleAdd).
 		Param(paramName, clitext.CmdParamScheduleAddName, true).
@@ -38,7 +38,7 @@ func scheduleAddVerb(lang languageSource, store *state.State, agents agentLookup
 		Param("task", clitext.CmdParamScheduleAddTask, true).
 		Param("grace", clitext.CmdParamScheduleAddGrace, false).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
-			now, err := currentScheduleTime()
+			now, err := currentScheduleTime(messages)
 			if err != nil {
 				return contracts.Result{}, err
 			}
@@ -46,10 +46,10 @@ func scheduleAddVerb(lang languageSource, store *state.State, agents agentLookup
 		})
 }
 
-func currentScheduleTime() (time.Time, error) {
+func currentScheduleTime(messages *hostMessages) (time.Time, error) {
 	clock, err := schedulerClock()
 	if err != nil {
-		return time.Time{}, wrapHost(err, "serve.scheduler_clock", map[string]any{detailParam: err.Error()})
+		return time.Time{}, wrapHost(messages, err, "serve.scheduler_clock", map[string]any{detailParam: err.Error()})
 	}
 	return clock(), nil
 }
@@ -98,11 +98,11 @@ func checkNewSchedule(store *state.State, agents agentLookup, definition schedul
 	return nil
 }
 
-func scheduleListVerb(lang languageSource, store *state.State) contracts.Cmd {
+func scheduleListVerb(messages *hostMessages, lang languageSource, store *state.State) contracts.Cmd {
 	return contracts.New(nsSchedule, "list").
 		Help(clitext.CmdHelpScheduleList).
 		Do(func(_ context.Context, _ contracts.Input) (contracts.Result, error) {
-			now, err := currentScheduleTime()
+			now, err := currentScheduleTime(messages)
 			if err != nil {
 				return contracts.Result{}, err
 			}
@@ -172,12 +172,12 @@ func scheduleRmVerb(lang languageSource, store *state.State) contracts.Cmd {
 		})
 }
 
-func schedulePauseVerb(lang languageSource, store *state.State, verb string, paused bool, helpKey string) contracts.Cmd {
+func schedulePauseVerb(messages *hostMessages, lang languageSource, store *state.State, verb string, paused bool, helpKey string) contracts.Cmd {
 	return contracts.New(nsSchedule, verb).
 		Help(helpKey).
 		Param(paramName, clitext.CmdParamScheduleName, true).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
-			now, err := currentScheduleTime()
+			now, err := currentScheduleTime(messages)
 			if err != nil {
 				return contracts.Result{}, err
 			}

@@ -10,4 +10,4 @@ import (
 
 func tryLock(*os.File) (bool, error) { return true, nil }
 
-func lockInstance(runtimedir.Layout, string) (func(), error) { return func() {}, nil }
+func lockInstance(*hostMessages, runtimedir.Layout, string) (func(), error) { return func() {}, nil }

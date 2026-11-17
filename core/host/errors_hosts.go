@@ -7,15 +7,19 @@ import (
 )
 
 type gatewayEnvUnsupportedError struct {
-	Model string
+	messages *hostMessages
+	Model    string
 }
 
 func (e *gatewayEnvUnsupportedError) Error() string {
-	return e.render(i18n.English)
+	if e == nil {
+		return nilErrorText
+	}
+	return e.render(e.messages, i18n.English)
 }
 
-func (e *gatewayEnvUnsupportedError) render(lang i18n.Language) string {
-	return newHostMessages().text(lang, "remote.gateway_env_unsupported", map[string]any{modelParam: e.Model})
+func (e *gatewayEnvUnsupportedError) render(messages *hostMessages, lang i18n.Language) string {
+	return messages.text(lang, "remote.gateway_env_unsupported", map[string]any{modelParam: e.Model})
 }
 
 type hostNeedsSSHError struct {
@@ -182,16 +186,20 @@ func (e *remoteHomeUnresolvedError) Error() string {
 }
 
 type unsafeTarMemberError struct {
-	Member string
-	Root   string
+	messages *hostMessages
+	Member   string
+	Root     string
 }
 
 func (e *unsafeTarMemberError) Error() string {
-	return e.render(i18n.English)
+	if e == nil {
+		return nilErrorText
+	}
+	return e.render(e.messages, i18n.English)
 }
 
-func (e *unsafeTarMemberError) render(lang i18n.Language) string {
-	return newHostMessages().text(lang, "remote.unsafe_member", map[string]any{"Member": e.Member, "Root": e.Root})
+func (e *unsafeTarMemberError) render(messages *hostMessages, lang i18n.Language) string {
+	return messages.text(lang, "remote.unsafe_member", map[string]any{"Member": e.Member, "Root": e.Root})
 }
 
 type noRemoteBackendError struct {
@@ -203,38 +211,50 @@ func (e *noRemoteBackendError) Error() string {
 }
 
 type instanceIDMismatchError struct {
-	Have string
-	Want string
+	messages *hostMessages
+	Have     string
+	Want     string
 }
 
 func (e *instanceIDMismatchError) Error() string {
-	return e.render(i18n.English)
+	if e == nil {
+		return nilErrorText
+	}
+	return e.render(e.messages, i18n.English)
 }
 
-func (e *instanceIDMismatchError) render(lang i18n.Language) string {
-	return newHostMessages().text(lang, "serve.instance_id_mismatch", map[string]any{"Have": e.Have, "Want": e.Want})
+func (e *instanceIDMismatchError) render(messages *hostMessages, lang i18n.Language) string {
+	return messages.text(lang, "serve.instance_id_mismatch", map[string]any{"Have": e.Have, "Want": e.Want})
 }
 
 type remoteSessionError struct {
-	Session string
+	messages *hostMessages
+	Session  string
 }
 
 func (e *remoteSessionError) Error() string {
-	return e.render(i18n.English)
+	if e == nil {
+		return nilErrorText
+	}
+	return e.render(e.messages, i18n.English)
 }
 
-func (e *remoteSessionError) render(lang i18n.Language) string {
-	return newHostMessages().text(lang, "remote.session_unsupported", map[string]any{"Session": e.Session})
+func (e *remoteSessionError) render(messages *hostMessages, lang i18n.Language) string {
+	return messages.text(lang, "remote.session_unsupported", map[string]any{"Session": e.Session})
 }
 
 type remoteAccountError struct {
-	Account string
+	messages *hostMessages
+	Account  string
 }
 
 func (e *remoteAccountError) Error() string {
-	return e.render(i18n.English)
+	if e == nil {
+		return nilErrorText
+	}
+	return e.render(e.messages, i18n.English)
 }
 
-func (e *remoteAccountError) render(lang i18n.Language) string {
-	return newHostMessages().text(lang, "remote.account_unsupported", map[string]any{"Account": e.Account})
+func (e *remoteAccountError) render(messages *hostMessages, lang i18n.Language) string {
+	return messages.text(lang, "remote.account_unsupported", map[string]any{"Account": e.Account})
 }

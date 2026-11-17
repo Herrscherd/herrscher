@@ -104,7 +104,7 @@ func startStuckCommand(ctx context.Context, t *testing.T, h *hub) <-chan struct{
 		return "late", nil
 	})
 	sockPath := filepath.Join(t.TempDir(), "cmd.sock")
-	listener, err := openSocket(ctx, isolatedRuntimeDir(t), sockPath)
+	listener, err := openSocket(ctx, newHostMessages(), isolatedRuntimeDir(t), sockPath)
 	if err != nil {
 		t.Fatal(err)
 	}

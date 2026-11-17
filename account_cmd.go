@@ -14,6 +14,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/accounts"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/host"
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 const accountArgCount = 3
@@ -85,7 +86,7 @@ func emitf(output io.Writer, format string, values ...any) error {
 }
 
 func writeText(output io.Writer, translator *clitext.Translator, key clitext.Key, params clitext.Params) error {
-	text := translator.Text(key, params)
+	text := translator.Text(key, clitext.Printable(params))
 	if err := translator.Err(); err != nil {
 		return err
 	}
@@ -113,7 +114,7 @@ func listAccounts(ctx context.Context, store accounts.Store, output io.Writer) e
 		if profile.Default {
 			marker = " " + translator.Text(clitext.AccountDefaultMarker, nil)
 		}
-		if err := emitf(output, "%-8s %-10s %s%s\n", profile.Vendor, profile.Name, loginState(ctx, translator, profile.Vendor, env), marker); err != nil {
+		if err := emitf(output, "%-8s %-10s %s%s\n", termpaint.Escape(profile.Vendor).String(), termpaint.Escape(profile.Name).String(), loginState(ctx, translator, profile.Vendor, env), marker); err != nil {
 			return err
 		}
 	}
@@ -168,14 +169,14 @@ func removeAccount(store accounts.Store, vendor string, name contracts.ProfileNa
 	if err != nil {
 		return err
 	}
-	users, err := host.ProfileUsers(vendor, string(name), defaultName == string(name))
+	users, err := host.ProfileUsers(host.NewMessages(), vendor, string(name), defaultName == string(name))
 	if err != nil {
 		return err
 	}
 	if refuseErr := refuseProfileInUse(vendor, name, users); refuseErr != nil {
 		return refuseErr
 	}
-	prompt := translator.Text(clitext.AccountRemovePrompt, clitext.Params{clitext.ParamVendor: vendor, clitext.ParamName: string(name)})
+	prompt := translator.Text(clitext.AccountRemovePrompt, clitext.Printable(clitext.Params{clitext.ParamVendor: vendor, clitext.ParamName: string(name)}))
 	if textErr := translator.Err(); textErr != nil {
 		return textErr
 	}
@@ -204,7 +205,7 @@ func refuseProfileInUse(vendor string, name contracts.ProfileName, users []strin
 }
 
 func warnResumingSessions(vendor string, output io.Writer) error {
-	names, err := host.ResumingSessions(vendor)
+	names, err := host.ResumingSessions(host.NewMessages(), vendor)
 	if err != nil {
 		return err
 	}

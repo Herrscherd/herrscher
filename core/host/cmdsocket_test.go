@@ -6,7 +6,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -56,7 +55,7 @@ func TestCommandSocketDispatchesOk(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	disp := &fakeDispatcher{out: `[{"name":"lead1"}]`}
-	serveCommandSocket(ctx, isolatedRuntimeDir(t), path, disp, testLanguage(), io.Discard)
+	serveTestCommandSocket(ctx, t, isolatedRuntimeDir(t), path, disp, defaultCommandReadTimeout)
 
 	resp := sendCommand(t, path, cmdRequest{Argv: []string{"session", "list", "--json"}})
 	if resp.Ok == nil || *resp.Ok != disp.out {
@@ -75,7 +74,7 @@ func TestCommandSocketReportsDispatchError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	disp := &fakeDispatcher{err: stringError("boom")}
-	serveCommandSocket(ctx, isolatedRuntimeDir(t), path, disp, testLanguage(), io.Discard)
+	serveTestCommandSocket(ctx, t, isolatedRuntimeDir(t), path, disp, defaultCommandReadTimeout)
 
 	resp := sendCommand(t, path, cmdRequest{Argv: []string{"session", "list"}})
 	if resp.Ok != nil {
@@ -91,7 +90,7 @@ func TestCommandSocketRejectsMalformed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	disp := &fakeDispatcher{out: "unused"}
-	serveCommandSocket(ctx, isolatedRuntimeDir(t), path, disp, testLanguage(), io.Discard)
+	serveTestCommandSocket(ctx, t, isolatedRuntimeDir(t), path, disp, defaultCommandReadTimeout)
 
 	c, err := (&net.Dialer{}).DialContext(t.Context(), "unix", path)
 	if err != nil {
@@ -119,7 +118,7 @@ func TestCommandSocketRestrictedToOwner(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cmd.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	serveCommandSocket(ctx, isolatedRuntimeDir(t), path, &fakeDispatcher{out: "unused"}, testLanguage(), io.Discard)
+	serveTestCommandSocket(ctx, t, isolatedRuntimeDir(t), path, &fakeDispatcher{out: "unused"}, defaultCommandReadTimeout)
 
 	info, err := os.Stat(path)
 	if err != nil {
@@ -134,9 +133,7 @@ func TestCommandSocketClosesSilentConnection(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cmd.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if err := serveCommandSocketWithTimeout(ctx, isolatedRuntimeDir(t), path, &fakeDispatcher{out: "unused"}, 50*time.Millisecond, time.Second, func(time.Duration) {}); err != nil {
-		t.Fatalf("serve: %v", err)
-	}
+	serveTestCommandSocket(ctx, t, isolatedRuntimeDir(t), path, &fakeDispatcher{out: "unused"}, 50*time.Millisecond)
 
 	c, err := (&net.Dialer{}).DialContext(t.Context(), "unix", path)
 	if err != nil {
@@ -183,7 +180,7 @@ func TestALongSessionNameStillGetsASocketThatBinds(t *testing.T) {
 	if len(p) > runtimedir.MaxUnixSocketPath {
 		t.Fatalf("path is %d bytes, over the %d sun_path holds: %q", len(p), runtimedir.MaxUnixSocketPath, p)
 	}
-	if err := ensureRuntimeDir(layout, p); err != nil {
+	if err := ensureRuntimeDir(newHostMessages(), layout, p); err != nil {
 		t.Fatalf("private runtime dir for %q: %v", p, err)
 	}
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", p)
@@ -212,9 +209,9 @@ func TestASessionSocketIsNotWorldReachable(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "s.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	serveCommandSocket(ctx, isolatedRuntimeDir(t), sock, dispatcherFunc(func(context.Context, []string) (string, error) {
+	serveTestCommandSocket(ctx, t, isolatedRuntimeDir(t), sock, dispatcherFunc(func(context.Context, []string) (string, error) {
 		return "", nil
-	}), testLanguage(), io.Discard)
+	}), defaultCommandReadTimeout)
 
 	fi, err := os.Stat(sock)
 	if err != nil {

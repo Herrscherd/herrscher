@@ -34,6 +34,7 @@ const seedTurnTimeout = 120 * time.Second
 const seedJoinGrace = 2 * time.Second
 
 type oneShotSeedRuntime struct {
+	messages        *hostMessages
 	warnings        io.Writer
 	sessionLanguage func(name string) languageSource
 	coordinator     contracts.Coordinator
@@ -53,7 +54,7 @@ func (r oneShotSeedRuntime) backendFactory() func(context.Context, state.Session
 		return r.backend
 	}
 	return func(ctx context.Context, sess state.Session) (contracts.Backend, error) {
-		return newSeedBackend(ctx, sess, nil, r.models)
+		return newSeedBackend(ctx, r.messages, sess, nil, r.models)
 	}
 }
 
@@ -63,10 +64,10 @@ func withOneShotSeedRuntime(ctx context.Context, runtime oneShotSeedRuntime) con
 	return context.WithValue(ctx, oneShotSeedRuntimeKey{}, runtime)
 }
 
-func oneShotSeedRuntimeFrom(ctx context.Context) oneShotSeedRuntime {
+func oneShotSeedRuntimeFrom(ctx context.Context, messages *hostMessages) oneShotSeedRuntime {
 	runtime, ok := ctx.Value(oneShotSeedRuntimeKey{}).(oneShotSeedRuntime)
 	if !ok {
-		return oneShotSeedRuntime{}
+		return oneShotSeedRuntime{messages: messages}
 	}
 	return runtime
 }
@@ -98,7 +99,7 @@ func runOneShotSeedIDWithRuntime(ctx context.Context, st *state.State, name, tas
 	if sess.Archived {
 		return "", errSeedArchivedSession
 	}
-	orch, mem, err := seedOrchestrator(ctx, sess)
+	orch, mem, err := seedOrchestrator(ctx, runtime.messages, sess)
 	if err != nil {
 		return "", err
 	}
@@ -116,14 +117,14 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	defer cancel()
 	toBridge := make(chan contracts.Event, 1)
 	fromBridge := make(chan contracts.Event, bridgeEventBuffer)
-	driver := newSessionDriver(sess.Name, nil, toBridge, fromBridge, runtime.warnings)
+	driver := newSessionDriver(runtime.messages, sess.Name, nil, toBridge, fromBridge, runtime.warnings)
 	runtime.sessions.attachPersists(driver)
 	oneShot := runtime.persists
 	if oneShot == nil {
 		oneShot = driver.persists.child()
 	}
 	driver.persists = oneShot
-	defer awaitOneShotWrites(oneShot, runtime.warnings, runtime.languageOf(sess))
+	defer awaitOneShotWrites(runtime.messages, oneShot, runtime.warnings, runtime.languageOf(sess))
 	driver.incarnation = sess.Incarnation
 	driver.agent = sess.Agent
 	driver.language = func() i18n.Language { return knownSessionLanguage(sess) }
@@ -172,15 +173,15 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 		}
 		driver.activeTurnID = ""
 	}
-	consolidateOneShot(ctx, orch, gate, sess, runtime.warnings, runtime.languageOf(sess))
+	consolidateOneShot(ctx, orch, gate, sess, runtime.messages, runtime.warnings, runtime.languageOf(sess))
 	return reply, nil
 }
 
-func awaitOneShotWrites(persists *persistWrites, warnings io.Writer, lang languageSource) {
+func awaitOneShotWrites(messages *hostMessages, persists *persistWrites, warnings io.Writer, lang languageSource) {
 	select {
 	case <-persists.group.settled():
 	case <-time.After(persists.grace):
-		warnLive(warnings, lang, "warn.persist_overrun", map[string]any{graceParam: persists.grace.String()})
+		warnLive(messages, warnings, lang, "warn.persist_overrun", map[string]any{graceParam: persists.grace.String()})
 	}
 }
 
@@ -192,7 +193,7 @@ func oneShotTurnTimeout(runtime oneShotSeedRuntime) time.Duration {
 }
 
 func attachOneShotTaps(driver *sessionDriver, sess state.Session, runtime oneShotSeedRuntime) *seedGate {
-	gate := newSeedGate(sess.Name, runtime.warnings, runtime.languageOf(sess))
+	gate := newSeedGate(runtime.messages, sess.Name, runtime.warnings, runtime.languageOf(sess))
 	if runtime.record != nil {
 		driver.sink.Transcript = func(entry state.TranscriptEntry) {
 			gate.admit(lateTranscriptKey, func() { runtime.record(sess.Name, entry) })
@@ -271,7 +272,7 @@ func (r oneShotSeedRuntime) languageOf(sess state.Session) languageSource {
 	return func() i18n.Language { return knownSessionLanguage(sess) }
 }
 
-func consolidateOneShot(ctx context.Context, orch contracts.Orchestrator, gate *seedGate, sess state.Session, warn io.Writer, lang languageSource) {
+func consolidateOneShot(ctx context.Context, orch contracts.Orchestrator, gate *seedGate, sess state.Session, messages *hostMessages, warn io.Writer, lang languageSource) {
 	if orch == nil || sess.ConsolidateEvery > 0 {
 		return
 	}
@@ -281,7 +282,7 @@ func consolidateOneShot(ctx context.Context, orch contracts.Orchestrator, gate *
 	err := orch.Consolidate(consCtx)
 	consCancel()
 	if err != nil {
-		warnTo(warn, lang(), "seed.consolidate", map[string]any{nameParam: sess.Name, "Elapsed": time.Since(started).Round(time.Millisecond).String(), detailParam: fmt.Sprint(err)})
+		warnTo(messages, warn, lang(), "seed.consolidate", map[string]any{nameParam: sess.Name, "Elapsed": time.Since(started).Round(time.Millisecond).String(), detailParam: fmt.Sprint(err)})
 	}
 }
 
@@ -332,11 +333,11 @@ type BackendRequest struct {
 	resolver remoteBackendResolver
 }
 
-func (req BackendRequest) remoteResolver() remoteBackendResolver {
+func (req BackendRequest) remoteResolver(messages *hostMessages) remoteBackendResolver {
 	if req.resolver != nil {
 		return req.resolver
 	}
-	return NewResolver(nil, os.Getenv("HERRSCHER_NATS"))
+	return newResolver(messages, nil, os.Getenv("HERRSCHER_NATS"))
 }
 
 type remoteBackendResolver interface {
@@ -347,15 +348,19 @@ type remoteBackendResolver interface {
 // wins when configured; otherwise the matching registered plugin is built
 // with the invocation, kind, working directory, and, if a ModelID is
 // supplied, the environment variables its route requires.
-func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend, error) {
-	backend, release, err := buildBackend(ctx, req)
+func BuildBackendFor(ctx context.Context, owner *Messages, req BackendRequest) (contracts.Backend, error) {
+	return buildBackendFor(ctx, owner.owner, req)
+}
+
+func buildBackendFor(ctx context.Context, messages *hostMessages, req BackendRequest) (contracts.Backend, error) {
+	backend, release, err := buildBackend(ctx, messages, req)
 	if err != nil {
 		return nil, err
 	}
 	return lease.Wrap(backend, release), nil
 }
 
-func buildBackend(ctx context.Context, req BackendRequest) (contracts.Backend, func(), error) {
+func buildBackend(ctx context.Context, messages *hostMessages, req BackendRequest) (contracts.Backend, func(), error) {
 	plugins := contracts.Default.Backends()
 	if req.ModelID == "" && ResolvePolicy(envx.Getenv) == contracts.PolicyGatewayOnly {
 		return nil, noRelease, errGatewayOnlyNoModel
@@ -364,7 +369,7 @@ func buildBackend(ctx context.Context, req BackendRequest) (contracts.Backend, f
 	if err != nil {
 		return nil, noRelease, err
 	}
-	route, err := routeFor(req.ModelID, entry, req.Keys)
+	route, err := routeFor(messages, req.ModelID, entry, req.Keys)
 	if err != nil {
 		return nil, noRelease, err
 	}
@@ -372,12 +377,12 @@ func buildBackend(ctx context.Context, req BackendRequest) (contracts.Backend, f
 		route.lease()()
 		return nil, noRelease, err
 	}
-	backend, fromRemote, err := req.remoteResolver().Backend(ctx, plugins, desired)
+	backend, fromRemote, err := req.remoteResolver(messages).Backend(ctx, plugins, desired)
 	if err != nil {
 		return failWith(err)
 	}
 	if fromRemote {
-		if refusal := req.remoteRefusal(route); refusal != nil {
+		if refusal := req.remoteRefusal(messages, route); refusal != nil {
 			return failWith(refusal)
 		}
 		return backend, noRelease, nil
@@ -393,7 +398,7 @@ func buildBackend(ctx context.Context, req BackendRequest) (contracts.Backend, f
 	if cfg.Settings == nil {
 		cfg.Settings = make(map[string]string)
 	}
-	env, release, err := sessionEnv(req, desired, route)
+	env, release, err := sessionEnv(messages, req, desired, route)
 	if err != nil {
 		return failWith(err)
 	}
@@ -441,31 +446,35 @@ func chooseVendor(requested, cmd, modelID string, plugins []contracts.Plugin, mo
 	return vendor, entry, nil
 }
 
-func routeFor(modelID string, entry CatalogEntry, keys *keyproxy.Proxy) (modelRoute, error) {
+func routeFor(messages *hostMessages, modelID string, entry CatalogEntry, keys *keyproxy.Proxy) (modelRoute, error) {
 	if modelID == "" {
 		return modelRoute{}, nil
 	}
-	env, release, err := spawnEnvVia(entry, os.Getenv, keys)
+	env, release, err := spawnEnvVia(messages, entry, os.Getenv, keys)
 	if err != nil {
 		return modelRoute{}, err
 	}
 	return modelRoute{env: env, arg: entry.Arg, grant: release}, nil
 }
 
-func (req BackendRequest) remoteRefusal(route modelRoute) error {
+func (req BackendRequest) remoteRefusal(messages *hostMessages, route modelRoute) error {
 	if req.Session != "" {
-		return &remoteSessionError{Session: req.Session}
+		return &remoteSessionError{messages: messages, Session: req.Session}
 	}
 	if len(route.env) > 0 {
-		return &gatewayEnvUnsupportedError{Model: req.ModelID}
+		return &gatewayEnvUnsupportedError{messages: messages, Model: req.ModelID}
 	}
-	return req.RemoteAccountRefusal()
+	return req.remoteAccountRefusal(messages)
 }
 
 // RemoteAccountRefusal refuses an account on a remote backend, which resolves accounts in its own store.
-func (req BackendRequest) RemoteAccountRefusal() error {
+func (req BackendRequest) RemoteAccountRefusal(owner *Messages) error {
+	return req.remoteAccountRefusal(owner.owner)
+}
+
+func (req BackendRequest) remoteAccountRefusal(messages *hostMessages) error {
 	if req.Account != "" {
-		return &remoteAccountError{Account: req.Account}
+		return &remoteAccountError{messages: messages, Account: req.Account}
 	}
 	return nil
 }
@@ -500,16 +509,16 @@ func setIfPresent(settings map[string]string, key, value string) {
 	}
 }
 
-func newSeedBackend(ctx context.Context, sess state.Session, keys *keyproxy.Proxy, models *ModelDiscovery) (contracts.Backend, error) {
-	return newSeedBackendWithToken(ctx, sess, keys, models, "")
+func newSeedBackend(ctx context.Context, messages *hostMessages, sess state.Session, keys *keyproxy.Proxy, models *ModelDiscovery) (contracts.Backend, error) {
+	return newSeedBackendWithToken(ctx, messages, sess, keys, models, "")
 }
 
-func newSeedBackendWithToken(ctx context.Context, sess state.Session, keys *keyproxy.Proxy, models *ModelDiscovery, token string) (contracts.Backend, error) {
+func newSeedBackendWithToken(ctx context.Context, messages *hostMessages, sess state.Session, keys *keyproxy.Proxy, models *ModelDiscovery, token string) (contracts.Backend, error) {
 	dir := sess.Dir
 	if dir == "" {
 		dir = sess.Worktree
 	}
-	return BuildBackendFor(ctx, BackendRequest{
+	return buildBackendFor(ctx, messages, BackendRequest{
 		Vendor:       sess.Vendor,
 		Cmd:          sess.Cmd,
 		Kind:         sess.Backend,
@@ -737,9 +746,9 @@ func provisionSeedScope(ctx context.Context, mem contracts.Memory, project, agen
 	}
 }
 
-func seedOrchestrator(ctx context.Context, sess state.Session) (contracts.Orchestrator, contracts.Memory, error) {
+func seedOrchestrator(ctx context.Context, messages *hostMessages, sess state.Session) (contracts.Orchestrator, contracts.Memory, error) {
 	memProject, memAgent := sess.MemoryRoots()
-	resolver := NewResolver(nil, os.Getenv("HERRSCHER_NATS"))
+	resolver := newResolver(messages, nil, os.Getenv("HERRSCHER_NATS"))
 	mem, _, err := resolver.Memory(ctx, contracts.Default.Memories(), os.Getenv)
 	if err != nil {
 		return nil, nil, err

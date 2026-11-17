@@ -22,7 +22,7 @@ func TestCommandSocketReleasesWithinItsJoinBudgetWhenAHandlerNeverEnds(t *testin
 		<-stuck
 		return "late", nil
 	})
-	listener, err := openSocket(ctx, isolatedRuntimeDir(t), path)
+	listener, err := openSocket(ctx, newHostMessages(), isolatedRuntimeDir(t), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestCommandSocketClosesIdleConnectionsOnOverrun(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cmd.sock")
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	listener, err := openSocket(ctx, isolatedRuntimeDir(t), path)
+	listener, err := openSocket(ctx, newHostMessages(), isolatedRuntimeDir(t), path)
 	if err != nil {
 		t.Fatal(err)
 	}

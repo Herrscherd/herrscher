@@ -138,9 +138,9 @@ type queued struct {
 	origin contracts.Conversation
 }
 
-func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- contracts.Event, fromBridge <-chan contracts.Event, warnings io.Writer) *sessionDriver {
+func newSessionDriver(messages *hostMessages, name string, gws []contracts.GatewaySet, toBridge chan<- contracts.Event, fromBridge <-chan contracts.Event, warnings io.Writer) *sessionDriver {
 	return &sessionDriver{
-		messages:   newHostMessages(),
+		messages:   messages,
 		warnings:   warnings,
 		name:       name,
 		gateways:   gws,
@@ -415,6 +415,7 @@ func (d *sessionDriver) SeedAndWaitWithTurnID(ctx context.Context, task, turnID 
 type sessionTable struct {
 	mu          sync.Mutex
 	m           map[string]*sessionDriver
+	messages    *hostMessages
 	checkpoints checkpoint.Store
 	persists    *persistWrites
 	compaction  compactionPolicy
@@ -437,8 +438,8 @@ func (t *sessionTable) percentOfSession(name string) int {
 	return t.compaction.percent
 }
 
-func newSessionTable() *sessionTable {
-	return &sessionTable{m: make(map[string]*sessionDriver), persists: newPersistWrites()}
+func newSessionTable(messages *hostMessages) *sessionTable {
+	return &sessionTable{m: make(map[string]*sessionDriver), messages: messages, persists: newPersistWrites()}
 }
 
 func (t *sessionTable) register(name string, driver *sessionDriver) {
@@ -978,7 +979,7 @@ func (d *sessionDriver) reportDone(ctx context.Context, summary string) *contrac
 		d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.report_refused", nil)})
 		return &contracts.CoordinationEvent{
 			Kind: "report_failed", SourceSession: d.name,
-			Summary: sanitizeCoordinationError(localizeHostError(d.textLanguage()(), err)),
+			Summary: sanitizeCoordinationError(localizeHostError(d.messages, d.textLanguage()(), err)),
 		}
 	}
 	d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.report_delivered", map[string]any{"Parent": parent})})
@@ -996,7 +997,7 @@ func (d *sessionDriver) delegateTask(ctx context.Context, toAgent, task string) 
 		d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.delegate_refused", nil)})
 		return &contracts.CoordinationEvent{
 			Kind: "delegate_failed", SourceSession: d.name,
-			Agent: toAgent, Summary: sanitizeCoordinationError(localizeHostError(d.textLanguage()(), err)),
+			Agent: toAgent, Summary: sanitizeCoordinationError(localizeHostError(d.messages, d.textLanguage()(), err)),
 		}
 	}
 	return &contracts.CoordinationEvent{
@@ -1012,7 +1013,7 @@ func (d *sessionDriver) launchCohort(ctx context.Context, toAgent string, tasks 
 	if err != nil {
 		d.fanOut(ctx, contracts.Event{
 			T:    eventwire.EventStatus,
-			Text: d.hostText("coordination.fanout_partial", map[string]any{"Launched": len(spawned), detailParam: localizeHostError(d.textLanguage()(), err).Error()}),
+			Text: d.hostText("coordination.fanout_partial", map[string]any{"Launched": len(spawned), detailParam: localizeHostError(d.messages, d.textLanguage()(), err).Error()}),
 		})
 		return
 	}
@@ -1027,7 +1028,7 @@ func (d *sessionDriver) routeTask(ctx context.Context, task string) {
 		FromSession: d.name, Task: task,
 	})
 	if err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.route_refused", map[string]any{detailParam: localizeHostError(d.textLanguage()(), err).Error()})})
+		d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.route_refused", map[string]any{detailParam: localizeHostError(d.messages, d.textLanguage()(), err).Error()})})
 		return
 	}
 	d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.routed", map[string]any{"Agent": toAgent, "Session": session})})
@@ -1037,7 +1038,7 @@ func (d *sessionDriver) sealCohort(ctx context.Context, node int) {
 	if _, err := d.coordinator.Seal(ctx, contracts.SealRequest{
 		FromSession: d.name, Expected: node,
 	}); err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.seal_refused", map[string]any{detailParam: localizeHostError(d.textLanguage()(), err).Error()})})
+		d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.seal_refused", map[string]any{detailParam: localizeHostError(d.messages, d.textLanguage()(), err).Error()})})
 		return
 	}
 	d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.sealed", map[string]any{"Node": node})})
@@ -1048,7 +1049,7 @@ func (d *sessionDriver) mergeWorker(ctx context.Context, worker string) {
 		FromSession: d.name, Worker: worker,
 	})
 	if err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.merge_refused", map[string]any{detailParam: localizeHostError(d.textLanguage()(), err).Error()})})
+		d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.merge_refused", map[string]any{detailParam: localizeHostError(d.messages, d.textLanguage()(), err).Error()})})
 		return
 	}
 	d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.merged", map[string]any{"Lead": lead})})
@@ -1058,7 +1059,7 @@ func (d *sessionDriver) handoffTask(ctx context.Context, toAgent, task string) {
 	if _, err := d.coordinator.Handoff(ctx, contracts.HandoffRequest{
 		FromSession: d.name, ToAgent: toAgent, Task: task,
 	}); err != nil {
-		d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.handoff_refused", map[string]any{detailParam: localizeHostError(d.textLanguage()(), err).Error()})})
+		d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("coordination.handoff_refused", map[string]any{detailParam: localizeHostError(d.messages, d.textLanguage()(), err).Error()})})
 	}
 }
 
@@ -1338,7 +1339,7 @@ func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, cha
 	defer closeRead(acc)
 	toBridge := make(chan contracts.Event)
 	fromBridge := make(chan contracts.Event)
-	driver := newSessionDriver(name, gws, toBridge, fromBridge, warnings)
+	driver := newSessionDriver(sessions.messages, name, gws, toBridge, fromBridge, warnings)
 	driver.persists = sessions.persists
 	driver.incarnation = identity.incarnation
 	driver.agent = identity.agent

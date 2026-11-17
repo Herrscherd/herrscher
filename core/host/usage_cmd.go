@@ -44,7 +44,7 @@ func (h *hub) recordUsageWith(persists *persistWrites, sess state.Session, recor
 	defer end()
 	ledger := usage.Ledger{Dir: usageDir(h.partDir), Now: time.Now}
 	if err := ledger.Append(stampUsage(records, h.st, sess)); err != nil {
-		warnLive(h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_usage", map[string]any{nameParam: sess.Name, detailParam: err})
+		warnLive(h.messages, h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_usage", map[string]any{nameParam: sess.Name, detailParam: err})
 	}
 }
 
@@ -70,8 +70,8 @@ type usageSource struct {
 	reported    map[string]bool
 }
 
-func newUsageSource(partDir string) *usageSource {
-	store, err := accountStore(BackendRequest{})
+func newUsageSource(messages *hostMessages, partDir string) *usageSource {
+	store, err := accountStore(messages, BackendRequest{})
 	if err != nil {
 		slog.Warn("usage: account store unavailable", "err", err)
 	}

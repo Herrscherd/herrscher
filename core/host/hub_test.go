@@ -20,7 +20,7 @@ import (
 func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
 	t.Helper()
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
@@ -41,7 +41,7 @@ func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
 
 func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	entered, release := make(chan struct{}), make(chan struct{})
@@ -166,7 +166,7 @@ func TestHubCloseOmitsForceWhenFalse(t *testing.T) {
 
 func TestHubDispatchSetSource(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	st := state.NewState(t.TempDir() + "/s.json")
@@ -190,7 +190,7 @@ func TestHubDispatchSetSource(t *testing.T) {
 func newTestHub(t *testing.T, opts ...hubOption) *hub {
 	t.Helper()
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
@@ -304,6 +304,7 @@ func (s *stubForgetCoord) forget(name string) { s.forgotten = append(s.forgotten
 func TestGoDeadCallsForget(t *testing.T) {
 	stub := &stubForgetCoord{}
 	h := testHub(&hub{
+		messages:      newHostMessages(),
 		warnings:      io.Discard,
 		coordinator:   stub,
 		live:          make(map[string]liveSession),

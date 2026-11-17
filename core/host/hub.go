@@ -92,7 +92,7 @@ func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir str
 	for _, opt := range opts {
 		opt(created)
 	}
-	created.sink = newWarningSink(created.warnings, created.lostWarningLine, withStillRunningLine(created.writeStillRunningLine))
+	created.sink = newWarningSink(created.messages, created.warnings, created.lostWarningLine, withStillRunningLine(created.writeStillRunningLine))
 	created.warnings = created.sink
 	if sup != nil {
 		sup.SetFailureSink(created.reportSessionFailure)

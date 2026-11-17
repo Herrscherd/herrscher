@@ -18,15 +18,16 @@ func englishLostLine(lost int) string {
 	return newHostMessages().text(i18n.English, "warn.warnings_dropped", map[string]any{countParam: lost})
 }
 
+func englishStillRunningLine() string {
+	return newHostMessages().text(i18n.English, "warn.write_still_running", nil)
+}
+
 func testHub(h *hub) *hub {
 	out := h.warnings
 	if out == nil {
 		out = io.Discard
 	}
-	if h.messages == nil {
-		h.messages = newHostMessages()
-	}
-	h.sink = newWarningSink(out, englishLostLine)
+	h.sink = newWarningSink(h.messages, out, englishLostLine)
 	h.warnings = h.sink
 	return h
 }

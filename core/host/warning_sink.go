@@ -89,14 +89,14 @@ func withStillRunningLine(line func() string) sinkOption {
 	return func(s *warningSink) { s.stillRunning = line }
 }
 
-func newWarningSink(out io.Writer, lostLine func(lost int) string, opts ...sinkOption) *warningSink {
+func newWarningSink(messages *hostMessages, out io.Writer, lostLine func(lost int) string, opts ...sinkOption) *warningSink {
 	created := &warningSink{
 		out:          warningWriter(out),
 		lostLine:     lostLine,
 		commands:     make(chan func(), warningCommandLimit),
 		finished:     make(chan struct{}),
 		idleWait:     warningWriteBudget,
-		stillRunning: englishStillRunningLine,
+		stillRunning: func() string { return messages.text(i18n.English, "warn.write_still_running", nil) },
 	}
 	for _, opt := range opts {
 		opt(created)
@@ -372,10 +372,6 @@ func (s *warningSink) Close() {
 	logged, stopLogged := writeBudget()
 	defer stopLogged()
 	s.log.drain(logged)
-}
-
-func englishStillRunningLine() string {
-	return newHostMessages().text(i18n.English, "warn.write_still_running", nil)
 }
 
 func (s *warningSink) joinLastWrite() bool {

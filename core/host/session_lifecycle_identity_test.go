@@ -17,7 +17,7 @@ func TestGoDeadWaitsForRunSessionTeardown(t *testing.T) {
 	cancelled := make(chan struct{})
 	tornDown := make(chan struct{})
 	returned := make(chan struct{})
-	h := testHub(&hub{warnings: io.Discard, teardownGrace: defaultTeardownGrace, live: map[string]liveSession{
+	h := testHub(&hub{messages: newHostMessages(), warnings: io.Discard, teardownGrace: defaultTeardownGrace, live: map[string]liveSession{
 		"same-name": {
 			cancel:  func() { close(cancelled) },
 			done:    tornDown,
@@ -164,7 +164,7 @@ func TestGoDeadWaitsForTheCommandSocketRelease(t *testing.T) {
 	done := make(chan struct{})
 	close(done)
 	released := make(chan struct{})
-	h := testHub(&hub{warnings: io.Discard, teardownGrace: 5 * time.Second, live: map[string]liveSession{
+	h := testHub(&hub{messages: newHostMessages(), warnings: io.Discard, teardownGrace: 5 * time.Second, live: map[string]liveSession{
 		"rebind": {cancel: func() {}, done: done, released: released, release: func() {}},
 	}})
 	returned := make(chan struct{})

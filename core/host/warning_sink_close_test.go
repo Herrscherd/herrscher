@@ -12,7 +12,7 @@ func TestCloseReportsTheFinalCountWhenItsSummaryCannotBeWritten(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := newGatedWarnings("frozen")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	if _, err := sink.Write([]byte("frozen\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
@@ -35,7 +35,7 @@ func TestOverrunBehindAFrozenDrainIsLostOrUnconfirmedAtClose(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := newGatedWarnings("frozen")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	if _, err := sink.Write([]byte("frozen\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
@@ -60,7 +60,7 @@ func TestSummaryInFlightAtCloseIsReportedAsLostAndUnconfirmed(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := newGatedWarnings("lost")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	if _, err := sink.Write(bytes.Repeat([]byte("x"), warningEntryBytes+1)); !errors.Is(err, errWarningAbandoned) {
 		t.Fatalf("write returned %v, want errWarningAbandoned", err)
 	}
@@ -80,7 +80,7 @@ func TestSummaryAcceptedAfterCloseDoesNotCountLossesTwice(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := newGatedWarnings("lost")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	if _, err := sink.Write(bytes.Repeat([]byte("x"), warningEntryBytes+1)); !errors.Is(err, errWarningAbandoned) {
 		t.Fatalf("write returned %v, want errWarningAbandoned", err)
 	}
@@ -115,7 +115,7 @@ func TestCloseWaitsForAWriteThatFinishesWithinTheBudget(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := newGatedWarnings("frozen")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	_ = sink.Enqueue([]byte("frozen\n"))
 	awaitGatedWrite(t, writer)
 	go func() {
@@ -136,7 +136,7 @@ func TestCloseNamesAnUnconfirmedWriteEvenWhenNothingWasLost(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := newGatedWarnings("frozen")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	if _, err := sink.Write([]byte("frozen\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
@@ -153,7 +153,7 @@ func TestQueuedBehindAFrozenWriterIsLostAtCloseAndNeverWritten(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := newGatedWarnings("frozen")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	if _, err := sink.Write([]byte("frozen\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
@@ -182,7 +182,7 @@ func TestInFlightWriteFailingAfterCloseIsAnnouncedAsADelta(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := newFirstWriteRefused()
 	t.Cleanup(writer.unblock)
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	if _, err := sink.Write([]byte("INFLIGHT\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
@@ -211,7 +211,7 @@ func TestRefusedWriteAfterTheBilanIsLoggedBeforeCloseReturns(t *testing.T) {
 			}()
 		}
 	})
-	sink = newWarningSink(writer, englishLostLine)
+	sink = newWarningSink(newHostMessages(), writer, englishLostLine)
 	_ = sink.Enqueue([]byte("INFLIGHT\n"))
 	awaitBackground(t, writer.entered, "the warning was never handed to the writer")
 	sink.Close()
@@ -245,7 +245,7 @@ func TestEntryAdmittedWhileCloseWaitsIsCountedOnceByTheBilan(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := newGatedWarnings("frozen")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(writer, englishLostLine, withIdleWait(2*time.Second))
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine, withIdleWait(2*time.Second))
 	_ = sink.Enqueue([]byte("frozen\n"))
 	awaitGatedWrite(t, writer)
 
@@ -283,7 +283,7 @@ func TestCloseSaysWhenAWriteIsStillRunningAtReturn(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := newGatedWarnings("GATED")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(writer, englishLostLine, withIdleWait(time.Millisecond))
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine, withIdleWait(time.Millisecond))
 	_ = sink.Enqueue([]byte("GATED\n"))
 	awaitGatedWrite(t, writer)
 	sink.Close()
@@ -296,7 +296,7 @@ func TestCloseSaysWhenAWriteIsStillRunningAtReturn(t *testing.T) {
 func TestCloseSaysNothingWhenTheLastWriteIsJoined(t *testing.T) {
 	logs := captureDefaultLog(t)
 	var out lockedBuffer
-	sink := newWarningSink(&out, englishLostLine)
+	sink := newWarningSink(newHostMessages(), &out, englishLostLine)
 	if _, err := sink.Write([]byte("done\n")); err != nil {
 		t.Fatal(err)
 	}
@@ -315,7 +315,7 @@ func TestConcurrentSecondCloseReturnsOnlyAfterTheBilanIsLogged(t *testing.T) {
 	})
 	writer := newFirstWriteRefused()
 	t.Cleanup(writer.unblock)
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	_ = sink.Enqueue([]byte("INFLIGHT\n"))
 	awaitBackground(t, writer.entered, "the warning was never handed to the writer")
 	first := make(chan struct{})
@@ -336,7 +336,7 @@ func TestWriterErrorDuringCloseIsAnnouncedOnce(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := newFirstWriteRefused()
 	t.Cleanup(writer.unblock)
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	if _, err := sink.Write([]byte("INFLIGHT\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
@@ -361,7 +361,7 @@ func TestSummaryFailingAfterCloseIsAnnouncedOnceAsADelta(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := newFirstWriteRefused()
 	t.Cleanup(writer.unblock)
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	if _, err := sink.Write(bytes.Repeat([]byte("x"), warningEntryBytes+1)); !errors.Is(err, errWarningAbandoned) {
 		t.Fatalf("oversized write returned %v, want errWarningAbandoned", err)
 	}
@@ -380,7 +380,7 @@ func TestSummaryFailingAfterCloseIsAnnouncedOnceAsADelta(t *testing.T) {
 func TestRefusedSummaryBeforeCloseIsNotLoggedUntilClose(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := &summaryRefusingWriter{}
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	if _, err := sink.Write(bytes.Repeat([]byte("x"), warningEntryBytes+1)); !errors.Is(err, errWarningAbandoned) {
 		t.Fatalf("oversized write returned %v, want errWarningAbandoned", err)
 	}
@@ -404,7 +404,7 @@ func TestRefusedSummaryBeforeCloseIsNotLoggedUntilClose(t *testing.T) {
 func TestSummaryRefusedAtCloseIsAnnouncedOnceByTheBilan(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := &summaryRefusingWriter{always: true}
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	if _, err := sink.Write(bytes.Repeat([]byte("x"), warningEntryBytes+1)); !errors.Is(err, errWarningAbandoned) {
 		t.Fatalf("oversized write returned %v, want errWarningAbandoned", err)
 	}
@@ -420,7 +420,7 @@ func TestSecondCloseIsSilentAndRecountsNothing(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := newGatedWarnings("frozen")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	if _, err := sink.Write([]byte("frozen\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
@@ -449,7 +449,7 @@ func TestWarningAfterCloseIsAnnouncedOnlyWithItsNewLoss(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := newGatedWarnings("frozen")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	if _, err := sink.Write([]byte("frozen\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
@@ -477,7 +477,7 @@ func TestWarningAfterCloseIsAnnouncedOnlyWithItsNewLoss(t *testing.T) {
 func TestLateSuccessAfterAnUnconfirmedWriteIsWrittenOnceAndNotCounted(t *testing.T) {
 	writer := newGatedWarnings("LATE")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	if _, err := sink.Write([]byte("LATE\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("a late write behind a frozen writer returned %v, want errWarningLate", err)
 	}
@@ -498,7 +498,7 @@ func TestLateSuccessAfterAnUnconfirmedWriteIsWrittenOnceAndNotCounted(t *testing
 func TestQueuedBehindAStalledWriterIsLateAndLostAtClose(t *testing.T) {
 	writer := newGatedWarnings("frozen")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	frozen := runInBackground(func() {
 		if _, err := sink.Write([]byte("frozen\n")); !errors.Is(err, errWarningLate) {
 			t.Errorf("write returned %v, want errWarningLate", err)
@@ -529,7 +529,7 @@ func TestQueuedBehindAStalledWriterIsLateAndLostAtClose(t *testing.T) {
 func TestQueuedWarningUnconfirmedAtBudgetReturnsLateWithoutCount(t *testing.T) {
 	writer := newGatedWarnings("frozen")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	frozen := runInBackground(func() {
 		if _, err := sink.Write([]byte("frozen\n")); !errors.Is(err, errWarningLate) {
 			t.Errorf("write returned %v, want errWarningLate", err)
@@ -551,7 +551,7 @@ func TestQueuedWarningUnconfirmedAtBudgetReturnsLateWithoutCount(t *testing.T) {
 func TestAdmissionAfterTheBilanStartsNoWriteAndCountsItsLoss(t *testing.T) {
 	logs := captureDefaultLog(t)
 	var out lockedBuffer
-	sink := newWarningSink(&out, englishLostLine)
+	sink := newWarningSink(newHostMessages(), &out, englishLostLine)
 	if _, err := sink.Write([]byte("before\n")); err != nil {
 		t.Fatal(err)
 	}
@@ -584,7 +584,7 @@ func TestAdmissionAfterTheBilanStartsNoWriteAndCountsItsLoss(t *testing.T) {
 func TestCloseJoinsTheWriteLaunchedLast(t *testing.T) {
 	warnings := newGatedWarnings("GATED")
 	t.Cleanup(warnings.open)
-	sink := newWarningSink(warnings, englishLostLine)
+	sink := newWarningSink(newHostMessages(), warnings, englishLostLine)
 	if _, err := sink.Write([]byte("first\n")); err != nil {
 		t.Fatal(err)
 	}
@@ -617,7 +617,7 @@ func (s *slowWarnings) Write(p []byte) (int, error) {
 
 func TestCloseReturnsOnlyAfterTheLastLaunchedWriteIsOnOutput(t *testing.T) {
 	warnings := &slowWarnings{}
-	sink := newWarningSink(warnings, englishLostLine, withIdleWait(time.Nanosecond))
+	sink := newWarningSink(newHostMessages(), warnings, englishLostLine, withIdleWait(time.Nanosecond))
 	_ = sink.Enqueue([]byte("LAST\n"))
 	sink.Close()
 	if !strings.Contains(warnings.out.String(), "LAST\n") {

@@ -11,7 +11,7 @@ import (
 func TestSinkSerializesDrainAndDirectWritesOnABareBuffer(t *testing.T) {
 	const writes = 300
 	var out bytes.Buffer
-	h := testHub(&hub{warnings: &out, teardownGrace: 10 * time.Second})
+	h := testHub(&hub{messages: newHostMessages(), warnings: &out, teardownGrace: 10 * time.Second})
 	direct := runInBackground(func() {
 		for range writes {
 			if err := h.sink.announce("direct"); err != nil {
@@ -38,7 +38,7 @@ func TestSinkSerializesDrainAndDirectWritesOnABareBuffer(t *testing.T) {
 func TestOverrunWaitsForAPendingDirectWriteInsteadOfBeingRefused(t *testing.T) {
 	writer := newGatedWarnings("late")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	_ = sink.Enqueue([]byte("late\n"))
 	awaitGatedWrite(t, writer)
 
@@ -60,7 +60,7 @@ func TestOverrunWaitsForAPendingDirectWriteInsteadOfBeingRefused(t *testing.T) {
 func TestOverrunIsCountedWhenTheWriterStaysFrozenForTheWholeBudget(t *testing.T) {
 	writer := newGatedWarnings("late")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	if _, err := sink.Write([]byte("late\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("a late write behind a frozen writer returned %v, want errWarningLate", err)
 	}
@@ -83,7 +83,7 @@ func TestAbandonedOverrunIsSilentUntilTheBilan(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := newGatedWarnings("slow")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	_ = sink.Enqueue([]byte("slow\n"))
 	awaitGatedWrite(t, writer)
 	if err := sink.announce("overrun"); !errors.Is(err, errWarningAbandoned) {
@@ -98,7 +98,7 @@ func TestAbandonedOverrunIsSilentUntilTheBilan(t *testing.T) {
 func TestDirectWriteBehindAStalledSinkNeverWaitsAndIsLostNeverWritten(t *testing.T) {
 	writer := newGatedWarnings("frozen")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(writer, englishLostLine)
+	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
 	if _, err := sink.Write([]byte("frozen\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}

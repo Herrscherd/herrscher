@@ -304,6 +304,7 @@ func (s *stubForgetCoord) forget(name string) { s.forgotten = append(s.forgotten
 func TestGoDeadCallsForget(t *testing.T) {
 	stub := &stubForgetCoord{}
 	h := testHub(&hub{
+		messages:      newHostMessages(),
 		warnings:      io.Discard,
 		coordinator:   stub,
 		live:          make(map[string]liveSession),

@@ -53,7 +53,7 @@ func TestFixturesWithABackendStartThroughStartModel(t *testing.T) {
 
 func newModelBypasses(t *testing.T) []string {
 	t.Helper()
-	files, globErr := filepath.Glob("*_test.go")
+	files, globErr := filepath.Glob("*.go")
 	if globErr != nil {
 		t.Fatal(globErr)
 	}
@@ -69,6 +69,9 @@ func newModelBypasses(t *testing.T) []string {
 	info := typesInfo(fset, parsedFiles)
 	var bypasses []string
 	for index, parsed := range parsedFiles {
+		if !strings.HasSuffix(files[index], "_test.go") {
+			continue
+		}
 		bypasses = append(bypasses, referencesToNewModel(fset, parsed, info, exemptFunction(files[index]))...)
 	}
 	return bypasses
@@ -154,6 +157,34 @@ func shadowed() {
 	want := []string{"snippet.go:4:7", "snippet.go:5:11", "snippet.go:7:6", "snippet.go:12:6"}
 	if strings.Join(refs, " ") != strings.Join(want, " ") {
 		t.Fatalf("flagged = %q, want %q", refs, want)
+	}
+}
+
+func TestNewModelGuardResolvesNilAcrossFiles(t *testing.T) {
+	const declaration = `package tui
+
+var nil Backend
+`
+	const fixture = `package tui
+
+func fixtures(be Backend) {
+	_ = newModel(testMessages(), nil)
+	_ = newModel(testMessages(), be)
+}
+`
+	fset := token.NewFileSet()
+	declared, declaredErr := parser.ParseFile(fset, "nil_decl.go", declaration, 0)
+	if declaredErr != nil {
+		t.Fatal(declaredErr)
+	}
+	parsed, parseErr := parser.ParseFile(fset, "fixtures_test.go", fixture, 0)
+	if parseErr != nil {
+		t.Fatal(parseErr)
+	}
+	refs := referencesToNewModel(fset, parsed, typesInfo(fset, []*ast.File{declared, parsed}), "")
+	want := []string{"fixtures_test.go:4:6", "fixtures_test.go:5:6"}
+	if strings.Join(refs, " ") != strings.Join(want, " ") {
+		t.Fatalf("flagged = %q, want %q: a package-level nil is not the predeclared one", refs, want)
 	}
 }
 

@@ -85,7 +85,7 @@ func TestRenderKeepsHostileParamsOffTheTerminal(t *testing.T) {
 		clitext.ParamWait:    "1s",
 	}
 	for _, key := range []clitext.Key{clitext.ServeGatewaySkipped, clitext.ServeGatewayRetrying, clitext.ServeGatewayUnavailable, clitext.ServeAttachFailed} {
-		text := render(i18n.English, key, params)
+		text := render(testMessages(), i18n.English, key, params)
 		if strings.ContainsAny(text, "\x1b\a") {
 			t.Errorf("%s: rendered %q, want no raw control", key, text)
 		}

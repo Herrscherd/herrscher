@@ -212,11 +212,26 @@ func lockBeside(root, instance string) error {
 
 const daemonWait = 30 * time.Second
 
+const orphanExitWait = 5 * time.Second
+
+func waitInstanceExit(instance string, wait time.Duration) error {
+	deadline := time.Now().Add(wait)
+	for {
+		listed, err := scanInstance(procRoot, instanceEntry(instance))
+		if err != nil || len(listed) == 0 || time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 func instanceGone(ts *testscript.TestScript, neg bool, args []string) {
 	if neg || len(args) != 0 {
 		ts.Fatalf("usage: instancegone")
 	}
-	stopped, survivors, err := reapInstance(procRoot, ts.Getenv(instanceEnv), reapGrace)
+	instance := ts.Getenv(instanceEnv)
+	ts.Check(waitInstanceExit(instance, orphanExitWait))
+	stopped, survivors, err := reapInstance(procRoot, instance, reapGrace)
 	ts.Check(err)
 	if len(stopped)+len(survivors) > 0 {
 		ts.Fatalf("processes of the daemon outlived it: stopped with SIGINT [%s], killed with SIGKILL [%s]", strings.Join(stopped, "; "), strings.Join(survivors, "; "))

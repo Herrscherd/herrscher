@@ -80,7 +80,9 @@ func newModelBypasses(t *testing.T) []string {
 func typesInfo(fset *token.FileSet, files []*ast.File) *types.Info {
 	info := &types.Info{Uses: make(map[*ast.Ident]types.Object)}
 	conf := types.Config{Error: func(error) {}}
-	_, _ = conf.Check("tui", fset, files, info)
+	if _, err := conf.Check("tui", fset, files, info); err != nil {
+		return info
+	}
 	return info
 }
 

@@ -416,7 +416,8 @@ type sessionTable struct {
 	outboundMaxBytes int64
 	fileSenders      map[string]contracts.FileSender
 
-	tokens map[string]string
+	tokens     map[string]string
+	seedLeases map[string]seedLease
 }
 
 func (t *sessionTable) percentOfSession(name string) int {

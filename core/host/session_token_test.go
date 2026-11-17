@@ -135,3 +135,53 @@ func TestSessionTokensAreStablePerSessionAndDistinct(t *testing.T) {
 		t.Fatal("two sessions share a token")
 	}
 }
+
+func TestSeedTokenDoesNotSurviveItsSeed(t *testing.T) {
+	sessionTab := newSessionTable()
+	seedCtx, endSeed := context.WithCancel(context.Background())
+	token := sessionTab.seedToken(seedCtx, "dormant")
+	if !sessionTab.tokenMatches("dormant", token) {
+		t.Fatal("the seed's token is refused while its seed runs")
+	}
+	endSeed()
+	if sessionTab.tokenMatches("dormant", token) {
+		t.Fatal("the token of a finished one-shot seed still answers approvals")
+	}
+}
+
+func TestDriverStartedDuringASeedKeepsItsToken(t *testing.T) {
+	sessionTab := newSessionTable()
+	seedCtx, endSeed := context.WithCancel(context.Background())
+	seedTok := sessionTab.seedToken(seedCtx, "s1")
+	driver := &sessionDriver{}
+	sessionTab.register("s1", driver)
+	driverTok := sessionTab.issueToken("s1")
+	endSeed()
+	if !sessionTab.tokenMatches("s1", driverTok) {
+		t.Fatal("the driver's token was revoked when the seed that overlapped it ended")
+	}
+	if sessionTab.tokenMatches("s1", seedTok) {
+		t.Fatal("the finished seed's token still answers for the session")
+	}
+	sessionTab.unregister("s1", driver)
+	if sessionTab.tokenMatches("s1", driverTok) {
+		t.Fatal("the driver's token outlived its run")
+	}
+}
+
+func TestTokensOfSessionsGoneFromTheStoreAreRevoked(t *testing.T) {
+	sessionTab := newSessionTable()
+	gone := sessionTab.issueToken("gone")
+	kept := sessionTab.issueToken("kept")
+	archived := sessionTab.issueToken("archived")
+	sessionTab.revokeTokensExcept(func(name string) bool { return name == "kept" })
+	if sessionTab.tokenMatches("gone", gone) {
+		t.Fatal("the token of a session removed from the store still answers approvals")
+	}
+	if sessionTab.tokenMatches("archived", archived) {
+		t.Fatal("the token of an archived session still answers approvals")
+	}
+	if !sessionTab.tokenMatches("kept", kept) {
+		t.Fatal("the token of a session still in the store was revoked")
+	}
+}

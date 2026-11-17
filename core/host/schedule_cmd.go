@@ -38,11 +38,23 @@ func scheduleAddVerb(lang languageSource, store *state.State, agents agentLookup
 		Param("task", clitext.CmdParamScheduleAddTask, true).
 		Param("grace", clitext.CmdParamScheduleAddGrace, false).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(addSchedule(lang(), store, agents, in))
+			now, err := currentScheduleTime()
+			if err != nil {
+				return contracts.Result{}, err
+			}
+			return cli.Data(addSchedule(lang(), store, agents, in, now))
 		})
 }
 
-func addSchedule(lang i18n.Language, store *state.State, agents agentLookup, input contracts.Input) (string, error) {
+func currentScheduleTime() (time.Time, error) {
+	clock, err := schedulerClock()
+	if err != nil {
+		return time.Time{}, wrapHost(err, "serve.scheduler_clock", map[string]any{detailParam: err.Error()})
+	}
+	return clock(), nil
+}
+
+func addSchedule(lang i18n.Language, store *state.State, agents agentLookup, input contracts.Input, now time.Time) (string, error) {
 	sched := schedule.Schedule{
 		Name:      strings.TrimSpace(input.Get(paramName)),
 		Session:   strings.TrimSpace(input.Get(paramSession)),
@@ -52,9 +64,9 @@ func addSchedule(lang i18n.Language, store *state.State, agents agentLookup, inp
 		Every:     strings.TrimSpace(input.Get("every")),
 		Cron:      strings.TrimSpace(input.Get("cron")),
 		Grace:     strings.TrimSpace(input.Get("grace")),
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		CreatedAt: now.UTC().Format(time.RFC3339),
 	}
-	if err := checkNewSchedule(store, agents, sched); err != nil {
+	if err := checkNewSchedule(store, agents, sched, now); err != nil {
 		return "", err
 	}
 	if err := store.PutSchedule(sched); err != nil {
@@ -68,8 +80,8 @@ func addSchedule(lang i18n.Language, store *state.State, agents agentLookup, inp
 	return out, nil
 }
 
-func checkNewSchedule(store *state.State, agents agentLookup, definition schedule.Schedule) error {
-	if err := schedule.Validate(definition, time.Now()); err != nil {
+func checkNewSchedule(store *state.State, agents agentLookup, definition schedule.Schedule, now time.Time) error {
+	if err := schedule.Validate(definition, now); err != nil {
 		return err
 	}
 	if definition.Agent != "" {
@@ -90,11 +102,11 @@ func scheduleListVerb(lang languageSource, store *state.State) contracts.Cmd {
 	return contracts.New(nsSchedule, "list").
 		Help(clitext.CmdHelpScheduleList).
 		Do(func(_ context.Context, _ contracts.Input) (contracts.Result, error) {
-			clock, err := schedulerClock()
+			now, err := currentScheduleTime()
 			if err != nil {
-				return contracts.Result{}, wrapHost(err, "serve.scheduler_clock", map[string]any{detailParam: err.Error()})
+				return contracts.Result{}, err
 			}
-			return contracts.DataResult(listSchedules(lang(), store, clock())), nil
+			return contracts.DataResult(listSchedules(lang(), store, now)), nil
 		})
 }
 
@@ -165,11 +177,15 @@ func schedulePauseVerb(lang languageSource, store *state.State, verb string, pau
 		Help(helpKey).
 		Param(paramName, clitext.CmdParamScheduleName, true).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(setSchedulePaused(lang(), store, paused, strings.TrimSpace(in.Get(paramName))))
+			now, err := currentScheduleTime()
+			if err != nil {
+				return contracts.Result{}, err
+			}
+			return cli.Data(setSchedulePaused(lang(), store, paused, strings.TrimSpace(in.Get(paramName)), now))
 		})
 }
 
-func setSchedulePaused(lang i18n.Language, store *state.State, paused bool, name string) (string, error) {
+func setSchedulePaused(lang i18n.Language, store *state.State, paused bool, name string, now time.Time) (string, error) {
 	ok, err := store.SetSchedulePaused(name, paused)
 	if err != nil {
 		return "", err
@@ -178,7 +194,7 @@ func setSchedulePaused(lang i18n.Language, store *state.State, paused bool, name
 		return "", &NotFoundError{Kind: kindSchedule, Name: name}
 	}
 	if !paused {
-		if err := store.StampScheduleRun(name, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		if err := store.StampScheduleRun(name, now.UTC().Format(time.RFC3339)); err != nil {
 			return "", err
 		}
 	}

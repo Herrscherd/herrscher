@@ -5,8 +5,9 @@ waitdaemon
 exec herrscher session create --name desk
 exec herrscher schedule add --name digest --session desk --cron '0 9 * * *' --task 'write the digest'
 exec herrscher schedule add --name later --session desk --every 87600h --task 'write the later note'
+exec herrscher schedule add --name probe --session desk --cron '0 9 * * *' --task 'write the probe'
 waitlog 'prompt .*write the digest'
-exec sleep 1
+waitlog 'prompt .*write the probe'
 exec cat $VENDORTEST_LOG
 stdout -count=1 'write the digest"$'
 ! stdout 'write the later note"$'

@@ -42,9 +42,54 @@ func (t *sessionTable) issueToken(session string) string {
 	return token
 }
 
-func (t *sessionTable) tokenMatches(session, presented string) bool {
+type seedLease struct {
+	session string
+	ctx     context.Context
+}
+
+func (t *sessionTable) seedToken(ctx context.Context, session string) string {
 	t.mu.Lock()
-	want, ok := t.tokens[session]
-	t.mu.Unlock()
-	return ok && presented != "" && subtle.ConstantTimeCompare([]byte(want), []byte(presented)) == 1
+	defer t.mu.Unlock()
+	if t.seedLeases == nil {
+		t.seedLeases = make(map[string]seedLease)
+	}
+	for token, lease := range t.seedLeases {
+		if lease.ctx.Err() != nil {
+			delete(t.seedLeases, token)
+		}
+	}
+	token := rand.Text()
+	t.seedLeases[token] = seedLease{session: session, ctx: ctx}
+	return token
+}
+
+func (t *sessionTable) revokeTokensExcept(keep func(session string) bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for session := range t.tokens {
+		if !keep(session) {
+			delete(t.tokens, session)
+		}
+	}
+}
+
+func (t *sessionTable) tokenMatches(session, presented string) bool {
+	if presented == "" {
+		return false
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if want, ok := t.tokens[session]; ok && sameToken(want, presented) {
+		return true
+	}
+	for token, lease := range t.seedLeases {
+		if lease.session == session && lease.ctx.Err() == nil && sameToken(token, presented) {
+			return true
+		}
+	}
+	return false
+}
+
+func sameToken(want, presented string) bool {
+	return subtle.ConstantTimeCompare([]byte(want), []byte(presented)) == 1
 }

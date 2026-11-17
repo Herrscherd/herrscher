@@ -1108,8 +1108,10 @@ The tab carries a `pendingApproval` flag for the rest of the window to mark it.
 
 Each session's approval hook answers with the token the daemon issued to that
 session at launch, sent in the `HERRSCHER_SESSION_TOKEN` variable. The token
-ends with the session's run, so a session recreated under the same name gets a
-new one. A hook that holds no token, or cannot reach a daemon, refuses the tool
+ends with the session's run. Closing or archiving the session revokes it before
+the command returns, so a session recreated under the same name gets a new one.
+A one-shot seed gets its own token instead, which answers only while that seed
+runs. A hook that holds no token, or cannot reach a daemon, refuses the tool
 call and says why: it never allows a call it could not check.
 
 Two paths run without a daemon. A `session create` run locally starts a session

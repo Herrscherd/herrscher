@@ -3138,6 +3138,11 @@
     "other": "--what must be code, conversation or both"
   },
   {
+    "id": "cli.host.fault.daemon_required",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (daemon required)",
+    "other": "this command needs the running herrscher daemon, and none answered on the command socket"
+  },
+  {
     "id": "cli.host.fault.rewind_needs_daemon",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (rewind needs daemon)",
     "other": "session rewind is only available from the running daemon"
@@ -3216,6 +3221,11 @@
     "id": "cli.host.fault.approve_mode_usage",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (approve mode usage)",
     "other": "usage: approve mode <session> <ask|bypass|strict|smart>"
+  },
+  {
+    "id": "cli.host.fault.approve_ask_unauthenticated",
+    "description": "Erreur d'une demande d'approbation refusée car l'appelant ne détient pas le jeton de la session",
+    "other": "approve ask refused: the caller does not hold this session's approval token"
   },
   {
     "id": "cli.host.fault.usage_empty_value",

@@ -166,7 +166,9 @@ func TestApproveHookAnswersWithoutBuildingTheRegistry(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HERRSCHER_STATE_DIR", dir)
 	t.Setenv("HERRSCHER_COMMAND_SOCKET", filepath.Join(t.TempDir(), "absent.sock"))
+	t.Setenv("HERRSCHER_LANG", "en")
 	t.Setenv(host.SessionVar, "s1")
+	t.Setenv(host.TokenVar, "token-s1")
 	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -180,8 +182,8 @@ func TestApproveHookAnswersWithoutBuildingTheRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the hook failed, which the vendor CLI reads as a crash: %v", err)
 	}
-	if !strings.Contains(out, `"permissionDecision":"allow"`) {
-		t.Fatalf("hook wrote %q, want an allow", out)
+	if !strings.Contains(out, `"permissionDecision":"deny"`) {
+		t.Fatalf("hook wrote %q, want a refusal: no daemon means the approval never happened", out)
 	}
 	if !strings.Contains(errOut, "no daemon is listening") {
 		t.Fatalf("stderr was %q, want the note that says why the guardrail is not running", errOut)

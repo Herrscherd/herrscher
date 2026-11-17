@@ -26,6 +26,12 @@ const (
 	stepCrash
 	stepEcho
 	stepAPIError
+	stepExpect
+)
+
+const (
+	wordAllowed = "allowed"
+	wordDenied  = "denied"
 )
 
 type step struct {
@@ -63,10 +69,7 @@ func (e *LineError) Unwrap() error {
 	return e.Err
 }
 
-// ParseScript reads a script. Each line is one step: "text <words>", "tool
-// <Name> <json input>", "error <message>", "apierror <message>", "spawn <file>",
-// "echo", "hang" or "crash", the last three alone. Blank lines are skipped and a
-// turn with no step is refused.
+// ParseScript reads a script of steps, one per line, and refuses an empty turn.
 func ParseScript(source io.Reader) (Script, error) {
 	var script Script
 	current := Turn{}
@@ -100,7 +103,8 @@ func ParseScript(source io.Reader) (Script, error) {
 }
 
 var (
-	errUnknownStep  = errors.New("unknown step, want text, tool, error, apierror, spawn, echo, hang or crash")
+	errUnknownStep  = errors.New("unknown step, want text, tool, expect, error, apierror, spawn, echo, hang or crash")
+	errExpectWord   = errors.New("expect wants allowed or denied after its name")
 	errToolNeedsArg = errors.New("tool wants a name and a JSON input")
 	errToolInput    = errors.New("tool input is not valid JSON")
 	errNeedsText    = errors.New("step wants text after its name")
@@ -145,6 +149,8 @@ func parseStep(line string) (step, error) {
 		return textStep(stepAPIError, rest)
 	case "tool":
 		return toolStep(rest)
+	case "expect":
+		return expectStep(rest)
 	case "echo":
 		return bareStep(stepEcho, rest)
 	case "hang":
@@ -175,6 +181,13 @@ func textStep(kind stepKind, text string) (step, error) {
 		return step{}, errNeedsText
 	}
 	return step{kind: kind, text: text}, nil
+}
+
+func expectStep(word string) (step, error) {
+	if word != wordAllowed && word != wordDenied {
+		return step{}, errExpectWord
+	}
+	return step{kind: stepExpect, text: word}, nil
 }
 
 func toolStep(rest string) (step, error) {

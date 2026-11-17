@@ -500,6 +500,26 @@
     "other": "herrscher: session \"{{.Name}}\": consolidate after {{.Elapsed}}: {{.Detail}}"
   },
   {
+    "id": "seed.late_transcript",
+    "description": "A transcript entry reaches a one-shot seed after its gate shut and is dropped, Name names the session; warned once per kind of item per seed",
+    "other": "herrscher: session \"{{.Name}}\": a transcript entry arrived after its seed closed and was dropped"
+  },
+  {
+    "id": "seed.late_event",
+    "description": "An event reaches a one-shot seed after its gate shut and is dropped, Name names the session; warned once per kind of item per seed",
+    "other": "herrscher: session \"{{.Name}}\": an event arrived after its seed closed and was dropped"
+  },
+  {
+    "id": "seed.late_usage",
+    "description": "A usage record reaches a one-shot seed after its gate shut and is dropped, Name names the session; warned once per kind of item per seed",
+    "other": "herrscher: session \"{{.Name}}\": a usage record arrived after its seed closed and was dropped"
+  },
+  {
+    "id": "seed.late_resume",
+    "description": "A resume token reaches a one-shot seed after its gate shut and is dropped, Name names the session; warned once per kind of item per seed",
+    "other": "herrscher: session \"{{.Name}}\": a resume token arrived after its seed closed and was dropped"
+  },
+  {
     "id": "serve.instance_persist",
     "description": "The instance identifier cannot be saved, Detail carries the cause",
     "other": "persist instanceID: {{.Detail}}"
@@ -613,6 +633,16 @@
     "id": "warn.session_resume_token",
     "description": "The resume token of a session could not be saved; a restart loses its conversation",
     "other": "herrscher serve: session \"{{.Name}}\": resume token not persisted, a restart will lose the conversation: {{.Detail}}"
+  },
+  {
+    "id": "warn.session_turn_mark_set",
+    "description": "The interrupted turn mark of a session could not be written; a daemon stop during this turn would go unannounced",
+    "other": "herrscher serve: session \"{{.Name}}\": interrupted turn not marked, a stop during it will go unannounced: {{.Detail}}"
+  },
+  {
+    "id": "warn.session_turn_mark_clear",
+    "description": "The interrupted turn mark of a session could not be cleared; the next start would announce a turn that was settled",
+    "other": "herrscher serve: session \"{{.Name}}\": interrupted turn mark not cleared, the next start will announce it again: {{.Detail}}"
   },
   {
     "id": "warn.session_project_pin",

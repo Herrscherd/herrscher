@@ -1,14 +1,19 @@
 package health
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
@@ -26,20 +31,21 @@ const (
 // state and names the worst one when something fails. pal paints each part; the
 // zero Palette writes plain text with the same alignment.
 func (s Snapshot) Table(writer io.Writer, lang i18n.Language, pal termpaint.Palette) error {
-	view, err := s.View(lang)
-	if err != nil {
-		return err
+	text := newRenderer(lang)
+	view := s.buildView(text)
+	if text.err != nil {
+		return text.err
 	}
 	out := &lineWriter{writer: writer}
-	out.line(termpaint.Paint(pal.Strong, view.Title) + " " + termpaint.Paint(pal.Dim, view.Banner))
+	out.line(termpaint.Paint(pal.Strong, view.Title.String()) + " " + termpaint.Paint(pal.Dim, view.Banner.String()))
 	out.line("")
 	table := &termpaint.Table{Right: map[int]bool{2: true}}
 	table.Add(paintAll(pal.Dim, view.Header)...)
 	for _, section := range view.Sections {
-		table.Span(termpaint.Paint(pal.Group, section.Title))
+		table.Span(termpaint.Paint(pal.Group, section.Title.String()))
 		for index := range section.Rows {
 			row := &section.Rows[index]
-			table.Add(rowIndent+RowLabel(*row, pal), StateCell(*row, pal), latencyCell(*row, pal), termpaint.Paint(detailStyle(row.State, pal), row.Detail()))
+			table.Add(rowIndent+RowLabel(*row, pal), StateCell(*row, pal), latencyCell(*row, pal), termpaint.Paint(detailStyle(row.State, pal), row.Detail().String()))
 		}
 	}
 	for _, line := range table.Lines() {
@@ -54,11 +60,8 @@ func (s Snapshot) Table(writer io.Writer, lang i18n.Language, pal termpaint.Pale
 // latency and the facts of each one, then its state, cause and remedy on aligned
 // rows.
 func (s Snapshot) Details(writer io.Writer, checks []Check, lang i18n.Language, pal termpaint.Palette) error {
-	rows, err := s.Rows(checks, lang)
-	if err != nil {
-		return err
-	}
-	text := &renderer{lang: lang}
+	text := newRenderer(lang)
+	rows := s.buildRows(checks, text)
 	labels := [...]string{
 		text.key(clitext.HealthDetailState, nil),
 		text.key(clitext.HealthDetailCause, nil),
@@ -74,17 +77,17 @@ func (s Snapshot) Details(writer io.Writer, checks []Check, lang i18n.Language, 
 			out.line("")
 		}
 		head := termpaint.Paint(pal.Strong, plainLabel(*row))
-		if facts := joinNonEmpty(row.Latency, row.Facts); facts != "" {
+		if facts := joinNonEmpty(row.Latency.String(), row.Facts.String()); facts != "" {
 			head += "  " + termpaint.Paint(pal.Dim, facts)
 		}
 		out.line(head)
 		table := &termpaint.Table{}
 		table.Add(rowIndent+labels[0], StateCell(*row, pal))
-		if row.Cause != "" {
-			table.Add(rowIndent+labels[1], termpaint.Paint(detailStyle(row.State, pal), row.Cause))
+		if row.Cause.String() != "" {
+			table.Add(rowIndent+labels[1], termpaint.Paint(detailStyle(row.State, pal), row.Cause.String()))
 		}
-		if row.Remedy != "" {
-			table.Add(rowIndent+labels[2], row.Remedy)
+		if row.Remedy.String() != "" {
+			table.Add(rowIndent+labels[2], row.Remedy.String())
 		}
 		for _, line := range table.Lines() {
 			out.line(line)
@@ -96,9 +99,9 @@ func (s Snapshot) Details(writer io.Writer, checks []Check, lang i18n.Language, 
 // RowLabel paints the name of a row: the service, then its account after a dim
 // separator, and the default marker of the default account.
 func RowLabel(row Row, pal termpaint.Palette) string {
-	label := row.Name
-	if row.Account != "" {
-		label += termpaint.Paint(pal.Dim, accountSep) + row.Account
+	label := row.Name.String()
+	if row.Account.String() != "" {
+		label += termpaint.Paint(pal.Dim, accountSep) + row.Account.String()
 	}
 	if row.Default {
 		label += " " + termpaint.Paint(pal.Accent, defaultMarker)
@@ -109,7 +112,7 @@ func RowLabel(row Row, pal termpaint.Palette) string {
 // StateCell paints the glyph and the word of the state of a row in the color of
 // that state.
 func StateCell(row Row, pal termpaint.Palette) string {
-	return termpaint.Paint(StateStyle(row.State, pal), row.Glyph+" "+row.StateText)
+	return termpaint.Paint(StateStyle(row.State, pal), row.Glyph.String()+" "+row.StateText.String())
 }
 
 // StateStyle is the style of state in pal: good, warn, bad, or dim when off.
@@ -132,11 +135,11 @@ func StateStyle(state contracts.HealthState, pal termpaint.Palette) termpaint.St
 func SummaryLine(view View, pal termpaint.Palette) string {
 	counts := make([]string, 0, len(view.Counts))
 	for _, count := range view.Counts {
-		counts = append(counts, termpaint.Paint(StateStyle(count.State, pal), count.Text))
+		counts = append(counts, termpaint.Paint(StateStyle(count.State, pal), count.Text.String()))
 	}
 	line := strings.Join(counts, termpaint.Paint(pal.Dim, factsSep))
-	if view.Worst != "" {
-		line += summaryGap + termpaint.Paint(pal.Dim, view.Hint) + " " + detailCommand + view.Worst
+	if view.Worst.String() != "" {
+		line += summaryGap + termpaint.Paint(pal.Dim, view.Hint.String()) + " " + detailCommand + view.Worst.String()
 	}
 	return line
 }
@@ -146,10 +149,10 @@ func plainLabel(row Row) string {
 }
 
 func latencyCell(row Row, pal termpaint.Palette) string {
-	if row.Latency == "" {
+	if row.Latency.String() == "" {
 		return termpaint.Paint(pal.Dim, missingLatency)
 	}
-	return row.Latency
+	return row.Latency.String()
 }
 
 func detailStyle(state contracts.HealthState, pal termpaint.Palette) termpaint.Style {
@@ -164,10 +167,10 @@ func detailStyle(state contracts.HealthState, pal termpaint.Palette) termpaint.S
 	return pal.Dim
 }
 
-func paintAll(style termpaint.Style, texts []string) []string {
+func paintAll(style termpaint.Style, texts []termpaint.Printed) []string {
 	painted := make([]string, len(texts))
 	for index, text := range texts {
-		painted[index] = termpaint.Paint(style, text)
+		painted[index] = termpaint.Paint(style, text.String())
 	}
 	return painted
 }
@@ -240,8 +243,13 @@ func (w *lineWriter) line(text string) {
 }
 
 type renderer struct {
-	lang i18n.Language
-	err  error
+	lang    i18n.Language
+	notices *contracts.Renderer
+	err     error
+}
+
+func newRenderer(lang i18n.Language) *renderer {
+	return &renderer{lang: lang, notices: contracts.NewRenderer()}
 }
 
 func (r *renderer) key(key clitext.Key, params clitext.Params) string {
@@ -251,9 +259,51 @@ func (r *renderer) key(key clitext.Key, params clitext.Params) string {
 }
 
 func (r *renderer) notice(notice contracts.Notice) string {
-	value, err := contracts.NewRenderer().Render(r.lang, notice)
+	value, err := r.notices.Render(r.lang, notice)
+	if fallsBackToArguments(err) {
+		return unrenderedNotice(notice)
+	}
 	r.keep(err)
 	return value
+}
+
+func fallsBackToArguments(err error) bool {
+	return errors.Is(err, contracts.ErrUnknownCode) || errors.Is(err, contracts.ErrNoticeArgs)
+}
+
+func unrenderedNotice(notice contracts.Notice) string {
+	texts := make([]string, 0, len(notice.Args))
+	for _, arg := range notice.Args {
+		if text, shown := argumentText(arg.Value()); shown {
+			texts = append(texts, text)
+		}
+	}
+	if len(texts) == 0 {
+		return strconv.FormatUint(uint64(notice.Code), 10)
+	}
+	return strings.Join(texts, factsSep)
+}
+
+func argumentText(value any) (string, bool) {
+	switch typed := value.(type) {
+	case string:
+		return boundedText(typed)
+	case json.RawMessage:
+		var text string
+		if err := json.Unmarshal(typed, &text); err == nil {
+			return boundedText(text)
+		}
+		var compacted bytes.Buffer
+		if err := json.Compact(&compacted, typed); err != nil {
+			return boundedText(string(typed))
+		}
+		return boundedText(compacted.String())
+	}
+	return "", false
+}
+
+func boundedText(text string) (string, bool) {
+	return compactwire.Bound(text), text != ""
 }
 
 func (r *renderer) keep(err error) {

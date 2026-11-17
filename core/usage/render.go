@@ -181,14 +181,18 @@ func addAccountRows(rows *termpaint.Table, account AccountLimits, now time.Time,
 const unavailableCell = "─"
 
 func accountName(account AccountLimits, text *renderer) string {
-	name := account.Account
-	if name == "" {
-		name = text.text(clitext.QuotaAccountNative, nil)
-	}
+	name := termpaint.Escape(accountText(account.Account, text)).String()
 	if account.Default {
 		name += " " + termpaint.Paint(text.pal.Accent, defaultMark)
 	}
 	return name
+}
+
+func accountText(account string, text *renderer) string {
+	if account == "" {
+		return text.text(clitext.QuotaAccountNative, nil)
+	}
+	return account
 }
 
 func windowLabel(limit contracts.Limit, text *renderer) string {
@@ -461,7 +465,7 @@ func accountTable(shares []Share, total float64, text *renderer) []string {
 	rows.Add(text.dimRow(text.text(clitext.SpendColAccount, nil), text.text(clitext.SpendColCost, nil), text.text(clitext.SpendColShare, nil), text.text(clitext.SpendColVolume, nil))...)
 	for index := range shares {
 		share := shares[index]
-		rows.Add("  "+termpaint.Paint(text.pal.Accent, "●")+" "+accountLabel(share, text), formatMoney(text.lang, share.Cost), formatPercent(text.lang, shareOf(share.Cost, total)), formatTokens(text.lang, share.Tokens, text))
+		rows.Add("  "+termpaint.Paint(text.pal.Accent, "●")+" "+accountLabel(share, text).String(), formatMoney(text.lang, share.Cost), formatPercent(text.lang, shareOf(share.Cost, total)), formatTokens(text.lang, share.Tokens, text))
 	}
 	return rows.Lines()
 }
@@ -476,7 +480,7 @@ func modelTable(shares []Share, total float64, text *renderer, valueHeader clite
 	for index := range shares {
 		share := shares[index]
 		part := shareOf(value(share), total)
-		rows.Add("  "+modelLabel(share, text), amount(share), shareBar(shareOf(value(share), largest), text.pal), formatPercent(text.lang, part))
+		rows.Add("  "+modelLabel(share, text).String(), amount(share), shareBar(shareOf(value(share), largest), text.pal), formatPercent(text.lang, part))
 	}
 	return rows.Lines()
 }
@@ -489,19 +493,15 @@ func shareBar(part float64, pal termpaint.Palette) string {
 	return termpaint.Paint(pal.Fill, strings.Repeat(fillCell, filled)) + strings.Repeat(" ", barWidth-filled)
 }
 
-func accountLabel(share Share, text *renderer) string {
-	name := share.Account
-	if name == "" {
-		name = text.text(clitext.QuotaAccountNative, nil)
-	}
-	return share.Vendor + summarySep + name
+func accountLabel(share Share, text *renderer) termpaint.Printed {
+	return termpaint.Escape(share.Vendor + summarySep + accountText(share.Account, text))
 }
 
-func modelLabel(share Share, text *renderer) string {
+func modelLabel(share Share, text *renderer) termpaint.Printed {
 	if share.Model == "" {
-		return text.text(clitext.SpendModelUnknown, nil)
+		return termpaint.Escape(text.text(clitext.SpendModelUnknown, nil))
 	}
-	return share.Model
+	return termpaint.Escape(share.Model)
 }
 
 func formatTokens(lang i18n.Language, count int64, text *renderer) string {

@@ -40,6 +40,7 @@ type oneShotSeedRuntime struct {
 	publish         func(session string, event contracts.Event)
 	record          func(session string, entry state.TranscriptEntry)
 	recordUsage     func(sess state.Session, records []usage.Record)
+	resume          func(session, token string)
 	timeout         time.Duration
 	backend         func(context.Context, state.Session) (contracts.Backend, error)
 	models          *ModelDiscovery
@@ -175,20 +176,25 @@ func oneShotTurnTimeout(runtime oneShotSeedRuntime) time.Duration {
 }
 
 func attachOneShotTaps(driver *sessionDriver, sess state.Session, runtime oneShotSeedRuntime) *seedGate {
-	gate := &seedGate{}
+	gate := newSeedGate(sess.Name, runtime.warnings, runtime.languageOf(sess))
 	if runtime.record != nil {
 		driver.sink.Transcript = func(entry state.TranscriptEntry) {
-			gate.admit(func() { runtime.record(sess.Name, entry) })
+			gate.admit(lateTranscriptKey, func() { runtime.record(sess.Name, entry) })
 		}
 	}
 	if runtime.publish != nil {
 		driver.emitTap = func(e contracts.Event) {
-			gate.admit(func() { runtime.publish(sess.Name, e) })
+			gate.admit(lateEventKey, func() { runtime.publish(sess.Name, e) })
 		}
 	}
 	if runtime.recordUsage != nil {
 		driver.sink.Usage = func(records []usage.Record) {
-			gate.admit(func() { runtime.recordUsage(sess, records) })
+			gate.admit(lateUsageKey, func() { runtime.recordUsage(sess, records) })
+		}
+	}
+	if runtime.resume != nil {
+		driver.sink.Resume = func(token string) {
+			gate.admit(lateResumeKey, func() { runtime.resume(sess.Name, token) })
 		}
 	}
 	return gate

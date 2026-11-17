@@ -10,6 +10,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 const (
@@ -24,24 +25,23 @@ const (
 // Row is one check as a report shows it, every text already rendered in the
 // language of the report.
 type Row struct {
-	Check     Check
 	State     contracts.HealthState
-	Glyph     string
-	StateText string
-	Name      string
-	Account   string
+	Glyph     termpaint.Printed
+	StateText termpaint.Printed
+	Name      termpaint.Printed
+	Account   termpaint.Printed
 	Default   bool
-	Latency   string
-	Cause     string
-	Facts     string
-	Remedy    string
+	Latency   termpaint.Printed
+	Cause     termpaint.Printed
+	Facts     termpaint.Printed
+	Remedy    termpaint.Printed
 }
 
 // Detail returns the one line a table shows for the row: its cause, else what the
 // host knows of the service, else the remedy.
-func (r Row) Detail() string {
-	for _, text := range []string{r.Cause, r.Facts} {
-		if text != "" {
+func (r Row) Detail() termpaint.Printed {
+	for _, text := range []termpaint.Printed{r.Cause, r.Facts} {
+		if text.String() != "" {
 			return text
 		}
 	}
@@ -50,68 +50,83 @@ func (r Row) Detail() string {
 
 // Section is one group of a report and the rows of its checks.
 type Section struct {
-	Group Group
-	Title string
-	Rows  []Row
+	Group   Group
+	Title   termpaint.Printed
+	Heading termpaint.Printed
+	Rows    []Row
 }
 
 // Count is the number of checks in one state, as the summary line words it.
 type Count struct {
 	State contracts.HealthState
-	Text  string
+	Text  termpaint.Printed
 }
 
 // View is a snapshot rendered in one language: the pieces a client lays out and
 // paints as it likes.
 type View struct {
-	Title    string
-	Banner   string
-	Header   []string
+	Title    termpaint.Printed
+	Banner   termpaint.Printed
+	Header   []termpaint.Printed
 	Sections []Section
 	Counts   []Count
-	Hint     string
-	Worst    string
+	Hint     termpaint.Printed
+	Worst    termpaint.Printed
 }
 
 // View renders the snapshot in lang: the banner, the checks grouped in report
 // order, and the summary counts with the service the hint names when something
 // fails.
 func (s Snapshot) View(lang i18n.Language) (View, error) {
-	text := &renderer{lang: lang}
+	text := newRenderer(lang)
+	view := s.buildView(text)
+	return view, text.err
+}
+
+func (s Snapshot) buildView(text *renderer) View {
 	view := View{
-		Title:  text.key(clitext.HealthBannerTitle, clitext.Params{clitext.ParamVersion: s.Daemon.Version}),
-		Banner: text.key(clitext.HealthBanner, s.bannerParams(text)),
-		Header: strings.Split(text.key(clitext.HealthHeader, nil), "\t"),
+		Title:  termpaint.Escape(text.key(clitext.HealthBannerTitle, clitext.Params{clitext.ParamVersion: s.Daemon.Version})),
+		Banner: termpaint.Escape(text.key(clitext.HealthBanner, s.bannerParams(text))),
+		Header: escapeAll(strings.Split(text.key(clitext.HealthHeader, nil), "\t")),
 		Counts: s.counts(text),
-		Hint:   text.key(clitext.HealthDetailHint, nil),
+		Hint:   termpaint.Escape(text.key(clitext.HealthDetailHint, nil)),
 	}
 	for _, group := range Groups() {
 		checks := s.inGroup(group)
 		if len(checks) == 0 {
 			continue
 		}
-		view.Sections = append(view.Sections, Section{Group: group, Title: s.groupTitle(group, text), Rows: s.rows(checks, text)})
+		title := s.groupTitle(group, text)
+		view.Sections = append(view.Sections, Section{Group: group, Title: termpaint.Escape(title), Heading: termpaint.Escape(strings.ToUpper(title)), Rows: s.buildRows(checks, text)})
 	}
 	if worst, found := s.worst(); found {
-		view.Worst = worst.Service()
+		view.Worst = termpaint.Escape(worst.Service())
 	}
-	return view, text.err
+	return view
+}
+
+func escapeAll(lines []string) []termpaint.Printed {
+	escaped := make([]termpaint.Printed, 0, len(lines))
+	for _, line := range lines {
+		escaped = append(escaped, termpaint.Escape(line))
+	}
+	return escaped
 }
 
 // Rows renders checks in lang, one row each, in the order given.
 func (s Snapshot) Rows(checks []Check, lang i18n.Language) ([]Row, error) {
-	text := &renderer{lang: lang}
-	return s.rows(checks, text), text.err
+	text := newRenderer(lang)
+	return s.buildRows(checks, text), text.err
 }
 
 // Latency renders a measured duration the way a report shows it: milliseconds
 // under a second, seconds with one decimal under a minute, a compact span beyond.
 func Latency(lang i18n.Language, elapsed time.Duration) (string, error) {
-	text := &renderer{lang: lang}
+	text := newRenderer(lang)
 	return text.latency(elapsed), text.err
 }
 
-func (s Snapshot) rows(checks []Check, text *renderer) []Row {
+func (s Snapshot) buildRows(checks []Check, text *renderer) []Row {
 	rows := make([]Row, 0, len(checks))
 	for index := range checks {
 		rows = append(rows, s.row(checks[index], text))
@@ -122,23 +137,22 @@ func (s Snapshot) rows(checks []Check, text *renderer) []Row {
 func (s Snapshot) row(check Check, text *renderer) Row {
 	report := Settled(check.Report)
 	row := Row{
-		Check:     check,
 		State:     report.State,
-		Glyph:     stateGlyph(report.State),
-		StateText: text.key(stateKey(report.State), nil),
-		Name:      checkName(check, text),
-		Account:   accountName(check, text),
+		Glyph:     termpaint.Escape(stateGlyph(report.State)),
+		StateText: termpaint.Escape(text.key(stateKey(report.State), nil)),
+		Name:      termpaint.Escape(checkName(check, text)),
+		Account:   termpaint.Escape(accountName(check, text)),
 		Default:   check.Default,
-		Facts:     s.facts(check, text),
+		Facts:     termpaint.Escape(s.facts(check, text)),
 	}
 	if report.Latency > 0 {
-		row.Latency = text.latency(report.Latency)
+		row.Latency = termpaint.Escape(text.latency(report.Latency))
 	}
 	if report.Detail.Code != 0 {
-		row.Cause = text.notice(report.Detail)
+		row.Cause = termpaint.Escape(text.notice(report.Detail))
 	}
 	if report.Remedy.Code != 0 {
-		row.Remedy = text.notice(report.Remedy)
+		row.Remedy = termpaint.Escape(text.notice(report.Remedy))
 	}
 	return row
 }
@@ -148,7 +162,8 @@ func (s Snapshot) groupTitle(group Group, text *renderer) string {
 	if group != GroupCompaction || len(s.CompactStack) == 0 {
 		return title
 	}
-	return title + "  " + text.key(clitext.HealthCompactStack, clitext.Params{clitext.ParamStack: strings.Join(s.CompactStack, stackSep)})
+	stack := strings.Join(s.CompactStack, stackSep)
+	return title + "  " + text.key(clitext.HealthCompactStack, clitext.Params{clitext.ParamStack: stack})
 }
 
 func (s Snapshot) bannerParams(text *renderer) clitext.Params {
@@ -168,11 +183,11 @@ func (s Snapshot) counts(text *renderer) []Count {
 	var counts []Count
 	for _, state := range []contracts.HealthState{contracts.HealthDown, contracts.HealthDegraded} {
 		if count := summary.Count(state); count > 0 {
-			counts = append(counts, Count{State: state, Text: text.key(summaryKey(state), clitext.Params{clitext.ParamCount: count})})
+			counts = append(counts, Count{State: state, Text: termpaint.Escape(text.key(summaryKey(state), clitext.Params{clitext.ParamCount: count}))})
 		}
 	}
 	ok := summary.Count(contracts.HealthOK)
-	return append(counts, Count{State: contracts.HealthOK, Text: text.key(clitext.HealthSummaryOK, clitext.Params{clitext.ParamCount: ok})})
+	return append(counts, Count{State: contracts.HealthOK, Text: termpaint.Escape(text.key(clitext.HealthSummaryOK, clitext.Params{clitext.ParamCount: ok}))})
 }
 
 func (s Snapshot) worst() (Check, bool) {

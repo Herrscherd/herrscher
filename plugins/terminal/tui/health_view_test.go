@@ -83,7 +83,7 @@ func TestDeepRefreshIsOneShot(t *testing.T) {
 		verbHealth:                       string(encoded),
 		verbHealth + " " + argHealthDeep: string(encoded),
 	}}
-	m := newModel(backend)
+	m := startedModel(backend)
 	m.health.open = true
 
 	deepMsg, ok := m.toggleHealthDeep()().(healthMsg)
@@ -113,7 +113,7 @@ func TestDeepRefreshIsOneShot(t *testing.T) {
 
 func TestHealthTickRefreshesThePlainStateWhileTheOverlayIsClosed(t *testing.T) {
 	backend := &fakeBackend{}
-	m := newModel(backend)
+	m := startedModel(backend)
 	m.health.open = false
 	m.health.at = time.Now().Add(-time.Hour)
 	cmd := m.healthTick()

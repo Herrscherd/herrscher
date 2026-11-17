@@ -13,22 +13,28 @@ import (
 const infoTTL = 500 * time.Millisecond
 
 func (m *model) activeInfo() (contracts.SessionInfo, bool) {
-	if m.tm == nil {
-		return contracts.SessionInfo{}, false
+	info, ok := m.sessionInfos[m.active]
+	return info, ok
+}
+
+func (m *model) knownActiveInfo() contracts.SessionInfo {
+	return m.sessionInfos[m.active]
+}
+
+func (m *model) rememberSession(info contracts.SessionInfo) {
+	if m.sessionInfos == nil {
+		m.sessionInfos = make(map[string]contracts.SessionInfo)
 	}
-	if m.infoChannel == m.active && time.Since(m.infoAt) < infoTTL {
-		return m.infoCache, m.infoKnown
+	if _, known := m.sessionInfos[info.ChannelID]; !known {
+		m.sessionInfos[info.ChannelID] = info
 	}
-	m.infoCache, m.infoKnown = contracts.SessionInfo{}, false
-	sessions := m.tm.Sessions()
+}
+
+func (m *model) rememberSessions(sessions []contracts.SessionInfo) {
+	m.sessionInfos = make(map[string]contracts.SessionInfo, len(sessions))
 	for index := range sessions {
-		if sessions[index].ChannelID == m.active {
-			m.infoCache, m.infoKnown = sessions[index], true
-			break
-		}
+		m.sessionInfos[sessions[index].ChannelID] = sessions[index]
 	}
-	m.infoChannel, m.infoAt = m.active, time.Now()
-	return m.infoCache, m.infoKnown
 }
 
 func (m *model) emptyState(width int) string {

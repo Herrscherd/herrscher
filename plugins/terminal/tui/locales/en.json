@@ -850,6 +850,34 @@
     "other": "opening a session…"
   },
   {
+    "id": "tui.session.open_pending",
+    "other": "session {{.Name}} is not ready yet, your message waits for it"
+  },
+  {
+    "id": "tui.session.history_loading",
+    "other": "loading history"
+  },
+  {
+    "id": "tui.session.history_failed",
+    "other": "history unavailable: {{.Reason}}"
+  },
+  {
+    "id": "tui.session.open_missing",
+    "other": "session {{.Name}} was not found, your message stays in the composer"
+  },
+  {
+    "id": "tui.session.open_cancelled",
+    "other": "queued message for session {{.Name}} cancelled"
+  },
+  {
+    "id": "tui.session.open_command_kept",
+    "other": "command line for session {{.Name}} kept in the composer, not sent"
+  },
+  {
+    "id": "tui.session.attachment_needs_text",
+    "other": "attachments need a message to go with them, add some text before sending"
+  },
+  {
     "id": "tui.session.start_failed",
     "other": "could not open a session: {{.Reason}}"
   },

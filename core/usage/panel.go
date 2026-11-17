@@ -74,7 +74,7 @@ func panelSummary(spend Spend, text *renderer) []string {
 	rows := &termpaint.Table{Right: map[int]bool{1: true}}
 	for index := range spend.Models[:min(len(spend.Models), panelModels)] {
 		share := spend.Models[index]
-		rows.Add(termpaint.Paint(text.pal.Accent, "●")+" "+shortModel(modelLabel(share, text)), formatMoney(text.lang, share.Cost))
+		rows.Add(termpaint.Paint(text.pal.Accent, "●")+" "+shortModel(modelLabel(share, text).String()), formatMoney(text.lang, share.Cost))
 	}
 	return append(lines, rows.Lines()...)
 }

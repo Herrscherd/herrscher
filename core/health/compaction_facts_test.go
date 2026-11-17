@@ -35,7 +35,7 @@ func TestCompactionFactsShowTheKeyTheLastReplyAndTheLastError(t *testing.T) {
 			if err != nil {
 				t.Fatalf("View: %v", err)
 			}
-			facts := view.Sections[0].Rows[0].Facts
+			facts := view.Sections[0].Rows[0].Facts.String()
 			for _, want := range tc.want {
 				if !strings.Contains(facts, want) {
 					t.Fatalf("facts = %q, want them to contain %q", facts, want)

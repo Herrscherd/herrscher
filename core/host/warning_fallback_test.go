@@ -56,5 +56,5 @@ func emitNilWarnings() {
 	newApprovalTable(nil).warnf("approvals: probe-warnf\n")
 	warnWaitOutlivesTheHook(nil, agent.HookWait)
 	serveHealth(ctx, "bad addr", health.NewHealth(time.Now()), fixedLanguageSource(i18n.English), nil)
-	consolidateOneShot(ctx, &consolidateSpy{err: consolidated}, &seedGate{}, state.Session{Name: "nil-writer"}, nil, fixedLanguageSource(i18n.English))
+	consolidateOneShot(ctx, &consolidateSpy{err: consolidated}, newSeedGate("nil-writer", nil, fixedLanguageSource(i18n.English)), state.Session{Name: "nil-writer"}, nil, fixedLanguageSource(i18n.English))
 }

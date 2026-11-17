@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"unicode/utf8"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -18,24 +19,18 @@ const (
 	NoCompactor   = "no_compactor"
 )
 
-var (
-	errNoCompactorText = errors.New("backend implements no compaction")
-	errUnknownArgKind  = errors.New("unknown notice argument kind")
-)
+var errNoCompactorText = errors.New("backend implements no compaction")
 
 // ErrNoticeMalformed reports a compaction notice that cannot be decoded.
 var ErrNoticeMalformed = errors.New("compaction notice malformed")
 
-type noticeFrame struct {
-	Code  uint16                  `json:"code"`
-	Args  []argFrame              `json:"args,omitempty"`
-	Stats *contracts.CompactStats `json:"stats,omitempty"`
-}
+const (
+	maxTextBytes   = 4 << 10
+	truncationMark = "..."
+)
 
-type argFrame struct {
-	Name  string          `json:"name"`
-	Kind  uint8           `json:"kind"`
-	Value json.RawMessage `json:"value"`
+type statsFrame struct {
+	Stats *contracts.CompactStats `json:"stats,omitempty"`
 }
 
 // Request encodes a compaction request as the frame the host sends to the bridge.
@@ -105,7 +100,7 @@ func DecodeResult(frame contracts.Event) (contracts.CompactResult, error) {
 	}
 	decoded, err := decodeFrame(frame.Value)
 	if err != nil {
-		return res, fmt.Errorf("%w: %w", ErrNoticeMalformed, err)
+		return res, err
 	}
 	res.Notice = decoded.notice
 	res.Stats = decoded.stats
@@ -122,23 +117,63 @@ func EncodeNotice(notice contracts.Notice) (string, error) {
 }
 
 func encodeFrame(notice contracts.Notice, stats *contracts.CompactStats) (string, error) {
-	frame := noticeFrame{Code: uint16(notice.Code), Args: make([]argFrame, 0, len(notice.Args)), Stats: stats}
-	for _, arg := range notice.Args {
-		value, err := json.Marshal(arg.Value())
-		if err != nil {
-			return "", fmt.Errorf("notice argument %q: %w", arg.Name(), err)
-		}
-		frame.Args = append(frame.Args, argFrame{Name: arg.Name(), Kind: uint8(arg.Kind()), Value: value})
-	}
-	encoded, err := json.Marshal(frame)
+	body, err := json.Marshal(boundNotice(notice))
 	if err != nil {
 		return "", fmt.Errorf("compaction notice code %d: %w", notice.Code, err)
 	}
-	return string(encoded), nil
+	if stats == nil {
+		return string(body), nil
+	}
+	statsPart, err := json.Marshal(statsFrame{Stats: stats})
+	if err != nil {
+		return "", fmt.Errorf("compaction stats: %w", err)
+	}
+	return string(body[:len(body)-1]) + "," + string(statsPart[1:]), nil
+}
+
+func boundNotice(notice contracts.Notice) contracts.Notice {
+	bounded := make([]contracts.Arg, 0, len(notice.Args))
+	for _, arg := range notice.Args {
+		bounded = append(bounded, boundArg(arg))
+	}
+	return contracts.Notice{Code: notice.Code, Args: bounded}
+}
+
+// Bound returns text unchanged when it is at most maxTextBytes long. Otherwise it cuts
+// text at a UTF-8 boundary to at most maxTextBytes bytes and appends "...", so the
+// result is at most maxTextBytes+3 bytes long.
+func Bound(text string) string {
+	if len(text) <= maxTextBytes {
+		return text
+	}
+	return cutUTF8(text, maxTextBytes) + truncationMark
+}
+
+func boundArg(arg contracts.Arg) contracts.Arg {
+	text, isText := arg.Value().(string)
+	if !isText {
+		return arg
+	}
+	bounded := Bound(text)
+	if bounded == text {
+		return arg
+	}
+	if arg.Kind() == contracts.ArgRef {
+		return contracts.Ref(arg.Name(), bounded)
+	}
+	return contracts.Text(arg.Name(), bounded)
+}
+
+func cutUTF8(text string, limit int) string {
+	cut := limit
+	for cut > 0 && !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+	return text[:cut]
 }
 
 // DecodeNotice decodes a notice encoded by EncodeNotice. The empty string decodes to the
-// zero notice.
+// zero notice. A value that cannot be decoded matches ErrNoticeMalformed.
 func DecodeNotice(value string) (contracts.Notice, error) {
 	decoded, err := decodeFrame(value)
 	return decoded.notice, err
@@ -153,46 +188,16 @@ func decodeFrame(value string) (decodedFrame, error) {
 	if value == "" {
 		return decodedFrame{}, nil
 	}
-	var frame noticeFrame
-	if err := json.Unmarshal([]byte(value), &frame); err != nil {
-		return decodedFrame{}, fmt.Errorf("compaction notice: %w", err)
+	var decoded decodedFrame
+	if err := json.Unmarshal([]byte(value), &decoded.notice); err != nil {
+		return decodedFrame{}, fmt.Errorf("%w: compaction notice: %w", ErrNoticeMalformed, err)
 	}
-	args := make([]contracts.Arg, 0, len(frame.Args))
-	for _, raw := range frame.Args {
-		arg, err := decodeArg(raw)
-		if err != nil {
-			return decodedFrame{}, err
-		}
-		args = append(args, arg)
+	var stats statsFrame
+	if err := json.Unmarshal([]byte(value), &stats); err != nil {
+		return decodedFrame{}, fmt.Errorf("%w: compaction stats: %w", ErrNoticeMalformed, err)
 	}
-	return decodedFrame{
-		notice: contracts.Notice{Code: contracts.Code(frame.Code), Args: args},
-		stats:  frame.Stats,
-	}, nil
-}
-
-func decodeArg(frame argFrame) (contracts.Arg, error) {
-	switch contracts.ArgKind(frame.Kind) {
-	case contracts.ArgText:
-		var text string
-		if err := json.Unmarshal(frame.Value, &text); err != nil {
-			return contracts.Arg{}, fmt.Errorf("notice argument %q: %w", frame.Name, err)
-		}
-		return contracts.Text(frame.Name, text), nil
-	case contracts.ArgRef:
-		var identifier string
-		if err := json.Unmarshal(frame.Value, &identifier); err != nil {
-			return contracts.Arg{}, fmt.Errorf("notice argument %q: %w", frame.Name, err)
-		}
-		return contracts.Ref(frame.Name, identifier), nil
-	case contracts.ArgCount:
-		var count int
-		if err := json.Unmarshal(frame.Value, &count); err != nil {
-			return contracts.Arg{}, fmt.Errorf("notice argument %q: %w", frame.Name, err)
-		}
-		return contracts.Count(count), nil
-	}
-	return contracts.Arg{}, fmt.Errorf("notice argument %q of kind %d: %w", frame.Name, frame.Kind, errUnknownArgKind)
+	decoded.stats = stats.Stats
+	return decoded, nil
 }
 
 // Failure encodes a failed compaction.

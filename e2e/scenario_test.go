@@ -45,6 +45,7 @@ func TestScenarios(t *testing.T) {
 			"waitlog":        waitLog,
 			"waitapproval":   waitApproval,
 			"descendantgone": descendantGone,
+			"instancegone":   instanceGone,
 			"sessionrunning": sessionRunning,
 			"sessionstopped": sessionStopped,
 		},

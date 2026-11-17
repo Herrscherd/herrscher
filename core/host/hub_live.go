@@ -18,9 +18,13 @@ func eventTap(publish func(string, contracts.Event), session string) func(contra
 func (h *hub) liveSink(ctx context.Context, sess state.Session) sessionSink {
 	return sessionSink{
 		Resume: func(tok string) {
-			if err := h.st.SetResumeToken(sess.Name, tok); err != nil {
-				warnLive(h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_resume_token", map[string]any{nameParam: sess.Name, detailParam: err})
-			}
+			h.keepResumeToken(sess.Name, tok)
+		},
+		TurnOpened: func(turnID string) {
+			h.openTurnMark(sess.Name, turnID)
+		},
+		TurnSettled: func() {
+			h.clearTurnMark(sess.Name)
 		},
 		Project: func(p string) {
 			if err := h.st.SetProjectPinned(sess.Name, p); err != nil {

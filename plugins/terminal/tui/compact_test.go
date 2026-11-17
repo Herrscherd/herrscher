@@ -16,7 +16,7 @@ import (
 func compactModel(t *testing.T, backend *fakeBackend) *model {
 	t.Helper()
 	backend.sessions = []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "claude"}}
-	m := newModel(backend)
+	m := startedModel(backend)
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
 	m.ensureTab("c")
 	m.active = "c"

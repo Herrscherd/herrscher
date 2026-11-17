@@ -188,7 +188,7 @@ func (m *model) boardCandidates() []boardRow {
 		return nil
 	}
 	byName := make(map[string]contracts.SessionInfo)
-	sessions := m.tm.Sessions()
+	sessions := m.boardInfos
 	for index := range sessions {
 		byName[sessions[index].Name] = sessions[index]
 	}
@@ -222,7 +222,7 @@ func (m *model) rebuildBoard() {
 func (m *model) openBoard() tea.Cmd {
 	m.surface = surfaceBoard
 	m.board = boardState{}
-	m.refreshOverviews()
+	m.loadBoard()
 	m.rebuildBoard()
 	m.relayout()
 	return m.summaryRefresh()
@@ -234,14 +234,57 @@ func (m *model) closeSurface() {
 	m.relayout()
 }
 
-func (m *model) refreshSurface() {
-	switch m.surface {
-	case surfaceBoard:
-		m.refreshOverviews()
+type surfaceMsg struct {
+	seq       uint64
+	overviews []SessionOverview
+	infos     []contracts.SessionInfo
+	readErr   error
+	parseErr  error
+}
+
+func (m *model) loadBoard() {
+	m.refreshOverviews()
+	if m.tm != nil {
+		m.boardInfos = m.tm.Sessions()
+	}
+}
+
+func (m *model) refreshSurfaceCmd() tea.Cmd {
+	if m.tm == nil || m.surface == surfaceChat || m.surfaceInFlight {
+		return nil
+	}
+	m.surfaceIssued++
+	m.surfaceInFlight = true
+	seq := m.surfaceIssued
+	backend := m.tm
+	return func() tea.Msg {
+		raw, readErr := backend.Overview()
+		var overviews []SessionOverview
+		var parseErr error
+		if readErr == nil {
+			overviews, parseErr = ParseSessionOverviews(raw)
+		}
+		return surfaceMsg{seq: seq, overviews: overviews, infos: backend.Sessions(), readErr: readErr, parseErr: parseErr}
+	}
+}
+
+func (m *model) applySurface(msg surfaceMsg) {
+	m.surfaceInFlight = false
+	if msg.seq < m.surfaceApplied {
+		return
+	}
+	m.surfaceApplied = msg.seq
+	m.boardInfos = msg.infos
+	switch {
+	case msg.readErr != nil:
+		m.flash = m.tr.t("tui.overview.preview_unavailable", map[string]any{tplArgReason: localizedReason(m.tr, msg.readErr)})
+	case msg.parseErr != nil:
+		m.flash = m.tr.t("tui.overview.preview_unreadable", map[string]any{tplArgReason: localizedReason(m.tr, msg.parseErr)})
+	default:
+		m.overviews = msg.overviews
+	}
+	if m.surface == surfaceBoard {
 		m.rebuildBoard()
-	case surfacePanes:
-		m.refreshOverviews()
-	case surfaceChat:
 	}
 }
 

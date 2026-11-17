@@ -64,6 +64,7 @@ if [ "$(uname -s)" = Linux ]; then
 	e2e_only_tests ./e2e/... > /dev/null
 	capped go test -tags e2e -count=1 ./e2e/...
 	capped go test -tags e2e -count=1 -v -run "^($(paste -sd'|' <<<"$host_only"))\$" ./core/host/
+	capped go test -tags e2e -count=1 -run '^TestE2EAttachedWindow' .
 else
 	echo "skipping the e2e scenarios: they run on Linux only" >&2
 fi

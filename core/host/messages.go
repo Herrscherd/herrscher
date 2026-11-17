@@ -43,13 +43,18 @@ func buildHostCatalog() (*i18n.Catalog, error) {
 	return i18n.NewCatalog(slog.Default(), sub)
 }
 
+func effectiveLanguage(lang i18n.Language) i18n.Language {
+	if lang != i18n.English && lang != i18n.French {
+		return i18n.English
+	}
+	return lang
+}
+
 func (m *hostMessages) text(lang i18n.Language, key string, params map[string]any) string {
 	if m == nil {
 		m = newHostMessages()
 	}
-	if lang != i18n.English && lang != i18n.French {
-		lang = i18n.English
-	}
+	lang = effectiveLanguage(lang)
 	params = renderableParams(lang, params)
 	catalog, err := m.catalog()
 	if err != nil {

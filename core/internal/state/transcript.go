@@ -12,11 +12,12 @@ import (
 // TranscriptEntry is one recorded turn side. Kept separate from the learning
 // call-journal: this is the human-visible conversation, replayed as scrollback.
 type TranscriptEntry struct {
-	Ts   string  `json:"ts"`
-	Role string  `json:"role"`
-	Text string  `json:"text"`
-	Cost float64 `json:"cost,omitempty"`
-	Kind string  `json:"kind,omitempty"`
+	Ts     string  `json:"ts"`
+	Role   string  `json:"role"`
+	Text   string  `json:"text"`
+	Cost   float64 `json:"cost,omitempty"`
+	Kind   string  `json:"kind,omitempty"`
+	TurnID string  `json:"turn,omitempty"`
 	// Per-turn usage, present on assistant entries. TokensOut is the turn's
 	// output tokens; TokensIn the input; CacheRead/CacheCreate the prompt-cache
 	// read/creation tokens; DurMs the turn's wall-clock duration in ms. All
@@ -99,8 +100,8 @@ func compactTranscript(path string) {
 		return
 	}
 	writer := bufio.NewWriter(file)
-	for _, e := range all[start:] {
-		payload, err := json.Marshal(e)
+	for idx := range all[start:] {
+		payload, err := json.Marshal(all[start+idx])
 		if err != nil {
 			continue
 		}
@@ -151,6 +152,22 @@ func ReadTranscript(path string, limit int) []TranscriptEntry {
 	}
 	if limit > 0 && len(out) > limit {
 		out = append([]TranscriptEntry(nil), out[len(out)-limit:]...)
+	}
+	return out
+}
+
+// ReadTranscriptTail returns up to limit entries from the file's last 64 KiB.
+func ReadTranscriptTail(path string, limit int) []TranscriptEntry {
+	lines := transcriptTailLines(path)
+	if limit > 0 && len(lines) > limit {
+		lines = lines[len(lines)-limit:]
+	}
+	out := make([]TranscriptEntry, 0, len(lines))
+	for _, line := range lines {
+		var entry TranscriptEntry
+		if json.Unmarshal(line, &entry) == nil {
+			out = append(out, entry)
+		}
 	}
 	return out
 }

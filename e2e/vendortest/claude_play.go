@@ -112,6 +112,8 @@ func (r *replay) runStep(streams Streams, current step, prompt string, state *tu
 		}
 		state.decided = &outcome
 		return outcomeAnswered, false, nil
+	case stepSession:
+		return outcomeAnswered, false, r.announceSession(streams.Out, current.text)
 	case stepExpect:
 		return r.judge(streams.Out, state.decided, current.text, prompt)
 	case stepUsage:
@@ -119,6 +121,14 @@ func (r *replay) runStep(streams Streams, current step, prompt string, state *tu
 		return outcomeAnswered, false, writeJSON(streams.Out, assistantUsage(current.tokens))
 	}
 	return outcomeAnswered, false, nil
+}
+
+func (r *replay) announceSession(out io.Writer, sessionID string) error {
+	r.sessionID = sessionID
+	if err := r.record("session " + sessionID); err != nil {
+		return err
+	}
+	return writeJSON(out, sessionInit(sessionID))
 }
 
 func (r *replay) apiError(out io.Writer, text, prompt string) (turnOutcome, bool, error) {

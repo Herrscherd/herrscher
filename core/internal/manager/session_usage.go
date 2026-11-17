@@ -51,7 +51,8 @@ func aggregateUsage(entries []state.TranscriptEntry) transcriptUsage {
 	}
 	summary := &usageJSON{StartedAt: entries[0].Ts}
 	var task string
-	for _, entry := range entries {
+	for idx := range entries {
+		entry := &entries[idx]
 		switch entry.Role {
 		case "assistant":
 			summary.Turns++

@@ -146,6 +146,9 @@ func (s *warningSink) await(entry *warning, budget <-chan struct{}) error {
 
 func (s *warningSink) admit(entry *warning) verdict {
 	direct := entry.direct || s.closed
+	if s.sealed {
+		return verdict{err: errWarningAbandoned, lost: s.lose()}
+	}
 	if len(entry.data) > warningEntryBytes || len(s.queue) >= warningQueueLimit || s.queuedBytes+len(entry.data) > warningQueueBytes {
 		return verdict{err: errWarningAbandoned, lost: s.lose()}
 	}

@@ -374,7 +374,6 @@ func TestLateSuccessAfterAnUnconfirmedWriteIsWrittenOnceAndNotCounted(t *testing
 	writer := newGatedWarnings("LATE")
 	t.Cleanup(writer.open)
 	sink := newWarningSink(writer, englishLostLine)
-	sink.Close()
 	if _, err := sink.Write([]byte("LATE\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("a late write behind a frozen writer returned %v, want errWarningLate", err)
 	}
@@ -443,4 +442,35 @@ func TestQueuedWarningUnconfirmedAtBudgetReturnsLateWithoutCount(t *testing.T) {
 	}
 	awaitBackground(t, frozen, "the frozen write did not return")
 	writer.open()
+}
+
+func TestAdmissionAfterTheBilanStartsNoWriteAndCountsItsLoss(t *testing.T) {
+	logs := captureDefaultLog(t)
+	var out lockedBuffer
+	sink := newWarningSink(&out, englishLostLine)
+	if _, err := sink.Write([]byte("before\n")); err != nil {
+		t.Fatal(err)
+	}
+	sink.Close()
+	writesBefore := ask(sink, func() int { return len(sink.writes) })
+
+	if _, err := sink.Write([]byte("after\n")); !errors.Is(err, errWarningAbandoned) {
+		t.Fatalf("a write admitted after the bilan returned %v, want errWarningAbandoned", err)
+	}
+	if busy := ask(sink, func() bool { return sink.inflight != nil }); busy {
+		t.Fatal("a write admitted after the bilan started an I/O goroutine")
+	}
+	if writesAfter := ask(sink, func() int { return len(sink.writes) }); writesAfter != writesBefore {
+		t.Fatalf("the writes joined by Close went from %d to %d after a refused admission, want unchanged", writesBefore, writesAfter)
+	}
+	if out.String() != "before\n" {
+		t.Fatalf("output = %q, want only the write before Close", out.String())
+	}
+	if n := strings.Count(logs.String(), "not all confirmed"); n != 1 {
+		t.Fatalf("logged %d unconfirmed lines for the refused admission, want 1: %q", n, logs.String())
+	}
+	line := lastUnconfirmedLine(logs.String())
+	if logField(line, "lost") != "1" || logField(line, "unconfirmed") != "0" {
+		t.Fatalf("the refused admission logged %q, want lost=1 and unconfirmed=0", line)
+	}
 }

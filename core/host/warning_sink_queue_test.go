@@ -103,18 +103,21 @@ func TestLostSummaryUsesTheSingularForOneWarning(t *testing.T) {
 	}
 }
 
-func TestWarningSinkWritesAfterCloseReachTheOutput(t *testing.T) {
+func TestWarningSinkRefusesWritesAfterCloseAndCountsThem(t *testing.T) {
 	var out lockedBuffer
 	sink := newWarningSink(&out, englishLostLine)
 	if _, err := sink.Write([]byte("before\n")); err != nil {
 		t.Fatal(err)
 	}
 	sink.Close()
-	if _, err := sink.Write([]byte("after\n")); err != nil {
-		t.Fatalf("a write after Close returned %v, want it written", err)
+	if _, err := sink.Write([]byte("after\n")); !errors.Is(err, errWarningAbandoned) {
+		t.Fatalf("a write after Close returned %v, want errWarningAbandoned: the bilan is sealed", err)
 	}
-	if got := out.String(); got != "before\nafter\n" {
-		t.Fatalf("output after Close = %q, want the write before it then the write after it", got)
+	if got := out.String(); got != "before\n" {
+		t.Fatalf("output after Close = %q, want only the write before it", got)
+	}
+	if got := droppedWarnings(sink); got != 1 {
+		t.Fatalf("dropped %d warnings after Close, want 1", got)
 	}
 }
 
@@ -125,8 +128,8 @@ func TestWarningSinkAfterCloseIsBoundedByAStalledWriter(t *testing.T) {
 	sink.Close()
 
 	started := time.Now()
-	if _, err := sink.Write([]byte("stuck\n")); !errors.Is(err, errWarningLate) {
-		t.Fatalf("a write behind a stalled writer after Close returned %v, want errWarningLate", err)
+	if _, err := sink.Write([]byte("stuck\n")); !errors.Is(err, errWarningAbandoned) {
+		t.Fatalf("a write behind a stalled writer after Close returned %v, want errWarningAbandoned", err)
 	}
 	if elapsed := time.Since(started); elapsed > time.Second {
 		t.Fatalf("a write after Close held %v behind a stalled writer, want under 1s", elapsed.Round(time.Millisecond))
@@ -224,7 +227,6 @@ func TestLateWriteKeepsTheBytesItWasGiven(t *testing.T) {
 	writer := newGatedWarnings("LATEMSG")
 	t.Cleanup(writer.open)
 	sink := newWarningSink(writer, englishLostLine)
-	sink.Close()
 	buf := []byte("LATEMSG\n")
 	if _, err := sink.Write(buf); !errors.Is(err, errWarningLate) {
 		t.Fatalf("a late write behind a frozen writer returned %v, want errWarningLate", err)

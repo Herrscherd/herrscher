@@ -39,11 +39,9 @@ func TestOverrunWaitsForAPendingDirectWriteInsteadOfBeingRefused(t *testing.T) {
 	writer := newGatedWarnings("late")
 	t.Cleanup(writer.open)
 	sink := newWarningSink(writer, englishLostLine)
-	sink.Close()
+	_ = sink.Enqueue([]byte("late\n"))
+	awaitGatedWrite(t, writer)
 
-	if _, err := sink.Write([]byte("late\n")); !errors.Is(err, errWarningLate) {
-		t.Fatalf("a late write behind a frozen writer returned %v, want errWarningLate", err)
-	}
 	time.AfterFunc(50*time.Millisecond, writer.open)
 	if err := sink.announce("overrun"); err != nil {
 		t.Fatalf("the overrun was refused behind a direct write that was then released: %v", err)
@@ -63,7 +61,6 @@ func TestOverrunIsCountedWhenTheWriterStaysFrozenForTheWholeBudget(t *testing.T)
 	writer := newGatedWarnings("late")
 	t.Cleanup(writer.open)
 	sink := newWarningSink(writer, englishLostLine)
-	sink.Close()
 	if _, err := sink.Write([]byte("late\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("a late write behind a frozen writer returned %v, want errWarningLate", err)
 	}

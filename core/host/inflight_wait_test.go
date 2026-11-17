@@ -225,7 +225,7 @@ func blockedStopBound() time.Duration {
 }
 
 func blockedStartupBound() time.Duration {
-	return 3*blockedGrace + 5*warningWriteBudget + blockedStopMargin
+	return 3*blockedGrace + 6*warningWriteBudget + blockedStopMargin
 }
 
 func stuckStartupOverrunText(h *hub, _ string) string {

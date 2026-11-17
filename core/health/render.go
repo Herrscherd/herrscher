@@ -1,14 +1,19 @@
 package health
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
@@ -26,9 +31,10 @@ const (
 // state and names the worst one when something fails. pal paints each part; the
 // zero Palette writes plain text with the same alignment.
 func (s Snapshot) Table(writer io.Writer, lang i18n.Language, pal termpaint.Palette) error {
-	view, err := s.View(lang)
-	if err != nil {
-		return err
+	text := newRenderer(lang)
+	view := s.buildView(text)
+	if text.err != nil {
+		return text.err
 	}
 	out := &lineWriter{writer: writer}
 	out.line(termpaint.Paint(pal.Strong, view.Title) + " " + termpaint.Paint(pal.Dim, view.Banner))
@@ -54,11 +60,8 @@ func (s Snapshot) Table(writer io.Writer, lang i18n.Language, pal termpaint.Pale
 // latency and the facts of each one, then its state, cause and remedy on aligned
 // rows.
 func (s Snapshot) Details(writer io.Writer, checks []Check, lang i18n.Language, pal termpaint.Palette) error {
-	rows, err := s.Rows(checks, lang)
-	if err != nil {
-		return err
-	}
-	text := &renderer{lang: lang}
+	text := newRenderer(lang)
+	rows := s.buildRows(checks, text)
 	labels := [...]string{
 		text.key(clitext.HealthDetailState, nil),
 		text.key(clitext.HealthDetailCause, nil),
@@ -240,8 +243,13 @@ func (w *lineWriter) line(text string) {
 }
 
 type renderer struct {
-	lang i18n.Language
-	err  error
+	lang    i18n.Language
+	notices *contracts.Renderer
+	err     error
+}
+
+func newRenderer(lang i18n.Language) *renderer {
+	return &renderer{lang: lang, notices: contracts.NewRenderer()}
 }
 
 func (r *renderer) key(key clitext.Key, params clitext.Params) string {
@@ -251,9 +259,51 @@ func (r *renderer) key(key clitext.Key, params clitext.Params) string {
 }
 
 func (r *renderer) notice(notice contracts.Notice) string {
-	value, err := contracts.NewRenderer().Render(r.lang, notice)
+	value, err := r.notices.Render(r.lang, notice)
+	if fallsBackToArguments(err) {
+		return unrenderedNotice(notice)
+	}
 	r.keep(err)
 	return value
+}
+
+func fallsBackToArguments(err error) bool {
+	return errors.Is(err, contracts.ErrUnknownCode) || errors.Is(err, contracts.ErrNoticeArgs)
+}
+
+func unrenderedNotice(notice contracts.Notice) string {
+	texts := make([]string, 0, len(notice.Args))
+	for _, arg := range notice.Args {
+		if text, shown := argumentText(arg.Value()); shown {
+			texts = append(texts, text)
+		}
+	}
+	if len(texts) == 0 {
+		return strconv.FormatUint(uint64(notice.Code), 10)
+	}
+	return strings.Join(texts, factsSep)
+}
+
+func argumentText(value any) (string, bool) {
+	switch typed := value.(type) {
+	case string:
+		return boundedText(typed)
+	case json.RawMessage:
+		var text string
+		if err := json.Unmarshal(typed, &text); err == nil {
+			return boundedText(text)
+		}
+		var compacted bytes.Buffer
+		if err := json.Compact(&compacted, typed); err != nil {
+			return boundedText(string(typed))
+		}
+		return boundedText(compacted.String())
+	}
+	return "", false
+}
+
+func boundedText(text string) (string, bool) {
+	return compactwire.Bound(text), text != ""
 }
 
 func (r *renderer) keep(err error) {

@@ -77,7 +77,12 @@ type View struct {
 // order, and the summary counts with the service the hint names when something
 // fails.
 func (s Snapshot) View(lang i18n.Language) (View, error) {
-	text := &renderer{lang: lang}
+	text := newRenderer(lang)
+	view := s.buildView(text)
+	return view, text.err
+}
+
+func (s Snapshot) buildView(text *renderer) View {
 	view := View{
 		Title:  text.key(clitext.HealthBannerTitle, clitext.Params{clitext.ParamVersion: s.Daemon.Version}),
 		Banner: text.key(clitext.HealthBanner, s.bannerParams(text)),
@@ -90,28 +95,28 @@ func (s Snapshot) View(lang i18n.Language) (View, error) {
 		if len(checks) == 0 {
 			continue
 		}
-		view.Sections = append(view.Sections, Section{Group: group, Title: s.groupTitle(group, text), Rows: s.rows(checks, text)})
+		view.Sections = append(view.Sections, Section{Group: group, Title: s.groupTitle(group, text), Rows: s.buildRows(checks, text)})
 	}
 	if worst, found := s.worst(); found {
 		view.Worst = worst.Service()
 	}
-	return view, text.err
+	return view
 }
 
 // Rows renders checks in lang, one row each, in the order given.
 func (s Snapshot) Rows(checks []Check, lang i18n.Language) ([]Row, error) {
-	text := &renderer{lang: lang}
-	return s.rows(checks, text), text.err
+	text := newRenderer(lang)
+	return s.buildRows(checks, text), text.err
 }
 
 // Latency renders a measured duration the way a report shows it: milliseconds
 // under a second, seconds with one decimal under a minute, a compact span beyond.
 func Latency(lang i18n.Language, elapsed time.Duration) (string, error) {
-	text := &renderer{lang: lang}
+	text := newRenderer(lang)
 	return text.latency(elapsed), text.err
 }
 
-func (s Snapshot) rows(checks []Check, text *renderer) []Row {
+func (s Snapshot) buildRows(checks []Check, text *renderer) []Row {
 	rows := make([]Row, 0, len(checks))
 	for index := range checks {
 		rows = append(rows, s.row(checks[index], text))

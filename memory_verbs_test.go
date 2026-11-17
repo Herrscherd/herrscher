@@ -14,7 +14,7 @@ import (
 
 func mkReg(t *testing.T) *cli.Registry {
 	t.Helper()
-	reg, err := host.NewRegistry(context.Background(), clitext.NewMessages(), nil, host.Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json"})
+	reg, err := host.NewRegistry(context.Background(), clitext.NewMessages(), host.NewMessages(), nil, host.Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)
 	}

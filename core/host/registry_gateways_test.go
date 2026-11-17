@@ -20,7 +20,7 @@ func TestNewRegistryWiresTheTerminalAdmin(t *testing.T) {
 		{Gateway: kindGateway{"chat"}, Admin: namedAdmin{labeledAdmin{"chat"}}},
 		{Gateway: kindGateway{"terminal"}, Admin: namedAdmin{labeledAdmin{"terminal"}}},
 	}
-	reg, err := NewRegistry(context.Background(), clitext.NewMessages(), gws, Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json"})
+	reg, err := NewRegistry(context.Background(), clitext.NewMessages(), NewMessages(), gws, Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestNewRegistryWiresTheTerminalAdmin(t *testing.T) {
 }
 
 func TestNewRegistryWithoutTerminalGatewayStillNeedsAHome(t *testing.T) {
-	reg, err := NewRegistry(context.Background(), clitext.NewMessages(), nil, Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json"})
+	reg, err := NewRegistry(context.Background(), clitext.NewMessages(), NewMessages(), nil, Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}

@@ -64,7 +64,7 @@ func TestRunHubClosesItsGatewaysWhenTheStateCannotLoad(t *testing.T) {
 	}
 	gateway := &closingGateway{}
 
-	err := RunHub(context.Background(), clitext.NewMessages(), nil, []contracts.Gateway{gateway}, Options{StatePath: statePath, Runtime: isolatedRuntimeDir(t)})
+	err := RunHub(context.Background(), clitext.NewMessages(), NewMessages(), nil, []contracts.Gateway{gateway}, Options{StatePath: statePath, Runtime: isolatedRuntimeDir(t)})
 
 	if err == nil {
 		t.Fatal("RunHub accepted a corrupt state file")
@@ -83,7 +83,7 @@ func TestRunHubCancelsTheStartContextBeforeClosingItsGateways(t *testing.T) {
 	}
 	gateway := &closingGateway{startErr: ctx.Err}
 
-	err := RunHub(ctx, clitext.NewMessages(), nil, []contracts.Gateway{gateway}, Options{StatePath: statePath, Runtime: isolatedRuntimeDir(t)})
+	err := RunHub(ctx, clitext.NewMessages(), NewMessages(), nil, []contracts.Gateway{gateway}, Options{StatePath: statePath, Runtime: isolatedRuntimeDir(t)})
 
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("RunHub must return the cancellation of its run context, got %v", err)

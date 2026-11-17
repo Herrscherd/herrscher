@@ -172,12 +172,12 @@ func TestApproveHookAnswersWithoutBuildingTheRegistry(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := runApprove(context.Background(), testRuntime(t), testMessages(), []string{"list"}); err == nil {
+	if err := runApprove(context.Background(), testRuntime(t), testMessages(), host.NewMessages(), []string{"list"}); err == nil {
 		t.Fatal("`approve list` built a registry out of an unparseable config.json")
 	}
 
 	read := swapStdio(t, `{"tool_name":"Bash","tool_input":{"command":"ls"}}`)
-	err := runApprove(context.Background(), testRuntime(t), testMessages(), []string{"hook"})
+	err := runApprove(context.Background(), testRuntime(t), testMessages(), host.NewMessages(), []string{"hook"})
 	out, errOut := read()
 	if err != nil {
 		t.Fatalf("the hook failed, which the vendor CLI reads as a crash: %v", err)

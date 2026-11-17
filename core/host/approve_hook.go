@@ -111,11 +111,10 @@ func RunPermissionHook(ctx context.Context, owner *Messages, stdin io.Reader, ou
 }
 
 // RunApprovalHook is RunPermissionHook wired to the operator daemon.
-func RunApprovalHook(ctx context.Context, layout RuntimeLayout, stdin io.Reader, out, errOut io.Writer) error {
+func RunApprovalHook(ctx context.Context, layout RuntimeLayout, owner *Messages, stdin io.Reader, out, errOut io.Writer) error {
 	target := sync.OnceValue(func() string {
 		return commandSocketTargetFrom(layout, func() string { return ServedInstanceID(DefaultStatePath(), "") })
 	})
-	owner := NewMessages()
 	return RunPermissionHook(ctx, owner, stdin, out, errOut, target, func(c context.Context, argv []string) (string, bool, error) {
 		return dispatchToOperatorDaemon(c, owner.owner, layout, target(), argv)
 	})

@@ -126,12 +126,12 @@ func TestNativeSpawnEnvironmentCarriesNoGatewayVariables(t *testing.T) {
 	t.Setenv(EnvGatewayToken, "tok")
 	CaptureGatewayCreds()
 
-	spawnEnv, err := spawnEnvFor(CatalogEntry{
+	spawnEnv, err := spawnEnvFor(newHostMessages(), CatalogEntry{
 		Vendor:    "claude",
 		ModelSpec: contracts.ModelSpec{ID: "m", Label: "M", Arg: "m", Route: contracts.RouteNative},
 	}, os.Getenv)
 	if err != nil {
-		t.Fatalf("spawnEnvFor(native): %v", err)
+		t.Fatalf("spawnEnvFor(newHostMessages(), native): %v", err)
 	}
 	for _, kv := range contracts.MergeEnv(os.Environ(), spawnEnv) {
 		if strings.HasPrefix(kv, EnvGatewayURL+"=") || strings.HasPrefix(kv, EnvGatewayToken+"=") {
@@ -174,12 +174,12 @@ func TestLoadGatewayCredsAcceptsFullConfig(t *testing.T) {
 }
 
 func TestBackendRequestNativeInjectsNothing(t *testing.T) {
-	env, err := spawnEnvFor(CatalogEntry{
+	env, err := spawnEnvFor(newHostMessages(), CatalogEntry{
 		Vendor:    "claude",
 		ModelSpec: contracts.ModelSpec{ID: "m", Label: "M", Arg: "m", Route: contracts.RouteNative},
 	}, func(string) string { return "" })
 	if err != nil {
-		t.Fatalf("spawnEnvFor(native): %v", err)
+		t.Fatalf("spawnEnvFor(newHostMessages(), native): %v", err)
 	}
 	if len(env) != 0 {
 		t.Fatalf("native route produced env %+v, want empty", env)
@@ -187,17 +187,17 @@ func TestBackendRequestNativeInjectsNothing(t *testing.T) {
 }
 
 func TestBackendRequestGatewayWithoutCredsFails(t *testing.T) {
-	_, err := spawnEnvFor(CatalogEntry{
+	_, err := spawnEnvFor(newHostMessages(), CatalogEntry{
 		Vendor:    "claude",
 		ModelSpec: contracts.ModelSpec{ID: "g", Label: "G", Arg: "g", Route: contracts.RouteGateway},
 	}, func(string) string { return "" })
 	if err == nil {
-		t.Fatal("spawnEnvFor(gateway) succeeded with no credentials. It must fail closed")
+		t.Fatal("spawnEnvFor(newHostMessages(), gateway) succeeded with no credentials. It must fail closed")
 	}
 }
 
 func TestBuildBackendForRejectsUnknownModel(t *testing.T) {
-	_, err := BuildBackendFor(context.Background(), BackendRequest{
+	_, err := BuildBackendFor(context.Background(), NewMessages(), BackendRequest{
 		Vendor: "claude", Cmd: "claude", ModelID: "no-such-model",
 	})
 	if err == nil {
@@ -210,7 +210,7 @@ func TestBuildBackendForRejectsUnknownModel(t *testing.T) {
 
 func TestBuildBackendForRefusesAModellessSpawnUnderGatewayOnly(t *testing.T) {
 	t.Setenv("HERRSCHER_ROUTE_POLICY", "gateway-only")
-	_, err := BuildBackendFor(context.Background(), BackendRequest{Vendor: "claude", Cmd: "claude"})
+	_, err := BuildBackendFor(context.Background(), NewMessages(), BackendRequest{Vendor: "claude", Cmd: "claude"})
 	if err == nil {
 		t.Fatal("BuildBackendFor spawned with no model under gateway-only. It would run on the local login")
 	}
@@ -230,7 +230,7 @@ func TestBuildBackendForWithoutModelIDKeepsLegacyPath(t *testing.T) {
 		},
 	})
 
-	if _, err := BuildBackendFor(context.Background(), BackendRequest{
+	if _, err := BuildBackendFor(context.Background(), NewMessages(), BackendRequest{
 		Vendor: "claude", Cmd: "claude", Kind: "oneshot",
 	}); err != nil {
 		t.Fatalf("legacy path (no ModelID) failed: %v", err)
@@ -262,7 +262,7 @@ func TestBuildBackendForInjectsResolvedGatewayEnv(t *testing.T) {
 	var cfg contracts.PluginConfig
 	gatewayPlugin(t, &cfg)
 
-	if _, err := BuildBackendFor(context.Background(), BackendRequest{
+	if _, err := BuildBackendFor(context.Background(), NewMessages(), BackendRequest{
 		Cmd: "claude", ModelID: "gw-opus",
 	}); err != nil {
 		t.Fatalf("BuildBackendFor: %v", err)
@@ -306,7 +306,7 @@ func TestBuildBackendForSetsModelSettingOnNativeRoute(t *testing.T) {
 	var cfg contracts.PluginConfig
 	nativePlugin(t, &cfg)
 
-	if _, err := BuildBackendFor(context.Background(), BackendRequest{
+	if _, err := BuildBackendFor(context.Background(), NewMessages(), BackendRequest{
 		Cmd: "claude", ModelID: "native-opus",
 	}); err != nil {
 		t.Fatalf("BuildBackendFor: %v", err)
@@ -320,7 +320,7 @@ func TestBuildBackendForSetsModelSettingOnGatewayRoute(t *testing.T) {
 	var cfg contracts.PluginConfig
 	gatewayPlugin(t, &cfg)
 
-	if _, err := BuildBackendFor(context.Background(), BackendRequest{
+	if _, err := BuildBackendFor(context.Background(), NewMessages(), BackendRequest{
 		Cmd: "claude", ModelID: "gw-opus",
 	}); err != nil {
 		t.Fatalf("BuildBackendFor: %v", err)
@@ -341,7 +341,7 @@ func TestBuildBackendForRejectsVendorModelMismatch(t *testing.T) {
 		},
 	})
 
-	_, err := BuildBackendFor(context.Background(), BackendRequest{
+	_, err := BuildBackendFor(context.Background(), NewMessages(), BackendRequest{
 		Vendor: "codex", Cmd: "codex", ModelID: "gw-opus",
 	})
 	if err == nil {
@@ -355,7 +355,7 @@ func TestBuildBackendForRejectsVendorModelMismatch(t *testing.T) {
 func TestBuildBackendForAcceptsMatchingVendor(t *testing.T) {
 	var cfg contracts.PluginConfig
 	nativePlugin(t, &cfg)
-	if _, err := BuildBackendFor(context.Background(), BackendRequest{
+	if _, err := BuildBackendFor(context.Background(), NewMessages(), BackendRequest{
 		Vendor: "claude", Cmd: "claude", ModelID: "native-opus",
 	}); err != nil {
 		t.Fatalf("matching vendor+model rejected: %v", err)
@@ -374,7 +374,7 @@ func TestBuildBackendForRefusesGatewayModelWithRemoteBackend(t *testing.T) {
 	gatewayPlugin(t, &cfg)
 	fake := &fakeRemoteResolver{}
 
-	_, err := BuildBackendFor(context.Background(), BackendRequest{Cmd: "claude", ModelID: "gw-opus", resolver: fake})
+	_, err := BuildBackendFor(context.Background(), NewMessages(), BackendRequest{Cmd: "claude", ModelID: "gw-opus", resolver: fake})
 	if err == nil {
 		t.Fatal("a gateway model resolved through the remote backend resolver must be refused, not silently stripped of its credentials")
 	}
@@ -387,7 +387,7 @@ func TestBuildBackendForRefusesGatewayModelWithRemoteBackend(t *testing.T) {
 }
 
 func TestBuildBackendForKeepsRemoteBackendWithoutModel(t *testing.T) {
-	be, err := BuildBackendFor(context.Background(), BackendRequest{Vendor: "claude", Cmd: "claude", resolver: &fakeRemoteResolver{}})
+	be, err := BuildBackendFor(context.Background(), NewMessages(), BackendRequest{Vendor: "claude", Cmd: "claude", resolver: &fakeRemoteResolver{}})
 	if err != nil {
 		t.Fatalf("BuildBackendFor: %v", err)
 	}
@@ -399,7 +399,7 @@ func TestBuildBackendForKeepsRemoteBackendWithoutModel(t *testing.T) {
 func TestBuildBackendForRefusesAccountWithRemoteBackend(t *testing.T) {
 	fake := &fakeRemoteResolver{}
 
-	_, err := BuildBackendFor(context.Background(), BackendRequest{Vendor: "claude", Cmd: "claude", Account: "perso", resolver: fake})
+	_, err := BuildBackendFor(context.Background(), NewMessages(), BackendRequest{Vendor: "claude", Cmd: "claude", Account: "perso", resolver: fake})
 	if err == nil {
 		t.Fatal("an account on a remote backend must be refused, not silently ignored")
 	}

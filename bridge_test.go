@@ -20,7 +20,7 @@ func (fakeExtractor) Extract(_ context.Context, _, _ string) ([]orchestrator.Can
 
 func TestBuildOrchestratorLearnerWhenExtractorConfigured(t *testing.T) {
 	orchestrator.RegisterExtractor("b2-fake", fakeExtractor{})
-	orch := buildOrchestrator(context.Background(), testMessages(), nil, "sess", "", "",
+	orch := buildOrchestrator(context.Background(), testMessages(), host.NewMessages(), nil, "sess", "", "",
 		learnConfig{extractor: "b2-fake", journal: ".neublox/calls.log", consolidateEvery: 3}, host.Logger(false))
 	if _, ok := orch.(*orchestrator.Learner); !ok {
 		t.Fatalf("want *orchestrator.Learner when an extractor is configured, got %T", orch)
@@ -28,7 +28,7 @@ func TestBuildOrchestratorLearnerWhenExtractorConfigured(t *testing.T) {
 }
 
 func TestBuildOrchestratorCuratorWhenNoExtractor(t *testing.T) {
-	orch := buildOrchestrator(context.Background(), testMessages(), nil, "sess", "", "",
+	orch := buildOrchestrator(context.Background(), testMessages(), host.NewMessages(), nil, "sess", "", "",
 		learnConfig{}, host.Logger(false))
 	if _, ok := orch.(*orchestrator.Curator); !ok {
 		t.Fatalf("want plain *orchestrator.Curator with no extractor, got %T", orch)
@@ -73,7 +73,7 @@ func (stubBackend) Respond(context.Context, contracts.Prompt, func(contracts.Bac
 func (stubBackend) Close() error { return nil }
 
 func TestNewBackendForRefusesModelWithRemoteBackend(t *testing.T) {
-	_, err := newBackendFor(context.Background(), testMessages(), remoteStub{}, host.BackendRequest{
+	_, err := newBackendFor(context.Background(), testMessages(), host.NewMessages(), remoteStub{}, host.BackendRequest{
 		Cmd: "claude", ModelID: "gw-claude-opus-5",
 	})
 	if err == nil {
@@ -85,7 +85,7 @@ func TestNewBackendForRefusesModelWithRemoteBackend(t *testing.T) {
 }
 
 func TestNewBackendForKeepsRemoteBackendWithoutModel(t *testing.T) {
-	be, err := newBackendFor(context.Background(), testMessages(), remoteStub{}, host.BackendRequest{Cmd: "claude"})
+	be, err := newBackendFor(context.Background(), testMessages(), host.NewMessages(), remoteStub{}, host.BackendRequest{Cmd: "claude"})
 	if err != nil {
 		t.Fatalf("newBackendFor: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestNewBackendForKeepsRemoteBackendWithoutModel(t *testing.T) {
 }
 
 func TestNewBackendForRefusesAccountWithRemoteBackend(t *testing.T) {
-	_, err := newBackendFor(context.Background(), testMessages(), remoteStub{}, host.BackendRequest{Cmd: "claude", Account: "perso"})
+	_, err := newBackendFor(context.Background(), testMessages(), host.NewMessages(), remoteStub{}, host.BackendRequest{Cmd: "claude", Account: "perso"})
 	if err == nil {
 		t.Fatal("remote backend + account must be refused")
 	}

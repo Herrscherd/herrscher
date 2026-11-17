@@ -28,7 +28,7 @@ func TestAnswerApprovalPickIsSessionScoped(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := newTestPendingApproval(tc.owner)
 			defer registerTestApproval(t, approvalTab, p)()
-			if got := answerApprovalPick(approvalTab, newSessionTable(), tc.clicker, approvalPickPrefix+p.id+":allow"); got != tc.swallowd {
+			if got := answerApprovalPick(approvalTab, newSessionTable(newHostMessages()), tc.clicker, approvalPickPrefix+p.id+":allow"); got != tc.swallowd {
 				t.Fatalf("answerApprovalPick = %v, want %v", got, tc.swallowd)
 			}
 			assertSettlement(t, p, tc.answered)
@@ -79,7 +79,7 @@ func TestDriverEnqueueIsBounded(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			d := newSessionDriver("full", nil, make(chan contracts.Event, 1), make(chan contracts.Event), io.Discard)
+			d := newSessionDriver(newHostMessages(), "full", nil, make(chan contracts.Event, 1), make(chan contracts.Event), io.Discard)
 			d.enqueueTimeout = 50 * time.Millisecond
 			for len(d.queue) < cap(d.queue) {
 				d.queue <- queued{ev: contracts.Event{T: eventwire.EventInput}}
@@ -101,7 +101,7 @@ func TestDriverEnqueueIsBounded(t *testing.T) {
 func TestGoDeadDoesNotHoldTheHubLockWhileWaiting(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		stuck := make(chan struct{})
-		h := testHub(&hub{warnings: io.Discard, live: make(map[string]liveSession), teardownGrace: 100 * time.Millisecond})
+		h := testHub(&hub{messages: newHostMessages(), warnings: io.Discard, live: make(map[string]liveSession), teardownGrace: 100 * time.Millisecond})
 		h.live["wedged"] = liveSession{cancel: func() {}, done: stuck, release: func() {}}
 
 		returned := make(chan struct{})

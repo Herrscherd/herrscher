@@ -66,7 +66,7 @@ func TestSessionLangRefusesAnythingOutsideTheClosedSetInTheSessionLanguage(t *te
 	if textErr != nil {
 		t.Fatal(textErr)
 	}
-	got := localizeHostError(commandErrorLanguage(st, i18n.English, contracts.Input{Args: map[string]string{paramName: "alpha"}}), err).Error()
+	got := localizeHostError(newHostMessages(), commandErrorLanguage(st, i18n.English, contracts.Input{Args: map[string]string{paramName: "alpha"}}), err).Error()
 	if !strings.Contains(got, phrase) || strings.Contains(got, errUnsupportedLang.Error()) {
 		t.Fatalf("error for a french session = %q, want the french phrase %q", got, phrase)
 	}
@@ -74,7 +74,7 @@ func TestSessionLangRefusesAnythingOutsideTheClosedSetInTheSessionLanguage(t *te
 
 func TestLocalizeHostErrorTranslatesEverySentinelInOneError(t *testing.T) {
 	err := fmt.Errorf("%w; %w", errNoPendingChoice, errUnsupportedLang)
-	got := localizeHostError(i18n.French, err).Error()
+	got := localizeHostError(newHostMessages(), i18n.French, err).Error()
 	for _, sentinel := range []error{errNoPendingChoice, errUnsupportedLang} {
 		if strings.Contains(got, sentinel.Error()) {
 			t.Fatalf("%q still carries the english sentinel %q", got, sentinel.Error())

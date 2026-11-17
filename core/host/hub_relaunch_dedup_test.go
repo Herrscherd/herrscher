@@ -17,7 +17,7 @@ func TestSettledStopStartsEachStuckSessionOnce(t *testing.T) {
 	if err := st.AddSession(state.Session{Name: "stuck", ChannelID: "c1", Incarnation: "stuck"}); err != nil {
 		t.Fatal(err)
 	}
-	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable())
+	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()))
 	h.runtime = isolatedRuntimeDir(t)
 	settled := make(chan struct{})
 	stillStopping := true

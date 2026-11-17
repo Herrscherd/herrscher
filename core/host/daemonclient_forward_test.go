@@ -20,7 +20,7 @@ func (d errDispatcher) Dispatch(context.Context, []string) (string, error) { ret
 func serveOneCommand(t *testing.T, layout RuntimeLayout, instance string, disp dispatcher) {
 	t.Helper()
 	path := CommandSocketPathIn(layout, instance)
-	ln, err := listenCommandSocket(t.Context(), layout, path)
+	ln, err := listenCommandSocket(t.Context(), newHostMessages(), layout, path)
 	if err != nil {
 		t.Fatalf("listenCommandSocket: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestForwardToDaemonReturnsTheDaemonsAnswer(t *testing.T) {
 	}
 
 	argv := []string{"plugin-kind", "channel", "read", "--limit", "5"}
-	out, handled, err := ForwardToDaemon(context.Background(), layout, statePath, "", argv)
+	out, handled, err := ForwardToDaemon(context.Background(), NewMessages(), layout, statePath, "", argv)
 	if err != nil {
 		t.Fatalf("ForwardToDaemon: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestForwardToDaemonSurfacesTheDaemonsError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, handled, err := ForwardToDaemon(context.Background(), layout, statePath, "", []string{"nope"})
+	out, handled, err := ForwardToDaemon(context.Background(), NewMessages(), layout, statePath, "", []string{"nope"})
 	if !handled {
 		t.Fatal("handled = false, want true: the daemon answered")
 	}
@@ -104,7 +104,7 @@ func TestForwardToDaemonSurfacesTheDaemonsError(t *testing.T) {
 func TestForwardToDaemonReportsNoDaemon(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "absent.json")
 
-	out, handled, err := ForwardToDaemon(context.Background(), testRuntime(t), statePath, uniqueInstance(), []string{"whatever"})
+	out, handled, err := ForwardToDaemon(context.Background(), NewMessages(), testRuntime(t), statePath, uniqueInstance(), []string{"whatever"})
 	if handled {
 		t.Fatal("handled = true, want false: nothing is listening")
 	}

@@ -94,7 +94,7 @@ func newTestCoordinatorFull(cr *fakeCreator, known []string, clean bool, session
 		km[k] = true
 	}
 	seed := func(sess, task string) bool { *seeded = append(*seeded, sess+"|"+task); return true }
-	return newCoordinator(cr, fakeAgents{known: km}, &fakeWTC{clean: clean, branches: branches}, fakeSessions{list: sessions}, closer, seed)
+	return newCoordinator(newHostMessages(), cr, fakeAgents{known: km}, &fakeWTC{clean: clean, branches: branches}, fakeSessions{list: sessions}, closer, seed)
 }
 
 func TestHandoffCreatesBOnABranchAndSeeds(t *testing.T) {
@@ -196,7 +196,7 @@ func TestHandoffRollsBackOnSeedTimeout(t *testing.T) {
 	closer := &fakeCloser{}
 	km := map[string]bool{"scripter": true}
 	seedFunc := func(_, _ string) bool { return false }
-	c := newCoordinator(cr, fakeAgents{known: km}, &fakeWTC{clean: true}, fakeSessions{list: []state.Session{
+	c := newCoordinator(newHostMessages(), cr, fakeAgents{known: km}, &fakeWTC{clean: true}, fakeSessions{list: []state.Session{
 		{Name: "alpha", Project: "game", Worktree: "/wt/alpha"},
 	}}, closer, seedFunc)
 
@@ -220,7 +220,7 @@ func TestHandoffRollsBackOnSeedTimeout(t *testing.T) {
 func TestSeedWithRetryHonoursCtxCancel(t *testing.T) {
 	var attempts int
 	seedFunc := func(_, _ string) bool { attempts++; return false }
-	c := newCoordinator(&fakeCreator{}, fakeAgents{}, &fakeWTC{}, fakeSessions{}, &fakeCloser{}, seedFunc)
+	c := newCoordinator(newHostMessages(), &fakeCreator{}, fakeAgents{}, &fakeWTC{}, fakeSessions{}, &fakeCloser{}, seedFunc)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -266,7 +266,7 @@ func TestDelegateInheritsCodexTargetFromLeadWithoutAgentOverride(t *testing.T) {
 	cr := &fakeCreator{}
 	var seeded []string
 	parentCmd := "codex --model gpt-5.6-terra --effort medium"
-	c := newCoordinator(
+	c := newCoordinator(newHostMessages(),
 		cr,
 		fakeAgents{profiles: map[string]agent.Agent{"scripter": {Name: "scripter"}}},
 		&fakeWTC{clean: true},
@@ -293,7 +293,7 @@ func TestDelegateInheritsCodexTargetFromLeadWithoutAgentOverride(t *testing.T) {
 
 func TestDelegatePreservesExplicitAgentTargetOverride(t *testing.T) {
 	cr := &fakeCreator{}
-	c := newCoordinator(
+	c := newCoordinator(newHostMessages(),
 		cr,
 		fakeAgents{profiles: map[string]agent.Agent{"scripter": {
 			Name: "scripter", Backend: "claude", Cmd: "claude --model sonnet",
@@ -319,7 +319,7 @@ func TestDelegatePreservesExplicitAgentTargetOverride(t *testing.T) {
 
 func TestDelegateKeepsClaudeDefaultsWhenNoParentTarget(t *testing.T) {
 	cr := &fakeCreator{}
-	c := newCoordinator(
+	c := newCoordinator(newHostMessages(),
 		cr,
 		fakeAgents{profiles: map[string]agent.Agent{"scripter": {Name: "scripter"}}},
 		&fakeWTC{clean: true},
@@ -618,7 +618,7 @@ func TestCoordinationViewConcurrentWithReport(t *testing.T) {
 
 func TestRoutePicksAndDelegates(t *testing.T) {
 	seeded := make(map[string]string)
-	c := newCoordinator(
+	c := newCoordinator(newHostMessages(),
 		&fakeCreator{},
 		fakeAgents{roster: []agent.Agent{
 			{Name: "netter", Tags: []string{"network"}},
@@ -649,7 +649,7 @@ func TestRoutePicksAndDelegates(t *testing.T) {
 }
 
 func TestRouteEmptyTaskRefused(t *testing.T) {
-	c := newCoordinator(&fakeCreator{}, fakeAgents{}, &fakeWTC{clean: true},
+	c := newCoordinator(newHostMessages(), &fakeCreator{}, fakeAgents{}, &fakeWTC{clean: true},
 		fakeSessions{list: []state.Session{{Name: "lead", Worktree: "/wt/lead"}}},
 		&fakeCloser{}, func(string, string) bool { return true })
 	if _, _, err := c.Route(context.Background(), contracts.RouteRequest{FromSession: "lead", Task: "  "}); err == nil {
@@ -658,7 +658,7 @@ func TestRouteEmptyTaskRefused(t *testing.T) {
 }
 
 func TestRouteLeadNotFound(t *testing.T) {
-	c := newCoordinator(&fakeCreator{},
+	c := newCoordinator(newHostMessages(), &fakeCreator{},
 		fakeAgents{roster: []agent.Agent{{Name: "netter", Tags: []string{"network"}}}},
 		&fakeWTC{clean: true}, fakeSessions{}, &fakeCloser{},
 		func(string, string) bool { return true })
@@ -668,7 +668,7 @@ func TestRouteLeadNotFound(t *testing.T) {
 }
 
 func TestRouteNoMatchRefused(t *testing.T) {
-	c := newCoordinator(&fakeCreator{},
+	c := newCoordinator(newHostMessages(), &fakeCreator{},
 		fakeAgents{roster: []agent.Agent{{Name: "scripter", Tags: []string{"lua"}}}},
 		&fakeWTC{clean: true, branches: make(map[string]bool)},
 		fakeSessions{list: []state.Session{{Name: "lead", Worktree: "/wt/lead"}}},
@@ -680,7 +680,7 @@ func TestRouteNoMatchRefused(t *testing.T) {
 
 func TestRouteDirtyLeadSpawnsNone(t *testing.T) {
 	seeded := make(map[string]string)
-	c := newCoordinator(&fakeCreator{},
+	c := newCoordinator(newHostMessages(), &fakeCreator{},
 		fakeAgents{roster: []agent.Agent{{Name: "netter", Tags: []string{"network"}}}},
 		&fakeWTC{clean: false},
 		fakeSessions{list: []state.Session{{Name: "lead", Worktree: "/wt/lead"}}},
@@ -1116,7 +1116,7 @@ func TestFanOutPartialSealsToSpawned(t *testing.T) {
 	var seeded []string
 	km := map[string]bool{"scripter": true}
 	seed := func(sess, task string) bool { seeded = append(seeded, sess+"|"+task); return true }
-	c := newCoordinator(cr, fakeAgents{known: km}, &fakeWTC{clean: true},
+	c := newCoordinator(newHostMessages(), cr, fakeAgents{known: km}, &fakeWTC{clean: true},
 		fakeSessions{list: []state.Session{{Name: "lead", Worktree: "/wt/lead"}}}, &fakeCloser{}, seed)
 
 	spawned, err := c.FanOut(context.Background(), contracts.FanOutRequest{

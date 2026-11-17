@@ -38,14 +38,14 @@ type usageOptions struct {
 	asJSON  bool
 }
 
-func runUsage(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, args []string) error {
+func runUsage(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, args []string) error {
 	lang := clitext.ClientLanguage()
 	opts, err := parseUsageArgs(messages, lang, args)
 	if err != nil {
 		return err
 	}
 	instance := host.ServedInstanceID(host.DefaultStatePath(), "")
-	snapshot, err := fetchUsage(ctx, layout, instance, opts)
+	snapshot, err := fetchUsage(ctx, hostMessages, layout, instance, opts)
 	if host.IsDaemonNotRunning(err) {
 		return usageDaemonDown(layout, messages, lang, instance)
 	}
@@ -155,7 +155,7 @@ func isUsageView(name string) bool {
 	return false
 }
 
-func fetchUsage(ctx context.Context, layout host.RuntimeLayout, instance string, opts usageOptions) (usagecore.Snapshot, error) {
+func fetchUsage(ctx context.Context, hostMessages *host.Messages, layout host.RuntimeLayout, instance string, opts usageOptions) (usagecore.Snapshot, error) {
 	argv := []string{usageVerb}
 	if opts.rng != "" {
 		argv = append(argv, usageParamRange, opts.rng)
@@ -166,7 +166,7 @@ func fetchUsage(ctx context.Context, layout host.RuntimeLayout, instance string,
 	if opts.vendor != "" {
 		argv = append(argv, usageParamVendor, opts.vendor)
 	}
-	out, err := host.DaemonDispatch(ctx, layout, instance, argv)
+	out, err := host.DaemonDispatch(ctx, hostMessages, layout, instance, argv)
 	if err != nil {
 		return usagecore.Snapshot{}, err
 	}

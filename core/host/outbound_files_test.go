@@ -88,7 +88,7 @@ func newOutboundDriver(gateways []contracts.Gateway, root string) *sessionDriver
 	for _, gateway := range gateways {
 		gws = append(gws, contracts.GatewaySet{Gateway: contracts.Degrade(gateway)})
 	}
-	d := newSessionDriver("s1", gws, nil, nil, io.Discard)
+	d := newSessionDriver(newHostMessages(), "s1", gws, nil, nil, io.Discard)
 	d.outboxRoot = root
 	d.outboundMaxBytes = outboundTestMaxBytes
 	d.fileSenders = fileSendersOf(gateways)

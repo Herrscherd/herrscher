@@ -95,7 +95,7 @@ func TestBuildBackendForSelectsByVendor(t *testing.T) {
 	contracts.Default.Register(makePlugin("claude"))
 	contracts.Default.Register(makePlugin("codex"))
 
-	if _, err := BuildBackendFor(context.Background(), BackendRequest{Vendor: "codex", Cmd: "codex --model gpt-5.6"}); err != nil {
+	if _, err := BuildBackendFor(context.Background(), NewMessages(), BackendRequest{Vendor: "codex", Cmd: "codex --model gpt-5.6"}); err != nil {
 		t.Fatalf("BuildBackendFor: %v", err)
 	}
 	if built != "codex" {
@@ -122,7 +122,7 @@ func TestBuildBackendForInfersVendorFromCmd(t *testing.T) {
 	contracts.Default.Register(makePlugin("codex"))
 	contracts.Default.Register(makePlugin("claude"))
 
-	if _, err := BuildBackendFor(context.Background(), BackendRequest{Cmd: "/usr/bin/claude --model claude-opus-5-5 --effort medium"}); err != nil {
+	if _, err := BuildBackendFor(context.Background(), NewMessages(), BackendRequest{Cmd: "/usr/bin/claude --model claude-opus-5-5 --effort medium"}); err != nil {
 		t.Fatalf("BuildBackendFor: %v", err)
 	}
 	if built != "claude" {
@@ -152,7 +152,7 @@ func TestNewSeedBackendResolvesRelativeWorktreeOnce(t *testing.T) {
 	})
 
 	sess := state.Session{Vendor: "codex", Worktree: relative}
-	if _, err := newSeedBackend(context.Background(), sess, nil, nil); err != nil {
+	if _, err := newSeedBackend(context.Background(), newHostMessages(), sess, nil, nil); err != nil {
 		t.Fatalf("newSeedBackend: %v", err)
 	}
 	if gotDir != worker {
@@ -185,7 +185,7 @@ func TestRunOneShotSeedWithConsolidatesAndCloses(t *testing.T) {
 
 	sess := state.Session{Name: "solo", ChannelID: "channel"}
 	spy := &seedSpyOrchestrator{}
-	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{backend: backend}); err != nil {
+	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{messages: newHostMessages(), backend: backend}); err != nil {
 		t.Fatalf("runOneShotSeedWith: %v", err)
 	}
 	if !spy.consolidated {
@@ -203,7 +203,7 @@ func TestRunOneShotSeedWithCoordinatesDelegateTrailer(t *testing.T) {
 
 	sess := state.Session{Name: "orchestrator", ChannelID: "channel"}
 	coord := &recordingCoord{}
-	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "délègue", newTurnID(), nil, oneShotSeedRuntime{backend: backend, coordinator: coord}); err != nil {
+	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "délègue", newTurnID(), nil, oneShotSeedRuntime{messages: newHostMessages(), backend: backend, coordinator: coord}); err != nil {
 		t.Fatalf("runOneShotSeedWithIDRuntime: %v", err)
 	}
 	if len(coord.delegates) != 1 {
@@ -231,7 +231,7 @@ func TestRunOneShotSeedCommandForwardsToLiveCoordinator(t *testing.T) {
 
 	got, err := runOneShotSeedCommand(
 		context.Background(), nil, "orchestrator", "lecture seule",
-		"turn-test", oneShotSeedRuntime{}, nil, layout, "instance-test", forward,
+		"turn-test", oneShotSeedRuntime{messages: newHostMessages()}, nil, layout, "instance-test", forward,
 	)
 	if err != nil {
 		t.Fatalf("runOneShotSeedCommand: %v", err)
@@ -274,7 +274,7 @@ func TestNewSeedBackendPropagatesSessionModelID(t *testing.T) {
 	t.Setenv("NEUBLOX_GATEWAY_TOKEN", "")
 
 	sess := state.Session{Vendor: "codex", ModelID: "gpt-gateway"}
-	_, err := newSeedBackend(context.Background(), sess, nil, nil)
+	_, err := newSeedBackend(context.Background(), newHostMessages(), sess, nil, nil)
 	if err == nil {
 		t.Fatal("newSeedBackend succeeded with a gateway-route model and no gateway credentials; want fail-closed error")
 	}
@@ -283,7 +283,7 @@ func TestNewSeedBackendPropagatesSessionModelID(t *testing.T) {
 	}
 
 	legacy := state.Session{Vendor: "codex"}
-	if _, err := newSeedBackend(context.Background(), legacy, nil, nil); err != nil {
+	if _, err := newSeedBackend(context.Background(), newHostMessages(), legacy, nil, nil); err != nil {
 		t.Fatalf("legacy path (no ModelID) failed: %v", err)
 	}
 }
@@ -319,7 +319,7 @@ func TestASeedKeepsItsReplyWhenConsolidationFails(t *testing.T) {
 
 	sess := state.Session{Name: "solo", ChannelID: "channel"}
 	spy := &consolidateSpy{err: context.DeadlineExceeded}
-	got, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{backend: backend, warnings: io.Discard})
+	got, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{messages: newHostMessages(), backend: backend, warnings: io.Discard})
 	if err != nil {
 		t.Fatalf("runOneShotSeedWith: %v", err)
 	}
@@ -336,7 +336,7 @@ func TestASeedConsolidatesOnItsOwnBudget(t *testing.T) {
 	sess := state.Session{Name: "solo", ChannelID: "channel"}
 	spy := &consolidateSpy{}
 	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy,
-		oneShotSeedRuntime{backend: backend, timeout: 50 * time.Millisecond}); err != nil {
+		oneShotSeedRuntime{messages: newHostMessages(), backend: backend, timeout: 50 * time.Millisecond}); err != nil {
 		t.Fatalf("runOneShotSeedWithIDRuntime: %v", err)
 	}
 	if !spy.called {
@@ -354,7 +354,7 @@ func TestASeedWithACadenceDoesNotConsolidateTwice(t *testing.T) {
 
 	sess := state.Session{Name: "solo", ChannelID: "channel", ConsolidateEvery: 1}
 	spy := &consolidateSpy{}
-	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{backend: backend}); err != nil {
+	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{messages: newHostMessages(), backend: backend}); err != nil {
 		t.Fatalf("runOneShotSeedWith: %v", err)
 	}
 	if spy.called {
@@ -387,7 +387,7 @@ func TestSeedBackendUsesTheStoredAccountThroughTheProxy(t *testing.T) {
 	keys := keysWithUpstream(t, "anthropic", upstream.URL, map[string]string{"KEY_MAIN": "sk-main"})
 
 	settings := registerClaudeWithSettings(t, func() (contracts.Backend, error) { return seedBackend{}, nil })
-	if _, err := newSeedBackend(context.Background(), state.Session{Vendor: contracts.VendorClaude, Account: "perso"}, keys, nil); err != nil {
+	if _, err := newSeedBackend(context.Background(), newHostMessages(), state.Session{Vendor: contracts.VendorClaude, Account: "perso"}, keys, nil); err != nil {
 		t.Fatalf("newSeedBackend: %v", err)
 	}
 	env := contracts.ParseEnvSetting(settings()["env"])
@@ -430,7 +430,7 @@ func TestSeedBackendNeverCarriesTheGatewayTokenWithAProxy(t *testing.T) {
 			return seedBackend{}, nil
 		},
 	})
-	if _, err := newSeedBackend(context.Background(), state.Session{Vendor: "codex", ModelID: "gpt-gateway"}, keys, nil); err != nil {
+	if _, err := newSeedBackend(context.Background(), newHostMessages(), state.Session{Vendor: "codex", ModelID: "gpt-gateway"}, keys, nil); err != nil {
 		t.Fatalf("newSeedBackend: %v", err)
 	}
 	for name, value := range contracts.ParseEnvSetting(settings["env"]) {
@@ -446,7 +446,7 @@ func TestSeedBackendNeverCarriesTheGatewayTokenWithAProxy(t *testing.T) {
 func TestConsolidationFailureIsWarnedInTheSessionLanguage(t *testing.T) {
 	spy := &consolidateSpy{err: errors.New("disque plein")}
 	var printed bytes.Buffer
-	consolidateOneShot(context.Background(), spy, newSeedGate("solo", &printed, fixedLanguageSource(i18n.French)), state.Session{Name: "solo"}, &printed, fixedLanguageSource(i18n.French))
+	consolidateOneShot(context.Background(), spy, newSeedGate(newHostMessages(), "solo", &printed, fixedLanguageSource(i18n.French)), state.Session{Name: "solo"}, newHostMessages(), &printed, fixedLanguageSource(i18n.French))
 	if !spy.called {
 		t.Fatal("consolidation was not attempted")
 	}

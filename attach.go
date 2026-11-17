@@ -24,13 +24,14 @@ import (
 var errNotAvailableFromTerminal = errors.New("not available from the terminal")
 
 type attachedDaemon struct {
-	messages *clitext.Messages
-	lang     i18n.Language
-	done     <-chan struct{}
-	send     func(argv []string) (string, error)
-	launch   func(name string) []string
-	instance string
-	events   chan tui.RoutedEvent
+	messages     *clitext.Messages
+	hostMessages *host.Messages
+	lang         i18n.Language
+	done         <-chan struct{}
+	send         func(argv []string) (string, error)
+	launch       func(name string) []string
+	instance     string
+	events       chan tui.RoutedEvent
 
 	mu        sync.Mutex
 	sessions  []contracts.SessionInfo
@@ -41,28 +42,29 @@ type attachedDaemon struct {
 
 const sessionCacheTTL = time.Second
 
-func newAttachedDaemonState(messages *clitext.Messages, lang i18n.Language, done <-chan struct{}, events chan tui.RoutedEvent) *attachedDaemon {
+func newAttachedDaemonState(messages *clitext.Messages, hostMessages *host.Messages, lang i18n.Language, done <-chan struct{}, events chan tui.RoutedEvent) *attachedDaemon {
 	return &attachedDaemon{
-		messages:  messages,
-		lang:      lang,
-		done:      done,
-		events:    events,
-		channelOf: make(map[string]string),
-		nameOf:    make(map[string]string),
+		messages:     messages,
+		hostMessages: hostMessages,
+		lang:         lang,
+		done:         done,
+		events:       events,
+		channelOf:    make(map[string]string),
+		nameOf:       make(map[string]string),
 	}
 }
 
-func newAttachedDaemon(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, instance, statePath string, lang i18n.Language) (*attachedDaemon, error) {
-	stream, err := host.SubscribeDaemonEvents(ctx, layout, instance)
+func newAttachedDaemon(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, instance, statePath string, lang i18n.Language) (*attachedDaemon, error) {
+	stream, err := host.SubscribeDaemonEvents(ctx, hostMessages, layout, instance)
 	if err != nil {
 		return nil, err
 	}
-	daemon := newAttachedDaemonState(messages, lang, ctx.Done(), make(chan tui.RoutedEvent, attachBuffer))
+	daemon := newAttachedDaemonState(messages, hostMessages, lang, ctx.Done(), make(chan tui.RoutedEvent, attachBuffer))
 	daemon.instance = instance
 	daemon.send = func(argv []string) (string, error) {
 		call, cancel := context.WithTimeout(ctx, attachTimeout)
 		defer cancel()
-		return host.DaemonDispatch(call, layout, instance, argv)
+		return host.DaemonDispatch(call, hostMessages, layout, instance, argv)
 	}
 	daemon.launch = func(name string) []string { return attachedLaunch(ctx, statePath, name) }
 	daemon.refresh()
@@ -138,9 +140,9 @@ type attachRunner struct {
 	run     func(ctx context.Context, cancel context.CancelFunc, messages *clitext.Messages, backend tui.Backend, opts ...tui.Option) error
 }
 
-func newAttachRunner(messages *clitext.Messages, log *slog.Logger) attachRunner {
+func newAttachRunner(messages *clitext.Messages, hostMessages *host.Messages, log *slog.Logger) attachRunner {
 	connect := func(ctx context.Context, layout host.RuntimeLayout, instance, statePath string, lang i18n.Language) (*attachedDaemon, error) {
-		return newAttachedDaemon(ctx, layout, messages, instance, statePath, lang)
+		return newAttachedDaemon(ctx, layout, messages, hostMessages, instance, statePath, lang)
 	}
 	return attachRunner{log: log, connect: connect, run: tui.Run}
 }

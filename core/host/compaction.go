@@ -75,11 +75,12 @@ var (
 )
 
 type compactorSettingsError struct {
-	missing *contracts.MissingSettingsError
+	messages *hostMessages
+	missing  *contracts.MissingSettingsError
 }
 
 func (e compactorSettingsError) Error() string {
-	return e.render(i18n.English)
+	return e.render(e.messages, i18n.English)
 }
 
 func (e compactorSettingsError) Unwrap() []error {
@@ -90,7 +91,7 @@ func (e compactorSettingsError) Notice() contracts.Notice {
 	return contracts.Notice{Code: contracts.CodeSettingMissing, Args: []contracts.Arg{contracts.Text("Settings", strings.Join(e.missing.Missing, ", "))}}
 }
 
-func (e compactorSettingsError) render(lang i18n.Language) string {
+func (e compactorSettingsError) render(_ *hostMessages, lang i18n.Language) string {
 	text, err := contracts.NewRenderer().Render(lang, e.Notice())
 	if err != nil {
 		return e.missing.Error()
@@ -99,6 +100,7 @@ func (e compactorSettingsError) render(lang i18n.Language) string {
 }
 
 type compactionPolicy struct {
+	messages       *hostMessages
 	percent        int
 	limits         contextwindow.Limits
 	names          []string
@@ -111,8 +113,9 @@ type compactionPolicy struct {
 	warn           func(key string, params map[string]any)
 }
 
-func newCompactionPolicy(ctx context.Context, lang languageSource, warn io.Writer, percent *int, names []string, perVendor map[string]int) (compactionPolicy, error) {
+func newCompactionPolicy(ctx context.Context, messages *hostMessages, lang languageSource, warn io.Writer, percent *int, names []string, perVendor map[string]int) (compactionPolicy, error) {
 	policy := compactionPolicy{
+		messages:       messages,
 		percent:        defaultCompactPercent,
 		names:          []string{contracts.CompactStageBackend},
 		plugins:        make(map[string]contracts.Compactor),
@@ -122,17 +125,17 @@ func newCompactionPolicy(ctx context.Context, lang languageSource, warn io.Write
 		warnOnce:       &sync.Once{},
 		historyOnce:    &sync.Once{},
 		warn: func(key string, params map[string]any) {
-			warnLive(warn, lang, key, params)
+			warnLive(messages, warn, lang, key, params)
 		},
 	}
 	if percent != nil {
 		if err := contracts.ValidateAutoCompactPercent(*percent); err != nil {
-			return compactionPolicy{}, wrapHost(err, "compaction.at", nil)
+			return compactionPolicy{}, wrapHost(messages, err, "compaction.at", nil)
 		}
 		policy.percent = *percent
 	}
 	if err := config.ValidateCompactStack(names); err != nil {
-		return compactionPolicy{}, wrapHost(err, "compaction.stack", nil)
+		return compactionPolicy{}, wrapHost(messages, err, "compaction.stack", nil)
 	}
 	if len(names) > 0 {
 		policy.names = names
@@ -165,14 +168,14 @@ func newCompactionPolicy(ctx context.Context, lang languageSource, warn io.Write
 }
 
 func (p *compactionPolicy) addStage(ctx context.Context, name string) error {
-	compactor, err := customStage(ctx, name, os.Getenv)
+	compactor, err := customStage(ctx, p.messages, name, os.Getenv)
 	if err != nil {
-		return wrapHost(err, "compaction.stack_named", map[string]any{nameParam: name})
+		return wrapHost(p.messages, err, "compaction.stack_named", map[string]any{nameParam: name})
 	}
 	if trigger, ok := compactor.(contracts.StageTrigger); ok {
 		percent := trigger.TriggerPercent()
 		if err := contracts.ValidateStageTriggerPercent(percent); err != nil {
-			return wrapHost(err, "compaction.stage_trigger", map[string]any{nameParam: name, "Percent": percent})
+			return wrapHost(p.messages, err, "compaction.stage_trigger", map[string]any{nameParam: name, "Percent": percent})
 		}
 		if percent != 0 {
 			p.triggers[name] = percent
@@ -196,7 +199,7 @@ func warnUnknownContextLimits(warn func(key string, params map[string]any), perV
 	}
 }
 
-func customStage(ctx context.Context, name string, getenv func(string) string) (contracts.Compactor, error) {
+func customStage(ctx context.Context, messages *hostMessages, name string, getenv func(string) string) (contracts.Compactor, error) {
 	plugins := contracts.Default.Compactors()
 	for index := range plugins {
 		plugin := &plugins[index]
@@ -208,7 +211,7 @@ func customStage(ctx context.Context, name string, getenv func(string) string) (
 		}
 		cfg, err := contracts.Resolve(plugin.Manifest.Config, getenv)
 		if missing, ok := errors.AsType[*contracts.MissingSettingsError](err); ok {
-			return nil, compactorSettingsError{missing: missing}
+			return nil, compactorSettingsError{messages: messages, missing: missing}
 		}
 		if err != nil {
 			return nil, err
@@ -703,7 +706,7 @@ func (c bridgeCompactor) Compact(ctx context.Context, req contracts.CompactReque
 func (d *sessionDriver) decodeCompactResult(frame contracts.Event) (contracts.CompactResult, error) {
 	res, err := compactwire.DecodeResult(frame)
 	if errors.Is(err, compactwire.ErrNoticeMalformed) {
-		warnTo(d.warnings, d.textLanguage()(), "warn.session_compaction_notice", map[string]any{nameParam: d.name, detailParam: err})
+		warnTo(d.messages, d.warnings, d.textLanguage()(), "warn.session_compaction_notice", map[string]any{nameParam: d.name, detailParam: err})
 		return res, nil
 	}
 	return res, err

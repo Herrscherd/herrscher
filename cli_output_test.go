@@ -61,7 +61,7 @@ func TestEscapedParamEscapesTheValue(t *testing.T) {
 func TestRunPromptEscapesTheReply(t *testing.T) {
 	d := &recordingDispatcher{reply: map[string]string{"session seed": "réponse \x1b[2Jeffacée\n- item"}}
 	var out, errOut strings.Builder
-	if err := runPromptWith(context.Background(), d, "n-a3fq", "x y", i18n.English, &out, &errOut); err != nil {
+	if err := runPromptWith(context.Background(), testMessages(), d, "n-a3fq", "x y", i18n.English, &out, &errOut); err != nil {
 		t.Fatalf("runPromptWith: %v", err)
 	}
 	if strings.ContainsRune(out.String(), '\x1b') {
@@ -75,7 +75,7 @@ func TestRunPromptEscapesTheReply(t *testing.T) {
 func TestRunPromptEscapesThePartialOutput(t *testing.T) {
 	d := &recordingDispatcher{fail: map[string]error{"session seed": partialFailureError{out: "fragment \x1b]0;pwned\a"}}}
 	var out, errOut strings.Builder
-	err := runPromptWith(context.Background(), d, "n-a3fq", "x y", i18n.English, &out, &errOut)
+	err := runPromptWith(context.Background(), testMessages(), d, "n-a3fq", "x y", i18n.English, &out, &errOut)
 	if err == nil {
 		t.Fatal("runPromptWith = nil, want the seed failure")
 	}
@@ -91,12 +91,12 @@ func TestReportErrorEscapesTheSeedFailure(t *testing.T) {
 	seedErr := errors.New("graine \x1b]0;pwned\a refusée")
 	d := &recordingDispatcher{fail: map[string]error{"session seed": seedErr}}
 	var out, errOut strings.Builder
-	err := runPromptWith(context.Background(), d, "n-a3fq", "x y", i18n.English, &out, &errOut)
+	err := runPromptWith(context.Background(), testMessages(), d, "n-a3fq", "x y", i18n.English, &out, &errOut)
 	if err == nil {
 		t.Fatal("runPromptWith = nil, want the seed failure")
 	}
 	var stderr strings.Builder
-	if code := reportErrorTo(&stderr, err); code != 1 {
+	if code := reportErrorTo(testMessages(), &stderr, err); code != 1 {
 		t.Fatalf("reportErrorTo = %d, want 1", code)
 	}
 	line := stderr.String()

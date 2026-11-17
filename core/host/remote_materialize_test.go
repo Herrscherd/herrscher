@@ -18,7 +18,7 @@ func TestStagedAgentTarCarriesTheFilesAndTheRemotePath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := stageAgentTar(a, "/srv/work/proj/.herrscher-sessions/inst/s1", "/far/bin/herrscher")
+	r, err := stageAgentTar(newHostMessages(), a, "/srv/work/proj/.herrscher-sessions/inst/s1", "/far/bin/herrscher")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestExtractTarRefusesAnEscapingMember(t *testing.T) {
 	if err := tw.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := extractTar(strings.NewReader(buf.String()), dir); err == nil {
+	if err := extractTar(newHostMessages(), strings.NewReader(buf.String()), dir); err == nil {
 		t.Fatal("want a refusal")
 	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(dir), "escaped")); err == nil {
@@ -121,7 +121,7 @@ func TestExtractTarRefusesAWriteThroughASymlinkInTheDestination(t *testing.T) {
 	if err := tw.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := extractTar(strings.NewReader(buf.String()), dst); err == nil {
+	if err := extractTar(newHostMessages(), strings.NewReader(buf.String()), dst); err == nil {
 		t.Fatal("want a refusal for a member that resolves through a symlink")
 	}
 	if _, err := os.Stat(filepath.Join(outside, "victim.txt")); err == nil {

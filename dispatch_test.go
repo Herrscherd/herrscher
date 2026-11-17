@@ -194,7 +194,7 @@ func TestForwardUnknownVerbWithoutDaemon(t *testing.T) {
 	t.Setenv("HERRSCHER_STATE_DIR", t.TempDir())
 	t.Setenv("HERRSCHER_INSTANCE_ID", "dispatch-test")
 
-	out, handled, err := forwardUnknownVerb(context.Background(), testRuntime(t), []string{"whatever", "list"})
+	out, handled, err := forwardUnknownVerb(context.Background(), testRuntime(t), host.NewMessages(), []string{"whatever", "list"})
 	if handled {
 		t.Fatal("handled = true, want false with no daemon listening")
 	}

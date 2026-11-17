@@ -71,8 +71,8 @@ func TestGatewayRetryNoticeCarriesTheWaitBeside(t *testing.T) {
 
 func TestAttachFailureParamsEscapeTheError(t *testing.T) {
 	hostile := errors.New("attache \x1b]0;pwn\a refusée")
-	params := attachFailureParams(i18n.English, hostile)
-	want := termpaint.Escape(host.LocalizeError(i18n.English, hostile).Error()).String()
+	params := attachFailureParams(host.NewMessages(), i18n.English, hostile)
+	want := termpaint.Escape(host.NewMessages().Localize(i18n.English, hostile).Error()).String()
 	if params[clitext.ParamErr] != want {
 		t.Fatalf("error param = %v, want %q", params[clitext.ParamErr], want)
 	}
@@ -85,7 +85,7 @@ func TestRenderKeepsHostileParamsOffTheTerminal(t *testing.T) {
 		clitext.ParamWait:    "1s",
 	}
 	for _, key := range []clitext.Key{clitext.ServeGatewaySkipped, clitext.ServeGatewayRetrying, clitext.ServeGatewayUnavailable, clitext.ServeAttachFailed} {
-		text := render(i18n.English, key, params)
+		text := render(testMessages(), i18n.English, key, params)
 		if strings.ContainsAny(text, "\x1b\a") {
 			t.Errorf("%s: rendered %q, want no raw control", key, text)
 		}

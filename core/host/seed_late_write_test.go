@@ -70,11 +70,12 @@ func (l *stampedLog) snapshot() []string {
 }
 
 func seedSharingSession(backend contracts.Backend, budget time.Duration, log *stampedLog) (string, error) {
-	table := newSessionTable()
+	table := newSessionTable(newHostMessages())
 	policy := compactPolicy(50, contracts.CompactStageBackend)
 	policy.limits = contextwindow.NewLimits("1000", nil)
 	table.compaction = policy
 	runtime := oneShotSeedRuntime{
+		messages: newHostMessages(),
 		timeout:  budget,
 		sessions: table,
 		publish:  func(string, contracts.Event) { log.note(eventwire.EventReply) },
@@ -123,11 +124,12 @@ func TestSeedWritesNothingAfterItReturnsEvenWhenABackendSpeaksLate(t *testing.T)
 func TestOneShotTapsRecordNothingOnceTheSeedHasReturned(t *testing.T) {
 	var recorded []string
 	runtime := oneShotSeedRuntime{
+		messages:    newHostMessages(),
 		publish:     func(string, contracts.Event) { recorded = append(recorded, "publish") },
 		record:      func(string, state.TranscriptEntry) { recorded = append(recorded, "transcript") },
 		recordUsage: func(state.Session, []usage.Record) { recorded = append(recorded, "usage") },
 	}
-	driver := &sessionDriver{}
+	driver := &sessionDriver{messages: newHostMessages()}
 	gate := attachOneShotTaps(driver, state.Session{Name: "seed-a"}, runtime)
 
 	driver.emitTap(contracts.Event{T: eventwire.EventReply})

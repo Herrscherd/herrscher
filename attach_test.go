@@ -26,7 +26,7 @@ func TestSubmittingFromAnUnboundTabNoticesInFrench(t *testing.T) {
 	d := startFakeDaemon(t, func([]string) (string, error) { return "", nil })
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.layout, testMessages(), d.instance, tempStatePath(t), i18n.French)
+	a, err := newAttachedDaemon(ctx, d.layout, testMessages(), host.NewMessages(), d.instance, tempStatePath(t), i18n.French)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestAttachedFrontendRoutesAnEventToItsTab(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.layout, testMessages(), d.instance, tempStatePath(t), testLang())
+	a, err := newAttachedDaemon(ctx, d.layout, testMessages(), host.NewMessages(), d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestAttachedFrontendSendsTypedLinesToTheRightSession(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.layout, testMessages(), d.instance, tempStatePath(t), testLang())
+	a, err := newAttachedDaemon(ctx, d.layout, testMessages(), host.NewMessages(), d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +221,7 @@ func TestAttachedFrontendRefusesVerbsTheTerminalDoesNotOwn(t *testing.T) {
 	d := startFakeDaemon(t, func([]string) (string, error) { return "", nil })
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.layout, testMessages(), d.instance, tempStatePath(t), testLang())
+	a, err := newAttachedDaemon(ctx, d.layout, testMessages(), host.NewMessages(), d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +239,7 @@ func TestAttachedFrontendReachesTheHealthAndUsageOverlays(t *testing.T) {
 	d := startFakeDaemon(t, func([]string) (string, error) { return "{}", nil })
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.layout, testMessages(), d.instance, tempStatePath(t), testLang())
+	a, err := newAttachedDaemon(ctx, d.layout, testMessages(), host.NewMessages(), d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +263,7 @@ func TestAttachedFrontendBindsANewSessionToTheTerminal(t *testing.T) {
 }
 
 func TestAttachingWithoutADaemonFails(t *testing.T) {
-	if _, err := newAttachedDaemon(context.Background(), testRuntime(t), testMessages(), "nobody", tempStatePath(t), testLang()); err == nil {
+	if _, err := newAttachedDaemon(context.Background(), testRuntime(t), testMessages(), host.NewMessages(), "nobody", tempStatePath(t), testLang()); err == nil {
 		t.Fatal("expected an error with no daemon listening")
 	}
 }
@@ -281,7 +281,7 @@ func TestScrollbackComesBackFromTheDaemon(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.layout, testMessages(), d.instance, tempStatePath(t), testLang())
+	a, err := newAttachedDaemon(ctx, d.layout, testMessages(), host.NewMessages(), d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}

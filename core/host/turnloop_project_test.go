@@ -12,7 +12,7 @@ import (
 
 func TestAwaitTurnPersistsSettledProject(t *testing.T) {
 	from := make(chan contracts.Event, 1)
-	d := newSessionDriver("s", nil, make(chan contracts.Event, 1), from, io.Discard)
+	d := newSessionDriver(newHostMessages(), "s", nil, make(chan contracts.Event, 1), from, io.Discard)
 	var gotResume, gotProject string
 	d.sink.Resume = func(tok string) { gotResume = tok }
 	d.sink.Project = func(p string) { gotProject = p }
@@ -31,7 +31,7 @@ func TestAwaitTurnPersistsSettledProject(t *testing.T) {
 
 func TestAwaitTurnSkipsAnEmptyProject(t *testing.T) {
 	from := make(chan contracts.Event, 1)
-	d := newSessionDriver("s", nil, make(chan contracts.Event, 1), from, io.Discard)
+	d := newSessionDriver(newHostMessages(), "s", nil, make(chan contracts.Event, 1), from, io.Discard)
 	called := false
 	d.sink.Project = func(string) { called = true }
 
@@ -44,7 +44,7 @@ func TestAwaitTurnSkipsAnEmptyProject(t *testing.T) {
 
 func TestAwaitTurnKeepsALateHistoryAnswerFromTheGateways(t *testing.T) {
 	from := make(chan contracts.Event, 2)
-	d := newSessionDriver("s", nil, make(chan contracts.Event, 1), from, io.Discard)
+	d := newSessionDriver(newHostMessages(), "s", nil, make(chan contracts.Event, 1), from, io.Discard)
 	var tapped []contracts.Event
 	d.emitTap = func(e contracts.Event) { tapped = append(tapped, e) }
 

@@ -47,7 +47,7 @@ func triggerDriver(host, trigger int) *sessionDriver {
 	if trigger != 0 {
 		policy.triggers["jev"] = trigger
 	}
-	d := newSessionDriver("s1", nil, nil, nil, io.Discard)
+	d := newSessionDriver(newHostMessages(), "s1", nil, nil, nil, io.Discard)
 	d.compaction = policy
 	return d
 }
@@ -106,7 +106,7 @@ func TestStackWithoutTriggerKeepsTheHostThreshold(t *testing.T) {
 		{used: 160_000, want: []string{contracts.CompactStageBackend}, full: true},
 	}
 	for _, tt := range tests {
-		d := newSessionDriver("s1", nil, nil, nil, io.Discard)
+		d := newSessionDriver(newHostMessages(), "s1", nil, nil, nil, io.Discard)
 		d.compaction = compactPolicy(80)
 		run := d.automaticRun(tt.used, triggerLimit)
 		if run.due() != (len(tt.want) > 0) || run.full != tt.full || !slices.Equal(run.names, tt.want) {
@@ -119,7 +119,7 @@ func TestStageTriggerOutOfRangeRefusesTheStart(t *testing.T) {
 	for _, percent := range []int{-1, 101} {
 		t.Run("refused "+strconv.Itoa(percent), func(t *testing.T) {
 			registerTriggerCompactor(t, percent)
-			_, err := newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, triggerNames(), nil)
+			_, err := newCompactionPolicy(context.Background(), newHostMessages(), testLanguage(), io.Discard, nil, triggerNames(), nil)
 			if !errors.Is(err, contracts.ErrStageTriggerPercentOutOfRange) {
 				t.Fatalf("newCompactionPolicy = %v, want ErrStageTriggerPercentOutOfRange", err)
 			}
@@ -134,7 +134,7 @@ func TestStageTriggerIsReadAtStart(t *testing.T) {
 	for _, percent := range []int{0, 50, 100} {
 		t.Run("accepted "+strconv.Itoa(percent), func(t *testing.T) {
 			registerTriggerCompactor(t, percent)
-			policy, err := newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, triggerNames(), nil)
+			policy, err := newCompactionPolicy(context.Background(), newHostMessages(), testLanguage(), io.Discard, nil, triggerNames(), nil)
 			if err != nil {
 				t.Fatalf("newCompactionPolicy: %v", err)
 			}

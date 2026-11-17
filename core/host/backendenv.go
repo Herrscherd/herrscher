@@ -93,13 +93,13 @@ func loadGatewayCreds(getenv func(string) string) (contracts.GatewayCreds, error
 	return contracts.NewGatewayCreds(getenv(EnvGatewayURL), getenv(EnvGatewayToken))
 }
 
-func spawnEnvFor(entry CatalogEntry, getenv func(string) string) (map[string]string, error) {
+func spawnEnvFor(messages *hostMessages, entry CatalogEntry, getenv func(string) string) (map[string]string, error) {
 	if entry.Route != contracts.RouteGateway {
 		return make(map[string]string), nil
 	}
 	creds, err := loadGatewayCreds(getenv)
 	if err != nil {
-		return nil, wrapHost(err, "gateway.model", map[string]any{modelParam: entry.ID})
+		return nil, wrapHost(messages, err, "gateway.model", map[string]any{modelParam: entry.ID})
 	}
 	env := gatewayEnvFor(entry.Vendor, creds, entry.Arg)
 	if len(env) == 0 {

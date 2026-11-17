@@ -4,6 +4,7 @@ package e2e_test
 
 import (
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -102,6 +103,91 @@ func TestReapInstanceCountsAProcessThatEndsAfterTheInterruptAsStopped(t *testing
 	if waitErr := child.Wait(); waitErr != nil {
 		t.Fatalf("the process ended with %v, want its own exit with status 0 after the interrupt, not a signal", waitErr)
 	}
+}
+
+func TestReapInstanceSkipsAProcessThatEndedAfterItWasPinned(t *testing.T) {
+	instance := newTestInstance(t)
+	waiters := []*markedWaiter{startMarkedWaiter(t, instance), startMarkedWaiter(t, instance)}
+	var firstPid, secondPid int
+	opener := func(candidate int) (int, error) {
+		switch {
+		case firstPid == 0:
+			firstPid = candidate
+		case secondPid == 0:
+			secondPid = candidate
+			waiterWithPid(t, waiters, firstPid).endBeforeInterrupt(t)
+		}
+		return openPidfd(candidate)
+	}
+	stopped, survivors, err := reapInstanceWith(procRoot, instance, reapGrace, opener)
+	if err != nil || len(survivors) != 0 || len(stopped) != 1 {
+		t.Fatalf("got stopped %q, survivors %q, %v: a process that ended after it was pinned and before the interrupt is neither signalled nor counted, so only the other process may be stopped", stopped, survivors, err)
+	}
+	if secondPid == 0 {
+		t.Fatal("the second process was never pinned")
+	}
+	if signo := stoppedBy(t, waiterWithPid(t, waiters, secondPid).cmd); signo != syscall.SIGINT {
+		t.Fatalf("got %v, want the remaining process stopped by SIGINT", signo)
+	}
+}
+
+type markedWaiter struct {
+	cmd   *exec.Cmd
+	input io.WriteCloser
+}
+
+func startMarkedWaiter(t *testing.T, instance string) *markedWaiter {
+	t.Helper()
+	cmd := exec.Command("sh", "-c", "read line")
+	cmd.Env = []string{instanceEntry(instance)}
+	input, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if cmd.ProcessState != nil {
+			return
+		}
+		if err := cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			t.Error(err)
+		}
+		if _, err := cmd.Process.Wait(); err != nil {
+			t.Error(err)
+		}
+	})
+	return &markedWaiter{cmd: cmd, input: input}
+}
+
+func (w *markedWaiter) endBeforeInterrupt(t *testing.T) {
+	t.Helper()
+	if err := w.input.Close(); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(daemonReadyTimeout)
+	for {
+		stat, err := readStat(procRoot, w.cmd.Process.Pid)
+		if err == nil && stat.exited() {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("process %d did not end after its input closed: %v", w.cmd.Process.Pid, err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func waiterWithPid(t *testing.T, waiters []*markedWaiter, pid int) *markedWaiter {
+	t.Helper()
+	for _, w := range waiters {
+		if w.cmd.Process.Pid == pid {
+			return w
+		}
+	}
+	t.Fatalf("no waiter runs as process %d", pid)
+	return nil
 }
 
 func killAtEnd(t *testing.T, cmd *exec.Cmd) {

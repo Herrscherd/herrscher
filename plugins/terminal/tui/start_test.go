@@ -45,6 +45,13 @@ func deliver(m *model, cmd tea.Cmd) {
 }
 
 func TestFixturesWithABackendStartThroughStartModel(t *testing.T) {
+	if bypasses := newModelBypasses(t); len(bypasses) > 0 {
+		t.Fatalf("fixtures with a backend must start through startModel, not newModel: %s", strings.Join(bypasses, ", "))
+	}
+}
+
+func newModelBypasses(t *testing.T) []string {
+	t.Helper()
 	files, globErr := filepath.Glob("*_test.go")
 	if globErr != nil {
 		t.Fatal(globErr)
@@ -60,21 +67,24 @@ func TestFixturesWithABackendStartThroughStartModel(t *testing.T) {
 			t.Fatal(parseErr)
 		}
 		ast.Inspect(parsed, func(node ast.Node) bool {
-			call, isCall := node.(*ast.CallExpr)
-			if !isCall || len(call.Args) != 1 {
-				return true
+			if isBackedNewModel(node) {
+				bypasses = append(bypasses, fset.Position(node.Pos()).String())
 			}
-			if fn, isIdent := call.Fun.(*ast.Ident); !isIdent || fn.Name != "newModel" {
-				return true
-			}
-			if arg, isIdent := call.Args[0].(*ast.Ident); isIdent && arg.Name == "nil" {
-				return true
-			}
-			bypasses = append(bypasses, fset.Position(call.Pos()).String())
 			return true
 		})
 	}
-	if len(bypasses) > 0 {
-		t.Fatalf("fixtures with a backend must start through startModel, not newModel: %s", strings.Join(bypasses, ", "))
+	return bypasses
+}
+
+func isBackedNewModel(node ast.Node) bool {
+	call, isCall := node.(*ast.CallExpr)
+	if !isCall || len(call.Args) != 1 {
+		return false
 	}
+	fn, isIdent := call.Fun.(*ast.Ident)
+	if !isIdent || fn.Name != "newModel" {
+		return false
+	}
+	arg, isArgIdent := call.Args[0].(*ast.Ident)
+	return !isArgIdent || arg.Name != "nil"
 }

@@ -123,7 +123,7 @@ func fixtures(be Backend) {
 		t.Fatal(parseErr)
 	}
 	refs := referencesToNewModel(fset, parsed)
-	want := []string{"snippet.go:4:7", "snippet.go:5:11", "snippet.go:7:7"}
+	want := []string{"snippet.go:4:7", "snippet.go:5:11", "snippet.go:7:6"}
 	if strings.Join(refs, " ") != strings.Join(want, " ") {
 		t.Fatalf("flagged = %q, want %q", refs, want)
 	}

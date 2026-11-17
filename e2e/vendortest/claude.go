@@ -24,6 +24,8 @@ const (
 	envLog    = "VENDORTEST_LOG"
 	envTurns  = "VENDORTEST_TURNS"
 
+	envConfigDir = "CLAUDE_CONFIG_DIR"
+
 	claudeVersion    = "2.1.0 (Claude Code)"
 	defaultSessionID = "vendortest-session"
 	echoPrefix       = "echo: "
@@ -130,6 +132,11 @@ func openReplay(files Files, args []string) (*replay, error) {
 	player := &replay{script: script, files: files, sessionID: sessionID}
 	if err := player.record("start " + strings.Join(args, " ")); err != nil {
 		return nil, err
+	}
+	if dir := os.Getenv(envConfigDir); dir != "" {
+		if err := player.record("account " + dir); err != nil {
+			return nil, err
+		}
 	}
 	return player, nil
 }

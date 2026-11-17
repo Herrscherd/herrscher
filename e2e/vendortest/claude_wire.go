@@ -21,7 +21,19 @@ type assistantEvent struct {
 	Message    struct {
 		Model   string         `json:"model,omitempty"`
 		Content []contentBlock `json:"content"`
+		Usage   *messageUsage  `json:"usage,omitempty"`
 	} `json:"message"`
+}
+
+type messageUsage struct {
+	InputTokens int `json:"input_tokens"`
+}
+
+func assistantUsage(tokens int) assistantEvent {
+	event := assistantEvent{Type: wordAssistant}
+	event.Message.Content = []contentBlock{}
+	event.Message.Usage = &messageUsage{InputTokens: tokens}
+	return event
 }
 
 func assistantText(text string) assistantEvent {
@@ -101,22 +113,26 @@ type failedResultEvent struct {
 
 const charsPerToken = 4
 
-func (r *replay) fields(subtype string, isError bool, prompt, text string) resultFields {
+func (r *replay) fields(subtype string, isError bool, prompt, text string, reported int) resultFields {
+	usage := tokenUsage{InputTokens: len(prompt)/charsPerToken + 1, OutputTokens: len(text)/charsPerToken + 1}
+	if reported > 0 {
+		usage.InputTokens = reported
+	}
 	return resultFields{
 		Type:      wordResult,
 		Subtype:   subtype,
 		IsError:   isError,
 		SessionID: r.sessionID,
-		Usage:     tokenUsage{InputTokens: len(prompt)/charsPerToken + 1, OutputTokens: len(text)/charsPerToken + 1},
+		Usage:     usage,
 	}
 }
 
-func (r *replay) result(text, prompt string) resultEvent {
-	return resultEvent{resultFields: r.fields(valueSuccess, false, prompt, text), Result: text}
+func (r *replay) result(text, prompt string, reported int) resultEvent {
+	return resultEvent{resultFields: r.fields(valueSuccess, false, prompt, text, reported), Result: text}
 }
 
 func (r *replay) failure(text, prompt string) failedResultEvent {
-	return failedResultEvent{resultFields: r.fields("error_during_execution", true, prompt, text), Errors: []string{text}}
+	return failedResultEvent{resultFields: r.fields(valueErrorDuringExecute, true, prompt, text, 0), Errors: []string{text}}
 }
 
 func writeJSON(out io.Writer, event any) error {

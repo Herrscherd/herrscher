@@ -1332,8 +1332,7 @@ func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, cha
 	driver.terms = identity.terms
 	driver.language = identity.language
 	driver.operator = identity.operator
-	driver.compaction = sessions.compaction
-	driver.percentOf = func() int { return sessions.percentOfSession(name) }
+	sessions.attachCompaction(driver, name)
 	if gate != nil {
 		driver.gate = gate
 	}

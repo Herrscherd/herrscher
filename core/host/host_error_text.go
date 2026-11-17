@@ -46,6 +46,7 @@ func hostErrorKeys() []hostErrorKey {
 		{errCompactUnsupported, "cli.host.fault.compact_unsupported"},
 		{errBridgeGone, "cli.host.fault.bridge_gone"},
 		{errHistoryTimeout, "cli.host.fault.history_timeout"},
+		{errTooManyEdits, "cli.host.fault.too_many_edits"},
 		{errHealthNotReady, "cli.host.fault.health_not_ready"},
 		{errNoCompactorFactory, "cli.host.fault.no_compactor_factory"},
 		{errNilCompactor, "cli.host.fault.nil_compactor"},

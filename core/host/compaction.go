@@ -66,6 +66,7 @@ var (
 	errCompactUnsupported = errors.New("its backend does not implement Compactor")
 	errBridgeGone         = errors.New("the bridge closed during a compaction")
 	errHistoryTimeout     = errors.New("the bridge did not answer a history call in time")
+	errTooManyEdits       = errors.New("the compaction would edit too many tool calls at once")
 	errNoCompactorFactory = errors.New("is a compactor plugin but provides no Compactor factory")
 	errNilCompactor       = errors.New("its Compactor factory returned no stage")
 	errNoCompactorPlugin  = errors.New("no compactor plugin is registered under this name")
@@ -507,6 +508,8 @@ func knownCompactFailure(err error) (string, bool) {
 		return "compaction.history_timeout", true
 	case errors.Is(err, historywire.ErrHistoryTooLarge):
 		return "compaction.history_too_large", true
+	case errors.Is(err, errTooManyEdits):
+		return "compaction.too_many_edits", true
 	}
 	return "", false
 }
@@ -768,23 +771,10 @@ func (h bridgeHistory) PruneHistory(ctx context.Context, edits []contracts.Histo
 	if err := contracts.ValidateHistoryEdits(edits); err != nil {
 		return contracts.PruneOutcome{}, err
 	}
-	var total contracts.PruneOutcome
-	for start := 0; start < len(edits) || start == 0; start += historywire.PruneBatch {
-		outcome, err := h.pruneBatch(ctx, edits[start:min(start+historywire.PruneBatch, len(edits))])
-		if err != nil {
-			return total, err
-		}
-		if start == 0 {
-			total.CharsBefore = outcome.CharsBefore
-		}
-		total.Edited += outcome.Edited
-		total.CharsAfter = outcome.CharsAfter
-	}
-	return total, nil
-}
-
-func (h bridgeHistory) pruneBatch(ctx context.Context, edits []contracts.HistoryEdit) (contracts.PruneOutcome, error) {
 	request, err := historywire.Prune(h.driver.nextHistoryCall(), edits)
+	if errors.Is(err, historywire.ErrTooManyEdits) {
+		return contracts.PruneOutcome{}, errTooManyEdits
+	}
 	if err != nil {
 		return contracts.PruneOutcome{}, err
 	}

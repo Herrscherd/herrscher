@@ -71,8 +71,9 @@ func (r *replay) answer(streams Streams, line []byte) (turnOutcome, error) {
 }
 
 type turnState struct {
-	reply   []string
-	decided *verdict
+	reply    []string
+	decided  *verdict
+	reported int
 }
 
 func (r *replay) play(streams Streams, turn Turn, prompt string) (turnOutcome, error) {
@@ -86,7 +87,7 @@ func (r *replay) play(streams Streams, turn Turn, prompt string) (turnOutcome, e
 			return outcome, nil
 		}
 	}
-	return outcomeAnswered, writeJSON(streams.Out, r.result(strings.Join(state.reply, "\n\n"), prompt))
+	return outcomeAnswered, writeJSON(streams.Out, r.result(strings.Join(state.reply, "\n\n"), prompt, state.reported))
 }
 
 func (r *replay) runStep(streams Streams, current step, prompt string, state *turnState) (turnOutcome, bool, error) {
@@ -112,6 +113,9 @@ func (r *replay) runStep(streams Streams, current step, prompt string, state *tu
 		return outcomeAnswered, false, nil
 	case stepExpect:
 		return r.judge(streams.Out, state.decided, current.text, prompt)
+	case stepUsage:
+		state.reported = current.tokens
+		return outcomeAnswered, false, writeJSON(streams.Out, assistantUsage(current.tokens))
 	}
 	return outcomeAnswered, false, nil
 }
@@ -180,13 +184,13 @@ func (r *replay) oneShot(out io.Writer, args []string) error {
 		return err
 	}
 	if isHealthProbe(args) {
-		return writeJSON(out, r.result(echoPrefix+lastLine(prompt), prompt))
+		return writeJSON(out, r.result(echoPrefix+lastLine(prompt), prompt, 0))
 	}
 	turn, err := r.beginTurn()
 	if err != nil {
 		return err
 	}
-	return writeJSON(out, r.result(oneShotReply(turn, prompt), prompt))
+	return writeJSON(out, r.result(oneShotReply(turn, prompt), prompt, 0))
 }
 
 func oneShotReply(turn Turn, prompt string) string {

@@ -12,9 +12,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
-	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/eventwire"
-	"github.com/Herrscherd/herrscher/core/historywire"
 	"github.com/Herrscherd/herrscher/core/identity"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/skills"
@@ -201,6 +199,7 @@ func runHubTurns(ctx context.Context, in <-chan contracts.Event, sink contracts.
 
 func runHubTurnsCtl(ctx context.Context, events <-chan contracts.Event, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, ctrl *turnController, eng *skills.Engine, aff affordances, pin *scopePin) {
 	var lang i18n.Language
+	router := turnRouter{sink: sink, backend: backend, orch: orch, ctrl: ctrl, eng: eng, aff: aff, pin: pin}
 	for {
 		select {
 		case <-ctx.Done():
@@ -214,14 +213,8 @@ func runHubTurnsCtl(ctx context.Context, events <-chan contracts.Event, sink con
 				lang = languageOf(event.Value)
 			case eventwire.EventPick:
 				runPick(ctx, sink, backend, event.Value)
-			case compactwire.EventRequest:
-				runCompact(ctx, sink, backend, ctrl, event)
-			case historywire.EventRead:
-				runHistoryRead(ctx, sink, backend, ctrl, event)
-			case historywire.EventPrune:
-				runHistoryPrune(ctx, sink, backend, ctrl, event)
-			case eventwire.EventInput:
-				if err := runOneTurn(ctx, sink, backend, orch, event, ctrl, eng, aff, pin, lang); err != nil {
+			default:
+				if err := router.route(ctx, event, lang); err != nil {
 					logTurnFailure(ctx, err)
 				}
 			}

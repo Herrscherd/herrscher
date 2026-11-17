@@ -401,17 +401,18 @@ func TestBridgeAnswersWithNoLanguageAfterAnEmptyLanguageFrame(t *testing.T) {
 	}
 }
 
-func TestRunOneShotAnswersOnlyTheInputAfterControlFrames(t *testing.T) {
+func TestRunUntilClosedAnswersOnlyTheInputAfterControlFrames(t *testing.T) {
 	in := make(chan contracts.Event, 3)
 	be := &captureBackend{reply: "ok"}
 	in <- contracts.Event{T: eventwire.EventInterrupt}
 	in <- contracts.Event{T: eventwire.EventLanguage, Value: "fr"}
 	in <- contracts.Event{T: eventwire.EventInput, Text: "bonjour"}
+	close(in)
 	out := make(chan contracts.Event, 8)
 
-	err := RunOneShot(context.Background(), func(string) (contracts.Backend, error) { return be, nil }, nil, "channel", in, out)
+	err := RunUntilClosed(context.Background(), func(string) (contracts.Backend, error) { return be, nil }, nil, "channel", in, out)
 	if err != nil {
-		t.Fatalf("RunOneShot: %v", err)
+		t.Fatalf("RunUntilClosed: %v", err)
 	}
 	if want := []string{"bonjour"}; !slices.Equal(be.texts, want) {
 		t.Fatalf("turn texts = %q, want %q", be.texts, want)

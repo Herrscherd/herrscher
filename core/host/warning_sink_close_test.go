@@ -187,6 +187,9 @@ func TestInFlightWriteFailingAfterCloseIsAnnouncedAsADelta(t *testing.T) {
 	if !sink.flush(window) {
 		t.Fatal("the sink did not settle the in-flight write")
 	}
+	waitUntil(t, "the delta of the failed in-flight write", func() bool {
+		return len(notConfirmedLines(logs.String())) == 2
+	})
 	lines := notConfirmedLines(logs.String())
 	if len(lines) != 2 || logField(lines[0], "lost") != "0" || logField(lines[0], "unconfirmed") != "1" || logField(lines[1], "lost") != "1" || logField(lines[1], "unconfirmed") != "0" {
 		t.Fatalf("Close logged %q, want the bilan (lost=0 unconfirmed=1) then one delta (lost=1 unconfirmed=0) once the in-flight write failed: the failure after the bilan is a new loss, announced once", lines)
@@ -217,7 +220,7 @@ func TestWriterErrorDuringCloseIsAnnouncedOnce(t *testing.T) {
 	}
 }
 
-func TestSummaryFailingAfterCloseIsNotAnnouncedTwice(t *testing.T) {
+func TestSummaryFailingAfterCloseIsAnnouncedOnceAsADelta(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := newFirstWriteRefused()
 	t.Cleanup(writer.unblock)
@@ -227,10 +230,12 @@ func TestSummaryFailingAfterCloseIsNotAnnouncedTwice(t *testing.T) {
 	}
 	sink.Close()
 	writer.unblock()
-	waitUntil(t, "the summary refused after Close to settle", func() bool { return unconfirmedCount(sink) == 0 })
+	waitUntil(t, "the summary refused after Close to be announced as a delta", func() bool {
+		return len(notConfirmedLines(logs.String())) == 2
+	})
 	lines := notConfirmedLines(logs.String())
-	if strings.Count(logs.String(), "level=WARN") != 1 || len(lines) != 1 || logField(lines[0], "lost") != "1" || logField(lines[0], "unconfirmed") != "1" {
-		t.Fatalf("Close logged %q, want exactly one line with lost=1 unconfirmed=1: the bilan announces the lost warning while its summary is in flight, and the refused summary is not announced again", lines)
+	if strings.Count(logs.String(), "level=WARN") != 2 || logField(lines[0], "lost") != "0" || logField(lines[0], "unconfirmed") != "1" || logField(lines[1], "lost") != "1" || logField(lines[1], "unconfirmed") != "0" {
+		t.Fatalf("Close logged %q, want the bilan (lost=0 unconfirmed=1) then one delta (lost=1 unconfirmed=0): the bilan names the refused summary as unconfirmed, and its loss is announced once when the summary fails", lines)
 	}
 }
 

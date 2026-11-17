@@ -10,7 +10,9 @@ func TestWriteBudgetExpiresAtTheWarningBudget(t *testing.T) {
 	defer stop()
 	started := time.Now()
 	<-expired
-	if elapsed := time.Since(started); elapsed < warningWriteBudget || elapsed > warningWriteBudget*3/2 {
-		t.Fatalf("the write budget expired after %v, want about %v", elapsed.Round(time.Millisecond), warningWriteBudget)
+	elapsed := time.Since(started)
+	t.Logf("write budget expired after %d ms, want about %d ms", elapsed.Milliseconds(), warningWriteBudget.Milliseconds())
+	if elapsed < warningWriteBudget || elapsed > warningWriteBudget*3/2 {
+		t.Fatalf("the write budget expired after %d ms, want about %d ms", elapsed.Milliseconds(), warningWriteBudget.Milliseconds())
 	}
 }

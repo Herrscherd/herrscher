@@ -35,8 +35,21 @@ type warning struct {
 type inflightWrite struct {
 	entry   *warning
 	lost    int
-	summary bool
 	stalled bool
+}
+
+func (w *inflightWrite) isSummary() bool {
+	return w.entry == nil
+}
+
+type verdict struct {
+	err  error
+	lost int
+}
+
+type bilan struct {
+	lost        int
+	unconfirmed int
 }
 
 type sinkQuiet struct {
@@ -45,25 +58,27 @@ type sinkQuiet struct {
 }
 
 type warningSink struct {
-	out         io.Writer
-	lostLine    func(lost int) string
-	commands    chan func()
-	running     atomic.Bool
-	queue       []*warning
-	queuedBytes int
-	inflight    *inflightWrite
-	idle        []chan struct{}
-	dropped     int
-	reported    int
-	closed      bool
-	sealed      bool
+	out          io.Writer
+	lostLine     func(lost int) string
+	commands     chan func()
+	running      atomic.Bool
+	queue        []*warning
+	queuedBytes  int
+	inflight     *inflightWrite
+	idle         []chan struct{}
+	dropped      int
+	reported     int
+	closed       bool
+	sealed       bool
+	sealedSignal chan struct{}
 }
 
 func newWarningSink(out io.Writer, lostLine func(lost int) string) *warningSink {
 	return &warningSink{
-		out:      warningWriter(out),
-		lostLine: lostLine,
-		commands: make(chan func(), warningCommandLimit),
+		out:          warningWriter(out),
+		lostLine:     lostLine,
+		commands:     make(chan func(), warningCommandLimit),
+		sealedSignal: make(chan struct{}),
 	}
 }
 
@@ -94,17 +109,6 @@ func ask[T any](sink *warningSink, task func() T) T {
 	return <-reply
 }
 
-func (s *warningSink) post(task func()) {
-	s.dispatch(task)
-}
-
-func (s *warningSink) call(task func()) {
-	ask(s, func() struct{} {
-		task()
-		return struct{}{}
-	})
-}
-
 func (s *warningSink) Write(data []byte) (int, error) {
 	budget, stop := writeBudget()
 	defer stop()
@@ -120,8 +124,10 @@ func (s *warningSink) Enqueue(data []byte) warningAwait {
 
 func (s *warningSink) submit(data []byte, direct bool) warningAwait {
 	entry := &warning{data: data, direct: direct, done: make(chan struct{})}
-	if err := ask(s, func() error { return s.admit(entry) }); err != nil {
-		return func(<-chan struct{}) error { return err }
+	admitted := ask(s, func() verdict { return s.admit(entry) })
+	logNotConfirmed(admitted.lost, 0)
+	if admitted.err != nil {
+		return func(<-chan struct{}) error { return admitted.err }
 	}
 	return func(budget <-chan struct{}) error { return s.await(entry, budget) }
 }
@@ -132,26 +138,26 @@ func (s *warningSink) await(entry *warning, budget <-chan struct{}) error {
 		return entry.err
 	case <-budget:
 	}
-	return ask(s, func() error { return s.giveUp(entry) })
+	gaveUp := ask(s, func() verdict { return s.giveUp(entry) })
+	logNotConfirmed(gaveUp.lost, 0)
+	return gaveUp.err
 }
 
-func (s *warningSink) admit(entry *warning) error {
-	entry.direct = entry.direct || s.closed
+func (s *warningSink) admit(entry *warning) verdict {
+	direct := entry.direct || s.closed
 	if len(entry.data) > warningEntryBytes || len(s.queue) >= warningQueueLimit || s.queuedBytes+len(entry.data) > warningQueueBytes {
-		s.lose()
-		return errWarningAbandoned
+		return verdict{err: errWarningAbandoned, lost: s.lose()}
 	}
 	if s.stalledInflight() {
-		if entry.direct {
-			s.lose()
-			return errWarningAbandoned
+		if direct {
+			return verdict{err: errWarningAbandoned, lost: s.lose()}
 		}
 		s.enqueue(entry)
-		return errWarningLate
+		return verdict{err: errWarningLate}
 	}
 	s.enqueue(entry)
 	s.pump(false)
-	return nil
+	return verdict{}
 }
 
 func (s *warningSink) enqueue(entry *warning) {
@@ -159,25 +165,26 @@ func (s *warningSink) enqueue(entry *warning) {
 	s.queuedBytes += len(entry.data)
 }
 
-func (s *warningSink) giveUp(entry *warning) error {
+func (s *warningSink) giveUp(entry *warning) verdict {
 	if settled(entry) {
-		return entry.err
+		return verdict{err: entry.err}
 	}
+	direct := entry.direct || s.closed
 	if s.isInflight(entry) {
-		if !entry.direct {
+		if !direct {
 			s.markStalled()
 		}
-		return errWarningLate
+		return verdict{err: errWarningLate}
 	}
-	if !entry.direct {
+	if !direct {
 		s.markStalled()
-		return errWarningLate
+		return verdict{err: errWarningLate}
 	}
 	s.removeQueued(entry)
-	s.lose()
+	lost := s.lose()
 	finish(entry, errWarningAbandoned)
 	s.pump(false)
-	return errWarningAbandoned
+	return verdict{err: errWarningAbandoned, lost: lost}
 }
 
 func (s *warningSink) removeQueued(entry *warning) {
@@ -203,17 +210,18 @@ func (s *warningSink) owed() int {
 	return s.dropped - s.reported
 }
 
-func (s *warningSink) lose() {
+func (s *warningSink) lose() int {
 	s.dropped++
 	if s.sealed {
-		s.announceDelta()
+		return s.takeDelta()
 	}
+	return 0
 }
 
-func (s *warningSink) announceDelta() {
+func (s *warningSink) takeDelta() int {
 	lost := s.owed()
 	s.reported = s.dropped
-	logNotConfirmed(lost, 0)
+	return lost
 }
 
 func (s *warningSink) pump(summarized bool) {
@@ -221,8 +229,7 @@ func (s *warningSink) pump(summarized bool) {
 		return
 	}
 	if !summarized && s.owed() > 0 && (len(s.queue) > 0 || s.closed) {
-		lost := s.owed()
-		s.start(&inflightWrite{lost: lost, summary: true}, []byte(s.lostLine(lost)+"\n"))
+		s.startSummary()
 		return
 	}
 	if len(s.queue) > 0 {
@@ -235,29 +242,46 @@ func (s *warningSink) pump(summarized bool) {
 	s.wakeIdle()
 }
 
+func (s *warningSink) startSummary() {
+	lost := s.owed()
+	s.reported += lost
+	s.start(&inflightWrite{lost: lost}, []byte(s.lostLine(lost)+"\n"))
+}
+
 func (s *warningSink) start(write *inflightWrite, data []byte) {
 	s.inflight = write
 	go func() {
 		written, err := s.out.Write(data)
 		logWriteFailure(written, err)
-		s.post(func() { s.settle(write, err) })
+		lost := ask(s, func() int { return s.settle(write, err) })
+		logNotConfirmed(lost, 0)
 	}()
 }
 
-func (s *warningSink) settle(write *inflightWrite, err error) {
+func (s *warningSink) settle(write *inflightWrite, err error) int {
 	s.inflight = nil
-	if write.summary {
-		if err == nil && !s.sealed {
-			s.reported += write.lost
-		}
-		s.pump(true)
-		return
+	if write.isSummary() {
+		return s.settleSummary(write, err)
 	}
 	finish(write.entry, err)
+	lost := 0
 	if err != nil {
-		s.lose()
+		lost = s.lose()
 	}
 	s.pump(false)
+	return lost
+}
+
+func (s *warningSink) settleSummary(write *inflightWrite, err error) int {
+	lost := 0
+	if err != nil {
+		s.reported -= write.lost
+		if s.sealed {
+			lost = s.takeDelta()
+		}
+	}
+	s.pump(true)
+	return lost
 }
 
 func (s *warningSink) idleSignal() <-chan struct{} {
@@ -304,12 +328,14 @@ func waitWithin(done <-chan struct{}, budget time.Duration) bool {
 
 func (s *warningSink) Close() {
 	if !ask(s, s.beginClose) {
+		<-s.sealedSignal
 		return
 	}
 	budget, stop := writeBudget()
 	defer stop()
 	s.waitIdle(budget)
-	s.call(s.seal)
+	taken := ask(s, s.seal)
+	logNotConfirmed(taken.lost, taken.unconfirmed)
 }
 
 func (s *warningSink) beginClose() bool {
@@ -328,21 +354,21 @@ func (s *warningSink) waitIdle(budget <-chan struct{}) {
 	}
 }
 
-func (s *warningSink) seal() {
+func (s *warningSink) seal() bilan {
 	for _, entry := range s.queue {
 		finish(entry, errWarningAbandoned)
 	}
 	s.dropped += len(s.queue)
 	s.queue = nil
 	s.queuedBytes = 0
-	unconfirmed := 0
+	taken := bilan{lost: s.owed()}
 	if s.inflight != nil {
-		unconfirmed = 1
+		taken.unconfirmed = 1
 	}
-	lost := s.owed()
 	s.reported = s.dropped
 	s.sealed = true
-	logNotConfirmed(lost, unconfirmed)
+	close(s.sealedSignal)
+	return taken
 }
 
 func (s *warningSink) announce(text string) error {

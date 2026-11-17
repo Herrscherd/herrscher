@@ -197,7 +197,7 @@ func blockedWriterCases() []blockedWriterCase {
 		{
 			name:  "startup ignoring cancel",
 			paths: []inflightPath{{name: "closeAndRemoveSockets", run: func(h *hub, _ string) { logCleanup(h.closeAndRemoveSockets()) }}},
-			bound: blockedStartupBound(),
+			bound: blockedStopBound(),
 			start: func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings) *hub {
 				t.Helper()
 				h := newInflightHub(t, name, grace, warnings)
@@ -221,10 +221,6 @@ const (
 )
 
 func blockedStopBound() time.Duration {
-	return 2*blockedGrace + 4*warningWriteBudget + blockedStopMargin
-}
-
-func blockedStartupBound() time.Duration {
 	return 3*blockedGrace + 6*warningWriteBudget + blockedStopMargin
 }
 

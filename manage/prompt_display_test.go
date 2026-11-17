@@ -28,6 +28,7 @@ func captureStderr(t *testing.T, run func()) string {
 	defer reader.Close()
 	saved := os.Stderr
 	os.Stderr = writer
+	defer func() { os.Stderr = saved }()
 	captured := make(chan string, 1)
 	go func() {
 		data, _ := io.ReadAll(reader)

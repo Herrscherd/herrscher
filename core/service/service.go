@@ -164,7 +164,7 @@ func envFileWrite(c Config) FileWrite {
 
 // BuildPlan returns the install plan for c's target OS. Every platform also
 // scaffolds the declarative config.json (template, never clobbered).
-func BuildPlan(cfg Config) (Plan, error) {
+func BuildPlan(messages *clitext.Messages, cfg Config) (Plan, error) {
 	var plan Plan
 	var err error
 	switch goos(cfg) {
@@ -175,7 +175,7 @@ func BuildPlan(cfg Config) (Plan, error) {
 	case goosWindows:
 		plan, err = windowsPlan(cfg)
 	default:
-		return Plan{}, unsupportedOS(cfg)
+		return Plan{}, unsupportedOS(messages, cfg)
 	}
 	if err != nil {
 		return Plan{}, err
@@ -191,7 +191,7 @@ func configFileWrite(c Config) FileWrite {
 }
 
 // BuildUninstall returns the uninstall plan for c's target OS.
-func BuildUninstall(cfg Config) (Plan, error) {
+func BuildUninstall(messages *clitext.Messages, cfg Config) (Plan, error) {
 	switch goos(cfg) {
 	case goosLinux:
 		unit := filepath.Join(cfg.Home, ".config", "systemd", "user", linuxUnitName)
@@ -211,12 +211,12 @@ func BuildUninstall(cfg Config) (Plan, error) {
 			{Argv: []string{cmdSchtasks, "/delete", flagTaskName, winTaskName, "/f"}},
 		}}, nil
 	default:
-		return Plan{}, unsupportedOS(cfg)
+		return Plan{}, unsupportedOS(messages, cfg)
 	}
 }
 
-func unsupportedOS(cfg Config) error {
-	return clitext.Failure(cfg.language(), errUnsupportedOS, clitext.ServiceUnsupportedOS, clitext.Params{clitext.ParamOS: strconv.Quote(goos(cfg))})
+func unsupportedOS(messages *clitext.Messages, cfg Config) error {
+	return messages.Failure(cfg.language(), errUnsupportedOS, clitext.ServiceUnsupportedOS, clitext.Params{clitext.ParamOS: strconv.Quote(goos(cfg))})
 }
 
 func (c Config) language() i18n.Language {
@@ -224,7 +224,7 @@ func (c Config) language() i18n.Language {
 }
 
 // StatusCommand returns the command that reports whether the service is active.
-func StatusCommand(cfg Config) (Command, error) {
+func StatusCommand(messages *clitext.Messages, cfg Config) (Command, error) {
 	switch goos(cfg) {
 	case goosLinux:
 		return Command{Argv: []string{cmdSystemctl, flagUser, "status", linuxUnitName}, IgnoreErr: true}, nil
@@ -233,13 +233,13 @@ func StatusCommand(cfg Config) (Command, error) {
 	case goosWindows:
 		return Command{Argv: []string{cmdSchtasks, "/query", flagTaskName, winTaskName, "/v"}, IgnoreErr: true}, nil
 	default:
-		return Command{}, unsupportedOS(cfg)
+		return Command{}, unsupportedOS(messages, cfg)
 	}
 }
 
 // RestartCommands returns the platform commands that restart the running
 // service. Some platforms need more than one (stop then start).
-func RestartCommands(cfg Config) ([]Command, error) {
+func RestartCommands(messages *clitext.Messages, cfg Config) ([]Command, error) {
 	switch goos(cfg) {
 	case goosLinux:
 		return []Command{{Argv: []string{cmdSystemctl, flagUser, "restart", linuxUnitName}}}, nil
@@ -252,14 +252,14 @@ func RestartCommands(cfg Config) ([]Command, error) {
 			{Argv: []string{cmdSchtasks, "/run", flagTaskName, winTaskName}},
 		}, nil
 	default:
-		return nil, unsupportedOS(cfg)
+		return nil, unsupportedOS(messages, cfg)
 	}
 }
 
 // Restart restarts the service inline (for a separate caller process, e.g. the
 // `herrscher service restart` CLI, never the daemon restarting itself).
-func Restart(ctx context.Context, c Config) error {
-	cmds, err := RestartCommands(c)
+func Restart(ctx context.Context, messages *clitext.Messages, c Config) error {
+	cmds, err := RestartCommands(messages, c)
 	if err != nil {
 		return err
 	}
@@ -278,7 +278,7 @@ func Restart(ctx context.Context, c Config) error {
 // (systemd-run) that lives outside that cgroup. launchd/Task Scheduler manage
 // the service from a separate process domain, so a normal restart already
 // survives there.
-func RestartDetached(ctx context.Context, cfg Config) error {
+func RestartDetached(ctx context.Context, messages *clitext.Messages, cfg Config) error {
 	if goos(cfg) == goosLinux {
 		return runCommand(ctx, Command{Argv: []string{
 			"systemd-run", flagUser, "--on-active=3",
@@ -286,7 +286,7 @@ func RestartDetached(ctx context.Context, cfg Config) error {
 			cmdSystemctl, flagUser, "restart", linuxUnitName,
 		}})
 	}
-	return Restart(ctx, cfg)
+	return Restart(ctx, messages, cfg)
 }
 
 func validateSource(messages *clitext.Messages, src string) error {
@@ -460,7 +460,7 @@ func Update(ctx context.Context, messages *clitext.Messages, cfg Config, src str
 		}
 		fmt.Fprintln(os.Stderr, note)
 	}
-	return Restart(ctx, cfg)
+	return Restart(ctx, messages, cfg)
 }
 
 func syncUnitPath(cfg Config) (bool, error) {
@@ -810,11 +810,11 @@ func renderHelp(translator *clitext.Translator, key string) (string, error) {
 
 // Install runs the install plan for the current OS: it writes the unit/launcher
 // and secrets template, then enables and starts the service.
-func Install(ctx context.Context, cfg Config) error {
+func Install(ctx context.Context, messages *clitext.Messages, cfg Config) error {
 	if !envFileHasRequired(cfg.EnvFile, cfg.EnvVars) {
 		cfg.SkipStart = true
 	}
-	plan, err := BuildPlan(cfg)
+	plan, err := BuildPlan(messages, cfg)
 	if err != nil {
 		return err
 	}
@@ -822,8 +822,8 @@ func Install(ctx context.Context, cfg Config) error {
 }
 
 // Uninstall stops and removes the service for the current OS.
-func Uninstall(ctx context.Context, c Config) error {
-	plan, err := BuildUninstall(c)
+func Uninstall(ctx context.Context, messages *clitext.Messages, c Config) error {
+	plan, err := BuildUninstall(messages, c)
 	if err != nil {
 		return err
 	}
@@ -831,8 +831,8 @@ func Uninstall(ctx context.Context, c Config) error {
 }
 
 // Status prints the platform's service status to stdout/stderr.
-func Status(ctx context.Context, c Config) error {
-	cmd, err := StatusCommand(c)
+func Status(ctx context.Context, messages *clitext.Messages, c Config) error {
+	cmd, err := StatusCommand(messages, c)
 	if err != nil {
 		return err
 	}

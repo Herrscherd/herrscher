@@ -55,7 +55,7 @@ func (u serviceUpdater) Build(ctx context.Context, pull bool) (string, error) {
 }
 
 func (u serviceUpdater) Restart(ctx context.Context) error {
-	return service.RestartDetached(ctx, u.cfg)
+	return service.RestartDetached(ctx, u.messages, u.cfg)
 }
 
 // Deps is the channel the daemon drives. It is the neutral contracts.GatewaySet

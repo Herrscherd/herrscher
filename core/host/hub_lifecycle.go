@@ -277,6 +277,7 @@ func (h *hub) goLiveLocked(ctx context.Context, sess state.Session) error {
 	}
 	bound := boundGateways(h.gws, effectiveKinds(h.gws, sess))
 	terms := liveModelTerms(h.st, h.models, sess.Name)
+	h.announceInterruptedTurn(sess)
 	done := make(chan struct{})
 	h.trackStartup(startupRun{name: sess.Name, cancel: cancel, done: done})
 	go func() {

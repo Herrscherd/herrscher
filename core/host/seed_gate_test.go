@@ -1,8 +1,10 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -28,6 +30,48 @@ func TestATapIsRefusedOnceTheSeedShutsItsGate(t *testing.T) {
 	}
 }
 
+func TestAResumeTokenIsRefusedOnceTheSeedShutsItsGate(t *testing.T) {
+	var resumed []string
+	runtime := oneShotSeedRuntime{resume: func(_, token string) {
+		resumed = append(resumed, token)
+	}}
+	sess := state.Session{Name: "window"}
+	driver := newSessionDriver(sess.Name, nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1), io.Discard)
+	gate := attachOneShotTaps(driver, sess, runtime)
+
+	driver.sink.Resume("before")
+	gate.shut()
+	driver.sink.Resume("during consolidation")
+
+	if len(resumed) != 1 || resumed[0] != "before" {
+		t.Fatalf("resumed = %v, want only the token admitted before the gate shut", resumed)
+	}
+}
+
+func TestARefusedDeliveryWarnsOncePerKindWithTheSession(t *testing.T) {
+	var warned bytes.Buffer
+	gate := newSeedGate("window", &warned, fixedLanguageSource(i18n.English))
+	gate.shut()
+	refused := func() { t.Fatal("a delivery reached the session after the gate shut") }
+	gate.admit(lateEventKey, refused)
+	gate.admit(lateEventKey, refused)
+	gate.admit(lateResumeKey, refused)
+	gate.admit(lateResumeKey, refused)
+
+	lines := strings.Split(strings.TrimSuffix(warned.String(), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("warnings = %q, want one line per refused kind", warned.String())
+	}
+	if !strings.Contains(lines[0], "event") || !strings.Contains(lines[1], "resume token") {
+		t.Fatalf("warnings = %q, want the event line then the resume token line", warned.String())
+	}
+	for _, line := range lines {
+		if !strings.Contains(line, "window") {
+			t.Fatalf("warning %q does not name the session", line)
+		}
+	}
+}
+
 type probeOrchestrator struct {
 	contracts.Orchestrator
 
@@ -39,10 +83,10 @@ func (p probeOrchestrator) Consolidate(ctx context.Context) error {
 }
 
 func TestConsolidationRunsWithTheGateShut(t *testing.T) {
-	gate := &seedGate{}
+	gate := newSeedGate("window", io.Discard, fixedLanguageSource(i18n.English))
 	delivered := false
 	orch := probeOrchestrator{consolidate: func(context.Context) error {
-		gate.admit(func() { delivered = true })
+		gate.admit(lateEventKey, func() { delivered = true })
 		return nil
 	}}
 	consolidateOneShot(context.Background(), orch, gate, state.Session{Name: "window"}, io.Discard, fixedLanguageSource(i18n.English))

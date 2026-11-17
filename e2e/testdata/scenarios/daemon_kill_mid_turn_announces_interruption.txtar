@@ -1,0 +1,33 @@
+! exec herrscher serve &daemon&
+waitdaemon
+exec herrscher session create --name resumed
+exec herrscher session seed --name resumed --task 'premier tour'
+stdout '^premier, réponse$'
+exec herrscher session send --name resumed --text 'tour coupé'
+waitlog 'prompt .*tour coupé'
+waitlog 'session tok-interrupted-43'
+kill -KILL daemon
+instancegone
+wait daemon
+! waitdaemon
+! exec herrscher serve &daemon2&
+waitdaemon
+exec herrscher session seed --name resumed --task 'après redémarrage'
+stdout '^reprise ok$'
+exec herrscher session scrollback --name resumed
+stdout 'notice'
+stdout 'sans réponse|no reply'
+waitlog 'start .*--resume tok-restart-42'
+! grep 'start .*--resume tok-interrupted-43' $WORK/claude.log
+kill -INT daemon2
+wait daemon2
+! waitdaemon
+
+-- claude.script --
+session tok-restart-42
+text premier, réponse
+---
+session tok-interrupted-43
+hang
+---
+text reprise ok

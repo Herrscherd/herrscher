@@ -500,6 +500,26 @@
     "other": "herrscher : session \"{{.Name}}\" : consolidation après {{.Elapsed}} : {{.Detail}}"
   },
   {
+    "id": "seed.late_transcript",
+    "description": "A transcript entry reaches a one-shot seed after its gate shut and is dropped, Name names the session; warned once per kind of item per seed",
+    "other": "herrscher : session \"{{.Name}}\" : une entrée de transcription reçue après la fermeture du seed a été abandonnée"
+  },
+  {
+    "id": "seed.late_event",
+    "description": "An event reaches a one-shot seed after its gate shut and is dropped, Name names the session; warned once per kind of item per seed",
+    "other": "herrscher : session \"{{.Name}}\" : un événement reçu après la fermeture du seed a été abandonné"
+  },
+  {
+    "id": "seed.late_usage",
+    "description": "A usage record reaches a one-shot seed after its gate shut and is dropped, Name names the session; warned once per kind of item per seed",
+    "other": "herrscher : session \"{{.Name}}\" : un relevé d'usage reçu après la fermeture du seed a été abandonné"
+  },
+  {
+    "id": "seed.late_resume",
+    "description": "A resume token reaches a one-shot seed after its gate shut and is dropped, Name names the session; warned once per kind of item per seed",
+    "other": "herrscher : session \"{{.Name}}\" : un jeton de reprise reçu après la fermeture du seed a été abandonné"
+  },
+  {
     "id": "serve.instance_persist",
     "description": "The instance identifier cannot be saved, Detail carries the cause",
     "other": "enregistrement de l'identifiant d'instance impossible : {{.Detail}}"
@@ -613,6 +633,16 @@
     "id": "warn.session_resume_token",
     "description": "The resume token of a session could not be saved; a restart loses its conversation",
     "other": "herrscher serve : session \"{{.Name}}\" : jeton de reprise non enregistré, un redémarrage perdra la conversation : {{.Detail}}"
+  },
+  {
+    "id": "warn.session_turn_mark_set",
+    "description": "La marque de tour interrompu d'une session n'a pas pu être écrite ; un arrêt du démon pendant ce tour passerait sans annonce",
+    "other": "herrscher serve : session \"{{.Name}}\" : tour non marqué, un arrêt pendant ce tour passera sans annonce : {{.Detail}}"
+  },
+  {
+    "id": "warn.session_turn_mark_clear",
+    "description": "La marque de tour interrompu d'une session n'a pas pu être effacée ; le prochain démarrage annoncerait un tour déjà réglé",
+    "other": "herrscher serve : session \"{{.Name}}\" : marque de tour interrompu non effacée, le prochain démarrage l'annoncera à nouveau : {{.Detail}}"
   },
   {
     "id": "warn.session_project_pin",

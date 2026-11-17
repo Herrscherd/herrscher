@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
 )
@@ -73,7 +72,8 @@ type Session struct {
 	// ResumeToken is the backend's opaque resume id, folded in from each turn's
 	// reply so a restart can resume the conversation with --resume. Empty =
 	// start fresh.
-	ResumeToken string `json:"resumeToken,omitempty"`
+	ResumeToken     string `json:"resumeToken,omitempty"`
+	InterruptedTurn string `json:"interruptedTurn,omitempty"`
 
 	// Archived marks a session closed-but-kept (session archive): its row,
 	// transcript and ResumeToken are retained so /resume can revive it, but the
@@ -137,13 +137,14 @@ func (s Session) IsLegacy() bool {
 
 // State is the daemon's persisted configuration. All access is mutex-guarded.
 type State struct {
-	mu           sync.Mutex `json:"-"`
-	path         string     `json:"-"`
-	Home         HomeRef    `json:"home"`
-	Repo         string     `json:"repo,omitempty"`
-	Workspace    string     `json:"workspace,omitempty"`
-	Source       string     `json:"source,omitempty"`
-	OperatorLang string     `json:"operator_lang,omitempty"`
+	mu           sync.Mutex                                             `json:"-"`
+	path         string                                                 `json:"-"`
+	write        func(name string, data []byte, perm os.FileMode) error `json:"-"`
+	Home         HomeRef                                                `json:"home"`
+	Repo         string                                                 `json:"repo,omitempty"`
+	Workspace    string                                                 `json:"workspace,omitempty"`
+	Source       string                                                 `json:"source,omitempty"`
+	OperatorLang string                                                 `json:"operator_lang,omitempty"`
 	// Approvals is the daemon-wide rule set, stored rendered ("ask Bash(git
 	// push*)") rather than structured: it is what the operator typed, it reads
 	// back out of the file, and parsing is already the check that runs before a
@@ -187,7 +188,7 @@ type RoleAssignment struct {
 }
 
 // NewState returns an empty state bound to path (not yet written).
-func NewState(path string) *State { return &State{path: path} }
+func NewState(path string) *State { return &State{path: path, write: os.WriteFile} }
 
 // ApplyDefaults seeds declarative config.json values into the in-memory state
 // for any field not already set, WITHOUT persisting. This keeps config.json the
@@ -291,10 +292,17 @@ func (s *State) saveLocked() error {
 		return err
 	}
 	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, buf, privateFileMode); err != nil {
+	if err := s.writeFile(tmp, buf, privateFileMode); err != nil {
 		return err
 	}
 	return os.Rename(tmp, s.path)
+}
+
+func (s *State) writeFile(name string, data []byte, perm os.FileMode) error {
+	if s.write == nil {
+		return os.WriteFile(name, data, perm)
+	}
+	return s.write(name, data, perm)
 }
 
 // FindSession returns the session with name (and whether it exists).
@@ -379,171 +387,6 @@ func (s *State) RenameSession(oldName, newName string) error {
 	return s.saveLocked()
 }
 
-// SetResumeToken records the backend resume token for the named session,
-// persisting only when it changes. Turns report the same id, so this avoids
-// rewriting state.json every turn. A missing session or an unchanged token is a
-// no-op.
-func (s *State) SetResumeToken(name, token string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for idx := range s.Sessions {
-		if s.Sessions[idx].Name == name {
-			if s.Sessions[idx].ResumeToken == token {
-				return nil
-			}
-			s.Sessions[idx].ResumeToken = token
-			return s.saveLocked()
-		}
-	}
-	return nil
-}
-
-// MemoryRoots answers which project and agent this session files what it learns
-// under. A memory root wins over the placement field of the same name: Project
-// may be steering the session into a workspace sub-directory and Agent may be
-// demanding an isolated worktree, and neither says where knowledge goes. Every
-// path that scopes memory (the supervisor spawning a bridge, the daemon running
-// a one-shot seed) asks here, so the two cannot drift.
-func (s Session) MemoryRoots() (string, string) {
-	project, agent := s.MemoryProject, s.MemoryAgent
-	if project == "" {
-		project = s.Project
-	}
-	if agent == "" {
-		agent = s.Agent
-	}
-	return project, agent
-}
-
-// SetProjectPinned records the memory project a session settled on and marks it
-// chosen, so no later turn re-opens the question. Mirrors SetResumeToken's
-// locking and persistence: a missing session, or a project already pinned to the
-// same value, is a no-op rather than a rewrite of state.json.
-func (s *State) SetProjectPinned(name, project string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for idx := range s.Sessions {
-		if s.Sessions[idx].Name != name {
-			continue
-		}
-		if s.Sessions[idx].MemoryProject == project && s.Sessions[idx].ProjectPinned {
-			return nil
-		}
-		s.Sessions[idx].MemoryProject = project
-		s.Sessions[idx].ProjectPinned = true
-		return s.saveLocked()
-	}
-	return nil
-}
-
-// SetPausedReason records why a session halted on a budget cap ("" clears it,
-// resuming the session). Mirrors SetResumeToken's locking + persistence.
-func (s *State) SetPausedReason(name, reason string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for idx := range s.Sessions {
-		if s.Sessions[idx].Name == name {
-			if s.Sessions[idx].PausedReason == reason {
-				return nil
-			}
-			s.Sessions[idx].PausedReason = reason
-			return s.saveLocked()
-		}
-	}
-	return nil
-}
-
-// SetBudget persists the budget caps and paused reason for the named session
-// in one write. Mirrors SetResumeToken/SetPausedReason's locking + persistence.
-// Used by session set-budget so raising a cap (which clears PausedReason)
-// survives restart. A missing session is a no-op.
-func (s *State) SetBudget(name string, costCap float64, tokenCap uint64, cohortCostCap float64, cohortTokenCap uint64, pausedReason string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for idx := range s.Sessions {
-		if s.Sessions[idx].Name != name {
-			continue
-		}
-		s.Sessions[idx].CostCap = costCap
-		s.Sessions[idx].TokenCap = tokenCap
-		s.Sessions[idx].CohortCostCap = cohortCostCap
-		s.Sessions[idx].CohortTokenCap = cohortTokenCap
-		s.Sessions[idx].PausedReason = pausedReason
-		return s.saveLocked()
-	}
-	return nil
-}
-
-// SetCompactPercent stores a session's automatic compaction threshold, nil dropping the override so the config default applies. It returns false when no session matches name.
-func (s *State) SetCompactPercent(name string, percent *int) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for idx := range s.Sessions {
-		if s.Sessions[idx].Name != name {
-			continue
-		}
-		s.Sessions[idx].CompactPercent = percent
-		return true, s.saveLocked()
-	}
-	return false, nil
-}
-
-// SetAccount sets a session account profile, dropping its resume token when fresh; false when no session matches.
-func (s *State) SetAccount(name, account string, fresh bool) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for idx := range s.Sessions {
-		if s.Sessions[idx].Name != name {
-			continue
-		}
-		s.Sessions[idx].Account = account
-		if fresh {
-			s.Sessions[idx].ResumeToken = ""
-		}
-		return true, s.saveLocked()
-	}
-	return false, nil
-}
-
-// SetBackendTarget re-points a live session's backend: it rewrites Vendor and the
-// opaque Cmd string (which carries model+effort) and clears the resume token,
-// which is backend-specific and meaningless once the vendor/model changes. The
-// caller restarts the supervised child so the new values take effect. Returns
-// false when no session matches name, and the persistence error when the new
-// target could not be written.
-func (s *State) SetBackendTarget(name, vendor, cmd, modelID string) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for idx := range s.Sessions {
-		if s.Sessions[idx].Name != name {
-			continue
-		}
-		s.Sessions[idx].Vendor = vendor
-		s.Sessions[idx].Cmd = cmd
-		s.Sessions[idx].ModelID = modelID
-		s.Sessions[idx].ResumeToken = ""
-		return true, s.saveLocked()
-	}
-	return false, nil
-}
-
-// SetArchived sets a session's archived flag and persists only on change. An
-// unknown name is a no-op (best-effort, mirrors SetResumeToken).
-func (s *State) SetArchived(name string, archived bool) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for idx := range s.Sessions {
-		if s.Sessions[idx].Name == name {
-			if s.Sessions[idx].Archived == archived {
-				return nil
-			}
-			s.Sessions[idx].Archived = archived
-			return s.saveLocked()
-		}
-	}
-	return nil
-}
-
 // SetHome records the home ref and persists.
 func (s *State) SetHome(home HomeRef) error {
 	s.mu.Lock()
@@ -591,148 +434,6 @@ func (s *State) SourceDir() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.Source
-}
-
-// ApprovalRules returns a copy of the daemon-wide rule set.
-func (s *State) ApprovalRules() []string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return append([]string(nil), s.Approvals...)
-}
-
-// AddApprovalRule appends a rendered rule, ignoring one already present, and
-// persists. The caller parses first: this stores text it was told is valid.
-func (s *State) AddApprovalRule(rendered string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, r := range s.Approvals {
-		if r == rendered {
-			return nil
-		}
-	}
-	s.Approvals = append(s.Approvals, rendered)
-	return s.saveLocked()
-}
-
-// RemoveApprovalRule drops a rendered rule, reporting whether it was there.
-func (s *State) RemoveApprovalRule(rendered string) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for idx, r := range s.Approvals {
-		if r == rendered {
-			s.Approvals = append(s.Approvals[:idx], s.Approvals[idx+1:]...)
-			return true, s.saveLocked()
-		}
-	}
-	return false, nil
-}
-
-// DefaultApprovalWait is how long a pending request waits for a human before it
-// is refused. Long enough to walk back to a keyboard, short enough that a
-// scheduled turn firing at 3am is not still holding a session at breakfast.
-//
-// Exported so the broker that does the waiting falls back to the same number
-// this file returns, instead of keeping a second copy of it that could drift.
-const DefaultApprovalWait = 5 * time.Minute
-
-// ApprovalWait is the configured wait, or five minutes. No verb writes the
-// field: it is edited by hand in state.json, so anything unparseable or
-// negative is answered with the default here rather than refused at a door
-// there is none of.
-func (s *State) ApprovalWait() time.Duration {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.ApprovalTimeout == "" {
-		return DefaultApprovalWait
-	}
-	timeout, err := time.ParseDuration(s.ApprovalTimeout)
-	if err != nil || timeout <= 0 {
-		return DefaultApprovalWait
-	}
-	return timeout
-}
-
-// SetSessionApprovals changes one session's approval mode and persists.
-func (s *State) SetSessionApprovals(name, mode string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for idx := range s.Sessions {
-		if s.Sessions[idx].Name == name {
-			s.Sessions[idx].Approvals = mode
-			return s.saveLocked()
-		}
-	}
-	return fmt.Errorf("%w: %q", errNoSession, name)
-}
-
-// SetSessionLanguage stores the language a session answers in and persists it.
-func (s *State) SetSessionLanguage(name, lang string) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for idx := range s.Sessions {
-		if s.Sessions[idx].Name == name {
-			s.Sessions[idx].Language = lang
-			return true, s.saveLocked()
-		}
-	}
-	return false, nil
-}
-
-// RoleAssignments returns a copy of the role table.
-func (s *State) RoleAssignments() map[string]RoleAssignment {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	out := make(map[string]RoleAssignment, len(s.Roles))
-	for k, v := range s.Roles {
-		out[k] = v
-	}
-	return out
-}
-
-// RoleNames is the table as the pure authorization package reads it: principal
-// to role name, with the display label dropped. It decides nothing, so it does
-// not travel to the code that decides.
-func (s *State) RoleNames() map[string]string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if len(s.Roles) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(s.Roles))
-	for k, v := range s.Roles {
-		out[k] = v.Role
-	}
-	return out
-}
-
-// SetRole assigns a role to a principal and persists. It reports whether the
-// table was empty before, because that first assignment is a cliff: from then
-// on every gateway account without a role is an observer. The caller validates
-// the role name first; this stores text it was told is valid, like
-// AddApprovalRule.
-func (s *State) SetRole(principal, role, label string) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	first := len(s.Roles) == 0
-	if s.Roles == nil {
-		s.Roles = make(map[string]RoleAssignment)
-	}
-	s.Roles[principal] = RoleAssignment{Role: role, Label: label}
-	return first, s.saveLocked()
-}
-
-// RemoveRole drops an assignment, reporting whether it was there.
-func (s *State) RemoveRole(principal string) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, ok := s.Roles[principal]; !ok {
-		return false, nil
-	}
-	delete(s.Roles, principal)
-	if len(s.Roles) == 0 {
-		s.Roles = nil
-	}
-	return true, s.saveLocked()
 }
 
 // SetStatusMessageID caches the status embed's message id and persists.

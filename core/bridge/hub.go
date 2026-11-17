@@ -101,7 +101,9 @@ func dialHub(ctx context.Context, path string) (*control.Conn, error) {
 	}
 }
 
-func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestrator, opts Options) error {
+func runHub(parent context.Context, newBackend BackendFactory, orch contracts.Orchestrator, opts Options) error {
+	ctx, endHub := context.WithCancel(parent)
+	defer endHub()
 	backend, err := newBackend(opts.Channel)
 	if err != nil {
 		return fmt.Errorf("backend: %w", err)
@@ -119,6 +121,7 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 	scanErr := make(chan error, 1)
 	go func() {
 		defer close(events)
+		defer endHub()
 		scanErr <- conn.Scan(func(event contracts.Event) error {
 			if event.T == eventwire.EventInterrupt {
 				ctrl.interrupt()
@@ -145,7 +148,7 @@ func runHub(ctx context.Context, newBackend BackendFactory, orch contracts.Orche
 	}
 	runHubTurnsCtl(ctx, events, conn, backend, orch, ctrl, eng,
 		affordances{roster: opts.Roster, caps: opts.Capabilities, user: identity.FromDir(ctx, cwd), outbox: outboundSettings{root: opts.OutboxRoot, session: opts.Channel, maxBytes: opts.OutboundMaxBytes}}, pin)
-	if err := ctx.Err(); err != nil {
+	if err := parent.Err(); err != nil {
 		return err
 	}
 	return reportControlScan(<-scanErr)

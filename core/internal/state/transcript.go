@@ -156,6 +156,22 @@ func ReadTranscript(path string, limit int) []TranscriptEntry {
 	return out
 }
 
+// ReadTranscriptTail returns up to limit entries from the file's last 64 KiB.
+func ReadTranscriptTail(path string, limit int) []TranscriptEntry {
+	lines := transcriptTailLines(path)
+	if limit > 0 && len(lines) > limit {
+		lines = lines[len(lines)-limit:]
+	}
+	out := make([]TranscriptEntry, 0, len(lines))
+	for _, line := range lines {
+		var entry TranscriptEntry
+		if json.Unmarshal(line, &entry) == nil {
+			out = append(out, entry)
+		}
+	}
+	return out
+}
+
 // TranscriptSummary is what a session list needs from a transcript without
 // reading it: when it last moved, and how full the model's window was on the
 // last turn that reported usage.

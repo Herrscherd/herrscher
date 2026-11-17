@@ -98,24 +98,6 @@ func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir str
 	return created
 }
 
-func (h *hub) textLanguage() languageSource {
-	if h.language != nil {
-		return h.language
-	}
-	return fixedLanguageSource(h.lang)
-}
-
-func (h *hub) sessionLanguageSource(name string) languageSource {
-	recorded := liveSessionLanguage(h.st, name)
-	operator := h.textLanguage()
-	return func() i18n.Language {
-		if lang := recorded(); lang != 0 {
-			return lang
-		}
-		return operator()
-	}
-}
-
 func (h *hub) operatorCommands() asOperator {
 	return asOperator{disp: h, lang: h.textLanguage()}
 }
@@ -151,9 +133,13 @@ func eventTap(publish func(string, contracts.Event), session string) func(contra
 func (h *hub) liveSink(ctx context.Context, sess state.Session) sessionSink {
 	return sessionSink{
 		Resume: func(tok string) {
-			if err := h.st.SetResumeToken(sess.Name, tok); err != nil {
-				warnLive(h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_resume_token", map[string]any{nameParam: sess.Name, detailParam: err})
-			}
+			h.keepResumeToken(sess.Name, tok)
+		},
+		TurnOpened: func(turnID string) {
+			h.openTurnMark(sess.Name, turnID)
+		},
+		TurnSettled: func() {
+			h.clearTurnMark(sess.Name)
 		},
 		Project: func(p string) {
 			if err := h.st.SetProjectPinned(sess.Name, p); err != nil {
@@ -174,34 +160,6 @@ func (h *hub) liveSink(ctx context.Context, sess state.Session) sessionSink {
 	}
 }
 
-func sessionLanguage(sess state.Session, operator i18n.Language) i18n.Language {
-	if lang := knownSessionLanguage(sess); lang != 0 {
-		return lang
-	}
-	return operator
-}
-
-func knownSessionLanguage(sess state.Session) i18n.Language {
-	lang, err := i18n.ParseLanguage(sess.Language)
-	if err != nil {
-		return 0
-	}
-	return lang
-}
-
-func liveSessionLanguage(store *state.State, name string) func() i18n.Language {
-	return func() i18n.Language {
-		if store == nil {
-			return 0
-		}
-		session, ok := store.FindSession(name)
-		if !ok {
-			return 0
-		}
-		return knownSessionLanguage(session)
-	}
-}
-
 func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, error) {
 	if err := h.authorize(ctx, args); err != nil {
 		return contracts.Result{}, err
@@ -218,6 +176,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 			models:          h.models,
 			sessions:        h.sessions,
 			recordUsage:     h.recordUsage,
+			resume:          h.keepResumeToken,
 			record: func(session string, entry state.TranscriptEntry) {
 				if err := state.AppendTranscript(state.TranscriptPath(h.partDir, session), entry); err != nil {
 					warnLive(h.warnings, h.sessionLanguageSource(session), "warn.session_seed_transcript", map[string]any{nameParam: session, detailParam: err})
@@ -457,21 +416,23 @@ func scrollbackOf(partDir, name string) []contracts.ScrollbackLine {
 	}
 	out := make([]contracts.ScrollbackLine, 0, len(entries))
 	for i := range entries {
-		out = append(out, contracts.ScrollbackLine{Role: entries[i].Role, Text: entries[i].Text, TurnID: entries[i].TurnID})
+		out = append(out, scrollbackLineOf(entries[i]))
 	}
 	return out
 }
 
-func (h *hub) RestartWithResume(name, token string) error {
-	sess, ok := h.st.FindSession(name)
-	if !ok {
-		return &NotFoundError{Kind: kindSession, Name: name}
+func scrollbackLineOf(entry state.TranscriptEntry) contracts.ScrollbackLine {
+	line := contracts.ScrollbackLine{Role: entry.Role, Text: entry.Text, TurnID: entry.TurnID}
+	if entry.Kind == turnInterruptedKind {
+		line.Notice = &contracts.Notice{Code: contracts.CodeTurnInterrupted}
 	}
-	h.goDead(name)
-	sess.ResumeToken = token
-	return h.goLiveStarted(context.Background(), sess, func() error {
-		return h.st.SetResumeToken(name, token)
-	})
+	return line
+}
+
+func (h *hub) keepResumeToken(session, token string) {
+	if err := h.st.SetResumeToken(session, token); err != nil {
+		warnLive(h.warnings, h.sessionLanguageSource(session), "warn.session_resume_token", map[string]any{nameParam: session, detailParam: err})
+	}
 }
 
 func (h *hub) Resume(name string) error {

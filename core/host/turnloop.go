@@ -62,11 +62,13 @@ func (g *tokenGuard) trips(event contracts.Event) (uint64, bool) {
 }
 
 type sessionSink struct {
-	Resume     func(token string)
-	Project    func(project string)
-	Transcript func(state.TranscriptEntry)
-	Checkpoint func(turnID, text string)
-	Usage      func([]usage.Record)
+	Resume      func(token string)
+	Project     func(project string)
+	Transcript  func(state.TranscriptEntry)
+	Checkpoint  func(turnID, text string)
+	Usage       func([]usage.Record)
+	TurnOpened  func(turnID string)
+	TurnSettled func()
 }
 
 type sessionDriver struct {
@@ -698,6 +700,9 @@ func (d *sessionDriver) prepareTurn(ctx context.Context, item queued) (contracts
 	event.SessionIncarnation = d.incarnation
 	event.Agent = d.agent
 	d.activeTurnID = event.TurnID
+	if d.sink.TurnOpened != nil {
+		d.sink.TurnOpened(event.TurnID)
+	}
 	if d.sink.Checkpoint != nil {
 		d.sink.Checkpoint(event.TurnID, event.Text)
 	}
@@ -768,7 +773,16 @@ func (d *sessionDriver) abandon(ctx context.Context, ev contracts.Event) {
 	if ev.T != eventwire.EventInput {
 		return
 	}
+	if ctx.Err() == nil {
+		d.settleTurn()
+	}
 	d.fanOut(ctx, contracts.Event{T: eventwire.EventAbandoned})
+}
+
+func (d *sessionDriver) settleTurn() {
+	if d.sink.TurnSettled != nil {
+		d.sink.TurnSettled()
+	}
 }
 
 func (d *sessionDriver) awaitTurn(ctx context.Context, guard tokenGuard) bool {
@@ -856,6 +870,7 @@ func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event,
 		cacheWrite:    event.CacheCreate,
 	}, d.modelNow().rates)
 	d.deliverReply(ctx, event, files)
+	d.settleTurn()
 	if d.sink.Resume != nil && event.Resume != "" {
 		d.sink.Resume(event.Resume)
 	}
@@ -1338,8 +1353,15 @@ func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, cha
 		driver.gate = gate
 	}
 	sessions.register(name, driver)
+	driverCtx, stopDriver := context.WithCancel(ctx)
+	driverDone := make(chan struct{})
+	defer func() { <-driverDone }()
 	defer sessions.unregister(name, driver)
-	go driver.run(ctx)
+	defer stopDriver()
+	go func() {
+		defer close(driverDone)
+		driver.run(driverCtx)
+	}()
 
 	for {
 		select {

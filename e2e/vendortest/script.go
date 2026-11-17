@@ -27,6 +27,7 @@ const (
 	stepCrash
 	stepEcho
 	stepAPIError
+	stepSession
 	stepUsage
 	stepExpect
 )
@@ -72,7 +73,10 @@ func (e *LineError) Unwrap() error {
 	return e.Err
 }
 
-// ParseScript reads a script of steps, one per line, and refuses an empty turn.
+// ParseScript reads a script. Each line is one step: "text <words>", "tool
+// <Name> <json input>", "expect allowed|denied", "error <message>", "apierror
+// <message>", "session <id>", "spawn <file>", "echo", "hang" or "crash", the
+// last three alone. Blank lines are skipped and a turn with no step is refused.
 func ParseScript(source io.Reader) (Script, error) {
 	var script Script
 	current := Turn{}
@@ -106,7 +110,7 @@ func ParseScript(source io.Reader) (Script, error) {
 }
 
 var (
-	errUnknownStep  = errors.New("unknown step, want text, tool, expect, error, apierror, usage, spawn, echo, hang or crash")
+	errUnknownStep  = errors.New("unknown step, want text, tool, expect, error, apierror, usage, session, spawn, echo, hang or crash")
 	errUsageCount   = errors.New("usage wants a whole number of input tokens, as in: usage 950")
 	errExpectWord   = errors.New("expect wants allowed or denied after its name")
 	errToolNeedsArg = errors.New("tool wants a name and a JSON input")
@@ -151,6 +155,8 @@ func parseStep(line string) (step, error) {
 		return textStep(stepFail, rest)
 	case "apierror":
 		return textStep(stepAPIError, rest)
+	case "session":
+		return textStep(stepSession, rest)
 	case "tool":
 		return toolStep(rest)
 	case "usage":

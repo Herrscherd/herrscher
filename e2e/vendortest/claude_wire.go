@@ -111,6 +111,16 @@ type failedResultEvent struct {
 	Errors []string `json:"errors"`
 }
 
+type sessionEvent struct {
+	Type      string `json:"type"`
+	Subtype   string `json:"subtype"`
+	SessionID string `json:"session_id"`
+}
+
+func sessionInit(id string) sessionEvent {
+	return sessionEvent{Type: "system", Subtype: "init", SessionID: id}
+}
+
 const charsPerToken = 4
 
 func (r *replay) fields(subtype string, isError bool, prompt, text string, reported int) resultFields {

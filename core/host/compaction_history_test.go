@@ -266,6 +266,26 @@ func TestPruneRefusesAFrameLargerThanTheChunkLimitBeforeAnySend(t *testing.T) {
 	for i := range edits {
 		edits[i].CallID = wideID + strconv.Itoa(i)
 	}
+	refuseBeforeSend(t, f, edits)
+}
+
+func TestPruneRefusesByTheEncodedFrameNotByTheRawIDLength(t *testing.T) {
+	f, _, _ := historyFixture(t, true)
+	edits := numberedEdits(historywire.MaxPruneEdits)
+	wideID := strings.Repeat("x", 110)
+	rawIDBytes := 0
+	for i := range edits {
+		edits[i].CallID = wideID + strconv.Itoa(i)
+		rawIDBytes += len(edits[i].CallID)
+	}
+	if rawIDBytes > historywire.ChunkLimit {
+		t.Fatalf("the raw call IDs weigh %d bytes, over the chunk limit: the fixture no longer separates raw from encoded size", rawIDBytes)
+	}
+	refuseBeforeSend(t, f, edits)
+}
+
+func refuseBeforeSend(t *testing.T, f *compactFixture, edits []contracts.HistoryEdit) {
+	t.Helper()
 	refusal := make(chan error, 1)
 	go func() {
 		_, err := bridgeHistory{driver: f.driver}.PruneHistory(context.Background(), edits)

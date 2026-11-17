@@ -20,9 +20,9 @@ func daemonOwned() [][]string {
 	return [][]string{{nsSession}, {"host"}, {nsApprove}, {"role"}}
 }
 
-func forwarderFor(layout RuntimeLayout) seedCommandForwarder {
+func forwarderFor(messages *hostMessages, layout RuntimeLayout) seedCommandForwarder {
 	return func(ctx context.Context, path string, argv []string) (string, bool, error) {
-		return dispatchToOperatorDaemon(ctx, layout, path, argv)
+		return dispatchToOperatorDaemon(ctx, messages, layout, path, argv)
 	}
 }
 

@@ -38,7 +38,7 @@ func addSessionVerbs(reg *cli.Registry, lang languageSource, store *state.State,
 	seen := newSeenTable(time.Now())
 	return addVerbs(
 		reg,
-		seedVerb(store, layout, instID, seedCoord),
+		seedVerb(sessions.messages, store, layout, instID, seedCoord),
 		sessionSendVerb(sessions),
 		sessionPickVerb(lang, approvals, sessions),
 		sessionInfoVerb(store, partDir, sessions, models),
@@ -47,10 +47,10 @@ func addSessionVerbs(reg *cli.Registry, lang languageSource, store *state.State,
 		sessionScrollbackVerb(partDir),
 		sessionInterruptVerb(lang, sessions),
 		sessionCompactVerb(lang, store, sessions),
-		sessionSetCompactVerb(store),
-		sessionSetAccountVerb(lang, store),
+		sessionSetCompactVerb(sessions.messages, store),
+		sessionSetAccountVerb(sessions.messages, lang, store),
 		sessionLangVerb(store, lang),
-		sessionAccountsVerb(lang, store),
+		sessionAccountsVerb(sessions.messages, lang, store),
 	)
 }
 
@@ -68,7 +68,7 @@ func addCheckpointCommands(reg *cli.Registry, lang languageSource, store *state.
 	return addVerbs(reg, addCheckpointVerbs(lang, store, sessions)...)
 }
 
-func seedVerb(store *state.State, layout RuntimeLayout, instID string, seedCoord *coordinatorSlot) contracts.Cmd {
+func seedVerb(messages *hostMessages, store *state.State, layout RuntimeLayout, instID string, seedCoord *coordinatorSlot) contracts.Cmd {
 	return contracts.New(nsSession, verbSeed).
 		Help(clitext.CmdHelpSessionSeed).
 		Param(paramName, clitext.CmdParamSessionSeedName, true).
@@ -76,11 +76,11 @@ func seedVerb(store *state.State, layout RuntimeLayout, instID string, seedCoord
 		ValueParam("turn_id", clitext.CmdParamSessionSeedTurnID, false).
 		ValueParam("timeout", clitext.CmdParamSessionSeedTimeout, false).
 		Do(func(cmdCtx context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(runSeedVerb(cmdCtx, in, store, layout, instID, seedCoord.coord))
+			return cli.Data(runSeedVerb(cmdCtx, messages, in, store, layout, instID, seedCoord.coord))
 		})
 }
 
-func runSeedVerb(ctx context.Context, input contracts.Input, store *state.State, layout RuntimeLayout, instID string, coord contracts.Coordinator) (string, error) {
+func runSeedVerb(ctx context.Context, messages *hostMessages, input contracts.Input, store *state.State, layout RuntimeLayout, instID string, coord contracts.Coordinator) (string, error) {
 	rawTurnID, supplied := input.Lookup("turn_id")
 	turnID, err := resolveTurnID(rawTurnID, supplied)
 	if err != nil {
@@ -90,12 +90,12 @@ func runSeedVerb(ctx context.Context, input contracts.Input, store *state.State,
 	if err != nil {
 		return "", err
 	}
-	runtime := oneShotSeedRuntimeFrom(ctx)
+	runtime := oneShotSeedRuntimeFrom(ctx, messages)
 	runtime.timeout = timeout
 	reply, err := runOneShotSeedCommand(
 		ctx, store, input.Get(paramName), input.Get("task"),
 		turnID, runtime,
-		coord, layout, instID, forwarderFor(layout),
+		coord, layout, instID, forwarderFor(messages, layout),
 	)
 	if err != nil {
 		return "", err
@@ -121,7 +121,7 @@ func sessionSendVerb(sessions *sessionTable) contracts.Cmd {
 }
 
 func sendToSession(ctx context.Context, sessions *sessionTable, input contracts.Input) error {
-	atts, err := parseAttachmentPaths(input.Get("attachments"))
+	atts, err := parseAttachmentPaths(sessions.messages, input.Get("attachments"))
 	if err != nil {
 		return err
 	}
@@ -179,7 +179,7 @@ func sessionPickVerb(lang languageSource, approvals *approvalTable, sessions *se
 			if answerApprovalPick(approvals, sessions, name, value) || sessions.pick(name, value) {
 				return contracts.DataResult(replyText(lang()).Text(clitext.SessionPicked, clitext.Params{clitext.ParamName: name})), nil
 			}
-			return contracts.Result{}, wrapHost(errNoPendingChoice, "session.refused", map[string]any{nameParam: name})
+			return contracts.Result{}, wrapHost(sessions.messages, errNoPendingChoice, "session.refused", map[string]any{nameParam: name})
 		})
 }
 
@@ -238,14 +238,14 @@ func mergedCompactNotice(lang i18n.Language, name, instruction string) string {
 	return replyText(lang).Text(key, clitext.Params{clitext.ParamName: name})
 }
 
-func sessionSetCompactVerb(store *state.State) contracts.Cmd {
+func sessionSetCompactVerb(messages *hostMessages, store *state.State) contracts.Cmd {
 	return contracts.New(nsSession, "set-compact").
 		Help(clitext.CmdHelpSessionSetCompact).
 		Param(paramName, clitext.CmdParamSessionSetCompactName, true).
 		Param("percent", clitext.CmdParamSessionSetCompactPercent, false).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			name := input.Get(paramName)
-			ok, err := applyCompactPercent(store, name, input.Get("percent"))
+			ok, err := applyCompactPercent(messages, store, name, input.Get("percent"))
 			if err != nil {
 				return contracts.Result{}, err
 			}
@@ -256,13 +256,13 @@ func sessionSetCompactVerb(store *state.State) contracts.Cmd {
 		})
 }
 
-func applyCompactPercent(store *state.State, name, raw string) (bool, error) {
+func applyCompactPercent(messages *hostMessages, store *state.State, name, raw string) (bool, error) {
 	if raw == "" {
 		return store.SetCompactPercent(name, nil)
 	}
 	percent, err := strconv.Atoi(raw)
 	if err != nil {
-		return false, wrapHost(err, "session.percent", map[string]any{"Raw": raw})
+		return false, wrapHost(messages, err, "session.percent", map[string]any{"Raw": raw})
 	}
 	if err := contracts.ValidateAutoCompactPercent(percent); err != nil {
 		return false, err

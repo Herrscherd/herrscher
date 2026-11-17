@@ -61,7 +61,7 @@ func TestTerminalAcceptErrorRetiresTheSessionAndRebinds(t *testing.T) {
 		nil,
 		nil,
 		newApprovalTable(io.Discard),
-		newSessionTable(),
+		newSessionTable(newHostMessages()),
 		withWarnings(warnings),
 	)
 	h.runtime = layout
@@ -112,7 +112,7 @@ func TestNormalStopReportsNothing(t *testing.T) {
 				nil,
 				nil,
 				newApprovalTable(io.Discard),
-				newSessionTable(),
+				newSessionTable(newHostMessages()),
 				withWarnings(warnings),
 			)
 			h.runtime = layout
@@ -134,7 +134,7 @@ func TestStaleAcceptFailureLeavesTheReplacementLive(t *testing.T) {
 	current := make(chan struct{})
 	stale := make(chan struct{})
 	var warnings lockedBuffer
-	h := testHub(&hub{warnings: &warnings, live: map[string]liveSession{name: {done: current, cancel: func() {}, release: func() {}}}})
+	h := testHub(&hub{messages: newHostMessages(), warnings: &warnings, live: map[string]liveSession{name: {done: current, cancel: func() {}, release: func() {}}}})
 
 	h.acceptFailed(name, stale, errTerminalAccept)
 

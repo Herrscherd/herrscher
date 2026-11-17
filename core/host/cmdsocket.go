@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net"
 	"time"
 
@@ -38,10 +37,10 @@ type cmdResponse struct {
 	Output string  `json:"output,omitempty"`
 }
 
-func dispatchLiveCommand(ctx context.Context, layout runtimedir.Layout, path string, argv []string) (string, bool, error) {
+func dispatchLiveCommand(ctx context.Context, messages *hostMessages, layout runtimedir.Layout, path string, argv []string) (string, bool, error) {
 	dialCtx, cancel := context.WithTimeout(ctx, commandDialTimeout)
 	defer cancel()
-	conn, err := dialCommandSocket(dialCtx, layout, path)
+	conn, err := dialCommandSocket(dialCtx, messages, layout, path)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return "", true, ctxErr
@@ -67,7 +66,7 @@ func dispatchLiveCommand(ctx context.Context, layout runtimedir.Layout, path str
 	}
 	var resp cmdResponse
 	if err := json.Unmarshal(line, &resp); err != nil {
-		return "", true, wrapHost(err, "command.socket_decode", nil)
+		return "", true, wrapHost(messages, err, "command.socket_decode", nil)
 	}
 	if resp.Err != nil {
 		return "", true, commandFailure(resp)
@@ -107,50 +106,35 @@ func cancellationOr(ctx context.Context, err error) error {
 	return err
 }
 
-func serveCommandSocket(ctx context.Context, layout runtimedir.Layout, path string, disp dispatcher, lang languageSource, warn io.Writer) {
-	if err := serveCommandSocketWithTimeout(ctx, layout, path, disp, defaultCommandReadTimeout); err != nil {
-		warnLive(warn, lang, "warn.command_socket_listen", map[string]any{pathParam: path, detailParam: err})
-	}
-}
-
-func serveCommandSocketWithTimeout(ctx context.Context, layout runtimedir.Layout, path string, disp dispatcher, readTimeout time.Duration) error {
-	listener, err := openSocket(ctx, layout, path)
-	if err != nil {
-		return err
-	}
-	acceptCommands(ctx, listener, disp, readTimeout)
-	return nil
-}
-
-func openSocket(ctx context.Context, layout runtimedir.Layout, path string) (net.Listener, error) {
-	if err := ensureSocketFree(ctx, layout, path); err != nil {
+func openSocket(ctx context.Context, messages *hostMessages, layout runtimedir.Layout, path string) (net.Listener, error) {
+	if err := ensureSocketFree(ctx, messages, layout, path); err != nil {
 		return nil, err
 	}
-	return listenCommandSocket(ctx, layout, path)
+	return listenCommandSocket(ctx, messages, layout, path)
 }
 
 var errSocketTaken = errors.New("another daemon already answers on this socket (same instance, another state file): stop it or pass --instance")
 
 var errInstanceLocked = errors.New("another daemon already holds the lock of this instance: stop it or pass --instance")
 
-func refuseTakenInstance(ctx context.Context, layout runtimedir.Layout, instID string) error {
+func refuseTakenInstance(ctx context.Context, messages *hostMessages, layout runtimedir.Layout, instID string) error {
 	for _, path := range []string{CommandSocketPathIn(layout, instID), EventsSocketPathIn(layout, instID)} {
-		if socketAnswers(ctx, layout, path) {
-			return wrapHost(errSocketTaken, "daemon.socket_taken", map[string]any{pathParam: path})
+		if socketAnswers(ctx, messages, layout, path) {
+			return wrapHost(messages, errSocketTaken, "daemon.socket_taken", map[string]any{pathParam: path})
 		}
 	}
 	return nil
 }
 
-func ensureSocketFree(ctx context.Context, layout runtimedir.Layout, path string) error {
-	if socketAnswers(ctx, layout, path) {
-		return wrapHost(errSocketTaken, "daemon.socket_taken", map[string]any{pathParam: path})
+func ensureSocketFree(ctx context.Context, messages *hostMessages, layout runtimedir.Layout, path string) error {
+	if socketAnswers(ctx, messages, layout, path) {
+		return wrapHost(messages, errSocketTaken, "daemon.socket_taken", map[string]any{pathParam: path})
 	}
 	return nil
 }
 
-func socketAnswers(ctx context.Context, layout runtimedir.Layout, path string) bool {
-	conn, err := dialCommandSocket(ctx, layout, path)
+func socketAnswers(ctx context.Context, messages *hostMessages, layout runtimedir.Layout, path string) bool {
+	conn, err := dialCommandSocket(ctx, messages, layout, path)
 	if err != nil {
 		return false
 	}

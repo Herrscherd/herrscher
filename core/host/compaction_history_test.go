@@ -10,6 +10,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/historywire"
@@ -164,7 +165,7 @@ func TestCompactorStageResolvesItsSettings(t *testing.T) {
 	var keys []string
 	registerSettingsCompactor(t, keyedFactory(&keys))
 	t.Setenv(typesafeEnv, "sk-test")
-	policy, err := newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, []string{"jev", contracts.CompactStageBackend}, nil)
+	policy, err := newCompactionPolicy(context.Background(), newHostMessages(), testLanguage(), io.Discard, nil, []string{"jev", contracts.CompactStageBackend}, nil)
 	if err != nil {
 		t.Fatalf("newCompactionPolicy: %v", err)
 	}
@@ -177,7 +178,7 @@ func TestMissingCompactorSettingRefusesStartup(t *testing.T) {
 	var keys []string
 	registerSettingsCompactor(t, keyedFactory(&keys))
 	t.Setenv(typesafeEnv, "")
-	_, err := newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, []string{"jev", contracts.CompactStageBackend}, nil)
+	_, err := newCompactionPolicy(context.Background(), newHostMessages(), testLanguage(), io.Discard, nil, []string{"jev", contracts.CompactStageBackend}, nil)
 	if !errors.Is(err, errCompactorSettings) {
 		t.Fatalf("newCompactionPolicy = %v, want errCompactorSettings", err)
 	}
@@ -192,11 +193,22 @@ func TestMissingCompactorSettingRefusesStartup(t *testing.T) {
 	}
 }
 
+func TestMissingCompactorSettingRendersInFrench(t *testing.T) {
+	registerSettingsCompactor(t, keyedFactory(new([]string)))
+	t.Setenv(typesafeEnv, "")
+	owner := newHostMessages()
+	_, err := newCompactionPolicy(context.Background(), owner, testLanguage(), io.Discard, nil, []string{"jev", contracts.CompactStageBackend}, nil)
+	const want = `compactStack "jev" : ces réglages doivent être définis : api_key (set TYPESAFE_API_KEY). Le démon ne démarre pas tant que cette étape échoue : corrige-la ou retire-la de compactStack, puis herrscher service restart`
+	if got := errorTextIn(owner, i18n.French, err); got != want {
+		t.Fatalf("French rendering = %q, want %q", got, want)
+	}
+}
+
 func TestStackWithoutTheCompactorNeedsNoSetting(t *testing.T) {
 	var keys []string
 	registerSettingsCompactor(t, keyedFactory(&keys))
 	t.Setenv(typesafeEnv, "")
-	if _, err := newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, nil, nil); err != nil {
+	if _, err := newCompactionPolicy(context.Background(), newHostMessages(), testLanguage(), io.Discard, nil, nil, nil); err != nil {
 		t.Fatalf("newCompactionPolicy without jev in the stack = %v, want a clean start without %s", err, typesafeEnv)
 	}
 	if len(keys) != 0 {
@@ -224,7 +236,7 @@ func TestCustomStageRefusesBrokenPlugins(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			registerSettingsCompactor(t, tc.factory)
 			getenv := func(string) string { return "sk-test" }
-			if _, err := customStage(context.Background(), tc.stage, getenv); !errors.Is(err, tc.want) {
+			if _, err := customStage(context.Background(), newHostMessages(), tc.stage, getenv); !errors.Is(err, tc.want) {
 				t.Fatalf("customStage = %v, want %v", err, tc.want)
 			}
 		})

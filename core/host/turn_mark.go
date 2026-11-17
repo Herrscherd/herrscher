@@ -16,13 +16,13 @@ func renderTurnInterrupted(lang i18n.Language) (string, error) {
 
 func (h *hub) openTurnMark(session, turnID string) {
 	if err := h.st.SetInterruptedTurn(session, turnID); err != nil {
-		warnLive(h.warnings, h.sessionLanguageSource(session), "warn.session_turn_mark_set", map[string]any{nameParam: session, detailParam: err})
+		warnLive(h.messages, h.warnings, h.sessionLanguageSource(session), "warn.session_turn_mark_set", map[string]any{nameParam: session, detailParam: err})
 	}
 }
 
 func (h *hub) clearTurnMark(session string) {
 	if err := h.st.SetInterruptedTurn(session, ""); err != nil {
-		warnLive(h.warnings, h.sessionLanguageSource(session), "warn.session_turn_mark_clear", map[string]any{nameParam: session, detailParam: err})
+		warnLive(h.messages, h.warnings, h.sessionLanguageSource(session), "warn.session_turn_mark_clear", map[string]any{nameParam: session, detailParam: err})
 	}
 }
 
@@ -51,7 +51,7 @@ func (h *hub) announceInterruptedTurnWith(sess state.Session, render func(i18n.L
 	lang := h.sessionLanguageSource(sess.Name)
 	text, err := render(lang())
 	if err != nil {
-		warnLive(h.warnings, lang, "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
+		warnLive(h.messages, h.warnings, lang, "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
 		return
 	}
 	entry := state.TranscriptEntry{
@@ -62,7 +62,7 @@ func (h *hub) announceInterruptedTurnWith(sess state.Session, render func(i18n.L
 		TurnID: sess.InterruptedTurn,
 	}
 	if err := state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), entry); err != nil {
-		warnLive(h.warnings, lang, "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
+		warnLive(h.messages, h.warnings, lang, "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
 		return
 	}
 	h.clearTurnMark(sess.Name)

@@ -20,8 +20,9 @@ func compactCmdFixture(t *testing.T, vendor string) (*state.State, *sessionTable
 		t.Fatalf("AddSession: %v", err)
 	}
 	queue := make(chan queued, 1)
-	sessions := newSessionTable()
+	sessions := newSessionTable(newHostMessages())
 	sessions.register("api", &sessionDriver{
+		messages:       newHostMessages(),
 		name:           "api",
 		terms:          func() modelTerms { return modelTerms{vendor: vendor} },
 		queue:          queue,

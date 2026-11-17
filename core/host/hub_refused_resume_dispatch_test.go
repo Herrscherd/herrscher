@@ -31,7 +31,7 @@ func TestDispatchOfAnotherSessionReturnsWhileAResumeIsRefused(t *testing.T) {
 	if err := reg.Add(list); err != nil {
 		t.Fatal(err)
 	}
-	h := newHub(st, nil, nil, t.TempDir(), &reg, nil, newApprovalTable(io.Discard), newSessionTable())
+	h := newHub(st, nil, nil, t.TempDir(), &reg, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()))
 	h.runtime = layout
 	const grace = 300 * time.Millisecond
 	h.teardownGrace = grace

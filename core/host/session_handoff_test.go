@@ -27,7 +27,8 @@ type handoffRecord struct {
 
 func fakeHandoff(rec *handoffRecord, clock func() time.Time, known ...string) handoffDeps {
 	return handoffDeps{
-		lang: fixedLanguage(i18n.English),
+		messages: newHostMessages(),
+		lang:     fixedLanguage(i18n.English),
 		exists: func(name string) bool {
 			for _, k := range known {
 				if k == name {

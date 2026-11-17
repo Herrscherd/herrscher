@@ -570,6 +570,11 @@
     "other": "key proxy: {{.Detail}}"
   },
   {
+    "id": "serve.outbox",
+    "description": "The turn outbox root cannot be resolved, Detail carries the cause",
+    "other": "resolve turn outbox: {{.Detail}}"
+  },
+  {
     "id": "session.percent",
     "description": "An invalid compaction percentage, Raw gives the value received and Detail carries the cause",
     "other": "percent \"{{.Raw}}\": {{.Detail}}"
@@ -709,11 +714,6 @@
     "id": "warn.health_server",
     "description": "The health endpoint could not serve",
     "other": "health server: {{.Detail}}"
-  },
-  {
-    "id": "warn.command_socket_listen",
-    "description": "The command socket could not listen on its path",
-    "other": "command socket: listen {{.Path}}: {{.Detail}}"
   },
   {
     "id": "warn.approvals_unreadable",

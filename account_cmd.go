@@ -21,7 +21,7 @@ const accountArgCount = 3
 
 var errAccountUsage = errors.New("account usage")
 
-func runAccount(ctx context.Context, messages *clitext.Messages, args []string) error {
+func runAccount(ctx context.Context, messages *clitext.Messages, hostMessages *host.Messages, args []string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return messages.Failure(clitext.ClientLanguage(), err, clitext.AccountResolveHome, clitext.Params{clitext.ParamErr: err.Error()})
@@ -44,7 +44,7 @@ func runAccount(ctx context.Context, messages *clitext.Messages, args []string) 
 		if err != nil {
 			return err
 		}
-		return removeAccount(messages, store, vendor, name, os.Stdin, os.Stdout)
+		return removeAccount(messages, hostMessages, store, vendor, name, os.Stdin, os.Stdout)
 	case "default":
 		vendor, name, err := accountArgs(messages, args)
 		if err != nil {
@@ -57,7 +57,7 @@ func runAccount(ctx context.Context, messages *clitext.Messages, args []string) 
 		if defaultErr := writeText(os.Stdout, translator, clitext.AccountDefault, clitext.Params{clitext.ParamVendor: vendor, clitext.ParamName: string(name)}); defaultErr != nil {
 			return defaultErr
 		}
-		return warnResumingSessions(messages, vendor, os.Stdout)
+		return warnResumingSessions(messages, hostMessages, vendor, os.Stdout)
 	}
 	return accountUsage(messages, clitext.ClientLanguage())
 }
@@ -163,13 +163,13 @@ func addAccount(ctx context.Context, messages *clitext.Messages, store accounts.
 	})
 }
 
-func removeAccount(messages *clitext.Messages, store accounts.Store, vendor string, name contracts.ProfileName, input io.Reader, output io.Writer) error {
+func removeAccount(messages *clitext.Messages, hostMessages *host.Messages, store accounts.Store, vendor string, name contracts.ProfileName, input io.Reader, output io.Writer) error {
 	translator := messages.For(clitext.ClientLanguage())
 	defaultName, err := store.Default(vendor)
 	if err != nil {
 		return err
 	}
-	users, err := host.ProfileUsers(vendor, string(name), defaultName == string(name))
+	users, err := host.ProfileUsers(hostMessages, vendor, string(name), defaultName == string(name))
 	if err != nil {
 		return err
 	}
@@ -204,8 +204,8 @@ func refuseProfileInUse(messages *clitext.Messages, vendor string, name contract
 	})
 }
 
-func warnResumingSessions(messages *clitext.Messages, vendor string, output io.Writer) error {
-	names, err := host.ResumingSessions(vendor)
+func warnResumingSessions(messages *clitext.Messages, hostMessages *host.Messages, vendor string, output io.Writer) error {
+	names, err := host.ResumingSessions(hostMessages, vendor)
 	if err != nil {
 		return err
 	}

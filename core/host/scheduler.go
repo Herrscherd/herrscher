@@ -143,14 +143,14 @@ func findSchedule(schedules []schedule.Schedule, name string) (schedule.Schedule
 	return schedule.Schedule{}, false
 }
 
-func schedulerSettings() (func() time.Time, time.Duration, error) {
+func schedulerSettings(messages *hostMessages) (func() time.Time, time.Duration, error) {
 	clock, err := schedulerClock()
 	if err != nil {
-		return nil, 0, wrapHost(err, "serve.scheduler_clock", map[string]any{detailParam: err.Error()})
+		return nil, 0, wrapHost(messages, err, "serve.scheduler_clock", map[string]any{detailParam: err.Error()})
 	}
 	tick, err := schedulerInterval()
 	if err != nil {
-		return nil, 0, wrapHost(err, "serve.scheduler_tick", map[string]any{detailParam: err.Error()})
+		return nil, 0, wrapHost(messages, err, "serve.scheduler_tick", map[string]any{detailParam: err.Error()})
 	}
 	return clock, tick, nil
 }

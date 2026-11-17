@@ -77,12 +77,12 @@ func defaultStack() map[string]string {
 // (route policy, gateway credentials, default model), then go-gets and rebuilds.
 // Pass --gateway/--backend/--memory/--orchestrator to swap a category, the kind
 // "none" to drop one, or --with MODULE to pin an extra module verbatim.
-func InitCmd(ctx context.Context, args []string) int {
+func InitCmd(ctx context.Context, hostMessages *host.Messages, args []string) int {
 	out, errOut := errwriter.New(os.Stdout), errwriter.New(os.Stderr)
-	return errwriter.Finish(initHost(ctx, out, errOut, args), out, errOut)
+	return errwriter.Finish(initHost(ctx, hostMessages, out, errOut, args), out, errOut)
 }
 
-func initHost(ctx context.Context, out, errOut *errwriter.Writer, args []string) int {
+func initHost(ctx context.Context, hostMessages *host.Messages, out, errOut *errwriter.Writer, args []string) int {
 	flags := flag.NewFlagSet("init", flag.ContinueOnError)
 	hostDir := flags.String("host", "", msg(clitext.ManageFlagHost, nil))
 	noBuild := flags.Bool("no-build", false, msg(clitext.ManageFlagInitNoBuild, nil))
@@ -122,7 +122,7 @@ func initHost(ctx context.Context, out, errOut *errwriter.Writer, args []string)
 	var secrets map[string]string
 	if interactive {
 		var ok bool
-		choices, secrets, ok = runInitWizard(errOut, compose, choices)
+		choices, secrets, ok = runInitWizard(hostMessages, errOut, compose, choices)
 		if !ok {
 			return 1
 		}
@@ -154,8 +154,8 @@ func initHost(ctx context.Context, out, errOut *errwriter.Writer, args []string)
 	return buildOrRestore(ctx, errOut, dir, manifest, src, modules)
 }
 
-func runInitWizard(errOut *errwriter.Writer, compose bool, choices map[string]string) (map[string]string, map[string]string, bool) {
-	wizardChoices, wizardSecrets, err := runWizard(compose, liveCatalog(host.DefaultModelDiscovery()), currentRoute())
+func runInitWizard(hostMessages *host.Messages, errOut *errwriter.Writer, compose bool, choices map[string]string) (map[string]string, map[string]string, bool) {
+	wizardChoices, wizardSecrets, err := runWizard(compose, liveCatalog(host.DefaultModelDiscovery(hostMessages)), currentRoute())
 	if err != nil {
 		errOut.Println(err)
 		return choices, nil, false

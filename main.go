@@ -60,6 +60,7 @@ func runWith(layout host.RuntimeLayout) int {
 	}
 
 	messages := clitext.NewMessages()
+	hostMessages := host.NewMessages()
 	if refuseBrokenCatalogs(messages, os.Stderr) {
 		return 1
 	}
@@ -72,7 +73,7 @@ func runWith(layout host.RuntimeLayout) int {
 	defer stop()
 
 	if len(os.Args) < minArgsWithCommand {
-		return reportOutcome(ctx, messages, runWithoutCommand(ctx, layout, messages))
+		return reportOutcome(ctx, messages, runWithoutCommand(ctx, layout, messages, hostMessages))
 	}
 
 	cmd := os.Args[1]
@@ -83,10 +84,10 @@ func runWith(layout host.RuntimeLayout) int {
 			fmt.Fprintln(os.Stderr, render(messages, clitext.ClientLanguage(), clitext.TaskNeedsText, clitext.Params{clitext.ParamVerb: cmd}))
 			return exitUsage
 		}
-		return reportOutcome(ctx, messages, runPrompt(ctx, layout, messages, task))
+		return reportOutcome(ctx, messages, runPrompt(ctx, layout, messages, hostMessages, task))
 	}
 
-	if code, ok := runManageCmd(cmd, args); ok {
+	if code, ok := runManageCmd(hostMessages, cmd, args); ok {
 		return code
 	}
 
@@ -98,7 +99,7 @@ func runWith(layout host.RuntimeLayout) int {
 		return 0
 	}
 
-	return outcomeReporterFor(messages, cmd)(ctx, runCommand(ctx, layout, messages, cmd, args))
+	return outcomeReporterFor(messages, cmd)(ctx, runCommand(ctx, layout, messages, hostMessages, cmd, args))
 }
 
 func refuseBrokenCatalogs(messages *clitext.Messages, stderr io.Writer) bool {
@@ -158,9 +159,9 @@ func loadHostEnv(messages *clitext.Messages) error {
 	return nil
 }
 
-func runWithoutCommand(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages) error {
+func runWithoutCommand(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages) error {
 	if term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway() {
-		return runServe(ctx, layout, messages, nil, serveDaemon)
+		return runServe(ctx, layout, messages, hostMessages, nil, serveDaemon)
 	}
 	if err := usage(messages, clitext.ClientLanguage()); err != nil {
 		return err
@@ -168,7 +169,7 @@ func runWithoutCommand(ctx context.Context, layout host.RuntimeLayout, messages 
 	return exitStatusError{code: exitUsage}
 }
 
-func runManageCmd(cmd string, args []string) (int, bool) {
+func runManageCmd(hostMessages *host.Messages, cmd string, args []string) (int, bool) {
 	switch cmd {
 	case "init", "plugin", "update", "install":
 	default:
@@ -178,7 +179,7 @@ func runManageCmd(cmd string, args []string) (int, bool) {
 	defer stop()
 	switch cmd {
 	case "init":
-		return manage.InitCmd(mctx, args), true
+		return manage.InitCmd(mctx, hostMessages, args), true
 	case "plugin":
 		return manage.PluginCmd(mctx, args), true
 	case "update":
@@ -188,18 +189,18 @@ func runManageCmd(cmd string, args []string) (int, bool) {
 	}
 }
 
-func runCommand(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, cmd string, args []string) error {
+func runCommand(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, cmd string, args []string) error {
 	switch cmd {
 	case "bridge":
-		return runBridge(ctx, messages, args)
+		return runBridge(ctx, messages, hostMessages, args)
 	case "serve":
-		return runServe(ctx, layout, messages, args, serveDaemon)
+		return runServe(ctx, layout, messages, hostMessages, args, serveDaemon)
 	case "session":
 		return runSession(ctx, layout, messages, args)
 	case "agent":
 		return runAgent(ctx, layout, messages, args)
 	case "account":
-		return runAccount(ctx, messages, args)
+		return runAccount(ctx, messages, hostMessages, args)
 	case "host":
 		return runHost(ctx, layout, messages, args)
 	case "approve":
@@ -213,26 +214,26 @@ func runCommand(ctx context.Context, layout host.RuntimeLayout, messages *clitex
 	case "service":
 		return runService(ctx, messages, args)
 	case "plugin-host":
-		return runPluginHost(ctx, messages, args)
+		return runPluginHost(ctx, messages, hostMessages, args)
 	case "worktree":
 		return host.RunWorktree(ctx, args)
 	case healthVerb:
-		return runHealth(ctx, layout, messages, args)
+		return runHealth(ctx, layout, messages, hostMessages, args)
 	case usageVerb:
-		return runUsage(ctx, layout, messages, args)
+		return runUsage(ctx, layout, messages, hostMessages, args)
 	case "whoami":
 		return runWhoami(ctx, messages, args)
 	}
-	return runForwarded(ctx, layout, messages, cmd, args)
+	return runForwarded(ctx, layout, messages, hostMessages, cmd, args)
 }
 
-func runForwarded(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, cmd string, args []string) error {
+func runForwarded(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, cmd string, args []string) error {
 	lang := clitext.ClientLanguage()
 	out, code, derr := dispatchUnknown(ctx, messages, lang, cmd, args, func(ctx context.Context, argv []string) (string, bool, error) {
-		return forwardUnknownVerb(ctx, layout, argv)
+		return forwardUnknownVerb(ctx, layout, hostMessages, argv)
 	})
 	if code != 0 {
-		fmt.Fprintln(os.Stderr, forwardedFailureLine(messages, lang, derr))
+		fmt.Fprintln(os.Stderr, forwardedFailureLine(messages, hostMessages, lang, derr))
 		if err := usage(messages, lang); err != nil {
 			return err
 		}
@@ -247,8 +248,8 @@ func runForwarded(ctx context.Context, layout host.RuntimeLayout, messages *clit
 	return writeCLIText(os.Stdout, out)
 }
 
-func forwardedFailureLine(messages *clitext.Messages, lang i18n.Language, derr error) string {
-	return cliErrorLine(render(messages, lang, clitext.ErrorLine, clitext.Params{clitext.ParamMessage: host.LocalizeError(lang, derr).Error()}))
+func forwardedFailureLine(messages *clitext.Messages, hostMessages *host.Messages, lang i18n.Language, derr error) string {
+	return cliErrorLine(render(messages, lang, clitext.ErrorLine, clitext.Params{clitext.ParamMessage: hostMessages.Localize(lang, derr).Error()}))
 }
 
 type exitStatusError struct {

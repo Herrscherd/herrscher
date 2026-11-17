@@ -37,6 +37,7 @@ type hub struct {
 	reg      *cli.Registry
 	metrics  *metrics.Registry
 	warnings io.Writer
+	messages *hostMessages
 	sink     *warningSink
 
 	coordinator    contracts.Coordinator
@@ -87,11 +88,11 @@ func withWarnings(w io.Writer) hubOption {
 }
 
 func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry, approvals *approvalTable, sessions *sessionTable, opts ...hubOption) *hub {
-	created := &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: make(map[string]liveSession), teardownGrace: defaultTeardownGrace, approvals: approvals, sessions: sessions, listen: control.Listen, relaunchStop: make(chan struct{})}
+	created := &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, messages: sessions.messages, live: make(map[string]liveSession), teardownGrace: defaultTeardownGrace, approvals: approvals, sessions: sessions, listen: control.Listen, relaunchStop: make(chan struct{})}
 	for _, opt := range opts {
 		opt(created)
 	}
-	created.sink = newWarningSink(created.warnings, created.lostWarningLine, withStillRunningLine(created.writeStillRunningLine))
+	created.sink = newWarningSink(created.messages, created.warnings, created.lostWarningLine, withStillRunningLine(created.writeStillRunningLine))
 	created.warnings = created.sink
 	if sup != nil {
 		sup.SetFailureSink(created.reportSessionFailure)
@@ -103,11 +104,11 @@ func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir str
 }
 
 func (h *hub) lostWarningLine(lost int) string {
-	return newHostMessages().text(h.textLanguage()(), "warn.warnings_dropped", map[string]any{countParam: lost})
+	return h.messages.text(h.textLanguage()(), "warn.warnings_dropped", map[string]any{countParam: lost})
 }
 
 func (h *hub) writeStillRunningLine() string {
-	return newHostMessages().text(h.textLanguage()(), "warn.write_still_running", nil)
+	return h.messages.text(h.textLanguage()(), "warn.write_still_running", nil)
 }
 
 func (h *hub) operatorCommands() asOperator {
@@ -124,7 +125,7 @@ func (h *hub) reportSessionFailure(sess state.Session, stage supervisor.Stage, c
 		return
 	}
 	lang := sessionLanguage(sess, h.textLanguage()())
-	text := LocalizeError(lang, wrapHost(cause, sessionFailureKey(stage), map[string]any{nameParam: sess.Name, detailParam: cause.Error()})).Error()
+	text := localizeHostError(h.messages, lang, wrapHost(h.messages, cause, sessionFailureKey(stage), map[string]any{nameParam: sess.Name, detailParam: cause.Error()})).Error()
 	h.eventPublisher(sess.Name, contracts.Event{T: eventwire.EventNotice, Text: text})
 }
 
@@ -144,6 +145,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 	if isSessionSeedCommand(args) {
 		runtime := oneShotSeedRuntime{
 			warnings:        h.warnings,
+			messages:        h.messages,
 			sessionLanguage: h.sessionLanguageSource,
 			coordinator:     h.coordinator,
 			publish:         h.eventPublisher,
@@ -154,7 +156,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 			resume:          h.keepResumeToken,
 			record: func(session string, entry state.TranscriptEntry) {
 				if err := state.AppendTranscript(state.TranscriptPath(h.partDir, session), entry); err != nil {
-					warnLive(h.warnings, h.sessionLanguageSource(session), "warn.session_seed_transcript", map[string]any{nameParam: session, detailParam: err})
+					warnLive(h.messages, h.warnings, h.sessionLanguageSource(session), "warn.session_seed_transcript", map[string]any{nameParam: session, detailParam: err})
 				}
 			},
 		}
@@ -406,7 +408,7 @@ func scrollbackLineOf(entry state.TranscriptEntry) contracts.ScrollbackLine {
 
 func (h *hub) keepResumeToken(session, token string) {
 	if err := h.st.SetResumeToken(session, token); err != nil {
-		warnLive(h.warnings, h.sessionLanguageSource(session), "warn.session_resume_token", map[string]any{nameParam: session, detailParam: err})
+		warnLive(h.messages, h.warnings, h.sessionLanguageSource(session), "warn.session_resume_token", map[string]any{nameParam: session, detailParam: err})
 	}
 }
 

@@ -194,10 +194,10 @@ func TestCacheRoundTripsThroughDisk(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "models-discovered.json")
 	fetched := time.Date(2026, 11, 4, 9, 0, 0, 0, time.UTC)
 	want := cacheWith(fetched, cachedModel{ID: "a-live", Label: "A live", Arg: "live", Efforts: []string{"low", "high"}, Route: "native"})
-	if err := saveDiscoveryCache(path, want); err != nil {
+	if err := saveDiscoveryCache(newHostMessages(), path, want); err != nil {
 		t.Fatalf("saveDiscoveryCache: %v", err)
 	}
-	got, err := loadDiscoveryCache(path)
+	got, err := loadDiscoveryCache(newHostMessages(), path)
 	if err != nil {
 		t.Fatalf("loadDiscoveryCache: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestCacheRoundTripsThroughDisk(t *testing.T) {
 }
 
 func TestMissingCacheFileLoadsEmpty(t *testing.T) {
-	got, err := loadDiscoveryCache(filepath.Join(t.TempDir(), "absent.json"))
+	got, err := loadDiscoveryCache(newHostMessages(), filepath.Join(t.TempDir(), "absent.json"))
 	if err != nil {
 		t.Fatalf("loadDiscoveryCache on a missing file: %v", err)
 	}
@@ -220,11 +220,11 @@ func TestMissingCacheFileLoadsEmpty(t *testing.T) {
 func TestSourcesReadTheCacheBesideTheStateFile(t *testing.T) {
 	dir := t.TempDir()
 	cache := cacheWith(time.Now(), cachedModel{ID: "a-live", Label: "A live", Arg: "live", Route: "native"})
-	if err := saveDiscoveryCache(filepath.Join(dir, discoveryCacheName), cache); err != nil {
+	if err := saveDiscoveryCache(newHostMessages(), filepath.Join(dir, discoveryCacheName), cache); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv(envModelsHidden, "a-native")
-	sources := ModelDiscoveryFor(filepath.Join(dir, "state.json")).Sources()
+	sources := ModelDiscoveryFor(NewMessages(), filepath.Join(dir, "state.json")).Sources()
 	got, err := CatalogWith(fakePlugins(), contracts.PolicyAll, sources)
 	if err != nil {
 		t.Fatalf("CatalogWith: %v", err)
@@ -312,16 +312,16 @@ func TestPersistRefreshedKeepsVendorsWrittenByOthers(t *testing.T) {
 	onDisk := discoveryCache{Vendors: map[string]vendorDiscovery{
 		"beta": {FetchedAt: now, Models: []cachedModel{{ID: "b-live", Label: "B live", Arg: "live", Route: "native"}}},
 	}}
-	if err := saveDiscoveryCache(path, onDisk); err != nil {
+	if err := saveDiscoveryCache(newHostMessages(), path, onDisk); err != nil {
 		t.Fatal(err)
 	}
 	next := discoveryCache{Vendors: map[string]vendorDiscovery{
 		"alpha": {FetchedAt: now, Models: []cachedModel{{ID: "a-new", Label: "A new", Arg: "new", Route: "native"}}},
 	}}
-	if err := persistRefreshed(path, next, []discoveryOutcome{{Vendor: "alpha", Refreshed: true}}); err != nil {
+	if err := persistRefreshed(newHostMessages(), path, next, []discoveryOutcome{{Vendor: "alpha", Refreshed: true}}); err != nil {
 		t.Fatalf("persistRefreshed: %v", err)
 	}
-	got, err := loadDiscoveryCache(path)
+	got, err := loadDiscoveryCache(newHostMessages(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -340,7 +340,7 @@ func TestGatewayRoutesDroppedWithoutCredentials(t *testing.T) {
 		cachedModel{ID: "a-via-gw", Label: "via gw", Arg: "gw", Route: "gateway"},
 		cachedModel{ID: "a-live", Label: "A live", Arg: "live", Route: "native"},
 	)
-	if err := saveDiscoveryCache(filepath.Join(stateDir, discoveryCacheName), cache); err != nil {
+	if err := saveDiscoveryCache(newHostMessages(), filepath.Join(stateDir, discoveryCacheName), cache); err != nil {
 		t.Fatal(err)
 	}
 	if ids := catalogIDs(t); ids["a-via-gw"] || !ids["a-live"] {
@@ -355,7 +355,7 @@ func TestGatewayRoutesDroppedWithoutCredentials(t *testing.T) {
 
 func catalogIDs(t *testing.T) map[string]bool {
 	t.Helper()
-	got, err := CatalogWith(fakePlugins(), contracts.PolicyAll, DefaultModelDiscovery().Sources())
+	got, err := CatalogWith(fakePlugins(), contracts.PolicyAll, DefaultModelDiscovery(NewMessages()).Sources())
 	if err != nil {
 		t.Fatalf("CatalogWith: %v", err)
 	}
@@ -398,7 +398,7 @@ func TestGatewayOnlyDiscoversThroughTheGatewayWhenCredentialsExist(t *testing.T)
 
 func TestSaveDiscoveryCacheCreatesItsDirectoryPrivately(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "state", "nested")
-	if err := saveDiscoveryCache(filepath.Join(dir, discoveryCacheName), cacheWith(time.Now())); err != nil {
+	if err := saveDiscoveryCache(newHostMessages(), filepath.Join(dir, discoveryCacheName), cacheWith(time.Now())); err != nil {
 		t.Fatalf("saveDiscoveryCache into a missing directory: %v", err)
 	}
 	if runtime.GOOS == "windows" {
@@ -416,7 +416,7 @@ func TestSaveDiscoveryCacheCreatesItsDirectoryPrivately(t *testing.T) {
 func TestModelDiscoveryPutsTheCacheBesideTheDaemonState(t *testing.T) {
 	t.Setenv("HERRSCHER_STATE_DIR", "")
 	state := filepath.Join(t.TempDir(), "elsewhere", "state.json")
-	path := ModelDiscoveryFor(state).cachePath()
+	path := ModelDiscoveryFor(NewMessages(), state).cachePath()
 	if want := filepath.Join(filepath.Dir(state), discoveryCacheName); path != want {
 		t.Fatalf("cache path = %s, want %s beside the --state file", path, want)
 	}
@@ -424,7 +424,7 @@ func TestModelDiscoveryPutsTheCacheBesideTheDaemonState(t *testing.T) {
 
 func TestModelDiscoveryForLeavesTheEnvironmentAlone(t *testing.T) {
 	t.Setenv("HERRSCHER_STATE_DIR", "")
-	_ = ModelDiscoveryFor(filepath.Join(t.TempDir(), "state.json"))
+	_ = ModelDiscoveryFor(NewMessages(), filepath.Join(t.TempDir(), "state.json"))
 	if inherited := os.Getenv("HERRSCHER_STATE_DIR"); inherited != "" {
 		t.Fatalf("ModelDiscoveryFor exported HERRSCHER_STATE_DIR=%q to child processes", inherited)
 	}
@@ -432,7 +432,7 @@ func TestModelDiscoveryForLeavesTheEnvironmentAlone(t *testing.T) {
 
 func modelsVerb(t *testing.T, verb string) contracts.Cmd {
 	t.Helper()
-	for _, cmd := range ModelsCommands(fixedLanguage(i18n.English)) {
+	for _, cmd := range ModelsCommands(newHostMessages(), fixedLanguage(i18n.English)) {
 		if len(cmd.Path) == 2 && cmd.Path[1] == verb {
 			return cmd
 		}
@@ -451,7 +451,7 @@ func TestModelsListFollowsTheStateFlag(t *testing.T) {
 	t.Setenv("HERRSCHER_STATE_DIR", t.TempDir())
 	dir := t.TempDir()
 	cache := cacheWith(time.Now(), cachedModel{ID: "alpha-state-live", Label: "state live", Arg: "sl", Route: "native"})
-	if err := saveDiscoveryCache(discoveryCacheIn(dir), cache); err != nil {
+	if err := saveDiscoveryCache(newHostMessages(), discoveryCacheIn(dir), cache); err != nil {
 		t.Fatal(err)
 	}
 	out, err := cli.Plain(modelsVerb(t, "list").Run(context.Background(), contracts.Input{Args: map[string]string{"state": filepath.Join(dir, "state.json")}}))
@@ -469,10 +469,10 @@ func TestClashWarnsOncePerCacheAcrossLoads(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
 	t.Cleanup(func() { slog.SetDefault(previous) })
 	path := discoveryCacheIn(t.TempDir())
-	if err := saveDiscoveryCache(path, cacheWith(time.Now(), cachedModel{ID: "b-native", Label: "clash", Arg: "clash", Route: "native"})); err != nil {
+	if err := saveDiscoveryCache(newHostMessages(), path, cacheWith(time.Now(), cachedModel{ID: "b-native", Label: "clash", Arg: "clash", Route: "native"})); err != nil {
 		t.Fatal(err)
 	}
-	models := ModelDiscoveryFor(filepath.Join(filepath.Dir(path), "state.json"))
+	models := ModelDiscoveryFor(NewMessages(), filepath.Join(filepath.Dir(path), "state.json"))
 	for range 5 {
 		if _, err := CatalogWith(fakePlugins(), contracts.PolicyAll, models.Sources()); err != nil {
 			t.Fatalf("CatalogWith: %v", err)
@@ -521,7 +521,7 @@ func TestConcurrentPersistKeepsEveryWriterVendor(t *testing.T) {
 			go func(vendor string) {
 				defer group.Done()
 				<-start
-				errs <- persistRefreshed(path, oneVendorCache(vendor), []discoveryOutcome{{Vendor: vendor, Refreshed: true}})
+				errs <- persistRefreshed(newHostMessages(), path, oneVendorCache(vendor), []discoveryOutcome{{Vendor: vendor, Refreshed: true}})
 			}(vendor)
 		}
 		close(start)
@@ -532,7 +532,7 @@ func TestConcurrentPersistKeepsEveryWriterVendor(t *testing.T) {
 				t.Fatalf("round %d: persistRefreshed: %v", round, err)
 			}
 		}
-		got, err := loadDiscoveryCache(path)
+		got, err := loadDiscoveryCache(newHostMessages(), path)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -569,11 +569,11 @@ func TestGatewayOnlyDropsNativeAnswersOfABackendThatIgnoresThePolicy(t *testing.
 func TestBridgeModelDiscoveryReadsTheCacheBesideItsStateFile(t *testing.T) {
 	stateDir := t.TempDir()
 	cache := cacheWith(time.Now(), cachedModel{ID: "a-live", Label: "A live", Arg: "live", Route: "native"})
-	if err := saveDiscoveryCache(filepath.Join(stateDir, discoveryCacheName), cache); err != nil {
+	if err := saveDiscoveryCache(newHostMessages(), filepath.Join(stateDir, discoveryCacheName), cache); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("HERRSCHER_STATE_DIR", t.TempDir())
-	sources := BridgeModelDiscovery(filepath.Join(stateDir, "state.json")).Sources()
+	sources := BridgeModelDiscovery(NewMessages(), filepath.Join(stateDir, "state.json")).Sources()
 	got, err := CatalogWith(fakePlugins(), contracts.PolicyAll, sources)
 	if err != nil {
 		t.Fatalf("CatalogWith: %v", err)
@@ -649,7 +649,7 @@ func TestCacheWrittenBeforeWindowAndHiddenLoads(t *testing.T) {
 	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	got, err := loadDiscoveryCache(path)
+	got, err := loadDiscoveryCache(newHostMessages(), path)
 	if err != nil {
 		t.Fatalf("loadDiscoveryCache of a cache without window or hidden: %v", err)
 	}
@@ -662,10 +662,10 @@ func TestCacheWrittenBeforeWindowAndHiddenLoads(t *testing.T) {
 func TestCacheCarriesContextWindowAndHidden(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "models-discovered.json")
 	want := cacheWith(time.Now(), cachedModel{ID: "a-live", Label: "A live", Arg: "live", Route: "native", ContextWindow: 400_000, Hidden: true})
-	if err := saveDiscoveryCache(path, want); err != nil {
+	if err := saveDiscoveryCache(newHostMessages(), path, want); err != nil {
 		t.Fatalf("saveDiscoveryCache: %v", err)
 	}
-	got, err := loadDiscoveryCache(path)
+	got, err := loadDiscoveryCache(newHostMessages(), path)
 	if err != nil {
 		t.Fatalf("loadDiscoveryCache: %v", err)
 	}

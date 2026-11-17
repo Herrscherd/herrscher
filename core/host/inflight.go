@@ -68,5 +68,5 @@ func (h *hub) flushWarningsWithin(window teardownWindow) {
 func (h *hub) warnHubOverrun() {
 	lang := h.textLanguage()()
 	params := map[string]any{graceParam: h.teardownGrace.String()}
-	logCleanup(h.sink.announce(newHostMessages().text(lang, "warn.hub_teardown_overrun", params)))
+	logCleanup(h.sink.announce(h.messages.text(lang, "warn.hub_teardown_overrun", params)))
 }

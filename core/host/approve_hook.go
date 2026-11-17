@@ -56,34 +56,35 @@ type hookInput struct {
 type hookAsker func(ctx context.Context, argv []string) (string, bool, error)
 
 // RunPermissionHook answers one tool-call payload from the daemon and fails closed on every error.
-func RunPermissionHook(ctx context.Context, stdin io.Reader, out, errOut io.Writer, target func() string, ask hookAsker) error {
+func RunPermissionHook(ctx context.Context, owner *Messages, stdin io.Reader, out, errOut io.Writer, target func() string, ask hookAsker) error {
+	messages := owner.owner
 	lang := language.Client(slog.Default(), "")
 	var payload hookInput
 	raw, err := io.ReadAll(io.LimitReader(stdin, maxHookInput+1))
 	if err == nil && len(raw) > maxHookInput {
-		return refuseHook(out, errOut, lang, hookPayloadTooLarge, nil)
+		return refuseHook(messages, out, errOut, lang, hookPayloadTooLarge, nil)
 	}
 	if err == nil {
 		err = json.Unmarshal(raw, &payload)
 	}
 	switch {
 	case err != nil:
-		return refuseHook(out, errOut, lang, hookPayloadUnreadable, map[string]any{detailParam: err.Error()})
+		return refuseHook(messages, out, errOut, lang, hookPayloadUnreadable, map[string]any{detailParam: err.Error()})
 	case payload.HookEventName != "" && payload.HookEventName != hookEvent:
-		note := hookText(lang, hookOtherEvent, map[string]any{expectedParam: hookEvent, eventParam: payload.HookEventName})
+		note := hookText(messages, lang, hookOtherEvent, map[string]any{expectedParam: hookEvent, eventParam: payload.HookEventName})
 		logWriteFailure(fmt.Fprintln(errOut, note))
-		return writeHookDecision(out, errOut, lang, "allow", "")
+		return writeHookDecision(messages, out, errOut, lang, "allow", "")
 	case payload.ToolName == "":
-		return refuseHook(out, errOut, lang, hookNamesNoTool, nil)
+		return refuseHook(messages, out, errOut, lang, hookNamesNoTool, nil)
 	}
 
 	session := strings.TrimSpace(os.Getenv(SessionVar))
 	if session == "" {
-		return refuseHook(out, errOut, lang, hookNoSession, map[string]any{variableParam: SessionVar})
+		return refuseHook(messages, out, errOut, lang, hookNoSession, map[string]any{variableParam: SessionVar})
 	}
 	token := os.Getenv(TokenVar)
 	if token == "" {
-		return refuseHook(out, errOut, lang, hookNoToken, map[string]any{variableParam: TokenVar})
+		return refuseHook(messages, out, errOut, lang, hookNoToken, map[string]any{variableParam: TokenVar})
 	}
 
 	argv := append([]string{nsApprove, "ask"}, cli.FlagArg(paramSession, session)...)
@@ -92,11 +93,11 @@ func RunPermissionHook(ctx context.Context, stdin io.Reader, out, errOut io.Writ
 	answer, handled, err := ask(withCallerToken(ctx, token), argv)
 	switch {
 	case !handled:
-		return refuseHook(out, errOut, lang, hookNoDaemon, map[string]any{socketParam: target()})
+		return refuseHook(messages, out, errOut, lang, hookNoDaemon, map[string]any{socketParam: target()})
 	case err != nil && ctx.Err() != nil:
-		return refuseHook(out, errOut, lang, hookCancelled, nil)
+		return refuseHook(messages, out, errOut, lang, hookCancelled, nil)
 	case err != nil:
-		return refuseHook(out, errOut, lang, hookDaemonFailed, map[string]any{detailParam: err.Error()})
+		return refuseHook(messages, out, errOut, lang, hookDaemonFailed, map[string]any{detailParam: err.Error()})
 	}
 
 	var verdict struct {
@@ -104,9 +105,9 @@ func RunPermissionHook(ctx context.Context, stdin io.Reader, out, errOut io.Writ
 		Reason   string `json:"reason"`
 	}
 	if err := json.Unmarshal([]byte(answer), &verdict); err != nil || !isDecision(verdict.Decision) {
-		return refuseHook(out, errOut, lang, hookAnswerUnreadable, map[string]any{answerParam: answer})
+		return refuseHook(messages, out, errOut, lang, hookAnswerUnreadable, map[string]any{answerParam: answer})
 	}
-	return writeHookDecision(out, errOut, lang, verdict.Decision, verdict.Reason)
+	return writeHookDecision(messages, out, errOut, lang, verdict.Decision, verdict.Reason)
 }
 
 // RunApprovalHook is RunPermissionHook wired to the operator daemon.
@@ -114,22 +115,23 @@ func RunApprovalHook(ctx context.Context, layout RuntimeLayout, stdin io.Reader,
 	target := sync.OnceValue(func() string {
 		return commandSocketTargetFrom(layout, func() string { return ServedInstanceID(DefaultStatePath(), "") })
 	})
-	return RunPermissionHook(ctx, stdin, out, errOut, target, func(c context.Context, argv []string) (string, bool, error) {
-		return dispatchToOperatorDaemon(c, layout, target(), argv)
+	owner := NewMessages()
+	return RunPermissionHook(ctx, owner, stdin, out, errOut, target, func(c context.Context, argv []string) (string, bool, error) {
+		return dispatchToOperatorDaemon(c, owner.owner, layout, target(), argv)
 	})
 }
 
-func refuseHook(out, errOut io.Writer, lang i18n.Language, key string, params map[string]any) error {
-	reason := hookText(lang, key, params)
+func refuseHook(messages *hostMessages, out, errOut io.Writer, lang i18n.Language, key string, params map[string]any) error {
+	reason := hookText(messages, lang, key, params)
 	logWriteFailure(fmt.Fprintln(errOut, reason))
-	return writeHookDecision(out, errOut, lang, "deny", reason)
+	return writeHookDecision(messages, out, errOut, lang, "deny", reason)
 }
 
-func hookText(lang i18n.Language, key string, params map[string]any) string {
-	return newHostMessages().text(lang, key, params)
+func hookText(messages *hostMessages, lang i18n.Language, key string, params map[string]any) string {
+	return messages.text(lang, key, params)
 }
 
-func writeHookDecision(out, errOut io.Writer, lang i18n.Language, decision, reason string) error {
+func writeHookDecision(messages *hostMessages, out, errOut io.Writer, lang i18n.Language, decision, reason string) error {
 	type specific struct {
 		HookEventName            string `json:"hookEventName"`
 		PermissionDecision       string `json:"permissionDecision"`
@@ -142,7 +144,7 @@ func writeHookDecision(out, errOut io.Writer, lang i18n.Language, decision, reas
 		return err
 	}
 	if _, err := fmt.Fprintf(out, "%s\n", payload); err != nil {
-		logWriteFailure(fmt.Fprintln(errOut, hookText(lang, hookDecisionUnwritable, map[string]any{decisionParam: decision, detailParam: err.Error()})))
+		logWriteFailure(fmt.Fprintln(errOut, hookText(messages, lang, hookDecisionUnwritable, map[string]any{decisionParam: decision, detailParam: err.Error()})))
 		return err
 	}
 	return nil

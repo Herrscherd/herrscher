@@ -33,10 +33,10 @@ type hostedPlugin struct {
 	closeReal func() error
 }
 
-func hostPlugin(ctx context.Context, messages *clitext.Messages, lang i18n.Language, category contracts.Category) (hostedPlugin, error) {
+func hostPlugin(ctx context.Context, messages *clitext.Messages, hostMessages *host.Messages, lang i18n.Language, category contracts.Category) (hostedPlugin, error) {
 	switch category {
 	case contracts.CategoryMemory:
-		impl, manifest, err := firstMemory(ctx)
+		impl, manifest, err := firstMemory(ctx, hostMessages)
 		if err != nil {
 			return hostedPlugin{}, err
 		}
@@ -105,7 +105,7 @@ func announceEvery(ctx context.Context, conn *nats.Conn, ann transport.Announcem
 	}
 }
 
-func runPluginHost(ctx context.Context, messages *clitext.Messages, args []string) error {
+func runPluginHost(ctx context.Context, messages *clitext.Messages, hostMessages *host.Messages, args []string) error {
 	lang := clitext.ClientLanguage()
 	translator := messages.For(lang)
 	flags := flag.NewFlagSet("plugin-host", flag.ContinueOnError)
@@ -133,7 +133,7 @@ func runPluginHost(ctx context.Context, messages *clitext.Messages, args []strin
 		return renderError(messages, lang, err, clitext.PluginHostFailed, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 
-	hosted, err := hostPlugin(ctx, messages, lang, contracts.Category(*category))
+	hosted, err := hostPlugin(ctx, messages, hostMessages, lang, contracts.Category(*category))
 	if err != nil {
 		return err
 	}
@@ -170,8 +170,8 @@ func runPluginHost(ctx context.Context, messages *clitext.Messages, args []strin
 	return server.Serve(lis)
 }
 
-func firstMemory(ctx context.Context) (contracts.Memory, contracts.Manifest, error) {
-	return host.BuildFirstMemoryWithManifest(ctx)
+func firstMemory(ctx context.Context, hostMessages *host.Messages) (contracts.Memory, contracts.Manifest, error) {
+	return host.BuildFirstMemoryWithManifest(ctx, hostMessages)
 }
 
 func firstOrchestrator(ctx context.Context, messages *clitext.Messages, lang i18n.Language) (contracts.Orchestrator, contracts.Manifest, error) {

@@ -52,7 +52,7 @@ func keysWith(t *testing.T, provider string, env map[string]string) *keyproxy.Pr
 
 func TestNativeClaudeSpawnCarriesNoProfileVariable(t *testing.T) {
 	root, _ := profileRoot(t, contracts.VendorClaude, "perso")
-	env, _, err := sessionEnv(BackendRequest{AccountRoot: root}, contracts.VendorClaude, modelRoute{})
+	env, _, err := sessionEnv(newHostMessages(), BackendRequest{AccountRoot: root}, contracts.VendorClaude, modelRoute{})
 	if err != nil {
 		t.Fatalf("sessionEnv: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestSessionAccountWinsOverTheVendorDefault(t *testing.T) {
 	if setErr := store.SetDefault(contracts.VendorClaude, perso); setErr != nil {
 		t.Fatal(setErr)
 	}
-	env, _, err := sessionEnv(BackendRequest{AccountRoot: root, Account: "boulot"}, contracts.VendorClaude, modelRoute{})
+	env, _, err := sessionEnv(newHostMessages(), BackendRequest{AccountRoot: root, Account: "boulot"}, contracts.VendorClaude, modelRoute{})
 	if err != nil {
 		t.Fatalf("sessionEnv: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestDefaultProfileAppliesWhenTheSessionChoosesNone(t *testing.T) {
 	if err := store.SetDefault(contracts.VendorCodex, mustProfile(t, "perso")); err != nil {
 		t.Fatal(err)
 	}
-	env, _, err := sessionEnv(BackendRequest{AccountRoot: root}, contracts.VendorCodex, modelRoute{})
+	env, _, err := sessionEnv(newHostMessages(), BackendRequest{AccountRoot: root}, contracts.VendorCodex, modelRoute{})
 	if err != nil {
 		t.Fatalf("sessionEnv: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestDefaultProfileAppliesWhenTheSessionChoosesNone(t *testing.T) {
 func TestGatewayRouteIgnoresTheProfile(t *testing.T) {
 	root, _ := profileRoot(t, contracts.VendorClaude, "perso")
 	gateway := modelRoute{env: map[string]string{contracts.EnvAnthropicBaseURL: "https://gw.example"}}
-	env, _, err := sessionEnv(BackendRequest{AccountRoot: root, Account: "perso"}, contracts.VendorClaude, gateway)
+	env, _, err := sessionEnv(newHostMessages(), BackendRequest{AccountRoot: root, Account: "perso"}, contracts.VendorClaude, gateway)
 	if err != nil {
 		t.Fatalf("sessionEnv: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestGatewayRouteIgnoresTheProfile(t *testing.T) {
 func TestCodexProfileGoesThroughTheProxyInItsOwnHome(t *testing.T) {
 	root, _ := profileRoot(t, contracts.VendorCodex, "perso")
 	keys := keysWith(t, "openai", map[string]string{"KEY_MAIN": "sk-real"})
-	env, _, err := sessionEnv(BackendRequest{AccountRoot: root, Account: "perso", Keys: keys}, contracts.VendorCodex, modelRoute{})
+	env, _, err := sessionEnv(newHostMessages(), BackendRequest{AccountRoot: root, Account: "perso", Keys: keys}, contracts.VendorCodex, modelRoute{})
 	if err != nil {
 		t.Fatalf("sessionEnv: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestGatewayRouteGoesThroughTheProxyWhenEnabled(t *testing.T) {
 		return map[string]string{EnvGatewayURL: "https://gw.example/anthropic", EnvGatewayToken: "nbx-secret-token"}[name]
 	}
 	entry := CatalogEntry{ID: "neublox-claude", Vendor: contracts.VendorClaude, Route: contracts.RouteGateway}
-	env, _, err := spawnEnvVia(entry, getenv, keys)
+	env, _, err := spawnEnvVia(newHostMessages(), entry, getenv, keys)
 	if err != nil {
 		t.Fatalf("spawnEnvVia: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestGatewayRouteWithoutProxyKeepsTheGatewayPair(t *testing.T) {
 		return map[string]string{EnvGatewayURL: "https://gw.example/anthropic", EnvGatewayToken: "nbx-secret-token"}[name]
 	}
 	entry := CatalogEntry{ID: "neublox-claude", Vendor: contracts.VendorClaude, Route: contracts.RouteGateway}
-	env, _, err := spawnEnvVia(entry, getenv, nil)
+	env, _, err := spawnEnvVia(newHostMessages(), entry, getenv, nil)
 	if err != nil {
 		t.Fatalf("spawnEnvVia: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestResumingUnderFollowsOnlySessionsWithoutAnAccount(t *testing.T) {
 func TestClaudeProxySpawnHoldsOnlyTheGrant(t *testing.T) {
 	root, _ := profileRoot(t, contracts.VendorClaude)
 	keys := keysWith(t, "anthropic", map[string]string{"KEY_MAIN": "sk-ant-real-value"})
-	env, _, err := sessionEnv(BackendRequest{AccountRoot: root, Keys: keys}, contracts.VendorClaude, modelRoute{})
+	env, _, err := sessionEnv(newHostMessages(), BackendRequest{AccountRoot: root, Keys: keys}, contracts.VendorClaude, modelRoute{})
 	if err != nil {
 		t.Fatalf("sessionEnv: %v", err)
 	}
@@ -223,7 +223,7 @@ func TestClaudeProxySpawnHoldsOnlyTheGrant(t *testing.T) {
 }
 
 func TestCursorWithoutProfileNeedsNoEnv(t *testing.T) {
-	env, _, err := sessionEnv(BackendRequest{AccountRoot: t.TempDir()}, contracts.VendorCursor, modelRoute{})
+	env, _, err := sessionEnv(newHostMessages(), BackendRequest{AccountRoot: t.TempDir()}, contracts.VendorCursor, modelRoute{})
 	if err != nil || len(env) != 0 {
 		t.Fatalf("cursor sessionEnv = %v %v, want an empty env and no error", env, err)
 	}

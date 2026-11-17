@@ -23,12 +23,13 @@ import (
 // registry by the caller). Command dispatch no longer runs here.
 // Session/service commands run through the operator CLI (see NewRegistry).
 func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, options Options) error {
-	clock, tick, settingsErr := schedulerSettings()
+	messages := newHostMessages()
+	clock, tick, settingsErr := schedulerSettings(messages)
 	if settingsErr != nil {
 		closeGateways(ctx, closers, obs.Stderr(false))
-		return localizeHostError(options.operatorLanguage(), settingsErr)
+		return localizeHostError(messages, options.operatorLanguage(), settingsErr)
 	}
-	return localizeHostError(options.operatorLanguage(), serveHub(ctx, gws, closers, options, clock, tick))
+	return localizeHostError(messages, options.operatorLanguage(), serveHub(ctx, messages, gws, closers, options, clock, tick))
 }
 
 func (options Options) withDefaultGateways(gws []Deps) Options {
@@ -38,7 +39,7 @@ func (options Options) withDefaultGateways(gws []Deps) Options {
 	return options
 }
 
-func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, options Options, clock func() time.Time, tick time.Duration) error {
+func serveHub(ctx context.Context, messages *hostMessages, gws []Deps, closers []contracts.Gateway, options Options, clock func() time.Time, tick time.Duration) error {
 	base := obs.Stderr(false)
 	defer closeGateways(ctx, closers, base)
 	if options.Runtime.Dir() == "" {
@@ -49,7 +50,7 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 
 	store, err := loadHubState(options)
 	if err != nil {
-		return wrapHost(err, "serve.load_state", nil)
+		return wrapHost(messages, err, "serve.load_state", nil)
 	}
 
 	self, execErr := os.Executable()
@@ -58,11 +59,11 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	partDir := filepath.Dir(options.StatePath)
 	sup := newHubSupervisor(ctx, self, options.Runtime, base, monitor, partDir, options.StatePath)
 
-	instID, err := resolveInstanceID(store, options.InstanceID, options.Owner, log)
+	instID, err := resolveInstanceID(messages, store, options.InstanceID, options.Owner, log)
 	if err != nil {
-		return wrapHost(err, "serve.resolve_instance", nil)
+		return wrapHost(messages, err, "serve.resolve_instance", nil)
 	}
-	releaseInstance, err := claimInstance(ctx, options.Runtime, instID)
+	releaseInstance, err := claimInstance(ctx, messages, options.Runtime, instID)
 	if err != nil {
 		return err
 	}
@@ -70,14 +71,14 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 
 	options = options.withDefaultGateways(gws)
 	approvals := newApprovalTable(options.Warnings).withRules(store)
-	sessions := newSessionTable()
+	sessions := newSessionTable(messages)
 	options.health = &healthSource{}
-	options.usage = newUsageSource(partDir)
+	options.usage = newUsageSource(messages, partDir)
 	stopUsageWatch := options.usage.startWatch(ctx)
 	defer stopUsageWatch()
-	policy, err := newCompactionPolicy(ctx, options.languageSource(), options.Warnings, options.CompactPercent, options.CompactStack, options.ContextLimits)
+	policy, err := newCompactionPolicy(ctx, messages, options.languageSource(), options.Warnings, options.CompactPercent, options.CompactStack, options.ContextLimits)
 	if err != nil {
-		return wrapHost(err, "serve.compaction", nil)
+		return wrapHost(messages, err, "serve.compaction", nil)
 	}
 	sessions.compaction = policy
 	sessions.store = store
@@ -86,7 +87,7 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	}
 	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, store.Home)}, options, store, sup, instID, options.ContributedCommands, approvals, sessions)
 	if err != nil {
-		return wrapHost(err, "serve.registry", nil)
+		return wrapHost(messages, err, "serve.registry", nil)
 	}
 	kinds := contributedKinds(options.ContributedCommands)
 	specs, specsErr := reg.Specs(options.Language)
@@ -100,7 +101,7 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	}
 	cfg, err := config.Load(config.DefaultPath())
 	if err != nil {
-		return wrapHost(err, "serve.config", nil)
+		return wrapHost(messages, err, "serve.config", nil)
 	}
 	sessions.outboundMaxBytes = cfg.EffectiveOutboundMaxBytes()
 	sessions.fileSenders = fileSendersOf(closers)
@@ -109,16 +110,16 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 	}
 	keys, err := keyproxy.Open(ctx, cfg.Keys, keyproxy.OSLoader(), log)
 	if err != nil && !errors.Is(err, keyproxy.ErrDisabled) {
-		return wrapHost(err, "serve.key_proxy", nil)
+		return wrapHost(messages, err, "serve.key_proxy", nil)
 	}
 	defer CloseKeyProxy(ctx, log, keys)
-	options.health.bind(newHealthInputs(options.Runtime, instID, keys, gws, policy, partDir))
+	options.health.bind(newHealthInputs(messages, options.Runtime, instID, keys, gws, policy, partDir))
 	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions, withWarnings(options.Warnings))
 	runningHub.lang = options.Language
 	runningHub.language = options.languageSource()
-	runningHub.models = options.modelDiscovery()
+	runningHub.models = options.modelDiscovery(messages)
 	runningHub.seedBackend = func(seedCtx context.Context, sess state.Session) (contracts.Backend, error) {
-		return newSeedBackendWithToken(seedCtx, sess, keys, runningHub.models, sessions.seedToken(seedCtx, sess.Name, liveSessionAllowed(store)))
+		return newSeedBackendWithToken(seedCtx, messages, sess, keys, runningHub.models, sessions.seedToken(seedCtx, sess.Name, liveSessionAllowed(store)))
 	}
 	runningHub.contributedKinds = kinds
 	runningHub.instanceID = instID
@@ -149,7 +150,7 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 		log.Info("instance resolved", "instance", instID)
 	}
 	logCompiledPlugins(log)
-	startHubProbes(ctx, gws, options, store, monitor, instID)
+	startHubProbes(ctx, messages, gws, options, store, monitor, instID)
 
 	log.Info("hub up; supervising sessions", "gateways", strings.Join(kindsOf(gws), ","))
 	return awaitHubStop(ctx, runningHub, sup, liveStopped, sockets, log)

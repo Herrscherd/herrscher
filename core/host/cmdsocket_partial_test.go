@@ -3,7 +3,6 @@ package host
 import (
 	"context"
 	"errors"
-	"io"
 	"path/filepath"
 	"testing"
 
@@ -23,11 +22,11 @@ func TestThePartialOutputCrossesTheSocket(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	failed := streamedFailureError{text: "partial answer"}
-	serveCommandSocket(ctx, isolatedRuntimeDir(t), sock, dispatcherFunc(func(context.Context, []string) (string, error) {
+	serveTestCommandSocket(ctx, t, isolatedRuntimeDir(t), sock, dispatcherFunc(func(context.Context, []string) (string, error) {
 		return "", failed
-	}), testLanguage(), io.Discard)
+	}), defaultCommandReadTimeout)
 
-	_, handled, err := dispatchLiveCommand(ctx, isolatedRuntimeDir(t), sock, []string{"session", "seed", "--name", "first"})
+	_, handled, err := dispatchLiveCommand(ctx, newHostMessages(), isolatedRuntimeDir(t), sock, []string{"session", "seed", "--name", "first"})
 	partial, ok := errors.AsType[cli.PartialError](err)
 	if !handled || !ok {
 		t.Fatalf("socket returned handled=%v err=%v, want a partial failure", handled, err)

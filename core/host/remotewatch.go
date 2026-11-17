@@ -69,14 +69,14 @@ func (w *remoteWatch) byCategory(category contracts.Category) []transport.Remote
 	return found
 }
 
-func awaitEntries(ctx context.Context, category contracts.Category, watch *remoteWatch) ([]transport.RemoteEntry, error) {
+func awaitEntries(ctx context.Context, messages *hostMessages, category contracts.Category, watch *remoteWatch) ([]transport.RemoteEntry, error) {
 	for {
 		if found := watch.byCategory(category); len(found) > 0 {
 			return found, nil
 		}
 		select {
 		case <-ctx.Done():
-			return nil, wrapHost(ctx.Err(), "remote.no_remote", map[string]any{"Category": category})
+			return nil, wrapHost(messages, ctx.Err(), "remote.no_remote", map[string]any{"Category": category})
 		case <-watch.arrived:
 		}
 	}

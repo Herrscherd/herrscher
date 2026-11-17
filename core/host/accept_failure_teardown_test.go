@@ -24,7 +24,7 @@ func TestGoDeadWaitsForAnAcceptFailureStillRetiring(t *testing.T) {
 	t.Cleanup(cancel)
 	sup := supervisor.NewSupervisor(ctx, filepath.Join(t.TempDir(), "no-such-bridge"), layout)
 	warnings := &lockedBuffer{}
-	h := newHub(st, sup, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(), withWarnings(warnings))
+	h := newHub(st, sup, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()), withWarnings(warnings))
 	h.runtime = layout
 	h.teardownGrace = time.Minute
 	h.listen = brokenFirstListen()

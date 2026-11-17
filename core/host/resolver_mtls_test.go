@@ -82,7 +82,7 @@ func TestResolverRemoteMemoryOverMTLS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("client creds: %v", err)
 	}
-	r := NewResolver(categorySet(contracts.CategoryMemory), srv.ClientURL())
+	r := NewResolver(NewMessages(), categorySet(contracts.CategoryMemory), srv.ClientURL())
 	r.SetAnnounceKey(key)
 	r.SetCredentials(clientCreds)
 	mem, _, err := r.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
@@ -95,7 +95,7 @@ func TestResolverRemoteMemoryOverMTLS(t *testing.T) {
 		t.Fatalf("Record over mTLS: %v", recordErr)
 	}
 
-	plain := NewResolver(categorySet(contracts.CategoryMemory), srv.ClientURL())
+	plain := NewResolver(NewMessages(), categorySet(contracts.CategoryMemory), srv.ClientURL())
 	plain.SetAnnounceKey(key)
 	memPlain, _, err := plain.Memory(context.Background(), remotePlugin(), func(string) string { return "" })
 	if err != nil {

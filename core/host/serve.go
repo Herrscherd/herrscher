@@ -151,14 +151,14 @@ func DefaultStatePath() string {
 	return filepath.Join(home, ".config", "herrscher", "state.json")
 }
 
-func resolveInstanceID(hostState *state.State, optID, ownerID string, log *slog.Logger) (string, error) {
+func resolveInstanceID(messages *hostMessages, hostState *state.State, optID, ownerID string, log *slog.Logger) (string, error) {
 	resolved, err := instanceid.Resolve(optID, ownerID)
 	if err != nil {
 		return "", err
 	}
 	if hostState.InstanceID != "" {
 		if resolved != "" && resolved != hostState.InstanceID {
-			return "", &instanceIDMismatchError{Have: hostState.InstanceID, Want: resolved}
+			return "", &instanceIDMismatchError{messages: messages, Have: hostState.InstanceID, Want: resolved}
 		}
 		return hostState.InstanceID, nil
 	}
@@ -171,7 +171,7 @@ func resolveInstanceID(hostState *state.State, optID, ownerID string, log *slog.
 		return "", nil
 	}
 	if err := hostState.SetInstanceID(resolved); err != nil {
-		return "", wrapHost(err, "serve.instance_persist", nil)
+		return "", wrapHost(messages, err, "serve.instance_persist", nil)
 	}
 	return resolved, nil
 }
@@ -180,12 +180,12 @@ func (options Options) operatorLanguage() i18n.Language {
 	return options.languageSource()()
 }
 
-func claimInstance(ctx context.Context, layout runtimedir.Layout, instID string) (func(), error) {
-	release, err := lockInstance(layout, instID)
+func claimInstance(ctx context.Context, messages *hostMessages, layout runtimedir.Layout, instID string) (func(), error) {
+	release, err := lockInstance(messages, layout, instID)
 	if err != nil {
 		return nil, err
 	}
-	if takenErr := refuseTakenInstance(ctx, layout, instID); takenErr != nil {
+	if takenErr := refuseTakenInstance(ctx, messages, layout, instID); takenErr != nil {
 		release()
 		return nil, takenErr
 	}
@@ -195,7 +195,7 @@ func claimInstance(ctx context.Context, layout runtimedir.Layout, instID string)
 func prepareTurnOutboxes(log *slog.Logger, sessions *sessionTable, statePath string) error {
 	outboxRoot, err := OutboxRoot(statePath)
 	if err != nil {
-		return wrapHost(err, "serve.outbox", nil)
+		return wrapHost(sessions.messages, err, "serve.outbox", nil)
 	}
 	sessions.outboxRoot = outboxRoot
 	if purgeErr := outbox.Purge(outboxRoot, time.Now()); purgeErr != nil {
@@ -263,7 +263,7 @@ func hubBridgeEnv(specs []cli.Spec, kinds map[string]bool) []string {
 }
 
 func wireCoordination(hubCore *hub, deps hostDeps, st *state.State, sessions *sessionTable) *coordinator {
-	coord := newCoordinator(hubCore, deps.agents, deps.wt, st, hubCore, sessions.Seed)
+	coord := newCoordinator(hubCore.messages, hubCore, deps.agents, deps.wt, st, hubCore, sessions.Seed)
 	hubCore.coordinator = coord
 	deps.seedCoord.coord = coord
 	return coord
@@ -271,11 +271,11 @@ func wireCoordination(hubCore *hub, deps hostDeps, st *state.State, sessions *se
 
 func serveHubSockets(ctx context.Context, layout runtimedir.Layout, instID string, hubCore *hub) (<-chan struct{}, error) {
 	events := newEventSocket()
-	eventsListener, err := openSocket(ctx, layout, EventsSocketPathIn(layout, instID))
+	eventsListener, err := openSocket(ctx, hubCore.messages, layout, EventsSocketPathIn(layout, instID))
 	if err != nil {
 		return nil, err
 	}
-	commandsListener, err := openSocket(ctx, layout, CommandSocketPathIn(layout, instID))
+	commandsListener, err := openSocket(ctx, hubCore.messages, layout, CommandSocketPathIn(layout, instID))
 	if err != nil {
 		closeRead(eventsListener)
 		return nil, err
@@ -313,9 +313,9 @@ func logCompiledPlugins(log *slog.Logger) {
 	}
 }
 
-func startHubProbes(ctx context.Context, gws []Deps, options Options, store *state.State, monitor *health.Health, instID string) {
+func startHubProbes(ctx context.Context, messages *hostMessages, gws []Deps, options Options, store *state.State, monitor *health.Health, instID string) {
 	if options.HealthAddr != "" {
-		go serveHealth(ctx, options.HealthAddr, monitor, options.languageSource(), options.Warnings)
+		go serveHealth(ctx, options.HealthAddr, monitor, messages, options.languageSource(), options.Warnings)
 	}
 	if pr := firstProber(gws); pr != nil {
 		go pingLoop(ctx, pr, monitor)

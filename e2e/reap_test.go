@@ -5,6 +5,7 @@ package e2e_test
 import (
 	"bufio"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/Herrscherd/herrscher/core/host"
 )
@@ -117,10 +119,8 @@ func TestSettleInterruptsTheDaemonBeforeKillingIt(t *testing.T) {
 	if startErr := daemon.Start(); startErr != nil {
 		t.Fatal(startErr)
 	}
-	ready, err := bufio.NewReader(stdout).ReadString('\n')
-	if err != nil || ready != "ready\n" {
-		t.Fatalf("the daemon did not install its interrupt trap: got %q, %v", ready, err)
-	}
+	t.Cleanup(func() { stopDaemon(t, daemon, stdout) })
+	awaitReady(t, stdout)
 	root := t.TempDir()
 	before, err := hashedEntries(root)
 	if err != nil {
@@ -133,6 +133,49 @@ func TestSettleInterruptsTheDaemonBeforeKillingIt(t *testing.T) {
 	exit, ok := errors.AsType[*exec.ExitError](waitErr)
 	if !ok || exit.ExitCode() != 130 {
 		t.Fatalf("daemon: got %v, want it to exit on the interrupt with status 130", waitErr)
+	}
+}
+
+const daemonReadyTimeout = 10 * time.Second
+
+func awaitReady(t *testing.T, stdout io.Reader) {
+	t.Helper()
+	type readLine struct {
+		text string
+		err  error
+	}
+	read := make(chan readLine, 1)
+	go func() {
+		text, err := bufio.NewReader(stdout).ReadString('\n')
+		read <- readLine{text: text, err: err}
+	}()
+	timer := time.NewTimer(daemonReadyTimeout)
+	defer timer.Stop()
+	select {
+	case got := <-read:
+		if got.err != nil || got.text != "ready\n" {
+			t.Fatalf("the daemon did not install its interrupt trap: got %q, %v", got.text, got.err)
+		}
+	case <-timer.C:
+		t.Fatalf("the daemon wrote no ready line within %s, so it did not install its interrupt trap", daemonReadyTimeout)
+	}
+}
+
+func stopDaemon(t *testing.T, daemon *exec.Cmd, stdout io.ReadCloser) {
+	t.Helper()
+	if daemon.ProcessState != nil {
+		return
+	}
+	if err := stdout.Close(); err != nil {
+		t.Error(err)
+	}
+	if err := daemon.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		t.Error(err)
+	}
+	if err := daemon.Wait(); err != nil {
+		if _, killed := errors.AsType[*exec.ExitError](err); !killed {
+			t.Error(err)
+		}
 	}
 }
 

@@ -76,7 +76,7 @@ func TestViewNeverCallsTheDaemonOnAnySurface(t *testing.T) {
 			}}
 			m := newModel(be)
 			m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
-			m.syncTabs()
+			syncLoaded(m)
 			m.active = "c1"
 			surface.open(m)
 
@@ -95,7 +95,7 @@ func TestWorktreeDirNeverReadsTheDaemon(t *testing.T) {
 		sessions: []contracts.SessionInfo{{Name: "alpha", ChannelID: "c1", Dir: "/tmp/alpha"}},
 	}}
 	m := newModel(be)
-	m.syncTabs()
+	syncLoaded(m)
 	m.active = "c1"
 
 	be.armed = true

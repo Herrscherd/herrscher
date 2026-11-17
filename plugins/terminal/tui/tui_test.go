@@ -105,6 +105,7 @@ type fakeBackend struct {
 	sessions        []contracts.SessionInfo
 	fe              chan RoutedEvent
 	scrollback      map[string][]contracts.ScrollbackLine
+	scrollbackErr   error
 	resumed         []string
 	submitted       []submittedTurn
 	interrupted     []string
@@ -157,8 +158,8 @@ func (f *fakeBackend) Close(name string, force bool) (string, error) {
 	return "ok", nil
 }
 
-func (f *fakeBackend) Scrollback(name string) []contracts.ScrollbackLine {
-	return f.scrollback[name]
+func (f *fakeBackend) Scrollback(name string) ([]contracts.ScrollbackLine, error) {
+	return f.scrollback[name], f.scrollbackErr
 }
 
 func (f *fakeBackend) Resume(name string) (string, error) {
@@ -278,6 +279,7 @@ func TestReopenedTabSeedsDimmedScrollback(t *testing.T) {
 		},
 	}
 	m := newModel(f)
+	syncLoaded(m)
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventChunk, Text: "live"}})
 	joined := tabText(m.tabs["c"])
 	if !strings.Contains(joined, "old-q") || !strings.Contains(joined, "old-a") {
@@ -294,7 +296,7 @@ func TestSyncTabsSkipsArchived(t *testing.T) {
 		{Name: "arch", ChannelID: "c2", Archived: true},
 	}}
 	m := newModel(f)
-	m.syncTabs()
+	syncLoaded(m)
 	if _, ok := m.tabs["c1"]; !ok {
 		t.Fatal("live session must get a tab")
 	}
@@ -327,6 +329,7 @@ func TestResumePickerRevivesArchivedAndFocusesLive(t *testing.T) {
 		},
 	}
 	m := newModel(f)
+	syncLoaded(m)
 
 	m.openResume()
 	if !m.resumeOpen {
@@ -337,6 +340,7 @@ func TestResumePickerRevivesArchivedAndFocusesLive(t *testing.T) {
 	}
 
 	cmd := m.chooseResume()
+	loadHistory(m)
 	if m.active != "ca" {
 		t.Fatalf("archived choice must focus its tab; active=%q", m.active)
 	}
@@ -385,7 +389,7 @@ func TestClosedEventRemovesTab(t *testing.T) {
 func TestSyncTabsFromSessions(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "alpha", ChannelID: "terminal/alpha-1"}}}
 	m := newModel(f)
-	m.syncTabs()
+	syncLoaded(m)
 	tb, ok := m.tabs["terminal/alpha-1"]
 	if !ok || tb.label != "alpha" {
 		t.Fatalf("tab not synced/labelled from Sessions(): %+v", m.tabs)

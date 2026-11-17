@@ -37,7 +37,7 @@ func newApprovalModel(t *testing.T, width int, command string, roles ...string) 
 	t.Helper()
 	fb := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "work", ChannelID: "a", Project: "herrscher", Dir: "/home/ada/dev/wt/tui"}}}
 	m := newModel(fb)
-	m.syncTabs()
+	syncLoaded(m)
 	m.Update(tea.WindowSizeMsg{Width: width, Height: 40})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: approvalMenuEvent(t, command, roles...)})
 	m.active = "a"

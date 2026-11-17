@@ -59,7 +59,7 @@ type Backend interface {
 	Commands() []CommandSpec
 	// Scrollback returns a session's recorded history lines, so a reopened tab is
 	// seeded with the conversation before live events arrive. Empty when none.
-	Scrollback(name string) []contracts.ScrollbackLine
+	Scrollback(name string) ([]contracts.ScrollbackLine, error)
 	// Resume revives an archived session by name (backend resumed via its stored
 	// token), for the /resume picker. Returns a human-readable result or an error.
 	Resume(name string) (string, error)
@@ -169,6 +169,30 @@ type tab struct {
 	turnStart          string
 	snapshotting       bool
 	queued             []queuedTurn
+	history            historyState
+	historySeq         uint64
+	historyName        string
+	pendingEvents      []RoutedEvent
+}
+
+type historyState uint8
+
+const (
+	historyNone historyState = iota
+	historyQueued
+	historyRequested
+	historyDone
+)
+
+type scrollbackMsg struct {
+	channel string
+	seq     uint64
+	lines   []contracts.ScrollbackLine
+	err     error
+}
+
+func (tb *tab) awaitingHistory() bool {
+	return tb.history == historyQueued || tb.history == historyRequested
 }
 
 type liveAgent struct {
@@ -284,6 +308,8 @@ type model struct {
 	sessionsIssued   uint64
 	sessionsApplied  uint64
 	sessionsInFlight bool
+
+	historySeq uint64
 
 	resumeOpen bool
 	resumeIdx  int
@@ -559,7 +585,7 @@ func (m *model) openTab(channel, name string) *tab {
 		m.active = channel
 		m.applySize()
 	}
-	m.seedScrollback(tab, name)
+	m.queueHistory(tab, name)
 	if m.active == channel {
 		m.syncViewport()
 		m.vp.GotoBottom()
@@ -567,18 +593,69 @@ func (m *model) openTab(channel, name string) *tab {
 	return tab
 }
 
-func (m *model) seedScrollback(tab *tab, name string) {
+func (m *model) queueHistory(tab *tab, name string) {
 	if m.tm == nil || name == "" {
 		return
 	}
-	lines := m.tm.Scrollback(name)
+	m.historySeq++
+	tab.history = historyQueued
+	tab.historySeq = m.historySeq
+	tab.historyName = name
+}
+
+func (m *model) drainHistory() tea.Cmd {
+	var cmds []tea.Cmd
+	for _, channel := range m.order {
+		tb := m.tabs[channel]
+		if tb == nil || tb.history != historyQueued {
+			continue
+		}
+		tb.history = historyRequested
+		cmds = append(cmds, m.loadHistory(tb))
+	}
+	return tea.Batch(cmds...)
+}
+
+func (m *model) loadHistory(tb *tab) tea.Cmd {
+	backend, channel, name, seq := m.tm, tb.channel, tb.historyName, tb.historySeq
+	return func() tea.Msg {
+		lines, err := backend.Scrollback(name)
+		return scrollbackMsg{channel: channel, seq: seq, lines: lines, err: err}
+	}
+}
+
+func (m *model) handleScrollback(msg scrollbackMsg) tea.Cmd {
+	tb := m.tabs[msg.channel]
+	if tb == nil || tb.history != historyRequested || tb.historySeq != msg.seq {
+		return nil
+	}
+	tb.history = historyDone
+	if msg.err != nil {
+		tb.appendEntry(entry{role: roleError, text: m.tr.t("tui.session.history_failed", map[string]any{tplArgReason: localizedReason(m.tr, msg.err)})})
+	} else {
+		m.seedScrollback(tb, msg.lines)
+	}
+	pending := tb.pendingEvents
+	tb.pendingEvents = nil
+	cmds := make([]tea.Cmd, 0, len(pending))
+	for _, routed := range pending {
+		cmds = append(cmds, m.route(routed))
+	}
+	if m.active == tb.channel {
+		m.syncViewport()
+		m.vp.GotoBottom()
+	}
+	return tea.Batch(cmds...)
+}
+
+func (m *model) seedScrollback(tb *tab, lines []contracts.ScrollbackLine) {
 	if len(lines) == 0 {
 		return
 	}
 	for _, ln := range lines {
-		tab.appendEntry(entry{role: scrollbackRole(ln.Role), text: ln.Text})
+		tb.appendEntry(entry{role: scrollbackRole(ln.Role), text: ln.Text})
 	}
-	tab.appendEntry(entry{role: roleScrollback, text: m.tr.t("tui.render.earlier", nil)})
+	tb.appendEntry(entry{role: roleScrollback, text: m.tr.t("tui.render.earlier", nil)})
 }
 
 func scrollbackRole(role string) string {
@@ -626,6 +703,10 @@ func (m *model) route(routed RoutedEvent) tea.Cmd {
 		return nil
 	}
 	tab := m.ensureTab(routed.Conv.ID)
+	if tab.awaitingHistory() {
+		tab.pendingEvents = append(tab.pendingEvents, routed)
+		return m.drainHistory()
+	}
 	before := len(tab.entries)
 	m.renderInto(tab, routed.Event)
 	flushCmd := m.flushQueue(tab, routed.Event.T)
@@ -1322,10 +1403,18 @@ func (m *model) baseContent() string { return m.contentWith("") }
 
 func (m *model) contentWith(query string) string {
 	tab := m.tabs[m.active]
-	if tab == nil || (len(tab.entries) == 0 && !tab.busy) {
+	if tab == nil || (len(tab.entries) == 0 && !tab.busy && !tab.awaitingHistory()) {
 		return m.emptyState(m.vp.Width)
 	}
 	content := m.cachedTranscript(tab)
+	if tab.awaitingHistory() {
+		loading := m.st.dim.Render(m.tr.t("tui.session.history_loading", nil))
+		if content == "" {
+			content = loading
+		} else {
+			content += "\n" + loading
+		}
+	}
 	if m.foldTurnsOn {
 		content = m.foldCache.get(content, "", func(s string) string {
 			return strings.Join(foldTurns(m.tr, strings.Split(s, "\n"), m.tsLayout.turns, turnFoldKeep, m.st), "\n")
@@ -1494,7 +1583,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 }
 
 func (m *model) Init() tea.Cmd {
-	return tea.Batch(m.syncTabs(), textarea.Blink, tickCmd(), themeWatchTick(), enableEnhancedKeys, m.armStatusline(), fontProbeCmd())
+	return tea.Batch(m.syncTabs(), m.drainHistory(), textarea.Blink, tickCmd(), themeWatchTick(), enableEnhancedKeys, m.armStatusline(), fontProbeCmd())
 }
 
 func (m *model) ensureSpin() tea.Cmd {
@@ -1510,7 +1599,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.syncComposer()
 	m.resizeComposer()
 	m.applySize()
-	return model, cmd
+	return model, tea.Batch(cmd, m.drainHistory())
 }
 
 func (m *model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -1618,8 +1707,12 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		m.handleRewindDone(msg)
 		return nil, true
 	case forkDoneMsg:
-		m.handleForkDone(msg)
+		return m.handleForkDone(msg), true
+	case forkResolvedMsg:
+		m.handleForkResolved(msg)
 		return nil, true
+	case scrollbackMsg:
+		return m.handleScrollback(msg), true
 	case tickMsg:
 		syncCmd := m.refreshTabs()
 		m.expireApprovals(time.Now())
@@ -1667,7 +1760,7 @@ func (m *model) handleWindowSize(msg tea.WindowSizeMsg) {
 }
 
 func (m *model) handleDispatchResult(msg dispatchResultMsg) tea.Cmd {
-	cmd := m.syncTabs()
+	cmd := m.refreshTabs()
 	line, role := msg.out, roleNotice
 	if msg.err != nil {
 		line, role = msg.err.Error(), roleError

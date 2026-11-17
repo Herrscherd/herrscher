@@ -854,6 +854,14 @@
     "other": "la session {{.Name}} n'est pas encore prête, le message attend"
   },
   {
+    "id": "tui.session.history_loading",
+    "other": "historique en cours de chargement"
+  },
+  {
+    "id": "tui.session.history_failed",
+    "other": "historique indisponible : {{.Reason}}"
+  },
+  {
     "id": "tui.session.open_missing",
     "other": "la session {{.Name}} est introuvable, le message reste dans la saisie"
   },

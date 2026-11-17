@@ -88,7 +88,7 @@ func TestQueuedTextIsSentOnceTheSessionAppears(t *testing.T) {
 	m.handleEnter()
 
 	be.sessions = append(be.sessions, contracts.SessionInfo{Name: "later", ChannelID: "c2"})
-	settle(m, m.syncTabs())
+	syncLoaded(m)
 
 	if len(be.submitted) != 1 || be.submitted[0].channel != "c2" || be.submitted[0].text != "hello" {
 		t.Fatalf("submitted = %+v, want %q once on c2", be.submitted, "hello")
@@ -108,9 +108,9 @@ func TestMissingSessionIsReleasedWithNoticeAndTextKept(t *testing.T) {
 	m.input.SetValue("hello")
 	m.handleEnter()
 
-	m.syncTabs()
+	syncLoaded(m)
 	now = now.Add(openWaitLimit)
-	settle(m, m.syncTabs())
+	syncLoaded(m)
 
 	if m.open.session != "" {
 		t.Fatalf("open.session = %q, want it released once the deadline passed with the session still missing", m.open.session)
@@ -131,7 +131,7 @@ func TestSessionAppearingInAReadyWindowShowsItsHistory(t *testing.T) {
 	m := newModel(be)
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 40})
 
-	m.syncTabs()
+	syncLoaded(m)
 
 	if !strings.Contains(m.vp.View(), "remembered question") {
 		t.Fatalf("the transcript of the first session is blank in a window already sized:\n%s", m.vp.View())

@@ -47,7 +47,11 @@ func (m *model) loadResumePreview() {
 	if m.tm == nil || m.resumeIdx < 0 || m.resumeIdx >= len(m.resumeRows) {
 		return
 	}
-	for _, line := range tailLines(m.tm.Scrollback(m.resumeRows[m.resumeIdx].Name), resumePreviewLines) {
+	lines, err := m.tm.Scrollback(m.resumeRows[m.resumeIdx].Name)
+	if err != nil {
+		return
+	}
+	for _, line := range tailLines(lines, resumePreviewLines) {
 		m.resumePreviewLines = append(m.resumePreviewLines, strings.ReplaceAll(line.Text, "\n", " "))
 	}
 }

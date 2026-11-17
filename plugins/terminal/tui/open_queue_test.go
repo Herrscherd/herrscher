@@ -27,13 +27,13 @@ func TestTabDuringTheWaitCancelsTheQueueSoTheTextIsSentOnce(t *testing.T) {
 	}
 
 	be.sessions = append(be.sessions, contracts.SessionInfo{Name: "later", ChannelID: "c3"})
-	settle(m, m.syncTabs())
+	syncLoaded(m)
 	if len(be.submitted) != 0 || m.active != "c2" {
 		t.Fatalf("submitted = %+v, active = %q after the requested session appeared, want nothing sent and c2 kept", be.submitted, m.active)
 	}
 
 	settle(m, m.handleEnter())
-	settle(m, m.syncTabs())
+	syncLoaded(m)
 	if len(be.submitted) != 1 || be.submitted[0].channel != "c2" || be.submitted[0].text != "hello" {
 		t.Fatalf("submitted = %+v, want hello sent exactly once to c2", be.submitted)
 	}
@@ -49,7 +49,7 @@ func TestEditedComposerDuringTheWaitIsWhatGoesOut(t *testing.T) {
 	m.input.SetValue("hello!")
 
 	be.sessions = append(be.sessions, contracts.SessionInfo{Name: "later", ChannelID: "c2"})
-	settle(m, m.syncTabs())
+	syncLoaded(m)
 
 	if len(be.submitted) != 1 || be.submitted[0].text != "hello!" || m.input.Value() != "" {
 		t.Fatalf("submitted = %+v, composer after arrival = %q, want the edited text %q sent once and the composer cleared", be.submitted, m.input.Value(), "hello!")
@@ -66,7 +66,7 @@ func TestEmptiedComposerDuringTheWaitSendsNothing(t *testing.T) {
 	m.input.SetValue("")
 
 	be.sessions = append(be.sessions, contracts.SessionInfo{Name: "later", ChannelID: "c2"})
-	settle(m, m.syncTabs())
+	syncLoaded(m)
 
 	if len(be.submitted) != 0 {
 		t.Fatalf("submitted = %+v after the user emptied the composer, want nothing sent", be.submitted)
@@ -86,7 +86,7 @@ func TestCommandLineInTheComposerAtArrivalIsNotSent(t *testing.T) {
 	m.input.SetValue("/help")
 
 	be.sessions = append(be.sessions, contracts.SessionInfo{Name: "later", ChannelID: "c2"})
-	settle(m, m.syncTabs())
+	syncLoaded(m)
 
 	if len(be.submitted) != 0 || m.input.Value() != "/help" {
 		t.Fatalf("submitted = %+v, composer = %q, want the command line left in the composer and nothing sent", be.submitted, m.input.Value())
@@ -109,7 +109,7 @@ func TestStartedSessionThatNeverGetsATabReleasesTheTextIntoTheComposer(t *testin
 	m.input.SetValue(m.input.Value() + "\nsecond")
 
 	now = now.Add(openWaitLimit)
-	settle(m, m.syncTabs())
+	syncLoaded(m)
 
 	if m.awaitingOpen() {
 		t.Fatal("the wait is still on after the deadline with no tab for the started session")
@@ -137,7 +137,7 @@ func TestTabChangeDuringTheStartKeepsTheTextForTheStartedSession(t *testing.T) {
 	}
 	m.activate("c2")
 	settle(m, m.handleSessionStarted(started))
-	settle(m, m.syncTabs())
+	syncLoaded(m)
 
 	if len(f.submitted) != 1 || f.submitted[0].channel != "c9" || f.submitted[0].text != "hello" {
 		t.Fatalf("submitted = %+v, want hello once on c9 after a tab change during the start", f.submitted)
@@ -151,7 +151,7 @@ func TestAttachmentsNeverStartASessionOrGoAloneWithoutText(t *testing.T) {
 	if cmd := m.handleEnter(); cmd != nil {
 		t.Fatal("enter with no session, an empty composer and an attachment must do nothing")
 	}
-	settle(m, m.syncTabs())
+	syncLoaded(m)
 
 	if len(f.sessions) != 0 || len(f.submitted) != 0 {
 		t.Fatalf("sessions = %+v, submitted = %+v, want nothing started or sent", f.sessions, f.submitted)
@@ -179,7 +179,7 @@ func TestEmptyEnterCancelsTheTextAndKeepsTheAttachmentsPending(t *testing.T) {
 		t.Fatalf("pending = %+v, chips = %q, want the attachment still pending", m.pending, m.chipsView())
 	}
 	be.sessions = append(be.sessions, contracts.SessionInfo{Name: "later", ChannelID: "c2"})
-	settle(m, m.syncTabs())
+	syncLoaded(m)
 	if len(be.submitted) != 0 {
 		t.Fatalf("submitted = %+v after the text was cancelled, want nothing sent", be.submitted)
 	}
@@ -191,12 +191,12 @@ func TestRemovingTheOnlyActiveTabEndsTheWait(t *testing.T) {
 	OpenOn("later", "")(m)
 	m.Init()
 	be.sessions = []contracts.SessionInfo{}
-	settle(m, m.syncTabs())
+	syncLoaded(m)
 	if m.awaitingOpen() {
 		t.Fatal("the wait is still on after the active tab was removed with no successor")
 	}
 	be.sessions = append(be.sessions, contracts.SessionInfo{Name: "later", ChannelID: "c3"})
-	settle(m, m.syncTabs())
+	syncLoaded(m)
 	if m.active == "c3" {
 		t.Fatal("the awaited session took focus after the user's active tab was removed")
 	}
@@ -217,7 +217,7 @@ func TestCancelledWaitKeepsItsNoticeAtTheDeadline(t *testing.T) {
 	m.activate("c2")
 
 	now = now.Add(openWaitLimit)
-	settle(m, m.syncTabs())
+	syncLoaded(m)
 
 	if want := m.tr.t("tui.session.open_cancelled", map[string]any{tplArgName: "later"}); m.flash != want {
 		t.Fatalf("flash = %q at the deadline of a cancelled wait, want the cancellation notice %q kept", m.flash, want)

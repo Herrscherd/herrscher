@@ -64,7 +64,7 @@ func TestMentionUsesTheFloatingList(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := newModel(&fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a", Dir: dir}}})
-	m.syncTabs()
+	syncLoaded(m)
 	m.ensureTab("a")
 	m = typeInto(t, m, tea.WindowSizeMsg{Width: 74, Height: 24})
 	m.input.SetValue("@no")

@@ -75,7 +75,7 @@ func TestLocalCommandsAreNeverDispatched(t *testing.T) {
 		m := newModel(be)
 		m.ensureTab("c1")
 		m.active = "c1"
-		m.syncTabs()
+		syncLoaded(m)
 		m.input.SetValue("/" + c.Name)
 		runCmd(m.handleEnter())
 		for _, argv := range be.dispatched {

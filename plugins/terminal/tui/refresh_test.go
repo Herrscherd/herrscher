@@ -65,7 +65,7 @@ func TestViewNeverReadsTheDaemonOnTheUpdateLoop(t *testing.T) {
 	defer close(be.release)
 	m := newModel(be)
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
-	m.syncTabs()
+	syncLoaded(m)
 
 	be.mute = true
 	returnsWithin(t, "View blocked on a silent daemon, the status line must render from the cache", func() {
@@ -80,7 +80,7 @@ func TestAStaleSnapshotLandingLateDoesNotReopenAClosedTab(t *testing.T) {
 	stale := runCmd(m.refreshTabs())
 
 	be.sessions = []contracts.SessionInfo{{Name: "main", ChannelID: "c1"}}
-	settle(m, m.syncTabs())
+	syncLoaded(m)
 	if m.tabs["c2"] != nil {
 		t.Fatal("the synchronous read must close the tab that the daemon no longer lists")
 	}

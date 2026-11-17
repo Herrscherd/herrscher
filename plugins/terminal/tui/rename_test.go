@@ -14,7 +14,7 @@ func TestRenameNamesTheActiveSession(t *testing.T) {
 	m := newModel(be)
 	m.ensureTab("c1")
 	m.active = "c1"
-	m.syncTabs()
+	syncLoaded(m)
 
 	m.input.SetValue("/rename ma grande refonte")
 	runCmd(m.handleEnter())
@@ -31,7 +31,7 @@ func TestRenameWithoutANameSaysSoAndSendsNothing(t *testing.T) {
 	m := newModel(be)
 	m.ensureTab("c1")
 	m.active = "c1"
-	m.syncTabs()
+	syncLoaded(m)
 
 	m.input.SetValue("/rename")
 	runCmd(m.handleEnter())

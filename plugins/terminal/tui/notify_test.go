@@ -352,7 +352,7 @@ func retourFixtureModel(t *testing.T, width, height int) *model {
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventSubagent, Subagent: &contracts.Subagent{ID: "1", Name: "explore", Kind: "haiku", State: "done"}}})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventSubagent, Subagent: &contracts.Subagent{ID: "2", Name: "explore", Kind: "haiku", State: "active"}}})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventSubagent, Subagent: &contracts.Subagent{ID: "3", Name: "review", Kind: "codex", State: "failed"}}})
-	m.syncTabs()
+	syncLoaded(m)
 	m.active = "a"
 	for _, channel := range []string{"a", "b", "c", "d"} {
 		m.tabs[channel].startedAt = time.Now().Add(-2 * time.Minute)

@@ -28,7 +28,7 @@ func TestEmptyEnterEndsTheWaitSoALateArrivalNeitherActivatesNorStealsFocus(t *te
 
 	be.sessions = append(be.sessions, contracts.SessionInfo{Name: "later", ChannelID: "c2"})
 	now = now.Add(openWaitLimit)
-	settle(m, m.syncTabs())
+	syncLoaded(m)
 
 	if m.active != "" {
 		t.Fatalf("active = %q after the cancelled session arrived, want no activation", m.active)
@@ -53,7 +53,7 @@ func TestRemoteCloseOfTheActiveTabKeepsTheQueuedTextInTheComposer(t *testing.T) 
 	m.handleEnter()
 
 	be.sessions = []contracts.SessionInfo{{Name: "two", ChannelID: "c2"}}
-	settle(m, m.syncTabs())
+	syncLoaded(m)
 
 	if m.awaitingOpen() {
 		t.Fatal("the wait is still on after the daemon closed the active tab")
@@ -74,10 +74,10 @@ func TestAfterTheLastTabClosesAnUnrequestedSessionTakesFocus(t *testing.T) {
 	m := newModel(be)
 	m.Init()
 	be.sessions = []contracts.SessionInfo{}
-	settle(m, m.syncTabs())
+	syncLoaded(m)
 
 	be.sessions = append(be.sessions, contracts.SessionInfo{Name: "other", ChannelID: "c2"})
-	settle(m, m.syncTabs())
+	syncLoaded(m)
 
 	if m.active != "c2" {
 		t.Fatalf("active = %q after the last tab closed and an unrequested session appeared, want c2 focused as on master", m.active)
@@ -94,7 +94,7 @@ func TestCommandLineAtArrivalSaysItWasKept(t *testing.T) {
 	m.input.SetValue("/help")
 
 	be.sessions = append(be.sessions, contracts.SessionInfo{Name: "later", ChannelID: "c2"})
-	settle(m, m.syncTabs())
+	syncLoaded(m)
 
 	if want := m.tr.t("tui.session.open_command_kept", map[string]any{tplArgName: "later"}); m.flash != want {
 		t.Fatalf("flash = %q when a command line is kept at arrival, want %q", m.flash, want)

@@ -323,16 +323,19 @@ func (a *attachedDaemon) Pick(channel, value string) bool {
 	return false
 }
 
-func (a *attachedDaemon) Scrollback(name string) []contracts.ScrollbackLine {
+func (a *attachedDaemon) Scrollback(name string) ([]contracts.ScrollbackLine, error) {
 	out, err := a.dispatch([]string{verbSession, "scrollback", argName, name})
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	var lines []contracts.ScrollbackLine
-	if err := json.Unmarshal([]byte(out), &lines); err != nil {
-		return nil
+	if len(out) == 0 {
+		return lines, nil
 	}
-	return lines
+	if err := json.Unmarshal([]byte(out), &lines); err != nil {
+		return nil, err
+	}
+	return lines, nil
 }
 
 func (a *attachedDaemon) Commands() []tui.CommandSpec {

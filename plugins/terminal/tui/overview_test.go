@@ -30,7 +30,7 @@ func boardModel(t *testing.T) (*fakeBackend, *model) {
 		overview: boardOverviewJSON,
 	}
 	m := readyModel(f)
-	m.syncTabs()
+	syncLoaded(m)
 	return f, m
 }
 

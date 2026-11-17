@@ -854,6 +854,14 @@
     "other": "session {{.Name}} is not ready yet, your message waits for it"
   },
   {
+    "id": "tui.session.history_loading",
+    "other": "loading history"
+  },
+  {
+    "id": "tui.session.history_failed",
+    "other": "history unavailable: {{.Reason}}"
+  },
+  {
     "id": "tui.session.open_missing",
     "other": "session {{.Name}} was not found, your message stays in the composer"
   },

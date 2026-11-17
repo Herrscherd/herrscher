@@ -76,7 +76,7 @@ func TestContextGaugeFollowsTheContextLimitsTable(t *testing.T) {
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
 	m.limits = contextwindow.NewLimits("", map[string]int{"codex": 400_000})
 	m.active = "c"
-	m.syncTabs()
+	syncLoaded(m)
 	m.ensureTab("c").measureContext(contracts.Event{TokensIn: 100_000})
 	if got := contextPercent(100_000, m.contextLimit("codex")); got != "25%" {
 		t.Fatalf("contextPercent with the table's 400000 window = %q, want 25%%", got)
@@ -206,7 +206,7 @@ func TestStatusBarNamesTheModelAndTheEffort(t *testing.T) {
 	m := newModel(be)
 	tb := m.ensureTab("c1")
 	m.active = "c1"
-	m.syncTabs()
+	syncLoaded(m)
 
 	bar := m.statusBar(tb, 120)
 	if !strings.Contains(bar, "opus-5 · high") {
@@ -225,7 +225,7 @@ func TestStatusBarFallsBackOnTheHubReading(t *testing.T) {
 	m := newModel(be)
 	tb := m.ensureTab("c1")
 	m.active = "c1"
-	m.syncTabs()
+	syncLoaded(m)
 
 	if !strings.Contains(m.statusBar(tb, 120), "96k/200k") {
 		t.Fatalf("un onglet sans tour vu doit lire la mesure du hub: %q", m.statusBar(tb, 120))
@@ -261,7 +261,7 @@ func barModelAt(t *testing.T, dir string) (*model, *tab) {
 	m := newModel(be)
 	tb := m.ensureTab("c1")
 	m.active = "c1"
-	m.syncTabs()
+	syncLoaded(m)
 	tb.ctxTokens = 82_000
 	tb.costTotal = 1.42
 	return m, tb
@@ -386,7 +386,7 @@ func TestRunModelReadsTheConfigFileIntoTheGauge(t *testing.T) {
 	m := newRunModel(context.Background(), f)
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
 	m.active = "c"
-	m.syncTabs()
+	syncLoaded(m)
 	m.ensureTab("c").measureContext(contracts.Event{TokensIn: 184_000})
 	if got := contextPercent(184_000, m.contextLimit("codex")); got != "46%" {
 		t.Fatalf("contextPercent with the config.json window = %q, want 46%%", got)
@@ -403,7 +403,7 @@ func TestDaemonContextWindowWinsOverTheLocalTable(t *testing.T) {
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
 	m.limits = contextwindow.NewLimits("", map[string]int{"codex": 400_000})
 	m.active = "c"
-	m.syncTabs()
+	syncLoaded(m)
 	m.ensureTab("c").measureContext(contracts.Event{TokensIn: 184_000})
 	if used, limit := m.contextFigures(); used != 184_000 || limit != 368_000 {
 		t.Fatalf("contextFigures = %d/%d, want the daemon's 184000/368000", used, limit)

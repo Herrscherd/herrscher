@@ -134,6 +134,11 @@ type forkDoneMsg struct {
 	err  error
 }
 
+type forkResolvedMsg struct {
+	name    string
+	channel string
+}
+
 func (m *model) escapeIdle() {
 	if m.input.Value() != "" {
 		m.escAt = time.Time{}
@@ -357,19 +362,25 @@ func (m *model) handleRewindDone(msg rewindDoneMsg) {
 	m.flash = m.tr.t("tui.rewind.done", map[string]any{"Index": msg.index, "What": m.tr.t(msg.what.doneLabelKey(), nil)})
 }
 
-func (m *model) handleForkDone(msg forkDoneMsg) {
+func (m *model) handleForkDone(msg forkDoneMsg) tea.Cmd {
 	if msg.err != nil {
 		m.flash = m.tr.t("tui.rewind.fork_refused", map[string]any{tplArgReason: localizedReason(m.tr, msg.err)})
-		return
+		return nil
 	}
-	channel := channelOfSession(m.tm.Sessions(), msg.name)
-	if channel == "" {
+	backend, name := m.tm, msg.name
+	return func() tea.Msg {
+		return forkResolvedMsg{name: name, channel: channelOfSession(backend.Sessions(), name)}
+	}
+}
+
+func (m *model) handleForkResolved(msg forkResolvedMsg) {
+	if msg.channel == "" {
 		m.flash = m.tr.t("tui.rewind.fork_created", map[string]any{tplArgName: msg.name})
 		return
 	}
 	m.releaseHeld(msg.name)
-	m.ensureTab(channel)
-	m.activate(channel)
+	m.ensureTab(msg.channel)
+	m.activate(msg.channel)
 	m.flash = m.tr.t("tui.rewind.fork_opened", map[string]any{tplArgName: msg.name})
 }
 

@@ -19,7 +19,7 @@ func newDiffModel(t *testing.T, repo string, run commandRunner, width, height in
 	be := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "s", ChannelID: "c1", Dir: repo}}}
 	m := newModel(be)
 	m.diffRun = run
-	m.syncTabs()
+	syncLoaded(m)
 	m.active = "c1"
 	m.Update(tea.WindowSizeMsg{Width: width, Height: height})
 	return m, be

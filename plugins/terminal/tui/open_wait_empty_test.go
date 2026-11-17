@@ -25,7 +25,7 @@ func TestEmptyEnterEndsAWaitThatHoldsNoText(t *testing.T) {
 
 	be.sessions = append(be.sessions, contracts.SessionInfo{Name: "later", ChannelID: "c2"})
 	now = now.Add(openWaitLimit)
-	settle(m, m.syncTabs())
+	syncLoaded(m)
 
 	if m.active != "" {
 		t.Fatalf("active = %q when the cancelled session arrived, want no activation", m.active)

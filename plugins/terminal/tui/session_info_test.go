@@ -21,7 +21,7 @@ func TestActiveInfoNeverReadsTheDaemon(t *testing.T) {
 	be := &countingBackend{}
 	be.sessions = []contracts.SessionInfo{{Name: "a", ChannelID: "c1", Vendor: "claude"}}
 	m := newModel(be)
-	m.syncTabs()
+	syncLoaded(m)
 
 	be.calls = 0
 	for range 20 {
@@ -38,7 +38,7 @@ func TestActiveInfoFollowsTheActiveTab(t *testing.T) {
 	be := &countingBackend{}
 	be.sessions = []contracts.SessionInfo{{Name: "a", ChannelID: "c1", Vendor: "claude"}, {Name: "b", ChannelID: "c2", Vendor: "codex"}}
 	m := newModel(be)
-	m.syncTabs()
+	syncLoaded(m)
 	m.active = "c1"
 	if s, _ := m.activeInfo(); s.Vendor != "claude" {
 		t.Fatalf("vendor = %q", s.Vendor)

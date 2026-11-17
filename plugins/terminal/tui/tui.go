@@ -670,6 +670,7 @@ func (m *model) applySessions(infos []contracts.SessionInfo) tea.Cmd {
 	if infos == nil {
 		return m.focusOpen(nil)
 	}
+	m.rememberActiveInfo(infos)
 	var builder strings.Builder
 	for i := range infos {
 		info := &infos[i]

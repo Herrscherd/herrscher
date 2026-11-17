@@ -19,8 +19,19 @@ func (m *model) activeInfo() (contracts.SessionInfo, bool) {
 	if m.infoChannel == m.active && time.Since(m.infoAt) < infoTTL {
 		return m.infoCache, m.infoKnown
 	}
+	m.rememberActiveInfo(m.tm.Sessions())
+	return m.infoCache, m.infoKnown
+}
+
+func (m *model) knownActiveInfo() contracts.SessionInfo {
+	if m.infoChannel != m.active {
+		return contracts.SessionInfo{}
+	}
+	return m.infoCache
+}
+
+func (m *model) rememberActiveInfo(sessions []contracts.SessionInfo) {
 	m.infoCache, m.infoKnown = contracts.SessionInfo{}, false
-	sessions := m.tm.Sessions()
 	for index := range sessions {
 		if sessions[index].ChannelID == m.active {
 			m.infoCache, m.infoKnown = sessions[index], true
@@ -28,7 +39,6 @@ func (m *model) activeInfo() (contracts.SessionInfo, bool) {
 		}
 	}
 	m.infoChannel, m.infoAt = m.active, time.Now()
-	return m.infoCache, m.infoKnown
 }
 
 func (m *model) emptyState(width int) string {

@@ -4,11 +4,14 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 func (tb *tab) appendChunk(text string) bool {
-	if n := len(tb.entries); n > 0 && tb.entries[n-1].role == roleAgent && tb.entries[n-1].streaming {
-		tb.entries[n-1].text += text
+	if count := len(tb.entries); count > 0 && tb.entries[count-1].role == roleAgent && tb.entries[count-1].streaming {
+		tb.entries[count-1].raw += text
+		tb.entries[count-1].text += termpaint.EscapeLines(text).String()
 		return true
 	}
 	if strings.TrimSpace(text) == "" {
@@ -41,7 +44,7 @@ func isLineBreak(r rune) bool {
 
 func (tb *tab) endStream() {
 	tb.pendingBlank.Reset()
-	if n := len(tb.entries); n > 0 && tb.entries[n-1].role == roleAgent {
-		tb.entries[n-1].streaming = false
+	if count := len(tb.entries); count > 0 && tb.entries[count-1].role == roleAgent {
+		tb.entries[count-1].streaming = false
 	}
 }

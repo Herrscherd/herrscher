@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Herrscherd/herrscher/core/bridge"
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 const (
@@ -170,7 +171,7 @@ func chipRow(atts []Attachment, styles uiStyles) string {
 	}
 	chips := make([]string, len(atts))
 	for i, a := range atts {
-		chips[i] = styles.chip.Render(fmt.Sprintf("📎 %s · %s", a.Name, humanSize(a.Size)))
+		chips[i] = styles.chip.Render(fmt.Sprintf("📎 %s · %s", termpaint.Escape(a.Name).String(), humanSize(a.Size)))
 	}
 	return strings.Join(chips, " ")
 }

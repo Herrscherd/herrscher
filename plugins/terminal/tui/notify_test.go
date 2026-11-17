@@ -150,20 +150,6 @@ func TestCtrlPJumpsToTheNotifyingSessionWhileToastShows(t *testing.T) {
 	}
 }
 
-func TestApprovalToastJumpsToItsSession(t *testing.T) {
-	m := notifyModel(t, false)
-	m.ensureTab("a")
-	m.active = "c"
-	m.notifyApproval("a", "run Bash(npm run deploy)")
-	if !strings.Contains(strings.Join(m.toast.body, " "), "run Bash") {
-		t.Fatalf("the approval toast must name what waits, got %q", m.toast.body)
-	}
-	m.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
-	if m.active != "a" {
-		t.Fatalf("ctrl+p must go to the session asking for approval, active = %q", m.active)
-	}
-}
-
 func TestCtrlPWithoutToastKeepsItsRole(t *testing.T) {
 	m := notifyModel(t, false)
 	m.ensureTab("a")

@@ -10,6 +10,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/host"
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 var (
@@ -160,11 +161,11 @@ func chooseDefaultModel(sty style, input *bufio.Reader, entries []host.CatalogEn
 	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, msg(clitext.ManageDefaultModelHeader, nil)))
 	for idx := range entries {
 		entry := &entries[idx]
-		padded, tag := fmt.Sprintf("%-24s", entry.ID), ""
+		padded, tag := fmt.Sprintf("%-24s", termpaint.Escape(entry.ID).String()), ""
 		if entry.ID == cur {
 			padded, tag = sty.wrap(sty.green, padded), sty.wrap(sty.dim, "  current")
 		}
-		fmt.Fprintf(os.Stderr, "    %s %s %s%s\n", sty.wrap(sty.dim, strconv.Itoa(idx+1)), padded, sty.wrap(sty.dim, entry.Label), tag)
+		fmt.Fprintf(os.Stderr, "    %s %s %s%s\n", sty.wrap(sty.dim, strconv.Itoa(idx+1)), padded, sty.wrap(sty.dim, termpaint.Escape(entry.Label).String()), tag)
 	}
 	fmt.Fprintf(os.Stderr, "    %s %s\n", sty.wrap(sty.dim, strconv.Itoa(len(entries)+1)), "none")
 

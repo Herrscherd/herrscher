@@ -15,6 +15,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 const (
@@ -659,7 +661,7 @@ func (m *model) paint(style lipgloss.Style, text string, selected bool) string {
 }
 
 func (panel *diffPanel) displayPath(filePath string) string {
-	return strings.TrimPrefix(filePath, commonDirPrefix(panel.report.Files))
+	return termpaint.Escape(strings.TrimPrefix(filePath, commonDirPrefix(panel.report.Files))).String()
 }
 
 func commonDirPrefix(files []diffFile) string {
@@ -727,16 +729,16 @@ func (m *model) diffPaneHeader(file diffFile, width int) string {
 		tag = "  " + m.tr.t("tui.diffpanel.added", nil)
 	}
 	pathWidth := width - lipgloss.Width(right) - lipgloss.Width(tag) - 1
-	left := m.st.text.Render(truncateLeft(" "+file.Path, pathWidth)) + m.st.violet.Render(tag)
+	left := m.st.text.Render(truncateLeft(" "+termpaint.Escape(file.Path).String(), pathWidth)) + m.st.violet.Render(tag)
 	return truncate(joinRow(width, left, right), width)
 }
 
 func (m *model) diffRowLine(row gitRow, width int, twoNums bool) string {
 	numbers := rowNumbers(row, twoNums)
 	if row.Kind == rowHunk {
-		return m.st.dim.Render(truncate(strings.Repeat(" ", lipgloss.Width(numbers)+diffHunkIndent)+row.Text, width))
+		return m.st.dim.Render(truncate(strings.Repeat(" ", lipgloss.Width(numbers)+diffHunkIndent)+termpaint.Escape(row.Text).String(), width))
 	}
-	line := truncate(numbers+row.Kind.String()+" "+strings.ReplaceAll(row.Text, "\t", diffPanelTabSpaces), width)
+	line := truncate(numbers+row.Kind.String()+" "+termpaint.Escape(strings.ReplaceAll(row.Text, "\t", diffPanelTabSpaces)).String(), width)
 	switch row.Kind {
 	case rowAdded:
 		return m.st.green.Render(line)

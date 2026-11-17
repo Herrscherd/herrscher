@@ -95,3 +95,40 @@ func TestPrintableOutputCarriesNoControlByte(t *testing.T) {
 		}
 	}
 }
+
+func TestPrintableLinesKeepTheLayoutAndEscapeTheRest(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "line feeds and tabs stay", in: "un\n\tdeux", want: "un\n\tdeux"},
+		{name: "ESC on a line of its own", in: "ok\n\x1b[31mred", want: "ok\n\\x1b[31mred"},
+		{name: "CR is escaped, LF is kept", in: "a\r\nb", want: `a\r` + "\n" + "b"},
+		{name: "OSC and bidi on two lines", in: "\x1b]0;t\a\n\u202eb", want: "\\x1b]0;t\\a\n\\u202eb"},
+		{name: "accents and emoji unchanged", in: "démon\n✕ ● 日本 🟢", want: "démon\n✕ ● 日本 🟢"},
+		{name: "invalid byte", in: "a\n\xff", want: "a\n\\xff"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := termpaint.EscapeLines(tc.in).String(); got != tc.want {
+				t.Errorf("EscapeLines(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestPrintableLinesCarryNoControlOtherThanLayout(t *testing.T) {
+	var in strings.Builder
+	in.WriteString("\x1b]8;;x\x07\u009b\r\x00\x7f\xffok\n\t")
+	for _, char := range termpainttest.BidiControls() {
+		in.WriteRune(char)
+	}
+	got := termpaint.EscapeLines(in.String()).String()
+	bidi := termpainttest.BidiControls()
+	for _, r := range got {
+		if (unicode.IsControl(r) && r != '\n' && r != '\t') || slices.Contains(bidi, r) {
+			t.Fatalf("EscapeLines carries control %U in %q", r, got)
+		}
+	}
+}

@@ -89,6 +89,7 @@ func TestUnmeasuredCompactionReturnsTheGaugeToItsEstimate(t *testing.T) {
 		m.handleWindowSize(size)
 		tb := m.ensureTab("c")
 		m.active = "c"
+		m.syncTabs()
 		tb.measureContext(contracts.Event{TokensIn: 150_000})
 		m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionStarted, Value: "manual"})
 		m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionDone, Value: "manual", Text: "compacté"})

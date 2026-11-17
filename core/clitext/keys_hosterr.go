@@ -27,6 +27,8 @@ func hostErrKeys() map[Key][]string {
 		"cli.host.fault.no_compactor_plugin":           nil,
 		"cli.host.fault.compactor_settings":            nil,
 		"cli.host.fault.compact_queue_full":            nil,
+		"cli.host.fault.warning_abandoned":             nil,
+		"cli.host.fault.warning_late":                  nil,
 		"cli.host.fault.request_name_missing":          nil,
 		"cli.host.fault.approve_mode_usage":            nil,
 		"cli.host.fault.approve_ask_unauthenticated":   nil,

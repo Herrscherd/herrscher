@@ -7,7 +7,7 @@ import (
 )
 
 func TestBridgeTermGraceIsBelowTeardownBudget(t *testing.T) {
-	h := &hub{teardownGrace: defaultTeardownGrace}
+	h := testHub(&hub{teardownGrace: defaultTeardownGrace})
 
 	if budget := h.teardownBudget(); supervisor.BridgeTermGrace >= budget {
 		t.Fatalf("BridgeTermGrace = %v must stay below the teardown budget %v", supervisor.BridgeTermGrace, budget)

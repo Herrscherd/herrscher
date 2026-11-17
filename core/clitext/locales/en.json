@@ -3218,6 +3218,16 @@
     "other": "the turn queue is full, the compaction was not queued"
   },
   {
+    "id": "cli.host.fault.warning_abandoned",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (warning abandoned)",
+    "other": "the warning writer stayed blocked: the warning was lost"
+  },
+  {
+    "id": "cli.host.fault.warning_late",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (warning late)",
+    "other": "the warning writer stayed blocked: the warning is not confirmed"
+  },
+  {
     "id": "cli.host.fault.request_name_missing",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (request name missing)",
     "other": "name a request (see `approve list`)"

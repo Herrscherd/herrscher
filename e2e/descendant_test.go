@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -28,10 +30,10 @@ func descendantGone(ts *testscript.TestScript, neg bool, args []string) {
 		ts.Fatalf("usage: descendantgone <pid file>")
 	}
 	pidPath := ts.MkAbs(args[0])
-	pid, err := readPid(pidPath)
+	pid, token, err := readDescendant(pidPath)
 	ts.Check(err)
 	ts.Check(descendantNotExpired(pidPath))
-	entry := instanceEntry(ts.Getenv(instanceEnv))
+	entry := descendantEntry(token)
 	ts.Defer(func() { ts.Check(killDescendant(pid, entry)) })
 	deadline := time.Now().Add(descendantWait)
 	for time.Now().Before(deadline) {
@@ -59,23 +61,53 @@ func descendantNotExpired(pidPath string) error {
 	return nil
 }
 
-func readPid(path string) (int, error) {
+func descendantEntry(token string) string {
+	return vendortest.DescendantMarker + "=" + token
+}
+
+func readDescendant(path string) (int, string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
-	return strconv.Atoi(strings.TrimSpace(string(data)))
+	fields := strings.Fields(string(data))
+	if len(fields) != 2 {
+		return 0, "", fmt.Errorf("the pid file %s holds %d fields, want a pid and a token", path, len(fields))
+	}
+	pid, err := strconv.Atoi(fields[0])
+	if err != nil {
+		return 0, "", err
+	}
+	return pid, fields[1], nil
 }
 
 func descendantAlive(pid int, entry string) (bool, error) {
-	environ, err := environOf(pid)
+	return descendantAliveIn(procRoot, pid, entry)
+}
+
+func descendantAliveIn(root string, pid int, entry string) (bool, error) {
+	status, err := os.ReadFile(filepath.Join(root, strconv.Itoa(pid), "status"))
+	if gone(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("cannot read the status of %d: %w", pid, err)
+	}
+	uid, err := realUID(string(status))
+	if err != nil {
+		return false, fmt.Errorf("cannot read the owner of %d: %w", pid, err)
+	}
+	if uid != os.Getuid() || statusField(string(status), "Name") != "sleep" {
+		return false, nil
+	}
+	environ, err := environOf(root, pid)
 	if err != nil {
 		return false, fmt.Errorf("cannot read the environment of %d: %w", pid, err)
 	}
 	if !carries(environ, entry) {
 		return false, nil
 	}
-	line, err := commandLine(procRoot, pid)
+	line, err := commandLine(root, pid)
 	if gone(err) {
 		return false, nil
 	}
@@ -87,6 +119,23 @@ func descendantAlive(pid int, entry string) (bool, error) {
 
 func gone(err error) bool {
 	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ESRCH)
+}
+
+func statusField(status, key string) string {
+	for _, line := range strings.Split(status, "\n") {
+		if value, found := strings.CutPrefix(line, key+":"); found {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func realUID(status string) (int, error) {
+	fields := strings.Fields(statusField(status, "Uid"))
+	if len(fields) == 0 {
+		return 0, errors.New("the status file has no readable Uid line")
+	}
+	return strconv.Atoi(fields[0])
 }
 
 func killDescendant(pid int, entry string) error {
@@ -109,11 +158,98 @@ func killDescendant(pid int, entry string) error {
 	return errors.Join(killErr, p.release())
 }
 
-func TestDescendantAliveRefusesAnUnreadablePid(t *testing.T) {
+func TestDescendantAliveIgnoresAForeignProcess(t *testing.T) {
 	if os.Geteuid() == 0 {
-		t.Skip("root reads the environment of every process")
+		t.Skip("root owns every process, so no pid is foreign")
 	}
-	if _, err := descendantAlive(1, instanceEntry("unused")); !errors.Is(err, fs.ErrPermission) {
-		t.Fatal("an unreadable pid counted as a live or dead descendant instead of an error")
+	alive, err := descendantAlive(1, instanceEntry("unused"))
+	if err != nil || alive {
+		t.Fatalf("a process of another uid was counted as a descendant: alive=%v err=%v", alive, err)
+	}
+}
+
+func plantSleepStatus(t *testing.T, root string, pid int, name string, environMode fs.FileMode) {
+	t.Helper()
+	dir := filepath.Join(root, strconv.Itoa(pid))
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	uid := strconv.Itoa(os.Getuid())
+	status := "Name:\t" + name + "\nUid:\t" + uid + "\t" + uid + "\t" + uid + "\t" + uid + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "status"), []byte(status), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "environ"), []byte("NOTHING=here\x00"), environMode); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDescendantAliveFailsWhenTheEnvironOfOurSleepIsRefused(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads every environ, so no read of ours is refused")
+	}
+	root := t.TempDir()
+	const pid = 4242
+	plantSleepStatus(t, root, pid, "sleep", 0)
+	alive, err := descendantAliveIn(root, pid, instanceEntry("probe"))
+	if err == nil {
+		t.Fatalf("a refused environ of our own sleep was read as a gone descendant (alive=%v): the turn-end check would pass while the descendant runs", alive)
+	}
+}
+
+func TestDescendantAliveIgnoresAReusedPidOfAnotherProgram(t *testing.T) {
+	root := t.TempDir()
+	const pid = 4243
+	plantSleepStatus(t, root, pid, "sudo", 0)
+	alive, err := descendantAliveIn(root, pid, instanceEntry("probe"))
+	if err != nil || alive {
+		t.Fatalf("a reused pid of another program of our uid was taken for the descendant: alive=%v err=%v", alive, err)
+	}
+}
+
+func startProbeSleep(t *testing.T, entry string) int {
+	t.Helper()
+	cmd := exec.CommandContext(t.Context(), "sleep", strconv.Itoa(int(vendortest.DescendantSleep/time.Second)))
+	cmd.Env = append(os.Environ(), entry)
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if killErr := cmd.Process.Kill(); killErr != nil && !errors.Is(killErr, os.ErrProcessDone) {
+			t.Errorf("kill the probe: %v", killErr)
+		}
+		var exitErr *exec.ExitError
+		waitErr := cmd.Wait()
+		if waitErr != nil && (!errors.As(waitErr, &exitErr) || exitErr.String() != "signal: killed") {
+			t.Errorf("wait for the probe: %v", waitErr)
+		}
+	})
+	return cmd.Process.Pid
+}
+
+func TestDescendantAliveSeesALiveDescendantOfOurs(t *testing.T) {
+	entry := descendantEntry("probe-" + strconv.Itoa(os.Getpid()))
+	pid := startProbeSleep(t, entry)
+	alive, err := descendantAlive(pid, entry)
+	if err != nil || !alive {
+		t.Fatalf("a live descendant of ours carrying the marker was not seen: alive=%v err=%v: the scan would report a surviving descendant as gone", alive, err)
+	}
+}
+
+func TestDescendantAliveIgnoresAnotherDescendantOfTheSameRun(t *testing.T) {
+	pid := startProbeSleep(t, descendantEntry("other-scenario"))
+	alive, err := descendantAlive(pid, descendantEntry("this-scenario"))
+	if err != nil || alive {
+		t.Fatalf("a sleep of another scenario carrying the same marker name was taken for this scenario's descendant: alive=%v err=%v", alive, err)
+	}
+}
+
+func TestRealUIDReadsTheUidLineOfTheStatusFile(t *testing.T) {
+	uid, err := realUID("Name:\tsleep\nUmask:\t0022\nUid:\t1000\t1000\t1000\t1000\nGid:\t0\t0\t0\t0\n")
+	if err != nil || uid != 1000 {
+		t.Fatalf("realUID = %d, %v, want 1000: the real uid is the first field of the Uid line, whatever the owner of the directory", uid, err)
+	}
+	if _, err := realUID("Name:\tsleep\n"); err == nil {
+		t.Fatal("a status file without a Uid line was accepted")
 	}
 }

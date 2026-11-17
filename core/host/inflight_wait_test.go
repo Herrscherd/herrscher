@@ -203,7 +203,11 @@ func blockedWriterCases() []blockedWriterCase {
 				h := newInflightHub(t, name, grace, warnings)
 				h.startBridge = func(state.Session, time.Duration) error { return errors.New("bridge refused") }
 				sess := state.Session{Name: name, ChannelID: "c1"}
-				_ = runInBackground(func() { logCleanup(h.goLiveBridged(t.Context(), sess)) })
+				sessionStart := runInBackground(func() { logCleanup(h.goLiveBridged(t.Context(), sess)) })
+				t.Cleanup(func() {
+					warnings.open()
+					awaitBackground(t, sessionStart, "the refused session start did not return once its warning was written")
+				})
 				awaitGatedWrite(t, warnings)
 				return h
 			},
@@ -258,6 +262,10 @@ func runBlockedWriterCase(t *testing.T, c blockedWriterCase, path inflightPath) 
 
 	started := time.Now()
 	returned := runInBackground(func() { path.run(h, name) })
+	t.Cleanup(func() {
+		warnings.open()
+		awaitBackground(t, returned, "the stop path did not return once the warning writer was released")
+	})
 	if c.want == nil {
 		awaitGatedWrite(t, warnings)
 	}

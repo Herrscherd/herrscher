@@ -23,9 +23,10 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
+	"github.com/Herrscherd/herrscher/core/service"
 )
 
-const defaultTeardownGrace = 5 * time.Second
+const defaultTeardownGrace = service.StopTeardownGrace
 
 type hub struct {
 	lang     i18n.Language

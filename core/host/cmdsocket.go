@@ -184,7 +184,7 @@ func acceptCommands(ctx context.Context, listener net.Listener, disp dispatcher,
 		<-ctx.Done()
 		closeRead(listener)
 		<-accepting
-		if !joinWithin(&handlers, joinBudget) {
+		if !joinHandlersWithin(&handlers, joinBudget) {
 			onOverrun()
 		}
 		close(released)
@@ -192,7 +192,7 @@ func acceptCommands(ctx context.Context, listener net.Listener, disp dispatcher,
 	return released
 }
 
-func joinWithin(handlers *sync.WaitGroup, budget time.Duration) bool {
+func joinHandlersWithin(handlers *sync.WaitGroup, budget time.Duration) bool {
 	finished := make(chan struct{})
 	go func() {
 		handlers.Wait()

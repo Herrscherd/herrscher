@@ -5,9 +5,10 @@ import (
 	"time"
 
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/service"
 )
 
-const persistWriteGrace = 2 * time.Second
+const persistWriteGrace = service.StopPersistGrace
 
 type persistWrites struct {
 	group   inflight

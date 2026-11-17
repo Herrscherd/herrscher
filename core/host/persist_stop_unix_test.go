@@ -56,7 +56,7 @@ func awaitPersistWriteInFlight(t *testing.T, h *hub) {
 	deadline := time.Now().Add(5 * time.Second)
 	for h.persists.group.pending() == 0 {
 		if time.Now().After(deadline) {
-			t.Fatal("the transcript write never entered the persist group")
+			t.Fatal("the write never entered the persist group: its caller is not wired to the write tracker")
 		}
 		time.Sleep(time.Millisecond)
 	}

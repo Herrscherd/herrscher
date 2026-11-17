@@ -10,6 +10,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Herrscherd/herrscher/core/internal/supervisor"
+	"github.com/Herrscherd/herrscher/core/service"
 )
 
 type instantDrainer struct{}
@@ -72,9 +75,13 @@ func TestStopPathStaysWithinItsBoundWithAStuckWriteAndAStuckCommand(t *testing.T
 		t.Fatal("the stop path never returned with a stuck write and a stuck command")
 	}
 
-	bound := 6*grace + persistWriteGrace + time.Second
+	bound := 6*grace + persistWriteGrace + supervisor.DrainBound
 	if elapsed := time.Since(started); elapsed > bound {
 		t.Fatalf("the stop path took %v with a stuck write and a stuck command, want under %v", elapsed, bound)
+	}
+	realBound := 6*defaultTeardownGrace + persistWriteGrace + supervisor.DrainBound
+	if floor := realBound + service.StopMargin; service.StopTimeout < floor {
+		t.Fatalf("StopTimeout is %v, want at least the stop bound %v plus the %v margin, %v", service.StopTimeout, realBound, service.StopMargin, floor)
 	}
 	if got := strings.Count(warnings.String(), persistOverrunText(h)); got != 1 {
 		t.Fatalf("the persist overrun was announced %d times, want exactly once: %q", got, warnings.String())

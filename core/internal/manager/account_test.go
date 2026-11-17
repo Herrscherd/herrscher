@@ -45,7 +45,7 @@ func TestAccountGateRefusesAnUnknownProfileBeforeCreate(t *testing.T) {
 
 func newAccountHandler(t *testing.T, validate func(vendor, profile string) error, resolve func(vendor, modelID, cmd string) (string, error)) *Handler {
 	t.Helper()
-	return NewHandler(clitext.NewMessages(), nil, nil, nil, nil, agent.NewStore(t.TempDir()), nil, "", "", nil, validate, resolve)
+	return NewHandler(clitext.NewMessages(), nil, nil, nil, nil, nil, agent.NewStore(t.TempDir()), nil, "", "", nil, validate, resolve)
 }
 
 func TestAccountWithoutAResolvableVendorIsRefused(t *testing.T) {

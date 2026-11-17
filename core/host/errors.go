@@ -193,7 +193,7 @@ type pluginKindReservedError struct {
 
 func (e *pluginKindReservedError) Error() string {
 	if e == nil {
-		return "<nil>"
+		return nilErrorText
 	}
 	return e.render(e.messages, i18n.English)
 }

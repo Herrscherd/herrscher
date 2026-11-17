@@ -13,7 +13,7 @@ type gatewayEnvUnsupportedError struct {
 
 func (e *gatewayEnvUnsupportedError) Error() string {
 	if e == nil {
-		return "<nil>"
+		return nilErrorText
 	}
 	return e.render(e.messages, i18n.English)
 }
@@ -193,7 +193,7 @@ type unsafeTarMemberError struct {
 
 func (e *unsafeTarMemberError) Error() string {
 	if e == nil {
-		return "<nil>"
+		return nilErrorText
 	}
 	return e.render(e.messages, i18n.English)
 }
@@ -218,7 +218,7 @@ type instanceIDMismatchError struct {
 
 func (e *instanceIDMismatchError) Error() string {
 	if e == nil {
-		return "<nil>"
+		return nilErrorText
 	}
 	return e.render(e.messages, i18n.English)
 }
@@ -234,7 +234,7 @@ type remoteSessionError struct {
 
 func (e *remoteSessionError) Error() string {
 	if e == nil {
-		return "<nil>"
+		return nilErrorText
 	}
 	return e.render(e.messages, i18n.English)
 }
@@ -250,7 +250,7 @@ type remoteAccountError struct {
 
 func (e *remoteAccountError) Error() string {
 	if e == nil {
-		return "<nil>"
+		return nilErrorText
 	}
 	return e.render(e.messages, i18n.English)
 }

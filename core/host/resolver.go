@@ -225,7 +225,7 @@ type RemoteResolveError struct {
 
 func (e *RemoteResolveError) Error() string {
 	if e == nil {
-		return "<nil>"
+		return nilErrorText
 	}
 	return e.render(e.messages, i18n.English)
 }

@@ -27,6 +27,8 @@ const (
 	countParam  = "Count"
 )
 
+const nilErrorText = "<nil>"
+
 type hostMessages struct {
 	catalog func() (*i18n.Catalog, error)
 }
@@ -98,7 +100,7 @@ type hostWrapError struct {
 
 func (e *hostWrapError) Error() string {
 	if e == nil {
-		return "<nil>"
+		return nilErrorText
 	}
 	return e.render(e.messages, i18n.English)
 }
@@ -141,7 +143,7 @@ func errorTextIn(messages *hostMessages, lang i18n.Language, err error) string {
 }
 
 func localizedPart(messages *hostMessages, lang i18n.Language, err error) (string, string, bool) {
-	if localizable, found := firstLocalizable(err); found {
+	if localizable := firstLocalizable(err); localizable != nil {
 		return localizable.Error(), localizable.render(messages, lang), true
 	}
 	if failure, found := errors.AsType[worktree.FailureError](err); found {
@@ -172,26 +174,26 @@ func isNilLocalizable(localizable localizableError) bool {
 	return false
 }
 
-func firstLocalizable(err error) (localizableError, bool) {
+func firstLocalizable(err error) localizableError {
 	if err == nil {
-		return nil, false
+		return nil
 	}
 	if localizable, found := errors.AsType[localizableError](err); found && !isNilLocalizable(localizable) {
-		return localizable, true
+		return localizable
 	}
 	if joined, isJoin := err.(interface{ Unwrap() []error }); isJoin {
 		for _, branch := range joined.Unwrap() {
-			if localizable, found := firstLocalizable(branch); found {
-				return localizable, true
+			if localizable := firstLocalizable(branch); localizable != nil {
+				return localizable
 			}
 		}
-		return nil, false
+		return nil
 	}
 	return firstLocalizable(errors.Unwrap(err))
 }
 
 func isLocalized(err error) bool {
-	if _, found := firstLocalizable(err); found {
+	if firstLocalizable(err) != nil {
 		return true
 	}
 	_, found := errors.AsType[worktree.FailureError](err)

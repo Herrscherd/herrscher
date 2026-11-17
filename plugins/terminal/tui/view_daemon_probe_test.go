@@ -89,3 +89,22 @@ func TestViewNeverCallsTheDaemonOnAnySurface(t *testing.T) {
 		})
 	}
 }
+
+func TestWorktreeDirNeverReadsTheDaemon(t *testing.T) {
+	be := &probeBackend{fakeBackend: &fakeBackend{
+		sessions: []contracts.SessionInfo{{Name: "alpha", ChannelID: "c1", Dir: "/tmp/alpha"}},
+	}}
+	m := newModel(be)
+	m.syncTabs()
+	m.active = "c1"
+
+	be.armed = true
+	dir := m.worktreeDir()
+	be.armed = false
+	if dir != "/tmp/alpha" {
+		t.Fatalf("worktreeDir = %q, want the cached session dir", dir)
+	}
+	if len(be.calls) > 0 {
+		t.Fatalf("worktreeDir called the daemon: %s", strings.Join(be.calls, ", "))
+	}
+}

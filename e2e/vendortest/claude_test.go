@@ -90,7 +90,7 @@ func summary(events []event) []string {
 	var got []string
 	for _, e := range events {
 		switch e.Type {
-		case "assistant":
+		case typeAssistant:
 			for index := range e.Message.Content {
 				block := &e.Message.Content[index]
 				got = append(got, block.Type+":"+block.Text+block.Name+block.ID+string(block.Input))

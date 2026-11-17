@@ -7,6 +7,8 @@ import (
 	"strconv"
 )
 
+const typeAssistant = "assistant"
+
 type contentBlock struct {
 	Type  string          `json:"type"`
 	Text  string          `json:"text,omitempty"`
@@ -30,14 +32,14 @@ type messageUsage struct {
 }
 
 func assistantUsage(tokens int) assistantEvent {
-	event := assistantEvent{Type: "assistant"}
+	event := assistantEvent{Type: typeAssistant}
 	event.Message.Content = []contentBlock{}
 	event.Message.Usage = &messageUsage{InputTokens: tokens}
 	return event
 }
 
 func assistantText(text string) assistantEvent {
-	event := assistantEvent{Type: "assistant"}
+	event := assistantEvent{Type: typeAssistant}
 	event.Message.Content = []contentBlock{{Type: "text", Text: text}}
 	return event
 }
@@ -54,7 +56,7 @@ func toolUseID(call int) string {
 }
 
 func assistantTool(call int, tool step) assistantEvent {
-	event := assistantEvent{Type: "assistant"}
+	event := assistantEvent{Type: typeAssistant}
 	event.Message.Content = []contentBlock{{Type: "tool_use", ID: toolUseID(call), Name: tool.tool, Input: tool.input}}
 	return event
 }

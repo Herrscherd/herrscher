@@ -103,10 +103,10 @@ func nilNewModelCallees(file *ast.File) map[*ast.Ident]bool {
 
 func newModelNilCallee(node ast.Node) (*ast.Ident, bool) {
 	call, isCall := node.(*ast.CallExpr)
-	if !isCall || len(call.Args) != 1 {
+	if !isCall || len(call.Args) != 2 {
 		return nil, false
 	}
-	arg, isArgIdent := call.Args[0].(*ast.Ident)
+	arg, isArgIdent := call.Args[1].(*ast.Ident)
 	if !isArgIdent || arg.Name != "nil" {
 		return nil, false
 	}

@@ -54,14 +54,15 @@ func syncLoaded(m *model) {
 func TestNewSessionAtTheTickOpensItsTabWithoutReadingHistory(t *testing.T) {
 	fresh := contracts.SessionInfo{Name: "fresh", ChannelID: "c2"}
 	f := &blockingHistory{
-		fakeBackend: &fakeBackend{fe: make(chan RoutedEvent, 1), sessions: []contracts.SessionInfo{fresh}},
+		fakeBackend: &fakeBackend{fe: make(chan RoutedEvent, 1)},
 		release:     make(chan struct{}),
 	}
 	m, _ := startModel(f)
 	f.sessions = []contracts.SessionInfo{fresh}
+	var openCmd tea.Cmd
 	returnsWithin(t, "the tick waited on the daemon history", func() {
 		m.Update(tickMsg{})
-		m.Update(sessionsMsg{seq: m.sessionsIssued, infos: f.sessions})
+		_, openCmd = m.Update(sessionsMsg{seq: m.sessionsIssued, infos: f.sessions})
 	})
 	tb := m.tabs["c2"]
 	if tb == nil {
@@ -74,7 +75,9 @@ func TestNewSessionAtTheTickOpensItsTabWithoutReadingHistory(t *testing.T) {
 		t.Fatalf("tab history = %v, want a history still queued or requested", tb.history)
 	}
 	close(f.release)
-	loadHistory(m)
+	for _, msg := range historyMsgs(openCmd) {
+		m.Update(msg)
+	}
 	if tb.history != historyDone {
 		t.Errorf("tab history = %v after the load, want historyDone", tb.history)
 	}

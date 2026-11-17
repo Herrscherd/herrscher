@@ -21,16 +21,15 @@ const boardOverviewJSON = `[
 func boardModel(t *testing.T) (*fakeBackend, *model) {
 	t.Helper()
 	f := &fakeBackend{
-		fe: make(chan RoutedEvent),
-		sessions: []contracts.SessionInfo{
-			{Name: "alpha", ChannelID: "ch-alpha"},
-			{Name: "beta", ChannelID: "ch-beta"},
-			{Name: "gamma", ChannelID: "ch-gamma"},
-		},
+		fe:       make(chan RoutedEvent),
 		overview: boardOverviewJSON,
 	}
 	m := readyModel(f)
-	syncLoaded(m)
+	f.sessions = []contracts.SessionInfo{
+		{Name: "alpha", ChannelID: "ch-alpha"},
+		{Name: "beta", ChannelID: "ch-beta"},
+		{Name: "gamma", ChannelID: "ch-gamma"},
+	}
 	return f, m
 }
 

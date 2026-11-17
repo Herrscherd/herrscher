@@ -14,7 +14,7 @@ func TestTheOneShotSeedRunsWithoutASessionTable(t *testing.T) {
 		return seedBackend{reply: "réponse sans table"}, nil
 	}
 	sess := state.Session{Name: "solo", ChannelID: "channel"}
-	got, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), &consolidateSpy{}, oneShotSeedRuntime{backend: backend, warnings: io.Discard})
+	got, err := runOneShotSeedWithIDRuntime(t.Context(), sess, "tâche", newTurnID(), &consolidateSpy{}, oneShotSeedRuntime{backend: backend, warnings: io.Discard})
 	if err != nil {
 		t.Fatalf("seed error = %v, want the reply", err)
 	}

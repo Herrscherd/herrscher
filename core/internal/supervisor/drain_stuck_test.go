@@ -8,7 +8,7 @@ import (
 )
 
 func TestDrainBridgesReturnsStillStoppingWithinTheBoundWhenABridgeNeverExits(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	sup := NewSupervisor(ctx, "herrscher", testLayout(t))
 	stuck := make(chan struct{})
 	t.Cleanup(func() { close(stuck) })

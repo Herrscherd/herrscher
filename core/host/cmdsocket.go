@@ -168,7 +168,7 @@ type openConns struct {
 }
 
 func newOpenConns() *openConns {
-	return &openConns{conns: map[net.Conn]struct{}{}}
+	return &openConns{conns: make(map[net.Conn]struct{})}
 }
 
 func (o *openConns) add(conn net.Conn) {

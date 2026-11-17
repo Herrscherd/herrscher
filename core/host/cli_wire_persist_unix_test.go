@@ -45,7 +45,7 @@ func TestWiredManagerWriteIsAwaitedByTheStopPath(t *testing.T) {
 	var runErr error
 	go func() {
 		defer close(done)
-		_, runErr = setLang.Run(t.Context(), contracts.Input{Args: map[string]string{"lang": "fr"}})
+		_, runErr = setLang.Run(ctx, contracts.Input{Args: map[string]string{"lang": "fr"}})
 	}()
 
 	awaitPersistWriteInFlight(t, h)

@@ -12,7 +12,7 @@ import (
 
 func TestCommandSocketReleasesWithinItsJoinBudgetWhenAHandlerNeverEnds(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cmd.sock")
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	stuck := make(chan struct{})
 	t.Cleanup(func() { close(stuck) })
@@ -30,7 +30,7 @@ func TestCommandSocketReleasesWithinItsJoinBudgetWhenAHandlerNeverEnds(t *testin
 	joinBudget := 200 * time.Millisecond
 	released := acceptCommands(ctx, listener, disp, defaultCommandReadTimeout, joinBudget, func(time.Duration) { overruns.Add(1) })
 
-	client, err := (&net.Dialer{}).DialContext(t.Context(), "unix", path)
+	client, err := (&net.Dialer{}).DialContext(ctx, "unix", path)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestCommandSocketReleasesWithinItsJoinBudgetWhenAHandlerNeverEnds(t *testin
 	if got := overruns.Load(); got != 1 {
 		t.Fatalf("the stuck handler was announced %d times, want exactly once", got)
 	}
-	probe, err := (&net.Dialer{}).DialContext(t.Context(), "unix", path)
+	probe, err := (&net.Dialer{}).DialContext(context.WithoutCancel(ctx), "unix", path)
 	if err == nil {
 		logCleanup(probe.Close())
 		t.Fatal("the command socket still answers after release")
@@ -66,7 +66,7 @@ func TestCommandSocketReleasesWithinItsJoinBudgetWhenAHandlerNeverEnds(t *testin
 
 func TestCommandSocketClosesIdleConnectionsOnOverrun(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cmd.sock")
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	listener, err := openSocket(ctx, isolatedRuntimeDir(t), path)
 	if err != nil {
@@ -74,7 +74,7 @@ func TestCommandSocketClosesIdleConnectionsOnOverrun(t *testing.T) {
 	}
 	idle := dispatcherFunc(func(context.Context, []string) (string, error) { return "unused", nil })
 	released := acceptCommands(ctx, listener, idle, defaultCommandReadTimeout, 200*time.Millisecond, func(time.Duration) {})
-	client, err := (&net.Dialer{}).DialContext(t.Context(), "unix", path)
+	client, err := (&net.Dialer{}).DialContext(ctx, "unix", path)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}

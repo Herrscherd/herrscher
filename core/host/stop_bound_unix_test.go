@@ -54,7 +54,7 @@ func stopDuration(t *testing.T, window time.Duration, write, command, drain bool
 	name := "stop-" + newTurnID()
 	h := newInflightHub(t, name, window, io.Discard)
 	h.persists.grace = window
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	if write {
 		path := makeBlockingTranscript(t, h, name)
@@ -109,7 +109,7 @@ func startStuckCommand(ctx context.Context, t *testing.T, h *hub) <-chan struct{
 		t.Fatal(err)
 	}
 	released := acceptCommands(ctx, listener, disp, defaultCommandReadTimeout, h.teardownGrace, h.warnCommandHandlerOverrun)
-	client, err := (&net.Dialer{}).DialContext(t.Context(), "unix", sockPath)
+	client, err := (&net.Dialer{}).DialContext(ctx, "unix", sockPath)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}

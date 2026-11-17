@@ -134,6 +134,7 @@ func identitySeedRegistry(t *testing.T) (*cli.Registry, state.Session, *[]contra
 
 	var events []contracts.Event
 	ctx = withOneShotSeedRuntime(ctx, oneShotSeedRuntime{
+		persists: newPersistWrites(),
 		messages: newHostMessages(),
 		backend: func(context.Context, state.Session) (contracts.Backend, error) {
 			return identitySeedBackend{}, nil

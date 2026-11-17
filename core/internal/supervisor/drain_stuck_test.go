@@ -5,16 +5,23 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 func TestDrainBridgesReturnsStillStoppingWithinTheBoundWhenABridgeNeverExits(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	sup := NewSupervisor(ctx, "herrscher", testLayout(t))
-	stuck := make(chan struct{})
-	t.Cleanup(func() { close(stuck) })
-	sup.mu.Lock()
-	sup.runs["stuck"] = &supervisedRun{done: stuck}
-	sup.mu.Unlock()
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	started := make(chan struct{})
+	sup.run = func(runCtx context.Context, _ state.Session) {
+		close(started)
+		<-runCtx.Done()
+		<-release
+	}
+	sup.Start(state.Session{Name: "stuck"})
+	<-started
 	cancel()
 
 	type drainResult struct {

@@ -55,3 +55,32 @@ func TestCommandSocketStopsOnlyOnceItsListenerIsReallyClosed(t *testing.T) {
 		t.Fatal("the command socket never stopped after its listener closed")
 	}
 }
+
+type noopCloser struct{}
+
+func (noopCloser) Close() error { return nil }
+
+func TestReleaseCommandSocketsWaitsForTheAcceptorToStop(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	listener := newGatedListener()
+	idle := dispatcherFunc(func(context.Context, []string) (string, error) { return "unused", nil })
+	stopped := acceptCommands(ctx, listener, idle, defaultCommandReadTimeout, time.Second, func(time.Duration) {}).stopped
+	released := make(chan struct{})
+	go func() {
+		releaseCommandSockets(noopCloser{}, noopCloser{}, cancel, stopped)
+		close(released)
+	}()
+	<-listener.closing
+	select {
+	case <-released:
+		t.Fatal("the release returned while the command listener was still closing")
+	default:
+	}
+	close(listener.gate)
+	select {
+	case <-released:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the release never returned after the command listener closed")
+	}
+}

@@ -64,10 +64,10 @@ func withOneShotSeedRuntime(ctx context.Context, runtime oneShotSeedRuntime) con
 	return context.WithValue(ctx, oneShotSeedRuntimeKey{}, runtime)
 }
 
-func oneShotSeedRuntimeFrom(ctx context.Context, messages *hostMessages) oneShotSeedRuntime {
+func oneShotSeedRuntimeFrom(ctx context.Context, messages *hostMessages, persists *persistWrites) oneShotSeedRuntime {
 	runtime, ok := ctx.Value(oneShotSeedRuntimeKey{}).(oneShotSeedRuntime)
 	if !ok {
-		return oneShotSeedRuntime{messages: messages}
+		return oneShotSeedRuntime{messages: messages, persists: persists}
 	}
 	return runtime
 }
@@ -118,11 +118,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	toBridge := make(chan contracts.Event, 1)
 	fromBridge := make(chan contracts.Event, bridgeEventBuffer)
 	driver := newSessionDriver(runtime.messages, sess.Name, nil, toBridge, fromBridge, runtime.warnings)
-	runtime.sessions.attachPersists(driver)
 	oneShot := runtime.persists
-	if oneShot == nil {
-		oneShot = driver.persists.child()
-	}
 	driver.persists = oneShot
 	defer awaitOneShotWrites(runtime.messages, oneShot, runtime.warnings, runtime.languageOf(sess))
 	driver.incarnation = sess.Incarnation

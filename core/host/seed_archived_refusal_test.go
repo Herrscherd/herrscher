@@ -20,6 +20,7 @@ func TestOneShotSeedRefusesAnArchivedSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	runtime := oneShotSeedRuntime{
+		persists: newPersistWrites(),
 		messages: newHostMessages(),
 		timeout:  time.Millisecond,
 		backend: func(context.Context, state.Session) (contracts.Backend, error) {

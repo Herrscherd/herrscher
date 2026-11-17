@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -170,6 +171,13 @@ func (o *openConns) closeAll() {
 	for conn := range o.conns {
 		closeRead(conn)
 	}
+}
+
+func releaseCommandSockets(acc, commands io.Closer, cancel context.CancelFunc, stopped <-chan struct{}) {
+	logCleanup(acc.Close())
+	logCleanup(commands.Close())
+	cancel()
+	<-stopped
 }
 
 type commandAcceptor struct {

@@ -30,9 +30,8 @@ const ChunkLimit = 128 * 1024
 // Collector accepts.
 const HistoryLimit = 64 * 1024 * 1024
 
-// PruneBatch is the most edits one prune frame carries, so the frame stays under
-// the line limit of the control wire.
-const PruneBatch = 1000
+// MaxPruneEdits is the most edits one prune frame carries; Prune refuses a longer list before it is sent.
+const MaxPruneEdits = 1000
 
 // FailureCode names the cause a history_error frame carries in its Value.
 type FailureCode int
@@ -85,6 +84,10 @@ var ErrFrameMalformed = errors.New("history frame malformed")
 // ErrHistoryTooLarge reports a history whose encoding passes HistoryLimit.
 // Match it with errors.Is.
 var ErrHistoryTooLarge = errors.New("history too large")
+
+// ErrTooManyEdits reports a prune request carrying more than MaxPruneEdits edits.
+// Match it with errors.Is.
+var ErrTooManyEdits = errors.New("too many edits for one prune frame")
 
 // IsFrame reports whether an event type belongs to the history wire.
 func IsFrame(eventType string) bool {
@@ -225,9 +228,13 @@ func DecodeHistory(frames []contracts.Event) (contracts.History, error) {
 }
 
 // Prune encodes the edits the host asks the bridge to apply, under the call id
-// its answer carries back. It fails with ErrHistoryTooLarge when the edits
-// encode to more than ChunkLimit bytes.
+// its answer carries back. It fails with ErrTooManyEdits when there are more than
+// MaxPruneEdits edits, and with ErrHistoryTooLarge when the edits encode to more
+// than ChunkLimit bytes.
 func Prune(callID string, edits []contracts.HistoryEdit) (contracts.Event, error) {
+	if len(edits) > MaxPruneEdits {
+		return contracts.Event{}, ErrTooManyEdits
+	}
 	frames := make([]editFrame, 0, len(edits))
 	for _, edit := range edits {
 		frames = append(frames, editFrame{CallID: edit.CallID, Action: edit.Action, KeepChars: edit.KeepChars, KeepTail: edit.KeepTail})

@@ -2100,7 +2100,7 @@
   {
     "id": "cli.help.cmd.approve.rule",
     "description": "Help of the command approve rule",
-    "other": "ajouter une règle, en retirer une avec --rm, ou les lister sans argument"
+    "other": "ajouter une règle, en retirer une avec --rm, ou les lister sans argument ; jamais de règle Bash large (Bash(*), Bash(herrscher*), un shell ou un interpréteur) : elle donne les droits de l'opérateur à chaque session"
   },
   {
     "id": "cli.help.cmd.approve.ask",
@@ -3188,6 +3188,11 @@
     "other": "le pont n'a pas répondu à temps à un appel sur l'historique"
   },
   {
+    "id": "cli.host.fault.too_many_edits",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (too many edits)",
+    "other": "la compaction voudrait modifier trop d'appels d'outils à la fois et n'en modifie aucun"
+  },
+  {
     "id": "cli.host.fault.no_compactor_factory",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (no compactor factory)",
     "other": "est un plugin compacteur mais ne fournit aucune fabrique Compactor"
@@ -3301,6 +3306,11 @@
     "id": "cli.host.fault.worktree_materialize_required",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (worktree materialize required)",
     "other": "worktree materialize : --worktree est obligatoire"
+  },
+  {
+    "id": "cli.host.fault.seed_archived_session",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (seed refused: the session is archived)",
+    "other": "seed refusé : la session est archivée"
   },
   {
     "id": "cli.host.fault.seed_timeout",

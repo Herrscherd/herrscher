@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -184,6 +185,19 @@ func TestFailuresKeepTheirCauseAcrossTheWire(t *testing.T) {
 	plain := DecodeFailure(Failure(errors.New("disque plein")))
 	if errors.Is(plain, ErrNoHistoryEditor) || errors.Is(plain, contracts.ErrInvalidHistoryEdit) || errors.Is(plain, contracts.ErrUnknownHistoryCall) {
 		t.Fatalf("an untyped failure %v matches a typed cause", plain)
+	}
+}
+
+func TestPruneRefusesMoreEditsThanOneFrameCarries(t *testing.T) {
+	edits := make([]contracts.HistoryEdit, MaxPruneEdits+1)
+	for i := range edits {
+		edits[i] = contracts.HistoryEdit{CallID: strconv.Itoa(i), Action: contracts.PruneCall}
+	}
+	if _, err := Prune("1", edits); !errors.Is(err, ErrTooManyEdits) {
+		t.Fatalf("Prune of %d edits = %v, want ErrTooManyEdits", len(edits), err)
+	}
+	if _, err := Prune("1", edits[:MaxPruneEdits]); err != nil {
+		t.Fatalf("Prune of %d edits = %v, want the largest frame accepted", MaxPruneEdits, err)
 	}
 }
 

@@ -12,11 +12,12 @@ import (
 // TranscriptEntry is one recorded turn side. Kept separate from the learning
 // call-journal: this is the human-visible conversation, replayed as scrollback.
 type TranscriptEntry struct {
-	Ts   string  `json:"ts"`
-	Role string  `json:"role"`
-	Text string  `json:"text"`
-	Cost float64 `json:"cost,omitempty"`
-	Kind string  `json:"kind,omitempty"`
+	Ts     string  `json:"ts"`
+	Role   string  `json:"role"`
+	Text   string  `json:"text"`
+	Cost   float64 `json:"cost,omitempty"`
+	Kind   string  `json:"kind,omitempty"`
+	TurnID string  `json:"turn,omitempty"`
 	// Per-turn usage, present on assistant entries. TokensOut is the turn's
 	// output tokens; TokensIn the input; CacheRead/CacheCreate the prompt-cache
 	// read/creation tokens; DurMs the turn's wall-clock duration in ms. All
@@ -99,8 +100,8 @@ func compactTranscript(path string) {
 		return
 	}
 	writer := bufio.NewWriter(file)
-	for _, e := range all[start:] {
-		payload, err := json.Marshal(e)
+	for idx := range all[start:] {
+		payload, err := json.Marshal(all[start+idx])
 		if err != nil {
 			continue
 		}

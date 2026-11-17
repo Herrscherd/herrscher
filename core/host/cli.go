@@ -60,9 +60,6 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addVerbs(reg, ModelsCommands(options.live.Get)...); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addVerbs(reg, extra...); err != nil {
-		return nil, hostDeps{}, err
-	}
 	if err := addSessionVerbs(reg, options.live.Get, hostState, options.Runtime, partDir, instID, approvals, sessions, seedCoord, models); err != nil {
 		return nil, hostDeps{}, err
 	}
@@ -97,8 +94,21 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addVerbs(reg, memorySearchVerb(options.live.Get), whoamiVerb(), commandsVerb(options.live.Get, reg), healthVerb(options.health), usageVerb(options.usage)); err != nil {
 		return nil, hostDeps{}, err
 	}
+	if err := addPluginVerbs(reg, extra); err != nil {
+		return nil, hostDeps{}, err
+	}
 	localizeCommandErrors(reg, hostState, options.live)
 	return reg, hostDeps{wt: worktrees, agents: agents, handler: hdl, seedCoord: seedCoord, schedSlot: schedSlot}, nil
+}
+
+func addPluginVerbs(reg *cli.Registry, extra []contracts.Cmd) error {
+	families := reg.Families()
+	for _, cmd := range extra {
+		if len(cmd.Path) > 0 && families[cmd.Path[0]] {
+			return &pluginKindReservedError{Kind: cmd.Path[0]}
+		}
+	}
+	return addVerbs(reg, extra...)
 }
 
 func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {

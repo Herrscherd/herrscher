@@ -3,7 +3,6 @@
 package e2e_test
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -15,10 +14,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/rogpeppe/go-internal/testscript"
@@ -27,38 +24,22 @@ import (
 	"github.com/Herrscherd/herrscher/e2e/vendortest"
 )
 
-var errLeaked = errors.New("processes outlived the scenario")
+var (
+	errStopped = errors.New("processes were still running when the scenario ended and were stopped with SIGINT")
+	errLeaked  = errors.New("processes outlived the scenario, ignored SIGINT and were killed with SIGKILL")
+)
 
 func settle(root, instance string, before map[string]bool) error {
-	interruptErr := interruptDaemons(instance)
-	leaked, reapErr := reapInstance(instance, reapGrace)
-	if len(leaked) > 0 {
-		reapErr = errors.Join(reapErr, fmt.Errorf("%w: %s", errLeaked, strings.Join(leaked, "; ")))
+	stopped, survivors, reapErr := reapInstance(procRoot, instance, reapGrace)
+	var stoppedErr, leakErr error
+	if len(stopped) > 0 {
+		stoppedErr = fmt.Errorf("%w: %s", errStopped, strings.Join(stopped, "; "))
+	}
+	if len(survivors) > 0 {
+		leakErr = fmt.Errorf("%w: %s", errLeaked, strings.Join(survivors, "; "))
 	}
 	removeErr := removeRuntimeEntries(root, instance)
-	return errors.Join(interruptErr, reapErr, removeErr, appearedHashed(root, before))
-}
-
-func interruptDaemons(instance string) error {
-	pids, err := processesWith(instanceMarker(instance))
-	if err != nil {
-		return err
-	}
-	var errs []error
-	for _, pid := range pids {
-		line, lineErr := commandLine(pid)
-		if lineErr != nil || !isDaemonCommand(line) {
-			continue
-		}
-		if killErr := syscall.Kill(pid, syscall.SIGINT); killErr != nil && !errors.Is(killErr, syscall.ESRCH) {
-			errs = append(errs, killErr)
-		}
-	}
-	return errors.Join(errs...)
-}
-
-func isDaemonCommand(line string) bool {
-	return slices.Contains(strings.Fields(line), "serve")
+	return errors.Join(stoppedErr, leakErr, reapErr, removeErr, appearedHashed(root, before))
 }
 
 var (
@@ -120,7 +101,6 @@ func newInstanceID() (string, error) {
 
 const (
 	runtimeRootEnv = "HERRSCHER_E2E_RUNTIME_ROOT"
-	procRoot       = "/proc"
 	tmpRoot        = "/tmp"
 )
 
@@ -281,6 +261,19 @@ func waitLog(ts *testscript.TestScript, neg bool, args []string) {
 	ts.Fatalf("the vendor log never matched %q within %s", args[0], daemonWait)
 }
 
+func answering(root, instance string) bool {
+	path, err := commandSocket(root, instance)
+	if err != nil {
+		return false
+	}
+	dialer := net.Dialer{Timeout: time.Second}
+	conn, err := dialer.DialContext(context.Background(), "unix", path)
+	if err != nil {
+		return false
+	}
+	return conn.Close() == nil
+}
+
 const pendingFile = "pending.json"
 
 func waitApproval(ts *testscript.TestScript, neg bool, args []string) {
@@ -313,95 +306,4 @@ func onlyPendingApproval(ts *testscript.TestScript) (string, bool) {
 		return "", false
 	}
 	return pending[0].ID, true
-}
-
-func instanceMarker(instance string) []byte {
-	return []byte(instanceEnv + "=" + instance + "\x00")
-}
-
-func answering(root, instance string) bool {
-	path, err := commandSocket(root, instance)
-	if err != nil {
-		return false
-	}
-	dialer := net.Dialer{Timeout: time.Second}
-	conn, err := dialer.DialContext(context.Background(), "unix", path)
-	if err != nil {
-		return false
-	}
-	return conn.Close() == nil
-}
-
-const reapGrace = 5 * time.Second
-
-func reapInstance(instance string, grace time.Duration) ([]string, error) {
-	marker := instanceMarker(instance)
-	deadline := time.Now().Add(grace)
-	for {
-		pids, err := processesWith(marker)
-		if err != nil || len(pids) == 0 {
-			return nil, err
-		}
-		if time.Now().After(deadline) {
-			return killAll(pids), nil
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-}
-
-func killAll(pids []int) []string {
-	leaked := make([]string, 0, len(pids))
-	for _, pid := range pids {
-		leaked = append(leaked, describe(pid))
-		if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
-			leaked = append(leaked, "cannot kill "+strconv.Itoa(pid)+": "+err.Error())
-		}
-	}
-	return leaked
-}
-
-func processesWith(marker []byte) ([]int, error) {
-	return processesIn(procRoot, marker)
-}
-
-func processesIn(root string, marker []byte) ([]int, error) {
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		return nil, fmt.Errorf("cannot list the processes: %w", err)
-	}
-	self := os.Getpid()
-	var pids []int
-	for _, entry := range entries {
-		pid, err := strconv.Atoi(entry.Name())
-		if err != nil || pid == self {
-			continue
-		}
-		environ, err := os.ReadFile(filepath.Join(root, entry.Name(), "environ"))
-		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrPermission) || errors.Is(err, syscall.ESRCH) {
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("cannot read the environment of %d: %w", pid, err)
-		}
-		if bytes.Contains(append(environ, 0), marker) {
-			pids = append(pids, pid)
-		}
-	}
-	return pids, nil
-}
-
-func describe(pid int) string {
-	line, err := commandLine(pid)
-	if err != nil {
-		return strconv.Itoa(pid)
-	}
-	return strconv.Itoa(pid) + " " + line
-}
-
-func commandLine(pid int) (string, error) {
-	cmdline, err := os.ReadFile(filepath.Join(procRoot, strconv.Itoa(pid), "cmdline"))
-	if err != nil {
-		return "", err
-	}
-	return strings.Join(strings.Split(strings.TrimRight(string(cmdline), "\x00"), "\x00"), " "), nil
 }

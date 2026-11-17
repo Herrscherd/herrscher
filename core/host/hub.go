@@ -55,6 +55,7 @@ type hub struct {
 	lifecycle  sync.Mutex
 	mu         sync.Mutex
 	live       map[string]liveSession
+	startups   map[<-chan struct{}]startupRun
 
 	listenedSessions map[string]struct{}
 	closed           bool
@@ -173,6 +174,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 			publish:         h.eventPublisher,
 			backend:         h.seedBackend,
 			models:          h.models,
+			sessions:        h.sessions,
 			recordUsage:     h.recordUsage,
 			resume:          h.keepResumeToken,
 			record: func(session string, entry state.TranscriptEntry) {
@@ -413,14 +415,14 @@ func scrollbackOf(partDir, name string) []contracts.ScrollbackLine {
 		return nil
 	}
 	out := make([]contracts.ScrollbackLine, 0, len(entries))
-	for _, e := range entries {
-		out = append(out, scrollbackLineOf(e))
+	for i := range entries {
+		out = append(out, scrollbackLineOf(entries[i]))
 	}
 	return out
 }
 
 func scrollbackLineOf(entry state.TranscriptEntry) contracts.ScrollbackLine {
-	line := contracts.ScrollbackLine{Role: entry.Role, Text: entry.Text}
+	line := contracts.ScrollbackLine{Role: entry.Role, Text: entry.Text, TurnID: entry.TurnID}
 	if entry.Kind == turnInterruptedKind {
 		line.Notice = &contracts.Notice{Code: contracts.CodeTurnInterrupted}
 	}

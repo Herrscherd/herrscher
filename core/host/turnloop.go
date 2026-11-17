@@ -245,6 +245,7 @@ func (d *sessionDriver) recordEntry(role, text string, cost float64, turn turnUs
 		Ts:          time.Now().UTC().Format(time.RFC3339),
 		Role:        role,
 		Text:        text,
+		TurnID:      d.activeTurnID,
 		Cost:        cost,
 		TokensIn:    turn.InTokens,
 		TokensOut:   turn.OutTokens,
@@ -418,7 +419,8 @@ type sessionTable struct {
 	outboundMaxBytes int64
 	fileSenders      map[string]contracts.FileSender
 
-	tokens map[string]string
+	tokens     map[string]string
+	seedLeases map[string]seedLease
 }
 
 func (t *sessionTable) percentOfSession(name string) int {
@@ -1346,8 +1348,7 @@ func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, cha
 	driver.terms = identity.terms
 	driver.language = identity.language
 	driver.operator = identity.operator
-	driver.compaction = sessions.compaction
-	driver.percentOf = func() int { return sessions.percentOfSession(name) }
+	sessions.attachCompaction(driver, name)
 	if gate != nil {
 		driver.gate = gate
 	}

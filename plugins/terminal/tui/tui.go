@@ -635,7 +635,7 @@ func (m *model) handleScrollback(msg scrollbackMsg) tea.Cmd {
 	} else {
 		m.seedScrollback(tb, msg.lines)
 	}
-	pending := tb.pendingEvents
+	pending := unseenPending(msg.lines, tb.pendingEvents)
 	tb.pendingEvents = nil
 	cmds := make([]tea.Cmd, 0, len(pending))
 	for _, routed := range pending {

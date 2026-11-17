@@ -1,0 +1,65 @@
+package tui
+
+import (
+	"slices"
+	"testing"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
+)
+
+func replyEvent(text string) RoutedEvent {
+	return RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventReply, Text: text}}
+}
+
+func conversationTexts(tb *tab) []string {
+	var texts []string
+	for _, e := range tb.entries {
+		if e.role == roleYou || e.role == roleAgent {
+			texts = append(texts, e.text)
+		}
+	}
+	return texts
+}
+
+func newHistoryTab(t *testing.T, transcript []contracts.ScrollbackLine) (*model, *tab) {
+	t.Helper()
+	f := &fakeBackend{
+		fe:         make(chan RoutedEvent, 1),
+		sessions:   []contracts.SessionInfo{{Name: "s", ChannelID: "c"}},
+		scrollback: map[string][]contracts.ScrollbackLine{"s": transcript},
+	}
+	m := newModel(f)
+	m.Update(sessionsMsg{seq: m.sessionsIssued, infos: f.sessions})
+	return m, m.tabs["c"]
+}
+
+func TestAReplyInTheQueueAndTheHistoryShowsOnce(t *testing.T) {
+	m, tb := newHistoryTab(t, []contracts.ScrollbackLine{
+		{Role: "user", Text: "question"},
+		{Role: "assistant", Text: "answer"},
+	})
+	historyCmd := m.route(replyEvent("answer"))
+	for _, msg := range historyMsgs(historyCmd) {
+		m.Update(msg)
+	}
+	want := []string{"question", "answer"}
+	if got := conversationTexts(tb); !slices.Equal(got, want) {
+		t.Fatalf("conversation = %q, want %q: the reply both queued and in the history must show once", got, want)
+	}
+}
+
+func TestAQueueWithoutOverlapReplaysInFullAndInOrder(t *testing.T) {
+	m, tb := newHistoryTab(t, []contracts.ScrollbackLine{
+		{Role: "user", Text: "question"},
+	})
+	historyCmd := m.route(replyEvent("first"))
+	m.route(replyEvent("second"))
+	for _, msg := range historyMsgs(historyCmd) {
+		m.Update(msg)
+	}
+	want := []string{"question", "first", "second"}
+	if got := conversationTexts(tb); !slices.Equal(got, want) {
+		t.Fatalf("conversation = %q, want %q replayed in full and in order", got, want)
+	}
+}

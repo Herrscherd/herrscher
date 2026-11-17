@@ -156,11 +156,16 @@ func (e *UnsupportedHomeTypeError) Notice() contracts.Notice {
 
 // SessionLimitError reports that creating a session would exceed the maximum number of sessions.
 type SessionLimitError struct {
-	Max int
+	Max      int
+	messages *clitext.Messages
+}
+
+func NewSessionLimitError(messages *clitext.Messages, limit int) *SessionLimitError {
+	return &SessionLimitError{Max: limit, messages: messages}
 }
 
 func (e *SessionLimitError) Error() string {
-	text, err := clitext.Text(i18n.English, clitext.HostErrSessionLimit, clitext.Params{clitext.ParamCount: e.Max})
+	text, err := e.messages.Text(i18n.English, clitext.HostErrSessionLimit, clitext.Params{clitext.ParamCount: e.Max})
 	if err != nil {
 		return ErrSessionLimit.Error()
 	}
@@ -182,33 +187,33 @@ type localizedError struct {
 	causes  []error
 }
 
-func localize(lang i18n.Language, english string, key clitext.Key, params clitext.Params, causes ...error) error {
-	text, err := clitext.Text(lang, key, params)
+func localize(messages *clitext.Messages, lang i18n.Language, english string, key clitext.Key, params clitext.Params, causes ...error) error {
+	text, err := messages.Text(lang, key, params)
 	if err != nil {
 		text = english
 	}
-	if catalogEnglish, err := clitext.Text(i18n.English, key, params); err == nil {
+	if catalogEnglish, err := messages.Text(i18n.English, key, params); err == nil {
 		english = catalogEnglish
 	}
 	return &localizedError{english: english, text: text, causes: causes}
 }
 
 func (h *Handler) keyed(key clitext.Key, params clitext.Params, causes ...error) error {
-	return localize(h.currentLanguage(), string(key), key, params, causes...)
+	return localize(h.messages, h.currentLanguage(), string(key), key, params, causes...)
 }
 
 func (h *Handler) localized(sentinel error, key clitext.Key) error {
-	return localize(h.currentLanguage(), sentinel.Error(), key, nil, sentinel)
+	return localize(h.messages, h.currentLanguage(), sentinel.Error(), key, nil, sentinel)
 }
 
 func (h *Handler) labelled(label string, key clitext.Key, err error) error {
-	return localize(h.currentLanguage(), label+": "+err.Error(), key, clitext.Params{clitext.ParamErr: err.Error()}, err)
+	return localize(h.messages, h.currentLanguage(), label+": "+err.Error(), key, clitext.Params{clitext.ParamErr: err.Error()}, err)
 }
 
-func restartLostError(lang i18n.Language, name string, restartErr, rollbackErr error) error {
+func restartLostError(messages *clitext.Messages, lang i18n.Language, name string, restartErr, rollbackErr error) error {
 	english := fmt.Sprintf("backend restart: %v; rollback failed, session %s out of service: %v", restartErr, name, rollbackErr)
 	params := clitext.Params{clitext.ParamName: name, clitext.ParamErr: restartErr.Error(), clitext.ParamRollbackErr: rollbackErr.Error()}
-	return localize(lang, english, clitext.SessionSwitchRestartLost, params, restartErr, rollbackErr)
+	return localize(messages, lang, english, clitext.SessionSwitchRestartLost, params, restartErr, rollbackErr)
 }
 
 func newDirtyWorktreeError(name string, cause error) error {

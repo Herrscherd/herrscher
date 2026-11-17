@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
@@ -101,7 +102,7 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	provisioned := provisionE2EHost(ctx, t, layout, st, target, src)
 	initE2EProject(t, local)
 
-	p := newHostPlacer(newHostMessages(), testLanguage(), io.Discard, st, layout, "e2e", nil, func() string { return service.SourceVersion(ctx, src) })
+	p := newHostPlacer(newHostMessages(), clitext.NewMessages(), testLanguage(), io.Discard, st, layout, "e2e", nil, func() string { return service.SourceVersion(ctx, src) })
 	repo := provisioned.Workspace + "/app"
 	t.Cleanup(func() {
 		_, rmErr := capture(context.Background(), runnerForTest(t, layout, provisioned), "rm", "-rf", repo)

@@ -65,7 +65,7 @@ func (h *Handler) resolveProject(ctx context.Context, input contracts.Input, hos
 	}
 	if spec, ok := input.Lookup("clone"); ok && spec != "" {
 		if hostName != "" {
-			return "", localize(h.currentLanguage(), fmt.Sprintf("%v: %q", ErrCloneUnsupported, hostName), clitext.HostErrCloneUnsupported, clitext.Params{clitext.ParamHost: hostName}, ErrCloneUnsupported)
+			return "", localize(h.messages, h.currentLanguage(), fmt.Sprintf("%v: %q", ErrCloneUnsupported, hostName), clitext.HostErrCloneUnsupported, clitext.Params{clitext.ParamHost: hostName}, ErrCloneUnsupported)
 		}
 		cctx, cancel := context.WithTimeout(ctx, cloneTimeout)
 		dir, err := h.fg.Clone(cctx, spec, wtRoot)
@@ -104,7 +104,7 @@ func (h *Handler) provisionAgent(ctx context.Context, req *createRequest, worktr
 		}
 		path, err := worktrees.Scratch(repo, req.name)
 		if err != nil {
-			return localize(h.currentLanguage(), fmt.Sprintf("provision agent %q: %v", agentName, err), clitext.HostErrProvisionAgent, clitext.Params{clitext.ParamAgent: agentName, clitext.ParamErr: err.Error()}, err)
+			return localize(h.messages, h.currentLanguage(), fmt.Sprintf("provision agent %q: %v", agentName, err), clitext.HostErrProvisionAgent, clitext.Params{clitext.ParamAgent: agentName, clitext.ParamErr: err.Error()}, err)
 		}
 		space.path, space.scratch = path, true
 	}
@@ -121,7 +121,7 @@ func (h *Handler) provisionAgent(ctx context.Context, req *createRequest, worktr
 	}
 	if err := h.materializeOn(ctx, req.hostName, agentSpec, space.path, req.mode != approval.ModeBypass.String()); err != nil {
 		h.rollbackWorkspace(ctx, worktrees, repo, req.name, *space)
-		return localize(h.currentLanguage(), fmt.Sprintf("provision agent %q: %v", agentName, err), clitext.HostErrProvisionAgent, clitext.Params{clitext.ParamAgent: agentName, clitext.ParamErr: err.Error()}, err)
+		return localize(h.messages, h.currentLanguage(), fmt.Sprintf("provision agent %q: %v", agentName, err), clitext.HostErrProvisionAgent, clitext.Params{clitext.ParamAgent: agentName, clitext.ParamErr: err.Error()}, err)
 	}
 	return nil
 }

@@ -28,6 +28,7 @@ type Handler struct {
 	up              updater
 	agents          agentStore
 	st              *state.State
+	messages        *clitext.Messages
 	defaultCmd      string
 	defaultGateways []string
 	partDir         string
@@ -55,7 +56,7 @@ func (h *Handler) SetHosts(hs Hosts) { h.hs = hs }
 func (h *Handler) worktreesOn(hostName string) (Worktrees, string, error) {
 	if hostName == "" || h.hs == nil {
 		if hostName != "" {
-			return nil, "", localize(h.currentLanguage(), fmt.Sprintf("session wants host %q but %v", hostName, ErrNoHostRegistered), clitext.HostErrNoHostRegistered, clitext.Params{clitext.ParamHost: hostName}, ErrNoHostRegistered)
+			return nil, "", localize(h.messages, h.currentLanguage(), fmt.Sprintf("session wants host %q but %v", hostName, ErrNoHostRegistered), clitext.HostErrNoHostRegistered, clitext.Params{clitext.ParamHost: hostName}, ErrNoHostRegistered)
 		}
 		return h.wt, h.st.WorkspaceRoot(), nil
 	}
@@ -120,7 +121,7 @@ func (h *Handler) text(key clitext.Key, params clitext.Params) string {
 }
 
 func (h *Handler) textIn(lang i18n.Language, key clitext.Key, params clitext.Params) string {
-	text, err := clitext.Text(lang, key, params)
+	text, err := h.messages.Text(lang, key, params)
 	if err != nil {
 		h.log.Error("render operator text", "key", key, "err", err)
 		return string(key)
@@ -293,7 +294,7 @@ func (h *Handler) checkAccount(runtime runtimeChoice, profile string) error {
 		return &localizedError{english: h.textIn(i18n.English, clitext.HostErrAccountVendor, params) + ": " + err.Error(), text: h.text(clitext.HostErrAccountVendor, params) + ": " + err.Error(), causes: []error{ErrAccountVendor, err}}
 	}
 	if vendor == "" {
-		return localize(h.currentLanguage(), fmt.Sprintf("account %q: %v", profile, ErrAccountVendor), clitext.HostErrAccountVendor, clitext.Params{clitext.ParamAccount: profile}, ErrAccountVendor)
+		return localize(h.messages, h.currentLanguage(), fmt.Sprintf("account %q: %v", profile, ErrAccountVendor), clitext.HostErrAccountVendor, clitext.Params{clitext.ParamAccount: profile}, ErrAccountVendor)
 	}
 	return h.validateAccount(vendor, profile)
 }
@@ -306,7 +307,7 @@ func (h *Handler) checkAccountUsable(hostName, account string) error {
 		return err
 	}
 	if h.remoteBackend {
-		return localize(h.currentLanguage(), fmt.Sprintf("account %q: %v; unset HERRSCHER_REMOTE=backend to use accounts on this daemon, or drop the account", account, ErrAccountRemote), clitext.HostErrAccountRemote, clitext.Params{clitext.ParamAccount: account}, ErrAccountRemote)
+		return localize(h.messages, h.currentLanguage(), fmt.Sprintf("account %q: %v; unset HERRSCHER_REMOTE=backend to use accounts on this daemon, or drop the account", account, ErrAccountRemote), clitext.HostErrAccountRemote, clitext.Params{clitext.ParamAccount: account}, ErrAccountRemote)
 	}
 	return nil
 }
@@ -315,7 +316,7 @@ func (h *Handler) checkAccountHost(hostName, account string) error {
 	if hostName == "" || account == "" {
 		return nil
 	}
-	return localize(h.currentLanguage(), fmt.Sprintf("account %q on host %q: %v; run the session on this host or drop the account", account, hostName, ErrAccountHost), clitext.HostErrAccountHost, clitext.Params{clitext.ParamAccount: account, clitext.ParamHost: hostName}, ErrAccountHost)
+	return localize(h.messages, h.currentLanguage(), fmt.Sprintf("account %q on host %q: %v; run the session on this host or drop the account", account, hostName, ErrAccountHost), clitext.HostErrAccountHost, clitext.Params{clitext.ParamAccount: account, clitext.ParamHost: hostName}, ErrAccountHost)
 }
 
 func (h *Handler) launchVendor(runtime runtimeChoice) (string, error) {
@@ -346,7 +347,7 @@ type coordinationReader interface {
 // which per-session participant journals live (participants/<name>.log). agents
 // owns the durable agent homes used to provision sessions.
 func NewHandler(d channelAdmin, sup supervisor, wt Worktrees, fg forges, up updater, agents agentStore, st *state.State, defaultCmd, partDir string, defaultGateways []string, validateAccount func(vendor, profile string) error, resolveVendor func(vendor, modelID, cmd string) (string, error)) *Handler {
-	return &Handler{log: obs.NewLogger(os.Stderr, slog.LevelInfo), lang: i18n.English, d: d, sup: sup, wt: wt, fg: fg, up: up, agents: agents, st: st, defaultCmd: defaultCmd, partDir: partDir, defaultGateways: defaultGateways, validateAccount: validateAccount, resolveVendor: resolveVendor}
+	return &Handler{log: obs.NewLogger(os.Stderr, slog.LevelInfo), messages: clitext.NewMessages(), lang: i18n.English, d: d, sup: sup, wt: wt, fg: fg, up: up, agents: agents, st: st, defaultCmd: defaultCmd, partDir: partDir, defaultGateways: defaultGateways, validateAccount: validateAccount, resolveVendor: resolveVendor}
 }
 
 // SetTerminalAdmin wires the terminal (TUI) channel admin used to route

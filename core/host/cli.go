@@ -39,7 +39,7 @@ type schedulerSlot struct {
 func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *state.State, sup *supervisor.Supervisor, instID string, extra []contracts.Cmd, approvals *approvalTable, sessions *sessionTable) (*cli.Registry, hostDeps, error) {
 	options = withOperatorLanguage(options)
 	partDir := filepath.Dir(options.StatePath)
-	worktrees := worktree.NewWorktreer(instID)
+	worktrees := worktree.NewWorktreer(sessions.cliMessages, instID)
 	upCfg, cfgErr := service.DefaultConfig()
 	logCleanup(cfgErr)
 	updater := serviceUpdater{cfg: upCfg, st: hostState}
@@ -134,7 +134,7 @@ func newManagerHandler(messages *hostMessages, deps Deps, options Options, partD
 
 func wireManagerHandler(ctx context.Context, lang languageSource, warn io.Writer, hdl *manager.Handler, hostState *state.State, layout RuntimeLayout, instID string, worktrees *worktree.Worktreer, sessions *sessionTable, models *ModelDiscovery) {
 	hdl.SetSeeder(sessions.Seed)
-	hdl.SetHosts(newHostPlacer(sessions.messages, lang, warn, hostState, layout, instID, worktrees, func() string { return sourceVersionOf(ctx, hostState) }))
+	hdl.SetHosts(newHostPlacer(sessions.messages, sessions.cliMessages, lang, warn, hostState, layout, instID, worktrees, func() string { return sourceVersionOf(ctx, hostState) }))
 	hdl.SetGatewayOnly(func() bool { return ResolvePolicy(envx.Getenv) == contracts.PolicyGatewayOnly })
 	hdl.SetDefaultModel(envx.Getenv(EnvDefaultModel))
 	hdl.SetVendorDefaultModel(func(vendor string) string { return envx.Getenv(VendorDefaultModelEnv(vendor)) })

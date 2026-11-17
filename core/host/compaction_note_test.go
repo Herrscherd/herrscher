@@ -110,7 +110,7 @@ func runRecordedStack(t *testing.T, jev, backend contracts.Compactor) (map[strin
 	}
 	result, err := contracts.RunCompactStack(context.Background(), stages, contracts.CompactRequest{}, nil)
 	var capture usageCapture
-	d := &sessionDriver{messages: newHostMessages(), name: "s1", sink: sessionSink{Usage: capture.add}}
+	d := &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), name: "s1", sink: sessionSink{Usage: capture.add}}
 	d.recordCompaction(result.StageStats, notes)
 	failed := make(map[string]string)
 	records := capture.all()

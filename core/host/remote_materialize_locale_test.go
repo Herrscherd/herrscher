@@ -40,7 +40,7 @@ func TestArchiveRefusalReachesTheFrenchOperatorInFrench(t *testing.T) {
 }
 
 func TestWorktreeFailureReachesTheFrenchOperatorInFrench(t *testing.T) {
-	failure := worktree.FailureError{Key: clitext.WorktreeRemoteMaterialize, Params: clitext.Params{clitext.ParamWhere: "me@h", clitext.ParamErr: errors.New("boom")}}
+	failure := worktree.NewFailure(clitext.NewMessages(), clitext.WorktreeRemoteMaterialize, clitext.Params{clitext.ParamWhere: "me@h", clitext.ParamErr: errors.New("boom")}, nil)
 	got := localizeHostError(newHostMessages(), clitext.NewMessages(), i18n.French, fmt.Errorf("installer: %w", failure)).Error()
 	if want := "installer: matérialisation sur me@h : boom"; got != want {
 		t.Fatalf("got %q, want %q", got, want)

@@ -292,7 +292,7 @@ func TestSessionDriverAskApproval(t *testing.T) {
 			name: "routes a menu when the reader can route and has a channel",
 			build: func() (*sessionDriver, *menuGatewayFake) {
 				gw := &menuGatewayFake{channel: "chan1"}
-				d := &sessionDriver{messages: newHostMessages(), name: "s1", gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
+				d := &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), name: "s1", gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
 				return d, gw
 			},
 			wantRouted: 1,
@@ -302,7 +302,7 @@ func TestSessionDriverAskApproval(t *testing.T) {
 			name: "falls back to text when RouteMenu errors",
 			build: func() (*sessionDriver, *menuGatewayFake) {
 				gw := &menuGatewayFake{channel: "chan1", routeErr: errors.New("boom")}
-				d := &sessionDriver{messages: newHostMessages(), name: "s1", gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
+				d := &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), name: "s1", gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
 				return d, gw
 			},
 			wantRouted: 1,
@@ -312,7 +312,7 @@ func TestSessionDriverAskApproval(t *testing.T) {
 			name: "falls back to text when the reader has no channel at all",
 			build: func() (*sessionDriver, *menuGatewayFake) {
 				gw := &menuGatewayFake{channel: ""}
-				d := &sessionDriver{messages: newHostMessages(), name: "s1", gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
+				d := &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), name: "s1", gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
 				return d, gw
 			},
 			wantRouted: 0,
@@ -336,7 +336,7 @@ func TestSessionDriverAskApproval(t *testing.T) {
 
 	t.Run("no panic and nothing posted with a nil Gateway and no usable router", func(t *testing.T) {
 		reader := &fanRecorder{}
-		d := &sessionDriver{messages: newHostMessages(), name: "s1", gateways: []contracts.GatewaySet{{Gateway: nil, Reader: reader}}}
+		d := &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), name: "s1", gateways: []contracts.GatewaySet{{Gateway: nil, Reader: reader}}}
 		d.askApproval(context.Background(), "id1", approval.Request{Tool: "Bash", Subject: "rm"}, time.Now().Add(time.Minute))
 		reader.mu.Lock()
 		defer reader.mu.Unlock()

@@ -189,7 +189,7 @@ func lockOrAttach(ctx context.Context, layout host.RuntimeLayout, lang i18n.Lang
 }
 
 func attachFailureText(lang i18n.Language, err error) string {
-	return render(lang, clitext.ServeAttachFailed, clitext.Params{clitext.ParamErr: host.LocalizeError(lang, err).Error()})
+	return render(lang, clitext.ServeAttachFailed, escapedParam(clitext.ParamErr, host.LocalizeError(lang, err).Error()))
 }
 
 func startGateways(ctx context.Context, lang i18n.Language) ([]host.Deps, []contracts.Gateway, contracts.Foreground, []contracts.Cmd, error) {
@@ -198,15 +198,17 @@ func startGateways(ctx context.Context, lang i18n.Language) ([]host.Deps, []cont
 		return nil, nil, nil, nil, err
 	}
 	for _, f := range hub.Unconfigured() {
-		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeGatewaySkipped, clitext.Params{clitext.ParamFailure: f}))
+		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeGatewaySkipped, escapedParam(clitext.ParamFailure, f)))
 	}
 	hub.AwaitPending(ctx, host.GatewayRetryWindow, func(failures []string, wait time.Duration) {
 		for _, f := range failures {
-			fmt.Fprintln(os.Stderr, render(lang, clitext.ServeGatewayRetrying, clitext.Params{clitext.ParamFailure: f, clitext.ParamWait: wait.String()}))
+			params := escapedParam(clitext.ParamFailure, f)
+			params[clitext.ParamWait] = wait.String()
+			fmt.Fprintln(os.Stderr, render(lang, clitext.ServeGatewayRetrying, params))
 		}
 	})
 	for _, f := range hub.Failures() {
-		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeGatewayUnavailable, clitext.Params{clitext.ParamFailure: f}))
+		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeGatewayUnavailable, escapedParam(clitext.ParamFailure, f)))
 	}
 	var raw []host.Deps
 	for _, kind := range hub.Kinds() {
@@ -322,7 +324,7 @@ func runRegistryVerb(ctx context.Context, layout host.RuntimeLayout, verb string
 		return err
 	}
 	if out != "" {
-		return printCLIText(os.Stdout, out)
+		return writeCLIText(os.Stdout, out)
 	}
 	return nil
 }
@@ -403,7 +405,7 @@ func runPromptWith(ctx context.Context, dispatcher verbDispatcher, name, prompt 
 	res, err := dispatcher.Dispatch(ctx, argv)
 	if err != nil {
 		if partial := cli.PartialOutputOf(err); partial != "" {
-			if werr := printCLIText(stdout, partial); werr != nil {
+			if werr := writeCLIText(stdout, partial); werr != nil {
 				return werr
 			}
 		}
@@ -415,7 +417,7 @@ func runPromptWith(ctx context.Context, dispatcher verbDispatcher, name, prompt 
 		return err
 	}
 	if reply != "" {
-		if err := printCLIText(stdout, reply); err != nil {
+		if err := writeCLIText(stdout, reply); err != nil {
 			return err
 		}
 	}

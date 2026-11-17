@@ -120,15 +120,17 @@ func answerGitAskpass(args []string) int {
 }
 
 func writeGitCredential(prompt string, out *errwriter.Writer) {
+	_, _ = out.Write([]byte(gitCredential(prompt) + "\n"))
+}
+
+func gitCredential(prompt string) string {
 	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(prompt)), "username") {
-		out.Println("x-access-token")
-		return
+		return "x-access-token"
 	}
 	if t := os.Getenv("GITHUB_TOKEN"); t != "" {
-		out.Println(t)
-		return
+		return t
 	}
-	out.Println(os.Getenv("GH_TOKEN"))
+	return os.Getenv("GH_TOKEN")
 }
 
 func loadHostEnv() error {
@@ -238,7 +240,7 @@ func runForwarded(ctx context.Context, layout host.RuntimeLayout, cmd string, ar
 	if out == "" {
 		return nil
 	}
-	return printCLIText(os.Stdout, out)
+	return writeCLIText(os.Stdout, out)
 }
 
 func forwardedFailureLine(lang i18n.Language, derr error) string {
@@ -254,6 +256,10 @@ func (s exitStatusError) Error() string {
 }
 
 func reportError(err error) int {
+	return reportErrorTo(os.Stderr, err)
+}
+
+func reportErrorTo(stderr io.Writer, err error) int {
 	if err == nil {
 		return 0
 	}
@@ -261,7 +267,7 @@ func reportError(err error) int {
 	if errors.As(err, &status) {
 		return status.code
 	}
-	fmt.Fprintln(os.Stderr, cliErrorLine(render(clitext.ClientLanguage(), clitext.ErrorLine, clitext.Params{clitext.ParamMessage: err.Error()})))
+	fmt.Fprintln(stderr, cliErrorLine(render(clitext.ClientLanguage(), clitext.ErrorLine, clitext.Params{clitext.ParamMessage: err.Error()})))
 	return 1
 }
 
@@ -306,7 +312,7 @@ func runWhoami(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	return printCLIText(os.Stdout, out)
+	return writeCLIText(os.Stdout, out)
 }
 
 func writeFailureCode(w *errwriter.Writer) int {
@@ -318,7 +324,7 @@ func writeFailureCode(w *errwriter.Writer) int {
 
 func render(lang i18n.Language, key clitext.Key, params clitext.Params) string {
 	translator := clitext.For(lang)
-	text := translator.Text(key, params)
+	text := translator.Text(key, clitext.Printable(params))
 	if err := translator.Err(); err != nil {
 		slog.Error("render message", "key", key, "err", err)
 	}

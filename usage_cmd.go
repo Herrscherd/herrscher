@@ -62,8 +62,12 @@ func outputPalette(out *os.File) termpaint.Palette {
 	return termpaint.ANSIPalette()
 }
 
+func usageDaemonDownText(lang i18n.Language, socket string) (string, error) {
+	return clitext.Text(lang, clitext.SpendDaemonDown, clitext.Params{clitext.ParamSocket: termpaint.Printable(socket)})
+}
+
 func usageDaemonDown(layout host.RuntimeLayout, lang i18n.Language, instance string) error {
-	text, err := clitext.Text(lang, clitext.SpendDaemonDown, clitext.Params{clitext.ParamSocket: host.CommandSocketPathIn(layout, instance)})
+	text, err := usageDaemonDownText(lang, host.CommandSocketPathIn(layout, instance))
 	if err != nil {
 		return err
 	}

@@ -209,7 +209,7 @@ func spawnEnvVia(entry CatalogEntry, getenv func(string) string, keys *keyproxy.
 	}
 	creds, err := loadGatewayCreds(getenv)
 	if err != nil {
-		return nil, noRelease, wrapHost(err, "gateway.model", map[string]any{"Model": entry.ID})
+		return nil, noRelease, wrapHost(err, "gateway.model", map[string]any{modelParam: entry.ID})
 	}
 	env := gatewayEnvFor(entry.Vendor, creds, entry.Arg)
 	if len(env) == 0 {

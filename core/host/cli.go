@@ -49,7 +49,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	models := options.modelDiscovery()
 	hdl := newManagerHandler(deps, options, partDir, hostState, sup, worktrees, updater, agents, models)
 	wireManagerHandler(ctx, options.live.Get, options.Warnings, hdl, hostState, options.Runtime, instID, worktrees, sessions, models)
-	wireSupervisor(sup, options.Runtime, hostState, instID)
+	wireSupervisor(sup, options.Runtime, hostState, instID, sessions)
 	seedCoord := &coordinatorSlot{}
 	schedSlot := &schedulerSlot{}
 
@@ -58,9 +58,6 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 		return nil, hostDeps{}, err
 	}
 	if err := addVerbs(reg, ModelsCommands(options.live.Get)...); err != nil {
-		return nil, hostDeps{}, err
-	}
-	if err := addVerbs(reg, extra...); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addSessionVerbs(reg, options.live.Get, hostState, options.Runtime, partDir, instID, approvals, sessions, seedCoord, models); err != nil {
@@ -97,8 +94,21 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addVerbs(reg, memorySearchVerb(options.live.Get), whoamiVerb(), commandsVerb(options.live.Get, reg), healthVerb(options.health), usageVerb(options.usage)); err != nil {
 		return nil, hostDeps{}, err
 	}
+	if err := addPluginVerbs(reg, extra); err != nil {
+		return nil, hostDeps{}, err
+	}
 	localizeCommandErrors(reg, hostState, options.live)
 	return reg, hostDeps{wt: worktrees, agents: agents, handler: hdl, seedCoord: seedCoord, schedSlot: schedSlot}, nil
+}
+
+func addPluginVerbs(reg *cli.Registry, extra []contracts.Cmd) error {
+	families := reg.Families()
+	for _, cmd := range extra {
+		if len(cmd.Path) > 0 && families[cmd.Path[0]] {
+			return &pluginKindReservedError{Kind: cmd.Path[0]}
+		}
+	}
+	return addVerbs(reg, extra...)
 }
 
 func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
@@ -160,9 +170,10 @@ func validateModelChoice(models *ModelDiscovery, vendor, modelID string) error {
 	return nil
 }
 
-func wireSupervisor(sup *supervisor.Supervisor, layout RuntimeLayout, store *state.State, instID string) {
+func wireSupervisor(sup *supervisor.Supervisor, layout RuntimeLayout, store *state.State, instID string, sessions *sessionTable) {
 	sup.SetInstanceID(instID)
 	sup.SetCommandSocket(func(session string) string { return SessionCommandSocketPathIn(layout, instID, session) })
+	sup.SetSessionToken(sessions.issueToken)
 	sup.SetHostLookup(func(name string) (supervisor.Placement, bool) {
 		host, ok := store.FindHost(name)
 		if !ok {

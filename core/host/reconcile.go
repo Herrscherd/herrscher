@@ -15,6 +15,12 @@ func (h *hub) reconcile(ctx context.Context) retiredBatch {
 		s := sessions[idx]
 		persisted[s.Name] = s
 	}
+	if h.sessions != nil {
+		h.sessions.revokeTokensExcept(func(name string) bool {
+			s, ok := persisted[name]
+			return ok && !s.Archived
+		})
+	}
 	h.mu.Lock()
 	liveNames := make([]string, 0, len(h.live))
 	for n := range h.live {

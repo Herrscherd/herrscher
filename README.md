@@ -423,30 +423,117 @@ its mode.
 The hook binds the agent herrscher started and nothing else on the machine, which
 is both its guarantee and the whole of its reach.
 
-Every failure allows and says why, on both paths. This is a guardrail against
-mistakes, not a sandbox, and a daemon that has gone away must not stop a `claude`
-run by hand.
+When no daemon answers, the approve CLI verbs run locally, since they are not
+daemon-only (`core/host/operator.go`). `approve ask` is the exception: it is
+daemon-only and fails without one. The approval hook never falls back: when it
+cannot reach a daemon, it denies the tool call and says why
+(`core/host/approve_hook.go`, `refuseHook`).
 
 `approve list`, `approve allow <id> [--session | --always]`,
 `approve deny <id> [--reason '…']`, `approve rule`, `approve ask` and
-`approve mode` (`ask`, `bypass`, `strict` or `smart`) are the whole surface.
+`approve mode` (`ask`, `accept-edits`, `plan`, `auto`, `bypass`, `strict` or
+`smart`) are the verbs this section covers.
 Flags come after the id or before it: `approve allow --session <id>` works too.
 With no rule configured nothing is ever asked, which is exactly how herrscher
 behaved before this existed.
+
+### Who may change the approvals
+
+`approve allow`, `approve deny`, `approve rule` and `approve mode` go to the
+command socket the CLI resolves. That is the one named by `HERRSCHER_COMMAND_SOCKET`
+when the variable is set, and the operator's socket otherwise
+(`core/host/cmdsocket_remote.go`). With the variable set, they reach the session's
+own socket, where the agent role refuses them. Without it, they reach the
+operator's socket, where they run as `owner`. The `role` verbs follow the same
+path. The operator's socket asks for no second proof: a process running under the
+daemon's user account is the operator, as far as the daemon can tell.
+
+That is the trust model, and it has a consequence. A shell command the approval
+hook allowed runs with the operator's rights. It can unset
+`HERRSCHER_COMMAND_SOCKET`, or dial the operator's socket directly, and then
+grant itself an approval or switch its session to `bypass`, which removes the
+hook. The variable is not needed on every path. `herrscher -p "<text>"` opens
+its session in a window while a daemon runs: that window sends the
+`session create` to the operator's socket as `owner`, whatever the variable says
+(`runPromptWindow`, `serve.go:358-366`, through `DaemonDispatch`,
+`core/host/daemonclient.go:82-89`). With `--print`, or without a window, the
+same command goes through the command registry and honours the variable
+(`runPrompt`, `serve.go:337-351`, and `forwardDaemonOwnedCommands`,
+`core/host/operator.go:36`, which reads the variable). Without the variable, any
+`herrscher` subcommand on sessions, approvals, hosts or roles reaches the
+operator's socket as `owner` while a daemon runs, `herrscher approve allow <id>`
+included (`forwardDaemonOwnedCommands`, `core/host/operator.go:36`, through
+`commandSocketTarget`, `core/host/cmdsocket_remote.go:14-19`). The hook sees a
+command string, not what the command does, so it cannot tell those calls from
+any other.
+
+Session sockets are not protected either. Each session's command socket path
+follows from its name (`core/host/cmdsocket_unix.go`), and `session list`, which
+an agent may run, shows every name. Any process of the same user can connect to
+any session's socket, and the daemon serves that connection with the rights of
+the session that owns the socket, not the caller's. A shell of any session can
+therefore send a message or seed a session as session B. Those rights reach B
+itself and the sessions B delegated for every verb that names a session; the
+verbs that name none, such as `session info`
+(`core/host/session_cmd.go:144-151`) and `session list`
+(`core/internal/manager/session_query.go:88`), show every session. The check
+runs in `subjectOf` (`core/host/authz.go:149-165`) over the verbs of
+`sessionArgs` (`core/host/authz.go:57-90`), through `inSubtree`
+(`core/host/authz.go:167-192`), and `Decide` enforces it
+(`core/internal/authz/authz.go:137`). The daemon checks no credential on a
+session socket except the token that `approve ask` requires, and only for that
+verb.
+
+What #232 protects is narrower. Each session holds its own token, sent in
+`HERRSCHER_SESSION_TOKEN` and checked in constant time. `approve ask` answers only
+for the session whose token it carries, so a session cannot answer an approval for
+another session without that token, and cannot guess it. On Linux, though, a
+process of the same user can read a session's token from that session's
+environment, so the token is no barrier against an approved command either. The
+hook fails closed: a missing session name, a missing token, no daemon, an answer
+that is neither `allow` nor `deny`, or a payload over the size limit each refuse
+the tool call.
+
+For the operator, the rule is this: never grant a broad rule on `Bash`. A rule
+that lets a shell run a program able to reach a socket gives that program the
+operator's rights. Examples of such programs are `sh`, `bash`, `python`, `node`,
+`env`, `xargs`, `find -exec`, `git -c`, `make`, `awk`, `perl`, `go test -exec`,
+the tools that speak to a socket directly (`socat`, `nc -U`), and the wrappers
+that run an argument vector (`timeout`, `nice`, `nohup`, `setsid`, `stdbuf`). So
+`allow Bash(*)`, `allow Bash(git *)` and `allow Bash(herrscher*)` are all broad
+rules. The last is the most direct: `herrscher approve allow <id>` reaches the
+operator's socket through the path above.
+
+Keep `ask` on everything that runs code from the repository: `make`, `go test`,
+`npm run`, and any script. A session in `acceptEdits` mode can write a Makefile
+recipe or a test file without asking, then run the command a rule names. An exact
+rule does not protect you against that, because a rule matches the command text,
+not the code the command executes.
+
+A real boundary needs one of two things, and herrscher has neither today. Either
+approval changes are confirmed out of band, on a channel the session cannot write
+to, such as the gateway or the TUI answered by you, so a shell call cannot
+complete one alone. Or the sessions run under another user account, or in a
+sandbox that hides the runtime directory, the operator's socket and the session
+sockets, so the shell cannot reach them at all. Until one of these exists, the
+approval system guards against the model's mistakes and against rules you wrote.
+It does not guard against a command you approved.
 
 ### A daemon that knows who is calling
 
 Identity comes from the entry point, never from the message.
 
-A session talks to its own command socket, not the operator's, so it can no
-longer widen the policy that decides its own tool calls, answer its own approval
-requests, or speak in another session's name. It cannot open a session either,
-which is the same refusal wearing a different hat: a session created from the
-command line carries whatever flags the command line chose, and one with no agent
-or `--approvals bypass` is a second session where the caller's own policy does
-not apply. Delegation is untouched, because a `⟢ delegate:` trailer opens a
-worker that runs a registered agent and answers to a policy the way its lead
-does.
+A session talks to its own command socket, which carries that session's rights
+only, so through it a session cannot widen the policy that decides its own tool
+calls. Who connects is a separate matter: any process of the same user can dial
+any session's socket, as described under who may change the approvals above. A
+session cannot open a session through its own socket either. Through the
+operator's socket it can: run from a shell without `HERRSCHER_COMMAND_SOCKET`,
+`herrscher -p` or `herrscher session create` creates a session that carries
+whatever flags the command line chose, and one with no agent or `--approvals
+bypass` is a second session where the caller's own policy does not apply.
+Delegation is untouched, because a `⟢ delegate:` trailer opens a worker that
+runs a registered agent and answers to a policy the way its lead does.
 
 That much applies from the upgrade, with nothing to configure.
 
@@ -1106,6 +1193,25 @@ refused without a reason, as if nobody answered.
 The box is drawn from 60 to 240 columns: below 80 each choice takes two rows.
 The tab carries a `pendingApproval` flag for the rest of the window to mark it.
 
+Each session's approval hook answers with the token the daemon issued to that
+session at launch, sent in the `HERRSCHER_SESSION_TOKEN` variable. The token
+ends with the session's run. Closing or archiving the session revokes it, and so
+does a session that stops inside the teardown window, so a session recreated
+under the same name gets a new one. A one-shot seed gets its own token instead,
+which answers only while that seed runs. A seed on an archived session is
+refused, and no token is issued to a seed whose session is archived or gone. A
+session archived or closed while its seed runs ends that seed's token. A hook
+that holds no token, or cannot reach a daemon, refuses the tool call and says
+why: it never allows a call it could not check.
+
+Two paths run without a daemon. A `session create` run locally starts a session
+whose children hold no token the daemon issued, so every tool call they make is
+refused by the hook, while text answers still work (`--print` runs this way). A
+`session seed` run locally has no token either, so its tool calls are refused
+too. `approve ask` refuses without a daemon. A seed on a remote backend with a session is refused outright,
+because the remote prompt carries no session identity: its approvals could not
+reach the operator, and they would be skipped without a sign.
+
 ### Using the terminal you are in
 
 Capabilities are probed once at startup, and every feature that has a richer and
@@ -1608,6 +1714,10 @@ such as `f := runtimedir.At` is not seen.
 no vendor account. `scripts/check.sh` runs it with `go test -tags e2e ./e2e/...` on
 Linux, and says it skips the step anywhere else.
 
+The `e2e` build also reads two variables that the production binary ignores:
+`HERRSCHER_E2E_CLOCK` (an RFC 3339 instant the scheduler takes as now) and
+`HERRSCHER_E2E_SCHEDULER_TICK` (a positive duration in place of the one-minute tick).
+
 - Each `.txtar` file in `e2e/testdata/scenarios` is a
   [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) scenario.
   It gets its own `HOME`, a fresh git repository as its work directory and a unique
@@ -1640,8 +1750,11 @@ Linux, and says it skips the step anywhere else.
   of the scenario if it still runs. `! descendantgone` is refused.
 - These waits poll with a short sleep: they wait on other processes, which a
   `testing/synctest` bubble cannot control.
-- A process that still carries the instance of the scenario after it ends fails the
-  run and is killed.
+- At the end of a scenario, `settle` sends SIGINT to every process still alive that
+  carries the instance of the scenario (the daemon, the fakes and their descendants),
+  then SIGKILL to the survivors once `reapGrace` has passed. A process that this SIGINT
+  stops fails the scenario with `errStopped`, a process that already ended is neither
+  signalled nor counted, and a survivor of both signals is a leak (`errLeaked`).
 - The cleanup removes every runtime entry named after the instance, and the names
   `core/host` gives its command and events sockets and its lock, hashed ones included.
   It only touches a runtime directory that `core/host` accepts as private to the user.
@@ -1661,7 +1774,7 @@ Linux, and says it skips the step anywhere else.
   provides it. The script holds one block per turn, separated by `---`, and each line
   is one step: `text <words>`, `tool <Name> <json input>`, `error <message>`,
   `apierror <message>`, `spawn <file>`, `echo`, `hang` or `crash`, the last three alone
-  on their line. `spawn` starts a `sleep` of sixty seconds (`DescendantSleep` in
+  on their line, and blank lines are skipped. `spawn` starts a `sleep` of sixty seconds (`DescendantSleep` in
   `e2e/vendortest`) that the fake does not wait for, and writes its pid to `<file>` in
   the work directory. Stream and one-shot turns run the spawns of their turn. A turn with
   neither a step nor a spawn is an error. The turn count is shared by every process of
@@ -1677,6 +1790,25 @@ Linux, and says it skips the step anywhere else.
   The one-shot mode is reached with `herrscher session create --backend oneshot` or
   `herrscher bridge --backend oneshot`, not with `CLAUDE_KIND`, which the stream backend
   of a session overrides. Every start and every prompt is appended to `$VENDORTEST_LOG`.
+
+The `codex` and `cursor-agent` fakes of the same package read that script and share its
+turn count, so each turn goes to whichever vendor asks for it next. `codex` answers the
+`login status` probe and serves the JSON-RPC app-server that the codex backend drives in
+stream mode, one turn per `turn/start` request. `cursor-agent` answers the `status` probe
+and replays one turn per invocation, with the prompt on its standard input. Both record
+their prompts in `$VENDORTEST_LOG` as `codex prompt "<text>"` and `cursor prompt "<text>"`.
+
+`sessionrunning <session> <vendor command>` fails the scenario unless a process of its
+instance has `--session <session>` and `--cmd <vendor command>` on its command line, so a
+switch that proves nothing cannot pass. `sessionstopped` takes the same arguments and waits
+up to five seconds for no such process, failing otherwise. Neither can be negated.
+
+`session_switch.txtar` covers a vendor switch on one session. It seeds a prompt through
+`claude`, checks the overview, then switches the session to `codex` and then to
+`cursor-agent`. Before each switch `sessionrunning` checks that the previous vendor process
+runs, and after it `sessionstopped` waits for that process to stop. The `codex` and
+`cursor-agent` prompts get `echo: <prompt>` back. Its `claude.script` holds one turn, so the
+later turns are past the end of the script and echo.
 
 Every bug found by hand becomes a scenario before it is fixed: the scenario is written
 first, fails on the bug, and passes with the fix.

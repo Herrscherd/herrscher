@@ -415,6 +415,9 @@ type sessionTable struct {
 
 	outboundMaxBytes int64
 	fileSenders      map[string]contracts.FileSender
+
+	tokens     map[string]string
+	seedLeases map[string]seedLease
 }
 
 func (t *sessionTable) percentOfSession(name string) int {
@@ -440,6 +443,7 @@ func (t *sessionTable) unregister(name string, driver *sessionDriver) {
 	t.mu.Lock()
 	if t.m[name] == driver {
 		delete(t.m, name)
+		delete(t.tokens, name)
 	}
 	t.mu.Unlock()
 }

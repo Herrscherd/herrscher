@@ -2100,7 +2100,7 @@
   {
     "id": "cli.help.cmd.approve.rule",
     "description": "Help of the command approve rule",
-    "other": "ajouter une règle, en retirer une avec --rm, ou les lister sans argument"
+    "other": "ajouter une règle, en retirer une avec --rm, ou les lister sans argument ; jamais de règle Bash large (Bash(*), Bash(herrscher*), un shell ou un interpréteur) : elle donne les droits de l'opérateur à chaque session"
   },
   {
     "id": "cli.help.cmd.approve.ask",
@@ -3138,6 +3138,11 @@
     "other": "--what doit valoir code, conversation ou both"
   },
   {
+    "id": "cli.host.fault.daemon_required",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (daemon required)",
+    "other": "cette commande nécessite le démon herrscher en cours, et aucun ne répond sur le socket de commande"
+  },
+  {
     "id": "cli.host.fault.rewind_needs_daemon",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (rewind needs daemon)",
     "other": "le retour arrière de session n'est disponible que depuis le démon en cours"
@@ -3218,6 +3223,11 @@
     "other": "usage : approve mode <session> <ask|bypass|strict|smart>"
   },
   {
+    "id": "cli.host.fault.approve_ask_unauthenticated",
+    "description": "Erreur d'une demande d'approbation refusée car l'appelant ne détient pas le jeton de la session",
+    "other": "approve ask refusé : l'appelant ne détient pas le jeton d'approbation de cette session"
+  },
+  {
     "id": "cli.host.fault.usage_empty_value",
     "description": "Erreur d'une commande usage dont une option est vide",
     "other": "usage : une valeur vide n'est pas acceptée"
@@ -3291,6 +3301,11 @@
     "id": "cli.host.fault.worktree_materialize_required",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (worktree materialize required)",
     "other": "worktree materialize : --worktree est obligatoire"
+  },
+  {
+    "id": "cli.host.fault.seed_archived_session",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (seed refused: the session is archived)",
+    "other": "seed refusé : la session est archivée"
   },
   {
     "id": "cli.host.fault.seed_timeout",

@@ -1,0 +1,17 @@
+! exec herrscher serve &daemon&
+waitdaemon
+exec herrscher session create --name first --vendor claude --approvals ask
+exec herrscher approve rule 'ask Bash(git push*)'
+exec herrscher session seed --name first --task 'push the branch' &seed&
+waitapproval APPROVAL
+exec herrscher approve deny $APPROVAL --reason 'not today'
+waitlog 'result toolu_\d+ denied: herrscher: the operator refused: not today'
+wait seed
+kill -INT daemon
+wait daemon
+! waitdaemon
+
+-- claude.script --
+tool Bash {"command":"git push origin master"}
+expect denied
+text push refused

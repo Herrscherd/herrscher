@@ -57,7 +57,25 @@ func summaryConfig(path string, count int) {
 		fmt.Fprintf(os.Stderr, "  %s %s\n", sty.wrap(sty.dim, "·"), msg(clitext.ManageNothingEntered, clitext.Params{clitext.ParamPath: path}))
 	}
 	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.dim, msg(clitext.ManageInstalledNote, nil)))
-	fmt.Fprintf(os.Stderr, "  %s\n\n", msg(clitext.ManageStartWith, clitext.Params{clitext.ParamCommand: sty.wrap(sty.bold, "herrscherd serve")}))
+	fmt.Fprintf(os.Stderr, "  %s\n\n", msg(clitext.ManageStartWith, clitext.Params{clitext.ParamCommand: sty.wrap(sty.bold, serveCommand(invokedBinary(os.Args)))}))
+}
+
+func invokedBinary(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	return args[0]
+}
+
+func serveCommand(invoked string) string {
+	name := filepath.Base(invoked)
+	if ext := filepath.Ext(name); strings.EqualFold(ext, ".exe") {
+		name = strings.TrimSuffix(name, ext)
+	}
+	if name == "." || name == string(filepath.Separator) {
+		name = "herrscher"
+	}
+	return name + " serve"
 }
 
 func shortModule(m string) string {

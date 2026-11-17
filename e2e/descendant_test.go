@@ -3,12 +3,10 @@
 package e2e_test
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -33,11 +31,11 @@ func descendantGone(ts *testscript.TestScript, neg bool, args []string) {
 	pid, err := readPid(pidPath)
 	ts.Check(err)
 	ts.Check(descendantNotExpired(pidPath))
-	marker := instanceMarker(ts.Getenv(instanceEnv))
-	ts.Defer(func() { ts.Check(killDescendant(pid, marker)) })
+	entry := instanceEntry(ts.Getenv(instanceEnv))
+	ts.Defer(func() { ts.Check(killDescendant(pid, entry)) })
 	deadline := time.Now().Add(descendantWait)
 	for time.Now().Before(deadline) {
-		alive, err := descendantAlive(pid, marker)
+		alive, err := descendantAlive(pid, entry)
 		ts.Check(err)
 		if !alive {
 			return
@@ -69,18 +67,15 @@ func readPid(path string) (int, error) {
 	return strconv.Atoi(strings.TrimSpace(string(data)))
 }
 
-func descendantAlive(pid int, marker []byte) (bool, error) {
-	environ, err := os.ReadFile(filepath.Join(procRoot, strconv.Itoa(pid), "environ"))
-	if gone(err) {
-		return false, nil
-	}
+func descendantAlive(pid int, entry string) (bool, error) {
+	environ, err := environOf(pid)
 	if err != nil {
 		return false, fmt.Errorf("cannot read the environment of %d: %w", pid, err)
 	}
-	if !bytes.Contains(append(environ, 0), marker) {
+	if !carries(environ, entry) {
 		return false, nil
 	}
-	line, err := commandLine(pid)
+	line, err := commandLine(procRoot, pid)
 	if gone(err) {
 		return false, nil
 	}
@@ -94,22 +89,31 @@ func gone(err error) bool {
 	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ESRCH)
 }
 
-func killDescendant(pid int, marker []byte) error {
-	alive, err := descendantAlive(pid, marker)
+func killDescendant(pid int, entry string) error {
+	alive, err := descendantAlive(pid, entry)
 	if err != nil || !alive {
 		return err
 	}
-	if killErr := syscall.Kill(pid, syscall.SIGKILL); killErr != nil && !errors.Is(killErr, syscall.ESRCH) {
-		return killErr
+	stat, err := readStat(procRoot, pid)
+	if gone(err) {
+		return nil
 	}
-	return nil
+	if err != nil {
+		return err
+	}
+	p, pinnedOK, err := pin(procRoot, openPidfd, processRef{pid: pid, start: stat.start}, entry)
+	if err != nil || !pinnedOK {
+		return err
+	}
+	killErr := signalAll([]pinned{p}, syscall.SIGKILL)
+	return errors.Join(killErr, p.release())
 }
 
 func TestDescendantAliveRefusesAnUnreadablePid(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root reads the environment of every process")
 	}
-	if _, err := descendantAlive(1, instanceMarker("unused")); !errors.Is(err, fs.ErrPermission) {
+	if _, err := descendantAlive(1, instanceEntry("unused")); !errors.Is(err, fs.ErrPermission) {
 		t.Fatal("an unreadable pid counted as a live or dead descendant instead of an error")
 	}
 }

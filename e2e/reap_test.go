@@ -166,11 +166,28 @@ func TestSettleInterruptsTheDaemonBeforeKillingIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	daemon := exec.CommandContext(t.Context(), "sh", "-c", "sleep 60 & child=$!; trap 'kill $child; exit 130' INT; wait", "sh", "serve")
+	daemon := exec.CommandContext(t.Context(), "sh", "-c", "sleep 60 >/dev/null 2>&1 & child=$!; trap 'kill $child; exit 130' INT; echo ready; wait", "sh", "serve")
 	daemon.Env = []string{instanceEnv + "=" + instance}
-	if startErr := daemon.Start(); startErr != nil {
+	ready, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if closeErr := ready.Close(); closeErr != nil {
+			t.Error(closeErr)
+		}
+	})
+	daemon.Stdout = write
+	daemon.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	startErr := daemon.Start()
+	if closeErr := write.Close(); closeErr != nil {
+		t.Error(closeErr)
+	}
+	if startErr != nil {
 		t.Fatal(startErr)
 	}
+	t.Cleanup(func() { stopDaemon(t, daemon) })
+	awaitReady(t, ready)
 	root := t.TempDir()
 	before, err := hashedEntries(root)
 	if err != nil {
@@ -183,6 +200,37 @@ func TestSettleInterruptsTheDaemonBeforeKillingIt(t *testing.T) {
 	exit, ok := errors.AsType[*exec.ExitError](waitErr)
 	if !ok || exit.ExitCode() != 130 {
 		t.Fatalf("daemon: got %v, want it to exit on the interrupt with status 130", waitErr)
+	}
+}
+
+const daemonReadyTimeout = 10 * time.Second
+
+func awaitReady(tb testing.TB, ready *os.File) {
+	tb.Helper()
+	if err := ready.SetReadDeadline(time.Now().Add(daemonReadyTimeout)); err != nil {
+		tb.Fatal(err)
+	}
+	line, err := bufio.NewReader(ready).ReadString('\n')
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		tb.Fatalf("the daemon wrote no ready line within %s, so it did not install its interrupt trap", daemonReadyTimeout)
+	}
+	if err != nil || line != "ready\n" {
+		tb.Fatalf("the daemon did not install its interrupt trap: got %q, %v", line, err)
+	}
+}
+
+func stopDaemon(tb testing.TB, daemon *exec.Cmd) {
+	tb.Helper()
+	if daemon.ProcessState != nil {
+		return
+	}
+	if err := syscall.Kill(-daemon.Process.Pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+		tb.Error(err)
+	}
+	if err := daemon.Wait(); err != nil {
+		if _, isExit := errors.AsType[*exec.ExitError](err); !isExit {
+			tb.Error(err)
+		}
 	}
 }
 

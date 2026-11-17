@@ -2,8 +2,10 @@ package compactwire
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -273,6 +275,75 @@ func TestResultRefusesStatsWithAnUnknownOutcome(t *testing.T) {
 	_, err := Result(contracts.CompactResult{Stats: &contracts.CompactStats{Stage: "jev"}})
 	if !errors.Is(err, contracts.ErrUnknownCompactOutcome) {
 		t.Fatalf("Result with a zero outcome: %v, want ErrUnknownCompactOutcome", err)
+	}
+}
+
+func TestDecodeRefusesMoreArgumentsThanTheLimit(t *testing.T) {
+	args := strings.TrimSuffix(strings.Repeat(`{"name":"Count","kind":2,"value":3},`, 17), ",")
+	requireNoticeMalformed(t, `{"code":1,"args":[`+args+`]}`, contracts.ErrNoticeLimit)
+}
+
+func TestDecodeRefusesANameLongerThanTheLimit(t *testing.T) {
+	name := strings.Repeat("N", 257)
+	requireNoticeMalformed(t, `{"code":1,"args":[{"name":"`+name+`","kind":1,"value":"a"}]}`, contracts.ErrNoticeLimit)
+}
+
+func TestDecodeRefusesAValueLongerThanTheLimit(t *testing.T) {
+	text := strings.Repeat("a", 70<<10)
+	requireNoticeMalformed(t, `{"code":1,"args":[{"name":"X","kind":1,"value":"`+text+`"}]}`, contracts.ErrNoticeLimit)
+}
+
+func TestDecodeRefusesAReferenceWithoutValue(t *testing.T) {
+	requireNoticeMalformed(t, `{"code":1,"args":[{"name":"R","kind":3}]}`, contracts.ErrNoticeArgs)
+}
+
+func TestDecodeRefusesACountWithoutValue(t *testing.T) {
+	requireNoticeMalformed(t, `{"code":1,"args":[{"name":"C","kind":2}]}`, contracts.ErrNoticeArgs)
+}
+
+func TestDecodeNoticeWrapsTheMalformedErrorWithErrNoticeMalformed(t *testing.T) {
+	if _, err := DecodeNotice(`{`); !errors.Is(err, ErrNoticeMalformed) {
+		t.Fatalf("DecodeNotice error = %v, want ErrNoticeMalformed", err)
+	}
+}
+
+func TestLongTextIsBoundedOnTheWire(t *testing.T) {
+	notice := contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", strings.Repeat("x", 70<<10))}}
+	value, err := EncodeNotice(notice)
+	if err != nil {
+		t.Fatalf("EncodeNotice of a 70 KiB text: %v", err)
+	}
+	got, err := DecodeNotice(value)
+	if err != nil {
+		t.Fatalf("DecodeNotice: %v", err)
+	}
+	reason, isText := got.Args[0].Value().(string)
+	if !isText || len(reason) != maxTextBytes+len(truncationMark) || !strings.HasSuffix(reason, truncationMark) {
+		t.Fatalf("reason = %d bytes, want %d bytes ending with %q", len(reason), maxTextBytes+len(truncationMark), truncationMark)
+	}
+}
+
+func TestBoundedTextStaysValidUTF8(t *testing.T) {
+	notice := contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", "a"+strings.Repeat("é", 3000))}}
+	value, err := EncodeNotice(notice)
+	if err != nil {
+		t.Fatalf("EncodeNotice: %v", err)
+	}
+	got, err := DecodeNotice(value)
+	if err != nil {
+		t.Fatalf("DecodeNotice: %v", err)
+	}
+	reason, _ := got.Args[0].Value().(string)
+	if !utf8.ValidString(reason) {
+		t.Fatalf("bounded reason is not valid UTF-8: %q", reason)
+	}
+}
+
+func requireNoticeMalformed(t *testing.T, value string, cause error) {
+	t.Helper()
+	_, err := DecodeResult(contracts.Event{T: EventResult, Value: value})
+	if !errors.Is(err, ErrNoticeMalformed) || !errors.Is(err, cause) {
+		t.Fatalf("DecodeResult error = %v, want ErrNoticeMalformed wrapping %v", err, cause)
 	}
 }
 

@@ -24,7 +24,7 @@ func approveReg(t *testing.T, approvalTab *approvalTable, sessionTab *sessionTab
 	if err != nil {
 		t.Fatalf("LoadState: %v", err)
 	}
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	if err := addApproveCommands(reg, newHostMessages(), clitext.NewMessages(), fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); err != nil {
 		t.Fatalf("addApproveCommands: %v", err)
 	}

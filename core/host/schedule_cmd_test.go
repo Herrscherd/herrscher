@@ -32,7 +32,7 @@ func (f *fakeScheduleRunner) fireNow(_ context.Context, name string) error {
 
 func testScheduleRegistry(t *testing.T, st *state.State, slot *schedulerSlot) *cli.Registry {
 	t.Helper()
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	if slot == nil {
 		slot = &schedulerSlot{}
 	}

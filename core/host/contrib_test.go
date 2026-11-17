@@ -7,6 +7,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 type fakeContributor struct {
@@ -127,7 +128,7 @@ func TestPrefixingPreservesTheHandler(t *testing.T) {
 }
 
 func TestContributedCommandDispatches(t *testing.T) {
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	cmds, err := CollectCommands([]contracts.GatewaySet{
 		{Gateway: fakeContributor{kind: "alpha", paths: [][]string{{"channel", "read"}}}},
 	})

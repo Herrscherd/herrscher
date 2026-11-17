@@ -22,15 +22,16 @@ func usageKeys() []usageKey {
 }
 
 type usageError struct {
-	cause  error
-	key    clitext.Key
-	params clitext.Params
+	cause    error
+	key      clitext.Key
+	params   clitext.Params
+	messages *clitext.Messages
 }
 
-func usageFailure(cause error, params clitext.Params) error {
+func usageFailure(messages *clitext.Messages, cause error, params clitext.Params) error {
 	for _, entry := range usageKeys() {
 		if errors.Is(entry.cause, cause) {
-			return usageError{cause: cause, key: entry.key, params: params}
+			return usageError{cause: cause, key: entry.key, params: params, messages: messages}
 		}
 	}
 	return cause
@@ -47,7 +48,7 @@ func (e usageError) Error() string {
 func (e usageError) Unwrap() error { return e.cause }
 
 func (e usageError) render(lang i18n.Language) (string, error) {
-	return clitext.Text(lang, e.key, e.params)
+	return e.messages.Text(lang, e.key, e.params)
 }
 
 func localizedUsage(usage usageError, err error, lang i18n.Language) error {

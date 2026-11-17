@@ -54,7 +54,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	seedCoord := &coordinatorSlot{}
 	schedSlot := &schedulerSlot{}
 
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(sessions.cliMessages)
 	if err := addVerbs(reg, hdl.Commands()...); err != nil {
 		return nil, hostDeps{}, err
 	}

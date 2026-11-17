@@ -10,7 +10,7 @@ import (
 
 func TestUsageErrorsAreRenderedInTheRequestedLanguage(t *testing.T) {
 	t.Parallel()
-	err := usageFailure(errUnknownCommand, clitext.Params{clitext.ParamName: `"x"`})
+	err := usageFailure(clitext.NewMessages(), errUnknownCommand, clitext.Params{clitext.ParamName: `"x"`})
 	if !errors.Is(err, errUnknownCommand) {
 		t.Fatal("a usage error must still match its sentinel")
 	}
@@ -27,8 +27,9 @@ func TestUsageErrorsAreRenderedInTheRequestedLanguage(t *testing.T) {
 
 func TestEveryUsageSentinelHasAKey(t *testing.T) {
 	t.Parallel()
+	messages := clitext.NewMessages()
 	for _, cause := range []error{errUnknownCommand, errMissingRequired, errUnknownFlag, errFlagNeedsValue} {
-		if usage, found := isUsage(usageFailure(cause, nil)); !found || !errors.Is(usage.cause, cause) {
+		if usage, found := isUsage(usageFailure(messages, cause, nil)); !found || !errors.Is(usage.cause, cause) {
 			t.Fatalf("%v has no usage key and would be shown raw", cause)
 		}
 	}

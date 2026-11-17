@@ -1,0 +1,20 @@
+! exec herrscher serve &daemon&
+waitdaemon
+exec herrscher session create --name manual --vendor claude
+exec herrscher session seed --name manual --task 'first question'
+stdout '^first answer$'
+exec herrscher session compact --name manual --instruction 'keep the schema'
+waitlog 'prompt "/compact keep the schema"'
+exec herrscher session send --name manual --text 'second question'
+waitlog 'prompt .*second question'
+kill -INT daemon
+wait daemon
+! waitdaemon
+exec cat $VENDORTEST_LOG
+stdout '(?s)prompt .*first question.*prompt "/compact keep the schema".*prompt .*second question'
+! stdout '(?m)^prompt "/compact"$'
+
+-- claude.script --
+text first answer
+---
+text compacted

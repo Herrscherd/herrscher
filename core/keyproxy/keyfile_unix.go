@@ -3,12 +3,15 @@
 package keyproxy
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"syscall"
 )
+
+var errKeyDirUnsafe = errors.New("key file directory must belong to the user or root, and must not be writable by its group or others")
 
 func openKeyFile(path string) (*os.File, error) {
 	return os.OpenFile(filepath.Clean(path), os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)

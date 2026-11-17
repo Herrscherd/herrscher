@@ -57,6 +57,17 @@ func (r *Registry) Add(cmd contracts.Cmd) error {
 	return nil
 }
 
+// Families returns the first word of every registered path.
+func (r *Registry) Families() map[string]bool {
+	families := make(map[string]bool, len(r.cmds))
+	for _, cmd := range r.cmds {
+		if len(cmd.Path) > 0 {
+			families[cmd.Path[0]] = true
+		}
+	}
+	return families
+}
+
 // Dispatch runs the command named by args and returns its result unrendered.
 func (r *Registry) Dispatch(ctx context.Context, args []string) (contracts.Result, error) {
 	cmd, rest := r.match(args)

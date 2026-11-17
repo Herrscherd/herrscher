@@ -295,7 +295,9 @@ func (h *hub) goLiveLocked(ctx context.Context, sess state.Session) error {
 	bound := boundGateways(h.gws, effectiveKinds(h.gws, sess))
 	terms := liveModelTerms(h.st, h.models, sess.Name)
 	done := make(chan struct{})
+	h.trackStartup(startupRun{name: sess.Name, cancel: cancel, done: done})
 	go func() {
+		defer h.untrackStartup(done)
 		defer close(done)
 		runSessionIdentified(sctx, h.sessions, sess.Name, sess.ChannelID, bound, acc, state.ParticipantsPath(h.partDir, sess.Name), h.metrics, h.coordinator,
 			h.liveSink(ctx, sess),
@@ -318,12 +320,52 @@ func (h *hub) goLiveLocked(ctx context.Context, sess state.Session) error {
 	return nil
 }
 
+type startupRun struct {
+	name   string
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
+func (h *hub) trackStartup(run startupRun) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.startups == nil {
+		h.startups = make(map[<-chan struct{}]startupRun)
+	}
+	h.startups[run.done] = run
+}
+
+func (h *hub) untrackStartup(done <-chan struct{}) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.startups, done)
+}
+
+func (h *hub) startupsLocked() []startupRun {
+	return slices.Collect(maps.Values(h.startups))
+}
+
+func (h *hub) stopStartups(starts []startupRun) {
+	window, cancel := h.newGrace()
+	defer cancel()
+	for _, start := range starts {
+		start.cancel()
+	}
+	for _, start := range starts {
+		if !window.finished(start.done) {
+			h.warnOverrun(start.name)
+			return
+		}
+	}
+}
+
 func (h *hub) stopLive() {
 	h.lifecycle.Lock()
 	h.closeLifecycleLocked()
 	h.mu.Lock()
 	lives := make(map[string]liveSession, len(h.live))
 	maps.Copy(lives, h.live)
+	starts := h.startupsLocked()
 	h.mu.Unlock()
 	h.lifecycle.Unlock()
 	for _, live := range lives {
@@ -336,6 +378,7 @@ func (h *hub) stopLive() {
 		cancel()
 	}
 	h.awaitInFlight()
+	h.stopStartups(starts)
 }
 
 func (h *hub) noteListened(session string) {
@@ -352,9 +395,11 @@ func (h *hub) closeAndRemoveSockets() error {
 	h.closeLifecycleLocked()
 	h.mu.Lock()
 	sessions := slices.Collect(maps.Keys(h.listenedSessions))
+	starts := h.startupsLocked()
 	h.mu.Unlock()
 	h.lifecycle.Unlock()
 	h.awaitInFlight()
+	h.stopStartups(starts)
 	h.closeWarnings()
 	return removeSocketFiles(h.runtime, h.instanceID, sessions)
 }

@@ -1,0 +1,14 @@
+! exec herrscher serve &daemon&
+waitdaemon
+exec herrscher session create --name closing
+exec herrscher session seed --name closing --task 'say ping please'
+grep 'say ping please' $WORK/claude.log
+exec herrscher session close --name closing
+descendantgone $WORK/descendant.pid
+kill -INT daemon
+wait daemon
+! waitdaemon
+
+-- claude.script --
+spawn descendant.pid
+text Voici

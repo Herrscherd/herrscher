@@ -8,25 +8,33 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"testing/synctest"
+	"time"
 )
 
 type event struct {
-	Type    string   `json:"type"`
-	IsError bool     `json:"is_error"`
-	Result  string   `json:"result"`
-	Errors  []string `json:"errors"`
+	Type    string     `json:"type"`
+	IsError bool       `json:"is_error"`
+	Result  string     `json:"result"`
+	Errors  []string   `json:"errors"`
+	Usage   tokenUsage `json:"usage"`
 	Message struct {
 		Content []struct {
-			Type  string          `json:"type"`
-			Text  string          `json:"text"`
-			ID    string          `json:"id"`
-			Name  string          `json:"name"`
-			Input json.RawMessage `json:"input"`
+			Type      string          `json:"type"`
+			Text      string          `json:"text"`
+			ID        string          `json:"id"`
+			Name      string          `json:"name"`
+			Input     json.RawMessage `json:"input"`
+			ToolUseID string          `json:"tool_use_id"`
+			IsError   bool            `json:"is_error"`
+			Content   string          `json:"content"`
 		} `json:"content"`
+		Usage *messageUsage `json:"usage"`
 	} `json:"message"`
 }
 
@@ -82,9 +90,15 @@ func summary(events []event) []string {
 	var got []string
 	for _, e := range events {
 		switch e.Type {
-		case "assistant":
-			for _, block := range e.Message.Content {
+		case wordAssistant:
+			for index := range e.Message.Content {
+				block := &e.Message.Content[index]
 				got = append(got, block.Type+":"+block.Text+block.Name+block.ID+string(block.Input))
+			}
+		case "user":
+			for index := range e.Message.Content {
+				block := &e.Message.Content[index]
+				got = append(got, fmt.Sprintf("%s:%s:%t:%s", block.Type, block.ToolUseID, block.IsError, block.Content))
 			}
 		case "result":
 			if e.IsError {
@@ -106,8 +120,9 @@ func TestClaudeReplaysEachStep(t *testing.T) {
 		want   []string
 	}{
 		{"text", "text hi\ntext there", []string{"go"}, 0, []string{"text:hi", "text:there", "result:hi\n\nthere"}},
-		{"tool", "tool Bash {\"command\":\"ls\"}\ntext done", []string{"go"}, 0, []string{"tool_use:Bashtoolu_1{\"command\":\"ls\"}", "text:done", "result:done"}},
+		{"tool", "tool Bash {\"command\":\"ls\"}\ntext done", []string{"go"}, 0, []string{"tool_use:Bashtoolu_1{\"command\":\"ls\"}", "tool_result:toolu_1:false:done", "text:done", "result:done"}},
 		{"error", "error quota exhausted", []string{"go"}, 0, []string{"failed:quota exhausted"}},
+		{"error after text", "text partial\nerror boom", []string{"go"}, 0, []string{"text:partial", "failed:boom"}},
 		{"echo past the end", "", []string{"first line\nlast line"}, 0, []string{"text:echo: last line", "result:echo: last line"}},
 		{"crash", "text partial\ncrash", []string{"go"}, exitFailure, []string{"text:partial"}},
 	} {
@@ -220,5 +235,72 @@ func TestLockTurnsNamesAStaleLock(t *testing.T) {
 	locked, isLocked := errors.AsType[*turnsLockedError](err)
 	if !isLocked || locked.Lock != turns+".lock" {
 		t.Fatalf("got %v, want the stale lock named", err)
+	}
+}
+
+func TestSpawnRefusesToRunWithoutTheLogPath(t *testing.T) {
+	err := (&replay{}).spawn("descendant.pid")
+	if !errors.Is(err, errNoLog) {
+		t.Fatalf("got %v, want %v", err, errNoLog)
+	}
+}
+
+func TestDescendantSleepArgMatchesItsDuration(t *testing.T) {
+	if got := strconv.Itoa(int(DescendantSleep / time.Second)); got != descendantSleepArg {
+		t.Fatalf("the sleep argument %q does not match %v (%q)", descendantSleepArg, DescendantSleep, got)
+	}
+}
+
+func TestOneShotRepliesWithTheTextOfTheTurn(t *testing.T) {
+	files := scriptFiles(t, "text Voici\ntext là\n")
+	args := []string{"-p", "say ping please"}
+	r, err := openReplay(files, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if callErr := r.oneShot(&out, args); callErr != nil {
+		t.Fatal(callErr)
+	}
+	var reply event
+	if decodeErr := json.Unmarshal(out.Bytes(), &reply); decodeErr != nil {
+		t.Fatal(decodeErr)
+	}
+	if reply.Result != "Voici\n\nlà" {
+		t.Fatalf("got reply %q, want the text steps of the turn", reply.Result)
+	}
+}
+
+func TestClaudeReportsScriptedInputTokens(t *testing.T) {
+	files := scriptFiles(t, "usage 950\ntext hi\n")
+	_, events := run(t, files, promptLine(t, "go"))
+	var reported []int
+	var result *event
+	for index := range events {
+		if events[index].Message.Usage != nil {
+			reported = append(reported, events[index].Message.Usage.InputTokens)
+		}
+		if events[index].Type == "result" {
+			result = &events[index]
+		}
+	}
+	if !slices.Equal(reported, []int{950}) {
+		t.Errorf("assistant usage: got %v, want [950]", reported)
+	}
+	if result == nil || result.Usage.InputTokens != 950 {
+		t.Errorf("result usage: got %+v, want 950 input tokens", result)
+	}
+}
+
+func TestClaudeRecordsTheAccountDirOfTheSession(t *testing.T) {
+	t.Setenv(envConfigDir, "/accounts/claude/second")
+	files := scriptFiles(t, "")
+	run(t, files, promptLine(t, "go"))
+	log, err := os.ReadFile(files.Log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(log), "\naccount /accounts/claude/second\n") {
+		t.Errorf("log %q does not name the account dir", log)
 	}
 }

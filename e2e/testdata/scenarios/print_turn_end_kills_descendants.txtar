@@ -1,0 +1,8 @@
+exec herrscher --print 'say ping please'
+stdout '^Voici$'
+! stderr 'unexpected error'
+descendantgone $WORK/descendant.pid
+
+-- claude.script --
+spawn descendant.pid
+text Voici

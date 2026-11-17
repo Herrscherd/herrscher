@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -26,18 +27,27 @@ const (
 	stepCrash
 	stepEcho
 	stepAPIError
+	stepUsage
+	stepExpect
+)
+
+const (
+	wordAllowed = "allowed"
+	wordDenied  = "denied"
 )
 
 type step struct {
-	kind  stepKind
-	text  string
-	tool  string
-	input json.RawMessage
+	kind   stepKind
+	text   string
+	tool   string
+	input  json.RawMessage
+	tokens int
 }
 
 // Turn is the scripted reply to one prompt.
 type Turn struct {
-	steps []step
+	steps  []step
+	spawns []string
 }
 
 // Script is the parsed list of turns, replayed in order.
@@ -62,10 +72,7 @@ func (e *LineError) Unwrap() error {
 	return e.Err
 }
 
-// ParseScript reads a script. Each line is one step: "text <words>", "tool
-// <Name> <json input>", "error <message>", "apierror <message>", "echo",
-// "hang" or "crash", the last three alone. Blank lines are skipped and a turn
-// with no step is refused.
+// ParseScript reads a script of steps, one per line, and refuses an empty turn.
 func ParseScript(source io.Reader) (Script, error) {
 	var script Script
 	current := Turn{}
@@ -78,48 +85,78 @@ func ParseScript(source io.Reader) (Script, error) {
 		case "":
 			continue
 		case turnSeparator:
-			if len(current.steps) == 0 {
+			if current.empty() {
 				return Script{}, &LineError{Line: lineNo, Text: line, Err: errEmptyTurn}
 			}
 			script.turns = append(script.turns, current)
 			current = Turn{}
 			continue
 		}
-		parsed, err := parseStep(line)
-		if err != nil {
+		if err := current.add(line); err != nil {
 			return Script{}, &LineError{Line: lineNo, Text: line, Err: err}
 		}
-		current.steps = append(current.steps, parsed)
 	}
 	if err := scanner.Err(); err != nil {
 		return Script{}, fmt.Errorf("cannot read the script: %w", err)
 	}
-	if len(current.steps) > 0 {
+	if !current.empty() {
 		script.turns = append(script.turns, current)
 	}
 	return script, nil
 }
 
 var (
-	errUnknownStep  = errors.New("unknown step, want text, tool, error, apierror, echo, hang or crash")
+	errUnknownStep  = errors.New("unknown step, want text, tool, expect, error, apierror, usage, spawn, echo, hang or crash")
+	errUsageCount   = errors.New("usage wants a whole number of input tokens, as in: usage 950")
+	errExpectWord   = errors.New("expect wants allowed or denied after its name")
 	errToolNeedsArg = errors.New("tool wants a name and a JSON input")
 	errToolInput    = errors.New("tool input is not valid JSON")
 	errNeedsText    = errors.New("step wants text after its name")
+	errSpawnNoFile  = errors.New("spawn is missing the pid file to write, as in: spawn descendant.pid")
 	errTakesNoText  = errors.New("echo, hang and crash take nothing after their name")
-	errEmptyTurn    = errors.New("a turn needs at least one step before its separator")
+	errEmptyTurn    = errors.New("a turn needs at least one step or spawn before its separator")
 )
+
+func (t *Turn) add(line string) error {
+	name, rest := cutWord(line)
+	if name == "spawn" {
+		return t.addSpawn(rest)
+	}
+	parsed, err := parseStep(line)
+	if err != nil {
+		return err
+	}
+	t.steps = append(t.steps, parsed)
+	return nil
+}
+
+func (t *Turn) addSpawn(pidFile string) error {
+	if pidFile == "" {
+		return errSpawnNoFile
+	}
+	t.spawns = append(t.spawns, pidFile)
+	return nil
+}
+
+func (t *Turn) empty() bool {
+	return len(t.steps) == 0 && len(t.spawns) == 0
+}
 
 func parseStep(line string) (step, error) {
 	name, rest := cutWord(line)
 	switch name {
-	case "text":
+	case scriptKeywordText:
 		return textStep(stepText, rest)
-	case "error":
+	case scriptKeywordError:
 		return textStep(stepFail, rest)
 	case "apierror":
 		return textStep(stepAPIError, rest)
 	case "tool":
 		return toolStep(rest)
+	case "usage":
+		return usageStep(rest)
+	case "expect":
+		return expectStep(rest)
 	case "echo":
 		return bareStep(stepEcho, rest)
 	case "hang":
@@ -152,6 +189,21 @@ func textStep(kind stepKind, text string) (step, error) {
 	return step{kind: kind, text: text}, nil
 }
 
+func usageStep(rest string) (step, error) {
+	tokens, err := strconv.Atoi(rest)
+	if err != nil || tokens <= 0 {
+		return step{}, errUsageCount
+	}
+	return step{kind: stepUsage, tokens: tokens}, nil
+}
+
+func expectStep(word string) (step, error) {
+	if word != wordAllowed && word != wordDenied {
+		return step{}, errExpectWord
+	}
+	return step{kind: stepExpect, text: word}, nil
+}
+
 func toolStep(rest string) (step, error) {
 	tool, input := cutWord(rest)
 	if input == "" || tool == "" {
@@ -163,8 +215,7 @@ func toolStep(rest string) (step, error) {
 	return step{kind: stepTool, tool: tool, input: json.RawMessage(input)}, nil
 }
 
-// Turn returns the reply scripted for the turn at index, counted from zero
-// across every process that replayed this script. A turn past the end echoes.
+// Turn returns the reply scripted for the turn at index, counted across processes.
 func (s Script) Turn(index int) Turn {
 	if index < len(s.turns) {
 		return s.turns[index]

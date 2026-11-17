@@ -37,6 +37,41 @@ func TestParseScriptTakesAnyBlankAfterTheStepName(t *testing.T) {
 	}
 }
 
+func TestParseScriptKeepsSpawnsApartFromSteps(t *testing.T) {
+	script, err := ParseScript(strings.NewReader("spawn descendant.pid\ntext Voici\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	turn := script.Turn(0)
+	if !slices.Equal(turn.spawns, []string{"descendant.pid"}) {
+		t.Errorf("spawns: got %v, want [descendant.pid]", turn.spawns)
+	}
+	if len(turn.steps) != 1 || turn.steps[0].kind != stepText || turn.steps[0].text != "Voici" {
+		t.Errorf("steps: got %+v, want one text step Voici", turn.steps)
+	}
+}
+
+func TestParseScriptAcceptsASpawnOnlyTurn(t *testing.T) {
+	script, err := ParseScript(strings.NewReader("spawn descendant.pid\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if turn := script.Turn(0); !slices.Equal(turn.spawns, []string{"descendant.pid"}) || len(turn.steps) != 0 {
+		t.Errorf("got %+v, want only the spawn", turn)
+	}
+}
+
+func TestParseScriptReadsTheExpectedVerdict(t *testing.T) {
+	script, err := ParseScript(strings.NewReader("tool Bash {\"command\":\"ls\"}\nexpect denied\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := script.Turn(0).steps
+	if len(steps) != 2 || steps[1].kind != stepExpect || steps[1].text != wordDenied {
+		t.Fatalf("got %+v, want an expect step for denied after the tool", steps)
+	}
+}
+
 func TestParseScriptNamesTheBadLine(t *testing.T) {
 	for _, tc := range []struct {
 		source string
@@ -50,6 +85,11 @@ func TestParseScriptNamesTheBadLine(t *testing.T) {
 		{"text ok\nhang forever\n", 2, errTakesNoText},
 		{"---\ntext ok\n", 1, errEmptyTurn},
 		{"text ok\n---\n---\ntext ok\n", 3, errEmptyTurn},
+		{"spawn\n", 1, errSpawnNoFile},
+		{"spawn   \n", 1, errSpawnNoFile},
+		{"usage many\n", 1, errUsageCount},
+		{"usage 0\n", 1, errUsageCount},
+		{"expect maybe\n", 1, errExpectWord},
 	} {
 		_, err := ParseScript(strings.NewReader(tc.source))
 		lineErr, ok := errors.AsType[*LineError](err)

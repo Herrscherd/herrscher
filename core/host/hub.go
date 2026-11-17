@@ -55,6 +55,7 @@ type hub struct {
 	lifecycle  sync.Mutex
 	mu         sync.Mutex
 	live       map[string]liveSession
+	startups   map[<-chan struct{}]startupRun
 
 	listenedSessions map[string]struct{}
 	closed           bool
@@ -144,6 +145,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 			publish:         h.eventPublisher,
 			backend:         h.seedBackend,
 			models:          h.models,
+			sessions:        h.sessions,
 			recordUsage:     h.recordUsage,
 			record: func(session string, entry state.TranscriptEntry) {
 				if err := state.AppendTranscript(state.TranscriptPath(h.partDir, session), entry); err != nil {

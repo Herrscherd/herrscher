@@ -73,3 +73,6 @@ const CommandSocketVar = "HERRSCHER_COMMAND_SOCKET"
 // core/host because the supervisor is what sets it, and core/host imports the
 // supervisor, not the other way round.
 const SessionVar = "HERRSCHER_SESSION"
+
+// ApprovalKeyVar carries the token the daemon issued to a session at launch.
+const ApprovalKeyVar = "HERRSCHER_SESSION_TOKEN"

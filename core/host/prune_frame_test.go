@@ -105,9 +105,6 @@ func TestMaximumPruneFrameFitsTheControlWire(t *testing.T) {
 		t.Fatalf("WriteEvent: %v", err)
 	}
 	t.Logf("%d edits, %d-byte call ids: frame text %d bytes, control line %d bytes", len(edits), callIDWidth, len(frame.Text), wire.Len())
-	if headroom := control.MaxEventLine / 2; wire.Len() > headroom {
-		t.Fatalf("the largest prune frame takes %d bytes of a %d byte control line, more than the %d the escaping headroom allows", wire.Len(), control.MaxEventLine, headroom)
-	}
 	var read []contracts.Event
 	if err := control.ScanEvents(strings.NewReader(wire.String()), func(event contracts.Event) error {
 		read = append(read, event)
@@ -117,5 +114,35 @@ func TestMaximumPruneFrameFitsTheControlWire(t *testing.T) {
 	}
 	if len(read) != 1 || read[0].Text != frame.Text {
 		t.Fatalf("read %d events, want the prune frame back intact", len(read))
+	}
+}
+
+func TestChunkLimitFrameFitsTheControlWire(t *testing.T) {
+	empty, err := historywire.Prune("p1", []contracts.HistoryEdit{{Action: contracts.PruneCall}})
+	if err != nil {
+		t.Fatalf("Prune with an empty call id: %v", err)
+	}
+	quotes := strings.Repeat(`"`, (historywire.ChunkLimit-len(empty.Text))/2)
+	frame, err := historywire.Prune("p1", []contracts.HistoryEdit{{CallID: quotes, Action: contracts.PruneCall}})
+	if err != nil {
+		t.Fatalf("Prune of the heaviest frame the chunk limit accepts: %v", err)
+	}
+	if len(frame.Text) < historywire.ChunkLimit-1 {
+		t.Fatalf("frame text takes %d bytes, want it to reach the chunk limit of %d", len(frame.Text), historywire.ChunkLimit)
+	}
+	var wire bytes.Buffer
+	if err := control.WriteEvent(&wire, frame); err != nil {
+		t.Fatalf("WriteEvent: %v", err)
+	}
+	t.Logf("frame text %d bytes, control line %d bytes", len(frame.Text), wire.Len())
+	var read []contracts.Event
+	if err := control.ScanEvents(strings.NewReader(wire.String()), func(event contracts.Event) error {
+		read = append(read, event)
+		return nil
+	}); err != nil {
+		t.Fatalf("ScanEvents: %v, the heaviest prune frame does not fit the control line", err)
+	}
+	if len(read) != 1 || read[0].Text != frame.Text {
+		t.Fatalf("read %d events, want the heaviest prune frame back intact", len(read))
 	}
 }

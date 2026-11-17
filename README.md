@@ -1654,8 +1654,11 @@ Linux, and says it skips the step anywhere else.
   of the scenario if it still runs. `! descendantgone` is refused.
 - These waits poll with a short sleep: they wait on other processes, which a
   `testing/synctest` bubble cannot control.
-- A process that still carries the instance of the scenario after it ends fails the
-  run and is killed.
+- At the end of a scenario, `settle` sends SIGINT to every process still alive that
+  carries the instance of the scenario (the daemon, the fakes and their descendants),
+  then SIGKILL to the survivors once `reapGrace` has passed. A process that this SIGINT
+  stops fails the scenario with `errStopped`, a process that already ended is neither
+  signalled nor counted, and a survivor of both signals is a leak (`errLeaked`).
 - The cleanup removes every runtime entry named after the instance, and the names
   `core/host` gives its command and events sockets and its lock, hashed ones included.
   It only touches a runtime directory that `core/host` accepts as private to the user.

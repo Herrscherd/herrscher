@@ -368,7 +368,9 @@ func (s *warningSink) Close() {
 	s.logNotConfirmed(taken.lost, taken.unconfirmed)
 	if !s.joinLastWrite() {
 		note := s.stillRunning()
-		s.log.reserve("still-running", func() { s.log.logger.Warn("a warning write was still running when Close returned", "note", note) })
+		s.log.reserve("still-running", func(logger *slog.Logger) {
+			logger.Warn("a warning write was still running when Close returned", "note", note)
+		})
 	}
 	logged, stopLogged := writeBudget()
 	defer stopLogged()

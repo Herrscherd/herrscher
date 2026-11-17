@@ -2,7 +2,6 @@ package host
 
 import (
 	"log/slog"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -62,116 +61,12 @@ func awaitHubLogs(t *testing.T, h *hub) {
 	}
 }
 
-func announcedAbandons(out string) int {
-	total := 0
-	for _, line := range strings.Split(out, "\n") {
-		if !strings.Contains(line, "warning lines were abandoned") {
-			continue
-		}
-		count, err := strconv.Atoi(logField(line, "abandoned"))
-		if err == nil {
-			total += count
-		}
-	}
-	return total
-}
-
-func TestBoundedLogHoldsItsLinesWhileTheWriterIsFrozen(t *testing.T) {
+func TestBoundedLogWritesTheBilanBeforeThePendingNotes(t *testing.T) {
 	frozen := freezeLogOn(t, "blocked line")
 	log := boundedLog{logger: slog.Default()}
-	log.warn(func() { slog.Warn("blocked line") })
+	log.reserve("blocked", func(logger *slog.Logger) { logger.Warn("blocked line") })
 	awaitBackground(t, frozen.entered, "the first line never reached the blocked log")
-	for range boundedLogQueue {
-		log.warn(func() { slog.Warn("queued line") })
-	}
-	log.warn(func() { slog.Warn("overflow line") })
-	if strings.Contains(frozen.logs.String(), "queued line") {
-		t.Fatal("a queued line was written while the writer was still blocked")
-	}
-	frozen.thaw()
-	awaitLogIdle(t, &log)
-	out := frozen.logs.String()
-	if got := announcedAbandons(out); got != 1 {
-		t.Fatalf("the abandoned lines were announced %d times in total, want exactly one line of 1: %q", got, out)
-	}
-	if got := strings.Count(out, "queued line"); got != boundedLogQueue {
-		t.Fatalf("%d queued lines were written, want all %d", got, boundedLogQueue)
-	}
-	if strings.Contains(out, "overflow line") {
-		t.Fatalf("a line refused by the full queue was written: %q", out)
-	}
-}
-
-func TestBoundedLogCountsEveryConcurrentAbandon(t *testing.T) {
-	frozen := freezeLogOn(t, "blocked line")
-	log := boundedLog{logger: slog.Default()}
-	log.warn(func() { slog.Warn("blocked line") })
-	awaitBackground(t, frozen.entered, "the first line never reached the blocked log")
-	const writers, linesEach = 8, 25
-	var offering sync.WaitGroup
-	for range writers {
-		offering.Add(1)
-		go func() {
-			defer offering.Done()
-			for range linesEach {
-				log.warn(func() { slog.Warn("concurrent line") })
-			}
-		}()
-	}
-	offering.Wait()
-	frozen.thaw()
-	awaitLogIdle(t, &log)
-	out := frozen.logs.String()
-	if got := strings.Count(out, "concurrent line"); got != boundedLogQueue {
-		t.Fatalf("%d concurrent lines were written, want the %d that fitted the queue", got, boundedLogQueue)
-	}
-	if got, want := announcedAbandons(out), writers*linesEach-boundedLogQueue; got != want {
-		t.Fatalf("the announcements count %d abandoned lines, want %d: an abandon was lost or counted twice: %q", got, want, out)
-	}
-}
-
-func TestBoundedLogAnnouncesAbandonsOfferedWhileTheAnnouncementIsFrozen(t *testing.T) {
-	frozen := freezeLogOn(t, "abandoned=")
-	log := boundedLog{logger: slog.Default()}
-	gate, openGate := gateUntilCleanup(t)
-	gateEntered := make(chan struct{})
-	log.warn(func() { close(gateEntered); <-gate })
-	awaitBackground(t, gateEntered, "the gate line never reached the log")
-	for range boundedLogQueue {
-		log.warn(func() { slog.Warn("first line") })
-	}
-	log.warn(func() { slog.Warn("first refused") })
-	openGate()
-	awaitBackground(t, frozen.entered, "the abandon announcement never reached the frozen log")
-	for range boundedLogQueue {
-		log.warn(func() { slog.Warn("second line") })
-	}
-	refusing := runInBackground(func() {
-		for range 3 {
-			log.warn(func() { slog.Warn("second refused") })
-		}
-	})
-	awaitBackground(t, refusing, "a refused line blocked the caller while the announcement was frozen")
-	if strings.Contains(frozen.logs.String(), "second line") {
-		t.Fatal("a second writer wrote a queued line while the first one was blocked in the announcement")
-	}
-	frozen.thaw()
-	awaitLogIdle(t, &log)
-	out := frozen.logs.String()
-	if got := strings.Count(out, "second line"); got != boundedLogQueue {
-		t.Fatalf("%d second lines were written, want all %d", got, boundedLogQueue)
-	}
-	if got := announcedAbandons(out); got != 4 {
-		t.Fatalf("the announcements count %d abandoned lines, want 4: the abandons offered during the frozen announcement were lost: %q", got, out)
-	}
-}
-
-func TestBoundedLogWritesTheBilanBeforeTheQueuedLines(t *testing.T) {
-	frozen := freezeLogOn(t, "blocked line")
-	log := boundedLog{logger: slog.Default()}
-	log.warn(func() { slog.Warn("blocked line") })
-	awaitBackground(t, frozen.entered, "the first line never reached the blocked log")
-	log.warn(func() { slog.Warn("queued line") })
+	log.reserve("queued", func(logger *slog.Logger) { logger.Warn("queued line") })
 	log.addBilan(2, 1, writeNotConfirmed)
 	frozen.thaw()
 	awaitLogIdle(t, &log)
@@ -179,7 +74,7 @@ func TestBoundedLogWritesTheBilanBeforeTheQueuedLines(t *testing.T) {
 	bilan := strings.Index(out, "not all confirmed")
 	queued := strings.Index(out, "queued line")
 	if bilan < 0 || queued < 0 || bilan > queued {
-		t.Fatalf("the bilan must be written before the lines queued earlier: bilan at %d, queued line at %d: %q", bilan, queued, out)
+		t.Fatalf("the bilan must be written before the notes pending earlier: bilan at %d, queued line at %d: %q", bilan, queued, out)
 	}
 }
 
@@ -188,12 +83,12 @@ func TestBoundedLogKeepsItsSummaryStateBounded(t *testing.T) {
 	log := boundedLog{logger: slog.Default()}
 	gate, openGate := gateUntilCleanup(t)
 	gateEntered := make(chan struct{})
-	log.warn(func() { close(gateEntered); <-gate })
+	log.reserve("gate", func(*slog.Logger) { close(gateEntered); <-gate })
 	awaitBackground(t, gateEntered, "the gate line never reached the log")
 	for range 500 {
 		log.addBilan(1, 0, writeNotConfirmed)
 		log.addBilan(0, 1, writeNotConfirmed)
-		log.reserve("still-running", func() { slog.Warn("still running line") })
+		log.reserve("still-running", func(logger *slog.Logger) { logger.Warn("still running line") })
 	}
 	log.mu.Lock()
 	sum, notes := log.bilan, len(log.notes)

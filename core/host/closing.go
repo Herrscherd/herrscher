@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"slices"
 	"sync"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
@@ -26,13 +27,25 @@ func logWriteFailure(_ int, err error) {
 
 const boundedLogQueue = 8
 
+type bilanSum struct {
+	lost        int
+	unconfirmed int
+}
+
+type namedLine struct {
+	key  string
+	line func()
+}
+
 type boundedLog struct {
-	mu        sync.Mutex
-	queue     []func()
-	summary   func()
-	abandoned int
-	running   bool
-	idle      []chan struct{}
+	mu         sync.Mutex
+	queue      []func()
+	notes      []namedLine
+	bilan      bilanSum
+	writeBilan func(lost, unconfirmed int)
+	abandoned  int
+	running    bool
+	idle       []chan struct{}
 }
 
 func (l *boundedLog) warn(line func()) {
@@ -46,16 +59,25 @@ func (l *boundedLog) warn(line func()) {
 	l.startLocked()
 }
 
-func (l *boundedLog) reserve(line func()) {
+func (l *boundedLog) addBilan(lost, unconfirmed int, write func(lost, unconfirmed int)) {
+	if lost == 0 && unconfirmed == 0 {
+		return
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if previous := l.summary; previous != nil {
-		l.summary = func() {
-			previous()
-			line()
-		}
+	l.bilan.lost += lost
+	l.bilan.unconfirmed += unconfirmed
+	l.writeBilan = write
+	l.startLocked()
+}
+
+func (l *boundedLog) reserve(key string, line func()) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if index := slices.IndexFunc(l.notes, func(note namedLine) bool { return note.key == key }); index >= 0 {
+		l.notes[index].line = line
 	} else {
-		l.summary = line
+		l.notes = append(l.notes, namedLine{key: key, line: line})
 	}
 	l.startLocked()
 }
@@ -107,9 +129,15 @@ func (l *boundedLog) run() {
 }
 
 func (l *boundedLog) takeLocked() func() {
-	if line := l.summary; line != nil {
-		l.summary = nil
-		return line
+	if l.bilan.lost != 0 || l.bilan.unconfirmed != 0 {
+		lost, unconfirmed, write := l.bilan.lost, l.bilan.unconfirmed, l.writeBilan
+		l.bilan = bilanSum{}
+		return func() { write(lost, unconfirmed) }
+	}
+	if len(l.notes) > 0 {
+		next := l.notes[0]
+		l.notes = l.notes[1:]
+		return next.line
 	}
 	if len(l.queue) == 0 {
 		return nil

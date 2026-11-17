@@ -367,7 +367,7 @@ func (s *warningSink) Close() {
 	s.logNotConfirmed(taken.lost, taken.unconfirmed)
 	if !s.joinLastWrite() {
 		note := s.stillRunning()
-		s.log.reserve(func() { slog.Warn("a warning write was still running when Close returned", "note", note) })
+		s.log.reserve("still-running", func() { slog.Warn("a warning write was still running when Close returned", "note", note) })
 	}
 	logged, stopLogged := writeBudget()
 	defer stopLogged()
@@ -455,11 +455,11 @@ func finish(entry *warning, err error) {
 }
 
 func (s *warningSink) logNotConfirmed(lost, unconfirmed int) {
-	if lost > 0 || unconfirmed > 0 {
-		s.log.reserve(func() {
-			slog.Warn("warnings were not all confirmed when the sink closed", "lost", lost, "unconfirmed", unconfirmed)
-		})
-	}
+	s.log.addBilan(lost, unconfirmed, writeNotConfirmed)
+}
+
+func writeNotConfirmed(lost, unconfirmed int) {
+	slog.Warn("warnings were not all confirmed when the sink closed", "lost", lost, "unconfirmed", unconfirmed)
 }
 
 func writeBudget() (<-chan struct{}, func()) {

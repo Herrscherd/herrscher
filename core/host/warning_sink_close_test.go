@@ -93,6 +93,7 @@ func TestSummaryAcceptedAfterCloseDoesNotCountLossesTwice(t *testing.T) {
 	if got := strings.Count(writer.out.String(), englishLostLine(1)+"\n"); got != 1 {
 		t.Fatalf("the summary reached the output %d times, want once: %q", got, writer.out.String())
 	}
+	awaitLogIdle(t, &sink.log)
 	lines := notConfirmedLines(logs.String())
 	if len(lines) != 1 || logField(lines[0], "lost") != "1" {
 		t.Fatalf("the bilan logged %q, want only the queued A (lost=1): the oversized warning is already named by the summary that Close let through", lines)
@@ -431,11 +432,13 @@ func TestWarningAfterCloseIsAnnouncedOnlyWithItsNewLoss(t *testing.T) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
 	sink.Close()
+	awaitLogIdle(t, &sink.log)
 	before := strings.Count(logs.String(), "not all confirmed")
 
 	if err := sink.announce("OVERRUN"); !errors.Is(err, errWarningAbandoned) {
 		t.Fatalf("the overrun behind a frozen writer after Close returned %v, want errWarningAbandoned", err)
 	}
+	awaitLogIdle(t, &sink.log)
 	if got := strings.Count(logs.String(), "not all confirmed"); got != before+1 {
 		t.Fatalf("the lost overrun after Close logged %d new lines, want 1", got-before)
 	}

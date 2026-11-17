@@ -108,6 +108,7 @@ func TestStderrPortAnnouncesTheFirstLossAndTheTotalAtClose(t *testing.T) {
 	for range 3 {
 		_ = h.errPort.offer(writer, "overflow")
 	}
+	awaitLogIdle(t, &h.errPort.log)
 	if got := strings.Count(logs.String(), "stderr line dropped"); got != 1 {
 		t.Fatalf("the first lost stderr line was announced %d times, want once: %q", got, logs.String())
 	}

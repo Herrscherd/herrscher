@@ -10,6 +10,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
@@ -177,7 +178,7 @@ func TestPriceCompactionsPricesTheRemovedTokensAtTheCacheReadRate(t *testing.T) 
 func assertCompactionLines(t *testing.T, stage StageUsage, jev JevUsage, lang i18n.Language, want, notWant []string) {
 	t.Helper()
 	snapshot := Snapshot{Spend: Spend{Stages: []StageUsage{stage}, Jev: jev}}
-	lines, err := CompactionLines(snapshot, lang, termpaint.Palette{})
+	lines, err := CompactionLines(snapshot, clitext.NewMessages(), lang, termpaint.Palette{})
 	if err != nil {
 		t.Fatalf("CompactionLines: %v", err)
 	}

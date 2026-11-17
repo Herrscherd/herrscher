@@ -245,7 +245,7 @@ func (c countingCatalog) Open(name string) (fs.File, error) {
 	return c.fsys.Open(name)
 }
 
-func TestMessagesAreBuiltOncePerOwner(t *testing.T) {
+func TestRenderingDoesNotRereadThePluginCatalog(t *testing.T) {
 	opens := 0
 	registerPlugins(t, contracts.Plugin{
 		Manifest: contracts.Manifest{Kind: "counted", Category: contracts.CategorySkills},
@@ -256,37 +256,37 @@ func TestMessagesAreBuiltOncePerOwner(t *testing.T) {
 	if built == 0 {
 		t.Fatal("NewMessages read no plugin catalog, so the count below would prove nothing")
 	}
+	cause := errors.New("cause")
 	for range 5 {
 		if _, err := messages.Text(i18n.French, Key("fake.verb.help"), nil); err != nil {
 			t.Fatal(err)
 		}
-		messages.For(i18n.English).Text("fake.verb.help", nil)
-		messages.Failure(i18n.English, errors.New("cause"), Key("fake.verb.help"), nil)
+		if text := messages.For(i18n.English).Text("fake.verb.help", nil); text == "" {
+			t.Fatal("the translator rendered an empty text")
+		}
+		if err := messages.Failure(i18n.English, cause, Key("fake.verb.help"), nil); !errors.Is(err, cause) {
+			t.Fatalf("Failure = %v, want it to match the cause", err)
+		}
 	}
 	if opens != built {
 		t.Fatalf("rendering read the plugin catalog %d more times: the catalog must be built once per owner", opens-built)
 	}
 }
 
-func TestTextFacadeRebuildsTheCatalogOnEachCall(t *testing.T) {
-	opens := 0
+func TestTextFacadeRendersLikeAnOwner(t *testing.T) {
 	registerPlugins(t, contracts.Plugin{
 		Manifest: contracts.Manifest{Kind: "counted", Category: contracts.CategorySkills},
-		Catalog:  countingCatalog{fsys: pluginLocales("fake.verb.help", "Do the thing", "Fais la chose"), opens: &opens},
+		Catalog:  countingCatalog{fsys: pluginLocales("fake.verb.help", "Do the thing", "Fais la chose"), opens: new(int)},
 	})
-	before := opens
-	NewMessages()
-	oneBuild := opens - before
-	if oneBuild == 0 {
-		t.Fatal("NewMessages read no plugin catalog, so the count below would prove nothing")
+	want, err := NewMessages().Text(i18n.French, Key("fake.verb.help"), nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	before = opens
-	for range 2 {
-		if _, err := Text(i18n.French, Key("fake.verb.help"), nil); err != nil {
-			t.Fatal(err)
-		}
+	got, err := Text(i18n.French, Key("fake.verb.help"), nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got := opens - before; got != 2*oneBuild {
-		t.Fatalf("two façade calls read the plugin catalog %d times, want %d: the façade rebuilds per call by design", got, 2*oneBuild)
+	if got != want {
+		t.Fatalf("the façade rendered %q, the owner rendered %q", got, want)
 	}
 }

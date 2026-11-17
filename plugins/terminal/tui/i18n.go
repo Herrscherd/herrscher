@@ -34,15 +34,16 @@ const (
 var localeFiles embed.FS
 
 type translator struct {
-	lang    i18n.Language
-	catalog func() (*i18n.Catalog, error)
-	cli     *clitext.Translator
-	cliOnce *sync.Once
-	log     *slog.Logger
+	messages *clitext.Messages
+	lang     i18n.Language
+	catalog  func() (*i18n.Catalog, error)
+	cli      *clitext.Translator
+	cliOnce  *sync.Once
+	log      *slog.Logger
 }
 
 func newTranslator() translator {
-	return translator{lang: i18n.English, catalog: sync.OnceValues(loadLocales), cli: clitext.For(i18n.English), cliOnce: new(sync.Once), log: slog.Default()}
+	return translator{messages: clitext.NewMessages(), lang: i18n.English, catalog: sync.OnceValues(loadLocales), cli: clitext.For(i18n.English), cliOnce: new(sync.Once), log: slog.Default()}
 }
 
 func loadLocales() (*i18n.Catalog, error) {

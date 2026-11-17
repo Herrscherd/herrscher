@@ -11,6 +11,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/health"
 	"github.com/Herrscherd/herrscher/core/termpaint"
 )
@@ -41,7 +42,7 @@ func TestTableNeutralisesExternalTextOfEveryCell(t *testing.T) {
 		},
 	}
 	var out bytes.Buffer
-	if err := snapshot.Table(&out, i18n.English, termpaint.Palette{}); err != nil {
+	if err := snapshot.Table(&out, clitext.NewMessages(), i18n.English, termpaint.Palette{}); err != nil {
 		t.Fatalf("Table() error = %v", err)
 	}
 	assertNoRawControl(t, out.String())
@@ -64,7 +65,7 @@ func TestDetailsNeutralisesCauseAndRemedyOfACheck(t *testing.T) {
 		},
 	}
 	var out bytes.Buffer
-	if err := (health.Snapshot{}).Details(&out, []health.Check{check}, i18n.English, termpaint.Palette{}); err != nil {
+	if err := (health.Snapshot{}).Details(&out, clitext.NewMessages(), []health.Check{check}, i18n.English, termpaint.Palette{}); err != nil {
 		t.Fatalf("Details() error = %v", err)
 	}
 	assertNoRawControl(t, out.String())
@@ -81,7 +82,7 @@ func TestSummaryAndBannerNeutraliseVersionAndWorstCheck(t *testing.T) {
 		Checks: []health.Check{{Group: health.GroupKeys, Name: "openai\x07", Report: contracts.ProbeReport{State: contracts.HealthDown}}},
 	}
 	var out bytes.Buffer
-	if err := snapshot.Table(&out, i18n.English, termpaint.Palette{}); err != nil {
+	if err := snapshot.Table(&out, clitext.NewMessages(), i18n.English, termpaint.Palette{}); err != nil {
 		t.Fatalf("Table() error = %v", err)
 	}
 	assertNoRawControl(t, out.String())
@@ -99,7 +100,7 @@ func TestCompactionTitleNeutralisesTheStack(t *testing.T) {
 			{Group: health.GroupCompaction, Name: "compact", Report: contracts.ProbeReport{State: contracts.HealthOK}},
 		},
 	}
-	view, err := snapshot.View(i18n.English)
+	view, err := snapshot.View(clitext.NewMessages(), i18n.English)
 	if err != nil {
 		t.Fatalf("View() error = %v", err)
 	}
@@ -129,7 +130,7 @@ func TestTableEscapesAnEscapeHeldByAnUnknownKindArgument(t *testing.T) {
 		{Group: health.GroupBackends, Name: "claude", Report: contracts.ProbeReport{State: contracts.HealthDown, Detail: detail}},
 	}}
 	var out bytes.Buffer
-	if err := snapshot.Table(&out, i18n.English, termpaint.Palette{}); err != nil {
+	if err := snapshot.Table(&out, clitext.NewMessages(), i18n.English, termpaint.Palette{}); err != nil {
 		t.Fatalf("Table() error = %v", err)
 	}
 	assertNoRawControl(t, out.String())
@@ -143,7 +144,7 @@ func TestValidUTF8ReachesTheTableUnchanged(t *testing.T) {
 		{Group: health.GroupBackends, Name: "démon ✕ 日本", Report: contracts.ProbeReport{State: contracts.HealthOK}},
 	}}
 	var out bytes.Buffer
-	if err := snapshot.Table(&out, i18n.English, termpaint.Palette{}); err != nil {
+	if err := snapshot.Table(&out, clitext.NewMessages(), i18n.English, termpaint.Palette{}); err != nil {
 		t.Fatalf("Table() error = %v", err)
 	}
 	if !strings.Contains(out.String(), "démon ✕ 日本") {

@@ -110,10 +110,10 @@ func checkHealth(ctx context.Context, layout host.RuntimeLayout, messages *clite
 	if opts.quiet {
 		return code, nil
 	}
-	return code, writeHealth(writer, snapshot, checks, opts, lang)
+	return code, writeHealth(writer, messages, snapshot, checks, opts, lang)
 }
 
-func writeHealth(writer io.Writer, snapshot health.Snapshot, checks []health.Check, opts healthOptions, lang i18n.Language) error {
+func writeHealth(writer io.Writer, messages *clitext.Messages, snapshot health.Snapshot, checks []health.Check, opts healthOptions, lang i18n.Language) error {
 	if opts.asJSON {
 		snapshot.Checks = checks
 		raw, err := health.Encode(snapshot)
@@ -124,9 +124,9 @@ func writeHealth(writer io.Writer, snapshot health.Snapshot, checks []health.Che
 		return err
 	}
 	if opts.service != "" {
-		return snapshot.Details(writer, checks, lang, opts.pal)
+		return snapshot.Details(writer, messages, checks, lang, opts.pal)
 	}
-	return snapshot.Table(writer, lang, opts.pal)
+	return snapshot.Table(writer, messages, lang, opts.pal)
 }
 
 func fetchHealth(ctx context.Context, layout host.RuntimeLayout, instance string, deep bool) (health.Snapshot, error) {

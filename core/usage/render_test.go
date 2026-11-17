@@ -8,6 +8,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
@@ -29,7 +30,7 @@ func limitsSnapshot(now time.Time) Snapshot {
 }
 
 func TestLimitLinesPutsClaudeFirstAndAlignsTheColumns(t *testing.T) {
-	lines, err := LimitLines(limitsSnapshot(time.Now()), i18n.French, termpaint.Palette{})
+	lines, err := LimitLines(limitsSnapshot(time.Now()), clitext.NewMessages(), i18n.French, termpaint.Palette{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,11 +61,11 @@ func TestLimitLinesPutsClaudeFirstAndAlignsTheColumns(t *testing.T) {
 
 func TestPaletteColorsTheRolesWithoutBreakingTheAlignment(t *testing.T) {
 	now := time.Now()
-	plain, err := LimitLines(limitsSnapshot(now), i18n.French, termpaint.Palette{})
+	plain, err := LimitLines(limitsSnapshot(now), clitext.NewMessages(), i18n.French, termpaint.Palette{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	colored, err := LimitLines(limitsSnapshot(now), i18n.French, termpaint.ANSIPalette())
+	colored, err := LimitLines(limitsSnapshot(now), clitext.NewMessages(), i18n.French, termpaint.ANSIPalette())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +85,7 @@ func TestCostLinesDrawsAShareBarPerModel(t *testing.T) {
 		Accounts: []Share{{Vendor: "claude", Account: "pro", Cost: 10, Tokens: 2000}},
 		Models:   []Share{{Model: "claude-opus-5-5", Cost: 9, Tokens: 1500}, {Model: "claude-haiku-5-5", Cost: 1, Tokens: 500}},
 	}}
-	lines, err := CostLines(snapshot, i18n.French, time.UTC, termpaint.Palette{})
+	lines, err := CostLines(snapshot, clitext.NewMessages(), i18n.French, time.UTC, termpaint.Palette{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +121,7 @@ func TestShareBarDrawsNothingForAZeroShare(t *testing.T) {
 
 func TestLimitPercentShowsTheRoundedZeroAsExhausted(t *testing.T) {
 	bad := func(text string) string { return "<" + text + ">" }
-	text := &renderer{lang: i18n.French, pal: termpaint.Palette{Bad: bad}}
+	text := &renderer{messages: clitext.NewMessages(), lang: i18n.French, pal: termpaint.Palette{Bad: bad}}
 	if got := limitPercent(contracts.Limit{UsedPercent: 99.6}, text); got != "<0 %>" {
 		t.Fatalf("limitPercent at 0,4 %% left = %q, want the exhausted style", got)
 	}

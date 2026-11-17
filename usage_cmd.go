@@ -52,7 +52,7 @@ func runUsage(ctx context.Context, layout host.RuntimeLayout, messages *clitext.
 	if err != nil {
 		return err
 	}
-	return writeUsage(os.Stdout, snapshot, opts, lang, outputPalette(os.Stdout))
+	return writeUsage(os.Stdout, messages, snapshot, opts, lang, outputPalette(os.Stdout))
 }
 
 func outputPalette(out *os.File) termpaint.Palette {
@@ -173,7 +173,7 @@ func fetchUsage(ctx context.Context, layout host.RuntimeLayout, instance string,
 	return usagecore.Decode([]byte(out))
 }
 
-func writeUsage(writer io.Writer, snapshot usagecore.Snapshot, opts usageOptions, lang i18n.Language, pal termpaint.Palette) error {
+func writeUsage(writer io.Writer, messages *clitext.Messages, snapshot usagecore.Snapshot, opts usageOptions, lang i18n.Language, pal termpaint.Palette) error {
 	if opts.asJSON {
 		raw, err := usagecore.Encode(snapshot)
 		if err != nil {
@@ -182,7 +182,7 @@ func writeUsage(writer io.Writer, snapshot usagecore.Snapshot, opts usageOptions
 		_, err = fmt.Fprintln(writer, string(raw))
 		return err
 	}
-	lines, err := usageLines(snapshot, opts.view, lang, pal)
+	lines, err := usageLines(messages, snapshot, opts.view, lang, pal)
 	if err != nil {
 		return err
 	}
@@ -194,15 +194,15 @@ func writeUsage(writer io.Writer, snapshot usagecore.Snapshot, opts usageOptions
 	return nil
 }
 
-func usageLines(snapshot usagecore.Snapshot, view string, lang i18n.Language, pal termpaint.Palette) ([]string, error) {
+func usageLines(messages *clitext.Messages, snapshot usagecore.Snapshot, view string, lang i18n.Language, pal termpaint.Palette) ([]string, error) {
 	switch view {
 	case usageViewCost:
-		return usagecore.CostLines(snapshot, lang, time.Local, pal)
+		return usagecore.CostLines(snapshot, messages, lang, time.Local, pal)
 	case usageViewTokens:
-		return usagecore.TokenLines(snapshot, lang, pal)
+		return usagecore.TokenLines(snapshot, messages, lang, pal)
 	case usageViewCompact:
-		return usagecore.CompactionLines(snapshot, lang, pal)
+		return usagecore.CompactionLines(snapshot, messages, lang, pal)
 	default:
-		return usagecore.LimitLines(snapshot, lang, pal)
+		return usagecore.LimitLines(snapshot, messages, lang, pal)
 	}
 }

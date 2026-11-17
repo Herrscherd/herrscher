@@ -14,8 +14,8 @@ import (
 // often the backend had to run behind it, then one block per stage with its runs and
 // their outcomes, the calls it examined and removed, what its model requests cost, and
 // the dollars its removed tokens saved.
-func CompactionLines(snapshot Snapshot, lang i18n.Language, pal termpaint.Palette) ([]string, error) {
-	text := &renderer{lang: lang, pal: pal}
+func CompactionLines(snapshot Snapshot, messages *clitext.Messages, lang i18n.Language, pal termpaint.Palette) ([]string, error) {
+	text := &renderer{messages: messages, lang: lang, pal: pal}
 	lines := append(truncatedNotice(snapshot, text), compactionBody(snapshot, text)...)
 	return lines, text.err
 }

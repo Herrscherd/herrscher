@@ -9,6 +9,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
@@ -33,10 +34,18 @@ func TestTruncatedLedgerShowsTheNoticeBeforeThePartialData(t *testing.T) {
 		t.Fatal(err)
 	}
 	renders := map[string]func(Snapshot) ([]string, error){
-		"cost":       func(s Snapshot) ([]string, error) { return CostLines(s, i18n.English, nil, termpaint.Palette{}) },
-		"tokens":     func(s Snapshot) ([]string, error) { return TokenLines(s, i18n.English, termpaint.Palette{}) },
-		"panel":      func(s Snapshot) ([]string, error) { return CostPanel(s, i18n.English, nil, termpaint.Palette{}, 80) },
-		"compaction": func(s Snapshot) ([]string, error) { return CompactionLines(s, i18n.English, termpaint.Palette{}) },
+		"cost": func(s Snapshot) ([]string, error) {
+			return CostLines(s, clitext.NewMessages(), i18n.English, nil, termpaint.Palette{})
+		},
+		"tokens": func(s Snapshot) ([]string, error) {
+			return TokenLines(s, clitext.NewMessages(), i18n.English, termpaint.Palette{})
+		},
+		"panel": func(s Snapshot) ([]string, error) {
+			return CostPanel(s, clitext.NewMessages(), i18n.English, nil, termpaint.Palette{}, 80)
+		},
+		"compaction": func(s Snapshot) ([]string, error) {
+			return CompactionLines(s, clitext.NewMessages(), i18n.English, termpaint.Palette{})
+		},
 	}
 	for name, render := range renders {
 		want, err := render(readable)
@@ -81,10 +90,18 @@ func TestTruncatedLedgerWithoutReadableDataSaysSo(t *testing.T) {
 
 func emptyViews(snapshot Snapshot, lang i18n.Language) map[string]func() ([]string, error) {
 	return map[string]func() ([]string, error){
-		"cost":       func() ([]string, error) { return CostLines(snapshot, lang, nil, termpaint.Palette{}) },
-		"tokens":     func() ([]string, error) { return TokenLines(snapshot, lang, termpaint.Palette{}) },
-		"panel":      func() ([]string, error) { return CostPanel(snapshot, lang, nil, termpaint.Palette{}, 80) },
-		"compaction": func() ([]string, error) { return CompactionLines(snapshot, lang, termpaint.Palette{}) },
+		"cost": func() ([]string, error) {
+			return CostLines(snapshot, clitext.NewMessages(), lang, nil, termpaint.Palette{})
+		},
+		"tokens": func() ([]string, error) {
+			return TokenLines(snapshot, clitext.NewMessages(), lang, termpaint.Palette{})
+		},
+		"panel": func() ([]string, error) {
+			return CostPanel(snapshot, clitext.NewMessages(), lang, nil, termpaint.Palette{}, 80)
+		},
+		"compaction": func() ([]string, error) {
+			return CompactionLines(snapshot, clitext.NewMessages(), lang, termpaint.Palette{})
+		},
 	}
 }
 

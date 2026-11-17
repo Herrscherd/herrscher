@@ -41,20 +41,24 @@ type attachedDaemon struct {
 
 const sessionCacheTTL = time.Second
 
+func newAttachedDaemonState(messages *clitext.Messages, lang i18n.Language, done <-chan struct{}, events chan tui.RoutedEvent) *attachedDaemon {
+	return &attachedDaemon{
+		messages:  messages,
+		lang:      lang,
+		done:      done,
+		events:    events,
+		channelOf: make(map[string]string),
+		nameOf:    make(map[string]string),
+	}
+}
+
 func newAttachedDaemon(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, instance, statePath string, lang i18n.Language) (*attachedDaemon, error) {
 	stream, err := host.SubscribeDaemonEvents(ctx, layout, instance)
 	if err != nil {
 		return nil, err
 	}
-	daemon := &attachedDaemon{
-		messages:  messages,
-		lang:      lang,
-		done:      ctx.Done(),
-		instance:  instance,
-		events:    make(chan tui.RoutedEvent, attachBuffer),
-		channelOf: make(map[string]string),
-		nameOf:    make(map[string]string),
-	}
+	daemon := newAttachedDaemonState(messages, lang, ctx.Done(), make(chan tui.RoutedEvent, attachBuffer))
+	daemon.instance = instance
 	daemon.send = func(argv []string) (string, error) {
 		call, cancel := context.WithTimeout(ctx, attachTimeout)
 		defer cancel()

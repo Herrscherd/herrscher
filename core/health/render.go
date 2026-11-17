@@ -30,8 +30,8 @@ const (
 // them, one aligned line each, and the summary line that counts the checks per
 // state and names the worst one when something fails. pal paints each part; the
 // zero Palette writes plain text with the same alignment.
-func (s Snapshot) Table(writer io.Writer, lang i18n.Language, pal termpaint.Palette) error {
-	text := newRenderer(lang)
+func (s Snapshot) Table(writer io.Writer, messages *clitext.Messages, lang i18n.Language, pal termpaint.Palette) error {
+	text := newRenderer(messages, lang)
 	view := s.buildView(text)
 	if text.err != nil {
 		return text.err
@@ -59,8 +59,8 @@ func (s Snapshot) Table(writer io.Writer, lang i18n.Language, pal termpaint.Pale
 // Details writes the detail view of checks: a head line with the name, the
 // latency and the facts of each one, then its state, cause and remedy on aligned
 // rows.
-func (s Snapshot) Details(writer io.Writer, checks []Check, lang i18n.Language, pal termpaint.Palette) error {
-	text := newRenderer(lang)
+func (s Snapshot) Details(writer io.Writer, messages *clitext.Messages, checks []Check, lang i18n.Language, pal termpaint.Palette) error {
+	text := newRenderer(messages, lang)
 	rows := s.buildRows(checks, text)
 	labels := [...]string{
 		text.key(clitext.HealthDetailState, nil),
@@ -243,17 +243,18 @@ func (w *lineWriter) line(text string) {
 }
 
 type renderer struct {
-	lang    i18n.Language
-	notices *contracts.Renderer
-	err     error
+	messages *clitext.Messages
+	lang     i18n.Language
+	notices  *contracts.Renderer
+	err      error
 }
 
-func newRenderer(lang i18n.Language) *renderer {
-	return &renderer{lang: lang, notices: contracts.NewRenderer()}
+func newRenderer(messages *clitext.Messages, lang i18n.Language) *renderer {
+	return &renderer{messages: messages, lang: lang, notices: contracts.NewRenderer()}
 }
 
 func (r *renderer) key(key clitext.Key, params clitext.Params) string {
-	value, err := clitext.Text(r.lang, key, params)
+	value, err := r.messages.Text(r.lang, key, params)
 	r.keep(err)
 	return value
 }

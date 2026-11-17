@@ -31,7 +31,7 @@ func TestCompactionFactsShowTheKeyTheLastReplyAndTheLastError(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			snapshot := Snapshot{Checks: []Check{{Group: GroupCompaction, Name: "jev", Facts: tc.facts}}}
-			view, err := snapshot.View(i18n.English)
+			view, err := snapshot.View(clitext.NewMessages(), i18n.English)
 			if err != nil {
 				t.Fatalf("View: %v", err)
 			}

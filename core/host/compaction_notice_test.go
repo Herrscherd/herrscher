@@ -160,7 +160,7 @@ func TestMalformedNoticeKeepsTheNoteAndTheFigures(t *testing.T) {
 		Text:   "compacté",
 		Tokens: 50_000,
 		Done:   true,
-		Value:  `{"code":1,"args":[{"name":"X","kind":9,"value":"a"}]}`,
+		Value:  `{"code":1,"args":[{"name":"X","kind":1}]}`,
 	}
 	if done := waitEmitted(t, f, eventwire.EventCompactionDone); done.Text != "compacté" || done.Tokens != 50_000 {
 		t.Fatalf("compaction_done = %+v, want the note and the measured figures", done)

@@ -2,6 +2,8 @@ package health_test
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"unicode"
@@ -110,6 +112,29 @@ func TestCompactionTitleNeutralisesTheStack(t *testing.T) {
 	assertNoRawControl(t, title)
 	if want := `jev\x1b[2J`; !strings.Contains(title, want) {
 		t.Errorf("compaction title does not contain %q: %q", want, title)
+	}
+}
+
+func TestTableEscapesAnEscapeHeldByAnUnknownKindArgument(t *testing.T) {
+	code, err := json.Marshal(contracts.CodeHealthUnreachable)
+	if err != nil {
+		t.Fatalf("json.Marshal(code) error = %v", err)
+	}
+	wire := fmt.Sprintf(`{"Code":%s,"Args":[{"name":"Reason","kind":99,"value":"\u001b[31mboom"}]}`, code)
+	var detail contracts.Notice
+	if err := json.Unmarshal([]byte(wire), &detail); err != nil {
+		t.Fatalf("json.Unmarshal(notice) error = %v", err)
+	}
+	snapshot := health.Snapshot{Checks: []health.Check{
+		{Group: health.GroupBackends, Name: "claude", Report: contracts.ProbeReport{State: contracts.HealthDown, Detail: detail}},
+	}}
+	var out bytes.Buffer
+	if err := snapshot.Table(&out, i18n.English, termpaint.Palette{}); err != nil {
+		t.Fatalf("Table() error = %v", err)
+	}
+	assertNoRawControl(t, out.String())
+	if want := `\x1b[31mboom`; !strings.Contains(out.String(), want) {
+		t.Errorf("Table() does not show the unknown-kind argument as %q:\n%s", want, out.String())
 	}
 }
 

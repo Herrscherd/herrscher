@@ -456,8 +456,8 @@ func scrollbackOf(partDir, name string) []contracts.ScrollbackLine {
 		return nil
 	}
 	out := make([]contracts.ScrollbackLine, 0, len(entries))
-	for _, e := range entries {
-		out = append(out, contracts.ScrollbackLine{Role: e.Role, Text: e.Text})
+	for i := range entries {
+		out = append(out, contracts.ScrollbackLine{Role: entries[i].Role, Text: entries[i].Text, TurnID: entries[i].TurnID})
 	}
 	return out
 }

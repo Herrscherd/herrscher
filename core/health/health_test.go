@@ -166,6 +166,30 @@ func TestStatelessReportGoesOverTheWireDown(t *testing.T) {
 	}
 }
 
+func TestOversizedReasonDoesNotDropTheSnapshot(t *testing.T) {
+	snapshot := health.Snapshot{Checks: []health.Check{
+		{
+			Group: health.GroupCore, Name: "daemon",
+			Report: contracts.ProbeReport{
+				State:  contracts.HealthDown,
+				Detail: contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", strings.Repeat("x", 70<<10))}},
+			},
+		},
+		{Group: health.GroupBackends, Name: "claude", Report: contracts.ProbeReport{State: contracts.HealthOK}},
+	}}
+	data, err := health.Encode(snapshot)
+	if err != nil {
+		t.Fatalf("Encode of a 70 KiB reason: %v", err)
+	}
+	back, err := health.Decode(data)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if len(back.Checks) != 2 || back.Checks[0].Report.State != contracts.HealthDown || back.Checks[1].Report.State != contracts.HealthOK {
+		t.Fatalf("checks = %+v, want both checks with their states", back.Checks)
+	}
+}
+
 func TestGarbledAnswerIsMalformed(t *testing.T) {
 	if _, err := health.Decode([]byte(`{"checks":[{"group":"nowhere"}]}`)); !errors.Is(err, health.ErrMalformed) {
 		t.Fatalf("Decode = %v, want ErrMalformed", err)

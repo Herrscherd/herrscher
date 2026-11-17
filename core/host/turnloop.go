@@ -156,6 +156,7 @@ func newSessionDriver(name string, gws []contracts.GatewaySet, toBridge chan<- c
 		failures:   make(chan compactFailure, noticeQueueCapacity),
 		noticeLog:  obs.Stderr(false),
 		gate:       noBudgetGate{},
+		persists:   newPersistWrites(),
 
 		enqueueTimeout: defaultEnqueueTimeout,
 

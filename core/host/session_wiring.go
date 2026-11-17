@@ -2,6 +2,13 @@ package host
 
 import "context"
 
+func (t *sessionTable) attachPersists(driver *sessionDriver) {
+	if t == nil {
+		return
+	}
+	driver.persists = t.persists
+}
+
 func (t *sessionTable) attachCompaction(driver *sessionDriver, name string) {
 	if t == nil {
 		return

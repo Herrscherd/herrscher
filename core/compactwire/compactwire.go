@@ -139,8 +139,9 @@ func boundNotice(notice contracts.Notice) contracts.Notice {
 	return contracts.Notice{Code: notice.Code, Args: bounded}
 }
 
-// Bound returns text unchanged when it fits the wire limit of a free text, else cuts it
-// at a UTF-8 boundary and appends "...".
+// Bound returns text unchanged when it is at most maxTextBytes long. Otherwise it cuts
+// text at a UTF-8 boundary to at most maxTextBytes bytes and appends "...", so the
+// result is at most maxTextBytes+3 bytes long.
 func Bound(text string) string {
 	if len(text) <= maxTextBytes {
 		return text

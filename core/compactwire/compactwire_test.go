@@ -359,6 +359,38 @@ func TestBoundedTextWithoutRuneStartDoesNotPanic(t *testing.T) {
 	}
 }
 
+func TestBoundKeepsATextAtOrBelowTheLimit(t *testing.T) {
+	for _, length := range []int{4095, 4096} {
+		text := strings.Repeat("a", length)
+		if got := Bound(text); got != text {
+			t.Fatalf("Bound(%d bytes) = %d bytes, want the text unchanged", length, len(got))
+		}
+	}
+}
+
+func TestBoundCutsAboveTheLimitAndAppendsTheMark(t *testing.T) {
+	got := Bound(strings.Repeat("a", 4097))
+	want := strings.Repeat("a", 4096) + truncationMark
+	if got != want {
+		t.Fatalf("Bound(4097 bytes) = %d bytes, want %d bytes ending with %q", len(got), len(want), truncationMark)
+	}
+}
+
+func TestBoundOutputIsAtMostTheLimitPlusTheMark(t *testing.T) {
+	got := Bound(strings.Repeat("a", 4097))
+	if len(got) != maxTextBytes+len(truncationMark) {
+		t.Fatalf("Bound output = %d bytes, want %d", len(got), maxTextBytes+len(truncationMark))
+	}
+}
+
+func TestBoundArgKeepsAnArgumentAtTheLimit(t *testing.T) {
+	arg := contracts.Text("Reason", strings.Repeat("a", 4096))
+	got := boundArg(arg)
+	if got.Name() != arg.Name() || got.Kind() != arg.Kind() || got.Value() != arg.Value() {
+		t.Fatalf("boundArg changed an argument of 4096 bytes: %v", got.Value())
+	}
+}
+
 func TestBoundedTextCutsBeforeAFourByteRune(t *testing.T) {
 	text := strings.Repeat("a", 4094) + "😀"
 	notice := contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", text)}}

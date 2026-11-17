@@ -49,6 +49,21 @@ func TestAReplyInTheQueueAndTheHistoryShowsOnce(t *testing.T) {
 	}
 }
 
+func TestAnIdenticalReplyAfterTheHistoryEndIsDroppedUntilTurnIDLands(t *testing.T) {
+	m, tb := newHistoryTab(t, []contracts.ScrollbackLine{
+		{Role: "user", Text: "question"},
+		{Role: "assistant", Text: "ok"},
+	})
+	historyCmd := m.route(replyEvent("ok"))
+	for _, msg := range historyMsgs(historyCmd) {
+		m.Update(msg)
+	}
+	want := []string{"question", "ok"}
+	if got := conversationTexts(tb); !slices.Equal(got, want) {
+		t.Fatalf("conversation = %q, want %q: without TurnID an identical reply after the history end is dropped as a duplicate", got, want)
+	}
+}
+
 func TestAQueueWithoutOverlapReplaysInFullAndInOrder(t *testing.T) {
 	m, tb := newHistoryTab(t, []contracts.ScrollbackLine{
 		{Role: "user", Text: "question"},

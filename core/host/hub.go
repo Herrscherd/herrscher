@@ -97,24 +97,6 @@ func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir str
 	return created
 }
 
-func (h *hub) textLanguage() languageSource {
-	if h.language != nil {
-		return h.language
-	}
-	return fixedLanguageSource(h.lang)
-}
-
-func (h *hub) sessionLanguageSource(name string) languageSource {
-	recorded := liveSessionLanguage(h.st, name)
-	operator := h.textLanguage()
-	return func() i18n.Language {
-		if lang := recorded(); lang != 0 {
-			return lang
-		}
-		return operator()
-	}
-}
-
 func (h *hub) operatorCommands() asOperator {
 	return asOperator{disp: h, lang: h.textLanguage()}
 }
@@ -174,34 +156,6 @@ func (h *hub) liveSink(ctx context.Context, sess state.Session) sessionSink {
 		Usage: func(records []usage.Record) {
 			h.recordUsage(sess, records)
 		},
-	}
-}
-
-func sessionLanguage(sess state.Session, operator i18n.Language) i18n.Language {
-	if lang := knownSessionLanguage(sess); lang != 0 {
-		return lang
-	}
-	return operator
-}
-
-func knownSessionLanguage(sess state.Session) i18n.Language {
-	lang, err := i18n.ParseLanguage(sess.Language)
-	if err != nil {
-		return 0
-	}
-	return lang
-}
-
-func liveSessionLanguage(store *state.State, name string) func() i18n.Language {
-	return func() i18n.Language {
-		if store == nil {
-			return 0
-		}
-		session, ok := store.FindSession(name)
-		if !ok {
-			return 0
-		}
-		return knownSessionLanguage(session)
 	}
 }
 

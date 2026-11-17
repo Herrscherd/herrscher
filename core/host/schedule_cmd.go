@@ -37,12 +37,12 @@ func scheduleAddVerb(lang languageSource, store *state.State, agents agentLookup
 		Param("cron", clitext.CmdParamScheduleAddCron, false).
 		Param("task", clitext.CmdParamScheduleAddTask, true).
 		Param("grace", clitext.CmdParamScheduleAddGrace, false).
-		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
+		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			now, err := currentScheduleTime()
 			if err != nil {
 				return contracts.Result{}, err
 			}
-			return cli.Data(addSchedule(lang(), store, agents, in, now))
+			return cli.Data(addSchedule(lang(), store, agents, input, now))
 		})
 }
 
@@ -176,12 +176,12 @@ func schedulePauseVerb(lang languageSource, store *state.State, verb string, pau
 	return contracts.New(nsSchedule, verb).
 		Help(helpKey).
 		Param(paramName, clitext.CmdParamScheduleName, true).
-		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
+		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			now, err := currentScheduleTime()
 			if err != nil {
 				return contracts.Result{}, err
 			}
-			return cli.Data(setSchedulePaused(lang(), store, paused, strings.TrimSpace(in.Get(paramName)), now))
+			return cli.Data(setSchedulePaused(lang(), store, paused, strings.TrimSpace(input.Get(paramName)), now))
 		})
 }
 

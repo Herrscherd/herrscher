@@ -44,7 +44,16 @@ func (t *sessionTable) issueToken(session string) string {
 
 type seedLease struct {
 	session string
-	ctx     context.Context
+	done    <-chan struct{}
+}
+
+func (l seedLease) alive() bool {
+	select {
+	case <-l.done:
+		return false
+	default:
+		return true
+	}
 }
 
 func (t *sessionTable) seedToken(ctx context.Context, session string) string {
@@ -54,12 +63,12 @@ func (t *sessionTable) seedToken(ctx context.Context, session string) string {
 		t.seedLeases = make(map[string]seedLease)
 	}
 	for token, lease := range t.seedLeases {
-		if lease.ctx.Err() != nil {
+		if !lease.alive() {
 			delete(t.seedLeases, token)
 		}
 	}
 	token := rand.Text()
-	t.seedLeases[token] = seedLease{session: session, ctx: ctx}
+	t.seedLeases[token] = seedLease{session: session, done: ctx.Done()}
 	return token
 }
 
@@ -83,7 +92,7 @@ func (t *sessionTable) tokenMatches(session, presented string) bool {
 		return true
 	}
 	for token, lease := range t.seedLeases {
-		if lease.session == session && lease.ctx.Err() == nil && sameToken(token, presented) {
+		if lease.session == session && lease.alive() && sameToken(token, presented) {
 			return true
 		}
 	}

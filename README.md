@@ -458,7 +458,7 @@ its session in a window while a daemon runs: that window sends the
 (`runPromptWindow`, `serve.go:358-366`, through `DaemonDispatch`,
 `core/host/daemonclient.go:82-89`). With `--print`, or without a window, the
 same command goes through the command registry and honours the variable
-(`runPrompt`, `serve.go:337-350`, and `forwardDaemonOwnedCommands`,
+(`runPrompt`, `serve.go:337-351`, and `forwardDaemonOwnedCommands`,
 `core/host/operator.go:36`, which reads the variable). Without the variable, any
 `herrscher` subcommand on sessions, approvals, hosts or roles reaches the
 operator's socket as `owner` while a daemon runs, `herrscher approve allow <id>`
@@ -475,7 +475,7 @@ the session that owns the socket, not the caller's. A shell of any session can
 therefore send a message or seed a session as session B. Those rights reach B
 itself and the sessions B delegated for every verb that names a session; the
 verbs that name none, such as `session info`
-(`core/host/session_cmd.go:144-150`) and `session list`
+(`core/host/session_cmd.go:144-151`) and `session list`
 (`core/internal/manager/session_query.go:88`), show every session. The check
 runs in `subjectOf` (`core/host/authz.go:149-165`) over the verbs of
 `sessionArgs` (`core/host/authz.go:57-90`), through `inSubtree`

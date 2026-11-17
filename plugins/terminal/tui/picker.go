@@ -77,6 +77,7 @@ func (m *model) openChannel(session contracts.SessionInfo) tea.Cmd {
 	if m.tm != nil {
 		m.tm.Seen(session.Name)
 	}
+	m.releaseHeld(session.Name)
 	m.ensureTab(session.ChannelID)
 	m.activate(session.ChannelID)
 	if !session.Archived {
@@ -157,6 +158,7 @@ func (m *model) chooseSwitch() {
 		return
 	}
 	row := m.switchRows[m.switchIdx]
+	m.releaseHeld(row.Name)
 	m.ensureTab(row.ChannelID)
 	m.activate(row.ChannelID)
 }

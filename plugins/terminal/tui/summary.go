@@ -268,15 +268,18 @@ func joinPanel(left, right []string, leftWidth, height int, separator string) []
 }
 
 func (m *model) refreshTabs() tea.Cmd {
-	if m.tm == nil {
+	if m.tm == nil || m.sessionsInFlight {
 		return nil
 	}
+	m.sessionsIssued++
+	m.sessionsInFlight = true
+	seq := m.sessionsIssued
 	backend := m.tm
 	channels := m.visibleChannels()
 	return func() tea.Msg {
 		infos := backend.Sessions()
 		markSeen(backend, infos, channels)
-		return sessionsMsg{infos: infos}
+		return sessionsMsg{seq: seq, infos: infos}
 	}
 }
 

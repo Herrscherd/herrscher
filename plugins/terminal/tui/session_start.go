@@ -40,6 +40,7 @@ func (m *model) handleSessionStarted(msg sessionStartedMsg) tea.Cmd {
 		return nil
 	}
 	m.flash = ""
+	m.releaseHeld(msg.name)
 	m.open.session = msg.name
 	m.tabSig = ""
 	return m.syncTabs()

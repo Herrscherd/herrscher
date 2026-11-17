@@ -2,7 +2,6 @@ package tui
 
 import (
 	"testing"
-	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -18,12 +17,11 @@ func (b *countingBackend) Sessions() []contracts.SessionInfo {
 	return b.sessions
 }
 
-func TestActiveInfoIsReadOncePerFrame(t *testing.T) {
+func TestActiveInfoNeverReadsTheDaemon(t *testing.T) {
 	be := &countingBackend{}
 	be.sessions = []contracts.SessionInfo{{Name: "a", ChannelID: "c1", Vendor: "claude"}}
 	m := newModel(be)
-	m.ensureTab("c1")
-	m.active = "c1"
+	m.syncTabs()
 
 	be.calls = 0
 	for range 20 {
@@ -31,8 +29,8 @@ func TestActiveInfoIsReadOncePerFrame(t *testing.T) {
 			t.Fatalf("activeInfo = %+v %v", s, ok)
 		}
 	}
-	if be.calls != 1 {
-		t.Fatalf("le hub a ete lu %d fois, une seule suffit", be.calls)
+	if be.calls != 0 {
+		t.Fatalf("activeInfo read the daemon %d times on the render path, want 0", be.calls)
 	}
 }
 
@@ -40,26 +38,13 @@ func TestActiveInfoFollowsTheActiveTab(t *testing.T) {
 	be := &countingBackend{}
 	be.sessions = []contracts.SessionInfo{{Name: "a", ChannelID: "c1", Vendor: "claude"}, {Name: "b", ChannelID: "c2", Vendor: "codex"}}
 	m := newModel(be)
+	m.syncTabs()
 	m.active = "c1"
 	if s, _ := m.activeInfo(); s.Vendor != "claude" {
 		t.Fatalf("vendor = %q", s.Vendor)
 	}
 	m.active = "c2"
 	if s, _ := m.activeInfo(); s.Vendor != "codex" {
-		t.Fatalf("changer d'onglet doit relire la fiche: %q", s.Vendor)
-	}
-}
-
-func TestActiveInfoExpires(t *testing.T) {
-	be := &countingBackend{}
-	be.sessions = []contracts.SessionInfo{{Name: "a", ChannelID: "c1", Vendor: "claude"}}
-	m := newModel(be)
-	m.active = "c1"
-	m.activeInfo()
-	be.calls = 1
-	m.infoAt = time.Now().Add(-2 * infoTTL)
-	m.activeInfo()
-	if be.calls != 2 {
-		t.Fatalf("une fiche perimee doit etre relue: %d lectures", be.calls)
+		t.Fatalf("changer d'onglet doit suivre la fiche déjà lue: %q", s.Vendor)
 	}
 }

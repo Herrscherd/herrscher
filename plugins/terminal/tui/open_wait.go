@@ -54,13 +54,21 @@ func (m *model) queueForOpen(text string) {
 }
 
 func (m *model) cancelOpenWait() {
-	if !m.open.queued {
+	if !m.awaitingOpen() {
 		return
 	}
+	name := m.open.session
 	if m.active == "" {
-		m.heldSession = m.open.session
+		m.heldSession = name
 	}
-	m.abandonOpen()
+	m.clearOpen()
+	m.flash = m.tr.t("tui.session.open_cancelled", map[string]any{tplArgName: name})
+}
+
+func (m *model) releaseHeld(name string) {
+	if m.heldSession == name {
+		m.heldSession = ""
+	}
 }
 
 func (m *model) abandonOpen() {
@@ -107,8 +115,8 @@ func (m *model) clearOpen() {
 	m.open = openWait{}
 }
 
-func (m *model) mayTakeFocus(channel string) bool {
-	return m.heldSession == "" || m.sessionName(channel) != m.heldSession
+func (m *model) mayTakeFocus(name string) bool {
+	return m.heldSession == "" || name != m.heldSession
 }
 
 func (m *model) focusOpen(infos []contracts.SessionInfo) tea.Cmd {

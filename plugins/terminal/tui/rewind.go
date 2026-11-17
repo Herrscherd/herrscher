@@ -367,6 +367,7 @@ func (m *model) handleForkDone(msg forkDoneMsg) {
 		m.flash = m.tr.t("tui.rewind.fork_created", map[string]any{tplArgName: msg.name})
 		return
 	}
+	m.releaseHeld(msg.name)
 	m.ensureTab(channel)
 	m.activate(channel)
 	m.flash = m.tr.t("tui.rewind.fork_opened", map[string]any{tplArgName: msg.name})

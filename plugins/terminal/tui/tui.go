@@ -222,6 +222,7 @@ type eventMsg RoutedEvent
 type tickMsg struct{}
 
 type sessionsMsg struct {
+	seq   uint64
 	infos []contracts.SessionInfo
 }
 
@@ -272,16 +273,17 @@ type model struct {
 	spinning         bool
 	composerRows     int
 
-	infoCache   contracts.SessionInfo
-	infoKnown   bool
-	infoChannel string
-	infoAt      time.Time
+	sessionInfos map[string]contracts.SessionInfo
 
 	open     openWait
 	clock    func() time.Time
 	starting bool
 
 	heldSession string
+
+	sessionsIssued   uint64
+	sessionsApplied  uint64
+	sessionsInFlight bool
 
 	resumeOpen bool
 	resumeIdx  int
@@ -533,14 +535,25 @@ func (m *model) ensureTab(channel string) *tab {
 	if tb, ok := m.tabs[channel]; ok {
 		return tb
 	}
+	return m.openTab(channel, m.sessionName(channel))
+}
+
+func (m *model) ensureTabNamed(channel, name string) *tab {
+	if tb, ok := m.tabs[channel]; ok {
+		return tb
+	}
+	return m.openTab(channel, name)
+}
+
+func (m *model) openTab(channel, name string) *tab {
 	tab := &tab{channel: channel, label: channel, openedAt: time.Now()}
 	m.tabs[channel] = tab
 	m.order = append(m.order, channel)
-	if m.active == "" && m.mayTakeFocus(channel) {
+	if m.active == "" && m.mayTakeFocus(name) {
 		m.active = channel
 		m.applySize()
 	}
-	m.seedScrollback(tab)
+	m.seedScrollback(tab, name)
 	if m.active == channel {
 		m.syncViewport()
 		m.vp.GotoBottom()
@@ -548,12 +561,8 @@ func (m *model) ensureTab(channel string) *tab {
 	return tab
 }
 
-func (m *model) seedScrollback(tab *tab) {
-	if m.tm == nil {
-		return
-	}
-	name := m.sessionName(tab.channel)
-	if name == "" {
+func (m *model) seedScrollback(tab *tab, name string) {
+	if m.tm == nil || name == "" {
 		return
 	}
 	lines := m.tm.Scrollback(name)
@@ -663,6 +672,8 @@ func lastAgentIndex(entries []entry) int {
 }
 
 func (m *model) syncTabs() tea.Cmd {
+	m.sessionsIssued++
+	m.sessionsApplied = m.sessionsIssued
 	return m.applySessions(m.tm.Sessions())
 }
 
@@ -670,7 +681,7 @@ func (m *model) applySessions(infos []contracts.SessionInfo) tea.Cmd {
 	if infos == nil {
 		return m.focusOpen(nil)
 	}
-	m.rememberActiveInfo(infos)
+	m.rememberSessions(infos)
 	var builder strings.Builder
 	for i := range infos {
 		info := &infos[i]
@@ -691,7 +702,7 @@ func (m *model) applySessions(infos []contracts.SessionInfo) tea.Cmd {
 		if session.Archived {
 			continue
 		}
-		tab := m.ensureTab(session.ChannelID)
+		tab := m.ensureTabNamed(session.ChannelID, session.Name)
 		if session.Name != "" {
 			tab.label = session.Name
 		}
@@ -1619,6 +1630,11 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		m.refreshSurface()
 		return tea.Batch(syncCmd, tickCmd(), m.gitTick(), m.loadModesCmd(), m.summaryRefresh(), m.healthTick()), true
 	case sessionsMsg:
+		m.sessionsInFlight = false
+		if msg.seq < m.sessionsApplied {
+			return nil, true
+		}
+		m.sessionsApplied = msg.seq
 		return m.applySessions(msg.infos), true
 	case summaryMsg:
 		m.summaryBusy = false

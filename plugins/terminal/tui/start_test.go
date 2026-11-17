@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -57,15 +58,27 @@ func newModelBypasses(t *testing.T) []string {
 		t.Fatal(globErr)
 	}
 	fset := token.NewFileSet()
-	var bypasses []string
+	parsedFiles := make([]*ast.File, 0, len(files))
 	for _, file := range files {
 		parsed, parseErr := parser.ParseFile(fset, file, nil, 0)
 		if parseErr != nil {
 			t.Fatal(parseErr)
 		}
-		bypasses = append(bypasses, referencesToNewModel(fset, parsed, exemptFunction(file))...)
+		parsedFiles = append(parsedFiles, parsed)
+	}
+	info := typesInfo(fset, parsedFiles)
+	var bypasses []string
+	for index, parsed := range parsedFiles {
+		bypasses = append(bypasses, referencesToNewModel(fset, parsed, info, exemptFunction(files[index]))...)
 	}
 	return bypasses
+}
+
+func typesInfo(fset *token.FileSet, files []*ast.File) *types.Info {
+	info := &types.Info{Uses: make(map[*ast.Ident]types.Object)}
+	conf := types.Config{Error: func(error) {}}
+	_, _ = conf.Check("tui", fset, files, info)
+	return info
 }
 
 func exemptFunction(file string) string {
@@ -75,8 +88,8 @@ func exemptFunction(file string) string {
 	return ""
 }
 
-func referencesToNewModel(fset *token.FileSet, file *ast.File, exempt string) []string {
-	allowed := nilNewModelCallees(file)
+func referencesToNewModel(fset *token.FileSet, file *ast.File, info *types.Info, exempt string) []string {
+	allowed := nilNewModelCallees(file, info)
 	var refs []string
 	ast.Inspect(file, func(node ast.Node) bool {
 		if fn, isFunc := node.(*ast.FuncDecl); isFunc && fn.Recv == nil && fn.Name.Name == exempt {
@@ -90,10 +103,10 @@ func referencesToNewModel(fset *token.FileSet, file *ast.File, exempt string) []
 	return refs
 }
 
-func nilNewModelCallees(file *ast.File) map[*ast.Ident]bool {
+func nilNewModelCallees(file *ast.File, info *types.Info) map[*ast.Ident]bool {
 	allowed := make(map[*ast.Ident]bool)
 	ast.Inspect(file, func(node ast.Node) bool {
-		if callee, isNilCall := newModelNilCallee(node); isNilCall {
+		if callee, isNilCall := newModelNilCallee(node, info); isNilCall {
 			allowed[callee] = true
 		}
 		return true
@@ -101,13 +114,16 @@ func nilNewModelCallees(file *ast.File) map[*ast.Ident]bool {
 	return allowed
 }
 
-func newModelNilCallee(node ast.Node) (*ast.Ident, bool) {
+func newModelNilCallee(node ast.Node, info *types.Info) (*ast.Ident, bool) {
 	call, isCall := node.(*ast.CallExpr)
 	if !isCall || len(call.Args) != 2 {
 		return nil, false
 	}
 	arg, isArgIdent := call.Args[1].(*ast.Ident)
-	if !isArgIdent || arg.Name != "nil" {
+	if !isArgIdent {
+		return nil, false
+	}
+	if _, isPredeclaredNil := info.Uses[arg].(*types.Nil); !isPredeclaredNil {
 		return nil, false
 	}
 	callee, isIdent := call.Fun.(*ast.Ident)
@@ -123,14 +139,19 @@ func fixtures(be Backend) {
 	_ = newModel(testMessages(), nil)
 	_ = newModel(testMessages(), be)
 }
+
+func shadowed() {
+	var nil Backend
+	_ = newModel(testMessages(), nil)
+}
 `
 	fset := token.NewFileSet()
 	parsed, parseErr := parser.ParseFile(fset, "snippet.go", snippet, 0)
 	if parseErr != nil {
 		t.Fatal(parseErr)
 	}
-	refs := referencesToNewModel(fset, parsed, "")
-	want := []string{"snippet.go:4:7", "snippet.go:5:11", "snippet.go:7:6"}
+	refs := referencesToNewModel(fset, parsed, typesInfo(fset, []*ast.File{parsed}), "")
+	want := []string{"snippet.go:4:7", "snippet.go:5:11", "snippet.go:7:6", "snippet.go:12:6"}
 	if strings.Join(refs, " ") != strings.Join(want, " ") {
 		t.Fatalf("flagged = %q, want %q", refs, want)
 	}
@@ -156,7 +177,7 @@ func (m *model) startModel(be Backend) {
 	if parseErr != nil {
 		t.Fatal(parseErr)
 	}
-	refs := referencesToNewModel(fset, parsed, "startModel")
+	refs := referencesToNewModel(fset, parsed, typesInfo(fset, []*ast.File{parsed}), "startModel")
 	want := []string{"start_test.go:8:6", "start_test.go:12:6"}
 	if strings.Join(refs, " ") != strings.Join(want, " ") {
 		t.Fatalf("flagged = %q, want %q: only the exempt function may reference newModel", refs, want)

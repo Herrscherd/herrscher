@@ -8,7 +8,7 @@ import (
 )
 
 func readyModel(f *fakeBackend) *model {
-	m := newModel(f)
+	m := startedModel(f)
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	return m
 }

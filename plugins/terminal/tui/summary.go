@@ -136,13 +136,9 @@ func parseRuleList(text string) *ruleCount {
 }
 
 func (m *model) panelFacets() ([]string, []string) {
-	if m.tm == nil {
-		return nil, nil
-	}
 	vendorSet, gatewaySet := make(map[string]bool), make(map[string]bool)
-	sessions := m.tm.Sessions()
-	for index := range sessions {
-		info := &sessions[index]
+	for name := range m.sessionInfos {
+		info := m.sessionInfos[name]
 		if info.Vendor != "" {
 			vendorSet[info.Vendor] = true
 		}
@@ -267,30 +263,39 @@ func joinPanel(left, right []string, leftWidth, height int, separator string) []
 	return out
 }
 
-func (m *model) markVisibleSeen() {
-	if m.tm == nil {
-		return
+func (m *model) refreshTabs() tea.Cmd {
+	if m.tm == nil || m.sessionsInFlight {
+		return nil
 	}
-	for _, name := range m.visibleSessionNames() {
-		m.tm.Seen(name)
+	m.sessionsIssued++
+	m.sessionsInFlight = true
+	seq := m.sessionsIssued
+	backend := m.tm
+	channels := m.visibleChannels()
+	return func() tea.Msg {
+		infos := backend.Sessions()
+		markSeen(backend, infos, channels)
+		return sessionsMsg{seq: seq, infos: infos}
 	}
 }
 
-func (m *model) visibleSessionNames() []string {
-	var channels []string
+func (m *model) visibleChannels() []string {
 	switch m.surface {
 	case surfaceChat:
-		channels = []string{m.active}
+		return []string{m.active}
 	case surfacePanes:
-		channels = m.panes.channels
+		return slices.Clone(m.panes.channels)
 	case surfaceBoard:
+		return nil
 	}
+	return nil
+}
 
-	var names []string
+func markSeen(backend Backend, infos []contracts.SessionInfo, channels []string) {
 	for _, channel := range channels {
-		if name := m.infoForChannel(channel).Name; name != "" {
-			names = append(names, name)
+		index := slices.IndexFunc(infos, func(info contracts.SessionInfo) bool { return info.ChannelID == channel })
+		if index >= 0 && infos[index].Name != "" {
+			backend.Seen(infos[index].Name)
 		}
 	}
-	return names
 }

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
 	"os/exec"
@@ -284,7 +285,10 @@ func TestScrollbackComesBackFromTheDaemon(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lines := a.Scrollback("alpha")
+	lines, err := a.Scrollback("alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(lines) != 1 || lines[0].Text != "hello" {
 		t.Fatalf("scrollback = %+v", lines)
 	}
@@ -334,4 +338,19 @@ func containsPair(argv []string, flag, value string) bool {
 		}
 	}
 	return false
+}
+
+func TestUnansweredSessionListIsNotRequestedTwiceInAGivenSecond(t *testing.T) {
+	asked := 0
+	attached := &attachedDaemon{lang: i18n.English, send: func([]string) (string, error) {
+		asked++
+		return "", errors.New("daemon down")
+	}}
+
+	attached.Sessions()
+	attached.Sessions()
+
+	if asked != 1 {
+		t.Fatalf("the daemon was asked %d times within one cache window, want 1", asked)
+	}
 }

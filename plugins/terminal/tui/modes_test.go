@@ -25,7 +25,8 @@ func (r *refusingBackend) Dispatch(args []string) (string, error) {
 }
 
 func modeSession(f Backend) *model {
-	m := newModel(f)
+	m := startedModel(f)
+	syncLoaded(m)
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m.ensureTab("a")
 	m.active = "a"
@@ -253,7 +254,7 @@ func TestTabStartsFromTheSessionStoredMode(t *testing.T) {
 	cases := map[string]modeID{"plan": modePlan, "accept-edits": modeEdits, "bypass": modeAuto, "strict": modeManual}
 	for host, want := range cases {
 		f := &replyBackend{fakeBackend: fakeBackend{sessions: namedSession()}, reply: host}
-		m := newModel(f)
+		m := startedModel(f)
 		m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 		m.ensureTab("a")
 		m.active = "a"

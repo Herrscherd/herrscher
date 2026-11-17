@@ -65,7 +65,7 @@ func (m *model) paneLayout() paneLayout {
 
 func (m *model) openPanes() {
 	m.surface = surfacePanes
-	m.refreshOverviews()
+	m.loadBoard()
 	m.panes = paneState{}
 	rows := m.boardCandidates()
 	for index := range rows {
@@ -74,7 +74,7 @@ func (m *model) openPanes() {
 			continue
 		}
 		m.panes.channels = append(m.panes.channels, info.ChannelID)
-		m.ensureTab(info.ChannelID)
+		m.ensureSessionTab(info)
 	}
 	m.activate(m.focusedChannel())
 	m.relayout()
@@ -391,15 +391,7 @@ func (m *model) paneToolRow(item entry, width int) string {
 }
 
 func (m *model) infoForChannel(channel string) contracts.SessionInfo {
-	if m.tm == nil {
-		return contracts.SessionInfo{}
-	}
-	sessions := m.tm.Sessions()
-	index := slices.IndexFunc(sessions, func(info contracts.SessionInfo) bool { return info.ChannelID == channel })
-	if index < 0 {
-		return contracts.SessionInfo{}
-	}
-	return sessions[index]
+	return m.sessionInfos[channel]
 }
 
 func (m *model) handlePanesKey(msg tea.KeyMsg) (tea.Cmd, bool) {

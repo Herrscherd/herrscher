@@ -34,7 +34,7 @@ func TestPickerViewsDrawTheSelectedRow(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := newModel(&fakeBackend{})
+			m := startedModel(&fakeBackend{})
 			tc.set(m, tc.sel)
 			out := tc.view(m)
 			if !strings.Contains(out, unicodeGlyphs().cursor) {
@@ -48,7 +48,7 @@ func TestPickerViewsDrawTheSelectedRow(t *testing.T) {
 }
 
 func TestSkillsViewDrawsTheSelectedRow(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	for i := range 24 {
 		m.skillsRows = append(m.skillsRows, skills.Skill{Name: fmt.Sprintf("skill-%02d", i)})
 	}
@@ -60,7 +60,7 @@ func TestSkillsViewDrawsTheSelectedRow(t *testing.T) {
 }
 
 func TestApplyImageIgnoresARecycledIndex(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	tb := &tab{channel: "c1"}
 	m.tabs["c1"] = tb
 	tb.appendEntry(entry{role: roleAgent, text: "first"})
@@ -107,7 +107,7 @@ func TestCheckURLTarget(t *testing.T) {
 }
 
 func TestMentionCursorFollowsTheCaret(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.input.SetWidth(80)
 	m.input.SetValue("@src/ma\nsecond line")
 	if got, want := m.mentionCursor(), len("@src/ma\nsecond line"); got != want {
@@ -137,7 +137,7 @@ func TestSearchQueryIgnoresModifiedKeys(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := newModel(&fakeBackend{})
+			m := startedModel(&fakeBackend{})
 			m.openSearch()
 			m.Update(tc.msg)
 			if m.searchQuery != tc.want {

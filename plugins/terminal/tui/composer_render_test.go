@@ -3,7 +3,6 @@ package tui
 import (
 	"strings"
 	"testing"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
@@ -102,7 +101,7 @@ func TestComposerStyleFollowsState(t *testing.T) {
 func TestShellTitleNamesTheSessionDirectory(t *testing.T) {
 	m, f := queueFixture(t)
 	f.sessions[0].Dir = "/srv/projets/herrscher/.worktrees/tui-v2"
-	m.infoAt = time.Time{}
+	syncLoaded(m)
 	typeLine(m, "!ls")
 	title := ansi.Strip(m.composerTitleLeft())
 	if !strings.Contains(title, "! SHELL · in .worktrees/tui-v2 · output goes into the session") {
@@ -173,7 +172,7 @@ func TestShellTopEdgeFoldsWholeSegmentsAtSixtyColumns(t *testing.T) {
 	m, f := queueFixture(t)
 	f.sessions[0].Dir = "/home/ada/dev/herrscher/.worktrees/tui-v2"
 	m.Update(tea.WindowSizeMsg{Width: 60, Height: composerRenderRows})
-	m.infoAt = time.Time{}
+	syncLoaded(m)
 	typeLine(m, "!ls")
 	top := ansi.Strip(m.composerZone()[0])
 	if !strings.Contains(top, "! SHELL · in .worktrees/tui-v2") {

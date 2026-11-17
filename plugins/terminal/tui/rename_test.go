@@ -11,10 +11,10 @@ import (
 func TestRenameNamesTheActiveSession(t *testing.T) {
 	be := &fakeBackend{}
 	be.sessions = []contracts.SessionInfo{{Name: "avant", ChannelID: "c1"}}
-	m := newModel(be)
+	m := startedModel(be)
 	m.ensureTab("c1")
 	m.active = "c1"
-	m.syncTabs()
+	syncLoaded(m)
 
 	m.input.SetValue("/rename ma grande refonte")
 	runCmd(m.handleEnter())
@@ -28,10 +28,10 @@ func TestRenameNamesTheActiveSession(t *testing.T) {
 func TestRenameWithoutANameSaysSoAndSendsNothing(t *testing.T) {
 	be := &fakeBackend{}
 	be.sessions = []contracts.SessionInfo{{Name: "avant", ChannelID: "c1"}}
-	m := newModel(be)
+	m := startedModel(be)
 	m.ensureTab("c1")
 	m.active = "c1"
-	m.syncTabs()
+	syncLoaded(m)
 
 	m.input.SetValue("/rename")
 	runCmd(m.handleEnter())

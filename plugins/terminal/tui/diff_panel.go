@@ -96,13 +96,8 @@ func (m *model) diffRepo(channel string) gitRepo {
 }
 
 func (m *model) sessionDir(channel string) string {
-	if name := m.sessionName(channel); name != "" {
-		sessions := m.tm.Sessions()
-		for index := range sessions {
-			if sessions[index].Name == name && sessions[index].Dir != "" {
-				return sessions[index].Dir
-			}
-		}
+	if dir := m.infoForChannel(channel).Dir; dir != "" {
+		return dir
 	}
 	if wd, err := os.Getwd(); err == nil {
 		return wd

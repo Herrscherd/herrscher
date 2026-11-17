@@ -59,7 +59,7 @@ type Backend interface {
 	Commands() []CommandSpec
 	// Scrollback returns a session's recorded history lines, so a reopened tab is
 	// seeded with the conversation before live events arrive. Empty when none.
-	Scrollback(name string) []contracts.ScrollbackLine
+	Scrollback(name string) ([]contracts.ScrollbackLine, error)
 	// Resume revives an archived session by name (backend resumed via its stored
 	// token), for the /resume picker. Returns a human-readable result or an error.
 	Resume(name string) (string, error)
@@ -169,6 +169,30 @@ type tab struct {
 	turnStart          string
 	snapshotting       bool
 	queued             []queuedTurn
+	history            historyState
+	historySeq         uint64
+	historyName        string
+	pendingEvents      []RoutedEvent
+}
+
+type historyState uint8
+
+const (
+	historyNone historyState = iota
+	historyQueued
+	historyRequested
+	historyDone
+)
+
+type scrollbackMsg struct {
+	channel string
+	seq     uint64
+	lines   []contracts.ScrollbackLine
+	err     error
+}
+
+func (tb *tab) awaitingHistory() bool {
+	return tb.history == historyQueued || tb.history == historyRequested
 }
 
 type liveAgent struct {
@@ -221,6 +245,11 @@ type eventMsg RoutedEvent
 
 type tickMsg struct{}
 
+type sessionsMsg struct {
+	seq   uint64
+	infos []contracts.SessionInfo
+}
+
 func tickCmd() tea.Cmd {
 	return tea.Tick(time.Second, func(time.Time) tea.Msg { return tickMsg{} })
 }
@@ -268,15 +297,19 @@ type model struct {
 	spinning         bool
 	composerRows     int
 
-	infoCache   contracts.SessionInfo
-	infoKnown   bool
-	infoChannel string
-	infoAt      time.Time
+	sessionInfos map[string]contracts.SessionInfo
 
-	openSession string
-	openText    string
-	openAtts    []Attachment
-	starting    bool
+	open     openWait
+	clock    func() time.Time
+	starting bool
+
+	heldSession string
+
+	sessionsIssued   uint64
+	sessionsApplied  uint64
+	sessionsInFlight bool
+
+	historySeq uint64
 
 	resumeOpen bool
 	resumeIdx  int
@@ -294,8 +327,9 @@ type model struct {
 	switchIdx  int
 	switchRows []contracts.SessionInfo
 
-	resumeAll   []contracts.SessionInfo
-	resumeQuery string
+	resumeAll          []contracts.SessionInfo
+	resumeQuery        string
+	resumePreviewLines []string
 
 	surface     surface
 	board       boardState
@@ -303,6 +337,11 @@ type model struct {
 	summary     panelSummary
 	summaryBusy bool
 	panes       paneState
+
+	boardInfos      []contracts.SessionInfo
+	surfaceIssued   uint64
+	surfaceApplied  uint64
+	surfaceInFlight bool
 
 	diagOpen bool
 
@@ -528,33 +567,103 @@ func (m *model) ensureTab(channel string) *tab {
 	if tb, ok := m.tabs[channel]; ok {
 		return tb
 	}
+	return m.openTab(channel, m.sessionName(channel))
+}
+
+func (m *model) ensureSessionTab(info contracts.SessionInfo) {
+	m.rememberSession(info)
+	m.ensureTabNamed(info.ChannelID, info.Name)
+}
+
+func (m *model) ensureTabNamed(channel, name string) *tab {
+	if existing, ok := m.tabs[channel]; ok {
+		if existing.history == historyNone && len(existing.entries) == 0 {
+			m.queueHistory(existing, name)
+		}
+		return existing
+	}
+	return m.openTab(channel, name)
+}
+
+func (m *model) openTab(channel, name string) *tab {
 	tab := &tab{channel: channel, label: channel, openedAt: time.Now()}
 	m.tabs[channel] = tab
 	m.order = append(m.order, channel)
-	if m.active == "" {
+	if m.active == "" && m.mayTakeFocus(name) {
 		m.active = channel
 		m.applySize()
 	}
-	m.seedScrollback(tab)
+	m.queueHistory(tab, name)
+	if m.active == channel {
+		m.syncViewport()
+		m.vp.GotoBottom()
+	}
 	return tab
 }
 
-func (m *model) seedScrollback(tab *tab) {
-	if m.tm == nil {
+func (m *model) queueHistory(tab *tab, name string) {
+	if m.tm == nil || name == "" {
 		return
 	}
-	name := m.sessionName(tab.channel)
-	if name == "" {
-		return
+	m.historySeq++
+	tab.history = historyQueued
+	tab.historySeq = m.historySeq
+	tab.historyName = name
+}
+
+func (m *model) drainHistory() tea.Cmd {
+	var cmds []tea.Cmd
+	for _, channel := range m.order {
+		channelTab := m.tabs[channel]
+		if channelTab == nil || channelTab.history != historyQueued {
+			continue
+		}
+		channelTab.history = historyRequested
+		cmds = append(cmds, m.loadHistory(channelTab))
 	}
-	lines := m.tm.Scrollback(name)
+	return tea.Batch(cmds...)
+}
+
+func (m *model) loadHistory(tb *tab) tea.Cmd {
+	backend, channel, name, seq := m.tm, tb.channel, tb.historyName, tb.historySeq
+	return func() tea.Msg {
+		lines, err := backend.Scrollback(name)
+		return scrollbackMsg{channel: channel, seq: seq, lines: lines, err: err}
+	}
+}
+
+func (m *model) handleScrollback(msg scrollbackMsg) tea.Cmd {
+	channelTab := m.tabs[msg.channel]
+	if channelTab == nil || channelTab.history != historyRequested || channelTab.historySeq != msg.seq {
+		return nil
+	}
+	channelTab.history = historyDone
+	if msg.err != nil {
+		channelTab.appendEntry(entry{role: roleError, text: m.tr.t("tui.session.history_failed", map[string]any{tplArgReason: localizedReason(m.tr, msg.err)})})
+	} else {
+		m.seedScrollback(channelTab, msg.lines)
+	}
+	pending := unseenPending(msg.lines, channelTab.pendingEvents)
+	channelTab.pendingEvents = nil
+	cmds := make([]tea.Cmd, 0, len(pending))
+	for i := range pending {
+		cmds = append(cmds, m.route(pending[i]))
+	}
+	if m.active == channelTab.channel {
+		m.syncViewport()
+		m.vp.GotoBottom()
+	}
+	return tea.Batch(cmds...)
+}
+
+func (m *model) seedScrollback(channelTab *tab, lines []contracts.ScrollbackLine) {
 	if len(lines) == 0 {
 		return
 	}
 	for _, ln := range lines {
-		tab.appendEntry(entry{role: scrollbackRole(ln.Role), text: ln.Text})
+		channelTab.appendEntry(entry{role: scrollbackRole(ln.Role), text: ln.Text})
 	}
-	tab.appendEntry(entry{role: roleScrollback, text: m.tr.t("tui.render.earlier", nil)})
+	channelTab.appendEntry(entry{role: roleScrollback, text: m.tr.t("tui.render.earlier", nil)})
 }
 
 func scrollbackRole(role string) string {
@@ -578,7 +687,10 @@ func (m *model) removeTab(channel string) {
 	}
 	m.order = out
 	if m.active == channel {
-		m.active = m.successorTab()
+		successor := m.successorTab()
+		m.endWaitAfterRemoval(successor)
+		m.active = ""
+		m.activate(successor)
 		m.syncViewport()
 	}
 }
@@ -599,6 +711,10 @@ func (m *model) route(routed RoutedEvent) tea.Cmd {
 		return nil
 	}
 	tab := m.ensureTab(routed.Conv.ID)
+	if tab.awaitingHistory() {
+		tab.pendingEvents = append(tab.pendingEvents, routed)
+		return m.drainHistory()
+	}
 	before := len(tab.entries)
 	m.renderInto(tab, routed.Event)
 	flushCmd := m.flushQueue(tab, routed.Event.T)
@@ -651,10 +767,16 @@ func lastAgentIndex(entries []entry) int {
 }
 
 func (m *model) syncTabs() tea.Cmd {
-	infos := m.tm.Sessions()
+	m.sessionsIssued++
+	m.sessionsApplied = m.sessionsIssued
+	return m.applySessions(m.tm.Sessions())
+}
+
+func (m *model) applySessions(infos []contracts.SessionInfo) tea.Cmd {
 	if infos == nil {
-		return nil
+		return m.focusOpen(nil)
 	}
+	m.rememberSessions(infos)
 	var builder strings.Builder
 	for i := range infos {
 		info := &infos[i]
@@ -665,7 +787,7 @@ func (m *model) syncTabs() tea.Cmd {
 	}
 	sig := builder.String()
 	if sig == m.tabSig {
-		return nil
+		return m.focusOpen(infos)
 	}
 	m.tabSig = sig
 	live := make(map[string]bool)
@@ -675,7 +797,7 @@ func (m *model) syncTabs() tea.Cmd {
 		if session.Archived {
 			continue
 		}
-		tab := m.ensureTab(session.ChannelID)
+		tab := m.ensureTabNamed(session.ChannelID, session.Name)
 		if session.Name != "" {
 			tab.label = session.Name
 		}
@@ -688,30 +810,9 @@ func (m *model) syncTabs() tea.Cmd {
 	return m.focusOpen(infos)
 }
 
-func (m *model) focusOpen(infos []contracts.SessionInfo) tea.Cmd {
-	if m.openSession == "" {
-		return nil
-	}
-	channel := ""
-	for i := range infos {
-		info := &infos[i]
-		if info.Name == m.openSession {
-			channel = info.ChannelID
-			break
-		}
-	}
-	if channel == "" || m.tabs[channel] == nil {
-		return nil
-	}
-	text, atts := m.openText, m.openAtts
-	m.openSession, m.openText, m.openAtts = "", "", nil
-	m.active = channel
-	m.applySize()
-	m.syncViewport()
-	if text == "" && len(atts) == 0 {
-		return nil
-	}
-	return m.submitTo(channel, text, atts)
+func isCommandLine(text string) bool {
+	_, isShell := shellCommand(text)
+	return isShell || strings.HasPrefix(text, "/")
 }
 
 func (m *model) continueLine() bool {
@@ -726,11 +827,22 @@ func (m *model) continueLine() bool {
 
 func (m *model) handleEnter() tea.Cmd {
 	text := strings.TrimSpace(m.input.Value())
+	if m.awaitingOpen() && !isCommandLine(text) {
+		m.queueForOpen(text)
+		return nil
+	}
 	if text == "" && len(m.pending) == 0 {
 		return nil
 	}
 	if m.starting {
 		m.flash = m.tr.t("tui.session.starting", nil)
+		return nil
+	}
+	if m.tabs[m.active] == nil && !isCommandLine(text) {
+		return m.startFromComposer(text)
+	}
+	if _, isShell := shellCommand(text); isShell && m.sessionName(m.active) == "" {
+		m.flash = m.tr.t("tui.shell.no_session", nil)
 		return nil
 	}
 	m.input.Reset()
@@ -745,9 +857,6 @@ func (m *model) handleEnter() tea.Cmd {
 	m.pending = nil
 	m.applySize()
 	m.recordHistory(text)
-	if m.tabs[m.active] == nil {
-		return m.startSessionWith(text, atts)
-	}
 	return m.submitTo(m.active, text, atts)
 }
 
@@ -904,14 +1013,6 @@ func (m *model) stageAttachment(path string) {
 	m.syncViewport()
 }
 
-func (m *model) removeLastPending() bool {
-	if len(m.pending) == 0 {
-		return false
-	}
-	m.pending = m.pending[:len(m.pending)-1]
-	return true
-}
-
 func (m *model) accountCmd(args []string) tea.Cmd {
 	if len(args) == 0 {
 		return m.dispatchCmd(m.active, []string{"session", "accounts", m.active})
@@ -984,17 +1085,7 @@ func (m *model) toggleHelp() {
 }
 
 func (m *model) sessionName(channel string) string {
-	if m.tm == nil {
-		return ""
-	}
-	sessions := m.tm.Sessions()
-	for i := range sessions {
-		session := &sessions[i]
-		if session.ChannelID == channel && session.Name != "" {
-			return session.Name
-		}
-	}
-	return ""
+	return m.infoForChannel(channel).Name
 }
 
 func (m *model) activeSessionName() string {
@@ -1120,7 +1211,11 @@ func (m *model) switchTab(delta int) {
 }
 
 func (m *model) activate(channel string) {
-	if channel == m.active || m.tabs[channel] == nil {
+	m.noteTabChange(channel)
+	if m.tabs[channel] == nil {
+		return
+	}
+	if channel == m.active {
 		return
 	}
 	m.active = channel
@@ -1320,10 +1415,18 @@ func (m *model) baseContent() string { return m.contentWith("") }
 
 func (m *model) contentWith(query string) string {
 	tab := m.tabs[m.active]
-	if tab == nil || (len(tab.entries) == 0 && !tab.busy) {
+	if tab == nil || (len(tab.entries) == 0 && !tab.busy && !tab.awaitingHistory()) {
 		return m.emptyState(m.vp.Width)
 	}
 	content := m.cachedTranscript(tab)
+	if tab.awaitingHistory() {
+		loading := m.st.dim.Render(m.tr.t("tui.session.history_loading", nil))
+		if content == "" {
+			content = loading
+		} else {
+			content += "\n" + loading
+		}
+	}
 	if m.foldTurnsOn {
 		content = m.foldCache.get(content, "", func(s string) string {
 			return strings.Join(foldTurns(m.tr, strings.Split(s, "\n"), m.tsLayout.turns, turnFoldKeep, m.st), "\n")
@@ -1451,7 +1554,7 @@ func (m *model) logger() *slog.Logger {
 // message. An empty text opens the session and sends nothing, which is how a
 // caller says "show me this one" without starting a turn.
 func OpenOn(session, text string) Option {
-	return func(m *model) { m.openSession, m.openText = session, text }
+	return func(m *model) { m.beginOpen(session, text) }
 }
 
 func newRunModel(ctx context.Context, backend Backend) *model {
@@ -1470,13 +1573,10 @@ func newRunModel(ctx context.Context, backend Backend) *model {
 // quits; quitting cancels ctx (wired by the caller) so the daemon shuts down
 // cleanly.
 func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts ...Option) (runErr error) {
-	model := newRunModel(ctx, backend)
+	model := newWindow(ctx, backend, opts)
 	defer func() {
 		runErr = errors.Join(runErr, model.releaseDrafts())
 	}()
-	for _, opt := range opts {
-		opt(model)
-	}
 	if err := sweepDraftsAtStart(); err != nil {
 		model.flash = model.tr.t("tui.drafts.orphans", map[string]any{tplArgReason: localizedReason(model.tr, err)})
 	}
@@ -1495,7 +1595,7 @@ func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts .
 }
 
 func (m *model) Init() tea.Cmd {
-	return tea.Batch(textarea.Blink, tickCmd(), themeWatchTick(), enableEnhancedKeys, m.armStatusline(), fontProbeCmd())
+	return tea.Batch(m.syncTabs(), m.drainHistory(), textarea.Blink, tickCmd(), themeWatchTick(), enableEnhancedKeys, m.armStatusline(), fontProbeCmd())
 }
 
 func (m *model) ensureSpin() tea.Cmd {
@@ -1511,7 +1611,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.syncComposer()
 	m.resizeComposer()
 	m.applySize()
-	return model, cmd
+	return model, tea.Batch(cmd, m.drainHistory())
 }
 
 func (m *model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -1619,14 +1719,27 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		m.handleRewindDone(msg)
 		return nil, true
 	case forkDoneMsg:
-		m.handleForkDone(msg)
+		return m.handleForkDone(msg), true
+	case forkResolvedMsg:
+		m.handleForkResolved(msg)
 		return nil, true
+	case scrollbackMsg:
+		return m.handleScrollback(msg), true
 	case tickMsg:
-		syncCmd := m.syncTabs()
+		syncCmd := m.refreshTabs()
 		m.expireApprovals(time.Now())
-		m.markVisibleSeen()
-		m.refreshSurface()
-		return tea.Batch(syncCmd, tickCmd(), m.gitTick(), m.loadModesCmd(), m.summaryRefresh(), m.healthTick()), true
+		surfaceCmd := m.refreshSurfaceCmd()
+		return tea.Batch(syncCmd, surfaceCmd, tickCmd(), m.gitTick(), m.loadModesCmd(), m.summaryRefresh(), m.healthTick()), true
+	case sessionsMsg:
+		m.sessionsInFlight = false
+		if msg.seq < m.sessionsApplied {
+			return nil, true
+		}
+		m.sessionsApplied = msg.seq
+		return m.applySessions(msg.infos), true
+	case surfaceMsg:
+		m.applySurface(msg)
+		return nil, true
 	case summaryMsg:
 		m.summaryBusy = false
 		m.summary = panelSummary(msg)
@@ -1659,7 +1772,7 @@ func (m *model) handleWindowSize(msg tea.WindowSizeMsg) {
 }
 
 func (m *model) handleDispatchResult(msg dispatchResultMsg) tea.Cmd {
-	cmd := m.syncTabs()
+	cmd := m.refreshTabs()
 	line, role := msg.out, roleNotice
 	if msg.err != nil {
 		line, role = msg.err.Error(), roleError

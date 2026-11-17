@@ -850,6 +850,34 @@
     "other": "ouverture de la session…"
   },
   {
+    "id": "tui.session.open_pending",
+    "other": "la session {{.Name}} n'est pas encore prête, le message attend"
+  },
+  {
+    "id": "tui.session.history_loading",
+    "other": "historique en cours de chargement"
+  },
+  {
+    "id": "tui.session.history_failed",
+    "other": "historique indisponible : {{.Reason}}"
+  },
+  {
+    "id": "tui.session.open_missing",
+    "other": "la session {{.Name}} est introuvable, le message reste dans la saisie"
+  },
+  {
+    "id": "tui.session.open_cancelled",
+    "other": "message en attente pour la session {{.Name}} annulé"
+  },
+  {
+    "id": "tui.session.open_command_kept",
+    "other": "ligne de commande pour la session {{.Name}} gardée dans la saisie, non envoyée"
+  },
+  {
+    "id": "tui.session.attachment_needs_text",
+    "other": "les pièces jointes ont besoin d'un message, ajoute du texte avant d'envoyer"
+  },
+  {
     "id": "tui.session.start_failed",
     "other": "session impossible à ouvrir : {{.Reason}}"
   },

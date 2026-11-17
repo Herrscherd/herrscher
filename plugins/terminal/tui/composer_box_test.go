@@ -10,7 +10,7 @@ import (
 
 func sizedTestModel(t *testing.T, width int) *model {
 	t.Helper()
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.Update(tea.WindowSizeMsg{Width: width, Height: 24})
 	return m
 }

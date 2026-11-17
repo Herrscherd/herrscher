@@ -87,7 +87,7 @@ var ErrHistoryTooLarge = errors.New("history too large")
 
 // ErrTooManyEdits reports a prune request carrying more than MaxPruneEdits edits.
 // Match it with errors.Is.
-var ErrTooManyEdits = errors.New("too many edits for one prune frame")
+var ErrTooManyEdits = errors.New("the compaction would edit too many tool calls at once")
 
 // IsFrame reports whether an event type belongs to the history wire.
 func IsFrame(eventType string) bool {
@@ -233,7 +233,7 @@ func DecodeHistory(frames []contracts.Event) (contracts.History, error) {
 // than ChunkLimit bytes.
 func Prune(callID string, edits []contracts.HistoryEdit) (contracts.Event, error) {
 	if len(edits) > MaxPruneEdits {
-		return contracts.Event{}, fmt.Errorf("%w: %d edits, more than %d", ErrTooManyEdits, len(edits), MaxPruneEdits)
+		return contracts.Event{}, ErrTooManyEdits
 	}
 	frames := make([]editFrame, 0, len(edits))
 	for _, edit := range edits {

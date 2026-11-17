@@ -191,21 +191,26 @@ func TestEveryInFlightWriteIsJoinedBeforeCloseReturns(t *testing.T) {
 	writer := newFirstWriteRefused()
 	t.Cleanup(writer.unblock)
 	var sink *warningSink
-	var afterErr error
+	refused := make(chan error, 1)
 	logs := captureDefaultLog(t, func(line string) {
 		if strings.Contains(line, "not all confirmed") && logField(line, "unconfirmed") == "1" {
-			_, afterErr = sink.Write([]byte("AFTER\n"))
-			writer.unblock()
-			return
-		}
-		if strings.Contains(line, "not all confirmed") {
-			time.Sleep(warningWriteBudget / 2)
+			go func() {
+				_, err := sink.Write([]byte("AFTER\n"))
+				refused <- err
+				writer.unblock()
+			}()
 		}
 	})
 	sink = newWarningSink(writer, englishLostLine)
 	_ = sink.Enqueue([]byte("INFLIGHT\n"))
 	awaitBackground(t, writer.entered, "the warning was never handed to the writer")
 	sink.Close()
+	var afterErr error
+	select {
+	case afterErr = <-refused:
+	default:
+		t.Fatal("Close returned before the write admitted after the bilan was refused")
+	}
 	if !errors.Is(afterErr, errWarningAbandoned) {
 		t.Fatalf("a write admitted after the bilan returned %v, want errWarningAbandoned", afterErr)
 	}
@@ -223,13 +228,14 @@ func TestEntryAdmittedWhileCloseWaitsIsCountedOnceByTheBilan(t *testing.T) {
 	writer := newGatedWarnings("frozen")
 	t.Cleanup(writer.open)
 	sink := newWarningSink(writer, englishLostLine)
+	sink.idleWait = 2 * time.Second
 	_ = sink.Enqueue([]byte("frozen\n"))
 	awaitGatedWrite(t, writer)
 
 	closed := runInBackground(sink.Close)
 	waitUntil(t, "Close to begin while the frozen write is in flight", func() bool { return isClosing(sink) })
 	queued := sink.Enqueue([]byte("QUEUEDMSG\n"))
-	if err := queued(time.After(5 * time.Second)); !errors.Is(err, errWarningAbandoned) {
+	if err := queued(expiresAfter(10 * time.Second)); !errors.Is(err, errWarningAbandoned) {
 		t.Fatalf("an entry admitted while Close waited returned %v, want errWarningAbandoned once the bilan sealed", err)
 	}
 	awaitBackground(t, closed, "Close did not return")
@@ -243,7 +249,9 @@ func TestEntryAdmittedWhileCloseWaitsIsCountedOnceByTheBilan(t *testing.T) {
 	}
 	writer.open()
 	awaitWarning(t, &writer.out, "frozen\n")
-	time.Sleep(50 * time.Millisecond)
+	waitUntil(t, "the frozen write to settle", func() bool {
+		return ask(sink, func() bool { return sink.inflight == nil })
+	})
 	if strings.Contains(writer.out.String(), "QUEUEDMSG") {
 		t.Fatalf("an entry counted as lost by the bilan reached the output: %q", writer.out.String())
 	}
@@ -490,7 +498,7 @@ func TestAdmissionAfterTheBilanStartsNoWriteAndCountsItsLoss(t *testing.T) {
 		t.Fatal(err)
 	}
 	sink.Close()
-	writesBefore := ask(sink, func() int { return len(sink.writes) })
+	lastBefore := ask(sink, func() chan struct{} { return sink.lastLogged })
 
 	if _, err := sink.Write([]byte("after\n")); !errors.Is(err, errWarningAbandoned) {
 		t.Fatalf("a write admitted after the bilan returned %v, want errWarningAbandoned", err)
@@ -498,8 +506,8 @@ func TestAdmissionAfterTheBilanStartsNoWriteAndCountsItsLoss(t *testing.T) {
 	if busy := ask(sink, func() bool { return sink.inflight != nil }); busy {
 		t.Fatal("a write admitted after the bilan started an I/O goroutine")
 	}
-	if writesAfter := ask(sink, func() int { return len(sink.writes) }); writesAfter != writesBefore {
-		t.Fatalf("the writes joined by Close went from %d to %d after a refused admission, want unchanged", writesBefore, writesAfter)
+	if lastAfter := ask(sink, func() chan struct{} { return sink.lastLogged }); lastAfter != lastBefore {
+		t.Fatal("a write refused after the bilan replaced the last write that Close joins")
 	}
 	if out.String() != "before\n" {
 		t.Fatalf("output = %q, want only the write before Close", out.String())

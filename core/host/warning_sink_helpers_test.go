@@ -139,6 +139,12 @@ func (w *refusingEntryWriter) Write(p []byte) (int, error) {
 	return w.out.Write(p)
 }
 
+func expiresAfter(d time.Duration) <-chan struct{} {
+	expired := make(chan struct{})
+	time.AfterFunc(d, func() { close(expired) })
+	return expired
+}
+
 func awaitBackground(t *testing.T, done <-chan struct{}, failure string) {
 	t.Helper()
 	select {

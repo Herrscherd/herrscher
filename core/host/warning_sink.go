@@ -71,7 +71,8 @@ type warningSink struct {
 	closed      bool
 	sealed      bool
 	finished    chan struct{}
-	writes      []chan struct{}
+	lastLogged  chan struct{}
+	idleWait    time.Duration
 }
 
 func newWarningSink(out io.Writer, lostLine func(lost int) string) *warningSink {
@@ -80,6 +81,7 @@ func newWarningSink(out io.Writer, lostLine func(lost int) string) *warningSink 
 		lostLine: lostLine,
 		commands: make(chan func(), warningCommandLimit),
 		finished: make(chan struct{}),
+		idleWait: warningWriteBudget,
 	}
 }
 
@@ -255,8 +257,7 @@ func (s *warningSink) startSummary() {
 func (s *warningSink) start(write *inflightWrite, data []byte) {
 	s.inflight = write
 	logged := make(chan struct{})
-	s.pruneWrites()
-	s.writes = append(s.writes, logged)
+	s.lastLogged = logged
 	go func() {
 		defer close(logged)
 		written, err := s.out.Write(data)
@@ -340,28 +341,22 @@ func (s *warningSink) Close() {
 		return
 	}
 	defer close(s.finished)
-	budget, stop := writeBudget()
+	budget, stop := budgetAfter(s.idleWait)
 	defer stop()
 	s.waitIdle(budget)
 	taken := ask(s, s.seal)
 	logNotConfirmed(taken.lost, taken.unconfirmed)
-	s.joinWriters()
+	s.joinLastWrite()
 }
 
-func (s *warningSink) joinWriters() {
+func (s *warningSink) joinLastWrite() {
+	logged := ask(s, func() chan struct{} { return s.lastLogged })
+	if logged == nil {
+		return
+	}
 	budget, stop := writeBudget()
 	defer stop()
-	for {
-		pending := ask(s, s.pendingWrites)
-		if len(pending) == 0 {
-			return
-		}
-		for _, logged := range pending {
-			if !waitLogged(logged, budget) {
-				return
-			}
-		}
-	}
+	waitLogged(logged, budget)
 }
 
 func waitLogged(logged, budget <-chan struct{}) bool {
@@ -374,23 +369,6 @@ func waitLogged(logged, budget <-chan struct{}) bool {
 	case <-logged:
 		return true
 	case <-budget:
-		return false
-	}
-}
-
-func (s *warningSink) pendingWrites() []chan struct{} {
-	return slices.DeleteFunc(slices.Clone(s.writes), isLogged)
-}
-
-func (s *warningSink) pruneWrites() {
-	s.writes = slices.DeleteFunc(s.writes, isLogged)
-}
-
-func isLogged(logged chan struct{}) bool {
-	select {
-	case <-logged:
-		return true
-	default:
 		return false
 	}
 }
@@ -454,7 +432,11 @@ func logNotConfirmed(lost, unconfirmed int) {
 }
 
 func writeBudget() (<-chan struct{}, func()) {
+	return budgetAfter(warningWriteBudget)
+}
+
+func budgetAfter(d time.Duration) (<-chan struct{}, func()) {
 	expired := make(chan struct{})
-	timer := time.AfterFunc(warningWriteBudget, func() { close(expired) })
+	timer := time.AfterFunc(d, func() { close(expired) })
 	return expired, func() { timer.Stop() }
 }

@@ -480,3 +480,55 @@ func TestHostCatalogBuildsOncePerOwner(t *testing.T) {
 		t.Fatalf("catalog built %d times across 3 sessions, want 1", builds)
 	}
 }
+
+func TestWrappedLocalizedErrorRendersThroughTheCountedOwner(t *testing.T) {
+	builds := 0
+	messages := &hostMessages{catalog: sync.OnceValues(func() (*i18n.Catalog, error) {
+		builds++
+		return buildHostCatalog()
+	})}
+	err := fmt.Errorf("ctx: %w", wrapHost(errors.New("boom"), "serve.load_state", nil))
+	if text := localizeHostError(messages, i18n.French, err).Error(); text == "" {
+		t.Fatal("wrapped localized error rendered an empty text")
+	}
+	if builds != 1 {
+		t.Fatalf("catalog built %d times for a wrapped localized error, want 1", builds)
+	}
+}
+
+func TestErrorTextKeepsTheWrapperPrefix(t *testing.T) {
+	messages := newHostMessages()
+	inner := hostWrapError{key: "serve.load_state", cause: errors.New("boom")}
+	err := fmt.Errorf("ctx: %w", inner)
+	want := "ctx: " + inner.render(messages, i18n.French)
+	if got := errorTextIn(messages, i18n.French, err); got != want {
+		t.Fatalf("errorTextIn = %q, want %q", got, want)
+	}
+}
+
+type errorProbe struct {
+	calls *int
+}
+
+func (p errorProbe) Error() string {
+	*p.calls++
+	return "probe"
+}
+
+func (p errorProbe) render(_ *hostMessages, lang i18n.Language) string {
+	if lang == i18n.French {
+		return "sonde"
+	}
+	return "probe"
+}
+
+func TestErrorTextRendersALocalizableErrorWithoutCallingItsError(t *testing.T) {
+	calls := 0
+	messages := newHostMessages()
+	if got := errorTextIn(messages, i18n.French, errorProbe{calls: &calls}); got != "sonde" {
+		t.Fatalf("errorTextIn = %q, want the localized text", got)
+	}
+	if calls != 0 {
+		t.Fatalf("errorTextIn called Error() %d times on a localizable error, want 0", calls)
+	}
+}

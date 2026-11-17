@@ -99,10 +99,26 @@ func errorTextIn(messages *hostMessages, lang i18n.Language, err error) string {
 	if err == nil {
 		return ""
 	}
-	if english, local, ok := localizedPart(messages, lang, err); ok {
-		return strings.Replace(fmt.Sprint(err), english, local, 1)
+	english, local, ok := localizedPart(messages, lang, err)
+	if !ok {
+		return fmt.Sprint(err)
 	}
-	return fmt.Sprint(err)
+	if isDirectLocalizable(err) {
+		return local
+	}
+	return strings.Replace(fmt.Sprint(err), english, local, 1)
+}
+
+func isDirectLocalizable(err error) bool {
+	if _, found := errors.AsType[localizableError](err); !found {
+		return false
+	}
+	inner := errors.Unwrap(err)
+	if inner == nil {
+		return true
+	}
+	_, nested := errors.AsType[localizableError](inner)
+	return !nested
 }
 
 func localizedPart(messages *hostMessages, lang i18n.Language, err error) (string, string, bool) {

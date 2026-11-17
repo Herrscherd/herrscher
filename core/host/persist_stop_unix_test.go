@@ -43,7 +43,7 @@ func releaseBlockedTranscript(path string) {
 }
 
 func unblockTranscript(path string) {
-	writer, err := os.OpenFile(path, os.O_RDWR, 0)
+	writer, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		logCleanup(err)
 		return

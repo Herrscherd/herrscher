@@ -570,17 +570,17 @@ func (m *model) ensureTab(channel string) *tab {
 	return m.openTab(channel, m.sessionName(channel))
 }
 
-func (m *model) ensureSessionTab(info contracts.SessionInfo) *tab {
+func (m *model) ensureSessionTab(info contracts.SessionInfo) {
 	m.rememberSession(info)
-	return m.ensureTabNamed(info.ChannelID, info.Name)
+	m.ensureTabNamed(info.ChannelID, info.Name)
 }
 
 func (m *model) ensureTabNamed(channel, name string) *tab {
-	if tb, ok := m.tabs[channel]; ok {
-		if tb.history == historyNone && len(tb.entries) == 0 {
-			m.queueHistory(tb, name)
+	if existing, ok := m.tabs[channel]; ok {
+		if existing.history == historyNone && len(existing.entries) == 0 {
+			m.queueHistory(existing, name)
 		}
-		return tb
+		return existing
 	}
 	return m.openTab(channel, name)
 }

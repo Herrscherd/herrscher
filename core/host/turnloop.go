@@ -243,6 +243,7 @@ func (d *sessionDriver) recordEntry(role, text string, cost float64, turn turnUs
 		Ts:          time.Now().UTC().Format(time.RFC3339),
 		Role:        role,
 		Text:        text,
+		TurnID:      d.activeTurnID,
 		Cost:        cost,
 		TokensIn:    turn.InTokens,
 		TokensOut:   turn.OutTokens,

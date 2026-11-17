@@ -176,8 +176,8 @@ func (h *Handler) sessionLogRun(_ context.Context, input contracts.Input) (contr
 		return contracts.DataResult(h.text(clitext.SessionLogEmpty, nil)), nil
 	}
 	var out strings.Builder
-	for _, e := range entries {
-		fmt.Fprintf(&out, "%s %s\n", e.Role, e.Text)
+	for i := range entries {
+		fmt.Fprintf(&out, "%s %s\n", entries[i].Role, entries[i].Text)
 	}
 	return contracts.DataResult(out.String()), nil
 }

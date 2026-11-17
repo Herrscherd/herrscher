@@ -23,8 +23,8 @@ func buildHandoffSeed(entries []state.TranscriptEntry, mode string) string {
 	if elided > 0 {
 		fmt.Fprintf(&text, "(%d earlier turns elided)\n", elided)
 	}
-	for _, e := range entries {
-		fmt.Fprintf(&text, "%s: %s\n", e.Role, e.Text)
+	for i := range entries {
+		fmt.Fprintf(&text, "%s: %s\n", entries[i].Role, entries[i].Text)
 	}
 	return text.String()
 }

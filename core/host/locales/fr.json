@@ -67,7 +67,7 @@
   {
     "id": "compaction.too_many_edits",
     "description": "La compaction voudrait modifier plus d'appels d'outils qu'une trame n'en porte, elle n'en modifie aucun",
-    "other": "la compaction voudrait modifier trop d'appels d'outils à la fois, elle n'en modifie aucun"
+    "other": "la compaction voudrait modifier trop d'appels d'outils à la fois et n'en modifie aucun"
   },
   {
     "id": "compaction.failed",

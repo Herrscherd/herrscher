@@ -105,6 +105,9 @@ func TestMaximumPruneFrameFitsTheControlWire(t *testing.T) {
 		t.Fatalf("WriteEvent: %v", err)
 	}
 	t.Logf("%d edits, %d-byte call ids: frame text %d bytes, control line %d bytes", len(edits), callIDWidth, len(frame.Text), wire.Len())
+	if headroom := control.MaxEventLine / 2; wire.Len() > headroom {
+		t.Fatalf("the largest prune frame takes %d bytes of a %d byte control line, more than the %d the escaping headroom allows", wire.Len(), control.MaxEventLine, headroom)
+	}
 	var read []contracts.Event
 	if err := control.ScanEvents(strings.NewReader(wire.String()), func(event contracts.Event) error {
 		read = append(read, event)

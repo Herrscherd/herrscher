@@ -160,6 +160,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 		}
 		driver.activeTurnID = ""
 	}
+	gate.shut()
 	consolidateOneShot(ctx, orch, sess, runtime.warnings, runtime.languageOf(sess))
 	return reply, nil
 }

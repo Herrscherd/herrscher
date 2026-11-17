@@ -66,7 +66,7 @@ var (
 	errCompactUnsupported = errors.New("its backend does not implement Compactor")
 	errBridgeGone         = errors.New("the bridge closed during a compaction")
 	errHistoryTimeout     = errors.New("the bridge did not answer a history call in time")
-	errTooManyEdits       = errors.New("the compaction would edit too many tool calls at once")
+	errTooManyEdits       = historywire.ErrTooManyEdits
 	errNoCompactorFactory = errors.New("is a compactor plugin but provides no Compactor factory")
 	errNilCompactor       = errors.New("its Compactor factory returned no stage")
 	errNoCompactorPlugin  = errors.New("no compactor plugin is registered under this name")
@@ -767,12 +767,10 @@ func (h bridgeHistory) ReadHistory(ctx context.Context) (contracts.History, erro
 	return collector.History()
 }
 
+// PruneHistory sends one frame and never resends it: after a failure past the send, the edits may be applied or not.
 func (h bridgeHistory) PruneHistory(ctx context.Context, edits []contracts.HistoryEdit) (contracts.PruneOutcome, error) {
 	if err := contracts.ValidateHistoryEdits(edits); err != nil {
 		return contracts.PruneOutcome{}, err
-	}
-	if len(edits) > historywire.MaxPruneEdits {
-		return contracts.PruneOutcome{}, fmt.Errorf("%w: %d", errTooManyEdits, len(edits))
 	}
 	request, err := historywire.Prune(h.driver.nextHistoryCall(), edits)
 	if err != nil {

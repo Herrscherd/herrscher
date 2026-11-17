@@ -187,6 +187,19 @@ func TestFailuresKeepTheirCauseAcrossTheWire(t *testing.T) {
 	}
 }
 
+func TestPruneRefusesMoreEditsThanOneFrameCarries(t *testing.T) {
+	edits := make([]contracts.HistoryEdit, MaxPruneEdits+1)
+	for i := range edits {
+		edits[i] = contracts.HistoryEdit{CallID: fmt.Sprint(i), Action: contracts.PruneCall}
+	}
+	if _, err := Prune("1", edits); !errors.Is(err, ErrTooManyEdits) {
+		t.Fatalf("Prune of %d edits = %v, want ErrTooManyEdits", len(edits), err)
+	}
+	if _, err := Prune("1", edits[:MaxPruneEdits]); err != nil {
+		t.Fatalf("Prune of %d edits = %v, want the largest frame accepted", MaxPruneEdits, err)
+	}
+}
+
 func TestPruneRefusesEditsPastAFrame(t *testing.T) {
 	_, err := Prune("1", []contracts.HistoryEdit{{CallID: strings.Repeat("c", ChunkLimit), Action: contracts.PruneCall}})
 	if !errors.Is(err, ErrHistoryTooLarge) {

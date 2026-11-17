@@ -28,6 +28,9 @@ const (
 	scanMaxLine       = 1024 * 1024
 )
 
+// MaxEventLine is the longest control line ScanEvents reads.
+const MaxEventLine = scanMaxLine
+
 // ScanEvents decodes events from r and passes each one to fn until r ends or fn fails.
 // ScanEvents passes each event read from r to handle and rejects a malformed line.
 func ScanEvents(r io.Reader, handle func(contracts.Event) error) error {

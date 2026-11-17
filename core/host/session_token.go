@@ -80,6 +80,11 @@ func (t *sessionTable) revokeTokensExcept(keep func(session string) bool) {
 			delete(t.tokens, session)
 		}
 	}
+	for token, lease := range t.seedLeases {
+		if !keep(lease.session) {
+			delete(t.seedLeases, token)
+		}
+	}
 }
 
 func (t *sessionTable) tokenMatches(session, presented string) bool {

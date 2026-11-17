@@ -76,7 +76,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addMemoryVerbs(reg, sessions.messages, options.live.Get); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addSkillVerbs(reg, options.live.Get); err != nil {
+	if err := addSkillVerbs(reg, sessions.messages, options.live.Get); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addScheduleCommands(reg, sessions.messages, options.live.Get, hostState, agents, schedSlot); err != nil {

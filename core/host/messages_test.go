@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 
@@ -457,7 +458,12 @@ func TestHostTextFallsBackToEnglishWhenFrenchDoesNotRender(t *testing.T) {
 }
 
 func TestOneOwnerKeepsOneCatalogueAcrossEveryRenderPath(t *testing.T) {
-	owner := newHostMessages()
+	builds := 0
+	owner := &hostMessages{}
+	owner.catalog = sync.OnceValues(func() (*i18n.Catalog, error) {
+		builds++
+		return buildHostCatalog()
+	})
 	built := owner.catalog
 	renders := 0
 	owner.catalog = func() (*i18n.Catalog, error) {
@@ -493,6 +499,9 @@ func TestOneOwnerKeepsOneCatalogueAcrossEveryRenderPath(t *testing.T) {
 	rendersThrough("errorTextIn on the nested error", func() {
 		errorTextIn(owner, i18n.French, top)
 	})
+	if builds != 1 {
+		t.Fatalf("the owner's catalogue was built %d times across the render paths, want exactly 1", builds)
+	}
 }
 
 func TestEveryLocalizableTypedNilRendersAsNilText(t *testing.T) {

@@ -127,6 +127,9 @@ func errorTextIn(messages *hostMessages, lang i18n.Language, err error) string {
 	if strings.HasSuffix(text, english) {
 		return strings.TrimSuffix(text, english) + local
 	}
+	if !strings.Contains(text, english) {
+		return text
+	}
 	return strings.Replace(text, english, local, 1)
 }
 

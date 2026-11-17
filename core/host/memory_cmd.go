@@ -27,8 +27,8 @@ func addMemoryVerbs(reg *cli.Registry, messages *hostMessages, lang languageSour
 	)
 }
 
-func addSkillVerbs(reg *cli.Registry, lang languageSource) error {
-	return addVerbs(reg, skillListVerb(lang), skillApproveVerb(lang))
+func addSkillVerbs(reg *cli.Registry, messages *hostMessages, lang languageSource) error {
+	return addVerbs(reg, skillListVerb(messages, lang), skillApproveVerb(messages, lang))
 }
 
 func withFirstMemory(ctx context.Context, messages *hostMessages, run func(contracts.Memory) (contracts.Result, error)) (contracts.Result, error) {
@@ -153,7 +153,7 @@ func memoryUnlinkVerb(messages *hostMessages, lang languageSource) contracts.Cmd
 		})
 }
 
-func skillListVerb(lang languageSource) contracts.Cmd {
+func skillListVerb(messages *hostMessages, lang languageSource) contracts.Cmd {
 	return contracts.New("skill", "list").
 		Help(clitext.CmdHelpSkillList).
 		Param("limit", clitext.CmdParamSkillListLimit, false).
@@ -209,7 +209,7 @@ func lastSeenOf(n contracts.Node) string {
 	return "never"
 }
 
-func skillApproveVerb(lang languageSource) contracts.Cmd {
+func skillApproveVerb(messages *hostMessages, lang languageSource) contracts.Cmd {
 	return contracts.New("skill", verbApprove).
 		Help(clitext.CmdHelpSkillApprove).
 		Param("key", clitext.CmdParamSkillApproveKey, true).

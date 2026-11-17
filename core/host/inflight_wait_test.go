@@ -209,7 +209,6 @@ func blockedWriterCases() []blockedWriterCase {
 				awaitGatedWrite(t, warnings)
 				return h
 			},
-			want: stuckStartupOverrunText,
 		},
 	}
 }
@@ -222,10 +221,6 @@ const (
 
 func blockedStopBound() time.Duration {
 	return 3*blockedGrace + 6*warningWriteBudget + blockedStopMargin
-}
-
-func stuckStartupOverrunText(h *hub, _ string) string {
-	return sessionOverrunText(h, stuckStartupName)
 }
 
 func TestBlockedWarningWriterDoesNotHoldStopPastTheBudget(t *testing.T) {

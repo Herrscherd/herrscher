@@ -141,10 +141,7 @@ func errorTextIn(messages *hostMessages, lang i18n.Language, err error) string {
 }
 
 func localizedPart(messages *hostMessages, lang i18n.Language, err error) (string, string, bool) {
-	if localizable, found := errors.AsType[localizableError](err); found {
-		if isNilLocalizable(localizable) {
-			return "", "", false
-		}
+	if localizable, found := firstLocalizable(err); found {
 		return localizable.Error(), localizable.render(messages, lang), true
 	}
 	if failure, found := errors.AsType[worktree.FailureError](err); found {
@@ -175,9 +172,27 @@ func isNilLocalizable(localizable localizableError) bool {
 	return false
 }
 
+func firstLocalizable(err error) (localizableError, bool) {
+	if err == nil {
+		return nil, false
+	}
+	if localizable, found := errors.AsType[localizableError](err); found && !isNilLocalizable(localizable) {
+		return localizable, true
+	}
+	if joined, isJoin := err.(interface{ Unwrap() []error }); isJoin {
+		for _, branch := range joined.Unwrap() {
+			if localizable, found := firstLocalizable(branch); found {
+				return localizable, true
+			}
+		}
+		return nil, false
+	}
+	return firstLocalizable(errors.Unwrap(err))
+}
+
 func isLocalized(err error) bool {
-	if localizable, found := errors.AsType[localizableError](err); found {
-		return !isNilLocalizable(localizable)
+	if _, found := firstLocalizable(err); found {
+		return true
 	}
 	_, found := errors.AsType[worktree.FailureError](err)
 	return found

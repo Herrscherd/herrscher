@@ -623,6 +623,18 @@ func TestLocalizeHostErrorTranslatesASentinelBesideATypedNil(t *testing.T) {
 	}
 }
 
+func TestLocalizeHostErrorTranslatesALocalizableAfterATypedNil(t *testing.T) {
+	owner := newHostMessages()
+	var nilWrap *hostWrapError
+	err := errors.Join(nilWrap, wrapHost(owner, errors.New("disque plein"), "serve.load_state", nil))
+	if got, want := localizeHostError(owner, i18n.French, err).Error(), "<nil>\nchargement de l'état impossible : disque plein"; got != want {
+		t.Fatalf("a typed nil before a localizable rendered %q in French, want %q", got, want)
+	}
+	if got, want := localizeHostError(owner, i18n.English, err).Error(), "<nil>\nload state: disque plein"; got != want {
+		t.Fatalf("a typed nil before a localizable rendered %q in English, want %q", got, want)
+	}
+}
+
 func TestEveryLocalizableTypedNilRendersAsNilText(t *testing.T) {
 	owner := newHostMessages()
 	params := map[string]any{nameParam: "digest"}

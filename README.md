@@ -450,19 +450,22 @@ daemon's user account is the operator, as far as the daemon can tell.
 
 That is the trust model, and it has a consequence. A shell command the approval
 hook allowed runs with the operator's rights. It can unset
-`HERRSCHER_COMMAND_SOCKET`, or dial the operator's socket directly, and then grant
-itself an approval or switch its session to `bypass`, which removes the hook. The variable is not needed on every path. `herrscher -p "<text>"` opens its session
-in a window while a daemon runs: that window sends the `session create` to the
-operator's socket as `owner`, whatever the variable says (`runPromptWindow`,
-`serve.go:358-366`, through `DaemonDispatch`, `core/host/daemonclient.go:82-88`).
-With `--print`, or without a window, the same command goes through the command
-registry and honours the variable (`runPrompt`, `serve.go:337-350`, and
-`forwarderFor`, `core/host/operator.go:23-27`). Without the variable, any
+`HERRSCHER_COMMAND_SOCKET`, or dial the operator's socket directly, and then
+grant itself an approval or switch its session to `bypass`, which removes the
+hook. The variable is not needed on every path. `herrscher -p "<text>"` opens
+its session in a window while a daemon runs: that window sends the `session
+create` to the operator's socket as `owner`, whatever the variable says
+(`runPromptWindow`, `serve.go:358-366`, through `DaemonDispatch`,
+`core/host/daemonclient.go:82-89`). With `--print`, or without a window, the
+same command goes through the command registry and honours the variable
+(`runPrompt`, `serve.go:337-350`, and `forwardDaemonOwnedCommands`,
+`core/host/operator.go:36`, which reads the variable). Without the variable, any
 `herrscher` subcommand on sessions, approvals, hosts or roles reaches the
 operator's socket as `owner` while a daemon runs, `herrscher approve allow <id>`
-included (`core/host/operator.go:36-44`, `core/host/cmdsocket_remote.go:14-19`).
-The hook sees a command string, not what the command does, so it cannot tell
-those calls from any other.
+included (`forwardDaemonOwnedCommands`, `core/host/operator.go:36`, through
+`commandSocketTarget`, `core/host/cmdsocket_remote.go:14-19`). The hook sees a
+command string, not what the command does, so it cannot tell those calls from
+any other.
 
 Session sockets are not protected either. Each session's command socket path
 follows from its name (`core/host/cmdsocket_unix.go`), and `session list`, which
@@ -470,10 +473,16 @@ an agent may run, shows every name. Any process of the same user can connect to
 any session's socket, and the daemon serves that connection with the rights of
 the session that owns the socket, not the caller's. A shell of any session can
 therefore send a message or seed a session as session B. Those rights reach B
-itself and the sessions B delegated, and nothing else (`inSubtree`,
-`core/host/authz.go:167-172`, and `Decide`, `core/internal/authz/authz.go:137`).
-The daemon checks no credential on a session socket except the token that
-`approve ask` requires, and only for that verb.
+itself and the sessions B delegated for every verb that names a session; the
+verbs that name none, such as `session info`
+(`core/host/session_cmd.go:144-151`) and `session list`
+(`core/internal/manager/session_query.go:88`), show every session. The check
+runs in `subjectOf` (`core/host/authz.go:149-164`) over the verbs of
+`sessionArgs` (`core/host/authz.go:57-90`), through `inSubtree`
+(`core/host/authz.go:167-190`), and `Decide` enforces it
+(`core/internal/authz/authz.go:137`). The daemon checks no credential on a
+session socket except the token that `approve ask` requires, and only for that
+verb.
 
 What #232 protects is narrower. Each session holds its own token, sent in
 `HERRSCHER_SESSION_TOKEN` and checked in constant time. `approve ask` answers only
@@ -487,13 +496,13 @@ the tool call.
 
 For the operator, the rule is this: never grant a broad rule on `Bash`. A rule
 that lets a shell run a program able to reach a socket gives that program the
-operator's rights. Examples of such programs are `sh`, `bash`, `python`, `node`, `env`, `xargs`,
-`find -exec`, `git -c`, `make`, `awk`, `perl`, `go test -exec`, the tools that
-speak to a socket directly (`socat`, `nc -U`), and the wrappers that run an argument
-vector (`timeout`, `nice`, `nohup`, `setsid`, `stdbuf`). So
+operator's rights. Examples of such programs are `sh`, `bash`, `python`, `node`,
+`env`, `xargs`, `find -exec`, `git -c`, `make`, `awk`, `perl`, `go test -exec`,
+the tools that speak to a socket directly (`socat`, `nc -U`), and the wrappers
+that run an argument vector (`timeout`, `nice`, `nohup`, `setsid`, `stdbuf`). So
 `allow Bash(*)`, `allow Bash(git *)` and `allow Bash(herrscher*)` are all broad
-rules. The last is the most direct: `herrscher approve allow <id>` reaches the operator's
-socket through the path above.
+rules. The last is the most direct: `herrscher approve allow <id>` reaches the
+operator's socket through the path above.
 
 Keep `ask` on everything that runs code from the repository: `make`, `go test`,
 `npm run`, and any script. A session in `acceptEdits` mode can write a Makefile
@@ -518,12 +527,13 @@ A session talks to its own command socket, which carries that session's rights
 only, so through it a session cannot widen the policy that decides its own tool
 calls. Who connects is a separate matter: any process of the same user can dial
 any session's socket, as described under who may change the approvals above. A
-session cannot open a session either. That is the same refusal in a different
-form: a session created from the command line carries whatever flags the command
-line chose, and one with no agent or `--approvals bypass` is a second session where
-the caller's own policy does not apply. Delegation is untouched, because a
-`⟢ delegate:` trailer opens a worker that runs a registered agent and answers to a
-policy the way its lead does.
+session cannot open a session through its own socket either. Through the
+operator's socket it can: run from a shell without `HERRSCHER_COMMAND_SOCKET`,
+`herrscher -p` or `herrscher session create` creates a session that carries
+whatever flags the command line chose, and one with no agent or `--approvals
+bypass` is a second session where the caller's own policy does not apply.
+Delegation is untouched, because a `⟢ delegate:` trailer opens a worker that
+runs a registered agent and answers to a policy the way its lead does.
 
 That much applies from the upgrade, with nothing to configure.
 

@@ -35,7 +35,7 @@ func testScheduleRegistry(t *testing.T, st *state.State, slot *schedulerSlot) *c
 	if slot == nil {
 		slot = &schedulerSlot{}
 	}
-	if err := addScheduleCommands(reg, fixedLanguage(i18n.English), st, fakeAgents{known: map[string]bool{"scout": true}}, slot); err != nil {
+	if err := addScheduleCommands(reg, newHostMessages(), fixedLanguage(i18n.English), st, fakeAgents{known: map[string]bool{"scout": true}}, slot); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
 	return reg

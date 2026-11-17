@@ -113,7 +113,7 @@ func (h *hub) reportSessionFailure(sess state.Session, stage supervisor.Stage, c
 		return
 	}
 	lang := sessionLanguage(sess, h.textLanguage()())
-	text := localizeHostError(h.messages, lang, wrapHost(cause, sessionFailureKey(stage), map[string]any{nameParam: sess.Name, detailParam: cause.Error()})).Error()
+	text := localizeHostError(h.messages, lang, wrapHost(h.messages, cause, sessionFailureKey(stage), map[string]any{nameParam: sess.Name, detailParam: cause.Error()})).Error()
 	h.eventPublisher(sess.Name, contracts.Event{T: eventwire.EventNotice, Text: text})
 }
 

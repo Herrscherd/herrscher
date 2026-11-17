@@ -25,7 +25,7 @@ func TestArchiveRefusalReachesTheFrenchOperatorInFrench(t *testing.T) {
 	if err := tw.Close(); err != nil {
 		t.Fatal(err)
 	}
-	err := extractTar(strings.NewReader(buf.String()), dst)
+	err := extractTar(newHostMessages(), strings.NewReader(buf.String()), dst)
 	if err == nil {
 		t.Fatal("want a refusal")
 	}

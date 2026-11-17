@@ -47,10 +47,10 @@ func addSessionVerbs(reg *cli.Registry, lang languageSource, store *state.State,
 		sessionScrollbackVerb(partDir),
 		sessionInterruptVerb(lang, sessions),
 		sessionCompactVerb(lang, store, sessions),
-		sessionSetCompactVerb(store),
-		sessionSetAccountVerb(lang, store),
+		sessionSetCompactVerb(sessions.messages, store),
+		sessionSetAccountVerb(sessions.messages, lang, store),
 		sessionLangVerb(store, lang),
-		sessionAccountsVerb(lang, store),
+		sessionAccountsVerb(sessions.messages, lang, store),
 	)
 }
 
@@ -121,7 +121,7 @@ func sessionSendVerb(sessions *sessionTable) contracts.Cmd {
 }
 
 func sendToSession(ctx context.Context, sessions *sessionTable, input contracts.Input) error {
-	atts, err := parseAttachmentPaths(input.Get("attachments"))
+	atts, err := parseAttachmentPaths(sessions.messages, input.Get("attachments"))
 	if err != nil {
 		return err
 	}
@@ -179,7 +179,7 @@ func sessionPickVerb(lang languageSource, approvals *approvalTable, sessions *se
 			if answerApprovalPick(approvals, sessions, name, value) || sessions.pick(name, value) {
 				return contracts.DataResult(replyText(lang()).Text(clitext.SessionPicked, clitext.Params{clitext.ParamName: name})), nil
 			}
-			return contracts.Result{}, wrapHost(errNoPendingChoice, "session.refused", map[string]any{nameParam: name})
+			return contracts.Result{}, wrapHost(sessions.messages, errNoPendingChoice, "session.refused", map[string]any{nameParam: name})
 		})
 }
 
@@ -238,14 +238,14 @@ func mergedCompactNotice(lang i18n.Language, name, instruction string) string {
 	return replyText(lang).Text(key, clitext.Params{clitext.ParamName: name})
 }
 
-func sessionSetCompactVerb(store *state.State) contracts.Cmd {
+func sessionSetCompactVerb(messages *hostMessages, store *state.State) contracts.Cmd {
 	return contracts.New(nsSession, "set-compact").
 		Help(clitext.CmdHelpSessionSetCompact).
 		Param(paramName, clitext.CmdParamSessionSetCompactName, true).
 		Param("percent", clitext.CmdParamSessionSetCompactPercent, false).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			name := input.Get(paramName)
-			ok, err := applyCompactPercent(store, name, input.Get("percent"))
+			ok, err := applyCompactPercent(messages, store, name, input.Get("percent"))
 			if err != nil {
 				return contracts.Result{}, err
 			}
@@ -256,13 +256,13 @@ func sessionSetCompactVerb(store *state.State) contracts.Cmd {
 		})
 }
 
-func applyCompactPercent(store *state.State, name, raw string) (bool, error) {
+func applyCompactPercent(messages *hostMessages, store *state.State, name, raw string) (bool, error) {
 	if raw == "" {
 		return store.SetCompactPercent(name, nil)
 	}
 	percent, err := strconv.Atoi(raw)
 	if err != nil {
-		return false, wrapHost(err, "session.percent", map[string]any{"Raw": raw})
+		return false, wrapHost(messages, err, "session.percent", map[string]any{"Raw": raw})
 	}
 	if err := contracts.ValidateAutoCompactPercent(percent); err != nil {
 		return false, err

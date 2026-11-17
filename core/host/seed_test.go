@@ -152,7 +152,7 @@ func TestNewSeedBackendResolvesRelativeWorktreeOnce(t *testing.T) {
 	})
 
 	sess := state.Session{Vendor: "codex", Worktree: relative}
-	if _, err := newSeedBackend(context.Background(), sess, nil, nil); err != nil {
+	if _, err := newSeedBackend(context.Background(), newHostMessages(), sess, nil, nil); err != nil {
 		t.Fatalf("newSeedBackend: %v", err)
 	}
 	if gotDir != worker {
@@ -274,7 +274,7 @@ func TestNewSeedBackendPropagatesSessionModelID(t *testing.T) {
 	t.Setenv("NEUBLOX_GATEWAY_TOKEN", "")
 
 	sess := state.Session{Vendor: "codex", ModelID: "gpt-gateway"}
-	_, err := newSeedBackend(context.Background(), sess, nil, nil)
+	_, err := newSeedBackend(context.Background(), newHostMessages(), sess, nil, nil)
 	if err == nil {
 		t.Fatal("newSeedBackend succeeded with a gateway-route model and no gateway credentials; want fail-closed error")
 	}
@@ -283,7 +283,7 @@ func TestNewSeedBackendPropagatesSessionModelID(t *testing.T) {
 	}
 
 	legacy := state.Session{Vendor: "codex"}
-	if _, err := newSeedBackend(context.Background(), legacy, nil, nil); err != nil {
+	if _, err := newSeedBackend(context.Background(), newHostMessages(), legacy, nil, nil); err != nil {
 		t.Fatalf("legacy path (no ModelID) failed: %v", err)
 	}
 }
@@ -387,7 +387,7 @@ func TestSeedBackendUsesTheStoredAccountThroughTheProxy(t *testing.T) {
 	keys := keysWithUpstream(t, "anthropic", upstream.URL, map[string]string{"KEY_MAIN": "sk-main"})
 
 	settings := registerClaudeWithSettings(t, func() (contracts.Backend, error) { return seedBackend{}, nil })
-	if _, err := newSeedBackend(context.Background(), state.Session{Vendor: contracts.VendorClaude, Account: "perso"}, keys, nil); err != nil {
+	if _, err := newSeedBackend(context.Background(), newHostMessages(), state.Session{Vendor: contracts.VendorClaude, Account: "perso"}, keys, nil); err != nil {
 		t.Fatalf("newSeedBackend: %v", err)
 	}
 	env := contracts.ParseEnvSetting(settings()["env"])
@@ -430,7 +430,7 @@ func TestSeedBackendNeverCarriesTheGatewayTokenWithAProxy(t *testing.T) {
 			return seedBackend{}, nil
 		},
 	})
-	if _, err := newSeedBackend(context.Background(), state.Session{Vendor: "codex", ModelID: "gpt-gateway"}, keys, nil); err != nil {
+	if _, err := newSeedBackend(context.Background(), newHostMessages(), state.Session{Vendor: "codex", ModelID: "gpt-gateway"}, keys, nil); err != nil {
 		t.Fatalf("newSeedBackend: %v", err)
 	}
 	for name, value := range contracts.ParseEnvSetting(settings["env"]) {

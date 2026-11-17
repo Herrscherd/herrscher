@@ -20,7 +20,7 @@ func TestAwaitEntriesWakesWhenAnAnnouncementArrives(t *testing.T) {
 	}
 	done := make(chan outcome, 1)
 	go func() {
-		entries, err := awaitEntries(ctx, contracts.CategoryMemory, watch)
+		entries, err := awaitEntries(ctx, newHostMessages(), contracts.CategoryMemory, watch)
 		done <- outcome{entries, err}
 	}()
 

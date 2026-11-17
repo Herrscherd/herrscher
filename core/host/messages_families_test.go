@@ -102,13 +102,13 @@ func TestHostMessageFamiliesAreFrozen(t *testing.T) {
 
 func TestSessionlessOperatorFrenchReachesTheWrappedMessage(t *testing.T) {
 	live := newOperatorLanguage(i18n.French)
-	err := busyRewindError("alpha")
+	err := busyRewindError(newHostMessages(), "alpha")
 	got := localizeHostError(newHostMessages(), commandErrorLanguage(nil, live.Get(), contracts.Input{}), err).Error()
 	want := `la session "alpha" a un tour en cours : interrompez-le (échap) avant de revenir en arrière`
 	if got != want {
 		t.Fatalf("sessionless fr operator got %q, want %q", got, want)
 	}
-	wrapped := fmt.Errorf("commande refusée: %w", busyRewindError("alpha"))
+	wrapped := fmt.Errorf("commande refusée: %w", busyRewindError(newHostMessages(), "alpha"))
 	gotWrapped := localizeHostError(newHostMessages(), commandErrorLanguage(nil, live.Get(), contracts.Input{}), wrapped).Error()
 	wantWrapped := "commande refusée: " + want
 	if gotWrapped != wantWrapped {

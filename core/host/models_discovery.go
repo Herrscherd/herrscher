@@ -126,8 +126,9 @@ func (a discoveryAnswer) under(policy contracts.RoutePolicy) discoveryAnswer {
 
 // ModelDiscovery reads and refreshes the model cache beside one daemon state file.
 type ModelDiscovery struct {
-	dir     string
-	notices *clashNotices
+	messages *hostMessages
+	dir      string
+	notices  *clashNotices
 }
 
 // Sources returns the discovered models of this cache and the hidden IDs; a nil discovery yields the static catalog.
@@ -135,12 +136,12 @@ func (d *ModelDiscovery) Sources() Sources {
 	if d == nil {
 		return Sources{hidden: splitSet(envx.Getenv(envModelsHidden))}
 	}
-	return loadSourcesAt(d.cachePath(), d.notices)
+	return loadSourcesAt(d.messages, d.cachePath(), d.notices)
 }
 
-func loadSourcesAt(path string, notices *clashNotices) Sources {
+func loadSourcesAt(messages *hostMessages, path string, notices *clashNotices) Sources {
 	sources := Sources{hidden: splitSet(envx.Getenv(envModelsHidden)), notices: notices}
-	cache, err := loadDiscoveryCache(path)
+	cache, err := loadDiscoveryCache(messages, path)
 	if err != nil {
 		slog.Warn("model cache unreadable, using the static catalog", "path", path, "err", err)
 	}
@@ -170,7 +171,7 @@ func withoutGatewayRoutes(cache discoveryCache) discoveryCache {
 func (d *ModelDiscovery) StartBackground(ctx context.Context, plugins []contracts.Plugin) {
 	go func() {
 		path := d.cachePath()
-		cache, err := loadDiscoveryCache(path)
+		cache, err := loadDiscoveryCache(d.messages, path)
 		if err != nil {
 			slog.Warn("model cache unreadable, refreshing from the backends", "path", path, "err", err)
 		}
@@ -178,7 +179,7 @@ func (d *ModelDiscovery) StartBackground(ctx context.Context, plugins []contract
 		if !anyRefreshed(outcomes) {
 			return
 		}
-		if err := persistRefreshed(path, next, outcomes); err != nil {
+		if err := persistRefreshed(d.messages, path, next, outcomes); err != nil {
 			slog.Warn("model cache not saved", "path", path, "err", err)
 		}
 	}()
@@ -242,7 +243,7 @@ func ModelDiscoveryFor(statePath string) *ModelDiscovery {
 	if envDir := envx.Get("STATE_DIR"); envDir != "" && filepath.Clean(envDir) != filepath.Clean(dir) {
 		slog.Warn("HERRSCHER_STATE_DIR differs from --state, the model cache follows --state", "env", envDir, "state", dir)
 	}
-	return &ModelDiscovery{dir: dir, notices: newClashNotices()}
+	return &ModelDiscovery{messages: newHostMessages(), dir: dir, notices: newClashNotices()}
 }
 
 // DefaultModelDiscovery returns the model discovery of the default daemon state file.
@@ -272,18 +273,18 @@ func (d *ModelDiscovery) cachePath() string {
 	return discoveryCacheIn(d.dir)
 }
 
-func loadDiscoveryCache(path string) (discoveryCache, error) {
+func loadDiscoveryCache(messages *hostMessages, path string) (discoveryCache, error) {
 	empty := discoveryCache{Vendors: make(map[string]vendorDiscovery)}
 	data, err := os.ReadFile(filepath.Clean(path))
 	if errors.Is(err, fs.ErrNotExist) {
 		return empty, nil
 	}
 	if err != nil {
-		return empty, wrapHost(err, "models.cache_read", nil)
+		return empty, wrapHost(messages, err, "models.cache_read", nil)
 	}
 	var cache discoveryCache
 	if err := json.Unmarshal(data, &cache); err != nil {
-		return empty, wrapHost(err, "models.cache_decode", nil)
+		return empty, wrapHost(messages, err, "models.cache_decode", nil)
 	}
 	if cache.Vendors == nil {
 		cache.Vendors = make(map[string]vendorDiscovery)
@@ -291,40 +292,40 @@ func loadDiscoveryCache(path string) (discoveryCache, error) {
 	return cache, nil
 }
 
-func saveDiscoveryCache(path string, cache discoveryCache) error {
+func saveDiscoveryCache(messages *hostMessages, path string, cache discoveryCache) error {
 	data, err := json.MarshalIndent(cache, "", "  ")
 	if err != nil {
-		return wrapHost(err, "models.cache_encode", nil)
+		return wrapHost(messages, err, "models.cache_encode", nil)
 	}
 	dir := filepath.Dir(path)
 	if mkdirErr := os.MkdirAll(dir, cacheDirMode); mkdirErr != nil {
-		return wrapHost(mkdirErr, "models.cache_dir", nil)
+		return wrapHost(messages, mkdirErr, "models.cache_dir", nil)
 	}
 	root, err := os.OpenRoot(dir)
 	if err != nil {
-		return wrapHost(err, "models.cache_dir_open", nil)
+		return wrapHost(messages, err, "models.cache_dir_open", nil)
 	}
 	defer func() { logCleanup(root.Close()) }()
 	name := filepath.Base(path)
 	tempName := fmt.Sprintf(".%s-%d.tmp", name, time.Now().UnixNano())
 	temp, err := root.OpenFile(tempName, os.O_WRONLY|os.O_CREATE|os.O_EXCL, cacheFileMode)
 	if err != nil {
-		return wrapHost(err, "models.cache_temp", nil)
+		return wrapHost(messages, err, "models.cache_temp", nil)
 	}
 	if err := writeAndClose(temp, data); err != nil {
 		logCleanup(root.Remove(tempName))
-		return wrapHost(err, "models.cache_write", nil)
+		return wrapHost(messages, err, "models.cache_write", nil)
 	}
 	if err := root.Rename(tempName, name); err != nil {
 		logCleanup(root.Remove(tempName))
-		return wrapHost(err, "models.cache_replace", nil)
+		return wrapHost(messages, err, "models.cache_replace", nil)
 	}
 	return nil
 }
 
-func persistRefreshed(path string, next discoveryCache, outcomes []discoveryOutcome) error {
-	return withCacheLock(path, func() error {
-		latest, err := loadDiscoveryCache(path)
+func persistRefreshed(messages *hostMessages, path string, next discoveryCache, outcomes []discoveryOutcome) error {
+	return withCacheLock(messages, path, func() error {
+		latest, err := loadDiscoveryCache(messages, path)
 		if err != nil {
 			slog.Warn("model cache unreadable, writing only the refreshed vendors", "path", path, "err", err)
 		}
@@ -333,21 +334,21 @@ func persistRefreshed(path string, next discoveryCache, outcomes []discoveryOutc
 				latest.Vendors[outcome.Vendor] = next.Vendors[outcome.Vendor]
 			}
 		}
-		return saveDiscoveryCache(path, latest)
+		return saveDiscoveryCache(messages, path, latest)
 	})
 }
 
-func withCacheLock(path string, critical func() error) error {
+func withCacheLock(messages *hostMessages, path string, critical func() error) error {
 	lockPath := cacheLockPath(path)
 	if err := os.MkdirAll(filepath.Dir(lockPath), cacheDirMode); err != nil {
-		return wrapHost(err, "models.cache_dir", nil)
+		return wrapHost(messages, err, "models.cache_dir", nil)
 	}
 	lockFile, err := os.OpenFile(filepath.Clean(lockPath), os.O_CREATE|os.O_RDWR, cacheFileMode)
 	if err != nil {
-		return wrapHost(err, "models.cache_lock_open", nil)
+		return wrapHost(messages, err, "models.cache_lock_open", nil)
 	}
 	defer func() { logCleanup(lockFile.Close()) }()
-	if err := acquireCacheLock(lockFile); err != nil {
+	if err := acquireCacheLock(messages, lockFile); err != nil {
 		return err
 	}
 	return critical()
@@ -358,12 +359,12 @@ func cacheLockPath(path string) string {
 	return filepath.Join(dir, "."+base+".lock")
 }
 
-func acquireCacheLock(lockFile *os.File) error {
+func acquireCacheLock(messages *hostMessages, lockFile *os.File) error {
 	deadline := time.Now().Add(cacheLockTimeout)
 	for {
 		locked, err := tryLock(lockFile)
 		if err != nil {
-			return wrapHost(err, "models.cache_lock", nil)
+			return wrapHost(messages, err, "models.cache_lock", nil)
 		}
 		if locked {
 			return nil

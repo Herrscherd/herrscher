@@ -53,7 +53,7 @@ func (r oneShotSeedRuntime) backendFactory() func(context.Context, state.Session
 		return r.backend
 	}
 	return func(ctx context.Context, sess state.Session) (contracts.Backend, error) {
-		return newSeedBackend(ctx, sess, nil, r.models)
+		return newSeedBackend(ctx, r.messages, sess, nil, r.models)
 	}
 }
 
@@ -333,14 +333,18 @@ type remoteBackendResolver interface {
 // with the invocation, kind, working directory, and, if a ModelID is
 // supplied, the environment variables its route requires.
 func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend, error) {
-	backend, release, err := buildBackend(ctx, req)
+	return buildBackendFor(ctx, newHostMessages(), req)
+}
+
+func buildBackendFor(ctx context.Context, messages *hostMessages, req BackendRequest) (contracts.Backend, error) {
+	backend, release, err := buildBackend(ctx, messages, req)
 	if err != nil {
 		return nil, err
 	}
 	return lease.Wrap(backend, release), nil
 }
 
-func buildBackend(ctx context.Context, req BackendRequest) (contracts.Backend, func(), error) {
+func buildBackend(ctx context.Context, messages *hostMessages, req BackendRequest) (contracts.Backend, func(), error) {
 	plugins := contracts.Default.Backends()
 	if req.ModelID == "" && ResolvePolicy(envx.Getenv) == contracts.PolicyGatewayOnly {
 		return nil, noRelease, errGatewayOnlyNoModel
@@ -349,7 +353,7 @@ func buildBackend(ctx context.Context, req BackendRequest) (contracts.Backend, f
 	if err != nil {
 		return nil, noRelease, err
 	}
-	route, err := routeFor(req.ModelID, entry, req.Keys)
+	route, err := routeFor(messages, req.ModelID, entry, req.Keys)
 	if err != nil {
 		return nil, noRelease, err
 	}
@@ -362,7 +366,7 @@ func buildBackend(ctx context.Context, req BackendRequest) (contracts.Backend, f
 		return failWith(err)
 	}
 	if fromRemote {
-		if refusal := req.remoteRefusal(route); refusal != nil {
+		if refusal := req.remoteRefusal(messages, route); refusal != nil {
 			return failWith(refusal)
 		}
 		return backend, noRelease, nil
@@ -378,7 +382,7 @@ func buildBackend(ctx context.Context, req BackendRequest) (contracts.Backend, f
 	if cfg.Settings == nil {
 		cfg.Settings = make(map[string]string)
 	}
-	env, release, err := sessionEnv(req, desired, route)
+	env, release, err := sessionEnv(messages, req, desired, route)
 	if err != nil {
 		return failWith(err)
 	}
@@ -426,31 +430,35 @@ func chooseVendor(requested, cmd, modelID string, plugins []contracts.Plugin, mo
 	return vendor, entry, nil
 }
 
-func routeFor(modelID string, entry CatalogEntry, keys *keyproxy.Proxy) (modelRoute, error) {
+func routeFor(messages *hostMessages, modelID string, entry CatalogEntry, keys *keyproxy.Proxy) (modelRoute, error) {
 	if modelID == "" {
 		return modelRoute{}, nil
 	}
-	env, release, err := spawnEnvVia(entry, os.Getenv, keys)
+	env, release, err := spawnEnvVia(messages, entry, os.Getenv, keys)
 	if err != nil {
 		return modelRoute{}, err
 	}
 	return modelRoute{env: env, arg: entry.Arg, grant: release}, nil
 }
 
-func (req BackendRequest) remoteRefusal(route modelRoute) error {
+func (req BackendRequest) remoteRefusal(messages *hostMessages, route modelRoute) error {
 	if req.Session != "" {
-		return &remoteSessionError{Session: req.Session}
+		return &remoteSessionError{messages: messages, Session: req.Session}
 	}
 	if len(route.env) > 0 {
-		return &gatewayEnvUnsupportedError{Model: req.ModelID}
+		return &gatewayEnvUnsupportedError{messages: messages, Model: req.ModelID}
 	}
-	return req.RemoteAccountRefusal()
+	return req.remoteAccountRefusal(messages)
 }
 
 // RemoteAccountRefusal refuses an account on a remote backend, which resolves accounts in its own store.
 func (req BackendRequest) RemoteAccountRefusal() error {
+	return req.remoteAccountRefusal(newHostMessages())
+}
+
+func (req BackendRequest) remoteAccountRefusal(messages *hostMessages) error {
 	if req.Account != "" {
-		return &remoteAccountError{Account: req.Account}
+		return &remoteAccountError{messages: messages, Account: req.Account}
 	}
 	return nil
 }
@@ -485,16 +493,16 @@ func setIfPresent(settings map[string]string, key, value string) {
 	}
 }
 
-func newSeedBackend(ctx context.Context, sess state.Session, keys *keyproxy.Proxy, models *ModelDiscovery) (contracts.Backend, error) {
-	return newSeedBackendWithToken(ctx, sess, keys, models, "")
+func newSeedBackend(ctx context.Context, messages *hostMessages, sess state.Session, keys *keyproxy.Proxy, models *ModelDiscovery) (contracts.Backend, error) {
+	return newSeedBackendWithToken(ctx, messages, sess, keys, models, "")
 }
 
-func newSeedBackendWithToken(ctx context.Context, sess state.Session, keys *keyproxy.Proxy, models *ModelDiscovery, token string) (contracts.Backend, error) {
+func newSeedBackendWithToken(ctx context.Context, messages *hostMessages, sess state.Session, keys *keyproxy.Proxy, models *ModelDiscovery, token string) (contracts.Backend, error) {
 	dir := sess.Dir
 	if dir == "" {
 		dir = sess.Worktree
 	}
-	return BuildBackendFor(ctx, BackendRequest{
+	return buildBackendFor(ctx, messages, BackendRequest{
 		Vendor:       sess.Vendor,
 		Cmd:          sess.Cmd,
 		Kind:         sess.Backend,

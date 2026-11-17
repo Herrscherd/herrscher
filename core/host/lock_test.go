@@ -82,7 +82,7 @@ func TestCacheLockHoldsOffASecondWriter(t *testing.T) {
 	release := make(chan struct{})
 	first := make(chan error, 1)
 	go func() {
-		first <- withCacheLock(path, func() error {
+		first <- withCacheLock(newHostMessages(), path, func() error {
 			close(entered)
 			<-release
 			return nil
@@ -91,7 +91,7 @@ func TestCacheLockHoldsOffASecondWriter(t *testing.T) {
 	<-entered
 	second := make(chan error, 1)
 	go func() {
-		second <- withCacheLock(path, func() error { return nil })
+		second <- withCacheLock(newHostMessages(), path, func() error { return nil })
 	}()
 	select {
 	case err := <-second:

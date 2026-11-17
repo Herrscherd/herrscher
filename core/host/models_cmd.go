@@ -109,13 +109,13 @@ func modelDiscoveryFor(input contracts.Input) *ModelDiscovery {
 
 func refreshModels(ctx context.Context, lang i18n.Language, plugins []contracts.Plugin, models *ModelDiscovery) (string, error) {
 	path := models.cachePath()
-	cache, err := loadDiscoveryCache(path)
+	cache, err := loadDiscoveryCache(models.messages, path)
 	if err != nil {
 		return "", err
 	}
 	next, outcomes := refreshDiscovery(ctx, plugins, cache, resolveDiscoverySettings(), time.Now(), true)
 	if anyRefreshed(outcomes) {
-		if err := persistRefreshed(path, next, outcomes); err != nil {
+		if err := persistRefreshed(models.messages, path, next, outcomes); err != nil {
 			return "", err
 		}
 	}

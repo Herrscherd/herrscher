@@ -258,7 +258,7 @@ func TestRebindSurvivesAnOverrunTeardown(t *testing.T) {
 	if got := probe.calls.Load(); got != 1 {
 		t.Fatalf("goDead returned after %d releases of the overrun session, want 1", got)
 	}
-	if socketAnswers(t.Context(), layout, SessionCommandSocketPathIn(layout, h.instanceID, name)) {
+	if socketAnswers(t.Context(), newHostMessages(), layout, SessionCommandSocketPathIn(layout, h.instanceID, name)) {
 		t.Fatal("the command socket still answers once goDead has returned")
 	}
 
@@ -320,7 +320,7 @@ func TestReleasedCommandSocketIsUnreachableOnceGoDeadReturns(t *testing.T) {
 			t.Fatal(err)
 		}
 		h.goDead(name)
-		if socketAnswers(t.Context(), layout, SessionCommandSocketPathIn(layout, h.instanceID, name)) {
+		if socketAnswers(t.Context(), newHostMessages(), layout, SessionCommandSocketPathIn(layout, h.instanceID, name)) {
 			t.Fatalf("session %s: the command socket still answers once goDead has returned", name)
 		}
 	}

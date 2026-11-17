@@ -17,7 +17,7 @@ func resumeHubWith(t *testing.T, sess state.Session) (*hub, *state.State) {
 	if err := st.AddSession(sess); err != nil {
 		t.Fatalf("AddSession: %v", err)
 	}
-	if err := ensureRuntimeDir(layout, SessionCommandSocketPathIn(layout, "", sess.Name)); err != nil {
+	if err := ensureRuntimeDir(newHostMessages(), layout, SessionCommandSocketPathIn(layout, "", sess.Name)); err != nil {
 		t.Fatal(err)
 	}
 	answeringListener(t, SessionCommandSocketPathIn(layout, "", sess.Name))

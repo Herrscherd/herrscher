@@ -123,7 +123,7 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 func provisionE2EHost(ctx context.Context, t *testing.T, layout RuntimeLayout, st *state.State, target, src string) state.Host {
 	t.Helper()
 	h := state.Host{Name: "e2e", SSH: target, Workspace: remoteWorkspace(ctx, t, layout, target)}
-	provisioned, err := provisionHost(ctx, runnerForTest(t, layout, h), h, src)
+	provisioned, err := provisionHost(ctx, newHostMessages(), runnerForTest(t, layout, h), h, src)
 	if err != nil {
 		t.Fatalf("provision: %v", err)
 	}
@@ -303,7 +303,7 @@ func TestE2ERemoteCommandSocketForward(t *testing.T) {
 	layout := testRuntime(t)
 
 	h := state.Host{Name: "e2e", SSH: target, Workspace: remoteWorkspace(ctx, t, layout, target)}
-	provisioned, err := provisionHost(ctx, runnerForTest(t, layout, h), h, src)
+	provisioned, err := provisionHost(ctx, newHostMessages(), runnerForTest(t, layout, h), h, src)
 	if err != nil {
 		t.Fatalf("provision: %v", err)
 	}
@@ -343,7 +343,7 @@ func TestE2ETwoSessionsReachTheDaemonAtOnce(t *testing.T) {
 	layout := testRuntime(t)
 
 	h := state.Host{Name: "e2e", SSH: target, Workspace: remoteWorkspace(ctx, t, layout, target)}
-	provisioned, err := provisionHost(ctx, runnerForTest(t, layout, h), h, sourceRoot(t))
+	provisioned, err := provisionHost(ctx, newHostMessages(), runnerForTest(t, layout, h), h, sourceRoot(t))
 	if err != nil {
 		t.Fatalf("provision: %v", err)
 	}

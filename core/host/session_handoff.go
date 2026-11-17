@@ -42,6 +42,7 @@ var (
 )
 
 type handoffDeps struct {
+	messages     *hostMessages
 	lang         languageSource
 	sessionLang  func(name string) i18n.Language
 	exists       func(name string) bool
@@ -104,7 +105,8 @@ func sessionHandoffCmd(lang languageSource, managerCmds []contracts.Cmd, store *
 		return contracts.Cmd{}, errHandoffNoCreate
 	}
 	return sessionHandoffVerb(handoffDeps{
-		lang: lang,
+		messages: sessions.messages,
+		lang:     lang,
 		sessionLang: func(name string) i18n.Language {
 			return namedSessionLanguage(store, name, lang())
 		},
@@ -224,7 +226,7 @@ func (d handoffDeps) checkedArgs(source, target, parent string, input contracts.
 	account := handoffAccount(input, d.account(source))
 	args := newSessionArgs(target, account, input, parent)
 	if err := d.checkAccount(contracts.Input{Args: args}); err != nil {
-		return nil, "", inheritedAccountError(input, source, account, err)
+		return nil, "", inheritedAccountError(d.messages, input, source, account, err)
 	}
 	return args, account, nil
 }
@@ -232,11 +234,11 @@ func (d handoffDeps) checkedArgs(source, target, parent string, input contracts.
 func (d handoffDeps) launch(ctx context.Context, source string, input contracts.Input, account string, args map[string]string) (string, string, error) {
 	brief, err := d.brief(ctx, source)
 	if err != nil {
-		return "", "", wrapHost(err, "handoff.brief_from", map[string]any{"Source": source})
+		return "", "", wrapHost(d.messages, err, "handoff.brief_from", map[string]any{"Source": source})
 	}
 	reply, err := d.create(ctx, contracts.Input{Args: args})
 	if err != nil {
-		return "", "", inheritedAccountError(input, source, account, err)
+		return "", "", inheritedAccountError(d.messages, input, source, account, err)
 	}
 	return reply, brief, nil
 }
@@ -253,11 +255,11 @@ func isAccountRefusal(err error) bool {
 		errors.Is(err, manager.ErrAccountHost) || errors.Is(err, manager.ErrAccountRemote)
 }
 
-func inheritedAccountError(input contracts.Input, source, account string, err error) error {
+func inheritedAccountError(messages *hostMessages, input contracts.Input, source, account string, err error) error {
 	if _, given := input.Lookup("account"); given || account == "" || !isAccountRefusal(err) {
 		return err
 	}
-	return wrapHost(err, "handoff.account_inherited", map[string]any{"Account": account, "Source": source, "Command": retryCommand(source, input)})
+	return wrapHost(messages, err, "handoff.account_inherited", map[string]any{"Account": account, "Source": source, "Command": retryCommand(source, input)})
 }
 
 func retryCommand(source string, input contracts.Input) string {
@@ -288,7 +290,7 @@ func shellQuote(value string) string {
 
 func (d handoffDeps) deliver(ctx context.Context, source, target, reply, brief, account string) (string, error) {
 	if err := d.send(ctx, target, "session "+source, handoffMessage(source, brief)); err != nil {
-		return "", wrapHost(err, "handoff.not_delivered", map[string]any{nameParam: target})
+		return "", wrapHost(d.messages, err, "handoff.not_delivered", map[string]any{nameParam: target})
 	}
 	return handoffReport(d.replyLang(source), source, target, reply, brief, account), nil
 }

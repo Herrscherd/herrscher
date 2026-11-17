@@ -7,11 +7,12 @@ import (
 )
 
 type gatewayEnvUnsupportedError struct {
-	Model string
+	messages *hostMessages
+	Model    string
 }
 
 func (e *gatewayEnvUnsupportedError) Error() string {
-	return e.render(newHostMessages(), i18n.English)
+	return e.render(e.messages, i18n.English)
 }
 
 func (e *gatewayEnvUnsupportedError) render(messages *hostMessages, lang i18n.Language) string {
@@ -182,12 +183,13 @@ func (e *remoteHomeUnresolvedError) Error() string {
 }
 
 type unsafeTarMemberError struct {
-	Member string
-	Root   string
+	messages *hostMessages
+	Member   string
+	Root     string
 }
 
 func (e *unsafeTarMemberError) Error() string {
-	return e.render(newHostMessages(), i18n.English)
+	return e.render(e.messages, i18n.English)
 }
 
 func (e *unsafeTarMemberError) render(messages *hostMessages, lang i18n.Language) string {
@@ -203,12 +205,13 @@ func (e *noRemoteBackendError) Error() string {
 }
 
 type instanceIDMismatchError struct {
-	Have string
-	Want string
+	messages *hostMessages
+	Have     string
+	Want     string
 }
 
 func (e *instanceIDMismatchError) Error() string {
-	return e.render(newHostMessages(), i18n.English)
+	return e.render(e.messages, i18n.English)
 }
 
 func (e *instanceIDMismatchError) render(messages *hostMessages, lang i18n.Language) string {
@@ -216,11 +219,12 @@ func (e *instanceIDMismatchError) render(messages *hostMessages, lang i18n.Langu
 }
 
 type remoteSessionError struct {
-	Session string
+	messages *hostMessages
+	Session  string
 }
 
 func (e *remoteSessionError) Error() string {
-	return e.render(newHostMessages(), i18n.English)
+	return e.render(e.messages, i18n.English)
 }
 
 func (e *remoteSessionError) render(messages *hostMessages, lang i18n.Language) string {
@@ -228,11 +232,12 @@ func (e *remoteSessionError) render(messages *hostMessages, lang i18n.Language) 
 }
 
 type remoteAccountError struct {
-	Account string
+	messages *hostMessages
+	Account  string
 }
 
 func (e *remoteAccountError) Error() string {
-	return e.render(newHostMessages(), i18n.English)
+	return e.render(e.messages, i18n.English)
 }
 
 func (e *remoteAccountError) render(messages *hostMessages, lang i18n.Language) string {

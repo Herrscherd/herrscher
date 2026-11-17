@@ -136,7 +136,7 @@ func TestResolveInstanceID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			st := newInstanceIDState(t, tt.stateID, tt.hasSessions)
-			got, err := resolveInstanceID(st, tt.optID, tt.ownerID, obs.NewLogger(io.Discard, slog.LevelInfo))
+			got, err := resolveInstanceID(newHostMessages(), st, tt.optID, tt.ownerID, obs.NewLogger(io.Discard, slog.LevelInfo))
 			assertInstanceIDOutcome(t, tt, st, got, err)
 		})
 	}

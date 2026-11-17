@@ -99,6 +99,7 @@ func (e compactorSettingsError) render(lang i18n.Language) string {
 }
 
 type compactionPolicy struct {
+	messages       *hostMessages
 	percent        int
 	limits         contextwindow.Limits
 	names          []string
@@ -113,6 +114,7 @@ type compactionPolicy struct {
 
 func newCompactionPolicy(ctx context.Context, messages *hostMessages, lang languageSource, warn io.Writer, percent *int, names []string, perVendor map[string]int) (compactionPolicy, error) {
 	policy := compactionPolicy{
+		messages:       messages,
 		percent:        defaultCompactPercent,
 		names:          []string{contracts.CompactStageBackend},
 		plugins:        make(map[string]contracts.Compactor),
@@ -127,12 +129,12 @@ func newCompactionPolicy(ctx context.Context, messages *hostMessages, lang langu
 	}
 	if percent != nil {
 		if err := contracts.ValidateAutoCompactPercent(*percent); err != nil {
-			return compactionPolicy{}, wrapHost(err, "compaction.at", nil)
+			return compactionPolicy{}, wrapHost(messages, err, "compaction.at", nil)
 		}
 		policy.percent = *percent
 	}
 	if err := config.ValidateCompactStack(names); err != nil {
-		return compactionPolicy{}, wrapHost(err, "compaction.stack", nil)
+		return compactionPolicy{}, wrapHost(messages, err, "compaction.stack", nil)
 	}
 	if len(names) > 0 {
 		policy.names = names
@@ -167,12 +169,12 @@ func newCompactionPolicy(ctx context.Context, messages *hostMessages, lang langu
 func (p *compactionPolicy) addStage(ctx context.Context, name string) error {
 	compactor, err := customStage(ctx, name, os.Getenv)
 	if err != nil {
-		return wrapHost(err, "compaction.stack_named", map[string]any{nameParam: name})
+		return wrapHost(p.messages, err, "compaction.stack_named", map[string]any{nameParam: name})
 	}
 	if trigger, ok := compactor.(contracts.StageTrigger); ok {
 		percent := trigger.TriggerPercent()
 		if err := contracts.ValidateStageTriggerPercent(percent); err != nil {
-			return wrapHost(err, "compaction.stage_trigger", map[string]any{nameParam: name, "Percent": percent})
+			return wrapHost(p.messages, err, "compaction.stage_trigger", map[string]any{nameParam: name, "Percent": percent})
 		}
 		if percent != 0 {
 			p.triggers[name] = percent

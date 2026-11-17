@@ -79,7 +79,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addSkillVerbs(reg, options.live.Get); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addScheduleCommands(reg, options.live.Get, hostState, agents, schedSlot); err != nil {
+	if err := addScheduleCommands(reg, sessions.messages, options.live.Get, hostState, agents, schedSlot); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addHostCommands(reg, sessions.messages, options.live.Get, options.Warnings, hostState, options.Runtime); err != nil {
@@ -94,18 +94,18 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addVerbs(reg, memorySearchVerb(options.live.Get), whoamiVerb(), commandsVerb(options.live.Get, reg), healthVerb(options.health), usageVerb(options.usage)); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addPluginVerbs(reg, extra); err != nil {
+	if err := addPluginVerbs(sessions.messages, reg, extra); err != nil {
 		return nil, hostDeps{}, err
 	}
 	localizeCommandErrors(sessions.messages, reg, hostState, options.live)
 	return reg, hostDeps{wt: worktrees, agents: agents, handler: hdl, seedCoord: seedCoord, schedSlot: schedSlot}, nil
 }
 
-func addPluginVerbs(reg *cli.Registry, extra []contracts.Cmd) error {
+func addPluginVerbs(messages *hostMessages, reg *cli.Registry, extra []contracts.Cmd) error {
 	families := reg.Families()
 	for _, cmd := range extra {
 		if len(cmd.Path) > 0 && families[cmd.Path[0]] {
-			return &pluginKindReservedError{Kind: cmd.Path[0]}
+			return &pluginKindReservedError{messages: messages, Kind: cmd.Path[0]}
 		}
 	}
 	return addVerbs(reg, extra...)
@@ -123,7 +123,7 @@ func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
 func newManagerHandler(deps Deps, options Options, partDir string, hostState *state.State, sup *supervisor.Supervisor, worktrees manager.Worktrees, updater serviceUpdater, agents *agent.Store, models *ModelDiscovery) *manager.Handler {
 	options = withOperatorLanguage(options)
 	launch := func(vendor, modelID, cmd string) (string, error) { return launchVendor(models, vendor, modelID, cmd) }
-	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, validateProfileChoice, launch)
+	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, func(vendor, profile string) error { return validateProfileChoice(sessions.messages, vendor, profile) }, launch)
 	hdl.SetRemoteBackend(options.RemoteCategories[contracts.CategoryBackend])
 	hdl.SetLanguage(options.live.Get())
 	hdl.SetDefaultLanguage(options.DefaultLanguage)
@@ -208,7 +208,7 @@ func NewRegistry(ctx context.Context, gws []Deps, options Options) (*cli.Registr
 	}
 	hostState.ApplyDefaults(home, options.Workspace, options.Source)
 
-	instID, err := resolveInstanceID(hostState, options.InstanceID, options.Owner, obs.Stderr(false))
+	instID, err := resolveInstanceID(messages, hostState, options.InstanceID, options.Owner, obs.Stderr(false))
 	if err != nil {
 		return nil, localizeHostError(messages, options.operatorLanguage(), err)
 	}

@@ -74,12 +74,13 @@ func (d *sessionDriver) hostText(key string, params map[string]any) string {
 }
 
 type hostWrapError struct {
-	key    string
-	params map[string]any
-	cause  error
+	messages *hostMessages
+	key      string
+	params   map[string]any
+	cause    error
 }
 
-func (e hostWrapError) Error() string { return e.render(newHostMessages(), i18n.English) }
+func (e hostWrapError) Error() string { return e.render(e.messages, i18n.English) }
 
 func (e hostWrapError) Unwrap() error { return e.cause }
 
@@ -99,47 +100,28 @@ func errorTextIn(messages *hostMessages, lang i18n.Language, err error) string {
 	if err == nil {
 		return ""
 	}
-	var node any = err
-	if wrapped, ok := node.(*hostWrapError); ok && wrapped == nil {
-		return ""
+	text := fmt.Sprint(err)
+	english, local, found := localizedPart(messages, lang, err)
+	if !found {
+		return text
 	}
-	if leaf, ok := node.(localizableError); ok {
-		return leaf.render(messages, lang)
+	if strings.HasSuffix(text, english) {
+		return strings.TrimSuffix(text, english) + local
 	}
-	if failure, ok := node.(worktree.FailureError); ok {
-		return failure.Text(lang)
-	}
-	if branches, ok := node.(interface{ Unwrap() []error }); ok {
-		return joinedText(messages, lang, branches.Unwrap())
-	}
-	cause := errors.Unwrap(err)
-	if cause == nil {
-		return fmt.Sprint(err)
-	}
-	return wrappedText(messages, lang, err, cause)
+	return strings.Replace(text, english, local, 1)
 }
 
-func joinedText(messages *hostMessages, lang i18n.Language, branches []error) string {
-	parts := make([]string, 0, len(branches))
-	for _, branch := range branches {
-		if branch != nil {
-			parts = append(parts, errorTextIn(messages, lang, branch))
-		}
+func localizedPart(messages *hostMessages, lang i18n.Language, err error) (string, string, bool) {
+	if wrapped, isWrap := errors.AsType[*hostWrapError](err); isWrap && wrapped == nil {
+		return "", "", false
 	}
-	return strings.Join(parts, "\n")
-}
-
-func wrappedText(messages *hostMessages, lang i18n.Language, err, cause error) string {
-	message := fmt.Sprint(err)
-	english := errorTextIn(messages, i18n.English, cause)
-	local := english
-	if lang != i18n.English {
-		local = errorTextIn(messages, lang, cause)
+	if localizable, found := errors.AsType[localizableError](err); found {
+		return localizable.Error(), localizable.render(messages, lang), true
 	}
-	if strings.HasSuffix(message, english) {
-		return strings.TrimSuffix(message, english) + local
+	if failure, found := errors.AsType[worktree.FailureError](err); found {
+		return failure.Error(), failure.Text(lang), true
 	}
-	return strings.Replace(message, english, local, 1)
+	return "", "", false
 }
 
 func isLocalized(err error) bool {
@@ -150,8 +132,8 @@ func isLocalized(err error) bool {
 	return found
 }
 
-func wrapHost(cause error, key string, params map[string]any) error {
-	return hostWrapError{key: key, params: params, cause: cause}
+func wrapHost(messages *hostMessages, cause error, key string, params map[string]any) error {
+	return hostWrapError{messages: messages, key: key, params: params, cause: cause}
 }
 
 func renderableParams(messages *hostMessages, lang i18n.Language, params map[string]any) map[string]any {

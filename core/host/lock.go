@@ -37,7 +37,7 @@ func StateLockPath(statePath string) string {
 // lock nobody can clear. The pid is written for the error message alone; nothing
 // reads it to make a decision.
 func LockState(statePath string) (func(), error) {
-	release, err := takeLock(StateLockPath(statePath))
+	release, err := takeLock(newHostMessages(), StateLockPath(statePath))
 	if taken, ok := errors.AsType[*lockTakenError](err); ok {
 		return nil, &lockHeldError{StatePath: statePath, Holder: taken.Holder}
 	}
@@ -52,18 +52,18 @@ func (e *lockTakenError) Error() string {
 	return "lock held by another process" + e.Holder
 }
 
-func takeLock(path string) (func(), error) {
+func takeLock(messages *hostMessages, path string) (func(), error) {
 	if err := os.MkdirAll(filepath.Dir(path), privateDirMode); err != nil {
-		return nil, wrapHost(err, "lock.dir", nil)
+		return nil, wrapHost(messages, err, "lock.dir", nil)
 	}
 	lockFile, err := openLockFile(path)
 	if err != nil {
-		return nil, wrapHost(err, "lock.unsafe", map[string]any{pathParam: path, detailParam: err.Error()})
+		return nil, wrapHost(messages, err, "lock.unsafe", map[string]any{pathParam: path, detailParam: err.Error()})
 	}
 	locked, err := tryLock(lockFile)
 	if err != nil {
 		closeRead(lockFile)
-		return nil, wrapHost(err, "lock.state", nil)
+		return nil, wrapHost(messages, err, "lock.state", nil)
 	}
 	if !locked {
 		holder := readHolder(lockFile)

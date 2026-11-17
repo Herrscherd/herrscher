@@ -24,7 +24,7 @@ import (
 // Session/service commands run through the operator CLI (see NewRegistry).
 func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, options Options) error {
 	messages := newHostMessages()
-	clock, tick, settingsErr := schedulerSettings()
+	clock, tick, settingsErr := schedulerSettings(messages)
 	if settingsErr != nil {
 		closeGateways(ctx, closers, obs.Stderr(false))
 		return localizeHostError(messages, options.operatorLanguage(), settingsErr)
@@ -50,7 +50,7 @@ func serveHub(ctx context.Context, messages *hostMessages, gws []Deps, closers [
 
 	store, err := loadHubState(options)
 	if err != nil {
-		return wrapHost(err, "serve.load_state", nil)
+		return wrapHost(messages, err, "serve.load_state", nil)
 	}
 
 	self, execErr := os.Executable()
@@ -59,11 +59,11 @@ func serveHub(ctx context.Context, messages *hostMessages, gws []Deps, closers [
 	partDir := filepath.Dir(options.StatePath)
 	sup := newHubSupervisor(ctx, self, options.Runtime, base, monitor, partDir, options.StatePath)
 
-	instID, err := resolveInstanceID(store, options.InstanceID, options.Owner, log)
+	instID, err := resolveInstanceID(messages, store, options.InstanceID, options.Owner, log)
 	if err != nil {
-		return wrapHost(err, "serve.resolve_instance", nil)
+		return wrapHost(messages, err, "serve.resolve_instance", nil)
 	}
-	releaseInstance, err := claimInstance(ctx, options.Runtime, instID)
+	releaseInstance, err := claimInstance(ctx, messages, options.Runtime, instID)
 	if err != nil {
 		return err
 	}
@@ -73,12 +73,12 @@ func serveHub(ctx context.Context, messages *hostMessages, gws []Deps, closers [
 	approvals := newApprovalTable(options.Warnings).withRules(store)
 	sessions := newSessionTable(messages)
 	options.health = &healthSource{}
-	options.usage = newUsageSource(partDir)
+	options.usage = newUsageSource(messages, partDir)
 	stopUsageWatch := options.usage.startWatch(ctx)
 	defer stopUsageWatch()
 	policy, err := newCompactionPolicy(ctx, messages, options.languageSource(), options.Warnings, options.CompactPercent, options.CompactStack, options.ContextLimits)
 	if err != nil {
-		return wrapHost(err, "serve.compaction", nil)
+		return wrapHost(messages, err, "serve.compaction", nil)
 	}
 	sessions.compaction = policy
 	sessions.store = store
@@ -87,7 +87,7 @@ func serveHub(ctx context.Context, messages *hostMessages, gws []Deps, closers [
 	}
 	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, store.Home)}, options, store, sup, instID, options.ContributedCommands, approvals, sessions)
 	if err != nil {
-		return wrapHost(err, "serve.registry", nil)
+		return wrapHost(messages, err, "serve.registry", nil)
 	}
 	kinds := contributedKinds(options.ContributedCommands)
 	specs, specsErr := reg.Specs(options.Language)
@@ -101,7 +101,7 @@ func serveHub(ctx context.Context, messages *hostMessages, gws []Deps, closers [
 	}
 	cfg, err := config.Load(config.DefaultPath())
 	if err != nil {
-		return wrapHost(err, "serve.config", nil)
+		return wrapHost(messages, err, "serve.config", nil)
 	}
 	sessions.outboundMaxBytes = cfg.EffectiveOutboundMaxBytes()
 	sessions.fileSenders = fileSendersOf(closers)
@@ -110,16 +110,16 @@ func serveHub(ctx context.Context, messages *hostMessages, gws []Deps, closers [
 	}
 	keys, err := keyproxy.Open(ctx, cfg.Keys, keyproxy.OSLoader(), log)
 	if err != nil && !errors.Is(err, keyproxy.ErrDisabled) {
-		return wrapHost(err, "serve.key_proxy", nil)
+		return wrapHost(messages, err, "serve.key_proxy", nil)
 	}
 	defer CloseKeyProxy(ctx, log, keys)
-	options.health.bind(newHealthInputs(options.Runtime, instID, keys, gws, policy, partDir))
+	options.health.bind(newHealthInputs(messages, options.Runtime, instID, keys, gws, policy, partDir))
 	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions, withWarnings(options.Warnings))
 	runningHub.lang = options.Language
 	runningHub.language = options.languageSource()
 	runningHub.models = options.modelDiscovery()
 	runningHub.seedBackend = func(seedCtx context.Context, sess state.Session) (contracts.Backend, error) {
-		return newSeedBackendWithToken(seedCtx, sess, keys, runningHub.models, sessions.seedToken(seedCtx, sess.Name, liveSessionAllowed(store)))
+		return newSeedBackendWithToken(seedCtx, messages, sess, keys, runningHub.models, sessions.seedToken(seedCtx, sess.Name, liveSessionAllowed(store)))
 	}
 	runningHub.contributedKinds = kinds
 	runningHub.instanceID = instID

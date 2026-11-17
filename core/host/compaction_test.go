@@ -78,6 +78,7 @@ func compactPolicy(percent int, names ...string) compactionPolicy {
 		names = []string{contracts.CompactStageBackend}
 	}
 	return compactionPolicy{
+		messages:       newHostMessages(),
 		percent:        percent,
 		names:          names,
 		plugins:        make(map[string]contracts.Compactor),

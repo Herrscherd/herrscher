@@ -95,7 +95,7 @@ func runHookAsync(ctx context.Context, layout runtimedir.Layout, in io.Reader, o
 	done := make(chan error, 1)
 	go func() {
 		done <- RunPermissionHook(ctx, in, out, errOut, func() string { return sock }, func(c context.Context, argv []string) (string, bool, error) {
-			return dispatchLiveCommand(c, layout, sock, argv)
+			return dispatchLiveCommand(c, newHostMessages(), layout, sock, argv)
 		})
 	}()
 	return done

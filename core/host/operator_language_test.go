@@ -52,7 +52,7 @@ func TestBuilderRepliesFollowTheLiveOperatorLanguage(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	live := newOperatorLanguage(i18n.English)
 	reg := &cli.Registry{}
-	if err := addScheduleCommands(reg, live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
+	if err := addScheduleCommands(reg, newHostMessages(), live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
 	if err := st.PutSchedule(schedule.Schedule{
@@ -85,7 +85,7 @@ func TestSetLangThroughTheWiredManagerChangesBuilderReplies(t *testing.T) {
 		t.Fatalf("set lang fr: %v", err)
 	}
 	reg := &cli.Registry{}
-	if err := addScheduleCommands(reg, live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
+	if err := addScheduleCommands(reg, newHostMessages(), live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
 	if err := st.PutSchedule(schedule.Schedule{
@@ -189,7 +189,7 @@ func TestOperatorCommandReplyFollowsALiveLanguageChange(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	live := newOperatorLanguage(i18n.English)
 	reg := &cli.Registry{}
-	if err := addScheduleCommands(reg, live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
+	if err := addScheduleCommands(reg, newHostMessages(), live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
 	h := &hub{messages: newHostMessages(), warnings: io.Discard, st: st, reg: reg, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)}
@@ -222,7 +222,7 @@ func TestSessionCommandReplyFollowsTheOperatorUnlessItsLanguageIsRecorded(t *tes
 	}
 	live := newOperatorLanguage(i18n.English)
 	reg := &cli.Registry{}
-	if err := addScheduleCommands(reg, live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
+	if err := addScheduleCommands(reg, newHostMessages(), live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
 	h := &hub{messages: newHostMessages(), warnings: io.Discard, st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)}
@@ -326,7 +326,7 @@ func TestWrappedErrorDetailRendersInFrench(t *testing.T) {
 }
 
 func TestWrapHostErrorRendersInFrench(t *testing.T) {
-	wrapped := wrapHost(errors.New("disque plein"), "session.go_live", map[string]any{nameParam: "digest"})
+	wrapped := wrapHost(newHostMessages(), errors.New("disque plein"), "session.go_live", map[string]any{nameParam: "digest"})
 	if errorTextIn(newHostMessages(), i18n.French, wrapped) == errorTextIn(newHostMessages(), i18n.English, wrapped) {
 		t.Fatalf("the wrapped error renders the same in both languages: %q", errorTextIn(newHostMessages(), i18n.French, wrapped))
 	}

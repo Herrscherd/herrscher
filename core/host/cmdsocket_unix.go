@@ -58,8 +58,8 @@ func EventsSocketPathIn(layout RuntimeLayout, instanceID string) string {
 	return layout.Socket(name)
 }
 
-func listenCommandSocket(ctx context.Context, layout RuntimeLayout, path string) (net.Listener, error) {
-	if err := ensureRuntimeDir(layout, path); err != nil {
+func listenCommandSocket(ctx context.Context, messages *hostMessages, layout RuntimeLayout, path string) (net.Listener, error) {
+	if err := ensureRuntimeDir(messages, layout, path); err != nil {
 		return nil, err
 	}
 	return sockfile.Listen(ctx, path, ownerOnlyFileMode)
@@ -93,8 +93,8 @@ func removeSocketFile(path string) error {
 	return os.Remove(path)
 }
 
-func dialCommandSocket(ctx context.Context, layout RuntimeLayout, path string) (net.Conn, error) {
-	if err := ensureRuntimeDir(layout, path); err != nil {
+func dialCommandSocket(ctx context.Context, messages *hostMessages, layout RuntimeLayout, path string) (net.Conn, error) {
+	if err := ensureRuntimeDir(messages, layout, path); err != nil {
 		return nil, err
 	}
 	var d net.Dialer

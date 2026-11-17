@@ -22,7 +22,7 @@ func renderAcrossSocket(t *testing.T, serverErr error, lang i18n.Language) strin
 		return "", serverErr
 	}), defaultCommandReadTimeout)
 
-	_, handled, err := dispatchLiveCommand(ctx, isolatedRuntimeDir(t), sock, []string{"session", "close", "revue"})
+	_, handled, err := dispatchLiveCommand(ctx, newHostMessages(), isolatedRuntimeDir(t), sock, []string{"session", "close", "revue"})
 	if !handled || err == nil {
 		t.Fatalf("socket returned handled=%v err=%v, want a failure", handled, err)
 	}

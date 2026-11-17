@@ -202,7 +202,7 @@ func approveAskVerb(messages *hostMessages, lang languageSource, warn io.Writer,
 		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 			session := strings.TrimSpace(input.Get(paramSession))
 			if !sessions.tokenMatches(session, callerTokenFrom(ctx)) {
-				return contracts.Result{}, wrapHost(errApproveAskUnauthenticated, "approve.ask_unauthenticated", map[string]any{nameParam: session})
+				return contracts.Result{}, wrapHost(messages, errApproveAskUnauthenticated, "approve.ask_unauthenticated", map[string]any{nameParam: session})
 			}
 			req := approval.Request{
 				Tool:    strings.TrimSpace(input.Get("tool")),

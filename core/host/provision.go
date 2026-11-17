@@ -82,7 +82,7 @@ func platformFromUname(out string) (string, string, error) {
 	return goos, goarch, nil
 }
 
-func provisionHost(ctx context.Context, run hostRunner, host state.Host, src string) (state.Host, error) {
+func provisionHost(ctx context.Context, messages *hostMessages, run hostRunner, host state.Host, src string) (state.Host, error) {
 	if src == "" {
 		return host, &noSourceCheckoutError{Host: host.Name}
 	}
@@ -132,7 +132,7 @@ func provisionHost(ctx context.Context, run hostRunner, host state.Host, src str
 		return host, err
 	}
 	if _, err := capture(ctx, run, bin, "--help"); err != nil {
-		return host, wrapHost(err, "provision.smoke", map[string]any{"Host": host.Name})
+		return host, wrapHost(messages, err, "provision.smoke", map[string]any{"Host": host.Name})
 	}
 
 	host.Bin, host.GOOS, host.GOARCH = bin, goos, goarch

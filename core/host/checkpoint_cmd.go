@@ -98,19 +98,19 @@ type checkpointView struct {
 
 func addCheckpointVerbs(lang languageSource, sessionStore *state.State, sessions *sessionTable) []contracts.Cmd {
 	return []contracts.Cmd{
-		checkpointsVerb(lang, sessionStore, &sessions.checkpoints),
-		rewindVerb(lang, sessionStore, sessions),
-		undoVerb(lang, sessionStore, sessions),
+		checkpointsVerb(sessions.messages, lang, sessionStore, &sessions.checkpoints),
+		rewindVerb(sessions.messages, lang, sessionStore, sessions),
+		undoVerb(sessions.messages, lang, sessionStore, sessions),
 		forkVerb(),
 	}
 }
 
-func checkpointsVerb(lang languageSource, sessionStore *state.State, checkpoints *checkpoint.Store) contracts.Cmd {
+func checkpointsVerb(messages *hostMessages, lang languageSource, sessionStore *state.State, checkpoints *checkpoint.Store) contracts.Cmd {
 	return contracts.New(nsSession, verbCheckpoints).
 		Help(clitext.CmdHelpSessionCheckpoints).
 		Param(paramName, clitext.CmdParamSessionCheckpointsName, true).
 		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
-			sess, err := checkpointSession(sessionStore, input.Get(paramName))
+			sess, err := checkpointSession(messages, sessionStore, input.Get(paramName))
 			if err != nil {
 				return contracts.Result{}, err
 			}
@@ -130,19 +130,19 @@ func marshalJSON[T any](value T) (string, error) {
 	return string(payload), err
 }
 
-func rewindVerb(lang languageSource, sessionStore *state.State, sessions *sessionTable) contracts.Cmd {
+func rewindVerb(messages *hostMessages, lang languageSource, sessionStore *state.State, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, verbRewind).
 		Help(clitext.CmdHelpSessionRewind).
 		Param(paramName, clitext.CmdParamSessionRewindName, true).
 		ValueParam(paramTo, clitext.CmdParamSessionRewindTo, true).
 		ValueParam(paramWhat, clitext.CmdParamSessionRewindWhat, true).
 		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
-			return cli.Data(rewindSession(ctx, lang(), sessionStore, sessions, input))
+			return cli.Data(rewindSession(ctx, messages, lang(), sessionStore, sessions, input))
 		})
 }
 
-func rewindSession(ctx context.Context, lang i18n.Language, sessionStore *state.State, sessions *sessionTable, input contracts.Input) (string, error) {
-	sess, position, err := checkpointTarget(sessionStore, input)
+func rewindSession(ctx context.Context, messages *hostMessages, lang i18n.Language, sessionStore *state.State, sessions *sessionTable, input contracts.Input) (string, error) {
+	sess, position, err := checkpointTarget(messages, sessionStore, input)
 	if err != nil {
 		return "", err
 	}
@@ -152,7 +152,7 @@ func rewindSession(ctx context.Context, lang i18n.Language, sessionStore *state.
 	}
 	release, ok := sessions.claimIdle(sess.Name)
 	if !ok {
-		return "", busyRewindError(sess.Name)
+		return "", busyRewindError(messages, sess.Name)
 	}
 	defer release()
 	entry, err := sessions.checkpoints.Get(ctx, sess.Worktree, sess.Name, position)
@@ -171,7 +171,7 @@ func rewindSession(ctx context.Context, lang i18n.Language, sessionStore *state.
 		}
 	}
 	if what != whatCode {
-		if err := restartWithConversation(ctx, sess.Name, resumeToken); err != nil {
+		if err := restartWithConversation(ctx, messages, sess.Name, resumeToken); err != nil {
 			return "", err
 		}
 	}
@@ -179,29 +179,29 @@ func rewindSession(ctx context.Context, lang i18n.Language, sessionStore *state.
 	return replyText(namedSessionLanguage(sessionStore, sess.Name, lang)).Text(clitext.HostCheckpointRewound, params), nil
 }
 
-func restartWithConversation(ctx context.Context, name, token string) error {
+func restartWithConversation(ctx context.Context, messages *hostMessages, name, token string) error {
 	restarter, ok := restarterFrom(ctx)
 	if !ok {
 		return errRewindNeedsDaemon
 	}
 	if err := restarter.RestartWithResume(name, token); err != nil {
-		return wrapHost(err, "checkpoint.rewind_resume", map[string]any{nameParam: name})
+		return wrapHost(messages, err, "checkpoint.rewind_resume", map[string]any{nameParam: name})
 	}
 	return nil
 }
 
-func undoVerb(lang languageSource, sessionStore *state.State, sessions *sessionTable) contracts.Cmd {
+func undoVerb(messages *hostMessages, lang languageSource, sessionStore *state.State, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsSession, verbUndo).
 		Help(clitext.CmdHelpSessionUndo).
 		Param(paramName, clitext.CmdParamSessionUndoName, true).
 		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
-			sess, err := checkpointSession(sessionStore, input.Get(paramName))
+			sess, err := checkpointSession(messages, sessionStore, input.Get(paramName))
 			if err != nil {
 				return contracts.Result{}, err
 			}
 			release, ok := sessions.claimIdle(sess.Name)
 			if !ok {
-				return contracts.Result{}, busyRewindError(sess.Name)
+				return contracts.Result{}, busyRewindError(messages, sess.Name)
 			}
 			defer release()
 			if err := sessions.checkpoints.Undo(ctx, sess.Worktree, sess.Name); err != nil {
@@ -233,15 +233,15 @@ type forkHost interface {
 }
 
 func (h *hub) forkSession(ctx context.Context, input contracts.Input) (string, error) {
-	return forkCheckpoint(ctx, h, h.st, &h.sessions.checkpoints, input)
+	return forkCheckpoint(ctx, h.messages, h, h.st, &h.sessions.checkpoints, input)
 }
 
-func forkCheckpoint(ctx context.Context, host forkHost, sessionStore *state.State, checkpoints *checkpoint.Store, input contracts.Input) (string, error) {
-	source, err := checkpointSession(sessionStore, input.Get(paramName))
+func forkCheckpoint(ctx context.Context, messages *hostMessages, host forkHost, sessionStore *state.State, checkpoints *checkpoint.Store, input contracts.Input) (string, error) {
+	source, err := checkpointSession(messages, sessionStore, input.Get(paramName))
 	if err != nil {
 		return "", err
 	}
-	index, err := checkpointIndex(input.Get(paramTo))
+	index, err := checkpointIndex(messages, input.Get(paramTo))
 	if err != nil {
 		return "", err
 	}
@@ -269,26 +269,26 @@ func forkCheckpoint(ctx context.Context, host forkHost, sessionStore *state.Stat
 		Base:         head,
 		TerminalOnly: true,
 	}, source.Vendor); err != nil {
-		return "", wrapHost(err, "fork.failed", map[string]any{nameParam: source.Name})
+		return "", wrapHost(messages, err, "fork.failed", map[string]any{nameParam: source.Name})
 	}
 	fork, ok := sessionStore.FindSession(forkName)
 	if !ok || fork.Worktree == "" {
 		rollbackFork(ctx, host, forkName)
-		return "", wrapHost(errForkNoWorktree, "fork.failed", map[string]any{nameParam: forkName})
+		return "", wrapHost(messages, errForkNoWorktree, "fork.failed", map[string]any{nameParam: forkName})
 	}
 	if err = checkpoints.Materialize(ctx, fork.Worktree, entry.Commit); err != nil {
 		rollbackFork(ctx, host, forkName)
-		return "", wrapHost(err, "fork.checkpoint_not_applied", map[string]any{nameParam: forkName, "Position": index})
+		return "", wrapHost(messages, err, "fork.checkpoint_not_applied", map[string]any{nameParam: forkName, "Position": index})
 	}
 	token, err := forkConversation(source, entry, fork)
 	if err != nil {
 		rollbackFork(ctx, host, forkName)
-		return "", wrapHost(err, "fork.not_taken", map[string]any{nameParam: forkName, "Position": index})
+		return "", wrapHost(messages, err, "fork.not_taken", map[string]any{nameParam: forkName, "Position": index})
 	}
 	if token != "" {
 		if err = host.RestartWithResume(forkName, token); err != nil {
 			rollbackFork(ctx, host, forkName)
-			return "", wrapHost(err, "fork.not_resumed", map[string]any{nameParam: forkName})
+			return "", wrapHost(messages, err, "fork.not_resumed", map[string]any{nameParam: forkName})
 		}
 	}
 	if input.JSON {
@@ -359,36 +359,36 @@ func checkpointable(sess state.Session) bool {
 	return sess.Worktree != "" && !sess.Scratch && sess.Host == ""
 }
 
-func checkpointSession(sessionStore *state.State, name string) (state.Session, error) {
+func checkpointSession(messages *hostMessages, sessionStore *state.State, name string) (state.Session, error) {
 	sess, ok := sessionStore.FindSession(name)
 	if !ok {
 		return state.Session{}, &NotFoundError{Kind: kindSession, Name: name}
 	}
 	if !checkpointable(sess) {
-		return state.Session{}, wrapHost(errNotCheckpointable, "session.refused", map[string]any{nameParam: name})
+		return state.Session{}, wrapHost(messages, errNotCheckpointable, "session.refused", map[string]any{nameParam: name})
 	}
 	return sess, nil
 }
 
-func checkpointTarget(sessionStore *state.State, input contracts.Input) (state.Session, int, error) {
-	sess, err := checkpointSession(sessionStore, input.Get(paramName))
+func checkpointTarget(messages *hostMessages, sessionStore *state.State, input contracts.Input) (state.Session, int, error) {
+	sess, err := checkpointSession(messages, sessionStore, input.Get(paramName))
 	if err != nil {
 		return state.Session{}, 0, err
 	}
-	index, err := checkpointIndex(input.Get(paramTo))
+	index, err := checkpointIndex(messages, input.Get(paramTo))
 	return sess, index, err
 }
 
-func checkpointIndex(raw string) (int, error) {
+func checkpointIndex(messages *hostMessages, raw string) (int, error) {
 	index, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil || index < 1 {
-		return 0, wrapHost(errCheckpointNumber, "checkpoint.index", map[string]any{"Got": raw})
+		return 0, wrapHost(messages, errCheckpointNumber, "checkpoint.index", map[string]any{"Got": raw})
 	}
 	return index, nil
 }
 
-func busyRewindError(name string) error {
-	return wrapHost(errTurnInFlight, "session.refused", map[string]any{nameParam: name})
+func busyRewindError(messages *hostMessages, name string) error {
+	return wrapHost(messages, errTurnInFlight, "session.refused", map[string]any{nameParam: name})
 }
 
 func checkpointViews(ctx context.Context, checkpoints *checkpoint.Store, worktree, name string) ([]checkpointView, error) {

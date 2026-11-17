@@ -210,7 +210,7 @@ func TestForkCreatesOwnWorktreeAtCheckpointAndLeavesOriginal(t *testing.T) {
 	writeFrame(t, repo, "v2\n")
 	host := &fakeForkHost{t: t, repo: repo, st: st}
 
-	out, err := forkCheckpoint(ctx, host, st, checkpoints, contracts.Input{Args: map[string]string{paramName: "alpha", paramTo: "1"}})
+	out, err := forkCheckpoint(ctx, newHostMessages(), host, st, checkpoints, contracts.Input{Args: map[string]string{paramName: "alpha", paramTo: "1"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,7 +300,7 @@ func TestForkCarriesTheConversationToTheCheckpoint(t *testing.T) {
 	}
 	host := &fakeForkHost{t: t, repo: repo, st: st}
 
-	if _, err := forkCheckpoint(ctx, host, st, checkpoints, contracts.Input{Args: map[string]string{paramName: "alpha", paramTo: "1"}}); err != nil {
+	if _, err := forkCheckpoint(ctx, newHostMessages(), host, st, checkpoints, contracts.Input{Args: map[string]string{paramName: "alpha", paramTo: "1"}}); err != nil {
 		t.Fatal(err)
 	}
 	fork, _ := st.FindSession("alpha-fork")
@@ -326,7 +326,7 @@ func TestForkRefusedWhenTheCheckpointHasNoConversationPosition(t *testing.T) {
 	}
 	host := &fakeForkHost{t: t, repo: repo, st: st}
 
-	_, err := forkCheckpoint(ctx, host, st, checkpoints, contracts.Input{Args: map[string]string{paramName: "alpha", paramTo: "1"}})
+	_, err := forkCheckpoint(ctx, newHostMessages(), host, st, checkpoints, contracts.Input{Args: map[string]string{paramName: "alpha", paramTo: "1"}})
 	if err == nil || !strings.Contains(err.Error(), "nothing was created") {
 		t.Fatalf("fork without a conversation position must be refused, err = %v", err)
 	}

@@ -34,7 +34,7 @@ func TestEnsureSocketFreeRefusesASocketAnotherDaemonServes(t *testing.T) {
 		}
 	}()
 
-	if err := ensureSocketFree(context.Background(), layout, path); !errors.Is(err, errSocketTaken) {
+	if err := ensureSocketFree(context.Background(), newHostMessages(), layout, path); !errors.Is(err, errSocketTaken) {
 		t.Fatalf("ensureSocketFree on a live socket = %v, want errSocketTaken", err)
 	}
 	if _, err := os.Stat(path); err != nil {
@@ -46,7 +46,7 @@ func TestEnsureSocketFreeLeavesADeadSocketInPlace(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
 	path := filepath.Join(t.TempDir(), "dead.sock")
 	deadSocket(t, path)
-	if err := ensureSocketFree(context.Background(), layout, path); err != nil {
+	if err := ensureSocketFree(context.Background(), newHostMessages(), layout, path); err != nil {
 		t.Fatalf("ensureSocketFree on a dead socket = %v, want nil", err)
 	}
 	assertSocketFile(t, path)
@@ -56,19 +56,19 @@ func TestCreatingACommandSocketReplacesADeadFile(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
 	path := CommandSocketPathIn(layout, "t14")
 	deadSocket(t, path)
-	listener, err := openSocket(context.Background(), layout, path)
+	listener, err := openSocket(context.Background(), newHostMessages(), layout, path)
 	if err != nil {
 		t.Fatalf("openSocket over a dead file: %v", err)
 	}
 	t.Cleanup(func() { logCleanup(listener.Close()) })
-	if !socketAnswers(context.Background(), layout, path) {
+	if !socketAnswers(context.Background(), newHostMessages(), layout, path) {
 		t.Fatal("the socket created over a dead file does not answer")
 	}
 }
 
 func TestADaemonRefusesAnInstanceAnotherDaemonServes(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
-	if err := refuseTakenInstance(context.Background(), layout, "t1"); err != nil {
+	if err := refuseTakenInstance(context.Background(), newHostMessages(), layout, "t1"); err != nil {
 		t.Fatalf("a free instance was refused: %v", err)
 	}
 	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", CommandSocketPathIn(layout, "t1"))
@@ -85,7 +85,7 @@ func TestADaemonRefusesAnInstanceAnotherDaemonServes(t *testing.T) {
 			logCleanup(conn.Close())
 		}
 	}()
-	if err := refuseTakenInstance(context.Background(), layout, "t1"); !errors.Is(err, errSocketTaken) {
+	if err := refuseTakenInstance(context.Background(), newHostMessages(), layout, "t1"); !errors.Is(err, errSocketTaken) {
 		t.Fatalf("refuseTakenInstance = %v, want errSocketTaken", err)
 	}
 }
@@ -93,7 +93,7 @@ func TestADaemonRefusesAnInstanceAnotherDaemonServes(t *testing.T) {
 func TestADaemonRefusesAnInstanceWhoseEventsSocketIsTaken(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
 	answeringListener(t, EventsSocketPathIn(layout, "t2"))
-	if err := refuseTakenInstance(context.Background(), layout, "t2"); !errors.Is(err, errSocketTaken) {
+	if err := refuseTakenInstance(context.Background(), newHostMessages(), layout, "t2"); !errors.Is(err, errSocketTaken) {
 		t.Fatalf("refuseTakenInstance with a live events socket = %v, want errSocketTaken", err)
 	}
 }
@@ -118,15 +118,15 @@ func TestServeHubSocketsStopsTheDaemonOnATakenCommandSocket(t *testing.T) {
 
 func TestLockInstanceRefusesASecondDaemonOfTheSameInstance(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
-	release, err := lockInstance(layout, "t5")
+	release, err := lockInstance(newHostMessages(), layout, "t5")
 	if err != nil {
 		t.Fatalf("first lockInstance: %v", err)
 	}
-	if _, secondErr := lockInstance(layout, "t5"); !errors.Is(secondErr, errInstanceLocked) {
+	if _, secondErr := lockInstance(newHostMessages(), layout, "t5"); !errors.Is(secondErr, errInstanceLocked) {
 		t.Fatalf("second lockInstance = %v, want errInstanceLocked", secondErr)
 	}
 	release()
-	again, err := lockInstance(layout, "t5")
+	again, err := lockInstance(newHostMessages(), layout, "t5")
 	if err != nil {
 		t.Fatalf("lockInstance after release: %v", err)
 	}
@@ -138,12 +138,12 @@ func TestReleaseLeavesASocketANewerListenerBoundAtThePath(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "takeover.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	older, err := openSocket(ctx, layout, path)
+	older, err := openSocket(ctx, newHostMessages(), layout, path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	released := acceptCommands(ctx, older, &fakeDispatcher{out: "old"}, time.Second)
-	newer, err := listenCommandSocket(context.Background(), layout, path)
+	newer, err := listenCommandSocket(context.Background(), newHostMessages(), layout, path)
 	if err != nil {
 		t.Fatalf("newer listen over the older socket: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestReleaseLeavesASocketANewerListenerBoundAtThePath(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the older listener did not finish releasing after shutdown")
 	}
-	if !socketAnswers(context.Background(), layout, path) {
+	if !socketAnswers(context.Background(), newHostMessages(), layout, path) {
 		t.Fatal("releasing the older listener disturbed the socket the newer one bound")
 	}
 }
@@ -174,7 +174,7 @@ func TestServeHubSocketsReleaseKeepsItsFilesInPlace(t *testing.T) {
 	}
 	for _, path := range []string{CommandSocketPathIn(layout, "t6"), EventsSocketPathIn(layout, "t6")} {
 		assertSocketFile(t, path)
-		if socketAnswers(context.Background(), layout, path) {
+		if socketAnswers(context.Background(), newHostMessages(), layout, path) {
 			t.Fatalf("socket %q still answers after its release was reported", path)
 		}
 	}

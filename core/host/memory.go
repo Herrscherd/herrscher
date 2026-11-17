@@ -12,6 +12,7 @@ import (
 // the single source both the CLI verbs (via BuildFirstMemory) and the
 // plugin-host (via firstMemory) build memory through.
 func BuildFirstMemoryWithManifest(ctx context.Context) (contracts.Memory, contracts.Manifest, error) {
+	messages := newHostMessages()
 	memories := contracts.Default.Memories()
 	for idx := range memories {
 		plugin := memories[idx]
@@ -20,11 +21,11 @@ func BuildFirstMemoryWithManifest(ctx context.Context) (contracts.Memory, contra
 		}
 		cfg, err := contracts.Resolve(plugin.Manifest.Config, os.Getenv)
 		if err != nil {
-			return nil, contracts.Manifest{}, wrapHost(err, "memory.wrap", nil)
+			return nil, contracts.Manifest{}, wrapHost(messages, err, "memory.wrap", nil)
 		}
 		mem, err := plugin.Memory(ctx, cfg)
 		if err != nil {
-			return nil, contracts.Manifest{}, wrapHost(err, "memory.wrap", nil)
+			return nil, contracts.Manifest{}, wrapHost(messages, err, "memory.wrap", nil)
 		}
 		return mem, plugin.Manifest, nil
 	}

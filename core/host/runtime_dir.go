@@ -24,16 +24,16 @@ func RuntimeAt(dir string) (RuntimeLayout, error) {
 	return runtimedir.At(dir)
 }
 
-func ensureRuntimeDir(layout runtimedir.Layout, path string) error {
-	return runtimeDirError(layout.Check(path))
+func ensureRuntimeDir(messages *hostMessages, layout runtimedir.Layout, path string) error {
+	return runtimeDirError(messages, layout.Check(path))
 }
 
-func runtimeDirError(err error) error {
+func runtimeDirError(messages *hostMessages, err error) error {
 	unsafe, ok := errors.AsType[*runtimedir.UnsafeError](err)
 	if !ok {
 		return err
 	}
-	return wrapHost(err, runtimeDirKey(unsafe.Kind), map[string]any{pathParam: unsafe.Path, detailParam: unsafe.Reason})
+	return wrapHost(messages, err, runtimeDirKey(unsafe.Kind), map[string]any{pathParam: unsafe.Path, detailParam: unsafe.Reason})
 }
 
 func runtimeDirKey(kind runtimedir.Kind) string {

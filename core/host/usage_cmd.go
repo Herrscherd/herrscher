@@ -64,8 +64,8 @@ type usageSource struct {
 	reported    map[string]bool
 }
 
-func newUsageSource(partDir string) *usageSource {
-	store, err := accountStore(BackendRequest{})
+func newUsageSource(messages *hostMessages, partDir string) *usageSource {
+	store, err := accountStore(messages, BackendRequest{})
 	if err != nil {
 		slog.Warn("usage: account store unavailable", "err", err)
 	}

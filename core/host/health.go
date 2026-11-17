@@ -436,8 +436,8 @@ func compactorPlugin(name string) (contracts.Plugin, bool) {
 	return contracts.Plugin{}, false
 }
 
-func newHealthInputs(layout runtimedir.Layout, instanceID string, keys *keyproxy.Proxy, gws []Deps, policy compactionPolicy, partDir string) healthInputs {
-	store, err := accountStore(BackendRequest{})
+func newHealthInputs(messages *hostMessages, layout runtimedir.Layout, instanceID string, keys *keyproxy.Proxy, gws []Deps, policy compactionPolicy, partDir string) healthInputs {
+	store, err := accountStore(messages, BackendRequest{})
 	if err != nil {
 		slog.Warn("health: account store unavailable", "err", err)
 	}

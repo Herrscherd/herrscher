@@ -49,7 +49,7 @@ func addHost(ctx context.Context, messages *hostMessages, lang languageSource, w
 	if err != nil {
 		return "", err
 	}
-	provisioned, err := provisionHost(ctx, run, host, hostState.SourceDir())
+	provisioned, err := provisionHost(ctx, messages, run, host, hostState.SourceDir())
 	if err != nil {
 		return "", err
 	}
@@ -161,7 +161,7 @@ func provisionRegisteredHost(ctx context.Context, messages *hostMessages, lang l
 	if err != nil {
 		return "", err
 	}
-	provisioned, err := provisionHost(ctx, run, host, store.SourceDir())
+	provisioned, err := provisionHost(ctx, messages, run, host, store.SourceDir())
 	if err != nil {
 		return "", err
 	}

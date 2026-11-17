@@ -103,7 +103,7 @@ func (p hostPlacer) Materialize(ctx context.Context, name string, assigned agent
 	if err != nil {
 		return err
 	}
-	payload, err := stageAgentTar(assigned, worktreePath, binIf(hook, host.Bin))
+	payload, err := stageAgentTar(p.messages, assigned, worktreePath, binIf(hook, host.Bin))
 	if err != nil {
 		return err
 	}
@@ -134,7 +134,7 @@ func (p hostPlacer) EnsureProject(ctx context.Context, name, project, repo strin
 	}
 	origin, err := originOf(ctx, filepath.Join(p.st.WorkspaceRoot(), project))
 	if err != nil {
-		return wrapHost(err, "hosts.clone", map[string]any{"Project": project, "Host": name})
+		return wrapHost(p.messages, err, "hosts.clone", map[string]any{"Project": project, "Host": name})
 	}
 	if _, err := capture(ctx, run, "git", "clone", origin, repo); err != nil {
 		return err

@@ -41,6 +41,7 @@ type sessionCloser interface {
 }
 
 type coordinator struct {
+	messages *hostMessages
 	creator  sessionCreator
 	agents   agentLookup
 	wt       cleanBrancher
@@ -53,9 +54,9 @@ type coordinator struct {
 	expected map[string]int
 }
 
-func newCoordinator(creator sessionCreator, agents agentLookup, worktrees cleanBrancher, sessions sessionLister, closer sessionCloser, seed func(string, string) bool) *coordinator {
+func newCoordinator(messages *hostMessages, creator sessionCreator, agents agentLookup, worktrees cleanBrancher, sessions sessionLister, closer sessionCloser, seed func(string, string) bool) *coordinator {
 	return &coordinator{
-		creator: creator, agents: agents, wt: worktrees, sessions: sessions, closer: closer, seed: seed,
+		messages: messages, creator: creator, agents: agents, wt: worktrees, sessions: sessions, closer: closer, seed: seed,
 		reported: make(map[string]map[string]bool),
 		expected: make(map[string]int),
 	}
@@ -135,14 +136,14 @@ func childCount(sessions []state.Session, parent string) int {
 
 func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, task, parent, vendor, cmd string) (string, error) {
 	if from.Worktree == "" {
-		return "", wrapHost(&noIsolatedWorktreeError{Session: from.Name}, "coordination.wrap", nil)
+		return "", wrapHost(c.messages, &noIsolatedWorktreeError{Session: from.Name}, "coordination.wrap", nil)
 	}
 	clean, err := c.wt.IsCleanAt(ctx, from.Worktree)
 	if err != nil {
-		return "", wrapHost(err, "coordination.wrap", nil)
+		return "", wrapHost(c.messages, err, "coordination.wrap", nil)
 	}
 	if !clean {
-		return "", wrapHost(&uncommittedError{Role: roleSession, Name: from.Name}, "coordination.refused", nil)
+		return "", wrapHost(c.messages, &uncommittedError{Role: roleSession, Name: from.Name}, "coordination.refused", nil)
 	}
 
 	base := from.Name + "-" + toAgent
@@ -150,13 +151,13 @@ func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, ta
 	for attempt := 2; ; attempt++ {
 		exists, err := c.wt.BranchExistsAt(ctx, from.Worktree, c.wt.Branch(bName))
 		if err != nil {
-			return "", wrapHost(err, "coordination.wrap", nil)
+			return "", wrapHost(c.messages, err, "coordination.wrap", nil)
 		}
 		if !exists {
 			break
 		}
 		if attempt > maxSpawnNameProbes {
-			return "", wrapHost(&freeNameExhaustedError{Base: base, Tries: maxSpawnNameProbes}, "coordination.wrap", nil)
+			return "", wrapHost(c.messages, &freeNameExhaustedError{Base: base, Tries: maxSpawnNameProbes}, "coordination.wrap", nil)
 		}
 		bName = fmt.Sprintf("%s-%d", base, attempt)
 	}
@@ -169,23 +170,23 @@ func (c *coordinator) spawn(ctx context.Context, from state.Session, toAgent, ta
 		Base:    c.wt.Branch(from.Name),
 		Parent:  parent,
 	}, vendor); err != nil {
-		return "", wrapHost(err, "coordination.create", map[string]any{nameParam: bName})
+		return "", wrapHost(c.messages, err, "coordination.create", map[string]any{nameParam: bName})
 	}
 	if !c.seedWithRetry(ctx, bName, task) {
 		_, rollbackErr := c.closer.Close(context.WithoutCancel(ctx), bName, true)
 		logCleanup(rollbackErr)
-		return "", wrapHost(&seedTimedOutError{Session: bName}, "coordination.wrap", nil)
+		return "", wrapHost(c.messages, &seedTimedOutError{Session: bName}, "coordination.wrap", nil)
 	}
 	return bName, nil
 }
 
 func (c *coordinator) Handoff(ctx context.Context, req contracts.HandoffRequest) (string, error) {
 	if _, ok := c.agents.Get(req.ToAgent); !ok {
-		return "", wrapHost(&UnknownError{Kind: kindAgent, Name: req.ToAgent}, "handoff.wrap", nil)
+		return "", wrapHost(c.messages, &UnknownError{Kind: kindAgent, Name: req.ToAgent}, "handoff.wrap", nil)
 	}
 	from, ok := c.findSession(req.FromSession)
 	if !ok {
-		return "", wrapHost(&NotFoundError{Kind: kindSession, Name: req.FromSession}, "handoff.wrap", nil)
+		return "", wrapHost(c.messages, &NotFoundError{Kind: kindSession, Name: req.FromSession}, "handoff.wrap", nil)
 	}
 	return c.spawn(ctx, from, req.ToAgent, req.Task, "", "", "")
 }
@@ -193,11 +194,11 @@ func (c *coordinator) Handoff(ctx context.Context, req contracts.HandoffRequest)
 func (c *coordinator) Delegate(ctx context.Context, req contracts.DelegateRequest) (string, error) {
 	target, ok := c.agents.Get(req.ToAgent)
 	if !ok {
-		return "", wrapHost(&UnknownError{Kind: kindAgent, Name: req.ToAgent}, "delegate.wrap", nil)
+		return "", wrapHost(c.messages, &UnknownError{Kind: kindAgent, Name: req.ToAgent}, "delegate.wrap", nil)
 	}
 	from, ok := c.findSession(req.FromSession)
 	if !ok {
-		return "", wrapHost(&NotFoundError{Kind: kindLead, Name: req.FromSession}, "delegate.wrap", nil)
+		return "", wrapHost(c.messages, &NotFoundError{Kind: kindLead, Name: req.FromSession}, "delegate.wrap", nil)
 	}
 	vendor, cmd := "", ""
 	if target.Backend == "" {
@@ -213,20 +214,20 @@ func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (
 	sessions := c.sessions.SnapshotSessions()
 	from, ok := findByName(sessions, req.FromSession)
 	if !ok {
-		return "", wrapHost(&UnknownError{Kind: kindWorker, Name: req.FromSession}, "report.wrap", nil)
+		return "", wrapHost(c.messages, &UnknownError{Kind: kindWorker, Name: req.FromSession}, "report.wrap", nil)
 	}
 	if from.Parent == "" {
-		return "", wrapHost(&noParentError{Session: req.FromSession}, "report.wrap", nil)
+		return "", wrapHost(c.messages, &noParentError{Session: req.FromSession}, "report.wrap", nil)
 	}
 	clean, err := c.wt.IsCleanAt(ctx, from.Worktree)
 	if err != nil {
-		return "", wrapHost(err, "report.wrap", nil)
+		return "", wrapHost(c.messages, err, "report.wrap", nil)
 	}
 	if !clean {
-		return "", wrapHost(&uncommittedError{Role: roleSession, Name: req.FromSession}, "report.refused", nil)
+		return "", wrapHost(c.messages, &uncommittedError{Role: roleSession, Name: req.FromSession}, "report.refused", nil)
 	}
 	if _, ok := findByName(sessions, from.Parent); !ok {
-		return "", wrapHost(&NotFoundError{Kind: "parent", Name: from.Parent}, "report.wrap", nil)
+		return "", wrapHost(c.messages, &NotFoundError{Kind: "parent", Name: from.Parent}, "report.wrap", nil)
 	}
 
 	c.mu.Lock()
@@ -255,7 +256,7 @@ func (c *coordinator) Report(ctx context.Context, req contracts.ReportRequest) (
 		}
 	}
 	if !c.seedWithRetry(ctx, from.Parent, msg) {
-		return "", wrapHost(&deliveryTimeoutError{Role: "parent", Name: from.Parent}, "report.wrap", nil)
+		return "", wrapHost(c.messages, &deliveryTimeoutError{Role: "parent", Name: from.Parent}, "report.wrap", nil)
 	}
 	return from.Parent, nil
 }
@@ -264,33 +265,33 @@ func (c *coordinator) Merge(ctx context.Context, req contracts.MergeRequest) (st
 	sessions := c.sessions.SnapshotSessions()
 	lead, ok := findByName(sessions, req.FromSession)
 	if !ok {
-		return "", wrapHost(&NotFoundError{Kind: kindLead, Name: req.FromSession}, "merge.wrap", nil)
+		return "", wrapHost(c.messages, &NotFoundError{Kind: kindLead, Name: req.FromSession}, "merge.wrap", nil)
 	}
 	worker, ok := findByName(sessions, req.Worker)
 	if !ok {
-		return "", wrapHost(&NotFoundError{Kind: kindWorker, Name: req.Worker}, "merge.wrap", nil)
+		return "", wrapHost(c.messages, &NotFoundError{Kind: kindWorker, Name: req.Worker}, "merge.wrap", nil)
 	}
 	if worker.Parent != req.FromSession {
-		return "", wrapHost(&notAWorkerError{Worker: req.Worker, Lead: req.FromSession}, "merge.refused", nil)
+		return "", wrapHost(c.messages, &notAWorkerError{Worker: req.Worker, Lead: req.FromSession}, "merge.refused", nil)
 	}
 	wClean, err := c.wt.IsCleanAt(ctx, worker.Worktree)
 	if err != nil {
-		return "", wrapHost(err, "merge.wrap", nil)
+		return "", wrapHost(c.messages, err, "merge.wrap", nil)
 	}
 	if !wClean {
-		return "", wrapHost(&uncommittedError{Role: roleWorker, Name: req.Worker}, "merge.refused", nil)
+		return "", wrapHost(c.messages, &uncommittedError{Role: roleWorker, Name: req.Worker}, "merge.refused", nil)
 	}
 	lClean, err := c.wt.IsCleanAt(ctx, lead.Worktree)
 	if err != nil {
-		return "", wrapHost(err, "merge.wrap", nil)
+		return "", wrapHost(c.messages, err, "merge.wrap", nil)
 	}
 	if !lClean {
-		return "", wrapHost(&uncommittedError{Role: roleLead, Name: req.FromSession}, "merge.refused", nil)
+		return "", wrapHost(c.messages, &uncommittedError{Role: roleLead, Name: req.FromSession}, "merge.refused", nil)
 	}
 
 	outcome, conflicts, err := c.wt.MergeInto(ctx, lead.Worktree, c.wt.Branch(req.Worker))
 	if err != nil {
-		return "", wrapHost(err, "merge.wrap", nil)
+		return "", wrapHost(c.messages, err, "merge.wrap", nil)
 	}
 	var msg string
 	switch outcome {
@@ -303,7 +304,7 @@ func (c *coordinator) Merge(ctx context.Context, req contracts.MergeRequest) (st
 			req.Worker, strings.Join(conflicts, ", "))
 	}
 	if !c.seedWithRetry(ctx, req.FromSession, msg) {
-		return "", wrapHost(&deliveryTimeoutError{Role: roleLead, Name: req.FromSession}, "merge.wrap", nil)
+		return "", wrapHost(c.messages, &deliveryTimeoutError{Role: roleLead, Name: req.FromSession}, "merge.wrap", nil)
 	}
 	return req.FromSession, nil
 }
@@ -311,14 +312,14 @@ func (c *coordinator) Merge(ctx context.Context, req contracts.MergeRequest) (st
 func (c *coordinator) Seal(_ context.Context, req contracts.SealRequest) (string, error) {
 	sessions := c.sessions.SnapshotSessions()
 	if _, ok := findByName(sessions, req.FromSession); !ok {
-		return "", wrapHost(&NotFoundError{Kind: kindLead, Name: req.FromSession}, "seal.wrap", nil)
+		return "", wrapHost(c.messages, &NotFoundError{Kind: kindLead, Name: req.FromSession}, "seal.wrap", nil)
 	}
 	if req.Expected <= 0 {
 		return "", errSealExpectedPositive
 	}
 	cohort := childCount(sessions, req.FromSession)
 	if req.Expected < cohort {
-		return "", wrapHost(&sealBelowCohortError{Expected: req.Expected, Cohort: cohort}, "seal.refused", nil)
+		return "", wrapHost(c.messages, &sealBelowCohortError{Expected: req.Expected, Cohort: cohort}, "seal.refused", nil)
 	}
 	c.mu.Lock()
 	c.expected[req.FromSession] = req.Expected
@@ -328,12 +329,12 @@ func (c *coordinator) Seal(_ context.Context, req contracts.SealRequest) (string
 
 func (c *coordinator) FanOut(ctx context.Context, req contracts.FanOutRequest) ([]string, error) {
 	if _, ok := c.agents.Get(req.ToAgent); !ok {
-		return nil, wrapHost(&UnknownError{Kind: kindAgent, Name: req.ToAgent}, "fanout.wrap", nil)
+		return nil, wrapHost(c.messages, &UnknownError{Kind: kindAgent, Name: req.ToAgent}, "fanout.wrap", nil)
 	}
 	sessions := c.sessions.SnapshotSessions()
 	lead, ok := findByName(sessions, req.FromSession)
 	if !ok {
-		return nil, wrapHost(&NotFoundError{Kind: kindLead, Name: req.FromSession}, "fanout.wrap", nil)
+		return nil, wrapHost(c.messages, &NotFoundError{Kind: kindLead, Name: req.FromSession}, "fanout.wrap", nil)
 	}
 	if len(req.Tasks) == 0 {
 		return nil, errFanoutNoTasks
@@ -363,11 +364,11 @@ func (c *coordinator) Route(ctx context.Context, req contracts.RouteRequest) (st
 	}
 	from, ok := c.findSession(req.FromSession)
 	if !ok {
-		return "", "", wrapHost(&NotFoundError{Kind: kindLead, Name: req.FromSession}, "route.wrap", nil)
+		return "", "", wrapHost(c.messages, &NotFoundError{Kind: kindLead, Name: req.FromSession}, "route.wrap", nil)
 	}
 	roster, err := c.agents.List()
 	if err != nil {
-		return "", "", wrapHost(err, "route.wrap", nil)
+		return "", "", wrapHost(c.messages, err, "route.wrap", nil)
 	}
 	chosen, ok := pickAgent(roster, req.Task)
 	if !ok {

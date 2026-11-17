@@ -32,31 +32,31 @@ func providerByVendor(vendor string) (string, bool) {
 	return "", false
 }
 
-func accountRoot(req BackendRequest) (string, error) {
+func accountRoot(messages *hostMessages, req BackendRequest) (string, error) {
 	if req.AccountRoot != "" {
 		return req.AccountRoot, nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", wrapHost(err, "account.home", nil)
+		return "", wrapHost(messages, err, "account.home", nil)
 	}
 	return accounts.DefaultRoot(home), nil
 }
 
-func accountStore(req BackendRequest) (accounts.Store, error) {
-	root, err := accountRoot(req)
+func accountStore(messages *hostMessages, req BackendRequest) (accounts.Store, error) {
+	root, err := accountRoot(messages, req)
 	if err != nil {
 		return accounts.Store{}, err
 	}
 	return accounts.Store{Root: root}, nil
 }
 
-func sessionEnv(req BackendRequest, vendor string, route modelRoute) (map[string]string, func(), error) {
+func sessionEnv(messages *hostMessages, req BackendRequest, vendor string, route modelRoute) (map[string]string, func(), error) {
 	if len(route.env) > 0 {
 		return route.env, route.lease(), nil
 	}
 	env := make(map[string]string)
-	store, err := accountStore(req)
+	store, err := accountStore(messages, req)
 	if err != nil {
 		return nil, noRelease, err
 	}
@@ -84,7 +84,7 @@ func sessionEnv(req BackendRequest, vendor string, route modelRoute) (map[string
 		return nil, noRelease, err
 	}
 	if vendor == contracts.VendorCodex && profileDir != "" {
-		proxyEnv, proxyErr := codexProfileProxyEnv(profileDir, grant)
+		proxyEnv, proxyErr := codexProfileProxyEnv(messages, profileDir, grant)
 		if proxyErr != nil {
 			grant.Release()
 			return nil, noRelease, proxyErr
@@ -110,14 +110,14 @@ func proxyEnvFor(vendor string, grant keyproxy.Grant) map[string]string {
 	}
 }
 
-func codexProfileProxyEnv(profileDir string, grant keyproxy.Grant) (map[string]string, error) {
+func codexProfileProxyEnv(messages *hostMessages, profileDir string, grant keyproxy.Grant) (map[string]string, error) {
 	root, err := os.OpenRoot(profileDir)
 	if err != nil {
-		return nil, wrapHost(err, "account.profile_open", nil)
+		return nil, wrapHost(messages, err, "account.profile_open", nil)
 	}
-	writeErr := errors.Join(writeCodexProxyHome(root, codexProxyConfig(grant.BaseURL+"/v1")), root.Close())
+	writeErr := errors.Join(writeCodexProxyHome(messages, root, codexProxyConfig(grant.BaseURL+"/v1")), root.Close())
 	if writeErr != nil {
-		return nil, wrapHost(writeErr, "account.codex_home", nil)
+		return nil, wrapHost(messages, writeErr, "account.codex_home", nil)
 	}
 	return map[string]string{
 		contracts.EnvCodexHome: filepath.Join(profileDir, codexProxyHomeDir),
@@ -125,17 +125,17 @@ func codexProfileProxyEnv(profileDir string, grant keyproxy.Grant) (map[string]s
 	}, nil
 }
 
-func writeCodexProxyHome(root *os.Root, config string) error {
+func writeCodexProxyHome(messages *hostMessages, root *os.Root, config string) error {
 	if mkErr := root.Mkdir(codexProxyHomeDir, proxyDirMode); mkErr != nil && !errors.Is(mkErr, fs.ErrExist) {
-		return wrapHost(mkErr, "account.codex_home_create", nil)
+		return wrapHost(messages, mkErr, "account.codex_home_create", nil)
 	}
 	file, err := root.OpenFile(filepath.Join(codexProxyHomeDir, codexProxyConfigFile), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, proxyFileMode)
 	if err != nil {
-		return wrapHost(err, "account.codex_config_open", nil)
+		return wrapHost(messages, err, "account.codex_config_open", nil)
 	}
 	_, writeErr := file.WriteString(config)
 	if joined := errors.Join(writeErr, file.Close()); joined != nil {
-		return wrapHost(joined, "account.codex_config_write", nil)
+		return wrapHost(messages, joined, "account.codex_config_write", nil)
 	}
 	return nil
 }
@@ -150,17 +150,17 @@ func mergeInto(dst, src map[string]string) {
 	}
 }
 
-func persistedSessions() ([]state.Session, error) {
+func persistedSessions(messages *hostMessages) ([]state.Session, error) {
 	persisted, err := state.LoadState(DefaultStatePath())
 	if err != nil {
-		return nil, wrapHost(err, "session.read", nil)
+		return nil, wrapHost(messages, err, "session.read", nil)
 	}
 	return persisted.SnapshotSessions(), nil
 }
 
 // ProfileUsers lists the persisted sessions using a profile, following the vendor default when isDefault.
 func ProfileUsers(vendor, name string, isDefault bool) ([]string, error) {
-	sessions, err := persistedSessions()
+	sessions, err := persistedSessions(newHostMessages())
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +183,7 @@ func profileUsers(sessions []state.Session, vendor, name string, isDefault bool)
 
 // ResumingSessions lists the sessions of vendor resuming under the vendor default.
 func ResumingSessions(vendor string) ([]string, error) {
-	sessions, err := persistedSessions()
+	sessions, err := persistedSessions(newHostMessages())
 	if err != nil {
 		return nil, err
 	}
@@ -202,14 +202,14 @@ func resumingUnder(sessions []state.Session, vendor string) []string {
 
 const neubloxKeyName = "neublox"
 
-func spawnEnvVia(entry CatalogEntry, getenv func(string) string, keys *keyproxy.Proxy) (map[string]string, func(), error) {
+func spawnEnvVia(messages *hostMessages, entry CatalogEntry, getenv func(string) string, keys *keyproxy.Proxy) (map[string]string, func(), error) {
 	if entry.Route != contracts.RouteGateway || keys == nil {
-		env, err := spawnEnvFor(entry, getenv)
+		env, err := spawnEnvFor(messages, entry, getenv)
 		return env, noRelease, err
 	}
 	creds, err := loadGatewayCreds(getenv)
 	if err != nil {
-		return nil, noRelease, wrapHost(err, "gateway.model", map[string]any{modelParam: entry.ID})
+		return nil, noRelease, wrapHost(messages, err, "gateway.model", map[string]any{modelParam: entry.ID})
 	}
 	env := gatewayEnvFor(entry.Vendor, creds, entry.Arg)
 	if len(env) == 0 {
@@ -217,12 +217,12 @@ func spawnEnvVia(entry CatalogEntry, getenv func(string) string, keys *keyproxy.
 	}
 	upstream, err := url.Parse(creds.BaseURL())
 	if err != nil {
-		return nil, noRelease, wrapHost(err, "gateway.base_url", nil)
+		return nil, noRelease, wrapHost(messages, err, "gateway.base_url", nil)
 	}
 	route := keyproxy.GatewayRoute(upstream, gatewayAuthStyle(entry.Vendor), keyproxy.NewSecret(neubloxKeyName, creds.Token()))
 	grant, err := keys.Grant(route)
 	if err != nil {
-		return nil, noRelease, wrapHost(err, "gateway.key_proxy", nil)
+		return nil, noRelease, wrapHost(messages, err, "gateway.key_proxy", nil)
 	}
 	return gatewayEnvThroughProxy(entry.Vendor, env, grant), grant.Release, nil
 }

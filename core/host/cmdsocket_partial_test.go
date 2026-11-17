@@ -26,7 +26,7 @@ func TestThePartialOutputCrossesTheSocket(t *testing.T) {
 		return "", failed
 	}), defaultCommandReadTimeout)
 
-	_, handled, err := dispatchLiveCommand(ctx, isolatedRuntimeDir(t), sock, []string{"session", "seed", "--name", "first"})
+	_, handled, err := dispatchLiveCommand(ctx, newHostMessages(), isolatedRuntimeDir(t), sock, []string{"session", "seed", "--name", "first"})
 	partial, ok := errors.AsType[cli.PartialError](err)
 	if !handled || !ok {
 		t.Fatalf("socket returned handled=%v err=%v, want a partial failure", handled, err)

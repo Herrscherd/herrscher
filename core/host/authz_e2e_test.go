@@ -40,7 +40,7 @@ func TestTheSameArgvIsRefusedOnOneSocketAndRunOnTheOther(t *testing.T) {
 
 	argv := []string{"approve", "rule", "allow Bash(*)"}
 
-	out, _, err := dispatchLiveCommand(ctx, isolatedRuntimeDir(t), operatorSock, argv)
+	out, _, err := dispatchLiveCommand(ctx, newHostMessages(), isolatedRuntimeDir(t), operatorSock, argv)
 	if err != nil {
 		t.Fatalf("the operator socket was refused: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestTheSameArgvIsRefusedOnOneSocketAndRunOnTheOther(t *testing.T) {
 		t.Fatal("the operator's call produced nothing")
 	}
 
-	_, _, err = dispatchLiveCommand(ctx, isolatedRuntimeDir(t), sessionSock, argv)
+	_, _, err = dispatchLiveCommand(ctx, newHostMessages(), isolatedRuntimeDir(t), sessionSock, argv)
 	if err == nil {
 		t.Fatal("the same argv on the session socket must be refused")
 	}
@@ -65,7 +65,7 @@ func TestServedOperatorSocketFollowsTheLiveLanguage(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	live := newOperatorLanguage(i18n.English)
 	reg := &cli.Registry{}
-	if err := addScheduleCommands(reg, live.Get, st, fakeAgents{known: make(map[string]bool)}, &schedulerSlot{}); err != nil {
+	if err := addScheduleCommands(reg, newHostMessages(), live.Get, st, fakeAgents{known: make(map[string]bool)}, &schedulerSlot{}); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
 	h := &hub{messages: newHostMessages(), warnings: io.Discard, st: st, reg: reg, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)}
@@ -76,7 +76,7 @@ func TestServedOperatorSocketFollowsTheLiveLanguage(t *testing.T) {
 		t.Fatalf("serveHubSockets: %v", err)
 	}
 	live.set(i18n.French)
-	_, _, err := dispatchLiveCommand(ctx, layout, CommandSocketPathIn(layout, "served"), []string{"schedule", "rm", "--name", "fantome"})
+	_, _, err := dispatchLiveCommand(ctx, newHostMessages(), layout, CommandSocketPathIn(layout, "served"), []string{"schedule", "rm", "--name", "fantome"})
 	if err == nil {
 		t.Fatal("schedule rm of an unknown schedule succeeded")
 	}

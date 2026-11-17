@@ -81,7 +81,7 @@ func ServedInstanceID(statePath, optID string) string {
 // than silently acting on a second copy of the state.
 func DaemonDispatch(ctx context.Context, layout RuntimeLayout, instanceID string, argv []string) (string, error) {
 	socket := CommandSocketPathIn(layout, instanceID)
-	out, handled, err := dispatchLiveCommand(ctx, layout, socket, argv)
+	out, handled, err := dispatchLiveCommand(ctx, newHostMessages(), layout, socket, argv)
 	if !handled {
 		return "", &daemonNotRunningError{Socket: socket}
 	}
@@ -94,8 +94,8 @@ func IsDaemonNotRunning(err error) bool {
 	return ok
 }
 
-func dispatchToOperatorDaemon(ctx context.Context, layout RuntimeLayout, path string, argv []string) (string, bool, error) {
-	return dispatchLiveCommand(ctx, layout, path, argv)
+func dispatchToOperatorDaemon(ctx context.Context, messages *hostMessages, layout RuntimeLayout, path string, argv []string) (string, bool, error) {
+	return dispatchLiveCommand(ctx, messages, layout, path, argv)
 }
 
 // ForwardToDaemon hands a raw argv to the daemon serving statePath and returns
@@ -109,7 +109,7 @@ func dispatchToOperatorDaemon(ctx context.Context, layout RuntimeLayout, path st
 // caller is free to answer as it did before there was a daemon to ask. A verb
 // that lives only inside a daemon must not claim to exist when none is running.
 func ForwardToDaemon(ctx context.Context, layout RuntimeLayout, statePath, optID string, argv []string) (string, bool, error) {
-	return dispatchToOperatorDaemon(ctx, layout, commandSocketTarget(layout, ServedInstanceID(statePath, optID)), argv)
+	return dispatchToOperatorDaemon(ctx, newHostMessages(), layout, commandSocketTarget(layout, ServedInstanceID(statePath, optID)), argv)
 }
 
 // SubscribeDaemonEvents dials the daemon's events socket and streams what it
@@ -119,19 +119,19 @@ func ForwardToDaemon(ctx context.Context, layout RuntimeLayout, statePath, optID
 // The daemon drops a subscriber's lines rather than block a turn on it, so a
 // consumer that falls far enough behind loses telemetry. Read promptly.
 func SubscribeDaemonEvents(ctx context.Context, layout RuntimeLayout, instanceID string) (<-chan DaemonEvent, error) {
-	return subscribeAt(ctx, layout, EventsSocketPathIn(layout, instanceID))
+	return subscribeAt(ctx, newHostMessages(), layout, EventsSocketPathIn(layout, instanceID))
 }
 
 var errDaemonEventsUnreachable = errors.New("the daemon does not answer on its events socket")
 
-func subscribeAt(ctx context.Context, layout runtimedir.Layout, path string) (<-chan DaemonEvent, error) {
-	if err := ensureRuntimeDir(layout, path); err != nil {
+func subscribeAt(ctx context.Context, messages *hostMessages, layout runtimedir.Layout, path string) (<-chan DaemonEvent, error) {
+	if err := ensureRuntimeDir(messages, layout, path); err != nil {
 		return nil, err
 	}
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "unix", path)
 	if err != nil {
-		return nil, wrapHost(errDaemonEventsUnreachable, "daemon.events_socket", map[string]any{pathParam: path})
+		return nil, wrapHost(messages, errDaemonEventsUnreachable, "daemon.events_socket", map[string]any{pathParam: path})
 	}
 	out := make(chan DaemonEvent, daemonEventBuffer)
 	stopClose := closeOnDone(ctx, conn)
@@ -156,13 +156,13 @@ func subscribeAt(ctx context.Context, layout runtimedir.Layout, path string) (<-
 	return out, nil
 }
 
-func parseAttachmentPaths(raw string) ([]contracts.Attachment, error) {
+func parseAttachmentPaths(messages *hostMessages, raw string) ([]contracts.Attachment, error) {
 	if raw == "" {
 		return nil, nil
 	}
 	var paths []string
 	if err := json.Unmarshal([]byte(raw), &paths); err != nil {
-		return nil, wrapHost(err, "daemon.attachments", nil)
+		return nil, wrapHost(messages, err, "daemon.attachments", nil)
 	}
 	out := make([]contracts.Attachment, 0, len(paths))
 	for _, path := range paths {

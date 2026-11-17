@@ -22,7 +22,7 @@ type seedGate struct {
 }
 
 func newSeedGate(session string, warn io.Writer, language languageSource) *seedGate {
-	return &seedGate{refused: map[string]bool{}, session: session, warn: warn, language: language}
+	return &seedGate{refused: make(map[string]bool), session: session, warn: warn, language: language}
 }
 
 func (g *seedGate) admit(lateKey string, deliver func()) {

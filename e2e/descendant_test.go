@@ -95,15 +95,33 @@ func gone(err error) bool {
 }
 
 func ownedByUs(pid int) (bool, error) {
-	info, err := os.Stat(filepath.Join(procRoot, strconv.Itoa(pid)))
-	if gone(err) {
+	status, err := os.ReadFile(filepath.Join(procRoot, strconv.Itoa(pid), "status"))
+	if errors.Is(err, fs.ErrNotExist) {
 		return false, nil
 	}
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("cannot read the status of %d: %w", pid, err)
 	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	return ok && stat.Uid == uint32(os.Getuid()), nil
+	uid, err := realUID(string(status))
+	if err != nil {
+		return false, fmt.Errorf("cannot read the owner of %d: %w", pid, err)
+	}
+	return uid == os.Getuid(), nil
+}
+
+func realUID(status string) (int, error) {
+	for _, line := range strings.Split(status, "\n") {
+		value, found := strings.CutPrefix(line, "Uid:")
+		if !found {
+			continue
+		}
+		fields := strings.Fields(value)
+		if len(fields) == 0 {
+			break
+		}
+		return strconv.Atoi(fields[0])
+	}
+	return 0, errors.New("the status file has no readable Uid line")
 }
 
 func killDescendant(pid int, entry string) error {
@@ -133,5 +151,15 @@ func TestDescendantAliveIgnoresAForeignProcess(t *testing.T) {
 	alive, err := descendantAlive(1, instanceEntry("unused"))
 	if err != nil || alive {
 		t.Fatalf("a process of another uid was counted as a descendant: alive=%v err=%v", alive, err)
+	}
+}
+
+func TestRealUIDReadsTheUidLineOfTheStatusFile(t *testing.T) {
+	uid, err := realUID("Name:\tsleep\nUmask:\t0022\nUid:\t1000\t1000\t1000\t1000\nGid:\t0\t0\t0\t0\n")
+	if err != nil || uid != 1000 {
+		t.Fatalf("realUID = %d, %v, want 1000: the real uid is the first field of the Uid line, whatever the owner of the directory", uid, err)
+	}
+	if _, err := realUID("Name:\tsleep\n"); err == nil {
+		t.Fatal("a status file without a Uid line was accepted")
 	}
 }

@@ -207,7 +207,7 @@ func healthColumn(section health.Section, pal termpaint.Palette) []string {
 		}
 		cells.Add(termpaint.Paint(health.StateStyle(row.State, pal), row.Glyph.String())+" "+label, healthCellNote(row, pal))
 	}
-	return append([]string{termpaint.Paint(pal.Group, strings.ToUpper(section.Title.String()))}, cells.Lines()...)
+	return append([]string{termpaint.Paint(pal.Group, section.Heading.String())}, cells.Lines()...)
 }
 
 func healthCellNote(row health.Row, pal termpaint.Palette) string {

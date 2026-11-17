@@ -8,14 +8,11 @@ import (
 	"unicode"
 
 	"github.com/Herrscherd/herrscher/core/termpaint"
+	"github.com/Herrscherd/herrscher/core/termpaint/termpainttest"
 )
 
-func bidiControls() []rune {
-	return []rune{
-		0x061c, 0x200e, 0x200f, 0x2028, 0x2029,
-		0x202a, 0x202b, 0x202c, 0x202d, 0x202e,
-		0x2066, 0x2067, 0x2068, 0x2069,
-	}
+func escapeText(text string) string {
+	return termpaint.Escape(text).String()
 }
 
 func TestPrintableWritesEveryControlCharacterAsVisibleEscape(t *testing.T) {
@@ -49,18 +46,18 @@ func TestPrintableWritesEveryControlCharacterAsVisibleEscape(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := termpaint.Printable(tc.in); got != tc.want {
-				t.Errorf("Printable(%q) = %q, want %q", tc.in, got, tc.want)
+			if got := escapeText(tc.in); got != tc.want {
+				t.Errorf("Escape(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
 	}
 }
 
 func TestPrintableEscapesTheBoundsOfEveryBidiRange(t *testing.T) {
-	for _, char := range bidiControls() {
+	for _, char := range termpainttest.BidiControls() {
 		want := fmt.Sprintf(`\u%04x`, char)
-		if got := termpaint.Printable(string(char)); got != want {
-			t.Errorf("Printable(U+%04X) = %q, want %q", char, got, want)
+		if got := escapeText(string(char)); got != want {
+			t.Errorf("Escape(U+%04X) = %q, want %q", char, got, want)
 		}
 	}
 }
@@ -77,8 +74,8 @@ func TestPrintableLeavesTheNeighboursOfBidiControlsIntact(t *testing.T) {
 		0x2030,
 	}
 	for _, char := range neighbours {
-		if got := termpaint.Printable(string(char)); got != string(char) {
-			t.Errorf("Printable(U+%04X) = %q, want it unchanged", char, got)
+		if got := escapeText(string(char)); got != string(char) {
+			t.Errorf("Escape(U+%04X) = %q, want it unchanged", char, got)
 		}
 	}
 }
@@ -86,15 +83,15 @@ func TestPrintableLeavesTheNeighboursOfBidiControlsIntact(t *testing.T) {
 func TestPrintableOutputCarriesNoControlByte(t *testing.T) {
 	var in strings.Builder
 	in.WriteString("\x1b]8;;x\x07\u009b\r\n\x00\x7f\xffok")
-	bidi := bidiControls()
+	bidi := termpainttest.BidiControls()
 	for _, char := range bidi {
 		in.WriteRune(char)
 	}
 	raw := in.String()
-	got := termpaint.Printable(raw)
+	got := escapeText(raw)
 	for _, r := range got {
 		if unicode.IsControl(r) || slices.Contains(bidi, r) {
-			t.Fatalf("Printable(%q) = %q still carries control %U", raw, got, r)
+			t.Fatalf("Escape(%q) = %q still carries control %U", raw, got, r)
 		}
 	}
 }

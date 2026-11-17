@@ -10,15 +10,8 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
 	"github.com/Herrscherd/herrscher/core/termpaint"
+	"github.com/Herrscherd/herrscher/core/termpaint/termpainttest"
 )
-
-func bidiControls() []rune {
-	return []rune{
-		0x061c, 0x200e, 0x200f, 0x2028, 0x2029,
-		0x202a, 0x202b, 0x202c, 0x202d, 0x202e,
-		0x2066, 0x2067, 0x2068, 0x2069,
-	}
-}
 
 func TestLimitCardsNeutraliseTheDefaultProfileName(t *testing.T) {
 	snapshot := Snapshot{
@@ -33,7 +26,7 @@ func TestLimitCardsNeutraliseTheDefaultProfileName(t *testing.T) {
 	}
 	out := strings.Join(lines, "\n")
 	for _, r := range out {
-		if r != '\n' && (unicode.IsControl(r) || slices.Contains(bidiControls(), r)) {
+		if r != '\n' && (unicode.IsControl(r) || slices.Contains(termpainttest.BidiControls(), r)) {
 			t.Fatalf("LimitCards() output carries the raw control %U:\n%q", r, out)
 		}
 	}
@@ -45,16 +38,17 @@ func TestLimitCardsNeutraliseTheDefaultProfileName(t *testing.T) {
 func TestShareLabelsNeutraliseAccountAndModel(t *testing.T) {
 	text := &renderer{lang: i18n.English}
 	share := Share{Vendor: "claude", Account: "work\u2066\x1b]0;pwn\a", Model: "opus\x1b[2J"}
-	account := accountLabel(share, text)
+	account := accountLabel(share, text).String()
+	model := modelLabel(share, text).String()
 	if want := `work\u2066\x1b]0;pwn\a`; !strings.Contains(account, want) {
 		t.Errorf("accountLabel() = %q, want it to contain %q", account, want)
 	}
-	if want := `opus\x1b[2J`; modelLabel(share, text) != want {
-		t.Errorf("modelLabel() = %q, want %q", modelLabel(share, text), want)
+	if want := `opus\x1b[2J`; model != want {
+		t.Errorf("modelLabel() = %q, want %q", model, want)
 	}
-	for _, label := range []string{account, modelLabel(share, text)} {
+	for _, label := range []string{account, model} {
 		for _, r := range label {
-			if unicode.IsControl(r) || slices.Contains(bidiControls(), r) {
+			if unicode.IsControl(r) || slices.Contains(termpainttest.BidiControls(), r) {
 				t.Fatalf("label %q carries the raw control %U", label, r)
 			}
 		}

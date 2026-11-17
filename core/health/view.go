@@ -50,9 +50,10 @@ func (r Row) Detail() termpaint.Printed {
 
 // Section is one group of a report and the rows of its checks.
 type Section struct {
-	Group Group
-	Title termpaint.Printed
-	Rows  []Row
+	Group   Group
+	Title   termpaint.Printed
+	Heading termpaint.Printed
+	Rows    []Row
 }
 
 // Count is the number of checks in one state, as the summary line words it.
@@ -90,7 +91,8 @@ func (s Snapshot) View(lang i18n.Language) (View, error) {
 		if len(checks) == 0 {
 			continue
 		}
-		view.Sections = append(view.Sections, Section{Group: group, Title: termpaint.Escape(s.groupTitle(group, text)), Rows: s.rows(checks, text)})
+		title := s.groupTitle(group, text)
+		view.Sections = append(view.Sections, Section{Group: group, Title: termpaint.Escape(title), Heading: termpaint.Escape(strings.ToUpper(title)), Rows: s.rows(checks, text)})
 	}
 	if worst, found := s.worst(); found {
 		view.Worst = termpaint.Escape(worst.Service())

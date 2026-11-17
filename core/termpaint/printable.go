@@ -24,15 +24,19 @@ const (
 	lastIsolate            rune = 0x2069
 )
 
-// Printed is text that has been through [Printable]. Only [Escape] builds one with
-// content, so a Printed value never carries a raw control to the terminal.
+// Printed is text that has been through [Escape]. It is the only way to hold text
+// that a terminal may show, so a Printed value never carries a raw control to it.
 type Printed struct {
 	text string
 }
 
-// Escape returns text escaped by [Printable] as a Printed value.
+// Escape returns text as a terminal shows it without obeying it: every control
+// character (C0, DEL and C1) and every bidirectional control (U+202A to U+202E,
+// U+2066 to U+2069, U+200E, U+200F, U+061C, U+2028, U+2029) is written as its Go
+// escape, so ESC reads \x1b, BEL \a, CR \r, LF \n, U+009B \u009b and RLO \u202e,
+// and every byte that is not valid UTF-8 reads \xNN. Valid text comes back unchanged.
 func Escape(text string) Printed {
-	return Printed{text: Printable(text)}
+	return Printed{text: printable(text)}
 }
 
 // String returns the escaped text, ready to paint.
@@ -40,12 +44,7 @@ func (p Printed) String() string {
 	return p.text
 }
 
-// Printable returns text as a terminal shows it without obeying it: every control
-// character (C0, DEL and C1) and every bidirectional control (U+202A to U+202E,
-// U+2066 to U+2069, U+200E, U+200F, U+061C, U+2028, U+2029) is written as its Go
-// escape, so ESC reads \x1b, BEL \a, CR \r, LF \n, U+009B \u009b and RLO \u202e,
-// and every byte that is not valid UTF-8 reads \xNN. Valid text comes back unchanged.
-func Printable(text string) string {
+func printable(text string) string {
 	var out strings.Builder
 	for index := 0; index < len(text); {
 		char, size := utf8.DecodeRuneInString(text[index:])

@@ -139,12 +139,24 @@ func boundNotice(notice contracts.Notice) contracts.Notice {
 	return contracts.Notice{Code: notice.Code, Args: bounded}
 }
 
+// Bound returns text unchanged when it fits the wire limit of a free text, else cuts it
+// at a UTF-8 boundary and appends "...".
+func Bound(text string) string {
+	if len(text) <= maxTextBytes {
+		return text
+	}
+	return cutUTF8(text, maxTextBytes) + truncationMark
+}
+
 func boundArg(arg contracts.Arg) contracts.Arg {
 	text, isText := arg.Value().(string)
-	if !isText || len(text) <= maxTextBytes {
+	if !isText {
 		return arg
 	}
-	bounded := cutUTF8(text, maxTextBytes) + truncationMark
+	bounded := Bound(text)
+	if bounded == text {
+		return arg
+	}
 	if arg.Kind() == contracts.ArgRef {
 		return contracts.Ref(arg.Name(), bounded)
 	}

@@ -1,6 +1,7 @@
 package health
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
@@ -285,15 +287,23 @@ func unrenderedNotice(notice contracts.Notice) string {
 func argumentText(value any) (string, bool) {
 	switch typed := value.(type) {
 	case string:
-		return typed, typed != ""
+		return boundedText(typed)
 	case json.RawMessage:
 		var text string
 		if err := json.Unmarshal(typed, &text); err == nil {
-			return text, text != ""
+			return boundedText(text)
 		}
-		return string(typed), len(typed) > 0
+		var compacted bytes.Buffer
+		if err := json.Compact(&compacted, typed); err != nil {
+			return boundedText(string(typed))
+		}
+		return boundedText(compacted.String())
 	}
 	return "", false
+}
+
+func boundedText(text string) (string, bool) {
+	return compactwire.Bound(text), text != ""
 }
 
 func (r *renderer) keep(err error) {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -24,6 +25,11 @@ func TestArgumentTextShowsTheTextOfEachValue(t *testing.T) {
 		{"unknown kind holding a JSON number", json.RawMessage(`3`), "3", true},
 		{"count keeps its number out of the text", 3, "", false},
 		{"no value", nil, "", false},
+		{"multiline JSON is shown compacted", json.RawMessage("{\"a\":\n  1}"), `{"a":1}`, true},
+		{"null is not shown", json.RawMessage("null"), "", false},
+		{"text value beyond the bound is cut in valid UTF-8", strings.Repeat("a", 5000), strings.Repeat("a", 4096) + "...", true},
+		{"JSON string beyond the bound is cut before a four-byte rune", json.RawMessage(`"` + strings.Repeat("a", 4094) + "😀" + `"`), strings.Repeat("a", 4094) + "...", true},
+		{"JSON string keeps the decoded ESC byte for the escaping of PR 237", json.RawMessage(`"\u001b[31m"`), "\x1b[31m", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

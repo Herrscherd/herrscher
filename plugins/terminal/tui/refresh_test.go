@@ -48,9 +48,10 @@ func returnsWithin(t *testing.T, what string, run func()) {
 }
 
 func TestMuteDaemonDoesNotBlockTheTick(t *testing.T) {
-	be := &silentBackend{fakeBackend: &fakeBackend{}, release: make(chan struct{}), mute: true}
+	be := &silentBackend{fakeBackend: &fakeBackend{}, release: make(chan struct{}), mute: false}
 	defer close(be.release)
 	m := startedModel(be)
+	be.mute = true
 
 	returnsWithin(t, "a tick with a silent daemon blocked the UI thread, the session list must be read off the update loop", func() {
 		m.Update(tickMsg{})
@@ -108,9 +109,10 @@ func TestOnlyOneSessionReadIsInFlight(t *testing.T) {
 }
 
 func TestApplyingASnapshotDecidesFocusWithoutReadingTheDaemon(t *testing.T) {
-	be := &silentBackend{fakeBackend: &fakeBackend{}, release: make(chan struct{}), mute: true}
+	be := &silentBackend{fakeBackend: &fakeBackend{}, release: make(chan struct{}), mute: false}
 	defer close(be.release)
 	m := startedModel(be)
+	be.mute = true
 	m.heldSession = "later"
 
 	returnsWithin(t, "applying a snapshot read the daemon again to decide focus", func() {
@@ -139,9 +141,10 @@ func TestAnExplicitOpenReleasesTheHeldSession(t *testing.T) {
 }
 
 func TestMuteDaemonDoesNotBlockTheTickOnTheBoard(t *testing.T) {
-	be := &silentBackend{fakeBackend: &fakeBackend{}, release: make(chan struct{}), mute: true}
+	be := &silentBackend{fakeBackend: &fakeBackend{}, release: make(chan struct{}), mute: false}
 	defer close(be.release)
 	m := startedModel(be)
+	be.mute = true
 	m.surface = surfaceBoard
 
 	returnsWithin(t, "a tick with a silent daemon blocked the board view on the update loop, the overview and the session list must be read off the loop", func() {
@@ -150,9 +153,10 @@ func TestMuteDaemonDoesNotBlockTheTickOnTheBoard(t *testing.T) {
 }
 
 func TestMuteDaemonDoesNotBlockTheTickOnThePanes(t *testing.T) {
-	be := &silentBackend{fakeBackend: &fakeBackend{}, release: make(chan struct{}), mute: true}
+	be := &silentBackend{fakeBackend: &fakeBackend{}, release: make(chan struct{}), mute: false}
 	defer close(be.release)
 	m := startedModel(be)
+	be.mute = true
 	m.surface = surfacePanes
 
 	returnsWithin(t, "a tick with a silent daemon blocked the panes view on the update loop, the overview and the session list must be read off the loop", func() {
@@ -161,9 +165,10 @@ func TestMuteDaemonDoesNotBlockTheTickOnThePanes(t *testing.T) {
 }
 
 func TestBoardRowsReadTheSnapshotNotTheDaemon(t *testing.T) {
-	be := &silentBackend{fakeBackend: &fakeBackend{}, release: make(chan struct{}), mute: true}
+	be := &silentBackend{fakeBackend: &fakeBackend{}, release: make(chan struct{}), mute: false}
 	defer close(be.release)
 	m := startedModel(be)
+	be.mute = true
 	m.overviews = []SessionOverview{{Name: "a"}}
 	m.boardInfos = []contracts.SessionInfo{{Name: "a", ChannelID: "c1"}}
 

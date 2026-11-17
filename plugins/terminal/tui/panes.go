@@ -65,7 +65,7 @@ func (m *model) paneLayout() paneLayout {
 
 func (m *model) openPanes() {
 	m.surface = surfacePanes
-	m.refreshOverviews()
+	m.loadBoard()
 	m.panes = paneState{}
 	rows := m.boardCandidates()
 	for index := range rows {

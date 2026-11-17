@@ -31,3 +31,18 @@ func TestEmptyEnterEndsAWaitThatHoldsNoText(t *testing.T) {
 		t.Fatalf("active = %q when the cancelled session arrived, want no activation", m.active)
 	}
 }
+
+func TestEmptyTextWithoutAWaitKeepsTheHeldSession(t *testing.T) {
+	m := newModel(&fakeBackend{})
+	m.heldSession = "later"
+	flash := m.flash
+
+	m.queueForOpen("")
+
+	if m.heldSession != "later" {
+		t.Fatalf("heldSession = %q after an empty Enter with no wait, want the held session kept", m.heldSession)
+	}
+	if m.flash != flash {
+		t.Fatalf("flash = %q after an empty Enter with no wait, want it unchanged", m.flash)
+	}
+}

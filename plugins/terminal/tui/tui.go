@@ -311,6 +311,11 @@ type model struct {
 	summaryBusy bool
 	panes       paneState
 
+	boardInfos      []contracts.SessionInfo
+	surfaceIssued   uint64
+	surfaceApplied  uint64
+	surfaceInFlight bool
+
 	diagOpen bool
 
 	theme           Theme
@@ -1627,8 +1632,8 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 	case tickMsg:
 		syncCmd := m.refreshTabs()
 		m.expireApprovals(time.Now())
-		m.refreshSurface()
-		return tea.Batch(syncCmd, tickCmd(), m.gitTick(), m.loadModesCmd(), m.summaryRefresh(), m.healthTick()), true
+		surfaceCmd := m.refreshSurfaceCmd()
+		return tea.Batch(syncCmd, surfaceCmd, tickCmd(), m.gitTick(), m.loadModesCmd(), m.summaryRefresh(), m.healthTick()), true
 	case sessionsMsg:
 		m.sessionsInFlight = false
 		if msg.seq < m.sessionsApplied {
@@ -1636,6 +1641,9 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		}
 		m.sessionsApplied = msg.seq
 		return m.applySessions(msg.infos), true
+	case surfaceMsg:
+		m.applySurface(msg)
+		return nil, true
 	case summaryMsg:
 		m.summaryBusy = false
 		m.summary = panelSummary(msg)

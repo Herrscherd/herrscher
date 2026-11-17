@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -190,7 +191,7 @@ func TestFailuresKeepTheirCauseAcrossTheWire(t *testing.T) {
 func TestPruneRefusesMoreEditsThanOneFrameCarries(t *testing.T) {
 	edits := make([]contracts.HistoryEdit, MaxPruneEdits+1)
 	for i := range edits {
-		edits[i] = contracts.HistoryEdit{CallID: fmt.Sprint(i), Action: contracts.PruneCall}
+		edits[i] = contracts.HistoryEdit{CallID: strconv.Itoa(i), Action: contracts.PruneCall}
 	}
 	if _, err := Prune("1", edits); !errors.Is(err, ErrTooManyEdits) {
 		t.Fatalf("Prune of %d edits = %v, want ErrTooManyEdits", len(edits), err)

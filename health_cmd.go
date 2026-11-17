@@ -41,9 +41,9 @@ func runHealth(ctx context.Context, layout host.RuntimeLayout, messages *clitext
 	opts.pal = outputPalette(os.Stdout)
 	instance := host.ServedInstanceID(host.DefaultStatePath(), "")
 	if opts.watch {
-		return watchHealth(ctx, layout, messages, instance, opts, lang)
+		return watchHealth(ctx, layout, messages, hostMessages, instance, opts, lang)
 	}
-	code, err := checkHealth(ctx, layout, messages, instance, opts, lang, os.Stdout)
+	code, err := checkHealth(ctx, layout, messages, hostMessages, instance, opts, lang, os.Stdout)
 	if err != nil {
 		return err
 	}
@@ -53,11 +53,11 @@ func runHealth(ctx context.Context, layout host.RuntimeLayout, messages *clitext
 	return nil
 }
 
-func watchHealth(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, instance string, opts healthOptions, lang i18n.Language) error {
+func watchHealth(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, instance string, opts healthOptions, lang i18n.Language) error {
 	ticker := time.NewTicker(healthWatchInterval)
 	defer ticker.Stop()
 	for {
-		if _, err := checkHealth(ctx, layout, messages, instance, opts, lang, os.Stdout); err != nil {
+		if _, err := checkHealth(ctx, layout, messages, hostMessages, instance, opts, lang, os.Stdout); err != nil {
 			return err
 		}
 		if err := writeRefreshed(messages, os.Stdout, lang); err != nil {
@@ -84,7 +84,7 @@ func daemonDownText(messages *clitext.Messages, lang i18n.Language, socket strin
 	return messages.Text(lang, clitext.HealthDaemonDown, clitext.Params{clitext.ParamSocket: termpaint.Escape(socket).String()})
 }
 
-func checkHealth(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, instance string, opts healthOptions, lang i18n.Language, writer io.Writer) (int, error) {
+func checkHealth(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, instance string, opts healthOptions, lang i18n.Language, writer io.Writer) (int, error) {
 	snapshot, err := fetchHealth(ctx, hostMessages, layout, instance, opts.deep)
 	if host.IsDaemonNotRunning(err) {
 		text, textErr := daemonDownText(messages, lang, host.CommandSocketPathIn(layout, instance))

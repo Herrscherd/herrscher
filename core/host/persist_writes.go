@@ -26,16 +26,10 @@ func newPersistWrites() *persistWrites {
 }
 
 func (p *persistWrites) child() *persistWrites {
-	if p == nil {
-		return nil
-	}
 	return &persistWrites{grace: p.grace, parent: p}
 }
 
 func (p *persistWrites) begin() func() {
-	if p == nil {
-		return func() {}
-	}
 	if p.pastDeadline() && p.onLate != nil {
 		p.onLate()
 	}
@@ -67,9 +61,6 @@ func (p *persistWrites) expire() {
 }
 
 func (p *persistWrites) stop() {
-	if p == nil {
-		return
-	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.timer != nil {

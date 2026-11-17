@@ -94,17 +94,8 @@ func withWarnings(w io.Writer) hubOption {
 }
 
 func (h *hub) bindSessionState() {
-	if h.sessions != nil {
-		if h.persists == nil {
-			h.persists = h.sessions.persists
-		}
-		if h.checkpoints == nil {
-			h.checkpoints = &h.sessions.checkpoints
-		}
-	}
-	if h.persists == nil {
-		h.persists = newPersistWrites()
-	}
+	h.persists = h.sessions.persists
+	h.checkpoints = &h.sessions.checkpoints
 }
 
 func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry, approvals *approvalTable, sessions *sessionTable, opts ...hubOption) *hub {

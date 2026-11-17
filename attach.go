@@ -93,12 +93,11 @@ func (a *attachedDaemon) channelFor(session string) string {
 }
 
 func (a *attachedDaemon) refresh() {
-	out, err := a.dispatch([]string{verbSession, "info", argJSON})
+	infos, err := a.fetchSessions()
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.fetched = time.Now()
 	if err != nil {
-		return
-	}
-	var infos []contracts.SessionInfo
-	if err := json.Unmarshal([]byte(out), &infos); err != nil {
 		return
 	}
 	channelOf := make(map[string]string, len(infos))
@@ -108,9 +107,19 @@ func (a *attachedDaemon) refresh() {
 		channelOf[info.Name] = info.ChannelID
 		nameOf[info.ChannelID] = info.Name
 	}
-	a.mu.Lock()
-	a.sessions, a.channelOf, a.nameOf, a.fetched = infos, channelOf, nameOf, time.Now()
-	a.mu.Unlock()
+	a.sessions, a.channelOf, a.nameOf = infos, channelOf, nameOf
+}
+
+func (a *attachedDaemon) fetchSessions() ([]contracts.SessionInfo, error) {
+	out, err := a.dispatch([]string{verbSession, "info", argJSON})
+	if err != nil {
+		return nil, err
+	}
+	var infos []contracts.SessionInfo
+	if err := json.Unmarshal([]byte(out), &infos); err != nil {
+		return nil, err
+	}
+	return infos, nil
 }
 
 func (a *attachedDaemon) dispatch(argv []string) (string, error) {
@@ -314,16 +323,19 @@ func (a *attachedDaemon) Pick(channel, value string) bool {
 	return false
 }
 
-func (a *attachedDaemon) Scrollback(name string) []contracts.ScrollbackLine {
+func (a *attachedDaemon) Scrollback(name string) ([]contracts.ScrollbackLine, error) {
 	out, err := a.dispatch([]string{verbSession, "scrollback", argName, name})
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	var lines []contracts.ScrollbackLine
-	if err := json.Unmarshal([]byte(out), &lines); err != nil {
-		return nil
+	if out == "" {
+		return lines, nil
 	}
-	return lines
+	if err := json.Unmarshal([]byte(out), &lines); err != nil {
+		return nil, err
+	}
+	return lines, nil
 }
 
 func (a *attachedDaemon) Commands() []tui.CommandSpec {

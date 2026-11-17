@@ -2,8 +2,10 @@ package compactwire
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -88,7 +90,7 @@ func TestResultUnmeasuredKeepsFlag(t *testing.T) {
 }
 
 func TestDecodeResultKeepsTheNoteWhenTheNoticeIsMalformed(t *testing.T) {
-	for _, value := range []string{"{", `{"code":1,"args":[{"name":"X","kind":9,"value":"a"}]}`} {
+	for _, value := range []string{"{", `{"code":1,"args":[{"name":"X","kind":1}]}`} {
 		frame := contracts.Event{T: EventResult, Text: "compacté", Tokens: 42, Done: true, Value: value}
 		got, err := DecodeResult(frame)
 		if !errors.Is(err, ErrNoticeMalformed) {
@@ -192,10 +194,233 @@ func TestDecodeResultReadsAnOldBackendFrame(t *testing.T) {
 	}
 }
 
+func TestResultWithoutStatsWritesTheOldWireForm(t *testing.T) {
+	notice := contracts.Notice{Code: contracts.CodeSettingInvalid, Args: []contracts.Arg{
+		contracts.Text("Setting", "compactAt"),
+		contracts.Count(3),
+	}}
+	const want = `{"code":7,"args":[{"name":"Setting","kind":1,"value":"compactAt"},{"name":"Count","kind":2,"value":3}]}`
+	if got := mustResult(t, contracts.CompactResult{Notice: notice}).Value; got != want {
+		t.Fatalf("Result value = %q, want %q", got, want)
+	}
+}
+
+func TestResultWithStatsWritesTheOldWireForm(t *testing.T) {
+	notice := contracts.Notice{Code: contracts.CodeSettingInvalid, Args: []contracts.Arg{
+		contracts.Text("Setting", "compactAt"),
+		contracts.Count(3),
+	}}
+	stats := contracts.CompactStats{
+		Stage:         "backend",
+		Outcome:       contracts.CompactShort,
+		Calls:         4,
+		Kept:          1,
+		Truncated:     2,
+		Pruned:        1,
+		Pinned:        3,
+		CharsBefore:   9_000,
+		CharsAfter:    2_000,
+		TokensRemoved: 1_800,
+		Requests:      2,
+		RequestTokens: 5_000,
+		Duration:      1500 * time.Millisecond,
+	}
+	const want = `{"code":7,"args":[{"name":"Setting","kind":1,"value":"compactAt"},{"name":"Count","kind":2,"value":3}],"stats":{"Stage":"backend","Outcome":"short","Calls":4,"Kept":1,"Truncated":2,"Pruned":1,"Pinned":3,"CharsBefore":9000,"CharsAfter":2000,"TokensRemoved":1800,"Requests":2,"RequestTokens":5000,"Duration":1500000000}}`
+	if got := mustResult(t, contracts.CompactResult{Notice: notice, Stats: &stats}).Value; got != want {
+		t.Fatalf("Result value = %q, want %q", got, want)
+	}
+}
+
+func TestDecodeResultReadsTheOldWireFormWithStats(t *testing.T) {
+	value := `{"code":7,"args":[{"name":"Setting","kind":1,"value":"compactAt"},{"name":"Count","kind":2,"value":3}],"stats":{"Stage":"backend","Outcome":"short","Calls":4,"Kept":1,"Truncated":2,"Pruned":1,"Pinned":3,"CharsBefore":9000,"CharsAfter":2000,"TokensRemoved":1800,"Requests":2,"RequestTokens":5000,"Duration":1500000000}}`
+	got, err := DecodeResult(contracts.Event{T: EventResult, Value: value, Text: "compacté", Tokens: 12_000, Done: true})
+	if err != nil {
+		t.Fatalf("DecodeResult: %v", err)
+	}
+	if got.Stats == nil || got.Stats.Stage != "backend" || got.Stats.Outcome != contracts.CompactShort || got.Stats.Duration != 1500*time.Millisecond || got.Stats.RequestTokens != 5_000 {
+		t.Fatalf("stats = %+v, want the backend stats of the old form", got.Stats)
+	}
+	if got.Notice.Code != contracts.CodeSettingInvalid || len(got.Notice.Args) != 2 || got.Notice.Args[1].Value() != 3 {
+		t.Fatalf("notice = %+v, want setting-invalid with its arguments", got.Notice)
+	}
+}
+
+func TestUnknownArgKindIsKeptAndReencodedCompact(t *testing.T) {
+	value := `{"code":1,"args":[{"name":"X","kind":9,"value":"a"}]}`
+	got, err := DecodeResult(contracts.Event{T: EventResult, Value: value})
+	if err != nil {
+		t.Fatalf("DecodeResult: %v", err)
+	}
+	encoded, err := EncodeNotice(got.Notice)
+	if err != nil {
+		t.Fatalf("EncodeNotice: %v", err)
+	}
+	if encoded != value {
+		t.Fatalf("re-encoded notice = %q, want %q", encoded, value)
+	}
+}
+
+func TestEncodeNoticeRefusesMoreArgumentsThanTheLimit(t *testing.T) {
+	args := make([]contracts.Arg, 0, 17)
+	for range 17 {
+		args = append(args, contracts.Count(3))
+	}
+	_, err := EncodeNotice(contracts.Notice{Code: contracts.CodeSettingInvalid, Args: args})
+	if !errors.Is(err, contracts.ErrNoticeLimit) {
+		t.Fatalf("EncodeNotice with 17 arguments: %v, want ErrNoticeLimit", err)
+	}
+}
+
 func TestResultRefusesStatsWithAnUnknownOutcome(t *testing.T) {
 	_, err := Result(contracts.CompactResult{Stats: &contracts.CompactStats{Stage: "jev"}})
 	if !errors.Is(err, contracts.ErrUnknownCompactOutcome) {
 		t.Fatalf("Result with a zero outcome: %v, want ErrUnknownCompactOutcome", err)
+	}
+}
+
+func TestDecodeRefusesMoreArgumentsThanTheLimit(t *testing.T) {
+	args := strings.TrimSuffix(strings.Repeat(`{"name":"Count","kind":2,"value":3},`, 17), ",")
+	requireNoticeMalformed(t, `{"code":1,"args":[`+args+`]}`, contracts.ErrNoticeLimit)
+}
+
+func TestDecodeRefusesANameLongerThanTheLimit(t *testing.T) {
+	name := strings.Repeat("N", 257)
+	requireNoticeMalformed(t, `{"code":1,"args":[{"name":"`+name+`","kind":1,"value":"a"}]}`, contracts.ErrNoticeLimit)
+}
+
+func TestDecodeRefusesAValueLongerThanTheLimit(t *testing.T) {
+	text := strings.Repeat("a", 70<<10)
+	requireNoticeMalformed(t, `{"code":1,"args":[{"name":"X","kind":1,"value":"`+text+`"}]}`, contracts.ErrNoticeLimit)
+}
+
+func TestDecodeRefusesARawValueBeyondTheRawCap(t *testing.T) {
+	text := strings.Repeat("a", 256<<10)
+	requireNoticeMalformed(t, `{"code":1,"args":[{"name":"X","kind":1,"value":"`+text+`"}]}`, contracts.ErrNoticeLimit)
+}
+
+func TestDecodeRefusesAReferenceWithoutValue(t *testing.T) {
+	requireNoticeMalformed(t, `{"code":1,"args":[{"name":"R","kind":3}]}`, contracts.ErrNoticeArgs)
+}
+
+func TestDecodeRefusesACountWithoutValue(t *testing.T) {
+	requireNoticeMalformed(t, `{"code":1,"args":[{"name":"C","kind":2}]}`, contracts.ErrNoticeArgs)
+}
+
+func TestDecodeNoticeWrapsTheMalformedErrorWithErrNoticeMalformed(t *testing.T) {
+	if _, err := DecodeNotice(`{`); !errors.Is(err, ErrNoticeMalformed) {
+		t.Fatalf("DecodeNotice error = %v, want ErrNoticeMalformed", err)
+	}
+}
+
+func TestLongTextIsBoundedOnTheWire(t *testing.T) {
+	notice := contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", strings.Repeat("x", 70<<10))}}
+	value, err := EncodeNotice(notice)
+	if err != nil {
+		t.Fatalf("EncodeNotice of a 70 KiB text: %v", err)
+	}
+	got, err := DecodeNotice(value)
+	if err != nil {
+		t.Fatalf("DecodeNotice: %v", err)
+	}
+	reason, isText := got.Args[0].Value().(string)
+	if !isText || len(reason) != maxTextBytes+len(truncationMark) || !strings.HasSuffix(reason, truncationMark) {
+		t.Fatalf("reason = %d bytes, want %d bytes ending with %q", len(reason), maxTextBytes+len(truncationMark), truncationMark)
+	}
+}
+
+func TestBoundedTextStaysValidUTF8(t *testing.T) {
+	notice := contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", "a"+strings.Repeat("é", 3000))}}
+	value, err := EncodeNotice(notice)
+	if err != nil {
+		t.Fatalf("EncodeNotice: %v", err)
+	}
+	got, err := DecodeNotice(value)
+	if err != nil {
+		t.Fatalf("DecodeNotice: %v", err)
+	}
+	reason, isText := got.Args[0].Value().(string)
+	if !isText || !utf8.ValidString(reason) {
+		t.Fatalf("bounded reason is not valid UTF-8: %q", reason)
+	}
+}
+
+func TestBoundedTextWithoutRuneStartDoesNotPanic(t *testing.T) {
+	notice := contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", strings.Repeat("\x80", 4<<10+1))}}
+	value, err := EncodeNotice(notice)
+	if err != nil {
+		t.Fatalf("EncodeNotice of continuation bytes: %v", err)
+	}
+	got, err := DecodeNotice(value)
+	if err != nil {
+		t.Fatalf("DecodeNotice: %v", err)
+	}
+	if reason, isText := got.Args[0].Value().(string); !isText || reason != truncationMark {
+		t.Fatalf("reason = %q, want only the truncation mark", reason)
+	}
+}
+
+func failOnPanic(t *testing.T, call func()) {
+	t.Helper()
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			t.Fatalf("panic: %v", recovered)
+		}
+	}()
+	call()
+}
+
+func TestBoundKeepsATextAtOrBelowTheLimit(t *testing.T) {
+	for _, length := range []int{4095, 4096} {
+		text := strings.Repeat("a", length)
+		var got string
+		failOnPanic(t, func() { got = Bound(text) })
+		if got != text {
+			t.Fatalf("Bound(%d bytes) = %d bytes, want the text unchanged", length, len(got))
+		}
+	}
+}
+
+func TestBoundCutsAboveTheLimitAndAppendsTheMark(t *testing.T) {
+	var got string
+	failOnPanic(t, func() { got = Bound(strings.Repeat("a", 4097)) })
+	want := strings.Repeat("a", 4096) + "..."
+	if got != want || len(got) != 4099 {
+		t.Fatalf("Bound(4097 bytes) = %d bytes, want %d bytes ending with \"...\"", len(got), len(want))
+	}
+}
+
+func TestBoundArgKeepsAnArgumentAtTheLimit(t *testing.T) {
+	arg := contracts.Text("Reason", strings.Repeat("a", 4096))
+	var got contracts.Arg
+	failOnPanic(t, func() { got = boundArg(arg) })
+	if got.Name() != arg.Name() || got.Kind() != arg.Kind() || got.Value() != arg.Value() {
+		t.Fatalf("boundArg changed an argument of 4096 bytes: %v", got.Value())
+	}
+}
+
+func TestBoundedTextCutsBeforeAFourByteRune(t *testing.T) {
+	text := strings.Repeat("a", 4094) + "😀"
+	notice := contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", text)}}
+	value, err := EncodeNotice(notice)
+	if err != nil {
+		t.Fatalf("EncodeNotice: %v", err)
+	}
+	got, err := DecodeNotice(value)
+	if err != nil {
+		t.Fatalf("DecodeNotice: %v", err)
+	}
+	reason, isText := got.Args[0].Value().(string)
+	want := strings.Repeat("a", 4094) + truncationMark
+	if !isText || reason != want || !utf8.ValidString(reason) {
+		t.Fatalf("reason = %q, want %q as valid UTF-8", reason, want)
+	}
+}
+
+func requireNoticeMalformed(t *testing.T, value string, cause error) {
+	t.Helper()
+	_, err := DecodeResult(contracts.Event{T: EventResult, Value: value})
+	if !errors.Is(err, ErrNoticeMalformed) || !errors.Is(err, cause) {
+		t.Fatalf("DecodeResult error = %v, want ErrNoticeMalformed wrapping %v", err, cause)
 	}
 }
 

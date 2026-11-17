@@ -134,6 +134,10 @@ type forkDoneMsg struct {
 	err  error
 }
 
+type forkResolvedMsg struct {
+	info contracts.SessionInfo
+}
+
 func (m *model) escapeIdle() {
 	if m.input.Value() != "" {
 		m.escAt = time.Time{}
@@ -357,29 +361,39 @@ func (m *model) handleRewindDone(msg rewindDoneMsg) {
 	m.flash = m.tr.t("tui.rewind.done", map[string]any{"Index": msg.index, "What": m.tr.t(msg.what.doneLabelKey(), nil)})
 }
 
-func (m *model) handleForkDone(msg forkDoneMsg) {
+func (m *model) handleForkDone(msg forkDoneMsg) tea.Cmd {
 	if msg.err != nil {
 		m.flash = m.tr.t("tui.rewind.fork_refused", map[string]any{tplArgReason: localizedReason(m.tr, msg.err)})
+		return nil
+	}
+	backend, name := m.tm, msg.name
+	return func() tea.Msg {
+		return forkResolvedMsg{info: sessionNamed(backend.Sessions(), name)}
+	}
+}
+
+func (m *model) handleForkResolved(msg forkResolvedMsg) {
+	if msg.info.ChannelID == "" {
+		m.flash = m.tr.t("tui.rewind.fork_created", map[string]any{tplArgName: msg.info.Name})
 		return
 	}
-	channel := channelOfSession(m.tm.Sessions(), msg.name)
-	if channel == "" {
-		m.flash = m.tr.t("tui.rewind.fork_created", map[string]any{tplArgName: msg.name})
-		return
+	m.releaseHeld(msg.info.Name)
+	m.ensureSessionTab(msg.info)
+	m.activate(msg.info.ChannelID)
+	m.flash = m.tr.t("tui.rewind.fork_opened", map[string]any{tplArgName: msg.info.Name})
+}
+
+func sessionNamed(sessions []contracts.SessionInfo, name string) contracts.SessionInfo {
+	for index := range sessions {
+		if sessions[index].Name == name && sessions[index].ChannelID != "" {
+			return sessions[index]
+		}
 	}
-	m.ensureTab(channel)
-	m.active = channel
-	m.syncViewport()
-	m.flash = m.tr.t("tui.rewind.fork_opened", map[string]any{tplArgName: msg.name})
+	return contracts.SessionInfo{Name: name}
 }
 
 func channelOfSession(sessions []contracts.SessionInfo, name string) string {
-	for index := range sessions {
-		if sessions[index].Name == name && sessions[index].ChannelID != "" {
-			return sessions[index].ChannelID
-		}
-	}
-	return ""
+	return sessionNamed(sessions, name).ChannelID
 }
 
 func (m *model) rewindView() string {

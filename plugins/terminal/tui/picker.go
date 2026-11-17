@@ -25,6 +25,7 @@ func sessionSearchText(info contracts.SessionInfo) string {
 func (m *model) applyResumeFilter() {
 	m.resumeRows = fuzzyFilter(m.resumeAll, m.resumeQuery, sessionSearchText)
 	m.resumeIdx = 0
+	m.loadResumePreview()
 }
 
 func (m *model) typeResume(text string) {
@@ -41,14 +42,24 @@ func (m *model) eraseResume() {
 	m.applyResumeFilter()
 }
 
-func (m *model) resumePreview(width int) string {
+func (m *model) loadResumePreview() {
+	m.resumePreviewLines = nil
 	if m.tm == nil || m.resumeIdx < 0 || m.resumeIdx >= len(m.resumeRows) {
-		return ""
+		return
 	}
-	lines := tailLines(m.tm.Scrollback(m.resumeRows[m.resumeIdx].Name), resumePreviewLines)
-	rendered := make([]string, 0, len(lines))
-	for _, line := range lines {
-		text := strings.ReplaceAll(line.Text, "\n", " ")
+	lines, err := m.tm.Scrollback(m.resumeRows[m.resumeIdx].Name)
+	if err != nil {
+		m.resumePreviewLines = []string{m.tr.t("tui.session.history_failed", map[string]any{tplArgReason: localizedReason(m.tr, err)})}
+		return
+	}
+	for _, line := range tailLines(lines, resumePreviewLines) {
+		m.resumePreviewLines = append(m.resumePreviewLines, strings.ReplaceAll(line.Text, "\n", " "))
+	}
+}
+
+func (m *model) resumePreview(width int) string {
+	rendered := make([]string, 0, len(m.resumePreviewLines))
+	for _, text := range m.resumePreviewLines {
 		rendered = append(rendered, m.st.dim.Render(truncate("  "+text, width)))
 	}
 	return strings.Join(rendered, "\n")
@@ -64,7 +75,11 @@ func (m *model) clampResume() {
 	}
 }
 
-func (m *model) moveResume(d int) { m.resumeIdx += d; m.clampResume() }
+func (m *model) moveResume(d int) {
+	m.resumeIdx += d
+	m.clampResume()
+	m.loadResumePreview()
+}
 
 func (m *model) chooseResume() tea.Cmd {
 	if m.resumeIdx < 0 || m.resumeIdx >= len(m.resumeRows) {
@@ -77,12 +92,9 @@ func (m *model) openChannel(session contracts.SessionInfo) tea.Cmd {
 	if m.tm != nil {
 		m.tm.Seen(session.Name)
 	}
-	m.ensureTab(session.ChannelID)
-	m.active = session.ChannelID
-	if tb := m.tabs[session.ChannelID]; tb != nil {
-		tb.unread = false
-	}
-	m.syncViewport()
+	m.releaseHeld(session.Name)
+	m.ensureSessionTab(session)
+	m.activate(session.ChannelID)
 	if !session.Archived {
 		return nil
 	}
@@ -161,12 +173,9 @@ func (m *model) chooseSwitch() {
 		return
 	}
 	row := m.switchRows[m.switchIdx]
-	m.ensureTab(row.ChannelID)
-	m.active = row.ChannelID
-	if tb := m.tabs[row.ChannelID]; tb != nil {
-		tb.unread = false
-	}
-	m.syncViewport()
+	m.releaseHeld(row.Name)
+	m.ensureSessionTab(row)
+	m.activate(row.ChannelID)
 }
 
 func (m *model) switchView() string {

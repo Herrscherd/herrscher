@@ -68,8 +68,7 @@ func (m *model) storeGit(msg gitRefreshMsg) {
 }
 
 func (m *model) gitTick() tea.Cmd {
-	info, _ := m.activeInfo()
-	return m.requestGit(info.Dir, false)
+	return m.requestGit(m.knownActiveInfo().Dir, false)
 }
 
 func (m *model) gitAfterTool(text string) tea.Cmd {

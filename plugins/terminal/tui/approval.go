@@ -175,16 +175,7 @@ func (ap *approvalPrompt) moveCursor(delta int) {
 }
 
 func (m *model) sessionInfo(channel string) contracts.SessionInfo {
-	if m.tm == nil {
-		return contracts.SessionInfo{}
-	}
-	sessions := m.tm.Sessions()
-	for index := range sessions {
-		if sessions[index].ChannelID == channel {
-			return sessions[index]
-		}
-	}
-	return contracts.SessionInfo{}
+	return m.infoForChannel(channel)
 }
 
 func (m *model) openApproval(target *tab, event contracts.Event) bool {

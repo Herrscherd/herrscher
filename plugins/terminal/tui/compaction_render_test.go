@@ -13,7 +13,7 @@ import (
 
 func TestCompactionEventsDriveTheTabFromStartToNotice(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "claude", AutoCompactPercent: 92}}}
-	m := newModel(f)
+	m := startedModel(f)
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
 	tb := m.ensureTab("c")
 	m.active = "c"
@@ -54,7 +54,7 @@ func TestCompactionNoticeShowsTheFiguresOnlyWhenMeasured(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "claude", AutoCompactPercent: 92}}}
-			m := newModel(f)
+			m := startedModel(f)
 			m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
 			tb := m.ensureTab("c")
 			m.active = "c"
@@ -70,7 +70,7 @@ func TestCompactionNoticeShowsTheFiguresOnlyWhenMeasured(t *testing.T) {
 
 func TestCompactionEventsDoNotOverwriteTheTokenCounter(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "claude", AutoCompactPercent: 92}}}
-	m := newModel(f)
+	m := startedModel(f)
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
 	tb := m.ensureTab("c")
 	m.active = "c"
@@ -85,10 +85,11 @@ func TestCompactionEventsDoNotOverwriteTheTokenCounter(t *testing.T) {
 func TestUnmeasuredCompactionReturnsTheGaugeToItsEstimate(t *testing.T) {
 	for _, size := range []tea.WindowSizeMsg{{Width: 60, Height: 20}, {Width: 80, Height: 30}} {
 		f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "claude", ContextTokens: 42_000, AutoCompactPercent: 92}}}
-		m := newModel(f)
+		m := startedModel(f)
 		m.handleWindowSize(size)
 		tb := m.ensureTab("c")
 		m.active = "c"
+		syncLoaded(m)
 		tb.measureContext(contracts.Event{TokensIn: 150_000})
 		m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionStarted, Value: "manual"})
 		m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionDone, Value: "manual", Text: "compacté"})
@@ -112,7 +113,8 @@ func TestUnmeasuredCompactionReturnsTheGaugeToItsEstimate(t *testing.T) {
 func TestContextViewSaysNoAutoCompactionInSmallWindows(t *testing.T) {
 	for _, size := range []tea.WindowSizeMsg{{Width: 60, Height: 20}, {Width: 80, Height: 30}} {
 		f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "claude", AutoCompactPercent: 0}}}
-		m := newModel(f)
+		m := startedModel(f)
+		syncLoaded(m)
 		m.handleWindowSize(size)
 		tb := m.ensureTab("c")
 		m.active = "c"
@@ -130,7 +132,7 @@ func TestContextViewSaysNoAutoCompactionInSmallWindows(t *testing.T) {
 
 func TestNoticeEventAddsANoticeLine(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "claude", AutoCompactPercent: 92}}}
-	m := newModel(f)
+	m := startedModel(f)
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
 	tb := m.ensureTab("c")
 	m.active = "c"
@@ -147,7 +149,7 @@ func TestNoticeEventAddsANoticeLine(t *testing.T) {
 
 func TestFailureWithoutTextAddsNoErrorLine(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "claude", AutoCompactPercent: 92}}}
-	m := newModel(f)
+	m := startedModel(f)
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
 	tb := m.ensureTab("c")
 	m.active = "c"

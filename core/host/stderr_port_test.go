@@ -1,6 +1,7 @@
 package host
 
 import (
+	"errors"
 	"io"
 	"strings"
 	"sync"
@@ -35,24 +36,69 @@ func (f *frozenStderr) unblock() {
 	f.openOnce.Do(func() { close(f.release) })
 }
 
-func TestNoStderrWriteStartsAfterStopReturns(t *testing.T) {
+func TestNoWarningWriteStartsAfterStopReturns(t *testing.T) {
 	name := "stderr-" + newTurnID()
 	writer := newFrozenStderr()
 	t.Cleanup(writer.unblock)
-	h := newInflightHub(t, name, time.Minute, io.Discard, withStderr(writer))
+	h := newInflightHub(t, name, time.Minute, writer)
 	h.warnSessionOverrun(name)
-	awaitBackground(t, writer.entered, "the first overrun line never reached stderr")
+	awaitBackground(t, writer.entered, "the first overrun line never reached the warnings writer")
 	h.warnSessionOverrun(name)
 	if err := h.closeAndRemoveSockets(); err != nil {
 		t.Fatal(err)
 	}
 	writer.unblock()
-	if !h.errPort.shutdown(expiresAfter(5 * time.Second)) {
-		t.Fatal("the stderr writer did not stop within 5 s of being released")
-	}
+	h.closeWarnings()
 	h.warnSessionOverrun(name)
 	if got := writer.calls.Load(); got != 1 {
-		t.Fatalf("stderr was written %d times, want 1: the queued line and the late one must never start a write once Stop returned", got)
+		t.Fatalf("the warnings writer was written %d times, want 1: the queued line and the late one must never start a write once Stop returned", got)
+	}
+}
+
+func TestSessionOverrunGoesThroughTheWarningSink(t *testing.T) {
+	var out, stderr lockedBuffer
+	h := testHub(&hub{warnings: &out, stderr: &stderr, teardownGrace: time.Second, live: make(map[string]liveSession)})
+	h.warnSessionOverrun("ordered")
+	awaitSinkQuiet(t, h.sink)
+	if !strings.Contains(out.String(), `"ordered"`) {
+		t.Fatalf("the session overrun did not reach the warning sink: %q", out.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("the session overrun bypassed the warning sink and reached stderr: %q", stderr.String())
+	}
+}
+
+func TestSessionOverrunDoesNotNeedTheLifecycleLock(t *testing.T) {
+	var out lockedBuffer
+	h := testHub(&hub{warnings: &out, teardownGrace: time.Second, live: make(map[string]liveSession)})
+	h.lifecycle.Lock()
+	done := runInBackground(func() { h.warnSessionOverrun("held") })
+	awaitBackground(t, done, "the session overrun waited for the lifecycle lock held by its caller")
+	h.lifecycle.Unlock()
+	awaitSinkQuiet(t, h.sink)
+	if !strings.Contains(out.String(), `"held"`) {
+		t.Fatalf("the session overrun was not written while the lifecycle was held: %q", out.String())
+	}
+}
+
+func TestSessionOverrunBehindAFrozenSinkIsCountedNotWritten(t *testing.T) {
+	writer := newGatedWarnings("frozen")
+	t.Cleanup(writer.open)
+	h := testHub(&hub{warnings: writer, teardownGrace: time.Second, live: make(map[string]liveSession)})
+	if _, err := h.warnings.Write([]byte("frozen\n")); !errors.Is(err, errWarningLate) {
+		t.Fatalf("write returned %v, want errWarningLate", err)
+	}
+	awaitGatedWrite(t, writer)
+	before := droppedWarnings(h.sink)
+	h.warnSessionOverrun("late")
+	if got := droppedWarnings(h.sink); got != before+1 {
+		t.Fatalf("dropped count went from %d to %d, want the lost overrun counted", before, got)
+	}
+	writer.open()
+	awaitWarning(t, &writer.out, "frozen\n")
+	awaitSinkQuiet(t, h.sink)
+	if strings.Contains(writer.out.String(), `"late"`) {
+		t.Fatalf("an overrun counted as lost reached the output after the writer unblocked: %q", writer.out.String())
 	}
 }
 

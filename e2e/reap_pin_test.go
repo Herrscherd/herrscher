@@ -90,7 +90,11 @@ func TestReapInstanceCountsAProcessThatEndsAfterTheInterruptAsStopped(t *testing
 	child := exec.CommandContext(t.Context(), "sh", "-c", "trap 'exit 0' INT; echo ready; while :; do sleep 0.05; done")
 	child.Env = []string{instanceEntry(instance)}
 	startReady(t, child)
-	t.Cleanup(func() { _ = child.Process.Kill() })
+	t.Cleanup(func() {
+		if err := child.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			t.Error(err)
+		}
+	})
 	stopped, survivors, err := reapInstance(procRoot, instance, reapGrace)
 	if err != nil || len(survivors) != 0 || len(stopped) == 0 {
 		t.Fatalf("got stopped %q, survivors %q, %v: a process that received the interrupt and ended within the grace counts as stopped, and is never killed", stopped, survivors, err)

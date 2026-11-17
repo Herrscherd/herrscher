@@ -74,7 +74,7 @@ func (stubBackend) Respond(context.Context, contracts.Prompt, func(contracts.Bac
 func (stubBackend) Close() error { return nil }
 
 func TestNewBackendForRefusesModelWithRemoteBackend(t *testing.T) {
-	_, err := newBackendFor(context.Background(), remoteStub{}, host.BackendRequest{
+	_, err := newBackendFor(context.Background(), host.NewMessages(), remoteStub{}, host.BackendRequest{
 		Cmd: "claude", ModelID: "gw-claude-opus-5",
 	})
 	if err == nil {
@@ -86,7 +86,7 @@ func TestNewBackendForRefusesModelWithRemoteBackend(t *testing.T) {
 }
 
 func TestNewBackendForKeepsRemoteBackendWithoutModel(t *testing.T) {
-	be, err := newBackendFor(context.Background(), remoteStub{}, host.BackendRequest{Cmd: "claude"})
+	be, err := newBackendFor(context.Background(), host.NewMessages(), remoteStub{}, host.BackendRequest{Cmd: "claude"})
 	if err != nil {
 		t.Fatalf("newBackendFor: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestNewBackendForKeepsRemoteBackendWithoutModel(t *testing.T) {
 }
 
 func TestNewBackendForRefusesAccountWithRemoteBackend(t *testing.T) {
-	_, err := newBackendFor(context.Background(), remoteStub{}, host.BackendRequest{Cmd: "claude", Account: "perso"})
+	_, err := newBackendFor(context.Background(), host.NewMessages(), remoteStub{}, host.BackendRequest{Cmd: "claude", Account: "perso"})
 	if err == nil {
 		t.Fatal("remote backend + account must be refused")
 	}

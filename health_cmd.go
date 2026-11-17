@@ -134,7 +134,7 @@ func fetchHealth(ctx context.Context, layout host.RuntimeLayout, instance string
 	if deep {
 		argv = append(argv, healthParamDeep)
 	}
-	out, err := host.DaemonDispatch(ctx, layout, instance, argv)
+	out, err := host.DaemonDispatch(ctx, host.NewMessages(), layout, instance, argv)
 	if err != nil {
 		return health.Snapshot{}, err
 	}

@@ -106,11 +106,6 @@ func hostErrorKeys() []hostErrorKey {
 	}
 }
 
-// LocalizeError renders err for an operator boundary in lang.
-func LocalizeError(lang i18n.Language, err error) error {
-	return localizeHostError(newHostMessages(), lang, err)
-}
-
 func localizeHostError(messages *hostMessages, lang i18n.Language, err error) error {
 	if err == nil {
 		return nil

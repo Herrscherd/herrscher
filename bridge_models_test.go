@@ -11,7 +11,7 @@ import (
 
 func TestBridgeKeepsOneModelDiscoveryForItsLifetime(t *testing.T) {
 	flags := declareBackendFlags(flag.NewFlagSet("bridge", flag.ContinueOnError), clitext.For(i18n.English))
-	requestFor := bridgeRequests(flags, "")
+	requestFor := bridgeRequests(host.NewMessages(), flags, "")
 	first := requestFor().Models
 	second := requestFor().Models
 	if first != second {

@@ -98,7 +98,7 @@ func runOneShotSeedIDWithRuntime(ctx context.Context, st *state.State, name, tas
 	if sess.Archived {
 		return "", errSeedArchivedSession
 	}
-	orch, mem, err := seedOrchestrator(ctx, sess)
+	orch, mem, err := seedOrchestrator(ctx, runtime.messages, sess)
 	if err != nil {
 		return "", err
 	}
@@ -317,11 +317,11 @@ type BackendRequest struct {
 	resolver remoteBackendResolver
 }
 
-func (req BackendRequest) remoteResolver() remoteBackendResolver {
+func (req BackendRequest) remoteResolver(messages *hostMessages) remoteBackendResolver {
 	if req.resolver != nil {
 		return req.resolver
 	}
-	return NewResolver(nil, os.Getenv("HERRSCHER_NATS"))
+	return newResolver(messages, nil, os.Getenv("HERRSCHER_NATS"))
 }
 
 type remoteBackendResolver interface {
@@ -332,8 +332,8 @@ type remoteBackendResolver interface {
 // wins when configured; otherwise the matching registered plugin is built
 // with the invocation, kind, working directory, and, if a ModelID is
 // supplied, the environment variables its route requires.
-func BuildBackendFor(ctx context.Context, req BackendRequest) (contracts.Backend, error) {
-	return buildBackendFor(ctx, newHostMessages(), req)
+func BuildBackendFor(ctx context.Context, owner *Messages, req BackendRequest) (contracts.Backend, error) {
+	return buildBackendFor(ctx, owner.owner, req)
 }
 
 func buildBackendFor(ctx context.Context, messages *hostMessages, req BackendRequest) (contracts.Backend, error) {
@@ -361,7 +361,7 @@ func buildBackend(ctx context.Context, messages *hostMessages, req BackendReques
 		route.lease()()
 		return nil, noRelease, err
 	}
-	backend, fromRemote, err := req.remoteResolver().Backend(ctx, plugins, desired)
+	backend, fromRemote, err := req.remoteResolver(messages).Backend(ctx, plugins, desired)
 	if err != nil {
 		return failWith(err)
 	}
@@ -452,8 +452,8 @@ func (req BackendRequest) remoteRefusal(messages *hostMessages, route modelRoute
 }
 
 // RemoteAccountRefusal refuses an account on a remote backend, which resolves accounts in its own store.
-func (req BackendRequest) RemoteAccountRefusal() error {
-	return req.remoteAccountRefusal(newHostMessages())
+func (req BackendRequest) RemoteAccountRefusal(owner *Messages) error {
+	return req.remoteAccountRefusal(owner.owner)
 }
 
 func (req BackendRequest) remoteAccountRefusal(messages *hostMessages) error {
@@ -730,9 +730,9 @@ func provisionSeedScope(ctx context.Context, mem contracts.Memory, project, agen
 	}
 }
 
-func seedOrchestrator(ctx context.Context, sess state.Session) (contracts.Orchestrator, contracts.Memory, error) {
+func seedOrchestrator(ctx context.Context, messages *hostMessages, sess state.Session) (contracts.Orchestrator, contracts.Memory, error) {
 	memProject, memAgent := sess.MemoryRoots()
-	resolver := NewResolver(nil, os.Getenv("HERRSCHER_NATS"))
+	resolver := newResolver(messages, nil, os.Getenv("HERRSCHER_NATS"))
 	mem, _, err := resolver.Memory(ctx, contracts.Default.Memories(), os.Getenv)
 	if err != nil {
 		return nil, nil, err

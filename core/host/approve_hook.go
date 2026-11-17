@@ -56,8 +56,8 @@ type hookInput struct {
 type hookAsker func(ctx context.Context, argv []string) (string, bool, error)
 
 // RunPermissionHook answers one tool-call payload from the daemon and fails closed on every error.
-func RunPermissionHook(ctx context.Context, stdin io.Reader, out, errOut io.Writer, target func() string, ask hookAsker) error {
-	messages := newHostMessages()
+func RunPermissionHook(ctx context.Context, owner *Messages, stdin io.Reader, out, errOut io.Writer, target func() string, ask hookAsker) error {
+	messages := owner.owner
 	lang := language.Client(slog.Default(), "")
 	var payload hookInput
 	raw, err := io.ReadAll(io.LimitReader(stdin, maxHookInput+1))
@@ -115,8 +115,9 @@ func RunApprovalHook(ctx context.Context, layout RuntimeLayout, stdin io.Reader,
 	target := sync.OnceValue(func() string {
 		return commandSocketTargetFrom(layout, func() string { return ServedInstanceID(DefaultStatePath(), "") })
 	})
-	return RunPermissionHook(ctx, stdin, out, errOut, target, func(c context.Context, argv []string) (string, bool, error) {
-		return dispatchToOperatorDaemon(c, layout, target(), argv)
+	owner := NewMessages()
+	return RunPermissionHook(ctx, owner, stdin, out, errOut, target, func(c context.Context, argv []string) (string, bool, error) {
+		return dispatchToOperatorDaemon(c, owner.owner, layout, target(), argv)
 	})
 }
 

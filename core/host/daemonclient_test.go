@@ -128,7 +128,7 @@ func TestServingPIDReportsTheHolderAndNooneElse(t *testing.T) {
 	if pid, ok := ServingPID(statePath); ok {
 		t.Fatalf("nobody is serving, got pid %d", pid)
 	}
-	unlock, err := LockState(statePath)
+	unlock, err := LockState(NewMessages(), statePath)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -57,9 +57,13 @@ type Resolver struct {
 }
 
 // NewResolver builds a Resolver for the categories in remote, reaching them over NATS at natsURL.
-func NewResolver(remote map[contracts.Category]bool, natsURL string) *Resolver {
+func NewResolver(owner *Messages, remote map[contracts.Category]bool, natsURL string) *Resolver {
+	return newResolver(owner.owner, remote, natsURL)
+}
+
+func newResolver(messages *hostMessages, remote map[contracts.Category]bool, natsURL string) *Resolver {
 	resolver := &Resolver{
-		messages:       newHostMessages(),
+		messages:       messages,
 		remote:         remote,
 		NatsURL:        natsURL,
 		log:            obs.NewLogger(os.Stderr, slog.LevelInfo),
@@ -217,11 +221,6 @@ type RemoteResolveError struct {
 	Attempts int
 	Elapsed  time.Duration
 	Err      error
-}
-
-// NewRemoteResolveError builds a RemoteResolveError that renders through its own message catalog.
-func NewRemoteResolveError(category contracts.Category, attempts int, elapsed time.Duration, err error) *RemoteResolveError {
-	return &RemoteResolveError{messages: newHostMessages(), Category: category, Attempts: attempts, Elapsed: elapsed, Err: err}
 }
 
 func (e *RemoteResolveError) Error() string { return e.render(e.messages, i18n.English) }

@@ -25,8 +25,9 @@ func TestSessionFailureNoticeIsWrittenInTheSessionLanguage(t *testing.T) {
 	h.reportSessionFailure(sess, supervisor.StagePrepare, cause)
 
 	params := map[string]any{nameParam: "revue", detailParam: cause.Error()}
-	inFrench := LocalizeError(i18n.French, wrapHost(newHostMessages(), cause, sessionFailureKey(supervisor.StagePrepare), params)).Error()
-	inEnglish := LocalizeError(i18n.English, wrapHost(newHostMessages(), cause, sessionFailureKey(supervisor.StagePrepare), params)).Error()
+	owner := newHostMessages()
+	inFrench := localizeHostError(owner, i18n.French, wrapHost(owner, cause, sessionFailureKey(supervisor.StagePrepare), params)).Error()
+	inEnglish := localizeHostError(owner, i18n.English, wrapHost(owner, cause, sessionFailureKey(supervisor.StagePrepare), params)).Error()
 	if inFrench == inEnglish {
 		t.Fatal("the two languages render the same notice, the test proves nothing")
 	}

@@ -79,7 +79,7 @@ func TestSetLangThroughTheWiredManagerChangesBuilderReplies(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	live := newOperatorLanguage(i18n.English)
 	options := Options{DefaultCmd: "claude", live: live}
-	hdl := newManagerHandler(Deps{}, options, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
+	hdl := newManagerHandler(newHostMessages(), Deps{}, options, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
 	setLang := mustCommand(t, hdl.Commands(), "set", "lang")
 	if _, err := setLang.Run(t.Context(), contracts.Input{Args: map[string]string{"lang": "fr"}}); err != nil {
 		t.Fatalf("set lang fr: %v", err)
@@ -111,7 +111,7 @@ func TestCommandsFollowsTheLiveLanguageAfterSetLang(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	live := newOperatorLanguage(i18n.English)
 	options := Options{DefaultCmd: "claude", live: live}
-	hdl := newManagerHandler(Deps{}, options, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
+	hdl := newManagerHandler(newHostMessages(), Deps{}, options, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
 	reg := &cli.Registry{}
 	if err := reg.Add(commandsVerb(live.Get, reg)); err != nil {
 		t.Fatal(err)

@@ -289,14 +289,14 @@ func TestDeadDaemonSocketsAreReadAsAnAbsentDaemon(t *testing.T) {
 	deadSocket(t, EventsSocketPathIn(layout, "t10"))
 	ctx := context.Background()
 
-	if _, err := DaemonDispatch(ctx, layout, "t10", []string{"status"}); !IsDaemonNotRunning(err) {
+	if _, err := DaemonDispatch(ctx, NewMessages(), layout, "t10", []string{"status"}); !IsDaemonNotRunning(err) {
 		t.Fatalf("DaemonDispatch on a dead command socket = %v, want daemon not running", err)
 	}
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	if _, handled, err := ForwardToDaemon(ctx, layout, statePath, "t10", []string{"status"}); handled || err != nil {
+	if _, handled, err := ForwardToDaemon(ctx, NewMessages(), layout, statePath, "t10", []string{"status"}); handled || err != nil {
 		t.Fatalf("ForwardToDaemon on a dead command socket = handled %v, err %v, want not handled and no error", handled, err)
 	}
-	if _, err := SubscribeDaemonEvents(ctx, layout, "t10"); !errors.Is(err, errDaemonEventsUnreachable) {
+	if _, err := SubscribeDaemonEvents(ctx, NewMessages(), layout, "t10"); !errors.Is(err, errDaemonEventsUnreachable) {
 		t.Fatalf("SubscribeDaemonEvents on a dead events socket = %v, want errDaemonEventsUnreachable", err)
 	}
 }

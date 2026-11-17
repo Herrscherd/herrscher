@@ -224,7 +224,7 @@ func TestSourcesReadTheCacheBesideTheStateFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(envModelsHidden, "a-native")
-	sources := ModelDiscoveryFor(filepath.Join(dir, "state.json")).Sources()
+	sources := ModelDiscoveryFor(NewMessages(), filepath.Join(dir, "state.json")).Sources()
 	got, err := CatalogWith(fakePlugins(), contracts.PolicyAll, sources)
 	if err != nil {
 		t.Fatalf("CatalogWith: %v", err)
@@ -355,7 +355,7 @@ func TestGatewayRoutesDroppedWithoutCredentials(t *testing.T) {
 
 func catalogIDs(t *testing.T) map[string]bool {
 	t.Helper()
-	got, err := CatalogWith(fakePlugins(), contracts.PolicyAll, DefaultModelDiscovery().Sources())
+	got, err := CatalogWith(fakePlugins(), contracts.PolicyAll, DefaultModelDiscovery(NewMessages()).Sources())
 	if err != nil {
 		t.Fatalf("CatalogWith: %v", err)
 	}
@@ -416,7 +416,7 @@ func TestSaveDiscoveryCacheCreatesItsDirectoryPrivately(t *testing.T) {
 func TestModelDiscoveryPutsTheCacheBesideTheDaemonState(t *testing.T) {
 	t.Setenv("HERRSCHER_STATE_DIR", "")
 	state := filepath.Join(t.TempDir(), "elsewhere", "state.json")
-	path := ModelDiscoveryFor(state).cachePath()
+	path := ModelDiscoveryFor(NewMessages(), state).cachePath()
 	if want := filepath.Join(filepath.Dir(state), discoveryCacheName); path != want {
 		t.Fatalf("cache path = %s, want %s beside the --state file", path, want)
 	}
@@ -424,7 +424,7 @@ func TestModelDiscoveryPutsTheCacheBesideTheDaemonState(t *testing.T) {
 
 func TestModelDiscoveryForLeavesTheEnvironmentAlone(t *testing.T) {
 	t.Setenv("HERRSCHER_STATE_DIR", "")
-	_ = ModelDiscoveryFor(filepath.Join(t.TempDir(), "state.json"))
+	_ = ModelDiscoveryFor(NewMessages(), filepath.Join(t.TempDir(), "state.json"))
 	if inherited := os.Getenv("HERRSCHER_STATE_DIR"); inherited != "" {
 		t.Fatalf("ModelDiscoveryFor exported HERRSCHER_STATE_DIR=%q to child processes", inherited)
 	}
@@ -432,7 +432,7 @@ func TestModelDiscoveryForLeavesTheEnvironmentAlone(t *testing.T) {
 
 func modelsVerb(t *testing.T, verb string) contracts.Cmd {
 	t.Helper()
-	for _, cmd := range ModelsCommands(fixedLanguage(i18n.English)) {
+	for _, cmd := range ModelsCommands(newHostMessages(), fixedLanguage(i18n.English)) {
 		if len(cmd.Path) == 2 && cmd.Path[1] == verb {
 			return cmd
 		}
@@ -472,7 +472,7 @@ func TestClashWarnsOncePerCacheAcrossLoads(t *testing.T) {
 	if err := saveDiscoveryCache(newHostMessages(), path, cacheWith(time.Now(), cachedModel{ID: "b-native", Label: "clash", Arg: "clash", Route: "native"})); err != nil {
 		t.Fatal(err)
 	}
-	models := ModelDiscoveryFor(filepath.Join(filepath.Dir(path), "state.json"))
+	models := ModelDiscoveryFor(NewMessages(), filepath.Join(filepath.Dir(path), "state.json"))
 	for range 5 {
 		if _, err := CatalogWith(fakePlugins(), contracts.PolicyAll, models.Sources()); err != nil {
 			t.Fatalf("CatalogWith: %v", err)
@@ -573,7 +573,7 @@ func TestBridgeModelDiscoveryReadsTheCacheBesideItsStateFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("HERRSCHER_STATE_DIR", t.TempDir())
-	sources := BridgeModelDiscovery(filepath.Join(stateDir, "state.json")).Sources()
+	sources := BridgeModelDiscovery(NewMessages(), filepath.Join(stateDir, "state.json")).Sources()
 	got, err := CatalogWith(fakePlugins(), contracts.PolicyAll, sources)
 	if err != nil {
 		t.Fatalf("CatalogWith: %v", err)

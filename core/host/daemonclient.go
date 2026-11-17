@@ -79,9 +79,9 @@ func ServedInstanceID(statePath, optID string) string {
 // operator CLI's own path, which falls back to running the command locally: a
 // client that meant to speak to the daemon must hear that it could not, rather
 // than silently acting on a second copy of the state.
-func DaemonDispatch(ctx context.Context, layout RuntimeLayout, instanceID string, argv []string) (string, error) {
+func DaemonDispatch(ctx context.Context, messages *Messages, layout RuntimeLayout, instanceID string, argv []string) (string, error) {
 	socket := CommandSocketPathIn(layout, instanceID)
-	out, handled, err := dispatchLiveCommand(ctx, newHostMessages(), layout, socket, argv)
+	out, handled, err := dispatchLiveCommand(ctx, messages.owner, layout, socket, argv)
 	if !handled {
 		return "", &daemonNotRunningError{Socket: socket}
 	}
@@ -108,8 +108,8 @@ func dispatchToOperatorDaemon(ctx context.Context, messages *hostMessages, layou
 // error the way DaemonDispatch folds it: false means the dial missed, so the
 // caller is free to answer as it did before there was a daemon to ask. A verb
 // that lives only inside a daemon must not claim to exist when none is running.
-func ForwardToDaemon(ctx context.Context, layout RuntimeLayout, statePath, optID string, argv []string) (string, bool, error) {
-	return dispatchToOperatorDaemon(ctx, newHostMessages(), layout, commandSocketTarget(layout, ServedInstanceID(statePath, optID)), argv)
+func ForwardToDaemon(ctx context.Context, messages *Messages, layout RuntimeLayout, statePath, optID string, argv []string) (string, bool, error) {
+	return dispatchToOperatorDaemon(ctx, messages.owner, layout, commandSocketTarget(layout, ServedInstanceID(statePath, optID)), argv)
 }
 
 // SubscribeDaemonEvents dials the daemon's events socket and streams what it
@@ -118,8 +118,8 @@ func ForwardToDaemon(ctx context.Context, layout RuntimeLayout, statePath, optID
 //
 // The daemon drops a subscriber's lines rather than block a turn on it, so a
 // consumer that falls far enough behind loses telemetry. Read promptly.
-func SubscribeDaemonEvents(ctx context.Context, layout RuntimeLayout, instanceID string) (<-chan DaemonEvent, error) {
-	return subscribeAt(ctx, newHostMessages(), layout, EventsSocketPathIn(layout, instanceID))
+func SubscribeDaemonEvents(ctx context.Context, messages *Messages, layout RuntimeLayout, instanceID string) (<-chan DaemonEvent, error) {
+	return subscribeAt(ctx, messages.owner, layout, EventsSocketPathIn(layout, instanceID))
 }
 
 var errDaemonEventsUnreachable = errors.New("the daemon does not answer on its events socket")

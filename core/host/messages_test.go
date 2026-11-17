@@ -9,7 +9,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"strings"
-	"sync"
 	"testing"
 	"testing/fstest"
 
@@ -454,54 +453,66 @@ func TestHostTextFallsBackToEnglishWhenFrenchDoesNotRender(t *testing.T) {
 	}
 }
 
-func TestHostCatalogBuildsOncePerOwner(t *testing.T) {
-	builds := 0
-	messages := &hostMessages{catalog: sync.OnceValues(func() (*i18n.Catalog, error) {
-		builds++
-		return buildHostCatalog()
-	})}
-	table := newSessionTable(messages)
-	cliRuntime := oneShotSeedRuntimeFrom(context.Background(), messages)
-	for _, name := range []string{"alpha", "beta", "gamma"} {
-		driver := newSessionDriver(table.messages, name, nil, nil, nil, io.Discard)
-		driver.operator = fixedLanguage(i18n.French)
-		if text := driver.hostText("warn.session_start", map[string]any{nameParam: name}); text == "" {
-			t.Fatalf("session %q rendered an empty warning", name)
-		}
-		warnTo(table.messages, io.Discard, i18n.French, "warn.session_start", map[string]any{nameParam: name, detailParam: errors.New("boom")})
-		if text := localizeHostError(table.messages, i18n.French, wrapHost(newHostMessages(), errors.New("boom"), "serve.load_state", nil)).Error(); text == "" {
-			t.Fatalf("session %q rendered an empty localized error", name)
-		}
-		if text := cliRuntime.messages.text(i18n.French, "warn.session_start", map[string]any{nameParam: name}); text == "" {
-			t.Fatalf("cli seed runtime of session %q rendered an empty warning", name)
+func TestOneOwnerKeepsOneCatalogueAcrossEveryRenderPath(t *testing.T) {
+	owner := newHostMessages()
+	built := owner.catalog
+	renders := 0
+	owner.catalog = func() (*i18n.Catalog, error) {
+		renders++
+		return built()
+	}
+	rendersThrough := func(name string, render func()) {
+		t.Helper()
+		before := renders
+		render()
+		if renders == before {
+			t.Fatalf("%s did not render through the owner's catalogue, it built or reached another one", name)
 		}
 	}
-	if builds != 1 {
-		t.Fatalf("catalog built %d times across 3 sessions, want 1", builds)
-	}
-}
 
-func countedOwner(builds *int) *hostMessages {
-	return &hostMessages{catalog: sync.OnceValues(func() (*i18n.Catalog, error) {
-		*builds++
-		return buildHostCatalog()
-	})}
-}
-
-func TestNestedLocalizableErrorsRenderThroughOneCountedCatalog(t *testing.T) {
-	builds := 0
-	owner := countedOwner(&builds)
+	driver := newSessionDriver(owner, "alpha", nil, nil, nil, io.Discard)
+	driver.operator = fixedLanguage(i18n.French)
+	rendersThrough("the session driver", func() {
+		driver.hostText("warn.session_start", map[string]any{nameParam: "alpha"})
+	})
+	rendersThrough("warnTo", func() {
+		warnTo(owner, io.Discard, i18n.French, "warn.session_start", map[string]any{nameParam: "alpha", detailParam: errors.New("boom")})
+	})
 	leaf := wrapHost(owner, errors.New("disque plein"), "serve.load_state", nil)
 	joined := errors.Join(fmt.Errorf("ctx: %w", leaf), unexpectedError{cause: errors.New("fermé")})
 	top := wrapHost(owner, joined, "warn.session_start", map[string]any{nameParam: "digest"})
-	if text := localizeHostError(owner, i18n.French, top).Error(); text == "" {
-		t.Fatal("the nested localized error rendered an empty text")
+	rendersThrough("localizeHostError on the nested error", func() {
+		localizeHostError(owner, i18n.French, top)
+	})
+	rendersThrough("Error() on the nested error", func() {
+		_ = top.Error()
+	})
+	rendersThrough("errorTextIn on the nested error", func() {
+		errorTextIn(owner, i18n.French, top)
+	})
+}
+
+func TestEveryLocalizableTypedNilRendersAsNilText(t *testing.T) {
+	owner := newHostMessages()
+	typedNils := []error{
+		(*hostWrapError)(nil),
+		(*pluginKindReservedError)(nil),
+		(*RemoteResolveError)(nil),
+		(*gatewayEnvUnsupportedError)(nil),
+		(*unsafeTarMemberError)(nil),
+		(*instanceIDMismatchError)(nil),
+		(*remoteSessionError)(nil),
+		(*remoteAccountError)(nil),
 	}
-	if text := top.Error(); text == "" {
-		t.Fatal("the nested error rendered an empty english text")
-	}
-	if builds != 1 {
-		t.Fatalf("catalog built %d times across three nested levels, want 1", builds)
+	params := map[string]any{nameParam: "digest"}
+	for _, typedNil := range typedNils {
+		for _, lang := range []i18n.Language{i18n.French, i18n.English} {
+			got := errorTextIn(owner, lang, wrapHost(owner, typedNil, "warn.session_start", params))
+			want := errorTextIn(owner, lang, wrapHost(owner, errors.New("<nil>"), "warn.session_start", params))
+			if got != want {
+				t.Fatalf("a typed nil %T rendered %q in %v, want the text of a nil cause %q", typedNil, got, lang, want)
+			}
+		}
 	}
 }
 
@@ -530,7 +541,7 @@ func TestErrorTextKeepsTheWrapperPrefix(t *testing.T) {
 	}
 }
 
-func TestErrorTextKeepsTheSeparatorOfTwoWrappedLocalizableErrors(t *testing.T) {
+func TestErrorTextLocalisesOnlyTheFirstOfTwoSiblingErrors(t *testing.T) {
 	messages := newHostMessages()
 	first := hostWrapError{messages: messages, key: "serve.load_state", cause: errors.New("premier")}
 	second := hostWrapError{messages: messages, key: "serve.load_state", cause: errors.New("second")}

@@ -75,11 +75,12 @@ var (
 )
 
 type compactorSettingsError struct {
-	missing *contracts.MissingSettingsError
+	messages *hostMessages
+	missing  *contracts.MissingSettingsError
 }
 
 func (e compactorSettingsError) Error() string {
-	return e.render(i18n.English)
+	return e.render(e.messages, i18n.English)
 }
 
 func (e compactorSettingsError) Unwrap() []error {
@@ -90,7 +91,7 @@ func (e compactorSettingsError) Notice() contracts.Notice {
 	return contracts.Notice{Code: contracts.CodeSettingMissing, Args: []contracts.Arg{contracts.Text("Settings", strings.Join(e.missing.Missing, ", "))}}
 }
 
-func (e compactorSettingsError) render(lang i18n.Language) string {
+func (e compactorSettingsError) render(_ *hostMessages, lang i18n.Language) string {
 	text, err := contracts.NewRenderer().Render(lang, e.Notice())
 	if err != nil {
 		return e.missing.Error()
@@ -167,7 +168,7 @@ func newCompactionPolicy(ctx context.Context, messages *hostMessages, lang langu
 }
 
 func (p *compactionPolicy) addStage(ctx context.Context, name string) error {
-	compactor, err := customStage(ctx, name, os.Getenv)
+	compactor, err := customStage(ctx, p.messages, name, os.Getenv)
 	if err != nil {
 		return wrapHost(p.messages, err, "compaction.stack_named", map[string]any{nameParam: name})
 	}
@@ -198,7 +199,7 @@ func warnUnknownContextLimits(warn func(key string, params map[string]any), perV
 	}
 }
 
-func customStage(ctx context.Context, name string, getenv func(string) string) (contracts.Compactor, error) {
+func customStage(ctx context.Context, messages *hostMessages, name string, getenv func(string) string) (contracts.Compactor, error) {
 	plugins := contracts.Default.Compactors()
 	for index := range plugins {
 		plugin := &plugins[index]
@@ -210,7 +211,7 @@ func customStage(ctx context.Context, name string, getenv func(string) string) (
 		}
 		cfg, err := contracts.Resolve(plugin.Manifest.Config, getenv)
 		if missing, ok := errors.AsType[*contracts.MissingSettingsError](err); ok {
-			return nil, compactorSettingsError{missing: missing}
+			return nil, compactorSettingsError{messages: messages, missing: missing}
 		}
 		if err != nil {
 			return nil, err

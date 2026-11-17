@@ -95,7 +95,7 @@ func TestBuildBackendForSelectsByVendor(t *testing.T) {
 	contracts.Default.Register(makePlugin("claude"))
 	contracts.Default.Register(makePlugin("codex"))
 
-	if _, err := BuildBackendFor(context.Background(), BackendRequest{Vendor: "codex", Cmd: "codex --model gpt-5.6"}); err != nil {
+	if _, err := BuildBackendFor(context.Background(), NewMessages(), BackendRequest{Vendor: "codex", Cmd: "codex --model gpt-5.6"}); err != nil {
 		t.Fatalf("BuildBackendFor: %v", err)
 	}
 	if built != "codex" {
@@ -122,7 +122,7 @@ func TestBuildBackendForInfersVendorFromCmd(t *testing.T) {
 	contracts.Default.Register(makePlugin("codex"))
 	contracts.Default.Register(makePlugin("claude"))
 
-	if _, err := BuildBackendFor(context.Background(), BackendRequest{Cmd: "/usr/bin/claude --model claude-opus-5-5 --effort medium"}); err != nil {
+	if _, err := BuildBackendFor(context.Background(), NewMessages(), BackendRequest{Cmd: "/usr/bin/claude --model claude-opus-5-5 --effort medium"}); err != nil {
 		t.Fatalf("BuildBackendFor: %v", err)
 	}
 	if built != "claude" {

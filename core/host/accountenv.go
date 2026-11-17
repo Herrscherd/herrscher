@@ -159,8 +159,8 @@ func persistedSessions(messages *hostMessages) ([]state.Session, error) {
 }
 
 // ProfileUsers lists the persisted sessions using a profile, following the vendor default when isDefault.
-func ProfileUsers(vendor, name string, isDefault bool) ([]string, error) {
-	sessions, err := persistedSessions(newHostMessages())
+func ProfileUsers(owner *Messages, vendor, name string, isDefault bool) ([]string, error) {
+	sessions, err := persistedSessions(owner.owner)
 	if err != nil {
 		return nil, err
 	}
@@ -182,8 +182,8 @@ func profileUsers(sessions []state.Session, vendor, name string, isDefault bool)
 }
 
 // ResumingSessions lists the sessions of vendor resuming under the vendor default.
-func ResumingSessions(vendor string) ([]string, error) {
-	sessions, err := persistedSessions(newHostMessages())
+func ResumingSessions(owner *Messages, vendor string) ([]string, error) {
+	sessions, err := persistedSessions(owner.owner)
 	if err != nil {
 		return nil, err
 	}

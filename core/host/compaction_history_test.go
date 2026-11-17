@@ -10,6 +10,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/historywire"
@@ -192,6 +193,17 @@ func TestMissingCompactorSettingRefusesStartup(t *testing.T) {
 	}
 }
 
+func TestMissingCompactorSettingRendersInFrench(t *testing.T) {
+	registerSettingsCompactor(t, keyedFactory(new([]string)))
+	t.Setenv(typesafeEnv, "")
+	owner := newHostMessages()
+	_, err := newCompactionPolicy(context.Background(), owner, testLanguage(), io.Discard, nil, []string{"jev", contracts.CompactStageBackend}, nil)
+	const want = `compactStack "jev" : ces réglages doivent être définis : TYPESAFE_API_KEY. Le démon ne démarre pas tant que cette étape échoue : corrige-la ou retire-la de compactStack, puis herrscher service restart`
+	if got := errorTextIn(owner, i18n.French, err); got != want {
+		t.Fatalf("French rendering = %q, want %q", got, want)
+	}
+}
+
 func TestStackWithoutTheCompactorNeedsNoSetting(t *testing.T) {
 	var keys []string
 	registerSettingsCompactor(t, keyedFactory(&keys))
@@ -224,7 +236,7 @@ func TestCustomStageRefusesBrokenPlugins(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			registerSettingsCompactor(t, tc.factory)
 			getenv := func(string) string { return "sk-test" }
-			if _, err := customStage(context.Background(), tc.stage, getenv); !errors.Is(err, tc.want) {
+			if _, err := customStage(context.Background(), newHostMessages(), tc.stage, getenv); !errors.Is(err, tc.want) {
 				t.Fatalf("customStage = %v, want %v", err, tc.want)
 			}
 		})

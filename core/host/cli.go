@@ -46,8 +46,8 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if n, ok := agent.UserBudgetFromEnv(os.Getenv); ok {
 		agents.SetUserBudget(n)
 	}
-	models := options.modelDiscovery()
-	hdl := newManagerHandler(deps, options, partDir, hostState, sup, worktrees, updater, agents, models)
+	models := options.modelDiscovery(sessions.messages)
+	hdl := newManagerHandler(sessions.messages, deps, options, partDir, hostState, sup, worktrees, updater, agents, models)
 	wireManagerHandler(ctx, options.live.Get, options.Warnings, hdl, hostState, options.Runtime, instID, worktrees, sessions, models)
 	wireSupervisor(sup, options.Runtime, hostState, instID, sessions)
 	seedCoord := &coordinatorSlot{}
@@ -57,7 +57,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addVerbs(reg, hdl.Commands()...); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addVerbs(reg, ModelsCommands(options.live.Get)...); err != nil {
+	if err := addVerbs(reg, ModelsCommands(sessions.messages, options.live.Get)...); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addSessionVerbs(reg, options.live.Get, hostState, options.Runtime, partDir, instID, approvals, sessions, seedCoord, models); err != nil {
@@ -73,7 +73,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addCheckpointCommands(reg, options.live.Get, hostState, sessions); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addMemoryVerbs(reg, options.live.Get); err != nil {
+	if err := addMemoryVerbs(reg, sessions.messages, options.live.Get); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addSkillVerbs(reg, options.live.Get); err != nil {
@@ -91,7 +91,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addRoleCommands(reg, options.live.Get, hostState); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addVerbs(reg, memorySearchVerb(options.live.Get), whoamiVerb(), commandsVerb(options.live.Get, reg), healthVerb(options.health), usageVerb(options.usage)); err != nil {
+	if err := addVerbs(reg, memorySearchVerb(sessions.messages, options.live.Get), whoamiVerb(), commandsVerb(options.live.Get, reg), healthVerb(options.health), usageVerb(options.usage)); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addPluginVerbs(sessions.messages, reg, extra); err != nil {
@@ -120,10 +120,10 @@ func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
 	return nil
 }
 
-func newManagerHandler(deps Deps, options Options, partDir string, hostState *state.State, sup *supervisor.Supervisor, worktrees manager.Worktrees, updater serviceUpdater, agents *agent.Store, models *ModelDiscovery) *manager.Handler {
+func newManagerHandler(messages *hostMessages, deps Deps, options Options, partDir string, hostState *state.State, sup *supervisor.Supervisor, worktrees manager.Worktrees, updater serviceUpdater, agents *agent.Store, models *ModelDiscovery) *manager.Handler {
 	options = withOperatorLanguage(options)
 	launch := func(vendor, modelID, cmd string) (string, error) { return launchVendor(models, vendor, modelID, cmd) }
-	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, func(vendor, profile string) error { return validateProfileChoice(sessions.messages, vendor, profile) }, launch)
+	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, func(vendor, profile string) error { return validateProfileChoice(messages, vendor, profile) }, launch)
 	hdl.SetRemoteBackend(options.RemoteCategories[contracts.CategoryBackend])
 	hdl.SetLanguage(options.live.Get())
 	hdl.SetDefaultLanguage(options.DefaultLanguage)
@@ -228,7 +228,7 @@ func NewRegistry(ctx context.Context, gws []Deps, options Options) (*cli.Registr
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)
 	}
-	forwardDaemonOwnedCommands(reg, options.Runtime, instID, forwarderFor(options.Runtime))
+	forwardDaemonOwnedCommands(reg, options.Runtime, instID, forwarderFor(messages, options.Runtime))
 	return reg, nil
 }
 

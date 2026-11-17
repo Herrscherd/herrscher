@@ -117,7 +117,7 @@ func serveHub(ctx context.Context, messages *hostMessages, gws []Deps, closers [
 	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions, withWarnings(options.Warnings))
 	runningHub.lang = options.Language
 	runningHub.language = options.languageSource()
-	runningHub.models = options.modelDiscovery()
+	runningHub.models = options.modelDiscovery(messages)
 	runningHub.seedBackend = func(seedCtx context.Context, sess state.Session) (contracts.Backend, error) {
 		return newSeedBackendWithToken(seedCtx, messages, sess, keys, runningHub.models, sessions.seedToken(seedCtx, sess.Name, liveSessionAllowed(store)))
 	}

@@ -171,7 +171,7 @@ func runPluginHost(ctx context.Context, args []string) error {
 }
 
 func firstMemory(ctx context.Context) (contracts.Memory, contracts.Manifest, error) {
-	return host.BuildFirstMemoryWithManifest(ctx)
+	return host.BuildFirstMemoryWithManifest(ctx, host.NewMessages())
 }
 
 func firstOrchestrator(ctx context.Context, lang i18n.Language) (contracts.Orchestrator, contracts.Manifest, error) {

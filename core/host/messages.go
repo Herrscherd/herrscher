@@ -34,6 +34,21 @@ func newHostMessages() *hostMessages {
 	return &hostMessages{catalog: sync.OnceValues(buildHostCatalog)}
 }
 
+// Messages is the catalogue owner a caller keeps for as long as it renders host errors.
+type Messages struct {
+	owner *hostMessages
+}
+
+// NewMessages returns a Messages whose catalogue is built on first use.
+func NewMessages() *Messages {
+	return &Messages{owner: newHostMessages()}
+}
+
+// Localize renders err for an operator boundary in lang through this owner's catalogue.
+func (m *Messages) Localize(lang i18n.Language, err error) error {
+	return localizeHostError(m.owner, lang, err)
+}
+
 func buildHostCatalog() (*i18n.Catalog, error) {
 	sub, err := fs.Sub(hostLocales, "locales")
 	if err != nil {
@@ -101,6 +116,9 @@ func errorTextIn(messages *hostMessages, lang i18n.Language, err error) string {
 		return ""
 	}
 	text := fmt.Sprint(err)
+	if lang == i18n.English {
+		return text
+	}
 	english, local, found := localizedPart(messages, lang, err)
 	if !found {
 		return text
@@ -112,10 +130,10 @@ func errorTextIn(messages *hostMessages, lang i18n.Language, err error) string {
 }
 
 func localizedPart(messages *hostMessages, lang i18n.Language, err error) (string, string, bool) {
-	if wrapped, isWrap := errors.AsType[*hostWrapError](err); isWrap && wrapped == nil {
-		return "", "", false
-	}
 	if localizable, found := errors.AsType[localizableError](err); found {
+		if isNilLocalizable(localizable) {
+			return "", "", false
+		}
 		return localizable.Error(), localizable.render(messages, lang), true
 	}
 	if failure, found := errors.AsType[worktree.FailureError](err); found {
@@ -124,9 +142,31 @@ func localizedPart(messages *hostMessages, lang i18n.Language, err error) (strin
 	return "", "", false
 }
 
+func isNilLocalizable(localizable localizableError) bool {
+	switch typed := localizable.(type) {
+	case *hostWrapError:
+		return typed == nil
+	case *pluginKindReservedError:
+		return typed == nil
+	case *RemoteResolveError:
+		return typed == nil
+	case *gatewayEnvUnsupportedError:
+		return typed == nil
+	case *unsafeTarMemberError:
+		return typed == nil
+	case *instanceIDMismatchError:
+		return typed == nil
+	case *remoteSessionError:
+		return typed == nil
+	case *remoteAccountError:
+		return typed == nil
+	}
+	return false
+}
+
 func isLocalized(err error) bool {
-	if _, found := errors.AsType[localizableError](err); found {
-		return true
+	if localizable, found := errors.AsType[localizableError](err); found {
+		return !isNilLocalizable(localizable)
 	}
 	_, found := errors.AsType[worktree.FailureError](err)
 	return found

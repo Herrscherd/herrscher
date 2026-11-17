@@ -74,11 +74,12 @@ func runBridge(ctx context.Context, args []string) error {
 		return err
 	}
 	defer host.CloseKeyProxy(ctx, log, keys)
-	requestFor := bridgeRequests(backendFlags, *statePath)
+	messages := host.NewMessages()
+	requestFor := bridgeRequests(messages, backendFlags, *statePath)
 	newBackend := func(_ string) (contracts.Backend, error) {
 		req := requestFor()
 		req.Keys = keys
-		return newBackendFor(ctx, resolver, req)
+		return newBackendFor(ctx, messages, resolver, req)
 	}
 
 	mem := buildMemory(ctx, log)
@@ -149,8 +150,8 @@ func runBridgeWithOutbox(ctx context.Context, newBackend bridge.BackendFactory, 
 	return bridge.Run(ctx, newBackend, orch, opts)
 }
 
-func bridgeRequests(flags backendFlags, statePath string) func() host.BackendRequest {
-	models := host.BridgeModelDiscovery(statePath)
+func bridgeRequests(messages *host.Messages, flags backendFlags, statePath string) func() host.BackendRequest {
+	models := host.BridgeModelDiscovery(messages, statePath)
 	return func() host.BackendRequest {
 		return flags.request(models)
 	}
@@ -160,18 +161,18 @@ type backendResolver interface {
 	Backend(context.Context, []contracts.Plugin, ...string) (contracts.Backend, bool, error)
 }
 
-func newBackendFor(ctx context.Context, br backendResolver, req host.BackendRequest) (contracts.Backend, error) {
-	backend, err := resolveBackendFor(ctx, br, req)
-	return backend, host.LocalizeError(clitext.ClientLanguage(), err)
+func newBackendFor(ctx context.Context, messages *host.Messages, br backendResolver, req host.BackendRequest) (contracts.Backend, error) {
+	backend, err := resolveBackendFor(ctx, messages, br, req)
+	return backend, messages.Localize(clitext.ClientLanguage(), err)
 }
 
-func resolveBackendFor(ctx context.Context, br backendResolver, req host.BackendRequest) (contracts.Backend, error) {
+func resolveBackendFor(ctx context.Context, messages *host.Messages, br backendResolver, req host.BackendRequest) (contracts.Backend, error) {
 	backend, fromRemote, err := br.Backend(ctx, contracts.Default.Backends())
 	if err != nil {
 		return nil, err
 	}
 	if fromRemote {
-		if err := req.RemoteAccountRefusal(); err != nil {
+		if err := req.RemoteAccountRefusal(messages); err != nil {
 			return nil, err
 		}
 		if req.ModelID != "" {
@@ -179,7 +180,7 @@ func resolveBackendFor(ctx context.Context, br backendResolver, req host.Backend
 		}
 		return backend, nil
 	}
-	return host.BuildBackendFor(ctx, req)
+	return host.BuildBackendFor(ctx, messages, req)
 }
 
 func buildMemory(ctx context.Context, log *slog.Logger) contracts.Memory {

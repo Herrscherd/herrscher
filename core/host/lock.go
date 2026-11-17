@@ -36,8 +36,8 @@ func StateLockPath(statePath string) string {
 // the kernel when the daemon exits, however it exits, so a crash never leaves a
 // lock nobody can clear. The pid is written for the error message alone; nothing
 // reads it to make a decision.
-func LockState(statePath string) (func(), error) {
-	release, err := takeLock(newHostMessages(), StateLockPath(statePath))
+func LockState(owner *Messages, statePath string) (func(), error) {
+	release, err := takeLock(owner.owner, StateLockPath(statePath))
 	if taken, ok := errors.AsType[*lockTakenError](err); ok {
 		return nil, &lockHeldError{StatePath: statePath, Holder: taken.Holder}
 	}

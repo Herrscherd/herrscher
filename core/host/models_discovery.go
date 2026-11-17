@@ -238,35 +238,39 @@ func discoveryCacheIn(stateDir string) string {
 }
 
 // ModelDiscoveryFor returns the model discovery whose cache sits beside statePath.
-func ModelDiscoveryFor(statePath string) *ModelDiscovery {
+func ModelDiscoveryFor(owner *Messages, statePath string) *ModelDiscovery {
+	return newModelDiscovery(owner.owner, statePath)
+}
+
+func newModelDiscovery(messages *hostMessages, statePath string) *ModelDiscovery {
 	dir := filepath.Dir(statePath)
 	if envDir := envx.Get("STATE_DIR"); envDir != "" && filepath.Clean(envDir) != filepath.Clean(dir) {
 		slog.Warn("HERRSCHER_STATE_DIR differs from --state, the model cache follows --state", "env", envDir, "state", dir)
 	}
-	return &ModelDiscovery{messages: newHostMessages(), dir: dir, notices: newClashNotices()}
+	return &ModelDiscovery{messages: messages, dir: dir, notices: newClashNotices()}
 }
 
 // DefaultModelDiscovery returns the model discovery of the default daemon state file.
-func DefaultModelDiscovery() *ModelDiscovery {
-	return ModelDiscoveryFor(DefaultStatePath())
+func DefaultModelDiscovery(owner *Messages) *ModelDiscovery {
+	return ModelDiscoveryFor(owner, DefaultStatePath())
 }
 
 // BridgeModelDiscovery returns the model discovery a bridge reads: the one beside statePath, or the default one when the bridge was started without --state.
-func BridgeModelDiscovery(statePath string) *ModelDiscovery {
+func BridgeModelDiscovery(owner *Messages, statePath string) *ModelDiscovery {
 	if statePath == "" {
-		return DefaultModelDiscovery()
+		return DefaultModelDiscovery(owner)
 	}
-	return ModelDiscoveryFor(statePath)
+	return ModelDiscoveryFor(owner, statePath)
 }
 
-func (o Options) modelDiscovery() *ModelDiscovery {
+func (o Options) modelDiscovery(messages *hostMessages) *ModelDiscovery {
 	if o.Models != nil {
 		return o.Models
 	}
 	if o.StatePath == "" {
-		return DefaultModelDiscovery()
+		return newModelDiscovery(messages, DefaultStatePath())
 	}
-	return ModelDiscoveryFor(o.StatePath)
+	return newModelDiscovery(messages, o.StatePath)
 }
 
 func (d *ModelDiscovery) cachePath() string {

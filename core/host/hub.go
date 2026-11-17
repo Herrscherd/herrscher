@@ -37,6 +37,7 @@ type hub struct {
 	reg      *cli.Registry
 	metrics  *metrics.Registry
 	warnings io.Writer
+	stderr   io.Writer
 	sink     *warningSink
 
 	coordinator    contracts.Coordinator
@@ -84,6 +85,10 @@ type hubOption func(*hub)
 
 func withWarnings(w io.Writer) hubOption {
 	return func(h *hub) { h.warnings = w }
+}
+
+func withStderr(w io.Writer) hubOption {
+	return func(h *hub) { h.stderr = w }
 }
 
 func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry, approvals *approvalTable, sessions *sessionTable, opts ...hubOption) *hub {

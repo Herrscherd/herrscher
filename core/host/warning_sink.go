@@ -75,14 +75,24 @@ type warningSink struct {
 	idleWait    time.Duration
 }
 
-func newWarningSink(out io.Writer, lostLine func(lost int) string) *warningSink {
-	return &warningSink{
+type sinkOption func(*warningSink)
+
+func withIdleWait(wait time.Duration) sinkOption {
+	return func(s *warningSink) { s.idleWait = wait }
+}
+
+func newWarningSink(out io.Writer, lostLine func(lost int) string, opts ...sinkOption) *warningSink {
+	created := &warningSink{
 		out:      warningWriter(out),
 		lostLine: lostLine,
 		commands: make(chan func(), warningCommandLimit),
 		finished: make(chan struct{}),
 		idleWait: warningWriteBudget,
 	}
+	for _, opt := range opts {
+		opt(created)
+	}
+	return created
 }
 
 func (s *warningSink) run() {
@@ -346,17 +356,25 @@ func (s *warningSink) Close() {
 	s.waitIdle(budget)
 	taken := ask(s, s.seal)
 	logNotConfirmed(taken.lost, taken.unconfirmed)
-	s.joinLastWrite()
+	if !s.joinLastWrite() {
+		logWriteStillRunning()
+	}
 }
 
-func (s *warningSink) joinLastWrite() {
+const stillRunningAtCloseText = "a warning write was still running when Close returned"
+
+func logWriteStillRunning() {
+	slog.Info(stillRunningAtCloseText)
+}
+
+func (s *warningSink) joinLastWrite() bool {
 	logged := ask(s, func() chan struct{} { return s.lastLogged })
 	if logged == nil {
-		return
+		return true
 	}
 	budget, stop := writeBudget()
 	defer stop()
-	waitLogged(logged, budget)
+	return waitLogged(logged, budget)
 }
 
 func waitLogged(logged, budget <-chan struct{}) bool {
@@ -435,8 +453,8 @@ func writeBudget() (<-chan struct{}, func()) {
 	return budgetAfter(warningWriteBudget)
 }
 
-func budgetAfter(d time.Duration) (<-chan struct{}, func()) {
+func budgetAfter(duration time.Duration) (<-chan struct{}, func()) {
 	expired := make(chan struct{})
-	timer := time.AfterFunc(d, func() { close(expired) })
+	timer := time.AfterFunc(duration, func() { close(expired) })
 	return expired, func() { timer.Stop() }
 }

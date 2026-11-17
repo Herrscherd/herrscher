@@ -208,7 +208,7 @@ func TestEveryInFlightWriteIsJoinedBeforeCloseReturns(t *testing.T) {
 	var afterErr error
 	select {
 	case afterErr = <-refused:
-	default:
+	case <-expiresAfter(5 * time.Second):
 		t.Fatal("Close returned before the write admitted after the bilan was refused")
 	}
 	if !errors.Is(afterErr, errWarningAbandoned) {
@@ -227,8 +227,7 @@ func TestEntryAdmittedWhileCloseWaitsIsCountedOnceByTheBilan(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := newGatedWarnings("frozen")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(writer, englishLostLine)
-	sink.idleWait = 2 * time.Second
+	sink := newWarningSink(writer, englishLostLine, withIdleWait(2*time.Second))
 	_ = sink.Enqueue([]byte("frozen\n"))
 	awaitGatedWrite(t, writer)
 
@@ -257,6 +256,32 @@ func TestEntryAdmittedWhileCloseWaitsIsCountedOnceByTheBilan(t *testing.T) {
 	}
 	if lines := notConfirmedLines(logs.String()); len(lines) != 1 {
 		t.Fatalf("a second line appeared after the writer settled: %q, want the bilan alone", lines)
+	}
+}
+
+func TestCloseSaysWhenAWriteIsStillRunningAtReturn(t *testing.T) {
+	logs := captureDefaultLog(t)
+	writer := newGatedWarnings("GATED")
+	t.Cleanup(writer.open)
+	sink := newWarningSink(writer, englishLostLine, withIdleWait(time.Millisecond))
+	_ = sink.Enqueue([]byte("GATED\n"))
+	awaitGatedWrite(t, writer)
+	sink.Close()
+	if n := strings.Count(logs.String(), stillRunningAtCloseText); n != 1 {
+		t.Fatalf("Close returned with its last write still running and logged the note %d times, want once: %q", n, logs.String())
+	}
+}
+
+func TestCloseSaysNothingWhenTheLastWriteIsJoined(t *testing.T) {
+	logs := captureDefaultLog(t)
+	var out lockedBuffer
+	sink := newWarningSink(&out, englishLostLine)
+	if _, err := sink.Write([]byte("done\n")); err != nil {
+		t.Fatal(err)
+	}
+	sink.Close()
+	if strings.Contains(logs.String(), stillRunningAtCloseText) {
+		t.Fatalf("Close logged that a write was still running although its last write was joined: %q", logs.String())
 	}
 }
 

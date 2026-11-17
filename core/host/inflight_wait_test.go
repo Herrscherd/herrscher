@@ -54,7 +54,7 @@ func (g *gatedWarnings) open() {
 	g.openOnce.Do(func() { close(g.release) })
 }
 
-func newInflightHub(t *testing.T, name string, grace time.Duration, warnings io.Writer) *hub {
+func newInflightHub(t *testing.T, name string, grace time.Duration, warnings io.Writer, opts ...hubOption) *hub {
 	t.Helper()
 	layout := isolatedRuntimeDir(t)
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
@@ -64,7 +64,8 @@ func newInflightHub(t *testing.T, name string, grace time.Duration, warnings io.
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	sup := supervisor.NewSupervisor(ctx, filepath.Join(t.TempDir(), "no-such-bridge"), layout)
-	h := newHub(st, sup, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(), withWarnings(warnings))
+	options := append([]hubOption{withWarnings(warnings)}, opts...)
+	h := newHub(st, sup, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(), options...)
 	h.runtime = layout
 	h.teardownGrace = grace
 	return h
@@ -107,6 +108,10 @@ func sessionOverrunText(h *hub, name string) string {
 	return newHostMessages().text(h.sessionLanguageSource(name)(), "warn.session_teardown_overrun", map[string]any{nameParam: name, graceParam: h.teardownGrace.String()})
 }
 
+func stuckStartupOverrunText(h *hub, _ string) string {
+	return sessionOverrunText(h, stuckStartupName)
+}
+
 func TestStopWaitsForTheAcceptFailureWarningToBeWritten(t *testing.T) {
 	for _, path := range inflightPaths() {
 		t.Run(path.name, func(t *testing.T) {
@@ -139,7 +144,7 @@ type blockedWriterCase struct {
 	name  string
 	paths []inflightPath
 	bound time.Duration
-	start func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings) *hub
+	start func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings, stderr io.Writer) *hub
 	want  func(h *hub, name string) string
 }
 
@@ -149,9 +154,9 @@ func blockedWriterCases() []blockedWriterCase {
 			name:  "accept failure",
 			paths: inflightPaths(),
 			bound: blockedStopBound(),
-			start: func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings) *hub {
+			start: func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings, stderr io.Writer) *hub {
 				t.Helper()
-				h := newInflightHub(t, name, grace, warnings)
+				h := newInflightHub(t, name, grace, warnings, withStderr(stderr))
 				h.listen = brokenFirstListen()
 				if err := h.goLive(t.Context(), state.Session{Name: name, ChannelID: "c1"}); err != nil {
 					t.Fatal(err)
@@ -164,9 +169,9 @@ func blockedWriterCases() []blockedWriterCase {
 			name:  "teardown overrun",
 			paths: []inflightPath{{name: "goDead", run: func(h *hub, session string) { h.goDead(session) }}},
 			bound: blockedStopBound(),
-			start: func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings) *hub {
+			start: func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings, stderr io.Writer) *hub {
 				t.Helper()
-				h := newInflightHub(t, name, grace, warnings)
+				h := newInflightHub(t, name, grace, warnings, withStderr(stderr))
 				if err := h.goLive(t.Context(), state.Session{Name: name, ChannelID: "c1"}); err != nil {
 					t.Fatal(err)
 				}
@@ -184,9 +189,9 @@ func blockedWriterCases() []blockedWriterCase {
 			name:  "session start",
 			paths: inflightPaths(),
 			bound: blockedStopBound(),
-			start: func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings) *hub {
+			start: func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings, stderr io.Writer) *hub {
 				t.Helper()
-				h := newInflightHub(t, name, grace, warnings)
+				h := newInflightHub(t, name, grace, warnings, withStderr(stderr))
 				h.startBridge = func(state.Session, time.Duration) error { return errors.New("bridge refused") }
 				sess := state.Session{Name: name, ChannelID: "c1"}
 				_ = runInBackground(func() { logCleanup(h.goLiveBridged(t.Context(), sess)) })
@@ -198,9 +203,9 @@ func blockedWriterCases() []blockedWriterCase {
 			name:  "startup ignoring cancel",
 			paths: []inflightPath{{name: "closeAndRemoveSockets", run: func(h *hub, _ string) { logCleanup(h.closeAndRemoveSockets()) }}},
 			bound: blockedStopBound(),
-			start: func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings) *hub {
+			start: func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings, stderr io.Writer) *hub {
 				t.Helper()
-				h := newInflightHub(t, name, grace, warnings)
+				h := newInflightHub(t, name, grace, warnings, withStderr(stderr))
 				h.listen = brokenFirstListen()
 				if err := h.goLive(t.Context(), state.Session{Name: name, ChannelID: "c1"}); err != nil {
 					t.Fatal(err)
@@ -209,6 +214,7 @@ func blockedWriterCases() []blockedWriterCase {
 				awaitGatedWrite(t, warnings)
 				return h
 			},
+			want: stuckStartupOverrunText,
 		},
 	}
 }
@@ -231,7 +237,8 @@ func TestBlockedWarningWriterDoesNotHoldStopPastTheBudget(t *testing.T) {
 				logs := captureDefaultLog(t)
 				warnings := newGatedWarnings(name)
 				t.Cleanup(warnings.open)
-				h := c.start(t, name, blockedGrace, warnings)
+				var stderr lockedBuffer
+				h := c.start(t, name, blockedGrace, warnings, &stderr)
 
 				started := time.Now()
 				returned := runInBackground(func() { path.run(h, name) })
@@ -244,34 +251,34 @@ func TestBlockedWarningWriterDoesNotHoldStopPastTheBudget(t *testing.T) {
 					t.Fatalf("a blocked warning writer held the stop for %v, past its worst case of %v", elapsed.Round(time.Millisecond), c.bound)
 				}
 
-				assertBlockedWriterOutcome(t, c, h, name, warnings, logs)
+				assertBlockedWriterOutcome(t, c, h, name, warnings, &stderr, logs)
 			})
 		}
 	}
 }
 
-func assertBlockedWriterOutcome(t *testing.T, c blockedWriterCase, h *hub, name string, warnings *gatedWarnings, logs *hookedLog) {
+func assertBlockedWriterOutcome(t *testing.T, c blockedWriterCase, h *hub, name string, warnings *gatedWarnings, stderr *lockedBuffer, logs *hookedLog) {
 	t.Helper()
-	if c.want == nil {
+	if c.want != nil {
+		awaitWarning(t, stderr, c.want(h, name))
 		warnings.open()
-		window, cancel := h.newGrace()
-		defer cancel()
-		if !h.sink.flush(window) {
-			t.Fatal("the frozen write did not settle within the grace window")
-		}
-		h.sink.Close()
-		if warnLines, bilanLines := strings.Count(logs.String(), "level=WARN"), len(notConfirmedLines(logs.String())); warnLines != bilanLines {
-			t.Fatalf("a loss was logged outside the bilan: %d warnings, %d of them the bilan: %q", warnLines, bilanLines, logs.String())
-		}
-		dropped := droppedWarnings(h.sink)
-		announced := announcedLostOnOutput(warnings.out.String(), dropped) + announcedLostTotal(t, logs.String())
-		if dropped < 1 || announced != dropped {
-			t.Fatalf("the sink counted %d lost warnings but announced %d on the output %q and in the logs %q, want each lost warning announced exactly once", dropped, announced, warnings.out.String(), notConfirmedLines(logs.String()))
-		}
 		return
 	}
 	warnings.open()
-	awaitWarning(t, &warnings.out, c.want(h, name))
+	window, cancel := h.newGrace()
+	defer cancel()
+	if !h.sink.flush(window) {
+		t.Fatal("the frozen write did not settle within the grace window")
+	}
+	h.sink.Close()
+	if warnLines, bilanLines := strings.Count(logs.String(), "level=WARN"), len(notConfirmedLines(logs.String())); warnLines != bilanLines {
+		t.Fatalf("a loss was logged outside the bilan: %d warnings, %d of them the bilan: %q", warnLines, bilanLines, logs.String())
+	}
+	dropped := droppedWarnings(h.sink)
+	announced := announcedLostOnOutput(warnings.out.String(), dropped) + announcedLostTotal(t, logs.String())
+	if dropped < 1 || announced != dropped {
+		t.Fatalf("the sink counted %d lost warnings but announced %d on the output %q and in the logs %q, want each lost warning announced exactly once", dropped, announced, warnings.out.String(), notConfirmedLines(logs.String()))
+	}
 }
 
 func announcedLostOnOutput(out string, dropped int) int {

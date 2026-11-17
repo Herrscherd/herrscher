@@ -353,7 +353,7 @@ func (h *hub) stopStartups(starts []startupRun) {
 	}
 	for _, start := range starts {
 		if !window.finished(start.done) {
-			h.warnOverrun(start.name)
+			h.warnSessionOverrun(start.name)
 			return
 		}
 	}
@@ -481,12 +481,17 @@ func (h *hub) withinGrace(name string, window teardownWindow, step func()) bool 
 	if window.finished(finished) {
 		return true
 	}
-	h.deferWarning(h.sessionLanguageSource(name)(), "warn.session_teardown_overrun", h.overrunParams(name))
+	h.warnSessionOverrun(name)
 	return false
 }
 
-func (h *hub) warnOverrun(name string) {
-	logCleanup(h.sink.announce(newHostMessages().text(h.sessionLanguageSource(name)(), "warn.session_teardown_overrun", h.overrunParams(name))))
+func (h *hub) warnSessionOverrun(name string) {
+	written := make(chan struct{})
+	go func() {
+		defer close(written)
+		warnTo(h.stderr, h.sessionLanguageSource(name)(), "warn.session_teardown_overrun", h.overrunParams(name))
+	}()
+	waitWithin(written, warningWriteBudget)
 }
 
 func (h *hub) overrunParams(name string) map[string]any {
@@ -522,7 +527,7 @@ func (h *hub) awaitTeardown(name string, live liveSession, window teardownWindow
 			continue
 		}
 		if !window.finished(finished) {
-			h.warnOverrun(name)
+			h.warnSessionOverrun(name)
 			return
 		}
 	}

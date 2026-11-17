@@ -7,10 +7,10 @@ import (
 )
 
 func TestTeardownOverrunWarnsOnlyForTheSessionStillStopping(t *testing.T) {
-	var warnings lockedBuffer
+	var warnings, stderr lockedBuffer
 	stuck := make(chan struct{})
 	t.Cleanup(func() { close(stuck) })
-	h := testHub(&hub{warnings: &warnings, teardownGrace: 300 * time.Millisecond, live: make(map[string]liveSession)})
+	h := testHub(&hub{warnings: &warnings, stderr: &stderr, teardownGrace: 300 * time.Millisecond, live: make(map[string]liveSession)})
 	h.stopBridge = func(name string) error {
 		if name == "blocked" {
 			<-stuck
@@ -35,7 +35,7 @@ func TestTeardownOverrunWarnsOnlyForTheSessionStillStopping(t *testing.T) {
 	h.awaitRetired(window, retired)
 	h.sink.flush(window)
 
-	out := warnings.String()
+	out := stderr.String()
 	if n := strings.Count(out, `"blocked"`); n != 1 {
 		t.Fatalf("the blocked session was named %d times in the overrun warnings, want 1:\n%s", n, out)
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 const (
@@ -430,7 +431,7 @@ func (m *model) rewindListLines(width int) []string {
 			head = m.st.glyphs.prompt + " "
 		}
 		summary := rewindSummary(m.tr, row.Files)
-		line := cutText("  "+head+row.At+"  "+row.Text, width)
+		line := cutText("  "+head+row.At+"  "+termpaint.Escape(row.Text).String(), width)
 		if width >= rewindMinSplit {
 			line = rightAligned(line, summary, width, rewindListGap)
 		}

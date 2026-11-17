@@ -223,6 +223,7 @@ func (tb *tab) clearPanels() {
 const maxTabLines = 5000
 
 func (tb *tab) appendEntry(item entry) {
+	item.text = termpaint.EscapeLines(item.text).String()
 	tb.nextEntryID++
 	item.id = tb.nextEntryID
 	item.at = time.Now()
@@ -1278,7 +1279,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.endStream()
 		target.appendEntry(entry{role: roleNotice, text: m.tr.t("tui.render.turn_reset", nil)})
 	case eventwire.EventNotice:
-		target.appendEntry(entry{role: roleNotice, text: termpaint.Escape(event.Text).String(), markdown: true})
+		target.appendEntry(entry{role: roleNotice, text: event.Text, markdown: true})
 	case eventwire.EventCompactionStarted:
 		target.startCompaction(event)
 	case eventwire.EventCompactionDone:
@@ -1316,7 +1317,7 @@ func (tb *tab) appendThinking(text string, tokens, before int) {
 	tb.endStream()
 	if n := len(tb.entries); n > 0 && tb.entries[n-1].role == roleThinking {
 		last := &tb.entries[n-1]
-		last.text += text
+		last.text += termpaint.EscapeLines(text).String()
 		last.ended = time.Now()
 		if tokens > 0 {
 			last.tokens = tokens

@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 const (
@@ -584,14 +585,14 @@ func (m *model) approvalBorder(head, tail, fill string, width int) string {
 func (m *model) approvalCommand(prompt approvalPrompt, inner int) string {
 	lead := m.st.accent.Render(m.st.glyphs.familyGlyph(familyRun)) + " "
 	if prompt.tool == "" {
-		return lead + m.st.text.Render(middleTruncate(prompt.statement, inner-lipgloss.Width(lead), m.st.glyphs.ellipsis))
+		return lead + m.st.text.Render(middleTruncate(termpaint.Escape(prompt.statement).String(), inner-lipgloss.Width(lead), m.st.glyphs.ellipsis))
 	}
-	lead += m.st.text.Bold(true).Render(prompt.tool)
+	lead += m.st.text.Bold(true).Render(termpaint.Escape(prompt.tool).String())
 	if prompt.command == "" {
 		return lead
 	}
 	room := inner - lipgloss.Width(lead) - approvalLeadGap
-	return lead + "  " + m.st.text.Render(middleTruncate(prompt.command, room, m.st.glyphs.ellipsis))
+	return lead + "  " + m.st.text.Render(middleTruncate(termpaint.Escape(prompt.command).String(), room, m.st.glyphs.ellipsis))
 }
 
 func (m *model) approvalChoiceLines(entry approvalChoice, selected, wide, notes bool) []string {
@@ -606,7 +607,7 @@ func (m *model) approvalChoiceLines(entry approvalChoice, selected, wide, notes 
 	if noteText == "" {
 		noteText = m.tr.t(entry.noteKey, nil)
 	}
-	note := m.st.dim.Render(noteText)
+	note := m.st.dim.Render(termpaint.Escape(noteText).String())
 	switch {
 	case wide:
 		return []string{padTo(head, approvalNoteColumn) + note}
@@ -623,7 +624,7 @@ func (m *model) approvalShort() bool {
 }
 
 func (m *model) approvalReasonLine(prompt approvalPrompt) string {
-	line := m.st.dim.Render("  "+m.tr.t("tui.approval.reason_label", nil)+" "+m.st.glyphs.reasonArrow+" ") + m.st.text.Render(prompt.reason) + m.st.accent.Render(m.st.glyphs.caret)
+	line := m.st.dim.Render("  "+m.tr.t("tui.approval.reason_label", nil)+" "+m.st.glyphs.reasonArrow+" ") + m.st.text.Render(termpaint.Escape(prompt.reason).String()) + m.st.accent.Render(m.st.glyphs.caret)
 	if prompt.reason == "" {
 		line += m.st.dim.Render(m.tr.t("tui.approval.reason_sent", nil))
 	}

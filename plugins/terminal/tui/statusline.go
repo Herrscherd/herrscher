@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 
+	"github.com/Herrscherd/herrscher/core/termpaint"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -31,7 +32,7 @@ func (m *model) statusZone() []string {
 
 func (m *model) statusLeft(budget int) string {
 	if m.flash != "" {
-		return truncate(m.st.dim.Render("· "+m.flash), budget)
+		return truncate(m.st.dim.Render("· "+termpaint.Escape(m.flash).String()), budget)
 	}
 	return m.footer(budget)
 }

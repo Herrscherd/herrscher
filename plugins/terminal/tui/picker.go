@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 func (m *model) openResume() {
@@ -53,7 +54,7 @@ func (m *model) loadResumePreview() {
 		return
 	}
 	for _, line := range tailLines(lines, resumePreviewLines) {
-		m.resumePreviewLines = append(m.resumePreviewLines, strings.ReplaceAll(line.Text, "\n", " "))
+		m.resumePreviewLines = append(m.resumePreviewLines, termpaint.Escape(strings.ReplaceAll(line.Text, "\n", " ")).String())
 	}
 }
 

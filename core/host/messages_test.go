@@ -169,6 +169,7 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"serve.scheduler_tick":              {"Detail"},
 		"serve.config":                      {"Detail"},
 		"serve.key_proxy":                   {"Detail"},
+		"serve.outbox":                      {"Detail"},
 		"session.percent":                   {"Detail", "Raw"},
 		"session.go_live":                   {"Detail", "Name"},
 		"session.launch_failed":             {"Detail", "Name"},

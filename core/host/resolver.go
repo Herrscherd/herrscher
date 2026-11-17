@@ -217,12 +217,12 @@ type RemoteResolveError struct {
 
 func (e *RemoteResolveError) Error() string { return e.render(newHostMessages(), i18n.English) }
 
-func (e *RemoteResolveError) render(m *hostMessages, lang i18n.Language) string {
-	return m.text(lang, "remote.unavailable", map[string]any{
+func (e *RemoteResolveError) render(messages *hostMessages, lang i18n.Language) string {
+	return messages.text(lang, "remote.unavailable", map[string]any{
 		"Category":  string(e.Category),
 		"Attempts":  e.Attempts,
 		"Elapsed":   e.Elapsed.String(),
-		detailParam: errorTextIn(m, lang, e.Err),
+		detailParam: errorTextIn(messages, lang, e.Err),
 	})
 }
 

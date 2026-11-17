@@ -83,39 +83,36 @@ func (e hostWrapError) Error() string { return e.render(newHostMessages(), i18n.
 
 func (e hostWrapError) Unwrap() error { return e.cause }
 
-func (e hostWrapError) render(m *hostMessages, lang i18n.Language) string {
+func (e hostWrapError) render(messages *hostMessages, lang i18n.Language) string {
 	params := make(map[string]any, len(e.params)+1)
 	maps.Copy(params, e.params)
-	params[detailParam] = errorTextIn(m, lang, e.cause)
-	return m.text(lang, e.key, params)
+	params[detailParam] = errorTextIn(messages, lang, e.cause)
+	return messages.text(lang, e.key, params)
 }
 
 type localizableError interface {
 	error
-	render(m *hostMessages, lang i18n.Language) string
+	render(messages *hostMessages, lang i18n.Language) string
 }
 
-func errorTextIn(m *hostMessages, lang i18n.Language, err error) string {
+func errorTextIn(messages *hostMessages, lang i18n.Language, err error) string {
 	if err == nil {
 		return ""
 	}
-	if local, ok := err.(localizableError); ok {
-		return local.render(m, lang)
-	}
-	if english, local, ok := localizedPart(m, lang, err); ok {
+	if english, local, ok := localizedPart(messages, lang, err); ok {
 		return strings.Replace(fmt.Sprint(err), english, local, 1)
 	}
 	return fmt.Sprint(err)
 }
 
-func localizedPart(m *hostMessages, lang i18n.Language, err error) (string, string, bool) {
+func localizedPart(messages *hostMessages, lang i18n.Language, err error) (string, string, bool) {
 	var wrapped *hostWrapError
 	if errors.As(err, &wrapped) && wrapped == nil {
 		return "", "", false
 	}
 	var local localizableError
 	if errors.As(err, &local) {
-		return local.render(m, i18n.English), local.render(m, lang), true
+		return local.render(messages, i18n.English), local.render(messages, lang), true
 	}
 	var failure worktree.FailureError
 	if errors.As(err, &failure) {
@@ -128,7 +125,7 @@ func wrapHost(cause error, key string, params map[string]any) error {
 	return hostWrapError{key: key, params: params, cause: cause}
 }
 
-func renderableParams(m *hostMessages, lang i18n.Language, params map[string]any) map[string]any {
+func renderableParams(messages *hostMessages, lang i18n.Language, params map[string]any) map[string]any {
 	var out map[string]any
 	for key, value := range params {
 		err, isErr := value.(error)
@@ -138,7 +135,7 @@ func renderableParams(m *hostMessages, lang i18n.Language, params map[string]any
 		if out == nil {
 			out = maps.Clone(params)
 		}
-		out[key] = errorTextIn(m, lang, err)
+		out[key] = errorTextIn(messages, lang, err)
 	}
 	if out == nil {
 		return params

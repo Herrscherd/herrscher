@@ -192,8 +192,8 @@ type pluginKindReservedError struct {
 
 func (e *pluginKindReservedError) Error() string { return e.render(newHostMessages(), i18n.English) }
 
-func (e *pluginKindReservedError) render(m *hostMessages, lang i18n.Language) string {
-	return m.text(lang, "plugin.kind_reserved", map[string]any{nameParam: e.Kind})
+func (e *pluginKindReservedError) render(messages *hostMessages, lang i18n.Language) string {
+	return messages.text(lang, "plugin.kind_reserved", map[string]any{nameParam: e.Kind})
 }
 
 type daemonNotRunningError struct {

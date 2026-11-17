@@ -520,3 +520,28 @@ func TestAdmissionAfterTheBilanStartsNoWriteAndCountsItsLoss(t *testing.T) {
 		t.Fatalf("the refused admission logged %q, want lost=1 and unconfirmed=0", line)
 	}
 }
+
+func TestCloseJoinsTheWriteLaunchedLast(t *testing.T) {
+	warnings := newGatedWarnings("GATED")
+	t.Cleanup(warnings.open)
+	sink := newWarningSink(warnings, englishLostLine)
+	if _, err := sink.Write([]byte("first\n")); err != nil {
+		t.Fatal(err)
+	}
+	firstLogged := ask(sink, func() chan struct{} { return sink.lastLogged })
+	awaitBackground(t, firstLogged, "the first write never finished logging")
+
+	sink.Enqueue([]byte("GATED\n"))
+	awaitGatedWrite(t, warnings)
+	gatedLogged := ask(sink, func() chan struct{} { return sink.lastLogged })
+	if gatedLogged == firstLogged {
+		t.Fatal("the write launched last is not the one Close joins: lastLogged still names the first write")
+	}
+	select {
+	case <-gatedLogged:
+		t.Fatal("the write launched last is already logged while its writer is still blocked")
+	default:
+	}
+	warnings.open()
+	awaitBackground(t, gatedLogged, "the gated write never finished logging")
+}

@@ -1,10 +1,7 @@
 package vendortest
 
 import (
-	"bufio"
 	"bytes"
-	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -24,16 +21,16 @@ const DescendantSleep = 60 * time.Second
 const descendantSleepArg = "60"
 
 const (
-	envScript    = "VENDORTEST_SCRIPT"
-	envLog       = "VENDORTEST_LOG"
-	envTurns     = "VENDORTEST_TURNS"
-	envConfigDir = "CLAUDE_CONFIG_DIR"
+	envScript = "VENDORTEST_SCRIPT"
+	envLog    = "VENDORTEST_LOG"
+	envTurns  = "VENDORTEST_TURNS"
 
-	assistantType = "assistant"
+	envConfigDir = "CLAUDE_CONFIG_DIR"
 
 	claudeVersion    = "2.1.0 (Claude Code)"
 	defaultSessionID = "vendortest-session"
 	echoPrefix       = "echo: "
+	toolDoneText     = "done"
 	privateFile      = 0o600
 	exitFailure      = 1
 	exitUnreported   = 2
@@ -240,204 +237,4 @@ func countTurn(path string) (int, error) {
 		return 0, fmt.Errorf("cannot write the turn count: %w", err)
 	}
 	return done, nil
-}
-
-type turnOutcome uint8
-
-const (
-	outcomeAnswered turnOutcome = iota + 1
-	outcomeHung
-	outcomeCrashed
-)
-
-func (r *replay) stream(streams Streams) int {
-	lines := bufio.NewScanner(streams.In)
-	lines.Buffer(nil, maxLineBytes)
-	hung := false
-	for lines.Scan() {
-		if hung {
-			continue
-		}
-		outcome, err := r.answer(streams.Out, lines.Bytes())
-		if err != nil {
-			return exitOf(streams.Err, err)
-		}
-		switch outcome {
-		case outcomeCrashed:
-			return exitOf(streams.Err, errCrashed)
-		case outcomeHung:
-			hung = true
-		case outcomeAnswered:
-		}
-	}
-	return exitOf(streams.Err, lines.Err())
-}
-
-var errCrashed = errors.New("crashed as scripted")
-
-type userLine struct {
-	Message struct {
-		Content string `json:"content"`
-	} `json:"message"`
-}
-
-func (r *replay) answer(out io.Writer, line []byte) (turnOutcome, error) {
-	var user userLine
-	if err := json.Unmarshal(line, &user); err != nil {
-		return 0, fmt.Errorf("cannot decode a user line: %w", err)
-	}
-	prompt := user.Message.Content
-	if err := r.record("prompt " + strconv.Quote(prompt)); err != nil {
-		return 0, err
-	}
-	turn, err := r.beginTurn()
-	if err != nil {
-		return 0, err
-	}
-	return r.play(out, turn, prompt)
-}
-
-type playedTurn struct {
-	reply    []string
-	reported int
-}
-
-func (p *playedTurn) say(out io.Writer, text string) error {
-	p.reply = append(p.reply, text)
-	return writeJSON(out, assistantText(text))
-}
-
-func (r *replay) play(out io.Writer, turn Turn, prompt string) (turnOutcome, error) {
-	var played playedTurn
-	for _, current := range turn.steps {
-		outcome, finished, err := r.playStep(out, current, prompt, &played)
-		if finished || err != nil {
-			return outcome, err
-		}
-	}
-	return outcomeAnswered, writeJSON(out, r.result(strings.Join(played.reply, "\n\n"), prompt, played.reported))
-}
-
-func (r *replay) playStep(out io.Writer, current step, prompt string, played *playedTurn) (turnOutcome, bool, error) {
-	switch current.kind {
-	case stepHang:
-		return outcomeHung, true, nil
-	case stepCrash:
-		return outcomeCrashed, true, nil
-	case stepFail:
-		return outcomeAnswered, true, writeJSON(out, r.failure(current.text, prompt))
-	case stepAPIError:
-		if err := writeJSON(out, apiErrorText(current.text)); err != nil {
-			return 0, true, err
-		}
-		return outcomeAnswered, true, writeJSON(out, r.failure(current.text, prompt))
-	case stepUsage:
-		played.reported = current.tokens
-		return 0, false, writeJSON(out, assistantUsage(current.tokens))
-	case stepEcho:
-		return 0, false, played.say(out, echoPrefix+lastLine(prompt))
-	case stepText:
-		return 0, false, played.say(out, current.text)
-	case stepTool:
-		r.toolCalls++
-		return 0, false, writeJSON(out, assistantTool(r.toolCalls, current))
-	}
-	return 0, false, nil
-}
-
-func isHealthProbe(args []string) bool {
-	return slices.Contains(args, "--tools") && slices.Contains(args, "--no-session-persistence")
-}
-
-func (r *replay) oneShot(out io.Writer, args []string) error {
-	prompt := oneShotPrompt(args)
-	if err := r.record("prompt " + strconv.Quote(prompt)); err != nil {
-		return err
-	}
-	if isHealthProbe(args) {
-		return writeJSON(out, r.result(echoPrefix+lastLine(prompt), prompt, 0))
-	}
-	turn, err := r.beginTurn()
-	if err != nil {
-		return err
-	}
-	return writeJSON(out, r.result(oneShotReply(turn, prompt), prompt, 0))
-}
-
-func oneShotReply(turn Turn, prompt string) string {
-	var texts []string
-	for _, current := range turn.steps {
-		if current.kind == stepText {
-			texts = append(texts, current.text)
-		}
-	}
-	if len(texts) == 0 {
-		return echoPrefix + lastLine(prompt)
-	}
-	return strings.Join(texts, "\n\n")
-}
-
-func (r *replay) beginTurn() (Turn, error) {
-	turn, err := r.nextTurn()
-	if err != nil {
-		return Turn{}, err
-	}
-	if err := r.spawnDescendants(turn); err != nil {
-		return Turn{}, err
-	}
-	return turn, nil
-}
-
-var errNoLog = errors.New("spawn needs $VENDORTEST_LOG, which names a file in the work directory of the scenario")
-
-func (r *replay) spawnDescendants(turn Turn) error {
-	for _, pidFile := range turn.spawns {
-		if err := r.spawn(pidFile); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (r *replay) spawn(pidFile string) error {
-	if r.files.Log == "" {
-		return errNoLog
-	}
-	child := exec.CommandContext(context.Background(), "sleep", descendantSleepArg)
-	if err := child.Start(); err != nil {
-		return fmt.Errorf("cannot start the descendant: %w", err)
-	}
-	r.descendants = append(r.descendants, child)
-	pidPath := filepath.Join(filepath.Dir(r.files.Log), filepath.Base(pidFile))
-	if err := os.WriteFile(pidPath, []byte(strconv.Itoa(child.Process.Pid)), privateFile); err != nil {
-		return errors.Join(fmt.Errorf("cannot record the descendant: %w", err), child.Process.Kill())
-	}
-	return nil
-}
-
-func lastLine(text string) string {
-	lines := strings.Split(strings.TrimSpace(text), "\n")
-	return strings.TrimSpace(lines[len(lines)-1])
-}
-
-func (r *replay) fields(subtype string, isError bool, prompt, text string, reported int) resultFields {
-	usage := tokenUsage{InputTokens: len(prompt)/charsPerToken + 1, OutputTokens: len(text)/charsPerToken + 1}
-	if reported > 0 {
-		usage.InputTokens = reported
-	}
-	return resultFields{
-		Type:      "result",
-		Subtype:   subtype,
-		IsError:   isError,
-		SessionID: r.sessionID,
-		Usage:     usage,
-	}
-}
-
-func (r *replay) result(text, prompt string, reported int) resultEvent {
-	return resultEvent{resultFields: r.fields("success", false, prompt, text, reported), Result: text}
-}
-
-func (r *replay) failure(text, prompt string) failedResultEvent {
-	return failedResultEvent{resultFields: r.fields("error_during_execution", true, prompt, text, 0), Errors: []string{text}}
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/eventwire"
+	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/lease"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
@@ -288,16 +290,18 @@ func ApplyOrchestratorScope(cfg *contracts.PluginConfig, session, project, agent
 // positional parameters; routing would have added a seventh, which made call
 // sites unreadable.
 type BackendRequest struct {
-	Vendor      string
-	Cmd         string
-	Kind        string
-	Dir         string
-	Resume      string
-	ModelID     string
-	Account     string
-	AccountRoot string
-	Keys        *keyproxy.Proxy
-	Models      *ModelDiscovery
+	Vendor       string
+	Cmd          string
+	Kind         string
+	Dir          string
+	Resume       string
+	ModelID      string
+	Account      string
+	AccountRoot  string
+	Keys         *keyproxy.Proxy
+	Models       *ModelDiscovery
+	Session      string
+	SessionToken string
 
 	resolver remoteBackendResolver
 }
@@ -423,6 +427,9 @@ func routeFor(modelID string, entry CatalogEntry, keys *keyproxy.Proxy) (modelRo
 }
 
 func (req BackendRequest) remoteRefusal(route modelRoute) error {
+	if req.Session != "" {
+		return &remoteSessionError{Session: req.Session}
+	}
 	if len(route.env) > 0 {
 		return &gatewayEnvUnsupportedError{Model: req.ModelID}
 	}
@@ -443,9 +450,22 @@ func applyBackendRequest(settings map[string]string, req BackendRequest, route m
 	setIfPresent(settings, "dir", req.Dir)
 	setIfPresent(settings, "resume", req.Resume)
 	setIfPresent(settings, "model", route.arg)
-	if len(route.env) > 0 {
-		settings["env"] = contracts.EncodeEnvSetting(route.env)
+	if env := withSessionIdentity(route.env, req.Session, req.SessionToken); len(env) > 0 {
+		settings["env"] = contracts.EncodeEnvSetting(env)
 	}
+}
+
+func withSessionIdentity(env map[string]string, session, token string) map[string]string {
+	if session == "" {
+		return env
+	}
+	identity := make(map[string]string, len(env)+1)
+	maps.Copy(identity, env)
+	identity[control.SessionVar] = session
+	if token != "" {
+		identity[control.ApprovalKeyVar] = token
+	}
+	return identity
 }
 
 func setIfPresent(settings map[string]string, key, value string) {
@@ -455,20 +475,26 @@ func setIfPresent(settings map[string]string, key, value string) {
 }
 
 func newSeedBackend(ctx context.Context, sess state.Session, keys *keyproxy.Proxy, models *ModelDiscovery) (contracts.Backend, error) {
+	return newSeedBackendWithToken(ctx, sess, keys, models, "")
+}
+
+func newSeedBackendWithToken(ctx context.Context, sess state.Session, keys *keyproxy.Proxy, models *ModelDiscovery, token string) (contracts.Backend, error) {
 	dir := sess.Dir
 	if dir == "" {
 		dir = sess.Worktree
 	}
 	return BuildBackendFor(ctx, BackendRequest{
-		Vendor:  sess.Vendor,
-		Cmd:     sess.Cmd,
-		Kind:    sess.Backend,
-		Dir:     resolveBackendDir(dir),
-		Resume:  sess.ResumeToken,
-		ModelID: sess.ModelID,
-		Account: sess.Account,
-		Keys:    keys,
-		Models:  models,
+		Vendor:       sess.Vendor,
+		Cmd:          sess.Cmd,
+		Kind:         sess.Backend,
+		Dir:          resolveBackendDir(dir),
+		Resume:       sess.ResumeToken,
+		ModelID:      sess.ModelID,
+		Account:      sess.Account,
+		Keys:         keys,
+		Models:       models,
+		Session:      sess.Name,
+		SessionToken: token,
 	})
 }
 

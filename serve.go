@@ -279,38 +279,6 @@ func bindGateways(sets []host.Deps, lang i18n.Language) ([]host.Deps, []contract
 	return gws, closers, foreground, extra, nil
 }
 
-func runSession(ctx context.Context, layout host.RuntimeLayout, args []string) error {
-	return runRegistryVerb(ctx, layout, verbSession, args)
-}
-
-func runAgent(ctx context.Context, layout host.RuntimeLayout, args []string) error {
-	return runRegistryVerb(ctx, layout, "agent", args)
-}
-
-func runHost(ctx context.Context, layout host.RuntimeLayout, args []string) error {
-	return runRegistryVerb(ctx, layout, "host", args)
-}
-
-func runApprove(ctx context.Context, layout host.RuntimeLayout, args []string) error {
-	if len(args) > 0 && args[0] == "hook" {
-		host.RunApprovalHook(ctx, layout, os.Stdin, os.Stdout, os.Stderr)
-		return nil
-	}
-	return runRegistryVerb(ctx, layout, "approve", args)
-}
-
-func runRole(ctx context.Context, layout host.RuntimeLayout, args []string) error {
-	return runRegistryVerb(ctx, layout, "role", args)
-}
-
-func runMemory(ctx context.Context, layout host.RuntimeLayout, args []string) error {
-	return runRegistryVerb(ctx, layout, "memory", args)
-}
-
-func runModels(ctx context.Context, layout host.RuntimeLayout, args []string) error {
-	return runRegistryVerb(ctx, layout, "models", args)
-}
-
 func loadOperator() (config.Config, language.Languages, error) {
 	cfg, err := config.Load(config.DefaultPath())
 	if err != nil {

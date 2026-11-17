@@ -68,8 +68,8 @@ func TestSummaryInFlightAtCloseIsReportedAsLostAndUnconfirmed(t *testing.T) {
 	awaitGatedWrite(t, writer)
 	sink.Close()
 	line := unconfirmedLine(logs.String())
-	if logField(line, "lost") != "2" || unconfirmedAtClose(t, logs.String()) < 1 {
-		t.Fatalf("Close logged %q, want lost=2 and unconfirmed>=1: the oversized warning and the queued A are lost while the summary is in flight", line)
+	if logField(line, "lost") != "1" || unconfirmedAtClose(t, logs.String()) < 1 {
+		t.Fatalf("Close logged %q, want lost=1 and unconfirmed>=1: the summary in flight already names the oversized warning, only the queued A is left for the bilan", line)
 	}
 }
 
@@ -90,12 +90,19 @@ func TestSummaryAcceptedAfterCloseDoesNotCountLossesTwice(t *testing.T) {
 	waitUntil(t, "the summary to be accepted after the bilan", func() bool {
 		return ask(sink, func() bool { return sink.inflight == nil })
 	})
+	if got := strings.Count(writer.out.String(), englishLostLine(1)+"\n"); got != 1 {
+		t.Fatalf("the summary reached the output %d times, want once: %q", got, writer.out.String())
+	}
+	lines := notConfirmedLines(logs.String())
+	if len(lines) != 1 || logField(lines[0], "lost") != "1" {
+		t.Fatalf("the bilan logged %q, want only the queued A (lost=1): the oversized warning is already named by the summary that Close let through", lines)
+	}
 	if _, err := sink.Write(bytes.Repeat([]byte("y"), warningEntryBytes+1)); !errors.Is(err, errWarningAbandoned) {
 		t.Fatalf("write returned %v, want errWarningAbandoned", err)
 	}
-	lines := notConfirmedLines(logs.String())
+	lines = notConfirmedLines(logs.String())
 	if len(lines) != 2 || logField(lines[1], "lost") != "1" || logField(lines[1], "unconfirmed") != "0" {
-		t.Fatalf("logged %q, want the bilan then lost=1 unconfirmed=0: an accepted summary after the bilan must not advance the count", lines)
+		t.Fatalf("logged %q, want the bilan then lost=1 unconfirmed=0 for the new loss alone", lines)
 	}
 }
 

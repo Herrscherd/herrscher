@@ -35,7 +35,7 @@ func TestCommandSocketReleasesWithinItsJoinBudgetWhenAHandlerNeverEnds(t *testin
 		t.Fatalf("dial: %v", err)
 	}
 	t.Cleanup(func() { logCleanup(client.Close()) })
-	if _, err := client.Write([]byte(`{"argv":["stuck"]}` + "\n")); err != nil {
+	if _, err = client.Write([]byte(`{"argv":["stuck"]}` + "\n")); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	select {

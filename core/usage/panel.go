@@ -30,8 +30,8 @@ func chartSteps() []float64 {
 // CostPanel writes the spend of the period for a panel width cells wide: the total, the
 // sessions and the cost by model on the left, the cost by bucket as a bar chart with its
 // axis on the right, then the tokens and what the cache saved under both.
-func CostPanel(snapshot Snapshot, lang i18n.Language, zone *time.Location, pal termpaint.Palette, width int) ([]string, error) {
-	text := &renderer{lang: lang, pal: pal}
+func CostPanel(snapshot Snapshot, messages *clitext.Messages, lang i18n.Language, zone *time.Location, pal termpaint.Palette, width int) ([]string, error) {
+	text := &renderer{messages: messages, lang: lang, pal: pal}
 	lines := append(truncatedNotice(snapshot, text), panelBody(snapshot, text, zone, width)...)
 	return lines, text.err
 }

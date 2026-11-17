@@ -11,6 +11,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
@@ -280,7 +281,7 @@ func TestCompactionLinesRendersEachStage(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			lines, err := CompactionLines(tc.snapshot, tc.lang, termpaint.Palette{})
+			lines, err := CompactionLines(tc.snapshot, clitext.NewMessages(), tc.lang, termpaint.Palette{})
 			if err != nil {
 				t.Fatalf("CompactionLines: %v", err)
 			}

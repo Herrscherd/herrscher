@@ -77,8 +77,8 @@ type View struct {
 // View renders the snapshot in lang: the banner, the checks grouped in report
 // order, and the summary counts with the service the hint names when something
 // fails.
-func (s Snapshot) View(lang i18n.Language) (View, error) {
-	text := newRenderer(lang)
+func (s Snapshot) View(messages *clitext.Messages, lang i18n.Language) (View, error) {
+	text := newRenderer(messages, lang)
 	view := s.buildView(text)
 	return view, text.err
 }
@@ -114,15 +114,15 @@ func escapeAll(lines []string) []termpaint.Printed {
 }
 
 // Rows renders checks in lang, one row each, in the order given.
-func (s Snapshot) Rows(checks []Check, lang i18n.Language) ([]Row, error) {
-	text := newRenderer(lang)
+func (s Snapshot) Rows(messages *clitext.Messages, checks []Check, lang i18n.Language) ([]Row, error) {
+	text := newRenderer(messages, lang)
 	return s.buildRows(checks, text), text.err
 }
 
 // Latency renders a measured duration the way a report shows it: milliseconds
 // under a second, seconds with one decimal under a minute, a compact span beyond.
-func Latency(lang i18n.Language, elapsed time.Duration) (string, error) {
-	text := newRenderer(lang)
+func Latency(messages *clitext.Messages, lang i18n.Language, elapsed time.Duration) (string, error) {
+	text := newRenderer(messages, lang)
 	return text.latency(elapsed), text.err
 }
 

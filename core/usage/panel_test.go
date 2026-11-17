@@ -8,11 +8,12 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 func TestFormatTokensMovesToTheNextUnitWhenRoundingReachesIt(t *testing.T) {
-	text := &renderer{lang: i18n.French}
+	text := &renderer{messages: clitext.NewMessages(), lang: i18n.French}
 	cases := map[int64]string{999: "999", 999950: "1,0 M", 1500: "1,5 k", 250_000_000: "250 M"}
 	for count, want := range cases {
 		if got := formatTokens(i18n.French, count, text); !strings.Contains(got, want) || strings.Contains(got, "1000") {
@@ -32,10 +33,10 @@ func TestFormatPercentNamesATinyShare(t *testing.T) {
 
 func TestDayLabelNamesTheMonth(t *testing.T) {
 	day := time.Date(2026, 10, 21, 0, 0, 0, 0, time.UTC)
-	if got := (&renderer{lang: i18n.French}).dayLabel(day); got != "21 oct." {
+	if got := (&renderer{messages: clitext.NewMessages(), lang: i18n.French}).dayLabel(day); got != "21 oct." {
 		t.Fatalf("french = %q", got)
 	}
-	if got := (&renderer{lang: i18n.English}).dayLabel(day); !strings.Contains(got, "21") || strings.Contains(got, "/") {
+	if got := (&renderer{messages: clitext.NewMessages(), lang: i18n.English}).dayLabel(day); !strings.Contains(got, "21") || strings.Contains(got, "/") {
 		t.Fatalf("english = %q", got)
 	}
 }
@@ -57,7 +58,7 @@ func spendSnapshot() Snapshot {
 }
 
 func TestCostLinesSplitsTheCostByTypeAndShowsTheCache(t *testing.T) {
-	lines, err := CostLines(spendSnapshot(), i18n.French, time.UTC, termpaint.Palette{})
+	lines, err := CostLines(spendSnapshot(), clitext.NewMessages(), i18n.French, time.UTC, termpaint.Palette{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +71,7 @@ func TestCostLinesSplitsTheCostByTypeAndShowsTheCache(t *testing.T) {
 }
 
 func TestCostPanelDrawsTheSummaryBesideTheChart(t *testing.T) {
-	lines, err := CostPanel(spendSnapshot(), i18n.French, time.UTC, termpaint.Palette{}, 100)
+	lines, err := CostPanel(spendSnapshot(), clitext.NewMessages(), i18n.French, time.UTC, termpaint.Palette{}, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +101,7 @@ func TestChartStepRoundsUpToANiceValue(t *testing.T) {
 }
 
 func TestCardPaceWarnsOnlyWhenAheadOfThePace(t *testing.T) {
-	text := &renderer{lang: i18n.French}
+	text := &renderer{messages: clitext.NewMessages(), lang: i18n.French}
 	limit := contracts.Limit{UsedPercent: 65}
 	ahead := cardPace(limit, Pace{Shown: true, Delta: 43}, "35 %", text)
 	if len(ahead) != 2 || !strings.Contains(ahead[0], paceUp) || !strings.Contains(ahead[1], "+43 %") {

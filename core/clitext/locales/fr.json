@@ -3303,6 +3303,11 @@
     "other": "worktree materialize : --worktree est obligatoire"
   },
   {
+    "id": "cli.host.fault.seed_archived_session",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (seed refused: the session is archived)",
+    "other": "seed refusé : la session est archivée"
+  },
+  {
     "id": "cli.host.fault.seed_timeout",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (seed timeout)",
     "other": "délai dépassé pour le seed"

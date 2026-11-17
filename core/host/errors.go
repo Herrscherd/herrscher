@@ -7,6 +7,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 
 	"github.com/Herrscherd/herrscher/core/internal/authz"
 )
@@ -30,6 +31,7 @@ var (
 	errWorktreeSubcommand          = errors.New("worktree: want one of create, pre-existing, remove, materialize")
 	errWorktreeMaterializeRequired = errors.New("worktree materialize: --worktree is required")
 	errSeedTimeout                 = errors.New("seed timeout")
+	errSeedArchivedSession         = errors.New("seed refused: the session is archived")
 	errNoBackendPlugin             = errors.New("no backend plugin registered")
 	errHostNoneRegistered          = errors.New("name a host: none is registered yet, add one with `host add <name> --ssh <target> --workspace <path>`")
 	errGatewayOnlyNoModel          = errors.New("the gateway-only route policy forbids a spawn with no model: it would run on this machine's own vendor login")
@@ -182,6 +184,16 @@ type contributionClashError struct {
 
 func (e *contributionClashError) Error() string {
 	return fmt.Sprintf("plugin %q contributes %q twice", e.Kind, e.Path)
+}
+
+type pluginKindReservedError struct {
+	Kind string
+}
+
+func (e *pluginKindReservedError) Error() string { return e.render(i18n.English) }
+
+func (e *pluginKindReservedError) render(lang i18n.Language) string {
+	return newHostMessages().text(lang, "plugin.kind_reserved", map[string]any{nameParam: e.Kind})
 }
 
 type daemonNotRunningError struct {

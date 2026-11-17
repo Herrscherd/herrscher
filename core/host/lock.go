@@ -58,7 +58,7 @@ func takeLock(path string) (func(), error) {
 	}
 	lockFile, err := openLockFile(path)
 	if err != nil {
-		return nil, wrapHost(err, "lock.unsafe", map[string]any{pathParam: path, "Detail": err.Error()})
+		return nil, wrapHost(err, "lock.unsafe", map[string]any{pathParam: path, detailParam: err.Error()})
 	}
 	locked, err := tryLock(lockFile)
 	if err != nil {

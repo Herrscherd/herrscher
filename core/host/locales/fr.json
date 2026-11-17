@@ -515,6 +515,21 @@
     "other": "compaction : {{.Detail}}"
   },
   {
+    "id": "serve.scheduler_clock",
+    "description": "The scheduler clock variable of an e2e build is malformed, Detail carries the cause",
+    "other": "horloge du planificateur : {{.Detail}}"
+  },
+  {
+    "id": "serve.scheduler_tick",
+    "description": "The scheduler tick variable of an e2e build is malformed, Detail carries the cause",
+    "other": "cadence du planificateur : {{.Detail}}"
+  },
+  {
+    "id": "plugin.kind_reserved",
+    "description": "A plugin Kind equal to a core command family is refused at registry construction, Name carries the Kind",
+    "other": "le genre de plugin {{.Name}} reprend une famille de commandes du cœur, il est refusé"
+  },
+  {
     "id": "serve.registry",
     "description": "The command registry cannot be built, Detail carries the cause",
     "other": "construction du registre des commandes impossible : {{.Detail}}"

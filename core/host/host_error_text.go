@@ -71,6 +71,7 @@ func hostErrorKeys() []hostErrorKey {
 		{errWorktreeSubcommand, "cli.host.fault.worktree_subcommand"},
 		{errWorktreeMaterializeRequired, "cli.host.fault.worktree_materialize_required"},
 		{errSeedTimeout, "cli.host.fault.seed_timeout"},
+		{errSeedArchivedSession, "cli.host.fault.seed_archived_session"},
 		{errNoBackendPlugin, "cli.host.fault.no_backend_plugin"},
 		{errHostNoneRegistered, "cli.host.fault.host_none_registered"},
 		{errGatewayOnlyNoModel, "cli.host.fault.gateway_only_no_model"},

@@ -1195,9 +1195,14 @@ The tab carries a `pendingApproval` flag for the rest of the window to mark it.
 
 Each session's approval hook answers with the token the daemon issued to that
 session at launch, sent in the `HERRSCHER_SESSION_TOKEN` variable. The token
-ends with the session's run, so a session recreated under the same name gets a
-new one. A hook that holds no token, or cannot reach a daemon, refuses the tool
-call and says why: it never allows a call it could not check.
+ends with the session's run. Closing or archiving the session revokes it, and so
+does a session that stops inside the teardown window, so a session recreated
+under the same name gets a new one. A one-shot seed gets its own token instead,
+which answers only while that seed runs. A seed on an archived session is
+refused, and no token is issued to a seed whose session is archived or gone. A
+session archived or closed while its seed runs ends that seed's token. A hook
+that holds no token, or cannot reach a daemon, refuses the tool call and says
+why: it never allows a call it could not check.
 
 Two paths run without a daemon. A `session create` run locally starts a session
 whose children hold no token the daemon issued, so every tool call they make is
@@ -1708,6 +1713,10 @@ such as `f := runtimedir.At` is not seen.
 `e2e/` drives the built `herrscher` binary from its command line, with no network and
 no vendor account. `scripts/check.sh` runs it with `go test -tags e2e ./e2e/...` on
 Linux, and says it skips the step anywhere else.
+
+The `e2e` build also reads two variables that the production binary ignores:
+`HERRSCHER_E2E_CLOCK` (an RFC 3339 instant the scheduler takes as now) and
+`HERRSCHER_E2E_SCHEDULER_TICK` (a positive duration in place of the one-minute tick).
 
 - Each `.txtar` file in `e2e/testdata/scenarios` is a
   [testscript](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript) scenario.

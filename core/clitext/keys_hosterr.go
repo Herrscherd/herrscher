@@ -45,6 +45,7 @@ func hostErrKeys() map[Key][]string {
 		"cli.host.fault.worktree_subcommand":           nil,
 		"cli.host.fault.worktree_materialize_required": nil,
 		"cli.host.fault.seed_timeout":                  nil,
+		"cli.host.fault.seed_archived_session":         nil,
 		"cli.host.fault.no_backend_plugin":             nil,
 		"cli.host.fault.host_none_registered":          nil,
 		"cli.host.fault.gateway_only_no_model":         nil,

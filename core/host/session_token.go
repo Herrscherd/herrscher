@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"github.com/Herrscherd/herrscher/core/internal/control"
+	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 var errApproveAskUnauthenticated = errors.New("approve ask refused: the caller does not hold this session's approval token")
@@ -42,9 +43,82 @@ func (t *sessionTable) issueToken(session string) string {
 	return token
 }
 
-func (t *sessionTable) tokenMatches(session, presented string) bool {
+type seedLease struct {
+	session string
+	done    <-chan struct{}
+}
+
+func (l seedLease) alive() bool {
+	select {
+	case <-l.done:
+		return false
+	default:
+		return true
+	}
+}
+
+func liveSessionAllowed(store *state.State) func(session string) bool {
+	return func(session string) bool {
+		sess, ok := store.FindSession(session)
+		return ok && !sess.Archived
+	}
+}
+
+func (t *sessionTable) seedToken(ctx context.Context, session string, allowed func(session string) bool) string {
+	done := ctx.Done()
+	if done == nil {
+		return ""
+	}
 	t.mu.Lock()
-	want, ok := t.tokens[session]
-	t.mu.Unlock()
-	return ok && presented != "" && subtle.ConstantTimeCompare([]byte(want), []byte(presented)) == 1
+	defer t.mu.Unlock()
+	if !allowed(session) {
+		return ""
+	}
+	if t.seedLeases == nil {
+		t.seedLeases = make(map[string]seedLease)
+	}
+	for token, lease := range t.seedLeases {
+		if !lease.alive() {
+			delete(t.seedLeases, token)
+		}
+	}
+	token := rand.Text()
+	t.seedLeases[token] = seedLease{session: session, done: done}
+	return token
+}
+
+func (t *sessionTable) revokeTokensExcept(keep func(session string) bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for session := range t.tokens {
+		if !keep(session) {
+			delete(t.tokens, session)
+		}
+	}
+	for token, lease := range t.seedLeases {
+		if !keep(lease.session) {
+			delete(t.seedLeases, token)
+		}
+	}
+}
+
+func (t *sessionTable) tokenMatches(session, presented string) bool {
+	if presented == "" {
+		return false
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if want, ok := t.tokens[session]; ok && sameToken(want, presented) {
+		return true
+	}
+	for token, lease := range t.seedLeases {
+		if lease.session == session && lease.alive() && sameToken(token, presented) {
+			return true
+		}
+	}
+	return false
+}
+
+func sameToken(want, presented string) bool {
+	return subtle.ConstantTimeCompare([]byte(want), []byte(presented)) == 1
 }

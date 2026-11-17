@@ -42,14 +42,14 @@ func TestWiredManagerWriteIsAwaitedByTheStopPath(t *testing.T) {
 
 	setLang := mustCommand(t, hdl.Commands(), "set", "lang")
 	done := make(chan struct{})
+	var runErr error
 	go func() {
 		defer close(done)
-		_, runErr := setLang.Run(t.Context(), contracts.Input{Args: map[string]string{"lang": "fr"}})
-		logCleanup(runErr)
+		_, runErr = setLang.Run(t.Context(), contracts.Input{Args: map[string]string{"lang": "fr"}})
 	}()
 
 	awaitPersistWriteInFlight(t, h)
-	release := time.AfterFunc(300*time.Millisecond, func() { unblockTranscript(tmp) })
+	release := time.AfterFunc(300*time.Millisecond, func() { releaseBlockedTranscript(tmp) })
 	t.Cleanup(func() { release.Stop() })
 
 	started := time.Now()
@@ -69,5 +69,8 @@ func TestWiredManagerWriteIsAwaitedByTheStopPath(t *testing.T) {
 	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("the manager command never returned after its write was released")
+	}
+	if runErr != nil {
+		t.Fatalf("the manager command failed after its write was released: %v", runErr)
 	}
 }

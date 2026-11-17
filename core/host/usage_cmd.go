@@ -36,7 +36,11 @@ func usageDir(partDir string) string {
 }
 
 func (h *hub) recordUsage(sess state.Session, records []usage.Record) {
-	end := h.persists.begin()
+	h.recordUsageWith(h.persists, sess, records)
+}
+
+func (h *hub) recordUsageWith(persists *persistWrites, sess state.Session, records []usage.Record) {
+	end := persists.begin()
 	defer end()
 	ledger := usage.Ledger{Dir: usageDir(h.partDir), Now: time.Now}
 	if err := ledger.Append(stampUsage(records, h.st, sess)); err != nil {

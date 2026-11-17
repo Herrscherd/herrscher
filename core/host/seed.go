@@ -45,6 +45,7 @@ type oneShotSeedRuntime struct {
 	backend         func(context.Context, state.Session) (contracts.Backend, error)
 	models          *ModelDiscovery
 	sessions        *sessionTable
+	persists        *persistWrites
 }
 
 func (r oneShotSeedRuntime) backendFactory() func(context.Context, state.Session) (contracts.Backend, error) {
@@ -117,7 +118,12 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	fromBridge := make(chan contracts.Event, bridgeEventBuffer)
 	driver := newSessionDriver(sess.Name, nil, toBridge, fromBridge, runtime.warnings)
 	runtime.sessions.attachPersists(driver)
-	defer awaitOneShotWrites(driver.persists, runtime.warnings, runtime.languageOf(sess))
+	oneShot := runtime.persists
+	if oneShot == nil {
+		oneShot = driver.persists.child()
+	}
+	driver.persists = oneShot
+	defer awaitOneShotWrites(oneShot, runtime.warnings, runtime.languageOf(sess))
 	driver.incarnation = sess.Incarnation
 	driver.agent = sess.Agent
 	driver.language = func() i18n.Language { return knownSessionLanguage(sess) }
@@ -173,8 +179,8 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 func awaitOneShotWrites(persists *persistWrites, warnings io.Writer, lang languageSource) {
 	select {
 	case <-persists.group.settled():
-	case <-time.After(persistWriteGrace):
-		warnLive(warnings, lang, "warn.persist_overrun", map[string]any{graceParam: persistWriteGrace.String()})
+	case <-time.After(persists.grace):
+		warnLive(warnings, lang, "warn.persist_overrun", map[string]any{graceParam: persists.grace.String()})
 	}
 }
 

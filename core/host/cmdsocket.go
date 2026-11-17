@@ -109,15 +109,15 @@ func cancellationOr(ctx context.Context, err error) error {
 }
 
 func serveCommandSocket(ctx context.Context, layout runtimedir.Layout, path string, disp dispatcher, lang languageSource, warn io.Writer) {
-	onOverrun := func() {
-		warnLive(warn, lang, "warn.command_handler_overrun", map[string]any{graceParam: defaultTeardownGrace.String()})
+	onOverrun := func(budget time.Duration) {
+		warnLive(warn, lang, "warn.command_handler_overrun", map[string]any{graceParam: budget.String()})
 	}
 	if err := serveCommandSocketWithTimeout(ctx, layout, path, disp, defaultCommandReadTimeout, defaultTeardownGrace, onOverrun); err != nil {
 		warnLive(warn, lang, "warn.command_socket_listen", map[string]any{pathParam: path, detailParam: err})
 	}
 }
 
-func serveCommandSocketWithTimeout(ctx context.Context, layout runtimedir.Layout, path string, disp dispatcher, readTimeout, joinBudget time.Duration, onOverrun func()) error {
+func serveCommandSocketWithTimeout(ctx context.Context, layout runtimedir.Layout, path string, disp dispatcher, readTimeout, joinBudget time.Duration, onOverrun func(time.Duration)) error {
 	listener, err := openSocket(ctx, layout, path)
 	if err != nil {
 		return err
@@ -162,10 +162,40 @@ func socketAnswers(ctx context.Context, layout runtimedir.Layout, path string) b
 	return true
 }
 
-func acceptCommands(ctx context.Context, listener net.Listener, disp dispatcher, readTimeout, joinBudget time.Duration, onOverrun func()) <-chan struct{} {
+type openConns struct {
+	mu    sync.Mutex
+	conns map[net.Conn]struct{}
+}
+
+func newOpenConns() *openConns {
+	return &openConns{conns: map[net.Conn]struct{}{}}
+}
+
+func (o *openConns) add(conn net.Conn) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.conns[conn] = struct{}{}
+}
+
+func (o *openConns) remove(conn net.Conn) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	delete(o.conns, conn)
+}
+
+func (o *openConns) closeAll() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	for conn := range o.conns {
+		closeRead(conn)
+	}
+}
+
+func acceptCommands(ctx context.Context, listener net.Listener, disp dispatcher, readTimeout, joinBudget time.Duration, onOverrun func(budget time.Duration)) <-chan struct{} {
 	released := make(chan struct{})
 	accepting := make(chan struct{})
 	var handlers sync.WaitGroup
+	conns := newOpenConns()
 	go func() {
 		defer close(accepting)
 		for {
@@ -173,9 +203,11 @@ func acceptCommands(ctx context.Context, listener net.Listener, disp dispatcher,
 			if err != nil {
 				return
 			}
+			conns.add(conn)
 			handlers.Add(1)
 			go func() {
 				defer handlers.Done()
+				defer conns.remove(conn)
 				handleCommandConn(ctx, conn, disp, readTimeout)
 			}()
 		}
@@ -185,7 +217,8 @@ func acceptCommands(ctx context.Context, listener net.Listener, disp dispatcher,
 		closeRead(listener)
 		<-accepting
 		if !joinHandlersWithin(&handlers, joinBudget) {
-			onOverrun()
+			conns.closeAll()
+			onOverrun(joinBudget)
 		}
 		close(released)
 	}()

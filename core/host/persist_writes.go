@@ -17,10 +17,19 @@ type persistWrites struct {
 	timer   *time.Timer
 	warned  bool
 	onLate  func()
+	grace   time.Duration
+	parent  *persistWrites
 }
 
 func newPersistWrites() *persistWrites {
-	return &persistWrites{}
+	return &persistWrites{grace: persistWriteGrace}
+}
+
+func (p *persistWrites) child() *persistWrites {
+	if p == nil {
+		return nil
+	}
+	return &persistWrites{grace: p.grace, parent: p}
 }
 
 func (p *persistWrites) begin() func() {
@@ -30,7 +39,15 @@ func (p *persistWrites) begin() func() {
 	if p.pastDeadline() && p.onLate != nil {
 		p.onLate()
 	}
-	return p.group.Begin()
+	end := p.group.Begin()
+	if p.parent == nil {
+		return end
+	}
+	endParent := p.parent.begin()
+	return func() {
+		end()
+		endParent()
+	}
 }
 
 func (p *persistWrites) deadline() <-chan struct{} {
@@ -38,7 +55,7 @@ func (p *persistWrites) deadline() <-chan struct{} {
 	defer p.mu.Unlock()
 	if p.expired == nil {
 		p.expired = make(chan struct{})
-		p.timer = time.AfterFunc(persistWriteGrace, p.expire)
+		p.timer = time.AfterFunc(p.grace, p.expire)
 	}
 	return p.expired
 }
@@ -87,7 +104,11 @@ func (p *persistWrites) claimWarning() bool {
 }
 
 func (h *hub) appendTranscript(session string, entry state.TranscriptEntry) error {
-	end := h.persists.begin()
+	return h.appendTranscriptWith(h.persists, session, entry)
+}
+
+func (h *hub) appendTranscriptWith(persists *persistWrites, session string, entry state.TranscriptEntry) error {
+	end := persists.begin()
 	defer end()
 	return state.AppendTranscript(state.TranscriptPath(h.partDir, session), entry)
 }
@@ -101,6 +122,6 @@ func (h *hub) awaitPersists() {
 
 func (h *hub) warnPersistOverrunOnce() {
 	if h.persists.claimWarning() {
-		h.warnOverrun("warn.persist_overrun", persistWriteGrace)
+		h.warnOverrun("warn.persist_overrun", h.persists.grace)
 	}
 }

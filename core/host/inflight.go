@@ -76,11 +76,13 @@ func (h *hub) flushWarningsWithin(window teardownWindow) {
 }
 
 func (h *hub) warnHubOverrun() {
-	h.warnOverrun("warn.hub_teardown_overrun", h.teardownGrace)
+	if h.hubOverrunWarned.CompareAndSwap(false, true) {
+		h.warnOverrun("warn.hub_teardown_overrun", h.teardownGrace)
+	}
 }
 
-func (h *hub) warnCommandHandlerOverrun() {
-	h.warnOverrun("warn.command_handler_overrun", h.teardownGrace)
+func (h *hub) warnCommandHandlerOverrun(budget time.Duration) {
+	h.warnOverrun("warn.command_handler_overrun", budget)
 }
 
 func (h *hub) warnOverrun(key string, grace time.Duration) {

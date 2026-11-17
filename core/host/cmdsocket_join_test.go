@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"net"
 	"path/filepath"
 	"sync/atomic"
@@ -27,7 +28,7 @@ func TestCommandSocketReleasesWithinItsJoinBudgetWhenAHandlerNeverEnds(t *testin
 	}
 	var overruns atomic.Int32
 	joinBudget := 200 * time.Millisecond
-	released := acceptCommands(ctx, listener, disp, defaultCommandReadTimeout, joinBudget, func() { overruns.Add(1) })
+	released := acceptCommands(ctx, listener, disp, defaultCommandReadTimeout, joinBudget, func(time.Duration) { overruns.Add(1) })
 
 	client, err := (&net.Dialer{}).DialContext(t.Context(), "unix", path)
 	if err != nil {
@@ -60,5 +61,32 @@ func TestCommandSocketReleasesWithinItsJoinBudgetWhenAHandlerNeverEnds(t *testin
 	if err == nil {
 		logCleanup(probe.Close())
 		t.Fatal("the command socket still answers after release")
+	}
+}
+
+func TestCommandSocketClosesIdleConnectionsOnOverrun(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cmd.sock")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	listener, err := openSocket(ctx, isolatedRuntimeDir(t), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	released := acceptCommands(ctx, listener, &fakeDispatcher{out: "unused"}, defaultCommandReadTimeout, 200*time.Millisecond, func(time.Duration) {})
+	client, err := (&net.Dialer{}).DialContext(t.Context(), "unix", path)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { logCleanup(client.Close()) })
+	cancel()
+	select {
+	case <-released:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the command socket never released with an idle connection open")
+	}
+	logCleanup(client.SetReadDeadline(time.Now().Add(2 * time.Second)))
+	_, readErr := client.Read(make([]byte, 1))
+	if netErr, ok := errors.AsType[net.Error](readErr); ok && netErr.Timeout() {
+		t.Fatal("the idle connection stayed open after the join overrun: the handler still waits on it")
 	}
 }

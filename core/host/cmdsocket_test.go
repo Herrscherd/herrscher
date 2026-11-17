@@ -134,7 +134,7 @@ func TestCommandSocketClosesSilentConnection(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cmd.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if err := serveCommandSocketWithTimeout(ctx, isolatedRuntimeDir(t), path, &fakeDispatcher{out: "unused"}, 50*time.Millisecond, time.Second, func() {}); err != nil {
+	if err := serveCommandSocketWithTimeout(ctx, isolatedRuntimeDir(t), path, &fakeDispatcher{out: "unused"}, 50*time.Millisecond, time.Second, func(time.Duration) {}); err != nil {
 		t.Fatalf("serve: %v", err)
 	}
 

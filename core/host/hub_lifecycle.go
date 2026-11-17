@@ -312,6 +312,7 @@ func (h *hub) goLiveLocked(ctx context.Context, sess state.Session) error {
 	released := acceptCommands(sctx, commands, h.sessionCommands(sess.Name), defaultCommandReadTimeout, h.teardownGrace/teardownLateShare, h.warnCommandHandlerOverrun)
 	releaseSockets := sync.OnceFunc(func() {
 		logCleanup(acc.Close())
+		logCleanup(commands.Close())
 		cancel()
 	})
 	h.mu.Lock()

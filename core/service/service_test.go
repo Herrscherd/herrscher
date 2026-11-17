@@ -85,7 +85,7 @@ func TestLinuxPlan(t *testing.T) {
 	for _, want := range []string{
 		"ExecStart=/home/me/.local/bin/herrscher serve --env-file /home/me/.config/herrscher/herrscher.env",
 		"Restart=always",
-		"TimeoutStopSec=46s",
+		fmt.Sprintf("TimeoutStopSec=%gs", StopTimeout.Seconds()),
 		"StartLimitBurst=5",
 		"WantedBy=default.target",
 	} {
@@ -314,7 +314,7 @@ func TestMacPlan(t *testing.T) {
 	for _, want := range []string{
 		"<key>Label</key><string>com.vskstudio.herrscher</string>",
 		"<key>RunAtLoad</key><true/>",
-		"<key>ExitTimeOut</key><integer>46</integer>",
+		fmt.Sprintf("<key>ExitTimeOut</key><integer>%g</integer>", StopTimeout.Seconds()),
 		"<string>/home/me/.local/bin/herrscher</string>",
 		"<string>serve</string>",
 		"<string>--env-file</string>",

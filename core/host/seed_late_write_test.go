@@ -129,7 +129,7 @@ func TestOneShotTapsRecordNothingOnceTheSeedHasReturned(t *testing.T) {
 		record:      func(string, state.TranscriptEntry) { recorded = append(recorded, "transcript") },
 		recordUsage: func(state.Session, []usage.Record) { recorded = append(recorded, "usage") },
 	}
-	driver := &sessionDriver{messages: newHostMessages()}
+	driver := &sessionDriver{messages: newHostMessages(), persists: newPersistWrites()}
 	gate := attachOneShotTaps(driver, state.Session{Name: "seed-a"}, runtime)
 
 	driver.emitTap(contracts.Event{T: eventwire.EventReply})

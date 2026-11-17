@@ -25,6 +25,7 @@ func englishStillRunningLine(messages *hostMessages) string {
 }
 
 func testHub(h *hub) *hub {
+	h.bindSessionState()
 	out := h.warnings
 	if out == nil {
 		out = io.Discard

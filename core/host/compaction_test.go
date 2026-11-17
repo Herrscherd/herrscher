@@ -333,7 +333,7 @@ func TestCompactionEventsCarryTokensOnlyWhenMeasured(t *testing.T) {
 func TestMergedRequestIsNotAcceptedWhenTheFirstEnqueueFails(t *testing.T) {
 	queue := make(chan queued, 1)
 	queue <- queued{ev: contracts.Event{T: eventwire.EventInput}}
-	d := &sessionDriver{messages: newHostMessages(), queue: queue, enqueueTimeout: 100 * time.Millisecond}
+	d := &sessionDriver{messages: newHostMessages(), persists: newPersistWrites(), queue: queue, enqueueTimeout: 100 * time.Millisecond}
 	first := make(chan [2]bool, 1)
 	registered := make(chan struct{})
 	d.compactRegistered = func() { close(registered) }

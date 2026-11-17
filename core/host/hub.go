@@ -93,9 +93,24 @@ func withWarnings(w io.Writer) hubOption {
 	return func(h *hub) { h.warnings = w }
 }
 
+func (h *hub) bindSessionState() {
+	if h.sessions != nil {
+		if h.persists == nil {
+			h.persists = h.sessions.persists
+		}
+		if h.checkpoints == nil {
+			h.checkpoints = &h.sessions.checkpoints
+		}
+	}
+	if h.persists == nil {
+		h.persists = newPersistWrites()
+	}
+}
+
 func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry, approvals *approvalTable, sessions *sessionTable, opts ...hubOption) *hub {
-	created := &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, messages: sessions.messages, live: make(map[string]liveSession), teardownGrace: defaultTeardownGrace, approvals: approvals, sessions: sessions, persists: sessions.persists, checkpoints: &sessions.checkpoints, listen: control.Listen, relaunchStop: make(chan struct{})}
-	sessions.persists.onLate = created.warnPersistOverrunOnce
+	created := &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, messages: sessions.messages, live: make(map[string]liveSession), teardownGrace: defaultTeardownGrace, approvals: approvals, sessions: sessions, listen: control.Listen, relaunchStop: make(chan struct{})}
+	created.bindSessionState()
+	created.persists.onLate = created.warnPersistOverrunOnce
 	for _, opt := range opts {
 		opt(created)
 	}

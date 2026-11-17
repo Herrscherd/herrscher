@@ -1140,7 +1140,7 @@ func TestDriverInvokesCoordinatorOnFanOutTrailer(t *testing.T) {
 
 func TestDriverInvokesCoordinatorOnRouteTrailer(t *testing.T) {
 	rc := &recordingCoord{}
-	d := &sessionDriver{messages: newHostMessages(), name: "lead", coordinator: rc}
+	d := &sessionDriver{messages: newHostMessages(), persists: newPersistWrites(), name: "lead", coordinator: rc}
 	d.maybeCoordinate(context.Background(), "voici mon plan\n⟢ route: un module réseau")
 	if len(rc.routes) != 1 {
 		t.Fatalf("Route calls = %d, want 1", len(rc.routes))

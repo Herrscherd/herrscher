@@ -19,7 +19,7 @@ func TestAttachOneShotTapsRecordsTheUsageOfTheSeed(t *testing.T) {
 		owner = sess.Name
 		recorded = append(recorded, records...)
 	}}
-	driver := &sessionDriver{messages: newHostMessages()}
+	driver := &sessionDriver{messages: newHostMessages(), persists: newPersistWrites()}
 
 	attachOneShotTaps(driver, state.Session{Name: "seed-a"}, runtime)
 	driver.sink.Usage([]usage.Record{{In: 7, Out: 3, Cost: 0.02}})

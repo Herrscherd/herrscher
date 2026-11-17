@@ -160,6 +160,7 @@ type SessionLimitError struct {
 	messages *clitext.Messages
 }
 
+// NewSessionLimitError builds a SessionLimitError whose text is rendered through messages.
 func NewSessionLimitError(messages *clitext.Messages, limit int) *SessionLimitError {
 	return &SessionLimitError{Max: limit, messages: messages}
 }

@@ -18,6 +18,7 @@ type FailureError struct {
 	messages *clitext.Messages
 }
 
+// NewFailure builds a FailureError whose text is rendered through messages.
 func NewFailure(messages *clitext.Messages, key clitext.Key, params clitext.Params, cause error) FailureError {
 	return FailureError{Key: key, Params: params, Cause: cause, messages: messages}
 }

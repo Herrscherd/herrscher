@@ -5,7 +5,6 @@ package e2e_test
 import (
 	"bufio"
 	"errors"
-	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -112,15 +111,26 @@ func TestSettleInterruptsTheDaemonBeforeKillingIt(t *testing.T) {
 	}
 	daemon := exec.CommandContext(t.Context(), "sh", "-c", "sleep 60 >/dev/null 2>&1 & child=$!; trap 'kill $child; exit 130' INT; echo ready; wait", "sh", "serve")
 	daemon.Env = []string{instanceEnv + "=" + instance}
-	stdout, err := daemon.StdoutPipe()
+	ready, write, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if startErr := daemon.Start(); startErr != nil {
+	t.Cleanup(func() {
+		if closeErr := ready.Close(); closeErr != nil {
+			t.Error(closeErr)
+		}
+	})
+	daemon.Stdout = write
+	daemon.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	startErr := daemon.Start()
+	if closeErr := write.Close(); closeErr != nil {
+		t.Error(closeErr)
+	}
+	if startErr != nil {
 		t.Fatal(startErr)
 	}
-	t.Cleanup(func() { stopDaemon(t, daemon, stdout) })
-	awaitReady(t, stdout)
+	t.Cleanup(func() { stopDaemon(t, daemon) })
+	awaitReady(t, ready)
 	root := t.TempDir()
 	before, err := hashedEntries(root)
 	if err != nil {
@@ -138,43 +148,32 @@ func TestSettleInterruptsTheDaemonBeforeKillingIt(t *testing.T) {
 
 const daemonReadyTimeout = 10 * time.Second
 
-func awaitReady(t *testing.T, stdout io.Reader) {
-	t.Helper()
-	type readLine struct {
-		text string
-		err  error
+func awaitReady(tb testing.TB, ready *os.File) {
+	tb.Helper()
+	if err := ready.SetReadDeadline(time.Now().Add(daemonReadyTimeout)); err != nil {
+		tb.Fatal(err)
 	}
-	read := make(chan readLine, 1)
-	go func() {
-		text, err := bufio.NewReader(stdout).ReadString('\n')
-		read <- readLine{text: text, err: err}
-	}()
-	timer := time.NewTimer(daemonReadyTimeout)
-	defer timer.Stop()
-	select {
-	case got := <-read:
-		if got.err != nil || got.text != "ready\n" {
-			t.Fatalf("the daemon did not install its interrupt trap: got %q, %v", got.text, got.err)
-		}
-	case <-timer.C:
-		t.Fatalf("the daemon wrote no ready line within %s, so it did not install its interrupt trap", daemonReadyTimeout)
+	line, err := bufio.NewReader(ready).ReadString('\n')
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		tb.Fatalf("the daemon wrote no ready line within %s, so it did not install its interrupt trap", daemonReadyTimeout)
+	}
+	if err != nil || line != "ready\n" {
+		tb.Fatalf("the daemon did not install its interrupt trap: got %q, %v", line, err)
 	}
 }
 
-func stopDaemon(t *testing.T, daemon *exec.Cmd, stdout io.ReadCloser) {
-	t.Helper()
+func stopDaemon(tb testing.TB, daemon *exec.Cmd) {
+	tb.Helper()
 	if daemon.ProcessState != nil {
 		return
 	}
-	if err := stdout.Close(); err != nil {
-		t.Error(err)
-	}
-	if err := daemon.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
-		t.Error(err)
+	if err := syscall.Kill(-daemon.Process.Pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+		tb.Error(err)
 	}
 	if err := daemon.Wait(); err != nil {
-		if _, killed := errors.AsType[*exec.ExitError](err); !killed {
-			t.Error(err)
+		exit, ok := errors.AsType[*exec.ExitError](err)
+		if !ok || exit.Exited() {
+			tb.Error(err)
 		}
 	}
 }

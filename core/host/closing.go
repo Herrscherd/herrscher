@@ -23,13 +23,13 @@ func logWriteFailure(_ int, err error) {
 	logCleanup(err)
 }
 
-func warnBounded(msg string, args ...any) {
+func warnBounded(warn func()) {
 	budget, stop := writeBudget()
 	defer stop()
 	logged := make(chan struct{})
 	go func() {
 		defer close(logged)
-		slog.Warn(msg, args...)
+		warn()
 	}()
 	select {
 	case <-logged:

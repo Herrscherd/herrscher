@@ -3,6 +3,7 @@ package host
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"sync"
 )
 
@@ -29,7 +30,7 @@ func (p *stderrPort) offer(out io.Writer, text string) <-chan struct{} {
 		p.dropped++
 		p.mu.Unlock()
 		close(written)
-		warnBounded("stderr line offered after the port closed, dropped")
+		warnBounded(func() { slog.Warn("stderr line offered after the port closed, dropped") })
 		return written
 	}
 	if len(p.pending) >= stderrQueueLimit {
@@ -123,6 +124,9 @@ func (h *hub) closeStderr() {
 	defer stop()
 	joined := h.errPort.shutdown(budget)
 	if dropped := h.errPort.droppedCount(); dropped > 0 || !joined {
-		warnBounded("stderr lines were abandoned at shutdown", "note", newHostMessages().text(h.textLanguage()(), "warn.stderr_abandoned", nil), "dropped", dropped, "writer_joined", joined)
+		note := newHostMessages().text(h.textLanguage()(), "warn.stderr_abandoned", nil)
+		warnBounded(func() {
+			slog.Warn("stderr lines were abandoned at shutdown", "note", note, "dropped", dropped, "writer_joined", joined)
+		})
 	}
 }

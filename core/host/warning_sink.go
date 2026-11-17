@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"log/slog"
 	"slices"
 	"sync/atomic"
 	"time"
@@ -364,7 +365,8 @@ func (s *warningSink) Close() {
 	taken := ask(s, s.seal)
 	logNotConfirmed(taken.lost, taken.unconfirmed)
 	if !s.joinLastWrite() {
-		warnBounded("a warning write was still running when Close returned", "note", s.stillRunning())
+		note := s.stillRunning()
+		warnBounded(func() { slog.Warn("a warning write was still running when Close returned", "note", note) })
 	}
 }
 
@@ -450,7 +452,9 @@ func finish(entry *warning, err error) {
 
 func logNotConfirmed(lost, unconfirmed int) {
 	if lost > 0 || unconfirmed > 0 {
-		warnBounded("warnings were not all confirmed when the sink closed", "lost", lost, "unconfirmed", unconfirmed)
+		warnBounded(func() {
+			slog.Warn("warnings were not all confirmed when the sink closed", "lost", lost, "unconfirmed", unconfirmed)
+		})
 	}
 }
 

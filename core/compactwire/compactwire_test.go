@@ -333,8 +333,8 @@ func TestBoundedTextStaysValidUTF8(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecodeNotice: %v", err)
 	}
-	reason, _ := got.Args[0].Value().(string)
-	if !utf8.ValidString(reason) {
+	reason, isText := got.Args[0].Value().(string)
+	if !isText || !utf8.ValidString(reason) {
 		t.Fatalf("bounded reason is not valid UTF-8: %q", reason)
 	}
 }

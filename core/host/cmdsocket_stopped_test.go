@@ -75,7 +75,7 @@ func TestReleaseCommandSocketsWaitsForTheAcceptorToStop(t *testing.T) {
 	select {
 	case <-released:
 		t.Fatal("the release returned while the command listener was still closing")
-	default:
+	case <-time.After(time.Second):
 	}
 	close(listener.gate)
 	select {

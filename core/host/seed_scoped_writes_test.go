@@ -19,6 +19,19 @@ func TestOneShotDoesNotWaitForAnUnrelatedDaemonWrite(t *testing.T) {
 	}
 }
 
+func TestProductionOneShotRouteDoesNotWaitForAnUnrelatedDaemonWrite(t *testing.T) {
+	root := newPersistWrites()
+	end := root.begin()
+	t.Cleanup(end)
+
+	runtime := oneShotSeedRuntimeFrom(t.Context(), newHostMessages(), root)
+	started := time.Now()
+	awaitOneShotWrites(runtime.messages, runtime.persists, io.Discard, testLanguage())
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("the handoff and seed route waited %v for a daemon write it did not start, want none", elapsed)
+	}
+}
+
 func TestOneShotWriteIsSeenByTheDaemonStop(t *testing.T) {
 	shared := newPersistWrites()
 	oneShot := shared.child()

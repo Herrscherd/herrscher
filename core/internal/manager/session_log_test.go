@@ -29,8 +29,8 @@ func seedTranscript(t *testing.T, partDir, name string, entries []state.Transcri
 		}
 	})
 	enc := json.NewEncoder(f)
-	for _, e := range entries {
-		if err := enc.Encode(e); err != nil {
+	for idx := range entries {
+		if err := enc.Encode(entries[idx]); err != nil {
 			t.Fatal(err)
 		}
 	}

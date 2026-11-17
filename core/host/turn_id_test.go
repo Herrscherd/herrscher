@@ -15,6 +15,7 @@ import (
 
 type turnIDPlainGateway struct {
 	fanRecorder
+
 	events []contracts.Event
 }
 
@@ -24,6 +25,7 @@ func (g *turnIDPlainGateway) Emit(e contracts.Event) {
 
 type turnIDRoutedGateway struct {
 	fanRecorder
+
 	events []contracts.Event
 }
 

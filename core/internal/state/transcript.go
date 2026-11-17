@@ -100,8 +100,8 @@ func compactTranscript(path string) {
 		return
 	}
 	writer := bufio.NewWriter(file)
-	for _, e := range all[start:] {
-		payload, err := json.Marshal(e)
+	for idx := range all[start:] {
+		payload, err := json.Marshal(all[start+idx])
 		if err != nil {
 			continue
 		}

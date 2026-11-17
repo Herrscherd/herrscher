@@ -37,7 +37,7 @@ func TestReportErrorPrintsTheFrenchErrorLine(t *testing.T) {
 
 func TestDefaultConfigRendersTheRealGatewaySettingsInFrench(t *testing.T) {
 	t.Setenv("HERRSCHER_LANG", "fr")
-	cfg, err := service.DefaultConfig()
+	cfg, err := service.DefaultConfig(clitext.NewMessages())
 	if err != nil {
 		t.Fatalf("DefaultConfig() with the real plugins: %v", err)
 	}

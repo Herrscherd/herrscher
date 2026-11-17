@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -35,7 +36,7 @@ func TestSessionCreateRollsBackWhenPersistFails(t *testing.T) {
 			wt := &fakeWT{path: t.TempDir(), scratchBase: t.TempDir()}
 			st := unwritableState(t)
 			st.Home = tc.home
-			h := NewHandler(d, sup, wt, &fakeForge{}, &fakeUpdater{}, agent.NewStore(t.TempDir()), st, "claude", t.TempDir(), []string{"chat"}, nil, nil)
+			h := NewHandler(clitext.NewMessages(), d, sup, wt, &fakeForge{}, &fakeUpdater{}, agent.NewStore(t.TempDir()), st, "claude", t.TempDir(), []string{"chat"}, nil, nil)
 
 			if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err == nil {
 				t.Fatal("expected a persist error")

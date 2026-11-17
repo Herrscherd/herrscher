@@ -11,6 +11,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/bridge"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -90,7 +91,7 @@ func TestAFailedSeedTurnReadsInTheOperatorLanguage(t *testing.T) {
 		{i18n.English, "unexpected error: refused by the vendor"},
 		{i18n.French, "erreur inattendue : refused by the vendor"},
 	} {
-		if got := cli.Localize(err, tc.lang).Error(); !strings.Contains(got, tc.want) {
+		if got := cli.Localize(clitext.NewMessages(), err, tc.lang).Error(); !strings.Contains(got, tc.want) {
 			t.Errorf("%s: got %q, want it to contain %q", tc.lang, got, tc.want)
 		}
 	}

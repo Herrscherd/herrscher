@@ -106,9 +106,9 @@ func Text(result contracts.Result, lang i18n.Language) (string, error) {
 
 // Render returns the text of a command outcome in lang: the error rendered in lang when it failed,
 // otherwise the result rendered by Text.
-func Render(res contracts.Result, err error, lang i18n.Language) (string, error) {
+func Render(messages *clitext.Messages, res contracts.Result, err error, lang i18n.Language) (string, error) {
 	if err != nil {
-		return "", Localize(err, lang)
+		return "", Localize(messages, err, lang)
 	}
 	return Text(res, lang)
 }
@@ -407,7 +407,7 @@ func (e renderedError) Error() string { return e.text }
 func (e renderedError) Unwrap() error { return e.err }
 
 // Localize returns err with its notice rendered in lang, or err itself when it carries none.
-func Localize(err error, lang i18n.Language) error {
+func Localize(messages *clitext.Messages, err error, lang i18n.Language) error {
 	if usage, ok := isUsage(err); ok {
 		return localizedUsage(usage, err, lang)
 	}
@@ -415,19 +415,19 @@ func Localize(err error, lang i18n.Language) error {
 	if err == nil || !errors.As(err, &noticed) {
 		return err
 	}
-	text, renderErr := renderNoticeText(noticed.Notice(), orEnglish(lang))
+	text, renderErr := renderNoticeText(messages, noticed.Notice(), orEnglish(lang))
 	if renderErr != nil {
 		return err
 	}
 	return renderedError{text: text, err: err}
 }
 
-func renderNoticeText(notice contracts.Notice, lang i18n.Language) (string, error) {
+func renderNoticeText(messages *clitext.Messages, notice contracts.Notice, lang i18n.Language) (string, error) {
 	text, err := contracts.NewRenderer().Render(lang, notice)
 	if err != nil || notice.Code != contracts.CodeSessionCloseDirty {
 		return text, err
 	}
-	kept, err := clitext.Text(lang, clitext.SessionCloseBranchKept, clitext.Params{clitext.ParamBranch: "session/" + noticeArg(notice, clitext.ParamName)})
+	kept, err := messages.Text(lang, clitext.SessionCloseBranchKept, clitext.Params{clitext.ParamBranch: "session/" + noticeArg(notice, clitext.ParamName)})
 	if err != nil {
 		return "", err
 	}
@@ -452,8 +452,9 @@ func Handler(handle func(context.Context, contracts.Input) (string, error)) func
 
 // Plain renders res or err as the English text a text-only caller expects.
 func Plain(res contracts.Result, err error) (string, error) {
+	messages := clitext.NewMessages()
 	if err != nil {
-		return "", Localize(err, i18n.English)
+		return "", Localize(messages, err, i18n.English)
 	}
 	return Text(res, i18n.English)
 }

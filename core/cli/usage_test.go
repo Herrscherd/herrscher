@@ -17,10 +17,10 @@ func TestUsageErrorsAreRenderedInTheRequestedLanguage(t *testing.T) {
 	if got := err.Error(); got != `unknown command "x"` {
 		t.Fatalf("English rendering %q", got)
 	}
-	if got := Localize(err, i18n.French).Error(); got != `commande inconnue "x"` {
+	if got := Localize(clitext.NewMessages(), err, i18n.French).Error(); got != `commande inconnue "x"` {
 		t.Fatalf("French rendering %q", got)
 	}
-	if !errors.Is(Localize(err, i18n.French), errUnknownCommand) {
+	if !errors.Is(Localize(clitext.NewMessages(), err, i18n.French), errUnknownCommand) {
 		t.Fatal("the localized usage error must keep matching its sentinel")
 	}
 }

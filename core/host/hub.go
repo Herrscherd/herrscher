@@ -114,11 +114,11 @@ func (h *hub) writeStillRunningLine() string {
 }
 
 func (h *hub) operatorCommands() asOperator {
-	return asOperator{disp: h, lang: h.textLanguage()}
+	return asOperator{disp: h, lang: h.textLanguage(), messages: h.cliMessages}
 }
 
 func (h *hub) sessionCommands(name string) asSession {
-	return asSession{disp: h, session: name, lang: h.sessionLanguageSource(name)}
+	return asSession{disp: h, session: name, lang: h.sessionLanguageSource(name), messages: h.cliMessages}
 }
 
 func (h *hub) reportSessionFailure(sess state.Session, stage supervisor.Stage, cause error) {

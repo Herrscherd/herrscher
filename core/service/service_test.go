@@ -727,7 +727,7 @@ func TestBuildUninstallRemovesArtifacts(t *testing.T) {
 }
 
 func TestDefaultConfig(t *testing.T) {
-	c, err := DefaultConfig()
+	c, err := DefaultConfig(clitext.NewMessages())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -803,24 +803,24 @@ func TestRestartCommandsPerOS(t *testing.T) {
 }
 
 func TestValidateSource(t *testing.T) {
-	if err := validateSource(""); err == nil {
+	if err := validateSource(clitext.NewMessages(), ""); err == nil {
 		t.Fatal("empty source must fail")
 	}
 	bare := t.TempDir()
-	if err := validateSource(bare); err == nil {
+	if err := validateSource(clitext.NewMessages(), bare); err == nil {
 		t.Fatal("dir without go.mod must fail")
 	}
 	src := t.TempDir()
 	if err := os.WriteFile(filepath.Join(src, "go.mod"), []byte("module x\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateSource(src); err == nil {
+	if err := validateSource(clitext.NewMessages(), src); err == nil {
 		t.Fatal("dir whose go.mod is not the herrscher module must fail")
 	}
 	if err := os.WriteFile(filepath.Join(src, "go.mod"), []byte("module github.com/Herrscherd/herrscher\n\ngo 1.23\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateSource(src); err != nil {
+	if err := validateSource(clitext.NewMessages(), src); err != nil {
 		t.Fatalf("valid checkout rejected: %v", err)
 	}
 }
@@ -832,13 +832,13 @@ func TestBuildRejectsNonSource(t *testing.T) {
 }
 
 func TestSmokeRejectsBrokenBinary(t *testing.T) {
-	if err := Smoke(context.Background(), ""); err == nil {
+	if err := Smoke(context.Background(), clitext.NewMessages(), ""); err == nil {
 		t.Fatal("Smoke must reject an empty binary path")
 	}
-	if err := Smoke(context.Background(), "/usr/bin/false"); err == nil {
+	if err := Smoke(context.Background(), clitext.NewMessages(), "/usr/bin/false"); err == nil {
 		t.Fatal("Smoke must reject a binary that exits non-zero")
 	}
-	if err := Smoke(context.Background(), "/bin/true"); err != nil {
+	if err := Smoke(context.Background(), clitext.NewMessages(), "/bin/true"); err != nil {
 		t.Skipf("smoke baseline unavailable: %v", err)
 	}
 }
@@ -891,7 +891,7 @@ func TestDefaultConfigRefusesAPluginKeyCollision(t *testing.T) {
 		fakeGateway("alpha", "Bot token", "Jeton du bot"),
 		fakeGateway("beta", "Other token", "Autre jeton"),
 	)
-	_, err := DefaultConfig()
+	_, err := DefaultConfig(clitext.NewMessages())
 	if !errors.Is(err, i18n.ErrDuplicateKey) {
 		t.Fatalf("DefaultConfig() error = %v, want i18n.ErrDuplicateKey", err)
 	}
@@ -906,7 +906,7 @@ func TestDefaultConfigNamesThePluginWithARawHelpKey(t *testing.T) {
 	gamma := fakeGateway("gamma", "Bot token", "Jeton du bot")
 	gamma.Manifest.Config[0].Help = "Bot token raw"
 	registerGatewaySetting(t, gamma)
-	_, err := DefaultConfig()
+	_, err := DefaultConfig(clitext.NewMessages())
 	if !errors.Is(err, clitext.ErrUndeclaredKey) {
 		t.Fatalf("DefaultConfig() error = %v, want clitext.ErrUndeclaredKey", err)
 	}

@@ -335,7 +335,7 @@ func runRegistryVerb(ctx context.Context, layout host.RuntimeLayout, messages *c
 		return err
 	}
 	res, dispatchErr := reg.Dispatch(ctx, append([]string{verb}, args...))
-	out, err := cli.Render(res, dispatchErr, langs.Client)
+	out, err := cli.Render(messages, res, dispatchErr, langs.Client)
 	if err != nil {
 		return err
 	}
@@ -425,7 +425,7 @@ func runPromptWith(ctx context.Context, messages *clitext.Messages, dispatcher v
 				return werr
 			}
 		}
-		localized := cli.Localize(err, lang)
+		localized := cli.Localize(messages, err, lang)
 		return renderError(messages, lang, localized, clitext.ServeSessionFailed, clitext.Params{clitext.ParamName: name, clitext.ParamErr: localized.Error()})
 	}
 	reply, err := cli.Text(res, lang)

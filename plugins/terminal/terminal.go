@@ -684,8 +684,10 @@ func slug(text string) string {
 
 func bestEffort(_ error) {}
 
+var terminalMessages = sync.OnceValue(clitext.NewMessages)
+
 func textResult(res contracts.Result, err error) (string, error) {
-	return cli.Render(res, err, clientLanguage())
+	return cli.Render(terminalMessages(), res, err, clientLanguage())
 }
 
 func terminalFailure(cause error, key clitext.Key, params clitext.Params) error {

@@ -31,7 +31,7 @@ func runService(ctx context.Context, messages *clitext.Messages, args []string) 
 		return unknownSubcommand(messages, lang, sub)
 	}
 
-	cfg, err := service.DefaultConfig()
+	cfg, err := service.DefaultConfig(messages)
 	if err != nil {
 		return err
 	}
@@ -120,7 +120,7 @@ func runServiceUpdate(ctx context.Context, messages *clitext.Messages, cfg servi
 		fmt.Fprintln(os.Stderr, render(messages, lang, clitext.ServiceUpdateRebuilding, clitext.Params{clitext.ParamInstalled: installed, clitext.ParamRan: cfg.BinPath}))
 		cfg.BinPath = installed
 	}
-	if err := service.Update(ctx, cfg, *source, !*noPull); err != nil {
+	if err := service.Update(ctx, messages, cfg, *source, !*noPull); err != nil {
 		return err
 	}
 	v := service.SourceVersion(ctx, *source)

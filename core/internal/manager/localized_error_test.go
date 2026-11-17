@@ -63,7 +63,7 @@ func TestLocalizedErrorsRenderTheirCatalogueTextOnce(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := cli.Localize(tc.err, tc.lang).Error(); got != tc.want {
+			if got := cli.Localize(clitext.NewMessages(), tc.err, tc.lang).Error(); got != tc.want {
 				t.Fatalf("rendered %q, want %q", got, tc.want)
 			}
 		})

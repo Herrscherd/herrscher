@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/runner"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/service"
@@ -82,7 +83,7 @@ func platformFromUname(out string) (string, string, error) {
 	return goos, goarch, nil
 }
 
-func provisionHost(ctx context.Context, messages *hostMessages, run hostRunner, host state.Host, src string) (state.Host, error) {
+func provisionHost(ctx context.Context, messages *hostMessages, cliMessages *clitext.Messages, run hostRunner, host state.Host, src string) (state.Host, error) {
 	if src == "" {
 		return host, &noSourceCheckoutError{Host: host.Name}
 	}
@@ -114,7 +115,7 @@ func provisionHost(ctx context.Context, messages *hostMessages, run hostRunner, 
 	}
 	defer func() { logCleanup(os.RemoveAll(stage)) }()
 	staged := filepath.Join(stage, "herrscher")
-	if err := service.BuildFor(ctx, src, staged, goos, goarch); err != nil {
+	if err := service.BuildFor(ctx, cliMessages, src, staged, goos, goarch); err != nil {
 		return host, err
 	}
 

@@ -10,6 +10,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 const (
@@ -79,7 +80,7 @@ type View struct {
 func (s Snapshot) View(lang i18n.Language) (View, error) {
 	text := &renderer{lang: lang}
 	view := View{
-		Title:  text.key(clitext.HealthBannerTitle, clitext.Params{clitext.ParamVersion: s.Daemon.Version}),
+		Title:  termpaint.Printable(text.key(clitext.HealthBannerTitle, clitext.Params{clitext.ParamVersion: s.Daemon.Version})),
 		Banner: text.key(clitext.HealthBanner, s.bannerParams(text)),
 		Header: strings.Split(text.key(clitext.HealthHeader, nil), "\t"),
 		Counts: s.counts(text),
@@ -93,7 +94,7 @@ func (s Snapshot) View(lang i18n.Language) (View, error) {
 		view.Sections = append(view.Sections, Section{Group: group, Title: s.groupTitle(group, text), Rows: s.rows(checks, text)})
 	}
 	if worst, found := s.worst(); found {
-		view.Worst = worst.Service()
+		view.Worst = termpaint.Printable(worst.Service())
 	}
 	return view, text.err
 }
@@ -126,19 +127,19 @@ func (s Snapshot) row(check Check, text *renderer) Row {
 		State:     report.State,
 		Glyph:     stateGlyph(report.State),
 		StateText: text.key(stateKey(report.State), nil),
-		Name:      checkName(check, text),
-		Account:   accountName(check, text),
+		Name:      termpaint.Printable(checkName(check, text)),
+		Account:   termpaint.Printable(accountName(check, text)),
 		Default:   check.Default,
-		Facts:     s.facts(check, text),
+		Facts:     termpaint.Printable(s.facts(check, text)),
 	}
 	if report.Latency > 0 {
 		row.Latency = text.latency(report.Latency)
 	}
 	if report.Detail.Code != 0 {
-		row.Cause = text.notice(report.Detail)
+		row.Cause = termpaint.Printable(text.notice(report.Detail))
 	}
 	if report.Remedy.Code != 0 {
-		row.Remedy = text.notice(report.Remedy)
+		row.Remedy = termpaint.Printable(text.notice(report.Remedy))
 	}
 	return row
 }
@@ -148,7 +149,8 @@ func (s Snapshot) groupTitle(group Group, text *renderer) string {
 	if group != GroupCompaction || len(s.CompactStack) == 0 {
 		return title
 	}
-	return title + "  " + text.key(clitext.HealthCompactStack, clitext.Params{clitext.ParamStack: strings.Join(s.CompactStack, stackSep)})
+	stack := termpaint.Printable(strings.Join(s.CompactStack, stackSep))
+	return title + "  " + text.key(clitext.HealthCompactStack, clitext.Params{clitext.ParamStack: stack})
 }
 
 func (s Snapshot) bannerParams(text *renderer) clitext.Params {

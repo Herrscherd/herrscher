@@ -1106,6 +1106,20 @@ refused without a reason, as if nobody answered.
 The box is drawn from 60 to 240 columns: below 80 each choice takes two rows.
 The tab carries a `pendingApproval` flag for the rest of the window to mark it.
 
+Each session's approval hook answers with the token the daemon issued to that
+session at launch, sent in the `HERRSCHER_SESSION_TOKEN` variable. The token
+ends with the session's run, so a session recreated under the same name gets a
+new one. A hook that holds no token, or cannot reach a daemon, refuses the tool
+call and says why: it never allows a call it could not check.
+
+Two paths run without a daemon. A `session create` run locally starts a session
+whose children hold no token the daemon issued, so every tool call they make is
+refused by the hook, while text answers still work (`--print` runs this way). A
+`session seed` run locally has no token either, so its tool calls are refused
+too. `approve ask` refuses without a daemon. A seed on a remote backend with a session is refused outright,
+because the remote prompt carries no session identity: its approvals could not
+reach the operator, and they would be skipped without a sign.
+
 ### Using the terminal you are in
 
 Capabilities are probed once at startup, and every feature that has a richer and

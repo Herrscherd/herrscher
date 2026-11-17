@@ -161,6 +161,31 @@ func TestSettleFailsOnALeakAndKillsIt(t *testing.T) {
 	}
 }
 
+func TestSettleInterruptsTheDaemonBeforeKillingIt(t *testing.T) {
+	instance, err := newInstanceID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	daemon := exec.CommandContext(t.Context(), "sh", "-c", "sleep 60 & child=$!; trap 'kill $child; exit 130' INT; wait", "sh", "serve")
+	daemon.Env = []string{instanceEnv + "=" + instance}
+	if startErr := daemon.Start(); startErr != nil {
+		t.Fatal(startErr)
+	}
+	root := t.TempDir()
+	before, err := hashedEntries(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := settle(root, instance, before); err != nil && !errors.Is(err, errStopped) {
+		t.Fatalf("got %v, want the daemon to stop on the interrupt", err)
+	}
+	waitErr := daemon.Wait()
+	exit, ok := errors.AsType[*exec.ExitError](waitErr)
+	if !ok || exit.ExitCode() != 130 {
+		t.Fatalf("daemon: got %v, want it to exit on the interrupt with status 130", waitErr)
+	}
+}
+
 func privateDir(t *testing.T) string {
 	t.Helper()
 	id, err := newInstanceID()

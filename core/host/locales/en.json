@@ -450,6 +450,26 @@
     "other": "refusing archive member {{.Member}}: it lands outside {{.Root}}"
   },
   {
+    "id": "remote.gateway_env_unsupported",
+    "description": "A model needs a gateway spawn environment the remote backend resolver cannot carry, Model names it",
+    "other": "model \"{{.Model}}\" needs a gateway spawn environment, which the remote backend resolver cannot carry; unset HERRSCHER_REMOTE=backend or pick a native model"
+  },
+  {
+    "id": "remote.session_unsupported",
+    "description": "A session cannot run on a remote backend yet, Session names it",
+    "other": "session \"{{.Session}}\" cannot run on a remote backend: its approval identity cannot reach the remote host yet; unset HERRSCHER_REMOTE=backend or drop the session"
+  },
+  {
+    "id": "remote.account_unsupported",
+    "description": "An account cannot be applied on a remote backend, Account names it",
+    "other": "account \"{{.Account}}\" cannot be applied: the backend runs on a remote host, which resolves accounts in its own store; drop the account or unset HERRSCHER_REMOTE=backend"
+  },
+  {
+    "id": "serve.instance_id_mismatch",
+    "description": "The instance id in the state differs from the one requested, Have is the stored one and Want the requested one",
+    "other": "instanceID mismatch: state has \"{{.Have}}\" but \"{{.Want}}\" was requested; changing it would orphan existing sessions"
+  },
+  {
     "id": "remote.stage_agent",
     "description": "An agent cannot be staged for a remote host, Name names the agent and Detail carries the cause",
     "other": "stage agent \"{{.Name}}\": {{.Detail}}"
@@ -663,5 +683,65 @@
     "id": "warn.compactor_port_missing",
     "description": "A backend declares the compactor capability without implementing its port",
     "other": "herrscher serve: backend \"{{.Name}}\" declares Capabilities.Compactor but its instance does not implement the port, its compaction is refused"
+  },
+  {
+    "id": "hook.no_session",
+    "description": "The approval hook refuses a tool call whose process carries no session identity, Variable names the environment variable that is missing",
+    "other": "herrscher: no {{.Variable}} in the environment, so this tool call has no session identity and is refused"
+  },
+  {
+    "id": "hook.no_token",
+    "description": "The approval hook refuses a tool call whose process carries no approval token, so it cannot prove which session it speaks for; Variable names the environment variable that is missing",
+    "other": "herrscher: no {{.Variable}} in the environment, so this tool call cannot prove its session and is refused"
+  },
+  {
+    "id": "approve.ask_unauthenticated",
+    "description": "approve ask refuses a request whose caller does not hold the approval token of the session it names; Name is that session",
+    "other": "herrscher: the caller does not hold the approval token of session {{.Name}}, so it cannot ask for an approval on its behalf"
+  },
+  {
+    "id": "hook.payload_unreadable",
+    "description": "The approval hook refuses a tool call whose payload it cannot parse, Detail carries the parse error",
+    "other": "herrscher: could not read the hook payload, so this tool call is refused: {{.Detail}}"
+  },
+  {
+    "id": "hook.payload_too_large",
+    "description": "The approval hook refuses a tool call whose payload exceeds the size it reads",
+    "other": "herrscher: the hook payload is over the size limit, so this tool call is refused"
+  },
+  {
+    "id": "hook.names_no_tool",
+    "description": "The approval hook refuses a PreToolUse payload that names no tool",
+    "other": "herrscher: the hook payload names no tool, so this tool call is refused"
+  },
+  {
+    "id": "hook.no_daemon",
+    "description": "The approval hook refuses a tool call because no daemon listens on the command socket, Socket names the socket it dialled",
+    "other": "herrscher: no daemon is listening on {{.Socket}}, so this tool call is refused"
+  },
+  {
+    "id": "hook.cancelled",
+    "description": "The approval hook refuses a tool call whose approval was cancelled before the daemon answered",
+    "other": "herrscher: the approval was cancelled before the daemon answered, so this tool call is refused"
+  },
+  {
+    "id": "hook.daemon_failed",
+    "description": "The approval hook refuses a tool call because the daemon returned an error, Detail carries it",
+    "other": "herrscher: the daemon could not answer, so this tool call is refused: {{.Detail}}"
+  },
+  {
+    "id": "hook.answer_unreadable",
+    "description": "The approval hook refuses a tool call whose daemon answer it cannot parse, Answer carries the raw answer",
+    "other": "herrscher: could not read the daemon's answer {{.Answer}}, so this tool call is refused"
+  },
+  {
+    "id": "hook.other_event",
+    "description": "The approval hook allows a payload for another event than PreToolUse, Expected names the event it serves and Event the one it was handed",
+    "other": "herrscher: this hook answers {{.Expected}}, not {{.Event}}, allowing"
+  },
+  {
+    "id": "hook.decision_unwritable",
+    "description": "The approval hook could not write its decision to stdout, Decision names it and Detail carries the error",
+    "other": "herrscher: could not write the {{.Decision}} decision: {{.Detail}}"
   }
 ]

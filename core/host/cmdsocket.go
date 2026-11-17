@@ -27,7 +27,8 @@ type dispatcher interface {
 const defaultCommandReadTimeout = 10 * time.Second
 
 type cmdRequest struct {
-	Argv []string `json:"argv"`
+	Argv  []string `json:"argv"`
+	Token string   `json:"token,omitempty"`
 }
 
 type cmdResponse struct {
@@ -53,7 +54,7 @@ func dispatchLiveCommand(ctx context.Context, layout runtimedir.Layout, path str
 	if deadline, ok := ctx.Deadline(); ok {
 		logCleanup(conn.SetDeadline(deadline))
 	}
-	payload, err := json.Marshal(cmdRequest{Argv: argv})
+	payload, err := json.Marshal(cmdRequest{Argv: argv, Token: callerTokenFrom(ctx)})
 	if err != nil {
 		return "", true, err
 	}
@@ -189,7 +190,7 @@ func handleCommandConn(ctx context.Context, conn net.Conn, disp dispatcher, read
 		msg := "command socket: malformed request"
 		resp.Err = &msg
 	default:
-		out, derr := disp.Dispatch(ctx, req.Argv)
+		out, derr := disp.Dispatch(withCallerToken(ctx, req.Token), req.Argv)
 		if derr != nil {
 			msg := derr.Error()
 			resp.Err = &msg

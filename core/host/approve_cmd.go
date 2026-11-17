@@ -201,6 +201,9 @@ func approveAskVerb(lang languageSource, warn io.Writer, store *state.State, age
 		ValueParam("subject", clitext.CmdParamApproveAskSubject, false).
 		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 			session := strings.TrimSpace(input.Get(paramSession))
+			if !sessions.tokenMatches(session, callerTokenFrom(ctx)) {
+				return contracts.Result{}, wrapHost(errApproveAskUnauthenticated, "approve.ask_unauthenticated", map[string]any{nameParam: session})
+			}
 			req := approval.Request{
 				Tool:    strings.TrimSpace(input.Get("tool")),
 				Subject: input.Get("subject"),

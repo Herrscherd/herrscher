@@ -767,7 +767,6 @@ func (h bridgeHistory) ReadHistory(ctx context.Context) (contracts.History, erro
 	return collector.History()
 }
 
-// PruneHistory sends one frame and never resends it: after a failure past the send, the edits may be applied or not.
 func (h bridgeHistory) PruneHistory(ctx context.Context, edits []contracts.HistoryEdit) (contracts.PruneOutcome, error) {
 	if err := contracts.ValidateHistoryEdits(edits); err != nil {
 		return contracts.PruneOutcome{}, err

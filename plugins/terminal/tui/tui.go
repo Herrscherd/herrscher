@@ -32,6 +32,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/contextwindow"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/skills"
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 // RoutedEvent is a turn event tagged with the conversation (session channel) it
@@ -1182,7 +1183,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.endStream()
 		target.appendEntry(entry{role: roleNotice, text: m.tr.t("tui.render.turn_reset", nil)})
 	case eventwire.EventNotice:
-		target.appendEntry(entry{role: roleNotice, text: event.Text, markdown: true})
+		target.appendEntry(entry{role: roleNotice, text: termpaint.Escape(event.Text).String(), markdown: true})
 	case eventwire.EventCompactionStarted:
 		target.startCompaction(event)
 	case eventwire.EventCompactionDone:

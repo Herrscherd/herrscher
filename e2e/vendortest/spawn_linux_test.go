@@ -6,9 +6,51 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 )
+
+func descendantToken(t *testing.T, child *exec.Cmd) string {
+	t.Helper()
+	for _, entry := range child.Env {
+		if value, found := strings.CutPrefix(entry, DescendantMarker+"="); found {
+			return value
+		}
+	}
+	t.Fatalf("the descendant carries no %s", DescendantMarker)
+	return ""
+}
+
+func TestSpawnGivesEachDescendantItsOwnToken(t *testing.T) {
+	files := scriptFiles(t, "text Voici\n")
+	r := &replay{files: files}
+	t.Cleanup(func() {
+		if stopErr := r.stopDescendants(); stopErr != nil {
+			t.Error(stopErr)
+		}
+	})
+	for range 2 {
+		if err := r.spawn("descendant.pid"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first := descendantToken(t, r.descendants[0])
+	last := descendantToken(t, r.descendants[1])
+	if first == last {
+		t.Fatalf("two descendants of one run share the token %q: a descendant of another scenario would pass as ours", first)
+	}
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(files.Log), "descendant.pid"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) != 2 || fields[0] != strconv.Itoa(r.descendants[1].Process.Pid) || fields[1] != last {
+		t.Fatalf("the pid file %q does not name the last descendant and its token", data)
+	}
+}
 
 func TestOneShotRealPromptConsumesATurn(t *testing.T) {
 	files := scriptFiles(t, "spawn descendant.pid\ntext Voici\n---\ntext second\n")

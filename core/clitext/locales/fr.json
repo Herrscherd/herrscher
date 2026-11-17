@@ -3218,6 +3218,16 @@
     "other": "la file des tours est pleine, la compaction n'a pas été mise en file"
   },
   {
+    "id": "cli.host.fault.warning_abandoned",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (warning abandoned)",
+    "other": "l'écrivain des avertissements est resté bloqué : l'avertissement est perdu"
+  },
+  {
+    "id": "cli.host.fault.warning_late",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (warning late)",
+    "other": "l'écrivain des avertissements est resté bloqué : l'avertissement n'est pas confirmé"
+  },
+  {
     "id": "cli.host.fault.request_name_missing",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (request name missing)",
     "other": "nommez une demande (voir `approve list`)"

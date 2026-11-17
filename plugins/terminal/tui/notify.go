@@ -7,6 +7,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 type notifyMode int
@@ -115,12 +117,6 @@ func (m *model) notifyTurnEnd(target *tab) tea.Cmd {
 	return m.announce(kindTurnEnd, m.st.glyphs.success, m.tr.t("tui.notify.turn_done", nil), target.channel, []string{subject})
 }
 
-func (m *model) notifyApproval(channel, question string) tea.Cmd {
-	info := m.sessionInfo(channel)
-	subject := joinNonEmpty(m.sessionName(channel), info.Vendor, strings.Join(info.Gateways, "+"))
-	return m.announce(kindApproval, m.st.glyphs.attention, m.tr.t("tui.notify.approval_pending", nil), channel, []string{subject, question})
-}
-
 func (m *model) jumpToToast() {
 	channel := m.toast.channel
 	m.toast = toast{}
@@ -131,11 +127,21 @@ func (m *model) announce(kind notifyKind, glyph, title, channel string, body []s
 	if !m.notifyMode.wants(kind) {
 		return nil
 	}
+	title = termpaint.Escape(title).String()
+	body = escapePrintableAll(body)
 	m.toastSeq++
 	m.toast = toast{seq: m.toastSeq, channel: channel, glyph: glyph, title: title, body: body, signal: deliveryLabel(m.tr, m.caps, m.shouldSignal()), at: time.Now()}
 	seq := m.toastSeq
 	expire := tea.Tick(toastTTL, func(time.Time) tea.Msg { return toastExpiredMsg{seq: seq} })
 	return tea.Batch(m.signalCmd(title+": "+joinNonEmpty(body...)), expire, toastTicker(seq))
+}
+
+func escapePrintableAll(texts []string) []string {
+	escaped := make([]string, 0, len(texts))
+	for _, text := range texts {
+		escaped = append(escaped, termpaint.Escape(text).String())
+	}
+	return escaped
 }
 
 func (m *model) signalCmd(text string) tea.Cmd {

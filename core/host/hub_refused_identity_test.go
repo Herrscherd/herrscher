@@ -11,6 +11,12 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
+func journalStartUnderLock(h *hub, name string, err error) {
+	h.lifecycle.Lock()
+	h.journalStart(name, err)
+	h.releaseLifecycle()
+}
+
 func TestARefusalDoesNotCarryOverToAReplacementSession(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	var warnings bytes.Buffer
@@ -19,14 +25,14 @@ func TestARefusalDoesNotCarryOverToAReplacementSession(t *testing.T) {
 	if err := st.AddSession(state.Session{Name: "reused", ChannelID: "c1", Incarnation: "first"}); err != nil {
 		t.Fatal(err)
 	}
-	h.journalStart("reused", startErr)
+	journalStartUnderLock(h, "reused", startErr)
 	if err := st.RemoveSession("reused"); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.AddSession(state.Session{Name: "reused", ChannelID: "c1", Incarnation: "second"}); err != nil {
 		t.Fatal(err)
 	}
-	h.journalStart("reused", startErr)
+	journalStartUnderLock(h, "reused", startErr)
 
 	if got := strings.Count(warnings.String(), "\n"); got != 2 {
 		t.Fatalf("two refusals of two sessions sharing a name wrote %d warnings, want 2:\n%s", got, warnings.String())

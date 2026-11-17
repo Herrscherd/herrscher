@@ -14,6 +14,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/accounts"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/host"
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 const accountArgCount = 3
@@ -85,7 +86,7 @@ func emitf(output io.Writer, format string, values ...any) error {
 }
 
 func writeText(output io.Writer, translator *clitext.Translator, key clitext.Key, params clitext.Params) error {
-	text := translator.Text(key, params)
+	text := translator.Text(key, clitext.Printable(params))
 	if err := translator.Err(); err != nil {
 		return err
 	}
@@ -113,7 +114,7 @@ func listAccounts(ctx context.Context, messages *clitext.Messages, store account
 		if profile.Default {
 			marker = " " + translator.Text(clitext.AccountDefaultMarker, nil)
 		}
-		if err := emitf(output, "%-8s %-10s %s%s\n", profile.Vendor, profile.Name, loginState(ctx, translator, profile.Vendor, env), marker); err != nil {
+		if err := emitf(output, "%-8s %-10s %s%s\n", termpaint.Escape(profile.Vendor).String(), termpaint.Escape(profile.Name).String(), loginState(ctx, translator, profile.Vendor, env), marker); err != nil {
 			return err
 		}
 	}
@@ -175,7 +176,7 @@ func removeAccount(messages *clitext.Messages, store accounts.Store, vendor stri
 	if refuseErr := refuseProfileInUse(messages, vendor, name, users); refuseErr != nil {
 		return refuseErr
 	}
-	prompt := translator.Text(clitext.AccountRemovePrompt, clitext.Params{clitext.ParamVendor: vendor, clitext.ParamName: string(name)})
+	prompt := translator.Text(clitext.AccountRemovePrompt, clitext.Printable(clitext.Params{clitext.ParamVendor: vendor, clitext.ParamName: string(name)}))
 	if textErr := translator.Err(); textErr != nil {
 		return textErr
 	}

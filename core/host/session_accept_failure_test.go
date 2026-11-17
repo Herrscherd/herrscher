@@ -1,7 +1,6 @@
 package host
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -134,8 +133,8 @@ func TestStaleAcceptFailureLeavesTheReplacementLive(t *testing.T) {
 	name := "stale-" + newTurnID()
 	current := make(chan struct{})
 	stale := make(chan struct{})
-	var warnings bytes.Buffer
-	h := &hub{warnings: &warnings, live: map[string]liveSession{name: {done: current, cancel: func() {}, release: func() {}}}}
+	var warnings lockedBuffer
+	h := testHub(&hub{warnings: &warnings, live: map[string]liveSession{name: {done: current, cancel: func() {}, release: func() {}}}})
 
 	h.acceptFailed(name, stale, errTerminalAccept)
 

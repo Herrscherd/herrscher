@@ -34,6 +34,15 @@ func (f *frozenLog) thaw() {
 	f.openOnce.Do(func() { close(f.open) })
 }
 
+func gateUntilCleanup(t *testing.T) (chan struct{}, func()) {
+	t.Helper()
+	gate := make(chan struct{})
+	var once sync.Once
+	open := func() { once.Do(func() { close(gate) }) }
+	t.Cleanup(open)
+	return gate, open
+}
+
 func awaitLogIdle(t *testing.T, log *boundedLog) {
 	t.Helper()
 	if !log.drain(expiresAfter(5 * time.Second)) {
@@ -125,7 +134,7 @@ func TestBoundedLogCountsEveryConcurrentAbandon(t *testing.T) {
 func TestBoundedLogAnnouncesAbandonsOfferedWhileTheAnnouncementIsFrozen(t *testing.T) {
 	frozen := freezeLogOn(t, "abandoned=")
 	var log boundedLog
-	gate := make(chan struct{})
+	gate, openGate := gateUntilCleanup(t)
 	gateEntered := make(chan struct{})
 	log.warn(func() { close(gateEntered); <-gate })
 	awaitBackground(t, gateEntered, "the gate line never reached the log")
@@ -133,7 +142,7 @@ func TestBoundedLogAnnouncesAbandonsOfferedWhileTheAnnouncementIsFrozen(t *testi
 		log.warn(func() { slog.Warn("first line") })
 	}
 	log.warn(func() { slog.Warn("first refused") })
-	close(gate)
+	openGate()
 	awaitBackground(t, frozen.entered, "the abandon announcement never reached the frozen log")
 	for range boundedLogQueue {
 		log.warn(func() { slog.Warn("second line") })
@@ -178,7 +187,7 @@ func TestBoundedLogWritesTheBilanBeforeTheQueuedLines(t *testing.T) {
 func TestBoundedLogKeepsItsSummaryStateBounded(t *testing.T) {
 	logs := captureDefaultLog(t)
 	var log boundedLog
-	gate := make(chan struct{})
+	gate, openGate := gateUntilCleanup(t)
 	gateEntered := make(chan struct{})
 	log.warn(func() { close(gateEntered); <-gate })
 	awaitBackground(t, gateEntered, "the gate line never reached the log")
@@ -193,7 +202,7 @@ func TestBoundedLogKeepsItsSummaryStateBounded(t *testing.T) {
 	if sum != (bilanSum{lost: 500, unconfirmed: 500}) || notes != 1 {
 		t.Fatalf("the pending summaries hold %+v and %d notes, want one sum of 500 and 500 and one note", sum, notes)
 	}
-	close(gate)
+	openGate()
 	awaitLogIdle(t, &log)
 	out := logs.String()
 	if got := strings.Count(out, "not all confirmed"); got != 1 {

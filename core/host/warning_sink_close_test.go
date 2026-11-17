@@ -172,7 +172,7 @@ func TestQueuedBehindAFrozenWriterIsLostAtCloseAndNeverWritten(t *testing.T) {
 	}
 	writer.open()
 	awaitWarning(t, &writer.out, "frozen\n")
-	time.Sleep(100 * time.Millisecond)
+	awaitSinkQuiet(t, sink)
 	if strings.Contains(writer.out.String(), "QUEUEDMSG") {
 		t.Fatalf("a warning counted as lost reached the output: %q", writer.out.String())
 	}
@@ -520,7 +520,7 @@ func TestQueuedBehindAStalledWriterIsLateAndLostAtClose(t *testing.T) {
 	}
 	awaitBackground(t, frozen, "the frozen write did not return")
 	writer.open()
-	time.Sleep(50 * time.Millisecond)
+	awaitSinkQuiet(t, sink)
 	if strings.Contains(writer.out.String(), "QUEUEDMSG") {
 		t.Fatalf("a warning reported as abandoned reached the output: %q", writer.out.String())
 	}

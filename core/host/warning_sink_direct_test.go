@@ -73,7 +73,7 @@ func TestOverrunIsCountedWhenTheWriterStaysFrozenForTheWholeBudget(t *testing.T)
 	}
 	writer.open()
 	awaitWarning(t, &writer.out, "late\n")
-	time.Sleep(100 * time.Millisecond)
+	awaitSinkQuiet(t, sink)
 	if strings.Contains(writer.out.String(), "overrun") {
 		t.Fatalf("an overrun counted as lost reached the output after the writer unblocked: %q", writer.out.String())
 	}
@@ -119,7 +119,7 @@ func TestDirectWriteBehindAStalledSinkNeverWaitsAndIsLostNeverWritten(t *testing
 	}
 	writer.open()
 	awaitWarning(t, &writer.out, "frozen\n")
-	time.Sleep(100 * time.Millisecond)
+	awaitSinkQuiet(t, sink)
 	if out := writer.out.String(); strings.Contains(out, "FIRST") || strings.Contains(out, "SECOND") {
 		t.Fatalf("an announce counted as lost reached the output: %q", out)
 	}

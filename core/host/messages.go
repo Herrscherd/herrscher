@@ -99,42 +99,55 @@ func errorTextIn(messages *hostMessages, lang i18n.Language, err error) string {
 	if err == nil {
 		return ""
 	}
-	english, local, ok := localizedPart(messages, lang, err)
-	if !ok {
+	var node any = err
+	if wrapped, ok := node.(*hostWrapError); ok && wrapped == nil {
+		return ""
+	}
+	if leaf, ok := node.(localizableError); ok {
+		return leaf.render(messages, lang)
+	}
+	if failure, ok := node.(worktree.FailureError); ok {
+		return failure.Text(lang)
+	}
+	if branches, ok := node.(interface{ Unwrap() []error }); ok {
+		return joinedText(messages, lang, branches.Unwrap())
+	}
+	cause := errors.Unwrap(err)
+	if cause == nil {
 		return fmt.Sprint(err)
 	}
-	if isDirectLocalizable(err) {
-		return local
-	}
-	return strings.Replace(fmt.Sprint(err), english, local, 1)
+	return wrappedText(messages, lang, err, cause)
 }
 
-func isDirectLocalizable(err error) bool {
-	if _, found := errors.AsType[localizableError](err); !found {
-		return false
+func joinedText(messages *hostMessages, lang i18n.Language, branches []error) string {
+	parts := make([]string, 0, len(branches))
+	for _, branch := range branches {
+		if branch != nil {
+			parts = append(parts, errorTextIn(messages, lang, branch))
+		}
 	}
-	inner := errors.Unwrap(err)
-	if inner == nil {
+	return strings.Join(parts, "\n")
+}
+
+func wrappedText(messages *hostMessages, lang i18n.Language, err, cause error) string {
+	message := fmt.Sprint(err)
+	english := errorTextIn(messages, i18n.English, cause)
+	local := english
+	if lang != i18n.English {
+		local = errorTextIn(messages, lang, cause)
+	}
+	if strings.HasSuffix(message, english) {
+		return strings.TrimSuffix(message, english) + local
+	}
+	return strings.Replace(message, english, local, 1)
+}
+
+func isLocalized(err error) bool {
+	if _, found := errors.AsType[localizableError](err); found {
 		return true
 	}
-	_, nested := errors.AsType[localizableError](inner)
-	return !nested
-}
-
-func localizedPart(messages *hostMessages, lang i18n.Language, err error) (string, string, bool) {
-	var wrapped *hostWrapError
-	if errors.As(err, &wrapped) && wrapped == nil {
-		return "", "", false
-	}
-	var local localizableError
-	if errors.As(err, &local) {
-		return local.render(messages, i18n.English), local.render(messages, lang), true
-	}
-	var failure worktree.FailureError
-	if errors.As(err, &failure) {
-		return failure.Text(i18n.English), failure.Text(lang), true
-	}
-	return "", "", false
+	_, found := errors.AsType[worktree.FailureError](err)
+	return found
 }
 
 func wrapHost(cause error, key string, params map[string]any) error {

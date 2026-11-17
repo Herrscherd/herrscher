@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 type promptDecider struct {

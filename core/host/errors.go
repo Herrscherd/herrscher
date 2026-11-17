@@ -7,6 +7,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 
 	"github.com/Herrscherd/herrscher/core/internal/authz"
 )
@@ -183,6 +184,16 @@ type contributionClashError struct {
 
 func (e *contributionClashError) Error() string {
 	return fmt.Sprintf("plugin %q contributes %q twice", e.Kind, e.Path)
+}
+
+type pluginKindReservedError struct {
+	Kind string
+}
+
+func (e *pluginKindReservedError) Error() string { return e.render(i18n.English) }
+
+func (e *pluginKindReservedError) render(lang i18n.Language) string {
+	return newHostMessages().text(lang, "plugin.kind_reserved", map[string]any{nameParam: e.Kind})
 }
 
 type daemonNotRunningError struct {

@@ -57,9 +57,9 @@ func (l seedLease) alive() bool {
 	}
 }
 
-func liveSessionAllowed(st *state.State) func(session string) bool {
+func liveSessionAllowed(store *state.State) func(session string) bool {
 	return func(session string) bool {
-		sess, ok := st.FindSession(session)
+		sess, ok := store.FindSession(session)
 		return ok && !sess.Archived
 	}
 }

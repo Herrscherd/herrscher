@@ -525,6 +525,11 @@
     "other": "scheduler tick: {{.Detail}}"
   },
   {
+    "id": "plugin.kind_reserved",
+    "description": "A plugin Kind equal to a core command family is refused at registry construction, Name carries the Kind",
+    "other": "plugin kind {{.Name}} reuses a core command family, so it is refused"
+  },
+  {
     "id": "serve.registry",
     "description": "The command registry cannot be built, Detail carries the cause",
     "other": "build command registry: {{.Detail}}"

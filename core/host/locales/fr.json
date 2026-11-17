@@ -525,6 +525,11 @@
     "other": "cadence du planificateur : {{.Detail}}"
   },
   {
+    "id": "plugin.kind_reserved",
+    "description": "A plugin Kind equal to a core command family is refused at registry construction, Name carries the Kind",
+    "other": "le genre de plugin {{.Name}} reprend une famille de commandes du cœur, il est refusé"
+  },
+  {
     "id": "serve.registry",
     "description": "The command registry cannot be built, Detail carries the cause",
     "other": "construction du registre des commandes impossible : {{.Detail}}"

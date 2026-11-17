@@ -1,6 +1,7 @@
 package termpaint
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -9,10 +10,13 @@ import (
 
 const hexDigits = "0123456789abcdef"
 
+var bidiMarks = []rune{0x061c, 0x200e, 0x200f, 0x2028, 0x2029}
+
 // Printable returns text as a terminal shows it without obeying it: every control
-// character (C0, DEL and C1) is written as its Go escape, so ESC reads \x1b, BEL
-// \a, CR \r, LF \n and U+009B \u009b, and every byte that is not valid UTF-8 reads
-// \xNN. Valid text comes back unchanged.
+// character (C0, DEL and C1) and every bidirectional control (U+202A to U+202E,
+// U+2066 to U+2069, U+200E, U+200F, U+061C, U+2028, U+2029) is written as its Go
+// escape, so ESC reads \x1b, BEL \a, CR \r, LF \n, U+009B \u009b and RLO \u202e,
+// and every byte that is not valid UTF-8 reads \xNN. Valid text comes back unchanged.
 func Printable(text string) string {
 	var out strings.Builder
 	for index := 0; index < len(text); {
@@ -20,7 +24,7 @@ func Printable(text string) string {
 		switch {
 		case char == utf8.RuneError && size == 1:
 			writeByteEscape(&out, text[index])
-		case unicode.IsControl(char):
+		case isEscaped(char):
 			out.WriteString(controlEscape(char))
 		default:
 			out.WriteString(text[index : index+size])
@@ -34,6 +38,14 @@ func writeByteEscape(out *strings.Builder, value byte) {
 	out.WriteString(`\x`)
 	out.WriteByte(hexDigits[value>>4])
 	out.WriteByte(hexDigits[value&0x0f])
+}
+
+func isEscaped(char rune) bool {
+	return unicode.IsControl(char) || isBidiControl(char)
+}
+
+func isBidiControl(char rune) bool {
+	return char >= 0x202a && char <= 0x202e || char >= 0x2066 && char <= 0x2069 || slices.Contains(bidiMarks, char)
 }
 
 func controlEscape(char rune) string {

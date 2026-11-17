@@ -19,7 +19,7 @@ func TestRefusedBridgeLeavesAnAlreadyLiveSessionListening(t *testing.T) {
 	if err := st.AddSession(state.Session{Name: name, ChannelID: "c1"}); err != nil {
 		t.Fatal(err)
 	}
-	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable())
+	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()))
 	h.runtime = layout
 	t.Cleanup(func() { h.goDead(name) })
 	sess := state.Session{Name: name, ChannelID: "c1"}

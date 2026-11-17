@@ -45,11 +45,11 @@ func TestNilWarningsReachStderrWithoutPanicking(t *testing.T) {
 	consolidated := errors.New("probe-consolidate")
 
 	printed := captureProcessStderr(t, func() {
-		warnTo(nil, i18n.English, "warn.health_server", map[string]any{detailParam: "probe-warnto"})
+		warnTo(newHostMessages(), nil, i18n.English, "warn.health_server", map[string]any{detailParam: "probe-warnto"})
 		newApprovalTable(nil).warnf("approvals: probe-warnf\n")
 		warnWaitOutlivesTheHook(nil, agent.HookWait)
-		serveHealth(ctx, "bad addr", health.NewHealth(time.Now()), fixedLanguageSource(i18n.English), nil)
-		consolidateOneShot(ctx, &consolidateSpy{err: consolidated}, newSeedGate("nil-writer", nil, fixedLanguageSource(i18n.English)), state.Session{Name: "nil-writer"}, nil, fixedLanguageSource(i18n.English))
+		serveHealth(ctx, "bad addr", health.NewHealth(time.Now()), newHostMessages(), fixedLanguageSource(i18n.English), nil)
+		consolidateOneShot(ctx, &consolidateSpy{err: consolidated}, newSeedGate(newHostMessages(), "nil-writer", nil, fixedLanguageSource(i18n.English)), state.Session{Name: "nil-writer"}, newHostMessages(), nil, fixedLanguageSource(i18n.English))
 	})
 
 	for _, marker := range []string{"probe-warnto", "approvals: probe-warnf", "approvals: a ", "bad addr", "probe-consolidate"} {

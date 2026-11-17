@@ -34,6 +34,7 @@ const seedTurnTimeout = 120 * time.Second
 const seedJoinGrace = 2 * time.Second
 
 type oneShotSeedRuntime struct {
+	messages        *hostMessages
 	warnings        io.Writer
 	sessionLanguage func(name string) languageSource
 	coordinator     contracts.Coordinator
@@ -65,7 +66,7 @@ func withOneShotSeedRuntime(ctx context.Context, runtime oneShotSeedRuntime) con
 func oneShotSeedRuntimeFrom(ctx context.Context) oneShotSeedRuntime {
 	runtime, ok := ctx.Value(oneShotSeedRuntimeKey{}).(oneShotSeedRuntime)
 	if !ok {
-		return oneShotSeedRuntime{}
+		return oneShotSeedRuntime{messages: newHostMessages()}
 	}
 	return runtime
 }
@@ -115,7 +116,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	defer cancel()
 	toBridge := make(chan contracts.Event, 1)
 	fromBridge := make(chan contracts.Event, bridgeEventBuffer)
-	driver := newSessionDriver(sess.Name, nil, toBridge, fromBridge, runtime.warnings)
+	driver := newSessionDriver(runtime.messages, sess.Name, nil, toBridge, fromBridge, runtime.warnings)
 	driver.incarnation = sess.Incarnation
 	driver.agent = sess.Agent
 	driver.language = func() i18n.Language { return knownSessionLanguage(sess) }
@@ -164,7 +165,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 		}
 		driver.activeTurnID = ""
 	}
-	consolidateOneShot(ctx, orch, gate, sess, runtime.warnings, runtime.languageOf(sess))
+	consolidateOneShot(ctx, orch, gate, sess, runtime.messages, runtime.warnings, runtime.languageOf(sess))
 	return reply, nil
 }
 
@@ -176,7 +177,7 @@ func oneShotTurnTimeout(runtime oneShotSeedRuntime) time.Duration {
 }
 
 func attachOneShotTaps(driver *sessionDriver, sess state.Session, runtime oneShotSeedRuntime) *seedGate {
-	gate := newSeedGate(sess.Name, runtime.warnings, runtime.languageOf(sess))
+	gate := newSeedGate(runtime.messages, sess.Name, runtime.warnings, runtime.languageOf(sess))
 	if runtime.record != nil {
 		driver.sink.Transcript = func(entry state.TranscriptEntry) {
 			gate.admit(lateTranscriptKey, func() { runtime.record(sess.Name, entry) })
@@ -255,7 +256,7 @@ func (r oneShotSeedRuntime) languageOf(sess state.Session) languageSource {
 	return func() i18n.Language { return knownSessionLanguage(sess) }
 }
 
-func consolidateOneShot(ctx context.Context, orch contracts.Orchestrator, gate *seedGate, sess state.Session, warn io.Writer, lang languageSource) {
+func consolidateOneShot(ctx context.Context, orch contracts.Orchestrator, gate *seedGate, sess state.Session, messages *hostMessages, warn io.Writer, lang languageSource) {
 	if orch == nil || sess.ConsolidateEvery > 0 {
 		return
 	}
@@ -265,7 +266,7 @@ func consolidateOneShot(ctx context.Context, orch contracts.Orchestrator, gate *
 	err := orch.Consolidate(consCtx)
 	consCancel()
 	if err != nil {
-		warnTo(warn, lang(), "seed.consolidate", map[string]any{nameParam: sess.Name, "Elapsed": time.Since(started).Round(time.Millisecond).String(), detailParam: fmt.Sprint(err)})
+		warnTo(messages, warn, lang(), "seed.consolidate", map[string]any{nameParam: sess.Name, "Elapsed": time.Since(started).Round(time.Millisecond).String(), detailParam: fmt.Sprint(err)})
 	}
 }
 

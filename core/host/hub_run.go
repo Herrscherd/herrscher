@@ -23,12 +23,13 @@ import (
 // registry by the caller). Command dispatch no longer runs here.
 // Session/service commands run through the operator CLI (see NewRegistry).
 func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, options Options) error {
+	messages := newHostMessages()
 	clock, tick, settingsErr := schedulerSettings()
 	if settingsErr != nil {
 		closeGateways(ctx, closers, obs.Stderr(false))
-		return localizeHostError(options.operatorLanguage(), settingsErr)
+		return localizeHostError(messages, options.operatorLanguage(), settingsErr)
 	}
-	return localizeHostError(options.operatorLanguage(), serveHub(ctx, gws, closers, options, clock, tick))
+	return localizeHostError(messages, options.operatorLanguage(), serveHub(ctx, messages, gws, closers, options, clock, tick))
 }
 
 func (options Options) withDefaultGateways(gws []Deps) Options {
@@ -38,7 +39,7 @@ func (options Options) withDefaultGateways(gws []Deps) Options {
 	return options
 }
 
-func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, options Options, clock func() time.Time, tick time.Duration) error {
+func serveHub(ctx context.Context, messages *hostMessages, gws []Deps, closers []contracts.Gateway, options Options, clock func() time.Time, tick time.Duration) error {
 	base := obs.Stderr(false)
 	defer closeGateways(ctx, closers, base)
 	if options.Runtime.Dir() == "" {
@@ -70,12 +71,12 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 
 	options = options.withDefaultGateways(gws)
 	approvals := newApprovalTable(options.Warnings).withRules(store)
-	sessions := newSessionTable()
+	sessions := newSessionTable(messages)
 	options.health = &healthSource{}
 	options.usage = newUsageSource(partDir)
 	stopUsageWatch := options.usage.startWatch(ctx)
 	defer stopUsageWatch()
-	policy, err := newCompactionPolicy(ctx, options.languageSource(), options.Warnings, options.CompactPercent, options.CompactStack, options.ContextLimits)
+	policy, err := newCompactionPolicy(ctx, messages, options.languageSource(), options.Warnings, options.CompactPercent, options.CompactStack, options.ContextLimits)
 	if err != nil {
 		return wrapHost(err, "serve.compaction", nil)
 	}
@@ -149,7 +150,7 @@ func serveHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, opti
 		log.Info("instance resolved", "instance", instID)
 	}
 	logCompiledPlugins(log)
-	startHubProbes(ctx, gws, options, store, monitor, instID)
+	startHubProbes(ctx, messages, gws, options, store, monitor, instID)
 
 	log.Info("hub up; supervising sessions", "gateways", strings.Join(kindsOf(gws), ","))
 	return awaitHubStop(ctx, runningHub, sup, liveStopped, sockets, log)

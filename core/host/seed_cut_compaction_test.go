@@ -118,13 +118,14 @@ func seedWithHistoryStage(backend contracts.Backend, budget time.Duration, emiss
 }
 
 func seedWithStage(stage contracts.Compactor, backend contracts.Backend, budget time.Duration, emissions *seedEmissions) (string, error) {
-	table := newSessionTable()
+	table := newSessionTable(newHostMessages())
 	policy := compactPolicy(50, "jev")
 	policy.plugins["jev"] = stage
 	policy.historyEditors["claude"] = true
 	policy.limits = contextwindow.NewLimits("1000", nil)
 	table.compaction = policy
 	runtime := oneShotSeedRuntime{
+		messages: newHostMessages(),
 		timeout:  budget,
 		sessions: table,
 		publish:  emissions.record,

@@ -29,7 +29,7 @@ func TestAwaitHubStopDrainsBridgesAfterSessionsStop(t *testing.T) {
 	sockets := make(chan struct{})
 	close(sockets)
 	drainer := &recordingDrainer{called: make(chan struct{}, 4)}
-	runningHub := &hub{runtime: testRuntime(t)}
+	runningHub := &hub{messages: newHostMessages(), runtime: testRuntime(t)}
 
 	returned := make(chan error, 1)
 	go func() {

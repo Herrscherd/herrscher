@@ -24,19 +24,19 @@ func TestTheSameArgvIsRefusedOnOneSocketAndRunOnTheOther(t *testing.T) {
 	}
 	reg := &cli.Registry{}
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable()
-	if approveErr := addApproveCommands(reg, fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); approveErr != nil {
+	sessionTab := newSessionTable(newHostMessages())
+	if approveErr := addApproveCommands(reg, newHostMessages(), fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); approveErr != nil {
 		t.Fatalf("addApproveCommands: %v", approveErr)
 	}
-	h := &hub{warnings: io.Discard, st: st, reg: reg, live: make(map[string]liveSession)}
+	h := &hub{messages: newHostMessages(), warnings: io.Discard, st: st, reg: reg, live: make(map[string]liveSession)}
 
 	dir := t.TempDir()
 	operatorSock := filepath.Join(dir, "op.sock")
 	sessionSock := filepath.Join(dir, "s1.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	serveCommandSocket(ctx, isolatedRuntimeDir(t), operatorSock, asOperator{disp: h, lang: h.textLanguage()}, testLanguage(), io.Discard)
-	serveCommandSocket(ctx, isolatedRuntimeDir(t), sessionSock, asSession{disp: h, session: "s1", lang: h.sessionLanguageSource("s1")}, testLanguage(), io.Discard)
+	serveCommandSocket(ctx, isolatedRuntimeDir(t), operatorSock, asOperator{disp: h, lang: h.textLanguage()}, newHostMessages(), testLanguage(), io.Discard)
+	serveCommandSocket(ctx, isolatedRuntimeDir(t), sessionSock, asSession{disp: h, session: "s1", lang: h.sessionLanguageSource("s1")}, newHostMessages(), testLanguage(), io.Discard)
 
 	argv := []string{"approve", "rule", "allow Bash(*)"}
 
@@ -68,7 +68,7 @@ func TestServedOperatorSocketFollowsTheLiveLanguage(t *testing.T) {
 	if err := addScheduleCommands(reg, live.Get, st, fakeAgents{known: make(map[string]bool)}, &schedulerSlot{}); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
-	h := &hub{warnings: io.Discard, st: st, reg: reg, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)}
+	h := &hub{messages: newHostMessages(), warnings: io.Discard, st: st, reg: reg, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)}
 	layout := isolatedRuntimeDir(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()

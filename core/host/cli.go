@@ -82,10 +82,10 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addScheduleCommands(reg, options.live.Get, hostState, agents, schedSlot); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addHostCommands(reg, options.live.Get, options.Warnings, hostState, options.Runtime); err != nil {
+	if err := addHostCommands(reg, sessions.messages, options.live.Get, options.Warnings, hostState, options.Runtime); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addApproveCommands(reg, options.live.Get, options.Warnings, hostState, agents, approvals, sessions); err != nil {
+	if err := addApproveCommands(reg, sessions.messages, options.live.Get, options.Warnings, hostState, agents, approvals, sessions); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addRoleCommands(reg, options.live.Get, hostState); err != nil {
@@ -97,7 +97,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addPluginVerbs(reg, extra); err != nil {
 		return nil, hostDeps{}, err
 	}
-	localizeCommandErrors(reg, hostState, options.live)
+	localizeCommandErrors(sessions.messages, reg, hostState, options.live)
 	return reg, hostDeps{wt: worktrees, agents: agents, handler: hdl, seedCoord: seedCoord, schedSlot: schedSlot}, nil
 }
 
@@ -133,7 +133,7 @@ func newManagerHandler(deps Deps, options Options, partDir string, hostState *st
 
 func wireManagerHandler(ctx context.Context, lang languageSource, warn io.Writer, hdl *manager.Handler, hostState *state.State, layout RuntimeLayout, instID string, worktrees *worktree.Worktreer, sessions *sessionTable, models *ModelDiscovery) {
 	hdl.SetSeeder(sessions.Seed)
-	hdl.SetHosts(newHostPlacer(lang, warn, hostState, layout, instID, worktrees, func() string { return sourceVersionOf(ctx, hostState) }))
+	hdl.SetHosts(newHostPlacer(sessions.messages, lang, warn, hostState, layout, instID, worktrees, func() string { return sourceVersionOf(ctx, hostState) }))
 	hdl.SetGatewayOnly(func() bool { return ResolvePolicy(envx.Getenv) == contracts.PolicyGatewayOnly })
 	hdl.SetDefaultModel(envx.Getenv(EnvDefaultModel))
 	hdl.SetVendorDefaultModel(func(vendor string) string { return envx.Getenv(VendorDefaultModelEnv(vendor)) })
@@ -197,6 +197,7 @@ func wireSupervisor(sup *supervisor.Supervisor, layout RuntimeLayout, store *sta
 // the home's owner for a normal session, the terminal gateway for a
 // terminal-only one. One set can only ever answer the first.
 func NewRegistry(ctx context.Context, gws []Deps, options Options) (*cli.Registry, error) {
+	messages := newHostMessages()
 	hostState, err := state.LoadState(options.StatePath)
 	if err != nil {
 		return nil, err
@@ -209,7 +210,7 @@ func NewRegistry(ctx context.Context, gws []Deps, options Options) (*cli.Registr
 
 	instID, err := resolveInstanceID(hostState, options.InstanceID, options.Owner, obs.Stderr(false))
 	if err != nil {
-		return nil, localizeHostError(options.operatorLanguage(), err)
+		return nil, localizeHostError(messages, options.operatorLanguage(), err)
 	}
 
 	self, execErr := os.Executable()
@@ -220,7 +221,7 @@ func NewRegistry(ctx context.Context, gws []Deps, options Options) (*cli.Registr
 	if options.DefaultGateways == nil {
 		options.DefaultGateways = nonTerminalKinds(gws)
 	}
-	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, hostState.Home)}, options, hostState, sup, instID, nil, newApprovalTable(options.Warnings), newSessionTable())
+	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, hostState.Home)}, options, hostState, sup, instID, nil, newApprovalTable(options.Warnings), newSessionTable(messages))
 	if err != nil {
 		return nil, err
 	}

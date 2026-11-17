@@ -107,9 +107,9 @@ func cancellationOr(ctx context.Context, err error) error {
 	return err
 }
 
-func serveCommandSocket(ctx context.Context, layout runtimedir.Layout, path string, disp dispatcher, lang languageSource, warn io.Writer) {
+func serveCommandSocket(ctx context.Context, layout runtimedir.Layout, path string, disp dispatcher, messages *hostMessages, lang languageSource, warn io.Writer) {
 	if err := serveCommandSocketWithTimeout(ctx, layout, path, disp, defaultCommandReadTimeout); err != nil {
-		warnLive(warn, lang, "warn.command_socket_listen", map[string]any{pathParam: path, detailParam: err})
+		warnLive(messages, warn, lang, "warn.command_socket_listen", map[string]any{pathParam: path, detailParam: err})
 	}
 }
 

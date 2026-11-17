@@ -47,7 +47,7 @@ func TestTurnSaidOutsideTheBoundChannelsIsNotPostedThere(t *testing.T) {
 		a := &fanRecorder{}
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+		d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		d.channel = "chan-1"
 		tapped, stop := tapping(d)
 		defer stop()
@@ -83,7 +83,7 @@ func TestTurnSaidInABoundChannelIsPostedThere(t *testing.T) {
 		a := &fanRecorder{}
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+		d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		_, stop := tapping(d)
 		defer stop()
 
@@ -105,7 +105,7 @@ func TestTurnSaidInABoundChannelIsPostedThere(t *testing.T) {
 
 func TestSessionSendCarriesTheOriginItWasTypedIn(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	dir := t.TempDir()
@@ -115,7 +115,7 @@ func TestSessionSendCarriesTheOriginItWasTypedIn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := newSessionDriver("s1", nil, nil, nil, io.Discard)
+	d := newSessionDriver(newHostMessages(), "s1", nil, nil, nil, io.Discard)
 	sessionTab.register("s1", d)
 	defer sessionTab.unregister("s1", d)
 
@@ -149,7 +149,7 @@ func TestTurnWithNoOriginIsPostedToTheBoundChannels(t *testing.T) {
 		a := &fanRecorder{}
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+		d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		_, stop := tapping(d)
 		defer stop()
 

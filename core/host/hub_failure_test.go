@@ -15,7 +15,7 @@ import (
 )
 
 func TestSessionFailureNoticeIsWrittenInTheSessionLanguage(t *testing.T) {
-	h := &hub{warnings: io.Discard, lang: i18n.English}
+	h := &hub{messages: newHostMessages(), warnings: io.Discard, lang: i18n.English}
 	var published []contracts.Event
 	h.eventPublisher = func(_ string, event contracts.Event) {
 		published = append(published, event)
@@ -41,7 +41,7 @@ func TestSessionFailureWithoutAnEventSinkIsLogged(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
 	t.Cleanup(func() { slog.SetDefault(saved) })
 
-	h := &hub{warnings: io.Discard, lang: i18n.English}
+	h := &hub{messages: newHostMessages(), warnings: io.Discard, lang: i18n.English}
 	h.reportSessionFailure(state.Session{Name: "revue"}, supervisor.StageLaunch, errors.New("boom"))
 
 	if !strings.Contains(logged.String(), "session failure not published") || !strings.Contains(logged.String(), "revue") {

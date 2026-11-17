@@ -10,7 +10,7 @@ import (
 func TestDriverTakesItsAttachmentAllowlistFromItsGateways(t *testing.T) {
 	a := &fanRecorder{hosts: []string{"cdn.example.test", "media.example.test"}}
 	b := &fanRecorder{}
-	d := newSessionDriver("s1", []contracts.GatewaySet{
+	d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{
 		{Gateway: a, Reader: a}, {Gateway: b, Reader: b},
 	}, nil, nil, io.Discard)
 
@@ -24,7 +24,7 @@ func TestDriverTakesItsAttachmentAllowlistFromItsGateways(t *testing.T) {
 
 func TestDriverWithNoDeclaredHostsAllowsNone(t *testing.T) {
 	a := &fanRecorder{}
-	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, nil, nil, io.Discard)
+	d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, nil, nil, io.Discard)
 	if len(d.attachHosts) != 0 {
 		t.Fatalf("attachHosts = %v, want an empty allowlist", d.attachHosts)
 	}
@@ -32,7 +32,7 @@ func TestDriverWithNoDeclaredHostsAllowsNone(t *testing.T) {
 
 func TestAttachmentHostsAreNormalized(t *testing.T) {
 	a := &fanRecorder{hosts: []string{"  CDN.Example.Test  ", "", "   "}}
-	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, nil, nil, io.Discard)
+	d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, nil, nil, io.Discard)
 	if len(d.attachHosts) != 1 || !d.attachHosts["cdn.example.test"] {
 		t.Fatalf("attachHosts = %v, want one lowercased host", d.attachHosts)
 	}
@@ -40,7 +40,7 @@ func TestAttachmentHostsAreNormalized(t *testing.T) {
 
 func TestAGatewaylessSetIsSkipped(t *testing.T) {
 	a := &fanRecorder{hosts: []string{"cdn.example.test"}}
-	d := newSessionDriver("s1", []contracts.GatewaySet{
+	d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{
 		{Reader: a}, {Gateway: a, Reader: a},
 	}, nil, nil, io.Discard)
 

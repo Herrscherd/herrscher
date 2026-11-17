@@ -17,7 +17,7 @@ func TestAStuckUnderLockStopWarnsOncePerSession(t *testing.T) {
 		st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 		names := []string{"warn-a", "warn-b", "warn-c"}
 		var warnings bytes.Buffer
-		h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(), withWarnings(&warnings))
+		h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()), withWarnings(&warnings))
 		h.runtime = isolatedRuntimeDir(t)
 		h.teardownGrace = reconcileGrace
 		release := make(chan struct{})

@@ -21,7 +21,7 @@ func resumeHubWith(t *testing.T, sess state.Session) (*hub, *state.State) {
 		t.Fatal(err)
 	}
 	answeringListener(t, SessionCommandSocketPathIn(layout, "", sess.Name))
-	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable())
+	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()))
 	h.runtime = layout
 	return h, st
 }

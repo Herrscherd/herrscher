@@ -16,6 +16,7 @@ import (
 )
 
 type hostPlacer struct {
+	messages      *hostMessages
 	lang          languageSource
 	warn          io.Writer
 	st            *state.State
@@ -25,8 +26,9 @@ type hostPlacer struct {
 	newRemote     func(runner.SSH, string) *worktree.Remote
 }
 
-func newHostPlacer(lang languageSource, warn io.Writer, hostState *state.State, layout RuntimeLayout, instanceID string, local *worktree.Worktreer, sourceVersion func() string) hostPlacer {
+func newHostPlacer(messages *hostMessages, lang languageSource, warn io.Writer, hostState *state.State, layout RuntimeLayout, instanceID string, local *worktree.Worktreer, sourceVersion func() string) hostPlacer {
 	return hostPlacer{
+		messages:      messages,
 		lang:          lang,
 		warn:          warn,
 		st:            hostState,
@@ -47,7 +49,7 @@ func (p hostPlacer) resolve(name string) (state.Host, *worktree.Remote, error) {
 	if host.Bin == "" {
 		return state.Host{}, nil, &hostNotProvisionedError{Name: name}
 	}
-	transport, err := sshRunner(p.lang, p.warn, p.layout, host.SSH)
+	transport, err := sshRunner(p.messages, p.lang, p.warn, p.layout, host.SSH)
 	if err != nil {
 		return state.Host{}, nil, err
 	}
@@ -123,7 +125,7 @@ func (p hostPlacer) EnsureProject(ctx context.Context, name, project, repo strin
 	if err != nil {
 		return err
 	}
-	run, err := runnerFor(p.lang, p.warn, p.layout, host)
+	run, err := runnerFor(p.messages, p.lang, p.warn, p.layout, host)
 	if err != nil {
 		return err
 	}

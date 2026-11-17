@@ -12,7 +12,7 @@ import (
 
 func TestReconcileSkipsArchived(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
@@ -43,7 +43,7 @@ func TestReconcileSkipsArchived(t *testing.T) {
 
 func TestReconcileReapsInPlaceArchived(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")

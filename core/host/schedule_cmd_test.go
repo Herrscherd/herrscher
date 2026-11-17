@@ -253,7 +253,7 @@ func TestScheduleRunNeedsALiveDaemon(t *testing.T) {
 
 func TestScheduleVerbsAreInTheRealRegistry(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	dir := t.TempDir()

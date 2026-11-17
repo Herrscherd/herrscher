@@ -185,7 +185,7 @@ func TestRunOneShotSeedWithConsolidatesAndCloses(t *testing.T) {
 
 	sess := state.Session{Name: "solo", ChannelID: "channel"}
 	spy := &seedSpyOrchestrator{}
-	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{backend: backend}); err != nil {
+	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{messages: newHostMessages(), backend: backend}); err != nil {
 		t.Fatalf("runOneShotSeedWith: %v", err)
 	}
 	if !spy.consolidated {
@@ -203,7 +203,7 @@ func TestRunOneShotSeedWithCoordinatesDelegateTrailer(t *testing.T) {
 
 	sess := state.Session{Name: "orchestrator", ChannelID: "channel"}
 	coord := &recordingCoord{}
-	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "délègue", newTurnID(), nil, oneShotSeedRuntime{backend: backend, coordinator: coord}); err != nil {
+	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "délègue", newTurnID(), nil, oneShotSeedRuntime{messages: newHostMessages(), backend: backend, coordinator: coord}); err != nil {
 		t.Fatalf("runOneShotSeedWithIDRuntime: %v", err)
 	}
 	if len(coord.delegates) != 1 {
@@ -231,7 +231,7 @@ func TestRunOneShotSeedCommandForwardsToLiveCoordinator(t *testing.T) {
 
 	got, err := runOneShotSeedCommand(
 		context.Background(), nil, "orchestrator", "lecture seule",
-		"turn-test", oneShotSeedRuntime{}, nil, layout, "instance-test", forward,
+		"turn-test", oneShotSeedRuntime{messages: newHostMessages()}, nil, layout, "instance-test", forward,
 	)
 	if err != nil {
 		t.Fatalf("runOneShotSeedCommand: %v", err)
@@ -319,7 +319,7 @@ func TestASeedKeepsItsReplyWhenConsolidationFails(t *testing.T) {
 
 	sess := state.Session{Name: "solo", ChannelID: "channel"}
 	spy := &consolidateSpy{err: context.DeadlineExceeded}
-	got, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{backend: backend, warnings: io.Discard})
+	got, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{messages: newHostMessages(), backend: backend, warnings: io.Discard})
 	if err != nil {
 		t.Fatalf("runOneShotSeedWith: %v", err)
 	}
@@ -336,7 +336,7 @@ func TestASeedConsolidatesOnItsOwnBudget(t *testing.T) {
 	sess := state.Session{Name: "solo", ChannelID: "channel"}
 	spy := &consolidateSpy{}
 	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy,
-		oneShotSeedRuntime{backend: backend, timeout: 50 * time.Millisecond}); err != nil {
+		oneShotSeedRuntime{messages: newHostMessages(), backend: backend, timeout: 50 * time.Millisecond}); err != nil {
 		t.Fatalf("runOneShotSeedWithIDRuntime: %v", err)
 	}
 	if !spy.called {
@@ -354,7 +354,7 @@ func TestASeedWithACadenceDoesNotConsolidateTwice(t *testing.T) {
 
 	sess := state.Session{Name: "solo", ChannelID: "channel", ConsolidateEvery: 1}
 	spy := &consolidateSpy{}
-	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{backend: backend}); err != nil {
+	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{messages: newHostMessages(), backend: backend}); err != nil {
 		t.Fatalf("runOneShotSeedWith: %v", err)
 	}
 	if spy.called {
@@ -446,7 +446,7 @@ func TestSeedBackendNeverCarriesTheGatewayTokenWithAProxy(t *testing.T) {
 func TestConsolidationFailureIsWarnedInTheSessionLanguage(t *testing.T) {
 	spy := &consolidateSpy{err: errors.New("disque plein")}
 	var printed bytes.Buffer
-	consolidateOneShot(context.Background(), spy, newSeedGate("solo", &printed, fixedLanguageSource(i18n.French)), state.Session{Name: "solo"}, &printed, fixedLanguageSource(i18n.French))
+	consolidateOneShot(context.Background(), spy, newSeedGate(newHostMessages(), "solo", &printed, fixedLanguageSource(i18n.French)), state.Session{Name: "solo"}, newHostMessages(), &printed, fixedLanguageSource(i18n.French))
 	if !spy.called {
 		t.Fatal("consolidation was not attempted")
 	}

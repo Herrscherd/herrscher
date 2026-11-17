@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"strings"
@@ -449,5 +450,28 @@ func TestHostTextFallsBackToEnglishWhenFrenchDoesNotRender(t *testing.T) {
 	}
 	if got := messages.text(i18n.French, "broken", params); got == "broken" || got == "" {
 		t.Fatalf("text of a key that renders in no language = %q, want the render error", got)
+	}
+}
+
+func TestHostCatalogBuildsOncePerOwner(t *testing.T) {
+	builds := 0
+	messages := newHostMessagesFrom(func() (*i18n.Catalog, error) {
+		builds++
+		return buildHostCatalog()
+	})
+	table := newSessionTable(messages)
+	for _, name := range []string{"alpha", "beta", "gamma"} {
+		driver := newSessionDriver(table.messages, name, nil, nil, nil, io.Discard)
+		driver.operator = fixedLanguage(i18n.French)
+		if text := driver.hostText("warn.session_start", map[string]any{nameParam: name}); text == "" {
+			t.Fatalf("session %q rendered an empty warning", name)
+		}
+		warnTo(table.messages, io.Discard, i18n.French, "warn.session_start", map[string]any{nameParam: name, detailParam: errors.New("boom")})
+		if text := localizeHostError(table.messages, i18n.French, wrapHost(errors.New("boom"), "serve.load_state", nil)).Error(); text == "" {
+			t.Fatalf("session %q rendered an empty localized error", name)
+		}
+	}
+	if builds != 1 {
+		t.Fatalf("catalog built %d times across 3 sessions, want 1", builds)
 	}
 }

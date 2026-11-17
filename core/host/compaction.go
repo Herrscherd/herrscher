@@ -111,7 +111,7 @@ type compactionPolicy struct {
 	warn           func(key string, params map[string]any)
 }
 
-func newCompactionPolicy(ctx context.Context, lang languageSource, warn io.Writer, percent *int, names []string, perVendor map[string]int) (compactionPolicy, error) {
+func newCompactionPolicy(ctx context.Context, messages *hostMessages, lang languageSource, warn io.Writer, percent *int, names []string, perVendor map[string]int) (compactionPolicy, error) {
 	policy := compactionPolicy{
 		percent:        defaultCompactPercent,
 		names:          []string{contracts.CompactStageBackend},
@@ -122,7 +122,7 @@ func newCompactionPolicy(ctx context.Context, lang languageSource, warn io.Write
 		warnOnce:       &sync.Once{},
 		historyOnce:    &sync.Once{},
 		warn: func(key string, params map[string]any) {
-			warnLive(warn, lang, key, params)
+			warnLive(messages, warn, lang, key, params)
 		},
 	}
 	if percent != nil {
@@ -703,7 +703,7 @@ func (c bridgeCompactor) Compact(ctx context.Context, req contracts.CompactReque
 func (d *sessionDriver) decodeCompactResult(frame contracts.Event) (contracts.CompactResult, error) {
 	res, err := compactwire.DecodeResult(frame)
 	if errors.Is(err, compactwire.ErrNoticeMalformed) {
-		warnTo(d.warnings, d.textLanguage()(), "warn.session_compaction_notice", map[string]any{nameParam: d.name, detailParam: err})
+		warnTo(d.messages, d.warnings, d.textLanguage()(), "warn.session_compaction_notice", map[string]any{nameParam: d.name, detailParam: err})
 		return res, nil
 	}
 	return res, err

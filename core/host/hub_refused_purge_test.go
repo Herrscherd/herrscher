@@ -13,7 +13,7 @@ import (
 func TestRemovedSessionDropsItsRefusal(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	var warnings bytes.Buffer
-	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(), withWarnings(&warnings))
+	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()), withWarnings(&warnings))
 	for _, name := range []string{"gone", "archived"} {
 		if err := st.AddSession(state.Session{Name: name, ChannelID: "c1", Incarnation: name}); err != nil {
 			t.Fatal(err)

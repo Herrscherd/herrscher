@@ -139,13 +139,13 @@ func (h *hub) journalStart(name string, err error) {
 	switch {
 	case err == nil && refused:
 		delete(h.refused, name)
-		warnLive(h.warnings, lang, "warn.session_start_recovered", map[string]any{nameParam: name})
+		warnLive(h.messages, h.warnings, lang, "warn.session_start_recovered", map[string]any{nameParam: name})
 	case err != nil && !refused:
 		if h.refused == nil {
 			h.refused = make(map[string]string)
 		}
 		h.refused[name] = incarnation
-		warnLive(h.warnings, lang, "warn.session_start", map[string]any{nameParam: name, detailParam: err})
+		warnLive(h.messages, h.warnings, lang, "warn.session_start", map[string]any{nameParam: name, detailParam: err})
 	}
 }
 
@@ -416,7 +416,7 @@ func (h *hub) acceptFailed(name string, done <-chan struct{}, cause error) {
 		return
 	}
 	h.forget(name)
-	warnLive(h.warnings, h.sessionLanguageSource(name), "warn.session_accept_failed", map[string]any{nameParam: name, detailParam: cause})
+	warnLive(h.messages, h.warnings, h.sessionLanguageSource(name), "warn.session_accept_failed", map[string]any{nameParam: name, detailParam: cause})
 }
 
 func (h *hub) retireFailed(name string, done <-chan struct{}) bool {
@@ -456,7 +456,7 @@ func (h *hub) withinGrace(name string, window teardownWindow, step func()) bool 
 }
 
 func (h *hub) warnOverrun(name string) {
-	warnLive(h.warnings, h.sessionLanguageSource(name), "warn.session_teardown_overrun", map[string]any{nameParam: name, graceParam: h.teardownGrace.String()})
+	warnLive(h.messages, h.warnings, h.sessionLanguageSource(name), "warn.session_teardown_overrun", map[string]any{nameParam: name, graceParam: h.teardownGrace.String()})
 }
 
 func (h *hub) dropLocked(name string, only <-chan struct{}) (liveSession, bool) {

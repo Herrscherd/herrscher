@@ -313,9 +313,9 @@ func logCompiledPlugins(log *slog.Logger) {
 	}
 }
 
-func startHubProbes(ctx context.Context, gws []Deps, options Options, store *state.State, monitor *health.Health, instID string) {
+func startHubProbes(ctx context.Context, messages *hostMessages, gws []Deps, options Options, store *state.State, monitor *health.Health, instID string) {
 	if options.HealthAddr != "" {
-		go serveHealth(ctx, options.HealthAddr, monitor, options.languageSource(), options.Warnings)
+		go serveHealth(ctx, options.HealthAddr, monitor, messages, options.languageSource(), options.Warnings)
 	}
 	if pr := firstProber(gws); pr != nil {
 		go pingLoop(ctx, pr, monitor)

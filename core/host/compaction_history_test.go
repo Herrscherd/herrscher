@@ -164,7 +164,7 @@ func TestCompactorStageResolvesItsSettings(t *testing.T) {
 	var keys []string
 	registerSettingsCompactor(t, keyedFactory(&keys))
 	t.Setenv(typesafeEnv, "sk-test")
-	policy, err := newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, []string{"jev", contracts.CompactStageBackend}, nil)
+	policy, err := newCompactionPolicy(context.Background(), newHostMessages(), testLanguage(), io.Discard, nil, []string{"jev", contracts.CompactStageBackend}, nil)
 	if err != nil {
 		t.Fatalf("newCompactionPolicy: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestMissingCompactorSettingRefusesStartup(t *testing.T) {
 	var keys []string
 	registerSettingsCompactor(t, keyedFactory(&keys))
 	t.Setenv(typesafeEnv, "")
-	_, err := newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, []string{"jev", contracts.CompactStageBackend}, nil)
+	_, err := newCompactionPolicy(context.Background(), newHostMessages(), testLanguage(), io.Discard, nil, []string{"jev", contracts.CompactStageBackend}, nil)
 	if !errors.Is(err, errCompactorSettings) {
 		t.Fatalf("newCompactionPolicy = %v, want errCompactorSettings", err)
 	}
@@ -196,7 +196,7 @@ func TestStackWithoutTheCompactorNeedsNoSetting(t *testing.T) {
 	var keys []string
 	registerSettingsCompactor(t, keyedFactory(&keys))
 	t.Setenv(typesafeEnv, "")
-	if _, err := newCompactionPolicy(context.Background(), testLanguage(), io.Discard, nil, nil, nil); err != nil {
+	if _, err := newCompactionPolicy(context.Background(), newHostMessages(), testLanguage(), io.Discard, nil, nil, nil); err != nil {
 		t.Fatalf("newCompactionPolicy without jev in the stack = %v, want a clean start without %s", err, typesafeEnv)
 	}
 	if len(keys) != 0 {

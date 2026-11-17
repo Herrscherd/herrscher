@@ -112,7 +112,7 @@ func TestDriverFanOutToAllBoundGateways(t *testing.T) {
 
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}, {Gateway: b, Reader: b}}, toBridge, fromBridge, io.Discard)
+		d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}, {Gateway: b, Reader: b}}, toBridge, fromBridge, io.Discard)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -146,7 +146,7 @@ func TestDriverPollsSessionChannel(t *testing.T) {
 		a := &fanRecorder{}
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+		d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		d.channel = "sess-chan"
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -184,7 +184,7 @@ func TestDriverDoesNotReplayHistoryWhenCursorInitFails(t *testing.T) {
 		a.feed("marrant tu fonctionne encore?")
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+		d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		d.channel = "sess-chan"
 
 		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
@@ -205,7 +205,7 @@ func TestDriverNonEventSinkPostsOnlyFinalReply(t *testing.T) {
 		a.feed("hello")
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+		d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		go d.run(ctx)
@@ -255,7 +255,7 @@ func TestDriverResolvesAttachmentsOntoInput(t *testing.T) {
 	})
 	toBridge := make(chan contracts.Event, 4)
 	fromBridge := make(chan contracts.Event, 4)
-	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+	d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go d.run(ctx)
@@ -277,7 +277,7 @@ func TestDriverEmitsAbandonedOnHangup(t *testing.T) {
 
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}, {Gateway: rec, Reader: rec}}, toBridge, fromBridge, io.Discard)
+		d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}, {Gateway: rec, Reader: rec}}, toBridge, fromBridge, io.Discard)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -308,7 +308,7 @@ func TestDriverPickForwardsWithoutOpeningTurn(t *testing.T) {
 		a := &fanRecorder{}
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+		d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		go d.run(ctx)
@@ -333,7 +333,7 @@ func TestDriverPickForwardsWithoutOpeningTurn(t *testing.T) {
 
 func TestPickRegistryRoutesToLiveSession(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	a := &fanRecorder{}
 	a.feed("ping")
 	sock := tmpSock(t)
@@ -349,17 +349,17 @@ func TestPickRegistryRoutesToLiveSession(t *testing.T) {
 	c := dialCtl(t, sock)
 	defer closeRead(c)
 	gotInput(t, c, "ping")
-	if !(&hub{warnings: io.Discard, approvals: approvalTab, sessions: sessionTab}).Pick("pickreg", "1") {
+	if !(&hub{messages: newHostMessages(), warnings: io.Discard, approvals: approvalTab, sessions: sessionTab}).Pick("pickreg", "1") {
 		t.Fatal("Pick must route to the session that is serving its control socket")
 	}
-	if (&hub{warnings: io.Discard, approvals: approvalTab, sessions: sessionTab}).Pick("does-not-exist", "1") {
+	if (&hub{messages: newHostMessages(), warnings: io.Discard, approvals: approvalTab, sessions: sessionTab}).Pick("does-not-exist", "1") {
 		t.Fatal("Pick must report false for an unknown session")
 	}
 }
 
 func TestSeedEnqueuesInput(t *testing.T) {
-	sessionTab := newSessionTable()
-	d := newSessionDriver("beta", nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1), io.Discard)
+	sessionTab := newSessionTable(newHostMessages())
+	d := newSessionDriver(newHostMessages(), "beta", nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1), io.Discard)
 	sessionTab.register("beta", d)
 	defer sessionTab.unregister("beta", d)
 
@@ -383,7 +383,7 @@ func TestSeedAndWaitReturnsReply(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		toBridge := make(chan contracts.Event, 8)
 		from := make(chan contracts.Event, 8)
-		d := newSessionDriver("solo", nil, toBridge, from, io.Discard)
+		d := newSessionDriver(newHostMessages(), "solo", nil, toBridge, from, io.Discard)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		go d.pump(ctx)
@@ -403,7 +403,7 @@ func TestSeedAndWaitReturnsReply(t *testing.T) {
 func TestSeedAndWaitAbandonOnCancel(t *testing.T) {
 	toBridge := make(chan contracts.Event, 8)
 	from := make(chan contracts.Event, 8)
-	d := newSessionDriver("solo", nil, toBridge, from, io.Discard)
+	d := newSessionDriver(newHostMessages(), "solo", nil, toBridge, from, io.Discard)
 	ctx, cancel := context.WithCancel(context.Background())
 	go d.pump(ctx)
 	go func() {
@@ -423,7 +423,7 @@ func TestDriverJournalsParticipants(t *testing.T) {
 		journal := filepath.Join(t.TempDir(), "demo.log")
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+		d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		d.participants = journal
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -443,7 +443,7 @@ func TestDriverFIFOSerializesTurns(t *testing.T) {
 		a.feed("second")
 		toBridge := make(chan contracts.Event, 8)
 		fromBridge := make(chan contracts.Event, 8)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+		d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		go d.run(ctx)
@@ -472,7 +472,7 @@ func TestDriverResetMidTurnDoesNotEndTurn(t *testing.T) {
 
 		toBridge := make(chan contracts.Event, 8)
 		fromBridge := make(chan contracts.Event, 8)
-		d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: a, Reader: a}, {Gateway: rec, Reader: rec}}, toBridge, fromBridge, io.Discard)
+		d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}, {Gateway: rec, Reader: rec}}, toBridge, fromBridge, io.Discard)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -515,7 +515,7 @@ func requireSettled(t *testing.T, cond func() bool, what string) {
 }
 
 func TestRunSessionReconnectsAndResumes(t *testing.T) {
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	a := &fanRecorder{}
 	a.feed("q1")
 	sock := tmpSock(t)
@@ -540,7 +540,7 @@ func TestRunSessionReconnectsAndResumes(t *testing.T) {
 }
 
 func TestRunSessionReconnectsAfterCompletedTurn(t *testing.T) {
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	a := &fanRecorder{}
 	a.feed("q1")
 	sock := tmpSock(t)
@@ -608,7 +608,7 @@ func (stopScanError) Error() string { return "stop" }
 
 func TestFanOutPrefersRoutedEventSink(t *testing.T) {
 	rec := &routedRec{}
-	d := newSessionDriver("s1", []contracts.GatewaySet{{Gateway: rec}}, nil, nil, io.Discard)
+	d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: rec}}, nil, nil, io.Discard)
 	d.channel = "chan-1"
 
 	d.fanOut(context.Background(), contracts.Event{T: eventwire.EventChunk, Text: "hi"})
@@ -701,7 +701,7 @@ func (r *recordingCoord) Route(_ context.Context, req contracts.RouteRequest) (s
 
 func TestDriverInvokesCoordinatorOnHandoffTrailer(t *testing.T) {
 	from := make(chan contracts.Event, 2)
-	d := newSessionDriver("alpha", nil, make(chan contracts.Event, 1), from, io.Discard)
+	d := newSessionDriver(newHostMessages(), "alpha", nil, make(chan contracts.Event, 1), from, io.Discard)
 	rc := &recordingCoord{}
 	d.coordinator = rc
 
@@ -723,7 +723,7 @@ func TestDriverInvokesCoordinatorOnHandoffTrailer(t *testing.T) {
 
 func TestDriverNoHandoffWithoutTrailer(t *testing.T) {
 	from := make(chan contracts.Event, 1)
-	d := newSessionDriver("alpha", nil, make(chan contracts.Event, 1), from, io.Discard)
+	d := newSessionDriver(newHostMessages(), "alpha", nil, make(chan contracts.Event, 1), from, io.Discard)
 	rc := &recordingCoord{}
 	d.coordinator = rc
 	from <- contracts.Event{T: eventwire.EventReply, Done: true, Text: "réponse normale"}
@@ -745,7 +745,7 @@ func TestMaybeCoordinateDispatchesByTrailer(t *testing.T) {
 	}
 	for _, tc := range cases {
 		from := make(chan contracts.Event, 1)
-		d := newSessionDriver("sess", nil, make(chan contracts.Event, 1), from, io.Discard)
+		d := newSessionDriver(newHostMessages(), "sess", nil, make(chan contracts.Event, 1), from, io.Discard)
 		rc := &recordingCoord{}
 		d.coordinator = rc
 		d.maybeCoordinate(context.Background(), tc.reply)
@@ -788,7 +788,7 @@ func (e *erroringCoord) Route(context.Context, contracts.RouteRequest) (string, 
 
 func TestTerminalReplyCarriesAcceptedDelegationBeforeSeedRelease(t *testing.T) {
 	from := make(chan contracts.Event, 1)
-	d := newSessionDriver("lead", nil, make(chan contracts.Event, 1), from, io.Discard)
+	d := newSessionDriver(newHostMessages(), "lead", nil, make(chan contracts.Event, 1), from, io.Discard)
 	d.agent = "orchestrator"
 	d.activeTurnID = "turn-user"
 	d.coordinator = &recordingCoord{}
@@ -903,7 +903,7 @@ func (c *terminalCapture) observe(e contracts.Event) {
 func runTerminalReplyCase(t *testing.T, tc terminalReplyCase) {
 	t.Helper()
 	from := make(chan contracts.Event, 1)
-	d := newSessionDriver(tc.session, nil, make(chan contracts.Event, 1), from, io.Discard)
+	d := newSessionDriver(newHostMessages(), tc.session, nil, make(chan contracts.Event, 1), from, io.Discard)
 	d.coordinator = tc.coordinator
 	capture := &terminalCapture{replyCh: make(chan string, 1)}
 	d.emitTap = capture.observe
@@ -980,7 +980,7 @@ func TestCoordinationRefusalStatusUsesStablePublicLabel(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			d := newSessionDriver("worker", nil, nil, nil, io.Discard)
+			d := newSessionDriver(newHostMessages(), "worker", nil, nil, nil, io.Discard)
 			d.operator = fixedLanguageSource(i18n.French)
 			d.coordinator = &erroringCoord{
 				err: errors.New("sensitive " + strings.Repeat("x", 200)),
@@ -1074,7 +1074,7 @@ func requireCoordinatorStatus(t *testing.T, coord contracts.Coordinator, lang i1
 	synctest.Test(t, func(t *testing.T) {
 		rec := &sinkRecorder{}
 		from := make(chan contracts.Event, 2)
-		d := newSessionDriver("alpha", []contracts.GatewaySet{{Gateway: rec}}, make(chan contracts.Event, 1), from, io.Discard)
+		d := newSessionDriver(newHostMessages(), "alpha", []contracts.GatewaySet{{Gateway: rec}}, make(chan contracts.Event, 1), from, io.Discard)
 
 		d.coordinator = coord
 		d.operator = fixedLanguageSource(lang)
@@ -1099,7 +1099,7 @@ func requireCoordinatorStatus(t *testing.T, coord contracts.Coordinator, lang i1
 
 func TestDriverInvokesCoordinatorOnSealTrailer(t *testing.T) {
 	from := make(chan contracts.Event, 2)
-	d := newSessionDriver("lead", nil, make(chan contracts.Event, 1), from, io.Discard)
+	d := newSessionDriver(newHostMessages(), "lead", nil, make(chan contracts.Event, 1), from, io.Discard)
 	rc := &recordingCoord{}
 	d.coordinator = rc
 
@@ -1117,7 +1117,7 @@ func TestDriverInvokesCoordinatorOnSealTrailer(t *testing.T) {
 
 func TestDriverInvokesCoordinatorOnFanOutTrailer(t *testing.T) {
 	from := make(chan contracts.Event, 2)
-	d := newSessionDriver("lead", nil, make(chan contracts.Event, 1), from, io.Discard)
+	d := newSessionDriver(newHostMessages(), "lead", nil, make(chan contracts.Event, 1), from, io.Discard)
 	rc := &recordingCoord{}
 	d.coordinator = rc
 
@@ -1140,7 +1140,7 @@ func TestDriverInvokesCoordinatorOnFanOutTrailer(t *testing.T) {
 
 func TestDriverInvokesCoordinatorOnRouteTrailer(t *testing.T) {
 	rc := &recordingCoord{}
-	d := &sessionDriver{name: "lead", coordinator: rc}
+	d := &sessionDriver{messages: newHostMessages(), name: "lead", coordinator: rc}
 	d.maybeCoordinate(context.Background(), "voici mon plan\n⟢ route: un module réseau")
 	if len(rc.routes) != 1 {
 		t.Fatalf("Route calls = %d, want 1", len(rc.routes))
@@ -1151,8 +1151,8 @@ func TestDriverInvokesCoordinatorOnRouteTrailer(t *testing.T) {
 }
 
 func TestSubmitEnqueuesAnInputFrame(t *testing.T) {
-	sessionTab := newSessionTable()
-	d := newSessionDriver("s1", nil, nil, nil, io.Discard)
+	sessionTab := newSessionTable(newHostMessages())
+	d := newSessionDriver(newHostMessages(), "s1", nil, nil, nil, io.Discard)
 	sessionTab.register("s1", d)
 	defer sessionTab.unregister("s1", d)
 
@@ -1170,16 +1170,16 @@ func TestSubmitEnqueuesAnInputFrame(t *testing.T) {
 }
 
 func TestSubmitOnUnknownSessionReportsFalse(t *testing.T) {
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	if sessionTab.Submit(t.Context(), "nobody-home", contracts.Inbound{Text: "hi"}) {
 		t.Fatal("Submit reported success for an unregistered session")
 	}
 }
 
 func TestSubmitJournalsTheAuthor(t *testing.T) {
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	dir := t.TempDir()
-	d := newSessionDriver("s2", nil, nil, nil, io.Discard)
+	d := newSessionDriver(newHostMessages(), "s2", nil, nil, nil, io.Discard)
 	d.participants = filepath.Join(dir, "participants")
 	sessionTab.register("s2", d)
 	defer sessionTab.unregister("s2", d)

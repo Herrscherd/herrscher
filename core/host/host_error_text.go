@@ -108,16 +108,16 @@ func hostErrorKeys() []hostErrorKey {
 
 // LocalizeError renders err for an operator boundary in lang.
 func LocalizeError(lang i18n.Language, err error) error {
-	return localizeHostError(lang, err)
+	return localizeHostError(newHostMessages(), lang, err)
 }
 
-func localizeHostError(lang i18n.Language, err error) error {
+func localizeHostError(messages *hostMessages, lang i18n.Language, err error) error {
 	if err == nil {
 		return nil
 	}
 	resolved := i18n.Resolve(lang)
-	text := errorTextIn(resolved, err)
-	_, _, isLocal := localizedPart(resolved, err)
+	text := errorTextIn(messages, resolved, err)
+	_, _, isLocal := localizedPart(messages, resolved, err)
 	translated := false
 	for _, known := range hostErrorKeys() {
 		if !errors.Is(err, known.sentinel) {
@@ -136,11 +136,11 @@ func localizeHostError(lang i18n.Language, err error) error {
 	return localizedHostError{text: text, cause: err}
 }
 
-func localizeCommandErrors(reg *cli.Registry, store *state.State, live *operatorLanguage) {
+func localizeCommandErrors(messages *hostMessages, reg *cli.Registry, store *state.State, live *operatorLanguage) {
 	reg.Intercept(nil, func(_ contracts.Cmd, next cli.Runner) cli.Runner {
 		return func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 			res, err := next(ctx, input)
-			return res, localizeHostError(commandErrorLanguage(store, live.Get(), input), err)
+			return res, localizeHostError(messages, commandErrorLanguage(store, live.Get(), input), err)
 		}
 	})
 }

@@ -74,11 +74,11 @@ func newApprovalRegistry(t *testing.T, approvalTab *approvalTable, menus *menuRe
 	if err := st.AddApprovalRule("ask Bash(git push*)"); err != nil {
 		t.Fatalf("AddApprovalRule: %v", err)
 	}
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	t.Setenv(TokenVar, sessionTab.issueToken("s1"))
-	sessionTab.register("s1", newSessionDriver("s1", []contracts.GatewaySet{{Gateway: menus, Reader: menus}}, nil, nil, io.Discard))
+	sessionTab.register("s1", newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: menus, Reader: menus}}, nil, nil, io.Discard))
 	reg := &cli.Registry{}
-	if err := addApproveCommands(reg, fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); err != nil {
+	if err := addApproveCommands(reg, newHostMessages(), fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); err != nil {
 		t.Fatalf("addApproveCommands: %v", err)
 	}
 	return reg
@@ -87,7 +87,7 @@ func newApprovalRegistry(t *testing.T, approvalTab *approvalTable, menus *menuRe
 func startApprovalSocket(ctx context.Context, t *testing.T, reg *cli.Registry) string {
 	t.Helper()
 	sock := filepath.Join(t.TempDir(), "cmd.sock")
-	serveCommandSocket(ctx, isolatedRuntimeDir(t), sock, textDispatch(reg), testLanguage(), io.Discard)
+	serveCommandSocket(ctx, isolatedRuntimeDir(t), sock, textDispatch(reg), newHostMessages(), testLanguage(), io.Discard)
 	return sock
 }
 

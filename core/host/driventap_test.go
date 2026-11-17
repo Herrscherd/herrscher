@@ -26,7 +26,7 @@ func TestEventTapAddressesTheSession(t *testing.T) {
 
 func TestDrivenSessionTapsTheEventSocket(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	const name = "driventap-test"

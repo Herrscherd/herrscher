@@ -11,11 +11,11 @@ type gatewayEnvUnsupportedError struct {
 }
 
 func (e *gatewayEnvUnsupportedError) Error() string {
-	return e.render(i18n.English)
+	return e.render(newHostMessages(), i18n.English)
 }
 
-func (e *gatewayEnvUnsupportedError) render(lang i18n.Language) string {
-	return newHostMessages().text(lang, "remote.gateway_env_unsupported", map[string]any{modelParam: e.Model})
+func (e *gatewayEnvUnsupportedError) render(m *hostMessages, lang i18n.Language) string {
+	return m.text(lang, "remote.gateway_env_unsupported", map[string]any{modelParam: e.Model})
 }
 
 type hostNeedsSSHError struct {
@@ -187,11 +187,11 @@ type unsafeTarMemberError struct {
 }
 
 func (e *unsafeTarMemberError) Error() string {
-	return e.render(i18n.English)
+	return e.render(newHostMessages(), i18n.English)
 }
 
-func (e *unsafeTarMemberError) render(lang i18n.Language) string {
-	return newHostMessages().text(lang, "remote.unsafe_member", map[string]any{"Member": e.Member, "Root": e.Root})
+func (e *unsafeTarMemberError) render(m *hostMessages, lang i18n.Language) string {
+	return m.text(lang, "remote.unsafe_member", map[string]any{"Member": e.Member, "Root": e.Root})
 }
 
 type noRemoteBackendError struct {
@@ -208,11 +208,11 @@ type instanceIDMismatchError struct {
 }
 
 func (e *instanceIDMismatchError) Error() string {
-	return e.render(i18n.English)
+	return e.render(newHostMessages(), i18n.English)
 }
 
-func (e *instanceIDMismatchError) render(lang i18n.Language) string {
-	return newHostMessages().text(lang, "serve.instance_id_mismatch", map[string]any{"Have": e.Have, "Want": e.Want})
+func (e *instanceIDMismatchError) render(m *hostMessages, lang i18n.Language) string {
+	return m.text(lang, "serve.instance_id_mismatch", map[string]any{"Have": e.Have, "Want": e.Want})
 }
 
 type remoteSessionError struct {
@@ -220,11 +220,11 @@ type remoteSessionError struct {
 }
 
 func (e *remoteSessionError) Error() string {
-	return e.render(i18n.English)
+	return e.render(newHostMessages(), i18n.English)
 }
 
-func (e *remoteSessionError) render(lang i18n.Language) string {
-	return newHostMessages().text(lang, "remote.session_unsupported", map[string]any{"Session": e.Session})
+func (e *remoteSessionError) render(m *hostMessages, lang i18n.Language) string {
+	return m.text(lang, "remote.session_unsupported", map[string]any{"Session": e.Session})
 }
 
 type remoteAccountError struct {
@@ -232,9 +232,9 @@ type remoteAccountError struct {
 }
 
 func (e *remoteAccountError) Error() string {
-	return e.render(i18n.English)
+	return e.render(newHostMessages(), i18n.English)
 }
 
-func (e *remoteAccountError) render(lang i18n.Language) string {
-	return newHostMessages().text(lang, "remote.account_unsupported", map[string]any{"Account": e.Account})
+func (e *remoteAccountError) render(m *hostMessages, lang i18n.Language) string {
+	return m.text(lang, "remote.account_unsupported", map[string]any{"Account": e.Account})
 }

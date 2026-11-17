@@ -18,7 +18,7 @@ func newMarkHub(t *testing.T, partDir string, sess state.Session) (*hub, *state.
 	if err := st.AddSession(sess); err != nil {
 		t.Fatal(err)
 	}
-	return &hub{warnings: io.Discard, st: st, partDir: partDir, live: make(map[string]liveSession)}, st
+	return &hub{messages: newHostMessages(), warnings: io.Discard, st: st, partDir: partDir, live: make(map[string]liveSession)}, st
 }
 
 func TestAnnounceInterruptedTurnAppendsNoticeAndClearsMark(t *testing.T) {
@@ -65,7 +65,7 @@ func TestRestartWithResumeDoesNotAnnounceTheMarkOfTheOldConversation(t *testing.
 		t.Fatal(err)
 	}
 	partDir := t.TempDir()
-	h := newHub(st, nil, nil, partDir, nil, nil, newApprovalTable(io.Discard), newSessionTable(), withWarnings(io.Discard))
+	h := newHub(st, nil, nil, partDir, nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()), withWarnings(io.Discard))
 	h.runtime = isolatedRuntimeDir(t)
 	h.startBridge = func(state.Session, time.Duration) error { return nil }
 
@@ -102,7 +102,7 @@ func stateFailingAfter(t *testing.T, sess state.Session) *state.State {
 
 func hubWarningInto(t *testing.T, st *state.State, partDir string, warnings *bytes.Buffer) *hub {
 	t.Helper()
-	h := newHub(st, nil, nil, partDir, nil, nil, newApprovalTable(io.Discard), newSessionTable(), withWarnings(warnings))
+	h := newHub(st, nil, nil, partDir, nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()), withWarnings(warnings))
 	h.runtime = isolatedRuntimeDir(t)
 	h.startBridge = func(state.Session, time.Duration) error { return nil }
 	return h

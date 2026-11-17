@@ -14,7 +14,7 @@ func placerWith(t *testing.T, h state.Host, sourceVersion string) hostPlacer {
 	if err := st.PutHost(h); err != nil {
 		t.Fatal(err)
 	}
-	return newHostPlacer(testLanguage(), io.Discard, st, testRuntime(t), "inst", nil, func() string { return sourceVersion })
+	return newHostPlacer(newHostMessages(), newHostMessages(), testLanguage(), io.Discard, st, testRuntime(t), "inst", nil, func() string { return sourceVersion })
 }
 
 func TestPlacerLocalNeedsNoRecord(t *testing.T) {

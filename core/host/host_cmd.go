@@ -15,28 +15,28 @@ import (
 	"github.com/Herrscherd/herrscher/core/service"
 )
 
-func addHostCommands(reg *cli.Registry, lang languageSource, warn io.Writer, hostState *state.State, layout RuntimeLayout) error {
+func addHostCommands(reg *cli.Registry, messages *hostMessages, lang languageSource, warn io.Writer, hostState *state.State, layout RuntimeLayout) error {
 	return addVerbs(reg,
-		hostAddVerb(lang, warn, hostState, layout),
+		hostAddVerb(messages, lang, warn, hostState, layout),
 		hostListVerb(hostState),
-		hostCheckVerb(lang, warn, hostState, layout),
-		hostProvisionVerb(lang, warn, hostState, layout),
+		hostCheckVerb(messages, lang, warn, hostState, layout),
+		hostProvisionVerb(messages, lang, warn, hostState, layout),
 		hostRmVerb(hostState),
 	)
 }
 
-func hostAddVerb(lang languageSource, warn io.Writer, store *state.State, layout RuntimeLayout) contracts.Cmd {
+func hostAddVerb(messages *hostMessages, lang languageSource, warn io.Writer, store *state.State, layout RuntimeLayout) contracts.Cmd {
 	return contracts.New("host", "add").
 		Help(clitext.CmdHelpHostAdd).
 		ValueParam(paramName, clitext.CmdParamHostAddName, false).
 		Param("ssh", clitext.CmdParamHostAddSSH, true).
 		Param("workspace", clitext.CmdParamHostAddWorkspace, true).
 		Do(func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(addHost(ctx, lang, warn, layout, store, in))
+			return cli.Data(addHost(ctx, messages, lang, warn, layout, store, in))
 		})
 }
 
-func addHost(ctx context.Context, lang languageSource, warn io.Writer, layout RuntimeLayout, hostState *state.State, input contracts.Input) (string, error) {
+func addHost(ctx context.Context, messages *hostMessages, lang languageSource, warn io.Writer, layout RuntimeLayout, hostState *state.State, input contracts.Input) (string, error) {
 	host := state.Host{
 		Name:      hostNameOf(input),
 		SSH:       strings.TrimSpace(input.Get("ssh")),
@@ -45,7 +45,7 @@ func addHost(ctx context.Context, lang languageSource, warn io.Writer, layout Ru
 	if err := checkNewHost(hostState, host); err != nil {
 		return "", err
 	}
-	run, err := runnerFor(lang, warn, layout, host)
+	run, err := runnerFor(messages, lang, warn, layout, host)
 	if err != nil {
 		return "", err
 	}
@@ -102,22 +102,22 @@ func listHosts(st *state.State, asJSON bool) (string, error) {
 	return strings.TrimRight(body.String(), "\n"), nil
 }
 
-func hostCheckVerb(lang languageSource, warn io.Writer, store *state.State, layout RuntimeLayout) contracts.Cmd {
+func hostCheckVerb(messages *hostMessages, lang languageSource, warn io.Writer, store *state.State, layout RuntimeLayout) contracts.Cmd {
 	return contracts.New("host", "check").
 		Help(clitext.CmdHelpHostCheck).
 		ValueParam(paramName, clitext.CmdParamHostCheckName, false).
 		Do(func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(checkRegisteredHost(ctx, lang, warn, layout, store, in))
+			return cli.Data(checkRegisteredHost(ctx, messages, lang, warn, layout, store, in))
 		})
 }
 
-func checkRegisteredHost(ctx context.Context, lang languageSource, warn io.Writer, layout RuntimeLayout, store *state.State, input contracts.Input) (string, error) {
+func checkRegisteredHost(ctx context.Context, messages *hostMessages, lang languageSource, warn io.Writer, layout RuntimeLayout, store *state.State, input contracts.Input) (string, error) {
 	name := hostNameOf(input)
 	host, ok := store.FindHost(name)
 	if !ok {
 		return "", unknownHost(store, name)
 	}
-	run, err := runnerFor(lang, warn, layout, host)
+	run, err := runnerFor(messages, lang, warn, layout, host)
 	if err != nil {
 		return "", err
 	}
@@ -142,22 +142,22 @@ func formatHostReport(rep hostReport) string {
 	return body.String()
 }
 
-func hostProvisionVerb(lang languageSource, warn io.Writer, store *state.State, layout RuntimeLayout) contracts.Cmd {
+func hostProvisionVerb(messages *hostMessages, lang languageSource, warn io.Writer, store *state.State, layout RuntimeLayout) contracts.Cmd {
 	return contracts.New("host", "provision").
 		Help(clitext.CmdHelpHostProvision).
 		ValueParam(paramName, clitext.CmdParamHostProvisionName, false).
 		Do(func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(provisionRegisteredHost(ctx, lang, warn, layout, store, in))
+			return cli.Data(provisionRegisteredHost(ctx, messages, lang, warn, layout, store, in))
 		})
 }
 
-func provisionRegisteredHost(ctx context.Context, lang languageSource, warn io.Writer, layout RuntimeLayout, store *state.State, in contracts.Input) (string, error) {
+func provisionRegisteredHost(ctx context.Context, messages *hostMessages, lang languageSource, warn io.Writer, layout RuntimeLayout, store *state.State, in contracts.Input) (string, error) {
 	name := hostNameOf(in)
 	host, ok := store.FindHost(name)
 	if !ok {
 		return "", unknownHost(store, name)
 	}
-	run, err := runnerFor(lang, warn, layout, host)
+	run, err := runnerFor(messages, lang, warn, layout, host)
 	if err != nil {
 		return "", err
 	}

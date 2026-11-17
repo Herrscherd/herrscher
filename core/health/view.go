@@ -78,6 +78,11 @@ type View struct {
 // fails.
 func (s Snapshot) View(lang i18n.Language) (View, error) {
 	text := newRenderer(lang)
+	view := s.view(text)
+	return view, text.err
+}
+
+func (s Snapshot) view(text *renderer) View {
 	view := View{
 		Title:  text.key(clitext.HealthBannerTitle, clitext.Params{clitext.ParamVersion: s.Daemon.Version}),
 		Banner: text.key(clitext.HealthBanner, s.bannerParams(text)),
@@ -95,7 +100,7 @@ func (s Snapshot) View(lang i18n.Language) (View, error) {
 	if worst, found := s.worst(); found {
 		view.Worst = worst.Service()
 	}
-	return view, text.err
+	return view
 }
 
 // Rows renders checks in lang, one row each, in the order given.

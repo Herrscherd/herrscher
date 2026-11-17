@@ -28,9 +28,10 @@ const (
 // state and names the worst one when something fails. pal paints each part; the
 // zero Palette writes plain text with the same alignment.
 func (s Snapshot) Table(writer io.Writer, lang i18n.Language, pal termpaint.Palette) error {
-	view, err := s.View(lang)
-	if err != nil {
-		return err
+	text := newRenderer(lang)
+	view := s.view(text)
+	if text.err != nil {
+		return text.err
 	}
 	out := &lineWriter{writer: writer}
 	out.line(termpaint.Paint(pal.Strong, view.Title) + " " + termpaint.Paint(pal.Dim, view.Banner))
@@ -56,11 +57,8 @@ func (s Snapshot) Table(writer io.Writer, lang i18n.Language, pal termpaint.Pale
 // latency and the facts of each one, then its state, cause and remedy on aligned
 // rows.
 func (s Snapshot) Details(writer io.Writer, checks []Check, lang i18n.Language, pal termpaint.Palette) error {
-	rows, err := s.Rows(checks, lang)
-	if err != nil {
-		return err
-	}
 	text := newRenderer(lang)
+	rows := s.rows(checks, text)
 	labels := [...]string{
 		text.key(clitext.HealthDetailState, nil),
 		text.key(clitext.HealthDetailCause, nil),

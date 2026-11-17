@@ -6,7 +6,16 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
+
+func TestNoticeKeepsAnErrorTheRendererReturnsForAnUnsupportedLanguage(t *testing.T) {
+	r := newRenderer(i18n.Language(200))
+	r.notice(contracts.Notice{Code: contracts.CodeSettingInvalid, Args: []contracts.Arg{contracts.Text("Setting", "compactAt"), contracts.Text("Value", "x")}})
+	if !errors.Is(r.err, i18n.ErrUnsupportedLanguage) {
+		t.Fatalf("notice() error = %v, want ErrUnsupportedLanguage kept", r.err)
+	}
+}
 
 func TestFallsBackToArgumentsOnlyOnAMismatchedNotice(t *testing.T) {
 	cases := []struct {

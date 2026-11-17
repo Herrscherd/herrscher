@@ -191,13 +191,11 @@ func TestEveryInFlightWriteIsJoinedBeforeCloseReturns(t *testing.T) {
 	writer := newFirstWriteRefused()
 	t.Cleanup(writer.unblock)
 	var sink *warningSink
+	var afterErr error
 	logs := captureDefaultLog(t, func(line string) {
 		if strings.Contains(line, "not all confirmed") && logField(line, "unconfirmed") == "1" {
-			_ = sink.Enqueue([]byte("AFTER\n"))
+			_, afterErr = sink.Write([]byte("AFTER\n"))
 			writer.unblock()
-			waitUntil(t, "the warning queued after the bilan to be written", func() bool {
-				return strings.Contains(writer.out.String(), "AFTER")
-			})
 			return
 		}
 		if strings.Contains(line, "not all confirmed") {
@@ -208,9 +206,49 @@ func TestEveryInFlightWriteIsJoinedBeforeCloseReturns(t *testing.T) {
 	_ = sink.Enqueue([]byte("INFLIGHT\n"))
 	awaitBackground(t, writer.entered, "the warning was never handed to the writer")
 	sink.Close()
+	if !errors.Is(afterErr, errWarningAbandoned) {
+		t.Fatalf("a write admitted after the bilan returned %v, want errWarningAbandoned", afterErr)
+	}
 	lines := notConfirmedLines(logs.String())
-	if len(lines) != 2 || logField(lines[0], "unconfirmed") != "1" || logField(lines[1], "lost") != "1" || logField(lines[1], "unconfirmed") != "0" {
-		t.Fatalf("Close logged %q, want the bilan (unconfirmed=1) then the delta of the older write (lost=1 unconfirmed=0) before it returned: the newer write started during the join must not hide the older one", lines)
+	if len(lines) != 3 || logField(lines[0], "unconfirmed") != "1" || logField(lines[1], "lost") != "1" || logField(lines[1], "unconfirmed") != "0" || logField(lines[2], "lost") != "1" || logField(lines[2], "unconfirmed") != "0" {
+		t.Fatalf("Close logged %q, want the bilan (unconfirmed=1), then the refused write (lost=1 unconfirmed=0), then the delta of the older write (lost=1 unconfirmed=0), all before it returned", lines)
+	}
+	if strings.Contains(writer.out.String(), "AFTER") {
+		t.Fatalf("a write refused after the bilan reached the output: %q", writer.out.String())
+	}
+}
+
+func TestEntryAdmittedWhileCloseWaitsIsCountedOnceByTheBilan(t *testing.T) {
+	logs := captureDefaultLog(t)
+	writer := newGatedWarnings("frozen")
+	t.Cleanup(writer.open)
+	sink := newWarningSink(writer, englishLostLine)
+	_ = sink.Enqueue([]byte("frozen\n"))
+	awaitGatedWrite(t, writer)
+
+	closed := runInBackground(sink.Close)
+	waitUntil(t, "Close to begin while the frozen write is in flight", func() bool { return isClosing(sink) })
+	queued := sink.Enqueue([]byte("QUEUEDMSG\n"))
+	if err := queued(time.After(5 * time.Second)); !errors.Is(err, errWarningAbandoned) {
+		t.Fatalf("an entry admitted while Close waited returned %v, want errWarningAbandoned once the bilan sealed", err)
+	}
+	awaitBackground(t, closed, "Close did not return")
+
+	lines := notConfirmedLines(logs.String())
+	if len(lines) != 1 || logField(lines[0], "lost") != "1" || logField(lines[0], "unconfirmed") != "1" {
+		t.Fatalf("Close logged %q, want exactly one bilan with lost=1 unconfirmed=1: the entry is counted once, by the bilan, and the frozen write is unconfirmed", lines)
+	}
+	if got := droppedWarnings(sink); got != 1 {
+		t.Fatalf("dropped = %d, want 1: the entry admitted between closed and sealed is lost once", got)
+	}
+	writer.open()
+	awaitWarning(t, &writer.out, "frozen\n")
+	time.Sleep(50 * time.Millisecond)
+	if strings.Contains(writer.out.String(), "QUEUEDMSG") {
+		t.Fatalf("an entry counted as lost by the bilan reached the output: %q", writer.out.String())
+	}
+	if lines := notConfirmedLines(logs.String()); len(lines) != 1 {
+		t.Fatalf("a second line appeared after the writer settled: %q, want the bilan alone", lines)
 	}
 }
 

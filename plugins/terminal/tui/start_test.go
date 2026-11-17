@@ -2,11 +2,11 @@ package tui
 
 import (
 	"go/ast"
-	gobuild "go/build"
 	"go/parser"
 	"go/token"
 	"go/types"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -58,7 +58,9 @@ func newModelBypasses(t *testing.T) []string {
 	if globErr != nil {
 		t.Fatal(globErr)
 	}
-	files = filesCompiledHere(t, files)
+	if len(files) == 0 || !slices.Contains(files, "start_test.go") {
+		t.Fatalf("scanned %d files, want start_test.go among them", len(files))
+	}
 	fset := token.NewFileSet()
 	parsedFiles := make([]*ast.File, 0, len(files))
 	for _, file := range files {
@@ -80,21 +82,6 @@ func newModelBypasses(t *testing.T) []string {
 		bypasses = append(bypasses, referencesToNewModel(fset, parsed, info, exemptFunction(files[index]))...)
 	}
 	return bypasses
-}
-
-func filesCompiledHere(t *testing.T, files []string) []string {
-	t.Helper()
-	compiled := make([]string, 0, len(files))
-	for _, file := range files {
-		match, matchErr := gobuild.Default.MatchFile(".", file)
-		if matchErr != nil {
-			t.Fatal(matchErr)
-		}
-		if match {
-			compiled = append(compiled, file)
-		}
-	}
-	return compiled
 }
 
 func typesInfo(fset *token.FileSet, files []*ast.File) (*types.Info, error) {

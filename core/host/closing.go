@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"sync/atomic"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
@@ -23,17 +24,39 @@ func logWriteFailure(_ int, err error) {
 	logCleanup(err)
 }
 
-func warnBounded(warn func()) {
+type boundedLog struct {
+	busy      atomic.Bool
+	abandoned atomic.Int64
+}
+
+func (l *boundedLog) warn(line func()) {
+	if !l.busy.CompareAndSwap(false, true) {
+		l.abandoned.Add(1)
+		return
+	}
 	budget, stop := writeBudget()
 	defer stop()
 	logged := make(chan struct{})
 	go func() {
 		defer close(logged)
-		warn()
+		line()
+		l.announceAbandoned()
 	}()
 	select {
 	case <-logged:
 	case <-budget:
+	}
+}
+
+func (l *boundedLog) announceAbandoned() {
+	for {
+		if n := l.abandoned.Swap(0); n > 0 {
+			slog.Warn("warning lines were abandoned while the log was blocked", "abandoned", n)
+		}
+		l.busy.Store(false)
+		if l.abandoned.Load() == 0 || !l.busy.CompareAndSwap(false, true) {
+			return
+		}
 	}
 }
 

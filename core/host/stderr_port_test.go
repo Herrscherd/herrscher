@@ -94,3 +94,28 @@ func TestCloseStderrLogsWhatItAbandons(t *testing.T) {
 		}
 	})
 }
+
+func TestStderrPortAnnouncesTheFirstLossAndTheTotalAtClose(t *testing.T) {
+	writer := newFrozenStderr()
+	t.Cleanup(writer.unblock)
+	h := testHub(&hub{warnings: io.Discard, stderr: writer})
+	_ = h.errPort.offer(writer, "held")
+	awaitBackground(t, writer.entered, "the line never reached the blocked writer")
+	for range stderrQueueLimit {
+		_ = h.errPort.offer(writer, "queued")
+	}
+	logs := captureDefaultLog(t)
+	for range 3 {
+		_ = h.errPort.offer(writer, "overflow")
+	}
+	if got := strings.Count(logs.String(), "stderr line dropped"); got != 1 {
+		t.Fatalf("the first lost stderr line was announced %d times, want once: %q", got, logs.String())
+	}
+	if got := h.errPort.droppedCount(); got != 3 {
+		t.Fatalf("droppedCount = %d, want 3 lines refused by the full queue", got)
+	}
+	h.closeStderr()
+	if !strings.Contains(logs.String(), "dropped=35") {
+		t.Fatalf("closeStderr did not report the total of the lost lines (3 refused and 32 still queued): %q", logs.String())
+	}
+}

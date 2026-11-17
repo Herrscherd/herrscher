@@ -21,22 +21,20 @@ type stderrPort struct {
 	running chan struct{}
 	halted  bool
 	dropped int
+	log     boundedLog
 }
 
 func (p *stderrPort) offer(out io.Writer, text string) <-chan struct{} {
 	written := make(chan struct{})
 	p.mu.Lock()
-	if p.halted {
+	if p.halted || len(p.pending) >= stderrQueueLimit {
+		first := p.dropped == 0
 		p.dropped++
 		p.mu.Unlock()
 		close(written)
-		warnBounded(func() { slog.Warn("stderr line offered after the port closed, dropped") })
-		return written
-	}
-	if len(p.pending) >= stderrQueueLimit {
-		p.dropped++
-		p.mu.Unlock()
-		close(written)
+		if first {
+			p.log.warn(func() { slog.Warn("stderr line dropped, the port is full or closed") })
+		}
 		return written
 	}
 	p.pending = append(p.pending, stderrLine{out: out, text: text, written: written})
@@ -125,7 +123,7 @@ func (h *hub) closeStderr() {
 	joined := h.errPort.shutdown(budget)
 	if dropped := h.errPort.droppedCount(); dropped > 0 || !joined {
 		note := newHostMessages().text(h.textLanguage()(), "warn.stderr_abandoned", nil)
-		warnBounded(func() {
+		h.errPort.log.warn(func() {
 			slog.Warn("stderr lines were abandoned at shutdown", "note", note, "dropped", dropped, "writer_joined", joined)
 		})
 	}

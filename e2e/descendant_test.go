@@ -30,10 +30,10 @@ func descendantGone(ts *testscript.TestScript, neg bool, args []string) {
 		ts.Fatalf("usage: descendantgone <pid file>")
 	}
 	pidPath := ts.MkAbs(args[0])
-	pid, err := readPid(pidPath)
+	pid, token, err := readDescendant(pidPath)
 	ts.Check(err)
 	ts.Check(descendantNotExpired(pidPath))
-	entry := instanceEntry(ts.Getenv(instanceEnv))
+	entry := descendantEntry(token)
 	ts.Defer(func() { ts.Check(killDescendant(pid, entry)) })
 	deadline := time.Now().Add(descendantWait)
 	for time.Now().Before(deadline) {
@@ -61,12 +61,24 @@ func descendantNotExpired(pidPath string) error {
 	return nil
 }
 
-func readPid(path string) (int, error) {
+func descendantEntry(token string) string {
+	return vendortest.DescendantMarker + "=" + token
+}
+
+func readDescendant(path string) (int, string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
-	return strconv.Atoi(strings.TrimSpace(string(data)))
+	fields := strings.Fields(string(data))
+	if len(fields) != 2 {
+		return 0, "", fmt.Errorf("the pid file %s holds %d fields, want a pid and a token", path, len(fields))
+	}
+	pid, err := strconv.Atoi(fields[0])
+	if err != nil {
+		return 0, "", err
+	}
+	return pid, fields[1], nil
 }
 
 func descendantAlive(pid int, entry string) (bool, error) {
@@ -195,8 +207,8 @@ func TestDescendantAliveIgnoresAReusedPidOfAnotherProgram(t *testing.T) {
 	}
 }
 
-func TestDescendantAliveSeesALiveDescendantOfOurs(t *testing.T) {
-	entry := instanceEntry("probe-" + strconv.Itoa(os.Getpid()))
+func startProbeSleep(t *testing.T, entry string) int {
+	t.Helper()
 	cmd := exec.CommandContext(t.Context(), "sleep", strconv.Itoa(int(vendortest.DescendantSleep/time.Second)))
 	cmd.Env = append(os.Environ(), entry)
 	if err := cmd.Start(); err != nil {
@@ -212,9 +224,23 @@ func TestDescendantAliveSeesALiveDescendantOfOurs(t *testing.T) {
 			t.Errorf("wait for the probe: %v", waitErr)
 		}
 	})
-	alive, err := descendantAlive(cmd.Process.Pid, entry)
+	return cmd.Process.Pid
+}
+
+func TestDescendantAliveSeesALiveDescendantOfOurs(t *testing.T) {
+	entry := descendantEntry("probe-" + strconv.Itoa(os.Getpid()))
+	pid := startProbeSleep(t, entry)
+	alive, err := descendantAlive(pid, entry)
 	if err != nil || !alive {
 		t.Fatalf("a live descendant of ours carrying the marker was not seen: alive=%v err=%v: the scan would report a surviving descendant as gone", alive, err)
+	}
+}
+
+func TestDescendantAliveIgnoresAnotherDescendantOfTheSameRun(t *testing.T) {
+	pid := startProbeSleep(t, descendantEntry("other-scenario"))
+	alive, err := descendantAlive(pid, descendantEntry("this-scenario"))
+	if err != nil || alive {
+		t.Fatalf("a sleep of another scenario carrying the same marker name was taken for this scenario's descendant: alive=%v err=%v", alive, err)
 	}
 }
 

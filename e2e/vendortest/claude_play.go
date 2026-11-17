@@ -3,6 +3,7 @@ package vendortest
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -232,13 +233,16 @@ func (r *replay) spawn(pidFile string) error {
 	if r.files.Log == "" {
 		return errNoLog
 	}
+	token := rand.Text()
 	child := exec.CommandContext(context.Background(), "sleep", descendantSleepArg)
+	child.Env = append(os.Environ(), DescendantMarker+"="+token)
 	if err := child.Start(); err != nil {
 		return fmt.Errorf("cannot start the descendant: %w", err)
 	}
 	r.descendants = append(r.descendants, child)
 	pidPath := filepath.Join(filepath.Dir(r.files.Log), filepath.Base(pidFile))
-	if err := os.WriteFile(pidPath, []byte(strconv.Itoa(child.Process.Pid)), privateFile); err != nil {
+	record := strconv.Itoa(child.Process.Pid) + "\n" + token + "\n"
+	if err := os.WriteFile(pidPath, []byte(record), privateFile); err != nil {
 		return errors.Join(fmt.Errorf("cannot record the descendant: %w", err), child.Process.Kill())
 	}
 	return nil

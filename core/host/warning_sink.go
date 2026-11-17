@@ -76,6 +76,7 @@ type warningSink struct {
 	lastLogged   chan struct{}
 	idleWait     time.Duration
 	stillRunning func() string
+	log          boundedLog
 }
 
 type sinkOption func(*warningSink)
@@ -146,7 +147,7 @@ func (s *warningSink) Enqueue(data []byte) warningAwait {
 func (s *warningSink) submit(data []byte, direct bool) warningAwait {
 	entry := &warning{data: data, direct: direct, done: make(chan struct{})}
 	admitted := ask(s, func() verdict { return s.admit(entry) })
-	logNotConfirmed(admitted.lost, 0)
+	s.logNotConfirmed(admitted.lost, 0)
 	if admitted.err != nil {
 		return func(<-chan struct{}) error { return admitted.err }
 	}
@@ -160,7 +161,7 @@ func (s *warningSink) await(entry *warning, budget <-chan struct{}) error {
 	case <-budget:
 	}
 	gaveUp := ask(s, func() verdict { return s.giveUp(entry) })
-	logNotConfirmed(gaveUp.lost, 0)
+	s.logNotConfirmed(gaveUp.lost, 0)
 	return gaveUp.err
 }
 
@@ -281,7 +282,7 @@ func (s *warningSink) start(write *inflightWrite, data []byte) {
 		written, err := s.out.Write(data)
 		logWriteFailure(written, err)
 		lost := ask(s, func() int { return s.settle(write, err) })
-		logNotConfirmed(lost, 0)
+		s.logNotConfirmed(lost, 0)
 	}()
 }
 
@@ -363,10 +364,10 @@ func (s *warningSink) Close() {
 	defer stop()
 	s.waitIdle(budget)
 	taken := ask(s, s.seal)
-	logNotConfirmed(taken.lost, taken.unconfirmed)
+	s.logNotConfirmed(taken.lost, taken.unconfirmed)
 	if !s.joinLastWrite() {
 		note := s.stillRunning()
-		warnBounded(func() { slog.Warn("a warning write was still running when Close returned", "note", note) })
+		s.log.warn(func() { slog.Warn("a warning write was still running when Close returned", "note", note) })
 	}
 }
 
@@ -450,9 +451,9 @@ func finish(entry *warning, err error) {
 	close(entry.done)
 }
 
-func logNotConfirmed(lost, unconfirmed int) {
+func (s *warningSink) logNotConfirmed(lost, unconfirmed int) {
 	if lost > 0 || unconfirmed > 0 {
-		warnBounded(func() {
+		s.log.warn(func() {
 			slog.Warn("warnings were not all confirmed when the sink closed", "lost", lost, "unconfirmed", unconfirmed)
 		})
 	}

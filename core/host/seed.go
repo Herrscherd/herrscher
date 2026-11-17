@@ -176,7 +176,7 @@ func oneShotTurnTimeout(runtime oneShotSeedRuntime) time.Duration {
 }
 
 func attachOneShotTaps(driver *sessionDriver, sess state.Session, runtime oneShotSeedRuntime) *seedGate {
-	gate := &seedGate{}
+	gate := newSeedGate(sess.Name, runtime.warnings, runtime.languageOf(sess))
 	if runtime.record != nil {
 		driver.sink.Transcript = func(entry state.TranscriptEntry) {
 			gate.admit(func() { runtime.record(sess.Name, entry) })

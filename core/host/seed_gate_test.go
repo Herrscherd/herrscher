@@ -1,8 +1,10 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -46,6 +48,18 @@ func TestAResumeTokenIsRefusedOnceTheSeedShutsItsGate(t *testing.T) {
 	}
 }
 
+func TestARefusedDeliveryWarnsOnceWithTheSession(t *testing.T) {
+	var warned bytes.Buffer
+	gate := newSeedGate("window", &warned, fixedLanguageSource(i18n.English))
+	gate.shut()
+	gate.admit(func() { t.Fatal("a delivery reached the session after the gate shut") })
+	gate.admit(func() { t.Fatal("a delivery reached the session after the gate shut") })
+
+	if lines := strings.Count(warned.String(), "\n"); lines != 1 || !strings.Contains(warned.String(), "window") {
+		t.Fatalf("warnings = %q, want one line naming the session", warned.String())
+	}
+}
+
 type probeOrchestrator struct {
 	contracts.Orchestrator
 
@@ -57,7 +71,7 @@ func (p probeOrchestrator) Consolidate(ctx context.Context) error {
 }
 
 func TestConsolidationRunsWithTheGateShut(t *testing.T) {
-	gate := &seedGate{}
+	gate := newSeedGate("window", io.Discard, fixedLanguageSource(i18n.English))
 	delivered := false
 	orch := probeOrchestrator{consolidate: func(context.Context) error {
 		gate.admit(func() { delivered = true })

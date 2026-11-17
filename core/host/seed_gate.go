@@ -1,10 +1,21 @@
 package host
 
-import "sync"
+import (
+	"io"
+	"sync"
+)
 
 type seedGate struct {
-	mu     sync.Mutex
-	closed bool
+	mu       sync.Mutex
+	closed   bool
+	refused  bool
+	session  string
+	warn     io.Writer
+	language languageSource
+}
+
+func newSeedGate(session string, warn io.Writer, language languageSource) *seedGate {
+	return &seedGate{session: session, warn: warn, language: language}
 }
 
 func (g *seedGate) admit(deliver func()) {
@@ -12,6 +23,11 @@ func (g *seedGate) admit(deliver func()) {
 	defer g.mu.Unlock()
 	if !g.closed {
 		deliver()
+		return
+	}
+	if !g.refused {
+		g.refused = true
+		warnLive(g.warn, g.language, "seed.late_delivery", map[string]any{nameParam: g.session})
 	}
 }
 

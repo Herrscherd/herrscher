@@ -65,6 +65,10 @@ func TestSetResumeTokenAndClearInterruptedTurnConcurrentMemoryMatchesDisk(t *tes
 	must(t, s.AddSession(Session{Name: "main", ResumeToken: "old", InterruptedTurn: "turn-1"}))
 	var calls atomic.Int64
 	s.write = func(name string, data []byte, perm os.FileMode) error {
+		if s.mu.TryLock() {
+			t.Error("save ran without the state lock")
+			s.mu.Unlock()
+		}
 		if calls.Add(1)%3 == 0 {
 			return errInjectedSave
 		}

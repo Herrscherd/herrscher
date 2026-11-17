@@ -500,6 +500,11 @@
     "other": "herrscher : session \"{{.Name}}\" : consolidation après {{.Elapsed}} : {{.Detail}}"
   },
   {
+    "id": "seed.late_delivery",
+    "description": "A message reaches a one-shot seed after its gate shut and is dropped, Name names the session; warned once per seed",
+    "other": "herrscher : session \"{{.Name}}\" : un message reçu après la fermeture du seed a été abandonné"
+  },
+  {
     "id": "serve.instance_persist",
     "description": "The instance identifier cannot be saved, Detail carries the cause",
     "other": "enregistrement de l'identifiant d'instance impossible : {{.Detail}}"

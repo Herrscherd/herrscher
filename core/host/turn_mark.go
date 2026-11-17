@@ -26,12 +26,26 @@ func (h *hub) clearTurnMark(session string) {
 	}
 }
 
+func (h *hub) interruptionAnnounced(name, turnID string) bool {
+	entries := state.ReadTranscript(state.TranscriptPath(h.partDir, name), scrollbackCap)
+	for i := range entries {
+		if entries[i].Kind == turnInterruptedKind && entries[i].TurnID == turnID {
+			return true
+		}
+	}
+	return false
+}
+
 func (h *hub) announceInterruptedTurn(sess state.Session) {
 	h.announceInterruptedTurnWith(sess, renderTurnInterrupted)
 }
 
 func (h *hub) announceInterruptedTurnWith(sess state.Session, render func(i18n.Language) (string, error)) {
 	if sess.InterruptedTurn == "" {
+		return
+	}
+	if h.interruptionAnnounced(sess.Name, sess.InterruptedTurn) {
+		h.clearTurnMark(sess.Name)
 		return
 	}
 	lang := h.sessionLanguageSource(sess.Name)

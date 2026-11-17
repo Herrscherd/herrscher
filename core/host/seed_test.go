@@ -446,7 +446,7 @@ func TestSeedBackendNeverCarriesTheGatewayTokenWithAProxy(t *testing.T) {
 func TestConsolidationFailureIsWarnedInTheSessionLanguage(t *testing.T) {
 	spy := &consolidateSpy{err: errors.New("disque plein")}
 	var printed bytes.Buffer
-	consolidateOneShot(context.Background(), spy, &seedGate{}, state.Session{Name: "solo"}, &printed, fixedLanguageSource(i18n.French))
+	consolidateOneShot(context.Background(), spy, newSeedGate("solo", &printed, fixedLanguageSource(i18n.French)), state.Session{Name: "solo"}, &printed, fixedLanguageSource(i18n.French))
 	if !spy.called {
 		t.Fatal("consolidation was not attempted")
 	}

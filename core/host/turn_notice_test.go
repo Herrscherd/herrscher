@@ -62,6 +62,30 @@ func TestAnnounceInterruptedTurnWithFailingRenderWritesNoEmptyLineAndKeepsTheMar
 	}
 }
 
+func TestAnnounceInterruptedTurnDoesNotDuplicateAnAnnouncedNotice(t *testing.T) {
+	partDir := t.TempDir()
+	h, st := newMarkHub(t, partDir, state.Session{Name: "main", InterruptedTurn: "turn-1"})
+	if err := state.AppendTranscript(state.TranscriptPath(partDir, "main"), state.TranscriptEntry{Role: "notice", Kind: turnInterruptedKind, Text: turnInterruptedFallback, TurnID: "turn-1"}); err != nil {
+		t.Fatal(err)
+	}
+
+	h.announceInterruptedTurn(state.Session{Name: "main", InterruptedTurn: "turn-1"})
+
+	var notices int
+	lines := h.Scrollback("main")
+	for i := range lines {
+		if lines[i].Notice != nil {
+			notices++
+		}
+	}
+	if notices != 1 {
+		t.Fatalf("scrollback = %+v after a restart, want the single notice already written for turn-1", lines)
+	}
+	if got, _ := st.FindSession("main"); got.InterruptedTurn != "" {
+		t.Fatalf("mark = %q after a restart that found the notice, want cleared", got.InterruptedTurn)
+	}
+}
+
 func TestSessionScrollbackJSONKeepsTheNotice(t *testing.T) {
 	partDir := interruptedTurnTranscript(t)
 

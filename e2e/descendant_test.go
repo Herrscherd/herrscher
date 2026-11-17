@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -74,8 +75,12 @@ func descendantAlive(pid int, entry string) (bool, error) {
 		return false, err
 	}
 	environ, err := environOf(pid)
+	foreign, err := environVerdict(err)
 	if err != nil {
 		return false, fmt.Errorf("cannot read the environment of %d: %w", pid, err)
+	}
+	if foreign {
+		return false, nil
 	}
 	if !carries(environ, entry) {
 		return false, nil
@@ -92,6 +97,17 @@ func descendantAlive(pid int, entry string) (bool, error) {
 
 func gone(err error) bool {
 	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ESRCH)
+}
+
+func environVerdict(err error) (bool, error) {
+	switch {
+	case err == nil, gone(err):
+		return false, nil
+	case errors.Is(err, fs.ErrPermission):
+		return true, nil
+	default:
+		return false, err
+	}
 }
 
 func ownedByUs(pid int) (bool, error) {
@@ -151,6 +167,46 @@ func TestDescendantAliveIgnoresAForeignProcess(t *testing.T) {
 	alive, err := descendantAlive(1, instanceEntry("unused"))
 	if err != nil || alive {
 		t.Fatalf("a process of another uid was counted as a descendant: alive=%v err=%v", alive, err)
+	}
+}
+
+func TestEnvironVerdictTreatsARefusedEnvironAsForeign(t *testing.T) {
+	const path = "/proc/1/environ"
+	for _, errno := range []syscall.Errno{syscall.EACCES, syscall.EPERM} {
+		foreign, err := environVerdict(&fs.PathError{Op: "open", Path: path, Err: errno})
+		if !foreign || err != nil {
+			t.Fatalf("%v on environ: foreign=%v err=%v, want a foreign process and no failure", errno, foreign, err)
+		}
+	}
+	for _, errno := range []syscall.Errno{syscall.ENOENT, syscall.ESRCH} {
+		foreign, err := environVerdict(&fs.PathError{Op: "open", Path: path, Err: errno})
+		if foreign || err != nil {
+			t.Fatalf("%v on environ: foreign=%v err=%v, want neither foreign nor failed: the process is gone", errno, foreign, err)
+		}
+	}
+	foreign, err := environVerdict(&fs.PathError{Op: "open", Path: path, Err: syscall.EIO})
+	if foreign || !errors.Is(err, syscall.EIO) {
+		t.Fatalf("EIO on environ: foreign=%v err=%v, want the unexpected errno returned as a failure", foreign, err)
+	}
+	if foreign, err := environVerdict(nil); foreign || err != nil {
+		t.Fatalf("a readable environ: foreign=%v err=%v, want neither", foreign, err)
+	}
+}
+
+func TestDescendantAliveSeesALiveDescendantOfOurs(t *testing.T) {
+	entry := instanceEntry("probe-" + strconv.Itoa(os.Getpid()))
+	cmd := exec.Command("sleep", strconv.Itoa(int(vendortest.DescendantSleep/time.Second)))
+	cmd.Env = append(os.Environ(), entry)
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	}()
+	alive, err := descendantAlive(cmd.Process.Pid, entry)
+	if err != nil || !alive {
+		t.Fatalf("a live descendant of ours carrying the marker was not seen: alive=%v err=%v: the scan would report a surviving descendant as gone", alive, err)
 	}
 }
 

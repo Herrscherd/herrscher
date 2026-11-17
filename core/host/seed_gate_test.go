@@ -30,6 +30,7 @@ func TestATapIsRefusedOnceTheSeedShutsItsGate(t *testing.T) {
 
 type probeOrchestrator struct {
 	contracts.Orchestrator
+
 	consolidate func(context.Context) error
 }
 

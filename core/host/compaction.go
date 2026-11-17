@@ -773,7 +773,7 @@ func (h bridgeHistory) PruneHistory(ctx context.Context, edits []contracts.Histo
 	}
 	request, err := historywire.Prune(h.driver.nextHistoryCall(), edits)
 	if errors.Is(err, historywire.ErrTooManyEdits) {
-		return contracts.PruneOutcome{}, fmt.Errorf("%w: %w", errTooManyEdits, err)
+		return contracts.PruneOutcome{}, errTooManyEdits
 	}
 	if err != nil {
 		return contracts.PruneOutcome{}, err

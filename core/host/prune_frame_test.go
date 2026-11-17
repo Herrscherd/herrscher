@@ -134,6 +134,9 @@ func TestChunkLimitFrameFitsTheControlWire(t *testing.T) {
 	if err := control.WriteEvent(&wire, frame); err != nil {
 		t.Fatalf("WriteEvent: %v", err)
 	}
+	if wire.Len() <= 256*1024 {
+		t.Fatalf("control line takes %d bytes, want more than the 256 KiB line of the wire, so the test reaches past the default limit", wire.Len())
+	}
 	t.Logf("frame text %d bytes, control line %d bytes", len(frame.Text), wire.Len())
 	var read []contracts.Event
 	if err := control.ScanEvents(strings.NewReader(wire.String()), func(event contracts.Event) error {

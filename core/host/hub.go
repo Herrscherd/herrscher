@@ -414,9 +414,17 @@ func scrollbackOf(partDir, name string) []contracts.ScrollbackLine {
 	}
 	out := make([]contracts.ScrollbackLine, 0, len(entries))
 	for _, e := range entries {
-		out = append(out, contracts.ScrollbackLine{Role: e.Role, Text: e.Text})
+		out = append(out, scrollbackLineOf(e))
 	}
 	return out
+}
+
+func scrollbackLineOf(entry state.TranscriptEntry) contracts.ScrollbackLine {
+	line := contracts.ScrollbackLine{Role: entry.Role, Text: entry.Text}
+	if entry.Kind == turnInterruptedKind {
+		line.Notice = &contracts.Notice{Code: contracts.CodeTurnInterrupted}
+	}
+	return line
 }
 
 func (h *hub) keepResumeToken(session, token string) {

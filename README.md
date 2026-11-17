@@ -453,8 +453,8 @@ hook allowed runs with the operator's rights. It can unset
 `HERRSCHER_COMMAND_SOCKET`, or dial the operator's socket directly, and then
 grant itself an approval or switch its session to `bypass`, which removes the
 hook. The variable is not needed on every path. `herrscher -p "<text>"` opens
-its session in a window while a daemon runs: that window sends the `session
-create` to the operator's socket as `owner`, whatever the variable says
+its session in a window while a daemon runs: that window sends the
+`session create` to the operator's socket as `owner`, whatever the variable says
 (`runPromptWindow`, `serve.go:358-366`, through `DaemonDispatch`,
 `core/host/daemonclient.go:82-89`). With `--print`, or without a window, the
 same command goes through the command registry and honours the variable
@@ -475,11 +475,11 @@ the session that owns the socket, not the caller's. A shell of any session can
 therefore send a message or seed a session as session B. Those rights reach B
 itself and the sessions B delegated for every verb that names a session; the
 verbs that name none, such as `session info`
-(`core/host/session_cmd.go:144-151`) and `session list`
+(`core/host/session_cmd.go:144-150`) and `session list`
 (`core/internal/manager/session_query.go:88`), show every session. The check
-runs in `subjectOf` (`core/host/authz.go:149-164`) over the verbs of
+runs in `subjectOf` (`core/host/authz.go:149-165`) over the verbs of
 `sessionArgs` (`core/host/authz.go:57-90`), through `inSubtree`
-(`core/host/authz.go:167-190`), and `Decide` enforces it
+(`core/host/authz.go:167-192`), and `Decide` enforces it
 (`core/internal/authz/authz.go:137`). The daemon checks no credential on a
 session socket except the token that `approve ask` requires, and only for that
 verb.

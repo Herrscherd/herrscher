@@ -181,7 +181,7 @@ func addAccountRows(rows *termpaint.Table, account AccountLimits, now time.Time,
 const unavailableCell = "─"
 
 func accountName(account AccountLimits, text *renderer) string {
-	name := account.Account
+	name := termpaint.Printable(account.Account)
 	if name == "" {
 		name = text.text(clitext.QuotaAccountNative, nil)
 	}

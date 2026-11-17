@@ -69,6 +69,7 @@ func (e *LineError) Unwrap() error {
 	return e.Err
 }
 
+// ParseScript reads a script of steps, one per line, and refuses an empty turn.
 func ParseScript(source io.Reader) (Script, error) {
 	var script Script
 	current := Turn{}

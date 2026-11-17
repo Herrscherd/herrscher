@@ -205,6 +205,7 @@ func TestRefusedWriteAfterTheBilanIsLoggedBeforeCloseReturns(t *testing.T) {
 		if strings.Contains(line, "not all confirmed") && logField(line, "unconfirmed") == "1" {
 			go func() {
 				_, err := sink.Write([]byte("AFTER\n"))
+				sink.log.drain(expiresAfter(5 * time.Second))
 				refused <- err
 				writer.unblock()
 			}()

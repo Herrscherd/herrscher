@@ -126,7 +126,9 @@ func TestBoundedLogAnnouncesAbandonsOfferedWhileTheAnnouncementIsFrozen(t *testi
 	frozen := freezeLogOn(t, "abandoned=")
 	var log boundedLog
 	gate := make(chan struct{})
-	log.warn(func() { <-gate })
+	gateEntered := make(chan struct{})
+	log.warn(func() { close(gateEntered); <-gate })
+	awaitBackground(t, gateEntered, "the gate line never reached the log")
 	for range boundedLogQueue {
 		log.warn(func() { slog.Warn("first line") })
 	}
@@ -177,7 +179,9 @@ func TestBoundedLogKeepsItsSummaryStateBounded(t *testing.T) {
 	logs := captureDefaultLog(t)
 	var log boundedLog
 	gate := make(chan struct{})
-	log.warn(func() { <-gate })
+	gateEntered := make(chan struct{})
+	log.warn(func() { close(gateEntered); <-gate })
+	awaitBackground(t, gateEntered, "the gate line never reached the log")
 	for range 500 {
 		log.addBilan(1, 0, writeNotConfirmed)
 		log.addBilan(0, 1, writeNotConfirmed)

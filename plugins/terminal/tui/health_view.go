@@ -170,7 +170,7 @@ func (m *model) healthBody() []string {
 func healthCounts(view health.View, pal termpaint.Palette) string {
 	counts := make([]string, 0, len(view.Counts))
 	for _, count := range view.Counts {
-		counts = append(counts, termpaint.Paint(health.StateStyle(count.State, pal), count.Text))
+		counts = append(counts, termpaint.Paint(health.StateStyle(count.State, pal), count.Text.String()))
 	}
 	return strings.Join(counts, healthColumnGap)
 }
@@ -205,19 +205,19 @@ func healthColumn(section health.Section, pal termpaint.Palette) []string {
 		if row.State == contracts.HealthOff {
 			label = termpaint.Paint(pal.Dim, health.RowLabel(row, termpaint.Palette{}))
 		}
-		cells.Add(termpaint.Paint(health.StateStyle(row.State, pal), row.Glyph)+" "+label, healthCellNote(row, pal))
+		cells.Add(termpaint.Paint(health.StateStyle(row.State, pal), row.Glyph.String())+" "+label, healthCellNote(row, pal))
 	}
-	return append([]string{termpaint.Paint(pal.Group, strings.ToUpper(section.Title))}, cells.Lines()...)
+	return append([]string{termpaint.Paint(pal.Group, strings.ToUpper(section.Title.String()))}, cells.Lines()...)
 }
 
 func healthCellNote(row health.Row, pal termpaint.Palette) string {
 	switch row.State {
 	case contracts.HealthOff, contracts.HealthDegraded:
-		return termpaint.Paint(health.StateStyle(row.State, pal), row.StateText)
+		return termpaint.Paint(health.StateStyle(row.State, pal), row.StateText.String())
 	case contracts.HealthOK, contracts.HealthDown:
-		return row.Latency
+		return row.Latency.String()
 	}
-	return row.Latency
+	return row.Latency.String()
 }
 
 func columnWidth(lines []string) int {
@@ -259,13 +259,13 @@ func healthBands(sections []health.Section, pal termpaint.Palette) []string {
 			if row.State != contracts.HealthDown && row.State != contracts.HealthDegraded {
 				continue
 			}
-			band := termpaint.Paint(pal.Inverse, " "+row.Glyph+" "+health.RowLabel(row, termpaint.Palette{})+" ")
-			if cause := joinNonEmpty(row.Cause, row.Facts); cause != "" {
+			band := termpaint.Paint(pal.Inverse, " "+row.Glyph.String()+" "+health.RowLabel(row, termpaint.Palette{})+" ")
+			if cause := joinNonEmpty(row.Cause.String(), row.Facts.String()); cause != "" {
 				band += " " + termpaint.Paint(health.StateStyle(row.State, pal), cause)
 			}
 			bands = append(bands, band)
-			if row.Remedy != "" {
-				bands = append(bands, healthRemedyIndent+termpaint.Paint(pal.Dim, "→ ")+row.Remedy)
+			if row.Remedy.String() != "" {
+				bands = append(bands, healthRemedyIndent+termpaint.Paint(pal.Dim, "→ ")+row.Remedy.String())
 			}
 		}
 	}

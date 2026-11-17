@@ -104,7 +104,7 @@ func TestCompactionTitleNeutralisesTheStack(t *testing.T) {
 	var title string
 	for _, section := range view.Sections {
 		if section.Group == health.GroupCompaction {
-			title = section.Title
+			title = section.Title.String()
 		}
 	}
 	assertNoRawControl(t, title)

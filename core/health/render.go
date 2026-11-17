@@ -31,15 +31,15 @@ func (s Snapshot) Table(writer io.Writer, lang i18n.Language, pal termpaint.Pale
 		return err
 	}
 	out := &lineWriter{writer: writer}
-	out.line(termpaint.Paint(pal.Strong, view.Title) + " " + termpaint.Paint(pal.Dim, view.Banner))
+	out.line(termpaint.Paint(pal.Strong, view.Title.String()) + " " + termpaint.Paint(pal.Dim, view.Banner.String()))
 	out.line("")
 	table := &termpaint.Table{Right: map[int]bool{2: true}}
 	table.Add(paintAll(pal.Dim, view.Header)...)
 	for _, section := range view.Sections {
-		table.Span(termpaint.Paint(pal.Group, section.Title))
+		table.Span(termpaint.Paint(pal.Group, section.Title.String()))
 		for index := range section.Rows {
 			row := &section.Rows[index]
-			table.Add(rowIndent+RowLabel(*row, pal), StateCell(*row, pal), latencyCell(*row, pal), termpaint.Paint(detailStyle(row.State, pal), row.Detail()))
+			table.Add(rowIndent+RowLabel(*row, pal), StateCell(*row, pal), latencyCell(*row, pal), termpaint.Paint(detailStyle(row.State, pal), row.Detail().String()))
 		}
 	}
 	for _, line := range table.Lines() {
@@ -74,17 +74,17 @@ func (s Snapshot) Details(writer io.Writer, checks []Check, lang i18n.Language, 
 			out.line("")
 		}
 		head := termpaint.Paint(pal.Strong, plainLabel(*row))
-		if facts := joinNonEmpty(row.Latency, row.Facts); facts != "" {
+		if facts := joinNonEmpty(row.Latency.String(), row.Facts.String()); facts != "" {
 			head += "  " + termpaint.Paint(pal.Dim, facts)
 		}
 		out.line(head)
 		table := &termpaint.Table{}
 		table.Add(rowIndent+labels[0], StateCell(*row, pal))
-		if row.Cause != "" {
-			table.Add(rowIndent+labels[1], termpaint.Paint(detailStyle(row.State, pal), row.Cause))
+		if row.Cause.String() != "" {
+			table.Add(rowIndent+labels[1], termpaint.Paint(detailStyle(row.State, pal), row.Cause.String()))
 		}
-		if row.Remedy != "" {
-			table.Add(rowIndent+labels[2], row.Remedy)
+		if row.Remedy.String() != "" {
+			table.Add(rowIndent+labels[2], row.Remedy.String())
 		}
 		for _, line := range table.Lines() {
 			out.line(line)
@@ -96,9 +96,9 @@ func (s Snapshot) Details(writer io.Writer, checks []Check, lang i18n.Language, 
 // RowLabel paints the name of a row: the service, then its account after a dim
 // separator, and the default marker of the default account.
 func RowLabel(row Row, pal termpaint.Palette) string {
-	label := row.Name
-	if row.Account != "" {
-		label += termpaint.Paint(pal.Dim, accountSep) + row.Account
+	label := row.Name.String()
+	if row.Account.String() != "" {
+		label += termpaint.Paint(pal.Dim, accountSep) + row.Account.String()
 	}
 	if row.Default {
 		label += " " + termpaint.Paint(pal.Accent, defaultMarker)
@@ -109,7 +109,7 @@ func RowLabel(row Row, pal termpaint.Palette) string {
 // StateCell paints the glyph and the word of the state of a row in the color of
 // that state.
 func StateCell(row Row, pal termpaint.Palette) string {
-	return termpaint.Paint(StateStyle(row.State, pal), row.Glyph+" "+row.StateText)
+	return termpaint.Paint(StateStyle(row.State, pal), row.Glyph.String()+" "+row.StateText.String())
 }
 
 // StateStyle is the style of state in pal: good, warn, bad, or dim when off.
@@ -132,11 +132,11 @@ func StateStyle(state contracts.HealthState, pal termpaint.Palette) termpaint.St
 func SummaryLine(view View, pal termpaint.Palette) string {
 	counts := make([]string, 0, len(view.Counts))
 	for _, count := range view.Counts {
-		counts = append(counts, termpaint.Paint(StateStyle(count.State, pal), count.Text))
+		counts = append(counts, termpaint.Paint(StateStyle(count.State, pal), count.Text.String()))
 	}
 	line := strings.Join(counts, termpaint.Paint(pal.Dim, factsSep))
-	if view.Worst != "" {
-		line += summaryGap + termpaint.Paint(pal.Dim, view.Hint) + " " + detailCommand + view.Worst
+	if view.Worst.String() != "" {
+		line += summaryGap + termpaint.Paint(pal.Dim, view.Hint.String()) + " " + detailCommand + view.Worst.String()
 	}
 	return line
 }
@@ -146,10 +146,10 @@ func plainLabel(row Row) string {
 }
 
 func latencyCell(row Row, pal termpaint.Palette) string {
-	if row.Latency == "" {
+	if row.Latency.String() == "" {
 		return termpaint.Paint(pal.Dim, missingLatency)
 	}
-	return row.Latency
+	return row.Latency.String()
 }
 
 func detailStyle(state contracts.HealthState, pal termpaint.Palette) termpaint.Style {
@@ -164,10 +164,10 @@ func detailStyle(state contracts.HealthState, pal termpaint.Palette) termpaint.S
 	return pal.Dim
 }
 
-func paintAll(style termpaint.Style, texts []string) []string {
+func paintAll(style termpaint.Style, texts []termpaint.Printed) []string {
 	painted := make([]string, len(texts))
 	for index, text := range texts {
-		painted[index] = termpaint.Paint(style, text)
+		painted[index] = termpaint.Paint(style, text.String())
 	}
 	return painted
 }

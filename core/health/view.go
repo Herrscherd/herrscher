@@ -26,22 +26,22 @@ const (
 // language of the report.
 type Row struct {
 	State     contracts.HealthState
-	Glyph     string
-	StateText string
-	Name      string
-	Account   string
+	Glyph     termpaint.Printed
+	StateText termpaint.Printed
+	Name      termpaint.Printed
+	Account   termpaint.Printed
 	Default   bool
-	Latency   string
-	Cause     string
-	Facts     string
-	Remedy    string
+	Latency   termpaint.Printed
+	Cause     termpaint.Printed
+	Facts     termpaint.Printed
+	Remedy    termpaint.Printed
 }
 
 // Detail returns the one line a table shows for the row: its cause, else what the
 // host knows of the service, else the remedy.
-func (r Row) Detail() string {
-	for _, text := range []string{r.Cause, r.Facts} {
-		if text != "" {
+func (r Row) Detail() termpaint.Printed {
+	for _, text := range []termpaint.Printed{r.Cause, r.Facts} {
+		if text.String() != "" {
 			return text
 		}
 	}
@@ -51,26 +51,26 @@ func (r Row) Detail() string {
 // Section is one group of a report and the rows of its checks.
 type Section struct {
 	Group Group
-	Title string
+	Title termpaint.Printed
 	Rows  []Row
 }
 
 // Count is the number of checks in one state, as the summary line words it.
 type Count struct {
 	State contracts.HealthState
-	Text  string
+	Text  termpaint.Printed
 }
 
 // View is a snapshot rendered in one language: the pieces a client lays out and
 // paints as it likes.
 type View struct {
-	Title    string
-	Banner   string
-	Header   []string
+	Title    termpaint.Printed
+	Banner   termpaint.Printed
+	Header   []termpaint.Printed
 	Sections []Section
 	Counts   []Count
-	Hint     string
-	Worst    string
+	Hint     termpaint.Printed
+	Worst    termpaint.Printed
 }
 
 // View renders the snapshot in lang: the banner, the checks grouped in report
@@ -79,23 +79,31 @@ type View struct {
 func (s Snapshot) View(lang i18n.Language) (View, error) {
 	text := &renderer{lang: lang}
 	view := View{
-		Title:  text.key(clitext.HealthBannerTitle, clitext.Params{clitext.ParamVersion: s.Daemon.Version}),
-		Banner: text.key(clitext.HealthBanner, s.bannerParams(text)),
-		Header: strings.Split(text.key(clitext.HealthHeader, nil), "\t"),
+		Title:  termpaint.Escape(text.key(clitext.HealthBannerTitle, clitext.Params{clitext.ParamVersion: s.Daemon.Version})),
+		Banner: termpaint.Escape(text.key(clitext.HealthBanner, s.bannerParams(text))),
+		Header: escapeAll(strings.Split(text.key(clitext.HealthHeader, nil), "\t")),
 		Counts: s.counts(text),
-		Hint:   text.key(clitext.HealthDetailHint, nil),
+		Hint:   termpaint.Escape(text.key(clitext.HealthDetailHint, nil)),
 	}
 	for _, group := range Groups() {
 		checks := s.inGroup(group)
 		if len(checks) == 0 {
 			continue
 		}
-		view.Sections = append(view.Sections, Section{Group: group, Title: s.groupTitle(group, text), Rows: s.rows(checks, text)})
+		view.Sections = append(view.Sections, Section{Group: group, Title: termpaint.Escape(s.groupTitle(group, text)), Rows: s.rows(checks, text)})
 	}
 	if worst, found := s.worst(); found {
-		view.Worst = worst.Service()
+		view.Worst = termpaint.Escape(worst.Service())
 	}
-	return view.printable(), text.err
+	return view, text.err
+}
+
+func escapeAll(lines []string) []termpaint.Printed {
+	escaped := make([]termpaint.Printed, 0, len(lines))
+	for _, line := range lines {
+		escaped = append(escaped, termpaint.Escape(line))
+	}
+	return escaped
 }
 
 // Rows renders checks in lang, one row each, in the order given.
@@ -114,7 +122,7 @@ func Latency(lang i18n.Language, elapsed time.Duration) (string, error) {
 func (s Snapshot) rows(checks []Check, text *renderer) []Row {
 	rows := make([]Row, 0, len(checks))
 	for index := range checks {
-		rows = append(rows, s.row(checks[index], text).printable())
+		rows = append(rows, s.row(checks[index], text))
 	}
 	return rows
 }
@@ -123,52 +131,23 @@ func (s Snapshot) row(check Check, text *renderer) Row {
 	report := Settled(check.Report)
 	row := Row{
 		State:     report.State,
-		Glyph:     stateGlyph(report.State),
-		StateText: text.key(stateKey(report.State), nil),
-		Name:      checkName(check, text),
-		Account:   accountName(check, text),
+		Glyph:     termpaint.Escape(stateGlyph(report.State)),
+		StateText: termpaint.Escape(text.key(stateKey(report.State), nil)),
+		Name:      termpaint.Escape(checkName(check, text)),
+		Account:   termpaint.Escape(accountName(check, text)),
 		Default:   check.Default,
-		Facts:     s.facts(check, text),
+		Facts:     termpaint.Escape(s.facts(check, text)),
 	}
 	if report.Latency > 0 {
-		row.Latency = text.latency(report.Latency)
+		row.Latency = termpaint.Escape(text.latency(report.Latency))
 	}
 	if report.Detail.Code != 0 {
-		row.Cause = text.notice(report.Detail)
+		row.Cause = termpaint.Escape(text.notice(report.Detail))
 	}
 	if report.Remedy.Code != 0 {
-		row.Remedy = text.notice(report.Remedy)
+		row.Remedy = termpaint.Escape(text.notice(report.Remedy))
 	}
 	return row
-}
-
-func (r Row) printable() Row {
-	r.Glyph = termpaint.Printable(r.Glyph)
-	r.StateText = termpaint.Printable(r.StateText)
-	r.Name = termpaint.Printable(r.Name)
-	r.Account = termpaint.Printable(r.Account)
-	r.Latency = termpaint.Printable(r.Latency)
-	r.Cause = termpaint.Printable(r.Cause)
-	r.Facts = termpaint.Printable(r.Facts)
-	r.Remedy = termpaint.Printable(r.Remedy)
-	return r
-}
-
-func (v View) printable() View {
-	v.Title = termpaint.Printable(v.Title)
-	v.Banner = termpaint.Printable(v.Banner)
-	v.Hint = termpaint.Printable(v.Hint)
-	v.Worst = termpaint.Printable(v.Worst)
-	for index := range v.Header {
-		v.Header[index] = termpaint.Printable(v.Header[index])
-	}
-	for index := range v.Counts {
-		v.Counts[index].Text = termpaint.Printable(v.Counts[index].Text)
-	}
-	for index := range v.Sections {
-		v.Sections[index].Title = termpaint.Printable(v.Sections[index].Title)
-	}
-	return v
 }
 
 func (s Snapshot) groupTitle(group Group, text *renderer) string {
@@ -197,11 +176,11 @@ func (s Snapshot) counts(text *renderer) []Count {
 	var counts []Count
 	for _, state := range []contracts.HealthState{contracts.HealthDown, contracts.HealthDegraded} {
 		if count := summary.Count(state); count > 0 {
-			counts = append(counts, Count{State: state, Text: text.key(summaryKey(state), clitext.Params{clitext.ParamCount: count})})
+			counts = append(counts, Count{State: state, Text: termpaint.Escape(text.key(summaryKey(state), clitext.Params{clitext.ParamCount: count}))})
 		}
 	}
 	ok := summary.Count(contracts.HealthOK)
-	return append(counts, Count{State: contracts.HealthOK, Text: text.key(clitext.HealthSummaryOK, clitext.Params{clitext.ParamCount: ok})})
+	return append(counts, Count{State: contracts.HealthOK, Text: termpaint.Escape(text.key(clitext.HealthSummaryOK, clitext.Params{clitext.ParamCount: ok}))})
 }
 
 func (s Snapshot) worst() (Check, bool) {

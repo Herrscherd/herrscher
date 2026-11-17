@@ -76,11 +76,11 @@ func seedVerb(sessions *sessionTable, store *state.State, layout RuntimeLayout, 
 		ValueParam("turn_id", clitext.CmdParamSessionSeedTurnID, false).
 		ValueParam("timeout", clitext.CmdParamSessionSeedTimeout, false).
 		Do(func(cmdCtx context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(runSeedVerb(cmdCtx, sessions.messages, sessions.oneShotPersists(), in, store, layout, instID, seedCoord.coord))
+			return cli.Data(runSeedVerb(cmdCtx, sessions.messages, sessions.oneShotPersists, in, store, layout, instID, seedCoord.coord))
 		})
 }
 
-func runSeedVerb(ctx context.Context, messages *hostMessages, persists *persistWrites, input contracts.Input, store *state.State, layout RuntimeLayout, instID string, coord contracts.Coordinator) (string, error) {
+func runSeedVerb(ctx context.Context, messages *hostMessages, newOneShot func() *persistWrites, input contracts.Input, store *state.State, layout RuntimeLayout, instID string, coord contracts.Coordinator) (string, error) {
 	rawTurnID, supplied := input.Lookup("turn_id")
 	turnID, err := resolveTurnID(rawTurnID, supplied)
 	if err != nil {
@@ -90,7 +90,7 @@ func runSeedVerb(ctx context.Context, messages *hostMessages, persists *persistW
 	if err != nil {
 		return "", err
 	}
-	runtime := oneShotSeedRuntimeFrom(ctx, messages, persists)
+	runtime := oneShotSeedRuntimeFrom(ctx, messages, newOneShot)
 	runtime.timeout = timeout
 	reply, err := runOneShotSeedCommand(
 		ctx, store, input.Get(paramName), input.Get("task"),

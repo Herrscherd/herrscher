@@ -40,6 +40,24 @@ func TestOneShotPersistsIsAChildOfTheDaemonTracker(t *testing.T) {
 	}
 }
 
+func TestContextRuntimeNeverCreatesAOneShotChild(t *testing.T) {
+	daemon := newPersistWrites()
+	fromContext := daemon.child()
+	created := 0
+	newOneShot := func() *persistWrites {
+		created++
+		return daemon.child()
+	}
+	ctx := withOneShotSeedRuntime(t.Context(), oneShotSeedRuntime{persists: fromContext})
+	runtime := oneShotSeedRuntimeFrom(ctx, newHostMessages(), newOneShot)
+	if created != 0 {
+		t.Fatalf("a call carrying a runtime in its context created %d one-shot children, want none", created)
+	}
+	if runtime.persists != fromContext {
+		t.Fatal("a call carrying a runtime in its context must keep the runtime's own tracker")
+	}
+}
+
 func TestOneShotWriteIsSeenByTheDaemonStop(t *testing.T) {
 	shared := newPersistWrites()
 	oneShot := shared.child()

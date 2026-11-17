@@ -234,7 +234,12 @@ func (e *RemoteResolveError) render(messages *hostMessages, lang i18n.Language) 
 	})
 }
 
-func (e *RemoteResolveError) Unwrap() error { return e.Err }
+func (e *RemoteResolveError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
 
 func resolveRemoteWithRetry[T any](ctx context.Context, resolver *Resolver, cat contracts.Category, dial func(context.Context) (T, error)) (T, error) {
 	var zero T

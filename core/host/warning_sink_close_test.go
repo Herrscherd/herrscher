@@ -283,12 +283,13 @@ func TestCloseSaysWhenAWriteIsStillRunningAtReturn(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := newGatedWarnings("GATED")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(newHostMessages(), writer, englishLostLine, withIdleWait(time.Millisecond))
+	messages := newHostMessages()
+	sink := newWarningSink(messages, writer, englishLostLine, withIdleWait(time.Millisecond))
 	_ = sink.Enqueue([]byte("GATED\n"))
 	awaitGatedWrite(t, writer)
 	sink.Close()
 	awaitSinkLog(t, sink)
-	if n := strings.Count(logs.String(), englishStillRunningLine()); n != 1 {
+	if n := strings.Count(logs.String(), englishStillRunningLine(messages)); n != 1 {
 		t.Fatalf("Close returned with its last write still running and logged the note %d times, want once: %q", n, logs.String())
 	}
 }
@@ -296,13 +297,14 @@ func TestCloseSaysWhenAWriteIsStillRunningAtReturn(t *testing.T) {
 func TestCloseSaysNothingWhenTheLastWriteIsJoined(t *testing.T) {
 	logs := captureDefaultLog(t)
 	var out lockedBuffer
-	sink := newWarningSink(newHostMessages(), &out, englishLostLine)
+	messages := newHostMessages()
+	sink := newWarningSink(messages, &out, englishLostLine)
 	if _, err := sink.Write([]byte("done\n")); err != nil {
 		t.Fatal(err)
 	}
 	sink.Close()
 	awaitSinkLog(t, sink)
-	if strings.Contains(logs.String(), englishStillRunningLine()) {
+	if strings.Contains(logs.String(), englishStillRunningLine(messages)) {
 		t.Fatalf("Close logged that a write was still running although its last write was joined: %q", logs.String())
 	}
 }

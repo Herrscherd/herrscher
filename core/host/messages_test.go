@@ -457,50 +457,85 @@ func TestHostTextFallsBackToEnglishWhenFrenchDoesNotRender(t *testing.T) {
 	}
 }
 
-func TestOneOwnerKeepsOneCatalogueAcrossEveryRenderPath(t *testing.T) {
-	builds := 0
-	owner := &hostMessages{}
-	owner.catalog = sync.OnceValues(func() (*i18n.Catalog, error) {
-		builds++
-		return buildHostCatalog()
-	})
-	built := owner.catalog
-	renders := 0
-	owner.catalog = func() (*i18n.Catalog, error) {
-		renders++
+func countingOwner() (*hostMessages, *int) {
+	built := sync.OnceValues(buildHostCatalog)
+	catalogueLookups := 0
+	owner := &hostMessages{catalog: func() (*i18n.Catalog, error) {
+		catalogueLookups++
 		return built()
+	}}
+	return owner, &catalogueLookups
+}
+
+func wrapChain(owner *hostMessages, depth int) error {
+	var err error = errors.New("disque plein")
+	for range depth {
+		err = wrapHost(owner, err, "serve.load_state", nil)
 	}
-	rendersThrough := func(name string, render func()) {
+	return err
+}
+
+func TestOneOwnerKeepsOneCatalogueAcrossEveryRenderPath(t *testing.T) {
+	owner, catalogueLookups := countingOwner()
+	expectLookups := func(path string, want int, render func()) {
 		t.Helper()
-		before := renders
+		before := *catalogueLookups
 		render()
-		if renders == before {
-			t.Fatalf("%s did not render through the owner's catalogue, it built or reached another one", name)
+		if got := *catalogueLookups - before; got != want {
+			t.Fatalf("%s looked up the owner's catalogue %d times, want exactly %d: a render that goes through another owner changes this count", path, got, want)
 		}
 	}
 
 	driver := newSessionDriver(owner, "alpha", nil, nil, nil, io.Discard)
 	driver.operator = fixedLanguage(i18n.French)
-	rendersThrough("the session driver", func() {
+	expectLookups("the session driver", 1, func() {
 		driver.hostText("warn.session_start", map[string]any{nameParam: "alpha"})
 	})
-	rendersThrough("warnTo", func() {
+	expectLookups("warnTo", 1, func() {
 		warnTo(owner, io.Discard, i18n.French, "warn.session_start", map[string]any{nameParam: "alpha", detailParam: errors.New("boom")})
 	})
-	leaf := wrapHost(owner, errors.New("disque plein"), "serve.load_state", nil)
-	joined := errors.Join(fmt.Errorf("ctx: %w", leaf), unexpectedError{cause: errors.New("fermé")})
-	top := wrapHost(owner, joined, "warn.session_start", map[string]any{nameParam: "digest"})
-	rendersThrough("localizeHostError on the nested error", func() {
+	top := wrapHost(owner, wrapChain(owner, 1), "warn.session_start", map[string]any{nameParam: "digest"})
+	expectLookups("localizeHostError in English over two levels", 2, func() {
+		localizeHostError(owner, i18n.English, top)
+	})
+	expectLookups("localizeHostError in French over two levels", 8, func() {
 		localizeHostError(owner, i18n.French, top)
 	})
-	rendersThrough("Error() on the nested error", func() {
+	expectLookups("Error() over two levels", 2, func() {
 		_ = top.Error()
 	})
-	rendersThrough("errorTextIn on the nested error", func() {
+	expectLookups("errorTextIn in French over two levels", 8, func() {
 		errorTextIn(owner, i18n.French, top)
 	})
-	if builds != 1 {
-		t.Fatalf("the owner's catalogue was built %d times across the render paths, want exactly 1", builds)
+}
+
+func TestCatalogueLookupsGrowAsDepthSquaredInFrench(t *testing.T) {
+	for depth := 1; depth <= 4; depth++ {
+		t.Run(fmt.Sprintf("depth %d", depth), func(t *testing.T) {
+			owner, catalogueLookups := countingOwner()
+			chain := wrapChain(owner, depth)
+			*catalogueLookups = 0
+			_ = chain.Error()
+			if got := *catalogueLookups; got != depth {
+				t.Fatalf("English over %d levels looked up the catalogue %d times, want %d (one per level)", depth, got, depth)
+			}
+			*catalogueLookups = 0
+			errorTextIn(owner, i18n.French, chain)
+			if want := depth*depth + 2*depth; *catalogueLookups != want {
+				t.Fatalf("French over %d levels looked up the catalogue %d times, want %d (n² + 2n)", depth, *catalogueLookups, want)
+			}
+		})
+	}
+}
+
+func TestErrorsIsSurvivesATypedNilRemoteResolveError(t *testing.T) {
+	var nilRemote *RemoteResolveError
+	var err error = nilRemote
+	if errors.Is(err, errors.New("cible")) {
+		t.Fatal("a typed nil RemoteResolveError matched a foreign target")
+	}
+	if errors.Is(fmt.Errorf("contexte: %w", err), errors.New("cible")) {
+		t.Fatal("a typed nil RemoteResolveError inside a wrap matched a foreign target")
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/host"
 )
 
 func TestBridgeKeepsOneModelDiscoveryForItsLifetime(t *testing.T) {

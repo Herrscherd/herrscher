@@ -295,7 +295,7 @@ func assertBlockedWriterOutcome(t *testing.T, c blockedWriterCase, h *hub, name 
 	}
 	h.sink.Close()
 	awaitHubLogs(t, h)
-	if outside := warnLinesOutsideBilan(logs.String()); len(outside) != 0 {
+	if outside := warnLinesOutsideBilan(h.messages, logs.String()); len(outside) != 0 {
 		t.Fatalf("a loss was logged outside the bilan: %q", outside)
 	}
 	dropped := droppedWarnings(h.sink)

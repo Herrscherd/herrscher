@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"github.com/Herrscherd/herrscher/core/internal/control"
+	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 var errApproveAskUnauthenticated = errors.New("approve ask refused: the caller does not hold this session's approval token")
@@ -56,9 +57,23 @@ func (l seedLease) alive() bool {
 	}
 }
 
-func (t *sessionTable) seedToken(ctx context.Context, session string) string {
+func liveSessionAllowed(st *state.State) func(session string) bool {
+	return func(session string) bool {
+		sess, ok := st.FindSession(session)
+		return ok && !sess.Archived
+	}
+}
+
+func (t *sessionTable) seedToken(ctx context.Context, session string, allowed func(session string) bool) string {
+	done := ctx.Done()
+	if done == nil {
+		return ""
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if !allowed(session) {
+		return ""
+	}
 	if t.seedLeases == nil {
 		t.seedLeases = make(map[string]seedLease)
 	}
@@ -68,7 +83,7 @@ func (t *sessionTable) seedToken(ctx context.Context, session string) string {
 		}
 	}
 	token := rand.Text()
-	t.seedLeases[token] = seedLease{session: session, done: ctx.Done()}
+	t.seedLeases[token] = seedLease{session: session, done: done}
 	return token
 }
 

@@ -139,7 +139,7 @@ func TestSessionTokensAreStablePerSessionAndDistinct(t *testing.T) {
 func TestSeedTokenDoesNotSurviveItsSeed(t *testing.T) {
 	sessionTab := newSessionTable()
 	seedCtx, endSeed := context.WithCancel(context.Background())
-	token := sessionTab.seedToken(seedCtx, "dormant")
+	token := sessionTab.seedToken(seedCtx, "dormant", allowEverySession)
 	if !sessionTab.tokenMatches("dormant", token) {
 		t.Fatal("the seed's token is refused while its seed runs")
 	}
@@ -152,7 +152,7 @@ func TestSeedTokenDoesNotSurviveItsSeed(t *testing.T) {
 func TestDriverStartedDuringASeedKeepsItsToken(t *testing.T) {
 	sessionTab := newSessionTable()
 	seedCtx, endSeed := context.WithCancel(context.Background())
-	seedTok := sessionTab.seedToken(seedCtx, "s1")
+	seedTok := sessionTab.seedToken(seedCtx, "s1", allowEverySession)
 	driver := &sessionDriver{}
 	sessionTab.register("s1", driver)
 	driverTok := sessionTab.issueToken("s1")

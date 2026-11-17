@@ -89,6 +89,9 @@ func runOneShotSeedIDWithRuntime(ctx context.Context, st *state.State, name, tas
 	if !ok {
 		return "", &NotFoundError{Kind: kindSession, Name: name}
 	}
+	if sess.Archived {
+		return "", errSeedArchivedSession
+	}
 	orch, mem, err := seedOrchestrator(ctx, sess)
 	if err != nil {
 		return "", err

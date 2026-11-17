@@ -37,8 +37,8 @@ func dispatchRevokesTheDoomedSession(t *testing.T, verb string, remove func(*sta
 	keptToken := sessionTab.issueToken("kept")
 	seedCtx, endSeed := context.WithCancel(t.Context())
 	t.Cleanup(endSeed)
-	doomedSeedToken := sessionTab.seedToken(seedCtx, "doomed")
-	keptSeedToken := sessionTab.seedToken(seedCtx, "kept")
+	doomedSeedToken := sessionTab.seedToken(seedCtx, "doomed", liveSessionAllowed(st))
+	keptSeedToken := sessionTab.seedToken(seedCtx, "kept", liveSessionAllowed(st))
 
 	var reg cli.Registry
 	command := contracts.New("session", verb).Do(func(context.Context, contracts.Input) (contracts.Result, error) {
@@ -53,6 +53,9 @@ func dispatchRevokesTheDoomedSession(t *testing.T, verb string, remove func(*sta
 	h.stopBridge = func(string) error { return nil }
 	t.Cleanup(h.stopLive)
 
+	if !sessionTab.tokenMatches("doomed", doomedToken) {
+		t.Fatal("the session token is refused before the session is removed, the check below would prove nothing")
+	}
 	if !sessionTab.tokenMatches("doomed", doomedSeedToken) {
 		t.Fatal("the seed token is refused before the session is removed, the check below would prove nothing")
 	}

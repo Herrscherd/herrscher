@@ -30,6 +30,7 @@ var (
 	errWorktreeSubcommand          = errors.New("worktree: want one of create, pre-existing, remove, materialize")
 	errWorktreeMaterializeRequired = errors.New("worktree materialize: --worktree is required")
 	errSeedTimeout                 = errors.New("seed timeout")
+	errSeedArchivedSession         = errors.New("seed refused: the session is archived")
 	errNoBackendPlugin             = errors.New("no backend plugin registered")
 	errHostNoneRegistered          = errors.New("name a host: none is registered yet, add one with `host add <name> --ssh <target> --workspace <path>`")
 	errGatewayOnlyNoModel          = errors.New("the gateway-only route policy forbids a spawn with no model: it would run on this machine's own vendor login")

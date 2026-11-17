@@ -242,7 +242,9 @@ func TestBlockedWarningWriterDoesNotHoldStopPastTheBudget(t *testing.T) {
 
 				started := time.Now()
 				returned := runInBackground(func() { path.run(h, name) })
-				awaitGatedWrite(t, warnings)
+				if c.want == nil {
+					awaitGatedWrite(t, warnings)
+				}
 				select {
 				case <-returned:
 				case <-time.After(c.bound):

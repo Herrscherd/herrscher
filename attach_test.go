@@ -285,7 +285,10 @@ func TestScrollbackComesBackFromTheDaemon(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lines := a.Scrollback("alpha")
+	lines, err := a.Scrollback("alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(lines) != 1 || lines[0].Text != "hello" {
 		t.Fatalf("scrollback = %+v", lines)
 	}

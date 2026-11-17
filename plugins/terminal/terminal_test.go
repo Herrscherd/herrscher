@@ -290,7 +290,11 @@ func TestTerminalForwardsScrollbackAndResume(t *testing.T) {
 	fake := &fakeSessionControl{scrollback: []contracts.ScrollbackLine{{Role: "user", Text: "hi"}}}
 	tm.BindSessionControl(fake)
 
-	if lines := tm.Scrollback("s"); len(lines) != 1 || lines[0].Text != "hi" {
+	lines, err := tm.Scrollback("s")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) != 1 || lines[0].Text != "hi" {
 		t.Fatalf("scrollback not forwarded: %+v", lines)
 	}
 	if _, err := tm.Resume("s"); err != nil {
@@ -300,8 +304,12 @@ func TestTerminalForwardsScrollbackAndResume(t *testing.T) {
 		t.Fatalf("resume not forwarded: %+v", fake.resumed)
 	}
 
-	if lines := New().Scrollback("s"); lines != nil {
-		t.Fatalf("unbound scrollback should be nil, got %+v", lines)
+	unbound, err := New().Scrollback("s")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unbound != nil {
+		t.Fatalf("unbound scrollback should be nil, got %+v", unbound)
 	}
 	if _, err := New().Resume("s"); err == nil {
 		t.Fatalf("unbound resume should error")

@@ -32,7 +32,7 @@ func (b *probeBackend) Overview() (string, error) {
 	return b.fakeBackend.Overview()
 }
 
-func (b *probeBackend) Scrollback(name string) []contracts.ScrollbackLine {
+func (b *probeBackend) Scrollback(name string) ([]contracts.ScrollbackLine, error) {
 	b.note("Scrollback")
 	return b.fakeBackend.Scrollback(name)
 }

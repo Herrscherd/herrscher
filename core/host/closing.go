@@ -5,7 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"sync/atomic"
+	"sync"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
@@ -24,40 +24,106 @@ func logWriteFailure(_ int, err error) {
 	logCleanup(err)
 }
 
+const boundedLogQueue = 8
+
 type boundedLog struct {
-	busy      atomic.Bool
-	abandoned atomic.Int64
+	mu        sync.Mutex
+	queue     []func()
+	summary   func()
+	abandoned int
+	running   bool
+	idle      []chan struct{}
 }
 
 func (l *boundedLog) warn(line func()) {
-	if !l.busy.CompareAndSwap(false, true) {
-		l.abandoned.Add(1)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if len(l.queue) >= boundedLogQueue {
+		l.abandoned++
 		return
 	}
-	budget, stop := writeBudget()
-	defer stop()
-	logged := make(chan struct{})
-	go func() {
-		defer close(logged)
-		line()
-		l.announceAbandoned()
-	}()
+	l.queue = append(l.queue, line)
+	l.startLocked()
+}
+
+func (l *boundedLog) reserve(line func()) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if previous := l.summary; previous != nil {
+		l.summary = func() {
+			previous()
+			line()
+		}
+	} else {
+		l.summary = line
+	}
+	l.startLocked()
+}
+
+func (l *boundedLog) drain(budget <-chan struct{}) bool {
+	l.mu.Lock()
+	if !l.running {
+		l.mu.Unlock()
+		return true
+	}
+	idle := make(chan struct{})
+	l.idle = append(l.idle, idle)
+	l.mu.Unlock()
 	select {
-	case <-logged:
+	case <-idle:
+		return true
 	case <-budget:
+		return false
 	}
 }
 
-func (l *boundedLog) announceAbandoned() {
-	for {
-		if n := l.abandoned.Swap(0); n > 0 {
-			slog.Warn("warning lines were abandoned while the log was blocked", "abandoned", n)
-		}
-		l.busy.Store(false)
-		if l.abandoned.Load() == 0 || !l.busy.CompareAndSwap(false, true) {
-			return
-		}
+func (l *boundedLog) startLocked() {
+	if !l.running {
+		l.running = true
+		go l.run()
 	}
+}
+
+func (l *boundedLog) run() {
+	for {
+		l.mu.Lock()
+		line := l.takeLocked()
+		if line == nil {
+			lost := l.abandoned
+			l.abandoned = 0
+			if lost == 0 {
+				l.running = false
+				l.wakeIdleLocked()
+				l.mu.Unlock()
+				return
+			}
+			l.mu.Unlock()
+			slog.Warn("warning lines were abandoned while the log was blocked", "abandoned", lost)
+			continue
+		}
+		l.mu.Unlock()
+		line()
+	}
+}
+
+func (l *boundedLog) takeLocked() func() {
+	if line := l.summary; line != nil {
+		l.summary = nil
+		return line
+	}
+	if len(l.queue) == 0 {
+		return nil
+	}
+	line := l.queue[0]
+	l.queue = l.queue[1:]
+	return line
+}
+
+func (l *boundedLog) wakeIdleLocked() {
+	for _, idle := range l.idle {
+		close(idle)
+	}
+	l.idle = nil
 }
 
 func warningWriter(writer io.Writer) io.Writer {

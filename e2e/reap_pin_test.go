@@ -138,7 +138,7 @@ type markedWaiter struct {
 
 func startMarkedWaiter(t *testing.T, instance string) *markedWaiter {
 	t.Helper()
-	cmd := exec.Command("sh", "-c", "read line")
+	cmd := exec.CommandContext(t.Context(), "sh", "-c", "read line")
 	cmd.Env = []string{instanceEntry(instance)}
 	input, err := cmd.StdinPipe()
 	if err != nil {
@@ -166,7 +166,7 @@ func (w *markedWaiter) endBeforeInterrupt(t *testing.T) {
 	if err := w.input.Close(); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(daemonReadyTimeout)
+	deadline := time.Now().Add(readyTimeout)
 	for {
 		stat, err := readStat(procRoot, w.cmd.Process.Pid)
 		if err == nil && stat.exited() {

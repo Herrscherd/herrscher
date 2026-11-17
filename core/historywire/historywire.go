@@ -87,7 +87,7 @@ var ErrHistoryTooLarge = errors.New("history too large")
 
 // ErrTooManyEdits reports a prune request carrying more than MaxPruneEdits edits.
 // Match it with errors.Is.
-var ErrTooManyEdits = errors.New("the compaction would edit too many tool calls at once")
+var ErrTooManyEdits = errors.New("too many edits for one prune frame")
 
 // IsFrame reports whether an event type belongs to the history wire.
 func IsFrame(eventType string) bool {

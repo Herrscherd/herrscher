@@ -9,7 +9,6 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
-	"github.com/Herrscherd/herrscher/core/historywire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 	"github.com/Herrscherd/herrscher/core/usage"
@@ -47,7 +46,7 @@ func hostErrorKeys() []hostErrorKey {
 		{errCompactUnsupported, "cli.host.fault.compact_unsupported"},
 		{errBridgeGone, "cli.host.fault.bridge_gone"},
 		{errHistoryTimeout, "cli.host.fault.history_timeout"},
-		{historywire.ErrTooManyEdits, "cli.host.fault.too_many_edits"},
+		{errTooManyEdits, "cli.host.fault.too_many_edits"},
 		{errHealthNotReady, "cli.host.fault.health_not_ready"},
 		{errNoCompactorFactory, "cli.host.fault.no_compactor_factory"},
 		{errNilCompactor, "cli.host.fault.nil_compactor"},

@@ -9,7 +9,7 @@ import (
 
 func TestKeyedErrorRendersInTheLanguageOfTheReason(t *testing.T) {
 	t.Parallel()
-	err := keyedError{cause: errSizeLimit, key: "tui.attach.too_large", params: map[string]any{"Limit": 10}}
+	err := keyedError{cause: errSizeLimit, key: "tui.attach.too_large", params: map[string]any{"Limit": 10}, catalog: testTranslator().catalog}
 	if !errors.Is(err, errSizeLimit) {
 		t.Fatal("a keyed error must still match its cause")
 	}

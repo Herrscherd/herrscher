@@ -994,7 +994,7 @@ func (m *model) pasteImage() bool {
 		m.flash = m.tr.t("tui.status.clipboard_failed", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 		return true
 	}
-	att, err := saveClipboardImage(data, mime, m.attachSeq)
+	att, err := saveClipboardImage(m.tr.catalog, data, mime, m.attachSeq)
 	if err != nil {
 		m.flash = localizedReason(m.tr, err)
 		return true
@@ -1007,7 +1007,7 @@ func (m *model) pasteImage() bool {
 }
 
 func (m *model) stageAttachment(path string) {
-	att, err := attachLocalFile(path, m.attachSeq)
+	att, err := attachLocalFile(m.tr.catalog, path, m.attachSeq)
 	if err != nil {
 		m.flash = localizedReason(m.tr, err)
 		return

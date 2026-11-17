@@ -7,9 +7,10 @@ import (
 )
 
 type keyedError struct {
-	cause  error
-	key    string
-	params map[string]any
+	cause   error
+	key     string
+	params  map[string]any
+	catalog func() (*i18n.Catalog, error)
 }
 
 type renderedError struct {
@@ -18,7 +19,7 @@ type renderedError struct {
 }
 
 func (e keyedError) Error() string {
-	return catalogText{lang: i18n.English, catalog: loadLocales, log: slog.Default()}.t(e.key, e.params)
+	return catalogText{lang: i18n.English, catalog: e.catalog, log: slog.Default()}.t(e.key, e.params)
 }
 
 func (e keyedError) Unwrap() error {

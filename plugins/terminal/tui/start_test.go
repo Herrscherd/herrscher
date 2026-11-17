@@ -66,7 +66,10 @@ func newModelBypasses(t *testing.T) []string {
 		}
 		parsedFiles = append(parsedFiles, parsed)
 	}
-	info := typesInfo(fset, parsedFiles)
+	info, err := typesInfo(fset, parsedFiles)
+	if err != nil {
+		t.Log(err)
+	}
 	var bypasses []string
 	for index, parsed := range parsedFiles {
 		if !strings.HasSuffix(files[index], "_test.go") {
@@ -77,13 +80,11 @@ func newModelBypasses(t *testing.T) []string {
 	return bypasses
 }
 
-func typesInfo(fset *token.FileSet, files []*ast.File) *types.Info {
+func typesInfo(fset *token.FileSet, files []*ast.File) (*types.Info, error) {
 	info := &types.Info{Uses: make(map[*ast.Ident]types.Object)}
 	conf := types.Config{Error: func(error) {}}
-	if _, err := conf.Check("tui", fset, files, info); err != nil {
-		return info
-	}
-	return info
+	_, err := conf.Check("tui", fset, files, info)
+	return info, err
 }
 
 func exemptFunction(file string) string {
@@ -155,7 +156,11 @@ func shadowed() {
 	if parseErr != nil {
 		t.Fatal(parseErr)
 	}
-	refs := referencesToNewModel(fset, parsed, typesInfo(fset, []*ast.File{parsed}), "")
+	info, err := typesInfo(fset, []*ast.File{parsed})
+	if err != nil {
+		t.Log(err)
+	}
+	refs := referencesToNewModel(fset, parsed, info, "")
 	want := []string{"snippet.go:4:7", "snippet.go:5:11", "snippet.go:7:6", "snippet.go:12:6"}
 	if strings.Join(refs, " ") != strings.Join(want, " ") {
 		t.Fatalf("flagged = %q, want %q", refs, want)
@@ -183,7 +188,11 @@ func fixtures(be Backend) {
 	if parseErr != nil {
 		t.Fatal(parseErr)
 	}
-	refs := referencesToNewModel(fset, parsed, typesInfo(fset, []*ast.File{declared, parsed}), "")
+	info, err := typesInfo(fset, []*ast.File{declared, parsed})
+	if err != nil {
+		t.Log(err)
+	}
+	refs := referencesToNewModel(fset, parsed, info, "")
 	want := []string{"fixtures_test.go:4:6", "fixtures_test.go:5:6"}
 	if strings.Join(refs, " ") != strings.Join(want, " ") {
 		t.Fatalf("flagged = %q, want %q: a package-level nil is not the predeclared one", refs, want)
@@ -210,7 +219,11 @@ func (m *model) startModel(be Backend) {
 	if parseErr != nil {
 		t.Fatal(parseErr)
 	}
-	refs := referencesToNewModel(fset, parsed, typesInfo(fset, []*ast.File{parsed}), "startModel")
+	info, err := typesInfo(fset, []*ast.File{parsed})
+	if err != nil {
+		t.Log(err)
+	}
+	refs := referencesToNewModel(fset, parsed, info, "startModel")
 	want := []string{"start_test.go:8:6", "start_test.go:12:6"}
 	if strings.Join(refs, " ") != strings.Join(want, " ") {
 		t.Fatalf("flagged = %q, want %q: only the exempt function may reference newModel", refs, want)

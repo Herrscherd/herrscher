@@ -586,7 +586,7 @@ func (t *Terminal) Commands() []tui.CommandSpec {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	out, err := textResult(call.Dispatch(ctx, []string{"commands", "--json"}))
+	out, err := t.textResult(call.Dispatch(ctx, []string{"commands", "--json"}))
 	if err != nil {
 		return nil
 	}
@@ -618,7 +618,7 @@ func (t *Terminal) Dispatch(args []string) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return textResult(call.Dispatch(ctx, withTerminalDefault(args)))
+	return t.textResult(call.Dispatch(ctx, withTerminalDefault(args)))
 }
 
 // Close tears a session down through the typed SessionControl seam, so the TUI's
@@ -633,7 +633,7 @@ func (t *Terminal) Close(name string, force bool) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return textResult(control.Close(ctx, name, force))
+	return t.textResult(control.Close(ctx, name, force))
 }
 
 // Kind reports every attachment as text, since the terminal has no richer kinds.
@@ -687,10 +687,8 @@ func slug(text string) string {
 
 func bestEffort(_ error) {}
 
-var terminalMessages = sync.OnceValue(clitext.NewMessages)
-
-func textResult(res contracts.Result, err error) (string, error) {
-	return cli.Render(terminalMessages(), res, err, clientLanguage())
+func (t *Terminal) textResult(res contracts.Result, err error) (string, error) {
+	return cli.Render(t.messages, res, err, clientLanguage())
 }
 
 func (t *Terminal) terminalFailure(cause error, key clitext.Key, params clitext.Params) error {

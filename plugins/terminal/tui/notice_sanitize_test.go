@@ -14,7 +14,7 @@ import (
 
 func TestNoticeEventEscapesTheControlsOfItsText(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "claude", AutoCompactPercent: 92}}}
-	m := newModel(f)
+	m, _ := startModel(f)
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
 	tb := m.ensureTab("c")
 	m.active = "c"

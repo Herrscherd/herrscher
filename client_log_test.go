@@ -156,13 +156,14 @@ func TestClientLogAppendsBelowTheCap(t *testing.T) {
 }
 
 func TestRunAttachedRoutesTheTUIThroughTheClientLog(t *testing.T) {
+	hostMessages := host.NewMessages()
 	stateDir := t.TempDir()
 	statePath := filepath.Join(stateDir, "state.json")
 	clientLog := filepath.Join(stateDir, "client.log")
 	runner := attachRunner{
 		log: silentLogger(),
 		connect: func(ctx context.Context, _ host.RuntimeLayout, _, _ string, _ i18n.Language) (*attachedDaemon, error) {
-			return newAttachedDaemonState(testMessages(), i18n.English, ctx.Done(), make(chan tui.RoutedEvent)), nil
+			return newAttachedDaemonState(testMessages(), hostMessages, i18n.English, ctx.Done(), make(chan tui.RoutedEvent)), nil
 		},
 		run: func(_ context.Context, _ context.CancelFunc, _ *clitext.Messages, _ tui.Backend, _ ...tui.Option) error {
 			fmt.Fprintln(os.Stderr, "tui stderr line")

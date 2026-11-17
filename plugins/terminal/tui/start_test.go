@@ -126,10 +126,15 @@ func headerSourceNeedsE2E(src string) (bool, error) {
 }
 
 func satisfiableWithout(expr constraint.Expr, excluded string) bool {
-	tags := tagNames(expr)
-	for mask := range 1 << len(tags) {
+	var free []string
+	for _, tag := range tagNames(expr) {
+		if tag != excluded {
+			free = append(free, tag)
+		}
+	}
+	for mask := range 1 << len(free) {
 		values := map[string]bool{excluded: false}
-		for index, tag := range tags {
+		for index, tag := range free {
 			values[tag] = mask&(1<<index) != 0
 		}
 		if expr.Eval(func(tag string) bool { return values[tag] }) {

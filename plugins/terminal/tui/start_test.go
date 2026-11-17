@@ -2,9 +2,11 @@ package tui
 
 import (
 	"go/ast"
+	"go/build/constraint"
 	"go/parser"
 	"go/token"
 	"go/types"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -54,13 +56,7 @@ func TestFixturesWithABackendStartThroughStartModel(t *testing.T) {
 
 func newModelBypasses(t *testing.T) []string {
 	t.Helper()
-	files, globErr := filepath.Glob("*.go")
-	if globErr != nil {
-		t.Fatal(globErr)
-	}
-	if len(files) == 0 || !slices.Contains(files, "start_test.go") {
-		t.Fatalf("scanned %d files, want start_test.go among them", len(files))
-	}
+	files := guardedFiles(t)
 	fset := token.NewFileSet()
 	parsedFiles := make([]*ast.File, 0, len(files))
 	for _, file := range files {
@@ -76,12 +72,108 @@ func newModelBypasses(t *testing.T) []string {
 	}
 	var bypasses []string
 	for index, parsed := range parsedFiles {
-		if !strings.HasSuffix(files[index], "_test.go") {
-			continue
-		}
 		bypasses = append(bypasses, referencesToNewModel(fset, parsed, info, exemptFunction(files[index]))...)
 	}
 	return bypasses
+}
+
+func guardedFiles(t *testing.T) []string {
+	t.Helper()
+	files, globErr := filepath.Glob("*.go")
+	if globErr != nil {
+		t.Fatal(globErr)
+	}
+	var guarded []string
+	for _, file := range files {
+		needsE2E, err := headerNeedsE2E(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.HasSuffix(file, "_test.go") || needsE2E {
+			guarded = append(guarded, file)
+		}
+	}
+	if !slices.Contains(guarded, "start_test.go") || !slices.Contains(guarded, "e2e_harness.go") {
+		t.Fatalf("scanned %q, want start_test.go and e2e_harness.go among them", guarded)
+	}
+	return guarded
+}
+
+func headerNeedsE2E(file string) (bool, error) {
+	src, err := os.ReadFile(file)
+	if err != nil {
+		return false, err
+	}
+	return headerSourceNeedsE2E(string(src))
+}
+
+func headerSourceNeedsE2E(src string) (bool, error) {
+	for _, line := range strings.Split(src, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "package ") {
+			break
+		}
+		if !constraint.IsGoBuild(trimmed) {
+			continue
+		}
+		expr, err := constraint.Parse(trimmed)
+		if err != nil {
+			return false, err
+		}
+		return !satisfiableWithout(expr, "e2e"), nil
+	}
+	return false, nil
+}
+
+func satisfiableWithout(expr constraint.Expr, excluded string) bool {
+	tags := tagNames(expr)
+	for mask := range 1 << len(tags) {
+		values := map[string]bool{excluded: false}
+		for index, tag := range tags {
+			values[tag] = mask&(1<<index) != 0
+		}
+		if expr.Eval(func(tag string) bool { return values[tag] }) {
+			return true
+		}
+	}
+	return false
+}
+
+func tagNames(expr constraint.Expr) []string {
+	switch node := expr.(type) {
+	case *constraint.TagExpr:
+		return []string{node.Tag}
+	case *constraint.NotExpr:
+		return tagNames(node.X)
+	case *constraint.AndExpr:
+		return append(tagNames(node.X), tagNames(node.Y)...)
+	case *constraint.OrExpr:
+		return append(tagNames(node.X), tagNames(node.Y)...)
+	}
+	return nil
+}
+
+func TestE2EConstraintDetection(t *testing.T) {
+	cases := []struct {
+		header string
+		want   bool
+	}{
+		{"//go:build e2e", true},
+		{"//go:build linux && e2e", true},
+		{"//go:build !e2e", false},
+		{"//go:build e2e || linux", false},
+		{"//go:build !linux", false},
+		{"package tui", false},
+	}
+	for _, tc := range cases {
+		got, err := headerSourceNeedsE2E(tc.header + "\n\npackage tui\n")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != tc.want {
+			t.Fatalf("%q: needs e2e = %v, want %v", tc.header, got, tc.want)
+		}
+	}
 }
 
 func typesInfo(fset *token.FileSet, files []*ast.File) (*types.Info, error) {

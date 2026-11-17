@@ -14,8 +14,10 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
 
-func englishLostLine(lost int) string {
-	return newHostMessages().text(i18n.English, "warn.warnings_dropped", map[string]any{countParam: lost})
+func englishLostLine(messages *hostMessages) func(lost int) string {
+	return func(lost int) string {
+		return messages.text(i18n.English, "warn.warnings_dropped", map[string]any{countParam: lost})
+	}
 }
 
 func englishStillRunningLine(messages *hostMessages) string {
@@ -27,7 +29,7 @@ func testHub(h *hub) *hub {
 	if out == nil {
 		out = io.Discard
 	}
-	h.sink = newWarningSink(h.messages, out, englishLostLine)
+	h.sink = newWarningSink(h.messages, out, englishLostLine(h.messages))
 	h.warnings = h.sink
 	return h
 }

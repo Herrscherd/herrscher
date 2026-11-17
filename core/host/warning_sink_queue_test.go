@@ -14,7 +14,8 @@ import (
 func TestWarningSinkDoesNotBlockWritersAndCountsDrops(t *testing.T) {
 	writer := newGatedWarnings("blocked")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
+	messages := newHostMessages()
+	sink := newWarningSink(messages, writer, englishLostLine(messages))
 	if _, err := sink.Write([]byte("blocked\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
@@ -52,7 +53,8 @@ func TestWarningSinkReportsHowManyWarningsItLostWhenTheWriterUnblocks(t *testing
 func assertLostSummaryFollowsUnblock(t *testing.T, lang i18n.Language) {
 	t.Helper()
 	writer := newGatedWarnings("blocked")
-	sink := newWarningSink(newHostMessages(), writer, func(lost int) string {
+	messages := newHostMessages()
+	sink := newWarningSink(messages, writer, func(lost int) string {
 		return newHostMessages().text(lang, "warn.warnings_dropped", map[string]any{countParam: lost})
 	})
 	if _, err := sink.Write([]byte("blocked\n")); !errors.Is(err, errWarningLate) {
@@ -105,7 +107,8 @@ func TestLostSummaryUsesTheSingularForOneWarning(t *testing.T) {
 
 func TestWarningSinkRefusesWritesAfterCloseAndCountsThem(t *testing.T) {
 	var out lockedBuffer
-	sink := newWarningSink(newHostMessages(), &out, englishLostLine)
+	messages := newHostMessages()
+	sink := newWarningSink(messages, &out, englishLostLine(messages))
 	if _, err := sink.Write([]byte("before\n")); err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +127,8 @@ func TestWarningSinkRefusesWritesAfterCloseAndCountsThem(t *testing.T) {
 func TestWarningSinkAfterCloseIsBoundedByAStalledWriter(t *testing.T) {
 	writer := newGatedWarnings("stuck")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
+	messages := newHostMessages()
+	sink := newWarningSink(messages, writer, englishLostLine(messages))
 	sink.Close()
 
 	started := time.Now()
@@ -139,7 +143,8 @@ func TestWarningSinkAfterCloseIsBoundedByAStalledWriter(t *testing.T) {
 func TestWarningSinkFlushIsBoundedByAStalledWriter(t *testing.T) {
 	writer := newGatedWarnings("stuck")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
+	messages := newHostMessages()
+	sink := newWarningSink(messages, writer, englishLostLine(messages))
 	if _, err := sink.Write([]byte("stuck\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
@@ -158,7 +163,8 @@ func TestWarningSinkFlushIsBoundedByAStalledWriter(t *testing.T) {
 
 func TestWarningSinkCountsAnOversizedEntryAsLost(t *testing.T) {
 	var out lockedBuffer
-	sink := newWarningSink(newHostMessages(), &out, englishLostLine)
+	messages := newHostMessages()
+	sink := newWarningSink(messages, &out, englishLostLine(messages))
 	oversized := bytes.Repeat([]byte("x"), warningEntryBytes+1)
 	if _, err := sink.Write(oversized); !errors.Is(err, errWarningAbandoned) {
 		t.Fatalf("write returned %v, want errWarningAbandoned", err)
@@ -169,7 +175,7 @@ func TestWarningSinkCountsAnOversizedEntryAsLost(t *testing.T) {
 	if _, err := sink.Write([]byte("after\n")); err != nil {
 		t.Fatal(err)
 	}
-	if want := englishLostLine(1) + "\nafter\n"; out.String() != want {
+	if want := englishLostLine(messages)(1) + "\nafter\n"; out.String() != want {
 		t.Fatalf("output = %q, want the summary of the lost warning then the next one %q", out.String(), want)
 	}
 }
@@ -177,7 +183,8 @@ func TestWarningSinkCountsAnOversizedEntryAsLost(t *testing.T) {
 func TestWarningSinkCountsAnEntryOverTheByteBudgetAsLost(t *testing.T) {
 	writer := newGatedWarnings("blocked")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
+	messages := newHostMessages()
+	sink := newWarningSink(messages, writer, englishLostLine(messages))
 	if _, err := sink.Write([]byte("blocked\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
@@ -202,7 +209,8 @@ func TestWarningSinkCountsAnEntryOverTheByteBudgetAsLost(t *testing.T) {
 func TestLateWritesBehindAFrozenWriterAreLostWithoutAGoroutine(t *testing.T) {
 	writer := newGatedWarnings("stuck")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
+	messages := newHostMessages()
+	sink := newWarningSink(messages, writer, englishLostLine(messages))
 	if _, err := sink.Write([]byte("stuck\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
@@ -231,7 +239,8 @@ func TestLateWritesBehindAFrozenWriterAreLostWithoutAGoroutine(t *testing.T) {
 func TestLateWriteKeepsTheBytesItWasGiven(t *testing.T) {
 	writer := newGatedWarnings("LATEMSG")
 	t.Cleanup(writer.open)
-	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
+	messages := newHostMessages()
+	sink := newWarningSink(messages, writer, englishLostLine(messages))
 	buf := []byte("LATEMSG\n")
 	if _, err := sink.Write(buf); !errors.Is(err, errWarningLate) {
 		t.Fatalf("a late write behind a frozen writer returned %v, want errWarningLate", err)
@@ -249,7 +258,8 @@ func TestLateWriteKeepsTheBytesItWasGiven(t *testing.T) {
 
 func TestFailedSummaryStaysUnreportedUntilItIsWritten(t *testing.T) {
 	writer := &summaryRefusingWriter{}
-	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
+	messages := newHostMessages()
+	sink := newWarningSink(messages, writer, englishLostLine(messages))
 	if _, err := sink.Write(bytes.Repeat([]byte("x"), warningEntryBytes+1)); !errors.Is(err, errWarningAbandoned) {
 		t.Fatalf("write returned %v, want errWarningAbandoned", err)
 	}
@@ -259,7 +269,7 @@ func TestFailedSummaryStaysUnreportedUntilItIsWritten(t *testing.T) {
 	if _, err := sink.Write([]byte("second\n")); err != nil {
 		t.Fatal(err)
 	}
-	want := "first\n" + englishLostLine(1) + "\nsecond\n"
+	want := "first\n" + englishLostLine(messages)(1) + "\nsecond\n"
 	if got := writer.out.String(); got != want {
 		t.Fatalf("output = %q, want %q: a refused summary is written again before the next warning", got, want)
 	}
@@ -267,7 +277,8 @@ func TestFailedSummaryStaysUnreportedUntilItIsWritten(t *testing.T) {
 
 func TestQueuedWriterErrorIsCountedLostBeforeTheNextWrite(t *testing.T) {
 	writer := &refusingEntryWriter{marker: "REFUSED"}
-	sink := newWarningSink(newHostMessages(), writer, englishLostLine)
+	messages := newHostMessages()
+	sink := newWarningSink(messages, writer, englishLostLine(messages))
 	if _, err := sink.Write([]byte("REFUSED\n")); !errors.Is(err, errEntryRefused) {
 		t.Fatalf("the refused queued warning returned %v, want the writer's error", err)
 	}
@@ -275,7 +286,7 @@ func TestQueuedWriterErrorIsCountedLostBeforeTheNextWrite(t *testing.T) {
 		t.Fatalf("the write after the refused one returned %v, want nil", err)
 	}
 	sink.Close()
-	if want := englishLostLine(1) + "\nafter\n"; writer.out.String() != want {
+	if want := englishLostLine(messages)(1) + "\nafter\n"; writer.out.String() != want {
 		t.Fatalf("output = %q, want %q: the refused queued warning must be counted lost and announced before the next write", writer.out.String(), want)
 	}
 }

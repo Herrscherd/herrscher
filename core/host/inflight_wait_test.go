@@ -300,16 +300,16 @@ func assertBlockedWriterOutcome(t *testing.T, c blockedWriterCase, h *hub, name 
 	}
 	dropped := droppedWarnings(h.sink)
 	awaitHubLogs(t, h)
-	announced := announcedLostOnOutput(warnings.out.String(), dropped) + announcedLostTotal(t, logs.String())
+	announced := announcedLostOnOutput(h.messages, warnings.out.String(), dropped) + announcedLostTotal(t, logs.String())
 	if dropped < 1 || announced != dropped {
 		t.Fatalf("the sink counted %d lost warnings but announced %d on the output %q and in the logs %q, want each lost warning announced exactly once", dropped, announced, warnings.out.String(), notConfirmedLines(logs.String()))
 	}
 }
 
-func announcedLostOnOutput(out string, dropped int) int {
+func announcedLostOnOutput(messages *hostMessages, out string, dropped int) int {
 	total := 0
 	for lost := 1; lost <= dropped; lost++ {
-		total += lost * strings.Count(out, englishLostLine(lost)+"\n")
+		total += lost * strings.Count(out, englishLostLine(messages)(lost)+"\n")
 	}
 	return total
 }

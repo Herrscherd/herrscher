@@ -3,6 +3,7 @@ package termpaint_test
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"unicode"
 
@@ -83,14 +84,17 @@ func TestPrintableLeavesTheNeighboursOfBidiControlsIntact(t *testing.T) {
 }
 
 func TestPrintableOutputCarriesNoControlByte(t *testing.T) {
-	in := "\x1b]8;;x\x07\u009b\r\n\x00\x7f\xff" + "ok"
-	for _, char := range bidiControls() {
-		in += string(char)
+	var in strings.Builder
+	in.WriteString("\x1b]8;;x\x07\u009b\r\n\x00\x7f\xffok")
+	bidi := bidiControls()
+	for _, char := range bidi {
+		in.WriteRune(char)
 	}
-	got := termpaint.Printable(in)
+	raw := in.String()
+	got := termpaint.Printable(raw)
 	for _, r := range got {
-		if unicode.IsControl(r) || slices.Contains(bidiControls(), r) {
-			t.Fatalf("Printable(%q) = %q still carries control %U", in, got, r)
+		if unicode.IsControl(r) || slices.Contains(bidi, r) {
+			t.Fatalf("Printable(%q) = %q still carries control %U", raw, got, r)
 		}
 	}
 }

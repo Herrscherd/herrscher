@@ -9,6 +9,21 @@ import (
 
 const hexDigits = "0123456789abcdef"
 
+const (
+	nibbleShift = 4
+	nibbleMask  = 0x0f
+
+	arabicLetterMark       rune = 0x061c
+	leftToRightMark        rune = 0x200e
+	rightToLeftMark        rune = 0x200f
+	lineSeparator          rune = 0x2028
+	paragraphSeparator     rune = 0x2029
+	firstEmbeddingOverride rune = 0x202a
+	lastEmbeddingOverride  rune = 0x202e
+	firstIsolate           rune = 0x2066
+	lastIsolate            rune = 0x2069
+)
+
 // Printed is text that has been through [Printable]. Only [Escape] builds one with
 // content, so a Printed value never carries a raw control to the terminal.
 type Printed struct {
@@ -49,8 +64,8 @@ func Printable(text string) string {
 
 func writeByteEscape(out *strings.Builder, value byte) {
 	out.WriteString(`\x`)
-	out.WriteByte(hexDigits[value>>4])
-	out.WriteByte(hexDigits[value&0x0f])
+	out.WriteByte(hexDigits[value>>nibbleShift])
+	out.WriteByte(hexDigits[value&nibbleMask])
 }
 
 func isEscaped(char rune) bool {
@@ -59,10 +74,10 @@ func isEscaped(char rune) bool {
 
 func isBidiControl(char rune) bool {
 	switch char {
-	case 0x061c, 0x200e, 0x200f, 0x2028, 0x2029:
+	case arabicLetterMark, leftToRightMark, rightToLeftMark, lineSeparator, paragraphSeparator:
 		return true
 	}
-	return char >= 0x202a && char <= 0x202e || char >= 0x2066 && char <= 0x2069
+	return char >= firstEmbeddingOverride && char <= lastEmbeddingOverride || char >= firstIsolate && char <= lastIsolate
 }
 
 func controlEscape(char rune) string {

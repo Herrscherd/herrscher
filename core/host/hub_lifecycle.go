@@ -380,6 +380,7 @@ func (h *hub) stopLive() {
 	cancel()
 	h.awaitInFlight()
 	h.stopStartups(starts)
+	h.awaitPersists()
 }
 
 func (h *hub) noteListened(session string) {
@@ -401,6 +402,7 @@ func (h *hub) closeAndRemoveSockets() error {
 	h.lifecycle.Unlock()
 	h.awaitInFlight()
 	h.stopStartups(starts)
+	h.awaitPersists()
 	h.closeWarnings()
 	return removeSocketFiles(h.runtime, h.instanceID, sessions)
 }

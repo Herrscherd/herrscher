@@ -670,6 +670,11 @@
     "other": "herrscher serve : l'arrêt n'a pas fini dans {{.Grace}}, du travail en cours ou des avertissements peuvent encore se terminer après lui, il continue quand même"
   },
   {
+    "id": "warn.persist_overrun",
+    "description": "A transcript, resume token or checkpoint write is still running when the stop grace of persistent writes ends; the stop goes on and that write may be lost",
+    "other": "herrscher serve : une écriture de transcript, de jeton de reprise ou de checkpoint est toujours en cours après {{.Grace}}, l'arrêt continue quand même et cette écriture peut être perdue"
+  },
+  {
     "id": "warn.warnings_dropped",
     "description": "A summary line: Count warnings were dropped while the output was blocked, written once it unblocks",
     "one": "herrscher serve : 1 avertissement perdu pendant que la sortie était bloquée",

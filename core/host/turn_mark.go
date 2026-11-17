@@ -61,7 +61,7 @@ func (h *hub) announceInterruptedTurnWith(sess state.Session, render func(i18n.L
 		Text:   text,
 		TurnID: sess.InterruptedTurn,
 	}
-	if err := state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), entry); err != nil {
+	if err := h.appendTranscript(sess.Name, entry); err != nil {
 		warnLive(h.warnings, lang, "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
 		return
 	}

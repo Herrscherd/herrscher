@@ -29,7 +29,9 @@ func boardModel(t *testing.T) (*fakeBackend, *model) {
 		},
 		overview: boardOverviewJSON,
 	}
-	return f, readyModel(f)
+	m := readyModel(f)
+	m.syncTabs()
+	return f, m
 }
 
 func updateKey(m *model, msg tea.KeyMsg) {

@@ -114,6 +114,7 @@ func TestContextViewSaysNoAutoCompactionInSmallWindows(t *testing.T) {
 	for _, size := range []tea.WindowSizeMsg{{Width: 60, Height: 20}, {Width: 80, Height: 30}} {
 		f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "claude", AutoCompactPercent: 0}}}
 		m := newModel(f)
+		m.syncTabs()
 		m.handleWindowSize(size)
 		tb := m.ensureTab("c")
 		m.active = "c"

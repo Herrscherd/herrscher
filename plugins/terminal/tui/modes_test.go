@@ -26,6 +26,7 @@ func (r *refusingBackend) Dispatch(args []string) (string, error) {
 
 func modeSession(f Backend) *model {
 	m := newModel(f)
+	m.syncTabs()
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m.ensureTab("a")
 	m.active = "a"

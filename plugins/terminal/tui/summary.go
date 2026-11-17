@@ -136,13 +136,8 @@ func parseRuleList(text string) *ruleCount {
 }
 
 func (m *model) panelFacets() ([]string, []string) {
-	if m.tm == nil {
-		return nil, nil
-	}
 	vendorSet, gatewaySet := make(map[string]bool), make(map[string]bool)
-	sessions := m.tm.Sessions()
-	for index := range sessions {
-		info := &sessions[index]
+	for _, info := range m.sessionInfos {
 		if info.Vendor != "" {
 			vendorSet[info.Vendor] = true
 		}

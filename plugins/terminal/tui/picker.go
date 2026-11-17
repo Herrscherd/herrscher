@@ -25,6 +25,7 @@ func sessionSearchText(info contracts.SessionInfo) string {
 func (m *model) applyResumeFilter() {
 	m.resumeRows = fuzzyFilter(m.resumeAll, m.resumeQuery, sessionSearchText)
 	m.resumeIdx = 0
+	m.loadResumePreview()
 }
 
 func (m *model) typeResume(text string) {
@@ -41,14 +42,19 @@ func (m *model) eraseResume() {
 	m.applyResumeFilter()
 }
 
-func (m *model) resumePreview(width int) string {
+func (m *model) loadResumePreview() {
+	m.resumePreviewLines = nil
 	if m.tm == nil || m.resumeIdx < 0 || m.resumeIdx >= len(m.resumeRows) {
-		return ""
+		return
 	}
-	lines := tailLines(m.tm.Scrollback(m.resumeRows[m.resumeIdx].Name), resumePreviewLines)
-	rendered := make([]string, 0, len(lines))
-	for _, line := range lines {
-		text := strings.ReplaceAll(line.Text, "\n", " ")
+	for _, line := range tailLines(m.tm.Scrollback(m.resumeRows[m.resumeIdx].Name), resumePreviewLines) {
+		m.resumePreviewLines = append(m.resumePreviewLines, strings.ReplaceAll(line.Text, "\n", " "))
+	}
+}
+
+func (m *model) resumePreview(width int) string {
+	rendered := make([]string, 0, len(m.resumePreviewLines))
+	for _, text := range m.resumePreviewLines {
 		rendered = append(rendered, m.st.dim.Render(truncate("  "+text, width)))
 	}
 	return strings.Join(rendered, "\n")
@@ -64,7 +70,11 @@ func (m *model) clampResume() {
 	}
 }
 
-func (m *model) moveResume(d int) { m.resumeIdx += d; m.clampResume() }
+func (m *model) moveResume(d int) {
+	m.resumeIdx += d
+	m.clampResume()
+	m.loadResumePreview()
+}
 
 func (m *model) chooseResume() tea.Cmd {
 	if m.resumeIdx < 0 || m.resumeIdx >= len(m.resumeRows) {

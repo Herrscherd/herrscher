@@ -391,15 +391,7 @@ func (m *model) paneToolRow(item entry, width int) string {
 }
 
 func (m *model) infoForChannel(channel string) contracts.SessionInfo {
-	if m.tm == nil {
-		return contracts.SessionInfo{}
-	}
-	sessions := m.tm.Sessions()
-	index := slices.IndexFunc(sessions, func(info contracts.SessionInfo) bool { return info.ChannelID == channel })
-	if index < 0 {
-		return contracts.SessionInfo{}
-	}
-	return sessions[index]
+	return m.sessionInfos[channel]
 }
 
 func (m *model) handlePanesKey(msg tea.KeyMsg) (tea.Cmd, bool) {

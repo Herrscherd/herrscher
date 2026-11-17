@@ -13,6 +13,7 @@ import (
 func TestKillAgentsInterruptsOnlyBusySessions(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{ChannelID: "a", Name: "s1"}, {ChannelID: "b", Name: "s2"}}}
 	m := newModel(f)
+	m.syncTabs()
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	m.ensureTab("a")
 	m.ensureTab("b")

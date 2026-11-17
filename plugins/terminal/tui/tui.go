@@ -301,8 +301,9 @@ type model struct {
 	switchIdx  int
 	switchRows []contracts.SessionInfo
 
-	resumeAll   []contracts.SessionInfo
-	resumeQuery string
+	resumeAll          []contracts.SessionInfo
+	resumeQuery        string
+	resumePreviewLines []string
 
 	surface     surface
 	board       boardState
@@ -991,17 +992,7 @@ func (m *model) toggleHelp() {
 }
 
 func (m *model) sessionName(channel string) string {
-	if m.tm == nil {
-		return ""
-	}
-	sessions := m.tm.Sessions()
-	for i := range sessions {
-		session := &sessions[i]
-		if session.ChannelID == channel && session.Name != "" {
-			return session.Name
-		}
-	}
-	return ""
+	return m.infoForChannel(channel).Name
 }
 
 func (m *model) activeSessionName() string {

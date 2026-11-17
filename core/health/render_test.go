@@ -10,6 +10,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
+	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/health"
 	"github.com/Herrscherd/herrscher/core/termpaint"
 )
@@ -24,6 +25,26 @@ func TestTableListsEveryCheckUnderItsGroup(t *testing.T) {
 		t.Fatalf("Table() error = %v", err)
 	}
 	for _, name := range []string{"fakegate", "claude"} {
+		if !strings.Contains(out.String(), name) {
+			t.Errorf("Table() output does not list %q:\n%s", name, out.String())
+		}
+	}
+}
+
+func TestUnknownArgKindDoesNotHideTheOtherChecks(t *testing.T) {
+	unknown, err := compactwire.DecodeNotice(`{"code":1,"args":[{"name":"X","kind":9,"value":"a"}]}`)
+	if err != nil {
+		t.Fatalf("DecodeNotice: %v", err)
+	}
+	snapshot := health.Snapshot{Checks: []health.Check{
+		{Group: health.GroupBackends, Name: "broken", Report: contracts.ProbeReport{State: contracts.HealthDown, Detail: unknown}},
+		{Group: health.GroupBackends, Name: "claude", Report: contracts.ProbeReport{State: contracts.HealthOK}},
+	}}
+	var out bytes.Buffer
+	if err := snapshot.Table(&out, i18n.English, termpaint.Palette{}); err != nil {
+		t.Fatalf("Table() error = %v, want the unknown kind rendered as a fallback", err)
+	}
+	for _, name := range []string{"broken", "claude"} {
 		if !strings.Contains(out.String(), name) {
 			t.Errorf("Table() output does not list %q:\n%s", name, out.String())
 		}

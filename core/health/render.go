@@ -3,6 +3,7 @@ package health
 import (
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -252,8 +253,23 @@ func (r *renderer) key(key clitext.Key, params clitext.Params) string {
 
 func (r *renderer) notice(notice contracts.Notice) string {
 	value, err := contracts.NewRenderer().Render(r.lang, notice)
-	r.keep(err)
+	if err != nil {
+		return unrenderedNotice(notice)
+	}
 	return value
+}
+
+func unrenderedNotice(notice contracts.Notice) string {
+	texts := make([]string, 0, len(notice.Args))
+	for _, arg := range notice.Args {
+		if text, isText := arg.Value().(string); isText && text != "" {
+			texts = append(texts, text)
+		}
+	}
+	if len(texts) == 0 {
+		return strconv.FormatUint(uint64(notice.Code), 10)
+	}
+	return strings.Join(texts, factsSep)
 }
 
 func (r *renderer) keep(err error) {

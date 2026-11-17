@@ -153,7 +153,7 @@ func boundArg(arg contracts.Arg) contracts.Arg {
 
 func cutUTF8(text string, limit int) string {
 	cut := limit
-	for !utf8.RuneStart(text[cut]) {
+	for cut > 0 && !utf8.RuneStart(text[cut]) {
 		cut--
 	}
 	return text[:cut]

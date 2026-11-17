@@ -293,6 +293,11 @@ func TestDecodeRefusesAValueLongerThanTheLimit(t *testing.T) {
 	requireNoticeMalformed(t, `{"code":1,"args":[{"name":"X","kind":1,"value":"`+text+`"}]}`, contracts.ErrNoticeLimit)
 }
 
+func TestDecodeRefusesARawValueBeyondTheRawCap(t *testing.T) {
+	text := strings.Repeat("a", 256<<10)
+	requireNoticeMalformed(t, `{"code":1,"args":[{"name":"X","kind":1,"value":"`+text+`"}]}`, contracts.ErrNoticeLimit)
+}
+
 func TestDecodeRefusesAReferenceWithoutValue(t *testing.T) {
 	requireNoticeMalformed(t, `{"code":1,"args":[{"name":"R","kind":3}]}`, contracts.ErrNoticeArgs)
 }
@@ -336,6 +341,39 @@ func TestBoundedTextStaysValidUTF8(t *testing.T) {
 	reason, isText := got.Args[0].Value().(string)
 	if !isText || !utf8.ValidString(reason) {
 		t.Fatalf("bounded reason is not valid UTF-8: %q", reason)
+	}
+}
+
+func TestBoundedTextWithoutRuneStartDoesNotPanic(t *testing.T) {
+	notice := contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", strings.Repeat("\x80", 4<<10+1))}}
+	value, err := EncodeNotice(notice)
+	if err != nil {
+		t.Fatalf("EncodeNotice of continuation bytes: %v", err)
+	}
+	got, err := DecodeNotice(value)
+	if err != nil {
+		t.Fatalf("DecodeNotice: %v", err)
+	}
+	if reason, isText := got.Args[0].Value().(string); !isText || reason != truncationMark {
+		t.Fatalf("reason = %q, want only the truncation mark", reason)
+	}
+}
+
+func TestBoundedTextCutsBeforeAFourByteRune(t *testing.T) {
+	text := strings.Repeat("a", 4094) + "😀"
+	notice := contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", text)}}
+	value, err := EncodeNotice(notice)
+	if err != nil {
+		t.Fatalf("EncodeNotice: %v", err)
+	}
+	got, err := DecodeNotice(value)
+	if err != nil {
+		t.Fatalf("DecodeNotice: %v", err)
+	}
+	reason, isText := got.Args[0].Value().(string)
+	want := strings.Repeat("a", 4094) + truncationMark
+	if !isText || reason != want || !utf8.ValidString(reason) {
+		t.Fatalf("reason = %q, want %q as valid UTF-8", reason, want)
 	}
 }
 

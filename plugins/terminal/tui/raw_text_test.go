@@ -294,10 +294,10 @@ func renderedAgentText(m *model, text string, streaming bool) string {
 func TestAgentTabAlignsOnTheNextFourColumnStop(t *testing.T) {
 	m, _ := rawTextModel(t)
 	cases := []struct{ withTab, withSpaces string }{
-		{"ab\tc", "ab  c"},
+		{"a\tb", "a   b"},
 		{"abc\td", "abc d"},
 		{"abcd\te", "abcd    e"},
-		{"文\tb", "文  b"},
+		{"文字\tb", "文字    b"},
 	}
 	for _, streaming := range []bool{false, true} {
 		for _, tc := range cases {

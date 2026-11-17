@@ -23,7 +23,7 @@ func TestTheSameArgvIsRefusedOnOneSocketAndRunOnTheOther(t *testing.T) {
 	if addErr := st.AddSession(state.Session{Name: "s1"}); addErr != nil {
 		t.Fatalf("AddSession: %v", addErr)
 	}
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	approvalTab := newApprovalTable(io.Discard)
 	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	if approveErr := addApproveCommands(reg, newHostMessages(), clitext.NewMessages(), fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); approveErr != nil {
@@ -65,7 +65,7 @@ func TestTheSameArgvIsRefusedOnOneSocketAndRunOnTheOther(t *testing.T) {
 func TestServedOperatorSocketFollowsTheLiveLanguage(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	live := newOperatorLanguage(i18n.English)
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	if err := addScheduleCommands(reg, newHostMessages(), clitext.NewMessages(), live.Get, st, fakeAgents{known: make(map[string]bool)}, &schedulerSlot{}); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}

@@ -571,7 +571,7 @@ func TestRetryCommandParsesWithTheRealRegistry(t *testing.T) {
 	if cmd != want {
 		t.Fatalf("retry command = %q, want %q", cmd, want)
 	}
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	if err := reg.Add(sessionHandoffVerb(fakeHandoff(&handoffRecord{}, fixedClock(), "alpha"))); err != nil {
 		t.Fatal(err)
 	}

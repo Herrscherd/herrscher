@@ -7,11 +7,12 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func TestApproveAskRefusesWithoutADaemon(t *testing.T) {
 	asked := false
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	ask := contracts.New(nsApprove, "ask").Do(func(context.Context, contracts.Input) (contracts.Result, error) {
 		asked = true
 		return contracts.Result{}, nil

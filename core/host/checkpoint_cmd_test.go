@@ -72,7 +72,7 @@ func checkpointState(t *testing.T, worktree string) *state.State {
 }
 
 func checkpointRegistry(st *state.State, sessions *sessionTable) *cli.Registry {
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	if err := addCheckpointCommands(reg, clitext.NewMessages(), fixedLanguage(i18n.English), st, sessions); err != nil {
 		panic(err)
 	}

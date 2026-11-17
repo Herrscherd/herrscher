@@ -18,14 +18,14 @@ const reconcileGrace = 300 * time.Millisecond
 
 func sessionListRegistry(t *testing.T) *cli.Registry {
 	t.Helper()
-	var reg cli.Registry
+	reg := cli.NewRegistry(clitext.NewMessages())
 	list := contracts.New("session", "list").Do(func(context.Context, contracts.Input) (contracts.Result, error) {
 		return contracts.DataResult("listed"), nil
 	})
 	if err := reg.Add(list); err != nil {
 		t.Fatal(err)
 	}
-	return &reg
+	return reg
 }
 
 func TestStuckBridgesDoNotAddAGracePerSessionToAnUnrelatedCommand(t *testing.T) {

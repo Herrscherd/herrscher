@@ -83,13 +83,13 @@ func TestSkillVerbsAreRegistered(t *testing.T) {
 }
 
 func TestCommandsVerbListsThenWarnsOnARawHelpText(t *testing.T) {
-	var reg cli.Registry
+	reg := cli.NewRegistry(clitext.NewMessages())
 	raw := contracts.New("rawdemo", "show").Help("rawdemo.help.undeclared").
 		Do(func(context.Context, contracts.Input) (contracts.Result, error) { return contracts.Result{}, nil })
 	if err := reg.Add(raw); err != nil {
 		t.Fatal(err)
 	}
-	if err := reg.Add(commandsVerb(clitext.NewMessages(), fixedLanguage(i18n.English), &reg)); err != nil {
+	if err := reg.Add(commandsVerb(clitext.NewMessages(), fixedLanguage(i18n.English), reg)); err != nil {
 		t.Fatal(err)
 	}
 	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"commands"}))
@@ -105,13 +105,13 @@ func TestCommandsVerbListsThenWarnsOnARawHelpText(t *testing.T) {
 }
 
 func TestCommandsJSONWarnsThroughTheLogOnARawHelpText(t *testing.T) {
-	var reg cli.Registry
+	reg := cli.NewRegistry(clitext.NewMessages())
 	raw := contracts.New("rawdemo", "show").Help("rawdemo.help.undeclared").
 		Do(func(context.Context, contracts.Input) (contracts.Result, error) { return contracts.Result{}, nil })
 	if err := reg.Add(raw); err != nil {
 		t.Fatal(err)
 	}
-	if err := reg.Add(commandsVerb(clitext.NewMessages(), fixedLanguage(i18n.English), &reg)); err != nil {
+	if err := reg.Add(commandsVerb(clitext.NewMessages(), fixedLanguage(i18n.English), reg)); err != nil {
 		t.Fatal(err)
 	}
 	var logs bytes.Buffer

@@ -19,7 +19,7 @@ func leaf(path ...string) contracts.Cmd {
 }
 
 func TestAddRejectsDuplicatePath(t *testing.T) {
-	var r cli.Registry
+	r := cli.NewRegistry(clitext.NewMessages())
 	if err := r.Add(leaf("set", "home")); err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestAddRejectsDuplicatePath(t *testing.T) {
 }
 
 func TestAddRejectsEmptyPath(t *testing.T) {
-	var r cli.Registry
+	r := cli.NewRegistry(clitext.NewMessages())
 	if err := r.Add(contracts.New().Do(nil)); err == nil {
 		t.Fatal("empty path must be rejected")
 	}
@@ -45,13 +45,13 @@ func runText(r *cli.Registry, path []string, input contracts.Input) (string, err
 
 func build(t *testing.T, cmds ...contracts.Cmd) *cli.Registry {
 	t.Helper()
-	var r cli.Registry
+	r := cli.NewRegistry(clitext.NewMessages())
 	for _, c := range cmds {
 		if err := r.Add(c); err != nil {
 			t.Fatal(err)
 		}
 	}
-	return &r
+	return r
 }
 
 func TestDispatchResolvesLongestPath(t *testing.T) {
@@ -211,7 +211,7 @@ func TestDispatchReturnsHandlerOutput(t *testing.T) {
 }
 
 func TestDispatchGlobalJSONFlag(t *testing.T) {
-	r := &cli.Registry{}
+	r := cli.NewRegistry(clitext.NewMessages())
 	var gotJSON bool
 	if err := r.Add(contracts.Cmd{
 		Path:   []string{"session", "list"},
@@ -284,7 +284,7 @@ func TestRunChecksRequiredParams(t *testing.T) {
 }
 
 func TestSpecsDescribeTheWholeRegistry(t *testing.T) {
-	var r cli.Registry
+	r := cli.NewRegistry(clitext.NewMessages())
 	must := func(err error) {
 		if err != nil {
 			t.Fatal(err)
@@ -297,7 +297,7 @@ func TestSpecsDescribeTheWholeRegistry(t *testing.T) {
 		Param("name", "", true).
 		Do(okRun)))
 
-	specs := mustSpecs(t, &r, i18n.English)
+	specs := mustSpecs(t, r, i18n.English)
 	if len(specs) != 2 {
 		t.Fatalf("Specs = %+v, want both commands", specs)
 	}
@@ -311,7 +311,7 @@ func TestSpecsDescribeTheWholeRegistry(t *testing.T) {
 
 func TestResolveReadsThePathAndTheFlagsWithoutRunning(t *testing.T) {
 	ran := false
-	var reg cli.Registry
+	reg := cli.NewRegistry(clitext.NewMessages())
 	if err := reg.Add(contracts.New("session", "send").
 		Param("name", "session name", true).
 		Do(func(context.Context, contracts.Input) (contracts.Result, error) {
@@ -339,14 +339,14 @@ func TestResolveReadsThePathAndTheFlagsWithoutRunning(t *testing.T) {
 }
 
 func TestResolveReportsAnUnknownCommand(t *testing.T) {
-	var reg cli.Registry
+	reg := cli.NewRegistry(clitext.NewMessages())
 	if _, _, ok := reg.Resolve([]string{"quantum", "entangle"}); ok {
 		t.Fatal("Resolve must not claim to have found an unregistered command")
 	}
 }
 
 func TestResolveNamesThePathEvenWhenTheFlagsDoNotParse(t *testing.T) {
-	var reg cli.Registry
+	reg := cli.NewRegistry(clitext.NewMessages())
 	if err := reg.Add(contracts.New("host", "add").
 		Param("ssh", "ssh target", true).
 		Do(func(context.Context, contracts.Input) (contracts.Result, error) { return contracts.Result{}, nil })); err != nil {
@@ -436,7 +436,7 @@ func TestSpecsAndHelpRenderTheHelpKeyInTheRequestedLanguage(t *testing.T) {
 }
 
 func TestRawHelpTextIsReportedWithItsCommand(t *testing.T) {
-	var r cli.Registry
+	r := cli.NewRegistry(clitext.NewMessages())
 	cmd := leaf("chat", "read")
 	cmd.Help = "chat.help.never_declared"
 	if err := r.Add(cmd); err != nil {

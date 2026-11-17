@@ -17,7 +17,7 @@ import (
 
 func authzHub(t *testing.T, st *state.State, verbs ...[]string) *hub {
 	t.Helper()
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	for _, path := range verbs {
 		cmd := contracts.New(path...).Help("test verb")
 		if path[0] == "session" || path[0] == "schedule" {
@@ -159,7 +159,7 @@ func TestAGatewayCannotClaimToBeTheOperatorSocketOrASession(t *testing.T) {
 func TestDispatchRefusesBeforeReachingTheRegistry(t *testing.T) {
 	st := authzState(t, []state.Session{{Name: "revue"}}, nil)
 	ran := false
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	if err := reg.Add(contracts.New("approve", "rule").
 		Help("test verb").
 		Do(func(context.Context, contracts.Input) (contracts.Result, error) {

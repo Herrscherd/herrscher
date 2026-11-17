@@ -26,7 +26,7 @@ func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
-	var r cli.Registry
+	r := cli.NewRegistry(clitext.NewMessages())
 	cmd := contracts.New(path...).Param("name", "", true).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
 			*got = in
@@ -35,7 +35,7 @@ func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
 	if err := r.Add(cmd); err != nil {
 		t.Fatal(err)
 	}
-	h := newHub(st, sup, nil, t.TempDir(), &r, nil, approvalTab, sessionTab)
+	h := newHub(st, sup, nil, t.TempDir(), r, nil, approvalTab, sessionTab)
 	h.runtime = isolatedRuntimeDir(t)
 	return h
 }
@@ -46,7 +46,7 @@ func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	entered, release := make(chan struct{}), make(chan struct{})
-	var r cli.Registry
+	r := cli.NewRegistry(clitext.NewMessages())
 	slow := contracts.New("plug", "read").Do(func(context.Context, contracts.Input) (contracts.Result, error) {
 		close(entered)
 		<-release
@@ -61,7 +61,7 @@ func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
 		}
 	}
 	h := newHub(state.NewState(t.TempDir()+"/s.json"),
-		supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t)), nil, t.TempDir(), &r, nil, approvalTab, sessionTab)
+		supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t)), nil, t.TempDir(), r, nil, approvalTab, sessionTab)
 	h.runtime = isolatedRuntimeDir(t)
 	h.contributedKinds = contributedKinds([]contracts.Cmd{slow})
 
@@ -196,7 +196,7 @@ func newTestHub(t *testing.T, opts ...hubOption) *hub {
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
-	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab, opts...)
+	h := newHub(st, sup, nil, t.TempDir(), cli.NewRegistry(clitext.NewMessages()), nil, approvalTab, sessionTab, opts...)
 	h.runtime = isolatedRuntimeDir(t)
 	t.Cleanup(h.stopLive)
 	return h

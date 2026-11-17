@@ -78,7 +78,7 @@ func newApprovalRegistry(t *testing.T, approvalTab *approvalTable, menus *menuRe
 	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	t.Setenv(TokenVar, sessionTab.issueToken("s1"))
 	sessionTab.register("s1", newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", []contracts.GatewaySet{{Gateway: menus, Reader: menus}}, nil, nil, io.Discard))
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	if err := addApproveCommands(reg, newHostMessages(), clitext.NewMessages(), fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); err != nil {
 		t.Fatalf("addApproveCommands: %v", err)
 	}

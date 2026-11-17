@@ -30,6 +30,12 @@ var (
 type Registry struct {
 	cmds       []contracts.Cmd
 	helpParams map[clitext.Key]clitext.Params
+	messages   *clitext.Messages
+}
+
+// NewRegistry returns an empty Registry whose usage errors and help texts render through messages.
+func NewRegistry(messages *clitext.Messages) *Registry {
+	return &Registry{messages: messages}
 }
 
 // SetHelpParams sets the parameters that a help key takes when the registry renders it,
@@ -72,9 +78,9 @@ func (r *Registry) Families() map[string]bool {
 func (r *Registry) Dispatch(ctx context.Context, args []string) (contracts.Result, error) {
 	cmd, rest := r.match(args)
 	if cmd == nil {
-		return contracts.Result{}, usageFailure(errUnknownCommand, clitext.Params{clitext.ParamName: strconv.Quote(strings.Join(args, " "))})
+		return contracts.Result{}, usageFailure(r.messages, errUnknownCommand, clitext.Params{clitext.ParamName: strconv.Quote(strings.Join(args, " "))})
 	}
-	input, err := parse(*cmd, rest)
+	input, err := r.parse(*cmd, rest)
 	if err != nil {
 		return contracts.Result{}, err
 	}
@@ -122,7 +128,7 @@ func (r *Registry) Resolve(args []string) ([]string, contracts.Input, bool) {
 	if cmd == nil {
 		return nil, contracts.Input{}, false
 	}
-	input, err := parse(*cmd, rest)
+	input, err := r.parse(*cmd, rest)
 	if err != nil {
 		return cmd.Path, contracts.Input{}, true
 	}
@@ -143,7 +149,7 @@ func (r *Registry) Run(ctx context.Context, path []string, input contracts.Input
 		}
 	}
 	if cmd == nil {
-		return contracts.Result{}, usageFailure(errUnknownCommand, clitext.Params{clitext.ParamName: strconv.Quote(key(path))})
+		return contracts.Result{}, usageFailure(r.messages, errUnknownCommand, clitext.Params{clitext.ParamName: strconv.Quote(key(path))})
 	}
 	if input.Args == nil {
 		input.Args = make(map[string]string)
@@ -151,7 +157,7 @@ func (r *Registry) Run(ctx context.Context, path []string, input contracts.Input
 	for _, param := range cmd.Params {
 		if param.Required {
 			if _, ok := input.Args[param.Name]; !ok {
-				return contracts.Result{}, usageFailure(errMissingRequired, clitext.Params{clitext.ParamCommand: key(cmd.Path), clitext.ParamName: param.Name})
+				return contracts.Result{}, usageFailure(r.messages, errMissingRequired, clitext.Params{clitext.ParamCommand: key(cmd.Path), clitext.ParamName: param.Name})
 			}
 		}
 	}
@@ -232,7 +238,7 @@ func isParam(c contracts.Cmd, name string) (contracts.Param, bool) {
 	return contracts.Param{}, false
 }
 
-func parse(cmd contracts.Cmd, rest []string) (contracts.Input, error) {
+func (r *Registry) parse(cmd contracts.Cmd, rest []string) (contracts.Input, error) {
 	input := contracts.Input{Args: make(map[string]string)}
 	for index := 0; index < len(rest); index++ {
 		tok := rest[index]
@@ -242,21 +248,21 @@ func parse(cmd contracts.Cmd, rest []string) (contracts.Input, error) {
 		case !strings.HasPrefix(tok, "--"):
 			input.Rest = append(input.Rest, tok)
 		default:
-			consumed, err := parseFlag(cmd, rest, index, input)
+			consumed, err := r.parseFlag(cmd, rest, index, input)
 			if err != nil {
 				return input, err
 			}
 			index += consumed
 		}
 	}
-	return input, checkRequired(cmd, input)
+	return input, r.checkRequired(cmd, input)
 }
 
-func parseFlag(cmd contracts.Cmd, rest []string, index int, input contracts.Input) (int, error) {
+func (r *Registry) parseFlag(cmd contracts.Cmd, rest []string, index int, input contracts.Input) (int, error) {
 	name, inline, isInline := strings.Cut(strings.TrimPrefix(rest[index], "--"), "=")
 	param, ok := isParam(cmd, name)
 	if !ok {
-		return 0, usageFailure(errUnknownFlag, clitext.Params{clitext.ParamCommand: strings.Join(cmd.Path, " "), clitext.ParamName: name})
+		return 0, usageFailure(r.messages, errUnknownFlag, clitext.Params{clitext.ParamCommand: strings.Join(cmd.Path, " "), clitext.ParamName: name})
 	}
 	if isInline {
 		input.Args[name] = inline
@@ -267,20 +273,20 @@ func parseFlag(cmd contracts.Cmd, rest []string, index int, input contracts.Inpu
 		input.Args[name] = rest[index+1]
 		return 1, nil
 	case param.Required || param.ValueRequired:
-		return 0, usageFailure(errFlagNeedsValue, clitext.Params{clitext.ParamCommand: strings.Join(cmd.Path, " "), clitext.ParamName: name})
+		return 0, usageFailure(r.messages, errFlagNeedsValue, clitext.Params{clitext.ParamCommand: strings.Join(cmd.Path, " "), clitext.ParamName: name})
 	default:
 		input.Args[name] = "true"
 		return 0, nil
 	}
 }
 
-func checkRequired(cmd contracts.Cmd, input contracts.Input) error {
+func (r *Registry) checkRequired(cmd contracts.Cmd, input contracts.Input) error {
 	for _, param := range cmd.Params {
 		if !param.Required {
 			continue
 		}
 		if _, ok := input.Args[param.Name]; !ok {
-			return usageFailure(errMissingRequired, clitext.Params{clitext.ParamCommand: strings.Join(cmd.Path, " "), clitext.ParamName: param.Name})
+			return usageFailure(r.messages, errMissingRequired, clitext.Params{clitext.ParamCommand: strings.Join(cmd.Path, " "), clitext.ParamName: param.Name})
 		}
 	}
 	return nil
@@ -297,7 +303,7 @@ type Spec struct {
 
 // Specs returns every registered command's shape, sorted by path, with its help texts rendered in lang.
 func (r *Registry) Specs(lang i18n.Language) ([]Spec, error) {
-	translator := clitext.For(lang)
+	translator := r.messages.For(lang)
 	if err := translator.Err(); err != nil {
 		return nil, err
 	}
@@ -344,7 +350,7 @@ func (r *Registry) localizedParams(translator *clitext.Translator, cmd contracts
 
 // Help renders one usage line per command, sorted by path, for the root help, with its help text rendered in lang.
 func (r *Registry) Help(lang i18n.Language) (string, error) {
-	translator := clitext.For(lang)
+	translator := r.messages.For(lang)
 	if err := translator.Err(); err != nil {
 		return "", err
 	}

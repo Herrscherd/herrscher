@@ -8,10 +8,11 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func TestHubDispatchSeedAllowsCoordinatorReentry(t *testing.T) {
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	h := testHub(&hub{messages: newHostMessages(), warnings: io.Discard, reg: reg})
 	if err := reg.Add(contracts.New("session", "seed").
 		Do(func(context.Context, contracts.Input) (contracts.Result, error) {

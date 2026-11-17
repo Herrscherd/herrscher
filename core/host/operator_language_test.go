@@ -51,7 +51,7 @@ func TestWarningFollowsALiveLanguageChange(t *testing.T) {
 func TestBuilderRepliesFollowTheLiveOperatorLanguage(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	live := newOperatorLanguage(i18n.English)
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	if err := addScheduleCommands(reg, newHostMessages(), clitext.NewMessages(), live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestSetLangThroughTheWiredManagerChangesBuilderReplies(t *testing.T) {
 	if _, err := setLang.Run(t.Context(), contracts.Input{Args: map[string]string{"lang": "fr"}}); err != nil {
 		t.Fatalf("set lang fr: %v", err)
 	}
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	if err := addScheduleCommands(reg, newHostMessages(), clitext.NewMessages(), live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestCommandsFollowsTheLiveLanguageAfterSetLang(t *testing.T) {
 	live := newOperatorLanguage(i18n.English)
 	options := Options{DefaultCmd: "claude", live: live}
 	hdl := newManagerHandler(newHostMessages(), Deps{}, options, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	if err := reg.Add(commandsVerb(clitext.NewMessages(), live.Get, reg)); err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +188,7 @@ func notFoundScheduleText(lang i18n.Language, name string) string {
 func TestOperatorCommandReplyFollowsALiveLanguageChange(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	live := newOperatorLanguage(i18n.English)
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	if err := addScheduleCommands(reg, newHostMessages(), clitext.NewMessages(), live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
@@ -221,7 +221,7 @@ func TestSessionCommandReplyFollowsTheOperatorUnlessItsLanguageIsRecorded(t *tes
 		t.Fatalf("SetSessionLanguage: %v", err)
 	}
 	live := newOperatorLanguage(i18n.English)
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	if err := addScheduleCommands(reg, newHostMessages(), clitext.NewMessages(), live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}

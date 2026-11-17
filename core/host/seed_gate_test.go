@@ -48,15 +48,27 @@ func TestAResumeTokenIsRefusedOnceTheSeedShutsItsGate(t *testing.T) {
 	}
 }
 
-func TestARefusedDeliveryWarnsOnceWithTheSession(t *testing.T) {
+func TestARefusedDeliveryWarnsOncePerKindWithTheSession(t *testing.T) {
 	var warned bytes.Buffer
 	gate := newSeedGate("window", &warned, fixedLanguageSource(i18n.English))
 	gate.shut()
-	gate.admit(func() { t.Fatal("a delivery reached the session after the gate shut") })
-	gate.admit(func() { t.Fatal("a delivery reached the session after the gate shut") })
+	refused := func() { t.Fatal("a delivery reached the session after the gate shut") }
+	gate.admit(lateEventKey, refused)
+	gate.admit(lateEventKey, refused)
+	gate.admit(lateResumeKey, refused)
+	gate.admit(lateResumeKey, refused)
 
-	if lines := strings.Count(warned.String(), "\n"); lines != 1 || !strings.Contains(warned.String(), "window") {
-		t.Fatalf("warnings = %q, want one line naming the session", warned.String())
+	lines := strings.Split(strings.TrimSuffix(warned.String(), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("warnings = %q, want one line per refused kind", warned.String())
+	}
+	if !strings.Contains(lines[0], "event") || !strings.Contains(lines[1], "resume token") {
+		t.Fatalf("warnings = %q, want the event line then the resume token line", warned.String())
+	}
+	for _, line := range lines {
+		if !strings.Contains(line, "window") {
+			t.Fatalf("warning %q does not name the session", line)
+		}
 	}
 }
 
@@ -74,7 +86,7 @@ func TestConsolidationRunsWithTheGateShut(t *testing.T) {
 	gate := newSeedGate("window", io.Discard, fixedLanguageSource(i18n.English))
 	delivered := false
 	orch := probeOrchestrator{consolidate: func(context.Context) error {
-		gate.admit(func() { delivered = true })
+		gate.admit(lateEventKey, func() { delivered = true })
 		return nil
 	}}
 	consolidateOneShot(context.Background(), orch, gate, state.Session{Name: "window"}, io.Discard, fixedLanguageSource(i18n.English))

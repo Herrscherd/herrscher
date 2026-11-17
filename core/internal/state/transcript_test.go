@@ -187,3 +187,19 @@ func TestReadTranscriptSummaryIgnoresTheBillingTotals(t *testing.T) {
 		t.Fatalf("a turn with no reading must report none, got %d", got.ContextTokens)
 	}
 }
+
+func TestReadTranscriptTailKeepsOnlyTheLastEntries(t *testing.T) {
+	p := TranscriptPath(t.TempDir(), "tail")
+	for _, text := range []string{"1", "2", "3", "4", "5"} {
+		if err := AppendTranscript(p, TranscriptEntry{Ts: "t", Role: "user", Text: text}); err != nil {
+			t.Fatalf("append: %v", err)
+		}
+	}
+	got := ReadTranscriptTail(p, 2)
+	if len(got) != 2 || got[0].Text != "4" || got[1].Text != "5" {
+		t.Fatalf("tail = %+v, want the entries 4 and 5 in file order", got)
+	}
+	if missing := ReadTranscriptTail(filepath.Join(t.TempDir(), "absent.jsonl"), 2); len(missing) != 0 {
+		t.Fatalf("missing transcript read as %+v, want nothing", missing)
+	}
+}

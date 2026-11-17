@@ -27,7 +27,7 @@ func (h *hub) clearTurnMark(session string) {
 }
 
 func (h *hub) interruptionAnnounced(name, turnID string) bool {
-	entries := state.ReadTranscript(state.TranscriptPath(h.partDir, name), scrollbackCap)
+	entries := state.ReadTranscriptTail(state.TranscriptPath(h.partDir, name), scrollbackCap)
 	for i := range entries {
 		if entries[i].Kind == turnInterruptedKind && entries[i].TurnID == turnID {
 			return true

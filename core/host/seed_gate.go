@@ -5,29 +5,36 @@ import (
 	"sync"
 )
 
+const (
+	lateTranscriptKey = "seed.late_transcript"
+	lateEventKey      = "seed.late_event"
+	lateUsageKey      = "seed.late_usage"
+	lateResumeKey     = "seed.late_resume"
+)
+
 type seedGate struct {
 	mu       sync.Mutex
 	closed   bool
-	refused  bool
+	refused  map[string]bool
 	session  string
 	warn     io.Writer
 	language languageSource
 }
 
 func newSeedGate(session string, warn io.Writer, language languageSource) *seedGate {
-	return &seedGate{session: session, warn: warn, language: language}
+	return &seedGate{refused: map[string]bool{}, session: session, warn: warn, language: language}
 }
 
-func (g *seedGate) admit(deliver func()) {
+func (g *seedGate) admit(lateKey string, deliver func()) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if !g.closed {
 		deliver()
 		return
 	}
-	if !g.refused {
-		g.refused = true
-		warnLive(g.warn, g.language, "seed.late_delivery", map[string]any{nameParam: g.session})
+	if !g.refused[lateKey] {
+		g.refused[lateKey] = true
+		warnLive(g.warn, g.language, lateKey, map[string]any{nameParam: g.session})
 	}
 }
 

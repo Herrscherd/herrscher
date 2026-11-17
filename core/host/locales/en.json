@@ -500,9 +500,24 @@
     "other": "herrscher: session \"{{.Name}}\": consolidate after {{.Elapsed}}: {{.Detail}}"
   },
   {
-    "id": "seed.late_delivery",
-    "description": "A message reaches a one-shot seed after its gate shut and is dropped, Name names the session; warned once per seed",
-    "other": "herrscher: session \"{{.Name}}\": a message arrived after its seed closed and was dropped"
+    "id": "seed.late_transcript",
+    "description": "A transcript entry reaches a one-shot seed after its gate shut and is dropped, Name names the session; warned once per kind of item per seed",
+    "other": "herrscher: session \"{{.Name}}\": a transcript entry arrived after its seed closed and was dropped"
+  },
+  {
+    "id": "seed.late_event",
+    "description": "An event reaches a one-shot seed after its gate shut and is dropped, Name names the session; warned once per kind of item per seed",
+    "other": "herrscher: session \"{{.Name}}\": an event arrived after its seed closed and was dropped"
+  },
+  {
+    "id": "seed.late_usage",
+    "description": "A usage record reaches a one-shot seed after its gate shut and is dropped, Name names the session; warned once per kind of item per seed",
+    "other": "herrscher: session \"{{.Name}}\": a usage record arrived after its seed closed and was dropped"
+  },
+  {
+    "id": "seed.late_resume",
+    "description": "A resume token reaches a one-shot seed after its gate shut and is dropped, Name names the session; warned once per kind of item per seed",
+    "other": "herrscher: session \"{{.Name}}\": a resume token arrived after its seed closed and was dropped"
   },
   {
     "id": "serve.instance_persist",

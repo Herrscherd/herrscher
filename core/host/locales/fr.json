@@ -500,9 +500,24 @@
     "other": "herrscher : session \"{{.Name}}\" : consolidation après {{.Elapsed}} : {{.Detail}}"
   },
   {
-    "id": "seed.late_delivery",
-    "description": "A message reaches a one-shot seed after its gate shut and is dropped, Name names the session; warned once per seed",
-    "other": "herrscher : session \"{{.Name}}\" : un message reçu après la fermeture du seed a été abandonné"
+    "id": "seed.late_transcript",
+    "description": "A transcript entry reaches a one-shot seed after its gate shut and is dropped, Name names the session; warned once per kind of item per seed",
+    "other": "herrscher : session \"{{.Name}}\" : une entrée de transcription reçue après la fermeture du seed a été abandonnée"
+  },
+  {
+    "id": "seed.late_event",
+    "description": "An event reaches a one-shot seed after its gate shut and is dropped, Name names the session; warned once per kind of item per seed",
+    "other": "herrscher : session \"{{.Name}}\" : un événement reçu après la fermeture du seed a été abandonné"
+  },
+  {
+    "id": "seed.late_usage",
+    "description": "A usage record reaches a one-shot seed after its gate shut and is dropped, Name names the session; warned once per kind of item per seed",
+    "other": "herrscher : session \"{{.Name}}\" : un relevé d'usage reçu après la fermeture du seed a été abandonné"
+  },
+  {
+    "id": "seed.late_resume",
+    "description": "A resume token reaches a one-shot seed after its gate shut and is dropped, Name names the session; warned once per kind of item per seed",
+    "other": "herrscher : session \"{{.Name}}\" : un jeton de reprise reçu après la fermeture du seed a été abandonné"
   },
   {
     "id": "serve.instance_persist",

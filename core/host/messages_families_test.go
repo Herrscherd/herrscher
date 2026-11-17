@@ -72,7 +72,10 @@ func TestHostMessageFamiliesAreFrozen(t *testing.T) {
 		},
 		"seed": {
 			{"seed.consolidate", map[string]any{"Name": "alpha", "Elapsed": "1s", "Detail": "boom"}, `herrscher : session "alpha" : consolidation après 1s : boom`, `herrscher: session "alpha": consolidate after 1s: boom`},
-			{"seed.late_delivery", map[string]any{"Name": "alpha"}, `herrscher : session "alpha" : un message reçu après la fermeture du seed a été abandonné`, `herrscher: session "alpha": a message arrived after its seed closed and was dropped`},
+			{"seed.late_transcript", map[string]any{"Name": "alpha"}, `herrscher : session "alpha" : une entrée de transcription reçue après la fermeture du seed a été abandonnée`, `herrscher: session "alpha": a transcript entry arrived after its seed closed and was dropped`},
+			{"seed.late_event", map[string]any{"Name": "alpha"}, `herrscher : session "alpha" : un événement reçu après la fermeture du seed a été abandonné`, `herrscher: session "alpha": an event arrived after its seed closed and was dropped`},
+			{"seed.late_usage", map[string]any{"Name": "alpha"}, `herrscher : session "alpha" : un relevé d'usage reçu après la fermeture du seed a été abandonné`, `herrscher: session "alpha": a usage record arrived after its seed closed and was dropped`},
+			{"seed.late_resume", map[string]any{"Name": "alpha"}, `herrscher : session "alpha" : un jeton de reprise reçu après la fermeture du seed a été abandonné`, `herrscher: session "alpha": a resume token arrived after its seed closed and was dropped`},
 		},
 		"serve": {
 			{"serve.config", map[string]any{"Detail": "boom"}, "chargement de la configuration impossible : boom", "load config: boom"},

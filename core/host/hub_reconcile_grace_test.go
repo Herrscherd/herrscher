@@ -10,6 +10,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -31,7 +32,7 @@ func TestStuckBridgesDoNotAddAGracePerSessionToAnUnrelatedCommand(t *testing.T) 
 	synctest.Test(t, func(t *testing.T) {
 		st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 		names := []string{"stuck-a", "stuck-b", "stuck-c"}
-		h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()))
+		h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()))
 		h.teardownGrace = reconcileGrace
 		release := make(chan struct{})
 		defer close(release)
@@ -70,7 +71,7 @@ func TestStuckStopsOfArchivedSessionsShareOneGraceInReconcile(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 		names := []string{"dead-a", "dead-b", "dead-c"}
-		h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()))
+		h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()))
 		h.teardownGrace = reconcileGrace
 		release := make(chan struct{})
 		defer close(release)

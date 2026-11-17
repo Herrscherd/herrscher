@@ -8,6 +8,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
@@ -33,7 +34,7 @@ func TestResumeWhoseArchiveFlagCannotBePersistedStartsNoBridge(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	sup := supervisor.NewSupervisor(ctx, filepath.Join(t.TempDir(), "no-such-bridge"), layout)
-	h := newHub(st, sup, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()), withWarnings(io.Discard))
+	h := newHub(st, sup, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()), withWarnings(io.Discard))
 	h.runtime = layout
 	h.teardownGrace = defaultTeardownGrace
 	var runningAtStop []bool

@@ -15,6 +15,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/control"
@@ -28,17 +29,18 @@ import (
 const defaultTeardownGrace = 5 * time.Second
 
 type hub struct {
-	lang     i18n.Language
-	language languageSource
-	st       *state.State
-	sup      *supervisor.Supervisor
-	gws      []Deps
-	partDir  string
-	reg      *cli.Registry
-	metrics  *metrics.Registry
-	warnings io.Writer
-	messages *hostMessages
-	sink     *warningSink
+	lang        i18n.Language
+	language    languageSource
+	st          *state.State
+	sup         *supervisor.Supervisor
+	gws         []Deps
+	partDir     string
+	reg         *cli.Registry
+	metrics     *metrics.Registry
+	warnings    io.Writer
+	messages    *hostMessages
+	cliMessages *clitext.Messages
+	sink        *warningSink
 
 	coordinator    contracts.Coordinator
 	eventPublisher func(session string, event contracts.Event)
@@ -88,7 +90,7 @@ func withWarnings(w io.Writer) hubOption {
 }
 
 func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry, approvals *approvalTable, sessions *sessionTable, opts ...hubOption) *hub {
-	created := &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, messages: sessions.messages, live: make(map[string]liveSession), teardownGrace: defaultTeardownGrace, approvals: approvals, sessions: sessions, listen: control.Listen, relaunchStop: make(chan struct{})}
+	created := &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, messages: sessions.messages, cliMessages: sessions.cliMessages, live: make(map[string]liveSession), teardownGrace: defaultTeardownGrace, approvals: approvals, sessions: sessions, listen: control.Listen, relaunchStop: make(chan struct{})}
 	for _, opt := range opts {
 		opt(created)
 	}
@@ -125,7 +127,7 @@ func (h *hub) reportSessionFailure(sess state.Session, stage supervisor.Stage, c
 		return
 	}
 	lang := sessionLanguage(sess, h.textLanguage()())
-	text := localizeHostError(h.messages, lang, wrapHost(h.messages, cause, sessionFailureKey(stage), map[string]any{nameParam: sess.Name, detailParam: cause.Error()})).Error()
+	text := localizeHostError(h.messages, h.cliMessages, lang, wrapHost(h.messages, cause, sessionFailureKey(stage), map[string]any{nameParam: sess.Name, detailParam: cause.Error()})).Error()
 	h.eventPublisher(sess.Name, contracts.Event{T: eventwire.EventNotice, Text: text})
 }
 
@@ -146,6 +148,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 		runtime := oneShotSeedRuntime{
 			warnings:        h.warnings,
 			messages:        h.messages,
+			cliMessages:     h.cliMessages,
 			sessionLanguage: h.sessionLanguageSource,
 			coordinator:     h.coordinator,
 			publish:         h.eventPublisher,

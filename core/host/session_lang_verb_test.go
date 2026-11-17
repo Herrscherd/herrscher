@@ -15,7 +15,7 @@ import (
 
 func TestSessionLangStoresTheLanguageAndRepliesInIt(t *testing.T) {
 	st := languageStore(t, state.Session{Name: "alpha"})
-	got, err := setSessionLang(st, i18n.English, "alpha", "fr")
+	got, err := setSessionLang(clitext.NewMessages(), st, i18n.English, "alpha", "fr")
 	if err != nil {
 		t.Fatalf("setSessionLang: %v", err)
 	}
@@ -31,7 +31,7 @@ func TestSessionLangStoresTheLanguageAndRepliesInIt(t *testing.T) {
 
 func TestSessionLangAutoClearsTheSessionAndRepliesInTheOperatorLanguage(t *testing.T) {
 	st := languageStore(t, state.Session{Name: "alpha", Language: "fr"})
-	got, err := setSessionLang(st, i18n.French, "alpha", "auto")
+	got, err := setSessionLang(clitext.NewMessages(), st, i18n.French, "alpha", "auto")
 	if err != nil {
 		t.Fatalf("setSessionLang: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestSessionLangAutoClearsTheSessionAndRepliesInTheOperatorLanguage(t *testi
 
 func TestSessionLangVerbRunsThroughTheCommand(t *testing.T) {
 	st := languageStore(t, state.Session{Name: "alpha"})
-	cmd := sessionLangVerb(st, fixedLanguage(i18n.English))
+	cmd := sessionLangVerb(clitext.NewMessages(), st, fixedLanguage(i18n.English))
 	in := contracts.Input{Args: map[string]string{paramName: "alpha", paramLang: "fr"}}
 	if _, err := cmd.Run(context.Background(), in); err != nil {
 		t.Fatalf("session lang alpha fr: %v", err)
@@ -58,7 +58,7 @@ func TestSessionLangVerbRunsThroughTheCommand(t *testing.T) {
 
 func TestSessionLangRefusesAnythingOutsideTheClosedSetInTheSessionLanguage(t *testing.T) {
 	st := languageStore(t, state.Session{Name: "alpha", Language: "fr"})
-	_, err := setSessionLang(st, i18n.English, "alpha", "klingon")
+	_, err := setSessionLang(clitext.NewMessages(), st, i18n.English, "alpha", "klingon")
 	if !errors.Is(err, errUnsupportedLang) {
 		t.Fatalf("setSessionLang(klingon) = %v, want errUnsupportedLang", err)
 	}
@@ -66,7 +66,7 @@ func TestSessionLangRefusesAnythingOutsideTheClosedSetInTheSessionLanguage(t *te
 	if textErr != nil {
 		t.Fatal(textErr)
 	}
-	got := localizeHostError(newHostMessages(), commandErrorLanguage(st, i18n.English, contracts.Input{Args: map[string]string{paramName: "alpha"}}), err).Error()
+	got := localizeHostError(newHostMessages(), clitext.NewMessages(), commandErrorLanguage(st, i18n.English, contracts.Input{Args: map[string]string{paramName: "alpha"}}), err).Error()
 	if !strings.Contains(got, phrase) || strings.Contains(got, errUnsupportedLang.Error()) {
 		t.Fatalf("error for a french session = %q, want the french phrase %q", got, phrase)
 	}
@@ -74,7 +74,7 @@ func TestSessionLangRefusesAnythingOutsideTheClosedSetInTheSessionLanguage(t *te
 
 func TestLocalizeHostErrorTranslatesEverySentinelInOneError(t *testing.T) {
 	err := fmt.Errorf("%w; %w", errNoPendingChoice, errUnsupportedLang)
-	got := localizeHostError(newHostMessages(), i18n.French, err).Error()
+	got := localizeHostError(newHostMessages(), clitext.NewMessages(), i18n.French, err).Error()
 	for _, sentinel := range []error{errNoPendingChoice, errUnsupportedLang} {
 		if strings.Contains(got, sentinel.Error()) {
 			t.Fatalf("%q still carries the english sentinel %q", got, sentinel.Error())
@@ -115,7 +115,7 @@ func TestCommandErrorsUseTheTargetSessionLanguage(t *testing.T) {
 
 func TestSessionLangUnknownSessionIsANotFoundNotice(t *testing.T) {
 	st := languageStore(t)
-	_, err := setSessionLang(st, i18n.French, "ghost", "fr")
+	_, err := setSessionLang(clitext.NewMessages(), st, i18n.French, "ghost", "fr")
 	var notFound *NotFoundError
 	if !errors.As(err, &notFound) {
 		t.Fatalf("setSessionLang on an unknown session = %v, want a NotFoundError", err)

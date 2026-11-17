@@ -2,14 +2,15 @@ package host
 
 import (
 	"context"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"io"
 	"testing"
 	"time"
 )
 
 func TestClaimIdleRefusesASessionWithATurnOrAQueuedMessage(t *testing.T) {
-	sessions := newSessionTable(newHostMessages())
-	driver := newSessionDriver(newHostMessages(), "s1", nil, nil, nil, io.Discard)
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	driver := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", nil, nil, nil, io.Discard)
 	sessions.register("s1", driver)
 
 	release, ok := sessions.claimIdle("s1")
@@ -41,8 +42,8 @@ func TestClaimIdleRefusesASessionWithATurnOrAQueuedMessage(t *testing.T) {
 }
 
 func TestPumpExitsOnTeardownWhileAClaimIsHeld(t *testing.T) {
-	sessions := newSessionTable(newHostMessages())
-	driver := newSessionDriver(newHostMessages(), "s1", nil, nil, nil, io.Discard)
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	driver := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", nil, nil, nil, io.Discard)
 	sessions.register("s1", driver)
 	release, ok := sessions.claimIdle("s1")
 	if !ok {
@@ -65,7 +66,7 @@ func TestPumpExitsOnTeardownWhileAClaimIsHeld(t *testing.T) {
 }
 
 func TestInTurnFollowsTheTurnToken(t *testing.T) {
-	driver := newSessionDriver(newHostMessages(), "s1", nil, nil, nil, io.Discard)
+	driver := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", nil, nil, nil, io.Discard)
 	if driver.inTurn() {
 		t.Fatal("an idle driver must not report a turn")
 	}
@@ -82,8 +83,8 @@ func TestInTurnFollowsTheTurnToken(t *testing.T) {
 }
 
 func TestAClaimedSessionIsRefusedButNotWorking(t *testing.T) {
-	sessions := newSessionTable(newHostMessages())
-	driver := newSessionDriver(newHostMessages(), "s1", nil, nil, nil, io.Discard)
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	driver := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", nil, nil, nil, io.Discard)
 	sessions.register("s1", driver)
 	release, ok := sessions.claimIdle("s1")
 	if !ok {

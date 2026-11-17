@@ -27,7 +27,7 @@ func languageStore(t *testing.T, sessions ...state.Session) *state.State {
 func TestBuilderRepliesFollowTheTargetSessionLanguage(t *testing.T) {
 	st := languageStore(t, state.Session{Name: "fr-s", Language: "fr"})
 	in := contracts.Input{Args: map[string]string{paramSession: "fr-s", "mode": "bypass"}}
-	got, err := setApprovalMode(st, i18n.English, in)
+	got, err := setApprovalMode(clitext.NewMessages(), st, i18n.English, in)
 	if err != nil {
 		t.Fatalf("setApprovalMode: %v", err)
 	}

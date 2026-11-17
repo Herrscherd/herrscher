@@ -7,6 +7,7 @@ import (
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -17,7 +18,7 @@ func roleRegistry(t *testing.T) (*cli.Registry, *state.State) {
 		t.Fatal(err)
 	}
 	reg := &cli.Registry{}
-	if err := addRoleCommands(reg, fixedLanguage(i18n.English), st); err != nil {
+	if err := addRoleCommands(reg, clitext.NewMessages(), fixedLanguage(i18n.English), st); err != nil {
 		t.Fatal(err)
 	}
 	return reg, st
@@ -198,7 +199,7 @@ func TestGrantConfirmationNamesThePrincipalAndTheRoleInEachLanguage(t *testing.T
 			t.Fatal(err)
 		}
 		reg := &cli.Registry{}
-		if err = addRoleCommands(reg, fixedLanguage(tc.lang), st); err != nil {
+		if err = addRoleCommands(reg, clitext.NewMessages(), fixedLanguage(tc.lang), st); err != nil {
 			t.Fatal(err)
 		}
 		if _, err = reg.Dispatch(context.Background(), []string{"role", "grant", "--principal", "chat:1", "--role", "owner"}); err != nil {

@@ -18,6 +18,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/envx"
 )
 
@@ -432,7 +433,7 @@ func TestModelDiscoveryForLeavesTheEnvironmentAlone(t *testing.T) {
 
 func modelsVerb(t *testing.T, verb string) contracts.Cmd {
 	t.Helper()
-	for _, cmd := range ModelsCommands(newHostMessages(), fixedLanguage(i18n.English)) {
+	for _, cmd := range ModelsCommands(newHostMessages(), clitext.NewMessages(), fixedLanguage(i18n.English)) {
 		if len(cmd.Path) == 2 && cmd.Path[1] == verb {
 			return cmd
 		}
@@ -683,10 +684,10 @@ func TestToCachedKeepsContextWindowAndHidden(t *testing.T) {
 }
 
 func TestModelsListTextFollowsTheLanguage(t *testing.T) {
-	if got := modelsListText(i18n.French, nil); got != "aucun modèle proposé avec la politique de routage actuelle" {
-		t.Fatalf("modelsListText(fr, none) = %q", got)
+	if got := modelsListText(clitext.NewMessages(), i18n.French, nil); got != "aucun modèle proposé avec la politique de routage actuelle" {
+		t.Fatalf("modelsListText(clitext.NewMessages(), fr, none) = %q", got)
 	}
-	if got := modelsListText(i18n.English, nil); got != "no models offered under the current route policy" {
-		t.Fatalf("modelsListText(en, none) = %q", got)
+	if got := modelsListText(clitext.NewMessages(), i18n.English, nil); got != "no models offered under the current route policy" {
+		t.Fatalf("modelsListText(clitext.NewMessages(), en, none) = %q", got)
 	}
 }

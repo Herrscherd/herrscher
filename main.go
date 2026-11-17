@@ -249,7 +249,7 @@ func runForwarded(ctx context.Context, layout host.RuntimeLayout, messages *clit
 }
 
 func forwardedFailureLine(messages *clitext.Messages, hostMessages *host.Messages, lang i18n.Language, derr error) string {
-	return cliErrorLine(render(messages, lang, clitext.ErrorLine, clitext.Params{clitext.ParamMessage: hostMessages.Localize(lang, derr).Error()}))
+	return cliErrorLine(render(messages, lang, clitext.ErrorLine, clitext.Params{clitext.ParamMessage: hostMessages.Localize(messages, lang, derr).Error()}))
 }
 
 type exitStatusError struct {

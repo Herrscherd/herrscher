@@ -24,28 +24,28 @@ const approvalsFile = "APPROVALS"
 
 var errScopeConflict = errors.New("--session and --always are two scopes: pick one")
 
-func addApproveCommands(reg *cli.Registry, messages *hostMessages, lang languageSource, warn io.Writer, hostState *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) error {
+func addApproveCommands(reg *cli.Registry, messages *hostMessages, cliMessages *clitext.Messages, lang languageSource, warn io.Writer, hostState *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) error {
 	return addVerbs(
 		reg,
-		approveListVerb(lang, approvals),
-		approveAllowVerb(lang, approvals, sessions),
-		approveDenyVerb(lang, approvals, sessions),
-		approveRuleVerb(lang, hostState),
+		approveListVerb(cliMessages, lang, approvals),
+		approveAllowVerb(cliMessages, lang, approvals, sessions),
+		approveDenyVerb(cliMessages, lang, approvals, sessions),
+		approveRuleVerb(cliMessages, lang, hostState),
 		approveAskVerb(messages, lang, warn, hostState, agents, approvals, sessions),
-		approveModeVerb(hostState, lang),
+		approveModeVerb(cliMessages, hostState, lang),
 		sessionShellVerb(messages, lang, warn, hostState, agents, approvals, sessions),
 	)
 }
 
-func approveListVerb(lang languageSource, approvals *approvalTable) contracts.Cmd {
+func approveListVerb(cliMessages *clitext.Messages, lang languageSource, approvals *approvalTable) contracts.Cmd {
 	return contracts.New(nsApprove, "list").
 		Help(clitext.CmdHelpApproveList).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(listApprovals(lang(), approvals, in.JSON))
+			return cli.Data(listApprovals(cliMessages, lang(), approvals, in.JSON))
 		})
 }
 
-func listApprovals(lang i18n.Language, approvals *approvalTable, asJSON bool) (string, error) {
+func listApprovals(cliMessages *clitext.Messages, lang i18n.Language, approvals *approvalTable, asJSON bool) (string, error) {
 	pending := pendingApprovals(approvals)
 	sort.SliceStable(pending, func(left, job int) bool {
 		if pending[left].Age != pending[job].Age {
@@ -58,7 +58,7 @@ func listApprovals(lang i18n.Language, approvals *approvalTable, asJSON bool) (s
 		return string(body), err
 	}
 	if len(pending) == 0 {
-		return replyText(lang).Text(clitext.HostApproveNone, nil), nil
+		return replyText(cliMessages, lang).Text(clitext.HostApproveNone, nil), nil
 	}
 	var body strings.Builder
 	for _, p := range pending {
@@ -67,7 +67,7 @@ func listApprovals(lang i18n.Language, approvals *approvalTable, asJSON bool) (s
 	return strings.TrimRight(body.String(), "\n"), nil
 }
 
-func approveAllowVerb(lang languageSource, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
+func approveAllowVerb(cliMessages *clitext.Messages, lang languageSource, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsApprove, "allow").
 		Help(clitext.CmdHelpApproveAllow).
 		ValueParam("id", clitext.CmdParamApproveAllowID, false).
@@ -81,7 +81,7 @@ func approveAllowVerb(lang languageSource, approvals *approvalTable, sessions *s
 			if !settleApproval(approvals, sessions, approvalID, approvalAnswer{scope: scope}) {
 				return contracts.Result{}, &requestNotWaitingError{ID: approvalID}
 			}
-			return contracts.DataResult(replyText(lang()).Text(clitext.HostApproveAllowed, clitext.Params{clitext.ParamID: approvalID})), nil
+			return contracts.DataResult(replyText(cliMessages, lang()).Text(clitext.HostApproveAllowed, clitext.Params{clitext.ParamID: approvalID})), nil
 		})
 }
 
@@ -117,7 +117,7 @@ func allowOperands(input contracts.Input) (string, approvalScope, error) {
 	return operands[0], scope, nil
 }
 
-func approveDenyVerb(lang languageSource, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
+func approveDenyVerb(cliMessages *clitext.Messages, lang languageSource, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
 	return contracts.New(nsApprove, "deny").
 		Help(clitext.CmdHelpApproveDeny).
 		ValueParam("id", clitext.CmdParamApproveDenyID, false).
@@ -131,28 +131,28 @@ func approveDenyVerb(lang languageSource, approvals *approvalTable, sessions *se
 			if !settleApproval(approvals, sessions, approvalID, answer) {
 				return contracts.Result{}, &requestNotWaitingError{ID: approvalID}
 			}
-			return contracts.DataResult(replyText(lang()).Text(clitext.HostApproveDenied, clitext.Params{clitext.ParamID: approvalID})), nil
+			return contracts.DataResult(replyText(cliMessages, lang()).Text(clitext.HostApproveDenied, clitext.Params{clitext.ParamID: approvalID})), nil
 		})
 }
 
-func approveRuleVerb(lang languageSource, store *state.State) contracts.Cmd {
+func approveRuleVerb(cliMessages *clitext.Messages, lang languageSource, store *state.State) contracts.Cmd {
 	return contracts.New(nsApprove, "rule").
 		Help(clitext.CmdHelpApproveRule).
 		ValueParam("rule", clitext.CmdParamApproveRuleRule, false).
 		ValueParam("rm", clitext.CmdParamApproveRuleRm, false).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			if rm := strings.TrimSpace(input.Get("rm")); rm != "" {
-				return cli.Data(removeApprovalRule(lang(), store, rm))
+				return cli.Data(removeApprovalRule(cliMessages, lang(), store, rm))
 			}
 			raw := firstOf(input.Get("rule"), input.Rest)
 			if raw == "" {
-				return cli.Data(listApprovalRules(lang(), store, input.JSON))
+				return cli.Data(listApprovalRules(cliMessages, lang(), store, input.JSON))
 			}
-			return cli.Data(addApprovalRule(lang(), store, raw))
+			return cli.Data(addApprovalRule(cliMessages, lang(), store, raw))
 		})
 }
 
-func removeApprovalRule(lang i18n.Language, store *state.State, raw string) (string, error) {
+func removeApprovalRule(cliMessages *clitext.Messages, lang i18n.Language, store *state.State, raw string) (string, error) {
 	parsed, err := approval.ParseRule(raw)
 	if err != nil {
 		return "", err
@@ -164,10 +164,10 @@ func removeApprovalRule(lang i18n.Language, store *state.State, raw string) (str
 	if !removed {
 		return "", &noSuchRuleError{Rule: parsed.String()}
 	}
-	return replyText(lang).Text(clitext.HostApproveRuleRemoved, clitext.Params{clitext.ParamRule: parsed.String()}), nil
+	return replyText(cliMessages, lang).Text(clitext.HostApproveRuleRemoved, clitext.Params{clitext.ParamRule: parsed.String()}), nil
 }
 
-func listApprovalRules(lang i18n.Language, st *state.State, asJSON bool) (string, error) {
+func listApprovalRules(cliMessages *clitext.Messages, lang i18n.Language, st *state.State, asJSON bool) (string, error) {
 	rules := st.ApprovalRules()
 	if asJSON {
 		if rules == nil {
@@ -177,12 +177,12 @@ func listApprovalRules(lang i18n.Language, st *state.State, asJSON bool) (string
 		return string(b), err
 	}
 	if len(rules) == 0 {
-		return replyText(lang).Text(clitext.HostApproveRuleNone, nil), nil
+		return replyText(cliMessages, lang).Text(clitext.HostApproveRuleNone, nil), nil
 	}
 	return "- " + strings.Join(rules, "\n- "), nil
 }
 
-func addApprovalRule(lang i18n.Language, store *state.State, raw string) (string, error) {
+func addApprovalRule(cliMessages *clitext.Messages, lang i18n.Language, store *state.State, raw string) (string, error) {
 	parsed, err := approval.ParseRule(raw)
 	if err != nil {
 		return "", err
@@ -190,7 +190,7 @@ func addApprovalRule(lang i18n.Language, store *state.State, raw string) (string
 	if err := store.AddApprovalRule(parsed.String()); err != nil {
 		return "", err
 	}
-	return replyText(lang).Text(clitext.HostApproveRuleAdded, clitext.Params{clitext.ParamRule: parsed.String()}), nil
+	return replyText(cliMessages, lang).Text(clitext.HostApproveRuleAdded, clitext.Params{clitext.ParamRule: parsed.String()}), nil
 }
 
 func approveAskVerb(messages *hostMessages, lang languageSource, warn io.Writer, store *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
@@ -218,17 +218,17 @@ func approveAskVerb(messages *hostMessages, lang languageSource, warn io.Writer,
 		})
 }
 
-func approveModeVerb(store *state.State, lang languageSource) contracts.Cmd {
+func approveModeVerb(cliMessages *clitext.Messages, store *state.State, lang languageSource) contracts.Cmd {
 	return contracts.New(nsApprove, "mode").
 		Help(clitext.CmdHelpApproveMode).
 		ValueParam(paramSession, clitext.CmdParamApproveModeSession, false).
 		ValueParam("mode", clitext.CmdParamApproveModeMode, false).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(setApprovalMode(store, lang(), in))
+			return cli.Data(setApprovalMode(cliMessages, store, lang(), in))
 		})
 }
 
-func setApprovalMode(store *state.State, operator i18n.Language, in contracts.Input) (string, error) {
+func setApprovalMode(cliMessages *clitext.Messages, store *state.State, operator i18n.Language, in contracts.Input) (string, error) {
 	ops := parseModeOperands(in)
 	name, mode := ops.session, ops.mode
 	if name == "" || mode == "" {
@@ -241,7 +241,7 @@ func setApprovalMode(store *state.State, operator i18n.Language, in contracts.In
 	if err := store.SetSessionApprovals(name, mode); err != nil {
 		return "", err
 	}
-	text := replyText(namedSessionLanguage(store, name, operator))
+	text := replyText(cliMessages, namedSessionLanguage(store, name, operator))
 	params := clitext.Params{clitext.ParamName: name, clitext.ParamMode: mode}
 	if parsed == approval.ModeSmart && !riskModelConfigured() {
 		return text.Text(clitext.HostApproveSmartNoBackend, params), nil

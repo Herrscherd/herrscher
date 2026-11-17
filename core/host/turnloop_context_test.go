@@ -7,6 +7,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -17,7 +18,7 @@ func recordedTurn(t *testing.T, events ...contracts.Event) state.TranscriptEntry
 	a.feed("vas-y")
 	toBridge := make(chan contracts.Event, 8)
 	fromBridge := make(chan contracts.Event, 8)
-	d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 	entries := make(chan state.TranscriptEntry, 8)
 	d.sink.Transcript = func(e state.TranscriptEntry) { entries <- e }
 	ctx, cancel := context.WithCancel(context.Background())

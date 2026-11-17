@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
@@ -19,7 +20,7 @@ func TestRefusedBridgeLeavesAnAlreadyLiveSessionListening(t *testing.T) {
 	if err := st.AddSession(state.Session{Name: name, ChannelID: "c1"}); err != nil {
 		t.Fatal(err)
 	}
-	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()))
+	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()))
 	h.runtime = layout
 	t.Cleanup(func() { h.goDead(name) })
 	sess := state.Session{Name: name, ChannelID: "c1"}

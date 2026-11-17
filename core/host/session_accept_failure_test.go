@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -61,7 +62,7 @@ func TestTerminalAcceptErrorRetiresTheSessionAndRebinds(t *testing.T) {
 		nil,
 		nil,
 		newApprovalTable(io.Discard),
-		newSessionTable(newHostMessages()),
+		newSessionTable(newHostMessages(), clitext.NewMessages()),
 		withWarnings(warnings),
 	)
 	h.runtime = layout
@@ -112,7 +113,7 @@ func TestNormalStopReportsNothing(t *testing.T) {
 				nil,
 				nil,
 				newApprovalTable(io.Discard),
-				newSessionTable(newHostMessages()),
+				newSessionTable(newHostMessages(), clitext.NewMessages()),
 				withWarnings(warnings),
 			)
 			h.runtime = layout

@@ -8,6 +8,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func TestRemoteDiscoveryFailureRendersInFrenchThroughTheHostCatalogue(t *testing.T) {
@@ -19,7 +20,7 @@ func TestRemoteDiscoveryFailureRendersInFrenchThroughTheHostCatalogue(t *testing
 	discovery := &RemoteResolveError{messages: newHostMessages(), Category: contracts.CategoryBackend, Attempts: 3, Elapsed: 2 * time.Second, Err: cause}
 	const head = "résolveur : ressource distante backend indisponible après 3 tentative(s) en 2s : socket d'événements "
 	const tail = " : le démon ne répond pas sur sa socket d'événements"
-	if got := localizeHostError(newHostMessages(), i18n.French, discovery).Error(); !strings.HasPrefix(got, head) || !strings.HasSuffix(got, tail) {
+	if got := localizeHostError(newHostMessages(), clitext.NewMessages(), i18n.French, discovery).Error(); !strings.HasPrefix(got, head) || !strings.HasSuffix(got, tail) {
 		t.Fatalf("discovery error = %q, want the French text %q ... %q", got, head, tail)
 	}
 }

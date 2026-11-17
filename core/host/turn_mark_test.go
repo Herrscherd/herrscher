@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -64,7 +65,7 @@ func TestRestartWithResumeDoesNotAnnounceTheMarkOfTheOldConversation(t *testing.
 		t.Fatal(err)
 	}
 	partDir := t.TempDir()
-	h := newHub(st, nil, nil, partDir, nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()), withWarnings(io.Discard))
+	h := newHub(st, nil, nil, partDir, nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()), withWarnings(io.Discard))
 	h.runtime = isolatedRuntimeDir(t)
 	h.startBridge = func(state.Session, time.Duration) error { return nil }
 
@@ -101,7 +102,7 @@ func stateFailingAfter(t *testing.T, sess state.Session) *state.State {
 
 func hubWarningInto(t *testing.T, st *state.State, partDir string, warnings *lockedBuffer) *hub {
 	t.Helper()
-	h := newHub(st, nil, nil, partDir, nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()), withWarnings(warnings))
+	h := newHub(st, nil, nil, partDir, nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()), withWarnings(warnings))
 	h.runtime = isolatedRuntimeDir(t)
 	h.startBridge = func(state.Session, time.Duration) error { return nil }
 	return h

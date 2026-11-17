@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
@@ -30,7 +31,7 @@ func newStartupTestHub(t *testing.T) *hub {
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
-	return newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()))
+	return newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()))
 }
 
 func TestStopLiveJoinsAStartupItNoLongerTracksAsLive(t *testing.T) {

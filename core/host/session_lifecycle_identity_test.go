@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -55,10 +56,10 @@ func TestGoDeadWaitsForRunSessionTeardown(t *testing.T) {
 }
 
 func TestOldDriverCannotUnregisterSameNameReplacement(t *testing.T) {
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	name := "registry-" + newTurnID()
-	oldDriver := newSessionDriver(newHostMessages(), name, nil, nil, nil, io.Discard)
-	newDriver := newSessionDriver(newHostMessages(), name, nil, nil, nil, io.Discard)
+	oldDriver := newSessionDriver(newHostMessages(), clitext.NewMessages(), name, nil, nil, nil, io.Discard)
+	newDriver := newSessionDriver(newHostMessages(), clitext.NewMessages(), name, nil, nil, nil, io.Discard)
 	sessionTab.register(name, oldDriver)
 	t.Cleanup(func() { sessionTab.unregister(name, newDriver) })
 
@@ -74,7 +75,7 @@ func TestOldDriverCannotUnregisterSameNameReplacement(t *testing.T) {
 func TestSameNameSessionCanRebindAfterTeardown(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	name := "rebind-" + newTurnID()
 	h := newHub(
 		state.NewState(filepath.Join(t.TempDir(), "state.json")),
@@ -142,7 +143,7 @@ func TestSessionSocketOutlivesTheContextThatCreatedIt(t *testing.T) {
 		nil,
 		nil,
 		newApprovalTable(io.Discard),
-		newSessionTable(newHostMessages()),
+		newSessionTable(newHostMessages(), clitext.NewMessages()),
 	)
 	h.runtime = layout
 	t.Cleanup(func() { h.goDead(name) })
@@ -196,7 +197,7 @@ func TestGoDeadReleasesTheSocketsWhileHoldingTheLifecycle(t *testing.T) {
 		nil,
 		nil,
 		newApprovalTable(io.Discard),
-		newSessionTable(newHostMessages()),
+		newSessionTable(newHostMessages(), clitext.NewMessages()),
 	)
 	h.runtime = layout
 	t.Cleanup(func() { h.goDead(name) })
@@ -218,7 +219,7 @@ func TestGoDeadReleasesTheSocketsWhileHoldingTheLifecycle(t *testing.T) {
 func TestRebindSurvivesAnOverrunTeardown(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
 	name := "overrun-" + newTurnID()
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	h := newHub(
 		state.NewState(filepath.Join(t.TempDir(), "state.json")),
 		nil,
@@ -310,7 +311,7 @@ func TestReleasedCommandSocketIsUnreachableOnceGoDeadReturns(t *testing.T) {
 		nil,
 		nil,
 		newApprovalTable(io.Discard),
-		newSessionTable(newHostMessages()),
+		newSessionTable(newHostMessages(), clitext.NewMessages()),
 	)
 	h.runtime = layout
 	h.teardownGrace = 0

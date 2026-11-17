@@ -12,13 +12,14 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
 
 func TestCommandsVerbDescribesTheRegistry(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	st := state.NewState(t.TempDir() + "/s.json")
@@ -56,7 +57,7 @@ func TestCommandsVerbDescribesTheRegistry(t *testing.T) {
 
 func TestSkillVerbsAreRegistered(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	st := state.NewState(t.TempDir() + "/s.json")
@@ -88,7 +89,7 @@ func TestCommandsVerbListsThenWarnsOnARawHelpText(t *testing.T) {
 	if err := reg.Add(raw); err != nil {
 		t.Fatal(err)
 	}
-	if err := reg.Add(commandsVerb(fixedLanguage(i18n.English), &reg)); err != nil {
+	if err := reg.Add(commandsVerb(clitext.NewMessages(), fixedLanguage(i18n.English), &reg)); err != nil {
 		t.Fatal(err)
 	}
 	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"commands"}))
@@ -110,7 +111,7 @@ func TestCommandsJSONWarnsThroughTheLogOnARawHelpText(t *testing.T) {
 	if err := reg.Add(raw); err != nil {
 		t.Fatal(err)
 	}
-	if err := reg.Add(commandsVerb(fixedLanguage(i18n.English), &reg)); err != nil {
+	if err := reg.Add(commandsVerb(clitext.NewMessages(), fixedLanguage(i18n.English), &reg)); err != nil {
 		t.Fatal(err)
 	}
 	var logs bytes.Buffer

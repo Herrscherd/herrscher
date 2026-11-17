@@ -185,15 +185,15 @@ func lockOrAttach(ctx context.Context, layout host.RuntimeLayout, messages *clit
 		}
 		fmt.Fprintln(os.Stderr, attachFailureText(messages, hostMessages, lang, aerr))
 	}
-	return nil, false, hostMessages.Localize(lang, err)
+	return nil, false, hostMessages.Localize(messages, lang, err)
 }
 
 func attachFailureText(messages *clitext.Messages, hostMessages *host.Messages, lang i18n.Language, err error) string {
-	return render(messages, lang, clitext.ServeAttachFailed, attachFailureParams(hostMessages, lang, err))
+	return render(messages, lang, clitext.ServeAttachFailed, attachFailureParams(messages, hostMessages, lang, err))
 }
 
-func attachFailureParams(messages *host.Messages, lang i18n.Language, err error) clitext.Params {
-	return escapedParam(clitext.ParamErr, messages.Localize(lang, err).Error())
+func attachFailureParams(cliMessages *clitext.Messages, messages *host.Messages, lang i18n.Language, err error) clitext.Params {
+	return escapedParam(clitext.ParamErr, messages.Localize(cliMessages, lang, err).Error())
 }
 
 type gatewayStatus interface {
@@ -237,7 +237,7 @@ func startGateways(ctx context.Context, messages *clitext.Messages, lang i18n.La
 
 func runHubForeground(ctx context.Context, messages *clitext.Messages, statePath string, gws []host.Deps, closers []contracts.Gateway, foreground contracts.Foreground, opts host.Options) error {
 	if foreground == nil || !term.IsTerminal(int(os.Stdout.Fd())) {
-		return runHub(ctx, gws, closers, opts)
+		return runHub(ctx, messages, gws, closers, opts)
 	}
 	if restore, rerr := redirectStderrCapped(filepath.Join(filepath.Dir(statePath), "serve.log"), maxLogFileBytes); rerr == nil {
 		defer func() {
@@ -249,7 +249,7 @@ func runHubForeground(ctx context.Context, messages *clitext.Messages, statePath
 	hubCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	return superviseForeground(hubCtx, messages, cancel, foreground, func(ctx context.Context) error {
-		return runHub(ctx, gws, closers, opts)
+		return runHub(ctx, messages, gws, closers, opts)
 	})
 }
 
@@ -274,8 +274,8 @@ func superviseForeground(ctx context.Context, messages *clitext.Messages, cancel
 	return foregroundErr
 }
 
-func runHub(ctx context.Context, gws []host.Deps, closers []contracts.Gateway, opts host.Options) error {
-	return host.RunHub(ctx, gws, closers, opts)
+func runHub(ctx context.Context, messages *clitext.Messages, gws []host.Deps, closers []contracts.Gateway, opts host.Options) error {
+	return host.RunHub(ctx, messages, gws, closers, opts)
 }
 
 func bindGateways(messages *clitext.Messages, sets []host.Deps, lang i18n.Language) ([]host.Deps, []contracts.Gateway, contracts.Foreground, []contracts.Cmd, error) {
@@ -312,7 +312,7 @@ func newOperatorRegistry(ctx context.Context, layout host.RuntimeLayout, message
 		return nil, err
 	}
 	home := homeRef(cfg)
-	return host.NewRegistry(ctx, gws, host.Options{
+	return host.NewRegistry(ctx, messages, gws, host.Options{
 		Warnings:   os.Stderr,
 		Runtime:    layout,
 		StatePath:  host.DefaultStatePath(),

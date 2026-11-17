@@ -71,7 +71,7 @@ func TestGatewayRetryNoticeCarriesTheWaitBeside(t *testing.T) {
 
 func TestAttachFailureParamsEscapeTheError(t *testing.T) {
 	hostile := errors.New("attache \x1b]0;pwn\a refusée")
-	params := attachFailureParams(host.NewMessages(), i18n.English, hostile)
+	params := attachFailureParams(clitext.NewMessages(), host.NewMessages(), i18n.English, hostile)
 	want := termpaint.Escape(host.NewMessages().Localize(i18n.English, hostile).Error()).String()
 	if params[clitext.ParamErr] != want {
 		t.Fatalf("error param = %v, want %q", params[clitext.ParamErr], want)

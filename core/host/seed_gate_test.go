@@ -9,6 +9,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -18,7 +19,7 @@ func TestATapIsRefusedOnceTheSeedShutsItsGate(t *testing.T) {
 		published = append(published, event.T)
 	}}
 	sess := state.Session{Name: "window"}
-	driver := newSessionDriver(newHostMessages(), sess.Name, nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1), io.Discard)
+	driver := newSessionDriver(newHostMessages(), clitext.NewMessages(), sess.Name, nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1), io.Discard)
 	gate := attachOneShotTaps(driver, sess, runtime)
 
 	driver.tapEvent(contracts.Event{T: "before"})
@@ -36,7 +37,7 @@ func TestAResumeTokenIsRefusedOnceTheSeedShutsItsGate(t *testing.T) {
 		resumed = append(resumed, token)
 	}}
 	sess := state.Session{Name: "window"}
-	driver := newSessionDriver(newHostMessages(), sess.Name, nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1), io.Discard)
+	driver := newSessionDriver(newHostMessages(), clitext.NewMessages(), sess.Name, nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1), io.Discard)
 	gate := attachOneShotTaps(driver, sess, runtime)
 
 	driver.sink.Resume("before")

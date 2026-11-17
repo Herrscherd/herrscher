@@ -61,11 +61,10 @@ func TestRefusedStartCreatesNoSocketAndStartsNoLoop(t *testing.T) {
 }
 
 func TestRefusedSessionJournalsOnlyItsTransitions(t *testing.T) {
-	h := newTestHub(t)
+	var out bytes.Buffer
+	h := newTestHub(t, withWarnings(&out))
 	name := "journal-" + newTurnID()
 	addRefusalSession(t, h, name)
-	var out bytes.Buffer
-	h.warnings = &out
 	var refusing atomic.Bool
 	refusing.Store(true)
 	h.startBridge = func(state.Session, time.Duration) error {

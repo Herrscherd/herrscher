@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 var errChoiceOutOfRange = clitext.SentinelError("choice out of range")
@@ -96,13 +97,13 @@ func chooseKind(sty style, input *bufio.Reader, cat string) (string, error) {
 	sort.Strings(kinds)
 	def := defaultStack()[cat]
 
-	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, cat))
+	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, termpaint.Escape(cat).String()))
 	translator := clitext.For(clitext.ClientLanguage())
 	for idx, kind := range kinds {
-		name := kind
+		name := termpaint.Escape(kind).String()
 		tag := ""
 		if kind == def {
-			name = sty.wrap(sty.green, kind)
+			name = sty.wrap(sty.green, name)
 			tag = sty.wrap(sty.dim, "  "+translator.Text(clitext.ManageDefaultTag, nil))
 		}
 		fmt.Fprintf(os.Stderr, "    %s %s%s\n", sty.wrap(sty.dim, strconv.Itoa(idx+1)), name, tag)

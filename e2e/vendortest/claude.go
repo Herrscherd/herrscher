@@ -19,6 +19,9 @@ const DescendantSleep = 60 * time.Second
 
 const descendantSleepArg = "60"
 
+// DescendantMarker is the environment variable that carries the token of one descendant started by spawn.
+const DescendantMarker = "VENDORTEST_DESCENDANT"
+
 const (
 	envScript = "VENDORTEST_SCRIPT"
 	envLog    = "VENDORTEST_LOG"

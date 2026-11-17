@@ -12,6 +12,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/skills"
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 func installShippedSkills(ctx context.Context, messages *clitext.Messages, lang i18n.Language) error {
@@ -24,12 +25,12 @@ func installShippedSkills(ctx context.Context, messages *clitext.Messages, lang 
 	translator := messages.For(lang)
 	plug, notes := installPluginSkills(ctx, translator, contracts.Default.Plugins(), os.Getenv, dst)
 	for _, n := range notes {
-		fmt.Fprintln(os.Stderr, n)
+		fmt.Fprintln(os.Stderr, termpaint.Escape(n).String())
 	}
 	reportSkills(translator, dst, plug)
 	retired, err := retireSkills(dst, plug)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillsRetireFailed, clitext.Params{clitext.ParamErr: err.Error()}))
+		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillsRetireFailed, clitext.Printable(clitext.Params{clitext.ParamErr: err.Error()})))
 	}
 	reportRetired(translator, dst, retired)
 	return translator.Err()
@@ -44,28 +45,28 @@ func retireSkills(dst string, plug skills.Outcome) (skills.Outcome, error) {
 
 func reportRetired(translator *clitext.Translator, dst string, out skills.Outcome) {
 	for _, name := range out.Removed {
-		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillRemoved, clitext.Params{clitext.ParamName: name}))
+		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillRemoved, clitext.Printable(clitext.Params{clitext.ParamName: name})))
 	}
 	for _, name := range out.Diverged {
-		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillRetiredDiverged, clitext.Params{clitext.ParamName: name, clitext.ParamPath: filepath.Join(dst, name)}))
+		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillRetiredDiverged, clitext.Printable(clitext.Params{clitext.ParamName: name, clitext.ParamPath: filepath.Join(dst, name)})))
 	}
 	for _, name := range out.Linked {
-		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillRetiredLinked, clitext.Params{clitext.ParamName: name, clitext.ParamPath: filepath.Join(dst, name)}))
+		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillRetiredLinked, clitext.Printable(clitext.Params{clitext.ParamName: name, clitext.ParamPath: filepath.Join(dst, name)})))
 	}
 }
 
 func reportSkills(translator *clitext.Translator, dst string, out skills.Outcome) {
 	for _, name := range out.Installed {
-		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillInstalled, clitext.Params{clitext.ParamName: name}))
+		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillInstalled, clitext.Printable(clitext.Params{clitext.ParamName: name})))
 	}
 	for _, name := range out.Updated {
-		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillUpdated, clitext.Params{clitext.ParamName: name}))
+		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillUpdated, clitext.Printable(clitext.Params{clitext.ParamName: name})))
 	}
 	for _, name := range out.Diverged {
-		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillDiverged, clitext.Params{clitext.ParamName: name, clitext.ParamPath: filepath.Join(dst, name)}))
+		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillDiverged, clitext.Printable(clitext.Params{clitext.ParamName: name, clitext.ParamPath: filepath.Join(dst, name)})))
 	}
 	for _, name := range out.Linked {
-		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillLinked, clitext.Params{clitext.ParamName: name, clitext.ParamPath: filepath.Join(dst, name)}))
+		fmt.Fprintln(os.Stderr, translator.Text(clitext.SkillLinked, clitext.Printable(clitext.Params{clitext.ParamName: name, clitext.ParamPath: filepath.Join(dst, name)})))
 	}
 }
 

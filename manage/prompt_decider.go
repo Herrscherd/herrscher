@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 type promptDecider struct {
@@ -23,7 +24,7 @@ func (p promptDecider) Warn(_ context.Context, findings []string) Decision {
 		fmt.Fprintf(os.Stderr, "    %s %s\n", p.s.wrap(p.s.dim, "·"), msg(clitext.ManageNothingKnown, nil))
 	}
 	for _, f := range findings {
-		fmt.Fprintf(os.Stderr, "    %s %s\n", p.s.wrap(p.s.red, "!"), f)
+		fmt.Fprintf(os.Stderr, "    %s %s\n", p.s.wrap(p.s.red, "!"), termpaint.Escape(f).String())
 	}
 	if p.yes(msg(clitext.ManagePromptProceed, nil), true) {
 		return Proceed
@@ -34,7 +35,7 @@ func (p promptDecider) Warn(_ context.Context, findings []string) Decision {
 func (p promptDecider) Failed(_ context.Context, buildOutput string) Decision {
 	fmt.Fprintf(os.Stderr, "\n  %s\n", p.s.wrap(p.s.bold+p.s.red, msg(clitext.ManageBuildFailed, nil)))
 	for _, line := range strings.Split(strings.TrimRight(buildOutput, "\n"), "\n") {
-		fmt.Fprintf(os.Stderr, "    %s\n", p.s.wrap(p.s.dim, line))
+		fmt.Fprintf(os.Stderr, "    %s\n", p.s.wrap(p.s.dim, termpaint.EscapeLines(line).String()))
 	}
 	if p.yes(msg(clitext.ManagePromptRestore, nil), true) {
 		return Restore

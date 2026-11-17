@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mattn/go-runewidth"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type transcriptLayout struct {
@@ -183,17 +183,17 @@ func expandLineTabs(line string) string {
 	if !strings.Contains(line, "\t") {
 		return line
 	}
+	segments := strings.Split(line, "\t")
 	var out strings.Builder
 	column := 0
-	for _, char := range line {
-		if char == '\t' {
+	for index, segment := range segments {
+		if index > 0 {
 			stop := proseTabStop - column%proseTabStop
 			out.WriteString(strings.Repeat(" ", stop))
 			column += stop
-			continue
 		}
-		out.WriteRune(char)
-		column += runewidth.RuneWidth(char)
+		out.WriteString(segment)
+		column += ansi.StringWidth(segment)
 	}
 	return out.String()
 }

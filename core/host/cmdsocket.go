@@ -172,7 +172,12 @@ func (o *openConns) closeAll() {
 	}
 }
 
-func acceptCommands(ctx context.Context, listener net.Listener, disp dispatcher, readTimeout, joinBudget time.Duration, onOverrun func(budget time.Duration)) (stopped, released <-chan struct{}) {
+type commandAcceptor struct {
+	stopped  <-chan struct{}
+	released <-chan struct{}
+}
+
+func acceptCommands(ctx context.Context, listener net.Listener, disp dispatcher, readTimeout, joinBudget time.Duration, onOverrun func(budget time.Duration)) commandAcceptor {
 	stoppedCh := make(chan struct{})
 	releasedCh := make(chan struct{})
 	accepting := make(chan struct{})
@@ -205,7 +210,7 @@ func acceptCommands(ctx context.Context, listener net.Listener, disp dispatcher,
 		}
 		close(releasedCh)
 	}()
-	return stoppedCh, releasedCh
+	return commandAcceptor{stopped: stoppedCh, released: releasedCh}
 }
 
 func joinHandlersWithin(handlers *sync.WaitGroup, budget time.Duration) bool {

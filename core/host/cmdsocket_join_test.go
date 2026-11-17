@@ -28,7 +28,7 @@ func TestCommandSocketReleasesWithinItsJoinBudgetWhenAHandlerNeverEnds(t *testin
 	}
 	var overruns atomic.Int32
 	joinBudget := 200 * time.Millisecond
-	_, released := acceptCommands(ctx, listener, disp, defaultCommandReadTimeout, joinBudget, func(time.Duration) { overruns.Add(1) })
+	released := acceptCommands(ctx, listener, disp, defaultCommandReadTimeout, joinBudget, func(time.Duration) { overruns.Add(1) }).released
 
 	client, err := (&net.Dialer{}).DialContext(ctx, "unix", path)
 	if err != nil {
@@ -73,7 +73,7 @@ func TestCommandSocketClosesIdleConnectionsOnOverrun(t *testing.T) {
 		t.Fatal(err)
 	}
 	idle := dispatcherFunc(func(context.Context, []string) (string, error) { return "unused", nil })
-	_, released := acceptCommands(ctx, listener, idle, defaultCommandReadTimeout, 200*time.Millisecond, func(time.Duration) {})
+	released := acceptCommands(ctx, listener, idle, defaultCommandReadTimeout, 200*time.Millisecond, func(time.Duration) {}).released
 	client, err := (&net.Dialer{}).DialContext(ctx, "unix", path)
 	if err != nil {
 		t.Fatalf("dial: %v", err)

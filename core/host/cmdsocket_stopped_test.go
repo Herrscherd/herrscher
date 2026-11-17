@@ -40,7 +40,7 @@ func TestCommandSocketStopsOnlyOnceItsListenerIsReallyClosed(t *testing.T) {
 	defer cancel()
 	listener := newGatedListener()
 	idle := dispatcherFunc(func(context.Context, []string) (string, error) { return "unused", nil })
-	stopped, _ := acceptCommands(ctx, listener, idle, defaultCommandReadTimeout, time.Second, func(time.Duration) {})
+	stopped := acceptCommands(ctx, listener, idle, defaultCommandReadTimeout, time.Second, func(time.Duration) {}).stopped
 	cancel()
 	<-listener.closing
 	select {

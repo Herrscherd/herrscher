@@ -108,7 +108,7 @@ func startStuckCommand(ctx context.Context, t *testing.T, h *hub) <-chan struct{
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, released := acceptCommands(ctx, listener, disp, defaultCommandReadTimeout, h.teardownGrace, h.warnCommandHandlerOverrun)
+	released := acceptCommands(ctx, listener, disp, defaultCommandReadTimeout, h.teardownGrace, h.warnCommandHandlerOverrun).released
 	client, err := (&net.Dialer{}).DialContext(ctx, "unix", sockPath)
 	if err != nil {
 		t.Fatalf("dial: %v", err)

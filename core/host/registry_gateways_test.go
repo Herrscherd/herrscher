@@ -3,9 +3,10 @@ package host
 import (
 	"context"
 	"fmt"
-	"github.com/Herrscherd/herrscher/core/clitext"
 	"strings"
 	"testing"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 type namedAdmin struct{ labeledAdmin }

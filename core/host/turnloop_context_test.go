@@ -51,7 +51,8 @@ func recordedTurn(t *testing.T, events ...contracts.Event) state.TranscriptEntry
 }
 
 func TestTurnRecordsTheLiveContextNotTheBillingTotals(t *testing.T) {
-	got := recordedTurn(t,
+	got := recordedTurn(
+		t,
 		contracts.Event{T: eventwire.EventChunk, Text: "un", TokensIn: 5, CacheRead: 40_000},
 		contracts.Event{T: eventwire.EventChunk, Text: "deux", TokensIn: 5, CacheRead: 60_000},
 		contracts.Event{T: eventwire.EventReply, Text: "fini", Done: true, TokensIn: 11, CacheRead: 334_662, CacheCreate: 5_831},
@@ -65,7 +66,8 @@ func TestTurnRecordsTheLiveContextNotTheBillingTotals(t *testing.T) {
 }
 
 func TestASingleMessageTurnRecordsItsOwnPrompt(t *testing.T) {
-	got := recordedTurn(t,
+	got := recordedTurn(
+		t,
 		contracts.Event{T: eventwire.EventReply, Text: "fini", Done: true, TokensIn: 11, CacheRead: 40_000, CacheCreate: 500},
 	)
 	if got.CtxTokens != 40_511 {

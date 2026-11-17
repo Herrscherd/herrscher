@@ -38,7 +38,8 @@ func TestBuilderRepliesFollowTheTargetSessionLanguage(t *testing.T) {
 }
 
 func TestNamedSessionLanguageFallsBackToTheOperator(t *testing.T) {
-	st := languageStore(t,
+	st := languageStore(
+		t,
 		state.Session{Name: "fr-s", Language: "fr"},
 		state.Session{Name: "en-s", Language: "en"},
 		state.Session{Name: "bare-s"},
@@ -65,7 +66,8 @@ func TestNamedSessionLanguageFallsBackToTheOperator(t *testing.T) {
 }
 
 func TestHandoffBriefDirectiveFollowsTheSessionLanguage(t *testing.T) {
-	st := languageStore(t,
+	st := languageStore(
+		t,
 		state.Session{Name: "fr-s", Language: "fr"},
 		state.Session{Name: "en-s", Language: "en"},
 		state.Session{Name: "bare-s"},

@@ -2,10 +2,11 @@ package host
 
 import (
 	"context"
-	"github.com/Herrscherd/herrscher/core/clitext"
 	"io"
 	"testing"
 	"time"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func TestClaimIdleRefusesASessionWithATurnOrAQueuedMessage(t *testing.T) {

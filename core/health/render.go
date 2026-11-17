@@ -1,6 +1,7 @@
 package health
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -251,11 +252,14 @@ func (r *renderer) key(key clitext.Key, params clitext.Params) string {
 	return value
 }
 
+var renderNotice = contracts.NewRenderer().Render
+
 func (r *renderer) notice(notice contracts.Notice) string {
-	value, err := contracts.NewRenderer().Render(r.lang, notice)
-	if err != nil {
+	value, err := renderNotice(r.lang, notice)
+	if errors.Is(err, contracts.ErrUnknownCode) || errors.Is(err, contracts.ErrNoticeArgs) {
 		return unrenderedNotice(notice)
 	}
+	r.keep(err)
 	return value
 }
 

@@ -32,23 +32,42 @@ func TestTableListsEveryCheckUnderItsGroup(t *testing.T) {
 }
 
 func TestUnknownArgKindDoesNotHideTheOtherChecks(t *testing.T) {
-	unknown, err := compactwire.DecodeNotice(`{"code":1,"args":[{"name":"X","kind":9,"value":"a"}]}`)
+	unknownKind, err := compactwire.DecodeNotice(`{"code":1,"args":[{"name":"X","kind":9,"value":"zeta"}]}`)
 	if err != nil {
-		t.Fatalf("DecodeNotice: %v", err)
+		t.Fatalf("DecodeNotice unknown kind: %v", err)
+	}
+	mismatch, err := compactwire.DecodeNotice(`{"code":7,"args":[{"name":"Count","kind":2,"value":3}]}`)
+	if err != nil {
+		t.Fatalf("DecodeNotice mismatch: %v", err)
 	}
 	snapshot := health.Snapshot{Checks: []health.Check{
-		{Group: health.GroupBackends, Name: "broken", Report: contracts.ProbeReport{State: contracts.HealthDown, Detail: unknown}},
+		{Group: health.GroupBackends, Name: "broken", Report: contracts.ProbeReport{State: contracts.HealthDown, Detail: unknownKind}},
+		{Group: health.GroupBackends, Name: "mismatch", Report: contracts.ProbeReport{State: contracts.HealthDown, Detail: mismatch}},
 		{Group: health.GroupBackends, Name: "claude", Report: contracts.ProbeReport{State: contracts.HealthOK}},
 	}}
 	var out bytes.Buffer
 	if err := snapshot.Table(&out, i18n.English, termpaint.Palette{}); err != nil {
-		t.Fatalf("Table() error = %v, want the unknown kind rendered as a fallback", err)
+		t.Fatalf("Table() error = %v, want the unrenderable checks shown as a fallback", err)
 	}
-	for _, name := range []string{"broken", "claude"} {
-		if !strings.Contains(out.String(), name) {
-			t.Errorf("Table() output does not list %q:\n%s", name, out.String())
+	if got := lastFieldOfRow(t, out.String(), "broken"); got != "zeta" {
+		t.Errorf("broken row ends with %q, want the argument text %q:\n%s", got, "zeta", out.String())
+	}
+	if got := lastFieldOfRow(t, out.String(), "mismatch"); got != "7" {
+		t.Errorf("mismatch row ends with %q, want the numeric code %q:\n%s", got, "7", out.String())
+	}
+	lastFieldOfRow(t, out.String(), "claude")
+}
+
+func lastFieldOfRow(t *testing.T, out, name string) string {
+	t.Helper()
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) > 0 && fields[0] == name {
+			return fields[len(fields)-1]
 		}
 	}
+	t.Fatalf("Table() output has no row named %q:\n%s", name, out)
+	return ""
 }
 
 func TestDetailsShowsTheRemedyOfACheck(t *testing.T) {

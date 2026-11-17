@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -68,6 +69,10 @@ func readPid(path string) (int, error) {
 }
 
 func descendantAlive(pid int, entry string) (bool, error) {
+	owned, err := ownedByUs(pid)
+	if err != nil || !owned {
+		return false, err
+	}
 	environ, err := environOf(pid)
 	if err != nil {
 		return false, fmt.Errorf("cannot read the environment of %d: %w", pid, err)
@@ -87,6 +92,18 @@ func descendantAlive(pid int, entry string) (bool, error) {
 
 func gone(err error) bool {
 	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ESRCH)
+}
+
+func ownedByUs(pid int) (bool, error) {
+	info, err := os.Stat(filepath.Join(procRoot, strconv.Itoa(pid)))
+	if gone(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	return ok && stat.Uid == uint32(os.Getuid()), nil
 }
 
 func killDescendant(pid int, entry string) error {
@@ -109,11 +126,12 @@ func killDescendant(pid int, entry string) error {
 	return errors.Join(killErr, p.release())
 }
 
-func TestDescendantAliveRefusesAnUnreadablePid(t *testing.T) {
+func TestDescendantAliveIgnoresAForeignProcess(t *testing.T) {
 	if os.Geteuid() == 0 {
-		t.Skip("root reads the environment of every process")
+		t.Skip("root owns every process, so no pid is foreign")
 	}
-	if _, err := descendantAlive(1, instanceEntry("unused")); !errors.Is(err, fs.ErrPermission) {
-		t.Fatal("an unreadable pid counted as a live or dead descendant instead of an error")
+	alive, err := descendantAlive(1, instanceEntry("unused"))
+	if err != nil || alive {
+		t.Fatalf("a process of another uid was counted as a descendant: alive=%v err=%v", alive, err)
 	}
 }

@@ -32,7 +32,7 @@ const (
 	RoleOperator Role = "operator"
 	// RoleObserver runs only what reads.
 	RoleObserver Role = "observer"
-	// RoleAgent is what a connection on a session's own command socket holds; the operator's socket grants local, whoever dials it.
+	// RoleAgent is what a connection on a session's command socket holds.
 	RoleAgent Role = "agent"
 )
 

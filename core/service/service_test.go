@@ -71,7 +71,7 @@ func TestServeArgs(t *testing.T) {
 }
 
 func TestLinuxPlan(t *testing.T) {
-	p, err := BuildPlan(testConfig("linux"))
+	p, err := BuildPlan(clitext.NewMessages(), testConfig("linux"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestLinuxPlan(t *testing.T) {
 func TestUnitCarriesTheOperatorsPath(t *testing.T) {
 	c := testConfig("linux")
 	c.Path = "/opt/tool/bin:/usr/bin"
-	p, err := BuildPlan(c)
+	p, err := BuildPlan(clitext.NewMessages(), c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestUnitCarriesTheOperatorsPath(t *testing.T) {
 }
 
 func TestUnitPathFallsBackToTheUsualDirs(t *testing.T) {
-	p, err := BuildPlan(testConfig("linux"))
+	p, err := BuildPlan(clitext.NewMessages(), testConfig("linux"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestUnitPathFallsBackToTheUsualDirs(t *testing.T) {
 func TestPlistCarriesThePath(t *testing.T) {
 	c := testConfig("darwin")
 	c.Path = "/opt/tool/bin:/usr/bin"
-	p, err := BuildPlan(c)
+	p, err := BuildPlan(clitext.NewMessages(), c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestPlistCarriesThePath(t *testing.T) {
 func TestUnitPathSurvivesASpaceInADirectory(t *testing.T) {
 	c := testConfig("linux")
 	c.Path = "/opt/my tools/bin:/usr/bin"
-	p, err := BuildPlan(c)
+	p, err := BuildPlan(clitext.NewMessages(), c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func unitPathOf(t *testing.T, unit string) string {
 func TestUnitPathCannotInjectDirectives(t *testing.T) {
 	c := testConfig("linux")
 	c.Path = "/opt/bin\nExecStartPre=/bin/rm -rf /\n"
-	p, err := BuildPlan(c)
+	p, err := BuildPlan(clitext.NewMessages(), c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestUnitPathCannotInjectDirectives(t *testing.T) {
 func TestUnitPathDropsVolatileAndRelativeEntries(t *testing.T) {
 	c := testConfig("linux")
 	c.Path = "/tmp/.mount_appXYZ:/keep/bin:relative/bin:/var/tmp/x:/dev/shm/y:/run/user/1000/z:."
-	p, err := BuildPlan(c)
+	p, err := BuildPlan(clitext.NewMessages(), c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +302,7 @@ func TestSyncUnitPathToleratesNoUnit(t *testing.T) {
 }
 
 func TestMacPlan(t *testing.T) {
-	p, err := BuildPlan(testConfig("darwin"))
+	p, err := BuildPlan(clitext.NewMessages(), testConfig("darwin"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +333,7 @@ func TestWindowsPlan(t *testing.T) {
 	c.BinPath = `C:\Users\me\herrscher.exe`
 	c.EnvFile = `C:\Users\me\.config\herrscher\herrscher.env`
 	c.Home = `C:\Users\me`
-	p, err := BuildPlan(c)
+	p, err := BuildPlan(clitext.NewMessages(), c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -352,7 +352,7 @@ func TestWindowsPlan(t *testing.T) {
 
 func TestStatusToleratesInactive(t *testing.T) {
 	for _, os := range []string{"linux", "darwin", "windows"} {
-		cmd, err := StatusCommand(testConfig(os))
+		cmd, err := StatusCommand(clitext.NewMessages(), testConfig(os))
 		if err != nil {
 			t.Fatalf("status %s: %v", os, err)
 		}
@@ -363,7 +363,7 @@ func TestStatusToleratesInactive(t *testing.T) {
 }
 
 func TestUnsupportedOS(t *testing.T) {
-	if _, err := BuildPlan(testConfig("plan9")); err == nil {
+	if _, err := BuildPlan(clitext.NewMessages(), testConfig("plan9")); err == nil {
 		t.Fatal("expected error for unsupported OS")
 	}
 }
@@ -395,7 +395,7 @@ func TestArgsWithSpacesAreQuoted(t *testing.T) {
 	for _, goos := range []string{"linux", "darwin", "windows"} {
 		c := testConfig(goos)
 		c.ExtraArgs = []string{"--status-channel", "chan with space"}
-		p, err := BuildPlan(c)
+		p, err := BuildPlan(clitext.NewMessages(), c)
 		if err != nil {
 			t.Fatalf("plan %s: %v", goos, err)
 		}
@@ -410,7 +410,7 @@ func TestDefaultCmdBakedIntoUnit(t *testing.T) {
 	for _, goos := range []string{"linux", "darwin", "windows"} {
 		c := testConfig(goos)
 		c.ExtraArgs = []string{"--cmd", cmd}
-		p, err := BuildPlan(c)
+		p, err := BuildPlan(clitext.NewMessages(), c)
 		if err != nil {
 			t.Fatalf("plan %s: %v", goos, err)
 		}
@@ -430,7 +430,7 @@ func TestConfigScaffoldInPlan(t *testing.T) {
 		c := testConfig(goos)
 		c.ConfigPath = "/home/me/.config/herrscher/config.json"
 		c.DefaultCmd = cmd
-		p, err := BuildPlan(c)
+		p, err := BuildPlan(clitext.NewMessages(), c)
 		if err != nil {
 			t.Fatalf("plan %s: %v", goos, err)
 		}
@@ -464,7 +464,7 @@ func assertConfigScaffold(t *testing.T, goos string, cfg *FileWrite, cmd string)
 }
 
 func TestNoConfigScaffoldWhenUnset(t *testing.T) {
-	p, err := BuildPlan(testConfig("linux"))
+	p, err := BuildPlan(clitext.NewMessages(), testConfig("linux"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -484,7 +484,7 @@ func TestInstalledBinPathReadsUnit(t *testing.T) {
 	if err := os.MkdirAll(unitDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	p, err := BuildPlan(c)
+	p, err := BuildPlan(clitext.NewMessages(), c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -518,10 +518,10 @@ func TestFirstToken(t *testing.T) {
 
 func TestUninstallAndStatus(t *testing.T) {
 	for _, os := range []string{"linux", "darwin", "windows"} {
-		if _, err := BuildUninstall(testConfig(os)); err != nil {
+		if _, err := BuildUninstall(clitext.NewMessages(), testConfig(os)); err != nil {
 			t.Errorf("uninstall %s: %v", os, err)
 		}
-		if _, err := StatusCommand(testConfig(os)); err != nil {
+		if _, err := StatusCommand(clitext.NewMessages(), testConfig(os)); err != nil {
 			t.Errorf("status %s: %v", os, err)
 		}
 	}
@@ -540,7 +540,7 @@ func assertCmd(t *testing.T, p Plan, want string) {
 func TestSkipStartOmitsImmediateStart(t *testing.T) {
 	lc := testConfig("linux")
 	lc.SkipStart = true
-	lp, err := BuildPlan(lc)
+	lp, err := BuildPlan(clitext.NewMessages(), lc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -558,7 +558,7 @@ func TestSkipStartOmitsImmediateStart(t *testing.T) {
 
 	mc := testConfig("darwin")
 	mc.SkipStart = true
-	mp, err := BuildPlan(mc)
+	mp, err := BuildPlan(clitext.NewMessages(), mc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -567,7 +567,7 @@ func TestSkipStartOmitsImmediateStart(t *testing.T) {
 			t.Errorf("SkipStart mac plan must not load (start) the agent: %v", c.Argv)
 		}
 	}
-	mp2, err := BuildPlan(testConfig("darwin"))
+	mp2, err := BuildPlan(clitext.NewMessages(), testConfig("darwin"))
 	must(t, err)
 	assertCmd(t, mp2, "launchctl load -w")
 }
@@ -613,7 +613,7 @@ func TestInstallSkipsStartWhenNoToken(t *testing.T) {
 		t.Fatal("precondition: env file should not be ready")
 	}
 	c.SkipStart = true
-	p, err := BuildPlan(c)
+	p, err := BuildPlan(clitext.NewMessages(), c)
 	must(t, err)
 	for _, cmd := range p.Commands {
 		if strings.Contains(strings.Join(cmd.Argv, " "), "--now") {
@@ -644,7 +644,7 @@ func TestNoSecretEmbeddedInAnyArtifact(t *testing.T) {
 	const sentinel = "super-secret-token-value"
 	for _, os := range []string{"linux", "darwin", "windows"} {
 		c := testConfig(os)
-		p, err := BuildPlan(c)
+		p, err := BuildPlan(clitext.NewMessages(), c)
 		if err != nil {
 			t.Fatalf("plan %s: %v", os, err)
 		}
@@ -662,7 +662,7 @@ func TestNoSecretEmbeddedInAnyArtifact(t *testing.T) {
 func TestLinuxLingerOmittedWithoutUser(t *testing.T) {
 	c := testConfig("linux")
 	c.User = ""
-	p, err := BuildPlan(c)
+	p, err := BuildPlan(clitext.NewMessages(), c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -676,7 +676,7 @@ func TestLinuxLingerOmittedWithoutUser(t *testing.T) {
 func TestMacRunStringIsXMLEscaped(t *testing.T) {
 	c := testConfig("darwin")
 	c.ExtraArgs = []string{"--note", "a<b>c&d"}
-	p, err := BuildPlan(c)
+	p, err := BuildPlan(clitext.NewMessages(), c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -692,7 +692,7 @@ func TestMacRunStringIsXMLEscaped(t *testing.T) {
 func TestWindowsBinPathQuotedWithSpaces(t *testing.T) {
 	c := testConfig("windows")
 	c.BinPath = `C:\Program Files\herrscher\herrscher.exe`
-	p, err := BuildPlan(c)
+	p, err := BuildPlan(clitext.NewMessages(), c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -708,7 +708,7 @@ func TestBuildUninstallRemovesArtifacts(t *testing.T) {
 		"windows": "herrscher",
 	}
 	for os, marker := range cases {
-		p, err := BuildUninstall(testConfig(os))
+		p, err := BuildUninstall(clitext.NewMessages(), testConfig(os))
 		if err != nil {
 			t.Fatalf("uninstall %s: %v", os, err)
 		}
@@ -788,7 +788,7 @@ func TestRestartCommandsPerOS(t *testing.T) {
 		{"darwin", "launchctl kickstart -k"},
 		{"windows", "schtasks /run /tn herrscher"},
 	} {
-		cmds, err := RestartCommands(testConfig(tc.goos))
+		cmds, err := RestartCommands(clitext.NewMessages(), testConfig(tc.goos))
 		if err != nil {
 			t.Fatalf("%s: %v", tc.goos, err)
 		}
@@ -797,7 +797,7 @@ func TestRestartCommandsPerOS(t *testing.T) {
 			t.Fatalf("%s: want %q in %q", tc.goos, tc.want, joined)
 		}
 	}
-	if _, err := RestartCommands(testConfig("plan9")); err == nil {
+	if _, err := RestartCommands(clitext.NewMessages(), testConfig("plan9")); err == nil {
 		t.Fatal("expected error for unsupported OS")
 	}
 }

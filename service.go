@@ -38,7 +38,7 @@ func runService(ctx context.Context, messages *clitext.Messages, args []string) 
 
 	switch sub {
 	case "restart":
-		if err := service.Restart(ctx, cfg); err != nil {
+		if err := service.Restart(ctx, messages, cfg); err != nil {
 			return err
 		}
 		fmt.Fprintln(os.Stderr, render(messages, lang, clitext.ServiceRestarted, nil))
@@ -67,15 +67,15 @@ func runService(ctx context.Context, messages *clitext.Messages, args []string) 
 	switch sub {
 	case cmdInstall:
 		cfg.DefaultCmd = *defaultCmd
-		return service.Install(ctx, cfg)
+		return service.Install(ctx, messages, cfg)
 	case "uninstall":
-		if err := service.Uninstall(ctx, cfg); err != nil {
+		if err := service.Uninstall(ctx, messages, cfg); err != nil {
 			return err
 		}
 		fmt.Fprintln(os.Stderr, render(messages, lang, clitext.ServiceRemoved, nil))
 		return nil
 	case cmdStatus:
-		return service.Status(ctx, cfg)
+		return service.Status(ctx, messages, cfg)
 	default:
 		return unknownSubcommand(messages, lang, sub)
 	}

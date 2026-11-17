@@ -41,6 +41,19 @@ func awaitLogIdle(t *testing.T, log *boundedLog) {
 	}
 }
 
+func awaitSinkLog(t *testing.T, sink *warningSink) {
+	t.Helper()
+	awaitLogIdle(t, &sink.log)
+}
+
+func awaitHubLogs(t *testing.T, h *hub) {
+	t.Helper()
+	if h.sink != nil {
+		awaitSinkLog(t, h.sink)
+	}
+	awaitLogIdle(t, &h.errPort.log)
+}
+
 func announcedAbandons(out string) int {
 	total := 0
 	for _, line := range strings.Split(out, "\n") {

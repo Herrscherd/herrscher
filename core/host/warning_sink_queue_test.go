@@ -221,6 +221,11 @@ func TestLateWritesBehindAFrozenWriterAreLostWithoutAGoroutine(t *testing.T) {
 	if dropped := droppedWarnings(sink); dropped != 20 {
 		t.Fatalf("%d late writes were abandoned without being counted as lost, want 20", dropped)
 	}
+	writer.open()
+	awaitSinkLog(t, sink)
+	waitUntil(t, "the goroutines of the late writes to end once the writer is released", func() bool {
+		return runtime.NumGoroutine() <= before
+	})
 }
 
 func TestLateWriteKeepsTheBytesItWasGiven(t *testing.T) {

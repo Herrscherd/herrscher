@@ -273,10 +273,12 @@ func assertBlockedWriterOutcome(t *testing.T, c blockedWriterCase, h *hub, name 
 		t.Fatal("the frozen write did not settle within the grace window")
 	}
 	h.sink.Close()
+	awaitHubLogs(t, h)
 	if outside := warnLinesOutsideBilan(logs.String()); len(outside) != 0 {
 		t.Fatalf("a loss was logged outside the bilan: %q", outside)
 	}
 	dropped := droppedWarnings(h.sink)
+	awaitHubLogs(t, h)
 	announced := announcedLostOnOutput(warnings.out.String(), dropped) + announcedLostTotal(t, logs.String())
 	if dropped < 1 || announced != dropped {
 		t.Fatalf("the sink counted %d lost warnings but announced %d on the output %q and in the logs %q, want each lost warning announced exactly once", dropped, announced, warnings.out.String(), notConfirmedLines(logs.String()))

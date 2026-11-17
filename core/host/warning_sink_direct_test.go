@@ -89,6 +89,7 @@ func TestAbandonedOverrunIsSilentUntilTheBilan(t *testing.T) {
 	if err := sink.announce("overrun"); !errors.Is(err, errWarningAbandoned) {
 		t.Fatalf("an overrun behind a slow write returned %v, want errWarningAbandoned", err)
 	}
+	awaitSinkLog(t, sink)
 	if logs.String() != "" {
 		t.Fatalf("an abandoned overrun logged %q before Close: only the bilan announces it", logs.String())
 	}

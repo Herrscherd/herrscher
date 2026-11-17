@@ -78,6 +78,7 @@ func TestCloseStderrLogsWhatItAbandons(t *testing.T) {
 		awaitBackground(t, writer.entered, "the line never reached the blocked writer")
 		logs := captureDefaultLog(t)
 		h.closeStderr()
+		awaitHubLogs(t, h)
 		if !strings.Contains(logs.String(), "writer_joined=false") {
 			t.Fatalf("closeStderr did not log the write it left behind: %q", logs.String())
 		}
@@ -89,6 +90,7 @@ func TestCloseStderrLogsWhatItAbandons(t *testing.T) {
 		_ = h.errPort.offer(&out, "late")
 		logs := captureDefaultLog(t)
 		h.closeStderr()
+		awaitHubLogs(t, h)
 		if !strings.Contains(logs.String(), "dropped=1") || !strings.Contains(logs.String(), "writer_joined=true") {
 			t.Fatalf("closeStderr logged %q, want the one dropped line and a joined writer", logs.String())
 		}
@@ -116,6 +118,7 @@ func TestStderrPortAnnouncesTheFirstLossAndTheTotalAtClose(t *testing.T) {
 		t.Fatalf("droppedCount = %d, want 3 lines refused by the full queue", got)
 	}
 	h.closeStderr()
+	awaitHubLogs(t, h)
 	if !strings.Contains(logs.String(), "dropped=35") {
 		t.Fatalf("closeStderr did not report the total of the lost lines (3 refused and 32 still queued): %q", logs.String())
 	}

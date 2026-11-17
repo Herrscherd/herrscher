@@ -24,6 +24,7 @@ func TestCloseReportsTheFinalCountWhenItsSummaryCannotBeWritten(t *testing.T) {
 		t.Fatalf("write returned %v, want errWarningAbandoned", err)
 	}
 	sink.Close()
+	awaitSinkLog(t, sink)
 	line := unconfirmedLine(logs.String())
 	if logField(line, "lost") != "2" || logField(line, "unconfirmed") != "1" {
 		t.Fatalf("Close logged %q, want lost=2 and unconfirmed=1: the announce and the oversized warning are lost, the frozen write is unconfirmed", line)
@@ -45,6 +46,7 @@ func TestOverrunBehindAFrozenDrainIsLostOrUnconfirmedAtClose(t *testing.T) {
 	}
 	sink.Close()
 	lost := droppedWarnings(sink) - before
+	awaitSinkLog(t, sink)
 	unconfirmed := unconfirmedAtClose(t, logs.String())
 	if lost == 0 && unconfirmed == 0 {
 		t.Fatal("the overrun behind a frozen drain was neither counted lost nor reported unconfirmed at Close")
@@ -67,7 +69,9 @@ func TestSummaryInFlightAtCloseIsReportedAsLostAndUnconfirmed(t *testing.T) {
 	}
 	awaitGatedWrite(t, writer)
 	sink.Close()
+	awaitSinkLog(t, sink)
 	line := unconfirmedLine(logs.String())
+	awaitSinkLog(t, sink)
 	if logField(line, "lost") != "1" || unconfirmedAtClose(t, logs.String()) < 1 {
 		t.Fatalf("Close logged %q, want lost=1 and unconfirmed>=1: the summary in flight already names the oversized warning, only the queued A is left for the bilan", line)
 	}
@@ -101,6 +105,7 @@ func TestSummaryAcceptedAfterCloseDoesNotCountLossesTwice(t *testing.T) {
 	if _, err := sink.Write(bytes.Repeat([]byte("y"), warningEntryBytes+1)); !errors.Is(err, errWarningAbandoned) {
 		t.Fatalf("write returned %v, want errWarningAbandoned", err)
 	}
+	awaitSinkLog(t, sink)
 	lines = notConfirmedLines(logs.String())
 	if len(lines) != 2 || logField(lines[1], "lost") != "1" || logField(lines[1], "unconfirmed") != "0" {
 		t.Fatalf("logged %q, want the bilan then lost=1 unconfirmed=0 for the new loss alone", lines)
@@ -119,6 +124,7 @@ func TestCloseWaitsForAWriteThatFinishesWithinTheBudget(t *testing.T) {
 		writer.open()
 	}()
 	sink.Close()
+	awaitSinkLog(t, sink)
 	if lines := notConfirmedLines(logs.String()); len(lines) != 0 {
 		t.Fatalf("Close logged %q, want nothing: the write finished inside the budget, so Close must wait for it", lines)
 	}
@@ -137,6 +143,7 @@ func TestCloseNamesAnUnconfirmedWriteEvenWhenNothingWasLost(t *testing.T) {
 	}
 	awaitGatedWrite(t, writer)
 	sink.Close()
+	awaitSinkLog(t, sink)
 	line := unconfirmedLine(logs.String())
 	if logField(line, "lost") != "0" || logField(line, "unconfirmed") != "1" {
 		t.Fatalf("Close logged %q, want lost=0 and unconfirmed=1: the frozen write is in flight and nothing was dropped", line)
@@ -159,6 +166,7 @@ func TestQueuedBehindAFrozenWriterIsLostAtCloseAndNeverWritten(t *testing.T) {
 	if got := droppedWarnings(sink); got != 1 {
 		t.Fatalf("dropped %d warnings at Close, want 1: the queued warning was never handed to the writer", got)
 	}
+	awaitSinkLog(t, sink)
 	line := unconfirmedLine(logs.String())
 	if logField(line, "lost") != "1" || logField(line, "unconfirmed") != "1" {
 		t.Fatalf("Close logged %q, want lost=1 and unconfirmed=1", line)
@@ -182,6 +190,7 @@ func TestInFlightWriteFailingAfterCloseIsAnnouncedAsADelta(t *testing.T) {
 	awaitBackground(t, writer.entered, "the warning was never handed to the writer")
 	time.AfterFunc(warningWriteBudget+warningWriteBudget/2, writer.unblock)
 	sink.Close()
+	awaitSinkLog(t, sink)
 	lines := notConfirmedLines(logs.String())
 	if len(lines) != 2 || logField(lines[0], "lost") != "0" || logField(lines[0], "unconfirmed") != "1" || logField(lines[1], "lost") != "1" || logField(lines[1], "unconfirmed") != "0" {
 		t.Fatalf("Close logged %q, want the bilan (lost=0 unconfirmed=1) then one delta (lost=1 unconfirmed=0) once the in-flight write failed: the failure after the bilan is a new loss, announced once", lines)
@@ -215,6 +224,7 @@ func TestRefusedWriteAfterTheBilanIsLoggedBeforeCloseReturns(t *testing.T) {
 	if !errors.Is(afterErr, errWarningAbandoned) {
 		t.Fatalf("a write admitted after the bilan returned %v, want errWarningAbandoned", afterErr)
 	}
+	awaitSinkLog(t, sink)
 	lines := notConfirmedLines(logs.String())
 	if len(lines) < 2 || logField(lines[0], "unconfirmed") != "1" || logField(lines[1], "lost") != "1" || logField(lines[1], "unconfirmed") != "0" {
 		t.Fatalf("Close logged %q, want the bilan (unconfirmed=1) then the refused write (lost=1 unconfirmed=0) before it returned", lines)
@@ -247,6 +257,7 @@ func TestEntryAdmittedWhileCloseWaitsIsCountedOnceByTheBilan(t *testing.T) {
 	}
 	awaitBackground(t, closed, "Close did not return")
 
+	awaitSinkLog(t, sink)
 	lines := notConfirmedLines(logs.String())
 	if len(lines) != 1 || logField(lines[0], "lost") != "1" || logField(lines[0], "unconfirmed") != "1" {
 		t.Fatalf("Close logged %q, want exactly one bilan with lost=1 unconfirmed=1: the entry is counted once, by the bilan, and the frozen write is unconfirmed", lines)
@@ -262,6 +273,7 @@ func TestEntryAdmittedWhileCloseWaitsIsCountedOnceByTheBilan(t *testing.T) {
 	if strings.Contains(writer.out.String(), "QUEUEDMSG") {
 		t.Fatalf("an entry counted as lost by the bilan reached the output: %q", writer.out.String())
 	}
+	awaitSinkLog(t, sink)
 	if lines := notConfirmedLines(logs.String()); len(lines) != 1 {
 		t.Fatalf("a second line appeared after the writer settled: %q, want the bilan alone", lines)
 	}
@@ -275,6 +287,7 @@ func TestCloseSaysWhenAWriteIsStillRunningAtReturn(t *testing.T) {
 	_ = sink.Enqueue([]byte("GATED\n"))
 	awaitGatedWrite(t, writer)
 	sink.Close()
+	awaitSinkLog(t, sink)
 	if n := strings.Count(logs.String(), englishStillRunningLine()); n != 1 {
 		t.Fatalf("Close returned with its last write still running and logged the note %d times, want once: %q", n, logs.String())
 	}
@@ -288,6 +301,7 @@ func TestCloseSaysNothingWhenTheLastWriteIsJoined(t *testing.T) {
 		t.Fatal(err)
 	}
 	sink.Close()
+	awaitSinkLog(t, sink)
 	if strings.Contains(logs.String(), englishStillRunningLine()) {
 		t.Fatalf("Close logged that a write was still running although its last write was joined: %q", logs.String())
 	}
@@ -311,6 +325,7 @@ func TestConcurrentSecondCloseReturnsOnlyAfterTheBilanIsLogged(t *testing.T) {
 	}()
 	waitUntil(t, "the first Close to begin", func() bool { return isClosing(sink) })
 	sink.Close()
+	awaitSinkLog(t, sink)
 	if !strings.Contains(logs.String(), "not all confirmed") {
 		t.Fatal("the second Close returned before the bilan was logged: it must wait for the first Close to finish")
 	}
@@ -336,6 +351,7 @@ func TestWriterErrorDuringCloseIsAnnouncedOnce(t *testing.T) {
 	if !strings.Contains(writer.out.String(), englishLostLine(2)+"\n") {
 		t.Fatalf("the failed write during Close was not followed by the summary of 2 lost warnings: output %q", writer.out.String())
 	}
+	awaitSinkLog(t, sink)
 	if lines := notConfirmedLines(logs.String()); len(lines) != 0 {
 		t.Fatalf("closing logged %q, want no bilan: the summary was written before the sink sealed", lines)
 	}
@@ -354,6 +370,7 @@ func TestSummaryFailingAfterCloseIsAnnouncedOnceAsADelta(t *testing.T) {
 	waitUntil(t, "the summary refused after Close to be announced as a delta", func() bool {
 		return len(notConfirmedLines(logs.String())) == 2
 	})
+	awaitSinkLog(t, sink)
 	lines := notConfirmedLines(logs.String())
 	if len(lines) != 2 || logField(lines[0], "lost") != "0" || logField(lines[0], "unconfirmed") != "1" || logField(lines[1], "lost") != "1" || logField(lines[1], "unconfirmed") != "0" {
 		t.Fatalf("Close logged %q, want the bilan (lost=0 unconfirmed=1) then one delta (lost=1 unconfirmed=0): the bilan names the refused summary as unconfirmed, and its loss is announced once when the summary fails", lines)
@@ -370,6 +387,7 @@ func TestRefusedSummaryBeforeCloseIsNotLoggedUntilClose(t *testing.T) {
 	if _, err := sink.Write([]byte("first\n")); err != nil {
 		t.Fatal(err)
 	}
+	awaitSinkLog(t, sink)
 	if logs.String() != "" {
 		t.Fatalf("a summary refused before Close was logged %q, want nothing: the refusal is not final until Close", logs.String())
 	}
@@ -377,6 +395,7 @@ func TestRefusedSummaryBeforeCloseIsNotLoggedUntilClose(t *testing.T) {
 	if want := englishLostLine(1) + "\n"; !strings.HasSuffix(writer.out.String(), want) {
 		t.Fatalf("Close did not write the lost summary: output %q, want it to end with %q", writer.out.String(), want)
 	}
+	awaitSinkLog(t, sink)
 	if logs.String() != "" {
 		t.Fatalf("Close logged %q although its summary was written, want nothing", logs.String())
 	}
@@ -390,6 +409,7 @@ func TestSummaryRefusedAtCloseIsAnnouncedOnceByTheBilan(t *testing.T) {
 		t.Fatalf("oversized write returned %v, want errWarningAbandoned", err)
 	}
 	sink.Close()
+	awaitSinkLog(t, sink)
 	lines := notConfirmedLines(logs.String())
 	if len(lines) != 1 || logField(lines[0], "lost") != "1" || logField(lines[0], "unconfirmed") != "0" {
 		t.Fatalf("Close logged %q, want exactly one line with lost=1 unconfirmed=0: the summary was definitively refused at Close, so the bilan is the one announcement", lines)
@@ -409,6 +429,7 @@ func TestSecondCloseIsSilentAndRecountsNothing(t *testing.T) {
 	}
 	sink.Close()
 	droppedAfterFirst := droppedWarnings(sink)
+	awaitSinkLog(t, sink)
 	logsAfterFirst := strings.Count(logs.String(), "not all confirmed")
 	if logsAfterFirst != 1 {
 		t.Fatalf("the first Close logged %d unconfirmed lines, want 1", logsAfterFirst)
@@ -418,6 +439,7 @@ func TestSecondCloseIsSilentAndRecountsNothing(t *testing.T) {
 	if got := droppedWarnings(sink); got != droppedAfterFirst {
 		t.Fatalf("a second Close changed dropped from %d to %d, want no recount", droppedAfterFirst, got)
 	}
+	awaitSinkLog(t, sink)
 	if got := strings.Count(logs.String(), "not all confirmed"); got != logsAfterFirst {
 		t.Fatalf("a second Close logged %d more lines, want none", got-logsAfterFirst)
 	}
@@ -442,6 +464,7 @@ func TestWarningAfterCloseIsAnnouncedOnlyWithItsNewLoss(t *testing.T) {
 	if got := strings.Count(logs.String(), "not all confirmed"); got != before+1 {
 		t.Fatalf("the lost overrun after Close logged %d new lines, want 1", got-before)
 	}
+	awaitSinkLog(t, sink)
 	line := lastUnconfirmedLine(logs.String())
 	if logField(line, "lost") != "1" || logField(line, "unconfirmed") != "0" {
 		t.Fatalf("the lost overrun after Close logged %q, want lost=1 and unconfirmed=0: the bilan already announced the frozen write as unconfirmed", line)
@@ -547,9 +570,11 @@ func TestAdmissionAfterTheBilanStartsNoWriteAndCountsItsLoss(t *testing.T) {
 	if out.String() != "before\n" {
 		t.Fatalf("output = %q, want only the write before Close", out.String())
 	}
+	awaitSinkLog(t, sink)
 	if n := strings.Count(logs.String(), "not all confirmed"); n != 1 {
 		t.Fatalf("logged %d unconfirmed lines for the refused admission, want 1: %q", n, logs.String())
 	}
+	awaitSinkLog(t, sink)
 	line := lastUnconfirmedLine(logs.String())
 	if logField(line, "lost") != "1" || logField(line, "unconfirmed") != "0" {
 		t.Fatalf("the refused admission logged %q, want lost=1 and unconfirmed=0", line)

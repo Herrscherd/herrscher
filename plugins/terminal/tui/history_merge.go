@@ -31,9 +31,9 @@ func replyLine(routed RoutedEvent) (transcriptLine, bool) {
 }
 
 func overlapLength(history, live []transcriptLine) int {
-	for n := min(len(history), len(live)); n > 0; n-- {
-		if slices.Equal(history[len(history)-n:], live[:n]) {
-			return n
+	for shared := min(len(history), len(live)); shared > 0; shared-- {
+		if slices.Equal(history[len(history)-shared:], live[:shared]) {
+			return shared
 		}
 	}
 	return 0

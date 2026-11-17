@@ -18,9 +18,9 @@ func chunkEvent(text string) RoutedEvent {
 
 func conversationTexts(tb *tab) []string {
 	var texts []string
-	for _, e := range tb.entries {
-		if e.role == roleYou || e.role == roleAgent {
-			texts = append(texts, e.text)
+	for i := range tb.entries {
+		if role := tb.entries[i].role; role == roleYou || role == roleAgent {
+			texts = append(texts, tb.entries[i].text)
 		}
 	}
 	return texts

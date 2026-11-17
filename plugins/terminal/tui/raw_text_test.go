@@ -299,7 +299,7 @@ func TestAgentTabAlignsOnTheNextFourColumnStop(t *testing.T) {
 		{"abcd\te", "abcd    e"},
 		{"文字\tb", "文字    b"},
 		{"\U0001F44D\U0001F3FD\tx", "\U0001F44D\U0001F3FD  x"},
-		{"\U0001F469‍\U0001F4BB\tx", "\U0001F469‍\U0001F4BB  x"},
+		{"\U0001F469\u200D\U0001F4BB\tx", "\U0001F469\u200D\U0001F4BB  x"},
 	}
 	for _, streaming := range []bool{false, true} {
 		for _, tc := range cases {

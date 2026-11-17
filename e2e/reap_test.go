@@ -3,6 +3,7 @@
 package e2e_test
 
 import (
+	"bufio"
 	"errors"
 	"io/fs"
 	"os"
@@ -107,10 +108,18 @@ func TestSettleInterruptsTheDaemonBeforeKillingIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	daemon := exec.CommandContext(t.Context(), "sh", "-c", "sleep 60 & child=$!; trap 'kill $child; exit 130' INT; wait", "sh", "serve")
+	daemon := exec.CommandContext(t.Context(), "sh", "-c", "sleep 60 >/dev/null 2>&1 & child=$!; trap 'kill $child; exit 130' INT; echo ready; wait", "sh", "serve")
 	daemon.Env = []string{instanceEnv + "=" + instance}
+	stdout, err := daemon.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if startErr := daemon.Start(); startErr != nil {
 		t.Fatal(startErr)
+	}
+	ready, err := bufio.NewReader(stdout).ReadString('\n')
+	if err != nil || ready != "ready\n" {
+		t.Fatalf("the daemon did not install its interrupt trap: got %q, %v", ready, err)
 	}
 	root := t.TempDir()
 	before, err := hashedEntries(root)

@@ -289,31 +289,31 @@ func RestartDetached(ctx context.Context, cfg Config) error {
 	return Restart(ctx, cfg)
 }
 
-func validateSource(src string) error {
+func validateSource(messages *clitext.Messages, src string) error {
 	lang := clitext.ClientLanguage()
 	if src == "" {
-		return clitext.Failure(lang, errNoSourceDir, clitext.ServiceNoSourceDir, nil)
+		return messages.Failure(lang, errNoSourceDir, clitext.ServiceNoSourceDir, nil)
 	}
 	data, err := os.ReadFile(filepath.Clean(filepath.Join(src, "go.mod")))
 	if err != nil {
-		return clitext.Failure(lang, errNotSourceCheckout, clitext.ServiceNotCheckoutNoModule, clitext.Params{clitext.ParamPath: src, clitext.ParamErr: err.Error()})
+		return messages.Failure(lang, errNotSourceCheckout, clitext.ServiceNotCheckoutNoModule, clitext.Params{clitext.ParamPath: src, clitext.ParamErr: err.Error()})
 	}
 	for _, line := range strings.Split(string(data), "\n") {
 		if strings.TrimSpace(line) == "module github.com/Herrscherd/herrscher" {
 			return nil
 		}
 	}
-	return clitext.Failure(lang, errNotSourceCheckout, clitext.ServiceNotCheckoutWrongModule, clitext.Params{clitext.ParamPath: src})
+	return messages.Failure(lang, errNotSourceCheckout, clitext.ServiceNotCheckoutWrongModule, clitext.Params{clitext.ParamPath: src})
 }
 
 // Pull fast-forwards the source checkout. --ff-only fails loudly rather than
 // creating a merge commit when local and remote have diverged.
-func Pull(ctx context.Context, src string) error {
-	if err := validateSource(src); err != nil {
+func Pull(ctx context.Context, messages *clitext.Messages, src string) error {
+	if err := validateSource(messages, src); err != nil {
 		return err
 	}
 	if out, err := runCapture(ctx, src, "git", "pull", "--ff-only"); err != nil {
-		return clitext.Failure(clitext.ClientLanguage(), err, clitext.ServiceGitPullFailed, clitext.Params{clitext.ParamErr: err.Error(), clitext.ParamOutput: redact.Output(out)})
+		return messages.Failure(clitext.ClientLanguage(), err, clitext.ServiceGitPullFailed, clitext.Params{clitext.ParamErr: err.Error(), clitext.ParamOutput: redact.Output(out)})
 	}
 	return nil
 }
@@ -321,15 +321,15 @@ func Pull(ctx context.Context, src string) error {
 // Build compiles the herrscher binary from src to binPath. `go build -o` writes a
 // new file and renames it into place, so replacing the live binary is safe while
 // the daemon runs (the restart then picks up the new file).
-func Build(ctx context.Context, src, binPath string) error {
-	if err := validateSource(src); err != nil {
+func Build(ctx context.Context, messages *clitext.Messages, src, binPath string) error {
+	if err := validateSource(messages, src); err != nil {
 		return err
 	}
 	if _, err := exec.LookPath("go"); err != nil {
-		return clitext.Failure(clitext.ClientLanguage(), errNoGoToolchain, clitext.ServiceNoGoToolchain, nil)
+		return messages.Failure(clitext.ClientLanguage(), errNoGoToolchain, clitext.ServiceNoGoToolchain, nil)
 	}
 	if out, err := runCapture(ctx, src, "go", "build", "-o", binPath, "."); err != nil {
-		return clitext.Failure(clitext.ClientLanguage(), err, clitext.ServiceGoBuildFailed, clitext.Params{clitext.ParamErr: err.Error(), clitext.ParamOutput: redact.Output(out)})
+		return messages.Failure(clitext.ClientLanguage(), err, clitext.ServiceGoBuildFailed, clitext.Params{clitext.ParamErr: err.Error(), clitext.ParamOutput: redact.Output(out)})
 	}
 	return nil
 }
@@ -338,19 +338,19 @@ func Build(ctx context.Context, src, binPath string) error {
 // platform. It is Build with GOOS/GOARCH pinned and cgo off: cross-compiling a
 // cgo binary would need a cross toolchain, and herrscher needs none. This is how
 // a host is provisioned, because the releases carry no binary assets.
-func BuildFor(ctx context.Context, src, binPath, goos, goarch string) error {
-	if err := validateSource(src); err != nil {
+func BuildFor(ctx context.Context, messages *clitext.Messages, src, binPath, goos, goarch string) error {
+	if err := validateSource(messages, src); err != nil {
 		return err
 	}
 	if _, err := exec.LookPath("go"); err != nil {
-		return clitext.Failure(clitext.ClientLanguage(), errNoGoToolchain, clitext.ServiceNoGoToolchain, nil)
+		return messages.Failure(clitext.ClientLanguage(), errNoGoToolchain, clitext.ServiceNoGoToolchain, nil)
 	}
 	cmd := exec.CommandContext(ctx, "go", "build", "-o", binPath, ".")
 	cmd.Dir = src
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+goos, "GOARCH="+goarch)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return clitext.Failure(clitext.ClientLanguage(), err, clitext.ServiceGoBuildForFailed, clitext.Params{
+		return messages.Failure(clitext.ClientLanguage(), err, clitext.ServiceGoBuildForFailed, clitext.Params{
 			clitext.ParamOS:     goos,
 			clitext.ParamArch:   goarch,
 			clitext.ParamErr:    err.Error(),
@@ -374,12 +374,12 @@ func SourceVersion(ctx context.Context, src string) string {
 // exits 0 without touching the network. A non-zero exit means the new binary is
 // broken (won't even parse its CLI), so the caller must not restart into it. The
 // daemon keeps running its old in-memory image; only the on-disk file changed.
-func Smoke(ctx context.Context, binPath string) error {
+func Smoke(ctx context.Context, messages *clitext.Messages, binPath string) error {
 	if binPath == "" {
-		return clitext.Failure(clitext.ClientLanguage(), errNoBinaryPath, clitext.ServiceNoBinaryPath, nil)
+		return messages.Failure(clitext.ClientLanguage(), errNoBinaryPath, clitext.ServiceNoBinaryPath, nil)
 	}
 	if out, err := runCapture(ctx, "", binPath, "--help"); err != nil {
-		return clitext.Failure(clitext.ClientLanguage(), err, clitext.ServiceSmokeFailed, clitext.Params{
+		return messages.Failure(clitext.ClientLanguage(), err, clitext.ServiceSmokeFailed, clitext.Params{
 			clitext.ParamPath:   binPath,
 			clitext.ParamErr:    err.Error(),
 			clitext.ParamOutput: redact.Output(out),
@@ -434,16 +434,16 @@ func firstToken(token string) string {
 // Update pulls (optional), rebuilds, smoke-tests, and restarts the service
 // inline. Used by the `herrscher service update` CLI (a separate process from the
 // daemon).
-func Update(ctx context.Context, cfg Config, src string, pull bool) error {
+func Update(ctx context.Context, messages *clitext.Messages, cfg Config, src string, pull bool) error {
 	if pull {
-		if err := Pull(ctx, src); err != nil {
+		if err := Pull(ctx, messages, src); err != nil {
 			return err
 		}
 	}
-	if err := Build(ctx, src, cfg.BinPath); err != nil {
+	if err := Build(ctx, messages, src, cfg.BinPath); err != nil {
 		return err
 	}
-	if err := Smoke(ctx, cfg.BinPath); err != nil {
+	if err := Smoke(ctx, messages, cfg.BinPath); err != nil {
 		return err
 	}
 	changed, err := syncUnitPath(cfg)
@@ -454,7 +454,7 @@ func Update(ctx context.Context, cfg Config, src string, pull bool) error {
 		if err := runCommand(ctx, Command{Argv: []string{cmdSystemctl, flagUser, subDaemonReload}}); err != nil {
 			return err
 		}
-		note, err := clitext.Text(cfg.language(), clitext.ServiceNoteUnitPath, nil)
+		note, err := messages.Text(cfg.language(), clitext.ServiceNoteUnitPath, nil)
 		if err != nil {
 			return err
 		}
@@ -716,16 +716,16 @@ func cmdQuote(value string) string {
 
 // DefaultConfig fills a Config from the current environment (binary path, home,
 // user, default env-file location and health address).
-func DefaultConfig() (Config, error) {
+func DefaultConfig(messages *clitext.Messages) (Config, error) {
 	lang := clitext.ClientLanguage()
-	translator := clitext.For(lang)
+	translator := messages.For(lang)
 	bin, err := os.Executable()
 	if err != nil {
-		return Config{}, clitext.Failure(lang, err, clitext.ServiceLocateBinary, clitext.Params{clitext.ParamErr: err.Error()})
+		return Config{}, messages.Failure(lang, err, clitext.ServiceLocateBinary, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return Config{}, clitext.Failure(lang, err, clitext.ServiceLocateHome, clitext.Params{clitext.ParamErr: err.Error()})
+		return Config{}, messages.Failure(lang, err, clitext.ServiceLocateHome, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	uname := ""
 	if current, userErr := user.Current(); userErr == nil {

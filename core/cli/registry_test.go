@@ -384,7 +384,7 @@ func TestTextRendersANoticeInTheRequestedLanguage(t *testing.T) {
 
 func TestLocalizeRendersANoticeErrorInTheRequestedLanguage(t *testing.T) {
 	src := noticedError{notice: closedNotice()}
-	out := cli.Localize(src, i18n.French)
+	out := cli.Localize(clitext.NewMessages(), src, i18n.French)
 	if !strings.Contains(out.Error(), "fermée") || strings.Contains(out.Error(), "internal english detail") {
 		t.Fatalf("Localize = %q, want the French notice in place of the internal text", out.Error())
 	}
@@ -400,18 +400,18 @@ func TestZeroLanguageFallsBackToEnglish(t *testing.T) {
 	if err != nil || !strings.Contains(text, "session demo closed") {
 		t.Fatalf("Text with no language = %q (%v), want English", text, err)
 	}
-	out := cli.Localize(noticedError{notice: closedNotice()}, 0)
+	out := cli.Localize(clitext.NewMessages(), noticedError{notice: closedNotice()}, 0)
 	if !strings.Contains(out.Error(), "session demo closed") {
 		t.Fatalf("Localize with no language = %q, want English", out.Error())
 	}
 }
 
 func TestRenderPicksTheErrorOrTheResult(t *testing.T) {
-	text, err := cli.Render(contracts.DataResult("ok"), nil, i18n.French)
+	text, err := cli.Render(clitext.NewMessages(), contracts.DataResult("ok"), nil, i18n.French)
 	if err != nil || text != "ok" {
 		t.Fatalf("Render of a result = %q (%v), want ok", text, err)
 	}
-	_, err = cli.Render(contracts.Result{}, noticedError{notice: closedNotice()}, i18n.French)
+	_, err = cli.Render(clitext.NewMessages(), contracts.Result{}, noticedError{notice: closedNotice()}, i18n.French)
 	if err == nil || !strings.Contains(err.Error(), "fermée") {
 		t.Fatalf("Render of a failure = %v, want the French error", err)
 	}

@@ -247,9 +247,9 @@ func (m *Messages) Failure(lang i18n.Language, cause error, key Key, params Para
 	return failureError{text: text, cause: cause}
 }
 
-// Text renders key in lang with params against a catalog built for this call. It
-// rebuilds the catalog on every call, so it is reserved for the parameterless
-// Error paths that cannot reach a *Messages; other callers hold their owner.
+// Text renders key in lang with params against a catalog built for this call.
+// Each call rebuilds the catalog, so a caller that renders more than once holds a
+// *Messages instead.
 func Text(lang i18n.Language, key Key, params Params) (string, error) {
 	return NewMessages().Text(lang, key, params)
 }

@@ -27,7 +27,7 @@ func renderAcrossSocket(t *testing.T, serverErr error, lang i18n.Language) strin
 	if !handled || err == nil {
 		t.Fatalf("socket returned handled=%v err=%v, want a failure", handled, err)
 	}
-	_, rendered := cli.Render(contracts.Result{}, err, lang)
+	_, rendered := cli.Render(clitext.NewMessages(), contracts.Result{}, err, lang)
 	if rendered == nil {
 		t.Fatal("render returned no error text")
 	}

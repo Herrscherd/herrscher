@@ -79,7 +79,7 @@ func TestSetLangThroughTheWiredManagerChangesBuilderReplies(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	live := newOperatorLanguage(i18n.English)
 	options := Options{DefaultCmd: "claude", live: live}
-	hdl := newManagerHandler(newHostMessages(), Deps{}, options, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
+	hdl := newManagerHandler(newHostMessages(), clitext.NewMessages(), Deps{}, options, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
 	setLang := mustCommand(t, hdl.Commands(), "set", "lang")
 	if _, err := setLang.Run(t.Context(), contracts.Input{Args: map[string]string{"lang": "fr"}}); err != nil {
 		t.Fatalf("set lang fr: %v", err)
@@ -111,7 +111,7 @@ func TestCommandsFollowsTheLiveLanguageAfterSetLang(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	live := newOperatorLanguage(i18n.English)
 	options := Options{DefaultCmd: "claude", live: live}
-	hdl := newManagerHandler(newHostMessages(), Deps{}, options, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
+	hdl := newManagerHandler(newHostMessages(), clitext.NewMessages(), Deps{}, options, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
 	reg := cli.NewRegistry(clitext.NewMessages())
 	if err := reg.Add(commandsVerb(clitext.NewMessages(), live.Get, reg)); err != nil {
 		t.Fatal(err)
@@ -182,7 +182,7 @@ func missingScheduleRemoval(t *testing.T, disp dispatcher, name string) string {
 }
 
 func notFoundScheduleText(lang i18n.Language, name string) string {
-	return cli.Localize(&NotFoundError{Kind: kindSchedule, Name: name}, lang).Error()
+	return cli.Localize(clitext.NewMessages(), &NotFoundError{Kind: kindSchedule, Name: name}, lang).Error()
 }
 
 func TestOperatorCommandReplyFollowsALiveLanguageChange(t *testing.T) {
@@ -227,8 +227,8 @@ func TestSessionCommandReplyFollowsTheOperatorUnlessItsLanguageIsRecorded(t *tes
 	}
 	h := testHub(&hub{messages: newHostMessages(), warnings: io.Discard, st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)})
 	live.set(i18n.French)
-	followed := missingScheduleRemoval(t, asSession{disp: reg, session: "s1", lang: h.sessionLanguageSource("s1")}, "weekly")
-	kept := missingScheduleRemoval(t, asSession{disp: reg, session: "s2", lang: h.sessionLanguageSource("s2")}, "daily")
+	followed := missingScheduleRemoval(t, asSession{disp: reg, session: "s1", lang: h.sessionLanguageSource("s1"), messages: clitext.NewMessages()}, "weekly")
+	kept := missingScheduleRemoval(t, asSession{disp: reg, session: "s2", lang: h.sessionLanguageSource("s2"), messages: clitext.NewMessages()}, "daily")
 	wantFrench := notFoundScheduleText(i18n.French, "weekly")
 	wantEnglish := notFoundScheduleText(i18n.English, "daily")
 	if followed != wantFrench {

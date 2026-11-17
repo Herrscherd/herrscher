@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -51,7 +52,7 @@ func TestPlatformFromUname(t *testing.T) {
 }
 
 func TestProvisionRefusesWithoutASourceCheckout(t *testing.T) {
-	_, err := provisionHost(context.Background(), newHostMessages(), &scriptedRunner{}, state.Host{Name: "build1", SSH: "me@b1"}, "")
+	_, err := provisionHost(context.Background(), newHostMessages(), clitext.NewMessages(), &scriptedRunner{}, state.Host{Name: "build1", SSH: "me@b1"}, "")
 	if err == nil {
 		t.Fatal("want a refusal")
 	}
@@ -62,7 +63,7 @@ func TestProvisionRefusesWithoutASourceCheckout(t *testing.T) {
 
 func TestProvisionStopsOnAnUnsupportedPlatform(t *testing.T) {
 	run := &scriptedRunner{replies: []string{"printf 'Plan9 vax'"}}
-	_, err := provisionHost(context.Background(), newHostMessages(), run, state.Host{Name: "build1", SSH: "me@b1"}, t.TempDir())
+	_, err := provisionHost(context.Background(), newHostMessages(), clitext.NewMessages(), run, state.Host{Name: "build1", SSH: "me@b1"}, t.TempDir())
 	if err == nil || !strings.Contains(err.Error(), "unsupported") {
 		t.Fatalf("want an unsupported-platform refusal, got %v", err)
 	}

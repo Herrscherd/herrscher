@@ -40,15 +40,15 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	options = withOperatorLanguage(options)
 	partDir := filepath.Dir(options.StatePath)
 	worktrees := worktree.NewWorktreer(sessions.cliMessages, instID)
-	upCfg, cfgErr := service.DefaultConfig()
+	upCfg, cfgErr := service.DefaultConfig(sessions.cliMessages)
 	logCleanup(cfgErr)
-	updater := serviceUpdater{cfg: upCfg, st: hostState}
+	updater := serviceUpdater{cfg: upCfg, st: hostState, messages: sessions.cliMessages}
 	agents := agent.NewStore(filepath.Join(partDir, "agents"))
 	if n, ok := agent.UserBudgetFromEnv(os.Getenv); ok {
 		agents.SetUserBudget(n)
 	}
 	models := options.modelDiscovery(sessions.messages)
-	hdl := newManagerHandler(sessions.messages, deps, options, partDir, hostState, sup, worktrees, updater, agents, models)
+	hdl := newManagerHandler(sessions.messages, sessions.cliMessages, deps, options, partDir, hostState, sup, worktrees, updater, agents, models)
 	wireManagerHandler(ctx, options.live.Get, options.Warnings, hdl, hostState, options.Runtime, instID, worktrees, sessions, models)
 	wireSupervisor(sup, options.Runtime, hostState, instID, sessions)
 	seedCoord := &coordinatorSlot{}
@@ -83,7 +83,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addScheduleCommands(reg, sessions.messages, sessions.cliMessages, options.live.Get, hostState, agents, schedSlot); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addHostCommands(reg, sessions.messages, options.live.Get, options.Warnings, hostState, options.Runtime); err != nil {
+	if err := addHostCommands(reg, sessions.messages, sessions.cliMessages, options.live.Get, options.Warnings, hostState, options.Runtime); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addApproveCommands(reg, sessions.messages, sessions.cliMessages, options.live.Get, options.Warnings, hostState, agents, approvals, sessions); err != nil {
@@ -121,10 +121,10 @@ func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
 	return nil
 }
 
-func newManagerHandler(messages *hostMessages, deps Deps, options Options, partDir string, hostState *state.State, sup *supervisor.Supervisor, worktrees manager.Worktrees, updater serviceUpdater, agents *agent.Store, models *ModelDiscovery) *manager.Handler {
+func newManagerHandler(messages *hostMessages, cliMessages *clitext.Messages, deps Deps, options Options, partDir string, hostState *state.State, sup *supervisor.Supervisor, worktrees manager.Worktrees, updater serviceUpdater, agents *agent.Store, models *ModelDiscovery) *manager.Handler {
 	options = withOperatorLanguage(options)
 	launch := func(vendor, modelID, cmd string) (string, error) { return launchVendor(models, vendor, modelID, cmd) }
-	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, func(vendor, profile string) error { return validateProfileChoice(messages, vendor, profile) }, launch)
+	hdl := manager.NewHandler(cliMessages, deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, func(vendor, profile string) error { return validateProfileChoice(messages, vendor, profile) }, launch)
 	hdl.SetRemoteBackend(options.RemoteCategories[contracts.CategoryBackend])
 	hdl.SetLanguage(options.live.Get())
 	hdl.SetDefaultLanguage(options.DefaultLanguage)

@@ -419,7 +419,7 @@ func TestSkillApprovalFailureTravelsAsAnUnexpectedNotice(t *testing.T) {
 func TestSkillApprovalFailureRendersInFrenchThroughTheCLI(t *testing.T) {
 	input := contracts.Input{Args: map[string]string{"key": "skill/x"}}
 	_, err := setSkillApproval(context.Background(), clitext.NewMessages(), i18n.English, recallFailingMemory{err: errors.New("store locked")}, input)
-	got := cli.Localize(err, i18n.French).Error()
+	got := cli.Localize(clitext.NewMessages(), err, i18n.French).Error()
 	if !strings.HasPrefix(got, "erreur inattendue : ") || !strings.Contains(got, "store locked") {
 		t.Fatalf("cli.Localize(%v, French) = %q, want the French unexpected notice carrying the cause", err, got)
 	}

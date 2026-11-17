@@ -1,10 +1,12 @@
 package host
 
 import (
+	"context"
 	"io"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -23,5 +25,27 @@ func TestATapIsRefusedOnceTheSeedShutsItsGate(t *testing.T) {
 
 	if len(published) != 1 || published[0] != "before" {
 		t.Fatalf("published = %v, want only the tap admitted before the gate shut", published)
+	}
+}
+
+type probeOrchestrator struct {
+	contracts.Orchestrator
+	consolidate func(context.Context) error
+}
+
+func (p probeOrchestrator) Consolidate(ctx context.Context) error {
+	return p.consolidate(ctx)
+}
+
+func TestConsolidationRunsWithTheGateShut(t *testing.T) {
+	gate := &seedGate{}
+	delivered := false
+	orch := probeOrchestrator{consolidate: func(context.Context) error {
+		gate.admit(func() { delivered = true })
+		return nil
+	}}
+	consolidateOneShot(context.Background(), orch, gate, state.Session{Name: "window"}, io.Discard, fixedLanguageSource(i18n.English))
+	if delivered {
+		t.Fatal("a tap reached the session during the consolidation: the gate must be shut before Consolidate")
 	}
 }

@@ -160,8 +160,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 		}
 		driver.activeTurnID = ""
 	}
-	gate.shut()
-	consolidateOneShot(ctx, orch, sess, runtime.warnings, runtime.languageOf(sess))
+	consolidateOneShot(ctx, orch, gate, sess, runtime.warnings, runtime.languageOf(sess))
 	return reply, nil
 }
 
@@ -247,10 +246,11 @@ func (r oneShotSeedRuntime) languageOf(sess state.Session) languageSource {
 	return func() i18n.Language { return knownSessionLanguage(sess) }
 }
 
-func consolidateOneShot(ctx context.Context, orch contracts.Orchestrator, sess state.Session, warn io.Writer, lang languageSource) {
+func consolidateOneShot(ctx context.Context, orch contracts.Orchestrator, gate *seedGate, sess state.Session, warn io.Writer, lang languageSource) {
 	if orch == nil || sess.ConsolidateEvery > 0 {
 		return
 	}
+	gate.shut()
 	consCtx, consCancel := context.WithTimeout(ctx, seedConsolidateTimeout)
 	started := time.Now()
 	err := orch.Consolidate(consCtx)

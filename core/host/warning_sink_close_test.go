@@ -68,8 +68,54 @@ func TestSummaryInFlightAtCloseIsReportedAsLostAndUnconfirmed(t *testing.T) {
 	awaitGatedWrite(t, writer)
 	sink.Close()
 	line := unconfirmedLine(logs.String())
-	if logField(line, "lost") != "1" || unconfirmedAtClose(t, logs.String()) < 1 {
-		t.Fatalf("Close logged %q, want lost=1 and unconfirmed>=1 while the summary is in flight", line)
+	if logField(line, "lost") != "2" || unconfirmedAtClose(t, logs.String()) < 1 {
+		t.Fatalf("Close logged %q, want lost=2 and unconfirmed>=1: the oversized warning and the queued A are lost while the summary is in flight", line)
+	}
+}
+
+func TestSummaryAcceptedAfterCloseDoesNotCountLossesTwice(t *testing.T) {
+	logs := captureDefaultLog(t)
+	writer := newGatedWarnings("lost")
+	t.Cleanup(writer.open)
+	sink := newWarningSink(writer, englishLostLine)
+	if _, err := sink.Write(bytes.Repeat([]byte("x"), warningEntryBytes+1)); !errors.Is(err, errWarningAbandoned) {
+		t.Fatalf("write returned %v, want errWarningAbandoned", err)
+	}
+	if _, err := sink.Write([]byte("A\n")); !errors.Is(err, errWarningLate) {
+		t.Fatalf("write returned %v, want errWarningLate", err)
+	}
+	awaitGatedWrite(t, writer)
+	sink.Close()
+	writer.open()
+	waitUntil(t, "the summary to be accepted after the bilan", func() bool {
+		return ask(sink, func() bool { return sink.inflight == nil })
+	})
+	if _, err := sink.Write(bytes.Repeat([]byte("y"), warningEntryBytes+1)); !errors.Is(err, errWarningAbandoned) {
+		t.Fatalf("write returned %v, want errWarningAbandoned", err)
+	}
+	lines := notConfirmedLines(logs.String())
+	if len(lines) != 2 || logField(lines[1], "lost") != "1" || logField(lines[1], "unconfirmed") != "0" {
+		t.Fatalf("logged %q, want the bilan then lost=1 unconfirmed=0: an accepted summary after the bilan must not advance the count", lines)
+	}
+}
+
+func TestCloseWaitsForAWriteThatFinishesWithinTheBudget(t *testing.T) {
+	logs := captureDefaultLog(t)
+	writer := newGatedWarnings("frozen")
+	t.Cleanup(writer.open)
+	sink := newWarningSink(writer, englishLostLine)
+	_ = sink.Enqueue([]byte("frozen\n"))
+	awaitGatedWrite(t, writer)
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		writer.open()
+	}()
+	sink.Close()
+	if lines := notConfirmedLines(logs.String()); len(lines) != 0 {
+		t.Fatalf("Close logged %q, want nothing: the write finished inside the budget, so Close must wait for it", lines)
+	}
+	if !strings.Contains(writer.out.String(), "frozen") {
+		t.Fatalf("the queued warning was not written, output %q", writer.out.String())
 	}
 }
 
@@ -117,7 +163,7 @@ func TestQueuedBehindAFrozenWriterIsLostAtCloseAndNeverWritten(t *testing.T) {
 	}
 }
 
-func TestInFlightWriteFailingAfterCloseIsNotAnnouncedTwice(t *testing.T) {
+func TestInFlightWriteFailingAfterCloseIsAnnouncedAsADelta(t *testing.T) {
 	logs := captureDefaultLog(t)
 	writer := newFirstWriteRefused()
 	t.Cleanup(writer.unblock)
@@ -127,9 +173,6 @@ func TestInFlightWriteFailingAfterCloseIsNotAnnouncedTwice(t *testing.T) {
 	}
 	awaitBackground(t, writer.entered, "the warning was never handed to the writer")
 	sink.Close()
-	if err := sink.announce("HOLD"); !errors.Is(err, errWarningAbandoned) {
-		t.Fatalf("the announce behind the in-flight write returned %v, want errWarningAbandoned", err)
-	}
 	writer.unblock()
 	h := testHub(&hub{teardownGrace: 10 * time.Second})
 	window, cancel := h.newGrace()
@@ -137,10 +180,9 @@ func TestInFlightWriteFailingAfterCloseIsNotAnnouncedTwice(t *testing.T) {
 	if !sink.flush(window) {
 		t.Fatal("the sink did not settle the in-flight write")
 	}
-	sink.announceAfterFinal()
 	lines := notConfirmedLines(logs.String())
 	if len(lines) != 2 || logField(lines[0], "lost") != "0" || logField(lines[0], "unconfirmed") != "1" || logField(lines[1], "lost") != "1" || logField(lines[1], "unconfirmed") != "0" {
-		t.Fatalf("Close logged %q, want the bilan (lost=0 unconfirmed=1) then the abandoned announce (lost=1 unconfirmed=0), and nothing once the in-flight write failed: the failure after the bilan is counted, not announced again", lines)
+		t.Fatalf("Close logged %q, want the bilan (lost=0 unconfirmed=1) then one delta (lost=1 unconfirmed=0) once the in-flight write failed: the failure after the bilan is a new loss, announced once", lines)
 	}
 }
 
@@ -157,15 +199,14 @@ func TestWriterErrorDuringCloseIsAnnouncedOnce(t *testing.T) {
 		t.Fatalf("oversized write returned %v, want errWarningAbandoned", err)
 	}
 	closed := runInBackground(sink.Close)
-	waitUntil(t, "Close to wait for the summary behind the in-flight write", func() bool { return isSummarizing(sink) })
+	waitUntil(t, "Close to begin while the in-flight write is still blocked", func() bool { return isClosing(sink) })
 	writer.unblock()
 	awaitBackground(t, closed, "the background Close did not return")
-	lines := notConfirmedLines(logs.String())
-	if len(lines) != 1 {
-		t.Fatalf("closing logged %d unconfirmed lines %q, want exactly one", len(lines), lines)
+	if !strings.Contains(writer.out.String(), englishLostLine(2)+"\n") {
+		t.Fatalf("the failed write during Close was not followed by the summary of 2 lost warnings: output %q", writer.out.String())
 	}
-	if lost, unconfirmed := logField(lines[0], "lost"), logField(lines[0], "unconfirmed"); lost != "1" || unconfirmed != "0" {
-		t.Fatalf("the failed in-flight write during Close logged lost=%s unconfirmed=%s, want lost=1 unconfirmed=0: %q", lost, unconfirmed, lines[0])
+	if lines := notConfirmedLines(logs.String()); len(lines) != 0 {
+		t.Fatalf("closing logged %q, want no bilan: the summary was written before the sink sealed", lines)
 	}
 }
 
@@ -297,7 +338,7 @@ func TestLateSuccessAfterAnUnconfirmedWriteIsWrittenOnceAndNotCounted(t *testing
 	}
 }
 
-func TestQueuedWarningLostAtCloseReturnsAbandonedAndWritesNothing(t *testing.T) {
+func TestQueuedBehindAStalledWriterIsLateAndLostAtClose(t *testing.T) {
 	writer := newGatedWarnings("frozen")
 	t.Cleanup(writer.open)
 	sink := newWarningSink(writer, englishLostLine)
@@ -312,10 +353,13 @@ func TestQueuedWarningLostAtCloseReturnsAbandonedAndWritesNothing(t *testing.T) 
 	var err error
 	queued := runInBackground(func() { n, err = sink.Write([]byte("QUEUEDMSG\n")) })
 	waitUntil(t, "the queued warning to wait behind the frozen writer", func() bool { return queuedWarnings(sink) == 1 })
+	awaitBackground(t, queued, "the queued write did not return once its budget expired")
+	if !errors.Is(err, errWarningLate) || n != 0 {
+		t.Fatalf("the queued warning behind the frozen writer returned (%d, %v), want (0, errWarningLate)", n, err)
+	}
 	sink.Close()
-	awaitBackground(t, queued, "the queued write did not return once Close dropped its entry")
-	if !errors.Is(err, errWarningAbandoned) || n != 0 {
-		t.Fatalf("the queued warning dropped at Close returned (%d, %v), want (0, errWarningAbandoned)", n, err)
+	if got := droppedWarnings(sink); got != 1 {
+		t.Fatalf("dropped = %d at Close, want 1: the queued warning was never handed to the writer", got)
 	}
 	awaitBackground(t, frozen, "the frozen write did not return")
 	writer.open()

@@ -29,15 +29,11 @@ func testHub(h *hub) *hub {
 }
 
 func droppedWarnings(s *warningSink) int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.dropped
+	return ask(s, func() int { return s.dropped })
 }
 
 func queuedWarnings(s *warningSink) int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return len(s.queue)
+	return ask(s, func() int { return len(s.queue) })
 }
 
 func fillQueueBehindBlockedWrite(t *testing.T, sink *warningSink) {
@@ -109,9 +105,12 @@ func isWarningOutcome(err error) bool {
 }
 
 func unconfirmedCount(s *warningSink) int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.unconfirmed
+	return ask(s, func() int {
+		if s.inflight != nil {
+			return 1
+		}
+		return 0
+	})
 }
 
 func waitUntil(t *testing.T, what string, condition func() bool) {
@@ -183,10 +182,8 @@ func (w *firstWriteRefused) unblock() {
 	w.openOnce.Do(func() { close(w.release) })
 }
 
-func isSummarizing(s *warningSink) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.summarizing
+func isClosing(s *warningSink) bool {
+	return ask(s, func() bool { return s.closed })
 }
 
 func notConfirmedLines(text string) []string {

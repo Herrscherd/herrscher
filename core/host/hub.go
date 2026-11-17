@@ -23,7 +23,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
-	"github.com/Herrscherd/herrscher/core/usage"
 )
 
 const defaultTeardownGrace = 5 * time.Second
@@ -102,26 +101,8 @@ func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir str
 	return created
 }
 
-func (h *hub) textLanguage() languageSource {
-	if h.language != nil {
-		return h.language
-	}
-	return fixedLanguageSource(h.lang)
-}
-
 func (h *hub) lostWarningLine(lost int) string {
 	return newHostMessages().text(h.textLanguage()(), "warn.warnings_dropped", map[string]any{countParam: lost})
-}
-
-func (h *hub) sessionLanguageSource(name string) languageSource {
-	recorded := liveSessionLanguage(h.st, name)
-	operator := h.textLanguage()
-	return func() i18n.Language {
-		if lang := recorded(); lang != 0 {
-			return lang
-		}
-		return operator()
-	}
 }
 
 func (h *hub) operatorCommands() asOperator {
@@ -147,67 +128,6 @@ func sessionFailureKey(stage supervisor.Stage) string {
 		return "session.prepare_failed"
 	}
 	return "session.launch_failed"
-}
-
-func eventTap(publish func(string, contracts.Event), session string) func(contracts.Event) {
-	if publish == nil {
-		return nil
-	}
-	return func(e contracts.Event) { publish(session, e) }
-}
-
-func (h *hub) liveSink(ctx context.Context, sess state.Session) sessionSink {
-	return sessionSink{
-		Resume: func(tok string) {
-			if err := h.st.SetResumeToken(sess.Name, tok); err != nil {
-				warnLive(h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_resume_token", map[string]any{nameParam: sess.Name, detailParam: err})
-			}
-		},
-		Project: func(p string) {
-			if err := h.st.SetProjectPinned(sess.Name, p); err != nil {
-				warnLive(h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_project_pin", map[string]any{nameParam: sess.Name, detailParam: err})
-			}
-		},
-		Transcript: func(e state.TranscriptEntry) {
-			if err := state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), e); err != nil {
-				warnLive(h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
-			}
-		},
-		Checkpoint: func(turnID, text string) {
-			h.takeCheckpoint(ctx, sess, turnID, text)
-		},
-		Usage: func(records []usage.Record) {
-			h.recordUsage(sess, records)
-		},
-	}
-}
-
-func sessionLanguage(sess state.Session, operator i18n.Language) i18n.Language {
-	if lang := knownSessionLanguage(sess); lang != 0 {
-		return lang
-	}
-	return operator
-}
-
-func knownSessionLanguage(sess state.Session) i18n.Language {
-	lang, err := i18n.ParseLanguage(sess.Language)
-	if err != nil {
-		return 0
-	}
-	return lang
-}
-
-func liveSessionLanguage(store *state.State, name string) func() i18n.Language {
-	return func() i18n.Language {
-		if store == nil {
-			return 0
-		}
-		session, ok := store.FindSession(name)
-		if !ok {
-			return 0
-		}
-		return knownSessionLanguage(session)
-	}
 }
 
 func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, error) {

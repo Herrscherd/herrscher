@@ -441,7 +441,7 @@ func (h *hub) withinGrace(name string, window teardownWindow, step func()) bool 
 }
 
 func (h *hub) warnOverrun(name string) {
-	warnTo(h.warnings, h.sessionLanguageSource(name)(), "warn.session_teardown_overrun", h.overrunParams(name))
+	logCleanup(h.sink.announce(newHostMessages().text(h.sessionLanguageSource(name)(), "warn.session_teardown_overrun", h.overrunParams(name))))
 }
 
 func (h *hub) overrunParams(name string) map[string]any {

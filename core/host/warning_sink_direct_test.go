@@ -82,6 +82,21 @@ func TestOverrunIsCountedWhenTheWriterStaysFrozenForTheWholeBudget(t *testing.T)
 	}
 }
 
+func TestAbandonedOverrunIsSilentUntilTheBilan(t *testing.T) {
+	logs := captureDefaultLog(t)
+	writer := newGatedWarnings("slow")
+	t.Cleanup(writer.open)
+	sink := newWarningSink(writer, englishLostLine)
+	_ = sink.Enqueue([]byte("slow\n"))
+	awaitGatedWrite(t, writer)
+	if err := sink.announce("overrun"); !errors.Is(err, errWarningAbandoned) {
+		t.Fatalf("an overrun behind a slow write returned %v, want errWarningAbandoned", err)
+	}
+	if logs.String() != "" {
+		t.Fatalf("an abandoned overrun logged %q before Close: only the bilan announces it", logs.String())
+	}
+}
+
 func TestDirectWriteBehindAStalledSinkNeverWaitsAndIsLostNeverWritten(t *testing.T) {
 	writer := newGatedWarnings("frozen")
 	t.Cleanup(writer.open)

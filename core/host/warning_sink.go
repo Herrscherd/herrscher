@@ -71,6 +71,7 @@ type warningSink struct {
 	closed       bool
 	sealed       bool
 	sealedSignal chan struct{}
+	lastLogged   chan struct{}
 }
 
 func newWarningSink(out io.Writer, lostLine func(lost int) string) *warningSink {
@@ -250,7 +251,10 @@ func (s *warningSink) startSummary() {
 
 func (s *warningSink) start(write *inflightWrite, data []byte) {
 	s.inflight = write
+	logged := make(chan struct{})
+	s.lastLogged = logged
 	go func() {
+		defer close(logged)
 		written, err := s.out.Write(data)
 		logWriteFailure(written, err)
 		lost := ask(s, func() int { return s.settle(write, err) })
@@ -336,6 +340,20 @@ func (s *warningSink) Close() {
 	s.waitIdle(budget)
 	taken := ask(s, s.seal)
 	logNotConfirmed(taken.lost, taken.unconfirmed)
+	s.joinWriter()
+}
+
+func (s *warningSink) joinWriter() {
+	logged := ask(s, func() chan struct{} { return s.lastLogged })
+	if logged == nil {
+		return
+	}
+	budget, stop := writeBudget()
+	defer stop()
+	select {
+	case <-logged:
+	case <-budget:
+	}
 }
 
 func (s *warningSink) beginClose() bool {

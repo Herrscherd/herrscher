@@ -179,17 +179,8 @@ func TestInFlightWriteFailingAfterCloseIsAnnouncedAsADelta(t *testing.T) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
 	awaitBackground(t, writer.entered, "the warning was never handed to the writer")
+	time.AfterFunc(warningWriteBudget+50*time.Millisecond, writer.unblock)
 	sink.Close()
-	writer.unblock()
-	h := testHub(&hub{teardownGrace: 10 * time.Second})
-	window, cancel := h.newGrace()
-	defer cancel()
-	if !sink.flush(window) {
-		t.Fatal("the sink did not settle the in-flight write")
-	}
-	waitUntil(t, "the delta of the failed in-flight write", func() bool {
-		return len(notConfirmedLines(logs.String())) == 2
-	})
 	lines := notConfirmedLines(logs.String())
 	if len(lines) != 2 || logField(lines[0], "lost") != "0" || logField(lines[0], "unconfirmed") != "1" || logField(lines[1], "lost") != "1" || logField(lines[1], "unconfirmed") != "0" {
 		t.Fatalf("Close logged %q, want the bilan (lost=0 unconfirmed=1) then one delta (lost=1 unconfirmed=0) once the in-flight write failed: the failure after the bilan is a new loss, announced once", lines)

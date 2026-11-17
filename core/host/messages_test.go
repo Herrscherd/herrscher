@@ -202,7 +202,6 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"warn.role_undefined":               {"Name", "Role"},
 		"warn.ssh_multiplexing_disabled":    {"Detail", "Name"},
 		"warn.health_server":                {"Detail"},
-		"warn.command_socket_listen":        {"Detail", "Path"},
 		"warn.approvals_unreadable":         {"Detail", "Path"},
 		"warn.approvals_file":               {"Detail", "Path"},
 		"warn.approvals_state_rule":         {"Detail", "Rule"},

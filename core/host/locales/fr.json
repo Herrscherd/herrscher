@@ -695,11 +695,6 @@
     "other": "serveur de santé : {{.Detail}}"
   },
   {
-    "id": "warn.command_socket_listen",
-    "description": "The command socket could not listen on its path",
-    "other": "socket de commandes : écoute sur {{.Path}} : {{.Detail}}"
-  },
-  {
     "id": "warn.approvals_unreadable",
     "description": "The approvals file cannot be read, so its rules are ignored",
     "other": "approbations : {{.Path}} illisible, ses règles ne s'appliquent pas : {{.Detail}}"

@@ -21,21 +21,21 @@ var colouredStyle = style{
 
 func captureStderr(t *testing.T, run func()) string {
 	t.Helper()
-	r, w, err := os.Pipe()
+	reader, writer, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("pipe: %v", err)
 	}
-	defer r.Close()
+	defer reader.Close()
 	saved := os.Stderr
-	os.Stderr = w
+	os.Stderr = writer
 	captured := make(chan string, 1)
 	go func() {
-		data, _ := io.ReadAll(r)
+		data, _ := io.ReadAll(reader)
 		captured <- string(data)
 	}()
 	run()
 	os.Stderr = saved
-	if err := w.Close(); err != nil {
+	if err := writer.Close(); err != nil {
 		t.Fatalf("close pipe: %v", err)
 	}
 	return <-captured

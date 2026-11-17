@@ -58,8 +58,8 @@ func TestCompactionFactsNameTheLastRunOrItsAbsence(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Rows: %v", err)
 			}
-			if len(rows) != 1 || !strings.Contains(rows[0].Facts, tc.want) {
-				t.Fatalf("facts = %q, want them to contain %q", rows[0].Facts, tc.want)
+			if len(rows) != 1 || !strings.Contains(rows[0].Facts.String(), tc.want) {
+				t.Fatalf("facts = %q, want them to contain %q", rows[0].Facts.String(), tc.want)
 			}
 		})
 	}

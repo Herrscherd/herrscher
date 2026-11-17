@@ -80,10 +80,14 @@ func writeRefreshed(writer io.Writer, lang i18n.Language) error {
 	return err
 }
 
+func daemonDownText(lang i18n.Language, socket string) (string, error) {
+	return clitext.Text(lang, clitext.HealthDaemonDown, clitext.Params{clitext.ParamSocket: termpaint.Escape(socket).String()})
+}
+
 func checkHealth(ctx context.Context, layout host.RuntimeLayout, instance string, opts healthOptions, lang i18n.Language, writer io.Writer) (int, error) {
 	snapshot, err := fetchHealth(ctx, layout, instance, opts.deep)
 	if host.IsDaemonNotRunning(err) {
-		text, textErr := clitext.Text(lang, clitext.HealthDaemonDown, clitext.Params{clitext.ParamSocket: host.CommandSocketPathIn(layout, instance)})
+		text, textErr := daemonDownText(lang, host.CommandSocketPathIn(layout, instance))
 		if textErr != nil {
 			return 0, textErr
 		}

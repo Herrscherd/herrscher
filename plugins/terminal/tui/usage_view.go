@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/Herrscherd/herrscher/core/termpaint"
 	"github.com/Herrscherd/herrscher/core/usage"
 )
 
@@ -280,8 +281,8 @@ func (m *model) usageFilters() string {
 	if m.usage.vendor != "" {
 		vendor = m.usage.vendor
 	}
-	return m.st.dim.Render(m.tr.t("tui.usage.filter.account", map[string]any{accountParam: m.st.accent.Render(account)})) + "  " +
-		m.st.dim.Render(m.tr.t("tui.usage.filter.vendor", map[string]any{vendorParam: m.st.accent.Render(vendor)}))
+	return m.st.dim.Render(m.tr.t("tui.usage.filter.account", map[string]any{accountParam: m.st.accent.Render(termpaint.Escape(account).String())})) + "  " +
+		m.st.dim.Render(m.tr.t("tui.usage.filter.vendor", map[string]any{vendorParam: m.st.accent.Render(termpaint.Escape(vendor).String())}))
 }
 
 func (m *model) usageBody() []string {

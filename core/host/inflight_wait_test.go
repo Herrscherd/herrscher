@@ -103,6 +103,10 @@ func hubOverrunText(h *hub, _ string) string {
 	return newHostMessages().text(h.textLanguage()(), "warn.hub_teardown_overrun", map[string]any{graceParam: h.teardownGrace.String()})
 }
 
+func commandOverrunText(h *hub, budget time.Duration) string {
+	return newHostMessages().text(h.textLanguage()(), "warn.command_handler_overrun", map[string]any{graceParam: budget.String()})
+}
+
 func sessionOverrunText(h *hub, name string) string {
 	return newHostMessages().text(h.sessionLanguageSource(name)(), "warn.session_teardown_overrun", map[string]any{nameParam: name, graceParam: h.teardownGrace.String()})
 }

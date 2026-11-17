@@ -10,9 +10,6 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/Herrscherd/herrscher/core/internal/supervisor"
-	"github.com/Herrscherd/herrscher/core/service"
 )
 
 type delayedDrainer struct{ hold time.Duration }
@@ -23,41 +20,40 @@ func (d delayedDrainer) DrainBridges() error {
 }
 
 func TestStopDurationGrowsWithEachStuckPhase(t *testing.T) {
-	grace := 200 * time.Millisecond
-	scale := func(full time.Duration) time.Duration {
-		return full * grace / service.StopTeardownGrace
-	}
-	persist := scale(service.StopPersistGrace)
-	drain := scale(supervisor.DrainBound)
-	tolerance := grace / 4
+	window := 300 * time.Millisecond
 	cases := []struct {
-		name      string
-		write     bool
-		command   bool
-		drainHold time.Duration
-		want      time.Duration
+		name    string
+		write   bool
+		drain   bool
+		command bool
+		windows int
 	}{
-		{name: "nothing stuck", want: 0},
-		{name: "a stuck write", write: true, want: persist},
-		{name: "a stuck drain", drainHold: drain, want: drain},
-		{name: "a stuck write then a stuck drain", write: true, drainHold: drain, want: persist + drain},
-		{name: "a stuck command", command: true, want: grace},
+		{name: "nothing stuck", windows: 0},
+		{name: "a stuck write", write: true, windows: 1},
+		{name: "a stuck drain", drain: true, windows: 1},
+		{name: "a stuck command", command: true, windows: 1},
+		{name: "a stuck write then a stuck drain", write: true, drain: true, windows: 2},
+		{name: "a stuck write and a stuck command overlap", write: true, command: true, windows: 1},
+		{name: "a stuck drain and a stuck command overlap", drain: true, command: true, windows: 1},
+		{name: "a stuck write, drain and command", write: true, drain: true, command: true, windows: 2},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			elapsed := stopDuration(t, grace, persist, c.write, c.command, c.drainHold)
-			if elapsed < c.want-tolerance || elapsed > c.want+tolerance {
-				t.Fatalf("the stop took %v, want %v within %v: a phase was added, dropped or no longer bounded", elapsed, c.want, tolerance)
+			elapsed := stopDuration(t, window, c.write, c.command, c.drain)
+			lower := time.Duration(c.windows) * window * 9 / 10
+			upper := time.Duration(c.windows)*window*13/10 + window/3
+			if elapsed < lower || elapsed > upper {
+				t.Fatalf("the stop took %v, want between %v and %v: the sequential stuck windows are %d", elapsed, lower, upper, c.windows)
 			}
 		})
 	}
 }
 
-func stopDuration(t *testing.T, grace, persist time.Duration, write, command bool, drainHold time.Duration) time.Duration {
+func stopDuration(t *testing.T, window time.Duration, write, command, drain bool) time.Duration {
 	t.Helper()
 	name := "stop-" + newTurnID()
-	h := newInflightHub(t, name, grace, io.Discard)
-	h.persists.grace = persist
+	h := newInflightHub(t, name, window, io.Discard)
+	h.persists.grace = window
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if write {
@@ -65,10 +61,17 @@ func stopDuration(t *testing.T, grace, persist time.Duration, write, command boo
 		startBlockedTranscriptWrite(t, h, name)
 		t.Cleanup(func() { unblockTranscript(path) })
 	}
-	released := make(chan struct{})
-	close(released)
+	var released <-chan struct{}
 	if command {
 		released = startStuckCommand(ctx, t, h)
+	} else {
+		done := make(chan struct{})
+		close(done)
+		released = done
+	}
+	var drainHold time.Duration
+	if drain {
+		drainHold = window
 	}
 
 	liveStopped := make(chan struct{})

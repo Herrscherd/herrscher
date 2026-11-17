@@ -72,7 +72,8 @@ func TestCommandSocketClosesIdleConnectionsOnOverrun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	released := acceptCommands(ctx, listener, &fakeDispatcher{out: "unused"}, defaultCommandReadTimeout, 200*time.Millisecond, func(time.Duration) {})
+	idle := dispatcherFunc(func(context.Context, []string) (string, error) { return "unused", nil })
+	released := acceptCommands(ctx, listener, idle, defaultCommandReadTimeout, 200*time.Millisecond, func(time.Duration) {})
 	client, err := (&net.Dialer{}).DialContext(t.Context(), "unix", path)
 	if err != nil {
 		t.Fatalf("dial: %v", err)

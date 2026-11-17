@@ -196,6 +196,29 @@ func notConfirmedLines(text string) []string {
 	return lines
 }
 
+type hookedLog struct {
+	buf  lockedBuffer
+	hook func(line string)
+}
+
+func (h *hookedLog) Write(p []byte) (int, error) {
+	h.hook(string(p))
+	return h.buf.Write(p)
+}
+
+func (h *hookedLog) String() string {
+	return h.buf.String()
+}
+
+func captureHookedLog(t *testing.T, hook func(line string)) *hookedLog {
+	t.Helper()
+	logs := &hookedLog{hook: hook}
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	return logs
+}
+
 func logField(line, key string) string {
 	for _, field := range strings.Fields(line) {
 		if value, found := strings.CutPrefix(field, key+"="); found {

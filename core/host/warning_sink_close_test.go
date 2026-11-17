@@ -179,12 +179,63 @@ func TestInFlightWriteFailingAfterCloseIsAnnouncedAsADelta(t *testing.T) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
 	awaitBackground(t, writer.entered, "the warning was never handed to the writer")
-	time.AfterFunc(warningWriteBudget+50*time.Millisecond, writer.unblock)
+	time.AfterFunc(warningWriteBudget+warningWriteBudget/2, writer.unblock)
 	sink.Close()
 	lines := notConfirmedLines(logs.String())
 	if len(lines) != 2 || logField(lines[0], "lost") != "0" || logField(lines[0], "unconfirmed") != "1" || logField(lines[1], "lost") != "1" || logField(lines[1], "unconfirmed") != "0" {
 		t.Fatalf("Close logged %q, want the bilan (lost=0 unconfirmed=1) then one delta (lost=1 unconfirmed=0) once the in-flight write failed: the failure after the bilan is a new loss, announced once", lines)
 	}
+}
+
+func TestEveryInFlightWriteIsJoinedBeforeCloseReturns(t *testing.T) {
+	writer := newFirstWriteRefused()
+	t.Cleanup(writer.unblock)
+	var sink *warningSink
+	logs := captureHookedLog(t, func(line string) {
+		if strings.Contains(line, "not all confirmed") && logField(line, "unconfirmed") == "1" {
+			_ = sink.Enqueue([]byte("AFTER\n"))
+			writer.unblock()
+			waitUntil(t, "the warning queued after the bilan to be written", func() bool {
+				return strings.Contains(writer.out.String(), "AFTER")
+			})
+			return
+		}
+		if strings.Contains(line, "not all confirmed") {
+			time.Sleep(warningWriteBudget / 2)
+		}
+	})
+	sink = newWarningSink(writer, englishLostLine)
+	_ = sink.Enqueue([]byte("INFLIGHT\n"))
+	awaitBackground(t, writer.entered, "the warning was never handed to the writer")
+	sink.Close()
+	lines := notConfirmedLines(logs.String())
+	if len(lines) != 2 || logField(lines[0], "unconfirmed") != "1" || logField(lines[1], "lost") != "1" || logField(lines[1], "unconfirmed") != "0" {
+		t.Fatalf("Close logged %q, want the bilan (unconfirmed=1) then the delta of the older write (lost=1 unconfirmed=0) before it returned: the newer write started during the join must not hide the older one", lines)
+	}
+}
+
+func TestConcurrentSecondCloseReturnsOnlyAfterTheBilanIsLogged(t *testing.T) {
+	logs := captureHookedLog(t, func(line string) {
+		if strings.Contains(line, "not all confirmed") {
+			time.Sleep(warningWriteBudget / 2)
+		}
+	})
+	writer := newFirstWriteRefused()
+	t.Cleanup(writer.unblock)
+	sink := newWarningSink(writer, englishLostLine)
+	_ = sink.Enqueue([]byte("INFLIGHT\n"))
+	awaitBackground(t, writer.entered, "the warning was never handed to the writer")
+	first := make(chan struct{})
+	go func() {
+		sink.Close()
+		close(first)
+	}()
+	waitUntil(t, "the first Close to begin", func() bool { return isClosing(sink) })
+	sink.Close()
+	if !strings.Contains(logs.String(), "not all confirmed") {
+		t.Fatal("the second Close returned before the bilan was logged: it must wait for the first Close to finish")
+	}
+	awaitBackground(t, first, "the first Close did not return")
 }
 
 func TestWriterErrorDuringCloseIsAnnouncedOnce(t *testing.T) {

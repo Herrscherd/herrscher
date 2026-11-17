@@ -578,15 +578,21 @@ func TestCloseJoinsTheWriteLaunchedLast(t *testing.T) {
 	awaitBackground(t, gatedLogged, "the gated write never finished logging")
 }
 
+type slowWarnings struct {
+	out lockedBuffer
+}
+
+func (s *slowWarnings) Write(p []byte) (int, error) {
+	time.Sleep(50 * time.Millisecond)
+	return s.out.Write(p)
+}
+
 func TestCloseReturnsOnlyAfterTheLastLaunchedWriteIsOnOutput(t *testing.T) {
-	warnings := newGatedWarnings("GATED")
-	t.Cleanup(warnings.open)
-	sink := newWarningSink(warnings, englishLostLine)
-	_ = sink.Enqueue([]byte("GATED\n"))
-	awaitGatedWrite(t, warnings)
-	warnings.open()
+	warnings := &slowWarnings{}
+	sink := newWarningSink(warnings, englishLostLine, withIdleWait(time.Nanosecond))
+	_ = sink.Enqueue([]byte("LAST\n"))
 	sink.Close()
-	if !strings.Contains(warnings.out.String(), "GATED\n") {
+	if !strings.Contains(warnings.out.String(), "LAST\n") {
 		t.Fatalf("Close returned before the write launched last reached the output: %q", warnings.out.String())
 	}
 }

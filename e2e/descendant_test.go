@@ -70,22 +70,32 @@ func readPid(path string) (int, error) {
 }
 
 func descendantAlive(pid int, entry string) (bool, error) {
-	owned, err := ownedByUs(pid)
-	if err != nil || !owned {
-		return false, err
+	return descendantAliveIn(procRoot, pid, entry)
+}
+
+func descendantAliveIn(root string, pid int, entry string) (bool, error) {
+	status, err := os.ReadFile(filepath.Join(root, strconv.Itoa(pid), "status"))
+	if gone(err) {
+		return false, nil
 	}
-	environ, err := environOf(pid)
-	foreign, err := environVerdict(err)
+	if err != nil {
+		return false, fmt.Errorf("cannot read the status of %d: %w", pid, err)
+	}
+	uid, err := realUID(string(status))
+	if err != nil {
+		return false, fmt.Errorf("cannot read the owner of %d: %w", pid, err)
+	}
+	if uid != os.Getuid() || statusField(string(status), "Name") != "sleep" {
+		return false, nil
+	}
+	environ, err := environOf(root, pid)
 	if err != nil {
 		return false, fmt.Errorf("cannot read the environment of %d: %w", pid, err)
-	}
-	if foreign {
-		return false, nil
 	}
 	if !carries(environ, entry) {
 		return false, nil
 	}
-	line, err := commandLine(procRoot, pid)
+	line, err := commandLine(root, pid)
 	if gone(err) {
 		return false, nil
 	}
@@ -99,45 +109,21 @@ func gone(err error) bool {
 	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ESRCH)
 }
 
-func environVerdict(err error) (bool, error) {
-	switch {
-	case err == nil, gone(err):
-		return false, nil
-	case errors.Is(err, fs.ErrPermission):
-		return true, nil
-	default:
-		return false, err
+func statusField(status, key string) string {
+	for _, line := range strings.Split(status, "\n") {
+		if value, found := strings.CutPrefix(line, key+":"); found {
+			return strings.TrimSpace(value)
+		}
 	}
-}
-
-func ownedByUs(pid int) (bool, error) {
-	status, err := os.ReadFile(filepath.Join(procRoot, strconv.Itoa(pid), "status"))
-	if errors.Is(err, fs.ErrNotExist) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("cannot read the status of %d: %w", pid, err)
-	}
-	uid, err := realUID(string(status))
-	if err != nil {
-		return false, fmt.Errorf("cannot read the owner of %d: %w", pid, err)
-	}
-	return uid == os.Getuid(), nil
+	return ""
 }
 
 func realUID(status string) (int, error) {
-	for _, line := range strings.Split(status, "\n") {
-		value, found := strings.CutPrefix(line, "Uid:")
-		if !found {
-			continue
-		}
-		fields := strings.Fields(value)
-		if len(fields) == 0 {
-			break
-		}
-		return strconv.Atoi(fields[0])
+	fields := strings.Fields(statusField(status, "Uid"))
+	if len(fields) == 0 {
+		return 0, errors.New("the status file has no readable Uid line")
 	}
-	return 0, errors.New("the status file has no readable Uid line")
+	return strconv.Atoi(fields[0])
 }
 
 func killDescendant(pid int, entry string) error {
@@ -170,26 +156,42 @@ func TestDescendantAliveIgnoresAForeignProcess(t *testing.T) {
 	}
 }
 
-func TestEnvironVerdictTreatsARefusedEnvironAsForeign(t *testing.T) {
-	const path = "/proc/1/environ"
-	for _, errno := range []syscall.Errno{syscall.EACCES, syscall.EPERM} {
-		foreign, err := environVerdict(&fs.PathError{Op: "open", Path: path, Err: errno})
-		if !foreign || err != nil {
-			t.Fatalf("%v on environ: foreign=%v err=%v, want a foreign process and no failure", errno, foreign, err)
-		}
+func plantSleepStatus(t *testing.T, root string, pid int, name string, environMode fs.FileMode) {
+	t.Helper()
+	dir := filepath.Join(root, strconv.Itoa(pid))
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
 	}
-	for _, errno := range []syscall.Errno{syscall.ENOENT, syscall.ESRCH} {
-		foreign, err := environVerdict(&fs.PathError{Op: "open", Path: path, Err: errno})
-		if foreign || err != nil {
-			t.Fatalf("%v on environ: foreign=%v err=%v, want neither foreign nor failed: the process is gone", errno, foreign, err)
-		}
+	uid := strconv.Itoa(os.Getuid())
+	status := "Name:\t" + name + "\nUid:\t" + uid + "\t" + uid + "\t" + uid + "\t" + uid + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "status"), []byte(status), 0o600); err != nil {
+		t.Fatal(err)
 	}
-	foreign, err := environVerdict(&fs.PathError{Op: "open", Path: path, Err: syscall.EIO})
-	if foreign || !errors.Is(err, syscall.EIO) {
-		t.Fatalf("EIO on environ: foreign=%v err=%v, want the unexpected errno returned as a failure", foreign, err)
+	if err := os.WriteFile(filepath.Join(dir, "environ"), []byte("NOTHING=here\x00"), environMode); err != nil {
+		t.Fatal(err)
 	}
-	if foreign, err := environVerdict(nil); foreign || err != nil {
-		t.Fatalf("a readable environ: foreign=%v err=%v, want neither", foreign, err)
+}
+
+func TestDescendantAliveFailsWhenTheEnvironOfOurSleepIsRefused(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads every environ, so no read of ours is refused")
+	}
+	root := t.TempDir()
+	const pid = 4242
+	plantSleepStatus(t, root, pid, "sleep", 0)
+	alive, err := descendantAliveIn(root, pid, instanceEntry("probe"))
+	if err == nil {
+		t.Fatalf("a refused environ of our own sleep was read as a gone descendant (alive=%v): the turn-end check would pass while the descendant runs", alive)
+	}
+}
+
+func TestDescendantAliveIgnoresAReusedPidOfAnotherProgram(t *testing.T) {
+	root := t.TempDir()
+	const pid = 4243
+	plantSleepStatus(t, root, pid, "sudo", 0)
+	alive, err := descendantAliveIn(root, pid, instanceEntry("probe"))
+	if err != nil || alive {
+		t.Fatalf("a reused pid of another program of our uid was taken for the descendant: alive=%v err=%v", alive, err)
 	}
 }
 

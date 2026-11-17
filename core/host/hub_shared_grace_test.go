@@ -16,7 +16,6 @@ func TestGoDeadSharesOneGraceBetweenHaltAndTeardown(t *testing.T) {
 		h := testHub(&hub{warnings: io.Discard, teardownGrace: grace, live: map[string]liveSession{
 			name: {cancel: func() {}, done: make(chan struct{}), release: func() {}},
 		}})
-		defer h.closeStderr()
 		h.stopBridge = func(string) error {
 			<-stuck
 			return nil

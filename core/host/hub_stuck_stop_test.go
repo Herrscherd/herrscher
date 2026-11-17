@@ -2,6 +2,7 @@ package host
 
 import (
 	"io"
+	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -11,13 +12,13 @@ func TestStuckStopCannotHoldTheLifecycleBeyondTheGrace(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		grace := time.Second
 		stuck := make(chan struct{})
-		defer close(stuck)
+		release := sync.OnceFunc(func() { close(stuck) })
+		defer release()
 		name := "stuck-stop"
 		done := make(chan struct{})
 		h := testHub(&hub{warnings: io.Discard, teardownGrace: grace, live: map[string]liveSession{
 			name: {cancel: func() {}, done: done, release: func() {}},
 		}})
-		defer h.closeStderr()
 		h.stopBridge = func(string) error {
 			<-stuck
 			return nil
@@ -44,6 +45,15 @@ func TestStuckStopCannotHoldTheLifecycleBeyondTheGrace(t *testing.T) {
 			t.Fatal("the lifecycle stays locked after retireFailed returned")
 		}
 		h.lifecycle.Unlock()
+
+		release()
+		synctest.Wait()
+		if err := h.closeAndRemoveSockets(); err != nil {
+			t.Fatal(err)
+		}
+		if !h.errPort.isHalted() {
+			t.Fatal("closeAndRemoveSockets returned with the stderr port still open: the hub stopped without halting its stderr goroutine")
+		}
 	})
 }
 
@@ -58,7 +68,6 @@ func TestStuckStopCannotFreezeGoDead(t *testing.T) {
 		h := testHub(&hub{warnings: io.Discard, teardownGrace: grace, live: map[string]liveSession{
 			name: {cancel: func() {}, done: done, release: func() {}},
 		}})
-		defer h.closeStderr()
 		h.stopBridge = func(string) error {
 			<-stuck
 			return nil

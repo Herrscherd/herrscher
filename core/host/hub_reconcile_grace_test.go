@@ -35,7 +35,6 @@ func TestStuckBridgesDoNotAddAGracePerSessionToAnUnrelatedCommand(t *testing.T) 
 		h.teardownGrace = reconcileGrace
 		release := make(chan struct{})
 		defer close(release)
-		defer h.closeStderr()
 		h.stopBridge = func(string) error {
 			<-release
 			return nil
@@ -75,7 +74,6 @@ func TestStuckStopsOfArchivedSessionsShareOneGraceInReconcile(t *testing.T) {
 		h.teardownGrace = reconcileGrace
 		release := make(chan struct{})
 		defer close(release)
-		defer h.closeStderr()
 		h.stopBridge = func(string) error {
 			<-release
 			return nil

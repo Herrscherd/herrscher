@@ -41,6 +41,7 @@ type catalogText struct {
 
 type translator struct {
 	catalogText
+
 	messages *clitext.Messages
 	cliOnce  *sync.Once
 }

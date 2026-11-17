@@ -8,7 +8,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
-
 	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
@@ -199,4 +198,91 @@ func TestDiffRowEscapesItsText(t *testing.T) {
 
 func TestAttachmentChipEscapesItsName(t *testing.T) {
 	assertEscapedNotRaw(t, chipRow([]Attachment{{Name: "a" + rawOSC, Size: 10}}, testStyles()), rawOSC, escapedOSC)
+}
+
+func TestResumePickerEscapesProjectTimeAndVendor(t *testing.T) {
+	m, _ := startModel(&fakeBackend{})
+	m.resumeRows = []contracts.SessionInfo{{Name: "s", Project: "p" + rawOSC, LastTs: "t" + rawOSC, Vendor: "v" + rawOSC}}
+	m.resumeIdx = 0
+	assertEscapedNotRaw(t, m.resumeView(), rawOSC, escapedOSC)
+}
+
+func TestSwitchPickerEscapesNameAndProject(t *testing.T) {
+	m, _ := startModel(&fakeBackend{})
+	m.switchRows = []contracts.SessionInfo{{Name: "s" + rawOSC, Project: "p" + rawOSC}}
+	m.switchIdx = 0
+	assertEscapedNotRaw(t, m.switchView(), rawOSC, escapedOSC)
+}
+
+func TestResumePreviewEscapesScrollbackLines(t *testing.T) {
+	backend := &fakeBackend{scrollback: map[string][]contracts.ScrollbackLine{"s": {{Role: "user", Text: "question" + rawOSC}}}}
+	m, _ := startModel(backend)
+	m.resumeRows = []contracts.SessionInfo{{Name: "s"}}
+	m.resumeIdx = 0
+	m.loadResumePreview()
+	if len(m.resumePreviewLines) != 1 {
+		t.Fatalf("preview lines = %q, want one line", m.resumePreviewLines)
+	}
+	assertEscapedNotRaw(t, m.resumePreviewLines[0], rawOSC, escapedOSC)
+}
+
+func TestRewindListEscapesTurnText(t *testing.T) {
+	m, _ := startModel(&fakeBackend{})
+	m.rwRows = []rewindRow{{Index: 1, At: "10:00", Text: "turn" + rawOSC}}
+	m.rwIdx = 0
+	assertEscapedNotRaw(t, strings.Join(m.rewindListLines(120), "\n"), rawOSC, escapedOSC)
+}
+
+func TestApprovalNoteEscapesItsText(t *testing.T) {
+	m, _ := startModel(&fakeBackend{})
+	choice := approvalCatalog()[0]
+	choice.note = "note" + rawOSC
+	assertEscapedNotRaw(t, strings.Join(m.approvalChoiceLines(choice, false, true, true), "\n"), rawOSC, escapedOSC)
+}
+
+func TestApprovalReasonEscapesItsText(t *testing.T) {
+	m, _ := startModel(&fakeBackend{})
+	assertEscapedNotRaw(t, m.approvalReasonLine(approvalPrompt{reasonOpen: true, reason: "raison" + rawOSC}), rawOSC, escapedOSC)
+}
+
+func TestToastEscapesTitleAndBodyBeforeSignalling(t *testing.T) {
+	m, _ := startModel(&fakeBackend{})
+	m.announce(kindTurnEnd, "ok", "titre\u009b"+rawRLO, "chan", []string{"corps" + rawRLO + "\u009b"})
+	if m.toast.title != `titre\u009b`+escapedRLO {
+		t.Errorf("toast title = %q, want the escaped form", m.toast.title)
+	}
+	if len(m.toast.body) != 1 || strings.ContainsAny(m.toast.body[0], "\u009b\u202e") {
+		t.Errorf("toast body = %q, want no raw C1 or bidi control", m.toast.body)
+	}
+}
+
+func TestCopyReplyYieldsTheOriginalAgentText(t *testing.T) {
+	m, tb := rawTextModel(t)
+	tb.appendEntry(entry{role: roleAgent, text: rawSGR + "\n\tsuite"})
+	if got := copyText(m.tr, tb.entries, copyReply); got != rawSGR+"\n\tsuite" {
+		t.Errorf("copy reply = %q, want the original agent text", got)
+	}
+}
+
+func TestCopyTurnYieldsTheOriginalText(t *testing.T) {
+	m, tb := rawTextModel(t)
+	tb.appendEntry(entry{role: roleYou, text: "question " + rawOSC})
+	tb.appendEntry(entry{role: roleAgent, text: rawSGR})
+	got := copyText(m.tr, tb.entries, copyTurn)
+	if !strings.Contains(got, "question "+rawOSC) || !strings.Contains(got, rawSGR) {
+		t.Errorf("copy turn = %q, want the original texts", got)
+	}
+}
+
+func TestAgentTabIsExpandedStablyAndNeverCarriesARawTab(t *testing.T) {
+	m, tb := rawTextModel(t)
+	tb.appendEntry(entry{role: roleAgent, text: "a\tb"})
+	item := lastEntryOf(t, tb)
+	first := renderEntry(item, 80, m.displayMode())
+	if strings.Contains(first, "\t") {
+		t.Fatalf("rendered reply carries a raw tab: %q", first)
+	}
+	if second := renderEntry(item, 80, m.displayMode()); second != first {
+		t.Errorf("rendering is not stable: %q then %q", first, second)
+	}
 }

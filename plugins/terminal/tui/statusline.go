@@ -3,8 +3,9 @@ package tui
 import (
 	"strings"
 
-	"github.com/Herrscherd/herrscher/core/termpaint"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 const (

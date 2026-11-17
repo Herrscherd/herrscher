@@ -120,20 +120,20 @@ func (m *model) resumeView() string {
 		}
 		cols := []string{}
 		if row.Project != "" {
-			cols = append(cols, row.Project)
+			cols = append(cols, termpaint.Escape(row.Project).String())
 		}
 		if row.LastTs != "" {
-			cols = append(cols, row.LastTs)
+			cols = append(cols, termpaint.Escape(row.LastTs).String())
 		}
 		if row.Vendor != "" {
-			cols = append(cols, row.Vendor)
+			cols = append(cols, termpaint.Escape(row.Vendor).String())
 		}
 		cols = append(cols, state)
 		mark := "  "
 		if row.Resumable {
 			mark = "⟲ "
 		}
-		rows = append(rows, overlayRow{mark: mark, label: row.Name, detail: strings.Join(cols, " · ")})
+		rows = append(rows, overlayRow{mark: mark, label: termpaint.Escape(row.Name).String(), detail: strings.Join(cols, " · ")})
 	}
 	footer := m.listFooter(ctxResume, m.tr.t("tui.common.open", nil))
 	if hidden := len(m.resumeRows) - (end - start); hidden > 0 {
@@ -191,7 +191,7 @@ func (m *model) switchView() string {
 		if tb := m.tabs[row.ChannelID]; tb != nil && tb.unread {
 			mark = m.st.glyphs.unread + " "
 		}
-		rows = append(rows, overlayRow{mark: mark, label: row.Name, detail: row.Project})
+		rows = append(rows, overlayRow{mark: mark, label: termpaint.Escape(row.Name).String(), detail: termpaint.Escape(row.Project).String()})
 	}
 	footer := m.listFooter(ctxSessions, m.tr.t("tui.common.switch", nil))
 	if hidden := len(m.switchRows) - (end - start); hidden > 0 {

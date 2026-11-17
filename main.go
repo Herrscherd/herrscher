@@ -147,7 +147,7 @@ func loadHostEnv() error {
 		if explicit {
 			return err
 		}
-		fmt.Fprintln(os.Stderr, render(lang, clitext.EnvContinuing, clitext.Params{clitext.ParamErr: err.Error()}))
+		fmt.Fprintln(os.Stderr, cliErrorLine(render(lang, clitext.EnvContinuing, clitext.Params{clitext.ParamErr: err.Error()})))
 	}
 	return nil
 }
@@ -238,12 +238,11 @@ func runForwarded(ctx context.Context, layout host.RuntimeLayout, cmd string, ar
 	if out == "" {
 		return nil
 	}
-	_, err := fmt.Fprintln(os.Stdout, out)
-	return err
+	return printCLIText(os.Stdout, out)
 }
 
 func forwardedFailureLine(lang i18n.Language, derr error) string {
-	return render(lang, clitext.ErrorLine, clitext.Params{clitext.ParamMessage: host.LocalizeError(lang, derr).Error()})
+	return cliErrorLine(render(lang, clitext.ErrorLine, clitext.Params{clitext.ParamMessage: host.LocalizeError(lang, derr).Error()}))
 }
 
 type exitStatusError struct {
@@ -262,7 +261,7 @@ func reportError(err error) int {
 	if errors.As(err, &status) {
 		return status.code
 	}
-	fmt.Fprintln(os.Stderr, render(clitext.ClientLanguage(), clitext.ErrorLine, clitext.Params{clitext.ParamMessage: err.Error()}))
+	fmt.Fprintln(os.Stderr, cliErrorLine(render(clitext.ClientLanguage(), clitext.ErrorLine, clitext.Params{clitext.ParamMessage: err.Error()})))
 	return 1
 }
 
@@ -307,8 +306,7 @@ func runWhoami(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintln(os.Stdout, out)
-	return err
+	return printCLIText(os.Stdout, out)
 }
 
 func writeFailureCode(w *errwriter.Writer) int {

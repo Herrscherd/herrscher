@@ -10,6 +10,7 @@ import (
 
 func (tb *tab) appendChunk(text string) bool {
 	if n := len(tb.entries); n > 0 && tb.entries[n-1].role == roleAgent && tb.entries[n-1].streaming {
+		tb.entries[n-1].raw += text
 		tb.entries[n-1].text += termpaint.EscapeLines(text).String()
 		return true
 	}

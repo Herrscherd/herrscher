@@ -322,8 +322,7 @@ func runRegistryVerb(ctx context.Context, layout host.RuntimeLayout, verb string
 		return err
 	}
 	if out != "" {
-		_, err := fmt.Fprintln(os.Stdout, out)
-		return err
+		return printCLIText(os.Stdout, out)
 	}
 	return nil
 }
@@ -404,7 +403,7 @@ func runPromptWith(ctx context.Context, dispatcher verbDispatcher, name, prompt 
 	res, err := dispatcher.Dispatch(ctx, argv)
 	if err != nil {
 		if partial := cli.PartialOutputOf(err); partial != "" {
-			if _, werr := fmt.Fprintln(stdout, partial); werr != nil {
+			if werr := printCLIText(stdout, partial); werr != nil {
 				return werr
 			}
 		}
@@ -416,7 +415,7 @@ func runPromptWith(ctx context.Context, dispatcher verbDispatcher, name, prompt 
 		return err
 	}
 	if reply != "" {
-		if _, err := fmt.Fprintln(stdout, reply); err != nil {
+		if err := printCLIText(stdout, reply); err != nil {
 			return err
 		}
 	}

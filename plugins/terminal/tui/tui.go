@@ -116,6 +116,7 @@ type entry struct {
 	id          uint64
 	role        string
 	text        string
+	raw         string
 	streaming   bool
 	attachments []Attachment
 	preview     string
@@ -223,6 +224,7 @@ func (tb *tab) clearPanels() {
 const maxTabLines = 5000
 
 func (tb *tab) appendEntry(item entry) {
+	item.raw = item.text
 	item.text = termpaint.EscapeLines(item.text).String()
 	tb.nextEntryID++
 	item.id = tb.nextEntryID
@@ -1317,6 +1319,7 @@ func (tb *tab) appendThinking(text string, tokens, before int) {
 	tb.endStream()
 	if n := len(tb.entries); n > 0 && tb.entries[n-1].role == roleThinking {
 		last := &tb.entries[n-1]
+		last.raw += text
 		last.text += termpaint.EscapeLines(text).String()
 		last.ended = time.Now()
 		if tokens > 0 {

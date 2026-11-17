@@ -64,6 +64,9 @@ func TestViewNeverCallsTheDaemonOnAnySurface(t *testing.T) {
 		{name: "panes", open: func(m *model) { m.openPanes() }},
 		{name: "context overlay", open: func(m *model) { m.openContext() }},
 		{name: "resume overlay", open: func(m *model) { m.openResume() }},
+		{name: "approval menu", open: func(m *model) {
+			m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c1"}, Event: approvalMenuEvent(t, "go test ./...", allApprovalRoles()...)})
+		}},
 	}
 	for _, surface := range surfaces {
 		t.Run(surface.name, func(t *testing.T) {

@@ -36,7 +36,7 @@ type Printed struct {
 // escape, so ESC reads \x1b, BEL \a, CR \r, LF \n, U+009B \u009b and RLO \u202e,
 // and every byte that is not valid UTF-8 reads \xNN. Valid text comes back unchanged.
 func Escape(text string) Printed {
-	return Printed{text: printable(text)}
+	return Printed{text: escapeControls(text)}
 }
 
 // String returns the escaped text, ready to paint.
@@ -44,7 +44,7 @@ func (p Printed) String() string {
 	return p.text
 }
 
-func printable(text string) string {
+func escapeControls(text string) string {
 	var out strings.Builder
 	for index := 0; index < len(text); {
 		char, size := utf8.DecodeRuneInString(text[index:])

@@ -3,6 +3,7 @@ package host
 import (
 	"bytes"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -39,7 +40,7 @@ func TestOverrunWaitsForAPendingDirectWriteInsteadOfBeingRefused(t *testing.T) {
 	writer := newGatedWarnings("late")
 	t.Cleanup(writer.open)
 	messages := newHostMessages()
-	sink := newWarningSink(messages, writer, englishLostLine(messages))
+	sink := newWarningSink(messages, writer, englishLostLine(messages), slog.Default())
 	_ = sink.Enqueue([]byte("late\n"))
 	awaitGatedWrite(t, writer)
 
@@ -62,7 +63,7 @@ func TestOverrunIsCountedWhenTheWriterStaysFrozenForTheWholeBudget(t *testing.T)
 	writer := newGatedWarnings("late")
 	t.Cleanup(writer.open)
 	messages := newHostMessages()
-	sink := newWarningSink(messages, writer, englishLostLine(messages))
+	sink := newWarningSink(messages, writer, englishLostLine(messages), slog.Default())
 	if _, err := sink.Write([]byte("late\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("a late write behind a frozen writer returned %v, want errWarningLate", err)
 	}
@@ -86,7 +87,7 @@ func TestAbandonedOverrunIsSilentUntilTheBilan(t *testing.T) {
 	writer := newGatedWarnings("slow")
 	t.Cleanup(writer.open)
 	messages := newHostMessages()
-	sink := newWarningSink(messages, writer, englishLostLine(messages))
+	sink := newWarningSink(messages, writer, englishLostLine(messages), slog.Default())
 	_ = sink.Enqueue([]byte("slow\n"))
 	awaitGatedWrite(t, writer)
 	if err := sink.announce("overrun"); !errors.Is(err, errWarningAbandoned) {
@@ -102,7 +103,7 @@ func TestDirectWriteBehindAStalledSinkNeverWaitsAndIsLostNeverWritten(t *testing
 	writer := newGatedWarnings("frozen")
 	t.Cleanup(writer.open)
 	messages := newHostMessages()
-	sink := newWarningSink(messages, writer, englishLostLine(messages))
+	sink := newWarningSink(messages, writer, englishLostLine(messages), slog.Default())
 	if _, err := sink.Write([]byte("frozen\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}

@@ -78,7 +78,7 @@ func announcedAbandons(out string) int {
 
 func TestBoundedLogHoldsItsLinesWhileTheWriterIsFrozen(t *testing.T) {
 	frozen := freezeLogOn(t, "blocked line")
-	var log boundedLog
+	log := boundedLog{logger: slog.Default()}
 	log.warn(func() { slog.Warn("blocked line") })
 	awaitBackground(t, frozen.entered, "the first line never reached the blocked log")
 	for range boundedLogQueue {
@@ -104,7 +104,7 @@ func TestBoundedLogHoldsItsLinesWhileTheWriterIsFrozen(t *testing.T) {
 
 func TestBoundedLogCountsEveryConcurrentAbandon(t *testing.T) {
 	frozen := freezeLogOn(t, "blocked line")
-	var log boundedLog
+	log := boundedLog{logger: slog.Default()}
 	log.warn(func() { slog.Warn("blocked line") })
 	awaitBackground(t, frozen.entered, "the first line never reached the blocked log")
 	const writers, linesEach = 8, 25
@@ -132,7 +132,7 @@ func TestBoundedLogCountsEveryConcurrentAbandon(t *testing.T) {
 
 func TestBoundedLogAnnouncesAbandonsOfferedWhileTheAnnouncementIsFrozen(t *testing.T) {
 	frozen := freezeLogOn(t, "abandoned=")
-	var log boundedLog
+	log := boundedLog{logger: slog.Default()}
 	gate, openGate := gateUntilCleanup(t)
 	gateEntered := make(chan struct{})
 	log.warn(func() { close(gateEntered); <-gate })
@@ -168,7 +168,7 @@ func TestBoundedLogAnnouncesAbandonsOfferedWhileTheAnnouncementIsFrozen(t *testi
 
 func TestBoundedLogWritesTheBilanBeforeTheQueuedLines(t *testing.T) {
 	frozen := freezeLogOn(t, "blocked line")
-	var log boundedLog
+	log := boundedLog{logger: slog.Default()}
 	log.warn(func() { slog.Warn("blocked line") })
 	awaitBackground(t, frozen.entered, "the first line never reached the blocked log")
 	log.warn(func() { slog.Warn("queued line") })
@@ -185,7 +185,7 @@ func TestBoundedLogWritesTheBilanBeforeTheQueuedLines(t *testing.T) {
 
 func TestBoundedLogKeepsItsSummaryStateBounded(t *testing.T) {
 	logs := captureDefaultLog(t)
-	var log boundedLog
+	log := boundedLog{logger: slog.Default()}
 	gate, openGate := gateUntilCleanup(t)
 	gateEntered := make(chan struct{})
 	log.warn(func() { close(gateEntered); <-gate })

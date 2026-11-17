@@ -39,13 +39,20 @@ type namedLine struct {
 
 type boundedLog struct {
 	mu         sync.Mutex
+	logger     *slog.Logger
 	queue      []func()
 	notes      []namedLine
 	bilan      bilanSum
-	writeBilan func(lost, unconfirmed int)
+	writeBilan func(logger *slog.Logger, lost, unconfirmed int)
 	abandoned  int
 	running    bool
 	idle       []chan struct{}
+}
+
+func (l *boundedLog) logWriteFailure(_ int, err error) {
+	if err != nil {
+		l.logger.Debug("cleanup failed", "err", err)
+	}
 }
 
 func (l *boundedLog) warn(line func()) {
@@ -59,7 +66,7 @@ func (l *boundedLog) warn(line func()) {
 	l.startLocked()
 }
 
-func (l *boundedLog) addBilan(lost, unconfirmed int, write func(lost, unconfirmed int)) {
+func (l *boundedLog) addBilan(lost, unconfirmed int, write func(logger *slog.Logger, lost, unconfirmed int)) {
 	if lost == 0 && unconfirmed == 0 {
 		return
 	}
@@ -120,7 +127,7 @@ func (l *boundedLog) run() {
 				return
 			}
 			l.mu.Unlock()
-			slog.Warn("warning lines were abandoned while the log was blocked", "abandoned", lost)
+			l.logger.Warn("warning lines were abandoned while the log was blocked", "abandoned", lost)
 			continue
 		}
 		l.mu.Unlock()
@@ -132,7 +139,7 @@ func (l *boundedLog) takeLocked() func() {
 	if l.bilan.lost != 0 || l.bilan.unconfirmed != 0 {
 		lost, unconfirmed, write := l.bilan.lost, l.bilan.unconfirmed, l.writeBilan
 		l.bilan = bilanSum{}
-		return func() { write(lost, unconfirmed) }
+		return func() { write(l.logger, lost, unconfirmed) }
 	}
 	if len(l.notes) > 0 {
 		next := l.notes[0]

@@ -33,7 +33,7 @@ func testHub(h *hub) *hub {
 	if out == nil {
 		out = io.Discard
 	}
-	h.sink = newWarningSink(h.messages, out, englishLostLine(h.messages))
+	h.sink = newWarningSink(h.messages, out, englishLostLine(h.messages), slog.Default())
 	h.warnings = h.sink
 	return h
 }

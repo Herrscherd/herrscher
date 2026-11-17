@@ -2,6 +2,8 @@ package vendortest
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"strconv"
 )
 
@@ -28,16 +30,6 @@ func assistantText(text string) assistantEvent {
 	return event
 }
 
-type sessionEvent struct {
-	Type      string `json:"type"`
-	Subtype   string `json:"subtype"`
-	SessionID string `json:"session_id"`
-}
-
-func sessionInit(id string) sessionEvent {
-	return sessionEvent{Type: "system", Subtype: "init", SessionID: id}
-}
-
 func apiErrorText(text string) assistantEvent {
 	event := assistantText(text)
 	event.IsAPIError = true
@@ -45,9 +37,39 @@ func apiErrorText(text string) assistantEvent {
 	return event
 }
 
+func toolUseID(call int) string {
+	return "toolu_" + strconv.Itoa(call)
+}
+
 func assistantTool(call int, tool step) assistantEvent {
 	event := assistantEvent{Type: "assistant"}
-	event.Message.Content = []contentBlock{{Type: "tool_use", ID: "toolu_" + strconv.Itoa(call), Name: tool.tool, Input: tool.input}}
+	event.Message.Content = []contentBlock{{Type: "tool_use", ID: toolUseID(call), Name: tool.tool, Input: tool.input}}
+	return event
+}
+
+type toolResultBlock struct {
+	Type      string `json:"type"`
+	ToolUseID string `json:"tool_use_id"`
+	Content   string `json:"content"`
+	IsError   bool   `json:"is_error"`
+}
+
+type toolResultEvent struct {
+	Type    string `json:"type"`
+	Message struct {
+		Role    string            `json:"role"`
+		Content []toolResultBlock `json:"content"`
+	} `json:"message"`
+}
+
+func toolResultOf(id string, outcome verdict) toolResultEvent {
+	block := toolResultBlock{Type: "tool_result", ToolUseID: id, Content: toolDoneText, IsError: !outcome.allowed}
+	if !outcome.allowed {
+		block.Content = outcome.reason
+	}
+	event := toolResultEvent{Type: "user"}
+	event.Message.Role = "user"
+	event.Message.Content = []toolResultBlock{block}
 	return event
 }
 
@@ -77,6 +99,16 @@ type failedResultEvent struct {
 	Errors []string `json:"errors"`
 }
 
+type sessionEvent struct {
+	Type      string `json:"type"`
+	Subtype   string `json:"subtype"`
+	SessionID string `json:"session_id"`
+}
+
+func sessionInit(id string) sessionEvent {
+	return sessionEvent{Type: "system", Subtype: "init", SessionID: id}
+}
+
 const charsPerToken = 4
 
 func (r *replay) fields(subtype string, isError bool, prompt, text string) resultFields {
@@ -95,4 +127,17 @@ func (r *replay) result(text, prompt string) resultEvent {
 
 func (r *replay) failure(text, prompt string) failedResultEvent {
 	return failedResultEvent{resultFields: r.fields("error_during_execution", true, prompt, text), Errors: []string{text}}
+}
+
+func writeJSON(out io.Writer, event any) error {
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("cannot encode an event: %w", err)
+	}
+	return writeLine(out, string(encoded))
+}
+
+func writeLine(out io.Writer, line string) error {
+	_, err := fmt.Fprintln(out, line)
+	return err
 }

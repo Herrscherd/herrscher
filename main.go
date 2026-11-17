@@ -226,12 +226,13 @@ func runCommand(ctx context.Context, layout host.RuntimeLayout, cmd string, args
 }
 
 func runForwarded(ctx context.Context, layout host.RuntimeLayout, cmd string, args []string) error {
+	messages := host.NewMessages()
 	lang := clitext.ClientLanguage()
 	out, code, derr := dispatchUnknown(ctx, lang, cmd, args, func(ctx context.Context, argv []string) (string, bool, error) {
 		return forwardUnknownVerb(ctx, layout, argv)
 	})
 	if code != 0 {
-		fmt.Fprintln(os.Stderr, forwardedFailureLine(lang, derr))
+		fmt.Fprintln(os.Stderr, forwardedFailureLine(messages, lang, derr))
 		if err := usage(lang); err != nil {
 			return err
 		}
@@ -246,8 +247,8 @@ func runForwarded(ctx context.Context, layout host.RuntimeLayout, cmd string, ar
 	return writeCLIText(os.Stdout, out)
 }
 
-func forwardedFailureLine(lang i18n.Language, derr error) string {
-	return cliErrorLine(render(lang, clitext.ErrorLine, clitext.Params{clitext.ParamMessage: host.LocalizeError(lang, derr).Error()}))
+func forwardedFailureLine(messages *host.Messages, lang i18n.Language, derr error) string {
+	return cliErrorLine(render(lang, clitext.ErrorLine, clitext.Params{clitext.ParamMessage: messages.Localize(lang, derr).Error()}))
 }
 
 type exitStatusError struct {

@@ -169,7 +169,7 @@ func removeAccount(store accounts.Store, vendor string, name contracts.ProfileNa
 	if err != nil {
 		return err
 	}
-	users, err := host.ProfileUsers(vendor, string(name), defaultName == string(name))
+	users, err := host.ProfileUsers(host.NewMessages(), vendor, string(name), defaultName == string(name))
 	if err != nil {
 		return err
 	}
@@ -205,7 +205,7 @@ func refuseProfileInUse(vendor string, name contracts.ProfileName, users []strin
 }
 
 func warnResumingSessions(vendor string, output io.Writer) error {
-	names, err := host.ResumingSessions(vendor)
+	names, err := host.ResumingSessions(host.NewMessages(), vendor)
 	if err != nil {
 		return err
 	}

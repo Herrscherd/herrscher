@@ -25,7 +25,7 @@ func TestSubscribeDaemonEventsStreamsTaggedEvents(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	stream, err := subscribeAt(ctx, isolatedRuntimeDir(t), path)
+	stream, err := subscribeAt(ctx, newHostMessages(), isolatedRuntimeDir(t), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestSubscribeDaemonEventsClosesWhenTheDaemonGoesAway(t *testing.T) {
 	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	stream, err := subscribeAt(ctx, isolatedRuntimeDir(t), path)
+	stream, err := subscribeAt(ctx, newHostMessages(), isolatedRuntimeDir(t), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestSubscribeDaemonEventsClosesWhenTheDaemonGoesAway(t *testing.T) {
 }
 
 func TestSubscribeDaemonEventsFailsWithoutADaemon(t *testing.T) {
-	_, err := subscribeAt(context.Background(), isolatedRuntimeDir(t), filepath.Join(t.TempDir(), "absent.sock"))
+	_, err := subscribeAt(context.Background(), newHostMessages(), isolatedRuntimeDir(t), filepath.Join(t.TempDir(), "absent.sock"))
 	if err == nil {
 		t.Fatal("expected an error when nothing is listening")
 	}
@@ -128,7 +128,7 @@ func TestServingPIDReportsTheHolderAndNooneElse(t *testing.T) {
 	if pid, ok := ServingPID(statePath); ok {
 		t.Fatalf("nobody is serving, got pid %d", pid)
 	}
-	unlock, err := LockState(statePath)
+	unlock, err := LockState(NewMessages(), statePath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestServingPIDReportsTheHolderAndNooneElse(t *testing.T) {
 }
 
 func TestParseAttachmentPathsEncodesAwkwardNames(t *testing.T) {
-	atts, err := parseAttachmentPaths(`["/tmp/a b#c?.png","/tmp/plain.pdf"]`)
+	atts, err := parseAttachmentPaths(newHostMessages(), `["/tmp/a b#c?.png","/tmp/plain.pdf"]`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,10 +162,10 @@ func TestParseAttachmentPathsEncodesAwkwardNames(t *testing.T) {
 }
 
 func TestParseAttachmentPathsRejectsNonJSON(t *testing.T) {
-	if _, err := parseAttachmentPaths("/tmp/a.png,/tmp/b.png"); err == nil {
+	if _, err := parseAttachmentPaths(newHostMessages(), "/tmp/a.png,/tmp/b.png"); err == nil {
 		t.Fatal("a bare comma list must be refused, not silently read as one path")
 	}
-	if atts, err := parseAttachmentPaths(""); err != nil || atts != nil {
+	if atts, err := parseAttachmentPaths(newHostMessages(), ""); err != nil || atts != nil {
 		t.Fatalf("empty = %v, %v; want no attachments and no error", atts, err)
 	}
 }

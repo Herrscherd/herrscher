@@ -17,12 +17,13 @@ type seedGate struct {
 	closed   bool
 	refused  map[string]bool
 	session  string
+	messages *hostMessages
 	warn     io.Writer
 	language languageSource
 }
 
-func newSeedGate(session string, warn io.Writer, language languageSource) *seedGate {
-	return &seedGate{refused: make(map[string]bool), session: session, warn: warn, language: language}
+func newSeedGate(messages *hostMessages, session string, warn io.Writer, language languageSource) *seedGate {
+	return &seedGate{refused: make(map[string]bool), messages: messages, session: session, warn: warn, language: language}
 }
 
 func (g *seedGate) admit(lateKey string, deliver func()) {
@@ -34,7 +35,7 @@ func (g *seedGate) admit(lateKey string, deliver func()) {
 	}
 	if !g.refused[lateKey] {
 		g.refused[lateKey] = true
-		warnLive(g.warn, g.language, lateKey, map[string]any{nameParam: g.session})
+		warnLive(g.messages, g.warn, g.language, lateKey, map[string]any{nameParam: g.session})
 	}
 }
 

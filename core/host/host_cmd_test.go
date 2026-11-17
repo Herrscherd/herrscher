@@ -16,7 +16,7 @@ func hostRegistry(t *testing.T) (*cli.Registry, *state.State) {
 	t.Helper()
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	reg := &cli.Registry{}
-	if err := addHostCommands(reg, testLanguage(), io.Discard, st, testRuntime(t)); err != nil {
+	if err := addHostCommands(reg, newHostMessages(), testLanguage(), io.Discard, st, testRuntime(t)); err != nil {
 		t.Fatal(err)
 	}
 	return reg, st

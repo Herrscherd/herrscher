@@ -50,7 +50,7 @@ func EventsSocketPathIn(_ RuntimeLayout, instanceID string) string {
 	return `\\.\pipe\herrscher-events`
 }
 
-func listenCommandSocket(_ context.Context, _ RuntimeLayout, path string) (net.Listener, error) {
+func listenCommandSocket(_ context.Context, _ *hostMessages, _ RuntimeLayout, path string) (net.Listener, error) {
 	return winio.ListenPipe(path, &winio.PipeConfig{
 		SecurityDescriptor: "D:P(A;;GA;;;OW)",
 	})
@@ -60,6 +60,6 @@ func removeSocketFiles(_ RuntimeLayout, _ string, _ []string) error {
 	return nil
 }
 
-func dialCommandSocket(ctx context.Context, _ RuntimeLayout, path string) (net.Conn, error) {
+func dialCommandSocket(ctx context.Context, _ *hostMessages, _ RuntimeLayout, path string) (net.Conn, error) {
 	return winio.DialPipeContext(ctx, path)
 }

@@ -16,7 +16,7 @@ func TestTooManyEditsReachesTheOperatorInFrenchWithoutTheEnglishText(t *testing.
 	if err == nil {
 		t.Fatal("PruneHistory accepted more edits than one frame carries")
 	}
-	localized := localizeHostError(i18n.French, err).Error()
+	localized := localizeHostError(newHostMessages(), i18n.French, err).Error()
 	want, textErr := clitext.Text(i18n.French, clitext.Key("cli.host.fault.too_many_edits"), nil)
 	if textErr != nil {
 		t.Fatalf("French text of cli.host.fault.too_many_edits: %v", textErr)

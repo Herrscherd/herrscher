@@ -12,18 +12,18 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 )
 
-func stageAgentTar(sessionAgent agent.Agent, remoteWorktree, remoteBin string) (io.Reader, error) {
+func stageAgentTar(messages *hostMessages, sessionAgent agent.Agent, remoteWorktree, remoteBin string) (io.Reader, error) {
 	stage, err := os.MkdirTemp("", "herrscher-agent-")
 	if err != nil {
-		return nil, wrapHost(err, "remote.stage_agent", map[string]any{nameParam: sessionAgent.Name})
+		return nil, wrapHost(messages, err, "remote.stage_agent", map[string]any{nameParam: sessionAgent.Name})
 	}
 	defer func() { logCleanup(os.RemoveAll(stage)) }()
 	if err := sessionAgent.MaterializeIntoAs(stage, remoteWorktree, remoteBin); err != nil {
-		return nil, wrapHost(err, "remote.stage_agent", map[string]any{nameParam: sessionAgent.Name})
+		return nil, wrapHost(messages, err, "remote.stage_agent", map[string]any{nameParam: sessionAgent.Name})
 	}
 	var buf bytes.Buffer
 	if err := tarDir(stage, &buf); err != nil {
-		return nil, wrapHost(err, "remote.pack_agent", map[string]any{nameParam: sessionAgent.Name})
+		return nil, wrapHost(messages, err, "remote.pack_agent", map[string]any{nameParam: sessionAgent.Name})
 	}
 	return &buf, nil
 }
@@ -73,13 +73,13 @@ func tarDir(root string, writer io.Writer) error {
 	return tarWriter.Close()
 }
 
-func extractTar(src io.Reader, dst string) error {
+func extractTar(messages *hostMessages, src io.Reader, dst string) error {
 	if err := os.MkdirAll(dst, privateDirMode); err != nil {
-		return wrapHost(err, "remote.extract_archive", map[string]any{pathParam: dst})
+		return wrapHost(messages, err, "remote.extract_archive", map[string]any{pathParam: dst})
 	}
 	root, err := os.OpenRoot(dst)
 	if err != nil {
-		return wrapHost(err, "remote.extract_archive", map[string]any{pathParam: dst})
+		return wrapHost(messages, err, "remote.extract_archive", map[string]any{pathParam: dst})
 	}
 	defer closeRead(root)
 	tarReader := tar.NewReader(src)
@@ -89,21 +89,21 @@ func extractTar(src io.Reader, dst string) error {
 			return nil
 		}
 		if err != nil {
-			return wrapHost(err, "remote.extract_archive", map[string]any{pathParam: dst})
+			return wrapHost(messages, err, "remote.extract_archive", map[string]any{pathParam: dst})
 		}
 		if hdr.Typeflag != tar.TypeReg {
 			continue
 		}
-		if err := extractRegularMember(tarReader, hdr, root); err != nil {
-			return wrapHost(err, "remote.extract_member", map[string]any{"Member": hdr.Name})
+		if err := extractRegularMember(messages, tarReader, hdr, root); err != nil {
+			return wrapHost(messages, err, "remote.extract_member", map[string]any{"Member": hdr.Name})
 		}
 	}
 }
 
-func extractRegularMember(reader *tar.Reader, hdr *tar.Header, root *os.Root) error {
+func extractRegularMember(messages *hostMessages, reader *tar.Reader, hdr *tar.Header, root *os.Root) error {
 	name := filepath.FromSlash(hdr.Name)
 	if !filepath.IsLocal(name) {
-		return &unsafeTarMemberError{Member: hdr.Name, Root: root.Name()}
+		return &unsafeTarMemberError{messages: messages, Member: hdr.Name, Root: root.Name()}
 	}
 	if mkdirErr := root.MkdirAll(filepath.Dir(name), privateDirMode); mkdirErr != nil {
 		return mkdirErr

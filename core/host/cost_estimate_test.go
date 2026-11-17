@@ -41,7 +41,7 @@ func TestEstimateTurnCostBlocksOnUnknownPrice(t *testing.T) {
 
 func TestCompleteTurnStoresEstimatedCostInTranscript(t *testing.T) {
 	var entries []state.TranscriptEntry
-	d := newSessionDriver("s1", nil, nil, nil, io.Discard)
+	d := newSessionDriver(newHostMessages(), "s1", nil, nil, nil, io.Discard)
 	d.sink = sessionSink{Transcript: func(e state.TranscriptEntry) { entries = append(entries, e) }}
 	d.terms = func() modelTerms { return modelTerms{rates: sonnetRates()} }
 	event := contracts.Event{T: eventwire.EventReply, Text: "hello", Done: true, TokensIn: 1000, Tokens: 500}

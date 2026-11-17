@@ -114,11 +114,12 @@ func serveWith(ctx context.Context, layout host.RuntimeLayout, args []string, op
 			return loadErr
 		}
 	}
-	models := host.ModelDiscoveryFor(*statePath)
+	messages := host.NewMessages()
+	models := host.ModelDiscoveryFor(messages, *statePath)
 	owner := or(envx.Get("OWNER_ID"), cfg.Owner)
 	home := homeRef(cfg)
 
-	unlock, attached, err := lockOrAttach(ctx, layout, langs.Operator, *statePath, *instanceID, open)
+	unlock, attached, err := lockOrAttach(ctx, messages, layout, langs.Operator, *statePath, *instanceID, open)
 	if attached || err != nil {
 		return err
 	}
@@ -169,8 +170,8 @@ func openOnForeground(open *openWindow, foreground contracts.Foreground) {
 	}
 }
 
-func lockOrAttach(ctx context.Context, layout host.RuntimeLayout, lang i18n.Language, statePath, instanceID string, open *openWindow) (func(), bool, error) {
-	unlock, err := host.LockState(statePath)
+func lockOrAttach(ctx context.Context, messages *host.Messages, layout host.RuntimeLayout, lang i18n.Language, statePath, instanceID string, open *openWindow) (func(), bool, error) {
+	unlock, err := host.LockState(messages, statePath)
 	if err == nil {
 		return unlock, false, nil
 	}
@@ -183,17 +184,17 @@ func lockOrAttach(ctx context.Context, layout host.RuntimeLayout, lang i18n.Lang
 		if aerr == nil {
 			return nil, true, nil
 		}
-		fmt.Fprintln(os.Stderr, attachFailureText(lang, aerr))
+		fmt.Fprintln(os.Stderr, attachFailureText(messages, lang, aerr))
 	}
-	return nil, false, host.LocalizeError(lang, err)
+	return nil, false, messages.Localize(lang, err)
 }
 
-func attachFailureText(lang i18n.Language, err error) string {
-	return render(lang, clitext.ServeAttachFailed, attachFailureParams(lang, err))
+func attachFailureText(messages *host.Messages, lang i18n.Language, err error) string {
+	return render(lang, clitext.ServeAttachFailed, attachFailureParams(messages, lang, err))
 }
 
-func attachFailureParams(lang i18n.Language, err error) clitext.Params {
-	return escapedParam(clitext.ParamErr, host.LocalizeError(lang, err).Error())
+func attachFailureParams(messages *host.Messages, lang i18n.Language, err error) clitext.Params {
+	return escapedParam(clitext.ParamErr, messages.Localize(lang, err).Error())
 }
 
 type gatewayStatus interface {
@@ -375,10 +376,11 @@ func createTaskSession(ctx context.Context, name string) []string {
 func runPromptWindow(ctx context.Context, layout host.RuntimeLayout, name, text string) error {
 	lang := clitext.ClientLanguage()
 	statePath := host.DefaultStatePath()
-	unlock, lerr := host.LockState(statePath)
+	messages := host.NewMessages()
+	unlock, lerr := host.LockState(messages, statePath)
 	if lerr != nil {
 		instance := host.ServedInstanceID(statePath, "")
-		if _, err := host.DaemonDispatch(ctx, layout, instance, createTaskSession(ctx, name)); err != nil {
+		if _, err := host.DaemonDispatch(ctx, messages, layout, instance, createTaskSession(ctx, name)); err != nil {
 			return err
 		}
 		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeSessionStarted, clitext.Params{clitext.ParamName: name}))
@@ -451,7 +453,7 @@ func forwardUnknownVerb(ctx context.Context, layout host.RuntimeLayout, argv []s
 			instance = cfg.Instance
 		}
 	}
-	return host.ForwardToDaemon(ctx, layout, host.DefaultStatePath(), instance, argv)
+	return host.ForwardToDaemon(ctx, host.NewMessages(), layout, host.DefaultStatePath(), instance, argv)
 }
 
 func buildGateways(ctx context.Context, lang i18n.Language) ([]host.Deps, error) {

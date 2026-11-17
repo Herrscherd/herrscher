@@ -30,7 +30,7 @@ func newStartupTestHub(t *testing.T) *hub {
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
-	return newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, newApprovalTable(io.Discard), newSessionTable())
+	return newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()))
 }
 
 func TestStopLiveJoinsAStartupItNoLongerTracksAsLive(t *testing.T) {

@@ -21,7 +21,7 @@ func TestRestartWithResumeKeepsOldTokenAndMarkOnDiskWhenPersistFails(t *testing.
 		t.Fatal(err)
 	}
 	partDir := t.TempDir()
-	h := newHub(st, nil, nil, partDir, nil, nil, newApprovalTable(io.Discard), newSessionTable(), withWarnings(io.Discard))
+	h := newHub(st, nil, nil, partDir, nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()), withWarnings(io.Discard))
 	h.runtime = isolatedRuntimeDir(t)
 	h.startBridge = func(state.Session, time.Duration) error { return nil }
 

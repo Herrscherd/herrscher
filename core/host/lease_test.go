@@ -80,7 +80,7 @@ func TestClosingTheBackendEndsItsKeyGrant(t *testing.T) {
 	settings := registerClaudeWithSettings(t, func() (contracts.Backend, error) { return seedBackend{}, nil })
 	keys := keysWithUpstream(t, "anthropic", upstream.URL, map[string]string{"KEY_MAIN": "sk-main"})
 
-	backend, err := BuildBackendFor(context.Background(), BackendRequest{Vendor: contracts.VendorClaude, AccountRoot: t.TempDir(), Keys: keys})
+	backend, err := BuildBackendFor(context.Background(), NewMessages(), BackendRequest{Vendor: contracts.VendorClaude, AccountRoot: t.TempDir(), Keys: keys})
 	if err != nil {
 		t.Fatalf("BuildBackendFor: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestFailedBackendConstructionEndsItsKeyGrant(t *testing.T) {
 	settings := registerClaudeWithSettings(t, func() (contracts.Backend, error) { return nil, errors.New("boom") })
 	keys := keysWithUpstream(t, "anthropic", upstream.URL, map[string]string{"KEY_MAIN": "sk-main"})
 
-	if _, err := BuildBackendFor(context.Background(), BackendRequest{Vendor: contracts.VendorClaude, AccountRoot: t.TempDir(), Keys: keys}); err == nil {
+	if _, err := BuildBackendFor(context.Background(), NewMessages(), BackendRequest{Vendor: contracts.VendorClaude, AccountRoot: t.TempDir(), Keys: keys}); err == nil {
 		t.Fatal("BuildBackendFor error = nil, want the plugin error")
 	}
 	env := contracts.ParseEnvSetting(settings()["env"])

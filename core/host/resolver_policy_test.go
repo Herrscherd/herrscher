@@ -15,7 +15,7 @@ import (
 
 func TestRejectedAnnouncementsAreLoggedOncePerReasonWithinTheInterval(t *testing.T) {
 	var logs bytes.Buffer
-	r := NewResolver(nil, "")
+	r := NewResolver(NewMessages(), nil, "")
 	r.SetLogger(slog.New(slog.NewTextHandler(&logs, nil)))
 	clock := r.now()
 	r.now = func() time.Time { return clock }
@@ -35,7 +35,7 @@ func TestRejectedAnnouncementsAreLoggedOncePerReasonWithinTheInterval(t *testing
 }
 
 func TestPlaintextRemoteAddressesAreRefusedWithoutCredentials(t *testing.T) {
-	r := NewResolver(nil, "")
+	r := NewResolver(NewMessages(), nil, "")
 	for addr, want := range map[string]bool{
 		"127.0.0.1:4000":   true,
 		"[::1]:4000":       true,
@@ -51,7 +51,7 @@ func TestPlaintextRemoteAddressesAreRefusedWithoutCredentials(t *testing.T) {
 }
 
 func TestAnyRemoteAddressIsAdmittedOnceCredentialsAreSet(t *testing.T) {
-	r := NewResolver(nil, "")
+	r := NewResolver(NewMessages(), nil, "")
 	r.SetCredentials(insecure.NewCredentials())
 	if !r.addrAllowed("10.0.0.5:4000") {
 		t.Fatal("mTLS credentials authenticate the peer, so a non-loopback address must be admitted")
@@ -60,7 +60,7 @@ func TestAnyRemoteAddressIsAdmittedOnceCredentialsAreSet(t *testing.T) {
 
 func TestRejectionsOfOneClassShareOneLogLine(t *testing.T) {
 	var logs bytes.Buffer
-	r := NewResolver(nil, "")
+	r := NewResolver(NewMessages(), nil, "")
 	r.SetLogger(slog.New(slog.NewTextHandler(&logs, nil)))
 	clock := r.now()
 	r.now = func() time.Time { return clock }

@@ -54,14 +54,14 @@ func approveAskWithToken(t *testing.T, sessionTab *sessionTable, token, session 
 }
 
 func TestApproveAskRefusesASessionWithoutAToken(t *testing.T) {
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	if _, err := approveAskWithToken(t, sessionTab, "", "ghost"); err == nil {
 		t.Fatal("approve ask answered for a session nobody issued a token to")
 	}
 }
 
 func TestApproveAskRefusesAnEmptyTokenForAKnownSession(t *testing.T) {
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	sessionTab.issueToken("s1")
 	_, err := approveAskWithToken(t, sessionTab, "", "s1")
 	if !errors.Is(err, errApproveAskUnauthenticated) {
@@ -70,8 +70,8 @@ func TestApproveAskRefusesAnEmptyTokenForAKnownSession(t *testing.T) {
 }
 
 func TestClosedSessionTokenIsRevoked(t *testing.T) {
-	sessionTab := newSessionTable()
-	driver := &sessionDriver{}
+	sessionTab := newSessionTable(newHostMessages())
+	driver := &sessionDriver{messages: newHostMessages()}
 	sessionTab.register("s1", driver)
 	old := sessionTab.issueToken("s1")
 	sessionTab.unregister("s1", driver)
@@ -88,7 +88,7 @@ func TestClosedSessionTokenIsRevoked(t *testing.T) {
 }
 
 func TestApproveAskRefusesAGuessedToken(t *testing.T) {
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	sessionTab.issueToken("s1")
 	if _, err := approveAskWithToken(t, sessionTab, "guess", "s1"); err == nil {
 		t.Fatal("approve ask answered for a token that is not the session's")
@@ -96,7 +96,7 @@ func TestApproveAskRefusesAGuessedToken(t *testing.T) {
 }
 
 func TestApproveAskRefusesAnotherSessionsToken(t *testing.T) {
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	sessionTab.issueToken("A")
 	tokenB := sessionTab.issueToken("B")
 	if _, err := approveAskWithToken(t, sessionTab, tokenB, "A"); err == nil {
@@ -109,7 +109,7 @@ func TestApproveAskRefusesAnotherSessionsToken(t *testing.T) {
 
 func TestApproveAskAcceptsItsOwnSessionsToken(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	reg, _ := approveReg(t, approvalTab, sessionTab)
 	ctx := context.Background()
 	if _, err := reg.Dispatch(ctx, []string{"approve", "rule", "allow Bash(ls*)"}); err != nil {
@@ -126,7 +126,7 @@ func TestApproveAskAcceptsItsOwnSessionsToken(t *testing.T) {
 }
 
 func TestSessionTokensAreStablePerSessionAndDistinct(t *testing.T) {
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	first := sessionTab.issueToken("s1")
 	if first == "" || first != sessionTab.issueToken("s1") {
 		t.Fatal("a session's token must not change while it runs")
@@ -137,7 +137,7 @@ func TestSessionTokensAreStablePerSessionAndDistinct(t *testing.T) {
 }
 
 func TestSeedTokenDoesNotSurviveItsSeed(t *testing.T) {
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	seedCtx, endSeed := context.WithCancel(context.Background())
 	token := sessionTab.seedToken(seedCtx, "dormant", allowEverySession)
 	if !sessionTab.tokenMatches("dormant", token) {
@@ -150,10 +150,10 @@ func TestSeedTokenDoesNotSurviveItsSeed(t *testing.T) {
 }
 
 func TestDriverStartedDuringASeedKeepsItsToken(t *testing.T) {
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	seedCtx, endSeed := context.WithCancel(context.Background())
 	seedTok := sessionTab.seedToken(seedCtx, "s1", allowEverySession)
-	driver := &sessionDriver{}
+	driver := &sessionDriver{messages: newHostMessages()}
 	sessionTab.register("s1", driver)
 	driverTok := sessionTab.issueToken("s1")
 	endSeed()
@@ -170,7 +170,7 @@ func TestDriverStartedDuringASeedKeepsItsToken(t *testing.T) {
 }
 
 func TestTokensOfSessionsGoneFromTheStoreAreRevoked(t *testing.T) {
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	gone := sessionTab.issueToken("gone")
 	kept := sessionTab.issueToken("kept")
 	archived := sessionTab.issueToken("archived")

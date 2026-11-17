@@ -41,7 +41,7 @@ func TestFailedPersistOfALiveSessionJoinsItsGoroutine(t *testing.T) {
 	if h.isLive(name) {
 		t.Fatal("a session whose persist failed stayed live")
 	}
-	if socketAnswers(t.Context(), h.runtime, SessionCommandSocketPathIn(h.runtime, h.instanceID, name)) {
+	if socketAnswers(t.Context(), newHostMessages(), h.runtime, SessionCommandSocketPathIn(h.runtime, h.instanceID, name)) {
 		t.Fatal("the command socket of a session whose persist failed still answers once goLiveAndPersist has returned")
 	}
 }

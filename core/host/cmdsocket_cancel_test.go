@@ -24,7 +24,7 @@ func TestDispatchLiveCommandReturnsWhenItsContextIsCancelled(t *testing.T) {
 	defer cancel()
 	result := make(chan error, 1)
 	go func() {
-		_, _, dispatchErr := dispatchLiveCommand(ctx, layout, path, []string{"status"})
+		_, _, dispatchErr := dispatchLiveCommand(ctx, newHostMessages(), layout, path, []string{"status"})
 		result <- dispatchErr
 	}()
 
@@ -55,7 +55,7 @@ func TestDispatchLiveCommandReportsCancellationBeforeDial(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, handled, dispatchErr := dispatchLiveCommand(ctx, isolatedRuntimeDir(t), path, []string{"status"})
+	_, handled, dispatchErr := dispatchLiveCommand(ctx, newHostMessages(), isolatedRuntimeDir(t), path, []string{"status"})
 	if !handled {
 		t.Fatal("a cancelled dial must stay handled, or the caller would run the command locally")
 	}

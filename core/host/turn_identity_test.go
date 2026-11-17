@@ -36,7 +36,7 @@ func relayTurnFrames(cancel context.CancelFunc, toBridge <-chan contracts.Event,
 }
 
 func identifiedTestDriver(to chan<- contracts.Event, from <-chan contracts.Event) (*sessionDriver, <-chan contracts.Event) {
-	d := newSessionDriver("same-name", nil, to, from, io.Discard)
+	d := newSessionDriver(newHostMessages(), "same-name", nil, to, from, io.Discard)
 	d.incarnation = "incarnation-a"
 	d.agent = "reviewer"
 	emitted := make(chan contracts.Event, 32)

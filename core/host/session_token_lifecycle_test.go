@@ -32,7 +32,7 @@ func dispatchRevokesTheDoomedSession(t *testing.T, verb string, remove func(*sta
 			t.Fatal(err)
 		}
 	}
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	doomedToken := sessionTab.issueToken("doomed")
 	keptToken := sessionTab.issueToken("kept")
 	seedCtx, endSeed := context.WithCancel(t.Context())

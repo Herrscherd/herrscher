@@ -15,7 +15,7 @@ import (
 func TestGoLiveReportsACommandSocketItCannotOpen(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
 	name := "golive-" + newTurnID()
-	if err := ensureRuntimeDir(layout, SessionCommandSocketPathIn(layout, "", name)); err != nil {
+	if err := ensureRuntimeDir(newHostMessages(), layout, SessionCommandSocketPathIn(layout, "", name)); err != nil {
 		t.Fatal(err)
 	}
 	answeringListener(t, SessionCommandSocketPathIn(layout, "", name))
@@ -27,7 +27,7 @@ func TestGoLiveReportsACommandSocketItCannotOpen(t *testing.T) {
 		nil,
 		nil,
 		newApprovalTable(io.Discard),
-		newSessionTable(),
+		newSessionTable(newHostMessages()),
 	)
 	h.runtime = layout
 	err := h.goLive(t.Context(), state.Session{Name: name, Incarnation: "incarnation"})

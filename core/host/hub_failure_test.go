@@ -15,7 +15,7 @@ import (
 )
 
 func TestSessionFailureNoticeIsWrittenInTheSessionLanguage(t *testing.T) {
-	h := testHub(&hub{warnings: io.Discard, lang: i18n.English})
+	h := testHub(&hub{messages: newHostMessages(), warnings: io.Discard, lang: i18n.English})
 	var published []contracts.Event
 	h.eventPublisher = func(_ string, event contracts.Event) {
 		published = append(published, event)
@@ -25,8 +25,9 @@ func TestSessionFailureNoticeIsWrittenInTheSessionLanguage(t *testing.T) {
 	h.reportSessionFailure(sess, supervisor.StagePrepare, cause)
 
 	params := map[string]any{nameParam: "revue", detailParam: cause.Error()}
-	inFrench := LocalizeError(i18n.French, wrapHost(cause, sessionFailureKey(supervisor.StagePrepare), params)).Error()
-	inEnglish := LocalizeError(i18n.English, wrapHost(cause, sessionFailureKey(supervisor.StagePrepare), params)).Error()
+	owner := newHostMessages()
+	inFrench := localizeHostError(owner, i18n.French, wrapHost(owner, cause, sessionFailureKey(supervisor.StagePrepare), params)).Error()
+	inEnglish := localizeHostError(owner, i18n.English, wrapHost(owner, cause, sessionFailureKey(supervisor.StagePrepare), params)).Error()
 	if inFrench == inEnglish {
 		t.Fatal("the two languages render the same notice, the test proves nothing")
 	}
@@ -41,7 +42,7 @@ func TestSessionFailureWithoutAnEventSinkIsLogged(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
 	t.Cleanup(func() { slog.SetDefault(saved) })
 
-	h := testHub(&hub{warnings: io.Discard, lang: i18n.English})
+	h := testHub(&hub{messages: newHostMessages(), warnings: io.Discard, lang: i18n.English})
 	h.reportSessionFailure(state.Session{Name: "revue"}, supervisor.StageLaunch, errors.New("boom"))
 
 	if !strings.Contains(logged.String(), "session failure not published") || !strings.Contains(logged.String(), "revue") {

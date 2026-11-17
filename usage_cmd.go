@@ -166,7 +166,7 @@ func fetchUsage(ctx context.Context, layout host.RuntimeLayout, instance string,
 	if opts.vendor != "" {
 		argv = append(argv, usageParamVendor, opts.vendor)
 	}
-	out, err := host.DaemonDispatch(ctx, layout, instance, argv)
+	out, err := host.DaemonDispatch(ctx, host.NewMessages(), layout, instance, argv)
 	if err != nil {
 		return usagecore.Snapshot{}, err
 	}

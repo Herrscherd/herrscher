@@ -74,11 +74,11 @@ func newApprovalRegistry(t *testing.T, approvalTab *approvalTable, menus *menuRe
 	if err := st.AddApprovalRule("ask Bash(git push*)"); err != nil {
 		t.Fatalf("AddApprovalRule: %v", err)
 	}
-	sessionTab := newSessionTable()
+	sessionTab := newSessionTable(newHostMessages())
 	t.Setenv(TokenVar, sessionTab.issueToken("s1"))
-	sessionTab.register("s1", newSessionDriver("s1", []contracts.GatewaySet{{Gateway: menus, Reader: menus}}, nil, nil, io.Discard))
+	sessionTab.register("s1", newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: menus, Reader: menus}}, nil, nil, io.Discard))
 	reg := &cli.Registry{}
-	if err := addApproveCommands(reg, fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); err != nil {
+	if err := addApproveCommands(reg, newHostMessages(), fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); err != nil {
 		t.Fatalf("addApproveCommands: %v", err)
 	}
 	return reg
@@ -87,15 +87,15 @@ func newApprovalRegistry(t *testing.T, approvalTab *approvalTable, menus *menuRe
 func startApprovalSocket(ctx context.Context, t *testing.T, reg *cli.Registry) string {
 	t.Helper()
 	sock := filepath.Join(t.TempDir(), "cmd.sock")
-	serveCommandSocket(ctx, isolatedRuntimeDir(t), sock, textDispatch(reg), testLanguage(), io.Discard)
+	serveTestCommandSocket(ctx, t, isolatedRuntimeDir(t), sock, textDispatch(reg), defaultCommandReadTimeout)
 	return sock
 }
 
 func runHookAsync(ctx context.Context, layout runtimedir.Layout, in io.Reader, out, errOut io.Writer, sock string) <-chan error {
 	done := make(chan error, 1)
 	go func() {
-		done <- RunPermissionHook(ctx, in, out, errOut, func() string { return sock }, func(c context.Context, argv []string) (string, bool, error) {
-			return dispatchLiveCommand(c, layout, sock, argv)
+		done <- RunPermissionHook(ctx, NewMessages(), in, out, errOut, func() string { return sock }, func(c context.Context, argv []string) (string, bool, error) {
+			return dispatchLiveCommand(c, newHostMessages(), layout, sock, argv)
 		})
 	}()
 	return done

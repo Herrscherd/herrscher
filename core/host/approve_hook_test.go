@@ -293,7 +293,7 @@ func TestHookRefusalIsWrittenInTheOperatorLanguage(t *testing.T) {
 
 func mustRunHook(ctx context.Context, t *testing.T, in io.Reader, out, errOut io.Writer, target func() string, ask hookAsker) {
 	t.Helper()
-	if err := RunPermissionHook(ctx, in, out, errOut, target, ask); err != nil {
+	if err := RunPermissionHook(ctx, NewMessages(), in, out, errOut, target, ask); err != nil {
 		t.Fatalf("the hook could not deliver its decision: %v", err)
 	}
 }
@@ -312,7 +312,7 @@ func TestHookReportsWhenItsDecisionCannotBeWritten(t *testing.T) {
 	}
 	in := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"ls"}}`)
 	var errOut bytes.Buffer
-	if err := RunPermissionHook(context.Background(), in, failingWriter{}, &errOut, testTarget, ask); err == nil {
+	if err := RunPermissionHook(context.Background(), NewMessages(), in, failingWriter{}, &errOut, testTarget, ask); err == nil {
 		t.Fatal("a decision the host could not write was reported as delivered")
 	}
 	if !strings.Contains(errOut.String(), "stdout is closed") {

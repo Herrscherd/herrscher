@@ -16,7 +16,7 @@ func TestSessionArchivedDuringReconcileStaysDown(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable())
+	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()))
 	h.runtime = isolatedRuntimeDir(t)
 	var first, second string
 	h.startBridge = func(sess state.Session, _ time.Duration) error {

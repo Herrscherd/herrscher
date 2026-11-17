@@ -32,6 +32,8 @@ const (
 // (in-proc factory) or remote (gRPC proxy) per category. With a nil/empty
 // remote set every category resolves local; today's behaviour.
 type Resolver struct {
+	messages *hostMessages
+
 	remote  map[contracts.Category]bool
 	NatsURL string
 
@@ -55,8 +57,13 @@ type Resolver struct {
 }
 
 // NewResolver builds a Resolver for the categories in remote, reaching them over NATS at natsURL.
-func NewResolver(remote map[contracts.Category]bool, natsURL string) *Resolver {
+func NewResolver(owner *Messages, remote map[contracts.Category]bool, natsURL string) *Resolver {
+	return newResolver(owner.owner, remote, natsURL)
+}
+
+func newResolver(messages *hostMessages, remote map[contracts.Category]bool, natsURL string) *Resolver {
 	resolver := &Resolver{
+		messages:       messages,
 		remote:         remote,
 		NatsURL:        natsURL,
 		log:            obs.NewLogger(os.Stderr, slog.LevelInfo),
@@ -209,24 +216,35 @@ func (r *Resolver) Backend(ctx context.Context, plugins []contracts.Plugin, desi
 // the retry budget. It carries the category, attempts made, and elapsed time so
 // the caller can degrade cleanly; Unwrap exposes the last underlying error.
 type RemoteResolveError struct {
+	messages *hostMessages
 	Category contracts.Category
 	Attempts int
 	Elapsed  time.Duration
 	Err      error
 }
 
-func (e *RemoteResolveError) Error() string { return e.render(i18n.English) }
+func (e *RemoteResolveError) Error() string {
+	if e == nil {
+		return nilErrorText
+	}
+	return e.render(e.messages, i18n.English)
+}
 
-func (e *RemoteResolveError) render(lang i18n.Language) string {
-	return newHostMessages().text(lang, "remote.unavailable", map[string]any{
+func (e *RemoteResolveError) render(messages *hostMessages, lang i18n.Language) string {
+	return messages.text(lang, "remote.unavailable", map[string]any{
 		"Category":  string(e.Category),
 		"Attempts":  e.Attempts,
 		"Elapsed":   e.Elapsed.String(),
-		detailParam: errorTextIn(lang, e.Err),
+		detailParam: errorTextIn(messages, lang, e.Err),
 	})
 }
 
-func (e *RemoteResolveError) Unwrap() error { return e.Err }
+func (e *RemoteResolveError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
 
 func resolveRemoteWithRetry[T any](ctx context.Context, resolver *Resolver, cat contracts.Category, dial func(context.Context) (T, error)) (T, error) {
 	var zero T
@@ -261,7 +279,7 @@ func resolveRemoteWithRetry[T any](ctx context.Context, resolver *Resolver, cat 
 	resolver.metrics.RemoteFailure()
 	elapsed := resolver.now().Sub(start)
 	resolver.log.Warn("remote resolve gave up", "category", cat, "attempts", attempt, "elapsed", elapsed, "err", lastErr)
-	return zero, &RemoteResolveError{Category: cat, Attempts: attempt, Elapsed: elapsed, Err: lastErr}
+	return zero, &RemoteResolveError{messages: resolver.messages, Category: cat, Attempts: attempt, Elapsed: elapsed, Err: lastErr}
 }
 
 func (r *Resolver) natsURL() string {
@@ -292,7 +310,7 @@ func (r *Resolver) dialRemoteMemoryOnce(ctx context.Context, _ contracts.Plugin)
 		return nil, err
 	}
 	defer closeConn()
-	mems, err := awaitEntries(ctx, contracts.CategoryMemory, watch)
+	mems, err := awaitEntries(ctx, r.messages, contracts.CategoryMemory, watch)
 	if err != nil {
 		return nil, err
 	}
@@ -305,7 +323,7 @@ func (r *Resolver) dialRemoteOrchestratorOnce(ctx context.Context, _ contracts.P
 		return nil, err
 	}
 	defer closeConn()
-	orchs, err := awaitEntries(ctx, contracts.CategoryOrchestrator, watch)
+	orchs, err := awaitEntries(ctx, r.messages, contracts.CategoryOrchestrator, watch)
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +336,7 @@ func (r *Resolver) dialRemoteBackendOnce(ctx context.Context, plugin contracts.P
 		return nil, err
 	}
 	defer closeConn()
-	bes, err := awaitEntries(ctx, contracts.CategoryBackend, watch)
+	bes, err := awaitEntries(ctx, r.messages, contracts.CategoryBackend, watch)
 	if err != nil {
 		return nil, err
 	}

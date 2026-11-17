@@ -12,7 +12,7 @@ import (
 func TestDeferredWarningsKeepTheOrderOfTheLockHolders(t *testing.T) {
 	gate := newGatedWarnings("blocker")
 	t.Cleanup(gate.open)
-	h := testHub(&hub{warnings: gate, teardownGrace: time.Second})
+	h := testHub(&hub{messages: newHostMessages(), warnings: gate, teardownGrace: time.Second})
 	if _, err := h.warnings.Write([]byte("blocker\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
@@ -43,7 +43,7 @@ func TestReleaseLifecycleSharesOneBudgetAcrossDeferredWarnings(t *testing.T) {
 	const deferred = 20
 	gate := newGatedWarnings("frozen")
 	t.Cleanup(gate.open)
-	h := testHub(&hub{warnings: gate, teardownGrace: time.Second})
+	h := testHub(&hub{messages: newHostMessages(), warnings: gate, teardownGrace: time.Second})
 	if _, err := h.warnings.Write([]byte("frozen\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}

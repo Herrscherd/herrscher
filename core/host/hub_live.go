@@ -28,12 +28,12 @@ func (h *hub) liveSink(ctx context.Context, sess state.Session) sessionSink {
 		},
 		Project: func(p string) {
 			if err := h.st.SetProjectPinned(sess.Name, p); err != nil {
-				warnLive(h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_project_pin", map[string]any{nameParam: sess.Name, detailParam: err})
+				warnLive(h.messages, h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_project_pin", map[string]any{nameParam: sess.Name, detailParam: err})
 			}
 		},
 		Transcript: func(e state.TranscriptEntry) {
 			if err := state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), e); err != nil {
-				warnLive(h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
+				warnLive(h.messages, h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
 			}
 		},
 		Checkpoint: func(turnID, text string) {

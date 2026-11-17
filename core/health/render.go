@@ -60,7 +60,7 @@ func (s Snapshot) Details(writer io.Writer, checks []Check, lang i18n.Language, 
 	if err != nil {
 		return err
 	}
-	text := &renderer{lang: lang}
+	text := newRenderer(lang)
 	labels := [...]string{
 		text.key(clitext.HealthDetailState, nil),
 		text.key(clitext.HealthDetailCause, nil),
@@ -242,8 +242,13 @@ func (w *lineWriter) line(text string) {
 }
 
 type renderer struct {
-	lang i18n.Language
-	err  error
+	lang    i18n.Language
+	notices *contracts.Renderer
+	err     error
+}
+
+func newRenderer(lang i18n.Language) *renderer {
+	return &renderer{lang: lang, notices: contracts.NewRenderer()}
 }
 
 func (r *renderer) key(key clitext.Key, params clitext.Params) string {
@@ -252,15 +257,17 @@ func (r *renderer) key(key clitext.Key, params clitext.Params) string {
 	return value
 }
 
-var renderNotice = contracts.NewRenderer().Render
-
 func (r *renderer) notice(notice contracts.Notice) string {
-	value, err := renderNotice(r.lang, notice)
-	if errors.Is(err, contracts.ErrUnknownCode) || errors.Is(err, contracts.ErrNoticeArgs) {
+	value, err := r.notices.Render(r.lang, notice)
+	if fallsBackToArguments(err) {
 		return unrenderedNotice(notice)
 	}
 	r.keep(err)
 	return value
+}
+
+func fallsBackToArguments(err error) bool {
+	return errors.Is(err, contracts.ErrUnknownCode) || errors.Is(err, contracts.ErrNoticeArgs)
 }
 
 func unrenderedNotice(notice contracts.Notice) string {

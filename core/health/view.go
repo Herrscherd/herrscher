@@ -77,7 +77,7 @@ type View struct {
 // order, and the summary counts with the service the hint names when something
 // fails.
 func (s Snapshot) View(lang i18n.Language) (View, error) {
-	text := &renderer{lang: lang}
+	text := newRenderer(lang)
 	view := View{
 		Title:  text.key(clitext.HealthBannerTitle, clitext.Params{clitext.ParamVersion: s.Daemon.Version}),
 		Banner: text.key(clitext.HealthBanner, s.bannerParams(text)),
@@ -100,14 +100,14 @@ func (s Snapshot) View(lang i18n.Language) (View, error) {
 
 // Rows renders checks in lang, one row each, in the order given.
 func (s Snapshot) Rows(checks []Check, lang i18n.Language) ([]Row, error) {
-	text := &renderer{lang: lang}
+	text := newRenderer(lang)
 	return s.rows(checks, text), text.err
 }
 
 // Latency renders a measured duration the way a report shows it: milliseconds
 // under a second, seconds with one decimal under a minute, a compact span beyond.
 func Latency(lang i18n.Language, elapsed time.Duration) (string, error) {
-	text := &renderer{lang: lang}
+	text := newRenderer(lang)
 	return text.latency(elapsed), text.err
 }
 

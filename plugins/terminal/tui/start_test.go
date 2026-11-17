@@ -79,7 +79,7 @@ func referencesToNewModel(fset *token.FileSet, file *ast.File, exempt string) []
 	allowed := nilNewModelCallees(file)
 	var refs []string
 	ast.Inspect(file, func(node ast.Node) bool {
-		if fn, isFunc := node.(*ast.FuncDecl); isFunc && fn.Name.Name == exempt {
+		if fn, isFunc := node.(*ast.FuncDecl); isFunc && fn.Recv == nil && fn.Name.Name == exempt {
 			return false
 		}
 		if ident, isIdent := node.(*ast.Ident); isIdent && ident.Name == "newModel" && !allowed[ident] {
@@ -146,6 +146,10 @@ func startModel(backend Backend) {
 func other(be Backend) {
 	_ = newModel(be)
 }
+
+func (m *model) startModel(be Backend) {
+	_ = newModel(be)
+}
 `
 	fset := token.NewFileSet()
 	parsed, parseErr := parser.ParseFile(fset, "start_test.go", snippet, 0)
@@ -153,7 +157,7 @@ func other(be Backend) {
 		t.Fatal(parseErr)
 	}
 	refs := referencesToNewModel(fset, parsed, "startModel")
-	want := []string{"start_test.go:8:6"}
+	want := []string{"start_test.go:8:6", "start_test.go:12:6"}
 	if strings.Join(refs, " ") != strings.Join(want, " ") {
 		t.Fatalf("flagged = %q, want %q: only the exempt function may reference newModel", refs, want)
 	}

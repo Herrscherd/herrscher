@@ -165,6 +165,32 @@ func renderEntry(item entry, width int, view view) string {
 	}
 }
 
+const proseTabStop = 4
+
+func expandProseTabs(text string) string {
+	lines := strings.Split(text, "\n")
+	for index, line := range lines {
+		lines[index] = expandLineTabs(line)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func expandLineTabs(line string) string {
+	if !strings.Contains(line, "\t") {
+		return line
+	}
+	var out strings.Builder
+	for _, char := range line {
+		if char != '\t' {
+			out.WriteRune(char)
+			continue
+		}
+		column := lipgloss.Width(out.String())
+		out.WriteString(strings.Repeat(" ", proseTabStop-column%proseTabStop))
+	}
+	return out.String()
+}
+
 func renderNotice(item entry, width int, view view) string {
 	text := view.st.glyphs.notice + " " + item.text
 	if !item.markdown {
@@ -177,7 +203,7 @@ func renderNotice(item entry, width int, view view) string {
 func renderAgent(item entry, width int, view view) string {
 	lead := view.st.glyphs.tool + " "
 	body := width - lipgloss.Width(blockIndent) - lipgloss.Width(lead)
-	prose := strings.ReplaceAll(item.text, "\t", diffTabSpaces)
+	prose := expandProseTabs(item.text)
 	var text string
 	if item.streaming {
 		text = wrapWith(view.st.text, prose, body)

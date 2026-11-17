@@ -286,3 +286,35 @@ func TestAgentTabIsExpandedStablyAndNeverCarriesARawTab(t *testing.T) {
 		t.Errorf("rendering is not stable: %q then %q", first, second)
 	}
 }
+
+func renderedAgentText(m *model, text string, streaming bool) string {
+	return renderEntry(entry{role: roleAgent, text: text, streaming: streaming}, 80, m.displayMode())
+}
+
+func TestAgentTabAlignsOnTheNextFourColumnStop(t *testing.T) {
+	m, _ := rawTextModel(t)
+	cases := []struct{ withTab, withSpaces string }{
+		{"ab\tc", "ab  c"},
+		{"abc\td", "abc d"},
+		{"abcd\te", "abcd    e"},
+		{"文\tb", "文  b"},
+	}
+	for _, streaming := range []bool{false, true} {
+		for _, tc := range cases {
+			got := renderedAgentText(m, tc.withTab, streaming)
+			want := renderedAgentText(m, tc.withSpaces, streaming)
+			if got != want {
+				t.Errorf("streaming=%v: %q rendered %q, want the stop-aligned %q", streaming, tc.withTab, got, want)
+			}
+		}
+	}
+}
+
+func TestAgentTabIndentedCodeBlockStaysACodeBlock(t *testing.T) {
+	m, _ := rawTextModel(t)
+	withTab := renderedAgentText(m, "para\n\n\tcode", false)
+	withSpaces := renderedAgentText(m, "para\n\n    code", false)
+	if withTab != withSpaces {
+		t.Errorf("tab-indented block rendered %q, want the four-column code block %q", withTab, withSpaces)
+	}
+}

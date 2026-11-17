@@ -24,8 +24,9 @@ const (
 	lastIsolate            rune = 0x2069
 )
 
-// Printed is text that has been through [Escape]. It is the only way to hold text
-// that a terminal may show, so a Printed value never carries a raw control to it.
+// Printed is text that has been through [Escape] or [EscapeLines]. It is the only
+// way to hold text that a terminal may show, so a Printed value never carries a raw
+// control to it, a line feed or tabulation of an [EscapeLines] text aside.
 type Printed struct {
 	text string
 }
@@ -36,7 +37,15 @@ type Printed struct {
 // escape, so ESC reads \x1b, BEL \a, CR \r, LF \n, U+009B \u009b and RLO \u202e,
 // and every byte that is not valid UTF-8 reads \xNN. Valid text comes back unchanged.
 func Escape(text string) Printed {
-	return Printed{text: escapeControls(text)}
+	return Printed{text: escapeControls(text, false)}
+}
+
+// EscapeLines is [Escape] for a text that is laid out in lines, such as an agent
+// reply: line feeds and tabulations stay as they are, so the layout survives, and
+// every other control or bidirectional control is written as its escape. Lipgloss
+// turns a tabulation into spaces when it renders, so a kept tabulation moves nothing.
+func EscapeLines(text string) Printed {
+	return Printed{text: escapeControls(text, true)}
 }
 
 // String returns the escaped text, ready to paint.
@@ -44,13 +53,15 @@ func (p Printed) String() string {
 	return p.text
 }
 
-func escapeControls(text string) string {
+func escapeControls(text string, layout bool) string {
 	var out strings.Builder
 	for index := 0; index < len(text); {
 		char, size := utf8.DecodeRuneInString(text[index:])
 		switch {
 		case char == utf8.RuneError && size == 1:
 			writeByteEscape(&out, text[index])
+		case layout && isLayoutSpace(char):
+			out.WriteRune(char)
 		case isEscaped(char):
 			out.WriteString(controlEscape(char))
 		default:
@@ -65,6 +76,10 @@ func writeByteEscape(out *strings.Builder, value byte) {
 	out.WriteString(`\x`)
 	out.WriteByte(hexDigits[value>>nibbleShift])
 	out.WriteByte(hexDigits[value&nibbleMask])
+}
+
+func isLayoutSpace(char rune) bool {
+	return char == '\n' || char == '\t'
 }
 
 func isEscaped(char rune) bool {

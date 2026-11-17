@@ -71,7 +71,6 @@ func TestSummaryInFlightAtCloseIsReportedAsLostAndUnconfirmed(t *testing.T) {
 	sink.Close()
 	awaitSinkLog(t, sink)
 	line := unconfirmedLine(logs.String())
-	awaitSinkLog(t, sink)
 	if logField(line, "lost") != "1" || unconfirmedAtClose(t, logs.String()) < 1 {
 		t.Fatalf("Close logged %q, want lost=1 and unconfirmed>=1: the summary in flight already names the oversized warning, only the queued A is left for the bilan", line)
 	}

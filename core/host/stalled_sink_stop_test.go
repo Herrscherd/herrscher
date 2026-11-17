@@ -41,10 +41,17 @@ func TestStopWithAFrozenWriterLosesOrLogsTheHubOverrun(t *testing.T) {
 		t.Fatal("the hub overrun behind a frozen writer was neither counted lost nor reported unconfirmed at Close")
 	}
 	warnings.open()
-	time.Sleep(200 * time.Millisecond)
+	awaitSinkQuiet(t, h.sink)
 	if written := strings.Contains(warnings.out.String(), hubOverrunText(h, "")); written && lost > 0 {
 		t.Fatalf("the hub overrun was written and counted as lost=%d", lost)
 	}
+}
+
+func awaitSinkQuiet(t *testing.T, sink *warningSink) {
+	t.Helper()
+	waitUntil(t, "the warning sink to finish its last write", func() bool {
+		return ask(sink, func() bool { return sink.inflight == nil && len(sink.queue) == 0 })
+	})
 }
 
 func TestCloseWarningsLosesOrLogsAnUndrainedOverrun(t *testing.T) {
@@ -64,7 +71,7 @@ func TestCloseWarningsLosesOrLogsAnUndrainedOverrun(t *testing.T) {
 		t.Fatal("the undrained overrun behind a frozen writer was neither counted lost nor reported unconfirmed at Close")
 	}
 	warnings.open()
-	time.Sleep(200 * time.Millisecond)
+	awaitSinkQuiet(t, h.sink)
 	if written := strings.Contains(warnings.out.String(), hubOverrunText(h, "")); written && lost > 0 {
 		t.Fatalf("the undrained overrun was written and counted as lost=%d", lost)
 	}

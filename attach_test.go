@@ -342,13 +342,13 @@ func containsPair(argv []string, flag, value string) bool {
 
 func TestUnansweredSessionListIsNotRequestedTwiceInAGivenSecond(t *testing.T) {
 	asked := 0
-	a := &attachedDaemon{lang: i18n.English, send: func([]string) (string, error) {
+	attached := &attachedDaemon{lang: i18n.English, send: func([]string) (string, error) {
 		asked++
 		return "", errors.New("daemon down")
 	}}
 
-	a.Sessions()
-	a.Sessions()
+	attached.Sessions()
+	attached.Sessions()
 
 	if asked != 1 {
 		t.Fatalf("the daemon was asked %d times within one cache window, want 1", asked)

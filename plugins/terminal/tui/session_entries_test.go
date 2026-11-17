@@ -40,6 +40,15 @@ func TestOpenPanesRegistersAnAbsentSessionBeforeAnySessionsMsg(t *testing.T) {
 	assertShellRunsOnce(t, f, m)
 }
 
+func TestRememberSessionKeepsTheNameAlreadyKnownForAChannel(t *testing.T) {
+	f := &fakeBackend{fe: make(chan RoutedEvent, 1), sessions: []contracts.SessionInfo{{Name: "N1", ChannelID: "c1"}}}
+	m := startedModel(f)
+	m.ensureSessionTab(contracts.SessionInfo{ChannelID: "c1", Name: "N2"})
+	if got := m.sessionName("c1"); got != "N1" {
+		t.Fatalf("sessionName(c1) = %q, want the name already known for the channel", got)
+	}
+}
+
 func TestAnUnnamedTabAttachedWithANameLoadsItsHistory(t *testing.T) {
 	f := &fakeBackend{
 		fe:         make(chan RoutedEvent, 1),

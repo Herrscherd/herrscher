@@ -59,22 +59,29 @@ func newModelBypasses(t *testing.T) []string {
 	fset := token.NewFileSet()
 	var bypasses []string
 	for _, file := range files {
-		if file == "start_test.go" {
-			continue
-		}
 		parsed, parseErr := parser.ParseFile(fset, file, nil, 0)
 		if parseErr != nil {
 			t.Fatal(parseErr)
 		}
-		bypasses = append(bypasses, referencesToNewModel(fset, parsed)...)
+		bypasses = append(bypasses, referencesToNewModel(fset, parsed, exemptFunction(file))...)
 	}
 	return bypasses
 }
 
-func referencesToNewModel(fset *token.FileSet, file *ast.File) []string {
+func exemptFunction(file string) string {
+	if file == "start_test.go" {
+		return "startModel"
+	}
+	return ""
+}
+
+func referencesToNewModel(fset *token.FileSet, file *ast.File, exempt string) []string {
 	allowed := nilNewModelCallees(file)
 	var refs []string
 	ast.Inspect(file, func(node ast.Node) bool {
+		if fn, isFunc := node.(*ast.FuncDecl); isFunc && fn.Name.Name == exempt {
+			return false
+		}
 		if ident, isIdent := node.(*ast.Ident); isIdent && ident.Name == "newModel" && !allowed[ident] {
 			refs = append(refs, fset.Position(ident.Pos()).String())
 		}
@@ -122,9 +129,32 @@ func fixtures(be Backend) {
 	if parseErr != nil {
 		t.Fatal(parseErr)
 	}
-	refs := referencesToNewModel(fset, parsed)
+	refs := referencesToNewModel(fset, parsed, "")
 	want := []string{"snippet.go:4:7", "snippet.go:5:11", "snippet.go:7:6"}
 	if strings.Join(refs, " ") != strings.Join(want, " ") {
 		t.Fatalf("flagged = %q, want %q", refs, want)
+	}
+}
+
+func TestNewModelGuardExemptsOnlyTheNamedFunction(t *testing.T) {
+	const snippet = `package tui
+
+func startModel(backend Backend) {
+	_ = newModel(backend)
+}
+
+func other(be Backend) {
+	_ = newModel(be)
+}
+`
+	fset := token.NewFileSet()
+	parsed, parseErr := parser.ParseFile(fset, "start_test.go", snippet, 0)
+	if parseErr != nil {
+		t.Fatal(parseErr)
+	}
+	refs := referencesToNewModel(fset, parsed, "startModel")
+	want := []string{"start_test.go:8:6"}
+	if strings.Join(refs, " ") != strings.Join(want, " ") {
+		t.Fatalf("flagged = %q, want %q: only the exempt function may reference newModel", refs, want)
 	}
 }

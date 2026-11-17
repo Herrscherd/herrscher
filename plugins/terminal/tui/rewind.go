@@ -393,12 +393,7 @@ func sessionNamed(sessions []contracts.SessionInfo, name string) contracts.Sessi
 }
 
 func channelOfSession(sessions []contracts.SessionInfo, name string) string {
-	for index := range sessions {
-		if sessions[index].Name == name && sessions[index].ChannelID != "" {
-			return sessions[index].ChannelID
-		}
-	}
-	return ""
+	return sessionNamed(sessions, name).ChannelID
 }
 
 func (m *model) rewindView() string {

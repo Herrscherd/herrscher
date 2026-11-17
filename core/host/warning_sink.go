@@ -361,7 +361,7 @@ func (s *warningSink) joinWriters() {
 	}
 }
 
-func waitLogged(logged <-chan struct{}, budget <-chan struct{}) bool {
+func waitLogged(logged, budget <-chan struct{}) bool {
 	select {
 	case <-budget:
 		return false

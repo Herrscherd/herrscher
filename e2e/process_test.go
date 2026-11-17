@@ -98,7 +98,10 @@ func reapPinned(root string, set *pinSet, listed []processRef, grace time.Durati
 			return nil, nil, err
 		}
 	}
-	targets := set.all()
+	targets, liveErr := set.live()
+	if liveErr != nil {
+		return nil, nil, liveErr
+	}
 	interruptErr := signalAll(targets, syscall.SIGINT)
 	survivors, waitErr := waitFor(grace, func() ([]pinned, error) {
 		if err := set.collect(root); err != nil {
@@ -107,7 +110,7 @@ func reapPinned(root string, set *pinSet, listed []processRef, grace time.Durati
 		return set.live()
 	})
 	if waitErr != nil {
-		return nil, nil, errors.Join(interruptErr, waitErr)
+		return nil, nil, errors.Join(interruptErr, fmt.Errorf("cannot tell which processes stopped after SIGINT, still unverified: %s: %w", strings.Join(names(targets), "; "), waitErr))
 	}
 	stopped := namesExcept(targets, survivors)
 	if len(survivors) == 0 {

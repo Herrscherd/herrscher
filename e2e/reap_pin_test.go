@@ -27,7 +27,7 @@ func TestReapInstanceKillsNothingWhenTheSecondScanFails(t *testing.T) {
 		t.Fatalf("got %v, want the second scan to fail on the replaced environment", err)
 	}
 	if !stillRunningAfter(child, signalSettle) {
-		t.Fatal("the process was ended although the second scan failed: no SIGKILL after a failed second scan, the process must survive")
+		t.Fatal("the second scan failed, yet the process was stopped: it must keep running")
 	}
 }
 
@@ -60,6 +60,43 @@ func TestReapInstanceRefusesAMalformedInstanceWithoutSignalling(t *testing.T) {
 	}
 	if !stillRunning(carrier) {
 		t.Fatal("a process was signalled for a malformed instance id")
+	}
+}
+
+func TestReapInstanceCountsNothingForAProcessThatEndedBeforeTheInterrupt(t *testing.T) {
+	instance := newTestInstance(t)
+	root := t.TempDir()
+	running := exec.CommandContext(t.Context(), "sleep", "60")
+	if err := running.Start(); err != nil {
+		t.Fatal(err)
+	}
+	killAtEnd(t, running)
+	fakeProcess(t, root, running.Process.Pid, instanceEntry(instance)+"\x00")
+	endedAlready := func(candidate int) (int, error) {
+		fakeStatWithState(t, root, candidate, "Z", fakeStart)
+		return openPidfd(candidate)
+	}
+	stopped, survivors, err := reapInstanceWith(root, instance, reapGrace, endedAlready)
+	if err != nil || len(stopped) != 0 || len(survivors) != 0 {
+		t.Fatalf("got stopped %q, survivors %q, %v: a process that had already ended before the interrupt is neither stopped nor killed, so it counts for nothing", stopped, survivors, err)
+	}
+	if !stillRunningAfter(running, signalSettle) {
+		t.Fatal("a process that had already ended was signalled, so it was not left alone")
+	}
+}
+
+func TestReapInstanceCountsAProcessThatEndsAfterTheInterruptAsStopped(t *testing.T) {
+	instance := newTestInstance(t)
+	child := exec.CommandContext(t.Context(), "sh", "-c", "trap 'exit 0' INT; echo ready; while :; do sleep 0.05; done")
+	child.Env = []string{instanceEntry(instance)}
+	startReady(t, child)
+	t.Cleanup(func() { _ = child.Process.Kill() })
+	stopped, survivors, err := reapInstance(procRoot, instance, reapGrace)
+	if err != nil || len(survivors) != 0 || len(stopped) == 0 {
+		t.Fatalf("got stopped %q, survivors %q, %v: a process that received the interrupt and ended within the grace counts as stopped, and is never killed", stopped, survivors, err)
+	}
+	if waitErr := child.Wait(); waitErr != nil {
+		t.Fatalf("the process ended with %v, want its own exit with status 0 after the interrupt, not a signal", waitErr)
 	}
 }
 
@@ -100,7 +137,12 @@ func fakeProcess(t *testing.T, root string, pid int, environ string) {
 
 func fakeStat(t *testing.T, root string, pid int, start string) {
 	t.Helper()
-	line := strconv.Itoa(pid) + " (fake) S" + strings.Repeat(" 0", 18) + " " + start + "\n"
+	fakeStatWithState(t, root, pid, "S", start)
+}
+
+func fakeStatWithState(t *testing.T, root string, pid int, state, start string) {
+	t.Helper()
+	line := strconv.Itoa(pid) + " (fake) " + state + strings.Repeat(" 0", 18) + " " + start + "\n"
 	if err := os.WriteFile(filepath.Join(root, strconv.Itoa(pid), "stat"), []byte(line), 0o600); err != nil {
 		t.Fatal(err)
 	}

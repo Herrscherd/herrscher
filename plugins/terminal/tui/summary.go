@@ -137,8 +137,8 @@ func parseRuleList(text string) *ruleCount {
 
 func (m *model) panelFacets() ([]string, []string) {
 	vendorSet, gatewaySet := make(map[string]bool), make(map[string]bool)
-	for i := range m.sessionInfos {
-		info := &m.sessionInfos[i]
+	for name := range m.sessionInfos {
+		info := m.sessionInfos[name]
 		if info.Vendor != "" {
 			vendorSet[info.Vendor] = true
 		}

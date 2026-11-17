@@ -83,6 +83,11 @@ func TestChunksOfAnAlreadyShownReplyAreDroppedWithIt(t *testing.T) {
 	if got := conversationTexts(tb); !slices.Equal(got, want) {
 		t.Fatalf("conversation = %q, want %q: the chunks of a reply the history already holds must go with it", got, want)
 	}
+	for i := range tb.entries {
+		if tb.entries[i].streaming {
+			t.Fatalf("entry %d still streams after the history: the chunks of a reply the history already holds must not stay open", i)
+		}
+	}
 }
 
 func TestAQueueWithoutOverlapReplaysInFullAndInOrder(t *testing.T) {

@@ -38,7 +38,7 @@ func addSessionVerbs(reg *cli.Registry, lang languageSource, store *state.State,
 	seen := newSeenTable(time.Now())
 	return addVerbs(
 		reg,
-		seedVerb(sessions.messages, sessions.persists, store, layout, instID, seedCoord),
+		seedVerb(sessions.messages, sessions.oneShotPersists(), store, layout, instID, seedCoord),
 		sessionSendVerb(sessions),
 		sessionPickVerb(lang, approvals, sessions),
 		sessionInfoVerb(store, partDir, sessions, models),

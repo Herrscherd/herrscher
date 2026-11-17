@@ -67,7 +67,7 @@ func withOneShotSeedRuntime(ctx context.Context, runtime oneShotSeedRuntime) con
 func oneShotSeedRuntimeFrom(ctx context.Context, messages *hostMessages, persists *persistWrites) oneShotSeedRuntime {
 	runtime, ok := ctx.Value(oneShotSeedRuntimeKey{}).(oneShotSeedRuntime)
 	if !ok {
-		return oneShotSeedRuntime{messages: messages, persists: persists.child()}
+		return oneShotSeedRuntime{messages: messages, persists: persists}
 	}
 	return runtime
 }

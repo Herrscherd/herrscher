@@ -442,6 +442,10 @@ func newSessionTable(messages *hostMessages) *sessionTable {
 	return &sessionTable{m: make(map[string]*sessionDriver), messages: messages, persists: newPersistWrites()}
 }
 
+func (t *sessionTable) oneShotPersists() *persistWrites {
+	return t.persists.child()
+}
+
 func (t *sessionTable) register(name string, driver *sessionDriver) {
 	t.mu.Lock()
 	t.m[name] = driver

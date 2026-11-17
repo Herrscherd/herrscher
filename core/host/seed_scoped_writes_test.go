@@ -20,15 +20,23 @@ func TestOneShotDoesNotWaitForAnUnrelatedDaemonWrite(t *testing.T) {
 }
 
 func TestProductionOneShotRouteDoesNotWaitForAnUnrelatedDaemonWrite(t *testing.T) {
-	root := newPersistWrites()
-	end := root.begin()
+	sessions := newSessionTable(newHostMessages())
+	end := sessions.persists.begin()
 	t.Cleanup(end)
 
-	runtime := oneShotSeedRuntimeFrom(t.Context(), newHostMessages(), root)
+	oneShot := sessions.oneShotPersists()
 	started := time.Now()
-	awaitOneShotWrites(runtime.messages, runtime.persists, io.Discard, testLanguage())
+	awaitOneShotWrites(sessions.messages, oneShot, io.Discard, testLanguage())
 	if elapsed := time.Since(started); elapsed > time.Second {
-		t.Fatalf("the handoff and seed route waited %v for a daemon write it did not start, want none", elapsed)
+		t.Fatalf("the handoff brief waited %v for a daemon write it did not start, want none", elapsed)
+	}
+}
+
+func TestOneShotPersistsIsAChildOfTheDaemonTracker(t *testing.T) {
+	sessions := newSessionTable(newHostMessages())
+	oneShot := sessions.oneShotPersists()
+	if oneShot == sessions.persists || oneShot.parent != sessions.persists {
+		t.Fatal("the one-shot of the handoff brief must run on a child of the daemon tracker, not on the tracker itself")
 	}
 }
 

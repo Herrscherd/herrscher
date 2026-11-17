@@ -96,7 +96,12 @@ type hostWrapError struct {
 	cause    error
 }
 
-func (e *hostWrapError) Error() string { return e.render(e.messages, i18n.English) }
+func (e *hostWrapError) Error() string {
+	if e == nil {
+		return "<nil>"
+	}
+	return e.render(e.messages, i18n.English)
+}
 
 func (e *hostWrapError) Unwrap() error {
 	if e == nil {

@@ -468,8 +468,11 @@ func countingOwner() (*hostMessages, *int) {
 }
 
 func wrapChain(owner *hostMessages, depth int) error {
-	var err error
-	err = errors.New("disque plein")
+	err := errors.New("disque plein")
+	return wrapLevels(owner, err, depth)
+}
+
+func wrapLevels(owner *hostMessages, err error, depth int) error {
 	for range depth {
 		err = wrapHost(owner, err, "serve.load_state", nil)
 	}
@@ -503,11 +506,13 @@ func TestOneOwnerKeepsOneCatalogueAcrossEveryRenderPath(t *testing.T) {
 	expectLookups("localizeHostError in French over two levels", 8, func() {
 		frenchTop = localizeHostError(owner, i18n.French, top)
 	})
-	if got := englishTop.Error(); got != top.Error() {
-		t.Fatalf("localizeHostError in English rendered %q, want the english text %q", got, top.Error())
+	const wantEnglish = `herrscher serve: session "digest": load state: disque plein`
+	const wantFrench = `herrscher serve : session "digest" : chargement de l'état impossible : disque plein`
+	if got := englishTop.Error(); got != wantEnglish {
+		t.Fatalf("localizeHostError in English rendered %q, want %q", got, wantEnglish)
 	}
-	if got := frenchTop.Error(); got == "" || got == top.Error() {
-		t.Fatalf("localizeHostError in French rendered %q, want the french text, not the english %q", got, top.Error())
+	if got := frenchTop.Error(); got != wantFrench {
+		t.Fatalf("localizeHostError in French rendered %q, want %q", got, wantFrench)
 	}
 	expectLookups("Error() over two levels", 2, func() {
 		_ = top.Error()
@@ -557,6 +562,19 @@ func typedNilLocalizables() []error {
 		(*instanceIDMismatchError)(nil),
 		(*remoteSessionError)(nil),
 		(*remoteAccountError)(nil),
+	}
+}
+
+func TestNilLocalizableInsideAJoinKeepsTheTextOfItsBranches(t *testing.T) {
+	owner := newHostMessages()
+	cause := wrapHost(owner, errors.New("disque plein"), "serve.load_state", nil)
+	var nilWrap *hostWrapError
+	err := errors.Join(fmt.Errorf("a: %w", cause), nilWrap)
+	if got, want := localizeHostError(owner, i18n.English, err).Error(), "a: load state: disque plein\n<nil>"; got != want {
+		t.Fatalf("a typed nil under errors.Join rendered %q in English, want %q", got, want)
+	}
+	if got, want := localizeHostError(owner, i18n.French, err).Error(), "a: chargement de l'état impossible : disque plein\n<nil>"; got != want {
+		t.Fatalf("a typed nil under errors.Join rendered %q in French, want %q", got, want)
 	}
 }
 

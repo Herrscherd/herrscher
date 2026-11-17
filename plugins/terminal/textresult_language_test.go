@@ -16,7 +16,8 @@ func TestTUIFollowsTheClientLocaleWithoutPublishingIt(t *testing.T) {
 	t.Setenv(language.EnvVar, "")
 	t.Setenv("LANG", "fr_FR.UTF-8")
 	notice := contracts.NoticeResult(contracts.Notice{Code: contracts.CodeSessionClosed, Args: []contracts.Arg{contracts.Text("Name", "demo")}})
-	got, err := textResult(notice, nil)
+	term := &Terminal{messages: clitext.NewMessages()}
+	got, err := term.textResult(notice, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

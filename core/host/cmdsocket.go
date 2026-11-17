@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"sync"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -160,19 +161,28 @@ func socketAnswers(ctx context.Context, layout runtimedir.Layout, path string) b
 
 func acceptCommands(ctx context.Context, listener net.Listener, disp dispatcher, readTimeout time.Duration) <-chan struct{} {
 	released := make(chan struct{})
+	accepting := make(chan struct{})
+	var handlers sync.WaitGroup
 	go func() {
-		<-ctx.Done()
-		closeRead(listener)
-		close(released)
-	}()
-	go func() {
+		defer close(accepting)
 		for {
 			conn, err := listener.Accept()
 			if err != nil {
 				return
 			}
-			go handleCommandConn(ctx, conn, disp, readTimeout)
+			handlers.Add(1)
+			go func() {
+				defer handlers.Done()
+				handleCommandConn(ctx, conn, disp, readTimeout)
+			}()
 		}
+	}()
+	go func() {
+		<-ctx.Done()
+		closeRead(listener)
+		<-accepting
+		handlers.Wait()
+		close(released)
 	}()
 	return released
 }
@@ -202,6 +212,7 @@ func handleCommandConn(ctx context.Context, conn net.Conn, disp dispatcher, read
 	}
 	payload, marshalErr := json.Marshal(resp)
 	logCleanup(marshalErr)
+	logCleanup(conn.SetWriteDeadline(time.Now().Add(readTimeout)))
 	logWriteFailure(conn.Write(append(payload, '\n')))
 }
 

@@ -22,6 +22,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
@@ -542,6 +543,12 @@ func volatileFree(dir string) bool {
 	return true
 }
 
+const StopTimeout = 45 * time.Second
+
+func stopSeconds() string {
+	return strconv.Itoa(int(StopTimeout / time.Second))
+}
+
 func linuxPlan(cfg Config) (Plan, error) {
 	unit := filepath.Join(cfg.Home, ".config", "systemd", "user", linuxUnitName)
 	content := "[Unit]\n" +
@@ -555,7 +562,8 @@ func linuxPlan(cfg Config) (Plan, error) {
 		unitPathLine(cfg) + "\n" +
 		"ExecStart=" + joinQuoted(systemdQuote, cfg.BinPath, serveArgs(cfg)) + "\n" +
 		"Restart=always\n" +
-		"RestartSec=3\n\n" +
+		"RestartSec=3\n" +
+		"TimeoutStopSec=" + stopSeconds() + "s\n\n" +
 		"[Install]\n" +
 		"WantedBy=default.target\n"
 	cmds := []Command{
@@ -599,6 +607,7 @@ func macPlan(cfg Config) (Plan, error) {
 		"  </dict>\n" +
 		"  <key>RunAtLoad</key><true/>\n" +
 		"  <key>KeepAlive</key><true/>\n" +
+		"  <key>ExitTimeOut</key><integer>" + stopSeconds() + "</integer>\n" +
 		"  <key>StandardOutPath</key><string>" + xmlEscape(logPath) + "</string>\n" +
 		"  <key>StandardErrorPath</key><string>" + xmlEscape(logPath) + "</string>\n" +
 		"</dict>\n</plist>\n"

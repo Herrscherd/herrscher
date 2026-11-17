@@ -31,11 +31,7 @@ type hostMessages struct {
 }
 
 func newHostMessages() *hostMessages {
-	return newHostMessagesFrom(buildHostCatalog)
-}
-
-func newHostMessagesFrom(build func() (*i18n.Catalog, error)) *hostMessages {
-	return &hostMessages{catalog: sync.OnceValues(build)}
+	return &hostMessages{catalog: sync.OnceValues(buildHostCatalog)}
 }
 
 func buildHostCatalog() (*i18n.Catalog, error) {

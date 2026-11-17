@@ -35,8 +35,8 @@ func TestTheSameArgvIsRefusedOnOneSocketAndRunOnTheOther(t *testing.T) {
 	sessionSock := filepath.Join(dir, "s1.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	serveCommandSocket(ctx, isolatedRuntimeDir(t), operatorSock, asOperator{disp: h, lang: h.textLanguage()}, newHostMessages(), testLanguage(), io.Discard)
-	serveCommandSocket(ctx, isolatedRuntimeDir(t), sessionSock, asSession{disp: h, session: "s1", lang: h.sessionLanguageSource("s1")}, newHostMessages(), testLanguage(), io.Discard)
+	serveTestCommandSocket(ctx, t, isolatedRuntimeDir(t), operatorSock, asOperator{disp: h, lang: h.textLanguage()}, defaultCommandReadTimeout)
+	serveTestCommandSocket(ctx, t, isolatedRuntimeDir(t), sessionSock, asSession{disp: h, session: "s1", lang: h.sessionLanguageSource("s1")}, defaultCommandReadTimeout)
 
 	argv := []string{"approve", "rule", "allow Bash(*)"}
 

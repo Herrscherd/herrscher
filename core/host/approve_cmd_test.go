@@ -147,7 +147,7 @@ func TestSessionPolicyMergesAgentFile(t *testing.T) {
 		t.Fatalf("AddSession: %v", err)
 	}
 
-	pol, mode := sessionPolicy(newHostMessages(), newHostMessages(), testLanguage(), io.Discard, st, agent.NewStore(root), "s1")
+	pol, mode := sessionPolicy(newHostMessages(), testLanguage(), io.Discard, st, agent.NewStore(root), "s1")
 	if mode != approval.ModeStrict {
 		t.Fatalf("mode = %q, want the session's own stance", mode)
 	}
@@ -167,7 +167,7 @@ func TestSessionPolicyOfAnUnknownSession(t *testing.T) {
 	if err := st.AddApprovalRule("deny Bash(rm -rf*)"); err != nil {
 		t.Fatalf("AddApprovalRule: %v", err)
 	}
-	pol, mode := sessionPolicy(newHostMessages(), newHostMessages(), testLanguage(), io.Discard, st, nil, "never-created")
+	pol, mode := sessionPolicy(newHostMessages(), testLanguage(), io.Discard, st, nil, "never-created")
 	if mode != 0 {
 		t.Fatalf("mode = %v, want the unset mode of a session that is not there", mode)
 	}

@@ -87,7 +87,7 @@ func newApprovalRegistry(t *testing.T, approvalTab *approvalTable, menus *menuRe
 func startApprovalSocket(ctx context.Context, t *testing.T, reg *cli.Registry) string {
 	t.Helper()
 	sock := filepath.Join(t.TempDir(), "cmd.sock")
-	serveCommandSocket(ctx, isolatedRuntimeDir(t), sock, textDispatch(reg), newHostMessages(), testLanguage(), io.Discard)
+	serveTestCommandSocket(ctx, t, isolatedRuntimeDir(t), sock, textDispatch(reg), defaultCommandReadTimeout)
 	return sock
 }
 

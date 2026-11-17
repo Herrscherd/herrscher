@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net"
 	"time"
 
@@ -105,21 +104,6 @@ func cancellationOr(ctx context.Context, err error) error {
 		return ctxErr
 	}
 	return err
-}
-
-func serveCommandSocket(ctx context.Context, layout runtimedir.Layout, path string, disp dispatcher, messages *hostMessages, lang languageSource, warn io.Writer) {
-	if err := serveCommandSocketWithTimeout(ctx, layout, path, disp, defaultCommandReadTimeout); err != nil {
-		warnLive(messages, warn, lang, "warn.command_socket_listen", map[string]any{pathParam: path, detailParam: err})
-	}
-}
-
-func serveCommandSocketWithTimeout(ctx context.Context, layout runtimedir.Layout, path string, disp dispatcher, readTimeout time.Duration) error {
-	listener, err := openSocket(ctx, layout, path)
-	if err != nil {
-		return err
-	}
-	acceptCommands(ctx, listener, disp, readTimeout)
-	return nil
 }
 
 func openSocket(ctx context.Context, layout runtimedir.Layout, path string) (net.Listener, error) {

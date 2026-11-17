@@ -63,10 +63,10 @@ func withOneShotSeedRuntime(ctx context.Context, runtime oneShotSeedRuntime) con
 	return context.WithValue(ctx, oneShotSeedRuntimeKey{}, runtime)
 }
 
-func oneShotSeedRuntimeFrom(ctx context.Context) oneShotSeedRuntime {
+func oneShotSeedRuntimeFrom(ctx context.Context, messages *hostMessages) oneShotSeedRuntime {
 	runtime, ok := ctx.Value(oneShotSeedRuntimeKey{}).(oneShotSeedRuntime)
 	if !ok {
-		return oneShotSeedRuntime{messages: newHostMessages()}
+		return oneShotSeedRuntime{messages: messages}
 	}
 	return runtime
 }

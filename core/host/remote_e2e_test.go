@@ -101,7 +101,7 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 	provisioned := provisionE2EHost(ctx, t, layout, st, target, src)
 	initE2EProject(t, local)
 
-	p := newHostPlacer(newHostMessages(), newHostMessages(), testLanguage(), io.Discard, st, layout, "e2e", nil, func() string { return service.SourceVersion(ctx, src) })
+	p := newHostPlacer(newHostMessages(), testLanguage(), io.Discard, st, layout, "e2e", nil, func() string { return service.SourceVersion(ctx, src) })
 	repo := provisioned.Workspace + "/app"
 	t.Cleanup(func() {
 		_, rmErr := capture(context.Background(), runnerForTest(t, layout, provisioned), "rm", "-rf", repo)
@@ -311,7 +311,7 @@ func TestE2ERemoteCommandSocketForward(t *testing.T) {
 	const instID = "e2efwd"
 	local := layout.Socket("herrscher-e2e-daemon.sock")
 	remote := control.RemoteCommandSocketPath(remoteSocketDir(ctx, t, layout, target), instID, "e2e-session")
-	serveCommandSocket(ctx, layout, local, &fakeDispatcher{out: "reached the daemon"}, newHostMessages(), testLanguage(), io.Discard)
+	serveTestCommandSocket(ctx, t, layout, local, &fakeDispatcher{out: "reached the daemon"}, defaultCommandReadTimeout)
 
 	removeRemoteSocketOnExit(t, target, remote)
 	run := runner.SSH{Target: target, Forwards: []runner.Forward{{Remote: remote, Local: local}}}
@@ -353,7 +353,7 @@ func TestE2ETwoSessionsReachTheDaemonAtOnce(t *testing.T) {
 	}
 
 	local := layout.Socket("herrscher-e2e-two.sock")
-	serveCommandSocket(ctx, layout, local, &fakeDispatcher{out: "reached the daemon"}, newHostMessages(), testLanguage(), io.Discard)
+	serveTestCommandSocket(ctx, t, layout, local, &fakeDispatcher{out: "reached the daemon"}, defaultCommandReadTimeout)
 
 	sessions := []string{"e2e-one", "e2e-two"}
 	dir := remoteSocketDir(ctx, t, layout, target)

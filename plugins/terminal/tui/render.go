@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type transcriptLayout struct {
@@ -165,6 +166,38 @@ func renderEntry(item entry, width int, view view) string {
 	}
 }
 
+const proseTabStop = 4
+
+func expandProseTabs(text string) string {
+	if !strings.Contains(text, "\t") {
+		return text
+	}
+	lines := strings.Split(text, "\n")
+	for index, line := range lines {
+		lines[index] = expandLineTabs(line)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func expandLineTabs(line string) string {
+	if !strings.Contains(line, "\t") {
+		return line
+	}
+	segments := strings.Split(line, "\t")
+	var out strings.Builder
+	column := 0
+	for index, segment := range segments {
+		if index > 0 {
+			stop := proseTabStop - column%proseTabStop
+			out.WriteString(strings.Repeat(" ", stop))
+			column += stop
+		}
+		out.WriteString(segment)
+		column += ansi.StringWidth(segment)
+	}
+	return out.String()
+}
+
 func renderNotice(item entry, width int, view view) string {
 	text := view.st.glyphs.notice + " " + item.text
 	if !item.markdown {
@@ -177,11 +210,12 @@ func renderNotice(item entry, width int, view view) string {
 func renderAgent(item entry, width int, view view) string {
 	lead := view.st.glyphs.tool + " "
 	body := width - lipgloss.Width(blockIndent) - lipgloss.Width(lead)
+	prose := expandProseTabs(item.text)
 	var text string
 	if item.streaming {
-		text = wrapWith(view.st.text, item.text, body)
+		text = wrapWith(view.st.text, prose, body)
 	} else {
-		text = renderMarkdown(item.text, body, view)
+		text = renderMarkdown(prose, body, view)
 	}
 	lines := strings.Split(text, "\n")
 	for index := range lines {

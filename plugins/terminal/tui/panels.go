@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 const (
@@ -59,7 +60,7 @@ func oneLine(s string) string {
 	fields := strings.FieldsFunc(ansi.Strip(s), func(r rune) bool {
 		return unicode.IsControl(r) || unicode.IsSpace(r)
 	})
-	return strings.Join(fields, " ")
+	return termpaint.Escape(strings.Join(fields, " ")).String()
 }
 
 func subagentPanel(trans translator, agents []liveAgent, now time.Time, width int, styles uiStyles) []string {

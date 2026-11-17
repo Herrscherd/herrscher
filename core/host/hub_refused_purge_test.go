@@ -18,7 +18,7 @@ func TestRemovedSessionDropsItsRefusal(t *testing.T) {
 		if err := st.AddSession(state.Session{Name: name, ChannelID: "c1", Incarnation: name}); err != nil {
 			t.Fatal(err)
 		}
-		h.journalStart(name, errors.New("bridge refused"))
+		journalStartUnderLock(h, name, errors.New("bridge refused"))
 	}
 	if err := st.SetArchived("archived", true); err != nil {
 		t.Fatal(err)

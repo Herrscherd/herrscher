@@ -23,7 +23,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
-	"github.com/Herrscherd/herrscher/core/usage"
 )
 
 const defaultTeardownGrace = 5 * time.Second
@@ -39,6 +38,7 @@ type hub struct {
 	metrics  *metrics.Registry
 	warnings io.Writer
 	messages *hostMessages
+	sink     *warningSink
 
 	coordinator    contracts.Coordinator
 	eventPublisher func(session string, event contracts.Event)
@@ -60,6 +60,7 @@ type hub struct {
 
 	listenedSessions map[string]struct{}
 	closed           bool
+	deferred         []warningAwait
 
 	teardownGrace time.Duration
 	listen        func(ctx context.Context, path string) (net.Listener, error)
@@ -69,7 +70,8 @@ type hub struct {
 	refused       map[string]string
 	relaunching   map[string]struct{}
 	relaunchStop  chan struct{}
-	relaunches    sync.WaitGroup
+	relaunches    inflight
+	acceptFails   inflight
 	seedBackend   func(context.Context, state.Session) (contracts.Backend, error)
 	models        *ModelDiscovery
 
@@ -90,6 +92,8 @@ func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir str
 	for _, opt := range opts {
 		opt(created)
 	}
+	created.sink = newWarningSink(created.warnings, created.lostWarningLine, withStillRunningLine(created.writeStillRunningLine))
+	created.warnings = created.sink
 	if sup != nil {
 		sup.SetFailureSink(created.reportSessionFailure)
 		created.startBridge = sup.StartWithin
@@ -97,6 +101,14 @@ func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir str
 		created.stopping = sup.Stopping
 	}
 	return created
+}
+
+func (h *hub) lostWarningLine(lost int) string {
+	return h.messages.text(h.textLanguage()(), "warn.warnings_dropped", map[string]any{countParam: lost})
+}
+
+func (h *hub) writeStillRunningLine() string {
+	return h.messages.text(h.textLanguage()(), "warn.write_still_running", nil)
 }
 
 func (h *hub) operatorCommands() asOperator {
@@ -122,43 +134,6 @@ func sessionFailureKey(stage supervisor.Stage) string {
 		return "session.prepare_failed"
 	}
 	return "session.launch_failed"
-}
-
-func eventTap(publish func(string, contracts.Event), session string) func(contracts.Event) {
-	if publish == nil {
-		return nil
-	}
-	return func(e contracts.Event) { publish(session, e) }
-}
-
-func (h *hub) liveSink(ctx context.Context, sess state.Session) sessionSink {
-	return sessionSink{
-		Resume: func(tok string) {
-			h.keepResumeToken(sess.Name, tok)
-		},
-		TurnOpened: func(turnID string) {
-			h.openTurnMark(sess.Name, turnID)
-		},
-		TurnSettled: func() {
-			h.clearTurnMark(sess.Name)
-		},
-		Project: func(p string) {
-			if err := h.st.SetProjectPinned(sess.Name, p); err != nil {
-				warnLive(h.messages, h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_project_pin", map[string]any{nameParam: sess.Name, detailParam: err})
-			}
-		},
-		Transcript: func(e state.TranscriptEntry) {
-			if err := state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), e); err != nil {
-				warnLive(h.messages, h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
-			}
-		},
-		Checkpoint: func(turnID, text string) {
-			h.takeCheckpoint(ctx, sess, turnID, text)
-		},
-		Usage: func(records []usage.Record) {
-			h.recordUsage(sess, records)
-		},
-	}
 }
 
 func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, error) {

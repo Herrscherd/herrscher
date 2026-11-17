@@ -2217,10 +2217,6 @@
     "other": "Turn finished"
   },
   {
-    "id": "tui.notify.approval_pending",
-    "other": "Approval pending"
-  },
-  {
     "id": "tui.notify.delivery_none",
     "other": "window active, nothing sent"
   },

@@ -20,8 +20,7 @@ func TestRetirementWaitingForTheLockKeepsItsGrace(t *testing.T) {
 	for name, setup := range cases {
 		t.Run(name, func(t *testing.T) {
 			var warnings bytes.Buffer
-			h := newTestHub(t)
-			h.warnings = &warnings
+			h := newTestHub(t, withWarnings(&warnings))
 			h.teardownGrace = lockWaitGrace
 			op, joined := setup(t, h)
 

@@ -62,7 +62,7 @@ func copyText(trans translator, entries []entry, target string) string {
 	case copyReply:
 		for index := len(entries) - 1; index >= 0; index-- {
 			if entries[index].role == roleAgent {
-				return strings.TrimSpace(entries[index].text)
+				return strings.TrimSpace(entries[index].raw)
 			}
 		}
 		return ""
@@ -86,7 +86,7 @@ func renderCopy(trans translator, entries []entry) string {
 	var blocks []string
 	for index := range entries {
 		item := &entries[index]
-		text := strings.TrimSpace(item.text)
+		text := strings.TrimSpace(item.raw)
 		if text == "" {
 			continue
 		}

@@ -1,7 +1,6 @@
 package host
 
 import (
-	"bytes"
 	"io"
 	"path/filepath"
 	"strings"
@@ -16,7 +15,7 @@ func TestAStuckUnderLockStopWarnsOncePerSession(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 		names := []string{"warn-a", "warn-b", "warn-c"}
-		var warnings bytes.Buffer
+		var warnings lockedBuffer
 		h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()), withWarnings(&warnings))
 		h.runtime = isolatedRuntimeDir(t)
 		h.teardownGrace = reconcileGrace
@@ -39,6 +38,7 @@ func TestAStuckUnderLockStopWarnsOncePerSession(t *testing.T) {
 		batch := h.reconcile(t.Context())
 		batch.await(h)
 
+		awaitSinkQuiet(t, h.sink)
 		out := warnings.String()
 		if lines := strings.Count(out, "\n"); lines != len(names) {
 			t.Fatalf("three stuck stops of sessions archived during start wrote %d overrun lines, want one per session (%d):\n%s", lines, len(names), out)

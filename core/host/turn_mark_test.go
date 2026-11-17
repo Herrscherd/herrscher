@@ -1,7 +1,6 @@
 package host
 
 import (
-	"bytes"
 	"io"
 	"os"
 	"path/filepath"
@@ -100,7 +99,7 @@ func stateFailingAfter(t *testing.T, sess state.Session) *state.State {
 	return st
 }
 
-func hubWarningInto(t *testing.T, st *state.State, partDir string, warnings *bytes.Buffer) *hub {
+func hubWarningInto(t *testing.T, st *state.State, partDir string, warnings *lockedBuffer) *hub {
 	t.Helper()
 	h := newHub(st, nil, nil, partDir, nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()), withWarnings(warnings))
 	h.runtime = isolatedRuntimeDir(t)
@@ -109,34 +108,37 @@ func hubWarningInto(t *testing.T, st *state.State, partDir string, warnings *byt
 }
 
 func TestKeepResumeTokenWarnsOnceWhenItCannotPersist(t *testing.T) {
-	var warnings bytes.Buffer
+	warnings := &lockedBuffer{}
 	st := stateFailingAfter(t, state.Session{Name: "main"})
-	h := hubWarningInto(t, st, t.TempDir(), &warnings)
+	h := hubWarningInto(t, st, t.TempDir(), warnings)
 	h.keepResumeToken("main", "tok")
+	awaitSinkQuiet(t, h.sink)
 	if n := strings.Count(warnings.String(), "\n"); n != 1 || !strings.Contains(warnings.String(), `"main"`) {
 		t.Fatalf("warnings = %q, want exactly one line naming the session", warnings.String())
 	}
 }
 
 func TestOpenTurnMarkWarnsWhenItCannotWrite(t *testing.T) {
-	var warnings bytes.Buffer
+	warnings := &lockedBuffer{}
 	st := stateFailingAfter(t, state.Session{Name: "main"})
-	h := hubWarningInto(t, st, t.TempDir(), &warnings)
+	h := hubWarningInto(t, st, t.TempDir(), warnings)
 	h.openTurnMark("main", "turn-1")
+	awaitSinkQuiet(t, h.sink)
 	if n := strings.Count(warnings.String(), "\n"); n != 1 || !strings.Contains(warnings.String(), `"main"`) {
 		t.Fatalf("warnings = %q, want exactly one line naming the session", warnings.String())
 	}
 }
 
 func TestAnnounceInterruptedTurnWarnsWhenTheMarkCannotBeCleared(t *testing.T) {
-	var warnings bytes.Buffer
+	warnings := &lockedBuffer{}
 	st := stateFailingAfter(t, state.Session{Name: "main", InterruptedTurn: "turn-1"})
 	partDir := t.TempDir()
-	h := hubWarningInto(t, st, partDir, &warnings)
+	h := hubWarningInto(t, st, partDir, warnings)
 	h.announceInterruptedTurn(state.Session{Name: "main", InterruptedTurn: "turn-1"})
 	if entries := state.ReadTranscript(state.TranscriptPath(partDir, "main"), 10); len(entries) != 1 {
 		t.Fatalf("transcript = %+v, want the notice written once", entries)
 	}
+	awaitSinkQuiet(t, h.sink)
 	if n := strings.Count(warnings.String(), "\n"); n != 1 || !strings.Contains(warnings.String(), `"main"`) {
 		t.Fatalf("warnings = %q, want exactly one line naming the session", warnings.String())
 	}
@@ -149,7 +151,7 @@ func TestResumeOfAnArchivedSessionAnnouncesItsMark(t *testing.T) {
 		t.Fatal(err)
 	}
 	partDir := t.TempDir()
-	h := hubWarningInto(t, st, partDir, &bytes.Buffer{})
+	h := hubWarningInto(t, st, partDir, &lockedBuffer{})
 	if err := h.Resume(name); err != nil {
 		t.Fatalf("Resume: %v", err)
 	}

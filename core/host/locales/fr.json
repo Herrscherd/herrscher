@@ -670,6 +670,22 @@
     "other": "herrscher serve : session \"{{.Name}}\" : l'arrêt est toujours en cours après {{.Grace}}, le nom est libéré quand même"
   },
   {
+    "id": "warn.hub_teardown_overrun",
+    "description": "The hub stop does not finish within its grace period and goes on anyway; work or warnings may still complete after it",
+    "other": "herrscher serve : l'arrêt n'a pas fini dans {{.Grace}}, du travail en cours ou des avertissements peuvent encore se terminer après lui, il continue quand même"
+  },
+  {
+    "id": "warn.warnings_dropped",
+    "description": "A summary line: Count warnings were dropped while the output was blocked, written once it unblocks",
+    "one": "herrscher serve : 1 avertissement perdu pendant que la sortie était bloquée",
+    "other": "herrscher serve : {{.Count}} avertissements perdus pendant que la sortie était bloquée"
+  },
+  {
+    "id": "warn.write_still_running",
+    "description": "A warning write was still running when the warning sink closed; its outcome may be logged after the close returns",
+    "other": "herrscher serve : une écriture d'avertissement tournait encore au retour de Close"
+  },
+  {
     "id": "warn.session_seed_transcript",
     "description": "A transcript entry of a seeded session could not be written",
     "other": "herrscher serve : session \"{{.Name}}\" : entrée de transcription initiale perdue : {{.Detail}}"

@@ -190,7 +190,33 @@ func lockOrAttach(ctx context.Context, messages *host.Messages, layout host.Runt
 }
 
 func attachFailureText(messages *host.Messages, lang i18n.Language, err error) string {
-	return render(lang, clitext.ServeAttachFailed, clitext.Params{clitext.ParamErr: messages.Localize(lang, err).Error()})
+	return render(lang, clitext.ServeAttachFailed, attachFailureParams(messages, lang, err))
+}
+
+func attachFailureParams(messages *host.Messages, lang i18n.Language, err error) clitext.Params {
+	return escapedParam(clitext.ParamErr, messages.Localize(lang, err).Error())
+}
+
+type gatewayStatus interface {
+	Unconfigured() []string
+	AwaitPending(ctx context.Context, window time.Duration, note func(failures []string, in time.Duration)) int
+	Failures() []string
+}
+
+func gatewayNotices(ctx context.Context, hub gatewayStatus, emit func(clitext.Key, clitext.Params)) {
+	for _, f := range hub.Unconfigured() {
+		emit(clitext.ServeGatewaySkipped, escapedParam(clitext.ParamFailure, f))
+	}
+	hub.AwaitPending(ctx, host.GatewayRetryWindow, func(failures []string, wait time.Duration) {
+		for _, f := range failures {
+			params := escapedParam(clitext.ParamFailure, f)
+			params[clitext.ParamWait] = wait.String()
+			emit(clitext.ServeGatewayRetrying, params)
+		}
+	})
+	for _, f := range hub.Failures() {
+		emit(clitext.ServeGatewayUnavailable, escapedParam(clitext.ParamFailure, f))
+	}
 }
 
 func startGateways(ctx context.Context, lang i18n.Language) ([]host.Deps, []contracts.Gateway, contracts.Foreground, []contracts.Cmd, error) {
@@ -198,17 +224,9 @@ func startGateways(ctx context.Context, lang i18n.Language) ([]host.Deps, []cont
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	for _, f := range hub.Unconfigured() {
-		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeGatewaySkipped, clitext.Params{clitext.ParamFailure: f}))
-	}
-	hub.AwaitPending(ctx, host.GatewayRetryWindow, func(failures []string, wait time.Duration) {
-		for _, f := range failures {
-			fmt.Fprintln(os.Stderr, render(lang, clitext.ServeGatewayRetrying, clitext.Params{clitext.ParamFailure: f, clitext.ParamWait: wait.String()}))
-		}
+	gatewayNotices(ctx, hub, func(key clitext.Key, params clitext.Params) {
+		fmt.Fprintln(os.Stderr, render(lang, key, params))
 	})
-	for _, f := range hub.Failures() {
-		fmt.Fprintln(os.Stderr, render(lang, clitext.ServeGatewayUnavailable, clitext.Params{clitext.ParamFailure: f}))
-	}
 	var raw []host.Deps
 	for _, kind := range hub.Kinds() {
 		if set, ok := hub.Get(kind); ok {
@@ -323,8 +341,7 @@ func runRegistryVerb(ctx context.Context, layout host.RuntimeLayout, verb string
 		return err
 	}
 	if out != "" {
-		_, err := fmt.Fprintln(os.Stdout, out)
-		return err
+		return writeCLIText(os.Stdout, out)
 	}
 	return nil
 }
@@ -406,7 +423,7 @@ func runPromptWith(ctx context.Context, dispatcher verbDispatcher, name, prompt 
 	res, err := dispatcher.Dispatch(ctx, argv)
 	if err != nil {
 		if partial := cli.PartialOutputOf(err); partial != "" {
-			if _, werr := fmt.Fprintln(stdout, partial); werr != nil {
+			if werr := writeCLIText(stdout, partial); werr != nil {
 				return werr
 			}
 		}
@@ -418,7 +435,7 @@ func runPromptWith(ctx context.Context, dispatcher verbDispatcher, name, prompt 
 		return err
 	}
 	if reply != "" {
-		if _, err := fmt.Fprintln(stdout, reply); err != nil {
+		if err := writeCLIText(stdout, reply); err != nil {
 			return err
 		}
 	}

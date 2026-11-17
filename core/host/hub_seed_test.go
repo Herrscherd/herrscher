@@ -12,7 +12,7 @@ import (
 
 func TestHubDispatchSeedAllowsCoordinatorReentry(t *testing.T) {
 	reg := &cli.Registry{}
-	h := &hub{messages: newHostMessages(), warnings: io.Discard, reg: reg}
+	h := testHub(&hub{warnings: io.Discard, reg: reg})
 	if err := reg.Add(contracts.New("session", "seed").
 		Do(func(context.Context, contracts.Input) (contracts.Result, error) {
 			h.dispatchMu.Lock()

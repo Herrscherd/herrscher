@@ -115,20 +115,25 @@ func answerGitAskpass(args []string) int {
 		prompt = args[1]
 	}
 	out := errwriter.New(os.Stdout)
-	writeGitCredential(prompt, out)
+	if err := writeGitCredential(prompt, out); err != nil {
+		return 1
+	}
 	return writeFailureCode(out)
 }
 
-func writeGitCredential(prompt string, out *errwriter.Writer) {
+func writeGitCredential(prompt string, out *errwriter.Writer) error {
+	_, err := out.Write([]byte(gitCredential(prompt) + "\n"))
+	return err
+}
+
+func gitCredential(prompt string) string {
 	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(prompt)), "username") {
-		out.Println("x-access-token")
-		return
+		return "x-access-token"
 	}
 	if t := os.Getenv("GITHUB_TOKEN"); t != "" {
-		out.Println(t)
-		return
+		return t
 	}
-	out.Println(os.Getenv("GH_TOKEN"))
+	return os.Getenv("GH_TOKEN")
 }
 
 func loadHostEnv() error {
@@ -147,7 +152,7 @@ func loadHostEnv() error {
 		if explicit {
 			return err
 		}
-		fmt.Fprintln(os.Stderr, render(lang, clitext.EnvContinuing, clitext.Params{clitext.ParamErr: err.Error()}))
+		fmt.Fprintln(os.Stderr, cliErrorLine(render(lang, clitext.EnvContinuing, clitext.Params{clitext.ParamErr: err.Error()})))
 	}
 	return nil
 }
@@ -221,12 +226,13 @@ func runCommand(ctx context.Context, layout host.RuntimeLayout, cmd string, args
 }
 
 func runForwarded(ctx context.Context, layout host.RuntimeLayout, cmd string, args []string) error {
+	messages := host.NewMessages()
 	lang := clitext.ClientLanguage()
 	out, code, derr := dispatchUnknown(ctx, lang, cmd, args, func(ctx context.Context, argv []string) (string, bool, error) {
 		return forwardUnknownVerb(ctx, layout, argv)
 	})
 	if code != 0 {
-		fmt.Fprintln(os.Stderr, forwardedFailureLine(lang, derr))
+		fmt.Fprintln(os.Stderr, forwardedFailureLine(messages, lang, derr))
 		if err := usage(lang); err != nil {
 			return err
 		}
@@ -238,12 +244,11 @@ func runForwarded(ctx context.Context, layout host.RuntimeLayout, cmd string, ar
 	if out == "" {
 		return nil
 	}
-	_, err := fmt.Fprintln(os.Stdout, out)
-	return err
+	return writeCLIText(os.Stdout, out)
 }
 
-func forwardedFailureLine(lang i18n.Language, derr error) string {
-	return render(lang, clitext.ErrorLine, clitext.Params{clitext.ParamMessage: host.NewMessages().Localize(lang, derr).Error()})
+func forwardedFailureLine(messages *host.Messages, lang i18n.Language, derr error) string {
+	return cliErrorLine(render(lang, clitext.ErrorLine, clitext.Params{clitext.ParamMessage: messages.Localize(lang, derr).Error()}))
 }
 
 type exitStatusError struct {
@@ -255,6 +260,10 @@ func (s exitStatusError) Error() string {
 }
 
 func reportError(err error) int {
+	return reportErrorTo(os.Stderr, err)
+}
+
+func reportErrorTo(stderr io.Writer, err error) int {
 	if err == nil {
 		return 0
 	}
@@ -262,7 +271,10 @@ func reportError(err error) int {
 	if errors.As(err, &status) {
 		return status.code
 	}
-	fmt.Fprintln(os.Stderr, render(clitext.ClientLanguage(), clitext.ErrorLine, clitext.Params{clitext.ParamMessage: err.Error()}))
+	line := cliErrorLine(render(clitext.ClientLanguage(), clitext.ErrorLine, clitext.Params{clitext.ParamMessage: err.Error()}))
+	if _, writeErr := fmt.Fprintln(stderr, line); writeErr != nil {
+		slog.Warn("write error line", "err", writeErr)
+	}
 	return 1
 }
 
@@ -307,8 +319,7 @@ func runWhoami(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintln(os.Stdout, out)
-	return err
+	return writeCLIText(os.Stdout, out)
 }
 
 func writeFailureCode(w *errwriter.Writer) int {
@@ -320,7 +331,7 @@ func writeFailureCode(w *errwriter.Writer) int {
 
 func render(lang i18n.Language, key clitext.Key, params clitext.Params) string {
 	translator := clitext.For(lang)
-	text := translator.Text(key, params)
+	text := translator.Text(key, clitext.Printable(params))
 	if err := translator.Err(); err != nil {
 		slog.Error("render message", "key", key, "err", err)
 	}

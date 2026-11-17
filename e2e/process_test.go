@@ -294,8 +294,8 @@ func unkilledError(unkilled []pinned) error {
 	return fmt.Errorf("processes survived SIGKILL: %s", strings.Join(names(unkilled), "; "))
 }
 
-func environOf(pid int) ([]byte, error) {
-	data, err := os.ReadFile(filepath.Join(procRoot, strconv.Itoa(pid), "environ"))
+func environOf(root string, pid int) ([]byte, error) {
+	data, err := os.ReadFile(filepath.Join(root, strconv.Itoa(pid), "environ"))
 	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ESRCH) {
 		return nil, nil
 	}

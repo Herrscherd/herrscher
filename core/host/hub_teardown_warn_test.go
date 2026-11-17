@@ -1,7 +1,6 @@
 package host
 
 import (
-	"bytes"
 	"io"
 	"path/filepath"
 	"strings"
@@ -16,7 +15,7 @@ func TestAStuckTeardownWarnsOnceForItsWindow(t *testing.T) {
 	if err := st.AddSession(state.Session{Name: "slow", ChannelID: "c1", Incarnation: "slow"}); err != nil {
 		t.Fatal(err)
 	}
-	var warnings bytes.Buffer
+	var warnings lockedBuffer
 	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()), withWarnings(&warnings))
 	h.runtime = isolatedRuntimeDir(t)
 	h.teardownGrace = 30 * time.Millisecond
@@ -33,6 +32,7 @@ func TestAStuckTeardownWarnsOnceForItsWindow(t *testing.T) {
 	}
 
 	h.goDead("slow")
+	awaitSinkQuiet(t, h.sink)
 
 	if got := strings.Count(warnings.String(), "\n"); got != 1 {
 		t.Fatalf("a stuck teardown wrote %d overrun warnings, want 1:\n%s", got, warnings.String())

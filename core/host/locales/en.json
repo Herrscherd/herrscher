@@ -670,6 +670,22 @@
     "other": "herrscher serve: session \"{{.Name}}\": teardown still running after {{.Grace}}, releasing the name anyway"
   },
   {
+    "id": "warn.hub_teardown_overrun",
+    "description": "The hub stop does not finish within its grace period and goes on anyway; work or warnings may still complete after it",
+    "other": "herrscher serve: stop did not finish within {{.Grace}}, in-flight work or warnings may still complete after it, stopping anyway"
+  },
+  {
+    "id": "warn.warnings_dropped",
+    "description": "A summary line: Count warnings were dropped while the output was blocked, written once it unblocks",
+    "one": "herrscher serve: 1 warning lost while the output was blocked",
+    "other": "herrscher serve: {{.Count}} warnings lost while the output was blocked"
+  },
+  {
+    "id": "warn.write_still_running",
+    "description": "A warning write was still running when the warning sink closed; its outcome may be logged after the close returns",
+    "other": "herrscher serve: a warning write was still running when Close returned"
+  },
+  {
     "id": "warn.session_seed_transcript",
     "description": "A transcript entry of a seeded session could not be written",
     "other": "herrscher serve: session \"{{.Name}}\": seed transcript entry dropped: {{.Detail}}"

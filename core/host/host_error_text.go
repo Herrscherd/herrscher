@@ -54,6 +54,8 @@ func hostErrorKeys() []hostErrorKey {
 		{errNoCompactorPlugin, "cli.host.fault.no_compactor_plugin"},
 		{errCompactorSettings, "cli.host.fault.compactor_settings"},
 		{errCompactQueueFull, "cli.host.fault.compact_queue_full"},
+		{errWarningAbandoned, "cli.host.fault.warning_abandoned"},
+		{errWarningLate, "cli.host.fault.warning_late"},
 		{errRequestNameMissing, "cli.host.fault.request_name_missing"},
 		{errApproveModeUsage, "cli.host.fault.approve_mode_usage"},
 		{errApproveAskUnauthenticated, "cli.host.fault.approve_ask_unauthenticated"},

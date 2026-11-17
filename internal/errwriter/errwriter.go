@@ -4,6 +4,8 @@ package errwriter
 import (
 	"fmt"
 	"io"
+
+	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
 // Writer records the first error of the writes made through it and skips the rest.
@@ -17,20 +19,21 @@ func New(w io.Writer) *Writer {
 	return &Writer{w: w}
 }
 
-// Println writes the operands like fmt.Println unless an earlier write failed.
+// Println writes the operands like fmt.Println, escaped for the terminal, unless an earlier write failed.
 func (w *Writer) Println(args ...any) {
-	if w.err != nil {
-		return
-	}
-	_, w.err = fmt.Fprintln(w.w, args...)
+	w.writeEscaped(fmt.Sprintln(args...))
 }
 
-// Printf writes like fmt.Printf unless an earlier write failed.
+// Printf writes like fmt.Printf, escaped for the terminal, unless an earlier write failed.
 func (w *Writer) Printf(format string, args ...any) {
+	w.writeEscaped(fmt.Sprintf(format, args...))
+}
+
+func (w *Writer) writeEscaped(text string) {
 	if w.err != nil {
 		return
 	}
-	_, w.err = fmt.Fprintf(w.w, format, args...)
+	_, w.err = io.WriteString(w.w, termpaint.EscapeLines(text).String())
 }
 
 // Err returns the first write error, or nil.

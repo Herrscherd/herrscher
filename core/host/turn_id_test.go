@@ -127,7 +127,7 @@ func TestTurnRecordsUserAndAssistantWithTheTurnID(t *testing.T) {
 	if !ok {
 		t.Fatal("prepareTurn refused the turn")
 	}
-	fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "salut", Done: true}
+	fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "salut", Done: true, TokensIn: 1000, Tokens: 500}
 	d.runTurn(ctx, event, guard)
 
 	if len(entries) != 2 {
@@ -138,5 +138,8 @@ func TestTurnRecordsUserAndAssistantWithTheTurnID(t *testing.T) {
 	}
 	if entries[1].Role != "assistant" || entries[1].Text != "salut" || entries[1].TurnID != "turn-9" {
 		t.Fatalf("assistant entry = %+v, want role assistant, text salut, TurnID turn-9", entries[1])
+	}
+	if want := (1000*3.0 + 500*15.0) / 1_000_000; entries[1].Cost != want {
+		t.Fatalf("assistant cost = %v, want %v priced at the session's terms", entries[1].Cost, want)
 	}
 }

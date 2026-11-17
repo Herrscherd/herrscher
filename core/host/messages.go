@@ -96,11 +96,16 @@ type hostWrapError struct {
 	cause    error
 }
 
-func (e hostWrapError) Error() string { return e.render(e.messages, i18n.English) }
+func (e *hostWrapError) Error() string { return e.render(e.messages, i18n.English) }
 
-func (e hostWrapError) Unwrap() error { return e.cause }
+func (e *hostWrapError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.cause
+}
 
-func (e hostWrapError) render(messages *hostMessages, lang i18n.Language) string {
+func (e *hostWrapError) render(messages *hostMessages, lang i18n.Language) string {
 	params := make(map[string]any, len(e.params)+1)
 	maps.Copy(params, e.params)
 	params[detailParam] = errorTextIn(messages, lang, e.cause)
@@ -174,7 +179,7 @@ func isLocalized(err error) bool {
 }
 
 func wrapHost(messages *hostMessages, cause error, key string, params map[string]any) error {
-	return hostWrapError{messages: messages, key: key, params: params, cause: cause}
+	return &hostWrapError{messages: messages, key: key, params: params, cause: cause}
 }
 
 func renderableParams(messages *hostMessages, lang i18n.Language, params map[string]any) map[string]any {

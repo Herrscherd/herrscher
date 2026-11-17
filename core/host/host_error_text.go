@@ -139,10 +139,10 @@ func holdsNilLocalizable(err error) bool {
 	if localizable, found := errors.AsType[localizableError](err); found && isNilLocalizable(localizable) {
 		return true
 	}
-	switch wrapped := err.(type) {
-	case interface{ Unwrap() error }:
+	if wrapped, found := errors.AsType[interface{ Unwrap() error }](err); found {
 		return holdsNilLocalizable(wrapped.Unwrap())
-	case interface{ Unwrap() []error }:
+	}
+	if wrapped, found := errors.AsType[interface{ Unwrap() []error }](err); found {
 		return slices.ContainsFunc(wrapped.Unwrap(), holdsNilLocalizable)
 	}
 	return false

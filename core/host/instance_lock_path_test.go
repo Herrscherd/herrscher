@@ -57,7 +57,7 @@ func TestInstanceLockRefusesASymlinkAtItsPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := lockInstance(newHostMessages(), layout, "t8")
-	wrapped, ok := errors.AsType[hostWrapError](err)
+	wrapped, ok := errors.AsType[*hostWrapError](err)
 	if !ok || wrapped.key != "lock.unsafe" {
 		t.Fatalf("lockInstance over a symlink = %v, want the lock.unsafe error", err)
 	}

@@ -7,15 +7,15 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
 
-type outerWithoutCauseText struct{ cause error }
+type outerWithoutCauseTextError struct{ cause error }
 
-func (outerWithoutCauseText) Error() string { return "outer" }
+func (outerWithoutCauseTextError) Error() string { return "outer" }
 
-func (e outerWithoutCauseText) Unwrap() error { return e.cause }
+func (e outerWithoutCauseTextError) Unwrap() error { return e.cause }
 
 func TestErrorTextFallsBackToEnglishWhenTheLocalizedPartIsNotInTheText(t *testing.T) {
 	cause := wrapHost(newHostMessages(), errors.New("cause"), "warn.health_server", map[string]any{detailParam: "x"})
-	err := outerWithoutCauseText{cause: cause}
+	err := outerWithoutCauseTextError{cause: cause}
 	if got := errorTextIn(newHostMessages(), i18n.French, err); got != "outer" {
 		t.Fatalf("errorTextIn(French) = %q, want the english text %q unchanged", got, "outer")
 	}

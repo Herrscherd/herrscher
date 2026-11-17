@@ -468,7 +468,8 @@ func countingOwner() (*hostMessages, *int) {
 }
 
 func wrapChain(owner *hostMessages, depth int) error {
-	var err error = errors.New("disque plein")
+	var err error
+	err = errors.New("disque plein")
 	for range depth {
 		err = wrapHost(owner, err, "serve.load_state", nil)
 	}
@@ -495,12 +496,19 @@ func TestOneOwnerKeepsOneCatalogueAcrossEveryRenderPath(t *testing.T) {
 		warnTo(owner, io.Discard, i18n.French, "warn.session_start", map[string]any{nameParam: "alpha", detailParam: errors.New("boom")})
 	})
 	top := wrapHost(owner, wrapChain(owner, 1), "warn.session_start", map[string]any{nameParam: "digest"})
+	var englishTop, frenchTop error
 	expectLookups("localizeHostError in English over two levels", 2, func() {
-		localizeHostError(owner, i18n.English, top)
+		englishTop = localizeHostError(owner, i18n.English, top)
 	})
 	expectLookups("localizeHostError in French over two levels", 8, func() {
-		localizeHostError(owner, i18n.French, top)
+		frenchTop = localizeHostError(owner, i18n.French, top)
 	})
+	if got := englishTop.Error(); got != top.Error() {
+		t.Fatalf("localizeHostError in English rendered %q, want the english text %q", got, top.Error())
+	}
+	if got := frenchTop.Error(); got == "" || got == top.Error() {
+		t.Fatalf("localizeHostError in French rendered %q, want the french text, not the english %q", got, top.Error())
+	}
 	expectLookups("Error() over two levels", 2, func() {
 		_ = top.Error()
 	})
@@ -539,9 +547,8 @@ func TestErrorsIsSurvivesATypedNilRemoteResolveError(t *testing.T) {
 	}
 }
 
-func TestEveryLocalizableTypedNilRendersAsNilText(t *testing.T) {
-	owner := newHostMessages()
-	typedNils := []error{
+func typedNilLocalizables() []error {
+	return []error{
 		(*hostWrapError)(nil),
 		(*pluginKindReservedError)(nil),
 		(*RemoteResolveError)(nil),
@@ -551,8 +558,29 @@ func TestEveryLocalizableTypedNilRendersAsNilText(t *testing.T) {
 		(*remoteSessionError)(nil),
 		(*remoteAccountError)(nil),
 	}
+}
+
+func TestErrorsIsSurvivesEveryLocalizableTypedNil(t *testing.T) {
+	owner := newHostMessages()
+	foreign := errors.New("cible")
 	params := map[string]any{nameParam: "digest"}
-	for _, typedNil := range typedNils {
+	for _, typedNil := range typedNilLocalizables() {
+		if errors.Is(typedNil, foreign) {
+			t.Fatalf("a typed nil %T matched a foreign target", typedNil)
+		}
+		if errors.Is(fmt.Errorf("contexte: %w", typedNil), foreign) {
+			t.Fatalf("a typed nil %T inside a %%w wrap matched a foreign target", typedNil)
+		}
+		if errors.Is(wrapHost(owner, typedNil, "warn.session_start", params), foreign) {
+			t.Fatalf("a typed nil %T inside a host wrap matched a foreign target", typedNil)
+		}
+	}
+}
+
+func TestEveryLocalizableTypedNilRendersAsNilText(t *testing.T) {
+	owner := newHostMessages()
+	params := map[string]any{nameParam: "digest"}
+	for _, typedNil := range typedNilLocalizables() {
 		for _, lang := range []i18n.Language{i18n.French, i18n.English} {
 			got := errorTextIn(owner, lang, wrapHost(owner, typedNil, "warn.session_start", params))
 			want := errorTextIn(owner, lang, wrapHost(owner, errors.New("<nil>"), "warn.session_start", params))
@@ -593,7 +621,7 @@ func TestWrapHostErrorRendersThroughItsOwnerCatalog(t *testing.T) {
 
 func TestErrorTextKeepsTheWrapperPrefix(t *testing.T) {
 	messages := newHostMessages()
-	inner := hostWrapError{messages: messages, key: "serve.load_state", cause: errors.New("boom")}
+	inner := &hostWrapError{messages: messages, key: "serve.load_state", cause: errors.New("boom")}
 	err := fmt.Errorf("ctx: %w", inner)
 	want := "ctx: " + inner.render(messages, i18n.French)
 	if got := errorTextIn(messages, i18n.French, err); got != want {
@@ -608,8 +636,8 @@ func TestErrorTextKeepsTheWrapperPrefix(t *testing.T) {
 
 func TestErrorTextLocalisesOnlyTheFirstOfTwoSiblingErrors(t *testing.T) {
 	messages := newHostMessages()
-	first := hostWrapError{messages: messages, key: "serve.load_state", cause: errors.New("premier")}
-	second := hostWrapError{messages: messages, key: "serve.load_state", cause: errors.New("second")}
+	first := &hostWrapError{messages: messages, key: "serve.load_state", cause: errors.New("premier")}
+	second := &hostWrapError{messages: messages, key: "serve.load_state", cause: errors.New("second")}
 	err := fmt.Errorf("%w: %w", first, second)
 	want := first.render(messages, i18n.French) + ": " + second.Error()
 	if got := errorTextIn(messages, i18n.French, err); got != want {
@@ -619,7 +647,7 @@ func TestErrorTextLocalisesOnlyTheFirstOfTwoSiblingErrors(t *testing.T) {
 
 func TestErrorTextKeepsTheTextOfEveryJoinedBranch(t *testing.T) {
 	messages := newHostMessages()
-	inner := hostWrapError{messages: messages, key: "serve.load_state", cause: errors.New("boom")}
+	inner := &hostWrapError{messages: messages, key: "serve.load_state", cause: errors.New("boom")}
 	err := errors.Join(inner, errors.New("close"))
 	want := inner.render(messages, i18n.French) + "\n" + "close"
 	if got := errorTextIn(messages, i18n.French, err); got != want {

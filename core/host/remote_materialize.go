@@ -108,10 +108,10 @@ func extractRegularMember(messages *hostMessages, reader *tar.Reader, hdr *tar.H
 	if mkdirErr := root.MkdirAll(filepath.Dir(name), privateDirMode); mkdirErr != nil {
 		return mkdirErr
 	}
-	return writeTarMember(messages, reader, hdr, root, name)
+	return writeTarMember(reader, hdr, root, name)
 }
 
-func writeTarMember(messages *hostMessages, reader *tar.Reader, hdr *tar.Header, root *os.Root, name string) error {
+func writeTarMember(reader *tar.Reader, hdr *tar.Header, root *os.Root, name string) error {
 	file, err := root.OpenFile(name, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, hdr.FileInfo().Mode().Perm())
 	if err != nil {
 		return err

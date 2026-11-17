@@ -5,9 +5,10 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/eventwire"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 type blockingHistory struct {

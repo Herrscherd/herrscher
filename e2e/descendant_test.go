@@ -205,7 +205,8 @@ func TestDescendantAliveSeesALiveDescendantOfOurs(t *testing.T) {
 			t.Errorf("kill the probe: %v", killErr)
 		}
 		var exitErr *exec.ExitError
-		if waitErr := cmd.Wait(); waitErr != nil && !(errors.As(waitErr, &exitErr) && exitErr.String() == "signal: killed") {
+		waitErr := cmd.Wait()
+		if waitErr != nil && (!errors.As(waitErr, &exitErr) || exitErr.String() != "signal: killed") {
 			t.Errorf("wait for the probe: %v", waitErr)
 		}
 	})

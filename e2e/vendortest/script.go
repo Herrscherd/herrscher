@@ -1,4 +1,7 @@
-// Package vendortest stands in for the vendor CLIs a backend runs, with no network.
+// Package vendortest stands in for the vendor CLIs a backend runs, so a scenario
+// drives the real herrscher binary with no network and no vendor account. Each
+// fake replays a script: one block of steps per turn, the blocks separated by a
+// line that holds only "---".
 package vendortest
 
 import (

@@ -1,7 +1,6 @@
 package termpaint
 
 import (
-	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -10,7 +9,21 @@ import (
 
 const hexDigits = "0123456789abcdef"
 
-var bidiMarks = []rune{0x061c, 0x200e, 0x200f, 0x2028, 0x2029}
+// Printed is text that has been through [Printable]. Only [Escape] builds one with
+// content, so a Printed value never carries a raw control to the terminal.
+type Printed struct {
+	text string
+}
+
+// Escape returns text escaped by [Printable] as a Printed value.
+func Escape(text string) Printed {
+	return Printed{text: Printable(text)}
+}
+
+// String returns the escaped text, ready to paint.
+func (p Printed) String() string {
+	return p.text
+}
 
 // Printable returns text as a terminal shows it without obeying it: every control
 // character (C0, DEL and C1) and every bidirectional control (U+202A to U+202E,
@@ -45,7 +58,11 @@ func isEscaped(char rune) bool {
 }
 
 func isBidiControl(char rune) bool {
-	return char >= 0x202a && char <= 0x202e || char >= 0x2066 && char <= 0x2069 || slices.Contains(bidiMarks, char)
+	switch char {
+	case 0x061c, 0x200e, 0x200f, 0x2028, 0x2029:
+		return true
+	}
+	return char >= 0x202a && char <= 0x202e || char >= 0x2066 && char <= 0x2069
 }
 
 func controlEscape(char rune) string {

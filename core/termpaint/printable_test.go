@@ -1,10 +1,21 @@
 package termpaint_test
 
 import (
+	"fmt"
+	"slices"
 	"testing"
+	"unicode"
 
 	"github.com/Herrscherd/herrscher/core/termpaint"
 )
+
+func bidiControls() []rune {
+	return []rune{
+		0x061c, 0x200e, 0x200f, 0x2028, 0x2029,
+		0x202a, 0x202b, 0x202c, 0x202d, 0x202e,
+		0x2066, 0x2067, 0x2068, 0x2069,
+	}
+}
 
 func TestPrintableWritesEveryControlCharacterAsVisibleEscape(t *testing.T) {
 	cases := []struct {
@@ -25,11 +36,11 @@ func TestPrintableWritesEveryControlCharacterAsVisibleEscape(t *testing.T) {
 		{name: "invalid UTF-8 byte 0xff", in: "a\xffb", want: `a\xffb`},
 		{name: "invalid UTF-8 byte 0xc3 before a non-continuation", in: "a\xc3b", want: `a\xc3b`},
 		{name: "invalid UTF-8 continuation byte 0x80", in: "\x80", want: `\x80`},
-		{name: "RLO bidi override", in: "a‮b", want: `a‮b`},
-		{name: "LRI bidi isolate", in: "a⁦b", want: `a⁦b`},
-		{name: "LRM and RLM marks", in: "a‎b‏c", want: `a‎b‏c`},
-		{name: "ALM arabic letter mark", in: "a؜b", want: `a؜b`},
-		{name: "line and paragraph separators", in: "a b c", want: `a b c`},
+		{name: "RLO bidi override", in: "a\u202eb", want: `a\u202eb`},
+		{name: "LRI bidi isolate", in: "a\u2066b", want: `a\u2066b`},
+		{name: "LRM and RLM marks", in: "a\u200eb\u200fc", want: `a\u200eb\u200fc`},
+		{name: "ALM arabic letter mark", in: "a\u061cb", want: `a\u061cb`},
+		{name: "line and paragraph separators", in: "a\u2028b\u2029c", want: `a\u2028b\u2029c`},
 		{name: "ZWJ joins an emoji sequence", in: "👨‍👩‍👧", want: "👨‍👩‍👧"},
 		{name: "valid UTF-8 unchanged", in: "démon ✕ ● 日本 🟢", want: "démon ✕ ● 日本 🟢"},
 		{name: "replacement character unchanged", in: "a�b", want: "a�b"},
@@ -44,11 +55,41 @@ func TestPrintableWritesEveryControlCharacterAsVisibleEscape(t *testing.T) {
 	}
 }
 
+func TestPrintableEscapesTheBoundsOfEveryBidiRange(t *testing.T) {
+	for _, char := range bidiControls() {
+		want := fmt.Sprintf(`\u%04x`, char)
+		if got := termpaint.Printable(string(char)); got != want {
+			t.Errorf("Printable(U+%04X) = %q, want %q", char, got, want)
+		}
+	}
+}
+
+func TestPrintableLeavesTheNeighboursOfBidiControlsIntact(t *testing.T) {
+	neighbours := []rune{
+		0x2065,
+		0x206a,
+		0x2027,
+		0x202f,
+		0x200d,
+		0x200c,
+		0x061b,
+		0x2030,
+	}
+	for _, char := range neighbours {
+		if got := termpaint.Printable(string(char)); got != string(char) {
+			t.Errorf("Printable(U+%04X) = %q, want it unchanged", char, got)
+		}
+	}
+}
+
 func TestPrintableOutputCarriesNoControlByte(t *testing.T) {
 	in := "\x1b]8;;x\x07\u009b\r\n\x00\x7f\xff" + "ok"
+	for _, char := range bidiControls() {
+		in += string(char)
+	}
 	got := termpaint.Printable(in)
 	for _, r := range got {
-		if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+		if unicode.IsControl(r) || slices.Contains(bidiControls(), r) {
 			t.Fatalf("Printable(%q) = %q still carries control %U", in, got, r)
 		}
 	}

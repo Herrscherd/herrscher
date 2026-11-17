@@ -88,7 +88,7 @@ func TestResultUnmeasuredKeepsFlag(t *testing.T) {
 }
 
 func TestDecodeResultKeepsTheNoteWhenTheNoticeIsMalformed(t *testing.T) {
-	for _, value := range []string{"{", `{"code":1,"args":[{"name":"X","kind":9,"value":"a"}]}`} {
+	for _, value := range []string{"{", `{"code":1,"args":[{"name":"X","kind":1}]}`} {
 		frame := contracts.Event{T: EventResult, Text: "compacté", Tokens: 42, Done: true, Value: value}
 		got, err := DecodeResult(frame)
 		if !errors.Is(err, ErrNoticeMalformed) {
@@ -189,6 +189,83 @@ func TestDecodeResultReadsAnOldBackendFrame(t *testing.T) {
 	}
 	if got.Note != "compacté" || got.TokensAfter != 12_000 || !got.TokensMeasured {
 		t.Fatalf("result = %+v, want the note, the tokens after and the measured flag kept", got)
+	}
+}
+
+func TestResultWithoutStatsWritesTheOldWireForm(t *testing.T) {
+	notice := contracts.Notice{Code: contracts.CodeSettingInvalid, Args: []contracts.Arg{
+		contracts.Text("Setting", "compactAt"),
+		contracts.Count(3),
+	}}
+	const want = `{"code":7,"args":[{"name":"Setting","kind":1,"value":"compactAt"},{"name":"Count","kind":2,"value":3}]}`
+	if got := mustResult(t, contracts.CompactResult{Notice: notice}).Value; got != want {
+		t.Fatalf("Result value = %q, want %q", got, want)
+	}
+}
+
+func TestResultWithStatsWritesTheOldWireForm(t *testing.T) {
+	notice := contracts.Notice{Code: contracts.CodeSettingInvalid, Args: []contracts.Arg{
+		contracts.Text("Setting", "compactAt"),
+		contracts.Count(3),
+	}}
+	stats := contracts.CompactStats{
+		Stage:         "backend",
+		Outcome:       contracts.CompactShort,
+		Calls:         4,
+		Kept:          1,
+		Truncated:     2,
+		Pruned:        1,
+		Pinned:        3,
+		CharsBefore:   9_000,
+		CharsAfter:    2_000,
+		TokensRemoved: 1_800,
+		Requests:      2,
+		RequestTokens: 5_000,
+		Duration:      1500 * time.Millisecond,
+	}
+	const want = `{"code":7,"args":[{"name":"Setting","kind":1,"value":"compactAt"},{"name":"Count","kind":2,"value":3}],"stats":{"Stage":"backend","Outcome":"short","Calls":4,"Kept":1,"Truncated":2,"Pruned":1,"Pinned":3,"CharsBefore":9000,"CharsAfter":2000,"TokensRemoved":1800,"Requests":2,"RequestTokens":5000,"Duration":1500000000}}`
+	if got := mustResult(t, contracts.CompactResult{Notice: notice, Stats: &stats}).Value; got != want {
+		t.Fatalf("Result value = %q, want %q", got, want)
+	}
+}
+
+func TestDecodeResultReadsTheOldWireFormWithStats(t *testing.T) {
+	value := `{"code":7,"args":[{"name":"Setting","kind":1,"value":"compactAt"},{"name":"Count","kind":2,"value":3}],"stats":{"Stage":"backend","Outcome":"short","Calls":4,"Kept":1,"Truncated":2,"Pruned":1,"Pinned":3,"CharsBefore":9000,"CharsAfter":2000,"TokensRemoved":1800,"Requests":2,"RequestTokens":5000,"Duration":1500000000}}`
+	got, err := DecodeResult(contracts.Event{T: EventResult, Value: value, Text: "compacté", Tokens: 12_000, Done: true})
+	if err != nil {
+		t.Fatalf("DecodeResult: %v", err)
+	}
+	if got.Stats == nil || got.Stats.Stage != "backend" || got.Stats.Outcome != contracts.CompactShort || got.Stats.Duration != 1500*time.Millisecond || got.Stats.RequestTokens != 5_000 {
+		t.Fatalf("stats = %+v, want the backend stats of the old form", got.Stats)
+	}
+	if got.Notice.Code != contracts.CodeSettingInvalid || len(got.Notice.Args) != 2 || got.Notice.Args[1].Value() != 3 {
+		t.Fatalf("notice = %+v, want setting-invalid with its arguments", got.Notice)
+	}
+}
+
+func TestUnknownArgKindIsKeptAndReencodedCompact(t *testing.T) {
+	value := `{"code":1,"args":[{"name":"X","kind":9,"value":"a"}]}`
+	got, err := DecodeResult(contracts.Event{T: EventResult, Value: value})
+	if err != nil {
+		t.Fatalf("DecodeResult: %v", err)
+	}
+	encoded, err := EncodeNotice(got.Notice)
+	if err != nil {
+		t.Fatalf("EncodeNotice: %v", err)
+	}
+	if encoded != value {
+		t.Fatalf("re-encoded notice = %q, want %q", encoded, value)
+	}
+}
+
+func TestEncodeNoticeRefusesMoreArgumentsThanTheLimit(t *testing.T) {
+	args := make([]contracts.Arg, 0, 17)
+	for range 17 {
+		args = append(args, contracts.Count(3))
+	}
+	_, err := EncodeNotice(contracts.Notice{Code: contracts.CodeSettingInvalid, Args: args})
+	if !errors.Is(err, contracts.ErrNoticeLimit) {
+		t.Fatalf("EncodeNotice with 17 arguments: %v, want ErrNoticeLimit", err)
 	}
 }
 

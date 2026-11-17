@@ -27,6 +27,8 @@ func (h *hub) liveSink(ctx context.Context, sess state.Session) sessionSink {
 			h.clearTurnMark(sess.Name)
 		},
 		Project: func(p string) {
+			end := h.persists.begin()
+			defer end()
 			if err := h.st.SetProjectPinned(sess.Name, p); err != nil {
 				warnLive(h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_project_pin", map[string]any{nameParam: sess.Name, detailParam: err})
 			}

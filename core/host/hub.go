@@ -71,7 +71,8 @@ type hub struct {
 	relaunchStop  chan struct{}
 	relaunches    inflight
 	acceptFails   inflight
-	persists      inflight
+	persists      *persistWrites
+	checkpoints   checkpointTaker
 	seedBackend   func(context.Context, state.Session) (contracts.Backend, error)
 	models        *ModelDiscovery
 
@@ -88,7 +89,8 @@ func withWarnings(w io.Writer) hubOption {
 }
 
 func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry, approvals *approvalTable, sessions *sessionTable, opts ...hubOption) *hub {
-	created := &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: make(map[string]liveSession), teardownGrace: defaultTeardownGrace, approvals: approvals, sessions: sessions, listen: control.Listen, relaunchStop: make(chan struct{})}
+	created := &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, live: make(map[string]liveSession), teardownGrace: defaultTeardownGrace, approvals: approvals, sessions: sessions, persists: sessions.persists, checkpoints: &sessions.checkpoints, listen: control.Listen, relaunchStop: make(chan struct{})}
+	sessions.persists.onLate = created.warnPersistOverrunOnce
 	for _, opt := range opts {
 		opt(created)
 	}
@@ -406,7 +408,7 @@ func scrollbackLineOf(entry state.TranscriptEntry) contracts.ScrollbackLine {
 }
 
 func (h *hub) keepResumeToken(session, token string) {
-	end := h.persists.Begin()
+	end := h.persists.begin()
 	defer end()
 	if err := h.st.SetResumeToken(session, token); err != nil {
 		warnLive(h.warnings, h.sessionLanguageSource(session), "warn.session_resume_token", map[string]any{nameParam: session, detailParam: err})
@@ -424,6 +426,8 @@ func (h *hub) Resume(name string) error {
 		if !sess.Archived {
 			return nil
 		}
+		end := h.persists.begin()
+		defer end()
 		return h.st.SetArchived(name, false)
 	})
 }

@@ -116,6 +116,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	toBridge := make(chan contracts.Event, 1)
 	fromBridge := make(chan contracts.Event, bridgeEventBuffer)
 	driver := newSessionDriver(sess.Name, nil, toBridge, fromBridge, runtime.warnings)
+	driver.persists = runtime.sessions.persists
 	driver.incarnation = sess.Incarnation
 	driver.agent = sess.Agent
 	driver.language = func() i18n.Language { return knownSessionLanguage(sess) }

@@ -297,6 +297,10 @@ func forkCheckpoint(ctx context.Context, host forkHost, sessionStore *state.Stat
 	return forkName, nil
 }
 
+type checkpointTaker interface {
+	Take(ctx context.Context, dir, session string, meta checkpoint.Meta) (checkpoint.Entry, error)
+}
+
 func (h *hub) takeCheckpoint(ctx context.Context, sess state.Session, turnID, text string) {
 	if !checkpointable(sess) {
 		return
@@ -305,10 +309,10 @@ func (h *hub) takeCheckpoint(ctx context.Context, sess state.Session, turnID, te
 	if !ok {
 		current = sess
 	}
-	end := h.persists.Begin()
+	end := h.persists.begin()
 	defer end()
 	meta := checkpoint.Meta{Turn: turnID, Text: text, Conversation: conversationPosition(current)}
-	if _, err := h.sessions.checkpoints.Take(context.WithoutCancel(ctx), sess.Worktree, sess.Name, meta); err != nil {
+	if _, err := h.checkpoints.Take(context.WithoutCancel(ctx), sess.Worktree, sess.Name, meta); err != nil {
 		warnLive(h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_checkpoint", map[string]any{nameParam: sess.Name, detailParam: err})
 	}
 }

@@ -15,12 +15,16 @@ func renderTurnInterrupted(lang i18n.Language) (string, error) {
 }
 
 func (h *hub) openTurnMark(session, turnID string) {
+	end := h.persists.begin()
+	defer end()
 	if err := h.st.SetInterruptedTurn(session, turnID); err != nil {
 		warnLive(h.warnings, h.sessionLanguageSource(session), "warn.session_turn_mark_set", map[string]any{nameParam: session, detailParam: err})
 	}
 }
 
 func (h *hub) clearTurnMark(session string) {
+	end := h.persists.begin()
+	defer end()
 	if err := h.st.SetInterruptedTurn(session, ""); err != nil {
 		warnLive(h.warnings, h.sessionLanguageSource(session), "warn.session_turn_mark_clear", map[string]any{nameParam: session, detailParam: err})
 	}

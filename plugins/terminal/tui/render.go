@@ -177,11 +177,12 @@ func renderNotice(item entry, width int, view view) string {
 func renderAgent(item entry, width int, view view) string {
 	lead := view.st.glyphs.tool + " "
 	body := width - lipgloss.Width(blockIndent) - lipgloss.Width(lead)
+	prose := strings.ReplaceAll(item.text, "\t", diffTabSpaces)
 	var text string
 	if item.streaming {
-		text = wrapWith(view.st.text, item.text, body)
+		text = wrapWith(view.st.text, prose, body)
 	} else {
-		text = renderMarkdown(item.text, body, view)
+		text = renderMarkdown(prose, body, view)
 	}
 	lines := strings.Split(text, "\n")
 	for index := range lines {

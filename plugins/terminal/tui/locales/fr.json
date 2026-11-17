@@ -2217,10 +2217,6 @@
     "other": "Tour fini"
   },
   {
-    "id": "tui.notify.approval_pending",
-    "other": "Approbation en attente"
-  },
-  {
     "id": "tui.notify.delivery_none",
     "other": "fenêtre active, rien envoyé"
   },

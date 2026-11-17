@@ -226,6 +226,10 @@ func TestReadTranscriptTailSkipsTheLineCutAtTheWindowStart(t *testing.T) {
 	if len(file) <= transcriptTailBytes {
 		t.Fatalf("fixture is %d bytes, want more than the %d-byte tail window", len(file), transcriptTailBytes)
 	}
+	windowStart := len(file) - transcriptTailBytes
+	if windowStart <= 0 || file[windowStart-1] == '\n' {
+		t.Fatal("the window start must cut a line in the middle")
+	}
 
 	capped := ReadTranscriptTail(p, 200)
 	if len(capped) != 200 {

@@ -152,6 +152,7 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"approval.prompt":                   {"Request"},
 		"approval.hint":                     {"Command", "Help"},
 		"seed.consolidate":                  {"Detail", "Elapsed", "Name"},
+		"seed.late_delivery":                {"Name"},
 		"serve.instance_id_mismatch":        {"Have", "Want"},
 		"serve.instance_persist":            {"Detail"},
 		"serve.load_state":                  {"Detail"},

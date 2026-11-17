@@ -38,7 +38,7 @@ func addSessionVerbs(reg *cli.Registry, lang languageSource, store *state.State,
 	seen := newSeenTable(time.Now())
 	return addVerbs(
 		reg,
-		seedVerb(sessions.messages, sessions.oneShotPersists(), store, layout, instID, seedCoord),
+		seedVerb(sessions, store, layout, instID, seedCoord),
 		sessionSendVerb(sessions),
 		sessionPickVerb(lang, approvals, sessions),
 		sessionInfoVerb(store, partDir, sessions, models),
@@ -68,7 +68,7 @@ func addCheckpointCommands(reg *cli.Registry, lang languageSource, store *state.
 	return addVerbs(reg, addCheckpointVerbs(lang, store, sessions)...)
 }
 
-func seedVerb(messages *hostMessages, persists *persistWrites, store *state.State, layout RuntimeLayout, instID string, seedCoord *coordinatorSlot) contracts.Cmd {
+func seedVerb(sessions *sessionTable, store *state.State, layout RuntimeLayout, instID string, seedCoord *coordinatorSlot) contracts.Cmd {
 	return contracts.New(nsSession, verbSeed).
 		Help(clitext.CmdHelpSessionSeed).
 		Param(paramName, clitext.CmdParamSessionSeedName, true).
@@ -76,7 +76,7 @@ func seedVerb(messages *hostMessages, persists *persistWrites, store *state.Stat
 		ValueParam("turn_id", clitext.CmdParamSessionSeedTurnID, false).
 		ValueParam("timeout", clitext.CmdParamSessionSeedTimeout, false).
 		Do(func(cmdCtx context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(runSeedVerb(cmdCtx, messages, persists, in, store, layout, instID, seedCoord.coord))
+			return cli.Data(runSeedVerb(cmdCtx, sessions.messages, sessions.oneShotPersists(), in, store, layout, instID, seedCoord.coord))
 		})
 }
 

@@ -516,6 +516,24 @@ func TestEveryLocalizableTypedNilRendersAsNilText(t *testing.T) {
 	}
 }
 
+func TestLocalizeHostErrorSurvivesATypedNilInTheChain(t *testing.T) {
+	owner := newHostMessages()
+	params := map[string]any{nameParam: "digest"}
+	var nilWrap *hostWrapError
+	nested := wrapHost(owner, nilWrap, "warn.session_start", params)
+	plain := wrapHost(owner, errors.New("<nil>"), "warn.session_start", params)
+	for _, lang := range []i18n.Language{i18n.French, i18n.English} {
+		got := fmt.Sprint(localizeHostError(owner, lang, nested))
+		want := fmt.Sprint(localizeHostError(owner, lang, plain))
+		if got != want {
+			t.Fatalf("a typed nil in the chain rendered %q in %v, want %q", got, lang, want)
+		}
+		if top := fmt.Sprint(localizeHostError(owner, lang, nilWrap)); top != "<nil>" {
+			t.Fatalf("a top-level typed nil rendered %q in %v, want <nil>", top, lang)
+		}
+	}
+}
+
 func TestWrapHostErrorRendersThroughItsOwnerCatalog(t *testing.T) {
 	owner := &hostMessages{catalog: func() (*i18n.Catalog, error) {
 		return nil, errors.New("catalogue indisponible")

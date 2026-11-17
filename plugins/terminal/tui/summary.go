@@ -286,6 +286,8 @@ func (m *model) visibleChannels() []string {
 		return []string{m.active}
 	case surfacePanes:
 		return slices.Clone(m.panes.channels)
+	case surfaceBoard:
+		return nil
 	}
 	return nil
 }

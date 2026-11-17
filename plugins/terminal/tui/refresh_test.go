@@ -9,6 +9,7 @@ import (
 
 type silentBackend struct {
 	*fakeBackend
+
 	release chan struct{}
 }
 

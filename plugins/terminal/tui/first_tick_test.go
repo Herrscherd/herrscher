@@ -15,7 +15,7 @@ func TestTabBeforeFirstTickSwitchesSession(t *testing.T) {
 		{Name: "main", ChannelID: "c1"},
 		{Name: "two", ChannelID: "c2"},
 	}}
-	m := newModel(be)
+	m := startedModel(be)
 	m.Init()
 
 	updateKey(m, tea.KeyMsg{Type: tea.KeyTab})
@@ -30,7 +30,7 @@ func TestEnterBeforeFirstTickSendsToTheRequestedSession(t *testing.T) {
 		{Name: "main", ChannelID: "c1"},
 		{Name: "two", ChannelID: "c2"},
 	}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("two", "")(m)
 	m.Init()
 	m.input.SetValue("hello")
@@ -47,7 +47,7 @@ func TestEnterBeforeFirstTickSendsToTheRequestedSession(t *testing.T) {
 
 func TestEnterWaitsWhileTheRequestedSessionIsMissing(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("later", "")(m)
 	m.Init()
 	m.input.SetValue("hello")
@@ -67,7 +67,7 @@ func TestEnterWaitsWhileTheRequestedSessionIsMissing(t *testing.T) {
 
 func TestSlashCommandsStillRunWhileTheRequestedSessionIsMissing(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("later", "")(m)
 	m.Init()
 	m.input.SetValue("/bogus")
@@ -81,7 +81,7 @@ func TestSlashCommandsStillRunWhileTheRequestedSessionIsMissing(t *testing.T) {
 
 func TestQueuedTextIsSentOnceTheSessionAppears(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("later", "")(m)
 	m.Init()
 	m.input.SetValue("hello")
@@ -101,7 +101,7 @@ func TestQueuedTextIsSentOnceTheSessionAppears(t *testing.T) {
 func TestMissingSessionIsReleasedWithNoticeAndTextKept(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
 	now := time.Unix(0, 0)
-	m := newModel(be)
+	m := startedModel(be)
 	m.clock = func() time.Time { return now }
 	OpenOn("ghost", "")(m)
 	m.Init()
@@ -128,7 +128,7 @@ func TestSessionAppearingInAReadyWindowShowsItsHistory(t *testing.T) {
 		sessions:   []contracts.SessionInfo{{Name: "main", ChannelID: "c1"}},
 		scrollback: map[string][]contracts.ScrollbackLine{"main": {{Role: "user", Text: "remembered question"}}},
 	}
-	m := newModel(be)
+	m := startedModel(be)
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 40})
 
 	syncLoaded(m)

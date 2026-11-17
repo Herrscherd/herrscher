@@ -20,7 +20,7 @@ func (b *countingBackend) Sessions() []contracts.SessionInfo {
 func TestActiveInfoNeverReadsTheDaemon(t *testing.T) {
 	be := &countingBackend{}
 	be.sessions = []contracts.SessionInfo{{Name: "a", ChannelID: "c1", Vendor: "claude"}}
-	m := newModel(be)
+	m := startedModel(be)
 	syncLoaded(m)
 
 	be.calls = 0
@@ -37,7 +37,7 @@ func TestActiveInfoNeverReadsTheDaemon(t *testing.T) {
 func TestActiveInfoFollowsTheActiveTab(t *testing.T) {
 	be := &countingBackend{}
 	be.sessions = []contracts.SessionInfo{{Name: "a", ChannelID: "c1", Vendor: "claude"}, {Name: "b", ChannelID: "c2", Vendor: "codex"}}
-	m := newModel(be)
+	m := startedModel(be)
 	syncLoaded(m)
 	m.active = "c1"
 	if s, _ := m.activeInfo(); s.Vendor != "claude" {

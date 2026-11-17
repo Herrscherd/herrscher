@@ -21,6 +21,15 @@ func (m *model) knownActiveInfo() contracts.SessionInfo {
 	return m.sessionInfos[m.active]
 }
 
+func (m *model) rememberSession(info contracts.SessionInfo) {
+	if m.sessionInfos == nil {
+		m.sessionInfos = make(map[string]contracts.SessionInfo)
+	}
+	if _, known := m.sessionInfos[info.ChannelID]; !known {
+		m.sessionInfos[info.ChannelID] = info
+	}
+}
+
 func (m *model) rememberSessions(sessions []contracts.SessionInfo) {
 	m.sessionInfos = make(map[string]contracts.SessionInfo, len(sessions))
 	for index := range sessions {

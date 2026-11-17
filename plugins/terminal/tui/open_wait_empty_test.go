@@ -10,7 +10,7 @@ import (
 func TestEmptyEnterEndsAWaitThatHoldsNoText(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
 	now := time.Unix(0, 0)
-	m := newModel(be)
+	m := startedModel(be)
 	m.clock = func() time.Time { return now }
 	OpenOn("later", "")(m)
 	m.Init()
@@ -33,7 +33,7 @@ func TestEmptyEnterEndsAWaitThatHoldsNoText(t *testing.T) {
 }
 
 func TestEmptyTextWithoutAWaitKeepsTheHeldSession(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.heldSession = "later"
 	flash := m.flash
 

@@ -57,7 +57,8 @@ func TestNewSessionAtTheTickOpensItsTabWithoutReadingHistory(t *testing.T) {
 		fakeBackend: &fakeBackend{fe: make(chan RoutedEvent, 1), sessions: []contracts.SessionInfo{fresh}},
 		release:     make(chan struct{}),
 	}
-	m := newModel(f)
+	m, _ := startModel(f)
+	f.sessions = []contracts.SessionInfo{fresh}
 	returnsWithin(t, "the tick waited on the daemon history", func() {
 		m.Update(tickMsg{})
 		m.Update(sessionsMsg{seq: m.sessionsIssued, infos: f.sessions})
@@ -87,9 +88,8 @@ func TestLateHistoryNeverFillsAClosedOrReopenedTab(t *testing.T) {
 			{Role: "user", Text: "old"},
 		}},
 	}
-	m := newModel(f)
-	m.Update(sessionsMsg{seq: m.sessionsIssued, infos: f.sessions})
-	stale := historyMsgs(m.drainHistory())
+	m, load := startModel(f)
+	stale := historyMsgs(load)
 
 	m.removeTab("c")
 	for _, msg := range stale {
@@ -128,18 +128,17 @@ func TestLiveEventsWaitForHistoryAndKeepTheirOrder(t *testing.T) {
 		sessions:   []contracts.SessionInfo{{Name: "s", ChannelID: "c"}},
 		scrollback: map[string][]contracts.ScrollbackLine{"s": {{Role: "user", Text: "history-line"}}},
 	}
-	m := newModel(f)
-	m.Update(sessionsMsg{seq: m.sessionsIssued, infos: f.sessions})
+	m, load := startModel(f)
 	live := func(text string) RoutedEvent {
 		return RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventChunk, Text: text}}
 	}
-	historyCmd := m.route(live("live-first"))
+	m.route(live("live-first"))
 	m.route(live("live-second"))
 	tb := m.tabs["c"]
 	if strings.Contains(tabText(tb), "live-first") {
 		t.Fatalf("live event applied before the history arrived: %q", tabText(tb))
 	}
-	for _, msg := range historyMsgs(historyCmd) {
+	for _, msg := range historyMsgs(load) {
 		m.Update(msg)
 	}
 	text := tabText(tb)
@@ -161,7 +160,7 @@ func TestHistoryErrorIsShownAndTheTabStaysUsable(t *testing.T) {
 		sessions:      []contracts.SessionInfo{{Name: "s", ChannelID: "c"}},
 		scrollbackErr: failure,
 	}
-	m := newModel(f)
+	m := startedModel(f)
 	m.Update(sessionsMsg{seq: m.sessionsIssued, infos: f.sessions})
 	loadHistory(m)
 	tb := m.tabs["c"]
@@ -189,7 +188,7 @@ func TestResumePreviewShowsTheHistoryFailure(t *testing.T) {
 		sessions:      []contracts.SessionInfo{{Name: "s", ChannelID: "c"}},
 		scrollbackErr: failure,
 	}
-	m := newModel(f)
+	m := startedModel(f)
 	m.Update(sessionsMsg{seq: m.sessionsIssued, infos: f.sessions})
 	m.openResume()
 	want := m.tr.t("tui.session.history_failed", map[string]any{tplArgReason: localizedReason(m.tr, failure)})

@@ -16,7 +16,7 @@ func TestSeedScrollbackReplaysRealRoles(t *testing.T) {
 			{Role: "assistant", Text: "hi there"},
 		}},
 	}
-	m := newModel(fb)
+	m := startedModel(fb)
 	syncLoaded(m)
 	tb := m.tabs["a"]
 
@@ -43,7 +43,7 @@ func TestSeedScrollbackAddsNoBoundaryWithoutHistory(t *testing.T) {
 		fe:       make(chan RoutedEvent, 1),
 		sessions: []contracts.SessionInfo{{Name: "s", ChannelID: "a"}},
 	}
-	m := newModel(fb)
+	m := startedModel(fb)
 	syncLoaded(m)
 	if tb := m.tabs["a"]; len(tb.entries) != 0 {
 		t.Fatalf("empty history seeded %d entries", len(tb.entries))

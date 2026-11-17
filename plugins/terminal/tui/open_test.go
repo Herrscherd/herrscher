@@ -11,7 +11,7 @@ func TestOpenOnFocusesSessionAndSendsTask(t *testing.T) {
 		{Name: "main", ChannelID: "c1"},
 		{Name: "read-the-thread-u25m", ChannelID: "c2"},
 	}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("read-the-thread-u25m", "read the thread")(m)
 
 	syncLoaded(m)
@@ -32,7 +32,7 @@ func TestOpenOnFocusesSessionAndSendsTask(t *testing.T) {
 
 func TestOpenOnSendsOnlyOnce(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "s", ChannelID: "c1"}}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("s", "go")(m)
 
 	syncLoaded(m)
@@ -46,7 +46,7 @@ func TestOpenOnSendsOnlyOnce(t *testing.T) {
 
 func TestOpenOnWaitsForTheSession(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "main", ChannelID: "c1"}}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("later", "go")(m)
 
 	syncLoaded(m)
@@ -67,7 +67,7 @@ func TestOpenOnWithoutTextSendsNothing(t *testing.T) {
 		{Name: "main", ChannelID: "c1"},
 		{Name: "other", ChannelID: "c2"},
 	}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("other", "")(m)
 
 	syncLoaded(m)

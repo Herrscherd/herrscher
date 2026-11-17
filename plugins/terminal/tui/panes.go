@@ -74,7 +74,7 @@ func (m *model) openPanes() {
 			continue
 		}
 		m.panes.channels = append(m.panes.channels, info.ChannelID)
-		m.ensureTab(info.ChannelID)
+		m.ensureSessionTab(info)
 	}
 	m.activate(m.focusedChannel())
 	m.relayout()

@@ -38,7 +38,7 @@ func TestMentionComplete(t *testing.T) {
 func TestWorktreeDirPrefersSessionDir(t *testing.T) {
 	dir := t.TempDir()
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a", Dir: dir}}}
-	m := newModel(f)
+	m := startedModel(f)
 	syncLoaded(m)
 	m.ensureTab("a")
 	if got := m.worktreeDir(); got != dir {
@@ -48,7 +48,7 @@ func TestWorktreeDirPrefersSessionDir(t *testing.T) {
 
 func TestWorktreeDirFallsBackToCwd(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a"}}}
-	m := newModel(f)
+	m := startedModel(f)
 	syncLoaded(m)
 	m.ensureTab("a")
 	wd, err := os.Getwd()

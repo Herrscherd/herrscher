@@ -50,7 +50,7 @@ func returnsWithin(t *testing.T, what string, run func()) {
 func TestMuteDaemonDoesNotBlockTheTick(t *testing.T) {
 	be := &silentBackend{fakeBackend: &fakeBackend{}, release: make(chan struct{}), mute: true}
 	defer close(be.release)
-	m := newModel(be)
+	m := startedModel(be)
 
 	returnsWithin(t, "a tick with a silent daemon blocked the UI thread, the session list must be read off the update loop", func() {
 		m.Update(tickMsg{})
@@ -63,7 +63,7 @@ func TestViewNeverReadsTheDaemonOnTheUpdateLoop(t *testing.T) {
 		release:     make(chan struct{}),
 	}
 	defer close(be.release)
-	m := newModel(be)
+	m := startedModel(be)
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	syncLoaded(m)
 
@@ -75,7 +75,7 @@ func TestViewNeverReadsTheDaemonOnTheUpdateLoop(t *testing.T) {
 
 func TestAStaleSnapshotLandingLateDoesNotReopenAClosedTab(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "main", ChannelID: "c1"}, {Name: "two", ChannelID: "c2"}}}
-	m := newModel(be)
+	m := startedModel(be)
 	m.Init()
 	stale := runCmd(m.refreshTabs())
 
@@ -92,7 +92,7 @@ func TestAStaleSnapshotLandingLateDoesNotReopenAClosedTab(t *testing.T) {
 }
 
 func TestOnlyOneSessionReadIsInFlight(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	first := m.refreshTabs()
 	if first == nil {
 		t.Fatal("the first read must start")
@@ -110,7 +110,7 @@ func TestOnlyOneSessionReadIsInFlight(t *testing.T) {
 func TestApplyingASnapshotDecidesFocusWithoutReadingTheDaemon(t *testing.T) {
 	be := &silentBackend{fakeBackend: &fakeBackend{}, release: make(chan struct{}), mute: true}
 	defer close(be.release)
-	m := newModel(be)
+	m := startedModel(be)
 	m.heldSession = "later"
 
 	returnsWithin(t, "applying a snapshot read the daemon again to decide focus", func() {
@@ -126,7 +126,7 @@ func TestApplyingASnapshotDecidesFocusWithoutReadingTheDaemon(t *testing.T) {
 
 func TestAnExplicitOpenReleasesTheHeldSession(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "later", ChannelID: "c2"}}}
-	m := newModel(be)
+	m := startedModel(be)
 	m.heldSession = "later"
 
 	m.openChannel(contracts.SessionInfo{Name: "later", ChannelID: "c2"})
@@ -141,7 +141,7 @@ func TestAnExplicitOpenReleasesTheHeldSession(t *testing.T) {
 func TestMuteDaemonDoesNotBlockTheTickOnTheBoard(t *testing.T) {
 	be := &silentBackend{fakeBackend: &fakeBackend{}, release: make(chan struct{}), mute: true}
 	defer close(be.release)
-	m := newModel(be)
+	m := startedModel(be)
 	m.surface = surfaceBoard
 
 	returnsWithin(t, "a tick with a silent daemon blocked the board view on the update loop, the overview and the session list must be read off the loop", func() {
@@ -152,7 +152,7 @@ func TestMuteDaemonDoesNotBlockTheTickOnTheBoard(t *testing.T) {
 func TestMuteDaemonDoesNotBlockTheTickOnThePanes(t *testing.T) {
 	be := &silentBackend{fakeBackend: &fakeBackend{}, release: make(chan struct{}), mute: true}
 	defer close(be.release)
-	m := newModel(be)
+	m := startedModel(be)
 	m.surface = surfacePanes
 
 	returnsWithin(t, "a tick with a silent daemon blocked the panes view on the update loop, the overview and the session list must be read off the loop", func() {
@@ -163,7 +163,7 @@ func TestMuteDaemonDoesNotBlockTheTickOnThePanes(t *testing.T) {
 func TestBoardRowsReadTheSnapshotNotTheDaemon(t *testing.T) {
 	be := &silentBackend{fakeBackend: &fakeBackend{}, release: make(chan struct{}), mute: true}
 	defer close(be.release)
-	m := newModel(be)
+	m := startedModel(be)
 	m.overviews = []SessionOverview{{Name: "a"}}
 	m.boardInfos = []contracts.SessionInfo{{Name: "a", ChannelID: "c1"}}
 
@@ -177,7 +177,7 @@ func TestBoardRowsReadTheSnapshotNotTheDaemon(t *testing.T) {
 }
 
 func TestOnlyOneSurfaceReadIsInFlight(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.surface = surfaceBoard
 	first := m.refreshSurfaceCmd()
 	if first == nil {
@@ -194,7 +194,7 @@ func TestOnlyOneSurfaceReadIsInFlight(t *testing.T) {
 }
 
 func TestASurfaceReadErrorStillFreesTheNextRead(t *testing.T) {
-	m := newModel(&fakeBackend{overviewErr: errors.New("daemon down")})
+	m := startedModel(&fakeBackend{overviewErr: errors.New("daemon down")})
 	m.surface = surfaceBoard
 	first := m.refreshSurfaceCmd()
 	m.Update(runCmd(first))
@@ -208,7 +208,7 @@ func TestASurfaceReadErrorStillFreesTheNextRead(t *testing.T) {
 }
 
 func TestAStaleSurfaceSnapshotIsIgnored(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.surface = surfaceBoard
 	m.Update(surfaceMsg{seq: 2, overviews: []SessionOverview{{Name: "new"}}})
 	m.Update(surfaceMsg{seq: 1, overviews: []SessionOverview{{Name: "old"}}})

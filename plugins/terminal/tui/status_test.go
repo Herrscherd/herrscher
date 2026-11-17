@@ -72,7 +72,7 @@ func TestContextLimitFollowsTheVendorAndTheEnv(t *testing.T) {
 
 func TestContextGaugeFollowsTheContextLimitsTable(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "codex"}}}
-	m := newModel(f)
+	m := startedModel(f)
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
 	m.limits = contextwindow.NewLimits("", map[string]int{"codex": 400_000})
 	m.active = "c"
@@ -203,7 +203,7 @@ func TestStatusBarNamesTheModelAndTheEffort(t *testing.T) {
 	be.sessions = []contracts.SessionInfo{{
 		Name: "a", ChannelID: "c1", Vendor: "claude", Model: "claude-opus-5", Effort: "high",
 	}}
-	m := newModel(be)
+	m := startedModel(be)
 	tb := m.ensureTab("c1")
 	m.active = "c1"
 	syncLoaded(m)
@@ -222,7 +222,7 @@ func TestStatusBarFallsBackOnTheHubReading(t *testing.T) {
 	be.sessions = []contracts.SessionInfo{{
 		Name: "a", ChannelID: "c1", Vendor: "claude", ContextTokens: 96_000,
 	}}
-	m := newModel(be)
+	m := startedModel(be)
 	tb := m.ensureTab("c1")
 	m.active = "c1"
 	syncLoaded(m)
@@ -258,7 +258,7 @@ func barModelAt(t *testing.T, dir string) (*model, *tab) {
 		Name: "a", ChannelID: "c1", Vendor: "claude", Model: "claude-opus-5", Effort: "high",
 		Project: "herrscher", Dir: dir, AutoCompactPercent: 92,
 	}}
-	m := newModel(be)
+	m := startedModel(be)
 	tb := m.ensureTab("c1")
 	m.active = "c1"
 	syncLoaded(m)
@@ -399,7 +399,7 @@ func TestRunModelReadsTheConfigFileIntoTheGauge(t *testing.T) {
 
 func TestDaemonContextWindowWinsOverTheLocalTable(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "codex", ContextWindow: 368_000}}}
-	m := newModel(f)
+	m := startedModel(f)
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
 	m.limits = contextwindow.NewLimits("", map[string]int{"codex": 400_000})
 	m.active = "c"

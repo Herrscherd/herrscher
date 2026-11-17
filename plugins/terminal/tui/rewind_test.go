@@ -45,7 +45,7 @@ func rewindModel(t *testing.T) (*model, *rewindBackend) {
 	t.Helper()
 	backend := &rewindBackend{checkpoints: sampleCheckpoints()}
 	backend.sessions = []contracts.SessionInfo{{Name: "alpha", ChannelID: "a"}}
-	m := newModel(backend)
+	m := startedModel(backend)
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m.ensureTab("a")
 	m.active = "a"

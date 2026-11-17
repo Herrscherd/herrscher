@@ -14,7 +14,7 @@ import (
 func contextModel(t *testing.T, used int) *model {
 	t.Helper()
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "claude"}}}
-	m := newModel(f)
+	m := startedModel(f)
 	syncLoaded(m)
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
 	tb := m.ensureTab("c")

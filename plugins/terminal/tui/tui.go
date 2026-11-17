@@ -570,8 +570,16 @@ func (m *model) ensureTab(channel string) *tab {
 	return m.openTab(channel, m.sessionName(channel))
 }
 
+func (m *model) ensureSessionTab(info contracts.SessionInfo) *tab {
+	m.rememberSession(info)
+	return m.ensureTabNamed(info.ChannelID, info.Name)
+}
+
 func (m *model) ensureTabNamed(channel, name string) *tab {
 	if tb, ok := m.tabs[channel]; ok {
+		if tb.history == historyNone && len(tb.entries) == 0 {
+			m.queueHistory(tb, name)
+		}
 		return tb
 	}
 	return m.openTab(channel, name)
@@ -832,6 +840,10 @@ func (m *model) handleEnter() tea.Cmd {
 	}
 	if m.tabs[m.active] == nil && !isCommandLine(text) {
 		return m.startFromComposer(text)
+	}
+	if _, isShell := shellCommand(text); isShell && m.sessionName(m.active) == "" {
+		m.flash = m.tr.t("tui.shell.no_session", nil)
+		return nil
 	}
 	m.input.Reset()
 	m.resizeComposer()

@@ -15,7 +15,7 @@ func TestTabDuringTheWaitCancelsTheQueueSoTheTextIsSentOnce(t *testing.T) {
 		{Name: "main", ChannelID: "c1"},
 		{Name: "two", ChannelID: "c2"},
 	}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("later", "")(m)
 	m.Init()
 	m.input.SetValue("hello")
@@ -41,7 +41,7 @@ func TestTabDuringTheWaitCancelsTheQueueSoTheTextIsSentOnce(t *testing.T) {
 
 func TestEditedComposerDuringTheWaitIsWhatGoesOut(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("later", "")(m)
 	m.Init()
 	m.input.SetValue("hello")
@@ -58,7 +58,7 @@ func TestEditedComposerDuringTheWaitIsWhatGoesOut(t *testing.T) {
 
 func TestEmptiedComposerDuringTheWaitSendsNothing(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("later", "")(m)
 	m.Init()
 	m.input.SetValue("hello")
@@ -78,7 +78,7 @@ func TestEmptiedComposerDuringTheWaitSendsNothing(t *testing.T) {
 
 func TestCommandLineInTheComposerAtArrivalIsNotSent(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("later", "")(m)
 	m.Init()
 	m.input.SetValue("hello")
@@ -96,7 +96,7 @@ func TestCommandLineInTheComposerAtArrivalIsNotSent(t *testing.T) {
 func TestStartedSessionThatNeverGetsATabReleasesTheTextIntoTheComposer(t *testing.T) {
 	be := &fakeBackend{startName: "fresh", startChannel: "c9"}
 	now := time.Unix(0, 0)
-	m := newModel(be)
+	m := startedModel(be)
 	m.clock = func() time.Time { return now }
 	m.pending = []Attachment{{Name: "a.png", Path: "/x/a.png"}}
 	m.input.SetValue("hello")
@@ -127,7 +127,7 @@ func TestStartedSessionThatNeverGetsATabReleasesTheTextIntoTheComposer(t *testin
 
 func TestTabChangeDuringTheStartKeepsTheTextForTheStartedSession(t *testing.T) {
 	f := &fakeBackend{startName: "fresh", startChannel: "c9", sessions: []contracts.SessionInfo{{Name: "two", ChannelID: "c2"}}}
-	m := newModel(f)
+	m := startedModel(f)
 	m.Init()
 	m.active = ""
 	m.input.SetValue("hello")
@@ -146,7 +146,7 @@ func TestTabChangeDuringTheStartKeepsTheTextForTheStartedSession(t *testing.T) {
 
 func TestAttachmentsNeverStartASessionOrGoAloneWithoutText(t *testing.T) {
 	f := &fakeBackend{startName: "fresh", startChannel: "c9"}
-	m := newModel(f)
+	m := startedModel(f)
 	m.pending = []Attachment{{Name: "a.png", Path: "/x/a.png"}}
 	if cmd := m.handleEnter(); cmd != nil {
 		t.Fatal("enter with no session, an empty composer and an attachment must do nothing")
@@ -163,7 +163,7 @@ func TestAttachmentsNeverStartASessionOrGoAloneWithoutText(t *testing.T) {
 
 func TestEmptyEnterCancelsTheTextAndKeepsTheAttachmentsPending(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("later", "")(m)
 	m.Init()
 	m.pending = []Attachment{{Name: "a.png", Path: "/x/a.png"}}
@@ -187,7 +187,7 @@ func TestEmptyEnterCancelsTheTextAndKeepsTheAttachmentsPending(t *testing.T) {
 
 func TestRemovingTheOnlyActiveTabEndsTheWait(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "main", ChannelID: "c1"}}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("later", "")(m)
 	m.Init()
 	be.sessions = []contracts.SessionInfo{}
@@ -208,7 +208,7 @@ func TestCancelledWaitKeepsItsNoticeAtTheDeadline(t *testing.T) {
 		{Name: "two", ChannelID: "c2"},
 	}}
 	now := time.Unix(0, 0)
-	m := newModel(be)
+	m := startedModel(be)
 	m.clock = func() time.Time { return now }
 	OpenOn("later", "")(m)
 	m.Init()

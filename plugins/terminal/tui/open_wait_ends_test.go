@@ -10,7 +10,7 @@ import (
 func TestEmptyEnterEndsTheWaitSoALateArrivalNeitherActivatesNorStealsFocus(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
 	now := time.Unix(0, 0)
-	m := newModel(be)
+	m := startedModel(be)
 	m.clock = func() time.Time { return now }
 	OpenOn("later", "")(m)
 	m.Init()
@@ -46,7 +46,7 @@ func TestRemoteCloseOfTheActiveTabKeepsTheQueuedTextInTheComposer(t *testing.T) 
 		{Name: "main", ChannelID: "c1"},
 		{Name: "two", ChannelID: "c2"},
 	}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("later", "")(m)
 	m.Init()
 	m.input.SetValue("hello")
@@ -71,7 +71,7 @@ func TestRemoteCloseOfTheActiveTabKeepsTheQueuedTextInTheComposer(t *testing.T) 
 
 func TestAfterTheLastTabClosesAnUnrequestedSessionTakesFocus(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "main", ChannelID: "c1"}}}
-	m := newModel(be)
+	m := startedModel(be)
 	m.Init()
 	be.sessions = []contracts.SessionInfo{}
 	syncLoaded(m)
@@ -86,7 +86,7 @@ func TestAfterTheLastTabClosesAnUnrequestedSessionTakesFocus(t *testing.T) {
 
 func TestCommandLineAtArrivalSaysItWasKept(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("later", "")(m)
 	m.Init()
 	m.input.SetValue("hello")
@@ -103,7 +103,7 @@ func TestCommandLineAtArrivalSaysItWasKept(t *testing.T) {
 
 func TestAttachmentAloneSaysItNeedsText(t *testing.T) {
 	f := &fakeBackend{startName: "fresh", startChannel: "c9"}
-	m := newModel(f)
+	m := startedModel(f)
 	m.pending = []Attachment{{Name: "a.png", Path: "/x/a.png"}}
 	if cmd := m.handleEnter(); cmd != nil {
 		t.Fatal("enter with an attachment alone must start nothing")

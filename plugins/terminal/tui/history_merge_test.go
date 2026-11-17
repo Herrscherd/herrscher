@@ -4,6 +4,8 @@ import (
 	"slices"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 )
@@ -26,25 +28,24 @@ func conversationTexts(tb *tab) []string {
 	return texts
 }
 
-func newHistoryTab(t *testing.T, transcript []contracts.ScrollbackLine) (*model, *tab) {
+func newHistoryTab(t *testing.T, transcript []contracts.ScrollbackLine) (*model, *tab, tea.Cmd) {
 	t.Helper()
 	f := &fakeBackend{
 		fe:         make(chan RoutedEvent, 1),
 		sessions:   []contracts.SessionInfo{{Name: "s", ChannelID: "c"}},
 		scrollback: map[string][]contracts.ScrollbackLine{"s": transcript},
 	}
-	m := newModel(f)
-	m.Update(sessionsMsg{seq: m.sessionsIssued, infos: f.sessions})
-	return m, m.tabs["c"]
+	m, load := startModel(f)
+	return m, m.tabs["c"], load
 }
 
 func TestAReplyInTheQueueAndTheHistoryShowsOnce(t *testing.T) {
-	m, tb := newHistoryTab(t, []contracts.ScrollbackLine{
+	m, tb, load := newHistoryTab(t, []contracts.ScrollbackLine{
 		{Role: "user", Text: "question"},
 		{Role: "assistant", Text: "answer"},
 	})
-	historyCmd := m.route(replyEvent("answer"))
-	for _, msg := range historyMsgs(historyCmd) {
+	m.route(replyEvent("answer"))
+	for _, msg := range historyMsgs(load) {
 		m.Update(msg)
 	}
 	want := []string{"question", "answer"}
@@ -54,12 +55,12 @@ func TestAReplyInTheQueueAndTheHistoryShowsOnce(t *testing.T) {
 }
 
 func TestAnIdenticalReplyAfterTheHistoryEndIsDroppedUntilTurnIDLands(t *testing.T) {
-	m, tb := newHistoryTab(t, []contracts.ScrollbackLine{
+	m, tb, load := newHistoryTab(t, []contracts.ScrollbackLine{
 		{Role: "user", Text: "question"},
 		{Role: "assistant", Text: "ok"},
 	})
-	historyCmd := m.route(replyEvent("ok"))
-	for _, msg := range historyMsgs(historyCmd) {
+	m.route(replyEvent("ok"))
+	for _, msg := range historyMsgs(load) {
 		m.Update(msg)
 	}
 	want := []string{"question", "ok"}
@@ -69,14 +70,14 @@ func TestAnIdenticalReplyAfterTheHistoryEndIsDroppedUntilTurnIDLands(t *testing.
 }
 
 func TestChunksOfAnAlreadyShownReplyAreDroppedWithIt(t *testing.T) {
-	m, tb := newHistoryTab(t, []contracts.ScrollbackLine{
+	m, tb, load := newHistoryTab(t, []contracts.ScrollbackLine{
 		{Role: "user", Text: "question"},
 		{Role: "assistant", Text: "answer"},
 	})
-	historyCmd := m.route(chunkEvent("an"))
+	m.route(chunkEvent("an"))
 	m.route(chunkEvent("swer"))
 	m.route(replyEvent("answer"))
-	for _, msg := range historyMsgs(historyCmd) {
+	for _, msg := range historyMsgs(load) {
 		m.Update(msg)
 	}
 	want := []string{"question", "answer"}
@@ -86,12 +87,12 @@ func TestChunksOfAnAlreadyShownReplyAreDroppedWithIt(t *testing.T) {
 }
 
 func TestAQueueWithoutOverlapReplaysInFullAndInOrder(t *testing.T) {
-	m, tb := newHistoryTab(t, []contracts.ScrollbackLine{
+	m, tb, load := newHistoryTab(t, []contracts.ScrollbackLine{
 		{Role: "user", Text: "question"},
 	})
-	historyCmd := m.route(replyEvent("first"))
+	m.route(replyEvent("first"))
 	m.route(replyEvent("second"))
-	for _, msg := range historyMsgs(historyCmd) {
+	for _, msg := range historyMsgs(load) {
 		m.Update(msg)
 	}
 	want := []string{"question", "first", "second"}

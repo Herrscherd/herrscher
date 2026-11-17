@@ -72,7 +72,7 @@ func TestLocalCommandsAreNeverDispatched(t *testing.T) {
 	for _, c := range localCommands(newTranslator()) {
 		be := &fakeBackend{}
 		be.sessions = []contracts.SessionInfo{{Name: "avant", ChannelID: "c1"}}
-		m := newModel(be)
+		m := startedModel(be)
 		m.ensureTab("c1")
 		m.active = "c1"
 		syncLoaded(m)

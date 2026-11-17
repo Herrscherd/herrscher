@@ -9,7 +9,7 @@ import (
 
 func TestTableErrorAtStartupStaysInTheKeyProblems(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.buildTables = func() (*dispatchTables, error) {
 		return &dispatchTables{}, errors.New("doublon")
 	}

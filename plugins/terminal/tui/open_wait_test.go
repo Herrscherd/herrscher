@@ -12,7 +12,7 @@ import (
 
 func TestEnterWaitsWhenAnotherSessionIsActive(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "main", ChannelID: "c1"}}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("ghost", "")(m)
 	m.Init()
 	m.input.SetValue("hello")
@@ -29,7 +29,7 @@ func TestEnterWaitsWhenAnotherSessionIsActive(t *testing.T) {
 
 func TestLatestSubmitReplacesTheQueuedText(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("later", "")(m)
 	m.Init()
 	m.input.SetValue("hello")
@@ -48,7 +48,7 @@ func TestLatestSubmitReplacesTheQueuedText(t *testing.T) {
 func TestBurstOfListsDoesNotReleaseBeforeTheDeadline(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
 	now := time.Unix(0, 0)
-	m := newModel(be)
+	m := startedModel(be)
 	m.clock = func() time.Time { return now }
 	OpenOn("later", "")(m)
 	m.Init()
@@ -74,7 +74,7 @@ func TestBurstOfListsDoesNotReleaseBeforeTheDeadline(t *testing.T) {
 func TestFrozenListIsReleasedAtTheDeadline(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "main", ChannelID: "c1"}}}
 	now := time.Unix(0, 0)
-	m := newModel(be)
+	m := startedModel(be)
 	m.clock = func() time.Time { return now }
 	OpenOn("ghost", "")(m)
 	m.Init()
@@ -97,7 +97,7 @@ func TestOpenDoesNotStealFocusAfterTheUserLeftTheWaitingTab(t *testing.T) {
 		{Name: "main", ChannelID: "c1"},
 		{Name: "two", ChannelID: "c2"},
 	}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("later", "")(m)
 	m.Init()
 	updateKey(m, tea.KeyMsg{Type: tea.KeyTab})
@@ -133,7 +133,7 @@ func TestUserChoiceAtEachEntryPointEndsTheWait(t *testing.T) {
 				{Name: "main", ChannelID: "c1"},
 				{Name: "two", ChannelID: "c2"},
 			}}
-			m := newModel(be)
+			m := startedModel(be)
 			OpenOn("ghost", "")(m)
 			m.Init()
 
@@ -159,7 +159,7 @@ func TestUserChoiceAtEachEntryPointEndsTheWait(t *testing.T) {
 
 func TestEmptyComposerCancelsTheQueuedText(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("later", "")(m)
 	m.Init()
 	m.input.SetValue("hello")
@@ -179,7 +179,7 @@ func TestEmptyComposerCancelsTheQueuedText(t *testing.T) {
 
 func TestQueuedAttachmentStaysVisibleAndIsSentOnce(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("later", "")(m)
 	m.Init()
 	m.pending = []Attachment{{Name: "a.png", Path: "/x/a.png"}}
@@ -203,7 +203,7 @@ func TestQueuedAttachmentStaysVisibleAndIsSentOnce(t *testing.T) {
 
 func TestQueuedAttachmentCanBeRemovedBeforeDelivery(t *testing.T) {
 	be := &fakeBackend{sessions: []contracts.SessionInfo{}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("later", "")(m)
 	m.Init()
 	m.pending = []Attachment{{Name: "a.png", Path: "/x/a.png"}, {Name: "b.png", Path: "/x/b.png"}}
@@ -229,7 +229,7 @@ func TestActiveTabRemovedDuringTheWaitDoesNotLetTheTargetTakeFocus(t *testing.T)
 		{Name: "main", ChannelID: "c1"},
 		{Name: "two", ChannelID: "c2"},
 	}}
-	m := newModel(be)
+	m := startedModel(be)
 	OpenOn("later", "")(m)
 	m.Init()
 	if m.active != "c1" {
@@ -252,7 +252,7 @@ func TestActiveTabRemovedDuringTheWaitDoesNotLetTheTargetTakeFocus(t *testing.T)
 func TestOpenWaitReleasesWhenNoListEverArrives(t *testing.T) {
 	be := &fakeBackend{}
 	now := time.Unix(0, 0)
-	m := newModel(be)
+	m := startedModel(be)
 	m.clock = func() time.Time { return now }
 	OpenOn("ghost", "")(m)
 	m.Init()
@@ -270,7 +270,7 @@ func TestOpenWaitReleasesWhenNoListEverArrives(t *testing.T) {
 
 func TestStartingSessionKeepsItsAttachmentsVisibleAndSentOnce(t *testing.T) {
 	f := &fakeBackend{startName: "fresh", startChannel: "c9"}
-	m := newModel(f)
+	m := startedModel(f)
 	m.pending = []Attachment{{Name: "a.png", Path: "/x/a.png"}}
 	m.input.SetValue("hello")
 	started, ok := runCmd(m.handleEnter()).(sessionStartedMsg)

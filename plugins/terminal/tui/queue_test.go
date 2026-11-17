@@ -16,7 +16,7 @@ import (
 func queueFixture(t *testing.T) (*model, *fakeBackend) {
 	t.Helper()
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{ChannelID: "a", Name: "s1"}}}
-	m := newModel(f)
+	m := startedModel(f)
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	m.ensureTab("a")
 	m.active = "a"

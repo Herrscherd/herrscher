@@ -379,7 +379,7 @@ func (m *model) handleForkResolved(msg forkResolvedMsg) {
 		return
 	}
 	m.releaseHeld(msg.name)
-	m.ensureTab(msg.channel)
+	m.ensureSessionTab(contracts.SessionInfo{ChannelID: msg.channel, Name: msg.name})
 	m.activate(msg.channel)
 	m.flash = m.tr.t("tui.rewind.fork_opened", map[string]any{tplArgName: msg.name})
 }

@@ -74,7 +74,7 @@ func TestRenderEventShowsCostPerTab(t *testing.T) {
 }
 
 func TestRenderEventOmitsZeroCost(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventReply, Text: "done", Done: true}})
 	for _, e := range m.tabs["a"].entries {
 		if strings.Contains(e.text, "$") {
@@ -187,7 +187,7 @@ func (f *fakeBackend) Commands() []CommandSpec {
 
 func TestSlashLineDispatches(t *testing.T) {
 	f := &fakeBackend{}
-	m := newModel(f)
+	m := startedModel(f)
 	m.ensureTab("a")
 	m.input.SetValue("/session list")
 	runCmd(m.handleEnter())
@@ -198,7 +198,7 @@ func TestSlashLineDispatches(t *testing.T) {
 
 func TestBareSlashDoesNotDispatch(t *testing.T) {
 	f := &fakeBackend{}
-	m := newModel(f)
+	m := startedModel(f)
 	m.ensureTab("a")
 	m.active = "a"
 	m.input.SetValue("/")
@@ -210,7 +210,7 @@ func TestBareSlashDoesNotDispatch(t *testing.T) {
 
 func TestPlainLineSubmits(t *testing.T) {
 	f := &fakeBackend{}
-	m := newModel(f)
+	m := startedModel(f)
 	m.ensureTab("a")
 	m.input.SetValue("hello world")
 	runCmd(m.handleEnter())
@@ -221,7 +221,7 @@ func TestPlainLineSubmits(t *testing.T) {
 
 func TestFirstLineWithoutSessionStartsOneAndSubmitsIt(t *testing.T) {
 	f := &fakeBackend{startName: "herrscher", startChannel: "c1"}
-	m := newModel(f)
+	m := startedModel(f)
 	m.input.SetValue("hello")
 	started, ok := runCmd(m.handleEnter()).(sessionStartedMsg)
 	if !ok {
@@ -238,7 +238,7 @@ func TestFirstLineWithoutSessionStartsOneAndSubmitsIt(t *testing.T) {
 
 func TestFailedSessionStartGivesTheLineBack(t *testing.T) {
 	f := &fakeBackend{startErr: errors.New("daemon down")}
-	m := newModel(f)
+	m := startedModel(f)
 	m.input.SetValue("hello")
 	started, ok := runCmd(m.handleEnter()).(sessionStartedMsg)
 	if !ok {
@@ -258,7 +258,7 @@ func TestFailedSessionStartGivesTheLineBack(t *testing.T) {
 
 func TestFailedSessionStartKeepsWhatWasTypedWhileOpening(t *testing.T) {
 	f := &fakeBackend{startErr: errors.New("daemon down")}
-	m := newModel(f)
+	m := startedModel(f)
 	m.input.SetValue("hello")
 	started, ok := runCmd(m.handleEnter()).(sessionStartedMsg)
 	if !ok {
@@ -278,7 +278,7 @@ func TestReopenedTabSeedsDimmedScrollback(t *testing.T) {
 			"s": {{Role: "user", Text: "old-q"}, {Role: "assistant", Text: "old-a"}},
 		},
 	}
-	m := newModel(f)
+	m := startedModel(f)
 	syncLoaded(m)
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventChunk, Text: "live"}})
 	joined := tabText(m.tabs["c"])
@@ -295,7 +295,7 @@ func TestSyncTabsSkipsArchived(t *testing.T) {
 		{Name: "live", ChannelID: "c1"},
 		{Name: "arch", ChannelID: "c2", Archived: true},
 	}}
-	m := newModel(f)
+	m := startedModel(f)
 	syncLoaded(m)
 	if _, ok := m.tabs["c1"]; !ok {
 		t.Fatal("live session must get a tab")
@@ -307,7 +307,7 @@ func TestSyncTabsSkipsArchived(t *testing.T) {
 
 func TestSlashResumeOpensPicker(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "c", Archived: true, Resumable: true}}}
-	m := newModel(f)
+	m := startedModel(f)
 	m.input.SetValue("/resume")
 	runCmd(m.handleEnter())
 	if !m.resumeOpen {
@@ -328,7 +328,7 @@ func TestResumePickerRevivesArchivedAndFocusesLive(t *testing.T) {
 			"arch": {{Role: "user", Text: "past"}},
 		},
 	}
-	m := newModel(f)
+	m := startedModel(f)
 	syncLoaded(m)
 
 	m.openResume()
@@ -372,7 +372,7 @@ func TestResumePickerRevivesArchivedAndFocusesLive(t *testing.T) {
 }
 
 func TestClosedEventRemovesTab(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.ensureTab("a")
 	m.ensureTab("b")
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "b"}, Event: contracts.Event{T: eventwire.EventClosed}})
@@ -388,7 +388,7 @@ func TestClosedEventRemovesTab(t *testing.T) {
 
 func TestSyncTabsFromSessions(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "alpha", ChannelID: "terminal/alpha-1"}}}
-	m := newModel(f)
+	m := startedModel(f)
 	syncLoaded(m)
 	tb, ok := m.tabs["terminal/alpha-1"]
 	if !ok || tb.label != "alpha" {
@@ -397,7 +397,7 @@ func TestSyncTabsFromSessions(t *testing.T) {
 }
 
 func TestTabBusyLifecycle(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventStatus, Text: "working"}})
 	if !m.tabs["a"].busy {
 		t.Fatal("status must mark tab busy")
@@ -412,7 +412,7 @@ func TestTabBusyLifecycle(t *testing.T) {
 }
 
 func TestResizeSyncsViewport(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.ensureTab("a")
 	m.tabs["a"].entries = []entry{{role: roleAgent, text: "line1"}, {role: roleAgent, text: "line2"}, {role: roleAgent, text: "line3"}}
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
@@ -424,7 +424,7 @@ func TestResizeSyncsViewport(t *testing.T) {
 }
 
 func TestHelpReducesViewportHeight(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	base := m.vp.Height
 	m.toggleHelp()
@@ -438,7 +438,7 @@ func TestHelpReducesViewportHeight(t *testing.T) {
 }
 
 func TestHelpToggle(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	if m.showHelp {
 		t.Fatal("help off by default")
 	}
@@ -450,7 +450,7 @@ func TestHelpToggle(t *testing.T) {
 
 func TestCloseActiveDispatchesClose(t *testing.T) {
 	f := &fakeBackend{}
-	m := newModel(f)
+	m := startedModel(f)
 	tb := m.ensureTab("terminal/alpha-1")
 	tb.label = "alpha"
 	m.active = "terminal/alpha-1"
@@ -469,7 +469,7 @@ func TestCloseActiveDispatchesClose(t *testing.T) {
 func TestSlashSessionCloseClosesTheActiveSession(t *testing.T) {
 	for _, line := range []string{"/session close", "/session close --name", "/session close --force"} {
 		f := &fakeBackend{}
-		m := newModel(f)
+		m := startedModel(f)
 		tb := m.ensureTab("terminal/alpha-1")
 		tb.label = "alpha"
 		m.active = "terminal/alpha-1"
@@ -493,7 +493,7 @@ func TestSlashSessionCloseClosesTheActiveSession(t *testing.T) {
 func TestSlashSessionCloseHonoursAnExplicitName(t *testing.T) {
 	for _, line := range []string{"/session close --name beta", "/session close --name=beta", "/session close beta"} {
 		f := &fakeBackend{}
-		m := newModel(f)
+		m := startedModel(f)
 		tb := m.ensureTab("terminal/alpha-1")
 		tb.label = "alpha"
 		m.active = "terminal/alpha-1"
@@ -506,7 +506,7 @@ func TestSlashSessionCloseHonoursAnExplicitName(t *testing.T) {
 }
 
 func TestAbandonedSetsDisconnected(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventAbandoned}})
 	if !m.tabs["a"].disconnected {
 		t.Fatal("abandoned must set disconnected")
@@ -518,7 +518,7 @@ func TestAbandonedSetsDisconnected(t *testing.T) {
 }
 
 func TestQuestionMarkTogglesHelpWhenEmpty(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	if m.showHelp {
 		t.Fatal("help must start off")
 	}
@@ -534,7 +534,7 @@ func TestQuestionMarkTogglesHelpWhenEmpty(t *testing.T) {
 }
 
 func TestQuestionMarkTypedWhenInputNonEmpty(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.input.SetValue("foo")
 	if m.showHelp {
 		t.Fatal("help must start off")
@@ -561,7 +561,7 @@ func TestShortcutsPanelListsClaudeKeys(t *testing.T) {
 
 func TestHistoryRecallsLastPrompt(t *testing.T) {
 	f := &fakeBackend{}
-	m := newModel(f)
+	m := startedModel(f)
 	m.ensureTab("a")
 	m.active = "a"
 	m.ready = true
@@ -607,7 +607,7 @@ func TestSessionSwitchOpensAndFocuses(t *testing.T) {
 		{Name: "one", ChannelID: "one"},
 		{Name: "two", ChannelID: "two"},
 	}}
-	m := newModel(f)
+	m := startedModel(f)
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.ensureTab("one")
 	m.active = "one"
@@ -628,7 +628,7 @@ func TestSessionSwitchOpensAndFocuses(t *testing.T) {
 
 func TestEscInterruptsActiveTurn(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a"}}}
-	m := newModel(f)
+	m := startedModel(f)
 	m.ensureTab("a")
 	m.active = "a"
 	m.ready = true
@@ -640,7 +640,7 @@ func TestEscInterruptsActiveTurn(t *testing.T) {
 }
 
 func TestPendingCloseCtrlCQuits(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.pendingClose = true
 	if !m.pendingClose {
 		t.Fatal("pendingClose must be true")
@@ -656,7 +656,7 @@ func TestPendingCloseCtrlCQuits(t *testing.T) {
 }
 
 func TestPendingCloseEscQuits(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.pendingClose = true
 	msg := tea.KeyMsg{Type: tea.KeyEsc}
 	_, cmd := m.Update(msg)
@@ -669,7 +669,7 @@ func TestPendingCloseEscQuits(t *testing.T) {
 }
 
 func TestPendingCloseOtherKeyCancels(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.pendingClose = true
 	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
 	_, cmd := m.Update(msg)
@@ -700,7 +700,7 @@ func tabLineCount(tb *tab, needle string) int {
 }
 
 func TestSubmitMarksBusyImmediately(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.ensureTab("a")
 	m.active = "a"
 	m.input.SetValue("hello")
@@ -718,7 +718,7 @@ func TestSubmitMarksBusyImmediately(t *testing.T) {
 }
 
 func TestStreamedReplyNotDuplicated(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.ensureTab("a")
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventChunk, Text: "the answer"}})
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventReply, Text: "the answer", Done: true}})
@@ -731,7 +731,7 @@ func TestStreamedReplyNotDuplicated(t *testing.T) {
 }
 
 func TestNonStreamedReplyRendersOnce(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.ensureTab("a")
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "a"}, Event: contracts.Event{T: eventwire.EventReply, Text: "direct answer", Done: true}})
 	if got := tabLineCount(m.tabs["a"], "direct answer"); got != 1 {
@@ -757,7 +757,7 @@ func TestThinkingLineDerivedWhileBusyNoStream(t *testing.T) {
 }
 
 func TestAnyBusyReflectsTabs(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.ensureTab("a")
 	m.ensureTab("b")
 	if m.anyBusy() {
@@ -770,7 +770,7 @@ func TestAnyBusyReflectsTabs(t *testing.T) {
 }
 
 func TestPaletteOpensAndCompletes(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.ensureTab("a")
 	m.active = "a"
 	if m.paletteOpen() {
@@ -788,7 +788,7 @@ func TestPaletteOpensAndCompletes(t *testing.T) {
 }
 
 func TestSpinnerStartsOnBusyStopsWhenIdle(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.ensureTab("a")
 	m.active = "a"
 	if m.spinning {
@@ -810,7 +810,7 @@ func TestSpinnerStartsOnBusyStopsWhenIdle(t *testing.T) {
 }
 
 func TestPaletteEscClosesWithoutQuitting(t *testing.T) {
-	m := newModel(&fakeBackend{})
+	m := startedModel(&fakeBackend{})
 	m.input.SetValue("/session")
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if cmd != nil {
@@ -874,7 +874,7 @@ func TestEmptyThinkingIsDropped(t *testing.T) {
 
 func TestCtrlCInterruptsTheTurnThenQuits(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a"}}}
-	m := newModel(f)
+	m := startedModel(f)
 	m.ensureTab("a")
 	m.active = "a"
 	m.ready = true
@@ -902,7 +902,7 @@ func TestCtrlCInterruptsTheTurnThenQuits(t *testing.T) {
 
 func TestCtrlCQuitsWhenNoTurnIsRunning(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a"}}}
-	m := newModel(f)
+	m := startedModel(f)
 	m.ensureTab("a")
 	m.active = "a"
 	m.ready = true
@@ -918,7 +918,7 @@ func TestCtrlCQuitsWhenNoTurnIsRunning(t *testing.T) {
 
 func TestCtrlCNoticesWhenNothingWasInterrupted(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a"}}, refuseInterrupt: true}
-	m := newModel(f)
+	m := startedModel(f)
 	m.ensureTab("a")
 	m.active = "a"
 	m.ready = true
@@ -936,7 +936,7 @@ func TestCtrlCNoticesWhenNothingWasInterrupted(t *testing.T) {
 
 func TestCtrlCDuringAPendingCloseInterruptsTheTurn(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a"}}}
-	m := newModel(f)
+	m := startedModel(f)
 	m.ensureTab("a")
 	m.active = "a"
 	m.ready = true
@@ -954,7 +954,7 @@ func TestCtrlCDuringAPendingCloseInterruptsTheTurn(t *testing.T) {
 
 func TestCtrlCInterruptsATurnFromTheSearchOverlay(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a"}}}
-	m := newModel(f)
+	m := startedModel(f)
 	m.ensureTab("a")
 	m.active = "a"
 	m.ready = true

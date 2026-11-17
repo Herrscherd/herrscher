@@ -63,7 +63,7 @@ func TestMentionUsesTheFloatingList(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "notes.md"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	m := newModel(&fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a", Dir: dir}}})
+	m := startedModel(&fakeBackend{sessions: []contracts.SessionInfo{{Name: "a", ChannelID: "a", Dir: dir}}})
 	syncLoaded(m)
 	m.ensureTab("a")
 	m = typeInto(t, m, tea.WindowSizeMsg{Width: 74, Height: 24})

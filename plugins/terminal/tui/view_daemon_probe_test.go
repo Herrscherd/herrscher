@@ -74,7 +74,7 @@ func TestViewNeverCallsTheDaemonOnAnySurface(t *testing.T) {
 				sessions: []contracts.SessionInfo{{Name: "alpha", ChannelID: "c1", Vendor: "claude", Gateways: []string{"terminal"}, Dir: "/tmp/alpha"}},
 				overview: boardOverviewJSON,
 			}}
-			m := newModel(be)
+			m := startedModel(be)
 			m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 			syncLoaded(m)
 			m.active = "c1"
@@ -94,7 +94,7 @@ func TestWorktreeDirNeverReadsTheDaemon(t *testing.T) {
 	be := &probeBackend{fakeBackend: &fakeBackend{
 		sessions: []contracts.SessionInfo{{Name: "alpha", ChannelID: "c1", Dir: "/tmp/alpha"}},
 	}}
-	m := newModel(be)
+	m := startedModel(be)
 	syncLoaded(m)
 	m.active = "c1"
 

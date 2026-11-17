@@ -490,7 +490,7 @@ func shareBar(part float64, pal termpaint.Palette) string {
 }
 
 func accountLabel(share Share, text *renderer) string {
-	name := share.Account
+	name := termpaint.Printable(share.Account)
 	if name == "" {
 		name = text.text(clitext.QuotaAccountNative, nil)
 	}
@@ -501,7 +501,7 @@ func modelLabel(share Share, text *renderer) string {
 	if share.Model == "" {
 		return text.text(clitext.SpendModelUnknown, nil)
 	}
-	return share.Model
+	return termpaint.Printable(share.Model)
 }
 
 func formatTokens(lang i18n.Language, count int64, text *renderer) string {

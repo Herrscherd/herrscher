@@ -1,11 +1,15 @@
 package tui
 
-import "testing"
+import (
+	"testing"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
+)
 
 func TestKeyOnAForkedSessionReachesTheDaemonBeforeAnySessionsMsg(t *testing.T) {
 	f := &fakeBackend{fe: make(chan RoutedEvent, 1)}
 	m := startedModel(f)
-	m.Update(forkResolvedMsg{name: "forked", channel: "cf"})
+	m.Update(forkResolvedMsg{info: contracts.SessionInfo{Name: "forked", ChannelID: "cf"}})
 	typeLine(m, "!ls")
 	deliver(m, m.handleEnter())
 	if len(f.dispatched) != 1 {

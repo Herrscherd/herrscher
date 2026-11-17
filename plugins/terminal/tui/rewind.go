@@ -135,8 +135,7 @@ type forkDoneMsg struct {
 }
 
 type forkResolvedMsg struct {
-	name    string
-	channel string
+	info contracts.SessionInfo
 }
 
 func (m *model) escapeIdle() {
@@ -369,19 +368,28 @@ func (m *model) handleForkDone(msg forkDoneMsg) tea.Cmd {
 	}
 	backend, name := m.tm, msg.name
 	return func() tea.Msg {
-		return forkResolvedMsg{name: name, channel: channelOfSession(backend.Sessions(), name)}
+		return forkResolvedMsg{info: sessionNamed(backend.Sessions(), name)}
 	}
 }
 
 func (m *model) handleForkResolved(msg forkResolvedMsg) {
-	if msg.channel == "" {
-		m.flash = m.tr.t("tui.rewind.fork_created", map[string]any{tplArgName: msg.name})
+	if msg.info.ChannelID == "" {
+		m.flash = m.tr.t("tui.rewind.fork_created", map[string]any{tplArgName: msg.info.Name})
 		return
 	}
-	m.releaseHeld(msg.name)
-	m.ensureSessionTab(contracts.SessionInfo{ChannelID: msg.channel, Name: msg.name})
-	m.activate(msg.channel)
-	m.flash = m.tr.t("tui.rewind.fork_opened", map[string]any{tplArgName: msg.name})
+	m.releaseHeld(msg.info.Name)
+	m.ensureSessionTab(msg.info)
+	m.activate(msg.info.ChannelID)
+	m.flash = m.tr.t("tui.rewind.fork_opened", map[string]any{tplArgName: msg.info.Name})
+}
+
+func sessionNamed(sessions []contracts.SessionInfo, name string) contracts.SessionInfo {
+	for index := range sessions {
+		if sessions[index].Name == name && sessions[index].ChannelID != "" {
+			return sessions[index]
+		}
+	}
+	return contracts.SessionInfo{Name: name}
 }
 
 func channelOfSession(sessions []contracts.SessionInfo, name string) string {

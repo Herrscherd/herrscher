@@ -244,6 +244,7 @@ func TestBlockedWarningWriterDoesNotHoldStopPastTheBudget(t *testing.T) {
 }
 
 func runBlockedWriterCase(t *testing.T, c blockedWriterCase, path inflightPath) {
+	t.Helper()
 	name := "inflight-" + newTurnID()
 	logs := captureDefaultLog(t)
 	warnings := newGatedWarnings(blockedWriterMarker(c, name))

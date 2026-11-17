@@ -7,21 +7,20 @@ import (
 )
 
 func TestStopLiveSharesOneGraceAcrossBlockedSessions(t *testing.T) {
-	const sessions = 2
 	var warnings lockedBuffer
 	h := newInflightHub(t, "stuck-"+newTurnID(), blockedGrace, &warnings)
 	stuck := make(chan struct{})
 	t.Cleanup(func() { close(stuck) })
-	names := []string{"stuck-a", "stuck-b"}
+	names := []string{"stuck-a", "stuck-b", "stuck-c", "stuck-d", "stuck-e", "stuck-f"}
 	for _, name := range names {
 		h.live[name] = liveSession{cancel: func() {}, done: stuck, release: func() {}}
 	}
 
 	started := time.Now()
 	h.stopLive()
-	bound := 3*blockedGrace + (sessions+3)*warningWriteBudget + blockedStopMargin
+	bound := 2*blockedGrace + blockedStopMargin
 	if elapsed := time.Since(started); elapsed > bound {
-		t.Fatalf("stopLive held %v for %d blocked sessions, past its bound of %v", elapsed.Round(time.Millisecond), sessions, bound)
+		t.Fatalf("stopLive held %v for %d blocked sessions, past its bound of %v", elapsed.Round(time.Millisecond), len(names), bound)
 	}
 
 	awaitSinkQuiet(t, h.sink)

@@ -68,9 +68,9 @@ func remoteClientCredentials() (credentials.TransportCredentials, error) {
 	return cfg.ClientCredentials()
 }
 
-func newResolver(log *slog.Logger) (*host.Resolver, error) {
+func newResolver(messages *host.Messages, log *slog.Logger) (*host.Resolver, error) {
 	categories := remoteCategories()
-	resolver := host.NewResolver(host.NewMessages(), categories, os.Getenv("HERRSCHER_NATS"))
+	resolver := host.NewResolver(messages, categories, os.Getenv("HERRSCHER_NATS"))
 	resolver.SetLogger(log)
 	creds, err := remoteClientCredentials()
 	if err != nil && !errors.Is(err, errTLSUnset) {

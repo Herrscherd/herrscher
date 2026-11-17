@@ -21,7 +21,7 @@ func (fakeExtractor) Extract(_ context.Context, _, _ string) ([]orchestrator.Can
 
 func TestBuildOrchestratorLearnerWhenExtractorConfigured(t *testing.T) {
 	orchestrator.RegisterExtractor("b2-fake", fakeExtractor{})
-	orch := buildOrchestrator(context.Background(), nil, "sess", "", "",
+	orch := buildOrchestrator(context.Background(), host.NewMessages(), nil, "sess", "", "",
 		learnConfig{extractor: "b2-fake", journal: ".neublox/calls.log", consolidateEvery: 3}, host.Logger(false))
 	if _, ok := orch.(*orchestrator.Learner); !ok {
 		t.Fatalf("want *orchestrator.Learner when an extractor is configured, got %T", orch)
@@ -29,7 +29,7 @@ func TestBuildOrchestratorLearnerWhenExtractorConfigured(t *testing.T) {
 }
 
 func TestBuildOrchestratorCuratorWhenNoExtractor(t *testing.T) {
-	orch := buildOrchestrator(context.Background(), nil, "sess", "", "",
+	orch := buildOrchestrator(context.Background(), host.NewMessages(), nil, "sess", "", "",
 		learnConfig{}, host.Logger(false))
 	if _, ok := orch.(*orchestrator.Curator); !ok {
 		t.Fatalf("want plain *orchestrator.Curator with no extractor, got %T", orch)

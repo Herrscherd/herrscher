@@ -33,20 +33,20 @@ const (
 //go:embed locales
 var localeFiles embed.FS
 
+type catalogText struct {
+	lang    i18n.Language
+	catalog func() (*i18n.Catalog, error)
+	log     *slog.Logger
+}
+
 type translator struct {
-	lang     i18n.Language
-	catalog  func() (*i18n.Catalog, error)
+	catalogText
 	messages *clitext.Messages
 	cliOnce  *sync.Once
-	log      *slog.Logger
 }
 
 func newTranslator(messages *clitext.Messages) translator {
-	return translator{lang: i18n.English, catalog: sync.OnceValues(loadLocales), messages: messages, cliOnce: new(sync.Once), log: slog.Default()}
-}
-
-func newCatalogTranslator() translator {
-	return translator{lang: i18n.English, catalog: sync.OnceValues(loadLocales), log: slog.Default()}
+	return translator{catalogText: catalogText{lang: i18n.English, catalog: sync.OnceValues(loadLocales), log: slog.Default()}, messages: messages, cliOnce: new(sync.Once)}
 }
 
 func loadLocales() (*i18n.Catalog, error) {
@@ -63,14 +63,14 @@ func (trans translator) in(lang i18n.Language) translator {
 	return trans
 }
 
-func (trans translator) logger() *slog.Logger {
+func (trans catalogText) logger() *slog.Logger {
 	if trans.log == nil {
 		return slog.Default()
 	}
 	return trans.log
 }
 
-func (trans translator) t(key string, params map[string]any) string {
+func (trans catalogText) t(key string, params map[string]any) string {
 	catalog, err := trans.catalog()
 	if err != nil {
 		trans.logger().Error("tui catalog unavailable", "key", key, "err", err)

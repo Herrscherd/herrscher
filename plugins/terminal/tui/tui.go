@@ -1587,11 +1587,11 @@ func Run(ctx context.Context, cancel context.CancelFunc, messages *clitext.Messa
 	}
 	if err := writeStdout(enhancedKeysOn); err != nil {
 		cancel()
-		return keyedError{cause: err, key: "tui.terminal.enhanced_keys_enable_failed", params: map[string]any{"Err": err.Error()}}
+		return renderedError{cause: err, text: model.tr.t("tui.terminal.enhanced_keys_enable_failed", map[string]any{"Err": err.Error()})}
 	}
 	runErr = runProgram(ctx, cancel, backend, model, tea.WithInput(newFilteredStdin(model.keys)))
 	if err := writeStdout(enhancedKeysOff); err != nil {
-		return errors.Join(runErr, keyedError{cause: err, key: "tui.terminal.enhanced_keys_disable_failed", params: map[string]any{"Err": err.Error()}})
+		return errors.Join(runErr, renderedError{cause: err, text: model.tr.t("tui.terminal.enhanced_keys_disable_failed", map[string]any{"Err": err.Error()})})
 	}
 	return runErr
 }

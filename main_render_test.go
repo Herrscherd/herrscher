@@ -64,7 +64,7 @@ func TestRunRefusesACatalogCollisionBeforeAnyCommand(t *testing.T) {
 	contracts.Default = contracts.Registry{}
 	contracts.Default.Register(collidingPlugin("alpha", "a"))
 	contracts.Default.Register(collidingPlugin("beta", "b"))
-	refusal := clitext.For(clitext.ClientLanguage()).Err()
+	refusal := testMessages().For(clitext.ClientLanguage()).Err()
 	if refusal == nil {
 		t.Fatal("the colliding plugins must break the catalogs")
 	}

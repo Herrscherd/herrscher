@@ -309,11 +309,12 @@ func (h *hub) goLiveLocked(ctx context.Context, sess state.Session) error {
 		}
 	}()
 
-	released := acceptCommands(sctx, commands, h.sessionCommands(sess.Name), defaultCommandReadTimeout, h.teardownGrace/teardownLateShare, h.warnCommandHandlerOverrun)
+	stopped, released := acceptCommands(sctx, commands, h.sessionCommands(sess.Name), defaultCommandReadTimeout, h.teardownGrace/teardownLateShare, h.warnCommandHandlerOverrun)
 	releaseSockets := sync.OnceFunc(func() {
 		logCleanup(acc.Close())
 		logCleanup(commands.Close())
 		cancel()
+		<-stopped
 	})
 	h.mu.Lock()
 	h.live[sess.Name] = liveSession{cancel: cancel, done: done, released: released, release: releaseSockets}

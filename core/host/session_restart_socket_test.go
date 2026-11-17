@@ -19,7 +19,7 @@ func TestRestartOnTheSameNameReclaimsTheCommandSocket(t *testing.T) {
 	h.mu.Lock()
 	first := h.live[name]
 	h.mu.Unlock()
-	first.release()
+	h.goDead(name)
 
 	if err := h.goLive(t.Context(), sess); err != nil {
 		t.Fatalf("the session could not come back on its own name right after its release: %v", err)

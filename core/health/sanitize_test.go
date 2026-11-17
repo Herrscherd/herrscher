@@ -90,6 +90,29 @@ func TestSummaryAndBannerNeutraliseVersionAndWorstCheck(t *testing.T) {
 	}
 }
 
+func TestCompactionTitleNeutralisesTheStack(t *testing.T) {
+	snapshot := health.Snapshot{
+		CompactStack: []string{"jev\x1b[2J"},
+		Checks: []health.Check{
+			{Group: health.GroupCompaction, Name: "compact", Report: contracts.ProbeReport{State: contracts.HealthOK}},
+		},
+	}
+	view, err := snapshot.View(i18n.English)
+	if err != nil {
+		t.Fatalf("View() error = %v", err)
+	}
+	var title string
+	for _, section := range view.Sections {
+		if section.Group == health.GroupCompaction {
+			title = section.Title
+		}
+	}
+	assertNoRawControl(t, title)
+	if want := `jev\x1b[2J`; !strings.Contains(title, want) {
+		t.Errorf("compaction title does not contain %q: %q", want, title)
+	}
+}
+
 func TestValidUTF8ReachesTheTableUnchanged(t *testing.T) {
 	snapshot := health.Snapshot{Checks: []health.Check{
 		{Group: health.GroupBackends, Name: "démon ✕ 日本", Report: contracts.ProbeReport{State: contracts.HealthOK}},

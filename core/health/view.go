@@ -25,7 +25,6 @@ const (
 // Row is one check as a report shows it, every text already rendered in the
 // language of the report.
 type Row struct {
-	Check     Check
 	State     contracts.HealthState
 	Glyph     string
 	StateText string
@@ -80,7 +79,7 @@ type View struct {
 func (s Snapshot) View(lang i18n.Language) (View, error) {
 	text := &renderer{lang: lang}
 	view := View{
-		Title:  termpaint.Printable(text.key(clitext.HealthBannerTitle, clitext.Params{clitext.ParamVersion: s.Daemon.Version})),
+		Title:  text.key(clitext.HealthBannerTitle, clitext.Params{clitext.ParamVersion: s.Daemon.Version}),
 		Banner: text.key(clitext.HealthBanner, s.bannerParams(text)),
 		Header: strings.Split(text.key(clitext.HealthHeader, nil), "\t"),
 		Counts: s.counts(text),
@@ -94,9 +93,9 @@ func (s Snapshot) View(lang i18n.Language) (View, error) {
 		view.Sections = append(view.Sections, Section{Group: group, Title: s.groupTitle(group, text), Rows: s.rows(checks, text)})
 	}
 	if worst, found := s.worst(); found {
-		view.Worst = termpaint.Printable(worst.Service())
+		view.Worst = worst.Service()
 	}
-	return view, text.err
+	return view.printable(), text.err
 }
 
 // Rows renders checks in lang, one row each, in the order given.
@@ -115,7 +114,7 @@ func Latency(lang i18n.Language, elapsed time.Duration) (string, error) {
 func (s Snapshot) rows(checks []Check, text *renderer) []Row {
 	rows := make([]Row, 0, len(checks))
 	for index := range checks {
-		rows = append(rows, s.row(checks[index], text))
+		rows = append(rows, s.row(checks[index], text).printable())
 	}
 	return rows
 }
@@ -123,25 +122,53 @@ func (s Snapshot) rows(checks []Check, text *renderer) []Row {
 func (s Snapshot) row(check Check, text *renderer) Row {
 	report := Settled(check.Report)
 	row := Row{
-		Check:     check,
 		State:     report.State,
 		Glyph:     stateGlyph(report.State),
 		StateText: text.key(stateKey(report.State), nil),
-		Name:      termpaint.Printable(checkName(check, text)),
-		Account:   termpaint.Printable(accountName(check, text)),
+		Name:      checkName(check, text),
+		Account:   accountName(check, text),
 		Default:   check.Default,
-		Facts:     termpaint.Printable(s.facts(check, text)),
+		Facts:     s.facts(check, text),
 	}
 	if report.Latency > 0 {
 		row.Latency = text.latency(report.Latency)
 	}
 	if report.Detail.Code != 0 {
-		row.Cause = termpaint.Printable(text.notice(report.Detail))
+		row.Cause = text.notice(report.Detail)
 	}
 	if report.Remedy.Code != 0 {
-		row.Remedy = termpaint.Printable(text.notice(report.Remedy))
+		row.Remedy = text.notice(report.Remedy)
 	}
 	return row
+}
+
+func (r Row) printable() Row {
+	r.Glyph = termpaint.Printable(r.Glyph)
+	r.StateText = termpaint.Printable(r.StateText)
+	r.Name = termpaint.Printable(r.Name)
+	r.Account = termpaint.Printable(r.Account)
+	r.Latency = termpaint.Printable(r.Latency)
+	r.Cause = termpaint.Printable(r.Cause)
+	r.Facts = termpaint.Printable(r.Facts)
+	r.Remedy = termpaint.Printable(r.Remedy)
+	return r
+}
+
+func (v View) printable() View {
+	v.Title = termpaint.Printable(v.Title)
+	v.Banner = termpaint.Printable(v.Banner)
+	v.Hint = termpaint.Printable(v.Hint)
+	v.Worst = termpaint.Printable(v.Worst)
+	for index := range v.Header {
+		v.Header[index] = termpaint.Printable(v.Header[index])
+	}
+	for index := range v.Counts {
+		v.Counts[index].Text = termpaint.Printable(v.Counts[index].Text)
+	}
+	for index := range v.Sections {
+		v.Sections[index].Title = termpaint.Printable(v.Sections[index].Title)
+	}
+	return v
 }
 
 func (s Snapshot) groupTitle(group Group, text *renderer) string {
@@ -149,7 +176,7 @@ func (s Snapshot) groupTitle(group Group, text *renderer) string {
 	if group != GroupCompaction || len(s.CompactStack) == 0 {
 		return title
 	}
-	stack := termpaint.Printable(strings.Join(s.CompactStack, stackSep))
+	stack := strings.Join(s.CompactStack, stackSep)
 	return title + "  " + text.key(clitext.HealthCompactStack, clitext.Params{clitext.ParamStack: stack})
 }
 

@@ -191,7 +191,7 @@ func TestEveryInFlightWriteIsJoinedBeforeCloseReturns(t *testing.T) {
 	writer := newFirstWriteRefused()
 	t.Cleanup(writer.unblock)
 	var sink *warningSink
-	logs := captureHookedLog(t, func(line string) {
+	logs := captureDefaultLog(t, func(line string) {
 		if strings.Contains(line, "not all confirmed") && logField(line, "unconfirmed") == "1" {
 			_ = sink.Enqueue([]byte("AFTER\n"))
 			writer.unblock()
@@ -215,7 +215,7 @@ func TestEveryInFlightWriteIsJoinedBeforeCloseReturns(t *testing.T) {
 }
 
 func TestConcurrentSecondCloseReturnsOnlyAfterTheBilanIsLogged(t *testing.T) {
-	logs := captureHookedLog(t, func(line string) {
+	logs := captureDefaultLog(t, func(line string) {
 		if strings.Contains(line, "not all confirmed") {
 			time.Sleep(warningWriteBudget / 2)
 		}

@@ -252,7 +252,8 @@ func (s *warningSink) startSummary() {
 func (s *warningSink) start(write *inflightWrite, data []byte) {
 	s.inflight = write
 	logged := make(chan struct{})
-	s.writes = append(s.openWrites(), logged)
+	s.pruneWrites()
+	s.writes = append(s.writes, logged)
 	go func() {
 		defer close(logged)
 		written, err := s.out.Write(data)
@@ -348,23 +349,38 @@ func (s *warningSink) joinWriters() {
 	budget, stop := writeBudget()
 	defer stop()
 	for {
-		pending := ask(s, s.openWrites)
+		pending := ask(s, s.pendingWrites)
 		if len(pending) == 0 {
 			return
 		}
 		for _, logged := range pending {
-			select {
-			case <-logged:
-			case <-budget:
+			if !waitLogged(logged, budget) {
 				return
 			}
 		}
 	}
 }
 
-func (s *warningSink) openWrites() []chan struct{} {
+func waitLogged(logged <-chan struct{}, budget <-chan struct{}) bool {
+	select {
+	case <-budget:
+		return false
+	default:
+	}
+	select {
+	case <-logged:
+		return true
+	case <-budget:
+		return false
+	}
+}
+
+func (s *warningSink) pendingWrites() []chan struct{} {
+	return slices.DeleteFunc(slices.Clone(s.writes), isLogged)
+}
+
+func (s *warningSink) pruneWrites() {
 	s.writes = slices.DeleteFunc(s.writes, isLogged)
-	return slices.Clone(s.writes)
 }
 
 func isLogged(logged chan struct{}) bool {

@@ -68,15 +68,6 @@ func (w *summaryRefusingWriter) Write(p []byte) (int, error) {
 	return w.out.Write(p)
 }
 
-func captureDefaultLog(t *testing.T) *lockedBuffer {
-	t.Helper()
-	logs := &lockedBuffer{}
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
-	return logs
-}
-
 func unconfirmedLine(text string) string {
 	for _, line := range strings.Split(text, "\n") {
 		if strings.Contains(line, "not all confirmed") {
@@ -202,7 +193,9 @@ type hookedLog struct {
 }
 
 func (h *hookedLog) Write(p []byte) (int, error) {
-	h.hook(string(p))
+	if h.hook != nil {
+		h.hook(string(p))
+	}
 	return h.buf.Write(p)
 }
 
@@ -210,11 +203,14 @@ func (h *hookedLog) String() string {
 	return h.buf.String()
 }
 
-func captureHookedLog(t *testing.T, hook func(line string)) *hookedLog {
+func captureDefaultLog(t *testing.T, hook ...func(line string)) *hookedLog {
 	t.Helper()
-	logs := &hookedLog{hook: hook}
+	logs := &hookedLog{}
+	if len(hook) > 0 {
+		logs.hook = hook[0]
+	}
 	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(logs, nil)))
+	slog.SetDefault(slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	t.Cleanup(func() { slog.SetDefault(previous) })
 	return logs
 }

@@ -138,6 +138,7 @@ func TestStopWaitsForTheAcceptFailureWarningToBeWritten(t *testing.T) {
 type blockedWriterCase struct {
 	name  string
 	paths []inflightPath
+	bound time.Duration
 	start func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings) *hub
 	want  func(h *hub, name string) string
 }
@@ -147,6 +148,7 @@ func blockedWriterCases() []blockedWriterCase {
 		{
 			name:  "accept failure",
 			paths: inflightPaths(),
+			bound: blockedStopBound(),
 			start: func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings) *hub {
 				t.Helper()
 				h := newInflightHub(t, name, grace, warnings)
@@ -161,6 +163,7 @@ func blockedWriterCases() []blockedWriterCase {
 		{
 			name:  "teardown overrun",
 			paths: []inflightPath{{name: "goDead", run: func(h *hub, session string) { h.goDead(session) }}},
+			bound: blockedStopBound(),
 			start: func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings) *hub {
 				t.Helper()
 				h := newInflightHub(t, name, grace, warnings)
@@ -180,6 +183,7 @@ func blockedWriterCases() []blockedWriterCase {
 		{
 			name:  "session start",
 			paths: inflightPaths(),
+			bound: blockedStopBound(),
 			start: func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings) *hub {
 				t.Helper()
 				h := newInflightHub(t, name, grace, warnings)
@@ -190,16 +194,42 @@ func blockedWriterCases() []blockedWriterCase {
 				return h
 			},
 		},
+		{
+			name:  "startup ignoring cancel",
+			paths: []inflightPath{{name: "closeAndRemoveSockets", run: func(h *hub, _ string) { logCleanup(h.closeAndRemoveSockets()) }}},
+			bound: blockedStartupBound(),
+			start: func(t *testing.T, name string, grace time.Duration, warnings *gatedWarnings) *hub {
+				t.Helper()
+				h := newInflightHub(t, name, grace, warnings)
+				h.listen = brokenFirstListen()
+				if err := h.goLive(t.Context(), state.Session{Name: name, ChannelID: "c1"}); err != nil {
+					t.Fatal(err)
+				}
+				h.trackStartup(startupRun{name: stuckStartupName, cancel: func() {}, done: make(chan struct{})})
+				awaitGatedWrite(t, warnings)
+				return h
+			},
+			want: stuckStartupOverrunText,
+		},
 	}
 }
 
 const (
 	blockedGrace      = 300 * time.Millisecond
 	blockedStopMargin = 250 * time.Millisecond
+	stuckStartupName  = "stuck"
 )
 
 func blockedStopBound() time.Duration {
 	return 2*blockedGrace + 4*warningWriteBudget + blockedStopMargin
+}
+
+func blockedStartupBound() time.Duration {
+	return 3*blockedGrace + 5*warningWriteBudget + blockedStopMargin
+}
+
+func stuckStartupOverrunText(h *hub, _ string) string {
+	return sessionOverrunText(h, stuckStartupName)
 }
 
 func TestBlockedWarningWriterDoesNotHoldStopPastTheBudget(t *testing.T) {
@@ -217,10 +247,10 @@ func TestBlockedWarningWriterDoesNotHoldStopPastTheBudget(t *testing.T) {
 				awaitGatedWrite(t, warnings)
 				select {
 				case <-returned:
-				case <-time.After(blockedStopBound()):
+				case <-time.After(c.bound):
 				}
-				if elapsed := time.Since(started); elapsed > blockedStopBound() {
-					t.Fatalf("a blocked warning writer held the stop for %v, past its worst case of %v", elapsed.Round(time.Millisecond), blockedStopBound())
+				if elapsed := time.Since(started); elapsed > c.bound {
+					t.Fatalf("a blocked warning writer held the stop for %v, past its worst case of %v", elapsed.Round(time.Millisecond), c.bound)
 				}
 
 				assertBlockedWriterOutcome(t, c, h, name, warnings, logs)
@@ -229,7 +259,7 @@ func TestBlockedWarningWriterDoesNotHoldStopPastTheBudget(t *testing.T) {
 	}
 }
 
-func assertBlockedWriterOutcome(t *testing.T, c blockedWriterCase, h *hub, name string, warnings *gatedWarnings, logs *lockedBuffer) {
+func assertBlockedWriterOutcome(t *testing.T, c blockedWriterCase, h *hub, name string, warnings *gatedWarnings, logs *hookedLog) {
 	t.Helper()
 	if c.want == nil {
 		warnings.open()

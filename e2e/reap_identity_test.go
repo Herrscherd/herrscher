@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"syscall"
 	"testing"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -69,11 +70,18 @@ func TestScanIgnoresAnUnreadableEnvironmentWithoutSignalling(t *testing.T) {
 	}
 }
 
+const pinnedSignalWait = 5 * time.Second
+
 func TestSignalGoesThroughThePinnedDescriptor(t *testing.T) {
 	pinnedChild := exec.CommandContext(t.Context(), "sleep", "60")
 	if err := pinnedChild.Start(); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := pinnedChild.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			t.Error(err)
+		}
+	})
 	other := startSleeper(t)
 	fd, err := unix.PidfdOpen(pinnedChild.Process.Pid, 0)
 	if err != nil {
@@ -83,7 +91,15 @@ func TestSignalGoesThroughThePinnedDescriptor(t *testing.T) {
 	if err := errors.Join(killErr, unix.Close(fd)); err != nil {
 		t.Fatal(err)
 	}
-	if err := pinnedChild.Wait(); err == nil {
+	exited := make(chan error, 1)
+	go func() { exited <- pinnedChild.Wait() }()
+	ended := false
+	select {
+	case err := <-exited:
+		ended = err != nil
+	case <-time.After(pinnedSignalWait):
+	}
+	if !ended {
 		t.Fatal("the process behind the pinned descriptor was not signalled")
 	}
 	if !stillRunning(other) {

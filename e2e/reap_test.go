@@ -396,18 +396,24 @@ func TestSettleDoesNotWaitForAProcessToExitByItself(t *testing.T) {
 	}
 	running := exec.CommandContext(t.Context(), "cat")
 	running.Env = []string{instanceEnv + "=" + instance}
-	stdin, err := running.StdinPipe()
-	if err != nil {
-		t.Fatal(err)
+	if _, pipeErr := running.StdinPipe(); pipeErr != nil {
+		t.Fatal(pipeErr)
 	}
-	t.Cleanup(func() {
-		if closeErr := stdin.Close(); closeErr != nil && !errors.Is(closeErr, os.ErrClosed) {
-			t.Error(closeErr)
-		}
-	})
 	if startErr := running.Start(); startErr != nil {
 		t.Fatal(startErr)
 	}
+	reaped := false
+	t.Cleanup(func() {
+		if reaped {
+			return
+		}
+		if killErr := running.Process.Kill(); killErr != nil && !errors.Is(killErr, os.ErrProcessDone) {
+			t.Error(killErr)
+		}
+		if _, waitErr := running.Process.Wait(); waitErr != nil {
+			t.Error(waitErr)
+		}
+	})
 	root := t.TempDir()
 	before, err := hashedEntries(root)
 	if err != nil {
@@ -416,6 +422,7 @@ func TestSettleDoesNotWaitForAProcessToExitByItself(t *testing.T) {
 	if settleErr := settle(root, instance, before); !errors.Is(settleErr, errStopped) {
 		t.Fatalf("got %v, want the process still running at the end reported as stopped", settleErr)
 	}
+	reaped = true
 	if signo := stoppedBy(t, running); signo != syscall.SIGINT {
 		t.Fatalf("got %v, want the process stopped by SIGINT", signo)
 	}

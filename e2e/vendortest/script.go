@@ -136,7 +136,7 @@ func parseStep(line string) (step, error) {
 	switch name {
 	case scriptKeywordText:
 		return textStep(stepText, rest)
-	case wordError:
+	case scriptKeywordError:
 		return textStep(stepFail, rest)
 	case "apierror":
 		return textStep(stepAPIError, rest)

@@ -88,7 +88,7 @@ func (v *vendor) cursorTurn(out io.Writer, resume, prompt string) error {
 		return err
 	}
 	if reply.failed {
-		return writeJSON(out, cursorResult{Type: wordResult, Subtype: valueError, SessionID: sessionID, IsError: true, Result: reply.failure})
+		return writeJSON(out, cursorResult{Type: wordResult, Subtype: resultSubtypeError, SessionID: sessionID, IsError: true, Result: reply.failure})
 	}
 	return writeJSON(out, cursorResult{Type: wordResult, Subtype: valueSuccess, SessionID: sessionID, Result: reply.text})
 }

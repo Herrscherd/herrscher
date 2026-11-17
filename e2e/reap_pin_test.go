@@ -27,7 +27,7 @@ func TestReapInstanceKillsNothingWhenTheSecondScanFails(t *testing.T) {
 		t.Fatalf("got %v, want the second scan to fail on the replaced environment", err)
 	}
 	if !stillRunningAfter(child, signalSettle) {
-		t.Fatal("the process was ended although the second scan failed: nothing may be signalled on an unverified list")
+		t.Fatal("the process was ended although the second scan failed: no SIGKILL after a failed second scan, the process must survive")
 	}
 }
 

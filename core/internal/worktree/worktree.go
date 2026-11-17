@@ -29,13 +29,14 @@ const sessionsDir = ".herrscher-sessions"
 // with an empty instanceID (legacy) under <repo>/.herrscher-sessions/<name> on
 // branch session/<name>, so multiple daemons sharing a repo never collide.
 type Worktreer struct {
+	messages   *clitext.Messages
 	instanceID string
 }
 
 // NewWorktreer builds a repo-stateless Worktreer, namespaced by instanceID
 // ("" means legacy, non-namespaced layout).
-func NewWorktreer(instanceID string) *Worktreer {
-	return &Worktreer{instanceID: instanceID}
+func NewWorktreer(messages *clitext.Messages, instanceID string) *Worktreer {
+	return &Worktreer{messages: messages, instanceID: instanceID}
 }
 
 func (w *Worktreer) isGitRepo(ctx context.Context, repo string) bool {
@@ -79,7 +80,7 @@ func (w *Worktreer) Create(ctx context.Context, repo, name, base string) (string
 		return "", nil
 	}
 	if base != "" && strings.HasPrefix(base, "-") {
-		return "", FailureError{Key: clitext.WorktreeFlagBase, Params: clitext.Params{clitext.ParamRef: strconv.Quote(base)}}
+		return "", NewFailure(w.messages, clitext.WorktreeFlagBase, clitext.Params{clitext.ParamRef: strconv.Quote(base)}, nil)
 	}
 	wtPath := w.Path(repo, name)
 	branch := w.Branch(name)
@@ -98,7 +99,7 @@ func (w *Worktreer) Create(ctx context.Context, repo, name, base string) (string
 	}
 	out, err := exec.CommandContext(ctx, "git", args...).CombinedOutput()
 	if err != nil {
-		return "", FailureError{Key: clitext.WorktreeAddFailed, Params: clitext.Params{clitext.ParamOutput: redact.Output(out), clitext.ParamErr: err}, Cause: err}
+		return "", NewFailure(w.messages, clitext.WorktreeAddFailed, clitext.Params{clitext.ParamOutput: redact.Output(out), clitext.ParamErr: err}, err)
 	}
 	return wtPath, nil
 }
@@ -130,10 +131,10 @@ func (w *Worktreer) reusable(ctx context.Context, repo, path, branch string) (bo
 
 	if !registered {
 		if statErr != nil && !missing {
-			return false, FailureError{Key: clitext.WorktreeInspect, Params: clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: statErr}, Cause: statErr}
+			return false, NewFailure(w.messages, clitext.WorktreeInspect, clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: statErr}, statErr)
 		}
 		if !missing {
-			return false, FailureError{Key: clitext.WorktreeNotAWorktree, Params: clitext.Params{clitext.ParamPath: strconv.Quote(path)}}
+			return false, NewFailure(w.messages, clitext.WorktreeNotAWorktree, clitext.Params{clitext.ParamPath: strconv.Quote(path)}, nil)
 		}
 		return false, nil
 	}
@@ -141,12 +142,12 @@ func (w *Worktreer) reusable(ctx context.Context, repo, path, branch string) (bo
 	if missing {
 		out, pruneErr := exec.CommandContext(ctx, "git", "-C", repo, subWorktree, "prune").CombinedOutput()
 		if pruneErr != nil {
-			return false, FailureError{Key: clitext.WorktreePruneFailed, Params: clitext.Params{clitext.ParamOutput: redact.Output(out), clitext.ParamErr: pruneErr}, Cause: pruneErr}
+			return false, NewFailure(w.messages, clitext.WorktreePruneFailed, clitext.Params{clitext.ParamOutput: redact.Output(out), clitext.ParamErr: pruneErr}, pruneErr)
 		}
 		return false, nil
 	}
 	if statErr != nil {
-		return false, FailureError{Key: clitext.WorktreeInspect, Params: clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: statErr}, Cause: statErr}
+		return false, NewFailure(w.messages, clitext.WorktreeInspect, clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: statErr}, statErr)
 	}
 
 	tip, err := w.branchAt(ctx, path)
@@ -154,7 +155,7 @@ func (w *Worktreer) reusable(ctx context.Context, repo, path, branch string) (bo
 		return false, err
 	}
 	if tip != branch {
-		return false, FailureError{Key: clitext.WorktreeOtherBranch, Params: clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamTip: strconv.Quote(tip), clitext.ParamBranch: strconv.Quote(branch)}}
+		return false, NewFailure(w.messages, clitext.WorktreeOtherBranch, clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamTip: strconv.Quote(tip), clitext.ParamBranch: strconv.Quote(branch)}, nil)
 	}
 	return true, nil
 }
@@ -162,7 +163,7 @@ func (w *Worktreer) reusable(ctx context.Context, repo, path, branch string) (bo
 func (w *Worktreer) branchAt(ctx context.Context, path string) (string, error) {
 	out, err := exec.CommandContext(ctx, "git", "-C", path, "symbolic-ref", "--short", "HEAD").Output()
 	if err != nil {
-		return "", FailureError{Key: clitext.WorktreeBranchUnreadable, Params: clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: err}, Cause: err}
+		return "", NewFailure(w.messages, clitext.WorktreeBranchUnreadable, clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: err}, err)
 	}
 	return strings.TrimSpace(string(out)), nil
 }
@@ -173,7 +174,7 @@ func (w *Worktreer) branchAt(ctx context.Context, path string) (string, error) {
 func (w *Worktreer) IsCleanAt(ctx context.Context, path string) (bool, error) {
 	out, err := exec.CommandContext(ctx, "git", "-C", path, "status", "--porcelain").Output()
 	if err != nil {
-		return false, FailureError{Key: clitext.WorktreeCleanUnverified, Params: clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: err}, Cause: err}
+		return false, NewFailure(w.messages, clitext.WorktreeCleanUnverified, clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: err}, err)
 	}
 	return strings.TrimSpace(string(out)) == "", nil
 }
@@ -193,7 +194,7 @@ func (w *Worktreer) BranchExistsAt(ctx context.Context, path, branch string) (bo
 	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
 		return false, nil
 	}
-	return false, FailureError{Key: clitext.WorktreeBranchUnverified, Params: clitext.Params{clitext.ParamBranch: strconv.Quote(branch), clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: err}, Cause: err}
+	return false, NewFailure(w.messages, clitext.WorktreeBranchUnverified, clitext.Params{clitext.ParamBranch: strconv.Quote(branch), clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: err}, err)
 }
 
 // MergeOutcome classifies a MergeInto result.
@@ -218,13 +219,13 @@ const (
 func (w *Worktreer) MergeInto(ctx context.Context, leadPath, branch string) (MergeOutcome, []string, error) {
 	pre, err := w.headAt(ctx, leadPath)
 	if err != nil {
-		return MergeConflict, nil, FailureError{Key: clitext.WorktreeHeadUnreadable, Params: clitext.Params{clitext.ParamPath: strconv.Quote(leadPath), clitext.ParamErr: err}, Cause: err}
+		return MergeConflict, nil, NewFailure(w.messages, clitext.WorktreeHeadUnreadable, clitext.Params{clitext.ParamPath: strconv.Quote(leadPath), clitext.ParamErr: err}, err)
 	}
 	out, mergeErr := exec.CommandContext(ctx, "git", "-C", leadPath, "merge", "--no-edit", branch).CombinedOutput()
 	if mergeErr == nil {
 		post, err := w.headAt(ctx, leadPath)
 		if err != nil {
-			return MergeApplied, nil, FailureError{Key: clitext.WorktreeHeadUnreadableAfterMerge, Params: clitext.Params{clitext.ParamPath: strconv.Quote(leadPath), clitext.ParamErr: err}, Cause: err}
+			return MergeApplied, nil, NewFailure(w.messages, clitext.WorktreeHeadUnreadableAfterMerge, clitext.Params{clitext.ParamPath: strconv.Quote(leadPath), clitext.ParamErr: err}, err)
 		}
 		if post == pre {
 			return MergeUpToDate, nil, nil
@@ -236,7 +237,7 @@ func (w *Worktreer) MergeInto(ctx context.Context, leadPath, branch string) (Mer
 	if len(conflicts) > 0 {
 		return MergeConflict, conflicts, nil
 	}
-	return MergeConflict, nil, FailureError{Key: clitext.WorktreeMergeFailed, Params: clitext.Params{clitext.ParamBranch: branch, clitext.ParamPath: strconv.Quote(leadPath), clitext.ParamOutput: redact.Output(out), clitext.ParamErr: mergeErr}, Cause: mergeErr}
+	return MergeConflict, nil, NewFailure(w.messages, clitext.WorktreeMergeFailed, clitext.Params{clitext.ParamBranch: branch, clitext.ParamPath: strconv.Quote(leadPath), clitext.ParamOutput: redact.Output(out), clitext.ParamErr: mergeErr}, mergeErr)
 }
 
 func (w *Worktreer) headAt(ctx context.Context, path string) (string, error) {
@@ -266,10 +267,10 @@ func (w *Worktreer) Remove(ctx context.Context, repo, name string, force bool) e
 	if !force {
 		clean, err := w.IsCleanAt(ctx, wtPath)
 		if err != nil {
-			return FailureError{Key: clitext.WorktreeUncommittedRemove, Params: clitext.Params{clitext.ParamName: strconv.Quote(name), clitext.ParamErr: err}, Cause: err}
+			return NewFailure(w.messages, clitext.WorktreeUncommittedRemove, clitext.Params{clitext.ParamName: strconv.Quote(name), clitext.ParamErr: err}, err)
 		}
 		if !clean {
-			return FailureError{Key: clitext.WorktreeUncommitted, Params: clitext.Params{clitext.ParamName: strconv.Quote(name)}}
+			return NewFailure(w.messages, clitext.WorktreeUncommitted, clitext.Params{clitext.ParamName: strconv.Quote(name)}, nil)
 		}
 	}
 	args := []string{"-C", repo, subWorktree, "remove", wtPath}
@@ -278,11 +279,11 @@ func (w *Worktreer) Remove(ctx context.Context, repo, name string, force bool) e
 	}
 	out, err := exec.CommandContext(ctx, "git", args...).CombinedOutput()
 	if err != nil {
-		removeErr := FailureError{Key: clitext.WorktreeRemoveFailed, Params: clitext.Params{clitext.ParamOutput: redact.Output(out), clitext.ParamErr: err}, Cause: err}
+		removeErr := NewFailure(w.messages, clitext.WorktreeRemoveFailed, clitext.Params{clitext.ParamOutput: redact.Output(out), clitext.ParamErr: err}, err)
 		if force {
 			recovered, recoverErr := w.recoverEmptyOrphan(ctx, repo, name)
 			if recoverErr != nil {
-				return FailureError{Key: clitext.WorktreeOrphanRecovery, Params: clitext.Params{clitext.ParamRemove: removeErr, clitext.ParamRecovery: recoverErr}, Cause: recoverErr}
+				return NewFailure(w.messages, clitext.WorktreeOrphanRecovery, clitext.Params{clitext.ParamRemove: removeErr, clitext.ParamRecovery: recoverErr}, recoverErr)
 			}
 			if recovered {
 				return nil
@@ -310,7 +311,7 @@ func (w *Worktreer) recoverEmptyOrphan(ctx context.Context, repo, name string) (
 	case os.IsNotExist(err):
 		return true, nil
 	case err != nil:
-		return false, FailureError{Key: clitext.WorktreeInspect, Params: clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: err}, Cause: err}
+		return false, NewFailure(w.messages, clitext.WorktreeInspect, clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: err}, err)
 	case len(entries) != 0:
 		return false, nil
 	}
@@ -319,7 +320,7 @@ func (w *Worktreer) recoverEmptyOrphan(ctx context.Context, repo, name string) (
 		return false, nil
 	}
 	if err := os.Remove(path); err != nil {
-		return false, FailureError{Key: clitext.WorktreeOrphanRemove, Params: clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: err}, Cause: err}
+		return false, NewFailure(w.messages, clitext.WorktreeOrphanRemove, clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: err}, err)
 	}
 	return true, nil
 }
@@ -380,12 +381,12 @@ func (w *Worktreer) registeredWorktree(ctx context.Context, repo, target string)
 		"git", "-C", repo, subWorktree, "list", "--porcelain", "-z",
 	).CombinedOutput()
 	if err != nil {
-		return false, FailureError{Key: clitext.WorktreeListFailed, Params: clitext.Params{clitext.ParamOutput: redact.Output(out), clitext.ParamErr: err}, Cause: err}
+		return false, NewFailure(w.messages, clitext.WorktreeListFailed, clitext.Params{clitext.ParamOutput: redact.Output(out), clitext.ParamErr: err}, err)
 	}
 	rawTarget := target
 	target, err = canonicalPathForComparison(target)
 	if err != nil {
-		return false, FailureError{Key: clitext.WorktreeResolveTarget, Params: clitext.Params{clitext.ParamPath: strconv.Quote(rawTarget), clitext.ParamErr: err}, Cause: err}
+		return false, NewFailure(w.messages, clitext.WorktreeResolveTarget, clitext.Params{clitext.ParamPath: strconv.Quote(rawTarget), clitext.ParamErr: err}, err)
 	}
 	for _, field := range bytes.Split(out, []byte{0}) {
 		const prefix = "worktree "
@@ -396,7 +397,7 @@ func (w *Worktreer) registeredWorktree(ctx context.Context, repo, target string)
 			filepath.FromSlash(string(field[len(prefix):])),
 		)
 		if err != nil {
-			return false, FailureError{Key: clitext.WorktreeResolveRegistered, Params: clitext.Params{clitext.ParamErr: err}, Cause: err}
+			return false, NewFailure(w.messages, clitext.WorktreeResolveRegistered, clitext.Params{clitext.ParamErr: err}, err)
 		}
 		if samePath(path, target) {
 			return true, nil

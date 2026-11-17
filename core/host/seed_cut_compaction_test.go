@@ -9,6 +9,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -118,7 +119,7 @@ func seedWithHistoryStage(backend contracts.Backend, budget time.Duration, emiss
 }
 
 func seedWithStage(stage contracts.Compactor, backend contracts.Backend, budget time.Duration, emissions *seedEmissions) (string, error) {
-	table := newSessionTable(newHostMessages())
+	table := newSessionTable(newHostMessages(), clitext.NewMessages())
 	policy := compactPolicy(50, "jev")
 	policy.plugins["jev"] = stage
 	policy.historyEditors["claude"] = true

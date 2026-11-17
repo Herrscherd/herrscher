@@ -13,6 +13,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
@@ -77,7 +78,7 @@ func TestPublishNilSocketNoop(_ *testing.T) {
 
 func TestFanOutFiresEmitTap(t *testing.T) {
 	var got []contracts.Event
-	d := newSessionDriver(newHostMessages(), "s", nil, nil, nil, io.Discard)
+	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s", nil, nil, nil, io.Discard)
 	d.emitTap = func(e contracts.Event) { got = append(got, e) }
 	d.fanOut(context.Background(), contracts.Event{T: eventwire.EventThinking, Text: "hmm"})
 	d.fanOut(context.Background(), contracts.Event{T: eventwire.EventReply, Text: "done", Done: true})

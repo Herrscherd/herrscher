@@ -27,14 +27,14 @@ func scratchPathIn(root, instanceID, name string) string {
 // Scratch creates the scratch directory for name under root.
 func (w *Worktreer) Scratch(root, name string) (string, error) {
 	if root == "" {
-		return "", FailureError{Key: clitext.WorktreeScratchNoRoot, Params: clitext.Params{clitext.ParamName: strconv.Quote(name)}}
+		return "", NewFailure(w.messages, clitext.WorktreeScratchNoRoot, clitext.Params{clitext.ParamName: strconv.Quote(name)}, nil)
 	}
 	if !validPathComponent(name) {
-		return "", FailureError{Key: clitext.WorktreeScratchBadName, Params: clitext.Params{clitext.ParamName: strconv.Quote(name)}}
+		return "", NewFailure(w.messages, clitext.WorktreeScratchBadName, clitext.Params{clitext.ParamName: strconv.Quote(name)}, nil)
 	}
 	scratchPath := w.ScratchPath(root, name)
 	if err := os.MkdirAll(scratchPath, scratchDirMode); err != nil {
-		return "", FailureError{Key: clitext.WorktreeScratchCreate, Params: clitext.Params{clitext.ParamPath: strconv.Quote(scratchPath), clitext.ParamErr: err}, Cause: err}
+		return "", NewFailure(w.messages, clitext.WorktreeScratchCreate, clitext.Params{clitext.ParamPath: strconv.Quote(scratchPath), clitext.ParamErr: err}, err)
 	}
 	return scratchPath, nil
 }
@@ -42,14 +42,14 @@ func (w *Worktreer) Scratch(root, name string) (string, error) {
 // RemoveScratch deletes the scratch directory for name under root.
 func (w *Worktreer) RemoveScratch(root, name string) error {
 	if root == "" || !validPathComponent(name) {
-		return FailureError{Key: clitext.WorktreeScratchRemoveRefused, Params: clitext.Params{clitext.ParamName: strconv.Quote(name), clitext.ParamRoot: strconv.Quote(root)}}
+		return NewFailure(w.messages, clitext.WorktreeScratchRemoveRefused, clitext.Params{clitext.ParamName: strconv.Quote(name), clitext.ParamRoot: strconv.Quote(root)}, nil)
 	}
 	scratchPath := w.ScratchPath(root, name)
 	if _, err := os.Lstat(scratchPath); os.IsNotExist(err) {
 		return nil
 	}
 	if err := os.RemoveAll(scratchPath); err != nil {
-		return FailureError{Key: clitext.WorktreeScratchRemove, Params: clitext.Params{clitext.ParamPath: strconv.Quote(scratchPath), clitext.ParamErr: err}, Cause: err}
+		return NewFailure(w.messages, clitext.WorktreeScratchRemove, clitext.Params{clitext.ParamPath: strconv.Quote(scratchPath), clitext.ParamErr: err}, err)
 	}
 	removeLogged(filepath.Dir(scratchPath))
 	return nil

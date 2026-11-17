@@ -10,6 +10,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
@@ -26,8 +27,8 @@ func TestSessionFailureNoticeIsWrittenInTheSessionLanguage(t *testing.T) {
 
 	params := map[string]any{nameParam: "revue", detailParam: cause.Error()}
 	owner := newHostMessages()
-	inFrench := localizeHostError(owner, i18n.French, wrapHost(owner, cause, sessionFailureKey(supervisor.StagePrepare), params)).Error()
-	inEnglish := localizeHostError(owner, i18n.English, wrapHost(owner, cause, sessionFailureKey(supervisor.StagePrepare), params)).Error()
+	inFrench := localizeHostError(owner, clitext.NewMessages(), i18n.French, wrapHost(owner, cause, sessionFailureKey(supervisor.StagePrepare), params)).Error()
+	inEnglish := localizeHostError(owner, clitext.NewMessages(), i18n.English, wrapHost(owner, cause, sessionFailureKey(supervisor.StagePrepare), params)).Error()
 	if inFrench == inEnglish {
 		t.Fatal("the two languages render the same notice, the test proves nothing")
 	}

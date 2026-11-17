@@ -11,6 +11,7 @@ import (
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -24,8 +25,8 @@ func TestTheSameArgvIsRefusedOnOneSocketAndRunOnTheOther(t *testing.T) {
 	}
 	reg := &cli.Registry{}
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages())
-	if approveErr := addApproveCommands(reg, newHostMessages(), fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); approveErr != nil {
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	if approveErr := addApproveCommands(reg, newHostMessages(), clitext.NewMessages(), fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); approveErr != nil {
 		t.Fatalf("addApproveCommands: %v", approveErr)
 	}
 	h := testHub(&hub{messages: newHostMessages(), warnings: io.Discard, st: st, reg: reg, live: make(map[string]liveSession)})
@@ -65,7 +66,7 @@ func TestServedOperatorSocketFollowsTheLiveLanguage(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	live := newOperatorLanguage(i18n.English)
 	reg := &cli.Registry{}
-	if err := addScheduleCommands(reg, newHostMessages(), live.Get, st, fakeAgents{known: make(map[string]bool)}, &schedulerSlot{}); err != nil {
+	if err := addScheduleCommands(reg, newHostMessages(), clitext.NewMessages(), live.Get, st, fakeAgents{known: make(map[string]bool)}, &schedulerSlot{}); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
 	h := testHub(&hub{messages: newHostMessages(), warnings: io.Discard, st: st, reg: reg, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)})

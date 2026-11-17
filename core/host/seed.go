@@ -18,6 +18,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/bridge"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/control"
@@ -35,6 +36,7 @@ const seedJoinGrace = 2 * time.Second
 
 type oneShotSeedRuntime struct {
 	messages        *hostMessages
+	cliMessages     *clitext.Messages
 	warnings        io.Writer
 	sessionLanguage func(name string) languageSource
 	coordinator     contracts.Coordinator
@@ -63,10 +65,10 @@ func withOneShotSeedRuntime(ctx context.Context, runtime oneShotSeedRuntime) con
 	return context.WithValue(ctx, oneShotSeedRuntimeKey{}, runtime)
 }
 
-func oneShotSeedRuntimeFrom(ctx context.Context, messages *hostMessages) oneShotSeedRuntime {
+func oneShotSeedRuntimeFrom(ctx context.Context, messages *hostMessages, cliMessages *clitext.Messages) oneShotSeedRuntime {
 	runtime, ok := ctx.Value(oneShotSeedRuntimeKey{}).(oneShotSeedRuntime)
 	if !ok {
-		return oneShotSeedRuntime{messages: messages}
+		return oneShotSeedRuntime{messages: messages, cliMessages: cliMessages}
 	}
 	return runtime
 }
@@ -116,7 +118,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	defer cancel()
 	toBridge := make(chan contracts.Event, 1)
 	fromBridge := make(chan contracts.Event, bridgeEventBuffer)
-	driver := newSessionDriver(runtime.messages, sess.Name, nil, toBridge, fromBridge, runtime.warnings)
+	driver := newSessionDriver(runtime.messages, runtime.cliMessages, sess.Name, nil, toBridge, fromBridge, runtime.warnings)
 	driver.incarnation = sess.Incarnation
 	driver.agent = sess.Agent
 	driver.language = func() i18n.Language { return knownSessionLanguage(sess) }

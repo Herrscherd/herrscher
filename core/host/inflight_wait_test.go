@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
@@ -65,7 +66,7 @@ func newInflightHub(t *testing.T, name string, grace time.Duration, warnings io.
 	t.Cleanup(cancel)
 	sup := supervisor.NewSupervisor(ctx, filepath.Join(t.TempDir(), "no-such-bridge"), layout)
 	owner := newHostMessages()
-	h := newHub(st, sup, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(owner), withWarnings(warnings))
+	h := newHub(st, sup, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(owner, clitext.NewMessages()), withWarnings(warnings))
 	h.runtime = layout
 	h.teardownGrace = grace
 	return h

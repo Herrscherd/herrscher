@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
 
@@ -48,8 +49,8 @@ func NewMessages() *Messages {
 }
 
 // Localize renders err for an operator boundary in lang through this owner's catalogue.
-func (m *Messages) Localize(lang i18n.Language, err error) error {
-	return localizeHostError(m.owner, lang, err)
+func (m *Messages) Localize(cliMessages *clitext.Messages, lang i18n.Language, err error) error {
+	return localizeHostError(m.owner, cliMessages, lang, err)
 }
 
 func buildHostCatalog() (*i18n.Catalog, error) {

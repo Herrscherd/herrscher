@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/outbox"
 )
@@ -88,7 +89,7 @@ func newOutboundDriver(gateways []contracts.Gateway, root string) *sessionDriver
 	for _, gateway := range gateways {
 		gws = append(gws, contracts.GatewaySet{Gateway: contracts.Degrade(gateway)})
 	}
-	d := newSessionDriver(newHostMessages(), "s1", gws, nil, nil, io.Discard)
+	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", gws, nil, nil, io.Discard)
 	d.outboxRoot = root
 	d.outboundMaxBytes = outboundTestMaxBytes
 	d.fileSenders = fileSendersOf(gateways)

@@ -162,7 +162,7 @@ type backendResolver interface {
 
 func newBackendFor(ctx context.Context, messages *clitext.Messages, hostMessages *host.Messages, br backendResolver, req host.BackendRequest) (contracts.Backend, error) {
 	backend, err := resolveBackendFor(ctx, messages, hostMessages, br, req)
-	return backend, hostMessages.Localize(clitext.ClientLanguage(), err)
+	return backend, hostMessages.Localize(messages, clitext.ClientLanguage(), err)
 }
 
 func resolveBackendFor(ctx context.Context, messages *clitext.Messages, hostMessages *host.Messages, br backendResolver, req host.BackendRequest) (contracts.Backend, error) {

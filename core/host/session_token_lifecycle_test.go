@@ -9,6 +9,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -32,7 +33,7 @@ func dispatchRevokesTheDoomedSession(t *testing.T, verb string, remove func(*sta
 			t.Fatal(err)
 		}
 	}
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	doomedToken := sessionTab.issueToken("doomed")
 	keptToken := sessionTab.issueToken("kept")
 	seedCtx, endSeed := context.WithCancel(t.Context())

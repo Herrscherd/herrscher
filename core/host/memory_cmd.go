@@ -16,19 +16,19 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
-func addMemoryVerbs(reg *cli.Registry, messages *hostMessages, lang languageSource) error {
+func addMemoryVerbs(reg *cli.Registry, messages *hostMessages, cliMessages *clitext.Messages, lang languageSource) error {
 	return addVerbs(
 		reg,
 		memoryLocateVerb(messages),
-		memoryForgetVerb(messages, lang),
-		memoryRecordVerb(messages, lang),
-		memoryRestoreVerb(messages, lang),
-		memoryUnlinkVerb(messages, lang),
+		memoryForgetVerb(messages, cliMessages, lang),
+		memoryRecordVerb(messages, cliMessages, lang),
+		memoryRestoreVerb(messages, cliMessages, lang),
+		memoryUnlinkVerb(messages, cliMessages, lang),
 	)
 }
 
-func addSkillVerbs(reg *cli.Registry, messages *hostMessages, lang languageSource) error {
-	return addVerbs(reg, skillListVerb(messages, lang), skillApproveVerb(messages, lang))
+func addSkillVerbs(reg *cli.Registry, messages *hostMessages, cliMessages *clitext.Messages, lang languageSource) error {
+	return addVerbs(reg, skillListVerb(messages, cliMessages, lang), skillApproveVerb(messages, cliMessages, lang))
 }
 
 func withFirstMemory(ctx context.Context, messages *hostMessages, run func(contracts.Memory) (contracts.Result, error)) (contracts.Result, error) {
@@ -70,18 +70,18 @@ func locateMemoryNode(ctx context.Context, mem contracts.Memory, input contracts
 	return line.File, nil
 }
 
-func memoryForgetVerb(messages *hostMessages, lang languageSource) contracts.Cmd {
+func memoryForgetVerb(messages *hostMessages, cliMessages *clitext.Messages, lang languageSource) contracts.Cmd {
 	return contracts.New("memory", "forget").
 		Help(clitext.CmdHelpMemoryForget).
 		Param("key", clitext.CmdParamMemoryForgetKey, true).
 		Do(func(cmdCtx context.Context, input contracts.Input) (contracts.Result, error) {
 			return withFirstMemory(cmdCtx, messages, func(mem contracts.Memory) (contracts.Result, error) {
-				return cli.Data(forgetMemoryNode(cmdCtx, lang(), mem, input))
+				return cli.Data(forgetMemoryNode(cmdCtx, cliMessages, lang(), mem, input))
 			})
 		})
 }
 
-func forgetMemoryNode(ctx context.Context, lang i18n.Language, mem contracts.Memory, input contracts.Input) (string, error) {
+func forgetMemoryNode(ctx context.Context, cliMessages *clitext.Messages, lang i18n.Language, mem contracts.Memory, input contracts.Input) (string, error) {
 	del, ok := mem.(contracts.Deleter)
 	if !ok {
 		return "", errMemoryForgetUnsupported
@@ -89,10 +89,10 @@ func forgetMemoryNode(ctx context.Context, lang i18n.Language, mem contracts.Mem
 	if err := del.Delete(ctx, input.Get("key")); err != nil {
 		return "", err
 	}
-	return replyText(lang).Text(clitext.HostMemoryForgotten, clitext.Params{clitext.ParamKey: input.Get("key")}), nil
+	return replyText(cliMessages, lang).Text(clitext.HostMemoryForgotten, clitext.Params{clitext.ParamKey: input.Get("key")}), nil
 }
 
-func memoryRecordVerb(messages *hostMessages, lang languageSource) contracts.Cmd {
+func memoryRecordVerb(messages *hostMessages, cliMessages *clitext.Messages, lang languageSource) contracts.Cmd {
 	return contracts.New("memory", "record").
 		Help(clitext.CmdHelpMemoryRecord).
 		Param("key", clitext.CmdParamMemoryRecordKey, true).
@@ -101,12 +101,12 @@ func memoryRecordVerb(messages *hostMessages, lang languageSource) contracts.Cmd
 		Param("body", clitext.CmdParamMemoryRecordBody, false).
 		Do(func(cmdCtx context.Context, input contracts.Input) (contracts.Result, error) {
 			return withFirstMemory(cmdCtx, messages, func(mem contracts.Memory) (contracts.Result, error) {
-				return cli.Data(recordMemoryNode(cmdCtx, lang(), mem, input))
+				return cli.Data(recordMemoryNode(cmdCtx, cliMessages, lang(), mem, input))
 			})
 		})
 }
 
-func recordMemoryNode(ctx context.Context, lang i18n.Language, mem contracts.Memory, input contracts.Input) (string, error) {
+func recordMemoryNode(ctx context.Context, cliMessages *clitext.Messages, lang i18n.Language, mem contracts.Memory, input contracts.Input) (string, error) {
 	kind := contracts.NodeKind(input.Get("kind"))
 	if !memoryKindAllowed(kind) {
 		return "", &UnknownError{Kind: "memory kind", Name: input.Get("kind")}
@@ -120,10 +120,10 @@ func recordMemoryNode(ctx context.Context, lang i18n.Language, mem contracts.Mem
 	if err := mem.Record(ctx, node); err != nil {
 		return "", err
 	}
-	return replyText(lang).Text(clitext.HostMemoryRecorded, clitext.Params{clitext.ParamKey: node.Key}), nil
+	return replyText(cliMessages, lang).Text(clitext.HostMemoryRecorded, clitext.Params{clitext.ParamKey: node.Key}), nil
 }
 
-func memoryRestoreVerb(messages *hostMessages, lang languageSource) contracts.Cmd {
+func memoryRestoreVerb(messages *hostMessages, cliMessages *clitext.Messages, lang languageSource) contracts.Cmd {
 	return contracts.New("memory", "restore").
 		Help(clitext.CmdHelpMemoryRestore).
 		Param("key", clitext.CmdParamMemoryRestoreKey, true).
@@ -133,12 +133,12 @@ func memoryRestoreVerb(messages *hostMessages, lang languageSource) contracts.Cm
 				if _, err := orchestrator.Restore(cmdCtx, mem, input.Get("key"), orchestrator.Force(input.Bool("force"))); err != nil {
 					return contracts.Result{}, err
 				}
-				return contracts.DataResult(replyText(lang()).Text(clitext.HostMemoryRestored, clitext.Params{clitext.ParamKey: input.Get("key")})), nil
+				return contracts.DataResult(replyText(cliMessages, lang()).Text(clitext.HostMemoryRestored, clitext.Params{clitext.ParamKey: input.Get("key")})), nil
 			})
 		})
 }
 
-func memoryUnlinkVerb(messages *hostMessages, lang languageSource) contracts.Cmd {
+func memoryUnlinkVerb(messages *hostMessages, cliMessages *clitext.Messages, lang languageSource) contracts.Cmd {
 	return contracts.New("memory", "unlink").
 		Help(clitext.CmdHelpMemoryUnlink).
 		Param("from", clitext.CmdParamMemoryUnlinkFrom, true).
@@ -148,18 +148,18 @@ func memoryUnlinkVerb(messages *hostMessages, lang languageSource) contracts.Cmd
 				if err := mem.Unlink(cmdCtx, input.Get("from"), input.Get("to")); err != nil {
 					return contracts.Result{}, err
 				}
-				return contracts.DataResult(replyText(lang()).Text(clitext.HostMemoryUnlinked, clitext.Params{clitext.ParamFrom: input.Get("from"), clitext.ParamTo: input.Get("to")})), nil
+				return contracts.DataResult(replyText(cliMessages, lang()).Text(clitext.HostMemoryUnlinked, clitext.Params{clitext.ParamFrom: input.Get("from"), clitext.ParamTo: input.Get("to")})), nil
 			})
 		})
 }
 
-func skillListVerb(messages *hostMessages, lang languageSource) contracts.Cmd {
+func skillListVerb(messages *hostMessages, cliMessages *clitext.Messages, lang languageSource) contracts.Cmd {
 	return contracts.New("skill", "list").
 		Help(clitext.CmdHelpSkillList).
 		Param("limit", clitext.CmdParamSkillListLimit, false).
 		Do(func(cmdCtx context.Context, input contracts.Input) (contracts.Result, error) {
 			return withFirstMemory(cmdCtx, messages, func(mem contracts.Memory) (contracts.Result, error) {
-				return cli.Data(listSkills(cmdCtx, lang(), mem, input))
+				return cli.Data(listSkills(cmdCtx, cliMessages, lang(), mem, input))
 			})
 		})
 }
@@ -169,7 +169,7 @@ const (
 	defaultSearchLimit = 10
 )
 
-func listSkills(ctx context.Context, lang i18n.Language, mem contracts.Memory, input contracts.Input) (string, error) {
+func listSkills(ctx context.Context, cliMessages *clitext.Messages, lang i18n.Language, mem contracts.Memory, input contracts.Input) (string, error) {
 	hits, err := mem.Search(ctx, contracts.Query{
 		Kinds:           []contracts.NodeKind{contracts.KindSkill},
 		IncludeArchived: true,
@@ -179,11 +179,11 @@ func listSkills(ctx context.Context, lang i18n.Language, mem contracts.Memory, i
 		return "", err
 	}
 	if len(hits) == 0 {
-		return replyText(lang).Text(clitext.HostMemorySkillsNone, nil), nil
+		return replyText(cliMessages, lang).Text(clitext.HostMemorySkillsNone, nil), nil
 	}
 	var body strings.Builder
 	for _, n := range hits {
-		fmt.Fprintf(&body, "%s\t%s\t%s\t%s\n", n.Key, skillStateOf(n), skillSharingOf(n), replyText(lang).Text(clitext.HostMemorySkillLastUsed, clitext.Params{clitext.ParamWhen: lastSeenOf(n)}))
+		fmt.Fprintf(&body, "%s\t%s\t%s\t%s\n", n.Key, skillStateOf(n), skillSharingOf(n), replyText(cliMessages, lang).Text(clitext.HostMemorySkillLastUsed, clitext.Params{clitext.ParamWhen: lastSeenOf(n)}))
 	}
 	return strings.TrimRight(body.String(), "\n"), nil
 }
@@ -209,31 +209,31 @@ func lastSeenOf(n contracts.Node) string {
 	return "never"
 }
 
-func skillApproveVerb(messages *hostMessages, lang languageSource) contracts.Cmd {
+func skillApproveVerb(messages *hostMessages, cliMessages *clitext.Messages, lang languageSource) contracts.Cmd {
 	return contracts.New("skill", verbApprove).
 		Help(clitext.CmdHelpSkillApprove).
 		Param("key", clitext.CmdParamSkillApproveKey, true).
 		Param("revoke", clitext.CmdParamSkillApproveRevoke, false).
 		Do(func(cmdCtx context.Context, input contracts.Input) (contracts.Result, error) {
 			return withFirstMemory(cmdCtx, messages, func(mem contracts.Memory) (contracts.Result, error) {
-				return cli.Data(setSkillApproval(cmdCtx, lang(), mem, input))
+				return cli.Data(setSkillApproval(cmdCtx, cliMessages, lang(), mem, input))
 			})
 		})
 }
 
-func setSkillApproval(ctx context.Context, lang i18n.Language, mem contracts.Memory, input contracts.Input) (string, error) {
+func setSkillApproval(ctx context.Context, cliMessages *clitext.Messages, lang i18n.Language, mem contracts.Memory, input contracts.Input) (string, error) {
 	key := input.Get("key")
 	approve := !input.Bool("revoke")
 	if err := orchestrator.ApproveSkill(ctx, mem, key, approve); err != nil {
 		return "", approvalFailure(err)
 	}
 	if !approve {
-		return replyText(lang).Text(clitext.HostMemorySkillRevoked, clitext.Params{clitext.ParamKey: key}), nil
+		return replyText(cliMessages, lang).Text(clitext.HostMemorySkillRevoked, clitext.Params{clitext.ParamKey: key}), nil
 	}
-	return replyText(lang).Text(clitext.HostMemorySkillApproved, clitext.Params{clitext.ParamKey: key}), nil
+	return replyText(cliMessages, lang).Text(clitext.HostMemorySkillApproved, clitext.Params{clitext.ParamKey: key}), nil
 }
 
-func memorySearchVerb(messages *hostMessages, lang languageSource) contracts.Cmd {
+func memorySearchVerb(messages *hostMessages, cliMessages *clitext.Messages, lang languageSource) contracts.Cmd {
 	return contracts.New("memory", "search").
 		Help(clitext.CmdHelpMemorySearch).
 		Param("text", clitext.CmdParamMemorySearchText, true).
@@ -241,12 +241,12 @@ func memorySearchVerb(messages *hostMessages, lang languageSource) contracts.Cmd
 		Param("limit", clitext.CmdParamMemorySearchLimit, false).
 		Do(func(cmdCtx context.Context, input contracts.Input) (contracts.Result, error) {
 			return withFirstMemory(cmdCtx, messages, func(mem contracts.Memory) (contracts.Result, error) {
-				return cli.Data(searchMemory(cmdCtx, lang(), mem, input))
+				return cli.Data(searchMemory(cmdCtx, cliMessages, lang(), mem, input))
 			})
 		})
 }
 
-func searchMemory(ctx context.Context, lang i18n.Language, mem contracts.Memory, input contracts.Input) (string, error) {
+func searchMemory(ctx context.Context, cliMessages *clitext.Messages, lang i18n.Language, mem contracts.Memory, input contracts.Input) (string, error) {
 	hits, err := mem.Search(ctx, contracts.Query{
 		Text:       input.Get("text"),
 		Ranked:     true,
@@ -257,7 +257,7 @@ func searchMemory(ctx context.Context, lang i18n.Language, mem contracts.Memory,
 		return "", err
 	}
 	if len(hits) == 0 {
-		return replyText(lang).Text(clitext.HostMemorySearchNone, nil), nil
+		return replyText(cliMessages, lang).Text(clitext.HostMemorySearchNone, nil), nil
 	}
 	var body strings.Builder
 	for _, n := range hits {
@@ -281,7 +281,7 @@ func whoamiVerb() contracts.Cmd {
 		})
 }
 
-func commandsVerb(lang languageSource, reg *cli.Registry) contracts.Cmd {
+func commandsVerb(cliMessages *clitext.Messages, lang languageSource, reg *cli.Registry) contracts.Cmd {
 	return contracts.New("commands").
 		Help(clitext.CmdHelpCommands).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
@@ -297,7 +297,7 @@ func commandsVerb(lang languageSource, reg *cli.Registry) contracts.Cmd {
 			if helpErr == nil {
 				return contracts.DataResult(help), nil
 			}
-			warning, renderErr := clitext.For(lang()).Render(clitext.CmdHelpCommandsWarning, clitext.Params{clitext.ParamErr: helpErr.Error()})
+			warning, renderErr := cliMessages.For(lang()).Render(clitext.CmdHelpCommandsWarning, clitext.Params{clitext.ParamErr: helpErr.Error()})
 			if renderErr != nil {
 				return contracts.Result{}, renderErr
 			}

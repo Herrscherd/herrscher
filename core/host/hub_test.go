@@ -13,6 +13,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
@@ -20,7 +21,7 @@ import (
 func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
 	t.Helper()
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
@@ -41,7 +42,7 @@ func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
 
 func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	entered, release := make(chan struct{}), make(chan struct{})
@@ -87,7 +88,7 @@ func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
 }
 
 func TestSessionSeedRegisteredRequiresNameAndTask(t *testing.T) {
-	reg, err := NewRegistry(context.Background(), nil, Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json"})
+	reg, err := NewRegistry(context.Background(), clitext.NewMessages(), nil, Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +167,7 @@ func TestHubCloseOmitsForceWhenFalse(t *testing.T) {
 
 func TestHubDispatchSetSource(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	st := state.NewState(t.TempDir() + "/s.json")
@@ -190,7 +191,7 @@ func TestHubDispatchSetSource(t *testing.T) {
 func newTestHub(t *testing.T, opts ...hubOption) *hub {
 	t.Helper()
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")

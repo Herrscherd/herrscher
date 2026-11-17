@@ -109,7 +109,7 @@ func renderNotice(t *testing.T, lang i18n.Language, err error) string {
 }
 
 func TestSessionLimitKeepsItsEnglishTextAndItsSentinel(t *testing.T) {
-	err := &SessionLimitError{Max: 3}
+	err := NewSessionLimitError(clitext.NewMessages(), 3)
 	if got, want := err.Error(), "session limit reached (3): close a session before creating another"; got != want {
 		t.Fatalf("Error() = %q, want %q", got, want)
 	}
@@ -179,7 +179,7 @@ func TestLocalizedErrorKeepsEveryCause(t *testing.T) {
 
 func TestLocalizedManagerErrorRendersInTheOperatorLanguage(t *testing.T) {
 	cause := errors.New("disk full")
-	h := &Handler{lang: i18n.French}
+	h := &Handler{lang: i18n.French, messages: clitext.NewMessages()}
 	err := h.labelled("worktree", clitext.HostErrWorktree, cause)
 	if err.Error() != "worktree: disk full" {
 		t.Fatalf("Error() = %q, want the English text", err.Error())

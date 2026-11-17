@@ -9,6 +9,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
@@ -20,7 +21,7 @@ func buildRegistryWithPluginCommands(t *testing.T, extra ...contracts.Cmd) error
 	store := state.NewState(filepath.Join(dir, "state.json"))
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
 	options := Options{Runtime: testRuntime(t), StatePath: filepath.Join(dir, "state.json"), DefaultCmd: "claude", Language: i18n.English}
-	_, _, err := buildRegistry(ctx, Deps{}, options, store, sup, "", extra, newApprovalTable(io.Discard), newSessionTable(newHostMessages()))
+	_, _, err := buildRegistry(ctx, Deps{}, options, store, sup, "", extra, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()))
 	return err
 }
 

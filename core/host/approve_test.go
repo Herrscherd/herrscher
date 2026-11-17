@@ -14,6 +14,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 )
@@ -40,7 +41,7 @@ func (m *menuGatewayFake) RouteMenu(_ context.Context, _, _, prompt, _ string, _
 
 func TestAskApprovalAnswersWithoutAskingAnyone(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	pol := approval.Policy{{Decision: approval.Deny, Tool: "Bash", Pattern: "sudo*"}}
 	req := approval.Request{Tool: "Bash", Subject: "sudo rm"}
 	d, reason := askApproval(context.Background(), approvalTab, sessionTab, "s1", req, pol, approval.ModeAsk, time.Minute)
@@ -58,7 +59,7 @@ func TestAskApprovalAnswersWithoutAskingAnyone(t *testing.T) {
 func TestAskApprovalWaitsThenIsAnswered(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		approvalTab := newApprovalTable(io.Discard)
-		sessionTab := newSessionTable(newHostMessages())
+		sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 		pol := approval.Policy{{Decision: approval.Ask, Tool: "Bash", Pattern: "git push*"}}
 		req := approval.Request{Tool: "Bash", Subject: "git push origin master"}
 		done := make(chan approval.Decision, 1)
@@ -81,7 +82,7 @@ func TestAskApprovalWaitsThenIsAnswered(t *testing.T) {
 
 func TestAskApprovalTimesOutIntoADenial(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 	req := approval.Request{Tool: "Bash", Subject: "git push"}
 	d, reason := askApproval(context.Background(), approvalTab, sessionTab, "s1", req, pol, approval.ModeAsk, 30*time.Millisecond)
@@ -101,7 +102,7 @@ func answerApproval(approvalTab *approvalTable, id string, decision approval.Dec
 	if decision == approval.Deny {
 		scope = scopeDeny
 	}
-	return settleApproval(approvalTab, newSessionTable(newHostMessages()), id, approvalAnswer{scope: scope})
+	return settleApproval(approvalTab, newSessionTable(newHostMessages(), clitext.NewMessages()), id, approvalAnswer{scope: scope})
 }
 
 func waitingFor(approvalTab *approvalTable, session string) int {
@@ -150,7 +151,7 @@ func fillApprovals(t *testing.T, approvalTab *approvalTable, sessionTab *session
 func TestOneSessionCannotFillTheRegistry(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		approvalTab := newApprovalTable(io.Discard)
-		sessionTab := newSessionTable(newHostMessages())
+		sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 		full := make([]string, 0, maxPendingPerSession)
 		for range maxPendingPerSession {
 			full = append(full, "s-cap")
@@ -186,7 +187,7 @@ func TestOneSessionCannotFillTheRegistry(t *testing.T) {
 func TestTheRegistryIsBoundedAcrossSessions(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		approvalTab := newApprovalTable(io.Discard)
-		sessionTab := newSessionTable(newHostMessages())
+		sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 		sessions := make([]string, 0, maxPendingApprovals)
 		for i := range maxPendingApprovals {
 			sessions = append(sessions, fmt.Sprintf("s-fleet-%d", i))
@@ -209,7 +210,7 @@ func TestTheRegistryIsBoundedAcrossSessions(t *testing.T) {
 
 func TestATimedOutRequestFreesItsSlot(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 	var reason string
 	for range maxPendingPerSession + 1 {
@@ -237,7 +238,7 @@ func TestAnswerApprovalUnknownID(t *testing.T) {
 func TestTwoSessionsWaitIndependently(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		approvalTab := newApprovalTable(io.Discard)
-		sessionTab := newSessionTable(newHostMessages())
+		sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 		pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 		got := make(chan string, 2)
 		for _, name := range []string{"s1", "s2"} {
@@ -291,7 +292,7 @@ func TestSessionDriverAskApproval(t *testing.T) {
 			name: "routes a menu when the reader can route and has a channel",
 			build: func() (*sessionDriver, *menuGatewayFake) {
 				gw := &menuGatewayFake{channel: "chan1"}
-				d := &sessionDriver{messages: newHostMessages(), name: "s1", gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
+				d := &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), name: "s1", gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
 				return d, gw
 			},
 			wantRouted: 1,
@@ -301,7 +302,7 @@ func TestSessionDriverAskApproval(t *testing.T) {
 			name: "falls back to text when RouteMenu errors",
 			build: func() (*sessionDriver, *menuGatewayFake) {
 				gw := &menuGatewayFake{channel: "chan1", routeErr: errors.New("boom")}
-				d := &sessionDriver{messages: newHostMessages(), name: "s1", gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
+				d := &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), name: "s1", gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
 				return d, gw
 			},
 			wantRouted: 1,
@@ -311,7 +312,7 @@ func TestSessionDriverAskApproval(t *testing.T) {
 			name: "falls back to text when the reader has no channel at all",
 			build: func() (*sessionDriver, *menuGatewayFake) {
 				gw := &menuGatewayFake{channel: ""}
-				d := &sessionDriver{messages: newHostMessages(), name: "s1", gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
+				d := &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), name: "s1", gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
 				return d, gw
 			},
 			wantRouted: 0,
@@ -335,7 +336,7 @@ func TestSessionDriverAskApproval(t *testing.T) {
 
 	t.Run("no panic and nothing posted with a nil Gateway and no usable router", func(t *testing.T) {
 		reader := &fanRecorder{}
-		d := &sessionDriver{messages: newHostMessages(), name: "s1", gateways: []contracts.GatewaySet{{Gateway: nil, Reader: reader}}}
+		d := &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), name: "s1", gateways: []contracts.GatewaySet{{Gateway: nil, Reader: reader}}}
 		d.askApproval(context.Background(), "id1", approval.Request{Tool: "Bash", Subject: "rm"}, time.Now().Add(time.Minute))
 		reader.mu.Lock()
 		defer reader.mu.Unlock()
@@ -348,7 +349,7 @@ func TestSessionDriverAskApproval(t *testing.T) {
 func TestPickRoutesApprovalValuesAwayFromTheBackend(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		approvalTab := newApprovalTable(io.Discard)
-		sessionTab := newSessionTable(newHostMessages())
+		sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 		pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 		done := make(chan approval.Decision, 1)
 		go func() {
@@ -368,7 +369,7 @@ func TestPickRoutesApprovalValuesAwayFromTheBackend(t *testing.T) {
 func TestALongWaitIsCalledOutButNotShortened(t *testing.T) {
 	var warnings bytes.Buffer
 	approvalTab := newApprovalTable(&warnings)
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	ask := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 	req := approval.Request{Tool: "Bash", Subject: "git push"}
 	fits, outlives := agent.HookWait/2, agent.HookWait/2+time.Minute

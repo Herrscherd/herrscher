@@ -10,6 +10,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
@@ -47,7 +48,7 @@ func TestTurnSaidOutsideTheBoundChannelsIsNotPostedThere(t *testing.T) {
 		a := &fanRecorder{}
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+		d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		d.channel = "chan-1"
 		tapped, stop := tapping(d)
 		defer stop()
@@ -83,7 +84,7 @@ func TestTurnSaidInABoundChannelIsPostedThere(t *testing.T) {
 		a := &fanRecorder{}
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+		d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		_, stop := tapping(d)
 		defer stop()
 
@@ -105,7 +106,7 @@ func TestTurnSaidInABoundChannelIsPostedThere(t *testing.T) {
 
 func TestSessionSendCarriesTheOriginItWasTypedIn(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	dir := t.TempDir()
@@ -115,7 +116,7 @@ func TestSessionSendCarriesTheOriginItWasTypedIn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := newSessionDriver(newHostMessages(), "s1", nil, nil, nil, io.Discard)
+	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", nil, nil, nil, io.Discard)
 	sessionTab.register("s1", d)
 	defer sessionTab.unregister("s1", d)
 
@@ -149,7 +150,7 @@ func TestTurnWithNoOriginIsPostedToTheBoundChannels(t *testing.T) {
 		a := &fanRecorder{}
 		toBridge := make(chan contracts.Event, 4)
 		fromBridge := make(chan contracts.Event, 4)
-		d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+		d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 		_, stop := tapping(d)
 		defer stop()
 

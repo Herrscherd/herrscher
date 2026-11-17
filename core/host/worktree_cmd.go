@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
@@ -67,7 +68,7 @@ func parseWorktreeFlags(sub string, rest []string) (worktreeFlags, error) {
 
 func runWorktreeSub(ctx context.Context, file worktreeFlags) error {
 	messages := newHostMessages()
-	worktrees := worktree.NewWorktreer(file.instance)
+	worktrees := worktree.NewWorktreer(clitext.NewMessages(), file.instance)
 	switch file.sub {
 	case "create":
 		return createWorktree(ctx, worktrees, file)

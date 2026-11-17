@@ -16,6 +16,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -74,11 +75,11 @@ func newApprovalRegistry(t *testing.T, approvalTab *approvalTable, menus *menuRe
 	if err := st.AddApprovalRule("ask Bash(git push*)"); err != nil {
 		t.Fatalf("AddApprovalRule: %v", err)
 	}
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	t.Setenv(TokenVar, sessionTab.issueToken("s1"))
-	sessionTab.register("s1", newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: menus, Reader: menus}}, nil, nil, io.Discard))
+	sessionTab.register("s1", newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", []contracts.GatewaySet{{Gateway: menus, Reader: menus}}, nil, nil, io.Discard))
 	reg := &cli.Registry{}
-	if err := addApproveCommands(reg, newHostMessages(), fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); err != nil {
+	if err := addApproveCommands(reg, newHostMessages(), clitext.NewMessages(), fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); err != nil {
 		t.Fatalf("addApproveCommands: %v", err)
 	}
 	return reg

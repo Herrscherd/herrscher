@@ -9,6 +9,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/internal/health"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
@@ -22,14 +23,14 @@ import (
 // health/liveness. gws are the gateway sets the daemon owns (built from the
 // registry by the caller). Command dispatch no longer runs here.
 // Session/service commands run through the operator CLI (see NewRegistry).
-func RunHub(ctx context.Context, gws []Deps, closers []contracts.Gateway, options Options) error {
+func RunHub(ctx context.Context, cliMessages *clitext.Messages, gws []Deps, closers []contracts.Gateway, options Options) error {
 	messages := newHostMessages()
 	clock, tick, settingsErr := schedulerSettings(messages)
 	if settingsErr != nil {
 		closeGateways(ctx, closers, obs.Stderr(false))
-		return localizeHostError(messages, options.operatorLanguage(), settingsErr)
+		return localizeHostError(messages, cliMessages, options.operatorLanguage(), settingsErr)
 	}
-	return localizeHostError(messages, options.operatorLanguage(), serveHub(ctx, messages, gws, closers, options, clock, tick))
+	return localizeHostError(messages, cliMessages, options.operatorLanguage(), serveHub(ctx, messages, cliMessages, gws, closers, options, clock, tick))
 }
 
 func (options Options) withDefaultGateways(gws []Deps) Options {
@@ -39,7 +40,7 @@ func (options Options) withDefaultGateways(gws []Deps) Options {
 	return options
 }
 
-func serveHub(ctx context.Context, messages *hostMessages, gws []Deps, closers []contracts.Gateway, options Options, clock func() time.Time, tick time.Duration) error {
+func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.Messages, gws []Deps, closers []contracts.Gateway, options Options, clock func() time.Time, tick time.Duration) error {
 	base := obs.Stderr(false)
 	defer closeGateways(ctx, closers, base)
 	if options.Runtime.Dir() == "" {
@@ -71,7 +72,7 @@ func serveHub(ctx context.Context, messages *hostMessages, gws []Deps, closers [
 
 	options = options.withDefaultGateways(gws)
 	approvals := newApprovalTable(options.Warnings).withRules(store)
-	sessions := newSessionTable(messages)
+	sessions := newSessionTable(messages, cliMessages)
 	options.health = &healthSource{}
 	options.usage = newUsageSource(messages, partDir)
 	stopUsageWatch := options.usage.startWatch(ctx)

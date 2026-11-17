@@ -12,7 +12,7 @@ import (
 
 func TestRemoteMaterializeFailureReadsInFrench(t *testing.T) {
 	f := &fakeCommander{fail: true}
-	err := NewRemote(f, "hs", "inst").Materialize(context.Background(), "/srv/work/proj/wt", strings.NewReader(""))
+	err := NewRemote(clitext.NewMessages(), f, "hs", "inst").Materialize(context.Background(), "/srv/work/proj/wt", strings.NewReader(""))
 	if err == nil {
 		t.Fatal("want a failure from the remote materialize")
 	}
@@ -34,10 +34,11 @@ func TestRemoteMaterializeFailureReadsInFrench(t *testing.T) {
 
 func TestEveryFailureKeyRendersInEachLanguage(t *testing.T) {
 	cause := errors.New("cause")
+	messages := clitext.NewMessages()
 	failures := []FailureError{
-		{Key: clitext.WorktreeFlagBase, Params: clitext.Params{clitext.ParamRef: `"-x"`}},
-		{Key: clitext.WorktreeOrphanRecovery, Params: clitext.Params{clitext.ParamRemove: FailureError{Key: clitext.WorktreeRemoveFailed, Params: clitext.Params{clitext.ParamOutput: "o", clitext.ParamErr: cause}}, clitext.ParamRecovery: cause}},
-		{Key: clitext.WorktreeOtherBranch, Params: clitext.Params{clitext.ParamPath: `"p"`, clitext.ParamTip: `"t"`, clitext.ParamBranch: `"b"`}},
+		NewFailure(messages, clitext.WorktreeFlagBase, clitext.Params{clitext.ParamRef: `"-x"`}, nil),
+		NewFailure(messages, clitext.WorktreeOrphanRecovery, clitext.Params{clitext.ParamRemove: NewFailure(messages, clitext.WorktreeRemoveFailed, clitext.Params{clitext.ParamOutput: "o", clitext.ParamErr: cause}, nil), clitext.ParamRecovery: cause}, nil),
+		NewFailure(messages, clitext.WorktreeOtherBranch, clitext.Params{clitext.ParamPath: `"p"`, clitext.ParamTip: `"t"`, clitext.ParamBranch: `"b"`}, nil),
 	}
 	for _, failure := range failures {
 		for _, lang := range []i18n.Language{i18n.English, i18n.French} {
@@ -50,7 +51,7 @@ func TestEveryFailureKeyRendersInEachLanguage(t *testing.T) {
 }
 
 func TestFailureWithAKeyNoCatalogDeclaresShowsTheKey(t *testing.T) {
-	failure := FailureError{Key: clitext.Key("cli.worktree.undeclared")}
+	failure := NewFailure(clitext.NewMessages(), clitext.Key("cli.worktree.undeclared"), nil, nil)
 	if text := failure.Text(i18n.French); text != "cli.worktree.undeclared" {
 		t.Fatalf("undeclared key rendered %q", text)
 	}

@@ -5,6 +5,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -14,7 +15,7 @@ func placerWith(t *testing.T, h state.Host, sourceVersion string) hostPlacer {
 	if err := st.PutHost(h); err != nil {
 		t.Fatal(err)
 	}
-	return newHostPlacer(newHostMessages(), testLanguage(), io.Discard, st, testRuntime(t), "inst", nil, func() string { return sourceVersion })
+	return newHostPlacer(newHostMessages(), clitext.NewMessages(), testLanguage(), io.Discard, st, testRuntime(t), "inst", nil, func() string { return sourceVersion })
 }
 
 func TestPlacerLocalNeedsNoRecord(t *testing.T) {

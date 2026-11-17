@@ -52,7 +52,7 @@ func TestBuilderRepliesFollowTheLiveOperatorLanguage(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	live := newOperatorLanguage(i18n.English)
 	reg := &cli.Registry{}
-	if err := addScheduleCommands(reg, newHostMessages(), live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
+	if err := addScheduleCommands(reg, newHostMessages(), clitext.NewMessages(), live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
 	if err := st.PutSchedule(schedule.Schedule{
@@ -85,7 +85,7 @@ func TestSetLangThroughTheWiredManagerChangesBuilderReplies(t *testing.T) {
 		t.Fatalf("set lang fr: %v", err)
 	}
 	reg := &cli.Registry{}
-	if err := addScheduleCommands(reg, newHostMessages(), live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
+	if err := addScheduleCommands(reg, newHostMessages(), clitext.NewMessages(), live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
 	if err := st.PutSchedule(schedule.Schedule{
@@ -113,7 +113,7 @@ func TestCommandsFollowsTheLiveLanguageAfterSetLang(t *testing.T) {
 	options := Options{DefaultCmd: "claude", live: live}
 	hdl := newManagerHandler(newHostMessages(), Deps{}, options, t.TempDir(), st, nil, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
 	reg := &cli.Registry{}
-	if err := reg.Add(commandsVerb(live.Get, reg)); err != nil {
+	if err := reg.Add(commandsVerb(clitext.NewMessages(), live.Get, reg)); err != nil {
 		t.Fatal(err)
 	}
 	setLang := mustCommand(t, hdl.Commands(), "set", "lang")
@@ -147,7 +147,7 @@ func TestHubWarningFollowsALiveLanguageChange(t *testing.T) {
 	}
 	live := newOperatorLanguage(i18n.English)
 	var printed bytes.Buffer
-	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()), withWarnings(&printed))
+	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()), withWarnings(&printed))
 	h.language = live.Get
 	h.roleNames()
 	english := printed.String()
@@ -189,7 +189,7 @@ func TestOperatorCommandReplyFollowsALiveLanguageChange(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	live := newOperatorLanguage(i18n.English)
 	reg := &cli.Registry{}
-	if err := addScheduleCommands(reg, newHostMessages(), live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
+	if err := addScheduleCommands(reg, newHostMessages(), clitext.NewMessages(), live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
 	h := testHub(&hub{messages: newHostMessages(), warnings: io.Discard, st: st, reg: reg, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)})
@@ -222,7 +222,7 @@ func TestSessionCommandReplyFollowsTheOperatorUnlessItsLanguageIsRecorded(t *tes
 	}
 	live := newOperatorLanguage(i18n.English)
 	reg := &cli.Registry{}
-	if err := addScheduleCommands(reg, newHostMessages(), live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
+	if err := addScheduleCommands(reg, newHostMessages(), clitext.NewMessages(), live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
 	h := testHub(&hub{messages: newHostMessages(), warnings: io.Discard, st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)})
@@ -267,7 +267,7 @@ func TestCompactionNoticeFollowsTheLiveSessionLanguage(t *testing.T) {
 	live := newOperatorLanguage(i18n.English)
 	h := testHub(&hub{messages: newHostMessages(), warnings: io.Discard, st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)})
 	var printed bytes.Buffer
-	d := newSessionDriver(newHostMessages(), "s1", nil, nil, nil, &printed)
+	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", nil, nil, nil, &printed)
 	d.language = liveSessionLanguage(st, "s1")
 	d.operator = h.textLanguage()
 
@@ -293,7 +293,7 @@ func TestCompactionNoticeFollowsTheOperatorWithoutASessionLanguage(t *testing.T)
 	live := newOperatorLanguage(i18n.English)
 	h := testHub(&hub{messages: newHostMessages(), warnings: io.Discard, st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)})
 	var printed bytes.Buffer
-	d := newSessionDriver(newHostMessages(), "s1", nil, nil, nil, &printed)
+	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", nil, nil, nil, &printed)
 	d.language = liveSessionLanguage(st, "s1")
 	d.operator = h.textLanguage()
 
@@ -367,7 +367,7 @@ func TestClosedHubReconcileOpensNoSessionQuietly(t *testing.T) {
 		}
 	}
 	var printed bytes.Buffer
-	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()), withWarnings(&printed))
+	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()), withWarnings(&printed))
 	h.runtime = isolatedRuntimeDir(t)
 	h.instanceID = "t18"
 	h.stopLive()
@@ -390,7 +390,7 @@ func TestSessionStartWarningFollowsTheSessionLanguage(t *testing.T) {
 	}
 	live := newOperatorLanguage(i18n.French)
 	var printed bytes.Buffer
-	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()), withWarnings(&printed))
+	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()), withWarnings(&printed))
 	h.language = live.Get
 	h.reconcile(context.Background())
 	params := map[string]any{nameParam: "revue", detailParam: errNoRuntimeLayout}

@@ -12,10 +12,9 @@ import (
 const openWaitLimit = 5 * time.Second
 
 type openWait struct {
-	session   string
-	queued    bool
-	unfocused bool
-	deadline  time.Time
+	session  string
+	queued   bool
+	deadline time.Time
 }
 
 func (m *model) now() time.Time {
@@ -26,6 +25,7 @@ func (m *model) now() time.Time {
 }
 
 func (m *model) beginOpen(session, text string) {
+	m.heldSession = ""
 	m.open = openWait{session: session, queued: text != ""}
 	if text != "" {
 		m.input.SetValue(text)
@@ -46,27 +46,47 @@ func (m *model) removeLastPending() bool {
 
 func (m *model) queueForOpen(text string) {
 	if text == "" {
-		m.cancelQueuedText()
+		m.cancelOpenWait()
 		return
 	}
 	m.open.queued = true
 	m.flash = m.tr.t("tui.session.open_pending", map[string]any{tplArgName: m.open.session})
 }
 
-func (m *model) cancelQueuedText() {
+func (m *model) cancelOpenWait() {
 	if !m.open.queued {
 		return
 	}
-	m.open.queued = false
-	m.flash = m.tr.t("tui.session.open_cancelled", map[string]any{tplArgName: m.open.session})
+	if m.active == "" {
+		m.heldSession = m.open.session
+	}
+	m.abandonOpen()
 }
 
 func (m *model) abandonOpen() {
-	if m.open.session == "" {
+	if !m.awaitingOpen() {
 		return
 	}
-	m.cancelQueuedText()
+	name := m.open.session
+	queued := m.open.queued
 	m.clearOpen()
+	if queued {
+		m.flash = m.tr.t("tui.session.open_cancelled", map[string]any{tplArgName: name})
+	}
+}
+
+func (m *model) endWaitAfterRemoval(successor string) {
+	if !m.awaitingOpen() {
+		return
+	}
+	if successor == "" {
+		m.heldSession = m.open.session
+	}
+	queued := m.open.queued
+	m.clearOpen()
+	if queued {
+		m.flash = ""
+	}
 }
 
 func (m *model) releaseOpen() {
@@ -76,12 +96,19 @@ func (m *model) releaseOpen() {
 }
 
 func (m *model) noteTabChange(channel string) {
+	if channel == "" {
+		return
+	}
+	m.heldSession = ""
 	m.abandonOpen()
-	m.open.unfocused = channel == ""
 }
 
 func (m *model) clearOpen() {
-	m.open = openWait{unfocused: m.open.unfocused}
+	m.open = openWait{}
+}
+
+func (m *model) mayTakeFocus(channel string) bool {
+	return m.heldSession == "" || m.sessionName(channel) != m.heldSession
 }
 
 func (m *model) focusOpen(infos []contracts.SessionInfo) tea.Cmd {
@@ -114,6 +141,7 @@ func (m *model) deliverOpen(channel string) tea.Cmd {
 		return nil
 	}
 	if isCommandLine(text) {
+		m.flash = m.tr.t("tui.session.open_command_kept", map[string]any{tplArgName: open.session})
 		return nil
 	}
 	atts := m.pending

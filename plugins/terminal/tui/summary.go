@@ -267,30 +267,34 @@ func joinPanel(left, right []string, leftWidth, height int, separator string) []
 	return out
 }
 
-func (m *model) markVisibleSeen() {
+func (m *model) refreshTabs() tea.Cmd {
 	if m.tm == nil {
-		return
+		return nil
 	}
-	for _, name := range m.visibleSessionNames() {
-		m.tm.Seen(name)
+	backend := m.tm
+	channels := m.visibleChannels()
+	return func() tea.Msg {
+		infos := backend.Sessions()
+		markSeen(backend, infos, channels)
+		return sessionsMsg{infos: infos}
 	}
 }
 
-func (m *model) visibleSessionNames() []string {
-	var channels []string
+func (m *model) visibleChannels() []string {
 	switch m.surface {
 	case surfaceChat:
-		channels = []string{m.active}
+		return []string{m.active}
 	case surfacePanes:
-		channels = m.panes.channels
-	case surfaceBoard:
+		return slices.Clone(m.panes.channels)
 	}
+	return nil
+}
 
-	var names []string
+func markSeen(backend Backend, infos []contracts.SessionInfo, channels []string) {
 	for _, channel := range channels {
-		if name := m.infoForChannel(channel).Name; name != "" {
-			names = append(names, name)
+		index := slices.IndexFunc(infos, func(info contracts.SessionInfo) bool { return info.ChannelID == channel })
+		if index >= 0 && infos[index].Name != "" {
+			backend.Seen(infos[index].Name)
 		}
 	}
-	return names
 }

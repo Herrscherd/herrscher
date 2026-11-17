@@ -862,6 +862,14 @@
     "other": "queued message for session {{.Name}} cancelled"
   },
   {
+    "id": "tui.session.open_command_kept",
+    "other": "command line for session {{.Name}} kept in the composer, not sent"
+  },
+  {
+    "id": "tui.session.attachment_needs_text",
+    "other": "attachments need a message to go with them, add some text before sending"
+  },
+  {
     "id": "tui.session.start_failed",
     "other": "could not open a session: {{.Reason}}"
   },

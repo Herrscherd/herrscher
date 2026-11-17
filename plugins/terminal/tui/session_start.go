@@ -9,6 +9,9 @@ type sessionStartedMsg struct {
 
 func (m *model) startFromComposer(text string) tea.Cmd {
 	if text == "" {
+		if len(m.pending) > 0 {
+			m.flash = m.tr.t("tui.session.attachment_needs_text", nil)
+		}
 		return nil
 	}
 	m.recordHistory(text)
@@ -17,6 +20,7 @@ func (m *model) startFromComposer(text string) tea.Cmd {
 
 func (m *model) startSession() tea.Cmd {
 	m.starting = true
+	m.heldSession = ""
 	m.open.queued = true
 	m.flash = m.tr.t("tui.session.starting", nil)
 	backend := m.tm

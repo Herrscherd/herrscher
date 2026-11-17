@@ -112,7 +112,7 @@ func TestOpeningASessionMarksItSeenWhileItIsShown(t *testing.T) {
 		t.Fatalf("opening beta must mark it seen, seen = %v", f.seen)
 	}
 	f.seen = nil
-	m.Update(tickMsg{})
+	m.Update(runCmd(m.refreshTabs()))
 	if !containsString(f.seen, "beta") || containsString(f.seen, "alpha") {
 		t.Fatalf("the shown session must be marked on each tick and no other, seen = %v", f.seen)
 	}

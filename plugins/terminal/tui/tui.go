@@ -221,6 +221,10 @@ type eventMsg RoutedEvent
 
 type tickMsg struct{}
 
+type sessionsMsg struct {
+	infos []contracts.SessionInfo
+}
+
 func tickCmd() tea.Cmd {
 	return tea.Tick(time.Second, func(time.Time) tea.Msg { return tickMsg{} })
 }
@@ -276,6 +280,8 @@ type model struct {
 	open     openWait
 	clock    func() time.Time
 	starting bool
+
+	heldSession string
 
 	resumeOpen bool
 	resumeIdx  int
@@ -530,7 +536,7 @@ func (m *model) ensureTab(channel string) *tab {
 	tab := &tab{channel: channel, label: channel, openedAt: time.Now()}
 	m.tabs[channel] = tab
 	m.order = append(m.order, channel)
-	if m.active == "" && !m.open.unfocused {
+	if m.active == "" && m.mayTakeFocus(channel) {
 		m.active = channel
 		m.applySize()
 	}
@@ -581,8 +587,10 @@ func (m *model) removeTab(channel string) {
 	}
 	m.order = out
 	if m.active == channel {
+		successor := m.successorTab()
+		m.endWaitAfterRemoval(successor)
 		m.active = ""
-		m.activate(m.successorTab())
+		m.activate(successor)
 		m.syncViewport()
 	}
 }
@@ -655,7 +663,10 @@ func lastAgentIndex(entries []entry) int {
 }
 
 func (m *model) syncTabs() tea.Cmd {
-	infos := m.tm.Sessions()
+	return m.applySessions(m.tm.Sessions())
+}
+
+func (m *model) applySessions(infos []contracts.SessionInfo) tea.Cmd {
 	if infos == nil {
 		return m.focusOpen(nil)
 	}
@@ -1602,11 +1613,12 @@ func (m *model) handleMsg(msg tea.Msg) (tea.Cmd, bool) {
 		m.handleForkDone(msg)
 		return nil, true
 	case tickMsg:
-		syncCmd := m.syncTabs()
+		syncCmd := m.refreshTabs()
 		m.expireApprovals(time.Now())
-		m.markVisibleSeen()
 		m.refreshSurface()
 		return tea.Batch(syncCmd, tickCmd(), m.gitTick(), m.loadModesCmd(), m.summaryRefresh(), m.healthTick()), true
+	case sessionsMsg:
+		return m.applySessions(msg.infos), true
 	case summaryMsg:
 		m.summaryBusy = false
 		m.summary = panelSummary(msg)

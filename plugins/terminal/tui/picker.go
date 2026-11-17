@@ -49,6 +49,7 @@ func (m *model) loadResumePreview() {
 	}
 	lines, err := m.tm.Scrollback(m.resumeRows[m.resumeIdx].Name)
 	if err != nil {
+		m.resumePreviewLines = []string{m.tr.t("tui.session.history_failed", map[string]any{tplArgReason: localizedReason(m.tr, err)})}
 		return
 	}
 	for _, line := range tailLines(lines, resumePreviewLines) {

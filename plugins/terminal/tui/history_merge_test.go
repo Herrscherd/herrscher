@@ -12,6 +12,10 @@ func replyEvent(text string) RoutedEvent {
 	return RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventReply, Text: text}}
 }
 
+func chunkEvent(text string) RoutedEvent {
+	return RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventChunk, Text: text}}
+}
+
 func conversationTexts(tb *tab) []string {
 	var texts []string
 	for _, e := range tb.entries {
@@ -61,6 +65,23 @@ func TestAnIdenticalReplyAfterTheHistoryEndIsDroppedUntilTurnIDLands(t *testing.
 	want := []string{"question", "ok"}
 	if got := conversationTexts(tb); !slices.Equal(got, want) {
 		t.Fatalf("conversation = %q, want %q: without TurnID an identical reply after the history end is dropped as a duplicate", got, want)
+	}
+}
+
+func TestChunksOfAnAlreadyShownReplyAreDroppedWithIt(t *testing.T) {
+	m, tb := newHistoryTab(t, []contracts.ScrollbackLine{
+		{Role: "user", Text: "question"},
+		{Role: "assistant", Text: "answer"},
+	})
+	historyCmd := m.route(chunkEvent("an"))
+	m.route(chunkEvent("swer"))
+	m.route(replyEvent("answer"))
+	for _, msg := range historyMsgs(historyCmd) {
+		m.Update(msg)
+	}
+	want := []string{"question", "answer"}
+	if got := conversationTexts(tb); !slices.Equal(got, want) {
+		t.Fatalf("conversation = %q, want %q: the chunks of a reply the history already holds must go with it", got, want)
 	}
 }
 

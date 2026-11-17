@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 
 type blockingHistory struct {
 	*fakeBackend
+
 	release chan struct{}
 }
 
@@ -147,7 +149,7 @@ func TestLiveEventsWaitForHistoryAndKeepTheirOrder(t *testing.T) {
 	if history < 0 || first < 0 || second < 0 {
 		t.Fatalf("missing lines in tab: %q", text)
 	}
-	if !(history < first && first < second) {
+	if history >= first || first >= second {
 		t.Errorf("tab order = history %d, live-first %d, live-second %d; want increasing", history, first, second)
 	}
 }
@@ -177,5 +179,21 @@ func TestHistoryErrorIsShownAndTheTabStaysUsable(t *testing.T) {
 	}
 	if !strings.Contains(tabText(tb), "still-live") {
 		t.Errorf("tab unusable after the history failure: %q", tabText(tb))
+	}
+}
+
+func TestResumePreviewShowsTheHistoryFailure(t *testing.T) {
+	failure := errors.New("daemon down")
+	f := &fakeBackend{
+		fe:            make(chan RoutedEvent, 1),
+		sessions:      []contracts.SessionInfo{{Name: "s", ChannelID: "c"}},
+		scrollbackErr: failure,
+	}
+	m := newModel(f)
+	m.Update(sessionsMsg{seq: m.sessionsIssued, infos: f.sessions})
+	m.openResume()
+	want := m.tr.t("tui.session.history_failed", map[string]any{tplArgReason: localizedReason(m.tr, failure)})
+	if !slices.Contains(m.resumePreviewLines, want) {
+		t.Fatalf("resume preview = %q, want the history failure %q", m.resumePreviewLines, want)
 	}
 }

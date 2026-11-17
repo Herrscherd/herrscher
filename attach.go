@@ -329,7 +329,7 @@ func (a *attachedDaemon) Scrollback(name string) ([]contracts.ScrollbackLine, er
 		return nil, err
 	}
 	var lines []contracts.ScrollbackLine
-	if len(out) == 0 {
+	if out == "" {
 		return lines, nil
 	}
 	if err := json.Unmarshal([]byte(out), &lines); err != nil {

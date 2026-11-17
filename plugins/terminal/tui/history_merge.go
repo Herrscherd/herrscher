@@ -42,8 +42,8 @@ func overlapLength(history, live []transcriptLine) int {
 func unseenPending(history []contracts.ScrollbackLine, pending []RoutedEvent) []RoutedEvent {
 	var replies []int
 	var lines []transcriptLine
-	for i, routed := range pending {
-		if line, ok := replyLine(routed); ok {
+	for i := range pending {
+		if line, ok := replyLine(pending[i]); ok {
 			replies = append(replies, i)
 			lines = append(lines, line)
 		}
@@ -57,9 +57,9 @@ func unseenPending(history []contracts.ScrollbackLine, pending []RoutedEvent) []
 		}
 	}
 	out := make([]RoutedEvent, 0, len(pending))
-	for i, routed := range pending {
+	for i := range pending {
 		if !skip[i] {
-			out = append(out, routed)
+			out = append(out, pending[i])
 		}
 	}
 	return out

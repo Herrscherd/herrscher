@@ -13,9 +13,9 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-func seedTranscript(t *testing.T, partDir, name string, entries []state.TranscriptEntry) {
+func seedTranscript(t *testing.T, partDir string, entries []state.TranscriptEntry) {
 	t.Helper()
-	path := state.TranscriptPath(partDir, name)
+	path := state.TranscriptPath(partDir, "alpha")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func contractsInputJSON(name string) contracts.Input {
 func TestSessionLogRun_JSONShapeAndOrder(t *testing.T) {
 	dir := t.TempDir()
 	h := &Handler{partDir: dir}
-	seedTranscript(t, dir, "alpha", []state.TranscriptEntry{
+	seedTranscript(t, dir, []state.TranscriptEntry{
 		{Ts: "t1", Role: "user", Text: "salut"},
 		{Ts: "t2", Role: "assistant", Text: "bonjour", Cost: 0.02},
 	})
@@ -67,7 +67,7 @@ func TestSessionLogRun_JSONShapeAndOrder(t *testing.T) {
 func TestSessionLogRun_ShowsTheNoticeOfAReplyWithoutText(t *testing.T) {
 	dir := t.TempDir()
 	h := &Handler{partDir: dir}
-	seedTranscript(t, dir, "alpha", []state.TranscriptEntry{
+	seedTranscript(t, dir, []state.TranscriptEntry{
 		{Ts: "t1", Role: "assistant", Text: "", Displayed: "fichier refusé: big.bin"},
 	})
 
@@ -83,7 +83,7 @@ func TestSessionLogRun_ShowsTheNoticeOfAReplyWithoutText(t *testing.T) {
 func TestSessionLogRun_OmitsAnEntryWithNothingShown(t *testing.T) {
 	dir := t.TempDir()
 	h := &Handler{partDir: dir}
-	seedTranscript(t, dir, "alpha", []state.TranscriptEntry{
+	seedTranscript(t, dir, []state.TranscriptEntry{
 		{Ts: "t1", Role: "user", Text: "salut"},
 		{Ts: "t2", Role: "assistant", Text: ""},
 	})
@@ -100,7 +100,7 @@ func TestSessionLogRun_OmitsAnEntryWithNothingShown(t *testing.T) {
 func TestSessionLogRun_JSONKeepsTextAndDisplayedOfANoticeOnlyReply(t *testing.T) {
 	dir := t.TempDir()
 	h := &Handler{partDir: dir}
-	seedTranscript(t, dir, "alpha", []state.TranscriptEntry{
+	seedTranscript(t, dir, []state.TranscriptEntry{
 		{Ts: "t1", Role: "assistant", Text: "", Displayed: "fichier refusé: big.bin"},
 	})
 

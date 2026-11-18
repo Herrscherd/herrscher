@@ -196,10 +196,11 @@ func TestAnAssistantReplyDoesNotMatchAUserLineWithTheSameText(t *testing.T) {
 }
 
 func TestAStatusBetweenChunksOfAHeldReplyIsDroppedWithThem(t *testing.T) {
-	got := conversationAfterReplay(t, []contracts.ScrollbackLine{
-		{Role: "user", Text: "q", TurnID: "t1"},
-		{Role: "assistant", Text: "answer", TurnID: "t1"},
-	},
+	got := conversationAfterReplay(
+		t, []contracts.ScrollbackLine{
+			{Role: "user", Text: "q", TurnID: "t1"},
+			{Role: "assistant", Text: "answer", TurnID: "t1"},
+		},
 		turnChunkEvent("t1", "an"),
 		RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventStatus, Text: "tool", TurnID: "t1"}},
 		turnChunkEvent("t1", "swer"),

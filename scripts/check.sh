@@ -88,11 +88,11 @@ if [ "$(uname -s)" = Linux ]; then
 	fi
 	e2e_capped go test -tags e2e -run '^$' ./e2e/... ./core/host/ .
 	e2e_capped env CGO_ENABLED=0 GOWORK=off go build -tags e2e -o "$lint_tools/herrscher" .
-	started_ms=$(( ${EPOCHREALTIME/./} / 1000 ))
+	started_ms=$(date +%s%3N)
 	e2e_capped go test -tags e2e -count=1 -timeout 2m ./e2e/...
 	e2e_capped go test -tags e2e -count=1 -timeout 2m -v -run "^($(paste -sd'|' <<<"$host_only"))\$" ./core/host/
 	e2e_capped go test -tags e2e -count=1 -timeout 2m -run '^TestE2EAttachedWindow' .
-	elapsed_ms=$(( ${EPOCHREALTIME/./} / 1000 - started_ms ))
+	elapsed_ms=$(( $(date +%s%3N) - started_ms ))
 	if [ "$elapsed_ms" -gt "$e2e_budget_ms" ]; then
 		echo "the e2e suite took ${elapsed_ms} ms, over the ${e2e_budget_ms} ms budget" >&2
 		exit 1

@@ -65,8 +65,8 @@ func TestAReplyInTheQueueAndTheHistoryShowsOnce(t *testing.T) {
 func conversationAfterReplay(t *testing.T, transcript []contracts.ScrollbackLine, pending ...RoutedEvent) []string {
 	t.Helper()
 	m, tb, load := newHistoryTab(t, transcript)
-	for _, event := range pending {
-		m.route(event)
+	for index := range pending {
+		m.route(pending[index])
 	}
 	for _, msg := range historyMsgs(load) {
 		m.Update(msg)
@@ -170,5 +170,70 @@ func TestAQueueWithoutOverlapReplaysInFullAndInOrder(t *testing.T) {
 	want := []string{"question", "first", "second"}
 	if got := conversationTexts(tb); !slices.Equal(got, want) {
 		t.Fatalf("conversation = %q, want %q replayed in full and in order", got, want)
+	}
+}
+
+func TestAReplyOfAMultiReplyTurnHeldByTheHistoryIsDroppedInFull(t *testing.T) {
+	got := conversationAfterReplay(t, []contracts.ScrollbackLine{
+		{Role: "user", Text: "q", TurnID: "t1"},
+		{Role: "assistant", Text: "a1", TurnID: "t1"},
+		{Role: "assistant", Text: "a2", TurnID: "t1"},
+	}, turnReplyEvent("t1", "a1"), turnReplyEvent("t1", "a2"))
+	want := []string{"q", "a1", "a2"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("conversation = %q, want %q: both replies of the turn the history holds must be dropped as the longest matching suffix", got, want)
+	}
+}
+
+func TestAnAssistantReplyDoesNotMatchAUserLineWithTheSameText(t *testing.T) {
+	got := conversationAfterReplay(t, []contracts.ScrollbackLine{
+		{Role: "user", Text: "ok", TurnID: "t1"},
+	}, turnReplyEvent("t1", "ok"))
+	want := []string{"ok", "ok"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("conversation = %q, want %q: roles are compared, so a user line never covers an assistant reply", got, want)
+	}
+}
+
+func TestAStatusBetweenChunksOfAHeldReplyIsDroppedWithThem(t *testing.T) {
+	got := conversationAfterReplay(t, []contracts.ScrollbackLine{
+		{Role: "user", Text: "q", TurnID: "t1"},
+		{Role: "assistant", Text: "answer", TurnID: "t1"},
+	},
+		turnChunkEvent("t1", "an"),
+		RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventStatus, Text: "tool", TurnID: "t1"}},
+		turnChunkEvent("t1", "swer"),
+		turnReplyEvent("t1", "answer"),
+	)
+	want := []string{"q", "answer"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("conversation = %q, want %q: every chunk of the held turn goes with its reply, even when a status event falls between them", got, want)
+	}
+}
+
+func TestAHostErrorBetweenHeldRepliesDoesNotShiftTheMatch(t *testing.T) {
+	m, tb, load := newHistoryTab(t, []contracts.ScrollbackLine{
+		{Role: "user", Text: "q", TurnID: "t1"},
+		{Role: "assistant", Text: "a1", TurnID: "t1"},
+		{Role: "assistant", Text: "a2", TurnID: "t1"},
+	})
+	m.route(turnReplyEvent("t1", "a1"))
+	m.route(turnReplyEvent("t1", hostErrPrefix+"boom"))
+	m.route(turnReplyEvent("t1", "a2"))
+	for _, msg := range historyMsgs(load) {
+		m.Update(msg)
+	}
+	want := []string{"q", "a1", "a2"}
+	if got := conversationTexts(tb); !slices.Equal(got, want) {
+		t.Fatalf("conversation = %q, want %q: a host error queued between held replies must not change which replies are dropped", got, want)
+	}
+	shown := false
+	for i := range tb.entries {
+		if tb.entries[i].role == roleError && tb.entries[i].text == "boom" {
+			shown = true
+		}
+	}
+	if !shown {
+		t.Fatalf("the host error queued between the held replies must still show")
 	}
 }

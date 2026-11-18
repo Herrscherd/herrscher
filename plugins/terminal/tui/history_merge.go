@@ -7,9 +7,16 @@ import (
 	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
+const assistantRole = "assistant"
+
 type transcriptLine struct {
 	role string
 	text string
+}
+
+type turnReply struct {
+	turnID string
+	text   string
 }
 
 func transcriptLines(lines []contracts.ScrollbackLine) []transcriptLine {
@@ -39,18 +46,45 @@ func overlapLength(history, live []transcriptLine) int {
 	return 0
 }
 
-func unseenPending(history []contracts.ScrollbackLine, pending []RoutedEvent) []RoutedEvent {
-	var replies []int
-	var lines []transcriptLine
-	for index := range pending {
-		if line, ok := replyLine(pending[index]); ok {
-			replies = append(replies, index)
-			lines = append(lines, line)
+func answeredTurns(history []contracts.ScrollbackLine) map[turnReply]bool {
+	answered := make(map[turnReply]bool)
+	for _, ln := range history {
+		if ln.Role == assistantRole && ln.TurnID != "" {
+			answered[turnReply{turnID: ln.TurnID, text: ln.Text}] = true
 		}
 	}
-	covered := overlapLength(transcriptLines(history), lines)
+	return answered
+}
+
+func untaggedTail(history []contracts.ScrollbackLine) []transcriptLine {
+	start := len(history)
+	for start > 0 && history[start-1].TurnID == "" {
+		start--
+	}
+	return transcriptLines(history[start:])
+}
+
+func unseenPending(history []contracts.ScrollbackLine, pending []RoutedEvent) []RoutedEvent {
+	answered := answeredTurns(history)
+	var covered, untagged []int
+	var untaggedLines []transcriptLine
+	for index := range pending {
+		line, ok := replyLine(pending[index])
+		if !ok {
+			continue
+		}
+		turnID := pending[index].Event.TurnID
+		switch {
+		case turnID == "":
+			untagged = append(untagged, index)
+			untaggedLines = append(untaggedLines, line)
+		case answered[turnReply{turnID: turnID, text: line.text}]:
+			covered = append(covered, index)
+		}
+	}
+	covered = append(covered, untagged[:overlapLength(untaggedTail(history), untaggedLines)]...)
 	skip := make([]bool, len(pending))
-	for _, reply := range replies[:covered] {
+	for _, reply := range covered {
 		skip[reply] = true
 		for j := reply - 1; j >= 0 && pending[j].Event.T == eventwire.EventChunk; j-- {
 			skip[j] = true

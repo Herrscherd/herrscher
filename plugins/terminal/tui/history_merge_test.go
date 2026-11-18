@@ -11,11 +11,19 @@ import (
 )
 
 func replyEvent(text string) RoutedEvent {
-	return RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventReply, Text: text}}
+	return turnReplyEvent("", text)
+}
+
+func turnReplyEvent(turnID, text string) RoutedEvent {
+	return RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventReply, Text: text, TurnID: turnID}}
 }
 
 func chunkEvent(text string) RoutedEvent {
-	return RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventChunk, Text: text}}
+	return turnChunkEvent("", text)
+}
+
+func turnChunkEvent(turnID, text string) RoutedEvent {
+	return RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventChunk, Text: text, TurnID: turnID}}
 }
 
 func conversationTexts(tb *tab) []string {
@@ -54,18 +62,70 @@ func TestAReplyInTheQueueAndTheHistoryShowsOnce(t *testing.T) {
 	}
 }
 
-func TestAnIdenticalReplyAfterTheHistoryEndIsDroppedUntilTurnIDLands(t *testing.T) {
-	m, tb, load := newHistoryTab(t, []contracts.ScrollbackLine{
-		{Role: "user", Text: "question"},
-		{Role: "assistant", Text: "ok"},
-	})
-	m.route(replyEvent("ok"))
+func conversationAfterReplay(t *testing.T, transcript []contracts.ScrollbackLine, pending ...RoutedEvent) []string {
+	t.Helper()
+	m, tb, load := newHistoryTab(t, transcript)
+	for _, event := range pending {
+		m.route(event)
+	}
 	for _, msg := range historyMsgs(load) {
 		m.Update(msg)
 	}
+	return conversationTexts(tb)
+}
+
+func TestAnIdenticalReplyOfANewTurnIsShown(t *testing.T) {
+	got := conversationAfterReplay(t, []contracts.ScrollbackLine{
+		{Role: "user", Text: "question", TurnID: "t1"},
+		{Role: "assistant", Text: "ok", TurnID: "t1"},
+	}, turnReplyEvent("t2", "ok"))
+	want := []string{"question", "ok", "ok"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("conversation = %q, want %q: a reply of a turn the history does not hold must show even when its text repeats a line", got, want)
+	}
+}
+
+func TestAReplyOfAHeldTurnIsShownOnceWithItsChunks(t *testing.T) {
+	got := conversationAfterReplay(t, []contracts.ScrollbackLine{
+		{Role: "user", Text: "question", TurnID: "t1"},
+		{Role: "assistant", Text: "ok", TurnID: "t1"},
+	}, turnChunkEvent("t1", "o"), turnChunkEvent("t1", "k"), turnReplyEvent("t1", "ok"))
 	want := []string{"question", "ok"}
-	if got := conversationTexts(tb); !slices.Equal(got, want) {
-		t.Fatalf("conversation = %q, want %q: without TurnID an identical reply after the history end is dropped as a duplicate", got, want)
+	if !slices.Equal(got, want) {
+		t.Fatalf("conversation = %q, want %q: the reply the history holds under its TurnID must show once, its chunks dropped with it", got, want)
+	}
+}
+
+func TestAnotherReplyOfAPartlyHeldTurnIsShown(t *testing.T) {
+	got := conversationAfterReplay(t, []contracts.ScrollbackLine{
+		{Role: "user", Text: "question", TurnID: "t1"},
+		{Role: "assistant", Text: "first", TurnID: "t1"},
+	}, turnReplyEvent("t1", "second"))
+	want := []string{"question", "first", "second"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("conversation = %q, want %q: a turn can hold several replies, so the history holding one must not hide another", got, want)
+	}
+}
+
+func TestAReplyWithATurnIDIsNotDroppedByALineWithoutOne(t *testing.T) {
+	got := conversationAfterReplay(t, []contracts.ScrollbackLine{
+		{Role: "user", Text: "question"},
+		{Role: "assistant", Text: "ok"},
+	}, turnReplyEvent("t1", "ok"))
+	want := []string{"question", "ok", "ok"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("conversation = %q, want %q: text is compared only between lines that carry no TurnID, so a reply with one is never dropped by a legacy line", got, want)
+	}
+}
+
+func TestAReplyWithoutATurnIDIsNotDroppedByALineWithOne(t *testing.T) {
+	got := conversationAfterReplay(t, []contracts.ScrollbackLine{
+		{Role: "user", Text: "question", TurnID: "t1"},
+		{Role: "assistant", Text: "ok", TurnID: "t1"},
+	}, replyEvent("ok"))
+	want := []string{"question", "ok", "ok"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("conversation = %q, want %q: the text fallback only reads the legacy lines at the end of the history, never a line carrying a TurnID", got, want)
 	}
 }
 

@@ -12,6 +12,33 @@ capped() {
 	fi
 }
 
+e2e_ceiling_kib=$((6 * 1024 * 1024))
+
+e2e_capped() {
+	if [ -n "${CI:-}" ]; then
+		e2e_peak_measured "$@"
+	else
+		systemd-run --user --scope -p MemoryMax=6G -q "$@"
+	fi
+}
+
+e2e_peak_measured() {
+	local report status=0 peak
+	report=$(mktemp)
+	/usr/bin/time -f '%M' -o "$report" "$@" || status=$?
+	peak=$(tail -n 1 "$report")
+	rm -f "$report"
+	if ! [[ $peak =~ ^[0-9]+$ ]]; then
+		echo "no peak resident memory read from /usr/bin/time" >&2
+		return 1
+	fi
+	if [ "$peak" -gt "$e2e_ceiling_kib" ]; then
+		echo "e2e peak resident memory ${peak} KiB is over the ${e2e_ceiling_kib} KiB ceiling" >&2
+		return 1
+	fi
+	return "$status"
+}
+
 regenerated_copy=$(mktemp -d)
 lint_tools=$(mktemp -d)
 trap 'rm -rf "$regenerated_copy" "$lint_tools"' EXIT
@@ -62,9 +89,9 @@ govulncheck=golang.org/x/vuln/cmd/govulncheck@v1.9.0
 if [ "$(uname -s)" = Linux ]; then
 	host_only=$(e2e_only_tests ./core/host/)
 	e2e_only_tests ./e2e/... > /dev/null
-	capped go test -tags e2e -count=1 ./e2e/...
-	capped go test -tags e2e -count=1 -v -run "^($(paste -sd'|' <<<"$host_only"))\$" ./core/host/
-	capped go test -tags e2e -count=1 -run '^TestE2EAttachedWindow' .
+	e2e_capped go test -tags e2e -count=1 -timeout 2m ./e2e/...
+	e2e_capped go test -tags e2e -count=1 -timeout 2m -v -run "^($(paste -sd'|' <<<"$host_only"))\$" ./core/host/
+	e2e_capped go test -tags e2e -count=1 -timeout 2m -run '^TestE2EAttachedWindow' .
 else
 	echo "skipping the e2e scenarios: they run on Linux only" >&2
 fi

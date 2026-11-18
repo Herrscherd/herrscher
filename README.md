@@ -1711,8 +1711,28 @@ such as `f := runtimedir.At` is not seen.
 ## Scenarios on the real binary
 
 `e2e/` drives the built `herrscher` binary from its command line, with no network and
-no vendor account. `scripts/check.sh` runs it with `go test -tags e2e ./e2e/...` on
-Linux, and says it skips the step anywhere else.
+no vendor account. `scripts/check.sh` runs it on Linux, and says it skips the step
+anywhere else. That step runs three `go test` invocations under the `e2e` build tag: `./e2e/...`
+(the testscript scenarios below), the `core/host` tests of that tag selected by name, and
+the TUI tests of the root package (`TestE2EAttachedWindow*`), which drive an attached
+window with teatest. The e2e-ssh job runs the `TestE2E` tests of `core/host` against an
+ssh host, as described in the last section.
+
+Two limits bound the suite:
+
+- Duration: each e2e invocation of `check.sh`, and the `TestE2E` invocation of the e2e-ssh
+  job, runs with `-timeout 2m`, so the test binary fails when it runs past two minutes. The
+  limit counts the run of the test binary, not its compilation, and it applies to each
+  invocation on its own: the three `check.sh` invocations run one after the other, so
+  the step as a whole is not bounded by two minutes. The step timings of the CI run are
+  the measure of the whole.
+- Memory: in CI, `check.sh` runs each e2e invocation under `/usr/bin/time` and fails it
+  when the peak resident memory of any single process of its tree exceeds 6 GiB
+  (6291456 KiB). That is the ceiling the development machine applies with
+  `systemd-run --user --scope -p MemoryMax=6G`, a cgroup that caps the sum of the
+  processes. CI does not use that cgroup, so its measure looks at the largest single
+  process, not at the sum of the processes running at once, and does not reproduce the
+  cgroup cap. The e2e-ssh job has no memory ceiling.
 
 The `e2e` build also reads two variables that the production binary ignores:
 `HERRSCHER_E2E_CLOCK` (an RFC 3339 instant the scheduler takes as now) and

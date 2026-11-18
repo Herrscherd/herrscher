@@ -3,6 +3,7 @@ package terminal
 import (
 	"context"
 	"testing"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
@@ -27,7 +28,12 @@ func TestResumeLostNoticeReachesTheTabInEachLanguage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Render(%v): %v", lang, err)
 		}
-		re := <-got
+		var re tui.RoutedEvent
+		select {
+		case re = <-got:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("Notify(%v) emitted nothing to the tab", lang)
+		}
 		if re.Event.T != eventwire.EventNotice || re.Event.Text != want || want == "" {
 			t.Fatalf("Notify(%v) emitted %+v, want a notice event with %q", lang, re.Event, want)
 		}

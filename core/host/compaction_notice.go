@@ -125,7 +125,7 @@ func (d *sessionDriver) enqueueNotice(delivery noticeDelivery) bool {
 	case d.notices <- delivery:
 		return true
 	default:
-		d.noticeLog.Warn("compaction notice dropped, the gateway's queue is full", keySession, d.name, "code", delivery.notice.Code, "gateway", delivery.conv.Gateway)
+		d.noticeLog.Warn("notice dropped, the gateway's queue is full", keySession, d.name, "code", delivery.notice.Code, "gateway", delivery.conv.Gateway)
 		return false
 	}
 }
@@ -145,10 +145,12 @@ func (d *sessionDriver) deliverNotice(parent context.Context, delivery noticeDel
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), noticeTimeout)
 	defer cancel()
 	if _, err := delivery.sink.Notify(ctx, delivery.conv, delivery.lang(), delivery.notice); err != nil && !errors.Is(err, contracts.ErrNoticeFallbackPosted) {
-		logCleanup(err)
-		if delivery.report != nil {
-			delivery.report.Do(func() { d.relayNoticeFailure(parent, d.noticeFailure(delivery)) })
+		if delivery.report == nil {
+			d.noticeLog.Warn("notice not delivered", keySession, d.name, "code", delivery.notice.Code, "gateway", delivery.conv.Gateway, "err", err)
+			return
 		}
+		logCleanup(err)
+		delivery.report.Do(func() { d.relayNoticeFailure(parent, d.noticeFailure(delivery)) })
 	}
 }
 

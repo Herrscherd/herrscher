@@ -113,6 +113,13 @@ func (d *sessionDriver) recordEntry(role, text, shown string, cost float64, turn
 	d.sink.Transcript(entry)
 }
 
+func (d *sessionDriver) currentTurnID() string {
+	if d.activeTurnID != "" {
+		return d.activeTurnID
+	}
+	return d.pickTurnID
+}
+
 func (d *sessionDriver) enforceTokenGuard(ctx context.Context, guard *tokenGuard, e contracts.Event) {
 	spent, over := guard.trips(e)
 	if !over {
@@ -142,4 +149,17 @@ func turnTokens(event contracts.Event) uint64 {
 		total += event.TokensIn
 	}
 	return uint64(total)
+}
+
+func (d *sessionDriver) stamp(event contracts.Event) contracts.Event {
+	if d.activeTurnID != "" {
+		event.SessionIncarnation = d.incarnation
+		event.TurnID = d.activeTurnID
+		event.Agent = d.agent
+		return event
+	}
+	event.SessionIncarnation = ""
+	event.TurnID = d.pickTurnID
+	event.Agent = ""
+	return event
 }

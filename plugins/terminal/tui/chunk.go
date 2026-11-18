@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -27,9 +26,13 @@ func (tb *tab) appendChunk(text string) bool {
 
 func (tb *tab) discardStreamed() {
 	tb.endStream()
+	streamedSet := make(map[uint64]struct{}, len(tb.streamedIDs))
+	for _, streamedID := range tb.streamedIDs {
+		streamedSet[streamedID] = struct{}{}
+	}
 	kept := tb.entries[:0]
 	for index := range tb.entries {
-		if !slices.Contains(tb.streamedIDs, tb.entries[index].id) {
+		if _, streamed := streamedSet[tb.entries[index].id]; !streamed {
 			kept = append(kept, tb.entries[index])
 		}
 	}

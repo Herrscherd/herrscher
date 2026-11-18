@@ -36,10 +36,12 @@ func (failure CompactionFailure) Encode() (string, error) {
 	return string(encoded), nil
 }
 
-// DecodeCompactionFailure reads the payload carried in the value of an EventCompactionFailed.
+// DecodeCompactionFailure reads the payload carried in the value of an EventCompactionFailed, or the bare trigger an older host sends.
 func DecodeCompactionFailure(value string) (CompactionFailure, error) {
-	var failure CompactionFailure
-	if err := json.Unmarshal([]byte(value), &failure); err != nil {
+	failure, err := decodeCompactionPayload(value, func(trigger string) CompactionFailure {
+		return CompactionFailure{Trigger: trigger}
+	})
+	if err != nil {
 		return CompactionFailure{}, fmt.Errorf("decode compaction failure: %w", err)
 	}
 	return failure, nil

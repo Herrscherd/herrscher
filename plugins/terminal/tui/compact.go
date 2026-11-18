@@ -149,6 +149,12 @@ func compactFailureText(trans translator, event contracts.Event) string {
 			return text
 		}
 	}
+	if eventwire.IsBareTrigger(event.Value) {
+		if event.Text != "" {
+			return event.Text
+		}
+		return trans.t("tui.compaction.failed", nil)
+	}
 	if failure.Notice == nil && failure.Reason == "" {
 		return ""
 	}

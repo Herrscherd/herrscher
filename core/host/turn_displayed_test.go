@@ -79,12 +79,46 @@ func TestScrollbackShowsTextForEntriesWithoutDisplayedText(t *testing.T) {
 	}
 }
 
-func TestDisplayedIsOmittedFromTranscriptJSONWhenEmpty(t *testing.T) {
-	encoded, err := json.Marshal(state.TranscriptEntry{Role: "assistant", Text: "hello"})
+func TestNoticeOnlyReplyIsRecordedWithItsNotice(t *testing.T) {
+	root := t.TempDir()
+	frame := turnFrame(t, root)
+	frame.Refused = []string{"big.bin"}
+	d := newOutboundDriver([]contracts.Gateway{&textRecordingGateway{}}, root)
+
+	tapped, entry := completeTurnCapturing(t, d, contracts.Event{T: eventwire.EventReply, Done: true}, frame)
+
+	if entry.Text != "" {
+		t.Fatalf("transcript Text = %q, want the empty model text", entry.Text)
+	}
+	line := scrollbackLineOf(entry)
+	if line.Text != tapped.Text || !strings.Contains(line.Text, "big.bin") {
+		t.Fatalf("scrollback shows %q, the tap delivered %q: the notice must replay as it was shown", line.Text, tapped.Text)
+	}
+}
+
+func transcriptJSONKeys(t *testing.T, entry state.TranscriptEntry) map[string]json.RawMessage {
+	t.Helper()
+	encoded, err := json.Marshal(entry)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(encoded), "displayed") {
-		t.Fatalf("entry without displayed text encodes %s, want the field omitted", encoded)
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &keys); err != nil {
+		t.Fatal(err)
+	}
+	return keys
+}
+
+func TestDisplayedKeyIsAbsentFromTranscriptJSONWhenEmpty(t *testing.T) {
+	keys := transcriptJSONKeys(t, state.TranscriptEntry{Role: "assistant", Text: "hello"})
+	if _, present := keys["displayed"]; present {
+		t.Fatalf("entry without displayed text encodes the displayed key, want it omitted: %v", keys)
+	}
+}
+
+func TestDisplayedKeyIsPresentInTranscriptJSONWhenSet(t *testing.T) {
+	keys := transcriptJSONKeys(t, state.TranscriptEntry{Role: "assistant", Text: "hello", Displayed: "hello\n\nnotice"})
+	if _, present := keys["displayed"]; !present {
+		t.Fatalf("entry with displayed text encodes %v, want the displayed key present", keys)
 	}
 }

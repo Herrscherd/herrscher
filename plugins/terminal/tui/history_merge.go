@@ -62,9 +62,9 @@ func unseenPending(history []contracts.ScrollbackLine, pending []RoutedEvent) []
 	skip := make([]bool, len(pending))
 	for _, reply := range replies[:covered] {
 		skip[reply] = true
-		for j := reply - 1; j >= 0 && pending[j].Event.T != eventwire.EventReply; j-- {
-			if pending[j].Event.T == eventwire.EventChunk && pending[j].Event.TurnID == pending[reply].Event.TurnID {
-				skip[j] = true
+		for earlier := reply - 1; earlier >= 0 && pending[earlier].Event.T != eventwire.EventReply; earlier-- {
+			if pending[earlier].Event.T == eventwire.EventChunk && pending[earlier].Event.TurnID == pending[reply].Event.TurnID {
+				skip[earlier] = true
 			}
 		}
 	}

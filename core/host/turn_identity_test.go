@@ -9,6 +9,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/eventwire"
+	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 func receiveTurnEvent(t *testing.T, ch <-chan contracts.Event) contracts.Event {
@@ -170,13 +171,50 @@ func TestPickReplyOutsideTurnCarriesItsOwnTurnID(t *testing.T) {
 	if pick.SessionIncarnation != "" || pick.Agent != "" {
 		t.Fatalf("pick input has dishonest identity: %+v", pick)
 	}
-	fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "picked", Done: true, TurnID: pick.TurnID}
+	fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "picked", Done: true, TurnID: "turn-last"}
 	reply := receiveTurnEvent(t, emitted)
 	if reply.TurnID != pick.TurnID {
-		t.Fatalf("pick reply TurnID = %q, want %q", reply.TurnID, pick.TurnID)
+		t.Fatalf("pick reply TurnID = %q, want the driver's %q, not the forged one", reply.TurnID, pick.TurnID)
 	}
 	if reply.SessionIncarnation != "" || reply.Agent != "" {
 		t.Fatalf("pick reply has dishonest identity: %+v", reply)
+	}
+}
+
+func TestOffTurnEventDropsAForgedTurnID(t *testing.T) {
+	toBridge := make(chan contracts.Event, 1)
+	fromBridge := make(chan contracts.Event, 1)
+	d, emitted := identifiedTestDriver(toBridge, fromBridge)
+
+	d.fanOut(context.Background(), contracts.Event{T: eventwire.EventStatus, Text: "hors tour", TurnID: "turn-last"})
+	if got := receiveTurnEvent(t, emitted); got.TurnID != "" {
+		t.Fatalf("off-turn event TurnID = %q, want none: a forged identifier must not leave the driver", got.TurnID)
+	}
+}
+
+func TestPickReplyIsRecordedWithItsTurnID(t *testing.T) {
+	toBridge := make(chan contracts.Event, 1)
+	fromBridge := make(chan contracts.Event, 8)
+	d, _ := identifiedTestDriver(toBridge, fromBridge)
+	recorded := make(chan state.TranscriptEntry, 8)
+	d.sink.Transcript = func(e state.TranscriptEntry) { recorded <- e }
+	d.terms = func() modelTerms { return modelTerms{rates: sonnetRates()} }
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go d.pump(ctx)
+
+	d.Pick("2")
+	pick := receiveTurnEvent(t, toBridge)
+	fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "picked", Done: true, TurnID: "turn-last"}
+
+	var entry state.TranscriptEntry
+	select {
+	case entry = <-recorded:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for the pick reply to be recorded")
+	}
+	if entry.Role != "assistant" || entry.Text != "picked" || entry.TurnID != pick.TurnID {
+		t.Fatalf("pick reply transcript = %+v, want assistant picked with the driver's TurnID %q", entry, pick.TurnID)
 	}
 }
 

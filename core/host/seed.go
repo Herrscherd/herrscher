@@ -48,6 +48,7 @@ type oneShotSeedRuntime struct {
 	backend         func(context.Context, state.Session) (contracts.Backend, error)
 	models          *ModelDiscovery
 	sessions        *sessionTable
+	persists        *persistWrites
 }
 
 func (r oneShotSeedRuntime) backendFactory() func(context.Context, state.Session) (contracts.Backend, error) {
@@ -65,10 +66,10 @@ func withOneShotSeedRuntime(ctx context.Context, runtime oneShotSeedRuntime) con
 	return context.WithValue(ctx, oneShotSeedRuntimeKey{}, runtime)
 }
 
-func oneShotSeedRuntimeFrom(ctx context.Context, messages *hostMessages, cliMessages *clitext.Messages) oneShotSeedRuntime {
+func oneShotSeedRuntimeFrom(ctx context.Context, messages *hostMessages, cliMessages *clitext.Messages, newOneShot func() *persistWrites) oneShotSeedRuntime {
 	runtime, ok := ctx.Value(oneShotSeedRuntimeKey{}).(oneShotSeedRuntime)
 	if !ok {
-		return oneShotSeedRuntime{messages: messages, cliMessages: cliMessages}
+		return oneShotSeedRuntime{messages: messages, cliMessages: cliMessages, persists: newOneShot()}
 	}
 	return runtime
 }
@@ -119,6 +120,9 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	toBridge := make(chan contracts.Event, 1)
 	fromBridge := make(chan contracts.Event, bridgeEventBuffer)
 	driver := newSessionDriver(runtime.messages, runtime.cliMessages, sess.Name, nil, toBridge, fromBridge, runtime.warnings)
+	oneShot := runtime.persists
+	driver.persists = oneShot
+	defer awaitOneShotWrites(runtime.messages, oneShot, runtime.warnings, runtime.languageOf(sess))
 	driver.incarnation = sess.Incarnation
 	driver.agent = sess.Agent
 	driver.language = func() i18n.Language { return knownSessionLanguage(sess) }
@@ -169,6 +173,14 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	}
 	consolidateOneShot(ctx, orch, gate, sess, runtime.messages, runtime.warnings, runtime.languageOf(sess))
 	return reply, nil
+}
+
+func awaitOneShotWrites(messages *hostMessages, persists *persistWrites, warnings io.Writer, lang languageSource) {
+	select {
+	case <-persists.group.settled():
+	case <-time.After(persists.grace):
+		warnLive(messages, warnings, lang, "warn.persist_overrun", map[string]any{graceParam: persists.grace.String()})
+	}
 }
 
 func oneShotTurnTimeout(runtime oneShotSeedRuntime) time.Duration {

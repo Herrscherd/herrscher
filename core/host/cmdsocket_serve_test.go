@@ -14,5 +14,5 @@ func serveTestCommandSocket(ctx context.Context, t *testing.T, layout runtimedir
 	if err != nil {
 		t.Fatalf("open command socket: %v", err)
 	}
-	acceptCommands(ctx, listener, disp, readTimeout)
+	acceptCommands(ctx, listener, disp, readTimeout, time.Second, func(time.Duration) {})
 }

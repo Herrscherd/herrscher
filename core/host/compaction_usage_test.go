@@ -195,7 +195,7 @@ func TestRecordCompactionKeepsOnlyValidStageStats(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var capture usageCapture
-			d := &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), name: "s1", sink: sessionSink{Usage: capture.add}}
+			d := &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), persists: newPersistWrites(), name: "s1", sink: sessionSink{Usage: capture.add}}
 			d.recordCompaction(tc.stats, nil)
 			assertRecorded(t, capture.all(), tc.want)
 		})
@@ -237,7 +237,7 @@ func jsonOf(t *testing.T, value any) string {
 }
 
 func TestRecordCompactionWithoutUsageSinkDoesNotPanic(_ *testing.T) {
-	d := &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), name: "s1"}
+	d := &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), persists: newPersistWrites(), name: "s1"}
 	d.recordCompaction([]contracts.CompactStats{stageStats("jev", contracts.CompactDone)}, nil)
 }
 

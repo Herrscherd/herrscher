@@ -47,6 +47,7 @@ type Handler struct {
 	lang            i18n.Language
 	defaultLang     i18n.Language
 	onLanguage      func(i18n.Language)
+	writes          WriteTracker
 }
 
 // SetHosts wires the placement resolver. Without it every session is local,

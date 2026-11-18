@@ -16,16 +16,18 @@ func closeRead(closer io.Closer) {
 }
 
 func logCleanup(err error) {
+	logCleanupWith(slog.Default(), err)
+}
+
+func logCleanupWith(logger *slog.Logger, err error) {
 	if err != nil {
-		slog.Debug("cleanup failed", "err", err)
+		logger.Debug("cleanup failed", "err", err)
 	}
 }
 
 func logWriteFailure(_ int, err error) {
 	logCleanup(err)
 }
-
-const boundedLogQueue = 8
 
 type bilanSum struct {
 	lost        int
@@ -34,32 +36,24 @@ type bilanSum struct {
 
 type namedLine struct {
 	key  string
-	line func()
+	line func(logger *slog.Logger)
 }
 
 type boundedLog struct {
 	mu         sync.Mutex
-	queue      []func()
+	logger     *slog.Logger
 	notes      []namedLine
 	bilan      bilanSum
-	writeBilan func(lost, unconfirmed int)
-	abandoned  int
+	writeBilan func(logger *slog.Logger, lost, unconfirmed int)
 	running    bool
 	idle       []chan struct{}
 }
 
-func (l *boundedLog) warn(line func()) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if len(l.queue) >= boundedLogQueue {
-		l.abandoned++
-		return
-	}
-	l.queue = append(l.queue, line)
-	l.startLocked()
+func (l *boundedLog) logWriteFailure(_ int, err error) {
+	logCleanupWith(l.logger, err)
 }
 
-func (l *boundedLog) addBilan(lost, unconfirmed int, write func(lost, unconfirmed int)) {
+func (l *boundedLog) addBilan(lost, unconfirmed int, write func(logger *slog.Logger, lost, unconfirmed int)) {
 	if lost == 0 && unconfirmed == 0 {
 		return
 	}
@@ -71,7 +65,7 @@ func (l *boundedLog) addBilan(lost, unconfirmed int, write func(lost, unconfirme
 	l.startLocked()
 }
 
-func (l *boundedLog) reserve(key string, line func()) {
+func (l *boundedLog) reserve(key string, line func(logger *slog.Logger)) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if index := slices.IndexFunc(l.notes, func(note namedLine) bool { return note.key == key }); index >= 0 {
@@ -111,40 +105,28 @@ func (l *boundedLog) run() {
 		l.mu.Lock()
 		line := l.takeLocked()
 		if line == nil {
-			lost := l.abandoned
-			l.abandoned = 0
-			if lost == 0 {
-				l.running = false
-				l.wakeIdleLocked()
-				l.mu.Unlock()
-				return
-			}
+			l.running = false
+			l.wakeIdleLocked()
 			l.mu.Unlock()
-			slog.Warn("warning lines were abandoned while the log was blocked", "abandoned", lost)
-			continue
+			return
 		}
 		l.mu.Unlock()
-		line()
+		line(l.logger)
 	}
 }
 
-func (l *boundedLog) takeLocked() func() {
+func (l *boundedLog) takeLocked() func(logger *slog.Logger) {
 	if l.bilan.lost != 0 || l.bilan.unconfirmed != 0 {
 		lost, unconfirmed, write := l.bilan.lost, l.bilan.unconfirmed, l.writeBilan
 		l.bilan = bilanSum{}
-		return func() { write(lost, unconfirmed) }
+		return func(logger *slog.Logger) { write(logger, lost, unconfirmed) }
 	}
-	if len(l.notes) > 0 {
-		next := l.notes[0]
-		l.notes = l.notes[1:]
-		return next.line
-	}
-	if len(l.queue) == 0 {
+	if len(l.notes) == 0 {
 		return nil
 	}
-	line := l.queue[0]
-	l.queue = l.queue[1:]
-	return line
+	next := l.notes[0]
+	l.notes = l.notes[1:]
+	return next.line
 }
 
 func (l *boundedLog) wakeIdleLocked() {

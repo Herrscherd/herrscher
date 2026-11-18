@@ -13,7 +13,10 @@ var ErrDrainBeforeCancel = errors.New("bridges drained before the supervisor con
 
 const bridgeDrainSlack = time.Second
 
-// DrainBridges waits for every bridge loop to return, for at most BridgeTermGrace plus a second.
+// DrainBound is the longest DrainBridges waits for the bridge loops once the supervisor context is cancelled.
+const DrainBound = BridgeTermGrace + bridgeDrainSlack
+
+// DrainBridges waits for every bridge loop to return, for at most DrainBound.
 // Call it after the supervisor's context is cancelled, so that no local bridge outlives the daemon.
 func (s *Supervisor) DrainBridges() error {
 	if s.ctx == nil || s.ctx.Err() == nil {
@@ -27,7 +30,7 @@ func (s *Supervisor) DrainBridges() error {
 	}
 	s.mu.Unlock()
 
-	expired := time.After(BridgeTermGrace + bridgeDrainSlack)
+	expired := time.After(DrainBound)
 	for _, done := range dones {
 		select {
 		case <-done:

@@ -22,6 +22,9 @@ func (h *hub) newBatch() retiredBatch {
 func (b retiredBatch) await(owner *hub) {
 	defer b.cancel()
 	settled := owner.awaitInFlightWithin(b.window, &owner.acceptFails)
+	if !settled {
+		owner.warnHubOverrun()
+	}
 	window, cancel := owner.newGrace()
 	defer cancel()
 	owner.awaitRetired(window, b.retired)

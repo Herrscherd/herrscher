@@ -22,12 +22,14 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/internal/redact"
+	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
 
 const (
@@ -542,6 +544,25 @@ func volatileFree(dir string) bool {
 	return true
 }
 
+// StopTeardownGrace is the teardown window the daemon gives each session and each stop phase.
+const StopTeardownGrace = 5 * time.Second
+
+// StopPersistGrace is how long a stop waits for persistent writes already in flight.
+const StopPersistGrace = 2 * time.Second
+
+// StopMargin is the slack kept between the longest stop path and the service manager's kill.
+const StopMargin = 10 * time.Second
+
+// StopBound is the longest stop path: six teardown windows, the persistent-write grace and the bridge drain.
+const StopBound = 6*StopTeardownGrace + StopPersistGrace + supervisor.DrainBound
+
+// StopTimeout is the grace the service manager gives the daemon to stop before it kills it.
+const StopTimeout = StopBound + StopMargin
+
+func stopSeconds() string {
+	return strconv.Itoa(int(StopTimeout / time.Second))
+}
+
 func linuxPlan(cfg Config) (Plan, error) {
 	unit := filepath.Join(cfg.Home, ".config", "systemd", "user", linuxUnitName)
 	content := "[Unit]\n" +
@@ -555,7 +576,8 @@ func linuxPlan(cfg Config) (Plan, error) {
 		unitPathLine(cfg) + "\n" +
 		"ExecStart=" + joinQuoted(systemdQuote, cfg.BinPath, serveArgs(cfg)) + "\n" +
 		"Restart=always\n" +
-		"RestartSec=3\n\n" +
+		"RestartSec=3\n" +
+		"TimeoutStopSec=" + stopSeconds() + "s\n\n" +
 		"[Install]\n" +
 		"WantedBy=default.target\n"
 	cmds := []Command{
@@ -599,6 +621,7 @@ func macPlan(cfg Config) (Plan, error) {
 		"  </dict>\n" +
 		"  <key>RunAtLoad</key><true/>\n" +
 		"  <key>KeepAlive</key><true/>\n" +
+		"  <key>ExitTimeOut</key><integer>" + stopSeconds() + "</integer>\n" +
 		"  <key>StandardOutPath</key><string>" + xmlEscape(logPath) + "</string>\n" +
 		"  <key>StandardErrorPath</key><string>" + xmlEscape(logPath) + "</string>\n" +
 		"</dict>\n</plist>\n"

@@ -101,6 +101,7 @@ type sessionDriver struct {
 	attachHosts map[string]bool
 
 	participants string
+	persists     *persistWrites
 	seenMu       sync.Mutex
 	seen         map[string]bool
 	pendingReply chan string
@@ -158,6 +159,7 @@ func newSessionDriver(messages *hostMessages, cliMessages *clitext.Messages, nam
 		failures:    make(chan compactFailure, noticeQueueCapacity),
 		noticeLog:   obs.Stderr(false),
 		gate:        noBudgetGate{},
+		persists:    newPersistWrites(),
 
 		enqueueTimeout: defaultEnqueueTimeout,
 
@@ -194,6 +196,8 @@ func (d *sessionDriver) journal(authorID string) {
 	d.seen[authorID] = true
 	d.seenMu.Unlock()
 	if first {
+		end := d.persists.begin()
+		defer end()
 		_, appendErr := state.AppendParticipant(d.participants, authorID)
 		logCleanup(appendErr)
 	}
@@ -417,6 +421,7 @@ type sessionTable struct {
 	messages    *hostMessages
 	cliMessages *clitext.Messages
 	checkpoints checkpoint.Store
+	persists    *persistWrites
 	compaction  compactionPolicy
 	store       *state.State
 	outboxRoot  string
@@ -438,7 +443,11 @@ func (t *sessionTable) percentOfSession(name string) int {
 }
 
 func newSessionTable(messages *hostMessages, cliMessages *clitext.Messages) *sessionTable {
-	return &sessionTable{m: make(map[string]*sessionDriver), messages: messages, cliMessages: cliMessages}
+	return &sessionTable{m: make(map[string]*sessionDriver), messages: messages, cliMessages: cliMessages, persists: newPersistWrites()}
+}
+
+func (t *sessionTable) oneShotPersists() *persistWrites {
+	return t.persists.child()
 }
 
 func (t *sessionTable) register(name string, driver *sessionDriver) {
@@ -1339,6 +1348,7 @@ func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, cha
 	toBridge := make(chan contracts.Event)
 	fromBridge := make(chan contracts.Event)
 	driver := newSessionDriver(sessions.messages, sessions.cliMessages, name, gws, toBridge, fromBridge, warnings)
+	driver.persists = sessions.persists
 	driver.incarnation = identity.incarnation
 	driver.agent = identity.agent
 	driver.channel = channel

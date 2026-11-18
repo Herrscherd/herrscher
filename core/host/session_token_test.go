@@ -72,7 +72,7 @@ func TestApproveAskRefusesAnEmptyTokenForAKnownSession(t *testing.T) {
 
 func TestClosedSessionTokenIsRevoked(t *testing.T) {
 	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
-	driver := &sessionDriver{messages: newHostMessages()}
+	driver := &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), persists: newPersistWrites()}
 	sessionTab.register("s1", driver)
 	old := sessionTab.issueToken("s1")
 	sessionTab.unregister("s1", driver)
@@ -154,7 +154,7 @@ func TestDriverStartedDuringASeedKeepsItsToken(t *testing.T) {
 	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	seedCtx, endSeed := context.WithCancel(context.Background())
 	seedTok := sessionTab.seedToken(seedCtx, "s1", allowEverySession)
-	driver := &sessionDriver{messages: newHostMessages()}
+	driver := &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), persists: newPersistWrites()}
 	sessionTab.register("s1", driver)
 	driverTok := sessionTab.issueToken("s1")
 	endSeed()

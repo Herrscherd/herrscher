@@ -126,6 +126,7 @@ func seedWithStage(stage contracts.Compactor, backend contracts.Backend, budget 
 	policy.limits = contextwindow.NewLimits("1000", nil)
 	table.compaction = policy
 	runtime := oneShotSeedRuntime{
+		persists: newPersistWrites(),
 		messages: newHostMessages(),
 		timeout:  budget,
 		sessions: table,

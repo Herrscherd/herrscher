@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -24,9 +25,11 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
+	"github.com/Herrscherd/herrscher/core/service"
+	"github.com/Herrscherd/herrscher/core/usage"
 )
 
-const defaultTeardownGrace = 5 * time.Second
+const defaultTeardownGrace = service.StopTeardownGrace
 
 type hub struct {
 	lang        i18n.Language
@@ -64,18 +67,21 @@ type hub struct {
 	closed           bool
 	deferred         []warningAwait
 
-	teardownGrace time.Duration
-	listen        func(ctx context.Context, path string) (net.Listener, error)
-	startBridge   func(sess state.Session, grace time.Duration) error
-	stopBridge    func(name string) error
-	stopping      func(name string) <-chan struct{}
-	refused       map[string]string
-	relaunching   map[string]struct{}
-	relaunchStop  chan struct{}
-	relaunches    inflight
-	acceptFails   inflight
-	seedBackend   func(context.Context, state.Session) (contracts.Backend, error)
-	models        *ModelDiscovery
+	teardownGrace    time.Duration
+	hubOverrunWarned atomic.Bool
+	listen           func(ctx context.Context, path string) (net.Listener, error)
+	startBridge      func(sess state.Session, grace time.Duration) error
+	stopBridge       func(name string) error
+	stopping         func(name string) <-chan struct{}
+	refused          map[string]string
+	relaunching      map[string]struct{}
+	relaunchStop     chan struct{}
+	relaunches       inflight
+	acceptFails      inflight
+	persists         *persistWrites
+	checkpoints      checkpointTaker
+	seedBackend      func(context.Context, state.Session) (contracts.Backend, error)
+	models           *ModelDiscovery
 
 	approvals *approvalTable
 	sessions  *sessionTable
@@ -89,12 +95,19 @@ func withWarnings(w io.Writer) hubOption {
 	return func(h *hub) { h.warnings = w }
 }
 
+func (h *hub) bindSessionState() {
+	h.persists = h.sessions.persists
+	h.checkpoints = &h.sessions.checkpoints
+}
+
 func newHub(st *state.State, sup *supervisor.Supervisor, gws []Deps, partDir string, reg *cli.Registry, m *metrics.Registry, approvals *approvalTable, sessions *sessionTable, opts ...hubOption) *hub {
 	created := &hub{st: st, sup: sup, gws: gws, partDir: partDir, reg: reg, metrics: m, messages: sessions.messages, cliMessages: sessions.cliMessages, live: make(map[string]liveSession), teardownGrace: defaultTeardownGrace, approvals: approvals, sessions: sessions, listen: control.Listen, relaunchStop: make(chan struct{})}
+	created.bindSessionState()
+	created.persists.onLate = created.warnPersistOverrunOnce
 	for _, opt := range opts {
 		opt(created)
 	}
-	created.sink = newWarningSink(created.messages, created.warnings, created.lostWarningLine, withStillRunningLine(created.writeStillRunningLine))
+	created.sink = newWarningSink(created.messages, created.warnings, created.lostWarningLine, slog.Default(), withStillRunningLine(created.writeStillRunningLine))
 	created.warnings = created.sink
 	if sup != nil {
 		sup.SetFailureSink(created.reportSessionFailure)
@@ -145,6 +158,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 	ctx = withRestarter(ctx, h)
 
 	if isSessionSeedCommand(args) {
+		oneShot := h.persists.child()
 		runtime := oneShotSeedRuntime{
 			warnings:        h.warnings,
 			messages:        h.messages,
@@ -155,10 +169,15 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 			backend:         h.seedBackend,
 			models:          h.models,
 			sessions:        h.sessions,
-			recordUsage:     h.recordUsage,
-			resume:          h.keepResumeToken,
+			persists:        oneShot,
+			recordUsage: func(sess state.Session, records []usage.Record) {
+				h.recordUsageWith(oneShot, sess, records)
+			},
+			resume: func(session, token string) {
+				h.keepResumeTokenWith(oneShot, session, token)
+			},
 			record: func(session string, entry state.TranscriptEntry) {
-				if err := state.AppendTranscript(state.TranscriptPath(h.partDir, session), entry); err != nil {
+				if err := h.appendTranscriptWith(oneShot, session, entry); err != nil {
 					warnLive(h.messages, h.warnings, h.sessionLanguageSource(session), "warn.session_seed_transcript", map[string]any{nameParam: session, detailParam: err})
 				}
 			},
@@ -410,6 +429,12 @@ func scrollbackLineOf(entry state.TranscriptEntry) contracts.ScrollbackLine {
 }
 
 func (h *hub) keepResumeToken(session, token string) {
+	h.keepResumeTokenWith(h.persists, session, token)
+}
+
+func (h *hub) keepResumeTokenWith(persists *persistWrites, session, token string) {
+	end := persists.begin()
+	defer end()
 	if err := h.st.SetResumeToken(session, token); err != nil {
 		warnLive(h.messages, h.warnings, h.sessionLanguageSource(session), "warn.session_resume_token", map[string]any{nameParam: session, detailParam: err})
 	}
@@ -426,6 +451,8 @@ func (h *hub) Resume(name string) error {
 		if !sess.Archived {
 			return nil
 		}
+		end := h.persists.begin()
+		defer end()
 		return h.st.SetArchived(name, false)
 	})
 }

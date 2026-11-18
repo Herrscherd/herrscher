@@ -36,7 +36,12 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, input contracts.Input) (
 	if err := h.checkSpawnSource(cmdSupplied, modelID); err != nil {
 		return contracts.Result{}, err
 	}
-	targeted, persistErr := h.st.SetBackendTarget(name, vendor, cmd, modelID)
+	var targeted bool
+	persistErr := h.persisted(func() error {
+		var err error
+		targeted, err = h.st.SetBackendTarget(name, vendor, cmd, modelID)
+		return err
+	})
 	if !targeted {
 		return contracts.Result{}, &SessionNotFoundError{Name: name}
 	}
@@ -89,8 +94,10 @@ func (h *Handler) injectSeed(ctx context.Context, name, task string) bool {
 }
 
 func (h *Handler) rollbackSwitch(name, oldVendor, oldCmd, oldModelID, oldToken string) error {
-	_, persistErr := h.st.SetBackendTarget(name, oldVendor, oldCmd, oldModelID)
-	persistErr = errors.Join(persistErr, h.st.SetResumeToken(name, oldToken))
+	persistErr := h.persisted(func() error {
+		_, err := h.st.SetBackendTarget(name, oldVendor, oldCmd, oldModelID)
+		return errors.Join(err, h.st.SetResumeToken(name, oldToken))
+	})
 	sess, _ := h.st.FindSession(name)
 	return errors.Join(persistErr, h.sup.RestartWithin(sess, supervisorGrace))
 }

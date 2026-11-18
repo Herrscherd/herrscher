@@ -115,7 +115,9 @@ func (h *Handler) applyBudgetTo(target state.Session, patch budgetPatch) error {
 	cohort := cohortTotals(target, h.st.SnapshotSessions(), usageFor)
 	updated := applyBudget(target, patch, usage.cost, usage.tokens)
 	releaseCohortPause(&updated, cohort)
-	if err := h.st.SetBudget(updated.Name, updated.CostCap, updated.TokenCap, updated.CohortCostCap, updated.CohortTokenCap, updated.PausedReason); err != nil {
+	if err := h.persisted(func() error {
+		return h.st.SetBudget(updated.Name, updated.CostCap, updated.TokenCap, updated.CohortCostCap, updated.CohortTokenCap, updated.PausedReason)
+	}); err != nil {
 		return h.keyed(clitext.HostSessionBudgetPersist, clitext.Params{clitext.ParamName: updated.Name, clitext.ParamErr: err.Error()}, err)
 	}
 	return nil

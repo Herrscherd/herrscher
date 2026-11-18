@@ -41,13 +41,13 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 		}
 	}
 	note := h.tidyChannel(ctx, sess)
-	if err := h.st.RemoveSession(name); err != nil {
+	if err := h.persisted(func() error { return h.st.RemoveSession(name) }); err != nil {
 		sess.Worktree, sess.Dir = "", repo
 		h.warnIfFailed(h.sup.StartWithin(sess, supervisorGrace), "start "+name)
 		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)
 	}
-	h.warnIfFailed(state.RemoveParticipantJournal(state.ParticipantsPath(h.partDir, name)), "remove participants of "+name)
-	h.warnIfFailed(state.RemoveTranscript(state.TranscriptPath(h.partDir, name)), "remove transcript of "+name)
+	h.warnIfFailed(h.persisted(func() error { return state.RemoveParticipantJournal(state.ParticipantsPath(h.partDir, name)) }), "remove participants of "+name)
+	h.warnIfFailed(h.persisted(func() error { return state.RemoveTranscript(state.TranscriptPath(h.partDir, name)) }), "remove transcript of "+name)
 	if note != "" {
 		return contracts.DataResult(h.text(clitext.SessionClosed, clitext.Params{clitext.ParamName: name}) + note), nil
 	}
@@ -67,7 +67,7 @@ func (h *Handler) sessionArchiveRun(ctx context.Context, input contracts.Input) 
 		return contracts.Result{}, err
 	}
 	note := h.tidyChannel(ctx, sess)
-	if err := h.st.SetArchived(name, true); err != nil {
+	if err := h.persisted(func() error { return h.st.SetArchived(name, true) }); err != nil {
 		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)
 	}
 	return contracts.DataResult(h.text(clitext.SessionArchived, clitext.Params{clitext.ParamName: name}) + note), nil
@@ -99,15 +99,19 @@ func (h *Handler) sessionRenameRun(_ context.Context, input contracts.Input) (co
 	if err := h.sup.StopWithin(name, supervisorGrace); err != nil {
 		return contracts.Result{}, err
 	}
-	if err := h.st.RenameSession(name, target); err != nil {
+	if err := h.persisted(func() error { return h.st.RenameSession(name, target) }); err != nil {
 		h.warnIfFailed(h.sup.StartWithin(sess, supervisorGrace), "start "+name)
 		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)
 	}
 	note := ""
-	if err := state.MoveSessionFile(state.TranscriptPath(h.partDir, name), state.TranscriptPath(h.partDir, target)); err != nil {
+	if err := h.persisted(func() error {
+		return state.MoveSessionFile(state.TranscriptPath(h.partDir, name), state.TranscriptPath(h.partDir, target))
+	}); err != nil {
 		note += "\n" + h.text(clitext.SessionTranscriptLeft, clitext.Params{clitext.ParamName: quoted(name), clitext.ParamErr: err.Error()})
 	}
-	if err := state.MoveSessionFile(state.ParticipantsPath(h.partDir, name), state.ParticipantsPath(h.partDir, target)); err != nil {
+	if err := h.persisted(func() error {
+		return state.MoveSessionFile(state.ParticipantsPath(h.partDir, name), state.ParticipantsPath(h.partDir, target))
+	}); err != nil {
 		note += "\n" + h.text(clitext.SessionParticipantsLeft, clitext.Params{clitext.ParamName: quoted(name), clitext.ParamErr: err.Error()})
 	}
 	if sc := scheduleOwning(h.st.SnapshotSchedules(), name); sc != "" {
@@ -141,7 +145,7 @@ func (h *Handler) sessionResumeRun(_ context.Context, input contracts.Input) (co
 	if !exists {
 		return contracts.Result{}, &SessionNotFoundError{Name: name}
 	}
-	if err := h.st.SetArchived(name, false); err != nil {
+	if err := h.persisted(func() error { return h.st.SetArchived(name, false) }); err != nil {
 		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)
 	}
 	sess.Archived = false

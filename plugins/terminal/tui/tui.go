@@ -1293,6 +1293,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.busy = false
 		target.interruptRequested = false
 		target.streamed = false
+		target.streamedIDs = nil
 		target.ctxMeasured = false
 		target.disconnected = true
 		target.endStream()

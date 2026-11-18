@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -145,6 +146,56 @@ func TestResetKeepsTheTurnBusyUntilItsReply(t *testing.T) {
 	}
 	if last := tb.entries[len(tb.entries)-1]; last.text != "Voici" {
 		t.Fatalf("the final reply must be shown after the reset: last entry %q", last.text)
+	}
+}
+
+func TestAbandonedAttemptIsNotDiscardedByALaterReset(t *testing.T) {
+	m := newTestModel()
+	tb := m.ensureTab("a")
+	m.renderInto(tb, contracts.Event{T: eventwire.EventChunk, Text: "Avant"})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventAbandoned})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventChunk, Text: "Après"})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventReset})
+	texts := entryTexts(tb)
+	if !slices.Contains(texts, "Avant") {
+		t.Fatalf("an abandoned turn is closed: a later reset must not discard it: %q", texts)
+	}
+	if slices.Contains(texts, "Après") {
+		t.Fatalf("the reset must still discard what streamed since the abandon: %q", texts)
+	}
+}
+
+func TestResetKeepsAnEarlierReplyOfTheTurn(t *testing.T) {
+	m := newTestModel()
+	tb := m.ensureTab("a")
+	m.renderInto(tb, contracts.Event{T: eventwire.EventReply, Text: "Premier"})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventChunk, Text: "Deuxième"})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventReset})
+	texts := entryTexts(tb)
+	if !slices.Contains(texts, "Premier") {
+		t.Fatalf("a reply already shown is not streamed output: the reset must keep it: %q", texts)
+	}
+	if slices.Contains(texts, "Deuxième") {
+		t.Fatalf("the reset must discard the streamed output of the abandoned attempt: %q", texts)
+	}
+}
+
+func TestResetThenErrorReplyEndsTheTurn(t *testing.T) {
+	m := newTestModel()
+	tb := m.ensureTab("a")
+	m.renderInto(tb, contracts.Event{T: eventwire.EventChunk, Text: "Je regarde."})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventReset})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventReply, Text: hostErrPrefix + "le backend a échoué", Done: true})
+	if tb.busy {
+		t.Fatal("an error turn ends with a reply Done: busy must return to false after a reset")
+	}
+	texts := entryTexts(tb)
+	if slices.Contains(texts, "Je regarde.") {
+		t.Fatalf("the partial output of the failed attempt must be gone: %q", texts)
+	}
+	last := tb.entries[len(tb.entries)-1]
+	if last.role != roleError || last.text != "le backend a échoué" {
+		t.Fatalf("the error must be shown after the reset: role %v text %q", last.role, last.text)
 	}
 }
 

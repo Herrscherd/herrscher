@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"log/slog"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -96,6 +98,14 @@ func (target *tab) startCompaction(event contracts.Event) {
 }
 
 func (target *tab) completeCompaction(trans translator, event contracts.Event) {
+	done, err := eventwire.DecodeCompactionDone(event.Value)
+	if err != nil {
+		slog.Warn("compaction done not read, its payload is not readable", "value", event.Value, "err", err)
+	}
+	if done.Notice != nil {
+		target.appendRelayedNotice(trans, *done.Notice)
+		return
+	}
 	if event.Tokens > 0 {
 		target.compaction.to = event.Tokens
 		target.compaction.measured = true
@@ -112,12 +122,74 @@ func (target *tab) completeCompaction(trans translator, event contracts.Event) {
 	target.busy = false
 }
 
-func (target *tab) failCompaction(event contracts.Event) {
-	target.compaction = compaction{}
-	target.busy = false
-	if event.Text != "" {
-		target.appendEntry(entry{role: roleError, text: event.Text})
+func (target *tab) appendRelayedNotice(trans translator, notice contracts.Notice) {
+	if text := compactionNoticeText(trans, notice); text != "" {
+		target.appendEntry(entry{role: roleNotice, text: text})
 	}
+}
+
+func (target *tab) failCompaction(trans translator, event contracts.Event) {
+	if target.compaction.active {
+		target.compaction = compaction{}
+		target.busy = false
+	}
+	if text := compactFailureText(trans, event); text != "" {
+		target.appendEntry(entry{role: roleError, text: text})
+	}
+}
+
+func compactFailureText(trans translator, event contracts.Event) string {
+	failure, err := eventwire.DecodeCompactionFailure(event.Value)
+	if err != nil {
+		slog.Warn("compaction failure not shown, its payload is not readable", "value", event.Value, "err", err)
+		return ""
+	}
+	if failure.Notice != nil {
+		if text := compactionNoticeText(trans, *failure.Notice); text != "" {
+			return text
+		}
+	}
+	if eventwire.IsLegacyPayload(event.Value) {
+		if event.Text != "" {
+			return event.Text
+		}
+		return trans.t("tui.compaction.failed", nil)
+	}
+	if failure.Notice == nil && failure.Reason == "" {
+		return ""
+	}
+	return trans.t(compactFailureKey(failure.Reason), nil)
+}
+
+func compactionNoticeText(trans translator, notice contracts.Notice) string {
+	text, err := contracts.NewRenderer().Render(trans.lang, notice)
+	if err != nil {
+		slog.Warn("compaction notice not rendered", "code", notice.Code, "err", err)
+		return ""
+	}
+	return text
+}
+
+func compactFailureKey(reason string) string {
+	switch reason {
+	case eventwire.CompactReasonBridgeGone:
+		return "tui.compaction.bridge_gone"
+	case eventwire.CompactReasonNoCompactorFactory:
+		return "tui.compaction.no_compactor_factory"
+	case eventwire.CompactReasonNilCompactor:
+		return "tui.compaction.nil_compactor"
+	case eventwire.CompactReasonNoCompactorPlugin:
+		return "tui.compaction.no_compactor_plugin"
+	case eventwire.CompactReasonNoHistoryPort:
+		return "tui.compaction.no_history_port"
+	case eventwire.CompactReasonHistoryTimeout:
+		return "tui.compaction.history_timeout"
+	case eventwire.CompactReasonHistoryTooLarge:
+		return "tui.compaction.history_too_large"
+	case eventwire.CompactReasonTooManyEdits:
+		return "tui.compaction.too_many_edits"
+	}
+	return "tui.compaction.failed"
 }
 
 func (m *model) lastCompactNote() string {

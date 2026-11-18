@@ -193,7 +193,7 @@ func TestAutomaticCompactionRunsOnceTheThresholdIsCrossed(t *testing.T) {
 	if !compactFrameOrQuiet(t, f, measuredAnswer(t, 20_000)) {
 		t.Fatal("no automatic compaction after a turn at 75 percent of the window, threshold 50")
 	}
-	if done := waitEmitted(t, f, eventwire.EventCompactionDone); done.Value != contracts.TriggerAutomatic.String() || done.Tokens != 20_000 {
+	if done := waitEmitted(t, f, eventwire.EventCompactionDone); decodeDone(t, done).Trigger != contracts.TriggerAutomatic.String() || done.Tokens != 20_000 {
 		t.Fatalf("compaction_done = %+v, want automatic down to 20000", done)
 	}
 }
@@ -235,31 +235,29 @@ func TestBackendWithoutCompactorIsRefusedBeforeAnySend(t *testing.T) {
 	if got.notice.Code != contracts.CodeCompactUnavailable {
 		t.Fatalf("notice code = %v, want %v", got.notice.Code, contracts.CodeCompactUnavailable)
 	}
-	if failed.Text != "" {
-		t.Fatalf("compaction_failed text = %q, want none while the linked gateway shows the notice", failed.Text)
-	}
+	requireFailure(t, failed, contracts.CodeCompactUnavailable, "")
 	expectNoFrame(t, f)
 }
 
-func TestCompactFailureTextIsKeptWhenNoGatewayIsLinked(t *testing.T) {
+func TestCompactFailureCodeIsKeptWhenNoGatewayIsLinked(t *testing.T) {
 	f := newConfiguredCompactFixture(t, "cursor", compactPolicy(92), func(d *sessionDriver) {
 		d.operator = fixedLanguageSource(i18n.French)
 	})
 	f.driver.requestCompaction("", contracts.Conversation{})
 	failed := waitEmitted(t, f, eventwire.EventCompactionFailed)
 	_, err := f.driver.compactStages(f.driver.compaction.names, stageNotes{})
-	requireRenderedText(t, failed.Text, contracts.NoticeOf(err), i18n.French)
+	requireFailure(t, failed, contracts.NoticeOf(err).Code, "")
 	expectNoFrame(t, f)
 }
 
-func requireRenderedText(t *testing.T, text string, notice contracts.Notice, lang i18n.Language) {
+func requireFailure(t *testing.T, failed contracts.Event, code contracts.Code, reason string) {
 	t.Helper()
-	want, err := contracts.NewRenderer().Render(lang, notice)
+	payload, err := eventwire.DecodeCompactionFailure(failed.Value)
 	if err != nil {
-		t.Fatalf("render %v in %s: %v", notice.Code, lang, err)
+		t.Fatalf("compaction_failed value = %q, want a payload: %v", failed.Value, err)
 	}
-	if text != want {
-		t.Fatalf("compaction_failed text = %q, want the notice rendered in %s: %q", text, lang, want)
+	if codeOf(payload.Notice) != uint16(code) || payload.Reason != reason {
+		t.Fatalf("compaction_failed payload = %+v, want code %d and reason %q", payload, code, reason)
 	}
 }
 

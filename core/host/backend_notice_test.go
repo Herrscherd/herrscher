@@ -44,7 +44,7 @@ func TestABackendNoticeReachesTheAttachedTabs(t *testing.T) {
 }
 
 func TestABackendNoticeFailureRelaysNoCompactionFailure(t *testing.T) {
-	gateway := &failingNoticeGateway{calls: make(chan struct{}, 1)}
+	gateway := newFailingNoticeGateway()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", []contracts.GatewaySet{{Gateway: gateway}}, nil, nil, io.Discard)
@@ -52,8 +52,8 @@ func TestABackendNoticeFailureRelaysNoCompactionFailure(t *testing.T) {
 	d.notifyBackendNotice(contracts.Event{T: eventwire.EventBackendNotice, Value: strconv.FormatUint(uint64(contracts.CodeResumeLost), 10)})
 	awaitCall(t, gateway.calls)
 	select {
-	case failure := <-d.failures:
-		t.Fatalf("backend notice relayed a compaction failure %+v", failure)
+	case relay := <-d.relays:
+		t.Fatalf("backend notice relayed %+v", relay)
 	case <-time.After(100 * time.Millisecond):
 	}
 }

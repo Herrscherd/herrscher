@@ -637,6 +637,51 @@
     "other": "compacté : {{.Range}}"
   },
   {
+    "id": "tui.compaction.bridge_gone",
+    "description": "Le bridge de la session a été fermé pendant une compaction",
+    "other": "le relais s'est fermé pendant une compaction"
+  },
+  {
+    "id": "tui.compaction.no_compactor_factory",
+    "description": "Un plugin compacteur ne fournit aucune fabrique Compactor",
+    "other": "le plugin compacteur ne fournit aucune fabrique Compactor"
+  },
+  {
+    "id": "tui.compaction.nil_compactor",
+    "description": "La fabrique Compactor d'un plugin compacteur n'a renvoyé aucune étape",
+    "other": "la fabrique du plugin compacteur n'a renvoyé aucune étape"
+  },
+  {
+    "id": "tui.compaction.no_compactor_plugin",
+    "description": "Aucun plugin compacteur n'est enregistré sous le nom demandé",
+    "other": "aucun plugin compacteur n'est enregistré sous ce nom"
+  },
+  {
+    "id": "tui.compaction.no_history_port",
+    "description": "Le backend de la session déclare la capacité HistoryEditor mais son instance n'implémente pas le port",
+    "other": "le backend déclare Capabilities.HistoryEditor mais n'implémente pas le port, son historique ne peut pas être modifié"
+  },
+  {
+    "id": "tui.compaction.history_timeout",
+    "description": "Le bridge n'a pas répondu à temps à une lecture ou un élagage de l'historique",
+    "other": "le relais n'a pas répondu à temps à un appel sur l'historique"
+  },
+  {
+    "id": "tui.compaction.history_too_large",
+    "description": "L'historique de la session est trop volumineux pour que le bridge l'envoie",
+    "other": "l'historique de la session est trop volumineux pour être modifié"
+  },
+  {
+    "id": "tui.compaction.too_many_edits",
+    "description": "La compaction voudrait modifier plus d'appels d'outils qu'une trame n'en porte, elle n'en modifie aucun",
+    "other": "la compaction voudrait modifier trop d'appels d'outils à la fois et n'en modifie aucun"
+  },
+  {
+    "id": "tui.compaction.failed",
+    "description": "La compaction a échoué pour une raison que le client ne nomme pas",
+    "other": "échec de la compaction"
+  },
+  {
     "id": "tui.render.last_compact",
     "other": "dernier compactage : {{.Range}}"
   },

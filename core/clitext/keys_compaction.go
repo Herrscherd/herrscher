@@ -33,6 +33,7 @@ const (
 	HealthNoteNoHistory    = "cli.health.facts.compact_note.no_history_port"
 	HealthNoteHistoryTime  = "cli.health.facts.compact_note.history_timeout"
 	HealthNoteHistoryBig   = "cli.health.facts.compact_note.history_too_large"
+	HealthNoteTooManyEdits = "cli.health.facts.compact_note.too_many_edits"
 	HealthNoteUnknown      = "cli.health.facts.compact_note.unknown_failure"
 	HealthNoteFellBack     = "cli.health.facts.compact_note.fell_back"
 	CompactionJevShare     = "cli.compaction.jev_share"
@@ -101,6 +102,7 @@ func compactionKeys() map[Key][]string {
 		HealthNoteNoHistory:    nil,
 		HealthNoteHistoryTime:  nil,
 		HealthNoteHistoryBig:   nil,
+		HealthNoteTooManyEdits: nil,
 		HealthNoteUnknown:      nil,
 		HealthNoteFellBack:     nil,
 		CompactionJevShare:     {ParamSucceeded, ParamCount, ParamPercent},

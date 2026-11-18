@@ -353,6 +353,8 @@ func compactNoteKey(class string) (clitext.Key, bool) {
 		return clitext.HealthNoteHistoryTime, true
 	case "compaction.history_too_large":
 		return clitext.HealthNoteHistoryBig, true
+	case "compaction.too_many_edits":
+		return clitext.HealthNoteTooManyEdits, true
 	case unknownFailureNote:
 		return clitext.HealthNoteUnknown, true
 	case fellBackNote:

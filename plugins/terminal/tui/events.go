@@ -122,7 +122,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 	case eventwire.EventCompactionDone:
 		target.completeCompaction(m.tr, event)
 	case eventwire.EventCompactionFailed:
-		target.failCompaction(event)
+		target.failCompaction(m.tr, event)
 	case eventwire.EventAbandoned:
 		target.busy = false
 		target.interruptRequested = false

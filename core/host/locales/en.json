@@ -30,51 +30,6 @@
     "other": "automatic compaction had no effect: the context stays above {{.Percent}} %, no new attempt until it drops below the threshold"
   },
   {
-    "id": "compaction.bridge_gone",
-    "description": "The session's bridge closed during a compaction",
-    "other": "the bridge closed during a compaction"
-  },
-  {
-    "id": "compaction.no_compactor_factory",
-    "description": "A compactor plugin provides no Compactor factory",
-    "other": "the compactor plugin provides no Compactor factory"
-  },
-  {
-    "id": "compaction.nil_compactor",
-    "description": "The Compactor factory of a compactor plugin returned no stage",
-    "other": "the compactor plugin's factory returned no stage"
-  },
-  {
-    "id": "compaction.no_compactor_plugin",
-    "description": "No compactor plugin is registered under the requested name",
-    "other": "no compactor plugin is registered under this name"
-  },
-  {
-    "id": "compaction.no_history_port",
-    "description": "The session backend declares the HistoryEditor capability but its instance does not implement the port",
-    "other": "the backend declares Capabilities.HistoryEditor but does not implement the port, its history cannot be edited"
-  },
-  {
-    "id": "compaction.history_timeout",
-    "description": "The bridge did not answer a history read or prune within its timeout",
-    "other": "the bridge did not answer a history call in time"
-  },
-  {
-    "id": "compaction.history_too_large",
-    "description": "The history of the session is too large for the bridge to send",
-    "other": "the history of the session is too large to be edited"
-  },
-  {
-    "id": "compaction.too_many_edits",
-    "description": "The compaction would edit more tool calls than one frame carries, so it edited none",
-    "other": "the compaction would edit too many tool calls at once"
-  },
-  {
-    "id": "compaction.failed",
-    "description": "A compaction fails for a reason with no code of its own; Detail holds the technical text",
-    "other": "compaction failed: {{.Detail}}"
-  },
-  {
     "id": "coordination.routed",
     "description": "The coordinator routed a task to an agent; Agent names it and Session names the session that takes the task",
     "other": "routed to {{.Agent}}: {{.Session}}"
@@ -624,7 +579,7 @@
     "description": "A session fails to come live or to be restored at start; Name is the session, Detail the cause",
     "other": "herrscher serve: session \"{{.Name}}\": {{.Detail}}"
   },
-{
+  {
     "id": "warn.session_start_recovered",
     "description": "A session whose start was refused starts again; Name is the session",
     "other": "herrscher serve: session \"{{.Name}}\": started again after a refused start"

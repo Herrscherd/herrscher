@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
-	"github.com/Herrscherd/herrscher-contracts/i18n"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/historywire"
@@ -74,9 +73,6 @@ func TestCompactionNoteNeverKeepsTheRawErrorText(t *testing.T) {
 	if strings.Contains(note, "XYZ") || strings.Contains(note, "api.example") {
 		t.Fatalf("jev note = %q, want no part of the raw error", note)
 	}
-	if text := compactFailureText(newHostMessages(), i18n.English, raw); strings.Contains(text, "XYZ") {
-		t.Fatalf("chat text = %q, want the key masked", text)
-	}
 }
 
 func TestAFreeTextNoteFromAnEarlierVersionReadsAsAnUnknownFailure(t *testing.T) {
@@ -87,7 +83,7 @@ func TestAFreeTextNoteFromAnEarlierVersionReadsAsAnUnknownFailure(t *testing.T) 
 }
 
 func TestEveryFailureClassHasAHealthText(t *testing.T) {
-	errs := []error{errBridgeGone, errNoCompactorFactory, errNilCompactor, errNoCompactorPlugin, historywire.ErrNoHistoryEditor, errHistoryTimeout, historywire.ErrHistoryTooLarge, errors.New("unclassified")}
+	errs := []error{errBridgeGone, errNoCompactorFactory, errNilCompactor, errNoCompactorPlugin, historywire.ErrNoHistoryEditor, errHistoryTimeout, historywire.ErrHistoryTooLarge, errTooManyEdits, errors.New("unclassified")}
 	for _, err := range errs {
 		class := failureClass(err)
 		if _, ok := compactNoteKey(class); !ok {

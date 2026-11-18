@@ -4380,6 +4380,11 @@
     "other": "the history of the session is too large to be edited"
   },
   {
+    "id": "cli.health.facts.compact_note.too_many_edits",
+    "description": "Health: the cause of a failed compaction note, in words",
+    "other": "the compaction would edit too many tool calls at once and edits none of them"
+  },
+  {
     "id": "cli.health.facts.compact_note.unknown_failure",
     "description": "Health: the cause of a failed compaction note, in words",
     "other": "the stage failed for a reason with no code of its own, its detail is not kept"

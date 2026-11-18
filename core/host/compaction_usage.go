@@ -12,10 +12,11 @@ import (
 )
 
 const (
-	maxStageRunes         = 64
-	maxCompactionDuration = 24 * time.Hour
-	fellBackNote          = "compaction.fell_back"
-	unknownFailureNote    = "compaction.unknown_failure"
+	maxStageRunes            = 64
+	maxCompactionDuration    = 24 * time.Hour
+	fellBackNote             = "compaction.fell_back"
+	unknownFailureNote       = "compaction.unknown_failure"
+	compactFailureNotePrefix = "compaction."
 )
 
 type stageNotes map[string]string
@@ -28,8 +29,8 @@ func (n stageNotes) fail(stage string, err error) {
 }
 
 func failureClass(err error) string {
-	if key, known := knownCompactFailure(err); known {
-		return key
+	if reason, known := knownCompactFailure(err); known {
+		return compactFailureNotePrefix + reason
 	}
 	return unknownFailureNote
 }

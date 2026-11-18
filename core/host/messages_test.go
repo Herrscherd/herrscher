@@ -18,6 +18,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n/i18ntest"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/historywire"
 )
 
@@ -61,25 +62,16 @@ func TestEnglishCatalogDescriptionsAreEnglish(t *testing.T) {
 
 func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 	declared := map[string][]string{
-		"coordination.fanout_partial":     {"Detail", "Launched"},
-		"coordination.route_refused":      {"Detail"},
-		"coordination.seal_refused":       {"Detail"},
-		"coordination.merge_refused":      {"Detail"},
-		"coordination.handoff_refused":    {"Detail"},
-		"compaction.no_effect":            {"Percent"},
-		"compaction.bridge_gone":          nil,
-		"compaction.no_compactor_factory": nil,
-		"compaction.nil_compactor":        nil,
-		"compaction.no_compactor_plugin":  nil,
-		"compaction.no_history_port":      nil,
-		"compaction.history_timeout":      nil,
-		"compaction.history_too_large":    nil,
-		"compaction.too_many_edits":       nil,
-		"compaction.failed":               {"Detail"},
-		"coordination.routed":             {"Agent", "Session"},
-		"coordination.sealed":             {"Node"},
-		"coordination.merged":             {"Lead"},
-		"coordination.launched":           {"Count", "Workers"},
+		"coordination.fanout_partial":  {"Detail", "Launched"},
+		"coordination.route_refused":   {"Detail"},
+		"coordination.seal_refused":    {"Detail"},
+		"coordination.merge_refused":   {"Detail"},
+		"coordination.handoff_refused": {"Detail"},
+		"compaction.no_effect":         {"Percent"},
+		"coordination.routed":          {"Agent", "Session"},
+		"coordination.sealed":          {"Node"},
+		"coordination.merged":          {"Lead"},
+		"coordination.launched":        {"Count", "Workers"},
 
 		"outbound.refused":   {"Names"},
 		"outbound.unsent":    {"Names"},
@@ -293,9 +285,9 @@ func TestHostTextRendersEachLanguage(t *testing.T) {
 		{
 			name:   "unset language falls back to english",
 			lang:   i18n.Language(0),
-			key:    "compaction.failed",
+			key:    "compaction.at",
 			params: map[string]any{"Detail": "disk full"},
-			want:   "compaction failed: disk full",
+			want:   "compactAt: disk full",
 		},
 	}
 	for _, tt := range tests {
@@ -307,71 +299,31 @@ func TestHostTextRendersEachLanguage(t *testing.T) {
 	}
 }
 
-func TestCompactFailureTextMapsUntypedCauses(t *testing.T) {
+func TestKnownCompactFailureNamesEachCause(t *testing.T) {
 	tests := []struct {
-		name string
-		err  error
-		fr   string
-		en   string
+		name   string
+		err    error
+		reason string
 	}{
-		{
-			name: "bridge closed",
-			err:  fmt.Errorf("stage: %w", errBridgeGone),
-			fr:   "le relais s'est fermé pendant une compaction",
-			en:   "the bridge closed during a compaction",
-		},
-		{
-			name: "no compactor factory",
-			err:  errNoCompactorFactory,
-			fr:   "le plugin compacteur ne fournit aucune fabrique Compactor",
-			en:   "the compactor plugin provides no Compactor factory",
-		},
-		{
-			name: "factory returned no stage",
-			err:  errNilCompactor,
-			fr:   "la fabrique du plugin compacteur n'a renvoyé aucune étape",
-			en:   "the compactor plugin's factory returned no stage",
-		},
-		{
-			name: "no compactor plugin",
-			err:  errNoCompactorPlugin,
-			fr:   "aucun plugin compacteur n'est enregistré sous ce nom",
-			en:   "no compactor plugin is registered under this name",
-		},
-		{
-			name: "history port not implemented",
-			err:  fmt.Errorf("stage: %w", historywire.ErrNoHistoryEditor),
-			fr:   "le backend déclare Capabilities.HistoryEditor mais n'implémente pas le port, son historique ne peut pas être modifié",
-			en:   "the backend declares Capabilities.HistoryEditor but does not implement the port, its history cannot be edited",
-		},
-		{
-			name: "history call timed out",
-			err:  fmt.Errorf("%w: %w", errHistoryTimeout, context.DeadlineExceeded),
-			fr:   "le relais n'a pas répondu à temps à un appel sur l'historique",
-			en:   "the bridge did not answer a history call in time",
-		},
-		{
-			name: "history too large",
-			err:  fmt.Errorf("stage: %w", historywire.ErrHistoryTooLarge),
-			fr:   "l'historique de la session est trop volumineux pour être modifié",
-			en:   "the history of the session is too large to be edited",
-		},
-		{
-			name: "unclassified failure keeps its technical detail",
-			err:  errors.New("disk full"),
-			fr:   "échec de la compaction : disk full",
-			en:   "compaction failed: disk full",
-		},
+		{name: "bridge closed", err: fmt.Errorf("stage: %w", errBridgeGone), reason: eventwire.CompactReasonBridgeGone},
+		{name: "no compactor factory", err: errNoCompactorFactory, reason: eventwire.CompactReasonNoCompactorFactory},
+		{name: "factory returned no stage", err: errNilCompactor, reason: eventwire.CompactReasonNilCompactor},
+		{name: "no compactor plugin", err: errNoCompactorPlugin, reason: eventwire.CompactReasonNoCompactorPlugin},
+		{name: "history port not implemented", err: fmt.Errorf("stage: %w", historywire.ErrNoHistoryEditor), reason: eventwire.CompactReasonNoHistoryPort},
+		{name: "history call timed out", err: fmt.Errorf("%w: %w", errHistoryTimeout, context.DeadlineExceeded), reason: eventwire.CompactReasonHistoryTimeout},
+		{name: "history too large", err: fmt.Errorf("stage: %w", historywire.ErrHistoryTooLarge), reason: eventwire.CompactReasonHistoryTooLarge},
+		{name: "too many edits", err: fmt.Errorf("stage: %w", errTooManyEdits), reason: eventwire.CompactReasonTooManyEdits},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := compactFailureText(newHostMessages(), i18n.French, tt.err); got != tt.fr {
-				t.Fatalf("french = %q, want %q", got, tt.fr)
-			}
-			if got := compactFailureText(newHostMessages(), i18n.English, tt.err); got != tt.en {
-				t.Fatalf("english = %q, want %q", got, tt.en)
+			reason, known := knownCompactFailure(tt.err)
+			if !known || reason != tt.reason {
+				t.Fatalf("knownCompactFailure = %q, %t, want %q", reason, known, tt.reason)
 			}
 		})
+	}
+	if _, known := knownCompactFailure(errors.New("unclassified")); known {
+		t.Fatal("an unclassified failure must not name a cause")
 	}
 }
 

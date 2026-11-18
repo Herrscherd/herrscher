@@ -43,7 +43,7 @@ jobs:
           HERRSCHER_E2E_DEDICATED: "1"
         run: |
           set -o pipefail
-          GOWORK=off go test -v -count=1 -run '^TestE2E' ./core/host/ | tee e2e.log
+          GOWORK=off go test -v -count=1 -timeout 2m -run '^TestE2E' ./core/host/ | tee e2e.log
           if grep -q -- '--- SKIP' e2e.log; then
             echo "an end-to-end test was skipped, the ssh target was not used" >&2
             exit 1

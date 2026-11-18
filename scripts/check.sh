@@ -12,6 +12,27 @@ capped() {
 	fi
 }
 
+e2e_budget_ms=120000
+e2e_cgroup_env=(PATH HOME GOPATH GOCACHE GOMODCACHE GOFLAGS GOWORK CGO_ENABLED GOTOOLCHAIN)
+
+e2e_capped() {
+	if [ -z "${CI:-}" ]; then
+		capped "$@"
+		return
+	fi
+	local name assignments=()
+	for name in "${e2e_cgroup_env[@]}"; do
+		if [ -n "${!name+x}" ]; then
+			assignments+=("$name=${!name}")
+		fi
+	done
+	sudo env "${assignments[@]}" /usr/bin/systemd-run --scope --quiet -p MemoryMax=6G -p MemorySwapMax=0 --uid="$(id -u)" --gid="$(id -g)" -- "$@"
+}
+
+e2e_cgroup_control() {
+	e2e_capped sh -c 'test "$(cat "/sys/fs/cgroup$(sed -n "s/^0:://p" /proc/self/cgroup)/memory.max")" = 6442450944'
+}
+
 regenerated_copy=$(mktemp -d)
 lint_tools=$(mktemp -d)
 trap 'rm -rf "$regenerated_copy" "$lint_tools"' EXIT
@@ -62,9 +83,20 @@ govulncheck=golang.org/x/vuln/cmd/govulncheck@v1.9.0
 if [ "$(uname -s)" = Linux ]; then
 	host_only=$(e2e_only_tests ./core/host/)
 	e2e_only_tests ./e2e/... > /dev/null
-	capped go test -tags e2e -count=1 ./e2e/...
-	capped go test -tags e2e -count=1 -v -run "^($(paste -sd'|' <<<"$host_only"))\$" ./core/host/
-	capped go test -tags e2e -count=1 -run '^TestE2EAttachedWindow' .
+	if [ -n "${CI:-}" ]; then
+		e2e_cgroup_control
+	fi
+	e2e_capped go test -tags e2e -run '^$' ./e2e/... ./core/host/ .
+	e2e_capped env CGO_ENABLED=0 GOWORK=off go build -tags e2e -o "$lint_tools/herrscher" .
+	started_ms=$(date +%s%3N)
+	e2e_capped go test -tags e2e -count=1 -timeout 2m ./e2e/...
+	e2e_capped go test -tags e2e -count=1 -timeout 2m -v -run "^($(paste -sd'|' <<<"$host_only"))\$" ./core/host/
+	e2e_capped go test -tags e2e -count=1 -timeout 2m -run '^TestE2EAttachedWindow' .
+	elapsed_ms=$(( $(date +%s%3N) - started_ms ))
+	if [ "$elapsed_ms" -gt "$e2e_budget_ms" ]; then
+		echo "the e2e suite took ${elapsed_ms} ms, over the ${e2e_budget_ms} ms budget" >&2
+		exit 1
+	fi
 else
 	echo "skipping the e2e scenarios: they run on Linux only" >&2
 fi

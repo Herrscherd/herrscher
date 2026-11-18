@@ -20,7 +20,7 @@ func TestSuperviseForegroundJoinsTheHubBeforeReturning(t *testing.T) {
 	defer cancel()
 	stopped := make(chan struct{})
 
-	err := superviseForeground(ctx, cancel, returningForeground{}, func(ctx context.Context) error {
+	err := superviseForeground(ctx, testMessages(), cancel, returningForeground{}, func(ctx context.Context) error {
 		<-ctx.Done()
 		close(stopped)
 		return ctx.Err()
@@ -47,7 +47,7 @@ func TestAHubThatStopsClosesTheWindowAndSaysWhy(t *testing.T) {
 	defer cancel()
 	broken := errors.New("state locked")
 
-	err := superviseForeground(ctx, cancel, waitingForeground{}, func(context.Context) error { return broken })
+	err := superviseForeground(ctx, testMessages(), cancel, waitingForeground{}, func(context.Context) error { return broken })
 	if !errors.Is(err, broken) {
 		t.Fatalf("superviseForeground = %v, want the hub failure", err)
 	}
@@ -66,7 +66,7 @@ func (c *closingTalker) Close(context.Context) error {
 func TestBindingKeepsTheRawGatewayAsItsCloser(t *testing.T) {
 	gateway := &closingTalker{}
 
-	gws, closers, _, _, err := bindGateways([]host.Deps{{Gateway: gateway}}, i18n.English)
+	gws, closers, _, _, err := bindGateways(testMessages(), []host.Deps{{Gateway: gateway}}, i18n.English)
 	if err != nil {
 		t.Fatalf("bind: %v", err)
 	}

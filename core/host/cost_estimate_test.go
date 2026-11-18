@@ -7,6 +7,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/outbox"
@@ -41,7 +42,7 @@ func TestEstimateTurnCostBlocksOnUnknownPrice(t *testing.T) {
 
 func TestCompleteTurnStoresEstimatedCostInTranscript(t *testing.T) {
 	var entries []state.TranscriptEntry
-	d := newSessionDriver(newHostMessages(), "s1", nil, nil, nil, io.Discard)
+	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", nil, nil, nil, io.Discard)
 	d.sink = sessionSink{Transcript: func(e state.TranscriptEntry) { entries = append(entries, e) }}
 	d.terms = func() modelTerms { return modelTerms{rates: sonnetRates()} }
 	event := contracts.Event{T: eventwire.EventReply, Text: "hello", Done: true, TokensIn: 1000, Tokens: 500}

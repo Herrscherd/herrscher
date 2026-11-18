@@ -61,12 +61,12 @@ func TestShownWrapSitesKeepTheirSentinel(t *testing.T) {
 		}},
 		{"not regular file", errNotRegularFile, func(t *testing.T) error {
 			t.Helper()
-			_, err := attachLocalFile(t.TempDir(), 1)
+			_, err := attachLocalFile(testTranslator().catalog, t.TempDir(), 1)
 			return err
 		}},
 		{"attach failure", fs.ErrNotExist, func(t *testing.T) error {
 			t.Helper()
-			_, err := attachLocalFile(filepath.Join(t.TempDir(), "missing"), 1)
+			_, err := attachLocalFile(testTranslator().catalog, filepath.Join(t.TempDir(), "missing"), 1)
 			return err
 		}},
 		{"unknown change", errUnknownChange, func(*testing.T) error {
@@ -87,7 +87,7 @@ func TestShownWrapSitesKeepTheirSentinel(t *testing.T) {
 			if !errors.Is(err, tc.sentinel) {
 				t.Fatalf("%q does not wrap its sentinel %q", err, tc.sentinel)
 			}
-			french := localizedReason(newTranslator().in(i18n.French), err)
+			french := localizedReason(testTranslator().in(i18n.French), err)
 			if french == err.Error() || strings.Contains(french, tc.sentinel.Error()) {
 				t.Fatalf("the French reason %q was not translated from %q", french, err)
 			}
@@ -97,11 +97,11 @@ func TestShownWrapSitesKeepTheirSentinel(t *testing.T) {
 
 func TestAttachFailureKeepsTheOSCause(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "missing")
-	_, err := attachLocalFile(path, 1)
+	_, err := attachLocalFile(testTranslator().catalog, path, 1)
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("the attach failure %q must keep the OS cause", err)
 	}
-	french := localizedReason(newTranslator().in(i18n.French), err)
+	french := localizedReason(testTranslator().in(i18n.French), err)
 	if want := "impossible de joindre " + path + ": "; !strings.HasPrefix(french, want) {
 		t.Fatalf("localizedReason = %q, want prefix %q", french, want)
 	}

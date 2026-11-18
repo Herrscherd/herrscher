@@ -14,7 +14,7 @@ import (
 	"github.com/Herrscherd/herrscher/platformtext"
 )
 
-func usage(lang i18n.Language) error {
+func usage(messages *clitext.Messages, lang i18n.Language) error {
 	renderer := lipgloss.NewRenderer(os.Stderr)
 	var (
 		banner  = renderer.NewStyle().Bold(true).Foreground(lipgloss.Color("13"))
@@ -23,7 +23,7 @@ func usage(lang i18n.Language) error {
 		verb    = renderer.NewStyle().Bold(true)
 		hint    = renderer.NewStyle().Faint(true)
 	)
-	translator := clitext.For(lang)
+	translator := messages.For(lang)
 	platform := platformtext.For(lang)
 
 	const col = 34
@@ -43,7 +43,8 @@ func usage(lang i18n.Language) error {
 		"  " + banner.Render("⛧ HERRSCHER"),
 		"  " + tagline.Render(platform.Text(platformtext.UsageTagline)),
 		"",
-		group(clitext.UsageGroupStart,
+		group(
+			clitext.UsageGroupStart,
 			row("herrscher \"<texte>\"", clitext.UsageStartTask),
 			row("herrscher --print \"<texte>\"", clitext.UsageStartPrint),
 			row("herrscher", clitext.UsageStartTUI),
@@ -51,7 +52,8 @@ func usage(lang i18n.Language) error {
 			row("herrscher init", clitext.UsageStartInit),
 		),
 		"",
-		group(clitext.UsageGroupSessions,
+		group(
+			clitext.UsageGroupSessions,
 			row("session <create|close|list|who>", clitext.UsageSessionVerbs),
 			row("agent   <create|list>", clitext.UsageAgentVerbs),
 			row("host    <add|list|check|provision|rm>", clitext.UsageHostVerbs),
@@ -60,14 +62,16 @@ func usage(lang i18n.Language) error {
 			row("models  list", clitext.UsageModelsVerbs),
 		),
 		"",
-		group(clitext.UsageGroupDaemon,
+		group(
+			clitext.UsageGroupDaemon,
 			row("serve", clitext.UsageServe),
 			row("bridge  --cmd '<command>'", clitext.UsageBridge),
 			row("service <install|uninstall|…>", clitext.UsageService),
 			row("commands", clitext.UsageCommands),
 		),
 		"",
-		group(clitext.UsageGroupSetup,
+		group(
+			clitext.UsageGroupSetup,
 			row("plugin  <list|add|remove|pin|unpin>", clitext.UsagePluginVerbs),
 			row("update", clitext.UsageUpdate),
 			row("install", clitext.UsageInstall),
@@ -83,7 +87,7 @@ func usage(lang i18n.Language) error {
 		"  " + hint.Render(translator.Text(clitext.UsageEnvInit, nil)),
 	}
 	if err := errors.Join(translator.Err(), platform.Err()); err != nil {
-		return clitext.Failure(lang, err, clitext.UsageWrap, clitext.Params{clitext.ParamDetail: err.Error()})
+		return messages.Failure(lang, err, clitext.UsageWrap, clitext.Params{clitext.ParamDetail: err.Error()})
 	}
 
 	fmt.Fprintln(os.Stderr, strings.Join(blocks, "\n"))

@@ -30,6 +30,12 @@ var (
 type Registry struct {
 	cmds       []contracts.Cmd
 	helpParams map[clitext.Key]clitext.Params
+	messages   *clitext.Messages
+}
+
+// NewRegistry returns an empty Registry whose usage errors and help texts render through messages.
+func NewRegistry(messages *clitext.Messages) *Registry {
+	return &Registry{messages: messages}
 }
 
 // SetHelpParams sets the parameters that a help key takes when the registry renders it,
@@ -72,9 +78,9 @@ func (r *Registry) Families() map[string]bool {
 func (r *Registry) Dispatch(ctx context.Context, args []string) (contracts.Result, error) {
 	cmd, rest := r.match(args)
 	if cmd == nil {
-		return contracts.Result{}, usageFailure(errUnknownCommand, clitext.Params{clitext.ParamName: strconv.Quote(strings.Join(args, " "))})
+		return contracts.Result{}, usageFailure(r.messages, errUnknownCommand, clitext.Params{clitext.ParamName: strconv.Quote(strings.Join(args, " "))})
 	}
-	input, err := parse(*cmd, rest)
+	input, err := r.parse(*cmd, rest)
 	if err != nil {
 		return contracts.Result{}, err
 	}
@@ -100,9 +106,9 @@ func Text(result contracts.Result, lang i18n.Language) (string, error) {
 
 // Render returns the text of a command outcome in lang: the error rendered in lang when it failed,
 // otherwise the result rendered by Text.
-func Render(res contracts.Result, err error, lang i18n.Language) (string, error) {
+func Render(messages *clitext.Messages, res contracts.Result, err error, lang i18n.Language) (string, error) {
 	if err != nil {
-		return "", Localize(err, lang)
+		return "", Localize(messages, err, lang)
 	}
 	return Text(res, lang)
 }
@@ -122,7 +128,7 @@ func (r *Registry) Resolve(args []string) ([]string, contracts.Input, bool) {
 	if cmd == nil {
 		return nil, contracts.Input{}, false
 	}
-	input, err := parse(*cmd, rest)
+	input, err := r.parse(*cmd, rest)
 	if err != nil {
 		return cmd.Path, contracts.Input{}, true
 	}
@@ -143,7 +149,7 @@ func (r *Registry) Run(ctx context.Context, path []string, input contracts.Input
 		}
 	}
 	if cmd == nil {
-		return contracts.Result{}, usageFailure(errUnknownCommand, clitext.Params{clitext.ParamName: strconv.Quote(key(path))})
+		return contracts.Result{}, usageFailure(r.messages, errUnknownCommand, clitext.Params{clitext.ParamName: strconv.Quote(key(path))})
 	}
 	if input.Args == nil {
 		input.Args = make(map[string]string)
@@ -151,7 +157,7 @@ func (r *Registry) Run(ctx context.Context, path []string, input contracts.Input
 	for _, param := range cmd.Params {
 		if param.Required {
 			if _, ok := input.Args[param.Name]; !ok {
-				return contracts.Result{}, usageFailure(errMissingRequired, clitext.Params{clitext.ParamCommand: key(cmd.Path), clitext.ParamName: param.Name})
+				return contracts.Result{}, usageFailure(r.messages, errMissingRequired, clitext.Params{clitext.ParamCommand: key(cmd.Path), clitext.ParamName: param.Name})
 			}
 		}
 	}
@@ -232,7 +238,7 @@ func isParam(c contracts.Cmd, name string) (contracts.Param, bool) {
 	return contracts.Param{}, false
 }
 
-func parse(cmd contracts.Cmd, rest []string) (contracts.Input, error) {
+func (r *Registry) parse(cmd contracts.Cmd, rest []string) (contracts.Input, error) {
 	input := contracts.Input{Args: make(map[string]string)}
 	for index := 0; index < len(rest); index++ {
 		tok := rest[index]
@@ -242,21 +248,21 @@ func parse(cmd contracts.Cmd, rest []string) (contracts.Input, error) {
 		case !strings.HasPrefix(tok, "--"):
 			input.Rest = append(input.Rest, tok)
 		default:
-			consumed, err := parseFlag(cmd, rest, index, input)
+			consumed, err := r.parseFlag(cmd, rest, index, input)
 			if err != nil {
 				return input, err
 			}
 			index += consumed
 		}
 	}
-	return input, checkRequired(cmd, input)
+	return input, r.checkRequired(cmd, input)
 }
 
-func parseFlag(cmd contracts.Cmd, rest []string, index int, input contracts.Input) (int, error) {
+func (r *Registry) parseFlag(cmd contracts.Cmd, rest []string, index int, input contracts.Input) (int, error) {
 	name, inline, isInline := strings.Cut(strings.TrimPrefix(rest[index], "--"), "=")
 	param, ok := isParam(cmd, name)
 	if !ok {
-		return 0, usageFailure(errUnknownFlag, clitext.Params{clitext.ParamCommand: strings.Join(cmd.Path, " "), clitext.ParamName: name})
+		return 0, usageFailure(r.messages, errUnknownFlag, clitext.Params{clitext.ParamCommand: strings.Join(cmd.Path, " "), clitext.ParamName: name})
 	}
 	if isInline {
 		input.Args[name] = inline
@@ -267,20 +273,20 @@ func parseFlag(cmd contracts.Cmd, rest []string, index int, input contracts.Inpu
 		input.Args[name] = rest[index+1]
 		return 1, nil
 	case param.Required || param.ValueRequired:
-		return 0, usageFailure(errFlagNeedsValue, clitext.Params{clitext.ParamCommand: strings.Join(cmd.Path, " "), clitext.ParamName: name})
+		return 0, usageFailure(r.messages, errFlagNeedsValue, clitext.Params{clitext.ParamCommand: strings.Join(cmd.Path, " "), clitext.ParamName: name})
 	default:
 		input.Args[name] = "true"
 		return 0, nil
 	}
 }
 
-func checkRequired(cmd contracts.Cmd, input contracts.Input) error {
+func (r *Registry) checkRequired(cmd contracts.Cmd, input contracts.Input) error {
 	for _, param := range cmd.Params {
 		if !param.Required {
 			continue
 		}
 		if _, ok := input.Args[param.Name]; !ok {
-			return usageFailure(errMissingRequired, clitext.Params{clitext.ParamCommand: strings.Join(cmd.Path, " "), clitext.ParamName: param.Name})
+			return usageFailure(r.messages, errMissingRequired, clitext.Params{clitext.ParamCommand: strings.Join(cmd.Path, " "), clitext.ParamName: param.Name})
 		}
 	}
 	return nil
@@ -297,7 +303,7 @@ type Spec struct {
 
 // Specs returns every registered command's shape, sorted by path, with its help texts rendered in lang.
 func (r *Registry) Specs(lang i18n.Language) ([]Spec, error) {
-	translator := clitext.For(lang)
+	translator := r.messages.For(lang)
 	if err := translator.Err(); err != nil {
 		return nil, err
 	}
@@ -344,7 +350,7 @@ func (r *Registry) localizedParams(translator *clitext.Translator, cmd contracts
 
 // Help renders one usage line per command, sorted by path, for the root help, with its help text rendered in lang.
 func (r *Registry) Help(lang i18n.Language) (string, error) {
-	translator := clitext.For(lang)
+	translator := r.messages.For(lang)
 	if err := translator.Err(); err != nil {
 		return "", err
 	}
@@ -401,7 +407,7 @@ func (e renderedError) Error() string { return e.text }
 func (e renderedError) Unwrap() error { return e.err }
 
 // Localize returns err with its notice rendered in lang, or err itself when it carries none.
-func Localize(err error, lang i18n.Language) error {
+func Localize(messages *clitext.Messages, err error, lang i18n.Language) error {
 	if usage, ok := isUsage(err); ok {
 		return localizedUsage(usage, err, lang)
 	}
@@ -409,19 +415,19 @@ func Localize(err error, lang i18n.Language) error {
 	if err == nil || !errors.As(err, &noticed) {
 		return err
 	}
-	text, renderErr := renderNoticeText(noticed.Notice(), orEnglish(lang))
+	text, renderErr := renderNoticeText(messages, noticed.Notice(), orEnglish(lang))
 	if renderErr != nil {
 		return err
 	}
 	return renderedError{text: text, err: err}
 }
 
-func renderNoticeText(notice contracts.Notice, lang i18n.Language) (string, error) {
+func renderNoticeText(messages *clitext.Messages, notice contracts.Notice, lang i18n.Language) (string, error) {
 	text, err := contracts.NewRenderer().Render(lang, notice)
 	if err != nil || notice.Code != contracts.CodeSessionCloseDirty {
 		return text, err
 	}
-	kept, err := clitext.Text(lang, clitext.SessionCloseBranchKept, clitext.Params{clitext.ParamBranch: "session/" + noticeArg(notice, clitext.ParamName)})
+	kept, err := messages.Text(lang, clitext.SessionCloseBranchKept, clitext.Params{clitext.ParamBranch: "session/" + noticeArg(notice, clitext.ParamName)})
 	if err != nil {
 		return "", err
 	}
@@ -446,8 +452,9 @@ func Handler(handle func(context.Context, contracts.Input) (string, error)) func
 
 // Plain renders res or err as the English text a text-only caller expects.
 func Plain(res contracts.Result, err error) (string, error) {
+	messages := clitext.NewMessages()
 	if err != nil {
-		return "", Localize(err, i18n.English)
+		return "", Localize(messages, err, i18n.English)
 	}
 	return Text(res, i18n.English)
 }

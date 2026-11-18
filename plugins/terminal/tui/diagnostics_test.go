@@ -16,7 +16,7 @@ func TestDiagnosticsNamesEachResolvedValueAndItsFeature(t *testing.T) {
 		Colour:     ColourTrue,
 		Terminal:   "kitty",
 	}
-	out := diagnosticsView(newTranslator(), caps, "pgup/pgdn", testStyles())
+	out := diagnosticsView(testTranslator(), caps, "pgup/pgdn", testStyles())
 	for _, want := range []string{
 		"kitty",
 		"truecolor",
@@ -34,7 +34,7 @@ func TestDiagnosticsNamesEachResolvedValueAndItsFeature(t *testing.T) {
 }
 
 func TestDiagnosticsNamesTheFallbackRatherThanHidingTheRow(t *testing.T) {
-	out := diagnosticsView(newTranslator(), Capabilities{Terminal: "xterm"}, "pgup/pgdn", testStyles())
+	out := diagnosticsView(testTranslator(), Capabilities{Terminal: "xterm"}, "pgup/pgdn", testStyles())
 	for _, want := range []string{"graphics", "none", "half blocks", "links", "styled text"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("a plain terminal must still be told what it gets, missing %q:\n%s", want, out)

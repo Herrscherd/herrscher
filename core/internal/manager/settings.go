@@ -46,7 +46,7 @@ func (h *Handler) setLangRun(_ context.Context, input contracts.Input) (contract
 	}
 	lang, ok := operatorLangNamed(raw)
 	if !ok {
-		return contracts.Result{}, localize(h.currentLanguage(), fmt.Sprintf("unsupported language %q, use en, fr or auto", raw), clitext.HostErrUnsupportedLang, clitext.Params{clitext.ParamLang: raw}, ErrUnsupportedLang)
+		return contracts.Result{}, localize(h.messages, h.currentLanguage(), fmt.Sprintf("unsupported language %q, use en, fr or auto", raw), clitext.HostErrUnsupportedLang, clitext.Params{clitext.ParamLang: raw}, ErrUnsupportedLang)
 	}
 	if err := h.persisted(func() error { return h.st.SetOperatorLang(raw) }); err != nil {
 		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)

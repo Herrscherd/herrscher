@@ -11,21 +11,21 @@ import (
 )
 
 func TestDiffUsesBasicColourOnA16ColourTerminal(t *testing.T) {
-	out := renderDiff("@@ -1 +1 @@\n+added\n-gone", 40, view{tr: newTranslator(), caps: Capabilities{Colour: Colour16}, st: testStyles()})
+	out := renderDiff("@@ -1 +1 @@\n+added\n-gone", 40, view{tr: testTranslator(), caps: Capabilities{Colour: Colour16}, st: testStyles()})
 	if !strings.Contains(out, "\x1b[32m") || !strings.Contains(out, "\x1b[31m") {
 		t.Fatalf("a 16-colour terminal must get the basic green/red pair: %q", out)
 	}
 }
 
 func TestDiffWithoutAPreambleIsAllContent(t *testing.T) {
-	out := renderDiff("+added\n-gone", 40, view{tr: newTranslator(), caps: Capabilities{Colour: Colour16}, st: testStyles()})
+	out := renderDiff("+added\n-gone", 40, view{tr: testTranslator(), caps: Capabilities{Colour: Colour16}, st: testStyles()})
 	if !strings.Contains(out, ansiGreen) || !strings.Contains(out, ansiRed) {
 		t.Fatalf("a bare hunk must still be coloured: %q", out)
 	}
 }
 
 func TestDiffLinesAreClippedToWidth(t *testing.T) {
-	out := renderDiff("@@ -1 +1 @@\n+"+strings.Repeat("x", 80), 20, view{tr: newTranslator(), caps: Capabilities{Colour: ColourTrue}, st: testStyles()})
+	out := renderDiff("@@ -1 +1 @@\n+"+strings.Repeat("x", 80), 20, view{tr: testTranslator(), caps: Capabilities{Colour: ColourTrue}, st: testStyles()})
 	for _, ln := range strings.Split(out, "\n") {
 		if lipgloss.Width(ln) > 20 {
 			t.Fatalf("a diff line must be clipped to the width: %q", ln)
@@ -64,7 +64,7 @@ func TestFoldedCodeBlockCollapsesAndRestoresExactly(t *testing.T) {
 	code := strings.Repeat("line\n", foldThreshold+5)
 	text := "before\n```go\n" + code + "```\nafter"
 
-	folded := foldCodeBlocks(newTranslator(), text, unicodeGlyphs(), "⌥C")
+	folded := foldCodeBlocks(testTranslator(), text, unicodeGlyphs(), "⌥C")
 	if strings.Contains(folded, strings.Repeat("line\n", 2)) {
 		t.Fatalf("a folded block must not still contain its body: %q", folded)
 	}
@@ -77,15 +77,15 @@ func TestFoldedCodeBlockCollapsesAndRestoresExactly(t *testing.T) {
 	if got := len(strings.Split(folded, "\n")); got != 3 {
 		t.Fatalf("a folded block is one line: got %d lines in %q", got, folded)
 	}
-	if foldCodeBlocks(newTranslator(), text, unicodeGlyphs(), "⌥C") == text {
+	if foldCodeBlocks(testTranslator(), text, unicodeGlyphs(), "⌥C") == text {
 		t.Fatalf("the fixture must actually fold")
 	}
 }
 
 func TestShortCodeBlocksAreNotFolded(t *testing.T) {
 	text := "```go\nfmt.Println(1)\n```"
-	if foldCodeBlocks(newTranslator(), text, unicodeGlyphs(), "⌥C") != text {
-		t.Fatalf("a short block must be left alone: %q", foldCodeBlocks(newTranslator(), text, unicodeGlyphs(), "⌥C"))
+	if foldCodeBlocks(testTranslator(), text, unicodeGlyphs(), "⌥C") != text {
+		t.Fatalf("a short block must be left alone: %q", foldCodeBlocks(testTranslator(), text, unicodeGlyphs(), "⌥C"))
 	}
 }
 
@@ -143,7 +143,7 @@ func TestDiffKeepsFourHunkLinesAndFolds(t *testing.T) {
 		"@@ -12,7 +12,9 @@ func Register(",
 		"+  a", "-  b", "+  c", "+  d", "+  e", "+  f",
 	}, "\n")
-	out := renderDiff(src, 74, view{tr: newTranslator(), caps: Capabilities{}, st: testStyles()})
+	out := renderDiff(src, 74, view{tr: testTranslator(), caps: Capabilities{}, st: testStyles()})
 	lines := strings.Split(out, "\n")
 	if len(lines) != diffHunkBudget+2 {
 		t.Fatalf("got %d lines, want %d: %q", len(lines), diffHunkBudget+2, lines)
@@ -155,7 +155,7 @@ func TestDiffKeepsFourHunkLinesAndFolds(t *testing.T) {
 }
 
 func TestDiffUnderBudgetHasNoFold(t *testing.T) {
-	out := renderDiff("@@ -1,2 +1,2 @@\n+  a\n-  b", 74, view{tr: newTranslator(), caps: Capabilities{}, st: testStyles()})
+	out := renderDiff("@@ -1,2 +1,2 @@\n+  a\n-  b", 74, view{tr: testTranslator(), caps: Capabilities{}, st: testStyles()})
 	if strings.Contains(ansi.Strip(out), unicodeGlyphs().fold) {
 		t.Fatalf("short diff folded: %q", out)
 	}
@@ -166,7 +166,7 @@ func TestDiffExpandsWithAltE(t *testing.T) {
 		"@@ -12,7 +12,9 @@ func Register(",
 		"+  a", "-  b", "+  c", "+  d", "+  e", "+  f",
 	}, "\n")
-	out := renderDiff(src, 74, view{tr: newTranslator(), st: testStyles(), expand: true})
+	out := renderDiff(src, 74, view{tr: testTranslator(), st: testStyles(), expand: true})
 	if strings.Contains(ansi.Strip(out), unicodeGlyphs().fold) {
 		t.Fatalf("alt+e must lift the diff budget: %q", out)
 	}

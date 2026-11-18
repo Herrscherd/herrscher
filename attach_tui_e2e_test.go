@@ -196,7 +196,7 @@ func onlySessionName(t *testing.T, daemon tuiDaemon) string {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	backend, err := newAttachedDaemon(ctx, daemon.layout, daemon.instance, daemon.statePath, i18n.English)
+	backend, err := newAttachedDaemon(ctx, daemon.layout, testMessages(), host.NewMessages(), daemon.instance, daemon.statePath, i18n.English)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,11 +211,11 @@ func attachTUIWindow(t *testing.T, daemon tuiDaemon) (*teatest.TestModel, contex
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
-	backend, err := newAttachedDaemon(ctx, daemon.layout, daemon.instance, daemon.statePath, i18n.English)
+	backend, err := newAttachedDaemon(ctx, daemon.layout, testMessages(), host.NewMessages(), daemon.instance, daemon.statePath, i18n.English)
 	if err != nil {
 		t.Fatal(err)
 	}
-	window := tui.NewWindow(ctx, backend, tui.Language(backend.lang))
+	window := tui.NewWindow(ctx, backend.messages, backend, tui.Language(backend.lang))
 	model := teatest.NewTestModel(t, window, teatest.WithInitialTermSize(120, 40))
 	go tui.Pump(ctx, backend, model.Send)
 	return model, cancel

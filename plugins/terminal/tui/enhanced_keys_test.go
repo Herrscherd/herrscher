@@ -74,7 +74,7 @@ func TestFilteredStdinTranslatesEnhancedKeysInStream(t *testing.T) {
 }
 
 func TestCtrlWDeletesAWordBeforeItClosesATab(t *testing.T) {
-	m := newModel(nil)
+	m := newModel(testMessages(), nil)
 	m.ensureTab("c")
 	m.input.SetValue("hello world")
 	var mm tea.Model = m

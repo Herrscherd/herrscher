@@ -11,6 +11,7 @@ import (
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -22,21 +23,21 @@ func TestTheSameArgvIsRefusedOnOneSocketAndRunOnTheOther(t *testing.T) {
 	if addErr := st.AddSession(state.Session{Name: "s1"}); addErr != nil {
 		t.Fatalf("AddSession: %v", addErr)
 	}
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages())
-	if approveErr := addApproveCommands(reg, newHostMessages(), fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); approveErr != nil {
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	if approveErr := addApproveCommands(reg, newHostMessages(), clitext.NewMessages(), fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); approveErr != nil {
 		t.Fatalf("addApproveCommands: %v", approveErr)
 	}
-	h := testHub(&hub{messages: newHostMessages(), warnings: io.Discard, st: st, reg: reg, live: make(map[string]liveSession)})
+	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, st: st, reg: reg, live: make(map[string]liveSession)})
 
 	dir := t.TempDir()
 	operatorSock := filepath.Join(dir, "op.sock")
 	sessionSock := filepath.Join(dir, "s1.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	serveTestCommandSocket(ctx, t, isolatedRuntimeDir(t), operatorSock, asOperator{disp: h, lang: h.textLanguage()}, defaultCommandReadTimeout)
-	serveTestCommandSocket(ctx, t, isolatedRuntimeDir(t), sessionSock, asSession{disp: h, session: "s1", lang: h.sessionLanguageSource("s1")}, defaultCommandReadTimeout)
+	serveTestCommandSocket(ctx, t, isolatedRuntimeDir(t), operatorSock, asOperator{disp: h, lang: h.textLanguage(), messages: clitext.NewMessages()}, defaultCommandReadTimeout)
+	serveTestCommandSocket(ctx, t, isolatedRuntimeDir(t), sessionSock, asSession{disp: h, session: "s1", lang: h.sessionLanguageSource("s1"), messages: clitext.NewMessages()}, defaultCommandReadTimeout)
 
 	argv := []string{"approve", "rule", "allow Bash(*)"}
 
@@ -64,11 +65,11 @@ func TestTheSameArgvIsRefusedOnOneSocketAndRunOnTheOther(t *testing.T) {
 func TestServedOperatorSocketFollowsTheLiveLanguage(t *testing.T) {
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	live := newOperatorLanguage(i18n.English)
-	reg := &cli.Registry{}
-	if err := addScheduleCommands(reg, newHostMessages(), live.Get, st, fakeAgents{known: make(map[string]bool)}, &schedulerSlot{}); err != nil {
+	reg := cli.NewRegistry(clitext.NewMessages())
+	if err := addScheduleCommands(reg, newHostMessages(), clitext.NewMessages(), live.Get, st, fakeAgents{known: make(map[string]bool)}, &schedulerSlot{}); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
-	h := testHub(&hub{messages: newHostMessages(), warnings: io.Discard, st: st, reg: reg, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)})
+	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, st: st, reg: reg, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)})
 	layout := isolatedRuntimeDir(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()

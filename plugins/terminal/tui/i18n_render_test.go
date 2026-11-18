@@ -28,7 +28,7 @@ func TestFrozenRendersInEachLanguage(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := newModel(nil)
+			m := newModel(testMessages(), nil)
 			m.localize(tc.lang)
 			if got := tc.render(m); got != tc.want {
 				t.Fatalf("render = %q, want %q", got, tc.want)
@@ -56,7 +56,7 @@ func copyNothingFlash(m *model) string {
 }
 
 func TestSharedCliTextFollowsTheTuiLanguage(t *testing.T) {
-	trans := newTranslator()
+	trans := testTranslator()
 	if got := trans.in(i18n.French).shared("cli.manage.state.added"); got != "ajouté" {
 		t.Fatalf("the shared CLI text must render in French, got %q", got)
 	}
@@ -66,7 +66,7 @@ func TestSharedCliTextFollowsTheTuiLanguage(t *testing.T) {
 }
 
 func TestSharedCliTextLoadsTheCatalogOnce(t *testing.T) {
-	trans := newTranslator().in(i18n.French)
+	trans := testTranslator().in(i18n.French)
 	allocs := testing.AllocsPerRun(3, func() {
 		for range 200 {
 			trans.shared("cli.manage.pinned_tag")
@@ -95,7 +95,7 @@ func TestLocalizedReasonTranslatesWrappedSentinels(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			wrapped := fmt.Errorf("%w : x", tc.sentinel)
-			got := localizedReason(newTranslator().in(tc.lang), wrapped)
+			got := localizedReason(testTranslator().in(tc.lang), wrapped)
 			if got != tc.want {
 				t.Fatalf("localizedReason(%q) = %q, want %q", wrapped, got, tc.want)
 			}
@@ -115,7 +115,7 @@ func TestLocalizedReasonFindsSentinelInTheMiddle(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			wrapped := fmt.Errorf("ctx: %w", errUnknownKey)
-			if got := localizedReason(newTranslator().in(tc.lang), wrapped); got != tc.want {
+			if got := localizedReason(testTranslator().in(tc.lang), wrapped); got != tc.want {
 				t.Fatalf("localizedReason(%q) = %q, want %q", wrapped, got, tc.want)
 			}
 		})
@@ -141,7 +141,7 @@ func TestDetailedReasonsTranslateTheWholePhrase(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := localizedReason(newTranslator().in(tc.lang), tc.err); got != tc.want {
+			if got := localizedReason(testTranslator().in(tc.lang), tc.err); got != tc.want {
 				t.Fatalf("localizedReason(%q) = %q, want %q", tc.err, got, tc.want)
 			}
 		})
@@ -150,14 +150,14 @@ func TestDetailedReasonsTranslateTheWholePhrase(t *testing.T) {
 
 func TestLocalizedReasonKeepsUnknownErrorsRaw(t *testing.T) {
 	raw := errors.New("open /etc/x: permission denied")
-	if got := localizedReason(newTranslator().in(i18n.French), raw); got != raw.Error() {
+	if got := localizedReason(testTranslator().in(i18n.French), raw); got != raw.Error() {
 		t.Fatalf("an error outside the table must keep its text, got %q", got)
 	}
 }
 
 func TestSharedCliTextLogsFailureOnce(t *testing.T) {
 	logger, logs := captureWarnings()
-	trans := newTranslator().in(i18n.French)
+	trans := testTranslator().in(i18n.French)
 	trans.log = logger
 	for range 5 {
 		if got := trans.shared(clitext.Key("cli.missing.key")); got != "cli.missing.key" {

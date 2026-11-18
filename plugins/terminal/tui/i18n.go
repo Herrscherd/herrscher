@@ -33,16 +33,21 @@ const (
 //go:embed locales
 var localeFiles embed.FS
 
-type translator struct {
+type catalogText struct {
 	lang    i18n.Language
 	catalog func() (*i18n.Catalog, error)
-	cli     *clitext.Translator
-	cliOnce *sync.Once
 	log     *slog.Logger
 }
 
-func newTranslator() translator {
-	return translator{lang: i18n.English, catalog: sync.OnceValues(loadLocales), cli: clitext.For(i18n.English), cliOnce: new(sync.Once), log: slog.Default()}
+type translator struct {
+	catalogText
+
+	messages *clitext.Messages
+	cliOnce  *sync.Once
+}
+
+func newTranslator(messages *clitext.Messages) translator {
+	return translator{catalogText: catalogText{lang: i18n.English, catalog: sync.OnceValues(loadLocales), log: slog.Default()}, messages: messages, cliOnce: new(sync.Once)}
 }
 
 func loadLocales() (*i18n.Catalog, error) {
@@ -55,19 +60,18 @@ func loadLocales() (*i18n.Catalog, error) {
 
 func (trans translator) in(lang i18n.Language) translator {
 	trans.lang = lang
-	trans.cli = clitext.For(lang)
 	trans.cliOnce = new(sync.Once)
 	return trans
 }
 
-func (trans translator) logger() *slog.Logger {
+func (trans catalogText) logger() *slog.Logger {
 	if trans.log == nil {
 		return slog.Default()
 	}
 	return trans.log
 }
 
-func (trans translator) t(key string, params map[string]any) string {
+func (trans catalogText) t(key string, params map[string]any) string {
 	catalog, err := trans.catalog()
 	if err != nil {
 		trans.logger().Error("tui catalog unavailable", "key", key, "err", err)
@@ -82,11 +86,12 @@ func (trans translator) t(key string, params map[string]any) string {
 }
 
 func (trans translator) shared(key clitext.Key) string {
-	text := trans.cli.Text(key, nil)
-	if err := trans.cli.Err(); err != nil {
+	text, err := trans.messages.Text(trans.lang, key, nil)
+	if err != nil {
 		trans.cliOnce.Do(func() {
 			trans.logger().Error("tui shared message not rendered", "key", key, "err", err)
 		})
+		return string(key)
 	}
 	return text
 }
@@ -154,11 +159,10 @@ func (reason reasonError) Unwrap() error {
 }
 
 func localizedReason(trans translator, err error) string {
-	message := err.Error()
-	var keyed keyedError
-	if errors.As(err, &keyed) {
+	if keyed, ok := errors.AsType[keyedError](err); ok {
 		return trans.t(keyed.key, keyed.params)
 	}
+	message := err.Error()
 	var detailed reasonError
 	if errors.As(err, &detailed) {
 		return strings.Replace(message, detailed.text, detailed.render(trans), 1)

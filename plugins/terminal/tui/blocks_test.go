@@ -9,7 +9,7 @@ import (
 )
 
 func TestAgentAnswerOpensWithARuleAndIsNotClosed(t *testing.T) {
-	out := renderEntry(entry{role: roleAgent, text: "the answer"}, 60, view{tr: newTranslator(), st: testStyles()})
+	out := renderEntry(entry{role: roleAgent, text: "the answer"}, 60, view{tr: testTranslator(), st: testStyles()})
 	lines := strings.Split(out, "\n")
 	if got := ansi.Strip(lines[0]); !strings.HasPrefix(got, blockIndent+unicodeGlyphs().tool+" the answer") {
 		t.Fatalf("the answer must open on the prose gutter: %q", got)
@@ -22,7 +22,7 @@ func TestAgentAnswerOpensWithARuleAndIsNotClosed(t *testing.T) {
 }
 
 func TestStreamingAnswerIsLeftOpen(t *testing.T) {
-	out := renderEntry(entry{role: roleAgent, text: "half an ans", streaming: true}, 60, view{tr: newTranslator(), st: testStyles()})
+	out := renderEntry(entry{role: roleAgent, text: "half an ans", streaming: true}, 60, view{tr: testTranslator(), st: testStyles()})
 	if got := ansi.Strip(out); !strings.HasPrefix(got, blockIndent+unicodeGlyphs().tool+" half an ans") {
 		t.Fatalf("a streaming answer keeps the prose gutter: %q", got)
 	}

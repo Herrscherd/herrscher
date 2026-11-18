@@ -12,9 +12,15 @@ import (
 // its params, so the presentation layer renders it in the language of the
 // session it concerns. An error among the params is rendered the same way.
 type FailureError struct {
-	Key    clitext.Key
-	Params clitext.Params
-	Cause  error
+	Key      clitext.Key
+	Params   clitext.Params
+	Cause    error
+	messages *clitext.Messages
+}
+
+// NewFailure builds a FailureError whose text is rendered through messages.
+func NewFailure(messages *clitext.Messages, key clitext.Key, params clitext.Params, cause error) FailureError {
+	return FailureError{Key: key, Params: params, Cause: cause, messages: messages}
 }
 
 func (f FailureError) Error() string { return f.Text(i18n.English) }
@@ -27,7 +33,7 @@ func (f FailureError) Text(lang i18n.Language) string {
 	for name, value := range f.Params {
 		params[name] = renderParam(lang, value)
 	}
-	text, err := clitext.Text(lang, f.Key, params)
+	text, err := f.messages.Text(lang, f.Key, params)
 	if err != nil {
 		return string(f.Key)
 	}

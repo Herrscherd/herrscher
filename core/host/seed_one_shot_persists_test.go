@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -14,7 +15,7 @@ func TestTheOneShotSeedRunsWithoutASessionTable(t *testing.T) {
 		return seedBackend{reply: "réponse sans table"}, nil
 	}
 	sess := state.Session{Name: "solo", ChannelID: "channel"}
-	got, err := runOneShotSeedWithIDRuntime(t.Context(), sess, "tâche", newTurnID(), &consolidateSpy{}, oneShotSeedRuntime{persists: newPersistWrites(), backend: backend, warnings: io.Discard})
+	got, err := runOneShotSeedWithIDRuntime(t.Context(), sess, "tâche", newTurnID(), &consolidateSpy{}, oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), backend: backend, warnings: io.Discard})
 	if err != nil {
 		t.Fatalf("seed error = %v, want the reply", err)
 	}

@@ -10,6 +10,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
@@ -24,14 +25,14 @@ func TestDispatchOfAnotherSessionReturnsWhileAResumeIsRefused(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	var reg cli.Registry
+	reg := cli.NewRegistry(clitext.NewMessages())
 	list := contracts.New("session", "list").Do(func(context.Context, contracts.Input) (contracts.Result, error) {
 		return contracts.DataResult("listed"), nil
 	})
 	if err := reg.Add(list); err != nil {
 		t.Fatal(err)
 	}
-	h := newHub(st, nil, nil, t.TempDir(), &reg, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()))
+	h := newHub(st, nil, nil, t.TempDir(), reg, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()))
 	h.runtime = layout
 	const grace = 300 * time.Millisecond
 	h.teardownGrace = grace

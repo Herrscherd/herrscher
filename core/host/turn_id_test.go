@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/outbox"
@@ -35,7 +36,7 @@ func (g *turnIDRoutedGateway) EmitTo(_ contracts.Conversation, e contracts.Event
 
 func TestRecordEntryStampsTheActiveTurn(t *testing.T) {
 	var got []state.TranscriptEntry
-	d := newSessionDriver(newHostMessages(), "s", nil, make(chan contracts.Event, 8), make(chan contracts.Event, 8), io.Discard)
+	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s", nil, make(chan contracts.Event, 8), make(chan contracts.Event, 8), io.Discard)
 	d.sink.Transcript = func(e state.TranscriptEntry) { got = append(got, e) }
 
 	d.activeTurnID = "turn-7"
@@ -85,7 +86,7 @@ func TestScrollbackCarriesTurnIDAndOldTranscriptReadsWithout(t *testing.T) {
 func TestEveryReplyFanOutCarriesItsTurnID(t *testing.T) {
 	plain := &turnIDPlainGateway{}
 	routed := &turnIDRoutedGateway{}
-	d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{
+	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", []contracts.GatewaySet{
 		{Gateway: plain, Reader: plain},
 		{Gateway: routed, Reader: routed},
 	}, nil, nil, io.Discard)
@@ -118,7 +119,7 @@ func TestTurnRecordsUserAndAssistantWithTheTurnID(t *testing.T) {
 	var entries []state.TranscriptEntry
 	gateway := &turnIDPlainGateway{}
 	fromBridge := make(chan contracts.Event, 1)
-	d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: gateway, Reader: gateway}}, make(chan contracts.Event, 8), fromBridge, io.Discard)
+	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", []contracts.GatewaySet{{Gateway: gateway, Reader: gateway}}, make(chan contracts.Event, 8), fromBridge, io.Discard)
 	d.sink.Transcript = func(e state.TranscriptEntry) { entries = append(entries, e) }
 	d.terms = func() modelTerms { return modelTerms{rates: sonnetRates()} }
 	ctx := context.Background()

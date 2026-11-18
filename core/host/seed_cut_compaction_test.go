@@ -9,6 +9,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -118,18 +119,19 @@ func seedWithHistoryStage(backend contracts.Backend, budget time.Duration, emiss
 }
 
 func seedWithStage(stage contracts.Compactor, backend contracts.Backend, budget time.Duration, emissions *seedEmissions) (string, error) {
-	table := newSessionTable(newHostMessages())
+	table := newSessionTable(newHostMessages(), clitext.NewMessages())
 	policy := compactPolicy(50, "jev")
 	policy.plugins["jev"] = stage
 	policy.historyEditors["claude"] = true
 	policy.limits = contextwindow.NewLimits("1000", nil)
 	table.compaction = policy
 	runtime := oneShotSeedRuntime{
-		persists: newPersistWrites(),
-		messages: newHostMessages(),
-		timeout:  budget,
-		sessions: table,
-		publish:  emissions.record,
+		persists:    newPersistWrites(),
+		messages:    newHostMessages(),
+		cliMessages: clitext.NewMessages(),
+		timeout:     budget,
+		sessions:    table,
+		publish:     emissions.record,
 		backend: func(context.Context, state.Session) (contracts.Backend, error) {
 			return backend, nil
 		},

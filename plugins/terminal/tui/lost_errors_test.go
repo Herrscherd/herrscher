@@ -116,7 +116,7 @@ func TestPNGEncodingFailureLeavesAWarning(t *testing.T) {
 
 func TestModelOutputReachesTheInjectedLogger(t *testing.T) {
 	log, logs := captureWarnings()
-	m := newModel(nil)
+	m := newModel(testMessages(), nil)
 	Logger(log)(m)
 	m.receiveScript(scriptDoneMsg{err: errStatuslineNoCommand})
 	expectWarning(t, logs, "statusline.no_command")

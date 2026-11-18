@@ -11,7 +11,7 @@ import (
 )
 
 func TestUserEntryIsOneUnruledRow(t *testing.T) {
-	out := renderEntry(entry{role: roleYou, text: "hello there"}, 40, view{tr: newTranslator(), st: testStyles()})
+	out := renderEntry(entry{role: roleYou, text: "hello there"}, 40, view{tr: testTranslator(), st: testStyles()})
 	if !strings.Contains(out, unicodeGlyphs().userBar+" hello there") {
 		t.Fatalf("user entry must render its request: %q", out)
 	}
@@ -28,7 +28,7 @@ func TestUserEntryIsOneUnruledRow(t *testing.T) {
 }
 
 func TestAgentEntryRendersBare(t *testing.T) {
-	out := renderEntry(entry{role: roleAgent, text: "the answer"}, 40, view{tr: newTranslator(), st: testStyles()})
+	out := renderEntry(entry{role: roleAgent, text: "the answer"}, 40, view{tr: testTranslator(), st: testStyles()})
 	if !strings.Contains(out, "the answer") {
 		t.Fatalf("agent prose must render its text: %q", out)
 	}
@@ -38,9 +38,9 @@ func TestAgentEntryRendersBare(t *testing.T) {
 }
 
 func TestRoleGlyphsAreDistinct(t *testing.T) {
-	think := renderEntry(entry{role: roleThinking, text: "weighing two options"}, 60, view{tr: newTranslator(), st: testStyles()})
-	notice := renderEntry(entry{role: roleNotice, text: "tour reinitialise"}, 60, view{tr: newTranslator(), st: testStyles()})
-	fail := renderEntry(entry{role: roleError, text: "exit status 1"}, 60, view{tr: newTranslator(), st: testStyles()})
+	think := renderEntry(entry{role: roleThinking, text: "weighing two options"}, 60, view{tr: testTranslator(), st: testStyles()})
+	notice := renderEntry(entry{role: roleNotice, text: "tour reinitialise"}, 60, view{tr: testTranslator(), st: testStyles()})
+	fail := renderEntry(entry{role: roleError, text: "exit status 1"}, 60, view{tr: testTranslator(), st: testStyles()})
 	if !strings.Contains(think, unicodeGlyphs().fold) {
 		t.Fatalf("reasoning must carry its glyph: %q", think)
 	}
@@ -63,7 +63,7 @@ func TestStatusRoleSplitsErrorsFromTools(t *testing.T) {
 
 func TestAgentBodyWrapsToWidth(t *testing.T) {
 	body := strings.Repeat("lorem ipsum dolor ", 20)
-	out := renderEntry(entry{role: roleAgent, text: body}, 40, view{tr: newTranslator(), st: testStyles()})
+	out := renderEntry(entry{role: roleAgent, text: body}, 40, view{tr: testTranslator(), st: testStyles()})
 	lines := strings.Split(out, "\n")
 	if len(lines) < 3 {
 		t.Fatalf("long body must wrap to several lines, got %d", len(lines))
@@ -76,7 +76,7 @@ func TestAgentBodyWrapsToWidth(t *testing.T) {
 }
 
 func TestWideGlyphWrapDoesNotOverflow(t *testing.T) {
-	out := renderEntry(entry{role: roleYou, text: strings.Repeat("世界", 30)}, 24, view{tr: newTranslator(), st: testStyles()})
+	out := renderEntry(entry{role: roleYou, text: strings.Repeat("世界", 30)}, 24, view{tr: testTranslator(), st: testStyles()})
 	for _, ln := range strings.Split(out, "\n") {
 		if w := lipgloss.Width(ln); w > 24 {
 			t.Fatalf("wide-glyph line width %d exceeds 24: %q", w, ln)

@@ -313,12 +313,12 @@ func (m *model) usageSessionBody() []string {
 func (m *model) usageLines() ([]string, error) {
 	switch m.usage.tab {
 	case usageTabCost:
-		return usage.CostPanel(m.usage.snapshot, m.tr.lang, time.Local, m.reportPalette(), m.frameInner())
+		return usage.CostPanel(m.usage.snapshot, m.tr.messages, m.tr.lang, time.Local, m.reportPalette(), m.frameInner())
 	case usageTabTokens:
-		return usage.TokenLines(m.usage.snapshot, m.tr.lang, m.reportPalette())
+		return usage.TokenLines(m.usage.snapshot, m.tr.messages, m.tr.lang, m.reportPalette())
 	case usageTabCompaction:
-		return usage.CompactionLines(m.usage.snapshot, m.tr.lang, m.reportPalette())
+		return usage.CompactionLines(m.usage.snapshot, m.tr.messages, m.tr.lang, m.reportPalette())
 	case usageTabSession, usageTabLimits:
 	}
-	return usage.LimitCards(m.usage.snapshot, m.tr.lang, m.reportPalette(), m.cardEdges(), m.frameInner())
+	return usage.LimitCards(m.usage.snapshot, m.tr.messages, m.tr.lang, m.reportPalette(), m.cardEdges(), m.frameInner())
 }

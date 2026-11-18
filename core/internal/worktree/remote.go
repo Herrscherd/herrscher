@@ -33,14 +33,15 @@ type Commander interface {
 // JSON: the filesystem work stays where the filesystem is, and one operation
 // costs one round trip instead of ten.
 type Remote struct {
+	messages   *clitext.Messages
 	run        Commander
 	bin        string
 	instanceID string
 }
 
 // NewRemote builds a Remote driving bin through run.
-func NewRemote(run Commander, bin, instanceID string) *Remote {
-	return &Remote{run: run, bin: bin, instanceID: instanceID}
+func NewRemote(messages *clitext.Messages, run Commander, bin, instanceID string) *Remote {
+	return &Remote{messages: messages, run: run, bin: bin, instanceID: instanceID}
 }
 
 // Branch is pure string work, so it is answered here. Paying a round trip to be
@@ -90,7 +91,7 @@ func (r *Remote) Remove(ctx context.Context, repo, name string, force bool) erro
 
 // Scratch creates the scratch directory for name under root on the remote host.
 func (r *Remote) Scratch(_, _ string) (string, error) {
-	return "", FailureError{Key: clitext.WorktreeRemoteScratch, Params: clitext.Params{clitext.ParamWhere: r.run.Describe()}}
+	return "", NewFailure(r.messages, clitext.WorktreeRemoteScratch, clitext.Params{clitext.ParamWhere: r.run.Describe()}, nil)
 }
 
 // ScratchPath returns the scratch directory path for name under root.
@@ -111,7 +112,7 @@ func (r *Remote) Materialize(ctx context.Context, worktreePath string, payload i
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		cause := reason(stderr.String(), err)
-		return FailureError{Key: clitext.WorktreeRemoteMaterialize, Params: clitext.Params{clitext.ParamWhere: r.run.Describe(), clitext.ParamErr: cause}, Cause: cause}
+		return NewFailure(r.messages, clitext.WorktreeRemoteMaterialize, clitext.Params{clitext.ParamWhere: r.run.Describe(), clitext.ParamErr: cause}, cause)
 	}
 	return nil
 }
@@ -123,10 +124,10 @@ func (r *Remote) call(ctx context.Context, argv []string, into any) error {
 	what := strings.Join(argv[:2], " ")
 	if err := cmd.Run(); err != nil {
 		cause := reason(stderr.String(), err)
-		return FailureError{Key: clitext.WorktreeRemoteCall, Params: clitext.Params{clitext.ParamCommand: what, clitext.ParamWhere: r.run.Describe(), clitext.ParamErr: cause}, Cause: cause}
+		return NewFailure(r.messages, clitext.WorktreeRemoteCall, clitext.Params{clitext.ParamCommand: what, clitext.ParamWhere: r.run.Describe(), clitext.ParamErr: cause}, cause)
 	}
 	if err := json.Unmarshal(bytes.TrimSpace(stdout.Bytes()), into); err != nil {
-		return FailureError{Key: clitext.WorktreeRemoteUnreadable, Params: clitext.Params{clitext.ParamCommand: what, clitext.ParamWhere: r.run.Describe(), clitext.ParamOutput: strconv.Quote(stdout.String()), clitext.ParamErr: err}, Cause: err}
+		return NewFailure(r.messages, clitext.WorktreeRemoteUnreadable, clitext.Params{clitext.ParamCommand: what, clitext.ParamWhere: r.run.Describe(), clitext.ParamOutput: strconv.Quote(stdout.String()), clitext.ParamErr: err}, err)
 	}
 	return nil
 }

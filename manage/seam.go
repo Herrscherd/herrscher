@@ -18,18 +18,19 @@ var errUnknownAction = clitext.SentinelError("unknown plugin action")
 // through apply; an event loop cannot block on a menu it has not drawn yet, so
 // it drives the same work in phases and calls Restore when the operator asks.
 type PluginOps struct {
-	dir   string
-	saved map[string][]byte
+	messages *clitext.Messages
+	dir      string
+	saved    map[string][]byte
 }
 
 // NewPluginOps binds the operations to a host module, resolved the same way the
 // CLI resolves it.
-func NewPluginOps(hostDir string) (*PluginOps, error) {
-	dir, err := resolveHost(hostDir)
+func NewPluginOps(messages *clitext.Messages, hostDir string) (*PluginOps, error) {
+	dir, err := resolveHost(messages, hostDir)
 	if err != nil {
 		return nil, err
 	}
-	return &PluginOps{dir: dir}, nil
+	return &PluginOps{messages: messages, dir: dir}, nil
 }
 
 // List reports every compiled-in module with its installed version, its pin
@@ -38,20 +39,20 @@ func NewPluginOps(hostDir string) (*PluginOps, error) {
 func (o *PluginOps) List(ctx context.Context) ([]PluginVersion, error) {
 	src, err := os.ReadFile(filepath.Join(o.dir, manifestFile))
 	if err != nil {
-		return nil, failure(err, clitext.ManageReadFailed, clitext.Params{clitext.ParamPath: manifestFile, clitext.ParamErr: err.Error()})
+		return nil, failure(o.messages, err, clitext.ManageReadFailed, clitext.Params{clitext.ParamPath: manifestFile, clitext.ParamErr: err.Error()})
 	}
-	return pluginVersions(ctx, o.dir, string(src))
+	return pluginVersions(ctx, o.messages, o.dir, string(src))
 }
 
 // Versions lists what a module has published, newest last.
 func (o *PluginOps) Versions(ctx context.Context, module string) ([]string, error) {
-	return availableVersions(ctx, goToolchain{dir: o.dir}, module)
+	return availableVersions(ctx, o.messages, goToolchain{messages: o.messages, dir: o.dir}, module)
 }
 
 // Findings reports what is known against a requested version before anything is
 // written.
 func (o *PluginOps) Findings(ctx context.Context, module, version string) []string {
-	return addFindings(ctx, o.dir, module, version)
+	return addFindings(ctx, o.messages, o.dir, module, version)
 }
 
 // Apply saves the composition, then runs the change. It never restores on its
@@ -60,10 +61,10 @@ func (o *PluginOps) Apply(ctx context.Context, action, module, version string) (
 	o.saved = nil
 
 	if action == verbPin || action == verbUnpin {
-		return "", pinModule(o.dir, module, action == verbPin)
+		return "", pinModule(o.messages, o.dir, module, action == verbPin)
 	}
 
-	saved, err := saveComposition(o.dir)
+	saved, err := saveComposition(o.messages, o.dir)
 	if err != nil {
 		return "", err
 	}
@@ -73,9 +74,9 @@ func (o *PluginOps) Apply(ctx context.Context, action, module, version string) (
 	case verbRemove:
 		src, err := os.ReadFile(filepath.Join(o.dir, manifestFile))
 		if err != nil {
-			return "", failure(err, clitext.ManageReadFailed, clitext.Params{clitext.ParamPath: manifestFile, clitext.ParamErr: err.Error()})
+			return "", failure(o.messages, err, clitext.ManageReadFailed, clitext.Params{clitext.ParamPath: manifestFile, clitext.ParamErr: err.Error()})
 		}
-		out, _, err := removePlugin(string(src), module)
+		out, _, err := removePlugin(o.messages, string(src), module)
 		if err != nil {
 			return "", err
 		}
@@ -88,7 +89,7 @@ func (o *PluginOps) Apply(ctx context.Context, action, module, version string) (
 	case "version":
 		return o.run(ctx, addCommands(module, version))
 	}
-	return "", failure(errUnknownAction, clitext.ManageUnknownAction, clitext.Params{clitext.ParamAction: strconv.Quote(action)})
+	return "", failure(o.messages, errUnknownAction, clitext.ManageUnknownAction, clitext.Params{clitext.ParamAction: strconv.Quote(action)})
 }
 
 // Restore puts the composition back as it was before the last Apply.
@@ -96,7 +97,7 @@ func (o *PluginOps) Restore() error {
 	if o.saved == nil {
 		return nil
 	}
-	return restoreComposition(o.dir, o.saved)
+	return restoreComposition(o.messages, o.dir, o.saved)
 }
 
 func (o *PluginOps) run(ctx context.Context, cmds [][]string) (string, error) {

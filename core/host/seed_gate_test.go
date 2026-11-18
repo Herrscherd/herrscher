@@ -9,16 +9,17 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 func TestATapIsRefusedOnceTheSeedShutsItsGate(t *testing.T) {
 	var published []string
-	runtime := oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), publish: func(_ string, event contracts.Event) {
+	runtime := oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), publish: func(_ string, event contracts.Event) {
 		published = append(published, event.T)
 	}}
 	sess := state.Session{Name: "window"}
-	driver := newSessionDriver(newHostMessages(), sess.Name, nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1), io.Discard)
+	driver := newSessionDriver(newHostMessages(), clitext.NewMessages(), sess.Name, nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1), io.Discard)
 	gate := attachOneShotTaps(driver, sess, runtime)
 
 	driver.tapEvent(contracts.Event{T: "before"})
@@ -32,11 +33,11 @@ func TestATapIsRefusedOnceTheSeedShutsItsGate(t *testing.T) {
 
 func TestAResumeTokenIsRefusedOnceTheSeedShutsItsGate(t *testing.T) {
 	var resumed []string
-	runtime := oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), resume: func(_, token string) {
+	runtime := oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), resume: func(_, token string) {
 		resumed = append(resumed, token)
 	}}
 	sess := state.Session{Name: "window"}
-	driver := newSessionDriver(newHostMessages(), sess.Name, nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1), io.Discard)
+	driver := newSessionDriver(newHostMessages(), clitext.NewMessages(), sess.Name, nil, make(chan contracts.Event, 1), make(chan contracts.Event, 1), io.Discard)
 	gate := attachOneShotTaps(driver, sess, runtime)
 
 	driver.sink.Resume("before")

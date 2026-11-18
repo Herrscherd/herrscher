@@ -9,6 +9,7 @@ import (
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/health"
 	"github.com/Herrscherd/herrscher/core/termpaint"
 )
@@ -25,7 +26,7 @@ func TestProbeFailureTextReachesTheTableNeutralised(t *testing.T) {
 		t.Fatalf("Decode() error = %v", err)
 	}
 	var out bytes.Buffer
-	if err := decoded.Table(&out, i18n.English, termpaint.Palette{}); err != nil {
+	if err := decoded.Table(&out, clitext.NewMessages(), i18n.English, termpaint.Palette{}); err != nil {
 		t.Fatalf("Table() error = %v", err)
 	}
 	for _, r := range out.String() {

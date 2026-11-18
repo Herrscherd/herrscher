@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
@@ -19,7 +20,7 @@ import (
 // Answered locally rather than forwarded to a daemon, for the same reason
 // whoami is: there is no daemon on the far side, and the caller of this verb is
 // a daemon on another machine that reads its JSON.
-func RunWorktree(ctx context.Context, args []string) error {
+func RunWorktree(ctx context.Context, cliMessages *clitext.Messages, hostMessages *Messages, args []string) error {
 	if len(args) == 0 {
 		return errWorktreeSubcommand
 	}
@@ -30,7 +31,7 @@ func RunWorktree(ctx context.Context, args []string) error {
 	if flags.sub != "materialize" && (flags.repo == "" || flags.name == "") {
 		return &worktreeFlagsError{Sub: flags.sub}
 	}
-	return runWorktreeSub(ctx, flags)
+	return runWorktreeSub(ctx, cliMessages, hostMessages, flags)
 }
 
 type worktreeFlags struct {
@@ -65,9 +66,8 @@ func parseWorktreeFlags(sub string, rest []string) (worktreeFlags, error) {
 	}, nil
 }
 
-func runWorktreeSub(ctx context.Context, file worktreeFlags) error {
-	messages := newHostMessages()
-	worktrees := worktree.NewWorktreer(file.instance)
+func runWorktreeSub(ctx context.Context, cliMessages *clitext.Messages, hostMessages *Messages, file worktreeFlags) error {
+	worktrees := worktree.NewWorktreer(cliMessages, file.instance)
 	switch file.sub {
 	case "create":
 		return createWorktree(ctx, worktrees, file)
@@ -76,7 +76,7 @@ func runWorktreeSub(ctx context.Context, file worktreeFlags) error {
 	case "remove":
 		return removeWorktree(ctx, worktrees, file)
 	case "materialize":
-		return materializeWorktree(ctx, messages, file.worktreePath)
+		return materializeWorktree(ctx, hostMessages.owner, file.worktreePath)
 	default:
 		return &unknownWorktreeSubcommandError{Sub: file.sub}
 	}

@@ -10,12 +10,13 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
 
 func TestSessionFailureNoticeIsWrittenInTheSessionLanguage(t *testing.T) {
-	h := testHub(&hub{messages: newHostMessages(), warnings: io.Discard, lang: i18n.English})
+	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, lang: i18n.English})
 	var published []contracts.Event
 	h.eventPublisher = func(_ string, event contracts.Event) {
 		published = append(published, event)
@@ -26,8 +27,8 @@ func TestSessionFailureNoticeIsWrittenInTheSessionLanguage(t *testing.T) {
 
 	params := map[string]any{nameParam: "revue", detailParam: cause.Error()}
 	owner := newHostMessages()
-	inFrench := localizeHostError(owner, i18n.French, wrapHost(owner, cause, sessionFailureKey(supervisor.StagePrepare), params)).Error()
-	inEnglish := localizeHostError(owner, i18n.English, wrapHost(owner, cause, sessionFailureKey(supervisor.StagePrepare), params)).Error()
+	inFrench := localizeHostError(owner, clitext.NewMessages(), i18n.French, wrapHost(owner, cause, sessionFailureKey(supervisor.StagePrepare), params)).Error()
+	inEnglish := localizeHostError(owner, clitext.NewMessages(), i18n.English, wrapHost(owner, cause, sessionFailureKey(supervisor.StagePrepare), params)).Error()
 	if inFrench == inEnglish {
 		t.Fatal("the two languages render the same notice, the test proves nothing")
 	}
@@ -42,7 +43,7 @@ func TestSessionFailureWithoutAnEventSinkIsLogged(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
 	t.Cleanup(func() { slog.SetDefault(saved) })
 
-	h := testHub(&hub{messages: newHostMessages(), warnings: io.Discard, lang: i18n.English})
+	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, lang: i18n.English})
 	h.reportSessionFailure(state.Session{Name: "revue"}, supervisor.StageLaunch, errors.New("boom"))
 
 	if !strings.Contains(logged.String(), "session failure not published") || !strings.Contains(logged.String(), "revue") {

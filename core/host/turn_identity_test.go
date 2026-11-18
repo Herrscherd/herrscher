@@ -8,6 +8,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -37,7 +38,7 @@ func relayTurnFrames(cancel context.CancelFunc, toBridge <-chan contracts.Event,
 }
 
 func identifiedTestDriver(to chan<- contracts.Event, from <-chan contracts.Event) (*sessionDriver, <-chan contracts.Event) {
-	d := newSessionDriver(newHostMessages(), "same-name", nil, to, from, io.Discard)
+	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "same-name", nil, to, from, io.Discard)
 	d.incarnation = "incarnation-a"
 	d.agent = "reviewer"
 	emitted := make(chan contracts.Event, 32)

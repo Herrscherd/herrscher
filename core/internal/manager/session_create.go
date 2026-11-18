@@ -80,7 +80,7 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 		return createRequest{}, &SessionExistsError{Name: name}
 	}
 	if n := len(h.st.SnapshotSessions()); n >= maxSessions {
-		return createRequest{}, &SessionLimitError{Max: maxSessions}
+		return createRequest{}, NewSessionLimitError(h.messages, maxSessions)
 	}
 	terminalOnly := input.Bool("terminal_only")
 	adopted, _ := input.Lookup("channel_id")

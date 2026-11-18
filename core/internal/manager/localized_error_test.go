@@ -6,6 +6,7 @@ import (
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func TestLocalizedErrorsKeepAnEnglishErrorAndRenderTheCatalogueOnce(t *testing.T) {
@@ -21,14 +22,14 @@ func TestLocalizedErrorsKeepAnEnglishErrorAndRenderTheCatalogueOnce(t *testing.T
 	}{
 		{
 			name:         "restart lost in english",
-			err:          restartLostError(i18n.English, "s1", restartErr, rollbackErr),
+			err:          restartLostError(clitext.NewMessages(), i18n.English, "s1", restartErr, rollbackErr),
 			wantError:    restartEnglish,
 			wantRendered: "unexpected error: backend restart: agent exited; rollback failed, session s1 out of service: state locked",
 			causes:       []error{restartErr, rollbackErr},
 		},
 		{
 			name:         "restart lost in french",
-			err:          restartLostError(i18n.French, "s1", restartErr, rollbackErr),
+			err:          restartLostError(clitext.NewMessages(), i18n.French, "s1", restartErr, rollbackErr),
 			wantError:    restartEnglish,
 			wantRendered: "erreur inattendue : red\u00e9marrage backend : agent exited ; le retour arrière a échoué, session s1 hors service : state locked",
 			causes:       []error{restartErr, rollbackErr},
@@ -57,12 +58,12 @@ func TestLocalizedErrorsRenderTheirCatalogueTextOnce(t *testing.T) {
 		err  error
 		want string
 	}{
-		{"restart lost en", i18n.English, restartLostError(i18n.English, "s1", restartErr, rollbackErr), "unexpected error: backend restart: agent exited; rollback failed, session s1 out of service: state locked"},
-		{"restart lost fr", i18n.French, restartLostError(i18n.French, "s1", restartErr, rollbackErr), "erreur inattendue : red\u00e9marrage backend : agent exited ; le retour arrière a échoué, session s1 hors service : state locked"},
+		{"restart lost en", i18n.English, restartLostError(clitext.NewMessages(), i18n.English, "s1", restartErr, rollbackErr), "unexpected error: backend restart: agent exited; rollback failed, session s1 out of service: state locked"},
+		{"restart lost fr", i18n.French, restartLostError(clitext.NewMessages(), i18n.French, "s1", restartErr, rollbackErr), "erreur inattendue : red\u00e9marrage backend : agent exited ; le retour arrière a échoué, session s1 hors service : state locked"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := cli.Localize(tc.err, tc.lang).Error(); got != tc.want {
+			if got := cli.Localize(clitext.NewMessages(), tc.err, tc.lang).Error(); got != tc.want {
 				t.Fatalf("rendered %q, want %q", got, tc.want)
 			}
 		})

@@ -18,6 +18,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/bridge"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/control"
@@ -35,6 +36,7 @@ const seedJoinGrace = 2 * time.Second
 
 type oneShotSeedRuntime struct {
 	messages        *hostMessages
+	cliMessages     *clitext.Messages
 	warnings        io.Writer
 	sessionLanguage func(name string) languageSource
 	coordinator     contracts.Coordinator
@@ -64,10 +66,10 @@ func withOneShotSeedRuntime(ctx context.Context, runtime oneShotSeedRuntime) con
 	return context.WithValue(ctx, oneShotSeedRuntimeKey{}, runtime)
 }
 
-func oneShotSeedRuntimeFrom(ctx context.Context, messages *hostMessages, newOneShot func() *persistWrites) oneShotSeedRuntime {
+func oneShotSeedRuntimeFrom(ctx context.Context, messages *hostMessages, cliMessages *clitext.Messages, newOneShot func() *persistWrites) oneShotSeedRuntime {
 	runtime, ok := ctx.Value(oneShotSeedRuntimeKey{}).(oneShotSeedRuntime)
 	if !ok {
-		return oneShotSeedRuntime{messages: messages, persists: newOneShot()}
+		return oneShotSeedRuntime{messages: messages, cliMessages: cliMessages, persists: newOneShot()}
 	}
 	return runtime
 }
@@ -117,7 +119,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	defer cancel()
 	toBridge := make(chan contracts.Event, 1)
 	fromBridge := make(chan contracts.Event, bridgeEventBuffer)
-	driver := newSessionDriver(runtime.messages, sess.Name, nil, toBridge, fromBridge, runtime.warnings)
+	driver := newSessionDriver(runtime.messages, runtime.cliMessages, sess.Name, nil, toBridge, fromBridge, runtime.warnings)
 	oneShot := runtime.persists
 	driver.persists = oneShot
 	defer awaitOneShotWrites(runtime.messages, oneShot, runtime.warnings, runtime.languageOf(sess))

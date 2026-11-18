@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"testing"
 	"time"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 const (
@@ -29,7 +31,7 @@ func TestAwaitHubStopDrainsBridgesAfterSessionsStop(t *testing.T) {
 	sockets := make(chan struct{})
 	close(sockets)
 	drainer := &recordingDrainer{called: make(chan struct{}, 4)}
-	runningHub := testHub(&hub{messages: newHostMessages(), runtime: testRuntime(t)})
+	runningHub := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), runtime: testRuntime(t)})
 
 	returned := make(chan error, 1)
 	go func() {

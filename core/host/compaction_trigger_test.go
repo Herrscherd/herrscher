@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 )
@@ -47,7 +48,7 @@ func triggerDriver(host, trigger int) *sessionDriver {
 	if trigger != 0 {
 		policy.triggers["jev"] = trigger
 	}
-	d := newSessionDriver(newHostMessages(), "s1", nil, nil, nil, io.Discard)
+	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", nil, nil, nil, io.Discard)
 	d.compaction = policy
 	return d
 }
@@ -106,7 +107,7 @@ func TestStackWithoutTriggerKeepsTheHostThreshold(t *testing.T) {
 		{used: 160_000, want: []string{contracts.CompactStageBackend}, full: true},
 	}
 	for _, tt := range tests {
-		d := newSessionDriver(newHostMessages(), "s1", nil, nil, nil, io.Discard)
+		d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", nil, nil, nil, io.Discard)
 		d.compaction = compactPolicy(80)
 		run := d.automaticRun(tt.used, triggerLimit)
 		if run.due() != (len(tt.want) > 0) || run.full != tt.full || !slices.Equal(run.names, tt.want) {

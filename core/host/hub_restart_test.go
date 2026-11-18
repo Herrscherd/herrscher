@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -21,7 +22,7 @@ func TestRestartWithResumeKeepsOldTokenAndMarkOnDiskWhenPersistFails(t *testing.
 		t.Fatal(err)
 	}
 	partDir := t.TempDir()
-	h := newHub(st, nil, nil, partDir, nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()), withWarnings(io.Discard))
+	h := newHub(st, nil, nil, partDir, nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()), withWarnings(io.Discard))
 	h.runtime = isolatedRuntimeDir(t)
 	h.startBridge = func(state.Session, time.Duration) error { return nil }
 

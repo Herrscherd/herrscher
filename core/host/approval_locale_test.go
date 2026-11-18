@@ -7,6 +7,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 )
@@ -48,7 +49,7 @@ func TestApprovalMenuAndHelpFollowTheSessionLanguage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			gw := &frenchMenuGateway{eventGateway: eventGateway{menuGatewayFake: &menuGatewayFake{}}}
-			d := &sessionDriver{messages: newHostMessages(), persists: newPersistWrites(), name: "s1", operator: fixedLanguageSource(tt.lang), gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
+			d := &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), persists: newPersistWrites(), name: "s1", operator: fixedLanguageSource(tt.lang), gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
 			d.askApproval(context.Background(), "id1", approval.Request{Tool: "Bash", Subject: "ls"}, time.Now().Add(time.Minute))
 			gw.mu.Lock()
 			defer gw.mu.Unlock()

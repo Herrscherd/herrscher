@@ -16,7 +16,7 @@ func TestMsgLogsAMessageThatFailsToRender(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
 	t.Cleanup(func() { slog.SetDefault(previous) })
 
-	text := msg(clitext.Key("cli.nowhere"), nil)
+	text := msg(testMessages(), clitext.Key("cli.nowhere"), nil)
 
 	if text != "cli.nowhere" {
 		t.Fatalf("msg on an undeclared key = %q, want the key itself", text)
@@ -34,7 +34,7 @@ func TestWritingPluginRowsLoadsTheCatalogOnce(t *testing.T) {
 	var out bytes.Buffer
 	allocs := testing.AllocsPerRun(3, func() {
 		out.Reset()
-		if err := writePluginRows(&out, rows); err != nil {
+		if err := writePluginRows(testMessages(), &out, rows); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -42,4 +42,8 @@ func TestWritingPluginRowsLoadsTheCatalogOnce(t *testing.T) {
 	if allocs > budget {
 		t.Fatalf("writing %d rows allocated %.0f times, above the budget of %d allocations (one catalogue load allocates about 42000 times, so this is about 3.5 loads): the catalogue is reloaded per row", len(rows), allocs, budget)
 	}
+}
+
+func testMessages() *clitext.Messages {
+	return clitext.NewMessages()
 }

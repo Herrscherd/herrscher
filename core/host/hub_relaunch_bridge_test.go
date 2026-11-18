@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
@@ -18,7 +19,7 @@ func TestRefusedResumeIsRelaunchedByTheNextReconcile(t *testing.T) {
 	if err := st.AddSession(state.Session{Name: name, ChannelID: "c1"}); err != nil {
 		t.Fatal(err)
 	}
-	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()))
+	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()))
 	h.runtime = isolatedRuntimeDir(t)
 	var starts, stops atomic.Int32
 	h.startBridge = func(state.Session, time.Duration) error {
@@ -59,7 +60,7 @@ func TestAcceptFailureRetiredBridgeIsRelaunchedByReconcile(t *testing.T) {
 		t.Fatal(err)
 	}
 	warnings := &lockedBuffer{}
-	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()), withWarnings(warnings))
+	h := newHub(st, nil, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()), withWarnings(warnings))
 	h.runtime = layout
 	h.teardownGrace = time.Minute
 	h.listen = brokenFirstListen()

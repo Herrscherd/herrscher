@@ -8,12 +8,13 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
 func mkReg(t *testing.T) *cli.Registry {
 	t.Helper()
-	reg, err := host.NewRegistry(context.Background(), nil, host.Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json"})
+	reg, err := host.NewRegistry(context.Background(), clitext.NewMessages(), host.NewMessages(), nil, host.Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)
 	}

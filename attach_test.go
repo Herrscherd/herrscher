@@ -26,7 +26,7 @@ func TestSubmittingFromAnUnboundTabNoticesInFrench(t *testing.T) {
 	d := startFakeDaemon(t, func([]string) (string, error) { return "", nil })
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.layout, d.instance, tempStatePath(t), i18n.French)
+	a, err := newAttachedDaemon(ctx, d.layout, testMessages(), host.NewMessages(), d.instance, tempStatePath(t), i18n.French)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestSubmittingFromAnUnboundTabNoticesInFrench(t *testing.T) {
 
 func TestAttachedNoticeIsRenderedInFrench(t *testing.T) {
 	events := make(chan tui.RoutedEvent, 1)
-	a := &attachedDaemon{lang: i18n.French, events: events}
+	a := newAttachedDaemonState(testMessages(), host.NewMessages(), i18n.French, nil, events)
 	a.notify("tab-1", clitext.AttachNoSession, nil)
 	ev := <-events
 	const want = "herrscher : aucune session n'est plus liée à cet onglet"
@@ -54,7 +54,7 @@ func TestAttachedNoticeIsRenderedInFrench(t *testing.T) {
 }
 
 func TestAttachedRefusalIsRenderedInFrench(t *testing.T) {
-	a := &attachedDaemon{lang: i18n.French}
+	a := newAttachedDaemonState(testMessages(), host.NewMessages(), i18n.French, nil, nil)
 	_, err := a.Dispatch([]string{"bogus"})
 	const want = `commande "bogus" indisponible depuis le terminal (autorisées : session, agent)`
 	if err == nil || err.Error() != want {
@@ -171,7 +171,7 @@ func TestAttachedFrontendRoutesAnEventToItsTab(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.layout, d.instance, tempStatePath(t), testLang())
+	a, err := newAttachedDaemon(ctx, d.layout, testMessages(), host.NewMessages(), d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestAttachedFrontendSendsTypedLinesToTheRightSession(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.layout, d.instance, tempStatePath(t), testLang())
+	a, err := newAttachedDaemon(ctx, d.layout, testMessages(), host.NewMessages(), d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +221,7 @@ func TestAttachedFrontendRefusesVerbsTheTerminalDoesNotOwn(t *testing.T) {
 	d := startFakeDaemon(t, func([]string) (string, error) { return "", nil })
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.layout, d.instance, tempStatePath(t), testLang())
+	a, err := newAttachedDaemon(ctx, d.layout, testMessages(), host.NewMessages(), d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +239,7 @@ func TestAttachedFrontendReachesTheHealthAndUsageOverlays(t *testing.T) {
 	d := startFakeDaemon(t, func([]string) (string, error) { return "{}", nil })
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.layout, d.instance, tempStatePath(t), testLang())
+	a, err := newAttachedDaemon(ctx, d.layout, testMessages(), host.NewMessages(), d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +263,7 @@ func TestAttachedFrontendBindsANewSessionToTheTerminal(t *testing.T) {
 }
 
 func TestAttachingWithoutADaemonFails(t *testing.T) {
-	if _, err := newAttachedDaemon(context.Background(), testRuntime(t), "nobody", tempStatePath(t), testLang()); err == nil {
+	if _, err := newAttachedDaemon(context.Background(), testRuntime(t), testMessages(), host.NewMessages(), "nobody", tempStatePath(t), testLang()); err == nil {
 		t.Fatal("expected an error with no daemon listening")
 	}
 }
@@ -281,7 +281,7 @@ func TestScrollbackComesBackFromTheDaemon(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := newAttachedDaemon(ctx, d.layout, d.instance, tempStatePath(t), testLang())
+	a, err := newAttachedDaemon(ctx, d.layout, testMessages(), host.NewMessages(), d.instance, tempStatePath(t), testLang())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -342,10 +342,11 @@ func containsPair(argv []string, flag, value string) bool {
 
 func TestUnansweredSessionListIsNotRequestedTwiceInAGivenSecond(t *testing.T) {
 	asked := 0
-	attached := &attachedDaemon{lang: i18n.English, send: func([]string) (string, error) {
+	attached := newAttachedDaemonState(testMessages(), host.NewMessages(), i18n.English, nil, nil)
+	attached.send = func([]string) (string, error) {
 		asked++
 		return "", errors.New("daemon down")
-	}}
+	}
 
 	attached.Sessions()
 	attached.Sessions()

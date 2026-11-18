@@ -53,9 +53,9 @@ func TestManageVersionRemoveKeepsTheArgumentWhole(t *testing.T) {
 
 func TestManageVersionApplyForgetsTheEarlierSnapshot(t *testing.T) {
 	dir := hostDir(t, "mod/a")
-	ops := &PluginOps{dir: dir}
+	ops := &PluginOps{messages: testMessages(), dir: dir}
 
-	saved, err := saveComposition(dir)
+	saved, err := saveComposition(testMessages(), dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,31 +82,31 @@ func TestManageVersionApplyForgetsTheEarlierSnapshot(t *testing.T) {
 
 func TestManageVersionPinRefusesAbsentModule(t *testing.T) {
 	dir := hostDir(t, "mod/a")
-	code := PluginCmd(context.Background(), []string{"pin", "--host", dir, "mod/absent"})
+	code := PluginCmd(context.Background(), testMessages(), []string{"pin", "--host", dir, "mod/absent"})
 	if code != 1 {
 		t.Fatalf("exit = %d, want 1", code)
 	}
 	if _, err := os.Stat(filepath.Join(dir, pinFile)); !os.IsNotExist(err) {
 		t.Fatal("a refused pin still wrote the pin file")
 	}
-	if err := pinModule(dir, "mod/absent", true); err == nil || !strings.Contains(err.Error(), "mod/absent") {
+	if err := pinModule(testMessages(), dir, "mod/absent", true); err == nil || !strings.Contains(err.Error(), "mod/absent") {
 		t.Fatalf("error = %v, want it to name the module", err)
 	}
 }
 
 func TestManageVersionPinAndUnpin(t *testing.T) {
 	dir := hostDir(t, "mod/a", "mod/b")
-	if err := pinModule(dir, "mod/a", true); err != nil {
+	if err := pinModule(testMessages(), dir, "mod/a", true); err != nil {
 		t.Fatalf("pin: %v", err)
 	}
-	pins, err := loadPins(dir)
+	pins, err := loadPins(testMessages(), dir)
 	if err != nil || !pins["mod/a"] || pins["mod/b"] {
 		t.Fatalf("pins = %v, err = %v", pins, err)
 	}
-	if err = pinModule(dir, "mod/a", false); err != nil {
+	if err = pinModule(testMessages(), dir, "mod/a", false); err != nil {
 		t.Fatalf("unpin: %v", err)
 	}
-	pins, err = loadPins(dir)
+	pins, err = loadPins(testMessages(), dir)
 	if err != nil {
 		t.Fatalf("load pins: %v", err)
 	}
@@ -146,13 +146,13 @@ func TestManageVersionUpdateAllPinned(t *testing.T) {
 
 func TestManageVersionNoTTYDecidesAutomatically(t *testing.T) {
 	in := bufio.NewReader(strings.NewReader(""))
-	if _, ok := newDecider(false, false, in).(autoDecider); !ok {
+	if _, ok := newDecider(testMessages(), false, false, in).(autoDecider); !ok {
 		t.Fatal("a run with no terminal must decide without asking")
 	}
-	if _, ok := newDecider(true, true, in).(autoDecider); !ok {
+	if _, ok := newDecider(testMessages(), true, true, in).(autoDecider); !ok {
 		t.Fatal("--yes must decide without asking")
 	}
-	if _, ok := newDecider(false, true, in).(promptDecider); !ok {
+	if _, ok := newDecider(testMessages(), false, true, in).(promptDecider); !ok {
 		t.Fatal("an interactive run must ask")
 	}
 }

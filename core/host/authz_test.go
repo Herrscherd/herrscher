@@ -9,6 +9,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/authz"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
@@ -16,7 +17,7 @@ import (
 
 func authzHub(t *testing.T, st *state.State, verbs ...[]string) *hub {
 	t.Helper()
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	for _, path := range verbs {
 		cmd := contracts.New(path...).Help("test verb")
 		if path[0] == "session" || path[0] == "schedule" {
@@ -31,7 +32,7 @@ func authzHub(t *testing.T, st *state.State, verbs ...[]string) *hub {
 			t.Fatal(err)
 		}
 	}
-	return testHub(&hub{messages: newHostMessages(), warnings: io.Discard, st: st, reg: reg, live: make(map[string]liveSession)})
+	return testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, st: st, reg: reg, live: make(map[string]liveSession)})
 }
 
 func authzState(t *testing.T, sessions []state.Session, roles map[string]string) *state.State {
@@ -158,7 +159,7 @@ func TestAGatewayCannotClaimToBeTheOperatorSocketOrASession(t *testing.T) {
 func TestDispatchRefusesBeforeReachingTheRegistry(t *testing.T) {
 	st := authzState(t, []state.Session{{Name: "revue"}}, nil)
 	ran := false
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	if err := reg.Add(contracts.New("approve", "rule").
 		Help("test verb").
 		Do(func(context.Context, contracts.Input) (contracts.Result, error) {
@@ -167,7 +168,7 @@ func TestDispatchRefusesBeforeReachingTheRegistry(t *testing.T) {
 		})); err != nil {
 		t.Fatal(err)
 	}
-	h := testHub(&hub{messages: newHostMessages(), warnings: io.Discard, st: st, reg: reg, live: make(map[string]liveSession)})
+	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, st: st, reg: reg, live: make(map[string]liveSession)})
 	if _, err := h.Dispatch(withSessionPrincipal(context.Background(), "revue"), []string{"approve", "rule"}); err == nil {
 		t.Fatal("Dispatch must refuse")
 	}
@@ -194,7 +195,7 @@ func TestAnUnknownVerbIsDispatchsErrorAndNotARefusal(t *testing.T) {
 func operatorRegistryForTest(t *testing.T) *cli.Registry {
 	t.Helper()
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	dir := t.TempDir()

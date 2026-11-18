@@ -4,6 +4,8 @@ import (
 	"io"
 	"testing"
 	"time"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func TestOneShotDoesNotWaitForAnUnrelatedDaemonWrite(t *testing.T) {
@@ -20,7 +22,7 @@ func TestOneShotDoesNotWaitForAnUnrelatedDaemonWrite(t *testing.T) {
 }
 
 func TestProductionOneShotRouteDoesNotWaitForAnUnrelatedDaemonWrite(t *testing.T) {
-	sessions := newSessionTable(newHostMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
 	end := sessions.persists.begin()
 	t.Cleanup(end)
 
@@ -33,7 +35,7 @@ func TestProductionOneShotRouteDoesNotWaitForAnUnrelatedDaemonWrite(t *testing.T
 }
 
 func TestOneShotPersistsIsAChildOfTheDaemonTracker(t *testing.T) {
-	sessions := newSessionTable(newHostMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
 	oneShot := sessions.oneShotPersists()
 	if oneShot == sessions.persists || oneShot.parent != sessions.persists {
 		t.Fatal("the one-shot of the handoff brief must run on a child of the daemon tracker, not on the tracker itself")
@@ -48,8 +50,8 @@ func TestContextRuntimeNeverCreatesAOneShotChild(t *testing.T) {
 		created++
 		return daemon.child()
 	}
-	ctx := withOneShotSeedRuntime(t.Context(), oneShotSeedRuntime{persists: fromContext})
-	runtime := oneShotSeedRuntimeFrom(ctx, newHostMessages(), newOneShot)
+	ctx := withOneShotSeedRuntime(t.Context(), oneShotSeedRuntime{persists: fromContext, messages: newHostMessages(), cliMessages: clitext.NewMessages()})
+	runtime := oneShotSeedRuntimeFrom(ctx, newHostMessages(), clitext.NewMessages(), newOneShot)
 	if created != 0 {
 		t.Fatalf("a call carrying a runtime in its context created %d one-shot children, want none", created)
 	}

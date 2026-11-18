@@ -61,13 +61,14 @@ func rangeKeys() map[Range]clitext.Key {
 }
 
 type renderer struct {
-	lang i18n.Language
-	pal  termpaint.Palette
-	err  error
+	messages *clitext.Messages
+	lang     i18n.Language
+	pal      termpaint.Palette
+	err      error
 }
 
 func (r *renderer) text(key clitext.Key, params clitext.Params) string {
-	value, err := clitext.Text(r.lang, key, params)
+	value, err := r.messages.Text(r.lang, key, params)
 	if r.err == nil {
 		r.err = err
 	}
@@ -84,8 +85,8 @@ func (r *renderer) dimRow(cells ...string) []string {
 
 // LimitLines writes the limits of the accounts of the snapshot, one table per vendor, each
 // window of an account on a row with its bar, its reset and its pace.
-func LimitLines(snapshot Snapshot, lang i18n.Language, pal termpaint.Palette) ([]string, error) {
-	text := &renderer{lang: lang, pal: pal}
+func LimitLines(snapshot Snapshot, messages *clitext.Messages, lang i18n.Language, pal termpaint.Palette) ([]string, error) {
+	text := &renderer{messages: messages, lang: lang, pal: pal}
 	if len(snapshot.Limits) == 0 {
 		return []string{termpaint.Paint(pal.Dim, text.text(clitext.QuotaEmpty, nil))}, text.err
 	}
@@ -282,8 +283,8 @@ func paceLabel(limit contracts.Limit, pace Pace, text *renderer) string {
 
 // CostLines writes the total of the spend of the period, its daily sparkline in the zone
 // of the display, and its cost by account and by model.
-func CostLines(snapshot Snapshot, lang i18n.Language, zone *time.Location, pal termpaint.Palette) ([]string, error) {
-	text := &renderer{lang: lang, pal: pal}
+func CostLines(snapshot Snapshot, messages *clitext.Messages, lang i18n.Language, zone *time.Location, pal termpaint.Palette) ([]string, error) {
+	text := &renderer{messages: messages, lang: lang, pal: pal}
 	lines := append(truncatedNotice(snapshot, text), costBody(snapshot, text, zone)...)
 	return lines, text.err
 }
@@ -349,8 +350,8 @@ func costDetail(spend Spend, text *renderer) []string {
 
 // CostNotes writes what the totals of the snapshot still miss: transcripts not read yet,
 // a price list not loaded yet, and the models no price is known for.
-func CostNotes(snapshot Snapshot, lang i18n.Language, pal termpaint.Palette) ([]string, error) {
-	text := &renderer{lang: lang, pal: pal}
+func CostNotes(snapshot Snapshot, messages *clitext.Messages, lang i18n.Language, pal termpaint.Palette) ([]string, error) {
+	text := &renderer{messages: messages, lang: lang, pal: pal}
 	return costNotes(snapshot, text), text.err
 }
 
@@ -379,8 +380,8 @@ func costNotes(snapshot Snapshot, text *renderer) []string {
 
 // TokenLines writes the tokens of the period by type, with the share of the cache read in
 // the input, then the tokens by model.
-func TokenLines(snapshot Snapshot, lang i18n.Language, pal termpaint.Palette) ([]string, error) {
-	text := &renderer{lang: lang, pal: pal}
+func TokenLines(snapshot Snapshot, messages *clitext.Messages, lang i18n.Language, pal termpaint.Palette) ([]string, error) {
+	text := &renderer{messages: messages, lang: lang, pal: pal}
 	lines := append(truncatedNotice(snapshot, text), tokenBody(snapshot, text)...)
 	return lines, text.err
 }

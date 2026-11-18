@@ -8,7 +8,7 @@ import (
 )
 
 func TestPaletteFuzzyMatchesCommandsByAbbreviation(t *testing.T) {
-	got := filterCommands(localCommands(newTranslator()), "qu")
+	got := filterCommands(localCommands(testTranslator()), "qu")
 	if len(got) == 0 || got[0].Name != "queue" {
 		names := make([]string, 0, len(got))
 		for _, c := range got {
@@ -19,7 +19,7 @@ func TestPaletteFuzzyMatchesCommandsByAbbreviation(t *testing.T) {
 }
 
 func TestQueueCommandCarriesPRTag(t *testing.T) {
-	for _, c := range localCommands(newTranslator()) {
+	for _, c := range localCommands(testTranslator()) {
 		if c.Name == "queue" {
 			if c.PR != "PR 2" {
 				t.Fatalf("queue PR = %q", c.PR)

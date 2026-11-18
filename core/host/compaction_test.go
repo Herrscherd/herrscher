@@ -14,6 +14,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
 	"github.com/Herrscherd/herrscher/core/eventwire"
@@ -62,7 +63,7 @@ func newConfiguredCompactFixture(t *testing.T, vendor string, policy compactionP
 	t.Helper()
 	t.Setenv(contextwindow.EnvVar(), "")
 	f := &compactFixture{toBridge: make(chan contracts.Event, 16), from: make(chan contracts.Event, 16), seen: make(chan struct{}, 64)}
-	f.driver = newSessionDriver(newHostMessages(), "s1", nil, f.toBridge, f.from, io.Discard)
+	f.driver = newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", nil, f.toBridge, f.from, io.Discard)
 	f.driver.terms = func() modelTerms { return modelTerms{vendor: vendor} }
 	f.driver.compaction = policy
 	f.driver.emitTap = f.tap
@@ -333,7 +334,7 @@ func TestCompactionEventsCarryTokensOnlyWhenMeasured(t *testing.T) {
 func TestMergedRequestIsNotAcceptedWhenTheFirstEnqueueFails(t *testing.T) {
 	queue := make(chan queued, 1)
 	queue <- queued{ev: contracts.Event{T: eventwire.EventInput}}
-	d := &sessionDriver{messages: newHostMessages(), persists: newPersistWrites(), queue: queue, enqueueTimeout: 100 * time.Millisecond}
+	d := &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), persists: newPersistWrites(), queue: queue, enqueueTimeout: 100 * time.Millisecond}
 	first := make(chan [2]bool, 1)
 	registered := make(chan struct{})
 	d.compactRegistered = func() { close(registered) }

@@ -55,8 +55,8 @@ type windowAccount struct {
 // LimitCards writes the limits of the snapshot for a panel width cells wide: per vendor
 // a box with one card per window, the accounts of that window side by side with their
 // bar, their reset and their share left, and the vendors with nothing to read on one line.
-func LimitCards(snapshot Snapshot, lang i18n.Language, pal termpaint.Palette, edges CardEdges, width int) ([]string, error) {
-	text := &renderer{lang: lang, pal: pal}
+func LimitCards(snapshot Snapshot, messages *clitext.Messages, lang i18n.Language, pal termpaint.Palette, edges CardEdges, width int) ([]string, error) {
+	text := &renderer{messages: messages, lang: lang, pal: pal}
 	if len(snapshot.Limits) == 0 {
 		return []string{termpaint.Paint(pal.Dim, text.text(clitext.QuotaEmpty, nil))}, text.err
 	}

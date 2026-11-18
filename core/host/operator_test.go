@@ -8,11 +8,12 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func operatorReg(t *testing.T, ran *[]string) *cli.Registry {
 	t.Helper()
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	local := func(name string) func(context.Context, contracts.Input) (contracts.Result, error) {
 		return func(context.Context, contracts.Input) (contracts.Result, error) {
 			*ran = append(*ran, name)
@@ -161,7 +162,7 @@ func TestSeedAndOtherNamespacesAreLeftAlone(t *testing.T) {
 
 func TestTheWholeInvocationSurvivesTheTrip(t *testing.T) {
 	var sent []string
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	if err := reg.Add(contracts.New("session", "create").
 		Param("name", "session name", true).
 		ValueParam("model", "model id", false).

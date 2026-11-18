@@ -166,18 +166,18 @@ func envFileWrite(c Config) FileWrite {
 
 // BuildPlan returns the install plan for c's target OS. Every platform also
 // scaffolds the declarative config.json (template, never clobbered).
-func BuildPlan(cfg Config) (Plan, error) {
+func BuildPlan(messages *clitext.Messages, cfg Config) (Plan, error) {
 	var plan Plan
 	var err error
 	switch goos(cfg) {
 	case goosLinux:
-		plan, err = linuxPlan(cfg)
+		plan, err = linuxPlan(messages, cfg)
 	case goosDarwin:
-		plan, err = macPlan(cfg)
+		plan, err = macPlan(messages, cfg)
 	case goosWindows:
-		plan, err = windowsPlan(cfg)
+		plan, err = windowsPlan(messages, cfg)
 	default:
-		return Plan{}, unsupportedOS(cfg)
+		return Plan{}, unsupportedOS(messages, cfg)
 	}
 	if err != nil {
 		return Plan{}, err
@@ -193,7 +193,7 @@ func configFileWrite(c Config) FileWrite {
 }
 
 // BuildUninstall returns the uninstall plan for c's target OS.
-func BuildUninstall(cfg Config) (Plan, error) {
+func BuildUninstall(messages *clitext.Messages, cfg Config) (Plan, error) {
 	switch goos(cfg) {
 	case goosLinux:
 		unit := filepath.Join(cfg.Home, ".config", "systemd", "user", linuxUnitName)
@@ -213,12 +213,12 @@ func BuildUninstall(cfg Config) (Plan, error) {
 			{Argv: []string{cmdSchtasks, "/delete", flagTaskName, winTaskName, "/f"}},
 		}}, nil
 	default:
-		return Plan{}, unsupportedOS(cfg)
+		return Plan{}, unsupportedOS(messages, cfg)
 	}
 }
 
-func unsupportedOS(cfg Config) error {
-	return clitext.Failure(cfg.language(), errUnsupportedOS, clitext.ServiceUnsupportedOS, clitext.Params{clitext.ParamOS: strconv.Quote(goos(cfg))})
+func unsupportedOS(messages *clitext.Messages, cfg Config) error {
+	return messages.Failure(cfg.language(), errUnsupportedOS, clitext.ServiceUnsupportedOS, clitext.Params{clitext.ParamOS: strconv.Quote(goos(cfg))})
 }
 
 func (c Config) language() i18n.Language {
@@ -226,7 +226,7 @@ func (c Config) language() i18n.Language {
 }
 
 // StatusCommand returns the command that reports whether the service is active.
-func StatusCommand(cfg Config) (Command, error) {
+func StatusCommand(messages *clitext.Messages, cfg Config) (Command, error) {
 	switch goos(cfg) {
 	case goosLinux:
 		return Command{Argv: []string{cmdSystemctl, flagUser, "status", linuxUnitName}, IgnoreErr: true}, nil
@@ -235,13 +235,13 @@ func StatusCommand(cfg Config) (Command, error) {
 	case goosWindows:
 		return Command{Argv: []string{cmdSchtasks, "/query", flagTaskName, winTaskName, "/v"}, IgnoreErr: true}, nil
 	default:
-		return Command{}, unsupportedOS(cfg)
+		return Command{}, unsupportedOS(messages, cfg)
 	}
 }
 
 // RestartCommands returns the platform commands that restart the running
 // service. Some platforms need more than one (stop then start).
-func RestartCommands(cfg Config) ([]Command, error) {
+func RestartCommands(messages *clitext.Messages, cfg Config) ([]Command, error) {
 	switch goos(cfg) {
 	case goosLinux:
 		return []Command{{Argv: []string{cmdSystemctl, flagUser, "restart", linuxUnitName}}}, nil
@@ -254,14 +254,14 @@ func RestartCommands(cfg Config) ([]Command, error) {
 			{Argv: []string{cmdSchtasks, "/run", flagTaskName, winTaskName}},
 		}, nil
 	default:
-		return nil, unsupportedOS(cfg)
+		return nil, unsupportedOS(messages, cfg)
 	}
 }
 
 // Restart restarts the service inline (for a separate caller process, e.g. the
 // `herrscher service restart` CLI, never the daemon restarting itself).
-func Restart(ctx context.Context, c Config) error {
-	cmds, err := RestartCommands(c)
+func Restart(ctx context.Context, messages *clitext.Messages, c Config) error {
+	cmds, err := RestartCommands(messages, c)
 	if err != nil {
 		return err
 	}
@@ -280,7 +280,7 @@ func Restart(ctx context.Context, c Config) error {
 // (systemd-run) that lives outside that cgroup. launchd/Task Scheduler manage
 // the service from a separate process domain, so a normal restart already
 // survives there.
-func RestartDetached(ctx context.Context, cfg Config) error {
+func RestartDetached(ctx context.Context, messages *clitext.Messages, cfg Config) error {
 	if goos(cfg) == goosLinux {
 		return runCommand(ctx, Command{Argv: []string{
 			"systemd-run", flagUser, "--on-active=3",
@@ -288,34 +288,34 @@ func RestartDetached(ctx context.Context, cfg Config) error {
 			cmdSystemctl, flagUser, "restart", linuxUnitName,
 		}})
 	}
-	return Restart(ctx, cfg)
+	return Restart(ctx, messages, cfg)
 }
 
-func validateSource(src string) error {
+func validateSource(messages *clitext.Messages, src string) error {
 	lang := clitext.ClientLanguage()
 	if src == "" {
-		return clitext.Failure(lang, errNoSourceDir, clitext.ServiceNoSourceDir, nil)
+		return messages.Failure(lang, errNoSourceDir, clitext.ServiceNoSourceDir, nil)
 	}
 	data, err := os.ReadFile(filepath.Clean(filepath.Join(src, "go.mod")))
 	if err != nil {
-		return clitext.Failure(lang, errNotSourceCheckout, clitext.ServiceNotCheckoutNoModule, clitext.Params{clitext.ParamPath: src, clitext.ParamErr: err.Error()})
+		return messages.Failure(lang, errNotSourceCheckout, clitext.ServiceNotCheckoutNoModule, clitext.Params{clitext.ParamPath: src, clitext.ParamErr: err.Error()})
 	}
 	for _, line := range strings.Split(string(data), "\n") {
 		if strings.TrimSpace(line) == "module github.com/Herrscherd/herrscher" {
 			return nil
 		}
 	}
-	return clitext.Failure(lang, errNotSourceCheckout, clitext.ServiceNotCheckoutWrongModule, clitext.Params{clitext.ParamPath: src})
+	return messages.Failure(lang, errNotSourceCheckout, clitext.ServiceNotCheckoutWrongModule, clitext.Params{clitext.ParamPath: src})
 }
 
 // Pull fast-forwards the source checkout. --ff-only fails loudly rather than
 // creating a merge commit when local and remote have diverged.
-func Pull(ctx context.Context, src string) error {
-	if err := validateSource(src); err != nil {
+func Pull(ctx context.Context, messages *clitext.Messages, src string) error {
+	if err := validateSource(messages, src); err != nil {
 		return err
 	}
 	if out, err := runCapture(ctx, src, "git", "pull", "--ff-only"); err != nil {
-		return clitext.Failure(clitext.ClientLanguage(), err, clitext.ServiceGitPullFailed, clitext.Params{clitext.ParamErr: err.Error(), clitext.ParamOutput: redact.Output(out)})
+		return messages.Failure(clitext.ClientLanguage(), err, clitext.ServiceGitPullFailed, clitext.Params{clitext.ParamErr: err.Error(), clitext.ParamOutput: redact.Output(out)})
 	}
 	return nil
 }
@@ -323,15 +323,15 @@ func Pull(ctx context.Context, src string) error {
 // Build compiles the herrscher binary from src to binPath. `go build -o` writes a
 // new file and renames it into place, so replacing the live binary is safe while
 // the daemon runs (the restart then picks up the new file).
-func Build(ctx context.Context, src, binPath string) error {
-	if err := validateSource(src); err != nil {
+func Build(ctx context.Context, messages *clitext.Messages, src, binPath string) error {
+	if err := validateSource(messages, src); err != nil {
 		return err
 	}
 	if _, err := exec.LookPath("go"); err != nil {
-		return clitext.Failure(clitext.ClientLanguage(), errNoGoToolchain, clitext.ServiceNoGoToolchain, nil)
+		return messages.Failure(clitext.ClientLanguage(), errNoGoToolchain, clitext.ServiceNoGoToolchain, nil)
 	}
 	if out, err := runCapture(ctx, src, "go", "build", "-o", binPath, "."); err != nil {
-		return clitext.Failure(clitext.ClientLanguage(), err, clitext.ServiceGoBuildFailed, clitext.Params{clitext.ParamErr: err.Error(), clitext.ParamOutput: redact.Output(out)})
+		return messages.Failure(clitext.ClientLanguage(), err, clitext.ServiceGoBuildFailed, clitext.Params{clitext.ParamErr: err.Error(), clitext.ParamOutput: redact.Output(out)})
 	}
 	return nil
 }
@@ -340,19 +340,19 @@ func Build(ctx context.Context, src, binPath string) error {
 // platform. It is Build with GOOS/GOARCH pinned and cgo off: cross-compiling a
 // cgo binary would need a cross toolchain, and herrscher needs none. This is how
 // a host is provisioned, because the releases carry no binary assets.
-func BuildFor(ctx context.Context, src, binPath, goos, goarch string) error {
-	if err := validateSource(src); err != nil {
+func BuildFor(ctx context.Context, messages *clitext.Messages, src, binPath, goos, goarch string) error {
+	if err := validateSource(messages, src); err != nil {
 		return err
 	}
 	if _, err := exec.LookPath("go"); err != nil {
-		return clitext.Failure(clitext.ClientLanguage(), errNoGoToolchain, clitext.ServiceNoGoToolchain, nil)
+		return messages.Failure(clitext.ClientLanguage(), errNoGoToolchain, clitext.ServiceNoGoToolchain, nil)
 	}
 	cmd := exec.CommandContext(ctx, "go", "build", "-o", binPath, ".")
 	cmd.Dir = src
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+goos, "GOARCH="+goarch)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return clitext.Failure(clitext.ClientLanguage(), err, clitext.ServiceGoBuildForFailed, clitext.Params{
+		return messages.Failure(clitext.ClientLanguage(), err, clitext.ServiceGoBuildForFailed, clitext.Params{
 			clitext.ParamOS:     goos,
 			clitext.ParamArch:   goarch,
 			clitext.ParamErr:    err.Error(),
@@ -376,12 +376,12 @@ func SourceVersion(ctx context.Context, src string) string {
 // exits 0 without touching the network. A non-zero exit means the new binary is
 // broken (won't even parse its CLI), so the caller must not restart into it. The
 // daemon keeps running its old in-memory image; only the on-disk file changed.
-func Smoke(ctx context.Context, binPath string) error {
+func Smoke(ctx context.Context, messages *clitext.Messages, binPath string) error {
 	if binPath == "" {
-		return clitext.Failure(clitext.ClientLanguage(), errNoBinaryPath, clitext.ServiceNoBinaryPath, nil)
+		return messages.Failure(clitext.ClientLanguage(), errNoBinaryPath, clitext.ServiceNoBinaryPath, nil)
 	}
 	if out, err := runCapture(ctx, "", binPath, "--help"); err != nil {
-		return clitext.Failure(clitext.ClientLanguage(), err, clitext.ServiceSmokeFailed, clitext.Params{
+		return messages.Failure(clitext.ClientLanguage(), err, clitext.ServiceSmokeFailed, clitext.Params{
 			clitext.ParamPath:   binPath,
 			clitext.ParamErr:    err.Error(),
 			clitext.ParamOutput: redact.Output(out),
@@ -436,16 +436,16 @@ func firstToken(token string) string {
 // Update pulls (optional), rebuilds, smoke-tests, and restarts the service
 // inline. Used by the `herrscher service update` CLI (a separate process from the
 // daemon).
-func Update(ctx context.Context, cfg Config, src string, pull bool) error {
+func Update(ctx context.Context, messages *clitext.Messages, cfg Config, src string, pull bool) error {
 	if pull {
-		if err := Pull(ctx, src); err != nil {
+		if err := Pull(ctx, messages, src); err != nil {
 			return err
 		}
 	}
-	if err := Build(ctx, src, cfg.BinPath); err != nil {
+	if err := Build(ctx, messages, src, cfg.BinPath); err != nil {
 		return err
 	}
-	if err := Smoke(ctx, cfg.BinPath); err != nil {
+	if err := Smoke(ctx, messages, cfg.BinPath); err != nil {
 		return err
 	}
 	changed, err := syncUnitPath(cfg)
@@ -456,13 +456,13 @@ func Update(ctx context.Context, cfg Config, src string, pull bool) error {
 		if err := runCommand(ctx, Command{Argv: []string{cmdSystemctl, flagUser, subDaemonReload}}); err != nil {
 			return err
 		}
-		note, err := clitext.Text(cfg.language(), clitext.ServiceNoteUnitPath, nil)
+		note, err := messages.Text(cfg.language(), clitext.ServiceNoteUnitPath, nil)
 		if err != nil {
 			return err
 		}
 		fmt.Fprintln(os.Stderr, note)
 	}
-	return Restart(ctx, cfg)
+	return Restart(ctx, messages, cfg)
 }
 
 func syncUnitPath(cfg Config) (bool, error) {
@@ -563,7 +563,7 @@ func stopSeconds() string {
 	return strconv.Itoa(int(StopTimeout / time.Second))
 }
 
-func linuxPlan(cfg Config) (Plan, error) {
+func linuxPlan(messages *clitext.Messages, cfg Config) (Plan, error) {
 	unit := filepath.Join(cfg.Home, ".config", "systemd", "user", linuxUnitName)
 	content := "[Unit]\n" +
 		"Description=herrscher gateway daemon\n" +
@@ -591,7 +591,7 @@ func linuxPlan(cfg Config) (Plan, error) {
 	if cfg.User != "" {
 		cmds = append(cmds, Command{Argv: []string{"loginctl", "enable-linger", cfg.User}, IgnoreErr: true})
 	}
-	note, err := startNote(cfg, "systemctl --user start "+linuxUnitName)
+	note, err := startNote(messages, cfg, "systemctl --user start "+linuxUnitName)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -602,7 +602,7 @@ func linuxPlan(cfg Config) (Plan, error) {
 	}, nil
 }
 
-func macPlan(cfg Config) (Plan, error) {
+func macPlan(messages *clitext.Messages, cfg Config) (Plan, error) {
 	plist := filepath.Join(cfg.Home, "Library", "LaunchAgents", macLabel+".plist")
 	logPath := filepath.Join(cfg.Home, ".local", "state", "herrscher", "herrscher.log")
 	argv := append([]string{cfg.BinPath}, serveArgs(cfg)...)
@@ -631,7 +631,7 @@ func macPlan(cfg Config) (Plan, error) {
 	if !cfg.SkipStart {
 		cmds = append(cmds, Command{Argv: []string{cmdLaunchctl, "load", "-w", plist}})
 	}
-	note, err := startNote(cfg, "launchctl load -w "+plist)
+	note, err := startNote(messages, cfg, "launchctl load -w "+plist)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -642,11 +642,11 @@ func macPlan(cfg Config) (Plan, error) {
 	}, nil
 }
 
-func windowsPlan(cfg Config) (Plan, error) {
+func windowsPlan(messages *clitext.Messages, cfg Config) (Plan, error) {
 	launcher := filepath.Join(cfg.Home, "AppData", "Local", "herrscher", "herrscher-serve.cmd")
 	content := "@echo off\r\n" +
 		joinQuoted(cmdQuote, cfg.BinPath, serveArgs(cfg)) + "\r\n"
-	note, err := clitext.Text(cfg.language(), clitext.ServiceNoteWindowsEdit, clitext.Params{clitext.ParamEnvFile: cfg.EnvFile, clitext.ParamTask: winTaskName})
+	note, err := messages.Text(cfg.language(), clitext.ServiceNoteWindowsEdit, clitext.Params{clitext.ParamEnvFile: cfg.EnvFile, clitext.ParamTask: winTaskName})
 	if err != nil {
 		return Plan{}, err
 	}
@@ -668,11 +668,11 @@ func xmlEscape(value string) string {
 	return r.Replace(value)
 }
 
-func startNote(cfg Config, startCmd string) (string, error) {
+func startNote(messages *clitext.Messages, cfg Config, startCmd string) (string, error) {
 	if cfg.SkipStart {
-		return clitext.Text(cfg.language(), clitext.ServiceNoteNotStarted, clitext.Params{clitext.ParamEnvFile: cfg.EnvFile, clitext.ParamStart: startCmd})
+		return messages.Text(cfg.language(), clitext.ServiceNoteNotStarted, clitext.Params{clitext.ParamEnvFile: cfg.EnvFile, clitext.ParamStart: startCmd})
 	}
-	return clitext.Text(cfg.language(), clitext.ServiceNoteRunning, clitext.Params{clitext.ParamEnvFile: cfg.EnvFile})
+	return messages.Text(cfg.language(), clitext.ServiceNoteRunning, clitext.Params{clitext.ParamEnvFile: cfg.EnvFile})
 }
 
 func envFileHasRequired(path string, vars []EnvVar) bool {
@@ -739,16 +739,16 @@ func cmdQuote(value string) string {
 
 // DefaultConfig fills a Config from the current environment (binary path, home,
 // user, default env-file location and health address).
-func DefaultConfig() (Config, error) {
+func DefaultConfig(messages *clitext.Messages) (Config, error) {
 	lang := clitext.ClientLanguage()
-	translator := clitext.For(lang)
+	translator := messages.For(lang)
 	bin, err := os.Executable()
 	if err != nil {
-		return Config{}, clitext.Failure(lang, err, clitext.ServiceLocateBinary, clitext.Params{clitext.ParamErr: err.Error()})
+		return Config{}, messages.Failure(lang, err, clitext.ServiceLocateBinary, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return Config{}, clitext.Failure(lang, err, clitext.ServiceLocateHome, clitext.Params{clitext.ParamErr: err.Error()})
+		return Config{}, messages.Failure(lang, err, clitext.ServiceLocateHome, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	uname := ""
 	if current, userErr := user.Current(); userErr == nil {
@@ -833,38 +833,38 @@ func renderHelp(translator *clitext.Translator, key string) (string, error) {
 
 // Install runs the install plan for the current OS: it writes the unit/launcher
 // and secrets template, then enables and starts the service.
-func Install(ctx context.Context, cfg Config) error {
+func Install(ctx context.Context, messages *clitext.Messages, cfg Config) error {
 	if !envFileHasRequired(cfg.EnvFile, cfg.EnvVars) {
 		cfg.SkipStart = true
 	}
-	plan, err := BuildPlan(cfg)
+	plan, err := BuildPlan(messages, cfg)
 	if err != nil {
 		return err
 	}
-	return runPlan(ctx, plan)
+	return runPlan(ctx, messages, plan)
 }
 
 // Uninstall stops and removes the service for the current OS.
-func Uninstall(ctx context.Context, c Config) error {
-	plan, err := BuildUninstall(c)
+func Uninstall(ctx context.Context, messages *clitext.Messages, c Config) error {
+	plan, err := BuildUninstall(messages, c)
 	if err != nil {
 		return err
 	}
-	return runPlan(ctx, plan)
+	return runPlan(ctx, messages, plan)
 }
 
 // Status prints the platform's service status to stdout/stderr.
-func Status(ctx context.Context, c Config) error {
-	cmd, err := StatusCommand(c)
+func Status(ctx context.Context, messages *clitext.Messages, c Config) error {
+	cmd, err := StatusCommand(messages, c)
 	if err != nil {
 		return err
 	}
 	return runCommand(ctx, cmd)
 }
 
-func runPlan(ctx context.Context, plan Plan) error {
+func runPlan(ctx context.Context, messages *clitext.Messages, plan Plan) error {
 	for _, f := range plan.Files {
-		if err := writeFile(f); err != nil {
+		if err := writeFile(messages, f); err != nil {
 			return err
 		}
 	}
@@ -879,22 +879,22 @@ func runPlan(ctx context.Context, plan Plan) error {
 	return nil
 }
 
-func writeFile(write FileWrite) error {
+func writeFile(messages *clitext.Messages, write FileWrite) error {
 	lang := clitext.ClientLanguage()
 	if write.Template {
 		switch _, err := os.Stat(write.Path); {
 		case err == nil:
 			return nil
 		case !errors.Is(err, fs.ErrNotExist):
-			return clitext.Failure(lang, err, clitext.ServiceStatFailed, clitext.Params{clitext.ParamPath: write.Path, clitext.ParamErr: err.Error()})
+			return messages.Failure(lang, err, clitext.ServiceStatFailed, clitext.Params{clitext.ParamPath: write.Path, clitext.ParamErr: err.Error()})
 		}
 	}
 	dir := filepath.Dir(write.Path)
 	if err := os.MkdirAll(dir, privateDirMode); err != nil {
-		return clitext.Failure(lang, err, clitext.ServiceMkdirFailed, clitext.Params{clitext.ParamPath: dir, clitext.ParamErr: err.Error()})
+		return messages.Failure(lang, err, clitext.ServiceMkdirFailed, clitext.Params{clitext.ParamPath: dir, clitext.ParamErr: err.Error()})
 	}
 	if err := os.WriteFile(write.Path, []byte(write.Content), write.Mode); err != nil {
-		return clitext.Failure(lang, err, clitext.ServiceWriteFailed, clitext.Params{clitext.ParamPath: write.Path, clitext.ParamErr: err.Error()})
+		return messages.Failure(lang, err, clitext.ServiceWriteFailed, clitext.Params{clitext.ParamPath: write.Path, clitext.ParamErr: err.Error()})
 	}
 	return nil
 }

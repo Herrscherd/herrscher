@@ -8,6 +8,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/health"
 )
 
@@ -54,7 +55,7 @@ func TestCompactionFactsNameTheLastRunOrItsAbsence(t *testing.T) {
 			snapshot := health.Snapshot{Checks: []health.Check{
 				{Group: health.GroupCompaction, Name: "jev", Facts: health.Facts{Compaction: tc.compaction, CompactionPartial: tc.partial, CompactionUnknown: tc.unknown}},
 			}}
-			rows, err := snapshot.Rows(snapshot.Checks, tc.lang)
+			rows, err := snapshot.Rows(clitext.NewMessages(), snapshot.Checks, tc.lang)
 			if err != nil {
 				t.Fatalf("Rows: %v", err)
 			}

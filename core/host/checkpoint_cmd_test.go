@@ -14,6 +14,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/checkpoint"
 	"github.com/Herrscherd/herrscher/core/internal/conversation"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -71,8 +72,8 @@ func checkpointState(t *testing.T, worktree string) *state.State {
 }
 
 func checkpointRegistry(st *state.State, sessions *sessionTable) *cli.Registry {
-	reg := &cli.Registry{}
-	if err := addCheckpointCommands(reg, fixedLanguage(i18n.English), st, sessions); err != nil {
+	reg := cli.NewRegistry(clitext.NewMessages())
+	if err := addCheckpointCommands(reg, clitext.NewMessages(), fixedLanguage(i18n.English), st, sessions); err != nil {
 		panic(err)
 	}
 	return reg
@@ -87,7 +88,7 @@ func TestCheckpointsListsMessagesWithTheFilesTheyTouched(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeFrame(t, repo, "v2\nv2b\n")
-	reg := checkpointRegistry(st, newSessionTable(newHostMessages()))
+	reg := checkpointRegistry(st, newSessionTable(newHostMessages(), clitext.NewMessages()))
 
 	out, err := cli.Plain(reg.Dispatch(ctx, []string{nsSession, verbCheckpoints, "--name", "alpha", "--json"}))
 	if err != nil {
@@ -114,7 +115,7 @@ func TestRewindRestoresCodeAndRefusesConversation(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeFrame(t, repo, "v2\n")
-	reg := checkpointRegistry(st, newSessionTable(newHostMessages()))
+	reg := checkpointRegistry(st, newSessionTable(newHostMessages(), clitext.NewMessages()))
 
 	_, err := reg.Dispatch(ctx, []string{nsSession, verbRewind, "--name", "alpha", "--to", "1", "--what", "both"})
 	if err == nil || !strings.Contains(err.Error(), "not available") {
@@ -147,8 +148,8 @@ func TestRewindRefusedWhileTurnInFlight(t *testing.T) {
 	if _, err := checkpoints.Take(ctx, repo, "alpha", checkpoint.Meta{Turn: "t1", Text: "avant"}); err != nil {
 		t.Fatal(err)
 	}
-	sessions := newSessionTable(newHostMessages())
-	driver := newSessionDriver(newHostMessages(), "alpha", nil, nil, nil, io.Discard)
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
+	driver := newSessionDriver(newHostMessages(), clitext.NewMessages(), "alpha", nil, nil, nil, io.Discard)
 	if !driver.claimTurn() {
 		t.Fatal("the fixture must put a turn in flight")
 	}
@@ -259,7 +260,7 @@ func TestRewindConversationResumesAtTheCheckpointPosition(t *testing.T) {
 		t.Fatal(err)
 	}
 	restarter := &fakeRestarter{}
-	reg := checkpointRegistry(st, newSessionTable(newHostMessages()))
+	reg := checkpointRegistry(st, newSessionTable(newHostMessages(), clitext.NewMessages()))
 
 	if _, err := reg.Dispatch(withRestarter(ctx, restarter), []string{nsSession, verbRewind, "--name", "alpha", "--to", "1", "--what", "conversation"}); err != nil {
 		t.Fatal(err)
@@ -336,10 +337,10 @@ func TestForkRefusedWhenTheCheckpointHasNoConversationPosition(t *testing.T) {
 }
 
 func TestFormatCheckpointsFollowsTheLanguage(t *testing.T) {
-	if got := formatCheckpoints(i18n.French, nil); got != "aucun point de contrôle" {
-		t.Fatalf("formatCheckpoints(fr, none) = %q", got)
+	if got := formatCheckpoints(clitext.NewMessages(), i18n.French, nil); got != "aucun point de contrôle" {
+		t.Fatalf("formatCheckpoints(clitext.NewMessages(), fr, none) = %q", got)
 	}
-	if got := formatCheckpoints(i18n.English, nil); got != "no checkpoints" {
-		t.Fatalf("formatCheckpoints(en, none) = %q", got)
+	if got := formatCheckpoints(clitext.NewMessages(), i18n.English, nil); got != "no checkpoints" {
+		t.Fatalf("formatCheckpoints(clitext.NewMessages(), en, none) = %q", got)
 	}
 }

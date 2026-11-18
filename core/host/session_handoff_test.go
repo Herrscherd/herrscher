@@ -13,6 +13,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/accounts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
 )
 
@@ -27,8 +28,9 @@ type handoffRecord struct {
 
 func fakeHandoff(rec *handoffRecord, clock func() time.Time, known ...string) handoffDeps {
 	return handoffDeps{
-		messages: newHostMessages(),
-		lang:     fixedLanguage(i18n.English),
+		messages:    newHostMessages(),
+		cliMessages: clitext.NewMessages(),
+		lang:        fixedLanguage(i18n.English),
 		exists: func(name string) bool {
 			for _, k := range known {
 				if k == name {
@@ -569,7 +571,7 @@ func TestRetryCommandParsesWithTheRealRegistry(t *testing.T) {
 	if cmd != want {
 		t.Fatalf("retry command = %q, want %q", cmd, want)
 	}
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	if err := reg.Add(sessionHandoffVerb(fakeHandoff(&handoffRecord{}, fixedClock(), "alpha"))); err != nil {
 		t.Fatal(err)
 	}

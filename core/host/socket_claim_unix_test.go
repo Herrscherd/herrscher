@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -101,7 +102,7 @@ func TestADaemonRefusesAnInstanceWhoseEventsSocketIsTaken(t *testing.T) {
 func TestServeHubSocketsStopsTheDaemonOnATakenEventsSocket(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
 	answeringListener(t, EventsSocketPathIn(layout, "t3"))
-	_, err := serveHubSockets(context.Background(), layout, "t3", testHub(&hub{messages: newHostMessages(), warnings: io.Discard}))
+	_, err := serveHubSockets(context.Background(), layout, "t3", testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard}))
 	if !errors.Is(err, errSocketTaken) {
 		t.Fatalf("serveHubSockets with a live events socket = %v, want errSocketTaken", err)
 	}
@@ -110,7 +111,7 @@ func TestServeHubSocketsStopsTheDaemonOnATakenEventsSocket(t *testing.T) {
 func TestServeHubSocketsStopsTheDaemonOnATakenCommandSocket(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
 	answeringListener(t, CommandSocketPathIn(layout, "t4"))
-	_, err := serveHubSockets(context.Background(), layout, "t4", testHub(&hub{messages: newHostMessages(), warnings: io.Discard}))
+	_, err := serveHubSockets(context.Background(), layout, "t4", testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard}))
 	if !errors.Is(err, errSocketTaken) {
 		t.Fatalf("serveHubSockets with a live command socket = %v, want errSocketTaken", err)
 	}
@@ -162,7 +163,7 @@ func TestReleaseLeavesASocketANewerListenerBoundAtThePath(t *testing.T) {
 func TestServeHubSocketsReleaseKeepsItsFilesInPlace(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	released, err := serveHubSockets(ctx, layout, "t6", testHub(&hub{messages: newHostMessages(), warnings: io.Discard}))
+	released, err := serveHubSockets(ctx, layout, "t6", testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +183,7 @@ func TestServeHubSocketsReleaseKeepsItsFilesInPlace(t *testing.T) {
 
 func TestRemoveSocketsRemovesOnlyTheSocketsOfThisInstance(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
-	h := testHub(&hub{messages: newHostMessages(), runtime: layout, instanceID: "t12"})
+	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), runtime: layout, instanceID: "t12"})
 	h.noteListened("alpha")
 	h.noteListened("absent")
 	owned := []string{
@@ -214,7 +215,7 @@ func TestRemoveSocketsRemovesOnlyTheSocketsOfThisInstance(t *testing.T) {
 
 func TestInstanceStopRemovesItsOwnSocketFiles(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
-	h := testHub(&hub{messages: newHostMessages(), runtime: layout, instanceID: "t15", warnings: io.Discard})
+	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), runtime: layout, instanceID: "t15", warnings: io.Discard})
 	ctx, cancel := context.WithCancel(context.Background())
 	released, err := serveHubSockets(ctx, layout, "t15", h)
 	if err != nil {
@@ -239,7 +240,7 @@ func TestStopLiveReleasesEachSessionSocket(t *testing.T) {
 	done := make(chan struct{})
 	close(done)
 	var cancelled, released int
-	h := testHub(&hub{messages: newHostMessages(), runtime: layout, instanceID: "t11", teardownGrace: time.Second, live: map[string]liveSession{
+	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), runtime: layout, instanceID: "t11", teardownGrace: time.Second, live: map[string]liveSession{
 		"alpha": {
 			cancel:   func() { cancelled++ },
 			done:     done,
@@ -255,7 +256,7 @@ func TestStopLiveReleasesEachSessionSocket(t *testing.T) {
 
 func TestGoLiveAfterStopLiveOpensNothing(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
-	h := testHub(&hub{messages: newHostMessages(), runtime: layout, instanceID: "t16", warnings: io.Discard, live: make(map[string]liveSession)})
+	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), runtime: layout, instanceID: "t16", warnings: io.Discard, live: make(map[string]liveSession)})
 	h.stopLive()
 	err := h.goLive(context.Background(), state.Session{Name: "alpha"})
 	if !errors.Is(err, errHubClosed) {
@@ -272,7 +273,7 @@ func TestGoLiveAfterStopLiveOpensNothing(t *testing.T) {
 
 func TestGoLiveAfterRemoveSocketsOpensNothing(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
-	h := testHub(&hub{messages: newHostMessages(), runtime: layout, instanceID: "t17", warnings: io.Discard, live: make(map[string]liveSession)})
+	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), runtime: layout, instanceID: "t17", warnings: io.Discard, live: make(map[string]liveSession)})
 	if err := h.closeAndRemoveSockets(); err != nil {
 		t.Fatalf("closeAndRemoveSockets: %v", err)
 	}

@@ -12,7 +12,6 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
-	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func tree(name string, seen *contracts.PluginConfig) contracts.SkillsFactory {
@@ -187,7 +186,7 @@ func TestTheClashNoteIsRenderedInFrench(t *testing.T) {
 		{Manifest: contracts.Manifest{Kind: "first"}, Skills: treeOf(map[string]string{"demo": "# from first"})},
 		{Manifest: contracts.Manifest{Kind: "second"}, Skills: treeOf(map[string]string{"demo": "# from second"})},
 	}
-	_, notes := installPluginSkills(context.Background(), clitext.For(i18n.French), plugs, noEnv, t.TempDir())
+	_, notes := installPluginSkills(context.Background(), testMessages().For(i18n.French), plugs, noEnv, t.TempDir())
 	want := "herrscher : la compétence demo du plugin second a été écartée : le plugin first en livre déjà une de ce nom"
 	if len(notes) != 1 || notes[0] != want {
 		t.Fatalf("the clash note in French = %v, want %q", notes, want)

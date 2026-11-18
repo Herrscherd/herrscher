@@ -12,6 +12,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
@@ -25,13 +26,13 @@ func TestWiredManagerWriteIsAwaitedByTheStopPath(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	sup := supervisor.NewSupervisor(ctx, filepath.Join(t.TempDir(), "no-such-bridge"), layout)
-	sessions := newSessionTable(newHostMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
 	warnings := &lockedBuffer{}
 	h := newHub(st, sup, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), sessions, withWarnings(warnings))
 	h.runtime = layout
 	h.teardownGrace = grace
 
-	hdl := newManagerHandler(newHostMessages(), Deps{}, Options{DefaultCmd: "claude"}, t.TempDir(), st, sup, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
+	hdl := newManagerHandler(newHostMessages(), clitext.NewMessages(), Deps{}, Options{DefaultCmd: "claude"}, t.TempDir(), st, sup, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
 	wireManagerHandler(ctx, nil, io.Discard, hdl, st, layout, "wired", nil, sessions, nil)
 
 	tmp := statePath + ".tmp"

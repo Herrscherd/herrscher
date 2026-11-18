@@ -10,6 +10,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/health"
 	"github.com/Herrscherd/herrscher/core/termpaint"
@@ -21,7 +22,7 @@ func TestTableListsEveryCheckUnderItsGroup(t *testing.T) {
 		{Group: health.GroupBackends, Name: "claude", Report: contracts.ProbeReport{State: contracts.HealthDown}},
 	}}
 	var out bytes.Buffer
-	if err := snapshot.Table(&out, i18n.English, termpaint.Palette{}); err != nil {
+	if err := snapshot.Table(&out, clitext.NewMessages(), i18n.English, termpaint.Palette{}); err != nil {
 		t.Fatalf("Table() error = %v", err)
 	}
 	for _, name := range []string{"fakegate", "claude"} {
@@ -46,7 +47,7 @@ func TestUnknownArgKindDoesNotHideTheOtherChecks(t *testing.T) {
 		{Group: health.GroupBackends, Name: "claude", Report: contracts.ProbeReport{State: contracts.HealthOK}},
 	}}
 	var out bytes.Buffer
-	if err := snapshot.Table(&out, i18n.English, termpaint.Palette{}); err != nil {
+	if err := snapshot.Table(&out, clitext.NewMessages(), i18n.English, termpaint.Palette{}); err != nil {
 		t.Fatalf("Table() error = %v, want the unrenderable checks shown as a fallback", err)
 	}
 	if got := lastFieldOfRow(t, out.String(), "broken"); got != "zeta" {
@@ -82,7 +83,7 @@ func TestDetailsShowsTheRemedyOfACheck(t *testing.T) {
 		},
 	}
 	var out bytes.Buffer
-	if err := (health.Snapshot{}).Details(&out, []health.Check{check}, i18n.English, termpaint.Palette{}); err != nil {
+	if err := (health.Snapshot{}).Details(&out, clitext.NewMessages(), []health.Check{check}, i18n.English, termpaint.Palette{}); err != nil {
 		t.Fatalf("Details() error = %v", err)
 	}
 	if !strings.Contains(out.String(), command) {
@@ -102,7 +103,7 @@ func TestSummaryCountsEachStateAndNamesTheWorstCheck(t *testing.T) {
 		},
 	}
 	var out bytes.Buffer
-	if err := snapshot.Table(&out, i18n.English, termpaint.Palette{}); err != nil {
+	if err := snapshot.Table(&out, clitext.NewMessages(), i18n.English, termpaint.Palette{}); err != nil {
 		t.Fatalf("Table() error = %v", err)
 	}
 	for _, want := range []string{"herrscher v1.2.3", "daemon up 3 h 0 min", "pid 42", "✕ down", "◐ degraded", "● ok", "1 down · 2 degraded · 1 ok", "details: herrscher health openai"} {
@@ -121,10 +122,10 @@ func TestTableAlignsColumnsTheSameWithAndWithoutColors(t *testing.T) {
 		{Group: health.GroupBackends, Name: "codex", Report: contracts.ProbeReport{State: contracts.HealthOff}},
 	}}
 	var plain, painted bytes.Buffer
-	if err := snapshot.Table(&plain, i18n.French, termpaint.Palette{}); err != nil {
+	if err := snapshot.Table(&plain, clitext.NewMessages(), i18n.French, termpaint.Palette{}); err != nil {
 		t.Fatalf("Table() plain error = %v", err)
 	}
-	if err := snapshot.Table(&painted, i18n.French, termpaint.ANSIPalette()); err != nil {
+	if err := snapshot.Table(&painted, clitext.NewMessages(), i18n.French, termpaint.ANSIPalette()); err != nil {
 		t.Fatalf("Table() painted error = %v", err)
 	}
 	if got := escapeSequence.ReplaceAllString(painted.String(), ""); got != plain.String() {
@@ -149,7 +150,7 @@ func TestLatencyWritesMillisecondsThenSecondsWithTheDecimalOfTheLanguage(t *test
 		{i18n.English, 3 * time.Minute, "3 min"},
 	}
 	for _, tc := range cases {
-		got, err := health.Latency(tc.lang, tc.elapsed)
+		got, err := health.Latency(clitext.NewMessages(), tc.lang, tc.elapsed)
 		if err != nil || got != tc.want {
 			t.Errorf("Latency(%v, %v) = %q, %v, want %q", tc.lang, tc.elapsed, got, err, tc.want)
 		}
@@ -168,7 +169,7 @@ func TestTableShortensTheSocketAndNamesTheCompactionStack(t *testing.T) {
 		},
 	}
 	var out bytes.Buffer
-	if err := snapshot.Table(&out, i18n.French, termpaint.Palette{}); err != nil {
+	if err := snapshot.Table(&out, clitext.NewMessages(), i18n.French, termpaint.Palette{}); err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{"~/.herrscher/host.sock", "compactStack = jev → backend"} {

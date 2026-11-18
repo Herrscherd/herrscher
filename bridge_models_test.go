@@ -6,12 +6,11 @@ import (
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
-	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/host"
 )
 
 func TestBridgeKeepsOneModelDiscoveryForItsLifetime(t *testing.T) {
-	flags := declareBackendFlags(flag.NewFlagSet("bridge", flag.ContinueOnError), clitext.For(i18n.English))
+	flags := declareBackendFlags(flag.NewFlagSet("bridge", flag.ContinueOnError), testMessages().For(i18n.English))
 	requestFor := bridgeRequests(host.NewMessages(), flags, "")
 	first := requestFor().Models
 	second := requestFor().Models

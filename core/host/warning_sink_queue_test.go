@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func TestWarningSinkDoesNotBlockWritersAndCountsDrops(t *testing.T) {
@@ -70,7 +71,7 @@ func assertLostSummaryFollowsUnblock(t *testing.T, lang i18n.Language) {
 	}
 
 	writer.open()
-	h := testHub(&hub{messages: newHostMessages(), teardownGrace: 10 * time.Second})
+	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), teardownGrace: 10 * time.Second})
 	window, cancel := h.newGrace()
 	defer cancel()
 	if !sink.flush(window) {
@@ -149,7 +150,7 @@ func TestWarningSinkFlushIsBoundedByAStalledWriter(t *testing.T) {
 	if _, err := sink.Write([]byte("stuck\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
-	h := testHub(&hub{messages: newHostMessages(), teardownGrace: 5 * time.Second})
+	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), teardownGrace: 5 * time.Second})
 	window, cancel := h.newGrace()
 	defer cancel()
 

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 )
 
@@ -57,7 +58,7 @@ func TestWorktreeVerbCreatesAndRemoves(t *testing.T) {
 	ctx := context.Background()
 
 	out := captureStdout(t, func() error {
-		return RunWorktree(ctx, []string{"pre-existing", "--repo", repo, "--name", "s1", "--instance", "inst"})
+		return RunWorktree(ctx, clitext.NewMessages(), NewMessages(), []string{"pre-existing", "--repo", repo, "--name", "s1", "--instance", "inst"})
 	})
 	var pre struct {
 		PreExisting bool `json:"preExisting"`
@@ -70,7 +71,7 @@ func TestWorktreeVerbCreatesAndRemoves(t *testing.T) {
 	}
 
 	out = captureStdout(t, func() error {
-		return RunWorktree(ctx, []string{"create", "--repo", repo, "--name", "s1", "--instance", "inst"})
+		return RunWorktree(ctx, clitext.NewMessages(), NewMessages(), []string{"create", "--repo", repo, "--name", "s1", "--instance", "inst"})
 	})
 	var made struct {
 		Path string `json:"path"`
@@ -87,7 +88,7 @@ func TestWorktreeVerbCreatesAndRemoves(t *testing.T) {
 	}
 
 	out = captureStdout(t, func() error {
-		return RunWorktree(ctx, []string{"remove", "--repo", repo, "--name", "s1", "--instance", "inst", "--force"})
+		return RunWorktree(ctx, clitext.NewMessages(), NewMessages(), []string{"remove", "--repo", repo, "--name", "s1", "--instance", "inst", "--force"})
 	})
 	var gone struct {
 		Removed bool `json:"removed"`
@@ -104,13 +105,13 @@ func TestWorktreeVerbCreatesAndRemoves(t *testing.T) {
 }
 
 func TestWorktreeVerbRejectsAnUnknownSubcommand(t *testing.T) {
-	if err := RunWorktree(context.Background(), []string{"frobnicate", "--repo", "/x", "--name", "s"}); err == nil {
+	if err := RunWorktree(context.Background(), clitext.NewMessages(), NewMessages(), []string{"frobnicate", "--repo", "/x", "--name", "s"}); err == nil {
 		t.Fatal("want an error for an unknown subcommand")
 	}
 }
 
 func TestWorktreeVerbNeedsASubcommand(t *testing.T) {
-	if err := RunWorktree(context.Background(), nil); err == nil {
+	if err := RunWorktree(context.Background(), clitext.NewMessages(), NewMessages(), nil); err == nil {
 		t.Fatal("want an error with no subcommand")
 	}
 }
@@ -140,7 +141,7 @@ func TestWorktreeVerbMaterializesFromStdin(t *testing.T) {
 	defer func() { os.Stdin = old }()
 
 	out := captureStdout(t, func() error {
-		return RunWorktree(context.Background(), []string{"materialize", "--worktree", dst})
+		return RunWorktree(context.Background(), clitext.NewMessages(), NewMessages(), []string{"materialize", "--worktree", dst})
 	})
 	if !strings.Contains(out, `"materialized":true`) {
 		t.Fatalf("output = %q", out)

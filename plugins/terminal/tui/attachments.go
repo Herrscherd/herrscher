@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/bridge"
 	"github.com/Herrscherd/herrscher/core/termpaint"
 )
@@ -51,12 +52,12 @@ func attachmentDir() string {
 	return filepath.Join(bridge.StagingRoot(), "terminal")
 }
 
-func saveClipboardImage(data []byte, mime string, seq int) (Attachment, error) {
+func saveClipboardImage(catalog func() (*i18n.Catalog, error), data []byte, mime string, seq int) (Attachment, error) {
 	if len(data) == 0 {
 		return Attachment{}, errEmptyClipboard
 	}
 	if int64(len(data)) > maxAttachmentBytes {
-		return Attachment{}, keyedError{cause: errSizeLimit, key: "tui.attach.too_large", params: map[string]any{"Limit": maxAttachmentBytes / bytesPerMiB}}
+		return Attachment{}, keyedError{cause: errSizeLimit, key: "tui.attach.too_large", params: map[string]any{"Limit": maxAttachmentBytes / bytesPerMiB}, catalog: catalog}
 	}
 	name := fmt.Sprintf("paste-%d%s", seq, mimeExt(mime))
 	path, err := stage(name, data)
@@ -91,7 +92,7 @@ func attachFailure(path string, cause error) error {
 	}, cause)
 }
 
-func attachLocalFile(path string, seq int) (Attachment, error) {
+func attachLocalFile(catalog func() (*i18n.Catalog, error), path string, seq int) (Attachment, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return Attachment{}, errUsage
@@ -109,7 +110,7 @@ func attachLocalFile(path string, seq int) (Attachment, error) {
 		return Attachment{}, fmt.Errorf("%w : %s", errNotRegularFile, path)
 	}
 	if info.Size() > maxAttachmentBytes {
-		return Attachment{}, keyedError{cause: errSizeLimit, key: "tui.attach.too_large_file", params: map[string]any{tplArgPath: path, "Limit": maxAttachmentBytes / bytesPerMiB}}
+		return Attachment{}, keyedError{cause: errSizeLimit, key: "tui.attach.too_large_file", params: map[string]any{tplArgPath: path, "Limit": maxAttachmentBytes / bytesPerMiB}, catalog: catalog}
 	}
 	abs, err := filepath.Abs(path)
 	if err != nil {

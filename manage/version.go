@@ -27,14 +27,17 @@ type toolchain interface {
 	List(ctx context.Context, args ...string) (string, error)
 }
 
-type goToolchain struct{ dir string }
+type goToolchain struct {
+	messages *clitext.Messages
+	dir      string
+}
 
 func (g goToolchain) List(ctx context.Context, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "go", append([]string{"list"}, args...)...)
 	cmd.Dir = g.dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", failure(err, clitext.ManageGoList, clitext.Params{clitext.ParamArgs: strings.Join(args, " "), clitext.ParamErr: err.Error(), clitext.ParamOutput: strings.TrimSpace(string(out))})
+		return "", failure(g.messages, err, clitext.ManageGoList, clitext.Params{clitext.ParamArgs: strings.Join(args, " "), clitext.ParamErr: err.Error(), clitext.ParamOutput: strings.TrimSpace(string(out))})
 	}
 	return string(out), nil
 }
@@ -46,7 +49,7 @@ func splitModuleVersion(arg string) (string, string) {
 	return arg, ""
 }
 
-func installedVersions(ctx context.Context, tc toolchain, modules []string) (map[string]string, error) {
+func installedVersions(ctx context.Context, messages *clitext.Messages, tc toolchain, modules []string) (map[string]string, error) {
 	out, err := tc.List(ctx, "-m", "-json", "all")
 	if err != nil {
 		return nil, err
@@ -63,7 +66,7 @@ func installedVersions(ctx context.Context, tc toolchain, modules []string) (map
 			Version string `json:"Version"`
 		}
 		if err := dec.Decode(&mod); err != nil {
-			return nil, failure(err, clitext.ManageGoListParse, clitext.Params{clitext.ParamErr: err.Error()})
+			return nil, failure(messages, err, clitext.ManageGoListParse, clitext.Params{clitext.ParamErr: err.Error()})
 		}
 		if wanted[mod.Path] {
 			versions[mod.Path] = mod.Version
@@ -72,19 +75,19 @@ func installedVersions(ctx context.Context, tc toolchain, modules []string) (map
 	return versions, nil
 }
 
-func availableVersions(ctx context.Context, tc toolchain, module string) ([]string, error) {
+func availableVersions(ctx context.Context, messages *clitext.Messages, tc toolchain, module string) ([]string, error) {
 	out, err := tc.List(ctx, "-m", "-versions", module)
 	if err != nil {
 		return nil, nil
 	}
 	fields := strings.Fields(out)
 	if len(fields) < minVersionParts {
-		return nil, failure(errNoVersions, clitext.ManageNoVersions, nil)
+		return nil, failure(messages, errNoVersions, clitext.ManageNoVersions, nil)
 	}
 	return fields[1:], nil
 }
 
-func contractsRequirement(ctx context.Context, tc toolchain, module, version string) (string, error) {
+func contractsRequirement(ctx context.Context, messages *clitext.Messages, tc toolchain, module, version string) (string, error) {
 	out, err := tc.List(ctx, "-m", "-json", module+"@"+version)
 	if err != nil {
 		return "", err
@@ -93,14 +96,14 @@ func contractsRequirement(ctx context.Context, tc toolchain, module, version str
 		GoMod string `json:"GoMod"`
 	}
 	if err = json.Unmarshal([]byte(strings.TrimSpace(out)), &mod); err != nil {
-		return "", failure(err, clitext.ManageGoListParseModule, clitext.Params{clitext.ParamModule: module, clitext.ParamVersion: version, clitext.ParamErr: err.Error()})
+		return "", failure(messages, err, clitext.ManageGoListParseModule, clitext.Params{clitext.ParamModule: module, clitext.ParamVersion: version, clitext.ParamErr: err.Error()})
 	}
 	if mod.GoMod == "" {
 		return "", nil
 	}
 	src, err := os.ReadFile(mod.GoMod)
 	if err != nil {
-		return "", failure(err, clitext.ManageReadFailed, clitext.Params{clitext.ParamPath: mod.GoMod, clitext.ParamErr: err.Error()})
+		return "", failure(messages, err, clitext.ManageReadFailed, clitext.Params{clitext.ParamPath: mod.GoMod, clitext.ParamErr: err.Error()})
 	}
 	return requiredVersion(string(src), contractsModule), nil
 }

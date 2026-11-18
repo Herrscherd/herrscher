@@ -58,21 +58,21 @@ func TestEveryHostErrorHasItsTextInEveryLanguage(t *testing.T) {
 
 func TestHostErrorIsWrittenInTheCommandLanguage(t *testing.T) {
 	err := fmt.Errorf("session %q %w", "alpha", errNoPendingChoice)
-	french := localizeHostError(newHostMessages(), i18n.French, err)
+	french := localizeHostError(newHostMessages(), clitext.NewMessages(), i18n.French, err)
 	if want := `session "alpha" n'a aucun choix en attente`; french.Error() != want {
 		t.Fatalf("french = %q, want %q", french.Error(), want)
 	}
 	if !errors.Is(french, errNoPendingChoice) {
 		t.Fatal("the localized error lost its sentinel")
 	}
-	if english := localizeHostError(newHostMessages(), i18n.English, err); english.Error() != err.Error() {
+	if english := localizeHostError(newHostMessages(), clitext.NewMessages(), i18n.English, err); english.Error() != err.Error() {
 		t.Fatalf("english = %q, want %q", english.Error(), err.Error())
 	}
 }
 
 func TestHostErrorsOutsideTheTableAreUnchanged(t *testing.T) {
 	other := errors.New("boom")
-	if got := localizeHostError(newHostMessages(), i18n.French, other); !errors.Is(got, other) || got.Error() != other.Error() {
+	if got := localizeHostError(newHostMessages(), clitext.NewMessages(), i18n.French, other); !errors.Is(got, other) || got.Error() != other.Error() {
 		t.Fatalf("localizeHostError changed an unknown error into %v", got)
 	}
 }
@@ -189,7 +189,7 @@ func recordTableEntry(node ast.Node, names map[string]bool) {
 }
 
 func TestRegistryCommandErrorsAreWrittenInTheHostLanguage(t *testing.T) {
-	reg, err := NewRegistry(context.Background(), nil, Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json", Language: i18n.French})
+	reg, err := NewRegistry(context.Background(), clitext.NewMessages(), NewMessages(), nil, Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json", Language: i18n.French})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +204,7 @@ func TestRegistryCommandErrorsAreWrittenInTheHostLanguage(t *testing.T) {
 
 func TestRegistryErrorsFollowTheLiveOperatorLanguage(t *testing.T) {
 	live := newOperatorLanguage(i18n.English)
-	reg, err := NewRegistry(context.Background(), nil, Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json", Language: i18n.English, live: live})
+	reg, err := NewRegistry(context.Background(), clitext.NewMessages(), NewMessages(), nil, Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json", Language: i18n.English, live: live})
 	if err != nil {
 		t.Fatal(err)
 	}

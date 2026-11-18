@@ -28,7 +28,7 @@ func (h *Handler) checkSessionAccount(input contracts.Input, runtime runtimeChoi
 	}
 	if err != nil {
 		if account != explicitAccount {
-			err = localize(h.currentLanguage(), fmt.Sprintf("the account of agent %q: %v", runtime.agent, err), clitext.HostErrAccountOfAgent, clitext.Params{clitext.ParamAgent: runtime.agent, clitext.ParamErr: err.Error()}, err)
+			err = localize(h.messages, h.currentLanguage(), fmt.Sprintf("the account of agent %q: %v", runtime.agent, err), clitext.HostErrAccountOfAgent, clitext.Params{clitext.ParamAgent: runtime.agent, clitext.ParamErr: err.Error()}, err)
 		}
 		return "", "", err
 	}

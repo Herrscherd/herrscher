@@ -25,23 +25,23 @@ const (
 
 var errConversationAccount = errors.New("the session has a conversation under another account: rerun with fresh to start a new conversation, or cancel")
 
-func sessionAccountsVerb(messages *hostMessages, lang languageSource, store *state.State) contracts.Cmd {
+func sessionAccountsVerb(messages *hostMessages, cliMessages *clitext.Messages, lang languageSource, store *state.State) contracts.Cmd {
 	return contracts.New(nsSession, "accounts").
 		Help(clitext.CmdHelpSessionAccounts).
 		Param(paramName, clitext.CmdParamSessionAccountsName, true).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
-			return cli.Data(listSessionAccounts(messages, lang(), store, input.Get(paramName)))
+			return cli.Data(listSessionAccounts(messages, cliMessages, lang(), store, input.Get(paramName)))
 		})
 }
 
-func sessionSetAccountVerb(messages *hostMessages, lang languageSource, store *state.State) contracts.Cmd {
+func sessionSetAccountVerb(messages *hostMessages, cliMessages *clitext.Messages, lang languageSource, store *state.State) contracts.Cmd {
 	return contracts.New(nsSession, "set-account").
 		Help(clitext.CmdHelpSessionSetAccount).
 		Param(paramName, clitext.CmdParamSessionSetAccountName, true).
 		Param(paramProfile, clitext.CmdParamSessionSetAccountProfile, false).
 		Param(paramFresh, clitext.CmdParamSessionSetAccountFresh, false).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
-			return cli.Data(setSessionAccount(messages, lang(), store, input.Get(paramName), input.Get(paramProfile), input.Get(paramFresh) == freshMarker))
+			return cli.Data(setSessionAccount(messages, cliMessages, lang(), store, input.Get(paramName), input.Get(paramProfile), input.Get(paramFresh) == freshMarker))
 		})
 }
 
@@ -55,7 +55,7 @@ func findSession(store *state.State, name string) (state.Session, bool) {
 	return state.Session{}, false
 }
 
-func listSessionAccounts(messages *hostMessages, lang i18n.Language, store *state.State, name string) (string, error) {
+func listSessionAccounts(messages *hostMessages, cliMessages *clitext.Messages, lang i18n.Language, store *state.State, name string) (string, error) {
 	sess, ok := findSession(store, name)
 	if !ok {
 		return "", &NotFoundError{Kind: kindSession, Name: name}
@@ -68,7 +68,7 @@ func listSessionAccounts(messages *hostMessages, lang i18n.Language, store *stat
 	if err != nil {
 		return "", err
 	}
-	text := replyText(lang)
+	text := replyText(cliMessages, lang)
 	lines := []string{sess.Vendor + ": " + text.Text(clitext.AccountNativeLabel, nil)}
 	for _, profile := range profiles {
 		if profile.Vendor != sess.Vendor {
@@ -90,7 +90,7 @@ func profileLine(text *clitext.Translator, profile accounts.Profile, chosen stri
 	return line
 }
 
-func setSessionAccount(messages *hostMessages, lang i18n.Language, store *state.State, name, profile string, fresh bool) (string, error) {
+func setSessionAccount(messages *hostMessages, cliMessages *clitext.Messages, lang i18n.Language, store *state.State, name, profile string, fresh bool) (string, error) {
 	sess, ok := findSession(store, name)
 	if !ok {
 		return "", &NotFoundError{Kind: kindSession, Name: name}
@@ -109,11 +109,11 @@ func setSessionAccount(messages *hostMessages, lang i18n.Language, store *state.
 	if !found {
 		return "", &NotFoundError{Kind: kindSession, Name: name}
 	}
-	return accountChangeNotice(lang, name, stored, fresh), nil
+	return accountChangeNotice(cliMessages, lang, name, stored, fresh), nil
 }
 
-func accountChangeNotice(lang i18n.Language, name, profile string, fresh bool) string {
-	text := replyText(lang)
+func accountChangeNotice(cliMessages *clitext.Messages, lang i18n.Language, name, profile string, fresh bool) string {
+	text := replyText(cliMessages, lang)
 	var key clitext.Key = clitext.SessionAccountNotice
 	if fresh {
 		key = clitext.SessionAccountNoticeFresh

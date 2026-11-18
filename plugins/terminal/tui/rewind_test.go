@@ -194,7 +194,7 @@ func TestConversationRestoreIsRefusedWithReason(t *testing.T) {
 	if cmd := pressMsg(m, tea.KeyMsg{Type: tea.KeyEnter}); cmd != nil {
 		t.Fatal("restoring the conversation must not dispatch anything")
 	}
-	if m.flash != newTranslator().t("tui.rewind.unsupported", nil) {
+	if m.flash != testTranslator().t("tui.rewind.unsupported", nil) {
 		t.Fatalf("flash = %q, want the reason", m.flash)
 	}
 	for _, args := range backend.dispatched {
@@ -284,8 +284,8 @@ func TestRewindSummaryOmitsZeroCounts(t *testing.T) {
 		{nil, "no file"},
 	}
 	for _, tc := range cases {
-		if got := rewindSummary(newTranslator(), tc.files); got != tc.want {
-			t.Errorf("rewindSummary(newTranslator(), %v) = %q, want %q", tc.files, got, tc.want)
+		if got := rewindSummary(testTranslator(), tc.files); got != tc.want {
+			t.Errorf("rewindSummary(testTranslator(), %v) = %q, want %q", tc.files, got, tc.want)
 		}
 	}
 }

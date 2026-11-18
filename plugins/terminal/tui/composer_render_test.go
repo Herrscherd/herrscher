@@ -197,7 +197,7 @@ func TestIdleFooterFoldsWholeSegmentsAgainstTheBorder(t *testing.T) {
 		t.Fatalf("the idle footer must keep whole segments, got %q", edge)
 	}
 	escKey := "esc"
-	back := newTranslator().t("tui.compose.back", nil)
+	back := testTranslator().t("tui.compose.back", nil)
 	if !strings.HasSuffix(edge, strings.Join([]string{"─", escKey, escKey, back, "╯"}, " ")) {
 		t.Fatalf("the right label must keep its rule and sit on the border, got %q", edge)
 	}

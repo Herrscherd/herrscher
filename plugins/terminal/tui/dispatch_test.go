@@ -141,7 +141,7 @@ func TestEveryBoundActionHasAHandlerInItsContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if missing := missingContextHandlers(tables, defaultKeyTable(newTranslator()).chords); len(missing) > 0 {
+	if missing := missingContextHandlers(tables, defaultKeyTable(testTranslator()).chords); len(missing) > 0 {
 		t.Fatalf("bound actions with no handler in their context: %s", strings.Join(missing, ", "))
 	}
 }

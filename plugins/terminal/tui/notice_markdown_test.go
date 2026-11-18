@@ -10,7 +10,7 @@ import (
 
 func TestHostNoticeRendersItsInlineMarkdown(t *testing.T) {
 	item := entry{role: roleNotice, text: "session **herrscher** in `~/dev` see [docs](https://x.dev)", markdown: true}
-	got := ansi.Strip(renderEntry(item, 120, view{tr: newTranslator(), st: testStyles()}))
+	got := ansi.Strip(renderEntry(item, 120, view{tr: testTranslator(), st: testStyles()}))
 	for _, raw := range []string{"**", "`", "]("} {
 		if strings.Contains(got, raw) {
 			t.Fatalf("notice kept the markup %q: %q", raw, got)
@@ -23,7 +23,7 @@ func TestHostNoticeRendersItsInlineMarkdown(t *testing.T) {
 
 func TestShellNoticeKeepsItsOutputVerbatim(t *testing.T) {
 	item := entry{role: roleNotice, text: "$ cat README.md\n**bold** stays"}
-	got := ansi.Strip(renderEntry(item, 120, view{tr: newTranslator(), st: testStyles()}))
+	got := ansi.Strip(renderEntry(item, 120, view{tr: testTranslator(), st: testStyles()}))
 	if !strings.Contains(got, "**bold** stays") {
 		t.Fatalf("shell output was rewritten: %q", got)
 	}
@@ -31,7 +31,7 @@ func TestShellNoticeKeepsItsOutputVerbatim(t *testing.T) {
 
 func TestHostNoticeKeepsEachLineTight(t *testing.T) {
 	item := entry{role: roleNotice, text: "a much longer first line of the banner\n• Command: `claude`", markdown: true}
-	got := ansi.Strip(renderEntry(item, 120, view{tr: newTranslator(), st: testStyles()}))
+	got := ansi.Strip(renderEntry(item, 120, view{tr: testTranslator(), st: testStyles()}))
 	if !strings.Contains(got, "• Command: claude") {
 		t.Fatalf("a short line was padded before its code span: %q", got)
 	}
@@ -74,7 +74,7 @@ func TestInlineMarkdownAppliesTheStylesToEachSpan(t *testing.T) {
 }
 
 func TestNoticeKeepsIdentifierUnderscoresOnScreen(t *testing.T) {
-	out := ansi.Strip(renderEntry(entry{role: roleNotice, text: "run __init__.py now", markdown: true}, 120, view{tr: newTranslator(), st: testStyles()}))
+	out := ansi.Strip(renderEntry(entry{role: roleNotice, text: "run __init__.py now", markdown: true}, 120, view{tr: testTranslator(), st: testStyles()}))
 	if !strings.Contains(out, "run __init__.py now") {
 		t.Fatalf("identifier underscores were eaten: %q", out)
 	}

@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 const (
@@ -49,11 +51,11 @@ func stoppedBy(ctx context.Context, err error) (os.Signal, bool) {
 	return stop.sig, true
 }
 
-func reportOutcome(ctx context.Context, err error) int {
+func reportOutcome(ctx context.Context, messages *clitext.Messages, err error) int {
 	sig, stopped := stoppedBy(ctx, err)
 	switch {
 	case !stopped:
-		return reportError(err)
+		return reportError(messages, err)
 	case sig == syscall.SIGTERM:
 		return exitTerminated
 	default:
@@ -61,18 +63,18 @@ func reportOutcome(ctx context.Context, err error) int {
 	}
 }
 
-func reportDaemonOutcome(ctx context.Context, err error) int {
+func reportDaemonOutcome(ctx context.Context, messages *clitext.Messages, err error) int {
 	if sig, stopped := stoppedBy(ctx, err); stopped && sig == syscall.SIGTERM {
 		return 0
 	}
-	return reportOutcome(ctx, err)
+	return reportOutcome(ctx, messages, err)
 }
 
-func outcomeReporterFor(cmd string) func(context.Context, error) int {
+func outcomeReporterFor(messages *clitext.Messages, cmd string) func(context.Context, error) int {
 	switch cmd {
 	case "serve", "bridge":
-		return reportDaemonOutcome
+		return func(ctx context.Context, err error) int { return reportDaemonOutcome(ctx, messages, err) }
 	default:
-		return reportOutcome
+		return func(ctx context.Context, err error) int { return reportOutcome(ctx, messages, err) }
 	}
 }

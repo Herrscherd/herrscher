@@ -6,11 +6,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func TestCreateReusesTheSessionsOwnWorktree(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer("inst")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 
 	first, err := w.Create(context.Background(), repo, "ch-1", "")
 	if err != nil {
@@ -34,7 +36,7 @@ func TestCreateReusesTheSessionsOwnWorktree(t *testing.T) {
 
 func TestCreateRecoversFromAStaleRegistration(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer("inst")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 
 	path, err := w.Create(context.Background(), repo, "ch-1", "")
 	if err != nil {
@@ -58,7 +60,7 @@ func TestCreateRecoversFromAStaleRegistration(t *testing.T) {
 
 func TestCreateRefusesAForeignDirectory(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer("inst")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 
 	path := w.Path(repo, "ch-1")
 	if err := os.MkdirAll(path, 0o755); err != nil {
@@ -80,7 +82,7 @@ func TestCreateRefusesAForeignDirectory(t *testing.T) {
 
 func TestCreateRefusesAWorktreeOnAnotherBranch(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer("inst")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 
 	path := w.Path(repo, "ch-1")
 	gitAt(t, repo, "worktree", "add", path, "-b", "somebody-elses")
@@ -96,7 +98,7 @@ func TestCreateRefusesAWorktreeOnAnotherBranch(t *testing.T) {
 
 func TestPreExistingDistinguishesReuseFromCreation(t *testing.T) {
 	repo := initRepo(t)
-	w := NewWorktreer("inst")
+	w := NewWorktreer(clitext.NewMessages(), "inst")
 
 	if w.PreExisting(context.Background(), repo, "ch-1") {
 		t.Fatal("a session with no worktree yet must not read as pre-existing")

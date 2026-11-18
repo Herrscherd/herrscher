@@ -5,12 +5,13 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 func TestDriverRecordsTranscript(t *testing.T) {
 	var got []state.TranscriptEntry
-	d := newSessionDriver(newHostMessages(), "s", nil, make(chan contracts.Event, 8), make(chan contracts.Event, 8), io.Discard)
+	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s", nil, make(chan contracts.Event, 8), make(chan contracts.Event, 8), io.Discard)
 	d.sink.Transcript = func(e state.TranscriptEntry) { got = append(got, e) }
 
 	d.recordEntry("user", "hello", "hello", 0, turnUsage{})

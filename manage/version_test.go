@@ -56,7 +56,7 @@ func TestVersionSplitModuleVersion(t *testing.T) {
 
 func TestVersionInstalledVersions(t *testing.T) {
 	tc := &fakeToolchain{out: map[string]string{"-m -json all": listJSON}}
-	got, err := installedVersions(context.Background(), tc, []string{
+	got, err := installedVersions(context.Background(), testMessages(), tc, []string{
 		"github.com/Herrscherd/herrscher-orchestrator",
 		"github.com/Herrscherd/herrscher-discord-gateway",
 	})
@@ -78,7 +78,7 @@ func TestVersionAvailableVersions(t *testing.T) {
 	tc := &fakeToolchain{out: map[string]string{
 		"-m -versions mod/a": "mod/a v0.1.0 v0.2.0 v1.0.0\n",
 	}}
-	got, err := availableVersions(context.Background(), tc, "mod/a")
+	got, err := availableVersions(context.Background(), testMessages(), tc, "mod/a")
 	if err != nil {
 		t.Fatalf("availableVersions: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestVersionAvailableVersionsOffline(t *testing.T) {
 	tc := &fakeToolchain{err: map[string]error{
 		"-m -versions mod/a": errors.New("dial tcp: lookup proxy.golang.org: no such host"),
 	}}
-	got, err := availableVersions(context.Background(), tc, "mod/a")
+	got, err := availableVersions(context.Background(), testMessages(), tc, "mod/a")
 	if err != nil || got != nil {
 		t.Fatalf("availableVersions = (%v, %v), want (nil, nil) when the network is gone", got, err)
 	}
@@ -112,14 +112,14 @@ func TestVersionContractsRequirement(t *testing.T) {
 		"-m -json mod/a@v1.0.0": `{"Path":"mod/a","Version":"v1.0.0","GoMod":` + quote(withReq) + `}`,
 		"-m -json mod/b@v1.0.0": `{"Path":"mod/b","Version":"v1.0.0","GoMod":` + quote(without) + `}`,
 	}}
-	got, err := contractsRequirement(context.Background(), tc, "mod/a", "v1.0.0")
+	got, err := contractsRequirement(context.Background(), testMessages(), tc, "mod/a", "v1.0.0")
 	if err != nil {
 		t.Fatalf("contractsRequirement: %v", err)
 	}
 	if got != "v0.2.17" {
 		t.Errorf("contractsRequirement = %q, want v0.2.17", got)
 	}
-	got, err = contractsRequirement(context.Background(), tc, "mod/b", "v1.0.0")
+	got, err = contractsRequirement(context.Background(), testMessages(), tc, "mod/b", "v1.0.0")
 	if err != nil {
 		t.Fatalf("contractsRequirement: %v", err)
 	}

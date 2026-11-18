@@ -10,7 +10,7 @@ func TestApplyEnvFromStdinSetsThePairs(t *testing.T) {
 	t.Setenv("HS_TEST_URL", "")
 	t.Setenv("HS_TEST_TOKEN", "")
 	in := "HS_TEST_URL=https://gw\nHS_TEST_TOKEN=tok-supersecret\n\n"
-	if err := applyEnvFromStdin(strings.NewReader(in)); err != nil {
+	if err := applyEnvFromStdin(testMessages(), strings.NewReader(in)); err != nil {
 		t.Fatal(err)
 	}
 	if os.Getenv("HS_TEST_URL") != "https://gw" {
@@ -24,7 +24,7 @@ func TestApplyEnvFromStdinSetsThePairs(t *testing.T) {
 func TestApplyEnvFromStdinStopsAtTheBlankLine(t *testing.T) {
 	t.Setenv("HS_TEST_AFTER", "")
 	r := strings.NewReader("HS_TEST_A=1\n\nHS_TEST_AFTER=2\n")
-	if err := applyEnvFromStdin(r); err != nil {
+	if err := applyEnvFromStdin(testMessages(), r); err != nil {
 		t.Fatal(err)
 	}
 	if os.Getenv("HS_TEST_AFTER") == "2" {
@@ -34,7 +34,7 @@ func TestApplyEnvFromStdinStopsAtTheBlankLine(t *testing.T) {
 
 func TestApplyEnvFromStdinKeepsEqualsInValues(t *testing.T) {
 	t.Setenv("HS_TEST_B64", "")
-	if err := applyEnvFromStdin(strings.NewReader("HS_TEST_B64=YWJjZA==\n\n")); err != nil {
+	if err := applyEnvFromStdin(testMessages(), strings.NewReader("HS_TEST_B64=YWJjZA==\n\n")); err != nil {
 		t.Fatal(err)
 	}
 	if os.Getenv("HS_TEST_B64") != "YWJjZA==" {
@@ -44,7 +44,7 @@ func TestApplyEnvFromStdinKeepsEqualsInValues(t *testing.T) {
 
 func TestApplyEnvFromStdinToleratesEOF(t *testing.T) {
 	t.Setenv("HS_TEST_EOF", "")
-	if err := applyEnvFromStdin(strings.NewReader("HS_TEST_EOF=1\n")); err != nil {
+	if err := applyEnvFromStdin(testMessages(), strings.NewReader("HS_TEST_EOF=1\n")); err != nil {
 		t.Fatal(err)
 	}
 	if os.Getenv("HS_TEST_EOF") != "1" {

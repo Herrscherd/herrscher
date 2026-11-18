@@ -68,6 +68,8 @@ type sessionDriver struct {
 	pickTurnID    string
 	turn          chan struct{}
 	running       atomic.Bool
+	compacting    atomic.Bool
+	interrupts    atomic.Uint64
 	historyCalls  atomic.Uint64
 	channel       string
 	outboxRoot    string
@@ -125,8 +127,9 @@ type sessionDriver struct {
 }
 
 type queued struct {
-	ev     contracts.Event
-	origin contracts.Conversation
+	ev         contracts.Event
+	origin     contracts.Conversation
+	interrupts uint64
 }
 
 func newSessionDriver(messages *hostMessages, cliMessages *clitext.Messages, name string, gws []contracts.GatewaySet, toBridge chan<- contracts.Event, fromBridge <-chan contracts.Event, warnings io.Writer) *sessionDriver {

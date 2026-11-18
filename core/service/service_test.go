@@ -805,42 +805,42 @@ func TestRestartCommandsPerOS(t *testing.T) {
 }
 
 func TestValidateSource(t *testing.T) {
-	if err := validateSource(clitext.NewMessages(), ""); err == nil {
+	if err := validateSource(clitext.NewMessages(), i18n.English, ""); err == nil {
 		t.Fatal("empty source must fail")
 	}
 	bare := t.TempDir()
-	if err := validateSource(clitext.NewMessages(), bare); err == nil {
+	if err := validateSource(clitext.NewMessages(), i18n.English, bare); err == nil {
 		t.Fatal("dir without go.mod must fail")
 	}
 	src := t.TempDir()
 	if err := os.WriteFile(filepath.Join(src, "go.mod"), []byte("module x\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateSource(clitext.NewMessages(), src); err == nil {
+	if err := validateSource(clitext.NewMessages(), i18n.English, src); err == nil {
 		t.Fatal("dir whose go.mod is not the herrscher module must fail")
 	}
 	if err := os.WriteFile(filepath.Join(src, "go.mod"), []byte("module github.com/Herrscherd/herrscher\n\ngo 1.23\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateSource(clitext.NewMessages(), src); err != nil {
+	if err := validateSource(clitext.NewMessages(), i18n.English, src); err != nil {
 		t.Fatalf("valid checkout rejected: %v", err)
 	}
 }
 
 func TestBuildRejectsNonSource(t *testing.T) {
-	if err := Build(context.Background(), clitext.NewMessages(), t.TempDir(), "/tmp/out"); err == nil {
+	if err := Build(context.Background(), clitext.NewMessages(), i18n.English, t.TempDir(), "/tmp/out"); err == nil {
 		t.Fatal("Build must reject a non-checkout before invoking go")
 	}
 }
 
 func TestSmokeRejectsBrokenBinary(t *testing.T) {
-	if err := Smoke(context.Background(), clitext.NewMessages(), ""); err == nil {
+	if err := Smoke(context.Background(), clitext.NewMessages(), i18n.English, ""); err == nil {
 		t.Fatal("Smoke must reject an empty binary path")
 	}
-	if err := Smoke(context.Background(), clitext.NewMessages(), "/usr/bin/false"); err == nil {
+	if err := Smoke(context.Background(), clitext.NewMessages(), i18n.English, "/usr/bin/false"); err == nil {
 		t.Fatal("Smoke must reject a binary that exits non-zero")
 	}
-	if err := Smoke(context.Background(), clitext.NewMessages(), "/bin/true"); err != nil {
+	if err := Smoke(context.Background(), clitext.NewMessages(), i18n.English, "/bin/true"); err != nil {
 		t.Skipf("smoke baseline unavailable: %v", err)
 	}
 }

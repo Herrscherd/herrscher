@@ -22,7 +22,14 @@ func (d *sessionDriver) pump(ctx context.Context) {
 				return
 			}
 			if item.ev.T == eventwire.EventCompactNow {
+				d.compacting.Store(true)
 				d.runCompactNow(ctx, d.takeCompactInstruction())
+				d.compacting.Store(false)
+				d.releaseTurn()
+				continue
+			}
+			if d.abandonedByInterrupt(item) {
+				d.fanOut(ctx, contracts.Event{T: eventwire.EventAbandoned})
 				d.releaseTurn()
 				continue
 			}
@@ -39,6 +46,10 @@ func (d *sessionDriver) pump(ctx context.Context) {
 			d.releaseTurn()
 		}
 	}
+}
+
+func (d *sessionDriver) abandonedByInterrupt(item queued) bool {
+	return item.ev.T == eventwire.EventInput && !isOrchestratedTurn(item.ev) && item.interrupts != d.interrupts.Load()
 }
 
 func (d *sessionDriver) enterTurn(ctx context.Context) bool {

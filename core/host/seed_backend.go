@@ -15,9 +15,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/keyproxy"
 )
 
-// BackendRequest is everything building a backend needs. It used to be six
-// positional parameters; routing would have added a seventh, which made call
-// sites unreadable.
+// BackendRequest is everything building a backend needs.
 type BackendRequest struct {
 	Vendor       string
 	Cmd          string

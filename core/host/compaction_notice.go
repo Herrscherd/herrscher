@@ -100,8 +100,8 @@ type noticeDelivery struct {
 	tapped  bool
 }
 
-func (d *sessionDriver) notifyGateways(trigger contracts.CompactTrigger, notice contracts.Notice, tapped bool) bool {
-	return d.broadcastNotice(notice, trigger, &sync.Once{}, tapped)
+func (d *sessionDriver) notifyGateways(trigger contracts.CompactTrigger, notice contracts.Notice, tapped bool) {
+	d.broadcastNotice(notice, trigger, &sync.Once{}, tapped)
 }
 
 func (d *sessionDriver) notifyBackendNotice(event contracts.Event) {
@@ -114,8 +114,7 @@ func (d *sessionDriver) notifyBackendNotice(event contracts.Event) {
 	d.tapEvent(d.stamp(event))
 }
 
-func (d *sessionDriver) broadcastNotice(notice contracts.Notice, trigger contracts.CompactTrigger, report *sync.Once, tapped bool) bool {
-	queued := false
+func (d *sessionDriver) broadcastNotice(notice contracts.Notice, trigger contracts.CompactTrigger, report *sync.Once, tapped bool) {
 	d.eachGateway(func(_ int, gateway contracts.GatewaySet) {
 		sink, ok := gateway.Gateway.(contracts.NoticeSink)
 		if !ok {
@@ -123,20 +122,15 @@ func (d *sessionDriver) broadcastNotice(notice contracts.Notice, trigger contrac
 		}
 		conv := contracts.Conversation{Gateway: gateway.Gateway.Manifest().Kind, ID: d.renderChannel(gateway)}
 		delivery := noticeDelivery{sink: sink, conv: conv, lang: d.textLanguage(), notice: notice, trigger: trigger, report: report, tapped: tapped}
-		if d.enqueueNotice(delivery) {
-			queued = true
-		}
+		d.enqueueNotice(delivery)
 	})
-	return queued
 }
 
-func (d *sessionDriver) enqueueNotice(delivery noticeDelivery) bool {
+func (d *sessionDriver) enqueueNotice(delivery noticeDelivery) {
 	select {
 	case d.notices <- delivery:
-		return true
 	default:
 		d.noticeLog.Warn("notice dropped, the gateway's queue is full", keySession, d.name, "code", delivery.notice.Code, "gateway", delivery.conv.Gateway)
-		return false
 	}
 }
 

@@ -187,6 +187,10 @@ func (d *sessionDriver) relayTurnEvent(ctx context.Context, guard *tokenGuard, e
 	if historywire.IsFrame(event.T) {
 		return live
 	}
+	if event.T == eventwire.EventBackendNotice {
+		d.notifyBackendNotice(event)
+		return live
+	}
 	d.fanOut(ctx, event)
 	if n := promptSize(event); n > 0 {
 		live = n

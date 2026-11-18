@@ -13,6 +13,7 @@ const (
 	EventAbandoned         = "abandoned"
 	EventClosed            = "closed"
 	EventNotice            = "notice"
+	EventBackendNotice     = "backend_notice"
 	EventInput             = "input"
 	EventHuman             = "human"
 	EventPaused            = "paused"

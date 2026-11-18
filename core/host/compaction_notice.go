@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"errors"
+	"strconv"
 	"sync"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -91,7 +92,19 @@ type compactFailure struct {
 }
 
 func (d *sessionDriver) notifyGateways(trigger contracts.CompactTrigger, notice contracts.Notice) bool {
-	report := &sync.Once{}
+	return d.broadcastNotice(notice, trigger, &sync.Once{})
+}
+
+func (d *sessionDriver) notifyBackendNotice(event contracts.Event) {
+	code, err := strconv.ParseUint(event.Value, 10, 16)
+	if err != nil {
+		d.noticeLog.Warn("backend notice dropped, its code is not a number", keySession, d.name, "value", event.Value)
+		return
+	}
+	d.broadcastNotice(contracts.Notice{Code: contracts.Code(code)}, 0, nil)
+}
+
+func (d *sessionDriver) broadcastNotice(notice contracts.Notice, trigger contracts.CompactTrigger, report *sync.Once) bool {
 	queued := false
 	d.eachGateway(func(_ int, gateway contracts.GatewaySet) {
 		sink, ok := gateway.Gateway.(contracts.NoticeSink)
@@ -133,7 +146,9 @@ func (d *sessionDriver) deliverNotice(parent context.Context, delivery noticeDel
 	defer cancel()
 	if _, err := delivery.sink.Notify(ctx, delivery.conv, delivery.lang(), delivery.notice); err != nil && !errors.Is(err, contracts.ErrNoticeFallbackPosted) {
 		logCleanup(err)
-		delivery.report.Do(func() { d.relayNoticeFailure(parent, d.noticeFailure(delivery)) })
+		if delivery.report != nil {
+			delivery.report.Do(func() { d.relayNoticeFailure(parent, d.noticeFailure(delivery)) })
+		}
 	}
 }
 

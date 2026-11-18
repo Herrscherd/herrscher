@@ -11,6 +11,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/outbox"
 )
 
 func receiveTurnEvent(t *testing.T, ch <-chan contracts.Event) contracts.Event {
@@ -200,7 +201,7 @@ func TestOffTurnEventDropsAForgedTurnID(t *testing.T) {
 func TestForgedTurnIDDuringAPickIsReplacedOnEveryGateway(t *testing.T) {
 	plain := &turnIDPlainGateway{}
 	routed := &turnIDRoutedGateway{}
-	d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{
+	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", []contracts.GatewaySet{
 		{Gateway: plain, Reader: plain},
 		{Gateway: routed, Reader: routed},
 	}, nil, nil, io.Discard)

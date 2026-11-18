@@ -68,6 +68,7 @@ func (m *model) submitTo(channel, text string, atts []Attachment) tea.Cmd {
 	item.preview = previewEscapes(m.logger(), atts, m.caps)
 	tab.appendEntry(item)
 	tab.busy = true
+	tab.compaction.ownsBusy = false
 	tab.streamed = false
 	tab.tokens = 0
 	tab.startedAt = time.Now()

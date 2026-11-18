@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -166,7 +167,7 @@ func (h *Handler) sessionLogRun(_ context.Context, input contracts.Input) (contr
 		b, err := json.Marshal(entries)
 		return contracts.DataResult(string(b)), err
 	}
-	rendered := renderShownTranscript(entries)
+	rendered := renderShownTranscript(entries, clitext.ClientLanguage())
 	if rendered == "" {
 		return contracts.DataResult(h.text(clitext.SessionLogEmpty, nil)), nil
 	}
@@ -182,14 +183,21 @@ func sessionLogLimit(input contracts.Input) int {
 	return sessionLogTranscriptCap
 }
 
-func renderShownTranscript(entries []state.TranscriptEntry) string {
+func renderShownTranscript(entries []state.TranscriptEntry, lang i18n.Language) string {
 	var out strings.Builder
 	for idx := range entries {
-		shown := entries[idx].ShownText()
+		shown := shownLine(entries[idx], lang)
 		if shown == "" {
 			continue
 		}
 		fmt.Fprintf(&out, "%s %s\n", entries[idx].Role, shown)
 	}
 	return out.String()
+}
+
+func shownLine(entry state.TranscriptEntry, lang i18n.Language) string {
+	if entry.Kind == state.KindTurnInterrupted {
+		return clitext.RenderNotice(lang, contracts.Notice{Code: contracts.CodeTurnInterrupted})
+	}
+	return entry.ShownText()
 }

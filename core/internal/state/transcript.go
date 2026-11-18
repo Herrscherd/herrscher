@@ -9,6 +9,9 @@ import (
 	"path/filepath"
 )
 
+// KindTurnInterrupted marks the transcript entry that records a turn ended without a reply.
+const KindTurnInterrupted = "turn_interrupted"
+
 // TranscriptEntry is one recorded turn side. Kept separate from the learning
 // call-journal: this is the human-visible conversation, replayed as scrollback.
 type TranscriptEntry struct {

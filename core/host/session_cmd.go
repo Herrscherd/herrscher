@@ -164,9 +164,19 @@ func sessionScrollbackVerb(partDir string) contracts.Cmd {
 		Help(clitext.CmdHelpSessionScrollback).
 		Param(paramName, clitext.CmdParamSessionScrollbackName, true).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			b, err := json.Marshal(scrollbackOf(partDir, in.Get(paramName)))
+			b, err := json.Marshal(cliScrollback(partDir, in.Get(paramName), clitext.ClientLanguage()))
 			return contracts.DataResult(string(b)), err
 		})
+}
+
+func cliScrollback(partDir, name string, lang i18n.Language) []contracts.ScrollbackLine {
+	lines := scrollbackOf(partDir, name)
+	for idx := range lines {
+		if lines[idx].Notice != nil && lines[idx].Text == "" {
+			lines[idx].Text = clitext.RenderNotice(lang, *lines[idx].Notice)
+		}
+	}
+	return lines
 }
 
 func sessionPickVerb(cliMessages *clitext.Messages, lang languageSource, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {

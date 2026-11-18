@@ -9,6 +9,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/config"
@@ -32,10 +33,16 @@ func RunHub(ctx context.Context, cliMessages *clitext.Messages, hostMessages *Me
 		return localizeHostError(messages, cliMessages, options.operatorLanguage(), settingsErr)
 	}
 	serveErr := serveHub(ctx, messages, cliMessages, gws, closers, options, clock, tick)
-	if errors.Is(serveErr, errCompactorSettings) {
-		return cli.Localize(cliMessages, serveErr, options.operatorLanguage())
+	if settings, ok := errors.AsType[compactorSettingsError](serveErr); ok {
+		return localizeCompactorSettings(messages, cliMessages, options.operatorLanguage(), settings)
 	}
 	return localizeHostError(messages, cliMessages, options.operatorLanguage(), serveErr)
+}
+
+func localizeCompactorSettings(messages *hostMessages, cliMessages *clitext.Messages, lang i18n.Language, settings compactorSettingsError) error {
+	notice := cli.Localize(cliMessages, settings, lang).Error()
+	text := messages.text(lang, "compaction.stack_named", map[string]any{nameParam: settings.stage, detailParam: notice})
+	return localizedHostError{text: text, cause: settings}
 }
 
 func (options Options) withDefaultGateways(gws []Deps) Options {

@@ -47,6 +47,35 @@ func TestAutomaticCompactionSuccessDuringTurnKeepsBusyUntilDone(t *testing.T) {
 	}
 }
 
+func TestSubmitDuringAutomaticCompactionTakesBusyFromIt(t *testing.T) {
+	m, tb := compactionTurnTab(t)
+	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionStarted, Value: "automatic", Tokens: 184_000})
+	m.submitTo("c", "question pendant la compaction", nil)
+	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionDone, Value: compactionDoneValue(t, eventwire.CompactionDone{Trigger: "automatic"}), Tokens: 90_000})
+	if !tb.busy {
+		t.Fatal("a compaction Done must not release a turn submitted during the compaction")
+	}
+	m.renderInto(tb, contracts.Event{T: eventwire.EventReply, Done: true})
+	if tb.busy {
+		t.Fatal("the submitted turn's Done must release the tab")
+	}
+}
+
+func TestSubmitDuringManualCompactionTakesBusyFromIt(t *testing.T) {
+	m, tb := compactionTurnTab(t)
+	m.compactCmd()
+	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionStarted, Value: "manual", Tokens: 90_000})
+	m.submitTo("c", "question pendant la compaction manuelle", nil)
+	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionDone, Value: compactionDoneValue(t, eventwire.CompactionDone{Trigger: "manual"}), Tokens: 60_000})
+	if !tb.busy {
+		t.Fatal("a manual compaction Done must not release a turn submitted during the compaction")
+	}
+	m.renderInto(tb, contracts.Event{T: eventwire.EventReply, Done: true})
+	if tb.busy {
+		t.Fatal("the submitted turn's Done must release the tab")
+	}
+}
+
 func TestIdleAutomaticCompactionFailureReleasesBusy(t *testing.T) {
 	m, tb := compactionTurnTab(t)
 	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionStarted, Value: "automatic", Tokens: 184_000})

@@ -11,7 +11,6 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
-	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/eventwire"
@@ -181,8 +180,8 @@ func TestMissingCompactorSettingRefusesStartup(t *testing.T) {
 	registerSettingsCompactor(t, keyedFactory(&keys))
 	t.Setenv(typesafeEnv, "")
 	_, err := newCompactionPolicy(context.Background(), newHostMessages(), testLanguage(), io.Discard, nil, []string{"jev", contracts.CompactStageBackend}, nil)
-	if !errors.Is(err, errCompactorSettings) {
-		t.Fatalf("newCompactionPolicy = %v, want errCompactorSettings", err)
+	if _, ok := errors.AsType[compactorSettingsError](err); !ok {
+		t.Fatalf("newCompactionPolicy = %v, want the compactor settings error", err)
 	}
 	if _, ok := errors.AsType[*contracts.MissingSettingsError](err); !ok {
 		t.Fatalf("newCompactionPolicy = %v, want a MissingSettingsError inside", err)
@@ -195,20 +194,34 @@ func TestMissingCompactorSettingRefusesStartup(t *testing.T) {
 	}
 }
 
-func TestMissingCompactorSettingRendersInFrench(t *testing.T) {
+func TestMissingCompactorSettingKeepsStageAndRemedyAtTheOperator(t *testing.T) {
+	cases := []struct {
+		lang   i18n.Language
+		remedy string
+	}{
+		{i18n.English, `compactStack "jev": `},
+		{i18n.English, "fix it or remove it from compactStack, then herrscher service restart"},
+		{i18n.French, `compactStack "jev" : `},
+		{i18n.French, "corrige-la ou retire-la de compactStack, puis herrscher service restart"},
+	}
 	registerSettingsCompactor(t, keyedFactory(new([]string)))
 	t.Setenv(typesafeEnv, "")
 	_, err := newCompactionPolicy(context.Background(), newHostMessages(), testLanguage(), io.Discard, nil, []string{"jev", contracts.CompactStageBackend}, nil)
-	notice, ok := errors.AsType[contracts.NoticeError](err)
+	settings, ok := errors.AsType[compactorSettingsError](err)
 	if !ok {
-		t.Fatalf("newCompactionPolicy = %v, want a notice the operator boundary can render", err)
+		t.Fatalf("newCompactionPolicy = %v, want the settings error the operator boundary renders", err)
 	}
-	want, renderErr := contracts.NewRenderer().Render(i18n.French, notice.Notice())
-	if renderErr != nil {
-		t.Fatalf("contracts render: %v", renderErr)
-	}
-	if got := cli.Localize(clitext.NewMessages(), err, i18n.French).Error(); got != want {
-		t.Fatalf("French rendering = %q, want %q", got, want)
+	for _, tc := range cases {
+		t.Run(tc.lang.String()+" "+tc.remedy, func(t *testing.T) {
+			notice, renderErr := contracts.NewRenderer().Render(tc.lang, settings.Notice())
+			if renderErr != nil {
+				t.Fatalf("contracts render: %v", renderErr)
+			}
+			got := localizeCompactorSettings(newHostMessages(), clitext.NewMessages(), tc.lang, settings).Error()
+			if !strings.Contains(got, tc.remedy) || !strings.Contains(got, notice) {
+				t.Fatalf("operator text = %q, want the stage, the remedy %q and the notice %q", got, tc.remedy, notice)
+			}
+		})
 	}
 }
 

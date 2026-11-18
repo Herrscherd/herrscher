@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/historywire"
 	"github.com/Herrscherd/herrscher/core/internal/redact"
@@ -30,10 +31,19 @@ func (d *sessionDriver) failCompaction(ctx context.Context, trigger contracts.Co
 
 func (d *sessionDriver) renderableNotice(err error) (contracts.Notice, bool) {
 	typed, ok := errors.AsType[contracts.NoticeError](err)
-	if !ok || !isKnownNotice(typed.Notice()) {
+	if !ok || !d.deliverableNotice(typed.Notice()) {
 		return contracts.Notice{}, false
 	}
 	return typed.Notice(), true
+}
+
+func (d *sessionDriver) deliverableNotice(notice contracts.Notice) bool {
+	return isKnownNotice(notice) && noticeRenders(notice, d.textLanguage()())
+}
+
+func noticeRenders(notice contracts.Notice, lang i18n.Language) bool {
+	_, err := contracts.NewRenderer().Render(lang, notice)
+	return err == nil
 }
 
 func (d *sessionDriver) compactionFailure(trigger contracts.CompactTrigger, err error) contracts.Event {
@@ -108,7 +118,7 @@ func knownCompactFailure(err error) (string, bool) {
 
 func (d *sessionDriver) announceCompaction(ctx context.Context, trigger contracts.CompactTrigger, result contracts.CompactResult) {
 	tokens := measuredTokens(result)
-	if result.Notice.Code == 0 || !isKnownNotice(result.Notice) {
+	if result.Notice.Code == 0 || !d.deliverableNotice(result.Notice) {
 		d.fanOut(ctx, d.compactionDone(trigger, nil, result.Note, tokens))
 		return
 	}

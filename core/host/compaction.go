@@ -64,11 +64,11 @@ var (
 	errNoCompactorFactory = errors.New("is a compactor plugin but provides no Compactor factory")
 	errNilCompactor       = errors.New("its Compactor factory returned no stage")
 	errNoCompactorPlugin  = errors.New("no compactor plugin is registered under this name")
-	errCompactorSettings  = errors.New("the compaction stage is missing required settings")
 	errCompactQueueFull   = errors.New("the turn queue is full, the compaction was not queued")
 )
 
 type compactorSettingsError struct {
+	stage   string
 	missing *contracts.MissingSettingsError
 }
 
@@ -76,8 +76,8 @@ func (e compactorSettingsError) Error() string {
 	return e.missing.Error()
 }
 
-func (e compactorSettingsError) Unwrap() []error {
-	return []error{errCompactorSettings, e.missing}
+func (e compactorSettingsError) Unwrap() error {
+	return e.missing
 }
 
 func (e compactorSettingsError) Notice() contracts.Notice {
@@ -196,7 +196,7 @@ func customStage(ctx context.Context, name string, getenv func(string) string) (
 		}
 		cfg, err := contracts.Resolve(plugin.Manifest.Config, getenv)
 		if missing, ok := errors.AsType[*contracts.MissingSettingsError](err); ok {
-			return nil, compactorSettingsError{missing: missing}
+			return nil, compactorSettingsError{stage: name, missing: missing}
 		}
 		if err != nil {
 			return nil, err

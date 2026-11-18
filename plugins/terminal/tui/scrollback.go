@@ -83,14 +83,20 @@ func (m *model) seedScrollback(channelTab *tab, lines []contracts.ScrollbackLine
 }
 
 func appendNoticeLine(trans translator, channelTab *tab, ln contracts.ScrollbackLine) {
-	text := noticeText(trans, *ln.Notice)
-	if text == "" {
-		text = ln.Text
-	}
+	text := scrollbackLineText(trans, ln)
 	if text == "" {
 		return
 	}
 	channelTab.appendEntry(entry{role: roleNotice, text: text})
+}
+
+func scrollbackLineText(trans translator, ln contracts.ScrollbackLine) string {
+	if ln.Notice != nil {
+		if text := noticeText(trans, *ln.Notice); text != "" {
+			return text
+		}
+	}
+	return ln.Text
 }
 
 func scrollbackRole(role string) string {

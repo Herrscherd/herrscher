@@ -53,8 +53,14 @@ func (m *model) loadResumePreview() {
 		m.resumePreviewLines = []string{m.tr.t("tui.session.history_failed", map[string]any{tplArgReason: localizedReason(m.tr, err)})}
 		return
 	}
-	for _, line := range tailLines(lines, resumePreviewLines) {
-		m.resumePreviewLines = append(m.resumePreviewLines, termpaint.Escape(strings.ReplaceAll(line.Text, "\n", " ")).String())
+	texts := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if text := scrollbackLineText(m.tr, line); text != "" {
+			texts = append(texts, text)
+		}
+	}
+	for _, text := range tailLines(texts, resumePreviewLines) {
+		m.resumePreviewLines = append(m.resumePreviewLines, termpaint.Escape(strings.ReplaceAll(text, "\n", " ")).String())
 	}
 }
 

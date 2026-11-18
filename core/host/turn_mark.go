@@ -6,7 +6,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-const turnInterruptedKind = "turn_interrupted"
+const turnInterruptedKind = state.KindTurnInterrupted
 
 func (h *hub) openTurnMark(session, turnID string) {
 	end := h.persists.begin()

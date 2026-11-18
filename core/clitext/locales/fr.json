@@ -3208,11 +3208,6 @@
     "other": "aucun plugin compacteur n'est enregistré sous ce nom"
   },
   {
-    "id": "cli.host.fault.compactor_settings",
-    "description": "Erreur d'une commande hôte rendue à l'opérateur (compactor settings)",
-    "other": "il manque des réglages requis à l'étape de compaction"
-  },
-  {
     "id": "cli.host.fault.compact_queue_full",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (compact queue full)",
     "other": "la file des tours est pleine, la compaction n'a pas été mise en file"

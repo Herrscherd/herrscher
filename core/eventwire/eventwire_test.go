@@ -41,6 +41,15 @@ func TestEventValuesAreFrozen(t *testing.T) {
 		{"EventCompactionStarted", EventCompactionStarted, "compaction_started"},
 		{"EventCompactionDone", EventCompactionDone, "compaction_done"},
 		{"EventCompactionFailed", EventCompactionFailed, "compaction_failed"},
+		{"CompactReasonBridgeGone", CompactReasonBridgeGone, "bridge_gone"},
+		{"CompactReasonNoCompactorFactory", CompactReasonNoCompactorFactory, "no_compactor_factory"},
+		{"CompactReasonNilCompactor", CompactReasonNilCompactor, "nil_compactor"},
+		{"CompactReasonNoCompactorPlugin", CompactReasonNoCompactorPlugin, "no_compactor_plugin"},
+		{"CompactReasonNoHistoryPort", CompactReasonNoHistoryPort, "no_history_port"},
+		{"CompactReasonHistoryTimeout", CompactReasonHistoryTimeout, "history_timeout"},
+		{"CompactReasonHistoryTooLarge", CompactReasonHistoryTooLarge, "history_too_large"},
+		{"CompactReasonTooManyEdits", CompactReasonTooManyEdits, "too_many_edits"},
+		{"CompactReasonUnknown", CompactReasonUnknown, "unknown"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

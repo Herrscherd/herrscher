@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
-	"github.com/Herrscherd/herrscher-contracts/i18n"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/historywire"
@@ -73,9 +72,6 @@ func TestCompactionNoteNeverKeepsTheRawErrorText(t *testing.T) {
 	}
 	if strings.Contains(note, "XYZ") || strings.Contains(note, "api.example") {
 		t.Fatalf("jev note = %q, want no part of the raw error", note)
-	}
-	if text := compactFailureText(newHostMessages(), i18n.English, raw); strings.Contains(text, "XYZ") {
-		t.Fatalf("chat text = %q, want the key masked", text)
 	}
 }
 

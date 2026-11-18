@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"log/slog"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -112,12 +114,51 @@ func (target *tab) completeCompaction(trans translator, event contracts.Event) {
 	target.busy = false
 }
 
-func (target *tab) failCompaction(event contracts.Event) {
+func (target *tab) failCompaction(trans translator, event contracts.Event) {
 	target.compaction = compaction{}
 	target.busy = false
-	if event.Text != "" {
-		target.appendEntry(entry{role: roleError, text: event.Text})
+	if text := compactFailureText(trans, event); text != "" {
+		target.appendEntry(entry{role: roleError, text: text})
 	}
+}
+
+func compactFailureText(trans translator, event contracts.Event) string {
+	failure, err := eventwire.DecodeCompactionFailure(event.Value)
+	if err != nil {
+		slog.Warn("compaction failure not shown, its payload is not readable", "value", event.Value, "err", err)
+		return ""
+	}
+	if failure.Code != 0 {
+		if text, renderErr := contracts.NewRenderer().Render(trans.lang, contracts.Notice{Code: contracts.Code(failure.Code)}); renderErr == nil {
+			return text
+		}
+	}
+	if failure.Code == 0 && failure.Reason == "" {
+		return ""
+	}
+	return trans.t(compactFailureKey(failure.Reason), nil)
+}
+
+func compactFailureKey(reason string) string {
+	switch reason {
+	case eventwire.CompactReasonBridgeGone:
+		return "tui.compaction.bridge_gone"
+	case eventwire.CompactReasonNoCompactorFactory:
+		return "tui.compaction.no_compactor_factory"
+	case eventwire.CompactReasonNilCompactor:
+		return "tui.compaction.nil_compactor"
+	case eventwire.CompactReasonNoCompactorPlugin:
+		return "tui.compaction.no_compactor_plugin"
+	case eventwire.CompactReasonNoHistoryPort:
+		return "tui.compaction.no_history_port"
+	case eventwire.CompactReasonHistoryTimeout:
+		return "tui.compaction.history_timeout"
+	case eventwire.CompactReasonHistoryTooLarge:
+		return "tui.compaction.history_too_large"
+	case eventwire.CompactReasonTooManyEdits:
+		return "tui.compaction.too_many_edits"
+	}
+	return "tui.compaction.failed"
 }
 
 func (m *model) lastCompactNote() string {

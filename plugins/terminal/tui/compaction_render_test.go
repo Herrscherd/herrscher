@@ -32,12 +32,12 @@ func TestCompactionEventsDriveTheTabFromStartToNotice(t *testing.T) {
 	}
 
 	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionStarted, Value: "manual", Tokens: 90_000})
-	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionFailed, Value: "manual", Text: "le backend a refusé"})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionFailed, Value: compactionFailureValue(t, eventwire.CompactionFailure{Trigger: "manual", Reason: eventwire.CompactReasonBridgeGone})})
 	if tb.busy {
 		t.Fatal("a failed compaction must release the tab")
 	}
 	last := tb.entries[len(tb.entries)-1]
-	if last.role != roleError || last.text != "le backend a refusé" {
+	if last.role != roleError || last.text != "the bridge closed during a compaction" {
 		t.Fatalf("last entry = %+v, want the failure as an error", last)
 	}
 }
@@ -147,7 +147,7 @@ func TestNoticeEventAddsANoticeLine(t *testing.T) {
 	}
 }
 
-func TestFailureWithoutTextAddsNoErrorLine(t *testing.T) {
+func TestFailureWithoutCodeOrReasonAddsNoErrorLine(t *testing.T) {
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "claude", AutoCompactPercent: 92}}}
 	m := startedModel(f)
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
@@ -155,8 +155,8 @@ func TestFailureWithoutTextAddsNoErrorLine(t *testing.T) {
 	m.active = "c"
 
 	before := len(tb.entries)
-	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionFailed, Value: "manual"})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionFailed, Value: compactionFailureValue(t, eventwire.CompactionFailure{Trigger: "manual"})})
 	if tb.busy || len(tb.entries) != before {
-		t.Fatalf("a failure without text must release the tab and add no line, entries %d -> %d", before, len(tb.entries))
+		t.Fatalf("a failure without code or reason must release the tab and add no line, entries %d -> %d", before, len(tb.entries))
 	}
 }

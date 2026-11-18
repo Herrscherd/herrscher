@@ -30,51 +30,6 @@
     "other": "compaction automatique sans effet : le contexte reste au-dessus de {{.Percent}} %, pas de nouvelle tentative avant qu'il repasse sous le seuil"
   },
   {
-    "id": "compaction.bridge_gone",
-    "description": "Le bridge de la session a été fermé pendant une compaction",
-    "other": "le relais s'est fermé pendant une compaction"
-  },
-  {
-    "id": "compaction.no_compactor_factory",
-    "description": "Un plugin compacteur ne fournit aucune fabrique Compactor",
-    "other": "le plugin compacteur ne fournit aucune fabrique Compactor"
-  },
-  {
-    "id": "compaction.nil_compactor",
-    "description": "La fabrique Compactor d'un plugin compacteur n'a renvoyé aucune étape",
-    "other": "la fabrique du plugin compacteur n'a renvoyé aucune étape"
-  },
-  {
-    "id": "compaction.no_compactor_plugin",
-    "description": "Aucun plugin compacteur n'est enregistré sous le nom demandé",
-    "other": "aucun plugin compacteur n'est enregistré sous ce nom"
-  },
-  {
-    "id": "compaction.no_history_port",
-    "description": "Le backend de la session déclare la capacité HistoryEditor mais son instance n'implémente pas le port",
-    "other": "le backend déclare Capabilities.HistoryEditor mais n'implémente pas le port, son historique ne peut pas être modifié"
-  },
-  {
-    "id": "compaction.history_timeout",
-    "description": "Le bridge n'a pas répondu à temps à une lecture ou un élagage de l'historique",
-    "other": "le relais n'a pas répondu à temps à un appel sur l'historique"
-  },
-  {
-    "id": "compaction.history_too_large",
-    "description": "L'historique de la session est trop volumineux pour que le bridge l'envoie",
-    "other": "l'historique de la session est trop volumineux pour être modifié"
-  },
-  {
-    "id": "compaction.too_many_edits",
-    "description": "La compaction voudrait modifier plus d'appels d'outils qu'une trame n'en porte, elle n'en modifie aucun",
-    "other": "la compaction voudrait modifier trop d'appels d'outils à la fois et n'en modifie aucun"
-  },
-  {
-    "id": "compaction.failed",
-    "description": "Une compaction échoue pour une raison sans code propre, Detail porte le texte technique",
-    "other": "échec de la compaction : {{.Detail}}"
-  },
-  {
     "id": "coordination.routed",
     "description": "Le coordinateur route une tâche vers un agent, Agent le nomme et Session nomme la session qui la prend",
     "other": "routé vers {{.Agent}} : {{.Session}}"
@@ -624,7 +579,7 @@
     "description": "A session fails to come live or to be restored at start; Name is the session, Detail the cause",
     "other": "herrscher serve : session \"{{.Name}}\" : {{.Detail}}"
   },
-{
+  {
     "id": "warn.session_start_recovered",
     "description": "Une session dont le démarrage avait été refusé démarre de nouveau ; Name est la session",
     "other": "herrscher serve : session \"{{.Name}}\" : démarrée de nouveau après un démarrage refusé"

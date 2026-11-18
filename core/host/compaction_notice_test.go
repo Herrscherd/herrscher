@@ -202,9 +202,7 @@ func TestUnsupportedCompactionFailureTravelsAsANotice(t *testing.T) {
 	if got.notice.Code != contracts.CodeCompactUnavailable {
 		t.Fatalf("notice = %+v, want compact.unavailable", got.notice)
 	}
-	if failed.Text != "" {
-		t.Fatalf("compaction_failed text = %q, want none while the linked gateway shows the notice", failed.Text)
-	}
+	requireFailure(t, failed, contracts.CodeCompactUnavailable, "")
 	if reason := reasonText(t, got.notice); !strings.Contains(reason, `"s1"`) || !strings.Contains(reason, `"codex"`) {
 		t.Fatalf("reason = %q, want the session and its vendor", reason)
 	}
@@ -322,7 +320,7 @@ func TestNoticeIsDeliveredWhenTheParentContextIsCancelledDuringANotify(t *testin
 	parent, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go d.deliverNotices(parent)
-	d.notifyGateways(contracts.TriggerManual, contracts.Notice{Code: contracts.CodeCompacted})
+	d.notifyGateways(contracts.TriggerManual, contracts.Notice{Code: contracts.CodeCompacted}, false)
 	select {
 	case <-gateway.entered:
 	case <-time.After(2 * time.Second):
@@ -343,7 +341,7 @@ func TestNoticesReachTheGatewayInTheOrderTheyWereRaised(t *testing.T) {
 	go d.deliverNotices(ctx)
 	codes := []contracts.Code{contracts.CodeCompacted, contracts.CodeCompactUnavailable, contracts.Code(99)}
 	for _, code := range codes {
-		d.notifyGateways(contracts.TriggerManual, contracts.Notice{Code: code})
+		d.notifyGateways(contracts.TriggerManual, contracts.Notice{Code: code}, false)
 	}
 	for _, code := range codes {
 		if got := awaitNotice(t, gateway); got.notice.Code != code {
@@ -369,7 +367,7 @@ func (b *lockedBuffer) String() string {
 	return b.buf.String()
 }
 
-func TestFailureTextIsKeptWhenTheFullQueueDropsItsNotice(t *testing.T) {
+func TestFailurePayloadIsKeptWhenTheFullQueueDropsItsNotice(t *testing.T) {
 	gateway := newNoticeGateway()
 	gateway.entered = make(chan struct{}, 1)
 	gateway.release = make(chan struct{})
@@ -391,7 +389,7 @@ func TestFailureTextIsKeptWhenTheFullQueueDropsItsNotice(t *testing.T) {
 	f.driver.requestCompaction("", contracts.Conversation{})
 	failed := waitEmitted(t, f, eventwire.EventCompactionFailed)
 	_, err := f.driver.compactStages(f.driver.compaction.names, stageNotes{})
-	requireRenderedText(t, failed.Text, contracts.NoticeOf(err), i18n.French)
+	requireFailure(t, failed, contracts.NoticeOf(err).Code, "")
 }
 
 func TestFullNoticeQueueDropsTheNoticeAndTheTurnAdvances(t *testing.T) {
@@ -456,7 +454,7 @@ func TestNoticeDeliveryFailureReachesTheSessionOnce(t *testing.T) {
 	nextFrame(t, f)
 	f.from <- mustAnswer(t, contracts.CompactResult{TokensAfter: 50_000, TokensMeasured: true, Note: "compacted", Notice: contracts.Notice{Code: contracts.CodeCompacted}})
 	failed := waitEmitted(t, f, eventwire.EventCompactionFailed)
-	requireRenderedText(t, failed.Text, contracts.Notice{Code: contracts.CodeCompacted}, i18n.French)
+	requireFailure(t, failed, contracts.CodeCompacted, "")
 	awaitCall(t, first.calls)
 	awaitCall(t, second.calls)
 	<-time.After(100 * time.Millisecond)
@@ -496,9 +494,7 @@ func TestPostOnlyGatewayAndNoticeSinkEachReceiveTheNoticeOnce(t *testing.T) {
 	})
 	f.driver.requestCompaction("", contracts.Conversation{})
 	failed := waitEmitted(t, f, eventwire.EventCompactionFailed)
-	if failed.Text != "" {
-		t.Fatalf("compaction_failed text = %q, want none while the notice is queued", failed.Text)
-	}
+	requireFailure(t, failed, contracts.CodeCompactUnavailable, "")
 	got := awaitNotice(t, sink)
 	if got.notice.Code != contracts.CodeCompactUnavailable {
 		t.Fatalf("notice = %+v, want compact.unavailable", got.notice)
@@ -514,5 +510,35 @@ func TestPostOnlyGatewayAndNoticeSinkEachReceiveTheNoticeOnce(t *testing.T) {
 	case text := <-postOnly.posted:
 		t.Fatalf("post-only gateway received a second text %q, want one", text)
 	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestCompactionFailureReasonReachesTheTapWithoutAGateway(t *testing.T) {
+	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", nil, nil, nil, io.Discard)
+	var tapped []contracts.Event
+	d.emitTap = func(event contracts.Event) { tapped = append(tapped, event) }
+	d.operator = fixedLanguageSource(i18n.French)
+
+	d.failCompaction(context.Background(), contracts.TriggerManual, errBridgeGone)
+
+	if len(tapped) != 1 || tapped[0].T != eventwire.EventCompactionFailed {
+		t.Fatalf("tapped = %+v, want one compaction_failed", tapped)
+	}
+	requireFailure(t, tapped[0], 0, eventwire.CompactReasonBridgeGone)
+}
+
+func TestRefusedFailureNoticeTapsTheFailureOnce(t *testing.T) {
+	gateway := &failingNoticeGateway{calls: make(chan struct{}, 1)}
+	f := newConfiguredCompactFixture(t, "cursor", compactPolicy(92), func(d *sessionDriver) {
+		d.gateways = []contracts.GatewaySet{{Gateway: gateway}}
+		d.operator = fixedLanguageSource(i18n.French)
+	})
+	f.driver.requestCompaction("", contracts.Conversation{})
+	failed := waitEmitted(t, f, eventwire.EventCompactionFailed)
+	awaitCall(t, gateway.calls)
+	requireFailure(t, failed, contracts.CodeCompactUnavailable, "")
+	<-time.After(100 * time.Millisecond)
+	if n := len(f.emittedOf(eventwire.EventCompactionFailed)); n != 1 {
+		t.Fatalf("compaction_failed tapped %d times, want exactly once", n)
 	}
 }

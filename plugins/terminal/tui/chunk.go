@@ -28,9 +28,9 @@ func (tb *tab) appendChunk(text string) bool {
 func (tb *tab) discardStreamed() {
 	tb.endStream()
 	kept := tb.entries[:0]
-	for _, item := range tb.entries {
-		if !slices.Contains(tb.streamedIDs, item.id) {
-			kept = append(kept, item)
+	for index := range tb.entries {
+		if !slices.Contains(tb.streamedIDs, tb.entries[index].id) {
+			kept = append(kept, tb.entries[index])
 		}
 	}
 	tb.entries = kept

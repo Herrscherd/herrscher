@@ -216,14 +216,6 @@ func (m *model) View() string {
 	return m.overlayToast(m.st.finish(m.buildFrame().render(body)))
 }
 
-func (m *model) frameTop() int {
-	top := 0
-	for _, line := range m.buildFrame().above {
-		top += strings.Count(line, "\n") + 1
-	}
-	return top
-}
-
 func (m *model) busyRow(tab *tab) string {
 	elapsedText := ""
 	if !tab.startedAt.IsZero() {

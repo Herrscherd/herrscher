@@ -1,5 +1,9 @@
 package tui
 
+import (
+	"strings"
+)
+
 const maxComposerLines = 8
 
 func (m *model) composerHeight() int {
@@ -57,4 +61,12 @@ func (m *model) applySize() {
 	}
 	m.vp.Width = m.transcriptWidth()
 	m.vp.Height = max(0, m.height-m.chromeHeight())
+}
+
+func (m *model) frameTop() int {
+	top := 0
+	for _, line := range m.buildFrame().above {
+		top += strings.Count(line, "\n") + 1
+	}
+	return top
 }

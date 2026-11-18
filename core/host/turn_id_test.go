@@ -40,9 +40,9 @@ func TestRecordEntryStampsTheActiveTurn(t *testing.T) {
 	d.sink.Transcript = func(e state.TranscriptEntry) { got = append(got, e) }
 
 	d.activeTurnID = "turn-7"
-	d.recordEntry("assistant", "hi", 0, turnUsage{})
+	d.recordEntry("assistant", "hi", "hi", 0, turnUsage{})
 	d.activeTurnID = ""
-	d.recordEntry("notice", "hors tour", 0, turnUsage{})
+	d.recordEntry("notice", "hors tour", "hors tour", 0, turnUsage{})
 
 	if len(got) != 2 {
 		t.Fatalf("want 2 entries, got %d", len(got))

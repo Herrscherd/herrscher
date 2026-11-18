@@ -7,15 +7,18 @@ import (
 	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
+const assistantRole = "assistant"
+
 type transcriptLine struct {
-	role string
-	text string
+	turnID string
+	role   string
+	text   string
 }
 
 func transcriptLines(lines []contracts.ScrollbackLine) []transcriptLine {
 	out := make([]transcriptLine, 0, len(lines))
 	for _, ln := range lines {
-		out = append(out, transcriptLine{role: scrollbackRole(ln.Role), text: ln.Text})
+		out = append(out, transcriptLine{turnID: ln.TurnID, role: ln.Role, text: ln.Text})
 	}
 	return out
 }
@@ -27,12 +30,19 @@ func replyLine(routed RoutedEvent) (transcriptLine, bool) {
 	if _, isErr := hostError(routed.Event.Text); isErr {
 		return transcriptLine{}, false
 	}
-	return transcriptLine{role: roleAgent, text: routed.Event.Text}, true
+	return transcriptLine{turnID: routed.Event.TurnID, role: assistantRole, text: routed.Event.Text}, true
+}
+
+func sameLine(history, live transcriptLine) bool {
+	if history.role != live.role || history.text != live.text {
+		return false
+	}
+	return history.turnID == "" || live.turnID == "" || history.turnID == live.turnID
 }
 
 func overlapLength(history, live []transcriptLine) int {
 	for shared := min(len(history), len(live)); shared > 0; shared-- {
-		if slices.Equal(history[len(history)-shared:], live[:shared]) {
+		if slices.EqualFunc(history[len(history)-shared:], live[:shared], sameLine) {
 			return shared
 		}
 	}
@@ -52,8 +62,10 @@ func unseenPending(history []contracts.ScrollbackLine, pending []RoutedEvent) []
 	skip := make([]bool, len(pending))
 	for _, reply := range replies[:covered] {
 		skip[reply] = true
-		for j := reply - 1; j >= 0 && pending[j].Event.T == eventwire.EventChunk; j-- {
-			skip[j] = true
+		for earlier := reply - 1; earlier >= 0 && pending[earlier].Event.T != eventwire.EventReply; earlier-- {
+			if pending[earlier].Event.T == eventwire.EventChunk && pending[earlier].Event.TurnID == pending[reply].Event.TurnID {
+				skip[earlier] = true
+			}
 		}
 	}
 	out := make([]RoutedEvent, 0, len(pending))

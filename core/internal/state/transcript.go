@@ -12,12 +12,13 @@ import (
 // TranscriptEntry is one recorded turn side. Kept separate from the learning
 // call-journal: this is the human-visible conversation, replayed as scrollback.
 type TranscriptEntry struct {
-	Ts     string  `json:"ts"`
-	Role   string  `json:"role"`
-	Text   string  `json:"text"`
-	Cost   float64 `json:"cost,omitempty"`
-	Kind   string  `json:"kind,omitempty"`
-	TurnID string  `json:"turn,omitempty"`
+	Ts        string  `json:"ts"`
+	Role      string  `json:"role"`
+	Text      string  `json:"text"`
+	Displayed string  `json:"displayed,omitempty"`
+	Cost      float64 `json:"cost,omitempty"`
+	Kind      string  `json:"kind,omitempty"`
+	TurnID    string  `json:"turn,omitempty"`
 	// Per-turn usage, present on assistant entries. TokensOut is the turn's
 	// output tokens; TokensIn the input; CacheRead/CacheCreate the prompt-cache
 	// read/creation tokens; DurMs the turn's wall-clock duration in ms. All
@@ -28,6 +29,14 @@ type TranscriptEntry struct {
 	CacheCreate int `json:"cache_create,omitempty"`
 	DurMs       int `json:"dur_ms,omitempty"`
 	CtxTokens   int `json:"ctx_tokens,omitempty"`
+}
+
+// ShownText is the text the human saw: Displayed when set, Text otherwise.
+func (e TranscriptEntry) ShownText() string {
+	if e.Displayed != "" {
+		return e.Displayed
+	}
+	return e.Text
 }
 
 // TranscriptPath returns the transcript path for session name under dir

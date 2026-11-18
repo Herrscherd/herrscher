@@ -158,13 +158,7 @@ func (h *Handler) sessionLogRun(_ context.Context, input contracts.Input) (contr
 		}
 		return contracts.DataResult(h.text(clitext.SessionLogEmpty, nil)), nil
 	}
-	limit := sessionLogTranscriptCap
-	if lraw, ok := input.Lookup("limit"); ok {
-		if n, err := strconv.Atoi(lraw); err == nil && n > 0 {
-			limit = n
-		}
-	}
-	entries := state.ReadTranscript(state.TranscriptPath(h.partDir, name), limit)
+	entries := state.ReadTranscript(state.TranscriptPath(h.partDir, name), sessionLogLimit(input))
 	if input.JSON {
 		if entries == nil {
 			entries = []state.TranscriptEntry{}
@@ -172,12 +166,30 @@ func (h *Handler) sessionLogRun(_ context.Context, input contracts.Input) (contr
 		b, err := json.Marshal(entries)
 		return contracts.DataResult(string(b)), err
 	}
-	if len(entries) == 0 {
+	rendered := renderShownTranscript(entries)
+	if rendered == "" {
 		return contracts.DataResult(h.text(clitext.SessionLogEmpty, nil)), nil
 	}
-	var out strings.Builder
-	for i := range entries {
-		fmt.Fprintf(&out, "%s %s\n", entries[i].Role, entries[i].Text)
+	return contracts.DataResult(rendered), nil
+}
+
+func sessionLogLimit(input contracts.Input) int {
+	if lraw, ok := input.Lookup("limit"); ok {
+		if n, err := strconv.Atoi(lraw); err == nil && n > 0 {
+			return n
+		}
 	}
-	return contracts.DataResult(out.String()), nil
+	return sessionLogTranscriptCap
+}
+
+func renderShownTranscript(entries []state.TranscriptEntry) string {
+	var out strings.Builder
+	for idx := range entries {
+		shown := entries[idx].ShownText()
+		if shown == "" {
+			continue
+		}
+		fmt.Fprintf(&out, "%s %s\n", entries[idx].Role, shown)
+	}
+	return out.String()
 }

@@ -14,9 +14,9 @@ func TestDriverRecordsTranscript(t *testing.T) {
 	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s", nil, make(chan contracts.Event, 8), make(chan contracts.Event, 8), io.Discard)
 	d.sink.Transcript = func(e state.TranscriptEntry) { got = append(got, e) }
 
-	d.recordEntry("user", "hello", 0, turnUsage{})
-	d.recordEntry("assistant", "hi there", 0.02, turnUsage{})
-	d.recordEntry("assistant", "", 0, turnUsage{})
+	d.recordEntry("user", "hello", "hello", 0, turnUsage{})
+	d.recordEntry("assistant", "hi there", "hi there", 0.02, turnUsage{})
+	d.recordEntry("assistant", "", "", 0, turnUsage{})
 
 	if len(got) != 2 {
 		t.Fatalf("want 2 entries, got %d", len(got))

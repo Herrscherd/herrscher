@@ -8,6 +8,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -20,9 +21,10 @@ func TestOneShotSeedRefusesAnArchivedSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	runtime := oneShotSeedRuntime{
-		persists: newPersistWrites(),
-		messages: newHostMessages(),
-		timeout:  time.Millisecond,
+		persists:    newPersistWrites(),
+		messages:    newHostMessages(),
+		cliMessages: clitext.NewMessages(),
+		timeout:     time.Millisecond,
 		backend: func(context.Context, state.Session) (contracts.Backend, error) {
 			t.Error("a seed on an archived session reached the backend")
 			return nil, errSeedArchivedSession

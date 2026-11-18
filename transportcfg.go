@@ -19,14 +19,14 @@ var (
 	errAnnounceKeyUnset = errors.New("HERRSCHER_ANNOUNCE_KEY is unset: the remote transport needs it to authenticate announcements")
 )
 
-func announceKeyFromEnv() (transport.AnnounceKey, error) {
+func announceKeyFromEnv(messages *clitext.Messages) (transport.AnnounceKey, error) {
 	secret := strings.TrimSpace(host.AnnounceKeySecret())
 	if secret == "" {
-		return transport.AnnounceKey{}, clitext.Failure(clitext.ClientLanguage(), errAnnounceKeyUnset, clitext.TransportAnnounceKeyUnset, nil)
+		return transport.AnnounceKey{}, messages.Failure(clitext.ClientLanguage(), errAnnounceKeyUnset, clitext.TransportAnnounceKeyUnset, nil)
 	}
 	key, err := transport.ParseAnnounceKey([]byte(secret))
 	if err != nil {
-		return transport.AnnounceKey{}, clitext.Failure(clitext.ClientLanguage(), err, clitext.TransportAnnounceKeyInvalid, clitext.Params{clitext.ParamErr: err.Error()})
+		return transport.AnnounceKey{}, messages.Failure(clitext.ClientLanguage(), err, clitext.TransportAnnounceKeyInvalid, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	return key, nil
 }
@@ -68,9 +68,9 @@ func remoteClientCredentials() (credentials.TransportCredentials, error) {
 	return cfg.ClientCredentials()
 }
 
-func newResolver(messages *host.Messages, log *slog.Logger) (*host.Resolver, error) {
+func newResolver(messages *clitext.Messages, hostMessages *host.Messages, log *slog.Logger) (*host.Resolver, error) {
 	categories := remoteCategories()
-	resolver := host.NewResolver(messages, categories, os.Getenv("HERRSCHER_NATS"))
+	resolver := host.NewResolver(hostMessages, categories, os.Getenv("HERRSCHER_NATS"))
 	resolver.SetLogger(log)
 	creds, err := remoteClientCredentials()
 	if err != nil && !errors.Is(err, errTLSUnset) {
@@ -80,7 +80,7 @@ func newResolver(messages *host.Messages, log *slog.Logger) (*host.Resolver, err
 	if len(categories) == 0 {
 		return resolver, nil
 	}
-	key, err := announceKeyFromEnv()
+	key, err := announceKeyFromEnv(messages)
 	if err != nil {
 		return nil, err
 	}

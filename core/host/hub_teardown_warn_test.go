@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -16,7 +17,7 @@ func TestAStuckTeardownWarnsOnceForItsWindow(t *testing.T) {
 		t.Fatal(err)
 	}
 	var warnings lockedBuffer
-	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()), withWarnings(&warnings))
+	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()), withWarnings(&warnings))
 	h.runtime = isolatedRuntimeDir(t)
 	h.teardownGrace = 30 * time.Millisecond
 	release := make(chan struct{})

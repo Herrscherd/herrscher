@@ -32,7 +32,7 @@ func TestTerminalFailuresFollowTheClientLanguage(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Setenv("HERRSCHER_STATE_DIR", dir)
-			term := &Terminal{}
+			term := New()
 
 			_, err := term.Resume("alpha")
 			if err == nil || err.Error() != tc.resume {

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -16,7 +17,7 @@ func TestSessionArchivedDuringReconcileStaysDown(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages()))
+	h := newHub(st, nil, nil, t.TempDir(), sessionListRegistry(t), nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()))
 	h.runtime = isolatedRuntimeDir(t)
 	var first, second string
 	h.startBridge = func(sess state.Session, _ time.Duration) error {

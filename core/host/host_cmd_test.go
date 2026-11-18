@@ -9,14 +9,15 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 func hostRegistry(t *testing.T) (*cli.Registry, *state.State) {
 	t.Helper()
 	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
-	reg := &cli.Registry{}
-	if err := addHostCommands(reg, newHostMessages(), testLanguage(), io.Discard, st, testRuntime(t)); err != nil {
+	reg := cli.NewRegistry(clitext.NewMessages())
+	if err := addHostCommands(reg, newHostMessages(), clitext.NewMessages(), testLanguage(), io.Discard, st, testRuntime(t)); err != nil {
 		t.Fatal(err)
 	}
 	return reg, st

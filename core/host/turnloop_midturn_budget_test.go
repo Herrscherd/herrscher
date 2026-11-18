@@ -12,6 +12,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
@@ -46,7 +47,7 @@ func startBudgetedTurn(t *testing.T, headroom uint64) *budgetedTurn {
 
 	toBridge := make(chan contracts.Event, 8)
 	fromBridge := make(chan contracts.Event, 8)
-	d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
+	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 	d.operator = fixedLanguageSource(i18n.French)
 	d.gate = fixedGate{headroom: headroom, capped: true}
 	b := &budgetedTurn{toBridge: toBridge, fromBridge: fromBridge}

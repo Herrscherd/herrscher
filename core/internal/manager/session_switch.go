@@ -58,9 +58,9 @@ func (h *Handler) sessionSwitchRun(ctx context.Context, input contracts.Input) (
 
 func (h *Handler) revertSwitch(name string, prior state.Session, restartErr error) error {
 	if rbErr := h.rollbackSwitch(name, prior.Vendor, prior.Cmd, prior.ModelID, prior.ResumeToken); rbErr != nil {
-		return restartLostError(h.currentLanguage(), name, restartErr, rbErr)
+		return restartLostError(h.messages, h.currentLanguage(), name, restartErr, rbErr)
 	}
-	return clitext.Failure(h.currentLanguage(), restartErr, clitext.SessionSwitchRestartRestored, clitext.Params{clitext.ParamName: name, clitext.ParamVendor: prior.Vendor, clitext.ParamErr: restartErr.Error()})
+	return h.messages.Failure(h.currentLanguage(), restartErr, clitext.SessionSwitchRestartRestored, clitext.Params{clitext.ParamName: name, clitext.ParamVendor: prior.Vendor, clitext.ParamErr: restartErr.Error()})
 }
 
 func (h *Handler) switchReply(ctx context.Context, name, vendor, handoff, switchNote string) string {

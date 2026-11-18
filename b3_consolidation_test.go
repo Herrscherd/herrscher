@@ -99,7 +99,7 @@ func TestB3ConsolidationWritesScopedFactAndSkill(t *testing.T) {
 	mem := &recMemory{}
 	journal := writeJournal(t, "noise line\nfact: studio uses ECS\nmore noise\nskill: retry on 429\n")
 
-	orch := buildOrchestrator(context.Background(), host.NewMessages(), mem, "s1", "alpha", "bishop",
+	orch := buildOrchestrator(context.Background(), testMessages(), host.NewMessages(), mem, "s1", "alpha", "bishop",
 		learnConfig{extractor: "b3-fake", journal: journal, consolidateEvery: 2}, host.Logger(false))
 	if _, ok := orch.(*orchestrator.Learner); !ok {
 		t.Fatalf("want *orchestrator.Learner, got %T", orch)
@@ -127,7 +127,7 @@ func TestB3ConsolidationIsIdempotent(t *testing.T) {
 	mem := &recMemory{}
 	journal := writeJournal(t, "fact: studio uses ECS\nskill: retry on 429\n")
 
-	orch := buildOrchestrator(context.Background(), host.NewMessages(), mem, "s1", "alpha", "bishop",
+	orch := buildOrchestrator(context.Background(), testMessages(), host.NewMessages(), mem, "s1", "alpha", "bishop",
 		learnConfig{extractor: "b3-fake", journal: journal, consolidateEvery: 1}, host.Logger(false))
 
 	p := contracts.Prompt{Author: "u", Content: "hi"}
@@ -147,7 +147,7 @@ func TestB3ConsolidationIsIdempotent(t *testing.T) {
 
 func TestB3NoExtractorPerformsNoConsolidationWrites(t *testing.T) {
 	mem := &recMemory{}
-	orch := buildOrchestrator(context.Background(), host.NewMessages(), mem, "s1", "alpha", "bishop",
+	orch := buildOrchestrator(context.Background(), testMessages(), host.NewMessages(), mem, "s1", "alpha", "bishop",
 		learnConfig{}, host.Logger(false))
 	if _, ok := orch.(*orchestrator.Curator); !ok {
 		t.Fatalf("want plain *orchestrator.Curator with no extractor, got %T", orch)

@@ -55,40 +55,40 @@ func modelsListJSON(entries []CatalogEntry) (string, error) {
 	return string(payload), nil
 }
 
-func modelsListText(lang i18n.Language, entries []CatalogEntry) string {
+func modelsListText(cliMessages *clitext.Messages, lang i18n.Language, entries []CatalogEntry) string {
 	if len(entries) == 0 {
-		return replyText(lang).Text(clitext.HostModelsNone, nil)
+		return replyText(cliMessages, lang).Text(clitext.HostModelsNone, nil)
 	}
 	var builder strings.Builder
 	for idx := range entries {
 		entry := &entries[idx]
 		fmt.Fprintf(&builder, "%-32s %-24s %-8s %-10s %s\n", entry.ID, entry.Label, entry.Route, entry.Source, entry.Vendor)
 		if entry.Hidden {
-			builder.WriteString(replyText(lang).Text(clitext.HostModelsHidden, nil) + "\n")
+			builder.WriteString(replyText(cliMessages, lang).Text(clitext.HostModelsHidden, nil) + "\n")
 		}
 	}
 	return strings.TrimRight(builder.String(), "\n")
 }
 
-func modelsRefreshText(lang i18n.Language, outcomes []discoveryOutcome) string {
+func modelsRefreshText(cliMessages *clitext.Messages, lang i18n.Language, outcomes []discoveryOutcome) string {
 	if len(outcomes) == 0 {
-		return replyText(lang).Text(clitext.HostModelsRefreshNone, nil)
+		return replyText(cliMessages, lang).Text(clitext.HostModelsRefreshNone, nil)
 	}
 	var builder strings.Builder
 	for _, outcome := range outcomes {
-		fmt.Fprintf(&builder, "%-12s %s\n", outcome.Vendor, outcomeSummary(lang, outcome))
+		fmt.Fprintf(&builder, "%-12s %s\n", outcome.Vendor, outcomeSummary(cliMessages, lang, outcome))
 	}
 	return strings.TrimRight(builder.String(), "\n")
 }
 
-func outcomeSummary(lang i18n.Language, outcome discoveryOutcome) string {
+func outcomeSummary(cliMessages *clitext.Messages, lang i18n.Language, outcome discoveryOutcome) string {
 	switch {
 	case outcome.Refreshed:
-		return replyText(lang).Text(clitext.HostModelsDiscovered, clitext.Params{clitext.ParamCount: outcome.Count})
+		return replyText(cliMessages, lang).Text(clitext.HostModelsDiscovered, clitext.Params{clitext.ParamCount: outcome.Count})
 	case outcome.Kept:
-		return replyText(lang).Text(clitext.HostModelsDiscoveryKept, clitext.Params{clitext.ParamErr: outcome.Err})
+		return replyText(cliMessages, lang).Text(clitext.HostModelsDiscoveryKept, clitext.Params{clitext.ParamErr: outcome.Err})
 	default:
-		return replyText(lang).Text(clitext.HostModelsDiscoveryStatic, clitext.Params{clitext.ParamErr: outcome.Err})
+		return replyText(cliMessages, lang).Text(clitext.HostModelsDiscoveryStatic, clitext.Params{clitext.ParamErr: outcome.Err})
 	}
 }
 
@@ -107,7 +107,7 @@ func modelDiscoveryFor(messages *hostMessages, input contracts.Input) *ModelDisc
 	return newModelDiscovery(messages, statePath)
 }
 
-func refreshModels(ctx context.Context, lang i18n.Language, plugins []contracts.Plugin, models *ModelDiscovery) (string, error) {
+func refreshModels(ctx context.Context, cliMessages *clitext.Messages, lang i18n.Language, plugins []contracts.Plugin, models *ModelDiscovery) (string, error) {
 	path := models.cachePath()
 	cache, err := loadDiscoveryCache(models.messages, path)
 	if err != nil {
@@ -119,11 +119,11 @@ func refreshModels(ctx context.Context, lang i18n.Language, plugins []contracts.
 			return "", err
 		}
 	}
-	return modelsRefreshText(lang, outcomes), nil
+	return modelsRefreshText(cliMessages, lang, outcomes), nil
 }
 
 // ModelsCommands returns the model catalog verbs.
-func ModelsCommands(messages *hostMessages, lang languageSource) []contracts.Cmd {
+func ModelsCommands(messages *hostMessages, cliMessages *clitext.Messages, lang languageSource) []contracts.Cmd {
 	return []contracts.Cmd{
 		contracts.New("models", "list").
 			ValueParam("state", clitext.CmdParamModelsListState, false).
@@ -137,13 +137,13 @@ func ModelsCommands(messages *hostMessages, lang languageSource) []contracts.Cmd
 				if input.JSON {
 					return cli.Data(modelsListJSON(entries))
 				}
-				return contracts.DataResult(modelsListText(lang(), entries)), nil
+				return contracts.DataResult(modelsListText(cliMessages, lang(), entries)), nil
 			}),
 		contracts.New("models", "refresh").
 			ValueParam("state", clitext.CmdParamModelsRefreshState, false).
 			Help(clitext.CmdHelpModelsRefresh).
 			Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
-				return cli.Data(refreshModels(ctx, lang(), contracts.Default.Backends(), modelDiscoveryFor(messages, input)))
+				return cli.Data(refreshModels(ctx, cliMessages, lang(), contracts.Default.Backends(), modelDiscoveryFor(messages, input)))
 			}),
 	}
 }

@@ -29,7 +29,7 @@ func TestArchiveRefusalReachesTheFrenchOperatorInFrench(t *testing.T) {
 	if err == nil {
 		t.Fatal("want a refusal")
 	}
-	got := localizeHostError(newHostMessages(), i18n.French, err).Error()
+	got := localizeHostError(newHostMessages(), clitext.NewMessages(), i18n.French, err).Error()
 	wantPrefix := "extraction de ../escaped impossible : élément d'archive refusé : ../escaped sortirait de "
 	if !strings.HasPrefix(got, wantPrefix) {
 		t.Fatalf("refusal = %q, want the french prefix %q", got, wantPrefix)
@@ -40,12 +40,12 @@ func TestArchiveRefusalReachesTheFrenchOperatorInFrench(t *testing.T) {
 }
 
 func TestWorktreeFailureReachesTheFrenchOperatorInFrench(t *testing.T) {
-	failure := worktree.FailureError{Key: clitext.WorktreeRemoteMaterialize, Params: clitext.Params{clitext.ParamWhere: "me@h", clitext.ParamErr: errors.New("boom")}}
-	got := localizeHostError(newHostMessages(), i18n.French, fmt.Errorf("installer: %w", failure)).Error()
+	failure := worktree.NewFailure(clitext.NewMessages(), clitext.WorktreeRemoteMaterialize, clitext.Params{clitext.ParamWhere: "me@h", clitext.ParamErr: errors.New("boom")}, nil)
+	got := localizeHostError(newHostMessages(), clitext.NewMessages(), i18n.French, fmt.Errorf("installer: %w", failure)).Error()
 	if want := "installer: matérialisation sur me@h : boom"; got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
-	if english := localizeHostError(newHostMessages(), i18n.English, failure).Error(); english != "materialize on me@h: boom" {
+	if english := localizeHostError(newHostMessages(), clitext.NewMessages(), i18n.English, failure).Error(); english != "materialize on me@h: boom" {
 		t.Fatalf("english = %q", english)
 	}
 }

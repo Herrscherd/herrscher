@@ -8,6 +8,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
@@ -38,66 +39,66 @@ type schedulerSlot struct {
 func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *state.State, sup *supervisor.Supervisor, instID string, extra []contracts.Cmd, approvals *approvalTable, sessions *sessionTable) (*cli.Registry, hostDeps, error) {
 	options = withOperatorLanguage(options)
 	partDir := filepath.Dir(options.StatePath)
-	worktrees := worktree.NewWorktreer(instID)
-	upCfg, cfgErr := service.DefaultConfig()
+	worktrees := worktree.NewWorktreer(sessions.cliMessages, instID)
+	upCfg, cfgErr := service.DefaultConfig(sessions.cliMessages)
 	logCleanup(cfgErr)
-	updater := serviceUpdater{cfg: upCfg, st: hostState}
+	updater := serviceUpdater{cfg: upCfg, st: hostState, messages: sessions.cliMessages}
 	agents := agent.NewStore(filepath.Join(partDir, "agents"))
 	if n, ok := agent.UserBudgetFromEnv(os.Getenv); ok {
 		agents.SetUserBudget(n)
 	}
 	models := options.modelDiscovery(sessions.messages)
-	hdl := newManagerHandler(sessions.messages, deps, options, partDir, hostState, sup, worktrees, updater, agents, models)
+	hdl := newManagerHandler(sessions.messages, sessions.cliMessages, deps, options, partDir, hostState, sup, worktrees, updater, agents, models)
 	wireManagerHandler(ctx, options.live.Get, options.Warnings, hdl, hostState, options.Runtime, instID, worktrees, sessions, models)
 	wireSupervisor(sup, options.Runtime, hostState, instID, sessions)
 	seedCoord := &coordinatorSlot{}
 	schedSlot := &schedulerSlot{}
 
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(sessions.cliMessages)
 	if err := addVerbs(reg, hdl.Commands()...); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addVerbs(reg, ModelsCommands(sessions.messages, options.live.Get)...); err != nil {
+	if err := addVerbs(reg, ModelsCommands(sessions.messages, sessions.cliMessages, options.live.Get)...); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addSessionVerbs(reg, options.live.Get, hostState, options.Runtime, partDir, instID, approvals, sessions, seedCoord, models); err != nil {
+	if err := addSessionVerbs(reg, sessions.cliMessages, options.live.Get, hostState, options.Runtime, partDir, instID, approvals, sessions, seedCoord, models); err != nil {
 		return nil, hostDeps{}, err
 	}
-	handoff, err := sessionHandoffCmd(options.live.Get, hdl.Commands(), hostState, sessions, options.Runtime, instID, seedCoord, hdl.PreflightAccount)
+	handoff, err := sessionHandoffCmd(sessions.cliMessages, options.live.Get, hdl.Commands(), hostState, sessions, options.Runtime, instID, seedCoord, hdl.PreflightAccount)
 	if err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addVerbs(reg, handoff); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addCheckpointCommands(reg, options.live.Get, hostState, sessions); err != nil {
+	if err := addCheckpointCommands(reg, sessions.cliMessages, options.live.Get, hostState, sessions); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addMemoryVerbs(reg, sessions.messages, options.live.Get); err != nil {
+	if err := addMemoryVerbs(reg, sessions.messages, sessions.cliMessages, options.live.Get); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addSkillVerbs(reg, sessions.messages, options.live.Get); err != nil {
+	if err := addSkillVerbs(reg, sessions.messages, sessions.cliMessages, options.live.Get); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addScheduleCommands(reg, sessions.messages, options.live.Get, hostState, agents, schedSlot); err != nil {
+	if err := addScheduleCommands(reg, sessions.messages, sessions.cliMessages, options.live.Get, hostState, agents, schedSlot); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addHostCommands(reg, sessions.messages, options.live.Get, options.Warnings, hostState, options.Runtime); err != nil {
+	if err := addHostCommands(reg, sessions.messages, sessions.cliMessages, options.live.Get, options.Warnings, hostState, options.Runtime); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addApproveCommands(reg, sessions.messages, options.live.Get, options.Warnings, hostState, agents, approvals, sessions); err != nil {
+	if err := addApproveCommands(reg, sessions.messages, sessions.cliMessages, options.live.Get, options.Warnings, hostState, agents, approvals, sessions); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addRoleCommands(reg, options.live.Get, hostState); err != nil {
+	if err := addRoleCommands(reg, sessions.cliMessages, options.live.Get, hostState); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addVerbs(reg, memorySearchVerb(sessions.messages, options.live.Get), whoamiVerb(), commandsVerb(options.live.Get, reg), healthVerb(options.health), usageVerb(options.usage)); err != nil {
+	if err := addVerbs(reg, memorySearchVerb(sessions.messages, sessions.cliMessages, options.live.Get), whoamiVerb(), commandsVerb(sessions.cliMessages, options.live.Get, reg), healthVerb(options.health), usageVerb(options.usage)); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addPluginVerbs(sessions.messages, reg, extra); err != nil {
 		return nil, hostDeps{}, err
 	}
-	localizeCommandErrors(sessions.messages, reg, hostState, options.live)
+	localizeCommandErrors(sessions.messages, sessions.cliMessages, reg, hostState, options.live)
 	return reg, hostDeps{wt: worktrees, agents: agents, handler: hdl, seedCoord: seedCoord, schedSlot: schedSlot}, nil
 }
 
@@ -120,10 +121,10 @@ func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
 	return nil
 }
 
-func newManagerHandler(messages *hostMessages, deps Deps, options Options, partDir string, hostState *state.State, sup *supervisor.Supervisor, worktrees manager.Worktrees, updater serviceUpdater, agents *agent.Store, models *ModelDiscovery) *manager.Handler {
+func newManagerHandler(messages *hostMessages, cliMessages *clitext.Messages, deps Deps, options Options, partDir string, hostState *state.State, sup *supervisor.Supervisor, worktrees manager.Worktrees, updater serviceUpdater, agents *agent.Store, models *ModelDiscovery) *manager.Handler {
 	options = withOperatorLanguage(options)
 	launch := func(vendor, modelID, cmd string) (string, error) { return launchVendor(models, vendor, modelID, cmd) }
-	hdl := manager.NewHandler(deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, func(vendor, profile string) error { return validateProfileChoice(messages, vendor, profile) }, launch)
+	hdl := manager.NewHandler(cliMessages, deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, func(vendor, profile string) error { return validateProfileChoice(messages, vendor, profile) }, launch)
 	hdl.SetRemoteBackend(options.RemoteCategories[contracts.CategoryBackend])
 	hdl.SetLanguage(options.live.Get())
 	hdl.SetDefaultLanguage(options.DefaultLanguage)
@@ -133,7 +134,7 @@ func newManagerHandler(messages *hostMessages, deps Deps, options Options, partD
 
 func wireManagerHandler(ctx context.Context, lang languageSource, warn io.Writer, hdl *manager.Handler, hostState *state.State, layout RuntimeLayout, instID string, worktrees *worktree.Worktreer, sessions *sessionTable, models *ModelDiscovery) {
 	hdl.SetSeeder(sessions.Seed)
-	hdl.SetHosts(newHostPlacer(sessions.messages, lang, warn, hostState, layout, instID, worktrees, func() string { return sourceVersionOf(ctx, hostState) }))
+	hdl.SetHosts(newHostPlacer(sessions.messages, sessions.cliMessages, lang, warn, hostState, layout, instID, worktrees, func() string { return sourceVersionOf(ctx, hostState) }))
 	hdl.SetGatewayOnly(func() bool { return ResolvePolicy(envx.Getenv) == contracts.PolicyGatewayOnly })
 	hdl.SetDefaultModel(envx.Getenv(EnvDefaultModel))
 	hdl.SetVendorDefaultModel(func(vendor string) string { return envx.Getenv(VendorDefaultModelEnv(vendor)) })
@@ -207,8 +208,8 @@ func wireSupervisor(sup *supervisor.Supervisor, layout RuntimeLayout, store *sta
 // does: which admin a session channel is minted on is a question about the set:
 // the home's owner for a normal session, the terminal gateway for a
 // terminal-only one. One set can only ever answer the first.
-func NewRegistry(ctx context.Context, gws []Deps, options Options) (*cli.Registry, error) {
-	messages := newHostMessages()
+func NewRegistry(ctx context.Context, cliMessages *clitext.Messages, hostMessages *Messages, gws []Deps, options Options) (*cli.Registry, error) {
+	messages := hostMessages.owner
 	hostState, err := state.LoadState(options.StatePath)
 	if err != nil {
 		return nil, err
@@ -221,7 +222,7 @@ func NewRegistry(ctx context.Context, gws []Deps, options Options) (*cli.Registr
 
 	instID, err := resolveInstanceID(messages, hostState, options.InstanceID, options.Owner, obs.Stderr(false))
 	if err != nil {
-		return nil, localizeHostError(messages, options.operatorLanguage(), err)
+		return nil, localizeHostError(messages, cliMessages, options.operatorLanguage(), err)
 	}
 
 	self, execErr := os.Executable()
@@ -232,7 +233,7 @@ func NewRegistry(ctx context.Context, gws []Deps, options Options) (*cli.Registr
 	if options.DefaultGateways == nil {
 		options.DefaultGateways = nonTerminalKinds(gws)
 	}
-	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, hostState.Home)}, options, hostState, sup, instID, nil, newApprovalTable(options.Warnings), newSessionTable(messages))
+	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, hostState.Home)}, options, hostState, sup, instID, nil, newApprovalTable(options.Warnings), newSessionTable(messages, cliMessages))
 	if err != nil {
 		return nil, err
 	}

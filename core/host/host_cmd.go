@@ -15,28 +15,28 @@ import (
 	"github.com/Herrscherd/herrscher/core/service"
 )
 
-func addHostCommands(reg *cli.Registry, messages *hostMessages, lang languageSource, warn io.Writer, hostState *state.State, layout RuntimeLayout) error {
+func addHostCommands(reg *cli.Registry, messages *hostMessages, cliMessages *clitext.Messages, lang languageSource, warn io.Writer, hostState *state.State, layout RuntimeLayout) error {
 	return addVerbs(reg,
-		hostAddVerb(messages, lang, warn, hostState, layout),
+		hostAddVerb(messages, cliMessages, lang, warn, hostState, layout),
 		hostListVerb(hostState),
 		hostCheckVerb(messages, lang, warn, hostState, layout),
-		hostProvisionVerb(messages, lang, warn, hostState, layout),
+		hostProvisionVerb(messages, cliMessages, lang, warn, hostState, layout),
 		hostRmVerb(hostState),
 	)
 }
 
-func hostAddVerb(messages *hostMessages, lang languageSource, warn io.Writer, store *state.State, layout RuntimeLayout) contracts.Cmd {
+func hostAddVerb(messages *hostMessages, cliMessages *clitext.Messages, lang languageSource, warn io.Writer, store *state.State, layout RuntimeLayout) contracts.Cmd {
 	return contracts.New("host", "add").
 		Help(clitext.CmdHelpHostAdd).
 		ValueParam(paramName, clitext.CmdParamHostAddName, false).
 		Param("ssh", clitext.CmdParamHostAddSSH, true).
 		Param("workspace", clitext.CmdParamHostAddWorkspace, true).
 		Do(func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(addHost(ctx, messages, lang, warn, layout, store, in))
+			return cli.Data(addHost(ctx, messages, cliMessages, lang, warn, layout, store, in))
 		})
 }
 
-func addHost(ctx context.Context, messages *hostMessages, lang languageSource, warn io.Writer, layout RuntimeLayout, hostState *state.State, input contracts.Input) (string, error) {
+func addHost(ctx context.Context, messages *hostMessages, cliMessages *clitext.Messages, lang languageSource, warn io.Writer, layout RuntimeLayout, hostState *state.State, input contracts.Input) (string, error) {
 	host := state.Host{
 		Name:      hostNameOf(input),
 		SSH:       strings.TrimSpace(input.Get("ssh")),
@@ -49,7 +49,7 @@ func addHost(ctx context.Context, messages *hostMessages, lang languageSource, w
 	if err != nil {
 		return "", err
 	}
-	provisioned, err := provisionHost(ctx, messages, run, host, hostState.SourceDir())
+	provisioned, err := provisionHost(ctx, messages, cliMessages, run, host, hostState.SourceDir())
 	if err != nil {
 		return "", err
 	}
@@ -142,16 +142,16 @@ func formatHostReport(rep hostReport) string {
 	return body.String()
 }
 
-func hostProvisionVerb(messages *hostMessages, lang languageSource, warn io.Writer, store *state.State, layout RuntimeLayout) contracts.Cmd {
+func hostProvisionVerb(messages *hostMessages, cliMessages *clitext.Messages, lang languageSource, warn io.Writer, store *state.State, layout RuntimeLayout) contracts.Cmd {
 	return contracts.New("host", "provision").
 		Help(clitext.CmdHelpHostProvision).
 		ValueParam(paramName, clitext.CmdParamHostProvisionName, false).
 		Do(func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(provisionRegisteredHost(ctx, messages, lang, warn, layout, store, in))
+			return cli.Data(provisionRegisteredHost(ctx, messages, cliMessages, lang, warn, layout, store, in))
 		})
 }
 
-func provisionRegisteredHost(ctx context.Context, messages *hostMessages, lang languageSource, warn io.Writer, layout RuntimeLayout, store *state.State, in contracts.Input) (string, error) {
+func provisionRegisteredHost(ctx context.Context, messages *hostMessages, cliMessages *clitext.Messages, lang languageSource, warn io.Writer, layout RuntimeLayout, store *state.State, in contracts.Input) (string, error) {
 	name := hostNameOf(in)
 	host, ok := store.FindHost(name)
 	if !ok {
@@ -161,7 +161,7 @@ func provisionRegisteredHost(ctx context.Context, messages *hostMessages, lang l
 	if err != nil {
 		return "", err
 	}
-	provisioned, err := provisionHost(ctx, messages, run, host, store.SourceDir())
+	provisioned, err := provisionHost(ctx, messages, cliMessages, run, host, store.SourceDir())
 	if err != nil {
 		return "", err
 	}

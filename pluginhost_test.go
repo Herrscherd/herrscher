@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/Herrscherd/herrscher/core/host"
 )
 
 func TestRunPluginHostFailsClosedOnHalfTLS(t *testing.T) {
@@ -23,7 +25,7 @@ func TestRunPluginHostFailsClosedOnHalfTLS(t *testing.T) {
 			t.Setenv("HERRSCHER_TLS_CA", tc.ca)
 			t.Setenv("HERRSCHER_TLS_CERT", tc.cert)
 			t.Setenv("HERRSCHER_TLS_KEY", tc.key)
-			err := runPluginHost(context.Background(), []string{"--category", "memory"})
+			err := runPluginHost(context.Background(), testMessages(), host.NewMessages(), []string{"--category", "memory"})
 			if err == nil || !strings.Contains(err.Error(), "TLS half-configured") {
 				t.Fatalf("want a fail-closed TLS error, got %v", err)
 			}

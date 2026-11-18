@@ -9,6 +9,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -32,7 +33,7 @@ func dispatchRevokesTheDoomedSession(t *testing.T, verb string, remove func(*sta
 			t.Fatal(err)
 		}
 	}
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	doomedToken := sessionTab.issueToken("doomed")
 	keptToken := sessionTab.issueToken("kept")
 	seedCtx, endSeed := context.WithCancel(t.Context())
@@ -40,14 +41,14 @@ func dispatchRevokesTheDoomedSession(t *testing.T, verb string, remove func(*sta
 	doomedSeedToken := sessionTab.seedToken(seedCtx, "doomed", liveSessionAllowed(st))
 	keptSeedToken := sessionTab.seedToken(seedCtx, "kept", liveSessionAllowed(st))
 
-	var reg cli.Registry
+	reg := cli.NewRegistry(clitext.NewMessages())
 	command := contracts.New("session", verb).Do(func(context.Context, contracts.Input) (contracts.Result, error) {
 		return contracts.Result{}, remove(st)
 	})
 	if err := reg.Add(command); err != nil {
 		t.Fatal(err)
 	}
-	h := newHub(st, nil, nil, t.TempDir(), &reg, nil, newApprovalTable(io.Discard), sessionTab)
+	h := newHub(st, nil, nil, t.TempDir(), reg, nil, newApprovalTable(io.Discard), sessionTab)
 	h.runtime = isolatedRuntimeDir(t)
 	h.startBridge = func(state.Session, time.Duration) error { return nil }
 	h.stopBridge = func(string) error { return nil }

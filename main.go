@@ -59,19 +59,21 @@ func runWith(layout host.RuntimeLayout) int {
 		return writeFailureCode(out)
 	}
 
-	if refuseBrokenCatalogs(os.Stderr) {
+	messages := clitext.NewMessages()
+	hostMessages := host.NewMessages()
+	if refuseBrokenCatalogs(messages, os.Stderr) {
 		return 1
 	}
 
-	if err := host.CaptureStartupSecrets(loadHostEnv, hideGatewayKeys); err != nil {
-		return reportError(err)
+	if err := host.CaptureStartupSecrets(func() error { return loadHostEnv(messages) }, hideGatewayKeys); err != nil {
+		return reportError(messages, err)
 	}
 
 	ctx, stop := notifyStop(context.Background())
 	defer stop()
 
 	if len(os.Args) < minArgsWithCommand {
-		return reportOutcome(ctx, runWithoutCommand(ctx, layout))
+		return reportOutcome(ctx, messages, runWithoutCommand(ctx, layout, messages, hostMessages))
 	}
 
 	cmd := os.Args[1]
@@ -79,29 +81,29 @@ func runWith(layout host.RuntimeLayout) int {
 
 	if task, ok := promptOf(cmd, args); ok {
 		if task.Text == "" {
-			fmt.Fprintln(os.Stderr, render(clitext.ClientLanguage(), clitext.TaskNeedsText, clitext.Params{clitext.ParamVerb: cmd}))
+			fmt.Fprintln(os.Stderr, render(messages, clitext.ClientLanguage(), clitext.TaskNeedsText, clitext.Params{clitext.ParamVerb: cmd}))
 			return exitUsage
 		}
-		return reportOutcome(ctx, runPrompt(ctx, layout, task))
+		return reportOutcome(ctx, messages, runPrompt(ctx, layout, messages, hostMessages, task))
 	}
 
-	if code, ok := runManageCmd(cmd, args); ok {
+	if code, ok := runManageCmd(hostMessages, cmd, args); ok {
 		return code
 	}
 
 	switch cmd {
 	case "-h", "--help", "help":
-		if err := usage(clitext.ClientLanguage()); err != nil {
-			return reportError(err)
+		if err := usage(messages, clitext.ClientLanguage()); err != nil {
+			return reportError(messages, err)
 		}
 		return 0
 	}
 
-	return outcomeReporterFor(cmd)(ctx, runCommand(ctx, layout, cmd, args))
+	return outcomeReporterFor(messages, cmd)(ctx, runCommand(ctx, layout, messages, hostMessages, cmd, args))
 }
 
-func refuseBrokenCatalogs(stderr io.Writer) bool {
-	err := clitext.For(clitext.ClientLanguage()).Err()
+func refuseBrokenCatalogs(messages *clitext.Messages, stderr io.Writer) bool {
+	err := messages.Err()
 	if err == nil {
 		return false
 	}
@@ -136,7 +138,7 @@ func gitCredential(prompt string) string {
 	return os.Getenv("GH_TOKEN")
 }
 
-func loadHostEnv() error {
+func loadHostEnv(messages *clitext.Messages) error {
 	envPath, explicit := os.Getenv("HERRSCHER_ENV_FILE"), true
 	if envPath == "" {
 		envPath, explicit = ".env", false
@@ -148,26 +150,26 @@ func loadHostEnv() error {
 		return err
 	}
 	lang := clitext.ClientLanguage()
-	if err := loadEnvFile(envPath, lang); err != nil {
+	if err := loadEnvFile(messages, envPath, lang); err != nil {
 		if explicit {
 			return err
 		}
-		fmt.Fprintln(os.Stderr, cliErrorLine(render(lang, clitext.EnvContinuing, clitext.Params{clitext.ParamErr: err.Error()})))
+		fmt.Fprintln(os.Stderr, cliErrorLine(render(messages, lang, clitext.EnvContinuing, clitext.Params{clitext.ParamErr: err.Error()})))
 	}
 	return nil
 }
 
-func runWithoutCommand(ctx context.Context, layout host.RuntimeLayout) error {
+func runWithoutCommand(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages) error {
 	if term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway() {
-		return runServe(ctx, layout, nil, serveDaemon)
+		return runServe(ctx, layout, messages, hostMessages, nil, serveDaemon)
 	}
-	if err := usage(clitext.ClientLanguage()); err != nil {
+	if err := usage(messages, clitext.ClientLanguage()); err != nil {
 		return err
 	}
 	return exitStatusError{code: exitUsage}
 }
 
-func runManageCmd(cmd string, args []string) (int, bool) {
+func runManageCmd(hostMessages *host.Messages, cmd string, args []string) (int, bool) {
 	switch cmd {
 	case "init", "plugin", "update", "install":
 	default:
@@ -177,7 +179,7 @@ func runManageCmd(cmd string, args []string) (int, bool) {
 	defer stop()
 	switch cmd {
 	case "init":
-		return manage.InitCmd(mctx, args), true
+		return manage.InitCmd(mctx, hostMessages, args), true
 	case "plugin":
 		return manage.PluginCmd(mctx, args), true
 	case "update":
@@ -187,53 +189,52 @@ func runManageCmd(cmd string, args []string) (int, bool) {
 	}
 }
 
-func runCommand(ctx context.Context, layout host.RuntimeLayout, cmd string, args []string) error {
+func runCommand(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, cmd string, args []string) error {
 	switch cmd {
 	case "bridge":
-		return runBridge(ctx, args)
+		return runBridge(ctx, messages, hostMessages, args)
 	case "serve":
-		return runServe(ctx, layout, args, serveDaemon)
+		return runServe(ctx, layout, messages, hostMessages, args, serveDaemon)
 	case "session":
-		return runSession(ctx, layout, args)
+		return runSession(ctx, layout, messages, hostMessages, args)
 	case "agent":
-		return runAgent(ctx, layout, args)
+		return runAgent(ctx, layout, messages, hostMessages, args)
 	case "account":
-		return runAccount(ctx, args)
+		return runAccount(ctx, messages, hostMessages, args)
 	case "host":
-		return runHost(ctx, layout, args)
+		return runHost(ctx, layout, messages, hostMessages, args)
 	case "approve":
-		return runApprove(ctx, layout, args)
+		return runApprove(ctx, layout, messages, hostMessages, args)
 	case "role":
-		return runRole(ctx, layout, args)
+		return runRole(ctx, layout, messages, hostMessages, args)
 	case "memory":
-		return runMemory(ctx, layout, args)
+		return runMemory(ctx, layout, messages, hostMessages, args)
 	case "models":
-		return runModels(ctx, layout, args)
+		return runModels(ctx, layout, messages, hostMessages, args)
 	case "service":
-		return runService(ctx, args)
+		return runService(ctx, messages, args)
 	case "plugin-host":
-		return runPluginHost(ctx, args)
+		return runPluginHost(ctx, messages, hostMessages, args)
 	case "worktree":
-		return host.RunWorktree(ctx, args)
+		return host.RunWorktree(ctx, messages, hostMessages, args)
 	case healthVerb:
-		return runHealth(ctx, layout, args)
+		return runHealth(ctx, layout, messages, hostMessages, args)
 	case usageVerb:
-		return runUsage(ctx, layout, args)
+		return runUsage(ctx, layout, messages, hostMessages, args)
 	case "whoami":
-		return runWhoami(ctx, args)
+		return runWhoami(ctx, messages, args)
 	}
-	return runForwarded(ctx, layout, cmd, args)
+	return runForwarded(ctx, layout, messages, hostMessages, cmd, args)
 }
 
-func runForwarded(ctx context.Context, layout host.RuntimeLayout, cmd string, args []string) error {
-	messages := host.NewMessages()
+func runForwarded(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, cmd string, args []string) error {
 	lang := clitext.ClientLanguage()
-	out, code, derr := dispatchUnknown(ctx, lang, cmd, args, func(ctx context.Context, argv []string) (string, bool, error) {
-		return forwardUnknownVerb(ctx, layout, argv)
+	out, code, derr := dispatchUnknown(ctx, messages, lang, cmd, args, func(ctx context.Context, argv []string) (string, bool, error) {
+		return forwardUnknownVerb(ctx, layout, hostMessages, argv)
 	})
 	if code != 0 {
-		fmt.Fprintln(os.Stderr, forwardedFailureLine(messages, lang, derr))
-		if err := usage(lang); err != nil {
+		fmt.Fprintln(os.Stderr, forwardedFailureLine(messages, hostMessages, lang, derr))
+		if err := usage(messages, lang); err != nil {
 			return err
 		}
 		return exitStatusError{code: code}
@@ -247,8 +248,8 @@ func runForwarded(ctx context.Context, layout host.RuntimeLayout, cmd string, ar
 	return writeCLIText(os.Stdout, out)
 }
 
-func forwardedFailureLine(messages *host.Messages, lang i18n.Language, derr error) string {
-	return cliErrorLine(render(lang, clitext.ErrorLine, clitext.Params{clitext.ParamMessage: messages.Localize(lang, derr).Error()}))
+func forwardedFailureLine(messages *clitext.Messages, hostMessages *host.Messages, lang i18n.Language, derr error) string {
+	return cliErrorLine(render(messages, lang, clitext.ErrorLine, clitext.Params{clitext.ParamMessage: hostMessages.Localize(messages, lang, derr).Error()}))
 }
 
 type exitStatusError struct {
@@ -259,11 +260,11 @@ func (s exitStatusError) Error() string {
 	return fmt.Sprintf("exit status %d", s.code)
 }
 
-func reportError(err error) int {
-	return reportErrorTo(os.Stderr, err)
+func reportError(messages *clitext.Messages, err error) int {
+	return reportErrorTo(messages, os.Stderr, err)
 }
 
-func reportErrorTo(stderr io.Writer, err error) int {
+func reportErrorTo(messages *clitext.Messages, stderr io.Writer, err error) int {
 	if err == nil {
 		return 0
 	}
@@ -271,23 +272,23 @@ func reportErrorTo(stderr io.Writer, err error) int {
 	if errors.As(err, &status) {
 		return status.code
 	}
-	line := cliErrorLine(render(clitext.ClientLanguage(), clitext.ErrorLine, clitext.Params{clitext.ParamMessage: err.Error()}))
+	line := cliErrorLine(render(messages, clitext.ClientLanguage(), clitext.ErrorLine, clitext.Params{clitext.ParamMessage: err.Error()}))
 	if _, writeErr := fmt.Fprintln(stderr, line); writeErr != nil {
 		slog.Warn("write error line", "err", writeErr)
 	}
 	return 1
 }
 
-func dispatchUnknown(ctx context.Context, lang i18n.Language, cmd string, args []string, fwd func(context.Context, []string) (string, bool, error)) (string, int, error) {
+func dispatchUnknown(ctx context.Context, messages *clitext.Messages, lang i18n.Language, cmd string, args []string, fwd func(context.Context, []string) (string, bool, error)) (string, int, error) {
 	out, handled, derr := fwd(ctx, append([]string{cmd}, args...))
 	if !handled {
-		return "", exitUsage, renderError(lang, errUnknownCommand, clitext.CommandUnknown, clitext.Params{clitext.ParamName: strconv.Quote(cmd)})
+		return "", exitUsage, renderError(messages, lang, errUnknownCommand, clitext.CommandUnknown, clitext.Params{clitext.ParamName: strconv.Quote(cmd)})
 	}
 	return out, 0, derr
 }
 
-func channelFlag(flags *flag.FlagSet) *string {
-	translator := clitext.For(clitext.ClientLanguage())
+func channelFlag(messages *clitext.Messages, flags *flag.FlagSet) *string {
+	translator := messages.For(clitext.ClientLanguage())
 	channel := flags.String("channel", "", translator.Text(clitext.FlagChannel, nil))
 	flags.StringVar(channel, "c", "", translator.Text(clitext.FlagChannelShort, nil))
 	if err := translator.Err(); err != nil {
@@ -307,11 +308,11 @@ func hasTerminalGateway() bool {
 	return false
 }
 
-func runWhoami(ctx context.Context, args []string) error {
+func runWhoami(ctx context.Context, messages *clitext.Messages, args []string) error {
 	asJSON := false
 	for _, arg := range args {
 		if arg != argJSON {
-			return renderError(clitext.ClientLanguage(), errUnknownArgument, clitext.WhoamiUnknownArgument, clitext.Params{clitext.ParamArg: strconv.Quote(arg)})
+			return renderError(messages, clitext.ClientLanguage(), errUnknownArgument, clitext.WhoamiUnknownArgument, clitext.Params{clitext.ParamArg: strconv.Quote(arg)})
 		}
 		asJSON = true
 	}
@@ -329,8 +330,8 @@ func writeFailureCode(w *errwriter.Writer) int {
 	return 0
 }
 
-func render(lang i18n.Language, key clitext.Key, params clitext.Params) string {
-	translator := clitext.For(lang)
+func render(messages *clitext.Messages, lang i18n.Language, key clitext.Key, params clitext.Params) string {
+	translator := messages.For(lang)
 	text := translator.Text(key, clitext.Printable(params))
 	if err := translator.Err(); err != nil {
 		slog.Error("render message", "key", key, "err", err)
@@ -338,8 +339,8 @@ func render(lang i18n.Language, key clitext.Key, params clitext.Params) string {
 	return text
 }
 
-func renderError(lang i18n.Language, cause error, key clitext.Key, params clitext.Params) error {
-	text, err := clitext.Text(lang, key, params)
+func renderError(messages *clitext.Messages, lang i18n.Language, cause error, key clitext.Key, params clitext.Params) error {
+	text, err := messages.Text(lang, key, params)
 	if err != nil {
 		return err
 	}

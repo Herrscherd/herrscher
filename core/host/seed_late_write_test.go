@@ -8,6 +8,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -70,17 +71,18 @@ func (l *stampedLog) snapshot() []string {
 }
 
 func seedSharingSession(backend contracts.Backend, budget time.Duration, log *stampedLog) (string, error) {
-	table := newSessionTable(newHostMessages())
+	table := newSessionTable(newHostMessages(), clitext.NewMessages())
 	policy := compactPolicy(50, contracts.CompactStageBackend)
 	policy.limits = contextwindow.NewLimits("1000", nil)
 	table.compaction = policy
 	runtime := oneShotSeedRuntime{
-		persists: newPersistWrites(),
-		messages: newHostMessages(),
-		timeout:  budget,
-		sessions: table,
-		publish:  func(string, contracts.Event) { log.note(eventwire.EventReply) },
-		record:   func(string, state.TranscriptEntry) { log.note("transcript") },
+		persists:    newPersistWrites(),
+		messages:    newHostMessages(),
+		cliMessages: clitext.NewMessages(),
+		timeout:     budget,
+		sessions:    table,
+		publish:     func(string, contracts.Event) { log.note(eventwire.EventReply) },
+		record:      func(string, state.TranscriptEntry) { log.note("transcript") },
 		recordUsage: func(state.Session, []usage.Record) {
 			log.note("usage")
 		},
@@ -127,11 +129,12 @@ func TestOneShotTapsRecordNothingOnceTheSeedHasReturned(t *testing.T) {
 	runtime := oneShotSeedRuntime{
 		persists:    newPersistWrites(),
 		messages:    newHostMessages(),
+		cliMessages: clitext.NewMessages(),
 		publish:     func(string, contracts.Event) { recorded = append(recorded, "publish") },
 		record:      func(string, state.TranscriptEntry) { recorded = append(recorded, "transcript") },
 		recordUsage: func(state.Session, []usage.Record) { recorded = append(recorded, "usage") },
 	}
-	driver := &sessionDriver{messages: newHostMessages(), persists: newPersistWrites()}
+	driver := &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), persists: newPersistWrites()}
 	gate := attachOneShotTaps(driver, state.Session{Name: "seed-a"}, runtime)
 
 	driver.emitTap(contracts.Event{T: eventwire.EventReply})

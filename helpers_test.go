@@ -13,6 +13,8 @@ import (
 
 func testLang() i18n.Language { return i18n.English }
 
+func testMessages() *clitext.Messages { return clitext.NewMessages() }
+
 func testTranslator() *clitext.Translator {
 	return clitext.For(testLang())
 }

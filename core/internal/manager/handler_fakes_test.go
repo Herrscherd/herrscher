@@ -8,6 +8,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -200,7 +201,7 @@ func newTestHandlerWithUpdater(t *testing.T, homeType string) (*Handler, *fakeUp
 	up := &fakeUpdater{version: "abc1234"}
 	st := state.NewState(t.TempDir() + "/s.json")
 	agents := agent.NewStore(t.TempDir())
-	return NewHandler(d, sup, wt, fg, up, agents, st, "claude", t.TempDir(), []string{"chat"}, nil, nil), up, d, sup, wt, fg, st
+	return NewHandler(clitext.NewMessages(), d, sup, wt, fg, up, agents, st, "claude", t.TempDir(), []string{"chat"}, nil, nil), up, d, sup, wt, fg, st
 }
 
 func args(kv ...string) contracts.Input {

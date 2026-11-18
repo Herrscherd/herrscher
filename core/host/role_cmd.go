@@ -14,42 +14,42 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-func addRoleCommands(reg *cli.Registry, lang languageSource, hostState *state.State) error {
+func addRoleCommands(reg *cli.Registry, cliMessages *clitext.Messages, lang languageSource, hostState *state.State) error {
 	reg.SetHelpParams(clitext.CmdParamRoleGrantRole, clitext.Params{"Roles": strings.Join(authz.GrantableRoles(), ", ")})
 	return addVerbs(
 		reg,
-		roleListVerb(lang, hostState),
-		roleGrantVerb(lang, hostState),
-		roleRevokeVerb(lang, hostState),
-		roleShowVerb(lang, hostState),
+		roleListVerb(cliMessages, lang, hostState),
+		roleGrantVerb(cliMessages, lang, hostState),
+		roleRevokeVerb(cliMessages, lang, hostState),
+		roleShowVerb(cliMessages, lang, hostState),
 	)
 }
 
-func roleListVerb(lang languageSource, store *state.State) contracts.Cmd {
+func roleListVerb(cliMessages *clitext.Messages, lang languageSource, store *state.State) contracts.Cmd {
 	return contracts.New("role", "list").
 		Help(clitext.CmdHelpRoleList).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(listRoles(lang(), store, in.JSON))
+			return cli.Data(listRoles(cliMessages, lang(), store, in.JSON))
 		})
 }
 
-func listRoles(lang i18n.Language, st *state.State, asJSON bool) (string, error) {
+func listRoles(cliMessages *clitext.Messages, lang i18n.Language, st *state.State, asJSON bool) (string, error) {
 	assignments := st.RoleAssignments()
 	if asJSON {
 		body, err := json.Marshal(assignments)
 		return string(body), err
 	}
 	var body strings.Builder
-	writeRoleAssignments(lang, &body, assignments)
-	_, _ = body.WriteString(replyText(lang).Text(clitext.HostRoleGrantable, clitext.Params{clitext.ParamRoles: strings.Join(authz.GrantableRoles(), ", ")}) + "\n")
-	_, _ = body.WriteString(replyText(lang).Text(clitext.HostRoleAgentNote, nil))
+	writeRoleAssignments(cliMessages, lang, &body, assignments)
+	_, _ = body.WriteString(replyText(cliMessages, lang).Text(clitext.HostRoleGrantable, clitext.Params{clitext.ParamRoles: strings.Join(authz.GrantableRoles(), ", ")}) + "\n")
+	_, _ = body.WriteString(replyText(cliMessages, lang).Text(clitext.HostRoleAgentNote, nil))
 	return body.String(), nil
 }
 
-func writeRoleAssignments(lang i18n.Language, body *strings.Builder, assignments map[string]state.RoleAssignment) {
+func writeRoleAssignments(cliMessages *clitext.Messages, lang i18n.Language, body *strings.Builder, assignments map[string]state.RoleAssignment) {
 	if len(assignments) == 0 {
-		_, _ = body.WriteString(replyText(lang).Text(clitext.HostRoleNone, nil) + "\n")
-		_, _ = body.WriteString(replyText(lang).Text(clitext.HostRoleFirstGrant, nil) + "\n\n")
+		_, _ = body.WriteString(replyText(cliMessages, lang).Text(clitext.HostRoleNone, nil) + "\n")
+		_, _ = body.WriteString(replyText(cliMessages, lang).Text(clitext.HostRoleFirstGrant, nil) + "\n\n")
 		return
 	}
 	for _, principal := range sortedPrincipals(assignments) {
@@ -63,18 +63,18 @@ func writeRoleAssignments(lang i18n.Language, body *strings.Builder, assignments
 	_, _ = body.WriteString("\n")
 }
 
-func roleGrantVerb(lang languageSource, store *state.State) contracts.Cmd {
+func roleGrantVerb(cliMessages *clitext.Messages, lang languageSource, store *state.State) contracts.Cmd {
 	return contracts.New("role", "grant").
 		Help(clitext.CmdHelpRoleGrant).
 		ValueParam("principal", clitext.CmdParamRoleGrantPrincipal, false).
 		ValueParam("role", clitext.CmdParamRoleGrantRole, false).
 		ValueParam("label", clitext.CmdParamRoleGrantLabel, false).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(grantRole(lang(), store, in))
+			return cli.Data(grantRole(cliMessages, lang(), store, in))
 		})
 }
 
-func grantRole(lang i18n.Language, store *state.State, input contracts.Input) (string, error) {
+func grantRole(cliMessages *clitext.Messages, lang i18n.Language, store *state.State, input contracts.Input) (string, error) {
 	ops := parseGrantOperands(input)
 	principal, role := ops.principal, ops.role
 	if err := grantable(principal, role); err != nil {
@@ -84,9 +84,9 @@ func grantRole(lang i18n.Language, store *state.State, input contracts.Input) (s
 	if err != nil {
 		return "", err
 	}
-	out := replyText(lang).Text(clitext.HostRoleGranted, clitext.Params{clitext.ParamPrincipal: principal, clitext.ParamRole: role})
+	out := replyText(cliMessages, lang).Text(clitext.HostRoleGranted, clitext.Params{clitext.ParamPrincipal: principal, clitext.ParamRole: role})
 	if first {
-		out += "\n" + replyText(lang).Text(clitext.HostRoleFirstGrant, nil)
+		out += "\n" + replyText(cliMessages, lang).Text(clitext.HostRoleFirstGrant, nil)
 	}
 	return out, nil
 }
@@ -109,16 +109,16 @@ func parseGrantOperands(input contracts.Input) grantOperands {
 	return grantOperands{principal: principal, role: role}
 }
 
-func roleRevokeVerb(lang languageSource, store *state.State) contracts.Cmd {
+func roleRevokeVerb(cliMessages *clitext.Messages, lang languageSource, store *state.State) contracts.Cmd {
 	return contracts.New("role", "revoke").
 		Help(clitext.CmdHelpRoleRevoke).
 		ValueParam("principal", clitext.CmdParamRoleRevokePrincipal, false).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(revokeRole(lang(), store, in))
+			return cli.Data(revokeRole(cliMessages, lang(), store, in))
 		})
 }
 
-func revokeRole(lang i18n.Language, store *state.State, in contracts.Input) (string, error) {
+func revokeRole(cliMessages *clitext.Messages, lang i18n.Language, store *state.State, in contracts.Input) (string, error) {
 	principal := strings.TrimSpace(firstOf(in.Get("principal"), in.Rest))
 	if principal == "" {
 		return "", errPrincipalMissing
@@ -131,27 +131,27 @@ func revokeRole(lang i18n.Language, store *state.State, in contracts.Input) (str
 		return "", &noRoleError{Principal: principal}
 	}
 	if len(store.RoleAssignments()) == 0 {
-		return replyText(lang).Text(clitext.HostRoleRevokedLast, clitext.Params{clitext.ParamPrincipal: principal}), nil
+		return replyText(cliMessages, lang).Text(clitext.HostRoleRevokedLast, clitext.Params{clitext.ParamPrincipal: principal}), nil
 	}
-	return replyText(lang).Text(clitext.HostRoleRevoked, clitext.Params{clitext.ParamPrincipal: principal}), nil
+	return replyText(cliMessages, lang).Text(clitext.HostRoleRevoked, clitext.Params{clitext.ParamPrincipal: principal}), nil
 }
 
-func roleShowVerb(lang languageSource, store *state.State) contracts.Cmd {
+func roleShowVerb(cliMessages *clitext.Messages, lang languageSource, store *state.State) contracts.Cmd {
 	return contracts.New("role", "show").
 		Help(clitext.CmdHelpRoleShow).
 		ValueParam("principal", clitext.CmdParamRoleShowPrincipal, false).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(showRole(lang(), store, in))
+			return cli.Data(showRole(cliMessages, lang(), store, in))
 		})
 }
 
-func showRole(lang i18n.Language, store *state.State, in contracts.Input) (string, error) {
+func showRole(cliMessages *clitext.Messages, lang i18n.Language, store *state.State, in contracts.Input) (string, error) {
 	principal := strings.TrimSpace(firstOf(in.Get("principal"), in.Rest))
 	if principal == "" {
 		return "", errPrincipalMissing
 	}
 	role := authz.RoleOf(authz.Principal{ID: principal}, store.RoleNames())
-	return replyText(lang).Text(clitext.HostRoleHolds, clitext.Params{clitext.ParamPrincipal: principal, clitext.ParamRole: string(role)}) + "\n" + authz.Describe(role), nil
+	return replyText(cliMessages, lang).Text(clitext.HostRoleHolds, clitext.Params{clitext.ParamPrincipal: principal, clitext.ParamRole: string(role)}) + "\n" + authz.Describe(role), nil
 }
 
 func grantable(principal, role string) error {

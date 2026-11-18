@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -27,7 +28,7 @@ func TestGoLiveReportsACommandSocketItCannotOpen(t *testing.T) {
 		nil,
 		nil,
 		newApprovalTable(io.Discard),
-		newSessionTable(newHostMessages()),
+		newSessionTable(newHostMessages(), clitext.NewMessages()),
 	)
 	h.runtime = layout
 	err := h.goLive(t.Context(), state.Session{Name: name, Incarnation: "incarnation"})

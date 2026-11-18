@@ -148,14 +148,14 @@ func (m *model) healthBody() []string {
 		return []string{"", m.st.dim.Render(m.tr.t("tui.health.waiting", nil)), ""}
 	}
 	pal := m.reportPalette()
-	view, err := m.health.snapshot.View(m.tr.lang)
+	view, err := m.health.snapshot.View(m.tr.messages, m.tr.lang)
 	if err != nil {
 		return []string{m.st.red.Render(m.tr.t("tui.health.render_failed", nil))}
 	}
 	lines := []string{"", spreadLine(healthCounts(view, pal), m.st.dim.Render(m.healthProbed()), m.frameInner()), ""}
 	if m.health.detail {
 		var out bytes.Buffer
-		if err := m.health.snapshot.Details(&out, problemChecks(m.health.snapshot.Checks), m.tr.lang, pal); err != nil {
+		if err := m.health.snapshot.Details(&out, m.tr.messages, problemChecks(m.health.snapshot.Checks), m.tr.lang, pal); err != nil {
 			return []string{m.st.red.Render(m.tr.t("tui.health.render_failed", nil))}
 		}
 		return append(lines, strings.Split(strings.TrimRight(out.String(), "\n"), "\n")...)

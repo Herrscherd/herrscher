@@ -8,6 +8,7 @@ import (
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/termpaint"
 )
 
@@ -15,7 +16,7 @@ func TestLimitCardsKeepTheBoxClosed(t *testing.T) {
 	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
 	for _, width := range []int{60, 100, 140} {
 		for _, pal := range []termpaint.Palette{{}, termpaint.ANSIPalette()} {
-			lines, err := LimitCards(limitsSnapshot(now), i18n.French, pal, UnicodeEdges(), width)
+			lines, err := LimitCards(limitsSnapshot(now), clitext.NewMessages(), i18n.French, pal, UnicodeEdges(), width)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -38,7 +39,7 @@ func boxWidths(lines []string) []int {
 
 func TestLimitCardsGroupAccountsByWindow(t *testing.T) {
 	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
-	lines, err := LimitCards(limitsSnapshot(now), i18n.French, termpaint.Palette{}, UnicodeEdges(), 140)
+	lines, err := LimitCards(limitsSnapshot(now), clitext.NewMessages(), i18n.French, termpaint.Palette{}, UnicodeEdges(), 140)
 	if err != nil {
 		t.Fatal(err)
 	}

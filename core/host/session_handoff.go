@@ -43,6 +43,7 @@ var (
 
 type handoffDeps struct {
 	messages     *hostMessages
+	cliMessages  *clitext.Messages
 	lang         languageSource
 	sessionLang  func(name string) i18n.Language
 	exists       func(name string) bool
@@ -99,14 +100,15 @@ func (l *handoffLimiter) forgetIdle(now time.Time) {
 	}
 }
 
-func sessionHandoffCmd(lang languageSource, managerCmds []contracts.Cmd, store *state.State, sessions *sessionTable, layout RuntimeLayout, instID string, seedCoord *coordinatorSlot, checkAccount func(contracts.Input) error) (contracts.Cmd, error) {
+func sessionHandoffCmd(cliMessages *clitext.Messages, lang languageSource, managerCmds []contracts.Cmd, store *state.State, sessions *sessionTable, layout RuntimeLayout, instID string, seedCoord *coordinatorSlot, checkAccount func(contracts.Input) error) (contracts.Cmd, error) {
 	create, ok := findCommand(managerCmds, nsSession, "create")
 	if !ok {
 		return contracts.Cmd{}, errHandoffNoCreate
 	}
 	return sessionHandoffVerb(handoffDeps{
-		messages: sessions.messages,
-		lang:     lang,
+		messages:    sessions.messages,
+		cliMessages: cliMessages,
+		lang:        lang,
 		sessionLang: func(name string) i18n.Language {
 			return namedSessionLanguage(store, name, lang())
 		},
@@ -123,11 +125,11 @@ func sessionHandoffCmd(lang languageSource, managerCmds []contracts.Cmd, store *
 		},
 		brief: func(ctx context.Context, source string) (string, error) {
 			in := contracts.Input{Args: map[string]string{paramName: source, "task": handoffBriefTaskFor(store, source, lang()), "timeout": handoffBriefTimeout}}
-			return runSeedVerb(ctx, sessions.messages, sessions.oneShotPersists, in, store, layout, instID, seedCoord.coord)
+			return runSeedVerb(ctx, sessions.messages, sessions.cliMessages, sessions.oneShotPersists, in, store, layout, instID, seedCoord.coord)
 		},
 		create: func(ctx context.Context, in contracts.Input) (string, error) {
 			res, err := create.Run(ctx, in)
-			return cli.Render(res, err, i18n.English)
+			return cli.Render(sessions.cliMessages, res, err, i18n.English)
 		},
 		send: func(ctx context.Context, target, author, text string) error {
 			return sendToSession(ctx, sessions, contracts.Input{Args: map[string]string{paramName: target, "author": author, "text": text}})
@@ -169,7 +171,7 @@ func (d handoffDeps) run(ctx context.Context, input contracts.Input) (string, er
 	}
 	target := strings.TrimSpace(input.Get(paramTo))
 	if target == "" {
-		return handoffPointer(d.replyLang(source), source), nil
+		return handoffPointer(d.cliMessages, d.replyLang(source), source), nil
 	}
 	if err := checkHandoffTargets(input, byAgent); err != nil {
 		return "", err
@@ -292,7 +294,7 @@ func (d handoffDeps) deliver(ctx context.Context, source, target, reply, brief, 
 	if err := d.send(ctx, target, "session "+source, handoffMessage(source, brief)); err != nil {
 		return "", wrapHost(d.messages, err, "handoff.not_delivered", map[string]any{nameParam: target})
 	}
-	return handoffReport(d.replyLang(source), source, target, reply, brief, account), nil
+	return handoffReport(d.cliMessages, d.replyLang(source), source, target, reply, brief, account), nil
 }
 
 func newSessionArgs(target, account string, input contracts.Input, parent string) map[string]string {
@@ -318,8 +320,8 @@ func (d handoffDeps) replyLang(source string) i18n.Language {
 	return d.sessionLang(source)
 }
 
-func handoffPointer(lang i18n.Language, source string) string {
-	text := replyText(lang)
+func handoffPointer(cliMessages *clitext.Messages, lang i18n.Language, source string) string {
+	text := replyText(cliMessages, lang)
 	where := text.Text(clitext.HostHandoffSession, nil)
 	if source != "" {
 		where = text.Text(clitext.HostHandoffSessionNamed, clitext.Params{clitext.ParamName: source})
@@ -331,8 +333,8 @@ func handoffMessage(source, brief string) string {
 	return "[Handover from session " + source + "]\n\n" + brief
 }
 
-func handoffReport(lang i18n.Language, source, target, reply, brief, account string) string {
-	text := replyText(lang)
+func handoffReport(cliMessages *clitext.Messages, lang i18n.Language, source, target, reply, brief, account string) string {
+	text := replyText(cliMessages, lang)
 	if account == "" {
 		account = text.Text(clitext.HostHandoffVendorDefault, nil)
 	}

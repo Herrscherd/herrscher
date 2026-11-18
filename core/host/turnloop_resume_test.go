@@ -7,12 +7,13 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 func TestAwaitTurnPersistsResumeToken(t *testing.T) {
 	from := make(chan contracts.Event, 1)
-	d := newSessionDriver(newHostMessages(), "s", nil, make(chan contracts.Event, 1), from, io.Discard)
+	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s", nil, make(chan contracts.Event, 1), from, io.Discard)
 	var got string
 	d.sink.Resume = func(tok string) { got = tok }
 
@@ -27,7 +28,7 @@ func TestAwaitTurnPersistsResumeToken(t *testing.T) {
 
 func TestAwaitTurnSkipsEmptyResumeToken(t *testing.T) {
 	from := make(chan contracts.Event, 1)
-	d := newSessionDriver(newHostMessages(), "s", nil, make(chan contracts.Event, 1), from, io.Discard)
+	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s", nil, make(chan contracts.Event, 1), from, io.Discard)
 	called := false
 	d.sink.Resume = func(string) { called = true }
 

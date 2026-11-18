@@ -7,6 +7,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/language"
 )
 
@@ -15,15 +16,16 @@ func TestTUIFollowsTheClientLocaleWithoutPublishingIt(t *testing.T) {
 	t.Setenv(language.EnvVar, "")
 	t.Setenv("LANG", "fr_FR.UTF-8")
 	notice := contracts.NoticeResult(contracts.Notice{Code: contracts.CodeSessionClosed, Args: []contracts.Arg{contracts.Text("Name", "demo")}})
-	got, err := textResult(notice, nil)
+	term := &Terminal{messages: clitext.NewMessages()}
+	got, err := term.textResult(notice, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	french, err := cli.Render(notice, nil, i18n.French)
+	french, err := cli.Render(clitext.NewMessages(), notice, nil, i18n.French)
 	if err != nil {
 		t.Fatal(err)
 	}
-	english, err := cli.Render(notice, nil, i18n.English)
+	english, err := cli.Render(clitext.NewMessages(), notice, nil, i18n.English)
 	if err != nil {
 		t.Fatal(err)
 	}

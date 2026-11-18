@@ -10,6 +10,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
 )
 
@@ -26,7 +27,7 @@ func renderAcrossSocket(t *testing.T, serverErr error, lang i18n.Language) strin
 	if !handled || err == nil {
 		t.Fatalf("socket returned handled=%v err=%v, want a failure", handled, err)
 	}
-	_, rendered := cli.Render(contracts.Result{}, err, lang)
+	_, rendered := cli.Render(clitext.NewMessages(), contracts.Result{}, err, lang)
 	if rendered == nil {
 		t.Fatal("render returned no error text")
 	}
@@ -44,7 +45,7 @@ func TestSessionNotFoundCrossesTheSocketInTheCallerLanguage(t *testing.T) {
 }
 
 func TestSessionLimitCrossesTheSocketInTheCallerLanguage(t *testing.T) {
-	limit := &manager.SessionLimitError{Max: 3}
+	limit := manager.NewSessionLimitError(clitext.NewMessages(), 3)
 	if got, want := renderAcrossSocket(t, limit, i18n.French), "limite de sessions atteinte : 3 sessions autorisées ; ferme-en une avant d'en créer une autre"; got != want {
 		t.Fatalf("fr = %q, want %q", got, want)
 	}

@@ -13,6 +13,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
@@ -20,12 +21,12 @@ import (
 func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
 	t.Helper()
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
-	var r cli.Registry
+	r := cli.NewRegistry(clitext.NewMessages())
 	cmd := contracts.New(path...).Param("name", "", true).
 		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
 			*got = in
@@ -34,18 +35,18 @@ func hubWith(t *testing.T, path []string, got *contracts.Input) *hub {
 	if err := r.Add(cmd); err != nil {
 		t.Fatal(err)
 	}
-	h := newHub(st, sup, nil, t.TempDir(), &r, nil, approvalTab, sessionTab)
+	h := newHub(st, sup, nil, t.TempDir(), r, nil, approvalTab, sessionTab)
 	h.runtime = isolatedRuntimeDir(t)
 	return h
 }
 
 func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	entered, release := make(chan struct{}), make(chan struct{})
-	var r cli.Registry
+	r := cli.NewRegistry(clitext.NewMessages())
 	slow := contracts.New("plug", "read").Do(func(context.Context, contracts.Input) (contracts.Result, error) {
 		close(entered)
 		<-release
@@ -60,7 +61,7 @@ func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
 		}
 	}
 	h := newHub(state.NewState(t.TempDir()+"/s.json"),
-		supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t)), nil, t.TempDir(), &r, nil, approvalTab, sessionTab)
+		supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t)), nil, t.TempDir(), r, nil, approvalTab, sessionTab)
 	h.runtime = isolatedRuntimeDir(t)
 	h.contributedKinds = contributedKinds([]contracts.Cmd{slow})
 
@@ -87,7 +88,7 @@ func TestContributedCommandDoesNotBlockTheHub(t *testing.T) {
 }
 
 func TestSessionSeedRegisteredRequiresNameAndTask(t *testing.T) {
-	reg, err := NewRegistry(context.Background(), nil, Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json"})
+	reg, err := NewRegistry(context.Background(), clitext.NewMessages(), NewMessages(), nil, Options{Runtime: testRuntime(t), StatePath: t.TempDir() + "/s.json"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +167,7 @@ func TestHubCloseOmitsForceWhenFalse(t *testing.T) {
 
 func TestHubDispatchSetSource(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	st := state.NewState(t.TempDir() + "/s.json")
@@ -190,12 +191,12 @@ func TestHubDispatchSetSource(t *testing.T) {
 func newTestHub(t *testing.T, opts ...hubOption) *hub {
 	t.Helper()
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
-	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab, opts...)
+	h := newHub(st, sup, nil, t.TempDir(), cli.NewRegistry(clitext.NewMessages()), nil, approvalTab, sessionTab, opts...)
 	h.runtime = isolatedRuntimeDir(t)
 	t.Cleanup(h.stopLive)
 	return h
@@ -305,6 +306,7 @@ func TestGoDeadCallsForget(t *testing.T) {
 	stub := &stubForgetCoord{}
 	h := testHub(&hub{
 		messages:      newHostMessages(),
+		cliMessages:   clitext.NewMessages(),
 		warnings:      io.Discard,
 		coordinator:   stub,
 		live:          make(map[string]liveSession),

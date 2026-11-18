@@ -7,13 +7,14 @@ import (
 )
 
 func TestEveryWorktreeKeyRendersWithItsDeclaredFieldsInEachLanguage(t *testing.T) {
+	messages := NewMessages()
 	for key, fields := range worktreeKeys() {
 		params := Params{}
 		for _, field := range fields {
 			params[field] = "x"
 		}
 		for _, lang := range []i18n.Language{i18n.English, i18n.French} {
-			text, err := Text(lang, key, params)
+			text, err := messages.Text(lang, key, params)
 			if err != nil {
 				t.Fatalf("%s in %v: %v", key, lang, err)
 			}

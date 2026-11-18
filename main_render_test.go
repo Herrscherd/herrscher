@@ -21,7 +21,7 @@ func TestReportErrorPrintsTheFrenchErrorLine(t *testing.T) {
 	old := os.Stderr
 	os.Stderr = w
 	t.Setenv("HERRSCHER_LANG", "fr")
-	code := reportError(errors.New("boom"))
+	code := reportError(testMessages(), errors.New("boom"))
 	os.Stderr = old
 	if closeErr := w.Close(); closeErr != nil {
 		t.Fatal(closeErr)
@@ -37,7 +37,7 @@ func TestReportErrorPrintsTheFrenchErrorLine(t *testing.T) {
 
 func TestDefaultConfigRendersTheRealGatewaySettingsInFrench(t *testing.T) {
 	t.Setenv("HERRSCHER_LANG", "fr")
-	cfg, err := service.DefaultConfig()
+	cfg, err := service.DefaultConfig(clitext.NewMessages())
 	if err != nil {
 		t.Fatalf("DefaultConfig() with the real plugins: %v", err)
 	}

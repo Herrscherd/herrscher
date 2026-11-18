@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/usage"
 )
@@ -15,11 +16,11 @@ import (
 func TestAttachOneShotTapsRecordsTheUsageOfTheSeed(t *testing.T) {
 	var recorded []usage.Record
 	var owner string
-	runtime := oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), recordUsage: func(sess state.Session, records []usage.Record) {
+	runtime := oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), recordUsage: func(sess state.Session, records []usage.Record) {
 		owner = sess.Name
 		recorded = append(recorded, records...)
 	}}
-	driver := &sessionDriver{messages: newHostMessages(), persists: newPersistWrites()}
+	driver := &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), persists: newPersistWrites()}
 
 	attachOneShotTaps(driver, state.Session{Name: "seed-a"}, runtime)
 	driver.sink.Usage([]usage.Record{{In: 7, Out: 3, Cost: 0.02}})

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -28,7 +29,7 @@ func shellFixture(t *testing.T, mode string) (*state.State, *approvalTable, *ses
 			t.Fatalf("SetSessionApprovals: %v", err)
 		}
 	}
-	return st, newApprovalTable(io.Discard), newSessionTable(newHostMessages()), dir
+	return st, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()), dir
 }
 
 func TestSessionShellRunsInTheSessionDirAndReturnsOutput(t *testing.T) {

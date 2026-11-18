@@ -23,7 +23,7 @@ func TestParseUsageArgsSelectsEachView(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			opts, err := parseUsageArgs(i18n.English, tc.args)
+			opts, err := parseUsageArgs(testMessages(), i18n.English, tc.args)
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("parseUsageArgs(%q) error = %v, want error %t", tc.args, err, tc.wantErr)
 			}
@@ -36,7 +36,7 @@ func TestParseUsageArgsSelectsEachView(t *testing.T) {
 
 func TestParseUsageArgsRefusesEmptyValues(t *testing.T) {
 	for _, args := range [][]string{{"--range="}, {"--account="}, {"--range", ""}, {"--account", ""}} {
-		if _, err := parseUsageArgs(i18n.English, args); !errors.Is(err, usagecore.ErrEmptyValue) {
+		if _, err := parseUsageArgs(testMessages(), i18n.English, args); !errors.Is(err, usagecore.ErrEmptyValue) {
 			t.Errorf("parseUsageArgs(%q) error = %v, want ErrEmptyValue", args, err)
 		}
 	}

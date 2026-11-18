@@ -6,18 +6,19 @@ import (
 	"testing"
 
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
 
 func TestReconcileStopsTheBridgeOfARemovedSession(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
-	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab)
+	h := newHub(st, sup, nil, t.TempDir(), cli.NewRegistry(clitext.NewMessages()), nil, approvalTab, sessionTab)
 	h.runtime = isolatedRuntimeDir(t)
 	t.Cleanup(h.stopLive)
 
@@ -42,12 +43,12 @@ func TestReconcileStopsTheBridgeOfARemovedSession(t *testing.T) {
 
 func TestReconcileStopsTheBridgeOfAnArchivedSession(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	st := state.NewState(t.TempDir() + "/s.json")
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
-	h := newHub(st, sup, nil, t.TempDir(), &cli.Registry{}, nil, approvalTab, sessionTab)
+	h := newHub(st, sup, nil, t.TempDir(), cli.NewRegistry(clitext.NewMessages()), nil, approvalTab, sessionTab)
 	h.runtime = isolatedRuntimeDir(t)
 	t.Cleanup(h.stopLive)
 

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -39,16 +40,17 @@ func (b countingCompactBackend) Compact(context.Context, contracts.CompactReques
 }
 
 func seedWithAutomaticCompactionAndPublish(backend contracts.Backend, timeout time.Duration, publish func(string, contracts.Event)) (string, error) {
-	table := newSessionTable(newHostMessages())
+	table := newSessionTable(newHostMessages(), clitext.NewMessages())
 	policy := compactPolicy(50, contracts.CompactStageBackend)
 	policy.limits = contextwindow.NewLimits("1000", nil)
 	table.compaction = policy
 	runtime := oneShotSeedRuntime{
-		persists: newPersistWrites(),
-		messages: newHostMessages(),
-		timeout:  timeout,
-		sessions: table,
-		publish:  publish,
+		persists:    newPersistWrites(),
+		messages:    newHostMessages(),
+		cliMessages: clitext.NewMessages(),
+		timeout:     timeout,
+		sessions:    table,
+		publish:     publish,
 		backend: func(context.Context, state.Session) (contracts.Backend, error) {
 			return backend, nil
 		},

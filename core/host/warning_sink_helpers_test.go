@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func englishLostLine(messages *hostMessages) func(lost int) string {
@@ -26,7 +27,7 @@ func englishStillRunningLine(messages *hostMessages) string {
 
 func testHub(h *hub) *hub {
 	if h.sessions == nil {
-		h.sessions = newSessionTable(h.messages)
+		h.sessions = newSessionTable(h.messages, clitext.NewMessages())
 	}
 	h.bindSessionState()
 	out := h.warnings

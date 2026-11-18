@@ -38,21 +38,21 @@ type usageOptions struct {
 	asJSON  bool
 }
 
-func runUsage(ctx context.Context, layout host.RuntimeLayout, args []string) error {
+func runUsage(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, args []string) error {
 	lang := clitext.ClientLanguage()
-	opts, err := parseUsageArgs(lang, args)
+	opts, err := parseUsageArgs(messages, lang, args)
 	if err != nil {
 		return err
 	}
 	instance := host.ServedInstanceID(host.DefaultStatePath(), "")
-	snapshot, err := fetchUsage(ctx, layout, instance, opts)
+	snapshot, err := fetchUsage(ctx, hostMessages, layout, instance, opts)
 	if host.IsDaemonNotRunning(err) {
-		return usageDaemonDown(layout, lang, instance)
+		return usageDaemonDown(layout, messages, lang, instance)
 	}
 	if err != nil {
 		return err
 	}
-	return writeUsage(os.Stdout, snapshot, opts, lang, outputPalette(os.Stdout))
+	return writeUsage(os.Stdout, messages, snapshot, opts, lang, outputPalette(os.Stdout))
 }
 
 func outputPalette(out *os.File) termpaint.Palette {
@@ -62,12 +62,12 @@ func outputPalette(out *os.File) termpaint.Palette {
 	return termpaint.ANSIPalette()
 }
 
-func usageDaemonDownText(lang i18n.Language, socket string) (string, error) {
-	return clitext.Text(lang, clitext.SpendDaemonDown, clitext.Params{clitext.ParamSocket: termpaint.Escape(socket).String()})
+func usageDaemonDownText(messages *clitext.Messages, lang i18n.Language, socket string) (string, error) {
+	return messages.Text(lang, clitext.SpendDaemonDown, clitext.Params{clitext.ParamSocket: termpaint.Escape(socket).String()})
 }
 
-func usageDaemonDown(layout host.RuntimeLayout, lang i18n.Language, instance string) error {
-	text, err := usageDaemonDownText(lang, host.CommandSocketPathIn(layout, instance))
+func usageDaemonDown(layout host.RuntimeLayout, messages *clitext.Messages, lang i18n.Language, instance string) error {
+	text, err := usageDaemonDownText(messages, lang, host.CommandSocketPathIn(layout, instance))
 	if err != nil {
 		return err
 	}
@@ -77,7 +77,7 @@ func usageDaemonDown(layout host.RuntimeLayout, lang i18n.Language, instance str
 	return exitStatusError{code: usageExitDown}
 }
 
-func parseUsageArgs(lang i18n.Language, args []string) (usageOptions, error) {
+func parseUsageArgs(messages *clitext.Messages, lang i18n.Language, args []string) (usageOptions, error) {
 	opts := usageOptions{view: usageViewLimits}
 	for index := 0; index < len(args); index++ {
 		name, value, inline := strings.Cut(args[index], "=")
@@ -86,29 +86,29 @@ func parseUsageArgs(lang i18n.Language, args []string) (usageOptions, error) {
 			opts.asJSON = true
 		case usageParamRange, usageParamAccount, usageParamVendor:
 			var err error
-			value, index, err = usageFlagValue(lang, args, index, name, value, inline)
+			value, index, err = usageFlagValue(messages, lang, args, index, name, value, inline)
 			if err != nil {
 				return opts, err
 			}
 			if value == "" {
-				return opts, renderError(lang, usagecore.ErrEmptyValue, clitext.FlagNeedsValue, clitext.Params{clitext.ParamCommand: usageVerb, clitext.ParamName: strings.TrimPrefix(name, "--")})
+				return opts, renderError(messages, lang, usagecore.ErrEmptyValue, clitext.FlagNeedsValue, clitext.Params{clitext.ParamCommand: usageVerb, clitext.ParamName: strings.TrimPrefix(name, "--")})
 			}
 			setUsageParam(&opts, name, value)
 		default:
-			if err := applyUsageArg(lang, &opts, name); err != nil {
+			if err := applyUsageArg(messages, lang, &opts, name); err != nil {
 				return opts, err
 			}
 		}
 	}
-	return opts, validateUsageOptions(lang, opts)
+	return opts, validateUsageOptions(messages, lang, opts)
 }
 
-func usageFlagValue(lang i18n.Language, args []string, index int, name, value string, inline bool) (string, int, error) {
+func usageFlagValue(messages *clitext.Messages, lang i18n.Language, args []string, index int, name, value string, inline bool) (string, int, error) {
 	if inline {
 		return value, index, nil
 	}
 	if index+1 >= len(args) {
-		return "", index, renderError(lang, errUnknownArgument, clitext.FlagNeedsValue, clitext.Params{clitext.ParamCommand: usageVerb, clitext.ParamName: strings.TrimPrefix(name, "--")})
+		return "", index, renderError(messages, lang, errUnknownArgument, clitext.FlagNeedsValue, clitext.Params{clitext.ParamCommand: usageVerb, clitext.ParamName: strings.TrimPrefix(name, "--")})
 	}
 	return args[index+1], index + 1, nil
 }
@@ -124,25 +124,25 @@ func setUsageParam(opts *usageOptions, name, value string) {
 	}
 }
 
-func applyUsageArg(lang i18n.Language, opts *usageOptions, name string) error {
+func applyUsageArg(messages *clitext.Messages, lang i18n.Language, opts *usageOptions, name string) error {
 	if strings.HasPrefix(name, "--") {
-		return renderError(lang, errUnknownArgument, clitext.FlagUnknown, clitext.Params{clitext.ParamCommand: usageVerb, clitext.ParamName: strconv.Quote(name)})
+		return renderError(messages, lang, errUnknownArgument, clitext.FlagUnknown, clitext.Params{clitext.ParamCommand: usageVerb, clitext.ParamName: strconv.Quote(name)})
 	}
 	if !isUsageView(name) {
-		return renderError(lang, errUnknownArgument, clitext.SpendModeUnknown, clitext.Params{clitext.ParamName: strconv.Quote(name)})
+		return renderError(messages, lang, errUnknownArgument, clitext.SpendModeUnknown, clitext.Params{clitext.ParamName: strconv.Quote(name)})
 	}
 	opts.view = name
 	return nil
 }
 
-func validateUsageOptions(lang i18n.Language, opts usageOptions) error {
+func validateUsageOptions(messages *clitext.Messages, lang i18n.Language, opts usageOptions) error {
 	if opts.rng != "" {
 		if _, err := usagecore.ParseRange(opts.rng); err != nil {
-			return renderError(lang, err, clitext.SpendRangeUnknown, clitext.Params{clitext.ParamName: strconv.Quote(opts.rng)})
+			return renderError(messages, lang, err, clitext.SpendRangeUnknown, clitext.Params{clitext.ParamName: strconv.Quote(opts.rng)})
 		}
 	}
 	if _, err := usagecore.ParseAccountKey(opts.account); err != nil {
-		return renderError(lang, err, clitext.SpendAccountInvalid, clitext.Params{clitext.ParamName: strconv.Quote(opts.account)})
+		return renderError(messages, lang, err, clitext.SpendAccountInvalid, clitext.Params{clitext.ParamName: strconv.Quote(opts.account)})
 	}
 	return nil
 }
@@ -155,7 +155,7 @@ func isUsageView(name string) bool {
 	return false
 }
 
-func fetchUsage(ctx context.Context, layout host.RuntimeLayout, instance string, opts usageOptions) (usagecore.Snapshot, error) {
+func fetchUsage(ctx context.Context, hostMessages *host.Messages, layout host.RuntimeLayout, instance string, opts usageOptions) (usagecore.Snapshot, error) {
 	argv := []string{usageVerb}
 	if opts.rng != "" {
 		argv = append(argv, usageParamRange, opts.rng)
@@ -166,14 +166,14 @@ func fetchUsage(ctx context.Context, layout host.RuntimeLayout, instance string,
 	if opts.vendor != "" {
 		argv = append(argv, usageParamVendor, opts.vendor)
 	}
-	out, err := host.DaemonDispatch(ctx, host.NewMessages(), layout, instance, argv)
+	out, err := host.DaemonDispatch(ctx, hostMessages, layout, instance, argv)
 	if err != nil {
 		return usagecore.Snapshot{}, err
 	}
 	return usagecore.Decode([]byte(out))
 }
 
-func writeUsage(writer io.Writer, snapshot usagecore.Snapshot, opts usageOptions, lang i18n.Language, pal termpaint.Palette) error {
+func writeUsage(writer io.Writer, messages *clitext.Messages, snapshot usagecore.Snapshot, opts usageOptions, lang i18n.Language, pal termpaint.Palette) error {
 	if opts.asJSON {
 		raw, err := usagecore.Encode(snapshot)
 		if err != nil {
@@ -182,7 +182,7 @@ func writeUsage(writer io.Writer, snapshot usagecore.Snapshot, opts usageOptions
 		_, err = fmt.Fprintln(writer, string(raw))
 		return err
 	}
-	lines, err := usageLines(snapshot, opts.view, lang, pal)
+	lines, err := usageLines(messages, snapshot, opts.view, lang, pal)
 	if err != nil {
 		return err
 	}
@@ -194,15 +194,15 @@ func writeUsage(writer io.Writer, snapshot usagecore.Snapshot, opts usageOptions
 	return nil
 }
 
-func usageLines(snapshot usagecore.Snapshot, view string, lang i18n.Language, pal termpaint.Palette) ([]string, error) {
+func usageLines(messages *clitext.Messages, snapshot usagecore.Snapshot, view string, lang i18n.Language, pal termpaint.Palette) ([]string, error) {
 	switch view {
 	case usageViewCost:
-		return usagecore.CostLines(snapshot, lang, time.Local, pal)
+		return usagecore.CostLines(snapshot, messages, lang, time.Local, pal)
 	case usageViewTokens:
-		return usagecore.TokenLines(snapshot, lang, pal)
+		return usagecore.TokenLines(snapshot, messages, lang, pal)
 	case usageViewCompact:
-		return usagecore.CompactionLines(snapshot, lang, pal)
+		return usagecore.CompactionLines(snapshot, messages, lang, pal)
 	default:
-		return usagecore.LimitLines(snapshot, lang, pal)
+		return usagecore.LimitLines(snapshot, messages, lang, pal)
 	}
 }

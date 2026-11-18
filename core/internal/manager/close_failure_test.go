@@ -9,6 +9,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -71,7 +72,7 @@ func TestARefusedCloseNamesTheDirtySessionInEachLanguage(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := cli.Localize(refusedDirtyClose(t), tc.lang).Error()
+			got := cli.Localize(clitext.NewMessages(), refusedDirtyClose(t), tc.lang).Error()
 			for _, want := range tc.wants {
 				if !strings.Contains(got, want) {
 					t.Fatalf("rendered %q, want it to contain %q", got, want)

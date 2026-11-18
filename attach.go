@@ -24,12 +24,14 @@ import (
 var errNotAvailableFromTerminal = errors.New("not available from the terminal")
 
 type attachedDaemon struct {
-	lang     i18n.Language
-	done     <-chan struct{}
-	send     func(argv []string) (string, error)
-	launch   func(name string) []string
-	instance string
-	events   chan tui.RoutedEvent
+	messages     *clitext.Messages
+	hostMessages *host.Messages
+	lang         i18n.Language
+	done         <-chan struct{}
+	send         func(argv []string) (string, error)
+	launch       func(name string) []string
+	instance     string
+	events       chan tui.RoutedEvent
 
 	mu        sync.Mutex
 	sessions  []contracts.SessionInfo
@@ -40,24 +42,29 @@ type attachedDaemon struct {
 
 const sessionCacheTTL = time.Second
 
-func newAttachedDaemon(ctx context.Context, layout host.RuntimeLayout, instance, statePath string, lang i18n.Language) (*attachedDaemon, error) {
-	messages := host.NewMessages()
-	stream, err := host.SubscribeDaemonEvents(ctx, messages, layout, instance)
+func newAttachedDaemonState(messages *clitext.Messages, hostMessages *host.Messages, lang i18n.Language, done <-chan struct{}, events chan tui.RoutedEvent) *attachedDaemon {
+	return &attachedDaemon{
+		messages:     messages,
+		hostMessages: hostMessages,
+		lang:         lang,
+		done:         done,
+		events:       events,
+		channelOf:    make(map[string]string),
+		nameOf:       make(map[string]string),
+	}
+}
+
+func newAttachedDaemon(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, instance, statePath string, lang i18n.Language) (*attachedDaemon, error) {
+	stream, err := host.SubscribeDaemonEvents(ctx, hostMessages, layout, instance)
 	if err != nil {
 		return nil, err
 	}
-	daemon := &attachedDaemon{
-		lang:      lang,
-		done:      ctx.Done(),
-		instance:  instance,
-		events:    make(chan tui.RoutedEvent, attachBuffer),
-		channelOf: make(map[string]string),
-		nameOf:    make(map[string]string),
-	}
+	daemon := newAttachedDaemonState(messages, hostMessages, lang, ctx.Done(), make(chan tui.RoutedEvent, attachBuffer))
+	daemon.instance = instance
 	daemon.send = func(argv []string) (string, error) {
 		call, cancel := context.WithTimeout(ctx, attachTimeout)
 		defer cancel()
-		return host.DaemonDispatch(call, messages, layout, instance, argv)
+		return host.DaemonDispatch(call, hostMessages, layout, instance, argv)
 	}
 	daemon.launch = func(name string) []string { return attachedLaunch(ctx, statePath, name) }
 	daemon.refresh()
@@ -133,8 +140,11 @@ type attachRunner struct {
 	run     func(ctx context.Context, cancel context.CancelFunc, backend tui.Backend, opts ...tui.Option) error
 }
 
-func newAttachRunner(log *slog.Logger) attachRunner {
-	return attachRunner{log: log, connect: newAttachedDaemon, run: tui.Run}
+func newAttachRunner(messages *clitext.Messages, hostMessages *host.Messages, log *slog.Logger) attachRunner {
+	connect := func(ctx context.Context, layout host.RuntimeLayout, instance, statePath string, lang i18n.Language) (*attachedDaemon, error) {
+		return newAttachedDaemon(ctx, layout, messages, hostMessages, instance, statePath, lang)
+	}
+	return attachRunner{log: log, connect: connect, run: tui.Run}
 }
 
 func (r attachRunner) runAttached(ctx context.Context, layout host.RuntimeLayout, instance, statePath string, opts ...tui.Option) error {
@@ -231,7 +241,7 @@ func (a *attachedDaemon) notify(channel string, key clitext.Key, params clitext.
 	select {
 	case a.events <- tui.RoutedEvent{
 		Conv:  contracts.Conversation{Gateway: kindTerminal, ID: channel},
-		Event: contracts.Event{T: cmdStatus, Text: render(a.lang, key, params)},
+		Event: contracts.Event{T: cmdStatus, Text: render(a.messages, a.lang, key, params)},
 	}:
 	default:
 	}
@@ -243,7 +253,7 @@ func (a *attachedDaemon) Dispatch(args []string) (string, error) {
 		if len(args) > 0 {
 			verb = args[0]
 		}
-		return "", renderError(a.lang, errNotAvailableFromTerminal, clitext.AttachNotAvailable, clitext.Params{clitext.ParamVerb: strconv.Quote(verb)})
+		return "", renderError(a.messages, a.lang, errNotAvailableFromTerminal, clitext.AttachNotAvailable, clitext.Params{clitext.ParamVerb: strconv.Quote(verb)})
 	}
 	return a.dispatch(withTerminalOnly(args))
 }

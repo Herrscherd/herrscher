@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
 	"github.com/Herrscherd/herrscher/core/internal/runner"
@@ -26,7 +27,7 @@ type hostPlacer struct {
 	newRemote     func(runner.SSH, string) *worktree.Remote
 }
 
-func newHostPlacer(messages *hostMessages, lang languageSource, warn io.Writer, hostState *state.State, layout RuntimeLayout, instanceID string, local *worktree.Worktreer, sourceVersion func() string) hostPlacer {
+func newHostPlacer(messages *hostMessages, cliMessages *clitext.Messages, lang languageSource, warn io.Writer, hostState *state.State, layout RuntimeLayout, instanceID string, local *worktree.Worktreer, sourceVersion func() string) hostPlacer {
 	return hostPlacer{
 		messages:      messages,
 		lang:          lang,
@@ -36,7 +37,7 @@ func newHostPlacer(messages *hostMessages, lang languageSource, warn io.Writer, 
 		local:         local,
 		sourceVersion: sourceVersion,
 		newRemote: func(r runner.SSH, bin string) *worktree.Remote {
-			return worktree.NewRemote(r, bin, instanceID)
+			return worktree.NewRemote(cliMessages, r, bin, instanceID)
 		},
 	}
 }

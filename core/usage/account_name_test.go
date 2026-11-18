@@ -9,6 +9,7 @@ import (
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/termpaint"
 	"github.com/Herrscherd/herrscher/core/termpaint/termpainttest"
 )
@@ -20,7 +21,7 @@ func TestLimitCardsNeutraliseTheDefaultProfileName(t *testing.T) {
 			{Vendor: "claude", Account: "work\x1b]0;pwn\a\u202e", Default: true, Status: LimitsFailed},
 		},
 	}
-	lines, err := LimitCards(snapshot, i18n.English, termpaint.Palette{}, UnicodeEdges(), 140)
+	lines, err := LimitCards(snapshot, clitext.NewMessages(), i18n.English, termpaint.Palette{}, UnicodeEdges(), 140)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +37,7 @@ func TestLimitCardsNeutraliseTheDefaultProfileName(t *testing.T) {
 }
 
 func TestShareLabelsNeutraliseAccountAndModel(t *testing.T) {
-	text := &renderer{lang: i18n.English}
+	text := &renderer{messages: clitext.NewMessages(), lang: i18n.English}
 	share := Share{Vendor: "claude", Account: "work\u2066\x1b]0;pwn\a", Model: "opus\x1b[2J"}
 	account := accountLabel(share, text).String()
 	model := modelLabel(share, text).String()

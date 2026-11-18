@@ -7,6 +7,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 )
@@ -26,7 +27,7 @@ func TestEventTapAddressesTheSession(t *testing.T) {
 
 func TestDrivenSessionTapsTheEventSocket(t *testing.T) {
 	layout := isolatedRuntimeDir(t)
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	const name = "driventap-test"

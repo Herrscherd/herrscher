@@ -11,6 +11,7 @@ import (
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
@@ -31,11 +32,11 @@ func (f *fakeScheduleRunner) fireNow(_ context.Context, name string) error {
 
 func testScheduleRegistry(t *testing.T, st *state.State, slot *schedulerSlot) *cli.Registry {
 	t.Helper()
-	reg := &cli.Registry{}
+	reg := cli.NewRegistry(clitext.NewMessages())
 	if slot == nil {
 		slot = &schedulerSlot{}
 	}
-	if err := addScheduleCommands(reg, newHostMessages(), fixedLanguage(i18n.English), st, fakeAgents{known: map[string]bool{"scout": true}}, slot); err != nil {
+	if err := addScheduleCommands(reg, newHostMessages(), clitext.NewMessages(), fixedLanguage(i18n.English), st, fakeAgents{known: map[string]bool{"scout": true}}, slot); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
 	return reg
@@ -253,7 +254,7 @@ func TestScheduleRunNeedsALiveDaemon(t *testing.T) {
 
 func TestScheduleVerbsAreInTheRealRegistry(t *testing.T) {
 	approvalTab := newApprovalTable(io.Discard)
-	sessionTab := newSessionTable(newHostMessages())
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	dir := t.TempDir()

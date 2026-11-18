@@ -11,21 +11,21 @@ import (
 
 func TestAnnounceKeyFromEnvRefusesUnset(t *testing.T) {
 	t.Setenv("HERRSCHER_ANNOUNCE_KEY", "")
-	if _, err := announceKeyFromEnv(); !errors.Is(err, errAnnounceKeyUnset) {
+	if _, err := announceKeyFromEnv(testMessages()); !errors.Is(err, errAnnounceKeyUnset) {
 		t.Fatalf("unset key = %v, want errAnnounceKeyUnset", err)
 	}
 }
 
 func TestAnnounceKeyFromEnvRefusesShortSecret(t *testing.T) {
 	t.Setenv("HERRSCHER_ANNOUNCE_KEY", weakAnnounceKey)
-	if _, err := announceKeyFromEnv(); !errors.Is(err, transport.ErrWeakAnnounceKey) {
+	if _, err := announceKeyFromEnv(testMessages()); !errors.Is(err, transport.ErrWeakAnnounceKey) {
 		t.Fatalf("short key = %v, want transport.ErrWeakAnnounceKey", err)
 	}
 }
 
 func TestAnnounceKeyFromEnvAcceptsLongSecret(t *testing.T) {
 	t.Setenv("HERRSCHER_ANNOUNCE_KEY", "0123456789abcdef0123456789abcdef")
-	if _, err := announceKeyFromEnv(); err != nil {
+	if _, err := announceKeyFromEnv(testMessages()); err != nil {
 		t.Fatalf("valid key = %v, want nil", err)
 	}
 }
@@ -36,7 +36,7 @@ func TestNewResolverRequiresAnnounceKeyWhenRemote(t *testing.T) {
 	t.Setenv("HERRSCHER_TLS_CA", "")
 	t.Setenv("HERRSCHER_TLS_CERT", "")
 	t.Setenv("HERRSCHER_TLS_KEY", "")
-	if _, err := newResolver(host.NewMessages(), slog.New(slog.DiscardHandler)); !errors.Is(err, errAnnounceKeyUnset) {
+	if _, err := newResolver(testMessages(), host.NewMessages(), slog.New(slog.DiscardHandler)); !errors.Is(err, errAnnounceKeyUnset) {
 		t.Fatalf("remote without key = %v, want errAnnounceKeyUnset", err)
 	}
 }
@@ -47,7 +47,7 @@ func TestNewResolverNeedsNoAnnounceKeyWhenLocal(t *testing.T) {
 	t.Setenv("HERRSCHER_TLS_CA", "")
 	t.Setenv("HERRSCHER_TLS_CERT", "")
 	t.Setenv("HERRSCHER_TLS_KEY", "")
-	if _, err := newResolver(host.NewMessages(), slog.New(slog.DiscardHandler)); err != nil {
+	if _, err := newResolver(testMessages(), host.NewMessages(), slog.New(slog.DiscardHandler)); err != nil {
 		t.Fatalf("local resolver = %v, want nil", err)
 	}
 }
@@ -60,7 +60,7 @@ func TestNewResolverRefusesAWeakAnnounceKeyWhenRemote(t *testing.T) {
 	t.Setenv("HERRSCHER_TLS_CA", "")
 	t.Setenv("HERRSCHER_TLS_CERT", "")
 	t.Setenv("HERRSCHER_TLS_KEY", "")
-	if _, err := newResolver(host.NewMessages(), slog.New(slog.DiscardHandler)); !errors.Is(err, transport.ErrWeakAnnounceKey) {
+	if _, err := newResolver(testMessages(), host.NewMessages(), slog.New(slog.DiscardHandler)); !errors.Is(err, transport.ErrWeakAnnounceKey) {
 		t.Fatalf("remote with a weak key = %v, want transport.ErrWeakAnnounceKey", err)
 	}
 }

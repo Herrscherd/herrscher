@@ -14,19 +14,19 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-func addScheduleCommands(reg *cli.Registry, messages *hostMessages, lang languageSource, hostState *state.State, agents agentLookup, slot *schedulerSlot) error {
+func addScheduleCommands(reg *cli.Registry, messages *hostMessages, cliMessages *clitext.Messages, lang languageSource, hostState *state.State, agents agentLookup, slot *schedulerSlot) error {
 	return addVerbs(
 		reg,
-		scheduleAddVerb(messages, lang, hostState, agents),
-		scheduleListVerb(messages, lang, hostState),
-		scheduleRmVerb(lang, hostState),
-		schedulePauseVerb(messages, lang, hostState, "pause", true, clitext.CmdHelpSchedulePause),
-		schedulePauseVerb(messages, lang, hostState, "resume", false, clitext.CmdHelpScheduleResume),
-		scheduleRunVerb(lang, slot),
+		scheduleAddVerb(messages, cliMessages, lang, hostState, agents),
+		scheduleListVerb(messages, cliMessages, lang, hostState),
+		scheduleRmVerb(cliMessages, lang, hostState),
+		schedulePauseVerb(messages, cliMessages, lang, hostState, "pause", true, clitext.CmdHelpSchedulePause),
+		schedulePauseVerb(messages, cliMessages, lang, hostState, "resume", false, clitext.CmdHelpScheduleResume),
+		scheduleRunVerb(cliMessages, lang, slot),
 	)
 }
 
-func scheduleAddVerb(messages *hostMessages, lang languageSource, store *state.State, agents agentLookup) contracts.Cmd {
+func scheduleAddVerb(messages *hostMessages, cliMessages *clitext.Messages, lang languageSource, store *state.State, agents agentLookup) contracts.Cmd {
 	return contracts.New(nsSchedule, "add").
 		Help(clitext.CmdHelpScheduleAdd).
 		Param(paramName, clitext.CmdParamScheduleAddName, true).
@@ -42,7 +42,7 @@ func scheduleAddVerb(messages *hostMessages, lang languageSource, store *state.S
 			if err != nil {
 				return contracts.Result{}, err
 			}
-			return cli.Data(addSchedule(lang(), store, agents, input, now))
+			return cli.Data(addSchedule(cliMessages, lang(), store, agents, input, now))
 		})
 }
 
@@ -54,7 +54,7 @@ func currentScheduleTime(messages *hostMessages) (time.Time, error) {
 	return clock(), nil
 }
 
-func addSchedule(lang i18n.Language, store *state.State, agents agentLookup, input contracts.Input, now time.Time) (string, error) {
+func addSchedule(cliMessages *clitext.Messages, lang i18n.Language, store *state.State, agents agentLookup, input contracts.Input, now time.Time) (string, error) {
 	sched := schedule.Schedule{
 		Name:      strings.TrimSpace(input.Get(paramName)),
 		Session:   strings.TrimSpace(input.Get(paramSession)),
@@ -72,8 +72,8 @@ func addSchedule(lang i18n.Language, store *state.State, agents agentLookup, inp
 	if err := store.PutSchedule(sched); err != nil {
 		return "", err
 	}
-	text := replyText(lang)
-	out := text.Text(clitext.HostScheduleScheduled, clitext.Params{clitext.ParamName: sched.Name, clitext.ParamCadence: cadenceOf(lang, sched)})
+	text := replyText(cliMessages, lang)
+	out := text.Text(clitext.HostScheduleScheduled, clitext.Params{clitext.ParamName: sched.Name, clitext.ParamCadence: cadenceOf(cliMessages, lang, sched)})
 	if sched.Session != "" && !sessionKnown(store, sched.Session) {
 		out += text.Text(clitext.HostScheduleNoSession, clitext.Params{clitext.ParamName: sched.Session})
 	}
@@ -98,7 +98,7 @@ func checkNewSchedule(store *state.State, agents agentLookup, definition schedul
 	return nil
 }
 
-func scheduleListVerb(messages *hostMessages, lang languageSource, store *state.State) contracts.Cmd {
+func scheduleListVerb(messages *hostMessages, cliMessages *clitext.Messages, lang languageSource, store *state.State) contracts.Cmd {
 	return contracts.New(nsSchedule, "list").
 		Help(clitext.CmdHelpScheduleList).
 		Do(func(_ context.Context, _ contracts.Input) (contracts.Result, error) {
@@ -106,42 +106,42 @@ func scheduleListVerb(messages *hostMessages, lang languageSource, store *state.
 			if err != nil {
 				return contracts.Result{}, err
 			}
-			return contracts.DataResult(listSchedules(lang(), store, now)), nil
+			return contracts.DataResult(listSchedules(cliMessages, lang(), store, now)), nil
 		})
 }
 
-func listSchedules(lang i18n.Language, st *state.State, now time.Time) string {
+func listSchedules(cliMessages *clitext.Messages, lang i18n.Language, st *state.State, now time.Time) string {
 	rows := st.SnapshotSchedules()
 	if len(rows) == 0 {
-		return replyText(lang).Text(clitext.HostScheduleNone, nil)
+		return replyText(cliMessages, lang).Text(clitext.HostScheduleNone, nil)
 	}
 	var body strings.Builder
 	for index := range rows {
 		row := rows[index]
 		fmt.Fprintf(&body, "%s\t%s\t%s\t%s\t%s\t%s\n",
-			row.Name, targetOf(row), cadenceOf(lang, row), scheduleStatus(lang, row), lastRunOf(lang, row), nextWindowOf(lang, row, now))
+			row.Name, targetOf(row), cadenceOf(cliMessages, lang, row), scheduleStatus(cliMessages, lang, row), lastRunOf(cliMessages, lang, row), nextWindowOf(cliMessages, lang, row, now))
 	}
 	return strings.TrimRight(body.String(), "\n")
 }
 
-func scheduleStatus(lang i18n.Language, sched schedule.Schedule) string {
+func scheduleStatus(cliMessages *clitext.Messages, lang i18n.Language, sched schedule.Schedule) string {
 	var key clitext.Key = clitext.HostScheduleLive
 	if sched.Paused {
 		key = clitext.HostScheduleStatusPaused
 	}
-	return replyText(lang).Text(key, nil)
+	return replyText(cliMessages, lang).Text(key, nil)
 }
 
-func lastRunOf(lang i18n.Language, sched schedule.Schedule) string {
-	when := replyText(lang).Text(clitext.HostScheduleNever, nil)
+func lastRunOf(cliMessages *clitext.Messages, lang i18n.Language, sched schedule.Schedule) string {
+	when := replyText(cliMessages, lang).Text(clitext.HostScheduleNever, nil)
 	if sched.LastRun != "" {
 		when = sched.LastRun
 	}
-	return replyText(lang).Text(clitext.HostScheduleLastRun, clitext.Params{clitext.ParamWhen: when})
+	return replyText(cliMessages, lang).Text(clitext.HostScheduleLastRun, clitext.Params{clitext.ParamWhen: when})
 }
 
-func nextWindowOf(lang i18n.Language, sched schedule.Schedule, now time.Time) string {
-	text := replyText(lang)
+func nextWindowOf(cliMessages *clitext.Messages, lang i18n.Language, sched schedule.Schedule, now time.Time) string {
+	text := replyText(cliMessages, lang)
 	switch {
 	case sched.Paused:
 		return text.Text(clitext.HostScheduleNextRun, clitext.Params{clitext.ParamWhen: "-"})
@@ -155,7 +155,7 @@ func nextWindowOf(lang i18n.Language, sched schedule.Schedule, now time.Time) st
 	return text.Text(clitext.HostScheduleNextRun, clitext.Params{clitext.ParamWhen: when.Format(time.RFC3339)})
 }
 
-func scheduleRmVerb(lang languageSource, store *state.State) contracts.Cmd {
+func scheduleRmVerb(cliMessages *clitext.Messages, lang languageSource, store *state.State) contracts.Cmd {
 	return contracts.New(nsSchedule, "rm").
 		Help(clitext.CmdHelpScheduleRm).
 		Param(paramName, clitext.CmdParamScheduleRmName, true).
@@ -168,11 +168,11 @@ func scheduleRmVerb(lang languageSource, store *state.State) contracts.Cmd {
 			if !ok {
 				return contracts.Result{}, &NotFoundError{Kind: kindSchedule, Name: name}
 			}
-			return contracts.DataResult(replyText(lang()).Text(clitext.HostScheduleRemoved, clitext.Params{clitext.ParamName: name})), nil
+			return contracts.DataResult(replyText(cliMessages, lang()).Text(clitext.HostScheduleRemoved, clitext.Params{clitext.ParamName: name})), nil
 		})
 }
 
-func schedulePauseVerb(messages *hostMessages, lang languageSource, store *state.State, verb string, paused bool, helpKey string) contracts.Cmd {
+func schedulePauseVerb(messages *hostMessages, cliMessages *clitext.Messages, lang languageSource, store *state.State, verb string, paused bool, helpKey string) contracts.Cmd {
 	return contracts.New(nsSchedule, verb).
 		Help(helpKey).
 		Param(paramName, clitext.CmdParamScheduleName, true).
@@ -181,11 +181,11 @@ func schedulePauseVerb(messages *hostMessages, lang languageSource, store *state
 			if err != nil {
 				return contracts.Result{}, err
 			}
-			return cli.Data(setSchedulePaused(lang(), store, paused, strings.TrimSpace(input.Get(paramName)), now))
+			return cli.Data(setSchedulePaused(cliMessages, lang(), store, paused, strings.TrimSpace(input.Get(paramName)), now))
 		})
 }
 
-func setSchedulePaused(lang i18n.Language, store *state.State, paused bool, name string, now time.Time) (string, error) {
+func setSchedulePaused(cliMessages *clitext.Messages, lang i18n.Language, store *state.State, paused bool, name string, now time.Time) (string, error) {
 	ok, err := store.SetSchedulePaused(name, paused)
 	if err != nil {
 		return "", err
@@ -202,10 +202,10 @@ func setSchedulePaused(lang i18n.Language, store *state.State, paused bool, name
 	if paused {
 		key = clitext.HostSchedulePaused
 	}
-	return replyText(lang).Text(key, clitext.Params{clitext.ParamName: name}), nil
+	return replyText(cliMessages, lang).Text(key, clitext.Params{clitext.ParamName: name}), nil
 }
 
-func scheduleRunVerb(lang languageSource, slot *schedulerSlot) contracts.Cmd {
+func scheduleRunVerb(cliMessages *clitext.Messages, lang languageSource, slot *schedulerSlot) contracts.Cmd {
 	return contracts.New(nsSchedule, "run").
 		Help(clitext.CmdHelpScheduleRun).
 		Param(paramName, clitext.CmdParamScheduleRunName, true).
@@ -217,7 +217,7 @@ func scheduleRunVerb(lang languageSource, slot *schedulerSlot) contracts.Cmd {
 			if err := slot.sched.fireNow(cmdCtx, name); err != nil {
 				return contracts.Result{}, err
 			}
-			return contracts.DataResult(replyText(lang()).Text(clitext.HostScheduleFired, clitext.Params{clitext.ParamName: name})), nil
+			return contracts.DataResult(replyText(cliMessages, lang()).Text(clitext.HostScheduleFired, clitext.Params{clitext.ParamName: name})), nil
 		})
 }
 
@@ -239,8 +239,8 @@ func targetOf(definition schedule.Schedule) string {
 	return "agent:" + definition.Agent
 }
 
-func cadenceOf(lang i18n.Language, definition schedule.Schedule) string {
-	text := replyText(lang)
+func cadenceOf(cliMessages *clitext.Messages, lang i18n.Language, definition schedule.Schedule) string {
+	text := replyText(cliMessages, lang)
 	if definition.Every != "" {
 		return text.Text(clitext.HostScheduleEvery, clitext.Params{clitext.ParamEvery: definition.Every})
 	}

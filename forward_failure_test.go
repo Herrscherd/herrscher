@@ -41,11 +41,11 @@ func TestForwardDecodeFr(t *testing.T) {
 		}
 	})
 	go answerNotJSON(t, ln)
-	_, _, derr := forwardUnknownVerb(context.Background(), layout, []string{"nope"})
+	_, _, derr := forwardUnknownVerb(context.Background(), layout, host.NewMessages(), []string{"nope"})
 	if derr == nil {
 		t.Fatal("want a decode failure from the daemon answer")
 	}
-	line := forwardedFailureLine(host.NewMessages(), i18n.French, derr)
+	line := forwardedFailureLine(testMessages(), host.NewMessages(), i18n.French, derr)
 	if !strings.Contains(line, "décodage de la réponse impossible") {
 		t.Fatalf("french line = %q", line)
 	}

@@ -14,6 +14,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -244,7 +245,7 @@ func TestSessionLanguageFallsBackToTheOperator(t *testing.T) {
 }
 
 func TestGoLiveUsesTheSessionLanguage(t *testing.T) {
-	sessions := newSessionTable(newHostMessages())
+	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
 	store := state.NewState(filepath.Join(t.TempDir(), "state.json"))
 	name := "lang-" + newTurnID()
 	if err := store.AddSession(state.Session{Name: name, Incarnation: "incarnation", Language: "en"}); err != nil {
@@ -317,7 +318,7 @@ func TestNoticeIsDeliveredWhenTheParentContextIsCancelledDuringANotify(t *testin
 	gateway := newNoticeGateway()
 	gateway.entered = make(chan struct{}, 1)
 	gateway.release = make(chan struct{})
-	d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: gateway}}, nil, nil, io.Discard)
+	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", []contracts.GatewaySet{{Gateway: gateway}}, nil, nil, io.Discard)
 	parent, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go d.deliverNotices(parent)
@@ -336,7 +337,7 @@ func TestNoticeIsDeliveredWhenTheParentContextIsCancelledDuringANotify(t *testin
 
 func TestNoticesReachTheGatewayInTheOrderTheyWereRaised(t *testing.T) {
 	gateway := newNoticeGateway()
-	d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{{Gateway: gateway}}, nil, nil, io.Discard)
+	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", []contracts.GatewaySet{{Gateway: gateway}}, nil, nil, io.Discard)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go d.deliverNotices(ctx)

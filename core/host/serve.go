@@ -12,6 +12,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/internal/health"
 	"github.com/Herrscherd/herrscher/core/internal/instanceid"
@@ -25,8 +26,9 @@ import (
 )
 
 type serviceUpdater struct {
-	cfg service.Config
-	st  *state.State
+	cfg      service.Config
+	st       *state.State
+	messages *clitext.Messages
 }
 
 const buildTimeout = 5 * time.Minute
@@ -39,21 +41,21 @@ func (u serviceUpdater) Build(ctx context.Context, pull bool) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, buildTimeout)
 	defer cancel()
 	if pull {
-		if err := service.Pull(ctx, src); err != nil {
+		if err := service.Pull(ctx, u.messages, src); err != nil {
 			return "", err
 		}
 	}
-	if err := service.Build(ctx, src, u.cfg.BinPath); err != nil {
+	if err := service.Build(ctx, u.messages, src, u.cfg.BinPath); err != nil {
 		return "", err
 	}
-	if err := service.Smoke(ctx, u.cfg.BinPath); err != nil {
+	if err := service.Smoke(ctx, u.messages, u.cfg.BinPath); err != nil {
 		return "", err
 	}
 	return service.SourceVersion(ctx, src), nil
 }
 
 func (u serviceUpdater) Restart(ctx context.Context) error {
-	return service.RestartDetached(ctx, u.cfg)
+	return service.RestartDetached(ctx, u.messages, u.cfg)
 }
 
 // Deps is the channel the daemon drives. It is the neutral contracts.GatewaySet

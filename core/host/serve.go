@@ -284,7 +284,7 @@ func serveHubSockets(ctx context.Context, layout runtimedir.Layout, instID strin
 	}
 	hubCore.eventPublisher = events.Publish
 	eventsReleased := acceptEvents(ctx, eventsListener, events)
-	commandsReleased := acceptCommands(ctx, commandsListener, hubCore.operatorCommands(), defaultCommandReadTimeout)
+	commandsReleased := acceptCommands(ctx, commandsListener, hubCore.operatorCommands(), defaultCommandReadTimeout, hubCore.teardownGrace, hubCore.warnCommandHandlerOverrun).released
 	return allReleased(eventsReleased, commandsReleased), nil
 }
 

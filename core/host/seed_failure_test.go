@@ -39,7 +39,7 @@ func TestTheOneShotBridgeCancelsTheSeedOnlyWhenNoReplyCame(t *testing.T) {
 			fromBridge := make(chan contracts.Event, bridgeEventBuffer)
 			bridgeErr := make(chan error, 1)
 			toBridge <- contracts.Event{T: eventwire.EventInput, Text: "tâche"}
-			runtime := oneShotSeedRuntime{messages: newHostMessages(), backend: func(context.Context, state.Session) (contracts.Backend, error) {
+			runtime := oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), backend: func(context.Context, state.Session) (contracts.Backend, error) {
 				return tc.turn, tc.backend
 			}}
 			runOneShotBridge(context.Background(), func() { cancelled = true }, state.Session{Name: "solo", ChannelID: "channel"}, nil, runtime, toBridge, fromBridge, bridgeErr)
@@ -67,7 +67,7 @@ func TestAFailedOneShotTurnNeitherCoordinatesNorConsolidates(t *testing.T) {
 	sess := state.Session{Name: "orchestrator", ChannelID: "channel"}
 	orch := &consolidateSpy{}
 	coord := &recordingCoord{}
-	_, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "délègue", newTurnID(), orch, oneShotSeedRuntime{messages: newHostMessages(), backend: backend, coordinator: coord})
+	_, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "délègue", newTurnID(), orch, oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), backend: backend, coordinator: coord})
 	if _, failed := errors.AsType[*bridge.TurnFailedError](err); !failed {
 		t.Fatalf("seed error = %v, want a failed turn", err)
 	}
@@ -83,7 +83,7 @@ func TestAFailedSeedTurnReadsInTheOperatorLanguage(t *testing.T) {
 	backend := func(context.Context, state.Session) (contracts.Backend, error) {
 		return failingSeedBackend{}, nil
 	}
-	_, err := runOneShotSeedWithIDRuntime(context.Background(), state.Session{Name: "solo", ChannelID: "channel"}, "tâche", newTurnID(), nil, oneShotSeedRuntime{messages: newHostMessages(), backend: backend, warnings: io.Discard})
+	_, err := runOneShotSeedWithIDRuntime(context.Background(), state.Session{Name: "solo", ChannelID: "channel"}, "tâche", newTurnID(), nil, oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), backend: backend, warnings: io.Discard})
 	for _, tc := range []struct {
 		lang i18n.Language
 		want string

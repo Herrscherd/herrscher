@@ -1,6 +1,9 @@
 package host
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
 
 type inflight struct {
 	mu    sync.Mutex
@@ -41,18 +44,25 @@ func (f *inflight) settled() <-chan struct{} {
 	return f.zero
 }
 
+func (f *inflight) pending() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.count
+}
+
 func (h *hub) awaitInFlight() {
 	window, cancel := h.newGrace()
 	defer cancel()
-	if h.awaitInFlightWithin(window, &h.relaunches, &h.acceptFails) {
-		h.flushWarningsWithin(window)
+	if !h.awaitInFlightWithin(window, &h.relaunches, &h.acceptFails) {
+		h.warnHubOverrun()
+		return
 	}
+	h.flushWarningsWithin(window)
 }
 
 func (h *hub) awaitInFlightWithin(window teardownWindow, groups ...*inflight) bool {
 	for _, group := range groups {
 		if !window.finished(group.settled()) {
-			h.warnHubOverrun()
 			return false
 		}
 	}
@@ -66,7 +76,17 @@ func (h *hub) flushWarningsWithin(window teardownWindow) {
 }
 
 func (h *hub) warnHubOverrun() {
+	if h.hubOverrunWarned.CompareAndSwap(false, true) {
+		h.warnOverrun("warn.hub_teardown_overrun", h.teardownGrace)
+	}
+}
+
+func (h *hub) warnCommandHandlerOverrun(budget time.Duration) {
+	h.warnOverrun("warn.command_handler_overrun", budget)
+}
+
+func (h *hub) warnOverrun(key string, grace time.Duration) {
 	lang := h.textLanguage()()
-	params := map[string]any{graceParam: h.teardownGrace.String()}
-	logCleanup(h.sink.announce(h.messages.text(lang, "warn.hub_teardown_overrun", params)))
+	params := map[string]any{graceParam: grace.String()}
+	logCleanup(h.sink.announce(h.messages.text(lang, key, params)))
 }

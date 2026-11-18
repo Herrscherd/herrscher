@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func englishLostLine(messages *hostMessages) func(lost int) string {
@@ -25,11 +26,15 @@ func englishStillRunningLine(messages *hostMessages) string {
 }
 
 func testHub(h *hub) *hub {
+	if h.sessions == nil {
+		h.sessions = newSessionTable(h.messages, clitext.NewMessages())
+	}
+	h.bindSessionState()
 	out := h.warnings
 	if out == nil {
 		out = io.Discard
 	}
-	h.sink = newWarningSink(h.messages, out, englishLostLine(h.messages))
+	h.sink = newWarningSink(h.messages, out, englishLostLine(h.messages), slog.Default())
 	h.warnings = h.sink
 	return h
 }

@@ -675,6 +675,16 @@
     "other": "herrscher serve: stop did not finish within {{.Grace}}, in-flight work or warnings may still complete after it, stopping anyway"
   },
   {
+    "id": "warn.command_handler_overrun",
+    "description": "A command handler of the command socket is still running when its join grace ends; the stop goes on and that command may be cut short",
+    "other": "herrscher serve: a command is still running after {{.Grace}}, stopping anyway: that command may be cut short"
+  },
+  {
+    "id": "warn.persist_overrun",
+    "description": "A transcript, resume token or checkpoint write is still running when the stop grace of persistent writes ends; the stop goes on and that write may be lost",
+    "other": "herrscher serve: a transcript, resume token or checkpoint write is still running after {{.Grace}}, stopping anyway: that write may be lost"
+  },
+  {
     "id": "warn.warnings_dropped",
     "description": "A summary line: Count warnings were dropped while the output was blocked, written once it unblocks",
     "one": "herrscher serve: 1 warning lost while the output was blocked",

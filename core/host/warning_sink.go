@@ -89,7 +89,7 @@ func withStillRunningLine(line func() string) sinkOption {
 	return func(s *warningSink) { s.stillRunning = line }
 }
 
-func newWarningSink(messages *hostMessages, out io.Writer, lostLine func(lost int) string, opts ...sinkOption) *warningSink {
+func newWarningSink(messages *hostMessages, out io.Writer, lostLine func(lost int) string, logger *slog.Logger, opts ...sinkOption) *warningSink {
 	created := &warningSink{
 		out:          warningWriter(out),
 		lostLine:     lostLine,
@@ -97,6 +97,7 @@ func newWarningSink(messages *hostMessages, out io.Writer, lostLine func(lost in
 		finished:     make(chan struct{}),
 		idleWait:     warningWriteBudget,
 		stillRunning: func() string { return messages.text(i18n.English, "warn.write_still_running", nil) },
+		log:          boundedLog{logger: logger},
 	}
 	for _, opt := range opts {
 		opt(created)
@@ -280,7 +281,7 @@ func (s *warningSink) start(write *inflightWrite, data []byte) {
 	go func() {
 		defer close(logged)
 		written, err := s.out.Write(data)
-		logWriteFailure(written, err)
+		s.log.logWriteFailure(written, err)
 		lost := ask(s, func() int { return s.settle(write, err) })
 		s.logNotConfirmed(lost, 0)
 	}()
@@ -367,7 +368,9 @@ func (s *warningSink) Close() {
 	s.logNotConfirmed(taken.lost, taken.unconfirmed)
 	if !s.joinLastWrite() {
 		note := s.stillRunning()
-		s.log.reserve("still-running", func() { slog.Warn("a warning write was still running when Close returned", "note", note) })
+		s.log.reserve("still-running", func(logger *slog.Logger) {
+			logger.Warn("a warning write was still running when Close returned", "note", note)
+		})
 	}
 	logged, stopLogged := writeBudget()
 	defer stopLogged()
@@ -454,8 +457,8 @@ func (s *warningSink) logNotConfirmed(lost, unconfirmed int) {
 	s.log.addBilan(lost, unconfirmed, writeNotConfirmed)
 }
 
-func writeNotConfirmed(lost, unconfirmed int) {
-	slog.Warn("warnings were not all confirmed when the sink closed", "lost", lost, "unconfirmed", unconfirmed)
+func writeNotConfirmed(logger *slog.Logger, lost, unconfirmed int) {
+	logger.Warn("warnings were not all confirmed when the sink closed", "lost", lost, "unconfirmed", unconfirmed)
 }
 
 func writeBudget() (<-chan struct{}, func()) {

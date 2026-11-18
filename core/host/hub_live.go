@@ -26,13 +26,15 @@ func (h *hub) liveSink(ctx context.Context, sess state.Session) sessionSink {
 		TurnSettled: func() {
 			h.clearTurnMark(sess.Name)
 		},
-		Project: func(p string) {
-			if err := h.st.SetProjectPinned(sess.Name, p); err != nil {
+		Project: func(pinned string) {
+			end := h.persists.begin()
+			defer end()
+			if err := h.st.SetProjectPinned(sess.Name, pinned); err != nil {
 				warnLive(h.messages, h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_project_pin", map[string]any{nameParam: sess.Name, detailParam: err})
 			}
 		},
 		Transcript: func(e state.TranscriptEntry) {
-			if err := state.AppendTranscript(state.TranscriptPath(h.partDir, sess.Name), e); err != nil {
+			if err := h.appendTranscript(sess.Name, e); err != nil {
 				warnLive(h.messages, h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
 			}
 		},

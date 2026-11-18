@@ -125,7 +125,7 @@ func sessionHandoffCmd(cliMessages *clitext.Messages, lang languageSource, manag
 		},
 		brief: func(ctx context.Context, source string) (string, error) {
 			in := contracts.Input{Args: map[string]string{paramName: source, "task": handoffBriefTaskFor(store, source, lang()), "timeout": handoffBriefTimeout}}
-			return runSeedVerb(ctx, sessions.messages, sessions.cliMessages, in, store, layout, instID, seedCoord.coord)
+			return runSeedVerb(ctx, sessions.messages, sessions.cliMessages, sessions.oneShotPersists, in, store, layout, instID, seedCoord.coord)
 		},
 		create: func(ctx context.Context, in contracts.Input) (string, error) {
 			res, err := create.Run(ctx, in)

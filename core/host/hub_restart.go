@@ -11,6 +11,8 @@ func (h *hub) RestartWithResume(name, token string) error {
 	sess.ResumeToken = token
 	sess.InterruptedTurn = ""
 	return h.goLiveStarted(context.Background(), sess, func() error {
+		end := h.persists.begin()
+		defer end()
 		return h.st.SetResumeTokenAndClearInterruptedTurn(name, token)
 	})
 }

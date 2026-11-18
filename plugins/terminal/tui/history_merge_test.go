@@ -96,36 +96,48 @@ func TestAReplyOfAHeldTurnIsShownOnceWithItsChunks(t *testing.T) {
 	}
 }
 
-func TestAnotherReplyOfAPartlyHeldTurnIsShown(t *testing.T) {
+func TestAThirdReplyOfAHeldTurnIsShown(t *testing.T) {
 	got := conversationAfterReplay(t, []contracts.ScrollbackLine{
-		{Role: "user", Text: "question", TurnID: "t1"},
-		{Role: "assistant", Text: "first", TurnID: "t1"},
-	}, turnReplyEvent("t1", "second"))
-	want := []string{"question", "first", "second"}
+		{Role: "user", Text: "q", TurnID: "t1"},
+		{Role: "assistant", Text: "a1", TurnID: "t1"},
+		{Role: "assistant", Text: "a2", TurnID: "t1"},
+	}, turnReplyEvent("t1", "a3"))
+	want := []string{"q", "a1", "a2", "a3"}
 	if !slices.Equal(got, want) {
-		t.Fatalf("conversation = %q, want %q: a turn can hold several replies, so the history holding one must not hide another", got, want)
+		t.Fatalf("conversation = %q, want %q: only the longest suffix of the history matched from the start of the live lines is dropped, so a3 after a1 and a2 must show", got, want)
 	}
 }
 
-func TestAReplyWithATurnIDIsNotDroppedByALineWithoutOne(t *testing.T) {
+func TestALiveReplyDropsOverAHistoryLineWithoutATurnID(t *testing.T) {
 	got := conversationAfterReplay(t, []contracts.ScrollbackLine{
-		{Role: "user", Text: "question"},
+		{Role: "user", Text: "question", TurnID: "t0"},
 		{Role: "assistant", Text: "ok"},
 	}, turnReplyEvent("t1", "ok"))
-	want := []string{"question", "ok", "ok"}
+	want := []string{"question", "ok"}
 	if !slices.Equal(got, want) {
-		t.Fatalf("conversation = %q, want %q: text is compared only between lines that carry no TurnID, so a reply with one is never dropped by a legacy line", got, want)
+		t.Fatalf("conversation = %q, want %q: a history line without TurnID compares on role and text only, so the live reply with T1 is dropped", got, want)
 	}
 }
 
-func TestAReplyWithoutATurnIDIsNotDroppedByALineWithOne(t *testing.T) {
+func TestALiveReplyWithoutATurnIDDropsOverAHistoryLineWithOne(t *testing.T) {
 	got := conversationAfterReplay(t, []contracts.ScrollbackLine{
-		{Role: "user", Text: "question", TurnID: "t1"},
-		{Role: "assistant", Text: "ok", TurnID: "t1"},
+		{Role: "user", Text: "question", TurnID: "t0"},
+		{Role: "assistant", Text: "ok", TurnID: "t0"},
 	}, replyEvent("ok"))
-	want := []string{"question", "ok", "ok"}
+	want := []string{"question", "ok"}
 	if !slices.Equal(got, want) {
-		t.Fatalf("conversation = %q, want %q: the text fallback only reads the legacy lines at the end of the history, never a line carrying a TurnID", got, want)
+		t.Fatalf("conversation = %q, want %q: a live reply without TurnID compares on role and text only, so it is dropped against the history line", got, want)
+	}
+}
+
+func TestAHistoryLineWithoutATurnIDBeforeAUserLineDoesNotDropTheReply(t *testing.T) {
+	got := conversationAfterReplay(t, []contracts.ScrollbackLine{
+		{Role: "assistant", Text: "ok"},
+		{Role: "user", Text: "question", TurnID: "t0"},
+	}, turnReplyEvent("t1", "ok"))
+	want := []string{"ok", "question", "ok"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("conversation = %q, want %q: the match must be the longest suffix of the history, and the history ends with a user line that no live reply matches", got, want)
 	}
 }
 

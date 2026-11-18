@@ -13,6 +13,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/compactwire"
 	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
@@ -30,6 +31,7 @@ const defaultCommandReadTimeout = 10 * time.Second
 type cmdRequest struct {
 	Argv  []string `json:"argv"`
 	Token string   `json:"token,omitempty"`
+	Lang  string   `json:"lang,omitempty"`
 }
 
 type cmdResponse struct {
@@ -55,7 +57,7 @@ func dispatchLiveCommand(ctx context.Context, messages *hostMessages, layout run
 	if deadline, ok := ctx.Deadline(); ok {
 		logCleanup(conn.SetDeadline(deadline))
 	}
-	payload, err := json.Marshal(cmdRequest{Argv: argv, Token: callerTokenFrom(ctx)})
+	payload, err := json.Marshal(cmdRequest{Argv: argv, Token: callerTokenFrom(ctx), Lang: clitext.ClientLanguage().String()})
 	if err != nil {
 		return "", true, err
 	}
@@ -250,7 +252,7 @@ func handleCommandConn(ctx context.Context, conn net.Conn, disp dispatcher, read
 		msg := "command socket: malformed request"
 		resp.Err = &msg
 	default:
-		out, derr := disp.Dispatch(withCallerToken(ctx, req.Token), req.Argv)
+		out, derr := disp.Dispatch(clitext.WithCallerLanguage(withCallerToken(ctx, req.Token), req.Lang), req.Argv)
 		if derr != nil {
 			msg := derr.Error()
 			resp.Err = &msg

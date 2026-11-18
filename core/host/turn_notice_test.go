@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -71,7 +72,9 @@ func TestAnnounceInterruptedTurnDoesNotDuplicateAnAnnouncedNotice(t *testing.T) 
 func TestSessionScrollbackJSONKeepsTheNotice(t *testing.T) {
 	partDir := interruptedTurnTranscript(t)
 
-	result, err := sessionScrollbackVerb(partDir).Run(t.Context(), contracts.Input{Args: map[string]string{paramName: "main"}})
+	ctx := clitext.WithCallerLanguage(t.Context(), i18n.French.String())
+	englishFallback := func() i18n.Language { return i18n.English }
+	result, err := sessionScrollbackVerb(partDir, englishFallback).Run(ctx, contracts.Input{Args: map[string]string{paramName: "main"}})
 	if err != nil {
 		t.Fatalf("session scrollback: %v", err)
 	}
@@ -80,7 +83,7 @@ func TestSessionScrollbackJSONKeepsTheNotice(t *testing.T) {
 		t.Fatalf("session scrollback data = %T, want a JSON string", result.Data())
 	}
 	var lines []contracts.ScrollbackLine
-	if err := json.Unmarshal([]byte(raw), &lines); err != nil {
+	if err = json.Unmarshal([]byte(raw), &lines); err != nil {
 		t.Fatalf("session scrollback JSON: %v", err)
 	}
 	if len(lines) != 2 || lines[1].Notice == nil || lines[1].Notice.Code != contracts.CodeTurnInterrupted {
@@ -88,5 +91,12 @@ func TestSessionScrollbackJSONKeepsTheNotice(t *testing.T) {
 	}
 	if strings.Count(raw, `"Notice"`) != 1 {
 		t.Fatalf("session scrollback = %s, want a notice only on the interruption line", raw)
+	}
+	want, err := contracts.NewRenderer().Render(i18n.French, contracts.Notice{Code: contracts.CodeTurnInterrupted})
+	if err != nil {
+		t.Fatalf("contracts render: %v", err)
+	}
+	if lines[1].Text != want {
+		t.Fatalf("session scrollback text = %q, want the interruption in the client language %q", lines[1].Text, want)
 	}
 }

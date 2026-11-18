@@ -1,7 +1,6 @@
 package host
 
 import (
-	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -24,9 +23,6 @@ func TestCLIScrollbackCarriesTheInterruptionText(t *testing.T) {
 			lines := cliScrollback(partDir, "resumed", lang)
 			if len(lines) != 1 || lines[0].Role != "notice" || lines[0].Text != want {
 				t.Fatalf("cliScrollback = %+v, want one notice line carrying %q", lines, want)
-			}
-			if !strings.Contains(lines[0].Text, "sans réponse") && lang == i18n.French {
-				t.Fatalf("French text = %q, want the French interruption", lines[0].Text)
 			}
 		})
 	}

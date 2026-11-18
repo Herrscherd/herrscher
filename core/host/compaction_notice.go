@@ -31,14 +31,20 @@ func (d *sessionDriver) failCompaction(ctx context.Context, trigger contracts.Co
 
 func (d *sessionDriver) renderableNotice(err error) (contracts.Notice, bool) {
 	typed, ok := errors.AsType[contracts.NoticeError](err)
-	if !ok || !d.deliverableNotice(typed.Notice()) {
+	if !ok || !deliverableNotice(typed.Notice()) {
 		return contracts.Notice{}, false
 	}
 	return typed.Notice(), true
 }
 
-func (d *sessionDriver) deliverableNotice(notice contracts.Notice) bool {
-	return isKnownNotice(notice) && noticeRenders(notice, d.textLanguage()())
+func deliverableNotice(notice contracts.Notice) bool {
+	return isKnownNotice(notice) && rendersInEvery(notice, i18n.Languages())
+}
+
+func rendersInEvery(notice contracts.Notice, languages []i18n.Language) bool {
+	return !slices.ContainsFunc(languages, func(lang i18n.Language) bool {
+		return !noticeRenders(notice, lang)
+	})
 }
 
 func noticeRenders(notice contracts.Notice, lang i18n.Language) bool {
@@ -118,7 +124,7 @@ func knownCompactFailure(err error) (string, bool) {
 
 func (d *sessionDriver) announceCompaction(ctx context.Context, trigger contracts.CompactTrigger, result contracts.CompactResult) {
 	tokens := measuredTokens(result)
-	if result.Notice.Code == 0 || !d.deliverableNotice(result.Notice) {
+	if result.Notice.Code == 0 || !deliverableNotice(result.Notice) {
 		d.fanOut(ctx, d.compactionDone(trigger, nil, result.Note, tokens))
 		return
 	}

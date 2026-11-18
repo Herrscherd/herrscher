@@ -72,31 +72,31 @@ func (m *model) seedScrollback(channelTab *tab, lines []contracts.ScrollbackLine
 	if len(lines) == 0 {
 		return
 	}
-	for _, ln := range lines {
-		if ln.Notice != nil {
-			appendNoticeLine(m.tr, channelTab, ln)
+	for _, line := range lines {
+		if line.Notice != nil {
+			appendNoticeLine(m.tr, channelTab, line)
 			continue
 		}
-		channelTab.appendEntry(entry{role: scrollbackRole(ln.Role), text: ln.Text})
+		channelTab.appendEntry(entry{role: scrollbackRole(line.Role), text: line.Text})
 	}
 	channelTab.appendEntry(entry{role: roleScrollback, text: m.tr.t("tui.render.earlier", nil)})
 }
 
-func appendNoticeLine(trans translator, channelTab *tab, ln contracts.ScrollbackLine) {
-	text := scrollbackLineText(trans, ln)
+func appendNoticeLine(trans translator, channelTab *tab, line contracts.ScrollbackLine) {
+	text := scrollbackLineText(trans, line)
 	if text == "" {
 		return
 	}
 	channelTab.appendEntry(entry{role: roleNotice, text: text})
 }
 
-func scrollbackLineText(trans translator, ln contracts.ScrollbackLine) string {
-	if ln.Notice != nil {
-		if text := noticeText(trans, *ln.Notice); text != "" {
+func scrollbackLineText(trans translator, line contracts.ScrollbackLine) string {
+	if line.Notice != nil {
+		if text := noticeText(trans, *line.Notice); text != "" {
 			return text
 		}
 	}
-	return ln.Text
+	return line.Text
 }
 
 func scrollbackRole(role string) string {

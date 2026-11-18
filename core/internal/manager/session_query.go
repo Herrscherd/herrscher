@@ -147,7 +147,7 @@ func (h *Handler) sessionWhoRun(_ context.Context, input contracts.Input) (contr
 	return contracts.DataResult(out.String()), nil
 }
 
-func (h *Handler) sessionLogRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
+func (h *Handler) sessionLogRun(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 	raw, ok := input.Lookup(nameParam)
 	if !ok {
 		return contracts.Result{}, h.localized(ErrMissingName, clitext.HostErrMissingName)
@@ -167,7 +167,7 @@ func (h *Handler) sessionLogRun(_ context.Context, input contracts.Input) (contr
 		b, err := json.Marshal(entries)
 		return contracts.DataResult(string(b)), err
 	}
-	rendered := renderShownTranscript(entries, clitext.ClientLanguage())
+	rendered := renderShownTranscript(entries, clitext.CallerLanguage(ctx, h.currentLanguage))
 	if rendered == "" {
 		return contracts.DataResult(h.text(clitext.SessionLogEmpty, nil)), nil
 	}

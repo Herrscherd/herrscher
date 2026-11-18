@@ -31,6 +31,14 @@ type TranscriptEntry struct {
 	CtxTokens   int `json:"ctx_tokens,omitempty"`
 }
 
+// ShownText is the text the human saw: Displayed when set, Text otherwise.
+func (e TranscriptEntry) ShownText() string {
+	if e.Displayed != "" {
+		return e.Displayed
+	}
+	return e.Text
+}
+
 // TranscriptPath returns the transcript path for session name under dir
 // (dir/transcripts/<name>.jsonl), beside participants/<name>.log.
 func TranscriptPath(dir, name string) string {

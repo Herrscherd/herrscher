@@ -64,6 +64,39 @@ func TestSessionLogRun_JSONShapeAndOrder(t *testing.T) {
 	}
 }
 
+func TestSessionLogRun_ShowsTheNoticeOfAReplyWithoutText(t *testing.T) {
+	dir := t.TempDir()
+	h := &Handler{partDir: dir}
+	seedTranscript(t, dir, "alpha", []state.TranscriptEntry{
+		{Ts: "t1", Role: "assistant", Text: "", Displayed: "fichier refusé: big.bin"},
+	})
+
+	out, err := cli.Plain(h.sessionLogRun(context.Background(), contracts.Input{Args: map[string]string{"name": "alpha"}}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if want := "assistant fichier refusé: big.bin\n"; out != want {
+		t.Fatalf("session view = %q, want %q: the human saw the notice, so the view shows it", out, want)
+	}
+}
+
+func TestSessionLogRun_OmitsAnEntryWithNothingShown(t *testing.T) {
+	dir := t.TempDir()
+	h := &Handler{partDir: dir}
+	seedTranscript(t, dir, "alpha", []state.TranscriptEntry{
+		{Ts: "t1", Role: "user", Text: "salut"},
+		{Ts: "t2", Role: "assistant", Text: ""},
+	})
+
+	out, err := cli.Plain(h.sessionLogRun(context.Background(), contracts.Input{Args: map[string]string{"name": "alpha"}}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if want := "user salut\n"; out != want {
+		t.Fatalf("session view = %q, want %q: an entry with nothing shown must not appear", out, want)
+	}
+}
+
 func TestSessionLogRun_UnknownSessionIsEmptyArray(t *testing.T) {
 	h := &Handler{partDir: t.TempDir()}
 	out, err := cli.Plain(h.sessionLogRun(context.Background(), contractsInputJSON("ghost")))

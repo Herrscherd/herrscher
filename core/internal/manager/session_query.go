@@ -172,12 +172,16 @@ func (h *Handler) sessionLogRun(_ context.Context, input contracts.Input) (contr
 		b, err := json.Marshal(entries)
 		return contracts.DataResult(string(b)), err
 	}
-	if len(entries) == 0 {
-		return contracts.DataResult(h.text(clitext.SessionLogEmpty, nil)), nil
-	}
 	var out strings.Builder
 	for i := range entries {
-		fmt.Fprintf(&out, "%s %s\n", entries[i].Role, entries[i].Text)
+		shown := entries[i].ShownText()
+		if shown == "" {
+			continue
+		}
+		fmt.Fprintf(&out, "%s %s\n", entries[i].Role, shown)
+	}
+	if out.Len() == 0 {
+		return contracts.DataResult(h.text(clitext.SessionLogEmpty, nil)), nil
 	}
 	return contracts.DataResult(out.String()), nil
 }

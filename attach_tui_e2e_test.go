@@ -78,7 +78,7 @@ type tuiSetup struct {
 
 func newTUISetup(t *testing.T, vendorScript string) tuiSetup {
 	t.Helper()
-	setup := tuiSetup{binDir: t.TempDir(), root: t.TempDir(), home: t.TempDir(), repo: t.TempDir()}
+	setup := tuiSetup{binDir: t.TempDir(), root: shortRuntimeRoot(t), home: t.TempDir(), repo: t.TempDir()}
 	buildTUIBinary(t, filepath.Join(setup.binDir, "claude"), "./e2e/vendortest/cmd/claude")
 	buildTUIBinary(t, filepath.Join(setup.binDir, "herrscher"), "-tags", "e2e", ".")
 	if err := os.Mkdir(filepath.Join(setup.root, strconv.Itoa(os.Getuid())), 0o700); err != nil {
@@ -99,6 +99,16 @@ func newTUISetup(t *testing.T, vendorScript string) tuiSetup {
 	}
 	t.Chdir(setup.repo)
 	return setup
+}
+
+func shortRuntimeRoot(t *testing.T) string {
+	t.Helper()
+	root, err := os.MkdirTemp("", "hs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	return root
 }
 
 func startTUIDaemon(t *testing.T, vendorScript string) tuiDaemon {

@@ -215,7 +215,7 @@ func runHubTurnsCtl(ctx context.Context, events <-chan contracts.Event, sink con
 			case eventwire.EventLanguage:
 				lang = languageOf(event.Value)
 			case eventwire.EventPick:
-				runPick(ctx, sink, backend, event.Value)
+				runPick(ctx, sink, backend, event.Value, event.TurnID)
 			default:
 				if err := router.route(ctx, event, lang); err != nil {
 					logTurnFailure(ctx, err)
@@ -380,7 +380,7 @@ func resumeToken(backend contracts.Backend) string {
 	return ""
 }
 
-func runPick(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, value string) {
+func runPick(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, value, turnID string) {
 	inj, ok := choiceInjectorOf(backend)
 	if !ok {
 		return
@@ -389,7 +389,7 @@ func runPick(ctx context.Context, sink contracts.EventSink, backend contracts.Ba
 	if err != nil {
 		out = errPrefix + err.Error()
 	}
-	sink.Emit(contracts.Event{T: eventwire.EventReply, Text: strings.TrimSpace(out), Done: true})
+	sink.Emit(contracts.Event{T: eventwire.EventReply, Text: strings.TrimSpace(out), Done: true, TurnID: turnID})
 }
 
 func emitBackendEvent(sink contracts.EventSink, event contracts.BackendEvent, tokens, tokensIn, cacheRead, cacheCreate int) {

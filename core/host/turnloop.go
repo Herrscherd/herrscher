@@ -241,11 +241,11 @@ func hasTurnUsage(event contracts.Event) bool {
 	return event.TokensIn != 0 || event.Tokens != 0 || event.CacheRead != 0 || event.CacheCreate != 0 || event.Cost != 0
 }
 
-func (d *sessionDriver) recordEntry(role, text string, cost float64, turn turnUsage) {
+func (d *sessionDriver) recordEntry(role, text, shown string, cost float64, turn turnUsage) {
 	if d.sink.Transcript == nil || text == "" {
 		return
 	}
-	d.sink.Transcript(state.TranscriptEntry{
+	entry := state.TranscriptEntry{
 		Ts:          time.Now().UTC().Format(time.RFC3339),
 		Role:        role,
 		Text:        text,
@@ -257,11 +257,15 @@ func (d *sessionDriver) recordEntry(role, text string, cost float64, turn turnUs
 		CacheCreate: turn.CacheCreate,
 		DurMs:       turn.DurMs,
 		CtxTokens:   turn.CtxTokens,
-	})
+	}
+	if shown != text {
+		entry.Displayed = shown
+	}
+	d.sink.Transcript(entry)
 }
 
 func (d *sessionDriver) Pick(value string) bool {
-	return d.enqueue(queued{ev: contracts.Event{T: eventwire.EventPick, Value: value}})
+	return d.enqueue(queued{ev: contracts.Event{T: eventwire.EventPick, Value: value, TurnID: newTurnID()}})
 }
 
 func (d *sessionDriver) enqueue(item queued) bool {
@@ -693,7 +697,9 @@ func (d *sessionDriver) prepareTurn(ctx context.Context, item queued) (contracts
 	d.saidElsewhere = event.T == eventwire.EventInput && outsideBoundGateways(item.origin, d.gateways)
 	if event.T != eventwire.EventInput {
 		event.SessionIncarnation = ""
-		event.TurnID = ""
+		if event.T != eventwire.EventPick {
+			event.TurnID = ""
+		}
 		event.Agent = ""
 		d.activeTurnID = ""
 		return event, tokenGuard{}, true
@@ -716,7 +722,7 @@ func (d *sessionDriver) prepareTurn(ctx context.Context, item queued) (contracts
 	if d.sink.Checkpoint != nil {
 		d.sink.Checkpoint(event.TurnID, event.Text)
 	}
-	d.recordEntry("user", event.Text, 0, turnUsage{})
+	d.recordEntry("user", event.Text, event.Text, 0, turnUsage{})
 	d.fanOut(ctx, contracts.Event{T: eventwire.EventHuman, Who: event.Who, Text: event.Text})
 	return event, tokenGuard{headroom: verdict.Headroom, capped: verdict.Capped}, true
 }
@@ -879,7 +885,7 @@ func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event,
 		cacheRead:     event.CacheRead,
 		cacheWrite:    event.CacheCreate,
 	}, d.modelNow().rates)
-	d.deliverReply(ctx, event, files)
+	shown := d.deliverReply(ctx, event, files)
 	d.settleTurn()
 	if d.sink.Resume != nil && event.Resume != "" {
 		d.sink.Resume(event.Resume)
@@ -888,7 +894,7 @@ func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event,
 		d.sink.Project(event.Project)
 	}
 	d.recordUsage(event)
-	d.recordEntry("assistant", event.Text, event.Cost, turnUsage{
+	d.recordEntry("assistant", event.Text, shown.Text, event.Cost, turnUsage{
 		InTokens:    event.TokensIn,
 		OutTokens:   event.Tokens,
 		CacheRead:   event.CacheRead,
@@ -1084,12 +1090,14 @@ func (d *sessionDriver) fanOut(ctx context.Context, event contracts.Event) {
 	d.fanOutReply(ctx, event, outbox.Frame{})
 }
 
-func (d *sessionDriver) fanOutReply(ctx context.Context, event contracts.Event, files outbox.Frame) {
+func (d *sessionDriver) fanOutReply(ctx context.Context, event contracts.Event, files outbox.Frame) contracts.Event {
 	if d.saidElsewhere {
-		d.tapEvent(d.stamp(d.withElsewhereNotice(event, files)))
-		return
+		shown := d.withElsewhereNotice(event, files)
+		d.tapEvent(d.stamp(shown))
+		return shown
 	}
-	d.tapEvent(d.stamp(d.withUnsentFiles(event, files, d.carriesFiles())))
+	shown := d.withUnsentFiles(event, files, d.carriesFiles())
+	d.tapEvent(d.stamp(shown))
 	d.eachGateway(func(index int, gateway contracts.GatewaySet) {
 		sender, canSend := d.fileSenders[gateway.Gateway.Manifest().Kind]
 		d.emitToGateway(ctx, index, gateway, d.stamp(d.withUnsentFiles(event, files, canSend)))
@@ -1097,6 +1105,7 @@ func (d *sessionDriver) fanOutReply(ctx context.Context, event contracts.Event, 
 			d.sendReplyFiles(ctx, index, gateway, sender, files.Files)
 		}
 	})
+	return shown
 }
 
 func (d *sessionDriver) tapEvent(event contracts.Event) {
@@ -1122,13 +1131,12 @@ func (d *sessionDriver) stamp(event contracts.Event) contracts.Event {
 		return event
 	}
 	event.SessionIncarnation = ""
-	event.TurnID = ""
 	event.Agent = ""
 	return event
 }
 
-func (d *sessionDriver) deliverReply(ctx context.Context, event contracts.Event, files outbox.Frame) {
-	d.fanOutReply(ctx, event, d.revet(files))
+func (d *sessionDriver) deliverReply(ctx context.Context, event contracts.Event, files outbox.Frame) contracts.Event {
+	return d.fanOutReply(ctx, event, d.revet(files))
 }
 
 func (d *sessionDriver) revet(files outbox.Frame) outbox.Frame {

@@ -418,7 +418,11 @@ func scrollbackOf(partDir, name string) []contracts.ScrollbackLine {
 }
 
 func scrollbackLineOf(entry state.TranscriptEntry) contracts.ScrollbackLine {
-	line := contracts.ScrollbackLine{Role: entry.Role, Text: entry.Text, TurnID: entry.TurnID}
+	text := entry.Text
+	if entry.Displayed != "" {
+		text = entry.Displayed
+	}
+	line := contracts.ScrollbackLine{Role: entry.Role, Text: text, TurnID: entry.TurnID}
 	if entry.Kind == turnInterruptedKind {
 		line.Notice = &contracts.Notice{Code: contracts.CodeTurnInterrupted}
 	}

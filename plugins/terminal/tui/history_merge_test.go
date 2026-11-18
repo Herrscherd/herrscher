@@ -237,3 +237,14 @@ func TestAHostErrorBetweenHeldRepliesDoesNotShiftTheMatch(t *testing.T) {
 		t.Fatalf("the host error queued between the held replies must still show")
 	}
 }
+
+func TestAMenuReplyIdenticalToTheLastHistoryLineIsShown(t *testing.T) {
+	got := conversationAfterReplay(t, []contracts.ScrollbackLine{
+		{Role: "user", Text: "q", TurnID: "t1"},
+		{Role: "assistant", Text: "ok", TurnID: "t1"},
+	}, turnReplyEvent("turn_menu", "ok"))
+	want := []string{"q", "ok", "ok"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("conversation = %q, want %q: a menu reply has its own TurnID, so it must not match a line of an earlier turn", got, want)
+	}
+}

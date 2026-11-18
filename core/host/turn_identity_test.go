@@ -149,25 +149,33 @@ func TestDriverAbandonedEventCarriesTurnIdentity(t *testing.T) {
 	assertTurnIdentity(t, abandoned, "incarnation-a", "turn-abandoned", "reviewer")
 }
 
-func TestDriverClearsIdentityForPickOutsideTurn(t *testing.T) {
+func TestPickReplyOutsideTurnCarriesItsOwnTurnID(t *testing.T) {
 	toBridge := make(chan contracts.Event, 1)
-	fromBridge := make(chan contracts.Event, 1)
+	fromBridge := make(chan contracts.Event, 8)
 	d, emitted := identifiedTestDriver(toBridge, fromBridge)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go d.pump(ctx)
 
+	d.queue <- queued{ev: contracts.Event{T: eventwire.EventInput, Text: "task", TurnID: "turn-last"}}
+	_ = receiveTurnEvent(t, toBridge)
+	fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "done", Done: true}
+	_ = receiveTurnEvent(t, emitted)
+
 	d.Pick("2")
 	pick := receiveTurnEvent(t, toBridge)
-	if pick.SessionIncarnation != "" || pick.TurnID != "" || pick.Agent != "" {
+	if pick.TurnID == "" || pick.TurnID == "turn-last" {
+		t.Fatalf("pick TurnID = %q, want a fresh non-empty id distinct from the last turn", pick.TurnID)
+	}
+	if pick.SessionIncarnation != "" || pick.Agent != "" {
 		t.Fatalf("pick input has dishonest identity: %+v", pick)
 	}
-	fromBridge <- contracts.Event{
-		T: eventwire.EventReply, Text: "picked", Done: true,
-		SessionIncarnation: "spoofed", TurnID: "spoofed", Agent: "spoofed",
-	}
+	fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "picked", Done: true, TurnID: pick.TurnID}
 	reply := receiveTurnEvent(t, emitted)
-	if reply.SessionIncarnation != "" || reply.TurnID != "" || reply.Agent != "" {
+	if reply.TurnID != pick.TurnID {
+		t.Fatalf("pick reply TurnID = %q, want %q", reply.TurnID, pick.TurnID)
+	}
+	if reply.SessionIncarnation != "" || reply.Agent != "" {
 		t.Fatalf("pick reply has dishonest identity: %+v", reply)
 	}
 }

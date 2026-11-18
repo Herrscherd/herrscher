@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -410,6 +411,10 @@ func emitBackendEvent(sink contracts.EventSink, event contracts.BackendEvent, to
 		}
 	case backendKindReset:
 		sink.Emit(contracts.Event{T: eventwire.EventReset})
+	case contracts.BackendKindNotice:
+		if event.Notice != nil {
+			sink.Emit(contracts.Event{T: eventwire.EventBackendNotice, Value: strconv.FormatUint(uint64(event.Notice.Code), 10)})
+		}
 	}
 }
 

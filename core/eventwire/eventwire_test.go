@@ -26,6 +26,7 @@ func TestEventValuesAreFrozen(t *testing.T) {
 		{"EventAbandoned", EventAbandoned, "abandoned"},
 		{"EventClosed", EventClosed, "closed"},
 		{"EventNotice", EventNotice, "notice"},
+		{"EventBackendNotice", EventBackendNotice, "backend_notice"},
 		{"EventInput", EventInput, "input"},
 		{"EventHuman", EventHuman, "human"},
 		{"EventPaused", EventPaused, "paused"},

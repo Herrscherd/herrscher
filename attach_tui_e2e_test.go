@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -67,42 +68,54 @@ func TestE2EAttachedWindowRereadsHistory(t *testing.T) {
 	awaitTUIScreen(t, reopened, onlySessionName(t, daemon), "first question", "answer one", "second question", "answer two")
 }
 
-func startTUIDaemon(t *testing.T, vendorScript string) tuiDaemon {
+type tuiSetup struct {
+	binDir     string
+	root       string
+	home       string
+	repo       string
+	scriptPath string
+}
+
+func newTUISetup(t *testing.T, vendorScript string) tuiSetup {
 	t.Helper()
-	binDir := t.TempDir()
-	buildTUIBinary(t, filepath.Join(binDir, "claude"), "./e2e/vendortest/cmd/claude")
-	buildTUIBinary(t, filepath.Join(binDir, "herrscher"), "-tags", "e2e", ".")
-
-	root := t.TempDir()
-	if err := os.Mkdir(filepath.Join(root, strconv.Itoa(os.Getuid())), 0o700); err != nil {
+	setup := tuiSetup{binDir: t.TempDir(), root: isolatedRuntimeRoot(t), home: t.TempDir(), repo: t.TempDir()}
+	buildTUIBinary(t, filepath.Join(setup.binDir, "claude"), "./e2e/vendortest/cmd/claude")
+	buildTUIBinary(t, filepath.Join(setup.binDir, "herrscher"), "-tags", "e2e", ".")
+	if err := os.Mkdir(filepath.Join(setup.root, strconv.Itoa(os.Getuid())), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	layout, err := host.RuntimeAt(filepath.Join(root, strconv.Itoa(os.Getuid()), "herrscher"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	home := t.TempDir()
-	repo := t.TempDir()
-	if out, err := exec.CommandContext(t.Context(), "git", "init", "-q", repo).CombinedOutput(); err != nil {
+	if out, err := exec.CommandContext(t.Context(), "git", "init", "-q", setup.repo).CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v: %s", err, out)
 	}
-	scriptPath := ""
 	if vendorScript != "" {
-		scriptPath = filepath.Join(home, "claude.script")
-		if err := os.WriteFile(scriptPath, []byte(vendorScript), 0o600); err != nil {
+		setup.scriptPath = filepath.Join(setup.home, "claude.script")
+		if err := os.WriteFile(setup.scriptPath, []byte(vendorScript), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	env := tuiEnv(home, root, binDir, scriptPath)
-	for _, pair := range env {
+	for _, pair := range tuiEnv(setup.home, setup.root, setup.binDir, setup.scriptPath) {
 		name, value, _ := strings.Cut(pair, "=")
 		t.Setenv(name, value)
 	}
-	t.Chdir(repo)
+	t.Chdir(setup.repo)
+	return setup
+}
 
-	daemon := exec.CommandContext(context.Background(), filepath.Join(binDir, "herrscher"), "serve")
-	daemon.Dir = repo
+func startTUIDaemon(t *testing.T, vendorScript string) tuiDaemon {
+	t.Helper()
+	daemon, _ := newTUISetup(t, vendorScript).serve(t)
+	return daemon
+}
+
+func (setup tuiSetup) serve(t *testing.T) (tuiDaemon, func()) {
+	t.Helper()
+	layout, err := host.RuntimeAt(filepath.Join(setup.root, strconv.Itoa(os.Getuid()), "herrscher"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := tuiEnv(setup.home, setup.root, setup.binDir, setup.scriptPath)
+	daemon := exec.CommandContext(context.Background(), filepath.Join(setup.binDir, "herrscher"), "serve")
+	daemon.Dir = setup.repo
 	daemon.Env = env
 	var stderr bytes.Buffer
 	daemon.Stderr = &stderr
@@ -111,12 +124,13 @@ func startTUIDaemon(t *testing.T, vendorScript string) tuiDaemon {
 	}
 	stopped := make(chan error, 1)
 	go func() { stopped <- daemon.Wait() }()
-	t.Cleanup(func() {
-		stopDaemon(t, daemon, stopped, &stderr)
-	})
-
+	var once sync.Once
+	stop := func() {
+		once.Do(func() { stopDaemon(t, daemon, stopped, &stderr) })
+	}
+	t.Cleanup(stop)
 	waitTUIDaemon(t, layout, tuiInstance)
-	return tuiDaemon{layout: layout, instance: tuiInstance, statePath: host.DefaultStatePath()}
+	return tuiDaemon{layout: layout, instance: tuiInstance, statePath: host.DefaultStatePath()}, stop
 }
 
 func tuiEnv(home, root, binDir, scriptPath string) []string {

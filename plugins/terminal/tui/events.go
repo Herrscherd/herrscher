@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"log/slog"
+	"strconv"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -113,6 +115,8 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.appendEntry(entry{role: roleNotice, text: m.tr.t("tui.render.turn_reset", nil)})
 	case eventwire.EventNotice:
 		target.appendEntry(entry{role: roleNotice, text: event.Text, markdown: true})
+	case eventwire.EventBackendNotice:
+		m.appendBackendNotice(target, event)
 	case eventwire.EventCompactionStarted:
 		target.startCompaction(event)
 	case eventwire.EventCompactionDone:
@@ -129,4 +133,18 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.endStream()
 		target.appendEntry(entry{role: roleNotice, text: m.tr.t("tui.render.turn_abandoned", nil)})
 	}
+}
+
+func (m *model) appendBackendNotice(target *tab, event contracts.Event) {
+	code, err := strconv.ParseUint(event.Value, 10, 16)
+	if err != nil {
+		slog.Warn("backend notice not shown, its code is not a number", "value", event.Value, "err", err)
+		return
+	}
+	text, err := contracts.NewRenderer().Render(m.tr.lang, contracts.Notice{Code: contracts.Code(code)})
+	if err != nil {
+		slog.Warn("backend notice not shown, it does not render", "code", code, "err", err)
+		return
+	}
+	target.appendEntry(entry{role: roleNotice, text: text, markdown: true})
 }

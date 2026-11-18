@@ -135,7 +135,7 @@ func TestStaleAcceptFailureLeavesTheReplacementLive(t *testing.T) {
 	current := make(chan struct{})
 	stale := make(chan struct{})
 	var warnings lockedBuffer
-	h := testHub(&hub{messages: newHostMessages(), warnings: &warnings, live: map[string]liveSession{name: {done: current, cancel: func() {}, release: func() {}}}})
+	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: &warnings, live: map[string]liveSession{name: {done: current, cancel: func() {}, release: func() {}}}})
 
 	h.acceptFailed(name, stale, errTerminalAccept)
 

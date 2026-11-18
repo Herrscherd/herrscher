@@ -171,11 +171,11 @@ func BuildPlan(messages *clitext.Messages, cfg Config) (Plan, error) {
 	var err error
 	switch goos(cfg) {
 	case goosLinux:
-		plan, err = linuxPlan(cfg)
+		plan, err = linuxPlan(messages, cfg)
 	case goosDarwin:
-		plan, err = macPlan(cfg)
+		plan, err = macPlan(messages, cfg)
 	case goosWindows:
-		plan, err = windowsPlan(cfg)
+		plan, err = windowsPlan(messages, cfg)
 	default:
 		return Plan{}, unsupportedOS(messages, cfg)
 	}
@@ -563,7 +563,7 @@ func stopSeconds() string {
 	return strconv.Itoa(int(StopTimeout / time.Second))
 }
 
-func linuxPlan(cfg Config) (Plan, error) {
+func linuxPlan(messages *clitext.Messages, cfg Config) (Plan, error) {
 	unit := filepath.Join(cfg.Home, ".config", "systemd", "user", linuxUnitName)
 	content := "[Unit]\n" +
 		"Description=herrscher gateway daemon\n" +
@@ -591,7 +591,7 @@ func linuxPlan(cfg Config) (Plan, error) {
 	if cfg.User != "" {
 		cmds = append(cmds, Command{Argv: []string{"loginctl", "enable-linger", cfg.User}, IgnoreErr: true})
 	}
-	note, err := startNote(cfg, "systemctl --user start "+linuxUnitName)
+	note, err := startNote(messages, cfg, "systemctl --user start "+linuxUnitName)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -602,7 +602,7 @@ func linuxPlan(cfg Config) (Plan, error) {
 	}, nil
 }
 
-func macPlan(cfg Config) (Plan, error) {
+func macPlan(messages *clitext.Messages, cfg Config) (Plan, error) {
 	plist := filepath.Join(cfg.Home, "Library", "LaunchAgents", macLabel+".plist")
 	logPath := filepath.Join(cfg.Home, ".local", "state", "herrscher", "herrscher.log")
 	argv := append([]string{cfg.BinPath}, serveArgs(cfg)...)
@@ -631,7 +631,7 @@ func macPlan(cfg Config) (Plan, error) {
 	if !cfg.SkipStart {
 		cmds = append(cmds, Command{Argv: []string{cmdLaunchctl, "load", "-w", plist}})
 	}
-	note, err := startNote(cfg, "launchctl load -w "+plist)
+	note, err := startNote(messages, cfg, "launchctl load -w "+plist)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -642,11 +642,11 @@ func macPlan(cfg Config) (Plan, error) {
 	}, nil
 }
 
-func windowsPlan(cfg Config) (Plan, error) {
+func windowsPlan(messages *clitext.Messages, cfg Config) (Plan, error) {
 	launcher := filepath.Join(cfg.Home, "AppData", "Local", "herrscher", "herrscher-serve.cmd")
 	content := "@echo off\r\n" +
 		joinQuoted(cmdQuote, cfg.BinPath, serveArgs(cfg)) + "\r\n"
-	note, err := clitext.Text(cfg.language(), clitext.ServiceNoteWindowsEdit, clitext.Params{clitext.ParamEnvFile: cfg.EnvFile, clitext.ParamTask: winTaskName})
+	note, err := messages.Text(cfg.language(), clitext.ServiceNoteWindowsEdit, clitext.Params{clitext.ParamEnvFile: cfg.EnvFile, clitext.ParamTask: winTaskName})
 	if err != nil {
 		return Plan{}, err
 	}
@@ -668,11 +668,11 @@ func xmlEscape(value string) string {
 	return r.Replace(value)
 }
 
-func startNote(cfg Config, startCmd string) (string, error) {
+func startNote(messages *clitext.Messages, cfg Config, startCmd string) (string, error) {
 	if cfg.SkipStart {
-		return clitext.Text(cfg.language(), clitext.ServiceNoteNotStarted, clitext.Params{clitext.ParamEnvFile: cfg.EnvFile, clitext.ParamStart: startCmd})
+		return messages.Text(cfg.language(), clitext.ServiceNoteNotStarted, clitext.Params{clitext.ParamEnvFile: cfg.EnvFile, clitext.ParamStart: startCmd})
 	}
-	return clitext.Text(cfg.language(), clitext.ServiceNoteRunning, clitext.Params{clitext.ParamEnvFile: cfg.EnvFile})
+	return messages.Text(cfg.language(), clitext.ServiceNoteRunning, clitext.Params{clitext.ParamEnvFile: cfg.EnvFile})
 }
 
 func envFileHasRequired(path string, vars []EnvVar) bool {
@@ -841,7 +841,7 @@ func Install(ctx context.Context, messages *clitext.Messages, cfg Config) error 
 	if err != nil {
 		return err
 	}
-	return runPlan(ctx, plan)
+	return runPlan(ctx, messages, plan)
 }
 
 // Uninstall stops and removes the service for the current OS.
@@ -850,7 +850,7 @@ func Uninstall(ctx context.Context, messages *clitext.Messages, c Config) error 
 	if err != nil {
 		return err
 	}
-	return runPlan(ctx, plan)
+	return runPlan(ctx, messages, plan)
 }
 
 // Status prints the platform's service status to stdout/stderr.
@@ -862,9 +862,9 @@ func Status(ctx context.Context, messages *clitext.Messages, c Config) error {
 	return runCommand(ctx, cmd)
 }
 
-func runPlan(ctx context.Context, plan Plan) error {
+func runPlan(ctx context.Context, messages *clitext.Messages, plan Plan) error {
 	for _, f := range plan.Files {
-		if err := writeFile(f); err != nil {
+		if err := writeFile(messages, f); err != nil {
 			return err
 		}
 	}
@@ -879,22 +879,22 @@ func runPlan(ctx context.Context, plan Plan) error {
 	return nil
 }
 
-func writeFile(write FileWrite) error {
+func writeFile(messages *clitext.Messages, write FileWrite) error {
 	lang := clitext.ClientLanguage()
 	if write.Template {
 		switch _, err := os.Stat(write.Path); {
 		case err == nil:
 			return nil
 		case !errors.Is(err, fs.ErrNotExist):
-			return clitext.Failure(lang, err, clitext.ServiceStatFailed, clitext.Params{clitext.ParamPath: write.Path, clitext.ParamErr: err.Error()})
+			return messages.Failure(lang, err, clitext.ServiceStatFailed, clitext.Params{clitext.ParamPath: write.Path, clitext.ParamErr: err.Error()})
 		}
 	}
 	dir := filepath.Dir(write.Path)
 	if err := os.MkdirAll(dir, privateDirMode); err != nil {
-		return clitext.Failure(lang, err, clitext.ServiceMkdirFailed, clitext.Params{clitext.ParamPath: dir, clitext.ParamErr: err.Error()})
+		return messages.Failure(lang, err, clitext.ServiceMkdirFailed, clitext.Params{clitext.ParamPath: dir, clitext.ParamErr: err.Error()})
 	}
 	if err := os.WriteFile(write.Path, []byte(write.Content), write.Mode); err != nil {
-		return clitext.Failure(lang, err, clitext.ServiceWriteFailed, clitext.Params{clitext.ParamPath: write.Path, clitext.ParamErr: err.Error()})
+		return messages.Failure(lang, err, clitext.ServiceWriteFailed, clitext.Params{clitext.ParamPath: write.Path, clitext.ParamErr: err.Error()})
 	}
 	return nil
 }

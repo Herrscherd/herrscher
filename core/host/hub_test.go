@@ -306,6 +306,7 @@ func TestGoDeadCallsForget(t *testing.T) {
 	stub := &stubForgetCoord{}
 	h := testHub(&hub{
 		messages:      newHostMessages(),
+		cliMessages:   clitext.NewMessages(),
 		warnings:      io.Discard,
 		coordinator:   stub,
 		live:          make(map[string]liveSession),

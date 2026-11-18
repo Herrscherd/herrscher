@@ -32,7 +32,7 @@ func TestWiredManagerWriteIsAwaitedByTheStopPath(t *testing.T) {
 	h.runtime = layout
 	h.teardownGrace = grace
 
-	hdl := newManagerHandler(newHostMessages(), Deps{}, Options{DefaultCmd: "claude"}, t.TempDir(), st, sup, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
+	hdl := newManagerHandler(newHostMessages(), clitext.NewMessages(), Deps{}, Options{DefaultCmd: "claude"}, t.TempDir(), st, sup, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
 	wireManagerHandler(ctx, nil, io.Discard, hdl, st, layout, "wired", nil, sessions, nil)
 
 	tmp := statePath + ".tmp"

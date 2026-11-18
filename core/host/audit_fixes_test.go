@@ -102,7 +102,7 @@ func TestDriverEnqueueIsBounded(t *testing.T) {
 func TestGoDeadDoesNotHoldTheHubLockWhileWaiting(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		stuck := make(chan struct{})
-		h := testHub(&hub{messages: newHostMessages(), warnings: io.Discard, live: make(map[string]liveSession), teardownGrace: 100 * time.Millisecond})
+		h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, live: make(map[string]liveSession), teardownGrace: 100 * time.Millisecond})
 		h.live["wedged"] = liveSession{cancel: func() {}, done: stuck, release: func() {}}
 
 		returned := make(chan struct{})

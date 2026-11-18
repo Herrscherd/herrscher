@@ -7,12 +7,14 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func TestSinkSerializesDrainAndDirectWritesOnABareBuffer(t *testing.T) {
 	const writes = 300
 	var out bytes.Buffer
-	h := testHub(&hub{messages: newHostMessages(), warnings: &out, teardownGrace: 10 * time.Second})
+	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: &out, teardownGrace: 10 * time.Second})
 	direct := runInBackground(func() {
 		for range writes {
 			if err := h.sink.announce("direct"); err != nil {

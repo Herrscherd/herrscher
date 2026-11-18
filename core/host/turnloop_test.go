@@ -350,10 +350,10 @@ func TestPickRegistryRoutesToLiveSession(t *testing.T) {
 	c := dialCtl(t, sock)
 	defer closeRead(c)
 	gotInput(t, c, "ping")
-	if !testHub(&hub{messages: newHostMessages(), warnings: io.Discard, approvals: approvalTab, sessions: sessionTab}).Pick("pickreg", "1") {
+	if !testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, approvals: approvalTab, sessions: sessionTab}).Pick("pickreg", "1") {
 		t.Fatal("Pick must route to the session that is serving its control socket")
 	}
-	if testHub(&hub{messages: newHostMessages(), warnings: io.Discard, approvals: approvalTab, sessions: sessionTab}).Pick("does-not-exist", "1") {
+	if testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, approvals: approvalTab, sessions: sessionTab}).Pick("does-not-exist", "1") {
 		t.Fatal("Pick must report false for an unknown session")
 	}
 }

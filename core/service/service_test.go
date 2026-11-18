@@ -23,7 +23,7 @@ func TestWriteFileNeverOverwritesTemplate(t *testing.T) {
 	if err := os.WriteFile(path, []byte("GW_TOKEN=real-secret\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeFile(FileWrite{Path: path, Content: renderEnvTemplate(testEnvVars()), Mode: 0o600, Template: true}); err != nil {
+	if err := writeFile(clitext.NewMessages(), FileWrite{Path: path, Content: renderEnvTemplate(testEnvVars()), Mode: 0o600, Template: true}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(path)
@@ -32,7 +32,7 @@ func TestWriteFileNeverOverwritesTemplate(t *testing.T) {
 		t.Fatalf("template clobbered existing secrets: %q", got)
 	}
 	fresh := filepath.Join(dir, "sub", "new.env")
-	if err := writeFile(FileWrite{Path: fresh, Content: renderEnvTemplate(testEnvVars()), Mode: 0o600, Template: true}); err != nil {
+	if err := writeFile(clitext.NewMessages(), FileWrite{Path: fresh, Content: renderEnvTemplate(testEnvVars()), Mode: 0o600, Template: true}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(fresh); err != nil {
@@ -769,7 +769,7 @@ func TestWriteFileAppliesMode(t *testing.T) {
 	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "nested", "herrscher.env")
-	if err := writeFile(FileWrite{Path: path, Content: renderEnvTemplate(testEnvVars()), Mode: 0o600, Template: true}); err != nil {
+	if err := writeFile(clitext.NewMessages(), FileWrite{Path: path, Content: renderEnvTemplate(testEnvVars()), Mode: 0o600, Template: true}); err != nil {
 		t.Fatal(err)
 	}
 	info, err := os.Stat(path)
@@ -889,7 +889,8 @@ func TestSettingHelpRendersInFrench(t *testing.T) {
 }
 
 func TestDefaultConfigRefusesAPluginKeyCollision(t *testing.T) {
-	registerGatewaySetting(t,
+	registerGatewaySetting(
+		t,
 		fakeGateway("alpha", "Bot token", "Jeton du bot"),
 		fakeGateway("beta", "Other token", "Autre jeton"),
 	)

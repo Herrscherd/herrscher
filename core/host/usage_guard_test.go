@@ -16,7 +16,7 @@ import (
 func TestAttachOneShotTapsRecordsTheUsageOfTheSeed(t *testing.T) {
 	var recorded []usage.Record
 	var owner string
-	runtime := oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), recordUsage: func(sess state.Session, records []usage.Record) {
+	runtime := oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), recordUsage: func(sess state.Session, records []usage.Record) {
 		owner = sess.Name
 		recorded = append(recorded, records...)
 	}}

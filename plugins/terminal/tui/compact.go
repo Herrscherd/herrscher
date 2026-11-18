@@ -149,7 +149,7 @@ func compactFailureText(trans translator, event contracts.Event) string {
 			return text
 		}
 	}
-	if eventwire.IsBareTrigger(event.Value) {
+	if eventwire.IsLegacyPayload(event.Value) {
 		if event.Text != "" {
 			return event.Text
 		}

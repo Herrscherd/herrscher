@@ -117,8 +117,13 @@ func TestBareFailureFromAnOlderHostShowsItsText(t *testing.T) {
 	m, tb := failedCompactionTab(t)
 	m.localize(i18n.English)
 
+	before := len(tb.entries)
+
 	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionFailed, Value: "automatic", Text: "the bridge closed during a compaction"})
 
+	if len(tb.entries) <= before {
+		t.Fatalf("entries = %d, want more than %d: a bare failure must be shown", len(tb.entries), before)
+	}
 	last := tb.entries[len(tb.entries)-1]
 	if last.role != roleError || last.text != "the bridge closed during a compaction" {
 		t.Fatalf("last entry = %+v, want the older host's text as an error", last)
@@ -129,8 +134,13 @@ func TestBareFailureWithoutTextShowsTheGenericLine(t *testing.T) {
 	m, tb := failedCompactionTab(t)
 	m.localize(i18n.English)
 
+	before := len(tb.entries)
+
 	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionFailed, Value: "automatic"})
 
+	if len(tb.entries) <= before {
+		t.Fatalf("entries = %d, want more than %d: a bare failure must be shown", len(tb.entries), before)
+	}
 	last := tb.entries[len(tb.entries)-1]
 	if last.role != roleError || last.text != "compaction failed" {
 		t.Fatalf("last entry = %+v, want the generic failure line", last)

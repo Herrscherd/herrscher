@@ -8,15 +8,15 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// IsBareTrigger reports whether value carries the bare trigger an older host puts in place of a JSON payload.
-func IsBareTrigger(value string) bool {
+// IsLegacyPayload reports whether value is not a JSON payload, as an older host sends it.
+func IsLegacyPayload(value string) bool {
 	return !strings.HasPrefix(strings.TrimSpace(value), "{")
 }
 
 func decodeCompactionPayload[T any](value string, fromTrigger func(trigger string) T) (T, error) {
 	var payload T
 	text := strings.TrimSpace(value)
-	if IsBareTrigger(text) {
+	if IsLegacyPayload(text) {
 		trigger, err := contracts.ParseCompactTrigger(text)
 		if err != nil {
 			return payload, fmt.Errorf("read bare compaction trigger: %w", err)

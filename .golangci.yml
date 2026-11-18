@@ -269,7 +269,7 @@ linters:
       - path: ^bridge_provision_test\.go$
         linters: [unparam]
         text: 'result 0 \(error\) is always nil'
-      - path: ^core/host/(coordinator|coordinator_test|turnloop)\.go$
+      - path: ^core/host/(coordinator|coordinator_test)\.go$
         linters: [misspell]
         text: "^`(conflit|existant|partiel)` is a misspelling"
       - path: ^core/host/backendenv\.go$

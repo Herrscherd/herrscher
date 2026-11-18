@@ -161,7 +161,11 @@ func TestPickReplyOutsideTurnCarriesItsOwnTurnID(t *testing.T) {
 	d.queue <- queued{ev: contracts.Event{T: eventwire.EventInput, Text: "task", TurnID: "turn-last"}}
 	_ = receiveTurnEvent(t, toBridge)
 	fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "done", Done: true}
-	_ = receiveTurnEvent(t, emitted)
+	human := receiveTurnEvent(t, emitted)
+	done := receiveTurnEvent(t, emitted)
+	if human.T != eventwire.EventHuman || done.T != eventwire.EventReply || done.TurnID != "turn-last" {
+		t.Fatalf("turn 1 events = [%s %q, %s %q], want [human, reply turn-last]", human.T, human.TurnID, done.T, done.TurnID)
+	}
 
 	d.Pick("2")
 	pick := receiveTurnEvent(t, toBridge)
@@ -189,6 +193,28 @@ func TestOffTurnEventDropsAForgedTurnID(t *testing.T) {
 	d.fanOut(context.Background(), contracts.Event{T: eventwire.EventStatus, Text: "hors tour", TurnID: "turn-last"})
 	if got := receiveTurnEvent(t, emitted); got.TurnID != "" {
 		t.Fatalf("off-turn event TurnID = %q, want none: a forged identifier must not leave the driver", got.TurnID)
+	}
+}
+
+func TestForgedTurnIDDuringAPickIsReplacedOnEveryGateway(t *testing.T) {
+	plain := &turnIDPlainGateway{}
+	routed := &turnIDRoutedGateway{}
+	d := newSessionDriver(newHostMessages(), "s1", []contracts.GatewaySet{
+		{Gateway: plain, Reader: plain},
+		{Gateway: routed, Reader: routed},
+	}, nil, nil, io.Discard)
+	ctx := context.Background()
+
+	pick, _, ok := d.prepareTurn(ctx, queued{ev: contracts.Event{T: eventwire.EventPick, Value: "2"}})
+	if !ok || pick.TurnID == "" || pick.TurnID == "turn-last" {
+		t.Fatalf("pick = %+v, ok %v: want a fresh TurnID from the driver", pick, ok)
+	}
+	d.fanOutReply(ctx, contracts.Event{T: eventwire.EventReply, Text: "picked", Done: true, TurnID: "turn-last"}, outbox.Frame{})
+
+	for _, got := range [][]contracts.Event{plain.events, routed.events} {
+		if len(got) != 1 || got[0].T != eventwire.EventReply || got[0].TurnID != pick.TurnID {
+			t.Fatalf("gateway events = %+v, want one reply with the driver's TurnID %q", got, pick.TurnID)
+		}
 	}
 }
 
@@ -230,6 +256,9 @@ func TestDriversWithSameNameRemainDistinguishableByIncarnation(t *testing.T) {
 		d.queue <- queued{ev: contracts.Event{T: eventwire.EventInput, Text: "task", TurnID: "same-turn"}}
 		_ = receiveTurnEvent(t, toBridge)
 		fromBridge <- contracts.Event{T: eventwire.EventReply, Text: "done", Done: true}
+		if human := receiveTurnEvent(t, emitted); human.T != eventwire.EventHuman {
+			t.Fatalf("first event = %q, want human", human.T)
+		}
 		return receiveTurnEvent(t, emitted)
 	}
 

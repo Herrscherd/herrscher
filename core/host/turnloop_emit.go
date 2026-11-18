@@ -42,6 +42,19 @@ func languageTag(lang i18n.Language) string {
 	return lang.String()
 }
 
+func (d *sessionDriver) stamp(event contracts.Event) contracts.Event {
+	if d.activeTurnID != "" {
+		event.SessionIncarnation = d.incarnation
+		event.TurnID = d.activeTurnID
+		event.Agent = d.agent
+		return event
+	}
+	event.SessionIncarnation = ""
+	event.TurnID = d.pickTurnID
+	event.Agent = ""
+	return event
+}
+
 func (d *sessionDriver) eachGateway(visit func(index int, gateway contracts.GatewaySet)) {
 	for index, gateway := range d.gateways {
 		visit(index, gateway)

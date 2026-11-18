@@ -150,16 +150,3 @@ func turnTokens(event contracts.Event) uint64 {
 	}
 	return uint64(total)
 }
-
-func (d *sessionDriver) stamp(event contracts.Event) contracts.Event {
-	if d.activeTurnID != "" {
-		event.SessionIncarnation = d.incarnation
-		event.TurnID = d.activeTurnID
-		event.Agent = d.agent
-		return event
-	}
-	event.SessionIncarnation = ""
-	event.TurnID = d.pickTurnID
-	event.Agent = ""
-	return event
-}

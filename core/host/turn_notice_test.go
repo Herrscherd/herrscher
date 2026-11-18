@@ -8,6 +8,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -26,7 +27,7 @@ func interruptedTurnTranscript(t *testing.T) string {
 
 func TestInterruptedTurnScrollbackLineCarriesTheNotice(t *testing.T) {
 	partDir := interruptedTurnTranscript(t)
-	h := testHub(&hub{messages: newHostMessages(), partDir: partDir})
+	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), partDir: partDir})
 
 	lines := h.Scrollback("main")
 	if len(lines) != 2 {

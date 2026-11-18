@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 func TestStopLiveIsBoundedWhenTheWarningWriterStalls(t *testing.T) {
@@ -58,7 +60,7 @@ func TestCloseWarningsLosesOrLogsAnUndrainedOverrun(t *testing.T) {
 	logs := captureDefaultLog(t)
 	warnings := newGatedWarnings("stuck")
 	t.Cleanup(warnings.open)
-	h := testHub(&hub{messages: newHostMessages(), warnings: warnings, teardownGrace: 300 * time.Millisecond})
+	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: warnings, teardownGrace: 300 * time.Millisecond})
 	if _, err := h.warnings.Write([]byte("stuck\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}

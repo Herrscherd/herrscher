@@ -76,12 +76,13 @@ func seedSharingSession(backend contracts.Backend, budget time.Duration, log *st
 	policy.limits = contextwindow.NewLimits("1000", nil)
 	table.compaction = policy
 	runtime := oneShotSeedRuntime{
-		persists: newPersistWrites(),
-		messages: newHostMessages(),
-		timeout:  budget,
-		sessions: table,
-		publish:  func(string, contracts.Event) { log.note(eventwire.EventReply) },
-		record:   func(string, state.TranscriptEntry) { log.note("transcript") },
+		persists:    newPersistWrites(),
+		messages:    newHostMessages(),
+		cliMessages: clitext.NewMessages(),
+		timeout:     budget,
+		sessions:    table,
+		publish:     func(string, contracts.Event) { log.note(eventwire.EventReply) },
+		record:      func(string, state.TranscriptEntry) { log.note("transcript") },
 		recordUsage: func(state.Session, []usage.Record) {
 			log.note("usage")
 		},
@@ -128,6 +129,7 @@ func TestOneShotTapsRecordNothingOnceTheSeedHasReturned(t *testing.T) {
 	runtime := oneShotSeedRuntime{
 		persists:    newPersistWrites(),
 		messages:    newHostMessages(),
+		cliMessages: clitext.NewMessages(),
 		publish:     func(string, contracts.Event) { recorded = append(recorded, "publish") },
 		record:      func(string, state.TranscriptEntry) { recorded = append(recorded, "transcript") },
 		recordUsage: func(state.Session, []usage.Record) { recorded = append(recorded, "usage") },

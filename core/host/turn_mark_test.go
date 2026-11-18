@@ -18,7 +18,7 @@ func newMarkHub(t *testing.T, partDir string, sess state.Session) (*hub, *state.
 	if err := st.AddSession(sess); err != nil {
 		t.Fatal(err)
 	}
-	return testHub(&hub{messages: newHostMessages(), warnings: io.Discard, st: st, partDir: partDir, live: make(map[string]liveSession)}), st
+	return testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, st: st, partDir: partDir, live: make(map[string]liveSession)}), st
 }
 
 func TestAnnounceInterruptedTurnAppendsNoticeAndClearsMark(t *testing.T) {

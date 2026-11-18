@@ -15,7 +15,7 @@ import (
 
 func TestATapIsRefusedOnceTheSeedShutsItsGate(t *testing.T) {
 	var published []string
-	runtime := oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), publish: func(_ string, event contracts.Event) {
+	runtime := oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), publish: func(_ string, event contracts.Event) {
 		published = append(published, event.T)
 	}}
 	sess := state.Session{Name: "window"}
@@ -33,7 +33,7 @@ func TestATapIsRefusedOnceTheSeedShutsItsGate(t *testing.T) {
 
 func TestAResumeTokenIsRefusedOnceTheSeedShutsItsGate(t *testing.T) {
 	var resumed []string
-	runtime := oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), resume: func(_, token string) {
+	runtime := oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), resume: func(_, token string) {
 		resumed = append(resumed, token)
 	}}
 	sess := state.Session{Name: "window"}

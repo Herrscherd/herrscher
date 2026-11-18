@@ -357,7 +357,7 @@ func TestPickRoutesApprovalValuesAwayFromTheBackend(t *testing.T) {
 			done <- d
 		}()
 		id := awaitPending(t, approvalTab, 1)[0].ID
-		if !testHub(&hub{messages: newHostMessages(), warnings: io.Discard, approvals: approvalTab, sessions: sessionTab}).Pick("s-no-driver", approvalPickPrefix+id+":deny") {
+		if !testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, approvals: approvalTab, sessions: sessionTab}).Pick("s-no-driver", approvalPickPrefix+id+":deny") {
 			t.Fatal("an approval pick must be handled even with no live driver")
 		}
 		if d := <-done; d != approval.Deny {

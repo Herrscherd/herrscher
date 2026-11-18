@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"strconv"
 	"testing"
 
@@ -53,5 +54,22 @@ func TestBackendNoticeWithANonNumericCodeAddsNoEntry(t *testing.T) {
 
 	if got := len(tb.entries); got != before {
 		t.Fatalf("entries = %d, want %d: a notice whose code is not a number must not be shown", got, before)
+	}
+}
+
+func TestBackendNoticeWithAnUnknownCodeAddsNoEntry(t *testing.T) {
+	if _, err := contracts.NewRenderer().Render(i18n.English, contracts.Notice{Code: 65535}); !errors.Is(err, contracts.ErrUnknownCode) {
+		t.Fatalf("Render of code 65535 = %v, want ErrUnknownCode", err)
+	}
+	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "claude"}}}
+	m := startedModel(f)
+	tb := m.ensureTab("c")
+	m.active = "c"
+	before := len(tb.entries)
+
+	m.renderInto(tb, contracts.Event{T: eventwire.EventBackendNotice, Value: "65535"})
+
+	if got := len(tb.entries); got != before {
+		t.Fatalf("entries = %d, want %d: a code missing from the catalogue must not be shown", got, before)
 	}
 }

@@ -156,7 +156,9 @@ A directory owned by another user is refused too: ask that user or root to remov
 
 Each session is a channel, an agent and an isolated git worktree, supervised and
 restarted automatically. The conversation resumes from the backend's own resume
-token, so a restart is not a new conversation.
+token, so a restart is not a new conversation. If the backend refuses that token
+before it answers, the same turn runs on a fresh backend session instead of
+failing: the conversation goes on, without the backend's earlier history.
 
 A session can be created explicitly or adopt an existing one with `--channel_id`.
 On Discord it opens the first time its owner pings the bot in a channel. A new

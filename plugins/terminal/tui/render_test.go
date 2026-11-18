@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -102,7 +103,7 @@ func TestChunkCoalescingRendersOneBlock(t *testing.T) {
 	}
 }
 
-func TestResetLeavesTheAbandonedAttemptClosed(t *testing.T) {
+func TestResetDropsTheAbandonedAttemptAndKeepsTheRetry(t *testing.T) {
 	m := newTestModel()
 	tb := m.ensureTab("a")
 	m.renderInto(tb, contracts.Event{T: eventwire.EventChunk, Text: "Je regarde."})
@@ -114,14 +115,87 @@ func TestResetLeavesTheAbandonedAttemptClosed(t *testing.T) {
 			agents = append(agents, item)
 		}
 	}
-	if len(agents) != 2 {
-		t.Fatalf("the retry must open its own entry after the reset: %d agent entries", len(agents))
+	if len(agents) != 1 {
+		t.Fatalf("the reset must drop the abandoned attempt, only the retry stays: %d agent entries", len(agents))
 	}
-	if agents[0].text != "Je regarde." || agents[0].streaming {
-		t.Fatalf("the abandoned attempt must stay as it was, closed: %+v", agents[0])
+	if agents[0].text != "Voici" {
+		t.Fatalf("the retry must hold only its own text: %q", agents[0].text)
 	}
-	if agents[1].text != "Voici" {
-		t.Fatalf("the retry must hold only its own text: %q", agents[1].text)
+}
+
+func TestResetKeepsTheTurnBusyUntilItsReply(t *testing.T) {
+	m := newTestModel()
+	tb := m.ensureTab("a")
+	m.renderInto(tb, contracts.Event{T: eventwire.EventChunk, Text: "Je regarde."})
+	tb.queue = []queuedInput{{text: "suivant"}}
+	m.renderInto(tb, contracts.Event{T: eventwire.EventReset})
+	if !tb.busy {
+		t.Fatal("a reset is a retry inside the same turn: the turn must stay busy")
+	}
+	if next := m.flushQueue(tb, eventwire.EventReset); next != nil {
+		t.Fatal("a queued message must not start in the middle of the turn")
+	}
+	m.renderInto(tb, contracts.Event{T: eventwire.EventReply, Text: "Voici", Done: true})
+	if tb.busy {
+		t.Fatal("the final reply must end the turn")
+	}
+	for _, item := range tb.entries {
+		if item.text == "Je regarde." {
+			t.Fatal("the partial output of the abandoned attempt must be gone")
+		}
+	}
+	if last := tb.entries[len(tb.entries)-1]; last.text != "Voici" {
+		t.Fatalf("the final reply must be shown after the reset: last entry %q", last.text)
+	}
+}
+
+func TestAbandonedAttemptIsNotDiscardedByALaterReset(t *testing.T) {
+	m := newTestModel()
+	tb := m.ensureTab("a")
+	m.renderInto(tb, contracts.Event{T: eventwire.EventChunk, Text: "Avant"})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventAbandoned})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventChunk, Text: "Après"})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventReset})
+	texts := entryTexts(tb)
+	if !slices.Contains(texts, "Avant") {
+		t.Fatalf("an abandoned turn is closed: a later reset must not discard it: %q", texts)
+	}
+	if slices.Contains(texts, "Après") {
+		t.Fatalf("the reset must still discard what streamed since the abandon: %q", texts)
+	}
+}
+
+func TestResetKeepsAnEarlierReplyOfTheTurn(t *testing.T) {
+	m := newTestModel()
+	tb := m.ensureTab("a")
+	m.renderInto(tb, contracts.Event{T: eventwire.EventReply, Text: "Premier"})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventChunk, Text: "Deuxième"})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventReset})
+	texts := entryTexts(tb)
+	if !slices.Contains(texts, "Premier") {
+		t.Fatalf("a reply already shown is not streamed output: the reset must keep it: %q", texts)
+	}
+	if slices.Contains(texts, "Deuxième") {
+		t.Fatalf("the reset must discard the streamed output of the abandoned attempt: %q", texts)
+	}
+}
+
+func TestResetThenErrorReplyEndsTheTurn(t *testing.T) {
+	m := newTestModel()
+	tb := m.ensureTab("a")
+	m.renderInto(tb, contracts.Event{T: eventwire.EventChunk, Text: "Je regarde."})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventReset})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventReply, Text: hostErrPrefix + "le backend a échoué", Done: true})
+	if tb.busy {
+		t.Fatal("an error turn ends with a reply Done: busy must return to false after a reset")
+	}
+	texts := entryTexts(tb)
+	if slices.Contains(texts, "Je regarde.") {
+		t.Fatalf("the partial output of the failed attempt must be gone: %q", texts)
+	}
+	last := tb.entries[len(tb.entries)-1]
+	if last.role != roleError || last.text != "le backend a échoué" {
+		t.Fatalf("the error must be shown after the reset: role %v text %q", last.role, last.text)
 	}
 }
 

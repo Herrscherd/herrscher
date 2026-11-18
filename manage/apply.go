@@ -44,12 +44,12 @@ func composed() []string {
 	return []string{"go.mod", "go.sum", manifestFile}
 }
 
-func apply(ctx context.Context, dir string, findings []string, dec decider, steps []step) (bool, error) {
+func apply(ctx context.Context, messages *clitext.Messages, dir string, findings []string, dec decider, steps []step) (bool, error) {
 	if dec.Warn(ctx, findings) == Abort {
 		return false, nil
 	}
 
-	saved, err := saveComposition(dir)
+	saved, err := saveComposition(messages, dir)
 	if err != nil {
 		return false, err
 	}
@@ -61,7 +61,7 @@ func apply(ctx context.Context, dir string, findings []string, dec decider, step
 		}
 		stepErr := fmt.Errorf("%w\n%s", err, out)
 		if dec.Failed(ctx, out) == Restore {
-			if rerr := restoreComposition(dir, saved); rerr != nil {
+			if rerr := restoreComposition(messages, dir, saved); rerr != nil {
 				return false, errors.Join(stepErr, rerr)
 			}
 		}
@@ -70,7 +70,7 @@ func apply(ctx context.Context, dir string, findings []string, dec decider, step
 	return true, nil
 }
 
-func saveComposition(dir string) (map[string][]byte, error) {
+func saveComposition(messages *clitext.Messages, dir string) (map[string][]byte, error) {
 	saved := make(map[string][]byte, len(composed()))
 	for _, name := range composed() {
 		body, err := os.ReadFile(filepath.Join(dir, name))
@@ -78,7 +78,7 @@ func saveComposition(dir string) (map[string][]byte, error) {
 		case errors.Is(err, os.ErrNotExist):
 			saved[name] = nil
 		case err != nil:
-			return nil, failure(err, clitext.ManageSaveFailed, clitext.Params{clitext.ParamPath: name, clitext.ParamErr: err.Error()})
+			return nil, failure(messages, err, clitext.ManageSaveFailed, clitext.Params{clitext.ParamPath: name, clitext.ParamErr: err.Error()})
 		default:
 			saved[name] = body
 		}
@@ -86,7 +86,7 @@ func saveComposition(dir string) (map[string][]byte, error) {
 	return saved, nil
 }
 
-func restoreComposition(dir string, saved map[string][]byte) error {
+func restoreComposition(messages *clitext.Messages, dir string, saved map[string][]byte) error {
 	for _, name := range composed() {
 		path := filepath.Join(dir, name)
 		body, ok := saved[name]
@@ -103,7 +103,7 @@ func restoreComposition(dir string, saved map[string][]byte) error {
 			err = os.WriteFile(path, body, modeFile)
 		}
 		if err != nil {
-			return failure(err, clitext.ManageRestoreFailed, clitext.Params{clitext.ParamPath: name, clitext.ParamErr: err.Error()})
+			return failure(messages, err, clitext.ManageRestoreFailed, clitext.Params{clitext.ParamPath: name, clitext.ParamErr: err.Error()})
 		}
 	}
 	return nil

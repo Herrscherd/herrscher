@@ -3,13 +3,14 @@ package tui
 import (
 	"context"
 
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/manage"
 )
 
 type manageSeam struct{ ops *manage.PluginOps }
 
-func newManageSeam() (PluginSeam, error) {
-	ops, err := manage.NewPluginOps("")
+func newManageSeam(messages *clitext.Messages) (PluginSeam, error) {
+	ops, err := manage.NewPluginOps(messages, "")
 	if err != nil {
 		return nil, err
 	}

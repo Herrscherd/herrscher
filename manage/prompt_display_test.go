@@ -72,7 +72,7 @@ func TestChooseKindListsPlainKindsWithoutColour(t *testing.T) {
 	var choice string
 	out := captureStderr(t, func() {
 		var err error
-		choice, err = chooseKind(style{}, answering("\n"), catGateway)
+		choice, err = chooseKind(testMessages(), style{}, answering("\n"), catGateway)
 		if err != nil {
 			t.Errorf("chooseKind: %v", err)
 		}
@@ -90,7 +90,7 @@ func TestChooseKindListsPlainKindsWithoutColour(t *testing.T) {
 
 func TestChooseKindColoursTheDefaultKind(t *testing.T) {
 	out := captureStderr(t, func() {
-		if _, err := chooseKind(colouredStyle(), answering("\n"), catGateway); err != nil {
+		if _, err := chooseKind(testMessages(), colouredStyle(), answering("\n"), catGateway); err != nil {
 			t.Errorf("chooseKind: %v", err)
 		}
 	})
@@ -106,7 +106,7 @@ func TestChooseKindColoursTheDefaultKind(t *testing.T) {
 func TestChooseKindEscapesHostileCategory(t *testing.T) {
 	hostile := "gateway\x1b]0;pwn\a"
 	out := captureStderr(t, func() {
-		if _, err := chooseKind(colouredStyle(), answering("\n"), hostile); err != nil {
+		if _, err := chooseKind(testMessages(), colouredStyle(), answering("\n"), hostile); err != nil {
 			t.Errorf("chooseKind: %v", err)
 		}
 	})
@@ -121,7 +121,7 @@ func TestChooseKindEscapesHostileCategory(t *testing.T) {
 func TestWarnListsEscapedFindingsWithoutColour(t *testing.T) {
 	hostile := "risque \x1b]0;pwn\a"
 	out := captureStderr(t, func() {
-		newPromptDecider(answering("n\n"), style{}).Warn(context.Background(), []string{hostile})
+		newPromptDecider(testMessages(), answering("n\n"), style{}).Warn(context.Background(), []string{hostile})
 	})
 	if strings.Contains(out, "\x1b]") || strings.Contains(out, "\a") {
 		t.Fatalf("output = %q, want no raw control from the finding", out)
@@ -134,7 +134,7 @@ func TestWarnListsEscapedFindingsWithoutColour(t *testing.T) {
 func TestWarnKeepsColourAroundEscapedFinding(t *testing.T) {
 	hostile := "risque \x1b]0;pwn\a"
 	out := captureStderr(t, func() {
-		newPromptDecider(answering("n\n"), colouredStyle()).Warn(context.Background(), []string{hostile})
+		newPromptDecider(testMessages(), answering("n\n"), colouredStyle()).Warn(context.Background(), []string{hostile})
 	})
 	if !strings.Contains(out, "\x1b[31m!\x1b[0m") {
 		t.Fatalf("output = %q, want the red marker kept", out)
@@ -147,7 +147,7 @@ func TestWarnKeepsColourAroundEscapedFinding(t *testing.T) {
 func TestFailedEscapesBuildOutputLineByLine(t *testing.T) {
 	build := "compile ok\n\x1b]0;pwn\a\nfin\n"
 	out := captureStderr(t, func() {
-		newPromptDecider(answering("n\n"), colouredStyle()).Failed(context.Background(), build)
+		newPromptDecider(testMessages(), answering("n\n"), colouredStyle()).Failed(context.Background(), build)
 	})
 	if strings.Contains(out, "\x1b]") || strings.Contains(out, "\a") {
 		t.Fatalf("output = %q, want no raw control from the build output", out)
@@ -159,7 +159,7 @@ func TestFailedEscapesBuildOutputLineByLine(t *testing.T) {
 
 func TestFailedShowsBuildOutputWithoutColour(t *testing.T) {
 	out := captureStderr(t, func() {
-		newPromptDecider(answering("n\n"), style{}).Failed(context.Background(), "ligne 1\nligne 2")
+		newPromptDecider(testMessages(), answering("n\n"), style{}).Failed(context.Background(), "ligne 1\nligne 2")
 	})
 	if strings.Contains(out, "\x1b") {
 		t.Fatalf("plain output carries an escape: %q", out)

@@ -2,9 +2,13 @@ package tui
 
 import (
 	"go/ast"
+	"go/build/constraint"
 	"go/parser"
 	"go/token"
+	"go/types"
+	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -12,7 +16,7 @@ import (
 )
 
 func startModel(backend Backend) (*model, tea.Cmd) {
-	m := newModel(backend)
+	m := newModel(testMessages(), backend)
 	if backend == nil {
 		return m, nil
 	}
@@ -52,20 +56,136 @@ func TestFixturesWithABackendStartThroughStartModel(t *testing.T) {
 
 func newModelBypasses(t *testing.T) []string {
 	t.Helper()
-	files, globErr := filepath.Glob("*_test.go")
-	if globErr != nil {
-		t.Fatal(globErr)
-	}
+	files := guardedFiles(t)
 	fset := token.NewFileSet()
-	var bypasses []string
+	parsedFiles := make([]*ast.File, 0, len(files))
 	for _, file := range files {
 		parsed, parseErr := parser.ParseFile(fset, file, nil, 0)
 		if parseErr != nil {
 			t.Fatal(parseErr)
 		}
-		bypasses = append(bypasses, referencesToNewModel(fset, parsed, exemptFunction(file))...)
+		parsedFiles = append(parsedFiles, parsed)
+	}
+	info, err := typesInfo(fset, parsedFiles)
+	if err != nil {
+		t.Log(err)
+	}
+	var bypasses []string
+	for index, parsed := range parsedFiles {
+		bypasses = append(bypasses, referencesToNewModel(fset, parsed, info, exemptFunction(files[index]))...)
 	}
 	return bypasses
+}
+
+func guardedFiles(t *testing.T) []string {
+	t.Helper()
+	files, globErr := filepath.Glob("*.go")
+	if globErr != nil {
+		t.Fatal(globErr)
+	}
+	var guarded []string
+	for _, file := range files {
+		needsE2E, err := headerNeedsE2E(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.HasSuffix(file, "_test.go") || needsE2E {
+			guarded = append(guarded, file)
+		}
+	}
+	if !slices.Contains(guarded, "start_test.go") || !slices.Contains(guarded, "e2e_harness.go") {
+		t.Fatalf("scanned %q, want start_test.go and e2e_harness.go among them", guarded)
+	}
+	return guarded
+}
+
+func headerNeedsE2E(file string) (bool, error) {
+	src, err := os.ReadFile(file)
+	if err != nil {
+		return false, err
+	}
+	return headerSourceNeedsE2E(string(src))
+}
+
+func headerSourceNeedsE2E(src string) (bool, error) {
+	for _, line := range strings.Split(src, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "package ") {
+			break
+		}
+		if !constraint.IsGoBuild(trimmed) {
+			continue
+		}
+		expr, err := constraint.Parse(trimmed)
+		if err != nil {
+			return false, err
+		}
+		return !satisfiableWithout(expr, "e2e"), nil
+	}
+	return false, nil
+}
+
+func satisfiableWithout(expr constraint.Expr, excluded string) bool {
+	var free []string
+	for _, tag := range tagNames(expr) {
+		if tag != excluded {
+			free = append(free, tag)
+		}
+	}
+	for mask := range 1 << len(free) {
+		values := map[string]bool{excluded: false}
+		for index, tag := range free {
+			values[tag] = mask&(1<<index) != 0
+		}
+		if expr.Eval(func(tag string) bool { return values[tag] }) {
+			return true
+		}
+	}
+	return false
+}
+
+func tagNames(expr constraint.Expr) []string {
+	switch node := expr.(type) {
+	case *constraint.TagExpr:
+		return []string{node.Tag}
+	case *constraint.NotExpr:
+		return tagNames(node.X)
+	case *constraint.AndExpr:
+		return append(tagNames(node.X), tagNames(node.Y)...)
+	case *constraint.OrExpr:
+		return append(tagNames(node.X), tagNames(node.Y)...)
+	}
+	return nil
+}
+
+func TestE2EConstraintDetection(t *testing.T) {
+	cases := []struct {
+		header string
+		want   bool
+	}{
+		{"//go:build e2e", true},
+		{"//go:build linux && e2e", true},
+		{"//go:build !e2e", false},
+		{"//go:build e2e || linux", false},
+		{"//go:build !linux", false},
+		{"package tui", false},
+	}
+	for _, tc := range cases {
+		got, err := headerSourceNeedsE2E(tc.header + "\n\npackage tui\n")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != tc.want {
+			t.Fatalf("%q: needs e2e = %v, want %v", tc.header, got, tc.want)
+		}
+	}
+}
+
+func typesInfo(fset *token.FileSet, files []*ast.File) (*types.Info, error) {
+	info := &types.Info{Uses: make(map[*ast.Ident]types.Object)}
+	conf := types.Config{Error: func(error) {}}
+	_, err := conf.Check("tui", fset, files, info)
+	return info, err
 }
 
 func exemptFunction(file string) string {
@@ -75,8 +195,8 @@ func exemptFunction(file string) string {
 	return ""
 }
 
-func referencesToNewModel(fset *token.FileSet, file *ast.File, exempt string) []string {
-	allowed := nilNewModelCallees(file)
+func referencesToNewModel(fset *token.FileSet, file *ast.File, info *types.Info, exempt string) []string {
+	allowed := nilNewModelCallees(file, info)
 	var refs []string
 	ast.Inspect(file, func(node ast.Node) bool {
 		if fn, isFunc := node.(*ast.FuncDecl); isFunc && fn.Recv == nil && fn.Name.Name == exempt {
@@ -90,10 +210,10 @@ func referencesToNewModel(fset *token.FileSet, file *ast.File, exempt string) []
 	return refs
 }
 
-func nilNewModelCallees(file *ast.File) map[*ast.Ident]bool {
+func nilNewModelCallees(file *ast.File, info *types.Info) map[*ast.Ident]bool {
 	allowed := make(map[*ast.Ident]bool)
 	ast.Inspect(file, func(node ast.Node) bool {
-		if callee, isNilCall := newModelNilCallee(node); isNilCall {
+		if callee, isNilCall := newModelNilCallee(node, info); isNilCall {
 			allowed[callee] = true
 		}
 		return true
@@ -101,13 +221,16 @@ func nilNewModelCallees(file *ast.File) map[*ast.Ident]bool {
 	return allowed
 }
 
-func newModelNilCallee(node ast.Node) (*ast.Ident, bool) {
+func newModelNilCallee(node ast.Node, info *types.Info) (*ast.Ident, bool) {
 	call, isCall := node.(*ast.CallExpr)
-	if !isCall || len(call.Args) != 1 {
+	if !isCall || len(call.Args) != 2 {
 		return nil, false
 	}
-	arg, isArgIdent := call.Args[0].(*ast.Ident)
-	if !isArgIdent || arg.Name != "nil" {
+	arg, isArgIdent := call.Args[1].(*ast.Ident)
+	if !isArgIdent {
+		return nil, false
+	}
+	if _, isPredeclaredNil := info.Uses[arg].(*types.Nil); !isPredeclaredNil {
 		return nil, false
 	}
 	callee, isIdent := call.Fun.(*ast.Ident)
@@ -120,8 +243,13 @@ func TestNewModelGuardFlagsEveryReferenceButNilCalls(t *testing.T) {
 func fixtures(be Backend) {
 	_ = (newModel)(be)
 	build := newModel
-	_ = newModel(nil)
-	_ = newModel(be)
+	_ = newModel(testMessages(), nil)
+	_ = newModel(testMessages(), be)
+}
+
+func shadowed() {
+	var nil Backend
+	_ = newModel(testMessages(), nil)
 }
 `
 	fset := token.NewFileSet()
@@ -129,10 +257,46 @@ func fixtures(be Backend) {
 	if parseErr != nil {
 		t.Fatal(parseErr)
 	}
-	refs := referencesToNewModel(fset, parsed, "")
-	want := []string{"snippet.go:4:7", "snippet.go:5:11", "snippet.go:7:6"}
+	info, err := typesInfo(fset, []*ast.File{parsed})
+	if err != nil {
+		t.Log(err)
+	}
+	refs := referencesToNewModel(fset, parsed, info, "")
+	want := []string{"snippet.go:4:7", "snippet.go:5:11", "snippet.go:7:6", "snippet.go:12:6"}
 	if strings.Join(refs, " ") != strings.Join(want, " ") {
 		t.Fatalf("flagged = %q, want %q", refs, want)
+	}
+}
+
+func TestNewModelGuardResolvesNilAcrossFiles(t *testing.T) {
+	const declaration = `package tui
+
+var nil Backend
+`
+	const fixture = `package tui
+
+func fixtures(be Backend) {
+	_ = newModel(testMessages(), nil)
+	_ = newModel(testMessages(), be)
+}
+`
+	fset := token.NewFileSet()
+	declared, declaredErr := parser.ParseFile(fset, "nil_decl.go", declaration, 0)
+	if declaredErr != nil {
+		t.Fatal(declaredErr)
+	}
+	parsed, parseErr := parser.ParseFile(fset, "fixtures_test.go", fixture, 0)
+	if parseErr != nil {
+		t.Fatal(parseErr)
+	}
+	info, err := typesInfo(fset, []*ast.File{declared, parsed})
+	if err != nil {
+		t.Log(err)
+	}
+	refs := referencesToNewModel(fset, parsed, info, "")
+	want := []string{"fixtures_test.go:4:6", "fixtures_test.go:5:6"}
+	if strings.Join(refs, " ") != strings.Join(want, " ") {
+		t.Fatalf("flagged = %q, want %q: a package-level nil is not the predeclared one", refs, want)
 	}
 }
 
@@ -140,15 +304,15 @@ func TestNewModelGuardExemptsOnlyTheNamedFunction(t *testing.T) {
 	const snippet = `package tui
 
 func startModel(backend Backend) {
-	_ = newModel(backend)
+	_ = newModel(testMessages(), backend)
 }
 
 func other(be Backend) {
-	_ = newModel(be)
+	_ = newModel(testMessages(), be)
 }
 
 func (m *model) startModel(be Backend) {
-	_ = newModel(be)
+	_ = newModel(testMessages(), be)
 }
 `
 	fset := token.NewFileSet()
@@ -156,7 +320,11 @@ func (m *model) startModel(be Backend) {
 	if parseErr != nil {
 		t.Fatal(parseErr)
 	}
-	refs := referencesToNewModel(fset, parsed, "startModel")
+	info, err := typesInfo(fset, []*ast.File{parsed})
+	if err != nil {
+		t.Log(err)
+	}
+	refs := referencesToNewModel(fset, parsed, info, "startModel")
 	want := []string{"start_test.go:8:6", "start_test.go:12:6"}
 	if strings.Join(refs, " ") != strings.Join(want, " ") {
 		t.Fatalf("flagged = %q, want %q: only the exempt function may reference newModel", refs, want)

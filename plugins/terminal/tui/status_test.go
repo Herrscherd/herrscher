@@ -383,7 +383,7 @@ func TestRunModelReadsTheConfigFileIntoTheGauge(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := &fakeBackend{sessions: []contracts.SessionInfo{{Name: "api", ChannelID: "c", Vendor: "codex"}}}
-	m := newRunModel(context.Background(), f)
+	m := newRunModel(context.Background(), testMessages(), f)
 	m.handleWindowSize(tea.WindowSizeMsg{Width: 120, Height: 30})
 	m.active = "c"
 	syncLoaded(m)

@@ -16,7 +16,7 @@ func transcriptWidths() []int {
 }
 
 func toolTestView(expand bool) view {
-	return view{tr: newTranslator(), caps: Capabilities{Colour: ColourTrue}, st: testStyles(), spin: "⣾", expand: expand}
+	return view{tr: testTranslator(), caps: Capabilities{Colour: ColourTrue}, st: testStyles(), spin: "⣾", expand: expand}
 }
 
 func assertFitsWidth(t *testing.T, out string, width int) {
@@ -181,18 +181,18 @@ func TestSubagentTreeMarksEachState(t *testing.T) {
 	if !strings.Contains(rows[0], unicodeGlyphs().success) || !strings.Contains(rows[1], "⣾") || !strings.Contains(rows[2], unicodeGlyphs().failure) {
 		t.Fatalf("states must show check, spinner and cross: %q", rows)
 	}
-	if !strings.Contains(rows[2], newTranslator().t("tui.render.subagent_retry", nil)) {
+	if !strings.Contains(rows[2], testTranslator().t("tui.render.subagent_retry", nil)) {
 		t.Fatalf("a timed out agent must say it was retried: %q", rows[2])
 	}
 }
 
 func TestBusyLineCarriesVerbTimeTokensCostAndEscape(t *testing.T) {
 	for _, width := range transcriptWidths() {
-		out := busyLine(newTranslator(), width, testStyles(), "⣾", "1m12s", "4.2k", "$0.31", "esc to interrupt")
+		out := busyLine(testTranslator(), width, testStyles(), "⣾", "1m12s", "4.2k", "$0.31", "esc to interrupt")
 		assertFitsWidth(t, out, width)
 	}
-	got := ansi.Strip(busyLine(newTranslator(), 120, testStyles(), "⣾", "1m12s", "4.2k", "$0.31", "esc to interrupt"))
-	for _, want := range []string{newTranslator().t("tui.common.working", nil), "1m12s", "↑ 4.2k", "$0.31", "esc to interrupt"} {
+	got := ansi.Strip(busyLine(testTranslator(), 120, testStyles(), "⣾", "1m12s", "4.2k", "$0.31", "esc to interrupt"))
+	for _, want := range []string{testTranslator().t("tui.common.working", nil), "1m12s", "↑ 4.2k", "$0.31", "esc to interrupt"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("busy line %q missing %q", got, want)
 		}

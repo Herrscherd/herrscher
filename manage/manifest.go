@@ -29,8 +29,8 @@ func parseModule(line string) (string, bool) {
 	return strings.Trim(strings.TrimSpace(trimmed[2:]), `"`), true
 }
 
-func listPlugins(src string) ([]string, error) {
-	region, _, _, err := region(src)
+func listPlugins(messages *clitext.Messages, src string) ([]string, error) {
+	region, _, _, err := region(messages, src)
 	if err != nil {
 		return nil, err
 	}
@@ -43,8 +43,8 @@ func listPlugins(src string) ([]string, error) {
 	return mods, nil
 }
 
-func addPlugin(src, module string) (string, bool, error) {
-	mods, err := listPlugins(src)
+func addPlugin(messages *clitext.Messages, src, module string) (string, bool, error) {
+	mods, err := listPlugins(messages, src)
 	if err != nil {
 		return src, false, err
 	}
@@ -62,11 +62,11 @@ func addPlugin(src, module string) (string, bool, error) {
 			return strings.Join(out, "\n"), true, nil
 		}
 	}
-	return src, false, failure(errMarkerNotFound, clitext.ManageEndMarkerNotFound, clitext.Params{clitext.ParamMarker: strconv.Quote(endMarker)})
+	return src, false, failure(messages, errMarkerNotFound, clitext.ManageEndMarkerNotFound, clitext.Params{clitext.ParamMarker: strconv.Quote(endMarker)})
 }
 
-func removePlugin(src, module string) (string, bool, error) {
-	if _, _, _, err := region(src); err != nil {
+func removePlugin(messages *clitext.Messages, src, module string) (string, bool, error) {
+	if _, _, _, err := region(messages, src); err != nil {
 		return src, false, err
 	}
 	lines := strings.Split(src, "\n")
@@ -91,9 +91,9 @@ func removePlugin(src, module string) (string, bool, error) {
 	return strings.Join(out, "\n"), changed, nil
 }
 
-func setPlugins(src string, modules []string) (string, error) {
+func setPlugins(messages *clitext.Messages, src string, modules []string) (string, error) {
 	lines := strings.Split(src, "\n")
-	_, begin, end, err := region(src)
+	_, begin, end, err := region(messages, src)
 	if err != nil {
 		return src, err
 	}
@@ -105,28 +105,28 @@ func setPlugins(src string, modules []string) (string, error) {
 	return strings.Join(out, "\n"), nil
 }
 
-func region(src string) ([]string, int, int, error) {
+func region(messages *clitext.Messages, src string) ([]string, int, int, error) {
 	all := strings.Split(src, "\n")
 	begin, end := -1, -1
 	for idx, line := range all {
 		switch strings.TrimSpace(line) {
 		case beginMarker:
 			if begin >= 0 {
-				return nil, begin, end, failure(errDuplicateMarker, clitext.ManageDuplicateMarker, clitext.Params{clitext.ParamMarker: strconv.Quote(beginMarker)})
+				return nil, begin, end, failure(messages, errDuplicateMarker, clitext.ManageDuplicateMarker, clitext.Params{clitext.ParamMarker: strconv.Quote(beginMarker)})
 			}
 			begin = idx
 		case endMarker:
 			if end >= 0 {
-				return nil, begin, end, failure(errDuplicateMarker, clitext.ManageDuplicateMarker, clitext.Params{clitext.ParamMarker: strconv.Quote(endMarker)})
+				return nil, begin, end, failure(messages, errDuplicateMarker, clitext.ManageDuplicateMarker, clitext.Params{clitext.ParamMarker: strconv.Quote(endMarker)})
 			}
 			end = idx
 		}
 	}
 	if begin < 0 || end < 0 {
-		return nil, begin, end, failure(errMarkerNotFound, clitext.ManageRegionNotFound, nil)
+		return nil, begin, end, failure(messages, errMarkerNotFound, clitext.ManageRegionNotFound, nil)
 	}
 	if end < begin {
-		return nil, begin, end, failure(errMarkerOrder, clitext.ManageMarkerOrder, nil)
+		return nil, begin, end, failure(messages, errMarkerOrder, clitext.ManageMarkerOrder, nil)
 	}
 	return all[begin+1 : end], begin, end, nil
 }

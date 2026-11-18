@@ -87,7 +87,7 @@ func runWith(layout host.RuntimeLayout) int {
 		return reportOutcome(ctx, messages, runPrompt(ctx, layout, messages, hostMessages, task))
 	}
 
-	if code, ok := runManageCmd(hostMessages, cmd, args); ok {
+	if code, ok := runManageCmd(messages, hostMessages, cmd, args); ok {
 		return code
 	}
 
@@ -169,7 +169,7 @@ func runWithoutCommand(ctx context.Context, layout host.RuntimeLayout, messages 
 	return exitStatusError{code: exitUsage}
 }
 
-func runManageCmd(hostMessages *host.Messages, cmd string, args []string) (int, bool) {
+func runManageCmd(messages *clitext.Messages, hostMessages *host.Messages, cmd string, args []string) (int, bool) {
 	switch cmd {
 	case "init", "plugin", "update", "install":
 	default:
@@ -179,13 +179,13 @@ func runManageCmd(hostMessages *host.Messages, cmd string, args []string) (int, 
 	defer stop()
 	switch cmd {
 	case "init":
-		return manage.InitCmd(mctx, hostMessages, args), true
+		return manage.InitCmd(mctx, messages, hostMessages, args), true
 	case "plugin":
-		return manage.PluginCmd(mctx, args), true
+		return manage.PluginCmd(mctx, messages, args), true
 	case "update":
-		return manage.UpdateCmd(mctx, args), true
+		return manage.UpdateCmd(mctx, messages, args), true
 	default:
-		return manage.InstallCmd(mctx, args), true
+		return manage.InstallCmd(mctx, messages, args), true
 	}
 }
 

@@ -31,7 +31,7 @@ func TestFontRowShowsEachDetectionState(t *testing.T) {
 		fontUnchecked: "checking…",
 	}
 	for presence, want := range cases {
-		row := ansi.Strip(themeFontRow(testStyles(), newTranslator(), presence))
+		row := ansi.Strip(themeFontRow(testStyles(), testTranslator(), presence))
 		if !strings.Contains(row, "font") || !strings.Contains(row, "Obel Mono · recommended") || !strings.Contains(row, want) {
 			t.Errorf("state %v: the font row must show the family and %q, got %q", presence, want, row)
 		}

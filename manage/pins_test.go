@@ -6,7 +6,7 @@ import (
 )
 
 func TestPinsReadEmpty(t *testing.T) {
-	pins, err := readPins("")
+	pins, err := readPins(testMessages(), "")
 	if err != nil {
 		t.Fatalf("readPins: %v", err)
 	}
@@ -16,7 +16,7 @@ func TestPinsReadEmpty(t *testing.T) {
 }
 
 func TestPinsReadModules(t *testing.T) {
-	pins, err := readPins("mod/a\nmod/b\n")
+	pins, err := readPins(testMessages(), "mod/a\nmod/b\n")
 	if err != nil {
 		t.Fatalf("readPins: %v", err)
 	}
@@ -26,7 +26,7 @@ func TestPinsReadModules(t *testing.T) {
 }
 
 func TestPinsReadSkipsCommentsAndBlanks(t *testing.T) {
-	pins, err := readPins("# note\n\nmod/a\n")
+	pins, err := readPins(testMessages(), "# note\n\nmod/a\n")
 	if err != nil {
 		t.Fatalf("readPins: %v", err)
 	}
@@ -36,7 +36,7 @@ func TestPinsReadSkipsCommentsAndBlanks(t *testing.T) {
 }
 
 func TestPinsReadTrimsSpaces(t *testing.T) {
-	pins, err := readPins("   mod/a   \n\t# indented comment\n")
+	pins, err := readPins(testMessages(), "   mod/a   \n\t# indented comment\n")
 	if err != nil {
 		t.Fatalf("readPins: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestPinsReadTrimsSpaces(t *testing.T) {
 }
 
 func TestPinsReadRejectsMalformedLine(t *testing.T) {
-	_, err := readPins("mod/a\nnot a path\n")
+	_, err := readPins(testMessages(), "mod/a\nnot a path\n")
 	if err == nil {
 		t.Fatal("want an error naming the bad line")
 	}
@@ -56,7 +56,7 @@ func TestPinsReadRejectsMalformedLine(t *testing.T) {
 }
 
 func TestPinsRoundTrip(t *testing.T) {
-	pins, err := readPins("# note\nmod/b\nmod/a\n")
+	pins, err := readPins(testMessages(), "# note\nmod/b\nmod/a\n")
 	if err != nil {
 		t.Fatalf("readPins: %v", err)
 	}

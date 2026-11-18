@@ -5,10 +5,12 @@ import (
 	"errors"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
-func newWindow(ctx context.Context, backend Backend, opts []Option) *model {
-	model := newRunModel(ctx, backend)
+func newWindow(ctx context.Context, messages *clitext.Messages, backend Backend, opts []Option) *model {
+	model := newRunModel(ctx, messages, backend)
 	for _, opt := range opts {
 		opt(model)
 	}

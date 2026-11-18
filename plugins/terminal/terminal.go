@@ -242,9 +242,9 @@ func (t *Terminal) RunForeground(ctx context.Context, cancel context.CancelFunc)
 		cancel()
 	}
 	if t.openSession == "" {
-		return tui.Run(ctx, quit, t, tui.Language(clientLanguage()))
+		return tui.Run(ctx, quit, t.messages, t, tui.Language(clientLanguage()))
 	}
-	return tui.Run(ctx, quit, t, tui.Language(clientLanguage()), tui.OpenOn(t.openSession, t.openText))
+	return tui.Run(ctx, quit, t.messages, t, tui.Language(clientLanguage()), tui.OpenOn(t.openSession, t.openText))
 }
 
 // New builds an unbound terminal gateway.

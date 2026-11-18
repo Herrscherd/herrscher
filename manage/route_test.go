@@ -29,7 +29,7 @@ func answers(lines ...string) *bufio.Reader {
 }
 
 func TestRouteStepDefaultsToTheInternalBuild(t *testing.T) {
-	got, err := routeStep(style{}, answers("", ""), fakeCatalog, routeCurrent{}, true)
+	got, err := routeStep(testMessages(), style{}, answers("", ""), fakeCatalog, routeCurrent{}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestRouteStepDefaultsToTheInternalBuild(t *testing.T) {
 }
 
 func TestRouteStepRefusesGatewayOnlyWithNoCredentials(t *testing.T) {
-	_, err := routeStep(style{}, answers("gateway-only", "", ""), fakeCatalog, routeCurrent{}, true)
+	_, err := routeStep(testMessages(), style{}, answers("gateway-only", "", ""), fakeCatalog, routeCurrent{}, true)
 	if err == nil {
 		t.Fatal("gateway-only accepted with no credentials")
 	}
@@ -57,7 +57,7 @@ func TestRouteStepRefusesAHalfGatewayPair(t *testing.T) {
 		{"token only", "", "secret"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := routeStep(style{}, answers("2", tc.url, tc.token, ""), fakeCatalog, routeCurrent{}, true)
+			_, err := routeStep(testMessages(), style{}, answers("2", tc.url, tc.token, ""), fakeCatalog, routeCurrent{}, true)
 			if err == nil {
 				t.Fatal("a half gateway pair was accepted")
 			}
@@ -69,7 +69,7 @@ func TestRouteStepRefusesAHalfGatewayPair(t *testing.T) {
 }
 
 func TestRouteStepWritesTheGatewayPairAndModel(t *testing.T) {
-	got, err := routeStep(style{}, answers("2", "https://gw.example", "secret", "1"), fakeCatalog, routeCurrent{}, true)
+	got, err := routeStep(testMessages(), style{}, answers("2", "https://gw.example", "secret", "1"), fakeCatalog, routeCurrent{}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestRouteStepWritesTheGatewayPairAndModel(t *testing.T) {
 }
 
 func TestRouteStepKeepsAnExistingGatewayPair(t *testing.T) {
-	got, err := routeStep(style{}, answers("2", "", "", ""), fakeCatalog, routeCurrent{haveCred: true}, true)
+	got, err := routeStep(testMessages(), style{}, answers("2", "", "", ""), fakeCatalog, routeCurrent{haveCred: true}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestRouteStepKeepsAnExistingGatewayPair(t *testing.T) {
 }
 
 func TestRouteStepSkipsTheModelQuestionInComposeMode(t *testing.T) {
-	got, err := routeStep(style{}, answers(""), fakeCatalog, routeCurrent{}, false)
+	got, err := routeStep(testMessages(), style{}, answers(""), fakeCatalog, routeCurrent{}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestRouteStepSkipsTheModelQuestionInComposeMode(t *testing.T) {
 }
 
 func TestRouteStepClearsTheDefaultModel(t *testing.T) {
-	got, err := routeStep(style{}, answers("1", "none"), fakeCatalog, routeCurrent{model: "local-opus"}, true)
+	got, err := routeStep(testMessages(), style{}, answers("1", "none"), fakeCatalog, routeCurrent{model: "local-opus"}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestRouteStepKeepsTheCatalogOrder(t *testing.T) {
 			{Vendor: "codex", ModelSpec: contracts.ModelSpec{ID: "a-codex"}},
 		}, nil
 	}
-	got, err := routeStep(style{}, answers("1", "2"), grouped, routeCurrent{}, true)
+	got, err := routeStep(testMessages(), style{}, answers("1", "2"), grouped, routeCurrent{}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,13 +132,13 @@ func TestRouteStepKeepsTheCatalogOrder(t *testing.T) {
 }
 
 func TestRouteStepRejectsAnUnknownModel(t *testing.T) {
-	if _, err := routeStep(style{}, answers("1", "nope"), fakeCatalog, routeCurrent{}, true); err == nil {
+	if _, err := routeStep(testMessages(), style{}, answers("1", "nope"), fakeCatalog, routeCurrent{}, true); err == nil {
 		t.Fatal("an unknown model id was accepted")
 	}
 }
 
 func TestRouteStepRejectsAnOutOfRangePolicy(t *testing.T) {
-	if _, err := routeStep(style{}, answers("9"), fakeCatalog, routeCurrent{}, true); err == nil {
+	if _, err := routeStep(testMessages(), style{}, answers("9"), fakeCatalog, routeCurrent{}, true); err == nil {
 		t.Fatal("an out-of-range policy choice was accepted")
 	}
 }

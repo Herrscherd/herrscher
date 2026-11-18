@@ -137,7 +137,7 @@ func (a *attachedDaemon) dispatch(argv []string) (string, error) {
 type attachRunner struct {
 	log     *slog.Logger
 	connect func(ctx context.Context, layout host.RuntimeLayout, instance, statePath string, lang i18n.Language) (*attachedDaemon, error)
-	run     func(ctx context.Context, cancel context.CancelFunc, backend tui.Backend, opts ...tui.Option) error
+	run     func(ctx context.Context, cancel context.CancelFunc, messages *clitext.Messages, backend tui.Backend, opts ...tui.Option) error
 }
 
 func newAttachRunner(messages *clitext.Messages, hostMessages *host.Messages, log *slog.Logger) attachRunner {
@@ -155,7 +155,7 @@ func (r attachRunner) runAttached(ctx context.Context, layout host.RuntimeLayout
 		return err
 	}
 	return withClientLog(r.log, clientLogPath(statePath), func() error {
-		return r.run(ctx, cancel, daemon, append([]tui.Option{tui.Logger(r.log), tui.Language(daemon.lang)}, opts...)...)
+		return r.run(ctx, cancel, daemon.messages, daemon, append([]tui.Option{tui.Logger(r.log), tui.Language(daemon.lang)}, opts...)...)
 	})
 }
 

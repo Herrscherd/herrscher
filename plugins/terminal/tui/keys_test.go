@@ -54,7 +54,7 @@ func loadForTest(t *testing.T, herrscher, claude string, section keysSection) ke
 			t.Fatal(err)
 		}
 	}
-	return loadKeyBindings(newTranslator(), claudePath, herrscherPath, section)
+	return loadKeyBindings(testTranslator(), claudePath, herrscherPath, section)
 }
 
 func actionOf(t *testing.T, table *keyTable, chord string, stack ...keyContext) keyAction {

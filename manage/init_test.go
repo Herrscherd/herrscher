@@ -8,11 +8,11 @@ import (
 
 func TestSetPlugins(t *testing.T) {
 	mods := []string{"example.com/a", "example.com/b"}
-	out, err := setPlugins(sample, mods)
+	out, err := setPlugins(testMessages(), sample, mods)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := listPlugins(out)
+	got, err := listPlugins(testMessages(), out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -22,7 +22,7 @@ func TestSetPlugins(t *testing.T) {
 }
 
 func TestResolveStackDefault(t *testing.T) {
-	mods, err := resolveStack(defaultStack(), nil)
+	mods, err := resolveStack(testMessages(), defaultStack(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestResolveStackDefault(t *testing.T) {
 
 func TestResolveStackNoneDropsCategory(t *testing.T) {
 	choices := map[string]string{"gateway": "discord", "backend": "none", "memory": "none", "orchestrator": "none"}
-	mods, err := resolveStack(choices, nil)
+	mods, err := resolveStack(testMessages(), choices, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestResolveStackNoneDropsCategory(t *testing.T) {
 
 func TestResolveStackExtrasDeduped(t *testing.T) {
 	choices := map[string]string{"gateway": "discord"}
-	mods, err := resolveStack(choices, []string{"example.com/x", catalog()["gateway"]["discord"]})
+	mods, err := resolveStack(testMessages(), choices, []string{"example.com/x", catalog()["gateway"]["discord"]})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,20 +66,20 @@ func TestResolveStackExtrasDeduped(t *testing.T) {
 }
 
 func TestResolveStackRejectsFlagLikeExtra(t *testing.T) {
-	if _, err := resolveStack(map[string]string{"gateway": "discord"}, []string{"-insecure"}); err == nil {
+	if _, err := resolveStack(testMessages(), map[string]string{"gateway": "discord"}, []string{"-insecure"}); err == nil {
 		t.Fatal("expected error for flag-like --with value")
 	}
 }
 
 func TestResolveStackUnknownKind(t *testing.T) {
-	if _, err := resolveStack(map[string]string{"gateway": "bogus"}, nil); err == nil {
+	if _, err := resolveStack(testMessages(), map[string]string{"gateway": "bogus"}, nil); err == nil {
 		t.Fatal("expected error for unknown kind")
 	}
 }
 
 func TestResolveStackAllNoneKeepsInTree(t *testing.T) {
 	choices := map[string]string{"gateway": "none", "backend": "none", "memory": "none", "orchestrator": "none", "extractor": "none"}
-	mods, err := resolveStack(choices, nil)
+	mods, err := resolveStack(testMessages(), choices, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestResolveStackAllNoneKeepsInTree(t *testing.T) {
 }
 
 func TestResolveStackAlwaysKeepsTerminal(t *testing.T) {
-	mods, err := resolveStack(map[string]string{"gateway": "discord"}, nil)
+	mods, err := resolveStack(testMessages(), map[string]string{"gateway": "discord"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +131,7 @@ func TestResolveStackSkillsIsACategory(t *testing.T) {
 	if defaultStack()["skills"] == "" {
 		t.Fatal("the default composition must hydrate herrscher with playbooks")
 	}
-	mods, err := resolveStack(map[string]string{"backend": "claude", "skills": "none"}, nil)
+	mods, err := resolveStack(testMessages(), map[string]string{"backend": "claude", "skills": "none"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

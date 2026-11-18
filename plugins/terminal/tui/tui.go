@@ -28,6 +28,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/contextwindow"
 	"github.com/Herrscherd/herrscher/core/eventwire"
@@ -543,8 +544,8 @@ func (m *model) runContext() context.Context {
 	return m.ctx
 }
 
-func newModel(backend Backend) *model {
-	trans := newTranslator()
+func newModel(messages *clitext.Messages, backend Backend) *model {
+	trans := newTranslator(messages)
 	field := textarea.New()
 	field.Placeholder = idlePlaceholder(trans)
 	field.SetPromptFunc(len(composerPrompt), promptAt(composerPrompt))
@@ -993,7 +994,7 @@ func (m *model) pasteImage() bool {
 		m.flash = m.tr.t("tui.status.clipboard_failed", map[string]any{tplArgReason: localizedReason(m.tr, err)})
 		return true
 	}
-	att, err := saveClipboardImage(data, mime, m.attachSeq)
+	att, err := saveClipboardImage(m.tr.catalog, data, mime, m.attachSeq)
 	if err != nil {
 		m.flash = localizedReason(m.tr, err)
 		return true
@@ -1006,7 +1007,7 @@ func (m *model) pasteImage() bool {
 }
 
 func (m *model) stageAttachment(path string) {
-	att, err := attachLocalFile(path, m.attachSeq)
+	att, err := attachLocalFile(m.tr.catalog, path, m.attachSeq)
 	if err != nil {
 		m.flash = localizedReason(m.tr, err)
 		return
@@ -1562,8 +1563,8 @@ func OpenOn(session, text string) Option {
 	return func(m *model) { m.beginOpen(session, text) }
 }
 
-func newRunModel(ctx context.Context, backend Backend) *model {
-	model := newModel(backend)
+func newRunModel(ctx context.Context, messages *clitext.Messages, backend Backend) *model {
+	model := newModel(messages, backend)
 	model.ctx = ctx
 	model.loadTheme(filepath.Dir(config.DefaultPath()), lipgloss.HasDarkBackground)
 	model.loadContextLimits(config.DefaultPath(), os.Getenv)
@@ -1577,24 +1578,24 @@ func newRunModel(ctx context.Context, backend Backend) *model {
 // Run starts the TUI bound to the given gateway backend, blocking until the user
 // quits; quitting cancels ctx (wired by the caller) so the daemon shuts down
 // cleanly.
-func Run(ctx context.Context, cancel context.CancelFunc, backend Backend, opts ...Option) (runErr error) {
-	model := newWindow(ctx, backend, opts)
+func Run(ctx context.Context, cancel context.CancelFunc, messages *clitext.Messages, backend Backend, opts ...Option) (runErr error) {
+	model := newWindow(ctx, messages, backend, opts)
 	defer func() {
 		runErr = errors.Join(runErr, model.releaseDrafts())
 	}()
 	if err := sweepDraftsAtStart(); err != nil {
 		model.flash = model.tr.t("tui.drafts.orphans", map[string]any{tplArgReason: localizedReason(model.tr, err)})
 	}
-	if seam, err := newManageSeam(); err == nil {
+	if seam, err := newManageSeam(messages); err == nil {
 		model.SetPluginSeam(seam)
 	}
 	if err := writeStdout(enhancedKeysOn); err != nil {
 		cancel()
-		return keyedError{cause: err, key: "tui.terminal.enhanced_keys_enable_failed", params: map[string]any{"Err": err.Error()}}
+		return renderedError{cause: err, text: model.tr.t("tui.terminal.enhanced_keys_enable_failed", map[string]any{"Err": err.Error()})}
 	}
 	runErr = runProgram(ctx, cancel, backend, model, tea.WithInput(newFilteredStdin(model.keys)))
 	if err := writeStdout(enhancedKeysOff); err != nil {
-		return errors.Join(runErr, keyedError{cause: err, key: "tui.terminal.enhanced_keys_disable_failed", params: map[string]any{"Err": err.Error()}})
+		return errors.Join(runErr, renderedError{cause: err, text: model.tr.t("tui.terminal.enhanced_keys_disable_failed", map[string]any{"Err": err.Error()})})
 	}
 	return runErr
 }

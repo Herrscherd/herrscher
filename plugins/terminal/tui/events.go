@@ -106,11 +106,10 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.busy = true
 		target.applySubagent(event.Subagent)
 	case eventwire.EventReset:
-		target.busy = false
-		target.interruptRequested = false
 		target.streamed = false
 		target.ctxMeasured = false
-		target.endStream()
+		target.discardStreamed()
+		m.tsCache.valid = false
 		target.appendEntry(entry{role: roleNotice, text: m.tr.t("tui.render.turn_reset", nil)})
 	case eventwire.EventNotice:
 		target.appendEntry(entry{role: roleNotice, text: event.Text, markdown: true})
@@ -124,6 +123,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.busy = false
 		target.interruptRequested = false
 		target.streamed = false
+		target.streamedIDs = nil
 		target.ctxMeasured = false
 		target.disconnected = true
 		target.endStream()

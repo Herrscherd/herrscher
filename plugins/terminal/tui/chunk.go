@@ -20,7 +20,24 @@ func (tb *tab) appendChunk(text string) bool {
 	}
 	pending := tb.pendingBlank.String() + text
 	tb.appendEntry(entry{role: roleAgent, text: dropBlankLeadingLines(pending), streaming: true})
+	tb.streamedIDs = append(tb.streamedIDs, tb.entries[len(tb.entries)-1].id)
 	return true
+}
+
+func (tb *tab) discardStreamed() {
+	tb.endStream()
+	streamedSet := make(map[uint64]struct{}, len(tb.streamedIDs))
+	for _, streamedID := range tb.streamedIDs {
+		streamedSet[streamedID] = struct{}{}
+	}
+	kept := tb.entries[:0]
+	for index := range tb.entries {
+		if _, streamed := streamedSet[tb.entries[index].id]; !streamed {
+			kept = append(kept, tb.entries[index])
+		}
+	}
+	tb.entries = kept
+	tb.streamedIDs = nil
 }
 
 func dropBlankLeadingLines(text string) string {

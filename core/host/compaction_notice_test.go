@@ -452,19 +452,48 @@ func awaitCall(t *testing.T, calls chan struct{}) {
 	}
 }
 
-func awaitRelayedText(t *testing.T, events chan contracts.Event) contracts.Event {
+func awaitRelayedCode(t *testing.T, events chan contracts.Event, kind string) contracts.Event {
 	t.Helper()
 	deadline := time.After(2 * time.Second)
 	for {
 		select {
 		case event := <-events:
-			if event.Text != "" {
+			if event.T == kind && relayedCode(t, event) != 0 {
 				return event
 			}
 		case <-deadline:
-			t.Fatal("gateway received no event carrying a text")
+			t.Fatalf("gateway received no relayed %s carrying a code", kind)
 		}
 	}
+}
+
+func relayedCode(t *testing.T, event contracts.Event) uint16 {
+	t.Helper()
+	switch event.T {
+	case eventwire.EventCompactionDone:
+		return decodeDone(t, event).Code
+	case eventwire.EventCompactionFailed:
+		return decodeFailure(t, event).Code
+	}
+	return 0
+}
+
+func decodeDone(t *testing.T, done contracts.Event) eventwire.CompactionDone {
+	t.Helper()
+	payload, err := eventwire.DecodeCompactionDone(done.Value)
+	if err != nil {
+		t.Fatalf("compaction_done value = %q, want a payload: %v", done.Value, err)
+	}
+	return payload
+}
+
+func decodeFailure(t *testing.T, failed contracts.Event) eventwire.CompactionFailure {
+	t.Helper()
+	payload, err := eventwire.DecodeCompactionFailure(failed.Value)
+	if err != nil {
+		t.Fatalf("compaction_failed value = %q, want a payload: %v", failed.Value, err)
+	}
+	return payload
 }
 
 func TestNoticeDeliveryFailureRelaysTheSuccessAsDoneNeverAsAFailure(t *testing.T) {
@@ -478,15 +507,11 @@ func TestNoticeDeliveryFailureRelaysTheSuccessAsDoneNeverAsAFailure(t *testing.T
 	nextFrame(t, f)
 	f.from <- mustAnswer(t, contracts.CompactResult{TokensAfter: 50_000, TokensMeasured: true, Note: "compacted", Notice: contracts.Notice{Code: contracts.CodeCompacted}})
 	waitEmitted(t, f, eventwire.EventCompactionDone)
-	want, err := contracts.NewRenderer().Render(i18n.French, contracts.Notice{Code: contracts.CodeCompacted})
-	if err != nil {
-		t.Fatalf("Render fr: %v", err)
-	}
 	for _, gateway := range []*failingNoticeGateway{first, second} {
 		awaitCall(t, gateway.calls)
-		relayed := awaitRelayedText(t, gateway.events)
-		if relayed.T != eventwire.EventCompactionDone || relayed.Text != want || relayed.Tokens != 50_000 {
-			t.Fatalf("relayed = %+v, want compaction_done with the French notice and the measured figures", relayed)
+		relayed := awaitRelayedCode(t, gateway.events, eventwire.EventCompactionDone)
+		if code := decodeDone(t, relayed).Code; code != uint16(contracts.CodeCompacted) || relayed.Text != "" || relayed.Tokens != 50_000 {
+			t.Fatalf("relayed = %+v, want compaction_done carrying the compacted code, no text and the measured figures", relayed)
 		}
 	}
 	<-time.After(100 * time.Millisecond)
@@ -549,7 +574,6 @@ func TestCompactionFailureReasonReachesTheTapWithoutAGateway(t *testing.T) {
 	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", nil, nil, nil, io.Discard)
 	var tapped []contracts.Event
 	d.emitTap = func(event contracts.Event) { tapped = append(tapped, event) }
-	d.operator = fixedLanguageSource(i18n.French)
 
 	d.failCompaction(t.Context(), contracts.TriggerManual, errBridgeGone)
 
@@ -575,6 +599,38 @@ func TestRefusedFailureNoticeTapsTheFailureOnce(t *testing.T) {
 	}
 }
 
+func TestRefusedFailureRelayCarriesACodeAndNoText(t *testing.T) {
+	gateway := newFailingNoticeGateway()
+	f := newConfiguredCompactFixture(t, "cursor", compactPolicy(92), func(d *sessionDriver) {
+		d.gateways = []contracts.GatewaySet{{Gateway: gateway}}
+		d.operator = fixedLanguageSource(i18n.French)
+	})
+	f.driver.requestCompaction("", contracts.Conversation{})
+	waitEmitted(t, f, eventwire.EventCompactionFailed)
+	awaitCall(t, gateway.calls)
+	relayed := awaitRelayedCode(t, gateway.events, eventwire.EventCompactionFailed)
+	if relayed.Text != "" || decodeFailure(t, relayed).Code != uint16(contracts.CodeCompactUnavailable) {
+		t.Fatalf("relayed = %+v, want the compact.unavailable code and no text", relayed)
+	}
+}
+
+func TestFailureFromAnotherSurfaceTapsOnceAndReachesNoGateway(t *testing.T) {
+	emitted := make(chan contracts.Event, 8)
+	notified := make(chan contracts.Notice, 8)
+	var tapped []contracts.Event
+	outcome := failureOutcome{sink: true}
+	d := newOutcomeDriver(t, outcome, outcomeGateway(outcome, emitted, notified), &tapped)
+	d.saidElsewhere = true
+
+	d.failCompaction(t.Context(), contracts.TriggerManual, queueFullCompaction("s1"))
+
+	got := drainEmitted(emitted)
+	requireSingleTap(t, tapped)
+	if len(got) != 0 || len(notified) != 0 {
+		t.Fatalf("gateway received %d events and %d notices for a turn said elsewhere, want none", len(got), len(notified))
+	}
+}
+
 type eventCounter struct {
 	fakeGateway
 
@@ -597,6 +653,7 @@ func (g *noticeCounter) Notify(_ context.Context, _ contracts.Conversation, _ i1
 	if g.refuse {
 		return "", errors.New("gateway down")
 	}
+	g.emitted <- contracts.Event{T: eventwire.EventNotice, Text: "notice"}
 	return "", nil
 }
 
@@ -614,19 +671,27 @@ func drainEmitted(events chan contracts.Event) []contracts.Event {
 	}
 }
 
-func countFailureLines(t *testing.T, events []contracts.Event) int {
+func countShownLines(t *testing.T, events []contracts.Event) int {
 	t.Helper()
 	lines := 0
 	for index := range events {
-		payload, err := eventwire.DecodeCompactionFailure(events[index].Value)
-		if err != nil {
-			t.Fatalf("compaction_failed value = %q, want a payload: %v", events[index].Value, err)
-		}
-		if payload.Code != 0 || payload.Reason != "" {
+		if isShownLine(t, events[index]) {
 			lines++
 		}
 	}
 	return lines
+}
+
+func isShownLine(t *testing.T, event contracts.Event) bool {
+	t.Helper()
+	if event.T == eventwire.EventNotice {
+		return event.Text != ""
+	}
+	if event.T != eventwire.EventCompactionFailed {
+		return false
+	}
+	payload := decodeFailure(t, event)
+	return payload.Code != 0 || payload.Reason != ""
 }
 
 type failureOutcome struct {
@@ -635,16 +700,15 @@ type failureOutcome struct {
 	refuse     bool
 	full       bool
 	wantEmits  int
-	wantLines  int
 	wantNotify bool
 }
 
 func TestCompactionFailureShowsOneLinePerGatewayAndTapsOnce(t *testing.T) {
 	outcomes := []failureOutcome{
-		{name: "accepted by the sink", sink: true, wantEmits: 1, wantLines: 0, wantNotify: true},
-		{name: "refused by the sink", sink: true, refuse: true, wantEmits: 2, wantLines: 1, wantNotify: true},
-		{name: "full queue", sink: true, full: true, wantEmits: 1, wantLines: 1},
-		{name: "no sink", wantEmits: 1, wantLines: 1},
+		{name: "accepted by the sink", sink: true, wantEmits: 2, wantNotify: true},
+		{name: "refused by the sink", sink: true, refuse: true, wantEmits: 2, wantNotify: true},
+		{name: "full queue", sink: true, full: true, wantEmits: 1},
+		{name: "no sink", wantEmits: 1},
 	}
 	for _, outcome := range outcomes {
 		t.Run(outcome.name, func(t *testing.T) {
@@ -660,8 +724,9 @@ func runFailureOutcome(t *testing.T, outcome failureOutcome) {
 	var tapped []contracts.Event
 	d := newOutcomeDriver(t, outcome, outcomeGateway(outcome, emitted, notified), &tapped)
 	d.failCompaction(t.Context(), contracts.TriggerManual, queueFullCompaction("s1"))
+	got := drainEmitted(emitted)
 	requireSingleTap(t, tapped)
-	checkGatewayOutcome(t, outcome, drainEmitted(emitted), len(notified))
+	checkGatewayOutcome(t, outcome, got, len(notified))
 }
 
 func outcomeGateway(outcome failureOutcome, emitted chan contracts.Event, notified chan contracts.Notice) contracts.GatewaySet {
@@ -698,8 +763,8 @@ func checkGatewayOutcome(t *testing.T, outcome failureOutcome, got []contracts.E
 	if len(got) != outcome.wantEmits {
 		t.Fatalf("gateway received %d events, want %d: %+v", len(got), outcome.wantEmits, got)
 	}
-	if lines := countFailureLines(t, got); lines != outcome.wantLines {
-		t.Fatalf("gateway shows %d failure lines, want %d", lines, outcome.wantLines)
+	if lines := countShownLines(t, got); lines != 1 {
+		t.Fatalf("gateway shows %d failure lines, want one", lines)
 	}
 	if outcome.wantNotify != (notified == 1) {
 		t.Fatalf("notice delivered = %t, want %t", notified == 1, outcome.wantNotify)

@@ -23,7 +23,7 @@ func TestCompactionEventsDriveTheTabFromStartToNotice(t *testing.T) {
 		t.Fatal("a started compaction must mark the tab busy and active")
 	}
 
-	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionDone, Value: "automatic", Text: "résumé", Tokens: 90_000})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionDone, Value: compactionDoneValue(t, eventwire.CompactionDone{Trigger: "automatic"}), Text: "résumé", Tokens: 90_000})
 	if tb.busy || tb.compaction.active {
 		t.Fatal("a finished compaction must release the tab")
 	}
@@ -59,7 +59,7 @@ func TestCompactionNoticeShowsTheFiguresOnlyWhenMeasured(t *testing.T) {
 			tb := m.ensureTab("c")
 			m.active = "c"
 			m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionStarted, Value: "automatic", Tokens: tc.started})
-			m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionDone, Value: "automatic", Tokens: tc.done})
+			m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionDone, Value: compactionDoneValue(t, eventwire.CompactionDone{Trigger: "automatic"}), Tokens: tc.done})
 			last := tb.entries[len(tb.entries)-1]
 			if last.role != roleNotice || last.text != "compacted: "+tc.want {
 				t.Fatalf("notice = %+v, want %q", last, "compacted: "+tc.want)
@@ -76,7 +76,7 @@ func TestCompactionEventsDoNotOverwriteTheTokenCounter(t *testing.T) {
 	m.active = "c"
 	tb.tokens = 1234
 	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionStarted, Value: "automatic", Tokens: 184_000})
-	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionDone, Value: "automatic", Tokens: 90_000})
+	m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionDone, Value: compactionDoneValue(t, eventwire.CompactionDone{Trigger: "automatic"}), Tokens: 90_000})
 	if tb.tokens != 1234 {
 		t.Fatalf("tokens = %d after a compaction, want the thinking and tool counter kept at 1234", tb.tokens)
 	}
@@ -92,7 +92,7 @@ func TestUnmeasuredCompactionReturnsTheGaugeToItsEstimate(t *testing.T) {
 		syncLoaded(m)
 		tb.measureContext(contracts.Event{TokensIn: 150_000})
 		m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionStarted, Value: "manual"})
-		m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionDone, Value: "manual", Text: "compacté"})
+		m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionDone, Value: compactionDoneValue(t, eventwire.CompactionDone{Trigger: "manual"}), Text: "compacté"})
 		if tb.ctxMeasured || tb.ctxTokens != 0 {
 			t.Fatalf("%dx%d: gauge still holds the pre-compaction reading: measured %t, tokens %d", size.Width, size.Height, tb.ctxMeasured, tb.ctxTokens)
 		}

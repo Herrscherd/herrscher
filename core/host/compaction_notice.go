@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
-	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/historywire"
 	"github.com/Herrscherd/herrscher/core/internal/redact"
@@ -49,40 +48,39 @@ func (d *sessionDriver) compactionFailure(trigger contracts.CompactTrigger, err 
 		payload.Reason = eventwire.CompactReasonUnknown
 		d.noticeLog.Warn("compaction failed", keySession, d.name, "trigger", trigger.String(), "err", redact.Output([]byte(err.Error())))
 	}
-	return d.encodedCompactionFailure(payload, "")
+	return d.encodedCompactionFailure(payload)
 }
 
 func (d *sessionDriver) quietFailure(trigger contracts.CompactTrigger) contracts.Event {
-	return d.encodedCompactionFailure(eventwire.CompactionFailure{Trigger: trigger.String()}, "")
+	return d.encodedCompactionFailure(eventwire.CompactionFailure{Trigger: trigger.String()})
 }
 
-func (d *sessionDriver) failedFallback(trigger contracts.CompactTrigger, notice contracts.Notice) func(i18n.Language) contracts.Event {
-	return func(lang i18n.Language) contracts.Event {
-		payload := eventwire.CompactionFailure{Trigger: trigger.String(), Code: uint16(notice.Code)}
-		return d.encodedCompactionFailure(payload, renderNotice(lang, notice))
+func (d *sessionDriver) failedFallback(trigger contracts.CompactTrigger, notice contracts.Notice) func() contracts.Event {
+	return func() contracts.Event {
+		return d.encodedCompactionFailure(eventwire.CompactionFailure{Trigger: trigger.String(), Code: uint16(notice.Code)})
 	}
 }
 
-func (d *sessionDriver) compactedFallback(trigger contracts.CompactTrigger, notice contracts.Notice, tokens int) func(i18n.Language) contracts.Event {
-	return func(lang i18n.Language) contracts.Event {
-		return contracts.Event{T: eventwire.EventCompactionDone, Value: trigger.String(), Text: renderNotice(lang, notice), Tokens: tokens}
+func (d *sessionDriver) compactedFallback(trigger contracts.CompactTrigger, notice contracts.Notice, tokens int) func() contracts.Event {
+	return func() contracts.Event {
+		return d.compactionDone(trigger, notice.Code, "", tokens)
 	}
 }
 
-func renderNotice(lang i18n.Language, notice contracts.Notice) string {
-	text, err := contracts.NewRenderer().Render(lang, notice)
-	if err != nil {
-		return ""
-	}
-	return text
-}
-
-func (d *sessionDriver) encodedCompactionFailure(payload eventwire.CompactionFailure, text string) contracts.Event {
+func (d *sessionDriver) encodedCompactionFailure(payload eventwire.CompactionFailure) contracts.Event {
 	value, err := payload.Encode()
 	if err != nil {
 		d.noticeLog.Warn("compaction failure not encoded", keySession, d.name, "err", err)
 	}
-	return contracts.Event{T: eventwire.EventCompactionFailed, Value: value, Text: text}
+	return contracts.Event{T: eventwire.EventCompactionFailed, Value: value}
+}
+
+func (d *sessionDriver) compactionDone(trigger contracts.CompactTrigger, code contracts.Code, text string, tokens int) contracts.Event {
+	value, err := eventwire.CompactionDone{Trigger: trigger.String(), Code: uint16(code)}.Encode()
+	if err != nil {
+		d.noticeLog.Warn("compaction done not encoded", keySession, d.name, "err", err)
+	}
+	return contracts.Event{T: eventwire.EventCompactionDone, Value: value, Text: text, Tokens: tokens}
 }
 
 func knownCompactFailure(err error) (string, bool) {
@@ -110,11 +108,11 @@ func knownCompactFailure(err error) (string, bool) {
 func (d *sessionDriver) announceCompaction(ctx context.Context, trigger contracts.CompactTrigger, result contracts.CompactResult) {
 	tokens := measuredTokens(result)
 	if result.Notice.Code == 0 || !d.noticeRenders(result.Notice) {
-		d.fanOut(ctx, contracts.Event{T: eventwire.EventCompactionDone, Value: trigger.String(), Text: result.Note, Tokens: tokens})
+		d.fanOut(ctx, d.compactionDone(trigger, 0, result.Note, tokens))
 		return
 	}
 	d.notifyGateways(result.Notice, d.compactedFallback(trigger, result.Notice, tokens))
-	d.fanOut(ctx, contracts.Event{T: eventwire.EventCompactionDone, Value: trigger.String(), Tokens: tokens})
+	d.fanOut(ctx, d.compactionDone(trigger, 0, "", tokens))
 }
 
 func (d *sessionDriver) noticeRenders(notice contracts.Notice) bool {
@@ -129,7 +127,7 @@ type noticeDelivery struct {
 	notice   contracts.Notice
 	index    int
 	gateway  contracts.GatewaySet
-	fallback func(i18n.Language) contracts.Event
+	fallback func() contracts.Event
 }
 
 type relayedEvent struct {
@@ -138,7 +136,7 @@ type relayedEvent struct {
 	event   contracts.Event
 }
 
-func (d *sessionDriver) notifyGateways(notice contracts.Notice, fallback func(i18n.Language) contracts.Event) {
+func (d *sessionDriver) notifyGateways(notice contracts.Notice, fallback func() contracts.Event) {
 	d.eachGateway(func(index int, gateway contracts.GatewaySet) {
 		d.queueNotice(index, gateway, notice, fallback)
 	})
@@ -154,7 +152,7 @@ func (d *sessionDriver) notifyBackendNotice(event contracts.Event) {
 	d.tapEvent(d.stamp(event))
 }
 
-func (d *sessionDriver) queueNotice(index int, gateway contracts.GatewaySet, notice contracts.Notice, fallback func(i18n.Language) contracts.Event) bool {
+func (d *sessionDriver) queueNotice(index int, gateway contracts.GatewaySet, notice contracts.Notice, fallback func() contracts.Event) bool {
 	sink, ok := gateway.Gateway.(contracts.NoticeSink)
 	if !ok {
 		return false
@@ -193,7 +191,7 @@ func (d *sessionDriver) deliverNotice(parent context.Context, delivery noticeDel
 		return
 	}
 	logCleanup(err)
-	d.relayNotice(parent, relayedEvent{index: delivery.index, gateway: delivery.gateway, event: delivery.fallback(delivery.lang())})
+	d.relayNotice(parent, relayedEvent{index: delivery.index, gateway: delivery.gateway, event: delivery.fallback()})
 }
 
 func (d *sessionDriver) relayNotice(parent context.Context, relay relayedEvent) {

@@ -98,6 +98,14 @@ func (target *tab) startCompaction(event contracts.Event) {
 }
 
 func (target *tab) completeCompaction(trans translator, event contracts.Event) {
+	done, err := eventwire.DecodeCompactionDone(event.Value)
+	if err != nil {
+		slog.Warn("compaction done not read, its payload is not readable", "value", event.Value, "err", err)
+	}
+	if done.Code != 0 {
+		target.appendRelayedNotice(trans, done.Code)
+		return
+	}
 	if event.Tokens > 0 {
 		target.compaction.to = event.Tokens
 		target.compaction.measured = true
@@ -112,6 +120,12 @@ func (target *tab) completeCompaction(trans translator, event contracts.Event) {
 		target.appendEntry(entry{role: roleNotice, text: event.Text})
 	}
 	target.busy = false
+}
+
+func (target *tab) appendRelayedNotice(trans translator, code uint16) {
+	if text := compactionNoticeText(trans, code); text != "" {
+		target.appendEntry(entry{role: roleNotice, text: text})
+	}
 }
 
 func (target *tab) failCompaction(trans translator, event contracts.Event) {
@@ -129,7 +143,7 @@ func compactFailureText(trans translator, event contracts.Event) string {
 		return ""
 	}
 	if failure.Code != 0 {
-		if text, renderErr := contracts.NewRenderer().Render(trans.lang, contracts.Notice{Code: contracts.Code(failure.Code)}); renderErr == nil {
+		if text := compactionNoticeText(trans, failure.Code); text != "" {
 			return text
 		}
 	}
@@ -137,6 +151,15 @@ func compactFailureText(trans translator, event contracts.Event) string {
 		return ""
 	}
 	return trans.t(compactFailureKey(failure.Reason), nil)
+}
+
+func compactionNoticeText(trans translator, code uint16) string {
+	text, err := contracts.NewRenderer().Render(trans.lang, contracts.Notice{Code: contracts.Code(code)})
+	if err != nil {
+		slog.Warn("compaction notice not rendered", "code", code, "err", err)
+		return ""
+	}
+	return text
 }
 
 func compactFailureKey(reason string) string {

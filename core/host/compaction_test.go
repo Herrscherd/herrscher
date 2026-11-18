@@ -193,7 +193,7 @@ func TestAutomaticCompactionRunsOnceTheThresholdIsCrossed(t *testing.T) {
 	if !compactFrameOrQuiet(t, f, measuredAnswer(t, 20_000)) {
 		t.Fatal("no automatic compaction after a turn at 75 percent of the window, threshold 50")
 	}
-	if done := waitEmitted(t, f, eventwire.EventCompactionDone); done.Value != contracts.TriggerAutomatic.String() || done.Tokens != 20_000 {
+	if done := waitEmitted(t, f, eventwire.EventCompactionDone); decodeDone(t, done).Trigger != contracts.TriggerAutomatic.String() || done.Tokens != 20_000 {
 		t.Fatalf("compaction_done = %+v, want automatic down to 20000", done)
 	}
 }

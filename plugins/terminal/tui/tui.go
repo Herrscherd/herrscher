@@ -141,7 +141,7 @@ type tab struct {
 	busy               bool
 	interruptRequested bool
 	streamed           bool
-	streamedIDs        []int
+	streamedIDs        []uint64
 	pendingBlank       strings.Builder
 	lastCost           float64
 	disconnected       bool

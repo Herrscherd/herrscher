@@ -12,7 +12,7 @@ capped() {
 	fi
 }
 
-e2e_budget_seconds=120
+e2e_budget_ms=120000
 e2e_cgroup_env=(PATH HOME GOPATH GOCACHE GOMODCACHE GOFLAGS GOWORK CGO_ENABLED GOTOOLCHAIN)
 
 e2e_capped() {
@@ -26,7 +26,7 @@ e2e_capped() {
 			assignments+=("$name=${!name}")
 		fi
 	done
-	sudo env "${assignments[@]}" systemd-run --scope --quiet -p MemoryMax=6G -p MemorySwapMax=0 --uid="$(id -u)" --gid="$(id -g)" -- "$@"
+	sudo env "${assignments[@]}" /usr/bin/systemd-run --scope --quiet -p MemoryMax=6G -p MemorySwapMax=0 --uid="$(id -u)" --gid="$(id -g)" -- "$@"
 }
 
 e2e_cgroup_control() {
@@ -87,13 +87,14 @@ if [ "$(uname -s)" = Linux ]; then
 		e2e_cgroup_control
 	fi
 	e2e_capped go test -tags e2e -run '^$' ./e2e/... ./core/host/ .
-	started=$SECONDS
+	e2e_capped env CGO_ENABLED=0 GOWORK=off go build -tags e2e -o "$lint_tools/herrscher" .
+	started_ms=$(( ${EPOCHREALTIME/./} / 1000 ))
 	e2e_capped go test -tags e2e -count=1 -timeout 2m ./e2e/...
 	e2e_capped go test -tags e2e -count=1 -timeout 2m -v -run "^($(paste -sd'|' <<<"$host_only"))\$" ./core/host/
 	e2e_capped go test -tags e2e -count=1 -timeout 2m -run '^TestE2EAttachedWindow' .
-	elapsed=$((SECONDS - started))
-	if [ "$elapsed" -gt "$e2e_budget_seconds" ]; then
-		echo "the e2e suite took ${elapsed}s, over the ${e2e_budget_seconds}s budget" >&2
+	elapsed_ms=$(( ${EPOCHREALTIME/./} / 1000 - started_ms ))
+	if [ "$elapsed_ms" -gt "$e2e_budget_ms" ]; then
+		echo "the e2e suite took ${elapsed_ms} ms, over the ${e2e_budget_ms} ms budget" >&2
 		exit 1
 	fi
 else

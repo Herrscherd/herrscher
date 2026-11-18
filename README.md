@@ -1722,14 +1722,16 @@ Two limits bound the suite:
 
 - Duration: the three `check.sh` invocations together must finish within 120 seconds.
   Before the clock starts, `check.sh` compiles the test binaries of the same packages
-  with the same tags (`-run '^$'`), so the build cache is warm. The clock then covers the
-  three invocations, including the compilation of `herrscher` that `TestScenarios` runs
-  itself, and `check.sh` fails above 120 seconds and prints the measured duration. Each
-  test binary also runs with `-timeout 2m` as a safety net. The `TestE2E` invocation of the
-  e2e-ssh job runs with `-timeout 2m` only.
+  with the same tags (`-run '^$'`) and builds `herrscher` with the flags `TestScenarios`
+  uses (`CGO_ENABLED=0`), so the build cache is warm. The clock then covers the three
+  invocations, including the build of `herrscher` that `TestScenarios` runs itself, and
+  `check.sh` fails above 120 seconds and prints the measured duration. The budget applies
+  locally too, on purpose. Each test binary also runs with `-timeout 2m` as a safety net.
+  The `TestE2E` invocation of the e2e-ssh job runs with `-timeout 2m` only.
 - Memory: the e2e invocations run under a cgroup that caps the sum of their processes at
-  6 GiB (`MemoryMax=6G`, 6442450944 bytes, swap disabled), the same ceiling as on the
-  development machine. In CI the cgroup is created with `sudo systemd-run --scope`, and
+  6 GiB (`MemoryMax=6G`, 6442450944 bytes): the same RAM ceiling as on the development
+  machine. CI also forbids swap (`MemorySwapMax=0`), which the development machine does
+  not do. In CI the cgroup is created with `sudo systemd-run --scope`, and
   `check.sh` first checks that the cgroup of a command reads that limit in `memory.max`,
   so a missing or wrong cap fails the job. A process over the ceiling is killed by the
   kernel, which fails the job. The e2e-ssh job has no memory ceiling.

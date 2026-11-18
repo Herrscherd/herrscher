@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -20,7 +21,20 @@ func (tb *tab) appendChunk(text string) bool {
 	}
 	pending := tb.pendingBlank.String() + text
 	tb.appendEntry(entry{role: roleAgent, text: dropBlankLeadingLines(pending), streaming: true})
+	tb.streamedIDs = append(tb.streamedIDs, tb.entries[len(tb.entries)-1].id)
 	return true
+}
+
+func (tb *tab) discardStreamed() {
+	tb.endStream()
+	kept := tb.entries[:0]
+	for _, item := range tb.entries {
+		if !slices.Contains(tb.streamedIDs, item.id) {
+			kept = append(kept, item)
+		}
+	}
+	tb.entries = kept
+	tb.streamedIDs = nil
 }
 
 func dropBlankLeadingLines(text string) string {

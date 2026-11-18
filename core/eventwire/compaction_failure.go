@@ -3,6 +3,8 @@ package eventwire
 import (
 	"encoding/json"
 	"fmt"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 // Reasons a compaction failed that the host can name without a notice code. They travel in CompactionFailure.Reason.
@@ -18,11 +20,11 @@ const (
 	CompactReasonUnknown            = "unknown"
 )
 
-// CompactionFailure is the payload of an EventCompactionFailed, carried JSON encoded in Value: the trigger, then either a notice Code or a Reason.
+// CompactionFailure is the payload of an EventCompactionFailed, carried JSON encoded in Value: the trigger, then either a Notice (its code and arguments, in the form contracts encodes) or a Reason.
 type CompactionFailure struct {
-	Trigger string `json:"trigger"`
-	Code    uint16 `json:"code,omitempty"`
-	Reason  string `json:"reason,omitempty"`
+	Trigger string            `json:"trigger"`
+	Notice  *contracts.Notice `json:"notice,omitempty"`
+	Reason  string            `json:"reason,omitempty"`
 }
 
 // Encode returns the JSON form of the payload, the value of an EventCompactionFailed.

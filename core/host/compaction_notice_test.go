@@ -471,11 +471,18 @@ func relayedCode(t *testing.T, event contracts.Event) uint16 {
 	t.Helper()
 	switch event.T {
 	case eventwire.EventCompactionDone:
-		return decodeDone(t, event).Code
+		return codeOf(decodeDone(t, event).Notice)
 	case eventwire.EventCompactionFailed:
-		return decodeFailure(t, event).Code
+		return codeOf(decodeFailure(t, event).Notice)
 	}
 	return 0
+}
+
+func codeOf(notice *contracts.Notice) uint16 {
+	if notice == nil {
+		return 0
+	}
+	return uint16(notice.Code)
 }
 
 func decodeDone(t *testing.T, done contracts.Event) eventwire.CompactionDone {
@@ -510,7 +517,7 @@ func TestNoticeDeliveryFailureRelaysTheSuccessAsDoneNeverAsAFailure(t *testing.T
 	for _, gateway := range []*failingNoticeGateway{first, second} {
 		awaitCall(t, gateway.calls)
 		relayed := awaitRelayedCode(t, gateway.events, eventwire.EventCompactionDone)
-		if code := decodeDone(t, relayed).Code; code != uint16(contracts.CodeCompacted) || relayed.Text != "" || relayed.Tokens != 50_000 {
+		if code := codeOf(decodeDone(t, relayed).Notice); code != uint16(contracts.CodeCompacted) || relayed.Text != "" || relayed.Tokens != 50_000 {
 			t.Fatalf("relayed = %+v, want compaction_done carrying the compacted code, no text and the measured figures", relayed)
 		}
 	}
@@ -609,8 +616,9 @@ func TestRefusedFailureRelayCarriesACodeAndNoText(t *testing.T) {
 	waitEmitted(t, f, eventwire.EventCompactionFailed)
 	awaitCall(t, gateway.calls)
 	relayed := awaitRelayedCode(t, gateway.events, eventwire.EventCompactionFailed)
-	if relayed.Text != "" || decodeFailure(t, relayed).Code != uint16(contracts.CodeCompactUnavailable) {
-		t.Fatalf("relayed = %+v, want the compact.unavailable code and no text", relayed)
+	payload := decodeFailure(t, relayed)
+	if relayed.Text != "" || payload.Notice == nil || payload.Notice.Code != contracts.CodeCompactUnavailable || len(payload.Notice.Args) != 1 {
+		t.Fatalf("relayed = %+v, want the compact.unavailable notice with its argument and no text", relayed)
 	}
 }
 
@@ -691,7 +699,7 @@ func isShownLine(t *testing.T, event contracts.Event) bool {
 		return false
 	}
 	payload := decodeFailure(t, event)
-	return payload.Code != 0 || payload.Reason != ""
+	return payload.Notice != nil || payload.Reason != ""
 }
 
 type failureOutcome struct {

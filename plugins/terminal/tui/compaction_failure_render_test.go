@@ -34,11 +34,11 @@ func TestCompactionFailureRendersANoticeCodeInTheClientLanguage(t *testing.T) {
 		t.Run(lang.String(), func(t *testing.T) {
 			m, tb := failedCompactionTab(t)
 			m.localize(lang)
-			code := uint16(contracts.CodeResumeLost)
+			notice := contracts.Notice{Code: contracts.CodeResumeLost}
 
-			m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionFailed, Value: compactionFailureValue(t, eventwire.CompactionFailure{Trigger: "manual", Code: code})})
+			m.renderInto(tb, contracts.Event{T: eventwire.EventCompactionFailed, Value: compactionFailureValue(t, eventwire.CompactionFailure{Trigger: "manual", Notice: &notice})})
 
-			want, err := contracts.NewRenderer().Render(lang, contracts.Notice{Code: contracts.Code(code)})
+			want, err := contracts.NewRenderer().Render(lang, notice)
 			if err != nil || want == "" {
 				t.Fatalf("Render = %q, %v, want the notice text", want, err)
 			}
@@ -81,8 +81,8 @@ func TestCompactionFailureWithAnUnknownCodeOrReasonShowsTheGenericLine(t *testin
 		lang    i18n.Language
 		want    string
 	}{
-		{"unknown code in english", eventwire.CompactionFailure{Trigger: "manual", Code: 65535}, i18n.English, "compaction failed"},
-		{"unknown code in french", eventwire.CompactionFailure{Trigger: "manual", Code: 65535}, i18n.French, "échec de la compaction"},
+		{"unknown code in english", eventwire.CompactionFailure{Trigger: "manual", Notice: &contracts.Notice{Code: 65535}}, i18n.English, "compaction failed"},
+		{"unknown code in french", eventwire.CompactionFailure{Trigger: "manual", Notice: &contracts.Notice{Code: 65535}}, i18n.French, "échec de la compaction"},
 		{"unknown reason in english", eventwire.CompactionFailure{Trigger: "manual", Reason: "from_a_newer_host"}, i18n.English, "compaction failed"},
 		{"unknown reason in french", eventwire.CompactionFailure{Trigger: "manual", Reason: "from_a_newer_host"}, i18n.French, "échec de la compaction"},
 		{"unclassified failure", eventwire.CompactionFailure{Trigger: "manual", Reason: eventwire.CompactReasonUnknown}, i18n.English, "compaction failed"},

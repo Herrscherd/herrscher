@@ -102,8 +102,8 @@ func (target *tab) completeCompaction(trans translator, event contracts.Event) {
 	if err != nil {
 		slog.Warn("compaction done not read, its payload is not readable", "value", event.Value, "err", err)
 	}
-	if done.Code != 0 {
-		target.appendRelayedNotice(trans, done.Code)
+	if done.Notice != nil {
+		target.appendRelayedNotice(trans, *done.Notice)
 		return
 	}
 	if event.Tokens > 0 {
@@ -122,15 +122,17 @@ func (target *tab) completeCompaction(trans translator, event contracts.Event) {
 	target.busy = false
 }
 
-func (target *tab) appendRelayedNotice(trans translator, code uint16) {
-	if text := compactionNoticeText(trans, code); text != "" {
+func (target *tab) appendRelayedNotice(trans translator, notice contracts.Notice) {
+	if text := compactionNoticeText(trans, notice); text != "" {
 		target.appendEntry(entry{role: roleNotice, text: text})
 	}
 }
 
 func (target *tab) failCompaction(trans translator, event contracts.Event) {
-	target.compaction = compaction{}
-	target.busy = false
+	if target.compaction.active {
+		target.compaction = compaction{}
+		target.busy = false
+	}
 	if text := compactFailureText(trans, event); text != "" {
 		target.appendEntry(entry{role: roleError, text: text})
 	}
@@ -142,21 +144,21 @@ func compactFailureText(trans translator, event contracts.Event) string {
 		slog.Warn("compaction failure not shown, its payload is not readable", "value", event.Value, "err", err)
 		return ""
 	}
-	if failure.Code != 0 {
-		if text := compactionNoticeText(trans, failure.Code); text != "" {
+	if failure.Notice != nil {
+		if text := compactionNoticeText(trans, *failure.Notice); text != "" {
 			return text
 		}
 	}
-	if failure.Code == 0 && failure.Reason == "" {
+	if failure.Notice == nil && failure.Reason == "" {
 		return ""
 	}
 	return trans.t(compactFailureKey(failure.Reason), nil)
 }
 
-func compactionNoticeText(trans translator, code uint16) string {
-	text, err := contracts.NewRenderer().Render(trans.lang, contracts.Notice{Code: contracts.Code(code)})
+func compactionNoticeText(trans translator, notice contracts.Notice) string {
+	text, err := contracts.NewRenderer().Render(trans.lang, notice)
 	if err != nil {
-		slog.Warn("compaction notice not rendered", "code", code, "err", err)
+		slog.Warn("compaction notice not rendered", "code", notice.Code, "err", err)
 		return ""
 	}
 	return text

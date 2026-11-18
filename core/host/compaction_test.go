@@ -256,7 +256,7 @@ func requireFailure(t *testing.T, failed contracts.Event, code contracts.Code, r
 	if err != nil {
 		t.Fatalf("compaction_failed value = %q, want a payload: %v", failed.Value, err)
 	}
-	if payload.Code != uint16(code) || payload.Reason != reason {
+	if codeOf(payload.Notice) != uint16(code) || payload.Reason != reason {
 		t.Fatalf("compaction_failed payload = %+v, want code %d and reason %q", payload, code, reason)
 	}
 }

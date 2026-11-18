@@ -41,7 +41,7 @@ func (d *sessionDriver) compactionFailure(trigger contracts.CompactTrigger, err 
 	notice, isNotice := d.renderableNotice(err)
 	switch {
 	case isNotice:
-		payload.Code = uint16(notice.Code)
+		payload.Notice = &notice
 	case known:
 		payload.Reason = reason
 	default:
@@ -57,13 +57,13 @@ func (d *sessionDriver) quietFailure(trigger contracts.CompactTrigger) contracts
 
 func (d *sessionDriver) failedFallback(trigger contracts.CompactTrigger, notice contracts.Notice) func() contracts.Event {
 	return func() contracts.Event {
-		return d.encodedCompactionFailure(eventwire.CompactionFailure{Trigger: trigger.String(), Code: uint16(notice.Code)})
+		return d.encodedCompactionFailure(eventwire.CompactionFailure{Trigger: trigger.String(), Notice: &notice})
 	}
 }
 
 func (d *sessionDriver) compactedFallback(trigger contracts.CompactTrigger, notice contracts.Notice, tokens int) func() contracts.Event {
 	return func() contracts.Event {
-		return d.compactionDone(trigger, notice.Code, "", tokens)
+		return d.compactionDone(trigger, &notice, "", tokens)
 	}
 }
 
@@ -75,8 +75,8 @@ func (d *sessionDriver) encodedCompactionFailure(payload eventwire.CompactionFai
 	return contracts.Event{T: eventwire.EventCompactionFailed, Value: value}
 }
 
-func (d *sessionDriver) compactionDone(trigger contracts.CompactTrigger, code contracts.Code, text string, tokens int) contracts.Event {
-	value, err := eventwire.CompactionDone{Trigger: trigger.String(), Code: uint16(code)}.Encode()
+func (d *sessionDriver) compactionDone(trigger contracts.CompactTrigger, notice *contracts.Notice, text string, tokens int) contracts.Event {
+	value, err := eventwire.CompactionDone{Trigger: trigger.String(), Notice: notice}.Encode()
 	if err != nil {
 		d.noticeLog.Warn("compaction done not encoded", keySession, d.name, "err", err)
 	}
@@ -108,11 +108,11 @@ func knownCompactFailure(err error) (string, bool) {
 func (d *sessionDriver) announceCompaction(ctx context.Context, trigger contracts.CompactTrigger, result contracts.CompactResult) {
 	tokens := measuredTokens(result)
 	if result.Notice.Code == 0 || !d.noticeRenders(result.Notice) {
-		d.fanOut(ctx, d.compactionDone(trigger, 0, result.Note, tokens))
+		d.fanOut(ctx, d.compactionDone(trigger, nil, result.Note, tokens))
 		return
 	}
 	d.notifyGateways(result.Notice, d.compactedFallback(trigger, result.Notice, tokens))
-	d.fanOut(ctx, d.compactionDone(trigger, 0, "", tokens))
+	d.fanOut(ctx, d.compactionDone(trigger, nil, "", tokens))
 }
 
 func (d *sessionDriver) noticeRenders(notice contracts.Notice) bool {

@@ -3,12 +3,15 @@ package eventwire
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-// CompactionDone is the payload of an EventCompactionDone, carried JSON encoded in Value: the trigger, and the notice Code of a success the gateway must render itself. Code is zero when the success needs no relayed notice.
+// CompactionDone is the payload of an EventCompactionDone, carried JSON encoded in Value: the trigger, and the Notice (its code and arguments) of a success the gateway must render itself. Notice is nil when the success needs no relayed notice.
 type CompactionDone struct {
-	Trigger string `json:"trigger"`
-	Code    uint16 `json:"code,omitempty"`
+	Trigger string            `json:"trigger"`
+	Notice  *contracts.Notice `json:"notice,omitempty"`
 }
 
 // Encode returns the JSON form of the payload, the value of an EventCompactionDone.
@@ -20,8 +23,11 @@ func (done CompactionDone) Encode() (string, error) {
 	return string(encoded), nil
 }
 
-// DecodeCompactionDone reads the payload carried in the value of an EventCompactionDone.
+// DecodeCompactionDone reads the payload carried in the value of an EventCompactionDone, or the bare trigger an older host sends.
 func DecodeCompactionDone(value string) (CompactionDone, error) {
+	if !strings.HasPrefix(value, "{") {
+		return CompactionDone{Trigger: value}, nil
+	}
 	var done CompactionDone
 	if err := json.Unmarshal([]byte(value), &done); err != nil {
 		return CompactionDone{}, fmt.Errorf("decode compaction done: %w", err)

@@ -15,11 +15,9 @@ import (
 	"time"
 )
 
-const shortTempRoot = "/tmp"
-
 func isolatedRuntimeRoot(t *testing.T) string {
 	t.Helper()
-	dir := filepath.Join(shortTempRoot, "rt"+strconv.FormatInt(time.Now().UnixNano(), 10))
+	dir := filepath.Join(os.TempDir(), "hs"+strconv.FormatInt(time.Now().UnixNano(), 10))
 	if err := os.Mkdir(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}

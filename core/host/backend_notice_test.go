@@ -34,13 +34,10 @@ func TestABackendNoticeReachesTheAttachedTabs(t *testing.T) {
 	var tapped []contracts.Event
 	d.emitTap = func(event contracts.Event) { tapped = append(tapped, event) }
 	guard := tokenGuard{}
-	d.relayTurnEvent(ctx, &guard, contracts.Event{T: eventwire.EventBackendNotice, Value: strconv.FormatUint(uint64(contracts.CodeResumeLost), 10)}, 0)
-	want, err := contracts.NewRenderer().Render(d.textLanguage()(), contracts.Notice{Code: contracts.CodeResumeLost})
-	if err != nil || want == "" {
-		t.Fatalf("Render = %q, %v, want the resume notice text", want, err)
-	}
-	if len(tapped) != 1 || tapped[0].T != eventwire.EventNotice || tapped[0].Text != want {
-		t.Fatalf("attached tabs got %+v, want one notice event with %q", tapped, want)
+	wantCode := strconv.FormatUint(uint64(contracts.CodeResumeLost), 10)
+	d.relayTurnEvent(ctx, &guard, contracts.Event{T: eventwire.EventBackendNotice, Value: wantCode}, 0)
+	if len(tapped) != 1 || tapped[0].T != eventwire.EventBackendNotice || tapped[0].Value != wantCode || tapped[0].Text != "" {
+		t.Fatalf("attached tabs got %+v, want one backend_notice event carrying code %s and no text", tapped, wantCode)
 	}
 	awaitNotice(t, gateway)
 }

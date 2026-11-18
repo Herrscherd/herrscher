@@ -113,8 +113,7 @@ func shortRuntimeRoot(t *testing.T) string {
 
 func startTUIDaemon(t *testing.T, vendorScript string) tuiDaemon {
 	t.Helper()
-	daemon, stop := newTUISetup(t, vendorScript).serve(t)
-	t.Cleanup(stop)
+	daemon, _ := newTUISetup(t, vendorScript).serve(t)
 	return daemon
 }
 
@@ -139,6 +138,7 @@ func (setup tuiSetup) serve(t *testing.T) (tuiDaemon, func()) {
 	stop := func() {
 		once.Do(func() { stopDaemon(t, daemon, stopped, &stderr) })
 	}
+	t.Cleanup(stop)
 	waitTUIDaemon(t, layout, tuiInstance)
 	return tuiDaemon{layout: layout, instance: tuiInstance, statePath: host.DefaultStatePath()}, stop
 }

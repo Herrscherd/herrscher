@@ -101,7 +101,18 @@ func (d *sessionDriver) notifyBackendNotice(event contracts.Event) {
 		d.noticeLog.Warn("backend notice dropped, its code is not a number", keySession, d.name, "value", event.Value)
 		return
 	}
-	d.broadcastNotice(contracts.Notice{Code: contracts.Code(code)}, 0, nil)
+	notice := contracts.Notice{Code: contracts.Code(code)}
+	d.broadcastNotice(notice, 0, nil)
+	d.tapBackendNotice(notice)
+}
+
+func (d *sessionDriver) tapBackendNotice(notice contracts.Notice) {
+	text, err := contracts.NewRenderer().Render(d.textLanguage()(), notice)
+	if err != nil {
+		d.noticeLog.Warn("backend notice not shown to the attached tabs", keySession, d.name, "code", notice.Code, "err", err)
+		return
+	}
+	d.tapEvent(d.stamp(contracts.Event{T: eventwire.EventNotice, Text: text}))
 }
 
 func (d *sessionDriver) broadcastNotice(notice contracts.Notice, trigger contracts.CompactTrigger, report *sync.Once) bool {

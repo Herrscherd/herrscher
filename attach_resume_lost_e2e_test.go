@@ -29,10 +29,9 @@ func TestE2EAttachedWindowShowsTheResumeLostNotice(t *testing.T) {
 	stopWindow()
 	stopFirst()
 
-	second, stopSecond := setup.serve(t)
-	t.Cleanup(stopSecond)
+	second, _ := setup.serve(t)
 	reopened, _ := attachTUIWindow(t, second)
-	reopened.Type("après redémarrage")
+	reopened.Type("apres redemarrage")
 	reopened.Send(tea.KeyMsg{Type: tea.KeyEnter})
 	awaitTUIScreen(t, reopened, "the earlier conversation could not be resumed", "reprise fraîche")
 }

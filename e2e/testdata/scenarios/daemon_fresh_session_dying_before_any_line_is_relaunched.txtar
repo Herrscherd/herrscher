@@ -1,0 +1,14 @@
+! exec herrscher serve &daemon&
+waitdaemon
+exec herrscher session create --name dying
+exec herrscher session seed --name dying --task 'bonjour relance'
+stdout '^relancée$'
+grep -count=2 '^prompt .*bonjour relance' $WORK/claude.log
+kill -INT daemon
+wait daemon
+! waitdaemon
+
+-- claude.script --
+crash
+---
+text relancée

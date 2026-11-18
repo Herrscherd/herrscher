@@ -1,0 +1,27 @@
+! exec herrscher serve &daemon&
+waitdaemon
+exec herrscher session create --name refused
+exec herrscher session seed --name refused --task 'premier tour'
+stdout '^premier, réponse$'
+kill -INT daemon
+wait daemon
+! waitdaemon
+! exec herrscher serve &daemon2&
+waitdaemon
+exec herrscher session seed --name refused --task 'après redémarrage'
+stdout '^reprise fraîche$'
+! stdout 'No conversation found'
+waitlog 'start .*--resume tok-refused-7'
+grep -count=1 'start .*--resume tok-refused-7' $WORK/claude.log
+grep -count=2 '^prompt .*après redémarrage' $WORK/claude.log
+kill -INT daemon2
+wait daemon2
+! waitdaemon
+
+-- claude.script --
+session tok-refused-7
+text premier, réponse
+---
+error No conversation found with session ID: tok-refused-7
+---
+text reprise fraîche

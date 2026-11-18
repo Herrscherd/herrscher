@@ -73,7 +73,7 @@ type sessionDriver struct {
 	outboxRoot    string
 	saidElsewhere bool
 	notices       chan noticeDelivery
-	failures      chan relayedFailure
+	relays        chan relayedEvent
 	noticeLog     *slog.Logger
 	gateways      []contracts.GatewaySet
 	toBridge      chan<- contracts.Event
@@ -145,7 +145,7 @@ func newSessionDriver(messages *hostMessages, cliMessages *clitext.Messages, nam
 		seen:        make(map[string]bool),
 		stageSpent:  make(map[string]bool),
 		notices:     make(chan noticeDelivery, noticeQueueCapacity),
-		failures:    make(chan relayedFailure, noticeQueueCapacity),
+		relays:      make(chan relayedEvent, noticeQueueCapacity),
 		noticeLog:   obs.Stderr(false),
 		gate:        noBudgetGate{},
 		persists:    newPersistWrites(),

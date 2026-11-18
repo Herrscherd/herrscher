@@ -83,7 +83,7 @@ func TestAFreeTextNoteFromAnEarlierVersionReadsAsAnUnknownFailure(t *testing.T) 
 }
 
 func TestEveryFailureClassHasAHealthText(t *testing.T) {
-	errs := []error{errBridgeGone, errNoCompactorFactory, errNilCompactor, errNoCompactorPlugin, historywire.ErrNoHistoryEditor, errHistoryTimeout, historywire.ErrHistoryTooLarge, errors.New("unclassified")}
+	errs := []error{errBridgeGone, errNoCompactorFactory, errNilCompactor, errNoCompactorPlugin, historywire.ErrNoHistoryEditor, errHistoryTimeout, historywire.ErrHistoryTooLarge, errTooManyEdits, errors.New("unclassified")}
 	for _, err := range errs {
 		class := failureClass(err)
 		if _, ok := compactNoteKey(class); !ok {

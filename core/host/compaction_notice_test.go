@@ -320,7 +320,7 @@ func TestNoticeIsDeliveredWhenTheParentContextIsCancelledDuringANotify(t *testin
 	parent, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go d.deliverNotices(parent)
-	d.notifyGateways(contracts.TriggerManual, contracts.Notice{Code: contracts.CodeCompacted}, false)
+	d.notifyGateways(contracts.Notice{Code: contracts.CodeCompacted}, nil)
 	select {
 	case <-gateway.entered:
 	case <-time.After(2 * time.Second):
@@ -341,7 +341,7 @@ func TestNoticesReachTheGatewayInTheOrderTheyWereRaised(t *testing.T) {
 	go d.deliverNotices(ctx)
 	codes := []contracts.Code{contracts.CodeCompacted, contracts.CodeCompactUnavailable, contracts.Code(99)}
 	for _, code := range codes {
-		d.notifyGateways(contracts.TriggerManual, contracts.Notice{Code: code}, false)
+		d.notifyGateways(contracts.Notice{Code: code}, nil)
 	}
 	for _, code := range codes {
 		if got := awaitNotice(t, gateway); got.notice.Code != code {
@@ -426,12 +426,21 @@ func TestFullNoticeQueueDropsTheNoticeAndTheTurnAdvances(t *testing.T) {
 type failingNoticeGateway struct {
 	fakeGateway
 
-	calls chan struct{}
+	calls  chan struct{}
+	events chan contracts.Event
+}
+
+func newFailingNoticeGateway() *failingNoticeGateway {
+	return &failingNoticeGateway{calls: make(chan struct{}, 1), events: make(chan contracts.Event, 8)}
 }
 
 func (g *failingNoticeGateway) Notify(context.Context, contracts.Conversation, i18n.Language, contracts.Notice) (contracts.MessageID, error) {
 	g.calls <- struct{}{}
 	return "", errors.New("gateway down")
+}
+
+func (g *failingNoticeGateway) Emit(event contracts.Event) {
+	g.events <- event
 }
 
 func awaitCall(t *testing.T, calls chan struct{}) {
@@ -443,9 +452,24 @@ func awaitCall(t *testing.T, calls chan struct{}) {
 	}
 }
 
-func TestNoticeDeliveryFailureReachesTheSessionOnce(t *testing.T) {
-	first := &failingNoticeGateway{calls: make(chan struct{}, 1)}
-	second := &failingNoticeGateway{calls: make(chan struct{}, 1)}
+func awaitRelayedText(t *testing.T, events chan contracts.Event) contracts.Event {
+	t.Helper()
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case event := <-events:
+			if event.Text != "" {
+				return event
+			}
+		case <-deadline:
+			t.Fatal("gateway received no event carrying a text")
+		}
+	}
+}
+
+func TestNoticeDeliveryFailureRelaysTheSuccessAsDoneNeverAsAFailure(t *testing.T) {
+	first := newFailingNoticeGateway()
+	second := newFailingNoticeGateway()
 	f := newConfiguredCompactFixture(t, "claude", compactPolicy(92), func(d *sessionDriver) {
 		d.gateways = []contracts.GatewaySet{{Gateway: first}, {Gateway: second}}
 		d.operator = fixedLanguageSource(i18n.French)
@@ -453,13 +477,21 @@ func TestNoticeDeliveryFailureReachesTheSessionOnce(t *testing.T) {
 	f.driver.requestCompaction("", contracts.Conversation{})
 	nextFrame(t, f)
 	f.from <- mustAnswer(t, contracts.CompactResult{TokensAfter: 50_000, TokensMeasured: true, Note: "compacted", Notice: contracts.Notice{Code: contracts.CodeCompacted}})
-	failed := waitEmitted(t, f, eventwire.EventCompactionFailed)
-	requireFailure(t, failed, contracts.CodeCompacted, "")
-	awaitCall(t, first.calls)
-	awaitCall(t, second.calls)
+	waitEmitted(t, f, eventwire.EventCompactionDone)
+	want, err := contracts.NewRenderer().Render(i18n.French, contracts.Notice{Code: contracts.CodeCompacted})
+	if err != nil {
+		t.Fatalf("Render fr: %v", err)
+	}
+	for _, gateway := range []*failingNoticeGateway{first, second} {
+		awaitCall(t, gateway.calls)
+		relayed := awaitRelayedText(t, gateway.events)
+		if relayed.T != eventwire.EventCompactionDone || relayed.Text != want || relayed.Tokens != 50_000 {
+			t.Fatalf("relayed = %+v, want compaction_done with the French notice and the measured figures", relayed)
+		}
+	}
 	<-time.After(100 * time.Millisecond)
-	if n := len(f.emittedOf(eventwire.EventCompactionFailed)); n != 1 {
-		t.Fatalf("compaction_failed emitted %d times, want exactly once for the notice", n)
+	if n := len(f.emittedOf(eventwire.EventCompactionFailed)); n != 0 {
+		t.Fatalf("compaction_failed tapped %d times, want none for a success", n)
 	}
 }
 
@@ -528,7 +560,7 @@ func TestCompactionFailureReasonReachesTheTapWithoutAGateway(t *testing.T) {
 }
 
 func TestRefusedFailureNoticeTapsTheFailureOnce(t *testing.T) {
-	gateway := &failingNoticeGateway{calls: make(chan struct{}, 1)}
+	gateway := newFailingNoticeGateway()
 	f := newConfiguredCompactFixture(t, "cursor", compactPolicy(92), func(d *sessionDriver) {
 		d.gateways = []contracts.GatewaySet{{Gateway: gateway}}
 		d.operator = fixedLanguageSource(i18n.French)
@@ -540,5 +572,117 @@ func TestRefusedFailureNoticeTapsTheFailureOnce(t *testing.T) {
 	<-time.After(100 * time.Millisecond)
 	if n := len(f.emittedOf(eventwire.EventCompactionFailed)); n != 1 {
 		t.Fatalf("compaction_failed tapped %d times, want exactly once", n)
+	}
+}
+
+type eventCounter struct {
+	fakeGateway
+
+	emitted chan contracts.Event
+}
+
+func (g *eventCounter) Emit(event contracts.Event) {
+	g.emitted <- event
+}
+
+type noticeCounter struct {
+	eventCounter
+
+	refuse   bool
+	notified chan contracts.Notice
+}
+
+func (g *noticeCounter) Notify(_ context.Context, _ contracts.Conversation, _ i18n.Language, notice contracts.Notice) (contracts.MessageID, error) {
+	g.notified <- notice
+	if g.refuse {
+		return "", errors.New("gateway down")
+	}
+	return "", nil
+}
+
+func drainEmitted(events chan contracts.Event) []contracts.Event {
+	var out []contracts.Event
+	idle := time.After(300 * time.Millisecond)
+	for {
+		select {
+		case event := <-events:
+			out = append(out, event)
+			idle = time.After(300 * time.Millisecond)
+		case <-idle:
+			return out
+		}
+	}
+}
+
+func countFailureLines(t *testing.T, events []contracts.Event) int {
+	t.Helper()
+	lines := 0
+	for _, event := range events {
+		payload, err := eventwire.DecodeCompactionFailure(event.Value)
+		if err != nil {
+			t.Fatalf("compaction_failed value = %q, want a payload: %v", event.Value, err)
+		}
+		if payload.Code != 0 || payload.Reason != "" {
+			lines++
+		}
+	}
+	return lines
+}
+
+func TestCompactionFailureShowsOneLinePerGatewayAndTapsOnce(t *testing.T) {
+	cases := []struct {
+		name       string
+		sink       bool
+		refuse     bool
+		full       bool
+		wantEmits  int
+		wantLines  int
+		wantNotify bool
+	}{
+		{name: "accepted by the sink", sink: true, wantEmits: 1, wantLines: 0, wantNotify: true},
+		{name: "refused by the sink", sink: true, refuse: true, wantEmits: 2, wantLines: 1, wantNotify: true},
+		{name: "full queue", sink: true, full: true, wantEmits: 1, wantLines: 1},
+		{name: "no sink", wantEmits: 1, wantLines: 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			emitted := make(chan contracts.Event, 8)
+			notified := make(chan contracts.Notice, 8)
+			var gateway contracts.GatewaySet
+			if tc.sink {
+				gateway = contracts.GatewaySet{Gateway: &noticeCounter{eventCounter: eventCounter{emitted: emitted}, refuse: tc.refuse, notified: notified}}
+			} else {
+				gateway = contracts.GatewaySet{Gateway: &eventCounter{emitted: emitted}}
+			}
+			d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", []contracts.GatewaySet{gateway}, nil, nil, io.Discard)
+			d.operator = fixedLanguageSource(i18n.French)
+			var tapped []contracts.Event
+			d.emitTap = func(event contracts.Event) { tapped = append(tapped, event) }
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			if tc.full {
+				d.notices = make(chan noticeDelivery)
+			} else {
+				go d.deliverNotices(ctx)
+			}
+			go d.pump(ctx)
+
+			d.failCompaction(ctx, contracts.TriggerManual, queueFullCompaction("s1"))
+
+			if len(tapped) != 1 || tapped[0].T != eventwire.EventCompactionFailed {
+				t.Fatalf("tapped = %+v, want one compaction_failed", tapped)
+			}
+			requireFailure(t, tapped[0], contracts.CodeCompactUnavailable, "")
+			got := drainEmitted(emitted)
+			if len(got) != tc.wantEmits {
+				t.Fatalf("gateway received %d events, want %d: %+v", len(got), tc.wantEmits, got)
+			}
+			if lines := countFailureLines(t, got); lines != tc.wantLines {
+				t.Fatalf("gateway shows %d failure lines, want %d", lines, tc.wantLines)
+			}
+			if tc.wantNotify != (len(notified) == 1) {
+				t.Fatalf("notice delivered = %t, want %t", len(notified) == 1, tc.wantNotify)
+			}
+		})
 	}
 }

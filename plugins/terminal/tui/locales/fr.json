@@ -678,7 +678,7 @@
   },
   {
     "id": "tui.compaction.failed",
-    "description": "The compaction failed for a reason the client does not name",
+    "description": "La compaction a échoué pour une raison que le client ne nomme pas",
     "other": "échec de la compaction"
   },
   {

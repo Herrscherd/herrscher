@@ -4380,6 +4380,11 @@
     "other": "l'historique de la session est trop volumineux pour être modifié"
   },
   {
+    "id": "cli.health.facts.compact_note.too_many_edits",
+    "description": "Santé : la cause d'une note de compaction échouée, en clair",
+    "other": "la compaction voudrait modifier trop d'appels d'outils à la fois et n'en modifie aucun"
+  },
+  {
     "id": "cli.health.facts.compact_note.unknown_failure",
     "description": "Santé : la cause d'une note de compaction échouée, en clair",
     "other": "l'étage a échoué pour une raison sans code propre, son détail n'est pas conservé"

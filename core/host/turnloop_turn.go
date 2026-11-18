@@ -15,8 +15,8 @@ func (d *sessionDriver) pump(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case failure := <-d.failures:
-			d.relayFailure(ctx, failure)
+		case relay := <-d.relays:
+			d.relayEvent(ctx, relay)
 		case item := <-d.queue:
 			if !d.enterTurn(ctx) {
 				return

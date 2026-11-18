@@ -97,6 +97,36 @@ func TestSessionLogRun_OmitsAnEntryWithNothingShown(t *testing.T) {
 	}
 }
 
+func TestSessionLogRun_JSONKeepsTextAndDisplayedOfANoticeOnlyReply(t *testing.T) {
+	dir := t.TempDir()
+	h := &Handler{partDir: dir}
+	seedTranscript(t, dir, "alpha", []state.TranscriptEntry{
+		{Ts: "t1", Role: "assistant", Text: "", Displayed: "fichier refusé: big.bin"},
+	})
+
+	out, err := cli.Plain(h.sessionLogRun(context.Background(), contractsInputJSON("alpha")))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var rows []map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(out), &rows); err != nil {
+		t.Fatalf("output is not a JSON array: %v (%q)", err, out)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("want 1 entry, got %d", len(rows))
+	}
+	var text, displayed string
+	if err := json.Unmarshal(rows[0]["text"], &text); err != nil {
+		t.Fatalf("text key missing or not a string: %v (%+v)", err, rows[0])
+	}
+	if err := json.Unmarshal(rows[0]["displayed"], &displayed); err != nil {
+		t.Fatalf("displayed key missing or not a string: %v (%+v)", err, rows[0])
+	}
+	if text != "" || displayed != "fichier refusé: big.bin" {
+		t.Fatalf("text = %q, displayed = %q, want an empty text and the notice as displayed", text, displayed)
+	}
+}
+
 func TestSessionLogRun_UnknownSessionIsEmptyArray(t *testing.T) {
 	h := &Handler{partDir: t.TempDir()}
 	out, err := cli.Plain(h.sessionLogRun(context.Background(), contractsInputJSON("ghost")))

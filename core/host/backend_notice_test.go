@@ -31,6 +31,7 @@ func TestABackendNoticeReachesTheAttachedTabs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", []contracts.GatewaySet{{Gateway: gateway}}, nil, nil, io.Discard)
+	go d.deliverNotices(ctx)
 	var tapped []contracts.Event
 	d.emitTap = func(event contracts.Event) { tapped = append(tapped, event) }
 	guard := tokenGuard{}

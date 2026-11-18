@@ -3,12 +3,10 @@ package host
 import (
 	"context"
 	"log/slog"
-	"strconv"
 	"strings"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
-	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/outbox"
 )
 
@@ -52,37 +50,6 @@ func (d *sessionDriver) deliverPendingReply(text string) {
 		d.pendingReply <- text
 		d.pendingReply = nil
 	}
-}
-
-func (d *sessionDriver) enforceTokenGuard(ctx context.Context, guard *tokenGuard, e contracts.Event) {
-	spent, over := guard.trips(e)
-	if !over {
-		return
-	}
-	d.Interrupt()
-	d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("turn.token_ceiling", map[string]any{"Spent": strconv.FormatUint(spent, 10), "Margin": strconv.FormatUint(guard.headroom, 10)})})
-}
-
-func promptSize(e contracts.Event) int {
-	return e.TokensIn + e.CacheRead + e.CacheCreate
-}
-
-func contextReading(live int, done contracts.Event) int {
-	if live > 0 {
-		return live
-	}
-	return promptSize(done)
-}
-
-func turnTokens(event contracts.Event) uint64 {
-	total := 0
-	if event.Tokens > 0 {
-		total += event.Tokens
-	}
-	if event.TokensIn > 0 {
-		total += event.TokensIn
-	}
-	return uint64(total)
 }
 
 func (d *sessionDriver) fanOut(ctx context.Context, event contracts.Event) {

@@ -12,31 +12,25 @@ capped() {
 	fi
 }
 
-e2e_ceiling_kib=$((6 * 1024 * 1024))
+e2e_budget_seconds=120
+e2e_cgroup_env=(PATH HOME GOPATH GOCACHE GOMODCACHE GOFLAGS GOWORK CGO_ENABLED GOTOOLCHAIN)
 
 e2e_capped() {
-	if [ -n "${CI:-}" ]; then
-		e2e_peak_measured "$@"
-	else
-		systemd-run --user --scope -p MemoryMax=6G -q "$@"
+	if [ -z "${CI:-}" ]; then
+		capped "$@"
+		return
 	fi
+	local name assignments=()
+	for name in "${e2e_cgroup_env[@]}"; do
+		if [ -n "${!name+x}" ]; then
+			assignments+=("$name=${!name}")
+		fi
+	done
+	sudo env "${assignments[@]}" systemd-run --scope --quiet -p MemoryMax=6G -p MemorySwapMax=0 --uid="$(id -u)" --gid="$(id -g)" -- "$@"
 }
 
-e2e_peak_measured() {
-	local report status=0 peak
-	report=$(mktemp)
-	/usr/bin/time -f '%M' -o "$report" "$@" || status=$?
-	peak=$(tail -n 1 "$report")
-	rm -f "$report"
-	if ! [[ $peak =~ ^[0-9]+$ ]]; then
-		echo "no peak resident memory read from /usr/bin/time" >&2
-		return 1
-	fi
-	if [ "$peak" -gt "$e2e_ceiling_kib" ]; then
-		echo "e2e peak resident memory ${peak} KiB is over the ${e2e_ceiling_kib} KiB ceiling" >&2
-		return 1
-	fi
-	return "$status"
+e2e_cgroup_control() {
+	e2e_capped sh -c 'test "$(cat "/sys/fs/cgroup$(sed -n "s/^0:://p" /proc/self/cgroup)/memory.max")" = 6442450944'
 }
 
 regenerated_copy=$(mktemp -d)
@@ -89,9 +83,19 @@ govulncheck=golang.org/x/vuln/cmd/govulncheck@v1.9.0
 if [ "$(uname -s)" = Linux ]; then
 	host_only=$(e2e_only_tests ./core/host/)
 	e2e_only_tests ./e2e/... > /dev/null
+	if [ -n "${CI:-}" ]; then
+		e2e_cgroup_control
+	fi
+	e2e_capped go test -tags e2e -run '^$' ./e2e/... ./core/host/ .
+	started=$SECONDS
 	e2e_capped go test -tags e2e -count=1 -timeout 2m ./e2e/...
 	e2e_capped go test -tags e2e -count=1 -timeout 2m -v -run "^($(paste -sd'|' <<<"$host_only"))\$" ./core/host/
 	e2e_capped go test -tags e2e -count=1 -timeout 2m -run '^TestE2EAttachedWindow' .
+	elapsed=$((SECONDS - started))
+	if [ "$elapsed" -gt "$e2e_budget_seconds" ]; then
+		echo "the e2e suite took ${elapsed}s, over the ${e2e_budget_seconds}s budget" >&2
+		exit 1
+	fi
 else
 	echo "skipping the e2e scenarios: they run on Linux only" >&2
 fi

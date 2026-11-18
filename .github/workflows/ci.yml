@@ -17,8 +17,6 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Peak memory tool for the end-to-end ceiling
-        run: sudo apt-get install -y -qq time
       - name: Quality chain of the go-book
         run: scripts/check.sh
   e2e-ssh:

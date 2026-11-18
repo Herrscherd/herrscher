@@ -170,13 +170,6 @@ func (d *sessionDriver) Pick(value string) bool {
 	return d.enqueue(queued{ev: contracts.Event{T: eventwire.EventPick, Value: value}})
 }
 
-func (d *sessionDriver) currentTurnID() string {
-	if d.activeTurnID != "" {
-		return d.activeTurnID
-	}
-	return d.pickTurnID
-}
-
 func (d *sessionDriver) enqueue(item queued) bool {
 	select {
 	case d.queue <- item:
@@ -814,19 +807,6 @@ func (d *sessionDriver) carriesFiles() bool {
 		}
 	}
 	return false
-}
-
-func (d *sessionDriver) stamp(event contracts.Event) contracts.Event {
-	if d.activeTurnID != "" {
-		event.SessionIncarnation = d.incarnation
-		event.TurnID = d.activeTurnID
-		event.Agent = d.agent
-		return event
-	}
-	event.SessionIncarnation = ""
-	event.TurnID = d.pickTurnID
-	event.Agent = ""
-	return event
 }
 
 func (d *sessionDriver) deliverReply(ctx context.Context, event contracts.Event, files outbox.Frame) contracts.Event {

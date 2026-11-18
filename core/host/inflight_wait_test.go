@@ -104,6 +104,10 @@ func hubOverrunText(h *hub, _ string) string {
 	return newHostMessages().text(h.textLanguage()(), "warn.hub_teardown_overrun", map[string]any{graceParam: h.teardownGrace.String()})
 }
 
+func commandOverrunText(h *hub, budget time.Duration) string {
+	return newHostMessages().text(h.textLanguage()(), "warn.command_handler_overrun", map[string]any{graceParam: budget.String()})
+}
+
 func sessionOverrunText(h *hub, name string) string {
 	return newHostMessages().text(h.sessionLanguageSource(name)(), "warn.session_teardown_overrun", map[string]any{nameParam: name, graceParam: h.teardownGrace.String()})
 }
@@ -199,7 +203,11 @@ func blockedWriterCases() []blockedWriterCase {
 				h := newInflightHub(t, name, grace, warnings)
 				h.startBridge = func(state.Session, time.Duration) error { return errors.New("bridge refused") }
 				sess := state.Session{Name: name, ChannelID: "c1"}
-				_ = runInBackground(func() { logCleanup(h.goLiveBridged(t.Context(), sess)) })
+				sessionStart := runInBackground(func() { logCleanup(h.goLiveBridged(t.Context(), sess)) })
+				t.Cleanup(func() {
+					warnings.open()
+					awaitBackground(t, sessionStart, "the refused session start did not return once its warning was written")
+				})
 				awaitGatedWrite(t, warnings)
 				return h
 			},
@@ -254,6 +262,10 @@ func runBlockedWriterCase(t *testing.T, c blockedWriterCase, path inflightPath) 
 
 	started := time.Now()
 	returned := runInBackground(func() { path.run(h, name) })
+	t.Cleanup(func() {
+		warnings.open()
+		awaitBackground(t, returned, "the stop path did not return once the warning writer was released")
+	})
 	if c.want == nil {
 		awaitGatedWrite(t, warnings)
 	}

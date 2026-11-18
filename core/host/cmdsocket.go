@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
+	"sync"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -142,23 +144,97 @@ func socketAnswers(ctx context.Context, messages *hostMessages, layout runtimedi
 	return true
 }
 
-func acceptCommands(ctx context.Context, listener net.Listener, disp dispatcher, readTimeout time.Duration) <-chan struct{} {
-	released := make(chan struct{})
+type openConns struct {
+	mu    sync.Mutex
+	conns map[net.Conn]struct{}
+}
+
+func newOpenConns() *openConns {
+	return &openConns{conns: make(map[net.Conn]struct{})}
+}
+
+func (o *openConns) add(conn net.Conn) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.conns[conn] = struct{}{}
+}
+
+func (o *openConns) remove(conn net.Conn) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	delete(o.conns, conn)
+}
+
+func (o *openConns) closeAll() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	for conn := range o.conns {
+		closeRead(conn)
+	}
+}
+
+func releaseCommandSockets(acc, commands io.Closer, cancel context.CancelFunc, stopped <-chan struct{}) {
+	logCleanup(acc.Close())
+	logCleanup(commands.Close())
+	cancel()
+	<-stopped
+}
+
+type commandAcceptor struct {
+	stopped  <-chan struct{}
+	released <-chan struct{}
+}
+
+func acceptCommands(ctx context.Context, listener net.Listener, disp dispatcher, readTimeout, joinBudget time.Duration, onOverrun func(budget time.Duration)) commandAcceptor {
+	stoppedCh := make(chan struct{})
+	releasedCh := make(chan struct{})
+	accepting := make(chan struct{})
+	var handlers sync.WaitGroup
+	conns := newOpenConns()
 	go func() {
-		<-ctx.Done()
-		closeRead(listener)
-		close(released)
-	}()
-	go func() {
+		defer close(accepting)
 		for {
 			conn, err := listener.Accept()
 			if err != nil {
 				return
 			}
-			go handleCommandConn(ctx, conn, disp, readTimeout)
+			conns.add(conn)
+			handlers.Add(1)
+			go func() {
+				defer handlers.Done()
+				defer conns.remove(conn)
+				handleCommandConn(ctx, conn, disp, readTimeout)
+			}()
 		}
 	}()
-	return released
+	go func() {
+		<-ctx.Done()
+		closeRead(listener)
+		<-accepting
+		close(stoppedCh)
+		if !joinHandlersWithin(&handlers, joinBudget) {
+			conns.closeAll()
+			onOverrun(joinBudget)
+		}
+		close(releasedCh)
+	}()
+	return commandAcceptor{stopped: stoppedCh, released: releasedCh}
+}
+
+func joinHandlersWithin(handlers *sync.WaitGroup, budget time.Duration) bool {
+	finished := make(chan struct{})
+	go func() {
+		handlers.Wait()
+		close(finished)
+	}()
+	timer := time.NewTimer(budget)
+	defer timer.Stop()
+	select {
+	case <-finished:
+		return true
+	case <-timer.C:
+		return false
+	}
 }
 
 func handleCommandConn(ctx context.Context, conn net.Conn, disp dispatcher, readTimeout time.Duration) {
@@ -186,6 +262,7 @@ func handleCommandConn(ctx context.Context, conn net.Conn, disp dispatcher, read
 	}
 	payload, marshalErr := json.Marshal(resp)
 	logCleanup(marshalErr)
+	logCleanup(conn.SetWriteDeadline(time.Now().Add(readTimeout)))
 	logWriteFailure(conn.Write(append(payload, '\n')))
 }
 

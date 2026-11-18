@@ -15,11 +15,11 @@ import (
 func TestAttachOneShotTapsRecordsTheUsageOfTheSeed(t *testing.T) {
 	var recorded []usage.Record
 	var owner string
-	runtime := oneShotSeedRuntime{messages: newHostMessages(), recordUsage: func(sess state.Session, records []usage.Record) {
+	runtime := oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), recordUsage: func(sess state.Session, records []usage.Record) {
 		owner = sess.Name
 		recorded = append(recorded, records...)
 	}}
-	driver := &sessionDriver{messages: newHostMessages()}
+	driver := &sessionDriver{messages: newHostMessages(), persists: newPersistWrites()}
 
 	attachOneShotTaps(driver, state.Session{Name: "seed-a"}, runtime)
 	driver.sink.Usage([]usage.Record{{In: 7, Out: 3, Cost: 0.02}})

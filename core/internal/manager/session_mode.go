@@ -42,7 +42,7 @@ func (h *Handler) sessionSetModeRun(_ context.Context, input contracts.Input) (c
 	if parsed, _ := approval.ParseMode(mode); parsed == approval.ModePlan && !gate.enforced {
 		return contracts.Result{}, &planUnsupportedError{Session: name, Vendor: sess.Vendor, Why: gate.why}
 	}
-	if err := h.st.SetSessionApprovals(name, mode); err != nil {
+	if err := h.persisted(func() error { return h.st.SetSessionApprovals(name, mode) }); err != nil {
 		return contracts.Result{}, err
 	}
 	return contracts.DataResult(h.setModeReply(sess, mode, gate)), nil

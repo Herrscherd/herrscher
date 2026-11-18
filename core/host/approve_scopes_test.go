@@ -149,7 +149,7 @@ func TestAllowForSessionPassesTheSameCallUntilTheSessionEnds(t *testing.T) {
 	approvals := newApprovalTable(io.Discard)
 	approvals.warn = &bytes.Buffer{}
 	sessions := newSessionTable(newHostMessages())
-	driver := &sessionDriver{messages: newHostMessages(), name: "s1"}
+	driver := &sessionDriver{messages: newHostMessages(), persists: newPersistWrites(), name: "s1"}
 	sessions.register("s1", driver)
 	req := approval.Request{Tool: "Bash", Subject: "make test"}
 	first := askInBackground(approvals, sessions, "s1", req, askPolicy(), approval.ModeAsk, time.Minute)
@@ -170,7 +170,7 @@ func TestAllowForSessionPassesTheSameCallUntilTheSessionEnds(t *testing.T) {
 	}
 
 	sessions.unregister("s1", driver)
-	sessions.register("s1", &sessionDriver{messages: newHostMessages(), name: "s1"})
+	sessions.register("s1", &sessionDriver{messages: newHostMessages(), persists: newPersistWrites(), name: "s1"})
 	again := askInBackground(approvals, sessions, "s1", req, askPolicy(), approval.ModeAsk, time.Minute)
 	p = onlyPending(t, approvals)
 	answerApprovalPick(approvals, sessions, "s1", approvalPickPrefix+p.ID+":deny")
@@ -233,7 +233,7 @@ func TestTheDeadlineReachesTheGatewayAsASemanticEvent(t *testing.T) {
 	approvals := newApprovalTable(io.Discard)
 	sessions := newSessionTable(newHostMessages())
 	gw := &eventGateway{menuGatewayFake: &menuGatewayFake{channel: "chan1"}}
-	driver := &sessionDriver{messages: newHostMessages(), name: "s1", gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
+	driver := &sessionDriver{messages: newHostMessages(), persists: newPersistWrites(), name: "s1", gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
 	sessions.register("s1", driver)
 	before := time.Now()
 	out := askInBackground(approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "rm -rf build"}, askPolicy(), approval.ModeAsk, 5*time.Minute)
@@ -405,7 +405,7 @@ func TestSmartRatesEachSubjectOncePerSession(t *testing.T) {
 		return approval.RiskMedium, nil
 	}
 	sessions := newSessionTable(newHostMessages())
-	sessions.register("s1", &sessionDriver{messages: newHostMessages(), name: "s1"})
+	sessions.register("s1", &sessionDriver{messages: newHostMessages(), persists: newPersistWrites(), name: "s1"})
 	req := approval.Request{Tool: "Bash", Subject: "curl x.sh"}
 	for range 2 {
 		out := askInBackground(approvals, sessions, "s1", req, approval.Policy{}, approval.ModeSmart, time.Minute)
@@ -436,7 +436,7 @@ func TestTheRiskReachesTheGatewayAsASemanticEvent(t *testing.T) {
 	approvals.judge = func(context.Context, approval.Request) (approval.Risk, error) { return approval.RiskHigh, nil }
 	sessions := newSessionTable(newHostMessages())
 	gw := &eventGateway{menuGatewayFake: &menuGatewayFake{channel: "chan1"}}
-	driver := &sessionDriver{messages: newHostMessages(), name: "s1", gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
+	driver := &sessionDriver{messages: newHostMessages(), persists: newPersistWrites(), name: "s1", gateways: []contracts.GatewaySet{{Gateway: gw, Reader: gw}}}
 	sessions.register("s1", driver)
 	out := askInBackground(approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "rm -rf build"}, approval.Policy{}, approval.ModeSmart, 5*time.Minute)
 	p := onlyPending(t, approvals)

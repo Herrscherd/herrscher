@@ -141,6 +141,17 @@ func wireManagerHandler(ctx context.Context, lang languageSource, warn io.Writer
 		return validateModelChoice(models, vendor, modelID)
 	})
 	hdl.SetGateResolver(GateFor)
+	if sessions != nil {
+		hdl.SetWriteTracker(persistTracker{persists: sessions.persists})
+	}
+}
+
+type persistTracker struct {
+	persists *persistWrites
+}
+
+func (t persistTracker) Begin() func() {
+	return t.persists.begin()
 }
 
 func launchVendor(models *ModelDiscovery, vendor, modelID, cmd string) (string, error) {

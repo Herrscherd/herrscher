@@ -23,6 +23,7 @@ func compactCmdFixture(t *testing.T, vendor string) (*state.State, *sessionTable
 	sessions := newSessionTable(newHostMessages())
 	sessions.register("api", &sessionDriver{
 		messages:       newHostMessages(),
+		persists:       newPersistWrites(),
 		name:           "api",
 		terms:          func() modelTerms { return modelTerms{vendor: vendor} },
 		queue:          queue,

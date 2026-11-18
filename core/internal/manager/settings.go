@@ -22,7 +22,7 @@ func (h *Handler) setHomeRun(ctx context.Context, input contracts.Input) (contra
 	if kind != categoryKind && kind != forumKind {
 		return contracts.Result{}, &ChannelKindError{Channel: channelID, Kind: kind, Need: "home must be a category or forum", Home: true}
 	}
-	if err := h.st.SetHome(state.HomeRef{ID: channelID, Type: kind}); err != nil {
+	if err := h.persisted(func() error { return h.st.SetHome(state.HomeRef{ID: channelID, Type: kind}) }); err != nil {
 		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)
 	}
 	return contracts.DataResult(h.text(clitext.HostHomeSet, clitext.Params{clitext.ParamChannel: h.d.ChannelRef(channelID), clitext.ParamKind: kind})), nil
@@ -33,7 +33,7 @@ func (h *Handler) setSourceRun(_ context.Context, input contracts.Input) (contra
 	if !ok || path == "" {
 		return contracts.Result{}, h.localized(ErrMissingPath, clitext.HostErrMissingPath)
 	}
-	if err := h.st.SetSource(path); err != nil {
+	if err := h.persisted(func() error { return h.st.SetSource(path) }); err != nil {
 		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)
 	}
 	return contracts.DataResult(h.text(clitext.HostSourceSet, clitext.Params{clitext.ParamPath: path})), nil
@@ -48,7 +48,7 @@ func (h *Handler) setLangRun(_ context.Context, input contracts.Input) (contract
 	if !ok {
 		return contracts.Result{}, localize(h.currentLanguage(), fmt.Sprintf("unsupported language %q, use en, fr or auto", raw), clitext.HostErrUnsupportedLang, clitext.Params{clitext.ParamLang: raw}, ErrUnsupportedLang)
 	}
-	if err := h.st.SetOperatorLang(raw); err != nil {
+	if err := h.persisted(func() error { return h.st.SetOperatorLang(raw) }); err != nil {
 		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)
 	}
 	h.changeLanguage(lang)
@@ -56,7 +56,7 @@ func (h *Handler) setLangRun(_ context.Context, input contracts.Input) (contract
 }
 
 func (h *Handler) resetLang() (contracts.Result, error) {
-	if err := h.st.SetOperatorLang(""); err != nil {
+	if err := h.persisted(func() error { return h.st.SetOperatorLang("") }); err != nil {
 		return contracts.Result{}, h.labelled("persist", clitext.HostErrPersist, err)
 	}
 	h.changeLanguage(h.defaultLanguage())

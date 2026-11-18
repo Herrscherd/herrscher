@@ -2,17 +2,13 @@ package host
 
 import (
 	"encoding/json"
-	"errors"
 	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
-	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
-
-const turnInterruptedFallback = "The last message got no reply, send it again if needed."
 
 func interruptedTurnTranscript(t *testing.T) string {
 	t.Helper()
@@ -40,33 +36,18 @@ func TestInterruptedTurnScrollbackLineCarriesTheNotice(t *testing.T) {
 	if interrupted.Notice == nil || interrupted.Notice.Code != contracts.CodeTurnInterrupted || interrupted.Notice.Args != nil {
 		t.Fatalf("interruption notice = %+v, want CodeTurnInterrupted without arguments", interrupted.Notice)
 	}
-	if interrupted.Text != turnInterruptedFallback {
-		t.Fatalf("interruption text = %q, want the fallback %q", interrupted.Text, turnInterruptedFallback)
+	if interrupted.Text != "" {
+		t.Fatalf("interruption text = %q, want none: the TUI renders the notice from its code", interrupted.Text)
 	}
 	if interrupted.TurnID != "turn-1" {
 		t.Fatalf("interruption TurnID = %q, want the interrupted turn turn-1", interrupted.TurnID)
 	}
 }
 
-func TestAnnounceInterruptedTurnWithFailingRenderWritesNoEmptyLineAndKeepsTheMark(t *testing.T) {
-	partDir := t.TempDir()
-	h, st := newMarkHub(t, partDir, state.Session{Name: "main", InterruptedTurn: "turn-1"})
-	failing := func(i18n.Language) (string, error) { return "", errors.New("render failed") }
-
-	h.announceInterruptedTurnWith(state.Session{Name: "main", InterruptedTurn: "turn-1"}, failing)
-
-	if lines := h.Scrollback("main"); len(lines) != 0 {
-		t.Fatalf("scrollback = %+v after a failed render, want no line", lines)
-	}
-	if got, _ := st.FindSession("main"); got.InterruptedTurn != "turn-1" {
-		t.Fatalf("mark = %q after a failed render, want kept for the next start", got.InterruptedTurn)
-	}
-}
-
 func TestAnnounceInterruptedTurnDoesNotDuplicateAnAnnouncedNotice(t *testing.T) {
 	partDir := t.TempDir()
 	h, st := newMarkHub(t, partDir, state.Session{Name: "main", InterruptedTurn: "turn-1"})
-	if err := state.AppendTranscript(state.TranscriptPath(partDir, "main"), state.TranscriptEntry{Role: "notice", Kind: turnInterruptedKind, Text: turnInterruptedFallback, TurnID: "turn-1"}); err != nil {
+	if err := state.AppendTranscript(state.TranscriptPath(partDir, "main"), state.TranscriptEntry{Role: "notice", Kind: turnInterruptedKind, TurnID: "turn-1"}); err != nil {
 		t.Fatal(err)
 	}
 

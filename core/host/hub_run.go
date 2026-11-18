@@ -9,6 +9,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/internal/health"
@@ -30,7 +31,11 @@ func RunHub(ctx context.Context, cliMessages *clitext.Messages, hostMessages *Me
 		closeGateways(ctx, closers, obs.Stderr(false))
 		return localizeHostError(messages, cliMessages, options.operatorLanguage(), settingsErr)
 	}
-	return localizeHostError(messages, cliMessages, options.operatorLanguage(), serveHub(ctx, messages, cliMessages, gws, closers, options, clock, tick))
+	serveErr := serveHub(ctx, messages, cliMessages, gws, closers, options, clock, tick)
+	if errors.Is(serveErr, errCompactorSettings) {
+		return cli.Localize(cliMessages, serveErr, options.operatorLanguage())
+	}
+	return localizeHostError(messages, cliMessages, options.operatorLanguage(), serveErr)
 }
 
 func (options Options) withDefaultGateways(gws []Deps) Options {

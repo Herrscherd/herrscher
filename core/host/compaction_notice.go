@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"errors"
+	"slices"
 	"strconv"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -29,7 +30,7 @@ func (d *sessionDriver) failCompaction(ctx context.Context, trigger contracts.Co
 
 func (d *sessionDriver) renderableNotice(err error) (contracts.Notice, bool) {
 	typed, ok := errors.AsType[contracts.NoticeError](err)
-	if !ok || !d.noticeRenders(typed.Notice()) {
+	if !ok || !isKnownNotice(typed.Notice()) {
 		return contracts.Notice{}, false
 	}
 	return typed.Notice(), true
@@ -107,7 +108,7 @@ func knownCompactFailure(err error) (string, bool) {
 
 func (d *sessionDriver) announceCompaction(ctx context.Context, trigger contracts.CompactTrigger, result contracts.CompactResult) {
 	tokens := measuredTokens(result)
-	if result.Notice.Code == 0 || !d.noticeRenders(result.Notice) {
+	if result.Notice.Code == 0 || !isKnownNotice(result.Notice) {
 		d.fanOut(ctx, d.compactionDone(trigger, nil, result.Note, tokens))
 		return
 	}
@@ -115,9 +116,8 @@ func (d *sessionDriver) announceCompaction(ctx context.Context, trigger contract
 	d.fanOut(ctx, d.compactionDone(trigger, nil, "", tokens))
 }
 
-func (d *sessionDriver) noticeRenders(notice contracts.Notice) bool {
-	_, err := contracts.NewRenderer().Render(d.textLanguage()(), notice)
-	return err == nil
+func isKnownNotice(notice contracts.Notice) bool {
+	return slices.Contains(contracts.Codes(), notice.Code)
 }
 
 type noticeDelivery struct {

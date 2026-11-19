@@ -496,6 +496,12 @@ hook fails closed: a missing session name, a missing token, no daemon, an answer
 that is neither `allow` nor `deny`, or a payload over the size limit each refuse
 the tool call.
 
+When the backend sets `HERRSCHER_APPROVAL_SOCKET`, the hook asks on that socket
+instead, and sends neither the session name nor the token: the socket carries no
+credential, and the daemon answers through the asker the turn carries. The hook
+never falls back to the command socket when that socket fails, so an error there
+refuses the call with its cause.
+
 For the operator, the rule is this: never grant a broad rule on `Bash`. A rule
 that lets a shell run a program able to reach a socket gives that program the
 operator's rights. Examples of such programs are `sh`, `bash`, `python`, `node`,
@@ -1195,16 +1201,19 @@ refused without a reason, as if nobody answered.
 The box is drawn from 60 to 240 columns: below 80 each choice takes two rows.
 The tab carries a `pendingApproval` flag for the rest of the window to mark it.
 
-Each session's approval hook answers with the token the daemon issued to that
-session at launch, sent in the `HERRSCHER_SESSION_TOKEN` variable. The token
+On the command socket, each session's approval hook answers with the token the
+daemon issued to that session at launch, sent in the `HERRSCHER_SESSION_TOKEN`
+variable. The token
 ends with the session's run. Closing or archiving the session revokes it, and so
 does a session that stops inside the teardown window, so a session recreated
 under the same name gets a new one. A one-shot seed gets its own token instead,
 which answers only while that seed runs. A seed on an archived session is
 refused, and no token is issued to a seed whose session is archived or gone. A
 session archived or closed while its seed runs ends that seed's token. A hook
-that holds no token, or cannot reach a daemon, refuses the tool call and says
-why: it never allows a call it could not check.
+that has no approval socket and holds no token, or cannot reach a daemon, refuses
+the tool call and says why: it never allows a call it could not check. A seed run
+inside the daemon sets the approval socket for its backend, so its hook needs no
+token at all.
 
 Two paths run without a daemon. A `session create` run locally starts a session
 whose children hold no token the daemon issued, so every tool call they make is

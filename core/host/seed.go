@@ -38,6 +38,7 @@ type oneShotSeedRuntime struct {
 	backend         func(context.Context, state.Session) (contracts.Backend, error)
 	models          *ModelDiscovery
 	sessions        *sessionTable
+	desk            *approvalDesk
 	persists        *persistWrites
 }
 
@@ -206,6 +207,9 @@ func attachOneShotTaps(driver *sessionDriver, sess state.Session, runtime oneSho
 }
 
 func runOneShotBridge(ctx context.Context, cancel context.CancelFunc, sess state.Session, orch contracts.Orchestrator, runtime oneShotSeedRuntime, toBridge, fromBridge chan contracts.Event, bridgeErr chan<- error) {
+	if runtime.desk != nil {
+		ctx = contracts.WithApprovalAsker(ctx, runtime.desk.asker(sess.Name))
+	}
 	err := bridge.RunUntilClosed(ctx, func(string) (contracts.Backend, error) {
 		return runtime.backendFactory()(ctx, sess)
 	}, orch, sess.ChannelID, toBridge, fromBridge)

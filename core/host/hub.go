@@ -85,6 +85,7 @@ type hub struct {
 
 	approvals *approvalTable
 	sessions  *sessionTable
+	desk      *approvalDesk
 }
 
 type forgetter interface{ forget(string) }
@@ -169,6 +170,7 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 			backend:         h.seedBackend,
 			models:          h.models,
 			sessions:        h.sessions,
+			desk:            h.desk,
 			persists:        oneShot,
 			recordUsage: func(sess state.Session, records []usage.Record) {
 				h.recordUsageWith(oneShot, sess, records)

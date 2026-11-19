@@ -134,6 +134,7 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	runningHub.seedBackend = func(seedCtx context.Context, sess state.Session) (contracts.Backend, error) {
 		return newSeedBackendWithToken(seedCtx, messages, sess, keys, runningHub.models, sessions.seedToken(seedCtx, sess.Name, liveSessionAllowed(store)))
 	}
+	runningHub.desk = newApprovalDesk(messages, options.languageSource(), options.Warnings, store, deps.agents, approvals, sessions)
 	runningHub.contributedKinds = kinds
 	runningHub.instanceID = instID
 	runningHub.runtime = options.Runtime

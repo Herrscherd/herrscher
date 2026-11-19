@@ -25,13 +25,14 @@ const approvalsFile = "APPROVALS"
 var errScopeConflict = errors.New("--session and --always are two scopes: pick one")
 
 func addApproveCommands(reg *cli.Registry, messages *hostMessages, cliMessages *clitext.Messages, lang languageSource, warn io.Writer, hostState *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) error {
+	desk := newApprovalDesk(messages, lang, warn, hostState, agents, approvals, sessions)
 	return addVerbs(
 		reg,
 		approveListVerb(cliMessages, lang, approvals),
 		approveAllowVerb(cliMessages, lang, approvals, sessions),
 		approveDenyVerb(cliMessages, lang, approvals, sessions),
 		approveRuleVerb(cliMessages, lang, hostState),
-		approveAskVerb(messages, lang, warn, hostState, agents, approvals, sessions),
+		approveAskVerb(desk),
 		approveModeVerb(cliMessages, hostState, lang),
 		sessionShellVerb(messages, lang, warn, hostState, agents, approvals, sessions),
 	)
@@ -193,7 +194,7 @@ func addApprovalRule(cliMessages *clitext.Messages, lang i18n.Language, store *s
 	return replyText(cliMessages, lang).Text(clitext.HostApproveRuleAdded, clitext.Params{clitext.ParamRule: parsed.String()}), nil
 }
 
-func approveAskVerb(messages *hostMessages, lang languageSource, warn io.Writer, store *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
+func approveAskVerb(desk *approvalDesk) contracts.Cmd {
 	return contracts.New(nsApprove, "ask").
 		Help(clitext.CmdHelpApproveAsk).
 		ValueParam(paramSession, clitext.CmdParamApproveAskSession, true).
@@ -201,15 +202,14 @@ func approveAskVerb(messages *hostMessages, lang languageSource, warn io.Writer,
 		ValueParam("subject", clitext.CmdParamApproveAskSubject, false).
 		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 			session := strings.TrimSpace(input.Get(paramSession))
-			if !sessions.tokenMatches(session, callerTokenFrom(ctx)) {
-				return contracts.Result{}, wrapHost(messages, errApproveAskUnauthenticated, "approve.ask_unauthenticated", map[string]any{nameParam: session})
+			if !desk.sessions.tokenMatches(session, callerTokenFrom(ctx)) {
+				return contracts.Result{}, wrapHost(desk.messages, errApproveAskUnauthenticated, "approve.ask_unauthenticated", map[string]any{nameParam: session})
 			}
 			req := approval.Request{
 				Tool:    strings.TrimSpace(input.Get("tool")),
 				Subject: input.Get("subject"),
 			}
-			pol, mode := sessionPolicy(messages, lang, warn, store, agents, session)
-			decision, reason := askApproval(ctx, approvals, sessions, session, req, pol, mode, store.ApprovalWait())
+			decision, reason := desk.decide(ctx, session, req)
 			payload, err := json.Marshal(struct {
 				Decision string `json:"decision"`
 				Reason   string `json:"reason,omitempty"`

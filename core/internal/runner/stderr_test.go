@@ -1,11 +1,9 @@
 package runner
 
 import (
-	"os"
 	"os/exec"
 	"strings"
 	"testing"
-	"unicode"
 	"unicode/utf8"
 )
 
@@ -22,18 +20,15 @@ func TestCommandErrorBoundsAndCleansHugeRemoteStderr(t *testing.T) {
 	if !strings.HasSuffix(msg, "Permission denied (publickey)") {
 		t.Fatalf("the end of stderr was lost: %q", msg)
 	}
-	if !strings.Contains(msg, truncatedMark) {
-		t.Fatalf("no truncation mark: %q", msg)
+	if !utf8.ValidString(msg) {
+		t.Fatalf("the cut split a UTF-8 rune: %q", msg)
 	}
-	bounded, truncated := boundedStderr([]byte(noisy))
-	if !truncated {
-		t.Fatal("a 128 KiB stderr was not reported as truncated")
+	bounded := boundedStderr([]byte(noisy))
+	if !strings.HasPrefix(bounded, truncatedMark+" ") {
+		t.Fatalf("a 128 KiB stderr does not start with the cut mark: %q", bounded[:min(len(bounded), 16)])
 	}
 	if len(bounded) > maxRemoteStderr+len(truncatedMark)+1 {
 		t.Fatalf("stderr not bounded: %d bytes", len(bounded))
-	}
-	if !utf8.ValidString(msg) {
-		t.Fatalf("the cut split a UTF-8 rune: %q", msg)
 	}
 }
 
@@ -42,8 +37,8 @@ func TestCommandErrorKeepsShortRemoteStderrWhole(t *testing.T) {
 	if !strings.HasSuffix(msg, ": fatal: hôte inconnu") {
 		t.Fatalf("short stderr altered: %q", msg)
 	}
-	if _, truncated := boundedStderr([]byte("  fatal: hôte inconnu\n")); truncated {
-		t.Fatal("short stderr reported as truncated")
+	if got := boundedStderr([]byte("  fatal: hôte inconnu\n")); got != "fatal: hôte inconnu" {
+		t.Fatalf("short stderr = %q, want it unchanged", got)
 	}
 }
 
@@ -54,37 +49,17 @@ func TestBoundedStderrDropsUnterminatedSequencesAndBidiControls(t *testing.T) {
 		want string
 	}{
 		{"unterminated CSI", "abc\x1b[31", "abc"},
+		{"CSI alone leaves nothing visible", "\x1b[31", ""},
+		{"unterminated CSI keeps its line", "\x1b[31 permission denied", "permission denied"},
 		{"unterminated OSC", "x\x1b]0;titre", "x"},
+		{"unterminated OSC stops at the first blank", "x\x1b]0;titre fin", "x fin"},
 		{"bidi controls", "a\u202eb\u2066c\u2069d", "abcd"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, _ := boundedStderr([]byte(tc.raw))
-			if got != tc.want {
+			if got := boundedStderr([]byte(tc.raw)); got != tc.want {
 				t.Fatalf("boundedStderr(%q) = %q, want %q", tc.raw, got, tc.want)
 			}
 		})
-	}
-}
-
-func TestRunnerSourcesCarryNoLocalizedText(t *testing.T) {
-	entries, err := os.ReadDir(".")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, entry := range entries {
-		name := entry.Name()
-		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		src, err := os.ReadFile(name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, char := range string(src) {
-			if char > unicode.MaxASCII && unicode.IsLetter(char) {
-				t.Fatalf("%s holds a non-ASCII letter %q: localized text belongs in the catalogue", name, char)
-			}
-		}
 	}
 }

@@ -11,20 +11,20 @@ const maxRemoteStderr = 512
 
 const truncatedMark = "…"
 
-var terminalSequence = regexp.MustCompile(`\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]|\x1b\[[^\n\r]*|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\][^\n\r]*|\x1b[\x40-\x5a\x5c-\x5f]`)
+var terminalSequence = regexp.MustCompile(`\x1b\[[\x30-\x3f]*(?:[\x40-\x7e]|[\x20-\x2f]*)|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\][^\x07\x1b\s]*|\x1b[\x40-\x5a\x5c-\x5f]`)
 
-func boundedStderr(raw []byte) (string, bool) {
+func boundedStderr(raw []byte) string {
 	clean := terminalSequence.ReplaceAllString(string(raw), "")
 	clean = strings.Map(cleanRune, clean)
 	clean = strings.Join(strings.Fields(clean), " ")
 	if len(clean) <= maxRemoteStderr {
-		return clean, false
+		return clean
 	}
 	start := len(clean) - maxRemoteStderr
 	for !utf8.RuneStart(clean[start]) {
 		start++
 	}
-	return truncatedMark + " " + clean[start:], true
+	return truncatedMark + " " + clean[start:]
 }
 
 func cleanRune(char rune) rune {

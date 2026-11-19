@@ -53,6 +53,8 @@ func TestBoundedStderrDropsUnterminatedSequencesAndBidiControls(t *testing.T) {
 		{"unterminated CSI keeps its line", "\x1b[31 permission denied", "permission denied"},
 		{"unterminated OSC", "x\x1b]0;titre", "x"},
 		{"unterminated OSC stops at the first blank", "x\x1b]0;titre fin", "x fin"},
+		{"terminated OSC does not cross a line", "x\x1b]0;titre\nerreur grave\x07 suite", "x erreur grave suite"},
+		{"terminated OSC title with a blank is removed whole", "\x1b]0;mon titre\x07", ""},
 		{"bidi controls", "a\u202eb\u2066c\u2069d", "abcd"},
 	}
 	for _, tc := range cases {

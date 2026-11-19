@@ -11,7 +11,7 @@ const maxRemoteStderr = 512
 
 const truncatedMark = "…"
 
-var terminalSequence = regexp.MustCompile(`\x1b\[[\x30-\x3f]*(?:[\x40-\x7e]|[\x20-\x2f]*)|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\][^\x07\x1b\s]*|\x1b[\x40-\x5a\x5c-\x5f]`)
+var terminalSequence = regexp.MustCompile(`\x1b\[[\x30-\x3f]*(?:[\x40-\x7e]|[\x20-\x2f]*)|\x1b\][^\x07\x1b\n\r]*(?:\x07|\x1b\\)|\x1b\][^\x07\x1b\s]*|\x1b[\x40-\x5a\x5c-\x5f]`)
 
 func boundedStderr(raw []byte) string {
 	clean := terminalSequence.ReplaceAllString(string(raw), "")

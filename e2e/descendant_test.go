@@ -224,7 +224,23 @@ func startProbeSleep(t *testing.T, entry string) int {
 			t.Errorf("wait for the probe: %v", waitErr)
 		}
 	})
+	awaitMarker(t, cmd.Process.Pid, entry)
 	return cmd.Process.Pid
+}
+
+func awaitMarker(t *testing.T, pid int, entry string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		environ, err := environOf(procRoot, pid)
+		if err == nil && carries(environ, entry) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the probe %d never showed its marker in its environment: err=%v", pid, err)
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 func TestDescendantAliveSeesALiveDescendantOfOurs(t *testing.T) {

@@ -218,6 +218,7 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"hook.daemon_failed":                {"Detail"},
 		"hook.answer_unreadable":            {"Answer"},
 		"hook.other_event":                  {"Event", "Expected"},
+		"hook.approval_socket_failed":       {"Detail"},
 		"hook.decision_unwritable":          {"Decision", "Detail"},
 	}
 	i18ntest.CheckDeclared(t, declared, hostLocaleSource(t))

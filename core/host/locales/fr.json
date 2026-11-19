@@ -771,6 +771,11 @@
     "other": "herrscher : ce hook répond à {{.Expected}}, pas à {{.Event}}, autorisé"
   },
   {
+    "id": "hook.approval_socket_failed",
+    "description": "Le hook d'approbation refuse un appel d'outil parce que la socket d'approbation a échoué ou répondu pour une autre requête, Detail porte la cause",
+    "other": "herrscher : la socket d'approbation n'a pas pu répondre, cet appel d'outil est donc refusé : {{.Detail}}"
+  },
+  {
     "id": "hook.decision_unwritable",
     "description": "The approval hook could not write its decision to stdout, Decision names it and Detail carries the error",
     "other": "herrscher : impossible d'écrire la décision {{.Decision}} : {{.Detail}}"

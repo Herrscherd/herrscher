@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/approvalsock"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
@@ -23,17 +25,18 @@ const SessionVar = control.SessionVar
 const hookEvent = "PreToolUse"
 
 const (
-	hookNoSession          = "hook.no_session"
-	hookNoToken            = "hook.no_token"
-	hookPayloadUnreadable  = "hook.payload_unreadable"
-	hookPayloadTooLarge    = "hook.payload_too_large"
-	hookNamesNoTool        = "hook.names_no_tool"
-	hookNoDaemon           = "hook.no_daemon"
-	hookCancelled          = "hook.cancelled"
-	hookDaemonFailed       = "hook.daemon_failed"
-	hookAnswerUnreadable   = "hook.answer_unreadable"
-	hookOtherEvent         = "hook.other_event"
-	hookDecisionUnwritable = "hook.decision_unwritable"
+	hookNoSession            = "hook.no_session"
+	hookNoToken              = "hook.no_token"
+	hookPayloadUnreadable    = "hook.payload_unreadable"
+	hookPayloadTooLarge      = "hook.payload_too_large"
+	hookNamesNoTool          = "hook.names_no_tool"
+	hookNoDaemon             = "hook.no_daemon"
+	hookCancelled            = "hook.cancelled"
+	hookDaemonFailed         = "hook.daemon_failed"
+	hookAnswerUnreadable     = "hook.answer_unreadable"
+	hookOtherEvent           = "hook.other_event"
+	hookDecisionUnwritable   = "hook.decision_unwritable"
+	hookApprovalSocketFailed = "hook.approval_socket_failed"
 )
 
 const (
@@ -78,6 +81,10 @@ func RunPermissionHook(ctx context.Context, owner *Messages, stdin io.Reader, ou
 		return refuseHook(messages, out, errOut, lang, hookNamesNoTool, nil)
 	}
 
+	if socket := strings.TrimSpace(os.Getenv(approvalsock.EnvApprovalSocket)); socket != "" {
+		return askApprovalSocket(ctx, messages, out, errOut, lang, socket, payload)
+	}
+
 	session := strings.TrimSpace(os.Getenv(SessionVar))
 	if session == "" {
 		return refuseHook(messages, out, errOut, lang, hookNoSession, map[string]any{variableParam: SessionVar})
@@ -108,6 +115,22 @@ func RunPermissionHook(ctx context.Context, owner *Messages, stdin io.Reader, ou
 		return refuseHook(messages, out, errOut, lang, hookAnswerUnreadable, map[string]any{answerParam: answer})
 	}
 	return writeHookDecision(messages, out, errOut, lang, verdict.Decision, verdict.Reason)
+}
+
+func askApprovalSocket(ctx context.Context, messages *hostMessages, out, errOut io.Writer, lang i18n.Language, socket string, payload hookInput) error {
+	req := contracts.ApprovalRequest{
+		ID:      newApprovalID(),
+		Tool:    payload.ToolName,
+		Subject: approval.SubjectOf(payload.ToolName, payload.ToolInput),
+	}
+	answer, err := approvalsock.Ask(ctx, socket, req)
+	if err != nil {
+		return refuseHook(messages, out, errOut, lang, hookApprovalSocketFailed, map[string]any{detailParam: err.Error()})
+	}
+	if !answer.Allowed() {
+		return writeHookDecision(messages, out, errOut, lang, "deny", answer.Reason)
+	}
+	return writeHookDecision(messages, out, errOut, lang, "allow", answer.Reason)
 }
 
 // RunApprovalHook is RunPermissionHook wired to the operator daemon.

@@ -27,7 +27,7 @@ func TestAnnounceInterruptedTurnAppendsNoticeAndClearsMark(t *testing.T) {
 	h.announceInterruptedTurn(state.Session{Name: "main", InterruptedTurn: "turn-1"})
 
 	entries := state.ReadTranscript(state.TranscriptPath(partDir, "main"), 10)
-	if len(entries) != 1 || entries[0].Role != "notice" || entries[0].Kind != "turn_interrupted" || entries[0].Text == "" {
+	if len(entries) != 1 || entries[0].Role != "notice" || entries[0].Kind != "turn_interrupted" || entries[0].Text != "" {
 		t.Fatalf("transcript = %+v, want one turn_interrupted notice", entries)
 	}
 	if got, _ := st.FindSession("main"); got.InterruptedTurn != "" {

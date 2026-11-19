@@ -22,6 +22,7 @@ type compaction struct {
 	from     int
 	to       int
 	measured bool
+	ownsBusy bool
 }
 
 type compactResultMsg struct {
@@ -45,7 +46,7 @@ func (m *model) compactCmd() tea.Cmd {
 		return nil
 	}
 	target.busy = true
-	target.compaction = compaction{active: true, from: m.contextTokens(target)}
+	target.compaction = compaction{active: true, from: m.contextTokens(target), ownsBusy: true}
 	backend := m.tm
 	channel := target.channel
 	args := []string{sessionVerb, verbCompact, argName, name, argOrigin, originTerminal}
@@ -60,8 +61,7 @@ func (m *model) handleCompactResult(msg compactResultMsg) {
 	if target == nil || msg.err == nil {
 		return
 	}
-	target.compaction = compaction{}
-	target.busy = false
+	target.releaseCompaction()
 	target.appendEntry(entry{role: roleError, text: msg.err.Error()})
 	m.syncViewport()
 }
@@ -93,8 +93,9 @@ func isCompactionEvent(kind string) bool {
 }
 
 func (target *tab) startCompaction(event contracts.Event) {
+	ownsBusy := !target.busy || target.compaction.ownsBusy
 	target.busy = true
-	target.compaction = compaction{active: true, from: event.Tokens, measured: event.Tokens > 0}
+	target.compaction = compaction{active: true, from: event.Tokens, measured: event.Tokens > 0, ownsBusy: ownsBusy}
 }
 
 func (target *tab) completeCompaction(trans translator, event contracts.Event) {
@@ -115,23 +116,32 @@ func (target *tab) completeCompaction(trans translator, event contracts.Event) {
 		target.ctxTokens = 0
 		target.ctxMeasured = false
 	}
+	ownsBusy := target.compaction.ownsBusy
 	target.finishCompaction(trans)
 	if event.Text != "" {
 		target.appendEntry(entry{role: roleNotice, text: event.Text})
 	}
-	target.busy = false
+	if ownsBusy {
+		target.busy = false
+	}
+}
+
+func (target *tab) releaseCompaction() {
+	if target.compaction.ownsBusy {
+		target.busy = false
+	}
+	target.compaction = compaction{}
 }
 
 func (target *tab) appendRelayedNotice(trans translator, notice contracts.Notice) {
-	if text := compactionNoticeText(trans, notice); text != "" {
+	if text := noticeText(trans, notice); text != "" {
 		target.appendEntry(entry{role: roleNotice, text: text})
 	}
 }
 
 func (target *tab) failCompaction(trans translator, event contracts.Event) {
 	if target.compaction.active {
-		target.compaction = compaction{}
-		target.busy = false
+		target.releaseCompaction()
 	}
 	if text := compactFailureText(trans, event); text != "" {
 		target.appendEntry(entry{role: roleError, text: text})
@@ -145,7 +155,7 @@ func compactFailureText(trans translator, event contracts.Event) string {
 		return ""
 	}
 	if failure.Notice != nil {
-		if text := compactionNoticeText(trans, *failure.Notice); text != "" {
+		if text := noticeText(trans, *failure.Notice); text != "" {
 			return text
 		}
 	}
@@ -161,10 +171,10 @@ func compactFailureText(trans translator, event contracts.Event) string {
 	return trans.t(compactFailureKey(failure.Reason), nil)
 }
 
-func compactionNoticeText(trans translator, notice contracts.Notice) string {
+func noticeText(trans translator, notice contracts.Notice) string {
 	text, err := contracts.NewRenderer().Render(trans.lang, notice)
 	if err != nil {
-		slog.Warn("compaction notice not rendered", "code", notice.Code, "err", err)
+		slog.Warn("notice not rendered", "code", notice.Code, "err", err)
 		return ""
 	}
 	return text

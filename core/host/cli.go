@@ -42,7 +42,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	worktrees := worktree.NewWorktreer(sessions.cliMessages, instID)
 	upCfg, cfgErr := service.DefaultConfig(sessions.cliMessages)
 	logCleanup(cfgErr)
-	updater := serviceUpdater{cfg: upCfg, st: hostState, messages: sessions.cliMessages}
+	updater := serviceUpdater{cfg: upCfg, st: hostState, messages: sessions.cliMessages, lang: options.languageSource()}
 	agents := agent.NewStore(filepath.Join(partDir, "agents"))
 	if n, ok := agent.UserBudgetFromEnv(os.Getenv); ok {
 		agents.SetUserBudget(n)

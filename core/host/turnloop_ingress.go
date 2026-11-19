@@ -15,6 +15,7 @@ func (d *sessionDriver) Pick(value string) bool {
 }
 
 func (d *sessionDriver) enqueue(item queued) bool {
+	item.interrupts = d.interrupts.Load()
 	select {
 	case d.queue <- item:
 		return true
@@ -23,9 +24,19 @@ func (d *sessionDriver) enqueue(item queued) bool {
 	}
 }
 
-const interruptSendTimeout = 2 * time.Second
+const (
+	interruptSendTimeout = 2 * time.Second
+	authorHandoff        = "handoff"
+)
+
+func isOrchestratedTurn(ev contracts.Event) bool {
+	return ev.Who == authorSeed || ev.Who == authorHandoff
+}
 
 func (d *sessionDriver) Interrupt() {
+	if d.compacting.Load() {
+		d.interrupts.Add(1)
+	}
 	go func() {
 		select {
 		case d.toBridge <- contracts.Event{T: eventwire.EventInterrupt}:
@@ -39,7 +50,7 @@ func (d *sessionDriver) emitPaused(ctx context.Context, reason string) {
 }
 
 func (d *sessionDriver) Seed(task string) bool {
-	return d.enqueue(queued{ev: contracts.Event{T: eventwire.EventInput, Who: "handoff", Text: task, TurnID: newTurnID()}})
+	return d.enqueue(queued{ev: contracts.Event{T: eventwire.EventInput, Who: authorHandoff, Text: task, TurnID: newTurnID()}})
 }
 
 func (d *sessionDriver) SeedAndWait(ctx context.Context, task string) (string, bool) {
@@ -52,7 +63,7 @@ func (d *sessionDriver) SeedAndWaitWithTurnID(ctx context.Context, task, turnID 
 	d.pendingReply = reply
 	d.seenMu.Unlock()
 	select {
-	case d.queue <- queued{ev: contracts.Event{T: eventwire.EventInput, Who: authorSeed, Text: task, TurnID: turnID}}:
+	case d.queue <- queued{ev: contracts.Event{T: eventwire.EventInput, Who: authorSeed, Text: task, TurnID: turnID}, interrupts: d.interrupts.Load()}:
 	case <-ctx.Done():
 		d.seenMu.Lock()
 		d.pendingReply = nil
@@ -181,8 +192,9 @@ func (d *sessionDriver) submit(ctx context.Context, inbound contracts.Inbound) b
 	})
 	select {
 	case d.queue <- queued{
-		ev:     contracts.Event{T: eventwire.EventInput, Who: inbound.Author, Text: inbound.Text, Attachments: atts},
-		origin: inbound.Conversation,
+		ev:         contracts.Event{T: eventwire.EventInput, Who: inbound.Author, Text: inbound.Text, Attachments: atts},
+		origin:     inbound.Conversation,
+		interrupts: d.interrupts.Load(),
 	}:
 		return true
 	case <-ctx.Done():

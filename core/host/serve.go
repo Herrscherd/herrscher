@@ -29,11 +29,13 @@ type serviceUpdater struct {
 	cfg      service.Config
 	st       *state.State
 	messages *clitext.Messages
+	lang     languageSource
 }
 
 const buildTimeout = 5 * time.Minute
 
 func (u serviceUpdater) Build(ctx context.Context, pull bool) (string, error) {
+	lang := clitext.CallerLanguage(ctx, u.lang)
 	src := u.st.SourceDir()
 	if src == "" {
 		return "", errSourceNotSet
@@ -41,14 +43,14 @@ func (u serviceUpdater) Build(ctx context.Context, pull bool) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, buildTimeout)
 	defer cancel()
 	if pull {
-		if err := service.Pull(ctx, u.messages, src); err != nil {
+		if err := service.Pull(ctx, u.messages, lang, src); err != nil {
 			return "", err
 		}
 	}
-	if err := service.Build(ctx, u.messages, src, u.cfg.BinPath); err != nil {
+	if err := service.Build(ctx, u.messages, lang, src, u.cfg.BinPath); err != nil {
 		return "", err
 	}
-	if err := service.Smoke(ctx, u.messages, u.cfg.BinPath); err != nil {
+	if err := service.Smoke(ctx, u.messages, lang, u.cfg.BinPath); err != nil {
 		return "", err
 	}
 	return service.SourceVersion(ctx, src), nil

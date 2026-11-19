@@ -3208,11 +3208,6 @@
     "other": "no compactor plugin is registered under this name"
   },
   {
-    "id": "cli.host.fault.compactor_settings",
-    "description": "Erreur d'une commande hôte rendue à l'opérateur (compactor settings)",
-    "other": "the compaction stage is missing required settings"
-  },
-  {
     "id": "cli.host.fault.compact_queue_full",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (compact queue full)",
     "other": "the turn queue is full, the compaction was not queued"

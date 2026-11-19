@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
@@ -23,7 +24,7 @@ func TestBuildForCrossCompiles(t *testing.T) {
 	src := t.TempDir()
 	writeGoModule(t, src)
 	out := filepath.Join(t.TempDir(), "hs")
-	if err := BuildFor(context.Background(), clitext.NewMessages(), src, out, "linux", "arm64"); err != nil {
+	if err := BuildFor(context.Background(), clitext.NewMessages(), i18n.English, src, out, "linux", "arm64"); err != nil {
 		t.Fatalf("cross build: %v", err)
 	}
 	if _, err := os.Stat(out); err != nil {
@@ -32,7 +33,7 @@ func TestBuildForCrossCompiles(t *testing.T) {
 }
 
 func TestBuildForRefusesSomethingThatIsNotTheSource(t *testing.T) {
-	if err := BuildFor(context.Background(), clitext.NewMessages(), t.TempDir(), filepath.Join(t.TempDir(), "hs"), "linux", "amd64"); err == nil {
+	if err := BuildFor(context.Background(), clitext.NewMessages(), i18n.English, t.TempDir(), filepath.Join(t.TempDir(), "hs"), "linux", "amd64"); err == nil {
 		t.Fatal("want a refusal for a directory that is not a herrscher checkout")
 	}
 }

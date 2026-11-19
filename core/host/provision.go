@@ -83,7 +83,7 @@ func platformFromUname(out string) (string, string, error) {
 	return goos, goarch, nil
 }
 
-func provisionHost(ctx context.Context, messages *hostMessages, cliMessages *clitext.Messages, run hostRunner, host state.Host, src string) (state.Host, error) {
+func provisionHost(ctx context.Context, messages *hostMessages, cliMessages *clitext.Messages, lang languageSource, run hostRunner, host state.Host, src string) (state.Host, error) {
 	if src == "" {
 		return host, &noSourceCheckoutError{Host: host.Name}
 	}
@@ -115,7 +115,7 @@ func provisionHost(ctx context.Context, messages *hostMessages, cliMessages *cli
 	}
 	defer func() { logCleanup(os.RemoveAll(stage)) }()
 	staged := filepath.Join(stage, "herrscher")
-	if err := service.BuildFor(ctx, cliMessages, src, staged, goos, goarch); err != nil {
+	if err := service.BuildFor(ctx, cliMessages, clitext.CallerLanguage(ctx, lang), src, staged, goos, goarch); err != nil {
 		return host, err
 	}
 

@@ -51,7 +51,6 @@ func hostErrorKeys() []hostErrorKey {
 		{errNoCompactorFactory, "cli.host.fault.no_compactor_factory"},
 		{errNilCompactor, "cli.host.fault.nil_compactor"},
 		{errNoCompactorPlugin, "cli.host.fault.no_compactor_plugin"},
-		{errCompactorSettings, "cli.host.fault.compactor_settings"},
 		{errCompactQueueFull, "cli.host.fault.compact_queue_full"},
 		{errWarningAbandoned, "cli.host.fault.warning_abandoned"},
 		{errWarningLate, "cli.host.fault.warning_late"},

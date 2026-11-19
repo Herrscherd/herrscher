@@ -26,6 +26,11 @@ func (d *sessionDriver) pump(ctx context.Context) {
 				d.releaseTurn()
 				continue
 			}
+			if d.abandonedByInterrupt(item) {
+				d.fanOut(ctx, contracts.Event{T: eventwire.EventAbandoned})
+				d.releaseTurn()
+				continue
+			}
 			event, guard, ok := d.prepareTurn(ctx, item)
 			if !ok {
 				d.releaseTurn()
@@ -39,6 +44,10 @@ func (d *sessionDriver) pump(ctx context.Context) {
 			d.releaseTurn()
 		}
 	}
+}
+
+func (d *sessionDriver) abandonedByInterrupt(item queued) bool {
+	return item.ev.T == eventwire.EventInput && !isOrchestratedTurn(item.ev) && item.interrupts != d.interrupts.Load()
 }
 
 func (d *sessionDriver) enterTurn(ctx context.Context) bool {

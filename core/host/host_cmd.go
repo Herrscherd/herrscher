@@ -49,7 +49,7 @@ func addHost(ctx context.Context, messages *hostMessages, cliMessages *clitext.M
 	if err != nil {
 		return "", err
 	}
-	provisioned, err := provisionHost(ctx, messages, cliMessages, run, host, hostState.SourceDir())
+	provisioned, err := provisionHost(ctx, messages, cliMessages, lang, run, host, hostState.SourceDir())
 	if err != nil {
 		return "", err
 	}
@@ -161,7 +161,7 @@ func provisionRegisteredHost(ctx context.Context, messages *hostMessages, cliMes
 	if err != nil {
 		return "", err
 	}
-	provisioned, err := provisionHost(ctx, messages, cliMessages, run, host, store.SourceDir())
+	provisioned, err := provisionHost(ctx, messages, cliMessages, lang, run, host, store.SourceDir())
 	if err != nil {
 		return "", err
 	}

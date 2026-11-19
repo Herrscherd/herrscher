@@ -11,6 +11,8 @@ import (
 )
 
 func (d *sessionDriver) runCompaction(ctx context.Context, trigger contracts.CompactTrigger, instruction string, run compactionPass) (contracts.CompactResult, error) {
+	d.compacting.Store(true)
+	defer d.compacting.Store(false)
 	notes := make(stageNotes)
 	stages, err := d.compactStages(run.names, notes)
 	if err != nil {

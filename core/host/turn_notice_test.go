@@ -2,7 +2,6 @@ package host
 
 import (
 	"encoding/json"
-	"errors"
 	"strings"
 	"testing"
 
@@ -11,8 +10,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
-
-const turnInterruptedFallback = "The last message got no reply, send it again if needed."
 
 func interruptedTurnTranscript(t *testing.T) string {
 	t.Helper()
@@ -40,33 +37,18 @@ func TestInterruptedTurnScrollbackLineCarriesTheNotice(t *testing.T) {
 	if interrupted.Notice == nil || interrupted.Notice.Code != contracts.CodeTurnInterrupted || interrupted.Notice.Args != nil {
 		t.Fatalf("interruption notice = %+v, want CodeTurnInterrupted without arguments", interrupted.Notice)
 	}
-	if interrupted.Text != turnInterruptedFallback {
-		t.Fatalf("interruption text = %q, want the fallback %q", interrupted.Text, turnInterruptedFallback)
+	if interrupted.Text != "" {
+		t.Fatalf("interruption text = %q, want none: the TUI renders the notice from its code", interrupted.Text)
 	}
 	if interrupted.TurnID != "turn-1" {
 		t.Fatalf("interruption TurnID = %q, want the interrupted turn turn-1", interrupted.TurnID)
 	}
 }
 
-func TestAnnounceInterruptedTurnWithFailingRenderWritesNoEmptyLineAndKeepsTheMark(t *testing.T) {
-	partDir := t.TempDir()
-	h, st := newMarkHub(t, partDir, state.Session{Name: "main", InterruptedTurn: "turn-1"})
-	failing := func(i18n.Language) (string, error) { return "", errors.New("render failed") }
-
-	h.announceInterruptedTurnWith(state.Session{Name: "main", InterruptedTurn: "turn-1"}, failing)
-
-	if lines := h.Scrollback("main"); len(lines) != 0 {
-		t.Fatalf("scrollback = %+v after a failed render, want no line", lines)
-	}
-	if got, _ := st.FindSession("main"); got.InterruptedTurn != "turn-1" {
-		t.Fatalf("mark = %q after a failed render, want kept for the next start", got.InterruptedTurn)
-	}
-}
-
 func TestAnnounceInterruptedTurnDoesNotDuplicateAnAnnouncedNotice(t *testing.T) {
 	partDir := t.TempDir()
 	h, st := newMarkHub(t, partDir, state.Session{Name: "main", InterruptedTurn: "turn-1"})
-	if err := state.AppendTranscript(state.TranscriptPath(partDir, "main"), state.TranscriptEntry{Role: "notice", Kind: turnInterruptedKind, Text: turnInterruptedFallback, TurnID: "turn-1"}); err != nil {
+	if err := state.AppendTranscript(state.TranscriptPath(partDir, "main"), state.TranscriptEntry{Role: "notice", Kind: turnInterruptedKind, TurnID: "turn-1"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -90,7 +72,9 @@ func TestAnnounceInterruptedTurnDoesNotDuplicateAnAnnouncedNotice(t *testing.T) 
 func TestSessionScrollbackJSONKeepsTheNotice(t *testing.T) {
 	partDir := interruptedTurnTranscript(t)
 
-	result, err := sessionScrollbackVerb(partDir).Run(t.Context(), contracts.Input{Args: map[string]string{paramName: "main"}})
+	ctx := clitext.WithCallerLanguage(t.Context(), i18n.French.String())
+	englishFallback := func() i18n.Language { return i18n.English }
+	result, err := sessionScrollbackVerb(partDir, englishFallback).Run(ctx, contracts.Input{Args: map[string]string{paramName: "main"}})
 	if err != nil {
 		t.Fatalf("session scrollback: %v", err)
 	}
@@ -99,7 +83,7 @@ func TestSessionScrollbackJSONKeepsTheNotice(t *testing.T) {
 		t.Fatalf("session scrollback data = %T, want a JSON string", result.Data())
 	}
 	var lines []contracts.ScrollbackLine
-	if err := json.Unmarshal([]byte(raw), &lines); err != nil {
+	if err = json.Unmarshal([]byte(raw), &lines); err != nil {
 		t.Fatalf("session scrollback JSON: %v", err)
 	}
 	if len(lines) != 2 || lines[1].Notice == nil || lines[1].Notice.Code != contracts.CodeTurnInterrupted {
@@ -107,5 +91,12 @@ func TestSessionScrollbackJSONKeepsTheNotice(t *testing.T) {
 	}
 	if strings.Count(raw, `"Notice"`) != 1 {
 		t.Fatalf("session scrollback = %s, want a notice only on the interruption line", raw)
+	}
+	want, err := contracts.NewRenderer().Render(i18n.French, contracts.Notice{Code: contracts.CodeTurnInterrupted})
+	if err != nil {
+		t.Fatalf("contracts render: %v", err)
+	}
+	if lines[1].Text != want {
+		t.Fatalf("session scrollback text = %q, want the interruption in the client language %q", lines[1].Text, want)
 	}
 }

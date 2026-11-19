@@ -44,7 +44,7 @@ func addSessionVerbs(reg *cli.Registry, cliMessages *clitext.Messages, lang lang
 		sessionInfoVerb(store, partDir, sessions, models),
 		sessionOverviewVerb(overviewSource{st: store, partDir: partDir, sessions: sessions, approvals: approvals, tallies: newTallyCache(), seen: seen}),
 		sessionSeenVerb(seen),
-		sessionScrollbackVerb(partDir),
+		sessionScrollbackVerb(partDir, lang),
 		sessionInterruptVerb(cliMessages, lang, sessions),
 		sessionCompactVerb(cliMessages, lang, store, sessions),
 		sessionSetCompactVerb(sessions.messages, store),
@@ -159,14 +159,24 @@ func sessionOverviewVerb(src overviewSource) contracts.Cmd {
 		})
 }
 
-func sessionScrollbackVerb(partDir string) contracts.Cmd {
+func sessionScrollbackVerb(partDir string, lang languageSource) contracts.Cmd {
 	return contracts.New(nsSession, "scrollback").
 		Help(clitext.CmdHelpSessionScrollback).
 		Param(paramName, clitext.CmdParamSessionScrollbackName, true).
-		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			b, err := json.Marshal(scrollbackOf(partDir, in.Get(paramName)))
+		Do(func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
+			b, err := json.Marshal(cliScrollback(partDir, in.Get(paramName), clitext.CallerLanguage(ctx, lang)))
 			return contracts.DataResult(string(b)), err
 		})
+}
+
+func cliScrollback(partDir, name string, lang i18n.Language) []contracts.ScrollbackLine {
+	lines := scrollbackOf(partDir, name)
+	for idx := range lines {
+		if lines[idx].Notice != nil && lines[idx].Text == "" {
+			lines[idx].Text = clitext.RenderNotice(lang, *lines[idx].Notice)
+		}
+	}
+	return lines
 }
 
 func sessionPickVerb(cliMessages *clitext.Messages, lang languageSource, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {

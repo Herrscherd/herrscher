@@ -22,9 +22,7 @@ func (d *sessionDriver) pump(ctx context.Context) {
 				return
 			}
 			if item.ev.T == eventwire.EventCompactNow {
-				d.compacting.Store(true)
 				d.runCompactNow(ctx, d.takeCompactInstruction())
-				d.compacting.Store(false)
 				d.releaseTurn()
 				continue
 			}

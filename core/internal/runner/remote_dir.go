@@ -38,7 +38,7 @@ func RemoteRuntimeDir(ctx context.Context, target, controlPath string) (string, 
 
 func commandError(err error) error {
 	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
-		return fmt.Errorf("%w: %s", exitErr, strings.TrimSpace(string(exitErr.Stderr)))
+		return fmt.Errorf("%w: %s", exitErr, boundedStderr(exitErr.Stderr))
 	}
 	return err
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -104,5 +105,22 @@ func TestRemoteEnvBlockNamesTheBinaryOverThere(t *testing.T) {
 	}
 	if env[contracts.EnvApprovalsMode] != "strict" {
 		t.Fatalf("mode = %q", env[contracts.EnvApprovalsMode])
+	}
+}
+
+func TestRemoteEnvBlockNeverCarriesTheSessionToken(t *testing.T) {
+	s := NewSupervisor(context.Background(), "/opt/herrscher", testLayout(t))
+	s.SetGateResolver(func(string) string { return "tool" })
+	s.SetSessionToken(func(string) string { return "tok-must-stay-home" })
+	s.SetHostLookup(func(_ string) (Placement, bool) {
+		return Placement{SSH: "me@build1", Bin: "/remote/bin/herrscher"}, true
+	})
+
+	block := s.remoteEnvBlock(state.Session{Name: "api", ChannelID: "c1", Vendor: "codex", Approvals: "strict", Host: "build1"}, remoteDirForTest)
+	if strings.Contains(block, "tok-must-stay-home") {
+		t.Fatalf("the session token left the daemon in the remote environment: %q", block)
+	}
+	if _, ok := contracts.ParseEnvSetting(block)[control.ApprovalKeyVar]; ok {
+		t.Fatalf("%s is set in the remote environment", control.ApprovalKeyVar)
 	}
 }

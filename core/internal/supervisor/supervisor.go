@@ -444,9 +444,6 @@ func (s *Supervisor) remoteEnvBlock(sess state.Session, remoteDir string) string
 	}
 	env["TMPDIR"] = "/tmp"
 	env[control.SessionVar] = sess.Name
-	if s.sessionToken != nil {
-		env[control.ApprovalKeyVar] = s.sessionToken(sess.Name)
-	}
 	if s.sessionCmdSocket != nil {
 		env[control.CommandSocketVar] = control.RemoteCommandSocketPath(remoteDir, s.instanceID, sess.Name)
 	}

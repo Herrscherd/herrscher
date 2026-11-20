@@ -801,6 +801,66 @@
     "other": "herrscher : l'attente d'approbation a pris fin, donc {{.Request}} est refusé"
   },
   {
+    "id": "approval.denied",
+    "description": "L'opérateur a refusé la demande d'outil sans donner de motif, elle est donc refusée, Request nomme l'outil et son sujet",
+    "other": "herrscher : {{.Request}} a été refusé par l'opérateur"
+  },
+  {
+    "id": "approval.plan_mode",
+    "description": "La session est en mode plan, qui ne fait que lire : une demande d'outil qui écrirait est refusée et l'opérateur valide le plan avant toute écriture, Request nomme l'outil et son sujet",
+    "other": "herrscher : {{.Request}} a été refusé : cette session est en mode plan, qui ne fait que lire ; écris le plan, l'opérateur le valide avant toute écriture"
+  },
+  {
+    "id": "approval.policy_denied",
+    "description": "Une règle de politique refuse la demande d'outil avant qu'un opérateur soit sollicité, Request nomme l'outil et son sujet",
+    "other": "herrscher : {{.Request}} a été refusé par la politique"
+  },
+  {
+    "id": "approval.fleet_full",
+    "description": "Trop de demandes d'outils de toute la flotte attendent déjà un opérateur, celle-ci est donc refusée, Request nomme l'outil et son sujet, Limit porte le maximum",
+    "other": "herrscher : {{.Request}} a été refusé : {{.Limit}} appels d'outils de la flotte sont déjà en attente d'un humain, c'est la limite ; chaque réponse libère une place"
+  },
+  {
+    "id": "approval.session_full",
+    "description": "Trop de demandes d'outils d'une même session attendent déjà un opérateur, celle-ci est donc refusée, Request nomme l'outil et son sujet, Session nomme la session, Limit porte le maximum",
+    "other": "herrscher : {{.Request}} a été refusé : la session « {{.Session}} » a déjà {{.Limit}} appels d'outils qui sont en attente d'un humain, c'est la limite ; attends leurs réponses, et demande moins de choses à la fois"
+  },
+  {
+    "id": "approval.operator_refused",
+    "description": "L'opérateur a refusé une demande d'outil en donnant un motif, que l'agent reçoit, Reason porte ce motif",
+    "other": "herrscher : l'opérateur a refusé : {{.Reason}}"
+  },
+  {
+    "id": "approval.session_not_running",
+    "description": "La réponse à une demande autorisée une fois ne peut pas être retenue, sa session ne tourne pas, Request nomme l'outil et son sujet, Session nomme la session",
+    "other": "approbations : {{.Request}} a été autorisé une fois : la session « {{.Session}} » ne tourne pas, elle ne peut donc pas retenir la réponse"
+  },
+  {
+    "id": "approval.no_exact_subject",
+    "description": "Une demande autorisée toujours ne peut pas devenir une règle, son sujet n'a pas de forme exacte qu'une règle puisse nommer sans couvrir plus que cette demande, Request nomme l'outil et son sujet",
+    "other": "approbations : {{.Request}} a été autorisé une fois : il n'a pas de sujet exact qu'une règle puisse nommer sans couvrir plus que cette demande"
+  },
+  {
+    "id": "approval.no_rule_store",
+    "description": "Une demande autorisée toujours ne peut pas devenir une règle, aucun magasin de règles n'est attaché, Request nomme l'outil et son sujet",
+    "other": "approbations : {{.Request}} a été autorisé une fois : aucun magasin de règles n'est attaché, donc aucune règle n'a été écrite"
+  },
+  {
+    "id": "approval.rule_not_saved",
+    "description": "Une demande autorisée toujours n'a pas pu être écrite dans le magasin de règles, Request nomme l'outil et son sujet, Rule nomme la règle, Detail porte la cause",
+    "other": "approbations : {{.Request}} a été autorisé une fois : la règle « {{.Rule}} » n'a pas été enregistrée : {{.Detail}}"
+  },
+  {
+    "id": "approval.smart_no_model",
+    "description": "Le mode smart n'a pas de modèle pour évaluer une demande d'outil, elle est donc décidée comme en mode demande, Request nomme l'outil et son sujet",
+    "other": "approbations : le mode smart n'a pas de modèle pour évaluer {{.Request}}, il est donc décidé comme en mode demande"
+  },
+  {
+    "id": "approval.smart_rate_failed",
+    "description": "Le mode smart n'a pas pu évaluer une demande d'outil, elle est donc décidée comme en mode demande, Request nomme l'outil et son sujet, Detail porte la cause",
+    "other": "approbations : le mode smart n'a pas pu évaluer {{.Request}} ({{.Detail}}), il est donc décidé comme en mode demande"
+  },
+  {
     "id": "approval.unknown_consumer",
     "description": "Le démon refuse une demande d'approbation dont il ne connaît pas le consommateur, sans rien demander à l'opérateur",
     "other": "herrscher : cette demande d'approbation n'a pas de consommateur connu, cet appel d'outil est donc refusé"

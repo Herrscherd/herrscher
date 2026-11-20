@@ -415,11 +415,6 @@
     "other": "le modèle « {{.Model}} » a besoin d'un environnement de lancement de passerelle, que le résolveur du backend distant ne peut pas transporter ; désactiver HERRSCHER_REMOTE=backend ou choisir un modèle natif"
   },
   {
-    "id": "remote.session_unsupported",
-    "description": "Une session ne peut pas encore tourner sur un backend distant, Session la nomme",
-    "other": "la session « {{.Session}} » ne peut pas tourner sur un backend distant : son identité d'approbation ne peut pas encore atteindre l'hôte distant ; désactiver HERRSCHER_REMOTE=backend ou retirer la session"
-  },
-  {
     "id": "remote.account_unsupported",
     "description": "Un compte ne peut pas être appliqué sur un backend distant, Account le nomme",
     "other": "le compte « {{.Account}} » ne peut pas être appliqué : le backend tourne sur un hôte distant, qui résout les comptes dans son propre magasin ; retirer le compte ou désactiver HERRSCHER_REMOTE=backend"

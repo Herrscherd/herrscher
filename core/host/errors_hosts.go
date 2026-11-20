@@ -227,22 +227,6 @@ func (e *instanceIDMismatchError) render(messages *hostMessages, lang i18n.Langu
 	return messages.text(lang, "serve.instance_id_mismatch", map[string]any{"Have": e.Have, "Want": e.Want})
 }
 
-type remoteSessionError struct {
-	messages *hostMessages
-	Session  string
-}
-
-func (e *remoteSessionError) Error() string {
-	if e == nil {
-		return nilErrorText
-	}
-	return e.render(e.messages, i18n.English)
-}
-
-func (e *remoteSessionError) render(messages *hostMessages, lang i18n.Language) string {
-	return messages.text(lang, "remote.session_unsupported", map[string]any{"Session": e.Session})
-}
-
 type remoteAccountError struct {
 	messages *hostMessages
 	Account  string

@@ -415,11 +415,6 @@
     "other": "model \"{{.Model}}\" needs a gateway spawn environment, which the remote backend resolver cannot carry; unset HERRSCHER_REMOTE=backend or pick a native model"
   },
   {
-    "id": "remote.session_unsupported",
-    "description": "A session cannot run on a remote backend yet, Session names it",
-    "other": "session \"{{.Session}}\" cannot run on a remote backend: its approval identity cannot reach the remote host yet; unset HERRSCHER_REMOTE=backend or drop the session"
-  },
-  {
     "id": "remote.account_unsupported",
     "description": "An account cannot be applied on a remote backend, Account names it",
     "other": "account \"{{.Account}}\" cannot be applied: the backend runs on a remote host, which resolves accounts in its own store; drop the account or unset HERRSCHER_REMOTE=backend"

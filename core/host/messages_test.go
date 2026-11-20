@@ -141,7 +141,6 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"remote.extract_member":             {"Detail", "Member"},
 		"remote.unsafe_member":              {"Member", "Root"},
 		"remote.gateway_env_unsupported":    {"Model"},
-		"remote.session_unsupported":        {"Session"},
 		"remote.account_unsupported":        {"Account"},
 		"approval.prompt":                   {"Request"},
 		"approval.hint":                     {"Command", "Help"},
@@ -520,7 +519,6 @@ func typedNilLocalizables() []error {
 		(*gatewayEnvUnsupportedError)(nil),
 		(*unsafeTarMemberError)(nil),
 		(*instanceIDMismatchError)(nil),
-		(*remoteSessionError)(nil),
 		(*remoteAccountError)(nil),
 	}
 }

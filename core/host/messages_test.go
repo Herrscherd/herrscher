@@ -223,6 +223,7 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"approve.wait_truncated":            {"Wait", "Bound"},
 		"approval.request_unreadable":       {"Detail"},
 		"approval.no_desk":                  nil,
+		"approval.unknown_consumer":         nil,
 		"hook.decision_unwritable":          {"Decision", "Detail"},
 	}
 	i18ntest.CheckDeclared(t, declared, hostLocaleSource(t))

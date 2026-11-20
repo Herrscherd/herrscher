@@ -51,19 +51,38 @@ const (
 	tokenConsumer
 )
 
-func consumerBound(consumer approvalConsumer) time.Duration {
-	if consumer == bridgeConsumer {
-		return bridgeDeskBound()
+const approvalUnknownConsumer = "approval.unknown_consumer"
+
+func consumerBound(consumer approvalConsumer) (time.Duration, bool) {
+	switch consumer {
+	case bridgeConsumer:
+		return bridgeDeskBound(), true
+	case seedConsumer, tokenConsumer:
+		return hookDeskBound(), true
 	}
-	return hookDeskBound()
+	return 0, false
 }
 
 func (d *approvalDesk) askerFor(consumer approvalConsumer, session string) contracts.ApprovalAsker {
-	return d.askerWithin(session, consumerBound(consumer))
+	bound, known := consumerBound(consumer)
+	if !known {
+		return func(_ context.Context, req contracts.ApprovalRequest) contracts.ApprovalAnswer {
+			return contracts.ApprovalAnswer{ID: req.ID, Decision: contracts.DecisionDeny, Reason: d.unknownConsumerReason()}
+		}
+	}
+	return d.askerWithin(session, bound)
 }
 
 func (d *approvalDesk) decideFor(ctx context.Context, consumer approvalConsumer, session string, req approval.Request) (approval.Decision, string) {
-	return d.decideWithin(ctx, consumerBound(consumer), session, req)
+	bound, known := consumerBound(consumer)
+	if !known {
+		return approval.Deny, d.unknownConsumerReason()
+	}
+	return d.decideWithin(ctx, bound, session, req)
+}
+
+func (d *approvalDesk) unknownConsumerReason() string {
+	return d.messages.text(d.lang(), approvalUnknownConsumer, nil)
 }
 
 func (d *approvalDesk) askerWithin(session string, bound time.Duration) contracts.ApprovalAsker {

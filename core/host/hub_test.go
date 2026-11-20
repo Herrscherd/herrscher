@@ -234,6 +234,7 @@ func TestReconcileStaysSilentOnceTheHubIsClosed(t *testing.T) {
 	}
 	h.stopLive()
 	h.reconcile(t.Context())
+	closeHubSink(t, h)
 	if printed.Len() != 0 {
 		t.Fatalf("reconcile on a closed hub printed %q, want no warning", printed.String())
 	}

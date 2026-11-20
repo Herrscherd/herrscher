@@ -104,6 +104,33 @@ func TestASessionVerdictBeforeTheBoundIsGrantedAndRemembered(t *testing.T) {
 	})
 }
 
+func TestAZeroConsumerIsRefusedAtOnceAndAsksNothing(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		desk, approvalTab := newLongWaitDesk(t)
+		var zero approvalConsumer
+		req := approval.Request{Tool: "Bash", Subject: "git push"}
+		started := time.Now()
+
+		decision, reason := desk.decideFor(context.Background(), zero, "s1", req)
+		if decision != approval.Deny || reason == "" {
+			t.Fatalf("a zero consumer must be refused with a reason, got %q %q", decision, reason)
+		}
+		answer := desk.askerFor(zero, "s1")(context.Background(), contracts.ApprovalRequest{ID: "req-zero", Tool: "Bash", Subject: "git push"})
+		if answer.ID != "req-zero" || answer.Allowed() || answer.Reason == "" {
+			t.Fatalf("a zero consumer's asker must refuse with a reason, got %+v", answer)
+		}
+		if elapsed := time.Since(started); elapsed != 0 {
+			t.Fatalf("a zero consumer waited %v, want no wait at all", elapsed)
+		}
+		if pending := pendingApprovals(approvalTab); len(pending) != 0 {
+			t.Fatalf("a zero consumer left %d approvals for the operator", len(pending))
+		}
+		if desk.sessions.remembers("s1", req) {
+			t.Fatal("a zero consumer recorded a rule")
+		}
+	})
+}
+
 func assertNoLateRule(t *testing.T, desk *approvalDesk, approvalTab *approvalTable, id string, req approval.Request) {
 	t.Helper()
 	if pending := pendingApprovals(approvalTab); len(pending) != 0 {

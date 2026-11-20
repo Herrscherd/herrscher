@@ -796,6 +796,11 @@
     "other": "herrscher : cette session n'a pas de bureau d'approbation, cet appel d'outil est donc refusé"
   },
   {
+    "id": "approval.unknown_consumer",
+    "description": "Le démon refuse une demande d'approbation dont il ne connaît pas le consommateur, sans rien demander à l'opérateur",
+    "other": "herrscher : cette demande d'approbation n'a pas de consommateur connu, cet appel d'outil est donc refusé"
+  },
+  {
     "id": "hook.decision_unwritable",
     "description": "The approval hook could not write its decision to stdout, Decision names it and Detail carries the error",
     "other": "herrscher : impossible d'écrire la décision {{.Decision}} : {{.Detail}}"

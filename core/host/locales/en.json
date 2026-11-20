@@ -796,6 +796,11 @@
     "other": "herrscher: this session has no approval desk, so this tool call is refused"
   },
   {
+    "id": "approval.unknown_consumer",
+    "description": "The daemon refuses an approval request whose consumer it does not know, so nothing is asked of the operator",
+    "other": "herrscher: this approval request has no known consumer, so this tool call is refused"
+  },
+  {
     "id": "hook.decision_unwritable",
     "description": "The approval hook could not write its decision to stdout, Decision names it and Detail carries the error",
     "other": "herrscher: could not write the {{.Decision}} decision: {{.Detail}}"

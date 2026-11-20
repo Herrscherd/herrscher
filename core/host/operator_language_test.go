@@ -373,6 +373,7 @@ func TestClosedHubReconcileOpensNoSessionQuietly(t *testing.T) {
 	h.stopLive()
 	t.Cleanup(h.stopLive)
 	h.reconcile(context.Background())
+	closeHubSink(t, h)
 	if printed.Len() != 0 {
 		t.Fatalf("a closed hub printed %q while its sessions were refused, want no warning", printed.String())
 	}

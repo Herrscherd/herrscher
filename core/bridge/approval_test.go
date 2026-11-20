@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
@@ -60,7 +61,7 @@ func operatorAllows(t *testing.T, sent <-chan contracts.Event, approvals *approv
 	}
 }
 
-func newChannelUnderOperator(t *testing.T) (*approvalChannel, chan contracts.Event) {
+func newChannelUnderOperator(t *testing.T) *approvalChannel {
 	t.Helper()
 	sent := make(chan contracts.Event, 8)
 	approvals := newApprovalChannel(func(event contracts.Event) error {
@@ -69,11 +70,11 @@ func newChannelUnderOperator(t *testing.T) (*approvalChannel, chan contracts.Eve
 	})
 	go operatorAllows(t, sent, approvals)
 	t.Cleanup(func() { close(sent) })
-	return approvals, sent
+	return approvals
 }
 
 func TestTurnCompactAndTurnEachReceiveTheBridgeAsker(t *testing.T) {
-	approvals, _ := newChannelUnderOperator(t)
+	approvals := newChannelUnderOperator(t)
 	records := make(chan askRecord, 3)
 	backend := askingBackend{records: records}
 	aff := affordances{approvals: approvals}
@@ -134,5 +135,61 @@ func TestApprovalChannelIgnoresAnswersNobodyAwaits(t *testing.T) {
 	}
 	if approvals.deliver(contracts.Event{T: eventwire.EventChunk, Text: "chunk"}) {
 		t.Fatal("a chunk was taken for an approval answer")
+	}
+}
+
+func TestApprovalChannelRefusesOnceTheHookWaitIsOver(t *testing.T) {
+	approvals := newApprovalChannel(func(contracts.Event) error { return nil })
+	approvals.wait = 10 * time.Millisecond
+	answer := approvals.asker(i18n.English)(context.Background(), contracts.ApprovalRequest{ID: "req-3", Tool: "Bash", Subject: "git push"})
+	if answer.ID != "req-3" || answer.Allowed() || !strings.Contains(answer.Reason, "10ms") {
+		t.Fatalf("answer %+v, want a denial naming the 10ms wait once nobody answered", answer)
+	}
+}
+
+func TestApprovalChannelRefusesARequestWhoseIDIsAlreadyWaiting(t *testing.T) {
+	sent := make(chan contracts.Event, 2)
+	approvals := newApprovalChannel(func(event contracts.Event) error {
+		sent <- event
+		return nil
+	})
+	first := make(chan contracts.ApprovalAnswer, 1)
+	go func() {
+		first <- approvals.asker(i18n.English)(context.Background(), contracts.ApprovalRequest{ID: "req-4", Tool: "Bash", Subject: "git push"})
+	}()
+	<-sent
+	second := approvals.asker(i18n.English)(context.Background(), contracts.ApprovalRequest{ID: "req-4", Tool: "Bash", Subject: "git status"})
+	if second.ID != "req-4" || second.Allowed() || !strings.Contains(second.Reason, "same ID") {
+		t.Fatalf("second answer %+v, want the same-ID request refused at once", second)
+	}
+	if len(sent) != 0 {
+		t.Fatal("the duplicate request was sent to the hub as well")
+	}
+	if !approvals.deliver(contracts.Event{T: eventwire.EventApprovalAnswer, Value: `{"ID":"req-4","Decision":"allow"}`}) {
+		t.Fatal("the answer was not recognised")
+	}
+	if answer := <-first; !answer.Allowed() {
+		t.Fatalf("the first request got %+v, want its own answer", answer)
+	}
+}
+
+func TestApprovalChannelKeepsTwoConcurrentRequestsApart(t *testing.T) {
+	approvals := newChannelUnderOperator(t)
+	answers := make(chan contracts.ApprovalAnswer, 2)
+	for _, id := range []string{"req-5", "req-6"} {
+		go func() {
+			answers <- approvals.asker(i18n.English)(context.Background(), contracts.ApprovalRequest{ID: id, Tool: "Bash", Subject: "git push " + id})
+		}()
+	}
+	seen := make(map[string]bool)
+	for range 2 {
+		answer := <-answers
+		if !answer.Allowed() {
+			t.Fatalf("answer %+v, want allowed", answer)
+		}
+		seen[answer.ID] = true
+	}
+	if !seen["req-5"] || !seen["req-6"] {
+		t.Fatalf("answers went to %v, want each request answered once", seen)
 	}
 }

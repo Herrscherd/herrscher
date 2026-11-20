@@ -3,5 +3,15 @@
     "id": "approval.unavailable",
     "description": "Un appel d'outil est refusé parce que le pont n'a pas pu demander l'approbation à l'opérateur, Detail porte la cause",
     "other": "herrscher : l'approbation n'a pas pu être demandée, cet appel d'outil est donc refusé : {{.Detail}}"
+  },
+  {
+    "id": "approval.duplicate",
+    "description": "Un appel d'outil est refusé parce qu'une demande portant le même identifiant attend déjà l'opérateur",
+    "other": "une demande portant le même identifiant attend déjà l'opérateur"
+  },
+  {
+    "id": "approval.no_answer",
+    "description": "Un appel d'outil est refusé parce que l'opérateur n'a pas répondu pendant l'attente du hook, Wait porte la durée",
+    "other": "personne n'a répondu dans {{.Wait}}"
   }
 ]

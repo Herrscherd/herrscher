@@ -776,6 +776,16 @@
     "other": "herrscher : la socket d'approbation n'a pas pu répondre, cet appel d'outil est donc refusé : {{.Detail}}"
   },
   {
+    "id": "approval.request_unreadable",
+    "description": "Le démon refuse une demande d'approbation du pont qu'il ne peut pas lire, Detail porte la cause",
+    "other": "herrscher : la demande d'approbation est illisible, cet appel d'outil est donc refusé : {{.Detail}}"
+  },
+  {
+    "id": "approval.no_desk",
+    "description": "Le démon refuse une demande d'approbation du pont parce que la session n'a pas de bureau d'approbation",
+    "other": "herrscher : cette session n'a pas de bureau d'approbation, cet appel d'outil est donc refusé"
+  },
+  {
     "id": "hook.decision_unwritable",
     "description": "The approval hook could not write its decision to stdout, Decision names it and Detail carries the error",
     "other": "herrscher : impossible d'écrire la décision {{.Decision}} : {{.Detail}}"

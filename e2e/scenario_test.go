@@ -89,7 +89,6 @@ func isolate(env *testscript.Env, binDir string) error {
 	}
 	vars := append([]string{
 		"HOME=" + home,
-		"TMPDIR=/tmp",
 		"PATH=" + binDir + string(os.PathListSeparator) + env.Getenv("PATH"),
 		"LANG=C.UTF-8",
 		instanceEnv + "=" + instance,

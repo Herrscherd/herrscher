@@ -1233,14 +1233,23 @@ JSON of the request (`contracts.ApprovalRequest`), and waits for an
 through the approval desk for the session bound to that connection when the bridge
 was opened. The session comes from the connection, never from a field of the
 request, so a bridge cannot ask on behalf of another session. An answer that
-cannot be sent, a hub that is gone, or a turn that ends before the answer arrives
-refuses the tool call, and the reason is written in the language the hub
-announced (`approval.unavailable` in `core/bridge/locales`). A request the daemon
-cannot decode gets no answer, so its call waits until the turn ends.
+cannot be sent, a hub that is gone, a turn that ends before the answer arrives,
+or an answer that does not come within the hook wait (`agent.HookWait`, the time
+the CLI gives a hook) refuses the tool call, and the reason is written in the
+language the hub announced (`approval.unavailable` in `core/bridge/locales`). A
+request whose ID is already waiting is refused at once (`approval.duplicate`),
+without a second request to the operator. The daemon answers every request that
+carries an ID: one it cannot decode is refused under that ID
+(`approval.request_unreadable`), and a session without an approval desk is refused
+with `approval.no_desk`. A request with no readable ID cannot be answered, so the
+bridge's wait for it ends at the hook wait.
 
 A one-shot seed run by the daemon fails at once with `the seed runtime has no
 approval desk` when it has no desk, instead of running tools that nobody could
-approve. The error is translated like the other host faults.
+approve. The error is translated like the other host faults. A `session handoff`
+run by the daemon writes its brief through the same daemon runtime, so its brief
+backend gets the session's approval asker, and it fails the same way without a
+desk.
 
 ### Using the terminal you are in
 

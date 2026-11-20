@@ -4,21 +4,26 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/eventwire"
+	"github.com/Herrscherd/herrscher/core/internal/agent"
 )
+
+const waitParam = "Wait"
 
 type approvalChannel struct {
 	send     func(contracts.Event) error
 	messages *bridgeMessages
+	wait     time.Duration
 	mu       sync.Mutex
 	waiting  map[string]chan contracts.ApprovalAnswer
 }
 
 func newApprovalChannel(send func(contracts.Event) error) *approvalChannel {
-	return &approvalChannel{send: send, messages: newBridgeMessages(), waiting: make(map[string]chan contracts.ApprovalAnswer)}
+	return &approvalChannel{send: send, messages: newBridgeMessages(), wait: agent.HookWait, waiting: make(map[string]chan contracts.ApprovalAnswer)}
 }
 
 func (c *approvalChannel) attach(ctx context.Context, lang i18n.Language) context.Context {
@@ -37,27 +42,37 @@ func (c *approvalChannel) asker(lang i18n.Language) contracts.ApprovalAsker {
 func (c *approvalChannel) ask(ctx context.Context, lang i18n.Language, req contracts.ApprovalRequest) contracts.ApprovalAnswer {
 	payload, err := json.Marshal(req)
 	if err != nil {
-		return c.refusal(lang, req, err)
+		return c.refusal(lang, req, err.Error())
 	}
-	answers := c.register(req.ID)
+	answers, registered := c.register(req.ID)
+	if !registered {
+		return c.refusal(lang, req, c.messages.render(lang, "approval.duplicate", nil))
+	}
 	defer c.unregister(req.ID)
 	if err := c.send(contracts.Event{T: eventwire.EventApprovalAsk, Value: string(payload)}); err != nil {
-		return c.refusal(lang, req, err)
+		return c.refusal(lang, req, err.Error())
 	}
+	timer := time.NewTimer(c.wait)
+	defer timer.Stop()
 	select {
 	case answer := <-answers:
 		return answer
 	case <-ctx.Done():
-		return c.refusal(lang, req, ctx.Err())
+		return c.refusal(lang, req, ctx.Err().Error())
+	case <-timer.C:
+		return c.refusal(lang, req, c.messages.render(lang, "approval.no_answer", map[string]any{waitParam: c.wait.String()}))
 	}
 }
 
-func (c *approvalChannel) register(requestID string) chan contracts.ApprovalAnswer {
-	answers := make(chan contracts.ApprovalAnswer, 1)
+func (c *approvalChannel) register(requestID string) (chan contracts.ApprovalAnswer, bool) {
 	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, taken := c.waiting[requestID]; taken {
+		return nil, false
+	}
+	answers := make(chan contracts.ApprovalAnswer, 1)
 	c.waiting[requestID] = answers
-	c.mu.Unlock()
-	return answers
+	return answers, true
 }
 
 func (c *approvalChannel) unregister(requestID string) {
@@ -85,10 +100,10 @@ func (c *approvalChannel) deliver(event contracts.Event) bool {
 	return true
 }
 
-func (c *approvalChannel) refusal(lang i18n.Language, req contracts.ApprovalRequest, cause error) contracts.ApprovalAnswer {
+func (c *approvalChannel) refusal(lang i18n.Language, req contracts.ApprovalRequest, cause string) contracts.ApprovalAnswer {
 	return contracts.ApprovalAnswer{
 		ID:       req.ID,
 		Decision: contracts.DecisionDeny,
-		Reason:   c.messages.render(lang, "approval.unavailable", map[string]any{detailParam: cause.Error()}),
+		Reason:   c.messages.render(lang, "approval.unavailable", map[string]any{detailParam: cause}),
 	}
 }

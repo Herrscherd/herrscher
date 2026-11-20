@@ -185,7 +185,7 @@ func TestApproveAllowSettlesAWaitingRequest(t *testing.T) {
 		pol := approval.Policy{{Decision: approval.Ask, Tool: "Bash", Pattern: "git push*"}}
 		done := make(chan approval.Decision, 1)
 		go func() {
-			d, _ := askApproval(context.Background(), approvalTab, sessionTab, "s1", approval.Request{Tool: "Bash", Subject: "git push"}, pol, approval.ModeAsk, 5*time.Second)
+			d, _ := askApproval(context.Background(), approvalTab, sessionTab, "s1", approval.Request{Tool: "Bash", Subject: "git push"}, pol, approval.ModeAsk, 5*time.Second, 0)
 			done <- d
 		}()
 

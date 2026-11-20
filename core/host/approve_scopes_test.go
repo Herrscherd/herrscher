@@ -44,7 +44,7 @@ func (g *eventGateway) Emit(event contracts.Event) {
 func askInBackground(approvals *approvalTable, sessions *sessionTable, session string, req approval.Request, pol approval.Policy, mode approval.Mode, wait time.Duration) <-chan askResult {
 	out := make(chan askResult, 1)
 	go func() {
-		decision, reason := askApproval(context.Background(), approvals, sessions, session, req, pol, mode, wait)
+		decision, reason := askApproval(context.Background(), approvals, sessions, session, req, pol, mode, wait, 0)
 		out <- askResult{decision: decision, reason: reason}
 	}()
 	return out

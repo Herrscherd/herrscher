@@ -30,7 +30,7 @@ func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, cha
 	defer closeRead(acc)
 	approvals := bridgeApprovals{messages: sessions.messages, lang: identity.operator}
 	if desk != nil {
-		approvals.asker = desk.asker(name, BridgeApprovalWait())
+		approvals.asker = desk.asker(name, bridgeDeskBound())
 	}
 	if approvals.lang == nil {
 		approvals.lang = fixedLanguageSource(i18n.English)

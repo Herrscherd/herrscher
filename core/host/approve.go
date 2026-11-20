@@ -26,11 +26,12 @@ const (
 )
 
 type pendingApproval struct {
-	id      string
-	session string
-	req     approval.Request
-	asked   time.Time
-	answer  chan approvalVerdict
+	id       string
+	session  string
+	req      approval.Request
+	asked    time.Time
+	deadline time.Time
+	answer   chan approvalVerdict
 }
 
 type approvalVerdict struct {
@@ -145,7 +146,7 @@ func (t *approvalTable) rated(ctx context.Context, sessions *sessionTable, sessi
 	return risk.Decision()
 }
 
-func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessionTable, session string, req approval.Request, pol approval.Policy, mode approval.Mode, wait time.Duration) (approval.Decision, string) {
+func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessionTable, session string, req approval.Request, pol approval.Policy, mode approval.Mode, wait, bound time.Duration) (approval.Decision, string) {
 	raw, matched := pol.Decide(req)
 	decided := approval.Apply(mode, req.Tool, raw, matched)
 	if decided == approval.Deny {
@@ -164,13 +165,19 @@ func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessio
 	if wait <= 0 {
 		wait = state.DefaultApprovalWait
 	}
+	if bound > 0 && wait > bound {
+		approvals.warnWaitTruncated(wait, bound)
+		wait = bound
+	}
 
+	now := time.Now()
 	pending := &pendingApproval{
-		id:      newApprovalID(),
-		session: session,
-		req:     req,
-		asked:   time.Now(),
-		answer:  make(chan approvalVerdict, 1),
+		id:       newApprovalID(),
+		session:  session,
+		req:      req,
+		asked:    now,
+		deadline: now.Add(wait),
+		answer:   make(chan approvalVerdict, 1),
 	}
 	release, refusal := registerApproval(approvals, pending)
 	if refusal != "" {
@@ -178,30 +185,48 @@ func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessio
 	}
 	defer release()
 
-	if bounded := boundedWait(ctx, wait); bounded < wait {
-		approvals.warnWaitTruncated(wait, bounded)
-		wait = bounded
-	}
-
 	octx, cancel := context.WithTimeout(ctx, wait)
-	askApprovalOn(octx, sessions, session, pending.id, req, time.Now().Add(wait))
+	askApprovalOn(octx, sessions, session, pending.id, req, pending.deadline)
 	cancel()
 
-	select {
-	case decision := <-pending.answer:
-		if decision.decision == approval.Allow {
-			approvals.remember(sessions, pending, decision.scope)
-			return approval.Allow, ""
-		}
-		reason := decision.reason
+	verdict, refused := awaitVerdict(ctx, pending, wait)
+	if buffered, ok := closeApproval(approvals, pending); ok {
+		verdict, refused = buffered, ""
+	}
+	if refused != "" {
+		return approval.Deny, refused
+	}
+	if verdict.decision != approval.Allow {
+		reason := verdict.reason
 		if reason == "" {
 			reason = fmt.Sprintf("herrscher: %s was denied by the operator", describeRequest(req))
 		}
 		return approval.Deny, reason
+	}
+	approvals.remember(sessions, pending, verdict.scope)
+	return approval.Allow, ""
+}
+
+func awaitVerdict(ctx context.Context, pending *pendingApproval, wait time.Duration) (approvalVerdict, string) {
+	select {
+	case verdict := <-pending.answer:
+		return verdict, ""
 	case <-time.After(wait):
-		return approval.Deny, fmt.Sprintf("herrscher: nobody answered within %s, so %s was denied", wait, describeRequest(req))
+		return approvalVerdict{}, fmt.Sprintf("herrscher: nobody answered within %s, so %s was denied", wait, describeRequest(pending.req))
 	case <-ctx.Done():
-		return approval.Deny, fmt.Sprintf("herrscher: the wait for approval ended, so %s was denied", describeRequest(req))
+		return approvalVerdict{}, fmt.Sprintf("herrscher: the wait for approval ended, so %s was denied", describeRequest(pending.req))
+	}
+}
+
+func closeApproval(approvals *approvalTable, pending *pendingApproval) (approvalVerdict, bool) {
+	approvals.mu.Lock()
+	defer approvals.mu.Unlock()
+	delete(approvals.m, pending.id)
+	select {
+	case verdict := <-pending.answer:
+		return verdict, true
+	default:
+		return approvalVerdict{}, false
 	}
 }
 
@@ -235,30 +260,23 @@ func registerApproval(approvals *approvalTable, pending *pendingApproval) (func(
 	}, ""
 }
 
-func boundedWait(ctx context.Context, wait time.Duration) time.Duration {
-	deadline, bounded := ctx.Deadline()
-	if !bounded {
-		return wait
-	}
-	return min(wait, time.Until(deadline))
-}
-
 func (t *approvalTable) warnWaitTruncated(configured, bound time.Duration) {
 	warnTo(t.messages, t.warn, t.lang(), "approve.wait_truncated", map[string]any{waitParam: configured.String(), boundParam: bound.Round(time.Second).String()})
 }
 
 func settleApproval(approvals *approvalTable, approvalID string, answer approvalAnswer) bool {
 	approvals.mu.Lock()
+	defer approvals.mu.Unlock()
 	pending := approvals.m[approvalID]
-	approvals.mu.Unlock()
-	if pending == nil {
+	if pending == nil || !time.Now().Before(pending.deadline) {
 		return false
 	}
 	select {
 	case pending.answer <- approvalVerdict{decision: answer.decision(), reason: answer.reason, scope: answer.scope}:
+		return true
 	default:
+		return false
 	}
-	return true
 }
 
 func (t *approvalTable) remember(sessions *sessionTable, pending *pendingApproval, scope approvalScope) {

@@ -12,6 +12,16 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
+const approvalDeskMargin = 30 * time.Second
+
+func bridgeDeskBound() time.Duration {
+	return BridgeApprovalWait() - approvalDeskMargin
+}
+
+func hookDeskBound() time.Duration {
+	return hookAnswerWait() - approvalDeskMargin
+}
+
 type approvalDesk struct {
 	messages  *hostMessages
 	lang      languageSource
@@ -30,7 +40,7 @@ func (d *approvalDesk) decideWithin(ctx context.Context, bound time.Duration, se
 	bounded, cancel := context.WithTimeout(ctx, bound)
 	defer cancel()
 	pol, mode := sessionPolicy(d.messages, d.lang, d.warn, d.store, d.agents, session)
-	return askApproval(bounded, d.approvals, d.sessions, session, req, pol, mode, d.store.ApprovalWait())
+	return askApproval(bounded, d.approvals, d.sessions, session, req, pol, mode, d.store.ApprovalWait(), bound)
 }
 
 func (d *approvalDesk) asker(session string, bound time.Duration) contracts.ApprovalAsker {

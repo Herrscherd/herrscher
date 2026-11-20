@@ -209,7 +209,7 @@ func approveAskVerb(desk *approvalDesk) contracts.Cmd {
 				Tool:    strings.TrimSpace(input.Get("tool")),
 				Subject: input.Get("subject"),
 			}
-			decision, reason := desk.decideWithin(ctx, hookAnswerWait(), session, req)
+			decision, reason := desk.decideWithin(ctx, hookDeskBound(), session, req)
 			payload, err := json.Marshal(struct {
 				Decision string `json:"decision"`
 				Reason   string `json:"reason,omitempty"`

@@ -43,7 +43,7 @@ func TestAskApprovalAnswersWithoutAskingAnyone(t *testing.T) {
 	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	pol := approval.Policy{{Decision: approval.Deny, Tool: "Bash", Pattern: "sudo*"}}
 	req := approval.Request{Tool: "Bash", Subject: "sudo rm"}
-	d, reason := askApproval(context.Background(), approvalTab, sessionTab, "s1", req, pol, approval.ModeAsk, time.Minute)
+	d, reason := askApproval(context.Background(), approvalTab, sessionTab, "s1", req, pol, approval.ModeAsk, time.Minute, 0)
 	if d != approval.Deny {
 		t.Fatalf("got %q, want deny", d)
 	}
@@ -63,7 +63,7 @@ func TestAskApprovalWaitsThenIsAnswered(t *testing.T) {
 		req := approval.Request{Tool: "Bash", Subject: "git push origin master"}
 		done := make(chan approval.Decision, 1)
 		go func() {
-			d, _ := askApproval(context.Background(), approvalTab, sessionTab, "s1", req, pol, approval.ModeAsk, 5*time.Second)
+			d, _ := askApproval(context.Background(), approvalTab, sessionTab, "s1", req, pol, approval.ModeAsk, 5*time.Second, 0)
 			done <- d
 		}()
 		id := awaitPending(t, approvalTab, 1)[0].ID
@@ -84,7 +84,7 @@ func TestAskApprovalTimesOutIntoADenial(t *testing.T) {
 	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 	req := approval.Request{Tool: "Bash", Subject: "git push"}
-	d, reason := askApproval(context.Background(), approvalTab, sessionTab, "s1", req, pol, approval.ModeAsk, 30*time.Millisecond)
+	d, reason := askApproval(context.Background(), approvalTab, sessionTab, "s1", req, pol, approval.ModeAsk, 30*time.Millisecond, 0)
 	if d != approval.Deny {
 		t.Fatalf("got %q, want deny", d)
 	}
@@ -126,7 +126,7 @@ func fillApprovals(t *testing.T, approvalTab *approvalTable, sessionTab *session
 		wg.Add(1)
 		go func(session string) {
 			defer wg.Done()
-			askApproval(context.Background(), approvalTab, sessionTab, session, approval.Request{Tool: "Bash", Subject: session}, pol, approval.ModeAsk, time.Minute)
+			askApproval(context.Background(), approvalTab, sessionTab, session, approval.Request{Tool: "Bash", Subject: session}, pol, approval.ModeAsk, time.Minute, 0)
 		}(s)
 	}
 	var ids []string
@@ -159,7 +159,7 @@ func TestOneSessionCannotFillTheRegistry(t *testing.T) {
 
 		pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 		started := time.Now()
-		d, reason := askApproval(context.Background(), approvalTab, sessionTab, "s-cap", approval.Request{Tool: "Bash", Subject: "one too many"}, pol, approval.ModeAsk, time.Minute)
+		d, reason := askApproval(context.Background(), approvalTab, sessionTab, "s-cap", approval.Request{Tool: "Bash", Subject: "one too many"}, pol, approval.ModeAsk, time.Minute, 0)
 		if d != approval.Deny {
 			t.Fatalf("got %q, want deny: over the cap is a decision, not a failure to reach anyone", d)
 		}
@@ -194,7 +194,7 @@ func TestTheRegistryIsBoundedAcrossSessions(t *testing.T) {
 		settle := fillApprovals(t, approvalTab, sessionTab, sessions...)
 
 		pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
-		d, reason := askApproval(context.Background(), approvalTab, sessionTab, "s-fleet-extra", approval.Request{Tool: "Bash", Subject: "x"}, pol, approval.ModeAsk, time.Minute)
+		d, reason := askApproval(context.Background(), approvalTab, sessionTab, "s-fleet-extra", approval.Request{Tool: "Bash", Subject: "x"}, pol, approval.ModeAsk, time.Minute, 0)
 		if d != approval.Deny {
 			t.Fatalf("got %q, want deny", d)
 		}
@@ -214,7 +214,7 @@ func TestATimedOutRequestFreesItsSlot(t *testing.T) {
 	var reason string
 	for range maxPendingPerSession + 1 {
 		var d approval.Decision
-		d, reason = askApproval(context.Background(), approvalTab, sessionTab, "s-expiry", approval.Request{Tool: "Bash", Subject: "x"}, pol, approval.ModeAsk, 20*time.Millisecond)
+		d, reason = askApproval(context.Background(), approvalTab, sessionTab, "s-expiry", approval.Request{Tool: "Bash", Subject: "x"}, pol, approval.ModeAsk, 20*time.Millisecond, 0)
 		if d != approval.Deny {
 			t.Fatalf("got %q, want deny: nobody answered", d)
 		}
@@ -242,7 +242,7 @@ func TestTwoSessionsWaitIndependently(t *testing.T) {
 		got := make(chan string, 2)
 		for _, name := range []string{"s1", "s2"} {
 			go func(session string) {
-				d, _ := askApproval(context.Background(), approvalTab, sessionTab, session, approval.Request{Tool: "Bash", Subject: session}, pol, approval.ModeAsk, 5*time.Second)
+				d, _ := askApproval(context.Background(), approvalTab, sessionTab, session, approval.Request{Tool: "Bash", Subject: session}, pol, approval.ModeAsk, 5*time.Second, 0)
 				got <- session + ":" + d.String()
 			}(name)
 		}
@@ -352,7 +352,7 @@ func TestPickRoutesApprovalValuesAwayFromTheBackend(t *testing.T) {
 		pol := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 		done := make(chan approval.Decision, 1)
 		go func() {
-			d, _ := askApproval(context.Background(), approvalTab, sessionTab, "s-no-driver", approval.Request{Tool: "Bash", Subject: "x"}, pol, approval.ModeAsk, 5*time.Second)
+			d, _ := askApproval(context.Background(), approvalTab, sessionTab, "s-no-driver", approval.Request{Tool: "Bash", Subject: "x"}, pol, approval.ModeAsk, 5*time.Second, 0)
 			done <- d
 		}()
 		id := awaitPending(t, approvalTab, 1)[0].ID
@@ -366,36 +366,48 @@ func TestPickRoutesApprovalValuesAwayFromTheBackend(t *testing.T) {
 }
 
 func TestAWaitWithinItsBoundIsSilent(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		assertWaitIsSilent(t, time.Minute, time.Hour)
+	})
+}
+
+func TestAWaitEqualToItsBoundIsSilent(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		assertWaitIsSilent(t, time.Minute, time.Minute)
+	})
+}
+
+func assertWaitIsSilent(t *testing.T, wait, bound time.Duration) {
+	t.Helper()
 	var warnings bytes.Buffer
 	approvalTab := newApprovalTable(&warnings)
 	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	ask := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
 
-	askApproval(ctx, approvalTab, sessionTab, "s-warn", approval.Request{Tool: "Bash", Subject: "git push"}, ask, approval.ModeAsk, time.Minute)
+	askApproval(context.Background(), approvalTab, sessionTab, "s-warn", approval.Request{Tool: "Bash", Subject: "git push"}, ask, approval.ModeAsk, wait, bound)
 	if warnings.Len() != 0 {
-		t.Fatalf("a wait the call can hold must say nothing, got %q", warnings.String())
+		t.Fatalf("a wait of %s within its bound %s must say nothing, got %q", wait, bound, warnings.String())
 	}
 }
 
 func TestAWaitBeyondItsBoundIsCutAndSaysSo(t *testing.T) {
-	var warnings bytes.Buffer
-	approvalTab := newApprovalTable(&warnings)
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
-	ask := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
-	configured := 20 * time.Minute
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
+	synctest.Test(t, func(t *testing.T) {
+		var warnings bytes.Buffer
+		approvalTab := newApprovalTable(&warnings)
+		sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+		ask := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
+		configured := 20 * time.Minute
+		bound := time.Second
 
-	askApproval(ctx, approvalTab, sessionTab, "s-warn", approval.Request{Tool: "Bash", Subject: "git push"}, ask, approval.ModeAsk, configured)
-	got := warnings.String()
-	if !strings.Contains(got, configured.String()) {
-		t.Fatalf("warning %q must name the configured wait", got)
-	}
-	if !strings.Contains(got, time.Second.String()) {
-		t.Fatalf("warning %q must name the bound the wait is cut at", got)
-	}
+		askApproval(context.Background(), approvalTab, sessionTab, "s-warn", approval.Request{Tool: "Bash", Subject: "git push"}, ask, approval.ModeAsk, configured, bound)
+		got := warnings.String()
+		if !strings.Contains(got, configured.String()) {
+			t.Fatalf("warning %q must name the configured wait", got)
+		}
+		if !strings.Contains(got, bound.String()) {
+			t.Fatalf("warning %q must name the bound the wait is cut at", got)
+		}
+	})
 }
 
 func awaitPending(t *testing.T, tab *approvalTable, want int) []PendingApproval {

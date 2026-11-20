@@ -39,11 +39,12 @@ func TestAnswerApprovalPickIsSessionScoped(t *testing.T) {
 
 func newTestPendingApproval(session string) *pendingApproval {
 	return &pendingApproval{
-		id:      newApprovalID(),
-		session: session,
-		req:     approval.Request{Tool: "Bash"},
-		asked:   time.Now(),
-		answer:  make(chan approvalVerdict, 1),
+		id:       newApprovalID(),
+		session:  session,
+		req:      approval.Request{Tool: "Bash"},
+		asked:    time.Now(),
+		deadline: time.Now().Add(time.Hour),
+		answer:   make(chan approvalVerdict, 1),
 	}
 }
 

@@ -60,7 +60,7 @@ func runSessionShell(ctx context.Context, messages *hostMessages, lang languageS
 	}
 	pol, mode := sessionPolicy(messages, lang, warn, store, agents, name)
 	req := approval.Request{Tool: shellToolName, Subject: command}
-	decision, reason := askApproval(ctx, approvals, sessions, name, req, pol, mode, store.ApprovalWait())
+	decision, reason := askApproval(ctx, approvals, sessions, name, req, pol, mode, store.ApprovalWait(), 0)
 	if decision != approval.Allow {
 		return "", fmt.Errorf("%w: %s", errShellRefused, reason)
 	}

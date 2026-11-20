@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -12,7 +13,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 )
 
-const boundedQuestionWait = 200 * time.Millisecond
+const boundedQuestionWait = 5 * time.Minute
 
 func newLongWaitDesk(t *testing.T) (*approvalDesk, *approvalTable) {
 	t.Helper()
@@ -23,49 +24,86 @@ func newLongWaitDesk(t *testing.T) (*approvalDesk, *approvalTable) {
 		t.Fatalf("AddApprovalRule: %v", err)
 	}
 	st.ApprovalTimeout = "20m"
+	sessionTab.register("s1", &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), persists: newPersistWrites(), name: "s1"})
 	desk := newApprovalDesk(newHostMessages(), fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab)
 	return desk, approvalTab
 }
 
-func TestTheBridgeQuestionLeavesNothingBehindAtItsBound(t *testing.T) {
-	desk, approvalTab := newLongWaitDesk(t)
-	req := approval.Request{Tool: "Bash", Subject: "git push"}
+func askBridgeInBackground(desk *approvalDesk, bound time.Duration) <-chan contracts.ApprovalAnswer {
 	answers := make(chan contracts.ApprovalAnswer, 1)
 	go func() {
-		answers <- desk.asker("s1", boundedQuestionWait)(context.Background(), contracts.ApprovalRequest{ID: "req-bridge", Tool: "Bash", Subject: "git push"})
+		answers <- desk.asker("s1", bound)(context.Background(), contracts.ApprovalRequest{ID: "req-bridge", Tool: "Bash", Subject: "git push"})
 	}()
-	id := awaitPendingLive(t, approvalTab, 1)[0].ID
+	return answers
+}
 
-	select {
-	case answer := <-answers:
-		if answer.Allowed() {
+func TestTheBridgeQuestionLeavesNothingBehindAtItsBound(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		desk, approvalTab := newLongWaitDesk(t)
+		answers := askBridgeInBackground(desk, boundedQuestionWait)
+		id := awaitPending(t, approvalTab, 1)[0].ID
+
+		if answer := <-answers; answer.Allowed() {
 			t.Fatalf("an unanswered question must be refused, got %+v", answer)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("the bridge question outlived its bound")
-	}
-	assertNoLateRule(t, desk, approvalTab, id, req)
+		assertNoLateRule(t, desk, approvalTab, id, approval.Request{Tool: "Bash", Subject: "git push"})
+	})
 }
 
 func TestTheTokenQuestionLeavesNothingBehindAtItsBound(t *testing.T) {
-	desk, approvalTab := newLongWaitDesk(t)
-	req := approval.Request{Tool: "Bash", Subject: "git push"}
-	decisions := make(chan approval.Decision, 1)
-	go func() {
-		decision, _ := desk.decideWithin(context.Background(), boundedQuestionWait, "s1", req)
-		decisions <- decision
-	}()
-	id := awaitPendingLive(t, approvalTab, 1)[0].ID
+	synctest.Test(t, func(t *testing.T) {
+		desk, approvalTab := newLongWaitDesk(t)
+		req := approval.Request{Tool: "Bash", Subject: "git push"}
+		decisions := make(chan approval.Decision, 1)
+		go func() {
+			decision, _ := desk.decideWithin(context.Background(), boundedQuestionWait, "s1", req)
+			decisions <- decision
+		}()
+		id := awaitPending(t, approvalTab, 1)[0].ID
 
-	select {
-	case decision := <-decisions:
-		if decision != approval.Deny {
+		if decision := <-decisions; decision != approval.Deny {
 			t.Fatalf("an unanswered question must be refused, got %q", decision)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("the token question outlived its bound")
-	}
-	assertNoLateRule(t, desk, approvalTab, id, req)
+		assertNoLateRule(t, desk, approvalTab, id, req)
+	})
+}
+
+func TestASessionVerdictArrivingAtTheBoundGrantsNothing(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		desk, approvalTab := newLongWaitDesk(t)
+		answers := askBridgeInBackground(desk, boundedQuestionWait)
+		id := awaitPending(t, approvalTab, 1)[0].ID
+
+		time.Sleep(boundedQuestionWait)
+		if settleApproval(approvalTab, id, approvalAnswer{scope: scopeSession}) {
+			t.Fatal("a session answer arriving at the bound was reported as taken")
+		}
+		if answer := <-answers; answer.Allowed() {
+			t.Fatalf("a session answer at the bound allowed the call: %+v", answer)
+		}
+		if desk.sessions.remembers("s1", approval.Request{Tool: "Bash", Subject: "git push"}) {
+			t.Fatal("a session answer at the bound recorded a rule for a call already refused")
+		}
+	})
+}
+
+func TestASessionVerdictBeforeTheBoundIsGrantedAndRemembered(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		desk, approvalTab := newLongWaitDesk(t)
+		answers := askBridgeInBackground(desk, boundedQuestionWait)
+		id := awaitPending(t, approvalTab, 1)[0].ID
+
+		time.Sleep(boundedQuestionWait - time.Minute)
+		if !settleApproval(approvalTab, id, approvalAnswer{scope: scopeSession}) {
+			t.Fatal("a session answer given inside the bound was not taken")
+		}
+		if answer := <-answers; !answer.Allowed() {
+			t.Fatalf("a session answer inside the bound must allow the call, got %+v", answer)
+		}
+		if !desk.sessions.remembers("s1", approval.Request{Tool: "Bash", Subject: "git push"}) {
+			t.Fatal("a session answer inside the bound was not remembered")
+		}
+	})
 }
 
 func assertNoLateRule(t *testing.T, desk *approvalDesk, approvalTab *approvalTable, id string, req approval.Request) {

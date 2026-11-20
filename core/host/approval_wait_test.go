@@ -20,6 +20,13 @@ func TestApprovalWaitsKeepTheBridgeBelowTheHookBelowTheCLIWait(t *testing.T) {
 	}
 }
 
+func TestEachDeskAnswersBeforeItsConsumerGivesUp(t *testing.T) {
+	bridgeDesk, bridge, hookDesk, hook, cli := bridgeDeskBound(), BridgeApprovalWait(), hookDeskBound(), hookAnswerWait(), agent.HookWait
+	if approvalDeskMargin <= 0 || bridgeDesk >= bridge || bridge >= hook || hookDesk >= hook || hook >= cli {
+		t.Fatalf("bridge desk %s, bridge %s, hook desk %s, hook %s, CLI %s: want each desk under its consumer, and the consumers in order", bridgeDesk, bridge, hookDesk, hook, cli)
+	}
+}
+
 func silentApprovalSocket(t *testing.T) string {
 	t.Helper()
 	path := privateSocketPath(t)

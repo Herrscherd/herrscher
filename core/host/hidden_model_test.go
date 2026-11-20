@@ -1,9 +1,7 @@
 package host
 
 import (
-	"bytes"
 	"context"
-	"log/slog"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -42,10 +40,7 @@ func TestModelsListAllShowsHiddenWhenRequested(t *testing.T) {
 }
 
 func TestHiddenModelFromEnvResolvesWithWarningAndNeverSwitches(t *testing.T) {
-	var logs bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	logs := captureDefaultLog(t)
 	t.Setenv(envModelsHidden, "a-visible")
 	models := ModelDiscoveryFor(NewMessages(), filepath.Join(t.TempDir(), "state.json"))
 

@@ -198,6 +198,7 @@ func newTestHub(t *testing.T, opts ...hubOption) *hub {
 	sup := supervisor.NewSupervisor(ctx, "/nonexistent/herrscher", testRuntime(t))
 	h := newHub(st, sup, nil, t.TempDir(), cli.NewRegistry(clitext.NewMessages()), nil, approvalTab, sessionTab, opts...)
 	h.runtime = isolatedRuntimeDir(t)
+	t.Cleanup(func() { closeHubSink(t, h) })
 	t.Cleanup(h.stopLive)
 	return h
 }
@@ -233,6 +234,7 @@ func TestReconcileStaysSilentOnceTheHubIsClosed(t *testing.T) {
 	}
 	h.stopLive()
 	h.reconcile(t.Context())
+	closeHubSink(t, h)
 	if printed.Len() != 0 {
 		t.Fatalf("reconcile on a closed hub printed %q, want no warning", printed.String())
 	}
@@ -304,7 +306,7 @@ func (s *stubForgetCoord) forget(name string) { s.forgotten = append(s.forgotten
 
 func TestGoDeadCallsForget(t *testing.T) {
 	stub := &stubForgetCoord{}
-	h := testHub(&hub{
+	h := testHub(t, &hub{
 		messages:      newHostMessages(),
 		cliMessages:   clitext.NewMessages(),
 		warnings:      io.Discard,

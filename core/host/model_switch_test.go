@@ -1,10 +1,8 @@
 package host
 
 import (
-	"bytes"
 	"context"
 	"io"
-	"log/slog"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -78,10 +76,7 @@ func TestUnofferedModelWarnsOnceForTheSession(t *testing.T) {
 	for _, plugin := range switchingPlugins() {
 		contracts.Default.Register(plugin)
 	}
-	var logs bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	logs := captureDefaultLog(t)
 	st, err := state.LoadState(filepath.Join(t.TempDir(), "state.json"))
 	if err != nil {
 		t.Fatalf("LoadState: %v", err)

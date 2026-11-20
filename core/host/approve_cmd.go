@@ -25,13 +25,14 @@ const approvalsFile = "APPROVALS"
 var errScopeConflict = errors.New("--session and --always are two scopes: pick one")
 
 func addApproveCommands(reg *cli.Registry, messages *hostMessages, cliMessages *clitext.Messages, lang languageSource, warn io.Writer, hostState *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) error {
+	desk := newApprovalDesk(messages, lang, warn, hostState, agents, approvals, sessions)
 	return addVerbs(
 		reg,
 		approveListVerb(cliMessages, lang, approvals),
-		approveAllowVerb(cliMessages, lang, approvals, sessions),
-		approveDenyVerb(cliMessages, lang, approvals, sessions),
+		approveAllowVerb(cliMessages, lang, approvals),
+		approveDenyVerb(cliMessages, lang, approvals),
 		approveRuleVerb(cliMessages, lang, hostState),
-		approveAskVerb(messages, lang, warn, hostState, agents, approvals, sessions),
+		approveAskVerb(desk),
 		approveModeVerb(cliMessages, hostState, lang),
 		sessionShellVerb(messages, lang, warn, hostState, agents, approvals, sessions),
 	)
@@ -67,7 +68,7 @@ func listApprovals(cliMessages *clitext.Messages, lang i18n.Language, approvals 
 	return strings.TrimRight(body.String(), "\n"), nil
 }
 
-func approveAllowVerb(cliMessages *clitext.Messages, lang languageSource, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
+func approveAllowVerb(cliMessages *clitext.Messages, lang languageSource, approvals *approvalTable) contracts.Cmd {
 	return contracts.New(nsApprove, "allow").
 		Help(clitext.CmdHelpApproveAllow).
 		ValueParam("id", clitext.CmdParamApproveAllowID, false).
@@ -78,7 +79,7 @@ func approveAllowVerb(cliMessages *clitext.Messages, lang languageSource, approv
 			if err != nil {
 				return contracts.Result{}, err
 			}
-			if !settleApproval(approvals, sessions, approvalID, approvalAnswer{scope: scope}) {
+			if !settleApproval(approvals, approvalID, approvalAnswer{scope: scope}) {
 				return contracts.Result{}, &requestNotWaitingError{ID: approvalID}
 			}
 			return contracts.DataResult(replyText(cliMessages, lang()).Text(clitext.HostApproveAllowed, clitext.Params{clitext.ParamID: approvalID})), nil
@@ -117,7 +118,7 @@ func allowOperands(input contracts.Input) (string, approvalScope, error) {
 	return operands[0], scope, nil
 }
 
-func approveDenyVerb(cliMessages *clitext.Messages, lang languageSource, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
+func approveDenyVerb(cliMessages *clitext.Messages, lang languageSource, approvals *approvalTable) contracts.Cmd {
 	return contracts.New(nsApprove, "deny").
 		Help(clitext.CmdHelpApproveDeny).
 		ValueParam("id", clitext.CmdParamApproveDenyID, false).
@@ -128,7 +129,7 @@ func approveDenyVerb(cliMessages *clitext.Messages, lang languageSource, approva
 				return contracts.Result{}, errRequestNameMissing
 			}
 			answer := approvalAnswer{scope: scopeDeny, reason: operatorRefusal(input.Get("reason"))}
-			if !settleApproval(approvals, sessions, approvalID, answer) {
+			if !settleApproval(approvals, approvalID, answer) {
 				return contracts.Result{}, &requestNotWaitingError{ID: approvalID}
 			}
 			return contracts.DataResult(replyText(cliMessages, lang()).Text(clitext.HostApproveDenied, clitext.Params{clitext.ParamID: approvalID})), nil
@@ -193,7 +194,7 @@ func addApprovalRule(cliMessages *clitext.Messages, lang i18n.Language, store *s
 	return replyText(cliMessages, lang).Text(clitext.HostApproveRuleAdded, clitext.Params{clitext.ParamRule: parsed.String()}), nil
 }
 
-func approveAskVerb(messages *hostMessages, lang languageSource, warn io.Writer, store *state.State, agents *agent.Store, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
+func approveAskVerb(desk *approvalDesk) contracts.Cmd {
 	return contracts.New(nsApprove, "ask").
 		Help(clitext.CmdHelpApproveAsk).
 		ValueParam(paramSession, clitext.CmdParamApproveAskSession, true).
@@ -201,15 +202,14 @@ func approveAskVerb(messages *hostMessages, lang languageSource, warn io.Writer,
 		ValueParam("subject", clitext.CmdParamApproveAskSubject, false).
 		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 			session := strings.TrimSpace(input.Get(paramSession))
-			if !sessions.tokenMatches(session, callerTokenFrom(ctx)) {
-				return contracts.Result{}, wrapHost(messages, errApproveAskUnauthenticated, "approve.ask_unauthenticated", map[string]any{nameParam: session})
+			if !desk.sessions.tokenMatches(session, callerTokenFrom(ctx)) {
+				return contracts.Result{}, wrapHost(desk.messages, errApproveAskUnauthenticated, "approve.ask_unauthenticated", map[string]any{nameParam: session})
 			}
 			req := approval.Request{
 				Tool:    strings.TrimSpace(input.Get("tool")),
 				Subject: input.Get("subject"),
 			}
-			pol, mode := sessionPolicy(messages, lang, warn, store, agents, session)
-			decision, reason := askApproval(ctx, approvals, sessions, session, req, pol, mode, store.ApprovalWait())
+			decision, reason := desk.decideFor(ctx, tokenConsumer, session, req)
 			payload, err := json.Marshal(struct {
 				Decision string `json:"decision"`
 				Reason   string `json:"reason,omitempty"`

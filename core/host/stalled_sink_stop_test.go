@@ -60,7 +60,7 @@ func TestCloseWarningsLosesOrLogsAnUndrainedOverrun(t *testing.T) {
 	logs := captureDefaultLog(t)
 	warnings := newGatedWarnings("stuck")
 	t.Cleanup(warnings.open)
-	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: warnings, teardownGrace: 300 * time.Millisecond})
+	h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: warnings, teardownGrace: 300 * time.Millisecond})
 	if _, err := h.warnings.Write([]byte("stuck\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}

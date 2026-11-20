@@ -69,6 +69,10 @@ func newInflightHub(t *testing.T, name string, grace time.Duration, warnings io.
 	h := newHub(st, sup, nil, t.TempDir(), nil, nil, newApprovalTable(io.Discard), newSessionTable(owner, clitext.NewMessages()), withWarnings(warnings))
 	h.runtime = layout
 	h.teardownGrace = grace
+	t.Cleanup(func() {
+		h.sink.Close()
+		awaitSinkLog(t, h.sink)
+	})
 	return h
 }
 

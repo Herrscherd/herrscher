@@ -496,6 +496,12 @@ hook fails closed: a missing session name, a missing token, no daemon, an answer
 that is neither `allow` nor `deny`, or a payload over the size limit each refuse
 the tool call.
 
+When the backend sets `HERRSCHER_APPROVAL_SOCKET`, the hook asks on that socket
+instead, and sends neither the session name nor the token: the socket carries no
+credential, and the daemon answers through the asker the turn carries. The hook
+never falls back to the command socket when that socket fails, so an error there
+refuses the call with its cause.
+
 For the operator, the rule is this: never grant a broad rule on `Bash`. A rule
 that lets a shell run a program able to reach a socket gives that program the
 operator's rights. Examples of such programs are `sh`, `bash`, `python`, `node`,
@@ -1195,16 +1201,18 @@ refused without a reason, as if nobody answered.
 The box is drawn from 60 to 240 columns: below 80 each choice takes two rows.
 The tab carries a `pendingApproval` flag for the rest of the window to mark it.
 
-Each session's approval hook answers with the token the daemon issued to that
-session at launch, sent in the `HERRSCHER_SESSION_TOKEN` variable. The token
-ends with the session's run. Closing or archiving the session revokes it, and so
-does a session that stops inside the teardown window, so a session recreated
-under the same name gets a new one. A one-shot seed gets its own token instead,
-which answers only while that seed runs. A seed on an archived session is
-refused, and no token is issued to a seed whose session is archived or gone. A
-session archived or closed while its seed runs ends that seed's token. A hook
-that holds no token, or cannot reach a daemon, refuses the tool call and says
-why: it never allows a call it could not check.
+On the command socket, each session's approval hook answers with the token the
+daemon issued to that session at launch, sent in the `HERRSCHER_SESSION_TOKEN`
+variable. The token ends with the session's run. Closing or archiving the
+session revokes it, and so does a session that stops inside the teardown window,
+so a session recreated under the same name gets a new one. A one-shot seed gets
+its own token instead, which answers only while that seed runs. A seed on an
+archived session is refused, and no token is issued to a seed whose session is
+archived or gone. A session archived or closed while its seed runs ends that
+seed's token. A hook that has no approval socket and holds no token, or cannot
+reach a daemon, refuses the tool call and says why: it never allows a call it
+could not check. A seed run inside the daemon sets the approval socket for its
+backend, so its hook needs no token at all.
 
 Two paths run without a daemon. A `session create` run locally starts a session
 whose children hold no token the daemon issued, so every tool call they make is
@@ -1213,6 +1221,58 @@ refused by the hook, while text answers still work (`--print` runs this way). A
 too. `approve ask` refuses without a daemon. A seed on a remote backend with a session is refused outright,
 because the remote prompt carries no session identity: its approvals could not
 reach the operator, and they would be skipped without a sign.
+
+The bridge process (`herrscher bridge --hub-socket`) runs its backend outside the
+daemon, and that backend needs approvals too, so it asks them over the hub
+connection it already holds. Every turn it runs and every compaction it makes sets an approval
+asker in the context of that call, so the backend receives one on each `Respond`
+and each `Compact`. The asker sends a hub event `approval_ask` whose value is the
+JSON of the request (`contracts.ApprovalRequest`), and waits for an
+`approval_answer` event whose value is the JSON of the answer
+(`contracts.ApprovalAnswer`), matched by the request's ID. The daemon answers
+through the approval desk for the session bound to that connection when the bridge
+was opened. The session comes from the connection, never from a field of the
+request, so a bridge cannot ask on behalf of another session. An answer that
+cannot be sent, a hub that is gone, or a turn that ends before the answer arrives
+refuses the tool call, and the reason is written in the language the hub announced
+(`approval.unavailable` in `core/bridge/locales`). The bridge also refuses when no
+answer comes within its own bound, `host.BridgeApprovalWait()`, which the binary
+passes in `Options.ApprovalWait` (`approval.no_answer`): the hook wait
+(`agent.HookWait`, 900 s, after which the CLI cuts the hook and runs the tool call)
+minus 60 s, so 840 s. The daemon's approval desk answers that question before the
+bridge gives up: it bounds the question at 30 s less, 810 s (`bridgeDeskBound()`).
+At 810 s the desk refuses, leaves the pending approvals, and an answer that comes
+later records nothing, not even a session rule. On the approval socket and on the
+daemon token path, and for a one-shot seed run, the hook has its own bound,
+`hookAnswerWait()`, the hook wait minus 30 s, so 870 s: a hook that gets no answer
+in time denies the call with `hook.approval_timeout`. The desk bounds those
+questions at 30 s less, 840 s (`hookDeskBound()`), with the same removal and the
+same rule for a late answer. The order is therefore desk (810 s on the bridge path,
+840 s on the hook path), then bridge (840 s), then hook (870 s), then CLI (900 s):
+every refusal a consumer receives is the desk's own, and the CLI never cuts a hook
+that is still waiting. The cap applies to every session whatever its backend: a
+codex session has no hook, but its wait is capped at the same bounds. An approval
+wait configured longer than the bound of the call that asks it is truncated to that
+bound: the question is cut at the bound, and the daemon's warnings name the
+configured wait and the bound it is cut at (`approve.wait_truncated`). A wait equal
+to its bound is not truncated and says nothing. A request whose ID is
+already waiting is refused at once (`approval.duplicate`), without a second request to
+the operator. The daemon answers every request that carries an ID: one it cannot decode
+is refused under that ID (`approval.request_unreadable`), and a session without an
+approval desk is refused with `approval.no_desk`. A request with no readable ID cannot
+be answered, so the bridge's wait for it ends at its own bound.
+
+An answer that picks `session` or `always` and is accepted before the question's
+deadline is kept even when the call it targeted has ended in the meantime: the turn
+finished, or the bridge closed, before the desk recorded it. The operator chose the
+rule in time, so the rule is recorded and is not rolled back when its call ends.
+
+A one-shot seed run by the daemon fails at once with `the seed runtime has no
+approval desk` when it has no desk, instead of running tools that nobody could
+approve. The error is translated like the other host faults. A `session handoff`
+run by the daemon writes its brief through the same daemon runtime, so its brief
+backend gets the session's approval asker, and it fails the same way without a
+desk.
 
 ### Using the terminal you are in
 

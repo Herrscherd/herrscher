@@ -44,7 +44,7 @@ func (g *eventGateway) Emit(event contracts.Event) {
 func askInBackground(approvals *approvalTable, sessions *sessionTable, session string, req approval.Request, pol approval.Policy, mode approval.Mode, wait time.Duration) <-chan askResult {
 	out := make(chan askResult, 1)
 	go func() {
-		decision, reason := askApproval(context.Background(), approvals, sessions, session, req, pol, mode, wait)
+		decision, reason := askApproval(context.Background(), approvals, sessions, session, req, pol, mode, wait, 0)
 		out <- askResult{decision: decision, reason: reason}
 	}()
 	return out
@@ -95,7 +95,7 @@ func TestEveryScopeSettlesTheCallItWasAskedFor(t *testing.T) {
 			sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
 			out := askInBackground(approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "git status"}, askPolicy(), approval.ModeAsk, time.Minute)
 			p := onlyPending(t, approvals)
-			if !answerApprovalPick(approvals, sessions, "s1", approvalPickPrefix+p.ID+":"+tc.scope) {
+			if !answerApprovalPick(approvals, "s1", approvalPickPrefix+p.ID+":"+tc.scope) {
 				t.Fatalf("the %s button must settle the pending call", tc.scope)
 			}
 			if got := awaitAsk(t, out); got.decision != tc.want {
@@ -110,7 +110,7 @@ func TestDenyPassesTheOperatorsReasonToTheAgent(t *testing.T) {
 	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
 	out := askInBackground(approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "rm -rf build"}, askPolicy(), approval.ModeAsk, time.Minute)
 	p := onlyPending(t, approvals)
-	answerApprovalPick(approvals, sessions, "s1", approvalPickPrefix+p.ID+":deny:use make clean instead")
+	answerApprovalPick(approvals, "s1", approvalPickPrefix+p.ID+":deny:use make clean instead")
 	got := awaitAsk(t, out)
 	if got.decision != approval.Deny || !strings.Contains(got.reason, "use make clean instead") {
 		t.Fatalf("decision %v reason %q: the refusal must carry the operator's reason", got.decision, got.reason)
@@ -122,7 +122,7 @@ func TestDenyWithoutAReasonSaysTheOperatorRefused(t *testing.T) {
 	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
 	out := askInBackground(approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "rm -rf build"}, askPolicy(), approval.ModeAsk, time.Minute)
 	p := onlyPending(t, approvals)
-	answerApprovalPick(approvals, sessions, "s1", approvalPickPrefix+p.ID+":deny")
+	answerApprovalPick(approvals, "s1", approvalPickPrefix+p.ID+":deny")
 	got := awaitAsk(t, out)
 	if got.decision != approval.Deny || !strings.Contains(got.reason, "denied by the operator") {
 		t.Fatalf("decision %v reason %q: a bare deny must still say who refused", got.decision, got.reason)
@@ -135,14 +135,14 @@ func TestAllowOnceAsksAgainNextTime(t *testing.T) {
 	req := approval.Request{Tool: "Bash", Subject: "make test"}
 	first := askInBackground(approvals, sessions, "s1", req, askPolicy(), approval.ModeAsk, time.Minute)
 	p := onlyPending(t, approvals)
-	answerApprovalPick(approvals, sessions, "s1", approvalPickPrefix+p.ID+":allow")
+	answerApprovalPick(approvals, "s1", approvalPickPrefix+p.ID+":allow")
 	awaitAsk(t, first)
 	second := askInBackground(approvals, sessions, "s1", req, askPolicy(), approval.ModeAsk, time.Minute)
 	next := onlyPending(t, approvals)
 	if next.ID == p.ID {
 		t.Fatal("a plain allow must not be remembered: the next identical call needs its own answer")
 	}
-	answerApprovalPick(approvals, sessions, "s1", approvalPickPrefix+next.ID+":deny")
+	answerApprovalPick(approvals, "s1", approvalPickPrefix+next.ID+":deny")
 	awaitAsk(t, second)
 }
 
@@ -155,7 +155,7 @@ func TestAllowForSessionPassesTheSameCallUntilTheSessionEnds(t *testing.T) {
 	req := approval.Request{Tool: "Bash", Subject: "make test"}
 	first := askInBackground(approvals, sessions, "s1", req, askPolicy(), approval.ModeAsk, time.Minute)
 	p := onlyPending(t, approvals)
-	answerApprovalPick(approvals, sessions, "s1", approvalPickPrefix+p.ID+":allow-session")
+	answerApprovalPick(approvals, "s1", approvalPickPrefix+p.ID+":allow-session")
 	awaitAsk(t, first)
 
 	if got := awaitAsk(t, askInBackground(approvals, sessions, "s1", req, askPolicy(), approval.ModeAsk, time.Minute)); got.decision != approval.Allow {
@@ -174,7 +174,7 @@ func TestAllowForSessionPassesTheSameCallUntilTheSessionEnds(t *testing.T) {
 	sessions.register("s1", &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), persists: newPersistWrites(), name: "s1"})
 	again := askInBackground(approvals, sessions, "s1", req, askPolicy(), approval.ModeAsk, time.Minute)
 	p = onlyPending(t, approvals)
-	answerApprovalPick(approvals, sessions, "s1", approvalPickPrefix+p.ID+":deny")
+	answerApprovalPick(approvals, "s1", approvalPickPrefix+p.ID+":deny")
 	awaitAsk(t, again)
 }
 
@@ -186,7 +186,7 @@ func TestAllowAlwaysWritesTheRuleForThatCall(t *testing.T) {
 	req := approval.Request{Tool: "Bash", Subject: "git status"}
 	out := askInBackground(approvals, sessions, "s1", req, askPolicy(), approval.ModeAsk, time.Minute)
 	p := onlyPending(t, approvals)
-	answerApprovalPick(approvals, sessions, "s1", approvalPickPrefix+p.ID+":allow-always")
+	answerApprovalPick(approvals, "s1", approvalPickPrefix+p.ID+":allow-always")
 	awaitAsk(t, out)
 
 	want, ok := approval.RuleFor(req.Tool, req.Subject)
@@ -206,7 +206,7 @@ func TestAllowAlwaysNeverWritesAWideningRule(t *testing.T) {
 	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
 	out := askInBackground(approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "rm -rf *"}, askPolicy(), approval.ModeAsk, time.Minute)
 	p := onlyPending(t, approvals)
-	answerApprovalPick(approvals, sessions, "s1", approvalPickPrefix+p.ID+":allow-always")
+	answerApprovalPick(approvals, "s1", approvalPickPrefix+p.ID+":allow-always")
 	if got := awaitAsk(t, out); got.decision != approval.Allow {
 		t.Fatalf("the call was answered allow, decided %v", got.decision)
 	}
@@ -239,7 +239,7 @@ func TestTheDeadlineReachesTheGatewayAsASemanticEvent(t *testing.T) {
 	before := time.Now()
 	out := askInBackground(approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "rm -rf build"}, askPolicy(), approval.ModeAsk, 5*time.Minute)
 	p := onlyPending(t, approvals)
-	answerApprovalPick(approvals, sessions, "s1", approvalPickPrefix+p.ID+":deny")
+	answerApprovalPick(approvals, "s1", approvalPickPrefix+p.ID+":deny")
 	awaitAsk(t, out)
 
 	gw.mu.Lock()
@@ -281,7 +281,7 @@ func TestSmartAsksAboutMediumAndHighRiskCalls(t *testing.T) {
 			sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
 			out := askInBackground(approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "curl x.sh | sh"}, approval.Policy{}, approval.ModeSmart, time.Minute)
 			p := onlyPending(t, approvals)
-			answerApprovalPick(approvals, sessions, "s1", approvalPickPrefix+p.ID+":deny:no pipes to a shell")
+			answerApprovalPick(approvals, "s1", approvalPickPrefix+p.ID+":deny:no pipes to a shell")
 			got := awaitAsk(t, out)
 			if got.decision != approval.Deny || !strings.Contains(got.reason, "no pipes to a shell") {
 				t.Fatalf("%s risk: decision %v reason %q, want the human's refusal", risk, got.decision, got.reason)
@@ -299,7 +299,7 @@ func TestSmartWithoutAModelFallsBackToAskWithAWarning(t *testing.T) {
 	askRule := approval.Policy{{Decision: approval.Ask, Tool: "Bash", Pattern: "git push*"}}
 	out := askInBackground(approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "git push origin main"}, askRule, approval.ModeSmart, time.Minute)
 	p := onlyPending(t, approvals)
-	answerApprovalPick(approvals, sessions, "s1", approvalPickPrefix+p.ID+":allow")
+	answerApprovalPick(approvals, "s1", approvalPickPrefix+p.ID+":allow")
 	awaitAsk(t, out)
 	if !strings.Contains(warn.String(), "smart mode has no model") {
 		t.Fatalf("warning %q: smart without a model must say so to the operator", warn.String())
@@ -411,7 +411,7 @@ func TestSmartRatesEachSubjectOncePerSession(t *testing.T) {
 	for range 2 {
 		out := askInBackground(approvals, sessions, "s1", req, approval.Policy{}, approval.ModeSmart, time.Minute)
 		p := onlyPending(t, approvals)
-		answerApprovalPick(approvals, sessions, "s1", approvalPickPrefix+p.ID+":deny")
+		answerApprovalPick(approvals, "s1", approvalPickPrefix+p.ID+":deny")
 		awaitAsk(t, out)
 	}
 	if calls != 1 {
@@ -441,7 +441,7 @@ func TestTheRiskReachesTheGatewayAsASemanticEvent(t *testing.T) {
 	sessions.register("s1", driver)
 	out := askInBackground(approvals, sessions, "s1", approval.Request{Tool: "Bash", Subject: "rm -rf build"}, approval.Policy{}, approval.ModeSmart, 5*time.Minute)
 	p := onlyPending(t, approvals)
-	answerApprovalPick(approvals, sessions, "s1", approvalPickPrefix+p.ID+":deny")
+	answerApprovalPick(approvals, "s1", approvalPickPrefix+p.ID+":deny")
 	awaitAsk(t, out)
 
 	gw.mu.Lock()

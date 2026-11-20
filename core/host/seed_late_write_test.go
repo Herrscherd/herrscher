@@ -76,6 +76,7 @@ func seedSharingSession(backend contracts.Backend, budget time.Duration, log *st
 	policy.limits = contextwindow.NewLimits("1000", nil)
 	table.compaction = policy
 	runtime := oneShotSeedRuntime{
+		desk:        stubSeedDesk(),
 		persists:    newPersistWrites(),
 		messages:    newHostMessages(),
 		cliMessages: clitext.NewMessages(),
@@ -127,6 +128,7 @@ func TestSeedWritesNothingAfterItReturnsEvenWhenABackendSpeaksLate(t *testing.T)
 func TestOneShotTapsRecordNothingOnceTheSeedHasReturned(t *testing.T) {
 	var recorded []string
 	runtime := oneShotSeedRuntime{
+		desk:        seedDesk(t),
 		persists:    newPersistWrites(),
 		messages:    newHostMessages(),
 		cliMessages: clitext.NewMessages(),

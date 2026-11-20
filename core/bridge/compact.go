@@ -4,10 +4,11 @@ import (
 	"context"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/compactwire"
 )
 
-func runCompact(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, ctrl *turnController, event contracts.Event) {
+func runCompact(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, ctrl *turnController, approvals *approvalChannel, lang i18n.Language, event contracts.Event) {
 	compactor, ok := compactorOf(backend)
 	if !ok {
 		sink.Emit(compactwire.NoPort())
@@ -20,6 +21,7 @@ func runCompact(ctx context.Context, sink contracts.EventSink, backend contracts
 	}
 	turnCtx, endTurn := ctrl.begin(ctx)
 	defer endTurn()
+	turnCtx = approvals.attach(turnCtx, lang)
 	result, err := compactor.Compact(turnCtx, req, func(progress contracts.BackendEvent) {
 		if progress.Detail != "" {
 			sink.Emit(compactwire.Progress(progress.Detail))

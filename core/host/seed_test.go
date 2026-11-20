@@ -186,7 +186,7 @@ func TestRunOneShotSeedWithConsolidatesAndCloses(t *testing.T) {
 
 	sess := state.Session{Name: "solo", ChannelID: "channel"}
 	spy := &seedSpyOrchestrator{}
-	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), backend: backend}); err != nil {
+	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{desk: seedDesk(t), persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), backend: backend}); err != nil {
 		t.Fatalf("runOneShotSeedWith: %v", err)
 	}
 	if !spy.consolidated {
@@ -204,7 +204,7 @@ func TestRunOneShotSeedWithCoordinatesDelegateTrailer(t *testing.T) {
 
 	sess := state.Session{Name: "orchestrator", ChannelID: "channel"}
 	coord := &recordingCoord{}
-	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "délègue", newTurnID(), nil, oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), backend: backend, coordinator: coord}); err != nil {
+	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "délègue", newTurnID(), nil, oneShotSeedRuntime{desk: seedDesk(t), persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), backend: backend, coordinator: coord}); err != nil {
 		t.Fatalf("runOneShotSeedWithIDRuntime: %v", err)
 	}
 	if len(coord.delegates) != 1 {
@@ -232,7 +232,7 @@ func TestRunOneShotSeedCommandForwardsToLiveCoordinator(t *testing.T) {
 
 	got, err := runOneShotSeedCommand(
 		context.Background(), nil, "orchestrator", "lecture seule",
-		"turn-test", oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages()}, nil, layout, "instance-test", forward,
+		"turn-test", oneShotSeedRuntime{desk: seedDesk(t), persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages()}, nil, layout, "instance-test", forward,
 	)
 	if err != nil {
 		t.Fatalf("runOneShotSeedCommand: %v", err)
@@ -320,7 +320,7 @@ func TestASeedKeepsItsReplyWhenConsolidationFails(t *testing.T) {
 
 	sess := state.Session{Name: "solo", ChannelID: "channel"}
 	spy := &consolidateSpy{err: context.DeadlineExceeded}
-	got, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), backend: backend, warnings: io.Discard})
+	got, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{desk: seedDesk(t), persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), backend: backend, warnings: io.Discard})
 	if err != nil {
 		t.Fatalf("runOneShotSeedWith: %v", err)
 	}
@@ -337,7 +337,7 @@ func TestASeedConsolidatesOnItsOwnBudget(t *testing.T) {
 	sess := state.Session{Name: "solo", ChannelID: "channel"}
 	spy := &consolidateSpy{}
 	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy,
-		oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), backend: backend, timeout: 50 * time.Millisecond}); err != nil {
+		oneShotSeedRuntime{desk: seedDesk(t), persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), backend: backend, timeout: 50 * time.Millisecond}); err != nil {
 		t.Fatalf("runOneShotSeedWithIDRuntime: %v", err)
 	}
 	if !spy.called {
@@ -355,7 +355,7 @@ func TestASeedWithACadenceDoesNotConsolidateTwice(t *testing.T) {
 
 	sess := state.Session{Name: "solo", ChannelID: "channel", ConsolidateEvery: 1}
 	spy := &consolidateSpy{}
-	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), backend: backend}); err != nil {
+	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{desk: seedDesk(t), persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), backend: backend}); err != nil {
 		t.Fatalf("runOneShotSeedWith: %v", err)
 	}
 	if spy.called {

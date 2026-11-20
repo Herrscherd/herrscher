@@ -192,7 +192,7 @@ func TestOperatorCommandReplyFollowsALiveLanguageChange(t *testing.T) {
 	if err := addScheduleCommands(reg, newHostMessages(), clitext.NewMessages(), live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
-	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, st: st, reg: reg, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)})
+	h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, st: st, reg: reg, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)})
 	disp := h.operatorCommands()
 	english := missingScheduleRemoval(t, disp, "digest")
 	live.set(i18n.French)
@@ -225,7 +225,7 @@ func TestSessionCommandReplyFollowsTheOperatorUnlessItsLanguageIsRecorded(t *tes
 	if err := addScheduleCommands(reg, newHostMessages(), clitext.NewMessages(), live.Get, st, fakeAgents{known: map[string]bool{"scout": true}}, &schedulerSlot{}); err != nil {
 		t.Fatalf("addScheduleCommands: %v", err)
 	}
-	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)})
+	h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)})
 	live.set(i18n.French)
 	followed := missingScheduleRemoval(t, asSession{disp: reg, session: "s1", lang: h.sessionLanguageSource("s1"), messages: clitext.NewMessages()}, "weekly")
 	kept := missingScheduleRemoval(t, asSession{disp: reg, session: "s2", lang: h.sessionLanguageSource("s2"), messages: clitext.NewMessages()}, "daily")
@@ -265,7 +265,7 @@ func TestCompactionNoticeFollowsTheLiveSessionLanguage(t *testing.T) {
 		t.Fatalf("AddSession: %v", err)
 	}
 	live := newOperatorLanguage(i18n.English)
-	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)})
+	h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)})
 	var printed bytes.Buffer
 	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", nil, nil, nil, &printed)
 	d.language = liveSessionLanguage(st, "s1")
@@ -291,7 +291,7 @@ func TestCompactionNoticeFollowsTheOperatorWithoutASessionLanguage(t *testing.T)
 		t.Fatalf("AddSession: %v", err)
 	}
 	live := newOperatorLanguage(i18n.English)
-	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)})
+	h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, st: st, lang: i18n.English, language: live.Get, live: make(map[string]liveSession)})
 	var printed bytes.Buffer
 	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", nil, nil, nil, &printed)
 	d.language = liveSessionLanguage(st, "s1")
@@ -373,6 +373,7 @@ func TestClosedHubReconcileOpensNoSessionQuietly(t *testing.T) {
 	h.stopLive()
 	t.Cleanup(h.stopLive)
 	h.reconcile(context.Background())
+	closeHubSink(t, h)
 	if printed.Len() != 0 {
 		t.Fatalf("a closed hub printed %q while its sessions were refused, want no warning", printed.String())
 	}

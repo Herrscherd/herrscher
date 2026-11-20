@@ -24,7 +24,7 @@ func TestNilWarningsReachStderrWithoutPanicking(t *testing.T) {
 		return
 	}
 	printed := runNilWarningsChild(t)
-	for _, marker := range []string{"probe-warnto", "approvals: probe-warnf", "approvals: a ", "bad addr", "probe-consolidate"} {
+	for _, marker := range []string{"probe-warnto", "approvals: probe-warnf", "the approval wait of ", "bad addr", "probe-consolidate"} {
 		if !strings.Contains(printed, marker) {
 			t.Fatalf("stderr = %q, want it to contain %q", printed, marker)
 		}
@@ -55,7 +55,7 @@ func emitNilWarnings() {
 
 	warnTo(messages, nil, i18n.English, "warn.health_server", map[string]any{detailParam: "probe-warnto"})
 	newApprovalTable(nil).warnf("approvals: probe-warnf\n")
-	warnWaitOutlivesTheHook(nil, agent.HookWait)
+	newApprovalTable(nil).warnWaitTruncated(agent.HookWait, hookAnswerWait())
 	serveHealth(ctx, "bad addr", health.NewHealth(time.Now()), messages, fixedLanguageSource(i18n.English), nil)
 	consolidateOneShot(ctx, &consolidateSpy{err: consolidated}, newSeedGate(messages, "nil-writer", nil, fixedLanguageSource(i18n.English)), state.Session{Name: "nil-writer"}, messages, nil, fixedLanguageSource(i18n.English))
 }

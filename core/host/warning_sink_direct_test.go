@@ -14,7 +14,7 @@ import (
 func TestSinkSerializesDrainAndDirectWritesOnABareBuffer(t *testing.T) {
 	const writes = 300
 	var out bytes.Buffer
-	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: &out, teardownGrace: 10 * time.Second})
+	h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: &out, teardownGrace: 10 * time.Second})
 	direct := runInBackground(func() {
 		for range writes {
 			if err := h.sink.announce("direct"); err != nil {

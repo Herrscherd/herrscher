@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -17,12 +18,12 @@ func (o *startOrch) Consolidate(context.Context) error                       { r
 func (o *startOrch) Close() error                                            { return nil }
 func (o *startOrch) Start(context.Context)                                   { o.started.Store(true) }
 
-type plainOrchG5 struct{}
+type noopOrchestrator struct{}
 
-func (plainOrchG5) Context(context.Context) string                          { return "" }
-func (plainOrchG5) Observe(context.Context, contracts.Prompt, string) error { return nil }
-func (plainOrchG5) Consolidate(context.Context) error                       { return nil }
-func (plainOrchG5) Close() error                                            { return nil }
+func (noopOrchestrator) Context(context.Context) string                          { return "" }
+func (noopOrchestrator) Observe(context.Context, contracts.Prompt, string) error { return nil }
+func (noopOrchestrator) Consolidate(context.Context) error                       { return nil }
+func (noopOrchestrator) Close() error                                            { return nil }
 
 func failBackend(string) (contracts.Backend, error) {
 	return nil, errors.New("no backend in test")
@@ -30,7 +31,7 @@ func failBackend(string) (contracts.Backend, error) {
 
 func TestRunStartsOptionalCapability(t *testing.T) {
 	orch := &startOrch{}
-	opts := Options{Channel: "c", HubSocket: "/nonexistent-hub.sock"}
+	opts := Options{Channel: "c", HubSocket: "/nonexistent-hub.sock", ApprovalWait: time.Minute}
 	if err := Run(context.Background(), failBackend, orch, opts); err != nil {
 		t.Logf("run: %v", err)
 	}
@@ -39,9 +40,16 @@ func TestRunStartsOptionalCapability(t *testing.T) {
 	}
 }
 
-func TestRunWithoutStartCapabilityStillRuns(t *testing.T) {
+func TestRunRefusesToStartWithoutAnApprovalWait(t *testing.T) {
 	opts := Options{Channel: "c", HubSocket: "/nonexistent-hub.sock"}
-	if err := Run(context.Background(), failBackend, plainOrchG5{}, opts); err == nil {
+	if err := Run(context.Background(), failBackend, noopOrchestrator{}, opts); !errors.Is(err, errNoApprovalWait) {
+		t.Fatalf("got %v, want errNoApprovalWait: a bridge with no bound must not wait forever", err)
+	}
+}
+
+func TestRunWithoutStartCapabilityStillRuns(t *testing.T) {
+	opts := Options{Channel: "c", HubSocket: "/nonexistent-hub.sock", ApprovalWait: time.Minute}
+	if err := Run(context.Background(), failBackend, noopOrchestrator{}, opts); err == nil {
 		t.Fatal("expected Run to surface the backend error")
 	}
 }

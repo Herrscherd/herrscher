@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
@@ -17,7 +18,10 @@ import (
 	"github.com/Herrscherd/herrscher/core/skills"
 )
 
-var errNoHubSocket = errors.New("bridge requires --hub-socket (pure-runner mode)")
+var (
+	errNoHubSocket    = errors.New("bridge requires --hub-socket (pure-runner mode)")
+	errNoApprovalWait = errors.New("bridge requires an approval wait (Options.ApprovalWait)")
+)
 
 // BackendFactory builds the model-edge backend for a resolved channel. It is
 // injected so core stays free of any model-specific code: the binary supplies a
@@ -67,6 +71,7 @@ type Options struct {
 	// bridge takes no files from its backend.
 	OutboxRoot       string
 	OutboundMaxBytes int64
+	ApprovalWait     time.Duration
 }
 
 // Run is the bridge entry point: a pure backend runner. It requires a hub socket
@@ -74,6 +79,9 @@ type Options struct {
 func Run(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestrator, opts Options) error {
 	if opts.HubSocket == "" {
 		return errNoHubSocket
+	}
+	if opts.ApprovalWait <= 0 {
+		return errNoApprovalWait
 	}
 	if starter, ok := orch.(interface{ Start(context.Context) }); ok {
 		starter.Start(ctx)
@@ -123,7 +131,7 @@ type turnRouter struct {
 func (r turnRouter) route(ctx context.Context, event contracts.Event, lang i18n.Language) error {
 	switch event.T {
 	case compactwire.EventRequest:
-		runCompact(ctx, r.sink, r.backend, r.ctrl, event)
+		runCompact(ctx, r.sink, r.backend, r.ctrl, r.aff.approvals, lang, event)
 	case historywire.EventRead:
 		runHistoryRead(ctx, r.sink, r.backend, r.ctrl, event)
 	case historywire.EventPrune:

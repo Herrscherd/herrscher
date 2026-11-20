@@ -1,0 +1,17 @@
+[
+  {
+    "id": "approval.unavailable",
+    "description": "A tool call is refused because the bridge could not ask the operator for approval, Detail carries the cause",
+    "other": "herrscher: approval could not be asked, so this tool call is refused: {{.Detail}}"
+  },
+  {
+    "id": "approval.duplicate",
+    "description": "A tool call is refused because a request with the same ID is already waiting for the operator",
+    "other": "a request with the same ID is already waiting for the operator"
+  },
+  {
+    "id": "approval.no_answer",
+    "description": "A tool call is refused because the operator did not answer within the hook wait, Wait carries the duration",
+    "other": "nobody answered within {{.Wait}}"
+  }
+]

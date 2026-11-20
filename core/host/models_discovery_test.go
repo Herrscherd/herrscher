@@ -1,11 +1,9 @@
 package host
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -465,10 +463,7 @@ func TestModelsListFollowsTheStateFlag(t *testing.T) {
 }
 
 func TestClashWarnsOncePerCacheAcrossLoads(t *testing.T) {
-	var logs bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	logs := captureDefaultLog(t)
 	path := discoveryCacheIn(t.TempDir())
 	if err := saveDiscoveryCache(newHostMessages(), path, cacheWith(time.Now(), cachedModel{ID: "b-native", Label: "clash", Arg: "clash", Route: "native"})); err != nil {
 		t.Fatal(err)
@@ -485,10 +480,7 @@ func TestClashWarnsOncePerCacheAcrossLoads(t *testing.T) {
 }
 
 func TestClashWarnsOncePerIDPerCacheLoad(t *testing.T) {
-	var logs bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	logs := captureDefaultLog(t)
 	sources := Sources{discovered: cacheWith(time.Now(), cachedModel{ID: "b-native", Label: "clash", Arg: "clash", Route: "native"}), notices: newClashNotices()}
 	for range 5 {
 		if _, err := CatalogWith(fakePlugins(), contracts.PolicyAll, sources); err != nil {
@@ -615,10 +607,7 @@ func TestModelHiddenBySpecLeavesSelectorButResolves(t *testing.T) {
 }
 
 func TestResolvingAHiddenModelWarnsWithoutSwitching(t *testing.T) {
-	var logs bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	logs := captureDefaultLog(t)
 	entry, err := LookupModelWith(pluginsWithRetiredModel(), contracts.PolicyAll, Sources{hidden: map[string]bool{"a-visible": true}}, "a-visible")
 	if err != nil {
 		t.Fatalf("LookupModelWith: %v", err)
@@ -632,10 +621,7 @@ func TestResolvingAHiddenModelWarnsWithoutSwitching(t *testing.T) {
 }
 
 func TestResolvingAVisibleModelDoesNotWarn(t *testing.T) {
-	var logs bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	logs := captureDefaultLog(t)
 	if _, err := LookupModelWith(pluginsWithRetiredModel(), contracts.PolicyAll, Sources{}, "a-visible"); err != nil {
 		t.Fatalf("LookupModelWith: %v", err)
 	}

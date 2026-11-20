@@ -85,6 +85,7 @@ type hub struct {
 
 	approvals *approvalTable
 	sessions  *sessionTable
+	desk      *approvalDesk
 }
 
 type forgetter interface{ forget(string) }
@@ -157,32 +158,8 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 	}
 	ctx = withRestarter(ctx, h)
 
-	if isSessionSeedCommand(args) {
-		oneShot := h.persists.child()
-		runtime := oneShotSeedRuntime{
-			warnings:        h.warnings,
-			messages:        h.messages,
-			cliMessages:     h.cliMessages,
-			sessionLanguage: h.sessionLanguageSource,
-			coordinator:     h.coordinator,
-			publish:         h.eventPublisher,
-			backend:         h.seedBackend,
-			models:          h.models,
-			sessions:        h.sessions,
-			persists:        oneShot,
-			recordUsage: func(sess state.Session, records []usage.Record) {
-				h.recordUsageWith(oneShot, sess, records)
-			},
-			resume: func(session, token string) {
-				h.keepResumeTokenWith(oneShot, session, token)
-			},
-			record: func(session string, entry state.TranscriptEntry) {
-				if err := h.appendTranscriptWith(oneShot, session, entry); err != nil {
-					warnLive(h.messages, h.warnings, h.sessionLanguageSource(session), "warn.session_seed_transcript", map[string]any{nameParam: session, detailParam: err})
-				}
-			},
-		}
-		return h.reg.Dispatch(withOneShotSeedRuntime(ctx, runtime), args)
+	if isSessionSeedCommand(args) || isSessionHandoffCommand(args) {
+		return h.reg.Dispatch(withOneShotSeedRuntime(ctx, h.daemonSeedRuntime()), args)
 	}
 
 	if isSessionForkCommand(args) {
@@ -200,12 +177,44 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 	return h.reconciling(ctx, func() (contracts.Result, error) { return h.reg.Dispatch(ctx, args) })
 }
 
+func (h *hub) daemonSeedRuntime() oneShotSeedRuntime {
+	oneShot := h.persists.child()
+	return oneShotSeedRuntime{
+		warnings:        h.warnings,
+		messages:        h.messages,
+		cliMessages:     h.cliMessages,
+		sessionLanguage: h.sessionLanguageSource,
+		coordinator:     h.coordinator,
+		publish:         h.eventPublisher,
+		backend:         h.seedBackend,
+		models:          h.models,
+		sessions:        h.sessions,
+		desk:            h.desk,
+		persists:        oneShot,
+		recordUsage: func(sess state.Session, records []usage.Record) {
+			h.recordUsageWith(oneShot, sess, records)
+		},
+		resume: func(session, token string) {
+			h.keepResumeTokenWith(oneShot, session, token)
+		},
+		record: func(session string, entry state.TranscriptEntry) {
+			if err := h.appendTranscriptWith(oneShot, session, entry); err != nil {
+				warnLive(h.messages, h.warnings, h.sessionLanguageSource(session), "warn.session_seed_transcript", map[string]any{nameParam: session, detailParam: err})
+			}
+		},
+	}
+}
+
 func (h *hub) isContributedCommand(args []string) bool {
 	return len(args) > 0 && h.contributedKinds[args[0]]
 }
 
 func isSessionSeedCommand(args []string) bool {
 	return len(args) >= 2 && args[0] == nsSession && args[1] == verbSeed
+}
+
+func isSessionHandoffCommand(args []string) bool {
+	return len(args) >= 2 && args[0] == nsSession && args[1] == verbHandoff
 }
 
 func (h *hub) Create(ctx context.Context, spec contracts.CreateSession) (contracts.Result, error) {
@@ -466,7 +475,7 @@ func (h *hub) Submit(name string, in contracts.Inbound) bool {
 }
 
 func (h *hub) Pick(name, value string) bool {
-	if answerApprovalPick(h.approvals, h.sessions, name, value) {
+	if answerApprovalPick(h.approvals, name, value) {
 		return true
 	}
 	return h.sessions.pick(name, value)

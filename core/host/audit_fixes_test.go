@@ -29,7 +29,7 @@ func TestAnswerApprovalPickIsSessionScoped(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := newTestPendingApproval(tc.owner)
 			defer registerTestApproval(t, approvalTab, p)()
-			if got := answerApprovalPick(approvalTab, newSessionTable(newHostMessages(), clitext.NewMessages()), tc.clicker, approvalPickPrefix+p.id+":allow"); got != tc.swallowd {
+			if got := answerApprovalPick(approvalTab, tc.clicker, approvalPickPrefix+p.id+":allow"); got != tc.swallowd {
 				t.Fatalf("answerApprovalPick = %v, want %v", got, tc.swallowd)
 			}
 			assertSettlement(t, p, tc.answered)
@@ -39,11 +39,12 @@ func TestAnswerApprovalPickIsSessionScoped(t *testing.T) {
 
 func newTestPendingApproval(session string) *pendingApproval {
 	return &pendingApproval{
-		id:      newApprovalID(),
-		session: session,
-		req:     approval.Request{Tool: "Bash"},
-		asked:   time.Now(),
-		answer:  make(chan approvalVerdict, 1),
+		id:       newApprovalID(),
+		session:  session,
+		req:      approval.Request{Tool: "Bash"},
+		asked:    time.Now(),
+		deadline: time.Now().Add(time.Hour),
+		answer:   make(chan approvalVerdict, 1),
 	}
 }
 
@@ -102,7 +103,7 @@ func TestDriverEnqueueIsBounded(t *testing.T) {
 func TestGoDeadDoesNotHoldTheHubLockWhileWaiting(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		stuck := make(chan struct{})
-		h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, live: make(map[string]liveSession), teardownGrace: 100 * time.Millisecond})
+		h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, live: make(map[string]liveSession), teardownGrace: 100 * time.Millisecond})
 		h.live["wedged"] = liveSession{cancel: func() {}, done: stuck, release: func() {}}
 
 		returned := make(chan struct{})

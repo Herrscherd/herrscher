@@ -15,7 +15,7 @@ func TestGoDeadSharesOneGraceBetweenHaltAndTeardown(t *testing.T) {
 		stuck := make(chan struct{})
 		defer close(stuck)
 		name := "shared-grace"
-		h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, teardownGrace: grace, live: map[string]liveSession{
+		h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, teardownGrace: grace, live: map[string]liveSession{
 			name: {cancel: func() {}, done: make(chan struct{}), release: func() {}},
 		}})
 		h.stopBridge = func(string) error {

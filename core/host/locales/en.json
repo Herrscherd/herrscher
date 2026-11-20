@@ -771,6 +771,36 @@
     "other": "herrscher: this hook answers {{.Expected}}, not {{.Event}}, allowing"
   },
   {
+    "id": "hook.approval_socket_failed",
+    "description": "The approval hook refuses a tool call because the approval socket failed or answered for another request, Detail carries the cause",
+    "other": "herrscher: the approval socket could not answer, so this tool call is refused: {{.Detail}}"
+  },
+  {
+    "id": "hook.approval_timeout",
+    "description": "The approval hook refuses a tool call because no answer came within its own bound, which sits below the CLI's hook wait, Wait carries that bound",
+    "other": "herrscher: no answer came within {{.Wait}}, so this tool call is refused before the CLI cuts the hook off"
+  },
+  {
+    "id": "approve.wait_truncated",
+    "description": "The approval wait configured is longer than the bound the call it belongs to can hold, so the question is cut at Bound, Wait carries the configured wait",
+    "other": "herrscher: the approval wait of {{.Wait}} outlives the call that asks, so it is cut at {{.Bound}}"
+  },
+  {
+    "id": "approval.request_unreadable",
+    "description": "The daemon refuses an approval request from the bridge that it cannot read, Detail carries the cause",
+    "other": "herrscher: the approval request could not be read, so this tool call is refused: {{.Detail}}"
+  },
+  {
+    "id": "approval.no_desk",
+    "description": "The daemon refuses an approval request from the bridge because the session has no approval desk",
+    "other": "herrscher: this session has no approval desk, so this tool call is refused"
+  },
+  {
+    "id": "approval.unknown_consumer",
+    "description": "The daemon refuses an approval request whose consumer it does not know, so nothing is asked of the operator",
+    "other": "herrscher: this approval request has no known consumer, so this tool call is refused"
+  },
+  {
     "id": "hook.decision_unwritable",
     "description": "The approval hook could not write its decision to stdout, Decision names it and Detail carries the error",
     "other": "herrscher: could not write the {{.Decision}} decision: {{.Detail}}"

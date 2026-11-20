@@ -31,6 +31,7 @@ func hostErrKeys() map[Key][]string {
 		"cli.host.fault.request_name_missing":          nil,
 		"cli.host.fault.approve_mode_usage":            nil,
 		"cli.host.fault.approve_ask_unauthenticated":   nil,
+		"cli.host.fault.seed_without_approval_desk":    nil,
 		"cli.host.fault.usage_empty_value":             nil,
 		"cli.host.fault.memory_locate_unsupported":     nil,
 		"cli.host.fault.memory_forget_unsupported":     nil,

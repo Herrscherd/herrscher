@@ -45,6 +45,7 @@ func seedWithAutomaticCompactionAndPublish(backend contracts.Backend, timeout ti
 	policy.limits = contextwindow.NewLimits("1000", nil)
 	table.compaction = policy
 	runtime := oneShotSeedRuntime{
+		desk:        stubSeedDesk(),
 		persists:    newPersistWrites(),
 		messages:    newHostMessages(),
 		cliMessages: clitext.NewMessages(),

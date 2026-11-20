@@ -233,7 +233,7 @@ func NewRegistry(ctx context.Context, cliMessages *clitext.Messages, hostMessage
 	if options.DefaultGateways == nil {
 		options.DefaultGateways = nonTerminalKinds(gws)
 	}
-	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, hostState.Home)}, options, hostState, sup, instID, nil, newApprovalTable(options.Warnings), newSessionTable(messages, cliMessages))
+	reg, deps, err := buildRegistry(ctx, Deps{Admin: adminForHome(gws, hostState.Home)}, options, hostState, sup, instID, nil, newApprovalTable(options.Warnings).withMessages(messages, options.languageSource()), newSessionTable(messages, cliMessages))
 	if err != nil {
 		return nil, err
 	}

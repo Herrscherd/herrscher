@@ -3,15 +3,20 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"strings"
 	"sync"
+	"time"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/approvalsock"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/language"
@@ -23,17 +28,19 @@ const SessionVar = control.SessionVar
 const hookEvent = "PreToolUse"
 
 const (
-	hookNoSession          = "hook.no_session"
-	hookNoToken            = "hook.no_token"
-	hookPayloadUnreadable  = "hook.payload_unreadable"
-	hookPayloadTooLarge    = "hook.payload_too_large"
-	hookNamesNoTool        = "hook.names_no_tool"
-	hookNoDaemon           = "hook.no_daemon"
-	hookCancelled          = "hook.cancelled"
-	hookDaemonFailed       = "hook.daemon_failed"
-	hookAnswerUnreadable   = "hook.answer_unreadable"
-	hookOtherEvent         = "hook.other_event"
-	hookDecisionUnwritable = "hook.decision_unwritable"
+	hookNoSession            = "hook.no_session"
+	hookNoToken              = "hook.no_token"
+	hookPayloadUnreadable    = "hook.payload_unreadable"
+	hookPayloadTooLarge      = "hook.payload_too_large"
+	hookNamesNoTool          = "hook.names_no_tool"
+	hookNoDaemon             = "hook.no_daemon"
+	hookCancelled            = "hook.cancelled"
+	hookDaemonFailed         = "hook.daemon_failed"
+	hookAnswerUnreadable     = "hook.answer_unreadable"
+	hookOtherEvent           = "hook.other_event"
+	hookDecisionUnwritable   = "hook.decision_unwritable"
+	hookApprovalSocketFailed = "hook.approval_socket_failed"
+	hookApprovalTimeout      = "hook.approval_timeout"
 )
 
 const (
@@ -43,7 +50,23 @@ const (
 	eventParam    = "Event"
 	answerParam   = "Answer"
 	decisionParam = "Decision"
+	waitParam     = "Wait"
+	boundParam    = "Bound"
 )
+
+const (
+	hookAnswerMargin   = 30 * time.Second
+	bridgeAnswerMargin = 60 * time.Second
+)
+
+func hookAnswerWait() time.Duration {
+	return agent.HookWait - hookAnswerMargin
+}
+
+// BridgeApprovalWait is how long the bridge waits for an approval answer: below the hook's own bound, so the refusal the operator sees is the bridge's.
+func BridgeApprovalWait() time.Duration {
+	return agent.HookWait - bridgeAnswerMargin
+}
 
 const modelParam = "Model"
 
@@ -56,7 +79,7 @@ type hookInput struct {
 type hookAsker func(ctx context.Context, argv []string) (string, bool, error)
 
 // RunPermissionHook answers one tool-call payload from the daemon and fails closed on every error.
-func RunPermissionHook(ctx context.Context, owner *Messages, stdin io.Reader, out, errOut io.Writer, target func() string, ask hookAsker) error {
+func RunPermissionHook(ctx context.Context, owner *Messages, stdin io.Reader, out, errOut io.Writer, target func() string, answerWait time.Duration, ask hookAsker) error {
 	messages := owner.owner
 	lang := language.Client(slog.Default(), "")
 	var payload hookInput
@@ -78,6 +101,10 @@ func RunPermissionHook(ctx context.Context, owner *Messages, stdin io.Reader, ou
 		return refuseHook(messages, out, errOut, lang, hookNamesNoTool, nil)
 	}
 
+	if socket := strings.TrimSpace(os.Getenv(approvalsock.EnvApprovalSocket)); socket != "" {
+		return askApprovalSocket(ctx, messages, out, errOut, lang, socket, answerWait, payload)
+	}
+
 	session := strings.TrimSpace(os.Getenv(SessionVar))
 	if session == "" {
 		return refuseHook(messages, out, errOut, lang, hookNoSession, map[string]any{variableParam: SessionVar})
@@ -90,10 +117,14 @@ func RunPermissionHook(ctx context.Context, owner *Messages, stdin io.Reader, ou
 	argv := append([]string{nsApprove, "ask"}, cli.FlagArg(paramSession, session)...)
 	argv = append(argv, cli.FlagArg("tool", payload.ToolName)...)
 	argv = append(argv, cli.FlagArg("subject", approval.SubjectOf(payload.ToolName, payload.ToolInput))...)
-	answer, handled, err := ask(withCallerToken(ctx, token), argv)
+	bounded, cancel := context.WithTimeout(ctx, answerWait)
+	defer cancel()
+	answer, handled, err := ask(withCallerToken(bounded, token), argv)
 	switch {
 	case !handled:
 		return refuseHook(messages, out, errOut, lang, hookNoDaemon, map[string]any{socketParam: target()})
+	case err != nil && answerTimedOut(ctx, bounded):
+		return refuseHook(messages, out, errOut, lang, hookApprovalTimeout, map[string]any{waitParam: answerWait.String()})
 	case err != nil && ctx.Err() != nil:
 		return refuseHook(messages, out, errOut, lang, hookCancelled, nil)
 	case err != nil:
@@ -110,14 +141,39 @@ func RunPermissionHook(ctx context.Context, owner *Messages, stdin io.Reader, ou
 	return writeHookDecision(messages, out, errOut, lang, verdict.Decision, verdict.Reason)
 }
 
+func askApprovalSocket(ctx context.Context, messages *hostMessages, out, errOut io.Writer, lang i18n.Language, socket string, answerWait time.Duration, payload hookInput) error {
+	req := contracts.ApprovalRequest{
+		ID:      newApprovalID(),
+		Tool:    payload.ToolName,
+		Subject: approval.SubjectOf(payload.ToolName, payload.ToolInput),
+	}
+	bounded, cancel := context.WithTimeout(ctx, answerWait)
+	defer cancel()
+	answer, err := approvalsock.Ask(bounded, socket, req)
+	if err != nil && answerTimedOut(ctx, bounded) {
+		return refuseHook(messages, out, errOut, lang, hookApprovalTimeout, map[string]any{waitParam: answerWait.String()})
+	}
+	if err != nil {
+		return refuseHook(messages, out, errOut, lang, hookApprovalSocketFailed, map[string]any{detailParam: err.Error()})
+	}
+	if !answer.Allowed() {
+		return writeHookDecision(messages, out, errOut, lang, "deny", answer.Reason)
+	}
+	return writeHookDecision(messages, out, errOut, lang, "allow", answer.Reason)
+}
+
 // RunApprovalHook is RunPermissionHook wired to the operator daemon.
 func RunApprovalHook(ctx context.Context, layout RuntimeLayout, owner *Messages, stdin io.Reader, out, errOut io.Writer) error {
 	target := sync.OnceValue(func() string {
 		return commandSocketTargetFrom(layout, func() string { return ServedInstanceID(DefaultStatePath(), "") })
 	})
-	return RunPermissionHook(ctx, owner, stdin, out, errOut, target, func(c context.Context, argv []string) (string, bool, error) {
+	return RunPermissionHook(ctx, owner, stdin, out, errOut, target, hookAnswerWait(), func(c context.Context, argv []string) (string, bool, error) {
 		return dispatchToOperatorDaemon(c, owner.owner, layout, target(), argv)
 	})
+}
+
+func answerTimedOut(parent, bounded context.Context) bool {
+	return parent.Err() == nil && errors.Is(bounded.Err(), context.DeadlineExceeded)
 }
 
 func refuseHook(messages *hostMessages, out, errOut io.Writer, lang i18n.Language, key string, params map[string]any) error {

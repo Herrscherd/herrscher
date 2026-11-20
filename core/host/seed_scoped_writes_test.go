@@ -50,7 +50,7 @@ func TestContextRuntimeNeverCreatesAOneShotChild(t *testing.T) {
 		created++
 		return daemon.child()
 	}
-	ctx := withOneShotSeedRuntime(t.Context(), oneShotSeedRuntime{persists: fromContext, messages: newHostMessages(), cliMessages: clitext.NewMessages()})
+	ctx := withOneShotSeedRuntime(t.Context(), oneShotSeedRuntime{desk: seedDesk(t), persists: fromContext, messages: newHostMessages(), cliMessages: clitext.NewMessages()})
 	runtime := oneShotSeedRuntimeFrom(ctx, newHostMessages(), clitext.NewMessages(), newOneShot)
 	if created != 0 {
 		t.Fatalf("a call carrying a runtime in its context created %d one-shot children, want none", created)

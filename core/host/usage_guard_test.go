@@ -1,9 +1,7 @@
 package host
 
 import (
-	"bytes"
 	"errors"
-	"log/slog"
 	"strings"
 	"testing"
 
@@ -16,7 +14,7 @@ import (
 func TestAttachOneShotTapsRecordsTheUsageOfTheSeed(t *testing.T) {
 	var recorded []usage.Record
 	var owner string
-	runtime := oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), recordUsage: func(sess state.Session, records []usage.Record) {
+	runtime := oneShotSeedRuntime{desk: seedDesk(t), persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), recordUsage: func(sess state.Session, records []usage.Record) {
 		owner = sess.Name
 		recorded = append(recorded, records...)
 	}}
@@ -46,10 +44,7 @@ func TestUsageRangeAndAccountRefuseEmptyValues(t *testing.T) {
 }
 
 func TestProfileEnvFailureIsLoggedOncePerProfile(t *testing.T) {
-	var logs bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	logs := captureDefaultLog(t)
 
 	source := &usageSource{}
 	failure := errors.New("unreadable env")

@@ -40,7 +40,7 @@ func compactFrame(t *testing.T) contracts.Event {
 
 func TestRunCompactReturnsTheBackendResult(t *testing.T) {
 	sink := &collectSink{}
-	runCompact(context.Background(), sink, compactingBackend{}, nil, compactFrame(t))
+	runCompact(context.Background(), sink, compactingBackend{}, nil, nil, 0, compactFrame(t))
 	if len(sink.events) != 1 {
 		t.Fatalf("events = %+v, want one result", sink.events)
 	}
@@ -63,7 +63,7 @@ func (noticingBackend) Compact(_ context.Context, _ contracts.CompactRequest, _ 
 
 func TestRunCompactCarriesTheNoticeToTheHost(t *testing.T) {
 	sink := &collectSink{}
-	runCompact(context.Background(), sink, noticingBackend{}, nil, compactFrame(t))
+	runCompact(context.Background(), sink, noticingBackend{}, nil, nil, 0, compactFrame(t))
 	if len(sink.events) != 1 {
 		t.Fatalf("events = %+v, want one result", sink.events)
 	}
@@ -78,7 +78,7 @@ func TestRunCompactCarriesTheNoticeToTheHost(t *testing.T) {
 
 func TestRunCompactRefusesABackendWithoutThePort(t *testing.T) {
 	sink := &collectSink{}
-	runCompact(context.Background(), sink, fakeBackend{}, nil, compactFrame(t))
+	runCompact(context.Background(), sink, fakeBackend{}, nil, nil, 0, compactFrame(t))
 	if len(sink.events) != 1 || sink.events[0].Value != compactwire.NoCompactor {
 		t.Fatalf("events = %+v, want one no-port failure", sink.events)
 	}

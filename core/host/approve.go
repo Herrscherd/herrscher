@@ -11,7 +11,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
-	"github.com/Herrscherd/herrscher/core/internal/agent"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -26,16 +26,18 @@ const (
 )
 
 type pendingApproval struct {
-	id      string
-	session string
-	req     approval.Request
-	asked   time.Time
-	answer  chan approvalVerdict
+	id       string
+	session  string
+	req      approval.Request
+	asked    time.Time
+	deadline time.Time
+	answer   chan approvalVerdict
 }
 
 type approvalVerdict struct {
 	decision approval.Decision
 	reason   string
+	scope    approvalScope
 }
 
 type approvalScope uint8
@@ -93,19 +95,33 @@ type PendingApproval struct {
 }
 
 type approvalTable struct {
-	mu    sync.Mutex
-	m     map[string]*pendingApproval
-	judge riskJudge
-	rules approvalRules
-	warn  io.Writer
+	mu       sync.Mutex
+	m        map[string]*pendingApproval
+	judge    riskJudge
+	rules    approvalRules
+	warn     io.Writer
+	messages *hostMessages
+	lang     languageSource
 }
 
 func newApprovalTable(warn io.Writer) *approvalTable {
-	return &approvalTable{m: make(map[string]*pendingApproval), judge: registryRiskJudge, warn: warningWriter(warn)}
+	return &approvalTable{
+		m:        make(map[string]*pendingApproval),
+		judge:    registryRiskJudge,
+		warn:     warningWriter(warn),
+		messages: newHostMessages(),
+		lang:     fixedLanguageSource(i18n.English),
+	}
 }
 
 func (t *approvalTable) withRules(rules approvalRules) *approvalTable {
 	t.rules = rules
+	return t
+}
+
+func (t *approvalTable) withMessages(messages *hostMessages, lang languageSource) *approvalTable {
+	t.messages = messages
+	t.lang = lang
 	return t
 }
 
@@ -130,7 +146,7 @@ func (t *approvalTable) rated(ctx context.Context, sessions *sessionTable, sessi
 	return risk.Decision()
 }
 
-func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessionTable, session string, req approval.Request, pol approval.Policy, mode approval.Mode, wait time.Duration) (approval.Decision, string) {
+func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessionTable, session string, req approval.Request, pol approval.Policy, mode approval.Mode, wait, bound time.Duration) (approval.Decision, string) {
 	raw, matched := pol.Decide(req)
 	decided := approval.Apply(mode, req.Tool, raw, matched)
 	if decided == approval.Deny {
@@ -149,13 +165,19 @@ func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessio
 	if wait <= 0 {
 		wait = state.DefaultApprovalWait
 	}
+	if bound > 0 && wait > bound {
+		approvals.warnWaitTruncated(wait, bound)
+		wait = bound
+	}
 
+	now := time.Now()
 	pending := &pendingApproval{
-		id:      newApprovalID(),
-		session: session,
-		req:     req,
-		asked:   time.Now(),
-		answer:  make(chan approvalVerdict, 1),
+		id:       newApprovalID(),
+		session:  session,
+		req:      req,
+		asked:    now,
+		deadline: now.Add(wait),
+		answer:   make(chan approvalVerdict, 1),
 	}
 	release, refusal := registerApproval(approvals, pending)
 	if refusal != "" {
@@ -163,26 +185,48 @@ func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessio
 	}
 	defer release()
 
-	warnWaitOutlivesTheHook(approvals.warn, wait)
-
 	octx, cancel := context.WithTimeout(ctx, wait)
-	askApprovalOn(octx, sessions, session, pending.id, req, time.Now().Add(wait))
+	askApprovalOn(octx, sessions, session, pending.id, req, pending.deadline)
 	cancel()
 
-	select {
-	case decision := <-pending.answer:
-		if decision.decision == approval.Allow {
-			return approval.Allow, ""
-		}
-		reason := decision.reason
+	verdict, refused := awaitVerdict(ctx, pending, wait)
+	if buffered, ok := closeApproval(approvals, pending); ok {
+		verdict, refused = buffered, ""
+	}
+	if refused != "" {
+		return approval.Deny, refused
+	}
+	if verdict.decision != approval.Allow {
+		reason := verdict.reason
 		if reason == "" {
 			reason = fmt.Sprintf("herrscher: %s was denied by the operator", describeRequest(req))
 		}
 		return approval.Deny, reason
+	}
+	approvals.remember(sessions, pending, verdict.scope)
+	return approval.Allow, ""
+}
+
+func awaitVerdict(ctx context.Context, pending *pendingApproval, wait time.Duration) (approvalVerdict, string) {
+	select {
+	case verdict := <-pending.answer:
+		return verdict, ""
 	case <-time.After(wait):
-		return approval.Deny, fmt.Sprintf("herrscher: nobody answered within %s, so %s was denied", wait, describeRequest(req))
+		return approvalVerdict{}, fmt.Sprintf("herrscher: nobody answered within %s, so %s was denied", wait, describeRequest(pending.req))
 	case <-ctx.Done():
-		return approval.Deny, fmt.Sprintf("herrscher: the wait for approval ended, so %s was denied", describeRequest(req))
+		return approvalVerdict{}, fmt.Sprintf("herrscher: the wait for approval ended, so %s was denied", describeRequest(pending.req))
+	}
+}
+
+func closeApproval(approvals *approvalTable, pending *pendingApproval) (approvalVerdict, bool) {
+	approvals.mu.Lock()
+	defer approvals.mu.Unlock()
+	delete(approvals.m, pending.id)
+	select {
+	case verdict := <-pending.answer:
+		return verdict, true
+	default:
+		return approvalVerdict{}, false
 	}
 }
 
@@ -216,29 +260,23 @@ func registerApproval(approvals *approvalTable, pending *pendingApproval) (func(
 	}, ""
 }
 
-func warnWaitOutlivesTheHook(out io.Writer, wait time.Duration) {
-	if wait <= agent.HookWait/2 {
-		return
-	}
-	logWriteFailure(fmt.Fprintf(warningWriter(out), "approvals: a %s wait can hold the hook for twice that (a slow menu post, then the timer), longer than the %s the CLI gives it: past %s the tool call runs and nobody is told\n", wait, agent.HookWait, agent.HookWait))
+func (t *approvalTable) warnWaitTruncated(configured, bound time.Duration) {
+	warnTo(t.messages, t.warn, t.lang(), "approve.wait_truncated", map[string]any{waitParam: configured.String(), boundParam: bound.Round(time.Second).String()})
 }
 
-func settleApproval(approvals *approvalTable, sessions *sessionTable, approvalID string, answer approvalAnswer) bool {
+func settleApproval(approvals *approvalTable, approvalID string, answer approvalAnswer) bool {
 	approvals.mu.Lock()
+	defer approvals.mu.Unlock()
 	pending := approvals.m[approvalID]
-	approvals.mu.Unlock()
-	if pending == nil {
+	if pending == nil || !time.Now().Before(pending.deadline) {
 		return false
 	}
 	select {
-	case pending.answer <- approvalVerdict{decision: answer.decision(), reason: answer.reason}:
-	default:
+	case pending.answer <- approvalVerdict{decision: answer.decision(), reason: answer.reason, scope: answer.scope}:
 		return true
+	default:
+		return false
 	}
-	if answer.decision() == approval.Allow {
-		approvals.remember(sessions, pending, answer.scope)
-	}
-	return true
 }
 
 func (t *approvalTable) remember(sessions *sessionTable, pending *pendingApproval, scope approvalScope) {
@@ -314,7 +352,7 @@ func pendingApprovals(approvals *approvalTable) []PendingApproval {
 	return out
 }
 
-func answerApprovalPick(approvals *approvalTable, sessions *sessionTable, session, value string) bool {
+func answerApprovalPick(approvals *approvalTable, session, value string) bool {
 	if !strings.HasPrefix(value, approvalPickPrefix) {
 		return false
 	}
@@ -325,7 +363,7 @@ func answerApprovalPick(approvals *approvalTable, sessions *sessionTable, sessio
 	if owner, known := approvalSession(approvals, approvalID); known && owner != session {
 		return true
 	}
-	settleApproval(approvals, sessions, approvalID, answer)
+	settleApproval(approvals, approvalID, answer)
 	return true
 }
 

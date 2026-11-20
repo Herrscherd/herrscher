@@ -24,6 +24,8 @@ const seedTurnTimeout = 120 * time.Second
 
 const seedJoinGrace = 2 * time.Second
 
+var errSeedWithoutApprovalDesk = errors.New("the seed runtime has no approval desk")
+
 type oneShotSeedRuntime struct {
 	messages        *hostMessages
 	cliMessages     *clitext.Messages
@@ -38,6 +40,8 @@ type oneShotSeedRuntime struct {
 	backend         func(context.Context, state.Session) (contracts.Backend, error)
 	models          *ModelDiscovery
 	sessions        *sessionTable
+	desk            *approvalDesk
+	localRun        bool
 	persists        *persistWrites
 }
 
@@ -59,7 +63,7 @@ func withOneShotSeedRuntime(ctx context.Context, runtime oneShotSeedRuntime) con
 func oneShotSeedRuntimeFrom(ctx context.Context, messages *hostMessages, cliMessages *clitext.Messages, newOneShot func() *persistWrites) oneShotSeedRuntime {
 	runtime, ok := ctx.Value(oneShotSeedRuntimeKey{}).(oneShotSeedRuntime)
 	if !ok {
-		return oneShotSeedRuntime{messages: messages, cliMessages: cliMessages, persists: newOneShot()}
+		return oneShotSeedRuntime{messages: messages, cliMessages: cliMessages, persists: newOneShot(), localRun: true}
 	}
 	return runtime
 }
@@ -102,6 +106,9 @@ func runOneShotSeedIDWithRuntime(ctx context.Context, st *state.State, name, tas
 }
 
 func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, turnID string, orch contracts.Orchestrator, runtime oneShotSeedRuntime) (string, error) {
+	if runtime.desk == nil && !runtime.localRun {
+		return "", errSeedWithoutApprovalDesk
+	}
 	if orch != nil {
 		defer closeRead(orch)
 	}
@@ -206,6 +213,9 @@ func attachOneShotTaps(driver *sessionDriver, sess state.Session, runtime oneSho
 }
 
 func runOneShotBridge(ctx context.Context, cancel context.CancelFunc, sess state.Session, orch contracts.Orchestrator, runtime oneShotSeedRuntime, toBridge, fromBridge chan contracts.Event, bridgeErr chan<- error) {
+	if runtime.desk != nil {
+		ctx = contracts.WithApprovalAsker(ctx, runtime.desk.askerFor(seedConsumer, sess.Name))
+	}
 	err := bridge.RunUntilClosed(ctx, func(string) (contracts.Backend, error) {
 		return runtime.backendFactory()(ctx, sess)
 	}, orch, sess.ChannelID, toBridge, fromBridge)

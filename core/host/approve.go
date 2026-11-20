@@ -11,7 +11,6 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
-	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -217,10 +216,10 @@ func registerApproval(approvals *approvalTable, pending *pendingApproval) (func(
 }
 
 func warnWaitOutlivesTheHook(out io.Writer, wait time.Duration) {
-	if wait <= agent.HookWait/2 {
+	if wait <= hookAnswerWait()/2 {
 		return
 	}
-	logWriteFailure(fmt.Fprintf(warningWriter(out), "approvals: a %s wait can hold the hook for twice that (a slow menu post, then the timer), longer than the %s the CLI gives it: past %s the tool call runs and nobody is told\n", wait, agent.HookWait, agent.HookWait))
+	logWriteFailure(fmt.Fprintf(warningWriter(out), "approvals: a %s wait can hold the hook for twice that (a slow menu post, then the timer), longer than the %s the hook waits for an answer: past %s the hook refuses the tool call and a later answer changes nothing\n", wait, hookAnswerWait(), hookAnswerWait()))
 }
 
 func settleApproval(approvals *approvalTable, sessions *sessionTable, approvalID string, answer approvalAnswer) bool {

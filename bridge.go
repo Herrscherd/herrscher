@@ -104,6 +104,7 @@ func runBridge(ctx context.Context, messages *clitext.Messages, hostMessages *ho
 		ProjectPinned:    *projectPinned,
 		MemoryAgent:      *agent,
 		OutboundMaxBytes: cfg.EffectiveOutboundMaxBytes(),
+		ApprovalWait:     host.BridgeApprovalWait(),
 	}
 	if mem != nil {
 		opts.Scope = vaultScopeResolver{mem: mem, log: log}

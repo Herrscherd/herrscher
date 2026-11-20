@@ -219,6 +219,7 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"hook.answer_unreadable":            {"Answer"},
 		"hook.other_event":                  {"Event", "Expected"},
 		"hook.approval_socket_failed":       {"Detail"},
+		"hook.approval_timeout":             {"Wait"},
 		"approval.request_unreadable":       {"Detail"},
 		"approval.no_desk":                  nil,
 		"hook.decision_unwritable":          {"Decision", "Detail"},

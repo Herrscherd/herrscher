@@ -776,6 +776,11 @@
     "other": "herrscher : la socket d'approbation n'a pas pu répondre, cet appel d'outil est donc refusé : {{.Detail}}"
   },
   {
+    "id": "hook.approval_timeout",
+    "description": "Le hook d'approbation refuse un appel d'outil parce qu'aucune réponse n'est venue dans sa propre borne, placée sous l'attente du hook du CLI, Wait porte cette borne",
+    "other": "herrscher : aucune réponse en {{.Wait}}, cet appel d'outil est donc refusé avant que le CLI ne coupe le hook"
+  },
+  {
     "id": "approval.request_unreadable",
     "description": "Le démon refuse une demande d'approbation du pont qu'il ne peut pas lire, Detail porte la cause",
     "other": "herrscher : la demande d'approbation est illisible, cet appel d'outil est donc refusé : {{.Detail}}"

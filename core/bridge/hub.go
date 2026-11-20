@@ -118,7 +118,7 @@ func runHub(parent context.Context, newBackend BackendFactory, orch contracts.Or
 	defer closeAndWarn(conn)
 
 	ctrl := &turnController{}
-	approvals := newApprovalChannel(conn.Write)
+	approvals := newApprovalChannel(conn.Write, opts.ApprovalWait)
 	events := make(chan contracts.Event)
 	scanErr := make(chan error, 1)
 	go func() {

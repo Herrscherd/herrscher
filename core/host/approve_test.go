@@ -15,7 +15,6 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/clitext"
-	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 )
 
@@ -372,7 +371,7 @@ func TestALongWaitIsCalledOutButNotShortened(t *testing.T) {
 	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	ask := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
 	req := approval.Request{Tool: "Bash", Subject: "git push"}
-	fits, outlives := agent.HookWait/2, agent.HookWait/2+time.Minute
+	fits, outlives := hookAnswerWait()/2, hookAnswerWait()/2+time.Minute
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -391,7 +390,7 @@ func TestALongWaitIsCalledOutButNotShortened(t *testing.T) {
 	if !strings.Contains(got, outlives.String()) {
 		t.Fatalf("warning %q must name the wait that was asked for", got)
 	}
-	if !strings.Contains(got, agent.HookWait.String()) {
+	if !strings.Contains(got, hookAnswerWait().String()) {
 		t.Fatalf("warning %q must name what the vendor will wait", got)
 	}
 }

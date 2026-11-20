@@ -61,10 +61,16 @@ func operatorAllows(t *testing.T, sent <-chan contracts.Event, approvals *approv
 	}
 }
 
+const testApprovalWait = time.Minute
+
+func newTestChannel(send func(contracts.Event) error) *approvalChannel {
+	return newApprovalChannel(send, testApprovalWait)
+}
+
 func newChannelUnderOperator(t *testing.T) *approvalChannel {
 	t.Helper()
 	sent := make(chan contracts.Event, 8)
-	approvals := newApprovalChannel(func(event contracts.Event) error {
+	approvals := newTestChannel(func(event contracts.Event) error {
 		sent <- event
 		return nil
 	})
@@ -105,7 +111,7 @@ func TestTurnCompactAndTurnEachReceiveTheBridgeAsker(t *testing.T) {
 
 func TestApprovalChannelRefusesWithALocalizedReasonWhenTheHubIsGone(t *testing.T) {
 	failure := errors.New("hub socket closed")
-	approvals := newApprovalChannel(func(contracts.Event) error { return failure })
+	approvals := newTestChannel(func(contracts.Event) error { return failure })
 	req := contracts.ApprovalRequest{ID: "req-1", Tool: "Bash", Subject: "git push"}
 
 	english := approvals.asker(i18n.English)(context.Background(), req)
@@ -119,7 +125,7 @@ func TestApprovalChannelRefusesWithALocalizedReasonWhenTheHubIsGone(t *testing.T
 }
 
 func TestApprovalChannelRefusesWhenTheTurnEndsBeforeTheAnswer(t *testing.T) {
-	approvals := newApprovalChannel(func(contracts.Event) error { return nil })
+	approvals := newTestChannel(func(contracts.Event) error { return nil })
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	answer := approvals.asker(i18n.English)(ctx, contracts.ApprovalRequest{ID: "req-2", Tool: "Bash", Subject: "git push"})
@@ -129,7 +135,7 @@ func TestApprovalChannelRefusesWhenTheTurnEndsBeforeTheAnswer(t *testing.T) {
 }
 
 func TestApprovalChannelIgnoresAnswersNobodyAwaits(t *testing.T) {
-	approvals := newApprovalChannel(func(contracts.Event) error { return nil })
+	approvals := newTestChannel(func(contracts.Event) error { return nil })
 	if !approvals.deliver(contracts.Event{T: eventwire.EventApprovalAnswer, Value: `{"ID":"nobody","Decision":"allow"}`}) {
 		t.Fatal("an approval answer was not recognised as one")
 	}
@@ -139,8 +145,7 @@ func TestApprovalChannelIgnoresAnswersNobodyAwaits(t *testing.T) {
 }
 
 func TestApprovalChannelRefusesOnceTheHookWaitIsOver(t *testing.T) {
-	approvals := newApprovalChannel(func(contracts.Event) error { return nil })
-	approvals.wait = 10 * time.Millisecond
+	approvals := newApprovalChannel(func(contracts.Event) error { return nil }, 10*time.Millisecond)
 	answer := approvals.asker(i18n.English)(context.Background(), contracts.ApprovalRequest{ID: "req-3", Tool: "Bash", Subject: "git push"})
 	if answer.ID != "req-3" || answer.Allowed() || !strings.Contains(answer.Reason, "10ms") {
 		t.Fatalf("answer %+v, want a denial naming the 10ms wait once nobody answered", answer)
@@ -149,7 +154,7 @@ func TestApprovalChannelRefusesOnceTheHookWaitIsOver(t *testing.T) {
 
 func TestApprovalChannelRefusesARequestWhoseIDIsAlreadyWaiting(t *testing.T) {
 	sent := make(chan contracts.Event, 2)
-	approvals := newApprovalChannel(func(event contracts.Event) error {
+	approvals := newTestChannel(func(event contracts.Event) error {
 		sent <- event
 		return nil
 	})

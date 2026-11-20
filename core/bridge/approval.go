@@ -9,7 +9,6 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/eventwire"
-	"github.com/Herrscherd/herrscher/core/internal/agent"
 )
 
 const waitParam = "Wait"
@@ -22,8 +21,8 @@ type approvalChannel struct {
 	waiting  map[string]chan contracts.ApprovalAnswer
 }
 
-func newApprovalChannel(send func(contracts.Event) error) *approvalChannel {
-	return &approvalChannel{send: send, messages: newBridgeMessages(), wait: agent.HookWait, waiting: make(map[string]chan contracts.ApprovalAnswer)}
+func newApprovalChannel(send func(contracts.Event) error, wait time.Duration) *approvalChannel {
+	return &approvalChannel{send: send, messages: newBridgeMessages(), wait: wait, waiting: make(map[string]chan contracts.ApprovalAnswer)}
 }
 
 func (c *approvalChannel) attach(ctx context.Context, lang i18n.Language) context.Context {
@@ -49,11 +48,11 @@ func (c *approvalChannel) ask(ctx context.Context, lang i18n.Language, req contr
 		return c.refusal(lang, req, c.messages.render(lang, "approval.duplicate", nil))
 	}
 	defer c.unregister(req.ID)
+	timer := time.NewTimer(c.wait)
+	defer timer.Stop()
 	if err := c.send(contracts.Event{T: eventwire.EventApprovalAsk, Value: string(payload)}); err != nil {
 		return c.refusal(lang, req, err.Error())
 	}
-	timer := time.NewTimer(c.wait)
-	defer timer.Stop()
 	select {
 	case answer := <-answers:
 		return answer

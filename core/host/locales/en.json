@@ -776,6 +776,11 @@
     "other": "herrscher: the approval socket could not answer, so this tool call is refused: {{.Detail}}"
   },
   {
+    "id": "hook.approval_timeout",
+    "description": "The approval hook refuses a tool call because no answer came within its own bound, which sits below the CLI's hook wait, Wait carries that bound",
+    "other": "herrscher: no answer came within {{.Wait}}, so this tool call is refused before the CLI cuts the hook off"
+  },
+  {
     "id": "approval.request_unreadable",
     "description": "The daemon refuses an approval request from the bridge that it cannot read, Detail carries the cause",
     "other": "herrscher: the approval request could not be read, so this tool call is refused: {{.Detail}}"

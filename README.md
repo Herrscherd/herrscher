@@ -1233,16 +1233,25 @@ JSON of the request (`contracts.ApprovalRequest`), and waits for an
 through the approval desk for the session bound to that connection when the bridge
 was opened. The session comes from the connection, never from a field of the
 request, so a bridge cannot ask on behalf of another session. An answer that
-cannot be sent, a hub that is gone, a turn that ends before the answer arrives,
-or an answer that does not come within the hook wait (`agent.HookWait`, the time
-the CLI gives a hook) refuses the tool call, and the reason is written in the
-language the hub announced (`approval.unavailable` in `core/bridge/locales`). A
-request whose ID is already waiting is refused at once (`approval.duplicate`),
-without a second request to the operator. The daemon answers every request that
-carries an ID: one it cannot decode is refused under that ID
-(`approval.request_unreadable`), and a session without an approval desk is refused
-with `approval.no_desk`. A request with no readable ID cannot be answered, so the
-bridge's wait for it ends at the hook wait.
+cannot be sent, a hub that is gone, or a turn that ends before the answer arrives
+refuses the tool call, and the reason is written in the language the hub announced
+(`approval.unavailable` in `core/bridge/locales`). The bridge also refuses when no
+answer comes within its own bound, `host.BridgeApprovalWait()`, which the binary
+passes in `Options.ApprovalWait` (`approval.no_answer`): the hook wait
+(`agent.HookWait`, 900 s, after which the CLI cuts the hook and runs the tool call)
+minus 60 s, so 840 s. The hook has its own bound below that, `hookAnswerWait()`, the
+hook wait minus 30 s, so 870 s: on the approval socket and on the daemon path alike,
+a hook that gets no answer in time denies the call with `hook.approval_timeout`. The
+order is therefore bridge (840 s), then hook (870 s), then CLI (900 s), so the refusal
+the operator sees is the bridge's, and the CLI never cuts a hook that is still
+waiting. An approval wait configured longer than the hook bound is truncated: the hook
+denies the call at 870 s, and an answer that comes later changes nothing; a wait longer
+than half of that bound is reported when the approval starts. A request whose ID is
+already waiting is refused at once (`approval.duplicate`), without a second request to
+the operator. The daemon answers every request that carries an ID: one it cannot decode
+is refused under that ID (`approval.request_unreadable`), and a session without an
+approval desk is refused with `approval.no_desk`. A request with no readable ID cannot
+be answered, so the bridge's wait for it ends at its own bound.
 
 A one-shot seed run by the daemon fails at once with `the seed runtime has no
 approval desk` when it has no desk, instead of running tools that nobody could

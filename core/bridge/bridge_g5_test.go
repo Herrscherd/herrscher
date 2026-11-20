@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
@@ -30,7 +31,7 @@ func failBackend(string) (contracts.Backend, error) {
 
 func TestRunStartsOptionalCapability(t *testing.T) {
 	orch := &startOrch{}
-	opts := Options{Channel: "c", HubSocket: "/nonexistent-hub.sock"}
+	opts := Options{Channel: "c", HubSocket: "/nonexistent-hub.sock", ApprovalWait: time.Minute}
 	if err := Run(context.Background(), failBackend, orch, opts); err != nil {
 		t.Logf("run: %v", err)
 	}
@@ -39,8 +40,15 @@ func TestRunStartsOptionalCapability(t *testing.T) {
 	}
 }
 
-func TestRunWithoutStartCapabilityStillRuns(t *testing.T) {
+func TestRunRefusesToStartWithoutAnApprovalWait(t *testing.T) {
 	opts := Options{Channel: "c", HubSocket: "/nonexistent-hub.sock"}
+	if err := Run(context.Background(), failBackend, plainOrchG5{}, opts); !errors.Is(err, errNoApprovalWait) {
+		t.Fatalf("got %v, want errNoApprovalWait: a bridge with no bound must not wait forever", err)
+	}
+}
+
+func TestRunWithoutStartCapabilityStillRuns(t *testing.T) {
+	opts := Options{Channel: "c", HubSocket: "/nonexistent-hub.sock", ApprovalWait: time.Minute}
 	if err := Run(context.Background(), failBackend, plainOrchG5{}, opts); err == nil {
 		t.Fatal("expected Run to surface the backend error")
 	}

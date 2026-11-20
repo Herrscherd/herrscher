@@ -146,8 +146,8 @@ func answerBridgeApproval(ctx context.Context, conn *control.Conn, approvals bri
 	var req contracts.ApprovalRequest
 	if err := json.Unmarshal([]byte(value), &req); err != nil {
 		slog.Warn("approval request from the bridge is unreadable", "err", err)
-		if id := approvalRequestID(value); id != "" {
-			writeBridgeAnswer(conn, approvals.refusal(id, hostApprovalRequestUnreadable, map[string]any{detailParam: err.Error()}))
+		if req.ID != "" {
+			writeBridgeAnswer(conn, approvals.refusal(req.ID, hostApprovalRequestUnreadable, map[string]any{detailParam: err.Error()}))
 		}
 		return
 	}
@@ -156,16 +156,6 @@ func answerBridgeApproval(ctx context.Context, conn *control.Conn, approvals bri
 		return
 	}
 	writeBridgeAnswer(conn, approvals.asker(ctx, req))
-}
-
-func approvalRequestID(value string) string {
-	var head struct {
-		ID string `json:"ID"`
-	}
-	if err := json.Unmarshal([]byte(value), &head); err != nil {
-		return ""
-	}
-	return head.ID
 }
 
 func writeBridgeAnswer(conn *control.Conn, answer contracts.ApprovalAnswer) {

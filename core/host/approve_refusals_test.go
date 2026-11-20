@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
@@ -177,4 +178,16 @@ func TestASmartModeWithoutAJudgeWarnsInFrench(t *testing.T) {
 	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
 	approvals.rated(context.Background(), sessions, "s1", approval.Request{Tool: "Bash", Subject: "git push"}, approval.Deny)
 	expectWarning(t, &buf, "approbations : le mode smart n'a pas de modèle pour évaluer Bash(git push), il est donc décidé comme en mode demande")
+}
+
+func TestAScopeConflictOnApproveIsGivenInFrench(t *testing.T) {
+	input := contracts.Input{Args: map[string]string{paramSession: "true", "always": "true", "id": "p1"}}
+	_, _, err := allowOperands(input)
+	if !errors.Is(err, errScopeConflict) {
+		t.Fatalf("err = %v, want the scope conflict", err)
+	}
+	french := localizeHostError(newHostMessages(), clitext.NewMessages(), i18n.French, err).Error()
+	if want := "--session et --always sont deux portées : choisissez-en une"; french != want {
+		t.Fatalf("french = %q, want %q", french, want)
+	}
 }

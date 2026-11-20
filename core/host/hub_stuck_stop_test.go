@@ -18,7 +18,7 @@ func TestStuckStopCannotHoldTheLifecycleBeyondTheGrace(t *testing.T) {
 		defer release()
 		name := "stuck-stop"
 		done := make(chan struct{})
-		h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, teardownGrace: grace, live: map[string]liveSession{
+		h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, teardownGrace: grace, live: map[string]liveSession{
 			name: {cancel: func() {}, done: done, release: func() {}},
 		}})
 		h.stopBridge = func(string) error {
@@ -64,7 +64,7 @@ func TestStuckStopCannotFreezeGoDead(t *testing.T) {
 		name := "stuck-dead"
 		done := make(chan struct{})
 		close(done)
-		h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, teardownGrace: grace, live: map[string]liveSession{
+		h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, teardownGrace: grace, live: map[string]liveSession{
 			name: {cancel: func() {}, done: done, release: func() {}},
 		}})
 		h.stopBridge = func(string) error {

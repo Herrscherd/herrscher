@@ -1,9 +1,7 @@
 package host
 
 import (
-	"bytes"
 	"errors"
-	"log/slog"
 	"strings"
 	"testing"
 
@@ -46,10 +44,7 @@ func TestUsageRangeAndAccountRefuseEmptyValues(t *testing.T) {
 }
 
 func TestProfileEnvFailureIsLoggedOncePerProfile(t *testing.T) {
-	var logs bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	logs := captureDefaultLog(t)
 
 	source := &usageSource{}
 	failure := errors.New("unreadable env")

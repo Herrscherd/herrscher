@@ -1,11 +1,9 @@
 package host
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
-	"log/slog"
 	"strings"
 	"testing"
 
@@ -114,10 +112,7 @@ func TestCommandsJSONWarnsThroughTheLogOnARawHelpText(t *testing.T) {
 	if err := reg.Add(commandsVerb(clitext.NewMessages(), fixedLanguage(i18n.English), reg)); err != nil {
 		t.Fatal(err)
 	}
-	var logs bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	logs := captureDefaultLog(t)
 
 	out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"commands", "--json"}))
 	if err != nil {

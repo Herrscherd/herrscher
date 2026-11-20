@@ -58,7 +58,7 @@ func TestNoWarningWriteStartsAfterStopReturns(t *testing.T) {
 
 func TestSessionOverrunGoesThroughTheWarningSink(t *testing.T) {
 	var warnings lockedBuffer
-	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: &warnings, teardownGrace: time.Second, live: make(map[string]liveSession)})
+	h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: &warnings, teardownGrace: time.Second, live: make(map[string]liveSession)})
 	h.warnSessionOverrun("ordered")
 	awaitSinkQuiet(t, h.sink)
 	if !strings.Contains(warnings.String(), `"ordered"`) {
@@ -68,7 +68,7 @@ func TestSessionOverrunGoesThroughTheWarningSink(t *testing.T) {
 
 func TestSessionOverrunDoesNotNeedTheLifecycleLock(t *testing.T) {
 	var warnings lockedBuffer
-	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: &warnings, teardownGrace: time.Second, live: make(map[string]liveSession)})
+	h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: &warnings, teardownGrace: time.Second, live: make(map[string]liveSession)})
 	h.lifecycle.Lock()
 	done := runInBackground(func() { h.warnSessionOverrun("held") })
 	awaitBackground(t, done, "the session overrun waited for the lifecycle lock held by its caller")
@@ -82,7 +82,7 @@ func TestSessionOverrunDoesNotNeedTheLifecycleLock(t *testing.T) {
 func TestSessionOverrunBehindAFrozenSinkIsCountedNotWritten(t *testing.T) {
 	writer := newGatedWarnings("frozen")
 	t.Cleanup(writer.open)
-	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: writer, teardownGrace: time.Second, live: make(map[string]liveSession)})
+	h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: writer, teardownGrace: time.Second, live: make(map[string]liveSession)})
 	if _, err := h.warnings.Write([]byte("frozen\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}

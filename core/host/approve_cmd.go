@@ -194,10 +194,6 @@ func addApprovalRule(cliMessages *clitext.Messages, lang i18n.Language, store *s
 	return replyText(cliMessages, lang).Text(clitext.HostApproveRuleAdded, clitext.Params{clitext.ParamRule: parsed.String()}), nil
 }
 
-func tokenDecision(ctx context.Context, desk *approvalDesk, session string, req approval.Request) (approval.Decision, string) {
-	return desk.decideWithin(ctx, hookDeskBound(), session, req)
-}
-
 func approveAskVerb(desk *approvalDesk) contracts.Cmd {
 	return contracts.New(nsApprove, "ask").
 		Help(clitext.CmdHelpApproveAsk).
@@ -213,7 +209,7 @@ func approveAskVerb(desk *approvalDesk) contracts.Cmd {
 				Tool:    strings.TrimSpace(input.Get("tool")),
 				Subject: input.Get("subject"),
 			}
-			decision, reason := tokenDecision(ctx, desk, session, req)
+			decision, reason := desk.decideFor(ctx, tokenConsumer, session, req)
 			payload, err := json.Marshal(struct {
 				Decision string `json:"decision"`
 				Reason   string `json:"reason,omitempty"`

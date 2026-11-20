@@ -71,7 +71,7 @@ func assertLostSummaryFollowsUnblock(t *testing.T, lang i18n.Language) {
 	}
 
 	writer.open()
-	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), teardownGrace: 10 * time.Second})
+	h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), teardownGrace: 10 * time.Second})
 	window, cancel := h.newGrace()
 	defer cancel()
 	if !sink.flush(window) {
@@ -150,7 +150,7 @@ func TestWarningSinkFlushIsBoundedByAStalledWriter(t *testing.T) {
 	if _, err := sink.Write([]byte("stuck\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
-	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), teardownGrace: 5 * time.Second})
+	h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), teardownGrace: 5 * time.Second})
 	window, cancel := h.newGrace()
 	defer cancel()
 

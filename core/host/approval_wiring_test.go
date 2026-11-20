@@ -21,7 +21,7 @@ func askWiredInBackground(asker contracts.ApprovalAsker) <-chan contracts.Approv
 func TestTheBridgeWiringRefusesAnAnswerAfterItsDeskBound(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		desk, approvalTab := newLongWaitDesk(t)
-		answers := askWiredInBackground(bridgeAskerFor(desk, "s1"))
+		answers := askWiredInBackground(desk.askerFor(bridgeConsumer, "s1"))
 		id := awaitPending(t, approvalTab, 1)[0].ID
 
 		time.Sleep(bridgeDeskBound() + time.Second)
@@ -38,7 +38,7 @@ func TestTheBridgeWiringRefusesAnAnswerAfterItsDeskBound(t *testing.T) {
 func TestTheSeedWiringRefusesAnAnswerAfterItsDeskBound(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		desk, approvalTab := newLongWaitDesk(t)
-		answers := askWiredInBackground(seedAskerFor(desk, "s1"))
+		answers := askWiredInBackground(desk.askerFor(seedConsumer, "s1"))
 		id := awaitPending(t, approvalTab, 1)[0].ID
 
 		time.Sleep(hookDeskBound() + time.Second)
@@ -58,7 +58,7 @@ func TestTheTokenWiringRefusesAnAnswerAfterItsDeskBound(t *testing.T) {
 		req := approval.Request{Tool: "Bash", Subject: "git push"}
 		decisions := make(chan approval.Decision, 1)
 		go func() {
-			decision, _ := tokenDecision(context.Background(), desk, "s1", req)
+			decision, _ := desk.decideFor(context.Background(), tokenConsumer, "s1", req)
 			decisions <- decision
 		}()
 		id := awaitPending(t, approvalTab, 1)[0].ID

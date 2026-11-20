@@ -13,8 +13,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 )
 
-const boundedQuestionWait = 5 * time.Minute
-
 func newLongWaitDesk(t *testing.T) (*approvalDesk, *approvalTable) {
 	t.Helper()
 	approvalTab := newApprovalTable(io.Discard)
@@ -29,10 +27,10 @@ func newLongWaitDesk(t *testing.T) (*approvalDesk, *approvalTable) {
 	return desk, approvalTab
 }
 
-func askBridgeInBackground(desk *approvalDesk, bound time.Duration) <-chan contracts.ApprovalAnswer {
+func askBridgeInBackground(desk *approvalDesk) <-chan contracts.ApprovalAnswer {
 	answers := make(chan contracts.ApprovalAnswer, 1)
 	go func() {
-		answers <- desk.asker("s1", bound)(context.Background(), contracts.ApprovalRequest{ID: "req-bridge", Tool: "Bash", Subject: "git push"})
+		answers <- desk.askerFor(bridgeConsumer, "s1")(context.Background(), contracts.ApprovalRequest{ID: "req-bridge", Tool: "Bash", Subject: "git push"})
 	}()
 	return answers
 }
@@ -40,7 +38,7 @@ func askBridgeInBackground(desk *approvalDesk, bound time.Duration) <-chan contr
 func TestTheBridgeQuestionLeavesNothingBehindAtItsBound(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		desk, approvalTab := newLongWaitDesk(t)
-		answers := askBridgeInBackground(desk, boundedQuestionWait)
+		answers := askBridgeInBackground(desk)
 		id := awaitPending(t, approvalTab, 1)[0].ID
 
 		if answer := <-answers; answer.Allowed() {
@@ -56,7 +54,7 @@ func TestTheTokenQuestionLeavesNothingBehindAtItsBound(t *testing.T) {
 		req := approval.Request{Tool: "Bash", Subject: "git push"}
 		decisions := make(chan approval.Decision, 1)
 		go func() {
-			decision, _ := desk.decideWithin(context.Background(), boundedQuestionWait, "s1", req)
+			decision, _ := desk.decideFor(context.Background(), tokenConsumer, "s1", req)
 			decisions <- decision
 		}()
 		id := awaitPending(t, approvalTab, 1)[0].ID
@@ -71,10 +69,10 @@ func TestTheTokenQuestionLeavesNothingBehindAtItsBound(t *testing.T) {
 func TestASessionVerdictArrivingAtTheBoundGrantsNothing(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		desk, approvalTab := newLongWaitDesk(t)
-		answers := askBridgeInBackground(desk, boundedQuestionWait)
+		answers := askBridgeInBackground(desk)
 		id := awaitPending(t, approvalTab, 1)[0].ID
 
-		time.Sleep(boundedQuestionWait)
+		time.Sleep(bridgeDeskBound())
 		if settleApproval(approvalTab, id, approvalAnswer{scope: scopeSession}) {
 			t.Fatal("a session answer arriving at the bound was reported as taken")
 		}
@@ -90,10 +88,10 @@ func TestASessionVerdictArrivingAtTheBoundGrantsNothing(t *testing.T) {
 func TestASessionVerdictBeforeTheBoundIsGrantedAndRemembered(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		desk, approvalTab := newLongWaitDesk(t)
-		answers := askBridgeInBackground(desk, boundedQuestionWait)
+		answers := askBridgeInBackground(desk)
 		id := awaitPending(t, approvalTab, 1)[0].ID
 
-		time.Sleep(boundedQuestionWait - time.Minute)
+		time.Sleep(bridgeDeskBound() - time.Minute)
 		if !settleApproval(approvalTab, id, approvalAnswer{scope: scopeSession}) {
 			t.Fatal("a session answer given inside the bound was not taken")
 		}

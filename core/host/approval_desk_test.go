@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 	"testing/synctest"
-	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
@@ -47,7 +46,7 @@ func TestApprovalDeskAskerReturnsTheOperatorsAllow(t *testing.T) {
 		desk, approvalTab, reg := newTestDesk(t)
 		answers := make(chan contracts.ApprovalAnswer, 1)
 		go func() {
-			answers <- desk.asker("s1", time.Minute)(context.Background(), contracts.ApprovalRequest{ID: "req-1", Tool: "Bash", Subject: "git push"})
+			answers <- desk.askerFor(bridgeConsumer, "s1")(context.Background(), contracts.ApprovalRequest{ID: "req-1", Tool: "Bash", Subject: "git push"})
 		}()
 		id := awaitPending(t, approvalTab, 1)[0].ID
 		if _, err := cli.Plain(reg.Dispatch(context.Background(), []string{"approve", "allow", id})); err != nil {
@@ -65,7 +64,7 @@ func TestApprovalDeskAskerReturnsTheOperatorsDeny(t *testing.T) {
 		desk, approvalTab, reg := newTestDesk(t)
 		answers := make(chan contracts.ApprovalAnswer, 1)
 		go func() {
-			answers <- desk.asker("s1", time.Minute)(context.Background(), contracts.ApprovalRequest{ID: "req-2", Tool: "Bash", Subject: "git push"})
+			answers <- desk.askerFor(bridgeConsumer, "s1")(context.Background(), contracts.ApprovalRequest{ID: "req-2", Tool: "Bash", Subject: "git push"})
 		}()
 		id := awaitPending(t, approvalTab, 1)[0].ID
 		if _, err := cli.Plain(reg.Dispatch(context.Background(), []string{"approve", "deny", id})); err != nil {
@@ -81,7 +80,7 @@ func TestApprovalDeskAskerReturnsTheOperatorsDeny(t *testing.T) {
 func TestApprovalDeskAskerDeniesWhenNobodyAnswers(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		desk, _, _ := newTestDesk(t)
-		answer := desk.asker("s1", time.Minute)(context.Background(), contracts.ApprovalRequest{ID: "req-3", Tool: "Bash", Subject: "git push"})
+		answer := desk.askerFor(bridgeConsumer, "s1")(context.Background(), contracts.ApprovalRequest{ID: "req-3", Tool: "Bash", Subject: "git push"})
 		if answer.ID != "req-3" || answer.Allowed() {
 			t.Fatalf("answer %+v, want req-3 refused after the wait", answer)
 		}
@@ -94,7 +93,7 @@ func TestApprovalDeskAskerDeniesWhenTheTurnIsCancelled(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		answers := make(chan contracts.ApprovalAnswer, 1)
 		go func() {
-			answers <- desk.asker("s1", time.Minute)(ctx, contracts.ApprovalRequest{ID: "req-4", Tool: "Bash", Subject: "git push"})
+			answers <- desk.askerFor(bridgeConsumer, "s1")(ctx, contracts.ApprovalRequest{ID: "req-4", Tool: "Bash", Subject: "git push"})
 		}()
 		awaitPending(t, approvalTab, 1)
 		cancel()
@@ -173,7 +172,7 @@ func TestApprovalDeskAskerKeepsTwoConcurrentRequestsApart(t *testing.T) {
 		answers := make(chan contracts.ApprovalAnswer, 2)
 		for _, id := range []string{"req-5", "req-6"} {
 			go func() {
-				answers <- desk.asker("s1", time.Minute)(context.Background(), contracts.ApprovalRequest{ID: id, Tool: "Bash", Subject: "git push " + id})
+				answers <- desk.askerFor(bridgeConsumer, "s1")(context.Background(), contracts.ApprovalRequest{ID: id, Tool: "Bash", Subject: "git push " + id})
 			}()
 		}
 		for _, pending := range awaitPending(t, approvalTab, 2) {

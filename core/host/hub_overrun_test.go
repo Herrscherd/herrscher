@@ -12,7 +12,7 @@ func TestTeardownOverrunWarnsOnlyForTheSessionStillStopping(t *testing.T) {
 	var warnings lockedBuffer
 	stuck := make(chan struct{})
 	t.Cleanup(func() { close(stuck) })
-	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: &warnings, teardownGrace: 300 * time.Millisecond, live: make(map[string]liveSession)})
+	h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: &warnings, teardownGrace: 300 * time.Millisecond, live: make(map[string]liveSession)})
 	h.stopBridge = func(name string) error {
 		if name == "blocked" {
 			<-stuck

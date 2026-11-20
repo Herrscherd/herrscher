@@ -25,7 +25,8 @@ func englishStillRunningLine(messages *hostMessages) string {
 	return messages.text(i18n.English, "warn.write_still_running", nil)
 }
 
-func testHub(h *hub) *hub {
+func testHub(t *testing.T, h *hub) *hub {
+	t.Helper()
 	if h.sessions == nil {
 		h.sessions = newSessionTable(h.messages, clitext.NewMessages())
 	}
@@ -36,7 +37,16 @@ func testHub(h *hub) *hub {
 	}
 	h.sink = newWarningSink(h.messages, out, englishLostLine(h.messages), slog.Default())
 	h.warnings = h.sink
+	t.Cleanup(func() { closeHubSink(t, h) })
 	return h
+}
+
+func closeHubSink(t *testing.T, h *hub) {
+	t.Helper()
+	if h.sink != nil {
+		h.sink.Close()
+		awaitSinkLog(t, h.sink)
+	}
 }
 
 func droppedWarnings(s *warningSink) int {

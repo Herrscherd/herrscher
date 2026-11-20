@@ -24,7 +24,7 @@ func interruptedTurnTranscript(t *testing.T) string {
 
 func TestInterruptedTurnScrollbackLineCarriesTheNotice(t *testing.T) {
 	partDir := interruptedTurnTranscript(t)
-	h := testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), partDir: partDir})
+	h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), partDir: partDir})
 
 	lines := h.Scrollback("main")
 	if len(lines) != 2 {

@@ -91,7 +91,7 @@ func awaitPendingLive(t *testing.T, tab *approvalTable, want int) []PendingAppro
 func TestDaemonAnswersTheBridgeWithTheOperatorsDecisionForItsSession(t *testing.T) {
 	desk, approvalTab, reg := newTestDesk(t)
 	daemonSide, bridgeSide := connectedPair(t)
-	startDaemonSide(t, daemonSide, deskApprovals(desk.asker("s1", time.Minute)))
+	startDaemonSide(t, daemonSide, deskApprovals(desk.askerFor(bridgeConsumer, "s1")))
 	answers := readBridgeAnswers(t, bridgeSide)
 
 	request := `{"ID":"req-9","Tool":"Bash","Subject":"git push","Session":"victim"}`
@@ -115,7 +115,7 @@ func TestDaemonAnswersTheBridgeWithTheOperatorsDecisionForItsSession(t *testing.
 func TestDaemonRefusesARequestItCannotDecodeWithItsOwnID(t *testing.T) {
 	desk, approvalTab, _ := newTestDesk(t)
 	daemonSide, bridgeSide := connectedPair(t)
-	startDaemonSide(t, daemonSide, deskApprovals(desk.asker("s1", time.Minute)))
+	startDaemonSide(t, daemonSide, deskApprovals(desk.askerFor(bridgeConsumer, "s1")))
 	answers := readBridgeAnswers(t, bridgeSide)
 	if err := bridgeSide.Write(contracts.Event{T: eventwire.EventApprovalAsk, Value: `{"ID":"req-10","Tool":5}`}); err != nil {
 		t.Fatalf("write unreadable request: %v", err)

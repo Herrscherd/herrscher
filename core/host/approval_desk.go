@@ -43,7 +43,30 @@ func (d *approvalDesk) decideWithin(ctx context.Context, bound time.Duration, se
 	return askApproval(bounded, d.approvals, d.sessions, session, req, pol, mode, d.store.ApprovalWait(), bound)
 }
 
-func (d *approvalDesk) asker(session string, bound time.Duration) contracts.ApprovalAsker {
+type approvalConsumer int
+
+const (
+	bridgeConsumer approvalConsumer = iota + 1
+	seedConsumer
+	tokenConsumer
+)
+
+func consumerBound(consumer approvalConsumer) time.Duration {
+	if consumer == bridgeConsumer {
+		return bridgeDeskBound()
+	}
+	return hookDeskBound()
+}
+
+func (d *approvalDesk) askerFor(consumer approvalConsumer, session string) contracts.ApprovalAsker {
+	return d.askerWithin(session, consumerBound(consumer))
+}
+
+func (d *approvalDesk) decideFor(ctx context.Context, consumer approvalConsumer, session string, req approval.Request) (approval.Decision, string) {
+	return d.decideWithin(ctx, consumerBound(consumer), session, req)
+}
+
+func (d *approvalDesk) askerWithin(session string, bound time.Duration) contracts.ApprovalAsker {
 	return func(ctx context.Context, req contracts.ApprovalRequest) contracts.ApprovalAnswer {
 		decision, reason := d.decideWithin(ctx, bound, session, approval.Request{Tool: strings.TrimSpace(req.Tool), Subject: req.Subject})
 		answer := contracts.ApprovalAnswer{ID: req.ID, Decision: contracts.DecisionDeny, Reason: reason}

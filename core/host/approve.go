@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -224,11 +225,32 @@ func (t *approvalTable) awaitVerdict(ctx context.Context, pending *pendingApprov
 		return verdict, ""
 	case <-time.After(wait):
 		params := requestParams(pending.req)
-		params["Wait"] = wait.String()
+		params["Wait"] = humanWait(wait)
 		return approvalVerdict{}, t.text("approval.timeout", params)
 	case <-ctx.Done():
 		return approvalVerdict{}, t.text("approval.ended", requestParams(pending.req))
 	}
+}
+
+func humanWait(wait time.Duration) string {
+	if wait < time.Second {
+		return strconv.FormatInt(wait.Milliseconds(), 10) + "ms"
+	}
+	rest := wait.Round(time.Second)
+	if wait < time.Hour {
+		return strconv.FormatInt(int64(rest/time.Second), 10) + "s"
+	}
+	var out strings.Builder
+	for _, unit := range []struct {
+		size   time.Duration
+		symbol string
+	}{{time.Hour, "h"}, {time.Minute, "m"}, {time.Second, "s"}} {
+		if count := rest / unit.size; count > 0 {
+			out.WriteString(strconv.FormatInt(int64(count), 10) + unit.symbol)
+			rest %= unit.size
+		}
+	}
+	return out.String()
 }
 
 func closeApproval(approvals *approvalTable, pending *pendingApproval) (approvalVerdict, bool) {

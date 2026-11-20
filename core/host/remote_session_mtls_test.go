@@ -2,8 +2,12 @@ package host
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -13,16 +17,20 @@ import (
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	transport "github.com/Herrscherd/herrscher-transport"
+
+	"github.com/Herrscherd/herrscher/core/internal/lease"
 )
 
 const mtlsSessionToken = "tok-mtls-never-leaves-the-daemon"
 
 type mtlsRemoteBackend struct {
-	mu      sync.Mutex
-	prompts []contracts.Prompt
+	mu               sync.Mutex
+	prompts          []contracts.Prompt
+	refuseWithoutAsk bool
 }
 
 func (b *mtlsRemoteBackend) Respond(ctx context.Context, prompt contracts.Prompt, _ func(contracts.BackendEvent)) (string, error) {
@@ -31,6 +39,9 @@ func (b *mtlsRemoteBackend) Respond(ctx context.Context, prompt contracts.Prompt
 	b.mu.Unlock()
 	asker, asked := contracts.ApprovalAskerFrom(ctx)
 	if !asked {
+		if b.refuseWithoutAsk {
+			return "", errors.New("approval channel lost")
+		}
 		return "no approval path", nil
 	}
 	answer := asker(ctx, contracts.ApprovalRequest{ID: "req-1", Tool: "Bash", Subject: "rm -rf build"})
@@ -45,7 +56,14 @@ func (b *mtlsRemoteBackend) received() []contracts.Prompt {
 	return append([]contracts.Prompt(nil), b.prompts...)
 }
 
-func remoteSessionOverMTLS(t *testing.T) (contracts.Backend, *mtlsRemoteBackend) {
+type mtlsRemote struct {
+	dir     string
+	natsURL string
+	key     transport.AnnounceKey
+	remote  *mtlsRemoteBackend
+}
+
+func startMTLSRemote(t *testing.T, refuseWithoutAsk bool) mtlsRemote {
 	t.Helper()
 	dir := genTestCerts(t)
 	tlsCfg := transport.TLSConfig{
@@ -56,10 +74,6 @@ func remoteSessionOverMTLS(t *testing.T) (contracts.Backend, *mtlsRemoteBackend)
 	serverCreds, err := tlsCfg.ServerCredentials()
 	if err != nil {
 		t.Fatalf("server creds: %v", err)
-	}
-	clientCreds, err := tlsCfg.ClientCredentials()
-	if err != nil {
-		t.Fatalf("client creds: %v", err)
 	}
 
 	srv, err := natsserver.NewServer(&natsserver.Options{Host: "127.0.0.1", Port: -1})
@@ -76,7 +90,7 @@ func remoteSessionOverMTLS(t *testing.T) (contracts.Backend, *mtlsRemoteBackend)
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	remote := &mtlsRemoteBackend{}
+	remote := &mtlsRemoteBackend{refuseWithoutAsk: refuseWithoutAsk}
 	gs := grpc.NewServer(grpc.Creds(serverCreds))
 	transport.RegisterBackendSkeleton(gs, remote)
 	go func() { logCleanup(gs.Serve(lis)) }()
@@ -116,9 +130,14 @@ func remoteSessionOverMTLS(t *testing.T) (contracts.Backend, *mtlsRemoteBackend)
 		},
 	})
 
-	resolver := NewResolver(NewMessages(), categorySet(contracts.CategoryBackend), srv.ClientURL())
-	resolver.SetAnnounceKey(key)
-	resolver.SetCredentials(clientCreds)
+	return mtlsRemote{dir: dir, natsURL: srv.ClientURL(), key: key, remote: remote}
+}
+
+func (r mtlsRemote) build(t *testing.T, creds credentials.TransportCredentials) (contracts.Backend, error) {
+	t.Helper()
+	resolver := NewResolver(NewMessages(), categorySet(contracts.CategoryBackend), r.natsURL)
+	resolver.SetAnnounceKey(r.key)
+	resolver.SetCredentials(creds)
 	backend, err := BuildBackendFor(context.Background(), NewMessages(), BackendRequest{
 		Vendor:       "fakeremote",
 		Cmd:          "fakeremote",
@@ -126,11 +145,38 @@ func remoteSessionOverMTLS(t *testing.T) (contracts.Backend, *mtlsRemoteBackend)
 		SessionToken: mtlsSessionToken,
 		resolver:     resolver,
 	})
+	if err == nil {
+		t.Cleanup(func() { logCleanup(backend.Close()) })
+	}
+	return backend, err
+}
+
+func (r mtlsRemote) validClient(t *testing.T) credentials.TransportCredentials {
+	t.Helper()
+	return mustClientCreds(t, transport.TLSConfig{
+		CAFile:   filepath.Join(r.dir, "ca.pem"),
+		CertFile: filepath.Join(r.dir, "leaf.pem"),
+		KeyFile:  filepath.Join(r.dir, "leaf-key.pem"),
+	})
+}
+
+func mustClientCreds(t *testing.T, cfg transport.TLSConfig) credentials.TransportCredentials {
+	t.Helper()
+	creds, err := cfg.ClientCredentials()
+	if err != nil {
+		t.Fatalf("client creds: %v", err)
+	}
+	return creds
+}
+
+func remoteSessionOverMTLS(t *testing.T) (contracts.Backend, *mtlsRemoteBackend) {
+	t.Helper()
+	fixture := startMTLSRemote(t, false)
+	backend, err := fixture.build(t, fixture.validClient(t))
 	if err != nil {
 		t.Fatalf("a session on a remote backend over mTLS must build: %v", err)
 	}
-	t.Cleanup(func() { logCleanup(backend.Close()) })
-	return backend, remote
+	return backend, fixture.remote
 }
 
 func TestASessionRunsOnARemoteBackendOverMTLS(t *testing.T) {
@@ -189,5 +235,109 @@ func TestNoTokenOrLocalOutboxReachesTheRemoteSide(t *testing.T) {
 	}
 	if strings.Contains(string(wire), mtlsSessionToken) {
 		t.Fatalf("the session token crossed the network in %s", wire)
+	}
+}
+
+func TestAClientWithoutACertificateIsRefusedByTheRemoteBackend(t *testing.T) {
+	fixture := startMTLSRemote(t, false)
+	pool := x509.NewCertPool()
+	caPEM, err := os.ReadFile(filepath.Join(fixture.dir, "ca.pem"))
+	if err != nil {
+		t.Fatalf("read ca: %v", err)
+	}
+	if !pool.AppendCertsFromPEM(caPEM) {
+		t.Fatal("the test CA did not parse")
+	}
+	anonymous := credentials.NewTLS(&tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12})
+	backend, err := fixture.build(t, anonymous)
+	if err != nil {
+		t.Fatalf("building the backend must not dial the remote: %v", err)
+	}
+	assertRemoteRefusesTurn(t, backend, fixture.remote)
+}
+
+func TestAClientCertificateFromAnotherCAIsRefusedByTheRemoteBackend(t *testing.T) {
+	fixture := startMTLSRemote(t, false)
+	foreign := genTestCerts(t)
+	foreignClient := mustClientCreds(t, transport.TLSConfig{
+		CAFile:   filepath.Join(fixture.dir, "ca.pem"),
+		CertFile: filepath.Join(foreign, "leaf.pem"),
+		KeyFile:  filepath.Join(foreign, "leaf-key.pem"),
+	})
+	backend, err := fixture.build(t, foreignClient)
+	if err != nil {
+		t.Fatalf("building the backend must not dial the remote: %v", err)
+	}
+	assertRemoteRefusesTurn(t, backend, fixture.remote)
+}
+
+func assertRemoteRefusesTurn(t *testing.T, backend contracts.Backend, remote *mtlsRemoteBackend) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	reply, err := backend.Respond(ctx, contracts.Prompt{Content: "hello"}, nil)
+	if err == nil {
+		t.Fatalf("an unauthenticated client got the reply %q from the remote backend", reply)
+	}
+	if got := remote.received(); len(got) != 0 {
+		t.Fatalf("the remote backend received %d prompts from an unauthenticated client", len(got))
+	}
+}
+
+func TestATurnWithoutAnAskerIsRefusedAtOnceWhenTheRemoteRefusesIt(t *testing.T) {
+	fixture := startMTLSRemote(t, true)
+	backend, err := fixture.build(t, fixture.validClient(t))
+	if err != nil {
+		t.Fatalf("a session on a remote backend over mTLS must build: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	started := time.Now()
+	_, err = backend.Respond(ctx, contracts.Prompt{Content: "clean up"}, nil)
+	if err == nil {
+		t.Fatal("a turn with no approval channel must not succeed")
+	}
+	if ctx.Err() != nil {
+		t.Fatalf("the refusal waited until the deadline (%v): %v", time.Since(started), err)
+	}
+	if !strings.Contains(err.Error(), "approval channel lost") {
+		t.Fatalf("error %q: the remote refusal must reach the caller", err)
+	}
+}
+
+func implements[T any](value any) bool {
+	_, ok := value.(T)
+	return ok
+}
+
+func TestTheRemoteDecoratorMasksNoOptionalBackendInterface(t *testing.T) {
+	fixture := startMTLSRemote(t, false)
+	backend, err := fixture.build(t, fixture.validClient(t))
+	if err != nil {
+		t.Fatalf("a session on a remote backend over mTLS must build: %v", err)
+	}
+	decorated, ok := lease.Unwrap(backend).(remoteBackend)
+	if !ok {
+		t.Fatalf("a remote session is %T, want remoteBackend", backend)
+	}
+	proxy := decorated.Backend
+	masked := []struct {
+		name        string
+		implemented bool
+	}{
+		{"ResumeAware", implements[contracts.ResumeAware](proxy)},
+		{"ChoiceAware", implements[contracts.ChoiceAware](proxy)},
+		{"ChoiceInjector", implements[contracts.ChoiceInjector](proxy)},
+		{"FileProducer", implements[contracts.FileProducer](proxy)},
+		{"Compactor", implements[contracts.Compactor](proxy)},
+		{"StageTrigger", implements[contracts.StageTrigger](proxy)},
+		{"HistoryEditor", implements[contracts.HistoryEditor](proxy)},
+		{"SkillNative", implements[contracts.SkillNative](proxy)},
+		{"Liveness", implements[contracts.Liveness](proxy)},
+	}
+	for _, iface := range masked {
+		if iface.implemented {
+			t.Fatalf("the remote backend implements %s, which remoteBackend masks: relay it in the decorator", iface.name)
+		}
 	}
 }

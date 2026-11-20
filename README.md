@@ -354,7 +354,7 @@ decision. What crosses the network and what stays here:
 - **Attribution:** the session's name reaches the remote environment on SSH, but
   the approval stream does not carry it. The daemon attributes each approval to
   the session whose turn asked it, through the asker bound to that turn in the
-  daemon (`askerFor` in `core/host/seed.go`), so the name is informational on the
+  daemon (`askerFor` in `core/host/approval_desk.go`), so the name is informational on the
   remote side and never the basis of a grant.
 
 No token reaches a bridge on a remote machine: `remoteEnvBlock` does not carry

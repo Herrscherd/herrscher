@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
-	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -28,9 +27,9 @@ import (
 const mtlsSessionToken = "tok-mtls-never-leaves-the-daemon"
 
 type mtlsRemoteBackend struct {
-	mu               sync.Mutex
-	prompts          []contracts.Prompt
-	refuseWithoutAsk bool
+	mu        sync.Mutex
+	prompts   []contracts.Prompt
+	decisions []contracts.ApprovalAnswer
 }
 
 func (b *mtlsRemoteBackend) Respond(ctx context.Context, prompt contracts.Prompt, _ func(contracts.BackendEvent)) (string, error) {
@@ -39,12 +38,12 @@ func (b *mtlsRemoteBackend) Respond(ctx context.Context, prompt contracts.Prompt
 	b.mu.Unlock()
 	asker, asked := contracts.ApprovalAskerFrom(ctx)
 	if !asked {
-		if b.refuseWithoutAsk {
-			return "", errors.New("approval channel lost")
-		}
 		return "no approval path", nil
 	}
 	answer := asker(ctx, contracts.ApprovalRequest{ID: "req-1", Tool: "Bash", Subject: "rm -rf build"})
+	b.mu.Lock()
+	b.decisions = append(b.decisions, answer)
+	b.mu.Unlock()
 	return "remote saw " + string(answer.Decision) + ": " + answer.Reason, nil
 }
 
@@ -56,6 +55,12 @@ func (b *mtlsRemoteBackend) received() []contracts.Prompt {
 	return append([]contracts.Prompt(nil), b.prompts...)
 }
 
+func (b *mtlsRemoteBackend) answered() []contracts.ApprovalAnswer {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]contracts.ApprovalAnswer(nil), b.decisions...)
+}
+
 type mtlsRemote struct {
 	dir     string
 	natsURL string
@@ -63,7 +68,7 @@ type mtlsRemote struct {
 	remote  *mtlsRemoteBackend
 }
 
-func startMTLSRemote(t *testing.T, refuseWithoutAsk bool) mtlsRemote {
+func startMTLSRemote(t *testing.T) mtlsRemote {
 	t.Helper()
 	dir := genTestCerts(t)
 	tlsCfg := transport.TLSConfig{
@@ -90,7 +95,7 @@ func startMTLSRemote(t *testing.T, refuseWithoutAsk bool) mtlsRemote {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	remote := &mtlsRemoteBackend{refuseWithoutAsk: refuseWithoutAsk}
+	remote := &mtlsRemoteBackend{}
 	gs := grpc.NewServer(grpc.Creds(serverCreds))
 	transport.RegisterBackendSkeleton(gs, remote)
 	go func() { logCleanup(gs.Serve(lis)) }()
@@ -171,7 +176,7 @@ func mustClientCreds(t *testing.T, cfg transport.TLSConfig) credentials.Transpor
 
 func remoteSessionOverMTLS(t *testing.T) (contracts.Backend, *mtlsRemoteBackend) {
 	t.Helper()
-	fixture := startMTLSRemote(t, false)
+	fixture := startMTLSRemote(t)
 	backend, err := fixture.build(t, fixture.validClient(t))
 	if err != nil {
 		t.Fatalf("a session on a remote backend over mTLS must build: %v", err)
@@ -239,7 +244,7 @@ func TestNoTokenOrLocalOutboxReachesTheRemoteSide(t *testing.T) {
 }
 
 func TestAClientWithoutACertificateIsRefusedByTheRemoteBackend(t *testing.T) {
-	fixture := startMTLSRemote(t, false)
+	fixture := startMTLSRemote(t)
 	pool := x509.NewCertPool()
 	caPEM, err := os.ReadFile(filepath.Join(fixture.dir, "ca.pem"))
 	if err != nil {
@@ -257,7 +262,7 @@ func TestAClientWithoutACertificateIsRefusedByTheRemoteBackend(t *testing.T) {
 }
 
 func TestAClientCertificateFromAnotherCAIsRefusedByTheRemoteBackend(t *testing.T) {
-	fixture := startMTLSRemote(t, false)
+	fixture := startMTLSRemote(t)
 	foreign := genTestCerts(t)
 	foreignClient := mustClientCreds(t, transport.TLSConfig{
 		CAFile:   filepath.Join(fixture.dir, "ca.pem"),
@@ -284,24 +289,25 @@ func assertRemoteRefusesTurn(t *testing.T, backend contracts.Backend, remote *mt
 	}
 }
 
-func TestATurnWithoutAnAskerIsRefusedAtOnceWhenTheRemoteRefusesIt(t *testing.T) {
-	fixture := startMTLSRemote(t, true)
-	backend, err := fixture.build(t, fixture.validClient(t))
+func TestAnApprovalOnATurnWithoutAnAskerIsDeniedByTheTransport(t *testing.T) {
+	backend, remote := remoteSessionOverMTLS(t)
+	relay, ok := lease.Unwrap(backend).(remoteBackend).Backend.(approvalRelayingBackend)
+	if !ok {
+		t.Fatal("the remote session's backend must relay approvals through the transport proxy")
+	}
+	reply, err := relay.RespondWithApprovals(context.Background(), contracts.Prompt{Content: "clean up"}, nil)
 	if err != nil {
-		t.Fatalf("a session on a remote backend over mTLS must build: %v", err)
+		t.Fatalf("RespondWithApprovals over mTLS: %v", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	started := time.Now()
-	_, err = backend.Respond(ctx, contracts.Prompt{Content: "clean up"}, nil)
-	if err == nil {
-		t.Fatal("a turn with no approval channel must not succeed")
+	answers := remote.answered()
+	if len(answers) != 1 {
+		t.Fatalf("the remote backend got %d answers, want the one denial of its approval", len(answers))
 	}
-	if ctx.Err() != nil {
-		t.Fatalf("the refusal waited until the deadline (%v): %v", time.Since(started), err)
+	if answers[0].Decision != contracts.DecisionDeny || answers[0].Allowed() {
+		t.Fatalf("an approval on a turn without an asker was answered %+v, want a denial", answers[0])
 	}
-	if !strings.Contains(err.Error(), "approval channel lost") {
-		t.Fatalf("error %q: the remote refusal must reach the caller", err)
+	if reply != "remote saw deny: " {
+		t.Fatalf("reply %q: the remote turn must receive the transport's denial", reply)
 	}
 }
 
@@ -311,7 +317,7 @@ func implements[T any](value any) bool {
 }
 
 func TestTheRemoteDecoratorMasksNoOptionalBackendInterface(t *testing.T) {
-	fixture := startMTLSRemote(t, false)
+	fixture := startMTLSRemote(t)
 	backend, err := fixture.build(t, fixture.validClient(t))
 	if err != nil {
 		t.Fatalf("a session on a remote backend over mTLS must build: %v", err)

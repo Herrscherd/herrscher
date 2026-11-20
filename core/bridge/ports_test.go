@@ -20,6 +20,16 @@ func (everyPort) InjectChoice(_ context.Context, value string) (string, error) {
 
 func (everyPort) NativeSkills() bool { return true }
 
+func (everyPort) TakeFiles() []contracts.OutboundFile { return nil }
+
+func (everyPort) ReadHistory(context.Context) (contracts.History, error) {
+	return contracts.History{}, nil
+}
+
+func (everyPort) PruneHistory(context.Context, []contracts.HistoryEdit) (contracts.PruneOutcome, error) {
+	return contracts.PruneOutcome{}, nil
+}
+
 func TestOptionalPortsAreFoundThroughTheLeaseWrap(t *testing.T) {
 	ports := []struct {
 		name string
@@ -32,6 +42,8 @@ func TestOptionalPortsAreFoundThroughTheLeaseWrap(t *testing.T) {
 			native, ok := skillNativeOf(b)
 			return ok && native.NativeSkills()
 		}},
+		{"FileProducer", func(b contracts.Backend) bool { _, ok := fileProducerOf(b); return ok }},
+		{"HistoryEditor", func(b contracts.Backend) bool { _, ok := historyEditorOf(b); return ok }},
 	}
 	wraps := []struct {
 		name  string

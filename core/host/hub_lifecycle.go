@@ -303,7 +303,7 @@ func (h *hub) goLiveLocked(ctx context.Context, sess state.Session) error {
 		runSessionIdentified(sctx, h.sessions, sess.Name, sess.ChannelID, bound, acc, state.ParticipantsPath(h.partDir, sess.Name), h.metrics, h.coordinator,
 			h.liveSink(ctx, sess),
 			eventTap(h.eventPublisher, sess.Name),
-			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent, terms: terms, language: liveSessionLanguage(h.st, sess.Name), operator: h.textLanguage()}, h.gate, h.warnings)
+			sessionIdentity{incarnation: sess.Incarnation, agent: sess.Agent, terms: terms, language: liveSessionLanguage(h.st, sess.Name), operator: h.textLanguage()}, h.desk, h.gate, h.warnings)
 		if err := acc.Err(); err != nil {
 			h.acceptFailed(sess.Name, done, err)
 		}

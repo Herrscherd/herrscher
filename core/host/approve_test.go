@@ -67,7 +67,7 @@ func TestAskApprovalWaitsThenIsAnswered(t *testing.T) {
 			d, _ := askApproval(context.Background(), approvalTab, sessionTab, "s1", req, pol, approval.ModeAsk, 5*time.Second)
 			done <- d
 		}()
-		id := awaitPending(t, approvalTab)[0].ID
+		id := awaitPending(t, approvalTab, 1)[0].ID
 		if !answerApproval(approvalTab, id, approval.Allow) {
 			t.Fatal("answerApproval reported no such request")
 		}
@@ -356,7 +356,7 @@ func TestPickRoutesApprovalValuesAwayFromTheBackend(t *testing.T) {
 			d, _ := askApproval(context.Background(), approvalTab, sessionTab, "s-no-driver", approval.Request{Tool: "Bash", Subject: "x"}, pol, approval.ModeAsk, 5*time.Second)
 			done <- d
 		}()
-		id := awaitPending(t, approvalTab)[0].ID
+		id := awaitPending(t, approvalTab, 1)[0].ID
 		if !testHub(&hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, approvals: approvalTab, sessions: sessionTab}).Pick("s-no-driver", approvalPickPrefix+id+":deny") {
 			t.Fatal("an approval pick must be handled even with no live driver")
 		}
@@ -396,12 +396,12 @@ func TestALongWaitIsCalledOutButNotShortened(t *testing.T) {
 	}
 }
 
-func awaitPending(t *testing.T, tab *approvalTable) []PendingApproval {
+func awaitPending(t *testing.T, tab *approvalTable, want int) []PendingApproval {
 	t.Helper()
 	var pending []PendingApproval
 	requireSettled(t, func() bool {
 		pending = pendingApprovals(tab)
-		return len(pending) == 1
+		return len(pending) == want
 	}, "the approval registered")
 	return pending
 }

@@ -123,7 +123,7 @@ type turnRouter struct {
 func (r turnRouter) route(ctx context.Context, event contracts.Event, lang i18n.Language) error {
 	switch event.T {
 	case compactwire.EventRequest:
-		runCompact(ctx, r.sink, r.backend, r.ctrl, event)
+		runCompact(ctx, r.sink, r.backend, r.ctrl, r.aff.approvals, lang, event)
 	case historywire.EventRead:
 		runHistoryRead(ctx, r.sink, r.backend, r.ctrl, event)
 	case historywire.EventPrune:

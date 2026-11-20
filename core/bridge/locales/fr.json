@@ -1,0 +1,7 @@
+[
+  {
+    "id": "approval.unavailable",
+    "description": "Un appel d'outil est refusé parce que le pont n'a pas pu demander l'approbation à l'opérateur, Detail porte la cause",
+    "other": "herrscher : l'approbation n'a pas pu être demandée, cet appel d'outil est donc refusé : {{.Detail}}"
+  }
+]

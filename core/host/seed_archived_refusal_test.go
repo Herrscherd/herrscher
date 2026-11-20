@@ -21,6 +21,7 @@ func TestOneShotSeedRefusesAnArchivedSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	runtime := oneShotSeedRuntime{
+		desk:        seedDesk(t),
 		persists:    newPersistWrites(),
 		messages:    newHostMessages(),
 		cliMessages: clitext.NewMessages(),

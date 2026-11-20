@@ -189,7 +189,7 @@ func TestApproveAllowSettlesAWaitingRequest(t *testing.T) {
 			done <- d
 		}()
 
-		id := awaitPending(t, approvalTab)[0].ID
+		id := awaitPending(t, approvalTab, 1)[0].ID
 		out, err := cli.Plain(reg.Dispatch(context.Background(), []string{"approve", "allow", id}))
 		if err != nil {
 			t.Fatalf("allow: %v", err)

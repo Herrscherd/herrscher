@@ -118,6 +118,7 @@ func runHub(parent context.Context, newBackend BackendFactory, orch contracts.Or
 	defer closeAndWarn(conn)
 
 	ctrl := &turnController{}
+	approvals := newApprovalChannel(conn.Write)
 	events := make(chan contracts.Event)
 	scanErr := make(chan error, 1)
 	go func() {
@@ -126,6 +127,9 @@ func runHub(parent context.Context, newBackend BackendFactory, orch contracts.Or
 		scanErr <- conn.Scan(func(event contracts.Event) error {
 			if event.T == eventwire.EventInterrupt {
 				ctrl.interrupt()
+				return nil
+			}
+			if approvals.deliver(event) {
 				return nil
 			}
 			select {
@@ -148,7 +152,7 @@ func runHub(parent context.Context, newBackend BackendFactory, orch contracts.Or
 		pin = &scopePin{resolve: opts.Scope, current: opts.LaunchProject, agent: opts.MemoryAgent, orch: orch}
 	}
 	runHubTurnsCtl(ctx, events, conn, backend, orch, ctrl, eng,
-		affordances{roster: opts.Roster, caps: opts.Capabilities, user: identity.FromDir(ctx, cwd), outbox: outboundSettings{root: opts.OutboxRoot, session: opts.Channel, maxBytes: opts.OutboundMaxBytes}}, pin)
+		affordances{roster: opts.Roster, caps: opts.Capabilities, user: identity.FromDir(ctx, cwd), outbox: outboundSettings{root: opts.OutboxRoot, session: opts.Channel, maxBytes: opts.OutboundMaxBytes}, approvals: approvals}, pin)
 	if err := parent.Err(); err != nil {
 		return err
 	}
@@ -164,10 +168,11 @@ func reportControlScan(err error) error {
 }
 
 type affordances struct {
-	roster contracts.RosterProvider
-	caps   string
-	user   identity.Identity
-	outbox outboundSettings
+	roster    contracts.RosterProvider
+	caps      string
+	user      identity.Identity
+	outbox    outboundSettings
+	approvals *approvalChannel
 }
 
 type scopePin struct {
@@ -294,6 +299,7 @@ func settleFailedReply(ctrl *turnController, out string, err error) string {
 func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, event contracts.Event, ctrl *turnController, eng *skills.Engine, aff affordances, pin *scopePin, lang i18n.Language) error {
 	turnCtx, endTurn := ctrl.begin(ctx)
 	defer endTurn()
+	turnCtx = aff.approvals.attach(turnCtx, lang)
 	if eng != nil {
 		eng.Refresh()
 	}

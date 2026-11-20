@@ -1203,17 +1203,16 @@ The tab carries a `pendingApproval` flag for the rest of the window to mark it.
 
 On the command socket, each session's approval hook answers with the token the
 daemon issued to that session at launch, sent in the `HERRSCHER_SESSION_TOKEN`
-variable. The token
-ends with the session's run. Closing or archiving the session revokes it, and so
-does a session that stops inside the teardown window, so a session recreated
-under the same name gets a new one. A one-shot seed gets its own token instead,
-which answers only while that seed runs. A seed on an archived session is
-refused, and no token is issued to a seed whose session is archived or gone. A
-session archived or closed while its seed runs ends that seed's token. A hook
-that has no approval socket and holds no token, or cannot reach a daemon, refuses
-the tool call and says why: it never allows a call it could not check. A seed run
-inside the daemon sets the approval socket for its backend, so its hook needs no
-token at all.
+variable. The token ends with the session's run. Closing or archiving the
+session revokes it, and so does a session that stops inside the teardown window,
+so a session recreated under the same name gets a new one. A one-shot seed gets
+its own token instead, which answers only while that seed runs. A seed on an
+archived session is refused, and no token is issued to a seed whose session is
+archived or gone. A session archived or closed while its seed runs ends that
+seed's token. A hook that has no approval socket and holds no token, or cannot
+reach a daemon, refuses the tool call and says why: it never allows a call it
+could not check. A seed run inside the daemon sets the approval socket for its
+backend, so its hook needs no token at all.
 
 Two paths run without a daemon. A `session create` run locally starts a session
 whose children hold no token the daemon issued, so every tool call they make is
@@ -1222,6 +1221,26 @@ refused by the hook, while text answers still work (`--print` runs this way). A
 too. `approve ask` refuses without a daemon. A seed on a remote backend with a session is refused outright,
 because the remote prompt carries no session identity: its approvals could not
 reach the operator, and they would be skipped without a sign.
+
+The bridge process (`herrscher bridge --hub-socket`) runs its backend outside the
+daemon, and that backend needs approvals too, so it asks them over the hub
+connection it already holds. Every turn it runs and every compaction it makes sets an approval
+asker in the context of that call, so the backend receives one on each `Respond`
+and each `Compact`. The asker sends a hub event `approval_ask` whose value is the
+JSON of the request (`contracts.ApprovalRequest`), and waits for an
+`approval_answer` event whose value is the JSON of the answer
+(`contracts.ApprovalAnswer`), matched by the request's ID. The daemon answers
+through the approval desk for the session bound to that connection when the bridge
+was opened. The session comes from the connection, never from a field of the
+request, so a bridge cannot ask on behalf of another session. An answer that
+cannot be sent, a hub that is gone, or a turn that ends before the answer arrives
+refuses the tool call, and the reason is written in the language the hub
+announced (`approval.unavailable` in `core/bridge/locales`). A request the daemon
+cannot decode gets no answer, so its call waits until the turn ends.
+
+A one-shot seed run by the daemon fails at once with `the seed runtime has no
+approval desk` when it has no desk, instead of running tools that nobody could
+approve. The error is translated like the other host faults.
 
 ### Using the terminal you are in
 

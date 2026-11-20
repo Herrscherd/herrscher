@@ -135,6 +135,7 @@ func identitySeedRegistry(t *testing.T) (*cli.Registry, state.Session, *[]contra
 
 	var events []contracts.Event
 	ctx = withOneShotSeedRuntime(ctx, oneShotSeedRuntime{
+		desk:        seedDesk(t),
 		persists:    newPersistWrites(),
 		messages:    newHostMessages(),
 		cliMessages: clitext.NewMessages(),
@@ -240,6 +241,7 @@ func TestDaemonSeedCoordinatesPersistsAndDoesNotHoldDispatchLock(t *testing.T) {
 	h.runtime = isolatedRuntimeDir(t)
 	coord := &reentrantSeedCoordinator{recordingCoord: &recordingCoord{}, hub: h}
 	h.coordinator = coord
+	h.desk = hubDesk(st, approvalTab, sessionTab)
 
 	var events []contracts.Event
 	h.eventPublisher = func(_ string, event contracts.Event) {

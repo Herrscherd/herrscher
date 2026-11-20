@@ -24,6 +24,8 @@ const (
 	EventApproval          = "approval"
 	EventApprovalRisk      = "approval_risk"
 	EventApprovalSubject   = "approval_subject"
+	EventApprovalAsk       = "approval_ask"
+	EventApprovalAnswer    = "approval_answer"
 	EventCompactNow        = "compact_now"
 	EventCompactionStarted = "compaction_started"
 	EventCompactionDone    = "compaction_done"

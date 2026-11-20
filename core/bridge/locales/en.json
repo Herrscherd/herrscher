@@ -1,0 +1,7 @@
+[
+  {
+    "id": "approval.unavailable",
+    "description": "A tool call is refused because the bridge could not ask the operator for approval, Detail carries the cause",
+    "other": "herrscher: approval could not be asked, so this tool call is refused: {{.Detail}}"
+  }
+]

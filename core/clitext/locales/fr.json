@@ -3233,6 +3233,11 @@
     "other": "usage : approve mode <session> <ask|bypass|strict|smart>"
   },
   {
+    "id": "cli.host.fault.seed_without_approval_desk",
+    "description": "Erreur d'un seed refusé car son runtime n'a pas de bureau d'approbation, son pont refuserait chaque outil sans consulter personne",
+    "other": "le runtime du seed n'a pas de bureau d'approbation"
+  },
+  {
     "id": "cli.host.fault.approve_ask_unauthenticated",
     "description": "Erreur d'une demande d'approbation refusée car l'appelant ne détient pas le jeton de la session",
     "other": "approve ask refusé : l'appelant ne détient pas le jeton d'approbation de cette session"

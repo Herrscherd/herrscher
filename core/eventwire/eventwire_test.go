@@ -37,6 +37,8 @@ func TestEventValuesAreFrozen(t *testing.T) {
 		{"EventApproval", EventApproval, "approval"},
 		{"EventApprovalRisk", EventApprovalRisk, "approval_risk"},
 		{"EventApprovalSubject", EventApprovalSubject, "approval_subject"},
+		{"EventApprovalAsk", EventApprovalAsk, "approval_ask"},
+		{"EventApprovalAnswer", EventApprovalAnswer, "approval_answer"},
 		{"EventCompactNow", EventCompactNow, "compact_now"},
 		{"EventCompactionStarted", EventCompactionStarted, "compaction_started"},
 		{"EventCompactionDone", EventCompactionDone, "compaction_done"},

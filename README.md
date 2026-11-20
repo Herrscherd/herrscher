@@ -333,14 +333,15 @@ A session on a remote backend is a runner over there, and the daemon keeps every
 decision. What crosses the network and what stays here:
 
 - **Crosses the network:** the prompt of each turn, as the backend receives it
-  (its content and its settings). The daemon's approval answers come back on the
-  same connection.
-- **Stays on this machine:** the session token (`HERRSCHER_SESSION_TOKEN`) and the
-  approval socket of the daemon. Neither is written into the remote environment,
-  so a remote backend never holds a credential that could answer an approval for
-  another session. The local outbox path is dropped from the prompt, because it
-  names a directory of this machine. A gateway model and an account are refused on
-  a remote backend, since they resolve in this daemon's store.
+  (its content and its settings). On an SSH placement, the remote environment also
+  carries the session's name and its approval settings (mode, session, binary).
+  The daemon's approval answers come back on the same connection.
+- **Stays on this machine:** the session token (`HERRSCHER_SESSION_TOKEN`). It is
+  never written into the remote environment, so no process on the remote side can
+  answer an approval for any session. The local outbox path is dropped from the
+  prompt, because it names a directory of this machine. A gateway model and an
+  account are refused on a remote backend, since they resolve in this daemon's
+  store.
 - **Who decides an approval:** the daemon, always. The remote backend asks through
   the approval stream the turn carries, and the answer is the daemon's desk
   decision for that session. A turn that reaches the remote backend without an
@@ -350,14 +351,15 @@ decision. What crosses the network and what stays here:
   backend's announcement to start. When the resolver cannot reach the remote
   backend, the turn fails with that error and nothing runs in its place on this
   machine.
-- **Known limit:** `HERRSCHER_SESSION` (the session's name) is not forwarded to the
-  remote backend, because the wire carries only the prompt. The remote backend
-  therefore has no session identity of its own, and the daemon attributes every
-  approval to the session whose turn asked it.
+- **Attribution:** the session's name reaches the remote environment on SSH, but
+  the approval stream does not carry it. The daemon attributes each approval to
+  the session whose turn asked it, through the asker bound to that turn in the
+  daemon (`askerFor` in `core/host/seed.go`), so the name is informational on the
+  remote side and never the basis of a grant.
 
-The bridge on a remote machine still holds the token it was launched with for its
-local hook, as described under the command socket above. Removing that token from
-the bridge is a separate change.
+No token reaches a bridge on a remote machine: `remoteEnvBlock` does not carry
+`HERRSCHER_SESSION_TOKEN`, so the bridge's local hook has no credential to present.
+Its approvals go through the asker that the turn attaches (`core/bridge/approval.go`).
 
 → `architecture/remote`
 

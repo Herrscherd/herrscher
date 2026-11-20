@@ -791,6 +791,16 @@
     "other": "herrscher: this session has no approval desk, so this tool call is refused"
   },
   {
+    "id": "approval.timeout",
+    "description": "The operator did not answer the approval before its wait ran out, so the tool request is denied, Request names the tool and its subject and Wait carries the wait",
+    "other": "herrscher: nobody answered within {{.Wait}}, so {{.Request}} was denied"
+  },
+  {
+    "id": "approval.ended",
+    "description": "The approval wait ended before any answer because the call that asked was cancelled, so the tool request is denied, Request names the tool and its subject",
+    "other": "herrscher: the wait for approval ended, so {{.Request}} was denied"
+  },
+  {
     "id": "approval.unknown_consumer",
     "description": "The daemon refuses an approval request whose consumer it does not know, so nothing is asked of the operator",
     "other": "herrscher: this approval request has no known consumer, so this tool call is refused"

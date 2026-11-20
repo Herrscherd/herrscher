@@ -61,6 +61,8 @@ func TestHostMessageFamiliesAreFrozen(t *testing.T) {
 		"approval": {
 			{"approval.prompt", map[string]any{"Request": "Bash(ls)"}, "autoriser Bash(ls) ?", "allow Bash(ls)?"},
 			{"approval.hint", map[string]any{"Command": "approve allow|deny id1", "Help": "approve allow --help"}, " (répondez avec `approve allow|deny id1`, voir `approve allow --help`)", " (answer with `approve allow|deny id1`, see `approve allow --help`)"},
+			{"approval.timeout", map[string]any{"Request": "Bash(ls)", "Wait": "5s"}, `herrscher : personne n'a répondu dans 5s, donc Bash(ls) est refusé`, "herrscher: nobody answered within 5s, so Bash(ls) was denied"},
+			{"approval.ended", map[string]any{"Request": "Bash(ls)"}, `herrscher : l'attente d'approbation a pris fin, donc Bash(ls) est refusé`, "herrscher: the wait for approval ended, so Bash(ls) was denied"},
 		},
 		"provision": {
 			{"provision.smoke", map[string]any{"Host": "h", "Detail": "boom"}, "le binaire déposé sur h échoue à son test de fumée : boom", "the binary put on h fails its smoke test: boom"},

@@ -42,7 +42,7 @@ func (d *sessionDriver) setVerdict(req approval.Request, risk approval.Risk) {
 
 func (d *sessionDriver) askApproval(ctx context.Context, approvalID string, req approval.Request, deadline time.Time) {
 	opts := approvalChoices(approvalID, req)
-	prompt := d.hostText("approval.prompt", map[string]any{"Request": describeRequest(req)})
+	prompt := d.hostText("approval.prompt", requestParams(req))
 	hint := d.hostText("approval.hint", map[string]any{"Command": "approve allow|deny " + approvalID, "Help": "approve allow --help"})
 	for _, gateway := range d.gateways {
 		channel := d.renderChannel(gateway)

@@ -791,6 +791,16 @@
     "other": "herrscher : cette session n'a pas de bureau d'approbation, cet appel d'outil est donc refusé"
   },
   {
+    "id": "approval.timeout",
+    "description": "L'opérateur n'a pas répondu à l'approbation avant la fin de son attente, la demande d'outil est donc refusée, Request nomme l'outil et son sujet, Wait porte l'attente",
+    "other": "herrscher : personne n'a répondu dans {{.Wait}}, donc {{.Request}} est refusé"
+  },
+  {
+    "id": "approval.ended",
+    "description": "L'attente d'approbation a pris fin sans réponse parce que l'appel qui la demandait a été annulé, la demande d'outil est donc refusée, Request nomme l'outil et son sujet",
+    "other": "herrscher : l'attente d'approbation a pris fin, donc {{.Request}} est refusé"
+  },
+  {
     "id": "approval.unknown_consumer",
     "description": "Le démon refuse une demande d'approbation dont il ne connaît pas le consommateur, sans rien demander à l'opérateur",
     "other": "herrscher : cette demande d'approbation n'a pas de consommateur connu, cet appel d'outil est donc refusé"

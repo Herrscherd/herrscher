@@ -189,7 +189,7 @@ func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessio
 	askApprovalOn(octx, sessions, session, pending.id, req, pending.deadline)
 	cancel()
 
-	verdict, refused := awaitVerdict(ctx, pending, wait)
+	verdict, refused := approvals.awaitVerdict(ctx, pending, wait)
 	if buffered, ok := closeApproval(approvals, pending); ok {
 		verdict, refused = buffered, ""
 	}
@@ -207,14 +207,16 @@ func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessio
 	return approval.Allow, ""
 }
 
-func awaitVerdict(ctx context.Context, pending *pendingApproval, wait time.Duration) (approvalVerdict, string) {
+func (t *approvalTable) awaitVerdict(ctx context.Context, pending *pendingApproval, wait time.Duration) (approvalVerdict, string) {
 	select {
 	case verdict := <-pending.answer:
 		return verdict, ""
 	case <-time.After(wait):
-		return approvalVerdict{}, fmt.Sprintf("herrscher: nobody answered within %s, so %s was denied", wait, describeRequest(pending.req))
+		params := requestParams(pending.req)
+		params["Wait"] = wait.String()
+		return approvalVerdict{}, t.messages.text(t.lang(), "approval.timeout", params)
 	case <-ctx.Done():
-		return approvalVerdict{}, fmt.Sprintf("herrscher: the wait for approval ended, so %s was denied", describeRequest(pending.req))
+		return approvalVerdict{}, t.messages.text(t.lang(), "approval.ended", requestParams(pending.req))
 	}
 }
 
@@ -421,6 +423,10 @@ func describeRequest(req approval.Request) string {
 		return req.Tool
 	}
 	return req.Tool + "(" + clip(req.Subject) + ")"
+}
+
+func requestParams(req approval.Request) map[string]any {
+	return map[string]any{"Request": describeRequest(req)}
 }
 
 func clip(text string) string {

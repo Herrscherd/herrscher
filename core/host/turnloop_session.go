@@ -30,7 +30,7 @@ func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, cha
 	defer closeRead(acc)
 	approvals := bridgeApprovals{messages: sessions.messages, lang: identity.operator}
 	if desk != nil {
-		approvals.asker = desk.asker(name, bridgeDeskBound())
+		approvals.asker = bridgeAskerFor(desk, name)
 	}
 	if approvals.lang == nil {
 		approvals.lang = fixedLanguageSource(i18n.English)
@@ -117,6 +117,10 @@ func serveConn(ctx context.Context, conn *control.Conn, toBridge <-chan contract
 			}
 		}
 	}
+}
+
+func bridgeAskerFor(desk *approvalDesk, session string) contracts.ApprovalAsker {
+	return desk.asker(session, bridgeDeskBound())
 }
 
 type bridgeApprovals struct {

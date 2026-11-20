@@ -212,9 +212,13 @@ func attachOneShotTaps(driver *sessionDriver, sess state.Session, runtime oneSho
 	return gate
 }
 
+func seedAskerFor(desk *approvalDesk, session string) contracts.ApprovalAsker {
+	return desk.asker(session, hookDeskBound())
+}
+
 func runOneShotBridge(ctx context.Context, cancel context.CancelFunc, sess state.Session, orch contracts.Orchestrator, runtime oneShotSeedRuntime, toBridge, fromBridge chan contracts.Event, bridgeErr chan<- error) {
 	if runtime.desk != nil {
-		ctx = contracts.WithApprovalAsker(ctx, runtime.desk.asker(sess.Name, hookDeskBound()))
+		ctx = contracts.WithApprovalAsker(ctx, seedAskerFor(runtime.desk, sess.Name))
 	}
 	err := bridge.RunUntilClosed(ctx, func(string) (contracts.Backend, error) {
 		return runtime.backendFactory()(ctx, sess)

@@ -1262,6 +1262,11 @@ is refused under that ID (`approval.request_unreadable`), and a session without 
 approval desk is refused with `approval.no_desk`. A request with no readable ID cannot
 be answered, so the bridge's wait for it ends at its own bound.
 
+An answer that picks `session` or `always` and is accepted before the question's
+deadline is kept even when the call it targeted has ended in the meantime: the turn
+finished, or the bridge closed, before the desk recorded it. The operator chose the
+rule in time, so the rule is recorded and is not rolled back when its call ends.
+
 A one-shot seed run by the daemon fails at once with `the seed runtime has no
 approval desk` when it has no desk, instead of running tools that nobody could
 approve. The error is translated like the other host faults. A `session handoff`

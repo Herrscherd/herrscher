@@ -51,6 +51,7 @@ const (
 	answerParam   = "Answer"
 	decisionParam = "Decision"
 	waitParam     = "Wait"
+	boundParam    = "Bound"
 )
 
 const (

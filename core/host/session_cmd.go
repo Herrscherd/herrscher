@@ -186,7 +186,7 @@ func sessionPickVerb(cliMessages *clitext.Messages, lang languageSource, approva
 		ValueParam("value", clitext.CmdParamSessionPickValue, true).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			name, value := input.Get(paramName), input.Get("value")
-			if answerApprovalPick(approvals, sessions, name, value) || sessions.pick(name, value) {
+			if answerApprovalPick(approvals, name, value) || sessions.pick(name, value) {
 				return contracts.DataResult(replyText(cliMessages, lang()).Text(clitext.SessionPicked, clitext.Params{clitext.ParamName: name})), nil
 			}
 			return contracts.Result{}, wrapHost(sessions.messages, errNoPendingChoice, "session.refused", map[string]any{nameParam: name})

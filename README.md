@@ -1239,14 +1239,19 @@ refuses the tool call, and the reason is written in the language the hub announc
 answer comes within its own bound, `host.BridgeApprovalWait()`, which the binary
 passes in `Options.ApprovalWait` (`approval.no_answer`): the hook wait
 (`agent.HookWait`, 900 s, after which the CLI cuts the hook and runs the tool call)
-minus 60 s, so 840 s. The hook has its own bound below that, `hookAnswerWait()`, the
-hook wait minus 30 s, so 870 s: on the approval socket and on the daemon path alike,
-a hook that gets no answer in time denies the call with `hook.approval_timeout`. The
-order is therefore bridge (840 s), then hook (870 s), then CLI (900 s), so the refusal
-the operator sees is the bridge's, and the CLI never cuts a hook that is still
-waiting. An approval wait configured longer than the hook bound is truncated: the hook
-denies the call at 870 s, and an answer that comes later changes nothing; a wait longer
-than half of that bound is reported when the approval starts. A request whose ID is
+minus 60 s, so 840 s. The daemon bounds that question with the same wait, so at
+840 s it leaves the pending approvals, and an answer that comes later records
+nothing, not even a session rule. On the approval socket and on the daemon token
+path, and for a one-shot seed run, the hook has its own bound, `hookAnswerWait()`,
+the hook wait minus 30 s, so 870 s: a hook that gets no answer in time denies the
+call with `hook.approval_timeout`, and the daemon bounds that question at the same
+870 s, with the same removal and the same rule for a late answer. The order is
+therefore bridge (840 s), then hook (870 s), then CLI (900 s), so on the bridge path
+the refusal the operator sees is the bridge's, and the CLI never cuts a hook that is
+still waiting. An approval wait configured longer than the bound of the call that
+asks it is truncated to that bound: the question is cut at the bound, and the
+daemon's warnings name the configured wait and the bound it is cut at
+(`approve.wait_truncated`). A request whose ID is
 already waiting is refused at once (`approval.duplicate`), without a second request to
 the operator. The daemon answers every request that carries an ID: one it cannot decode
 is refused under that ID (`approval.request_unreadable`), and a session without an

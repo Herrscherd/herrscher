@@ -781,6 +781,11 @@
     "other": "herrscher : aucune réponse en {{.Wait}}, cet appel d'outil est donc refusé avant que le CLI ne coupe le hook"
   },
   {
+    "id": "approve.wait_truncated",
+    "description": "L'attente d'approbation configurée dépasse la borne de l'appel auquel elle appartient, la question est donc coupée à Bound, Wait porte l'attente configurée",
+    "other": "herrscher : l'attente d'approbation de {{.Wait}} dépasse l'appel qui la demande, elle est donc coupée à {{.Bound}}"
+  },
+  {
     "id": "approval.request_unreadable",
     "description": "Le démon refuse une demande d'approbation du pont qu'il ne peut pas lire, Detail porte la cause",
     "other": "herrscher : la demande d'approbation est illisible, cet appel d'outil est donc refusé : {{.Detail}}"

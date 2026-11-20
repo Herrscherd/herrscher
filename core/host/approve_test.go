@@ -101,7 +101,7 @@ func answerApproval(approvalTab *approvalTable, id string, decision approval.Dec
 	if decision == approval.Deny {
 		scope = scopeDeny
 	}
-	return settleApproval(approvalTab, newSessionTable(newHostMessages(), clitext.NewMessages()), id, approvalAnswer{scope: scope})
+	return settleApproval(approvalTab, id, approvalAnswer{scope: scope})
 }
 
 func waitingFor(approvalTab *approvalTable, session string) int {
@@ -365,33 +365,36 @@ func TestPickRoutesApprovalValuesAwayFromTheBackend(t *testing.T) {
 	})
 }
 
-func TestALongWaitIsCalledOutButNotShortened(t *testing.T) {
+func TestAWaitWithinItsBoundIsSilent(t *testing.T) {
 	var warnings bytes.Buffer
 	approvalTab := newApprovalTable(&warnings)
 	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
 	ask := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
-	req := approval.Request{Tool: "Bash", Subject: "git push"}
-	fits, outlives := hookAnswerWait()/2, hookAnswerWait()/2+time.Minute
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	askApproval(ctx, approvalTab, sessionTab, "s-warn", req, ask, approval.ModeAsk, fits)
+	askApproval(ctx, approvalTab, sessionTab, "s-warn", approval.Request{Tool: "Bash", Subject: "git push"}, ask, approval.ModeAsk, time.Minute)
 	if warnings.Len() != 0 {
-		t.Fatalf("a wait the vendor will sit through must say nothing, got %q", warnings.String())
+		t.Fatalf("a wait the call can hold must say nothing, got %q", warnings.String())
 	}
+}
 
-	askApproval(ctx, approvalTab, sessionTab, "s-warn", req, nil, 0, outlives)
-	if warnings.Len() != 0 {
-		t.Fatalf("a call nobody is asked about must say nothing, got %q", warnings.String())
-	}
+func TestAWaitBeyondItsBoundIsCutAndSaysSo(t *testing.T) {
+	var warnings bytes.Buffer
+	approvalTab := newApprovalTable(&warnings)
+	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
+	ask := approval.Policy{{Decision: approval.Ask, Tool: "*", Pattern: ""}}
+	configured := 20 * time.Minute
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 
-	askApproval(ctx, approvalTab, sessionTab, "s-warn", req, ask, approval.ModeAsk, outlives)
+	askApproval(ctx, approvalTab, sessionTab, "s-warn", approval.Request{Tool: "Bash", Subject: "git push"}, ask, approval.ModeAsk, configured)
 	got := warnings.String()
-	if !strings.Contains(got, outlives.String()) {
-		t.Fatalf("warning %q must name the wait that was asked for", got)
+	if !strings.Contains(got, configured.String()) {
+		t.Fatalf("warning %q must name the configured wait", got)
 	}
-	if !strings.Contains(got, hookAnswerWait().String()) {
-		t.Fatalf("warning %q must name what the vendor will wait", got)
+	if !strings.Contains(got, time.Second.String()) {
+		t.Fatalf("warning %q must name the bound the wait is cut at", got)
 	}
 }
 

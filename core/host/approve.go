@@ -11,6 +11,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -35,6 +36,7 @@ type pendingApproval struct {
 type approvalVerdict struct {
 	decision approval.Decision
 	reason   string
+	scope    approvalScope
 }
 
 type approvalScope uint8
@@ -92,19 +94,33 @@ type PendingApproval struct {
 }
 
 type approvalTable struct {
-	mu    sync.Mutex
-	m     map[string]*pendingApproval
-	judge riskJudge
-	rules approvalRules
-	warn  io.Writer
+	mu       sync.Mutex
+	m        map[string]*pendingApproval
+	judge    riskJudge
+	rules    approvalRules
+	warn     io.Writer
+	messages *hostMessages
+	lang     languageSource
 }
 
 func newApprovalTable(warn io.Writer) *approvalTable {
-	return &approvalTable{m: make(map[string]*pendingApproval), judge: registryRiskJudge, warn: warningWriter(warn)}
+	return &approvalTable{
+		m:        make(map[string]*pendingApproval),
+		judge:    registryRiskJudge,
+		warn:     warningWriter(warn),
+		messages: newHostMessages(),
+		lang:     fixedLanguageSource(i18n.English),
+	}
 }
 
 func (t *approvalTable) withRules(rules approvalRules) *approvalTable {
 	t.rules = rules
+	return t
+}
+
+func (t *approvalTable) withMessages(messages *hostMessages, lang languageSource) *approvalTable {
+	t.messages = messages
+	t.lang = lang
 	return t
 }
 
@@ -162,7 +178,10 @@ func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessio
 	}
 	defer release()
 
-	warnWaitOutlivesTheHook(approvals.warn, wait)
+	if bounded := boundedWait(ctx, wait); bounded < wait {
+		approvals.warnWaitTruncated(wait, bounded)
+		wait = bounded
+	}
 
 	octx, cancel := context.WithTimeout(ctx, wait)
 	askApprovalOn(octx, sessions, session, pending.id, req, time.Now().Add(wait))
@@ -171,6 +190,7 @@ func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessio
 	select {
 	case decision := <-pending.answer:
 		if decision.decision == approval.Allow {
+			approvals.remember(sessions, pending, decision.scope)
 			return approval.Allow, ""
 		}
 		reason := decision.reason
@@ -215,14 +235,19 @@ func registerApproval(approvals *approvalTable, pending *pendingApproval) (func(
 	}, ""
 }
 
-func warnWaitOutlivesTheHook(out io.Writer, wait time.Duration) {
-	if wait <= hookAnswerWait()/2 {
-		return
+func boundedWait(ctx context.Context, wait time.Duration) time.Duration {
+	deadline, bounded := ctx.Deadline()
+	if !bounded {
+		return wait
 	}
-	logWriteFailure(fmt.Fprintf(warningWriter(out), "approvals: a %s wait can hold the hook for twice that (a slow menu post, then the timer), longer than the %s the hook waits for an answer: past %s the hook refuses the tool call and a later answer changes nothing\n", wait, hookAnswerWait(), hookAnswerWait()))
+	return min(wait, time.Until(deadline))
 }
 
-func settleApproval(approvals *approvalTable, sessions *sessionTable, approvalID string, answer approvalAnswer) bool {
+func (t *approvalTable) warnWaitTruncated(configured, bound time.Duration) {
+	warnTo(t.messages, t.warn, t.lang(), "approve.wait_truncated", map[string]any{waitParam: configured.String(), boundParam: bound.Round(time.Second).String()})
+}
+
+func settleApproval(approvals *approvalTable, approvalID string, answer approvalAnswer) bool {
 	approvals.mu.Lock()
 	pending := approvals.m[approvalID]
 	approvals.mu.Unlock()
@@ -230,12 +255,8 @@ func settleApproval(approvals *approvalTable, sessions *sessionTable, approvalID
 		return false
 	}
 	select {
-	case pending.answer <- approvalVerdict{decision: answer.decision(), reason: answer.reason}:
+	case pending.answer <- approvalVerdict{decision: answer.decision(), reason: answer.reason, scope: answer.scope}:
 	default:
-		return true
-	}
-	if answer.decision() == approval.Allow {
-		approvals.remember(sessions, pending, answer.scope)
 	}
 	return true
 }
@@ -313,7 +334,7 @@ func pendingApprovals(approvals *approvalTable) []PendingApproval {
 	return out
 }
 
-func answerApprovalPick(approvals *approvalTable, sessions *sessionTable, session, value string) bool {
+func answerApprovalPick(approvals *approvalTable, session, value string) bool {
 	if !strings.HasPrefix(value, approvalPickPrefix) {
 		return false
 	}
@@ -324,7 +345,7 @@ func answerApprovalPick(approvals *approvalTable, sessions *sessionTable, sessio
 	if owner, known := approvalSession(approvals, approvalID); known && owner != session {
 		return true
 	}
-	settleApproval(approvals, sessions, approvalID, answer)
+	settleApproval(approvals, approvalID, answer)
 	return true
 }
 

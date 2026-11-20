@@ -781,6 +781,11 @@
     "other": "herrscher: no answer came within {{.Wait}}, so this tool call is refused before the CLI cuts the hook off"
   },
   {
+    "id": "approve.wait_truncated",
+    "description": "The approval wait configured is longer than the bound the call it belongs to can hold, so the question is cut at Bound, Wait carries the configured wait",
+    "other": "herrscher: the approval wait of {{.Wait}} outlives the call that asks, so it is cut at {{.Bound}}"
+  },
+  {
     "id": "approval.request_unreadable",
     "description": "The daemon refuses an approval request from the bridge that it cannot read, Detail carries the cause",
     "other": "herrscher: the approval request could not be read, so this tool call is refused: {{.Detail}}"

@@ -83,7 +83,7 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	defer releaseInstance()
 
 	options = options.withDefaultGateways(gws)
-	approvals := newApprovalTable(options.Warnings).withRules(store)
+	approvals := newApprovalTable(options.Warnings).withRules(store).withMessages(messages, options.languageSource())
 	sessions := newSessionTable(messages, cliMessages)
 	options.health = &healthSource{}
 	options.usage = newUsageSource(messages, partDir)

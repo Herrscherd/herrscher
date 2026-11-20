@@ -29,8 +29,8 @@ func addApproveCommands(reg *cli.Registry, messages *hostMessages, cliMessages *
 	return addVerbs(
 		reg,
 		approveListVerb(cliMessages, lang, approvals),
-		approveAllowVerb(cliMessages, lang, approvals, sessions),
-		approveDenyVerb(cliMessages, lang, approvals, sessions),
+		approveAllowVerb(cliMessages, lang, approvals),
+		approveDenyVerb(cliMessages, lang, approvals),
 		approveRuleVerb(cliMessages, lang, hostState),
 		approveAskVerb(desk),
 		approveModeVerb(cliMessages, hostState, lang),
@@ -68,7 +68,7 @@ func listApprovals(cliMessages *clitext.Messages, lang i18n.Language, approvals 
 	return strings.TrimRight(body.String(), "\n"), nil
 }
 
-func approveAllowVerb(cliMessages *clitext.Messages, lang languageSource, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
+func approveAllowVerb(cliMessages *clitext.Messages, lang languageSource, approvals *approvalTable) contracts.Cmd {
 	return contracts.New(nsApprove, "allow").
 		Help(clitext.CmdHelpApproveAllow).
 		ValueParam("id", clitext.CmdParamApproveAllowID, false).
@@ -79,7 +79,7 @@ func approveAllowVerb(cliMessages *clitext.Messages, lang languageSource, approv
 			if err != nil {
 				return contracts.Result{}, err
 			}
-			if !settleApproval(approvals, sessions, approvalID, approvalAnswer{scope: scope}) {
+			if !settleApproval(approvals, approvalID, approvalAnswer{scope: scope}) {
 				return contracts.Result{}, &requestNotWaitingError{ID: approvalID}
 			}
 			return contracts.DataResult(replyText(cliMessages, lang()).Text(clitext.HostApproveAllowed, clitext.Params{clitext.ParamID: approvalID})), nil
@@ -118,7 +118,7 @@ func allowOperands(input contracts.Input) (string, approvalScope, error) {
 	return operands[0], scope, nil
 }
 
-func approveDenyVerb(cliMessages *clitext.Messages, lang languageSource, approvals *approvalTable, sessions *sessionTable) contracts.Cmd {
+func approveDenyVerb(cliMessages *clitext.Messages, lang languageSource, approvals *approvalTable) contracts.Cmd {
 	return contracts.New(nsApprove, "deny").
 		Help(clitext.CmdHelpApproveDeny).
 		ValueParam("id", clitext.CmdParamApproveDenyID, false).
@@ -129,7 +129,7 @@ func approveDenyVerb(cliMessages *clitext.Messages, lang languageSource, approva
 				return contracts.Result{}, errRequestNameMissing
 			}
 			answer := approvalAnswer{scope: scopeDeny, reason: operatorRefusal(input.Get("reason"))}
-			if !settleApproval(approvals, sessions, approvalID, answer) {
+			if !settleApproval(approvals, approvalID, answer) {
 				return contracts.Result{}, &requestNotWaitingError{ID: approvalID}
 			}
 			return contracts.DataResult(replyText(cliMessages, lang()).Text(clitext.HostApproveDenied, clitext.Params{clitext.ParamID: approvalID})), nil
@@ -209,7 +209,7 @@ func approveAskVerb(desk *approvalDesk) contracts.Cmd {
 				Tool:    strings.TrimSpace(input.Get("tool")),
 				Subject: input.Get("subject"),
 			}
-			decision, reason := desk.decide(ctx, session, req)
+			decision, reason := desk.decideWithin(ctx, hookAnswerWait(), session, req)
 			payload, err := json.Marshal(struct {
 				Decision string `json:"decision"`
 				Reason   string `json:"reason,omitempty"`

@@ -85,7 +85,7 @@ func buildBackend(ctx context.Context, messages *hostMessages, req BackendReques
 		if refusal := req.remoteRefusal(messages, route); refusal != nil {
 			return failWith(refusal)
 		}
-		return backend, noRelease, nil
+		return remoteBackend{Backend: backend}, noRelease, nil
 	}
 	plugin, err := selectBackend(desired, plugins)
 	if err != nil {
@@ -158,9 +158,6 @@ func routeFor(messages *hostMessages, modelID string, entry CatalogEntry, keys *
 }
 
 func (req BackendRequest) remoteRefusal(messages *hostMessages, route modelRoute) error {
-	if req.Session != "" {
-		return &remoteSessionError{messages: messages, Session: req.Session}
-	}
 	if len(route.env) > 0 {
 		return &gatewayEnvUnsupportedError{messages: messages, Model: req.ModelID}
 	}

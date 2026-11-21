@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -125,6 +127,10 @@ func (t *approvalTable) withMessages(messages *hostMessages, lang languageSource
 	return t
 }
 
+func (t *approvalTable) text(key string, params map[string]any) string {
+	return t.messages.text(t.lang(), key, params)
+}
+
 func (t *approvalTable) warnf(format string, args ...any) {
 	logWriteFailure(fmt.Fprintf(t.warn, format, args...))
 }
@@ -134,12 +140,18 @@ func (t *approvalTable) rated(ctx context.Context, sessions *sessionTable, sessi
 		return risk.Decision()
 	}
 	if t.judge == nil {
-		t.warnf("approvals: smart mode has no model to rate %s, so it is decided as in ask mode\n", describeRequest(req))
+		warnTo(t.messages, t.warn, t.lang(), "approval.smart_no_model", requestParams(req))
 		return fallback
 	}
 	risk, err := t.judge(ctx, req)
+	if errors.Is(err, errNoRiskModel) {
+		warnTo(t.messages, t.warn, t.lang(), "approval.smart_no_model", requestParams(req))
+		return fallback
+	}
 	if err != nil {
-		t.warnf("approvals: smart mode could not rate %s (%v), so it is decided as in ask mode\n", describeRequest(req), err)
+		params := requestParams(req)
+		params["Detail"] = err.Error()
+		warnTo(t.messages, t.warn, t.lang(), "approval.smart_rate_failed", params)
 		return fallback
 	}
 	sessions.setVerdict(session, req, risk)
@@ -150,7 +162,7 @@ func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessio
 	raw, matched := pol.Decide(req)
 	decided := approval.Apply(mode, req.Tool, raw, matched)
 	if decided == approval.Deny {
-		return approval.Deny, denialReason(mode, req)
+		return approval.Deny, approvals.denialReason(mode, req)
 	}
 	if sessions.remembers(session, req) {
 		return approval.Allow, ""
@@ -189,7 +201,7 @@ func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessio
 	askApprovalOn(octx, sessions, session, pending.id, req, pending.deadline)
 	cancel()
 
-	verdict, refused := awaitVerdict(ctx, pending, wait)
+	verdict, refused := approvals.awaitVerdict(ctx, pending, wait)
 	if buffered, ok := closeApproval(approvals, pending); ok {
 		verdict, refused = buffered, ""
 	}
@@ -199,7 +211,7 @@ func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessio
 	if verdict.decision != approval.Allow {
 		reason := verdict.reason
 		if reason == "" {
-			reason = fmt.Sprintf("herrscher: %s was denied by the operator", describeRequest(req))
+			reason = approvals.text("approval.denied", requestParams(req))
 		}
 		return approval.Deny, reason
 	}
@@ -207,15 +219,38 @@ func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessio
 	return approval.Allow, ""
 }
 
-func awaitVerdict(ctx context.Context, pending *pendingApproval, wait time.Duration) (approvalVerdict, string) {
+func (t *approvalTable) awaitVerdict(ctx context.Context, pending *pendingApproval, wait time.Duration) (approvalVerdict, string) {
 	select {
 	case verdict := <-pending.answer:
 		return verdict, ""
 	case <-time.After(wait):
-		return approvalVerdict{}, fmt.Sprintf("herrscher: nobody answered within %s, so %s was denied", wait, describeRequest(pending.req))
+		params := requestParams(pending.req)
+		params["Wait"] = humanWait(wait)
+		return approvalVerdict{}, t.text("approval.timeout", params)
 	case <-ctx.Done():
-		return approvalVerdict{}, fmt.Sprintf("herrscher: the wait for approval ended, so %s was denied", describeRequest(pending.req))
+		return approvalVerdict{}, t.text("approval.ended", requestParams(pending.req))
 	}
+}
+
+func humanWait(wait time.Duration) string {
+	if wait < time.Second {
+		return strconv.FormatInt(wait.Milliseconds(), 10) + "ms"
+	}
+	rest := wait.Round(time.Second)
+	if rest < time.Minute {
+		return strconv.FormatInt(int64(rest/time.Second), 10) + "s"
+	}
+	var out strings.Builder
+	for _, unit := range []struct {
+		size   time.Duration
+		symbol string
+	}{{time.Hour, "h"}, {time.Minute, "m"}, {time.Second, "s"}} {
+		if count := rest / unit.size; count > 0 {
+			out.WriteString(strconv.FormatInt(int64(count), 10) + unit.symbol)
+			rest %= unit.size
+		}
+	}
+	return out.String()
 }
 
 func closeApproval(approvals *approvalTable, pending *pendingApproval) (approvalVerdict, bool) {
@@ -230,18 +265,20 @@ func closeApproval(approvals *approvalTable, pending *pendingApproval) (approval
 	}
 }
 
-func denialReason(mode approval.Mode, req approval.Request) string {
+func (t *approvalTable) denialReason(mode approval.Mode, req approval.Request) string {
 	if mode == approval.ModePlan {
-		return fmt.Sprintf("herrscher: %s was refused: this session is in plan mode, which only reads; write the plan, and the operator validates it before anything is written", describeRequest(req))
+		return t.text("approval.plan_mode", requestParams(req))
 	}
-	return fmt.Sprintf("herrscher: %s was denied by policy", describeRequest(req))
+	return t.text("approval.policy_denied", requestParams(req))
 }
 
 func registerApproval(approvals *approvalTable, pending *pendingApproval) (func(), string) {
 	approvals.mu.Lock()
 	defer approvals.mu.Unlock()
 	if len(approvals.m) >= maxPendingApprovals {
-		return nil, fmt.Sprintf("herrscher: %s was denied: %d tool calls across the fleet are already waiting for a human, which is the limit; each one answered frees a slot", describeRequest(pending.req), maxPendingApprovals)
+		params := requestParams(pending.req)
+		params["Limit"] = maxPendingApprovals
+		return nil, approvals.text("approval.fleet_full", params)
 	}
 	mine := 0
 	for _, other := range approvals.m {
@@ -250,7 +287,10 @@ func registerApproval(approvals *approvalTable, pending *pendingApproval) (func(
 		}
 	}
 	if mine >= maxPendingPerSession {
-		return nil, fmt.Sprintf("herrscher: %s was denied: session %q already has %d tool calls waiting for a human, which is the limit; wait for those to be answered, and ask about fewer things at once", describeRequest(pending.req), pending.session, maxPendingPerSession)
+		params := requestParams(pending.req)
+		params["Session"] = pending.session
+		params["Limit"] = maxPendingPerSession
+		return nil, approvals.text("approval.session_full", params)
 	}
 	approvals.m[pending.id] = pending
 	return func() {
@@ -286,7 +326,9 @@ func (t *approvalTable) remember(sessions *sessionTable, pending *pendingApprova
 			driver.remember(pending.req)
 			return
 		}
-		t.warnf("approvals: %s was allowed once: session %q is not running, so it cannot remember the answer\n", describeRequest(pending.req), pending.session)
+		params := requestParams(pending.req)
+		params["Session"] = pending.session
+		warnTo(t.messages, t.warn, t.lang(), "approval.session_not_running", params)
 	case scopeAlways:
 		t.addRule(pending.req)
 	case scopeOnce, scopeDeny:
@@ -296,15 +338,15 @@ func (t *approvalTable) remember(sessions *sessionTable, pending *pendingApprova
 func (t *approvalTable) addRule(req approval.Request) {
 	rule, ok := approval.RuleFor(req.Tool, req.Subject)
 	if !ok {
-		t.warnf("approvals: %s was allowed once: it has no exact subject a rule could name without matching more\n", describeRequest(req))
+		warnTo(t.messages, t.warn, t.lang(), "approval.no_exact_subject", requestParams(req))
 		return
 	}
 	if t.rules == nil {
-		t.warnf("approvals: %s was allowed once: no rule store is attached, so no rule was written\n", describeRequest(req))
+		warnTo(t.messages, t.warn, t.lang(), "approval.no_rule_store", requestParams(req))
 		return
 	}
 	if err := t.rules.AddApprovalRule(rule.String()); err != nil {
-		t.warnf("approvals: %s was allowed once: the rule %q was not saved: %v\n", describeRequest(req), rule.String(), err)
+		warnTo(t.messages, t.warn, t.lang(), "approval.rule_not_saved", map[string]any{"Request": describeRequest(req), "Rule": rule.String(), "Detail": err.Error()})
 	}
 }
 
@@ -360,6 +402,7 @@ func answerApprovalPick(approvals *approvalTable, session, value string) bool {
 	if !ok {
 		return true
 	}
+	answer.reason = approvals.operatorRefusal(answer.reason)
 	if owner, known := approvalSession(approvals, approvalID); known && owner != session {
 		return true
 	}
@@ -378,7 +421,7 @@ func parseApprovalPick(value string) (string, approvalAnswer, bool) {
 	if !known {
 		return "", approvalAnswer{}, false
 	}
-	return approvalID, approvalAnswer{scope: scope, reason: operatorRefusal(reason)}, true
+	return approvalID, approvalAnswer{scope: scope, reason: reason}, true
 }
 
 func scopeNamed(word string) (approvalScope, bool) {
@@ -390,12 +433,12 @@ func scopeNamed(word string) (approvalScope, bool) {
 	return 0, false
 }
 
-func operatorRefusal(reason string) string {
+func (t *approvalTable) operatorRefusal(reason string) string {
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
 		return ""
 	}
-	return "herrscher: the operator refused: " + reason
+	return t.text("approval.operator_refused", map[string]any{"Reason": reason})
 }
 
 func approvalSession(approvals *approvalTable, approvalID string) (string, bool) {
@@ -421,6 +464,10 @@ func describeRequest(req approval.Request) string {
 		return req.Tool
 	}
 	return req.Tool + "(" + clip(req.Subject) + ")"
+}
+
+func requestParams(req approval.Request) map[string]any {
+	return map[string]any{"Request": describeRequest(req)}
 }
 
 func clip(text string) string {

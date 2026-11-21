@@ -327,6 +327,45 @@ with `--host`, since the forge client runs here and would clone onto the wrong
 machine. `host check build1` says in four lines whether ssh, the binary, the
 workspace and git are there.
 
+### Trust model of remote sessions
+
+A session on a remote backend is a runner over there, and the daemon keeps every
+decision. What crosses the network and what stays here:
+
+- **Crosses the network:** the prompt of each turn, as the backend receives it
+  (its content and its settings). On an SSH placement, the remote environment also
+  carries the session's name and its approval settings (mode, session, binary).
+  The daemon's approval answers come back on the same connection.
+- **Stays on this machine:** the session token (`HERRSCHER_SESSION_TOKEN`). It is
+  never written into the remote environment, so no process on the remote side can
+  answer an approval for any session. The local outbox path is dropped from the
+  prompt, because it names a directory of this machine. A gateway model and an
+  account are refused on a remote backend, since they resolve in this daemon's
+  store.
+- **Who decides an approval:** the daemon, always. The remote backend asks through
+  the approval stream the turn carries, and the answer is the daemon's desk
+  decision for that session. A turn that reaches the remote backend without an
+  asker opens no approval stream, as
+  `TestARemoteBackendWithoutAnAskerTakesThePlainPath` proves. An approval that
+  reaches the transport proxy without an asker is refused, as
+  `TestTheTransportProxyDeniesAnApprovalWithoutAnAsker` proves, so nothing is
+  granted by default. A session's approvals reach the daemon desk over mTLS and
+  the desk's decision comes back, as
+  `TestAnApprovalOnTheRemoteTurnComesBackWithTheDaemonsDecision` proves.
+- **Daemon unreachable:** a remote session needs the daemon's address and the
+  backend's announcement to start. When the resolver cannot reach the remote
+  backend, the turn fails with that error and nothing runs in its place on this
+  machine.
+- **Attribution:** the session's name reaches the remote environment on SSH, but
+  the approval stream does not carry it. The daemon attributes each approval to
+  the session whose turn asked it, through the asker bound to that turn in the
+  daemon (`askerFor` in `core/host/approval_desk.go`), so the name is
+  informational on the remote side and never the basis of a grant.
+
+No token reaches a bridge on a remote machine: `remoteEnvBlock` does not carry
+`HERRSCHER_SESSION_TOKEN`, so the bridge's local hook has no credential to present.
+Its approvals go through the asker that the turn attaches (`core/bridge/approval.go`).
+
 → `architecture/remote`
 
 ### Plugins on another machine
@@ -1218,9 +1257,9 @@ Two paths run without a daemon. A `session create` run locally starts a session
 whose children hold no token the daemon issued, so every tool call they make is
 refused by the hook, while text answers still work (`--print` runs this way). A
 `session seed` run locally has no token either, so its tool calls are refused
-too. `approve ask` refuses without a daemon. A seed on a remote backend with a session is refused outright,
-because the remote prompt carries no session identity: its approvals could not
-reach the operator, and they would be skipped without a sign.
+too. `approve ask` refuses without a daemon. A seed on a remote backend with a session
+runs: its approvals travel back to the daemon over the approval stream (see
+[Trust model of remote sessions](#trust-model-of-remote-sessions)).
 
 The bridge process (`herrscher bridge --hub-socket`) runs its backend outside the
 daemon, and that backend needs approvals too, so it asks them over the hub

@@ -141,7 +141,6 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"remote.extract_member":             {"Detail", "Member"},
 		"remote.unsafe_member":              {"Member", "Root"},
 		"remote.gateway_env_unsupported":    {"Model"},
-		"remote.session_unsupported":        {"Session"},
 		"remote.account_unsupported":        {"Account"},
 		"approval.prompt":                   {"Request"},
 		"approval.hint":                     {"Command", "Help"},
@@ -224,6 +223,20 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"approval.request_unreadable":       {"Detail"},
 		"approval.no_desk":                  nil,
 		"approval.unknown_consumer":         nil,
+		"approval.timeout":                  {"Request", "Wait"},
+		"approval.ended":                    {"Request"},
+		"approval.denied":                   {"Request"},
+		"approval.plan_mode":                {"Request"},
+		"approval.policy_denied":            {"Request"},
+		"approval.fleet_full":               {"Request", "Limit"},
+		"approval.session_full":             {"Request", "Session", "Limit"},
+		"approval.operator_refused":         {"Reason"},
+		"approval.session_not_running":      {"Request", "Session"},
+		"approval.no_exact_subject":         {"Request"},
+		"approval.no_rule_store":            {"Request"},
+		"approval.rule_not_saved":           {"Request", "Rule", "Detail"},
+		"approval.smart_no_model":           {"Request"},
+		"approval.smart_rate_failed":        {"Request", "Detail"},
 		"hook.decision_unwritable":          {"Decision", "Detail"},
 	}
 	i18ntest.CheckDeclared(t, declared, hostLocaleSource(t))
@@ -520,7 +533,6 @@ func typedNilLocalizables() []error {
 		(*gatewayEnvUnsupportedError)(nil),
 		(*unsafeTarMemberError)(nil),
 		(*instanceIDMismatchError)(nil),
-		(*remoteSessionError)(nil),
 		(*remoteAccountError)(nil),
 	}
 }

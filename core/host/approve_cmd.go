@@ -128,7 +128,7 @@ func approveDenyVerb(cliMessages *clitext.Messages, lang languageSource, approva
 			if approvalID == "" {
 				return contracts.Result{}, errRequestNameMissing
 			}
-			answer := approvalAnswer{scope: scopeDeny, reason: operatorRefusal(input.Get("reason"))}
+			answer := approvalAnswer{scope: scopeDeny, reason: approvals.operatorRefusal(input.Get("reason"))}
 			if !settleApproval(approvals, approvalID, answer) {
 				return contracts.Result{}, &requestNotWaitingError{ID: approvalID}
 			}

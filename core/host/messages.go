@@ -167,8 +167,6 @@ func isNilLocalizable(localizable localizableError) bool {
 		return typed == nil
 	case *instanceIDMismatchError:
 		return typed == nil
-	case *remoteSessionError:
-		return typed == nil
 	case *remoteAccountError:
 		return typed == nil
 	}

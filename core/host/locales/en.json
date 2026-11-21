@@ -415,11 +415,6 @@
     "other": "model \"{{.Model}}\" needs a gateway spawn environment, which the remote backend resolver cannot carry; unset HERRSCHER_REMOTE=backend or pick a native model"
   },
   {
-    "id": "remote.session_unsupported",
-    "description": "A session cannot run on a remote backend yet, Session names it",
-    "other": "session \"{{.Session}}\" cannot run on a remote backend: its approval identity cannot reach the remote host yet; unset HERRSCHER_REMOTE=backend or drop the session"
-  },
-  {
     "id": "remote.account_unsupported",
     "description": "An account cannot be applied on a remote backend, Account names it",
     "other": "account \"{{.Account}}\" cannot be applied: the backend runs on a remote host, which resolves accounts in its own store; drop the account or unset HERRSCHER_REMOTE=backend"
@@ -794,6 +789,76 @@
     "id": "approval.no_desk",
     "description": "The daemon refuses an approval request from the bridge because the session has no approval desk",
     "other": "herrscher: this session has no approval desk, so this tool call is refused"
+  },
+  {
+    "id": "approval.timeout",
+    "description": "The operator did not answer the approval before its wait ran out, so the tool request is denied, Request names the tool and its subject and Wait carries the wait",
+    "other": "herrscher: nobody answered within {{.Wait}}, so {{.Request}} was denied"
+  },
+  {
+    "id": "approval.ended",
+    "description": "The approval wait ended before any answer because the call that asked was cancelled, so the tool request is denied, Request names the tool and its subject",
+    "other": "herrscher: the wait for approval ended, so {{.Request}} was denied"
+  },
+  {
+    "id": "approval.denied",
+    "description": "The operator refused the tool request without giving a reason, so it is denied, Request names the tool and its subject",
+    "other": "herrscher: {{.Request}} was denied by the operator"
+  },
+  {
+    "id": "approval.plan_mode",
+    "description": "The session is in plan mode, which only reads, so a tool request that would write is refused and the operator validates the plan before anything is written, Request names the tool and its subject",
+    "other": "herrscher: {{.Request}} was refused: this session is in plan mode, which only reads; write the plan, and the operator validates it before anything is written"
+  },
+  {
+    "id": "approval.policy_denied",
+    "description": "A policy rule denies the tool request before any operator is asked, Request names the tool and its subject",
+    "other": "herrscher: {{.Request}} was denied by policy"
+  },
+  {
+    "id": "approval.fleet_full",
+    "description": "Too many tool requests across the whole fleet already wait for an operator, so this one is denied, Request names the tool and its subject, Limit carries the maximum",
+    "other": "herrscher: {{.Request}} was denied: {{.Limit}} tool calls across the fleet are already waiting for a human, which is the limit; each one answered frees a slot"
+  },
+  {
+    "id": "approval.session_full",
+    "description": "Too many tool requests of one session already wait for an operator, so this one is denied, Request names the tool and its subject, Session names the session, Limit carries the maximum",
+    "other": "herrscher: {{.Request}} was denied: session \"{{.Session}}\" already has {{.Limit}} tool calls waiting for a human, which is the limit; wait for those to be answered, and ask about fewer things at once"
+  },
+  {
+    "id": "approval.operator_refused",
+    "description": "The operator refused a tool request and gave a reason, which the agent receives, Reason carries that reason",
+    "other": "herrscher: the operator refused: {{.Reason}}"
+  },
+  {
+    "id": "approval.session_not_running",
+    "description": "The answer to a request allowed once cannot be remembered because its session is not running, Request names the tool and its subject, Session names the session",
+    "other": "approvals: {{.Request}} was allowed once: session \"{{.Session}}\" is not running, so it cannot remember the answer"
+  },
+  {
+    "id": "approval.no_exact_subject",
+    "description": "A request allowed always cannot become a rule because its subject has no exact form that a rule could name without matching more, Request names the tool and its subject",
+    "other": "approvals: {{.Request}} was allowed once: it has no exact subject a rule could name without matching more"
+  },
+  {
+    "id": "approval.no_rule_store",
+    "description": "A request allowed always cannot become a rule because no rule store is attached, Request names the tool and its subject",
+    "other": "approvals: {{.Request}} was allowed once: no rule store is attached, so no rule was written"
+  },
+  {
+    "id": "approval.rule_not_saved",
+    "description": "A request allowed always could not be written to the rule store, Request names the tool and its subject, Rule names the rule, Detail carries the cause",
+    "other": "approvals: {{.Request}} was allowed once: the rule \"{{.Rule}}\" was not saved: {{.Detail}}"
+  },
+  {
+    "id": "approval.smart_no_model",
+    "description": "Smart mode has no model to rate a tool request, so the request is decided as in ask mode, Request names the tool and its subject",
+    "other": "approvals: smart mode has no model to rate {{.Request}}, so it is decided as in ask mode"
+  },
+  {
+    "id": "approval.smart_rate_failed",
+    "description": "Smart mode could not rate a tool request, so the request is decided as in ask mode, Request names the tool and its subject, Detail carries the cause",
+    "other": "approvals: smart mode could not rate {{.Request}} ({{.Detail}}), so it is decided as in ask mode"
   },
   {
     "id": "approval.unknown_consumer",

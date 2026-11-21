@@ -349,8 +349,9 @@ decision. What crosses the network and what stays here:
   `TestARemoteBackendWithoutAnAskerTakesThePlainPath` proves. An approval that
   reaches the transport proxy without an asker is refused, as
   `TestTheTransportProxyDeniesAnApprovalWithoutAnAsker` proves, so nothing is
-  granted by default. A session's approvals reach the daemon desk over mTLS, as
-  `TestASessionRunsOnARemoteBackendOverMTLS` proves.
+  granted by default. A session's approvals reach the daemon desk over mTLS and
+  the desk's decision comes back, as
+  `TestAnApprovalOnTheRemoteTurnComesBackWithTheDaemonsDecision` proves.
 - **Daemon unreachable:** a remote session needs the daemon's address and the
   backend's announcement to start. When the resolver cannot reach the remote
   backend, the turn fails with that error and nothing runs in its place on this

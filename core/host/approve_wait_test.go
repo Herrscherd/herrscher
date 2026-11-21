@@ -42,6 +42,7 @@ func TestAWaitIsWrittenForAHuman(t *testing.T) {
 		{1100 * time.Millisecond, "1s"},
 		{1500 * time.Millisecond, "2s"},
 		{59 * time.Second, "59s"},
+		{59*time.Second + 600*time.Millisecond, "1m"},
 		{90 * time.Second, "1m30s"},
 		{810 * time.Second, "13m30s"},
 		{59*time.Minute + 59*time.Second, "59m59s"},

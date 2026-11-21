@@ -289,7 +289,7 @@ func assertRemoteRefusesTurn(t *testing.T, backend contracts.Backend, remote *mt
 	}
 }
 
-func TestAnApprovalOnATurnWithoutAnAskerIsDeniedByTheTransport(t *testing.T) {
+func TestTheTransportProxyDeniesAnApprovalWithoutAnAsker(t *testing.T) {
 	backend, remote := remoteSessionOverMTLS(t)
 	relay, ok := lease.Unwrap(backend).(remoteBackend).Backend.(approvalRelayingBackend)
 	if !ok {

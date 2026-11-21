@@ -345,8 +345,12 @@ decision. What crosses the network and what stays here:
 - **Who decides an approval:** the daemon, always. The remote backend asks through
   the approval stream the turn carries, and the answer is the daemon's desk
   decision for that session. A turn that reaches the remote backend without an
-  asker is refused every approval: the stream is the only path to an answer, and
-  nothing is granted by default.
+  asker opens no approval stream, as
+  `TestARemoteBackendWithoutAnAskerTakesThePlainPath` proves. An approval that
+  reaches the transport proxy without an asker is refused, as
+  `TestTheTransportProxyDeniesAnApprovalWithoutAnAsker` proves, so nothing is
+  granted by default. A session's approvals reach the daemon desk over mTLS, as
+  `TestASessionRunsOnARemoteBackendOverMTLS` proves.
 - **Daemon unreachable:** a remote session needs the daemon's address and the
   backend's announcement to start. When the resolver cannot reach the remote
   backend, the turn fails with that error and nothing runs in its place on this
@@ -354,8 +358,8 @@ decision. What crosses the network and what stays here:
 - **Attribution:** the session's name reaches the remote environment on SSH, but
   the approval stream does not carry it. The daemon attributes each approval to
   the session whose turn asked it, through the asker bound to that turn in the
-  daemon (`askerFor` in `core/host/approval_desk.go`), so the name is informational on the
-  remote side and never the basis of a grant.
+  daemon (`askerFor` in `core/host/approval_desk.go`), so the name is
+  informational on the remote side and never the basis of a grant.
 
 No token reaches a bridge on a remote machine: `remoteEnvBlock` does not carry
 `HERRSCHER_SESSION_TOKEN`, so the bridge's local hook has no credential to present.

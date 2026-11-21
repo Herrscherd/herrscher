@@ -237,7 +237,7 @@ func humanWait(wait time.Duration) string {
 		return strconv.FormatInt(wait.Milliseconds(), 10) + "ms"
 	}
 	rest := wait.Round(time.Second)
-	if wait < time.Hour {
+	if rest < time.Minute {
 		return strconv.FormatInt(int64(rest/time.Second), 10) + "s"
 	}
 	var out strings.Builder

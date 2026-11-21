@@ -18,33 +18,51 @@ type refusalText struct {
 }
 
 var knownRefusalTexts = []refusalText{
-	{contracts.RefusalInvalid,
+	{
+		contracts.RefusalInvalid,
 		"herrscher: this approval was refused because its request or its answer was malformed",
-		"herrscher : cette approbation a été refusée, sa demande ou sa réponse était mal formée"},
-	{contracts.RefusalTooLarge,
+		"herrscher : cette approbation a été refusée, sa demande ou sa réponse était mal formée",
+	},
+	{
+		contracts.RefusalTooLarge,
 		"herrscher: this approval was refused because a message exceeded its size limit",
-		"herrscher : cette approbation a été refusée, un message dépassait sa taille limite"},
-	{contracts.RefusalTooMany,
+		"herrscher : cette approbation a été refusée, un message dépassait sa taille limite",
+	},
+	{
+		contracts.RefusalTooMany,
 		"herrscher: this approval was refused because the transport already has its maximum of approvals waiting",
-		"herrscher : cette approbation a été refusée, le transport a déjà le maximum d'approbations en attente"},
-	{contracts.RefusalNoAsker,
+		"herrscher : cette approbation a été refusée, le transport a déjà le maximum d'approbations en attente",
+	},
+	{
+		contracts.RefusalNoAsker,
 		"herrscher: this approval was refused because no one was available to answer it",
-		"herrscher : cette approbation a été refusée, personne n'était disponible pour y répondre"},
-	{contracts.RefusalCancelled,
+		"herrscher : cette approbation a été refusée, personne n'était disponible pour y répondre",
+	},
+	{
+		contracts.RefusalCancelled,
 		"herrscher: this approval was refused because it was cancelled before anyone answered",
-		"herrscher : cette approbation a été refusée, elle a été annulée avant qu'une réponse arrive"},
-	{contracts.RefusalDeadline,
+		"herrscher : cette approbation a été refusée, elle a été annulée avant qu'une réponse arrive",
+	},
+	{
+		contracts.RefusalDeadline,
 		"herrscher: this approval was refused because its time ran out before anyone answered",
-		"herrscher : cette approbation a été refusée, son délai est écoulé avant toute réponse"},
-	{contracts.RefusalStreamClosed,
+		"herrscher : cette approbation a été refusée, son délai est écoulé avant toute réponse",
+	},
+	{
+		contracts.RefusalStreamClosed,
 		"herrscher: this approval was refused because the connection closed before anyone answered",
-		"herrscher : cette approbation a été refusée, la connexion s'est fermée avant toute réponse"},
-	{contracts.RefusalSendFailed,
+		"herrscher : cette approbation a été refusée, la connexion s'est fermée avant toute réponse",
+	},
+	{
+		contracts.RefusalSendFailed,
 		"herrscher: this approval was refused because its answer could not be sent back",
-		"herrscher : cette approbation a été refusée, sa réponse n'a pas pu être renvoyée"},
-	{contracts.RefusalUnclassified,
+		"herrscher : cette approbation a été refusée, sa réponse n'a pas pu être renvoyée",
+	},
+	{
+		contracts.RefusalUnclassified,
 		"herrscher: this approval was refused by the transport for a cause it cannot name",
-		"herrscher : cette approbation a été refusée par le transport, pour une cause qu'il ne sait pas nommer"},
+		"herrscher : cette approbation a été refusée par le transport, pour une cause qu'il ne sait pas nommer",
+	},
 }
 
 const (

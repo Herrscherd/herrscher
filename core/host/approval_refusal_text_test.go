@@ -3,12 +3,16 @@ package host
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/approvalsock"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/internal/lease"
 	"github.com/Herrscherd/herrscher/core/language"
 )
 
@@ -145,6 +149,91 @@ func TestADenialWithoutACodeKeepsItsReason(t *testing.T) {
 	if errOut := assertHookDenial(t, "en", "use make clean"); errOut != "" {
 		t.Fatalf("stderr %q, want none for a denial without a code", errOut)
 	}
+}
+
+type hookRun struct {
+	out, errOut string
+	err         error
+}
+
+func TestAHookRefusedThroughTheTransportWithoutAnAskerWritesItsText(t *testing.T) {
+	pinEnglish(t)
+	t.Setenv(SessionVar, "")
+	t.Setenv(TokenVar, "")
+	path := privateSocketPath(t)
+	t.Setenv(approvalsock.EnvApprovalSocket, path)
+	backend, remote := remoteSessionOverMTLS(t)
+	ran := make(chan hookRun, 1)
+	remote.setDriver(func(_ context.Context, asker contracts.ApprovalAsker) string {
+		ran <- runHookOverSocket(path, asker)
+		return ""
+	})
+	relay, ok := lease.Unwrap(backend).(remoteBackend).Backend.(approvalRelayingBackend)
+	if !ok {
+		t.Fatal("the remote session's backend must relay approvals through the transport proxy")
+	}
+	if _, err := relay.RespondWithApprovals(context.Background(), contracts.Prompt{Content: "clean up"}, nil); err != nil {
+		t.Fatalf("RespondWithApprovals over mTLS: %v", err)
+	}
+	var run hookRun
+	select {
+	case run = <-ran:
+	default:
+		t.Fatal("the remote turn never ran its hook")
+	}
+	if run.err != nil {
+		t.Fatalf("the hook could not deliver its decision: %v", run.err)
+	}
+	want := refusalTextFor(t, contracts.RefusalNoAsker).en
+	decision, reason := hookDecision(t, run.out)
+	if decision != "deny" || reason != want {
+		t.Fatalf("decision %q reason %q, want deny with %q", decision, reason, want)
+	}
+	if !strings.Contains(run.errOut, want) {
+		t.Fatalf("stderr %q, want the note %q", run.errOut, want)
+	}
+}
+
+func refusalTextFor(t *testing.T, code contracts.ApprovalRefusal) refusalText {
+	t.Helper()
+	for _, known := range knownRefusalTexts {
+		if known.code == code {
+			return known
+		}
+	}
+	t.Fatalf("no catalogue text for the refusal %q", code)
+	return refusalText{}
+}
+
+func runHookOverSocket(path string, asker contracts.ApprovalAsker) (run hookRun) {
+	ctx, cancel := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() {
+		served <- approvalsock.Serve(ctx, path, asker, approvalsock.WithErrorHandler(func(error) {}))
+	}()
+	defer func() {
+		cancel()
+		if err := <-served; err != nil && run.err == nil {
+			run.err = err
+		}
+	}()
+	if err := waitForSocket(path); err != nil {
+		return hookRun{err: err}
+	}
+	var out, errOut bytes.Buffer
+	noCommandSocket := func(context.Context, []string) (string, bool, error) { return "", false, nil }
+	err := RunPermissionHook(context.Background(), NewMessages(), strings.NewReader(bashPayload), &out, &errOut, testTarget, hookAnswerWait(), noCommandSocket)
+	return hookRun{out: out.String(), errOut: errOut.String(), err: err}
+}
+
+func waitForSocket(path string) error {
+	for range 500 {
+		if _, err := os.Stat(path); err == nil {
+			return nil
+		}
+		time.Sleep(time.Millisecond)
+	}
+	return fmt.Errorf("approval socket %s never appeared", path)
 }
 
 func assertHookRefusal(t *testing.T, lang, want string) {

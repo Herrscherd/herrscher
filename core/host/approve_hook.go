@@ -160,6 +160,9 @@ func askApprovalSocket(ctx context.Context, messages *hostMessages, out, errOut 
 		return refuseHookWithText(messages, out, errOut, lang, approvalRefusalText(messages, lang, answer.Refusal))
 	}
 	if !answer.Allowed() {
+		if answer.Reason == "" {
+			return refuseHookWithText(messages, out, errOut, lang, messages.text(lang, approvalDenialUnexplainedKey, nil))
+		}
 		return writeHookDecision(messages, out, errOut, lang, "deny", answer.Reason)
 	}
 	return writeHookDecision(messages, out, errOut, lang, "allow", answer.Reason)

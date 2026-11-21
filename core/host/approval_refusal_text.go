@@ -5,7 +5,10 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
 
-const approvalRefusalUnknownKey = "approval.refusal.unknown"
+const (
+	approvalRefusalUnknownKey    = "approval.refusal.unknown"
+	approvalDenialUnexplainedKey = "approval.denial_without_reason"
+)
 
 func approvalRefusalKey(refusal contracts.ApprovalRefusal) string {
 	switch refusal {

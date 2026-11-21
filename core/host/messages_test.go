@@ -233,6 +233,7 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"approval.refusal.send_failed":      nil,
 		"approval.refusal.unclassified":     nil,
 		"approval.refusal.unknown":          nil,
+		"approval.denial_without_reason":    nil,
 		"approval.timeout":                  {"Request", "Wait"},
 		"approval.ended":                    {"Request"},
 		"approval.denied":                   {"Request"},

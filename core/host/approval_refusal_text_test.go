@@ -168,3 +168,23 @@ func assertHookDenial(t *testing.T, lang, want string) string {
 	}
 	return errOut.String()
 }
+
+func TestAHookDenialWithoutAnyReasonWritesTheGenericText(t *testing.T) {
+	deny := func(_ context.Context, req contracts.ApprovalRequest) contracts.ApprovalAnswer {
+		return contracts.ApprovalAnswer{ID: req.ID, Decision: contracts.DecisionDeny}
+	}
+	t.Run("english", func(t *testing.T) {
+		pinEnglish(t)
+		t.Setenv(SessionVar, "")
+		t.Setenv(TokenVar, "")
+		t.Setenv(approvalsock.EnvApprovalSocket, listenApprovals(t, deny))
+		assertHookRefusal(t, "en", "herrscher: this tool call was denied, and the approval gave no reason")
+	})
+	t.Run("french", func(t *testing.T) {
+		t.Setenv(language.EnvVar, "fr")
+		t.Setenv(SessionVar, "")
+		t.Setenv(TokenVar, "")
+		t.Setenv(approvalsock.EnvApprovalSocket, listenApprovals(t, deny))
+		assertHookRefusal(t, "fr", "herrscher : cet appel d'outil a été refusé, et l'approbation n'a donné aucune raison")
+	})
+}

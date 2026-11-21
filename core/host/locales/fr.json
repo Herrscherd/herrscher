@@ -916,6 +916,11 @@
     "other": "herrscher : cette approbation a été refusée par le transport, pour une raison que cette version ne connaît pas"
   },
   {
+    "id": "approval.denial_without_reason",
+    "description": "La réponse d'approbation refuse l'appel d'outil sans aucune raison et sans refus du transport, le hook écrit donc ce texte sur stderr et dans sa décision",
+    "other": "herrscher : cet appel d'outil a été refusé, et l'approbation n'a donné aucune raison"
+  },
+  {
     "id": "hook.decision_unwritable",
     "description": "The approval hook could not write its decision to stdout, Decision names it and Detail carries the error",
     "other": "herrscher : impossible d'écrire la décision {{.Decision}} : {{.Detail}}"

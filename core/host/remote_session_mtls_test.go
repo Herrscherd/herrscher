@@ -30,6 +30,7 @@ type mtlsRemoteBackend struct {
 	mu        sync.Mutex
 	prompts   []contracts.Prompt
 	decisions []contracts.ApprovalAnswer
+	drive     func(context.Context, contracts.ApprovalAsker) string
 }
 
 func (b *mtlsRemoteBackend) Respond(ctx context.Context, prompt contracts.Prompt, _ func(contracts.BackendEvent)) (string, error) {
@@ -40,6 +41,9 @@ func (b *mtlsRemoteBackend) Respond(ctx context.Context, prompt contracts.Prompt
 	if !asked {
 		return "no approval path", nil
 	}
+	if drive := b.driver(); drive != nil {
+		return drive(ctx, asker), nil
+	}
 	answer := asker(ctx, contracts.ApprovalRequest{ID: "req-1", Tool: "Bash", Subject: "rm -rf build"})
 	b.mu.Lock()
 	b.decisions = append(b.decisions, answer)
@@ -48,6 +52,18 @@ func (b *mtlsRemoteBackend) Respond(ctx context.Context, prompt contracts.Prompt
 }
 
 func (b *mtlsRemoteBackend) Close() error { return nil }
+
+func (b *mtlsRemoteBackend) setDriver(drive func(context.Context, contracts.ApprovalAsker) string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.drive = drive
+}
+
+func (b *mtlsRemoteBackend) driver() func(context.Context, contracts.ApprovalAsker) string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.drive
+}
 
 func (b *mtlsRemoteBackend) received() []contracts.Prompt {
 	b.mu.Lock()

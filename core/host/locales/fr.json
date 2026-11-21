@@ -866,6 +866,61 @@
     "other": "herrscher : cette demande d'approbation n'a pas de consommateur connu, cet appel d'outil est donc refusé"
   },
   {
+    "id": "approval.refusal.invalid",
+    "description": "Le transport refuse une approbation parce que la demande ou sa réponse était mal formée, l'appel d'outil est donc refusé",
+    "other": "herrscher : cette approbation a été refusée, sa demande ou sa réponse était mal formée"
+  },
+  {
+    "id": "approval.refusal.too_large",
+    "description": "Le transport refuse une approbation parce qu'un message dépassait sa taille limite, l'appel d'outil est donc refusé",
+    "other": "herrscher : cette approbation a été refusée, un message dépassait sa taille limite"
+  },
+  {
+    "id": "approval.refusal.too_many",
+    "description": "Le transport refuse une approbation parce qu'il avait déjà le maximum d'approbations en attente, l'appel d'outil est donc refusé",
+    "other": "herrscher : cette approbation a été refusée, le transport a déjà le maximum d'approbations en attente"
+  },
+  {
+    "id": "approval.refusal.no_asker",
+    "description": "Le transport refuse une approbation parce que personne n'était disponible pour y répondre, l'appel d'outil est donc refusé",
+    "other": "herrscher : cette approbation a été refusée, personne n'était disponible pour y répondre"
+  },
+  {
+    "id": "approval.refusal.cancelled",
+    "description": "Le transport refuse une approbation parce qu'elle a été annulée avant toute réponse, l'appel d'outil est donc refusé",
+    "other": "herrscher : cette approbation a été refusée, elle a été annulée avant qu'une réponse arrive"
+  },
+  {
+    "id": "approval.refusal.deadline",
+    "description": "Le transport refuse une approbation parce que son délai est écoulé avant toute réponse, l'appel d'outil est donc refusé",
+    "other": "herrscher : cette approbation a été refusée, son délai est écoulé avant toute réponse"
+  },
+  {
+    "id": "approval.refusal.stream_closed",
+    "description": "Le transport refuse une approbation parce que le flux s'est fermé avant toute réponse, l'appel d'outil est donc refusé",
+    "other": "herrscher : cette approbation a été refusée, la connexion s'est fermée avant toute réponse"
+  },
+  {
+    "id": "approval.refusal.send_failed",
+    "description": "Le transport refuse une approbation parce que sa réponse n'a pas pu être renvoyée, l'appel d'outil est donc refusé",
+    "other": "herrscher : cette approbation a été refusée, sa réponse n'a pas pu être renvoyée"
+  },
+  {
+    "id": "approval.refusal.unclassified",
+    "description": "Le transport refuse une approbation pour une cause qu'il ne sait pas nommer, l'appel d'outil est donc refusé",
+    "other": "herrscher : cette approbation a été refusée par le transport, pour une cause qu'il ne sait pas nommer"
+  },
+  {
+    "id": "approval.refusal.unknown",
+    "description": "Le transport refuse une approbation avec un code que cette version ne connaît pas, l'appel d'outil est donc refusé",
+    "other": "herrscher : cette approbation a été refusée par le transport, pour une raison que cette version ne connaît pas"
+  },
+  {
+    "id": "approval.denial_without_reason",
+    "description": "La réponse d'approbation refuse l'appel d'outil sans aucune raison et sans refus du transport, le hook écrit donc ce texte sur stderr et dans sa décision",
+    "other": "herrscher : cet appel d'outil a été refusé, et l'approbation n'a donné aucune raison"
+  },
+  {
     "id": "hook.decision_unwritable",
     "description": "The approval hook could not write its decision to stdout, Decision names it and Detail carries the error",
     "other": "herrscher : impossible d'écrire la décision {{.Decision}} : {{.Detail}}"

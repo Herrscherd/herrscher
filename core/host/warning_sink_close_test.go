@@ -209,36 +209,25 @@ func TestRefusedWriteAfterTheBilanIsLoggedBeforeCloseReturns(t *testing.T) {
 	writer := newFirstWriteRefused()
 	t.Cleanup(writer.unblock)
 	var sink *warningSink
-	refused := make(chan error, 1)
-	logs := captureDefaultLog(t, func(line string) {
+	var afterErr error
+	logger, logs := newCapturedLogger(func(line string) {
 		if strings.Contains(line, "not all confirmed") && logField(line, "unconfirmed") == "1" {
-			go func() {
-				_, err := sink.Write([]byte("AFTER\n"))
-				sink.log.drain(expiresAfter(5 * time.Second))
-				refused <- err
-				writer.unblock()
-			}()
+			_, afterErr = sink.Write([]byte("AFTER\n"))
 		}
 	})
 	messages := newHostMessages()
-	sink = newWarningSink(messages, writer, englishLostLine(messages), slog.Default())
+	sink = newWarningSink(messages, writer, englishLostLine(messages), logger)
 	_ = sink.Enqueue([]byte("INFLIGHT\n"))
 	awaitBackground(t, writer.entered, "the warning was never handed to the writer")
 	sink.Close()
-	var afterErr error
-	select {
-	case afterErr = <-refused:
-	case <-expiresAfter(5 * time.Second):
-		t.Fatal("Close returned before the write admitted after the bilan was refused")
-	}
 	if !errors.Is(afterErr, errWarningAbandoned) {
 		t.Fatalf("a write admitted after the bilan returned %v, want errWarningAbandoned", afterErr)
 	}
-	awaitSinkLog(t, sink)
 	lines := notConfirmedLines(logs.String())
-	if len(lines) < 2 || logField(lines[0], "unconfirmed") != "1" || logField(lines[1], "lost") != "1" || logField(lines[1], "unconfirmed") != "0" {
-		t.Fatalf("Close logged %q, want the bilan (unconfirmed=1) then the refused write (lost=1 unconfirmed=0) before it returned", lines)
+	if len(lines) != 2 || logField(lines[0], "unconfirmed") != "1" || logField(lines[1], "lost") != "1" || logField(lines[1], "unconfirmed") != "0" {
+		t.Fatalf("Close returned with %q logged, want the bilan (unconfirmed=1) then the refused write (lost=1 unconfirmed=0)", lines)
 	}
+	writer.unblock()
 	waitUntil(t, "the delta of the older write once its writer is released", func() bool {
 		return len(notConfirmedLines(logs.String())) == 3
 	})

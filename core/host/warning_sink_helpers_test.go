@@ -242,14 +242,20 @@ func (h *hookedLog) String() string {
 
 func captureDefaultLog(t *testing.T, hook ...func(line string)) *hookedLog {
 	t.Helper()
-	logs := &hookedLog{}
+	var lineHook func(line string)
 	if len(hook) > 0 {
-		logs.hook = hook[0]
+		lineHook = hook[0]
 	}
+	logger, logs := newCapturedLogger(lineHook)
 	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	slog.SetDefault(logger)
 	t.Cleanup(func() { slog.SetDefault(previous) })
 	return logs
+}
+
+func newCapturedLogger(hook func(line string)) (*slog.Logger, *hookedLog) {
+	logs := &hookedLog{hook: hook}
+	return slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelInfo})), logs
 }
 
 func logField(line, key string) string {

@@ -156,6 +156,9 @@ func askApprovalSocket(ctx context.Context, messages *hostMessages, out, errOut 
 	if err != nil {
 		return refuseHook(messages, out, errOut, lang, hookApprovalSocketFailed, map[string]any{detailParam: err.Error()})
 	}
+	if answer.Refusal != "" {
+		return refuseHookWithText(messages, out, errOut, lang, approvalRefusalText(messages, lang, answer.Refusal))
+	}
 	if !answer.Allowed() {
 		return writeHookDecision(messages, out, errOut, lang, "deny", answer.Reason)
 	}
@@ -177,7 +180,10 @@ func answerTimedOut(parent, bounded context.Context) bool {
 }
 
 func refuseHook(messages *hostMessages, out, errOut io.Writer, lang i18n.Language, key string, params map[string]any) error {
-	reason := hookText(messages, lang, key, params)
+	return refuseHookWithText(messages, out, errOut, lang, hookText(messages, lang, key, params))
+}
+
+func refuseHookWithText(messages *hostMessages, out, errOut io.Writer, lang i18n.Language, reason string) error {
 	logWriteFailure(fmt.Fprintln(errOut, reason))
 	return writeHookDecision(messages, out, errOut, lang, "deny", reason)
 }

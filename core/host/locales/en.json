@@ -866,6 +866,56 @@
     "other": "herrscher: this approval request has no known consumer, so this tool call is refused"
   },
   {
+    "id": "approval.refusal.invalid",
+    "description": "The transport refused an approval because the request or its answer was malformed, so the tool call is denied",
+    "other": "herrscher: this approval was refused because its request or its answer was malformed"
+  },
+  {
+    "id": "approval.refusal.too_large",
+    "description": "The transport refused an approval because a message exceeded its size bound, so the tool call is denied",
+    "other": "herrscher: this approval was refused because a message exceeded its size limit"
+  },
+  {
+    "id": "approval.refusal.too_many",
+    "description": "The transport refused an approval because it already had its maximum of approvals in flight, so the tool call is denied",
+    "other": "herrscher: this approval was refused because the transport already has its maximum of approvals waiting"
+  },
+  {
+    "id": "approval.refusal.no_asker",
+    "description": "The transport refused an approval because no asker was available to answer it, so the tool call is denied",
+    "other": "herrscher: this approval was refused because no one was available to answer it"
+  },
+  {
+    "id": "approval.refusal.cancelled",
+    "description": "The transport refused an approval because it was cancelled before anyone answered, so the tool call is denied",
+    "other": "herrscher: this approval was refused because it was cancelled before anyone answered"
+  },
+  {
+    "id": "approval.refusal.deadline",
+    "description": "The transport refused an approval because its time ran out before anyone answered, so the tool call is denied",
+    "other": "herrscher: this approval was refused because its time ran out before anyone answered"
+  },
+  {
+    "id": "approval.refusal.stream_closed",
+    "description": "The transport refused an approval because the stream closed before anyone answered, so the tool call is denied",
+    "other": "herrscher: this approval was refused because the connection closed before anyone answered"
+  },
+  {
+    "id": "approval.refusal.send_failed",
+    "description": "The transport refused an approval because its answer could not be sent back, so the tool call is denied",
+    "other": "herrscher: this approval was refused because its answer could not be sent back"
+  },
+  {
+    "id": "approval.refusal.unclassified",
+    "description": "The transport refused an approval for a cause it cannot name, so the tool call is denied",
+    "other": "herrscher: this approval was refused by the transport for a cause it cannot name"
+  },
+  {
+    "id": "approval.refusal.unknown",
+    "description": "The transport refused an approval with a code this version does not know, so the tool call is denied",
+    "other": "herrscher: this approval was refused by the transport for a reason this version does not know"
+  },
+  {
     "id": "hook.decision_unwritable",
     "description": "The approval hook could not write its decision to stdout, Decision names it and Detail carries the error",
     "other": "herrscher: could not write the {{.Decision}} decision: {{.Detail}}"

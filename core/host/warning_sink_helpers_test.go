@@ -252,6 +252,11 @@ func captureDefaultLog(t *testing.T, hook ...func(line string)) *hookedLog {
 	return logs
 }
 
+func newCapturedLogger(hook func(line string)) (*slog.Logger, *hookedLog) {
+	logs := &hookedLog{hook: hook}
+	return slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelInfo})), logs
+}
+
 func logField(line, key string) string {
 	for _, field := range strings.Fields(line) {
 		if value, found := strings.CutPrefix(field, key+"="); found {

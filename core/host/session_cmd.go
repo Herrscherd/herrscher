@@ -45,6 +45,7 @@ func addSessionVerbs(reg *cli.Registry, cliMessages *clitext.Messages, lang lang
 		sessionOverviewVerb(overviewSource{st: store, partDir: partDir, sessions: sessions, approvals: approvals, tallies: newTallyCache(), seen: seen}),
 		sessionSeenVerb(seen),
 		sessionScrollbackVerb(partDir, lang),
+		sessionWatchVerb(sessions.messages, store, sessions.journal),
 		sessionInterruptVerb(cliMessages, lang, sessions),
 		sessionCompactVerb(cliMessages, lang, store, sessions),
 		sessionSetCompactVerb(sessions.messages, store),

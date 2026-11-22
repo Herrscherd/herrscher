@@ -68,6 +68,11 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Param("name", clitext.CmdParamSessionLogName, true).
 			Param("limit", clitext.CmdParamSessionLogLimit, false).
 			Do(h.sessionLogRun),
+		contracts.New("session", "history").
+			Help(clitext.CmdHelpSessionHistory).
+			Param("name", clitext.CmdParamSessionHistoryName, true).
+			Param("since", clitext.CmdParamSessionHistorySince, false).
+			Do(h.sessionHistoryRun),
 		contracts.New("session", "resume").
 			Help(clitext.CmdHelpSessionResume).
 			Param("name", clitext.CmdParamSessionResumeName, true).

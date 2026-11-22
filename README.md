@@ -647,6 +647,32 @@ the checkout can edit.
 from, and answers without a daemon, because a diagnostic must not sit behind the
 thing it is used to diagnose.
 
+### Following a session from any client
+
+`herrscher session watch --name <session>` follows the session's current turn in the
+terminal: the prompt and who sent it, each tool line, the reply as it streams, and
+the tokens and cost when the turn ends. It keeps following the next turns until it
+is interrupted or the session closes. `--json` prints one event per line, the same
+events the daemon sends on its events socket, so a script can consume them.
+
+Every event the daemon publishes carries a sequence number (`seq`), and the daemon
+keeps the latest events of each session in memory: 512 per session, for the 64
+sessions that spoke most recently, with the text of a streamed reply folded into
+one entry. A client that lost its connection runs `session watch --since <seq>`
+with the last number it saw and receives what followed before the live events, with
+no duplicate. Without `--since`, it starts at the prompt of the current turn. A
+number from before a daemon restart replays what the new daemon holds. A client
+other than the terminal that calls `session watch` receives these held events as
+JSON and does not follow.
+
+`herrscher session history --name <session>` replays the past turns from the
+session's transcript, which survives restarts: for each turn its id and start time,
+the prompt, the reply, the notices, and the duration, tokens and cost.
+`--since <turn>` keeps the turns after that one, and an id the transcript does not
+hold is an error. `--json` prints the turns as an array. The transcript records
+the conversation, not the tool calls, so a past turn is replayed without its tool
+lines.
+
 ### Health, one command away
 
 `herrscher health` asks the running daemon for a snapshot of everything it depends

@@ -58,6 +58,8 @@ const (
 	CmdHelpSessionResume                  = "cli.help.cmd.session.resume"
 	CmdHelpSessionRewind                  = "cli.help.cmd.session.rewind"
 	CmdHelpSessionScrollback              = "cli.help.cmd.session.scrollback"
+	CmdHelpSessionWatch                   = "cli.help.cmd.session.watch"
+	CmdHelpSessionHistory                 = "cli.help.cmd.session.history"
 	CmdHelpSessionSeed                    = "cli.help.cmd.session.seed"
 	CmdHelpSessionSeen                    = "cli.help.cmd.session.seen"
 	CmdHelpSessionSend                    = "cli.help.cmd.session.send"
@@ -198,6 +200,10 @@ const (
 	CmdParamSessionRewindTo               = "cli.help.param.session.rewind.to"
 	CmdParamSessionRewindWhat             = "cli.help.param.session.rewind.what"
 	CmdParamSessionScrollbackName         = "cli.help.param.session.scrollback.name"
+	CmdParamSessionWatchName              = "cli.help.param.session.watch.name"
+	CmdParamSessionWatchSince             = "cli.help.param.session.watch.since"
+	CmdParamSessionHistoryName            = "cli.help.param.session.history.name"
+	CmdParamSessionHistorySince           = "cli.help.param.session.history.since"
 	CmdParamSessionSeedName               = "cli.help.param.session.seed.name"
 	CmdParamSessionSeedTask               = "cli.help.param.session.seed.task"
 	CmdParamSessionSeedTimeout            = "cli.help.param.session.seed.timeout"
@@ -298,6 +304,8 @@ func helpKeys() map[Key][]string {
 		CmdHelpSessionResume:                  nil,
 		CmdHelpSessionRewind:                  nil,
 		CmdHelpSessionScrollback:              nil,
+		CmdHelpSessionWatch:                   nil,
+		CmdHelpSessionHistory:                 nil,
 		CmdHelpSessionSeed:                    nil,
 		CmdHelpSessionSeen:                    nil,
 		CmdHelpSessionSend:                    nil,
@@ -438,6 +446,10 @@ func helpKeys() map[Key][]string {
 		CmdParamSessionRewindTo:               nil,
 		CmdParamSessionRewindWhat:             nil,
 		CmdParamSessionScrollbackName:         nil,
+		CmdParamSessionWatchName:              nil,
+		CmdParamSessionWatchSince:             nil,
+		CmdParamSessionHistoryName:            nil,
+		CmdParamSessionHistorySince:           nil,
 		CmdParamSessionSeedName:               nil,
 		CmdParamSessionSeedTask:               nil,
 		CmdParamSessionSeedTimeout:            nil,

@@ -24,6 +24,7 @@ type DaemonEvent struct {
 	contracts.Event
 
 	Session string `json:"session"`
+	Seq     uint64 `json:"seq,omitempty"`
 }
 
 var launchProjectRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)

@@ -14,13 +14,15 @@ type wireEvent struct {
 	contracts.Event
 
 	Session string `json:"session"`
+	Seq     uint64 `json:"seq,omitempty"`
 }
 
 func marshalSessionEvent(session string, event contracts.Event) ([]byte, error) {
-	payload, err := json.Marshal(wireEvent{
-		Session: session,
-		Event:   event,
-	})
+	return marshalWireEvent(wireEvent{Session: session, Event: event})
+}
+
+func marshalWireEvent(stamped wireEvent) ([]byte, error) {
+	payload, err := json.Marshal(stamped)
 	if err != nil {
 		return nil, err
 	}
@@ -39,13 +41,18 @@ type subscriber struct {
 }
 
 type eventSocket struct {
-	mu     sync.Mutex
-	subs   map[*subscriber]struct{}
-	closed bool
+	mu      sync.Mutex
+	subs    map[*subscriber]struct{}
+	closed  bool
+	journal *eventJournal
 }
 
 func newEventSocket() *eventSocket {
-	return &eventSocket{subs: make(map[*subscriber]struct{})}
+	return newJournaledEventSocket(newEventJournal())
+}
+
+func newJournaledEventSocket(journal *eventJournal) *eventSocket {
+	return &eventSocket{subs: make(map[*subscriber]struct{}), journal: journal}
 }
 
 func (s *eventSocket) add(conn net.Conn) {
@@ -130,17 +137,15 @@ func (s *eventSocket) Publish(session string, event contracts.Event) {
 		return
 	}
 	s.mu.Lock()
-	idle := len(s.subs) == 0
-	s.mu.Unlock()
-	if idle {
+	defer s.mu.Unlock()
+	stamped := s.journal.record(session, event)
+	if len(s.subs) == 0 {
 		return
 	}
-	line, err := marshalSessionEvent(session, event)
+	line, err := marshalWireEvent(stamped)
 	if err != nil {
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	for sub := range s.subs {
 		if event.Coordination != nil {
 			sub.enqueuePriority(line)

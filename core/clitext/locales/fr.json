@@ -4538,5 +4538,25 @@
     "id": "cli.health.facts.compact_unknown",
     "description": "Santé : aucune exécution de l'étage n'est retrouvée dans le journal lisible, la dernière est inconnue",
     "other": "dernière compaction inconnue"
+  },
+  {
+    "id": "cli.tool.succeeded",
+    "description": "Un appel d'outil d'un tour réussi : son outil et son détail, sa durée et ses jetons",
+    "other": "  ✓ {{.Call}} · {{.Duration}} · {{.Tokens}} jetons"
+  },
+  {
+    "id": "cli.tool.failed",
+    "description": "Un appel d'outil d'un tour en échec : son outil et son détail, sa durée et la raison",
+    "other": "  ✗ {{.Call}} · {{.Duration}} · {{.Error}}"
+  },
+  {
+    "id": "cli.tool.unfinished",
+    "description": "Un appel d'outil d'un tour dont le résultat n'est jamais revenu",
+    "other": "  … {{.Call}} · inachevé"
+  },
+  {
+    "id": "cli.tool.bound",
+    "description": "Avis qu'un tour n'a gardé que les premiers appels d'outil, jusqu'à la limite",
+    "other": "  · seuls les {{.Limit}} premiers appels d'outil de ce tour sont gardés"
   }
 ]

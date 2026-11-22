@@ -4538,5 +4538,25 @@
     "id": "cli.health.facts.compact_unknown",
     "description": "Health: no run of the stage is found in the readable ledger, so the last one is not known",
     "other": "last compaction unknown"
+  },
+  {
+    "id": "cli.tool.succeeded",
+    "description": "A tool call of a turn that succeeded: its tool and detail, duration and tokens",
+    "other": "  ✓ {{.Call}} · {{.Duration}} · {{.Tokens}} tokens"
+  },
+  {
+    "id": "cli.tool.failed",
+    "description": "A tool call of a turn that failed: its tool and detail, duration and the reason",
+    "other": "  ✗ {{.Call}} · {{.Duration}} · {{.Error}}"
+  },
+  {
+    "id": "cli.tool.unfinished",
+    "description": "A tool call of a turn that never reported its result",
+    "other": "  … {{.Call}} · unfinished"
+  },
+  {
+    "id": "cli.tool.bound",
+    "description": "Notice that a turn kept only the first tool calls, up to the limit",
+    "other": "  · only the first {{.Limit}} tool calls of this turn are kept"
   }
 ]

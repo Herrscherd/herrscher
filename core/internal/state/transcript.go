@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/Herrscherd/herrscher/core/timeline"
 )
 
 // KindTurnInterrupted marks the transcript entry that records a turn ended without a reply.
@@ -26,12 +28,13 @@ type TranscriptEntry struct {
 	// output tokens; TokensIn the input; CacheRead/CacheCreate the prompt-cache
 	// read/creation tokens; DurMs the turn's wall-clock duration in ms. All
 	// omitempty so user turns and pre-usage transcripts stay compact.
-	TokensIn    int `json:"tokens_in,omitempty"`
-	TokensOut   int `json:"tokens_out,omitempty"`
-	CacheRead   int `json:"cache_read,omitempty"`
-	CacheCreate int `json:"cache_create,omitempty"`
-	DurMs       int `json:"dur_ms,omitempty"`
-	CtxTokens   int `json:"ctx_tokens,omitempty"`
+	TokensIn    int             `json:"tokens_in,omitempty"`
+	TokensOut   int             `json:"tokens_out,omitempty"`
+	CacheRead   int             `json:"cache_read,omitempty"`
+	CacheCreate int             `json:"cache_create,omitempty"`
+	DurMs       int             `json:"dur_ms,omitempty"`
+	CtxTokens   int             `json:"ctx_tokens,omitempty"`
+	Tools       []timeline.Call `json:"tools,omitempty"`
 }
 
 // ShownText is the text the human saw: Displayed when set, Text otherwise.

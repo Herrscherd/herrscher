@@ -68,6 +68,8 @@ func sessionArgs() map[string]string {
 		"session seen":        paramName,
 		"session who":         paramName,
 		"session log":         paramName,
+		"session history":     paramName,
+		"session watch":       paramName,
 		"session close":       paramName,
 		"session archive":     paramName,
 		"session rename":      paramName,

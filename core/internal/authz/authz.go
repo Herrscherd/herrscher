@@ -89,7 +89,7 @@ func definitionOf(role Role) (definition, bool) {
 	case RoleObserver:
 		return definition{allow: []string{
 			"commands", "whoami",
-			"session list", "session info", "session log", "session who", "session scrollback", "session checkpoints",
+			"session list", "session info", "session log", "session history", "session watch", "session who", "session scrollback", "session checkpoints",
 			"agent list", "agent show",
 			"models list",
 			"approve list",
@@ -102,7 +102,7 @@ func definitionOf(role Role) (definition, bool) {
 			allow: []string{
 				"commands", "whoami",
 				"session send", "session seed", "session handoff",
-				"session list", "session info", "session log", "session who", "session scrollback", "session checkpoints",
+				"session list", "session info", "session log", "session history", "session watch", "session who", "session scrollback", "session checkpoints",
 				"agent list", "agent show",
 				"models list",
 				"memory search", "memory locate", "memory record", "memory unlink", "memory restore",

@@ -1247,6 +1247,106 @@
     "other": "Participants observed in **{{.Name}}**:"
   },
   {
+    "id": "cli.session.history.empty",
+    "description": "Shown by session history when the session has no recorded turn",
+    "other": "No turn recorded yet."
+  },
+  {
+    "id": "cli.session.history.turn",
+    "description": "Header of one turn replayed by session history, with its id and start time",
+    "other": "── turn {{.ID}} · {{.Time}}"
+  },
+  {
+    "id": "cli.session.history.prompt",
+    "description": "Prompt line of a turn replayed by session history",
+    "other": "› {{.Message}}"
+  },
+  {
+    "id": "cli.session.history.reply",
+    "description": "Reply line of a turn replayed by session history",
+    "other": "{{.Message}}"
+  },
+  {
+    "id": "cli.session.history.notice",
+    "description": "Notice line of a turn replayed by session history",
+    "other": "· {{.Message}}"
+  },
+  {
+    "id": "cli.session.history.usage",
+    "description": "Usage line of a turn replayed by session history: duration, tokens and cost",
+    "other": "{{.Duration}} · {{.In}} in · {{.Out}} out · {{.Cost}}"
+  },
+  {
+    "id": "cli.session.watch.human",
+    "description": "Prompt line of a turn followed by session watch, with its author",
+    "other": "› {{.Name}}: {{.Message}}"
+  },
+  {
+    "id": "cli.session.watch.status",
+    "description": "Activity line, usually a tool call, of a turn followed by session watch",
+    "other": "  · {{.Message}}"
+  },
+  {
+    "id": "cli.session.watch.subagent",
+    "description": "Subagent line of a turn followed by session watch, with its raw state",
+    "other": "  ↳ {{.Name}} ({{.State}})"
+  },
+  {
+    "id": "cli.session.watch.notice",
+    "description": "Notice line of a turn followed by session watch",
+    "other": "  ! {{.Message}}"
+  },
+  {
+    "id": "cli.session.watch.done",
+    "description": "Usage line closing a turn followed by session watch: tokens and cost",
+    "other": "  ✓ {{.In}} in · {{.Out}} out · {{.Cost}}"
+  },
+  {
+    "id": "cli.session.watch.abandoned",
+    "description": "Line shown by session watch when the turn ended without a reply",
+    "other": "  ✗ turn ended without a reply"
+  },
+  {
+    "id": "cli.session.watch.closed",
+    "description": "Line shown by session watch when the followed session closes",
+    "other": "Session {{.Name}} closed."
+  },
+  {
+    "id": "cli.session.watch.daemon_lost",
+    "description": "Error of session watch when the daemon stops sending events",
+    "other": "the daemon stopped sending events: run herrscher health, then session watch --since {{.Seq}} to resume where it stopped"
+  },
+  {
+    "id": "cli.session.watch.gap",
+    "description": "Line shown by session watch when earlier events of the session are no longer in the daemon's memory",
+    "other": "  ⋯ earlier events are no longer in the daemon's memory, see session history"
+  },
+  {
+    "id": "cli.session.watch.idle",
+    "description": "Line shown by session watch once caught up when the last turn of the session is over",
+    "other": "  … {{.Name}} is idle, waiting for its next turn"
+  },
+  {
+    "id": "cli.session.watch.empty",
+    "description": "Line shown by session watch once caught up when the daemon holds no event of the session",
+    "other": "  … no event of {{.Name}} in the daemon's memory, waiting for the next one"
+  },
+  {
+    "id": "cli.session.watch.renamed",
+    "description": "Line shown by session watch when the followed session is renamed and the watch goes on under the new name",
+    "other": "Session {{.Name}} renamed to {{.To}}, following it."
+  },
+  {
+    "id": "cli.session.watch.bad_since",
+    "description": "Error of session watch when --since is not a seq number",
+    "other": "--since {{.Arg}} is not a seq number: give the seq of the last event seen"
+  },
+  {
+    "id": "cli.session.watch.old_daemon",
+    "description": "Error of session watch when the daemon sends events without a seq",
+    "other": "the daemon does not number its events: restart it to use session watch"
+  },
+  {
     "id": "cli.session.log.empty",
     "description": "Shown by session log when the session has no transcript yet",
     "other": "No transcript yet."
@@ -1843,6 +1943,16 @@
     "other": "dump a session's replayable history as the frontend renders it. JSON only"
   },
   {
+    "id": "cli.help.cmd.session.watch",
+    "description": "Help of the command session watch",
+    "other": "follow a session's current turn live in the terminal, and keep following until interrupted; with --json, one numbered event per line. A client that is not the terminal receives the events the daemon holds: the current turn, or every event after --since"
+  },
+  {
+    "id": "cli.help.cmd.session.history",
+    "description": "Help of the command session history",
+    "other": "replay the past turns of a session, one block per turn with its prompt, reply, duration and tokens; --json for a program"
+  },
+  {
     "id": "cli.help.cmd.session.pick",
     "description": "Help of the command session pick",
     "other": "answer a session's pending choice (an approval) with a menu value"
@@ -1916,6 +2026,26 @@
     "id": "cli.help.param.session.scrollback.name",
     "description": "Help of the --name param of the command session scrollback",
     "other": "session name"
+  },
+  {
+    "id": "cli.help.param.session.watch.name",
+    "description": "Help of the --name param of the command session watch",
+    "other": "session name"
+  },
+  {
+    "id": "cli.help.param.session.watch.since",
+    "description": "Help of the --since param of the command session watch",
+    "other": "sequence number of the last event already seen"
+  },
+  {
+    "id": "cli.help.param.session.history.name",
+    "description": "Help of the --name param of the command session history",
+    "other": "session name"
+  },
+  {
+    "id": "cli.help.param.session.history.since",
+    "description": "Help of the --since param of the command session history",
+    "other": "id of the last turn already read; only the turns after it are shown"
   },
   {
     "id": "cli.help.param.session.pick.name",

@@ -26,6 +26,8 @@ type sessionTable struct {
 
 	tokens     map[string]string
 	seedLeases map[string]seedLease
+
+	journal *eventJournal
 }
 
 func (t *sessionTable) percentOfSession(name string) int {
@@ -38,7 +40,7 @@ func (t *sessionTable) percentOfSession(name string) int {
 }
 
 func newSessionTable(messages *hostMessages, cliMessages *clitext.Messages) *sessionTable {
-	return &sessionTable{m: make(map[string]*sessionDriver), messages: messages, cliMessages: cliMessages, persists: newPersistWrites()}
+	return &sessionTable{m: make(map[string]*sessionDriver), messages: messages, cliMessages: cliMessages, persists: newPersistWrites(), journal: newEventJournal()}
 }
 
 func (t *sessionTable) oneShotPersists() *persistWrites {

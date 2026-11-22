@@ -21,6 +21,9 @@ func runApprove(ctx context.Context, layout host.RuntimeLayout, messages *clitex
 }
 
 func runSession(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, args []string) error {
+	if len(args) > 0 && args[0] == watchVerb {
+		return runSessionWatch(ctx, layout, messages, hostMessages, args[1:])
+	}
 	return runRegistryVerb(ctx, layout, messages, hostMessages, verbSession, args)
 }
 

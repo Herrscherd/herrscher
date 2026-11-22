@@ -274,7 +274,7 @@ func wireCoordination(hubCore *hub, deps hostDeps, st *state.State, sessions *se
 }
 
 func serveHubSockets(ctx context.Context, layout runtimedir.Layout, instID string, hubCore *hub) (<-chan struct{}, error) {
-	events := newEventSocket()
+	events := newJournaledEventSocket(hubCore.eventJournal())
 	eventsListener, err := openSocket(ctx, hubCore.messages, layout, EventsSocketPathIn(layout, instID))
 	if err != nil {
 		return nil, err

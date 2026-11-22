@@ -1,26 +1,35 @@
 package host
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 type wireEvent struct {
 	contracts.Event
 
 	Session string `json:"session"`
+	Seq     uint64 `json:"seq,omitempty"`
 }
 
 func marshalSessionEvent(session string, event contracts.Event) ([]byte, error) {
-	payload, err := json.Marshal(wireEvent{
-		Session: session,
-		Event:   event,
-	})
+	return marshalWireEvent(wireEvent{Session: session, Event: event})
+}
+
+func marshalWireEvent(stamped wireEvent) ([]byte, error) {
+	payload, err := json.Marshal(stamped)
 	if err != nil {
 		return nil, err
 	}
@@ -31,21 +40,32 @@ const subscriberBuffer = 256
 
 const publishWriteTimeout = 2 * time.Second
 
+const (
+	cursorWait  = 200 * time.Millisecond
+	cursorBytes = 1024
+)
+
 type subscriber struct {
 	conn       net.Conn
 	ch         chan []byte
 	priorityMu sync.Mutex
 	priority   [][]byte
+	dropped    atomic.Bool
 }
 
 type eventSocket struct {
-	mu     sync.Mutex
-	subs   map[*subscriber]struct{}
-	closed bool
+	mu      sync.Mutex
+	subs    map[*subscriber]struct{}
+	closed  bool
+	journal *eventJournal
 }
 
 func newEventSocket() *eventSocket {
-	return &eventSocket{subs: make(map[*subscriber]struct{})}
+	return newJournaledEventSocket(newEventJournal())
+}
+
+func newJournaledEventSocket(journal *eventJournal) *eventSocket {
+	return &eventSocket{subs: make(map[*subscriber]struct{}), journal: journal}
 }
 
 func (s *eventSocket) add(conn net.Conn) {
@@ -57,25 +77,117 @@ func (s *eventSocket) add(conn net.Conn) {
 		return
 	}
 	s.subs[sub] = struct{}{}
+	upTo := s.journal.current()
 	s.mu.Unlock()
-	go s.serve(sub)
+	go s.serve(sub, upTo)
 }
 
-func (s *eventSocket) serve(sub *subscriber) {
+func (s *eventSocket) serve(sub *subscriber, upTo uint64) {
 	defer func() {
 		s.remove(sub)
 		logCleanup(sub.conn.Close())
 	}()
+	if !s.catchUp(sub, upTo) {
+		return
+	}
 	for {
 		line, ok := sub.next()
 		if !ok {
 			return
 		}
-		logCleanup(sub.conn.SetWriteDeadline(time.Now().Add(publishWriteTimeout)))
-		if _, err := sub.conn.Write(line); err != nil {
+		if sub.dropped.Swap(false) && !sub.write(wireEvent{Event: contracts.Event{T: eventwire.EventGap, Value: eventwire.GapDropped}}) {
+			return
+		}
+		if line == nil {
+			continue
+		}
+		if !sub.send(line) {
 			return
 		}
 	}
+}
+
+type cursorOutcome int
+
+const (
+	cursorAbsent cursorOutcome = iota
+	cursorSilent
+	cursorGiven
+	cursorUnreadable
+)
+
+func (s *eventSocket) catchUp(sub *subscriber, upTo uint64) bool {
+	cursor, outcome := readCursor(sub.conn)
+	switch outcome {
+	case cursorAbsent:
+		return true
+	case cursorSilent:
+		go sub.awaitLateCursor()
+		return true
+	case cursorUnreadable:
+		return sub.write(wireEvent{Event: contracts.Event{T: eventwire.EventGap, Value: eventwire.GapDropped}})
+	case cursorGiven:
+		return s.replay(sub, cursor, upTo)
+	}
+	return true
+}
+
+func (s *eventSocket) replay(sub *subscriber, cursor EventCursor, upTo uint64) bool {
+	held := s.journal.catchUp(cursor, upTo)
+	for idx := range held {
+		if !sub.write(held[idx]) {
+			return false
+		}
+	}
+	return true
+}
+
+func readCursor(conn net.Conn) (EventCursor, cursorOutcome) {
+	var cursor EventCursor
+	if conn.SetReadDeadline(time.Now().Add(cursorWait)) != nil {
+		return cursor, cursorAbsent
+	}
+	line, err := bufio.NewReader(io.LimitReader(conn, cursorBytes)).ReadBytes('\n')
+	logCleanup(conn.SetReadDeadline(time.Time{}))
+	var timeout net.Error
+	switch {
+	case len(line) == 0 && errors.As(err, &timeout) && timeout.Timeout():
+		return cursor, cursorSilent
+	case len(line) == 0:
+		return cursor, cursorAbsent
+	case err != nil || json.Unmarshal(line, &cursor) != nil:
+		return cursor, cursorUnreadable
+	case cursor.Session == "":
+		return cursor, cursorAbsent
+	}
+	return cursor, cursorGiven
+}
+
+func (sub *subscriber) awaitLateCursor() {
+	line, err := bufio.NewReader(io.LimitReader(sub.conn, cursorBytes)).ReadBytes('\n')
+	if len(bytes.TrimSpace(line)) > 0 {
+		sub.flagDropped()
+	}
+	logCleanup(err)
+}
+
+func (sub *subscriber) flagDropped() {
+	sub.dropped.Store(true)
+	select {
+	case sub.ch <- nil:
+	default:
+	}
+}
+
+func (sub *subscriber) write(event wireEvent) bool {
+	line, err := marshalWireEvent(event)
+	return err == nil && sub.send(line)
+}
+
+func (sub *subscriber) send(line []byte) bool {
+	logCleanup(sub.conn.SetWriteDeadline(time.Now().Add(publishWriteTimeout)))
+	_, err := sub.conn.Write(line)
+	return err == nil
 }
 
 func (sub *subscriber) enqueuePriority(line []byte) {
@@ -86,11 +198,6 @@ func (sub *subscriber) enqueuePriority(line []byte) {
 	select {
 	case sub.ch <- nil:
 	default:
-		select {
-		case <-sub.ch:
-		default:
-		}
-		sub.ch <- nil
 	}
 }
 
@@ -110,7 +217,7 @@ func (sub *subscriber) next() ([]byte, bool) {
 		if !ok {
 			return nil, false
 		}
-		if line != nil {
+		if line != nil || sub.dropped.Load() {
 			return line, true
 		}
 	}
@@ -130,17 +237,15 @@ func (s *eventSocket) Publish(session string, event contracts.Event) {
 		return
 	}
 	s.mu.Lock()
-	idle := len(s.subs) == 0
-	s.mu.Unlock()
-	if idle {
+	defer s.mu.Unlock()
+	stamped := s.journal.record(session, event)
+	if len(s.subs) == 0 {
 		return
 	}
-	line, err := marshalSessionEvent(session, event)
+	line, err := marshalWireEvent(stamped)
 	if err != nil {
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	for sub := range s.subs {
 		if event.Coordination != nil {
 			sub.enqueuePriority(line)
@@ -149,6 +254,7 @@ func (s *eventSocket) Publish(session string, event contracts.Event) {
 		select {
 		case sub.ch <- line:
 		default:
+			sub.dropped.Store(true)
 		}
 	}
 }

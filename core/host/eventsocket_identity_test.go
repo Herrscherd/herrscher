@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"net"
+	"strconv"
 	"testing"
 	"time"
 
@@ -92,7 +93,7 @@ func TestEventSocketPrioritizesCoordinationWhenTelemetryQueueFull(t *testing.T) 
 		T: eventwire.EventReply, Done: true, Coordination: &want,
 	})
 
-	go es.serve(sub)
+	go es.serve(sub, es.journal.current())
 	logCleanup(client.SetReadDeadline(time.Now().Add(time.Second)))
 	line, err := bufio.NewReader(client).ReadBytes('\n')
 	if err != nil {
@@ -106,6 +107,40 @@ func TestEventSocketPrioritizesCoordinationWhenTelemetryQueueFull(t *testing.T) 
 	}
 	if got.Coordination == nil || *got.Coordination != want {
 		t.Fatalf("first delivered event coordination = %+v, want %+v", got.Coordination, want)
+	}
+}
+
+func TestEventSocketSendsTheWholeBacklogAfterACoordinationEvent(t *testing.T) {
+	server, client := net.Pipe()
+	sub := &subscriber{conn: server, ch: make(chan []byte, subscriberBuffer)}
+	es := newEventSocket()
+	es.subs[sub] = struct{}{}
+	t.Cleanup(func() {
+		es.closeAll()
+		logCleanup(client.Close())
+	})
+	for idx := range subscriberBuffer {
+		es.Publish("lead", contracts.Event{T: eventwire.EventChunk, Text: strconv.Itoa(idx)})
+	}
+	es.Publish("lead", contracts.Event{T: eventwire.EventReply, Done: true, Coordination: &contracts.CoordinationEvent{Kind: "delegated"}})
+	go es.serve(sub, es.journal.current())
+	reader := bufio.NewReader(client)
+	logCleanup(client.SetReadDeadline(time.Now().Add(5 * time.Second)))
+	for idx := -1; idx < subscriberBuffer; idx++ {
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			t.Fatalf("line %d: %v", idx, err)
+		}
+		var got wireEvent
+		if err := json.Unmarshal(line, &got); err != nil {
+			t.Fatal(err)
+		}
+		if idx < 0 && got.Coordination == nil {
+			t.Fatalf("first line = %+v, want the coordination event ahead of the backlog", got.Event)
+		}
+		if idx >= 0 && (got.T != eventwire.EventChunk || got.Text != strconv.Itoa(idx)) {
+			t.Fatalf("backlog line %d = %+v, a coordination event must not push a queued line out", idx, got.Event)
+		}
 	}
 }
 

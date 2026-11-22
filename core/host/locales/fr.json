@@ -525,6 +525,11 @@
     "other": "résolution de la boîte de sortie des tours impossible : {{.Detail}}"
   },
   {
+    "id": "session.since",
+    "description": "An invalid event sequence number given to session events --since, Raw gives the value received and Detail carries the cause",
+    "other": "depuis \"{{.Raw}}\" : {{.Detail}}"
+  },
+  {
     "id": "session.percent",
     "description": "An invalid compaction percentage, Raw gives the value received and Detail carries the cause",
     "other": "pourcentage \"{{.Raw}}\" : {{.Detail}}"

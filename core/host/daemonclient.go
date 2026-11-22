@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
@@ -24,6 +25,7 @@ type DaemonEvent struct {
 	contracts.Event
 
 	Session string `json:"session"`
+	Seq     uint64 `json:"seq,omitempty"`
 }
 
 var launchProjectRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
@@ -117,20 +119,34 @@ func ForwardToDaemon(ctx context.Context, messages *Messages, layout RuntimeLayo
 // either, so a frontend can tell "the daemon stopped" from "I stopped".
 //
 // The daemon drops a subscriber's lines rather than block a turn on it, so a
-// consumer that falls far enough behind loses telemetry. Read promptly.
+// consumer that falls far enough behind loses telemetry and is sent a gap
+// event with the value dropped. Read promptly.
 func SubscribeDaemonEvents(ctx context.Context, messages *Messages, layout RuntimeLayout, instanceID string) (<-chan DaemonEvent, error) {
-	return subscribeAt(ctx, messages.owner, layout, EventsSocketPathIn(layout, instanceID))
+	return SubscribeSessionEvents(ctx, messages, layout, instanceID, EventCursor{})
+}
+
+// SubscribeSessionEvents is SubscribeDaemonEvents for one session: the daemon first replays what the cursor missed, ending with a caught_up event, then streams live.
+func SubscribeSessionEvents(ctx context.Context, messages *Messages, layout RuntimeLayout, instanceID string, cursor EventCursor) (<-chan DaemonEvent, error) {
+	line, err := json.Marshal(cursor)
+	if err != nil {
+		return nil, err
+	}
+	return subscribeAt(ctx, messages.owner, layout, EventsSocketPathIn(layout, instanceID), append(line, '\n'))
 }
 
 var errDaemonEventsUnreachable = errors.New("the daemon does not answer on its events socket")
 
-func subscribeAt(ctx context.Context, messages *hostMessages, layout runtimedir.Layout, path string) (<-chan DaemonEvent, error) {
+func subscribeAt(ctx context.Context, messages *hostMessages, layout runtimedir.Layout, path string, cursor []byte) (<-chan DaemonEvent, error) {
 	if err := ensureRuntimeDir(messages, layout, path); err != nil {
 		return nil, err
 	}
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "unix", path)
 	if err != nil {
+		return nil, wrapHost(messages, errDaemonEventsUnreachable, "daemon.events_socket", map[string]any{pathParam: path})
+	}
+	if err := sendCursor(conn, cursor); err != nil {
+		logCleanup(conn.Close())
 		return nil, wrapHost(messages, errDaemonEventsUnreachable, "daemon.events_socket", map[string]any{pathParam: path})
 	}
 	out := make(chan DaemonEvent, daemonEventBuffer)
@@ -154,6 +170,19 @@ func subscribeAt(ctx context.Context, messages *hostMessages, layout runtimedir.
 		}
 	}()
 	return out, nil
+}
+
+func sendCursor(conn net.Conn, cursor []byte) error {
+	if cursor == nil {
+		return nil
+	}
+	if err := conn.SetWriteDeadline(time.Now().Add(publishWriteTimeout)); err != nil {
+		return err
+	}
+	if _, err := conn.Write(cursor); err != nil {
+		return err
+	}
+	return conn.SetWriteDeadline(time.Time{})
 }
 
 func parseAttachmentPaths(messages *hostMessages, raw string) ([]contracts.Attachment, error) {

@@ -9,6 +9,26 @@ const (
 	SessionWhoEmpty               = "cli.session.who.empty"
 	SessionWhoHeader              = "cli.session.who.header"
 	SessionLogEmpty               = "cli.session.log.empty"
+	SessionHistoryEmpty           = "cli.session.history.empty"
+	SessionHistoryTurn            = "cli.session.history.turn"
+	SessionHistoryPrompt          = "cli.session.history.prompt"
+	SessionHistoryReply           = "cli.session.history.reply"
+	SessionHistoryNotice          = "cli.session.history.notice"
+	SessionHistoryUsage           = "cli.session.history.usage"
+	SessionWatchHuman             = "cli.session.watch.human"
+	SessionWatchStatus            = "cli.session.watch.status"
+	SessionWatchSubagent          = "cli.session.watch.subagent"
+	SessionWatchNotice            = "cli.session.watch.notice"
+	SessionWatchDone              = "cli.session.watch.done"
+	SessionWatchAbandoned         = "cli.session.watch.abandoned"
+	SessionWatchClosed            = "cli.session.watch.closed"
+	SessionWatchDaemonLost        = "cli.session.watch.daemon_lost"
+	SessionWatchGap               = "cli.session.watch.gap"
+	SessionWatchIdle              = "cli.session.watch.idle"
+	SessionWatchEmpty             = "cli.session.watch.empty"
+	SessionWatchRenamed           = "cli.session.watch.renamed"
+	SessionWatchBadSince          = "cli.session.watch.bad_since"
+	SessionWatchOldDaemon         = "cli.session.watch.old_daemon"
 	SessionClosed                 = "cli.session.closed"
 	SessionCloseBranchKept        = "cli.session.close.branch_kept"
 	SessionArchived               = "cli.session.archived"
@@ -63,6 +83,26 @@ func sessionKeys() map[Key][]string {
 		SessionWhoEmpty:               nil,
 		SessionWhoHeader:              {ParamName},
 		SessionLogEmpty:               nil,
+		SessionHistoryEmpty:           nil,
+		SessionHistoryTurn:            {ParamID, ParamTime},
+		SessionHistoryPrompt:          {ParamMessage},
+		SessionHistoryReply:           {ParamMessage},
+		SessionHistoryNotice:          {ParamMessage},
+		SessionHistoryUsage:           {ParamDuration, ParamIn, ParamOut, ParamCost},
+		SessionWatchHuman:             {ParamName, ParamMessage},
+		SessionWatchStatus:            {ParamMessage},
+		SessionWatchSubagent:          {ParamName, ParamState},
+		SessionWatchNotice:            {ParamMessage},
+		SessionWatchDone:              {ParamIn, ParamOut, ParamCost},
+		SessionWatchAbandoned:         nil,
+		SessionWatchClosed:            {ParamName},
+		SessionWatchDaemonLost:        {ParamSeq},
+		SessionWatchGap:               nil,
+		SessionWatchIdle:              {ParamName},
+		SessionWatchEmpty:             {ParamName},
+		SessionWatchRenamed:           {ParamName, ParamTo},
+		SessionWatchBadSince:          {ParamArg},
+		SessionWatchOldDaemon:         nil,
 		SessionClosed:                 {ParamName},
 		SessionCloseBranchKept:        {ParamBranch},
 		SessionArchived:               {ParamName},

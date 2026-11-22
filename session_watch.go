@@ -16,6 +16,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/host"
+	"github.com/Herrscherd/herrscher/core/timeline"
 )
 
 const (
@@ -218,6 +219,7 @@ type watchView struct {
 	asJSON   bool
 	midLine  bool
 	streamed bool
+	calls    timeline.Recorder
 }
 
 func newWatchView(out io.Writer, messages *clitext.Messages, lang i18n.Language, asJSON bool) *watchView {
@@ -237,6 +239,9 @@ func (p *watchView) show(event *host.DaemonEvent) error {
 }
 
 func (p *watchView) render(event *host.DaemonEvent) error {
+	if err := p.trackCalls(event); err != nil {
+		return err
+	}
 	switch event.T {
 	case eventwire.EventHuman:
 		p.streamed = false
@@ -266,6 +271,35 @@ func (p *watchView) render(event *host.DaemonEvent) error {
 	case eventwire.EventCaughtUp:
 		return p.caughtUp(event)
 	}
+	return nil
+}
+
+func (p *watchView) trackCalls(event *host.DaemonEvent) error {
+	call, touched, err := p.calls.Apply(event.Event)
+	if errors.Is(err, timeline.ErrFull) {
+		return p.line(clitext.ToolBound, clitext.Params{clitext.ParamLimit: timeline.MaxCalls})
+	}
+	switch {
+	case event.T == eventwire.EventToolDone && touched:
+		key, params := clitext.ToolCallLine(p.lang, call)
+		return p.line(key, params)
+	case event.T == eventwire.EventReply && event.Done:
+		return p.closeTurnCalls()
+	}
+	return nil
+}
+
+func (p *watchView) closeTurnCalls() error {
+	for _, call := range p.calls.Calls() {
+		if call.Finished() {
+			continue
+		}
+		key, params := clitext.ToolCallLine(p.lang, call)
+		if err := p.line(key, params); err != nil {
+			return err
+		}
+	}
+	p.calls = timeline.Recorder{}
 	return nil
 }
 

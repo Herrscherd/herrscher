@@ -12,6 +12,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/timeline"
 )
 
 const (
@@ -22,18 +23,19 @@ const (
 )
 
 type historyTurn struct {
-	TurnID      string   `json:"turn_id"`
-	Started     string   `json:"started,omitempty"`
-	Prompt      string   `json:"prompt,omitempty"`
-	Reply       string   `json:"reply,omitempty"`
-	Notices     []string `json:"notices,omitempty"`
-	Interrupted bool     `json:"interrupted,omitempty"`
-	TokensIn    int      `json:"tokens_in,omitempty"`
-	TokensOut   int      `json:"tokens_out,omitempty"`
-	CacheRead   int      `json:"cache_read,omitempty"`
-	CacheCreate int      `json:"cache_create,omitempty"`
-	DurMs       int      `json:"dur_ms,omitempty"`
-	Cost        float64  `json:"cost,omitempty"`
+	TurnID      string          `json:"turn_id"`
+	Started     string          `json:"started,omitempty"`
+	Prompt      string          `json:"prompt,omitempty"`
+	Reply       string          `json:"reply,omitempty"`
+	Notices     []string        `json:"notices,omitempty"`
+	Interrupted bool            `json:"interrupted,omitempty"`
+	TokensIn    int             `json:"tokens_in,omitempty"`
+	TokensOut   int             `json:"tokens_out,omitempty"`
+	CacheRead   int             `json:"cache_read,omitempty"`
+	CacheCreate int             `json:"cache_create,omitempty"`
+	DurMs       int             `json:"dur_ms,omitempty"`
+	Cost        float64         `json:"cost,omitempty"`
+	Tools       []timeline.Call `json:"tools,omitempty"`
 }
 
 func (h *Handler) sessionHistoryRun(ctx context.Context, input contracts.Input) (contracts.Result, error) {
@@ -131,6 +133,7 @@ func absorb(turn *historyTurn, entry state.TranscriptEntry) {
 		turn.CacheCreate += entry.CacheCreate
 		turn.DurMs += entry.DurMs
 		turn.Cost += entry.Cost
+		turn.Tools = append(turn.Tools, entry.Tools...)
 	default:
 		turn.Notices = append(turn.Notices, entry.ShownText())
 	}
@@ -168,6 +171,10 @@ func (h *Handler) renderHistory(turns []historyTurn, lang i18n.Language) string 
 		}
 		if turn.Interrupted {
 			out.WriteString(clitext.RenderNotice(lang, contracts.Notice{Code: contracts.CodeTurnInterrupted}) + "\n")
+		}
+		for _, call := range turn.Tools {
+			key, params := clitext.ToolCallLine(lang, call)
+			out.WriteString(h.textIn(lang, key, params) + "\n")
 		}
 		if turn.DurMs != 0 || turn.TokensOut != 0 || turn.Cost != 0 {
 			out.WriteString(h.textIn(lang, clitext.SessionHistoryUsage, clitext.Params{

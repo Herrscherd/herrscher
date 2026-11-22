@@ -198,11 +198,6 @@ func (sub *subscriber) enqueuePriority(line []byte) {
 	select {
 	case sub.ch <- nil:
 	default:
-		select {
-		case <-sub.ch:
-		default:
-		}
-		sub.ch <- nil
 	}
 }
 

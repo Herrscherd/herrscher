@@ -22,6 +22,7 @@ func (m *model) route(routed RoutedEvent) tea.Cmd {
 		return m.drainHistory()
 	}
 	before := len(tab.entries)
+	m.observeToolCalls(tab, routed.Event)
 	m.renderInto(tab, routed.Event)
 	flushCmd := m.flushQueue(tab, routed.Event.T)
 	isReply := routed.Event.T == eventwire.EventReply
@@ -100,6 +101,9 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		text, _ := hostError(event.Text)
 		target.appendEntry(entry{role: statusRole(event.Text), text: text})
 	case eventwire.EventReply:
+		if event.Done {
+			m.appendTimeline(target)
+		}
 		target.appendReply(m.tr, event)
 	case eventwire.EventTodos:
 		target.busy = true

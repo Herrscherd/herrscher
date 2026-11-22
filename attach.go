@@ -16,6 +16,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/plugins/terminal"
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
@@ -75,6 +76,9 @@ func newAttachedDaemon(ctx context.Context, layout host.RuntimeLayout, messages 
 func (a *attachedDaemon) pump(stream <-chan host.DaemonEvent) {
 	defer close(a.events)
 	for event := range stream {
+		if event.T == eventwire.EventGap || event.T == eventwire.EventCaughtUp {
+			continue
+		}
 		conv := contracts.Conversation{Gateway: kindTerminal, ID: a.channelFor(event.Session)}
 		select {
 		case a.events <- tui.RoutedEvent{Conv: conv, Event: event.Event}:

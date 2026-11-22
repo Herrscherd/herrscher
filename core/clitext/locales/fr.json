@@ -1314,7 +1314,37 @@
   {
     "id": "cli.session.watch.daemon_lost",
     "description": "Error of session watch when the daemon stops sending events",
-    "other": "le démon n'envoie plus d'événements : lance herrscher health, puis de nouveau session watch avec --since et le dernier seq vu"
+    "other": "le daemon n'envoie plus d'événements : lance herrscher health, puis session watch --since {{.Seq}} pour reprendre là où il s'est arrêté"
+  },
+  {
+    "id": "cli.session.watch.gap",
+    "description": "Line shown by session watch when earlier events of the session are no longer in the daemon's memory",
+    "other": "  ⋯ les événements précédents ne sont plus dans la mémoire du daemon, voir session history"
+  },
+  {
+    "id": "cli.session.watch.idle",
+    "description": "Line shown by session watch once caught up when the last turn of the session is over",
+    "other": "  … {{.Name}} est inactive, en attente de son prochain tour"
+  },
+  {
+    "id": "cli.session.watch.empty",
+    "description": "Line shown by session watch once caught up when the daemon holds no event of the session",
+    "other": "  … aucun événement de {{.Name}} dans la mémoire du daemon, en attente du suivant"
+  },
+  {
+    "id": "cli.session.watch.renamed",
+    "description": "Line shown by session watch when the followed session is renamed and the watch goes on under the new name",
+    "other": "Session {{.Name}} renommée en {{.To}}, le suivi continue."
+  },
+  {
+    "id": "cli.session.watch.bad_since",
+    "description": "Error of session watch when --since is not a seq number",
+    "other": "--since {{.Arg}} n'est pas un numéro de seq : donne le seq du dernier événement vu"
+  },
+  {
+    "id": "cli.session.watch.old_daemon",
+    "description": "Error of session watch when the daemon sends events without a seq",
+    "other": "le daemon ne numérote pas ses événements : redémarre-le pour utiliser session watch"
   },
   {
     "id": "cli.session.log.empty",

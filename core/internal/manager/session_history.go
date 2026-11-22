@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -41,10 +42,10 @@ func (h *Handler) sessionHistoryRun(ctx context.Context, input contracts.Input) 
 		return contracts.Result{}, h.localized(ErrMissingName, clitext.HostErrMissingName)
 	}
 	name := slugify(raw)
-	var turns []historyTurn
-	if name != "" && sessionNameRe.MatchString(name) {
-		turns = groupTurns(state.ReadTranscript(state.TranscriptPath(h.partDir, name), 0))
+	if !h.hasHistory(name) {
+		return contracts.Result{}, &SessionNotFoundError{Name: raw}
 	}
+	turns := groupTurns(state.ReadTranscript(state.TranscriptPath(h.partDir, name), 0))
 	if since, given := input.Lookup(sinceParam); given {
 		after, err := turnsAfter(turns, since)
 		if err != nil {
@@ -66,14 +67,37 @@ func (h *Handler) sessionHistoryRun(ctx context.Context, input contracts.Input) 
 	return contracts.DataResult(h.renderHistory(turns, lang)), nil
 }
 
+func (h *Handler) hasHistory(name string) bool {
+	if name == "" || !sessionNameRe.MatchString(name) {
+		return false
+	}
+	if _, err := os.Stat(state.TranscriptPath(h.partDir, name)); err == nil {
+		return true
+	}
+	if h.st == nil {
+		return false
+	}
+	_, known := h.st.FindSession(name)
+	return known
+}
+
 func groupTurns(entries []state.TranscriptEntry) []historyTurn {
 	var turns []historyTurn
+	byID := make(map[string]int)
 	for idx := range entries {
 		entry := entries[idx]
-		if startsTurn(turns, entry) {
-			turns = append(turns, historyTurn{TurnID: entry.TurnID, Started: entry.Ts})
+		owner, known := byID[entry.TurnID]
+		if entry.TurnID == "" || entry.Role == roleUser || !known {
+			owner, known = len(turns)-1, len(turns) > 0
 		}
-		absorb(&turns[len(turns)-1], entry)
+		if !known || opensTurn(turns[owner], entry) {
+			turns = append(turns, historyTurn{TurnID: entry.TurnID, Started: entry.Ts})
+			owner = len(turns) - 1
+		}
+		absorb(&turns[owner], entry)
+		if turns[owner].TurnID != "" {
+			byID[turns[owner].TurnID] = owner
+		}
 	}
 	for idx := range turns {
 		if turns[idx].TurnID == "" {
@@ -83,11 +107,10 @@ func groupTurns(entries []state.TranscriptEntry) []historyTurn {
 	return turns
 }
 
-func startsTurn(turns []historyTurn, entry state.TranscriptEntry) bool {
-	if len(turns) == 0 || entry.Role == roleUser {
+func opensTurn(current historyTurn, entry state.TranscriptEntry) bool {
+	if entry.Role == roleUser {
 		return true
 	}
-	current := turns[len(turns)-1]
 	return entry.TurnID != "" && current.TurnID != "" && entry.TurnID != current.TurnID
 }
 

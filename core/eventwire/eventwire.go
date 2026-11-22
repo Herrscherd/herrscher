@@ -30,4 +30,16 @@ const (
 	EventCompactionStarted = "compaction_started"
 	EventCompactionDone    = "compaction_done"
 	EventCompactionFailed  = "compaction_failed"
+	EventGap               = "gap"
+	EventCaughtUp          = "caught_up"
+)
+
+// Values of a gap, caught_up or closed event on the events socket: why a subscriber missed events, the state of the turn once its catch-up is over, and a session that lives on under another name.
+const (
+	GapExpired      = "expired"
+	GapDropped      = "dropped"
+	CaughtUpIdle    = "idle"
+	CaughtUpRunning = "running"
+	CaughtUpEmpty   = "empty"
+	ClosedRenamed   = "renamed"
 )

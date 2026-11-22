@@ -12,6 +12,11 @@ var slugInvalidRe = regexp.MustCompile(`[^a-z0-9_-]+`)
 
 const maxSlugLen = 64
 
+// SessionSlug is the name a session is filed under once created from name.
+func SessionSlug(name string) string {
+	return slugify(name)
+}
+
 func slugify(name string) string {
 	slug := slugInvalidRe.ReplaceAllString(strings.ToLower(strings.TrimSpace(name)), "-")
 	slug = strings.Trim(slug, "-_")

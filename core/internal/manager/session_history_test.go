@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -108,13 +109,40 @@ func TestSessionHistoryTextInTheCallerLanguage(t *testing.T) {
 	}
 }
 
-func TestSessionHistoryEmpty(t *testing.T) {
-	h := &Handler{messages: clitext.NewMessages(), partDir: t.TempDir(), lang: i18n.English}
-	if turns := historyJSON(t, h, map[string]string{"name": "ghost"}); len(turns) != 0 {
-		t.Fatalf("unknown session = %+v, want an empty array", turns)
+func TestSessionHistoryAttachesALateEntryToItsTurn(t *testing.T) {
+	dir := t.TempDir()
+	seedTranscript(t, dir, []state.TranscriptEntry{
+		{Ts: "t1", Role: "user", Text: "first", TurnID: "turn_a"},
+		{Ts: "t2", Role: "user", Text: "second", TurnID: "turn_b"},
+		{Ts: "t3", Role: "assistant", Text: "late", TurnID: "turn_a"},
+		{Ts: "t4", Role: "assistant", Text: "two", TurnID: "turn_b"},
+	})
+	turns := historyJSON(t, &Handler{partDir: dir}, map[string]string{"name": "alpha"})
+	if len(turns) != 2 || turns[0].Reply != "late" || turns[1].Reply != "two" {
+		t.Fatalf("a late reply must join its own turn: %+v", turns)
 	}
-	out, err := cli.Plain(h.sessionHistoryRun(context.Background(), contracts.Input{Args: map[string]string{"name": "ghost"}}))
+}
+
+func TestSessionHistoryOfAKnownSessionWithoutTranscript(t *testing.T) {
+	st := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	if err := st.AddSession(state.Session{Name: "quiet", ChannelID: "c1"}); err != nil {
+		t.Fatal(err)
+	}
+	h := &Handler{messages: clitext.NewMessages(), partDir: t.TempDir(), lang: i18n.English, st: st}
+	if turns := historyJSON(t, h, map[string]string{"name": "quiet"}); len(turns) != 0 {
+		t.Fatalf("a session without turns = %+v, want an empty array", turns)
+	}
+	out, err := cli.Plain(h.sessionHistoryRun(context.Background(), contracts.Input{Args: map[string]string{"name": "quiet"}}))
 	if err != nil || out != "No turn recorded yet." {
 		t.Fatalf("empty history = %q, %v", out, err)
+	}
+}
+
+func TestSessionHistoryOfAnUnknownSession(t *testing.T) {
+	h := &Handler{messages: clitext.NewMessages(), partDir: t.TempDir(), lang: i18n.English}
+	_, err := h.sessionHistoryRun(context.Background(), contracts.Input{Args: map[string]string{"name": "ghost"}})
+	var missing *SessionNotFoundError
+	if !errors.As(err, &missing) {
+		t.Fatalf("err = %v, want SessionNotFoundError", err)
 	}
 }

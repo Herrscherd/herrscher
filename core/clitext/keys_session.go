@@ -23,6 +23,12 @@ const (
 	SessionWatchAbandoned         = "cli.session.watch.abandoned"
 	SessionWatchClosed            = "cli.session.watch.closed"
 	SessionWatchDaemonLost        = "cli.session.watch.daemon_lost"
+	SessionWatchGap               = "cli.session.watch.gap"
+	SessionWatchIdle              = "cli.session.watch.idle"
+	SessionWatchEmpty             = "cli.session.watch.empty"
+	SessionWatchRenamed           = "cli.session.watch.renamed"
+	SessionWatchBadSince          = "cli.session.watch.bad_since"
+	SessionWatchOldDaemon         = "cli.session.watch.old_daemon"
 	SessionClosed                 = "cli.session.closed"
 	SessionCloseBranchKept        = "cli.session.close.branch_kept"
 	SessionArchived               = "cli.session.archived"
@@ -90,7 +96,13 @@ func sessionKeys() map[Key][]string {
 		SessionWatchDone:              {ParamIn, ParamOut, ParamCost},
 		SessionWatchAbandoned:         nil,
 		SessionWatchClosed:            {ParamName},
-		SessionWatchDaemonLost:        nil,
+		SessionWatchDaemonLost:        {ParamSeq},
+		SessionWatchGap:               nil,
+		SessionWatchIdle:              {ParamName},
+		SessionWatchEmpty:             {ParamName},
+		SessionWatchRenamed:           {ParamName, ParamTo},
+		SessionWatchBadSince:          {ParamArg},
+		SessionWatchOldDaemon:         nil,
 		SessionClosed:                 {ParamName},
 		SessionCloseBranchKept:        {ParamBranch},
 		SessionArchived:               {ParamName},

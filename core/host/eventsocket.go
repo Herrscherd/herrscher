@@ -1,13 +1,18 @@
 package host
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+
+	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
 type wireEvent struct {
@@ -33,11 +38,17 @@ const subscriberBuffer = 256
 
 const publishWriteTimeout = 2 * time.Second
 
+const (
+	cursorWait  = 200 * time.Millisecond
+	cursorBytes = 1024
+)
+
 type subscriber struct {
 	conn       net.Conn
 	ch         chan []byte
 	priorityMu sync.Mutex
 	priority   [][]byte
+	dropped    atomic.Bool
 }
 
 type eventSocket struct {
@@ -64,25 +75,60 @@ func (s *eventSocket) add(conn net.Conn) {
 		return
 	}
 	s.subs[sub] = struct{}{}
+	upTo := s.journal.current()
 	s.mu.Unlock()
-	go s.serve(sub)
+	go s.serve(sub, upTo)
 }
 
-func (s *eventSocket) serve(sub *subscriber) {
+func (s *eventSocket) serve(sub *subscriber, upTo uint64) {
 	defer func() {
 		s.remove(sub)
 		logCleanup(sub.conn.Close())
 	}()
+	if cursor, given := readCursor(sub.conn); given {
+		replay := s.journal.catchUp(cursor, upTo)
+		for idx := range replay {
+			if !sub.write(replay[idx]) {
+				return
+			}
+		}
+	}
 	for {
 		line, ok := sub.next()
 		if !ok {
 			return
 		}
-		logCleanup(sub.conn.SetWriteDeadline(time.Now().Add(publishWriteTimeout)))
-		if _, err := sub.conn.Write(line); err != nil {
+		if sub.dropped.Swap(false) && !sub.write(wireEvent{Event: contracts.Event{T: eventwire.EventGap, Value: eventwire.GapDropped}}) {
+			return
+		}
+		if !sub.send(line) {
 			return
 		}
 	}
+}
+
+func readCursor(conn net.Conn) (EventCursor, bool) {
+	var cursor EventCursor
+	if conn.SetReadDeadline(time.Now().Add(cursorWait)) != nil {
+		return cursor, false
+	}
+	line, err := bufio.NewReader(io.LimitReader(conn, cursorBytes)).ReadBytes('\n')
+	logCleanup(conn.SetReadDeadline(time.Time{}))
+	if err != nil || json.Unmarshal(line, &cursor) != nil {
+		return cursor, false
+	}
+	return cursor, cursor.Session != ""
+}
+
+func (sub *subscriber) write(event wireEvent) bool {
+	line, err := marshalWireEvent(event)
+	return err == nil && sub.send(line)
+}
+
+func (sub *subscriber) send(line []byte) bool {
+	logCleanup(sub.conn.SetWriteDeadline(time.Now().Add(publishWriteTimeout)))
+	_, err := sub.conn.Write(line)
+	return err == nil
 }
 
 func (sub *subscriber) enqueuePriority(line []byte) {
@@ -154,6 +200,7 @@ func (s *eventSocket) Publish(session string, event contracts.Event) {
 		select {
 		case sub.ch <- line:
 		default:
+			sub.dropped.Store(true)
 		}
 	}
 }

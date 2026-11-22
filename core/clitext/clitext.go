@@ -154,6 +154,7 @@ const (
 	ParamVendor    = "Vendor"
 	ParamState     = "State"
 	ParamTo        = "To"
+	ParamSeq       = "Seq"
 	ParamSchedule  = "Schedule"
 	ParamTotal     = "Total"
 	ParamPID       = "PID"

@@ -92,7 +92,7 @@ func TestEventSocketPrioritizesCoordinationWhenTelemetryQueueFull(t *testing.T) 
 		T: eventwire.EventReply, Done: true, Coordination: &want,
 	})
 
-	go es.serve(sub)
+	go es.serve(sub, es.journal.current())
 	logCleanup(client.SetReadDeadline(time.Now().Add(time.Second)))
 	line, err := bufio.NewReader(client).ReadBytes('\n')
 	if err != nil {

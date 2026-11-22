@@ -24,7 +24,9 @@ const (
 
 var (
 	errWatchMissingName = errors.New("session watch needs --name")
+	errWatchBadSince    = errors.New("session watch --since needs a seq number")
 	errWatchDaemonLost  = errors.New("the daemon stopped answering")
+	errWatchOldDaemon   = errors.New("the daemon sends events without a seq")
 )
 
 type watchOptions struct {
@@ -32,6 +34,8 @@ type watchOptions struct {
 	since  string
 	asJSON bool
 }
+
+type eventSubscriber func(ctx context.Context, cursor host.EventCursor) (<-chan host.DaemonEvent, error)
 
 func runSessionWatch(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, args []string) error {
 	lang := clitext.ClientLanguage()
@@ -42,16 +46,16 @@ func runSessionWatch(ctx context.Context, layout host.RuntimeLayout, messages *c
 	if opts.name == "" {
 		return renderError(messages, lang, errWatchMissingName, clitext.HostErrMissingName, nil)
 	}
+	cursor, err := opts.cursor()
+	if err != nil {
+		return renderError(messages, lang, errWatchBadSince, clitext.SessionWatchBadSince, clitext.Params{clitext.ParamArg: strconv.Quote(opts.since)})
+	}
 	instance := host.ServedInstanceID(host.DefaultStatePath(), "")
-	stream, err := host.SubscribeDaemonEvents(ctx, hostMessages, layout, instance)
-	if err != nil {
-		return err
+	subscribe := func(ctx context.Context, cursor host.EventCursor) (<-chan host.DaemonEvent, error) {
+		return host.SubscribeSessionEvents(ctx, hostMessages, layout, instance, cursor)
 	}
-	backlog, err := fetchWatchBacklog(ctx, hostMessages, layout, instance, opts)
-	if err != nil {
-		return err
-	}
-	return followSession(ctx, newWatchView(os.Stdout, messages, lang, opts.asJSON), opts.name, backlog, stream)
+	follow := sessionFollow{view: newWatchView(os.Stdout, messages, lang, opts.asJSON), cursor: cursor}
+	return follow.run(ctx, subscribe)
 }
 
 func parseWatchArgs(args []string) (watchOptions, string) {
@@ -90,60 +94,98 @@ func (o *watchOptions) set(key, value string) {
 	o.since = value
 }
 
-func fetchWatchBacklog(ctx context.Context, hostMessages *host.Messages, layout host.RuntimeLayout, instance string, opts watchOptions) ([]host.DaemonEvent, error) {
-	argv := []string{verbSession, watchVerb, argName, opts.name}
-	if opts.since != "" {
-		argv = append(argv, argSince, opts.since)
+func (o *watchOptions) cursor() (host.EventCursor, error) {
+	cursor := host.EventCursor{Session: host.SessionSlug(o.name)}
+	if o.since == "" {
+		return cursor, nil
 	}
-	out, err := host.DaemonDispatch(ctx, hostMessages, layout, instance, argv)
+	after, err := strconv.ParseUint(o.since, 10, 64)
 	if err != nil {
-		return nil, err
+		return cursor, err
 	}
-	var backlog []host.DaemonEvent
-	if err := json.Unmarshal([]byte(out), &backlog); err != nil {
-		return nil, err
-	}
-	return backlog, nil
+	cursor.Since = &after
+	return cursor, nil
 }
 
-func followSession(ctx context.Context, view *watchView, name string, backlog []host.DaemonEvent, stream <-chan host.DaemonEvent) error {
-	follow := sessionFollow{view: view, name: name}
-	for idx := range backlog {
-		if _, err := follow.take(&backlog[idx]); err != nil {
+type followStep int
+
+const (
+	stepContinue followStep = iota
+	stepResume
+	stepClosed
+)
+
+type sessionFollow struct {
+	view   *watchView
+	cursor host.EventCursor
+	seen   uint64
+}
+
+func (f *sessionFollow) run(ctx context.Context, subscribe eventSubscriber) error {
+	for {
+		step, err := f.attach(ctx, subscribe)
+		if err != nil || step != stepResume {
 			return err
 		}
+	}
+}
+
+func (f *sessionFollow) attach(ctx context.Context, subscribe eventSubscriber) (followStep, error) {
+	attached, detach := context.WithCancel(ctx)
+	defer detach()
+	stream, err := subscribe(attached, f.resumeCursor())
+	if err != nil {
+		return stepClosed, err
 	}
 	for {
 		select {
 		case <-ctx.Done():
-			return view.finish()
+			return stepClosed, f.view.finish()
 		case event, open := <-stream:
 			if !open {
-				return view.lost()
+				return stepClosed, f.view.lost(f.seen)
 			}
-			closed, err := follow.take(&event)
-			if err != nil {
-				return err
-			}
-			if closed {
-				return view.finish()
+			step, err := f.take(&event)
+			if err != nil || step != stepContinue {
+				return step, err
 			}
 		}
 	}
 }
 
-type sessionFollow struct {
-	view *watchView
-	name string
-	seen uint64
+func (f *sessionFollow) resumeCursor() host.EventCursor {
+	if f.seen == 0 {
+		return f.cursor
+	}
+	seen := f.seen
+	return host.EventCursor{Session: f.cursor.Session, Since: &seen}
 }
 
-func (f *sessionFollow) take(event *host.DaemonEvent) (bool, error) {
-	if event.Session != f.name || event.Seq != 0 && event.Seq <= f.seen {
-		return false, nil
+func (f *sessionFollow) take(event *host.DaemonEvent) (followStep, error) {
+	if event.T == eventwire.EventGap && event.Value == eventwire.GapDropped {
+		return stepResume, nil
 	}
-	f.seen = max(f.seen, event.Seq)
-	return event.T == eventwire.EventClosed, f.view.show(event)
+	if event.Session != f.cursor.Session {
+		return stepContinue, nil
+	}
+	if event.T == eventwire.EventGap || event.T == eventwire.EventCaughtUp {
+		return stepContinue, f.view.show(event)
+	}
+	if event.Seq == 0 {
+		return stepClosed, f.view.refuse(errWatchOldDaemon, clitext.SessionWatchOldDaemon)
+	}
+	if event.Seq <= f.seen {
+		return stepContinue, nil
+	}
+	f.seen = event.Seq
+	if event.T != eventwire.EventClosed {
+		return stepContinue, f.view.show(event)
+	}
+	if event.Value == eventwire.ClosedRenamed && event.Text != "" {
+		f.cursor.Session = event.Text
+		return stepContinue, f.view.show(event)
+	}
+	return stepClosed, f.view.show(event)
 }
 
 type watchView struct {
@@ -168,6 +210,10 @@ func (p *watchView) show(event *host.DaemonEvent) error {
 		_, err = fmt.Fprintf(p.out, "%s\n", line)
 		return err
 	}
+	return p.render(event)
+}
+
+func (p *watchView) render(event *host.DaemonEvent) error {
 	switch event.T {
 	case eventwire.EventHuman:
 		p.streamed = false
@@ -191,7 +237,28 @@ func (p *watchView) show(event *host.DaemonEvent) error {
 	case eventwire.EventAbandoned:
 		return p.line(clitext.SessionWatchAbandoned, nil)
 	case eventwire.EventClosed:
-		return p.line(clitext.SessionWatchClosed, clitext.Params{clitext.ParamName: event.Session})
+		return p.closed(event)
+	case eventwire.EventGap:
+		return p.line(clitext.SessionWatchGap, nil)
+	case eventwire.EventCaughtUp:
+		return p.caughtUp(event)
+	}
+	return nil
+}
+
+func (p *watchView) closed(event *host.DaemonEvent) error {
+	if event.Value == eventwire.ClosedRenamed {
+		return p.line(clitext.SessionWatchRenamed, clitext.Params{clitext.ParamName: event.Session, clitext.ParamTo: event.Text})
+	}
+	return p.line(clitext.SessionWatchClosed, clitext.Params{clitext.ParamName: event.Session})
+}
+
+func (p *watchView) caughtUp(event *host.DaemonEvent) error {
+	switch event.Value {
+	case eventwire.CaughtUpIdle:
+		return p.line(clitext.SessionWatchIdle, clitext.Params{clitext.ParamName: event.Session})
+	case eventwire.CaughtUpEmpty:
+		return p.line(clitext.SessionWatchEmpty, clitext.Params{clitext.ParamName: event.Session})
 	}
 	return nil
 }
@@ -237,9 +304,16 @@ func (p *watchView) finish() error {
 	return nil
 }
 
-func (p *watchView) lost() error {
+func (p *watchView) lost(seen uint64) error {
 	if err := p.finish(); err != nil {
 		return err
 	}
-	return renderError(p.messages, p.lang, errWatchDaemonLost, clitext.SessionWatchDaemonLost, nil)
+	return renderError(p.messages, p.lang, errWatchDaemonLost, clitext.SessionWatchDaemonLost, clitext.Params{clitext.ParamSeq: strconv.FormatUint(seen, 10)})
+}
+
+func (p *watchView) refuse(cause error, key clitext.Key) error {
+	if err := p.finish(); err != nil {
+		return err
+	}
+	return renderError(p.messages, p.lang, cause, key, nil)
 }

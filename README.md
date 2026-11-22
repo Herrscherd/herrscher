@@ -651,27 +651,41 @@ thing it is used to diagnose.
 
 `herrscher session watch --name <session>` follows the session's current turn in the
 terminal: the prompt and who sent it, each tool line, the reply as it streams, and
-the tokens and cost when the turn ends. It keeps following the next turns until it
-is interrupted or the session closes. `--json` prints one event per line, the same
-events the daemon sends on its events socket, so a script can consume them.
+the tokens and cost when the turn ends. It says when the session is idle or when
+the daemon holds nothing of it yet, keeps following the next turns, follows the
+session under its new name when it is renamed, and stops when the session is closed
+or archived, or when it is interrupted. `--json` prints one event per line, the
+same events the daemon sends on its events socket, so a script can consume them.
 
-Every event the daemon publishes carries a sequence number (`seq`), and the daemon
-keeps the latest events of each session in memory: 512 per session, for the 64
-sessions that spoke most recently, with the text of a streamed reply folded into
-one entry. A client that lost its connection runs `session watch --since <seq>`
-with the last number it saw and receives what followed before the live events, with
-no duplicate. Without `--since`, it starts at the prompt of the current turn. A
-number from before a daemon restart replays what the new daemon holds. A client
-other than the terminal that calls `session watch` receives these held events as
-JSON and does not follow.
+Every event the daemon publishes carries a sequence number (`seq`). It starts from
+the clock when the daemon starts, so a new daemon always numbers above the one
+before it. The daemon keeps the latest events of each session in memory: 512 events
+and 1 MiB per session, for the 64 sessions that spoke most recently, with the text
+of a streamed reply folded into one entry.
+
+The catch-up happens on the events socket itself. A subscriber may write one line
+as soon as it connects, `{"session":"<name>","since":<seq>}`, and the daemon first
+sends what that session published after the seq, then a `caught_up` event whose
+value says whether the turn is `running`, `idle`, or `empty` (nothing held), then
+the live events, with nothing lost and nothing repeated in between. Without
+`since`, the replay starts at the prompt of the current turn. When the daemon no
+longer holds every event after the seq (it restarted, trimmed the session, or
+evicted it), the replay opens with a `gap` event of value `expired`. A subscriber
+too slow to read its lines loses some, and the daemon then sends a `gap` event of
+value `dropped`: `session watch` reconnects with the last seq it saw and misses
+nothing. When the daemon goes away, `session watch` prints that seq, to run
+`session watch --since <seq>` once the daemon is back. A subscriber that writes
+nothing within 200 ms receives the live events only. The `session watch` verb,
+called through the command socket by another client, returns the same replay as a
+JSON array and does not follow.
 
 `herrscher session history --name <session>` replays the past turns from the
 session's transcript, which survives restarts: for each turn its id and start time,
 the prompt, the reply, the notices, and the duration, tokens and cost.
 `--since <turn>` keeps the turns after that one, and an id the transcript does not
-hold is an error. `--json` prints the turns as an array. The transcript records
-the conversation, not the tool calls, so a past turn is replayed without its tool
-lines.
+hold is an error, as is a session the daemon does not know. `--json` prints the
+turns as an array. The transcript records the conversation, not the tool calls, so
+a past turn is replayed without its tool lines.
 
 ### Health, one command away
 

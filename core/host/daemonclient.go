@@ -28,6 +28,23 @@ type DaemonEvent struct {
 	Seq     uint64 `json:"seq,omitempty"`
 }
 
+type daemonEnvelope struct {
+	Session string `json:"session"`
+	Seq     uint64 `json:"seq,omitempty"`
+}
+
+func decodeDaemonEvent(line []byte) (DaemonEvent, error) {
+	event, err := contracts.DecodeEvent(line)
+	if err != nil {
+		return DaemonEvent{}, err
+	}
+	var envelope daemonEnvelope
+	if err := json.Unmarshal(line, &envelope); err != nil {
+		return DaemonEvent{}, err
+	}
+	return DaemonEvent{Event: event, Session: envelope.Session, Seq: envelope.Seq}, nil
+}
+
 var launchProjectRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 
 // LaunchProject names the workspace project dir belongs to, so a client can ask
@@ -158,8 +175,8 @@ func subscribeAt(ctx context.Context, messages *hostMessages, layout runtimedir.
 		scanner := bufio.NewScanner(conn)
 		scanner.Buffer(make([]byte, 0, daemonLineBufferInitial), daemonLineBufferMax)
 		for scanner.Scan() {
-			var event DaemonEvent
-			if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
+			event, err := decodeDaemonEvent(scanner.Bytes())
+			if err != nil {
 				continue
 			}
 			select {

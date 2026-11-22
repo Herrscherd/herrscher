@@ -27,6 +27,7 @@ const (
 	backendKindText     = "text"
 	backendKindThinking = "thinking"
 	backendKindTool     = "tool"
+	backendKindToolDone = contracts.BackendKindToolDone
 	backendKindTodos    = "todos"
 	backendKindSubagent = "subagent"
 	backendKindReset    = "reset"
@@ -315,6 +316,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	var usage turnUsage
 	var streamed []string
 	onEvent := func(event contracts.BackendEvent) {
+		event = receiveBackendEvent(event)
 		usage.absorb(event)
 		switch event.Kind {
 		case backendKindText:
@@ -399,6 +401,21 @@ func runPick(ctx context.Context, sink contracts.EventSink, backend contracts.Ba
 	sink.Emit(contracts.Event{T: eventwire.EventReply, Text: strings.TrimSpace(out), Done: true, TurnID: turnID})
 }
 
+func receiveBackendEvent(event contracts.BackendEvent) contracts.BackendEvent {
+	if err := event.ValidateToolCall(); err != nil {
+		logger.Warn("backend tool call refused, the event keeps its text and tokens")
+		event.ToolCall = nil
+		return event
+	}
+	if event.ToolCall == nil {
+		return event
+	}
+	call := *event.ToolCall
+	call.At = time.Now().UTC()
+	event.ToolCall = &call
+	return event
+}
+
 func emitBackendEvent(sink contracts.EventSink, event contracts.BackendEvent, tokens, tokensIn, cacheRead, cacheCreate int) {
 	switch event.Kind {
 	case backendKindThinking:
@@ -407,7 +424,11 @@ func emitBackendEvent(sink contracts.EventSink, event contracts.BackendEvent, to
 		sink.Emit(contracts.Event{T: eventwire.EventChunk, Text: event.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
 	case backendKindTool:
 		if text := strings.TrimSpace(event.Tool + " " + event.Detail); text != "" {
-			sink.Emit(contracts.Event{T: eventwire.EventStatus, Text: text, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
+			sink.Emit(contracts.Event{T: eventwire.EventStatus, Text: text, ToolCall: event.ToolCall, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
+		}
+	case backendKindToolDone:
+		if event.ToolCall != nil {
+			sink.Emit(contracts.Event{T: eventwire.EventToolDone, ToolCall: event.ToolCall, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
 		}
 	case backendKindTodos:
 		sink.Emit(contracts.Event{T: eventwire.EventTodos, Todos: event.Todos})

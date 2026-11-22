@@ -19,6 +19,7 @@ func TestEventValuesAreFrozen(t *testing.T) {
 		{"EventChunk", EventChunk, "chunk"},
 		{"EventThinking", EventThinking, "thinking"},
 		{"EventStatus", EventStatus, "status"},
+		{"EventToolDone", EventToolDone, "tool_done"},
 		{"EventTodos", EventTodos, "todos"},
 		{"EventSubagent", EventSubagent, "subagent"},
 		{"EventReset", EventReset, "reset"},

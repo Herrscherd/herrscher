@@ -650,12 +650,17 @@ thing it is used to diagnose.
 ### Following a session from any client
 
 `herrscher session watch --name <session>` follows the session's current turn in the
-terminal: the prompt and who sent it, each tool line, the reply as it streams, and
-the tokens and cost when the turn ends. It says when the session is idle or when
+terminal: the prompt and who sent it, each tool call as a line when it ends (`✓` with
+its duration and tokens, or `✗` with its duration and error), the reply as it streams,
+and the tokens and cost when the turn ends. A call still open when the reply arrives
+shows as `…` with `unfinished`. The bound notice appears once, when a turn goes past
+4096 tool calls, and only the first 4096 are kept. It says when the session is idle or when
 the daemon holds nothing of it yet, keeps following the next turns, follows the
 session under its new name when it is renamed, and stops when the session is closed
 or archived, or when it is interrupted. `--json` prints one event per line, the
-same events the daemon sends on its events socket, so a script can consume them.
+same events the daemon sends on its events socket, so a script can consume them. A
+tool call travels as `tool_call` on the `status` event that starts it and on the
+`tool_done` event that ends it, with no duplicate status line.
 
 Every event the daemon publishes carries a sequence number (`seq`). It starts from
 the clock when the daemon starts, so a new daemon always numbers above the one
@@ -689,8 +694,20 @@ session's transcript, which survives restarts: for each turn its id and start ti
 the prompt, the reply, the notices, and the duration, tokens and cost.
 `--since <turn>` keeps the turns after that one, and an id the transcript does not
 hold is an error, as is a session the daemon does not know. `--json` prints the
-turns as an array. The transcript records the conversation, not the tool calls, so
-a past turn is replayed without its tool lines.
+turns as an array. Each turn carries a `tools` array, one entry per tool call in the
+order they started, with `id`, `tool`, `detail` (omitted when empty), `state`
+(`started`, `succeeded` or `failed`), `started_at`, `ended_at` and `duration_ms`
+(the last two omitted while the call is open), `error` (on a failed call) and
+`tokens`. `tokens` counts the output tokens between the previous tool event of the
+turn and this call's start, and is zero for the first call. A call that never got
+its outcome keeps the state `started` and has no end. The text form lists the calls
+before the usage line of the turn, with the same `✓`, `✗` and `…` lines as the watch.
+A turn with tool calls and no reply is kept. The `detail` of a call is what the
+backend reported, and it is stored in the local transcript as it is.
+
+The terminal UI shows the same lines at the end of each turn, before the reply, for
+the turns it follows live. Past turns replayed from the transcript do not get their
+tool lines in the terminal UI yet.
 
 ### Health, one command away
 

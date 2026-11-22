@@ -674,13 +674,15 @@ replay opens with a `gap` event of value `expired`. A subscriber too slow to rea
 its lines loses some, and the daemon then sends a `gap` event of value `dropped`:
 `session watch` reconnects with the last seq it saw and misses nothing. A
 coordination event jumps the queue, so it can arrive before lines with a lower seq;
-`session watch` shows it once and still shows those lines. When the daemon goes
-away, `session watch` prints that seq, to run `session watch --since <seq>` once the
-daemon is back. A subscriber that writes nothing within 200 ms receives the live
-events only. A line cut by that deadline, a line that is not a cursor, or a cursor
-that arrives after it gets a `dropped` gap, so `session watch` reconnects and sends
-it again. The `session watch` verb, called through the command socket by another
-client, returns the same replay as a JSON array and does not follow.
+`session watch` shows it once and still shows those lines. It remembers the last 256
+such events, so past that many in a row with no other line, a resume can show one
+twice. When the daemon goes away, `session watch` prints that seq, to run `session
+watch --since <seq>` once the daemon is back. A subscriber that writes nothing
+within 200 ms receives the live events only. A line cut by that deadline, a line
+that is not a cursor, or a cursor that arrives after it gets a `dropped` gap, so
+`session watch` reconnects and sends it again. The `session watch` verb, called
+through the command socket by another client, returns the same replay as a JSON
+array and does not follow.
 
 `herrscher session history --name <session>` replays the past turns from the
 session's transcript, which survives restarts: for each turn its id and start time,

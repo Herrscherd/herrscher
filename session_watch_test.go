@@ -115,6 +115,37 @@ func TestFollowSessionResumesAfterDroppedLines(t *testing.T) {
 	}
 }
 
+func TestFollowSessionKeepsTheLinesACoordinationEventOvertook(t *testing.T) {
+	delegated := contracts.Event{T: eventwire.EventReply, Done: true, Coordination: &contracts.CoordinationEvent{Kind: "delegated"}}
+	daemon := &scriptedDaemon{streams: [][]host.DaemonEvent{
+		{
+			watchEvent(9, "a", delegated),
+			watchEvent(7, "a", contracts.Event{T: eventwire.EventChunk, Text: "x"}),
+			watchEvent(8, "a", contracts.Event{T: eventwire.EventChunk, Text: "y"}),
+			control("", eventwire.EventGap, eventwire.GapDropped),
+		},
+		{watchEvent(9, "a", delegated), watchEvent(10, "a", contracts.Event{T: eventwire.EventClosed})},
+	}}
+	out, err := followedFrom(t, true, daemon)
+	if err != nil {
+		t.Fatalf("the watch ends on the close, got %v", err)
+	}
+	var seqs []uint64
+	for line := range strings.Lines(out) {
+		var event host.DaemonEvent
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			t.Fatalf("line %q: %v", line, err)
+		}
+		seqs = append(seqs, event.Seq)
+	}
+	if len(seqs) != 4 || seqs[0] != 9 || seqs[1] != 7 || seqs[2] != 8 || seqs[3] != 10 {
+		t.Fatalf("seqs = %v, want 9 7 8 10: the overtaken lines shown, the coordination event once", seqs)
+	}
+	if since := daemon.cursors[1].Since; since == nil || *since != 8 {
+		t.Fatalf("resume cursor = %+v, want since 8, below the coordination event", daemon.cursors[1])
+	}
+}
+
 func TestFollowSessionFollowsARename(t *testing.T) {
 	out, err := followed(t, false,
 		watchEvent(1, "a", contracts.Event{T: eventwire.EventClosed, Value: eventwire.ClosedRenamed, Text: "b"}),

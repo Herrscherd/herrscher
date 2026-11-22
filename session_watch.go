@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"strconv"
 	"strings"
@@ -116,9 +117,10 @@ const (
 )
 
 type sessionFollow struct {
-	view   *watchView
-	cursor host.EventCursor
-	seen   uint64
+	view      *watchView
+	cursor    host.EventCursor
+	seen      uint64
+	overtaken map[uint64]bool
 }
 
 func (f *sessionFollow) run(ctx context.Context, subscribe eventSubscriber) error {
@@ -161,6 +163,17 @@ func (f *sessionFollow) resumeCursor() host.EventCursor {
 	return host.EventCursor{Session: f.cursor.Session, Since: &seen}
 }
 
+func (f *sessionFollow) takeOvertaking(event *host.DaemonEvent) error {
+	if event.Seq <= f.seen || f.overtaken[event.Seq] {
+		return nil
+	}
+	if f.overtaken == nil {
+		f.overtaken = make(map[uint64]bool)
+	}
+	f.overtaken[event.Seq] = true
+	return f.view.show(event)
+}
+
 func (f *sessionFollow) take(event *host.DaemonEvent) (followStep, error) {
 	if event.T == eventwire.EventGap && event.Value == eventwire.GapDropped {
 		return stepResume, nil
@@ -174,10 +187,14 @@ func (f *sessionFollow) take(event *host.DaemonEvent) (followStep, error) {
 	if event.Seq == 0 {
 		return stepClosed, f.view.refuse(errWatchOldDaemon, clitext.SessionWatchOldDaemon)
 	}
+	if event.Coordination != nil {
+		return stepContinue, f.takeOvertaking(event)
+	}
 	if event.Seq <= f.seen {
 		return stepContinue, nil
 	}
 	f.seen = event.Seq
+	maps.DeleteFunc(f.overtaken, func(seq uint64, _ bool) bool { return seq <= f.seen })
 	if event.T != eventwire.EventClosed {
 		return stepContinue, f.view.show(event)
 	}

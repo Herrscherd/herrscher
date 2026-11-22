@@ -673,7 +673,8 @@ longer holds every event after the seq (it restarted, trimmed the session, or
 evicted it), the replay opens with a `gap` event of value `expired`. A subscriber
 too slow to read its lines loses some, and the daemon then sends a `gap` event of
 value `dropped`: `session watch` reconnects with the last seq it saw and misses
-nothing. When the daemon goes away, `session watch` prints that seq, to run
+nothing. A coordination event jumps the queue, so it can arrive before lines with a
+lower seq; `session watch` shows it once and still shows those lines. When the daemon goes away, `session watch` prints that seq, to run
 `session watch --since <seq>` once the daemon is back. A subscriber that writes
 nothing within 200 ms receives the live events only. A line cut by that deadline,
 a line that is not a cursor, or a cursor that arrives after it gets a `dropped`

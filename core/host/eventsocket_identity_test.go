@@ -110,7 +110,7 @@ func TestEventSocketPrioritizesCoordinationWhenTelemetryQueueFull(t *testing.T) 
 	}
 }
 
-func TestEventSocketKeepsTheBacklogBehindACoordinationEvent(t *testing.T) {
+func TestEventSocketSendsTheWholeBacklogAfterACoordinationEvent(t *testing.T) {
 	server, client := net.Pipe()
 	sub := &subscriber{conn: server, ch: make(chan []byte, subscriberBuffer)}
 	es := newEventSocket()
@@ -134,6 +134,9 @@ func TestEventSocketKeepsTheBacklogBehindACoordinationEvent(t *testing.T) {
 		var got wireEvent
 		if err := json.Unmarshal(line, &got); err != nil {
 			t.Fatal(err)
+		}
+		if idx < 0 && got.Coordination == nil {
+			t.Fatalf("first line = %+v, want the coordination event ahead of the backlog", got.Event)
 		}
 		if idx >= 0 && (got.T != eventwire.EventChunk || got.Text != strconv.Itoa(idx)) {
 			t.Fatalf("backlog line %d = %+v, a coordination event must not push a queued line out", idx, got.Event)

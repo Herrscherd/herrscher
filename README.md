@@ -663,24 +663,24 @@ before it. The daemon keeps the latest events of each session in memory: 512 eve
 and 1 MiB per session, for the 64 sessions that spoke most recently, with the text
 of a streamed reply folded into one entry.
 
-The catch-up happens on the events socket itself. A subscriber may write one line
-as soon as it connects, `{"session":"<name>","since":<seq>}`, and the daemon first
+The catch-up happens on the events socket itself. A subscriber may write one line as
+soon as it connects, `{"session":"<name>","since":<seq>}`, and the daemon first
 sends what that session published after the seq, then a `caught_up` event whose
 value says whether the turn is `running`, `idle`, or `empty` (nothing held), then
-the live events, with nothing lost and nothing repeated in between. Without
-`since`, the replay starts at the prompt of the current turn. When the daemon no
-longer holds every event after the seq (it restarted, trimmed the session, or
-evicted it), the replay opens with a `gap` event of value `expired`. A subscriber
-too slow to read its lines loses some, and the daemon then sends a `gap` event of
-value `dropped`: `session watch` reconnects with the last seq it saw and misses
-nothing. A coordination event jumps the queue, so it can arrive before lines with a
-lower seq; `session watch` shows it once and still shows those lines. When the daemon goes away, `session watch` prints that seq, to run
-`session watch --since <seq>` once the daemon is back. A subscriber that writes
-nothing within 200 ms receives the live events only. A line cut by that deadline,
-a line that is not a cursor, or a cursor that arrives after it gets a `dropped`
-gap, so `session watch` reconnects and sends it again. The `session watch` verb,
-called through the command socket by another client, returns the same replay as a
-JSON array and does not follow.
+the live events, with nothing lost and nothing repeated in between. Without `since`,
+the replay starts at the prompt of the current turn. When the daemon no longer holds
+every event after the seq (it restarted, trimmed the session, or evicted it), the
+replay opens with a `gap` event of value `expired`. A subscriber too slow to read
+its lines loses some, and the daemon then sends a `gap` event of value `dropped`:
+`session watch` reconnects with the last seq it saw and misses nothing. A
+coordination event jumps the queue, so it can arrive before lines with a lower seq;
+`session watch` shows it once and still shows those lines. When the daemon goes
+away, `session watch` prints that seq, to run `session watch --since <seq>` once the
+daemon is back. A subscriber that writes nothing within 200 ms receives the live
+events only. A line cut by that deadline, a line that is not a cursor, or a cursor
+that arrives after it gets a `dropped` gap, so `session watch` reconnects and sends
+it again. The `session watch` verb, called through the command socket by another
+client, returns the same replay as a JSON array and does not follow.
 
 `herrscher session history --name <session>` replays the past turns from the
 session's transcript, which survives restarts: for each turn its id and start time,

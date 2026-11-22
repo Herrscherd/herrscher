@@ -8,6 +8,7 @@ import (
 	"io"
 	"maps"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -110,6 +111,8 @@ func (o *watchOptions) cursor() (host.EventCursor, error) {
 
 type followStep int
 
+const overtakenLimit = 256
+
 const (
 	stepContinue followStep = iota
 	stepResume
@@ -169,6 +172,9 @@ func (f *sessionFollow) takeOvertaking(event *host.DaemonEvent) error {
 	}
 	if f.overtaken == nil {
 		f.overtaken = make(map[uint64]bool)
+	}
+	if len(f.overtaken) >= overtakenLimit {
+		delete(f.overtaken, slices.Min(slices.Collect(maps.Keys(f.overtaken))))
 	}
 	f.overtaken[event.Seq] = true
 	return f.view.show(event)

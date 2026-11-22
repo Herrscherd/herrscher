@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
@@ -143,6 +144,19 @@ func TestFollowSessionKeepsTheLinesACoordinationEventOvertook(t *testing.T) {
 	}
 	if since := daemon.cursors[1].Since; since == nil || *since != 8 {
 		t.Fatalf("resume cursor = %+v, want since 8, below the coordination event", daemon.cursors[1])
+	}
+}
+
+func TestFollowSessionBoundsTheCoordinationEventsItRemembers(t *testing.T) {
+	follow := sessionFollow{view: newWatchView(io.Discard, clitext.NewMessages(), i18n.English, true), cursor: host.EventCursor{Session: "a"}}
+	for seq := range uint64(overtakenLimit * 2) {
+		event := watchEvent(seq+1, "a", contracts.Event{T: eventwire.EventReply, Coordination: &contracts.CoordinationEvent{Kind: "delegated"}})
+		if _, err := follow.take(&event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(follow.overtaken) != overtakenLimit || follow.overtaken[1] || !follow.overtaken[overtakenLimit*2] {
+		t.Fatalf("remembered %d coordination events, want the latest %d", len(follow.overtaken), overtakenLimit)
 	}
 }
 

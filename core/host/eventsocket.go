@@ -2,8 +2,10 @@ package host
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"sync"
@@ -96,6 +98,9 @@ func (s *eventSocket) serve(sub *subscriber, upTo uint64) {
 		if sub.dropped.Swap(false) && !sub.write(wireEvent{Event: contracts.Event{T: eventwire.EventGap, Value: eventwire.GapDropped}}) {
 			return
 		}
+		if line == nil {
+			continue
+		}
 		if !sub.send(line) {
 			return
 		}
@@ -106,6 +111,7 @@ type cursorOutcome int
 
 const (
 	cursorAbsent cursorOutcome = iota
+	cursorSilent
 	cursorGiven
 	cursorUnreadable
 )
@@ -114,6 +120,9 @@ func (s *eventSocket) catchUp(sub *subscriber, upTo uint64) bool {
 	cursor, outcome := readCursor(sub.conn)
 	switch outcome {
 	case cursorAbsent:
+		return true
+	case cursorSilent:
+		go sub.awaitLateCursor()
 		return true
 	case cursorUnreadable:
 		return sub.write(wireEvent{Event: contracts.Event{T: eventwire.EventGap, Value: eventwire.GapDropped}})
@@ -140,7 +149,10 @@ func readCursor(conn net.Conn) (EventCursor, cursorOutcome) {
 	}
 	line, err := bufio.NewReader(io.LimitReader(conn, cursorBytes)).ReadBytes('\n')
 	logCleanup(conn.SetReadDeadline(time.Time{}))
+	var timeout net.Error
 	switch {
+	case len(line) == 0 && errors.As(err, &timeout) && timeout.Timeout():
+		return cursor, cursorSilent
 	case len(line) == 0:
 		return cursor, cursorAbsent
 	case err != nil || json.Unmarshal(line, &cursor) != nil:
@@ -149,6 +161,22 @@ func readCursor(conn net.Conn) (EventCursor, cursorOutcome) {
 		return cursor, cursorAbsent
 	}
 	return cursor, cursorGiven
+}
+
+func (sub *subscriber) awaitLateCursor() {
+	line, err := bufio.NewReader(io.LimitReader(sub.conn, cursorBytes)).ReadBytes('\n')
+	if len(bytes.TrimSpace(line)) > 0 {
+		sub.flagDropped()
+	}
+	logCleanup(err)
+}
+
+func (sub *subscriber) flagDropped() {
+	sub.dropped.Store(true)
+	select {
+	case sub.ch <- nil:
+	default:
+	}
 }
 
 func (sub *subscriber) write(event wireEvent) bool {
@@ -194,7 +222,7 @@ func (sub *subscriber) next() ([]byte, bool) {
 		if !ok {
 			return nil, false
 		}
-		if line != nil {
+		if line != nil || sub.dropped.Load() {
 			return line, true
 		}
 	}

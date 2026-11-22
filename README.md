@@ -675,9 +675,9 @@ too slow to read its lines loses some, and the daemon then sends a `gap` event o
 value `dropped`: `session watch` reconnects with the last seq it saw and misses
 nothing. When the daemon goes away, `session watch` prints that seq, to run
 `session watch --since <seq>` once the daemon is back. A subscriber that writes
-nothing within 200 ms receives the live events only, and one whose line is cut by
-that deadline or is not a cursor gets a `dropped` gap first, so `session watch`
-reconnects and sends it again. The `session watch` verb,
+nothing within 200 ms receives the live events only. A line cut by that deadline,
+a line that is not a cursor, or a cursor that arrives after it gets a `dropped`
+gap, so `session watch` reconnects and sends it again. The `session watch` verb,
 called through the command socket by another client, returns the same replay as a
 JSON array and does not follow.
 

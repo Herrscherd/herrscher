@@ -18,7 +18,9 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/eventwire"
+	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
 
 const journalTestBase = 1000
@@ -295,6 +297,23 @@ func TestEventSocketSignalsACursorItCouldNotRead(t *testing.T) {
 	}
 }
 
+func TestEventSocketSignalsACursorThatCameTooLate(t *testing.T) {
+	es := newJournaledEventSocket(newEventJournalFrom(journalTestBase))
+	defer es.closeAll()
+	server, client := net.Pipe()
+	t.Cleanup(func() { logCleanup(client.Close()) })
+	es.add(server)
+	time.Sleep(cursorWait * 2)
+	logCleanup(client.SetWriteDeadline(time.Now().Add(5 * time.Second)))
+	if _, err := client.Write([]byte(`{"session":"a"}` + "\n")); err != nil {
+		t.Fatal(err)
+	}
+	reader := &socketReader{t: t, conn: client, scanner: bufio.NewScanner(client)}
+	if event := reader.next(); event.T != eventwire.EventGap || event.Value != eventwire.GapDropped {
+		t.Fatalf("a cursor sent after the deadline must be answered by a dropped gap, got %+v", event)
+	}
+}
+
 func sessionVerbs(t *testing.T, verbs map[string]func() error) *cli.Registry {
 	t.Helper()
 	reg := cli.NewRegistry(clitext.NewMessages())
@@ -315,28 +334,31 @@ func TestDispatchAnnouncesARenameAndAClose(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	reg := sessionVerbs(t, map[string]func() error{
-		"touch":  func() error { return nil },
-		"rename": func() error { return st.RenameSession("old", "new") },
-		"close":  func() error { return st.RemoveSession("gone") },
-	})
-	sessionTab := newSessionTable(newHostMessages(), clitext.NewMessages())
-	h := newHub(st, nil, nil, t.TempDir(), reg, nil, newApprovalTable(io.Discard), sessionTab)
+	sup := supervisor.NewSupervisor(t.Context(), "/nonexistent/herrscher", testRuntime(t))
+	partDir := t.TempDir()
+	hdl := newManagerHandler(newHostMessages(), clitext.NewMessages(), Deps{}, Options{DefaultCmd: "claude"}, partDir, st, sup, stoppingWorktrees{}, serviceUpdater{}, agent.NewStore(t.TempDir()), nil)
+	reg := sessionVerbs(t, map[string]func() error{"touch": func() error { return nil }})
+	for _, cmd := range hdl.Commands() {
+		if err := reg.Add(cmd); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := newHub(st, sup, nil, partDir, reg, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()))
 	h.runtime = isolatedRuntimeDir(t)
-	h.startBridge = func(state.Session, time.Duration) error { return nil }
-	h.stopBridge = func(string) error { return nil }
 	t.Cleanup(h.stopLive)
 	events := newJournaledEventSocket(h.eventJournal())
 	defer events.closeAll()
 	h.eventPublisher = events.Publish
-	for _, verb := range []string{"touch", "rename", "close"} {
-		if verb == "rename" {
-			events.Publish("old", contracts.Event{T: eventwire.EventHuman, Text: "q"})
-		}
-		if _, err := h.Dispatch(t.Context(), []string{"session", verb}); err != nil {
-			t.Fatalf("session %s: %v", verb, err)
+	dispatch := func(args ...string) {
+		t.Helper()
+		if _, err := h.Dispatch(t.Context(), args); err != nil {
+			t.Fatalf("%v: %v", args, err)
 		}
 	}
+	dispatch("session", "touch")
+	events.Publish("old", contracts.Event{T: eventwire.EventHuman, Text: "q"})
+	dispatch("session", "rename", "--name", "old", "--to", "new")
+	dispatch("session", "archive", "--name", "gone")
 	journal := h.eventJournal()
 	renamed := journal.catchUp(EventCursor{Session: "new"}, journal.current())
 	if !sameTexts(renamed, "human:q", "caught_up:running") {
@@ -348,7 +370,7 @@ func TestDispatchAnnouncesARenameAndAClose(t *testing.T) {
 	}
 	closed := journal.rings["gone"].entries
 	if len(closed) != 1 || closed[0].T != eventwire.EventClosed || closed[0].Value != "" {
-		t.Fatalf("a removed session must be announced closed, got %+v", closed)
+		t.Fatalf("an archived session must be announced closed, got %+v", closed)
 	}
 }
 

@@ -85,13 +85,8 @@ func (s *eventSocket) serve(sub *subscriber, upTo uint64) {
 		s.remove(sub)
 		logCleanup(sub.conn.Close())
 	}()
-	if cursor, given := readCursor(sub.conn); given {
-		replay := s.journal.catchUp(cursor, upTo)
-		for idx := range replay {
-			if !sub.write(replay[idx]) {
-				return
-			}
-		}
+	if !s.catchUp(sub, upTo) {
+		return
 	}
 	for {
 		line, ok := sub.next()
@@ -107,17 +102,53 @@ func (s *eventSocket) serve(sub *subscriber, upTo uint64) {
 	}
 }
 
-func readCursor(conn net.Conn) (EventCursor, bool) {
+type cursorOutcome int
+
+const (
+	cursorAbsent cursorOutcome = iota
+	cursorGiven
+	cursorUnreadable
+)
+
+func (s *eventSocket) catchUp(sub *subscriber, upTo uint64) bool {
+	cursor, outcome := readCursor(sub.conn)
+	switch outcome {
+	case cursorAbsent:
+		return true
+	case cursorUnreadable:
+		return sub.write(wireEvent{Event: contracts.Event{T: eventwire.EventGap, Value: eventwire.GapDropped}})
+	case cursorGiven:
+		return s.replay(sub, cursor, upTo)
+	}
+	return true
+}
+
+func (s *eventSocket) replay(sub *subscriber, cursor EventCursor, upTo uint64) bool {
+	held := s.journal.catchUp(cursor, upTo)
+	for idx := range held {
+		if !sub.write(held[idx]) {
+			return false
+		}
+	}
+	return true
+}
+
+func readCursor(conn net.Conn) (EventCursor, cursorOutcome) {
 	var cursor EventCursor
 	if conn.SetReadDeadline(time.Now().Add(cursorWait)) != nil {
-		return cursor, false
+		return cursor, cursorAbsent
 	}
 	line, err := bufio.NewReader(io.LimitReader(conn, cursorBytes)).ReadBytes('\n')
 	logCleanup(conn.SetReadDeadline(time.Time{}))
-	if err != nil || json.Unmarshal(line, &cursor) != nil {
-		return cursor, false
+	switch {
+	case len(line) == 0:
+		return cursor, cursorAbsent
+	case err != nil || json.Unmarshal(line, &cursor) != nil:
+		return cursor, cursorUnreadable
+	case cursor.Session == "":
+		return cursor, cursorAbsent
 	}
-	return cursor, cursor.Session != ""
+	return cursor, cursorGiven
 }
 
 func (sub *subscriber) write(event wireEvent) bool {

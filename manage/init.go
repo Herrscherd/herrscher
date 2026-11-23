@@ -171,20 +171,30 @@ func rewritePlugins(messages *clitext.Messages, errOut *errwriter.Writer, manife
 }
 
 func buildOrRestore(ctx context.Context, messages *clitext.Messages, errOut *errwriter.Writer, dir string, saved map[string][]byte, modules []string) int {
-	for _, command := range stackCommands(dir, modules) {
+	target := runningBinary(dir)
+	for _, command := range stackCommands(dir, target, modules) {
 		if code := run(ctx, messages, errOut, command.dir, command.name, command.args...); code != 0 {
-			if err := restoreComposition(messages, dir, saved); err != nil {
-				errOut.Println(err)
-			} else {
-				errOut.Println(msg(messages, clitext.ManageBuildRestored, clitext.Params{clitext.ParamPath: manifestFile}))
-			}
+			restoreAfterFailedBuild(messages, errOut, dir, saved)
 			return code
 		}
+	}
+	if err := swapBinary(target); err != nil {
+		errOut.Println(failure(messages, err, clitext.ManageWriteFailed, clitext.Params{clitext.ParamPath: target, clitext.ParamErr: err.Error()}))
+		restoreAfterFailedBuild(messages, errOut, dir, saved)
+		return 1
 	}
 	return 0
 }
 
-func stackCommands(dir string, modules []string) []setupCommand {
+func restoreAfterFailedBuild(messages *clitext.Messages, errOut *errwriter.Writer, dir string, saved map[string][]byte) {
+	if err := restoreComposition(messages, dir, saved); err != nil {
+		errOut.Println(err)
+		return
+	}
+	errOut.Println(msg(messages, clitext.ManageBuildRestored, clitext.Params{clitext.ParamPath: manifestFile}))
+}
+
+func stackCommands(dir, target string, modules []string) []setupCommand {
 	var commands []setupCommand
 	for _, module := range modules {
 		if module == hostModule || strings.HasPrefix(module, hostModule+"/") {
@@ -192,7 +202,7 @@ func stackCommands(dir string, modules []string) []setupCommand {
 		}
 		commands = append(commands, goCommand(dir, verbGet, "--", module))
 	}
-	return append(commands, goCommand(dir, "mod", "tidy"), goCommand(dir, "build", "./..."))
+	return append(commands, goCommand(dir, "mod", "tidy"), goCommand(dir, "build", "-o", freshBinary(target), "."))
 }
 
 func goCommand(dir string, args ...string) setupCommand {

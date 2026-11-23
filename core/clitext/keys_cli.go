@@ -20,6 +20,7 @@ const (
 	TerminalSessionUnbound      = "cli.terminal.session_unbound"
 	FlagUnknown                 = "cli.flag.unknown"
 	FlagNeedsValue              = "cli.flag.needs_value"
+	FirstRunHint                = "cli.first_run.hint"
 )
 
 func cliKeys() map[Key][]string {
@@ -42,5 +43,6 @@ func cliKeys() map[Key][]string {
 		TerminalNoSessionControl:    nil,
 		TerminalNotAvailable:        {ParamCommand, ParamAllowed},
 		TerminalSessionUnbound:      nil,
+		FirstRunHint:                {ParamCommand},
 	}
 }

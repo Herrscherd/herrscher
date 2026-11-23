@@ -1,0 +1,12 @@
+! exec herrscher
+stderr 'nothing is set up yet: run herrscher setup in a terminal'
+cp $WORK/.env.example .env
+! exec herrscher
+! stderr 'nothing is set up yet'
+rm .env
+exec herrscher --print 'ready'
+stdout '^echo: ready$'
+! exec herrscher
+! stderr 'nothing is set up yet'
+-- .env.example --
+CLAUDE_CMD=claude

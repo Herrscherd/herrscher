@@ -35,8 +35,11 @@ type fakeReply struct {
 
 func newShell() *fakeShell {
 	return &fakeShell{replies: map[string]fakeReply{
-		"claude auth status --json": {out: `{"loggedIn":true,"authMethod":"claude.ai","subscriptionType":"max"}`},
-		"codex login status":        {out: "Logged in using ChatGPT\n"},
+		"claude auth status --json":                       {out: `{"loggedIn":true,"authMethod":"claude.ai","subscriptionType":"max"}`},
+		"codex login status":                              {out: "Logged in using ChatGPT\n"},
+		"claude -p " + trialPrompt:                        {out: "OK\n"},
+		"codex exec --skip-git-repo-check " + trialPrompt: {out: "OK\n"},
+		cursorCLI + " -p " + trialPrompt:                  {out: "OK\n"},
 	}}
 }
 
@@ -48,7 +51,22 @@ func (shell *fakeShell) run(_ context.Context, cmd setupCommand) ([]byte, error)
 		shell.effect(cmd)
 	}
 	reply := shell.replies[strings.Join(append([]string{cmd.name}, cmd.args...), " ")]
+	if reply.err == nil && cmd.name == "go" && len(cmd.args) > 2 && cmd.args[0] == "build" && cmd.args[1] == "-o" {
+		return []byte(reply.out), os.WriteFile(cmd.args[2], []byte(freshBuild), modeFile)
+	}
 	return []byte(reply.out), reply.err
+}
+
+const freshBuild = "fresh build"
+
+func (shell *fakeShell) goCommands() []string {
+	var lines []string
+	for _, line := range shell.commands() {
+		if strings.HasPrefix(line, "go ") {
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }
 
 func (shell *fakeShell) commands() []string {
@@ -129,6 +147,7 @@ func newHarness(t *testing.T, manifest []byte, screen setupScreen, env map[strin
 		envPath:     filepath.Join(dir, ".env"),
 		hostDir:     dir,
 		manifest:    manifest,
+		binary:      filepath.Join(dir, binaryName),
 		abandonWait: time.Minute,
 	}
 	if manifest != nil {
@@ -463,9 +482,13 @@ func TestSourceInstallRewritesPluginsAndRebuilds(t *testing.T) {
 			t.Errorf("plugins.go = %v, missing %s", mods, want)
 		}
 	}
-	got := harness.shell.commands()
-	if !slices.Contains(got, "go get -- github.com/Herrscherd/herrscher-codex-backend") || !slices.Contains(got, "go mod tidy") || got[len(got)-1] != "go build ./..." {
+	got := harness.shell.goCommands()
+	build := "go build -o " + freshBinary(harness.model.deps.binary) + " ."
+	if !slices.Contains(got, "go get -- github.com/Herrscherd/herrscher-codex-backend") || !slices.Contains(got, "go mod tidy") || got[len(got)-1] != build {
 		t.Fatalf("commands = %v, want go get, tidy then build", got)
+	}
+	if binary, err := os.ReadFile(harness.model.deps.binary); err != nil || string(binary) != freshBuild {
+		t.Fatalf("binary = %q (%v), want the fresh build in place", binary, err)
 	}
 	if slices.Contains(got, "go get -- "+inTree()[0]) {
 		t.Fatalf("commands = %v, the in-tree module was fetched", got)
@@ -474,7 +497,7 @@ func TestSourceInstallRewritesPluginsAndRebuilds(t *testing.T) {
 
 func TestFailedBuildRestoresPlugins(t *testing.T) {
 	harness := newHarness(t, []byte(setupManifest), screenModules, nil)
-	harness.shell.replies["go build ./..."] = fakeReply{out: "line one\nboom\n", err: errProbeStatus}
+	harness.shell.replies["go build -o "+freshBinary(harness.model.deps.binary)+" ."] = fakeReply{out: "line one\nboom\n", err: errProbeStatus}
 	goMod := filepath.Join(harness.model.deps.hostDir, "go.mod")
 	goSum := filepath.Join(harness.model.deps.hostDir, "go.sum")
 	if err := os.WriteFile(goMod, []byte("module before\n"), modeFile); err != nil {
@@ -506,17 +529,20 @@ func TestFailedBuildRestoresPlugins(t *testing.T) {
 	if _, err := os.Stat(goSum); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("go.sum stat err = %v, want it removed since it did not exist", err)
 	}
-	last := harness.model.install.steps[len(harness.model.install.steps)-1]
-	if last.output != "line one\nboom" {
-		t.Fatalf("build output = %q", last.output)
+	build := harness.model.install.steps[len(harness.model.install.steps)-2]
+	if build.state != probeFailed || build.output != "line one\nboom" {
+		t.Fatalf("build step = %+v", build)
+	}
+	if _, err := os.Stat(harness.model.deps.binary); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("binary stat err = %v, want nothing put in place after a failed build", err)
 	}
 }
 
 func TestUnchangedStackSkipsTheRebuild(t *testing.T) {
 	harness := newHarness(t, []byte(setupManifest), screenReview, nil)
 	harness.drive(harness.model.goTo(screenInstall))
-	if !harness.model.install.done || len(harness.shell.commands()) != 0 {
-		t.Fatalf("install = %+v, commands = %v, want done with no command", harness.model.install, harness.shell.commands())
+	if !harness.model.install.done || len(harness.shell.goCommands()) != 0 {
+		t.Fatalf("install = %+v, commands = %v, want done with no go command", harness.model.install, harness.shell.goCommands())
 	}
 }
 

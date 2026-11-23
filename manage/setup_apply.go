@@ -41,6 +41,7 @@ type installRun struct {
 	saved      map[string][]byte
 	rendered   []byte
 	steps      []installStep
+	trials     []trialStep
 	started    bool
 	touched    bool
 	restored   bool
@@ -88,7 +89,7 @@ type stepDoneMsg struct {
 }
 
 func (model *setupModel) startInstall() tea.Cmd {
-	if model.install.running() {
+	if model.install.running() || model.install.trialsRunning() {
 		return nil
 	}
 	ctx, cancel := context.WithCancel(model.ctx)
@@ -135,13 +136,17 @@ func (model *setupModel) buildSteps() []installStep {
 		},
 	}}
 	runner := model.deps.run
-	for _, command := range stackCommands(model.deps.hostDir, paths) {
+	target := model.deps.binary
+	for _, command := range stackCommands(model.deps.hostDir, target, paths) {
 		steps = append(steps, installStep{
 			label: command.name + " " + strings.Join(command.args, " "),
 			run:   func(ctx context.Context) ([]byte, error) { return runner(ctx, command) },
 		})
 	}
-	return steps
+	return append(steps, installStep{
+		label: model.text(clitext.SetupStepBinary, clitext.Params{clitext.ParamPath: target}),
+		run:   func(context.Context) ([]byte, error) { return nil, swapBinary(target) },
+	})
 }
 
 func (model *setupModel) runStep(index int) tea.Cmd {
@@ -173,7 +178,11 @@ func (model *setupModel) stepDone(done stepDoneMsg) tea.Cmd {
 	case done.index+1 == len(model.install.steps):
 		step.state = probePassed
 		model.installed()
-		return model.quitIfAsked()
+		if model.install.quitting {
+			model.install.cancel()
+			return tea.Quit
+		}
+		return model.startTrials()
 	default:
 		step.state = probePassed
 		if !model.install.quitting {
@@ -199,6 +208,9 @@ func (model *setupModel) abortInstall() {
 }
 
 func (model *setupModel) abandon() {
+	if model.install.trialsRunning() {
+		model.install.cancel()
+	}
 	if !model.install.running() {
 		return
 	}
@@ -237,7 +249,6 @@ func (model *setupModel) restorePlugins() {
 
 func (model *setupModel) installed() {
 	model.install.done = true
-	model.install.cancel()
 	model.envExists = true
 	for key, value := range model.draft.written() {
 		model.draft.initial[key] = value

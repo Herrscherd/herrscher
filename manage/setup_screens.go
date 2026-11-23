@@ -3,6 +3,7 @@ package manage
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"sort"
 	"strings"
 
@@ -442,12 +443,55 @@ func (model *setupModel) installRows() []setupRow {
 		rows = append(rows, line(toneBad, model.text(clitext.SetupInstallFailed, nil)))
 		rows = append(rows, model.restoreRows()...)
 	default:
-		rows = append(rows,
-			line(toneOK, model.text(clitext.SetupInstallDone, nil)),
-			line(toneDim, model.text(clitext.SetupInstallStart, clitext.Params{clitext.ParamCommand: serveCommand(invokedBinary(os.Args))})),
-		)
+		rows = append(rows, line(toneOK, model.text(clitext.SetupInstallDone, nil)))
+		rows = append(rows, model.trialRows()...)
+		if model.install.trialsRunning() {
+			return rows
+		}
+		rows = append(rows, model.outcomeRow())
 	}
 	return append(rows, blank(), action(model.text(clitext.SetupInstallHub, nil), "", func(target *setupModel) tea.Cmd { return target.openHub() }))
+}
+
+func (model *setupModel) outcomeRow() setupRow {
+	if model.install.trialFailed() {
+		return line(toneWarn, model.text(clitext.SetupTrialFailed, nil))
+	}
+	return line(toneDim, model.text(clitext.SetupInstallStart, clitext.Params{clitext.ParamCommand: serveCommand(invokedBinary(os.Args))}))
+}
+
+func (model *setupModel) trialRows() []setupRow {
+	if len(model.install.trials) == 0 {
+		return nil
+	}
+	rows := []setupRow{blank(), line(toneBold, model.text(clitext.SetupTrialTitle, nil))}
+	for idx := range model.install.trials {
+		trial := &model.install.trials[idx]
+		switch trial.state {
+		case probeRunning:
+			rows = append(rows, line(toneDim, "  … "+trial.label))
+		case probePassed:
+			rows = append(rows, line(toneOK, "  ✓ "+trial.label))
+		case probeFailed:
+			rows = append(rows, model.failedTrialRows(trial)...)
+		case probeIdle:
+			rows = append(rows, line(toneDim, "  · "+trial.label))
+		}
+	}
+	return rows
+}
+
+func (model *setupModel) failedTrialRows(trial *trialStep) []setupRow {
+	rows := []setupRow{line(toneBad, "  ✗ "+trial.label)}
+	if trial.err != nil && !errors.Is(trial.err, exec.ErrNotFound) {
+		rows = append(rows, line(toneDim, "    "+trial.err.Error()))
+	}
+	for _, out := range strings.Split(trial.output, "\n") {
+		if out != "" {
+			rows = append(rows, line(toneDim, "    "+out))
+		}
+	}
+	return append(rows, line(toneWarn, "    "+model.trialRemedy(trial)))
 }
 
 func (model *setupModel) stepRows(step *installStep) []setupRow {

@@ -160,8 +160,16 @@ func loadHostEnv(messages *clitext.Messages) error {
 }
 
 func runWithoutCommand(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages) error {
-	if term.IsTerminal(int(os.Stdout.Fd())) && hasTerminalGateway() {
+	onTerminal := term.IsTerminal(int(os.Stdout.Fd()))
+	firstRun := manage.FirstRun()
+	if firstRun && onTerminal && term.IsTerminal(int(os.Stdin.Fd())) {
+		return exitCodeError(manage.SetupCmd(ctx, messages, hostMessages, nil))
+	}
+	if onTerminal && hasTerminalGateway() {
 		return runServe(ctx, layout, messages, hostMessages, nil, serveDaemon)
+	}
+	if firstRun {
+		fmt.Fprintln(os.Stderr, render(messages, clitext.ClientLanguage(), clitext.FirstRunHint, clitext.Params{clitext.ParamCommand: strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe") + " setup"}))
 	}
 	if err := usage(messages, clitext.ClientLanguage()); err != nil {
 		return err
@@ -252,6 +260,13 @@ func runForwarded(ctx context.Context, layout host.RuntimeLayout, messages *clit
 
 func forwardedFailureLine(messages *clitext.Messages, hostMessages *host.Messages, lang i18n.Language, derr error) string {
 	return cliErrorLine(render(messages, lang, clitext.ErrorLine, clitext.Params{clitext.ParamMessage: hostMessages.Localize(messages, lang, derr).Error()}))
+}
+
+func exitCodeError(code int) error {
+	if code == 0 {
+		return nil
+	}
+	return exitStatusError{code: code}
 }
 
 type exitStatusError struct {

@@ -175,6 +175,11 @@
     "other": "{{.Command}} : l'option --{{.Name}} attend une valeur"
   },
   {
+    "id": "cli.first_run.hint",
+    "description": "Printed by a bare herrscher on a machine with no settings and no state",
+    "other": "rien n'est encore configuré : lance {{.Command}} dans un terminal pour choisir les backends et te connecter"
+  },
+  {
     "id": "cli.whoami.unknown_argument",
     "description": "Erreur pour un argument que whoami n'accepte pas",
     "other": "whoami : argument inconnu {{.Arg}} (seulement --json)"
@@ -4993,6 +4998,36 @@
     "id": "cli.setup.install.not_restored",
     "description": "An aborted install gave up waiting for a step that kept running, so nothing was put back",
     "other": "l'étape en cours ne s'est pas arrêtée ; plugins.go, go.mod et go.sum sont laissés tels quels, vérifie-les à la main"
+  },
+  {
+    "id": "cli.setup.step.binary",
+    "description": "Install step: the freshly built binary replaces the running one",
+    "other": "remplacer le binaire {{.Path}}"
+  },
+  {
+    "id": "cli.setup.trial.title",
+    "description": "Heading of the trial turns run after the install",
+    "other": "première réponse de chaque backend"
+  },
+  {
+    "id": "cli.setup.trial.step",
+    "description": "Trial turn line: one short prompt sent to a backend CLI",
+    "other": "{{.Name}} répond à une courte question"
+  },
+  {
+    "id": "cli.setup.trial.failed",
+    "description": "Install screen: the settings are written but a backend did not answer",
+    "other": "réglages écrits, mais un backend n'a pas répondu : corrige-le avant de démarrer"
+  },
+  {
+    "id": "cli.setup.trial.missing",
+    "description": "Remedy when the backend CLI is not installed",
+    "other": "{{.Name}} n'est pas installé : installe-le, puis relance le setup"
+  },
+  {
+    "id": "cli.setup.trial.remedy",
+    "description": "Remedy when a backend CLI is installed but did not answer",
+    "other": "reconnecte-toi avec {{.Command}}"
   },
   {
     "id": "cli.setup.hub.sub",

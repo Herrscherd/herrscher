@@ -61,15 +61,17 @@ func invokedBinary(args []string) string {
 	return args[0]
 }
 
-func serveCommand(invoked string) string {
+func serveCommand(invoked string) string { return commandName(invoked) + " serve" }
+
+func commandName(invoked string) string {
 	name := filepath.Base(invoked)
 	if ext := filepath.Ext(name); strings.EqualFold(ext, ".exe") {
 		name = strings.TrimSuffix(name, ext)
 	}
 	if name == "." || name == string(filepath.Separator) {
-		name = "herrscher"
+		name = binaryName
 	}
-	return name + " serve"
+	return name
 }
 
 func shortModule(m string) string {

@@ -34,7 +34,18 @@ for writing, and the route screen sets the policy, the gateway credentials that
 `gateway-only` needs, the default model and the language. A review lists what will
 change before anything is written to `.env`; on a source checkout it also rewrites
 `plugins.go`, fetches the modules and rebuilds, restoring `plugins.go` if the build
-fails.
+fails. The new build replaces the binary you ran, so the next `herrscher` already
+has the chosen modules.
+
+Once the settings are written, `setup` sends each chosen backend CLI one short
+prompt and waits for its answer. A backend that does not answer is shown with its
+output and the remedy: install the CLI when it is missing, or sign in again with
+`herrscher setup claude` (or `codex`, `cursor`). The settings stay written and
+`setup` exits with status 1, so a script sees the failure.
+
+On a machine with no settings file and no host state yet, a bare `herrscher` in a
+terminal opens `setup` instead of serving. Without a terminal it prints the
+usage after a line saying to run `herrscher setup`.
 
 Run again, `setup` opens a dashboard with the state of every section, and
 `herrscher setup discord` (or `claude`, `codex`, `cursor`, `obsidian`, `route`,

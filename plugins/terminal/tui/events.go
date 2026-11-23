@@ -21,11 +21,11 @@ func (m *model) route(routed RoutedEvent) tea.Cmd {
 		tab.pendingEvents = append(tab.pendingEvents, routed)
 		return m.drainHistory()
 	}
-	if replayedToolStart(tab, routed.Event) {
+	if tab.calls.Replays(routed.Event) {
 		return nil
 	}
 	before := len(tab.entries)
-	m.observeToolCalls(tab, routed.Event)
+	m.settleCalls(tab, routed.Event)
 	m.renderInto(tab, routed.Event)
 	flushCmd := m.flushQueue(tab, routed.Event.T)
 	isReply := routed.Event.T == eventwire.EventReply
@@ -104,9 +104,6 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		text, _ := hostError(event.Text)
 		target.appendEntry(entry{role: statusRole(event.Text), text: text})
 	case eventwire.EventReply:
-		if event.Done {
-			m.closeTurnTimeline(target)
-		}
 		target.appendReply(m.tr, event)
 	case eventwire.EventTodos:
 		target.busy = true
@@ -130,10 +127,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.completeCompaction(m.tr, event)
 	case eventwire.EventCompactionFailed:
 		target.failCompaction(m.tr, event)
-	case eventwire.EventGap:
-		m.appendTimeline(target)
 	case eventwire.EventAbandoned:
-		m.closeTurnTimeline(target)
 		target.busy = false
 		target.interruptRequested = false
 		target.streamed = false

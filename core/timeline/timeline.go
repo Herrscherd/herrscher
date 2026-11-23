@@ -92,6 +92,56 @@ func (r *Recorder) End() []Call {
 	return r.hand(true)
 }
 
+// Handover names the event at which a surface takes the finished calls of a turn, before the turn ends.
+type Handover int
+
+// The surfaces hand their finished calls over at a tool done or at a gap.
+const (
+	AtToolDone Handover = iota + 1
+	AtGap
+)
+
+func (h Handover) hands(event contracts.Event) bool {
+	switch h {
+	case AtToolDone:
+		return event.T == eventwire.EventToolDone
+	case AtGap:
+		return event.T == eventwire.EventGap
+	}
+	return false
+}
+
+// Settle feeds one event of a turn and returns the calls a surface writes for it: the finished calls at the handover, or every call still unreturned once the turn ends, after which the recorder starts over.
+func (r *Recorder) Settle(event contracts.Event, handover Handover) ([]Call, error) {
+	_, _, err := r.Apply(event)
+	switch {
+	case handover.hands(event):
+		return r.Drain(), err
+	case endsTurn(event):
+		calls := r.End()
+		*r = Recorder{}
+		return calls, err
+	}
+	return nil, err
+}
+
+func endsTurn(event contracts.Event) bool {
+	switch event.T {
+	case eventwire.EventReply:
+		return event.Done
+	case eventwire.EventAbandoned:
+		return true
+	case eventwire.EventClosed:
+		return event.Value != eventwire.ClosedRenamed
+	}
+	return false
+}
+
+// Replays reports whether the event starts a call the turn already knows, a replay that adds nothing to the turn.
+func (r *Recorder) Replays(event contracts.Event) bool {
+	return event.T == eventwire.EventStatus && event.ToolCall != nil && r.Knows(event.ToolCall.ID)
+}
+
 func (r *Recorder) hand(open bool) []Call {
 	var handed []Call
 	for index := range r.calls {
@@ -180,7 +230,12 @@ func (r *Recorder) observeTokens(event contracts.Event) {
 }
 
 func reportsCount(event contracts.Event) bool {
-	return carriesTokens(event.T) && event.Tokens > 0
+	return carriesTokens(event.T) && ReportsCount(event.Tokens)
+}
+
+// ReportsCount reports whether a count from the backend replaces the running total: zero means the backend reported no usage.
+func ReportsCount(tokens int) bool {
+	return tokens > 0
 }
 
 func (r *Recorder) setMark() {

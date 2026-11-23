@@ -6,23 +6,15 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/clitext"
-	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/timeline"
 )
 
-func (m *model) observeToolCalls(target *tab, event contracts.Event) {
-	if _, _, err := target.calls.Apply(event); errors.Is(err, timeline.ErrFull) {
+func (m *model) settleCalls(target *tab, event contracts.Event) {
+	calls, err := target.calls.Settle(event, timeline.AtGap)
+	if errors.Is(err, timeline.ErrFull) {
 		target.appendEntry(entry{role: roleNotice, text: m.cliText(clitext.ToolBound, clitext.Params{clitext.ParamLimit: timeline.MaxCalls})})
 	}
-}
-
-func (m *model) appendTimeline(target *tab) {
-	m.appendCalls(target, target.calls.Drain())
-}
-
-func (m *model) closeTurnTimeline(target *tab) {
-	m.appendCalls(target, target.calls.End())
-	target.calls = timeline.Recorder{}
+	m.appendCalls(target, calls)
 }
 
 func (m *model) appendCalls(target *tab, calls []timeline.Call) {
@@ -30,10 +22,6 @@ func (m *model) appendCalls(target *tab, calls []timeline.Call) {
 		key, params := clitext.ToolCallLine(m.tr.lang, call)
 		target.appendEntry(entry{role: roleNotice, text: m.cliText(key, params)})
 	}
-}
-
-func replayedToolStart(target *tab, event contracts.Event) bool {
-	return event.T == eventwire.EventStatus && event.ToolCall != nil && target.calls.Knows(event.ToolCall.ID)
 }
 
 func (m *model) cliText(key clitext.Key, params clitext.Params) string {

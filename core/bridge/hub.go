@@ -252,7 +252,9 @@ func (u *turnUsage) absorb(event contracts.BackendEvent) {
 		u.outTok += event.OutTokens
 		u.setInputSide(event)
 	case backendKindResult:
-		u.outTok = event.OutTokens
+		if timeline.ReportsCount(event.OutTokens) {
+			u.outTok = event.OutTokens
+		}
 		u.setInputSide(event)
 		u.cost = event.Cost
 	}
@@ -320,14 +322,13 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	defer calls.report()
 	onEvent := func(event contracts.BackendEvent) {
 		event = calls.receive(event)
-		usage.absorb(event)
+		relayBackendEvent(sink, &usage, event)
 		switch event.Kind {
 		case backendKindText:
 			streamed = append(streamed, event.Detail)
 		case backendKindReset:
 			streamed = nil
 		}
-		emitBackendEvent(sink, event, usage.outTok, usage.inTok, usage.cacheRd, usage.cacheCr)
 	}
 	out, err := backend.Respond(turnCtx, prompt, onEvent)
 	var failure error
@@ -446,6 +447,11 @@ func (g *toolCallGuard) report() {
 		return
 	}
 	logger.Warn("backend tool calls refused in this turn, their events keep their text and tokens", "count", g.refused, "err", g.firstError)
+}
+
+func relayBackendEvent(sink contracts.EventSink, usage *turnUsage, event contracts.BackendEvent) {
+	usage.absorb(event)
+	emitBackendEvent(sink, event, usage.outTok, usage.inTok, usage.cacheRd, usage.cacheCr)
 }
 
 func emitBackendEvent(sink contracts.EventSink, event contracts.BackendEvent, tokens, tokensIn, cacheRead, cacheCreate int) {

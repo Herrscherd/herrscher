@@ -239,10 +239,10 @@ func (p *watchView) show(event *host.DaemonEvent) error {
 }
 
 func (p *watchView) render(event *host.DaemonEvent) error {
-	if event.T == eventwire.EventStatus && event.ToolCall != nil && p.calls.Knows(event.ToolCall.ID) {
+	if p.calls.Replays(event.Event) {
 		return nil
 	}
-	if err := p.trackCalls(event); err != nil {
+	if err := p.settleCalls(event); err != nil {
 		return err
 	}
 	switch event.T {
@@ -277,20 +277,14 @@ func (p *watchView) render(event *host.DaemonEvent) error {
 	return nil
 }
 
-func (p *watchView) trackCalls(event *host.DaemonEvent) error {
-	_, _, err := p.calls.Apply(event.Event)
+func (p *watchView) settleCalls(event *host.DaemonEvent) error {
+	calls, err := p.calls.Settle(event.Event, timeline.AtToolDone)
 	if errors.Is(err, timeline.ErrFull) {
-		return p.line(clitext.ToolBound, clitext.Params{clitext.ParamLimit: timeline.MaxCalls})
+		if lineErr := p.line(clitext.ToolBound, clitext.Params{clitext.ParamLimit: timeline.MaxCalls}); lineErr != nil {
+			return lineErr
+		}
 	}
-	switch {
-	case event.T == eventwire.EventToolDone:
-		return p.printCalls(p.calls.Drain())
-	case event.T == eventwire.EventReply && event.Done, event.T == eventwire.EventAbandoned:
-		return p.closeTurnCalls()
-	case event.T == eventwire.EventClosed && event.Value != eventwire.ClosedRenamed:
-		return p.closeTurnCalls()
-	}
-	return nil
+	return p.printCalls(calls)
 }
 
 func (p *watchView) printCalls(calls []timeline.Call) error {
@@ -300,14 +294,6 @@ func (p *watchView) printCalls(calls []timeline.Call) error {
 			return err
 		}
 	}
-	return nil
-}
-
-func (p *watchView) closeTurnCalls() error {
-	if err := p.printCalls(p.calls.End()); err != nil {
-		return err
-	}
-	p.calls = timeline.Recorder{}
 	return nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -34,27 +35,25 @@ func TestDispatchOfAnotherSessionReturnsWhileAResumeIsRefused(t *testing.T) {
 	}
 	h := newHub(st, nil, nil, t.TempDir(), reg, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()))
 	h.runtime = layout
-	h.teardownGrace = 300 * time.Millisecond
+	h.teardownGrace = time.Hour
 	settling := make(chan struct{})
+	var settled atomic.Bool
 	h.stopping = func(name string) <-chan struct{} {
-		if name == stuck {
+		if name == stuck && !settled.Load() {
 			return settling
 		}
 		return nil
-	}
-	h.startBridge = func(sess state.Session, wait time.Duration) error {
-		if sess.Name != stuck {
-			return nil
-		}
-		time.Sleep(wait)
-		return supervisor.ErrStillStopping
 	}
 	h.stopBridge = func(string) error { return nil }
 	t.Cleanup(func() {
 		h.goDead(stuck)
 		h.goDead(other)
 	})
-	t.Cleanup(func() { close(settling) })
+	t.Cleanup(func() {
+		settled.Store(true)
+		close(settling)
+		awaitBackground(t, h.relaunches.settled(), "the relaunch of the refused session outlived the test")
+	})
 
 	var resumeErr error
 	resumed := runInBackground(func() { resumeErr = h.Resume(stuck) })
@@ -70,11 +69,6 @@ func TestDispatchOfAnotherSessionReturnsWhileAResumeIsRefused(t *testing.T) {
 	})
 	awaitBackground(t, dispatched, "Dispatch waited on the stopping bridge of the refused session")
 
-	select {
-	case <-settling:
-		t.Fatal("the refused session's stop settled before the dispatch returned: the dispatch was not shown to return during the refusal")
-	default:
-	}
 	if dispatchErr != nil {
 		t.Fatalf("Dispatch during a refused resume: %v", dispatchErr)
 	}

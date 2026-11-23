@@ -5173,5 +5173,95 @@
     "id": "cli.setup.label.language",
     "description": "Welcome screen label in front of the language",
     "other": "language"
+  },
+  {
+    "id": "cli.connect.usage",
+    "description": "Usage line of herrscher connect",
+    "other": "usage: herrscher connect github [--host <host>] | status | logout [--host <host>]"
+  },
+  {
+    "id": "cli.connect.host_invalid",
+    "description": "Error: the host given to connect is not a forge host",
+    "other": "invalid forge host: {{.Err}}"
+  },
+  {
+    "id": "cli.connect.start",
+    "description": "Prompt: the device code to enter on the forge to connect a host",
+    "other": "To connect {{.Host}}, open {{.URL}} and enter the code {{.UserCode}}. Waiting for the authorization."
+  },
+  {
+    "id": "cli.connect.done",
+    "description": "Confirmation: the host is connected",
+    "other": "connected to {{.Host}}. Run herrscher connect status to see the account."
+  },
+  {
+    "id": "cli.connect.app_unavailable",
+    "description": "Error: the forge host does not offer the herrscher app for sign-in",
+    "other": "{{.Host}} does not offer the herrscher app for sign-in. Use GH_TOKEN, or log in with gh auth login."
+  },
+  {
+    "id": "cli.connect.device_expired",
+    "description": "Error: the device code expired before the user entered it",
+    "other": "the sign-in code expired before it was entered. Run the command again."
+  },
+  {
+    "id": "cli.connect.device_denied",
+    "description": "Error: the user refused the sign-in on the forge",
+    "other": "the sign-in was denied on the forge."
+  },
+  {
+    "id": "cli.connect.failed",
+    "description": "Error: connecting a forge host failed for a reason the message names",
+    "other": "connecting {{.Host}} failed: {{.Err}}"
+  },
+  {
+    "id": "cli.connect.status.line",
+    "description": "Status line: one forge host with its token source, account and token expiry",
+    "other": "{{.Host}}: source {{.Source}}, account {{.Login}}, token {{.Access}}"
+  },
+  {
+    "id": "cli.connect.status.source_none",
+    "description": "Status value: the host has no usable credential",
+    "other": "none"
+  },
+  {
+    "id": "cli.connect.status.login_unknown",
+    "description": "Status value: the account of the host could not be read",
+    "other": "unknown"
+  },
+  {
+    "id": "cli.connect.status.access_never",
+    "description": "Status value: the saved token does not expire",
+    "other": "no expiry"
+  },
+  {
+    "id": "cli.connect.status.access_expires",
+    "description": "Status value: the saved token expires at this time",
+    "other": "expires {{.Time}}"
+  },
+  {
+    "id": "cli.connect.status.access_rejected",
+    "description": "Status value: the forge refused the saved token",
+    "other": "refused by the forge, run herrscher connect github again"
+  },
+  {
+    "id": "cli.connect.status.install",
+    "description": "Status line: the URL where the herrscher app is installed",
+    "other": "install the app: {{.URL}}"
+  },
+  {
+    "id": "cli.connect.status.revoke",
+    "description": "Status line: the URL where the herrscher app authorization is revoked",
+    "other": "revoke the app: {{.URL}}"
+  },
+  {
+    "id": "cli.connect.logout_done",
+    "description": "Confirmation: the saved token of a host was removed",
+    "other": "removed the saved token of {{.Host}}."
+  },
+  {
+    "id": "cli.connect.logout_nothing",
+    "description": "Notice: logout found no saved token for the host",
+    "other": "no saved token for {{.Host}}."
   }
 ]

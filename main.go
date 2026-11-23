@@ -233,6 +233,8 @@ func runCommand(ctx context.Context, layout host.RuntimeLayout, messages *clitex
 		return runUsage(ctx, layout, messages, hostMessages, args)
 	case "whoami":
 		return runWhoami(ctx, messages, args)
+	case connectVerb:
+		return runConnect(ctx, messages, args)
 	}
 	return runForwarded(ctx, layout, messages, hostMessages, cmd, args)
 }

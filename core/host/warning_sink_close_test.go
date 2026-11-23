@@ -561,10 +561,10 @@ func TestQueuedWarningUnconfirmedAtBudgetReturnsLateWithoutCount(t *testing.T) {
 }
 
 func TestAdmissionAfterTheBilanStartsNoWriteAndCountsItsLoss(t *testing.T) {
-	logs := captureDefaultLog(t)
+	logger, logs := newCapturedLogger(nil)
 	var out lockedBuffer
 	messages := newHostMessages()
-	sink := newWarningSink(messages, &out, englishLostLine(messages), slog.Default())
+	sink := newWarningSink(messages, &out, englishLostLine(messages), logger)
 	if _, err := sink.Write([]byte("before\n")); err != nil {
 		t.Fatal(err)
 	}

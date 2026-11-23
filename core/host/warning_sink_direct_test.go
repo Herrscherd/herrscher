@@ -85,11 +85,11 @@ func TestOverrunIsCountedWhenTheWriterStaysFrozenForTheWholeBudget(t *testing.T)
 }
 
 func TestAbandonedOverrunIsSilentUntilTheBilan(t *testing.T) {
-	logs := captureDefaultLog(t)
+	logger, logs := newCapturedLogger(nil)
 	writer := newGatedWarnings("slow")
 	t.Cleanup(writer.open)
 	messages := newHostMessages()
-	sink := newWarningSink(messages, writer, englishLostLine(messages), slog.Default())
+	sink := newWarningSink(messages, writer, englishLostLine(messages), logger)
 	_ = sink.Enqueue([]byte("slow\n"))
 	awaitGatedWrite(t, writer)
 	if err := sink.announce("overrun"); !errors.Is(err, errWarningAbandoned) {

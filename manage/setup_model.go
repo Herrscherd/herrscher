@@ -51,6 +51,7 @@ type setupDeps struct {
 	manifest    []byte
 	binary      string
 	abandonWait time.Duration
+	trialWait   time.Duration
 }
 
 func (deps setupDeps) compose() bool { return deps.manifest != nil }
@@ -364,7 +365,7 @@ func (model *setupModel) back() tea.Cmd {
 	case screenWelcome, screenHub:
 		return nil
 	case screenInstall:
-		if model.install.finished() {
+		if model.install.finished() && !model.install.trialsRunning() {
 			return model.openHub()
 		}
 		return nil

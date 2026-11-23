@@ -149,6 +149,7 @@ func newHarness(t *testing.T, manifest []byte, screen setupScreen, env map[strin
 		manifest:    manifest,
 		binary:      filepath.Join(dir, binaryName),
 		abandonWait: time.Minute,
+		trialWait:   time.Minute,
 	}
 	if manifest != nil {
 		if err := os.WriteFile(filepath.Join(dir, manifestFile), manifest, modeFile); err != nil {

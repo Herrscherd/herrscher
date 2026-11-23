@@ -1016,6 +1016,11 @@
     "other": "write plugins.go but skip go get/build"
   },
   {
+    "id": "cli.manage.flag.init_no_trial",
+    "description": "Flag help: the --no-trial flag of herrscher init",
+    "other": "skip the short prompt sent to the chosen backend at the end"
+  },
+  {
     "id": "cli.manage.flag.yes",
     "description": "Flag help: the --yes flag, which answers the confirmations without asking",
     "other": "answer both confirmations without asking"

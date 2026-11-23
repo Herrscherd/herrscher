@@ -92,6 +92,7 @@ func liveDeps(messages *clitext.Messages, hostMessages *host.Messages, hostDir s
 		run:         execRunner,
 		envPath:     envTarget(),
 		abandonWait: abandonLimit,
+		trialWait:   trialTimeout,
 	}
 	dir, err := resolveHost(messages, hostDir)
 	if err != nil {
@@ -120,7 +121,7 @@ func runSetup(ctx context.Context, messages *clitext.Messages, errOut *errwriter
 	if model.install.restoreErr != nil {
 		errOut.Println(model.install.restoreErr)
 	}
-	if model.install.err != nil || model.install.trialFailed() {
+	if model.install.err != nil || !model.install.trialsAnswered() {
 		return 1
 	}
 	return 0

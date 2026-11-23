@@ -1016,6 +1016,11 @@
     "other": "écrit plugins.go sans lancer go get ni la compilation"
   },
   {
+    "id": "cli.manage.flag.init_no_trial",
+    "description": "Flag help: the --no-trial flag of herrscher init",
+    "other": "ne pas envoyer la courte question au backend choisi à la fin"
+  },
+  {
     "id": "cli.manage.flag.yes",
     "description": "Flag help: the --yes flag, which answers the confirmations without asking",
     "other": "répond aux deux confirmations sans les poser"

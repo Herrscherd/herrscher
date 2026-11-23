@@ -33,9 +33,14 @@ is checked against Discord, Claude and Codex open their own sign-in
 for writing, and the route screen sets the policy, the gateway credentials that
 `gateway-only` needs, the default model and the language. A review lists what will
 change before anything is written to `.env`; on a source checkout it also rewrites
-`plugins.go`, fetches the modules and rebuilds, restoring `plugins.go` if the build
-fails. The new build replaces the binary you ran, so the next `herrscher` already
-has the chosen modules.
+`plugins.go`, fetches the modules and rebuilds, restoring `plugins.go`, `go.mod`
+and `go.sum` if the build fails. The new build replaces the binary you ran, so the
+next `herrscher` already has the chosen modules; the previous binary stays beside
+it with a `.old` suffix until the next rebuild.
+
+Settings live in the `.env` of the directory you run from, or in the file
+`HERRSCHER_ENV_FILE` names. Run `setup` and `herrscher` from the same directory,
+or export `HERRSCHER_ENV_FILE`, so the host finds what `setup` wrote.
 
 Once the settings are written, `setup` sends each chosen backend CLI one short
 prompt and waits for its answer. A backend that does not answer is shown with its
@@ -51,7 +56,9 @@ Run again, `setup` opens a dashboard with the state of every section, and
 `herrscher setup discord` (or `claude`, `codex`, `cursor`, `obsidian`, `route`,
 `modules`) jumps straight to one. `herrscher init --yes` with its stack flags stays
 the non-interactive path for scripts, and `herrscher models list` shows what the
-active policy offers.
+active policy offers. `init` ends with the same prompt to each chosen backend and
+exits with status 1 when one does not answer; `--no-trial` skips it, for a machine
+where the backend is signed in later.
 
 The gateway credentials are both halves or neither. A base URL without a token
 would redirect the CLI while it keeps authenticating as this machine's own

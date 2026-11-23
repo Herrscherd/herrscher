@@ -210,6 +210,8 @@ func (model *setupModel) abortInstall() {
 func (model *setupModel) abandon() {
 	if model.install.trialsRunning() {
 		model.install.cancel()
+		model.waitStep()
+		return
 	}
 	if !model.install.running() {
 		return

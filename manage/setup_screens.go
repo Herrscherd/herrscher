@@ -3,7 +3,6 @@ package manage
 import (
 	"errors"
 	"os"
-	"os/exec"
 	"sort"
 	"strings"
 
@@ -483,15 +482,11 @@ func (model *setupModel) trialRows() []setupRow {
 
 func (model *setupModel) failedTrialRows(trial *trialStep) []setupRow {
 	rows := []setupRow{line(toneBad, "  ✗ "+trial.label)}
-	if trial.err != nil && !errors.Is(trial.err, exec.ErrNotFound) {
-		rows = append(rows, line(toneDim, "    "+trial.err.Error()))
+	failure := trialFailureLines(model.messages, trial.spec, trial.output, trial.err)
+	for _, text := range failure[:len(failure)-1] {
+		rows = append(rows, line(toneDim, "    "+text))
 	}
-	for _, out := range strings.Split(trial.output, "\n") {
-		if out != "" {
-			rows = append(rows, line(toneDim, "    "+out))
-		}
-	}
-	return append(rows, line(toneWarn, "    "+model.trialRemedy(trial)))
+	return append(rows, line(toneWarn, "    "+failure[len(failure)-1]))
 }
 
 func (model *setupModel) stepRows(step *installStep) []setupRow {

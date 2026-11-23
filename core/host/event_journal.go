@@ -7,6 +7,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
 	"github.com/Herrscherd/herrscher/core/eventwire"
+	"github.com/Herrscherd/herrscher/core/timeline"
 )
 
 const (
@@ -36,7 +37,25 @@ type journalEntry struct {
 }
 
 func (e *journalEntry) cost() int {
-	return len(e.Text) + journalEntryOverhead
+	return len(e.Text) + journalEntryOverhead + toolCallText(e.ToolCall)
+}
+
+func toolCallText(call *contracts.ToolCall) int {
+	if call == nil {
+		return 0
+	}
+	return len(call.ID) + len(call.Tool) + len(call.Detail) + len(call.Error)
+}
+
+func withBoundedToolFields(event contracts.Event) contracts.Event {
+	if event.ToolCall == nil {
+		return event
+	}
+	call := *event.ToolCall
+	call.Detail = timeline.BoundField(call.Detail)
+	call.Error = timeline.BoundField(call.Error)
+	event.ToolCall = &call
+	return event
 }
 
 func (e *journalEntry) between(after, upTo uint64) (wireEvent, bool) {
@@ -160,7 +179,7 @@ func (j *eventJournal) record(session string, event contracts.Event) wireEvent {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	j.seq++
-	stamped := wireEvent{Event: event, Session: session, Seq: j.seq}
+	stamped := wireEvent{Event: withBoundedToolFields(event), Session: session, Seq: j.seq}
 	ring, known := j.rings[session]
 	if !known {
 		if len(j.rings) >= journalSessions {

@@ -661,18 +661,43 @@ thing it is used to diagnose.
 ### Following a session from any client
 
 `herrscher session watch --name <session>` follows the session's current turn in the
-terminal: the prompt and who sent it, each tool line, the reply as it streams, and
-the tokens and cost when the turn ends. It says when the session is idle or when
+terminal: the prompt and who sent it, each tool call as its status line when it starts and as a
+line when it ends (`✓` with its duration and tokens, or `✗` with its duration and error,
+or `no reason given` when the backend gave none), the reply as it streams,
+and the tokens and cost when the turn ends. In session watch, each call prints its finished line at its own
+done. A call still open when the turn ends (the reply arrives, the turn is abandoned, or the
+session closes) shows once as `…` with `unfinished`. Only session watch prints that line at a
+session close: the TUI removes the session's tab on close, so it shows nothing for open calls then.
+A gap in the daemon's memory does not close a call: when its done arrives later, session watch
+prints `✓` or `✗` as usual. The bound notice appears once, when a turn goes past
+4096 tool calls, and only the first 4096 are kept. It says when the session is idle or when
 the daemon holds nothing of it yet, keeps following the next turns, follows the
 session under its new name when it is renamed, and stops when the session is closed
 or archived, or when it is interrupted. `--json` prints one event per line, the
-same events the daemon sends on its events socket, so a script can consume them.
+same events the daemon sends on its events socket, so a script can consume them. A
+tool call travels as `tool_call` on the `status` event that starts it and on the
+`tool_done` event that ends it. The two lines are the only ones a call prints: the
+`tool_done` event never prints a second status line.
+
+The TUI shows the same calls differently. Each call shows its status line when it starts, but its
+finished line waits: the TUI prints the finished calls together only when a gap in the daemon's
+memory expires, or when the turn ends, before the reply. A call still open at the turn end shows
+once as `…` with `unfinished`, as in session watch.
 
 Every event the daemon publishes carries a sequence number (`seq`). It starts from
 the clock when the daemon starts, so a new daemon always numbers above the one
-before it. The daemon keeps the latest events of each session in memory: 512 events
-and 1 MiB per session, for the 64 sessions that spoke most recently, with the text
-of a streamed reply folded into one entry.
+before it. The daemon keeps the latest events of each session in memory: at most 512
+entries and 1 MiB of cost per session, for the 64 sessions that spoke most recently,
+with the text of a streamed reply folded into one entry. The cost of an entry is its
+text, plus the `id`, `tool`, `detail` and `error` of its tool call, plus 128 bytes of
+overhead. The `detail` and the `error` are cut to 4096 bytes before they are kept. The
+bridge refuses a tool call whose `id` or `tool` is longer than 256 bytes: the event
+keeps its text and loses its call.
+
+Memory budget of one turn in a client (an estimate, not measured): 4096 calls × 2 fields
+(`detail` and `error`) × 4096 bytes ≈ 32 MiB, plus the `id` and the `tool` of each call (at
+most 256 bytes each, so at most 2 MiB for 4096 calls), so about 34 MiB before the data
+structures themselves.
 
 The catch-up happens on the events socket itself. A subscriber may write one line as
 soon as it connects, `{"session":"<name>","since":<seq>}`, and the daemon first
@@ -700,8 +725,29 @@ session's transcript, which survives restarts: for each turn its id and start ti
 the prompt, the reply, the notices, and the duration, tokens and cost.
 `--since <turn>` keeps the turns after that one, and an id the transcript does not
 hold is an error, as is a session the daemon does not know. `--json` prints the
-turns as an array. The transcript records the conversation, not the tool calls, so
-a past turn is replayed without its tool lines.
+turns as an array. Each turn carries a `tools` array, one entry per tool call in the
+order they started, with `id`, `tool`, `detail` (omitted when empty), `state`
+(`started`, `succeeded` or `failed`), `started_at`, `ended_at` and `duration_ms`
+(the last two omitted while the call is open), `error` (on a failed call) and
+`tokens`. `tokens` counts the output tokens between the previous tool event of the
+turn and this call's start, and is zero for the first call. A backend that reports
+fewer tokens than the turn had can make it negative: `--json` keeps that raw value,
+while the text form and the terminal UI show it as zero. A call that never got
+its outcome keeps the state `started` and has no end. The text form lists the calls
+before the usage line of the turn, with the same `✓`, `✗` and `…` lines as the watch.
+A turn with tool calls and no reply is kept. The `detail` and the `error` of a call are
+kept up to 4096 bytes: a longer one is cut at the last whole character under that bound,
+and the rest is dropped. Within that bound they are stored verbatim: the `detail` is what
+the backend reported, and it is written as it is to the session's local transcript, a file
+created with mode `0600` and read back by `session history`. `session watch` shows the same
+values from the events the daemon keeps in memory. Both verbs need the same right, the
+`observer` role or above, the one that already lets a user read the turns. A `detail` can
+carry sensitive arguments, such as a path, a command or a query, so grant that role only to
+people who may read the session's content.
+
+The terminal UI shows the same lines at the end of each turn, before the reply, for
+the turns it follows live. Past turns replayed from the transcript do not get their
+tool lines in the terminal UI yet.
 
 ### Health, one command away
 

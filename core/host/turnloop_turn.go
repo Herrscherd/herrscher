@@ -8,6 +8,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/historywire"
 	"github.com/Herrscherd/herrscher/core/outbox"
+	"github.com/Herrscherd/herrscher/core/timeline"
 )
 
 func (d *sessionDriver) pump(ctx context.Context) {
@@ -37,6 +38,7 @@ func (d *sessionDriver) pump(ctx context.Context) {
 				continue
 			}
 			d.turnReading = 0
+			d.calls = timeline.Recorder{}
 			d.runTurn(ctx, event, guard)
 			d.activeTurnID = ""
 			d.pickTurnID = ""

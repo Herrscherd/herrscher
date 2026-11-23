@@ -39,8 +39,8 @@ func ScanEvents(r io.Reader, handle func(contracts.Event) error) error {
 			continue
 		}
 		if line[0] == '{' {
-			var event contracts.Event
-			if err := json.Unmarshal([]byte(line), &event); err != nil {
+			event, err := contracts.DecodeEvent([]byte(line))
+			if err != nil {
 				return fmt.Errorf("control: malformed event line: %w", err)
 			}
 			if err := handle(event); err != nil {

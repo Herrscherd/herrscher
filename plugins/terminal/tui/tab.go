@@ -6,6 +6,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/termpaint"
+	"github.com/Herrscherd/herrscher/core/timeline"
 )
 
 type tab struct {
@@ -35,6 +36,7 @@ type tab struct {
 	background         []backgroundTask
 	unreadCount        int
 	finished           bool
+	calls              timeline.Recorder
 	files              []string
 	trail              []liveAgent
 	flips              map[uint64]bool

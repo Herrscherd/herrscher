@@ -2,12 +2,14 @@ package host
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/outbox"
+	"github.com/Herrscherd/herrscher/core/timeline"
 )
 
 func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event, turnStart time.Time, live int, files outbox.Frame) {
@@ -35,6 +37,7 @@ func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event,
 		CacheCreate: event.CacheCreate,
 		DurMs:       int(time.Since(turnStart).Milliseconds()),
 		CtxTokens:   contextReading(live, event),
+		Tools:       d.calls.Calls(),
 	})
 	d.deliverPendingReply(event.Text)
 	d.metrics.TurnCompleted()
@@ -75,8 +78,15 @@ func (d *sessionDriver) fanOutReply(ctx context.Context, event contracts.Event, 
 }
 
 func (d *sessionDriver) tapEvent(event contracts.Event) {
+	d.observeCalls(event)
 	if d.emitTap != nil {
 		d.emitTap(event)
+	}
+}
+
+func (d *sessionDriver) observeCalls(event contracts.Event) {
+	if _, _, err := d.calls.Apply(event); errors.Is(err, timeline.ErrFull) {
+		slog.Warn("turn tool calls past the bound are not kept", "bound", timeline.MaxCalls)
 	}
 }
 

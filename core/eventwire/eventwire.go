@@ -6,6 +6,7 @@ const (
 	EventChunk             = "chunk"
 	EventThinking          = "thinking"
 	EventStatus            = "status"
+	EventToolDone          = "tool_done"
 	EventTodos             = "todos"
 	EventSubagent          = "subagent"
 	EventReset             = "reset"

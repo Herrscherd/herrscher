@@ -150,7 +150,7 @@ func actionSet(actions []keyAction) map[keyAction]bool {
 	return set
 }
 
-func readmeActionNames(line string) []keyAction {
+func notYetActionNames(line string) []keyAction {
 	var names []keyAction
 	for _, match := range regexp.MustCompile("`([a-zA-Z]+:[a-zA-Z]+)`").FindAllStringSubmatch(line, -1) {
 		names = append(names, keyAction(match[1]))
@@ -158,23 +158,23 @@ func readmeActionNames(line string) []keyAction {
 	return names
 }
 
-func readmeNotYetLines(t *testing.T) []string {
+func notYetSectionLines(t *testing.T) []string {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "README.md"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "docs", "terminal-ui.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var lines []string
 	inSection := false
 	for _, line := range strings.Split(string(raw), "\n") {
-		if line == "#### Not yet" {
+		if line == "### Not yet" {
 			inSection = true
 			continue
 		}
 		if !inSection {
 			continue
 		}
-		if strings.HasPrefix(line, "#### ") {
+		if strings.HasPrefix(line, "#") {
 			break
 		}
 		lines = append(lines, line)
@@ -182,11 +182,11 @@ func readmeNotYetLines(t *testing.T) []string {
 	return lines
 }
 
-func readmeNotYet(t *testing.T) ([]keyAction, []keyAction) {
+func notYetSection(t *testing.T) ([]keyAction, []keyAction) {
 	t.Helper()
 	var table, all []keyAction
-	for _, line := range readmeNotYetLines(t) {
-		names := readmeActionNames(line)
+	for _, line := range notYetSectionLines(t) {
+		names := notYetActionNames(line)
 		if strings.HasPrefix(line, "|") {
 			table = append(table, names...)
 		}
@@ -195,9 +195,9 @@ func readmeNotYet(t *testing.T) ([]keyAction, []keyAction) {
 	return table, all
 }
 
-func TestReadmeNotYetNamesTheKeysThatHaveNoEffect(t *testing.T) {
+func TestNotYetNamesTheKeysThatHaveNoEffect(t *testing.T) {
 	var table []string
-	for _, line := range readmeNotYetLines(t) {
+	for _, line := range notYetSectionLines(t) {
 		if strings.HasPrefix(line, "|") {
 			table = append(table, line)
 		}
@@ -209,15 +209,15 @@ func TestReadmeNotYetNamesTheKeysThatHaveNoEffect(t *testing.T) {
 	}
 }
 
-func TestReadmeNotYetTableListsTheFourteenSilentActions(t *testing.T) {
-	table, _ := readmeNotYet(t)
+func TestNotYetTableListsTheFourteenSilentActions(t *testing.T) {
+	table, _ := notYetSection(t)
 	want := defaultsWithoutEffect()
 	if len(table) != len(want) || !maps.Equal(actionSet(table), actionSet(want)) {
 		t.Fatalf("the Not yet table must list exactly defaultsWithoutEffect: got %v, want %v", table, want)
 	}
 }
 
-func TestReadmeNotYetListsEveryUnhandledReferenceAction(t *testing.T) {
+func TestNotYetListsEveryUnhandledReferenceAction(t *testing.T) {
 	tables, err := newDispatchTables()
 	if err != nil {
 		t.Fatal(err)
@@ -229,7 +229,7 @@ func TestReadmeNotYetListsEveryUnhandledReferenceAction(t *testing.T) {
 			unhandled = append(unhandled, action)
 		}
 	}
-	_, all := readmeNotYet(t)
+	_, all := notYetSection(t)
 	if len(all) != len(actionSet(all)) {
 		t.Fatal("the Not yet list repeats an action name")
 	}

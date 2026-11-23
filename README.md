@@ -16,14 +16,38 @@ slugs are given below as inline code, for example `architecture/memory`.
 
 ## Install and run
 
-Requires Go 1.25+.
+```bash
+curl -fsSL https://raw.githubusercontent.com/Herrscherd/herrscher/master/scripts/install.sh | sh
+```
+
+The script downloads the latest release for Linux or macOS (amd64 or arm64),
+checks it against `checksums.txt` and installs `herrscher` in `~/.local/bin`
+(`HERRSCHER_INSTALL_DIR` changes the directory, `HERRSCHER_VERSION` pins a tag).
+Windows archives, and every other platform, are on the
+[releases page](https://github.com/Herrscherd/herrscher/releases). With Go 1.27:
+
+```bash
+go install github.com/Herrscherd/herrscher@latest
+```
+
+On Arch Linux, `makepkg -si` in a checkout builds the `herrscher` package from
+the `PKGBUILD` (it replaces the older `herrscherd` package).
+
+A prebuilt binary carries the default stack. Changing the compiled modules
+(`herrscher plugin`, `herrscher update`, the modules screen of `setup`) rebuilds
+from source and needs Go and a checkout:
 
 ```bash
 git clone https://github.com/Herrscherd/herrscher.git
 cd herrscher
 go build -o herrscher .    # the only binary; plugins are compiled in
-./herrscher setup          # pick modules, sign in, configure everything
-./herrscher                # serves, with the terminal UI in the foreground
+```
+
+Then, from any of these:
+
+```bash
+herrscher setup            # pick modules, sign in, configure everything
+herrscher                  # serves, with the terminal UI in the foreground
 ```
 
 `setup` opens an interactive screen: you check the modules you want (gateways,

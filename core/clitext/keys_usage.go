@@ -11,6 +11,7 @@ const (
 	UsageStartTUI        = "cli.usage.start.tui"
 	UsageStartVersion    = "cli.usage.start.version"
 	UsageStartInit       = "cli.usage.start.init"
+	UsageStartSetup      = "cli.usage.start.setup"
 	UsageSessionVerbs    = "cli.usage.session.verbs"
 	UsageAgentVerbs      = "cli.usage.agent.verbs"
 	UsageHostVerbs       = "cli.usage.host.verbs"
@@ -44,6 +45,7 @@ func usageKeys() map[Key][]string {
 		UsageStartTUI:        nil,
 		UsageStartVersion:    nil,
 		UsageStartInit:       nil,
+		UsageStartSetup:      nil,
 		UsageSessionVerbs:    nil,
 		UsageAgentVerbs:      nil,
 		UsageHostVerbs:       nil,

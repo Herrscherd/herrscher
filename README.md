@@ -651,7 +651,8 @@ thing it is used to diagnose.
 
 `herrscher session watch --name <session>` follows the session's current turn in the
 terminal: the prompt and who sent it, each tool call as a line when it ends (`✓` with
-its duration and tokens, or `✗` with its duration and error), the reply as it streams,
+its duration and tokens, or `✗` with its duration and error, or `no reason given` when
+the backend gave none), the reply as it streams,
 and the tokens and cost when the turn ends. A call still open when the reply arrives
 shows as `…` with `unfinished`. The bound notice appears once, when a turn goes past
 4096 tool calls, and only the first 4096 are kept. It says when the session is idle or when
@@ -699,7 +700,9 @@ order they started, with `id`, `tool`, `detail` (omitted when empty), `state`
 (`started`, `succeeded` or `failed`), `started_at`, `ended_at` and `duration_ms`
 (the last two omitted while the call is open), `error` (on a failed call) and
 `tokens`. `tokens` counts the output tokens between the previous tool event of the
-turn and this call's start, and is zero for the first call. A call that never got
+turn and this call's start, and is zero for the first call. A backend that reports
+fewer tokens than the turn had can make it negative: `--json` keeps that raw value,
+while the text form and the terminal UI show it as zero. A call that never got
 its outcome keeps the state `started` and has no end. The text form lists the calls
 before the usage line of the turn, with the same `✓`, `✗` and `…` lines as the watch.
 A turn with tool calls and no reply is kept. The `detail` of a call is what the

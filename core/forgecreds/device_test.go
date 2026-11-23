@@ -139,6 +139,15 @@ func TestBeginReportsAnAppThatRefusesItsCredentialsOrDeviceFlowAsAppUnavailable(
 	}
 }
 
+func TestBeginReportsUnauthorizedClientAsARejectedSignIn(t *testing.T) {
+	server := newForgeServer(t, &forgeScript{codeReply: `{"error":"unauthorized_client"}`})
+
+	_, err := testFlow(server.Client(), &waitRecorder{}).Begin(t.Context(), server.URL)
+	if errors.Is(err, ErrAppUnavailable) || !errors.Is(err, ErrDeviceRejected) {
+		t.Fatalf("Begin with unauthorized_client = %v, want ErrDeviceRejected and not ErrAppUnavailable", err)
+	}
+}
+
 func TestAwaitGrantsTheTokensOnceTheUserAuthorizes(t *testing.T) {
 	script := &forgeScript{tokenReplies: []string{
 		`{"error":"authorization_pending"}`,

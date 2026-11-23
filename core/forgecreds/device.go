@@ -37,7 +37,6 @@ const (
 	errBadRefreshToken      = "bad_refresh_token"
 	errIncorrectCredentials = "incorrect_client_credentials"
 	errDeviceFlowDisabled   = "device_flow_disabled"
-	errUnauthorizedClient   = "unauthorized_client"
 )
 
 // ErrAppUnavailable reports a forge host that does not offer the herrscher App
@@ -233,7 +232,7 @@ func (f Flow) postForm(ctx context.Context, endpoint string, form url.Values, ou
 }
 
 func isAppMissing(code string) bool {
-	return code == errIncorrectCredentials || code == errDeviceFlowDisabled || code == errUnauthorizedClient
+	return code == errIncorrectCredentials || code == errDeviceFlowDisabled
 }
 
 func secondsOr(seconds int64, fallback time.Duration) time.Duration {

@@ -79,13 +79,17 @@ func TestAttachFailureParamsEscapeTheError(t *testing.T) {
 }
 
 func TestRenderKeepsHostileParamsOffTheTerminal(t *testing.T) {
-	paramsByKey := map[clitext.Key]clitext.Params{
-		clitext.ServeGatewaySkipped:     {clitext.ParamFailure: hostileGateway},
-		clitext.ServeGatewayRetrying:    {clitext.ParamFailure: hostileGateway, clitext.ParamWait: "1s"},
-		clitext.ServeGatewayUnavailable: {clitext.ParamFailure: hostileGateway},
-		clitext.ServeAttachFailed:       {clitext.ParamErr: hostileGateway},
+	cases := []struct {
+		key    clitext.Key
+		params clitext.Params
+	}{
+		{clitext.ServeGatewaySkipped, clitext.Params{clitext.ParamFailure: hostileGateway}},
+		{clitext.ServeGatewayRetrying, clitext.Params{clitext.ParamFailure: hostileGateway, clitext.ParamWait: "1s"}},
+		{clitext.ServeGatewayUnavailable, clitext.Params{clitext.ParamFailure: hostileGateway}},
+		{clitext.ServeAttachFailed, clitext.Params{clitext.ParamErr: hostileGateway}},
 	}
-	for key, params := range paramsByKey {
+	for _, c := range cases {
+		key, params := c.key, c.params
 		if _, err := testMessages().Text(i18n.English, key, clitext.Printable(params)); err != nil {
 			t.Fatalf("%s: params rejected: %v", key, err)
 		}

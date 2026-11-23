@@ -1,6 +1,7 @@
 package manage
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,11 +22,8 @@ func startRunningImage(t *testing.T, path string) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := cmd.Process.Kill(); err != nil {
-			t.Log(err)
-		}
-		if err := cmd.Wait(); err != nil {
-			t.Log(err)
+		if _, killed := errors.AsType[*exec.ExitError](cmd.Wait()); !killed {
+			t.Error("the running binary ended on its own before the swaps were done")
 		}
 	})
 }

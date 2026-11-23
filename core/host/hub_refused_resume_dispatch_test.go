@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -34,36 +35,45 @@ func TestDispatchOfAnotherSessionReturnsWhileAResumeIsRefused(t *testing.T) {
 	}
 	h := newHub(st, nil, nil, t.TempDir(), reg, nil, newApprovalTable(io.Discard), newSessionTable(newHostMessages(), clitext.NewMessages()))
 	h.runtime = layout
-	const grace = 300 * time.Millisecond
-	h.teardownGrace = grace
-	h.startBridge = func(sess state.Session, wait time.Duration) error {
-		if sess.Name != stuck {
-			return nil
+	h.teardownGrace = time.Hour
+	settling := make(chan struct{})
+	var settled atomic.Bool
+	h.stopping = func(name string) <-chan struct{} {
+		if name == stuck && !settled.Load() {
+			return settling
 		}
-		time.Sleep(wait)
-		return supervisor.ErrStillStopping
+		return nil
 	}
 	h.stopBridge = func(string) error { return nil }
 	t.Cleanup(func() {
 		h.goDead(stuck)
 		h.goDead(other)
 	})
+	t.Cleanup(func() {
+		settled.Store(true)
+		close(settling)
+		awaitBackground(t, h.relaunches.settled(), "the relaunch of the refused session outlived the test")
+	})
 
-	if err := h.Resume(stuck); !errors.Is(err, supervisor.ErrStillStopping) {
-		t.Fatalf("Resume = %v, want ErrStillStopping", err)
+	var resumeErr error
+	resumed := runInBackground(func() { resumeErr = h.Resume(stuck) })
+	awaitBackground(t, resumed, "Resume hung on the stopping bridge of the refused session")
+	if !errors.Is(resumeErr, supervisor.ErrStillStopping) {
+		t.Fatalf("Resume = %v, want ErrStillStopping", resumeErr)
 	}
 
-	started := time.Now()
-	out, err := cli.Plain(h.Dispatch(withLocalPrincipal(t.Context()), []string{"session", "list"}))
-	elapsed := time.Since(started)
-	if err != nil {
-		t.Fatalf("Dispatch during a refused resume: %v", err)
+	var out string
+	var dispatchErr error
+	dispatched := runInBackground(func() {
+		out, dispatchErr = cli.Plain(h.Dispatch(withLocalPrincipal(t.Context()), []string{"session", "list"}))
+	})
+	awaitBackground(t, dispatched, "Dispatch waited on the stopping bridge of the refused session")
+
+	if dispatchErr != nil {
+		t.Fatalf("Dispatch during a refused resume: %v", dispatchErr)
 	}
 	if out != "listed" {
 		t.Fatalf("Dispatch output = %q during a refused resume, want %q", out, "listed")
-	}
-	if bound := grace + 150*time.Millisecond; elapsed > bound {
-		t.Fatalf("Dispatch took %v during a refused resume, want it bounded by the grace %v plus a margin (%v)", elapsed, grace, bound)
 	}
 	if !h.isLive(other) {
 		t.Fatal("the other session was not brought live by the dispatch")

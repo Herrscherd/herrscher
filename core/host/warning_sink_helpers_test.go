@@ -25,7 +25,28 @@ func englishStillRunningLine(messages *hostMessages) string {
 	return messages.text(i18n.English, "warn.write_still_running", nil)
 }
 
+func discardLogger() *slog.Logger {
+	return slog.New(slog.DiscardHandler)
+}
+
+func newTestWarningSink(t *testing.T, messages *hostMessages, out io.Writer, lostLine func(lost int) string, logger *slog.Logger, opts ...sinkOption) *warningSink {
+	t.Helper()
+	sink := newWarningSink(messages, out, lostLine, logger, opts...)
+	t.Cleanup(func() {
+		if gated, ok := out.(*gatedWarnings); ok {
+			gated.open()
+		}
+		sink.Close()
+	})
+	return sink
+}
+
 func testHub(t *testing.T, h *hub) *hub {
+	t.Helper()
+	return testHubLogged(t, h, discardLogger())
+}
+
+func testHubLogged(t *testing.T, h *hub, logger *slog.Logger) *hub {
 	t.Helper()
 	if h.sessions == nil {
 		h.sessions = newSessionTable(h.messages, clitext.NewMessages())
@@ -35,9 +56,10 @@ func testHub(t *testing.T, h *hub) *hub {
 	if out == nil {
 		out = io.Discard
 	}
-	h.sink = newWarningSink(h.messages, out, englishLostLine(h.messages), slog.Default())
+	h.sink = newWarningSink(h.messages, out, englishLostLine(h.messages), logger)
 	h.warnings = h.sink
 	t.Cleanup(func() { closeHubSink(t, h) })
+	t.Cleanup(h.stopLive)
 	return h
 }
 

@@ -2,7 +2,6 @@ package host
 
 import (
 	"context"
-	"log/slog"
 	"time"
 
 	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
@@ -41,7 +40,7 @@ func (d *sessionDriver) exportTurn(ctx context.Context, outcome otelexport.Outco
 		Calls:               d.calls.Calls(),
 	})
 	if err != nil {
-		slog.Warn("turn not exported to telemetry", "err", err)
+		d.noticeLog.Warn("turn not exported to telemetry", keySession, d.name, "err", err)
 	}
 }
 

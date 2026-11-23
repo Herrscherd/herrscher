@@ -41,6 +41,11 @@ const (
 	hookDecisionUnwritable   = "hook.decision_unwritable"
 	hookApprovalSocketFailed = "hook.approval_socket_failed"
 	hookApprovalTimeout      = "hook.approval_timeout"
+	hookAnswerMismatch       = "hook.approval_answer_mismatch"
+	hookAnswerInvalid        = "hook.approval_answer_invalid"
+	hookForeignPeer          = "hook.approval_foreign_peer"
+	hookApprovalBusy         = "hook.approval_busy"
+	hookRequestTooLarge      = "hook.approval_request_too_large"
 )
 
 const (
@@ -48,7 +53,6 @@ const (
 	socketParam   = "Socket"
 	expectedParam = "Expected"
 	eventParam    = "Event"
-	answerParam   = "Answer"
 	decisionParam = "Decision"
 	waitParam     = "Wait"
 	boundParam    = "Bound"
@@ -92,7 +96,7 @@ func RunPermissionHook(ctx context.Context, owner *Messages, stdin io.Reader, ou
 	}
 	switch {
 	case err != nil:
-		return refuseHook(messages, out, errOut, lang, hookPayloadUnreadable, map[string]any{detailParam: err.Error()})
+		return refuseHook(messages, out, errOut, lang, hookPayloadUnreadable, nil)
 	case payload.HookEventName != "" && payload.HookEventName != hookEvent:
 		note := hookText(messages, lang, hookOtherEvent, map[string]any{expectedParam: hookEvent, eventParam: payload.HookEventName})
 		logWriteFailure(fmt.Fprintln(errOut, note))
@@ -128,7 +132,7 @@ func RunPermissionHook(ctx context.Context, owner *Messages, stdin io.Reader, ou
 	case err != nil && ctx.Err() != nil:
 		return refuseHook(messages, out, errOut, lang, hookCancelled, nil)
 	case err != nil:
-		return refuseHook(messages, out, errOut, lang, hookDaemonFailed, map[string]any{detailParam: err.Error()})
+		return refuseHook(messages, out, errOut, lang, hookDaemonFailed, nil)
 	}
 
 	var verdict struct {
@@ -136,7 +140,7 @@ func RunPermissionHook(ctx context.Context, owner *Messages, stdin io.Reader, ou
 		Reason   string `json:"reason"`
 	}
 	if err := json.Unmarshal([]byte(answer), &verdict); err != nil || !isDecision(verdict.Decision) {
-		return refuseHook(messages, out, errOut, lang, hookAnswerUnreadable, map[string]any{answerParam: answer})
+		return refuseHook(messages, out, errOut, lang, hookAnswerUnreadable, nil)
 	}
 	return writeHookDecision(messages, out, errOut, lang, verdict.Decision, verdict.Reason)
 }
@@ -150,11 +154,13 @@ func askApprovalSocket(ctx context.Context, messages *hostMessages, out, errOut 
 	bounded, cancel := context.WithTimeout(ctx, answerWait)
 	defer cancel()
 	answer, err := approvalsock.Ask(bounded, socket, req)
-	if err != nil && answerTimedOut(ctx, bounded) {
+	switch {
+	case err != nil && answerTimedOut(ctx, bounded):
 		return refuseHook(messages, out, errOut, lang, hookApprovalTimeout, map[string]any{waitParam: answerWait.String()})
-	}
-	if err != nil {
-		return refuseHook(messages, out, errOut, lang, hookApprovalSocketFailed, nil)
+	case err != nil && ctx.Err() != nil:
+		return refuseHook(messages, out, errOut, lang, hookCancelled, nil)
+	case err != nil:
+		return refuseHook(messages, out, errOut, lang, approvalSocketFailureKey(err), nil)
 	}
 	if answer.Refusal != "" {
 		return refuseHookWithText(messages, out, errOut, lang, approvalRefusalText(messages, lang, answer.Refusal))
@@ -176,6 +182,22 @@ func RunApprovalHook(ctx context.Context, layout RuntimeLayout, owner *Messages,
 	return RunPermissionHook(ctx, owner, stdin, out, errOut, target, hookAnswerWait(), func(c context.Context, argv []string) (string, bool, error) {
 		return dispatchToOperatorDaemon(c, owner.owner, layout, target(), argv)
 	})
+}
+
+func approvalSocketFailureKey(err error) string {
+	switch {
+	case errors.Is(err, approvalsock.ErrAnswerMismatch):
+		return hookAnswerMismatch
+	case errors.Is(err, contracts.ErrInvalidDecision):
+		return hookAnswerInvalid
+	case errors.Is(err, approvalsock.ErrForeignPeer):
+		return hookForeignPeer
+	case errors.Is(err, approvalsock.ErrBusy):
+		return hookApprovalBusy
+	case errors.Is(err, approvalsock.ErrRequestTooLarge):
+		return hookRequestTooLarge
+	}
+	return hookApprovalSocketFailed
 }
 
 func answerTimedOut(parent, bounded context.Context) bool {

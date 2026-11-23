@@ -1,11 +1,14 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -235,5 +238,16 @@ func TestModelIsReadWhenTheTurnStarts(t *testing.T) {
 	turn := collector.named(t, "invoke_agent alpha")
 	if got := spanAttr(turn, "gen_ai.request.model"); got.GetStringValue() != "claude-before" {
 		t.Errorf("gen_ai.request.model = %q, want the model at turn start", got.GetStringValue())
+	}
+}
+
+func TestUnexportableTurnIsLoggedThroughTheSessionLogger(t *testing.T) {
+	_, exporter := startTelemetryCollector(t)
+	d := telemetryDriver(exporter, claudeTerms)
+	var logs bytes.Buffer
+	d.noticeLog = slog.New(slog.NewTextHandler(&logs, nil))
+	d.exportTurn(context.Background(), otelexport.Outcome(0), contracts.Event{})
+	if !strings.Contains(logs.String(), "turn not exported to telemetry") || !strings.Contains(logs.String(), "session=alpha") {
+		t.Fatalf("log = %q, want the session logger to name the session that lost its turn", logs.String())
 	}
 }

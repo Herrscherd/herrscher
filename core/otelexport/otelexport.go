@@ -31,7 +31,7 @@ const (
 // ErrUnsupportedProtocol is returned by Setup when the configured OTLP traces protocol is neither grpc nor http/protobuf.
 var ErrUnsupportedProtocol = errors.New("otelexport: unsupported OTLP traces protocol")
 
-// ErrInvalidEndpoint is returned by Setup when the configured OTLP endpoint is not an http or https URL with a host.
+// ErrInvalidEndpoint is returned by Setup when the configured OTLP endpoint is not an address its protocol accepts: an http or https URL with a host for http/protobuf, and either such a URL or a host with an optional port for grpc.
 var ErrInvalidEndpoint = errors.New("otelexport: invalid OTLP endpoint")
 
 // Lookup reads one environment variable, the way os.LookupEnv does.
@@ -56,13 +56,12 @@ func Setup(ctx context.Context, lookup Lookup) (Exporter, error) {
 	if !enabled(lookup) {
 		return Exporter{}, nil
 	}
-	endpoint := firstSet(lookup, envTracesEndpoint, envEndpoint)
-	if err := validateEndpoint(endpoint); err != nil {
-		return Exporter{}, err
-	}
 	proto, err := parseProtocol(firstSet(lookup, envTracesProtocol, envProtocol))
 	if err != nil {
 		return Exporter{}, err
+	}
+	if endpointErr := validateEndpoint(firstSet(lookup, envTracesEndpoint, envEndpoint), proto); endpointErr != nil {
+		return Exporter{}, endpointErr
 	}
 	res, err := resourceFrom(ctx)
 	if err != nil {
@@ -105,9 +104,20 @@ func enabled(lookup Lookup) bool {
 	return firstSet(lookup, envTracesEndpoint, envEndpoint) != ""
 }
 
-func validateEndpoint(raw string) error {
+func validateEndpoint(raw string, proto protocol) error {
+	if proto == protocolGRPC && !strings.Contains(raw, "://") {
+		return validateHostPort(raw)
+	}
 	endpoint, err := url.Parse(raw)
 	if err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Host == "" {
+		return ErrInvalidEndpoint
+	}
+	return nil
+}
+
+func validateHostPort(raw string) error {
+	endpoint, err := url.Parse("//" + raw)
+	if err != nil || endpoint.Host == "" || endpoint.Path != "" {
 		return ErrInvalidEndpoint
 	}
 	return nil

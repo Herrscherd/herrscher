@@ -157,3 +157,39 @@ func TestInvalidEndpointIsRefused(t *testing.T) {
 		}
 	}
 }
+
+func TestGRPCEndpointWithoutSchemeIsEnabled(t *testing.T) {
+	for _, endpoint := range []string{"localhost:4317", "collector.internal", "https://collector.example:4317"} {
+		exporter, err := Setup(context.Background(), environment(map[string]string{envEndpoint: endpoint, envProtocol: "grpc"}))
+		if err != nil {
+			t.Fatalf("endpoint %q over grpc: err = %v, want it accepted", endpoint, err)
+		}
+		if !exporter.Enabled() {
+			t.Fatalf("endpoint %q over grpc: exporter stayed disabled", endpoint)
+		}
+		if err := exporter.Shutdown(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestEndpointRefusalsHoldForEachProtocol(t *testing.T) {
+	for _, tc := range []struct {
+		protocol string
+		endpoint string
+	}{
+		{"grpc", "::bad"},
+		{"grpc", "http://[::1"},
+		{"grpc", "not a url"},
+		{"grpc", "ftp://x"},
+		{"grpc", "http://"},
+		{"grpc", "localhost:4317/path"},
+		{"http/protobuf", "localhost:4318"},
+		{"http/protobuf", "ftp://x"},
+	} {
+		_, err := Setup(context.Background(), environment(map[string]string{envEndpoint: tc.endpoint, envProtocol: tc.protocol}))
+		if !errors.Is(err, ErrInvalidEndpoint) {
+			t.Errorf("endpoint %q over %s: err = %v, want ErrInvalidEndpoint", tc.endpoint, tc.protocol, err)
+		}
+	}
+}

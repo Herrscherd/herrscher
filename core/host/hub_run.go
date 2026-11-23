@@ -34,8 +34,11 @@ func startTelemetry(ctx context.Context, messages *hostMessages, lang i18n.Langu
 }
 
 func telemetryDisabledText(messages *hostMessages, lang i18n.Language, err error) string {
-	if errors.Is(err, otelexport.ErrInvalidEndpoint) {
+	switch {
+	case errors.Is(err, otelexport.ErrInvalidEndpoint):
 		return messages.text(lang, "telemetry.endpoint_invalid", nil)
+	case errors.Is(err, otelexport.ErrUnsupportedProtocol):
+		return messages.text(lang, "telemetry.protocol_unsupported", nil)
 	}
 	return messages.text(lang, "telemetry.exporter_failed", nil)
 }

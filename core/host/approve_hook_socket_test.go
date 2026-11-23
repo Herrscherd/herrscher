@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net"
 	"os"
@@ -14,6 +15,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/approvalsock"
+	"github.com/Herrscherd/herrscher-contracts/echotest"
 )
 
 func privateSocketPath(t *testing.T) string {
@@ -121,10 +123,82 @@ func TestHookRefusesAnAnswerThatNamesAnotherRequest(t *testing.T) {
 	var out, errOut bytes.Buffer
 	mustRunHook(context.Background(), t, strings.NewReader(bashPayload), &out, &errOut, testTarget, forbidDaemon(t))
 	d, reason := hookDecision(t, out.String())
-	const want = "herrscher: the approval socket could not answer, so this tool call is refused"
+	const want = "herrscher: the approval socket answered another request, so this tool call is refused"
 	if d != "deny" || reason != want {
 		t.Fatalf("got %q/%q, want deny/%q for the answer that names another request", d, reason, want)
 	}
+}
+
+func TestHookRefusesAnApprovalAnswerWithAnUnknownDecision(t *testing.T) {
+	pinEnglish(t)
+	path := privateSocketPath(t)
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", path)
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { closeRead(listener) })
+	go answerRequestWith(listener, func(id string) string {
+		return `{"ID":"` + id + `","Decision":"maybe"}`
+	})
+	t.Setenv(approvalsock.EnvApprovalSocket, path)
+	var out, errOut bytes.Buffer
+	mustRunHook(context.Background(), t, strings.NewReader(bashPayload), &out, &errOut, testTarget, forbidDaemon(t))
+	d, reason := hookDecision(t, out.String())
+	const want = "herrscher: the approval socket sent an unknown decision, so this tool call is refused"
+	if d != "deny" || reason != want {
+		t.Fatalf("got %q/%q, want deny/%q", d, reason, want)
+	}
+}
+
+func TestHookRefusesAnApprovalRequestOverTheSocketBound(t *testing.T) {
+	pinEnglish(t)
+	t.Setenv(approvalsock.EnvApprovalSocket, privateSocketPath(t))
+	oversized := `{"hook_event_name":"PreToolUse","tool_name":"` + strings.Repeat("a", 70<<10) + `","tool_input":{}}`
+	var out, errOut bytes.Buffer
+	mustRunHook(context.Background(), t, strings.NewReader(oversized), &out, &errOut, testTarget, forbidDaemon(t))
+	d, reason := hookDecision(t, out.String())
+	const want = "herrscher: the approval request is over the size limit, so this tool call is refused"
+	if d != "deny" || reason != want {
+		t.Fatalf("got %q/%q, want deny/%q", d, reason, want)
+	}
+}
+
+func TestHookRefusesAnApprovalCancelledBeforeTheSocketAnswers(t *testing.T) {
+	pinEnglish(t)
+	path := privateSocketPath(t)
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", path)
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { closeRead(listener) })
+	t.Setenv(approvalsock.EnvApprovalSocket, path)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var out, errOut bytes.Buffer
+	mustRunHook(ctx, t, strings.NewReader(bashPayload), &out, &errOut, testTarget, forbidDaemon(t))
+	d, reason := hookDecision(t, out.String())
+	const want = "herrscher: the approval was cancelled before an answer came, so this tool call is refused"
+	if d != "deny" || reason != want {
+		t.Fatalf("got %q/%q, want deny/%q", d, reason, want)
+	}
+}
+
+func answerRequestWith(listener net.Listener, answer func(id string) string) {
+	conn, err := listener.Accept()
+	if err != nil {
+		return
+	}
+	defer closeRead(conn)
+	line, readErr := bufio.NewReader(conn).ReadString('\n')
+	if readErr != nil {
+		return
+	}
+	var request contracts.ApprovalRequest
+	if json.Unmarshal([]byte(line), &request) != nil {
+		return
+	}
+	_, err = io.WriteString(conn, answer(request.ID)+"\n")
+	logCleanup(err)
 }
 
 func answerWith(listener net.Listener, answer string) {
@@ -142,14 +216,13 @@ func answerWith(listener net.Listener, answer string) {
 
 func TestHookRefusesAMalformedApprovalAnswerWithoutEchoingIt(t *testing.T) {
 	pinEnglish(t)
-	const received = "ANSWER-PROBE-7f3a not json"
 	path := privateSocketPath(t)
 	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", path)
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
 	t.Cleanup(func() { closeRead(listener) })
-	go answerWith(listener, received)
+	go answerWith(listener, echotest.Probe)
 	t.Setenv(approvalsock.EnvApprovalSocket, path)
 	var out, errOut bytes.Buffer
 	mustRunHook(context.Background(), t, strings.NewReader(bashPayload), &out, &errOut, testTarget, forbidDaemon(t))
@@ -158,9 +231,10 @@ func TestHookRefusesAMalformedApprovalAnswerWithoutEchoingIt(t *testing.T) {
 	if d != "deny" || reason != want {
 		t.Fatalf("got %q/%q, want deny/%q", d, reason, want)
 	}
-	if strings.Contains(out.String()+errOut.String(), "PROBE") {
-		t.Fatalf("the refusal echoed the received answer: stdout %q, stderr %q", out.String(), errOut.String())
+	if got := strings.TrimSuffix(errOut.String(), "\n"); got != want {
+		t.Fatalf("stderr = %q, want the fixed message %q", got, want)
 	}
+	echotest.RequireNoSecretFragment(t, out.String()+errOut.String(), echotest.Probe)
 }
 
 func TestHookKeepsTheDaemonPathWhenTheApprovalSocketIsUnset(t *testing.T) {

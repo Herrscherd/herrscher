@@ -21,6 +21,7 @@ const (
 	envGHHost     = "GH_HOST"
 	gitHubDotCom  = "github.com"
 	flowTimeout   = 30 * time.Second
+	appRetryDelay = time.Minute
 )
 
 // Credentials implements contracts.ForgeCredentials. A token is looked up in
@@ -38,23 +39,24 @@ const (
 // only once it has expired; AppMisconfigured reports the state. Nothing is
 // marked as refused.
 type Credentials struct {
-	store  *Store
-	flow   Flow
-	base   func(contracts.ForgeHost) string
-	env    func(string) (string, bool)
-	gitHub func(context.Context, contracts.ForgeHost) (string, error)
-	now    func() time.Time
-	mu     sync.Mutex
-	guards map[string]*sync.Mutex
-	cache  map[string]contracts.ForgeToken
-	served map[string]string
-	held   map[string]heldRecord
-	appBad map[string]bool
+	store       *Store
+	flow        Flow
+	base        func(contracts.ForgeHost) string
+	env         func(string) (string, bool)
+	gitHub      func(context.Context, contracts.ForgeHost) (string, error)
+	now         func() time.Time
+	mu          sync.Mutex
+	guards      map[string]*sync.Mutex
+	cache       map[string]contracts.ForgeToken
+	served      map[string]string
+	held        map[string]heldRecord
+	appBadUntil map[string]time.Time
 }
 
 type heldRecord struct {
 	record Record
 	from   string
+	warned bool
 }
 
 type settlement struct {
@@ -74,15 +76,15 @@ func New(stateFile string) *Credentials {
 			wait:     waitFor,
 			now:      time.Now,
 		},
-		base:   defaultBase,
-		env:    os.LookupEnv,
-		gitHub: gitHubCLIToken,
-		now:    time.Now,
-		guards: make(map[string]*sync.Mutex),
-		cache:  make(map[string]contracts.ForgeToken),
-		served: make(map[string]string),
-		held:   make(map[string]heldRecord),
-		appBad: make(map[string]bool),
+		base:        defaultBase,
+		env:         os.LookupEnv,
+		gitHub:      gitHubCLIToken,
+		now:         time.Now,
+		guards:      make(map[string]*sync.Mutex),
+		cache:       make(map[string]contracts.ForgeToken),
+		served:      make(map[string]string),
+		held:        make(map[string]heldRecord),
+		appBadUntil: make(map[string]time.Time),
 	}
 }
 
@@ -217,17 +219,27 @@ func (c *Credentials) savedToken(ctx context.Context, host contracts.ForgeHost) 
 func (c *Credentials) AppMisconfigured(host contracts.ForgeHost) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.appBad[host.String()]
+	_, bad := c.appBadUntil[host.String()]
+	return bad
 }
 
-func (c *Credentials) setAppMisconfigured(host contracts.ForgeHost, misconfigured bool) {
+func (c *Credentials) setAppMisconfigured(host contracts.ForgeHost, retryAt time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if misconfigured {
-		c.appBad[host.String()] = true
-		return
-	}
-	delete(c.appBad, host.String())
+	c.appBadUntil[host.String()] = retryAt
+}
+
+func (c *Credentials) clearAppMisconfigured(host contracts.ForgeHost) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.appBadUntil, host.String())
+}
+
+func (c *Credentials) appRetryHeld(host contracts.ForgeHost, now time.Time) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	retryAt, bad := c.appBadUntil[host.String()]
+	return bad && now.Before(retryAt)
 }
 
 func (c *Credentials) savedRecord(ctx context.Context, host contracts.ForgeHost) (Record, bool, error) {
@@ -235,6 +247,7 @@ func (c *Credentials) savedRecord(ctx context.Context, host contracts.ForgeHost)
 	if err != nil {
 		return c.heldWhileUnreadable(ctx, host, err)
 	}
+	c.markReadable(host)
 	now := c.now()
 	_, pending := c.heldFor(host)
 	if !found {
@@ -291,8 +304,7 @@ func (c *Credentials) renew(ctx context.Context, host contracts.ForgeHost) (sett
 	if current.Expired(now) {
 		return settlement{}, nil
 	}
-	refreshed, err := c.flow.Refresh(ctx, c.base(host), current)
-	c.noteAppStanding(host, err)
+	refreshed, err := c.refresh(ctx, host, current)
 	switch {
 	case errors.Is(err, ErrRefreshRejected):
 		current.Rejected = true
@@ -336,7 +348,7 @@ func (c *Credentials) settleFailed(host contracts.ForgeHost, outcome settlement,
 		return outcome.record, true, nil
 	}
 	if pending, ok := c.heldFor(host); ok && stillValid(pending.record, c.now()) {
-		slog.Warn("forge connections not readable, using the renewed token kept in memory", "host", host.String(), "err", err)
+		c.noteUnreadable(host, err)
 		return pending.record, true, nil
 	}
 	return Record{}, false, err
@@ -347,31 +359,65 @@ func (c *Credentials) heldWhileUnreadable(ctx context.Context, host contracts.Fo
 	if !ok || !stillValid(pending.record, c.now()) {
 		return Record{}, false, readErr
 	}
-	slog.Warn("forge connections not readable, using the renewed token kept in memory", "host", host.String(), "err", readErr)
-	c.retryHeld(ctx, host, pending)
+	c.noteUnreadable(host, readErr)
+	if err := c.retryHeld(ctx, host, pending); err != nil {
+		slog.Debug("forge connections not saved yet, the renewed token is kept in memory", "host", host.String(), "err", err)
+	}
 	return pending.record, true, nil
 }
 
-func (c *Credentials) retryHeld(ctx context.Context, host contracts.ForgeHost, pending heldRecord) {
+func (c *Credentials) retryHeld(ctx context.Context, host contracts.ForgeHost, pending heldRecord) error {
 	release, err := c.store.lockRenewal(ctx, host)
 	if err != nil {
-		slog.Warn("forge connections not saved, the renewed token is kept in memory", "host", host.String(), "err", err)
-		return
+		return err
 	}
 	defer release()
 	if _, err := c.persist(ctx, host, settlement{record: pending.record, ok: true, write: true, from: pending.from}); err != nil {
-		slog.Warn("forge connections not saved, the renewed token is kept in memory", "host", host.String(), "err", err)
-		return
+		return err
 	}
 	c.dropHeld(host)
+	return nil
 }
 
-func (c *Credentials) noteAppStanding(host contracts.ForgeHost, refreshErr error) {
+func (c *Credentials) noteUnreadable(host contracts.ForgeHost, readErr error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	held, ok := c.held[host.String()]
+	if !ok || held.warned {
+		return
+	}
+	held.warned = true
+	c.held[host.String()] = held
+	slog.Warn("forge connections not readable, using the renewed token kept in memory", "host", host.String(), "err", readErr)
+}
+
+func (c *Credentials) markReadable(host contracts.ForgeHost) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	held, ok := c.held[host.String()]
+	if !ok {
+		return
+	}
+	held.warned = false
+	c.held[host.String()] = held
+}
+
+func (c *Credentials) refresh(ctx context.Context, host contracts.ForgeHost, current Record) (Record, error) {
+	now := c.now()
+	if c.appRetryHeld(host, now) {
+		return Record{}, ErrAppMisconfigured
+	}
+	refreshed, err := c.flow.Refresh(ctx, c.base(host), current)
+	c.noteAppStanding(host, err, now)
+	return refreshed, err
+}
+
+func (c *Credentials) noteAppStanding(host contracts.ForgeHost, refreshErr error, now time.Time) {
 	switch {
 	case errors.Is(refreshErr, ErrAppMisconfigured):
-		c.setAppMisconfigured(host, true)
+		c.setAppMisconfigured(host, now.Add(appRetryDelay))
 	case refreshErr == nil, errors.Is(refreshErr, ErrRefreshRejected):
-		c.setAppMisconfigured(host, false)
+		c.clearAppMisconfigured(host)
 	}
 }
 

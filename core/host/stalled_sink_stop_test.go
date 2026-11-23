@@ -39,8 +39,8 @@ func TestStopWithAFrozenWriterLosesOrLogsTheHubOverrun(t *testing.T) {
 	lost := droppedWarnings(h.sink)
 	awaitHubLogs(t, h)
 	unconfirmed := unconfirmedAtClose(t, logs.String())
-	if lost == 0 && unconfirmed == 0 {
-		t.Fatal("the hub overrun behind a frozen writer was neither counted lost nor reported unconfirmed at Close")
+	if lost < 1 || unconfirmed != lost {
+		t.Fatalf("the hub overrun behind a frozen writer was counted lost=%d but the journal at Close reports unconfirmed=%d, want each loss announced", lost, unconfirmed)
 	}
 	warnings.open()
 	awaitSinkQuiet(t, h.sink)
@@ -57,10 +57,10 @@ func awaitSinkQuiet(t *testing.T, sink *warningSink) {
 }
 
 func TestCloseWarningsLosesOrLogsAnUndrainedOverrun(t *testing.T) {
-	logs := captureDefaultLog(t)
+	logger, logs := newCapturedLogger(nil)
 	warnings := newGatedWarnings("stuck")
 	t.Cleanup(warnings.open)
-	h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: warnings, teardownGrace: 300 * time.Millisecond})
+	h := testHubLogged(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: warnings, teardownGrace: 300 * time.Millisecond}, logger)
 	if _, err := h.warnings.Write([]byte("stuck\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}
@@ -69,8 +69,8 @@ func TestCloseWarningsLosesOrLogsAnUndrainedOverrun(t *testing.T) {
 	lost := droppedWarnings(h.sink)
 	awaitHubLogs(t, h)
 	unconfirmed := unconfirmedAtClose(t, logs.String())
-	if lost == 0 && unconfirmed == 0 {
-		t.Fatal("the undrained overrun behind a frozen writer was neither counted lost nor reported unconfirmed at Close")
+	if lost < 1 || unconfirmed != lost {
+		t.Fatalf("the undrained overrun behind a frozen writer was counted lost=%d but the journal at Close reports unconfirmed=%d, want each loss announced", lost, unconfirmed)
 	}
 	warnings.open()
 	awaitSinkQuiet(t, h.sink)

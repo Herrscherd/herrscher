@@ -43,6 +43,11 @@ func newTestWarningSink(t *testing.T, messages *hostMessages, out io.Writer, los
 
 func testHub(t *testing.T, h *hub) *hub {
 	t.Helper()
+	return testHubLogged(t, h, discardLogger())
+}
+
+func testHubLogged(t *testing.T, h *hub, logger *slog.Logger) *hub {
+	t.Helper()
 	if h.sessions == nil {
 		h.sessions = newSessionTable(h.messages, clitext.NewMessages())
 	}
@@ -51,9 +56,10 @@ func testHub(t *testing.T, h *hub) *hub {
 	if out == nil {
 		out = io.Discard
 	}
-	h.sink = newWarningSink(h.messages, out, englishLostLine(h.messages), discardLogger())
+	h.sink = newWarningSink(h.messages, out, englishLostLine(h.messages), logger)
 	h.warnings = h.sink
 	t.Cleanup(func() { closeHubSink(t, h) })
+	t.Cleanup(h.stopLive)
 	return h
 }
 

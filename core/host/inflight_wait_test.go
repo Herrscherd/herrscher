@@ -73,6 +73,7 @@ func newInflightHub(t *testing.T, name string, grace time.Duration, warnings io.
 		h.sink.Close()
 		awaitSinkLog(t, h.sink)
 	})
+	t.Cleanup(h.stopLive)
 	return h
 }
 

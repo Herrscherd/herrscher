@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -15,7 +16,6 @@ import (
 const (
 	installTimeout = 15 * time.Minute
 	outputTail     = 8
-	abandonWait    = 10 * time.Second
 )
 
 var errInstallAborted = clitext.SentinelError("install aborted")
@@ -33,12 +33,12 @@ type installRun struct {
 	err        error
 	restoreErr error
 	cancel     context.CancelFunc
-	idle       chan struct{}
+	gate       *stepGate
 	saved      map[string][]byte
 	rendered   []byte
 	steps      []installStep
 	started    bool
-	written    bool
+	touched    bool
 	restored   bool
 	done       bool
 	quitting   bool
@@ -47,6 +47,34 @@ type installRun struct {
 func (run installRun) finished() bool { return run.done || run.err != nil }
 
 func (run installRun) running() bool { return run.started && !run.finished() }
+
+type stepGate struct {
+	idle    chan struct{}
+	mu      sync.Mutex
+	entered bool
+	shut    bool
+}
+
+func newStepGate() *stepGate { return &stepGate{idle: make(chan struct{})} }
+
+func (gate *stepGate) enter() bool {
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	gate.entered = !gate.shut
+	return gate.entered
+}
+
+func (gate *stepGate) leave() { close(gate.idle) }
+
+func (gate *stepGate) close() <-chan struct{} {
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	gate.shut = true
+	if gate.entered {
+		return gate.idle
+	}
+	return nil
+}
 
 type stepDoneMsg struct {
 	err    error
@@ -113,13 +141,16 @@ func (model *setupModel) buildSteps() []installStep {
 
 func (model *setupModel) runStep(index int) tea.Cmd {
 	model.install.steps[index].state = probeRunning
-	model.install.written = model.install.written || model.install.steps[index].writesPlugins
+	model.install.touched = model.install.touched || model.install.steps[index].writesPlugins
 	work := model.install.steps[index].run
 	parent := model.install.ctx
-	idle := make(chan struct{})
-	model.install.idle = idle
+	gate := newStepGate()
+	model.install.gate = gate
 	return func() tea.Msg {
-		defer close(idle)
+		if !gate.enter() {
+			return stepDoneMsg{index: index, err: errInstallAborted}
+		}
+		defer gate.leave()
 		ctx, cancel := context.WithTimeout(parent, installTimeout)
 		defer cancel()
 		out, err := work(ctx)
@@ -167,16 +198,15 @@ func (model *setupModel) abandon() {
 		return
 	}
 	model.install.cancel()
-	select {
-	case <-model.install.idle:
-	case <-time.After(abandonWait):
+	if busy := model.install.gate.close(); busy != nil {
+		<-busy
 	}
 	model.install.err = errInstallAborted
 	model.restorePlugins()
 }
 
 func (model *setupModel) restorePlugins() {
-	if !model.install.written {
+	if !model.install.touched {
 		return
 	}
 	if err := restoreComposition(model.messages, model.deps.hostDir, model.install.saved); err != nil {

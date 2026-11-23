@@ -4985,6 +4985,11 @@
     "other": "plugins.go, go.mod and go.sum put back as they were"
   },
   {
+    "id": "cli.setup.install.stopping",
+    "description": "Install screen notice after Ctrl+C while a step still runs",
+    "other": "stopping: the running step ends, then the files are put back"
+  },
+  {
     "id": "cli.setup.hub.sub",
     "description": "Subtitle of the dashboard",
     "other": "dashboard"

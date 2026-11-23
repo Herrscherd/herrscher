@@ -13,7 +13,7 @@ func TestSentinelsReadAsEnglishSentences(t *testing.T) {
 		errNoVersions, errNoHostModule, errNotCompiledIn, errNotModulePath,
 		errUnknownKind, errInvalidModulePath, errEmptyStack, errUnknownAction,
 		errMarkerNotFound, errDuplicateMarker, errMarkerOrder, errNoGatewayCreds,
-		errIncompleteCreds, errProbeStatus, errVaultNotDir, errUnknownSection, errNeedsTerminal,
+		errIncompleteCreds, errProbeStatus, errVaultNotDir, errVaultRelative, errInstallAborted, errUnknownSection, errNeedsTerminal,
 	}
 	for _, sentinel := range sentinels {
 		text := sentinel.Error()

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -624,6 +625,7 @@ func TestVaultCheck(t *testing.T) {
 		{path: filepath.Join(dir, "new"), key: clitext.SetupVaultCreate},
 		{path: filepath.Join(dir, "a", "b"), key: clitext.SetupVaultBad},
 		{path: file, key: clitext.SetupVaultBad},
+		{path: "relative/vault", key: clitext.SetupVaultBad},
 	}
 	for _, tc := range cases {
 		if got := vaultCheck(tc.path); got.key != tc.key {
@@ -684,7 +686,7 @@ func (harness *setupHarness) startInstallUntilGoGet(t *testing.T) tea.Cmd {
 	for range 2 {
 		_, cmd = harness.model.Update(cmd())
 	}
-	if !harness.model.install.written {
+	if !harness.model.install.touched {
 		t.Fatalf("install = %+v, want plugins.go written before go get", harness.model.install)
 	}
 	return cmd
@@ -723,11 +725,28 @@ func TestCtrlCDuringInstallCancelsRestoresThenQuits(t *testing.T) {
 	}
 }
 
-func TestAbandonedProgramRestoresPlugins(t *testing.T) {
+func TestAbandonedProgramWaitsForTheStepThenRestores(t *testing.T) {
 	harness := newHarness(t, []byte(setupManifest), screenReview, nil)
 	pending := harness.startInstallUntilGoGet(t)
+	entered, release := make(chan struct{}), make(chan struct{})
+	harness.shell.effect = func(setupCommand) {
+		close(entered)
+		<-release
+	}
 	go pending()
-	harness.model.abandon()
+	<-entered
+	abandoned := make(chan struct{})
+	go func() {
+		harness.model.abandon()
+		close(abandoned)
+	}()
+	select {
+	case <-abandoned:
+		t.Fatal("abandon returned while the step was still running")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	<-abandoned
 	if !errors.Is(harness.model.install.err, errInstallAborted) || !harness.model.install.restored {
 		t.Fatalf("install = %+v, want aborted and restored", harness.model.install)
 	}
@@ -807,5 +826,29 @@ func TestSecretMaskHidesTheLength(t *testing.T) {
 	short, long := harness.model.shownValue(envDiscordToken, "ab"), harness.model.shownValue(envDiscordToken, strings.Repeat("z", 60))
 	if short != long {
 		t.Fatalf("masks differ: %q vs %q", short, long)
+	}
+}
+
+func TestAbandonBeforeTheStepRunsSkipsIt(t *testing.T) {
+	harness := newHarness(t, []byte(setupManifest), screenReview, nil)
+	pending := harness.startInstallUntilGoGet(t)
+	harness.model.abandon()
+	if !harness.model.install.restored {
+		t.Fatalf("install = %+v, want restored", harness.model.install)
+	}
+	if done, ok := pending().(stepDoneMsg); !ok || !errors.Is(done.err, errInstallAborted) {
+		t.Fatal("a step dispatched after abandon still ran")
+	}
+	if slices.ContainsFunc(harness.shell.commands(), func(line string) bool { return strings.HasPrefix(line, "go get") }) {
+		t.Fatalf("commands = %v, want go get never run", harness.shell.commands())
+	}
+}
+
+func TestCtrlCShowsTheInstallIsStopping(t *testing.T) {
+	harness := newHarness(t, []byte(setupManifest), screenReview, nil)
+	harness.startInstallUntilGoGet(t)
+	harness.model.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if view := harness.model.View(); !strings.Contains(view, harness.text(clitext.SetupInstallStopping)) {
+		t.Fatalf("view after ctrl+c = %q, want the stopping notice", view)
 	}
 }

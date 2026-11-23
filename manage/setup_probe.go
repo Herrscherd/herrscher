@@ -73,11 +73,14 @@ type setupCommand struct {
 	args  []string
 }
 
+const processWaitDelay = 5 * time.Second
+
 type commandRunner func(ctx context.Context, cmd setupCommand) ([]byte, error)
 
 func execRunner(ctx context.Context, cmd setupCommand) ([]byte, error) {
 	proc := exec.CommandContext(ctx, cmd.name, cmd.args...)
 	proc.Dir = cmd.dir
+	proc.WaitDelay = processWaitDelay
 	if cmd.stdin != "" {
 		proc.Stdin = strings.NewReader(cmd.stdin)
 	}
@@ -248,6 +251,9 @@ func vaultCheck(path string) probeResult {
 	if path == "" {
 		return failed(clitext.SetupVaultEmpty, nil)
 	}
+	if !filepath.IsAbs(path) {
+		return failed(clitext.SetupVaultBad, clitext.Params{clitext.ParamErr: errVaultRelative.Error()})
+	}
 	info, err := os.Stat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		if parent, parentErr := os.Stat(filepath.Dir(path)); parentErr == nil && parent.IsDir() {
@@ -273,4 +279,7 @@ func vaultCheck(path string) probeResult {
 	return passed(clitext.SetupVaultOK, nil)
 }
 
-var errVaultNotDir = clitext.SentinelError("not a directory")
+var (
+	errVaultNotDir   = clitext.SentinelError("not a directory")
+	errVaultRelative = clitext.SentinelError("not an absolute path")
+)

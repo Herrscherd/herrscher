@@ -430,6 +430,9 @@ func (model *setupModel) installRows() []setupRow {
 	for idx := range model.install.steps {
 		rows = append(rows, model.stepRows(&model.install.steps[idx])...)
 	}
+	if model.install.quitting && !model.install.finished() {
+		rows = append(rows, blank(), line(toneWarn, model.text(clitext.SetupInstallStopping, nil)))
+	}
 	if !model.install.finished() {
 		return rows
 	}

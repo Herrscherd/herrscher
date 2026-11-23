@@ -980,20 +980,20 @@ func TestUnreadableFileWarnsOnceWhileTheKeptPairIsServed(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(previous) })
 
-	if err := os.WriteFile(path, []byte("{broken"), 0o600); err != nil {
+	if err = os.WriteFile(path, []byte("{broken"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	for range 3 {
-		token, err := tokenSource(t, setup.creds, "github.com")
-		if err != nil || token.Secret() != "ghu_fresh" {
-			t.Fatalf("Token with a corrupt file = %v, %v; want the renewed token kept in memory", token.Secret(), err)
+		token, tokenErr := tokenSource(t, setup.creds, "github.com")
+		if tokenErr != nil || token.Secret() != "ghu_fresh" {
+			t.Fatalf("Token with a corrupt file = %v, %v; want the renewed token kept in memory", token.Secret(), tokenErr)
 		}
 	}
 	if n := countWarnings(logs.String(), "not readable"); n != 1 {
 		t.Fatalf("unreadable warnings for three calls = %d, want 1: %s", n, logs.String())
 	}
 
-	if err := os.WriteFile(path, original, 0o600); err != nil {
+	if err = os.WriteFile(path, original, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	host := mustHost(t, "github.com")
@@ -1008,10 +1008,10 @@ func TestUnreadableFileWarnsOnceWhileTheKeptPairIsServed(t *testing.T) {
 	if err != nil || token.Secret() != "ghu_fresh" {
 		t.Fatalf("Token with the file readable and the renewal lock not taken = %v, %v; want the renewed token kept in memory", token.Secret(), err)
 	}
-	if err := os.WriteFile(path, []byte("{broken"), 0o600); err != nil {
+	if err = os.WriteFile(path, []byte("{broken"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tokenSource(t, setup.creds, "github.com"); err != nil {
+	if _, err = tokenSource(t, setup.creds, "github.com"); err != nil {
 		t.Fatalf("Token with the file corrupt again: %v", err)
 	}
 	if n := countWarnings(logs.String(), "not readable"); n != 2 {

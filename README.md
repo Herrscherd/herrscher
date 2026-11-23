@@ -86,6 +86,8 @@ Input tokens: `gen_ai.usage.input_tokens` is the sum of the uncached input, the 
 Outcomes and error status:
 
 - A completed turn has no error status.
+- A failed turn (the backend returned an error) has error status with `error.type` set to `turn_failed`. The error text is never exported, so the status carries the fixed type only.
+- An interrupted turn (the operator cut it while the backend was answering) has unset status, because the operator chose to stop it, and the result attribute `herrscher.turn.outcome` set to `interrupted`. `herrscher.turn.outcome` is a daemon attribute: semconv v1.41.0 defines no value for an interrupted turn.
 - An abandoned turn has error status with `error.type` set to `turn_abandoned`. A turn is abandoned when its send to the bridge fails, when the language announcement fails, or when the turn is cut while it waits for the backend.
 - A failed tool call has error status with `error.type` set to `tool_failed`. A tool call still open when its turn ends has `error.type` set to `tool_unfinished`. Both are set on the `execute_tool` span, and the turn keeps its own status.
 - The error message of a failed call is never exported: the error status carries the type only.
@@ -96,7 +98,6 @@ Endpoint: the endpoint must be an `http` or `https` URL with a host, and the pro
 
 Known limits:
 
-- A failed or interrupted backend turn is not marked as an error yet. The exporter already knows the `turn_failed` and `turn_interrupted` outcomes, but the bridge does not put that outcome in the event stream: it only puts the text of the reply there. Marking it needs a field on the terminal event in the contracts, which is a separate change and is not merged, so the daemon does not depend on it yet.
 - An input dropped by an interrupt before the driver hands it to the backend, or refused by the budget gate, produces no span, because no agent invocation happened.
 - Token counts that are zero, negative or not finite are omitted, not exported as zero.
 

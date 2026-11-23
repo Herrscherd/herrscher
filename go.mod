@@ -8,7 +8,7 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/Herrscherd/herrscher-claude-backend v0.18.0
 	github.com/Herrscherd/herrscher-codex-backend v0.11.0
-	github.com/Herrscherd/herrscher-contracts v0.37.0
+	github.com/Herrscherd/herrscher-contracts v0.39.0
 	github.com/Herrscherd/herrscher-cursor-backend v0.9.0
 	github.com/Herrscherd/herrscher-discord-gateway v0.31.0
 	github.com/Herrscherd/herrscher-jev-compactor v0.4.0

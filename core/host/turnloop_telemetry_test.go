@@ -157,6 +157,41 @@ func TestAbandonedTurnIsExportedAsErrorWithItsType(t *testing.T) {
 	}
 }
 
+func TestFailedTurnIsExportedAsErrorWithItsFixedType(t *testing.T) {
+	collector, exporter := startTelemetryCollector(t)
+	d := telemetryDriver(exporter, claudeTerms)
+	d.turnSpan = d.openTurnSpan()
+	d.completeTurn(context.Background(), contracts.Event{T: eventwire.EventReply, Text: "partial", Done: true, Outcome: contracts.TurnFailed}, time.Now(), 0, outbox.Frame{})
+	flushTelemetry(t, exporter)
+
+	turn := collector.named(t, "invoke_agent alpha")
+	if turn.GetStatus().GetCode() != tracepb.Status_STATUS_CODE_ERROR {
+		t.Errorf("failed turn status = %v, want error", turn.GetStatus().GetCode())
+	}
+	if got := spanAttr(turn, "error.type"); got.GetStringValue() != "turn_failed" {
+		t.Errorf("error.type = %q, want turn_failed", got.GetStringValue())
+	}
+}
+
+func TestInterruptedTurnIsExportedWithItsOutcomeNotAsError(t *testing.T) {
+	collector, exporter := startTelemetryCollector(t)
+	d := telemetryDriver(exporter, claudeTerms)
+	d.turnSpan = d.openTurnSpan()
+	d.completeTurn(context.Background(), contracts.Event{T: eventwire.EventReply, Text: "stopped", Done: true, Outcome: contracts.TurnInterrupted}, time.Now(), 0, outbox.Frame{})
+	flushTelemetry(t, exporter)
+
+	turn := collector.named(t, "invoke_agent alpha")
+	if turn.GetStatus().GetCode() == tracepb.Status_STATUS_CODE_ERROR {
+		t.Errorf("interrupted turn exported as an error")
+	}
+	if spanAttr(turn, "error.type") != nil {
+		t.Errorf("interrupted turn carries error.type, want none")
+	}
+	if got := spanAttr(turn, "herrscher.turn.outcome"); got.GetStringValue() != "interrupted" {
+		t.Errorf("herrscher.turn.outcome = %q, want interrupted", got.GetStringValue())
+	}
+}
+
 func TestTurnSpanNamesTheGenAIProviderOfEachVendor(t *testing.T) {
 	collector, exporter := startTelemetryCollector(t)
 	for _, tc := range []struct {

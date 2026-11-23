@@ -211,15 +211,19 @@ func TestFailedTurnIsAnErrorWithItsOwnType(t *testing.T) {
 	}
 }
 
-func TestInterruptedTurnIsAnErrorWithItsOwnType(t *testing.T) {
+func TestInterruptedTurnIsNotAnErrorButCarriesItsOutcome(t *testing.T) {
 	exporter, memory := recordingExporter(t)
 	mustExport(t, exporter, Turn{Session: "alpha", Started: at(0), Ended: at(10 * time.Second), Outcome: OutcomeInterrupted})
 	parent := spanNamed(t, memory.GetSpans(), "invoke_agent alpha")
-	if parent.Status.Code != codes.Error {
-		t.Errorf("interrupted turn status = %v, want error", parent.Status.Code)
+	if parent.Status.Code == codes.Error {
+		t.Errorf("interrupted turn status = %v, want not error", parent.Status.Code)
 	}
-	if got := errorTypeOf(t, parent); got != errorTypeInterrupted {
-		t.Errorf("error.type = %q, want %q", got, errorTypeInterrupted)
+	if _, ok := attrValue(parent, semconv.ErrorTypeKey); ok {
+		t.Error("interrupted turn carries error.type, want none")
+	}
+	got, ok := attrValue(parent, turnOutcomeKey)
+	if !ok || got.AsString() != turnOutcomeInterrupted {
+		t.Errorf("%s = %q, want %q", turnOutcomeKey, got.AsString(), turnOutcomeInterrupted)
 	}
 }
 

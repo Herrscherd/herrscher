@@ -46,10 +46,14 @@ type Turn struct {
 
 const (
 	errorTypeFailed         = "turn_failed"
-	errorTypeInterrupted    = "turn_interrupted"
 	errorTypeAbandoned      = "turn_abandoned"
 	errorTypeToolFailed     = "tool_failed"
 	errorTypeToolUnfinished = "tool_unfinished"
+)
+
+const (
+	turnOutcomeKey         = attribute.Key("herrscher.turn.outcome")
+	turnOutcomeInterrupted = "interrupted"
 )
 
 // Export sends the turn as one invoke_agent span with an execute_tool child per call. It only queues the spans, so it never waits for the collector. A disabled exporter does nothing and reports no error.
@@ -57,34 +61,37 @@ func (e Exporter) Export(ctx context.Context, turn Turn) error {
 	if !e.Enabled() {
 		return nil
 	}
-	failure, err := outcomeErrorType(turn.Outcome)
-	if err != nil {
+	if err := checkOutcome(turn.Outcome); err != nil {
 		return err
 	}
 	ctx, span := e.tracer.Start(ctx, spanName(semconv.GenAIOperationNameInvokeAgent, turn.Session), trace.WithSpanKind(trace.SpanKindClient), trace.WithTimestamp(turn.Started), trace.WithAttributes(turnAttributes(turn)...))
 	for _, call := range turn.Calls {
 		e.exportCall(ctx, call, turn.Ended)
 	}
-	if failure != "" {
-		fail(span, failure)
-	}
+	markOutcome(span, turn.Outcome)
 	span.End(trace.WithTimestamp(turn.Ended))
 	return nil
 }
 
-func outcomeErrorType(outcome Outcome) (string, error) {
+func checkOutcome(outcome Outcome) error {
 	switch outcome {
-	case OutcomeCompleted:
-		return "", nil
-	case OutcomeFailed:
-		return errorTypeFailed, nil
-	case OutcomeInterrupted:
-		return errorTypeInterrupted, nil
-	case OutcomeAbandoned:
-		return errorTypeAbandoned, nil
+	case OutcomeCompleted, OutcomeFailed, OutcomeInterrupted, OutcomeAbandoned:
+		return nil
 	case outcomeUnset:
 	}
-	return "", ErrUnknownOutcome
+	return ErrUnknownOutcome
+}
+
+func markOutcome(span trace.Span, outcome Outcome) {
+	switch outcome {
+	case OutcomeFailed:
+		fail(span, errorTypeFailed)
+	case OutcomeInterrupted:
+		span.SetAttributes(turnOutcomeKey.String(turnOutcomeInterrupted))
+	case OutcomeAbandoned:
+		fail(span, errorTypeAbandoned)
+	case OutcomeCompleted, outcomeUnset:
+	}
 }
 
 func (e Exporter) exportCall(parent context.Context, call timeline.Call, turnEnd time.Time) {

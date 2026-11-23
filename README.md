@@ -708,8 +708,13 @@ its outcome keeps the state `started` and has no end. The text form lists the ca
 before the usage line of the turn, with the same `✓`, `✗` and `…` lines as the watch.
 A turn with tool calls and no reply is kept. The `detail` and the `error` of a call are
 kept up to 4096 bytes: a longer one is cut at the last whole character under that bound,
-and the rest is dropped. The `detail` of a call is what the backend reported, and it is
-stored in the local transcript as it is.
+and the rest is dropped. Within that bound they are stored verbatim: the `detail` is what
+the backend reported, and it is written as it is to the session's local transcript, a file
+created with mode `0600` and read back by `session history`. `session watch` shows the same
+values from the events the daemon keeps in memory. Both verbs need the same right, the
+`observer` role or above, the one that already lets a user read the turns. A `detail` can
+carry sensitive arguments, such as a path, a command or a query, so grant that role only to
+people who may read the session's content.
 
 The terminal UI shows the same lines at the end of each turn, before the reply, for
 the turns it follows live. Past turns replayed from the transcript do not get their

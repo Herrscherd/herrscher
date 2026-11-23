@@ -142,14 +142,21 @@ fail with a message saying herrscher is not connected to that host.
 - **The saved connections file cannot be read.** Status names its path and
   says to run `herrscher connect logout`, which removes it, then connect again.
 - **The forge does not accept the App's credentials.** The client settings of
-  the App are wrong on that forge, so its renewals fail. Once a renewal has
-  tried, status shows that the herrscher GitHub App is misconfigured on the
-  forge and asks you to report it to the herrscher maintainers. This is not a
-  refused token: the saved connection is not marked refused, and no other source
-  takes its place.
+  the App are wrong on that forge, so its renewals fail. This is not a refused
+  token: the saved connection is not marked refused, and no other source takes
+  its place.
 
-  While the saved token is still valid, forge operations keep using it and log a
-  warning that names the host, never the token. Once it expires, forge operations
-  fail with an error that ends with `the forge does not accept the herrscher app
-  credentials`. Renewal is tried again only when the token is due, and fixing the
-  App restores renewals.
+  `connect status` shows that the herrscher GitHub App is misconfigured on the
+  forge, and asks you to report it to the herrscher maintainers, only when that
+  same `connect status` run tried a renewal and the forge refused the App's
+  credentials. A renewal is tried when the saved access token is due, that is in
+  its last five minutes or after it expired. A renewal run by another herrscher
+  process, such as the daemon, is not visible to `connect status`.
+
+  After such a refusal, herrscher does not send the renewal to the forge again
+  for the same host for one minute. While the saved token is still valid, forge
+  operations keep using it and log a warning that names the host, never the
+  token. Once it expires, forge operations fail with an error that ends with
+  `the forge does not accept the herrscher app credentials`. Renewal is tried
+  again when the token is due and that minute has passed, and fixing the App
+  restores renewals.

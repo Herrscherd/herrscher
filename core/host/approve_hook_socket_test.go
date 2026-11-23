@@ -116,17 +116,18 @@ func TestHookRefusesAnAnswerThatNamesAnotherRequest(t *testing.T) {
 		t.Fatalf("listen: %v", err)
 	}
 	t.Cleanup(func() { closeRead(listener) })
-	go answerWithForeignID(listener)
+	go answerWith(listener, `{"ID":"someone-else","Decision":"allow"}`)
 	t.Setenv(approvalsock.EnvApprovalSocket, path)
 	var out, errOut bytes.Buffer
 	mustRunHook(context.Background(), t, strings.NewReader(bashPayload), &out, &errOut, testTarget, forbidDaemon(t))
 	d, reason := hookDecision(t, out.String())
-	if d != "deny" || !strings.Contains(reason, "does not match") {
-		t.Fatalf("got %q/%q, want a refusal for the answer that names another request", d, reason)
+	const want = "herrscher: the approval socket could not answer, so this tool call is refused"
+	if d != "deny" || reason != want {
+		t.Fatalf("got %q/%q, want deny/%q for the answer that names another request", d, reason, want)
 	}
 }
 
-func answerWithForeignID(listener net.Listener) {
+func answerWith(listener net.Listener, answer string) {
 	conn, err := listener.Accept()
 	if err != nil {
 		return
@@ -135,8 +136,31 @@ func answerWithForeignID(listener net.Listener) {
 	if _, readErr := bufio.NewReader(conn).ReadString('\n'); readErr != nil {
 		return
 	}
-	_, err = io.WriteString(conn, `{"ID":"someone-else","Decision":"allow"}`+"\n")
+	_, err = io.WriteString(conn, answer+"\n")
 	logCleanup(err)
+}
+
+func TestHookRefusesAMalformedApprovalAnswerWithoutEchoingIt(t *testing.T) {
+	pinEnglish(t)
+	const received = "ANSWER-PROBE-7f3a not json"
+	path := privateSocketPath(t)
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", path)
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { closeRead(listener) })
+	go answerWith(listener, received)
+	t.Setenv(approvalsock.EnvApprovalSocket, path)
+	var out, errOut bytes.Buffer
+	mustRunHook(context.Background(), t, strings.NewReader(bashPayload), &out, &errOut, testTarget, forbidDaemon(t))
+	d, reason := hookDecision(t, out.String())
+	const want = "herrscher: the approval socket could not answer, so this tool call is refused"
+	if d != "deny" || reason != want {
+		t.Fatalf("got %q/%q, want deny/%q", d, reason, want)
+	}
+	if strings.Contains(out.String()+errOut.String(), "PROBE") {
+		t.Fatalf("the refusal echoed the received answer: stdout %q, stderr %q", out.String(), errOut.String())
+	}
 }
 
 func TestHookKeepsTheDaemonPathWhenTheApprovalSocketIsUnset(t *testing.T) {

@@ -772,8 +772,8 @@
   },
   {
     "id": "hook.approval_socket_failed",
-    "description": "The approval hook refuses a tool call because the approval socket failed or answered for another request, Detail carries the cause",
-    "other": "herrscher: the approval socket could not answer, so this tool call is refused: {{.Detail}}"
+    "description": "The approval hook refuses a tool call because the approval socket failed or answered for another request; the cause is not repeated, since it may echo received text",
+    "other": "herrscher: the approval socket could not answer, so this tool call is refused"
   },
   {
     "id": "hook.approval_timeout",

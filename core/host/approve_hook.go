@@ -154,7 +154,7 @@ func askApprovalSocket(ctx context.Context, messages *hostMessages, out, errOut 
 		return refuseHook(messages, out, errOut, lang, hookApprovalTimeout, map[string]any{waitParam: answerWait.String()})
 	}
 	if err != nil {
-		return refuseHook(messages, out, errOut, lang, hookApprovalSocketFailed, map[string]any{detailParam: err.Error()})
+		return refuseHook(messages, out, errOut, lang, hookApprovalSocketFailed, nil)
 	}
 	if answer.Refusal != "" {
 		return refuseHookWithText(messages, out, errOut, lang, approvalRefusalText(messages, lang, answer.Refusal))

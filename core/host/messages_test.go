@@ -218,7 +218,7 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"hook.daemon_failed":                {"Detail"},
 		"hook.answer_unreadable":            {"Answer"},
 		"hook.other_event":                  {"Event", "Expected"},
-		"hook.approval_socket_failed":       {"Detail"},
+		"hook.approval_socket_failed":       nil,
 		"hook.approval_timeout":             {"Wait"},
 		"approve.wait_truncated":            {"Wait", "Bound"},
 		"approval.request_unreadable":       {"Detail"},

@@ -97,9 +97,12 @@ func park(stale string) error {
 		return err
 	}
 	if err := slot.Close(); err != nil {
-		return err
+		return errors.Join(err, os.Remove(slot.Name()))
 	}
-	return os.Rename(stale, slot.Name())
+	if err := os.Rename(stale, slot.Name()); err != nil {
+		return errors.Join(err, os.Remove(slot.Name()))
+	}
+	return nil
 }
 
 func sweepParked(stale string, remove removeFunc) error {

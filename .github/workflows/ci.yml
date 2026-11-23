@@ -40,10 +40,15 @@ jobs:
         run: |
           cd "$RUNNER_TEMP/dist"
           python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &
-          sleep 2
+          for attempt in $(seq 1 20); do
+            curl -fsS -o /dev/null http://127.0.0.1:8765/ && break
+            test "$attempt" -lt 20
+            sleep 0.5
+          done
           mkdir -p releases/download/v0.0.0-dryrun
           cp herrscher_* checksums.txt releases/download/v0.0.0-dryrun/
           sed 's#https://github.com/$repo/releases#http://127.0.0.1:8765/releases#' "$GITHUB_WORKSPACE/scripts/install.sh" > install-local.sh
+          test "$(grep -c 127.0.0.1:8765 install-local.sh)" -eq 2
           HERRSCHER_VERSION=v0.0.0-dryrun HERRSCHER_INSTALL_DIR="$RUNNER_TEMP/bin" sh install-local.sh
           "$RUNNER_TEMP/bin/herrscher" version | grep -F 0.0.0-dryrun
   e2e-ssh:

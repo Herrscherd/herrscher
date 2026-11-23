@@ -16,6 +16,7 @@ import (
 const (
 	installTimeout = 15 * time.Minute
 	outputTail     = 8
+	abandonLimit   = 30 * time.Second
 )
 
 var errInstallAborted = clitext.SentinelError("install aborted")
@@ -50,6 +51,7 @@ func (run installRun) running() bool { return run.started && !run.finished() }
 
 type stepGate struct {
 	idle    chan struct{}
+	done    sync.Once
 	mu      sync.Mutex
 	entered bool
 	shut    bool
@@ -64,7 +66,7 @@ func (gate *stepGate) enter() bool {
 	return gate.entered
 }
 
-func (gate *stepGate) leave() { close(gate.idle) }
+func (gate *stepGate) leave() { gate.done.Do(func() { close(gate.idle) }) }
 
 func (gate *stepGate) close() <-chan struct{} {
 	gate.mu.Lock()
@@ -199,7 +201,10 @@ func (model *setupModel) abandon() {
 	}
 	model.install.cancel()
 	if busy := model.install.gate.close(); busy != nil {
-		<-busy
+		select {
+		case <-busy:
+		case <-time.After(abandonLimit):
+		}
 	}
 	model.install.err = errInstallAborted
 	model.restorePlugins()

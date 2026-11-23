@@ -84,7 +84,11 @@ func execRunner(ctx context.Context, cmd setupCommand) ([]byte, error) {
 	if cmd.stdin != "" {
 		proc.Stdin = strings.NewReader(cmd.stdin)
 	}
-	return proc.CombinedOutput()
+	out, err := proc.CombinedOutput()
+	if errors.Is(err, exec.ErrWaitDelay) && proc.ProcessState != nil && proc.ProcessState.Success() {
+		return out, nil
+	}
+	return out, err
 }
 
 type setupProber struct {

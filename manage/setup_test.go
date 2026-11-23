@@ -852,3 +852,37 @@ func TestCtrlCShowsTheInstallIsStopping(t *testing.T) {
 		t.Fatalf("view after ctrl+c = %q, want the stopping notice", view)
 	}
 }
+
+func TestExecRunnerKeepsASuccessWhoseChildHoldsTheOutput(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("no sh")
+	}
+	out, err := execRunner(t.Context(), setupCommand{name: "sh", args: []string{"-c", "sleep 7 & echo ok"}})
+	if err != nil || string(out) != "ok\n" {
+		t.Fatalf("out %q, err %v, want ok and no error", out, err)
+	}
+}
+
+func TestExecRunnerReportsAFailure(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("no sh")
+	}
+	if _, err := execRunner(t.Context(), setupCommand{name: "sh", args: []string{"-c", "exit 3"}}); err == nil {
+		t.Fatal("a failing command reported success")
+	}
+}
+
+func TestStepGateLeavesOnce(t *testing.T) {
+	gate := newStepGate()
+	if !gate.enter() {
+		t.Fatal("a fresh gate refused entry")
+	}
+	gate.leave()
+	gate.leave()
+	if busy := gate.close(); busy == nil {
+		t.Fatal("an entered gate gave nothing to wait on")
+	}
+	if gate.enter() {
+		t.Fatal("a closed gate let a step in")
+	}
+}

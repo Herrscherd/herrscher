@@ -650,9 +650,9 @@ thing it is used to diagnose.
 ### Following a session from any client
 
 `herrscher session watch --name <session>` follows the session's current turn in the
-terminal: the prompt and who sent it, each tool call as a line when it ends (`✓` with
-its duration and tokens, or `✗` with its duration and error, or `no reason given` when
-the backend gave none), the reply as it streams,
+terminal: the prompt and who sent it, each tool call as its status line when it starts and as a
+line when it ends (`✓` with its duration and tokens, or `✗` with its duration and error,
+or `no reason given` when the backend gave none), the reply as it streams,
 and the tokens and cost when the turn ends. A call still open when the reply arrives
 shows as `…` with `unfinished`. The bound notice appears once, when a turn goes past
 4096 tool calls, and only the first 4096 are kept. It says when the session is idle or when
@@ -661,7 +661,8 @@ session under its new name when it is renamed, and stops when the session is clo
 or archived, or when it is interrupted. `--json` prints one event per line, the
 same events the daemon sends on its events socket, so a script can consume them. A
 tool call travels as `tool_call` on the `status` event that starts it and on the
-`tool_done` event that ends it, with no duplicate status line.
+`tool_done` event that ends it. The two lines are the only ones a call prints: the
+`tool_done` event never prints a second status line.
 
 Every event the daemon publishes carries a sequence number (`seq`). It starts from
 the clock when the daemon starts, so a new daemon always numbers above the one

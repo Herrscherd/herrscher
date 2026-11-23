@@ -666,11 +666,13 @@ tool call travels as `tool_call` on the `status` event that starts it and on the
 
 Every event the daemon publishes carries a sequence number (`seq`). It starts from
 the clock when the daemon starts, so a new daemon always numbers above the one
-before it. The daemon keeps the latest events of each session in memory: 512 events
-and 1 MiB per session, for the 64 sessions that spoke most recently, with the text
-of a streamed reply folded into one entry. The bytes of an event are its text plus
-the `id`, `tool`, `detail` and `error` of its tool call, and the `detail` and the
-`error` are cut to 4096 bytes before they are kept.
+before it. The daemon keeps the latest events of each session in memory: at most 512
+entries and 1 MiB of cost per session, for the 64 sessions that spoke most recently,
+with the text of a streamed reply folded into one entry. The cost of an entry is its
+text, plus the `id`, `tool`, `detail` and `error` of its tool call, plus 128 bytes of
+overhead. The `detail` and the `error` are cut to 4096 bytes before they are kept. The
+bridge refuses a tool call whose `id` or `tool` is longer than 256 bytes: the event
+keeps its text and loses its call.
 
 The catch-up happens on the events socket itself. A subscriber may write one line as
 soon as it connects, `{"session":"<name>","since":<seq>}`, and the daemon first

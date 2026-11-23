@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -450,4 +451,26 @@ func TestJournalStoresToolDetailAndErrorWithinTheBound(t *testing.T) {
 	if len(last.Error) != timeline.MaxFieldBytes || len(last.Detail) != timeline.MaxFieldBytes {
 		t.Fatalf("stored detail %d and error %d bytes, want both cut to %d", len(last.Detail), len(last.Error), timeline.MaxFieldBytes)
 	}
+}
+
+func recordToolErrorOfAMebibyte(journal *eventJournal) {
+	huge := strings.Repeat("e", 1<<20)
+	journal.record("tools", contracts.Event{T: eventwire.EventToolDone, ToolCall: &contracts.ToolCall{ID: "c", Tool: "bash", Error: huge, State: contracts.ToolCallFailed}})
+}
+
+func TestJournalReleasesTheToolTextItCuts(t *testing.T) {
+	journal := newEventJournalFrom(journalTestBase)
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	for range 128 {
+		recordToolErrorOfAMebibyte(journal)
+	}
+	runtime.GC()
+	runtime.ReadMemStats(&after)
+	const margin = 32 << 20
+	if retained := int64(after.HeapAlloc) - int64(before.HeapAlloc); retained > margin {
+		t.Fatalf("the journal still holds %d bytes after GC for 128 errors of 1 MiB, want under %d: the cut keeps the whole error alive", retained, margin)
+	}
+	runtime.KeepAlive(journal)
 }

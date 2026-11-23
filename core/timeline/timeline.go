@@ -53,6 +53,7 @@ type Recorder struct {
 	mark       int
 	marked     bool
 	full       bool
+	drained    int
 }
 
 // Apply feeds one event of the turn to the recorder, and returns a copy of the call it started or finished, whether it touched a call, and ErrFull on the first call the turn cannot keep.
@@ -76,6 +77,34 @@ func (r *Recorder) Apply(event contracts.Event) (Call, bool, error) {
 // Calls returns the calls of the turn in the order they started, open ones included.
 func (r *Recorder) Calls() []Call {
 	return slices.Clone(r.calls)
+}
+
+// Knows reports whether the turn has started a call with this ID, open or finished.
+func (r *Recorder) Knows(id string) bool {
+	return r.started[id]
+}
+
+// Seal closes every open call and returns them in the order they started.
+func (r *Recorder) Seal() []Call {
+	indexes := make([]int, 0, len(r.openIndex))
+	for callID, index := range r.openIndex {
+		indexes = append(indexes, index)
+		delete(r.openIndex, callID)
+	}
+	slices.Sort(indexes)
+	sealed := make([]Call, 0, len(indexes))
+	for _, index := range indexes {
+		sealed = append(sealed, r.calls[index])
+	}
+	return sealed
+}
+
+// Drain seals the open calls and returns the calls no earlier Drain returned.
+func (r *Recorder) Drain() []Call {
+	r.Seal()
+	fresh := slices.Clone(r.calls[r.drained:])
+	r.drained = len(r.calls)
+	return fresh
 }
 
 func (r *Recorder) reset() {
@@ -136,7 +165,7 @@ func BoundField(text string) string {
 	for cut > 0 && !utf8.RuneStart(text[cut]) {
 		cut--
 	}
-	return text[:cut]
+	return strings.Clone(text[:cut])
 }
 
 func (r *Recorder) tokensSinceMark() int {

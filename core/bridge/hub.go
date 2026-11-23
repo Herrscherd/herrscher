@@ -403,13 +403,27 @@ func runPick(ctx context.Context, sink contracts.EventSink, backend contracts.Ba
 	sink.Emit(contracts.Event{T: eventwire.EventReply, Text: strings.TrimSpace(out), Done: true, TurnID: turnID})
 }
 
+const maxToolCallNameBytes = 256
+
+var errToolCallNameTooLong = errors.New("bridge: a tool call's id or tool is longer than the limit")
+
 type toolCallGuard struct {
 	refused    int
 	firstError error
 }
 
-func (g *toolCallGuard) receive(event contracts.BackendEvent) contracts.BackendEvent {
+func validateToolCall(event contracts.BackendEvent) error {
 	if err := event.ValidateToolCall(); err != nil {
+		return err
+	}
+	if event.ToolCall != nil && (len(event.ToolCall.ID) > maxToolCallNameBytes || len(event.ToolCall.Tool) > maxToolCallNameBytes) {
+		return errToolCallNameTooLong
+	}
+	return nil
+}
+
+func (g *toolCallGuard) receive(event contracts.BackendEvent) contracts.BackendEvent {
+	if err := validateToolCall(event); err != nil {
 		if g.refused == 0 {
 			g.firstError = err
 		}

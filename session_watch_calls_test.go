@@ -134,3 +134,19 @@ func TestFollowSessionClosesOpenCallsOnAnExpiredGap(t *testing.T) {
 		t.Fatalf("output %q lets a call lost in the gap finish later", out)
 	}
 }
+
+func TestFollowSessionPrintsAGapCallOnceAfterItsReplay(t *testing.T) {
+	out, err := followed(t, false, toolStart(1, "a"), watchEvent(2, "a", contracts.Event{T: eventwire.EventGap, Value: eventwire.GapExpired}), toolStart(3, "a"), toolDone(4, "a", time.Second, contracts.ToolCallSucceeded), replyDone(5), sessionClosed(6))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(out, "  … read env.go · unfinished\n"); n != 1 {
+		t.Fatalf("output %q lists the call as unfinished %d times, want once", out, n)
+	}
+	if strings.Contains(out, "✓ read env.go") {
+		t.Fatalf("output %q finishes a call the gap already closed", out)
+	}
+	if n := strings.Count(out, "read env.go"); n != 2 {
+		t.Fatalf("output %q shows \"read env.go\" %d times, want 2: the first status and the unfinished line", out, n)
+	}
+}

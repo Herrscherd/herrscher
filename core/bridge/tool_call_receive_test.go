@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -57,6 +58,35 @@ func TestStampedBackendCallIsRefused(t *testing.T) {
 	got := receiveOne(contracts.BackendEvent{Kind: backendKindTool, Tool: "read", Detail: "env.go", ToolCall: call})
 	if got.ToolCall != nil {
 		t.Fatalf("ToolCall = %+v, want nil: the backend must leave At zero", got.ToolCall)
+	}
+}
+
+func TestToolCallWithAnOverlongIDOrToolIsRefused(t *testing.T) {
+	long := strings.Repeat("x", maxToolCallNameBytes+1)
+	for name, mutate := range map[string]func(*contracts.ToolCall){
+		"id":   func(call *contracts.ToolCall) { call.ID = long },
+		"tool": func(call *contracts.ToolCall) { call.Tool = long },
+	} {
+		t.Run(name, func(t *testing.T) {
+			call := startedCall()
+			mutate(call)
+			got := receiveOne(contracts.BackendEvent{Kind: backendKindTool, Tool: call.Tool, Detail: call.Detail, ToolCall: call})
+			if got.ToolCall != nil {
+				t.Fatalf("ToolCall with an overlong %s was kept, want it refused", name)
+			}
+			if got.Detail != call.Detail {
+				t.Fatalf("event = %+v, want its text kept", got)
+			}
+		})
+	}
+}
+
+func TestToolCallAtTheNameLimitIsKept(t *testing.T) {
+	call := startedCall()
+	call.ID = strings.Repeat("x", maxToolCallNameBytes)
+	got := receiveOne(contracts.BackendEvent{Kind: backendKindTool, Tool: "read", Detail: "env.go", ToolCall: call})
+	if got.ToolCall == nil {
+		t.Fatal("ToolCall = nil, want a call at the limit kept")
 	}
 }
 

@@ -21,6 +21,9 @@ func (m *model) route(routed RoutedEvent) tea.Cmd {
 		tab.pendingEvents = append(tab.pendingEvents, routed)
 		return m.drainHistory()
 	}
+	if replayedToolStart(tab, routed.Event) {
+		return nil
+	}
 	before := len(tab.entries)
 	m.observeToolCalls(tab, routed.Event)
 	m.renderInto(tab, routed.Event)
@@ -102,7 +105,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.appendEntry(entry{role: statusRole(event.Text), text: text})
 	case eventwire.EventReply:
 		if event.Done {
-			m.appendTimeline(target)
+			m.closeTurnTimeline(target)
 		}
 		target.appendReply(m.tr, event)
 	case eventwire.EventTodos:
@@ -130,7 +133,7 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 	case eventwire.EventGap:
 		m.appendTimeline(target)
 	case eventwire.EventAbandoned:
-		m.appendTimeline(target)
+		m.closeTurnTimeline(target)
 		target.busy = false
 		target.interruptRequested = false
 		target.streamed = false

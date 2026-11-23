@@ -239,6 +239,9 @@ func (p *watchView) show(event *host.DaemonEvent) error {
 }
 
 func (p *watchView) render(event *host.DaemonEvent) error {
+	if event.T == eventwire.EventStatus && event.ToolCall != nil && p.calls.Knows(event.ToolCall.ID) {
+		return nil
+	}
 	if err := p.trackCalls(event); err != nil {
 		return err
 	}
@@ -283,21 +286,27 @@ func (p *watchView) trackCalls(event *host.DaemonEvent) error {
 	case event.T == eventwire.EventToolDone && touched:
 		key, params := clitext.ToolCallLine(p.lang, call)
 		return p.line(key, params)
-	case event.T == eventwire.EventReply && event.Done, event.T == eventwire.EventAbandoned, event.T == eventwire.EventGap:
+	case event.T == eventwire.EventGap:
+		return p.sealCalls()
+	case event.T == eventwire.EventReply && event.Done, event.T == eventwire.EventAbandoned:
 		return p.closeTurnCalls()
 	}
 	return nil
 }
 
-func (p *watchView) closeTurnCalls() error {
-	for _, call := range p.calls.Calls() {
-		if call.Finished() {
-			continue
-		}
+func (p *watchView) sealCalls() error {
+	for _, call := range p.calls.Seal() {
 		key, params := clitext.ToolCallLine(p.lang, call)
 		if err := p.line(key, params); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (p *watchView) closeTurnCalls() error {
+	if err := p.sealCalls(); err != nil {
+		return err
 	}
 	p.calls = timeline.Recorder{}
 	return nil

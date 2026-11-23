@@ -111,3 +111,23 @@ func TestExpiredGapListsItsOpenCallAsUnfinished(t *testing.T) {
 		t.Fatalf("transcript\n%s\nwant the call open before the gap listed as unfinished", transcript)
 	}
 }
+
+func TestGapReplayShowsItsCallOnce(t *testing.T) {
+	m := newTestModel()
+	routeToolStart(m, "a")
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventGap, Value: eventwire.GapExpired}})
+	routeToolStart(m, "a")
+	routeToolDone(m, "a", time.Second)
+	routeReply(m)
+
+	transcript := ansi.Strip(strings.Join(entryTexts(m.tabs["c"]), "\n"))
+	if n := strings.Count(transcript, "… read env.go · unfinished"); n != 1 {
+		t.Fatalf("transcript\n%s\nlists the call as unfinished %d times, want once", transcript, n)
+	}
+	if strings.Contains(transcript, "✓ read env.go") {
+		t.Fatalf("transcript\n%s\nfinishes a call the gap already closed", transcript)
+	}
+	if n := strings.Count(transcript, "read env.go"); n != 2 {
+		t.Fatalf("transcript\n%s\nshows the call %d times, want 2: the first status and the unfinished line", transcript, n)
+	}
+}

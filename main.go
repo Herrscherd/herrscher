@@ -171,7 +171,7 @@ func runWithoutCommand(ctx context.Context, layout host.RuntimeLayout, messages 
 
 func runManageCmd(messages *clitext.Messages, hostMessages *host.Messages, cmd string, args []string) (int, bool) {
 	switch cmd {
-	case "init", "plugin", "update", "install":
+	case "init", "setup", "plugin", "update", "install":
 	default:
 		return 0, false
 	}
@@ -180,6 +180,8 @@ func runManageCmd(messages *clitext.Messages, hostMessages *host.Messages, cmd s
 	switch cmd {
 	case "init":
 		return manage.InitCmd(mctx, messages, hostMessages, args), true
+	case "setup":
+		return manage.SetupCmd(mctx, messages, hostMessages, args), true
 	case "plugin":
 		return manage.PluginCmd(mctx, messages, args), true
 	case "update":

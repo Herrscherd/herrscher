@@ -42,7 +42,12 @@
   {
     "id": "cli.usage.start.init",
     "description": "Usage line: compose the plugin stack and the secrets",
-    "other": "compose the plugin stack + secrets (wizard)"
+    "other": "compose the plugin stack (flags, or the setup on a terminal)"
+  },
+  {
+    "id": "cli.usage.start.setup",
+    "description": "Usage line: open the interactive setup and its dashboard",
+    "other": "pick modules, sign in, configure everything (dashboard)"
   },
   {
     "id": "cli.usage.session.verbs",
@@ -136,8 +141,8 @@
   },
   {
     "id": "cli.usage.env.init",
-    "description": "Environment line: `herrscher init` asks the questions",
-    "other": "     `herrscher init` asks these three questions, no need to write them by hand"
+    "description": "Environment line: `herrscher setup route` sets the route",
+    "other": "     `herrscher setup route` sets these three, no need to write them by hand"
   },
   {
     "id": "cli.task.needs_text",
@@ -881,16 +886,6 @@
     "other": "{{.Name}} failed: {{.Err}}"
   },
   {
-    "id": "cli.manage.choice_out_of_range",
-    "description": "Error: a numbered answer is outside the list it names, Name is the list's label",
-    "other": "{{.Name}}: choice out of range: {{.Choice}}"
-  },
-  {
-    "id": "cli.manage.unknown_kind",
-    "description": "Error: a module kind typed at the wizard is not in the catalog",
-    "other": "{{.Category}}: unknown kind {{.Kind}}"
-  },
-  {
     "id": "cli.manage.unknown_kind.listed",
     "description": "Error: a module kind given as a flag is not in the catalog, with the way to list it",
     "other": "{{.Category}}: unknown kind {{.Kind}} (try `herrscher init --list`)"
@@ -909,16 +904,6 @@
     "id": "cli.manage.default_tag",
     "description": "List: the mark of the kind that a category uses by default",
     "other": "(default)"
-  },
-  {
-    "id": "cli.manage.unknown_policy",
-    "description": "Error: a route policy typed at the wizard is unknown",
-    "other": "unknown route policy {{.Policy}}"
-  },
-  {
-    "id": "cli.manage.unknown_model",
-    "description": "Error: a default model typed at the wizard is not offered under the chosen policy",
-    "other": "unknown model {{.Model}} (not offered under this policy)"
   },
   {
     "id": "cli.manage.unknown_action",
@@ -1082,41 +1067,6 @@
     "other": "write secrets: {{.Err}}"
   },
   {
-    "id": "cli.manage.catalog_failed",
-    "description": "Error: the model catalog could not be read for the wizard",
-    "other": "model catalog(): {{.Err}}"
-  },
-  {
-    "id": "cli.manage.route.default_model_later",
-    "description": "Notice: init skipped the default model question, and how to answer it later",
-    "other": "default model: run `herrscher init` again after the rebuild to pick one"
-  },
-  {
-    "id": "cli.manage.route.no_model_offered",
-    "description": "Notice: no compiled backend offers a default model under the chosen policy",
-    "other": "default model: no compiled backend offers one under this policy"
-  },
-  {
-    "id": "cli.manage.route.gateway_no_model",
-    "description": "Warning: gateway-only with no default model forces every session create to name a model",
-    "other": "with no default model, every `session create` must pass --model, which gateway-only requires"
-  },
-  {
-    "id": "cli.manage.route.routing_header",
-    "description": "Heading of the routing step of the wizard",
-    "other": "routing"
-  },
-  {
-    "id": "cli.manage.route.routing_note",
-    "description": "Subtitle of the routing step: where agent turns run",
-    "other": "where agent turns run"
-  },
-  {
-    "id": "cli.manage.route.policy_header",
-    "description": "Heading of the route policy list of the wizard",
-    "other": "route policy"
-  },
-  {
     "id": "cli.manage.route.policy_all",
     "description": "Help line of the all route policy in the wizard",
     "other": "native and gateway models (internal build)"
@@ -1127,44 +1077,9 @@
     "other": "the product gateway only (public build)"
   },
   {
-    "id": "cli.manage.route.default_model_header",
-    "description": "Heading of the default model list of the wizard",
-    "other": "default model"
-  },
-  {
-    "id": "cli.manage.gateway_pair.header",
-    "description": "Heading of the gateway credentials step of the wizard",
-    "other": "gateway · credentials"
-  },
-  {
     "id": "cli.manage.gateway_pair.required",
     "description": "Note under the gateway credentials heading when none is set yet",
     "other": "(both are required; token entry is hidden)"
-  },
-  {
-    "id": "cli.manage.gateway_pair.keep",
-    "description": "Note under the gateway credentials heading when a pair is already set",
-    "other": "(already set: enter to keep; token entry is hidden)"
-  },
-  {
-    "id": "cli.manage.env.header",
-    "description": "Heading of the secrets step of a gateway, Kind is the gateway kind",
-    "other": "{{.Kind}} · secrets"
-  },
-  {
-    "id": "cli.manage.token_hidden",
-    "description": "Note: a token typed at a prompt is not shown on screen",
-    "other": "(token entry is hidden)"
-  },
-  {
-    "id": "cli.manage.wizard.compose",
-    "description": "Subtitle of the init wizard when it composes the plugin stack",
-    "other": "compose your plugin stack: enter accepts the default"
-  },
-  {
-    "id": "cli.manage.wizard.configure",
-    "description": "Subtitle of the init wizard when it configures an installed host",
-    "other": "configure the installed host: enter to skip a field"
   },
   {
     "id": "cli.manage.decider.before_writing",
@@ -1220,11 +1135,6 @@
     "id": "cli.manage.stack_header",
     "description": "Heading of the stack summary printed after init composes the plugin list",
     "other": "stack"
-  },
-  {
-    "id": "cli.manage.current_tag",
-    "description": "Tag marking the route policy or default model that is already set",
-    "other": "current"
   },
   {
     "id": "cli.session.list.empty",
@@ -4563,5 +4473,660 @@
     "id": "cli.tool.bound",
     "description": "Notice that a turn kept only the first tool calls, up to the limit",
     "other": "  · only the first {{.Limit}} tool calls of this turn are kept"
+  },
+  {
+    "id": "cli.setup.usage",
+    "description": "Usage of the setup command, Name lists the sections",
+    "other": "usage: herrscher setup [{{.Name}}]"
+  },
+  {
+    "id": "cli.setup.unknown_section",
+    "description": "Error: setup was given a section it does not know",
+    "other": "unknown section {{.Name}}"
+  },
+  {
+    "id": "cli.setup.needs_terminal",
+    "description": "Error: setup was started without a terminal",
+    "other": "herrscher setup needs a terminal; without one, use herrscher init --yes with its flags"
+  },
+  {
+    "id": "cli.setup.failed",
+    "description": "Error: the setup screen stopped on an error",
+    "other": "setup stopped: {{.Err}}"
+  },
+  {
+    "id": "cli.setup.title",
+    "description": "Title word after herrscher in every setup screen header",
+    "other": "setup"
+  },
+  {
+    "id": "cli.setup.label.host",
+    "description": "Welcome screen label in front of the host description",
+    "other": "host"
+  },
+  {
+    "id": "cli.setup.label.settings",
+    "description": "Welcome screen label in front of the settings file state",
+    "other": "settings"
+  },
+  {
+    "id": "cli.setup.host.binary",
+    "description": "Welcome screen: the host is an installed binary",
+    "other": "installed binary, every module already built in"
+  },
+  {
+    "id": "cli.setup.host.source",
+    "description": "Welcome screen: the host is a source checkout",
+    "other": "source checkout in {{.Path}}"
+  },
+  {
+    "id": "cli.setup.env.missing",
+    "description": "Welcome screen: the settings file does not exist yet",
+    "other": "no settings yet ({{.Path}})"
+  },
+  {
+    "id": "cli.setup.env.found",
+    "description": "Welcome screen: the settings file exists",
+    "other": "{{.Path}}"
+  },
+  {
+    "id": "cli.setup.welcome.sub",
+    "description": "Subtitle of the welcome screen",
+    "other": "welcome"
+  },
+  {
+    "id": "cli.setup.welcome.question",
+    "description": "Question above the welcome choices",
+    "other": "What do you want to do?"
+  },
+  {
+    "id": "cli.setup.welcome.quick",
+    "description": "Welcome choice: install the recommended stack",
+    "other": "Quick setup"
+  },
+  {
+    "id": "cli.setup.welcome.quick_hint",
+    "description": "Hint of the quick setup choice",
+    "other": "the recommended modules, then their settings"
+  },
+  {
+    "id": "cli.setup.welcome.custom",
+    "description": "Welcome choice: pick every module",
+    "other": "Custom setup"
+  },
+  {
+    "id": "cli.setup.welcome.custom_hint",
+    "description": "Hint of the custom setup choice",
+    "other": "pick each module, then configure it"
+  },
+  {
+    "id": "cli.setup.welcome.dashboard",
+    "description": "Welcome choice: open the dashboard",
+    "other": "Configure one section"
+  },
+  {
+    "id": "cli.setup.welcome.dashboard_hint",
+    "description": "Hint of the dashboard choice",
+    "other": "open the dashboard on the current settings"
+  },
+  {
+    "id": "cli.setup.modules.sub",
+    "description": "Subtitle of the module checklist",
+    "other": "check what to install"
+  },
+  {
+    "id": "cli.setup.modules.many",
+    "description": "Category note: several modules may be checked",
+    "other": "several allowed"
+  },
+  {
+    "id": "cli.setup.modules.one",
+    "description": "Category note: a single module may be checked",
+    "other": "one only"
+  },
+  {
+    "id": "cli.setup.modules.builtin",
+    "description": "Tag of a module that is always present",
+    "other": "built in"
+  },
+  {
+    "id": "cli.setup.modules.count",
+    "description": "Count of the checked modules",
+    "other": "{{.Count}} modules checked"
+  },
+  {
+    "id": "cli.setup.category.gateway",
+    "description": "Module category name",
+    "other": "gateways"
+  },
+  {
+    "id": "cli.setup.category.backend",
+    "description": "Module category name",
+    "other": "backends"
+  },
+  {
+    "id": "cli.setup.category.memory",
+    "description": "Module category name",
+    "other": "memory"
+  },
+  {
+    "id": "cli.setup.category.orchestrator",
+    "description": "Module category name",
+    "other": "orchestrator"
+  },
+  {
+    "id": "cli.setup.category.extractor",
+    "description": "Module category name",
+    "other": "extractor"
+  },
+  {
+    "id": "cli.setup.category.skills",
+    "description": "Module category name",
+    "other": "skills"
+  },
+  {
+    "id": "cli.setup.category.compactor",
+    "description": "Module category name",
+    "other": "compactor"
+  },
+  {
+    "id": "cli.setup.module.terminal",
+    "description": "Description of the terminal gateway module",
+    "other": "local terminal app"
+  },
+  {
+    "id": "cli.setup.module.chat_bot",
+    "description": "Description of a chat bot gateway module, Name is its platform",
+    "other": "{{.Name}} bot, DMs and channels"
+  },
+  {
+    "id": "cli.setup.module.claude",
+    "description": "Description of the Claude backend module",
+    "other": "Claude Code, subscription or API key"
+  },
+  {
+    "id": "cli.setup.module.codex",
+    "description": "Description of the Codex backend module",
+    "other": "OpenAI Codex CLI"
+  },
+  {
+    "id": "cli.setup.module.cursor",
+    "description": "Description of the Cursor backend module",
+    "other": "Cursor agent"
+  },
+  {
+    "id": "cli.setup.module.obsidian",
+    "description": "Description of the Obsidian memory module",
+    "other": "notes in an Obsidian vault"
+  },
+  {
+    "id": "cli.setup.module.basic",
+    "description": "Description of the basic orchestrator module",
+    "other": "simple task delegation"
+  },
+  {
+    "id": "cli.setup.module.llm",
+    "description": "Description of the LLM extractor module",
+    "other": "pulls facts and preferences out of turns"
+  },
+  {
+    "id": "cli.setup.module.superset",
+    "description": "Description of the superset skills module",
+    "other": "Paradev skills for the agent"
+  },
+  {
+    "id": "cli.setup.module.jev",
+    "description": "Description of the jev compactor module",
+    "other": "summarises long conversations"
+  },
+  {
+    "id": "cli.setup.module.none",
+    "description": "Choice that leaves a single-module category empty",
+    "other": "none"
+  },
+  {
+    "id": "cli.setup.bot.sub",
+    "description": "Subtitle of the chat bot screen",
+    "other": "gateway"
+  },
+  {
+    "id": "cli.setup.bot.intro",
+    "description": "How to get a bot token, URL is the developer portal",
+    "other": "Create a bot on {{.URL}}, turn on Message Content, then paste its token."
+  },
+  {
+    "id": "cli.setup.bot.token",
+    "description": "Label of the bot token field",
+    "other": "bot token"
+  },
+  {
+    "id": "cli.setup.bot.token_hint",
+    "description": "Hint of the bot token field",
+    "other": "hidden, written to the private settings file"
+  },
+  {
+    "id": "cli.setup.bot.user",
+    "description": "Label of the operator user id field",
+    "other": "your user ID"
+  },
+  {
+    "id": "cli.setup.bot.user_hint",
+    "description": "Hint of the operator user id field",
+    "other": "right click your profile, Copy User ID"
+  },
+  {
+    "id": "cli.setup.bot.probe",
+    "description": "Action that checks the bot token",
+    "other": "check the token"
+  },
+  {
+    "id": "cli.setup.bot.ok",
+    "description": "Probe result: the platform accepted the token, Name is the bot",
+    "other": "signed in as {{.Name}}"
+  },
+  {
+    "id": "cli.setup.bot.refused",
+    "description": "Probe result: the platform refused the token, Name is the platform",
+    "other": "{{.Name}} refused this token"
+  },
+  {
+    "id": "cli.setup.bot.empty",
+    "description": "Probe result: no token was entered, Name is the platform",
+    "other": "no token: the {{.Name}} gateway will not start"
+  },
+  {
+    "id": "cli.setup.backend.sub",
+    "description": "Subtitle of a backend screen",
+    "other": "backend"
+  },
+  {
+    "id": "cli.setup.claude.question",
+    "description": "Question of the Claude screen",
+    "other": "How does the agent sign in to Claude?"
+  },
+  {
+    "id": "cli.setup.claude.subscription",
+    "description": "Claude sign-in choice",
+    "other": "Claude subscription"
+  },
+  {
+    "id": "cli.setup.claude.subscription_hint",
+    "description": "Hint of the Claude subscription choice",
+    "other": "signs in through claude auth login, no key"
+  },
+  {
+    "id": "cli.setup.api_key",
+    "description": "Sign-in choice and field label: an API key",
+    "other": "API key"
+  },
+  {
+    "id": "cli.setup.api_key_hint",
+    "description": "Hint of the API key choice",
+    "other": "billed per use"
+  },
+  {
+    "id": "cli.setup.login",
+    "description": "Action that signs in through the vendor CLI",
+    "other": "sign in (opens the browser)"
+  },
+  {
+    "id": "cli.setup.check_key",
+    "description": "Action that checks an API key was entered",
+    "other": "check the key"
+  },
+  {
+    "id": "cli.setup.logged_in",
+    "description": "Probe result: the vendor CLI has a session",
+    "other": "signed in · {{.Name}}"
+  },
+  {
+    "id": "cli.setup.logged_out",
+    "description": "Probe result: the vendor CLI has no session",
+    "other": "no session open yet"
+  },
+  {
+    "id": "cli.setup.login_unfinished",
+    "description": "Probe result: the sign-in ended without a session",
+    "other": "the sign-in did not finish"
+  },
+  {
+    "id": "cli.setup.cli_missing",
+    "description": "Probe result: the vendor CLI is not installed",
+    "other": "{{.Name}} not found in PATH"
+  },
+  {
+    "id": "cli.setup.key_empty",
+    "description": "Probe result: no API key was entered",
+    "other": "no key entered"
+  },
+  {
+    "id": "cli.setup.codex.question",
+    "description": "Question of the Codex screen",
+    "other": "How does the agent sign in to Codex?"
+  },
+  {
+    "id": "cli.setup.codex.account",
+    "description": "Codex sign-in choice",
+    "other": "ChatGPT account"
+  },
+  {
+    "id": "cli.setup.codex.account_hint",
+    "description": "Hint of the ChatGPT account choice",
+    "other": "signs in through codex login"
+  },
+  {
+    "id": "cli.setup.cursor.key",
+    "description": "Label of the Cursor API key field",
+    "other": "Cursor API key"
+  },
+  {
+    "id": "cli.setup.cursor.key_hint",
+    "description": "Hint of the Cursor API key field",
+    "other": "Cursor, Settings, Integrations"
+  },
+  {
+    "id": "cli.setup.cursor.probe",
+    "description": "Action that checks the Cursor setup",
+    "other": "check cursor-agent"
+  },
+  {
+    "id": "cli.setup.cursor.ok",
+    "description": "Probe result: cursor-agent is installed and a key is set",
+    "other": "cursor-agent found, key entered"
+  },
+  {
+    "id": "cli.setup.memory.sub",
+    "description": "Subtitle of the memory screen",
+    "other": "memory"
+  },
+  {
+    "id": "cli.setup.vault",
+    "description": "Label of the Obsidian vault field",
+    "other": "Obsidian vault"
+  },
+  {
+    "id": "cli.setup.vault_hint",
+    "description": "Hint of the Obsidian vault field",
+    "other": "absolute path of the vault folder"
+  },
+  {
+    "id": "cli.setup.vault.probe",
+    "description": "Action that checks the vault folder",
+    "other": "check the folder"
+  },
+  {
+    "id": "cli.setup.vault.ok",
+    "description": "Probe result: the vault folder is writable",
+    "other": "folder writable"
+  },
+  {
+    "id": "cli.setup.vault.create",
+    "description": "Probe result: the vault folder does not exist but its parent does",
+    "other": "folder will be created on first write"
+  },
+  {
+    "id": "cli.setup.vault.empty",
+    "description": "Probe result: no vault path was entered",
+    "other": "no path entered"
+  },
+  {
+    "id": "cli.setup.vault.bad",
+    "description": "Probe result: the vault folder cannot be used",
+    "other": "unusable folder: {{.Err}}"
+  },
+  {
+    "id": "cli.setup.route.sub",
+    "description": "Subtitle of the routing screen",
+    "other": "policy, model, language"
+  },
+  {
+    "id": "cli.setup.route.policy",
+    "description": "Group header of the route policy choices",
+    "other": "Where turns run"
+  },
+  {
+    "id": "cli.setup.route.model",
+    "description": "Group header of the default model choices",
+    "other": "Default model"
+  },
+  {
+    "id": "cli.setup.route.no_model",
+    "description": "Default model choice: none",
+    "other": "no default"
+  },
+  {
+    "id": "cli.setup.route.policy_all",
+    "description": "Label of the route policy that keeps every model",
+    "other": "all"
+  },
+  {
+    "id": "cli.setup.route.lang",
+    "description": "Group header of the language choices",
+    "other": "Language of the agent and its messages"
+  },
+  {
+    "id": "cli.setup.route.catalog_failed",
+    "description": "The model list could not be read",
+    "other": "model list unavailable: {{.Err}}"
+  },
+  {
+    "id": "cli.setup.lang.en",
+    "description": "Name of the English language, written in English",
+    "other": "English"
+  },
+  {
+    "id": "cli.setup.lang.fr",
+    "description": "Name of the French language, written in French",
+    "other": "français"
+  },
+  {
+    "id": "cli.setup.review.sub",
+    "description": "Subtitle of the review screen",
+    "other": "nothing is written before you confirm"
+  },
+  {
+    "id": "cli.setup.review.plugins",
+    "description": "Header of the module list in the review",
+    "other": "plugins.go, {{.Count}} modules"
+  },
+  {
+    "id": "cli.setup.review.binary",
+    "description": "Review note on an installed binary",
+    "other": "this binary already includes every module; unchecked ones stay unconfigured"
+  },
+  {
+    "id": "cli.setup.review.settings",
+    "description": "Header of the settings list in the review",
+    "other": "{{.Path}}"
+  },
+  {
+    "id": "cli.setup.review.no_change",
+    "description": "Review: no setting was changed",
+    "other": "no setting changed"
+  },
+  {
+    "id": "cli.setup.review.unset",
+    "description": "Review value of a setting left empty",
+    "other": "(empty)"
+  },
+  {
+    "id": "cli.setup.review.warnings",
+    "description": "Review: some checks failed",
+    "other": "{{.Count}} check(s) failed; you can install anyway and come back with herrscher setup"
+  },
+  {
+    "id": "cli.setup.review.checked",
+    "description": "Review: every check passed",
+    "other": "every check passed"
+  },
+  {
+    "id": "cli.setup.review.install",
+    "description": "Review action: write and build",
+    "other": "Install"
+  },
+  {
+    "id": "cli.setup.review.save",
+    "description": "Review action: write the settings only",
+    "other": "Save"
+  },
+  {
+    "id": "cli.setup.continue",
+    "description": "Action that moves to the next screen",
+    "other": "Continue"
+  },
+  {
+    "id": "cli.setup.install.sub",
+    "description": "Subtitle of the install screen",
+    "other": "applying"
+  },
+  {
+    "id": "cli.setup.step.env",
+    "description": "Install step: write the settings file",
+    "other": "write {{.Path}}"
+  },
+  {
+    "id": "cli.setup.step.plugins",
+    "description": "Install step: rewrite plugins.go",
+    "other": "write plugins.go"
+  },
+  {
+    "id": "cli.setup.install.done",
+    "description": "Install finished",
+    "other": "Herrscher is ready."
+  },
+  {
+    "id": "cli.setup.install.start",
+    "description": "How to start the host after setup",
+    "other": "start it with {{.Command}}"
+  },
+  {
+    "id": "cli.setup.install.failed",
+    "description": "Install stopped on a failed step",
+    "other": "install stopped; nothing else was changed"
+  },
+  {
+    "id": "cli.setup.install.restored",
+    "description": "plugins.go, go.mod and go.sum were put back after a failed or aborted install",
+    "other": "plugins.go, go.mod and go.sum put back as they were"
+  },
+  {
+    "id": "cli.setup.install.stopping",
+    "description": "Install screen notice after Ctrl+C while a step still runs",
+    "other": "stopping: the running step ends, then the files are put back"
+  },
+  {
+    "id": "cli.setup.install.not_restored",
+    "description": "An aborted install gave up waiting for a step that kept running, so nothing was put back",
+    "other": "the running step did not stop; plugins.go, go.mod and go.sum were left as they are, check them by hand"
+  },
+  {
+    "id": "cli.setup.hub.sub",
+    "description": "Subtitle of the dashboard",
+    "other": "dashboard"
+  },
+  {
+    "id": "cli.setup.hub.modules",
+    "description": "Dashboard state of the module section",
+    "other": "{{.Count}} modules checked"
+  },
+  {
+    "id": "cli.setup.hub.configured",
+    "description": "Dashboard state: configured",
+    "other": "configured"
+  },
+  {
+    "id": "cli.setup.hub.missing",
+    "description": "Dashboard state: required setting missing",
+    "other": "setting missing"
+  },
+  {
+    "id": "cli.setup.hub.unchecked",
+    "description": "Dashboard state: module not checked",
+    "other": "not checked"
+  },
+  {
+    "id": "cli.setup.hub.shortcut",
+    "description": "Dashboard hint about direct sections, Name is one section",
+    "other": "herrscher setup {{.Name}} opens one section directly"
+  },
+  {
+    "id": "cli.setup.hub.save",
+    "description": "Dashboard action: review and save the changes",
+    "other": "Review and save"
+  },
+  {
+    "id": "cli.setup.hub.quit",
+    "description": "Dashboard action: leave without writing",
+    "other": "Quit without saving"
+  },
+  {
+    "id": "cli.setup.section.modules",
+    "description": "Section name",
+    "other": "modules"
+  },
+  {
+    "id": "cli.setup.section.route",
+    "description": "Section name",
+    "other": "routing"
+  },
+  {
+    "id": "cli.setup.keys.move",
+    "description": "Key hint: arrows move",
+    "other": "move"
+  },
+  {
+    "id": "cli.setup.keys.toggle",
+    "description": "Key hint: space checks",
+    "other": "check"
+  },
+  {
+    "id": "cli.setup.keys.choose",
+    "description": "Key hint: enter chooses",
+    "other": "choose"
+  },
+  {
+    "id": "cli.setup.keys.back",
+    "description": "Key hint: escape goes back",
+    "other": "back"
+  },
+  {
+    "id": "cli.setup.keys.quit",
+    "description": "Key hint: ctrl+c quits",
+    "other": "quit"
+  },
+  {
+    "id": "cli.setup.probe.running",
+    "description": "A check is running",
+    "other": "checking…"
+  },
+  {
+    "id": "cli.setup.probe.failed",
+    "description": "A check could not run",
+    "other": "check failed: {{.Err}}"
+  },
+  {
+    "id": "cli.setup.key_accepted",
+    "description": "Probe result: the vendor API accepted the key",
+    "other": "key accepted"
+  },
+  {
+    "id": "cli.setup.key_refused",
+    "description": "Probe result: the vendor API refused the key",
+    "other": "the API refused this key"
+  },
+  {
+    "id": "cli.setup.install.hub",
+    "description": "Install action: open the dashboard",
+    "other": "Open the dashboard"
+  },
+  {
+    "id": "cli.setup.step.unchanged",
+    "description": "Install step: the module set did not change",
+    "other": "modules unchanged, no rebuild"
+  },
+  {
+    "id": "cli.setup.label.language",
+    "description": "Welcome screen label in front of the language",
+    "other": "language"
   }
 ]

@@ -22,14 +22,25 @@ Requires Go 1.25+.
 git clone https://github.com/Herrscherd/herrscher.git
 cd herrscher
 go build -o herrscher .    # the only binary; plugins are compiled in
-./herrscher init           # compose the plugin stack, seed config, choose routing
+./herrscher setup          # pick modules, sign in, configure everything
 ./herrscher                # serves, with the terminal UI in the foreground
 ```
 
-`init` ends by asking where agent turns run: the route policy, the gateway
-credentials that `gateway-only` needs, and the model a session gets when it names
-none. It writes them to `.env`, and `herrscher models list` shows what the active
-policy offers.
+`setup` opens an interactive screen: you check the modules you want (gateways,
+backends, memory, skills), then each one is configured in turn. The Discord token
+is checked against Discord, Claude and Codex open their own sign-in
+(`claude auth login`, `codex login`) or take an API key, the memory vault is tested
+for writing, and the route screen sets the policy, the gateway credentials that
+`gateway-only` needs, the default model and the language. A review lists what will
+change before anything is written to `.env`; on a source checkout it also rewrites
+`plugins.go`, fetches the modules and rebuilds, restoring `plugins.go` if the build
+fails.
+
+Run again, `setup` opens a dashboard with the state of every section, and
+`herrscher setup discord` (or `claude`, `codex`, `cursor`, `obsidian`, `route`,
+`modules`) jumps straight to one. `herrscher init --yes` with its stack flags stays
+the non-interactive path for scripts, and `herrscher models list` shows what the
+active policy offers.
 
 The gateway credentials are both halves or neither. A base URL without a token
 would redirect the CLI while it keeps authenticating as this machine's own

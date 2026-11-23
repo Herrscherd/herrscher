@@ -79,15 +79,26 @@ func TestAttachFailureParamsEscapeTheError(t *testing.T) {
 }
 
 func TestRenderKeepsHostileParamsOffTheTerminal(t *testing.T) {
-	params := clitext.Params{
-		clitext.ParamFailure: hostileGateway,
-		clitext.ParamErr:     hostileGateway,
-		clitext.ParamWait:    "1s",
+	cases := []struct {
+		key    clitext.Key
+		params clitext.Params
+	}{
+		{clitext.ServeGatewaySkipped, clitext.Params{clitext.ParamFailure: hostileGateway}},
+		{clitext.ServeGatewayRetrying, clitext.Params{clitext.ParamFailure: hostileGateway, clitext.ParamWait: "1s"}},
+		{clitext.ServeGatewayUnavailable, clitext.Params{clitext.ParamFailure: hostileGateway}},
+		{clitext.ServeAttachFailed, clitext.Params{clitext.ParamErr: hostileGateway}},
 	}
-	for _, key := range []clitext.Key{clitext.ServeGatewaySkipped, clitext.ServeGatewayRetrying, clitext.ServeGatewayUnavailable, clitext.ServeAttachFailed} {
+	for _, c := range cases {
+		key, params := c.key, c.params
+		if _, err := testMessages().Text(i18n.English, key, clitext.Printable(params)); err != nil {
+			t.Fatalf("%s: params rejected: %v", key, err)
+		}
 		text := render(testMessages(), i18n.English, key, params)
 		if strings.ContainsAny(text, "\x1b\a") {
 			t.Errorf("%s: rendered %q, want no raw control", key, text)
+		}
+		if !strings.Contains(text, "discord") {
+			t.Errorf("%s: rendered %q, want the gateway name kept", key, text)
 		}
 	}
 }

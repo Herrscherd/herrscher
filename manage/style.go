@@ -33,13 +33,6 @@ func (s style) wrap(code, text string) string {
 	return code + text + s.reset
 }
 
-func (s style) header(title, sub string) {
-	fmt.Fprintf(os.Stderr, "\n  %s\n", s.wrap(s.bold+s.cyan, "herrscher · "+title))
-	if sub != "" {
-		fmt.Fprintf(os.Stderr, "  %s\n\n", s.wrap(s.dim, sub))
-	}
-}
-
 func summaryStack(messages *clitext.Messages, modules []string) {
 	sty := newStyle()
 	fmt.Fprintf(os.Stderr, "  %s\n", sty.wrap(sty.bold, msg(messages, clitext.ManageStackHeader, nil)))

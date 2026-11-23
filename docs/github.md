@@ -31,8 +31,9 @@ be renewed. Status warns you 14 days before that date, and you run
 For GitHub Enterprise Server, pass `--host` with the instance name. The device
 flow then runs against that host.
 
-If the GitHub App is not installed on the account or the instance, the command
-says so and suggests the two alternatives below.
+If the GitHub App is not installed on the account or the instance, or the forge
+refuses its client ID or has device sign-in turned off for it, the command says
+so and suggests the two alternatives below.
 
 ## Several herrscher processes
 
@@ -50,6 +51,13 @@ in that directory:
   network call.
 - A renewal never overwrites a pair saved meanwhile, and never brings back a
   connection that was logged out while it was running.
+
+The lock files stay in the state directory. Herrscher never deletes them:
+removing a lock file that another process may hold would let two processes in
+at once. The shared lock is `.forge-connections.json.lock`, and each host whose
+token has been renewed leaves an empty `.forge-connections.json.<sha256>.renew.lock`
+there. When no herrscher process is running, you can delete these empty files
+by hand; herrscher creates them again when it needs them.
 
 ## Check the connection
 
@@ -89,7 +97,9 @@ token.
   again, the saved connection is refused at the next start and you run
   `herrscher connect github` again.
 - **The connections file cannot be read, but a renewed token is held in
-  memory.** The token kept in memory is used while it is still valid.
+  memory.** The token kept in memory is used while it is still valid, and
+  herrscher tries to save it again at each use. Once it has expired, forge
+  operations fail with the read error.
 
 ## Log out
 
@@ -118,9 +128,12 @@ fail with a message saying herrscher is not connected to that host.
 
 ## Troubleshooting
 
-- **The App is not available for this host.** Install the GitHub App on the
-  account or instance (the install link is printed by `connect status`), or use
-  `GH_TOKEN` or `gh auth login`.
+- **The App is not available for this host.** Either the host has no herrscher
+  App (GitHub Enterprise Server without it), or the App's client ID is refused
+  there, or the device sign-in is turned off in the App's settings. Install the
+  GitHub App on the account or instance (the install link is printed by
+  `connect status`), or use `GH_TOKEN` or `gh auth login`. If the host should
+  accept the App, report the problem to the herrscher maintainers.
 - **A saved token is marked as refused.** Run `herrscher connect github` again
   for that host. A refused token is never used, and the next source takes over
   until then.
@@ -129,13 +142,14 @@ fail with a message saying herrscher is not connected to that host.
 - **The saved connections file cannot be read.** Status names its path and
   says to run `herrscher connect logout`, which removes it, then connect again.
 - **The forge does not accept the App's credentials.** The client settings of
-  the App are wrong on that forge, so its renewals fail. Status then shows that
-  the herrscher GitHub App is misconfigured on the forge and asks you to report
-  it to the herrscher maintainers. This is not a refused token: the saved
-  connection is not marked refused, and no other source takes its place.
+  the App are wrong on that forge, so its renewals fail. Once a renewal has
+  tried, status shows that the herrscher GitHub App is misconfigured on the
+  forge and asks you to report it to the herrscher maintainers. This is not a
+  refused token: the saved connection is not marked refused, and no other source
+  takes its place.
 
-  While the saved token is due for renewal, forge operations fail with an error
-  that ends with `the forge does not accept the herrscher app credentials`, even
-  if the saved token still works. Once the token is no longer due for renewal, it keeps
-  being used until it expires, and renewal is tried again only when it is due.
-  Fixing the App restores renewals.
+  While the saved token is still valid, forge operations keep using it and log a
+  warning that names the host, never the token. Once it expires, forge operations
+  fail with an error that ends with `the forge does not accept the herrscher app
+  credentials`. Renewal is tried again only when the token is due, and fixing the
+  App restores renewals.

@@ -835,7 +835,7 @@ func TestLogoutDuringRenewalIsNotUndone(t *testing.T) {
 	}
 }
 
-func TestMisconfiguredAppIsReportedEvenWhileTheTokenStillWorks(t *testing.T) {
+func TestMisconfiguredAppKeepsServingAValidTokenWithAWarning(t *testing.T) {
 	server := newRefreshServer(t, `{"error":"incorrect_client_credentials"}`)
 	setup := newTestCredentials(t, server.URL)
 	mustPut(t, setup.creds, Record{
@@ -843,13 +843,94 @@ func TestMisconfiguredAppIsReportedEvenWhileTheTokenStillWorks(t *testing.T) {
 		AccessExpiresAt: fixedNow().Add(2 * time.Minute),
 		RefreshToken:    "ghr_fine",
 	})
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
 
-	_, err := tokenSource(t, setup.creds, "github.com")
-	if !errors.Is(err, ErrAppMisconfigured) {
-		t.Fatalf("Token with a misconfigured app = %v, want ErrAppMisconfigured", err)
+	token, err := tokenSource(t, setup.creds, "github.com")
+	if err != nil || token.Secret() != "ghu_still" {
+		t.Fatalf("Token with a misconfigured app and a valid token = %v, %v; want the valid token", token.Secret(), err)
+	}
+	if !setup.creds.AppMisconfigured(mustHost(t, "github.com")) {
+		t.Fatalf("AppMisconfigured = false after the forge refused the app credentials")
+	}
+	if !strings.Contains(logs.String(), "refresh the saved forge token") {
+		t.Fatalf("no warning was logged for the misconfigured app: %s", logs.String())
+	}
+	for _, secret := range []string{"ghu_still", "ghr_fine"} {
+		if strings.Contains(logs.String(), secret) {
+			t.Fatalf("the log carries a token: %s", logs.String())
+		}
 	}
 	if stored := storedRecord(t, setup.creds); stored.Rejected || stored.RefreshToken != "ghr_fine" {
 		t.Fatalf("the record changed for an app error: %+v", stored)
+	}
+}
+
+func failOnce(read func(string) ([]byte, error)) func(string) ([]byte, error) {
+	var failed bool
+	return func(path string) ([]byte, error) {
+		if !failed {
+			failed = true
+			return nil, errors.New("injected read failure")
+		}
+		return read(path)
+	}
+}
+
+func renewWithFailingSave(t *testing.T, reply string) (testSetup, *refreshServer) {
+	t.Helper()
+	server := newRefreshServer(t, reply)
+	setup := newTestCredentials(t, server.URL)
+	mustPut(t, setup.creds, Record{AccessToken: "ghu_stale", AccessExpiresAt: fixedNow().Add(2 * time.Minute), RefreshToken: "ghr_old"})
+	setup.creds.store.rename = func(string, string) error { return errors.New("injected rename failure") }
+	if token, err := tokenSource(t, setup.creds, "github.com"); err != nil || token.Secret() != "ghu_fresh" {
+		t.Fatalf("first Token = %v, %v; want the renewed token", token.Secret(), err)
+	}
+	return setup, server
+}
+
+func TestHeldRenewalIsServedWhenTheFileBecomesCorrupt(t *testing.T) {
+	setup, server := renewWithFailingSave(t, `{"access_token":"ghu_fresh","refresh_token":"ghr_fresh","expires_in":28800}`)
+	if err := os.WriteFile(setup.creds.store.Path(), []byte("{broken"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	token, err := tokenSource(t, setup.creds, "github.com")
+	if err != nil || token.Secret() != "ghu_fresh" {
+		t.Fatalf("Token with a corrupt file = %v, %v; want the renewed token kept in memory", token.Secret(), err)
+	}
+	if hits := server.hitCount(); hits != 1 {
+		t.Fatalf("refresh calls = %d, want 1: the refresh token was spent again", hits)
+	}
+}
+
+func TestHeldRenewalIsSavedAgainWhenTheFileCannotBeReadOnce(t *testing.T) {
+	setup, server := renewWithFailingSave(t, `{"access_token":"ghu_fresh","refresh_token":"ghr_fresh","expires_in":28800}`)
+	setup.creds.store.rename = os.Rename
+	setup.creds.store.read = failOnce(os.ReadFile)
+
+	token, err := tokenSource(t, setup.creds, "github.com")
+	if err != nil || token.Secret() != "ghu_fresh" {
+		t.Fatalf("Token with one unreadable read = %v, %v; want the renewed token", token.Secret(), err)
+	}
+	if stored := storedRecord(t, setup.creds); stored.RefreshToken != "ghr_fresh" {
+		t.Fatalf("the held pair was not saved again under the lock: %+v", stored)
+	}
+	if hits := server.hitCount(); hits != 1 {
+		t.Fatalf("refresh calls = %d, want 1", hits)
+	}
+}
+
+func TestExpiredHeldRenewalIsNotServedWhenTheFileCannotBeRead(t *testing.T) {
+	setup, _ := renewWithFailingSave(t, `{"access_token":"ghu_fresh","refresh_token":"ghr_fresh","expires_in":28800}`)
+	setup.creds.store.read = func(string) ([]byte, error) { return nil, errors.New("injected read failure") }
+	setup.creds.now = func() time.Time { return fixedNow().Add(9 * time.Hour) }
+
+	token, err := tokenSource(t, setup.creds, "github.com")
+	if err == nil {
+		t.Fatalf("Token with an expired renewed token and an unreadable file = %q, want an error", token.Secret())
 	}
 }
 

@@ -255,6 +255,19 @@ func serveForgeOverTLS(t *testing.T, reply string) {
 	t.Cleanup(func() { http.DefaultTransport = previous })
 }
 
+func TestAppUnavailableNamesTheCausesAndTheWayOut(t *testing.T) {
+	forgeHost, err := contracts.ParseForgeHost("ghe.example.com")
+	if err != nil {
+		t.Fatalf("ParseForgeHost: %v", err)
+	}
+	failure := connectFailure(testMessages(), testLang(), forgeHost, forgecreds.ErrAppUnavailable)
+	for _, want := range []string{"ghe.example.com", "GH_TOKEN", "gh auth login", "maintainers"} {
+		if !strings.Contains(failure.Error(), want) {
+			t.Fatalf("app unavailable message = %q, want it to contain %q", failure.Error(), want)
+		}
+	}
+}
+
 func TestStatusReportsAMisconfiguredAppInsteadOfTheToken(t *testing.T) {
 	isolateGitHubEnvironment(t)
 	serveForgeOverTLS(t, `{"error":"incorrect_client_credentials"}`)

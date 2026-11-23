@@ -35,8 +35,8 @@ func TestSavedRecordFileIsReadableByItsOwnerOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stat: %v", err)
 	}
-	if mode := info.Mode().Perm(); mode != storeFileMode {
-		t.Fatalf("file mode = %o, want %o", mode, storeFileMode)
+	if mode := info.Mode().Perm(); mode != 0o600 {
+		t.Fatalf("file mode = %o, want 600", mode)
 	}
 }
 

@@ -45,7 +45,7 @@ func TestAcquireCreatesTheLockFileOwnerOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stat: %v", err)
 	}
-	if mode := info.Mode().Perm(); mode != lockFileMode {
-		t.Fatalf("lock file mode = %o, want %o", mode, lockFileMode)
+	if mode := info.Mode().Perm(); mode != 0o600 {
+		t.Fatalf("lock file mode = %o, want 600", mode)
 	}
 }

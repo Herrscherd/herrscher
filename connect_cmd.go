@@ -215,11 +215,11 @@ func statusLine(ctx context.Context, messages *clitext.Messages, lang i18n.Langu
 	source := translator.Text(clitext.ConnectSourceNone, nil)
 	login := translator.Text(clitext.ConnectLoginUnknown, nil)
 	token, tokenErr := creds.Token(ctx, forgeHost)
-	switch {
-	case tokenErr == nil:
+	if tokenErr == nil {
 		source = token.Source().String()
 		login = connectionLogin(ctx, creds, forgeHost, translator)
-	case errors.Is(tokenErr, forgecreds.ErrAppMisconfigured):
+	}
+	if creds.AppMisconfigured(forgeHost) || errors.Is(tokenErr, forgecreds.ErrAppMisconfigured) {
 		access = translator.Text(clitext.ConnectAccessAppBad, nil)
 	}
 	if err := translator.Err(); err != nil {

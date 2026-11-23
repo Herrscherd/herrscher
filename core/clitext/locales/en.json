@@ -5196,8 +5196,8 @@
   },
   {
     "id": "cli.connect.app_unavailable",
-    "description": "Error: the forge host does not offer the herrscher app for sign-in",
-    "other": "{{.Host}} does not offer the herrscher app for sign-in. Use GH_TOKEN, or log in with gh auth login."
+    "description": "Error: the forge host offers no usable herrscher app for sign-in",
+    "other": "{{.Host}} has no herrscher app for sign-in, or the app refuses its credentials or has device sign-in turned off. Use GH_TOKEN, or log in with gh auth login. If this host should accept herrscher, report the problem to the herrscher maintainers."
   },
   {
     "id": "cli.connect.device_expired",

@@ -33,8 +33,10 @@ const (
 // the processes of the state directory, so they never spend the same refresh
 // token twice. A slow renewal holds up that host only. A renewal the file could
 // not record is kept in memory for this process and recorded again on the next
-// call. When the forge does not accept the herrscher app, Token returns
-// ErrAppMisconfigured and marks nothing as refused.
+// call. When the forge does not accept the herrscher app, a saved token that is
+// still valid is served with a warning, and Token returns ErrAppMisconfigured
+// only once it has expired; AppMisconfigured reports the state. Nothing is
+// marked as refused.
 type Credentials struct {
 	store  *Store
 	flow   Flow
@@ -47,6 +49,7 @@ type Credentials struct {
 	cache  map[string]contracts.ForgeToken
 	served map[string]string
 	held   map[string]heldRecord
+	appBad map[string]bool
 }
 
 type heldRecord struct {
@@ -79,6 +82,7 @@ func New(stateFile string) *Credentials {
 		cache:  make(map[string]contracts.ForgeToken),
 		served: make(map[string]string),
 		held:   make(map[string]heldRecord),
+		appBad: make(map[string]bool),
 	}
 }
 
@@ -207,10 +211,29 @@ func (c *Credentials) savedToken(ctx context.Context, host contracts.ForgeHost) 
 	return token, true, nil
 }
 
+// AppMisconfigured reports whether the last renewal of host was refused because
+// the forge does not accept the herrscher app credentials. It is false until a
+// renewal of host runs again in this process.
+func (c *Credentials) AppMisconfigured(host contracts.ForgeHost) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.appBad[host.String()]
+}
+
+func (c *Credentials) setAppMisconfigured(host contracts.ForgeHost, misconfigured bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if misconfigured {
+		c.appBad[host.String()] = true
+		return
+	}
+	delete(c.appBad, host.String())
+}
+
 func (c *Credentials) savedRecord(ctx context.Context, host contracts.ForgeHost) (Record, bool, error) {
 	record, found, err := c.store.Get(host)
 	if err != nil {
-		return Record{}, false, err
+		return c.heldWhileUnreadable(ctx, host, err)
 	}
 	now := c.now()
 	_, pending := c.heldFor(host)
@@ -269,12 +292,11 @@ func (c *Credentials) renew(ctx context.Context, host contracts.ForgeHost) (sett
 		return settlement{}, nil
 	}
 	refreshed, err := c.flow.Refresh(ctx, c.base(host), current)
+	c.noteAppStanding(host, err)
 	switch {
 	case errors.Is(err, ErrRefreshRejected):
 		current.Rejected = true
 		return settlement{record: current, write: true, from: current.RefreshToken}, nil
-	case errors.Is(err, ErrAppMisconfigured):
-		return settlement{}, fmt.Errorf("%s: refresh the saved token: %w", host, err)
 	case err != nil:
 		if !stillValid(current, now) {
 			return settlement{}, fmt.Errorf("%s: refresh the saved token: %w", host, err)
@@ -318,6 +340,39 @@ func (c *Credentials) settleFailed(host contracts.ForgeHost, outcome settlement,
 		return pending.record, true, nil
 	}
 	return Record{}, false, err
+}
+
+func (c *Credentials) heldWhileUnreadable(ctx context.Context, host contracts.ForgeHost, readErr error) (Record, bool, error) {
+	pending, ok := c.heldFor(host)
+	if !ok || !stillValid(pending.record, c.now()) {
+		return Record{}, false, readErr
+	}
+	slog.Warn("forge connections not readable, using the renewed token kept in memory", "host", host.String(), "err", readErr)
+	c.retryHeld(ctx, host, pending)
+	return pending.record, true, nil
+}
+
+func (c *Credentials) retryHeld(ctx context.Context, host contracts.ForgeHost, pending heldRecord) {
+	release, err := c.store.lockRenewal(ctx, host)
+	if err != nil {
+		slog.Warn("forge connections not saved, the renewed token is kept in memory", "host", host.String(), "err", err)
+		return
+	}
+	defer release()
+	if _, err := c.persist(ctx, host, settlement{record: pending.record, ok: true, write: true, from: pending.from}); err != nil {
+		slog.Warn("forge connections not saved, the renewed token is kept in memory", "host", host.String(), "err", err)
+		return
+	}
+	c.dropHeld(host)
+}
+
+func (c *Credentials) noteAppStanding(host contracts.ForgeHost, refreshErr error) {
+	switch {
+	case errors.Is(refreshErr, ErrAppMisconfigured):
+		c.setAppMisconfigured(host, true)
+	case refreshErr == nil, errors.Is(refreshErr, ErrRefreshRejected):
+		c.setAppMisconfigured(host, false)
+	}
 }
 
 func (c *Credentials) fallbackToken(ctx context.Context, host contracts.ForgeHost) (contracts.ForgeToken, error) {

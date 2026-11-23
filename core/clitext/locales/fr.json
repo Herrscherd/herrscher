@@ -5196,8 +5196,8 @@
   },
   {
     "id": "cli.connect.app_unavailable",
-    "description": "Erreur : l'hôte de forge n'offre pas l'application herrscher pour la connexion",
-    "other": "{{.Host}} n'offre pas l'application herrscher pour la connexion. Utilise GH_TOKEN, ou connecte-toi avec gh auth login."
+    "description": "Erreur : l'hôte de forge n'offre aucune application herrscher utilisable pour la connexion",
+    "other": "{{.Host}} n'a pas d'application herrscher pour la connexion, ou l'application refuse ses identifiants ou a la connexion par appareil désactivée. Utilise GH_TOKEN, ou connecte-toi avec gh auth login. Si cet hôte doit accepter herrscher, signale le problème aux mainteneurs de herrscher."
   },
   {
     "id": "cli.connect.device_expired",

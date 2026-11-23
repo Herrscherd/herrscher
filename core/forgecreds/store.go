@@ -71,6 +71,7 @@ type storeFile struct {
 type Store struct {
 	dir    string
 	rename func(oldPath, newPath string) error
+	read   func(path string) ([]byte, error)
 }
 
 // Tx is the connections file as one change of Store.Update sees it. Its
@@ -105,7 +106,7 @@ func (t *Tx) Delete(host contracts.ForgeHost) bool {
 
 // NewStore keeps the forge connections file in dir.
 func NewStore(dir string) *Store {
-	return &Store{dir: dir, rename: os.Rename}
+	return &Store{dir: dir, rename: os.Rename, read: os.ReadFile}
 }
 
 // Path returns the file the saved records live in.
@@ -240,7 +241,7 @@ func (s *Store) Insecure() (bool, error) {
 
 func (s *Store) load() (storeFile, error) {
 	file := storeFile{Hosts: make(map[string]Record)}
-	raw, err := os.ReadFile(s.Path())
+	raw, err := s.read(s.Path())
 	if errors.Is(err, fs.ErrNotExist) {
 		return file, nil
 	}

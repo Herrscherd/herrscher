@@ -122,6 +122,23 @@ func TestBeginReportsAForgeWithoutTheAppAsAppUnavailable(t *testing.T) {
 	}
 }
 
+func TestBeginReportsAnAppThatRefusesItsCredentialsOrDeviceFlowAsAppUnavailable(t *testing.T) {
+	cases := map[string]string{
+		"credentials refused": `{"error":"incorrect_client_credentials"}`,
+		"device flow off":     `{"error":"device_flow_disabled"}`,
+	}
+	for name, reply := range cases {
+		t.Run(name, func(t *testing.T) {
+			server := newForgeServer(t, &forgeScript{codeReply: reply})
+
+			_, err := testFlow(server.Client(), &waitRecorder{}).Begin(t.Context(), server.URL)
+			if !errors.Is(err, ErrAppUnavailable) {
+				t.Fatalf("Begin = %v, want ErrAppUnavailable", err)
+			}
+		})
+	}
+}
+
 func TestAwaitGrantsTheTokensOnceTheUserAuthorizes(t *testing.T) {
 	script := &forgeScript{tokenReplies: []string{
 		`{"error":"authorization_pending"}`,

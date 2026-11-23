@@ -315,8 +315,10 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	prompt := contracts.Prompt{Content: event.Text, Context: withIdentity(withCapabilities(withDelegation(withSkills(memCtx, eng), aff.roster), aff.caps), aff.user), Author: event.Who, Attachments: event.Attachments, Language: lang, Outbox: turn.dir}
 	var usage turnUsage
 	var streamed []string
+	var calls toolCallGuard
+	defer calls.report()
 	onEvent := func(event contracts.BackendEvent) {
-		event = receiveBackendEvent(event)
+		event = calls.receive(event)
 		usage.absorb(event)
 		switch event.Kind {
 		case backendKindText:
@@ -401,9 +403,17 @@ func runPick(ctx context.Context, sink contracts.EventSink, backend contracts.Ba
 	sink.Emit(contracts.Event{T: eventwire.EventReply, Text: strings.TrimSpace(out), Done: true, TurnID: turnID})
 }
 
-func receiveBackendEvent(event contracts.BackendEvent) contracts.BackendEvent {
+type toolCallGuard struct {
+	refused    int
+	firstError error
+}
+
+func (g *toolCallGuard) receive(event contracts.BackendEvent) contracts.BackendEvent {
 	if err := event.ValidateToolCall(); err != nil {
-		logger.Warn("backend tool call refused, the event keeps its text and tokens")
+		if g.refused == 0 {
+			g.firstError = err
+		}
+		g.refused++
 		event.ToolCall = nil
 		return event
 	}
@@ -414,6 +424,13 @@ func receiveBackendEvent(event contracts.BackendEvent) contracts.BackendEvent {
 	call.At = time.Now().UTC()
 	event.ToolCall = &call
 	return event
+}
+
+func (g *toolCallGuard) report() {
+	if g.refused == 0 {
+		return
+	}
+	logger.Warn("backend tool calls refused in this turn, their events keep their text and tokens", "count", g.refused, "err", g.firstError)
 }
 
 func emitBackendEvent(sink contracts.EventSink, event contracts.BackendEvent, tokens, tokensIn, cacheRead, cacheCreate int) {

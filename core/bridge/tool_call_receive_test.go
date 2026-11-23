@@ -22,7 +22,7 @@ func startedCall() *contracts.ToolCall {
 
 func TestRefusedToolCallKeepsTheRestOfTheEvent(t *testing.T) {
 	event := contracts.BackendEvent{Kind: backendKindText, Detail: "hello", InTokens: 7, OutTokens: 3, ToolCall: startedCall()}
-	got := receiveBackendEvent(event)
+	got := receiveOne(event)
 	if got.ToolCall != nil {
 		t.Fatalf("ToolCall = %+v, want nil: a text event cannot carry a call", got.ToolCall)
 	}
@@ -34,7 +34,7 @@ func TestRefusedToolCallKeepsTheRestOfTheEvent(t *testing.T) {
 func TestReceivedToolCallIsStampedInUTC(t *testing.T) {
 	event := contracts.BackendEvent{Kind: backendKindTool, Tool: "read", Detail: "env.go", ToolCall: startedCall()}
 	before := time.Now()
-	got := receiveBackendEvent(event)
+	got := receiveOne(event)
 	after := time.Now()
 	if got.ToolCall == nil {
 		t.Fatal("ToolCall = nil, want the valid call kept")
@@ -54,7 +54,7 @@ func TestReceivedToolCallIsStampedInUTC(t *testing.T) {
 func TestStampedBackendCallIsRefused(t *testing.T) {
 	call := startedCall()
 	call.At = time.Date(2026, 11, 22, 10, 0, 0, 0, time.UTC)
-	got := receiveBackendEvent(contracts.BackendEvent{Kind: backendKindTool, Tool: "read", Detail: "env.go", ToolCall: call})
+	got := receiveOne(contracts.BackendEvent{Kind: backendKindTool, Tool: "read", Detail: "env.go", ToolCall: call})
 	if got.ToolCall != nil {
 		t.Fatalf("ToolCall = %+v, want nil: the backend must leave At zero", got.ToolCall)
 	}
@@ -63,7 +63,7 @@ func TestStampedBackendCallIsRefused(t *testing.T) {
 func TestToolDoneCarriesCallWithoutStatusLine(t *testing.T) {
 	sink := &recordingSink{}
 	done := contracts.BackendEvent{Kind: backendKindToolDone, ToolCall: &contracts.ToolCall{ID: "a", Tool: "read", State: contracts.ToolCallSucceeded}}
-	emitBackendEvent(sink, receiveBackendEvent(done), 12, 0, 0, 0)
+	emitBackendEvent(sink, receiveOne(done), 12, 0, 0, 0)
 	if len(sink.events) != 1 {
 		t.Fatalf("events = %d, want one tool_done and no status", len(sink.events))
 	}
@@ -78,7 +78,7 @@ func TestToolDoneCarriesCallWithoutStatusLine(t *testing.T) {
 
 func TestToolDoneWithoutCallEmitsNothing(t *testing.T) {
 	sink := &recordingSink{}
-	emitBackendEvent(sink, receiveBackendEvent(contracts.BackendEvent{Kind: backendKindToolDone}), 0, 0, 0, 0)
+	emitBackendEvent(sink, receiveOne(contracts.BackendEvent{Kind: backendKindToolDone}), 0, 0, 0, 0)
 	if len(sink.events) != 0 {
 		t.Fatalf("events = %+v, want none", sink.events)
 	}
@@ -86,7 +86,7 @@ func TestToolDoneWithoutCallEmitsNothing(t *testing.T) {
 
 func TestToolStartKeepsToolAndDetailAndCall(t *testing.T) {
 	sink := &recordingSink{}
-	start := receiveBackendEvent(contracts.BackendEvent{Kind: backendKindTool, Tool: "read", Detail: "env.go", ToolCall: startedCall()})
+	start := receiveOne(contracts.BackendEvent{Kind: backendKindTool, Tool: "read", Detail: "env.go", ToolCall: startedCall()})
 	emitBackendEvent(sink, start, 0, 0, 0, 0)
 	if len(sink.events) != 1 {
 		t.Fatalf("events = %d, want one status", len(sink.events))
@@ -95,4 +95,9 @@ func TestToolStartKeepsToolAndDetailAndCall(t *testing.T) {
 	if event.T != eventwire.EventStatus || event.Text != "read env.go" || event.ToolCall == nil {
 		t.Fatalf("event = %+v, want a status reading \"read env.go\" with its call", event)
 	}
+}
+
+func receiveOne(event contracts.BackendEvent) contracts.BackendEvent {
+	var guard toolCallGuard
+	return guard.receive(event)
 }

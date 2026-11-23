@@ -510,8 +510,8 @@ func (model *setupModel) stepRows(step *installStep) []setupRow {
 
 func (model *setupModel) restoreRows() []setupRow {
 	switch {
-	case model.install.restoreErr != nil:
-		return []setupRow{line(toneBad, model.install.restoreErr.Error())}
+	case model.install.cleanupErr != nil:
+		return []setupRow{line(toneBad, model.install.cleanupErr.Error())}
 	case model.install.restored:
 		return []setupRow{line(toneDim, model.text(clitext.SetupInstallRestored, nil))}
 	}

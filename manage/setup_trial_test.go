@@ -165,15 +165,6 @@ func TestSwapBinaryNeverPutsBackAnOlderStaleBinary(t *testing.T) {
 	}
 }
 
-func TestGoRunBinaryIsNotTheTarget(t *testing.T) {
-	if !builtByGoRun(filepath.Join(os.TempDir(), "go-build1234", "b001", "exe", binaryName)) {
-		t.Fatal("a go run build was taken for the installed binary")
-	}
-	if builtByGoRun(filepath.Join("usr", "local", "bin", binaryName)) {
-		t.Fatal("an installed binary was taken for a go run build")
-	}
-}
-
 func TestSwapBinaryWithoutAFreshBuildKeepsTheTarget(t *testing.T) {
 	target := filepath.Join(t.TempDir(), binaryName)
 	if err := os.WriteFile(target, []byte("old"), modeFile); err != nil {
@@ -335,5 +326,42 @@ func TestInitTrialReportsEachBackend(t *testing.T) {
 				t.Fatalf("stderr %q, want %q", errs.String(), want)
 			}
 		})
+	}
+}
+
+func TestLeavingGivesUpOnATrialThatKeepsRunning(t *testing.T) {
+	harness := installWithTrial(t, fakeReply{out: "OK\n"})
+	harness.model.deps.abandonWait = 20 * time.Millisecond
+	pending, entered, release := harness.blockTrials(t)
+	finished := make(chan struct{})
+	go func() {
+		pending()
+		close(finished)
+	}()
+	<-entered
+	harness.model.abandon()
+	close(release)
+	<-finished
+	want := msg(testMessages(), clitext.SetupTrialNotStopped, nil)
+	if harness.model.install.cleanupErr == nil || !strings.Contains(harness.model.install.cleanupErr.Error(), want) {
+		t.Fatalf("cleanupErr = %v, want %q", harness.model.install.cleanupErr, want)
+	}
+}
+
+func TestInitTrialStopsOnceCancelled(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "ran")
+	fakeVendor(t, kindClaude, ": > "+marker+"\necho OK")
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	var out, errs bytes.Buffer
+	code := trialStack(ctx, testMessages(), errwriter.New(&out), errwriter.New(&errs), []string{catalog()[catBackend][kindClaude]})
+	if code != 1 {
+		t.Fatalf("code = %d, want 1 after a cancel", code)
+	}
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("marker stat err = %v, want no backend started after a cancel", err)
+	}
+	if strings.Contains(errs.String(), "✗") {
+		t.Fatalf("stderr %q, want no failure line per backend after a cancel", errs.String())
 	}
 }

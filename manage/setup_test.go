@@ -931,7 +931,7 @@ func TestAbandonGivesUpOnAStuckStepAndLeavesTheFiles(t *testing.T) {
 	}()
 	<-entered
 	harness.model.abandon()
-	if !errors.Is(harness.model.install.restoreErr, errStepStillRuns) || harness.model.install.restored {
+	if !errors.Is(harness.model.install.cleanupErr, errStepStillRuns) || harness.model.install.restored {
 		t.Fatalf("install = %+v, want gave up without restoring", harness.model.install)
 	}
 	if got := harness.manifestOnDisk(t); got == setupManifest {

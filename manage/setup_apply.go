@@ -35,7 +35,7 @@ type installStep struct {
 type installRun struct {
 	ctx        context.Context
 	err        error
-	restoreErr error
+	cleanupErr error
 	cancel     context.CancelFunc
 	gate       *stepGate
 	saved      map[string][]byte
@@ -210,7 +210,9 @@ func (model *setupModel) abortInstall() {
 func (model *setupModel) abandon() {
 	if model.install.trialsRunning() {
 		model.install.cancel()
-		model.waitStep()
+		if !model.waitStep() {
+			model.install.cleanupErr = failure(model.messages, errStepStillRuns, clitext.SetupTrialNotStopped, nil)
+		}
 		return
 	}
 	if !model.install.running() {
@@ -219,7 +221,7 @@ func (model *setupModel) abandon() {
 	model.install.cancel()
 	model.install.err = errInstallAborted
 	if !model.waitStep() {
-		model.install.restoreErr = failure(model.messages, errStepStillRuns, clitext.SetupInstallNotRestored, nil)
+		model.install.cleanupErr = failure(model.messages, errStepStillRuns, clitext.SetupInstallNotRestored, nil)
 		return
 	}
 	model.restorePlugins()
@@ -243,7 +245,7 @@ func (model *setupModel) restorePlugins() {
 		return
 	}
 	if err := restoreComposition(model.messages, model.deps.hostDir, model.install.saved); err != nil {
-		model.install.restoreErr = err
+		model.install.cleanupErr = err
 		return
 	}
 	model.install.restored = true

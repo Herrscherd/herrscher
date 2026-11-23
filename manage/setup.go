@@ -118,8 +118,8 @@ func runSetup(ctx context.Context, messages *clitext.Messages, errOut *errwriter
 		errOut.Println(failure(messages, err, clitext.SetupFailed, clitext.Params{clitext.ParamErr: err.Error()}))
 		return 1
 	}
-	if model.install.restoreErr != nil {
-		errOut.Println(model.install.restoreErr)
+	if model.install.cleanupErr != nil {
+		errOut.Println(model.install.cleanupErr)
 	}
 	if model.install.err != nil || !model.install.trialsAnswered() {
 		return 1

@@ -117,6 +117,7 @@ const (
 	SetupTrialFailed            = "cli.setup.trial.failed"
 	SetupTrialMissing           = "cli.setup.trial.missing"
 	SetupTrialRemedy            = "cli.setup.trial.remedy"
+	SetupTrialNotStopped        = "cli.setup.trial.not_stopped"
 	SetupHubSub                 = "cli.setup.hub.sub"
 	SetupHubModules             = "cli.setup.hub.modules"
 	SetupHubConfigured          = "cli.setup.hub.configured"
@@ -252,6 +253,7 @@ func setupKeys() map[Key][]string {
 		SetupInstallRestored:        nil,
 		SetupInstallStopping:        nil,
 		SetupInstallNotRestored:     nil,
+		SetupTrialNotStopped:        nil,
 		SetupStepBinary:             {ParamPath},
 		SetupTrialTitle:             nil,
 		SetupTrialStep:              {ParamName},

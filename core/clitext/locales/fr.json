@@ -5005,6 +5005,11 @@
     "other": "l'étape en cours ne s'est pas arrêtée ; plugins.go, go.mod et go.sum sont laissés tels quels, vérifie-les à la main"
   },
   {
+    "id": "cli.setup.trial.not_stopped",
+    "description": "Leaving setup gave up waiting for a backend trial that kept running",
+    "other": "l'essai du backend ne s'est pas arrêté à temps ; son dossier temporaire peut rester dans le dossier temporaire du système"
+  },
+  {
     "id": "cli.setup.step.binary",
     "description": "Install step: the freshly built binary replaces the running one",
     "other": "remplacer le binaire {{.Path}}"

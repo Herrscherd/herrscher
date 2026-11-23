@@ -36,7 +36,9 @@ change before anything is written to `.env`; on a source checkout it also rewrit
 `plugins.go`, fetches the modules and rebuilds, restoring `plugins.go`, `go.mod`
 and `go.sum` if the build fails. The new build replaces the binary you ran, so the
 next `herrscher` already has the chosen modules; the previous binary stays beside
-it with a `.old` suffix until the next rebuild.
+it with a `.old` suffix until the next rebuild. On Windows a previous binary that
+still runs cannot be deleted, so the rebuild moves it aside under a `.old-parked-`
+name and removes it on a later rebuild, once it has stopped.
 
 Settings live in the `.env` of the directory you run from, or in the file
 `HERRSCHER_ENV_FILE` names. Run `setup` and `herrscher` from the same directory,
@@ -57,8 +59,9 @@ Run again, `setup` opens a dashboard with the state of every section, and
 `modules`) jumps straight to one. `herrscher init --yes` with its stack flags stays
 the non-interactive path for scripts, and `herrscher models list` shows what the
 active policy offers. `init` ends with the same prompt to each chosen backend and
-exits with status 1 when one does not answer; `--no-trial` skips it, for a machine
-where the backend is signed in later.
+exits with status 1 when one does not answer, scripts included. A script that
+prepares a machine before its backend CLI is installed or signed in passes
+`--no-trial`.
 
 The gateway credentials are both halves or neither. A base URL without a token
 would redirect the CLI while it keeps authenticating as this machine's own

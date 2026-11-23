@@ -5005,6 +5005,11 @@
     "other": "the running step did not stop; plugins.go, go.mod and go.sum were left as they are, check them by hand"
   },
   {
+    "id": "cli.setup.trial.not_stopped",
+    "description": "Leaving setup gave up waiting for a backend trial that kept running",
+    "other": "the backend trial did not stop in time; its temporary directory may remain in the system temp folder"
+  },
+  {
     "id": "cli.setup.step.binary",
     "description": "Install step: the freshly built binary replaces the running one",
     "other": "replace the binary {{.Path}}"

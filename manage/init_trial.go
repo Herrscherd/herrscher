@@ -18,6 +18,9 @@ func trialStack(ctx context.Context, messages *clitext.Messages, out, errOut *er
 	out.Println(msg(messages, clitext.SetupTrialTitle, nil))
 	code := 0
 	for _, spec := range specs {
+		if ctx.Err() != nil {
+			return 1
+		}
 		label := trialLabel(messages, spec)
 		output, err := runTrialIn(ctx, execRunner, spec.command, trialTimeout)
 		if trialAnswered(string(output), err) {

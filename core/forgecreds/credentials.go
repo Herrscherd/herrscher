@@ -348,7 +348,7 @@ func (c *Credentials) settleFailed(host contracts.ForgeHost, outcome settlement,
 		return outcome.record, true, nil
 	}
 	if pending, ok := c.heldFor(host); ok && stillValid(pending.record, c.now()) {
-		c.noteUnreadable(host, err)
+		slog.Warn("forge renewal not finished, using the renewed token kept in memory", "host", host.String(), "err", err)
 		return pending.record, true, nil
 	}
 	return Record{}, false, err

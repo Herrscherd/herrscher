@@ -17,6 +17,8 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+
+	"github.com/Herrscherd/herrscher/core/internal/filelock"
 )
 
 type fakeCLI struct {
@@ -994,8 +996,17 @@ func TestUnreadableFileWarnsOnceWhileTheKeptPairIsServed(t *testing.T) {
 	if err := os.WriteFile(path, original, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tokenSource(t, setup.creds, "github.com"); err != nil {
-		t.Fatalf("Token once the file is readable again: %v", err)
+	host := mustHost(t, "github.com")
+	release, err := filelock.Acquire(t.Context(), setup.creds.store.renewLockPath(host))
+	if err != nil {
+		t.Fatalf("hold the renewal lock: %v", err)
+	}
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	token, err := setup.creds.Token(cancelled, host)
+	release()
+	if err != nil || token.Secret() != "ghu_fresh" {
+		t.Fatalf("Token with the file readable and the renewal lock not taken = %v, %v; want the renewed token kept in memory", token.Secret(), err)
 	}
 	if err := os.WriteFile(path, []byte("{broken"), 0o600); err != nil {
 		t.Fatal(err)

@@ -879,9 +879,9 @@ func failOnce(read func(string) ([]byte, error)) func(string) ([]byte, error) {
 	}
 }
 
-func renewWithFailingSave(t *testing.T, reply string) (testSetup, *refreshServer) {
+func renewWithFailingSave(t *testing.T) (testSetup, *refreshServer) {
 	t.Helper()
-	server := newRefreshServer(t, reply)
+	server := newRefreshServer(t, `{"access_token":"ghu_fresh","refresh_token":"ghr_fresh","expires_in":28800}`)
 	setup := newTestCredentials(t, server.URL)
 	mustPut(t, setup.creds, Record{AccessToken: "ghu_stale", AccessExpiresAt: fixedNow().Add(2 * time.Minute), RefreshToken: "ghr_old"})
 	setup.creds.store.rename = func(string, string) error { return errors.New("injected rename failure") }
@@ -967,7 +967,7 @@ func TestMisconfiguredAppWithinTheRetryDelayFailsOnceTheTokenExpired(t *testing.
 }
 
 func TestUnreadableFileWarnsOnceWhileTheKeptPairIsServed(t *testing.T) {
-	setup, _ := renewWithFailingSave(t, `{"access_token":"ghu_fresh","refresh_token":"ghr_fresh","expires_in":28800}`)
+	setup, _ := renewWithFailingSave(t)
 	path := setup.creds.store.Path()
 	original, err := os.ReadFile(path)
 	if err != nil {
@@ -1009,7 +1009,7 @@ func TestUnreadableFileWarnsOnceWhileTheKeptPairIsServed(t *testing.T) {
 }
 
 func TestHeldRenewalIsServedWhenTheFileBecomesCorrupt(t *testing.T) {
-	setup, server := renewWithFailingSave(t, `{"access_token":"ghu_fresh","refresh_token":"ghr_fresh","expires_in":28800}`)
+	setup, server := renewWithFailingSave(t)
 	if err := os.WriteFile(setup.creds.store.Path(), []byte("{broken"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -1024,7 +1024,7 @@ func TestHeldRenewalIsServedWhenTheFileBecomesCorrupt(t *testing.T) {
 }
 
 func TestHeldRenewalIsSavedAgainWhenTheFileCannotBeReadOnce(t *testing.T) {
-	setup, server := renewWithFailingSave(t, `{"access_token":"ghu_fresh","refresh_token":"ghr_fresh","expires_in":28800}`)
+	setup, server := renewWithFailingSave(t)
 	setup.creds.store.rename = os.Rename
 	setup.creds.store.read = failOnce(os.ReadFile)
 
@@ -1041,7 +1041,7 @@ func TestHeldRenewalIsSavedAgainWhenTheFileCannotBeReadOnce(t *testing.T) {
 }
 
 func TestExpiredHeldRenewalIsNotServedWhenTheFileCannotBeRead(t *testing.T) {
-	setup, _ := renewWithFailingSave(t, `{"access_token":"ghu_fresh","refresh_token":"ghr_fresh","expires_in":28800}`)
+	setup, _ := renewWithFailingSave(t)
 	setup.creds.store.read = func(string) ([]byte, error) { return nil, errors.New("injected read failure") }
 	setup.creds.now = func() time.Time { return fixedNow().Add(9 * time.Hour) }
 

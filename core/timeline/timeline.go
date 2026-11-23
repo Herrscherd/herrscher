@@ -3,6 +3,7 @@ package timeline
 
 import (
 	"errors"
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -232,7 +233,7 @@ func reportsCount(event contracts.Event) bool {
 
 // ReportsCount reports whether a figure from the backend replaces the running one: zero means the backend reported nothing.
 func ReportsCount[N int | float64](figure N) bool {
-	return figure > 0
+	return figure > 0 && !math.IsInf(float64(figure), 0)
 }
 
 func (r *Recorder) setMark() {

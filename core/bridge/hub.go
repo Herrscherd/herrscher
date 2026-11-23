@@ -249,7 +249,9 @@ type turnUsage struct {
 func (u *turnUsage) absorb(event contracts.BackendEvent) {
 	switch event.Kind {
 	case backendKindUsage:
-		u.outTok += event.OutTokens
+		if timeline.ReportsCount(event.OutTokens) {
+			u.outTok += event.OutTokens
+		}
 		u.setInputSide(event)
 	case backendKindResult:
 		if timeline.ReportsCount(event.OutTokens) {

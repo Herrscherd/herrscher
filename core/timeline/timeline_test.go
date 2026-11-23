@@ -2,6 +2,7 @@ package timeline
 
 import (
 	"errors"
+	"math"
 	"strconv"
 	"strings"
 	"testing"
@@ -427,5 +428,11 @@ func TestToolDoneWithUnfinishedStateDoesNotCloseTheCall(t *testing.T) {
 	call := r.Calls()[0]
 	if call.Finished() || call.DurationMs != nil {
 		t.Fatalf("call = %+v, want still open: a done whose state is not finished must not close it", call)
+	}
+}
+
+func TestReportsCountRefusesAnInfiniteFigure(t *testing.T) {
+	if ReportsCount(math.Inf(1)) {
+		t.Fatal("ReportsCount(+Inf) = true, want false: a JSON reply cannot carry an infinite cost")
 	}
 }

@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"math"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -90,5 +91,144 @@ func TestResultWithoutCostKeepsTheEarlierCost(t *testing.T) {
 	usage.absorb(contracts.BackendEvent{Kind: backendKindResult, Cost: 0})
 	if usage.cost != 0.0042 {
 		t.Fatalf("cost = %v after a result reporting no cost, want the earlier 0.0042", usage.cost)
+	}
+}
+
+func usageEvent(out, in, cacheRd, cacheCr int) contracts.BackendEvent {
+	return contracts.BackendEvent{Kind: backendKindUsage, OutTokens: out, InTokens: in, CacheRead: cacheRd, CacheCreate: cacheCr}
+}
+
+func resultEvent(out, in, cacheRd, cacheCr int) contracts.BackendEvent {
+	return contracts.BackendEvent{Kind: backendKindResult, OutTokens: out, InTokens: in, CacheRead: cacheRd, CacheCreate: cacheCr}
+}
+
+type figureCase struct {
+	name  string
+	value int
+}
+
+func notPositiveFigures() []figureCase {
+	return []figureCase{{"negative", -40}, {"zero", 0}}
+}
+
+func TestUsageOutputThatIsNotPositiveIsNotAdded(t *testing.T) {
+	for _, tc := range notPositiveFigures() {
+		t.Run(tc.name, func(t *testing.T) {
+			var usage turnUsage
+			usage.absorb(usageEvent(150, 0, 0, 0))
+			usage.absorb(usageEvent(tc.value, 0, 0, 0))
+			if usage.outTok != 150 {
+				t.Fatalf("total = %d after a usage of %d, want 150", usage.outTok, tc.value)
+			}
+		})
+	}
+}
+
+func TestResultOutputThatIsNotPositiveKeepsTheTotal(t *testing.T) {
+	for _, tc := range notPositiveFigures() {
+		t.Run(tc.name, func(t *testing.T) {
+			var usage turnUsage
+			usage.absorb(usageEvent(150, 0, 0, 0))
+			usage.absorb(resultEvent(tc.value, 0, 0, 0))
+			if usage.outTok != 150 {
+				t.Fatalf("total = %d after a result of %d, want 150", usage.outTok, tc.value)
+			}
+		})
+	}
+}
+
+func TestUsageInputThatIsNotPositiveKeepsTheEarlierInput(t *testing.T) {
+	for _, tc := range notPositiveFigures() {
+		t.Run(tc.name, func(t *testing.T) {
+			var usage turnUsage
+			usage.absorb(usageEvent(0, 900, 0, 0))
+			usage.absorb(usageEvent(0, tc.value, 0, 0))
+			if usage.inTok != 900 {
+				t.Fatalf("input = %d after a usage of %d, want 900", usage.inTok, tc.value)
+			}
+		})
+	}
+}
+
+func TestResultInputThatIsNotPositiveKeepsTheEarlierInput(t *testing.T) {
+	for _, tc := range notPositiveFigures() {
+		t.Run(tc.name, func(t *testing.T) {
+			var usage turnUsage
+			usage.absorb(usageEvent(0, 900, 0, 0))
+			usage.absorb(resultEvent(0, tc.value, 0, 0))
+			if usage.inTok != 900 {
+				t.Fatalf("input = %d after a result of %d, want 900", usage.inTok, tc.value)
+			}
+		})
+	}
+}
+
+func TestUsageCacheReadThatIsNotPositiveKeepsTheEarlierCacheRead(t *testing.T) {
+	for _, tc := range notPositiveFigures() {
+		t.Run(tc.name, func(t *testing.T) {
+			var usage turnUsage
+			usage.absorb(usageEvent(0, 0, 300, 0))
+			usage.absorb(usageEvent(0, 0, tc.value, 0))
+			if usage.cacheRd != 300 {
+				t.Fatalf("cache read = %d after a usage of %d, want 300", usage.cacheRd, tc.value)
+			}
+		})
+	}
+}
+
+func TestResultCacheReadThatIsNotPositiveKeepsTheEarlierCacheRead(t *testing.T) {
+	for _, tc := range notPositiveFigures() {
+		t.Run(tc.name, func(t *testing.T) {
+			var usage turnUsage
+			usage.absorb(usageEvent(0, 0, 300, 0))
+			usage.absorb(resultEvent(0, 0, tc.value, 0))
+			if usage.cacheRd != 300 {
+				t.Fatalf("cache read = %d after a result of %d, want 300", usage.cacheRd, tc.value)
+			}
+		})
+	}
+}
+
+func TestUsageCacheCreateThatIsNotPositiveKeepsTheEarlierCacheCreate(t *testing.T) {
+	for _, tc := range notPositiveFigures() {
+		t.Run(tc.name, func(t *testing.T) {
+			var usage turnUsage
+			usage.absorb(usageEvent(0, 0, 0, 40))
+			usage.absorb(usageEvent(0, 0, 0, tc.value))
+			if usage.cacheCr != 40 {
+				t.Fatalf("cache create = %d after a usage of %d, want 40", usage.cacheCr, tc.value)
+			}
+		})
+	}
+}
+
+func TestResultCacheCreateThatIsNotPositiveKeepsTheEarlierCacheCreate(t *testing.T) {
+	for _, tc := range notPositiveFigures() {
+		t.Run(tc.name, func(t *testing.T) {
+			var usage turnUsage
+			usage.absorb(usageEvent(0, 0, 0, 40))
+			usage.absorb(resultEvent(0, 0, 0, tc.value))
+			if usage.cacheCr != 40 {
+				t.Fatalf("cache create = %d after a result of %d, want 40", usage.cacheCr, tc.value)
+			}
+		})
+	}
+}
+
+func TestResultCostThatIsNegativeKeepsTheEarlierCost(t *testing.T) {
+	var usage turnUsage
+	usage.absorb(contracts.BackendEvent{Kind: backendKindResult, Cost: 0.0042})
+	usage.absorb(contracts.BackendEvent{Kind: backendKindResult, Cost: -0.5})
+	if usage.cost != 0.0042 {
+		t.Fatalf("cost = %v after a result reporting a negative cost, want the earlier 0.0042", usage.cost)
+	}
+}
+
+func TestResultCostThatIsInfiniteKeepsTheEarlierCost(t *testing.T) {
+	var usage turnUsage
+	usage.absorb(contracts.BackendEvent{Kind: backendKindResult, Cost: 0.0042})
+	usage.absorb(contracts.BackendEvent{Kind: backendKindResult, Cost: math.Inf(1)})
+	if usage.cost != 0.0042 {
+		t.Fatalf("cost = %v after a result reporting +Inf, want the earlier 0.0042", usage.cost)
 	}
 }

@@ -81,5 +81,4 @@ Uninstall disables and removes the unit but **leaves your `config.json` and `her
 
 - [Installation](install.md): build the binary before installing the service.
 - [Configuration](env.md): the `config.json` fields and `.env` precedence.
-- CLI reference: the full `service` flag table.
 - [Managing plugins](plugins.md): `herrscher install` builds then delegates to `service install`.

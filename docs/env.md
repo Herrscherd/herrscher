@@ -36,7 +36,7 @@ backend's vars are read.
 |---------|--------|-------|--------|---------|
 | `cmd` | `CLAUDE_CMD` (`claude`) | `CODEX_CMD` (`codex`) | `CURSOR_CMD` (`cursor-agent`) | Base command to run the agent. |
 | `model` | `CLAUDE_MODEL` | `CODEX_MODEL` | `CURSOR_MODEL` | Model override. Unset ⇒ the CLI's own default. |
-| `stream` | `CLAUDE_STREAM` (`true`) | `CODEX_STREAM` (`true`) | `CURSOR_STREAM` (`true`) | Streaming mode: stream-json, persistent app-server, resume-based stream respectively. Exactly the string `false` disables it. |
+| `stream` | `CLAUDE_STREAM` (`true`) | `CODEX_STREAM` (`true`) | `CURSOR_STREAM` (`true`) | Streaming mode: stream-json, persistent app-server, resume-based stream respectively. For Claude and Codex, exactly the string `false` disables it. Cursor also takes `off` and every false spelling of a boolean (`0`, `f`, `false`), and refuses a value that is not a boolean. |
 | `dir` | `CLAUDE_DIR` | `CODEX_DIR` | `CURSOR_DIR` | Working directory. |
 | `kind` | `CLAUDE_KIND` | `CODEX_KIND` | `CURSOR_KIND` | Backend kind. |
 | `effort` | no variable | `CODEX_EFFORT` | no variable | Reasoning effort override (Codex only). |
@@ -64,7 +64,7 @@ The vault path and the per-node budget are read by the **Obsidian memory plugin*
 
 Read by the **orchestrator** when learning is enabled (an extractor is named).
 Every one is optional and defaults to off or conservative, so an untuned deployment
-runs the plain persist-only learner. See Learning for
+runs the plain persist-only learner. See [Learning](sessions.md#learning) for
 what each pass does.
 
 | Variable | Default | Meaning |
@@ -108,8 +108,7 @@ configuration is its own too.
 ## Compaction (Jev)
 
 These settings are read by the herrscher-jev-compactor
-plugin, and only when `compactStack` names `jev` (see
-Compaction). A daemon whose stack does not name `jev`
+plugin, and only when `compactStack` names `jev`. A daemon whose stack does not name `jev`
 never builds the stage and reads none of them.
 
 | Variable | Default | Meaning | Read by |
@@ -213,7 +212,7 @@ unfamiliar name in a process environment can be identified.
 
 | Variable | Meaning | Written by |
 |----------|---------|------------|
-| `HERRSCHER_CAPABILITIES` | The summary of the verbs the supervising daemon dispatches, one line per verb family. The bridge turns it into the `<capabilities>` block of every turn's prompt, so the agent knows it can reach the daemon as `herrscher <verb>` instead of reaching for a token of its own. Built after the registry, so it includes gateway-contributed verbs. See host. | Host (`serve`) → bridge |
+| `HERRSCHER_CAPABILITIES` | The summary of the verbs the supervising daemon dispatches, one line per verb family. The bridge turns it into the `<capabilities>` block of every turn's prompt, so the agent knows it can reach the daemon as `herrscher <verb>` instead of reaching for a token of its own. Built after the registry, so it includes gateway-contributed verbs. | Host (`serve`) → bridge |
 | `HERRSCHER_SESSION` | Which session a process spawned inside it belongs to. The [approval](approvals.md) hook is what needs it: a vendor CLI's own session id is the vendor's, and the daemon knows nothing about it. A hook that does not find this variable allows the tool call and says so on stderr. | Host (`serve`) → bridge |
 | `HERRSCHER_COMMAND_SOCKET` | Where `herrscher <verb>` dials the daemon. Only a session on a [host](remote.md) gets it: the socket is forwarded back over ssh under a path named after the session, which the far side cannot derive on its own. Empty locally, where the path follows from the instance id. | Host (`serve`) → remote bridge |
 
@@ -231,13 +230,14 @@ reason is the one above: argv would be world-readable over there too.
 
 Distributed transport lets certain categories run as separate processes over NATS
 (discovery) + gRPC (port calls). In-process stays the default. See
-Transport.
+[Plugins on another machine](remote.md#plugins-on-another-machine).
 
 | Variable | Default | Meaning | Read by |
 |----------|---------|---------|---------|
 | `HERRSCHER_BACKEND` | none (⇒ default) | Agent backend vendor when a session doesn't set one via `--vendor`: `claude\|codex\|cursor`. Precedence: `session.Vendor` → `HERRSCHER_BACKEND` → default. | Host |
 | `HERRSCHER_REMOTE` | none (⇒ all in-process) | Comma-separated categories to run out-of-process: `memory`, `orchestrator`, `backend`. | Host |
 | `HERRSCHER_NATS` | `nats://127.0.0.1:4222` | The NATS server URL (required in remote mode). | Host (transport) |
+| `HERRSCHER_ANNOUNCE_KEY` | none | Shared secret of at least 32 random bytes that signs the announcements a plugin-host publishes. Every host and plugin-host must hold the same one, and a host with a remote category refuses to start without a valid key. See [Plugins on another machine](remote.md#plugins-on-another-machine). | Host and plugin-host (transport) |
 | `HERRSCHER_BIND` | `127.0.0.1:0` | The plugin-host bind, for multi-machine (take it off loopback). | Host (transport) |
 | `HERRSCHER_TLS_CA` | none | The mTLS CA. All three `HERRSCHER_TLS_*` together or none, and a partial set fails closed. | Host (transport) |
 | `HERRSCHER_TLS_CERT` | none | The mTLS certificate. | Host (transport) |

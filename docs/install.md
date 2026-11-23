@@ -106,7 +106,7 @@ export HERRSCHER_OWNER_ID=...     # optional: the instance-id fallback
 ./herrscher serve --health-addr :8787
 ```
 
-When `serve` runs on an interactive TTY it also brings up the in-tree terminal gateway (a Bubbletea TUI) in the foreground as a first-class peer of Discord. A background service with no TTY runs headless, hub-driven only. See The two run modes.
+When `serve` runs on an interactive TTY it also brings up the in-tree terminal gateway (a Bubbletea TUI) in the foreground as a first-class peer of Discord. A background service with no TTY runs headless, hub-driven only.
 
 ### The health endpoint
 
@@ -156,6 +156,7 @@ Once the bot is online, from any channel the bot can see:
 - `/session create` creates a bridged channel, an isolated git worktree, and a backend runner. It appears as a new channel under your home.
 
 Then **start talking in the session channel**. Each message becomes one turn: the hub hands it to the session's bridge, the backend streams tool activity and cost, and the smart Discord gateway renders its own progress message, acknowledgement, and summary.
+
 ### Path B. Terminal TUI
 
 If you ran `serve` on an interactive TTY, the terminal gateway is already in the foreground. Create and drive sessions with slash commands, and **no Discord required**:

@@ -10,8 +10,6 @@
 .superpowers/
 .worktrees/
 
-# specs and plans a feature was built from: work notes, not documentation. The
-# docs that ship live in docs/.
 /docs/superpowers/
 
 # local-dev Go workspace (resolves the unmerged gateway branch); never committed

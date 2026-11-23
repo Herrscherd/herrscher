@@ -104,7 +104,7 @@ memory context passes through `withSkills` unchanged.
 
 In the terminal TUI, **`/skills`** opens a read-only modal panel listing the discovered
 skills: name and description per row, `↑↓` to move the selection, `Esc` to close. It
-shows at most 10 rows and then a `… +N more` line.
+shows at most 12 rows (a third of the window height, at least 5) and then a `… +N more` line.
 
 The panel is **session-agnostic** (the TUI is one gateway over many sessions), so it lists
 from `~/.claude/skills` plus any configured extra roots and deliberately omits per-session

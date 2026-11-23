@@ -86,6 +86,7 @@ const (
 	SetupRoutePolicy            = "cli.setup.route.policy"
 	SetupRouteModel             = "cli.setup.route.model"
 	SetupRouteNoModel           = "cli.setup.route.no_model"
+	SetupRoutePolicyAll         = "cli.setup.route.policy_all"
 	SetupRouteLang              = "cli.setup.route.lang"
 	SetupRouteCatalogFailed     = "cli.setup.route.catalog_failed"
 	SetupLangEnglish            = "cli.setup.lang.en"
@@ -218,6 +219,7 @@ func setupKeys() map[Key][]string {
 		SetupRoutePolicy:            nil,
 		SetupRouteModel:             nil,
 		SetupRouteNoModel:           nil,
+		SetupRoutePolicyAll:         nil,
 		SetupRouteLang:              nil,
 		SetupRouteCatalogFailed:     {ParamErr},
 		SetupLangEnglish:            nil,

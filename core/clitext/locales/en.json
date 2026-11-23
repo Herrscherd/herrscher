@@ -4870,6 +4870,11 @@
     "other": "no default"
   },
   {
+    "id": "cli.setup.route.policy_all",
+    "description": "Label of the route policy that keeps every model",
+    "other": "all"
+  },
+  {
     "id": "cli.setup.route.lang",
     "description": "Group header of the language choices",
     "other": "Language of the agent and its messages"
@@ -4976,8 +4981,8 @@
   },
   {
     "id": "cli.setup.install.restored",
-    "description": "plugins.go was put back after a failed build",
-    "other": "plugins.go put back as it was"
+    "description": "plugins.go, go.mod and go.sum were put back after a failed or aborted install",
+    "other": "plugins.go, go.mod and go.sum put back as they were"
   },
   {
     "id": "cli.setup.hub.sub",

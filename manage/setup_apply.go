@@ -15,7 +15,10 @@ import (
 const (
 	installTimeout = 15 * time.Minute
 	outputTail     = 8
+	abandonWait    = 10 * time.Second
 )
+
+var errInstallAborted = clitext.SentinelError("install aborted")
 
 type installStep struct {
 	run           func(context.Context) ([]byte, error)
@@ -26,18 +29,24 @@ type installStep struct {
 }
 
 type installRun struct {
+	ctx        context.Context
 	err        error
 	restoreErr error
-	source     []byte
+	cancel     context.CancelFunc
+	idle       chan struct{}
+	saved      map[string][]byte
 	rendered   []byte
 	steps      []installStep
 	started    bool
 	written    bool
 	restored   bool
 	done       bool
+	quitting   bool
 }
 
 func (run installRun) finished() bool { return run.done || run.err != nil }
+
+func (run installRun) running() bool { return run.started && !run.finished() }
 
 type stepDoneMsg struct {
 	err    error
@@ -46,10 +55,11 @@ type stepDoneMsg struct {
 }
 
 func (model *setupModel) startInstall() tea.Cmd {
-	if model.install.started && !model.install.finished() {
+	if model.install.running() {
 		return nil
 	}
-	model.install = installRun{started: true}
+	ctx, cancel := context.WithCancel(model.ctx)
+	model.install = installRun{started: true, ctx: ctx, cancel: cancel}
 	model.install.steps = model.installSteps()
 	return model.runStep(0)
 }
@@ -60,8 +70,7 @@ func (model *setupModel) installSteps() []installStep {
 	steps := []installStep{{
 		label: model.text(clitext.SetupStepEnv, clitext.Params{clitext.ParamPath: envPath}),
 		run: func(context.Context) ([]byte, error) {
-			_, err := writeSecretsTo(envPath, written)
-			return nil, err
+			return nil, writeSecretsTo(envPath, written)
 		},
 	}}
 	if !model.deps.compose() {
@@ -72,14 +81,16 @@ func (model *setupModel) installSteps() []installStep {
 
 func (model *setupModel) buildSteps() []installStep {
 	source := model.deps.manifest
-	model.install.source = source
 	paths := model.modules.paths(model.extras)
 	rendered, err := setPlugins(model.messages, string(source), paths)
+	if err == nil && rendered == string(source) {
+		return []installStep{{label: model.text(clitext.SetupStepUnchanged, nil), run: func(context.Context) ([]byte, error) { return nil, nil }}}
+	}
+	if err == nil {
+		model.install.saved, err = saveComposition(model.messages, model.deps.hostDir)
+	}
 	if err != nil {
 		return []installStep{{label: model.text(clitext.SetupStepPlugins, nil), run: func(context.Context) ([]byte, error) { return nil, err }}}
-	}
-	if rendered == string(source) {
-		return []installStep{{label: model.text(clitext.SetupStepUnchanged, nil), run: func(context.Context) ([]byte, error) { return nil, nil }}}
 	}
 	model.install.rendered = []byte(rendered)
 	manifest := filepath.Join(model.deps.hostDir, manifestFile)
@@ -90,29 +101,26 @@ func (model *setupModel) buildSteps() []installStep {
 			return nil, os.WriteFile(manifest, []byte(rendered), modeFile)
 		},
 	}}
-	for _, module := range paths {
-		if module == hostModule || strings.HasPrefix(module, hostModule+"/") {
-			continue
-		}
-		steps = append(steps, model.goStep(verbGet, "--", module))
-	}
-	return append(steps, model.goStep("mod", "tidy"), model.goStep("build", "./..."))
-}
-
-func (model *setupModel) goStep(args ...string) installStep {
-	command := setupCommand{dir: model.deps.hostDir, name: "go", args: args}
 	runner := model.deps.run
-	return installStep{
-		label: "go " + strings.Join(args, " "),
-		run:   func(ctx context.Context) ([]byte, error) { return runner(ctx, command) },
+	for _, command := range stackCommands(model.deps.hostDir, paths) {
+		steps = append(steps, installStep{
+			label: command.name + " " + strings.Join(command.args, " "),
+			run:   func(ctx context.Context) ([]byte, error) { return runner(ctx, command) },
+		})
 	}
+	return steps
 }
 
 func (model *setupModel) runStep(index int) tea.Cmd {
 	model.install.steps[index].state = probeRunning
+	model.install.written = model.install.written || model.install.steps[index].writesPlugins
 	work := model.install.steps[index].run
+	parent := model.install.ctx
+	idle := make(chan struct{})
+	model.install.idle = idle
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), installTimeout)
+		defer close(idle)
+		ctx, cancel := context.WithTimeout(parent, installTimeout)
 		defer cancel()
 		out, err := work(ctx)
 		return stepDoneMsg{index: index, output: string(out), err: err}
@@ -122,29 +130,56 @@ func (model *setupModel) runStep(index int) tea.Cmd {
 func (model *setupModel) stepDone(done stepDoneMsg) tea.Cmd {
 	step := &model.install.steps[done.index]
 	step.output = lastLines(done.output, outputTail)
-	if done.err != nil {
+	switch {
+	case done.err != nil:
 		step.state = probeFailed
 		model.install.err = done.err
-		model.restorePlugins()
-		return nil
+	case done.index+1 == len(model.install.steps):
+		step.state = probePassed
+		model.installed()
+		return model.quitIfAsked()
+	default:
+		step.state = probePassed
+		if !model.install.quitting {
+			return model.runStep(done.index + 1)
+		}
+		model.install.err = errInstallAborted
 	}
-	step.state = probePassed
-	if step.writesPlugins {
-		model.install.written = true
+	model.install.cancel()
+	model.restorePlugins()
+	return model.quitIfAsked()
+}
+
+func (model *setupModel) quitIfAsked() tea.Cmd {
+	if model.install.quitting {
+		return tea.Quit
 	}
-	if done.index+1 < len(model.install.steps) {
-		return model.runStep(done.index + 1)
-	}
-	model.installed()
 	return nil
+}
+
+func (model *setupModel) abortInstall() {
+	model.install.quitting = true
+	model.install.cancel()
+}
+
+func (model *setupModel) abandon() {
+	if !model.install.running() {
+		return
+	}
+	model.install.cancel()
+	select {
+	case <-model.install.idle:
+	case <-time.After(abandonWait):
+	}
+	model.install.err = errInstallAborted
+	model.restorePlugins()
 }
 
 func (model *setupModel) restorePlugins() {
 	if !model.install.written {
 		return
 	}
-	manifest := filepath.Join(model.deps.hostDir, manifestFile)
-	if err := os.WriteFile(manifest, model.install.source, modeFile); err != nil {
+	if err := restoreComposition(model.messages, model.deps.hostDir, model.install.saved); err != nil {
 		model.install.restoreErr = err
 		return
 	}
@@ -153,6 +188,7 @@ func (model *setupModel) restorePlugins() {
 
 func (model *setupModel) installed() {
 	model.install.done = true
+	model.install.cancel()
 	model.envExists = true
 	for key, value := range model.draft.written() {
 		model.draft.initial[key] = value

@@ -22,6 +22,7 @@ import (
 
 type fakeShell struct {
 	replies map[string]fakeReply
+	effect  func(setupCommand)
 	calls   []setupCommand
 	mu      sync.Mutex
 }
@@ -42,6 +43,9 @@ func (shell *fakeShell) run(_ context.Context, cmd setupCommand) ([]byte, error)
 	shell.mu.Lock()
 	defer shell.mu.Unlock()
 	shell.calls = append(shell.calls, cmd)
+	if shell.effect != nil {
+		shell.effect(cmd)
+	}
 	reply := shell.replies[strings.Join(append([]string{cmd.name}, cmd.args...), " ")]
 	return []byte(reply.out), reply.err
 }
@@ -116,7 +120,7 @@ func newHarness(t *testing.T, manifest []byte, screen setupScreen, env map[strin
 	dir := t.TempDir()
 	deps := setupDeps{
 		prober: testProber(t, shell),
-		login: func(kind probeKind) tea.Cmd {
+		login: func(_ context.Context, kind probeKind) tea.Cmd {
 			return func() tea.Msg { return loginDoneMsg{kind: kind} }
 		},
 		catalog:  fakeCatalog,
@@ -131,7 +135,7 @@ func newHarness(t *testing.T, manifest []byte, screen setupScreen, env map[strin
 		}
 	}
 	getenv := func(key string) string { return env[key] }
-	harness := &setupHarness{model: newSetupModel(testMessages(), deps, setupStart{getenv: getenv, screen: screen}), shell: shell, env: deps.envPath}
+	harness := &setupHarness{model: newSetupModel(testMessages(), deps, setupStart{ctx: t.Context(), getenv: getenv, screen: screen}), shell: shell, env: deps.envPath}
 	harness.drive(harness.model.Init())
 	return harness
 }
@@ -298,7 +302,7 @@ func TestClaudeSignInRunsTheLoginThenRechecks(t *testing.T) {
 
 func TestLoginWithoutTheCLISaysItIsMissing(t *testing.T) {
 	harness := newHarness(t, nil, screenClaude, nil)
-	harness.model.deps.login = func(kind probeKind) tea.Cmd {
+	harness.model.deps.login = func(_ context.Context, kind probeKind) tea.Cmd {
 		return func() tea.Msg { return loginDoneMsg{kind: kind, err: exec.ErrNotFound} }
 	}
 	harness.choose(t, harness.text(clitext.SetupLogin))
@@ -469,6 +473,19 @@ func TestSourceInstallRewritesPluginsAndRebuilds(t *testing.T) {
 func TestFailedBuildRestoresPlugins(t *testing.T) {
 	harness := newHarness(t, []byte(setupManifest), screenModules, nil)
 	harness.shell.replies["go build ./..."] = fakeReply{out: "line one\nboom\n", err: errProbeStatus}
+	goMod := filepath.Join(harness.model.deps.hostDir, "go.mod")
+	goSum := filepath.Join(harness.model.deps.hostDir, "go.sum")
+	if err := os.WriteFile(goMod, []byte("module before\n"), modeFile); err != nil {
+		t.Fatal(err)
+	}
+	harness.shell.effect = func(cmd setupCommand) {
+		if cmd.args[0] != verbGet {
+			return
+		}
+		if err := errors.Join(os.WriteFile(goMod, []byte("module after\n"), modeFile), os.WriteFile(goSum, []byte("sum\n"), modeFile)); err != nil {
+			t.Error(err)
+		}
+	}
 	harness.model.modules[moduleCodex] = true
 	harness.drive(harness.model.goTo(screenInstall))
 	if !errors.Is(harness.model.install.err, errProbeStatus) || !harness.model.install.restored {
@@ -480,6 +497,12 @@ func TestFailedBuildRestoresPlugins(t *testing.T) {
 	}
 	if string(data) != setupManifest {
 		t.Fatalf("plugins.go = %q, want the original back", data)
+	}
+	if mod, err := os.ReadFile(goMod); err != nil || string(mod) != "module before\n" {
+		t.Fatalf("go.mod = %q (%v), want the original back", mod, err)
+	}
+	if _, err := os.Stat(goSum); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("go.sum stat err = %v, want it removed since it did not exist", err)
 	}
 	last := harness.model.install.steps[len(harness.model.install.steps)-1]
 	if last.output != "line one\nboom" {
@@ -639,6 +662,9 @@ func TestViewEscapesCatalogText(t *testing.T) {
 	if strings.Contains(view, "\x1b]0;pwn") || strings.Contains(view, "\a") {
 		t.Fatalf("view leaks raw control sequences: %q", view)
 	}
+	if !strings.Contains(view, "evil") || !strings.Contains(view, "pwn") {
+		t.Fatalf("view drops the catalog entry instead of escaping it: %q", view)
+	}
 }
 
 func TestEveryScreenRenders(t *testing.T) {
@@ -648,5 +674,138 @@ func TestEveryScreenRenders(t *testing.T) {
 		if view := harness.model.View(); !strings.Contains(view, "herrscher · ") {
 			t.Errorf("screen %d renders no header", screen)
 		}
+	}
+}
+
+func (harness *setupHarness) startInstallUntilGoGet(t *testing.T) tea.Cmd {
+	t.Helper()
+	harness.model.modules[moduleCodex] = true
+	cmd := harness.model.goTo(screenInstall)
+	for range 2 {
+		_, cmd = harness.model.Update(cmd())
+	}
+	if !harness.model.install.written {
+		t.Fatalf("install = %+v, want plugins.go written before go get", harness.model.install)
+	}
+	return cmd
+}
+
+func (harness *setupHarness) manifestOnDisk(t *testing.T) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(harness.model.deps.hostDir, manifestFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+func TestCtrlCDuringInstallCancelsRestoresThenQuits(t *testing.T) {
+	harness := newHarness(t, []byte(setupManifest), screenReview, nil)
+	pending := harness.startInstallUntilGoGet(t)
+	if _, cmd := harness.model.Update(tea.KeyMsg{Type: tea.KeyCtrlC}); cmd != nil {
+		t.Fatal("ctrl+c quit while a step was still running")
+	}
+	if harness.model.install.ctx.Err() == nil {
+		t.Fatal("ctrl+c left the running step's context alive")
+	}
+	_, cmd := harness.model.Update(pending())
+	if cmd == nil {
+		t.Fatal("the aborted install never quits")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatal("the aborted install returns a command that is not a quit")
+	}
+	if !errors.Is(harness.model.install.err, errInstallAborted) || !harness.model.install.restored {
+		t.Fatalf("install = %+v, want aborted and restored", harness.model.install)
+	}
+	if got := harness.manifestOnDisk(t); got != setupManifest {
+		t.Fatalf("plugins.go = %q, want the original back", got)
+	}
+}
+
+func TestAbandonedProgramRestoresPlugins(t *testing.T) {
+	harness := newHarness(t, []byte(setupManifest), screenReview, nil)
+	pending := harness.startInstallUntilGoGet(t)
+	go pending()
+	harness.model.abandon()
+	if !errors.Is(harness.model.install.err, errInstallAborted) || !harness.model.install.restored {
+		t.Fatalf("install = %+v, want aborted and restored", harness.model.install)
+	}
+	if got := harness.manifestOnDisk(t); got != setupManifest {
+		t.Fatalf("plugins.go = %q, want the original back", got)
+	}
+}
+
+func TestStaleProbeResultIsDropped(t *testing.T) {
+	harness := newHarness(t, nil, screenDiscord, nil)
+	harness.fill(t, envDiscordToken, "good-token")
+	pending := harness.model.runProbe(probeDiscord)
+	harness.typeText("x")
+	harness.model.Update(pending())
+	if got, ok := harness.model.probes[probeDiscord]; ok {
+		t.Fatalf("probe = %+v, want the result for the old token dropped", got)
+	}
+	harness.drive(harness.model.runProbe(probeDiscord))
+	if got := harness.model.probes[probeDiscord]; got.state != probeFailed {
+		t.Fatalf("probe of the edited token = %+v, want refused", got)
+	}
+}
+
+func TestWriteSecretsTightensAnOpenFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(path, []byte("A=1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeSecretsTo(path, map[string]string{envDiscordToken: "secret"}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != modeSecret {
+		t.Fatalf("mode = %v, want %v", info.Mode().Perm(), os.FileMode(modeSecret))
+	}
+}
+
+func TestExpandHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cases := map[string]string{
+		"~":           home,
+		"~/vault":     filepath.Join(home, "vault"),
+		"~other/x":    "~other/x",
+		"/abs/vault":  "/abs/vault",
+		"rel/~/vault": "rel/~/vault",
+	}
+	for in, want := range cases {
+		if got := expandHome(in); got != want {
+			t.Errorf("expandHome(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestVaultPlaceholderPathIsAccepted(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.Mkdir(filepath.Join(home, ".herrscher"), modeDirPrivate); err != nil {
+		t.Fatal(err)
+	}
+	harness := newHarness(t, nil, screenObsidian, nil)
+	harness.fill(t, envVault, vaultPlaceholder)
+	harness.drive(harness.model.runProbe(probeVault))
+	if got := harness.model.probes[probeVault]; got.key != clitext.SetupVaultCreate {
+		t.Fatalf("probe = %+v, want the placeholder path accepted", got)
+	}
+	if got := harness.model.draft.written()[envVault]; got != filepath.Join(home, ".herrscher", "memory") {
+		t.Fatalf("written vault = %q, want the home expanded", got)
+	}
+}
+
+func TestSecretMaskHidesTheLength(t *testing.T) {
+	harness := newHarness(t, nil, screenReview, nil)
+	short, long := harness.model.shownValue(envDiscordToken, "ab"), harness.model.shownValue(envDiscordToken, strings.Repeat("z", 60))
+	if short != long {
+		t.Fatalf("masks differ: %q vs %q", short, long)
 	}
 }

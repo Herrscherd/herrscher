@@ -4451,7 +4451,7 @@
   },
   {
     "id": "cli.setup.usage",
-    "description": "Usage de la commande setup, Name liste les sections",
+    "description": "Usage of the setup command, Name lists the sections",
     "other": "usage : herrscher setup [{{.Name}}]"
   },
   {
@@ -4611,7 +4611,7 @@
   },
   {
     "id": "cli.setup.module.chat_bot",
-    "description": "Description d'un module passerelle de bot, Name est sa plateforme",
+    "description": "Description of a chat bot gateway module, Name is its platform",
     "other": "bot {{.Name}}, MP et salons"
   },
   {
@@ -4661,52 +4661,52 @@
   },
   {
     "id": "cli.setup.bot.sub",
-    "description": "Sous-titre de l'écran du bot",
+    "description": "Subtitle of the chat bot screen",
     "other": "passerelle"
   },
   {
     "id": "cli.setup.bot.intro",
-    "description": "Comment obtenir un jeton de bot, URL est le portail développeur",
+    "description": "How to get a bot token, URL is the developer portal",
     "other": "Crée un bot sur {{.URL}}, active Message Content, puis colle son jeton."
   },
   {
     "id": "cli.setup.bot.token",
-    "description": "Libellé du champ jeton du bot",
+    "description": "Label of the bot token field",
     "other": "jeton du bot"
   },
   {
     "id": "cli.setup.bot.token_hint",
-    "description": "Aide du champ jeton du bot",
+    "description": "Hint of the bot token field",
     "other": "masqué, écrit dans le fichier de réglages privé"
   },
   {
     "id": "cli.setup.bot.user",
-    "description": "Libellé du champ ID de l'opérateur",
+    "description": "Label of the operator user id field",
     "other": "ton ID utilisateur"
   },
   {
     "id": "cli.setup.bot.user_hint",
-    "description": "Aide du champ ID de l'opérateur",
+    "description": "Hint of the operator user id field",
     "other": "clic droit sur ton profil, Copier l'identifiant"
   },
   {
     "id": "cli.setup.bot.probe",
-    "description": "Action qui vérifie le jeton du bot",
+    "description": "Action that checks the bot token",
     "other": "vérifier le jeton"
   },
   {
     "id": "cli.setup.bot.ok",
-    "description": "Résultat : la plateforme accepte le jeton, Name est le bot",
+    "description": "Probe result: the platform accepted the token, Name is the bot",
     "other": "connecté comme {{.Name}}"
   },
   {
     "id": "cli.setup.bot.refused",
-    "description": "Résultat : la plateforme refuse le jeton, Name est la plateforme",
+    "description": "Probe result: the platform refused the token, Name is the platform",
     "other": "{{.Name}} refuse ce jeton"
   },
   {
     "id": "cli.setup.bot.empty",
-    "description": "Résultat : aucun jeton, Name est la plateforme",
+    "description": "Probe result: no token was entered, Name is the platform",
     "other": "aucun jeton : la passerelle {{.Name}} ne démarrera pas"
   },
   {
@@ -4870,6 +4870,11 @@
     "other": "aucun par défaut"
   },
   {
+    "id": "cli.setup.route.policy_all",
+    "description": "Label of the route policy that keeps every model",
+    "other": "tous"
+  },
+  {
     "id": "cli.setup.route.lang",
     "description": "Group header of the language choices",
     "other": "Langue de l'agent et des messages"
@@ -4976,8 +4981,8 @@
   },
   {
     "id": "cli.setup.install.restored",
-    "description": "plugins.go was put back after a failed build",
-    "other": "plugins.go remis comme avant"
+    "description": "plugins.go, go.mod and go.sum were put back after a failed or aborted install",
+    "other": "plugins.go, go.mod et go.sum remis comme avant"
   },
   {
     "id": "cli.setup.hub.sub",
@@ -5006,7 +5011,7 @@
   },
   {
     "id": "cli.setup.hub.shortcut",
-    "description": "Aide du tableau de bord sur les sections, Name est une section",
+    "description": "Dashboard hint about direct sections, Name is one section",
     "other": "herrscher setup {{.Name}} ouvre directement une section"
   },
   {

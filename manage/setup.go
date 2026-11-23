@@ -109,13 +109,17 @@ func liveDeps(messages *clitext.Messages, hostMessages *host.Messages, hostDir s
 
 func runSetup(ctx context.Context, messages *clitext.Messages, errOut *errwriter.Writer, deps setupDeps, screen setupScreen) int {
 	_, statErr := os.Stat(deps.envPath)
-	model := newSetupModel(messages, deps, setupStart{getenv: envx.Getenv, screen: screen, envExists: statErr == nil})
-	final, err := tea.NewProgram(model, tea.WithContext(ctx)).Run()
+	model := newSetupModel(messages, deps, setupStart{ctx: ctx, getenv: envx.Getenv, screen: screen, envExists: statErr == nil})
+	_, err := tea.NewProgram(model, tea.WithContext(ctx)).Run()
+	model.abandon()
 	if err != nil && !errors.Is(err, tea.ErrProgramKilled) {
 		errOut.Println(failure(messages, err, clitext.SetupFailed, clitext.Params{clitext.ParamErr: err.Error()}))
 		return 1
 	}
-	if done, ok := final.(*setupModel); ok && done.install.err != nil {
+	if model.install.restoreErr != nil {
+		errOut.Println(model.install.restoreErr)
+	}
+	if model.install.err != nil {
 		return 1
 	}
 	return 0

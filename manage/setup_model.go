@@ -42,7 +42,7 @@ func flowOrder() []setupScreen {
 
 type setupDeps struct {
 	prober   setupProber
-	login    func(probeKind) tea.Cmd
+	login    func(context.Context, probeKind) tea.Cmd
 	catalog  catalogFn
 	run      commandRunner
 	envPath  string
@@ -60,6 +60,7 @@ type routeModels struct {
 }
 
 type probeDoneMsg struct {
+	input  string
 	result probeResult
 	kind   probeKind
 }
@@ -76,6 +77,7 @@ type catalogMsg struct {
 }
 
 type setupModel struct {
+	ctx       context.Context
 	messages  *clitext.Messages
 	modules   moduleSet
 	fields    map[string]textinput.Model
@@ -96,6 +98,7 @@ type setupModel struct {
 }
 
 type setupStart struct {
+	ctx       context.Context
 	getenv    func(string) string
 	screen    setupScreen
 	envExists bool
@@ -104,6 +107,7 @@ type setupStart struct {
 func newSetupModel(messages *clitext.Messages, deps setupDeps, start setupStart) *setupModel {
 	settings := readSettings(start.getenv)
 	model := &setupModel{
+		ctx:       start.ctx,
 		messages:  messages,
 		deps:      deps,
 		draft:     newDraft(settings),
@@ -169,7 +173,9 @@ func (model *setupModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := model.key(typed)
 		return model, cmd
 	case probeDoneMsg:
-		model.probes[typed.kind] = typed.result
+		if typed.input == model.probeInput(typed.kind) {
+			model.probes[typed.kind] = typed.result
+		}
 	case loginDoneMsg:
 		cmd := model.loginDone(typed)
 		return model, cmd
@@ -187,6 +193,10 @@ func (model *setupModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 func (model *setupModel) key(press tea.KeyMsg) tea.Cmd {
 	switch press.String() {
 	case "ctrl+c":
+		if model.install.running() {
+			model.abortInstall()
+			return nil
+		}
 		return tea.Quit
 	case "up", "shift+tab":
 		model.move(-1)
@@ -419,6 +429,26 @@ func (model *setupModel) statusCheck(kind probeKind) tea.Cmd {
 	return model.vendorStatus(kind, false)
 }
 
+func (model *setupModel) probeInput(kind probeKind) string {
+	switch kind {
+	case probeDiscord:
+		return model.draft.value(envDiscordToken)
+	case probeClaude:
+		if model.claudeKey {
+			return model.draft.value(envAnthropicKey)
+		}
+	case probeCodex:
+		if model.codexKey {
+			return model.draft.value(fieldCodexKey)
+		}
+	case probeCursor:
+		return model.draft.value(envCursorKey)
+	case probeVault:
+		return model.draft.value(envVault)
+	}
+	return ""
+}
+
 func (model *setupModel) vendorStatus(kind probeKind, afterLogin bool) tea.Cmd {
 	prober := model.deps.prober
 	if kind == probeCodex {
@@ -429,10 +459,11 @@ func (model *setupModel) vendorStatus(kind probeKind, afterLogin bool) tea.Cmd {
 
 func (model *setupModel) probe(kind probeKind, check func(context.Context) probeResult) tea.Cmd {
 	model.probes[kind] = probeResult{state: probeRunning}
+	input, parent := model.probeInput(kind), model.ctx
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+		ctx, cancel := context.WithTimeout(parent, probeTimeout)
 		defer cancel()
-		return probeDoneMsg{kind: kind, result: check(ctx)}
+		return probeDoneMsg{kind: kind, input: input, result: check(ctx)}
 	}
 }
 
@@ -458,7 +489,7 @@ func (model *setupModel) runProbe(kind probeKind) tea.Cmd {
 		key := model.draft.value(envCursorKey)
 		return model.probe(kind, func(context.Context) probeResult { return prober.cursor(key) })
 	case probeVault:
-		path := model.draft.value(envVault)
+		path := expandHome(model.draft.value(envVault))
 		return model.probe(kind, func(context.Context) probeResult { return vaultCheck(path) })
 	}
 	return nil
@@ -466,7 +497,7 @@ func (model *setupModel) runProbe(kind probeKind) tea.Cmd {
 
 func (model *setupModel) login(kind probeKind) tea.Cmd {
 	model.probes[kind] = probeResult{state: probeRunning}
-	return model.deps.login(kind)
+	return model.deps.login(model.ctx, kind)
 }
 
 func (model *setupModel) loginDone(done loginDoneMsg) tea.Cmd {
@@ -481,12 +512,12 @@ func (model *setupModel) loginDone(done loginDoneMsg) tea.Cmd {
 	return model.vendorStatus(done.kind, true)
 }
 
-func execLogin(kind probeKind) tea.Cmd {
+func execLogin(ctx context.Context, kind probeKind) tea.Cmd {
 	name, args := kindClaude, []string{"auth", verbLogin}
 	if kind == probeCodex {
 		name, args = kindCodex, []string{verbLogin}
 	}
-	cmd := exec.CommandContext(context.Background(), name, args...)
+	cmd := exec.CommandContext(ctx, name, args...)
 	return tea.ExecProcess(cmd, func(err error) tea.Msg { return loginDoneMsg{kind: kind, err: err} })
 }
 

@@ -278,7 +278,7 @@ func (model *setupModel) routeRows() []setupRow {
 	policy := contracts.RoutePolicy(model.draft.value(envPolicy))
 	rows := []setupRow{
 		line(toneGroup, model.text(clitext.SetupRoutePolicy, nil)),
-		choice(policy == contracts.PolicyAll, "all", model.text(clitext.ManagePolicyAllHelp, nil), policyChoice(contracts.PolicyAll)),
+		choice(policy == contracts.PolicyAll, model.text(clitext.SetupRoutePolicyAll, nil), model.text(clitext.ManagePolicyAllHelp, nil), policyChoice(contracts.PolicyAll)),
 		choice(policy == contracts.PolicyGatewayOnly, string(contracts.PolicyGatewayOnly), model.text(clitext.ManagePolicyGatewayHelp, nil), policyChoice(contracts.PolicyGatewayOnly)),
 	}
 	if policy == contracts.PolicyGatewayOnly {
@@ -397,12 +397,12 @@ func (model *setupModel) shownValue(key, value string) string {
 	case value == "":
 		return model.text(clitext.SetupReviewUnset, nil)
 	case secretKeys()[key]:
-		return strings.Repeat("•", min(len(value), maskWidth))
+		return strings.Repeat("•", maskLength)
 	}
 	return value
 }
 
-const maskWidth = 24
+const maskLength = 8
 
 func settingScreen(key string) setupScreen {
 	switch key {
@@ -469,8 +469,7 @@ func (model *setupModel) stepRows(step *installStep) []setupRow {
 func (model *setupModel) restoreRows() []setupRow {
 	switch {
 	case model.install.restoreErr != nil:
-		path := manifestFile
-		return []setupRow{line(toneBad, model.text(clitext.ManageRestoreFailed, clitext.Params{clitext.ParamPath: path, clitext.ParamErr: model.install.restoreErr.Error()}))}
+		return []setupRow{line(toneBad, model.install.restoreErr.Error())}
 	case model.install.restored:
 		return []setupRow{line(toneDim, model.text(clitext.SetupInstallRestored, nil))}
 	}
@@ -575,7 +574,7 @@ func (model *setupModel) vaultState() string {
 func (model *setupModel) routeState() string {
 	policy := model.draft.value(envPolicy)
 	if policy == "" {
-		policy = "all"
+		policy = model.text(clitext.SetupRoutePolicyAll, nil)
 	}
 	if chosen := model.draft.value(envModel); chosen != "" {
 		return chosen + " · " + policy

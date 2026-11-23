@@ -122,10 +122,9 @@ func initHost(ctx context.Context, messages *clitext.Messages, hostMessages *hos
 	if interactive {
 		return runSetup(ctx, messages, errOut, liveDeps(messages, hostMessages, *hostDir), screenWelcome)
 	}
-	var secrets map[string]string
-
 	if !compose {
-		return writeSecretsOnly(messages, errOut, secrets)
+		summaryConfig(messages, envTarget(), 0)
+		return 0
 	}
 
 	modules, err := resolveStack(messages, choices, extras)
@@ -134,85 +133,70 @@ func initHost(ctx context.Context, messages *clitext.Messages, hostMessages *hos
 		return exitUsage
 	}
 
+	saved, err := saveComposition(messages, dir)
+	if err != nil {
+		errOut.Println(err)
+		return 1
+	}
 	manifest := filepath.Join(dir, manifestFile)
-	src, code := rewritePlugins(messages, errOut, manifest, modules)
-	if code != 0 {
+	if code := rewritePlugins(messages, errOut, manifest, modules); code != 0 {
 		return code
 	}
 	summaryStack(messages, modules)
 	seedEnv(messages, out, errOut, dir)
-	writeProjectSecrets(messages, out, errOut, dir, secrets)
 
 	if *noBuild {
 		out.Println(msg(messages, clitext.ManageInitWroteNoBuild, nil))
 		return 0
 	}
-	return buildOrRestore(ctx, messages, errOut, dir, manifest, src, modules)
+	return buildOrRestore(ctx, messages, errOut, dir, saved, modules)
 }
 
-func writeSecretsOnly(messages *clitext.Messages, errOut *errwriter.Writer, secrets map[string]string) int {
-	path := envTarget()
-	written, err := writeSecretsTo(path, secrets)
-	if err != nil {
-		errOut.Println(failure(messages, err, clitext.ManageEnvWriteFailed, clitext.Params{clitext.ParamErr: err.Error()}))
-		return 1
-	}
-	summaryConfig(messages, path, written)
-	return 0
-}
-
-func rewritePlugins(messages *clitext.Messages, errOut *errwriter.Writer, manifest string, modules []string) ([]byte, int) {
+func rewritePlugins(messages *clitext.Messages, errOut *errwriter.Writer, manifest string, modules []string) int {
 	src, err := os.ReadFile(manifest)
 	if err != nil {
 		errOut.Println(failure(messages, err, clitext.ManageReadFailed, clitext.Params{clitext.ParamPath: manifest, clitext.ParamErr: err.Error()}))
-		return nil, 1
+		return 1
 	}
 	rendered, err := setPlugins(messages, string(src), modules)
 	if err != nil {
 		errOut.Println(err)
-		return nil, 1
+		return 1
 	}
 	if err := os.WriteFile(manifest, []byte(rendered), modeFile); err != nil {
 		errOut.Println(failure(messages, err, clitext.ManageWriteFailed, clitext.Params{clitext.ParamPath: manifest, clitext.ParamErr: err.Error()}))
-		return nil, 1
+		return 1
 	}
-	return src, 0
+	return 0
 }
 
-func writeProjectSecrets(messages *clitext.Messages, out, errOut *errwriter.Writer, dir string, secrets map[string]string) {
-	if written, err := writeSecretsTo(filepath.Join(dir, ".env"), secrets); err != nil {
-		errOut.Println(failure(messages, err, clitext.ManageEnvWriteFailed, clitext.Params{clitext.ParamErr: err.Error()}))
-	} else if written > 0 {
-		out.Println(msg(messages, clitext.ManageWroteSettings, clitext.Params{clitext.ParamCount: written, clitext.ParamPath: ".env"}))
+func buildOrRestore(ctx context.Context, messages *clitext.Messages, errOut *errwriter.Writer, dir string, saved map[string][]byte, modules []string) int {
+	for _, command := range stackCommands(dir, modules) {
+		if code := run(ctx, messages, errOut, command.dir, command.name, command.args...); code != 0 {
+			if err := restoreComposition(messages, dir, saved); err != nil {
+				errOut.Println(err)
+			} else {
+				errOut.Println(msg(messages, clitext.ManageBuildRestored, clitext.Params{clitext.ParamPath: manifestFile}))
+			}
+			return code
+		}
 	}
+	return 0
 }
 
-func buildOrRestore(ctx context.Context, messages *clitext.Messages, errOut *errwriter.Writer, dir, manifest string, src []byte, modules []string) int {
-	code := buildStack(ctx, messages, errOut, dir, modules)
-	if code == 0 {
-		return 0
-	}
-	if werr := os.WriteFile(manifest, src, modeFile); werr != nil {
-		errOut.Println(failure(messages, werr, clitext.ManageRestoreFailed, clitext.Params{clitext.ParamPath: manifest, clitext.ParamErr: werr.Error()}))
-	} else {
-		errOut.Println(msg(messages, clitext.ManageBuildRestored, clitext.Params{clitext.ParamPath: manifest}))
-	}
-	return code
-}
-
-func buildStack(ctx context.Context, messages *clitext.Messages, errOut *errwriter.Writer, dir string, modules []string) int {
+func stackCommands(dir string, modules []string) []setupCommand {
+	var commands []setupCommand
 	for _, module := range modules {
 		if module == hostModule || strings.HasPrefix(module, hostModule+"/") {
 			continue
 		}
-		if code := run(ctx, messages, errOut, dir, "go", verbGet, "--", module); code != 0 {
-			return code
-		}
+		commands = append(commands, goCommand(dir, verbGet, "--", module))
 	}
-	if code := run(ctx, messages, errOut, dir, "go", "mod", "tidy"); code != 0 {
-		return code
-	}
-	return run(ctx, messages, errOut, dir, "go", "build", "./...")
+	return append(commands, goCommand(dir, "mod", "tidy"), goCommand(dir, "build", "./..."))
+}
+
+func goCommand(dir string, args ...string) setupCommand {
+	return setupCommand{dir: dir, name: "go", args: args}
 }
 
 func resolveStack(messages *clitext.Messages, choices map[string]string, extras []string) ([]string, error) {
@@ -268,19 +252,28 @@ func envTarget() string {
 	return ".env"
 }
 
-func writeSecretsTo(path string, secrets map[string]string) (int, error) {
+func writeSecretsTo(path string, secrets map[string]string) error {
 	if len(secrets) == 0 {
-		return 0, nil
+		return nil
 	}
 	if dir := filepath.Dir(path); dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, modeDirPrivate); err != nil {
-			return 0, err
+			return err
 		}
 	}
 	var lines []string
 	if b, err := os.ReadFile(path); err == nil {
 		lines = strings.Split(strings.TrimRight(string(b), "\n"), "\n")
 	}
+	lines = mergeSecrets(lines, secrets)
+	out := strings.Join(lines, "\n") + "\n"
+	if err := os.WriteFile(path, []byte(out), modeSecret); err != nil {
+		return err
+	}
+	return os.Chmod(path, modeSecret)
+}
+
+func mergeSecrets(lines []string, secrets map[string]string) []string {
 	done := make(map[string]bool)
 	for idx, line := range lines {
 		key := line
@@ -302,8 +295,7 @@ func writeSecretsTo(path string, secrets map[string]string) (int, error) {
 	for _, k := range keys {
 		lines = append(lines, k+"="+secrets[k])
 	}
-	out := strings.Join(lines, "\n") + "\n"
-	return len(secrets), os.WriteFile(path, []byte(out), modeSecret)
+	return lines
 }
 
 func seedEnv(messages *clitext.Messages, out, errOut *errwriter.Writer, dir string) {

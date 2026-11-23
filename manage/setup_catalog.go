@@ -1,7 +1,10 @@
 package manage
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/clitext"
@@ -217,7 +220,11 @@ func (draft settingsDraft) set(key, value string) {
 func (draft settingsDraft) written() map[string]string {
 	out := make(map[string]string, len(draft.edits))
 	for key, value := range draft.edits {
-		if key != fieldCodexKey {
+		switch key {
+		case fieldCodexKey:
+		case envVault:
+			out[key] = expandHome(value)
+		default:
 			out[key] = value
 		}
 	}
@@ -240,4 +247,16 @@ func readSettings(getenv func(string) string) map[string]string {
 		}
 	}
 	return values
+}
+
+func expandHome(path string) string {
+	rest, ok := strings.CutPrefix(strings.TrimSpace(path), "~")
+	if !ok || (rest != "" && rest[0] != '/') {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	return filepath.Join(home, rest)
 }

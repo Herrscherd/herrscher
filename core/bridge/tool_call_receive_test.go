@@ -7,6 +7,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/eventwire"
+	"github.com/Herrscherd/herrscher/core/timeline"
 )
 
 type recordingSink struct {
@@ -74,10 +75,38 @@ func TestToolCallWithAnOverlongIDOrToolIsRefused(t *testing.T) {
 			if got.ToolCall != nil {
 				t.Fatalf("ToolCall with an overlong %s was kept, want it refused", name)
 			}
-			if got.Detail != call.Detail {
-				t.Fatalf("event = %+v, want its text kept", got)
-			}
+			checkRefusedCallStatus(t, got, call)
 		})
+	}
+}
+
+func checkRefusedCallStatus(t *testing.T, got contracts.BackendEvent, call *contracts.ToolCall) {
+	t.Helper()
+	if got.Detail != call.Detail {
+		t.Fatalf("event = %+v, want its text kept", got)
+	}
+	var sink recordingSink
+	emitBackendEvent(&sink, got, 9, 0, 0, 0)
+	if len(sink.events) != 1 {
+		t.Fatalf("emitted %d events, want the refused call's status", len(sink.events))
+	}
+	emitted := sink.events[0]
+	if want := strings.TrimSpace(call.Tool + " " + call.Detail); emitted.Text != want || emitted.T != eventwire.EventStatus {
+		t.Fatalf("emitted %+v, want a status with text %q", emitted, want)
+	}
+	if emitted.ToolCall != nil || emitted.Tokens != 9 {
+		t.Fatalf("emitted %+v, want no call and its tokens kept", emitted)
+	}
+}
+
+func TestToolStatusTextIsBoundedToTheFieldLimit(t *testing.T) {
+	var sink recordingSink
+	emitBackendEvent(&sink, contracts.BackendEvent{Kind: backendKindTool, Tool: "read", Detail: strings.Repeat("x", 3*timeline.MaxFieldBytes)}, 0, 0, 0, 0)
+	if len(sink.events) != 1 {
+		t.Fatalf("emitted %d events, want one status", len(sink.events))
+	}
+	if n := len(sink.events[0].Text); n == 0 || n > timeline.MaxFieldBytes {
+		t.Fatalf("status text is %d bytes, want between 1 and %d", n, timeline.MaxFieldBytes)
 	}
 }
 

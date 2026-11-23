@@ -53,7 +53,7 @@ type Recorder struct {
 	mark       int
 	marked     bool
 	full       bool
-	drained    int
+	handed     []bool
 }
 
 // Apply feeds one event of the turn to the recorder, and returns a copy of the call it started or finished, whether it touched a call, and ErrFull on the first call the turn cannot keep.
@@ -84,27 +84,26 @@ func (r *Recorder) Knows(id string) bool {
 	return r.started[id]
 }
 
-// Seal closes every open call and returns them in the order they started.
-func (r *Recorder) Seal() []Call {
-	indexes := make([]int, 0, len(r.openIndex))
-	for callID, index := range r.openIndex {
-		indexes = append(indexes, index)
-		delete(r.openIndex, callID)
-	}
-	slices.Sort(indexes)
-	sealed := make([]Call, 0, len(indexes))
-	for _, index := range indexes {
-		sealed = append(sealed, r.calls[index])
-	}
-	return sealed
+// Drain returns the finished calls that no earlier Drain or End returned, in the order they started.
+func (r *Recorder) Drain() []Call {
+	return r.hand(false)
 }
 
-// Drain seals the open calls and returns the calls no earlier Drain returned.
-func (r *Recorder) Drain() []Call {
-	r.Seal()
-	fresh := slices.Clone(r.calls[r.drained:])
-	r.drained = len(r.calls)
-	return fresh
+// End returns the calls that no earlier Drain or End returned, open ones included, once the turn is over.
+func (r *Recorder) End() []Call {
+	return r.hand(true)
+}
+
+func (r *Recorder) hand(open bool) []Call {
+	var handed []Call
+	for index := range r.calls {
+		if r.handed[index] || (!open && !r.calls[index].Finished()) {
+			continue
+		}
+		r.handed[index] = true
+		handed = append(handed, r.calls[index])
+	}
+	return handed
 }
 
 func (r *Recorder) reset() {
@@ -133,6 +132,7 @@ func (r *Recorder) open(event contracts.Event) (Call, bool, error) {
 	entry := Call{ID: call.ID, Tool: call.Tool, Detail: BoundField(call.Detail), State: contracts.ToolCallStarted, StartedAt: call.At, Tokens: r.tokensSinceMark()}
 	r.setMark()
 	r.calls = append(r.calls, entry)
+	r.handed = append(r.handed, false)
 	r.openIndex[call.ID] = len(r.calls) - 1
 	return entry, true, nil
 }

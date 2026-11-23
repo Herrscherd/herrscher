@@ -24,8 +24,8 @@ func routeToolStart(m *model, id string) {
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventStatus, Text: "read env.go", ToolCall: &call}})
 }
 
-func routeToolDone(m *model, id string, elapsed time.Duration) {
-	call := contracts.ToolCall{ID: id, State: contracts.ToolCallSucceeded, At: timelineStart().Add(elapsed)}
+func routeToolDone(m *model, elapsed time.Duration) {
+	call := contracts.ToolCall{ID: "a", State: contracts.ToolCallSucceeded, At: timelineStart().Add(elapsed)}
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventToolDone, ToolCall: &call}})
 }
 
@@ -36,7 +36,7 @@ func routeReply(m *model) {
 func TestTurnEndShowsItsFinishedCallBeforeTheReply(t *testing.T) {
 	m := newTestModel()
 	routeToolStart(m, "a")
-	routeToolDone(m, "a", 1500*time.Millisecond)
+	routeToolDone(m, 1500*time.Millisecond)
 	routeReply(m)
 
 	transcript := ansi.Strip(strings.Join(entryTexts(m.tabs["c"]), "\n"))
@@ -93,41 +93,55 @@ func TestAbandonedTurnListsItsOpenCallAsUnfinished(t *testing.T) {
 	if !strings.Contains(transcript, "… read env.go · unfinished") {
 		t.Fatalf("transcript\n%s\nwant the open call listed as unfinished before the abandon notice", transcript)
 	}
-	routeToolDone(m, "a", time.Second)
+	routeToolDone(m, time.Second)
 	routeReply(m)
 	if after := ansi.Strip(strings.Join(entryTexts(m.tabs["c"]), "\n")); strings.Contains(after, "✓ read env.go") {
 		t.Fatalf("transcript\n%s\nwant the abandoned call not to reappear in the next turn", after)
 	}
 }
 
-func TestExpiredGapListsItsOpenCallAsUnfinished(t *testing.T) {
+func TestExpiredGapLeavesItsOpenCallOpenUntilTheTurnEnds(t *testing.T) {
 	m := newTestModel()
 	routeToolStart(m, "a")
-	tb := m.tabs["c"]
-	m.renderInto(tb, contracts.Event{T: eventwire.EventGap, Value: eventwire.GapExpired})
-
-	transcript := ansi.Strip(strings.Join(entryTexts(tb), "\n"))
-	if !strings.Contains(transcript, "… read env.go · unfinished") {
-		t.Fatalf("transcript\n%s\nwant the call open before the gap listed as unfinished", transcript)
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventGap, Value: eventwire.GapExpired}})
+	if transcript := ansi.Strip(strings.Join(entryTexts(m.tabs["c"]), "\n")); strings.Contains(transcript, "unfinished") {
+		t.Fatalf("transcript\n%s\nlists the open call at the gap, want it at the turn end", transcript)
+	}
+	routeReply(m)
+	transcript := ansi.Strip(strings.Join(entryTexts(m.tabs["c"]), "\n"))
+	if n := strings.Count(transcript, "… read env.go · unfinished"); n != 1 {
+		t.Fatalf("transcript\n%s\nlists the open call as unfinished %d times at the turn end, want once", transcript, n)
 	}
 }
 
-func TestGapReplayShowsItsCallOnce(t *testing.T) {
+func TestGapReplayFinishesTheCallOnce(t *testing.T) {
 	m := newTestModel()
 	routeToolStart(m, "a")
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventGap, Value: eventwire.GapExpired}})
 	routeToolStart(m, "a")
-	routeToolDone(m, "a", time.Second)
+	routeToolDone(m, time.Second)
 	routeReply(m)
 
 	transcript := ansi.Strip(strings.Join(entryTexts(m.tabs["c"]), "\n"))
-	if n := strings.Count(transcript, "… read env.go · unfinished"); n != 1 {
-		t.Fatalf("transcript\n%s\nlists the call as unfinished %d times, want once", transcript, n)
+	if n := strings.Count(transcript, "✓ read env.go"); n != 1 {
+		t.Fatalf("transcript\n%s\nfinishes the call %d times, want its real done once", transcript, n)
 	}
-	if strings.Contains(transcript, "✓ read env.go") {
-		t.Fatalf("transcript\n%s\nfinishes a call the gap already closed", transcript)
+	if strings.Contains(transcript, "unfinished") {
+		t.Fatalf("transcript\n%s\nlists a call its real done finished as unfinished", transcript)
 	}
-	if n := strings.Count(transcript, "read env.go"); n != 2 {
-		t.Fatalf("transcript\n%s\nshows the call %d times, want 2: the first status and the unfinished line", transcript, n)
+}
+
+func TestNextTurnShowsAReusedIDAgain(t *testing.T) {
+	m := newTestModel()
+	routeToolStart(m, "a")
+	routeToolDone(m, time.Second)
+	routeReply(m)
+	routeToolStart(m, "a")
+	routeToolDone(m, time.Second)
+	routeReply(m)
+
+	transcript := ansi.Strip(strings.Join(entryTexts(m.tabs["c"]), "\n"))
+	if n := strings.Count(transcript, "✓ read env.go"); n != 2 {
+		t.Fatalf("transcript\n%s\nshows the reused call %d times, want once per turn", transcript, n)
 	}
 }

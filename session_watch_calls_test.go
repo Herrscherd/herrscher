@@ -122,31 +122,58 @@ func TestFollowSessionClosesAnAbandonedTurnsOpenCallAsUnfinished(t *testing.T) {
 	}
 }
 
-func TestFollowSessionClosesOpenCallsOnAnExpiredGap(t *testing.T) {
-	out, err := followed(t, false, toolStart(1, "a"), watchEvent(2, "a", contracts.Event{T: eventwire.EventGap, Value: eventwire.GapExpired}), toolDone(3, "a", time.Second, contracts.ToolCallSucceeded), replyDone(4), sessionClosed(5))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out, "  … read env.go · unfinished\n") {
-		t.Fatalf("output %q does not close the call open before the gap as unfinished", out)
-	}
-	if strings.Contains(out, "✓ read env.go") {
-		t.Fatalf("output %q lets a call lost in the gap finish later", out)
-	}
-}
-
-func TestFollowSessionPrintsAGapCallOnceAfterItsReplay(t *testing.T) {
+func TestFollowSessionFinishesACallWhoseDoneComesAfterAGap(t *testing.T) {
 	out, err := followed(t, false, toolStart(1, "a"), watchEvent(2, "a", contracts.Event{T: eventwire.EventGap, Value: eventwire.GapExpired}), toolStart(3, "a"), toolDone(4, "a", time.Second, contracts.ToolCallSucceeded), replyDone(5), sessionClosed(6))
 	if err != nil {
 		t.Fatal(err)
 	}
+	if n := strings.Count(out, "✓ read env.go"); n != 1 {
+		t.Fatalf("output %q finishes the call %d times, want its real done once", out, n)
+	}
+	if strings.Contains(out, "unfinished") {
+		t.Fatalf("output %q lists a call its real done finished as unfinished", out)
+	}
+}
+
+func TestFollowSessionIgnoresAReplayedDoneOfAFinishedCall(t *testing.T) {
+	out, err := followed(t, false, toolStart(1, "a"), toolDone(2, "a", time.Second, contracts.ToolCallSucceeded), watchEvent(3, "a", contracts.Event{T: eventwire.EventGap, Value: eventwire.GapExpired}), toolDone(4, "a", time.Second, contracts.ToolCallSucceeded), replyDone(5), sessionClosed(6))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(out, "✓ read env.go"); n != 1 {
+		t.Fatalf("output %q prints the call's outcome %d times, want once", out, n)
+	}
+}
+
+func TestFollowSessionListsAGapCallUnfinishedOnlyAtTheReply(t *testing.T) {
+	out, err := followed(t, false, toolStart(1, "a"), watchEvent(2, "a", contracts.Event{T: eventwire.EventGap, Value: eventwire.GapExpired}), replyDone(3), sessionClosed(4))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if n := strings.Count(out, "  … read env.go · unfinished\n"); n != 1 {
-		t.Fatalf("output %q lists the call as unfinished %d times, want once", out, n)
+		t.Fatalf("output %q lists the open call as unfinished %d times, want once", out, n)
 	}
-	if strings.Contains(out, "✓ read env.go") {
-		t.Fatalf("output %q finishes a call the gap already closed", out)
+	if strings.Index(out, "unfinished") < strings.Index(out, "no longer in the daemon's memory") {
+		t.Fatalf("output %q lists the call as unfinished before the gap ends, want it at the reply", out)
 	}
-	if n := strings.Count(out, "read env.go"); n != 2 {
-		t.Fatalf("output %q shows \"read env.go\" %d times, want 2: the first status and the unfinished line", out, n)
+}
+
+func TestFollowSessionListsItsOpenCallsWhenTheSessionCloses(t *testing.T) {
+	out, err := followed(t, false, toolStart(1, "a"), sessionClosed(2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "  … read env.go · unfinished\n") {
+		t.Fatalf("output %q does not list the open call of a closed session as unfinished", out)
+	}
+}
+
+func TestFollowSessionShowsAReusedIDInTheNextTurn(t *testing.T) {
+	out, err := followed(t, false, toolStart(1, "a"), toolDone(2, "a", time.Second, contracts.ToolCallSucceeded), replyDone(3), toolStart(4, "a"), toolDone(5, "a", time.Second, contracts.ToolCallSucceeded), replyDone(6), sessionClosed(7))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(out, "✓ read env.go"); n != 2 {
+		t.Fatalf("output %q shows the reused call %d times, want once per turn", out, n)
 	}
 }

@@ -278,24 +278,23 @@ func (p *watchView) render(event *host.DaemonEvent) error {
 }
 
 func (p *watchView) trackCalls(event *host.DaemonEvent) error {
-	call, touched, err := p.calls.Apply(event.Event)
+	_, _, err := p.calls.Apply(event.Event)
 	if errors.Is(err, timeline.ErrFull) {
 		return p.line(clitext.ToolBound, clitext.Params{clitext.ParamLimit: timeline.MaxCalls})
 	}
 	switch {
-	case event.T == eventwire.EventToolDone && touched:
-		key, params := clitext.ToolCallLine(p.lang, call)
-		return p.line(key, params)
-	case event.T == eventwire.EventGap:
-		return p.sealCalls()
+	case event.T == eventwire.EventToolDone:
+		return p.printCalls(p.calls.Drain())
 	case event.T == eventwire.EventReply && event.Done, event.T == eventwire.EventAbandoned:
+		return p.closeTurnCalls()
+	case event.T == eventwire.EventClosed && event.Value != eventwire.ClosedRenamed:
 		return p.closeTurnCalls()
 	}
 	return nil
 }
 
-func (p *watchView) sealCalls() error {
-	for _, call := range p.calls.Seal() {
+func (p *watchView) printCalls(calls []timeline.Call) error {
+	for _, call := range calls {
 		key, params := clitext.ToolCallLine(p.lang, call)
 		if err := p.line(key, params); err != nil {
 			return err
@@ -305,7 +304,7 @@ func (p *watchView) sealCalls() error {
 }
 
 func (p *watchView) closeTurnCalls() error {
-	if err := p.sealCalls(); err != nil {
+	if err := p.printCalls(p.calls.End()); err != nil {
 		return err
 	}
 	p.calls = timeline.Recorder{}

@@ -653,8 +653,10 @@ thing it is used to diagnose.
 terminal: the prompt and who sent it, each tool call as its status line when it starts and as a
 line when it ends (`✓` with its duration and tokens, or `✗` with its duration and error,
 or `no reason given` when the backend gave none), the reply as it streams,
-and the tokens and cost when the turn ends. A call still open when the reply arrives
-shows as `…` with `unfinished`. The bound notice appears once, when a turn goes past
+and the tokens and cost when the turn ends. A call that has not finished when the turn
+ends (the reply arrives, the turn is abandoned, or the session closes) shows once as `…`
+with `unfinished`. A gap in the daemon's memory does not close a call: when its done
+arrives later, it prints `✓` or `✗` as usual. The bound notice appears once, when a turn goes past
 4096 tool calls, and only the first 4096 are kept. It says when the session is idle or when
 the daemon holds nothing of it yet, keeps following the next turns, follows the
 session under its new name when it is renamed, and stops when the session is closed
@@ -673,6 +675,11 @@ text, plus the `id`, `tool`, `detail` and `error` of its tool call, plus 128 byt
 overhead. The `detail` and the `error` are cut to 4096 bytes before they are kept. The
 bridge refuses a tool call whose `id` or `tool` is longer than 256 bytes: the event
 keeps its text and loses its call.
+
+Memory budget of one turn in a client (an estimate, not measured): 4096 calls × 2 fields
+(`detail` and `error`) × 4096 bytes ≈ 32 MiB, plus the `id` and the `tool` of each call (at
+most 256 bytes each, so at most 2 MiB for 4096 calls), so about 34 MiB before the data
+structures themselves.
 
 The catch-up happens on the events socket itself. A subscriber may write one line as
 soon as it connects, `{"session":"<name>","since":<seq>}`, and the daemon first

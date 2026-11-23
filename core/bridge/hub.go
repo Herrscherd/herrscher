@@ -17,6 +17,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/identity"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/skills"
+	"github.com/Herrscherd/herrscher/core/timeline"
 )
 
 const errPrefix = "⚠️ "
@@ -454,7 +455,7 @@ func emitBackendEvent(sink contracts.EventSink, event contracts.BackendEvent, to
 	case backendKindText:
 		sink.Emit(contracts.Event{T: eventwire.EventChunk, Text: event.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
 	case backendKindTool:
-		if text := strings.TrimSpace(event.Tool + " " + event.Detail); text != "" {
+		if text := timeline.BoundField(strings.TrimSpace(event.Tool + " " + event.Detail)); text != "" {
 			sink.Emit(contracts.Event{T: eventwire.EventStatus, Text: text, ToolCall: event.ToolCall, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
 		}
 	case backendKindToolDone:

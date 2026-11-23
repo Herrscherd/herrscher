@@ -17,15 +17,19 @@ func (m *model) observeToolCalls(target *tab, event contracts.Event) {
 }
 
 func (m *model) appendTimeline(target *tab) {
-	for _, call := range target.calls.Drain() {
-		key, params := clitext.ToolCallLine(m.tr.lang, call)
-		target.appendEntry(entry{role: roleNotice, text: m.cliText(key, params)})
-	}
+	m.appendCalls(target, target.calls.Drain())
 }
 
 func (m *model) closeTurnTimeline(target *tab) {
-	m.appendTimeline(target)
+	m.appendCalls(target, target.calls.End())
 	target.calls = timeline.Recorder{}
+}
+
+func (m *model) appendCalls(target *tab, calls []timeline.Call) {
+	for _, call := range calls {
+		key, params := clitext.ToolCallLine(m.tr.lang, call)
+		target.appendEntry(entry{role: roleNotice, text: m.cliText(key, params)})
+	}
 }
 
 func replayedToolStart(target *tab, event contracts.Event) bool {

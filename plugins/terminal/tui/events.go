@@ -21,7 +21,11 @@ func (m *model) route(routed RoutedEvent) tea.Cmd {
 		tab.pendingEvents = append(tab.pendingEvents, routed)
 		return m.drainHistory()
 	}
+	if tab.calls.Replays(routed.Event) {
+		return nil
+	}
 	before := len(tab.entries)
+	m.settleCalls(tab, routed.Event)
 	m.renderInto(tab, routed.Event)
 	flushCmd := m.flushQueue(tab, routed.Event.T)
 	isReply := routed.Event.T == eventwire.EventReply

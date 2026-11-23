@@ -10,6 +10,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/bridge"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/timeline"
 	"github.com/Herrscherd/herrscher/core/usage"
 )
 
@@ -59,6 +60,7 @@ func (d *sessionDriver) resolveAttachments(ctx context.Context, message contract
 type turnUsage struct {
 	InTokens, OutTokens, CacheRead, CacheCreate, DurMs int
 	CtxTokens                                          int
+	Tools                                              []timeline.Call
 }
 
 func (d *sessionDriver) recordUsage(event contracts.Event) {
@@ -91,7 +93,7 @@ func hasTurnUsage(event contracts.Event) bool {
 }
 
 func (d *sessionDriver) recordEntry(role, text, shown string, cost float64, turn turnUsage) {
-	if d.sink.Transcript == nil || (text == "" && shown == "") {
+	if d.sink.Transcript == nil || (text == "" && shown == "" && len(turn.Tools) == 0) {
 		return
 	}
 	entry := state.TranscriptEntry{
@@ -106,6 +108,7 @@ func (d *sessionDriver) recordEntry(role, text, shown string, cost float64, turn
 		CacheCreate: turn.CacheCreate,
 		DurMs:       turn.DurMs,
 		CtxTokens:   turn.CtxTokens,
+		Tools:       turn.Tools,
 	}
 	if shown != text {
 		entry.Displayed = shown

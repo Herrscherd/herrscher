@@ -4460,6 +4460,31 @@
     "other": "last compaction unknown"
   },
   {
+    "id": "cli.tool.succeeded",
+    "description": "A tool call of a turn that succeeded: its tool and detail, duration and the tokens already formatted",
+    "other": "  ✓ {{.Call}} · {{.Duration}} · tokens: {{.Tokens}}"
+  },
+  {
+    "id": "cli.tool.failed",
+    "description": "A tool call of a turn that failed: its tool and detail, duration, the tokens already formatted and the reason",
+    "other": "  ✗ {{.Call}} · {{.Duration}} · tokens: {{.Tokens}} · {{.Error}}"
+  },
+  {
+    "id": "cli.tool.failed_no_reason",
+    "description": "A tool call of a turn that failed without giving a reason: its tool and detail, duration and the tokens already formatted",
+    "other": "  ✗ {{.Call}} · {{.Duration}} · tokens: {{.Tokens}} · no reason given"
+  },
+  {
+    "id": "cli.tool.unfinished",
+    "description": "A tool call of a turn that never reported its result",
+    "other": "  … {{.Call}} · unfinished"
+  },
+  {
+    "id": "cli.tool.bound",
+    "description": "Notice that a turn kept only the first tool calls, up to the limit",
+    "other": "  · only the first {{.Limit}} tool calls of this turn are kept"
+  },
+  {
     "id": "cli.setup.usage",
     "description": "Usage of the setup command, Name lists the sections",
     "other": "usage: herrscher setup [{{.Name}}]"

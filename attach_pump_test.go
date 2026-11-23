@@ -36,3 +36,26 @@ func TestAttachedPumpForwardsAResetIntact(t *testing.T) {
 		t.Fatal("the reset never reached the frontend")
 	}
 }
+
+func TestAttachedPumpForwardsAnExpiredGap(t *testing.T) {
+	done := make(chan struct{})
+	defer close(done)
+	events := make(chan tui.RoutedEvent, 1)
+	var lang i18n.Language
+	state := newAttachedDaemonState(nil, nil, lang, done, events)
+	state.channelOf["sess"] = "chan-1"
+
+	stream := make(chan host.DaemonEvent, 1)
+	stream <- host.DaemonEvent{Session: "sess", Event: contracts.Event{T: eventwire.EventGap, Value: eventwire.GapExpired}}
+	close(stream)
+	go state.pump(stream)
+
+	select {
+	case routed := <-events:
+		if routed.Event.T != eventwire.EventGap || routed.Event.Value != eventwire.GapExpired {
+			t.Fatalf("an expired gap must reach the frontend so it closes the open calls: %+v", routed.Event)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the expired gap never reached the frontend")
+	}
+}

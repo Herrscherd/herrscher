@@ -4460,6 +4460,31 @@
     "other": "dernière compaction inconnue"
   },
   {
+    "id": "cli.tool.succeeded",
+    "description": "Un appel d'outil d'un tour réussi : son outil et son détail, sa durée et ses jetons déjà formatés",
+    "other": "  ✓ {{.Call}} · {{.Duration}} · jetons : {{.Tokens}}"
+  },
+  {
+    "id": "cli.tool.failed",
+    "description": "Un appel d'outil d'un tour en échec : son outil et son détail, sa durée, ses jetons déjà formatés et la raison",
+    "other": "  ✗ {{.Call}} · {{.Duration}} · jetons : {{.Tokens}} · {{.Error}}"
+  },
+  {
+    "id": "cli.tool.failed_no_reason",
+    "description": "Un appel d'outil d'un tour en échec sans raison donnée : son outil et son détail, sa durée et ses jetons déjà formatés",
+    "other": "  ✗ {{.Call}} · {{.Duration}} · jetons : {{.Tokens}} · aucune raison donnée"
+  },
+  {
+    "id": "cli.tool.unfinished",
+    "description": "Un appel d'outil d'un tour dont le résultat n'est jamais revenu",
+    "other": "  … {{.Call}} · inachevé"
+  },
+  {
+    "id": "cli.tool.bound",
+    "description": "Avis qu'un tour n'a gardé que les premiers appels d'outil, jusqu'à la limite",
+    "other": "  · seuls les {{.Limit}} premiers appels d'outil de ce tour sont gardés"
+  },
+  {
     "id": "cli.setup.usage",
     "description": "Usage of the setup command, Name lists the sections",
     "other": "usage : herrscher setup [{{.Name}}]"

@@ -76,7 +76,7 @@ func newAttachedDaemon(ctx context.Context, layout host.RuntimeLayout, messages 
 func (a *attachedDaemon) pump(stream <-chan host.DaemonEvent) {
 	defer close(a.events)
 	for event := range stream {
-		if event.T == eventwire.EventGap || event.T == eventwire.EventCaughtUp {
+		if isHiddenFromTUI(event) {
 			continue
 		}
 		conv := contracts.Conversation{Gateway: kindTerminal, ID: a.channelFor(event.Session)}
@@ -86,6 +86,10 @@ func (a *attachedDaemon) pump(stream <-chan host.DaemonEvent) {
 			return
 		}
 	}
+}
+
+func isHiddenFromTUI(event host.DaemonEvent) bool {
+	return event.T == eventwire.EventCaughtUp || (event.T == eventwire.EventGap && event.Value != eventwire.GapExpired)
 }
 
 func (a *attachedDaemon) channelFor(session string) string {

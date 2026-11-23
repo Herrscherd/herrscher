@@ -1,15 +1,15 @@
 # Maintainer: Akayashuu <sauvageleo1@gmail.com>
-pkgname=herrscherd
-pkgdesc="Herrscher host + Discord bot CLI: a modular Discord<->Claude harness"
-pkgver=1.1.0
+pkgname=herrscher
+pkgdesc="Self-hosted harness for running fleets of AI coding agents"
+pkgver=0.63.0
 pkgrel=1
-arch=('x86_64')
+arch=('x86_64' 'aarch64')
 url="https://github.com/Herrscherd/herrscher"
 license=('MIT')
 depends=('glibc')
 makedepends=('go' 'git')
-# Pure-upstream build from GitHub master. For a local-checkout build instead,
-# swap to: git+file:///path/to/herrscher#branch=master
+conflicts=('herrscherd')
+replaces=('herrscherd')
 source=("$pkgname::git+https://github.com/Herrscherd/herrscher.git#branch=master")
 sha256sums=('SKIP')
 options=('!debug')
@@ -24,8 +24,6 @@ pkgver() {
 
 build() {
 	cd "$srcdir/$pkgname"
-	# The clone has no go.work in its parents; pin it off and resolve the
-	# published plugin modules from the proxy (same as a fresh GitHub build).
 	export GOWORK=off
 	export CGO_ENABLED=0
 	export GOFLAGS="-trimpath -mod=readonly -modcacherw"
@@ -35,4 +33,5 @@ build() {
 package() {
 	cd "$srcdir/$pkgname"
 	install -Dm755 "$pkgname" "$pkgdir/usr/bin/$pkgname"
+	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }

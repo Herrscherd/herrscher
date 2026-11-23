@@ -17,6 +17,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/identity"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/skills"
+	"github.com/Herrscherd/herrscher/core/timeline"
 )
 
 const errPrefix = "⚠️ "
@@ -27,6 +28,7 @@ const (
 	backendKindText     = "text"
 	backendKindThinking = "thinking"
 	backendKindTool     = "tool"
+	backendKindToolDone = contracts.BackendKindToolDone
 	backendKindTodos    = "todos"
 	backendKindSubagent = "subagent"
 	backendKindReset    = "reset"
@@ -247,19 +249,31 @@ type turnUsage struct {
 func (u *turnUsage) absorb(event contracts.BackendEvent) {
 	switch event.Kind {
 	case backendKindUsage:
-		u.outTok += event.OutTokens
+		if timeline.ReportsCount(event.OutTokens) {
+			u.outTok += event.OutTokens
+		}
 		u.setInputSide(event)
 	case backendKindResult:
-		u.outTok = event.OutTokens
+		if timeline.ReportsCount(event.OutTokens) {
+			u.outTok = event.OutTokens
+		}
 		u.setInputSide(event)
-		u.cost = event.Cost
+		if timeline.ReportsCount(event.Cost) {
+			u.cost = event.Cost
+		}
 	}
 }
 
 func (u *turnUsage) setInputSide(event contracts.BackendEvent) {
-	u.inTok = event.InTokens
-	u.cacheRd = event.CacheRead
-	u.cacheCr = event.CacheCreate
+	if timeline.ReportsCount(event.InTokens) {
+		u.inTok = event.InTokens
+	}
+	if timeline.ReportsCount(event.CacheRead) {
+		u.cacheRd = event.CacheRead
+	}
+	if timeline.ReportsCount(event.CacheCreate) {
+		u.cacheCr = event.CacheCreate
+	}
 }
 
 // TurnFailedError reports that the backend ended a turn in error. The gateways
@@ -314,15 +328,17 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	prompt := contracts.Prompt{Content: event.Text, Context: withIdentity(withCapabilities(withDelegation(withSkills(memCtx, eng), aff.roster), aff.caps), aff.user), Author: event.Who, Attachments: event.Attachments, Language: lang, Outbox: turn.dir}
 	var usage turnUsage
 	var streamed []string
+	var calls toolCallGuard
+	defer calls.report()
 	onEvent := func(event contracts.BackendEvent) {
-		usage.absorb(event)
+		event = calls.receive(event)
+		relayBackendEvent(sink, &usage, event)
 		switch event.Kind {
 		case backendKindText:
 			streamed = append(streamed, event.Detail)
 		case backendKindReset:
 			streamed = nil
 		}
-		emitBackendEvent(sink, event, usage.outTok, usage.inTok, usage.cacheRd, usage.cacheCr)
 	}
 	out, err := backend.Respond(turnCtx, prompt, onEvent)
 	var failure error
@@ -399,6 +415,55 @@ func runPick(ctx context.Context, sink contracts.EventSink, backend contracts.Ba
 	sink.Emit(contracts.Event{T: eventwire.EventReply, Text: strings.TrimSpace(out), Done: true, TurnID: turnID})
 }
 
+const maxToolCallNameBytes = 256
+
+var errToolCallNameTooLong = errors.New("bridge: a tool call's id or tool is longer than the limit")
+
+type toolCallGuard struct {
+	refused    int
+	firstError error
+}
+
+func validateToolCall(event contracts.BackendEvent) error {
+	if err := event.ValidateToolCall(); err != nil {
+		return err
+	}
+	if event.ToolCall != nil && (len(event.ToolCall.ID) > maxToolCallNameBytes || len(event.ToolCall.Tool) > maxToolCallNameBytes) {
+		return errToolCallNameTooLong
+	}
+	return nil
+}
+
+func (g *toolCallGuard) receive(event contracts.BackendEvent) contracts.BackendEvent {
+	if err := validateToolCall(event); err != nil {
+		if g.refused == 0 {
+			g.firstError = err
+		}
+		g.refused++
+		event.ToolCall = nil
+		return event
+	}
+	if event.ToolCall == nil {
+		return event
+	}
+	call := *event.ToolCall
+	call.At = time.Now().UTC()
+	event.ToolCall = &call
+	return event
+}
+
+func (g *toolCallGuard) report() {
+	if g.refused == 0 {
+		return
+	}
+	logger.Warn("backend tool calls refused in this turn, their events keep their text and tokens", "count", g.refused, "err", g.firstError)
+}
+
+func relayBackendEvent(sink contracts.EventSink, usage *turnUsage, event contracts.BackendEvent) {
+	usage.absorb(event)
+	emitBackendEvent(sink, event, usage.outTok, usage.inTok, usage.cacheRd, usage.cacheCr)
+}
+
 func emitBackendEvent(sink contracts.EventSink, event contracts.BackendEvent, tokens, tokensIn, cacheRead, cacheCreate int) {
 	switch event.Kind {
 	case backendKindThinking:
@@ -406,8 +471,12 @@ func emitBackendEvent(sink contracts.EventSink, event contracts.BackendEvent, to
 	case backendKindText:
 		sink.Emit(contracts.Event{T: eventwire.EventChunk, Text: event.Detail, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
 	case backendKindTool:
-		if text := strings.TrimSpace(event.Tool + " " + event.Detail); text != "" {
-			sink.Emit(contracts.Event{T: eventwire.EventStatus, Text: text, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
+		if text := timeline.BoundField(strings.TrimSpace(event.Tool + " " + event.Detail)); text != "" {
+			sink.Emit(contracts.Event{T: eventwire.EventStatus, Text: text, ToolCall: event.ToolCall, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
+		}
+	case backendKindToolDone:
+		if event.ToolCall != nil {
+			sink.Emit(contracts.Event{T: eventwire.EventToolDone, ToolCall: event.ToolCall, Tokens: tokens, TokensIn: tokensIn, CacheRead: cacheRead, CacheCreate: cacheCreate})
 		}
 	case backendKindTodos:
 		sink.Emit(contracts.Event{T: eventwire.EventTodos, Todos: event.Todos})

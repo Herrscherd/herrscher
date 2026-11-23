@@ -15,6 +15,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/timeline"
 	"github.com/Herrscherd/herrscher/core/usage"
 )
 
@@ -114,6 +115,7 @@ type sessionDriver struct {
 	compaction        compactionPolicy
 	percentOf         func() int
 	turnReading       int
+	calls             timeline.Recorder
 	hostSpent         bool
 	stageSpent        map[string]bool
 	compactMu         sync.Mutex

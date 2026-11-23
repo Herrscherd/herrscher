@@ -68,9 +68,7 @@ func (r *Recorder) Apply(event contracts.Event) (Call, bool, error) {
 		call, touched := r.close(event)
 		return call, touched, nil
 	}
-	if carriesTokens(event.T) {
-		r.cumulative = event.Tokens
-	}
+	r.observeTokens(event)
 	return Call{}, false, nil
 }
 
@@ -128,7 +126,7 @@ func (r *Recorder) open(event contracts.Event) (Call, bool, error) {
 		r.openIndex = make(map[string]int)
 	}
 	r.started[call.ID] = true
-	r.cumulative = event.Tokens
+	r.observeTokens(event)
 	entry := Call{ID: call.ID, Tool: call.Tool, Detail: BoundField(call.Detail), State: contracts.ToolCallStarted, StartedAt: call.At, Tokens: r.tokensSinceMark()}
 	r.setMark()
 	r.calls = append(r.calls, entry)
@@ -143,7 +141,7 @@ func (r *Recorder) close(event contracts.Event) (Call, bool) {
 	if !open {
 		return Call{}, false
 	}
-	r.cumulative = event.Tokens
+	r.observeTokens(event)
 	entry := &r.calls[index]
 	ended := call.At
 	elapsed := ended.Sub(entry.StartedAt).Milliseconds()
@@ -173,6 +171,12 @@ func (r *Recorder) tokensSinceMark() int {
 		return 0
 	}
 	return r.cumulative - r.mark
+}
+
+func (r *Recorder) observeTokens(event contracts.Event) {
+	if carriesTokens(event.T) && event.Tokens > r.cumulative {
+		r.cumulative = event.Tokens
+	}
 }
 
 func (r *Recorder) setMark() {

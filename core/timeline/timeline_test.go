@@ -156,6 +156,43 @@ func TestTokensCountFromPreviousTransition(t *testing.T) {
 	}
 }
 
+func TestDoneWithNoTokensDoesNotMoveTheMarkBack(t *testing.T) {
+	var r Recorder
+	if _, _, err := r.Apply(tokenStart("a", 10)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := r.Apply(contracts.Event{T: eventwire.EventChunk, Tokens: 30}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := r.Apply(tokenDone("a", 0)); err != nil {
+		t.Fatal(err)
+	}
+	next, _, err := r.Apply(tokenStart("b", 40))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.Tokens != 10 {
+		t.Fatalf("tokens = %d, want 10: the done reporting 0 must not move the mark below the 30 already counted", next.Tokens)
+	}
+}
+
+func TestChunkTokensCountWhenTheNextStartReportsNone(t *testing.T) {
+	var r Recorder
+	if _, _, err := r.Apply(tokenStart("a", 10)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := r.Apply(contracts.Event{T: eventwire.EventChunk, Tokens: 40}); err != nil {
+		t.Fatal(err)
+	}
+	next, _, err := r.Apply(tokenStart("b", 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.Tokens != 30 {
+		t.Fatalf("tokens = %d, want 30: the chunk at 40 is counted from the mark at 10", next.Tokens)
+	}
+}
+
 func TestBoundKeepsMaxCallsAndReportsFullOnce(t *testing.T) {
 	var r Recorder
 	for i := range MaxCalls {

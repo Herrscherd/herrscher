@@ -60,9 +60,30 @@ func TestFailedToolLineWithoutReasonHasNoTrailingSeparator(t *testing.T) {
 		t.Fatalf("key = %q, want %q for a failed call without an error", key, ToolFailedNoReason)
 	}
 	line := renderToolLine(t, i18n.English, finishedToolCall(contracts.ToolCallFailed, 0, ""))
-	want := "  ✗ read env.go · " + FormatDuration(i18n.English, time.Second) + " · no reason given"
+	want := "  ✗ read env.go · " + FormatDuration(i18n.English, time.Second) + " · tokens: 0 · no reason given"
 	if line != want {
 		t.Fatalf("line = %q, want %q", line, want)
+	}
+}
+
+func TestFailedToolLineWithoutReasonShowsItsTokens(t *testing.T) {
+	tests := []struct {
+		name   string
+		lang   i18n.Language
+		tokens string
+		reason string
+	}{
+		{name: "en", lang: i18n.English, tokens: "tokens: 12,345", reason: "no reason given"},
+		{name: "fr", lang: i18n.French, tokens: "jetons : 12 345", reason: "aucune raison donnée"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			line := renderToolLine(t, tc.lang, finishedToolCall(contracts.ToolCallFailed, 12345, ""))
+			want := "  ✗ read env.go · " + FormatDuration(tc.lang, time.Second) + " · " + tc.tokens + " · " + tc.reason
+			if line != want {
+				t.Fatalf("line = %q, want %q", line, want)
+			}
+		})
 	}
 }
 
@@ -73,5 +94,25 @@ func TestFailedToolLineWithReasonShowsIt(t *testing.T) {
 	}
 	if params[ParamError] != "exit 2" {
 		t.Fatalf("error param = %v, want exit 2", params[ParamError])
+	}
+}
+
+func TestFailedToolLineWithReasonShowsItsTokens(t *testing.T) {
+	tests := []struct {
+		name   string
+		lang   i18n.Language
+		tokens string
+	}{
+		{name: "en", lang: i18n.English, tokens: "tokens: 12,345"},
+		{name: "fr", lang: i18n.French, tokens: "jetons : 12 345"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			line := renderToolLine(t, tc.lang, finishedToolCall(contracts.ToolCallFailed, 12345, "exit 2"))
+			want := "  ✗ read env.go · " + FormatDuration(tc.lang, time.Second) + " · " + tc.tokens + " · exit 2"
+			if line != want {
+				t.Fatalf("line = %q, want %q", line, want)
+			}
+		})
 	}
 }

@@ -20,8 +20,8 @@ const (
 func toolKeys() map[Key][]string {
 	return map[Key][]string{
 		ToolSucceeded:      {ParamCall, ParamDuration, ParamTokens},
-		ToolFailed:         {ParamCall, ParamDuration, ParamError},
-		ToolFailedNoReason: {ParamCall, ParamDuration},
+		ToolFailed:         {ParamCall, ParamDuration, ParamTokens, ParamError},
+		ToolFailedNoReason: {ParamCall, ParamDuration, ParamTokens},
 		ToolUnfinished:     {ParamCall},
 		ToolBound:          {ParamLimit},
 	}
@@ -35,6 +35,7 @@ func ToolCallLine(lang i18n.Language, call timeline.Call) (Key, Params) {
 	params := Params{
 		ParamCall:     call.Label(),
 		ParamDuration: FormatDuration(lang, time.Duration(*call.DurationMs)*time.Millisecond),
+		ParamTokens:   FormatNumber(lang, float64(max(call.Tokens, 0)), 0),
 	}
 	if call.State == contracts.ToolCallFailed {
 		if call.Error == "" {
@@ -43,6 +44,5 @@ func ToolCallLine(lang i18n.Language, call timeline.Call) (Key, Params) {
 		params[ParamError] = call.Error
 		return ToolFailed, params
 	}
-	params[ParamTokens] = FormatNumber(lang, float64(max(call.Tokens, 0)), 0)
 	return ToolSucceeded, params
 }

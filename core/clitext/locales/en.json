@@ -4546,13 +4546,13 @@
   },
   {
     "id": "cli.tool.failed",
-    "description": "A tool call of a turn that failed: its tool and detail, duration and the reason",
-    "other": "  ✗ {{.Call}} · {{.Duration}} · {{.Error}}"
+    "description": "A tool call of a turn that failed: its tool and detail, duration, the tokens already formatted and the reason",
+    "other": "  ✗ {{.Call}} · {{.Duration}} · tokens: {{.Tokens}} · {{.Error}}"
   },
   {
     "id": "cli.tool.failed_no_reason",
-    "description": "A tool call of a turn that failed without giving a reason: its tool and detail, duration",
-    "other": "  ✗ {{.Call}} · {{.Duration}} · no reason given"
+    "description": "A tool call of a turn that failed without giving a reason: its tool and detail, duration and the tokens already formatted",
+    "other": "  ✗ {{.Call}} · {{.Duration}} · tokens: {{.Tokens}} · no reason given"
   },
   {
     "id": "cli.tool.unfinished",

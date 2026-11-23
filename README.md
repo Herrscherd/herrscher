@@ -653,10 +653,12 @@ thing it is used to diagnose.
 terminal: the prompt and who sent it, each tool call as its status line when it starts and as a
 line when it ends (`✓` with its duration and tokens, or `✗` with its duration and error,
 or `no reason given` when the backend gave none), the reply as it streams,
-and the tokens and cost when the turn ends. A call that has not finished when the turn
-ends (the reply arrives, the turn is abandoned, or the session closes) shows once as `…`
-with `unfinished`. A gap in the daemon's memory does not close a call: when its done
-arrives later, it prints `✓` or `✗` as usual. The bound notice appears once, when a turn goes past
+and the tokens and cost when the turn ends. In session watch, each call prints its finished line at its own
+done. A call still open when the turn ends (the reply arrives, the turn is abandoned, or the
+session closes) shows once as `…` with `unfinished`. Only session watch prints that line at a
+session close: the TUI removes the session's tab on close, so it shows nothing for open calls then.
+A gap in the daemon's memory does not close a call: when its done arrives later, session watch
+prints `✓` or `✗` as usual. The bound notice appears once, when a turn goes past
 4096 tool calls, and only the first 4096 are kept. It says when the session is idle or when
 the daemon holds nothing of it yet, keeps following the next turns, follows the
 session under its new name when it is renamed, and stops when the session is closed
@@ -665,6 +667,11 @@ same events the daemon sends on its events socket, so a script can consume them.
 tool call travels as `tool_call` on the `status` event that starts it and on the
 `tool_done` event that ends it. The two lines are the only ones a call prints: the
 `tool_done` event never prints a second status line.
+
+The TUI shows the same calls differently. Each call shows its status line when it starts, but its
+finished line waits: the TUI prints the finished calls together only when a gap in the daemon's
+memory expires, or when the turn ends, before the reply. A call still open at the turn end shows
+once as `…` with `unfinished`, as in session watch.
 
 Every event the daemon publishes carries a sequence number (`seq`). It starts from
 the clock when the daemon starts, so a new daemon always numbers above the one

@@ -56,7 +56,7 @@ func TestFollowSessionRendersAFailedCallWithItsError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "  ✗ read env.go · "+clitext.FormatDuration(i18n.English, time.Second)+" · exit 2\n") {
+	if !strings.Contains(out, "  ✗ read env.go · "+clitext.FormatDuration(i18n.English, time.Second)+" · tokens: 0 · exit 2\n") {
 		t.Fatalf("output %q does not show the failed call with its error", out)
 	}
 }
@@ -175,5 +175,25 @@ func TestFollowSessionShowsAReusedIDInTheNextTurn(t *testing.T) {
 	}
 	if n := strings.Count(out, "✓ read env.go"); n != 2 {
 		t.Fatalf("output %q shows the reused call %d times, want once per turn", out, n)
+	}
+}
+
+func TestFollowSessionPrintsEachConcurrentCallAtItsOwnDone(t *testing.T) {
+	out, err := followed(t, false,
+		toolStart(1, "a"), toolStart(2, "b"),
+		toolDone(3, "b", 2*time.Second, contracts.ToolCallSucceeded),
+		toolDone(4, "a", 3*time.Second, contracts.ToolCallSucceeded),
+		replyDone(5), sessionClosed(6))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "unfinished") {
+		t.Fatalf("output %q lists a call as unfinished, want both finished at their own done", out)
+	}
+	bLine := "  ✓ read env.go · " + clitext.FormatDuration(i18n.English, 2*time.Second) + " · tokens: 0\n"
+	aLine := "  ✓ read env.go · " + clitext.FormatDuration(i18n.English, 3*time.Second) + " · tokens: 0\n"
+	bAt, aAt := strings.Index(out, bLine), strings.Index(out, aLine)
+	if bAt < 0 || aAt < 0 || bAt > aAt {
+		t.Fatalf("output %q, want b's line then a's line, each once", out)
 	}
 }

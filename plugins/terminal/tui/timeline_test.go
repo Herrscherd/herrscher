@@ -25,7 +25,11 @@ func routeToolStart(m *model, id string) {
 }
 
 func routeToolDone(m *model, elapsed time.Duration) {
-	call := contracts.ToolCall{ID: "a", State: contracts.ToolCallSucceeded, At: timelineStart().Add(elapsed)}
+	routeCallDone(m, "a", elapsed)
+}
+
+func routeCallDone(m *model, id string, elapsed time.Duration) {
+	call := contracts.ToolCall{ID: id, State: contracts.ToolCallSucceeded, At: timelineStart().Add(elapsed)}
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventToolDone, ToolCall: &call}})
 }
 
@@ -143,5 +147,38 @@ func TestNextTurnShowsAReusedIDAgain(t *testing.T) {
 	transcript := ansi.Strip(strings.Join(entryTexts(m.tabs["c"]), "\n"))
 	if n := strings.Count(transcript, "✓ read env.go"); n != 2 {
 		t.Fatalf("transcript\n%s\nshows the reused call %d times, want once per turn", transcript, n)
+	}
+}
+
+func TestConcurrentCallsFinishedAroundAGapEachShowOnce(t *testing.T) {
+	m := newTestModel()
+	routeToolStart(m, "a")
+	routeToolStart(m, "b")
+	routeCallDone(m, "b", time.Second)
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventGap, Value: eventwire.GapExpired}})
+	atGap := ansi.Strip(strings.Join(entryTexts(m.tabs["c"]), "\n"))
+	if strings.Contains(atGap, "unfinished") {
+		t.Fatalf("transcript\n%s\nlists the call still open beside a finished one at the gap, want it left open", atGap)
+	}
+	routeCallDone(m, "a", 2*time.Second)
+	routeReply(m)
+
+	transcript := ansi.Strip(strings.Join(entryTexts(m.tabs["c"]), "\n"))
+	if n := strings.Count(transcript, "✓ read env.go"); n != 2 {
+		t.Fatalf("transcript\n%s\nshows %d finished calls, want each of the two once", transcript, n)
+	}
+	if strings.Contains(transcript, "unfinished") {
+		t.Fatalf("transcript\n%s\nlists a call its done finished as unfinished", transcript)
+	}
+}
+
+func TestReplayedStartAfterAGapAddsNoLine(t *testing.T) {
+	m := newTestModel()
+	routeToolStart(m, "a")
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventGap, Value: eventwire.GapExpired}})
+	before := len(m.tabs["c"].entries)
+	routeToolStart(m, "a")
+	if after := len(m.tabs["c"].entries); after != before {
+		t.Fatalf("transcript\n%s\ngained %d lines from the replayed start, want none", ansi.Strip(strings.Join(entryTexts(m.tabs["c"]), "\n")), after-before)
 	}
 }

@@ -4546,13 +4546,13 @@
   },
   {
     "id": "cli.tool.failed",
-    "description": "Un appel d'outil d'un tour en échec : son outil et son détail, sa durée et la raison",
-    "other": "  ✗ {{.Call}} · {{.Duration}} · {{.Error}}"
+    "description": "Un appel d'outil d'un tour en échec : son outil et son détail, sa durée, ses jetons déjà formatés et la raison",
+    "other": "  ✗ {{.Call}} · {{.Duration}} · jetons : {{.Tokens}} · {{.Error}}"
   },
   {
     "id": "cli.tool.failed_no_reason",
-    "description": "Un appel d'outil d'un tour en échec sans raison donnée : son outil et son détail, sa durée",
-    "other": "  ✗ {{.Call}} · {{.Duration}} · aucune raison donnée"
+    "description": "Un appel d'outil d'un tour en échec sans raison donnée : son outil et son détail, sa durée et ses jetons déjà formatés",
+    "other": "  ✗ {{.Call}} · {{.Duration}} · jetons : {{.Tokens}} · aucune raison donnée"
   },
   {
     "id": "cli.tool.unfinished",

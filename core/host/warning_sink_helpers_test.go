@@ -26,7 +26,7 @@ func englishStillRunningLine(messages *hostMessages) string {
 }
 
 func discardLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 func newTestWarningSink(t *testing.T, messages *hostMessages, out io.Writer, lostLine func(lost int) string, logger *slog.Logger, opts ...sinkOption) *warningSink {

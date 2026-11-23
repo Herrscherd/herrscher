@@ -245,10 +245,10 @@ linters:
       - path: ^core/internal/supervisor/supervisor\.go$
         linters: [containedctx]
         text: "found a struct that contains a context.Context field"
-      - path: ^manage/(manage|seam|version)\.go$
+      - path: ^manage/(manage|seam|version|setup_probe)\.go$
         linters: [gosec]
         text: "^G204:"
-      - path: ^manage/(apply|init|lifecycle|manage)\.go$
+      - path: ^manage/(apply|init|lifecycle|manage|setup)\.go$
         linters: [gosec]
         text: "^G304:"
       - path: ^manage/(apply|init|manage|seam)\.go$
@@ -273,6 +273,9 @@ linters:
         linters: [misspell]
         text: "^`(conflit|existant|partiel)` is a misspelling"
       - path: ^core/host/backendenv\.go$
+        linters: [gosec]
+        text: "^G101:"
+      - path: ^(core/clitext/keys_setup|manage/setup_catalog)\.go$
         linters: [gosec]
         text: "^G101:"
       - path: ^core/host/(hosts_port|serve)\.go$

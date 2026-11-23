@@ -27,24 +27,24 @@ func catalog() map[string]map[string]string {
 			kindDiscord: "github.com/Herrscherd/herrscher-discord-gateway",
 		},
 		catBackend: {
-			"claude": "github.com/Herrscherd/herrscher-claude-backend",
-			"codex":  "github.com/Herrscherd/herrscher-codex-backend",
-			"cursor": "github.com/Herrscherd/herrscher-cursor-backend",
+			kindClaude: "github.com/Herrscherd/herrscher-claude-backend",
+			kindCodex:  "github.com/Herrscherd/herrscher-codex-backend",
+			kindCursor: "github.com/Herrscherd/herrscher-cursor-backend",
 		},
 		catMemory: {
-			"obsidian": "github.com/Herrscherd/herrscher-obsidian-memory",
+			kindObsidian: "github.com/Herrscherd/herrscher-obsidian-memory",
 		},
 		catOrchestrator: {
-			"basic": "github.com/Herrscherd/herrscher-orchestrator",
+			kindBasic: "github.com/Herrscherd/herrscher-orchestrator",
 		},
 		catExtractor: {
-			"llm": "github.com/Herrscherd/herrscher-llm-extractor",
+			kindLLM: "github.com/Herrscherd/herrscher-llm-extractor",
 		},
 		catSkills: {
-			"superset": "github.com/Herrscherd/herrscher-superset-skills",
+			kindSuperset: "github.com/Herrscherd/herrscher-superset-skills",
 		},
 		catCompactor: {
-			"jev": "github.com/Herrscherd/herrscher-jev-compactor",
+			kindJev: "github.com/Herrscherd/herrscher-jev-compactor",
 		},
 	}
 }
@@ -62,19 +62,19 @@ func categories() []string {
 func defaultStack() map[string]string {
 	return map[string]string{
 		catGateway:      kindDiscord,
-		catBackend:      "claude",
-		catMemory:       "obsidian",
-		catOrchestrator: "basic",
-		catExtractor:    "llm",
-		catSkills:       "superset",
-		catCompactor:    "jev",
+		catBackend:      kindClaude,
+		catMemory:       kindObsidian,
+		catOrchestrator: kindBasic,
+		catExtractor:    kindLLM,
+		catSkills:       kindSuperset,
+		catCompactor:    kindJev,
 	}
 }
 
 // InitCmd composes the host's plugin stack from scratch: it picks one module per
 // category (defaulting to the batteries-included stack), rewrites plugins.go to
-// exactly that set, seeds a .env from .env.example, asks where agent turns run
-// (route policy, gateway credentials, default model), then go-gets and rebuilds.
+// exactly that set, seeds a .env from .env.example, then go-gets and rebuilds.
+// On a terminal with no stack flag it opens the interactive setup instead.
 // Pass --gateway/--backend/--memory/--orchestrator to swap a category, the kind
 // "none" to drop one, or --with MODULE to pin an extra module verbatim.
 func InitCmd(ctx context.Context, messages *clitext.Messages, hostMessages *host.Messages, args []string) int {
@@ -119,14 +119,10 @@ func initHost(ctx context.Context, messages *clitext.Messages, hostMessages *hos
 		catSkills:       *skills,
 		catCompactor:    *compactor,
 	}
-	var secrets map[string]string
 	if interactive {
-		var ok bool
-		choices, secrets, ok = runInitWizard(messages, hostMessages, errOut, compose, choices)
-		if !ok {
-			return 1
-		}
+		return runSetup(ctx, messages, errOut, liveDeps(messages, hostMessages, *hostDir), screenWelcome)
 	}
+	var secrets map[string]string
 
 	if !compose {
 		return writeSecretsOnly(messages, errOut, secrets)
@@ -152,18 +148,6 @@ func initHost(ctx context.Context, messages *clitext.Messages, hostMessages *hos
 		return 0
 	}
 	return buildOrRestore(ctx, messages, errOut, dir, manifest, src, modules)
-}
-
-func runInitWizard(messages *clitext.Messages, hostMessages *host.Messages, errOut *errwriter.Writer, compose bool, choices map[string]string) (map[string]string, map[string]string, bool) {
-	wizardChoices, wizardSecrets, err := runWizard(messages, compose, liveCatalog(host.DefaultModelDiscovery(hostMessages)), currentRoute())
-	if err != nil {
-		errOut.Println(err)
-		return choices, nil, false
-	}
-	if compose {
-		choices = wizardChoices
-	}
-	return choices, wizardSecrets, true
 }
 
 func writeSecretsOnly(messages *clitext.Messages, errOut *errwriter.Writer, secrets map[string]string) int {

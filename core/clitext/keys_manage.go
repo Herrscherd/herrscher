@@ -49,14 +49,10 @@ const (
 	ManageSaveFailed                = "cli.manage.save_failed"
 	ManageRestoreFailed             = "cli.manage.restore_failed"
 	ManageCommandFailed             = "cli.manage.command_failed"
-	ManageChoiceOutOfRange          = "cli.manage.choice_out_of_range"
-	ManageUnknownKind               = "cli.manage.unknown_kind"
 	ManageUnknownKindListed         = "cli.manage.unknown_kind.listed"
 	ManageInvalidModulePath         = "cli.manage.invalid_module_path"
 	ManageEmptyStack                = "cli.manage.empty_stack"
 	ManageDefaultTag                = "cli.manage.default_tag"
-	ManageUnknownPolicy             = "cli.manage.unknown_policy"
-	ManageUnknownModel              = "cli.manage.unknown_model"
 	ManageUnknownAction             = "cli.manage.unknown_action"
 	ManageGatewayPairMissing        = "cli.manage.gateway_pair_missing"
 	ManageGatewayPairPartial        = "cli.manage.gateway_pair_partial"
@@ -85,23 +81,9 @@ const (
 	ManageSeedFailed                = "cli.manage.seed_failed"
 	ManageSeeded                    = "cli.manage.seeded"
 	ManageEnvWriteFailed            = "cli.manage.env_write_failed"
-	ManageCatalogFailed             = "cli.manage.catalog_failed"
-	ManageDefaultModelLater         = "cli.manage.route.default_model_later"
-	ManageNoModelOffered            = "cli.manage.route.no_model_offered"
-	ManageGatewayNoModel            = "cli.manage.route.gateway_no_model"
-	ManageRoutingHeader             = "cli.manage.route.routing_header"
-	ManageRoutingNote               = "cli.manage.route.routing_note"
-	ManageRoutePolicyHeader         = "cli.manage.route.policy_header"
 	ManagePolicyAllHelp             = "cli.manage.route.policy_all"
 	ManagePolicyGatewayHelp         = "cli.manage.route.policy_gateway_only"
-	ManageDefaultModelHeader        = "cli.manage.route.default_model_header"
-	ManageGatewayPairHeader         = "cli.manage.gateway_pair.header"
 	ManageGatewayPairRequired       = "cli.manage.gateway_pair.required"
-	ManageGatewayPairKeep           = "cli.manage.gateway_pair.keep"
-	ManageEnvHeader                 = "cli.manage.env.header"
-	ManageTokenHidden               = "cli.manage.token_hidden"
-	ManageWizardCompose             = "cli.manage.wizard.compose"
-	ManageWizardConfigure           = "cli.manage.wizard.configure"
 	ManageBeforeWriting             = "cli.manage.decider.before_writing"
 	ManageNothingKnown              = "cli.manage.decider.nothing_known"
 	ManageBuildFailed               = "cli.manage.decider.build_failed"
@@ -113,7 +95,6 @@ const (
 	ManageInstalledNote             = "cli.manage.installed_note"
 	ManageStartWith                 = "cli.manage.start_with"
 	ManageStackHeader               = "cli.manage.stack_header"
-	ManageCurrentTag                = "cli.manage.current_tag"
 )
 
 func manageKeys() map[Key][]string {
@@ -148,14 +129,10 @@ func manageKeys() map[Key][]string {
 		ManageSaveFailed:                {ParamPath, ParamErr},
 		ManageRestoreFailed:             {ParamPath, ParamErr},
 		ManageCommandFailed:             {ParamName, ParamErr},
-		ManageChoiceOutOfRange:          {ParamName, ParamChoice},
-		ManageUnknownKind:               {ParamCategory, ParamKind},
 		ManageUnknownKindListed:         {ParamCategory, ParamKind},
 		ManageInvalidModulePath:         {ParamModule},
 		ManageEmptyStack:                nil,
 		ManageDefaultTag:                nil,
-		ManageUnknownPolicy:             {ParamPolicy},
-		ManageUnknownModel:              {ParamModel},
 		ManageUnknownAction:             {ParamAction},
 		ManageGatewayPairMissing:        {ParamURL, ParamToken},
 		ManageGatewayPairPartial:        {ParamURL, ParamToken},
@@ -184,23 +161,9 @@ func manageKeys() map[Key][]string {
 		ManageSeedFailed:                {ParamPath, ParamErr},
 		ManageSeeded:                    {ParamPath},
 		ManageEnvWriteFailed:            {ParamErr},
-		ManageCatalogFailed:             {ParamErr},
-		ManageDefaultModelLater:         nil,
-		ManageNoModelOffered:            nil,
-		ManageGatewayNoModel:            nil,
-		ManageRoutingHeader:             nil,
-		ManageRoutingNote:               nil,
-		ManageRoutePolicyHeader:         nil,
 		ManagePolicyAllHelp:             nil,
 		ManagePolicyGatewayHelp:         nil,
-		ManageDefaultModelHeader:        nil,
-		ManageGatewayPairHeader:         nil,
 		ManageGatewayPairRequired:       nil,
-		ManageGatewayPairKeep:           nil,
-		ManageEnvHeader:                 {ParamKind},
-		ManageTokenHidden:               nil,
-		ManageWizardCompose:             nil,
-		ManageWizardConfigure:           nil,
 		ManageBeforeWriting:             nil,
 		ManageNothingKnown:              nil,
 		ManageBuildFailed:               nil,
@@ -212,6 +175,5 @@ func manageKeys() map[Key][]string {
 		ManageInstalledNote:             nil,
 		ManageStartWith:                 {ParamCommand},
 		ManageStackHeader:               nil,
-		ManageCurrentTag:                nil,
 	}
 }

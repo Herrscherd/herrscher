@@ -174,9 +174,13 @@ func (r *Recorder) tokensSinceMark() int {
 }
 
 func (r *Recorder) observeTokens(event contracts.Event) {
-	if carriesTokens(event.T) && event.Tokens > r.cumulative {
+	if reportsCount(event) {
 		r.cumulative = event.Tokens
 	}
+}
+
+func reportsCount(event contracts.Event) bool {
+	return carriesTokens(event.T) && event.Tokens > 0
 }
 
 func (r *Recorder) setMark() {

@@ -80,6 +80,27 @@ func tokenDone(id string, tokens int) contracts.Event {
 	return contracts.Event{T: eventwire.EventToolDone, Tokens: tokens, ToolCall: &contracts.ToolCall{ID: id, State: contracts.ToolCallSucceeded, At: callAt().Add(time.Second)}}
 }
 
+func chunkEvent(tokens int) contracts.Event {
+	return contracts.Event{T: eventwire.EventChunk, Text: "x", Tokens: tokens}
+}
+
+func replyEvent(tokens int) contracts.Event {
+	return contracts.Event{T: eventwire.EventReply, Done: true, Tokens: tokens}
+}
+
+func resetEvent() contracts.Event {
+	return contracts.Event{T: eventwire.EventReset}
+}
+
+func feed(t *testing.T, r *Recorder, events ...contracts.Event) {
+	t.Helper()
+	for i := range events {
+		if _, _, err := r.Apply(events[i]); err != nil {
+			t.Fatalf("Apply(%s) = %v", events[i].T, err)
+		}
+	}
+}
+
 func TestSecondStartOfKnownIDOpensNothing(t *testing.T) {
 	var r Recorder
 	if _, _, err := r.Apply(startEvent("a", "env.go")); err != nil {
@@ -153,43 +174,6 @@ func TestTokensCountFromPreviousTransition(t *testing.T) {
 	}
 	if second.Tokens != 7 {
 		t.Fatalf("second call tokens = %d, want 7, counted from the previous tool_done at 18", second.Tokens)
-	}
-}
-
-func TestDoneWithNoTokensDoesNotMoveTheMarkBack(t *testing.T) {
-	var r Recorder
-	if _, _, err := r.Apply(tokenStart("a", 10)); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := r.Apply(contracts.Event{T: eventwire.EventChunk, Tokens: 30}); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := r.Apply(tokenDone("a", 0)); err != nil {
-		t.Fatal(err)
-	}
-	next, _, err := r.Apply(tokenStart("b", 40))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if next.Tokens != 10 {
-		t.Fatalf("tokens = %d, want 10: the done reporting 0 must not move the mark below the 30 already counted", next.Tokens)
-	}
-}
-
-func TestChunkTokensCountWhenTheNextStartReportsNone(t *testing.T) {
-	var r Recorder
-	if _, _, err := r.Apply(tokenStart("a", 10)); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := r.Apply(contracts.Event{T: eventwire.EventChunk, Tokens: 40}); err != nil {
-		t.Fatal(err)
-	}
-	next, _, err := r.Apply(tokenStart("b", 0))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if next.Tokens != 30 {
-		t.Fatalf("tokens = %d, want 30: the chunk at 40 is counted from the mark at 10", next.Tokens)
 	}
 }
 
@@ -311,5 +295,137 @@ func TestBoundFieldReturnsTheCutAsItsOwnString(t *testing.T) {
 	cut := BoundField(long)
 	if len(cut) != MaxFieldBytes {
 		t.Fatalf("cut is %d bytes, want %d", len(cut), MaxFieldBytes)
+	}
+}
+
+func TestDoneWithoutACountLeavesTheRunningCountAlone(t *testing.T) {
+	var r Recorder
+	feed(t, &r, tokenStart("a", 10), chunkEvent(30), tokenDone("a", 0))
+	next, _, err := r.Apply(tokenStart("b", 40))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.Tokens != 10 {
+		t.Fatalf("tokens = %d, want 10: a done reporting no count must not move the count back to the mark", next.Tokens)
+	}
+}
+
+func TestChunkCountIsKeptWhenTheNextStartReportsNone(t *testing.T) {
+	var r Recorder
+	feed(t, &r, tokenStart("a", 10), chunkEvent(40), tokenStart("b", 0))
+	if got := r.Calls()[1].Tokens; got != 30 {
+		t.Fatalf("tokens = %d, want 30: the chunk at 40 is counted from the mark at 10 even though the next start reports no count", got)
+	}
+}
+
+func TestLowerCountFromAReplyIsTakenAsSent(t *testing.T) {
+	var r Recorder
+	feed(t, &r, tokenStart("a", 100), chunkEvent(150), replyEvent(120), tokenStart("b", 120))
+	if got := r.Calls()[1].Tokens; got != 20 {
+		t.Fatalf("tokens = %d, want 20: the reply at 120 replaces the running count of 150, as the bridge does", got)
+	}
+}
+
+func TestLowerCountFromAStartIsTakenAsSent(t *testing.T) {
+	var r Recorder
+	feed(t, &r, tokenStart("a", 100), chunkEvent(150), tokenStart("b", 120))
+	if got := r.Calls()[1].Tokens; got != 20 {
+		t.Fatalf("tokens = %d, want 20: the start at 120 replaces the running count of 150", got)
+	}
+}
+
+func TestCountBelowTheMarkGivesNegativeTokens(t *testing.T) {
+	var r Recorder
+	feed(t, &r, tokenStart("a", 100), tokenStart("b", 80), tokenStart("c", 95))
+	calls := r.Calls()
+	if calls[1].Tokens != -20 {
+		t.Fatalf("call b tokens = %d, want -20: the count follows the value as sent", calls[1].Tokens)
+	}
+	if calls[2].Tokens != 15 {
+		t.Fatalf("call c tokens = %d, want 15: counted from the lower count of 80", calls[2].Tokens)
+	}
+}
+
+func TestResultLowerThanMarkGivesNegativeTokens(t *testing.T) {
+	var r Recorder
+	feed(t, &r, tokenStart("a", 100), chunkEvent(300), tokenStart("b", 50))
+	if got := r.Calls()[1].Tokens; got != 50-100 {
+		t.Fatalf("call after a lower result = %d, want %d: the count follows the result as sent", got, 50-100)
+	}
+}
+
+func TestFirstCallHasNoTokensAndCloses(t *testing.T) {
+	var r Recorder
+	feed(t, &r, tokenStart("a", 40), tokenDone("a", 90))
+	calls := r.Calls()
+	if len(calls) != 1 {
+		t.Fatalf("calls = %d, want 1", len(calls))
+	}
+	call := calls[0]
+	if call.Tokens != 0 {
+		t.Fatalf("first call tokens = %d, want 0", call.Tokens)
+	}
+	if !call.Finished() || call.State != contracts.ToolCallSucceeded {
+		t.Fatalf("call = %+v, want succeeded and finished", call)
+	}
+	if call.DurationMs == nil || *call.DurationMs != 1000 {
+		t.Fatalf("duration = %v, want 1000 ms", call.DurationMs)
+	}
+}
+
+func TestFailedCallKeepsItsError(t *testing.T) {
+	var r Recorder
+	feed(t, &r, startEvent("a", "env.go"), failedEvent("exit 2"))
+	call := r.Calls()[0]
+	if call.State != contracts.ToolCallFailed || call.Error != "exit 2" {
+		t.Fatalf("call = %+v, want failed with its error", call)
+	}
+}
+
+func TestUnfinishedCallAtEndOfTurnHasNoOutcome(t *testing.T) {
+	var r Recorder
+	feed(t, &r, tokenStart("a", 0), tokenStart("b", 3), tokenDone("b", 3))
+	calls := r.Calls()
+	if calls[0].Finished() || calls[0].State != contracts.ToolCallStarted || calls[0].DurationMs != nil {
+		t.Fatalf("call a = %+v, want started, unfinished, no duration", calls[0])
+	}
+	if !calls[1].Finished() {
+		t.Fatal("call b must be finished")
+	}
+}
+
+func TestSecondStartDoesNotMoveTokens(t *testing.T) {
+	var r Recorder
+	feed(t, &r, tokenStart("a", 5), tokenStart("a", 500), tokenStart("b", 20))
+	if got := r.Calls()[1].Tokens; got != 15 {
+		t.Fatalf("second call tokens = %d, want 15: a second start is not a transition", got)
+	}
+}
+
+func TestResetLeavesCumulativeCountUnchanged(t *testing.T) {
+	var r Recorder
+	feed(t, &r, tokenStart("a", 40), resetEvent(), tokenStart("b", 60))
+	if got := r.Calls()[1].Tokens; got != 20 {
+		t.Fatalf("call after reset tokens = %d, want 20: the reset must not move the count", got)
+	}
+}
+
+func TestBoundDoesNotCountUnknownDones(t *testing.T) {
+	var r Recorder
+	for i := range MaxCalls {
+		feed(t, &r, startEvent(strconv.Itoa(i), ""))
+	}
+	feed(t, &r, tokenDone("ghost", 0))
+	if n := len(r.Calls()); n != MaxCalls {
+		t.Fatalf("calls = %d, want %d", n, MaxCalls)
+	}
+}
+
+func TestToolDoneWithUnfinishedStateDoesNotCloseTheCall(t *testing.T) {
+	var r Recorder
+	feed(t, &r, startEvent("a", "env.go"), contracts.Event{T: eventwire.EventToolDone, ToolCall: &contracts.ToolCall{ID: "a", State: contracts.ToolCallStarted, At: callAt().Add(time.Second)}})
+	call := r.Calls()[0]
+	if call.Finished() || call.DurationMs != nil {
+		t.Fatalf("call = %+v, want still open: a done whose state is not finished must not close it", call)
 	}
 }

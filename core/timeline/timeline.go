@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/eventwire"
@@ -13,6 +14,9 @@ import (
 
 // MaxCalls bounds the calls one turn keeps. A call that starts past it is not kept, the turn's text and tokens are unchanged, and Apply reports ErrFull once.
 const MaxCalls = 4096
+
+// MaxFieldBytes bounds the detail and the error one call keeps. A longer one is cut at the last whole character under the bound.
+const MaxFieldBytes = 4096
 
 // ErrFull is returned by Apply once, on the first call a turn drops for MaxCalls.
 var ErrFull = errors.New("timeline: the turn has more tool calls than it keeps")
@@ -102,7 +106,7 @@ func (r *Recorder) open(event contracts.Event) (Call, bool, error) {
 	}
 	r.started[call.ID] = true
 	r.cumulative = event.Tokens
-	entry := Call{ID: call.ID, Tool: call.Tool, Detail: call.Detail, State: contracts.ToolCallStarted, StartedAt: call.At, Tokens: r.tokensSinceMark()}
+	entry := Call{ID: call.ID, Tool: call.Tool, Detail: boundField(call.Detail), State: contracts.ToolCallStarted, StartedAt: call.At, Tokens: r.tokensSinceMark()}
 	r.setMark()
 	r.calls = append(r.calls, entry)
 	r.openIndex[call.ID] = len(r.calls) - 1
@@ -120,12 +124,23 @@ func (r *Recorder) close(event contracts.Event) (Call, bool) {
 	ended := call.At
 	elapsed := ended.Sub(entry.StartedAt).Milliseconds()
 	entry.State = call.State
-	entry.Error = call.Error
+	entry.Error = boundField(call.Error)
 	entry.EndedAt = &ended
 	entry.DurationMs = &elapsed
 	delete(r.openIndex, call.ID)
 	r.setMark()
 	return *entry, true
+}
+
+func boundField(text string) string {
+	if len(text) <= MaxFieldBytes {
+		return text
+	}
+	cut := MaxFieldBytes
+	for cut > 0 && !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+	return text[:cut]
 }
 
 func (r *Recorder) tokensSinceMark() int {

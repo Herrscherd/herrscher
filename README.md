@@ -705,8 +705,10 @@ fewer tokens than the turn had can make it negative: `--json` keeps that raw val
 while the text form and the terminal UI show it as zero. A call that never got
 its outcome keeps the state `started` and has no end. The text form lists the calls
 before the usage line of the turn, with the same `✓`, `✗` and `…` lines as the watch.
-A turn with tool calls and no reply is kept. The `detail` of a call is what the
-backend reported, and it is stored in the local transcript as it is.
+A turn with tool calls and no reply is kept. The `detail` and the `error` of a call are
+kept up to 4096 bytes: a longer one is cut at the last whole character under that bound,
+and the rest is dropped. The `detail` of a call is what the backend reported, and it is
+stored in the local transcript as it is.
 
 The terminal UI shows the same lines at the end of each turn, before the reply, for
 the turns it follows live. Past turns replayed from the transcript do not get their

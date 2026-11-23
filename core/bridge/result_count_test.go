@@ -59,3 +59,36 @@ func TestBridgeTotalAndCallTokensAgreeOnTheSequence(t *testing.T) {
 		t.Fatalf("calls sum to %d tokens, the bridge total is %d", sum, usage.outTok)
 	}
 }
+
+func TestResultWithoutUsageKeepsTheInputSideAndTheCost(t *testing.T) {
+	var usage turnUsage
+	usage.absorb(contracts.BackendEvent{Kind: backendKindUsage, OutTokens: 150, InTokens: 900, CacheRead: 300, CacheCreate: 40})
+	usage.absorb(contracts.BackendEvent{Kind: backendKindResult, Cost: 0.0042})
+	if usage.inTok != 900 || usage.cacheRd != 300 || usage.cacheCr != 40 {
+		t.Fatalf("input side = (%d, %d, %d) after a result without usage, want (900, 300, 40)", usage.inTok, usage.cacheRd, usage.cacheCr)
+	}
+	if usage.cost != 0.0042 {
+		t.Fatalf("cost = %v after a result without usage, want 0.0042", usage.cost)
+	}
+}
+
+func TestUsageWithZeroInputDoesNotEraseTheEarlierInput(t *testing.T) {
+	var usage turnUsage
+	usage.absorb(contracts.BackendEvent{Kind: backendKindUsage, OutTokens: 150, InTokens: 900})
+	usage.absorb(contracts.BackendEvent{Kind: backendKindUsage, OutTokens: 20})
+	if usage.inTok != 900 {
+		t.Fatalf("input = %d after a usage with no input, want 900", usage.inTok)
+	}
+	if usage.outTok != 170 {
+		t.Fatalf("output = %d, want 170: the two usages add up", usage.outTok)
+	}
+}
+
+func TestResultWithoutCostKeepsTheEarlierCost(t *testing.T) {
+	var usage turnUsage
+	usage.absorb(contracts.BackendEvent{Kind: backendKindResult, Cost: 0.0042})
+	usage.absorb(contracts.BackendEvent{Kind: backendKindResult, Cost: 0})
+	if usage.cost != 0.0042 {
+		t.Fatalf("cost = %v after a result reporting no cost, want the earlier 0.0042", usage.cost)
+	}
+}

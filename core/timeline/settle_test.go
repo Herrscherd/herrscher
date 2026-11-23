@@ -85,7 +85,7 @@ func TestAReplyThatIsNotDoneKeepsTheTurnOpen(t *testing.T) {
 	if len(handed) != 0 {
 		t.Fatalf("handed = %+v at a reply that is not done, want nothing", handed)
 	}
-	if !r.Knows("a") {
+	if !r.knows("a") {
 		t.Fatal("the turn forgot its call a at a reply that is not done")
 	}
 }
@@ -112,7 +112,7 @@ func TestARenamedSessionKeepsTheTurn(t *testing.T) {
 	if len(handed) != 0 {
 		t.Fatalf("handed = %+v at a rename, want the turn kept", handed)
 	}
-	if !r.Knows("a") {
+	if !r.knows("a") {
 		t.Fatal("the turn forgot its call a at a rename")
 	}
 }
@@ -120,7 +120,7 @@ func TestARenamedSessionKeepsTheTurn(t *testing.T) {
 func TestEndingTheTurnForgetsItsCallIDs(t *testing.T) {
 	var r Recorder
 	settleAll(t, &r, AtGap, startEvent("a", "env.go"), doneReplyEvent())
-	if r.Knows("a") {
+	if r.knows("a") {
 		t.Fatal("the next turn still knows call a after the turn ended")
 	}
 }

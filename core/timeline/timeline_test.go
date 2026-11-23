@@ -237,13 +237,13 @@ func TestDoneAfterAGapFinishesTheOpenCall(t *testing.T) {
 	if _, _, err := r.Apply(startEvent("a", "env.go")); err != nil {
 		t.Fatal(err)
 	}
-	if got := r.Drain(); len(got) != 0 {
+	if got := r.drain(); len(got) != 0 {
 		t.Fatalf("Drain before the done = %+v, want the open call held back", got)
 	}
 	if _, touched, err := r.Apply(failedEvent("exit 2")); err != nil || !touched {
 		t.Fatalf("done after the gap: touched %v, err %v, want the open call closed", touched, err)
 	}
-	if got := r.Drain(); len(got) != 1 || !got[0].Finished() {
+	if got := r.drain(); len(got) != 1 || !got[0].Finished() {
 		t.Fatalf("Drain after the done = %+v, want the finished call", got)
 	}
 }
@@ -259,7 +259,7 @@ func TestRepeatedDoneOfAFinishedCallIsIgnored(t *testing.T) {
 	if _, touched, err := r.Apply(failedEvent("exit 2")); err != nil || touched {
 		t.Fatalf("second done: touched %v, err %v, want nothing closed", touched, err)
 	}
-	if got := r.Drain(); len(got) != 1 {
+	if got := r.drain(); len(got) != 1 {
 		t.Fatalf("Drain = %+v, want the call once", got)
 	}
 }
@@ -275,17 +275,17 @@ func TestDrainHandsFinishedCallsOnceAndEndHandsTheRest(t *testing.T) {
 	if _, _, err := r.Apply(startEvent("b", "main.go")); err != nil {
 		t.Fatal(err)
 	}
-	if got := r.Drain(); len(got) != 1 || got[0].ID != "a" || !got[0].Finished() {
+	if got := r.drain(); len(got) != 1 || got[0].ID != "a" || !got[0].Finished() {
 		t.Fatalf("Drain = %+v, want only the finished call a", got)
 	}
-	if got := r.Drain(); len(got) != 0 {
+	if got := r.drain(); len(got) != 0 {
 		t.Fatalf("second Drain = %+v, want nothing again", got)
 	}
-	got := r.End()
+	got := r.end()
 	if len(got) != 1 || got[0].ID != "b" || got[0].Finished() {
 		t.Fatalf("End = %+v, want the open call b, unfinished", got)
 	}
-	if got := r.End(); len(got) != 0 {
+	if got := r.end(); len(got) != 0 {
 		t.Fatalf("second End = %+v, want nothing again", got)
 	}
 }

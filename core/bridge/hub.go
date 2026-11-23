@@ -256,14 +256,22 @@ func (u *turnUsage) absorb(event contracts.BackendEvent) {
 			u.outTok = event.OutTokens
 		}
 		u.setInputSide(event)
-		u.cost = event.Cost
+		if timeline.ReportsCount(event.Cost) {
+			u.cost = event.Cost
+		}
 	}
 }
 
 func (u *turnUsage) setInputSide(event contracts.BackendEvent) {
-	u.inTok = event.InTokens
-	u.cacheRd = event.CacheRead
-	u.cacheCr = event.CacheCreate
+	if timeline.ReportsCount(event.InTokens) {
+		u.inTok = event.InTokens
+	}
+	if timeline.ReportsCount(event.CacheRead) {
+		u.cacheRd = event.CacheRead
+	}
+	if timeline.ReportsCount(event.CacheCreate) {
+		u.cacheCr = event.CacheCreate
+	}
 }
 
 // TurnFailedError reports that the backend ended a turn in error. The gateways

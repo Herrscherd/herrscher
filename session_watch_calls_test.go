@@ -197,3 +197,20 @@ func TestFollowSessionPrintsEachConcurrentCallAtItsOwnDone(t *testing.T) {
 		t.Fatalf("output %q, want b's line then a's line, each once", out)
 	}
 }
+
+func resetEvent(seq uint64) host.DaemonEvent {
+	return watchEvent(seq, "a", contracts.Event{T: eventwire.EventReset})
+}
+
+func TestFollowSessionKeepsTheCallOpenBeforeAResetUnfinishedAndShowsAReusedID(t *testing.T) {
+	out, err := followed(t, false, toolStart(1, "a"), resetEvent(2), toolStart(3, "a"), toolDone(4, "a", time.Second, contracts.ToolCallSucceeded), replyDone(5), sessionClosed(6))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(out, "  ✓ read env.go"); n != 1 {
+		t.Fatalf("output %q shows the reused call finished %d times, want once", out, n)
+	}
+	if n := strings.Count(out, "  … read env.go · unfinished\n"); n != 1 {
+		t.Fatalf("output %q lists the call open before the reset as unfinished %d times, want once", out, n)
+	}
+}

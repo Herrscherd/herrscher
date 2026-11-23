@@ -33,8 +33,18 @@ func routeCallDone(m *model, id string, elapsed time.Duration) {
 	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventToolDone, ToolCall: &call}})
 }
 
+const replyMarker = "closing words of the turn"
+
 func routeReply(m *model) {
-	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventReply, Text: "ok", Done: true}})
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventReply, Text: replyMarker, Done: true}})
+}
+
+func routeGap(m *model) {
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventGap, Value: eventwire.GapExpired}})
+}
+
+func routeReset(m *model) {
+	m.route(RoutedEvent{Conv: contracts.Conversation{ID: "c"}, Event: contracts.Event{T: eventwire.EventReset}})
 }
 
 func TestTurnEndShowsItsFinishedCallBeforeTheReply(t *testing.T) {
@@ -48,8 +58,39 @@ func TestTurnEndShowsItsFinishedCallBeforeTheReply(t *testing.T) {
 	if !strings.Contains(transcript, want) {
 		t.Fatalf("transcript\n%s\nwant the outcome line %q", transcript, want)
 	}
-	if strings.Index(transcript, want) > strings.LastIndex(transcript, "ok") {
+	if before, after := strings.Index(transcript, want), strings.Index(transcript, replyMarker); before < 0 || after < 0 || before > after {
 		t.Fatalf("the outcome line must come before the reply text:\n%s", transcript)
+	}
+}
+
+func TestFinishedCallIsHeldUntilTheGap(t *testing.T) {
+	m := newTestModel()
+	routeToolStart(m, "a")
+	routeToolDone(m, time.Second)
+	if transcript := ansi.Strip(strings.Join(entryTexts(m.tabs["c"]), "\n")); strings.Contains(transcript, "✓ read env.go") {
+		t.Fatalf("transcript\n%s\nshows the finished call before any gap, want it held until the gap", transcript)
+	}
+	routeGap(m)
+	transcript := ansi.Strip(strings.Join(entryTexts(m.tabs["c"]), "\n"))
+	if n := strings.Count(transcript, "✓ read env.go"); n != 1 {
+		t.Fatalf("transcript\n%s\nshows the finished call %d times after the gap, want once", transcript, n)
+	}
+}
+
+func TestResetKeepsTheOpenCallUnfinishedAndShowsAReusedID(t *testing.T) {
+	m := newTestModel()
+	routeToolStart(m, "a")
+	routeReset(m)
+	routeToolStart(m, "a")
+	routeToolDone(m, time.Second)
+	routeReply(m)
+
+	transcript := ansi.Strip(strings.Join(entryTexts(m.tabs["c"]), "\n"))
+	if n := strings.Count(transcript, "✓ read env.go"); n != 1 {
+		t.Fatalf("transcript\n%s\nshows the reused call finished %d times, want once", transcript, n)
+	}
+	if n := strings.Count(transcript, "… read env.go · unfinished"); n != 1 {
+		t.Fatalf("transcript\n%s\nlists the call open before the reset as unfinished %d times, want once", transcript, n)
 	}
 }
 

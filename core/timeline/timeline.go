@@ -77,18 +77,15 @@ func (r *Recorder) Calls() []Call {
 	return slices.Clone(r.calls)
 }
 
-// Knows reports whether the turn has started a call with this ID, open or finished.
-func (r *Recorder) Knows(id string) bool {
+func (r *Recorder) knows(id string) bool {
 	return r.started[id]
 }
 
-// Drain returns the finished calls that no earlier Drain or End returned, in the order they started.
-func (r *Recorder) Drain() []Call {
+func (r *Recorder) drain() []Call {
 	return r.hand(false)
 }
 
-// End returns the calls that no earlier Drain or End returned, open ones included, once the turn is over.
-func (r *Recorder) End() []Call {
+func (r *Recorder) end() []Call {
 	return r.hand(true)
 }
 
@@ -116,9 +113,9 @@ func (r *Recorder) Settle(event contracts.Event, handover Handover) ([]Call, err
 	_, _, err := r.Apply(event)
 	switch {
 	case handover.hands(event):
-		return r.Drain(), err
+		return r.drain(), err
 	case endsTurn(event):
-		calls := r.End()
+		calls := r.end()
 		*r = Recorder{}
 		return calls, err
 	}
@@ -139,7 +136,7 @@ func endsTurn(event contracts.Event) bool {
 
 // Replays reports whether the event starts a call the turn already knows, a replay that adds nothing to the turn.
 func (r *Recorder) Replays(event contracts.Event) bool {
-	return event.T == eventwire.EventStatus && event.ToolCall != nil && r.Knows(event.ToolCall.ID)
+	return event.T == eventwire.EventStatus && event.ToolCall != nil && r.knows(event.ToolCall.ID)
 }
 
 func (r *Recorder) hand(open bool) []Call {
@@ -233,9 +230,9 @@ func reportsCount(event contracts.Event) bool {
 	return carriesTokens(event.T) && ReportsCount(event.Tokens)
 }
 
-// ReportsCount reports whether a count from the backend replaces the running total: zero means the backend reported no usage.
-func ReportsCount(tokens int) bool {
-	return tokens > 0
+// ReportsCount reports whether a figure from the backend replaces the running one: zero means the backend reported nothing.
+func ReportsCount[N int | float64](figure N) bool {
+	return figure > 0
 }
 
 func (r *Recorder) setMark() {

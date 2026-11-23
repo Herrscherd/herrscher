@@ -40,7 +40,7 @@ starts that path, so run `herrscher service install` again after the upgrade.
 
 A prebuilt binary carries the default stack. Changing the compiled modules
 (`herrscher plugin`, `herrscher update`, the modules screen of `setup`) rebuilds
-from source and needs Go and a checkout:
+from source and needs Go 1.27 and a checkout:
 
 ```bash
 git clone https://github.com/Herrscherd/herrscher.git
@@ -48,7 +48,7 @@ cd herrscher
 go build -o herrscher .    # the only binary; plugins are compiled in
 ```
 
-Then, from any of these:
+Then:
 
 ```bash
 herrscher setup            # pick modules, sign in, configure everything
@@ -62,14 +62,35 @@ is checked against Discord, Claude and Codex open their own sign-in
 for writing, and the route screen sets the policy, the gateway credentials that
 `gateway-only` needs, the default model and the language. A review lists what will
 change before anything is written to `.env`; on a source checkout it also rewrites
-`plugins.go`, fetches the modules and rebuilds, restoring `plugins.go` if the build
-fails.
+`plugins.go`, fetches the modules and rebuilds, restoring `plugins.go`, `go.mod`
+and `go.sum` if the build fails. The new build replaces the binary you ran, so the
+next `herrscher` already has the chosen modules; the previous binary stays beside
+it with a `.old` suffix until the next rebuild. On Windows a previous binary that
+still runs cannot be deleted, so the rebuild moves it aside under a `.old-parked-`
+name and removes it on a later rebuild, once it has stopped.
+
+Settings live in the `.env` of the directory you run from, or in the file
+`HERRSCHER_ENV_FILE` names. Run `setup` and `herrscher` from the same directory,
+or export `HERRSCHER_ENV_FILE`, so the host finds what `setup` wrote.
+
+Once the settings are written, `setup` sends each chosen backend CLI one short
+prompt and waits for its answer. A backend that does not answer is shown with its
+output and the remedy: install the CLI when it is missing, or sign in again with
+`herrscher setup claude` (or `codex`, `cursor`). The settings stay written and
+`setup` exits with status 1, so a script sees the failure.
+
+On a machine with no settings file and no host state yet, a bare `herrscher` in a
+terminal opens `setup` instead of serving. Without a terminal it prints the
+usage after a line saying to run `herrscher setup`.
 
 Run again, `setup` opens a dashboard with the state of every section, and
 `herrscher setup discord` (or `claude`, `codex`, `cursor`, `obsidian`, `route`,
 `modules`) jumps straight to one. `herrscher init --yes` with its stack flags stays
 the non-interactive path for scripts, and `herrscher models list` shows what the
-active policy offers.
+active policy offers. `init` ends with the same prompt to each chosen backend and
+exits with status 1 when one does not answer, scripts included. A script that
+prepares a machine before its backend CLI is installed or signed in passes
+`--no-trial`.
 
 The gateway credentials are both halves or neither. A base URL without a token
 would redirect the CLI while it keeps authenticating as this machine's own

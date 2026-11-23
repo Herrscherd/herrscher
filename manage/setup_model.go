@@ -49,7 +49,9 @@ type setupDeps struct {
 	envPath     string
 	hostDir     string
 	manifest    []byte
+	binary      string
 	abandonWait time.Duration
+	trialWait   time.Duration
 }
 
 func (deps setupDeps) compose() bool { return deps.manifest != nil }
@@ -188,6 +190,9 @@ func (model *setupModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case stepDoneMsg:
 		cmd := model.stepDone(typed)
 		return model, cmd
+	case trialDoneMsg:
+		cmd := model.trialDone(typed)
+		return model, cmd
 	}
 	return model, nil
 }
@@ -195,7 +200,7 @@ func (model *setupModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 func (model *setupModel) key(press tea.KeyMsg) tea.Cmd {
 	switch press.String() {
 	case "ctrl+c":
-		if model.install.running() {
+		if model.install.running() || model.install.trialsRunning() {
 			model.abortInstall()
 			return nil
 		}
@@ -360,7 +365,7 @@ func (model *setupModel) back() tea.Cmd {
 	case screenWelcome, screenHub:
 		return nil
 	case screenInstall:
-		if model.install.finished() {
+		if model.install.finished() && !model.install.trialsRunning() {
 			return model.openHub()
 		}
 		return nil

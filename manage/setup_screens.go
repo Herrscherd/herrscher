@@ -442,12 +442,51 @@ func (model *setupModel) installRows() []setupRow {
 		rows = append(rows, line(toneBad, model.text(clitext.SetupInstallFailed, nil)))
 		rows = append(rows, model.restoreRows()...)
 	default:
-		rows = append(rows,
-			line(toneOK, model.text(clitext.SetupInstallDone, nil)),
-			line(toneDim, model.text(clitext.SetupInstallStart, clitext.Params{clitext.ParamCommand: serveCommand(invokedBinary(os.Args))})),
-		)
+		rows = append(rows, line(toneOK, model.text(clitext.SetupInstallDone, nil)))
+		rows = append(rows, model.trialRows()...)
+		if model.install.trialsRunning() {
+			return rows
+		}
+		rows = append(rows, model.outcomeRow())
 	}
 	return append(rows, blank(), action(model.text(clitext.SetupInstallHub, nil), "", func(target *setupModel) tea.Cmd { return target.openHub() }))
+}
+
+func (model *setupModel) outcomeRow() setupRow {
+	if model.install.trialFailed() {
+		return line(toneWarn, model.text(clitext.SetupTrialFailed, nil))
+	}
+	return line(toneDim, model.text(clitext.SetupInstallStart, clitext.Params{clitext.ParamCommand: serveCommand(invokedBinary(os.Args))}))
+}
+
+func (model *setupModel) trialRows() []setupRow {
+	if len(model.install.trials) == 0 {
+		return nil
+	}
+	rows := []setupRow{blank(), line(toneBold, model.text(clitext.SetupTrialTitle, nil))}
+	for idx := range model.install.trials {
+		trial := &model.install.trials[idx]
+		switch trial.state {
+		case probeRunning:
+			rows = append(rows, line(toneDim, "  … "+trial.label))
+		case probePassed:
+			rows = append(rows, line(toneOK, "  ✓ "+trial.label))
+		case probeFailed:
+			rows = append(rows, model.failedTrialRows(trial)...)
+		case probeIdle:
+			rows = append(rows, line(toneDim, "  · "+trial.label))
+		}
+	}
+	return rows
+}
+
+func (model *setupModel) failedTrialRows(trial *trialStep) []setupRow {
+	rows := []setupRow{line(toneBad, "  ✗ "+trial.label)}
+	failure := trialFailureLines(model.messages, trial.spec, trial.output, trial.err)
+	for _, text := range failure[:len(failure)-1] {
+		rows = append(rows, line(toneDim, "    "+text))
+	}
+	return append(rows, line(toneWarn, "    "+failure[len(failure)-1]))
 }
 
 func (model *setupModel) stepRows(step *installStep) []setupRow {
@@ -471,8 +510,8 @@ func (model *setupModel) stepRows(step *installStep) []setupRow {
 
 func (model *setupModel) restoreRows() []setupRow {
 	switch {
-	case model.install.restoreErr != nil:
-		return []setupRow{line(toneBad, model.install.restoreErr.Error())}
+	case model.install.cleanupErr != nil:
+		return []setupRow{line(toneBad, model.install.cleanupErr.Error())}
 	case model.install.restored:
 		return []setupRow{line(toneDim, model.text(clitext.SetupInstallRestored, nil))}
 	}

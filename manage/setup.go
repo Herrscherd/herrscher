@@ -92,6 +92,7 @@ func liveDeps(messages *clitext.Messages, hostMessages *host.Messages, hostDir s
 		run:         execRunner,
 		envPath:     envTarget(),
 		abandonWait: abandonLimit,
+		trialWait:   trialTimeout,
 	}
 	dir, err := resolveHost(messages, hostDir)
 	if err != nil {
@@ -104,7 +105,7 @@ func liveDeps(messages *clitext.Messages, hostMessages *host.Messages, hostDir s
 	if abs, absErr := filepath.Abs(dir); absErr == nil {
 		dir = abs
 	}
-	deps.hostDir, deps.manifest = dir, manifest
+	deps.hostDir, deps.manifest, deps.binary = dir, manifest, runningBinary(dir)
 	return deps
 }
 
@@ -117,11 +118,22 @@ func runSetup(ctx context.Context, messages *clitext.Messages, errOut *errwriter
 		errOut.Println(failure(messages, err, clitext.SetupFailed, clitext.Params{clitext.ParamErr: err.Error()}))
 		return 1
 	}
-	if model.install.restoreErr != nil {
-		errOut.Println(model.install.restoreErr)
+	if model.install.cleanupErr != nil {
+		errOut.Println(model.install.cleanupErr)
 	}
-	if model.install.err != nil {
+	if model.install.err != nil || !model.install.trialsAnswered() {
 		return 1
 	}
 	return 0
+}
+
+// FirstRun reports whether this machine has neither a settings file nor a host
+// state yet, the case where a bare herrscher opens the setup.
+func FirstRun() bool {
+	for _, path := range []string{envTarget(), host.DefaultStatePath()} {
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			return false
+		}
+	}
+	return true
 }

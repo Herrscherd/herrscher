@@ -70,6 +70,7 @@ const (
 	ManageFlagPluginNoBuild         = "cli.manage.flag.plugin_no_build"
 	ManageFlagUpdateNoBuild         = "cli.manage.flag.update_no_build"
 	ManageFlagInitNoBuild           = "cli.manage.flag.init_no_build"
+	ManageFlagInitNoTrial           = "cli.manage.flag.init_no_trial"
 	ManageFlagYes                   = "cli.manage.flag.yes"
 	ManageFlagList                  = "cli.manage.flag.list"
 	ManageFlagInitYes               = "cli.manage.flag.init_yes"
@@ -150,6 +151,7 @@ func manageKeys() map[Key][]string {
 		ManageFlagPluginNoBuild:         nil,
 		ManageFlagUpdateNoBuild:         nil,
 		ManageFlagInitNoBuild:           nil,
+		ManageFlagInitNoTrial:           nil,
 		ManageFlagYes:                   nil,
 		ManageFlagList:                  nil,
 		ManageFlagInitYes:               nil,

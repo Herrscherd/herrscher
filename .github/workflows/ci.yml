@@ -92,5 +92,7 @@ jobs:
         run: go test -v -count=1 -run '^(TestLock|TestReleasedLock|TestStateLock|TestCacheLock)' ./core/host/
       - name: Accept retry tests on Windows (transient Win32 codes)
         run: go test -v -count=1 -run '^TestAcceptRetriesEachTransientErrno$' ./core/internal/control/
+      - name: Binary swap while older generations still run
+        run: go test -v -count=1 -run '^TestSwapBinaryWhileEveryGenerationStillRunsOnWindows$' ./manage/
       - name: Bridge cancellation kills the process tree and releases the worktree (taskkill)
         run: go test -v -count=1 -run '^TestConfiguredBridgeCancellationTerminatesDescendantHoldingWorktree$' ./core/internal/supervisor/

@@ -71,6 +71,7 @@ type setupCommand struct {
 	stdin string
 	name  string
 	args  []string
+	env   []string
 }
 
 const processWaitDelay = 5 * time.Second
@@ -81,6 +82,9 @@ func execRunner(ctx context.Context, cmd setupCommand) ([]byte, error) {
 	proc := exec.CommandContext(ctx, cmd.name, cmd.args...)
 	proc.Dir = cmd.dir
 	proc.WaitDelay = processWaitDelay
+	if len(cmd.env) > 0 {
+		proc.Env = append(os.Environ(), cmd.env...)
+	}
 	if cmd.stdin != "" {
 		proc.Stdin = strings.NewReader(cmd.stdin)
 	}

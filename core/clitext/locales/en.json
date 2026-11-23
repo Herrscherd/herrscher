@@ -175,6 +175,11 @@
     "other": "{{.Command}}: flag --{{.Name}} needs a value"
   },
   {
+    "id": "cli.first_run.hint",
+    "description": "Printed by a bare herrscher on a machine with no settings and no state",
+    "other": "nothing is set up yet: run {{.Command}} in a terminal to choose the backends and sign in"
+  },
+  {
     "id": "cli.whoami.unknown_argument",
     "description": "Error for an argument whoami does not accept",
     "other": "whoami: unknown argument {{.Arg}} (only --json)"
@@ -1009,6 +1014,11 @@
     "id": "cli.manage.flag.init_no_build",
     "description": "Flag help: the --no-build flag of herrscher init",
     "other": "write plugins.go but skip go get/build"
+  },
+  {
+    "id": "cli.manage.flag.init_no_trial",
+    "description": "Flag help: the --no-trial flag of herrscher init",
+    "other": "skip the short prompt sent to the chosen backend at the end"
   },
   {
     "id": "cli.manage.flag.yes",
@@ -5018,6 +5028,41 @@
     "id": "cli.setup.install.not_restored",
     "description": "An aborted install gave up waiting for a step that kept running, so nothing was put back",
     "other": "the running step did not stop; plugins.go, go.mod and go.sum were left as they are, check them by hand"
+  },
+  {
+    "id": "cli.setup.trial.not_stopped",
+    "description": "Leaving setup gave up waiting for a backend trial that kept running",
+    "other": "the backend trial did not stop in time; its temporary directory may remain in the system temp folder"
+  },
+  {
+    "id": "cli.setup.step.binary",
+    "description": "Install step: the freshly built binary replaces the running one",
+    "other": "replace the binary {{.Path}}"
+  },
+  {
+    "id": "cli.setup.trial.title",
+    "description": "Heading of the trial turns run after the install",
+    "other": "first answer from each backend"
+  },
+  {
+    "id": "cli.setup.trial.step",
+    "description": "Trial turn line: one short prompt sent to a backend CLI",
+    "other": "{{.Name}} answers a short prompt"
+  },
+  {
+    "id": "cli.setup.trial.failed",
+    "description": "Install screen: the settings are written but a backend did not answer",
+    "other": "settings written, but a backend did not answer: fix it before starting"
+  },
+  {
+    "id": "cli.setup.trial.missing",
+    "description": "Remedy when the backend CLI is not installed",
+    "other": "{{.Name}} is not installed: install it, then run setup again"
+  },
+  {
+    "id": "cli.setup.trial.remedy",
+    "description": "Remedy when a backend CLI is installed but did not answer",
+    "other": "sign in again with {{.Command}}"
   },
   {
     "id": "cli.setup.hub.sub",

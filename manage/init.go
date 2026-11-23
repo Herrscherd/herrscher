@@ -86,6 +86,7 @@ func initHost(ctx context.Context, messages *clitext.Messages, hostMessages *hos
 	flags := flag.NewFlagSet("init", flag.ContinueOnError)
 	hostDir := flags.String("host", "", msg(messages, clitext.ManageFlagHost, nil))
 	noBuild := flags.Bool("no-build", false, msg(messages, clitext.ManageFlagInitNoBuild, nil))
+	noTrial := flags.Bool("no-trial", false, msg(messages, clitext.ManageFlagInitNoTrial, nil))
 	list := flags.Bool("list", false, msg(messages, clitext.ManageFlagList, nil))
 	yes := flags.Bool("yes", false, msg(messages, clitext.ManageFlagInitYes, nil))
 	gateway := flags.String(catGateway, defaultStack()[catGateway], msg(messages, clitext.ManageFlagCategory, clitext.Params{clitext.ParamCategory: catGateway}))
@@ -122,15 +123,20 @@ func initHost(ctx context.Context, messages *clitext.Messages, hostMessages *hos
 	if interactive {
 		return runSetup(ctx, messages, errOut, liveDeps(messages, hostMessages, *hostDir), screenWelcome)
 	}
-	if !compose {
-		summaryConfig(messages, envTarget(), 0)
-		return 0
-	}
-
 	modules, err := resolveStack(messages, choices, extras)
 	if err != nil {
 		errOut.Println(err)
 		return exitUsage
+	}
+	trial := func(code int) int {
+		if code != 0 || *noTrial {
+			return code
+		}
+		return trialStack(ctx, messages, out, errOut, modules)
+	}
+	if !compose {
+		summaryConfig(messages, envTarget(), 0)
+		return trial(0)
 	}
 
 	saved, err := saveComposition(messages, dir)
@@ -147,9 +153,9 @@ func initHost(ctx context.Context, messages *clitext.Messages, hostMessages *hos
 
 	if *noBuild {
 		out.Println(msg(messages, clitext.ManageInitWroteNoBuild, nil))
-		return 0
+		return trial(0)
 	}
-	return buildOrRestore(ctx, messages, errOut, dir, saved, modules)
+	return trial(buildOrRestore(ctx, messages, errOut, dir, saved, modules))
 }
 
 func rewritePlugins(messages *clitext.Messages, errOut *errwriter.Writer, manifest string, modules []string) int {
@@ -171,20 +177,30 @@ func rewritePlugins(messages *clitext.Messages, errOut *errwriter.Writer, manife
 }
 
 func buildOrRestore(ctx context.Context, messages *clitext.Messages, errOut *errwriter.Writer, dir string, saved map[string][]byte, modules []string) int {
-	for _, command := range stackCommands(dir, modules) {
+	target := runningBinary(dir)
+	for _, command := range stackCommands(dir, target, modules) {
 		if code := run(ctx, messages, errOut, command.dir, command.name, command.args...); code != 0 {
-			if err := restoreComposition(messages, dir, saved); err != nil {
-				errOut.Println(err)
-			} else {
-				errOut.Println(msg(messages, clitext.ManageBuildRestored, clitext.Params{clitext.ParamPath: manifestFile}))
-			}
+			restoreAfterFailedBuild(messages, errOut, dir, saved)
 			return code
 		}
+	}
+	if err := swapBinary(target); err != nil {
+		errOut.Println(failure(messages, err, clitext.ManageWriteFailed, clitext.Params{clitext.ParamPath: target, clitext.ParamErr: err.Error()}))
+		restoreAfterFailedBuild(messages, errOut, dir, saved)
+		return 1
 	}
 	return 0
 }
 
-func stackCommands(dir string, modules []string) []setupCommand {
+func restoreAfterFailedBuild(messages *clitext.Messages, errOut *errwriter.Writer, dir string, saved map[string][]byte) {
+	if err := restoreComposition(messages, dir, saved); err != nil {
+		errOut.Println(err)
+		return
+	}
+	errOut.Println(msg(messages, clitext.ManageBuildRestored, clitext.Params{clitext.ParamPath: manifestFile}))
+}
+
+func stackCommands(dir, target string, modules []string) []setupCommand {
 	var commands []setupCommand
 	for _, module := range modules {
 		if module == hostModule || strings.HasPrefix(module, hostModule+"/") {
@@ -192,7 +208,7 @@ func stackCommands(dir string, modules []string) []setupCommand {
 		}
 		commands = append(commands, goCommand(dir, verbGet, "--", module))
 	}
-	return append(commands, goCommand(dir, "mod", "tidy"), goCommand(dir, "build", "./..."))
+	return append(commands, goCommand(dir, "mod", "tidy"), goCommand(dir, "build", "-o", freshBinary(target), "."))
 }
 
 func goCommand(dir string, args ...string) setupCommand {

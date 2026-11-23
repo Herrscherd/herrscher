@@ -338,7 +338,7 @@ func Build(ctx context.Context, messages *clitext.Messages, lang i18n.Language, 
 // BuildFor compiles the herrscher binary from src to binPath for another
 // platform. It is Build with GOOS/GOARCH pinned and cgo off: cross-compiling a
 // cgo binary would need a cross toolchain, and herrscher needs none. This is how
-// a host is provisioned, because the releases carry no binary assets.
+// a host is provisioned, so the remote binary carries the modules composed in src.
 func BuildFor(ctx context.Context, messages *clitext.Messages, lang i18n.Language, src, binPath, goos, goarch string) error {
 	if err := validateSource(messages, lang, src); err != nil {
 		return err

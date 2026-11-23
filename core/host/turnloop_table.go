@@ -8,6 +8,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/checkpoint"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/otelexport"
 )
 
 type sessionTable struct {
@@ -23,6 +24,7 @@ type sessionTable struct {
 
 	outboundMaxBytes int64
 	fileSenders      map[string]contracts.FileSender
+	telemetry        otelexport.Exporter
 
 	tokens     map[string]string
 	seedLeases map[string]seedLease

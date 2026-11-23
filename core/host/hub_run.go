@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +18,20 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
+	"github.com/Herrscherd/herrscher/core/otelexport"
 )
+
+func startTelemetry(ctx context.Context, log *slog.Logger) (otelexport.Exporter, func()) {
+	telemetry, err := otelexport.Setup(ctx, os.LookupEnv)
+	if err != nil {
+		log.Warn("turn telemetry disabled: the OTLP exporter did not start", "err", err)
+	}
+	return telemetry, func() {
+		if shutdownErr := telemetry.Shutdown(ctx); shutdownErr != nil {
+			log.Warn("turn telemetry did not flush before exit", "err", shutdownErr)
+		}
+	}
+}
 
 // RunHub is the always-on multi-gateway daemon: it supervises one pure-runner
 // bridge per persisted session, drives each session's turns over a control
@@ -94,6 +108,9 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 		return wrapHost(messages, err, "serve.compaction", nil)
 	}
 	sessions.compaction = policy
+	telemetry, stopTelemetry := startTelemetry(ctx, log)
+	defer stopTelemetry()
+	sessions.telemetry = telemetry
 	sessions.store = store
 	if outboxErr := prepareTurnOutboxes(log, sessions, options.StatePath); outboxErr != nil {
 		return outboxErr

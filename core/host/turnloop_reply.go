@@ -8,6 +8,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/otelexport"
 	"github.com/Herrscherd/herrscher/core/outbox"
 	"github.com/Herrscherd/herrscher/core/timeline"
 )
@@ -39,6 +40,7 @@ func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event,
 		CtxTokens:   contextReading(live, event),
 		Tools:       d.calls.Calls(),
 	})
+	d.exportTurn(ctx, otelexport.OutcomeCompleted, turnStart, event)
 	d.deliverPendingReply(event.Text)
 	d.metrics.TurnCompleted()
 	if verdict := d.gate.Check(d.name); verdict.Reason != "" {

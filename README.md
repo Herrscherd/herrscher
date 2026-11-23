@@ -59,6 +59,37 @@ A first task needs no daemon to start: `herrscher "read the thread and propose a
 - `herrscher serve --health-addr :8787`: run the daemon in the foreground.
 - `herrscher service install|status|restart|update`: keep the daemon running as a boot-started service.
 
+## Turn telemetry (OpenTelemetry)
+
+The daemon can send each turn of a session to an OpenTelemetry collector. It is off by default: with no OTLP endpoint configured, nothing is initialised, no connection is opened and the turn path pays no cost.
+
+Enable it by pointing the standard variables at a collector, for example:
+
+```sh
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 herrscher serve
+```
+
+The configuration is read from the environment only, through the standard OpenTelemetry variables, so no key is added to the configuration file:
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` enables the export (the traces variable wins when both are set).
+- `OTEL_EXPORTER_OTLP_PROTOCOL` or `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL` selects `http/protobuf` (default) or `grpc`.
+- `OTEL_SERVICE_NAME` overrides the service name, which defaults to `herrscher`.
+- `OTEL_SDK_DISABLED=true` turns the export off even when an endpoint is set.
+- Headers, timeouts and batch sizes use the other standard `OTEL_EXPORTER_OTLP_*` and `OTEL_BSP_*` variables.
+
+The export follows the GenAI semantic conventions pinned to **semconv v1.41.0** (`go.opentelemetry.io/otel/semconv/v1.41.0`). Each settled turn becomes one `invoke_agent <session>` span, and each tool call of that turn becomes an `execute_tool <tool>` child span.
+
+Exported: the operation name, the provider (`anthropic` or `openai` for the built-in backends), the session as `gen_ai.agent.name`, the request model when known, the input and output token counts, the cache read and cache creation counts, the tool name and call id, the call timestamps, and error status for failed calls and for abandoned turns. Error messages are cut to the same bound the timeline uses.
+
+Not exported: prompts, replies, tool details and tool arguments, in any case. The semantic conventions define opt-in content capture, which this export does not implement.
+
+Known limits:
+
+- A failed backend turn is not marked as an error. The bridge does not put the failure in the event stream, only the text of the reply, so the span looks completed. Marking it needs a field on the terminal reply in the contracts, planned as a follow-up.
+- An input that is abandoned before it reaches the backend produces no span, because no agent invocation happened.
+- `gen_ai.usage.input_tokens` is the uncached input the backend reported; cached reads and creations are exported in their own attributes.
+- Token counts that are zero, negative or not finite are omitted, not exported as zero.
+
 ## Documentation
 
 Start with the [documentation index](docs/README.md). The main guides are:

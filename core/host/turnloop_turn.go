@@ -7,6 +7,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/historywire"
+	"github.com/Herrscherd/herrscher/core/otelexport"
 	"github.com/Herrscherd/herrscher/core/outbox"
 	"github.com/Herrscherd/herrscher/core/timeline"
 )
@@ -122,6 +123,9 @@ func (d *sessionDriver) prepareTurn(ctx context.Context, item queued) (contracts
 }
 
 func (d *sessionDriver) runTurn(ctx context.Context, event contracts.Event, guard tokenGuard) {
+	if d.telemetry.Enabled() {
+		d.turnStarted = time.Now()
+	}
 	select {
 	case <-d.hangup:
 	default:
@@ -150,6 +154,7 @@ func (d *sessionDriver) abandon(ctx context.Context, ev contracts.Event) {
 	if ev.T != eventwire.EventInput {
 		return
 	}
+	d.exportTurn(ctx, otelexport.OutcomeAbandoned, d.turnStarted, contracts.Event{})
 	if ctx.Err() == nil {
 		d.settleTurn()
 	}

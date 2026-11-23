@@ -21,16 +21,22 @@ func Open(path string) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	info, err := file.Stat()
-	if err != nil {
+	if err := checkOwner(file, os.Getuid()); err != nil {
 		closeFile(file)
 		return nil, err
 	}
-	if stat, ok := info.Sys().(*syscall.Stat_t); ok && int(stat.Uid) != os.Getuid() {
-		closeFile(file)
-		return nil, ErrNotOwned
-	}
 	return file, nil
+}
+
+func checkOwner(file *os.File, uid int) error {
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	if stat, ok := info.Sys().(*syscall.Stat_t); ok && int(stat.Uid) != uid {
+		return ErrNotOwned
+	}
+	return nil
 }
 
 // TryLock takes the exclusive lock of f without waiting. It reports false when

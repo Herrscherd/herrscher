@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -71,7 +72,9 @@ func newCredentialsIn(t *testing.T, dir, base string) testSetup {
 
 func tokenSource(t *testing.T, creds *Credentials, host string) (contracts.ForgeToken, error) {
 	t.Helper()
-	return creds.Token(t.Context(), mustHost(t, host))
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	t.Cleanup(cancel)
+	return creds.Token(ctx, mustHost(t, host))
 }
 
 func TestSavedTokenWinsOverEnvironmentAndCLI(t *testing.T) {
@@ -449,6 +452,39 @@ func TestWarningsNeverCarryTheTokens(t *testing.T) {
 	}
 }
 
+func TestFailedRefreshWhileTokenStillValidLogsNoToken(t *testing.T) {
+	forge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "upstream unavailable", http.StatusInternalServerError)
+	}))
+	t.Cleanup(forge.Close)
+	setup := newTestCredentials(t, forge.URL)
+	mustPut(t, setup.creds, Record{
+		AccessToken:     "ghu_STILL_VALID_LOG_SECRET",
+		AccessExpiresAt: fixedNow().Add(2 * time.Minute),
+		RefreshToken:    "ghr_LOG_SECRET",
+	})
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	token, err := tokenSource(t, setup.creds, "github.com")
+	if err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	if token.Secret() != "ghu_STILL_VALID_LOG_SECRET" {
+		t.Fatalf("Token = %q, want the saved token that is still valid", token.Secret())
+	}
+	if !strings.Contains(logs.String(), "refresh the saved forge token") {
+		t.Fatalf("no warning was logged for the failed refresh: %s", logs.String())
+	}
+	for _, secret := range []string{"ghu_STILL_VALID_LOG_SECRET", "ghr_LOG_SECRET"} {
+		if strings.Contains(logs.String(), secret) {
+			t.Fatalf("the log carries a token: %s", logs.String())
+		}
+	}
+}
+
 func TestRefusedRefreshMarksTheSavedTokenAndFallsBack(t *testing.T) {
 	server := newRefreshServer(t, `{"error":"bad_refresh_token"}`)
 	setup := newTestCredentials(t, server.URL)
@@ -625,4 +661,233 @@ func (s *refreshServer) hitCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.hits
+}
+
+const (
+	slowHostName = "ghe.example.com"
+	fastHostName = "ghe.example.org"
+)
+
+type gatedServer struct {
+	*httptest.Server
+
+	entered     chan struct{}
+	release     chan struct{}
+	hits        atomic.Int64
+	enteredOnce sync.Once
+	releaseOnce sync.Once
+}
+
+func newGatedRefreshServer(t *testing.T, reply string) *gatedServer {
+	t.Helper()
+	gate := &gatedServer{entered: make(chan struct{}), release: make(chan struct{})}
+	gate.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gate.hits.Add(1)
+		gate.enteredOnce.Do(func() { close(gate.entered) })
+		select {
+		case <-gate.release:
+		case <-r.Context().Done():
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		writeReply(t, w, reply)
+	}))
+	t.Cleanup(gate.Close)
+	t.Cleanup(gate.open)
+	return gate
+}
+
+func (g *gatedServer) hitCount() int64 {
+	return g.hits.Load()
+}
+
+func (g *gatedServer) open() {
+	g.releaseOnce.Do(func() { close(g.release) })
+}
+
+func (g *gatedServer) waitEntered(t *testing.T) {
+	t.Helper()
+	select {
+	case <-g.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the renewal never reached the forge")
+	}
+}
+
+func putRenewable(t *testing.T, store *Store, host string, record Record) {
+	t.Helper()
+	if err := store.Put(t.Context(), mustHost(t, host), record); err != nil {
+		t.Fatalf("Put %s: %v", host, err)
+	}
+}
+
+func TestSlowRenewalOfOneHostDoesNotHoldAnotherHost(t *testing.T) {
+	slow := newGatedRefreshServer(t, `{"access_token":"ghu_slow","refresh_token":"ghr_slow","expires_in":28800}`)
+	fast := newRefreshServer(t, `{"access_token":"ghu_fast","refresh_token":"ghr_fast","expires_in":28800}`)
+	setup := newTestCredentials(t, fast.URL)
+	setup.creds.base = func(host contracts.ForgeHost) string {
+		if host.String() == slowHostName {
+			return slow.URL
+		}
+		return fast.URL
+	}
+	nearExpiry := Record{AccessToken: "ghu_old", AccessExpiresAt: fixedNow().Add(2 * time.Minute), RefreshToken: "ghr_old"}
+	putRenewable(t, setup.creds.Store(), slowHostName, nearExpiry)
+	putRenewable(t, setup.creds.Store(), fastHostName, nearExpiry)
+
+	slowResult := make(chan error, 1)
+	go func() {
+		_, err := setup.creds.Token(t.Context(), mustHost(t, slowHostName))
+		slowResult <- err
+	}()
+	slow.waitEntered(t)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	token, err := setup.creds.Token(ctx, mustHost(t, fastHostName))
+	if err != nil {
+		t.Fatalf("Token of another host while one renewal is stuck: %v", err)
+	}
+	if token.Secret() != "ghu_fast" {
+		t.Fatalf("Token of the other host = %q, want ghu_fast", token.Secret())
+	}
+
+	slow.open()
+	if err := <-slowResult; err != nil {
+		t.Fatalf("the stuck renewal, once released: %v", err)
+	}
+}
+
+func TestRenewalLockNameIsPerHostAndPathFree(t *testing.T) {
+	dir := t.TempDir()
+	store := NewStore(dir)
+	withPort := store.renewLockPath(mustHost(t, "ghe.example.com:8443"))
+	plain := store.renewLockPath(mustHost(t, "ghe.example.com"))
+	if withPort == plain {
+		t.Fatalf("two hosts share the renewal lock %q", plain)
+	}
+	for _, path := range []string{withPort, plain} {
+		if filepath.Dir(path) != dir {
+			t.Fatalf("renewal lock %q is not beside the connections file", path)
+		}
+		if strings.ContainsAny(filepath.Base(path), `:/\`) {
+			t.Fatalf("renewal lock name %q carries a path or port character", filepath.Base(path))
+		}
+		if path == store.lockPath() {
+			t.Fatalf("renewal lock %q is the shared lock", path)
+		}
+	}
+}
+
+func TestRenewalDoesNotOverwritePairSavedMeanwhile(t *testing.T) {
+	gate := newGatedRefreshServer(t, `{"access_token":"ghu_renewed","refresh_token":"ghr_renewed","expires_in":28800}`)
+	dir := t.TempDir()
+	setup := newCredentialsIn(t, dir, gate.URL)
+	mustPut(t, setup.creds, Record{AccessToken: "ghu_stale", AccessExpiresAt: fixedNow().Add(2 * time.Minute), RefreshToken: "ghr_old"})
+
+	result := make(chan string, 1)
+	go func() {
+		token, err := setup.creds.Token(t.Context(), mustHost(t, "github.com"))
+		if err != nil {
+			result <- "error: " + err.Error()
+			return
+		}
+		result <- token.Secret()
+	}()
+	gate.waitEntered(t)
+	connected := Record{AccessToken: "ghu_connected", AccessExpiresAt: fixedNow().Add(time.Hour), RefreshToken: "ghr_connected"}
+	if err := NewStore(dir).Put(t.Context(), mustHost(t, "github.com"), connected); err != nil {
+		t.Fatalf("Put by a connect in the meantime: %v", err)
+	}
+	gate.open()
+
+	if got := <-result; got != "ghu_connected" {
+		t.Fatalf("Token = %q, want the pair saved meanwhile", got)
+	}
+	if stored := storedRecord(t, setup.creds); stored.RefreshToken != "ghr_connected" {
+		t.Fatalf("the renewal overwrote the pair saved meanwhile: %+v", stored)
+	}
+}
+
+func TestLogoutDuringRenewalIsNotUndone(t *testing.T) {
+	gate := newGatedRefreshServer(t, `{"access_token":"ghu_renewed","refresh_token":"ghr_renewed","expires_in":28800}`)
+	dir := t.TempDir()
+	setup := newCredentialsIn(t, dir, gate.URL)
+	mustPut(t, setup.creds, Record{AccessToken: "ghu_stale", AccessExpiresAt: fixedNow().Add(2 * time.Minute), RefreshToken: "ghr_old"})
+
+	result := make(chan error, 1)
+	go func() {
+		_, err := setup.creds.Token(t.Context(), mustHost(t, "github.com"))
+		result <- err
+	}()
+	gate.waitEntered(t)
+	removed, err := NewStore(dir).Delete(t.Context(), mustHost(t, "github.com"))
+	if err != nil || !removed {
+		t.Fatalf("logout during the renewal: removed %v, err %v", removed, err)
+	}
+	gate.open()
+
+	if err := <-result; !errors.Is(err, contracts.ErrForgeNotConnected) {
+		t.Fatalf("Token after logout = %v, want ErrForgeNotConnected", err)
+	}
+	if _, found, err := NewStore(dir).Get(mustHost(t, "github.com")); err != nil || found {
+		t.Fatalf("logout undone by the renewal: found %v, err %v", found, err)
+	}
+}
+
+func TestMisconfiguredAppIsReportedEvenWhileTheTokenStillWorks(t *testing.T) {
+	server := newRefreshServer(t, `{"error":"incorrect_client_credentials"}`)
+	setup := newTestCredentials(t, server.URL)
+	mustPut(t, setup.creds, Record{
+		AccessToken:     "ghu_still",
+		AccessExpiresAt: fixedNow().Add(2 * time.Minute),
+		RefreshToken:    "ghr_fine",
+	})
+
+	_, err := tokenSource(t, setup.creds, "github.com")
+	if !errors.Is(err, ErrAppMisconfigured) {
+		t.Fatalf("Token with a misconfigured app = %v, want ErrAppMisconfigured", err)
+	}
+	if stored := storedRecord(t, setup.creds); stored.Rejected || stored.RefreshToken != "ghr_fine" {
+		t.Fatalf("the record changed for an app error: %+v", stored)
+	}
+}
+
+func TestSecondProcessWaitsForTheRenewalInsteadOfSpendingTheTokenTwice(t *testing.T) {
+	gate := newGatedRefreshServer(t, `{"access_token":"ghu_renewed","refresh_token":"ghr_renewed","expires_in":28800}`)
+	dir := t.TempDir()
+	first := newCredentialsIn(t, dir, gate.URL)
+	second := newCredentialsIn(t, dir, gate.URL)
+	mustPut(t, first.creds, Record{AccessToken: "ghu_stale", AccessExpiresAt: fixedNow().Add(2 * time.Minute), RefreshToken: "ghr_old"})
+
+	results := make(chan string, 2)
+	serve := func(creds *Credentials) {
+		token, err := creds.Token(t.Context(), mustHost(t, "github.com"))
+		if err != nil {
+			results <- "error: " + err.Error()
+			return
+		}
+		results <- token.Secret()
+	}
+	go serve(first.creds)
+	gate.waitEntered(t)
+	go serve(second.creds)
+	select {
+	case <-time.After(200 * time.Millisecond):
+	case got := <-results:
+		t.Fatalf("a credential answered %q while the renewal was in flight", got)
+	}
+	if hits := gate.hitCount(); hits != 1 {
+		t.Fatalf("refresh requests while the first renewal is in flight = %d, want 1", hits)
+	}
+
+	gate.open()
+	for range 2 {
+		if got := <-results; got != "ghu_renewed" {
+			t.Fatalf("a credential served %q, want ghu_renewed", got)
+		}
+	}
+	if hits := gate.hitCount(); hits != 1 {
+		t.Fatalf("refresh calls = %d for two processes, want 1", hits)
+	}
 }

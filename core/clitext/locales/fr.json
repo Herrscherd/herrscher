@@ -5296,7 +5296,7 @@
   },
   {
     "id": "cli.connect.status.access_app_misconfigured",
-    "description": "Valeur de statut : le forge n'accepte pas les identifiants de l'application herrscher",
-    "other": "le forge n'accepte pas l'application herrscher, vérifie les réglages du client de l'application"
+    "description": "Valeur de statut : l'application herrscher est mal configurée sur le forge, le jeton enregistré ne peut pas être renouvelé",
+    "other": "ne peut pas être renouvelé : l'application herrscher est mal configurée sur le forge, signale-le aux mainteneurs de herrscher"
   }
 ]

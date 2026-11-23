@@ -5296,7 +5296,7 @@
   },
   {
     "id": "cli.connect.status.access_app_misconfigured",
-    "description": "Status value: the forge does not accept the herrscher app credentials",
-    "other": "the forge does not accept the herrscher app, check the app client settings"
+    "description": "Status value: the herrscher app is misconfigured on the forge, so the saved token cannot be renewed",
+    "other": "cannot be renewed: the herrscher app is misconfigured on the forge, report this to the herrscher maintainers"
   }
 ]

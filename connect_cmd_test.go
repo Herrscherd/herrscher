@@ -2,6 +2,11 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -225,4 +230,65 @@ func mustConnectHost(t *testing.T) contracts.ForgeHost {
 		t.Fatalf("ParseForgeHost: %v", err)
 	}
 	return host
+}
+
+func serveForgeOverTLS(t *testing.T, reply string) {
+	t.Helper()
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := io.WriteString(w, reply); err != nil {
+			t.Errorf("write reply: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+	transport, ok := server.Client().Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("test client transport is %T, want *http.Transport", server.Client().Transport)
+	}
+	transport = transport.Clone()
+	transport.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		var dialer net.Dialer
+		return dialer.DialContext(ctx, network, server.Listener.Addr().String())
+	}
+	previous := http.DefaultTransport
+	http.DefaultTransport = transport
+	t.Cleanup(func() { http.DefaultTransport = previous })
+}
+
+func TestStatusReportsAMisconfiguredAppInsteadOfTheToken(t *testing.T) {
+	isolateGitHubEnvironment(t)
+	serveForgeOverTLS(t, `{"error":"incorrect_client_credentials"}`)
+	creds := forgecreds.New(filepath.Join(t.TempDir(), "state.json"))
+	forgeHost, err := contracts.ParseForgeHost("example.com")
+	if err != nil {
+		t.Fatalf("ParseForgeHost: %v", err)
+	}
+	if err = creds.Store().Put(t.Context(), forgeHost, forgecreds.Record{
+		AccessToken:     "ghu_app_bad",
+		AccessExpiresAt: time.Now().Add(2 * time.Minute),
+		RefreshToken:    "ghr_app_bad",
+	}); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	messages := testMessages()
+	translator := messages.For(testLang())
+	want := translator.Text(clitext.ConnectAccessAppBad, nil)
+	if err = translator.Err(); err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+	var out bytes.Buffer
+
+	if err = connectStatus(t.Context(), messages, testLang(), creds, &out); err != nil {
+		t.Fatalf("connectStatus: %v", err)
+	}
+	if !strings.Contains(out.String(), want) {
+		t.Fatalf("status output = %q, want the misconfigured app line %q", out.String(), want)
+	}
+	record, _, err := creds.Store().Get(forgeHost)
+	if err != nil {
+		t.Fatalf("read the saved record: %v", err)
+	}
+	if record.Rejected {
+		t.Fatalf("the token was marked refused for an app error: %+v", record)
+	}
 }

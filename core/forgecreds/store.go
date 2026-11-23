@@ -5,6 +5,8 @@ package forgecreds
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -63,8 +65,9 @@ type storeFile struct {
 }
 
 // Store keeps the saved records of every forge host in one file of the host
-// state directory. Writes are atomic and the file is 0600. Each change runs
-// under an exclusive lock shared by every process of that directory.
+// state directory. Writes are atomic and the file is 0600. Each change to the
+// file runs under an exclusive lock shared by every process of that directory,
+// and that lock is held only while the file is read, changed and written.
 type Store struct {
 	dir    string
 	rename func(oldPath, newPath string) error
@@ -114,6 +117,29 @@ func (s *Store) lockPath() string {
 	return filepath.Join(s.dir, "."+storeFileName+".lock")
 }
 
+func (s *Store) renewLockPath(host contracts.ForgeHost) string {
+	sum := sha256.Sum256([]byte(host.String()))
+	return filepath.Join(s.dir, "."+storeFileName+"."+hex.EncodeToString(sum[:])+".renew.lock")
+}
+
+func (s *Store) lockRenewal(ctx context.Context, host contracts.ForgeHost) (func(), error) {
+	if err := s.ensureDir(); err != nil {
+		return nil, err
+	}
+	release, err := filelock.Acquire(ctx, s.renewLockPath(host))
+	if err != nil {
+		return nil, fmt.Errorf("lock forge renewal: %w", err)
+	}
+	return release, nil
+}
+
+func (s *Store) ensureDir() error {
+	if err := os.MkdirAll(s.dir, storeDirMode); err != nil {
+		return fmt.Errorf("create state directory: %w", err)
+	}
+	return nil
+}
+
 // Get returns the saved record of host and whether there is one.
 func (s *Store) Get(host contracts.ForgeHost) (Record, bool, error) {
 	file, err := s.load()
@@ -137,13 +163,14 @@ func (s *Store) Hosts() ([]string, error) {
 	return names, nil
 }
 
-// Update runs change under the lock of the state directory, on the records as
+// Update runs change under the lock of the connections file, on the records as
 // they are at that moment, and saves them when change put or deleted one. The
-// lock is held until change returns, so change may refresh a token and save
-// what it got without another process doing the same in between.
+// lock is held until change returns, so change must not wait on the network:
+// a renewal takes the lock of its host first and calls Update only to record
+// its result.
 func (s *Store) Update(ctx context.Context, change func(*Tx) error) error {
-	if err := os.MkdirAll(s.dir, storeDirMode); err != nil {
-		return fmt.Errorf("create state directory: %w", err)
+	if err := s.ensureDir(); err != nil {
+		return err
 	}
 	release, err := filelock.Acquire(ctx, s.lockPath())
 	if err != nil {

@@ -29,10 +29,12 @@ const (
 // the host named by GH_HOST, then the login of gh auth token. A token that is
 // not saved is kept in memory until Invalidate drops it.
 //
-// The saved token of a host is renewed under the lock of the state directory,
-// so processes sharing it never spend the same refresh token twice. A renewal
-// the file could not record is kept in memory for this process and recorded
-// again on the next call.
+// The saved token of a host is renewed under a lock of that host, shared by
+// the processes of the state directory, so they never spend the same refresh
+// token twice. A slow renewal holds up that host only. A renewal the file could
+// not record is kept in memory for this process and recorded again on the next
+// call. When the forge does not accept the herrscher app, Token returns
+// ErrAppMisconfigured and marks nothing as refused.
 type Credentials struct {
 	store  *Store
 	flow   Flow
@@ -223,24 +225,31 @@ func (c *Credentials) savedRecord(ctx context.Context, host contracts.ForgeHost)
 }
 
 func (c *Credentials) settle(ctx context.Context, host contracts.ForgeHost) (Record, bool, error) {
-	var outcome settlement
-	ran := false
-	err := c.store.Update(ctx, func(transaction *Tx) error {
-		ran = true
-		var settleErr error
-		outcome, settleErr = c.settleLocked(ctx, host, transaction)
-		return settleErr
-	})
+	release, err := c.store.lockRenewal(ctx, host)
 	if err != nil {
-		return c.settleFailed(host, outcome, ran, err)
+		return c.settleFailed(host, settlement{}, err)
+	}
+	defer release()
+	outcome, err := c.renew(ctx, host)
+	if err != nil {
+		return c.settleFailed(host, outcome, err)
+	}
+	if outcome.write {
+		outcome, err = c.persist(ctx, host, outcome)
+		if err != nil {
+			return c.settleFailed(host, outcome, err)
+		}
 	}
 	c.dropHeld(host)
 	return outcome.record, outcome.ok, nil
 }
 
-func (c *Credentials) settleLocked(ctx context.Context, host contracts.ForgeHost, transaction *Tx) (settlement, error) {
+func (c *Credentials) renew(ctx context.Context, host contracts.ForgeHost) (settlement, error) {
 	now := c.now()
-	current, found := transaction.Get(host)
+	current, found, err := c.store.Get(host)
+	if err != nil {
+		return settlement{}, err
+	}
 	if !found || current.Rejected {
 		c.dropHeld(host)
 		return settlement{}, nil
@@ -251,7 +260,6 @@ func (c *Credentials) settleLocked(ctx context.Context, host contracts.ForgeHost
 		pendingFound = false
 	}
 	if pendingFound {
-		transaction.Put(host, pending.record)
 		return settlement{record: pending.record, ok: true, write: true, from: pending.from}, nil
 	}
 	if !needsRefresh(current, now) {
@@ -264,8 +272,9 @@ func (c *Credentials) settleLocked(ctx context.Context, host contracts.ForgeHost
 	switch {
 	case errors.Is(err, ErrRefreshRejected):
 		current.Rejected = true
-		transaction.Put(host, current)
-		return settlement{write: true}, nil
+		return settlement{record: current, write: true, from: current.RefreshToken}, nil
+	case errors.Is(err, ErrAppMisconfigured):
+		return settlement{}, fmt.Errorf("%s: refresh the saved token: %w", host, err)
 	case err != nil:
 		if !stillValid(current, now) {
 			return settlement{}, fmt.Errorf("%s: refresh the saved token: %w", host, err)
@@ -273,22 +282,40 @@ func (c *Credentials) settleLocked(ctx context.Context, host contracts.ForgeHost
 		slog.Warn("refresh the saved forge token", "host", host.String(), "err", err)
 		return settlement{record: current, ok: true}, nil
 	}
-	transaction.Put(host, refreshed)
 	return settlement{record: refreshed, ok: true, write: true, from: current.RefreshToken}, nil
 }
 
-func (c *Credentials) settleFailed(host contracts.ForgeHost, outcome settlement, ran bool, err error) (Record, bool, error) {
-	if !ran {
-		if pending, ok := c.heldFor(host); ok && stillValid(pending.record, c.now()) {
-			slog.Warn("forge connections not readable, using the renewed token kept in memory", "host", host.String(), "err", err)
-			return pending.record, true, nil
+func (c *Credentials) persist(ctx context.Context, host contracts.ForgeHost, outcome settlement) (settlement, error) {
+	now := c.now()
+	saved := outcome
+	err := c.store.Update(ctx, func(transaction *Tx) error {
+		current, found := transaction.Get(host)
+		switch {
+		case !found:
+			saved = settlement{}
+		case current.RefreshToken != outcome.from:
+			saved = settlement{record: current, ok: !current.Rejected && !current.Expired(now)}
+		default:
+			transaction.Put(host, outcome.record)
+			saved = settlement{record: outcome.record, ok: outcome.ok}
 		}
-		return Record{}, false, err
+		return nil
+	})
+	if err != nil {
+		return outcome, err
 	}
+	return saved, nil
+}
+
+func (c *Credentials) settleFailed(host contracts.ForgeHost, outcome settlement, err error) (Record, bool, error) {
 	if outcome.ok && outcome.write {
 		c.setHeld(host, heldRecord{record: outcome.record, from: outcome.from})
 		slog.Warn("forge connections not saved, the renewed token is kept in memory", "host", host.String(), "err", err)
 		return outcome.record, true, nil
+	}
+	if pending, ok := c.heldFor(host); ok && stillValid(pending.record, c.now()) {
+		slog.Warn("forge connections not readable, using the renewed token kept in memory", "host", host.String(), "err", err)
+		return pending.record, true, nil
 	}
 	return Record{}, false, err
 }

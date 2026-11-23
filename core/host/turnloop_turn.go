@@ -150,11 +150,11 @@ func (d *sessionDriver) sendToBridge(ctx context.Context, event contracts.Event)
 	}
 }
 
-func (d *sessionDriver) abandon(ctx context.Context, ev contracts.Event) {
-	if ev.T != eventwire.EventInput {
+func (d *sessionDriver) abandon(ctx context.Context, event contracts.Event) {
+	d.exportTurn(ctx, otelexport.OutcomeAbandoned, contracts.Event{})
+	if event.T != eventwire.EventInput {
 		return
 	}
-	d.exportTurn(ctx, otelexport.OutcomeAbandoned, contracts.Event{})
 	if ctx.Err() == nil {
 		d.settleTurn()
 	}

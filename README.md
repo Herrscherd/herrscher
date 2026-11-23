@@ -71,7 +71,7 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 herrscher serve
 
 The configuration is read from the environment only, through the standard OpenTelemetry variables, so no key is added to the configuration file:
 
-- `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` enables the export (the traces variable wins when both are set).
+- `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` enables the export (the traces variable wins when both are set). The endpoint rules are in the Endpoint paragraph below.
 - `OTEL_EXPORTER_OTLP_PROTOCOL` or `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL` selects `http/protobuf` (default) or `grpc`.
 - `OTEL_SERVICE_NAME` overrides the service name, which defaults to `herrscher`.
 - `OTEL_SDK_DISABLED=true` turns the export off even when an endpoint is set.
@@ -88,13 +88,18 @@ Outcomes and error status:
 - A completed turn has no error status.
 - A failed turn (the backend returned an error) has error status with `error.type` set to `turn_failed`. The error text is never exported, so the status carries the fixed type only.
 - An interrupted turn (the operator cut it while the backend was answering) has unset status, because the operator chose to stop it, and the result attribute `herrscher.turn.outcome` set to `interrupted`. `herrscher.turn.outcome` is a daemon attribute: semconv v1.41.0 defines no value for an interrupted turn.
-- An abandoned turn has error status with `error.type` set to `turn_abandoned`. A turn is abandoned when its send to the bridge fails, when the language announcement fails, or when the turn is cut while it waits for the backend.
+- An abandoned turn has error status with `error.type` set to `turn_abandoned`. A turn is abandoned when its send to the bridge fails, when the language announcement fails, or when the turn is cut while it waits for the backend. A pick turn that fails in the same places is abandoned too, with the same type.
 - A failed tool call has error status with `error.type` set to `tool_failed`. A tool call still open when its turn ends has `error.type` set to `tool_unfinished`. Both are set on the `execute_tool` span, and the turn keeps its own status.
 - The error message of a failed call is never exported: the error status carries the type only.
 
 Not exported: prompts, replies, tool details, tool arguments and error messages, in any case. The semantic conventions define opt-in content capture, which this export does not implement.
 
-Endpoint: the endpoint must be an `http` or `https` URL with a host, and the protocol must be `http/protobuf` or `grpc`. An invalid value is refused at start-up: the daemon logs a localized warning and runs without telemetry.
+Endpoint: the endpoint is read from the same environment the daemon reads, and it is passed to the OTLP client explicitly, so the client never reads a different value from the process environment.
+
+- `http/protobuf`: the endpoint is an `http` or `https` URL with a host, such as `http://[::1]:4318`. The scheme sets the transport: `https` is TLS, `http` is plaintext. A base endpoint (`OTEL_EXPORTER_OTLP_ENDPOINT`) gets the `/v1/traces` path appended; `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is used exactly as written.
+- `grpc`: the endpoint is either a URL with an `http` or `https` scheme, which the scheme makes plaintext or TLS, or a bare `host:port`, with IPv6 literals in brackets. A bare `host:port` is TLS unless `OTEL_EXPORTER_OTLP_INSECURE` (or `OTEL_EXPORTER_OTLP_TRACES_INSECURE`) is `true`, which makes it plaintext.
+
+An invalid value is refused at start-up: the daemon logs a localized warning and runs without telemetry.
 
 Known limits:
 

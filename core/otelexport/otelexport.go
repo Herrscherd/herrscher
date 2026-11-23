@@ -23,6 +23,9 @@ const (
 	envTracesEndpoint  = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
 	envProtocol        = "OTEL_EXPORTER_OTLP_PROTOCOL"
 	envTracesProtocol  = "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL"
+	envInsecure        = "OTEL_EXPORTER_OTLP_INSECURE"
+	envTracesInsecure  = "OTEL_EXPORTER_OTLP_TRACES_INSECURE"
+	defaultTracesPath  = "v1/traces"
 	defaultServiceName = "herrscher"
 	tracerName         = "github.com/Herrscherd/herrscher/core/otelexport"
 	shutdownGrace      = 5 * time.Second
@@ -60,14 +63,15 @@ func Setup(ctx context.Context, lookup Lookup) (Exporter, error) {
 	if err != nil {
 		return Exporter{}, err
 	}
-	if endpointErr := validateEndpoint(firstSet(lookup, envTracesEndpoint, envEndpoint), proto); endpointErr != nil {
+	raw, signalSpecific := traceEndpoint(lookup)
+	if endpointErr := validateEndpoint(raw, proto); endpointErr != nil {
 		return Exporter{}, endpointErr
 	}
 	res, err := resourceFrom(ctx)
 	if err != nil {
 		return Exporter{}, fmt.Errorf("otelexport: resource: %w", err)
 	}
-	spans, err := newSpanExporter(ctx, proto)
+	spans, err := newSpanExporter(ctx, proto, otlpTarget{raw: raw, signalSpecific: signalSpecific, insecure: insecureFrom(lookup)})
 	if err != nil {
 		return Exporter{}, err
 	}
@@ -102,6 +106,23 @@ func enabled(lookup Lookup) bool {
 		return false
 	}
 	return firstSet(lookup, envTracesEndpoint, envEndpoint) != ""
+}
+
+type otlpTarget struct {
+	raw            string
+	signalSpecific bool
+	insecure       bool
+}
+
+func traceEndpoint(lookup Lookup) (string, bool) {
+	if raw := firstSet(lookup, envTracesEndpoint); raw != "" {
+		return raw, true
+	}
+	return firstSet(lookup, envEndpoint), false
+}
+
+func insecureFrom(lookup Lookup) bool {
+	return strings.EqualFold(firstSet(lookup, envTracesInsecure, envInsecure), "true")
 }
 
 func validateEndpoint(raw string, proto protocol) error {
@@ -146,20 +167,46 @@ func resourceFrom(ctx context.Context) (*resource.Resource, error) {
 	return resource.New(ctx, resource.WithAttributes(semconv.ServiceName(defaultServiceName)), resource.WithFromEnv(), resource.WithTelemetrySDK())
 }
 
-func newSpanExporter(ctx context.Context, proto protocol) (sdktrace.SpanExporter, error) {
+func newSpanExporter(ctx context.Context, proto protocol, target otlpTarget) (sdktrace.SpanExporter, error) {
 	switch proto {
 	case protocolGRPC:
-		exporter, err := otlptracegrpc.New(ctx)
+		exporter, err := otlptracegrpc.New(ctx, grpcOptions(target)...)
 		if err != nil {
 			return nil, fmt.Errorf("otelexport: grpc exporter: %w", err)
 		}
 		return exporter, nil
 	case protocolHTTP:
-		exporter, err := otlptracehttp.New(ctx)
+		options, err := httpOptions(target)
+		if err != nil {
+			return nil, err
+		}
+		exporter, err := otlptracehttp.New(ctx, options...)
 		if err != nil {
 			return nil, fmt.Errorf("otelexport: http exporter: %w", err)
 		}
 		return exporter, nil
 	}
 	return nil, ErrUnsupportedProtocol
+}
+
+func grpcOptions(target otlpTarget) []otlptracegrpc.Option {
+	if strings.Contains(target.raw, "://") {
+		return []otlptracegrpc.Option{otlptracegrpc.WithEndpointURL(target.raw)}
+	}
+	options := []otlptracegrpc.Option{otlptracegrpc.WithEndpoint(target.raw)}
+	if target.insecure {
+		options = append(options, otlptracegrpc.WithInsecure())
+	}
+	return options
+}
+
+func httpOptions(target otlpTarget) ([]otlptracehttp.Option, error) {
+	endpoint, err := url.Parse(target.raw)
+	if err != nil {
+		return nil, ErrInvalidEndpoint
+	}
+	if !target.signalSpecific {
+		endpoint = endpoint.JoinPath(defaultTracesPath)
+	}
+	return []otlptracehttp.Option{otlptracehttp.WithEndpointURL(endpoint.String())}, nil
 }

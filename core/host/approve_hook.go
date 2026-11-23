@@ -44,7 +44,6 @@ const (
 	hookAnswerMismatch       = "hook.approval_answer_mismatch"
 	hookAnswerInvalid        = "hook.approval_answer_invalid"
 	hookForeignPeer          = "hook.approval_foreign_peer"
-	hookApprovalBusy         = "hook.approval_busy"
 	hookRequestTooLarge      = "hook.approval_request_too_large"
 )
 
@@ -192,8 +191,6 @@ func approvalSocketFailureKey(err error) string {
 		return hookAnswerInvalid
 	case errors.Is(err, approvalsock.ErrForeignPeer):
 		return hookForeignPeer
-	case errors.Is(err, approvalsock.ErrBusy):
-		return hookApprovalBusy
 	case errors.Is(err, approvalsock.ErrRequestTooLarge):
 		return hookRequestTooLarge
 	}
@@ -230,7 +227,7 @@ func writeHookDecision(messages *hostMessages, out, errOut io.Writer, lang i18n.
 		return err
 	}
 	if _, err := fmt.Fprintf(out, "%s\n", payload); err != nil {
-		logWriteFailure(fmt.Fprintln(errOut, hookText(messages, lang, hookDecisionUnwritable, map[string]any{decisionParam: decision, detailParam: err.Error()})))
+		logWriteFailure(fmt.Fprintln(errOut, hookText(messages, lang, hookDecisionUnwritable, map[string]any{decisionParam: decision})))
 		return err
 	}
 	return nil

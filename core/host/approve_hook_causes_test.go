@@ -68,7 +68,6 @@ func TestApprovalSocketFailureNamesTheCausesWithoutAnExchange(t *testing.T) {
 		want string
 	}{
 		{"foreign peer", approvalsock.ErrForeignPeer, hookForeignPeer},
-		{"busy", approvalsock.ErrBusy, hookApprovalBusy},
 		{"unclassified", errors.New("dial approval socket"), hookApprovalSocketFailed},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

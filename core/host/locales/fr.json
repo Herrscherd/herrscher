@@ -791,11 +791,6 @@
     "other": "herrscher : la socket d'approbation est tenue par un autre utilisateur, cet appel d'outil est donc refusé"
   },
   {
-    "id": "hook.approval_busy",
-    "description": "Le hook d'approbation refuse un appel d'outil parce que la socket d'approbation répond au nombre maximal de connexions",
-    "other": "herrscher : la socket d'approbation est occupée, cet appel d'outil est donc refusé"
-  },
-  {
     "id": "hook.approval_request_too_large",
     "description": "Le hook d'approbation refuse un appel d'outil parce que sa requête d'approbation dépasse la taille acceptée par la socket",
     "other": "herrscher : la requête d'approbation dépasse la taille limite, cet appel d'outil est donc refusé"
@@ -952,8 +947,8 @@
   },
   {
     "id": "hook.decision_unwritable",
-    "description": "The approval hook could not write its decision to stdout, Decision names it and Detail carries the error",
-    "other": "herrscher : impossible d'écrire la décision {{.Decision}} : {{.Detail}}"
+    "description": "The approval hook could not write its decision to stdout, Decision names it",
+    "other": "herrscher : impossible d'écrire la décision {{.Decision}}"
   },
   {
     "id": "telemetry.endpoint_invalid",

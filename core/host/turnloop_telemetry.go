@@ -23,14 +23,16 @@ func (d *sessionDriver) openTurnSpan() turnSpan {
 }
 
 func (d *sessionDriver) exportTurn(ctx context.Context, outcome otelexport.Outcome, usage contracts.Event) {
+	span := d.turnSpan
+	d.turnSpan = turnSpan{}
 	if !d.telemetry.Enabled() {
 		return
 	}
 	err := d.telemetry.Export(ctx, otelexport.Turn{
 		Session:             d.name,
-		Provider:            d.turnSpan.provider,
-		Model:               d.turnSpan.model,
-		Started:             d.turnSpan.started,
+		Provider:            span.provider,
+		Model:               span.model,
+		Started:             span.started,
 		Ended:               time.Now(),
 		Outcome:             outcome,
 		InputTokens:         usage.TokensIn,

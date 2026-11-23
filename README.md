@@ -40,7 +40,7 @@ starts that path, so run `herrscher service install` again after the upgrade.
 
 A prebuilt binary carries the default stack. Changing the compiled modules
 (`herrscher plugin`, `herrscher update`, the modules screen of `setup`) rebuilds
-from source and needs Go and a checkout:
+from source and needs Go 1.27 and a checkout:
 
 ```bash
 git clone https://github.com/Herrscherd/herrscher.git
@@ -48,7 +48,7 @@ cd herrscher
 go build -o herrscher .    # the only binary; plugins are compiled in
 ```
 
-Then, from any of these:
+Then:
 
 ```bash
 herrscher setup            # pick modules, sign in, configure everything

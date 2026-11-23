@@ -21,9 +21,9 @@ func TestFollowSessionPrintsOneStatusLineAndOneOutcomePerCall(t *testing.T) {
 	}
 	want := []string{
 		"  · read env.go",
-		"  ✓ read env.go · " + clitext.FormatDuration(i18n.English, time.Second) + " · 0 tokens",
+		"  ✓ read env.go · " + clitext.FormatDuration(i18n.English, time.Second) + " · tokens: 0",
 		"  · read env.go",
-		"  ✓ read env.go · " + clitext.FormatDuration(i18n.English, 2*time.Second) + " · 0 tokens",
+		"  ✓ read env.go · " + clitext.FormatDuration(i18n.English, 2*time.Second) + " · tokens: 0",
 	}
 	lines := strings.Split(out, "\n")
 	if len(lines) < len(want) || !slices.Equal(lines[:len(want)], want) {

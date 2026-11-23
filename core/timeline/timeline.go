@@ -12,17 +12,16 @@ import (
 	"github.com/Herrscherd/herrscher/core/eventwire"
 )
 
-// MaxCalls bounds the calls one turn keeps. A call that starts past it is not kept, the turn's text and tokens are unchanged, and Apply reports ErrFull once.
+// MaxCalls bounds the calls one turn keeps.
 const MaxCalls = 4096
 
-// MaxFieldBytes bounds the detail and the error one call keeps. A longer one is cut at the last whole character under the bound.
+// MaxFieldBytes bounds the detail and the error one call keeps.
 const MaxFieldBytes = 4096
 
 // ErrFull is returned by Apply once, on the first call a turn drops for MaxCalls.
 var ErrFull = errors.New("timeline: the turn has more tool calls than it keeps")
 
-// Call is one tool call of a turn. A call still open at the end of its turn has
-// no EndedAt, no DurationMs and no outcome beyond its started state.
+// Call is one tool call of a turn, open or finished.
 type Call struct {
 	ID         string                  `json:"id"`
 	Tool       string                  `json:"tool"`
@@ -45,9 +44,7 @@ func (c Call) Label() string {
 	return strings.TrimSpace(c.Tool + " " + c.Detail)
 }
 
-// Recorder keeps the tool calls of one turn. Its zero value is ready to use, and
-// it is fed the turn's events in order. A reset starts a new execution: the calls
-// still open are kept as unfinished, and the execution forgets their IDs.
+// Recorder keeps the tool calls of one turn.
 type Recorder struct {
 	calls      []Call
 	openIndex  map[string]int
@@ -58,9 +55,7 @@ type Recorder struct {
 	full       bool
 }
 
-// Apply feeds one event of the turn to the recorder. It returns a copy of the
-// call the event started or finished, whether the event touched a call, and
-// ErrFull on the first call the turn cannot keep.
+// Apply feeds one event of the turn to the recorder, and returns a copy of the call it started or finished, whether it touched a call, and ErrFull on the first call the turn cannot keep.
 func (r *Recorder) Apply(event contracts.Event) (Call, bool, error) {
 	switch {
 	case event.T == eventwire.EventReset:
@@ -106,7 +101,7 @@ func (r *Recorder) open(event contracts.Event) (Call, bool, error) {
 	}
 	r.started[call.ID] = true
 	r.cumulative = event.Tokens
-	entry := Call{ID: call.ID, Tool: call.Tool, Detail: boundField(call.Detail), State: contracts.ToolCallStarted, StartedAt: call.At, Tokens: r.tokensSinceMark()}
+	entry := Call{ID: call.ID, Tool: call.Tool, Detail: BoundField(call.Detail), State: contracts.ToolCallStarted, StartedAt: call.At, Tokens: r.tokensSinceMark()}
 	r.setMark()
 	r.calls = append(r.calls, entry)
 	r.openIndex[call.ID] = len(r.calls) - 1
@@ -124,7 +119,7 @@ func (r *Recorder) close(event contracts.Event) (Call, bool) {
 	ended := call.At
 	elapsed := ended.Sub(entry.StartedAt).Milliseconds()
 	entry.State = call.State
-	entry.Error = boundField(call.Error)
+	entry.Error = BoundField(call.Error)
 	entry.EndedAt = &ended
 	entry.DurationMs = &elapsed
 	delete(r.openIndex, call.ID)
@@ -132,7 +127,8 @@ func (r *Recorder) close(event contracts.Event) (Call, bool) {
 	return *entry, true
 }
 
-func boundField(text string) string {
+// BoundField cuts text to MaxFieldBytes at the last whole character under the bound.
+func BoundField(text string) string {
 	if len(text) <= MaxFieldBytes {
 		return text
 	}

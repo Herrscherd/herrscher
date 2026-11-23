@@ -4541,9 +4541,8 @@
   },
   {
     "id": "cli.tool.succeeded",
-    "description": "Un appel d'outil d'un tour réussi : son outil et son détail, sa durée et ses jetons (Count choisit la forme du pluriel)",
-    "one": "  ✓ {{.Call}} · {{.Duration}} · {{.Count}} jeton",
-    "other": "  ✓ {{.Call}} · {{.Duration}} · {{.Count}} jetons"
+    "description": "Un appel d'outil d'un tour réussi : son outil et son détail, sa durée et ses jetons déjà formatés",
+    "other": "  ✓ {{.Call}} · {{.Duration}} · jetons : {{.Tokens}}"
   },
   {
     "id": "cli.tool.failed",

@@ -40,7 +40,7 @@ func TestFollowSessionRendersToolOutcomeWithoutADuplicateStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	line := "  ✓ read env.go · " + clitext.FormatDuration(i18n.English, 1500*time.Millisecond) + " · 0 tokens\n"
+	line := "  ✓ read env.go · " + clitext.FormatDuration(i18n.English, 1500*time.Millisecond) + " · tokens: 0\n"
 	if !strings.Contains(out, line) {
 		t.Fatalf("output\n%q\nwant the outcome line\n%q", out, line)
 	}
@@ -99,12 +99,38 @@ func TestFollowSessionJSONCarriesTheToolCall(t *testing.T) {
 }
 
 func TestFollowSessionTextMatchesEnglishCatalogueLine(t *testing.T) {
-	want := fmt.Sprintf("  ✓ read env.go · %s · 0 tokens", clitext.FormatDuration(i18n.English, 2*time.Second))
+	want := fmt.Sprintf("  ✓ read env.go · %s · tokens: 0", clitext.FormatDuration(i18n.English, 2*time.Second))
 	out, err := followed(t, false, toolStart(1, "a"), toolDone(2, "a", 2*time.Second, contracts.ToolCallSucceeded), replyDone(3), sessionClosed(4))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out, want+"\n") {
 		t.Fatalf("output %q lacks %q", out, want)
+	}
+}
+
+func TestFollowSessionClosesAnAbandonedTurnsOpenCallAsUnfinished(t *testing.T) {
+	out, err := followed(t, false, toolStart(1, "a"), watchEvent(2, "a", contracts.Event{T: eventwire.EventAbandoned}), toolDone(3, "a", time.Second, contracts.ToolCallSucceeded), replyDone(4), sessionClosed(5))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "  … read env.go · unfinished\n") {
+		t.Fatalf("output %q does not close the abandoned turn's open call as unfinished", out)
+	}
+	if strings.Contains(out, "✓ read env.go") {
+		t.Fatalf("output %q lets the abandoned turn's call finish in the next turn", out)
+	}
+}
+
+func TestFollowSessionClosesOpenCallsOnAnExpiredGap(t *testing.T) {
+	out, err := followed(t, false, toolStart(1, "a"), watchEvent(2, "a", contracts.Event{T: eventwire.EventGap, Value: eventwire.GapExpired}), toolDone(3, "a", time.Second, contracts.ToolCallSucceeded), replyDone(4), sessionClosed(5))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "  … read env.go · unfinished\n") {
+		t.Fatalf("output %q does not close the call open before the gap as unfinished", out)
+	}
+	if strings.Contains(out, "✓ read env.go") {
+		t.Fatalf("output %q lets a call lost in the gap finish later", out)
 	}
 }

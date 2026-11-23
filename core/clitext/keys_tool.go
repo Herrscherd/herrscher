@@ -19,7 +19,7 @@ const (
 
 func toolKeys() map[Key][]string {
 	return map[Key][]string{
-		ToolSucceeded:      {ParamCall, ParamDuration, ParamCount},
+		ToolSucceeded:      {ParamCall, ParamDuration, ParamTokens},
 		ToolFailed:         {ParamCall, ParamDuration, ParamError},
 		ToolFailedNoReason: {ParamCall, ParamDuration},
 		ToolUnfinished:     {ParamCall},
@@ -28,8 +28,6 @@ func toolKeys() map[Key][]string {
 }
 
 // ToolCallLine picks the key and the params of the line that shows call in lang.
-// A call still open has no duration and no outcome, so it gets the unfinished line.
-// Tokens never show below zero: a backend may report fewer than the turn had.
 func ToolCallLine(lang i18n.Language, call timeline.Call) (Key, Params) {
 	if !call.Finished() {
 		return ToolUnfinished, Params{ParamCall: call.Label()}
@@ -45,7 +43,6 @@ func ToolCallLine(lang i18n.Language, call timeline.Call) (Key, Params) {
 		params[ParamError] = call.Error
 		return ToolFailed, params
 	}
-	tokens := max(call.Tokens, 0)
-	params[ParamCount] = tokens
+	params[ParamTokens] = FormatNumber(lang, float64(max(call.Tokens, 0)), 0)
 	return ToolSucceeded, params
 }

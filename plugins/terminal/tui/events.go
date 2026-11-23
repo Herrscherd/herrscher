@@ -127,7 +127,10 @@ func (m *model) renderInto(target *tab, event contracts.Event) {
 		target.completeCompaction(m.tr, event)
 	case eventwire.EventCompactionFailed:
 		target.failCompaction(m.tr, event)
+	case eventwire.EventGap:
+		m.appendTimeline(target)
 	case eventwire.EventAbandoned:
+		m.appendTimeline(target)
 		target.busy = false
 		target.interruptRequested = false
 		target.streamed = false

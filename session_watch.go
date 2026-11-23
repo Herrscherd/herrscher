@@ -283,7 +283,7 @@ func (p *watchView) trackCalls(event *host.DaemonEvent) error {
 	case event.T == eventwire.EventToolDone && touched:
 		key, params := clitext.ToolCallLine(p.lang, call)
 		return p.line(key, params)
-	case event.T == eventwire.EventReply && event.Done:
+	case event.T == eventwire.EventReply && event.Done, event.T == eventwire.EventAbandoned, event.T == eventwire.EventGap:
 		return p.closeTurnCalls()
 	}
 	return nil

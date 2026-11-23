@@ -21,6 +21,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
+	"github.com/Herrscherd/herrscher/core/timeline"
 )
 
 const journalTestBase = 1000
@@ -410,5 +411,43 @@ func TestSessionWatchVerb(t *testing.T) {
 	var missing *NotFoundError
 	if _, err := run(map[string]string{"name": "ghost"}); !errors.As(err, &missing) {
 		t.Fatalf("unknown session err = %v, want NotFoundError", err)
+	}
+}
+
+func TestJournalCostCountsEveryToolCallField(t *testing.T) {
+	bare := journalEntry{wireEvent: wireEvent{Event: contracts.Event{T: eventwire.EventToolDone, ToolCall: &contracts.ToolCall{}}}}
+	filled := journalEntry{wireEvent: wireEvent{Event: contracts.Event{T: eventwire.EventToolDone, ToolCall: &contracts.ToolCall{ID: "id", Tool: "tool", Detail: "detail", Error: "error"}}}}
+	want := len("id") + len("tool") + len("detail") + len("error")
+	if got := filled.cost() - bare.cost(); got != want {
+		t.Fatalf("the tool call's text adds %d to the cost, want %d", got, want)
+	}
+}
+
+func TestJournalStoresToolDetailAndErrorWithinTheBound(t *testing.T) {
+	journal := newEventJournalFrom(journalTestBase)
+	huge := strings.Repeat("e", 1<<20)
+	for range journalDepth {
+		journal.record("tools", contracts.Event{T: eventwire.EventToolDone, ToolCall: &contracts.ToolCall{ID: "c", Tool: "bash", Detail: huge, Error: huge, State: contracts.ToolCallFailed}})
+	}
+	ring := journal.rings["tools"]
+	if ring.bytes > journalRingBytes {
+		t.Fatalf("ring holds %d bytes, cap %d: the tool fields are not counted", ring.bytes, journalRingBytes)
+	}
+	var counted, held int
+	for idx := range ring.entries {
+		counted += ring.entries[idx].cost()
+		if call := ring.entries[idx].ToolCall; call != nil {
+			held += len(call.Detail) + len(call.Error)
+		}
+	}
+	if counted != ring.bytes {
+		t.Fatalf("ring accounts %d bytes, its entries cost %d", ring.bytes, counted)
+	}
+	if held > journalRingBytes {
+		t.Fatalf("ring keeps %d bytes of tool detail and error, cap %d", held, journalRingBytes)
+	}
+	last := ring.entries[len(ring.entries)-1].ToolCall
+	if len(last.Error) != timeline.MaxFieldBytes || len(last.Detail) != timeline.MaxFieldBytes {
+		t.Fatalf("stored detail %d and error %d bytes, want both cut to %d", len(last.Detail), len(last.Error), timeline.MaxFieldBytes)
 	}
 }

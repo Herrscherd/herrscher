@@ -4541,9 +4541,8 @@
   },
   {
     "id": "cli.tool.succeeded",
-    "description": "A tool call of a turn that succeeded: its tool and detail, duration and tokens (Count selects the plural form)",
-    "one": "  ✓ {{.Call}} · {{.Duration}} · {{.Count}} token",
-    "other": "  ✓ {{.Call}} · {{.Duration}} · {{.Count}} tokens"
+    "description": "A tool call of a turn that succeeded: its tool and detail, duration and the tokens already formatted",
+    "other": "  ✓ {{.Call}} · {{.Duration}} · tokens: {{.Tokens}}"
   },
   {
     "id": "cli.tool.failed",

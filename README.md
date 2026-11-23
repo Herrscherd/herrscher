@@ -668,7 +668,9 @@ Every event the daemon publishes carries a sequence number (`seq`). It starts fr
 the clock when the daemon starts, so a new daemon always numbers above the one
 before it. The daemon keeps the latest events of each session in memory: 512 events
 and 1 MiB per session, for the 64 sessions that spoke most recently, with the text
-of a streamed reply folded into one entry.
+of a streamed reply folded into one entry. The bytes of an event are its text plus
+the `id`, `tool`, `detail` and `error` of its tool call, and the `detail` and the
+`error` are cut to 4096 bytes before they are kept.
 
 The catch-up happens on the events socket itself. A subscriber may write one line as
 soon as it connects, `{"session":"<name>","since":<seq>}`, and the daemon first

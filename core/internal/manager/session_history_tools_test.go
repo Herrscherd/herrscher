@@ -74,7 +74,7 @@ func TestSessionHistoryTextShowsEachToolCallLine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("session history: %v", err)
 	}
-	finished := "✓ read env.go · " + clitext.FormatDuration(i18n.English, 1500*time.Millisecond) + " · 3 tokens"
+	finished := "✓ read env.go · " + clitext.FormatDuration(i18n.English, 1500*time.Millisecond) + " · tokens: 3"
 	for _, want := range []string{finished, "… grep TODO · unfinished"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("history text lacks %q:\n%s", want, out)

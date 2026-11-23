@@ -26,17 +26,16 @@ func renderToolLine(t *testing.T, lang i18n.Language, call timeline.Call) string
 	return text
 }
 
-func TestToolLineCountsItsTokensInEachPluralForm(t *testing.T) {
+func TestToolLineGroupsTheThousandsOfItsTokens(t *testing.T) {
 	tests := []struct {
 		name   string
 		lang   i18n.Language
 		tokens int
 		want   string
 	}{
-		{name: "en one token", lang: i18n.English, tokens: 1, want: "1 token"},
-		{name: "en many tokens", lang: i18n.English, tokens: 12, want: "12 tokens"},
-		{name: "fr one token", lang: i18n.French, tokens: 1, want: "1 jeton"},
-		{name: "fr many tokens", lang: i18n.French, tokens: 12, want: "12 jetons"},
+		{name: "en one token", lang: i18n.English, tokens: 1, want: "tokens: 1"},
+		{name: "en thousands", lang: i18n.English, tokens: 12345, want: "tokens: 12,345"},
+		{name: "fr thousands", lang: i18n.French, tokens: 12345, want: "jetons : 12 345"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -50,7 +49,7 @@ func TestToolLineCountsItsTokensInEachPluralForm(t *testing.T) {
 
 func TestToolLineNeverShowsNegativeTokens(t *testing.T) {
 	line := renderToolLine(t, i18n.English, finishedToolCall(contracts.ToolCallSucceeded, -12, ""))
-	if !strings.HasSuffix(line, " · 0 tokens") {
+	if !strings.HasSuffix(line, " · tokens: 0") {
 		t.Fatalf("line = %q, want the tokens clamped to 0", line)
 	}
 }

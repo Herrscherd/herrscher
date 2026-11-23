@@ -4990,6 +4990,11 @@
     "other": "stopping: the running step ends, then the files are put back"
   },
   {
+    "id": "cli.setup.install.not_restored",
+    "description": "An aborted install gave up waiting for a step that kept running, so nothing was put back",
+    "other": "the running step did not stop; plugins.go, go.mod and go.sum were left as they are, check them by hand"
+  },
+  {
     "id": "cli.setup.hub.sub",
     "description": "Subtitle of the dashboard",
     "other": "dashboard"

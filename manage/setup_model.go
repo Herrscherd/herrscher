@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"time"
 
 	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -41,13 +42,14 @@ func flowOrder() []setupScreen {
 }
 
 type setupDeps struct {
-	prober   setupProber
-	login    func(context.Context, probeKind) tea.Cmd
-	catalog  catalogFn
-	run      commandRunner
-	envPath  string
-	hostDir  string
-	manifest []byte
+	prober      setupProber
+	login       func(context.Context, probeKind) tea.Cmd
+	catalog     catalogFn
+	run         commandRunner
+	envPath     string
+	hostDir     string
+	manifest    []byte
+	abandonWait time.Duration
 }
 
 func (deps setupDeps) compose() bool { return deps.manifest != nil }

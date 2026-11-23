@@ -110,6 +110,7 @@ const (
 	SetupInstallFailed          = "cli.setup.install.failed"
 	SetupInstallRestored        = "cli.setup.install.restored"
 	SetupInstallStopping        = "cli.setup.install.stopping"
+	SetupInstallNotRestored     = "cli.setup.install.not_restored"
 	SetupHubSub                 = "cli.setup.hub.sub"
 	SetupHubModules             = "cli.setup.hub.modules"
 	SetupHubConfigured          = "cli.setup.hub.configured"
@@ -244,6 +245,7 @@ func setupKeys() map[Key][]string {
 		SetupInstallFailed:          nil,
 		SetupInstallRestored:        nil,
 		SetupInstallStopping:        nil,
+		SetupInstallNotRestored:     nil,
 		SetupHubSub:                 nil,
 		SetupHubModules:             {ParamCount},
 		SetupHubConfigured:          nil,

@@ -124,11 +124,12 @@ func newHarness(t *testing.T, manifest []byte, screen setupScreen, env map[strin
 		login: func(_ context.Context, kind probeKind) tea.Cmd {
 			return func() tea.Msg { return loginDoneMsg{kind: kind} }
 		},
-		catalog:  fakeCatalog,
-		run:      shell.run,
-		envPath:  filepath.Join(dir, ".env"),
-		hostDir:  dir,
-		manifest: manifest,
+		catalog:     fakeCatalog,
+		run:         shell.run,
+		envPath:     filepath.Join(dir, ".env"),
+		hostDir:     dir,
+		manifest:    manifest,
+		abandonWait: time.Minute,
 	}
 	if manifest != nil {
 		if err := os.WriteFile(filepath.Join(dir, manifestFile), manifest, modeFile); err != nil {
@@ -885,4 +886,30 @@ func TestStepGateLeavesOnce(t *testing.T) {
 	if gate.enter() {
 		t.Fatal("a closed gate let a step in")
 	}
+}
+
+func TestAbandonGivesUpOnAStuckStepAndLeavesTheFiles(t *testing.T) {
+	harness := newHarness(t, []byte(setupManifest), screenReview, nil)
+	harness.model.deps.abandonWait = 20 * time.Millisecond
+	pending := harness.startInstallUntilGoGet(t)
+	entered, release := make(chan struct{}), make(chan struct{})
+	harness.shell.effect = func(setupCommand) {
+		close(entered)
+		<-release
+	}
+	finished := make(chan struct{})
+	go func() {
+		pending()
+		close(finished)
+	}()
+	<-entered
+	harness.model.abandon()
+	if !errors.Is(harness.model.install.restoreErr, errStepStillRuns) || harness.model.install.restored {
+		t.Fatalf("install = %+v, want gave up without restoring", harness.model.install)
+	}
+	if got := harness.manifestOnDisk(t); got == setupManifest {
+		t.Fatal("plugins.go was put back while the step still ran")
+	}
+	close(release)
+	<-finished
 }

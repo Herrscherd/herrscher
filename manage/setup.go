@@ -86,11 +86,12 @@ func setupEntry(messages *clitext.Messages, rest []string) (setupScreen, error) 
 
 func liveDeps(messages *clitext.Messages, hostMessages *host.Messages, hostDir string) setupDeps {
 	deps := setupDeps{
-		prober:  liveProber(),
-		login:   execLogin,
-		catalog: liveCatalog(host.DefaultModelDiscovery(hostMessages)),
-		run:     execRunner,
-		envPath: envTarget(),
+		prober:      liveProber(),
+		login:       execLogin,
+		catalog:     liveCatalog(host.DefaultModelDiscovery(hostMessages)),
+		run:         execRunner,
+		envPath:     envTarget(),
+		abandonWait: abandonLimit,
 	}
 	dir, err := resolveHost(messages, hostDir)
 	if err != nil {

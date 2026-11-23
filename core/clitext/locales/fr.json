@@ -4990,6 +4990,11 @@
     "other": "arrêt : l'étape en cours se termine, puis les fichiers sont remis comme avant"
   },
   {
+    "id": "cli.setup.install.not_restored",
+    "description": "An aborted install gave up waiting for a step that kept running, so nothing was put back",
+    "other": "l'étape en cours ne s'est pas arrêtée ; plugins.go, go.mod et go.sum sont laissés tels quels, vérifie-les à la main"
+  },
+  {
     "id": "cli.setup.hub.sub",
     "description": "Subtitle of the dashboard",
     "other": "tableau de bord"

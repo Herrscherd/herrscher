@@ -19,7 +19,10 @@ const (
 	abandonLimit   = 30 * time.Second
 )
 
-var errInstallAborted = clitext.SentinelError("install aborted")
+var (
+	errInstallAborted = clitext.SentinelError("install aborted")
+	errStepStillRuns  = clitext.SentinelError("install step still running")
+)
 
 type installStep struct {
 	run           func(context.Context) ([]byte, error)
@@ -200,14 +203,25 @@ func (model *setupModel) abandon() {
 		return
 	}
 	model.install.cancel()
-	if busy := model.install.gate.close(); busy != nil {
-		select {
-		case <-busy:
-		case <-time.After(abandonLimit):
-		}
-	}
 	model.install.err = errInstallAborted
+	if !model.waitStep() {
+		model.install.restoreErr = failure(model.messages, errStepStillRuns, clitext.SetupInstallNotRestored, nil)
+		return
+	}
 	model.restorePlugins()
+}
+
+func (model *setupModel) waitStep() bool {
+	busy := model.install.gate.close()
+	if busy == nil {
+		return true
+	}
+	select {
+	case <-busy:
+		return true
+	case <-time.After(model.deps.abandonWait):
+		return false
+	}
 }
 
 func (model *setupModel) restorePlugins() {

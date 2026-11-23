@@ -79,15 +79,25 @@ The configuration is read from the environment only, through the standard OpenTe
 
 The export follows the GenAI semantic conventions pinned to **semconv v1.41.0** (`go.opentelemetry.io/otel/semconv/v1.41.0`). Each settled turn becomes one `invoke_agent <session>` span, and each tool call of that turn becomes an `execute_tool <tool>` child span.
 
-Exported: the operation name, the provider (`anthropic` or `openai` for the built-in backends), the session as `gen_ai.agent.name`, the request model when known, the input and output token counts, the cache read and cache creation counts, the tool name and call id, the call timestamps, and error status for failed calls and for abandoned turns. Error messages are cut to the same bound the timeline uses.
+Exported: the operation name, the provider (`anthropic` or `openai` for the built-in backends, the vendor name otherwise), the session as `gen_ai.agent.name`, the request model as it was when the turn started, the input and output token counts, the cache read and cache creation counts, the tool name and call id, and the start and end timestamps of the turn and of each call. Every free-text field is cut to the timeline bound (`timeline.MaxFieldBytes`, 4096 bytes).
 
-Not exported: prompts, replies, tool details and tool arguments, in any case. The semantic conventions define opt-in content capture, which this export does not implement.
+Input tokens: `gen_ai.usage.input_tokens` is the sum of the uncached input, the cache reads and the cache creations the backend reported, so it counts every input token. The two cache attributes give the cached part of that sum.
+
+Outcomes and error status:
+
+- A completed turn has no error status.
+- An abandoned turn has error status with `error.type` set to `turn_abandoned`. A turn is abandoned when its send to the bridge fails, when the language announcement fails, or when the turn is cut while it waits for the backend.
+- A failed tool call has error status with `error.type` set to `tool_failed`. A tool call still open when its turn ends has `error.type` set to `tool_unfinished`. Both are set on the `execute_tool` span, and the turn keeps its own status.
+- The error message of a failed call is never exported: the error status carries the type only.
+
+Not exported: prompts, replies, tool details, tool arguments and error messages, in any case. The semantic conventions define opt-in content capture, which this export does not implement.
+
+Endpoint: the endpoint must be an `http` or `https` URL with a host, and the protocol must be `http/protobuf` or `grpc`. An invalid value is refused at start-up: the daemon logs a localized warning and runs without telemetry.
 
 Known limits:
 
-- A failed backend turn is not marked as an error. The bridge does not put the failure in the event stream, only the text of the reply, so the span looks completed. Marking it needs a field on the terminal reply in the contracts, planned as a follow-up.
-- An input that is abandoned before it reaches the backend produces no span, because no agent invocation happened.
-- `gen_ai.usage.input_tokens` is the uncached input the backend reported; cached reads and creations are exported in their own attributes.
+- A failed or interrupted backend turn is not marked as an error yet. The exporter already knows the `turn_failed` and `turn_interrupted` outcomes, but the bridge does not put that outcome in the event stream: it only puts the text of the reply there. Marking it needs a field on the terminal event in the contracts, which is a separate change and is not merged, so the daemon does not depend on it yet.
+- An input dropped by an interrupt before the driver hands it to the backend, or refused by the budget gate, produces no span, because no agent invocation happened.
 - Token counts that are zero, negative or not finite are omitted, not exported as zero.
 
 ## Documentation

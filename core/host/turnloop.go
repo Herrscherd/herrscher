@@ -118,7 +118,7 @@ type sessionDriver struct {
 	turnReading       int
 	calls             timeline.Recorder
 	telemetry         otelexport.Exporter
-	turnStarted       time.Time
+	turnSpan          turnSpan
 	hostSpent         bool
 	stageSpent        map[string]bool
 	compactMu         sync.Mutex

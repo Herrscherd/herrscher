@@ -105,7 +105,7 @@ func TestShutdownFlushesTurnsToCollector(t *testing.T) {
 		t.Fatal(err)
 	}
 	started := time.Now()
-	exporter.Export(context.Background(), Turn{Session: "alpha", Started: started, Ended: started.Add(time.Second), Outcome: OutcomeCompleted, Calls: []timeline.Call{
+	mustExport(t, exporter, Turn{Session: "alpha", Started: started, Ended: started.Add(time.Second), Outcome: OutcomeCompleted, Calls: []timeline.Call{
 		{ID: "c1", Tool: "read", StartedAt: started, EndedAt: ptrTime(started.Add(time.Millisecond))},
 	}})
 	if err := exporter.Shutdown(context.Background()); err != nil {
@@ -132,7 +132,7 @@ func TestShutdownIsBoundedWhenCollectorHangs(t *testing.T) {
 		t.Fatal(err)
 	}
 	exporter.grace = 200 * time.Millisecond
-	exporter.Export(context.Background(), Turn{Session: "alpha", Started: time.Now(), Ended: time.Now(), Outcome: OutcomeCompleted})
+	mustExport(t, exporter, Turn{Session: "alpha", Started: time.Now(), Ended: time.Now(), Outcome: OutcomeCompleted})
 	started := time.Now()
 	if err := exporter.Shutdown(context.Background()); err != nil {
 		t.Log(err)
@@ -146,5 +146,14 @@ func TestShutdownOfDisabledExporterIsNoop(t *testing.T) {
 	var exporter Exporter
 	if err := exporter.Shutdown(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestInvalidEndpointIsRefused(t *testing.T) {
+	for _, endpoint := range []string{"::bad", "http://[::1", "not a url", "ftp://x", "http://"} {
+		_, err := Setup(context.Background(), environment(map[string]string{envEndpoint: endpoint}))
+		if !errors.Is(err, ErrInvalidEndpoint) {
+			t.Errorf("endpoint %q: err = %v, want ErrInvalidEndpoint", endpoint, err)
+		}
 	}
 }

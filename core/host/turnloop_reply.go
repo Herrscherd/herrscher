@@ -14,6 +14,7 @@ import (
 )
 
 func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event, turnStart time.Time, live int, files outbox.Frame) {
+	d.exportTurn(ctx, otelexport.OutcomeCompleted, event)
 	d.turnReading = contextReading(live, event)
 	event.Coordination = d.maybeCoordinate(ctx, event.Text)
 	event.Cost = estimateTurnCost(event.Cost, priceableTokens{
@@ -40,7 +41,6 @@ func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event,
 		CtxTokens:   contextReading(live, event),
 		Tools:       d.calls.Calls(),
 	})
-	d.exportTurn(ctx, otelexport.OutcomeCompleted, turnStart, event)
 	d.deliverPendingReply(event.Text)
 	d.metrics.TurnCompleted()
 	if verdict := d.gate.Check(d.name); verdict.Reason != "" {

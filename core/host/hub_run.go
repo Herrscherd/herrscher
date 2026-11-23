@@ -21,16 +21,23 @@ import (
 	"github.com/Herrscherd/herrscher/core/otelexport"
 )
 
-func startTelemetry(ctx context.Context, log *slog.Logger) (otelexport.Exporter, func()) {
+func startTelemetry(ctx context.Context, messages *hostMessages, lang i18n.Language, log *slog.Logger) (otelexport.Exporter, func()) {
 	telemetry, err := otelexport.Setup(ctx, os.LookupEnv)
 	if err != nil {
-		log.Warn("turn telemetry disabled: the OTLP exporter did not start", "err", err)
+		log.Warn("turn telemetry disabled", "reason", telemetryDisabledText(messages, lang, err), "err", err)
 	}
 	return telemetry, func() {
 		if shutdownErr := telemetry.Shutdown(ctx); shutdownErr != nil {
 			log.Warn("turn telemetry did not flush before exit", "err", shutdownErr)
 		}
 	}
+}
+
+func telemetryDisabledText(messages *hostMessages, lang i18n.Language, err error) string {
+	if errors.Is(err, otelexport.ErrInvalidEndpoint) {
+		return messages.text(lang, "telemetry.endpoint_invalid", nil)
+	}
+	return messages.text(lang, "telemetry.exporter_failed", nil)
 }
 
 // RunHub is the always-on multi-gateway daemon: it supervises one pure-runner
@@ -108,7 +115,7 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 		return wrapHost(messages, err, "serve.compaction", nil)
 	}
 	sessions.compaction = policy
-	telemetry, stopTelemetry := startTelemetry(ctx, log)
+	telemetry, stopTelemetry := startTelemetry(ctx, messages, options.operatorLanguage(), log)
 	defer stopTelemetry()
 	sessions.telemetry = telemetry
 	sessions.store = store

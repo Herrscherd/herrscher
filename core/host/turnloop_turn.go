@@ -124,7 +124,7 @@ func (d *sessionDriver) prepareTurn(ctx context.Context, item queued) (contracts
 
 func (d *sessionDriver) runTurn(ctx context.Context, event contracts.Event, guard tokenGuard) {
 	if d.telemetry.Enabled() {
-		d.turnStarted = time.Now()
+		d.turnSpan = d.openTurnSpan()
 	}
 	select {
 	case <-d.hangup:
@@ -154,7 +154,7 @@ func (d *sessionDriver) abandon(ctx context.Context, ev contracts.Event) {
 	if ev.T != eventwire.EventInput {
 		return
 	}
-	d.exportTurn(ctx, otelexport.OutcomeAbandoned, d.turnStarted, contracts.Event{})
+	d.exportTurn(ctx, otelexport.OutcomeAbandoned, contracts.Event{})
 	if ctx.Err() == nil {
 		d.settleTurn()
 	}

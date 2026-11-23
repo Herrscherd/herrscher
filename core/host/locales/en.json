@@ -929,5 +929,15 @@
     "id": "hook.decision_unwritable",
     "description": "The approval hook could not write its decision to stdout, Decision names it and Detail carries the error",
     "other": "herrscher: could not write the {{.Decision}} decision: {{.Detail}}"
+  },
+  {
+    "id": "telemetry.endpoint_invalid",
+    "description": "Turn telemetry stays off because the configured OTLP endpoint is not an http or https URL with a host",
+    "other": "turn telemetry is off: the OTLP endpoint is not an http or https URL with a host"
+  },
+  {
+    "id": "telemetry.exporter_failed",
+    "description": "Turn telemetry stays off because the OTLP exporter did not start",
+    "other": "turn telemetry is off: the OTLP exporter did not start"
   }
 ]

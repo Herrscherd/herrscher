@@ -2,6 +2,7 @@ package otelexport
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -13,7 +14,6 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
-	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/timeline"
 )
 
@@ -31,6 +31,13 @@ func recordingExporter(t *testing.T) (Exporter, *tracetest.InMemoryExporter) {
 		}
 	})
 	return newExporter(provider), memory
+}
+
+func mustExport(t *testing.T, exporter Exporter, turn Turn) {
+	t.Helper()
+	if err := exporter.Export(context.Background(), turn); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func spanNamed(t *testing.T, spans tracetest.SpanStubs, name string) tracetest.SpanStub {
@@ -53,9 +60,18 @@ func attrValue(span tracetest.SpanStub, key attribute.Key) (attribute.Value, boo
 	return attribute.Value{}, false
 }
 
+func errorTypeOf(t *testing.T, span tracetest.SpanStub) string {
+	t.Helper()
+	got, ok := attrValue(span, semconv.ErrorTypeKey)
+	if !ok {
+		return ""
+	}
+	return got.AsString()
+}
+
 func TestExportTurnWithTwoCallsCarriesGenAIAttributes(t *testing.T) {
 	exporter, memory := recordingExporter(t)
-	exporter.Export(context.Background(), Turn{
+	mustExport(t, exporter, Turn{
 		Session: "alpha", Provider: "anthropic", Model: "claude-x", Started: at(0), Ended: at(10 * time.Second), Outcome: OutcomeCompleted,
 		InputTokens: 120, OutputTokens: 45, CacheReadTokens: 900, CacheCreationTokens: 30,
 		Calls: []timeline.Call{
@@ -79,7 +95,7 @@ func TestExportTurnWithTwoCallsCarriesGenAIAttributes(t *testing.T) {
 		}
 	}
 	for key, want := range map[attribute.Key]int64{
-		semconv.GenAIUsageInputTokensKey:              120,
+		semconv.GenAIUsageInputTokensKey:              1050,
 		semconv.GenAIUsageOutputTokensKey:             45,
 		semconv.GenAIUsageCacheReadInputTokensKey:     900,
 		semconv.GenAIUsageCacheCreationInputTokensKey: 30,
@@ -103,9 +119,18 @@ func TestExportTurnWithTwoCallsCarriesGenAIAttributes(t *testing.T) {
 	}
 }
 
+func TestInputTokensCountOnlyTheCountsReported(t *testing.T) {
+	exporter, memory := recordingExporter(t)
+	mustExport(t, exporter, Turn{Session: "alpha", Started: at(0), Ended: at(time.Second), Outcome: OutcomeCompleted, CacheReadTokens: 900, CacheCreationTokens: -3})
+	parent := spanNamed(t, memory.GetSpans(), "invoke_agent alpha")
+	if got, ok := attrValue(parent, semconv.GenAIUsageInputTokensKey); !ok || got.AsInt64() != 900 {
+		t.Errorf("input tokens = %d (present %v), want the reported cache read 900", got.AsInt64(), ok)
+	}
+}
+
 func TestExportOmitsTokenCountsThatAreNotReported(t *testing.T) {
 	exporter, memory := recordingExporter(t)
-	exporter.Export(context.Background(), Turn{Session: "alpha", Started: at(0), Ended: at(10 * time.Second), Outcome: OutcomeCompleted, InputTokens: 0, OutputTokens: -4, CacheReadTokens: -1, CacheCreationTokens: 0})
+	mustExport(t, exporter, Turn{Session: "alpha", Started: at(0), Ended: at(10 * time.Second), Outcome: OutcomeCompleted, InputTokens: 0, OutputTokens: -4, CacheReadTokens: -1, CacheCreationTokens: 0})
 	parent := spanNamed(t, memory.GetSpans(), "invoke_agent alpha")
 	for _, key := range []attribute.Key{
 		semconv.GenAIUsageInputTokensKey,
@@ -119,86 +144,121 @@ func TestExportOmitsTokenCountsThatAreNotReported(t *testing.T) {
 	}
 }
 
-func TestExportFailedCallMarksErrorWithBoundedMessage(t *testing.T) {
+func TestFailedCallMarksToolFailedWithoutItsErrorText(t *testing.T) {
+	const detail = "exit 2 with SECRET-ARGUMENT"
 	exporter, memory := recordingExporter(t)
-	exporter.Export(context.Background(), Turn{Session: "alpha", Started: at(0), Ended: at(10 * time.Second), Outcome: OutcomeCompleted, Calls: []timeline.Call{
-		{ID: "c1", Tool: "bash", State: contracts.ToolCallFailed, Error: "exit 2", StartedAt: at(0), EndedAt: ptrTime(at(0).Add(time.Second))},
+	mustExport(t, exporter, Turn{Session: "alpha", Started: at(0), Ended: at(10 * time.Second), Outcome: OutcomeCompleted, Calls: []timeline.Call{
+		{ID: "c1", Tool: "bash", State: contracts.ToolCallFailed, Error: detail, StartedAt: at(0), EndedAt: ptrTime(at(0).Add(time.Second))},
 	}})
 	child := spanNamed(t, memory.GetSpans(), "execute_tool bash")
-	if child.Status.Code != codes.Error || child.Status.Description != "exit 2" {
-		t.Errorf("status = %v %q, want error with the call error", child.Status.Code, child.Status.Description)
+	if child.Status.Code != codes.Error || child.Status.Description != "" {
+		t.Errorf("status = %v %q, want error with no description", child.Status.Code, child.Status.Description)
 	}
-	if got, _ := attrValue(child, semconv.ErrorTypeKey); got.AsString() != "_OTHER" {
-		t.Errorf("error.type = %q, want _OTHER", got.AsString())
+	if got := errorTypeOf(t, child); got != errorTypeToolFailed {
+		t.Errorf("error.type = %q, want %q", got, errorTypeToolFailed)
+	}
+	for _, kv := range child.Attributes {
+		if strings.Contains(kv.Value.String(), "SECRET-ARGUMENT") {
+			t.Errorf("attribute %s carries the tool error text", kv.Key)
+		}
 	}
 }
 
-func TestFailedCallWithoutMessageUsesFixedText(t *testing.T) {
+func TestToolNameAndIDAreBoundedByTheTimeline(t *testing.T) {
+	long := strings.Repeat("x", timeline.MaxFieldBytes*2)
 	exporter, memory := recordingExporter(t)
-	exporter.Export(context.Background(), Turn{Session: "alpha", Started: at(0), Ended: at(10 * time.Second), Outcome: OutcomeCompleted, Calls: []timeline.Call{
-		{ID: "c1", Tool: "bash", State: contracts.ToolCallFailed, StartedAt: at(0), EndedAt: ptrTime(at(0).Add(time.Second))},
+	mustExport(t, exporter, Turn{Session: "alpha", Model: long, Started: at(0), Ended: at(10 * time.Second), Outcome: OutcomeCompleted, Calls: []timeline.Call{
+		{ID: long, Tool: long, State: contracts.ToolCallSucceeded, StartedAt: at(0), EndedAt: ptrTime(at(time.Second))},
 	}})
-	child := spanNamed(t, memory.GetSpans(), "execute_tool bash")
-	if child.Status.Code != codes.Error || child.Status.Description != messageToolFailed {
-		t.Errorf("status = %v %q, want error %q", child.Status.Code, child.Status.Description, messageToolFailed)
-	}
-}
-
-func TestFailedCallMessageIsBoundedByTheTimeline(t *testing.T) {
-	var recorder timeline.Recorder
-	long := strings.Repeat("x", timeline.MaxFieldBytes*3)
-	started := contracts.Event{T: eventwire.EventStatus, ToolCall: &contracts.ToolCall{ID: "c1", Tool: "bash", State: contracts.ToolCallStarted, At: at(0)}}
-	failed := contracts.Event{T: eventwire.EventToolDone, ToolCall: &contracts.ToolCall{ID: "c1", State: contracts.ToolCallFailed, Error: long, At: at(0).Add(time.Second)}}
-	if _, _, err := recorder.Apply(started); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := recorder.Apply(failed); err != nil {
-		t.Fatal(err)
-	}
-	exporter, memory := recordingExporter(t)
-	exporter.Export(context.Background(), Turn{Session: "alpha", Started: at(0), Ended: at(10 * time.Second), Outcome: OutcomeCompleted, Calls: recorder.Calls()})
-	child := spanNamed(t, memory.GetSpans(), "execute_tool bash")
-	if len(child.Status.Description) > timeline.MaxFieldBytes {
-		t.Errorf("error description is %d bytes, want at most %d", len(child.Status.Description), timeline.MaxFieldBytes)
+	for _, span := range memory.GetSpans() {
+		for _, kv := range span.Attributes {
+			if len(kv.Value.String()) > timeline.MaxFieldBytes {
+				t.Errorf("attribute %s is %d bytes, want at most %d", kv.Key, len(kv.Value.String()), timeline.MaxFieldBytes)
+			}
+		}
+		if len(span.Name) > timeline.MaxFieldBytes {
+			t.Errorf("span name is %d bytes, want at most %d", len(span.Name), timeline.MaxFieldBytes)
+		}
 	}
 }
 
 func TestUnfinishedCallIsClosedAtTurnEndWithError(t *testing.T) {
 	exporter, memory := recordingExporter(t)
-	exporter.Export(context.Background(), Turn{Session: "alpha", Started: at(0), Ended: at(10 * time.Second), Outcome: OutcomeCompleted, Calls: []timeline.Call{
+	mustExport(t, exporter, Turn{Session: "alpha", Started: at(0), Ended: at(10 * time.Second), Outcome: OutcomeCompleted, Calls: []timeline.Call{
 		{ID: "c1", Tool: "bash", State: contracts.ToolCallStarted, StartedAt: at(0).Add(time.Second)},
 	}})
 	child := spanNamed(t, memory.GetSpans(), "execute_tool bash")
 	if !child.EndTime.Equal(at(10 * time.Second)) {
 		t.Errorf("unfinished call ends at %v, want the turn end %v", child.EndTime, at(10*time.Second))
 	}
-	if child.Status.Code != codes.Error || child.Status.Description != messageUnfinished {
-		t.Errorf("status = %v %q, want error %q", child.Status.Code, child.Status.Description, messageUnfinished)
+	if child.Status.Code != codes.Error {
+		t.Errorf("status = %v, want error", child.Status.Code)
+	}
+	if got := errorTypeOf(t, child); got != errorTypeToolUnfinished {
+		t.Errorf("error.type = %q, want %q", got, errorTypeToolUnfinished)
 	}
 }
 
-func TestAbandonedTurnIsAnErrorSpan(t *testing.T) {
+func TestFailedTurnIsAnErrorWithItsOwnType(t *testing.T) {
 	exporter, memory := recordingExporter(t)
-	exporter.Export(context.Background(), Turn{Session: "alpha", Started: at(0), Ended: at(10 * time.Second), Outcome: OutcomeAbandoned})
+	mustExport(t, exporter, Turn{Session: "alpha", Started: at(0), Ended: at(10 * time.Second), Outcome: OutcomeFailed})
 	parent := spanNamed(t, memory.GetSpans(), "invoke_agent alpha")
-	if parent.Status.Code != codes.Error || parent.Status.Description != messageAbandoned {
-		t.Errorf("status = %v %q, want error %q", parent.Status.Code, parent.Status.Description, messageAbandoned)
+	if parent.Status.Code != codes.Error {
+		t.Errorf("failed turn status = %v, want error", parent.Status.Code)
+	}
+	if got := errorTypeOf(t, parent); got != errorTypeFailed {
+		t.Errorf("error.type = %q, want %q", got, errorTypeFailed)
+	}
+}
+
+func TestInterruptedTurnIsAnErrorWithItsOwnType(t *testing.T) {
+	exporter, memory := recordingExporter(t)
+	mustExport(t, exporter, Turn{Session: "alpha", Started: at(0), Ended: at(10 * time.Second), Outcome: OutcomeInterrupted})
+	parent := spanNamed(t, memory.GetSpans(), "invoke_agent alpha")
+	if parent.Status.Code != codes.Error {
+		t.Errorf("interrupted turn status = %v, want error", parent.Status.Code)
+	}
+	if got := errorTypeOf(t, parent); got != errorTypeInterrupted {
+		t.Errorf("error.type = %q, want %q", got, errorTypeInterrupted)
+	}
+}
+
+func TestAbandonedTurnIsAnErrorWithItsOwnType(t *testing.T) {
+	exporter, memory := recordingExporter(t)
+	mustExport(t, exporter, Turn{Session: "alpha", Started: at(0), Ended: at(10 * time.Second), Outcome: OutcomeAbandoned})
+	parent := spanNamed(t, memory.GetSpans(), "invoke_agent alpha")
+	if parent.Status.Code != codes.Error {
+		t.Errorf("abandoned turn status = %v, want error", parent.Status.Code)
+	}
+	if got := errorTypeOf(t, parent); got != errorTypeAbandoned {
+		t.Errorf("error.type = %q, want %q", got, errorTypeAbandoned)
 	}
 }
 
 func TestCompletedTurnIsNotAnError(t *testing.T) {
 	exporter, memory := recordingExporter(t)
-	exporter.Export(context.Background(), Turn{Session: "alpha", Started: at(0), Ended: at(10 * time.Second), Outcome: OutcomeCompleted})
+	mustExport(t, exporter, Turn{Session: "alpha", Started: at(0), Ended: at(10 * time.Second), Outcome: OutcomeCompleted})
 	parent := spanNamed(t, memory.GetSpans(), "invoke_agent alpha")
 	if parent.Status.Code == codes.Error {
-		t.Errorf("completed turn marked as error: %q", parent.Status.Description)
+		t.Errorf("completed turn marked as error")
+	}
+}
+
+func TestZeroOutcomeIsRefusedWithoutASpan(t *testing.T) {
+	exporter, memory := recordingExporter(t)
+	err := exporter.Export(context.Background(), Turn{Session: "alpha", Started: at(0), Ended: at(10 * time.Second)})
+	if !errors.Is(err, ErrUnknownOutcome) {
+		t.Fatalf("zero outcome error = %v, want ErrUnknownOutcome", err)
+	}
+	if n := len(memory.GetSpans()); n != 0 {
+		t.Errorf("zero outcome exported %d spans", n)
 	}
 }
 
 func TestExportNeverCarriesToolDetail(t *testing.T) {
 	const secret = "SECRET-PROMPT-TEXT"
 	exporter, memory := recordingExporter(t)
-	exporter.Export(context.Background(), Turn{Session: "alpha", Started: at(0), Ended: at(10 * time.Second), Outcome: OutcomeCompleted, Calls: []timeline.Call{
+	mustExport(t, exporter, Turn{Session: "alpha", Started: at(0), Ended: at(10 * time.Second), Outcome: OutcomeCompleted, Calls: []timeline.Call{
 		{ID: "c1", Tool: "read", Detail: secret, State: contracts.ToolCallSucceeded, StartedAt: at(0), EndedAt: ptrTime(at(0).Add(time.Second))},
 	}})
 	for _, span := range memory.GetSpans() {
@@ -215,7 +275,9 @@ func TestExportNeverCarriesToolDetail(t *testing.T) {
 
 func TestDisabledExporterExportsNothing(t *testing.T) {
 	var exporter Exporter
-	exporter.Export(context.Background(), Turn{Session: "alpha", Started: at(0), Ended: at(10 * time.Second), Outcome: OutcomeAbandoned})
+	if err := exporter.Export(context.Background(), Turn{Session: "alpha", Started: at(0), Ended: at(10 * time.Second), Outcome: OutcomeAbandoned}); err != nil {
+		t.Fatal(err)
+	}
 	if exporter.Enabled() {
 		t.Fatal("zero Exporter reports enabled")
 	}

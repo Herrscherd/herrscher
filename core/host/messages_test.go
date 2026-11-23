@@ -250,6 +250,8 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"approval.smart_no_model":           {"Request"},
 		"approval.smart_rate_failed":        {"Request", "Detail"},
 		"hook.decision_unwritable":          {"Decision", "Detail"},
+		"telemetry.endpoint_invalid":        nil,
+		"telemetry.exporter_failed":         nil,
 	}
 	i18ntest.CheckDeclared(t, declared, hostLocaleSource(t))
 }

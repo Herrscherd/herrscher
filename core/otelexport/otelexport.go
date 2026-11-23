@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -22,8 +23,6 @@ const (
 	envTracesEndpoint  = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
 	envProtocol        = "OTEL_EXPORTER_OTLP_PROTOCOL"
 	envTracesProtocol  = "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL"
-	protocolGRPC       = "grpc"
-	protocolHTTP       = "http/protobuf"
 	defaultServiceName = "herrscher"
 	tracerName         = "github.com/Herrscherd/herrscher/core/otelexport"
 	shutdownGrace      = 5 * time.Second
@@ -31,6 +30,9 @@ const (
 
 // ErrUnsupportedProtocol is returned by Setup when the configured OTLP traces protocol is neither grpc nor http/protobuf.
 var ErrUnsupportedProtocol = errors.New("otelexport: unsupported OTLP traces protocol")
+
+// ErrInvalidEndpoint is returned by Setup when the configured OTLP endpoint is not an http or https URL with a host.
+var ErrInvalidEndpoint = errors.New("otelexport: invalid OTLP endpoint")
 
 // Lookup reads one environment variable, the way os.LookupEnv does.
 type Lookup func(key string) (string, bool)
@@ -42,16 +44,31 @@ type Exporter struct {
 	grace    time.Duration
 }
 
-// Setup returns an enabled Exporter when an OTLP endpoint is configured and OTEL_SDK_DISABLED is not "true", and the disabled zero Exporter otherwise. The OTLP client reads the rest of its configuration (headers, timeouts, batch size) from the standard OTEL_* variables, and it connects lazily, so an unreachable collector does not delay Setup.
+type protocol int
+
+const (
+	protocolHTTP protocol = iota + 1
+	protocolGRPC
+)
+
+// Setup returns an enabled Exporter when an OTLP endpoint is configured and OTEL_SDK_DISABLED is not "true", and the disabled zero Exporter otherwise. A configured endpoint or protocol that is invalid is an error, matched with ErrInvalidEndpoint or ErrUnsupportedProtocol. The OTLP client reads the rest of its configuration (headers, timeouts, batch size) from the standard OTEL_* variables, and it connects lazily, so an unreachable collector does not delay Setup.
 func Setup(ctx context.Context, lookup Lookup) (Exporter, error) {
 	if !enabled(lookup) {
 		return Exporter{}, nil
+	}
+	endpoint := firstSet(lookup, envTracesEndpoint, envEndpoint)
+	if err := validateEndpoint(endpoint); err != nil {
+		return Exporter{}, err
+	}
+	proto, err := parseProtocol(firstSet(lookup, envTracesProtocol, envProtocol))
+	if err != nil {
+		return Exporter{}, err
 	}
 	res, err := resourceFrom(ctx)
 	if err != nil {
 		return Exporter{}, fmt.Errorf("otelexport: resource: %w", err)
 	}
-	spans, err := newSpanExporter(ctx, protocolFrom(lookup))
+	spans, err := newSpanExporter(ctx, proto)
 	if err != nil {
 		return Exporter{}, err
 	}
@@ -88,11 +105,22 @@ func enabled(lookup Lookup) bool {
 	return firstSet(lookup, envTracesEndpoint, envEndpoint) != ""
 }
 
-func protocolFrom(lookup Lookup) string {
-	if protocol := firstSet(lookup, envTracesProtocol, envProtocol); protocol != "" {
-		return protocol
+func validateEndpoint(raw string) error {
+	endpoint, err := url.Parse(raw)
+	if err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Host == "" {
+		return ErrInvalidEndpoint
 	}
-	return protocolHTTP
+	return nil
+}
+
+func parseProtocol(value string) (protocol, error) {
+	switch value {
+	case "", "http/protobuf":
+		return protocolHTTP, nil
+	case "grpc":
+		return protocolGRPC, nil
+	}
+	return 0, fmt.Errorf("%w: %q", ErrUnsupportedProtocol, value)
 }
 
 func firstSet(lookup Lookup, keys ...string) string {
@@ -108,8 +136,8 @@ func resourceFrom(ctx context.Context) (*resource.Resource, error) {
 	return resource.New(ctx, resource.WithAttributes(semconv.ServiceName(defaultServiceName)), resource.WithFromEnv(), resource.WithTelemetrySDK())
 }
 
-func newSpanExporter(ctx context.Context, protocol string) (sdktrace.SpanExporter, error) {
-	switch protocol {
+func newSpanExporter(ctx context.Context, proto protocol) (sdktrace.SpanExporter, error) {
+	switch proto {
 	case protocolGRPC:
 		exporter, err := otlptracegrpc.New(ctx)
 		if err != nil {
@@ -123,5 +151,5 @@ func newSpanExporter(ctx context.Context, protocol string) (sdktrace.SpanExporte
 		}
 		return exporter, nil
 	}
-	return nil, fmt.Errorf("%w: %q", ErrUnsupportedProtocol, protocol)
+	return nil, ErrUnsupportedProtocol
 }

@@ -929,5 +929,15 @@
     "id": "hook.decision_unwritable",
     "description": "The approval hook could not write its decision to stdout, Decision names it and Detail carries the error",
     "other": "herrscher : impossible d'écrire la décision {{.Decision}} : {{.Detail}}"
+  },
+  {
+    "id": "telemetry.endpoint_invalid",
+    "description": "La télémétrie des tours reste désactivée parce que le point de terminaison OTLP configuré n'est pas une URL http ou https avec un hôte",
+    "other": "la télémétrie des tours est désactivée : le point de terminaison OTLP n'est pas une URL http ou https avec un hôte"
+  },
+  {
+    "id": "telemetry.exporter_failed",
+    "description": "La télémétrie des tours reste désactivée parce que l'exportateur OTLP n'a pas démarré",
+    "other": "la télémétrie des tours est désactivée : l'exportateur OTLP n'a pas démarré"
   }
 ]

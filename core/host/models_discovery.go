@@ -16,6 +16,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/envx"
+	"github.com/Herrscherd/herrscher/core/internal/filelock"
 )
 
 const (
@@ -366,7 +367,7 @@ func cacheLockPath(path string) string {
 func acquireCacheLock(messages *hostMessages, lockFile *os.File) error {
 	deadline := time.Now().Add(cacheLockTimeout)
 	for {
-		locked, err := tryLock(lockFile)
+		locked, err := filelock.TryLock(lockFile)
 		if err != nil {
 			return wrapHost(messages, err, "models.cache_lock", nil)
 		}

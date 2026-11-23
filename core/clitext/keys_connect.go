@@ -20,6 +20,13 @@ const (
 	ConnectRevokeLine     = "cli.connect.status.revoke"
 	ConnectLogoutDone     = "cli.connect.logout_done"
 	ConnectLogoutNothing  = "cli.connect.logout_nothing"
+	ConnectLogoutRevoke   = "cli.connect.logout_revoke"
+	ConnectStoreCorrupt   = "cli.connect.store_corrupt"
+	ConnectInsecure       = "cli.connect.status.insecure"
+	ConnectAccessExpired  = "cli.connect.status.access_expired"
+	ConnectAccessRenews   = "cli.connect.status.access_renews"
+	ConnectRenewSoon      = "cli.connect.status.renew_soon"
+	ConnectAccessAppBad   = "cli.connect.status.access_app_misconfigured"
 	ParamUserCode         = "UserCode"
 	ParamLogin            = "Login"
 	ParamAccess           = "Access"
@@ -45,5 +52,12 @@ func connectKeys() map[Key][]string {
 		ConnectRevokeLine:     {ParamURL},
 		ConnectLogoutDone:     {ParamHost},
 		ConnectLogoutNothing:  {ParamHost},
+		ConnectLogoutRevoke:   {ParamURL},
+		ConnectStoreCorrupt:   {ParamPath},
+		ConnectInsecure:       {ParamPath},
+		ConnectAccessExpired:  nil,
+		ConnectAccessRenews:   {ParamTime},
+		ConnectRenewSoon:      {ParamTime},
+		ConnectAccessAppBad:   nil,
 	}
 }

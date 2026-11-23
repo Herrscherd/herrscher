@@ -5263,5 +5263,40 @@
     "id": "cli.connect.logout_nothing",
     "description": "Notice: logout found no saved token for the host",
     "other": "no saved token for {{.Host}}."
+  },
+  {
+    "id": "cli.connect.logout_revoke",
+    "description": "Reminder printed after logout: the saved token is not revoked on the forge",
+    "other": "The saved token is not revoked by logout. To revoke the herrscher app on the forge, open {{.URL}}"
+  },
+  {
+    "id": "cli.connect.store_corrupt",
+    "description": "Error: the forge connections file cannot be read, with its path",
+    "other": "The forge connections file {{.Path}} cannot be read. Run herrscher connect logout to remove it, then connect again."
+  },
+  {
+    "id": "cli.connect.status.insecure",
+    "description": "Warning: the forge connections file can be read by other users, with its path",
+    "other": "warning: {{.Path}} can be read by other users of this machine. Connect again to rewrite it with owner-only access."
+  },
+  {
+    "id": "cli.connect.status.access_expired",
+    "description": "Status value: the saved connection ran out and cannot be renewed",
+    "other": "expired, run herrscher connect github again"
+  },
+  {
+    "id": "cli.connect.status.access_renews",
+    "description": "Status value: the saved connection is renewed until this time",
+    "other": "renewable until {{.Time}}"
+  },
+  {
+    "id": "cli.connect.status.renew_soon",
+    "description": "Warning: the renewal token of the saved connection runs out soon",
+    "other": "warning: the renewal token expires {{.Time}}. Run herrscher connect github again before then."
+  },
+  {
+    "id": "cli.connect.status.access_app_misconfigured",
+    "description": "Status value: the forge does not accept the herrscher app credentials",
+    "other": "the forge does not accept the herrscher app, check the app client settings"
   }
 ]

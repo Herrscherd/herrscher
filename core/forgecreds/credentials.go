@@ -28,15 +28,35 @@ const (
 // connect for the host, then GH_TOKEN and GITHUB_TOKEN for github.com or for
 // the host named by GH_HOST, then the login of gh auth token. A token that is
 // not saved is kept in memory until Invalidate drops it.
+//
+// The saved token of a host is renewed under the lock of the state directory,
+// so processes sharing it never spend the same refresh token twice. A renewal
+// the file could not record is kept in memory for this process and recorded
+// again on the next call.
 type Credentials struct {
 	store  *Store
 	flow   Flow
 	base   func(contracts.ForgeHost) string
 	env    func(string) (string, bool)
-	gitHub func(context.Context, string) (string, error)
+	gitHub func(context.Context, contracts.ForgeHost) (string, error)
 	now    func() time.Time
 	mu     sync.Mutex
+	guards map[string]*sync.Mutex
 	cache  map[string]contracts.ForgeToken
+	served map[string]string
+	held   map[string]heldRecord
+}
+
+type heldRecord struct {
+	record Record
+	from   string
+}
+
+type settlement struct {
+	record Record
+	ok     bool
+	write  bool
+	from   string
 }
 
 // New builds the credentials kept in the host state directory of stateFile.
@@ -53,7 +73,10 @@ func New(stateFile string) *Credentials {
 		env:    os.LookupEnv,
 		gitHub: gitHubCLIToken,
 		now:    time.Now,
+		guards: make(map[string]*sync.Mutex),
 		cache:  make(map[string]contracts.ForgeToken),
+		served: make(map[string]string),
+		held:   make(map[string]heldRecord),
 	}
 }
 
@@ -69,8 +92,6 @@ func defaultBase(host contracts.ForgeHost) string {
 // Token returns the credential of host, from the first source that holds a
 // valid one. It returns [contracts.ErrForgeNotConnected] when none does.
 func (c *Credentials) Token(ctx context.Context, host contracts.ForgeHost) (contracts.ForgeToken, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	saved, found, err := c.savedToken(ctx, host)
 	if err != nil {
 		return contracts.ForgeToken{}, err
@@ -78,26 +99,66 @@ func (c *Credentials) Token(ctx context.Context, host contracts.ForgeHost) (cont
 	if found {
 		return saved, nil
 	}
-	if token, remembered := c.cache[host.String()]; remembered {
-		return token, nil
+	key := host.String()
+	c.mu.Lock()
+	remembered, ok := c.cache[key]
+	c.mu.Unlock()
+	if ok {
+		return remembered, nil
 	}
 	token, err := c.fallbackToken(ctx, host)
 	if err != nil {
 		return contracts.ForgeToken{}, fmt.Errorf("%s: %w", host, err)
 	}
-	c.cache[host.String()] = token
+	c.mu.Lock()
+	c.cache[key] = token
+	c.mu.Unlock()
 	return token, nil
 }
 
-// Invalidate forgets the token remembered for host, and marks the saved token
-// of host as refused so that status reports it. The saved token is kept, not
-// erased: connect again to replace it.
-func (c *Credentials) Invalidate(_ context.Context, host contracts.ForgeHost) {
+// Invalidate forgets the token remembered for host. When the forge refused the
+// saved access token this process last served for host, it marks that saved
+// token as refused so that status reports it. The saved token is kept, not
+// erased: connect again to replace it. The contract passes no token, so a
+// refusal of a token that was replaced by a renewal after it was served is
+// not recognized as such; it is marked only while it is still the last one
+// served.
+func (c *Credentials) Invalidate(ctx context.Context, host contracts.ForgeHost) {
+	key := host.String()
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	delete(c.cache, host.String())
-	if err := c.store.Reject(host); err != nil {
-		slog.Warn("mark forge token refused", "host", host.String(), "err", err)
+	delete(c.cache, key)
+	served, wasServed := c.served[key]
+	delete(c.served, key)
+	c.mu.Unlock()
+	if !wasServed {
+		return
+	}
+	guard := c.guard(host)
+	guard.Lock()
+	defer guard.Unlock()
+	marked := false
+	err := c.store.Update(ctx, func(transaction *Tx) error {
+		current, found := transaction.Get(host)
+		if !found {
+			return nil
+		}
+		if pending, ok := c.heldFor(host); ok && current.RefreshToken == pending.from {
+			current = pending.record
+		}
+		if current.AccessToken != served {
+			return nil
+		}
+		current.Rejected = true
+		transaction.Put(host, current)
+		marked = true
+		return nil
+	})
+	if err != nil {
+		slog.Warn("mark forge token refused", "host", key, "err", err)
+		return
+	}
+	if marked {
+		c.dropHeld(host)
 	}
 }
 
@@ -116,45 +177,127 @@ func (c *Credentials) Connect(ctx context.Context, host contracts.ForgeHost, sho
 	if err != nil {
 		return err
 	}
-	return c.store.Put(host, record)
+	guard := c.guard(host)
+	guard.Lock()
+	defer guard.Unlock()
+	if err := c.store.Put(ctx, host, record); err != nil {
+		return err
+	}
+	c.dropHeld(host)
+	return nil
 }
 
 func (c *Credentials) savedToken(ctx context.Context, host contracts.ForgeHost) (contracts.ForgeToken, bool, error) {
-	record, found, err := c.store.Get(host)
-	if err != nil || !found || record.Rejected {
+	guard := c.guard(host)
+	guard.Lock()
+	defer guard.Unlock()
+	record, usable, err := c.savedRecord(ctx, host)
+	if err != nil || !usable {
 		return contracts.ForgeToken{}, false, err
-	}
-	now := c.now()
-	if needsRefresh(record, now) {
-		refreshed, refreshErr := c.flow.Refresh(ctx, c.base(host), record)
-		switch {
-		case refreshErr == nil:
-			record = refreshed
-			if putErr := c.store.Put(host, record); putErr != nil {
-				return contracts.ForgeToken{}, false, putErr
-			}
-		case errors.Is(refreshErr, ErrRefreshRejected):
-			if markErr := c.store.Reject(host); markErr != nil {
-				return contracts.ForgeToken{}, false, markErr
-			}
-			return contracts.ForgeToken{}, false, nil
-		case stillValid(record, now):
-		default:
-			return contracts.ForgeToken{}, false, fmt.Errorf("%s: refresh the saved token: %w", host, refreshErr)
-		}
 	}
 	token, err := contracts.NewForgeToken(record.AccessToken, record.Login, contracts.TokenSourceSaved)
 	if err != nil {
 		return contracts.ForgeToken{}, false, fmt.Errorf("%s: saved token: %w", host, err)
 	}
+	c.mu.Lock()
+	c.served[host.String()] = record.AccessToken
+	c.mu.Unlock()
 	return token, true, nil
+}
+
+func (c *Credentials) savedRecord(ctx context.Context, host contracts.ForgeHost) (Record, bool, error) {
+	record, found, err := c.store.Get(host)
+	if err != nil {
+		return Record{}, false, err
+	}
+	now := c.now()
+	_, pending := c.heldFor(host)
+	if !found {
+		c.dropHeld(host)
+		return Record{}, false, nil
+	}
+	if !pending && !needsRefresh(record, now) {
+		return record, !record.Rejected && !record.Expired(now), nil
+	}
+	return c.settle(ctx, host)
+}
+
+func (c *Credentials) settle(ctx context.Context, host contracts.ForgeHost) (Record, bool, error) {
+	var outcome settlement
+	ran := false
+	err := c.store.Update(ctx, func(transaction *Tx) error {
+		ran = true
+		var settleErr error
+		outcome, settleErr = c.settleLocked(ctx, host, transaction)
+		return settleErr
+	})
+	if err != nil {
+		return c.settleFailed(host, outcome, ran, err)
+	}
+	c.dropHeld(host)
+	return outcome.record, outcome.ok, nil
+}
+
+func (c *Credentials) settleLocked(ctx context.Context, host contracts.ForgeHost, transaction *Tx) (settlement, error) {
+	now := c.now()
+	current, found := transaction.Get(host)
+	if !found || current.Rejected {
+		c.dropHeld(host)
+		return settlement{}, nil
+	}
+	pending, pendingFound := c.heldFor(host)
+	if pendingFound && current.RefreshToken != pending.from {
+		c.dropHeld(host)
+		pendingFound = false
+	}
+	if pendingFound {
+		transaction.Put(host, pending.record)
+		return settlement{record: pending.record, ok: true, write: true, from: pending.from}, nil
+	}
+	if !needsRefresh(current, now) {
+		return settlement{record: current, ok: !current.Expired(now)}, nil
+	}
+	if current.Expired(now) {
+		return settlement{}, nil
+	}
+	refreshed, err := c.flow.Refresh(ctx, c.base(host), current)
+	switch {
+	case errors.Is(err, ErrRefreshRejected):
+		current.Rejected = true
+		transaction.Put(host, current)
+		return settlement{write: true}, nil
+	case err != nil:
+		if !stillValid(current, now) {
+			return settlement{}, fmt.Errorf("%s: refresh the saved token: %w", host, err)
+		}
+		slog.Warn("refresh the saved forge token", "host", host.String(), "err", err)
+		return settlement{record: current, ok: true}, nil
+	}
+	transaction.Put(host, refreshed)
+	return settlement{record: refreshed, ok: true, write: true, from: current.RefreshToken}, nil
+}
+
+func (c *Credentials) settleFailed(host contracts.ForgeHost, outcome settlement, ran bool, err error) (Record, bool, error) {
+	if !ran {
+		if pending, ok := c.heldFor(host); ok && stillValid(pending.record, c.now()) {
+			slog.Warn("forge connections not readable, using the renewed token kept in memory", "host", host.String(), "err", err)
+			return pending.record, true, nil
+		}
+		return Record{}, false, err
+	}
+	if outcome.ok && outcome.write {
+		c.setHeld(host, heldRecord{record: outcome.record, from: outcome.from})
+		slog.Warn("forge connections not saved, the renewed token is kept in memory", "host", host.String(), "err", err)
+		return outcome.record, true, nil
+	}
+	return Record{}, false, err
 }
 
 func (c *Credentials) fallbackToken(ctx context.Context, host contracts.ForgeHost) (contracts.ForgeToken, error) {
 	if secret, ok := c.environmentSecret(host); ok {
 		return contracts.NewForgeToken(secret, "", contracts.TokenSourceEnv)
 	}
-	secret, err := c.gitHub(ctx, host.String())
+	secret, err := c.gitHub(ctx, host)
 	if err != nil || secret == "" {
 		return contracts.ForgeToken{}, contracts.ErrForgeNotConnected
 	}
@@ -185,6 +328,36 @@ func (c *Credentials) environmentApplies(host contracts.ForgeHost) bool {
 	}
 	parsed, err := contracts.ParseForgeHost(named)
 	return err == nil && parsed == host
+}
+
+func (c *Credentials) guard(host contracts.ForgeHost) *sync.Mutex {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	guard, ok := c.guards[host.String()]
+	if !ok {
+		guard = &sync.Mutex{}
+		c.guards[host.String()] = guard
+	}
+	return guard
+}
+
+func (c *Credentials) heldFor(host contracts.ForgeHost) (heldRecord, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	held, ok := c.held[host.String()]
+	return held, ok
+}
+
+func (c *Credentials) setHeld(host contracts.ForgeHost, held heldRecord) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.held[host.String()] = held
+}
+
+func (c *Credentials) dropHeld(host contracts.ForgeHost) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.held, host.String())
 }
 
 func needsRefresh(record Record, now time.Time) bool {

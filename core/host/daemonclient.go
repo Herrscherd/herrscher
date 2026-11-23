@@ -14,6 +14,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
+	"github.com/Herrscherd/herrscher/core/internal/filelock"
 	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/scope"
@@ -230,7 +231,7 @@ func ServingPID(statePath string) (int, bool) {
 		return 0, false
 	}
 	defer closeRead(lockFile)
-	locked, err := tryLock(lockFile)
+	locked, err := filelock.TryLock(lockFile)
 	if err != nil || locked {
 		return 0, false
 	}

@@ -29,6 +29,7 @@ const (
 	gitHubAppInstallURL    = "https://github.com/apps/herrscher-for-github/installations/new"
 	gitHubAppRevokeURLBase = "https://github.com/settings/connections/applications/"
 	connectExpiryLayout    = time.RFC3339
+	connectLookupTimeout   = 10 * time.Second
 )
 
 var errConnectUsage = errors.New("connect usage")
@@ -60,7 +61,7 @@ func runConnect(ctx context.Context, messages *clitext.Messages, args []string) 
 		if err != nil {
 			return err
 		}
-		return connectLogout(messages, lang, creds, opts.host, os.Stdout)
+		return connectLogout(ctx, messages, lang, creds, opts.host, os.Stdout)
 	}
 	return connectUsage(messages, lang)
 }
@@ -138,7 +139,19 @@ func connectFailure(messages *clitext.Messages, lang i18n.Language, forgeHost co
 
 func connectStatus(ctx context.Context, messages *clitext.Messages, lang i18n.Language, creds *forgecreds.Credentials, output io.Writer) error {
 	translator := messages.For(lang)
+	insecure, err := creds.Store().Insecure()
+	if err != nil {
+		return renderError(messages, lang, err, clitext.ConnectFailed, clitext.Params{clitext.ParamHost: connectDefaultHost, clitext.ParamErr: termpaint.Escape(err.Error()).String()})
+	}
+	if insecure {
+		if writeErr := writeText(output, translator, clitext.ConnectInsecure, clitext.Params{clitext.ParamPath: creds.Store().Path()}); writeErr != nil {
+			return writeErr
+		}
+	}
 	hosts, err := statusHosts(creds)
+	if errors.Is(err, forgecreds.ErrStoreCorrupt) {
+		return renderError(messages, lang, err, clitext.ConnectStoreCorrupt, clitext.Params{clitext.ParamPath: creds.Store().Path()})
+	}
 	if err != nil {
 		return renderError(messages, lang, err, clitext.ConnectFailed, clitext.Params{clitext.ParamHost: connectDefaultHost, clitext.ParamErr: termpaint.Escape(err.Error()).String()})
 	}
@@ -148,6 +161,9 @@ func connectStatus(ctx context.Context, messages *clitext.Messages, lang i18n.La
 			return err
 		}
 		if err := emitf(output, "%s\n", line); err != nil {
+			return err
+		}
+		if err := renewalWarning(messages, lang, creds, forgeHost, output); err != nil {
 			return err
 		}
 	}
@@ -181,17 +197,30 @@ func statusHosts(creds *forgecreds.Credentials) ([]contracts.ForgeHost, error) {
 	return hosts, nil
 }
 
+func renewalWarning(messages *clitext.Messages, lang i18n.Language, creds *forgecreds.Credentials, forgeHost contracts.ForgeHost, output io.Writer) error {
+	record, found, err := creds.Store().Get(forgeHost)
+	now := time.Now()
+	if err != nil || !found || record.Expired(now) || !record.RenewSoon(now) {
+		return err
+	}
+	return writeText(output, messages.For(lang), clitext.ConnectRenewSoon, clitext.Params{clitext.ParamTime: record.RefreshExpiresAt.UTC().Format(connectExpiryLayout)})
+}
+
 func statusLine(ctx context.Context, messages *clitext.Messages, lang i18n.Language, creds *forgecreds.Credentials, forgeHost contracts.ForgeHost) (string, error) {
 	translator := messages.For(lang)
-	access, err := accessText(messages, lang, creds, forgeHost)
+	access, err := accessText(messages, lang, creds, forgeHost, time.Now())
 	if err != nil {
 		return "", err
 	}
 	source := translator.Text(clitext.ConnectSourceNone, nil)
 	login := translator.Text(clitext.ConnectLoginUnknown, nil)
-	if token, tokenErr := creds.Token(ctx, forgeHost); tokenErr == nil {
+	token, tokenErr := creds.Token(ctx, forgeHost)
+	switch {
+	case tokenErr == nil:
 		source = token.Source().String()
 		login = connectionLogin(ctx, creds, forgeHost, translator)
+	case errors.Is(tokenErr, forgecreds.ErrAppMisconfigured):
+		access = translator.Text(clitext.ConnectAccessAppBad, nil)
 	}
 	if err := translator.Err(); err != nil {
 		return "", err
@@ -206,45 +235,66 @@ func statusLine(ctx context.Context, messages *clitext.Messages, lang i18n.Langu
 
 func connectionLogin(ctx context.Context, creds *forgecreds.Credentials, forgeHost contracts.ForgeHost, translator *clitext.Translator) string {
 	unknown := translator.Text(clitext.ConnectLoginUnknown, nil)
-	forges := contracts.Default.Forges()
-	if len(forges) == 0 || forges[0].Forge == nil {
+	newForge, found := gitHubForge()
+	if !found {
 		return unknown
 	}
-	forge, err := forges[0].Forge(ctx, contracts.PluginConfig{}, forgeHost, creds)
+	lookup, cancel := context.WithTimeout(ctx, connectLookupTimeout)
+	defer cancel()
+	forge, err := newForge(lookup, contracts.PluginConfig{}, forgeHost, creds)
 	if err != nil {
 		return unknown
 	}
-	connection, err := forge.Connection(ctx)
+	connection, err := forge.Connection(lookup)
 	if err != nil || connection.Login == "" {
 		return unknown
 	}
 	return connection.Login
 }
 
-func accessText(messages *clitext.Messages, lang i18n.Language, creds *forgecreds.Credentials, forgeHost contracts.ForgeHost) (string, error) {
+func gitHubForge() (contracts.ForgeFactory, bool) {
+	forges := contracts.Default.Forges()
+	for index := range forges {
+		plugin := &forges[index]
+		if plugin.Manifest.Kind == connectProviderGitHub && plugin.Forge != nil {
+			return plugin.Forge, true
+		}
+	}
+	return nil, false
+}
+
+func accessText(messages *clitext.Messages, lang i18n.Language, creds *forgecreds.Credentials, forgeHost contracts.ForgeHost, now time.Time) (string, error) {
 	translator := messages.For(lang)
 	record, found, err := creds.Store().Get(forgeHost)
 	if err != nil {
 		return "", renderError(messages, lang, err, clitext.ConnectFailed, clitext.Params{clitext.ParamHost: forgeHost.String(), clitext.ParamErr: termpaint.Escape(err.Error()).String()})
 	}
 	switch {
-	case found && record.Rejected:
+	case !found:
+	case record.Rejected:
 		return translator.Text(clitext.ConnectAccessRejected, nil), nil
-	case found && !record.AccessExpiresAt.IsZero():
+	case record.Expired(now):
+		return translator.Text(clitext.ConnectAccessExpired, nil), nil
+	case record.RefreshToken != "" && !record.RefreshExpiresAt.IsZero():
+		return translator.Text(clitext.ConnectAccessRenews, clitext.Params{clitext.ParamTime: record.RefreshExpiresAt.UTC().Format(connectExpiryLayout)}), nil
+	case !record.AccessExpiresAt.IsZero():
 		return translator.Text(clitext.ConnectAccessExpires, clitext.Params{clitext.ParamTime: record.AccessExpiresAt.UTC().Format(connectExpiryLayout)}), nil
 	}
 	return translator.Text(clitext.ConnectAccessNever, nil), nil
 }
 
-func connectLogout(messages *clitext.Messages, lang i18n.Language, creds *forgecreds.Credentials, forgeHost contracts.ForgeHost, output io.Writer) error {
-	removed, err := creds.Store().Delete(forgeHost)
+func connectLogout(ctx context.Context, messages *clitext.Messages, lang i18n.Language, creds *forgecreds.Credentials, forgeHost contracts.ForgeHost, output io.Writer) error {
+	removed, err := creds.Store().Delete(ctx, forgeHost)
 	if err != nil {
 		return renderError(messages, lang, err, clitext.ConnectFailed, clitext.Params{clitext.ParamHost: forgeHost.String(), clitext.ParamErr: termpaint.Escape(err.Error()).String()})
 	}
 	params := clitext.Params{clitext.ParamHost: forgeHost.String()}
 	translator := messages.For(lang)
-	if removed {
-		return writeText(output, translator, clitext.ConnectLogoutDone, params)
+	if !removed {
+		return writeText(output, translator, clitext.ConnectLogoutNothing, params)
 	}
-	return writeText(output, translator, clitext.ConnectLogoutNothing, params)
+	if err := writeText(output, translator, clitext.ConnectLogoutDone, params); err != nil {
+		return err
+	}
+	return writeText(output, translator, clitext.ConnectLogoutRevoke, clitext.Params{clitext.ParamURL: gitHubAppRevokeURLBase + forgecreds.ClientID})
 }

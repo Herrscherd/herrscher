@@ -206,7 +206,7 @@ These variables are read by the GitHub forge when no token was saved by
 |----------|---------|---------|---------|
 | `GH_TOKEN` | unset | A GitHub token used for `github.com`, or for the host named by `GH_HOST`. Ignored for any other host. Blank values are ignored. | Forge credentials |
 | `GITHUB_TOKEN` | unset | Used when `GH_TOKEN` is unset, with the same host rule. | Forge credentials |
-| `GH_HOST` | `github.com` | The GitHub host that `GH_TOKEN` and `GITHUB_TOKEN` apply to, for example `ghe.example.com`. Also listed by `herrscher connect status`. | Forge credentials |
+| `GH_HOST` | unset | A GitHub host, besides `github.com`, that `GH_TOKEN` and `GITHUB_TOKEN` apply to, for example `ghe.example.com`. Unset, they apply to `github.com` only. Also listed by `herrscher connect status`. | Forge credentials |
 
 ## Host: logging and env file
 

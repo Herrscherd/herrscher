@@ -1,11 +1,15 @@
 package forgecreds
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -22,11 +26,11 @@ type fakeCLI struct {
 	hosts []string
 }
 
-func (f *fakeCLI) run(_ context.Context, host string) (string, error) {
+func (f *fakeCLI) run(_ context.Context, host contracts.ForgeHost) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
-	f.hosts = append(f.hosts, host)
+	f.hosts = append(f.hosts, host.String())
 	return f.token, f.err
 }
 
@@ -45,25 +49,23 @@ type testSetup struct {
 
 func newTestCredentials(t *testing.T, base string) testSetup {
 	t.Helper()
+	return newCredentialsIn(t, t.TempDir(), base)
+}
+
+func newCredentialsIn(t *testing.T, dir, base string) testSetup {
+	t.Helper()
 	setup := testSetup{env: make(map[string]string), cli: &fakeCLI{}, base: base}
-	client := &http.Client{}
-	setup.creds = &Credentials{
-		store: NewStore(t.TempDir()),
-		flow: Flow{
-			http:     client,
-			clientID: ClientID,
-			wait:     func(context.Context, time.Duration) error { return nil },
-			now:      fixedNow,
-		},
-		base: func(contracts.ForgeHost) string { return base },
-		env: func(name string) (string, bool) {
-			value, ok := setup.env[name]
-			return value, ok
-		},
-		gitHub: setup.cli.run,
-		now:    fixedNow,
-		cache:  make(map[string]contracts.ForgeToken),
+	creds := New(filepath.Join(dir, storeFileName))
+	creds.flow.wait = func(context.Context, time.Duration) error { return nil }
+	creds.flow.now = fixedNow
+	creds.base = func(contracts.ForgeHost) string { return base }
+	creds.env = func(name string) (string, bool) {
+		value, ok := setup.env[name]
+		return value, ok
 	}
+	creds.gitHub = setup.cli.run
+	creds.now = fixedNow
+	setup.creds = creds
 	return setup
 }
 
@@ -201,10 +203,13 @@ func TestRememberedTokenIsReusedUntilInvalidated(t *testing.T) {
 	}
 }
 
-func TestInvalidateMarksTheSavedTokenAndKeepsIt(t *testing.T) {
+func TestInvalidateMarksTheServedSavedTokenAndKeepsIt(t *testing.T) {
 	setup := newTestCredentials(t, "")
 	mustPut(t, setup.creds, Record{AccessToken: "ghu_saved"})
 	host := mustHost(t, "github.com")
+	if _, err := setup.creds.Token(t.Context(), host); err != nil {
+		t.Fatalf("Token: %v", err)
+	}
 
 	setup.creds.Invalidate(t.Context(), host)
 
@@ -220,20 +225,51 @@ func TestInvalidateMarksTheSavedTokenAndKeepsIt(t *testing.T) {
 	}
 }
 
+func TestInvalidateLeavesAnotherHostsSavedRecordAlone(t *testing.T) {
+	setup := newTestCredentials(t, "")
+	mustPut(t, setup.creds, Record{AccessToken: "ghu_saved"})
+	setup.cli.token = "gho_cli"
+	host := mustHost(t, "ghe.example.com")
+	if _, err := setup.creds.Token(t.Context(), host); err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+
+	setup.creds.Invalidate(t.Context(), host)
+
+	if _, found, err := setup.creds.Store().Get(mustHost(t, "github.com")); err != nil || !found {
+		t.Fatalf("saved record of another host lost: found %v, err %v", found, err)
+	}
+	if storedRecord(t, setup.creds).Rejected {
+		t.Fatalf("a token that was never served from the file was marked refused")
+	}
+}
+
+func TestInvalidateDoesNotMarkATokenThatWasReplacedAfterServing(t *testing.T) {
+	setup := newTestCredentials(t, "")
+	mustPut(t, setup.creds, Record{
+		AccessToken:     "ghu_served",
+		AccessExpiresAt: fixedNow().Add(time.Hour),
+		RefreshToken:    "ghr_old",
+	})
+	host := mustHost(t, "github.com")
+	if _, err := setup.creds.Token(t.Context(), host); err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	mustPut(t, setup.creds, Record{
+		AccessToken:     "ghu_newer",
+		AccessExpiresAt: fixedNow().Add(time.Hour),
+		RefreshToken:    "ghr_newer",
+	})
+
+	setup.creds.Invalidate(t.Context(), host)
+
+	if storedRecord(t, setup.creds).Rejected {
+		t.Fatalf("the newer saved token was marked refused for an older one")
+	}
+}
+
 func TestSavedTokenNearExpiryIsRefreshedBeforeUse(t *testing.T) {
-	var hits int
-	var mu sync.Mutex
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		hits++
-		mu.Unlock()
-		if err := r.ParseForm(); err != nil {
-			t.Errorf("parse form: %v", err)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		writeReply(t, w, `{"access_token":"ghu_fresh","refresh_token":"ghr_fresh","expires_in":28800}`)
-	}))
-	t.Cleanup(server.Close)
+	server := newRefreshServer(t, `{"access_token":"ghu_fresh","refresh_token":"ghr_fresh","expires_in":28800}`)
 	setup := newTestCredentials(t, server.URL)
 	mustPut(t, setup.creds, Record{
 		AccessToken:     "ghu_stale",
@@ -252,22 +288,13 @@ func TestSavedTokenNearExpiryIsRefreshedBeforeUse(t *testing.T) {
 	if record.AccessToken != "ghu_fresh" || record.RefreshToken != "ghr_fresh" {
 		t.Fatalf("saved record = %+v, want the refreshed tokens saved", record)
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	if hits != 1 {
+	if hits := server.hitCount(); hits != 1 {
 		t.Fatalf("refresh calls = %d, want 1", hits)
 	}
 }
 
 func TestSavedTokenFarFromExpiryIsNotRefreshed(t *testing.T) {
-	var hits int
-	var mu sync.Mutex
-	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		mu.Lock()
-		defer mu.Unlock()
-		hits++
-	}))
-	t.Cleanup(server.Close)
+	server := newRefreshServer(t, `{"access_token":"ghu_other"}`)
 	setup := newTestCredentials(t, server.URL)
 	mustPut(t, setup.creds, Record{
 		AccessToken:     "ghu_fine",
@@ -282,19 +309,148 @@ func TestSavedTokenFarFromExpiryIsNotRefreshed(t *testing.T) {
 	if token.Secret() != "ghu_fine" {
 		t.Fatalf("Token = %q, want the saved token", token.Secret())
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	if hits != 0 {
+	if hits := server.hitCount(); hits != 0 {
 		t.Fatalf("refresh calls = %d for a token far from expiry, want 0", hits)
 	}
 }
 
+func TestTwoCredentialsSharingTheDirectorySpendTheRefreshTokenOnce(t *testing.T) {
+	server := newRefreshServer(t, `{"access_token":"ghu_fresh","refresh_token":"ghr_fresh","expires_in":28800}`)
+	dir := t.TempDir()
+	first := newCredentialsIn(t, dir, server.URL)
+	second := newCredentialsIn(t, dir, server.URL)
+	mustPut(t, first.creds, Record{
+		AccessToken:     "ghu_stale",
+		AccessExpiresAt: fixedNow().Add(2 * time.Minute),
+		RefreshToken:    "ghr_old",
+	})
+
+	var wg sync.WaitGroup
+	results := make(chan string, 2)
+	for _, setup := range []testSetup{first, second} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			token, err := setup.creds.Token(t.Context(), mustHost(t, "github.com"))
+			if err != nil {
+				results <- "error: " + err.Error()
+				return
+			}
+			results <- token.Secret()
+		}()
+	}
+	wg.Wait()
+	close(results)
+	for got := range results {
+		if got != "ghu_fresh" {
+			t.Fatalf("a credential served %q, want ghu_fresh", got)
+		}
+	}
+	if hits := server.hitCount(); hits != 1 {
+		t.Fatalf("refresh calls = %d for two processes, want 1", hits)
+	}
+}
+
+func TestRenewalIsKeptInMemoryWhenTheFileCannotBeWritten(t *testing.T) {
+	server := newRefreshServer(t, `{"access_token":"ghu_fresh","refresh_token":"ghr_fresh","expires_in":28800}`)
+	setup := newTestCredentials(t, server.URL)
+	mustPut(t, setup.creds, Record{
+		AccessToken:     "ghu_stale",
+		AccessExpiresAt: fixedNow().Add(2 * time.Minute),
+		RefreshToken:    "ghr_old",
+	})
+	setup.creds.store.rename = func(string, string) error { return errors.New("injected rename failure") }
+
+	for range 2 {
+		token, err := tokenSource(t, setup.creds, "github.com")
+		if err != nil {
+			t.Fatalf("Token while the file cannot be written: %v", err)
+		}
+		if token.Secret() != "ghu_fresh" {
+			t.Fatalf("Token = %q, want the renewed token kept in memory", token.Secret())
+		}
+	}
+	if hits := server.hitCount(); hits != 1 {
+		t.Fatalf("refresh calls = %d, want 1: the refresh token was spent again", hits)
+	}
+	if stored := storedRecord(t, setup.creds); stored.RefreshToken != "ghr_old" {
+		t.Fatalf("file changed by a failed write: %+v", stored)
+	}
+
+	setup.creds.store.rename = os.Rename
+	token, err := tokenSource(t, setup.creds, "github.com")
+	if err != nil || token.Secret() != "ghu_fresh" {
+		t.Fatalf("Token after the file is writable again = %v, %v", token.Secret(), err)
+	}
+	if stored := storedRecord(t, setup.creds); stored.RefreshToken != "ghr_fresh" {
+		t.Fatalf("renewed pair not saved once writable: %+v", stored)
+	}
+	if hits := server.hitCount(); hits != 1 {
+		t.Fatalf("refresh calls = %d after saving, want 1", hits)
+	}
+}
+
+func TestHeldRenewalIsDroppedWhenAnotherProcessSavedANewerPair(t *testing.T) {
+	server := newRefreshServer(t, `{"access_token":"ghu_fresh","refresh_token":"ghr_fresh","expires_in":28800}`)
+	dir := t.TempDir()
+	first := newCredentialsIn(t, dir, server.URL)
+	mustPut(t, first.creds, Record{
+		AccessToken:     "ghu_stale",
+		AccessExpiresAt: fixedNow().Add(2 * time.Minute),
+		RefreshToken:    "ghr_old",
+	})
+	first.creds.store.rename = func(string, string) error { return errors.New("injected rename failure") }
+	if _, err := tokenSource(t, first.creds, "github.com"); err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+
+	other := NewStore(dir)
+	if err := other.Put(t.Context(), mustHost(t, "github.com"), Record{
+		AccessToken:     "ghu_other",
+		AccessExpiresAt: fixedNow().Add(time.Hour),
+		RefreshToken:    "ghr_other",
+	}); err != nil {
+		t.Fatalf("Put by the other process: %v", err)
+	}
+
+	token, err := tokenSource(t, first.creds, "github.com")
+	if err != nil || token.Secret() != "ghu_other" {
+		t.Fatalf("Token = %v, %v; want the newer pair saved by the other process", token.Secret(), err)
+	}
+	if hits := server.hitCount(); hits != 1 {
+		t.Fatalf("refresh calls = %d, want 1", hits)
+	}
+}
+
+func TestWarningsNeverCarryTheTokens(t *testing.T) {
+	server := newRefreshServer(t, `{"access_token":"ghu_ACCESS_LOG_SECRET","refresh_token":"ghr_REFRESH_LOG_SECRET","expires_in":28800}`)
+	setup := newTestCredentials(t, server.URL)
+	mustPut(t, setup.creds, Record{
+		AccessToken:     "ghu_stale",
+		AccessExpiresAt: fixedNow().Add(2 * time.Minute),
+		RefreshToken:    "ghr_old",
+	})
+	setup.creds.store.rename = func(string, string) error { return errors.New("injected rename failure") }
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	if _, err := tokenSource(t, setup.creds, "github.com"); err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	if logs.Len() == 0 {
+		t.Fatalf("no warning was logged for the file that could not be written")
+	}
+	for _, secret := range []string{"ghu_ACCESS_LOG_SECRET", "ghr_REFRESH_LOG_SECRET"} {
+		if strings.Contains(logs.String(), secret) {
+			t.Fatalf("the log carries a token: %s", logs.String())
+		}
+	}
+}
+
 func TestRefusedRefreshMarksTheSavedTokenAndFallsBack(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		writeReply(t, w, `{"error":"bad_refresh_token"}`)
-	}))
-	t.Cleanup(server.Close)
+	server := newRefreshServer(t, `{"error":"bad_refresh_token"}`)
 	setup := newTestCredentials(t, server.URL)
 	setup.cli.token = "gho_cli"
 	mustPut(t, setup.creds, Record{
@@ -310,9 +466,49 @@ func TestRefusedRefreshMarksTheSavedTokenAndFallsBack(t *testing.T) {
 	if token.Source() != contracts.TokenSourceCLI {
 		t.Fatalf("Token after a refused refresh = source %v, want the gh fallback", token.Source())
 	}
-	record := storedRecord(t, setup.creds)
-	if !record.Rejected {
+	if record := storedRecord(t, setup.creds); !record.Rejected {
 		t.Fatalf("saved record after a refused refresh = %+v, want Rejected", record)
+	}
+}
+
+func TestMisconfiguredAppIsNotAMarkedRefusal(t *testing.T) {
+	server := newRefreshServer(t, `{"error":"incorrect_client_credentials"}`)
+	setup := newTestCredentials(t, server.URL)
+	mustPut(t, setup.creds, Record{
+		AccessToken:     "ghu_stale",
+		AccessExpiresAt: fixedNow().Add(-time.Minute),
+		RefreshToken:    "ghr_fine",
+	})
+
+	_, err := tokenSource(t, setup.creds, "github.com")
+	if !errors.Is(err, ErrAppMisconfigured) {
+		t.Fatalf("Token with a misconfigured app = %v, want ErrAppMisconfigured", err)
+	}
+	if record := storedRecord(t, setup.creds); record.Rejected {
+		t.Fatalf("the token of the user was marked refused for an app error: %+v", record)
+	}
+}
+
+func TestExpiredRefreshTokenIsNotSentToTheForge(t *testing.T) {
+	server := newRefreshServer(t, `{"access_token":"ghu_never"}`)
+	setup := newTestCredentials(t, server.URL)
+	setup.cli.token = "gho_cli"
+	mustPut(t, setup.creds, Record{
+		AccessToken:      "ghu_old",
+		AccessExpiresAt:  fixedNow().Add(-time.Hour),
+		RefreshToken:     "ghr_old",
+		RefreshExpiresAt: fixedNow().Add(-time.Minute),
+	})
+
+	token, err := tokenSource(t, setup.creds, "github.com")
+	if err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	if token.Source() != contracts.TokenSourceCLI {
+		t.Fatalf("Token with an expired refresh token = source %v, want the gh fallback", token.Source())
+	}
+	if hits := server.hitCount(); hits != 0 {
+		t.Fatalf("the forge was asked %d times with an expired refresh token, want 0", hits)
 	}
 }
 
@@ -396,7 +592,37 @@ func storedRecord(t *testing.T, creds *Credentials) Record {
 
 func mustPut(t *testing.T, creds *Credentials, record Record) {
 	t.Helper()
-	if err := creds.Store().Put(mustHost(t, "github.com"), record); err != nil {
+	if err := creds.Store().Put(t.Context(), mustHost(t, "github.com"), record); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
+}
+
+type refreshServer struct {
+	*httptest.Server
+
+	mu   sync.Mutex
+	hits int
+}
+
+func newRefreshServer(t *testing.T, reply string) *refreshServer {
+	t.Helper()
+	server := &refreshServer{}
+	server.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server.mu.Lock()
+		server.hits++
+		server.mu.Unlock()
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("parse form: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		writeReply(t, w, reply)
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func (s *refreshServer) hitCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.hits
 }

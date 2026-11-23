@@ -21,7 +21,8 @@ written to a log.
 
 The access token expires after eight hours. Herrscher refreshes it with the
 refresh token a few minutes before it expires, and saves the new pair. You do
-not have to reconnect.
+not have to reconnect. The refresh token has its own lifetime: when it runs out,
+the connection cannot be renewed and you run `herrscher connect github` again.
 
 For GitHub Enterprise Server, pass `--host` with the instance name. The device
 flow then runs against that host.
@@ -40,11 +41,17 @@ For each known host, the output gives:
 - the source of the active token: `saved`, `env` (an environment variable),
   `cli` (the `gh` login), or `none`;
 - the login of the account, when it can be read;
-- when the saved access token expires, or that it was refused;
+- until when the saved connection can be renewed, that it expired, that it was
+  refused, or that the forge does not accept the App's credentials;
 - the link to install the GitHub App and the link to revoke it.
 
-A saved token the forge has refused is marked as refused. The token itself is
-kept until you connect again or log out.
+When the refresh token runs out within 14 days, status prints a warning with
+the date. A saved token the forge has refused is marked as refused. The token
+itself is kept until you connect again or log out. An expired connection is not
+sent to the forge: status reports it without a network call.
+
+If the file of saved connections is readable by other users, status warns with
+its path. Connect again to rewrite it with owner-only access.
 
 ## Log out
 
@@ -54,8 +61,9 @@ herrscher connect logout --host ghe.example.com
 ```
 
 This removes the saved tokens of the host. It does not revoke them on GitHub:
-to revoke the authorization itself, use the revoke link printed by
-`herrscher connect status`.
+logout prints the page where you revoke the herrscher App, and the same link is
+printed by `herrscher connect status`. If the file of saved connections cannot
+be read, logout removes the whole file.
 
 ## Without the GitHub App
 
@@ -80,3 +88,9 @@ fail with a message saying herrscher is not connected to that host.
   over until then.
 - **The device code expired or was denied.** Run `herrscher connect github`
   again and approve within the time the code gives.
+- **The saved connections file cannot be read.** Status names its path and
+  says to run `herrscher connect logout`, which removes it, then connect again.
+- **The forge does not accept the App's credentials.** The App's client
+  settings are wrong on that forge. This is not a refused token: the saved
+  connection is kept and not marked refused. Forge operations fail with that
+  error until the App is fixed, and status says so.

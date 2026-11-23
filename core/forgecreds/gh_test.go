@@ -28,7 +28,7 @@ func TestGitHubCLITokenReadsOnlyStandardOutput(t *testing.T) {
 fi
 exit 1`)
 
-	token, err := gitHubCLIToken(t.Context(), "github.com")
+	token, err := gitHubCLIToken(t.Context(), mustHost(t, "github.com"))
 	if err != nil {
 		t.Fatalf("gitHubCLIToken: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestGitHubCLIFailureGivesNoToken(t *testing.T) {
 	installFakeGH(t, `echo "not logged in" >&2
 exit 1`)
 
-	token, err := gitHubCLIToken(t.Context(), "github.com")
+	token, err := gitHubCLIToken(t.Context(), mustHost(t, "github.com"))
 	if err == nil || token != "" {
 		t.Fatalf("gitHubCLIToken after a failed login = %q, %v; want no token and an error", token, err)
 	}
@@ -51,7 +51,7 @@ func TestGitHubCLIOutputBeyondTheBoundIsRefused(t *testing.T) {
 	installFakeGH(t, `head -c 10000 /dev/zero | tr '\0' 'a'
 exit 0`)
 
-	token, err := gitHubCLIToken(t.Context(), "github.com")
+	token, err := gitHubCLIToken(t.Context(), mustHost(t, "github.com"))
 	if err == nil || token != "" {
 		t.Fatalf("gitHubCLIToken with oversized output = %d bytes, %v; want refusal", len(token), err)
 	}
@@ -63,8 +63,22 @@ exit 0`)
 func TestMissingGHGivesNoToken(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
-	token, err := gitHubCLIToken(t.Context(), "github.com")
+	token, err := gitHubCLIToken(t.Context(), mustHost(t, "github.com"))
 	if err == nil || token != "" {
 		t.Fatalf("gitHubCLIToken without gh = %q, %v; want no token and an error", token, err)
+	}
+}
+
+func TestGitHubCLIFailureNeverEchoesAPrintedToken(t *testing.T) {
+	const leaked = "gho_PRINTED_THEN_FAILED"
+	installFakeGH(t, `echo "`+leaked+`"
+exit 1`)
+
+	token, err := gitHubCLIToken(t.Context(), mustHost(t, "github.com"))
+	if err == nil || token != "" {
+		t.Fatalf("gitHubCLIToken after a failure = %q, %v; want no token and an error", token, err)
+	}
+	if strings.Contains(err.Error(), leaked) {
+		t.Fatalf("the error %q carries the token printed before the failure", err)
 	}
 }

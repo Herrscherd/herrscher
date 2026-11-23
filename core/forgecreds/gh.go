@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 const (
@@ -36,11 +38,11 @@ func (b *boundedBuffer) String() string {
 	return b.buf.String()
 }
 
-func gitHubCLIToken(ctx context.Context, host string) (string, error) {
+func gitHubCLIToken(ctx context.Context, host contracts.ForgeHost) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, gitHubCLITimeout)
 	defer cancel()
 	var output boundedBuffer
-	cmd := exec.CommandContext(ctx, gitHubCLI, "auth", "token", "--hostname", host)
+	cmd := exec.CommandContext(ctx, gitHubCLI, "auth", "token", "--hostname", host.String())
 	cmd.Stdout = &output
 	cmd.Stderr = io.Discard
 	cmd.WaitDelay = gitHubCLIWaitDelay

@@ -237,3 +237,48 @@ func TestRefreshReportsATokenTheForgeNoLongerAccepts(t *testing.T) {
 		t.Fatalf("Refresh with a revoked token = %v, want ErrRefreshRejected", err)
 	}
 }
+
+func TestRefreshAcceptsTheJSONAnswerItAsksFor(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Accept") != "application/json" {
+			w.Header().Set("Content-Type", "application/x-www-form-urlencoded")
+			writeReply(t, w, "access_token=ghu_FORM&refresh_token=ghr_FORM&expires_in=28800")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		writeReply(t, w, `{"access_token":"ghu_json","refresh_token":"ghr_json","expires_in":28800}`)
+	}))
+	t.Cleanup(server.Close)
+
+	refreshed, err := testFlow(server.Client(), &waitRecorder{}).Refresh(t.Context(), server.URL, Record{RefreshToken: "ghr_old"})
+	if err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	if refreshed.AccessToken != "ghu_json" || refreshed.RefreshToken != "ghr_json" {
+		t.Fatalf("Refresh = %+v, want the JSON answer", refreshed)
+	}
+}
+
+func TestRefreshWithoutANewRefreshTokenIsAnError(t *testing.T) {
+	server := newForgeServer(t, &forgeScript{tokenReplies: []string{`{"access_token":"ghu_only"}`}})
+
+	refreshed, err := testFlow(server.Client(), &waitRecorder{}).Refresh(t.Context(), server.URL, Record{RefreshToken: "ghr_old"})
+	if err == nil {
+		t.Fatalf("Refresh without a refresh token = %+v, want an error", refreshed)
+	}
+	if errors.Is(err, ErrRefreshRejected) {
+		t.Fatalf("a missing refresh token reads as a refused one: %v", err)
+	}
+	if !errors.Is(err, ErrDeviceRejected) {
+		t.Fatalf("Refresh error = %v, want ErrDeviceRejected", err)
+	}
+}
+
+func TestRefreshWithAMisconfiguredAppIsNotARefusedToken(t *testing.T) {
+	server := newForgeServer(t, &forgeScript{tokenReplies: []string{`{"error":"incorrect_client_credentials"}`}})
+
+	_, err := testFlow(server.Client(), &waitRecorder{}).Refresh(t.Context(), server.URL, Record{RefreshToken: "ghr_old"})
+	if !errors.Is(err, ErrAppMisconfigured) || errors.Is(err, ErrRefreshRejected) {
+		t.Fatalf("Refresh with a misconfigured app = %v, want ErrAppMisconfigured alone", err)
+	}
+}

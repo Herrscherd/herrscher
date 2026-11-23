@@ -57,6 +57,10 @@ var ErrDeviceRejected = errors.New("the forge refused the sign-in")
 // ErrRefreshRejected reports a refresh token the forge no longer accepts.
 var ErrRefreshRejected = errors.New("the forge refused the refresh token")
 
+// ErrAppMisconfigured reports client credentials the forge does not accept for
+// the herrscher App: the App is misconfigured, the refresh token is not at fault.
+var ErrAppMisconfigured = errors.New("the forge does not accept the herrscher app credentials")
+
 // DeviceCode is the code a user enters on the forge to authorize the host.
 type DeviceCode struct {
 	DeviceCode      string
@@ -159,8 +163,11 @@ func (f Flow) Refresh(ctx context.Context, base string, record Record) (Record, 
 	if err != nil {
 		return Record{}, err
 	}
-	if resp.Error == errBadRefreshToken || resp.Error == errIncorrectCredentials {
+	if resp.Error == errBadRefreshToken {
 		return Record{}, ErrRefreshRejected
+	}
+	if resp.Error == errIncorrectCredentials {
+		return Record{}, ErrAppMisconfigured
 	}
 	if resp.Error != "" {
 		return Record{}, fmt.Errorf("refresh: %s: %w", resp.Error, ErrDeviceRejected)
@@ -169,10 +176,10 @@ func (f Flow) Refresh(ctx context.Context, base string, record Record) (Record, 
 	if err != nil {
 		return Record{}, err
 	}
-	refreshed.Login = record.Login
 	if refreshed.RefreshToken == "" {
-		refreshed.RefreshToken = record.RefreshToken
+		return Record{}, fmt.Errorf("refresh granted no refresh token: %w", ErrDeviceRejected)
 	}
+	refreshed.Login = record.Login
 	return refreshed, nil
 }
 

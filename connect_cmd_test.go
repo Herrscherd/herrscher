@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -28,7 +30,7 @@ func TestStatusNeverPrintsTheSavedToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseForgeHost: %v", err)
 	}
-	if err := creds.Store().Put(host, forgecreds.Record{
+	if err := creds.Store().Put(t.Context(), host, forgecreds.Record{
 		AccessToken:     secret,
 		Login:           "octo",
 		AccessExpiresAt: time.Date(2026, 11, 23, 17, 0, 0, 0, time.UTC),
@@ -55,11 +57,8 @@ func TestStatusReportsARefusedTokenAsRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseForgeHost: %v", err)
 	}
-	if err := creds.Store().Put(host, forgecreds.Record{AccessToken: "ghu_refused"}); err != nil {
+	if err := creds.Store().Put(t.Context(), host, forgecreds.Record{AccessToken: "ghu_refused", Rejected: true}); err != nil {
 		t.Fatalf("Put: %v", err)
-	}
-	if err := creds.Store().Reject(host); err != nil {
-		t.Fatalf("Reject: %v", err)
 	}
 	messages := testMessages()
 	translator := messages.For(testLang())
@@ -84,13 +83,13 @@ func TestLogoutReportsWhetherARecordWasRemoved(t *testing.T) {
 		t.Fatalf("ParseForgeHost: %v", err)
 	}
 	var first, second bytes.Buffer
-	if err := connectLogout(testMessages(), testLang(), creds, host, &first); err != nil {
+	if err := connectLogout(t.Context(), testMessages(), testLang(), creds, host, &first); err != nil {
 		t.Fatalf("connectLogout on an empty store: %v", err)
 	}
-	if err := creds.Store().Put(host, forgecreds.Record{AccessToken: "ghu_logout"}); err != nil {
+	if err := creds.Store().Put(t.Context(), host, forgecreds.Record{AccessToken: "ghu_logout"}); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
-	if err := connectLogout(testMessages(), testLang(), creds, host, &second); err != nil {
+	if err := connectLogout(t.Context(), testMessages(), testLang(), creds, host, &second); err != nil {
 		t.Fatalf("connectLogout with a record: %v", err)
 	}
 	if first.String() == second.String() {
@@ -122,4 +121,108 @@ func TestParseConnectArgsRefusesBadInput(t *testing.T) {
 			t.Fatalf("parseConnectArgs(%v) accepted bad input", args)
 		}
 	}
+}
+
+func TestStatusWarnsWhenTheFileIsReadableByOtherUsers(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file modes carry no owner-only meaning on windows")
+	}
+	isolateGitHubEnvironment(t)
+	creds := forgecreds.New(filepath.Join(t.TempDir(), "state.json"))
+	if err := creds.Store().Put(t.Context(), mustConnectHost(t), forgecreds.Record{AccessToken: "ghu_open"}); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if err := os.Chmod(creds.Store().Path(), 0o644); err != nil {
+		t.Fatalf("Chmod: %v", err)
+	}
+	messages := testMessages()
+	want, err := messages.Text(testLang(), clitext.ConnectInsecure, clitext.Params{clitext.ParamPath: creds.Store().Path()})
+	if err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+	var out bytes.Buffer
+
+	if err := connectStatus(t.Context(), messages, testLang(), creds, &out); err != nil {
+		t.Fatalf("connectStatus: %v", err)
+	}
+	if !strings.Contains(out.String(), want) {
+		t.Fatalf("status output = %q, want the permission warning %q", out.String(), want)
+	}
+}
+
+func TestStatusNamesACorruptFileWithoutItsContent(t *testing.T) {
+	isolateGitHubEnvironment(t)
+	const leaked = "ghu_CORRUPT_STATUS_SECRET"
+	creds := forgecreds.New(filepath.Join(t.TempDir(), "state.json"))
+	if err := os.WriteFile(creds.Store().Path(), []byte(`{"hosts": `+leaked), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	var out bytes.Buffer
+
+	err := connectStatus(t.Context(), testMessages(), testLang(), creds, &out)
+	if err == nil {
+		t.Fatalf("connectStatus on a corrupt file returned no error; output %q", out.String())
+	}
+	if !strings.Contains(err.Error(), creds.Store().Path()) || !strings.Contains(err.Error(), "logout") {
+		t.Fatalf("the error %q does not name the file and the way to clear it", err)
+	}
+	if strings.Contains(err.Error(), leaked) || strings.Contains(out.String(), leaked) {
+		t.Fatalf("the corrupt content reached the output")
+	}
+}
+
+func TestStatusShowsTheRenewalWindowOfAConnection(t *testing.T) {
+	isolateGitHubEnvironment(t)
+	creds := forgecreds.New(filepath.Join(t.TempDir(), "state.json"))
+	refreshUntil := time.Now().Add(10 * 24 * time.Hour)
+	if err := creds.Store().Put(t.Context(), mustConnectHost(t), forgecreds.Record{
+		AccessToken:      "ghu_renewable",
+		AccessExpiresAt:  time.Now().Add(time.Hour),
+		RefreshToken:     "ghr_renewable",
+		RefreshExpiresAt: refreshUntil,
+	}); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	messages := testMessages()
+	translator := messages.For(testLang())
+	wantRenews := translator.Text(clitext.ConnectAccessRenews, clitext.Params{clitext.ParamTime: refreshUntil.UTC().Format(time.RFC3339)})
+	wantSoon, err := messages.Text(testLang(), clitext.ConnectRenewSoon, clitext.Params{clitext.ParamTime: refreshUntil.UTC().Format(time.RFC3339)})
+	if err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+	var out bytes.Buffer
+
+	if err := connectStatus(t.Context(), messages, testLang(), creds, &out); err != nil {
+		t.Fatalf("connectStatus: %v", err)
+	}
+	if !strings.Contains(out.String(), wantRenews) {
+		t.Fatalf("status output = %q, want the renewal line %q", out.String(), wantRenews)
+	}
+	if !strings.Contains(out.String(), wantSoon) {
+		t.Fatalf("status output = %q, want the renewal warning inside 14 days", out.String())
+	}
+}
+
+func TestLogoutSaysTheTokenIsNotRevoked(t *testing.T) {
+	creds := forgecreds.New(filepath.Join(t.TempDir(), "state.json"))
+	if err := creds.Store().Put(t.Context(), mustConnectHost(t), forgecreds.Record{AccessToken: "ghu_logout"}); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	var out bytes.Buffer
+
+	if err := connectLogout(t.Context(), testMessages(), testLang(), creds, mustConnectHost(t), &out); err != nil {
+		t.Fatalf("connectLogout: %v", err)
+	}
+	if !strings.Contains(out.String(), "not revoked") || !strings.Contains(out.String(), "https://github.com/settings/connections/applications/"+forgecreds.ClientID) {
+		t.Fatalf("logout output = %q, want the revocation reminder with the app page", out.String())
+	}
+}
+
+func mustConnectHost(t *testing.T) contracts.ForgeHost {
+	t.Helper()
+	host, err := contracts.ParseForgeHost(connectDefaultHost)
+	if err != nil {
+		t.Fatalf("ParseForgeHost: %v", err)
+	}
+	return host
 }

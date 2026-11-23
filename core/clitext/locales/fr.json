@@ -5263,5 +5263,40 @@
     "id": "cli.connect.logout_nothing",
     "description": "Avis : la déconnexion n'a trouvé aucun jeton enregistré pour l'hôte",
     "other": "aucun jeton enregistré pour {{.Host}}."
+  },
+  {
+    "id": "cli.connect.logout_revoke",
+    "description": "Rappel affiché après la déconnexion : le jeton enregistré n'est pas révoqué sur le forge",
+    "other": "La déconnexion ne révoque pas le jeton enregistré. Pour révoquer l'application herrscher sur le forge, ouvre {{.URL}}"
+  },
+  {
+    "id": "cli.connect.store_corrupt",
+    "description": "Erreur : le fichier des connexions du forge est illisible, avec son chemin",
+    "other": "Le fichier des connexions du forge {{.Path}} est illisible. Lance herrscher connect logout pour le supprimer, puis reconnecte-toi."
+  },
+  {
+    "id": "cli.connect.status.insecure",
+    "description": "Avertissement : le fichier des connexions du forge est lisible par d'autres utilisateurs, avec son chemin",
+    "other": "avertissement : {{.Path}} est lisible par d'autres utilisateurs de cette machine. Reconnecte-toi pour le réécrire en accès réservé au propriétaire."
+  },
+  {
+    "id": "cli.connect.status.access_expired",
+    "description": "Valeur de statut : la connexion enregistrée est échue et ne peut plus être renouvelée",
+    "other": "expirée, relance herrscher connect github"
+  },
+  {
+    "id": "cli.connect.status.access_renews",
+    "description": "Valeur de statut : la connexion enregistrée se renouvelle jusqu'à ce moment",
+    "other": "renouvelable jusqu'au {{.Time}}"
+  },
+  {
+    "id": "cli.connect.status.renew_soon",
+    "description": "Avertissement : le jeton de renouvellement de la connexion arrive bientôt à échéance",
+    "other": "avertissement : le jeton de renouvellement expire le {{.Time}}. Relance herrscher connect github avant cette date."
+  },
+  {
+    "id": "cli.connect.status.access_app_misconfigured",
+    "description": "Valeur de statut : le forge n'accepte pas les identifiants de l'application herrscher",
+    "other": "le forge n'accepte pas l'application herrscher, vérifie les réglages du client de l'application"
   }
 ]

@@ -75,7 +75,7 @@ func TestProjectFromDirRefusesAnUnnameableDirectory(t *testing.T) {
 }
 
 func TestMatchProject(t *testing.T) {
-	known := []string{"herrscher", "neublox", "herrscher-docs"}
+	known := []string{"herrscher", "neublox", "herrscher-notes"}
 	for _, tc := range []struct {
 		name, prompt, want string
 	}{
@@ -84,7 +84,7 @@ func TestMatchProject(t *testing.T) {
 		{"case folds", "NEUBLOX est casse", "neublox"},
 		{"earliest named wins", "neublox puis herrscher", "neublox"},
 		{"whole words only", "neubloxide est un autre projet", ""},
-		{"longest at the same place wins", "herrscher-docs a besoin d'une page", "herrscher-docs"},
+		{"longest at the same place wins", "herrscher-notes a besoin d'une page", "herrscher-notes"},
 		{"nothing known, nothing matched", "neublox", ""},
 		{"typographic punctuation is a boundary", "cf. neublox\u2026", "neublox"},
 		{"a non-breaking space is a boundary", "\u00ab\u00a0neublox\u00a0\u00bb", "neublox"},

@@ -80,7 +80,7 @@ func RepoRoot(ctx context.Context, dir string) string {
 //
 // The rule is deliberately the dullest one that can work: a known project named
 // as a whole word wins, the earliest mention breaks a tie, and the longest name
-// breaks a tie at the same place, so "herrscher-docs" is not read as
+// breaks a tie at the same place, so "herrscher-notes" is not read as
 // "herrscher". This is the piece of the design most likely to be wrong in the
 // field. It takes its whole world as arguments precisely so the vault-side
 // registry that replaces it changes nothing above this line.

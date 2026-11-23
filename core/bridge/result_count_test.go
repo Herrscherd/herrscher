@@ -232,3 +232,21 @@ func TestResultCostThatIsInfiniteKeepsTheEarlierCost(t *testing.T) {
 		t.Fatalf("cost = %v after a result reporting +Inf, want the earlier 0.0042", usage.cost)
 	}
 }
+
+func TestResultCostThatIsNegativeInfiniteKeepsTheEarlierCost(t *testing.T) {
+	var usage turnUsage
+	usage.absorb(contracts.BackendEvent{Kind: backendKindResult, Cost: 0.0042})
+	usage.absorb(contracts.BackendEvent{Kind: backendKindResult, Cost: math.Inf(-1)})
+	if usage.cost != 0.0042 {
+		t.Fatalf("cost = %v after a result reporting -Inf, want the earlier 0.0042", usage.cost)
+	}
+}
+
+func TestResultCostThatIsNaNKeepsTheEarlierCost(t *testing.T) {
+	var usage turnUsage
+	usage.absorb(contracts.BackendEvent{Kind: backendKindResult, Cost: 0.0042})
+	usage.absorb(contracts.BackendEvent{Kind: backendKindResult, Cost: math.NaN()})
+	if usage.cost != 0.0042 {
+		t.Fatalf("cost = %v after a result reporting NaN, want the earlier 0.0042", usage.cost)
+	}
+}

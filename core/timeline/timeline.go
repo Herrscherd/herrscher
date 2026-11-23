@@ -231,9 +231,20 @@ func reportsCount(event contracts.Event) bool {
 	return carriesTokens(event.T) && ReportsCount(event.Tokens)
 }
 
-// ReportsCount reports whether a figure from the backend replaces the running one: zero means the backend reported nothing.
+// ReportsCount reports whether a figure from the backend replaces the running one: only a strictly positive, finite figure does, so zero, negative, NaN and infinite figures report nothing.
 func ReportsCount[N int | float64](figure N) bool {
-	return figure > 0 && !math.IsInf(float64(figure), 0)
+	return strictlyPositive(figure) && finite(figure)
+}
+
+func strictlyPositive[N int | float64](figure N) bool {
+	return figure > 0
+}
+
+func finite[N int | float64](figure N) bool {
+	if value, isFloat := any(figure).(float64); isFloat {
+		return !math.IsInf(value, 0)
+	}
+	return true
 }
 
 func (r *Recorder) setMark() {

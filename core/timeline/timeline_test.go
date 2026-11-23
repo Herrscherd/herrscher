@@ -431,8 +431,39 @@ func TestToolDoneWithUnfinishedStateDoesNotCloseTheCall(t *testing.T) {
 	}
 }
 
-func TestReportsCountRefusesAnInfiniteFigure(t *testing.T) {
-	if ReportsCount(math.Inf(1)) {
-		t.Fatal("ReportsCount(+Inf) = true, want false: a JSON reply cannot carry an infinite cost")
+func TestReportsCountRefusesWhatIsNotAPositiveFiniteFloat(t *testing.T) {
+	cases := []struct {
+		name   string
+		figure float64
+	}{
+		{"negative infinity", math.Inf(-1)},
+		{"NaN", math.NaN()},
+		{"negative", -40},
+		{"zero", 0},
+		{"positive infinity", math.Inf(1)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if ReportsCount(tc.figure) {
+				t.Fatalf("ReportsCount(%v) = true, want false", tc.figure)
+			}
+		})
+	}
+}
+
+func TestReportsCountRefusesNegativeAndZeroIntegers(t *testing.T) {
+	for _, figure := range []int{-40, 0} {
+		if ReportsCount(figure) {
+			t.Fatalf("ReportsCount(%d) = true, want false", figure)
+		}
+	}
+}
+
+func TestReportsCountAcceptsPositiveFiniteFigures(t *testing.T) {
+	if !ReportsCount(1) || !ReportsCount(math.MaxInt) {
+		t.Fatal("ReportsCount refused a positive integer, want true: an integer is never infinite")
+	}
+	if !ReportsCount(0.0042) || !ReportsCount(math.MaxFloat64) {
+		t.Fatal("ReportsCount refused a positive finite float64, want true")
 	}
 }

@@ -23,6 +23,9 @@ curl -fsSL https://raw.githubusercontent.com/Herrscherd/herrscher/master/scripts
 The script downloads the latest release for Linux or macOS (amd64 or arm64),
 checks it against `checksums.txt` and installs `herrscher` in `~/.local/bin`
 (`HERRSCHER_INSTALL_DIR` changes the directory, `HERRSCHER_VERSION` pins a tag).
+The checksum comes from the same release as the archive, so it catches a
+corrupted download, not a release replaced by someone with write access to the
+repository.
 Windows archives, and every other platform, are on the
 [releases page](https://github.com/Herrscherd/herrscher/releases). With Go 1.27:
 
@@ -30,8 +33,10 @@ Windows archives, and every other platform, are on the
 go install github.com/Herrscherd/herrscher@latest
 ```
 
-On Arch Linux, `makepkg -si` in a checkout builds the `herrscher` package from
-the `PKGBUILD` (it replaces the older `herrscherd` package).
+On Arch Linux, `makepkg -si` next to the `PKGBUILD` builds the `herrscher`
+package from the `master` branch on GitHub. It replaces the older `herrscherd`
+package, whose binary was `/usr/bin/herrscherd`: a service installed from it still
+starts that path, so run `herrscher service install` again after the upgrade.
 
 A prebuilt binary carries the default stack. Changing the compiled modules
 (`herrscher plugin`, `herrscher update`, the modules screen of `setup`) rebuilds

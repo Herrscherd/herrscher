@@ -2,12 +2,16 @@
 set -eu
 
 repo=Herrscherd/herrscher
-dir=${HERRSCHER_INSTALL_DIR:-$HOME/.local/bin}
 
 fail() {
 	echo "herrscher install: $*" >&2
 	exit 1
 }
+
+if [ -z "${HERRSCHER_INSTALL_DIR:-}" ] && [ -z "${HOME:-}" ]; then
+	fail "HOME is not set: set HERRSCHER_INSTALL_DIR to the directory to install into"
+fi
+dir=${HERRSCHER_INSTALL_DIR:-$HOME/.local/bin}
 
 need() {
 	command -v "$1" >/dev/null 2>&1 || fail "$1 is required"
@@ -31,7 +35,8 @@ esac
 
 tag=${HERRSCHER_VERSION:-}
 if [ -z "$tag" ]; then
-	latest=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$repo/releases/latest")
+	latest=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$repo/releases/latest") ||
+		fail "could not reach the latest release of $repo: set HERRSCHER_VERSION to a tag"
 	tag=${latest##*/}
 fi
 case $tag in

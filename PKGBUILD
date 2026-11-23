@@ -8,7 +8,6 @@ url="https://github.com/Herrscherd/herrscher"
 license=('MIT')
 depends=('glibc')
 makedepends=('go' 'git')
-provides=('herrscherd')
 conflicts=('herrscherd')
 replaces=('herrscherd')
 source=("$pkgname::git+https://github.com/Herrscherd/herrscher.git#branch=master")

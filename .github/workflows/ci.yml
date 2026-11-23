@@ -19,6 +19,33 @@ jobs:
           cache: true
       - name: Quality chain of the go-book
         run: scripts/check.sh
+  release-dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build every release archive from a throwaway tag
+        run: |
+          git tag v0.0.0-dryrun
+          scripts/release.sh v0.0.0-dryrun "$RUNNER_TEMP/dist"
+          cd "$RUNNER_TEMP/dist"
+          sha256sum -c checksums.txt
+          test "$(ls herrscher_v0.0.0-dryrun_* | wc -l)" -eq 6
+      - name: Install the linux archive with the install script
+        run: |
+          cd "$RUNNER_TEMP/dist"
+          python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &
+          sleep 2
+          mkdir -p releases/download/v0.0.0-dryrun
+          cp herrscher_* checksums.txt releases/download/v0.0.0-dryrun/
+          sed 's#https://github.com/$repo/releases#http://127.0.0.1:8765/releases#' "$GITHUB_WORKSPACE/scripts/install.sh" > install-local.sh
+          HERRSCHER_VERSION=v0.0.0-dryrun HERRSCHER_INSTALL_DIR="$RUNNER_TEMP/bin" sh install-local.sh
+          "$RUNNER_TEMP/bin/herrscher" version | grep -F 0.0.0-dryrun
   e2e-ssh:
     runs-on: ubuntu-latest
     steps:

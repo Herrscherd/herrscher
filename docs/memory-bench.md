@@ -100,10 +100,11 @@ seen so far: if spent plus twice the widest call reaches the ceiling, it does
 not start the call. When it stops, it discards the arm that was running, marks
 the run partial, and counts the arms it did not run in the report.
 
-Two limits follow from this. The first call cannot be projected, so it can
-overshoot the ceiling by one call. A single call wider than the reserve can
-also carry the spend past the ceiling, because the reserve is an estimate from
-the calls already made, not a guarantee.
+Two limits follow from this. The first call of the budget is not reserved: no
+call has been measured yet, so the bench starts it whatever the ceiling, and it
+can overshoot by that one call. A later call wider than the reserve can also
+carry the spend past the ceiling, because the reserve is an estimate from the
+calls already made, not a guarantee.
 
 ## Isolation
 

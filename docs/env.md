@@ -216,6 +216,33 @@ These variables are read by the GitHub forge when no token was saved by
 | `HERRSCHER_LIMITS_TIMEOUT` | `10s` | Cap of one reading of an account's limits, counted from its start, as a Go duration between `1s` and `5m`. Read when the daemon starts, so a change takes a restart. A malformed or out of range value is reported in the daemon log and the default applies. | Host |
 | `HERRSCHER_ENV_FILE` | `./.env` | Path of the `.env` file to load. Resolved to an absolute path and re-exported, so each `bridge` subprocess (whose cwd is a session worktree) loads the *same* file. An implicit `./.env` is best-effort; an explicit `$HERRSCHER_ENV_FILE` is authoritative (a load failure is fatal). | Host |
 
+## Turn telemetry (OpenTelemetry)
+
+The `config.json` key `telemetry.enabled` takes priority over the environment:
+`false` turns the export off even when an endpoint is set, and a missing key or `true`
+leaves the decision to the variables below. Use the key when the daemon runs as a
+service, since a service unit usually carries only `PATH`.
+
+```json
+{
+  "telemetry": {
+    "enabled": false
+  }
+}
+```
+
+| Variable | Default | Meaning | Read by |
+|----------|---------|---------|---------|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset (export off) | The collector endpoint. Without one, the other telemetry variables enable nothing. | Host |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | unset | The traces endpoint, used exactly as written. Wins over `OTEL_EXPORTER_OTLP_ENDPOINT` when both are set. | Host |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | `http/protobuf` or `grpc`. | Host |
+| `OTEL_SERVICE_NAME` | `herrscher` | The service name. | Host |
+| `OTEL_SDK_DISABLED` | unset | `true` turns the export off even when an endpoint is set. | Host |
+
+The other `OTEL_EXPORTER_OTLP_*` and `OTEL_BSP_*` variables set headers, timeouts and
+batching. The endpoint rules, the span contents and the error types are described in the
+[README](../README.md#turn-telemetry-opentelemetry).
+
 ## Set by the daemon, not by you
 
 These are written into a `bridge` child's environment by the daemon that spawns it.

@@ -124,16 +124,20 @@ The unit tests run under `go test ./...`. They use no model: the budget, the
 scoring, the sampling, the report and the sandbox environment are tested
 directly.
 
-Two end-to-end tests run under `-tags e2e` in `scripts/check.sh`. They build
+Three end-to-end tests run under `-tags e2e` in `scripts/check.sh`. They build
 the real `herrscher` and the fake `claude` of `e2e/vendortest`, then:
 
 - `TestMemorySettingReachesTheRealBinary` runs `herrscher --print` with
   `MEMORY_RAW_ARCHIVE` set to `false`, then to `true`, and checks that the raw
   archive is written only in the second run. It fails if the bench does not
   forward the setting to the binary.
-- `TestBenchStopsWithoutAUsageLedger` runs one arm against the real binary. A
-  local `--print` writes no usage ledger, so the bench must stop with the
-  missing-ledger error, keep no outcome, and mark the run stopped.
+- `TestBenchMeasuresEachArmFromTheLedger` runs the task pair against the real
+  binary, one arm off and one on. Each arm's turns, tokens and input come from
+  the usage ledger the local `--print` writes, so the test fails if a run does
+  not record its usage.
+- `TestBenchStopsWithoutAUsageLedger` runs one arm against a binary that writes
+  no ledger. The bench must stop with the missing-ledger error, keep no outcome,
+  and mark the run stopped.
 
 The budget, isolation and scoring rules were checked by breaking them on
 purpose. Each break was caught by a named test: the sandbox dropping the
@@ -143,21 +147,21 @@ and a scorer matching substrings fails `TestScoreMatchesWholeWordsOnly`.
 
 ## Lint exclusions
 
-Two gosec findings are excluded by path in `.golangci.yml`, because the code is
-right and the rule does not apply:
+The only gosec finding excluded by path for this package is G204 in
+`tools/membench/runner.go`: the binary run is the one the operator names with
+`-herrscher`, and running it is the purpose of the tool. The G101 exclusion was
+removed: the catalogue keys and flag names that tripped it are renamed, and their
+values are unchanged.
 
-- G204 in `tools/membench/runner.go`: the binary run is the one the operator
-  names with `-herrscher`, and running it is the purpose of the tool.
-- G101 in `tools/membench/keys.go` and `tools/membench/config.go`: the names
-  matched are catalogue keys and flag names such as `api-key-env`, not
-  credentials.
+The repository-wide exclusion of G304 and G703 under `tools/` still applies to
+this package. The bench reads the dataset and credentials paths the operator
+gives, which is the reason for that rule.
 
 ## Limitations
 
-- A local `herrscher --print` (no daemon) writes no usage ledger, so the bench
-  cannot read its spend. With no daemon, the first call fails with the
-  missing-ledger error and the run stops. Measuring real calls needs either a
-  core change that records local one-shot usage, or a run through a daemon.
+- The bench reads spend from the ledger of the binary it runs. A binary that
+  writes no ledger stops the run with the missing-ledger error, as the
+  `TestBenchStopsWithoutAUsageLedger` test checks.
 - The settings gated by time of day are not exercised by the bench.
 - The effect of `HERRSCHER_OWNER_ID` on `--print` is not verified; the bench
   sets it, but its result is not measured.

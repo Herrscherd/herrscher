@@ -54,10 +54,11 @@ in that directory:
 
 The lock files stay in the state directory. Herrscher never deletes them:
 removing a lock file that another process may hold would let two processes in
-at once. The shared lock is `.forge-connections.json.lock`, and each host whose
-token has been renewed leaves an empty `.forge-connections.json.<sha256>.renew.lock`
-there. When no herrscher process is running, you can delete these empty files
-by hand; herrscher creates them again when it needs them.
+at once. The shared lock is `.forge-connections.json.lock`, and each host
+whose token has been renewed leaves an empty
+`.forge-connections.json.<sha256>.renew.lock` there. When no herrscher process
+is running, you can delete these empty files by hand; herrscher creates them
+again when it needs them.
 
 ## Check the connection
 

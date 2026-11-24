@@ -12,8 +12,8 @@ import (
 
 const (
 	callTimeout    = 5 * time.Minute
-	apiKeyVariable = "ANTHROPIC_API_KEY"
-	redactedSecret = "[redacted]"
+	anthropicEnvName = "ANTHROPIC_API_KEY"
+	redactedSecret   = "[redacted]"
 )
 
 var (
@@ -156,7 +156,7 @@ func (r *runner) play(ctx context.Context, box sandbox, planned arm) (outcome, e
 func (r *runner) assignments(option setting, enabled bool) []string {
 	list := []string{option.assignment(enabled)}
 	if r.apiKey != "" {
-		list = append(list, apiKeyVariable+"="+r.apiKey)
+		list = append(list, anthropicEnvName+"="+r.apiKey)
 	}
 	return list
 }

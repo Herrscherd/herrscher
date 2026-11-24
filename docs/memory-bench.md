@@ -148,10 +148,9 @@ right and the rule does not apply:
 
 - G204 in `tools/membench/runner.go`: the binary run is the one the operator
   names with `-herrscher`, and running it is the purpose of the tool.
-- G101 in `tools/membench/keys.go`, `tools/membench/config.go` and
-  `tools/membench/runner.go`: the names matched are catalogue keys, flag names
-  such as `api-key-env`, and the name of the environment variable that carries
-  the key (`ANTHROPIC_API_KEY`), not credentials.
+- G101 in `tools/membench/keys.go` and `tools/membench/config.go`: the names
+  matched are catalogue keys and flag names such as `api-key-env`, not
+  credentials.
 
 ## Limitations
 

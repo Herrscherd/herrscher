@@ -192,7 +192,7 @@ linters:
       - path: ^tools/membench/runner\.go$
         linters: [gosec]
         text: "^G204:"
-      - path: ^tools/membench/(keys|config|runner)\.go$
+      - path: ^tools/membench/(keys|config)\.go$
         linters: [gosec]
         text: "^G101:"
       - path: ^core/internal/manager/session\.go$

@@ -178,6 +178,7 @@ const (
 	ParamBranch     = "Branch"
 	ParamCommand    = "Command"
 	ParamRepo       = "Repo"
+	ParamReason     = "Reason"
 	ParamPermission = "Permission"
 	ParamChannel    = "Channel"
 	ParamBanner     = "Banner"

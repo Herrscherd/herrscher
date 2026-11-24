@@ -79,6 +79,40 @@ func TestForgeFactsAreTranslatedInFrench(t *testing.T) {
 	}
 }
 
+func TestUnreadableRepoAccessShowsItsReason(t *testing.T) {
+	report := contracts.ProbeReport{State: contracts.HealthDegraded, Detail: contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", "boom")}}}
+	out := tableOf(t, forgeSnapshotWith(report, &health.Forge{Source: contracts.TokenSourceSaved, Repo: "octo/herrscher", RepoErr: "boom"}))
+	if !strings.Contains(out, "repository access could not be read: boom") {
+		t.Errorf("Table() output does not show the repo access reason:\n%s", out)
+	}
+}
+
+func TestUnreadableRepoAccessIsTranslatedInFrench(t *testing.T) {
+	report := contracts.ProbeReport{State: contracts.HealthDegraded, Detail: contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", "boom")}}}
+	out := tableIn(t, i18n.French, forgeSnapshotWith(report, &health.Forge{Source: contracts.TokenSourceSaved, Repo: "octo/herrscher", RepoErr: "boom"}))
+	if !strings.Contains(out, "l’accès au dépôt n’a pas pu être lu : boom") {
+		t.Errorf("French Table() output does not show the repo access reason:\n%s", out)
+	}
+	if strings.Contains(out, "repository access") {
+		t.Errorf("French Table() output carries the English repo access text:\n%s", out)
+	}
+}
+
+func TestRepoAccessReasonIsAppendedToADegradedDetail(t *testing.T) {
+	report := contracts.ProbeReport{State: contracts.HealthDegraded, Detail: contracts.Notice{Code: contracts.CodeHealthRateLimited}}
+	plain := tableOf(t, forgeSnapshotWith(report, &health.Forge{Source: contracts.TokenSourceSaved, Login: "octo", Quota: &health.Quota{Remaining: 12}}))
+	out := tableOf(t, forgeSnapshotWith(report, &health.Forge{Source: contracts.TokenSourceSaved, Login: "octo", Quota: &health.Quota{Remaining: 12}, RepoErr: "boom"}))
+	if strings.Contains(plain, "boom") {
+		t.Fatalf("Table() without a repo error shows a reason:\n%s", plain)
+	}
+	if !strings.Contains(out, "repository access could not be read: boom") {
+		t.Errorf("Table() output drops the repo access reason under a degraded report:\n%s", out)
+	}
+	if !strings.Contains(out, "octo") {
+		t.Errorf("Table() output drops the login under a degraded report:\n%s", out)
+	}
+}
+
 func TestForgeFactsSayThePermissionIsUnknownWhenItCouldNotBeRead(t *testing.T) {
 	out := tableOf(t, forgeSnapshot(&health.Forge{Source: contracts.TokenSourceSaved, Repo: "octo/herrscher"}))
 	if !strings.Contains(out, "octo/herrscher: permission unknown") {

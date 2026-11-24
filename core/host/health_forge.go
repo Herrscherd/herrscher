@@ -87,8 +87,9 @@ func githubRun(open forgeOpener, origin string) runFunc {
 		repo, permission, repoErr := sessionRepoAccess(ctx, forge, host, origin)
 		facts.Repo, facts.Permission = repo, permission
 		report := forgeReady(connection)
-		if repoErr != nil && report.State == contracts.HealthOK {
-			report = repoAccessWarning(repoErr)
+		if repoErr != nil {
+			facts.RepoErr = repoErr.Error()
+			report = withRepoAccess(report, repoErr)
 		}
 		return report, health.Facts{Forge: facts}
 	}
@@ -125,8 +126,15 @@ func forgeFailure(err error) contracts.ProbeReport {
 	return unreachableReport(err)
 }
 
-func repoAccessWarning(err error) contracts.ProbeReport {
-	return contracts.ProbeReport{State: contracts.HealthDegraded, Detail: contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", err.Error())}}}
+func withRepoAccess(report contracts.ProbeReport, err error) contracts.ProbeReport {
+	if report.State != contracts.HealthOK {
+		return report
+	}
+	return contracts.ProbeReport{State: contracts.HealthDegraded, Detail: repoAccessNotice(err)}
+}
+
+func repoAccessNotice(err error) contracts.Notice {
+	return contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", err.Error())}}
 }
 
 func forgeReady(connection contracts.ForgeConnection) contracts.ProbeReport {
@@ -176,11 +184,15 @@ func (c *forgeCache) memo(run runFunc, origin string) runFunc {
 			return c.report, c.facts
 		}
 		report, facts := run(ctx, deep)
-		if ctx.Err() == nil {
+		if ctx.Err() == nil && cacheable(facts) {
 			c.store(origin, report, facts)
 		}
 		return report, facts
 	}
+}
+
+func cacheable(facts health.Facts) bool {
+	return facts.Forge != nil && facts.Forge.RepoErr == ""
 }
 
 func (c *forgeCache) fresh(origin string) bool {

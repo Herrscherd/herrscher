@@ -5440,6 +5440,11 @@
     "other": "{{.Repo}} : droits inconnus"
   },
   {
+    "id": "cli.health.facts.forge_repo_unreadable",
+    "description": "Ligne de détail de la forge de code quand l’accès au dépôt de la session n’a pas pu être lu, Reason est la raison technique",
+    "other": "l’accès au dépôt n’a pas pu être lu : {{.Reason}}"
+  },
+  {
     "id": "cli.forge.source.saved",
     "description": "Word for a forge token stored in the host",
     "other": "enregistré"

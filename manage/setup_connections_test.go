@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -24,7 +25,9 @@ type fakeGitHub struct {
 	code       forgecreds.DeviceCode
 	connects   int
 	block      bool
+	stubborn   chan struct{}
 	entered    chan struct{}
+	returned   chan struct{}
 	cancelled  error
 }
 
@@ -34,10 +37,17 @@ func (fake *fakeGitHub) status(context.Context) (gitHubStatus, error) {
 
 func (fake *fakeGitHub) connect(ctx context.Context, show func(forgecreds.DeviceCode) error) error {
 	fake.connects++
+	if fake.stubborn != nil {
+		close(fake.entered)
+		<-fake.stubborn
+		close(fake.returned)
+		return ctx.Err()
+	}
 	if fake.block {
 		close(fake.entered)
 		<-ctx.Done()
 		fake.cancelled = ctx.Err()
+		close(fake.returned)
 		return ctx.Err()
 	}
 	if err := show(fake.code); err != nil {
@@ -190,12 +200,13 @@ func TestGitHubDeviceCodeIsShownWhileAwaitingTheSignIn(t *testing.T) {
 }
 
 func TestLeavingConnectionsCancelsThePendingSignIn(t *testing.T) {
-	fake := &fakeGitHub{account: "octo", block: true, entered: make(chan struct{})}
+	fake := &fakeGitHub{account: "octo", block: true, entered: make(chan struct{}), returned: make(chan struct{})}
 	harness := newHarnessWithGitHub(t, nil, screenConnections, nil, fake)
 	harness.model.connectGitHub()
 	<-fake.entered
 	harness.choose(t, harness.text(clitext.SetupConnectionsSkip))
 	harness.expectScreen(t, screenHub)
+	<-fake.returned
 	if !errors.Is(fake.cancelled, context.Canceled) {
 		t.Fatalf("sign-in context error = %v, want canceled", fake.cancelled)
 	}
@@ -210,6 +221,28 @@ func TestLeavingConnectionsCancelsThePendingSignIn(t *testing.T) {
 	harness.choose(t, harness.text(clitext.SetupGitHubConnect))
 	if fake.saves != 1 || !fake.connected {
 		t.Fatalf("reconnect after leaving: saves %d connected %v, want one save", fake.saves, fake.connected)
+	}
+}
+
+func TestLeavingConnectionsDoesNotWaitForASignInThatIgnoresCancellation(t *testing.T) {
+	fake := &fakeGitHub{stubborn: make(chan struct{}), entered: make(chan struct{}), returned: make(chan struct{})}
+	t.Cleanup(func() { close(fake.stubborn) })
+	harness := newHarnessWithGitHub(t, nil, screenConnections, nil, fake)
+	harness.model.connectGitHub()
+	<-fake.entered
+	left := make(chan struct{})
+	go func() {
+		harness.choose(t, harness.text(clitext.SetupConnectionsSkip))
+		close(left)
+	}()
+	select {
+	case <-left:
+	case <-time.After(5 * time.Second):
+		t.Fatal("leaving the connections screen waited for a sign-in that ignores cancellation")
+	}
+	harness.expectScreen(t, screenHub)
+	if harness.model.github.busy || harness.model.github.awaiting {
+		t.Fatalf("github = %+v, want not busy and not awaiting after leaving", harness.model.github)
 	}
 }
 

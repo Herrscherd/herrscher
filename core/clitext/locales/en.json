@@ -5440,6 +5440,11 @@
     "other": "{{.Repo}}: permission unknown"
   },
   {
+    "id": "cli.health.facts.forge_repo_unreadable",
+    "description": "Detail line of the code forge when the access to the session repository could not be read, Reason is the technical reason",
+    "other": "repository access could not be read: {{.Reason}}"
+  },
+  {
     "id": "cli.forge.source.saved",
     "description": "Word for a forge token stored in the host",
     "other": "saved"

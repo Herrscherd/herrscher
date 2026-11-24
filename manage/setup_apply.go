@@ -209,6 +209,7 @@ func (model *setupModel) abortInstall() {
 
 func (model *setupModel) abandon() {
 	model.stopGitHub()
+	model.joinGitHub()
 	if model.install.trialsRunning() {
 		model.install.cancel()
 		if !model.waitStep() {

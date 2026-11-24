@@ -112,7 +112,8 @@ it belongs to, the permission the account has on the repository of the current
 directory (the session worktree when an agent runs it), and the requests left before
 the rate limit resets, with the time of the reset. The permission part is left out when
 that directory has no origin or its origin is not on github.com, and the rest of the
-line still shows. No connection is a warning that points to `herrscher connect github`.
+line still shows. When that right cannot be read, the line says so with the reason the
+forge gave, and when the quota is also low, that reason follows the quota warning. No connection is a warning that points to `herrscher connect github`.
 A token the forge refuses is an error asking you to connect again. Fewer than 100
 requests left is a warning, and the login stays on the line beside it. A quota the
 forge did not report is neither shown nor a warning. The token itself is never printed.

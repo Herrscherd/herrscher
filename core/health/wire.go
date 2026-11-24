@@ -51,6 +51,7 @@ type wireForge struct {
 	Quota      *wireQuota                `json:"quota,omitempty"`
 	Repo       string                    `json:"repo,omitempty"`
 	Permission *contracts.RepoPermission `json:"permission,omitempty"`
+	RepoErr    string                    `json:"repo_err,omitempty"`
 }
 
 type wireQuota struct {
@@ -197,7 +198,7 @@ func wireForgeOf(forge *Forge) *wireForge {
 	if forge == nil {
 		return nil
 	}
-	wire := &wireForge{Source: forge.Source, Login: forge.Login, Repo: forge.Repo, Permission: forge.Permission}
+	wire := &wireForge{Source: forge.Source, Login: forge.Login, Repo: forge.Repo, Permission: forge.Permission, RepoErr: forge.RepoErr}
 	if forge.Quota != nil {
 		wire.Quota = &wireQuota{Remaining: forge.Quota.Remaining, Reset: forge.Quota.Reset}
 	}
@@ -208,7 +209,7 @@ func forgeOf(wire *wireForge) *Forge {
 	if wire == nil {
 		return nil
 	}
-	forge := &Forge{Source: wire.Source, Login: wire.Login, Repo: wire.Repo, Permission: wire.Permission}
+	forge := &Forge{Source: wire.Source, Login: wire.Login, Repo: wire.Repo, Permission: wire.Permission, RepoErr: wire.RepoErr}
 	if wire.Quota != nil {
 		forge.Quota = &Quota{Remaining: wire.Quota.Remaining, Reset: wire.Quota.Reset}
 	}

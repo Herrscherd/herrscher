@@ -296,13 +296,24 @@ func (r *renderer) outcome(outcome contracts.CompactOutcome) string {
 }
 
 func causeText(check Check, report contracts.ProbeReport, text *renderer) string {
-	cause := text.notice(report.Detail)
+	cause := detailText(report, check.Facts.Forge, text)
 	forge := check.Facts.Forge
 	if forge == nil || forge.Login == "" || report.Detail.Code == contracts.CodeHealthSignedInAs {
 		return cause
 	}
 	login := contracts.Notice{Code: contracts.CodeHealthSignedInAs, Args: []contracts.Arg{contracts.Text("Name", forge.Login)}}
 	return text.notice(login) + factsSep + cause
+}
+
+func detailText(report contracts.ProbeReport, forge *Forge, text *renderer) string {
+	if forge == nil || forge.RepoErr == "" {
+		return text.notice(report.Detail)
+	}
+	repo := text.key(clitext.HealthForgeRepoUnreadable, clitext.Params{clitext.ParamReason: forge.RepoErr})
+	if report.Detail.Code == contracts.CodeHealthUnreachable {
+		return repo
+	}
+	return text.notice(report.Detail) + factsSep + repo
 }
 
 func forgeFacts(forge *Forge, text *renderer) string {

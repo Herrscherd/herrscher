@@ -4,13 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
+	"github.com/Herrscherd/herrscher/core/forgecreds"
+	"github.com/Herrscherd/herrscher/core/forgeport"
 	"github.com/Herrscherd/herrscher/core/health"
+	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
 type fakeForge struct {
@@ -180,11 +184,112 @@ func TestUnreadableRepoPermissionIsAWarningWithItsReason(t *testing.T) {
 	if report.State != contracts.HealthDegraded {
 		t.Errorf("state = %v, want degraded: a right that cannot be read is a warning", report.State)
 	}
-	if !sameNotice(report.Detail, repoAccessWarning(contracts.ErrForgeNotFound).Detail) {
+	want := contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", contracts.ErrForgeNotFound.Error())}}
+	if !sameNotice(report.Detail, want) {
 		t.Errorf("detail = %+v, want the reason of the failed right check", report.Detail)
 	}
 	if facts.Forge.Repo != "octo/herrscher" || facts.Forge.Permission != nil {
 		t.Errorf("repo = %q permission = %v, want octo/herrscher with no permission", facts.Forge.Repo, facts.Forge.Permission)
+	}
+	if facts.Forge.RepoErr != contracts.ErrForgeNotFound.Error() {
+		t.Errorf("repo error = %q, want the reason kept as a fact", facts.Forge.RepoErr)
+	}
+}
+
+func TestDegradedForgeKeepsItsOwnDetailAndTheRepoReason(t *testing.T) {
+	forge := connectedAs(12)
+	forge.accessErr = contracts.ErrForgeNotFound
+	report, facts := probeOnce(t, openingWith(forge, nil), "https://github.com/octo/herrscher")
+	if report.State != contracts.HealthDegraded || report.Detail.Code != contracts.CodeHealthRateLimited {
+		t.Errorf("report = %+v, want degraded with the rate limit warning kept", report)
+	}
+	if facts.Forge == nil || facts.Forge.RepoErr != contracts.ErrForgeNotFound.Error() {
+		t.Errorf("facts = %+v, want the repo reason kept beside the rate limit warning", facts.Forge)
+	}
+}
+
+func TestSessionRepoWithoutAccessHasNoRepoReason(t *testing.T) {
+	_, facts := probeOnce(t, openingWith(connectedAs(4000), nil), "https://github.com/octo/herrscher")
+	if facts.Forge == nil || facts.Forge.RepoErr != "" {
+		t.Errorf("facts = %+v, want no repo reason when the right is read", facts.Forge)
+	}
+}
+
+func TestFailedForgeProbeIsReprobedOnTheNextTick(t *testing.T) {
+	tests := []struct {
+		name    string
+		openErr error
+		connErr error
+	}{
+		{name: "not connected", connErr: contracts.ErrForgeNotConnected},
+		{name: "refused credential", connErr: contracts.ErrForgeUnauthorized},
+		{name: "rate limited", connErr: &contracts.ForgeRateLimitedError{}},
+		{name: "unreachable forge", connErr: errors.New("dial tcp: refused")},
+		{name: "no forge plugin", openErr: errors.New("no plugin")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clock := &manualClock{now: time.Date(2026, 11, 24, 9, 0, 0, 0, time.UTC)}
+			forge := connectedAs(4000)
+			forge.connErr = tt.connErr
+			openErr := tt.openErr
+			open := func(context.Context, contracts.ForgeHost) (contracts.Forge, error) {
+				if openErr != nil {
+					return nil, openErr
+				}
+				return forge, nil
+			}
+			origin := "https://github.com/octo/herrscher"
+			run := newForgeCache(clock.Now).memo(githubRun(open, origin), origin)
+			if report, _ := run(context.Background(), false); report.State == contracts.HealthOK {
+				t.Fatalf("first tick = %+v, want a failure", report)
+			}
+			openErr, forge.connErr = nil, nil
+			clock.now = clock.now.Add(time.Second)
+			report, facts := run(context.Background(), false)
+			if report.State != contracts.HealthOK || facts.Forge == nil || facts.Forge.Login != "octo" {
+				t.Fatalf("next tick = %+v, want the success shown at once", report)
+			}
+		})
+	}
+}
+
+func TestFailedRepoReadIsReprobedOnTheNextTick(t *testing.T) {
+	clock := &manualClock{now: time.Date(2026, 11, 24, 9, 0, 0, 0, time.UTC)}
+	forge := connectedAs(4000)
+	forge.accessErr = contracts.ErrForgeNotFound
+	origin := "https://github.com/octo/herrscher"
+	run := newForgeCache(clock.Now).memo(githubRun(openingWith(forge, nil), origin), origin)
+	run(context.Background(), false)
+	forge.accessErr = nil
+	clock.now = clock.now.Add(time.Second)
+	report, facts := run(context.Background(), false)
+	if report.State != contracts.HealthOK || facts.Forge == nil || facts.Forge.RepoErr != "" {
+		t.Fatalf("next tick = %+v facts %+v, want the repo right read at once", report, facts.Forge)
+	}
+}
+
+func TestGitHubForgeCredentialsReachTheProbe(t *testing.T) {
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+	var opened contracts.ForgeCredentials
+	contracts.Default.Register(contracts.Plugin{
+		Manifest: contracts.Manifest{Kind: forgeport.KindGitHub, Category: contracts.CategoryForge},
+		Forge: func(_ context.Context, _ contracts.PluginConfig, _ contracts.ForgeHost, creds contracts.ForgeCredentials) (contracts.Forge, error) {
+			opened = creds
+			return connectedAs(4000), nil
+		},
+	})
+	creds := forgecreds.New(filepath.Join(t.TempDir(), "forge.json"))
+	inputs := newHealthInputs(newHostMessages(), runtimedir.Layout{}, "test", nil, nil, compactionPolicy{}, t.TempDir(), forgeCredentials(creds))
+	probes := forgeProbes(inputs)
+	if len(probes) != 1 {
+		t.Fatalf("forge probes = %d, want the GitHub probe", len(probes))
+	}
+	probes[0].Run(context.Background(), false)
+	if opened != forgeCredentials(creds) {
+		t.Errorf("forge opened with %v, want the host's forge credentials", opened)
 	}
 }
 

@@ -56,6 +56,7 @@ type Forge struct {
 	Quota      *Quota
 	Repo       string
 	Permission *contracts.RepoPermission
+	RepoErr    string
 }
 
 // Quota is the rate limit of the forge: the requests left in the window, and when

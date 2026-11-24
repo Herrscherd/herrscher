@@ -125,10 +125,7 @@ func (model *setupModel) connectGitHub() tea.Cmd {
 		err := link.connect(ctx, func(code forgecreds.DeviceCode) error {
 			return sendGitHub(ctx, events, gitHubCodeMsg{flow: flow, code: code, events: events})
 		})
-		select {
-		case events <- gitHubConnectDoneMsg{flow: flow, err: err}:
-		case <-ctx.Done():
-		}
+		events <- gitHubConnectDoneMsg{flow: flow, err: err}
 	}()
 	return nextGitHubEvent(events)
 }
@@ -156,7 +153,6 @@ func (model *setupModel) cancelGitHub() {
 func (model *setupModel) stopGitHub() {
 	model.github.flow++
 	model.cancelGitHub()
-	model.joinGitHub()
 	model.github.busy = false
 	model.github.awaiting = false
 	model.github.code = forgecreds.DeviceCode{}

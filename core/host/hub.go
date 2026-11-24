@@ -501,9 +501,6 @@ func (h *hub) Repos(ctx context.Context) ([]contracts.RepoRef, error) {
 }
 
 func newForgeClient(credentials *forgecreds.Credentials) *forge.Client {
-	if credentials == nil {
-		credentials = forgecreds.New(DefaultStatePath())
-	}
 	return forge.New(credentials)
 }
 

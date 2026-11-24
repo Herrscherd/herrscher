@@ -66,6 +66,13 @@ func TestOpenPullRequestOpensGitHubThroughTheInjectedOpener(t *testing.T) {
 	}
 }
 
+func TestNewPullRequestsWithoutForgeIsNoOpener(t *testing.T) {
+	var opener tui.PullRequestOpener = newPullRequests(nil)
+	if opener != nil {
+		t.Fatalf("opener = %T, want nil so the window reports that no forge is wired", opener)
+	}
+}
+
 func TestOpenPullRequestReturnsTheOpenerError(t *testing.T) {
 	boom := errors.New("not connected")
 	open := func(context.Context, contracts.ForgeHost) (contracts.Forge, error) { return nil, boom }

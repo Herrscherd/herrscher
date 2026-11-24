@@ -326,6 +326,7 @@ func newOperatorRegistry(ctx context.Context, layout host.RuntimeLayout, message
 	}
 	home := homeRef(cfg)
 	return host.NewRegistry(ctx, messages, hostMessages, gws, host.Options{
+		Forge:      forgecreds.New(host.DefaultStatePath()),
 		Warnings:   os.Stderr,
 		Runtime:    layout,
 		StatePath:  host.DefaultStatePath(),

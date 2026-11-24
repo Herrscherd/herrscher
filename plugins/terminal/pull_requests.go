@@ -16,7 +16,10 @@ type githubPullRequests struct {
 	open forgeOpener
 }
 
-func newPullRequests(open forgeOpener) githubPullRequests {
+func newPullRequests(open forgeOpener) tui.PullRequestOpener {
+	if open == nil {
+		return nil
+	}
 	return githubPullRequests{open: open}
 }
 

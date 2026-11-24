@@ -71,8 +71,9 @@ items may have none).
 
 The file is streamed, never loaded whole, and it is capped at 512 MiB and
 100000 items. The sample keeps the items with the lowest seeded hash of their
-id, so the same seed and file always give the same items. The dataset is not
-bundled: pass its path.
+id, so the same seed and file always give the same items. The sample is not
+stratified by capability: the capabilities are whatever the hash selects, so one
+may get few items or none. The dataset is not bundled: pass its path.
 
 ## What is measured
 

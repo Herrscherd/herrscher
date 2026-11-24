@@ -107,20 +107,18 @@ func runOneShotSeedIDWithRuntime(ctx context.Context, st *state.State, name, tas
 	if err != nil {
 		return "", err
 	}
-	if mem != nil {
-		defer closeRead(mem)
-	}
-	return runOneShotSeedWithIDRuntime(ctx, sess, task, turnID, orch, runtime)
+	return runOneShotSeedWithIDRuntime(ctx, sess, task, turnID, orch, runtime, mem)
 }
 
-func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, turnID string, orch contracts.Orchestrator, runtime oneShotSeedRuntime) (string, error) {
+func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, turnID string, orch contracts.Orchestrator, runtime oneShotSeedRuntime, memory ...io.Closer) (string, error) {
 	if runtime.desk == nil && !runtime.localRun {
 		return "", errSeedWithoutApprovalDesk
 	}
+	owned := append([]io.Closer{orch}, memory...)
 	bridgeJoined := false
 	defer func() {
-		if orch != nil && bridgeJoined {
-			closeRead(orch)
+		if bridgeJoined {
+			closeAll(owned)
 		}
 	}()
 	seedCtx, cancel := context.WithTimeout(ctx, oneShotTurnTimeout(runtime))
@@ -171,6 +169,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	joined, bridgeRunErr := endBridge(seedCtx, bridgeErr, grace, stopBridge)
 	if !joined {
 		warnLive(runtime.messages, runtime.warnings, runtime.languageOf(sess), "warn.seed_bridge_unjoined", map[string]any{graceParam: grace.String()})
+		go closeWhenBridgeEnds(bridgeErr, owned)
 		if !ok {
 			return "", errSeedTimeout
 		}
@@ -185,6 +184,19 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	}
 	consolidateOneShot(ctx, orch, gate, sess, runtime.messages, runtime.warnings, runtime.languageOf(sess))
 	return reply, nil
+}
+
+func closeWhenBridgeEnds(bridgeErr <-chan error, owned []io.Closer) {
+	logCleanup(<-bridgeErr)
+	closeAll(owned)
+}
+
+func closeAll(closers []io.Closer) {
+	for _, closer := range closers {
+		if closer != nil {
+			closeRead(closer)
+		}
+	}
 }
 
 func seedReplyError(ok bool, bridgeRunErr error) error {

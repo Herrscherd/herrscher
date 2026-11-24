@@ -229,8 +229,8 @@ func columnsOf(translator *translator, section msgKey) []column {
 		{msgColOn, func(item row) string { return percentCell(lang, item.On) }},
 		{msgColDeltaSuccess, func(item row) string { return signed(lang, item.DeltaSuccess*percent, 0) + "%" }},
 		{msgColDeltaTurns, func(item row) string { return signed(lang, item.DeltaTurns, turnDecimals) }},
-		{msgColDeltaTokens, func(item row) string { return tokensCell(translator, item.DeltaTokensPerSuccess) }},
-		{msgColMemoryTokens, func(item row) string { return signed(lang, item.MemoryTokensPerTurn, memoryDecimals) }},
+		{msgColDeltaVolume, func(item row) string { return tokensCell(translator, item.DeltaTokensPerSuccess) }},
+		{msgColMemoryVolume, func(item row) string { return signed(lang, item.MemoryTokensPerTurn, memoryDecimals) }},
 	}
 	if section == msgSectionLongMemEval {
 		return columns

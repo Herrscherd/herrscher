@@ -31,7 +31,7 @@ const (
 	nameBudgetTokens = "budget-tokens"
 	nameBudgetUSD    = "budget-usd"
 	nameCredentials  = "credentials"
-	nameAPIKeyEnv    = "api-key-env"
+	nameKeyEnv       = "api-key-env"
 	nameDataset      = "dataset"
 	nameSamples      = "samples"
 	nameSeed         = "seed"
@@ -76,10 +76,10 @@ func flagCatalogue() []flagSpec {
 	return []flagSpec{
 		{nameHerrscher, msgFlagHerrscher},
 		{nameModel, msgFlagModel},
-		{nameBudgetTokens, msgFlagBudgetTokens},
+		{nameBudgetTokens, msgFlagBudgetLimit},
 		{nameBudgetUSD, msgFlagBudgetUSD},
-		{nameCredentials, msgFlagCredentials},
-		{nameAPIKeyEnv, msgFlagAPIKeyEnv},
+		{nameCredentials, msgFlagAuthFile},
+		{nameKeyEnv, msgFlagKeyEnv},
 		{nameDataset, msgFlagDataset},
 		{nameSamples, msgFlagSamples},
 		{nameSeed, msgFlagSeed},
@@ -121,7 +121,7 @@ func (r *rawFlags) bind(flags *flag.FlagSet) {
 	flags.Int64Var(&r.budgetTokens, nameBudgetTokens, 0, "")
 	flags.Float64Var(&r.budgetUSD, nameBudgetUSD, 0, "")
 	flags.StringVar(&r.credentials, nameCredentials, "", "")
-	flags.StringVar(&r.apiKeyEnv, nameAPIKeyEnv, "", "")
+	flags.StringVar(&r.apiKeyEnv, nameKeyEnv, "", "")
 	flags.StringVar(&r.dataset, nameDataset, "", "")
 	flags.IntVar(&r.samples, nameSamples, defaultSamples, "")
 	flags.Uint64Var(&r.seed, nameSeed, defaultSeed, "")
@@ -171,7 +171,7 @@ func (c *config) readAPIKey(name string, getenv func(string) string) error {
 	}
 	value := getenv(name)
 	if value == "" {
-		return flagError(nameAPIKeyEnv, name)
+		return flagError(nameKeyEnv, name)
 	}
 	c.apiKey = value
 	return nil

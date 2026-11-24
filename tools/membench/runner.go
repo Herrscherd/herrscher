@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	callTimeout    = 5 * time.Minute
+	callTimeout      = 5 * time.Minute
 	anthropicEnvName = "ANTHROPIC_API_KEY"
 	redactedSecret   = "[redacted]"
 )

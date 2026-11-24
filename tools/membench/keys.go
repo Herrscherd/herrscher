@@ -17,10 +17,10 @@ const (
 	msgUsage              msgKey = "membench.usage"
 	msgFlagHerrscher      msgKey = "membench.flag.herrscher"
 	msgFlagModel          msgKey = "membench.flag.model"
-	msgFlagBudgetTokens   msgKey = "membench.flag.budget_tokens"
+	msgFlagBudgetLimit    msgKey = "membench.flag.budget_tokens"
 	msgFlagBudgetUSD      msgKey = "membench.flag.budget_usd"
-	msgFlagCredentials    msgKey = "membench.flag.credentials"
-	msgFlagAPIKeyEnv      msgKey = "membench.flag.api_key_env"
+	msgFlagAuthFile       msgKey = "membench.flag.credentials"
+	msgFlagKeyEnv         msgKey = "membench.flag.api_key_env"
 	msgFlagDataset        msgKey = "membench.flag.dataset"
 	msgFlagSamples        msgKey = "membench.flag.samples"
 	msgFlagSeed           msgKey = "membench.flag.seed"
@@ -53,8 +53,8 @@ const (
 	msgColOn              msgKey = "membench.col.on"
 	msgColDeltaSuccess    msgKey = "membench.col.delta_success"
 	msgColDeltaTurns      msgKey = "membench.col.delta_turns"
-	msgColDeltaTokens     msgKey = "membench.col.delta_tokens"
-	msgColMemoryTokens    msgKey = "membench.col.memory_tokens"
+	msgColDeltaVolume     msgKey = "membench.col.delta_tokens"
+	msgColMemoryVolume    msgKey = "membench.col.memory_tokens"
 	msgColFalseRecall     msgKey = "membench.col.false_recall"
 	msgColCapability      msgKey = "membench.col.capability"
 	msgVariantSameAgent   msgKey = "membench.variant.same_agent"
@@ -73,10 +73,10 @@ func declaredMessages() map[msgKey][]string {
 		msgUsage:              nil,
 		msgFlagHerrscher:      nil,
 		msgFlagModel:          nil,
-		msgFlagBudgetTokens:   nil,
+		msgFlagBudgetLimit:    nil,
 		msgFlagBudgetUSD:      nil,
-		msgFlagCredentials:    nil,
-		msgFlagAPIKeyEnv:      nil,
+		msgFlagAuthFile:       nil,
+		msgFlagKeyEnv:         nil,
 		msgFlagDataset:        nil,
 		msgFlagSamples:        nil,
 		msgFlagSeed:           nil,
@@ -109,8 +109,8 @@ func declaredMessages() map[msgKey][]string {
 		msgColOn:              nil,
 		msgColDeltaSuccess:    nil,
 		msgColDeltaTurns:      nil,
-		msgColDeltaTokens:     nil,
-		msgColMemoryTokens:    nil,
+		msgColDeltaVolume:     nil,
+		msgColMemoryVolume:    nil,
 		msgColFalseRecall:     nil,
 		msgColCapability:      nil,
 		msgVariantSameAgent:   nil,

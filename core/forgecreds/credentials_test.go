@@ -1096,6 +1096,66 @@ func TestUnreadableFileWarnsOnceWhileTheKeptPairIsServed(t *testing.T) {
 	}
 }
 
+func tokenWhileRenewalLockHeld(t *testing.T, creds *Credentials, host contracts.ForgeHost, calls int) {
+	t.Helper()
+	release, err := filelock.Acquire(t.Context(), creds.store.renewLockPath(host))
+	if err != nil {
+		t.Fatalf("hold the renewal lock: %v", err)
+	}
+	defer release()
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	for range calls {
+		token, tokenErr := creds.Token(cancelled, host)
+		if tokenErr != nil || token.Secret() != "ghu_fresh" {
+			t.Fatalf("Token with the renewal lock not taken = %v, %v; want the renewed token kept in memory", token.Secret(), tokenErr)
+		}
+	}
+}
+
+func TestUnfinishedRenewalWarnsOncePerEpisode(t *testing.T) {
+	setup, _ := renewWithFailingSave(t)
+	host := mustHost(t, "github.com")
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	tokenWhileRenewalLockHeld(t, setup.creds, host, 2)
+	if n := countWarnings(logs.String(), "forge renewal not finished"); n != 1 {
+		t.Fatalf("unfinished warnings for two calls in one episode = %d, want 1: %s", n, logs.String())
+	}
+
+	if _, err := tokenSource(t, setup.creds, "github.com"); err != nil {
+		t.Fatalf("Token with the file still failing to save: %v", err)
+	}
+	tokenWhileRenewalLockHeld(t, setup.creds, host, 1)
+	if n := countWarnings(logs.String(), "forge renewal not finished"); n != 1 {
+		t.Fatalf("unfinished warnings after the held renewal was replaced in the same episode = %d, want 1: %s", n, logs.String())
+	}
+
+	setup.creds.store.rename = os.Rename
+	if _, err := tokenSource(t, setup.creds, "github.com"); err != nil {
+		t.Fatalf("Token once the file is writable: %v", err)
+	}
+	if stored := storedRecord(t, setup.creds); stored.RefreshToken != "ghr_fresh" {
+		t.Fatalf("renewed pair not saved once writable: %+v", stored)
+	}
+	if _, found := setup.creds.heldFor(host); found {
+		t.Fatalf("held renewal kept after a successful save")
+	}
+
+	mustPut(t, setup.creds, Record{AccessToken: "ghu_near", AccessExpiresAt: fixedNow().Add(2 * time.Minute), RefreshToken: "ghr_next"})
+	setup.creds.store.rename = func(string, string) error { return errors.New("injected rename failure") }
+	if _, err := tokenSource(t, setup.creds, "github.com"); err != nil {
+		t.Fatalf("Token with a new failed write: %v", err)
+	}
+	tokenWhileRenewalLockHeld(t, setup.creds, host, 2)
+	if n := countWarnings(logs.String(), "forge renewal not finished"); n != 2 {
+		t.Fatalf("unfinished warnings after a new episode = %d, want 2: %s", n, logs.String())
+	}
+}
+
 func TestHeldRenewalIsServedWhenTheFileBecomesCorrupt(t *testing.T) {
 	setup, server := renewWithFailingSave(t)
 	if err := os.WriteFile(setup.creds.store.Path(), []byte("{broken"), 0o600); err != nil {

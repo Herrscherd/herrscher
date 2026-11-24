@@ -6,12 +6,50 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Herrscherd/herrscher/core/usage"
 )
+
+func TestEveryArmPlantsTheAgedNodeBeforeTheBinaryRuns(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run("enabled="+strconv.FormatBool(enabled), func(t *testing.T) {
+			seen, err := playArmCapturingVault(t, enabled)
+			if seen != agedNodeText {
+				t.Errorf("enabled=%t: the vault held %q when the binary ran, want the aged node", enabled, seen)
+			}
+			if known, ok := errors.AsType[messageError](err); !ok || known.key != msgErrNoUsage {
+				t.Errorf("enabled=%t: error %v, want the missing-ledger error after the binary ran", enabled, err)
+			}
+		})
+	}
+}
+
+func playArmCapturingVault(t *testing.T, enabled bool) (string, error) {
+	t.Helper()
+	dir := t.TempDir()
+	capture := filepath.Join(dir, "seen.md")
+	binary := filepath.Join(dir, "herrscher")
+	script := "#!/bin/sh\ncat \"$OBSIDIAN_VAULT/" + agedNodeFile + "\" > '" + capture + "' || exit 3\n"
+	if err := os.WriteFile(binary, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	box, err := newSandbox(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	bench := &runner{binary: binary, meter: &meter{}}
+	planned := arm{current: pairTasks()[0], option: setting{name: "report", env: "MEMORY_REPORT_ENABLED"}, enabled: enabled}
+	_, playErr := bench.play(context.Background(), box, planned)
+	seen, readErr := os.ReadFile(capture)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	return string(seen), playErr
+}
 
 func TestRedactHidesTheKeyWhereItAppears(t *testing.T) {
 	const secret = "placeholder-key"

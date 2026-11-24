@@ -188,6 +188,8 @@ checks that every arm sets its setting and `TERMINAL_CONSOLIDATE_EVERY=0`, and
 `TestEveryDeclaredKeyIsInBothCatalogues` and `TestUsageWritesInEachLanguage`
 check that every message key and the usage text exist in English and French.
 `TestDeltasUseOnlyCompletePairsAndMarkPartialRows` checks the paired deltas.
+`TestEveryArmPlantsTheAgedNodeBeforeTheBinaryRuns` checks that the aged node is
+in the vault of both arms when the binary starts.
 In `core/host`, `TestLocalOneShotReportsAFailedLedgerWrite` checks that a failed
 usage write in a local one-shot reaches the warnings writer.
 

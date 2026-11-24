@@ -11,7 +11,10 @@ import (
 	"testing"
 )
 
-const rawArchiveDir = "raw"
+const (
+	rawArchiveDir = "raw"
+	vaultEnv      = "OBSIDIAN_VAULT"
+)
 
 type binaries struct {
 	herrscher string
@@ -48,11 +51,13 @@ func rawArchiveFiles(tb testing.TB, bins binaries, option setting, enabled bool)
 			tb.Fatal(closeErr)
 		}
 	}()
+	vault := filepath.Join(box.root, "vault")
 	r := runner{binary: bins.herrscher, model: defaultModel}
-	if _, err := r.invoke(tb.Context(), box, step{prompt: "Remember this: the code is 4242.", agent: agentAlpha}, []string{option.assignment(enabled)}); err != nil {
+	assignments := []string{option.assignment(enabled), vaultEnv + "=" + vault}
+	if _, err := r.invoke(tb.Context(), box, step{prompt: "Remember this: the code is 4242.", agent: agentAlpha}, assignments); err != nil {
 		tb.Fatalf("herrscher --print: %v", err)
 	}
-	archive := filepath.Join(box.home, ".herrscher", "memory", rawArchiveDir)
+	archive := filepath.Join(vault, rawArchiveDir)
 	count := 0
 	walkErr := filepath.WalkDir(archive, func(_ string, entry fs.DirEntry, err error) error {
 		if err != nil {

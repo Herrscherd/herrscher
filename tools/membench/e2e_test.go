@@ -83,14 +83,51 @@ func TestMemorySettingReachesTheRealBinary(t *testing.T) {
 	}
 }
 
-func TestBenchStopsWithoutAUsageLedger(t *testing.T) {
+func TestBenchMeasuresEachArmFromTheLedger(t *testing.T) {
 	bins := buildBinaries(t)
 	settings, err := selectSettings("raw-archive")
 	if err != nil {
 		t.Fatal(err)
 	}
+	tasks := pairTasks()[:1]
 	r := runner{
 		binary: bins.herrscher,
+		model:  defaultModel,
+		parent: t.TempDir(),
+		meter:  &meter{limit: budget{tokens: 10000000}},
+	}
+	result, err := r.runAll(t.Context(), tasks, settings)
+	if err != nil {
+		t.Fatalf("runAll: %v", err)
+	}
+	if result.stopped {
+		t.Fatal("execution stopped although the budget allows every arm")
+	}
+	if len(result.outcomes) != armsPerSetting {
+		t.Fatalf("outcomes = %d, want %d", len(result.outcomes), armsPerSetting)
+	}
+	wantTurns := len(tasks[0].steps) + 1
+	for _, got := range result.outcomes {
+		if got.turns != wantTurns {
+			t.Errorf("arm on=%t: turns = %d, want %d read from the ledger", got.on, got.turns, wantTurns)
+		}
+		if got.tokens <= 0 || got.input <= 0 {
+			t.Errorf("arm on=%t: tokens = %d, input = %d, want the ledger's usage", got.on, got.tokens, got.input)
+		}
+	}
+}
+
+func TestBenchStopsWithoutAUsageLedger(t *testing.T) {
+	binary := filepath.Join(t.TempDir(), "herrscher")
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\necho ok\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := selectSettings("raw-archive")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := runner{
+		binary: binary,
 		model:  defaultModel,
 		parent: t.TempDir(),
 		meter:  &meter{limit: budget{tokens: 1000000}},

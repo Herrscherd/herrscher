@@ -62,7 +62,7 @@ func RunHub(ctx context.Context, cliMessages *clitext.Messages, hostMessages *Me
 	messages := hostMessages.owner
 	clock, tick, settingsErr := schedulerSettings(messages)
 	if settingsErr != nil {
-		closeGateways(ctx, closers, obs.Stderr(false))
+		closeGateways(ctx, closers, operatorLogger(options.Warnings))
 		return localizeHostError(messages, cliMessages, options.operatorLanguage(), settingsErr)
 	}
 	serveErr := serveHub(ctx, messages, cliMessages, gws, closers, options, clock, tick)
@@ -86,10 +86,7 @@ func (options Options) withDefaultGateways(gws []Deps) Options {
 }
 
 func operatorLogger(warnings io.Writer) *slog.Logger {
-	if warnings == nil {
-		warnings = os.Stderr
-	}
-	return obs.NewLogger(warnings, obs.ParseLevel(false, os.Getenv(obs.EnvLevel)))
+	return obs.NewLogger(warningWriter(warnings), obs.ParseLevel(false, os.Getenv(obs.EnvLevel)))
 }
 
 func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.Messages, gws []Deps, closers []contracts.Gateway, options Options, clock func() time.Time, tick time.Duration) error {

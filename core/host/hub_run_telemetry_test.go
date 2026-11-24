@@ -96,7 +96,7 @@ func TestRunHubHonoursTheConfigFileTelemetrySwitch(t *testing.T) {
 
 	err := RunHub(ctx, clitext.NewMessages(), NewMessages(), nil, nil, Options{StatePath: statePath, Runtime: isolatedRuntimeDir(t), Warnings: &logs})
 
-	if err != nil && !errors.Is(err, context.Canceled) {
+	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("RunHub returned %v, want the cancellation of its run context", err)
 	}
 	if !strings.Contains(logs.String(), "turn telemetry is off: the configuration sets telemetry.enabled to false") {

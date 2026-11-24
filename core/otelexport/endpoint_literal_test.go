@@ -116,6 +116,12 @@ func TestExportReachesCollectorAtIPLiteral(t *testing.T) {
 			},
 		},
 		{
+			name: "grpc IPv4 traces insecure overrides insecure", host: "127.0.0.1", protocol: "grpc", start: startGRPCCollector,
+			settings: func(addr string) map[string]string {
+				return map[string]string{envEndpoint: addr, envTracesInsecure: "true", envInsecure: "false"}
+			},
+		},
+		{
 			name: "grpc IPv6 URL", host: "::1", protocol: "grpc", start: startGRPCCollector,
 			settings: func(addr string) map[string]string { return map[string]string{envEndpoint: "http://" + addr} },
 		},

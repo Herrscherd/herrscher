@@ -58,6 +58,38 @@ func TestTracesEndpointEnablesExporter(t *testing.T) {
 	}
 }
 
+func TestTracesProtocolOverridesProtocol(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		tracesProto   string
+		genericProto  string
+		wantSetupFail bool
+	}{
+		{name: "traces grpc over generic http", tracesProto: "grpc", genericProto: "http/protobuf"},
+		{name: "traces http over generic grpc", tracesProto: "http/protobuf", genericProto: "grpc", wantSetupFail: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			exporter, err := Setup(context.Background(), environment(map[string]string{
+				envEndpoint:       "localhost:4317",
+				envTracesProtocol: tc.tracesProto,
+				envProtocol:       tc.genericProto,
+			}))
+			if tc.wantSetupFail {
+				if !errors.Is(err, ErrInvalidEndpoint) {
+					t.Fatalf("err = %v, want the bare host:port refused over http/protobuf", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("err = %v, want the traces protocol grpc to accept the bare host:port", err)
+			}
+			if err := exporter.Shutdown(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
 func TestUnsupportedProtocolIsAnError(t *testing.T) {
 	_, err := Setup(context.Background(), environment(map[string]string{
 		envEndpoint:       "http://127.0.0.1:1",

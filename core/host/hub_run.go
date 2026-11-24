@@ -37,6 +37,10 @@ func startTelemetry(ctx context.Context, messages *hostMessages, lang i18n.Langu
 	}
 }
 
+func startTelemetryForConfig(ctx context.Context, messages *hostMessages, lang i18n.Language, log *slog.Logger, cfg config.Config) (otelexport.Exporter, func()) {
+	return startTelemetry(ctx, messages, lang, log, cfg.TelemetryOff())
+}
+
 func telemetryDisabledText(messages *hostMessages, lang i18n.Language, err error) string {
 	switch {
 	case errors.Is(err, otelexport.ErrInvalidEndpoint):
@@ -126,7 +130,7 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	if err != nil {
 		return wrapHost(messages, err, "serve.config", nil)
 	}
-	telemetry, stopTelemetry := startTelemetry(ctx, messages, options.operatorLanguage(), log, cfg.TelemetryOff())
+	telemetry, stopTelemetry := startTelemetryForConfig(ctx, messages, options.operatorLanguage(), log, cfg)
 	defer stopTelemetry()
 	sessions.telemetry = telemetry
 	sessions.store = store

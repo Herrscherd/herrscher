@@ -4,11 +4,27 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/config"
 )
+
+func loadConfigFile(t *testing.T, body string) config.Config {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cfg
+}
 
 func TestTelemetryRefusalNamesItsCause(t *testing.T) {
 	for _, tc := range []struct {
@@ -32,10 +48,11 @@ func TestTelemetryRefusalNamesItsCause(t *testing.T) {
 	}
 }
 
-func TestTelemetryTurnedOffByConfigExportsNothing(t *testing.T) {
+func TestTelemetryTurnedOffInConfigFileExportsNothing(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4318")
+	cfg := loadConfigFile(t, `{"telemetry":{"enabled":false}}`)
 	var logs bytes.Buffer
-	telemetry, stop := startTelemetry(context.Background(), newHostMessages(), i18n.English, slog.New(slog.NewTextHandler(&logs, nil)), true)
+	telemetry, stop := startTelemetryForConfig(context.Background(), newHostMessages(), i18n.English, slog.New(slog.NewTextHandler(&logs, nil)), cfg)
 	defer stop()
 	if telemetry.Enabled() {
 		t.Fatal("the exporter is on although the configuration turns telemetry off")
@@ -46,10 +63,11 @@ func TestTelemetryTurnedOffByConfigExportsNothing(t *testing.T) {
 	}
 }
 
-func TestTelemetryTurnedOffByConfigSkipsAnInvalidEndpoint(t *testing.T) {
+func TestTelemetryTurnedOffInConfigFileSkipsAnInvalidEndpoint(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "ftp://collector")
+	cfg := loadConfigFile(t, `{"telemetry":{"enabled":false}}`)
 	var logs bytes.Buffer
-	telemetry, stop := startTelemetry(context.Background(), newHostMessages(), i18n.English, slog.New(slog.NewTextHandler(&logs, nil)), true)
+	telemetry, stop := startTelemetryForConfig(context.Background(), newHostMessages(), i18n.English, slog.New(slog.NewTextHandler(&logs, nil)), cfg)
 	defer stop()
 	if telemetry.Enabled() {
 		t.Fatal("the exporter is on although the configuration turns telemetry off")
@@ -59,10 +77,11 @@ func TestTelemetryTurnedOffByConfigSkipsAnInvalidEndpoint(t *testing.T) {
 	}
 }
 
-func TestTelemetryNotTurnedOffByConfigKeepsTheEnvironmentDecision(t *testing.T) {
+func TestTelemetryWithoutConfigSwitchKeepsTheEnvironmentDecision(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4318")
+	cfg := loadConfigFile(t, `{"telemetry":{}}`)
 	var logs bytes.Buffer
-	telemetry, stop := startTelemetry(context.Background(), newHostMessages(), i18n.English, slog.New(slog.NewTextHandler(&logs, nil)), false)
+	telemetry, stop := startTelemetryForConfig(context.Background(), newHostMessages(), i18n.English, slog.New(slog.NewTextHandler(&logs, nil)), cfg)
 	defer stop()
 	if !telemetry.Enabled() {
 		t.Fatalf("the exporter is off with a valid endpoint and no configuration switch, log = %q", logs.String())

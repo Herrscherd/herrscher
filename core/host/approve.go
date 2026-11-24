@@ -3,7 +3,6 @@ package host
 import (
 	"context"
 	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -451,12 +450,8 @@ func approvalSession(approvals *approvalTable, approvalID string) (string, bool)
 	return pending.session, true
 }
 
-const approvalIDBytes = 8
-
 func newApprovalID() string {
-	var randomBytes [approvalIDBytes]byte
-	_, _ = rand.Read(randomBytes[:])
-	return hex.EncodeToString(randomBytes[:])
+	return rand.Text()
 }
 
 func describeRequest(req approval.Request) string {

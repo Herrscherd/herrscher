@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -71,6 +72,9 @@ func (h *Handler) resolveProject(ctx context.Context, input contracts.Input, hos
 		dir, err := h.fg.Clone(cctx, spec, wtRoot)
 		cancel()
 		if err != nil {
+			if errors.Is(err, contracts.ErrForgeNotConnected) {
+				return "", localize(h.messages, h.currentLanguage(), "clone: "+err.Error(), clitext.HostErrForgeNotConnected, clitext.Params{}, err)
+			}
 			return "", h.labelled("clone", clitext.HostErrCloneFailed, err)
 		}
 		project = filepath.Base(dir)

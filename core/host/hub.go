@@ -19,6 +19,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/eventwire"
+	"github.com/Herrscherd/herrscher/core/forgecreds"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
@@ -483,7 +484,7 @@ func (h *hub) Pick(name, value string) bool {
 
 func (h *hub) Repos(ctx context.Context) ([]contracts.RepoRef, error) {
 	out := workspaceRepos(h.st.WorkspaceRoot())
-	repos, err := forge.New().List(ctx)
+	repos, err := newForgeClient().List(ctx)
 	if err != nil {
 		slog.Warn("repos unavailable", "err", err)
 		return out, nil
@@ -492,6 +493,10 @@ func (h *hub) Repos(ctx context.Context) ([]contracts.RepoRef, error) {
 		out = append(out, contracts.RepoRef{Name: r.FullName, Description: r.Desc})
 	}
 	return out, nil
+}
+
+func newForgeClient() *forge.Client {
+	return forge.New(forgecreds.New(DefaultStatePath()))
 }
 
 func workspaceRepos(workspace string) []contracts.RepoRef {

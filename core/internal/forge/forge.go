@@ -1,33 +1,44 @@
-// Package forge wraps the gh / glab CLIs to list and clone remote repos.
-// All process execution goes through the runner seam so tests can fake exec.
+// Package forge lists the repositories of the forge hosts a herrscher host is
+// connected to and clones them. GitHub goes through the contracts forge port,
+// with its token passed to git only through the environment; GitLab listing
+// stays on the glab command line.
 package forge
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
+
+	"github.com/Herrscherd/herrscher/core/forgeport"
 	"github.com/Herrscherd/herrscher/core/internal/redact"
 )
 
 const (
-	subRepo  = "repo"
-	subClone = "clone"
+	githubLabel  = "github"
+	gitlabLabel  = "gitlab"
+	maxListPages = 20
+	tokenUser    = "x-access-token"
+	subRepo      = "repo"
+	subList      = "list"
+	redactedMark = "[redacted]"
 )
 
 var (
-	errNoForgeCLI = errors.New("no gh or glab installed")
-	errRepoSpec   = errors.New("invalid repo spec")
+	errRepoSpec     = errors.New("invalid repo spec")
+	errTooManyPages = errors.New("repository listing has more pages than the bound")
+	specRe          = regexp.MustCompile(`^[\w.\-]+/[\w.\-]+$`)
 )
 
-// Repo is one remote repository discovered via a forge CLI.
+// Repo is one remote repository discovered on a forge host.
 type Repo struct {
 	FullName string
 	CloneURL string
@@ -55,104 +66,96 @@ func (execRunner) run(ctx context.Context, dir string, env []string, name string
 	return cmd.CombinedOutput()
 }
 
-// Client is the forge facade injected into the handler.
+type openForge func(ctx context.Context, host contracts.ForgeHost) (contracts.Forge, error)
+
+// Client lists and clones repositories for the host.
 type Client struct {
-	r runner
+	creds contracts.ForgeCredentials
+	open  openForge
+	r     runner
 }
 
-// New returns a Client backed by real exec.
-func New() *Client { return &Client{r: execRunner{}} }
-
-// Available reports which forge CLIs are installed.
-func (c *Client) Available() (bool, bool) {
-	return c.r.look("gh") == nil, c.r.look("glab") == nil
-}
-
-// List returns repos from every installed forge, labeled by Forge.
-func (c *Client) List(ctx context.Context) ([]Repo, error) {
-	githubOK, gitlabOK := c.Available()
-	var out []Repo
-	if githubOK {
-		repos, err := c.listGitHub(ctx)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, repos...)
+// New returns a Client that reaches GitHub through the forge plugin, with
+// creds as the port that supplies its token.
+func New(creds contracts.ForgeCredentials) *Client {
+	open := func(ctx context.Context, host contracts.ForgeHost) (contracts.Forge, error) {
+		return forgeport.Open(ctx, forgeport.KindGitHub, host, creds)
 	}
-	if gitlabOK {
-		repos, err := c.listGitLab(ctx)
+	return newClient(creds, open, execRunner{})
+}
+
+func newClient(creds contracts.ForgeCredentials, open openForge, r runner) *Client {
+	return &Client{creds: creds, open: open, r: r}
+}
+
+// List returns the repositories of GitHub, when the host holds a credential for
+// it, and of GitLab, when glab is installed. A host without a GitHub credential
+// lists no GitHub repository and no error.
+func (c *Client) List(ctx context.Context) ([]Repo, error) {
+	out, err := c.listGitHub(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if c.r.look("glab") == nil {
+		gitlab, err := c.listGitLab(ctx)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, repos...)
+		out = append(out, gitlab...)
 	}
 	return out, nil
 }
 
 func (c *Client) listGitHub(ctx context.Context) ([]Repo, error) {
-	out, err := c.ghRepoList(ctx)
+	host, err := contracts.ParseForgeHost(forgeport.GitHubHost)
 	if err != nil {
 		return nil, err
 	}
-	seen := make(map[string]struct{}, len(out))
-	for _, r := range out {
-		seen[r.FullName] = struct{}{}
+	forge, err := c.open(ctx, host)
+	if err != nil {
+		return nil, notConnectedAsEmpty(err, "github open")
 	}
-	for _, org := range c.ghOrgs(ctx) {
-		repos, err := c.ghRepoList(ctx, org)
+	var out []Repo
+	var cursor contracts.PageCursor
+	for fetched := 1; ; fetched++ {
+		page, err := forge.Repositories(ctx, contracts.PageRequest{Cursor: cursor, Limit: contracts.MaxPageLimit})
 		if err != nil {
-			continue
+			return nil, notConnectedAsEmpty(err, "github repositories")
 		}
-		for _, repo := range repos {
-			if _, dup := seen[repo.FullName]; dup {
-				continue
-			}
-			seen[repo.FullName] = struct{}{}
-			out = append(out, repo)
+		out = append(out, githubRepos(page.Items)...)
+		if page.Next == "" {
+			return out, nil
 		}
+		if fetched == maxListPages {
+			return nil, fmt.Errorf("github repositories: %w after %d pages", errTooManyPages, maxListPages)
+		}
+		cursor = page.Next
 	}
-	return out, nil
 }
 
-func (c *Client) ghRepoList(ctx context.Context, owner ...string) ([]Repo, error) {
-	args := []string{subRepo, "list"}
-	args = append(args, owner...)
-	args = append(args, "--json", "nameWithOwner,sshUrl,description", "--limit", "100")
-	raw, err := c.r.run(ctx, "", nil, "gh", args...)
-	if err != nil {
-		return nil, fmt.Errorf("gh repo list: %s: %w", redact.Output(raw), err)
-	}
-	var items []struct {
-		NameWithOwner string `json:"nameWithOwner"`
-		SSHURL        string `json:"sshUrl"`
-		Description   string `json:"description"`
-	}
-	if err := json.Unmarshal(raw, &items); err != nil {
-		return nil, fmt.Errorf("gh repo list: parse: %w", err)
-	}
-	out := make([]Repo, 0, len(items))
-	for _, it := range items {
-		out = append(out, Repo{FullName: it.NameWithOwner, CloneURL: it.SSHURL, Desc: it.Description, Forge: "github"})
-	}
-	return out, nil
-}
-
-func (c *Client) ghOrgs(ctx context.Context) []string {
-	raw, err := c.r.run(ctx, "", nil, "gh", "api", "--paginate", "user/orgs", "--jq", ".[].login")
-	if err != nil {
+func notConnectedAsEmpty(err error, label string) error {
+	if errors.Is(err, contracts.ErrForgeNotConnected) {
 		return nil
 	}
-	var orgs []string
-	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
-		if l := strings.TrimSpace(line); l != "" {
-			orgs = append(orgs, l)
-		}
+	return fmt.Errorf("%s: %w", label, err)
+}
+
+func githubRepos(items []contracts.ForgeRepo) []Repo {
+	out := make([]Repo, 0, len(items))
+	for _, item := range items {
+		ref := item.Repo()
+		out = append(out, Repo{
+			FullName: ref.Namespace() + "/" + ref.Name(),
+			CloneURL: item.CloneURL(),
+			Desc:     item.Description(),
+			Forge:    githubLabel,
+		})
 	}
-	return orgs
+	return out
 }
 
 func (c *Client) listGitLab(ctx context.Context) ([]Repo, error) {
-	raw, err := c.r.run(ctx, "", nil, "glab", subRepo, "list", "--output", "json")
+	raw, err := c.r.run(ctx, "", nil, "glab", subRepo, subList, "--output", "json")
 	if err != nil {
 		return nil, fmt.Errorf("glab repo list: %s: %w", redact.Output(raw), err)
 	}
@@ -166,100 +169,76 @@ func (c *Client) listGitLab(ctx context.Context) ([]Repo, error) {
 	}
 	out := make([]Repo, 0, len(items))
 	for _, it := range items {
-		out = append(out, Repo{FullName: it.PathWithNamespace, CloneURL: it.SSHURLToRepo, Desc: it.Description, Forge: "gitlab"})
+		out = append(out, Repo{FullName: it.PathWithNamespace, CloneURL: it.SSHURLToRepo, Desc: it.Description, Forge: gitlabLabel})
 	}
 	return out, nil
 }
 
-var specRe = regexp.MustCompile(`^[\w.\-]+/[\w.\-]+$`)
-
-// Clone clones spec into workspace and returns the project dir. It refuses
-// traversal / shell-unsafe specs. If the target dir already exists it is
-// returned as-is (idempotent "already cloned").
+// Clone clones spec into workspace and returns the project dir. spec is
+// owner/name on GitHub or an https URL of a repository on a forge host; the
+// clone URL is validated by the forge port before git runs. An existing target
+// is returned as-is.
 func (c *Client) Clone(ctx context.Context, spec, workspace string) (string, error) {
-	base, isURL, err := parseSpec(spec)
+	repo, err := cloneRepo(spec)
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(workspace, base)
-
-	githubOK, gitlabOK := c.Available()
-	var name string
-	var args []string
-	var env []string
-	switch {
-	case isURL:
-		name, args = "git", []string{subClone, "--", spec, dir}
-		env = gitCloneAuthEnv()
-	case githubOK:
-		name, args = "gh", []string{subRepo, subClone, spec, "--", dir}
-	case gitlabOK:
-		name, args = "glab", []string{subRepo, subClone, "--", spec, dir}
-	default:
-		return "", fmt.Errorf("%w to clone %q; pass a full git URL instead", errNoForgeCLI, spec)
+	host := repo.Repo().Host()
+	token, err := c.creds.Token(ctx, host)
+	if err != nil {
+		return "", fmt.Errorf("clone %s: %w", repo.Repo().String(), err)
 	}
-	if out, err := c.r.run(ctx, workspace, env, name, args...); err != nil {
-		msg := strings.TrimSpace(string(out))
-		if strings.Contains(msg, "already exists") {
+	if !token.Valid() {
+		return "", fmt.Errorf("clone %s: %w", repo.Repo().String(), contracts.ErrForgeNotConnected)
+	}
+	dir := filepath.Join(workspace, repo.Repo().Name())
+	out, err := c.r.run(ctx, workspace, cloneEnv(host, token.Secret()), "git", "clone", "--", repo.CloneURL(), dir)
+	if err != nil {
+		if strings.Contains(string(out), "already exists") {
 			return dir, nil
 		}
-		return "", fmt.Errorf("%s clone: %s: %w", name, redact.Output(out), err)
+		return "", fmt.Errorf("git clone: %s: %w", redact.Output([]byte(strings.ReplaceAll(string(out), token.Secret(), redactedMark))), err)
 	}
 	return dir, nil
 }
 
-func gitCloneAuthEnv() []string {
-	env := []string{"GIT_TERMINAL_PROMPT=0"}
-	if EnvToken() == "" {
-		return env
-	}
-	self, err := os.Executable()
+func cloneRepo(spec string) (contracts.ForgeRepo, error) {
+	ref, cloneURL, err := cloneTarget(spec)
 	if err != nil {
-		return env
+		return contracts.ForgeRepo{}, err
 	}
-	return append(env, "GIT_ASKPASS="+self, "HERRSCHER_GIT_ASKPASS=1")
+	repo, err := contracts.NewForgeRepo(ref.Host(), contracts.ForgeRepoFields{Repo: ref, CloneURL: cloneURL})
+	if err != nil {
+		return contracts.ForgeRepo{}, fmt.Errorf("%w: %q", errRepoSpec, spec)
+	}
+	return repo, nil
 }
 
-// EnvToken returns the GitHub token from the environment (GITHUB_TOKEN, then
-// GH_TOKEN), or "" if neither is set.
-func EnvToken() string {
-	if t := os.Getenv("GITHUB_TOKEN"); t != "" {
-		return t
-	}
-	return os.Getenv("GH_TOKEN")
-}
-
-// AskpassReply answers a git credential prompt when this binary is invoked as
-// GIT_ASKPASS. Git asks for the username first, then the password: GitHub token
-// auth uses the fixed username "x-access-token" and the token as the password.
-func AskpassReply(prompt string) string {
-	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(prompt)), "username") {
-		return "x-access-token"
-	}
-	return EnvToken()
-}
-
-func parseSpec(spec string) (string, bool, error) {
-	if spec == "" {
-		return "", false, fmt.Errorf("%w: empty", errRepoSpec)
-	}
-	if strings.ContainsFunc(spec, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
-		return "", false, fmt.Errorf("%w: control character", errRepoSpec)
-	}
-	if strings.HasPrefix(spec, "https://") || strings.HasPrefix(spec, "git@") || strings.HasPrefix(spec, "ssh://") {
-		base := path.Base(strings.TrimSuffix(spec, ".git"))
-		if base == "" || base == "." || base == "/" || strings.Contains(base, "..") || strings.HasPrefix(base, "-") {
-			return "", false, fmt.Errorf("%w: cannot derive project name from %q", errRepoSpec, spec)
+func cloneTarget(spec string) (contracts.ForgeRepoRef, string, error) {
+	if strings.HasPrefix(spec, "https://") {
+		ref, err := contracts.ParseRepoRef(spec)
+		if err != nil || ref.Host().String() != forgeport.GitHubHost {
+			return contracts.ForgeRepoRef{}, "", fmt.Errorf("%w: %q", errRepoSpec, spec)
 		}
-		return base, true, nil
+		return ref, spec, nil
 	}
 	if !specRe.MatchString(spec) {
-		return "", false, fmt.Errorf("%w %q: use owner/name or a full git URL", errRepoSpec, spec)
+		return contracts.ForgeRepoRef{}, "", fmt.Errorf("%w %q: use owner/name or an https URL", errRepoSpec, spec)
 	}
-	for _, seg := range strings.Split(spec, "/") {
-		if seg == "" || seg == "." || seg == ".." || strings.HasPrefix(seg, "-") {
-			return "", false, fmt.Errorf("%w %q", errRepoSpec, spec)
-		}
+	cloneURL := "https://" + forgeport.GitHubHost + "/" + spec + ".git"
+	ref, err := contracts.ParseRepoRef(forgeport.GitHubHost + "/" + spec)
+	if err != nil {
+		return contracts.ForgeRepoRef{}, "", fmt.Errorf("%w %q", errRepoSpec, spec)
 	}
-	return path.Base(spec), false, nil
+	return ref, cloneURL, nil
+}
+
+func cloneEnv(host contracts.ForgeHost, token string) []string {
+	basic := base64.StdEncoding.EncodeToString([]byte(tokenUser + ":" + token))
+	return []string{
+		"GIT_TERMINAL_PROMPT=0",
+		"GIT_CONFIG_COUNT=1",
+		"GIT_CONFIG_KEY_0=http.https://" + host.String() + "/.extraheader",
+		"GIT_CONFIG_VALUE_0=Authorization: Basic " + basic,
+	}
 }

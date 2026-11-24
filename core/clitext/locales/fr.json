@@ -3033,6 +3033,11 @@
     "other": "le clonage n'est pas pris en charge sur l'hôte \"{{.Host}}\" : créez d'abord le projet localement, puis la session avec --host"
   },
   {
+    "id": "cli.host.err.forge_not_connected",
+    "description": "Reply of a host command, err forge not connected",
+    "other": "aucune connexion GitHub sur cet hôte : lancez `herrscher connect github`"
+  },
+  {
     "id": "cli.host.err.clone_failed",
     "description": "Reply of a host command, err clone failed",
     "other": "clonage : {{.Err}}"

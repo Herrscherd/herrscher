@@ -136,12 +136,13 @@ fail with a message saying herrscher is not connected to that host.
 
 Cloning a repository for a session and opening its pull request from the
 terminal use the same token, and only for `github.com`. An `owner/name` or an
-`https://github.com/` URL is cloned with the token when one is held. A `git@`
-or `ssh://` URL, and any repository on another host, is cloned without the
-token, with your own git or ssh setup. A host name without a dot, such as an
-intranet `gitlab`, is accepted in the `git@`, `ssh://` and `https://` forms and
-cloned the same way. A pull request for a host other than github.com is refused. The token goes to git through its environment, never on
-the command line or in the clone's configuration.
+`https://github.com/` URL is cloned with the token when one is held. A `git@` or
+`ssh://` URL, and any repository on another host, is cloned without the token,
+with your own git or ssh setup. A host name without a dot, such as an intranet
+`gitlab`, is accepted in the `git@`, `ssh://` and `https://` forms and cloned
+the same way. A pull request for a host other than github.com is refused. The
+token goes to git through its environment, never on the command line or in the
+clone's configuration.
 
 ## Repositories to clone
 
@@ -154,16 +155,16 @@ connected to.
   repository is listed, and this is not an error. Choosing an entry clones
   `owner/name` from `github.com`, with the token when one is held. Without a
   token, the clone is anonymous, so a private repository cannot be cloned.
-- **GitLab** is listed only when `glab` is installed, from `glab repo list`. The
-  choice shows the ssh clone URL of each project, such as
+- **GitLab** is listed only when `glab` is installed, from `glab repo list`.
+  The choice shows the ssh clone URL of each project, such as
   `git@gitlab.com:group/project.git`, because that URL is what the clone
   receives. Choosing an entry clones it over ssh with your own key, for any
   GitLab host: private repositories and self-hosted instances included, whether
   the host name has a dot (`gitlab.example.com`) or none (`gitlab`, an intranet
-  name). A project that lists no ssh URL falls back to its https clone URL, cloned
-  anonymously. The herrscher token never goes to GitLab, and a GitLab entry is
-  never cloned from `github.com`, even when a GitHub repository has the same
-  path.
+  name). A project that lists no ssh URL falls back to its https clone URL,
+  cloned anonymously. The herrscher token never goes to GitLab, and a GitLab
+  entry is never cloned from `github.com`, even when a GitHub repository has the
+  same path.
 
 ## Troubleshooting
 

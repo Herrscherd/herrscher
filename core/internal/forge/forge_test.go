@@ -260,6 +260,34 @@ func TestCloneRefusedIntranetSpecNeverShowsItsUserinfo(t *testing.T) {
 	}
 }
 
+func TestDisplaySpecKeepsHostAndPathButNeverTheSecret(t *testing.T) {
+	cases := []struct {
+		name   string
+		spec   string
+		want   string
+		secret string
+	}{
+		{"scp with git user", "git@gitlab.example.com:group/project.git", "[redacted]@gitlab.example.com:group/project.git", ""},
+		{"scp with user:secret", "token:hunter2@github.example.com:owner/repo.git", "[redacted]@github.example.com:owner/repo.git", "hunter2"},
+		{"scp password containing an at sign", "token:ho@cret@host:p/q", "[redacted]@host:p/q", "cret"},
+		{"scp dash-led host", "git@-oProxyCommand=x:p/q", "[redacted]@-oProxyCommand=x:p/q", ""},
+		{"URL with user:password", "https://deploy:hunter2@gitlab.example.com/group/project.git", "https://gitlab.example.com/group/project.git", "hunter2"},
+		{"URL without userinfo", "https://gitlab.example.com/group/project.git", "https://gitlab.example.com/group/project.git", ""},
+		{"owner/name", "owner/name", "owner/name", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := displaySpec(tc.spec)
+			if got != tc.want {
+				t.Fatalf("displaySpec(%q) = %q, want %q", tc.spec, got, tc.want)
+			}
+			if tc.secret != "" && strings.Contains(got, tc.secret) {
+				t.Fatalf("displaySpec(%q) = %q leaks %q", tc.spec, got, tc.secret)
+			}
+		})
+	}
+}
+
 func TestCloneAcceptsSSHFormsWithoutToken(t *testing.T) {
 	cases := map[string]string{
 		"git@github.com:owner/repo.git":       "scp form",

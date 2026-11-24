@@ -317,10 +317,28 @@ func displaySpec(spec string) string {
 		parsed.Fragment = ""
 		return parsed.String()
 	}
-	if strings.ContainsAny(spec, "@?#") {
+	if strings.Contains(spec, "://") {
+		if strings.ContainsAny(spec, "@?#") {
+			return redactedMark
+		}
+		return spec
+	}
+	return displayScpSpec(spec)
+}
+
+func displayScpSpec(spec string) string {
+	userEnd := strings.LastIndex(spec, "@")
+	if userEnd < 0 {
+		if strings.ContainsAny(spec, "?#") {
+			return redactedMark
+		}
+		return spec
+	}
+	hostAndPath := spec[userEnd+1:]
+	if strings.ContainsAny(hostAndPath, "?#") {
 		return redactedMark
 	}
-	return spec
+	return redactedMark + "@" + hostAndPath
 }
 
 func hasCloneScheme(spec string) bool {

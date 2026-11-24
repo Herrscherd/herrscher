@@ -80,20 +80,23 @@ func TestForgeFactsAreTranslatedInFrench(t *testing.T) {
 }
 
 func TestUnreadableRepoAccessShowsItsReason(t *testing.T) {
-	report := contracts.ProbeReport{State: contracts.HealthDegraded, Detail: contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", "boom")}}}
+	report := contracts.ProbeReport{State: contracts.HealthDegraded, Detail: contracts.Notice{Code: contracts.CodeHealthRepoAccessUnreadable, Args: []contracts.Arg{contracts.Text("Repo", "octo/herrscher"), contracts.Text("Reason", "boom")}}}
 	out := tableOf(t, forgeSnapshotWith(report, &health.Forge{Source: contracts.TokenSourceSaved, Repo: "octo/herrscher", RepoErr: "boom"}))
-	if !strings.Contains(out, "repository access could not be read: boom") {
+	if !strings.Contains(out, "could not read the permission on octo/herrscher: boom") {
 		t.Errorf("Table() output does not show the repo access reason:\n%s", out)
+	}
+	if strings.Count(out, "boom") != 1 {
+		t.Errorf("Table() output repeats the repo access reason:\n%s", out)
 	}
 }
 
 func TestUnreadableRepoAccessIsTranslatedInFrench(t *testing.T) {
-	report := contracts.ProbeReport{State: contracts.HealthDegraded, Detail: contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", "boom")}}}
+	report := contracts.ProbeReport{State: contracts.HealthDegraded, Detail: contracts.Notice{Code: contracts.CodeHealthRepoAccessUnreadable, Args: []contracts.Arg{contracts.Text("Repo", "octo/herrscher"), contracts.Text("Reason", "boom")}}}
 	out := tableIn(t, i18n.French, forgeSnapshotWith(report, &health.Forge{Source: contracts.TokenSourceSaved, Repo: "octo/herrscher", RepoErr: "boom"}))
-	if !strings.Contains(out, "l’accès au dépôt n’a pas pu être lu : boom") {
+	if !strings.Contains(out, "impossible de lire la permission sur octo/herrscher : boom") {
 		t.Errorf("French Table() output does not show the repo access reason:\n%s", out)
 	}
-	if strings.Contains(out, "repository access") {
+	if strings.Contains(out, "could not read") {
 		t.Errorf("French Table() output carries the English repo access text:\n%s", out)
 	}
 }

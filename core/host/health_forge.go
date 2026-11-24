@@ -96,7 +96,7 @@ func githubRun(open forgeOpener, origin string, probeRepo repoProbe) runFunc {
 		report := forgeReady(connection)
 		if repoErr != nil {
 			facts.RepoErr = repoErr.Error()
-			report = withRepoAccess(report, repoErr)
+			report = withRepoAccess(report, repo, repoErr)
 		}
 		return report, health.Facts{Forge: facts}
 	}
@@ -133,15 +133,15 @@ func forgeFailure(err error) contracts.ProbeReport {
 	return unreachableReport(err)
 }
 
-func withRepoAccess(report contracts.ProbeReport, err error) contracts.ProbeReport {
+func withRepoAccess(report contracts.ProbeReport, repo string, err error) contracts.ProbeReport {
 	if report.State != contracts.HealthOK {
 		return report
 	}
-	return contracts.ProbeReport{State: contracts.HealthDegraded, Detail: repoAccessNotice(err)}
+	return contracts.ProbeReport{State: contracts.HealthDegraded, Detail: repoAccessNotice(repo, err)}
 }
 
-func repoAccessNotice(err error) contracts.Notice {
-	return contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", err.Error())}}
+func repoAccessNotice(repo string, err error) contracts.Notice {
+	return contracts.Notice{Code: contracts.CodeHealthRepoAccessUnreadable, Args: []contracts.Arg{contracts.Text("Repo", repo), contracts.Text("Reason", err.Error())}}
 }
 
 func forgeReady(connection contracts.ForgeConnection) contracts.ProbeReport {

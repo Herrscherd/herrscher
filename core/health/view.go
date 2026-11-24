@@ -306,13 +306,10 @@ func causeText(check Check, report contracts.ProbeReport, text *renderer) string
 }
 
 func detailText(report contracts.ProbeReport, forge *Forge, text *renderer) string {
-	if forge == nil || forge.RepoErr == "" {
+	if forge == nil || forge.RepoErr == "" || report.Detail.Code == contracts.CodeHealthRepoAccessUnreadable {
 		return text.notice(report.Detail)
 	}
 	repo := text.key(clitext.HealthForgeRepoUnreadable, clitext.Params{clitext.ParamReason: forge.RepoErr})
-	if report.Detail.Code == contracts.CodeHealthUnreachable {
-		return repo
-	}
 	return text.notice(report.Detail) + factsSep + repo
 }
 

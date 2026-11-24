@@ -184,9 +184,9 @@ func TestUnreadableRepoPermissionIsAWarningWithItsReason(t *testing.T) {
 	if report.State != contracts.HealthDegraded {
 		t.Errorf("state = %v, want degraded: a right that cannot be read is a warning", report.State)
 	}
-	want := contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", contracts.ErrForgeNotFound.Error())}}
+	want := contracts.Notice{Code: contracts.CodeHealthRepoAccessUnreadable, Args: []contracts.Arg{contracts.Text("Repo", "octo/herrscher"), contracts.Text("Reason", contracts.ErrForgeNotFound.Error())}}
 	if !sameNotice(report.Detail, want) {
-		t.Errorf("detail = %+v, want the reason of the failed right check", report.Detail)
+		t.Errorf("detail = %+v, want the repo and the reason of the failed right check", report.Detail)
 	}
 	if facts.Forge.Repo != "octo/herrscher" || facts.Forge.Permission != nil {
 		t.Errorf("repo = %q permission = %v, want octo/herrscher with no permission", facts.Forge.Repo, facts.Forge.Permission)

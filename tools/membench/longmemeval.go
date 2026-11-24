@@ -1,19 +1,24 @@
 package main
 
 import (
+	"cmp"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand/v2"
 	"os"
+	"slices"
+	"strconv"
 	"strings"
-
-	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 const (
 	abstentionSuffix = "_abs"
 	rememberPrefix   = "Remember this: "
+	maxDatasetBytes  = 512 << 20
+	maxDatasetItems  = 100000
+	fnvOffset        = 14695981039346656037
+	fnvPrime         = 1099511628211
 )
 
 type lmeTurn struct {
@@ -31,18 +36,27 @@ type lmeItem struct {
 	Evidence     []string    `json:"answer_session_ids"`
 }
 
+type sampled struct {
+	key  uint64
+	item lmeItem
+}
+
 func loadLongMemEval(path string, samples int, seed uint64, maxTurns int) ([]task, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, messageError{key: clitext.MembenchErrDatasetRead, params: clitext.Params{clitext.ParamPath: path, clitext.ParamErr: err.Error()}}
+		return nil, datasetRead(path, err)
 	}
-	items, eligible, readErr := sampleItems(file, samples, seed, maxTurns)
+	limited := &io.LimitedReader{R: file, N: maxDatasetBytes + 1}
+	items, eligible, readErr := sampleItems(limited, samples, seed, maxTurns)
 	closeErr := file.Close()
+	if limited.N <= 0 {
+		return nil, datasetLarge(strconv.Itoa(maxDatasetBytes) + " bytes")
+	}
 	if readErr != nil {
 		return nil, readErr
 	}
 	if closeErr != nil {
-		return nil, messageError{key: clitext.MembenchErrDatasetRead, params: clitext.Params{clitext.ParamPath: path, clitext.ParamErr: closeErr.Error()}}
+		return nil, datasetRead(path, closeErr)
 	}
 	if eligible == 0 {
 		return nil, datasetShape("no item has evidence sessions, a known question type and an answer")
@@ -59,34 +73,62 @@ func sampleItems(source io.Reader, samples int, seed uint64, maxTurns int) ([]lm
 	if err := expectDelim(decoder, '['); err != nil {
 		return nil, 0, err
 	}
-	rng := rand.New(rand.NewPCG(seed, 0))
-	var reservoir []lmeItem
-	eligible := 0
+	var kept []sampled
+	decoded, eligible := 0, 0
 	for decoder.More() {
 		var item lmeItem
 		if err := decoder.Decode(&item); err != nil {
-			return nil, 0, messageError{key: clitext.MembenchErrDatasetShape, params: clitext.Params{clitext.ParamDetail: err.Error()}}
+			return nil, 0, datasetShape(err.Error())
+		}
+		decoded++
+		if decoded > maxDatasetItems {
+			return nil, 0, datasetLarge(strconv.Itoa(maxDatasetItems) + " items")
 		}
 		if !eligibleItem(item, maxTurns) {
 			continue
 		}
 		eligible++
-		if len(reservoir) < samples {
-			reservoir = append(reservoir, item)
-		} else if slot := rng.IntN(eligible); slot < samples {
-			reservoir[slot] = item
+		kept = append(kept, sampled{key: sampleKey(seed, item.QuestionID), item: item})
+		if len(kept) >= 2*samples {
+			kept = lowestKeys(kept, samples)
 		}
 	}
 	if err := expectDelim(decoder, ']'); err != nil {
 		return nil, 0, err
 	}
-	return reservoir, eligible, nil
+	kept = lowestKeys(kept, samples)
+	items := make([]lmeItem, 0, len(kept))
+	for i := range kept {
+		items = append(items, kept[i].item)
+	}
+	return items, eligible, nil
+}
+
+func sampleKey(seed uint64, itemID string) uint64 {
+	hash := uint64(fnvOffset)
+	for _, b := range binary.LittleEndian.AppendUint64(nil, seed) {
+		hash = (hash ^ uint64(b)) * fnvPrime
+	}
+	for i := range len(itemID) {
+		hash = (hash ^ uint64(itemID[i])) * fnvPrime
+	}
+	return hash
+}
+
+func lowestKeys(kept []sampled, limit int) []sampled {
+	slices.SortFunc(kept, func(a, b sampled) int {
+		return cmp.Or(cmp.Compare(a.key, b.key), strings.Compare(a.item.QuestionID, b.item.QuestionID))
+	})
+	if len(kept) > limit {
+		kept = kept[:limit]
+	}
+	return kept
 }
 
 func expectDelim(decoder *json.Decoder, want json.Delim) error {
 	token, err := decoder.Token()
 	if err != nil {
-		return messageError{key: clitext.MembenchErrDatasetShape, params: clitext.Params{clitext.ParamDetail: err.Error()}}
+		return datasetShape(err.Error())
 	}
 	if delim, ok := token.(json.Delim); !ok || delim != want {
 		return datasetShape(fmt.Sprintf("expected %q, got %v", want, token))
@@ -94,8 +136,16 @@ func expectDelim(decoder *json.Decoder, want json.Delim) error {
 	return nil
 }
 
+func datasetRead(path string, cause error) error {
+	return messageError{key: msgErrDatasetRead, params: params{paramPath: path, paramErr: cause.Error()}}
+}
+
+func datasetLarge(limit string) error {
+	return messageError{key: msgErrDatasetLarge, params: params{paramLimit: limit}}
+}
+
 func datasetShape(detail string) error {
-	return messageError{key: clitext.MembenchErrDatasetShape, params: clitext.Params{clitext.ParamDetail: detail}}
+	return messageError{key: msgErrDatasetShape, params: params{paramDetail: detail}}
 }
 
 func eligibleItem(item lmeItem, maxTurns int) bool {
@@ -108,19 +158,19 @@ func eligibleItem(item lmeItem, maxTurns int) bool {
 	return isAbstention(item) || strings.TrimSpace(answerText(item)) != ""
 }
 
-func capabilityOf(item lmeItem) (clitext.Key, bool) {
+func capabilityOf(item lmeItem) (msgKey, bool) {
 	if isAbstention(item) {
-		return clitext.MembenchCapAbstention, true
+		return msgCapAbstention, true
 	}
 	switch item.QuestionType {
 	case "single-session-user", "single-session-assistant", "single-session-preference":
-		return clitext.MembenchCapExtraction, true
+		return msgCapExtraction, true
 	case "multi-session":
-		return clitext.MembenchCapMultisession, true
+		return msgCapMultisession, true
 	case "temporal-reasoning":
-		return clitext.MembenchCapTemporal, true
+		return msgCapTemporal, true
 	case "knowledge-update":
-		return clitext.MembenchCapUpdate, true
+		return msgCapUpdate, true
 	}
 	return "", false
 }
@@ -154,7 +204,7 @@ func itemTask(item lmeItem) task {
 		steps = append(steps, step{agent: agentAlpha, prompt: rememberPrefix + transcript(item.Sessions[index])})
 	}
 	built := task{
-		section: clitext.MembenchSectionLongMemEval,
+		section: msgSectionLongMemEval,
 		group:   capability,
 		id:      item.QuestionID,
 		steps:   steps,
@@ -164,7 +214,7 @@ func itemTask(item lmeItem) task {
 		built.abstain = true
 		return built
 	}
-	built.want = []string{strings.ToLower(strings.TrimSpace(answerText(item)))}
+	built.want = []string{answerText(item)}
 	return built
 }
 

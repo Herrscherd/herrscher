@@ -1,0 +1,257 @@
+[
+  {
+    "id": "membench.usage",
+    "description": "Message of the memory bench: usage",
+    "other": "usage: membench [options] (see docs/memory-bench.md)"
+  },
+  {
+    "id": "membench.flag.herrscher",
+    "description": "Message of the memory bench: flag.herrscher",
+    "other": "herrscher binary to measure, looked up in PATH when not a path"
+  },
+  {
+    "id": "membench.flag.model",
+    "description": "Message of the memory bench: flag.model",
+    "other": "Claude model the tasks run on, the smallest one by default"
+  },
+  {
+    "id": "membench.flag.budget_tokens",
+    "description": "Message of the memory bench: flag.budget_tokens",
+    "other": "token ceiling for the whole bench, the bench stops cleanly past it"
+  },
+  {
+    "id": "membench.flag.budget_usd",
+    "description": "Message of the memory bench: flag.budget_usd",
+    "other": "dollar ceiling, honored when the backend reports a cost"
+  },
+  {
+    "id": "membench.flag.credentials",
+    "description": "Message of the memory bench: flag.credentials",
+    "other": "Claude credentials file copied into the isolated config of each run, for a real backend"
+  },
+  {
+    "id": "membench.flag.dataset",
+    "description": "Message of the memory bench: flag.dataset",
+    "other": "LongMemEval dataset file that you provide, empty runs the in-house pairs only"
+  },
+  {
+    "id": "membench.flag.samples",
+    "description": "Message of the memory bench: flag.samples",
+    "other": "number of LongMemEval questions drawn"
+  },
+  {
+    "id": "membench.flag.seed",
+    "description": "Message of the memory bench: flag.seed",
+    "other": "seed of the LongMemEval draw"
+  },
+  {
+    "id": "membench.flag.settings",
+    "description": "Message of the memory bench: flag.settings",
+    "other": "memory settings to measure, comma separated"
+  },
+  {
+    "id": "membench.flag.max_turns",
+    "description": "Message of the memory bench: flag.max_turns",
+    "other": "invocations allowed per task before it counts as a failure"
+  },
+  {
+    "id": "membench.flag.format",
+    "description": "Message of the memory bench: flag.format",
+    "other": "report format: md or json"
+  },
+  {
+    "id": "membench.flag.lang",
+    "description": "Message of the memory bench: flag.lang",
+    "other": "report language: en or fr"
+  },
+  {
+    "id": "membench.error.budget_missing",
+    "description": "Message of the memory bench: error.budget_missing",
+    "other": "a ceiling is required: --budget-tokens or --budget-usd"
+  },
+  {
+    "id": "membench.error.flag_value",
+    "description": "Message of the memory bench: error.flag_value",
+    "other": "{{.Name}}: {{.Detail}}"
+  },
+  {
+    "id": "membench.error.dataset_read",
+    "description": "Message of the memory bench: error.dataset_read",
+    "other": "cannot read the LongMemEval dataset {{.Path}}: {{.Err}}"
+  },
+  {
+    "id": "membench.error.dataset_shape",
+    "description": "Message of the memory bench: error.dataset_shape",
+    "other": "invalid LongMemEval dataset: {{.Detail}}"
+  },
+  {
+    "id": "membench.error.herrscher",
+    "description": "Message of the memory bench: error.herrscher",
+    "other": "herrscher binary {{.Path}} is unusable: {{.Err}}"
+  },
+  {
+    "id": "membench.error.run",
+    "description": "Message of the memory bench: error.run",
+    "other": "run {{.Run}} failed: {{.Err}}"
+  },
+  {
+    "id": "membench.report.title",
+    "description": "Message of the memory bench: report.title",
+    "other": "Memory bench"
+  },
+  {
+    "id": "membench.status.complete",
+    "description": "Message of the memory bench: status.complete",
+    "other": "complete"
+  },
+  {
+    "id": "membench.status.partial",
+    "description": "Message of the memory bench: status.partial",
+    "other": "partial"
+  },
+  {
+    "id": "membench.budget_stopped",
+    "description": "Message of the memory bench: budget_stopped",
+    "other": "stopped on budget: {{.Spent}} spent, ceiling {{.Limit}}"
+  },
+  {
+    "id": "membench.not_run",
+    "description": "Message of the memory bench: not_run",
+    "other": "not run (budget): {{.Count}}"
+  },
+  {
+    "id": "membench.no_measure",
+    "description": "Message of the memory bench: no_measure",
+    "other": "no measure"
+  },
+  {
+    "id": "membench.section.pairs",
+    "description": "Message of the memory bench: section.pairs",
+    "other": "In-house pairs"
+  },
+  {
+    "id": "membench.section.longmemeval",
+    "description": "Message of the memory bench: section.longmemeval",
+    "other": "LongMemEval"
+  },
+  {
+    "id": "membench.col.task",
+    "description": "Message of the memory bench: col.task",
+    "other": "task"
+  },
+  {
+    "id": "membench.col.setting",
+    "description": "Message of the memory bench: col.setting",
+    "other": "setting"
+  },
+  {
+    "id": "membench.col.off",
+    "description": "Message of the memory bench: col.off",
+    "other": "off"
+  },
+  {
+    "id": "membench.col.on",
+    "description": "Message of the memory bench: col.on",
+    "other": "on"
+  },
+  {
+    "id": "membench.col.delta_success",
+    "description": "Message of the memory bench: col.delta_success",
+    "other": "delta success"
+  },
+  {
+    "id": "membench.col.delta_turns",
+    "description": "Message of the memory bench: col.delta_turns",
+    "other": "delta turns"
+  },
+  {
+    "id": "membench.col.delta_tokens",
+    "description": "Message of the memory bench: col.delta_tokens",
+    "other": "delta tokens"
+  },
+  {
+    "id": "membench.col.memory_tokens",
+    "description": "Message of the memory bench: col.memory_tokens",
+    "other": "memory tokens per turn"
+  },
+  {
+    "id": "membench.col.false_recall",
+    "description": "Message of the memory bench: col.false_recall",
+    "other": "false recalls"
+  },
+  {
+    "id": "membench.col.capability",
+    "description": "Message of the memory bench: col.capability",
+    "other": "capability"
+  },
+  {
+    "id": "membench.variant.same_agent",
+    "description": "Message of the memory bench: variant.same_agent",
+    "other": "same agent"
+  },
+  {
+    "id": "membench.variant.other_agent",
+    "description": "Message of the memory bench: variant.other_agent",
+    "other": "other agent of the project"
+  },
+  {
+    "id": "membench.variant.stale",
+    "description": "Message of the memory bench: variant.stale",
+    "other": "stale then corrected"
+  },
+  {
+    "id": "membench.variant.never_given",
+    "description": "Message of the memory bench: variant.never_given",
+    "other": "never given"
+  },
+  {
+    "id": "membench.cap.extraction",
+    "description": "Message of the memory bench: cap.extraction",
+    "other": "information extraction"
+  },
+  {
+    "id": "membench.cap.multisession",
+    "description": "Message of the memory bench: cap.multisession",
+    "other": "multi-session reasoning"
+  },
+  {
+    "id": "membench.cap.temporal",
+    "description": "Message of the memory bench: cap.temporal",
+    "other": "temporal reasoning"
+  },
+  {
+    "id": "membench.cap.update",
+    "description": "Message of the memory bench: cap.update",
+    "other": "knowledge update"
+  },
+  {
+    "id": "membench.cap.abstention",
+    "description": "Message of the memory bench: cap.abstention",
+    "other": "abstention"
+  },
+  {
+    "id": "membench.amount",
+    "description": "Message of the memory bench: amount",
+    "other": "{{.Tokens}} tokens, {{.Money}} USD"
+  },
+  {
+    "id": "membench.status.failed",
+    "description": "Message of the memory bench: the run stopped on an error",
+    "other": "failed: a run stopped on an error, the report keeps the arms finished before it: {{.Detail}}"
+  },
+  {
+    "id": "membench.error.dataset_large",
+    "description": "Message of the memory bench: the dataset exceeds the reading limit",
+    "other": "the LongMemEval dataset exceeds the reading limit of {{.Limit}}"
+  },
+  {
+    "id": "membench.error.no_usage",
+    "description": "Message of the memory bench: error.no_usage",
+    "other": "run {{.Run}} wrote no usage record, so the bench cannot measure its spend and stopped; a local herrscher --print writes no usage ledger"
+  },
+  {
+    "id": "membench.error.no_cost",
+    "description": "Message of the memory bench: error.no_cost",
+    "other": "run {{.Run}} recorded no cost, and a US dollar ceiling needs one: the bench stopped"
+  }
+]

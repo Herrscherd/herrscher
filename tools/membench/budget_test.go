@@ -4,19 +4,21 @@ import "testing"
 
 func TestMayStartKeepsTheWidestCallInReserve(t *testing.T) {
 	cases := []struct {
-		name  string
-		limit budget
-		spent spend
-		want  bool
+		name   string
+		limit  budget
+		spent  spend
+		widest spend
+		want   bool
 	}{
-		{"room for two widest calls", budget{tokens: 1000}, spend{tokens: 500}, true},
-		{"reserve reaches the ceiling", budget{tokens: 1000}, spend{tokens: 800}, false},
-		{"usd ceiling reached", budget{usd: 1}, spend{usd: 1}, false},
-		{"no ceiling never stops", budget{}, spend{tokens: 1 << 40, usd: 1e6}, true},
+		{"room for two widest calls", budget{tokens: 1000}, spend{tokens: 500}, spend{tokens: 100}, true},
+		{"reserve reaches the ceiling", budget{tokens: 1000}, spend{tokens: 800}, spend{tokens: 100}, false},
+		{"an expensive call is kept in reserve", budget{usd: 1}, spend{usd: 0.1}, spend{usd: 0.6}, false},
+		{"usd ceiling reached", budget{usd: 1}, spend{usd: 1}, spend{usd: 0.01}, false},
+		{"no ceiling never stops", budget{}, spend{tokens: 1 << 40, usd: 1e6}, spend{tokens: 100}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := &meter{limit: tc.limit, spent: tc.spent, widest: spend{tokens: 100}}
+			m := &meter{limit: tc.limit, spent: tc.spent, widest: tc.widest}
 			if got := m.mayStart(); got != tc.want {
 				t.Errorf("mayStart() = %v, want %v", got, tc.want)
 			}

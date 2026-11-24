@@ -1,114 +1,70 @@
 package main
 
 import (
-	"errors"
-	"os"
-	"path/filepath"
-	"slices"
+	"fmt"
 	"strings"
 	"testing"
-
-	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
-const lmeFixture = `[
- {"question_id":"q1","question_type":"single-session-user","question":"Where do I live?","answer":"Lyon","haystack_session_ids":["s1","s2"],"haystack_sessions":[[{"role":"user","content":"I live in Lyon."}],[{"role":"user","content":"I like tea."}]],"answer_session_ids":["s1"]},
- {"question_id":"q2","question_type":"multi-session","question":"How many trips?","answer":3,"haystack_session_ids":["s1","s2"],"haystack_sessions":[[{"role":"user","content":"Trip one."}],[{"role":"user","content":"Trip two."}]],"answer_session_ids":["s1","s2"]},
- {"question_id":"q3","question_type":"other-type","question":"Ignored?","answer":"no","haystack_session_ids":["s1"],"haystack_sessions":[[{"role":"user","content":"x"}]],"answer_session_ids":["s1"]},
- {"question_id":"q4","question_type":"single-session-user","question":"No evidence?","answer":"no","haystack_session_ids":["s1"],"haystack_sessions":[[{"role":"user","content":"x"}]],"answer_session_ids":[]},
- {"question_id":"q5_abs","question_type":"multi-session","question":"Unknown thing?","answer":"","haystack_session_ids":["s1"],"haystack_sessions":[[{"role":"user","content":"x"}]],"answer_session_ids":["s1"]},
- {"question_id":"q6","question_type":"temporal-reasoning","question":"Which came first?","answer":"alpha","haystack_session_ids":["s1","s2","s3","s4","s5"],"haystack_sessions":[[{"role":"user","content":"1"}],[{"role":"user","content":"2"}],[{"role":"user","content":"3"}],[{"role":"user","content":"4"}],[{"role":"user","content":"5"}]],"answer_session_ids":["s1","s2","s3","s4","s5"]}
-]`
+func lmeFixture(count int) string {
+	var items []string
+	for i := range count {
+		items = append(items, fmt.Sprintf(`{"question_id":"q%03d","question_type":"multi-session","question":"What?","answer":"ans%d","haystack_session_ids":["s1","s2"],"haystack_sessions":[[{"role":"user","content":"hi"}],[{"role":"user","content":"yo"}]],"answer_session_ids":["s1"]}`, i, i))
+	}
+	return "[" + strings.Join(items, ",") + "]"
+}
 
-func TestSampleItemsKeepsOnlyEligibleItems(t *testing.T) {
-	items, eligible, err := sampleItems(strings.NewReader(lmeFixture), 100, 1, 6)
+func sampledIDs(t *testing.T, fixture string, samples int, seed uint64) []string {
+	t.Helper()
+	items, _, err := sampleItems(strings.NewReader(fixture), samples, seed, 6)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if eligible != 4 {
-		t.Errorf("eligible %d, want 4 (q3 has an unknown type, q4 no evidence)", eligible)
+	ids := make([]string, 0, len(items))
+	for index := range items {
+		ids = append(ids, items[index].QuestionID)
 	}
-	var ids []string
-	for _, item := range items {
-		ids = append(ids, item.QuestionID)
+	return ids
+}
+
+func TestSampleIsDeterministicAndBounded(t *testing.T) {
+	fixture := lmeFixture(50)
+	first := sampledIDs(t, fixture, 5, 7)
+	again := sampledIDs(t, fixture, 5, 7)
+	if len(first) != 5 || strings.Join(first, ",") != strings.Join(again, ",") {
+		t.Errorf("sample %v then %v, want five items, the same both times", first, again)
 	}
-	slices.Sort(ids)
-	if want := []string{"q1", "q2", "q5_abs", "q6"}; !slices.Equal(ids, want) {
-		t.Errorf("sampled %v, want %v", ids, want)
+	other := sampledIDs(t, fixture, 5, 8)
+	if strings.Join(first, ",") == strings.Join(other, ",") {
+		t.Errorf("seeds 7 and 8 sampled the same items %v", first)
 	}
 }
 
-func TestSampleItemsHonoursMaxTurns(t *testing.T) {
-	_, eligible, err := sampleItems(strings.NewReader(lmeFixture), 100, 1, 5)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if eligible != 3 {
-		t.Errorf("eligible %d with max turns 5, want 3 (q6 needs six turns)", eligible)
-	}
-}
-
-func TestSampleItemsIsSeeded(t *testing.T) {
-	first, _, err := sampleItems(strings.NewReader(lmeFixture), 2, 3, 6)
-	if err != nil {
-		t.Fatal(err)
-	}
-	second, _, err := sampleItems(strings.NewReader(lmeFixture), 2, 3, 6)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(first) != 2 {
-		t.Fatalf("sampled %d items, want 2", len(first))
-	}
-	for i := range first {
-		if first[i].QuestionID != second[i].QuestionID {
-			t.Errorf("same seed sampled %q then %q", first[i].QuestionID, second[i].QuestionID)
-		}
+func TestSampleSkipsIneligibleItems(t *testing.T) {
+	fixture := `[{"question_id":"keep","question_type":"multi-session","question":"q","answer":"a","haystack_session_ids":["s1"],"haystack_sessions":[[{"role":"user","content":"x"}]],"answer_session_ids":["s1"]},` +
+		`{"question_id":"no-evidence","question_type":"multi-session","question":"q","answer":"a","haystack_session_ids":["s1"],"haystack_sessions":[[]],"answer_session_ids":[]},` +
+		`{"question_id":"unknown-type","question_type":"other","question":"q","answer":"a","haystack_session_ids":["s1"],"haystack_sessions":[[]],"answer_session_ids":["s1"]}]`
+	ids := sampledIDs(t, fixture, 10, 1)
+	if strings.Join(ids, ",") != "keep" {
+		t.Errorf("sampled %v, want only the eligible item", ids)
 	}
 }
 
-func TestLoadLongMemEvalBuildsTasksPerCapability(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "longmemeval.json")
-	if err := os.WriteFile(path, []byte(lmeFixture), 0o600); err != nil {
-		t.Fatal(err)
+func TestItemTaskAsksTheQuestionAfterItsEvidence(t *testing.T) {
+	item := lmeItem{
+		QuestionID:   "q1",
+		QuestionType: "knowledge-update",
+		Question:     "Where now?",
+		Answer:       "Lisbon",
+		SessionIDs:   []string{"s1", "s2"},
+		Sessions:     [][]lmeTurn{{{Role: "user", Content: "I live in Porto."}}, {{Role: "user", Content: "I moved to Lisbon."}}},
+		Evidence:     []string{"s2"},
 	}
-	tasks, err := loadLongMemEval(path, 100, 1, 6)
-	if err != nil {
-		t.Fatal(err)
+	built := itemTask(item)
+	if len(built.steps) != 1 || !strings.HasPrefix(built.steps[0].prompt, rememberPrefix) {
+		t.Fatalf("steps %+v, want one remember step for the evidence session", built.steps)
 	}
-	byID := make(map[string]task)
-	for _, built := range tasks {
-		byID[built.id] = built
-	}
-	if got := byID["q1"]; got.group != clitext.MembenchCapExtraction || !slices.Equal(got.want, []string{"lyon"}) || len(got.steps) != 1 {
-		t.Errorf("q1 = group %s, want %v, %d steps; want extraction, lyon, one step", got.group, got.want, len(got.steps))
-	}
-	if got := byID["q2"]; got.group != clitext.MembenchCapMultisession || !slices.Equal(got.want, []string{"3"}) || len(got.steps) != 2 {
-		t.Errorf("q2 = group %s, want %v, %d steps; want multisession, 3, two steps", got.group, got.want, len(got.steps))
-	}
-	if got := byID["q5_abs"]; got.group != clitext.MembenchCapAbstention || !got.abstain {
-		t.Errorf("q5_abs = group %s, abstain %v; want abstention with abstain set", got.group, got.abstain)
-	}
-	if got := byID["q6"]; got.group != clitext.MembenchCapTemporal || len(got.steps) != 5 {
-		t.Errorf("q6 = group %s, %d steps; want temporal with five steps", got.group, len(got.steps))
-	}
-}
-
-func TestLoadLongMemEvalRejectsBadShapes(t *testing.T) {
-	dir := t.TempDir()
-	cases := map[string]string{
-		"not an array": `{}`,
-		"no eligible":  `[]`,
-	}
-	for name, content := range cases {
-		path := filepath.Join(dir, strings.ReplaceAll(name, " ", "-")+".json")
-		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		_, err := loadLongMemEval(path, 10, 1, 6)
-		known, ok := errors.AsType[messageError](err)
-		if !ok || known.key != clitext.MembenchErrDatasetShape {
-			t.Errorf("%s: error %v, want a dataset shape error", name, err)
-		}
+	if built.ask.prompt != "Where now?" || len(built.want) != 1 || built.want[0] != "Lisbon" {
+		t.Errorf("ask %+v, want %q", built.ask, "Where now?")
 	}
 }

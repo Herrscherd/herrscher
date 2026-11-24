@@ -3,13 +3,14 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 
-	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
 
 func TestSummarizeDerivesOnOffDeltas(t *testing.T) {
-	base := outcome{section: clitext.MembenchSectionPairs, group: clitext.MembenchVariantStale, setting: "report", turns: 2}
+	base := outcome{section: msgSectionPairs, group: msgVariantStale, setting: "report", turns: 2}
 	off := func(success bool) outcome {
 		o := base
 		o.success = success
@@ -43,7 +44,7 @@ func TestSummarizeDerivesOnOffDeltas(t *testing.T) {
 }
 
 func TestSummarizeCountsArmsNotRunAfterAStop(t *testing.T) {
-	ex := execution{stopped: true, outcomes: []outcome{{section: clitext.MembenchSectionPairs, group: clitext.MembenchVariantSameAgent, setting: "report"}}}
+	ex := execution{stopped: true, outcomes: []outcome{{section: msgSectionPairs, group: msgVariantSameAgent, setting: "report"}}}
 	rep := summarize(config{budget: budget{tokens: 10}}, ex, spend{tokens: 9}, 3)
 	if rep.Status != statusPartial || rep.NotRun != 2 || rep.SpentTokens != 9 {
 		t.Errorf("status %q, not run %d, spent %d; want partial, 2, 9", rep.Status, rep.NotRun, rep.SpentTokens)
@@ -51,10 +52,10 @@ func TestSummarizeCountsArmsNotRunAfterAStop(t *testing.T) {
 }
 
 func TestWriteReportJSONCarriesTheDeltas(t *testing.T) {
-	ex := execution{outcomes: []outcome{{section: clitext.MembenchSectionPairs, group: clitext.MembenchVariantSameAgent, setting: "report", on: true, success: true, turns: 1, tokens: 50, input: 40}}}
+	ex := execution{outcomes: []outcome{{section: msgSectionPairs, group: msgVariantSameAgent, setting: "report", on: true, success: true, turns: 1, tokens: 50, input: 40}}}
 	rep := summarize(config{budget: budget{tokens: 100}}, ex, spend{tokens: 50}, 1)
 	var out bytes.Buffer
-	if err := writeReport(&out, rep, config{format: formatJSON}); err != nil {
+	if err := writeReport(&out, rep, config{format: formatJSON}, loadCatalogue()); err != nil {
 		t.Fatal(err)
 	}
 	var decoded struct {
@@ -71,5 +72,49 @@ func TestWriteReportJSONCarriesTheDeltas(t *testing.T) {
 	}
 	if decoded.Status != statusComplete || len(decoded.Rows) != 1 || decoded.Rows[0].On.Successes != 1 || decoded.Rows[0].DeltaSuccess != 1 {
 		t.Errorf("decoded %+v; want complete, one row, one on success, delta 1", decoded)
+	}
+}
+
+func TestFailedReportKeepsTheArmsFinishedBeforeTheError(t *testing.T) {
+	ex := execution{stopped: true, outcomes: []outcome{{section: msgSectionPairs, group: msgVariantSameAgent, setting: "report"}}}
+	rep := summarize(config{budget: budget{tokens: 100}}, ex, spend{}, 3)
+	rep.Status = statusFailed
+	rep.Failure = "run same-agent wrote no usage record"
+	var out bytes.Buffer
+	if err := writeReport(&out, rep, config{format: formatJSON}, loadCatalogue()); err != nil {
+		t.Fatal(err)
+	}
+	var decoded struct {
+		Status  string `json:"status"`
+		Failure string `json:"failure"`
+		NotRun  int    `json:"notRun"`
+		Rows    []any  `json:"rows"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Status != statusFailed || decoded.Failure != rep.Failure || decoded.NotRun != 2 || len(decoded.Rows) != 1 {
+		t.Errorf("decoded %+v; want failed, the failure text, two arms not run, one row kept", decoded)
+	}
+}
+
+func TestMarkdownHidesFalseRecallForLongMemEval(t *testing.T) {
+	ex := execution{outcomes: []outcome{
+		{section: msgSectionPairs, group: msgVariantSameAgent, setting: "report"},
+		{section: msgSectionLongMemEval, group: msgCapExtraction, setting: "report"},
+	}}
+	rep := summarize(config{budget: budget{tokens: 100}}, ex, spend{}, 2)
+	var out bytes.Buffer
+	if err := renderMarkdown(&out, rep, loadCatalogue().For(i18n.English)); err != nil {
+		t.Fatal(err)
+	}
+	var separators []int
+	for _, line := range strings.Split(out.String(), "\n") {
+		if strings.HasPrefix(line, "|---") {
+			separators = append(separators, strings.Count(line, "---|"))
+		}
+	}
+	if len(separators) != 2 || separators[0] != 9 || separators[1] != 8 {
+		t.Errorf("table column counts %v, want the pair table with 9 and the LongMemEval table with 8", separators)
 	}
 }

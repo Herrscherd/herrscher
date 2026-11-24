@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
-	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 const (
@@ -32,6 +31,7 @@ const (
 	nameBudgetTokens = "budget-tokens"
 	nameBudgetUSD    = "budget-usd"
 	nameCredentials  = "credentials"
+	nameAPIKeyEnv    = "api-key-env"
 	nameDataset      = "dataset"
 	nameSamples      = "samples"
 	nameSeed         = "seed"
@@ -44,8 +44,8 @@ const (
 var errUsageRequested = errors.New("membench: usage requested")
 
 type messageError struct {
-	key    clitext.Key
-	params clitext.Params
+	key    msgKey
+	params params
 }
 
 func (e messageError) Error() string {
@@ -57,6 +57,7 @@ type config struct {
 	model       string
 	budget      budget
 	credentials string
+	apiKey      string
 	dataset     string
 	samples     int
 	seed        uint64
@@ -68,27 +69,28 @@ type config struct {
 
 type flagSpec struct {
 	name string
-	key  clitext.Key
+	key  msgKey
 }
 
 func flagCatalogue() []flagSpec {
 	return []flagSpec{
-		{nameHerrscher, clitext.MembenchFlagHerrscher},
-		{nameModel, clitext.MembenchFlagModel},
-		{nameBudgetTokens, clitext.MembenchFlagBudgetTokens},
-		{nameBudgetUSD, clitext.MembenchFlagBudgetUSD},
-		{nameCredentials, clitext.MembenchFlagCredentials},
-		{nameDataset, clitext.MembenchFlagDataset},
-		{nameSamples, clitext.MembenchFlagSamples},
-		{nameSeed, clitext.MembenchFlagSeed},
-		{nameSettings, clitext.MembenchFlagSettings},
-		{nameMaxTurns, clitext.MembenchFlagMaxTurns},
-		{nameFormat, clitext.MembenchFlagFormat},
-		{nameLang, clitext.MembenchFlagLang},
+		{nameHerrscher, msgFlagHerrscher},
+		{nameModel, msgFlagModel},
+		{nameBudgetTokens, msgFlagBudgetTokens},
+		{nameBudgetUSD, msgFlagBudgetUSD},
+		{nameCredentials, msgFlagCredentials},
+		{nameAPIKeyEnv, msgFlagAPIKeyEnv},
+		{nameDataset, msgFlagDataset},
+		{nameSamples, msgFlagSamples},
+		{nameSeed, msgFlagSeed},
+		{nameSettings, msgFlagSettings},
+		{nameMaxTurns, msgFlagMaxTurns},
+		{nameFormat, msgFlagFormat},
+		{nameLang, msgFlagLang},
 	}
 }
 
-func parseConfig(args []string, stderr io.Writer, msgs *clitext.Messages, defaultLang i18n.Language) (config, error) {
+func parseConfig(args []string, stderr io.Writer, msgs catalogue, defaultLang i18n.Language, getenv func(string) string) (config, error) {
 	var raw rawFlags
 	flags := flag.NewFlagSet("membench", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
@@ -100,17 +102,17 @@ func parseConfig(args []string, stderr io.Writer, msgs *clitext.Messages, defaul
 			}
 			return config{}, errUsageRequested
 		}
-		return config{}, messageError{key: clitext.MembenchErrFlagValue, params: clitext.Params{clitext.ParamName: "flags", clitext.ParamDetail: err.Error()}}
+		return config{}, messageError{key: msgErrFlagValue, params: params{paramName: "flags", paramDetail: err.Error()}}
 	}
-	return raw.resolve(defaultLang)
+	return raw.resolve(defaultLang, getenv)
 }
 
 type rawFlags struct {
-	binary, model, credentials, dataset, settings, format, lang string
-	budgetTokens                                                int64
-	budgetUSD                                                   float64
-	samples, maxTurns                                           int
-	seed                                                        uint64
+	binary, model, credentials, apiKeyEnv, dataset, settings, format, lang string
+	budgetTokens                                                           int64
+	budgetUSD                                                              float64
+	samples, maxTurns                                                      int
+	seed                                                                   uint64
 }
 
 func (r *rawFlags) bind(flags *flag.FlagSet) {
@@ -119,6 +121,7 @@ func (r *rawFlags) bind(flags *flag.FlagSet) {
 	flags.Int64Var(&r.budgetTokens, nameBudgetTokens, 0, "")
 	flags.Float64Var(&r.budgetUSD, nameBudgetUSD, 0, "")
 	flags.StringVar(&r.credentials, nameCredentials, "", "")
+	flags.StringVar(&r.apiKeyEnv, nameAPIKeyEnv, "", "")
 	flags.StringVar(&r.dataset, nameDataset, "", "")
 	flags.IntVar(&r.samples, nameSamples, defaultSamples, "")
 	flags.Uint64Var(&r.seed, nameSeed, defaultSeed, "")
@@ -128,7 +131,7 @@ func (r *rawFlags) bind(flags *flag.FlagSet) {
 	flags.StringVar(&r.lang, nameLang, "", "")
 }
 
-func (r *rawFlags) resolve(defaultLang i18n.Language) (config, error) {
+func (r *rawFlags) resolve(defaultLang i18n.Language, getenv func(string) string) (config, error) {
 	lang := defaultLang
 	if r.lang != "" {
 		parsed, err := i18n.ParseLanguage(r.lang)
@@ -151,12 +154,27 @@ func (r *rawFlags) resolve(defaultLang i18n.Language) (config, error) {
 	if err := r.validate(&cfg); err != nil {
 		return config{}, err
 	}
+	if err := cfg.readAPIKey(r.apiKeyEnv, getenv); err != nil {
+		return config{}, err
+	}
 	binary, err := exec.LookPath(r.binary)
 	if err != nil {
-		return config{}, messageError{key: clitext.MembenchErrHerrscher, params: clitext.Params{clitext.ParamPath: r.binary, clitext.ParamErr: err.Error()}}
+		return config{}, messageError{key: msgErrHerrscher, params: params{paramPath: r.binary, paramErr: err.Error()}}
 	}
 	cfg.binary = binary
 	return cfg, nil
+}
+
+func (c *config) readAPIKey(name string, getenv func(string) string) error {
+	if name == "" {
+		return nil
+	}
+	value := getenv(name)
+	if value == "" {
+		return flagError(nameAPIKeyEnv, name)
+	}
+	c.apiKey = value
+	return nil
 }
 
 func (r *rawFlags) validate(cfg *config) error {
@@ -167,7 +185,7 @@ func (r *rawFlags) validate(cfg *config) error {
 		return flagError(nameBudgetUSD, strconv.FormatFloat(cfg.budget.usd, 'f', -1, float64Bits))
 	}
 	if cfg.budget.tokens == 0 && cfg.budget.usd == 0 {
-		return messageError{key: clitext.MembenchErrBudgetMissing}
+		return messageError{key: msgErrBudgetMissing}
 	}
 	if cfg.maxTurns < minMaxTurns {
 		return flagError(nameMaxTurns, strconv.Itoa(cfg.maxTurns))
@@ -180,7 +198,7 @@ func (r *rawFlags) validate(cfg *config) error {
 	}
 	if cfg.credentials != "" {
 		if _, err := os.Stat(cfg.credentials); err != nil {
-			return messageError{key: clitext.MembenchErrFlagValue, params: clitext.Params{clitext.ParamName: nameCredentials, clitext.ParamDetail: err.Error()}}
+			return messageError{key: msgErrFlagValue, params: params{paramName: nameCredentials, paramDetail: err.Error()}}
 		}
 	}
 	settings, err := selectSettings(r.settings)
@@ -192,13 +210,13 @@ func (r *rawFlags) validate(cfg *config) error {
 }
 
 func flagError(name, detail string) error {
-	return messageError{key: clitext.MembenchErrFlagValue, params: clitext.Params{clitext.ParamName: name, clitext.ParamDetail: detail}}
+	return messageError{key: msgErrFlagValue, params: params{paramName: name, paramDetail: detail}}
 }
 
-func writeUsage(out io.Writer, msgs *clitext.Messages, lang i18n.Language) error {
+func writeUsage(out io.Writer, msgs catalogue, lang i18n.Language) error {
 	translator := msgs.For(lang)
 	var text strings.Builder
-	text.WriteString(translator.Text(clitext.MembenchUsage, nil) + "\n")
+	text.WriteString(translator.Text(msgUsage, nil) + "\n")
 	for _, spec := range flagCatalogue() {
 		text.WriteString("  -" + spec.name + "\n    " + translator.Text(spec.key, nil) + "\n")
 	}

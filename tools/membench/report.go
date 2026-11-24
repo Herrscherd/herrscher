@@ -13,6 +13,7 @@ import (
 const (
 	statusComplete = "complete"
 	statusPartial  = "partial"
+	statusFailed   = "failed"
 	signedPrefix   = "+"
 	percent        = 100
 	turnDecimals   = 2
@@ -72,15 +73,15 @@ func (c *cell) tokensPerSuccess() (float64, bool) {
 }
 
 type row struct {
-	Section               clitext.Key `json:"section"`
-	Group                 clitext.Key `json:"group"`
-	Setting               string      `json:"setting"`
-	Off                   cell        `json:"off"`
-	On                    cell        `json:"on"`
-	DeltaSuccess          float64     `json:"deltaSuccess"`
-	DeltaTurns            float64     `json:"deltaTurns"`
-	DeltaTokensPerSuccess *float64    `json:"deltaTokensPerSuccess"`
-	MemoryTokensPerTurn   float64     `json:"memoryTokensPerTurn"`
+	Section               msgKey   `json:"section"`
+	Group                 msgKey   `json:"group"`
+	Setting               string   `json:"setting"`
+	Off                   cell     `json:"off"`
+	On                    cell     `json:"on"`
+	DeltaSuccess          float64  `json:"deltaSuccess"`
+	DeltaTurns            float64  `json:"deltaTurns"`
+	DeltaTokensPerSuccess *float64 `json:"deltaTokensPerSuccess"`
+	MemoryTokensPerTurn   float64  `json:"memoryTokensPerTurn"`
 }
 
 func (r *row) derive() {
@@ -97,6 +98,7 @@ func (r *row) derive() {
 
 type report struct {
 	Status      string  `json:"status"`
+	Failure     string  `json:"failure,omitempty"`
 	Model       string  `json:"model"`
 	LimitTokens int64   `json:"limitTokens"`
 	LimitUSD    float64 `json:"limitUsd"`
@@ -107,8 +109,8 @@ type report struct {
 }
 
 type rowKey struct {
-	section clitext.Key
-	group   clitext.Key
+	section msgKey
+	group   msgKey
 	setting string
 }
 
@@ -147,30 +149,29 @@ func summarize(cfg config, executed execution, spent spend, planned int) report 
 	return rep
 }
 
-func writeReport(out io.Writer, rep report, cfg config) error {
+func writeReport(out io.Writer, rep report, cfg config, msgs catalogue) error {
 	if cfg.format == formatJSON {
 		encoder := json.NewEncoder(out)
 		encoder.SetIndent("", jsonIndent)
 		return encoder.Encode(rep)
 	}
-	return renderMarkdown(out, rep, cfg.lang)
+	return renderMarkdown(out, rep, msgs.For(cfg.lang))
 }
 
-func renderMarkdown(out io.Writer, rep report, lang i18n.Language) error {
-	translator := clitext.NewMessages().For(lang)
+func renderMarkdown(out io.Writer, rep report, translator *translator) error {
 	var text strings.Builder
-	text.WriteString("# " + translator.Text(clitext.MembenchReportTitle, nil) + "\n\n")
-	text.WriteString(statusLine(translator, rep, lang) + "\n")
-	for _, section := range []clitext.Key{clitext.MembenchSectionPairs, clitext.MembenchSectionLongMemEval} {
+	text.WriteString("# " + translator.Text(msgReportTitle, nil) + "\n\n")
+	text.WriteString(statusLine(translator, rep) + "\n")
+	for _, section := range []msgKey{msgSectionPairs, msgSectionLongMemEval} {
 		rows := rowsOf(rep.Rows, section)
 		if len(rows) == 0 {
 			continue
 		}
 		text.WriteString("\n## " + translator.Text(section, nil) + "\n\n")
-		text.WriteString(table(translator, section, rows, lang))
+		text.WriteString(table(translator, section, rows))
 	}
 	if len(rep.Rows) == 0 {
-		text.WriteString("\n" + translator.Text(clitext.MembenchNoMeasure, nil) + "\n")
+		text.WriteString("\n" + translator.Text(msgNoMeasure, nil) + "\n")
 	}
 	if err := translator.Err(); err != nil {
 		return err
@@ -179,26 +180,32 @@ func renderMarkdown(out io.Writer, rep report, lang i18n.Language) error {
 	return err
 }
 
-func statusLine(translator *clitext.Translator, rep report, lang i18n.Language) string {
-	if rep.Status != statusPartial {
-		return translator.Text(clitext.MembenchStatusComplete, nil)
+func statusLine(translator *translator, rep report) string {
+	switch rep.Status {
+	case statusFailed:
+		return translator.Text(msgStatusFailed, params{paramDetail: rep.Failure}) + " " + notRunText(translator, rep)
+	case statusPartial:
+		stopped := translator.Text(msgBudgetStopped, params{
+			paramSpent: amountText(translator, rep.SpentTokens, rep.SpentUSD),
+			paramLimit: amountText(translator, rep.LimitTokens, rep.LimitUSD),
+		})
+		return translator.Text(msgStatusPartial, nil) + " " + stopped + " " + notRunText(translator, rep)
 	}
-	stopped := translator.Text(clitext.MembenchBudgetStopped, clitext.Params{
-		clitext.ParamSpent: amountText(translator, lang, rep.SpentTokens, rep.SpentUSD),
-		clitext.ParamLimit: amountText(translator, lang, rep.LimitTokens, rep.LimitUSD),
-	})
-	notRun := translator.Text(clitext.MembenchNotRun, clitext.Params{clitext.ParamCount: clitext.FormatNumber(lang, float64(rep.NotRun), 0)})
-	return translator.Text(clitext.MembenchStatusPartial, nil) + " " + stopped + " " + notRun
+	return translator.Text(msgStatusComplete, nil)
 }
 
-func amountText(translator *clitext.Translator, lang i18n.Language, tokens int64, usd float64) string {
-	return translator.Text(clitext.MembenchAmount, clitext.Params{
-		clitext.ParamTokens: clitext.FormatNumber(lang, float64(tokens), 0),
-		clitext.ParamMoney:  clitext.FormatNumber(lang, usd, moneyDecimals),
+func notRunText(translator *translator, rep report) string {
+	return translator.Text(msgNotRun, params{paramCount: clitext.FormatNumber(translator.lang, float64(rep.NotRun), 0)})
+}
+
+func amountText(translator *translator, tokens int64, usd float64) string {
+	return translator.Text(msgAmount, params{
+		paramTokens: clitext.FormatNumber(translator.lang, float64(tokens), 0),
+		paramMoney:  clitext.FormatNumber(translator.lang, usd, moneyDecimals),
 	})
 }
 
-func rowsOf(rows []row, section clitext.Key) []row {
+func rowsOf(rows []row, section msgKey) []row {
 	var matched []row
 	for index := range rows {
 		if rows[index].Section == section {
@@ -208,55 +215,66 @@ func rowsOf(rows []row, section clitext.Key) []row {
 	return matched
 }
 
-func table(translator *clitext.Translator, section clitext.Key, rows []row, lang i18n.Language) string {
-	headers := []clitext.Key{
-		firstColumn(section), clitext.MembenchColSetting, clitext.MembenchColOff, clitext.MembenchColOn,
-		clitext.MembenchColDeltaSuccess, clitext.MembenchColDeltaTurns, clitext.MembenchColDeltaTokens,
-		clitext.MembenchColMemoryTokens, clitext.MembenchColFalseRecall,
+type column struct {
+	header msgKey
+	value  func(item row) string
+}
+
+func columnsOf(translator *translator, section msgKey) []column {
+	lang := translator.lang
+	columns := []column{
+		{firstColumn(section), func(item row) string { return translator.Text(item.Group, nil) }},
+		{msgColSetting, func(item row) string { return item.Setting }},
+		{msgColOff, func(item row) string { return percentCell(lang, item.Off) }},
+		{msgColOn, func(item row) string { return percentCell(lang, item.On) }},
+		{msgColDeltaSuccess, func(item row) string { return signed(lang, item.DeltaSuccess*percent, 0) + "%" }},
+		{msgColDeltaTurns, func(item row) string { return signed(lang, item.DeltaTurns, turnDecimals) }},
+		{msgColDeltaTokens, func(item row) string { return tokensCell(translator, item.DeltaTokensPerSuccess) }},
+		{msgColMemoryTokens, func(item row) string { return signed(lang, item.MemoryTokensPerTurn, memoryDecimals) }},
 	}
-	names := make([]string, 0, len(headers))
-	for _, header := range headers {
-		names = append(names, translator.Text(header, nil))
+	if section == msgSectionLongMemEval {
+		return columns
+	}
+	return append(columns, column{msgColFalseRecall, func(item row) string {
+		return fmt.Sprintf("%d / %d", item.Off.FalseRecalls, item.On.FalseRecalls)
+	}})
+}
+
+func table(translator *translator, section msgKey, rows []row) string {
+	columns := columnsOf(translator, section)
+	headers := make([]string, 0, len(columns))
+	for _, column := range columns {
+		headers = append(headers, translator.Text(column.header, nil))
 	}
 	var text strings.Builder
-	text.WriteString("| " + strings.Join(names, " | ") + " |\n")
-	text.WriteString("|" + strings.Repeat("---|", len(headers)) + "\n")
-	for i := range rows {
-		text.WriteString("| " + strings.Join(rowCells(translator, lang, rows[i]), " | ") + " |\n")
+	text.WriteString("| " + strings.Join(headers, " | ") + " |\n")
+	text.WriteString("|" + strings.Repeat("---|", len(columns)) + "\n")
+	for index := range rows {
+		cells := make([]string, 0, len(columns))
+		for _, column := range columns {
+			cells = append(cells, column.value(rows[index]))
+		}
+		text.WriteString("| " + strings.Join(cells, " | ") + " |\n")
 	}
 	return text.String()
 }
 
-func firstColumn(section clitext.Key) clitext.Key {
-	if section == clitext.MembenchSectionLongMemEval {
-		return clitext.MembenchColCapability
+func firstColumn(section msgKey) msgKey {
+	if section == msgSectionLongMemEval {
+		return msgColCapability
 	}
-	return clitext.MembenchColTask
-}
-
-func rowCells(translator *clitext.Translator, lang i18n.Language, item row) []string {
-	return []string{
-		translator.Text(item.Group, nil),
-		item.Setting,
-		percentCell(lang, item.Off),
-		percentCell(lang, item.On),
-		signed(lang, item.DeltaSuccess*percent, 0) + "%",
-		signed(lang, item.DeltaTurns, turnDecimals),
-		tokensCell(translator, lang, item.DeltaTokensPerSuccess),
-		signed(lang, item.MemoryTokensPerTurn, memoryDecimals),
-		fmt.Sprintf("%d / %d", item.Off.FalseRecalls, item.On.FalseRecalls),
-	}
+	return msgColTask
 }
 
 func percentCell(lang i18n.Language, counts cell) string {
 	return fmt.Sprintf("%s%% (%d)", clitext.FormatNumber(lang, counts.successRate()*percent, 0), counts.Runs)
 }
 
-func tokensCell(translator *clitext.Translator, lang i18n.Language, delta *float64) string {
+func tokensCell(translator *translator, delta *float64) string {
 	if delta == nil {
-		return translator.Text(clitext.MembenchNoMeasure, nil)
+		return translator.Text(msgNoMeasure, nil)
 	}
-	return signed(lang, *delta, 0)
+	return signed(translator.lang, *delta, 0)
 }
 
 func signed(lang i18n.Language, value float64, decimals int) string {

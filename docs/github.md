@@ -157,7 +157,7 @@ fail with a message saying herrscher is not connected to that host.
   After such a refusal, herrscher does not send the renewal to the forge again
   for the same host for one minute. While the saved token is still valid, forge
   operations keep using it and log one warning for the refusal that names the
-  host, never the token. Once it expires, forge operations fail with an error that ends with
-  `the forge does not accept the herrscher app credentials`. Renewal is tried
-  again when the token is due and that minute has passed, and fixing the App
-  restores renewals.
+  host, never the token. Once it expires, forge operations fail with an error
+  that ends with `the forge does not accept the herrscher app credentials`.
+  Renewal is tried again when the token is due and that minute has passed, and
+  fixing the App restores renewals.

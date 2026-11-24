@@ -189,6 +189,15 @@ linters:
       - path: ^(cmd|tools)/
         linters: [gosec]
         text: "^G(304|703):"
+      - path: ^tools/membench/runner\.go$
+        linters: [gosec]
+        text: "^G204:"
+      - path: ^tools/membench/longmemeval\.go$
+        linters: [gosec]
+        text: "^G404:"
+      - path: ^core/clitext/keys_membench\.go$
+        linters: [gosec]
+        text: "^G101:"
       - path: ^core/internal/manager/session\.go$
         linters: [misspell]
         text: "marrage"

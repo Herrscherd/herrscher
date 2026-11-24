@@ -44,16 +44,6 @@ type oneShotSeedRuntime struct {
 	localRun        bool
 	persists        *persistWrites
 	joinGrace       time.Duration
-	openSeed        seedOpener
-}
-
-type seedOpener func(ctx context.Context, messages *hostMessages, sess state.Session) (contracts.Orchestrator, contracts.Memory, error)
-
-func (r oneShotSeedRuntime) seedOpener() seedOpener {
-	if r.openSeed != nil {
-		return r.openSeed
-	}
-	return seedOrchestrator
 }
 
 func (r oneShotSeedRuntime) grace() time.Duration {
@@ -116,7 +106,7 @@ func runOneShotSeedIDWithRuntime(ctx context.Context, st *state.State, name, tas
 	if err := requireApprovalDesk(runtime); err != nil {
 		return "", err
 	}
-	orch, mem, err := runtime.seedOpener()(ctx, runtime.messages, sess)
+	orch, mem, err := seedOrchestrator(ctx, runtime.messages, sess)
 	if err != nil {
 		return "", err
 	}

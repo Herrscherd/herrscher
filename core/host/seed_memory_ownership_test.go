@@ -75,6 +75,28 @@ func (o *memoryWritingObserveOrchestrator) Observe(ctx context.Context, _ contra
 func (o *memoryWritingObserveOrchestrator) Consolidate(context.Context) error { return nil }
 func (o *memoryWritingObserveOrchestrator) Close() error                      { return nil }
 
+func registerSeedPlugins(t *testing.T, mem contracts.Memory, orch contracts.Orchestrator) *atomic.Int32 {
+	t.Helper()
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+	var opened atomic.Int32
+	contracts.Default.Register(contracts.Plugin{
+		Manifest: contracts.Manifest{Kind: "guard-memory", Category: contracts.CategoryMemory},
+		Memory: func(context.Context, contracts.PluginConfig) (contracts.Memory, error) {
+			opened.Add(1)
+			return mem, nil
+		},
+	})
+	contracts.Default.Register(contracts.Plugin{
+		Manifest: contracts.Manifest{Kind: "guard-orchestrator", Category: contracts.CategoryOrchestrator},
+		Orchestrator: func(context.Context, contracts.PluginConfig, contracts.Memory) (contracts.Orchestrator, error) {
+			return orch, nil
+		},
+	})
+	return &opened
+}
+
 func TestUnjoinedBridgeClosesMemoryOnlyWhenItEnds(t *testing.T) {
 	mem := newCloseGuardMemory()
 	orch := &memoryWritingObserveOrchestrator{seen: make(chan struct{}, 1), release: make(chan struct{}), memory: mem}
@@ -147,6 +169,7 @@ func TestOneShotSeedClosesMemoryOnlyWhenTheBridgeEnds(t *testing.T) {
 	backend := func(context.Context, state.Session) (contracts.Backend, error) {
 		return seedBackend{reply: "réponse"}, nil
 	}
+	opened := registerSeedPlugins(t, mem, orch)
 	runtime := oneShotSeedRuntime{
 		desk:        seedDesk(t),
 		persists:    newPersistWrites(),
@@ -154,9 +177,6 @@ func TestOneShotSeedClosesMemoryOnlyWhenTheBridgeEnds(t *testing.T) {
 		cliMessages: clitext.NewMessages(),
 		backend:     backend,
 		joinGrace:   oneShotTestGrace,
-		openSeed: func(context.Context, *hostMessages, state.Session) (contracts.Orchestrator, contracts.Memory, error) {
-			return orch, mem, nil
-		},
 	}
 
 	returned := make(chan error, 1)
@@ -181,6 +201,9 @@ func TestOneShotSeedClosesMemoryOnlyWhenTheBridgeEnds(t *testing.T) {
 	if n := mem.closeCalls.Load(); n != 0 {
 		t.Fatalf("memory closed %d time(s) at return while Observe still runs, want 0", n)
 	}
+	if n := opened.Load(); n != 1 {
+		t.Fatalf("the seed opened memory %d time(s), want 1 through the registry", n)
+	}
 
 	close(orch.release)
 	select {
@@ -201,22 +224,18 @@ func TestOneShotSeedWithoutDeskOpensNothing(t *testing.T) {
 	if err := store.AddSession(state.Session{Name: "solo", ChannelID: "channel", Incarnation: "solo"}); err != nil {
 		t.Fatal(err)
 	}
-	opened := 0
+	opened := registerSeedPlugins(t, newCloseGuardMemory(), nil)
 	runtime := oneShotSeedRuntime{
 		persists:    newPersistWrites(),
 		messages:    newHostMessages(),
 		cliMessages: clitext.NewMessages(),
-		openSeed: func(context.Context, *hostMessages, state.Session) (contracts.Orchestrator, contracts.Memory, error) {
-			opened++
-			return nil, newCloseGuardMemory(), nil
-		},
 	}
 	_, err := runOneShotSeedIDWithRuntime(t.Context(), store, "solo", "tâche", newTurnID(), runtime)
 	if !errors.Is(err, errSeedWithoutApprovalDesk) {
 		t.Fatalf("err = %v, want %v", err, errSeedWithoutApprovalDesk)
 	}
-	if opened != 0 {
-		t.Fatalf("the seed opened memory %d time(s) before refusing, want 0", opened)
+	if n := opened.Load(); n != 0 {
+		t.Fatalf("the seed opened memory %d time(s) before refusing, want 0", n)
 	}
 }
 

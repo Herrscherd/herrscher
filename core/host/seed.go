@@ -220,15 +220,15 @@ func attachOneShotTaps(driver *sessionDriver, sess state.Session, runtime oneSho
 	return gate
 }
 
-func forwardToBridge(ctx context.Context, from <-chan contracts.Event, to chan<- contracts.Event) {
-	defer close(to)
+func forwardToBridge(ctx context.Context, from <-chan contracts.Event, bridgeIn chan<- contracts.Event) {
+	defer close(bridgeIn)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case event := <-from:
 			select {
-			case to <- event:
+			case bridgeIn <- event:
 			case <-ctx.Done():
 				return
 			}

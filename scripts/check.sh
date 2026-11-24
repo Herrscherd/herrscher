@@ -82,15 +82,17 @@ govulncheck=golang.org/x/vuln/cmd/govulncheck@v1.9.0
 
 if [ "$(uname -s)" = Linux ]; then
 	host_only=$(e2e_only_tests ./core/host/)
+	membench_only=$(e2e_only_tests ./tools/membench/)
 	e2e_only_tests ./e2e/... > /dev/null
 	if [ -n "${CI:-}" ]; then
 		e2e_cgroup_control
 	fi
-	e2e_capped go test -tags e2e -run '^$' ./e2e/... ./core/host/ .
+	e2e_capped go test -tags e2e -run '^$' ./e2e/... ./core/host/ ./tools/membench/ .
 	e2e_capped env CGO_ENABLED=0 GOWORK=off go build -tags e2e -o "$lint_tools/herrscher" .
 	started_ms=$(date +%s%3N)
 	e2e_capped go test -tags e2e -count=1 -timeout 2m ./e2e/...
 	e2e_capped go test -tags e2e -count=1 -timeout 2m -v -run "^($(paste -sd'|' <<<"$host_only"))\$" ./core/host/
+	e2e_capped go test -tags e2e -count=1 -timeout 2m -v -run "^($(paste -sd'|' <<<"$membench_only"))\$" ./tools/membench/
 	e2e_capped go test -tags e2e -count=1 -timeout 2m -run '^TestE2EAttachedWindow' .
 	elapsed_ms=$(( $(date +%s%3N) - started_ms ))
 	if [ "$elapsed_ms" -gt "$e2e_budget_ms" ]; then

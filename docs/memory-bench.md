@@ -6,9 +6,8 @@ directory, and reports what changed: success, turns, tokens, the memory tokens
 added per turn, and false recall.
 
 It is an on-demand tool under `tools/membench`. It is never run by CI, and
-`go test ./...` only runs its unit and fake-vendor tests, which make no real
-model call. Running the bench itself reaches a real model and spends money, so
-it requires a budget.
+`go test ./...` only runs its unit tests, which make no model call. Running the
+bench itself reaches a real model and spends money, so it requires a budget.
 
 ## Running it
 
@@ -30,6 +29,7 @@ heavy tool at a time.
 | `-budget-tokens` | none | Ceiling in tokens (input, output and cache tokens of the ledger). |
 | `-budget-usd` | none | Ceiling in US dollars, from the cost the ledger records. |
 | `-credentials` | none | A credentials file copied into each run's config directory, mode 0600. |
+| `-api-key-env` | none | Name of an environment variable holding an API key passed to each run. Unset by default, so a run uses only `-credentials`. The key is redacted from error messages. |
 | `-dataset` | none | A LongMemEval JSON file. Without it only the pair suite runs. |
 | `-samples` | `10` | How many dataset items to sample. |
 | `-seed` | `1` | Seed of the sampling, so the same seed samples the same items. |
@@ -44,6 +44,9 @@ on arm and `false` in the off arm.
 
 Exit codes: `0` complete, `1` failed, `2` usage error, `3` partial (the budget
 stopped the run before every arm ran).
+
+A failed run still writes its report. It keeps the arms that finished before
+the error, marks the status as failed with the cause, and exits `1`.
 
 ## What runs
 
@@ -62,25 +65,31 @@ evidence sessions are taught in order, then its question is asked. The five
 capabilities are extraction, multi-session, temporal reasoning, knowledge
 update and abstention. An item is eligible when it has evidence sessions, fits
 within `-max-turns`, has a known question type, and has an answer (abstention
-items may have none). The sample is drawn with a seeded reservoir, so the file
-is streamed and never loaded whole. The dataset is not bundled: pass its path.
+items may have none).
+
+The file is streamed, never loaded whole, and it is capped at 512 MiB and
+100000 items. The sample keeps the items with the lowest seeded hash of their
+id, so the same seed and file always give the same items. The dataset is not
+bundled: pass its path.
 
 ## What is measured
 
 For each task and setting, the report has one row with an off cell and an on
 cell, each with its runs, successes, false recalls, turns and tokens.
 
-- **Success**: the reply contains every expected value and no forbidden one, or,
-  for abstention, says it does not know without giving the forbidden value.
+- **Success**: the reply contains every expected value as whole words and no
+  forbidden one, or, for abstention, says it does not know without giving the
+  forbidden value. Matching is by whole word, so `42` does not match `1042`.
 - **Turns**: the calls of a run, one usage record each.
 - **Tokens to success**: the tokens of all runs divided by their successes. The
   delta is on minus off.
 - **Memory tokens per turn**: input tokens per turn on minus off. This is the
   cost the memory adds to each call.
 - **False recall**: a forbidden value (the stale answer, the planted secret) is
-  given. It is counted, not averaged into success.
+  given. It is counted, not averaged into success. The LongMemEval section does
+  not report it, because its reference answers do not mark forbidden values.
 
-The LongMemEval scoring is a substring check of the reference answer in the
+The LongMemEval scoring is a whole-word check of the reference answer in the
 reply. It is a proxy for the official judge, not a replacement for it.
 
 ## Budget semantics
@@ -99,38 +108,57 @@ the calls already made, not a guarantee.
 ## Isolation
 
 Each arm runs in a new directory under a temporary parent that is removed at the
-end. The directory holds the state, the home and the config of that run, and
-the run's environment is built from nothing: only `PATH` is inherited, the
-state, home and config variables point into the arm's directory, and
-`HERRSCHER_INSTANCE_ID` is unique to the arm. `ANTHROPIC_API_KEY` is never
-passed, so a run uses only the credentials given with `-credentials`.
+end. The parent lives under the user cache directory. The directory holds the
+state, the home and the config of that run, and the run's environment is built
+from nothing: only `PATH` is inherited, the state, home and config variables
+point into the arm's directory, and `HERRSCHER_INSTANCE_ID` is unique to the
+arm.
+
+`ANTHROPIC_API_KEY` is never read from the caller's environment. A run uses the
+credentials given with `-credentials`, and the key named by `-api-key-env` only
+when that flag is set.
 
 ## Tests
 
-The unit tests and the fake-vendor tests run under `go test ./...`. The fake
-vendor is the test binary itself, re-entered through a shell wrapper that
-stands in for `herrscher`: it keeps the facts and the usage ledger in the state
-directory the bench gives it, so the whole pipeline runs without a model call.
+The unit tests run under `go test ./...`. They use no model: the budget, the
+scoring, the sampling, the report and the sandbox environment are tested
+directly.
+
+Two end-to-end tests run under `-tags e2e` in `scripts/check.sh`. They build
+the real `herrscher` and the fake `claude` of `e2e/vendortest`, then:
+
+- `TestMemorySettingReachesTheRealBinary` runs `herrscher --print` with
+  `MEMORY_RAW_ARCHIVE` set to `false`, then to `true`, and checks that the raw
+  archive is written only in the second run. It fails if the bench does not
+  forward the setting to the binary.
+- `TestBenchStopsWithoutAUsageLedger` runs one arm against the real binary. A
+  local `--print` writes no usage ledger, so the bench must stop with the
+  missing-ledger error, keep no outcome, and mark the run stopped.
 
 The budget, isolation and scoring rules were checked by breaking them on
-purpose: a reserve that ignores the widest call, an environment that inherits
-the caller's secrets, a scorer that accepts a forbidden answer, and an
-abstention that counts as success. Each break was caught by a named test.
+purpose. Each break was caught by a named test: the sandbox dropping the
+setting assignments fails `TestMemorySettingReachesTheRealBinary`, a reserve
+that ignores the widest call fails `TestMayStartKeepsTheWidestCallInReserve`,
+and a scorer matching substrings fails `TestScoreMatchesWholeWordsOnly`.
 
 ## Lint exclusions
 
-Three gosec findings are excluded by path in `.golangci.yml`, each because the
-code is right and the rule does not apply:
+Two gosec findings are excluded by path in `.golangci.yml`, because the code is
+right and the rule does not apply:
 
 - G204 in `tools/membench/runner.go`: the binary run is the one the operator
   names with `-herrscher`, and running it is the purpose of the tool.
-- G404 in `tools/membench/longmemeval.go`: the reservoir sampling uses a seeded
-  PCG generator, so a seed reproduces the sample. It is not a security boundary.
-- G101 in `core/clitext/keys_membench.go`: the names are catalogue keys
-  (`cli.membench.*`), not credentials.
+- G101 in `tools/membench/keys.go`, `tools/membench/config.go` and
+  `tools/membench/runner.go`: the names matched are catalogue keys, flag names
+  such as `api-key-env`, and the name of the environment variable that carries
+  the key (`ANTHROPIC_API_KEY`), not credentials.
 
 ## Limitations
 
+- A local `herrscher --print` (no daemon) writes no usage ledger, so the bench
+  cannot read its spend. With no daemon, the first call fails with the
+  missing-ledger error and the run stops. Measuring real calls needs either a
+  core change that records local one-shot usage, or a run through a daemon.
 - The settings gated by time of day are not exercised by the bench.
 - The effect of `HERRSCHER_OWNER_ID` on `--print` is not verified; the bench
   sets it, but its result is not measured.

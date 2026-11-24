@@ -192,10 +192,7 @@ linters:
       - path: ^tools/membench/runner\.go$
         linters: [gosec]
         text: "^G204:"
-      - path: ^tools/membench/longmemeval\.go$
-        linters: [gosec]
-        text: "^G404:"
-      - path: ^core/clitext/keys_membench\.go$
+      - path: ^tools/membench/(keys|config|runner)\.go$
         linters: [gosec]
         text: "^G101:"
       - path: ^core/internal/manager/session\.go$

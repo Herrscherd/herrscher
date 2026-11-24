@@ -15,6 +15,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/usage"
 )
 
 var (
@@ -38,7 +39,7 @@ func addSessionVerbs(reg *cli.Registry, cliMessages *clitext.Messages, lang lang
 	seen := newSeenTable(time.Now())
 	return addVerbs(
 		reg,
-		seedVerb(sessions, store, layout, instID, seedCoord),
+		seedVerb(sessions, store, layout, instID, seedCoord, localUsageLedger(partDir, store, sessions.messages)),
 		sessionSendVerb(sessions),
 		sessionPickVerb(cliMessages, lang, approvals, sessions),
 		sessionInfoVerb(store, partDir, sessions, models),
@@ -69,7 +70,11 @@ func addCheckpointCommands(reg *cli.Registry, cliMessages *clitext.Messages, lan
 	return addVerbs(reg, addCheckpointVerbs(cliMessages, lang, store, sessions)...)
 }
 
-func seedVerb(sessions *sessionTable, store *state.State, layout RuntimeLayout, instID string, seedCoord *coordinatorSlot) contracts.Cmd {
+func localUsageLedger(partDir string, store *state.State, messages *hostMessages) usageLedger {
+	return usageLedger{partDir: partDir, current: store, messages: messages}
+}
+
+func seedVerb(sessions *sessionTable, store *state.State, layout RuntimeLayout, instID string, seedCoord *coordinatorSlot, ledger usageLedger) contracts.Cmd {
 	return contracts.New(nsSession, verbSeed).
 		Help(clitext.CmdHelpSessionSeed).
 		Param(paramName, clitext.CmdParamSessionSeedName, true).
@@ -77,11 +82,11 @@ func seedVerb(sessions *sessionTable, store *state.State, layout RuntimeLayout, 
 		ValueParam("turn_id", clitext.CmdParamSessionSeedTurnID, false).
 		ValueParam("timeout", clitext.CmdParamSessionSeedTimeout, false).
 		Do(func(cmdCtx context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(runSeedVerb(cmdCtx, sessions.messages, sessions.cliMessages, sessions.oneShotPersists, in, store, layout, instID, seedCoord.coord))
+			return cli.Data(runSeedVerb(cmdCtx, sessions.messages, sessions.cliMessages, sessions.oneShotPersists, in, store, layout, instID, seedCoord.coord, ledger))
 		})
 }
 
-func runSeedVerb(ctx context.Context, messages *hostMessages, cliMessages *clitext.Messages, newOneShot func() *persistWrites, input contracts.Input, store *state.State, layout RuntimeLayout, instID string, coord contracts.Coordinator) (string, error) {
+func runSeedVerb(ctx context.Context, messages *hostMessages, cliMessages *clitext.Messages, newOneShot func() *persistWrites, input contracts.Input, store *state.State, layout RuntimeLayout, instID string, coord contracts.Coordinator, ledger usageLedger) (string, error) {
 	rawTurnID, supplied := input.Lookup("turn_id")
 	turnID, err := resolveTurnID(rawTurnID, supplied)
 	if err != nil {
@@ -93,6 +98,11 @@ func runSeedVerb(ctx context.Context, messages *hostMessages, cliMessages *clite
 	}
 	runtime := oneShotSeedRuntimeFrom(ctx, messages, cliMessages, newOneShot)
 	runtime.timeout = timeout
+	if runtime.localRun {
+		runtime.recordUsage = func(sess state.Session, records []usage.Record) {
+			ledger.record(runtime.persists, runtime.languageOf(sess), sess, records)
+		}
+	}
 	reply, err := runOneShotSeedCommand(
 		ctx, store, input.Get(paramName), input.Get("task"),
 		turnID, runtime,

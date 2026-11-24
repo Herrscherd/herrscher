@@ -100,7 +100,7 @@ func (l *handoffLimiter) forgetIdle(now time.Time) {
 	}
 }
 
-func sessionHandoffCmd(cliMessages *clitext.Messages, lang languageSource, managerCmds []contracts.Cmd, store *state.State, sessions *sessionTable, layout RuntimeLayout, instID string, seedCoord *coordinatorSlot, checkAccount func(contracts.Input) error) (contracts.Cmd, error) {
+func sessionHandoffCmd(cliMessages *clitext.Messages, lang languageSource, managerCmds []contracts.Cmd, store *state.State, sessions *sessionTable, layout RuntimeLayout, instID string, seedCoord *coordinatorSlot, ledger usageLedger, checkAccount func(contracts.Input) error) (contracts.Cmd, error) {
 	create, ok := findCommand(managerCmds, nsSession, "create")
 	if !ok {
 		return contracts.Cmd{}, errHandoffNoCreate
@@ -125,7 +125,7 @@ func sessionHandoffCmd(cliMessages *clitext.Messages, lang languageSource, manag
 		},
 		brief: func(ctx context.Context, source string) (string, error) {
 			in := contracts.Input{Args: map[string]string{paramName: source, "task": handoffBriefTaskFor(store, source, lang()), "timeout": handoffBriefTimeout}}
-			return runSeedVerb(ctx, sessions.messages, sessions.cliMessages, sessions.oneShotPersists, in, store, layout, instID, seedCoord.coord)
+			return runSeedVerb(ctx, sessions.messages, sessions.cliMessages, sessions.oneShotPersists, in, store, layout, instID, seedCoord.coord, ledger)
 		},
 		create: func(ctx context.Context, in contracts.Input) (string, error) {
 			res, err := create.Run(ctx, in)

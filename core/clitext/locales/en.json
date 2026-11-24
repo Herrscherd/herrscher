@@ -3773,6 +3773,11 @@
     "other": "run real round trips instead of the cheap checks"
   },
   {
+    "id": "cli.help.cmd.health.repo",
+    "description": "Help of the --repo flag of health",
+    "other": "Repository of the session the health check runs for, its right on the repository is reported"
+  },
+  {
     "id": "cli.health.summary.down",
     "description": "Health summary segment, the count of the checks in the state",
     "one": "{{.Count}} down",
@@ -5130,6 +5135,76 @@
     "other": "routing"
   },
   {
+    "id": "cli.setup.section.connections",
+    "description": "Section name",
+    "other": "Connections"
+  },
+  {
+    "id": "cli.setup.connections.sub",
+    "description": "Subtitle of the connections screen",
+    "other": "Connect the forges herrscher uses"
+  },
+  {
+    "id": "cli.setup.connections.skip",
+    "description": "Action that leaves the connections unchanged",
+    "other": "Skip, keep everything as it is"
+  },
+  {
+    "id": "cli.setup.github.title",
+    "description": "Connections screen: GitHub group title",
+    "other": "GitHub"
+  },
+  {
+    "id": "cli.setup.github.connected",
+    "description": "Connections screen: GitHub connected state",
+    "other": "connected as {{.Login}} via {{.Source}}"
+  },
+  {
+    "id": "cli.setup.github.not_connected",
+    "description": "Connections screen: GitHub not connected state",
+    "other": "not connected"
+  },
+  {
+    "id": "cli.setup.github.connect",
+    "description": "Action that starts the GitHub device sign-in",
+    "other": "Connect GitHub"
+  },
+  {
+    "id": "cli.setup.github.install",
+    "description": "Connections screen: hint with the app installation page",
+    "other": "install the app on your account: {{.URL}}"
+  },
+  {
+    "id": "cli.setup.github.code",
+    "description": "Connections screen: device code to enter on GitHub",
+    "other": "open {{.URL}} and enter the code {{.UserCode}}"
+  },
+  {
+    "id": "cli.setup.github.denied",
+    "description": "Connections screen: the GitHub sign-in was refused",
+    "other": "the sign-in was denied on GitHub"
+  },
+  {
+    "id": "cli.setup.github.expired",
+    "description": "Connections screen: the device code expired",
+    "other": "the sign-in code expired, start again"
+  },
+  {
+    "id": "cli.setup.github.app_unavailable",
+    "description": "Connections screen: GitHub offers no usable herrscher app",
+    "other": "GitHub has no herrscher app usable for sign-in"
+  },
+  {
+    "id": "cli.setup.github.failed",
+    "description": "Connections screen: the GitHub connection failed",
+    "other": "the connection failed: {{.Err}}"
+  },
+  {
+    "id": "cli.setup.github.status_failed",
+    "description": "Connections screen: the GitHub state could not be read",
+    "other": "the connection could not be checked: {{.Err}}"
+  },
+  {
     "id": "cli.setup.keys.move",
     "description": "Key hint: arrows move",
     "other": "move"
@@ -5313,5 +5388,35 @@
     "id": "cli.connect.status.access_app_misconfigured",
     "description": "Status value: the herrscher app is misconfigured on the forge, so the saved token cannot be renewed",
     "other": "cannot be renewed: the herrscher app is misconfigured on the forge, report this to the herrscher maintainers"
+  },
+  {
+    "id": "cli.health.group.forge",
+    "description": "Name of the forge group in health",
+    "other": "code forge"
+  },
+  {
+    "id": "cli.health.facts.forge_source",
+    "description": "Detail line of the code forge, Source is where its token comes from",
+    "other": "token from {{.Source}}"
+  },
+  {
+    "id": "cli.health.facts.forge_quota",
+    "description": "Detail line of the code forge, Count requests are left in the rate limit",
+    "other": "{{.Count}} requests left"
+  },
+  {
+    "id": "cli.health.facts.forge_reset",
+    "description": "Detail line of the code forge, Time is when the rate limit refills",
+    "other": "rate limit resets at {{.Time}}"
+  },
+  {
+    "id": "cli.health.facts.forge_repo",
+    "description": "Detail line of the code forge, Repo is the session repository, Permission the right the account holds on it",
+    "other": "{{.Repo}}: {{.Permission}}"
+  },
+  {
+    "id": "cli.health.facts.forge_repo_unknown",
+    "description": "Detail line of the code forge when the right on the session repository could not be read, Repo is the repository",
+    "other": "{{.Repo}}: permission unknown"
   }
 ]

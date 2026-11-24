@@ -142,11 +142,11 @@ func TestCompactionRunIsOKWithoutAPlugin(t *testing.T) {
 
 func TestHealthSourceRefusesBeforeItIsBound(t *testing.T) {
 	var unbound healthSource
-	if _, err := unbound.run(context.Background(), false); !errors.Is(err, errHealthNotReady) {
+	if _, err := unbound.run(context.Background(), false, ""); !errors.Is(err, errHealthNotReady) {
 		t.Errorf("run() error = %v, want %v", err, errHealthNotReady)
 	}
 	var missing *healthSource
-	if _, err := missing.run(context.Background(), false); !errors.Is(err, errHealthNotReady) {
+	if _, err := missing.run(context.Background(), false, ""); !errors.Is(err, errHealthNotReady) {
 		t.Errorf("nil run() error = %v, want %v", err, errHealthNotReady)
 	}
 }

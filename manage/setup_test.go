@@ -135,10 +135,16 @@ type setupHarness struct {
 
 func newHarness(t *testing.T, manifest []byte, screen setupScreen, env map[string]string) *setupHarness {
 	t.Helper()
+	return newHarnessWithGitHub(t, manifest, screen, env, &fakeGitHub{})
+}
+
+func newHarnessWithGitHub(t *testing.T, manifest []byte, screen setupScreen, env map[string]string, github gitHubLink) *setupHarness {
+	t.Helper()
 	shell := newShell()
 	dir := t.TempDir()
 	deps := setupDeps{
 		prober: testProber(t, shell),
+		github: github,
 		login: func(_ context.Context, kind probeKind) tea.Cmd {
 			return func() tea.Msg { return loginDoneMsg{kind: kind} }
 		},

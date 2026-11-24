@@ -84,6 +84,18 @@ For each known host, the output gives:
 Status reads the saved connection through the same path as forge operations, so
 a saved token that is due for renewal is renewed by `status` too.
 
+`herrscher health` adds a GitHub line to the health table: the token source and the
+login, the permission on the repository of the session when its origin is on
+github.com, and the requests left before the rate limit resets. Without a connection
+it is a warning that points to `herrscher connect github`, and a refused token is an
+error asking you to connect again. The token is never printed.
+
+The same state shows in `setup`, in the first section of the dashboard named
+`connections`. It reads the connection as `connected as <login> via <source>` or
+`not connected`, and offers a connect action that runs the same device sign-in as
+`herrscher connect github`, with the code to enter on GitHub and the link to install
+the App. Skipping the section changes nothing.
+
 A saved token the forge has refused is marked as refused. The token itself is
 kept until you connect again or log out. An expired connection is not sent to
 the forge: no renewal is attempted with it, and status falls back to the other

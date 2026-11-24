@@ -96,7 +96,7 @@ tool lines in the terminal UI yet.
 `herrscher health` asks the running daemon for a snapshot of everything it depends
 on, and prints it as a table grouped by what the checks cover: the daemon and its
 key proxy, the gateways, the backends with each account and profile, the
-compaction stages, the memory plugins and the key pools. Each line says the state
+compaction stages, the memory plugins, the key pools and the code forge. Each line says the state
 (ok, degraded, down or off), how long the probe took, and the facts the host knows
 about the service. Each compaction stage shows when it last ran and how it ended
 (done, short, failed, dry run or skipped), read from the usage ledger, or that there
@@ -106,6 +106,14 @@ data as partial. A compaction stage that reads its API key from the environment 
 shows whether that variable is set, by its name only (`TYPESAFE_API_KEY`), never its
 value, with the time and outcome of its last successful run and the time and note of
 its last failed one.
+
+The forge line checks the GitHub connection: where the token comes from and the login
+it belongs to, the permission the account has on the repository of the checkout
+`herrscher health` runs from (the line is skipped when that checkout has no origin or
+its origin is not on github.com), and the requests left before the rate limit resets,
+with the time of the reset. No connection is a warning that points to
+`herrscher connect github`. A token the forge refuses is an error asking you to connect
+again. Fewer than 100 requests left is a warning. The token itself is never printed.
 
 A gateway the daemon does not run reads as off, and so does a memory plugin that is
 not the one in use: the first local memory plugin with a factory is the live one,

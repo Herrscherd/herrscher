@@ -14,8 +14,9 @@ func healthVerb(source *healthSource) contracts.Cmd {
 	return contracts.New("health").
 		Help(clitext.CmdHelpHealth).
 		Param(healthParamDeep, clitext.CmdHelpHealthDeep, false).
+		Param(healthParamRepo, clitext.CmdHelpHealthRepo, false).
 		Do(func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
-			snapshot, err := source.run(ctx, in.Bool(healthParamDeep))
+			snapshot, err := source.run(ctx, in.Bool(healthParamDeep), in.Get(healthParamRepo))
 			if err != nil {
 				return contracts.Result{}, err
 			}

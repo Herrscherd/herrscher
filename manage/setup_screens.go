@@ -92,6 +92,8 @@ func (model *setupModel) rows() []setupRow {
 		return model.reviewRows()
 	case screenInstall:
 		return model.installRows()
+	case screenConnections:
+		return model.connectionRows()
 	case screenHub:
 		return model.hubRows()
 	}
@@ -540,7 +542,7 @@ type hubSection struct {
 }
 
 func (model *setupModel) sections() []hubSection {
-	sections := []hubSection{{
+	sections := []hubSection{model.connectionsSection(), {
 		name:   model.text(clitext.SetupSectionModules, nil),
 		state:  model.text(clitext.SetupHubModules, clitext.Params{clitext.ParamCount: model.modules.count()}),
 		screen: screenModules,

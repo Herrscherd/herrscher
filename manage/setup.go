@@ -25,13 +25,14 @@ var (
 
 func setupSections() map[string]setupScreen {
 	return map[string]setupScreen{
-		"modules":    screenModules,
-		kindDiscord:  screenDiscord,
-		kindClaude:   screenClaude,
-		kindCodex:    screenCodex,
-		kindCursor:   screenCursor,
-		kindObsidian: screenObsidian,
-		"route":      screenRoute,
+		"modules":     screenModules,
+		kindDiscord:   screenDiscord,
+		kindClaude:    screenClaude,
+		kindCodex:     screenCodex,
+		kindCursor:    screenCursor,
+		kindObsidian:  screenObsidian,
+		"route":       screenRoute,
+		"connections": screenConnections,
 	}
 }
 
@@ -87,6 +88,7 @@ func setupEntry(messages *clitext.Messages, rest []string) (setupScreen, error) 
 func liveDeps(messages *clitext.Messages, hostMessages *host.Messages, hostDir string) setupDeps {
 	deps := setupDeps{
 		prober:      liveProber(),
+		github:      liveGitHubLink(),
 		login:       execLogin,
 		catalog:     liveCatalog(host.DefaultModelDiscovery(hostMessages)),
 		run:         execRunner,

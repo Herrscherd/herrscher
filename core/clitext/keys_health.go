@@ -4,6 +4,7 @@ package clitext
 const (
 	CmdHelpHealth          = "cli.help.cmd.health"
 	CmdHelpHealthDeep      = "cli.help.cmd.health.deep"
+	CmdHelpHealthRepo      = "cli.help.cmd.health.repo"
 	HealthSummaryDown      = "cli.health.summary.down"
 	HealthSummaryDegraded  = "cli.health.summary.degraded"
 	HealthSummaryOK        = "cli.health.summary.ok"
@@ -39,12 +40,19 @@ const (
 	HealthDetailState      = "cli.health.detail.state"
 	HealthDetailCause      = "cli.health.detail.cause"
 	HealthDetailRemedy     = "cli.health.detail.remedy"
+	HealthGroupForge       = "cli.health.group.forge"
+	HealthForgeSource      = "cli.health.facts.forge_source"
+	HealthForgeQuota       = "cli.health.facts.forge_quota"
+	HealthForgeReset       = "cli.health.facts.forge_reset"
+	HealthForgeRepo        = "cli.health.facts.forge_repo"
+	HealthForgeRepoUnknown = "cli.health.facts.forge_repo_unknown"
 )
 
 func healthKeys() map[Key][]string {
 	return map[Key][]string{
 		CmdHelpHealth:          nil,
 		CmdHelpHealthDeep:      nil,
+		CmdHelpHealthRepo:      nil,
 		HealthSummaryDown:      {ParamCount},
 		HealthSummaryDegraded:  {ParamCount},
 		HealthSummaryOK:        {ParamCount},
@@ -80,5 +88,11 @@ func healthKeys() map[Key][]string {
 		HealthDetailState:      nil,
 		HealthDetailCause:      nil,
 		HealthDetailRemedy:     nil,
+		HealthGroupForge:       nil,
+		HealthForgeSource:      {ParamSource},
+		HealthForgeQuota:       {ParamCount},
+		HealthForgeReset:       {ParamTime},
+		HealthForgeRepo:        {ParamRepo, ParamPermission},
+		HealthForgeRepoUnknown: {ParamRepo},
 	}
 }

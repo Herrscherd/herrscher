@@ -128,6 +128,20 @@ const (
 	SetupHubQuit                = "cli.setup.hub.quit"
 	SetupSectionModules         = "cli.setup.section.modules"
 	SetupSectionRoute           = "cli.setup.section.route"
+	SetupSectionConnections     = "cli.setup.section.connections"
+	SetupConnectionsSub         = "cli.setup.connections.sub"
+	SetupConnectionsSkip        = "cli.setup.connections.skip"
+	SetupGitHubTitle            = "cli.setup.github.title"
+	SetupGitHubConnected        = "cli.setup.github.connected"
+	SetupGitHubNotConnected     = "cli.setup.github.not_connected"
+	SetupGitHubConnect          = "cli.setup.github.connect"
+	SetupGitHubInstall          = "cli.setup.github.install"
+	SetupGitHubCode             = "cli.setup.github.code"
+	SetupGitHubDenied           = "cli.setup.github.denied"
+	SetupGitHubExpired          = "cli.setup.github.expired"
+	SetupGitHubAppUnavailable   = "cli.setup.github.app_unavailable"
+	SetupGitHubFailed           = "cli.setup.github.failed"
+	SetupGitHubStatusFailed     = "cli.setup.github.status_failed"
 	SetupKeysMove               = "cli.setup.keys.move"
 	SetupKeysToggle             = "cli.setup.keys.toggle"
 	SetupKeysChoose             = "cli.setup.keys.choose"
@@ -270,6 +284,20 @@ func setupKeys() map[Key][]string {
 		SetupHubQuit:                nil,
 		SetupSectionModules:         nil,
 		SetupSectionRoute:           nil,
+		SetupSectionConnections:     nil,
+		SetupConnectionsSub:         nil,
+		SetupConnectionsSkip:        nil,
+		SetupGitHubTitle:            nil,
+		SetupGitHubConnected:        {ParamLogin, ParamSource},
+		SetupGitHubNotConnected:     nil,
+		SetupGitHubConnect:          nil,
+		SetupGitHubInstall:          {ParamURL},
+		SetupGitHubCode:             {ParamURL, ParamUserCode},
+		SetupGitHubDenied:           nil,
+		SetupGitHubExpired:          nil,
+		SetupGitHubAppUnavailable:   nil,
+		SetupGitHubFailed:           {ParamErr},
+		SetupGitHubStatusFailed:     {ParamErr},
 		SetupKeysMove:               nil,
 		SetupKeysToggle:             nil,
 		SetupKeysChoose:             nil,

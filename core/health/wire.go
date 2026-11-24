@@ -42,6 +42,15 @@ type wireCheck struct {
 	Compaction *wireCompaction       `json:"compaction,omitempty"`
 	Partial    bool                  `json:"compaction_partial,omitempty"`
 	Unknown    bool                  `json:"compaction_unknown,omitempty"`
+	Forge      *wireForge            `json:"forge,omitempty"`
+}
+
+type wireForge struct {
+	Source     contracts.TokenSource `json:"source"`
+	Remaining  int                   `json:"remaining"`
+	Reset      time.Time             `json:"reset"`
+	Repo       string                `json:"repo,omitempty"`
+	Permission string                `json:"permission,omitempty"`
 }
 
 type wireCompaction struct {
@@ -117,6 +126,9 @@ func encodeCheck(check Check) (wireCheck, error) {
 	if last := check.Facts.Compaction; last != nil {
 		wire.Compaction = &wireCompaction{At: last.At, Outcome: last.Outcome}
 	}
+	if forge := check.Facts.Forge; forge != nil {
+		wire.Forge = &wireForge{Source: forge.Source, Remaining: forge.Remaining, Reset: forge.Reset, Repo: forge.Repo, Permission: forge.Permission}
+	}
 	return wire, nil
 }
 
@@ -173,6 +185,9 @@ func decodeCheck(wire wireCheck) (Check, error) {
 	}
 	if last := wire.Compaction; last != nil {
 		check.Facts.Compaction = &Compaction{At: last.At, Outcome: last.Outcome}
+	}
+	if forge := wire.Forge; forge != nil {
+		check.Facts.Forge = &Forge{Source: forge.Source, Remaining: forge.Remaining, Reset: forge.Reset, Repo: forge.Repo, Permission: forge.Permission}
 	}
 	return check, nil
 }

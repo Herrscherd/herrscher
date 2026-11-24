@@ -22,6 +22,8 @@ const (
 	GroupMemory
 	// GroupKeys holds the key pools of the key proxy.
 	GroupKeys
+	// GroupForge holds the code forge the host is connected to.
+	GroupForge
 )
 
 // ErrUnknownGroup is returned for text, or a value, that names no group. Match
@@ -30,7 +32,7 @@ var ErrUnknownGroup = errors.New("unknown health group")
 
 // Groups lists every group, in report order.
 func Groups() []Group {
-	return []Group{GroupCore, GroupGateways, GroupBackends, GroupCompaction, GroupMemory, GroupKeys}
+	return []Group{GroupCore, GroupGateways, GroupBackends, GroupCompaction, GroupMemory, GroupKeys, GroupForge}
 }
 
 // String renders the group as its text form, the one [ParseGroup] reads back.
@@ -48,6 +50,8 @@ func (g Group) String() string {
 		return "memory"
 	case GroupKeys:
 		return "keys"
+	case GroupForge:
+		return "forge"
 	}
 	return fmt.Sprintf("Group(%d)", int(g))
 }

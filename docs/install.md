@@ -34,7 +34,7 @@ usage after a line saying to run `herrscher setup`.
 
 Run again, `setup` opens a dashboard with the state of every section, and
 `herrscher setup discord` (or `claude`, `codex`, `cursor`, `obsidian`, `route`,
-`modules`) jumps straight to one. `herrscher init --yes` with its stack flags stays
+`modules`, `connections`) jumps straight to one. `herrscher init --yes` with its stack flags stays
 the non-interactive path for scripts, and `herrscher models list` shows what the
 active policy offers. `init` ends with the same prompt to each chosen backend and
 exits with status 1 when one does not answer, scripts included. A script that

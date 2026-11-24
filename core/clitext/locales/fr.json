@@ -3773,6 +3773,11 @@
     "other": "lancer de vrais allers-retours au lieu des vérifications rapides"
   },
   {
+    "id": "cli.help.cmd.health.repo",
+    "description": "Help of the --repo flag of health",
+    "other": "Dépôt de la session pour laquelle la vérification tourne, son droit sur le dépôt est indiqué"
+  },
+  {
     "id": "cli.health.summary.down",
     "description": "Health summary segment, the count of the checks in the state",
     "one": "{{.Count}} panne",
@@ -5130,6 +5135,76 @@
     "other": "routage"
   },
   {
+    "id": "cli.setup.section.connections",
+    "description": "Section name",
+    "other": "Connexions"
+  },
+  {
+    "id": "cli.setup.connections.sub",
+    "description": "Subtitle of the connections screen",
+    "other": "Connecter les forges qu'utilise herrscher"
+  },
+  {
+    "id": "cli.setup.connections.skip",
+    "description": "Action that leaves the connections unchanged",
+    "other": "Passer, tout reste en l'état"
+  },
+  {
+    "id": "cli.setup.github.title",
+    "description": "Connections screen: GitHub group title",
+    "other": "GitHub"
+  },
+  {
+    "id": "cli.setup.github.connected",
+    "description": "Connections screen: GitHub connected state",
+    "other": "connecté en tant que {{.Login}} via {{.Source}}"
+  },
+  {
+    "id": "cli.setup.github.not_connected",
+    "description": "Connections screen: GitHub not connected state",
+    "other": "non connecté"
+  },
+  {
+    "id": "cli.setup.github.connect",
+    "description": "Action that starts the GitHub device sign-in",
+    "other": "Connecter GitHub"
+  },
+  {
+    "id": "cli.setup.github.install",
+    "description": "Connections screen: hint with the app installation page",
+    "other": "installer l'application sur ton compte : {{.URL}}"
+  },
+  {
+    "id": "cli.setup.github.code",
+    "description": "Connections screen: device code to enter on GitHub",
+    "other": "ouvre {{.URL}} et saisis le code {{.UserCode}}"
+  },
+  {
+    "id": "cli.setup.github.denied",
+    "description": "Connections screen: the GitHub sign-in was refused",
+    "other": "la connexion a été refusée sur GitHub"
+  },
+  {
+    "id": "cli.setup.github.expired",
+    "description": "Connections screen: the device code expired",
+    "other": "le code de connexion a expiré, recommence"
+  },
+  {
+    "id": "cli.setup.github.app_unavailable",
+    "description": "Connections screen: GitHub offers no usable herrscher app",
+    "other": "GitHub n'a aucune application herrscher utilisable pour la connexion"
+  },
+  {
+    "id": "cli.setup.github.failed",
+    "description": "Connections screen: the GitHub connection failed",
+    "other": "la connexion a échoué : {{.Err}}"
+  },
+  {
+    "id": "cli.setup.github.status_failed",
+    "description": "Connections screen: the GitHub state could not be read",
+    "other": "la connexion n'a pas pu être vérifiée : {{.Err}}"
+  },
+  {
     "id": "cli.setup.keys.move",
     "description": "Key hint: arrows move",
     "other": "naviguer"
@@ -5313,5 +5388,35 @@
     "id": "cli.connect.status.access_app_misconfigured",
     "description": "Valeur de statut : l'application herrscher est mal configurée sur le forge, le jeton enregistré ne peut pas être renouvelé",
     "other": "ne peut pas être renouvelé : l'application herrscher est mal configurée sur le forge, signale-le aux mainteneurs de herrscher"
+  },
+  {
+    "id": "cli.health.group.forge",
+    "description": "Nom du groupe forge de code dans health",
+    "other": "forge de code"
+  },
+  {
+    "id": "cli.health.facts.forge_source",
+    "description": "Ligne de détail de la forge de code, Source est l'origine du jeton",
+    "other": "jeton {{.Source}}"
+  },
+  {
+    "id": "cli.health.facts.forge_quota",
+    "description": "Ligne de détail de la forge de code, Count requêtes restent dans la limite",
+    "other": "{{.Count}} requêtes restantes"
+  },
+  {
+    "id": "cli.health.facts.forge_reset",
+    "description": "Ligne de détail de la forge de code, Time est le moment où la limite se recharge",
+    "other": "quota réinitialisé à {{.Time}}"
+  },
+  {
+    "id": "cli.health.facts.forge_repo",
+    "description": "Ligne de détail de la forge de code, Repo est le dépôt de la session, Permission le droit du compte dessus",
+    "other": "{{.Repo}} : {{.Permission}}"
+  },
+  {
+    "id": "cli.health.facts.forge_repo_unknown",
+    "description": "Ligne de détail de la forge de code quand le droit sur le dépôt de la session est illisible, Repo est le dépôt",
+    "other": "{{.Repo}} : droits inconnus"
   }
 ]

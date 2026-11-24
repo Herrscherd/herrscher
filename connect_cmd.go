@@ -26,7 +26,6 @@ const (
 	connectFlagName        = "host"
 	connectDefaultHost     = "github.com"
 	connectGitHubHostEnv   = "GH_HOST"
-	gitHubAppInstallURL    = "https://github.com/apps/herrscher-for-github/installations/new"
 	gitHubAppRevokeURLBase = "https://github.com/settings/connections/applications/"
 	connectExpiryLayout    = time.RFC3339
 	connectLookupTimeout   = 10 * time.Second
@@ -167,7 +166,7 @@ func connectStatus(ctx context.Context, messages *clitext.Messages, lang i18n.La
 			return err
 		}
 	}
-	if err := writeText(output, translator, clitext.ConnectInstallLine, clitext.Params{clitext.ParamURL: gitHubAppInstallURL}); err != nil {
+	if err := writeText(output, translator, clitext.ConnectInstallLine, clitext.Params{clitext.ParamURL: forgecreds.AppInstallURL}); err != nil {
 		return err
 	}
 	return writeText(output, translator, clitext.ConnectRevokeLine, clitext.Params{clitext.ParamURL: gitHubAppRevokeURLBase + forgecreds.ClientID})

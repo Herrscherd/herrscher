@@ -16,8 +16,11 @@ import (
 const (
 	forgeAbsoluteQuotaFloor = 100
 	forgeRefreshEvery       = 5 * time.Minute
+	repoRetryEvery          = time.Minute
 	healthParamOrigin       = "repo"
 )
+
+type repoProbe func(ctx context.Context, forge contracts.Forge, host contracts.ForgeHost, origin string) (string, *contracts.RepoPermission, error)
 
 func gitHubConnectCommand() string {
 	return "herrscher connect github"
@@ -47,7 +50,11 @@ func forgeProbes(inputs healthInputs) []health.Probe {
 	open := func(ctx context.Context, host contracts.ForgeHost) (contracts.Forge, error) {
 		return forgeport.Open(ctx, forgeport.KindGitHub, host, inputs.forge)
 	}
-	run := githubRun(open, inputs.repo)
+	probeRepo := sessionRepoAccess
+	if inputs.watching && inputs.forgeCache != nil {
+		probeRepo = inputs.forgeCache.repoAccess(probeRepo)
+	}
+	run := githubRun(open, inputs.repo, probeRepo)
 	if inputs.watching && inputs.forgeCache != nil {
 		run = inputs.forgeCache.memo(run, inputs.repo)
 	}
@@ -69,7 +76,7 @@ func forgeBuilt(kind string) bool {
 	return false
 }
 
-func githubRun(open forgeOpener, origin string) runFunc {
+func githubRun(open forgeOpener, origin string, probeRepo repoProbe) runFunc {
 	return func(ctx context.Context, _ bool) (contracts.ProbeReport, health.Facts) {
 		host, err := contracts.ParseForgeHost(forgeport.GitHubHost)
 		if err != nil {
@@ -84,7 +91,7 @@ func githubRun(open forgeOpener, origin string) runFunc {
 			return forgeFailure(err), health.Facts{}
 		}
 		facts := &health.Forge{Source: connection.Source, Login: connection.Login, Quota: quotaOf(connection.RateLimit)}
-		repo, permission, repoErr := sessionRepoAccess(ctx, forge, host, origin)
+		repo, permission, repoErr := probeRepo(ctx, forge, host, origin)
 		facts.Repo, facts.Permission = repo, permission
 		report := forgeReady(connection)
 		if repoErr != nil {
@@ -163,17 +170,43 @@ func gitHubConnectRemedy() contracts.Notice {
 }
 
 type forgeCache struct {
-	mutex   sync.Mutex
-	now     func() time.Time
-	origin  string
-	fetched time.Time
-	report  contracts.ProbeReport
-	facts   health.Facts
-	filled  bool
+	mutex      sync.Mutex
+	now        func() time.Time
+	origin     string
+	fetched    time.Time
+	report     contracts.ProbeReport
+	facts      health.Facts
+	filled     bool
+	failedRepo *repoFailure
+}
+
+type repoFailure struct {
+	origin string
+	at     time.Time
+	name   string
+	err    error
 }
 
 func newForgeCache(now func() time.Time) *forgeCache {
 	return &forgeCache{now: now}
+}
+
+func (c *forgeCache) repoAccess(probe repoProbe) repoProbe {
+	return func(ctx context.Context, forge contracts.Forge, host contracts.ForgeHost, origin string) (string, *contracts.RepoPermission, error) {
+		if c.repoRetryHeld(origin) {
+			return c.failedRepo.name, nil, c.failedRepo.err
+		}
+		name, permission, err := probe(ctx, forge, host, origin)
+		c.failedRepo = nil
+		if err != nil && ctx.Err() == nil {
+			c.failedRepo = &repoFailure{origin: origin, at: c.now(), name: name, err: err}
+		}
+		return name, permission, err
+	}
+}
+
+func (c *forgeCache) repoRetryHeld(origin string) bool {
+	return c.failedRepo != nil && c.failedRepo.origin == origin && c.now().Sub(c.failedRepo.at) < repoRetryEvery
 }
 
 func (c *forgeCache) memo(run runFunc, origin string) runFunc {

@@ -54,7 +54,7 @@ func openingWith(forge contracts.Forge, err error) forgeOpener {
 
 func probeOnce(t *testing.T, open forgeOpener, origin string) (contracts.ProbeReport, health.Facts) {
 	t.Helper()
-	return githubRun(open, origin)(context.Background(), false)
+	return githubRun(open, origin, sessionRepoAccess)(context.Background(), false)
 }
 
 func connectedAs(remaining int) *fakeForge {
@@ -240,7 +240,7 @@ func TestFailedForgeProbeIsReprobedOnTheNextTick(t *testing.T) {
 				return forge, nil
 			}
 			origin := "https://github.com/octo/herrscher"
-			run := newForgeCache(clock.Now).memo(githubRun(open, origin), origin)
+			run := newForgeCache(clock.Now).memo(githubRun(open, origin, sessionRepoAccess), origin)
 			if report, _ := run(context.Background(), false); report.State == contracts.HealthOK {
 				t.Fatalf("first tick = %+v, want a failure", report)
 			}
@@ -254,18 +254,31 @@ func TestFailedForgeProbeIsReprobedOnTheNextTick(t *testing.T) {
 	}
 }
 
-func TestFailedRepoReadIsReprobedOnTheNextTick(t *testing.T) {
-	clock := &manualClock{now: time.Date(2026, 11, 24, 9, 0, 0, 0, time.UTC)}
+func TestFailedRepoReadIsRetriedOncePerMinute(t *testing.T) {
+	start := time.Date(2026, 11, 24, 9, 0, 0, 0, time.UTC)
+	clock := &manualClock{now: start}
 	forge := connectedAs(4000)
 	forge.accessErr = contracts.ErrForgeNotFound
 	origin := "https://github.com/octo/herrscher"
-	run := newForgeCache(clock.Now).memo(githubRun(openingWith(forge, nil), origin), origin)
-	run(context.Background(), false)
+	cache := newForgeCache(clock.Now)
+	run := cache.memo(githubRun(openingWith(forge, nil), origin, cache.repoAccess(sessionRepoAccess)), origin)
+	for elapsed := time.Duration(0); elapsed <= 3*time.Minute; elapsed += 15 * time.Second {
+		clock.now = start.Add(elapsed)
+		run(context.Background(), false)
+		if want := int(elapsed/time.Minute) + 1; len(forge.asked) != want {
+			t.Fatalf("after %v RepoAccess asked %d times, want %d", elapsed, len(forge.asked), want)
+		}
+	}
 	forge.accessErr = nil
-	clock.now = clock.now.Add(time.Second)
+	clock.now = start.Add(3*time.Minute + 15*time.Second)
+	_, facts := run(context.Background(), false)
+	if len(forge.asked) != 4 || facts.Forge == nil || facts.Forge.RepoErr == "" {
+		t.Fatalf("between retries: asked %d times, repo error %v, want the failure held until the next retry", len(forge.asked), facts.Forge)
+	}
+	clock.now = start.Add(4 * time.Minute)
 	report, facts := run(context.Background(), false)
-	if report.State != contracts.HealthOK || facts.Forge == nil || facts.Forge.RepoErr != "" {
-		t.Fatalf("next tick = %+v facts %+v, want the repo right read at once", report, facts.Forge)
+	if len(forge.asked) != 5 || report.State != contracts.HealthOK || facts.Forge == nil || facts.Forge.RepoErr != "" {
+		t.Fatalf("at the retry: asked %d times, report %+v facts %+v, want the right read and the report ok", len(forge.asked), report, facts.Forge)
 	}
 }
 
@@ -297,7 +310,7 @@ func TestWatchedForgeFactsAreRefreshedEveryFiveMinutes(t *testing.T) {
 	clock := &manualClock{now: time.Date(2026, 11, 24, 9, 0, 0, 0, time.UTC)}
 	forge := connectedAs(4000)
 	cache := newForgeCache(clock.Now)
-	run := cache.memo(githubRun(openingWith(forge, nil), "https://github.com/octo/herrscher"), "https://github.com/octo/herrscher")
+	run := cache.memo(githubRun(openingWith(forge, nil), "https://github.com/octo/herrscher", sessionRepoAccess), "https://github.com/octo/herrscher")
 	for _, step := range []struct {
 		advance time.Duration
 		want    int
@@ -320,8 +333,8 @@ func TestWatchedForgeFactsAreNotCachedForAnotherCheckout(t *testing.T) {
 	forge := connectedAs(4000)
 	cache := newForgeCache(clock.Now)
 	open := openingWith(forge, nil)
-	cache.memo(githubRun(open, "https://github.com/octo/herrscher"), "https://github.com/octo/herrscher")(context.Background(), false)
-	cache.memo(githubRun(open, "https://github.com/octo/other"), "https://github.com/octo/other")(context.Background(), false)
+	cache.memo(githubRun(open, "https://github.com/octo/herrscher", sessionRepoAccess), "https://github.com/octo/herrscher")(context.Background(), false)
+	cache.memo(githubRun(open, "https://github.com/octo/other", sessionRepoAccess), "https://github.com/octo/other")(context.Background(), false)
 	if forge.connects != 2 {
 		t.Errorf("forge asked %d times, want 2 for two checkouts", forge.connects)
 	}

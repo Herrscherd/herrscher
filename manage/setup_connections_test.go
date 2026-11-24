@@ -246,6 +246,21 @@ func TestLeavingConnectionsDoesNotWaitForASignInThatIgnoresCancellation(t *testi
 	}
 }
 
+func TestGitHubSignInFinishesWhileNobodyReadsItsEvents(t *testing.T) {
+	fake := &fakeGitHub{account: "octo", code: forgecreds.DeviceCode{UserCode: "WXYZ-9876"}}
+	harness := newHarnessWithGitHub(t, nil, screenConnections, nil, fake)
+	harness.model.connectGitHub()
+	finished := harness.model.github.finished
+	select {
+	case <-finished:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the sign-in goroutine blocked on an event nobody reads")
+	}
+	if fake.saves != 1 {
+		t.Fatalf("saves = %d, want the sign-in completed", fake.saves)
+	}
+}
+
 func TestConnectionsListGitHubFirstInTheHub(t *testing.T) {
 	harness := newHarnessWithGitHub(t, nil, screenHub, nil, &fakeGitHub{})
 	sections := harness.model.sections()

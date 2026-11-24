@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -35,11 +36,11 @@ func namedSessionLanguage(st *state.State, name string, operator i18n.Language) 
 	return sessionLanguage(sess, i18n.Resolve(operator))
 }
 
-func addSessionVerbs(reg *cli.Registry, cliMessages *clitext.Messages, lang languageSource, store *state.State, layout RuntimeLayout, partDir, instID string, approvals *approvalTable, sessions *sessionTable, seedCoord *coordinatorSlot, models *ModelDiscovery) error {
+func addSessionVerbs(reg *cli.Registry, cliMessages *clitext.Messages, lang languageSource, store *state.State, layout RuntimeLayout, partDir, instID string, approvals *approvalTable, sessions *sessionTable, seedCoord *coordinatorSlot, models *ModelDiscovery, warnings io.Writer) error {
 	seen := newSeenTable(time.Now())
 	return addVerbs(
 		reg,
-		seedVerb(sessions, store, layout, instID, seedCoord, localUsageLedger(partDir, store, sessions.messages)),
+		seedVerb(sessions, store, layout, instID, seedCoord, localUsageLedger(partDir, store, sessions.messages, warnings)),
 		sessionSendVerb(sessions),
 		sessionPickVerb(cliMessages, lang, approvals, sessions),
 		sessionInfoVerb(store, partDir, sessions, models),
@@ -70,8 +71,8 @@ func addCheckpointCommands(reg *cli.Registry, cliMessages *clitext.Messages, lan
 	return addVerbs(reg, addCheckpointVerbs(cliMessages, lang, store, sessions)...)
 }
 
-func localUsageLedger(partDir string, store *state.State, messages *hostMessages) usageLedger {
-	return usageLedger{partDir: partDir, current: store, messages: messages}
+func localUsageLedger(partDir string, store *state.State, messages *hostMessages, warnings io.Writer) usageLedger {
+	return usageLedger{partDir: partDir, current: store, messages: messages, warnings: warnings}
 }
 
 func seedVerb(sessions *sessionTable, store *state.State, layout RuntimeLayout, instID string, seedCoord *coordinatorSlot, ledger usageLedger) contracts.Cmd {
@@ -99,6 +100,7 @@ func runSeedVerb(ctx context.Context, messages *hostMessages, cliMessages *clite
 	runtime := oneShotSeedRuntimeFrom(ctx, messages, cliMessages, newOneShot)
 	runtime.timeout = timeout
 	if runtime.localRun {
+		runtime.warnings = ledger.warnings
 		runtime.recordUsage = func(sess state.Session, records []usage.Record) {
 			ledger.record(runtime.persists, runtime.languageOf(sess), sess, records)
 		}

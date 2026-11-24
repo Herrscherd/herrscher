@@ -236,11 +236,15 @@ service, since a service unit usually carries only `PATH`.
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | unset (export off) | The collector endpoint. Without one, the other telemetry variables enable nothing. | Host |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | unset | The traces endpoint, used exactly as written. Wins over `OTEL_EXPORTER_OTLP_ENDPOINT` when both are set. | Host |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | `http/protobuf` or `grpc`. | Host |
+| `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL` | unset | The protocol for traces. Wins over `OTEL_EXPORTER_OTLP_PROTOCOL` when both are set. | Host |
+| `OTEL_EXPORTER_OTLP_INSECURE` | unset | `true` makes a bare `host:port` `grpc` endpoint plaintext. | Host |
+| `OTEL_EXPORTER_OTLP_TRACES_INSECURE` | unset | Same as `OTEL_EXPORTER_OTLP_INSECURE`, for traces. Wins over it when both are set. | Host |
 | `OTEL_SERVICE_NAME` | `herrscher` | The service name. | Host |
 | `OTEL_SDK_DISABLED` | unset | `true` turns the export off even when an endpoint is set. | Host |
 
-The other `OTEL_EXPORTER_OTLP_*` and `OTEL_BSP_*` variables set headers, timeouts and
-batching. The endpoint rules, the span contents and the error types are described in the
+The OpenTelemetry SDK reads the other `OTEL_EXPORTER_OTLP_*` variables (headers, timeouts)
+and the `OTEL_BSP_*` variables (batching) itself; herrscher does not set them. The endpoint
+rules, the span contents and the error types are described in the
 [README](../README.md#turn-telemetry-opentelemetry).
 
 ## Set by the daemon, not by you

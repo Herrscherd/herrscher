@@ -85,6 +85,7 @@ Otherwise the export reads the standard OpenTelemetry variables:
 
 - `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` enables the export (the traces variable wins when both are set). The endpoint rules are in the Endpoint paragraph below.
 - `OTEL_EXPORTER_OTLP_PROTOCOL` or `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL` selects `http/protobuf` (default) or `grpc`.
+- `OTEL_EXPORTER_OTLP_INSECURE` (or `OTEL_EXPORTER_OTLP_TRACES_INSECURE`, which wins) makes a bare `host:port` `grpc` endpoint plaintext.
 - `OTEL_SERVICE_NAME` overrides the service name, which defaults to `herrscher`.
 - `OTEL_SDK_DISABLED=true` turns the export off even when an endpoint is set.
 - Headers, timeouts and batch sizes use the other standard `OTEL_EXPORTER_OTLP_*` and `OTEL_BSP_*` variables.

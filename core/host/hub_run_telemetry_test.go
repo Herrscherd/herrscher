@@ -3,6 +3,7 @@ package host
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/config"
 )
 
@@ -74,6 +76,34 @@ func TestTelemetryTurnedOffInConfigFileSkipsAnInvalidEndpoint(t *testing.T) {
 	}
 	if strings.Contains(logs.String(), "level=WARN") {
 		t.Fatalf("log = %q, want no warning when the configuration turns telemetry off", logs.String())
+	}
+}
+
+func TestRunHubHonoursTheConfigFileTelemetrySwitch(t *testing.T) {
+	stateDir := t.TempDir()
+	t.Setenv("HERRSCHER_STATE_DIR", stateDir)
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "ftp://collector")
+	if err := os.WriteFile(filepath.Join(stateDir, "config.json"), []byte(`{"telemetry":{"enabled":false}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	statePath := filepath.Join(stateDir, "state.json")
+	if err := os.WriteFile(statePath, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var logs lockedBuffer
+
+	err := RunHub(ctx, clitext.NewMessages(), NewMessages(), nil, nil, Options{StatePath: statePath, Runtime: isolatedRuntimeDir(t), Warnings: &logs})
+
+	if err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("RunHub returned %v, want the cancellation of its run context", err)
+	}
+	if !strings.Contains(logs.String(), "turn telemetry is off: the configuration sets telemetry.enabled to false") {
+		t.Fatalf("log = %q, want the configuration notice at startup", logs.String())
+	}
+	if strings.Contains(logs.String(), "turn telemetry is off: the OTLP endpoint is not an address its protocol accepts") {
+		t.Fatalf("log = %q, the invalid endpoint must not be examined when the configuration turns telemetry off", logs.String())
 	}
 }
 

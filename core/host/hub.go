@@ -33,6 +33,7 @@ import (
 const defaultTeardownGrace = service.StopTeardownGrace
 
 type hub struct {
+	forge       *forgecreds.Credentials
 	lang        i18n.Language
 	language    languageSource
 	st          *state.State
@@ -95,6 +96,10 @@ type hubOption func(*hub)
 
 func withWarnings(w io.Writer) hubOption {
 	return func(h *hub) { h.warnings = w }
+}
+
+func withForge(credentials *forgecreds.Credentials) hubOption {
+	return func(h *hub) { h.forge = credentials }
 }
 
 func (h *hub) bindSessionState() {
@@ -484,7 +489,7 @@ func (h *hub) Pick(name, value string) bool {
 
 func (h *hub) Repos(ctx context.Context) ([]contracts.RepoRef, error) {
 	out := workspaceRepos(h.st.WorkspaceRoot())
-	repos, err := newForgeClient().List(ctx)
+	repos, err := newForgeClient(h.forge).List(ctx)
 	if err != nil {
 		slog.Warn("repos unavailable", "err", err)
 		return out, nil
@@ -495,8 +500,11 @@ func (h *hub) Repos(ctx context.Context) ([]contracts.RepoRef, error) {
 	return out, nil
 }
 
-func newForgeClient() *forge.Client {
-	return forge.New(forgecreds.New(DefaultStatePath()))
+func newForgeClient(credentials *forgecreds.Credentials) *forge.Client {
+	if credentials == nil {
+		credentials = forgecreds.New(DefaultStatePath())
+	}
+	return forge.New(credentials)
 }
 
 func workspaceRepos(workspace string) []contracts.RepoRef {

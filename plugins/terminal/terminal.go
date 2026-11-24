@@ -88,6 +88,7 @@ type Terminal struct {
 
 	openSession string
 	openText    string
+	openForge   forgeOpener
 
 	mintedSession string
 }
@@ -98,6 +99,13 @@ type Terminal struct {
 // a terminal exists.
 func (t *Terminal) OpenOn(session, text string) {
 	t.openSession, t.openText = session, text
+}
+
+// SetForgeOpener gives the gateway the function that opens a forge host for pull
+// requests. The composition root calls it before the foreground starts, so the
+// plugin never reaches the credential store or the forge port itself.
+func (t *Terminal) SetForgeOpener(open func(ctx context.Context, host contracts.ForgeHost) (contracts.Forge, error)) {
+	t.openForge = open
 }
 
 var (
@@ -242,9 +250,9 @@ func (t *Terminal) RunForeground(ctx context.Context, cancel context.CancelFunc)
 		cancel()
 	}
 	if t.openSession == "" {
-		return tui.Run(ctx, quit, t.messages, t, tui.Language(clientLanguage()), tui.WithPullRequests(newPullRequests()))
+		return tui.Run(ctx, quit, t.messages, t, tui.Language(clientLanguage()), tui.WithPullRequests(newPullRequests(t.openForge)))
 	}
-	return tui.Run(ctx, quit, t.messages, t, tui.Language(clientLanguage()), tui.WithPullRequests(newPullRequests()), tui.OpenOn(t.openSession, t.openText))
+	return tui.Run(ctx, quit, t.messages, t, tui.Language(clientLanguage()), tui.WithPullRequests(newPullRequests(t.openForge)), tui.OpenOn(t.openSession, t.openText))
 }
 
 // New builds an unbound terminal gateway.

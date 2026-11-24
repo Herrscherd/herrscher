@@ -20,6 +20,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/envx"
+	"github.com/Herrscherd/herrscher/core/forgecreds"
 	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/core/language"
 	"github.com/Herrscherd/herrscher/core/scope"
@@ -133,7 +134,9 @@ func serveWith(ctx context.Context, layout host.RuntimeLayout, messages *clitext
 		return err
 	}
 
+	credentials := forgecreds.New(*statePath)
 	opts := host.Options{
+		Forge:               credentials,
 		Warnings:            os.Stderr,
 		StatePath:           *statePath,
 		Runtime:             layout,
@@ -156,6 +159,7 @@ func serveWith(ctx context.Context, layout host.RuntimeLayout, messages *clitext
 	withCompactionConfig(&opts, cfg)
 
 	openOnForeground(open, foreground)
+	wireForgeOpener(foreground, credentials)
 	models.StartBackground(ctx, contracts.Default.Backends())
 	return runHubForeground(ctx, messages, hostMessages, *statePath, gws, closers, foreground, opts)
 }
@@ -166,6 +170,15 @@ func openOnForeground(open *openWindow, foreground contracts.Foreground) {
 	}
 	if o, ok := foreground.(foregroundOpener); ok {
 		o.OpenOn(open.session, open.text)
+	}
+}
+
+func wireForgeOpener(foreground contracts.Foreground, credentials *forgecreds.Credentials) {
+	if foreground == nil {
+		return
+	}
+	if s, ok := foreground.(forgeOpenerSetter); ok {
+		s.SetForgeOpener(host.GitHubOpener(credentials))
 	}
 }
 
@@ -407,6 +420,10 @@ type openWindow struct {
 
 type foregroundOpener interface {
 	OpenOn(session, text string)
+}
+
+type forgeOpenerSetter interface {
+	SetForgeOpener(open func(ctx context.Context, host contracts.ForgeHost) (contracts.Forge, error))
 }
 
 func runPromptWith(ctx context.Context, messages *clitext.Messages, dispatcher verbDispatcher, name, prompt string, lang i18n.Language, stdout, stderr io.Writer) error {

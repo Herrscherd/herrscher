@@ -3043,6 +3043,11 @@
     "other": "clonage : {{.Err}}"
   },
   {
+    "id": "cli.host.err.repo_spec",
+    "description": "Reply of a host command, err repo spec",
+    "other": "clone attend owner/name, ou une URL de clonage en https ou en ssh"
+  },
+  {
     "id": "cli.host.err.no_host",
     "description": "Reply of a host command, err no host",
     "other": "la session veut l'hôte \"{{.Host}}\" mais aucun hôte n'est enregistré"

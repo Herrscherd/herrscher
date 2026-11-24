@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -14,6 +16,10 @@ import (
 )
 
 const testToken = "ghp_testsecret123"
+
+func basicTestHeader() string {
+	return base64.StdEncoding.EncodeToString([]byte("x-access-token:" + testToken))
+}
 
 type fakeForge struct {
 	contracts.Forge
@@ -41,11 +47,15 @@ func (f *fakeForge) Repositories(_ context.Context, page contracts.PageRequest) 
 type fakeCreds struct {
 	secret string
 	err    error
+	zero   bool
 }
 
 func (c fakeCreds) Token(context.Context, contracts.ForgeHost) (contracts.ForgeToken, error) {
 	if c.err != nil {
 		return contracts.ForgeToken{}, c.err
+	}
+	if c.zero {
+		return contracts.ForgeToken{}, nil
 	}
 	return contracts.NewForgeToken(c.secret, "octo", contracts.TokenSourceSaved)
 }
@@ -181,20 +191,19 @@ func TestCloneOwnerNameTokenOnlyInEnvironment(t *testing.T) {
 	runner := &fakeRunner{}
 	client := newClient(fakeCreds{secret: testToken}, nil, runner)
 
-	dir, err := client.Clone(context.Background(), "owner/repo", "/ws")
+	dir, err := client.Clone(context.Background(), "owner/repo", t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dir != "/ws/repo" {
+	call := runner.calls[0]
+	if filepath.Base(dir) != "repo" {
 		t.Fatalf("dir = %q", dir)
 	}
-	call := runner.calls[0]
-	if !slices.Equal(call.args, []string{"clone", "--", "https://github.com/owner/repo.git", "/ws/repo"}) {
+	if !slices.Equal(call.args, []string{"clone", "--", "https://github.com/owner/repo.git", dir}) {
 		t.Fatalf("argv = %v", call.args)
 	}
 	assertNoSecret(t, call.args, call.dir)
-	wantBasic := "GIT_CONFIG_VALUE_0=Authorization: Basic " + base64.StdEncoding.EncodeToString([]byte("x-access-token:"+testToken))
-	if !slices.Contains(call.env, wantBasic) {
+	if !slices.Contains(call.env, "GIT_CONFIG_VALUE_0=Authorization: Basic "+basicTestHeader()) {
 		t.Fatalf("env misses the basic auth header: %v", call.env)
 	}
 	if !slices.Contains(call.env, "GIT_CONFIG_KEY_0=http.https://github.com/.extraheader") || !slices.Contains(call.env, "GIT_TERMINAL_PROMPT=0") {
@@ -202,21 +211,23 @@ func TestCloneOwnerNameTokenOnlyInEnvironment(t *testing.T) {
 	}
 }
 
-func TestCloneURLIsCheckedByTheContractsPort(t *testing.T) {
+func TestCloneRefusesBeforeAnyGitCommand(t *testing.T) {
 	cases := map[string]string{
-		"git@github.com:owner/repo.git":  "scp form",
-		"ssh://github.com/owner/repo":    "ssh URL",
+		"ssh://github.com/owner/repo":    "ssh URL without the git user",
 		"https://github.com/owner/repo?": "query",
 		"https://github.com/owner/..":    "dot-dot name",
 		"owner/-repo":                    "leading dash",
+		"owner/repo.git/..":              "dot-dot segment after the suffix",
 		"github.com/owner/repo":          "host-prefixed bare path",
+		"owner/repo\n":                   "control character",
+		"":                               "empty",
 	}
 	for spec, why := range cases {
 		t.Run(why, func(t *testing.T) {
 			runner := &fakeRunner{}
 			client := newClient(fakeCreds{secret: testToken}, nil, runner)
-			if _, err := client.Clone(context.Background(), spec, "/ws"); !errors.Is(err, errRepoSpec) {
-				t.Fatalf("Clone(%q) err = %v, want errRepoSpec", spec, err)
+			if _, err := client.Clone(context.Background(), spec, t.TempDir()); !errors.Is(err, ErrRepoSpec) {
+				t.Fatalf("Clone(%q) err = %v, want ErrRepoSpec", spec, err)
 			}
 			if len(runner.calls) != 0 {
 				t.Fatalf("git ran for %q", spec)
@@ -225,29 +236,153 @@ func TestCloneURLIsCheckedByTheContractsPort(t *testing.T) {
 	}
 }
 
-func TestCloneHttpsURLClonesTheNamedRepository(t *testing.T) {
-	runner := &fakeRunner{}
-	client := newClient(fakeCreds{secret: testToken}, nil, runner)
-
-	dir, err := client.Clone(context.Background(), "https://github.com/owner/repo.git", "/ws")
-	if err != nil {
-		t.Fatal(err)
+func TestCloneAcceptsSSHFormsWithoutToken(t *testing.T) {
+	cases := map[string]string{
+		"git@github.com:owner/repo.git":       "scp form",
+		"ssh://git@github.com/owner/repo.git": "ssh URL",
 	}
-	if dir != "/ws/repo" || !slices.Contains(runner.calls[0].args, "https://github.com/owner/repo.git") {
-		t.Fatalf("dir = %q, argv = %v", dir, runner.calls[0].args)
+	for spec, why := range cases {
+		t.Run(why, func(t *testing.T) {
+			runner := &fakeRunner{}
+			client := newClient(fakeCreds{secret: testToken}, nil, runner)
+			workspace := t.TempDir()
+			dir, err := client.Clone(context.Background(), spec, workspace)
+			if err != nil {
+				t.Fatal(err)
+			}
+			call := runner.calls[0]
+			if dir != filepath.Join(workspace, "repo") || !slices.Equal(call.args, []string{"clone", "--", spec, dir}) {
+				t.Fatalf("dir = %q, argv = %v", dir, call.args)
+			}
+			assertAnonymous(t, call.env)
+		})
 	}
 }
 
-func TestCloneWithoutCredentialStopsBeforeGit(t *testing.T) {
+func TestCloneHttpsGitHubWithoutConnectionIsAnonymous(t *testing.T) {
 	runner := &fakeRunner{}
 	client := newClient(fakeCreds{err: contracts.ErrForgeNotConnected}, nil, runner)
 
-	_, err := client.Clone(context.Background(), "owner/repo", "/ws")
-	if !errors.Is(err, contracts.ErrForgeNotConnected) {
-		t.Fatalf("err = %v, want ErrForgeNotConnected", err)
+	dir, err := client.Clone(context.Background(), "https://github.com/owner/repo.git", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := runner.calls[0]
+	if !slices.Equal(call.args, []string{"clone", "--", "https://github.com/owner/repo.git", dir}) {
+		t.Fatalf("argv = %v", call.args)
+	}
+	assertAnonymous(t, call.env)
+}
+
+func TestCloneOwnerNameWithoutConnectionIsAnonymous(t *testing.T) {
+	runner := &fakeRunner{}
+	client := newClient(fakeCreds{err: contracts.ErrForgeNotConnected}, nil, runner)
+
+	if _, err := client.Clone(context.Background(), "owner/repo", t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	if runner.calls[0].name != "git" {
+		t.Fatalf("command = %q, want git", runner.calls[0].name)
+	}
+	assertAnonymous(t, runner.calls[0].env)
+}
+
+func TestCloneZeroTokenIsAnonymous(t *testing.T) {
+	runner := &fakeRunner{}
+	client := newClient(fakeCreds{zero: true}, nil, runner)
+
+	if _, err := client.Clone(context.Background(), "https://github.com/owner/repo.git", t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	assertAnonymous(t, runner.calls[0].env)
+}
+
+func TestCloneTokenNeverGoesToAnotherHost(t *testing.T) {
+	cases := map[string]string{
+		"https://ghe.example.com/owner/repo": "GitHub Enterprise host",
+		"https://gitlab.com/owner/repo.git":  "GitLab host",
+		"https://github.com.evil.test/o/r":   "lookalike host",
+	}
+	for spec, why := range cases {
+		t.Run(why, func(t *testing.T) {
+			runner := &fakeRunner{}
+			client := newClient(fakeCreds{secret: testToken}, nil, runner)
+
+			if _, err := client.Clone(context.Background(), spec, t.TempDir()); err != nil {
+				t.Fatal(err)
+			}
+			call := runner.calls[0]
+			assertAnonymous(t, call.env)
+			assertNoSecret(t, call.args, call.dir)
+		})
+	}
+}
+
+func TestCloneForgeCredentialFailureStopsBeforeGit(t *testing.T) {
+	boom := errors.New("credential store unreadable")
+	runner := &fakeRunner{}
+	client := newClient(fakeCreds{err: boom}, nil, runner)
+
+	_, err := client.Clone(context.Background(), "https://github.com/owner/repo.git", t.TempDir())
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want the credential error", err)
 	}
 	if len(runner.calls) != 0 {
-		t.Fatal("git ran without a credential")
+		t.Fatal("git ran after a credential failure")
+	}
+}
+
+func TestCloneOwnerNameUsesGlabWithoutGitHubToken(t *testing.T) {
+	runner := &fakeRunner{gitHub: true}
+	client := newClient(fakeCreds{err: contracts.ErrForgeNotConnected}, nil, runner)
+	workspace := t.TempDir()
+
+	dir, err := client.Clone(context.Background(), "owner/repo", workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := runner.calls[0]
+	if call.name != "glab" || !slices.Equal(call.args, []string{"repo", "clone", "--", "owner/repo", dir}) {
+		t.Fatalf("command = %s %v", call.name, call.args)
+	}
+	if len(runner.calls) != 1 {
+		t.Fatalf("calls = %d, want only glab", len(runner.calls))
+	}
+}
+
+func TestCloneOwnerNameWithTokenDoesNotUseGlab(t *testing.T) {
+	runner := &fakeRunner{gitHub: true}
+	client := newClient(fakeCreds{secret: testToken}, nil, runner)
+
+	if _, err := client.Clone(context.Background(), "owner/repo", t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	if runner.calls[0].name != "git" {
+		t.Fatalf("command = %q, want git", runner.calls[0].name)
+	}
+}
+
+func TestCloneZeroTokenNeverSendsAuthHeader(t *testing.T) {
+	runner := &fakeRunner{}
+	client := newClient(fakeCreds{zero: true, secret: testToken}, nil, runner)
+
+	if _, err := client.Clone(context.Background(), "owner/repo", t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	assertAnonymous(t, runner.calls[0].env)
+}
+
+func TestCloneHttpsURLClonesTheNamedRepository(t *testing.T) {
+	runner := &fakeRunner{}
+	client := newClient(fakeCreds{secret: testToken}, nil, runner)
+	workspace := t.TempDir()
+
+	dir, err := client.Clone(context.Background(), "https://github.com/owner/repo.git", workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dir != filepath.Join(workspace, "repo") || !slices.Contains(runner.calls[0].args, "https://github.com/owner/repo.git") {
+		t.Fatalf("dir = %q, argv = %v", dir, runner.calls[0].args)
 	}
 }
 
@@ -256,7 +391,7 @@ func TestCloneErrorNeverCarriesTheToken(t *testing.T) {
 	runner := &fakeRunner{out: leaking, err: errors.New("exit status 128")}
 	client := newClient(fakeCreds{secret: testToken}, nil, runner)
 
-	_, err := client.Clone(context.Background(), "owner/repo", "/ws")
+	_, err := client.Clone(context.Background(), "owner/repo", t.TempDir())
 	if err == nil {
 		t.Fatal("expected a clone error")
 	}
@@ -265,14 +400,99 @@ func TestCloneErrorNeverCarriesTheToken(t *testing.T) {
 	}
 }
 
-func TestCloneExistingTargetIsReturnedAsIs(t *testing.T) {
-	runner := &fakeRunner{out: []byte("fatal: destination path '/ws/repo' already exists"), err: errors.New("exit status 128")}
+func TestCloneErrorNeverCarriesTheBasicAuthHeader(t *testing.T) {
+	leaking := []byte("fatal: header " + basicTestHeader() + " refused")
+	runner := &fakeRunner{out: leaking, err: errors.New("exit status 128")}
 	client := newClient(fakeCreds{secret: testToken}, nil, runner)
 
-	dir, err := client.Clone(context.Background(), "owner/repo", "/ws")
-	if err != nil || dir != "/ws/repo" {
+	_, err := client.Clone(context.Background(), "owner/repo", t.TempDir())
+	if err == nil {
+		t.Fatal("expected a clone error")
+	}
+	if strings.Contains(err.Error(), basicTestHeader()) || strings.Contains(err.Error(), testToken) {
+		t.Fatalf("error leaks the credential: %v", err)
+	}
+}
+
+func TestCloneExistingTargetIsReturnedWithoutReadingTheCredential(t *testing.T) {
+	workspace := t.TempDir()
+	if err := os.Mkdir(filepath.Join(workspace, "repo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runner := &fakeRunner{}
+	client := newClient(fakeCreds{err: errors.New("credential store unreadable")}, nil, runner)
+
+	dir, err := client.Clone(context.Background(), "owner/repo", workspace)
+	if err != nil || dir != filepath.Join(workspace, "repo") {
 		t.Fatalf("Clone = %q, %v", dir, err)
 	}
+	if len(runner.calls) != 0 {
+		t.Fatal("git ran for an existing target")
+	}
+}
+
+func TestCloneKeepsTheUsersGitConfigEntries(t *testing.T) {
+	t.Setenv(configCount, "2")
+	runner := &fakeRunner{}
+	client := newClient(fakeCreds{secret: testToken}, nil, runner)
+
+	if _, err := client.Clone(context.Background(), "owner/repo", t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	env := runner.calls[0].env
+	for _, want := range []string{
+		"GIT_CONFIG_COUNT=3",
+		"GIT_CONFIG_KEY_2=http.https://github.com/.extraheader",
+		"GIT_CONFIG_VALUE_2=Authorization: Basic " + basicTestHeader(),
+	} {
+		if !slices.Contains(env, want) {
+			t.Fatalf("env misses %q: %v", want, env)
+		}
+	}
+	if slices.Contains(env, "GIT_CONFIG_KEY_0=http.https://github.com/.extraheader") {
+		t.Fatalf("env reuses index 0 over the user's entries: %v", env)
+	}
+}
+
+func TestGitEnvironmentIndexesFromTheExistingCount(t *testing.T) {
+	cases := map[string]struct {
+		count string
+		index string
+		next  string
+	}{
+		"unset":     {count: "", index: "0", next: "1"},
+		"two":       {count: "2", index: "2", next: "3"},
+		"malformed": {count: "many", index: "0", next: "1"},
+		"negative":  {count: "-1", index: "0", next: "1"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			getenv := func(key string) string {
+				if key == configCount {
+					return tc.count
+				}
+				return ""
+			}
+			env := gitEnvironment(getenv, mustHost(t), contracts.ForgeToken{})
+			if len(env) != 1 {
+				t.Fatalf("invalid token must add no config, env = %v", env)
+			}
+			env = gitEnvironment(getenv, mustHost(t), mustToken(t))
+			wantCount := "GIT_CONFIG_COUNT=" + tc.next
+			if !slices.Contains(env, wantCount) || !slices.Contains(env, "GIT_CONFIG_KEY_"+tc.index+"=http.https://github.com/.extraheader") {
+				t.Fatalf("env = %v, want %s and index %s", env, wantCount, tc.index)
+			}
+		})
+	}
+}
+
+func mustToken(t *testing.T) contracts.ForgeToken {
+	t.Helper()
+	token, err := contracts.NewForgeToken(testToken, "octo", contracts.TokenSourceSaved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return token
 }
 
 func TestListIncludesGitLabOnlyWhenGlabIsInstalled(t *testing.T) {
@@ -307,5 +527,14 @@ func assertNoSecret(t *testing.T, args []string, dir string) {
 	}
 	if strings.Contains(dir, testToken) {
 		t.Fatal("token in working directory")
+	}
+}
+
+func assertAnonymous(t *testing.T, env []string) {
+	t.Helper()
+	for _, entry := range env {
+		if strings.HasPrefix(entry, "GIT_CONFIG_") || strings.Contains(entry, basicTestHeader()) || strings.Contains(entry, testToken) {
+			t.Fatalf("anonymous clone carries a credential: %v", env)
+		}
 	}
 }

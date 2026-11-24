@@ -2391,7 +2391,7 @@
   },
   {
     "id": "tui.diffgit.forge_not_connected",
-    "other": "no GitHub connection on this host: run herrscher connect github"
+    "other": "no GitHub connection on this host: run `herrscher connect github`"
   },
   {
     "id": "tui.diffgit.wrong_host",

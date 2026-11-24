@@ -2391,7 +2391,7 @@
   },
   {
     "id": "tui.diffgit.forge_not_connected",
-    "other": "aucune connexion GitHub sur cet hôte : lancez herrscher connect github"
+    "other": "aucune connexion GitHub sur cet hôte : lancez `herrscher connect github`"
   },
   {
     "id": "tui.diffgit.wrong_host",
@@ -2399,7 +2399,7 @@
   },
   {
     "id": "tui.diffgit.invalid_remote",
-    "other": "la distante origin n'est pas une référence de dépôt"
+    "other": "le remote origin ne désigne pas un dépôt reconnu"
   },
   {
     "id": "tui.reason.theme_cycle",

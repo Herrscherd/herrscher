@@ -11,6 +11,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
+	"github.com/Herrscherd/herrscher/core/internal/forge"
 )
 
 const cloneTimeout = 10 * time.Minute
@@ -72,6 +73,9 @@ func (h *Handler) resolveProject(ctx context.Context, input contracts.Input, hos
 		dir, err := h.fg.Clone(cctx, spec, wtRoot)
 		cancel()
 		if err != nil {
+			if errors.Is(err, forge.ErrRepoSpec) {
+				return "", h.localized(forge.ErrRepoSpec, clitext.HostErrRepoSpec)
+			}
 			if errors.Is(err, contracts.ErrForgeNotConnected) {
 				return "", localize(h.messages, h.currentLanguage(), "clone: "+err.Error(), clitext.HostErrForgeNotConnected, clitext.Params{}, err)
 			}

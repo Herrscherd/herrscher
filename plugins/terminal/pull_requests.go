@@ -5,18 +5,19 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
-	"github.com/Herrscherd/herrscher/core/forgecreds"
-	"github.com/Herrscherd/herrscher/core/forgeport"
-	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/plugins/terminal/tui"
 )
 
+const githubHost = "github.com"
+
+type forgeOpener func(ctx context.Context, host contracts.ForgeHost) (contracts.Forge, error)
+
 type githubPullRequests struct {
-	creds contracts.ForgeCredentials
+	open forgeOpener
 }
 
-func newPullRequests() githubPullRequests {
-	return githubPullRequests{creds: forgecreds.New(host.DefaultStatePath())}
+func newPullRequests(open forgeOpener) githubPullRequests {
+	return githubPullRequests{open: open}
 }
 
 func (p githubPullRequests) OpenPullRequest(ctx context.Context, draft tui.PullRequestDraft) (int, error) {
@@ -24,10 +25,10 @@ func (p githubPullRequests) OpenPullRequest(ctx context.Context, draft tui.PullR
 	if err != nil {
 		return 0, err
 	}
-	if repo.Host().String() != forgeport.GitHubHost {
+	if repo.Host().String() != githubHost {
 		return 0, contracts.ErrForgeWrongHost
 	}
-	forge, err := forgeport.Open(ctx, forgeport.KindGitHub, repo.Host(), p.creds)
+	forge, err := p.open(ctx, repo.Host())
 	if err != nil {
 		return 0, err
 	}

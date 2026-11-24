@@ -31,6 +31,10 @@ be renewed. Status warns you 14 days before that date, and you run
 For GitHub Enterprise Server, pass `--host` with the instance name. The device
 flow then runs against that host.
 
+The clone and pull request paths reach github.com only for now: the forge port
+does not support GitHub Enterprise Server yet, and herrscher never sends the
+token to another host.
+
 If the GitHub App is not installed on the account or the instance, or the forge
 refuses its client ID or has device sign-in turned off for it, the command says
 so and suggests the two alternatives below.

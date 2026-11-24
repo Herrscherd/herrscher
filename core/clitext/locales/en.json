@@ -3043,6 +3043,11 @@
     "other": "clone: {{.Err}}"
   },
   {
+    "id": "cli.host.err.repo_spec",
+    "description": "Reply of a host command, err repo spec",
+    "other": "clone expects owner/name, or a clone URL over https or ssh"
+  },
+  {
     "id": "cli.host.err.no_host",
     "description": "Reply of a host command, err no host",
     "other": "session wants host \"{{.Host}}\" but no host is registered"

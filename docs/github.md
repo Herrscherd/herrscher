@@ -128,6 +128,13 @@ this order (see [Environment variables](env.md#forge-github)):
 The first valid token wins. If none of them holds a token, forge operations
 fail with a message saying herrscher is not connected to that host.
 
+Cloning a repository for a session and opening its pull request from the
+terminal use the same token, and only for `github.com`: a clone or a pull
+request on another host is refused, so the token never reaches a host that is
+not GitHub. The token goes to git through its environment, never on the command
+line or in the clone's configuration, and an `https://` URL or an `owner/name`
+is accepted, while `git@` and `ssh://` URLs are refused.
+
 ## Troubleshooting
 
 - **The App is not available for this host.** Either the host has no herrscher

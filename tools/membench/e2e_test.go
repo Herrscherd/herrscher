@@ -96,23 +96,36 @@ func TestBenchMeasuresEachArmFromTheLedger(t *testing.T) {
 		parent: t.TempDir(),
 		meter:  &meter{limit: budget{tokens: 10000000}},
 	}
-	result, err := r.runAll(t.Context(), tasks, settings)
-	if err != nil {
-		t.Fatalf("runAll: %v", err)
-	}
-	if result.stopped {
-		t.Fatal("execution stopped although the budget allows every arm")
-	}
-	if len(result.outcomes) != armsPerSetting {
-		t.Fatalf("outcomes = %d, want %d", len(result.outcomes), armsPerSetting)
+	arms := planArms(tasks, settings)
+	if len(arms) != armsPerSetting {
+		t.Fatalf("arms = %d, want %d", len(arms), armsPerSetting)
 	}
 	wantTurns := len(tasks[0].steps) + 1
-	for _, got := range result.outcomes {
-		if got.turns != wantTurns {
-			t.Errorf("arm on=%t: turns = %d, want %d read from the ledger", got.on, got.turns, wantTurns)
+	for _, planned := range arms {
+		box, err := newSandbox(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
 		}
-		if got.tokens <= 0 || got.input <= 0 {
-			t.Errorf("arm on=%t: tokens = %d, input = %d, want the ledger's usage", got.on, got.tokens, got.input)
+		got, err := r.play(t.Context(), box, planned)
+		if err != nil {
+			t.Fatal(errors.Join(err, box.close()))
+		}
+		ledger, err := readTally(box.state)
+		if err != nil {
+			t.Fatal(errors.Join(err, box.close()))
+		}
+		if closeErr := box.close(); closeErr != nil {
+			t.Fatal(closeErr)
+		}
+		if ledger.turns != wantTurns {
+			t.Errorf("arm on=%t: ledger turns = %d, want %d", planned.enabled, ledger.turns, wantTurns)
+		}
+		if got.turns != ledger.turns || got.tokens != ledger.tokens || got.input != ledger.input {
+			t.Errorf("arm on=%t: outcome turns=%d tokens=%d input=%d, ledger turns=%d tokens=%d input=%d",
+				planned.enabled, got.turns, got.tokens, got.input, ledger.turns, ledger.tokens, ledger.input)
+		}
+		if ledger.input <= 0 {
+			t.Errorf("arm on=%t: ledger input = %d, want the vendor's reported usage", planned.enabled, ledger.input)
 		}
 	}
 }

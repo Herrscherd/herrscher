@@ -17,4 +17,5 @@ The [README](../README.md) is the startup page. These guides go deeper.
 | [Service](service.md) | The native OS service: units, update, uninstall. |
 | [Skills](skills.md) | Cross-backend skills: discovery, the menu, hot reload. |
 | [Budgets](budgets.md) | Spend and token caps for sessions, and how a paused session resumes. |
+| [Memory bench](memory-bench.md) | Measuring the memory settings against each other, under a hard spend ceiling. |
 | [Environment variables](env.md) | Every variable the binary reads, its default, and who reads it. |

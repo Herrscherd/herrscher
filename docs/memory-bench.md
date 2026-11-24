@@ -134,13 +134,19 @@ The unit tests run under `go test ./...`. They use no model: the budget, the
 scoring, the sampling, the report and the sandbox environment are tested
 directly.
 
-Three end-to-end tests run under `-tags e2e` in `scripts/check.sh`. They build
+Four end-to-end tests run under `-tags e2e` in `scripts/check.sh`. They build
 the real `herrscher` and the fake `claude` of `e2e/vendortest`, then:
 
 - `TestMemorySettingReachesTheRealBinary` runs `herrscher --print` with
   `MEMORY_RAW_ARCHIVE` set to `false`, then to `true`, and checks that the raw
   archive is written only in the second run. It fails if the bench does not
   forward the setting to the binary.
+- `TestReportSettingReachesTheRealBinary` seeds a vault with a node last seen in
+  2001, then runs `herrscher --print` with `MEMORY_REPORT_ENABLED` set to
+  `false`, then to `true`. It sets `TERMINAL_CONSOLIDATE_EVERY=0`: a one-shot
+  with the default of 10 never consolidates, so it never sweeps the vault. The
+  test checks that the node is archived and that a report is written only in
+  the second run.
 - `TestBenchMeasuresEachArmFromTheLedger` runs the task pair against the real
   binary, one arm off and one on. Each arm's turns, tokens and input come from
   the usage ledger the local `--print` writes, so the test fails if a run does

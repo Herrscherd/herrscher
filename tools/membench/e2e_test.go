@@ -43,6 +43,11 @@ func goBuild(tb testing.TB, dir, out string, args ...string) {
 
 func printIntoVault(tb testing.TB, bins binaries, option setting, enabled bool, prompt string, count func(vault string) (int, error)) int {
 	tb.Helper()
+	return printIntoSeededVault(tb, bins, option, enabled, prompt, nil, nil, count)
+}
+
+func printIntoSeededVault(tb testing.TB, bins binaries, option setting, enabled bool, prompt string, seed func(vault string) error, extra []string, count func(vault string) (int, error)) int {
+	tb.Helper()
 	box, err := newSandbox(tb.TempDir())
 	if err != nil {
 		tb.Fatal(err)
@@ -53,8 +58,13 @@ func printIntoVault(tb testing.TB, bins binaries, option setting, enabled bool, 
 		}
 	}()
 	vault := filepath.Join(box.root, "vault")
+	if seed != nil {
+		if seedErr := seed(vault); seedErr != nil {
+			tb.Fatal(seedErr)
+		}
+	}
 	r := runner{binary: bins.herrscher, model: defaultModel}
-	assignments := []string{option.assignment(enabled), vaultEnv + "=" + vault}
+	assignments := append([]string{option.assignment(enabled), vaultEnv + "=" + vault}, extra...)
 	if _, invokeErr := r.invoke(tb.Context(), box, step{prompt: prompt, agent: agentAlpha}, assignments); invokeErr != nil {
 		tb.Fatalf("herrscher --print: %v", invokeErr)
 	}
@@ -117,6 +127,49 @@ func TestMemorySettingReachesTheRealBinary(t *testing.T) {
 	}
 	if got := rawArchiveFiles(t, bins, raw, true); got == 0 {
 		t.Fatal("no raw archive with MEMORY_RAW_ARCHIVE=true: the setting was not forwarded to herrscher")
+	}
+}
+
+const (
+	agedNodeFile             = "aged.md"
+	consolidateOnEveryRunEnv = "TERMINAL_CONSOLIDATE_EVERY=0"
+)
+
+func seedAgedNode(vault string) error {
+	if err := os.MkdirAll(vault, 0o700); err != nil {
+		return err
+	}
+	node := "---\ntype: fact\ntitle: old fact\nlastSeen: 2001-01-01T00:00:00Z\n---\nThe old fact.\n"
+	return os.WriteFile(filepath.Join(vault, agedNodeFile), []byte(node), 0o600)
+}
+
+func reportFiles(tb testing.TB, bins binaries, option setting, enabled bool) int {
+	tb.Helper()
+	return printIntoSeededVault(tb, bins, option, enabled, "Remember this: the code is 4242.", seedAgedNode, []string{consolidateOnEveryRunEnv}, func(vault string) (int, error) {
+		aged, err := os.ReadFile(filepath.Join(vault, agedNodeFile))
+		if err != nil {
+			return 0, err
+		}
+		if !strings.Contains(string(aged), "state: archived") {
+			return 0, errors.New("the sweep did not archive the aged node")
+		}
+		return countFiles(vault, func(data []byte) bool {
+			return strings.Contains(string(data), "type: report")
+		})
+	})
+}
+
+func TestReportSettingReachesTheRealBinary(t *testing.T) {
+	bins := buildBinaries(t)
+	report, ok := settingNamed("report")
+	if !ok {
+		t.Fatal("report setting is not known")
+	}
+	if got := reportFiles(t, bins, report, false); got != 0 {
+		t.Fatalf("report written with MEMORY_REPORT_ENABLED=false: %d files", got)
+	}
+	if got := reportFiles(t, bins, report, true); got == 0 {
+		t.Fatal("no report with MEMORY_REPORT_ENABLED=true: the setting was not forwarded to herrscher")
 	}
 }
 

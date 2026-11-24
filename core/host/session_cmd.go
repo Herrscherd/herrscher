@@ -16,7 +16,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
-	"github.com/Herrscherd/herrscher/core/usage"
 )
 
 var (
@@ -101,9 +100,7 @@ func runSeedVerb(ctx context.Context, messages *hostMessages, cliMessages *clite
 	runtime.timeout = timeout
 	if runtime.localRun {
 		runtime.warnings = ledger.warnings
-		runtime.recordUsage = func(sess state.Session, records []usage.Record) {
-			ledger.record(runtime.persists, runtime.languageOf(sess), sess, records)
-		}
+		runtime.recordUsage = ledger.oneShotRecorder(runtime)
 	}
 	reply, err := runOneShotSeedCommand(
 		ctx, store, input.Get(paramName), input.Get("task"),

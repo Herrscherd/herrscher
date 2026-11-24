@@ -64,6 +64,12 @@ func (l usageLedger) record(persists *persistWrites, lang languageSource, sess s
 	}
 }
 
+func (l usageLedger) oneShotRecorder(runtime oneShotSeedRuntime) func(state.Session, []usage.Record) {
+	return func(sess state.Session, records []usage.Record) {
+		l.record(runtime.persists, runtime.languageOf(sess), sess, records)
+	}
+}
+
 func stampUsage(records []usage.Record, current *state.State, sess state.Session) []usage.Record {
 	vendor, account := sess.Vendor, sess.Account
 	if live, ok := current.FindSession(sess.Name); ok {

@@ -44,6 +44,16 @@ type oneShotSeedRuntime struct {
 	localRun        bool
 	persists        *persistWrites
 	joinGrace       time.Duration
+	openSeed        seedOpener
+}
+
+type seedOpener func(ctx context.Context, messages *hostMessages, sess state.Session) (contracts.Orchestrator, contracts.Memory, error)
+
+func (r oneShotSeedRuntime) seedOpener() seedOpener {
+	if r.openSeed != nil {
+		return r.openSeed
+	}
+	return seedOrchestrator
 }
 
 func (r oneShotSeedRuntime) grace() time.Duration {
@@ -103,18 +113,29 @@ func runOneShotSeedIDWithRuntime(ctx context.Context, st *state.State, name, tas
 	if sess.Archived {
 		return "", errSeedArchivedSession
 	}
-	orch, mem, err := seedOrchestrator(ctx, runtime.messages, sess)
+	if err := requireApprovalDesk(runtime); err != nil {
+		return "", err
+	}
+	orch, mem, err := runtime.seedOpener()(ctx, runtime.messages, sess)
 	if err != nil {
 		return "", err
 	}
 	return runOneShotSeedWithIDRuntime(ctx, sess, task, turnID, orch, runtime, mem)
 }
 
-func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, turnID string, orch contracts.Orchestrator, runtime oneShotSeedRuntime, memory ...io.Closer) (string, error) {
+func requireApprovalDesk(runtime oneShotSeedRuntime) error {
 	if runtime.desk == nil && !runtime.localRun {
-		return "", errSeedWithoutApprovalDesk
+		return errSeedWithoutApprovalDesk
 	}
+	return nil
+}
+
+func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, turnID string, orch contracts.Orchestrator, runtime oneShotSeedRuntime, memory ...io.Closer) (string, error) {
 	owned := append([]io.Closer{orch}, memory...)
+	if err := requireApprovalDesk(runtime); err != nil {
+		closeAll(owned)
+		return "", err
+	}
 	bridgeJoined := false
 	defer func() {
 		if bridgeJoined {

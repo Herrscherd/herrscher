@@ -1,7 +1,12 @@
 package host
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -9,6 +14,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/usage"
 )
 
 type closeGuardMemory struct {
@@ -128,5 +134,126 @@ func TestUnjoinedBridgeClosesMemoryOnlyWhenItEnds(t *testing.T) {
 	}
 	if n := mem.closeCalls.Load(); n != 1 {
 		t.Fatalf("memory closed %d times, want 1", n)
+	}
+}
+
+func TestOneShotSeedClosesMemoryOnlyWhenTheBridgeEnds(t *testing.T) {
+	mem := newCloseGuardMemory()
+	orch := &memoryWritingObserveOrchestrator{seen: make(chan struct{}, 1), release: make(chan struct{}), memory: mem}
+	store := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	if err := store.AddSession(state.Session{Name: "solo", ChannelID: "channel", Incarnation: "solo"}); err != nil {
+		t.Fatal(err)
+	}
+	backend := func(context.Context, state.Session) (contracts.Backend, error) {
+		return seedBackend{reply: "réponse"}, nil
+	}
+	runtime := oneShotSeedRuntime{
+		desk:        seedDesk(t),
+		persists:    newPersistWrites(),
+		messages:    newHostMessages(),
+		cliMessages: clitext.NewMessages(),
+		backend:     backend,
+		joinGrace:   oneShotTestGrace,
+		openSeed: func(context.Context, *hostMessages, state.Session) (contracts.Orchestrator, contracts.Memory, error) {
+			return orch, mem, nil
+		},
+	}
+
+	returned := make(chan error, 1)
+	go func() {
+		_, err := runOneShotSeedIDWithRuntime(context.Background(), store, "solo", "tâche", newTurnID(), runtime)
+		returned <- err
+	}()
+
+	select {
+	case <-orch.seen:
+	case <-time.After(oneShotHandoffWait):
+		t.Fatal("the turn was never handed to Observe")
+	}
+	select {
+	case err := <-returned:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(oneShotHandoffWait):
+		t.Fatal("the one-shot never returned while Observe was blocked")
+	}
+	if n := mem.closeCalls.Load(); n != 0 {
+		t.Fatalf("memory closed %d time(s) at return while Observe still runs, want 0", n)
+	}
+
+	close(orch.release)
+	select {
+	case <-mem.closedCh:
+	case <-time.After(oneShotHandoffWait):
+		t.Fatal("memory was never closed after the bridge ended")
+	}
+	if n := mem.violations.Load(); n != 0 {
+		t.Fatalf("%d write(s) reached memory after Close", n)
+	}
+	if n := mem.closeCalls.Load(); n != 1 {
+		t.Fatalf("memory closed %d times, want 1", n)
+	}
+}
+
+func TestOneShotSeedWithoutDeskOpensNothing(t *testing.T) {
+	store := state.NewState(filepath.Join(t.TempDir(), "state.json"))
+	if err := store.AddSession(state.Session{Name: "solo", ChannelID: "channel", Incarnation: "solo"}); err != nil {
+		t.Fatal(err)
+	}
+	opened := 0
+	runtime := oneShotSeedRuntime{
+		persists:    newPersistWrites(),
+		messages:    newHostMessages(),
+		cliMessages: clitext.NewMessages(),
+		openSeed: func(context.Context, *hostMessages, state.Session) (contracts.Orchestrator, contracts.Memory, error) {
+			opened++
+			return nil, newCloseGuardMemory(), nil
+		},
+	}
+	_, err := runOneShotSeedIDWithRuntime(t.Context(), store, "solo", "tâche", newTurnID(), runtime)
+	if !errors.Is(err, errSeedWithoutApprovalDesk) {
+		t.Fatalf("err = %v, want %v", err, errSeedWithoutApprovalDesk)
+	}
+	if opened != 0 {
+		t.Fatalf("the seed opened memory %d time(s) before refusing, want 0", opened)
+	}
+}
+
+func TestRefusedSeedClosesMemoryHandedToIt(t *testing.T) {
+	mem := newCloseGuardMemory()
+	runtime := oneShotSeedRuntime{persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages()}
+	_, err := runOneShotSeedWithIDRuntime(t.Context(), state.Session{Name: "solo", ChannelID: "channel"}, "tâche", newTurnID(), nil, runtime, mem)
+	if !errors.Is(err, errSeedWithoutApprovalDesk) {
+		t.Fatalf("err = %v, want %v", err, errSeedWithoutApprovalDesk)
+	}
+	if n := mem.closeCalls.Load(); n != 1 {
+		t.Fatalf("memory closed %d times on the refusal, want 1", n)
+	}
+}
+
+func TestLocalOneShotReportsAFailedLedgerWrite(t *testing.T) {
+	partDir := filepath.Join(t.TempDir(), "part")
+	if err := os.WriteFile(partDir, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var warnings bytes.Buffer
+	messages := newHostMessages()
+	runtime := oneShotSeedRuntime{
+		localRun:    true,
+		desk:        seedDesk(t),
+		persists:    newPersistWrites(),
+		messages:    messages,
+		cliMessages: clitext.NewMessages(),
+		warnings:    &warnings,
+	}
+	ledger := localUsageLedger(partDir, state.NewState(filepath.Join(t.TempDir(), "state.json")), messages, &warnings)
+	runtime.recordUsage = ledger.oneShotRecorder(runtime)
+	driver := &sessionDriver{messages: messages, cliMessages: runtime.cliMessages, persists: runtime.persists}
+	gate := attachOneShotTaps(driver, state.Session{Name: "solo"}, runtime)
+	driver.sink.Usage([]usage.Record{{In: 3, Out: 2}})
+	gate.shut()
+	if !strings.Contains(warnings.String(), "usage not recorded") || !strings.Contains(warnings.String(), "solo") {
+		t.Fatalf("warnings = %q, want the warn.session_usage line for session solo", warnings.String())
 	}
 }

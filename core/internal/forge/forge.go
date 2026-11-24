@@ -1,8 +1,8 @@
 // Package forge lists the repositories of the forge hosts a herrscher host is
 // connected to and clones them. GitHub goes through the contracts forge port.
 // Its token reaches git only through the environment, and only for github.com
-// over https; every other clone runs without it. GitLab listing and the glab
-// clone stay on the glab command line.
+// over https; every other clone runs without it. GitLab listing stays on the
+// glab command line.
 package forge
 
 import (
@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,6 +35,7 @@ const (
 	subClone     = "clone"
 	redactedMark = "[redacted]"
 	configCount  = "GIT_CONFIG_COUNT"
+	maxConfigs   = 1000
 )
 
 // ErrRepoSpec matches a clone spec that names no repository the clone can reach.
@@ -41,6 +43,7 @@ var ErrRepoSpec = errors.New("invalid repo spec")
 
 var (
 	errTooManyPages = errors.New("repository listing has more pages than the bound")
+	errConfigCount  = errors.New(configCount + " must be a count from 0 to " + strconv.Itoa(maxConfigs))
 	specRe          = regexp.MustCompile(`^[\w.\-]+/[\w.\-]+$`)
 )
 
@@ -198,13 +201,11 @@ func (c *Client) Clone(ctx context.Context, spec, workspace string) (string, err
 	if tokenErr != nil {
 		return "", fmt.Errorf("clone %s: %w", target.ref, tokenErr)
 	}
-	if target.ownerName && !token.Valid() && c.r.look("glab") == nil {
-		if glabErr := c.glabClone(ctx, workspace, spec, dir); glabErr != nil {
-			return "", glabErr
-		}
-		return dir, nil
+	env, envErr := gitEnvironment(os.Getenv, target.ref.Host(), token)
+	if envErr != nil {
+		return "", fmt.Errorf("clone %s: %w", target.ref, envErr)
 	}
-	out, err := c.r.run(ctx, workspace, gitEnvironment(os.Getenv, target.ref.Host(), token), "git", subClone, "--", target.cloneURL, dir)
+	out, err := c.r.run(ctx, workspace, env, "git", subClone, "--", target.cloneURL, dir)
 	if err != nil {
 		return "", fmt.Errorf("git clone: %s: %w", scrub(out, token), err)
 	}
@@ -214,7 +215,6 @@ func (c *Client) Clone(ctx context.Context, spec, workspace string) (string, err
 type cloneTarget struct {
 	ref         contracts.ForgeRepoRef
 	cloneURL    string
-	ownerName   bool
 	githubHTTPS bool
 }
 
@@ -223,11 +223,11 @@ func parseCloneTarget(spec string) (cloneTarget, error) {
 		return ownerNameTarget(spec)
 	}
 	if !hasCloneScheme(spec) {
-		return cloneTarget{}, fmt.Errorf("%w: %q", ErrRepoSpec, spec)
+		return cloneTarget{}, invalidSpec(spec)
 	}
 	ref, err := contracts.ParseRepoRef(spec)
 	if err != nil {
-		return cloneTarget{}, fmt.Errorf("%w: %q", ErrRepoSpec, spec)
+		return cloneTarget{}, invalidSpec(spec)
 	}
 	https := strings.HasPrefix(spec, "https://")
 	return cloneTarget{
@@ -240,14 +240,30 @@ func parseCloneTarget(spec string) (cloneTarget, error) {
 func ownerNameTarget(spec string) (cloneTarget, error) {
 	ref, err := contracts.ParseRepoRef(forgeport.GitHubHost + "/" + spec)
 	if err != nil {
-		return cloneTarget{}, fmt.Errorf("%w: %q", ErrRepoSpec, spec)
+		return cloneTarget{}, invalidSpec(spec)
 	}
 	return cloneTarget{
 		ref:         ref,
 		cloneURL:    "https://" + forgeport.GitHubHost + "/" + ref.Namespace() + "/" + ref.Name() + ".git",
-		ownerName:   true,
 		githubHTTPS: true,
 	}, nil
+}
+
+func invalidSpec(spec string) error {
+	return fmt.Errorf("%w: %q", ErrRepoSpec, displaySpec(spec))
+}
+
+func displaySpec(spec string) string {
+	if parsed, err := url.Parse(spec); err == nil && parsed.Host != "" {
+		parsed.User = nil
+		parsed.RawQuery = ""
+		parsed.Fragment = ""
+		return parsed.String()
+	}
+	if strings.ContainsAny(spec, "@?#") {
+		return redactedMark
+	}
+	return spec
 }
 
 func hasCloneScheme(spec string) bool {
@@ -265,34 +281,33 @@ func (c *Client) gitHubToken(ctx context.Context, target cloneTarget) (contracts
 	return token, err
 }
 
-func (c *Client) glabClone(ctx context.Context, workspace, spec, dir string) error {
-	out, err := c.r.run(ctx, workspace, nil, "glab", subRepo, subClone, "--", spec, dir)
-	if err != nil {
-		return fmt.Errorf("glab clone: %s: %w", redact.Output(out), err)
-	}
-	return nil
-}
-
-func gitEnvironment(getenv func(string) string, host contracts.ForgeHost, token contracts.ForgeToken) []string {
+func gitEnvironment(getenv func(string) string, host contracts.ForgeHost, token contracts.ForgeToken) ([]string, error) {
 	env := []string{"GIT_TERMINAL_PROMPT=0"}
 	if !token.Valid() {
-		return env
+		return env, nil
 	}
-	index := configIndex(getenv)
+	index, err := configIndex(getenv)
+	if err != nil {
+		return nil, err
+	}
 	key := strconv.Itoa(index)
 	return append(env,
 		configCount+"="+strconv.Itoa(index+1),
 		"GIT_CONFIG_KEY_"+key+"=http.https://"+host.String()+"/.extraheader",
 		"GIT_CONFIG_VALUE_"+key+"=Authorization: Basic "+basicAuth(token.Secret()),
-	)
+	), nil
 }
 
-func configIndex(getenv func(string) string) int {
-	count, err := strconv.Atoi(getenv(configCount))
-	if err != nil || count < 0 {
-		return 0
+func configIndex(getenv func(string) string) (int, error) {
+	raw := getenv(configCount)
+	if raw == "" {
+		return 0, nil
 	}
-	return count
+	count, err := strconv.Atoi(raw)
+	if err != nil || count < 0 || count > maxConfigs {
+		return 0, errConfigCount
+	}
+	return count, nil
 }
 
 func basicAuth(secret string) string {

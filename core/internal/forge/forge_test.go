@@ -332,7 +332,7 @@ func TestCloneForgeCredentialFailureStopsBeforeGit(t *testing.T) {
 	}
 }
 
-func TestCloneOwnerNameUsesGlabWithoutGitHubToken(t *testing.T) {
+func TestCloneOwnerNameIsAnonymousGitEvenWithGlabInstalled(t *testing.T) {
 	runner := &fakeRunner{gitHub: true}
 	client := newClient(fakeCreds{err: contracts.ErrForgeNotConnected}, nil, runner)
 	workspace := t.TempDir()
@@ -341,13 +341,14 @@ func TestCloneOwnerNameUsesGlabWithoutGitHubToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	call := runner.calls[0]
-	if call.name != "glab" || !slices.Equal(call.args, []string{"repo", "clone", "--", "owner/repo", dir}) {
-		t.Fatalf("command = %s %v", call.name, call.args)
-	}
 	if len(runner.calls) != 1 {
-		t.Fatalf("calls = %d, want only glab", len(runner.calls))
+		t.Fatalf("calls = %d, want one git clone", len(runner.calls))
 	}
+	call := runner.calls[0]
+	if call.name != "git" || !slices.Equal(call.args, []string{"clone", "--", "https://github.com/owner/repo.git", dir}) {
+		t.Fatalf("command = %s %v, want git clone of github.com", call.name, call.args)
+	}
+	assertAnonymous(t, call.env)
 }
 
 func TestCloneOwnerNameWithTokenDoesNotUseGlab(t *testing.T) {
@@ -454,33 +455,89 @@ func TestCloneKeepsTheUsersGitConfigEntries(t *testing.T) {
 	}
 }
 
+func envWithCount(count string) func(string) string {
+	return func(key string) string {
+		if key == configCount {
+			return count
+		}
+		return ""
+	}
+}
+
 func TestGitEnvironmentIndexesFromTheExistingCount(t *testing.T) {
 	cases := map[string]struct {
 		count string
 		index string
 		next  string
 	}{
-		"unset":     {count: "", index: "0", next: "1"},
-		"two":       {count: "2", index: "2", next: "3"},
-		"malformed": {count: "many", index: "0", next: "1"},
-		"negative":  {count: "-1", index: "0", next: "1"},
+		"unset":         {count: "", index: "0", next: "1"},
+		"two":           {count: "2", index: "2", next: "3"},
+		"largest bound": {count: "1000", index: "1000", next: "1001"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			getenv := func(key string) string {
-				if key == configCount {
-					return tc.count
-				}
-				return ""
+			env, err := gitEnvironment(envWithCount(tc.count), mustHost(t), mustToken(t))
+			if err != nil {
+				t.Fatal(err)
 			}
-			env := gitEnvironment(getenv, mustHost(t), contracts.ForgeToken{})
-			if len(env) != 1 {
-				t.Fatalf("invalid token must add no config, env = %v", env)
-			}
-			env = gitEnvironment(getenv, mustHost(t), mustToken(t))
 			wantCount := "GIT_CONFIG_COUNT=" + tc.next
 			if !slices.Contains(env, wantCount) || !slices.Contains(env, "GIT_CONFIG_KEY_"+tc.index+"=http.https://github.com/.extraheader") {
 				t.Fatalf("env = %v, want %s and index %s", env, wantCount, tc.index)
+			}
+		})
+	}
+}
+
+func TestGitEnvironmentRefusesAUnusableCountOnlyWithAToken(t *testing.T) {
+	for _, count := range []string{"many", "-1", "1001", "9223372036854775807", "9223372036854775808"} {
+		t.Run(count, func(t *testing.T) {
+			env, err := gitEnvironment(envWithCount(count), mustHost(t), contracts.ForgeToken{})
+			if err != nil || len(env) != 1 {
+				t.Fatalf("anonymous env = %v, %v; the count must not be read", env, err)
+			}
+			if _, err := gitEnvironment(envWithCount(count), mustHost(t), mustToken(t)); !errors.Is(err, errConfigCount) {
+				t.Fatalf("err = %v, want errConfigCount", err)
+			}
+		})
+	}
+}
+
+func TestCloneRefusesAnUnusableCountBeforeGit(t *testing.T) {
+	t.Setenv(configCount, "9223372036854775807")
+	runner := &fakeRunner{}
+	client := newClient(fakeCreds{secret: testToken}, nil, runner)
+
+	if _, err := client.Clone(context.Background(), "owner/repo", t.TempDir()); !errors.Is(err, errConfigCount) {
+		t.Fatalf("err = %v, want errConfigCount", err)
+	}
+	if len(runner.calls) != 0 {
+		t.Fatal("git ran with an unusable GIT_CONFIG_COUNT")
+	}
+}
+
+func TestCloneErrorNeverCarriesUserinfoFromAnInvalidSpec(t *testing.T) {
+	const secret = "SUPERSECRET"
+	cases := []string{
+		"https://x-access-token:" + secret + "@github.com/owner/repo.git/..",
+		"https://x-access-token:" + secret + "@github.com/owner/repo?token=" + secret,
+		"ssh://x-access-token:" + secret + "@github.com/owner/repo\n",
+		"https://x-access-token:" + secret + "@gith\nub.com/owner/repo",
+		"x-access-token:" + secret + "@github.com/owner/repo",
+	}
+	for _, spec := range cases {
+		t.Run(spec, func(t *testing.T) {
+			runner := &fakeRunner{}
+			client := newClient(fakeCreds{secret: testToken}, nil, runner)
+
+			_, err := client.Clone(context.Background(), spec, t.TempDir())
+			if !errors.Is(err, ErrRepoSpec) {
+				t.Fatalf("err = %v, want ErrRepoSpec", err)
+			}
+			if strings.Contains(err.Error(), secret) {
+				t.Fatalf("error leaks the userinfo: %v", err)
+			}
+			if len(runner.calls) != 0 {
+				t.Fatal("git ran for an invalid spec")
 			}
 		})
 	}

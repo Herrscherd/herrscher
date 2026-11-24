@@ -257,7 +257,7 @@ type cloneTarget struct {
 	githubHTTPS bool
 }
 
-var intranetHostRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]*(:[0-9]+)?$`)
+var intranetHostRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]*(:\d+)?$`)
 
 func parseCloneTarget(spec string) (cloneTarget, error) {
 	if specRe.MatchString(spec) {

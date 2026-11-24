@@ -404,11 +404,11 @@ func (failingForge) Repositories(context.Context, contracts.PageRequest) (contra
 	return contracts.Page[contracts.ForgeRepo]{}, errors.New("forge unreachable")
 }
 
-func githubPlugin(forge contracts.Forge) contracts.Plugin {
+func githubPlugin(fake contracts.Forge) contracts.Plugin {
 	return contracts.Plugin{
 		Manifest: contracts.Manifest{Kind: forgeport.KindGitHub, Category: contracts.CategoryForge},
 		Forge: func(context.Context, contracts.PluginConfig, contracts.ForgeHost, contracts.ForgeCredentials) (contracts.Forge, error) {
-			return forge, nil
+			return fake, nil
 		},
 	}
 }

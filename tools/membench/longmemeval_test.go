@@ -16,7 +16,7 @@ func lmeFixture(count int) string {
 
 func sampledIDs(t *testing.T, fixture string, samples int, seed uint64) []string {
 	t.Helper()
-	items, _, err := sampleItems(strings.NewReader(fixture), samples, seed, 6)
+	items, _, _, err := sampleItems(strings.NewReader(fixture), samples, seed, 6)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,5 +66,18 @@ func TestItemTaskAsksTheQuestionAfterItsEvidence(t *testing.T) {
 	}
 	if built.ask.prompt != "Where now?" || len(built.want) != 1 || built.want[0] != "Lisbon" {
 		t.Errorf("ask %+v, want %q", built.ask, "Where now?")
+	}
+}
+
+func TestSampleCountsItemsTooLongForAnArgument(t *testing.T) {
+	long := strings.Repeat("y", maxPromptBytes)
+	fixture := fmt.Sprintf(`[{"question_id":"keep","question_type":"multi-session","question":"q","answer":"a","haystack_session_ids":["s1"],"haystack_sessions":[[{"role":"user","content":"x"}]],"answer_session_ids":["s1"]},`+
+		`{"question_id":"too-long","question_type":"multi-session","question":"q","answer":"a","haystack_session_ids":["s1"],"haystack_sessions":[[{"role":"user","content":"%s"}]],"answer_session_ids":["s1"]}]`, long)
+	items, _, skipped, err := sampleItems(strings.NewReader(fixture), 10, 1, 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if skipped != 1 || len(items) != 1 || items[0].QuestionID != "keep" {
+		t.Errorf("items %d, skipped %d; want the eligible item kept and one skipped", len(items), skipped)
 	}
 }

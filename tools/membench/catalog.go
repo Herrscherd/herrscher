@@ -44,10 +44,10 @@ func (c catalogue) text(lang i18n.Language, key msgKey, args params) (string, er
 	if c.err != nil {
 		return "", c.err
 	}
-	fields, known := declaredMessages()[key]
-	if !known {
+	if !c.cat.Has(string(key)) {
 		return "", fmt.Errorf("%q: %w", key, errUndeclaredKey)
 	}
+	fields := paramsOf(key)
 	if !namesExactly(fields, args) {
 		return "", fmt.Errorf("%q takes %v, given %v: %w", key, fields, slices.Sorted(maps.Keys(args)), errParamsMismatch)
 	}

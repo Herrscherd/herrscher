@@ -13,32 +13,36 @@ import (
 )
 
 const (
-	defaultModel    = "claude-haiku-5-5"
-	defaultBinary   = "herrscher"
-	defaultSamples  = 10
-	defaultMaxTurns = 6
-	defaultSeed     = 1
-	minMaxTurns     = 3
-	float64Bits     = 64
-	formatMarkdown  = "md"
-	formatJSON      = "json"
-	settingsAll     = "all"
+	defaultModel         = "claude-haiku-5-5"
+	defaultBinary        = "herrscher"
+	defaultSamples       = 10
+	defaultMaxTurns      = 6
+	defaultSeed          = 1
+	defaultReserveTokens = 200000
+	defaultReserveUSD    = 0.5
+	minMaxTurns          = 3
+	float64Bits          = 64
+	formatMarkdown       = "md"
+	formatJSON           = "json"
+	settingsAll          = "all"
 )
 
 const (
-	nameHerrscher    = "herrscher"
-	nameModel        = "model"
-	nameBudgetTokens = "budget-tokens"
-	nameBudgetUSD    = "budget-usd"
-	nameCredentials  = "credentials"
-	nameKeyEnv       = "api-key-env"
-	nameDataset      = "dataset"
-	nameSamples      = "samples"
-	nameSeed         = "seed"
-	nameSettings     = "settings"
-	nameMaxTurns     = "max-turns"
-	nameFormat       = "format"
-	nameLang         = "lang"
+	nameHerrscher     = "herrscher"
+	nameModel         = "model"
+	nameBudgetTokens  = "budget-tokens"
+	nameBudgetUSD     = "budget-usd"
+	nameReserveTokens = "reserve-tokens"
+	nameReserveUSD    = "reserve-usd"
+	nameCredentials   = "credentials"
+	nameKeyEnv        = "api-key-env"
+	nameDataset       = "dataset"
+	nameSamples       = "samples"
+	nameSeed          = "seed"
+	nameSettings      = "settings"
+	nameMaxTurns      = "max-turns"
+	nameFormat        = "format"
+	nameLang          = "lang"
 )
 
 var errUsageRequested = errors.New("membench: usage requested")
@@ -56,6 +60,7 @@ type config struct {
 	binary      string
 	model       string
 	budget      budget
+	reserve     spend
 	credentials string
 	apiKey      string
 	dataset     string
@@ -78,6 +83,8 @@ func flagCatalogue() []flagSpec {
 		{nameModel, msgFlagModel},
 		{nameBudgetTokens, msgFlagBudgetLimit},
 		{nameBudgetUSD, msgFlagBudgetUSD},
+		{nameReserveTokens, msgFlagReserveLimit},
+		{nameReserveUSD, msgFlagReserveUSD},
 		{nameCredentials, msgFlagAuthFile},
 		{nameKeyEnv, msgFlagKeyEnv},
 		{nameDataset, msgFlagDataset},
@@ -111,6 +118,8 @@ type rawFlags struct {
 	binary, model, credentials, apiKeyEnv, dataset, settings, format, lang string
 	budgetTokens                                                           int64
 	budgetUSD                                                              float64
+	reserveTokens                                                          int64
+	reserveUSD                                                             float64
 	samples, maxTurns                                                      int
 	seed                                                                   uint64
 }
@@ -120,6 +129,8 @@ func (r *rawFlags) bind(flags *flag.FlagSet) {
 	flags.StringVar(&r.model, nameModel, defaultModel, "")
 	flags.Int64Var(&r.budgetTokens, nameBudgetTokens, 0, "")
 	flags.Float64Var(&r.budgetUSD, nameBudgetUSD, 0, "")
+	flags.Int64Var(&r.reserveTokens, nameReserveTokens, defaultReserveTokens, "")
+	flags.Float64Var(&r.reserveUSD, nameReserveUSD, defaultReserveUSD, "")
 	flags.StringVar(&r.credentials, nameCredentials, "", "")
 	flags.StringVar(&r.apiKeyEnv, nameKeyEnv, "", "")
 	flags.StringVar(&r.dataset, nameDataset, "", "")
@@ -143,6 +154,7 @@ func (r *rawFlags) resolve(defaultLang i18n.Language, getenv func(string) string
 	cfg := config{
 		model:       r.model,
 		budget:      budget{tokens: r.budgetTokens, usd: r.budgetUSD},
+		reserve:     spend{tokens: r.reserveTokens, usd: r.reserveUSD},
 		credentials: r.credentials,
 		dataset:     r.dataset,
 		samples:     r.samples,
@@ -187,6 +199,9 @@ func (r *rawFlags) validate(cfg *config) error {
 	if cfg.budget.tokens == 0 && cfg.budget.usd == 0 {
 		return messageError{key: msgErrBudgetMissing}
 	}
+	if err := cfg.validateReserve(); err != nil {
+		return err
+	}
 	if cfg.maxTurns < minMaxTurns {
 		return flagError(nameMaxTurns, strconv.Itoa(cfg.maxTurns))
 	}
@@ -206,6 +221,26 @@ func (r *rawFlags) validate(cfg *config) error {
 		return err
 	}
 	cfg.settings = settings
+	return nil
+}
+
+func (c *config) validateReserve() error {
+	if c.budget.tokens > 0 {
+		if c.reserve.tokens <= 0 {
+			return flagError(nameReserveTokens, strconv.FormatInt(c.reserve.tokens, 10))
+		}
+		if c.reserve.tokens > c.budget.tokens {
+			return messageError{key: msgErrReserveCeiling, params: params{paramReserve: strconv.FormatInt(c.reserve.tokens, 10), paramLimit: strconv.FormatInt(c.budget.tokens, 10)}}
+		}
+	}
+	if c.budget.usd > 0 {
+		if c.reserve.usd <= 0 {
+			return flagError(nameReserveUSD, strconv.FormatFloat(c.reserve.usd, 'f', -1, float64Bits))
+		}
+		if c.reserve.usd > c.budget.usd {
+			return messageError{key: msgErrReserveCeiling, params: params{paramReserve: strconv.FormatFloat(c.reserve.usd, 'f', -1, float64Bits), paramLimit: strconv.FormatFloat(c.budget.usd, 'f', -1, float64Bits)}}
+		}
+	}
 	return nil
 }
 

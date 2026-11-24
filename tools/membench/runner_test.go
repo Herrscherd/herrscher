@@ -1,8 +1,16 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/Herrscherd/herrscher/core/usage"
 )
 
 func TestRedactHidesTheKeyWhereItAppears(t *testing.T) {
@@ -32,5 +40,42 @@ func TestPlanArmsPairsEachSettingOffThenOn(t *testing.T) {
 	plan := planArms(pairTasks()[:1], []setting{{name: "report", env: "MEMORY_REPORT_ENABLED"}})
 	if len(plan) != armsPerSetting || plan[0].enabled || !plan[1].enabled {
 		t.Errorf("plan %+v, want one off arm then one on arm", plan)
+	}
+}
+
+func TestFailedCallIsChargedFromTheLedger(t *testing.T) {
+	binary := filepath.Join(t.TempDir(), "herrscher")
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\nexit 1\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	box, err := newSandbox(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger := usage.Ledger{Dir: filepath.Join(box.state, usageSubdir), Now: time.Now}
+	if err = ledger.Append([]usage.Record{{Time: time.Now(), In: 100, Out: 20, Cost: 0.01}}); err != nil {
+		t.Fatal(err)
+	}
+	bench := &runner{binary: binary, meter: &meter{}}
+	planned := arm{current: pairTasks()[0], option: setting{name: "report", env: "MEMORY_REPORT_ENABLED"}, enabled: true}
+	if _, err = bench.play(context.Background(), box, planned); err == nil {
+		t.Fatal("a failing binary returned no error")
+	}
+	if bench.meter.spent.tokens != 120 {
+		t.Errorf("spent %d tokens, want the 120 the ledger recorded for the failed call", bench.meter.spent.tokens)
+	}
+}
+
+func TestOversizedPromptIsRefusedBeforeTheBinaryRuns(t *testing.T) {
+	bench := &runner{binary: filepath.Join(t.TempDir(), "missing"), meter: &meter{}}
+	box, err := newSandbox(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := step{agent: agentAlpha, prompt: strings.Repeat("x", maxPromptBytes+1)}
+	_, _, err = bench.call(context.Background(), box, task{id: "long"}, request, nil)
+	known, ok := errors.AsType[messageError](err)
+	if !ok || known.key != msgErrPromptLong {
+		t.Errorf("error %v, want the prompt-too-long message", err)
 	}
 }

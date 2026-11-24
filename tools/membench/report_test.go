@@ -32,10 +32,10 @@ func TestSummarizeDerivesOnOffDeltas(t *testing.T) {
 		t.Fatalf("status %q, not run %d, rows %d; want complete, 0, 1", rep.Status, rep.NotRun, len(rep.Rows))
 	}
 	r := rep.Rows[0]
-	if r.DeltaSuccess != 0.5 {
+	if r.DeltaSuccess == nil || *r.DeltaSuccess != 0.5 {
 		t.Errorf("delta success %v, want 0.5 (off 1 of 2, on 2 of 2)", r.DeltaSuccess)
 	}
-	if r.MemoryTokensPerTurn != 40 {
+	if r.MemoryTokensPerTurn == nil || *r.MemoryTokensPerTurn != 40 {
 		t.Errorf("memory tokens per turn %v, want 40 (on 130, off 90)", r.MemoryTokensPerTurn)
 	}
 	if r.DeltaTokensPerSuccess == nil || *r.DeltaTokensPerSuccess != -100 {
@@ -52,8 +52,11 @@ func TestSummarizeCountsArmsNotRunAfterAStop(t *testing.T) {
 }
 
 func TestWriteReportJSONCarriesTheDeltas(t *testing.T) {
-	ex := execution{outcomes: []outcome{{section: msgSectionPairs, group: msgVariantSameAgent, setting: "report", on: true, success: true, turns: 1, tokens: 50, input: 40}}}
-	rep := summarize(config{budget: budget{tokens: 100}}, ex, spend{tokens: 50}, 1)
+	ex := execution{outcomes: []outcome{
+		{section: msgSectionPairs, group: msgVariantSameAgent, setting: "report", success: false, turns: 1, tokens: 50, input: 40},
+		{section: msgSectionPairs, group: msgVariantSameAgent, setting: "report", on: true, success: true, turns: 1, tokens: 50, input: 40},
+	}}
+	rep := summarize(config{budget: budget{tokens: 100}}, ex, spend{tokens: 100}, 2)
 	var out bytes.Buffer
 	if err := writeReport(&out, rep, config{format: formatJSON}, loadCatalogue()); err != nil {
 		t.Fatal(err)
@@ -61,7 +64,7 @@ func TestWriteReportJSONCarriesTheDeltas(t *testing.T) {
 	var decoded struct {
 		Status string `json:"status"`
 		Rows   []struct {
-			DeltaSuccess float64 `json:"deltaSuccess"`
+			DeltaSuccess *float64 `json:"deltaSuccess"`
 			On           struct {
 				Successes int `json:"successes"`
 			} `json:"on"`
@@ -70,7 +73,7 @@ func TestWriteReportJSONCarriesTheDeltas(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if decoded.Status != statusComplete || len(decoded.Rows) != 1 || decoded.Rows[0].On.Successes != 1 || decoded.Rows[0].DeltaSuccess != 1 {
+	if decoded.Status != statusComplete || len(decoded.Rows) != 1 || decoded.Rows[0].On.Successes != 1 || decoded.Rows[0].DeltaSuccess == nil || *decoded.Rows[0].DeltaSuccess != 1 {
 		t.Errorf("decoded %+v; want complete, one row, one on success, delta 1", decoded)
 	}
 }
@@ -116,5 +119,40 @@ func TestMarkdownHidesFalseRecallForLongMemEval(t *testing.T) {
 	}
 	if len(separators) != 2 || separators[0] != 9 || separators[1] != 8 {
 		t.Errorf("table column counts %v, want the pair table with 9 and the LongMemEval table with 8", separators)
+	}
+}
+
+func TestJSONLeavesLongMemEvalFalseRecallAbsentAndUnpairedDeltasNil(t *testing.T) {
+	ex := execution{outcomes: []outcome{
+		{section: msgSectionLongMemEval, group: msgCapExtraction, setting: "report", on: true, success: true, turns: 1, tokens: 50, input: 40},
+		{section: msgSectionPairs, group: msgVariantSameAgent, setting: "report", on: true, success: true, turns: 1, tokens: 50, input: 40},
+	}}
+	rep := summarize(config{budget: budget{tokens: 100}}, ex, spend{tokens: 100}, 2)
+	var out bytes.Buffer
+	if err := writeReport(&out, rep, config{format: formatJSON}, loadCatalogue()); err != nil {
+		t.Fatal(err)
+	}
+	var decoded struct {
+		Rows []struct {
+			Section string `json:"section"`
+			Off     struct {
+				FalseRecalls *int `json:"falseRecalls"`
+			} `json:"off"`
+			DeltaSuccess *float64 `json:"deltaSuccess"`
+		} `json:"rows"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.Rows) != 2 {
+		t.Fatalf("rows %d, want 2", len(decoded.Rows))
+	}
+	for _, row := range decoded.Rows {
+		if row.DeltaSuccess != nil {
+			t.Errorf("row %s with no off arm has delta success %v, want null", row.Section, *row.DeltaSuccess)
+		}
+		if row.Section == string(msgSectionLongMemEval) && row.Off.FalseRecalls != nil {
+			t.Errorf("LongMemEval row publishes false recalls %d, want null", *row.Off.FalseRecalls)
+		}
 	}
 }

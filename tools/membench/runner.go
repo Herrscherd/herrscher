@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -14,6 +15,7 @@ const (
 	callTimeout      = 5 * time.Minute
 	anthropicEnvName = "ANTHROPIC_API_KEY"
 	redactedSecret   = "[redacted]"
+	maxPromptBytes   = 128<<10 - 1
 )
 
 var (
@@ -125,6 +127,7 @@ func (r *runner) play(ctx context.Context, box sandbox, planned arm) (outcome, e
 		}
 		text, cumulative, err := r.call(ctx, box, planned.current, request, assignments)
 		if err != nil {
+			r.settle(&total, cumulative)
 			return outcome{}, err
 		}
 		delta := cumulative.minus(total)
@@ -134,8 +137,7 @@ func (r *runner) play(ctx context.Context, box sandbox, planned arm) (outcome, e
 		if r.meter.limit.usd > 0 && delta.usd <= 0 {
 			return outcome{}, messageError{key: msgErrNoCost, params: params{paramRun: planned.current.id}}
 		}
-		r.meter.charge(delta.spend())
-		total = cumulative
+		r.settle(&total, cumulative)
 		answer = text
 	}
 	success, falseRecall := score(planned.current, answer)
@@ -153,6 +155,15 @@ func (r *runner) play(ctx context.Context, box sandbox, planned arm) (outcome, e
 	}, nil
 }
 
+func (r *runner) settle(total *tally, cumulative tally) {
+	delta := cumulative.minus(*total)
+	if delta.turns <= 0 {
+		return
+	}
+	r.meter.charge(delta.spend())
+	*total = cumulative
+}
+
 func (r *runner) assignments(option setting, enabled bool) []string {
 	list := []string{option.assignment(enabled)}
 	if r.apiKey != "" {
@@ -162,13 +173,16 @@ func (r *runner) assignments(option setting, enabled bool) []string {
 }
 
 func (r *runner) call(ctx context.Context, box sandbox, current task, request step, assignments []string) (string, tally, error) {
-	text, err := r.invoke(ctx, box, request, assignments)
-	if err != nil {
-		return "", tally{}, runFailure(current.id, err)
+	if len(request.prompt) > maxPromptBytes {
+		return "", tally{}, messageError{key: msgErrPromptLong, params: params{paramRun: current.id, paramLimit: strconv.Itoa(maxPromptBytes)}}
 	}
-	cumulative, err := readTally(box.state)
-	if err != nil {
-		return "", tally{}, runFailure(current.id, err)
+	text, invokeErr := r.invoke(ctx, box, request, assignments)
+	cumulative, readErr := readTally(box.state)
+	if readErr != nil {
+		return "", tally{}, runFailure(current.id, errors.Join(invokeErr, readErr))
+	}
+	if invokeErr != nil {
+		return "", cumulative, runFailure(current.id, invokeErr)
 	}
 	return text, cumulative, nil
 }

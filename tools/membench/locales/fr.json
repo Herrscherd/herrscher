@@ -130,6 +130,21 @@
     "other": "plafond en dollars, respecté quand le backend rapporte un coût"
   },
   {
+    "id": "membench.flag.reserve_limit",
+    "description": "Message of the memory bench: reserve_limit",
+    "other": "réserve de jetons par appel, retenue avant chaque appel ; le banc ne lance jamais un appel que la réserve ferait dépasser le plafond ; 200000 par défaut"
+  },
+  {
+    "id": "membench.flag.reserve_usd",
+    "description": "Message of the memory bench: reserve_usd",
+    "other": "réserve en dollars par appel, retenue avant chaque appel selon la même règle que la réserve de jetons ; 0,5 par défaut"
+  },
+  {
+    "id": "membench.error.reserve_ceiling",
+    "description": "Message of the memory bench: reserve_ceiling",
+    "other": "la réserve par appel {{.Reserve}} dépasse le plafond {{.Limit}} : baisse la réserve ou relève le plafond"
+  },
+  {
     "id": "membench.flag.credentials",
     "description": "Message of the memory bench: flag.credentials",
     "other": "fichier d'identifiants Claude copié dans la configuration isolée de chaque exécution, pour un vrai backend"
@@ -253,5 +268,15 @@
     "id": "membench.error.no_cost",
     "description": "Message of the memory bench: error.no_cost",
     "other": "la passe {{.Run}} n'a enregistré aucun coût, et un plafond en dollars en exige un : le banc s'arrête"
+  },
+  {
+    "id": "membench.error.prompt_long",
+    "description": "Message of the memory bench: error.prompt_long",
+    "other": "la passe {{.Run}} enverrait un prompt de plus de {{.Limit}} octets, la taille maximale d'un argument : le banc refuse cet élément et s'arrête"
+  },
+  {
+    "id": "membench.skipped_long",
+    "description": "Message of the memory bench: skipped_long",
+    "other": "{{.Count}} éléments LongMemEval ont été écartés car leur prompt dépasse la taille maximale d'un argument"
   }
 ]

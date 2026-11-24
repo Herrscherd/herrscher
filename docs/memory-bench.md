@@ -28,8 +28,10 @@ heavy tool at a time.
 | `-model` | `claude-haiku-5-5` | The model the runs use, passed as `HERRSCHER_DEFAULT_MODEL`. |
 | `-budget-tokens` | none | Ceiling in tokens (input, output and cache tokens of the ledger). |
 | `-budget-usd` | none | Ceiling in US dollars, from the cost the ledger records. |
+| `-reserve-tokens` | `200000` | Tokens reserved before each call, and the floor of every projection. Must be positive and not above `-budget-tokens`. |
+| `-reserve-usd` | `0.5` | Dollars reserved before each call, and the floor of every projection. Must be positive and not above `-budget-usd`. |
 | `-credentials` | none | A credentials file copied into each run's config directory, mode 0600. |
-| `-api-key-env` | none | Name of an environment variable holding an API key passed to each run. Unset by default, so a run uses only `-credentials`. The key is redacted from error messages. |
+| `-api-key-env` | none | Name of an environment variable holding an API key passed to each run. Unset by default, so a run uses only `-credentials`. The key is never put on the command line and is redacted from a failed run's stderr. |
 | `-dataset` | none | A LongMemEval JSON file. Without it only the pair suite runs. |
 | `-samples` | `10` | How many dataset items to sample. |
 | `-seed` | `1` | Seed of the sampling, so the same seed samples the same items. |
@@ -95,16 +97,20 @@ reply. It is a proxy for the official judge, not a replacement for it.
 ## Budget semantics
 
 Spend is read from the usage ledger of each run's state directory after every
-call. Before each call the bench projects the spend with two of the widest calls
-seen so far: if spent plus twice the widest call reaches the ceiling, it does
-not start the call. When it stops, it discards the arm that was running, marks
-the run partial, and counts the arms it did not run in the report.
+call. Before each call the bench projects the cost of the next call as the
+larger of the operator reserve and the widest call seen so far. It does not
+start the call when spent plus that projection reaches the ceiling. When it
+stops, it discards the arm that was running, marks the run partial, and counts
+the arms it did not run in the report.
 
-Two limits follow from this. The first call of the budget is not reserved: no
-call has been measured yet, so the bench starts it whatever the ceiling, and it
-can overshoot by that one call. A later call wider than the reserve can also
-carry the spend past the ceiling, because the reserve is an estimate from the
-calls already made, not a guarantee.
+The reserve is set with `-reserve-tokens` (default 200000) and `-reserve-usd`
+(default 0.5). It is charged before the first call and stays as a floor for
+every later one, so the first call is reserved too. A reserve above the ceiling
+is refused at startup, since no call could then start.
+
+The guarantee is that the ceiling is exceeded only when a single call costs more
+than the reserve. The reserve is an operator estimate of what one call can cost,
+so a call wider than it can carry the spend past the ceiling by the excess.
 
 ## Isolation
 
@@ -115,9 +121,11 @@ from nothing: only `PATH` is inherited, the state, home and config variables
 point into the arm's directory, and `HERRSCHER_INSTANCE_ID` is unique to the
 arm.
 
-`ANTHROPIC_API_KEY` is never read from the caller's environment. A run uses the
-credentials given with `-credentials`, and the key named by `-api-key-env` only
-when that flag is set.
+`ANTHROPIC_API_KEY` is never read from the caller's environment by default. A run
+uses the credentials given with `-credentials`. The key is passed to each run
+only when `-api-key-env` names the variable that holds it. It travels in the
+run's environment, never on the command line, and the bench redacts it from the
+stderr of a failed run before that stderr goes into the error.
 
 ## Tests
 
@@ -143,8 +151,8 @@ the real `herrscher` and the fake `claude` of `e2e/vendortest`, then:
 The budget, isolation and scoring rules were checked by breaking them on
 purpose. Each break was caught by a named test: the sandbox dropping the
 setting assignments fails `TestMemorySettingReachesTheRealBinary`, a reserve
-that ignores the widest call fails `TestMayStartKeepsTheWidestCallInReserve`,
-and a scorer matching substrings fails `TestScoreMatchesWholeWordsOnly`.
+that ignores the reserve fails `TestMayStartKeepsTheReserveInFront`, and a
+scorer matching substrings fails `TestScoreMatchesWholeWordsOnly`.
 
 ## Lint exclusions
 
@@ -171,4 +179,5 @@ gives, which is the reason for that rule.
 - Sample sizes are small, so one run difference can move a rate by a lot. The
   report gives counts beside the rates for that reason. It has no confidence
   intervals.
-- The first call can overshoot the ceiling by one call, as described above.
+- The ceiling can be exceeded by the part of a single call that is wider than
+  the reserve, as described above.

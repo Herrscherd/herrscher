@@ -42,13 +42,13 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) ex
 	if err != nil {
 		return fail(stderr, msgs, lang, err, exitUsage)
 	}
-	tasks, err := loadTasks(cfg)
+	tasks, skipped, err := loadTasks(cfg)
 	if err != nil {
 		return fail(stderr, msgs, cfg.lang, err, exitFailed)
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	rep, runErr := execute(ctx, cfg, tasks, msgs)
+	rep, runErr := execute(ctx, cfg, tasks, skipped, msgs)
 	if writeErr := writeReport(stdout, rep, cfg, msgs); writeErr != nil {
 		return fail(stderr, msgs, cfg.lang, writeErr, exitFailed)
 	}
@@ -69,24 +69,24 @@ func defaultLanguage(getenv func(string) string) i18n.Language {
 	return lang
 }
 
-func loadTasks(cfg config) ([]task, error) {
+func loadTasks(cfg config) ([]task, int, error) {
 	tasks := pairTasks()
 	if cfg.dataset == "" || cfg.samples == 0 {
-		return tasks, nil
+		return tasks, 0, nil
 	}
-	sampled, err := loadLongMemEval(cfg.dataset, cfg.samples, cfg.seed, cfg.maxTurns)
+	sampled, skipped, err := loadLongMemEval(cfg.dataset, cfg.samples, cfg.seed, cfg.maxTurns)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return append(tasks, sampled...), nil
+	return append(tasks, sampled...), skipped, nil
 }
 
-func execute(ctx context.Context, cfg config, tasks []task, msgs catalogue) (report, error) {
+func execute(ctx context.Context, cfg config, tasks []task, skipped int, msgs catalogue) (report, error) {
 	parent, err := benchParent()
 	if err != nil {
 		return report{}, err
 	}
-	rep, runErr := measure(ctx, cfg, tasks, parent)
+	rep, runErr := measure(ctx, cfg, tasks, skipped, parent)
 	cleanupErr := os.RemoveAll(parent)
 	if runErr != nil {
 		rep.Status = statusFailed
@@ -105,15 +105,21 @@ func benchParent() (string, error) {
 	if err = os.MkdirAll(benchRoot, dirMode); err != nil {
 		return "", fmt.Errorf("membench cache: %w", err)
 	}
+	if sweepErr := sweepOrphans(benchRoot); sweepErr != nil {
+		return "", sweepErr
+	}
 	parent, err := os.MkdirTemp(benchRoot, "run-")
 	if err != nil {
 		return "", fmt.Errorf("membench cache: %w", err)
 	}
+	if err = writeOwner(parent); err != nil {
+		return "", errors.Join(err, os.RemoveAll(parent))
+	}
 	return parent, nil
 }
 
-func measure(ctx context.Context, cfg config, tasks []task, parent string) (report, error) {
-	ceiling := &meter{limit: cfg.budget}
+func measure(ctx context.Context, cfg config, tasks []task, skipped int, parent string) (report, error) {
+	ceiling := &meter{limit: cfg.budget, reserve: cfg.reserve}
 	bench := runner{
 		binary:      cfg.binary,
 		model:       cfg.model,
@@ -124,7 +130,9 @@ func measure(ctx context.Context, cfg config, tasks []task, parent string) (repo
 	}
 	executed, err := bench.runAll(ctx, tasks, cfg.settings)
 	planned := len(tasks) * len(cfg.settings) * armsPerSetting
-	return summarize(cfg, executed, ceiling.spent, planned), err
+	rep := summarize(cfg, executed, ceiling.spent, planned)
+	rep.SkippedLong = skipped
+	return rep, err
 }
 
 func fail(stderr io.Writer, msgs catalogue, lang i18n.Language, err error, code exitCode) exitCode {

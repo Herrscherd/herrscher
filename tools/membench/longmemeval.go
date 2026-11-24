@@ -41,67 +41,83 @@ type sampled struct {
 	item lmeItem
 }
 
-func loadLongMemEval(path string, samples int, seed uint64, maxTurns int) ([]task, error) {
+func loadLongMemEval(path string, samples int, seed uint64, maxTurns int) ([]task, int, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, datasetRead(path, err)
+		return nil, 0, datasetRead(path, err)
 	}
 	limited := &io.LimitedReader{R: file, N: maxDatasetBytes + 1}
-	items, eligible, readErr := sampleItems(limited, samples, seed, maxTurns)
+	items, eligible, skipped, readErr := sampleItems(limited, samples, seed, maxTurns)
 	closeErr := file.Close()
 	if limited.N <= 0 {
-		return nil, datasetLarge(strconv.Itoa(maxDatasetBytes) + " bytes")
+		return nil, 0, datasetLarge(strconv.Itoa(maxDatasetBytes) + " bytes")
 	}
 	if readErr != nil {
-		return nil, readErr
+		return nil, 0, readErr
 	}
 	if closeErr != nil {
-		return nil, datasetRead(path, closeErr)
+		return nil, 0, datasetRead(path, closeErr)
 	}
 	if eligible == 0 {
-		return nil, datasetShape("no item has evidence sessions, a known question type and an answer")
+		return nil, 0, datasetShape("no item has evidence sessions, a known question type and an answer")
 	}
 	tasks := make([]task, 0, len(items))
 	for i := range items {
 		tasks = append(tasks, itemTask(items[i]))
 	}
-	return tasks, nil
+	return tasks, skipped, nil
 }
 
-func sampleItems(source io.Reader, samples int, seed uint64, maxTurns int) ([]lmeItem, int, error) {
+func sampleItems(source io.Reader, samples int, seed uint64, maxTurns int) ([]lmeItem, int, int, error) {
 	decoder := json.NewDecoder(source)
 	if err := expectDelim(decoder, '['); err != nil {
-		return nil, 0, err
+		return nil, 0, 0, err
 	}
 	var kept []sampled
-	decoded, eligible := 0, 0
+	decoded, eligible, skipped := 0, 0, 0
 	for decoder.More() {
 		var item lmeItem
 		if err := decoder.Decode(&item); err != nil {
-			return nil, 0, datasetShape(err.Error())
+			return nil, 0, 0, datasetShape(err.Error())
 		}
 		decoded++
 		if decoded > maxDatasetItems {
-			return nil, 0, datasetLarge(strconv.Itoa(maxDatasetItems) + " items")
+			return nil, 0, 0, datasetLarge(strconv.Itoa(maxDatasetItems) + " items")
 		}
 		if !eligibleItem(item, maxTurns) {
 			continue
 		}
 		eligible++
+		if oversizedItem(item) {
+			skipped++
+			continue
+		}
 		kept = append(kept, sampled{key: sampleKey(seed, item.QuestionID), item: item})
 		if len(kept) >= 2*samples {
 			kept = lowestKeys(kept, samples)
 		}
 	}
 	if err := expectDelim(decoder, ']'); err != nil {
-		return nil, 0, err
+		return nil, 0, 0, err
 	}
 	kept = lowestKeys(kept, samples)
 	items := make([]lmeItem, 0, len(kept))
 	for i := range kept {
 		items = append(items, kept[i].item)
 	}
-	return items, eligible, nil
+	return items, eligible, skipped, nil
+}
+
+func oversizedItem(item lmeItem) bool {
+	if len(item.Question) > maxPromptBytes {
+		return true
+	}
+	for _, index := range evidenceSessions(item) {
+		if len(rememberPrefix)+len(transcript(item.Sessions[index])) > maxPromptBytes {
+			return true
+		}
+	}
+	return false
 }
 
 func sampleKey(seed uint64, itemID string) uint64 {

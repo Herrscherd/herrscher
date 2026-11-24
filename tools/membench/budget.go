@@ -19,13 +19,21 @@ func (b budget) reached(s spend) bool {
 }
 
 type meter struct {
-	limit  budget
-	spent  spend
-	widest spend
+	limit   budget
+	reserve spend
+	spent   spend
+	widest  spend
+}
+
+func (m *meter) projected() spend {
+	return spend{
+		tokens: max(m.reserve.tokens, m.widest.tokens),
+		usd:    max(m.reserve.usd, m.widest.usd),
+	}
 }
 
 func (m *meter) mayStart() bool {
-	return !m.limit.reached(m.spent.plus(m.widest).plus(m.widest))
+	return !m.limit.reached(m.spent.plus(m.projected()))
 }
 
 func (m *meter) charge(call spend) {

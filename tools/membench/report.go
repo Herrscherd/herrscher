@@ -25,10 +25,11 @@ const (
 type cell struct {
 	Runs         int   `json:"runs"`
 	Successes    int   `json:"successes"`
-	FalseRecalls int   `json:"falseRecalls"`
+	FalseRecalls *int  `json:"falseRecalls"`
 	Turns        int   `json:"turns"`
 	Tokens       int64 `json:"tokens"`
 	Input        int64 `json:"input"`
+	falseRecalls int
 }
 
 func (c *cell) add(got outcome) {
@@ -40,8 +41,17 @@ func (c *cell) add(got outcome) {
 		c.Successes++
 	}
 	if got.falseRecall {
-		c.FalseRecalls++
+		c.falseRecalls++
 	}
+}
+
+func (c *cell) publishFalseRecalls(measured bool) {
+	if !measured {
+		c.FalseRecalls = nil
+		return
+	}
+	count := c.falseRecalls
+	c.FalseRecalls = &count
 }
 
 func (c *cell) successRate() float64 {
@@ -78,16 +88,25 @@ type row struct {
 	Setting               string   `json:"setting"`
 	Off                   cell     `json:"off"`
 	On                    cell     `json:"on"`
-	DeltaSuccess          float64  `json:"deltaSuccess"`
-	DeltaTurns            float64  `json:"deltaTurns"`
+	DeltaSuccess          *float64 `json:"deltaSuccess"`
+	DeltaTurns            *float64 `json:"deltaTurns"`
 	DeltaTokensPerSuccess *float64 `json:"deltaTokensPerSuccess"`
-	MemoryTokensPerTurn   float64  `json:"memoryTokensPerTurn"`
+	MemoryTokensPerTurn   *float64 `json:"memoryTokensPerTurn"`
 }
 
 func (r *row) derive() {
-	r.DeltaSuccess = r.On.successRate() - r.Off.successRate()
-	r.DeltaTurns = r.On.averageTurns() - r.Off.averageTurns()
-	r.MemoryTokensPerTurn = r.On.inputPerTurn() - r.Off.inputPerTurn()
+	measured := r.Section != msgSectionLongMemEval
+	r.Off.publishFalseRecalls(measured)
+	r.On.publishFalseRecalls(measured)
+	if r.Off.Runs != r.On.Runs {
+		return
+	}
+	success := r.On.successRate() - r.Off.successRate()
+	turns := r.On.averageTurns() - r.Off.averageTurns()
+	memory := r.On.inputPerTurn() - r.Off.inputPerTurn()
+	r.DeltaSuccess = &success
+	r.DeltaTurns = &turns
+	r.MemoryTokensPerTurn = &memory
 	onTokens, onMeasured := r.On.tokensPerSuccess()
 	offTokens, offMeasured := r.Off.tokensPerSuccess()
 	if onMeasured && offMeasured {
@@ -105,6 +124,7 @@ type report struct {
 	SpentTokens int64   `json:"spentTokens"`
 	SpentUSD    float64 `json:"spentUsd"`
 	NotRun      int     `json:"notRun"`
+	SkippedLong int     `json:"skippedTooLong"`
 	Rows        []row   `json:"rows"`
 }
 
@@ -162,6 +182,9 @@ func renderMarkdown(out io.Writer, rep report, translator *translator) error {
 	var text strings.Builder
 	text.WriteString("# " + translator.Text(msgReportTitle, nil) + "\n\n")
 	text.WriteString(statusLine(translator, rep) + "\n")
+	if rep.SkippedLong > 0 {
+		text.WriteString(translator.Text(msgSkippedLong, params{paramCount: clitext.FormatNumber(translator.lang, float64(rep.SkippedLong), 0)}) + "\n")
+	}
 	for _, section := range []msgKey{msgSectionPairs, msgSectionLongMemEval} {
 		rows := rowsOf(rep.Rows, section)
 		if len(rows) == 0 {
@@ -227,16 +250,18 @@ func columnsOf(translator *translator, section msgKey) []column {
 		{msgColSetting, func(item row) string { return item.Setting }},
 		{msgColOff, func(item row) string { return percentCell(lang, item.Off) }},
 		{msgColOn, func(item row) string { return percentCell(lang, item.On) }},
-		{msgColDeltaSuccess, func(item row) string { return signed(lang, item.DeltaSuccess*percent, 0) + "%" }},
-		{msgColDeltaTurns, func(item row) string { return signed(lang, item.DeltaTurns, turnDecimals) }},
+		{msgColDeltaSuccess, func(item row) string { return optionalSigned(translator, item.DeltaSuccess, percent, 0, "%") }},
+		{msgColDeltaTurns, func(item row) string { return optionalSigned(translator, item.DeltaTurns, 1, turnDecimals, "") }},
 		{msgColDeltaVolume, func(item row) string { return tokensCell(translator, item.DeltaTokensPerSuccess) }},
-		{msgColMemoryVolume, func(item row) string { return signed(lang, item.MemoryTokensPerTurn, memoryDecimals) }},
+		{msgColMemoryVolume, func(item row) string {
+			return optionalSigned(translator, item.MemoryTokensPerTurn, 1, memoryDecimals, "")
+		}},
 	}
 	if section == msgSectionLongMemEval {
 		return columns
 	}
 	return append(columns, column{msgColFalseRecall, func(item row) string {
-		return fmt.Sprintf("%d / %d", item.Off.FalseRecalls, item.On.FalseRecalls)
+		return fmt.Sprintf("%d / %d", item.Off.falseRecalls, item.On.falseRecalls)
 	}})
 }
 
@@ -271,10 +296,14 @@ func percentCell(lang i18n.Language, counts cell) string {
 }
 
 func tokensCell(translator *translator, delta *float64) string {
-	if delta == nil {
+	return optionalSigned(translator, delta, 1, 0, "")
+}
+
+func optionalSigned(translator *translator, value *float64, scale float64, decimals int, suffix string) string {
+	if value == nil {
 		return translator.Text(msgNoMeasure, nil)
 	}
-	return signed(translator.lang, *delta, 0)
+	return signed(translator.lang, *value*scale, decimals) + suffix
 }
 
 func signed(lang i18n.Language, value float64, decimals int) string {

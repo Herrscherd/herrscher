@@ -25,6 +25,21 @@
     "other": "dollar ceiling, honored when the backend reports a cost"
   },
   {
+    "id": "membench.flag.reserve_limit",
+    "description": "Message of the memory bench: reserve_limit",
+    "other": "per-call token reserve, held back before each call; the bench never starts a call that the reserve would carry past the ceiling; defaults to 200000"
+  },
+  {
+    "id": "membench.flag.reserve_usd",
+    "description": "Message of the memory bench: reserve_usd",
+    "other": "per-call dollar reserve, held back before each call, the same rule as the token reserve; defaults to 0.5"
+  },
+  {
+    "id": "membench.error.reserve_ceiling",
+    "description": "Message of the memory bench: reserve_ceiling",
+    "other": "the per-call reserve {{.Reserve}} is above the ceiling {{.Limit}}: lower the reserve or raise the ceiling"
+  },
+  {
     "id": "membench.flag.credentials",
     "description": "Message of the memory bench: flag.credentials",
     "other": "Claude credentials file copied into the isolated config of each run, for a real backend"
@@ -253,5 +268,15 @@
     "id": "membench.error.no_cost",
     "description": "Message of the memory bench: error.no_cost",
     "other": "run {{.Run}} recorded no cost, and a US dollar ceiling needs one: the bench stopped"
+  },
+  {
+    "id": "membench.error.prompt_long",
+    "description": "Message of the memory bench: error.prompt_long",
+    "other": "run {{.Run}} would send a prompt above {{.Limit}} bytes, the most an argument can carry: the bench refused that item and stopped"
+  },
+  {
+    "id": "membench.skipped_long",
+    "description": "Message of the memory bench: skipped_long",
+    "other": "{{.Count}} LongMemEval items were skipped because their prompt exceeds the argument size limit"
   }
 ]

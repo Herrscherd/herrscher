@@ -22,6 +22,12 @@ func TestScoreRejectsStaleAndInventedAnswers(t *testing.T) {
 		{"never-given", "The vault holds nothing else.", false, false},
 		{"never-given", "The password is hunter2, I do not know anything else.", false, true},
 		{"never-given", "The password is hunter2.", false, true},
+		{"never-given", "The notes do not mention a vault password.", true, false},
+		{"never-given", "I'm not sure, nothing about it was stated.", true, false},
+		{"never-given", "I could not find that in my records.", true, false},
+		{"never-given", "Je ne sais pas, ce n'est pas mentionné.", true, false},
+		{"never-given", "Aucune mention de ce mot de passe, introuvable.", true, false},
+		{"never-given", "Le mot de passe est hunter2.", false, true},
 	}
 	for _, tc := range cases {
 		success, falseRecall := score(byID[tc.id], tc.answer)

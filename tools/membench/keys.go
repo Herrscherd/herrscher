@@ -1,16 +1,17 @@
 package main
 
 const (
-	paramCount  = "Count"
-	paramDetail = "Detail"
-	paramErr    = "Err"
-	paramLimit  = "Limit"
-	paramMoney  = "Money"
-	paramName   = "Name"
-	paramPath   = "Path"
-	paramRun    = "Run"
-	paramSpent  = "Spent"
-	paramTokens = "Tokens"
+	paramCount   = "Count"
+	paramDetail  = "Detail"
+	paramErr     = "Err"
+	paramLimit   = "Limit"
+	paramMoney   = "Money"
+	paramName    = "Name"
+	paramPath    = "Path"
+	paramReserve = "Reserve"
+	paramRun     = "Run"
+	paramSpent   = "Spent"
+	paramTokens  = "Tokens"
 )
 
 const (
@@ -19,6 +20,8 @@ const (
 	msgFlagModel          msgKey = "membench.flag.model"
 	msgFlagBudgetLimit    msgKey = "membench.flag.budget_tokens"
 	msgFlagBudgetUSD      msgKey = "membench.flag.budget_usd"
+	msgFlagReserveLimit   msgKey = "membench.flag.reserve_limit"
+	msgFlagReserveUSD     msgKey = "membench.flag.reserve_usd"
 	msgFlagAuthFile       msgKey = "membench.flag.credentials"
 	msgFlagKeyEnv         msgKey = "membench.flag.api_key_env"
 	msgFlagDataset        msgKey = "membench.flag.dataset"
@@ -29,6 +32,7 @@ const (
 	msgFlagFormat         msgKey = "membench.flag.format"
 	msgFlagLang           msgKey = "membench.flag.lang"
 	msgErrBudgetMissing   msgKey = "membench.error.budget_missing"
+	msgErrReserveCeiling  msgKey = "membench.error.reserve_ceiling"
 	msgErrFlagValue       msgKey = "membench.error.flag_value"
 	msgErrDatasetRead     msgKey = "membench.error.dataset_read"
 	msgErrDatasetShape    msgKey = "membench.error.dataset_shape"
@@ -37,6 +41,8 @@ const (
 	msgErrRun             msgKey = "membench.error.run"
 	msgErrNoUsage         msgKey = "membench.error.no_usage"
 	msgErrNoCost          msgKey = "membench.error.no_cost"
+	msgErrPromptLong      msgKey = "membench.error.prompt_long"
+	msgSkippedLong        msgKey = "membench.skipped_long"
 	msgReportTitle        msgKey = "membench.report.title"
 	msgStatusComplete     msgKey = "membench.status.complete"
 	msgStatusPartial      msgKey = "membench.status.partial"
@@ -68,59 +74,36 @@ const (
 	msgCapAbstention      msgKey = "membench.cap.abstention"
 )
 
-func declaredMessages() map[msgKey][]string {
-	return map[msgKey][]string{
-		msgUsage:              nil,
-		msgFlagHerrscher:      nil,
-		msgFlagModel:          nil,
-		msgFlagBudgetLimit:    nil,
-		msgFlagBudgetUSD:      nil,
-		msgFlagAuthFile:       nil,
-		msgFlagKeyEnv:         nil,
-		msgFlagDataset:        nil,
-		msgFlagSamples:        nil,
-		msgFlagSeed:           nil,
-		msgFlagSettings:       nil,
-		msgFlagMaxTurns:       nil,
-		msgFlagFormat:         nil,
-		msgFlagLang:           nil,
-		msgErrBudgetMissing:   nil,
-		msgErrFlagValue:       {paramName, paramDetail},
-		msgErrDatasetRead:     {paramPath, paramErr},
-		msgErrDatasetShape:    {paramDetail},
-		msgErrDatasetLarge:    {paramLimit},
-		msgErrHerrscher:       {paramPath, paramErr},
-		msgErrRun:             {paramRun, paramErr},
-		msgErrNoUsage:         {paramRun},
-		msgErrNoCost:          {paramRun},
-		msgReportTitle:        nil,
-		msgStatusComplete:     nil,
-		msgStatusPartial:      nil,
-		msgStatusFailed:       {paramDetail},
-		msgBudgetStopped:      {paramSpent, paramLimit},
-		msgNotRun:             {paramCount},
-		msgAmount:             {paramTokens, paramMoney},
-		msgNoMeasure:          nil,
-		msgSectionPairs:       nil,
-		msgSectionLongMemEval: nil,
-		msgColTask:            nil,
-		msgColSetting:         nil,
-		msgColOff:             nil,
-		msgColOn:              nil,
-		msgColDeltaSuccess:    nil,
-		msgColDeltaTurns:      nil,
-		msgColDeltaVolume:     nil,
-		msgColMemoryVolume:    nil,
-		msgColFalseRecall:     nil,
-		msgColCapability:      nil,
-		msgVariantSameAgent:   nil,
-		msgVariantOtherAgent:  nil,
-		msgVariantStale:       nil,
-		msgVariantNeverGiven:  nil,
-		msgCapExtraction:      nil,
-		msgCapMultisession:    nil,
-		msgCapTemporal:        nil,
-		msgCapUpdate:          nil,
-		msgCapAbstention:      nil,
+type keyParams struct {
+	key    msgKey
+	params []string
+}
+
+func paramsOf(key msgKey) []string {
+	for _, entry := range paramTable() {
+		if entry.key == key {
+			return entry.params
+		}
+	}
+	return nil
+}
+
+func paramTable() []keyParams {
+	return []keyParams{
+		{key: msgErrReserveCeiling, params: []string{paramReserve, paramLimit}},
+		{key: msgErrFlagValue, params: []string{paramName, paramDetail}},
+		{key: msgErrDatasetRead, params: []string{paramPath, paramErr}},
+		{key: msgErrDatasetShape, params: []string{paramDetail}},
+		{key: msgErrDatasetLarge, params: []string{paramLimit}},
+		{key: msgErrHerrscher, params: []string{paramPath, paramErr}},
+		{key: msgErrRun, params: []string{paramRun, paramErr}},
+		{key: msgErrNoUsage, params: []string{paramRun}},
+		{key: msgErrNoCost, params: []string{paramRun}},
+		{key: msgErrPromptLong, params: []string{paramRun, paramLimit}},
+		{key: msgSkippedLong, params: []string{paramCount}},
+		{key: msgStatusFailed, params: []string{paramDetail}},
+		{key: msgBudgetStopped, params: []string{paramSpent, paramLimit}},
+		{key: msgNotRun, params: []string{paramCount}},
+		{key: msgAmount, params: []string{paramTokens, paramMoney}},
 	}
 }

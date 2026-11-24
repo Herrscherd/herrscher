@@ -192,6 +192,7 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"warn.hub_teardown_overrun":         {"Grace"},
 		"warn.command_handler_overrun":      {"Grace"},
 		"warn.persist_overrun":              {"Grace"},
+		"warn.seed_bridge_unjoined":         {"Grace"},
 		"warn.warnings_dropped":             {"Count"},
 		"warn.write_still_running":          nil,
 		"warn.session_seed_transcript":      {"Detail", "Name"},

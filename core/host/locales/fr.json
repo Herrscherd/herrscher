@@ -640,6 +640,11 @@
     "other": "herrscher serve : une écriture de transcript, de jeton de reprise ou de checkpoint est toujours en cours après {{.Grace}}, l'arrêt continue quand même et cette écriture peut être perdue"
   },
   {
+    "id": "warn.seed_bridge_unjoined",
+    "description": "The bridge of a one-shot seed is still running when its join grace ends twice; the reply is returned without consolidating its memory, and the bridge may still write it",
+    "other": "herrscher seed : le tour est toujours observé après {{.Grace}}, la réponse est rendue sans consolider sa mémoire : l'observation peut être perdue"
+  },
+  {
     "id": "warn.warnings_dropped",
     "description": "A summary line: Count warnings were dropped while the output was blocked, written once it unblocks",
     "one": "herrscher serve : 1 avertissement perdu pendant que la sortie était bloquée",

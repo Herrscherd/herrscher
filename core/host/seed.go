@@ -43,6 +43,14 @@ type oneShotSeedRuntime struct {
 	desk            *approvalDesk
 	localRun        bool
 	persists        *persistWrites
+	joinGrace       time.Duration
+}
+
+func (r oneShotSeedRuntime) grace() time.Duration {
+	if r.joinGrace <= 0 {
+		return seedJoinGrace
+	}
+	return r.joinGrace
 }
 
 func (r oneShotSeedRuntime) backendFactory() func(context.Context, state.Session) (contracts.Backend, error) {
@@ -109,9 +117,12 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	if runtime.desk == nil && !runtime.localRun {
 		return "", errSeedWithoutApprovalDesk
 	}
-	if orch != nil {
-		defer closeRead(orch)
-	}
+	bridgeJoined := false
+	defer func() {
+		if orch != nil && bridgeJoined {
+			closeRead(orch)
+		}
+	}()
 	seedCtx, cancel := context.WithTimeout(ctx, oneShotTurnTimeout(runtime))
 	defer cancel()
 	toBridge := make(chan contracts.Event, 1)
@@ -144,40 +155,58 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	bridgeErr := make(chan error, 1)
 	go runOneShotBridge(bridgeCtx, cancel, sess, orch, runtime, bridgeIn, fromBridge, bridgeErr)
 
+	grace := runtime.grace()
 	stopSeedWork := func() {
 		pumpCancel()
-		if !joinWithin(pumpDone, seedJoinGrace) {
+		if !joinWithin(pumpDone, grace) {
 			slog.Warn("seed pump outlived its grace", "session", sess.Name)
 		}
 		stopForward()
 	}
 	reply, ok := driver.SeedAndWaitWithTurnID(seedCtx, task, turnID)
-	if !ok {
-		timeoutErr := oneShotTimeoutError(bridgeErr)
-		stopSeedWork()
-		stopBridge()
-		return "", timeoutErr
+	if ok {
+		driver.awaitTurnRelease(seedCtx)
 	}
-	driver.awaitTurnRelease(seedCtx)
 	stopSeedWork()
-	ended, bridgeRunErr := bridgeEndWithin(seedCtx, bridgeErr, seedJoinGrace)
-	if !ended {
-		slog.Warn("seed bridge outlived its grace", "session", sess.Name)
-		stopBridge()
+	joined, bridgeRunErr := endBridge(seedCtx, bridgeErr, grace, stopBridge)
+	if !joined {
+		warnLive(runtime.messages, runtime.warnings, runtime.languageOf(sess), "warn.seed_bridge_unjoined", map[string]any{graceParam: grace.String()})
+		if !ok {
+			return "", errSeedTimeout
+		}
+		return reply, nil
 	}
-	if reportsFailedTurn(bridgeRunErr) {
-		return "", bridgeRunErr
+	bridgeJoined = true
+	if err := seedReplyError(ok, bridgeRunErr); err != nil {
+		return "", err
 	}
 	if runtime.coordinator != nil {
-		driver.coordinator = runtime.coordinator
-		driver.activeTurnID = turnID
-		if coordination := driver.maybeCoordinate(seedCtx, reply); coordination != nil {
-			driver.fanOut(seedCtx, contracts.Event{T: eventwire.EventReply, Done: true, Text: reply, Coordination: coordination})
-		}
-		driver.activeTurnID = ""
+		coordinateSeedReply(seedCtx, driver, runtime.coordinator, turnID, reply)
 	}
 	consolidateOneShot(ctx, orch, gate, sess, runtime.messages, runtime.warnings, runtime.languageOf(sess))
 	return reply, nil
+}
+
+func seedReplyError(ok bool, bridgeRunErr error) error {
+	if !ok {
+		if bridgeRunErr != nil {
+			return bridgeRunErr
+		}
+		return errSeedTimeout
+	}
+	if reportsFailedTurn(bridgeRunErr) {
+		return bridgeRunErr
+	}
+	return nil
+}
+
+func coordinateSeedReply(ctx context.Context, driver *sessionDriver, coordinator contracts.Coordinator, turnID, reply string) {
+	driver.coordinator = coordinator
+	driver.activeTurnID = turnID
+	if coordination := driver.maybeCoordinate(ctx, reply); coordination != nil {
+		driver.fanOut(ctx, contracts.Event{T: eventwire.EventReply, Done: true, Text: reply, Coordination: coordination})
+	}
+	driver.activeTurnID = ""
 }
 
 func awaitOneShotWrites(messages *hostMessages, persists *persistWrites, warnings io.Writer, lang languageSource) {
@@ -278,15 +307,12 @@ func bridgeEndWithin(ctx context.Context, bridgeErr <-chan error, grace time.Dur
 	}
 }
 
-func oneShotTimeoutError(bridgeErr <-chan error) error {
-	select {
-	case err := <-bridgeErr:
-		if err != nil {
-			return err
-		}
-	default:
+func endBridge(ctx context.Context, bridgeErr <-chan error, grace time.Duration, stop func()) (bool, error) {
+	if ended, err := bridgeEndWithin(ctx, bridgeErr, grace); ended {
+		return true, err
 	}
-	return errSeedTimeout
+	stop()
+	return bridgeEndWithin(context.WithoutCancel(ctx), bridgeErr, grace)
 }
 
 func (r oneShotSeedRuntime) languageOf(sess state.Session) languageSource {

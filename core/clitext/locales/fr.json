@@ -5173,5 +5173,130 @@
     "id": "cli.setup.label.language",
     "description": "Welcome screen label in front of the language",
     "other": "langue"
+  },
+  {
+    "id": "cli.connect.usage",
+    "description": "Ligne d'usage de herrscher connect",
+    "other": "usage : herrscher connect github [--host <hôte>] | status | logout [--host <hôte>]"
+  },
+  {
+    "id": "cli.connect.host_invalid",
+    "description": "Erreur : l'hôte donné à connect n'est pas un hôte de forge",
+    "other": "hôte forge invalide : {{.Err}}"
+  },
+  {
+    "id": "cli.connect.start",
+    "description": "Invite : le code d'appareil à saisir sur le forge pour connecter un hôte",
+    "other": "Pour connecter {{.Host}}, ouvre {{.URL}} et saisis le code {{.UserCode}}. En attente de l'autorisation."
+  },
+  {
+    "id": "cli.connect.done",
+    "description": "Confirmation : l'hôte est connecté",
+    "other": "connecté à {{.Host}}. Lance herrscher connect status pour voir le compte."
+  },
+  {
+    "id": "cli.connect.app_unavailable",
+    "description": "Erreur : l'hôte de forge n'offre aucune application herrscher utilisable pour la connexion",
+    "other": "{{.Host}} n'a pas d'application herrscher pour la connexion, ou l'application refuse ses identifiants ou a la connexion par appareil désactivée. Utilise GH_TOKEN, ou connecte-toi avec gh auth login. Si cet hôte doit accepter herrscher, signale le problème aux mainteneurs de herrscher."
+  },
+  {
+    "id": "cli.connect.device_expired",
+    "description": "Erreur : le code d'appareil a expiré avant d'être saisi",
+    "other": "le code de connexion a expiré avant d'être saisi. Relance la commande."
+  },
+  {
+    "id": "cli.connect.device_denied",
+    "description": "Erreur : l'utilisateur a refusé la connexion sur le forge",
+    "other": "la connexion a été refusée sur le forge."
+  },
+  {
+    "id": "cli.connect.failed",
+    "description": "Erreur : la connexion d'un hôte de forge a échoué pour une raison que le message nomme",
+    "other": "échec de la connexion à {{.Host}} : {{.Err}}"
+  },
+  {
+    "id": "cli.connect.status.line",
+    "description": "Ligne d'état : un hôte de forge avec la source de son jeton, son compte et l'expiration du jeton",
+    "other": "{{.Host}} : source {{.Source}}, compte {{.Login}}, jeton {{.Access}}"
+  },
+  {
+    "id": "cli.connect.status.source_none",
+    "description": "Valeur d'état : l'hôte n'a aucun identifiant utilisable",
+    "other": "aucune"
+  },
+  {
+    "id": "cli.connect.status.login_unknown",
+    "description": "Valeur d'état : le compte de l'hôte n'a pas pu être lu",
+    "other": "inconnu"
+  },
+  {
+    "id": "cli.connect.status.access_never",
+    "description": "Valeur d'état : le jeton enregistré n'expire pas",
+    "other": "sans expiration"
+  },
+  {
+    "id": "cli.connect.status.access_expires",
+    "description": "Valeur d'état : le jeton enregistré expire à cet instant",
+    "other": "expire le {{.Time}}"
+  },
+  {
+    "id": "cli.connect.status.access_rejected",
+    "description": "Valeur d'état : le forge a refusé le jeton enregistré",
+    "other": "refusé par le forge, relance herrscher connect github"
+  },
+  {
+    "id": "cli.connect.status.install",
+    "description": "Ligne d'état : l'adresse où installer l'application herrscher",
+    "other": "installer l'application : {{.URL}}"
+  },
+  {
+    "id": "cli.connect.status.revoke",
+    "description": "Ligne d'état : l'adresse où révoquer l'autorisation de l'application herrscher",
+    "other": "révoquer l'application : {{.URL}}"
+  },
+  {
+    "id": "cli.connect.logout_done",
+    "description": "Confirmation : le jeton enregistré d'un hôte a été supprimé",
+    "other": "jeton enregistré de {{.Host}} supprimé."
+  },
+  {
+    "id": "cli.connect.logout_nothing",
+    "description": "Avis : la déconnexion n'a trouvé aucun jeton enregistré pour l'hôte",
+    "other": "aucun jeton enregistré pour {{.Host}}."
+  },
+  {
+    "id": "cli.connect.logout_revoke",
+    "description": "Rappel affiché après la déconnexion : le jeton enregistré n'est pas révoqué sur le forge",
+    "other": "La déconnexion ne révoque pas le jeton enregistré. Pour révoquer l'application herrscher sur le forge, ouvre {{.URL}}"
+  },
+  {
+    "id": "cli.connect.store_corrupt",
+    "description": "Erreur : le fichier des connexions du forge est illisible, avec son chemin",
+    "other": "Le fichier des connexions du forge {{.Path}} est illisible. Lance herrscher connect logout pour le supprimer, puis reconnecte-toi."
+  },
+  {
+    "id": "cli.connect.status.insecure",
+    "description": "Avertissement : le fichier des connexions du forge est lisible par d'autres utilisateurs, avec son chemin",
+    "other": "avertissement : {{.Path}} est lisible par d'autres utilisateurs de cette machine. Reconnecte-toi pour le réécrire en accès réservé au propriétaire."
+  },
+  {
+    "id": "cli.connect.status.access_expired",
+    "description": "Valeur de statut : la connexion enregistrée est échue et ne peut plus être renouvelée",
+    "other": "expirée, relance herrscher connect github"
+  },
+  {
+    "id": "cli.connect.status.access_renews",
+    "description": "Valeur de statut : la connexion enregistrée se renouvelle jusqu'à ce moment",
+    "other": "renouvelable jusqu'au {{.Time}}"
+  },
+  {
+    "id": "cli.connect.status.renew_soon",
+    "description": "Avertissement : le jeton de renouvellement de la connexion arrive bientôt à échéance",
+    "other": "avertissement : le jeton de renouvellement expire le {{.Time}}. Relance herrscher connect github avant cette date."
+  },
+  {
+    "id": "cli.connect.status.access_app_misconfigured",
+    "description": "Valeur de statut : l'application herrscher est mal configurée sur le forge, le jeton enregistré ne peut pas être renouvelé",
+    "other": "ne peut pas être renouvelé : l'application herrscher est mal configurée sur le forge, signale-le aux mainteneurs de herrscher"
   }
 ]

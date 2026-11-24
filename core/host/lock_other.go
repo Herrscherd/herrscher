@@ -3,11 +3,7 @@
 package host
 
 import (
-	"os"
-
 	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
-
-func tryLock(*os.File) (bool, error) { return true, nil }
 
 func lockInstance(*hostMessages, runtimedir.Layout, string) (func(), error) { return func() {}, nil }

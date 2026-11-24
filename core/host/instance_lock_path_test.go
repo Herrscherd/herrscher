@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Herrscherd/herrscher/core/internal/filelock"
 	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 )
 
@@ -61,8 +62,8 @@ func TestInstanceLockRefusesASymlinkAtItsPath(t *testing.T) {
 	if !ok || wrapped.key != "lock.unsafe" {
 		t.Fatalf("lockInstance over a symlink = %v, want the lock.unsafe error", err)
 	}
-	if !errors.Is(err, errLockSymlink) {
-		t.Fatalf("lockInstance over a symlink = %v, want errLockSymlink underneath", err)
+	if !errors.Is(err, filelock.ErrSymlink) {
+		t.Fatalf("lockInstance over a symlink = %v, want filelock.ErrSymlink underneath", err)
 	}
 	if content, readErr := os.ReadFile(victim); readErr != nil || string(content) != "keep" {
 		t.Fatalf("the symlink target was touched: %q, %v", content, readErr)

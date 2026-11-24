@@ -115,6 +115,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	seedCtx, cancel := context.WithTimeout(ctx, oneShotTurnTimeout(runtime))
 	defer cancel()
 	toBridge := make(chan contracts.Event, 1)
+	bridgeIn := make(chan contracts.Event)
 	fromBridge := make(chan contracts.Event, bridgeEventBuffer)
 	driver := newSessionDriver(runtime.messages, runtime.cliMessages, sess.Name, nil, toBridge, fromBridge, runtime.warnings)
 	oneShot := runtime.persists
@@ -134,22 +135,27 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	pumpDone := make(chan struct{})
 	go func() { defer close(pumpDone); driver.pump(pumpCtx) }()
 
+	forwardCtx, stopForward := context.WithCancel(seedCtx)
+	defer stopForward()
+	go forwardToBridge(forwardCtx, toBridge, bridgeIn)
+
 	bridgeCtx, stopBridge := context.WithCancel(seedCtx)
 	defer stopBridge()
 	bridgeErr := make(chan error, 1)
-	go runOneShotBridge(bridgeCtx, cancel, sess, orch, runtime, toBridge, fromBridge, bridgeErr)
+	go runOneShotBridge(bridgeCtx, cancel, sess, orch, runtime, bridgeIn, fromBridge, bridgeErr)
 
 	stopSeedWork := func() {
 		pumpCancel()
 		if !joinWithin(pumpDone, seedJoinGrace) {
 			slog.Warn("seed pump outlived its grace", "session", sess.Name)
 		}
-		stopBridge()
+		stopForward()
 	}
 	reply, ok := driver.SeedAndWaitWithTurnID(seedCtx, task, turnID)
 	if !ok {
 		timeoutErr := oneShotTimeoutError(bridgeErr)
 		stopSeedWork()
+		stopBridge()
 		return "", timeoutErr
 	}
 	driver.awaitTurnRelease(seedCtx)
@@ -157,6 +163,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	ended, bridgeRunErr := bridgeEndWithin(bridgeErr, seedJoinGrace)
 	if !ended {
 		slog.Warn("seed bridge outlived its grace", "session", sess.Name)
+		stopBridge()
 	}
 	if reportsFailedTurn(bridgeRunErr) {
 		return "", bridgeRunErr
@@ -211,6 +218,22 @@ func attachOneShotTaps(driver *sessionDriver, sess state.Session, runtime oneSho
 		}
 	}
 	return gate
+}
+
+func forwardToBridge(ctx context.Context, from <-chan contracts.Event, to chan<- contracts.Event) {
+	defer close(to)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event := <-from:
+			select {
+			case to <- event:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
 }
 
 func runOneShotBridge(ctx context.Context, cancel context.CancelFunc, sess state.Session, orch contracts.Orchestrator, runtime oneShotSeedRuntime, toBridge, fromBridge chan contracts.Event, bridgeErr chan<- error) {

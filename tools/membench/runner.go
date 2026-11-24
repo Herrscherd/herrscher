@@ -12,10 +12,11 @@ import (
 )
 
 const (
-	callTimeout      = 5 * time.Minute
-	anthropicEnvName = "ANTHROPIC_API_KEY"
-	redactedSecret   = "[redacted]"
-	maxPromptBytes   = 128<<10 - 1
+	callTimeout            = 5 * time.Minute
+	anthropicEnvName       = "ANTHROPIC_API_KEY"
+	redactedSecret         = "[redacted]"
+	maxPromptBytes         = 128<<10 - 1
+	consolidateEveryRunEnv = "TERMINAL_CONSOLIDATE_EVERY=0"
 )
 
 var (
@@ -115,7 +116,10 @@ func (r *runner) play(ctx context.Context, box sandbox, planned arm) (outcome, e
 	if err := box.installCredentials(r.credentials); err != nil {
 		return outcome{}, err
 	}
-	assignments := r.assignments(planned.option, planned.enabled)
+	if err := box.plantAgedNode(); err != nil {
+		return outcome{}, err
+	}
+	assignments := r.assignments(box, planned.option, planned.enabled)
 	requests := append(append([]step{}, planned.current.steps...), planned.current.ask)
 	var (
 		total  tally
@@ -164,8 +168,8 @@ func (r *runner) settle(total *tally, cumulative tally) {
 	*total = cumulative
 }
 
-func (r *runner) assignments(option setting, enabled bool) []string {
-	list := []string{option.assignment(enabled)}
+func (r *runner) assignments(box sandbox, option setting, enabled bool) []string {
+	list := []string{option.assignment(enabled), consolidateEveryRunEnv, vaultEnv + "=" + box.vault()}
 	if r.apiKey != "" {
 		list = append(list, anthropicEnvName+"="+r.apiKey)
 	}

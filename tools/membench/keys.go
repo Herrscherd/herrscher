@@ -51,6 +51,7 @@ const (
 	msgNotRun             msgKey = "membench.not_run"
 	msgAmount             msgKey = "membench.amount"
 	msgNoMeasure          msgKey = "membench.no_measure"
+	msgRowPartial         msgKey = "membench.row.partial"
 	msgSectionPairs       msgKey = "membench.section.pairs"
 	msgSectionLongMemEval msgKey = "membench.section.longmemeval"
 	msgColTask            msgKey = "membench.col.task"

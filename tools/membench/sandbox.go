@@ -11,6 +11,11 @@ const (
 	dirMode         = 0o700
 	credentialsMode = 0o600
 	credentialsFile = ".credentials.json"
+	fileMode        = 0o600
+	vaultDir        = "vault"
+	vaultEnv        = "OBSIDIAN_VAULT"
+	agedNodeFile    = "aged.md"
+	agedNodeText    = "---\ntype: fact\ntitle: old fact\nlastSeen: 2001-01-01T00:00:00Z\n---\nThe old fact.\n"
 )
 
 type sandbox struct {
@@ -42,6 +47,20 @@ func newSandbox(parent string) (sandbox, error) {
 func (s sandbox) close() error {
 	if err := os.RemoveAll(s.root); err != nil {
 		return fmt.Errorf("membench sandbox: %w", err)
+	}
+	return nil
+}
+
+func (s sandbox) vault() string {
+	return filepath.Join(s.root, vaultDir)
+}
+
+func (s sandbox) plantAgedNode() error {
+	if err := os.MkdirAll(s.vault(), dirMode); err != nil {
+		return fmt.Errorf("membench vault: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(s.vault(), agedNodeFile), []byte(agedNodeText), fileMode); err != nil {
+		return fmt.Errorf("membench vault: %w", err)
 	}
 	return nil
 }

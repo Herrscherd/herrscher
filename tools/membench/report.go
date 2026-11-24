@@ -88,27 +88,57 @@ type row struct {
 	Setting               string   `json:"setting"`
 	Off                   cell     `json:"off"`
 	On                    cell     `json:"on"`
+	Paired                int      `json:"paired"`
+	Partial               bool     `json:"partial"`
 	DeltaSuccess          *float64 `json:"deltaSuccess"`
 	DeltaTurns            *float64 `json:"deltaTurns"`
 	DeltaTokensPerSuccess *float64 `json:"deltaTokensPerSuccess"`
 	MemoryTokensPerTurn   *float64 `json:"memoryTokensPerTurn"`
 }
 
-func (r *row) derive() {
+type pairing struct {
+	off []outcome
+	on  []outcome
+}
+
+func (r *row) add(got outcome) {
+	if got.on {
+		r.On.add(got)
+		return
+	}
+	r.Off.add(got)
+}
+
+func (r *row) derive(tasks map[string]*pairing) {
 	measured := r.Section != msgSectionLongMemEval
 	r.Off.publishFalseRecalls(measured)
 	r.On.publishFalseRecalls(measured)
-	if r.Off.Runs != r.On.Runs {
+	var pairedOff, pairedOn cell
+	for _, sides := range tasks {
+		if len(sides.off) != len(sides.on) {
+			r.Partial = true
+		}
+		for index := range min(len(sides.off), len(sides.on)) {
+			pairedOff.add(sides.off[index])
+			pairedOn.add(sides.on[index])
+			r.Paired++
+		}
+	}
+	if r.Paired == 0 {
 		return
 	}
-	success := r.On.successRate() - r.Off.successRate()
-	turns := r.On.averageTurns() - r.Off.averageTurns()
-	memory := r.On.inputPerTurn() - r.Off.inputPerTurn()
+	r.deriveDeltas(pairedOff, pairedOn)
+}
+
+func (r *row) deriveDeltas(offCell, onCell cell) {
+	success := onCell.successRate() - offCell.successRate()
+	turns := onCell.averageTurns() - offCell.averageTurns()
+	memory := onCell.inputPerTurn() - offCell.inputPerTurn()
 	r.DeltaSuccess = &success
 	r.DeltaTurns = &turns
 	r.MemoryTokensPerTurn = &memory
-	onTokens, onMeasured := r.On.tokensPerSuccess()
-	offTokens, offMeasured := r.Off.tokensPerSuccess()
+	onTokens, onMeasured := onCell.tokensPerSuccess()
+	offTokens, offMeasured := offCell.tokensPerSuccess()
 	if onMeasured && offMeasured {
 		delta := onTokens - offTokens
 		r.DeltaTokensPerSuccess = &delta
@@ -148,6 +178,7 @@ func summarize(cfg config, executed execution, spent spend, planned int) report 
 		rep.Status = statusPartial
 	}
 	index := make(map[rowKey]int)
+	tasks := make(map[rowKey]map[string]*pairing)
 	for i := range executed.outcomes {
 		got := executed.outcomes[i]
 		key := rowKey{section: got.section, group: got.group, setting: got.setting}
@@ -156,15 +187,22 @@ func summarize(cfg config, executed execution, spent spend, planned int) report 
 			rep.Rows = append(rep.Rows, row{Section: got.section, Group: got.group, Setting: got.setting})
 			position = len(rep.Rows) - 1
 			index[key] = position
+			tasks[key] = make(map[string]*pairing)
+		}
+		rep.Rows[position].add(got)
+		sides := tasks[key][got.task]
+		if sides == nil {
+			sides = &pairing{}
+			tasks[key][got.task] = sides
 		}
 		if got.on {
-			rep.Rows[position].On.add(got)
+			sides.on = append(sides.on, got)
 		} else {
-			rep.Rows[position].Off.add(got)
+			sides.off = append(sides.off, got)
 		}
 	}
-	for i := range rep.Rows {
-		rep.Rows[i].derive()
+	for key, position := range index {
+		rep.Rows[position].derive(tasks[key])
 	}
 	return rep
 }
@@ -246,7 +284,7 @@ type column struct {
 func columnsOf(translator *translator, section msgKey) []column {
 	lang := translator.lang
 	columns := []column{
-		{firstColumn(section), func(item row) string { return translator.Text(item.Group, nil) }},
+		{firstColumn(section), func(item row) string { return groupText(translator, item) }},
 		{msgColSetting, func(item row) string { return item.Setting }},
 		{msgColOff, func(item row) string { return percentCell(lang, item.Off) }},
 		{msgColOn, func(item row) string { return percentCell(lang, item.On) }},
@@ -282,6 +320,14 @@ func table(translator *translator, section msgKey, rows []row) string {
 		text.WriteString("| " + strings.Join(cells, " | ") + " |\n")
 	}
 	return text.String()
+}
+
+func groupText(translator *translator, item row) string {
+	name := translator.Text(item.Group, nil)
+	if item.Partial {
+		return name + " (" + translator.Text(msgRowPartial, nil) + ")"
+	}
+	return name
 }
 
 func firstColumn(section msgKey) msgKey {

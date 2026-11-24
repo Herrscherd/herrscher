@@ -156,3 +156,45 @@ func TestJSONLeavesLongMemEvalFalseRecallAbsentAndUnpairedDeltasNil(t *testing.T
 		}
 	}
 }
+
+func TestDeltasUseOnlyCompletePairsAndMarkPartialRows(t *testing.T) {
+	base := outcome{section: msgSectionPairs, group: msgVariantSameAgent, setting: "report", turns: 1, tokens: 50, input: 40}
+	pair := func(task string, on, success bool) outcome {
+		o := base
+		o.task = task
+		o.on = on
+		o.success = success
+		return o
+	}
+	ex := execution{outcomes: []outcome{
+		pair("paired", false, true),
+		pair("paired", true, true),
+		pair("lonely", false, false),
+		pair("lonely", false, true),
+	}}
+	rep := summarize(config{budget: budget{tokens: 1000}}, ex, spend{tokens: 200}, 2)
+	if len(rep.Rows) != 1 {
+		t.Fatalf("rows = %d, want 1", len(rep.Rows))
+	}
+	r := rep.Rows[0]
+	if r.Paired != 1 || !r.Partial {
+		t.Fatalf("paired %d, partial %t; want 1 complete pair and a partial row", r.Paired, r.Partial)
+	}
+	if r.DeltaSuccess == nil || *r.DeltaSuccess != 0 {
+		t.Errorf("delta success %v, want 0 from the complete pair only", r.DeltaSuccess)
+	}
+	var out bytes.Buffer
+	if err := writeReport(&out, rep, config{format: formatJSON}, loadCatalogue()); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `"partial": true`) {
+		t.Errorf("JSON lacks the partial mark: %s", out.String())
+	}
+	var md bytes.Buffer
+	if err := writeReport(&md, rep, config{format: formatMarkdown, lang: i18n.English}, loadCatalogue()); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(md.String(), "partial") {
+		t.Errorf("markdown lacks the partial mark: %s", md.String())
+	}
+}

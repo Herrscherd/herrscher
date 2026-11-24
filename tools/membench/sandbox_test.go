@@ -97,3 +97,22 @@ func TestInstallCredentialsIsPrivate(t *testing.T) {
 		t.Errorf("installed credentials differ from the source")
 	}
 }
+
+func TestPlantAgedNodeWritesTheRealFormat(t *testing.T) {
+	box, err := newSandbox(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = box.plantAgedNode(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(box.vault(), agedNodeFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range []string{"type: fact", "title: old fact", "lastSeen: 2001-01-01T00:00:00Z"} {
+		if !strings.Contains(string(data), line) {
+			t.Errorf("aged node lacks %q:\n%s", line, data)
+		}
+	}
+}

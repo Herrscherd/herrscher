@@ -95,6 +95,29 @@ cell, each with its runs, successes, false recalls, turns and tokens.
 The LongMemEval scoring is a whole-word check of the reference answer in the
 reply. It is a proxy for the official judge, not a replacement for it.
 
+Deltas are computed only on complete pairs: the off run and the on run of the
+same task. A task that ran in one arm only, because the budget stopped the run
+or the arm failed, is left out of the deltas. Its row is marked partial in the
+markdown, and the JSON row carries `"partial": true` with the number of pairs
+in `"paired"`. Each cell still reports its own runs, so the counts show how
+many runs each side has.
+
+## Fixed conditions
+
+Every arm runs with `TERMINAL_CONSOLIDATE_EVERY=0`, whatever the user's default
+is. The default of 10 never consolidates a one-shot, so a one-shot would never
+sweep the vault and the report and sweep settings would have nothing to act on.
+With 0, consolidation runs at the end of each one-shot, so the off arm and the
+on arm differ only by the setting under test. A herrscher run by a user keeps
+the default of 10, so the bench measures a condition a user does not run by
+default.
+
+Each arm's vault (`OBSIDIAN_VAULT`) starts with one aged node in the real
+format, `type: fact` with `lastSeen: 2001-01-01T00:00:00Z`, in off and on arms
+alike. The sweep archives that node when consolidation runs, so the report and
+sweep settings have a node to act on, and the difference between the arms comes
+from the setting.
+
 ## Budget semantics
 
 Spend is read from the usage ledger of each run's state directory after every
@@ -141,12 +164,11 @@ the real `herrscher` and the fake `claude` of `e2e/vendortest`, then:
   `MEMORY_RAW_ARCHIVE` set to `false`, then to `true`, and checks that the raw
   archive is written only in the second run. It fails if the bench does not
   forward the setting to the binary.
-- `TestReportSettingReachesTheRealBinary` seeds a vault with a node last seen in
-  2001, then runs `herrscher --print` with `MEMORY_REPORT_ENABLED` set to
-  `false`, then to `true`. It sets `TERMINAL_CONSOLIDATE_EVERY=0`: a one-shot
-  with the default of 10 never consolidates, so it never sweeps the vault. The
-  test checks that the node is archived and that a report is written only in
-  the second run.
+- `TestReportSettingReachesTheRealBinary` plants the aged node in the vault,
+  then runs `herrscher --print` with `MEMORY_REPORT_ENABLED` set to `false`,
+  then to `true`, with `TERMINAL_CONSOLIDATE_EVERY=0` as every bench arm sets
+  it. The test checks that the node is archived and that a report is written
+  only in the second run.
 - `TestBenchMeasuresEachArmFromTheLedger` runs the task pair against the real
   binary, one arm off and one on. Each arm's turns, tokens and input come from
   the usage ledger the local `--print` writes, so the test fails if a run does
@@ -161,6 +183,14 @@ setting assignments fails `TestMemorySettingReachesTheRealBinary`, a reserve
 that ignores the reserve fails `TestMayStartKeepsTheReserveInFront`, and a
 scorer matching substrings fails `TestScoreMatchesWholeWordsOnly`.
 
+The wiring of the arms is tested without a model. `TestEveryArmSetsItsSettingAndConsolidatesOnEveryRun`
+checks that every arm sets its setting and `TERMINAL_CONSOLIDATE_EVERY=0`, and
+`TestEveryDeclaredKeyIsInBothCatalogues` and `TestUsageWritesInEachLanguage`
+check that every message key and the usage text exist in English and French.
+`TestDeltasUseOnlyCompletePairsAndMarkPartialRows` checks the paired deltas.
+In `core/host`, `TestLocalOneShotReportsAFailedLedgerWrite` checks that a failed
+usage write in a local one-shot reaches the warnings writer.
+
 ## Lint exclusions
 
 The only gosec finding excluded by path for this package is G204 in
@@ -169,9 +199,9 @@ The only gosec finding excluded by path for this package is G204 in
 removed: the catalogue keys and flag names that tripped it are renamed, and their
 values are unchanged.
 
-The repository-wide exclusion of G304 and G703 under `tools/` still applies to
-this package. The bench reads the dataset and credentials paths the operator
-gives, which is the reason for that rule.
+`.golangci.yml` excludes G304 and G703 for `^(cmd|tools)/`, and this package
+falls under that rule: it reads the dataset and credentials paths the operator
+names.
 
 ## Limitations
 

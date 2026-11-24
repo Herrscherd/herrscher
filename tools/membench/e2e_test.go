@@ -12,10 +12,7 @@ import (
 	"testing"
 )
 
-const (
-	rawArchiveDir = "raw"
-	vaultEnv      = "OBSIDIAN_VAULT"
-)
+const rawArchiveDir = "raw"
 
 type binaries struct {
 	herrscher string
@@ -43,11 +40,6 @@ func goBuild(tb testing.TB, dir, out string, args ...string) {
 
 func printIntoVault(tb testing.TB, bins binaries, option setting, enabled bool, prompt string, count func(vault string) (int, error)) int {
 	tb.Helper()
-	return printIntoSeededVault(tb, bins, option, enabled, prompt, nil, nil, count)
-}
-
-func printIntoSeededVault(tb testing.TB, bins binaries, option setting, enabled bool, prompt string, seed func(vault string) error, extra []string, count func(vault string) (int, error)) int {
-	tb.Helper()
 	box, err := newSandbox(tb.TempDir())
 	if err != nil {
 		tb.Fatal(err)
@@ -57,18 +49,14 @@ func printIntoSeededVault(tb testing.TB, bins binaries, option setting, enabled 
 			tb.Fatal(closeErr)
 		}
 	}()
-	vault := filepath.Join(box.root, "vault")
-	if seed != nil {
-		if seedErr := seed(vault); seedErr != nil {
-			tb.Fatal(seedErr)
-		}
+	if plantErr := box.plantAgedNode(); plantErr != nil {
+		tb.Fatal(plantErr)
 	}
 	r := runner{binary: bins.herrscher, model: defaultModel}
-	assignments := append([]string{option.assignment(enabled), vaultEnv + "=" + vault}, extra...)
-	if _, invokeErr := r.invoke(tb.Context(), box, step{prompt: prompt, agent: agentAlpha}, assignments); invokeErr != nil {
+	if _, invokeErr := r.invoke(tb.Context(), box, step{prompt: prompt, agent: agentAlpha}, r.assignments(box, option, enabled)); invokeErr != nil {
 		tb.Fatalf("herrscher --print: %v", invokeErr)
 	}
-	found, err := count(vault)
+	found, err := count(box.vault())
 	if err != nil {
 		tb.Fatal(err)
 	}
@@ -130,22 +118,9 @@ func TestMemorySettingReachesTheRealBinary(t *testing.T) {
 	}
 }
 
-const (
-	agedNodeFile             = "aged.md"
-	consolidateOnEveryRunEnv = "TERMINAL_CONSOLIDATE_EVERY=0"
-)
-
-func seedAgedNode(vault string) error {
-	if err := os.MkdirAll(vault, 0o700); err != nil {
-		return err
-	}
-	node := "---\ntype: fact\ntitle: old fact\nlastSeen: 2001-01-01T00:00:00Z\n---\nThe old fact.\n"
-	return os.WriteFile(filepath.Join(vault, agedNodeFile), []byte(node), 0o600)
-}
-
 func reportFiles(tb testing.TB, bins binaries, option setting, enabled bool) int {
 	tb.Helper()
-	return printIntoSeededVault(tb, bins, option, enabled, "Remember this: the code is 4242.", seedAgedNode, []string{consolidateOnEveryRunEnv}, func(vault string) (int, error) {
+	return printIntoVault(tb, bins, option, enabled, "Remember this: the code is 4242.", func(vault string) (int, error) {
 		aged, err := os.ReadFile(filepath.Join(vault, agedNodeFile))
 		if err != nil {
 			return 0, err

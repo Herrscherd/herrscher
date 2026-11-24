@@ -150,6 +150,11 @@
     "other": "fichier d'identifiants Claude copié dans la configuration isolée de chaque exécution, pour un vrai backend"
   },
   {
+    "id": "membench.flag.api_key_env",
+    "description": "Message of the memory bench: flag.api_key_env",
+    "other": "nom de la variable d'environnement qui contient une clé d'API, passée à chaque exécution et jamais placée sur la ligne de commande"
+  },
+  {
     "id": "membench.flag.dataset",
     "description": "Message of the memory bench: flag.dataset",
     "other": "fichier du jeu LongMemEval que vous fournissez, vide pour ne lancer que les paires maison"
@@ -198,6 +203,11 @@
     "id": "membench.no_measure",
     "description": "Message of the memory bench: no_measure",
     "other": "aucune mesure"
+  },
+  {
+    "id": "membench.row.partial",
+    "description": "Message of the memory bench: row.partial",
+    "other": "partiel"
   },
   {
     "id": "membench.not_run",

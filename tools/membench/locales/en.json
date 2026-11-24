@@ -45,6 +45,11 @@
     "other": "Claude credentials file copied into the isolated config of each run, for a real backend"
   },
   {
+    "id": "membench.flag.api_key_env",
+    "description": "Message of the memory bench: flag.api_key_env",
+    "other": "name of the environment variable that holds an API key, passed to each run and never put on the command line"
+  },
+  {
     "id": "membench.flag.dataset",
     "description": "Message of the memory bench: flag.dataset",
     "other": "LongMemEval dataset file that you provide, empty runs the in-house pairs only"
@@ -138,6 +143,11 @@
     "id": "membench.no_measure",
     "description": "Message of the memory bench: no_measure",
     "other": "no measure"
+  },
+  {
+    "id": "membench.row.partial",
+    "description": "Message of the memory bench: row.partial",
+    "other": "partial"
   },
   {
     "id": "membench.section.pairs",

@@ -26,13 +26,30 @@ func TestRedactHidesTheKeyWhereItAppears(t *testing.T) {
 
 func TestAssignmentsCarryTheKeyOnlyWhenGiven(t *testing.T) {
 	option := setting{name: "raw-archive", env: "MEMORY_RAW_ARCHIVE"}
-	without := (&runner{}).assignments(option, true)
-	if !slices.Equal(without, []string{"MEMORY_RAW_ARCHIVE=true"}) {
+	box := sandbox{root: "run"}
+	vault := filepath.Join("run", "vault")
+	without := (&runner{}).assignments(box, option, true)
+	if !slices.Equal(without, []string{"MEMORY_RAW_ARCHIVE=true", "TERMINAL_CONSOLIDATE_EVERY=0", "OBSIDIAN_VAULT=" + vault}) {
 		t.Errorf("without a key: %v", without)
 	}
-	with := (&runner{apiKey: "placeholder-key"}).assignments(option, false)
-	if !slices.Equal(with, []string{"MEMORY_RAW_ARCHIVE=false", "ANTHROPIC_API_KEY=placeholder-key"}) {
+	with := (&runner{apiKey: "placeholder-key"}).assignments(box, option, false)
+	if !slices.Equal(with, []string{"MEMORY_RAW_ARCHIVE=false", "TERMINAL_CONSOLIDATE_EVERY=0", "OBSIDIAN_VAULT=" + vault, "ANTHROPIC_API_KEY=placeholder-key"}) {
 		t.Errorf("with a key: %v", with)
+	}
+}
+
+func TestEveryArmSetsItsSettingAndConsolidatesOnEveryRun(t *testing.T) {
+	box := sandbox{root: "run"}
+	for _, option := range knownSettings() {
+		for _, enabled := range []bool{false, true} {
+			got := (&runner{}).assignments(box, option, enabled)
+			if !slices.Contains(got, option.assignment(enabled)) {
+				t.Errorf("arm %s enabled=%t: %v lacks its setting", option.name, enabled, got)
+			}
+			if !slices.Contains(got, "TERMINAL_CONSOLIDATE_EVERY=0") {
+				t.Errorf("arm %s enabled=%t: %v does not consolidate on every run, so report and sweep never act", option.name, enabled, got)
+			}
+		}
 	}
 }
 

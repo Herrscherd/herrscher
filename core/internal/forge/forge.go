@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -229,17 +230,17 @@ func (c *Client) Clone(ctx context.Context, spec, workspace string) (string, err
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(workspace, target.ref.Name())
+	dir := filepath.Join(workspace, target.name)
 	if _, statErr := os.Stat(dir); statErr == nil {
 		return dir, nil
 	}
 	token, tokenErr := c.gitHubToken(ctx, target)
 	if tokenErr != nil {
-		return "", fmt.Errorf("clone %s: %w", target.ref, tokenErr)
+		return "", fmt.Errorf("clone %s: %w", target.label, tokenErr)
 	}
-	env, envErr := gitEnvironment(os.Getenv, target.ref.Host(), token)
+	env, envErr := gitEnvironment(os.Getenv, target.host, token)
 	if envErr != nil {
-		return "", fmt.Errorf("clone %s: %w", target.ref, envErr)
+		return "", fmt.Errorf("clone %s: %w", target.label, envErr)
 	}
 	out, err := c.r.run(ctx, workspace, env, "git", subClone, "--", target.cloneURL, dir)
 	if err != nil {
@@ -249,10 +250,14 @@ func (c *Client) Clone(ctx context.Context, spec, workspace string) (string, err
 }
 
 type cloneTarget struct {
-	ref         contracts.ForgeRepoRef
+	name        string
+	label       string
+	host        contracts.ForgeHost
 	cloneURL    string
 	githubHTTPS bool
 }
+
+var intranetHostRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]*(:[0-9]+)?$`)
 
 func parseCloneTarget(spec string) (cloneTarget, error) {
 	if specRe.MatchString(spec) {
@@ -263,14 +268,28 @@ func parseCloneTarget(spec string) (cloneTarget, error) {
 	}
 	ref, err := contracts.ParseRepoRef(spec)
 	if err != nil {
-		return cloneTarget{}, invalidSpec(spec)
+		return intranetTarget(spec)
 	}
 	https := strings.HasPrefix(spec, "https://")
 	return cloneTarget{
-		ref:         ref,
+		name:        ref.Name(),
+		label:       ref.String(),
+		host:        ref.Host(),
 		cloneURL:    spec,
 		githubHTTPS: https && ref.Host().String() == forgeport.GitHubHost,
 	}, nil
+}
+
+func intranetTarget(spec string) (cloneTarget, error) {
+	host, repoPath, ok := cloneLocation(spec)
+	if !ok || !intranetHostRe.MatchString(host) || strings.ContainsAny(spec, "?#") {
+		return cloneTarget{}, invalidSpec(spec)
+	}
+	name := path.Base(strings.TrimSuffix(repoPath, ".git"))
+	if name == "." || name == ".." || name == "/" || strings.HasPrefix(name, "-") {
+		return cloneTarget{}, invalidSpec(spec)
+	}
+	return cloneTarget{name: name, label: displaySpec(spec), cloneURL: spec}, nil
 }
 
 func ownerNameTarget(spec string) (cloneTarget, error) {
@@ -279,7 +298,9 @@ func ownerNameTarget(spec string) (cloneTarget, error) {
 		return cloneTarget{}, invalidSpec(spec)
 	}
 	return cloneTarget{
-		ref:         ref,
+		name:        ref.Name(),
+		label:       ref.String(),
+		host:        ref.Host(),
 		cloneURL:    "https://" + forgeport.GitHubHost + "/" + ref.Namespace() + "/" + ref.Name() + ".git",
 		githubHTTPS: true,
 	}, nil
@@ -306,11 +327,36 @@ func hasCloneScheme(spec string) bool {
 	return strings.HasPrefix(spec, "https://") || strings.HasPrefix(spec, "ssh://") || strings.HasPrefix(spec, "git@")
 }
 
+func cloneLocation(spec string) (string, string, bool) {
+	switch {
+	case strings.HasPrefix(spec, "git@"):
+		host, repoPath, found := strings.Cut(strings.TrimPrefix(spec, "git@"), ":")
+		return host, repoPath, found
+	case strings.HasPrefix(spec, "ssh://"):
+		return urlLocation(strings.TrimPrefix(spec, "ssh://"))
+	case strings.HasPrefix(spec, "https://"):
+		return urlLocation(strings.TrimPrefix(spec, "https://"))
+	}
+	return "", "", false
+}
+
+func urlLocation(rest string) (string, string, bool) {
+	authority, repoPath, found := strings.Cut(rest, "/")
+	if !found {
+		return "", "", false
+	}
+	userinfo, host := "", authority
+	if at := strings.LastIndex(authority, "@"); at >= 0 {
+		userinfo, host = authority[:at], authority[at+1:]
+	}
+	return host, repoPath, !strings.HasPrefix(userinfo, "-")
+}
+
 func (c *Client) gitHubToken(ctx context.Context, target cloneTarget) (contracts.ForgeToken, error) {
 	if !target.githubHTTPS {
 		return contracts.ForgeToken{}, nil
 	}
-	token, err := c.creds.Token(ctx, target.ref.Host())
+	token, err := c.creds.Token(ctx, target.host)
 	if errors.Is(err, contracts.ErrForgeNotConnected) {
 		return contracts.ForgeToken{}, nil
 	}

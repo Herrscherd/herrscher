@@ -221,6 +221,14 @@ func TestCloneRefusesBeforeAnyGitCommand(t *testing.T) {
 		"github.com/owner/repo":          "host-prefixed bare path",
 		"owner/repo\n":                   "control character",
 		"":                               "empty",
+		"git@-oProxyCommand=x:p/q":       "dash-led intranet host, scp form",
+		"https://-x/p":                   "dash-led intranet host, https form",
+		"ssh://-oProxy@gitlab/g/p":       "dash-led user of an intranet host",
+		"https://gitlab/g/..":            "dot-dot name on an intranet host",
+		"https://gitlab/g/-p":            "leading dash name on an intranet host",
+		"https://gitlab/g/p.git?x=1":     "query on an intranet host",
+		"https://github.com/owner":       "github.com without a repository name",
+		"git@gitlab.example.com:onlyone": "dotted host without a repository name",
 	}
 	for spec, why := range cases {
 		t.Run(why, func(t *testing.T) {
@@ -233,6 +241,22 @@ func TestCloneRefusesBeforeAnyGitCommand(t *testing.T) {
 				t.Fatalf("git ran for %q", spec)
 			}
 		})
+	}
+}
+
+func TestCloneRefusedIntranetSpecNeverShowsItsUserinfo(t *testing.T) {
+	runner := &fakeRunner{}
+	client := newClient(fakeCreds{secret: testToken}, nil, runner)
+
+	_, err := client.Clone(context.Background(), "ssh://git:hunter2@gitlab/g/-p", t.TempDir())
+	if !errors.Is(err, ErrRepoSpec) {
+		t.Fatalf("err = %v, want ErrRepoSpec", err)
+	}
+	if strings.Contains(err.Error(), "hunter2") {
+		t.Fatalf("error leaks the userinfo: %v", err)
+	}
+	if len(runner.calls) != 0 {
+		t.Fatal("git ran for a refused spec")
 	}
 }
 
@@ -253,6 +277,37 @@ func TestCloneAcceptsSSHFormsWithoutToken(t *testing.T) {
 			call := runner.calls[0]
 			if dir != filepath.Join(workspace, "repo") || !slices.Equal(call.args, []string{"clone", "--", spec, dir}) {
 				t.Fatalf("dir = %q, argv = %v", dir, call.args)
+			}
+			assertAnonymous(t, call.env)
+		})
+	}
+}
+
+func TestCloneIntranetHostWithoutDotClonesAnonymously(t *testing.T) {
+	cases := map[string]string{
+		"git@gitlab:group/p.git":        "scp form",
+		"ssh://git@gitlab/group/p.git":  "ssh URL",
+		"https://gitlab/g/p.git":        "https URL",
+		"ssh://git@gitlab:2222/g/p.git": "ssh URL with a port",
+	}
+	for spec, why := range cases {
+		t.Run(why, func(t *testing.T) {
+			runner := &fakeRunner{}
+			client := newClient(fakeCreds{secret: testToken}, nil, runner)
+			workspace := t.TempDir()
+			dir, err := client.Clone(context.Background(), spec, workspace)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(runner.calls) != 1 {
+				t.Fatalf("calls = %d, want one git clone", len(runner.calls))
+			}
+			call := runner.calls[0]
+			if call.name != "git" || dir != filepath.Join(workspace, "p") || !slices.Equal(call.args, []string{"clone", "--", spec, dir}) {
+				t.Fatalf("command = %q, dir = %q, argv = %v", call.name, dir, call.args)
+			}
+			if !slices.Equal(call.env, []string{"GIT_TERMINAL_PROMPT=0"}) {
+				t.Fatalf("env = %v, want only GIT_TERMINAL_PROMPT=0", call.env)
 			}
 			assertAnonymous(t, call.env)
 		})

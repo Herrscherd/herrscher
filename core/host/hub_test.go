@@ -348,20 +348,44 @@ func TestReposOnAnUnsetWorkspaceIsEmpty(t *testing.T) {
 func TestRemoteReposNameEachEntryByItsOwnHost(t *testing.T) {
 	got := remoteRepos([]forge.Repo{
 		{FullName: "octo/one", CloneURL: "https://github.com/octo/one.git", Desc: "gh", Forge: "github"},
-		{FullName: "group/sub/project", CloneURL: "https://gitlab.com/group/sub/project.git", Desc: "gl", Forge: "gitlab"},
+		{FullName: "group/sub/project", CloneURL: "git@gitlab.com:group/sub/project.git", Desc: "gl", Forge: "gitlab"},
 	})
 	want := []contracts.RepoRef{
 		{Name: "octo/one", Description: "gh"},
-		{Name: "https://gitlab.com/group/sub/project.git", Description: "gl"},
+		{Name: "git@gitlab.com:group/sub/project.git", Description: "gl"},
 	}
 	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("remoteRepos = %+v, want %+v", got, want)
 	}
 }
 
-func TestNewForgeClientWithoutCredentialsDoesNotPanic(t *testing.T) {
-	if newForgeClient(nil) == nil {
-		t.Fatal("newForgeClient(nil) = nil")
+func TestRemoteReposSkipsAnEntryWithoutAUsableURL(t *testing.T) {
+	got := remoteRepos([]forge.Repo{
+		{FullName: "group/project", Desc: "gl", Forge: "gitlab"},
+		{FullName: "octo/one", CloneURL: "https://github.com/octo/one.git", Desc: "gh", Forge: "github"},
+	})
+	if len(got) != 1 || got[0].Name != "octo/one" || got[0].Description != "gh" {
+		t.Fatalf("remoteRepos = %+v, want only octo/one", got)
+	}
+}
+
+func TestReposWithoutCredentialsListsLocalCheckoutsOnly(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	workspace := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(workspace, "myproj", ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h := newTestHub(t)
+	if err := h.st.SetWorkspace(workspace); err != nil {
+		t.Fatal(err)
+	}
+
+	repos, err := h.Repos(context.Background())
+	if err != nil {
+		t.Fatalf("Repos err = %v, want none", err)
+	}
+	if len(repos) != 1 || repos[0].Name != "myproj" || !repos[0].Local {
+		t.Fatalf("Repos = %+v, want only the local myproj", repos)
 	}
 }
 

@@ -154,12 +154,14 @@ connected to.
   `owner/name` from `github.com`, with the token when one is held. Without a
   token, the clone is anonymous, so a private repository cannot be cloned.
 - **GitLab** is listed only when `glab` is installed, from `glab repo list`. The
-  choice shows the https clone URL of each project, such as
-  `https://gitlab.com/group/project.git`, because that URL is what the clone
-  receives. Choosing an entry clones that URL from its own host, anonymously or
-  with your own git setup, as for any other clone. The herrscher token never
-  goes to GitLab, and a GitLab entry is never cloned from `github.com`, even
-  when a GitHub repository has the same path.
+  choice shows the ssh clone URL of each project, such as
+  `git@gitlab.com:group/project.git`, because that URL is what the clone
+  receives. Choosing an entry clones it over ssh with your own key, as before,
+  for any GitLab host, private repositories and self-hosted instances included.
+  A project that lists no ssh URL falls back to its https clone URL, cloned
+  anonymously. The herrscher token never goes to GitLab, and a GitLab entry is
+  never cloned from `github.com`, even when a GitHub repository has the same
+  path.
 
 ## Troubleshooting
 

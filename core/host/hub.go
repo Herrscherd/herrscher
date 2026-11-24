@@ -499,8 +499,12 @@ func (h *hub) Repos(ctx context.Context) ([]contracts.RepoRef, error) {
 
 func remoteRepos(repos []forge.Repo) []contracts.RepoRef {
 	out := make([]contracts.RepoRef, 0, len(repos))
-	for _, r := range repos {
-		out = append(out, contracts.RepoRef{Name: r.Spec(), Description: r.Desc})
+	for _, repo := range repos {
+		spec := repo.Spec()
+		if spec == "" {
+			continue
+		}
+		out = append(out, contracts.RepoRef{Name: spec, Description: repo.Desc})
 	}
 	return out
 }

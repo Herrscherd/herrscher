@@ -561,13 +561,13 @@ func TestListIncludesGitLabOnlyWhenGlabIsInstalled(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(repos) != 1 || repos[0].Forge != "gitlab" || repos[0].FullName != "g/p" || repos[0].CloneURL != "https://gitlab.com/g/p.git" {
+	if len(repos) != 1 || repos[0].Forge != "gitlab" || repos[0].FullName != "g/p" || repos[0].CloneURL != "git@gitlab.com:g/p.git" {
 		t.Fatalf("repos = %+v", repos)
 	}
 }
 
 func TestGitLabListingEntryClonesFromItsOwnHost(t *testing.T) {
-	runner := &fakeRunner{gitHub: true, out: []byte(`[{"path_with_namespace":"group/sub/project","http_url_to_repo":"https://gitlab.com/group/sub/project.git","description":"x"}]`)}
+	runner := &fakeRunner{gitHub: true, out: []byte(`[{"path_with_namespace":"group/sub/project","ssh_url_to_repo":"git@gitlab.com:group/sub/project.git","http_url_to_repo":"https://gitlab.com/group/sub/project.git","description":"x"}]`)}
 	client := newClient(fakeCreds{secret: testToken}, openWith(&fakeForge{}), runner)
 	repos, err := client.List(context.Background())
 	if err != nil {
@@ -581,12 +581,83 @@ func TestGitLabListingEntryClonesFromItsOwnHost(t *testing.T) {
 		t.Fatal(err)
 	}
 	call := runner.calls[0]
-	if dir != filepath.Join(workspace, "project") || !slices.Equal(call.args, []string{"clone", "--", "https://gitlab.com/group/sub/project.git", dir}) {
+	if dir != filepath.Join(workspace, "project") || !slices.Equal(call.args, []string{"clone", "--", "git@gitlab.com:group/sub/project.git", dir}) {
 		t.Fatalf("dir = %q, argv = %v", dir, call.args)
 	}
 	assertAnonymous(t, call.env)
 	if strings.Contains(strings.Join(call.args, " "), "github.com") {
 		t.Fatalf("GitLab entry cloned from github.com: %v", call.args)
+	}
+}
+
+func TestGitLabListingFallsBackToHTTPSOnlyWithoutSSHURL(t *testing.T) {
+	runner := &fakeRunner{gitHub: true, out: []byte(`[{"path_with_namespace":"g/p","ssh_url_to_repo":"","http_url_to_repo":"https://gitlab.example.com/g/p.git","description":"x"}]`)}
+	client := newClient(fakeCreds{secret: testToken}, openWith(&fakeForge{}), runner)
+	repos, err := client.List(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repos[0].Spec() != "https://gitlab.example.com/g/p.git" {
+		t.Fatalf("Spec() = %q, want the https URL", repos[0].Spec())
+	}
+	runner.calls = nil
+	workspace := t.TempDir()
+
+	dir, err := client.Clone(context.Background(), repos[0].Spec(), workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := runner.calls[0]
+	if dir != filepath.Join(workspace, "p") || !slices.Equal(call.args, []string{"clone", "--", "https://gitlab.example.com/g/p.git", dir}) {
+		t.Fatalf("dir = %q, argv = %v", dir, call.args)
+	}
+	assertAnonymous(t, call.env)
+}
+
+func TestGitLabListingWithoutAUsableURLHasNoSpec(t *testing.T) {
+	cases := map[string]string{
+		"no URL":          `{"path_with_namespace":"g/p","ssh_url_to_repo":"","http_url_to_repo":""}`,
+		"plain http only": `{"path_with_namespace":"g/p","ssh_url_to_repo":"","http_url_to_repo":"http://gitlab.example.com/g/p.git"}`,
+	}
+	for why, item := range cases {
+		t.Run(why, func(t *testing.T) {
+			runner := &fakeRunner{gitHub: true, out: []byte("[" + item + "]")}
+			client := newClient(fakeCreds{}, openWith(&fakeForge{}), runner)
+			repos, err := client.List(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if spec := repos[0].Spec(); spec != "" {
+				t.Fatalf("Spec() = %q, want empty", spec)
+			}
+		})
+	}
+}
+
+func TestCloneGitLabSSHFormsOnAnyHostAreAnonymous(t *testing.T) {
+	cases := map[string]string{
+		"git@gitlab.com:group/project.git":                    "hosted scp form",
+		"git@gitlab.example.com:group/project.git":            "self-hosted scp form",
+		"ssh://git@gitlab.example.com:2222/group/project.git": "self-hosted ssh URL with a port",
+		"git@10.0.0.5:group/project.git":                      "self-hosted scp form on an address",
+	}
+	for spec, why := range cases {
+		t.Run(why, func(t *testing.T) {
+			runner := &fakeRunner{}
+			client := newClient(fakeCreds{secret: testToken}, nil, runner)
+			workspace := t.TempDir()
+
+			dir, err := client.Clone(context.Background(), spec, workspace)
+			if err != nil {
+				t.Fatal(err)
+			}
+			call := runner.calls[0]
+			if call.name != "git" || dir != filepath.Join(workspace, "project") || !slices.Equal(call.args, []string{"clone", "--", spec, dir}) {
+				t.Fatalf("command = %s %v, dir = %q", call.name, call.args, dir)
+			}
+			assertAnonymous(t, call.env)
+			assertNoSecret(t, call.args, call.dir)
+		})
 	}
 }
 

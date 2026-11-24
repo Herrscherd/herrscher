@@ -59,7 +59,8 @@ type Repo struct {
 
 // Spec is the clone spec that reaches the repository on its own host. A GitHub
 // repository is named owner/name, which the clone resolves to github.com; any
-// other forge is named by its https clone URL.
+// other forge is named by the clone URL it lists, which is empty when it lists
+// none.
 func (r Repo) Spec() string {
 	if r.Forge == githubLabel {
 		return r.FullName
@@ -194,6 +195,7 @@ func (c *Client) listGitLab(ctx context.Context) ([]Repo, error) {
 	}
 	var items []struct {
 		PathWithNamespace string `json:"path_with_namespace"`
+		SSHURLToRepo      string `json:"ssh_url_to_repo"`
 		HTTPURLToRepo     string `json:"http_url_to_repo"`
 		Description       string `json:"description"`
 	}
@@ -202,9 +204,19 @@ func (c *Client) listGitLab(ctx context.Context) ([]Repo, error) {
 	}
 	out := make([]Repo, 0, len(items))
 	for _, it := range items {
-		out = append(out, Repo{FullName: it.PathWithNamespace, CloneURL: it.HTTPURLToRepo, Desc: it.Description, Forge: gitlabLabel})
+		out = append(out, Repo{FullName: it.PathWithNamespace, CloneURL: gitlabCloneURL(it.SSHURLToRepo, it.HTTPURLToRepo), Desc: it.Description, Forge: gitlabLabel})
 	}
 	return out, nil
+}
+
+func gitlabCloneURL(sshURL, httpsURL string) string {
+	if sshURL != "" {
+		return sshURL
+	}
+	if strings.HasPrefix(httpsURL, "https://") {
+		return httpsURL
+	}
+	return ""
 }
 
 // Clone clones spec into workspace and returns the project dir. spec is

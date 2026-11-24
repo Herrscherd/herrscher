@@ -54,9 +54,10 @@ type Credentials struct {
 }
 
 type heldRecord struct {
-	record Record
-	from   string
-	warned bool
+	record           Record
+	from             string
+	warnedUnreadable bool
+	warnedUnsaved    bool
 }
 
 type settlement struct {
@@ -304,7 +305,7 @@ func (c *Credentials) renew(ctx context.Context, host contracts.ForgeHost) (sett
 	if current.Expired(now) {
 		return settlement{}, nil
 	}
-	refreshed, err := c.refresh(ctx, host, current)
+	refreshed, deferred, err := c.refresh(ctx, host, current)
 	switch {
 	case errors.Is(err, ErrRefreshRejected):
 		current.Rejected = true
@@ -313,7 +314,9 @@ func (c *Credentials) renew(ctx context.Context, host contracts.ForgeHost) (sett
 		if !stillValid(current, now) {
 			return settlement{}, fmt.Errorf("%s: refresh the saved token: %w", host, err)
 		}
-		slog.Warn("refresh the saved forge token", "host", host.String(), "err", err)
+		if !deferred {
+			slog.Warn("refresh the saved forge token", "host", host.String(), "err", err)
+		}
 		return settlement{record: current, ok: true}, nil
 	}
 	return settlement{record: refreshed, ok: true, write: true, from: current.RefreshToken}, nil
@@ -343,8 +346,7 @@ func (c *Credentials) persist(ctx context.Context, host contracts.ForgeHost, out
 
 func (c *Credentials) settleFailed(host contracts.ForgeHost, outcome settlement, err error) (Record, bool, error) {
 	if outcome.ok && outcome.write {
-		c.setHeld(host, heldRecord{record: outcome.record, from: outcome.from})
-		slog.Warn("forge connections not saved, the renewed token is kept in memory", "host", host.String(), "err", err)
+		c.holdUnsaved(host, heldRecord{record: outcome.record, from: outcome.from}, err)
 		return outcome.record, true, nil
 	}
 	if pending, ok := c.heldFor(host); ok && stillValid(pending.record, c.now()) {
@@ -379,14 +381,29 @@ func (c *Credentials) retryHeld(ctx context.Context, host contracts.ForgeHost, p
 	return nil
 }
 
+func (c *Credentials) holdUnsaved(host contracts.ForgeHost, held heldRecord, saveErr error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	key := host.String()
+	if previous, ok := c.held[key]; ok {
+		held.warnedUnreadable = previous.warnedUnreadable
+		held.warnedUnsaved = previous.warnedUnsaved
+	}
+	if !held.warnedUnsaved {
+		held.warnedUnsaved = true
+		slog.Warn("forge connections not saved, the renewed token is kept in memory", "host", key, "err", saveErr)
+	}
+	c.held[key] = held
+}
+
 func (c *Credentials) noteUnreadable(host contracts.ForgeHost, readErr error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	held, ok := c.held[host.String()]
-	if !ok || held.warned {
+	if !ok || held.warnedUnreadable {
 		return
 	}
-	held.warned = true
+	held.warnedUnreadable = true
 	c.held[host.String()] = held
 	slog.Warn("forge connections not readable, using the renewed token kept in memory", "host", host.String(), "err", readErr)
 }
@@ -398,18 +415,18 @@ func (c *Credentials) markReadable(host contracts.ForgeHost) {
 	if !ok {
 		return
 	}
-	held.warned = false
+	held.warnedUnreadable = false
 	c.held[host.String()] = held
 }
 
-func (c *Credentials) refresh(ctx context.Context, host contracts.ForgeHost, current Record) (Record, error) {
+func (c *Credentials) refresh(ctx context.Context, host contracts.ForgeHost, current Record) (Record, bool, error) {
 	now := c.now()
 	if c.appRetryHeld(host, now) {
-		return Record{}, ErrAppMisconfigured
+		return Record{}, true, ErrAppMisconfigured
 	}
 	refreshed, err := c.flow.Refresh(ctx, c.base(host), current)
 	c.noteAppStanding(host, err, now)
-	return refreshed, err
+	return refreshed, false, err
 }
 
 func (c *Credentials) noteAppStanding(host contracts.ForgeHost, refreshErr error, now time.Time) {
@@ -474,12 +491,6 @@ func (c *Credentials) heldFor(host contracts.ForgeHost) (heldRecord, bool) {
 	defer c.mu.Unlock()
 	held, ok := c.held[host.String()]
 	return held, ok
-}
-
-func (c *Credentials) setHeld(host contracts.ForgeHost, held heldRecord) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.held[host.String()] = held
 }
 
 func (c *Credentials) dropHeld(host contracts.ForgeHost) {

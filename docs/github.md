@@ -95,7 +95,8 @@ token.
   memory and used by this process. GitHub has already replaced the refresh token
   that the file still holds, so when this process stops before the file is saved
   again, the saved connection is refused at the next start and you run
-  `herrscher connect github` again.
+  `herrscher connect github` again. Herrscher warns once while saves keep
+  failing, and again only after a save has succeeded and a later one fails.
 - **The connections file cannot be read, but a renewed token is held in
   memory.** The token kept in memory is used while it is still valid, and
   herrscher tries to save it again at each use. Once it has expired, forge
@@ -155,8 +156,8 @@ fail with a message saying herrscher is not connected to that host.
 
   After such a refusal, herrscher does not send the renewal to the forge again
   for the same host for one minute. While the saved token is still valid, forge
-  operations keep using it and log a warning that names the host, never the
-  token. Once it expires, forge operations fail with an error that ends with
+  operations keep using it and log one warning for the refusal that names the
+  host, never the token. Once it expires, forge operations fail with an error that ends with
   `the forge does not accept the herrscher app credentials`. Renewal is tried
   again when the token is due and that minute has passed, and fixing the App
   restores renewals.

@@ -100,9 +100,19 @@
     "other": "cannot read the LongMemEval dataset {{.Path}}: {{.Err}}"
   },
   {
-    "id": "membench.error.dataset_shape",
-    "description": "Message of the memory bench: error.dataset_shape",
-    "other": "invalid LongMemEval dataset: {{.Detail}}"
+    "id": "membench.error.dataset_empty",
+    "description": "Message of the memory bench: error.dataset_empty",
+    "other": "invalid LongMemEval dataset: no item has evidence sessions, a known question type and an answer"
+  },
+  {
+    "id": "membench.error.dataset_json",
+    "description": "Message of the memory bench: error.dataset_json",
+    "other": "invalid LongMemEval dataset: malformed JSON at byte {{.Offset}}"
+  },
+  {
+    "id": "membench.error.dataset_delim",
+    "description": "Message of the memory bench: error.dataset_delim",
+    "other": "invalid LongMemEval dataset: expected {{.Want}} at byte {{.Offset}}"
   },
   {
     "id": "membench.error.herrscher",

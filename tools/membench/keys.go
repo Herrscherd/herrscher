@@ -7,11 +7,13 @@ const (
 	paramLimit   = "Limit"
 	paramMoney   = "Money"
 	paramName    = "Name"
+	paramOffset  = "Offset"
 	paramPath    = "Path"
 	paramReserve = "Reserve"
 	paramRun     = "Run"
 	paramSpent   = "Spent"
 	paramTokens  = "Tokens"
+	paramWant    = "Want"
 )
 
 const (
@@ -35,7 +37,9 @@ const (
 	msgErrReserveCeiling  msgKey = "membench.error.reserve_ceiling"
 	msgErrFlagValue       msgKey = "membench.error.flag_value"
 	msgErrDatasetRead     msgKey = "membench.error.dataset_read"
-	msgErrDatasetShape    msgKey = "membench.error.dataset_shape"
+	msgErrDatasetEmpty    msgKey = "membench.error.dataset_empty"
+	msgErrDatasetJSON     msgKey = "membench.error.dataset_json"
+	msgErrDatasetDelim    msgKey = "membench.error.dataset_delim"
 	msgErrDatasetLarge    msgKey = "membench.error.dataset_large"
 	msgErrHerrscher       msgKey = "membench.error.herrscher"
 	msgErrRun             msgKey = "membench.error.run"
@@ -94,7 +98,8 @@ func paramTable() []keyParams {
 		{key: msgErrReserveCeiling, params: []string{paramReserve, paramLimit}},
 		{key: msgErrFlagValue, params: []string{paramName, paramDetail}},
 		{key: msgErrDatasetRead, params: []string{paramPath, paramErr}},
-		{key: msgErrDatasetShape, params: []string{paramDetail}},
+		{key: msgErrDatasetJSON, params: []string{paramOffset}},
+		{key: msgErrDatasetDelim, params: []string{paramWant, paramOffset}},
 		{key: msgErrDatasetLarge, params: []string{paramLimit}},
 		{key: msgErrHerrscher, params: []string{paramPath, paramErr}},
 		{key: msgErrRun, params: []string{paramRun, paramErr}},

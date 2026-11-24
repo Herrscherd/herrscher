@@ -59,7 +59,7 @@ func loadLongMemEval(path string, samples int, seed uint64, maxTurns int) ([]tas
 		return nil, 0, datasetRead(path, closeErr)
 	}
 	if eligible == 0 {
-		return nil, 0, datasetShape("no item has evidence sessions, a known question type and an answer")
+		return nil, 0, datasetEmpty()
 	}
 	tasks := make([]task, 0, len(items))
 	for i := range items {
@@ -78,7 +78,7 @@ func sampleItems(source io.Reader, samples int, seed uint64, maxTurns int) ([]lm
 	for decoder.More() {
 		var item lmeItem
 		if err := decoder.Decode(&item); err != nil {
-			return nil, 0, 0, datasetShape(err.Error())
+			return nil, 0, 0, datasetMalformed(decoder.InputOffset())
 		}
 		decoded++
 		if decoded > maxDatasetItems {
@@ -144,10 +144,10 @@ func lowestKeys(kept []sampled, limit int) []sampled {
 func expectDelim(decoder *json.Decoder, want json.Delim) error {
 	token, err := decoder.Token()
 	if err != nil {
-		return datasetShape(err.Error())
+		return datasetMalformed(decoder.InputOffset())
 	}
 	if delim, ok := token.(json.Delim); !ok || delim != want {
-		return datasetShape(fmt.Sprintf("expected %q, got %v", want, token))
+		return datasetDelim(want, decoder.InputOffset())
 	}
 	return nil
 }
@@ -160,8 +160,16 @@ func datasetLarge(limit string) error {
 	return messageError{key: msgErrDatasetLarge, params: params{paramLimit: limit}}
 }
 
-func datasetShape(detail string) error {
-	return messageError{key: msgErrDatasetShape, params: params{paramDetail: detail}}
+func datasetEmpty() error {
+	return messageError{key: msgErrDatasetEmpty}
+}
+
+func datasetMalformed(offset int64) error {
+	return messageError{key: msgErrDatasetJSON, params: params{paramOffset: offset}}
+}
+
+func datasetDelim(want json.Delim, offset int64) error {
+	return messageError{key: msgErrDatasetDelim, params: params{paramWant: want.String(), paramOffset: offset}}
 }
 
 func eligibleItem(item lmeItem, maxTurns int) bool {

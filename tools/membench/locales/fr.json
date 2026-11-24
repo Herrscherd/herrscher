@@ -100,9 +100,19 @@
     "other": "lecture du jeu LongMemEval {{.Path}} impossible : {{.Err}}"
   },
   {
-    "id": "membench.error.dataset_shape",
-    "description": "Message of the memory bench: error.dataset_shape",
-    "other": "jeu LongMemEval invalide : {{.Detail}}"
+    "id": "membench.error.dataset_empty",
+    "description": "Message of the memory bench: error.dataset_empty",
+    "other": "jeu LongMemEval invalide : aucun item n'a de sessions de preuve, de type de question connu et de réponse"
+  },
+  {
+    "id": "membench.error.dataset_json",
+    "description": "Message of the memory bench: error.dataset_json",
+    "other": "jeu LongMemEval invalide : JSON mal formé à l'octet {{.Offset}}"
+  },
+  {
+    "id": "membench.error.dataset_delim",
+    "description": "Message of the memory bench: error.dataset_delim",
+    "other": "jeu LongMemEval invalide : « {{.Want}} » attendu à l'octet {{.Offset}}"
   },
   {
     "id": "membench.error.flag_value",

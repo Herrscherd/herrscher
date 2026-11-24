@@ -2,8 +2,12 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
 
 func lmeFixture(count int) string {
@@ -79,5 +83,30 @@ func TestSampleCountsItemsTooLongForAnArgument(t *testing.T) {
 	}
 	if skipped != 1 || len(items) != 1 || items[0].QuestionID != "keep" {
 		t.Errorf("items %d, skipped %d; want the eligible item kept and one skipped", len(items), skipped)
+	}
+}
+
+func TestDatasetErrorsReadInFrench(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "empty", body: "[]", want: "jeu LongMemEval invalide : aucun item n'a de sessions de preuve, de type de question connu et de réponse"},
+		{name: "malformed", body: `[{"question_id":`, want: "jeu LongMemEval invalide : JSON mal formé à l'octet 1"},
+		{name: "delimiter", body: "{}", want: "jeu LongMemEval invalide : « [ » attendu à l'octet 1"},
+	}
+	msgs := loadCatalogue()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "dataset.json")
+			if err := os.WriteFile(path, []byte(tc.body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, _, err := loadLongMemEval(path, 10, 1, 6)
+			if got := failureText(msgs, i18n.French, err); got != tc.want {
+				t.Errorf("french text %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

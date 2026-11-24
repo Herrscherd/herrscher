@@ -201,6 +201,9 @@ linters:
       - path: ^core/(identity|scope|service|keyproxy|internal/(forge|runner|supervisor|worktree|checkpoint))/
         linters: [gosec]
         text: "^G204:"
+      - path: ^core/forgecreds/gh\.go$
+        linters: [gosec]
+        text: "^G204:"
       - path: ^core/host/session_shell\.go$
         linters: [gosec]
         text: "^G204:"

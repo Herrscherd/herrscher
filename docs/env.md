@@ -196,6 +196,18 @@ worktree. Outside a repository there is no project, only the agent root.
 A memory root is not a location: `TERMINAL_PROJECT` names where what the session
 learns is filed, and never moves where the session runs.
 
+## Forge (GitHub)
+
+These variables are read by the GitHub forge when no token was saved by
+`herrscher connect github`. The connection itself is described in
+[GitHub connection](github.md).
+
+| Variable | Default | Meaning | Read by |
+|----------|---------|---------|---------|
+| `GH_TOKEN` | unset | A GitHub token used for `github.com`, or for the host named by `GH_HOST`. Ignored for any other host. Blank values are ignored. | Forge credentials |
+| `GITHUB_TOKEN` | unset | Used when `GH_TOKEN` is unset, with the same host rule. | Forge credentials |
+| `GH_HOST` | unset | A GitHub host, besides `github.com`, that `GH_TOKEN` and `GITHUB_TOKEN` apply to, for example `ghe.example.com`. Unset, they apply to `github.com` only. Also listed by `herrscher connect status`. | Forge credentials |
+
 ## Host: logging and env file
 
 | Variable | Default | Meaning | Read by |

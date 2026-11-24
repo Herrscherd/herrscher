@@ -7,11 +7,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-)
 
-var (
-	errLockNotOwned = errors.New("the lock file is not owned by this user")
-	errLockSymlink  = errors.New("the lock file is a symbolic link")
+	"github.com/Herrscherd/herrscher/core/internal/filelock"
 )
 
 // StateLockPath is the lock a daemon holds for the whole time it serves. It sits
@@ -56,11 +53,11 @@ func takeLock(messages *hostMessages, path string) (func(), error) {
 	if err := os.MkdirAll(filepath.Dir(path), privateDirMode); err != nil {
 		return nil, wrapHost(messages, err, "lock.dir", nil)
 	}
-	lockFile, err := openLockFile(path)
+	lockFile, err := filelock.Open(path)
 	if err != nil {
 		return nil, wrapHost(messages, err, "lock.unsafe", map[string]any{pathParam: path, detailParam: err.Error()})
 	}
-	locked, err := tryLock(lockFile)
+	locked, err := filelock.TryLock(lockFile)
 	if err != nil {
 		closeRead(lockFile)
 		return nil, wrapHost(messages, err, "lock.state", nil)

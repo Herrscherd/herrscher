@@ -9,6 +9,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/internal/filelock"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 	"github.com/Herrscherd/herrscher/core/usage"
@@ -84,8 +85,8 @@ func hostErrorKeys() []hostErrorKey {
 		{errSealExpectedPositive, "cli.host.fault.seal_expected_positive"},
 		{errDiscoveryNoAnswer, "cli.host.fault.discovery_no_answer"},
 		{errCacheLockBusy, "cli.host.fault.cache_lock_busy"},
-		{errLockNotOwned, "cli.host.fault.lock_not_owned"},
-		{errLockSymlink, "cli.host.fault.lock_symlink"},
+		{filelock.ErrNotOwned, "cli.host.fault.lock_not_owned"},
+		{filelock.ErrSymlink, "cli.host.fault.lock_symlink"},
 		{errNoPendingChoice, "cli.host.fault.no_pending_choice"},
 		{errHandoffTargets, "cli.host.fault.handoff_targets"},
 		{errHandoffAgentTargets, "cli.host.fault.handoff_agent_targets"},

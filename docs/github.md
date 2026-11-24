@@ -31,9 +31,11 @@ be renewed. Status warns you 14 days before that date, and you run
 For GitHub Enterprise Server, pass `--host` with the instance name. The device
 flow then runs against that host.
 
-The clone and pull request paths reach github.com only for now: the forge port
-does not support GitHub Enterprise Server yet, and herrscher never sends the
-token to another host.
+The token and the forge port only ever go to github.com. Opening a pull request
+works on github.com only: the forge port does not support GitHub Enterprise
+Server yet, so a pull request for another host is refused. A repository on
+another host, whether its URL is `https://`, `git@` or `ssh://`, is cloned
+anonymously or with your own git or ssh setup, never with the herrscher token.
 
 If the GitHub App is not installed on the account or the instance, or the forge
 refuses its client ID or has device sign-in turned off for it, the command says
@@ -133,11 +135,13 @@ The first valid token wins. If none of them holds a token, forge operations
 fail with a message saying herrscher is not connected to that host.
 
 Cloning a repository for a session and opening its pull request from the
-terminal use the same token, and only for `github.com`: a clone or a pull
-request on another host is refused, so the token never reaches a host that is
-not GitHub. The token goes to git through its environment, never on the command
-line or in the clone's configuration, and an `https://` URL or an `owner/name`
-is accepted, while `git@` and `ssh://` URLs are refused.
+terminal use the same token, and only for `github.com`. An `owner/name` or an
+`https://github.com/` URL is cloned with the token when one is held. A `git@` or
+`ssh://` URL, and any repository on another host, is cloned without the token,
+with your own git or ssh setup. A pull
+request for a host other than github.com is refused. The token goes to git
+through its environment, never on the command line or in the clone's
+configuration.
 
 ## Troubleshooting
 

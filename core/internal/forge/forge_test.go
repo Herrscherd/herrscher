@@ -495,8 +495,8 @@ func TestGitEnvironmentRefusesAUnusableCountOnlyWithAToken(t *testing.T) {
 			if err != nil || len(env) != 1 {
 				t.Fatalf("anonymous env = %v, %v; the count must not be read", env, err)
 			}
-			if _, err := gitEnvironment(envWithCount(count), mustHost(t), mustToken(t)); !errors.Is(err, errConfigCount) {
-				t.Fatalf("err = %v, want errConfigCount", err)
+			if _, err := gitEnvironment(envWithCount(count), mustHost(t), mustToken(t)); !errors.Is(err, ErrConfigCount) {
+				t.Fatalf("err = %v, want ErrConfigCount", err)
 			}
 		})
 	}
@@ -507,8 +507,8 @@ func TestCloneRefusesAnUnusableCountBeforeGit(t *testing.T) {
 	runner := &fakeRunner{}
 	client := newClient(fakeCreds{secret: testToken}, nil, runner)
 
-	if _, err := client.Clone(context.Background(), "owner/repo", t.TempDir()); !errors.Is(err, errConfigCount) {
-		t.Fatalf("err = %v, want errConfigCount", err)
+	if _, err := client.Clone(context.Background(), "owner/repo", t.TempDir()); !errors.Is(err, ErrConfigCount) {
+		t.Fatalf("err = %v, want ErrConfigCount", err)
 	}
 	if len(runner.calls) != 0 {
 		t.Fatal("git ran with an unusable GIT_CONFIG_COUNT")
@@ -554,15 +554,76 @@ func mustToken(t *testing.T) contracts.ForgeToken {
 
 func TestListIncludesGitLabOnlyWhenGlabIsInstalled(t *testing.T) {
 	forge := &fakeForge{}
-	runner := &fakeRunner{gitHub: true, out: []byte(`[{"path_with_namespace":"g/p","ssh_url_to_repo":"git@gitlab.com:g/p.git","description":"x"}]`)}
+	runner := &fakeRunner{gitHub: true, out: []byte(`[{"path_with_namespace":"g/p","http_url_to_repo":"https://gitlab.com/g/p.git","ssh_url_to_repo":"git@gitlab.com:g/p.git","description":"x"}]`)}
 	client := newClient(fakeCreds{}, openWith(forge), runner)
 
 	repos, err := client.List(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(repos) != 1 || repos[0].Forge != "gitlab" || repos[0].FullName != "g/p" {
+	if len(repos) != 1 || repos[0].Forge != "gitlab" || repos[0].FullName != "g/p" || repos[0].CloneURL != "https://gitlab.com/g/p.git" {
 		t.Fatalf("repos = %+v", repos)
+	}
+}
+
+func TestGitLabListingEntryClonesFromItsOwnHost(t *testing.T) {
+	runner := &fakeRunner{gitHub: true, out: []byte(`[{"path_with_namespace":"group/sub/project","http_url_to_repo":"https://gitlab.com/group/sub/project.git","description":"x"}]`)}
+	client := newClient(fakeCreds{secret: testToken}, openWith(&fakeForge{}), runner)
+	repos, err := client.List(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner.calls = nil
+	workspace := t.TempDir()
+
+	dir, err := client.Clone(context.Background(), repos[0].Spec(), workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := runner.calls[0]
+	if dir != filepath.Join(workspace, "project") || !slices.Equal(call.args, []string{"clone", "--", "https://gitlab.com/group/sub/project.git", dir}) {
+		t.Fatalf("dir = %q, argv = %v", dir, call.args)
+	}
+	assertAnonymous(t, call.env)
+	if strings.Contains(strings.Join(call.args, " "), "github.com") {
+		t.Fatalf("GitLab entry cloned from github.com: %v", call.args)
+	}
+}
+
+func TestGitHubListingEntryStillClonesFromGitHubWithToken(t *testing.T) {
+	forge := &fakeForge{pages: map[contracts.PageCursor]contracts.Page[contracts.ForgeRepo]{
+		"": {Items: []contracts.ForgeRepo{listedRepo(t, "github.com/a/one")}},
+	}}
+	runner := &fakeRunner{}
+	client := newClient(fakeCreds{secret: testToken}, openWith(forge), runner)
+	repos, err := client.List(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repos[0].Spec() != "a/one" {
+		t.Fatalf("Spec() = %q, want a/one", repos[0].Spec())
+	}
+	workspace := t.TempDir()
+
+	dir, err := client.Clone(context.Background(), repos[0].Spec(), workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := runner.calls[0]
+	if dir != filepath.Join(workspace, "one") || !slices.Equal(call.args, []string{"clone", "--", "https://github.com/a/one.git", dir}) {
+		t.Fatalf("dir = %q, argv = %v", dir, call.args)
+	}
+	if !slices.Contains(call.env, "GIT_CONFIG_VALUE_0=Authorization: Basic "+basicTestHeader()) {
+		t.Fatalf("GitHub clone misses the token header: %v", call.env)
+	}
+}
+
+func TestNewWithoutCredentialsHoldsNoToken(t *testing.T) {
+	client := New(nil)
+
+	_, err := client.creds.Token(context.Background(), mustHost(t))
+	if !errors.Is(err, contracts.ErrForgeNotConnected) {
+		t.Fatalf("Token err = %v, want ErrForgeNotConnected", err)
 	}
 }
 

@@ -41,9 +41,11 @@ const (
 // ErrRepoSpec matches a clone spec that names no repository the clone can reach.
 var ErrRepoSpec = errors.New("invalid repo spec")
 
+// ErrConfigCount matches a GIT_CONFIG_COUNT that is not a count from 0 to 1000.
+var ErrConfigCount = errors.New(configCount + " is not a count from 0 to " + strconv.Itoa(maxConfigs))
+
 var (
 	errTooManyPages = errors.New("repository listing has more pages than the bound")
-	errConfigCount  = errors.New(configCount + " must be a count from 0 to " + strconv.Itoa(maxConfigs))
 	specRe          = regexp.MustCompile(`^[\w.\-]+/[\w.\-]+$`)
 )
 
@@ -53,6 +55,16 @@ type Repo struct {
 	CloneURL string
 	Desc     string
 	Forge    string
+}
+
+// Spec is the clone spec that reaches the repository on its own host. A GitHub
+// repository is named owner/name, which the clone resolves to github.com; any
+// other forge is named by its https clone URL.
+func (r Repo) Spec() string {
+	if r.Forge == githubLabel {
+		return r.FullName
+	}
+	return r.CloneURL
 }
 
 type runner interface {
@@ -85,13 +97,25 @@ type Client struct {
 }
 
 // New returns a Client that reaches GitHub through the forge plugin, with
-// creds as the port that supplies its token.
+// creds as the port that supplies its token. A nil creds holds no token: the
+// client lists no GitHub repository and clones anonymously.
 func New(creds contracts.ForgeCredentials) *Client {
+	if creds == nil {
+		creds = unconnected{}
+	}
 	open := func(ctx context.Context, host contracts.ForgeHost) (contracts.Forge, error) {
 		return forgeport.Open(ctx, forgeport.KindGitHub, host, creds)
 	}
 	return newClient(creds, open, execRunner{})
 }
+
+type unconnected struct{}
+
+func (unconnected) Token(context.Context, contracts.ForgeHost) (contracts.ForgeToken, error) {
+	return contracts.ForgeToken{}, contracts.ErrForgeNotConnected
+}
+
+func (unconnected) Invalidate(context.Context, contracts.ForgeHost) {}
 
 func newClient(creds contracts.ForgeCredentials, open openForge, r runner) *Client {
 	return &Client{creds: creds, open: open, r: r}
@@ -170,7 +194,7 @@ func (c *Client) listGitLab(ctx context.Context) ([]Repo, error) {
 	}
 	var items []struct {
 		PathWithNamespace string `json:"path_with_namespace"`
-		SSHURLToRepo      string `json:"ssh_url_to_repo"`
+		HTTPURLToRepo     string `json:"http_url_to_repo"`
 		Description       string `json:"description"`
 	}
 	if err := json.Unmarshal(raw, &items); err != nil {
@@ -178,7 +202,7 @@ func (c *Client) listGitLab(ctx context.Context) ([]Repo, error) {
 	}
 	out := make([]Repo, 0, len(items))
 	for _, it := range items {
-		out = append(out, Repo{FullName: it.PathWithNamespace, CloneURL: it.SSHURLToRepo, Desc: it.Description, Forge: gitlabLabel})
+		out = append(out, Repo{FullName: it.PathWithNamespace, CloneURL: it.HTTPURLToRepo, Desc: it.Description, Forge: gitlabLabel})
 	}
 	return out, nil
 }
@@ -305,7 +329,7 @@ func configIndex(getenv func(string) string) (int, error) {
 	}
 	count, err := strconv.Atoi(raw)
 	if err != nil || count < 0 || count > maxConfigs {
-		return 0, errConfigCount
+		return 0, ErrConfigCount
 	}
 	return count, nil
 }

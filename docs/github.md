@@ -136,12 +136,30 @@ fail with a message saying herrscher is not connected to that host.
 
 Cloning a repository for a session and opening its pull request from the
 terminal use the same token, and only for `github.com`. An `owner/name` or an
-`https://github.com/` URL is cloned with the token when one is held. A `git@` or
-`ssh://` URL, and any repository on another host, is cloned without the token,
-with your own git or ssh setup. A pull
-request for a host other than github.com is refused. The token goes to git
-through its environment, never on the command line or in the clone's
-configuration.
+`https://github.com/` URL is cloned with the token when one is held. A `git@`
+or `ssh://` URL, and any repository on another host, is cloned without the
+token, with your own git or ssh setup. A pull request for a host other than
+github.com is refused. The token goes to git through its environment, never on
+the command line or in the clone's configuration.
+
+## Repositories to clone
+
+When you create a session, the choice of repositories lists the workspace
+checkouts already on disk, and the repositories of the forges the host is
+connected to.
+
+- **GitHub** lists every repository the connected account can see, shown as
+  `owner/name` with its description. Without a GitHub connection, no GitHub
+  repository is listed, and this is not an error. Choosing an entry clones
+  `owner/name` from `github.com`, with the token when one is held. Without a
+  token, the clone is anonymous, so a private repository cannot be cloned.
+- **GitLab** is listed only when `glab` is installed, from `glab repo list`. The
+  choice shows the https clone URL of each project, such as
+  `https://gitlab.com/group/project.git`, because that URL is what the clone
+  receives. Choosing an entry clones that URL from its own host, anonymously or
+  with your own git setup, as for any other clone. The herrscher token never
+  goes to GitLab, and a GitLab entry is never cloned from `github.com`, even
+  when a GitHub repository has the same path.
 
 ## Troubleshooting
 

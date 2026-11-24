@@ -3048,6 +3048,11 @@
     "other": "clone attend owner/name, ou une URL de clonage en https ou en ssh"
   },
   {
+    "id": "cli.host.err.config_count",
+    "description": "Reply of a host command, err config count",
+    "other": "GIT_CONFIG_COUNT n'est pas un compte utilisable : retirez-le, ou donnez-lui un nombre de 0 à 1000"
+  },
+  {
     "id": "cli.host.err.no_host",
     "description": "Reply of a host command, err no host",
     "other": "la session veut l'hôte \"{{.Host}}\" mais aucun hôte n'est enregistré"

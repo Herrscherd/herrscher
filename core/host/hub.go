@@ -494,13 +494,21 @@ func (h *hub) Repos(ctx context.Context) ([]contracts.RepoRef, error) {
 		slog.Warn("repos unavailable", "err", err)
 		return out, nil
 	}
+	return append(out, remoteRepos(repos)...), nil
+}
+
+func remoteRepos(repos []forge.Repo) []contracts.RepoRef {
+	out := make([]contracts.RepoRef, 0, len(repos))
 	for _, r := range repos {
-		out = append(out, contracts.RepoRef{Name: r.FullName, Description: r.Desc})
+		out = append(out, contracts.RepoRef{Name: r.Spec(), Description: r.Desc})
 	}
-	return out, nil
+	return out
 }
 
 func newForgeClient(credentials *forgecreds.Credentials) *forge.Client {
+	if credentials == nil {
+		return forge.New(nil)
+	}
 	return forge.New(credentials)
 }
 

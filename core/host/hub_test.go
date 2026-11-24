@@ -14,6 +14,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
@@ -341,6 +342,26 @@ func TestReposListsLocalCheckoutsOnly(t *testing.T) {
 func TestReposOnAnUnsetWorkspaceIsEmpty(t *testing.T) {
 	if got := workspaceRepos(""); got != nil {
 		t.Fatalf("workspaceRepos(\"\") = %+v, want nil", got)
+	}
+}
+
+func TestRemoteReposNameEachEntryByItsOwnHost(t *testing.T) {
+	got := remoteRepos([]forge.Repo{
+		{FullName: "octo/one", CloneURL: "https://github.com/octo/one.git", Desc: "gh", Forge: "github"},
+		{FullName: "group/sub/project", CloneURL: "https://gitlab.com/group/sub/project.git", Desc: "gl", Forge: "gitlab"},
+	})
+	want := []contracts.RepoRef{
+		{Name: "octo/one", Description: "gh"},
+		{Name: "https://gitlab.com/group/sub/project.git", Description: "gl"},
+	}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("remoteRepos = %+v, want %+v", got, want)
+	}
+}
+
+func TestNewForgeClientWithoutCredentialsDoesNotPanic(t *testing.T) {
+	if newForgeClient(nil) == nil {
+		t.Fatal("newForgeClient(nil) = nil")
 	}
 }
 

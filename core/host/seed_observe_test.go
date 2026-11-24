@@ -51,3 +51,64 @@ func TestOneShotSeedReturnsOnlyAfterTheTurnIsObserved(t *testing.T) {
 		t.Fatal("the one-shot returned before the turn was observed: its memory would be lost")
 	}
 }
+
+type blockedObserveOrchestrator struct {
+	seen    chan context.Context
+	release chan struct{}
+}
+
+func (o *blockedObserveOrchestrator) Context(context.Context) string { return "" }
+
+func (o *blockedObserveOrchestrator) Observe(ctx context.Context, _ contracts.Prompt, _ string) error {
+	o.seen <- ctx
+	<-o.release
+	return nil
+}
+
+func (o *blockedObserveOrchestrator) Consolidate(context.Context) error { return nil }
+func (o *blockedObserveOrchestrator) Close() error                      { return nil }
+
+const oneShotReturnDeadline = 10 * time.Second
+
+func TestOneShotSeedReturnsWithinItsGraceWhenObserveNeverReturns(t *testing.T) {
+	orch := &blockedObserveOrchestrator{seen: make(chan context.Context, 1), release: make(chan struct{})}
+	defer close(orch.release)
+	backend := func(context.Context, state.Session) (contracts.Backend, error) {
+		return seedBackend{reply: "réponse"}, nil
+	}
+	sess := state.Session{Name: "solo", ChannelID: "channel"}
+	runtime := oneShotSeedRuntime{desk: seedDesk(t), persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), backend: backend}
+
+	type outcome struct {
+		reply string
+		err   error
+	}
+	returned := make(chan outcome, 1)
+	go func() {
+		reply, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), orch, runtime)
+		returned <- outcome{reply: reply, err: err}
+	}()
+
+	var turnCtx context.Context
+	select {
+	case turnCtx = <-orch.seen:
+	case <-time.After(oneShotReturnDeadline):
+		t.Fatal("the turn was never handed to Observe")
+	}
+	select {
+	case got := <-returned:
+		if got.err != nil {
+			t.Fatalf("runOneShotSeedWith: %v", got.err)
+		}
+		if got.reply != "réponse" {
+			t.Fatalf("reply = %q, want %q", got.reply, "réponse")
+		}
+	case <-time.After(oneShotReturnDeadline):
+		t.Fatal("the one-shot waited for an Observe that never returns")
+	}
+	select {
+	case <-turnCtx.Done():
+	default:
+		t.Fatal("the bridge was not stopped when its grace ran out")
+	}
+}

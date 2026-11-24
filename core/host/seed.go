@@ -160,7 +160,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	}
 	driver.awaitTurnRelease(seedCtx)
 	stopSeedWork()
-	ended, bridgeRunErr := bridgeEndWithin(bridgeErr, seedJoinGrace)
+	ended, bridgeRunErr := bridgeEndWithin(seedCtx, bridgeErr, seedJoinGrace)
 	if !ended {
 		slog.Warn("seed bridge outlived its grace", "session", sess.Name)
 		stopBridge()
@@ -267,11 +267,13 @@ func joinWithin(done <-chan struct{}, grace time.Duration) bool {
 	}
 }
 
-func bridgeEndWithin(bridgeErr <-chan error, grace time.Duration) (bool, error) {
+func bridgeEndWithin(ctx context.Context, bridgeErr <-chan error, grace time.Duration) (bool, error) {
 	select {
 	case err := <-bridgeErr:
 		return true, err
 	case <-time.After(grace):
+		return false, nil
+	case <-ctx.Done():
 		return false, nil
 	}
 }

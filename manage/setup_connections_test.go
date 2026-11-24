@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/forgecreds"
 )
@@ -15,25 +16,38 @@ import (
 type fakeGitHub struct {
 	connected  bool
 	login      string
+	account    string
+	saves      int
 	statusErr  error
 	connectErr error
+	forgeErr   error
 	code       forgecreds.DeviceCode
 	connects   int
+	block      bool
+	entered    chan struct{}
+	cancelled  error
 }
 
 func (fake *fakeGitHub) status(context.Context) (gitHubStatus, error) {
-	return gitHubStatus{connected: fake.connected, login: fake.login, source: "keyring"}, fake.statusErr
+	return gitHubStatus{connected: fake.connected, login: fake.login, source: contracts.TokenSourceSaved, forgeErr: fake.forgeErr}, fake.statusErr
 }
 
-func (fake *fakeGitHub) connect(_ context.Context, show func(forgecreds.DeviceCode) error) error {
+func (fake *fakeGitHub) connect(ctx context.Context, show func(forgecreds.DeviceCode) error) error {
 	fake.connects++
+	if fake.block {
+		close(fake.entered)
+		<-ctx.Done()
+		fake.cancelled = ctx.Err()
+		return ctx.Err()
+	}
 	if err := show(fake.code); err != nil {
 		return err
 	}
 	if fake.connectErr != nil {
 		return fake.connectErr
 	}
-	fake.connected = true
+	fake.connected, fake.login = true, fake.account
+	fake.saves++
 	return nil
 }
 
@@ -46,7 +60,8 @@ func rowsText(model *setupModel) string {
 }
 
 func connectedText() string {
-	return msg(testMessages(), clitext.SetupGitHubConnected, clitext.Params{clitext.ParamLogin: "octo", clitext.ParamSource: "keyring"})
+	source := msg(testMessages(), clitext.ForgeSourceKey(contracts.TokenSourceSaved), nil)
+	return msg(testMessages(), clitext.SetupGitHubConnected, clitext.Params{clitext.ParamLogin: "octo", clitext.ParamSource: source})
 }
 
 func TestConnectionsShowTheConnectedGitHubAccount(t *testing.T) {
@@ -72,6 +87,32 @@ func TestConnectionsReportAFailedStatusCheck(t *testing.T) {
 	}
 }
 
+func TestConnectionsSayWhyTheForgeCannotNameTheAccount(t *testing.T) {
+	cases := []struct {
+		name   string
+		cause  error
+		key    clitext.Key
+		params clitext.Params
+	}{
+		{"refused credential", contracts.ErrForgeUnauthorized, clitext.SetupGitHubForgeRefused, nil},
+		{"rate limited", &contracts.ForgeRateLimitedError{}, clitext.SetupGitHubForgeLimited, nil},
+		{"not connected at the forge", contracts.ErrForgeNotConnected, clitext.SetupGitHubNotConnected, nil},
+		{"other failure", errors.New("dial tcp: refused"), clitext.SetupGitHubForgeFailed, clitext.Params{clitext.ParamErr: "dial tcp: refused"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			harness := newHarnessWithGitHub(t, nil, screenConnections, nil, &fakeGitHub{connected: true, forgeErr: tc.cause})
+			text := rowsText(harness.model)
+			if want := msg(testMessages(), tc.key, tc.params); !strings.Contains(text, want) {
+				t.Fatalf("connections = %q, want %q", text, want)
+			}
+			if unknown := msg(testMessages(), clitext.ConnectLoginUnknown, nil); strings.Contains(text, unknown) {
+				t.Fatalf("connections = %q, want no unknown login when the forge failed", text)
+			}
+		})
+	}
+}
+
 func TestConnectionsSkipLeavesEverythingUnchanged(t *testing.T) {
 	fake := &fakeGitHub{}
 	harness := newHarnessWithGitHub(t, nil, screenConnections, nil, fake)
@@ -86,11 +127,14 @@ func TestConnectionsSkipLeavesEverythingUnchanged(t *testing.T) {
 }
 
 func TestGitHubConnectSavesTheAccountOnSuccess(t *testing.T) {
-	fake := &fakeGitHub{login: "octo", code: forgecreds.DeviceCode{UserCode: "ABCD-1234", VerificationURI: "https://github.com/login/device"}}
+	fake := &fakeGitHub{account: "octo", code: forgecreds.DeviceCode{UserCode: "ABCD-1234", VerificationURI: "https://github.com/login/device"}}
 	harness := newHarnessWithGitHub(t, nil, screenConnections, nil, fake)
 	harness.choose(t, harness.text(clitext.SetupGitHubConnect))
 	if fake.connects != 1 {
 		t.Fatalf("connects = %d, want 1", fake.connects)
+	}
+	if fake.saves != 1 || !fake.connected || fake.login != "octo" {
+		t.Fatalf("store = saves %d connected %v login %q, want one save of octo", fake.saves, fake.connected, fake.login)
 	}
 	if text := rowsText(harness.model); !strings.Contains(text, connectedText()) {
 		t.Fatalf("connections after sign-in = %q, want %q", text, connectedText())
@@ -142,6 +186,30 @@ func TestGitHubDeviceCodeIsShownWhileAwaitingTheSignIn(t *testing.T) {
 	want := msg(testMessages(), clitext.SetupGitHubCode, clitext.Params{clitext.ParamURL: code.VerificationURI, clitext.ParamUserCode: code.UserCode})
 	if text := rowsText(harness.model); !strings.Contains(text, want) {
 		t.Fatalf("connections = %q, want %q", text, want)
+	}
+}
+
+func TestLeavingConnectionsCancelsThePendingSignIn(t *testing.T) {
+	fake := &fakeGitHub{account: "octo", block: true, entered: make(chan struct{})}
+	harness := newHarnessWithGitHub(t, nil, screenConnections, nil, fake)
+	harness.model.connectGitHub()
+	<-fake.entered
+	harness.choose(t, harness.text(clitext.SetupConnectionsSkip))
+	harness.expectScreen(t, screenHub)
+	if !errors.Is(fake.cancelled, context.Canceled) {
+		t.Fatalf("sign-in context error = %v, want canceled", fake.cancelled)
+	}
+	if harness.model.github.busy || harness.model.github.awaiting {
+		t.Fatalf("github = %+v, want not busy and not awaiting after leaving", harness.model.github)
+	}
+	if fake.saves != 0 || fake.connected {
+		t.Fatalf("cancelled sign-in saved the account: saves %d connected %v", fake.saves, fake.connected)
+	}
+	fake.block = false
+	harness.drive(harness.model.goTo(screenConnections))
+	harness.choose(t, harness.text(clitext.SetupGitHubConnect))
+	if fake.saves != 1 || !fake.connected {
+		t.Fatalf("reconnect after leaving: saves %d connected %v, want one save", fake.saves, fake.connected)
 	}
 }
 

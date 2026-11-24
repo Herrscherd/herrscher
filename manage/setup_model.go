@@ -311,6 +311,7 @@ func fieldProbes() map[string]probeKind {
 }
 
 func (model *setupModel) goTo(screen setupScreen) tea.Cmd {
+	model.leaveScreen(screen)
 	model.screen = screen
 	model.cursor = 0
 	model.notice = nil
@@ -367,6 +368,7 @@ func (model *setupModel) next() tea.Cmd {
 }
 
 func (model *setupModel) quick() tea.Cmd {
+	model.leaveScreen(screenModules)
 	model.screen = screenModules
 	return model.next()
 }

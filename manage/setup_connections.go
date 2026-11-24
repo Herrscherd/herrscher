@@ -3,6 +3,7 @@ package manage
 import (
 	"context"
 	"errors"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -23,7 +24,8 @@ type gitHubLink interface {
 type gitHubStatus struct {
 	connected bool
 	login     string
-	source    string
+	source    contracts.TokenSource
+	forgeErr  error
 }
 
 type liveGitHub struct {
@@ -39,13 +41,21 @@ func (link liveGitHub) status(ctx context.Context) (gitHubStatus, error) {
 	if err != nil {
 		return gitHubStatus{}, err
 	}
-	status := gitHubStatus{connected: true, source: token.Source().String()}
-	if forge, openErr := forgeport.Open(ctx, forgeport.KindGitHub, link.host, link.creds); openErr == nil {
-		if connection, connErr := forge.Connection(ctx); connErr == nil {
-			status.login = connection.Login
-		}
-	}
+	status := gitHubStatus{connected: true, source: token.Source()}
+	status.login, status.forgeErr = link.forgeLogin(ctx)
 	return status, nil
+}
+
+func (link liveGitHub) forgeLogin(ctx context.Context) (string, error) {
+	forge, err := forgeport.Open(ctx, forgeport.KindGitHub, link.host, link.creds)
+	if err != nil {
+		return "", err
+	}
+	connection, err := forge.Connection(ctx)
+	if err != nil {
+		return "", err
+	}
+	return connection.Login, nil
 }
 
 func (link liveGitHub) connect(ctx context.Context, show func(forgecreds.DeviceCode) error) error {
@@ -60,7 +70,9 @@ type gitHubState struct {
 	awaiting  bool
 	code      forgecreds.DeviceCode
 	failure   error
+	flow      uint64
 	cancel    context.CancelFunc
+	finished  chan struct{}
 }
 
 type gitHubStatusMsg struct {
@@ -69,12 +81,14 @@ type gitHubStatusMsg struct {
 }
 
 type gitHubCodeMsg struct {
+	flow   uint64
 	code   forgecreds.DeviceCode
 	events <-chan tea.Msg
 }
 
 type gitHubConnectDoneMsg struct {
-	err error
+	flow uint64
+	err  error
 }
 
 func (model *setupModel) githubStatus() tea.Cmd {
@@ -98,18 +112,34 @@ func (model *setupModel) connectGitHub() tea.Cmd {
 		return nil
 	}
 	ctx, cancel := context.WithCancel(model.ctx)
+	model.github.flow++
+	flow := model.github.flow
 	model.github.cancel = cancel
 	model.github.busy = true
 	model.github.failure = nil
+	finished := make(chan struct{})
+	model.github.finished = finished
 	events := make(chan tea.Msg, gitHubEventBuffer)
 	go func() {
+		defer close(finished)
 		err := link.connect(ctx, func(code forgecreds.DeviceCode) error {
-			events <- gitHubCodeMsg{code: code, events: events}
-			return nil
+			return sendGitHub(ctx, events, gitHubCodeMsg{flow: flow, code: code, events: events})
 		})
-		events <- gitHubConnectDoneMsg{err: err}
+		select {
+		case events <- gitHubConnectDoneMsg{flow: flow, err: err}:
+		case <-ctx.Done():
+		}
 	}()
 	return nextGitHubEvent(events)
+}
+
+func sendGitHub(ctx context.Context, events chan<- tea.Msg, msg tea.Msg) error {
+	select {
+	case events <- msg:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func nextGitHubEvent(events <-chan tea.Msg) tea.Cmd {
@@ -123,6 +153,33 @@ func (model *setupModel) cancelGitHub() {
 	}
 }
 
+func (model *setupModel) stopGitHub() {
+	model.github.flow++
+	model.cancelGitHub()
+	model.joinGitHub()
+	model.github.busy = false
+	model.github.awaiting = false
+	model.github.code = forgecreds.DeviceCode{}
+	model.github.failure = nil
+}
+
+func (model *setupModel) joinGitHub() {
+	if model.github.finished == nil {
+		return
+	}
+	select {
+	case <-model.github.finished:
+		model.github.finished = nil
+	case <-time.After(model.deps.abandonWait):
+	}
+}
+
+func (model *setupModel) leaveScreen(next setupScreen) {
+	if model.screen == screenConnections && next != screenConnections {
+		model.stopGitHub()
+	}
+}
+
 func (model *setupModel) gitHubStatusDone(done gitHubStatusMsg) {
 	model.github.busy = false
 	model.github.known = done.err == nil
@@ -131,12 +188,18 @@ func (model *setupModel) gitHubStatusDone(done gitHubStatusMsg) {
 }
 
 func (model *setupModel) gitHubCodeShown(shown gitHubCodeMsg) tea.Cmd {
+	if shown.flow != model.github.flow {
+		return nextGitHubEvent(shown.events)
+	}
 	model.github.awaiting = true
 	model.github.code = shown.code
 	return nextGitHubEvent(shown.events)
 }
 
 func (model *setupModel) gitHubConnectDone(done gitHubConnectDoneMsg) tea.Cmd {
+	if done.flow != model.github.flow {
+		return nil
+	}
 	model.cancelGitHub()
 	model.github.awaiting = false
 	model.github.busy = false
@@ -173,8 +236,11 @@ func (model *setupModel) githubState() sectionState {
 		return sectionState{tone: toneDim, text: model.text(clitext.SetupProbeRunning, nil)}
 	case !model.github.status.connected:
 		return sectionState{tone: toneWarn, text: model.text(clitext.SetupGitHubNotConnected, nil)}
+	case model.github.status.forgeErr != nil:
+		return model.gitHubForgeState(model.github.status.forgeErr)
 	}
-	return sectionState{tone: toneOK, text: model.text(clitext.SetupGitHubConnected, clitext.Params{clitext.ParamLogin: model.gitHubLogin(), clitext.ParamSource: model.github.status.source})}
+	source := model.text(clitext.ForgeSourceKey(model.github.status.source), nil)
+	return sectionState{tone: toneOK, text: model.text(clitext.SetupGitHubConnected, clitext.Params{clitext.ParamLogin: model.gitHubLogin(), clitext.ParamSource: source})}
 }
 
 func (model *setupModel) gitHubLogin() string {
@@ -182,6 +248,19 @@ func (model *setupModel) gitHubLogin() string {
 		return login
 	}
 	return model.text(clitext.ConnectLoginUnknown, nil)
+}
+
+func (model *setupModel) gitHubForgeState(err error) sectionState {
+	var limited *contracts.ForgeRateLimitedError
+	switch {
+	case errors.Is(err, contracts.ErrForgeNotConnected):
+		return sectionState{tone: toneWarn, text: model.text(clitext.SetupGitHubNotConnected, nil)}
+	case errors.Is(err, contracts.ErrForgeUnauthorized):
+		return sectionState{tone: toneBad, text: model.text(clitext.SetupGitHubForgeRefused, nil)}
+	case errors.As(err, &limited):
+		return sectionState{tone: toneWarn, text: model.text(clitext.SetupGitHubForgeLimited, nil)}
+	}
+	return sectionState{tone: toneBad, text: model.text(clitext.SetupGitHubForgeFailed, clitext.Params{clitext.ParamErr: err.Error()})}
 }
 
 func (model *setupModel) gitHubFailureText(err error) string {

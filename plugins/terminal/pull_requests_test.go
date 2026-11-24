@@ -67,7 +67,7 @@ func TestOpenPullRequestOpensGitHubThroughTheInjectedOpener(t *testing.T) {
 }
 
 func TestNewPullRequestsWithoutForgeIsNoOpener(t *testing.T) {
-	var opener tui.PullRequestOpener = newPullRequests(nil)
+	opener := newPullRequests(nil)
 	if opener != nil {
 		t.Fatalf("opener = %T, want nil so the window reports that no forge is wired", opener)
 	}

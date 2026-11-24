@@ -20,6 +20,11 @@ func (m *model) logger() *slog.Logger {
 	return m.log
 }
 
+// WithPullRequests sets the forge the window opens the pull requests of a commit on.
+func WithPullRequests(opener PullRequestOpener) Option {
+	return func(m *model) { m.prs = opener }
+}
+
 // OpenOn opens the window on a named session and sends text there as its first
 // message. An empty text opens the session and sends nothing, which is how a
 // caller says "show me this one" without starting a turn.

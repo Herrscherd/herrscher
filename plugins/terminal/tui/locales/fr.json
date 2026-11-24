@@ -2386,8 +2386,20 @@
     "other": "sortie git inattendue"
   },
   {
-    "id": "tui.diffgit.no_pull_number",
-    "other": "aucun numéro de PR dans la sortie de gh"
+    "id": "tui.diffgit.no_opener",
+    "other": "aucun forge n'est branché pour ouvrir les pull requests"
+  },
+  {
+    "id": "tui.diffgit.forge_not_connected",
+    "other": "aucune connexion GitHub sur cet hôte : lancez herrscher connect github"
+  },
+  {
+    "id": "tui.diffgit.wrong_host",
+    "other": "l'origine n'est pas un dépôt github.com"
+  },
+  {
+    "id": "tui.diffgit.invalid_remote",
+    "other": "la distante origin n'est pas une référence de dépôt"
   },
   {
     "id": "tui.reason.theme_cycle",

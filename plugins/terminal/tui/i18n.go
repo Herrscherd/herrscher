@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
 )
@@ -111,7 +112,10 @@ func reasonKeys() []reasonKey {
 		{errUnknownScope, "tui.diffgit.unknown_scope"},
 		{errUnknownChange, "tui.diffgit.unknown_change"},
 		{errMalformedStat, "tui.diffgit.malformed_stat"},
-		{errNoPullNumber, "tui.diffgit.no_pull_number"},
+		{errNoPROpener, "tui.diffgit.no_opener"},
+		{contracts.ErrForgeNotConnected, "tui.diffgit.forge_not_connected"},
+		{contracts.ErrForgeWrongHost, "tui.diffgit.wrong_host"},
+		{contracts.ErrInvalidRepoRef, "tui.diffgit.invalid_remote"},
 		{errThemeCycle, "tui.reason.theme_cycle"},
 		{errUnknownKey, "tui.reason.unknown_key"},
 		{errInvalidColor, "tui.reason.invalid_color"},

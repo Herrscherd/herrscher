@@ -2386,8 +2386,20 @@
     "other": "unexpected git output"
   },
   {
-    "id": "tui.diffgit.no_pull_number",
-    "other": "no PR number in gh output"
+    "id": "tui.diffgit.no_opener",
+    "other": "no forge is wired to open pull requests"
+  },
+  {
+    "id": "tui.diffgit.forge_not_connected",
+    "other": "no GitHub connection on this host: run herrscher connect github"
+  },
+  {
+    "id": "tui.diffgit.wrong_host",
+    "other": "the origin is not a github.com repository"
+  },
+  {
+    "id": "tui.diffgit.invalid_remote",
+    "other": "the origin remote is not a repository reference"
   },
   {
     "id": "tui.reason.theme_cycle",

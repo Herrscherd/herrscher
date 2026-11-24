@@ -352,7 +352,7 @@ func (m *model) commitCmd(withPR bool) tea.Cmd {
 	panel.busy, panel.dlg, panel.editing = true, dialogNone, false
 	subject, body := splitMessage(message)
 	trans := m.tr
-	repo, base := m.diffRepo(panel.channel), panel.report.Base
+	repo, base, opener := m.diffRepo(panel.channel), panel.report.Base, m.prs
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), prCallLimit+gitCallLimit)
 		defer cancel()
@@ -363,7 +363,7 @@ func (m *model) commitCmd(withPR bool) tea.Cmd {
 		if !withPR {
 			return diffActionMsg{notice: trans.t("tui.diffpanel.committed", map[string]any{tplArgSha: sha, "Subject": subject})}
 		}
-		number, err := repo.openPR(ctx, base, subject, body)
+		number, err := repo.openPR(ctx, opener, base, subject, body)
 		if err != nil {
 			return diffActionMsg{notice: trans.t("tui.diffpanel.pr_failed", map[string]any{tplArgSha: sha, tplArgReason: localizedReason(trans, err)}), bad: true}
 		}

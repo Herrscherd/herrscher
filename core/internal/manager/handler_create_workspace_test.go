@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
+
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
@@ -170,6 +172,24 @@ func TestSessionCreateCloneErrorSurfaces(t *testing.T) {
 	}
 	if len(wt.created) != 0 || len(d.created) != 0 {
 		t.Fatalf("nothing should be created after clone failure")
+	}
+}
+
+func TestSessionCreateCloneWithoutForgeConnectionSaysHowToConnect(t *testing.T) {
+	h, d, _, wt, fg, st := newTestHandler(t, "")
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetWorkspace("/ws"); err != nil {
+		t.Fatal(err)
+	}
+	fg.cloneErr = fmt.Errorf("github: %w", contracts.ErrForgeNotConnected)
+	_, err := h.sessionCreateRun(context.Background(), args("name", "demo", "clone", "me/app"))
+	if err == nil || !strings.Contains(err.Error(), "herrscher connect github") {
+		t.Fatalf("err = %v, want the connect hint", err)
+	}
+	if len(wt.created) != 0 || len(d.created) != 0 {
+		t.Fatalf("nothing should be created without a connection")
 	}
 }
 

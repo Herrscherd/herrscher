@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
+	"github.com/Herrscherd/herrscher/core/internal/forge"
 )
 
 const cloneTimeout = 10 * time.Minute
@@ -71,7 +73,7 @@ func (h *Handler) resolveProject(ctx context.Context, input contracts.Input, hos
 		dir, err := h.fg.Clone(cctx, spec, wtRoot)
 		cancel()
 		if err != nil {
-			return "", h.labelled("clone", clitext.HostErrCloneFailed, err)
+			return "", h.cloneError(err)
 		}
 		project = filepath.Base(dir)
 	}
@@ -79,6 +81,18 @@ func (h *Handler) resolveProject(ctx context.Context, input contracts.Input, hos
 		return "", &InvalidValueError{Field: "project", Value: project, Hint: "use a single name (no /, spaces, or ..)"}
 	}
 	return project, nil
+}
+
+func (h *Handler) cloneError(err error) error {
+	switch {
+	case errors.Is(err, forge.ErrRepoSpec):
+		return h.localized(forge.ErrRepoSpec, clitext.HostErrRepoSpec)
+	case errors.Is(err, forge.ErrConfigCount):
+		return h.localized(forge.ErrConfigCount, clitext.HostErrConfigCount)
+	case errors.Is(err, contracts.ErrForgeNotConnected):
+		return localize(h.messages, h.currentLanguage(), "clone: "+err.Error(), clitext.HostErrForgeNotConnected, clitext.Params{}, err)
+	}
+	return h.labelled("clone", clitext.HostErrCloneFailed, err)
 }
 
 func (h *Handler) ensureWorkspace(ctx context.Context, worktrees Worktrees, repo string, req createRequest) (workspace, error) {

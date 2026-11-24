@@ -621,9 +621,10 @@ are left as they were.
 Inside the panel, `space` marks a file reviewed, `i` sends a note to the agent about
 the selected file (the message starts with its path), `c` opens the commit message
 generated from the changes so you can edit it, `enter` opens the file in `$EDITOR`,
-and `p` commits and opens a pull request with `gh`, showing its number. `/review`
-opens the same panel in review mode. Git and `gh` calls have a timeout and run in
-the session's folder.
+and `p` commits and opens a pull request on the GitHub origin of the session's
+folder through the forge port, showing its number. Without a GitHub connection,
+the panel says to run `herrscher connect github`. `/review` opens the same panel
+in review mode. Git calls have a timeout and run in the session's folder.
 
 ## Getting text back out
 

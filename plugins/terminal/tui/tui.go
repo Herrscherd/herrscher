@@ -88,6 +88,7 @@ type model struct {
 	cmds             []CommandSpec
 	diff             diffPanel
 	diffRun          commandRunner
+	prs              PullRequestOpener
 	palIdx           int
 	palWasOpen       bool
 	spinning         bool

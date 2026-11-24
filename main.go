@@ -49,10 +49,6 @@ func run() int {
 }
 
 func runWith(layout host.RuntimeLayout) int {
-	if os.Getenv("HERRSCHER_GIT_ASKPASS") == "1" {
-		return answerGitAskpass(os.Args)
-	}
-
 	if len(os.Args) == 2 && (os.Args[1] == "version" || os.Args[1] == "--version") {
 		out := errwriter.New(os.Stdout)
 		out.Println(herrscherVersion())
@@ -109,33 +105,6 @@ func refuseBrokenCatalogs(messages *clitext.Messages, stderr io.Writer) bool {
 	}
 	errwriter.New(stderr).Println(err)
 	return true
-}
-
-func answerGitAskpass(args []string) int {
-	prompt := ""
-	if len(args) > 1 {
-		prompt = args[1]
-	}
-	out := errwriter.New(os.Stdout)
-	if err := writeGitCredential(prompt, out); err != nil {
-		return 1
-	}
-	return writeFailureCode(out)
-}
-
-func writeGitCredential(prompt string, out *errwriter.Writer) error {
-	_, err := out.Write([]byte(gitCredential(prompt) + "\n"))
-	return err
-}
-
-func gitCredential(prompt string) string {
-	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(prompt)), "username") {
-		return "x-access-token"
-	}
-	if t := os.Getenv("GITHUB_TOKEN"); t != "" {
-		return t
-	}
-	return os.Getenv("GH_TOKEN")
 }
 
 func loadHostEnv(messages *clitext.Messages) error {

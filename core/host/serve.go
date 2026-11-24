@@ -14,6 +14,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/envx"
+	"github.com/Herrscherd/herrscher/core/forgecreds"
 	"github.com/Herrscherd/herrscher/core/internal/health"
 	"github.com/Herrscherd/herrscher/core/internal/instanceid"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
@@ -67,6 +68,7 @@ type Deps = contracts.GatewaySet
 
 // Options holds the parsed flags for the serve daemon.
 type Options struct {
+	Forge           *forgecreds.Credentials
 	StatePath       string
 	Runtime         runtimedir.Layout
 	Language        i18n.Language

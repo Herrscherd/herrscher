@@ -19,6 +19,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/eventwire"
+	"github.com/Herrscherd/herrscher/core/forgecreds"
 	"github.com/Herrscherd/herrscher/core/internal/control"
 	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/metrics"
@@ -32,6 +33,7 @@ import (
 const defaultTeardownGrace = service.StopTeardownGrace
 
 type hub struct {
+	forge       *forgecreds.Credentials
 	lang        i18n.Language
 	language    languageSource
 	st          *state.State
@@ -94,6 +96,10 @@ type hubOption func(*hub)
 
 func withWarnings(w io.Writer) hubOption {
 	return func(h *hub) { h.warnings = w }
+}
+
+func withForge(credentials *forgecreds.Credentials) hubOption {
+	return func(h *hub) { h.forge = credentials }
 }
 
 func (h *hub) bindSessionState() {
@@ -483,15 +489,31 @@ func (h *hub) Pick(name, value string) bool {
 
 func (h *hub) Repos(ctx context.Context) ([]contracts.RepoRef, error) {
 	out := workspaceRepos(h.st.WorkspaceRoot())
-	repos, err := forge.New().List(ctx)
+	repos, err := newForgeClient(h.forge).List(ctx)
 	if err != nil {
 		slog.Warn("repos unavailable", "err", err)
 		return out, nil
 	}
-	for _, r := range repos {
-		out = append(out, contracts.RepoRef{Name: r.FullName, Description: r.Desc})
+	return append(out, remoteRepos(repos)...), nil
+}
+
+func remoteRepos(repos []forge.Repo) []contracts.RepoRef {
+	out := make([]contracts.RepoRef, 0, len(repos))
+	for _, repo := range repos {
+		spec := repo.Spec()
+		if spec == "" {
+			continue
+		}
+		out = append(out, contracts.RepoRef{Name: spec, Description: repo.Desc})
 	}
-	return out, nil
+	return out
+}
+
+func newForgeClient(credentials *forgecreds.Credentials) *forge.Client {
+	if credentials == nil {
+		return forge.New(nil)
+	}
+	return forge.New(credentials)
 }
 
 func workspaceRepos(workspace string) []contracts.RepoRef {

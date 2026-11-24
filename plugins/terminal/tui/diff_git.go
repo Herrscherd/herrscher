@@ -38,24 +38,17 @@ var (
 	errUnknownScope  = errors.New("unknown diff scope")
 	errUnknownChange = errors.New("unknown git file status")
 	errMalformedStat = errors.New("unexpected git output")
-	errNoPullNumber  = errors.New("no PR number in gh output")
-	pullNumber       = regexp.MustCompile(`/pull/(\d+)`)
+	errNoPROpener    = errors.New("no forge is wired to open pull requests")
 	hunkHeader       = regexp.MustCompile(`^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
 )
 
 type cliTool int
 
-const (
-	toolGit cliTool = iota + 1
-	toolGh
-)
+const toolGit cliTool = 1
 
 func (tool cliTool) String() string {
-	switch tool {
-	case toolGit:
+	if tool == toolGit {
 		return "git"
-	case toolGh:
-		return "gh"
 	}
 	return ""
 }
@@ -82,10 +75,6 @@ func gitEnvironment() []string {
 	return []string{"GIT_TERMINAL_PROMPT=0"}
 }
 
-func ghEnvironment() []string {
-	return []string{"GH_PROMPT_DISABLED=1"}
-}
-
 func execRunner(ctx context.Context, dir string, env []string, tool cliTool, args ...string) (string, error) {
 	if len(args) == 0 {
 		return "", errNoArguments
@@ -108,8 +97,6 @@ func commandFor(ctx context.Context, tool cliTool, args []string) (*exec.Cmd, er
 	switch tool {
 	case toolGit:
 		return exec.CommandContext(ctx, "git", args...), nil
-	case toolGh:
-		return exec.CommandContext(ctx, "gh", args...), nil
 	default:
 		return nil, errUnknownTool
 	}
@@ -247,14 +234,14 @@ func newGitRepo(dir string, run commandRunner) gitRepo {
 	return gitRepo{dir: dir, run: run}
 }
 
-func (r gitRepo) call(parent context.Context, limit time.Duration, env []string, tool cliTool, args ...string) (string, error) {
+func (r gitRepo) call(parent context.Context, limit time.Duration, env []string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(parent, limit)
 	defer cancel()
-	return r.run(ctx, r.dir, env, tool, args...)
+	return r.run(ctx, r.dir, env, toolGit, args...)
 }
 
 func (r gitRepo) git(ctx context.Context, args ...string) (string, error) {
-	return r.call(ctx, gitCallLimit, gitEnvironment(), toolGit, args...)
+	return r.call(ctx, gitCallLimit, gitEnvironment(), args...)
 }
 
 func (r gitRepo) optionalValue(ctx context.Context, args ...string) (string, error) {
@@ -277,14 +264,14 @@ func (r gitRepo) snapshot(ctx context.Context) (string, error) {
 func (r gitRepo) writeSnapshotTree(ctx context.Context, scratch string) (string, error) {
 	env := append(gitEnvironment(), "GIT_INDEX_FILE="+filepath.Join(scratch, "index"))
 	if r.hasHead(ctx) {
-		if _, err := r.call(ctx, gitCallLimit, env, toolGit, "read-tree", "HEAD"); err != nil {
+		if _, err := r.call(ctx, gitCallLimit, env, "read-tree", "HEAD"); err != nil {
 			return "", err
 		}
 	}
-	if _, err := r.call(ctx, gitCallLimit, env, toolGit, "add", "-A"); err != nil {
+	if _, err := r.call(ctx, gitCallLimit, env, "add", "-A"); err != nil {
 		return "", err
 	}
-	tree, err := r.call(ctx, gitCallLimit, env, toolGit, "write-tree")
+	tree, err := r.call(ctx, gitCallLimit, env, "write-tree")
 	return strings.TrimSpace(tree), err
 }
 
@@ -556,26 +543,40 @@ func (r gitRepo) commit(ctx context.Context, message string) (string, error) {
 	return strings.TrimSpace(sha), err
 }
 
-func (r gitRepo) openPR(ctx context.Context, base, title, body string) (int, error) {
+// PullRequestDraft is the branch and text a pull request is opened with.
+type PullRequestDraft struct {
+	Remote string
+	Head   string
+	Base   string
+	Title  string
+	Body   string
+}
+
+// PullRequestOpener opens a pull request for a draft and returns its number.
+type PullRequestOpener interface {
+	OpenPullRequest(ctx context.Context, draft PullRequestDraft) (int, error)
+}
+
+func (r gitRepo) openPR(ctx context.Context, opener PullRequestOpener, base, title, body string) (int, error) {
 	branch, err := r.git(ctx, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
 		return 0, err
 	}
-	if strings.TrimSpace(branch) == base {
+	head := strings.TrimSpace(branch)
+	if head == base {
 		return 0, errOnBase
 	}
-	if _, err = r.call(ctx, prCallLimit, gitEnvironment(), toolGit, "push", "-u", "origin", "HEAD"); err != nil {
+	if opener == nil {
+		return 0, errNoPROpener
+	}
+	if _, err = r.call(ctx, prCallLimit, gitEnvironment(), "push", "-u", "origin", "HEAD"); err != nil {
 		return 0, err
 	}
-	out, err := r.call(ctx, prCallLimit, ghEnvironment(), toolGh, "pr", "create", "--base", base, "--title", title, "--body", body)
+	remote, err := r.call(ctx, prCallLimit, gitEnvironment(), "remote", "get-url", "origin")
 	if err != nil {
 		return 0, err
 	}
-	match := pullNumber.FindStringSubmatch(out)
-	if match == nil {
-		return 0, fmt.Errorf("%w : %q", errNoPullNumber, strings.TrimSpace(out))
-	}
-	return strconv.Atoi(match[1])
+	return opener.OpenPullRequest(ctx, PullRequestDraft{Remote: strings.TrimSpace(remote), Head: head, Base: base, Title: title, Body: body})
 }
 
 func draftCommitMessage(files []diffFile) string {

@@ -167,7 +167,7 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	}
 	defer CloseKeyProxy(ctx, log, keys)
 	options.health.bind(newHealthInputs(messages, options.Runtime, instID, keys, gws, policy, partDir))
-	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions, withWarnings(options.Warnings))
+	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions, withWarnings(options.Warnings), withForge(options.Forge))
 	runningHub.lang = options.Language
 	runningHub.language = options.languageSource()
 	runningHub.models = options.modelDiscovery(messages)

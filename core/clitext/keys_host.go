@@ -77,6 +77,9 @@ const (
 	HostErrConflictingPlacement = "cli.host.err.conflicting_placement"
 	HostErrCloneUnsupported     = "cli.host.err.clone_unsupported"
 	HostErrCloneFailed          = "cli.host.err.clone_failed"
+	HostErrForgeNotConnected    = "cli.host.err.forge_not_connected"
+	HostErrRepoSpec             = "cli.host.err.repo_spec"
+	HostErrConfigCount          = "cli.host.err.config_count"
 	HostErrNoHostRegistered     = "cli.host.err.no_host"
 	HostErrAccountVendor        = "cli.host.err.account_vendor"
 	HostErrAccountRemote        = "cli.host.err.account_remote"
@@ -177,6 +180,9 @@ func hostKeys() map[Key][]string {
 		HostErrConflictingPlacement: nil,
 		HostErrCloneUnsupported:     {ParamHost},
 		HostErrCloneFailed:          {ParamErr},
+		HostErrForgeNotConnected:    nil,
+		HostErrRepoSpec:             nil,
+		HostErrConfigCount:          nil,
 		HostErrNoHostRegistered:     {ParamHost},
 		HostErrAccountVendor:        {ParamAccount},
 		HostErrAccountRemote:        {ParamAccount},

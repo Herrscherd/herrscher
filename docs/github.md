@@ -31,6 +31,12 @@ be renewed. Status warns you 14 days before that date, and you run
 For GitHub Enterprise Server, pass `--host` with the instance name. The device
 flow then runs against that host.
 
+The token and the forge port only ever go to github.com. Opening a pull request
+works on github.com only: the forge port does not support GitHub Enterprise
+Server yet, so a pull request for another host is refused. A repository on
+another host, whether its URL is `https://`, `git@` or `ssh://`, is cloned
+anonymously or with your own git or ssh setup, never with the herrscher token.
+
 If the GitHub App is not installed on the account or the instance, or the forge
 refuses its client ID or has device sign-in turned off for it, the command says
 so and suggests the two alternatives below.
@@ -127,6 +133,38 @@ this order (see [Environment variables](env.md#forge-github)):
 
 The first valid token wins. If none of them holds a token, forge operations
 fail with a message saying herrscher is not connected to that host.
+
+Cloning a repository for a session and opening its pull request from the
+terminal use the same token, and only for `github.com`. An `owner/name` or an
+`https://github.com/` URL is cloned with the token when one is held. A `git@` or
+`ssh://` URL, and any repository on another host, is cloned without the token,
+with your own git or ssh setup. A host name without a dot, such as an intranet
+`gitlab`, is accepted in the `git@`, `ssh://` and `https://` forms and cloned
+the same way. A pull request for a host other than github.com is refused. The
+token goes to git through its environment, never on the command line or in the
+clone's configuration.
+
+## Repositories to clone
+
+When you create a session, the choice of repositories lists the workspace
+checkouts already on disk, and the repositories of the forges the host is
+connected to.
+
+- **GitHub** lists every repository the connected account can see, shown as
+  `owner/name` with its description. Without a GitHub connection, no GitHub
+  repository is listed, and this is not an error. Choosing an entry clones
+  `owner/name` from `github.com`, with the token when one is held. Without a
+  token, the clone is anonymous, so a private repository cannot be cloned.
+- **GitLab** is listed only when `glab` is installed, from `glab repo list`.
+  The choice shows the ssh clone URL of each project, such as
+  `git@gitlab.com:group/project.git`, because that URL is what the clone
+  receives. Choosing an entry clones it over ssh with your own key, for any
+  GitLab host: private repositories and self-hosted instances included, whether
+  the host name has a dot (`gitlab.example.com`) or none (`gitlab`, an intranet
+  name). A project that lists no ssh URL falls back to its https clone URL,
+  cloned anonymously. The herrscher token never goes to GitLab, and a GitLab
+  entry is never cloned from `github.com`, even when a GitHub repository has the
+  same path.
 
 ## Troubleshooting
 

@@ -11,7 +11,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
-	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -124,7 +123,7 @@ func addVerbs(reg *cli.Registry, cmds ...contracts.Cmd) error {
 func newManagerHandler(messages *hostMessages, cliMessages *clitext.Messages, deps Deps, options Options, partDir string, hostState *state.State, sup *supervisor.Supervisor, worktrees manager.Worktrees, updater serviceUpdater, agents *agent.Store, models *ModelDiscovery) *manager.Handler {
 	options = withOperatorLanguage(options)
 	launch := func(vendor, modelID, cmd string) (string, error) { return launchVendor(models, vendor, modelID, cmd) }
-	hdl := manager.NewHandler(cliMessages, deps.Admin, sup, worktrees, forge.New(), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, func(vendor, profile string) error { return validateProfileChoice(messages, vendor, profile) }, launch)
+	hdl := manager.NewHandler(cliMessages, deps.Admin, sup, worktrees, newForgeClient(options.Forge), updater, agents, hostState, options.DefaultCmd, partDir, options.DefaultGateways, func(vendor, profile string) error { return validateProfileChoice(messages, vendor, profile) }, launch)
 	hdl.SetRemoteBackend(options.RemoteCategories[contracts.CategoryBackend])
 	hdl.SetLanguage(options.live.Get())
 	hdl.SetDefaultLanguage(options.DefaultLanguage)

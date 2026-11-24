@@ -3,7 +3,9 @@ package host
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +16,8 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/forgeport"
+	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
 )
@@ -341,6 +345,135 @@ func TestReposListsLocalCheckoutsOnly(t *testing.T) {
 func TestReposOnAnUnsetWorkspaceIsEmpty(t *testing.T) {
 	if got := workspaceRepos(""); got != nil {
 		t.Fatalf("workspaceRepos(\"\") = %+v, want nil", got)
+	}
+}
+
+func TestRemoteReposNameEachEntryByItsOwnHost(t *testing.T) {
+	got := remoteRepos([]forge.Repo{
+		{FullName: "octo/one", CloneURL: "https://github.com/octo/one.git", Desc: "gh", Forge: "github"},
+		{FullName: "group/sub/project", CloneURL: "git@gitlab.com:group/sub/project.git", Desc: "gl", Forge: "gitlab"},
+	})
+	want := []contracts.RepoRef{
+		{Name: "octo/one", Description: "gh"},
+		{Name: "git@gitlab.com:group/sub/project.git", Description: "gl"},
+	}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("remoteRepos = %+v, want %+v", got, want)
+	}
+}
+
+func TestRemoteReposSkipsAnEntryWithoutAUsableURL(t *testing.T) {
+	got := remoteRepos([]forge.Repo{
+		{FullName: "group/project", Desc: "gl", Forge: "gitlab"},
+		{FullName: "octo/one", CloneURL: "https://github.com/octo/one.git", Desc: "gh", Forge: "github"},
+	})
+	if len(got) != 1 || got[0].Name != "octo/one" || got[0].Description != "gh" {
+		t.Fatalf("remoteRepos = %+v, want only octo/one", got)
+	}
+}
+
+func TestReposWithNoForgePluginListsLocalCheckoutsOnly(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	workspace := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(workspace, "myproj", ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h := newTestHub(t)
+	if err := h.st.SetWorkspace(workspace); err != nil {
+		t.Fatal(err)
+	}
+
+	repos, err := h.Repos(context.Background())
+	if err != nil {
+		t.Fatalf("Repos err = %v, want none", err)
+	}
+	if len(repos) != 1 || repos[0].Name != "myproj" || !repos[0].Local {
+		t.Fatalf("Repos = %+v, want only the local myproj", repos)
+	}
+}
+
+type notConnectedForge struct{ contracts.Forge }
+
+func (notConnectedForge) Repositories(context.Context, contracts.PageRequest) (contracts.Page[contracts.ForgeRepo], error) {
+	return contracts.Page[contracts.ForgeRepo]{}, contracts.ErrForgeNotConnected
+}
+
+type failingForge struct{ contracts.Forge }
+
+func (failingForge) Repositories(context.Context, contracts.PageRequest) (contracts.Page[contracts.ForgeRepo], error) {
+	return contracts.Page[contracts.ForgeRepo]{}, errors.New("forge unreachable")
+}
+
+func githubPlugin(fake contracts.Forge) contracts.Plugin {
+	return contracts.Plugin{
+		Manifest: contracts.Manifest{Kind: forgeport.KindGitHub, Category: contracts.CategoryForge},
+		Forge: func(context.Context, contracts.PluginConfig, contracts.ForgeHost, contracts.ForgeCredentials) (contracts.Forge, error) {
+			return fake, nil
+		},
+	}
+}
+
+func registerOnlyForgePlugin(t *testing.T, plugin contracts.Plugin) {
+	t.Helper()
+	saved := contracts.Default
+	contracts.Default = contracts.Registry{}
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Register(plugin)
+}
+
+func recordDefaultLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var logs bytes.Buffer
+	saved := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(saved) })
+	return &logs
+}
+
+func workspaceWithLocalCheckout(t *testing.T) string {
+	t.Helper()
+	workspace := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(workspace, "myproj", ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return workspace
+}
+
+func TestReposWithForgeNotConnectedListsLocalCheckoutsWithoutWarning(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	registerOnlyForgePlugin(t, githubPlugin(notConnectedForge{}))
+	logs := recordDefaultLogs(t)
+	h := newTestHub(t)
+	if err := h.st.SetWorkspace(workspaceWithLocalCheckout(t)); err != nil {
+		t.Fatal(err)
+	}
+
+	repos, err := h.Repos(context.Background())
+	if err != nil {
+		t.Fatalf("Repos err = %v, want none", err)
+	}
+	if len(repos) != 1 || repos[0].Name != "myproj" || !repos[0].Local {
+		t.Fatalf("Repos = %+v, want only the local myproj", repos)
+	}
+	if strings.Contains(logs.String(), "repos unavailable") {
+		t.Fatalf("not connected logged a warning: %s", logs.String())
+	}
+}
+
+func TestReposWhenTheForgeFailsLogsAWarning(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	registerOnlyForgePlugin(t, githubPlugin(failingForge{}))
+	logs := recordDefaultLogs(t)
+	h := newTestHub(t)
+	if err := h.st.SetWorkspace(workspaceWithLocalCheckout(t)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.Repos(context.Background()); err != nil {
+		t.Fatalf("Repos err = %v, want none", err)
+	}
+	if !strings.Contains(logs.String(), "repos unavailable") {
+		t.Fatalf("a failing forge logged no warning: %q", logs.String())
 	}
 }
 

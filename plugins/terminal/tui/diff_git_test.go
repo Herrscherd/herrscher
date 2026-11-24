@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 func gitIn(t *testing.T, dir string, args ...string) string {
@@ -45,19 +47,28 @@ func initRepo(t *testing.T) string {
 }
 
 type scriptedRunner struct {
-	prURL   string
-	ghCalls [][]string
+	remote string
 }
 
 func (s *scriptedRunner) run(ctx context.Context, dir string, env []string, tool cliTool, args ...string) (string, error) {
-	if tool == toolGh {
-		s.ghCalls = append(s.ghCalls, args)
-		return s.prURL, nil
-	}
 	if len(args) > 0 && args[0] == "push" {
 		return "", nil
 	}
+	if len(args) > 1 && args[0] == "remote" && args[1] == "get-url" {
+		return s.remote, nil
+	}
 	return execRunner(ctx, dir, env, tool, args...)
+}
+
+type fakePullRequests struct {
+	number int
+	err    error
+	drafts []PullRequestDraft
+}
+
+func (f *fakePullRequests) OpenPullRequest(_ context.Context, draft PullRequestDraft) (int, error) {
+	f.drafts = append(f.drafts, draft)
+	return f.number, f.err
 }
 
 type fileExpectation struct {
@@ -187,30 +198,53 @@ func TestCommitStagesEverythingWithTheGivenMessage(t *testing.T) {
 func TestOpenPRPushesAndReturnsTheCreatedNumber(t *testing.T) {
 	dir := initRepo(t)
 	gitIn(t, dir, "checkout", "-q", "-b", "feature")
-	runner := &scriptedRunner{prURL: "https://github.com/o/r/pull/42\n"}
+	runner := &scriptedRunner{remote: "git@github.com:o/r.git\n"}
+	opener := &fakePullRequests{number: 42}
 
-	number, err := newGitRepo(dir, runner.run).openPR(t.Context(), "master", "feat: change", "body")
+	number, err := newGitRepo(dir, runner.run).openPR(t.Context(), opener, "master", "feat: change", "body")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if number != 42 {
 		t.Fatalf("number = %d, want 42", number)
 	}
-	if len(runner.ghCalls) != 1 || !containsArgs(runner.ghCalls[0], "--base", "master") || !containsArgs(runner.ghCalls[0], "--title", "feat: change") {
-		t.Fatalf("gh calls = %v", runner.ghCalls)
+	want := PullRequestDraft{Remote: "git@github.com:o/r.git", Head: "feature", Base: "master", Title: "feat: change", Body: "body"}
+	if len(opener.drafts) != 1 || opener.drafts[0] != want {
+		t.Fatalf("drafts = %+v, want %+v", opener.drafts, want)
 	}
 }
 
 func TestOpenPRRefusesTheBaseBranch(t *testing.T) {
 	dir := initRepo(t)
-	runner := &scriptedRunner{prURL: "https://github.com/o/r/pull/1\n"}
+	opener := &fakePullRequests{number: 1}
 
-	_, err := newGitRepo(dir, runner.run).openPR(t.Context(), "master", "t", "b")
+	_, err := newGitRepo(dir, (&scriptedRunner{}).run).openPR(t.Context(), opener, "master", "t", "b")
 	if !errors.Is(err, errOnBase) {
 		t.Fatalf("err = %v, want errOnBase", err)
 	}
-	if len(runner.ghCalls) != 0 {
-		t.Fatalf("gh must not run from the base branch: %v", runner.ghCalls)
+	if len(opener.drafts) != 0 {
+		t.Fatalf("opener called from the base branch: %+v", opener.drafts)
+	}
+}
+
+func TestOpenPRWithoutOpenerReportsIt(t *testing.T) {
+	dir := initRepo(t)
+	gitIn(t, dir, "checkout", "-q", "-b", "feature")
+
+	_, err := newGitRepo(dir, (&scriptedRunner{remote: "git@github.com:o/r.git\n"}).run).openPR(t.Context(), nil, "master", "t", "b")
+	if !errors.Is(err, errNoPROpener) {
+		t.Fatalf("err = %v, want errNoPROpener", err)
+	}
+}
+
+func TestOpenPRKeepsTheOpenerError(t *testing.T) {
+	dir := initRepo(t)
+	gitIn(t, dir, "checkout", "-q", "-b", "feature")
+	opener := &fakePullRequests{err: contracts.ErrForgeNotConnected}
+
+	_, err := newGitRepo(dir, (&scriptedRunner{remote: "git@github.com:o/r.git\n"}).run).openPR(t.Context(), opener, "master", "t", "b")
+	if !errors.Is(err, contracts.ErrForgeNotConnected) {
+		t.Fatalf("err = %v, want ErrForgeNotConnected", err)
 	}
 }
 
@@ -251,15 +285,6 @@ func findDiffFile(files []diffFile, path string) (diffFile, bool) {
 		}
 	}
 	return diffFile{}, false
-}
-
-func containsArgs(args []string, flag, value string) bool {
-	for i := range len(args) - 1 {
-		if args[i] == flag && args[i+1] == value {
-			return true
-		}
-	}
-	return false
 }
 
 func TestSnapshotSeesSameSizeEditsRightAfterTheCommit(t *testing.T) {

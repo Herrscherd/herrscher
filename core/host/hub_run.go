@@ -3,6 +3,8 @@ package host
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +19,38 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
+	"github.com/Herrscherd/herrscher/core/otelexport"
 )
+
+func startTelemetry(ctx context.Context, messages *hostMessages, lang i18n.Language, log *slog.Logger, off bool) (otelexport.Exporter, func()) {
+	if off {
+		log.Info("turn telemetry disabled", "reason", messages.text(lang, "telemetry.disabled_by_config", nil))
+		return otelexport.Exporter{}, func() {}
+	}
+	telemetry, err := otelexport.Setup(ctx, os.LookupEnv)
+	if err != nil {
+		log.Warn("turn telemetry disabled", "reason", telemetryDisabledText(messages, lang, err), "err", err)
+	}
+	return telemetry, func() {
+		if shutdownErr := telemetry.Shutdown(ctx); shutdownErr != nil {
+			log.Warn("turn telemetry did not flush before exit", "err", shutdownErr)
+		}
+	}
+}
+
+func startTelemetryForConfig(ctx context.Context, messages *hostMessages, lang i18n.Language, log *slog.Logger, cfg config.Config) (otelexport.Exporter, func()) {
+	return startTelemetry(ctx, messages, lang, log, cfg.TelemetryOff())
+}
+
+func telemetryDisabledText(messages *hostMessages, lang i18n.Language, err error) string {
+	switch {
+	case errors.Is(err, otelexport.ErrInvalidEndpoint):
+		return messages.text(lang, "telemetry.endpoint_invalid", nil)
+	case errors.Is(err, otelexport.ErrUnsupportedProtocol):
+		return messages.text(lang, "telemetry.protocol_unsupported", nil)
+	}
+	return messages.text(lang, "telemetry.exporter_failed", nil)
+}
 
 // RunHub is the always-on multi-gateway daemon: it supervises one pure-runner
 // bridge per persisted session, drives each session's turns over a control
@@ -29,7 +62,7 @@ func RunHub(ctx context.Context, cliMessages *clitext.Messages, hostMessages *Me
 	messages := hostMessages.owner
 	clock, tick, settingsErr := schedulerSettings(messages)
 	if settingsErr != nil {
-		closeGateways(ctx, closers, obs.Stderr(false))
+		closeGateways(ctx, closers, operatorLogger(options.Warnings))
 		return localizeHostError(messages, cliMessages, options.operatorLanguage(), settingsErr)
 	}
 	serveErr := serveHub(ctx, messages, cliMessages, gws, closers, options, clock, tick)
@@ -52,8 +85,12 @@ func (options Options) withDefaultGateways(gws []Deps) Options {
 	return options
 }
 
+func operatorLogger(warnings io.Writer) *slog.Logger {
+	return obs.NewLogger(warningWriter(warnings), obs.ParseLevel(false, os.Getenv(obs.EnvLevel)))
+}
+
 func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.Messages, gws []Deps, closers []contracts.Gateway, options Options, clock func() time.Time, tick time.Duration) error {
-	base := obs.Stderr(false)
+	base := operatorLogger(options.Warnings)
 	defer closeGateways(ctx, closers, base)
 	if options.Runtime.Dir() == "" {
 		return errNoRuntimeLayout
@@ -94,6 +131,13 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 		return wrapHost(messages, err, "serve.compaction", nil)
 	}
 	sessions.compaction = policy
+	cfg, err := config.Load(config.DefaultPath())
+	if err != nil {
+		return wrapHost(messages, err, "serve.config", nil)
+	}
+	telemetry, stopTelemetry := startTelemetryForConfig(ctx, messages, options.operatorLanguage(), log, cfg)
+	defer stopTelemetry()
+	sessions.telemetry = telemetry
 	sessions.store = store
 	if outboxErr := prepareTurnOutboxes(log, sessions, options.StatePath); outboxErr != nil {
 		return outboxErr
@@ -111,10 +155,6 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	ensureCodexAgent(deps.agents)
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)
-	}
-	cfg, err := config.Load(config.DefaultPath())
-	if err != nil {
-		return wrapHost(messages, err, "serve.config", nil)
 	}
 	sessions.outboundMaxBytes = cfg.EffectiveOutboundMaxBytes()
 	sessions.fileSenders = fileSendersOf(closers)

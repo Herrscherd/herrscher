@@ -65,6 +65,20 @@ type Config struct {
 
 	// Keys configures the local API key proxy. Absent means no proxy.
 	Keys *KeysConfig `json:"keys,omitempty"`
+
+	Telemetry *TelemetryConfig `json:"telemetry,omitempty"`
+}
+
+// TelemetryConfig configures the turn telemetry. A nil pointer, or a nil Enabled,
+// leaves the export to the OpenTelemetry environment variables.
+type TelemetryConfig struct {
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// TelemetryOff reports whether the configuration turns the turn telemetry off, even
+// when an OTLP endpoint is set in the environment.
+func (c Config) TelemetryOff() bool {
+	return c.Telemetry != nil && c.Telemetry.Enabled != nil && !*c.Telemetry.Enabled
 }
 
 // SkillsConfig configures cross-backend skill injection. A nil pointer, or a nil

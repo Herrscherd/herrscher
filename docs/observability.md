@@ -276,3 +276,7 @@ rewrite is not in effect instead of finding your version gone. See
 
 And per-node memory budgets, in [Budgets](budgets.md).
 
+Each settled turn can also be exported to an OpenTelemetry collector, following the GenAI
+semantic conventions. The export is off unless an endpoint is configured or the
+`telemetry.enabled` key allows it; see [Turn telemetry](env.md#turn-telemetry-opentelemetry).
+

@@ -126,6 +126,7 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	gate := attachOneShotTaps(driver, sess, runtime)
 	defer gate.shut()
 	runtime.sessions.attachCompaction(driver, sess.Name)
+	runtime.sessions.attachTelemetry(driver)
 	terms := modelTermsFor(runtime.models)
 	driver.terms = func() modelTerms { return terms(sess) }
 	pumpCtx, pumpCancel := context.WithCancel(seedCtx)

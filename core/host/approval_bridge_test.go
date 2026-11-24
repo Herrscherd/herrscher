@@ -8,6 +8,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/echotest"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/eventwire"
@@ -124,6 +125,26 @@ func TestDaemonRefusesARequestItCannotDecodeWithItsOwnID(t *testing.T) {
 	if answer.ID != "req-10" || answer.Allowed() || answer.Reason == "" {
 		t.Fatalf("answer %+v, want req-10 refused with a reason", answer)
 	}
+	if pending := pendingApprovals(approvalTab); len(pending) != 0 {
+		t.Fatalf("pending %+v, want nothing asked of the operator", pending)
+	}
+}
+
+func TestDaemonRefusesAnUnreadableRequestWithoutEchoingItsNumbers(t *testing.T) {
+	desk, approvalTab, _ := newTestDesk(t)
+	daemonSide, bridgeSide := connectedPair(t)
+	startDaemonSide(t, daemonSide, deskApprovals(desk.askerFor(bridgeConsumer, "s1")))
+	answers := readBridgeAnswers(t, bridgeSide)
+	const secret = "4815162342"
+	request := `{"ID":"req-12","Tool":` + secret + `}`
+	if err := bridgeSide.Write(contracts.Event{T: eventwire.EventApprovalAsk, Value: request}); err != nil {
+		t.Fatalf("write unreadable request: %v", err)
+	}
+	answer := awaitBridgeAnswer(t, answers)
+	if answer.ID != "req-12" || answer.Allowed() || answer.Reason == "" {
+		t.Fatalf("answer %+v, want req-12 refused with a reason", answer)
+	}
+	echotest.RequireNoSecretFragment(t, answer.Reason, secret)
 	if pending := pendingApprovals(approvalTab); len(pending) != 0 {
 		t.Fatalf("pending %+v, want nothing asked of the operator", pending)
 	}

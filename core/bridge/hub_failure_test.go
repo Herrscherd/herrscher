@@ -104,6 +104,57 @@ func TestAFailedTurnIsLoggedAsAWarning(t *testing.T) {
 	}
 }
 
+func TestAFailedTurnsReplyCarriesTheFailedOutcome(t *testing.T) {
+	sink := &recordSink{}
+	err := runOneTurn(context.Background(), sink, errBackend{}, nil, contracts.Event{T: eventwire.EventInput, Text: "go"}, &turnController{}, nil, affordances{}, nil, 0)
+	if _, ok := errors.AsType[*TurnFailedError](err); !ok {
+		t.Fatalf("runOneTurn error = %v, want a TurnFailedError", err)
+	}
+	if got := finalReply(t, sink).Outcome; got != contracts.TurnFailed {
+		t.Fatalf("final reply outcome = %q, want %q", got, contracts.TurnFailed)
+	}
+}
+
+func TestASuccessfulTurnsReplyCarriesNoOutcome(t *testing.T) {
+	sink := &recordSink{}
+	if err := runOneTurn(context.Background(), sink, fakeBackend{reply: "done"}, nil, contracts.Event{T: eventwire.EventInput, Text: "go"}, &turnController{}, nil, affordances{}, nil, 0); err != nil {
+		t.Fatalf("runOneTurn: %v", err)
+	}
+	if got := finalReply(t, sink).Outcome; got != "" {
+		t.Fatalf("final reply outcome = %q, want none", got)
+	}
+}
+
+func TestAnInterruptedTurnsReplyCarriesTheInterruptedOutcome(t *testing.T) {
+	ctrl := &turnController{}
+	sink := &recordSink{}
+	be := partialBackend{started: make(chan struct{})}
+	result := make(chan error, 1)
+	go func() {
+		result <- runOneTurn(context.Background(), sink, be, nil, contracts.Event{T: eventwire.EventInput, Text: "go"}, ctrl, nil, affordances{}, nil, 0)
+	}()
+	<-be.started
+	ctrl.interrupt()
+	if err := <-result; err != nil {
+		t.Fatalf("runOneTurn: %v", err)
+	}
+	if got := finalReply(t, sink).Outcome; got != contracts.TurnInterrupted {
+		t.Fatalf("final reply outcome = %q, want %q", got, contracts.TurnInterrupted)
+	}
+}
+
+func finalReply(t *testing.T, sink *recordSink) contracts.Event {
+	t.Helper()
+	if len(sink.events) == 0 {
+		t.Fatal("no event emitted")
+	}
+	last := sink.events[len(sink.events)-1]
+	if !last.Done {
+		t.Fatalf("last event Done = false, want the terminal reply")
+	}
+	return last
+}
+
 func TestAnInterruptedTurnIsNotLoggedAsAFailure(t *testing.T) {
 	logs := captureLog(t)
 	ctrl := &turnController{}

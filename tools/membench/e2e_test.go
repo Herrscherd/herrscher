@@ -107,31 +107,42 @@ func TestBenchMeasuresEachArmFromTheLedger(t *testing.T) {
 	}
 	wantTurns := len(tasks[0].steps) + 1
 	for _, planned := range arms {
-		box, err := newSandbox(t.TempDir())
-		if err != nil {
-			t.Fatal(err)
-		}
-		got, err := r.play(t.Context(), box, planned)
-		if err != nil {
-			t.Fatal(errors.Join(err, box.close()))
-		}
-		ledger, err := readTally(box.state)
-		if err != nil {
-			t.Fatal(errors.Join(err, box.close()))
-		}
-		if closeErr := box.close(); closeErr != nil {
-			t.Fatal(closeErr)
-		}
-		if ledger.turns != wantTurns {
-			t.Errorf("arm on=%t: ledger turns = %d, want %d", planned.enabled, ledger.turns, wantTurns)
-		}
-		if got.turns != ledger.turns || got.tokens != ledger.tokens || got.input != ledger.input {
-			t.Errorf("arm on=%t: outcome turns=%d tokens=%d input=%d, ledger turns=%d tokens=%d input=%d",
-				planned.enabled, got.turns, got.tokens, got.input, ledger.turns, ledger.tokens, ledger.input)
-		}
-		if ledger.input <= 0 {
-			t.Errorf("arm on=%t: ledger input = %d, want the vendor's reported usage", planned.enabled, ledger.input)
-		}
+		got, ledger := playArmWithLedger(t, r, planned)
+		checkArmAgainstLedger(t, planned, got, ledger, wantTurns)
+	}
+}
+
+func playArmWithLedger(t *testing.T, r runner, planned arm) (outcome, tally) {
+	t.Helper()
+	box, err := newSandbox(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := r.play(t.Context(), box, planned)
+	if err != nil {
+		t.Fatal(errors.Join(err, box.close()))
+	}
+	ledger, err := readTally(box.state)
+	if err != nil {
+		t.Fatal(errors.Join(err, box.close()))
+	}
+	if closeErr := box.close(); closeErr != nil {
+		t.Fatal(closeErr)
+	}
+	return got, ledger
+}
+
+func checkArmAgainstLedger(t *testing.T, planned arm, got outcome, ledger tally, wantTurns int) {
+	t.Helper()
+	if ledger.turns != wantTurns {
+		t.Errorf("arm on=%t: ledger turns = %d, want %d", planned.enabled, ledger.turns, wantTurns)
+	}
+	if got.turns != ledger.turns || got.tokens != ledger.tokens || got.input != ledger.input {
+		t.Errorf("arm on=%t: outcome turns=%d tokens=%d input=%d, ledger turns=%d tokens=%d input=%d",
+			planned.enabled, got.turns, got.tokens, got.input, ledger.turns, ledger.tokens, ledger.input)
+	}
+	if ledger.input <= 0 {
+		t.Errorf("arm on=%t: ledger input = %d, want the vendor's reported usage", planned.enabled, ledger.input)
 	}
 }
 

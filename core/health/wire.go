@@ -46,11 +46,16 @@ type wireCheck struct {
 }
 
 type wireForge struct {
-	Source     contracts.TokenSource `json:"source"`
-	Remaining  int                   `json:"remaining"`
-	Reset      time.Time             `json:"reset"`
-	Repo       string                `json:"repo,omitempty"`
-	Permission string                `json:"permission,omitempty"`
+	Source     contracts.TokenSource     `json:"source"`
+	Login      string                    `json:"login,omitempty"`
+	Quota      *wireQuota                `json:"quota,omitempty"`
+	Repo       string                    `json:"repo,omitempty"`
+	Permission *contracts.RepoPermission `json:"permission,omitempty"`
+}
+
+type wireQuota struct {
+	Remaining int       `json:"remaining"`
+	Reset     time.Time `json:"reset"`
 }
 
 type wireCompaction struct {
@@ -126,9 +131,7 @@ func encodeCheck(check Check) (wireCheck, error) {
 	if last := check.Facts.Compaction; last != nil {
 		wire.Compaction = &wireCompaction{At: last.At, Outcome: last.Outcome}
 	}
-	if forge := check.Facts.Forge; forge != nil {
-		wire.Forge = &wireForge{Source: forge.Source, Remaining: forge.Remaining, Reset: forge.Reset, Repo: forge.Repo, Permission: forge.Permission}
-	}
+	wire.Forge = wireForgeOf(check.Facts.Forge)
 	return wire, nil
 }
 
@@ -186,8 +189,28 @@ func decodeCheck(wire wireCheck) (Check, error) {
 	if last := wire.Compaction; last != nil {
 		check.Facts.Compaction = &Compaction{At: last.At, Outcome: last.Outcome}
 	}
-	if forge := wire.Forge; forge != nil {
-		check.Facts.Forge = &Forge{Source: forge.Source, Remaining: forge.Remaining, Reset: forge.Reset, Repo: forge.Repo, Permission: forge.Permission}
-	}
+	check.Facts.Forge = forgeOf(wire.Forge)
 	return check, nil
+}
+
+func wireForgeOf(forge *Forge) *wireForge {
+	if forge == nil {
+		return nil
+	}
+	wire := &wireForge{Source: forge.Source, Login: forge.Login, Repo: forge.Repo, Permission: forge.Permission}
+	if forge.Quota != nil {
+		wire.Quota = &wireQuota{Remaining: forge.Quota.Remaining, Reset: forge.Quota.Reset}
+	}
+	return wire
+}
+
+func forgeOf(wire *wireForge) *Forge {
+	if wire == nil {
+		return nil
+	}
+	forge := &Forge{Source: wire.Source, Login: wire.Login, Repo: wire.Repo, Permission: wire.Permission}
+	if wire.Quota != nil {
+		forge.Quota = &Quota{Remaining: wire.Quota.Remaining, Reset: wire.Quota.Reset}
+	}
+	return forge
 }

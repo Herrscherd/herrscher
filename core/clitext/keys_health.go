@@ -5,6 +5,7 @@ const (
 	CmdHelpHealth          = "cli.help.cmd.health"
 	CmdHelpHealthDeep      = "cli.help.cmd.health.deep"
 	CmdHelpHealthRepo      = "cli.help.cmd.health.repo"
+	CmdHelpHealthWatch     = "cli.help.cmd.health.watch"
 	HealthSummaryDown      = "cli.health.summary.down"
 	HealthSummaryDegraded  = "cli.health.summary.degraded"
 	HealthSummaryOK        = "cli.health.summary.ok"
@@ -53,6 +54,7 @@ func healthKeys() map[Key][]string {
 		CmdHelpHealth:          nil,
 		CmdHelpHealthDeep:      nil,
 		CmdHelpHealthRepo:      nil,
+		CmdHelpHealthWatch:     nil,
 		HealthSummaryDown:      {ParamCount},
 		HealthSummaryDegraded:  {ParamCount},
 		HealthSummaryOK:        {ParamCount},

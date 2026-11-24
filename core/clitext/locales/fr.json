@@ -3775,7 +3775,12 @@
   {
     "id": "cli.help.cmd.health.repo",
     "description": "Help of the --repo flag of health",
-    "other": "Dépôt de la session pour laquelle la vérification tourne, son droit sur le dépôt est indiqué"
+    "other": "Dépôt du répertoire courant, le worktree de la session quand un agent le lance : le droit du compte sur ce dépôt est indiqué"
+  },
+  {
+    "id": "cli.help.cmd.health.watch",
+    "description": "Help of the --watch flag of health",
+    "other": "Garder les faits de la forge cinq minutes entre deux relevés, pour qu'une surveillance ne consomme la limite de la forge qu'une fois"
   },
   {
     "id": "cli.health.summary.down",
@@ -5157,7 +5162,7 @@
   {
     "id": "cli.setup.github.connected",
     "description": "Connections screen: GitHub connected state",
-    "other": "connecté en tant que {{.Login}} via {{.Source}}"
+    "other": "connecté en tant que {{.Login}}, origine du jeton : {{.Source}}"
   },
   {
     "id": "cli.setup.github.not_connected",
@@ -5203,6 +5208,21 @@
     "id": "cli.setup.github.status_failed",
     "description": "Connections screen: the GitHub state could not be read",
     "other": "la connexion n'a pas pu être vérifiée : {{.Err}}"
+  },
+  {
+    "id": "cli.setup.github.forge_refused",
+    "description": "Écran des connexions : la forge a refusé l'identifiant GitHub enregistré",
+    "other": "la connexion GitHub enregistrée a été refusée, relance la commande de connexion"
+  },
+  {
+    "id": "cli.setup.github.forge_limited",
+    "description": "Écran des connexions : la limite de requêtes de la forge est atteinte",
+    "other": "la limite de requêtes GitHub est atteinte, le compte ne peut pas être vérifié pour l'instant"
+  },
+  {
+    "id": "cli.setup.github.forge_failed",
+    "description": "Écran des connexions : la forge n'a pas pu indiquer qui est le compte",
+    "other": "le compte GitHub n'a pas pu être lu : {{.Err}}"
   },
   {
     "id": "cli.setup.keys.move",
@@ -5397,7 +5417,7 @@
   {
     "id": "cli.health.facts.forge_source",
     "description": "Ligne de détail de la forge de code, Source est l'origine du jeton",
-    "other": "jeton {{.Source}}"
+    "other": "origine du jeton : {{.Source}}"
   },
   {
     "id": "cli.health.facts.forge_quota",
@@ -5418,5 +5438,65 @@
     "id": "cli.health.facts.forge_repo_unknown",
     "description": "Ligne de détail de la forge de code quand le droit sur le dépôt de la session est illisible, Repo est le dépôt",
     "other": "{{.Repo}} : droits inconnus"
+  },
+  {
+    "id": "cli.forge.source.saved",
+    "description": "Word for a forge token stored in the host",
+    "other": "enregistré"
+  },
+  {
+    "id": "cli.forge.source.app",
+    "description": "Word for a forge token minted for an installed App",
+    "other": "application"
+  },
+  {
+    "id": "cli.forge.source.env",
+    "description": "Word for a forge token read from the environment",
+    "other": "environnement"
+  },
+  {
+    "id": "cli.forge.source.cli",
+    "description": "Word for a forge token borrowed from the forge command line login",
+    "other": "connexion CLI"
+  },
+  {
+    "id": "cli.forge.source.unknown",
+    "description": "Word for a forge token whose source is not known",
+    "other": "inconnue"
+  },
+  {
+    "id": "cli.forge.permission.none",
+    "description": "Word for a repository permission: no right at all",
+    "other": "aucun"
+  },
+  {
+    "id": "cli.forge.permission.read",
+    "description": "Word for a repository permission: can read",
+    "other": "lecture"
+  },
+  {
+    "id": "cli.forge.permission.triage",
+    "description": "Word for a repository permission: can manage issues and pull requests",
+    "other": "tri"
+  },
+  {
+    "id": "cli.forge.permission.write",
+    "description": "Word for a repository permission: can push",
+    "other": "écriture"
+  },
+  {
+    "id": "cli.forge.permission.maintain",
+    "description": "Word for a repository permission: can manage the repository",
+    "other": "maintenance"
+  },
+  {
+    "id": "cli.forge.permission.admin",
+    "description": "Word for a repository permission: holds every right",
+    "other": "administration"
+  },
+  {
+    "id": "cli.forge.permission.unknown",
+    "description": "Word for a repository permission that names no known right",
+    "other": "inconnu"
   }
 ]

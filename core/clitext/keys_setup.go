@@ -142,6 +142,9 @@ const (
 	SetupGitHubAppUnavailable   = "cli.setup.github.app_unavailable"
 	SetupGitHubFailed           = "cli.setup.github.failed"
 	SetupGitHubStatusFailed     = "cli.setup.github.status_failed"
+	SetupGitHubForgeRefused     = "cli.setup.github.forge_refused"
+	SetupGitHubForgeLimited     = "cli.setup.github.forge_limited"
+	SetupGitHubForgeFailed      = "cli.setup.github.forge_failed"
 	SetupKeysMove               = "cli.setup.keys.move"
 	SetupKeysToggle             = "cli.setup.keys.toggle"
 	SetupKeysChoose             = "cli.setup.keys.choose"
@@ -298,6 +301,9 @@ func setupKeys() map[Key][]string {
 		SetupGitHubAppUnavailable:   nil,
 		SetupGitHubFailed:           {ParamErr},
 		SetupGitHubStatusFailed:     {ParamErr},
+		SetupGitHubForgeRefused:     nil,
+		SetupGitHubForgeLimited:     nil,
+		SetupGitHubForgeFailed:      {ParamErr},
 		SetupKeysMove:               nil,
 		SetupKeysToggle:             nil,
 		SetupKeysChoose:             nil,

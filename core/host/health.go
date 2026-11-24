@@ -31,7 +31,9 @@ type healthInputs struct {
 	compaction compactionPolicy
 	ledger     usage.Ledger
 	forge      contracts.ForgeCredentials
+	forgeCache *forgeCache
 	repo       string
+	watching   bool
 	now        func() time.Time
 }
 
@@ -40,16 +42,17 @@ type healthSource struct {
 	ready  bool
 }
 
-type runFunc = func(ctx context.Context, deep bool) contracts.ProbeReport
+type runFunc = func(ctx context.Context, deep bool) (contracts.ProbeReport, health.Facts)
 
 var errHealthNotReady = errors.New("health probes not ready")
 
-func (s *healthSource) run(ctx context.Context, deep bool, origin string) (health.Snapshot, error) {
+func (s *healthSource) run(ctx context.Context, deep bool, origin string, watching bool) (health.Snapshot, error) {
 	if s == nil || !s.ready {
 		return health.Snapshot{}, errHealthNotReady
 	}
 	inputs := s.inputs
 	inputs.repo = origin
+	inputs.watching = watching
 	return probeHealth(ctx, inputs, deep), nil
 }
 
@@ -195,8 +198,8 @@ func backendRun(plugin contracts.Plugin, account contracts.ProfileName, env map[
 	if plugin.Probe != nil {
 		return pluginProbeRun(plugin.Manifest.Config, plugin.Probe, account, envGetter(env))
 	}
-	return func(runCtx context.Context, _ bool) contracts.ProbeReport {
-		return loginReport(runCtx, accounts.OSRunner, plugin.Manifest.Kind, account, env)
+	return func(runCtx context.Context, _ bool) (contracts.ProbeReport, health.Facts) {
+		return loginReport(runCtx, accounts.OSRunner, plugin.Manifest.Kind, account, env), health.Facts{}
 	}
 }
 
@@ -246,12 +249,12 @@ func unreachableReport(err error) contracts.ProbeReport {
 }
 
 func pluginProbeRun(settings []contracts.Setting, probe contracts.HealthProber, account contracts.ProfileName, getenv func(string) string) runFunc {
-	return func(ctx context.Context, deep bool) contracts.ProbeReport {
+	return func(ctx context.Context, deep bool) (contracts.ProbeReport, health.Facts) {
 		cfg, err := contracts.Resolve(settings, getenv)
 		if err != nil {
-			return settingsReport(err)
+			return settingsReport(err), health.Facts{}
 		}
-		return probe(ctx, contracts.ProbeAccess{Getenv: getenv, Account: account, Config: cfg, Deep: deep})
+		return probe(ctx, contracts.ProbeAccess{Getenv: getenv, Account: account, Config: cfg, Deep: deep}), health.Facts{}
 	}
 }
 
@@ -277,8 +280,8 @@ func missingEnvName(entry string) (string, bool) {
 }
 
 func reportRun(report contracts.ProbeReport) runFunc {
-	return func(context.Context, bool) contracts.ProbeReport {
-		return report
+	return func(context.Context, bool) (contracts.ProbeReport, health.Facts) {
+		return report, health.Facts{}
 	}
 }
 
@@ -456,8 +459,9 @@ func newHealthInputs(messages *hostMessages, layout runtimedir.Layout, instanceI
 		accounts:   store,
 		compaction: policy,
 		ledger:     usage.Ledger{Dir: usageDir(partDir), Now: time.Now},
-		forge:      forge,
 		now:        time.Now,
+		forge:      forge,
+		forgeCache: newForgeCache(time.Now),
 	}
 }
 

@@ -45,15 +45,24 @@ type Facts struct {
 	Forge               *Forge
 }
 
-// Forge is the state of the code forge at the probe: the token source and the rate
-// limit it reports, and the repository of the session with the permission the
-// account holds on it, empty when the probe did not name one or could not read it.
+// Forge is the state of the code forge at the probe: the token source and the
+// account behind it, the rate limit it reports, and the right the account holds on
+// the repository of the checkout. Quota is nil when the forge reported no rate
+// limit, Repo is empty when the checkout names no repository on the forge, and
+// Permission is nil when that right could not be read.
 type Forge struct {
 	Source     contracts.TokenSource
-	Remaining  int
-	Reset      time.Time
+	Login      string
+	Quota      *Quota
 	Repo       string
-	Permission string
+	Permission *contracts.RepoPermission
+}
+
+// Quota is the rate limit of the forge: the requests left in the window, and when
+// the window resets.
+type Quota struct {
+	Remaining int
+	Reset     time.Time
 }
 
 // Compaction is a run of a compaction stage the host recorded. A failed run carries the

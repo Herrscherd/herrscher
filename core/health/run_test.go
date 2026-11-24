@@ -13,9 +13,9 @@ import (
 func TestProbeThatNeverReturnsIsDownAtItsTimeout(t *testing.T) {
 	release := make(chan struct{})
 	defer close(release)
-	blocked := func(context.Context, bool) contracts.ProbeReport {
+	blocked := func(context.Context, bool) (contracts.ProbeReport, health.Facts) {
 		<-release
-		return contracts.ProbeReport{State: contracts.HealthOK}
+		return contracts.ProbeReport{State: contracts.HealthOK}, health.Facts{}
 	}
 	runner := health.Runner{Timeout: 20 * time.Millisecond}
 	checks, _ := runner.Run(context.Background(), []health.Probe{{Check: health.Check{Name: "blocked"}, Run: blocked}}, false)
@@ -25,7 +25,7 @@ func TestProbeThatNeverReturnsIsDownAtItsTimeout(t *testing.T) {
 }
 
 func TestPanickingProbeIsDown(t *testing.T) {
-	panicking := func(context.Context, bool) contracts.ProbeReport {
+	panicking := func(context.Context, bool) (contracts.ProbeReport, health.Facts) {
 		panic("secret value")
 	}
 	checks, _ := health.Runner{}.Run(context.Background(), []health.Probe{{Check: health.Check{Name: "boom"}, Run: panicking}}, false)
@@ -40,8 +40,8 @@ func TestLatencyIsTimedFromTheRunnerClockWhenTheProbeLeavesItZero(t *testing.T) 
 		ticks++
 		return time.Unix(0, int64(ticks)*int64(time.Millisecond))
 	}
-	probe := func(context.Context, bool) contracts.ProbeReport {
-		return contracts.ProbeReport{State: contracts.HealthOK}
+	probe := func(context.Context, bool) (contracts.ProbeReport, health.Facts) {
+		return contracts.ProbeReport{State: contracts.HealthOK}, health.Facts{}
 	}
 	checks, _ := health.Runner{Now: clock}.Run(context.Background(), []health.Probe{{Check: health.Check{Name: "fast"}, Run: probe}}, false)
 	if checks[0].Report.Latency <= 0 {

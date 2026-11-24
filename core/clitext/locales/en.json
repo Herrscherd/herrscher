@@ -3775,7 +3775,12 @@
   {
     "id": "cli.help.cmd.health.repo",
     "description": "Help of the --repo flag of health",
-    "other": "Repository of the session the health check runs for, its right on the repository is reported"
+    "other": "Repository of the current directory, the session worktree when an agent runs it: the right the account holds on it is reported"
+  },
+  {
+    "id": "cli.help.cmd.health.watch",
+    "description": "Help of the --watch flag of health",
+    "other": "Keep the forge facts for five minutes between checks, so a watch spends the forge rate limit once"
   },
   {
     "id": "cli.health.summary.down",
@@ -5157,7 +5162,7 @@
   {
     "id": "cli.setup.github.connected",
     "description": "Connections screen: GitHub connected state",
-    "other": "connected as {{.Login}} via {{.Source}}"
+    "other": "connected as {{.Login}}, token source: {{.Source}}"
   },
   {
     "id": "cli.setup.github.not_connected",
@@ -5203,6 +5208,21 @@
     "id": "cli.setup.github.status_failed",
     "description": "Connections screen: the GitHub state could not be read",
     "other": "the connection could not be checked: {{.Err}}"
+  },
+  {
+    "id": "cli.setup.github.forge_refused",
+    "description": "Connections screen: the forge refused the saved GitHub credential",
+    "other": "the saved GitHub sign-in was refused, run the connect command again"
+  },
+  {
+    "id": "cli.setup.github.forge_limited",
+    "description": "Connections screen: the forge rate limit is reached",
+    "other": "the GitHub request limit is reached, the account cannot be checked for now"
+  },
+  {
+    "id": "cli.setup.github.forge_failed",
+    "description": "Connections screen: the forge could not be asked who the account is",
+    "other": "the GitHub account could not be read: {{.Err}}"
   },
   {
     "id": "cli.setup.keys.move",
@@ -5397,7 +5417,7 @@
   {
     "id": "cli.health.facts.forge_source",
     "description": "Detail line of the code forge, Source is where its token comes from",
-    "other": "token from {{.Source}}"
+    "other": "token source: {{.Source}}"
   },
   {
     "id": "cli.health.facts.forge_quota",
@@ -5418,5 +5438,65 @@
     "id": "cli.health.facts.forge_repo_unknown",
     "description": "Detail line of the code forge when the right on the session repository could not be read, Repo is the repository",
     "other": "{{.Repo}}: permission unknown"
+  },
+  {
+    "id": "cli.forge.source.saved",
+    "description": "Word for a forge token stored in the host",
+    "other": "saved"
+  },
+  {
+    "id": "cli.forge.source.app",
+    "description": "Word for a forge token minted for an installed App",
+    "other": "app"
+  },
+  {
+    "id": "cli.forge.source.env",
+    "description": "Word for a forge token read from the environment",
+    "other": "environment"
+  },
+  {
+    "id": "cli.forge.source.cli",
+    "description": "Word for a forge token borrowed from the forge command line login",
+    "other": "CLI login"
+  },
+  {
+    "id": "cli.forge.source.unknown",
+    "description": "Word for a forge token whose source is not known",
+    "other": "unknown"
+  },
+  {
+    "id": "cli.forge.permission.none",
+    "description": "Word for a repository permission: no right at all",
+    "other": "none"
+  },
+  {
+    "id": "cli.forge.permission.read",
+    "description": "Word for a repository permission: can read",
+    "other": "read"
+  },
+  {
+    "id": "cli.forge.permission.triage",
+    "description": "Word for a repository permission: can manage issues and pull requests",
+    "other": "triage"
+  },
+  {
+    "id": "cli.forge.permission.write",
+    "description": "Word for a repository permission: can push",
+    "other": "write"
+  },
+  {
+    "id": "cli.forge.permission.maintain",
+    "description": "Word for a repository permission: can manage the repository",
+    "other": "maintain"
+  },
+  {
+    "id": "cli.forge.permission.admin",
+    "description": "Word for a repository permission: holds every right",
+    "other": "admin"
+  },
+  {
+    "id": "cli.forge.permission.unknown",
+    "description": "Word for a repository permission that names no known right",
+    "other": "unknown"
   }
 ]

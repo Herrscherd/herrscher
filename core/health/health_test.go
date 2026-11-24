@@ -196,8 +196,10 @@ func TestGarbledAnswerIsMalformed(t *testing.T) {
 	}
 }
 
-func fixed(state contracts.HealthState) func(context.Context, bool) contracts.ProbeReport {
-	return func(context.Context, bool) contracts.ProbeReport { return contracts.ProbeReport{State: state} }
+func fixed(state contracts.HealthState) func(context.Context, bool) (contracts.ProbeReport, health.Facts) {
+	return func(context.Context, bool) (contracts.ProbeReport, health.Facts) {
+		return contracts.ProbeReport{State: state}, health.Facts{}
+	}
 }
 
 func TestRunnerKeepsTheProbeOrder(t *testing.T) {
@@ -217,7 +219,7 @@ func TestRunnerKeepsTheProbeOrder(t *testing.T) {
 func TestRunnerNeverRunsMoreProbesThanItsWorkers(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var running, peak atomic.Int32
-		slow := func(_ context.Context, _ bool) contracts.ProbeReport {
+		slow := func(_ context.Context, _ bool) (contracts.ProbeReport, health.Facts) {
 			now := running.Add(1)
 			for {
 				old := peak.Load()
@@ -227,7 +229,7 @@ func TestRunnerNeverRunsMoreProbesThanItsWorkers(t *testing.T) {
 			}
 			time.Sleep(time.Second)
 			running.Add(-1)
-			return contracts.ProbeReport{State: contracts.HealthOK}
+			return contracts.ProbeReport{State: contracts.HealthOK}, health.Facts{}
 		}
 		probes := make([]health.Probe, 7)
 		for index := range probes {
@@ -243,9 +245,9 @@ func TestRunnerNeverRunsMoreProbesThanItsWorkers(t *testing.T) {
 	})
 }
 
-func stalls(ctx context.Context, _ bool) contracts.ProbeReport {
+func stalls(ctx context.Context, _ bool) (contracts.ProbeReport, health.Facts) {
 	<-ctx.Done()
-	return contracts.ProbeReport{State: contracts.HealthOK, Remedy: contracts.Notice{Code: contracts.CodeHealthRemedyRun, Args: []contracts.Arg{contracts.Text("Command", "claude login")}}}
+	return contracts.ProbeReport{State: contracts.HealthOK, Remedy: contracts.Notice{Code: contracts.CodeHealthRemedyRun, Args: []contracts.Arg{contracts.Text("Command", "claude login")}}}, health.Facts{}
 }
 
 func TestProbePastItsTimeoutIsDown(t *testing.T) {
@@ -274,9 +276,9 @@ func TestDeepRunWaitsForTheDeepTimeout(t *testing.T) {
 
 func TestDeepFlagReachesTheProbe(t *testing.T) {
 	var deep atomic.Bool
-	probe := health.Probe{Run: func(_ context.Context, asked bool) contracts.ProbeReport {
+	probe := health.Probe{Run: func(_ context.Context, asked bool) (contracts.ProbeReport, health.Facts) {
 		deep.Store(asked)
-		return contracts.ProbeReport{State: contracts.HealthOK}
+		return contracts.ProbeReport{State: contracts.HealthOK}, health.Facts{}
 	}}
 	health.Runner{}.Run(context.Background(), []health.Probe{probe}, true)
 	if !deep.Load() {

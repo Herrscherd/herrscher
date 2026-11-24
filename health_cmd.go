@@ -42,7 +42,7 @@ func runHealth(ctx context.Context, layout host.RuntimeLayout, messages *clitext
 	}
 	opts.pal = outputPalette(os.Stdout)
 	if cwd, cwdErr := os.Getwd(); cwdErr == nil {
-		opts.repo = host.SessionOrigin(ctx, cwd)
+		opts.repo = host.CheckoutOrigin(ctx, cwd)
 	}
 	instance := host.ServedInstanceID(host.DefaultStatePath(), "")
 	if opts.watch {
@@ -138,6 +138,9 @@ func fetchHealth(ctx context.Context, hostMessages *host.Messages, layout host.R
 	argv := []string{healthVerb}
 	if opts.deep {
 		argv = append(argv, healthParamDeep)
+	}
+	if opts.watch {
+		argv = append(argv, healthParamWatch)
 	}
 	if opts.repo != "" {
 		argv = append(argv, healthParamRepo, opts.repo)

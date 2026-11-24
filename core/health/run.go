@@ -14,8 +14,7 @@ import (
 // probes the service. Run should return when its context is done.
 type Probe struct {
 	Check Check
-	Run   func(ctx context.Context, deep bool) contracts.ProbeReport
-	Watch func(ctx context.Context, deep bool) (contracts.ProbeReport, Facts)
+	Run   func(ctx context.Context, deep bool) (contracts.ProbeReport, Facts)
 }
 
 type answer struct {
@@ -101,12 +100,8 @@ func answerProbe(ctx context.Context, probe Probe, deep bool, answered chan<- an
 			answered <- answer{report: contracts.ProbeReport{State: contracts.HealthDown}}
 		}
 	}()
-	if probe.Watch != nil {
-		report, facts := probe.Watch(ctx, deep)
-		answered <- answer{report: report, facts: facts}
-		return
-	}
-	answered <- answer{report: probe.Run(ctx, deep)}
+	report, facts := probe.Run(ctx, deep)
+	answered <- answer{report: report, facts: facts}
 }
 
 func timedOut(check Check, timeout time.Duration) Check {

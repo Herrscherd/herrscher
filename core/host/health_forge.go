@@ -3,6 +3,8 @@ package host
 import (
 	"context"
 	"errors"
+	"sync"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
@@ -12,8 +14,9 @@ import (
 )
 
 const (
-	forgeRateLimitLow = 100
-	healthParamRepo   = "repo"
+	forgeAbsoluteQuotaFloor = 100
+	forgeRefreshEvery       = 5 * time.Minute
+	healthParamOrigin       = "repo"
 )
 
 func gitHubConnectCommand() string {
@@ -27,9 +30,9 @@ func forgeCredentials(creds *forgecreds.Credentials) contracts.ForgeCredentials 
 	return creds
 }
 
-// SessionOrigin returns the origin URL of the git checkout at dir, or an empty
+// CheckoutOrigin returns the origin URL of the git checkout at dir, or an empty
 // string when dir is not a checkout with an origin.
-func SessionOrigin(ctx context.Context, dir string) string {
+func CheckoutOrigin(ctx context.Context, dir string) string {
 	origin, err := originOf(ctx, dir)
 	if err != nil {
 		return ""
@@ -44,9 +47,13 @@ func forgeProbes(inputs healthInputs) []health.Probe {
 	open := func(ctx context.Context, host contracts.ForgeHost) (contracts.Forge, error) {
 		return forgeport.Open(ctx, forgeport.KindGitHub, host, inputs.forge)
 	}
+	run := githubRun(open, inputs.repo)
+	if inputs.watching && inputs.forgeCache != nil {
+		run = inputs.forgeCache.memo(run, inputs.repo)
+	}
 	return []health.Probe{{
 		Check: health.Check{Group: health.GroupForge, Name: forgeport.KindGitHub},
-		Watch: githubWatch(open, inputs.repo),
+		Run:   run,
 	}}
 }
 
@@ -62,7 +69,7 @@ func forgeBuilt(kind string) bool {
 	return false
 }
 
-func githubWatch(open forgeOpener, origin string) func(context.Context, bool) (contracts.ProbeReport, health.Facts) {
+func githubRun(open forgeOpener, origin string) runFunc {
 	return func(ctx context.Context, _ bool) (contracts.ProbeReport, health.Facts) {
 		host, err := contracts.ParseForgeHost(forgeport.GitHubHost)
 		if err != nil {
@@ -76,26 +83,33 @@ func githubWatch(open forgeOpener, origin string) func(context.Context, bool) (c
 		if err != nil {
 			return forgeFailure(err), health.Facts{}
 		}
-		facts := &health.Forge{Source: connection.Source, Remaining: connection.RateLimit.Remaining, Reset: connection.RateLimit.Reset}
-		facts.Repo, facts.Permission = sessionRepoAccess(ctx, forge, host, origin)
-		return forgeReady(connection), health.Facts{Forge: facts}
+		facts := &health.Forge{Source: connection.Source, Login: connection.Login, Quota: quotaOf(connection.RateLimit)}
+		repo, permission, repoErr := sessionRepoAccess(ctx, forge, host, origin)
+		facts.Repo, facts.Permission = repo, permission
+		report := forgeReady(connection)
+		if repoErr != nil && report.State == contracts.HealthOK {
+			report = repoAccessWarning(repoErr)
+		}
+		return report, health.Facts{Forge: facts}
 	}
 }
 
-func sessionRepoAccess(ctx context.Context, forge contracts.Forge, host contracts.ForgeHost, origin string) (string, string) {
-	if origin == "" {
-		return "", ""
-	}
-	ref, err := contracts.ParseRepoRef(origin)
-	if err != nil || ref.Host() != host {
-		return "", ""
+func sessionRepoAccess(ctx context.Context, forge contracts.Forge, host contracts.ForgeHost, origin string) (string, *contracts.RepoPermission, error) {
+	ref, ok := originRepo(origin, host)
+	if !ok {
+		return "", nil, nil
 	}
 	name := ref.Namespace() + "/" + ref.Name()
 	permission, err := forge.RepoAccess(ctx, ref)
 	if err != nil {
-		return name, ""
+		return name, nil, err
 	}
-	return name, permission.String()
+	return name, &permission, nil
+}
+
+func originRepo(origin string, host contracts.ForgeHost) (contracts.ForgeRepoRef, bool) {
+	ref, err := contracts.ParseRepoRef(origin)
+	return ref, err == nil && ref.Host() == host
 }
 
 func forgeFailure(err error) contracts.ProbeReport {
@@ -111,8 +125,12 @@ func forgeFailure(err error) contracts.ProbeReport {
 	return unreachableReport(err)
 }
 
+func repoAccessWarning(err error) contracts.ProbeReport {
+	return contracts.ProbeReport{State: contracts.HealthDegraded, Detail: contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", err.Error())}}}
+}
+
 func forgeReady(connection contracts.ForgeConnection) contracts.ProbeReport {
-	if connection.RateLimit.Remaining < forgeRateLimitLow {
+	if knownQuota(connection.RateLimit) && connection.RateLimit.Remaining < forgeAbsoluteQuotaFloor {
 		return contracts.ProbeReport{State: contracts.HealthDegraded, Detail: contracts.Notice{Code: contracts.CodeHealthRateLimited}}
 	}
 	if connection.Login == "" {
@@ -121,6 +139,54 @@ func forgeReady(connection contracts.ForgeConnection) contracts.ProbeReport {
 	return contracts.ProbeReport{State: contracts.HealthOK, Detail: contracts.Notice{Code: contracts.CodeHealthSignedInAs, Args: []contracts.Arg{contracts.Text("Name", connection.Login)}}}
 }
 
+func quotaOf(limit contracts.ForgeRateLimit) *health.Quota {
+	if !knownQuota(limit) {
+		return nil
+	}
+	return &health.Quota{Remaining: limit.Remaining, Reset: limit.Reset}
+}
+
+func knownQuota(limit contracts.ForgeRateLimit) bool {
+	return limit.Remaining != 0 || !limit.Reset.IsZero()
+}
+
 func gitHubConnectRemedy() contracts.Notice {
 	return contracts.Notice{Code: contracts.CodeHealthRemedyRun, Args: []contracts.Arg{contracts.Text("Command", gitHubConnectCommand())}}
+}
+
+type forgeCache struct {
+	mutex   sync.Mutex
+	now     func() time.Time
+	origin  string
+	fetched time.Time
+	report  contracts.ProbeReport
+	facts   health.Facts
+	filled  bool
+}
+
+func newForgeCache(now func() time.Time) *forgeCache {
+	return &forgeCache{now: now}
+}
+
+func (c *forgeCache) memo(run runFunc, origin string) runFunc {
+	return func(ctx context.Context, deep bool) (contracts.ProbeReport, health.Facts) {
+		c.mutex.Lock()
+		defer c.mutex.Unlock()
+		if c.fresh(origin) {
+			return c.report, c.facts
+		}
+		report, facts := run(ctx, deep)
+		if ctx.Err() == nil {
+			c.store(origin, report, facts)
+		}
+		return report, facts
+	}
+}
+
+func (c *forgeCache) fresh(origin string) bool {
+	return c.filled && c.origin == origin && c.now().Sub(c.fetched) < forgeRefreshEvery
+}
+
+func (c *forgeCache) store(origin string, report contracts.ProbeReport, facts health.Facts) {
+	c.filled, c.origin, c.fetched, c.report, c.facts = true, origin, c.now(), report, facts
 }

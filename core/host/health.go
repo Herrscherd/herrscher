@@ -30,6 +30,10 @@ type healthInputs struct {
 	accounts   accounts.Store
 	compaction compactionPolicy
 	ledger     usage.Ledger
+	forge      contracts.ForgeCredentials
+	forgeCache *forgeCache
+	repo       string
+	watching   bool
 	now        func() time.Time
 }
 
@@ -38,15 +42,18 @@ type healthSource struct {
 	ready  bool
 }
 
-type runFunc = func(ctx context.Context, deep bool) contracts.ProbeReport
+type runFunc = func(ctx context.Context, deep bool) (contracts.ProbeReport, health.Facts)
 
 var errHealthNotReady = errors.New("health probes not ready")
 
-func (s *healthSource) run(ctx context.Context, deep bool) (health.Snapshot, error) {
+func (s *healthSource) run(ctx context.Context, deep bool, origin string, watching bool) (health.Snapshot, error) {
 	if s == nil || !s.ready {
 		return health.Snapshot{}, errHealthNotReady
 	}
-	return probeHealth(ctx, s.inputs, deep), nil
+	inputs := s.inputs
+	inputs.repo = origin
+	inputs.watching = watching
+	return probeHealth(ctx, inputs, deep), nil
 }
 
 func probeHealth(ctx context.Context, inputs healthInputs, deep bool) health.Snapshot {
@@ -61,6 +68,7 @@ func healthProbes(inputs healthInputs) []health.Probe {
 	probes = append(probes, gatewayProbes(inputs)...)
 	probes = append(probes, backendProbes(inputs)...)
 	probes = append(probes, memoryProbes(inputs.memory)...)
+	probes = append(probes, forgeProbes(inputs)...)
 	history := lastCompactions(inputs.ledger)
 	return append(probes, compactionProbes(inputs.compaction.names, history, compactionKey)...)
 }
@@ -190,8 +198,8 @@ func backendRun(plugin contracts.Plugin, account contracts.ProfileName, env map[
 	if plugin.Probe != nil {
 		return pluginProbeRun(plugin.Manifest.Config, plugin.Probe, account, envGetter(env))
 	}
-	return func(runCtx context.Context, _ bool) contracts.ProbeReport {
-		return loginReport(runCtx, accounts.OSRunner, plugin.Manifest.Kind, account, env)
+	return func(runCtx context.Context, _ bool) (contracts.ProbeReport, health.Facts) {
+		return loginReport(runCtx, accounts.OSRunner, plugin.Manifest.Kind, account, env), health.Facts{}
 	}
 }
 
@@ -241,12 +249,12 @@ func unreachableReport(err error) contracts.ProbeReport {
 }
 
 func pluginProbeRun(settings []contracts.Setting, probe contracts.HealthProber, account contracts.ProfileName, getenv func(string) string) runFunc {
-	return func(ctx context.Context, deep bool) contracts.ProbeReport {
+	return func(ctx context.Context, deep bool) (contracts.ProbeReport, health.Facts) {
 		cfg, err := contracts.Resolve(settings, getenv)
 		if err != nil {
-			return settingsReport(err)
+			return settingsReport(err), health.Facts{}
 		}
-		return probe(ctx, contracts.ProbeAccess{Getenv: getenv, Account: account, Config: cfg, Deep: deep})
+		return probe(ctx, contracts.ProbeAccess{Getenv: getenv, Account: account, Config: cfg, Deep: deep}), health.Facts{}
 	}
 }
 
@@ -272,8 +280,8 @@ func missingEnvName(entry string) (string, bool) {
 }
 
 func reportRun(report contracts.ProbeReport) runFunc {
-	return func(context.Context, bool) contracts.ProbeReport {
-		return report
+	return func(context.Context, bool) (contracts.ProbeReport, health.Facts) {
+		return report, health.Facts{}
 	}
 }
 
@@ -438,7 +446,7 @@ func compactorPlugin(name string) (contracts.Plugin, bool) {
 	return contracts.Plugin{}, false
 }
 
-func newHealthInputs(messages *hostMessages, layout runtimedir.Layout, instanceID string, keys *keyproxy.Proxy, gws []Deps, policy compactionPolicy, partDir string) healthInputs {
+func newHealthInputs(messages *hostMessages, layout runtimedir.Layout, instanceID string, keys *keyproxy.Proxy, gws []Deps, policy compactionPolicy, partDir string, forge contracts.ForgeCredentials) healthInputs {
 	store, err := accountStore(messages, BackendRequest{})
 	if err != nil {
 		slog.Warn("health: account store unavailable", "err", err)
@@ -452,6 +460,8 @@ func newHealthInputs(messages *hostMessages, layout runtimedir.Layout, instanceI
 		compaction: policy,
 		ledger:     usage.Ledger{Dir: usageDir(partDir), Now: time.Now},
 		now:        time.Now,
+		forge:      forge,
+		forgeCache: newForgeCache(time.Now),
 	}
 }
 

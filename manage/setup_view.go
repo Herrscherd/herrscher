@@ -165,6 +165,8 @@ func (model *setupModel) screenSub() clitext.Key {
 		return clitext.SetupReviewSub
 	case screenInstall:
 		return clitext.SetupInstallSub
+	case screenConnections:
+		return clitext.SetupConnectionsSub
 	case screenHub:
 		return clitext.SetupHubSub
 	}

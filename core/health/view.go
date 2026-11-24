@@ -149,7 +149,7 @@ func (s Snapshot) row(check Check, text *renderer) Row {
 		row.Latency = termpaint.Escape(text.latency(report.Latency))
 	}
 	if report.Detail.Code != 0 {
-		row.Cause = termpaint.Escape(text.notice(report.Detail))
+		row.Cause = termpaint.Escape(causeText(check, report, text))
 	}
 	if report.Remedy.Code != 0 {
 		row.Remedy = termpaint.Escape(text.notice(report.Remedy))
@@ -215,6 +215,8 @@ func (s Snapshot) facts(check Check, text *renderer) string {
 	switch {
 	case check.Facts.Pool != nil:
 		return poolFacts(check.Facts.Pool, text)
+	case check.Facts.Forge != nil:
+		return forgeFacts(check.Facts.Forge, text)
 	case check.Group == GroupCore && check.Name == ServiceProxy:
 		return text.key(clitext.HealthProxyFacts, clitext.Params{
 			clitext.ParamListen: check.Facts.Listen,
@@ -291,6 +293,46 @@ func (r *renderer) outcome(outcome contracts.CompactOutcome) string {
 		return outcome.String()
 	}
 	return r.key(key, nil)
+}
+
+func causeText(check Check, report contracts.ProbeReport, text *renderer) string {
+	cause := detailText(report, check.Facts.Forge, text)
+	forge := check.Facts.Forge
+	if forge == nil || forge.Login == "" || report.Detail.Code == contracts.CodeHealthSignedInAs {
+		return cause
+	}
+	login := contracts.Notice{Code: contracts.CodeHealthSignedInAs, Args: []contracts.Arg{contracts.Text("Name", forge.Login)}}
+	return text.notice(login) + factsSep + cause
+}
+
+func detailText(report contracts.ProbeReport, forge *Forge, text *renderer) string {
+	if forge == nil || forge.RepoErr == "" || report.Detail.Code == contracts.CodeHealthRepoAccessUnreadable {
+		return text.notice(report.Detail)
+	}
+	repo := text.key(clitext.HealthForgeRepoUnreadable, clitext.Params{clitext.ParamReason: forge.RepoErr})
+	return text.notice(report.Detail) + factsSep + repo
+}
+
+func forgeFacts(forge *Forge, text *renderer) string {
+	segments := []string{text.key(clitext.HealthForgeSource, clitext.Params{clitext.ParamSource: text.key(clitext.ForgeSourceKey(forge.Source), nil)})}
+	if forge.Quota != nil {
+		segments = append(segments, text.key(clitext.HealthForgeQuota, clitext.Params{clitext.ParamCount: forge.Quota.Remaining}))
+		if !forge.Quota.Reset.IsZero() {
+			segments = append(segments, text.key(clitext.HealthForgeReset, clitext.Params{clitext.ParamTime: forge.Quota.Reset.Local().Format(time.TimeOnly)}))
+		}
+	}
+	if forge.Repo != "" {
+		segments = append(segments, forgeRepoFact(forge, text))
+	}
+	return strings.Join(segments, factsSep)
+}
+
+func forgeRepoFact(forge *Forge, text *renderer) string {
+	if forge.Permission == nil {
+		return text.key(clitext.HealthForgeRepoUnknown, clitext.Params{clitext.ParamRepo: forge.Repo})
+	}
+	permission := text.key(clitext.ForgePermissionKey(*forge.Permission), nil)
+	return text.key(clitext.HealthForgeRepo, clitext.Params{clitext.ParamRepo: forge.Repo, clitext.ParamPermission: permission})
 }
 
 func poolFacts(pool *Pool, text *renderer) string {

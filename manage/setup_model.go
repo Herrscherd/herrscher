@@ -34,6 +34,7 @@ const (
 	screenRoute
 	screenReview
 	screenInstall
+	screenConnections
 	screenHub
 )
 
@@ -43,6 +44,7 @@ func flowOrder() []setupScreen {
 
 type setupDeps struct {
 	prober      setupProber
+	github      gitHubLink
 	login       func(context.Context, probeKind) tea.Cmd
 	catalog     catalogFn
 	run         commandRunner
@@ -91,6 +93,7 @@ type setupModel struct {
 	draft     settingsDraft
 	extras    []string
 	route     routeModels
+	github    gitHubState
 	install   installRun
 	screen    setupScreen
 	base      setupScreen
@@ -192,6 +195,14 @@ func (model *setupModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return model, cmd
 	case trialDoneMsg:
 		cmd := model.trialDone(typed)
+		return model, cmd
+	case gitHubStatusMsg:
+		model.gitHubStatusDone(typed)
+	case gitHubCodeMsg:
+		cmd := model.gitHubCodeShown(typed)
+		return model, cmd
+	case gitHubConnectDoneMsg:
+		cmd := model.gitHubConnectDone(typed)
 		return model, cmd
 	}
 	return model, nil
@@ -300,6 +311,7 @@ func fieldProbes() map[string]probeKind {
 }
 
 func (model *setupModel) goTo(screen setupScreen) tea.Cmd {
+	model.leaveScreen(screen)
 	model.screen = screen
 	model.cursor = 0
 	model.notice = nil
@@ -319,7 +331,7 @@ func (model *setupModel) shown(screen setupScreen) bool {
 		return model.modules[moduleCursor]
 	case screenObsidian:
 		return model.modules[moduleObsidian]
-	case screenWelcome, screenModules, screenRoute, screenReview, screenInstall, screenHub:
+	case screenWelcome, screenModules, screenRoute, screenReview, screenInstall, screenConnections, screenHub:
 		return true
 	}
 	return false
@@ -356,6 +368,7 @@ func (model *setupModel) next() tea.Cmd {
 }
 
 func (model *setupModel) quick() tea.Cmd {
+	model.leaveScreen(screenModules)
 	model.screen = screenModules
 	return model.next()
 }
@@ -369,7 +382,7 @@ func (model *setupModel) back() tea.Cmd {
 			return model.openHub()
 		}
 		return nil
-	case screenModules, screenDiscord, screenClaude, screenCodex, screenCursor, screenObsidian, screenRoute, screenReview:
+	case screenModules, screenDiscord, screenClaude, screenCodex, screenCursor, screenObsidian, screenRoute, screenReview, screenConnections:
 	}
 	if target, ok := model.returnTarget(); ok {
 		return model.goTo(target)
@@ -412,9 +425,11 @@ func (model *setupModel) enter(screen setupScreen) tea.Cmd {
 	case screenRoute:
 		return model.loadCatalog()
 	case screenHub:
-		return tea.Batch(model.statusCheck(probeClaude), model.statusCheck(probeCodex))
+		return tea.Batch(model.statusCheck(probeClaude), model.statusCheck(probeCodex), model.githubStatus())
 	case screenInstall:
 		return model.startInstall()
+	case screenConnections:
+		return model.githubStatus()
 	case screenWelcome, screenModules, screenDiscord, screenCursor, screenObsidian, screenReview:
 	}
 	return nil

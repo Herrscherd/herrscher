@@ -3773,6 +3773,16 @@
     "other": "run real round trips instead of the cheap checks"
   },
   {
+    "id": "cli.help.cmd.health.repo",
+    "description": "Help of the --repo flag of health",
+    "other": "Repository of the current directory, the session worktree when an agent runs it: the right the account holds on it is reported"
+  },
+  {
+    "id": "cli.help.cmd.health.watch",
+    "description": "Help of the --watch flag of health",
+    "other": "Keep the forge facts for five minutes between checks, so a watch spends the forge rate limit once"
+  },
+  {
     "id": "cli.health.summary.down",
     "description": "Health summary segment, the count of the checks in the state",
     "one": "{{.Count}} down",
@@ -5130,6 +5140,91 @@
     "other": "routing"
   },
   {
+    "id": "cli.setup.section.connections",
+    "description": "Section name",
+    "other": "Connections"
+  },
+  {
+    "id": "cli.setup.connections.sub",
+    "description": "Subtitle of the connections screen",
+    "other": "Connect the forges herrscher uses"
+  },
+  {
+    "id": "cli.setup.connections.skip",
+    "description": "Action that leaves the connections unchanged",
+    "other": "Skip, keep everything as it is"
+  },
+  {
+    "id": "cli.setup.github.title",
+    "description": "Connections screen: GitHub group title",
+    "other": "GitHub"
+  },
+  {
+    "id": "cli.setup.github.connected",
+    "description": "Connections screen: GitHub connected state",
+    "other": "connected as {{.Login}}, token source: {{.Source}}"
+  },
+  {
+    "id": "cli.setup.github.not_connected",
+    "description": "Connections screen: GitHub not connected state",
+    "other": "not connected"
+  },
+  {
+    "id": "cli.setup.github.connect",
+    "description": "Action that starts the GitHub device sign-in",
+    "other": "Connect GitHub"
+  },
+  {
+    "id": "cli.setup.github.install",
+    "description": "Connections screen: hint with the app installation page",
+    "other": "install the app on your account: {{.URL}}"
+  },
+  {
+    "id": "cli.setup.github.code",
+    "description": "Connections screen: device code to enter on GitHub",
+    "other": "open {{.URL}} and enter the code {{.UserCode}}"
+  },
+  {
+    "id": "cli.setup.github.denied",
+    "description": "Connections screen: the GitHub sign-in was refused",
+    "other": "the sign-in was denied on GitHub"
+  },
+  {
+    "id": "cli.setup.github.expired",
+    "description": "Connections screen: the device code expired",
+    "other": "the sign-in code expired, start again"
+  },
+  {
+    "id": "cli.setup.github.app_unavailable",
+    "description": "Connections screen: GitHub offers no usable herrscher app",
+    "other": "GitHub has no herrscher app usable for sign-in"
+  },
+  {
+    "id": "cli.setup.github.failed",
+    "description": "Connections screen: the GitHub connection failed",
+    "other": "the connection failed: {{.Err}}"
+  },
+  {
+    "id": "cli.setup.github.status_failed",
+    "description": "Connections screen: the GitHub state could not be read",
+    "other": "the connection could not be checked: {{.Err}}"
+  },
+  {
+    "id": "cli.setup.github.forge_refused",
+    "description": "Connections screen: the forge refused the saved GitHub credential",
+    "other": "the saved GitHub sign-in was refused, run the connect command again"
+  },
+  {
+    "id": "cli.setup.github.forge_limited",
+    "description": "Connections screen: the forge rate limit is reached",
+    "other": "the GitHub request limit is reached, the account cannot be checked for now"
+  },
+  {
+    "id": "cli.setup.github.forge_failed",
+    "description": "Connections screen: the forge could not be asked who the account is",
+    "other": "the GitHub account could not be read: {{.Err}}"
+  },
+  {
     "id": "cli.setup.keys.move",
     "description": "Key hint: arrows move",
     "other": "move"
@@ -5313,5 +5408,100 @@
     "id": "cli.connect.status.access_app_misconfigured",
     "description": "Status value: the herrscher app is misconfigured on the forge, so the saved token cannot be renewed",
     "other": "cannot be renewed: the herrscher app is misconfigured on the forge, report this to the herrscher maintainers"
+  },
+  {
+    "id": "cli.health.group.forge",
+    "description": "Name of the forge group in health",
+    "other": "code forge"
+  },
+  {
+    "id": "cli.health.facts.forge_source",
+    "description": "Detail line of the code forge, Source is where its token comes from",
+    "other": "token source: {{.Source}}"
+  },
+  {
+    "id": "cli.health.facts.forge_quota",
+    "description": "Detail line of the code forge, Count requests are left in the rate limit",
+    "other": "{{.Count}} requests left"
+  },
+  {
+    "id": "cli.health.facts.forge_reset",
+    "description": "Detail line of the code forge, Time is when the rate limit refills",
+    "other": "rate limit resets at {{.Time}}"
+  },
+  {
+    "id": "cli.health.facts.forge_repo",
+    "description": "Detail line of the code forge, Repo is the session repository, Permission the right the account holds on it",
+    "other": "{{.Repo}}: {{.Permission}}"
+  },
+  {
+    "id": "cli.health.facts.forge_repo_unknown",
+    "description": "Detail line of the code forge when the right on the session repository could not be read, Repo is the repository",
+    "other": "{{.Repo}}: permission unknown"
+  },
+  {
+    "id": "cli.health.facts.forge_repo_unreadable",
+    "description": "Detail line of the code forge when the access to the session repository could not be read, Reason is the technical reason",
+    "other": "repository access could not be read: {{.Reason}}"
+  },
+  {
+    "id": "cli.forge.source.saved",
+    "description": "Word for a forge token stored in the host",
+    "other": "saved"
+  },
+  {
+    "id": "cli.forge.source.app",
+    "description": "Word for a forge token minted for an installed App",
+    "other": "app"
+  },
+  {
+    "id": "cli.forge.source.env",
+    "description": "Word for a forge token read from the environment",
+    "other": "environment"
+  },
+  {
+    "id": "cli.forge.source.cli",
+    "description": "Word for a forge token borrowed from the forge command line login",
+    "other": "CLI login"
+  },
+  {
+    "id": "cli.forge.source.unknown",
+    "description": "Word for a forge token whose source is not known",
+    "other": "unknown"
+  },
+  {
+    "id": "cli.forge.permission.none",
+    "description": "Word for a repository permission: no right at all",
+    "other": "none"
+  },
+  {
+    "id": "cli.forge.permission.read",
+    "description": "Word for a repository permission: can read",
+    "other": "read"
+  },
+  {
+    "id": "cli.forge.permission.triage",
+    "description": "Word for a repository permission: can manage issues and pull requests",
+    "other": "triage"
+  },
+  {
+    "id": "cli.forge.permission.write",
+    "description": "Word for a repository permission: can push",
+    "other": "write"
+  },
+  {
+    "id": "cli.forge.permission.maintain",
+    "description": "Word for a repository permission: can manage the repository",
+    "other": "maintain"
+  },
+  {
+    "id": "cli.forge.permission.admin",
+    "description": "Word for a repository permission: holds every right",
+    "other": "admin"
+  },
+  {
+    "id": "cli.forge.permission.unknown",
+    "description": "Word for a repository permission that names no known right",
+    "other": "unknown"
   }
 ]

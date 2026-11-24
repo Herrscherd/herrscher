@@ -199,6 +199,8 @@ func groupKey(group Group) clitext.Key {
 		return clitext.HealthGroupMemory
 	case GroupKeys:
 		return clitext.HealthGroupKeys
+	case GroupForge:
+		return clitext.HealthGroupForge
 	}
 	return ""
 }

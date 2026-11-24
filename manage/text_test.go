@@ -31,16 +31,19 @@ func TestWritingPluginRowsLoadsTheCatalogOnce(t *testing.T) {
 	for i := range rows {
 		rows[i] = PluginVersion{Module: fmt.Sprintf("example.com/m%d", i), Installed: "v1.0.0", Latest: "v1.1.0", Pinned: true}
 	}
+	load := testing.AllocsPerRun(3, func() {
+		_ = testMessages()
+	})
+	messages := testMessages()
 	var out bytes.Buffer
 	allocs := testing.AllocsPerRun(3, func() {
 		out.Reset()
-		if err := writePluginRows(testMessages(), &out, rows); err != nil {
+		if err := writePluginRows(messages, &out, rows); err != nil {
 			t.Fatal(err)
 		}
 	})
-	const budget = 150000
-	if allocs > budget {
-		t.Fatalf("writing %d rows allocated %.0f times, above the budget of %d allocations (one catalogue load allocates about 42000 times, so this is about 3.5 loads): the catalogue is reloaded per row", len(rows), allocs, budget)
+	if allocs > load {
+		t.Fatalf("writing %d rows allocated %.0f times, above one catalogue load of %.0f allocations: the catalogue is reloaded per row", len(rows), allocs, load)
 	}
 }
 

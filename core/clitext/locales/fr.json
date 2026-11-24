@@ -3773,6 +3773,16 @@
     "other": "lancer de vrais allers-retours au lieu des vérifications rapides"
   },
   {
+    "id": "cli.help.cmd.health.repo",
+    "description": "Help of the --repo flag of health",
+    "other": "Dépôt du répertoire courant, le worktree de la session quand un agent le lance : le droit du compte sur ce dépôt est indiqué"
+  },
+  {
+    "id": "cli.help.cmd.health.watch",
+    "description": "Help of the --watch flag of health",
+    "other": "Garder les faits de la forge cinq minutes entre deux relevés, pour qu'une surveillance ne consomme la limite de la forge qu'une fois"
+  },
+  {
     "id": "cli.health.summary.down",
     "description": "Health summary segment, the count of the checks in the state",
     "one": "{{.Count}} panne",
@@ -5130,6 +5140,91 @@
     "other": "routage"
   },
   {
+    "id": "cli.setup.section.connections",
+    "description": "Section name",
+    "other": "Connexions"
+  },
+  {
+    "id": "cli.setup.connections.sub",
+    "description": "Subtitle of the connections screen",
+    "other": "Connecter les forges qu'utilise herrscher"
+  },
+  {
+    "id": "cli.setup.connections.skip",
+    "description": "Action that leaves the connections unchanged",
+    "other": "Passer, tout reste en l'état"
+  },
+  {
+    "id": "cli.setup.github.title",
+    "description": "Connections screen: GitHub group title",
+    "other": "GitHub"
+  },
+  {
+    "id": "cli.setup.github.connected",
+    "description": "Connections screen: GitHub connected state",
+    "other": "connecté en tant que {{.Login}}, origine du jeton : {{.Source}}"
+  },
+  {
+    "id": "cli.setup.github.not_connected",
+    "description": "Connections screen: GitHub not connected state",
+    "other": "non connecté"
+  },
+  {
+    "id": "cli.setup.github.connect",
+    "description": "Action that starts the GitHub device sign-in",
+    "other": "Connecter GitHub"
+  },
+  {
+    "id": "cli.setup.github.install",
+    "description": "Connections screen: hint with the app installation page",
+    "other": "installer l'application sur ton compte : {{.URL}}"
+  },
+  {
+    "id": "cli.setup.github.code",
+    "description": "Connections screen: device code to enter on GitHub",
+    "other": "ouvre {{.URL}} et saisis le code {{.UserCode}}"
+  },
+  {
+    "id": "cli.setup.github.denied",
+    "description": "Connections screen: the GitHub sign-in was refused",
+    "other": "la connexion a été refusée sur GitHub"
+  },
+  {
+    "id": "cli.setup.github.expired",
+    "description": "Connections screen: the device code expired",
+    "other": "le code de connexion a expiré, recommence"
+  },
+  {
+    "id": "cli.setup.github.app_unavailable",
+    "description": "Connections screen: GitHub offers no usable herrscher app",
+    "other": "GitHub n'a aucune application herrscher utilisable pour la connexion"
+  },
+  {
+    "id": "cli.setup.github.failed",
+    "description": "Connections screen: the GitHub connection failed",
+    "other": "la connexion a échoué : {{.Err}}"
+  },
+  {
+    "id": "cli.setup.github.status_failed",
+    "description": "Connections screen: the GitHub state could not be read",
+    "other": "la connexion n'a pas pu être vérifiée : {{.Err}}"
+  },
+  {
+    "id": "cli.setup.github.forge_refused",
+    "description": "Écran des connexions : la forge a refusé l'identifiant GitHub enregistré",
+    "other": "la connexion GitHub enregistrée a été refusée, relance la commande de connexion"
+  },
+  {
+    "id": "cli.setup.github.forge_limited",
+    "description": "Écran des connexions : la limite de requêtes de la forge est atteinte",
+    "other": "la limite de requêtes GitHub est atteinte, le compte ne peut pas être vérifié pour l'instant"
+  },
+  {
+    "id": "cli.setup.github.forge_failed",
+    "description": "Écran des connexions : la forge n'a pas pu indiquer qui est le compte",
+    "other": "le compte GitHub n'a pas pu être lu : {{.Err}}"
+  },
+  {
     "id": "cli.setup.keys.move",
     "description": "Key hint: arrows move",
     "other": "naviguer"
@@ -5313,5 +5408,100 @@
     "id": "cli.connect.status.access_app_misconfigured",
     "description": "Valeur de statut : l'application herrscher est mal configurée sur le forge, le jeton enregistré ne peut pas être renouvelé",
     "other": "ne peut pas être renouvelé : l'application herrscher est mal configurée sur le forge, signale-le aux mainteneurs de herrscher"
+  },
+  {
+    "id": "cli.health.group.forge",
+    "description": "Nom du groupe forge de code dans health",
+    "other": "forge de code"
+  },
+  {
+    "id": "cli.health.facts.forge_source",
+    "description": "Ligne de détail de la forge de code, Source est l'origine du jeton",
+    "other": "origine du jeton : {{.Source}}"
+  },
+  {
+    "id": "cli.health.facts.forge_quota",
+    "description": "Ligne de détail de la forge de code, Count requêtes restent dans la limite",
+    "other": "{{.Count}} requêtes restantes"
+  },
+  {
+    "id": "cli.health.facts.forge_reset",
+    "description": "Ligne de détail de la forge de code, Time est le moment où la limite se recharge",
+    "other": "quota réinitialisé à {{.Time}}"
+  },
+  {
+    "id": "cli.health.facts.forge_repo",
+    "description": "Ligne de détail de la forge de code, Repo est le dépôt de la session, Permission le droit du compte dessus",
+    "other": "{{.Repo}} : {{.Permission}}"
+  },
+  {
+    "id": "cli.health.facts.forge_repo_unknown",
+    "description": "Ligne de détail de la forge de code quand le droit sur le dépôt de la session est illisible, Repo est le dépôt",
+    "other": "{{.Repo}} : droits inconnus"
+  },
+  {
+    "id": "cli.health.facts.forge_repo_unreadable",
+    "description": "Ligne de détail de la forge de code quand l’accès au dépôt de la session n’a pas pu être lu, Reason est la raison technique",
+    "other": "l’accès au dépôt n’a pas pu être lu : {{.Reason}}"
+  },
+  {
+    "id": "cli.forge.source.saved",
+    "description": "Word for a forge token stored in the host",
+    "other": "enregistré"
+  },
+  {
+    "id": "cli.forge.source.app",
+    "description": "Word for a forge token minted for an installed App",
+    "other": "application"
+  },
+  {
+    "id": "cli.forge.source.env",
+    "description": "Word for a forge token read from the environment",
+    "other": "environnement"
+  },
+  {
+    "id": "cli.forge.source.cli",
+    "description": "Word for a forge token borrowed from the forge command line login",
+    "other": "connexion CLI"
+  },
+  {
+    "id": "cli.forge.source.unknown",
+    "description": "Word for a forge token whose source is not known",
+    "other": "inconnue"
+  },
+  {
+    "id": "cli.forge.permission.none",
+    "description": "Word for a repository permission: no right at all",
+    "other": "aucun"
+  },
+  {
+    "id": "cli.forge.permission.read",
+    "description": "Word for a repository permission: can read",
+    "other": "lecture"
+  },
+  {
+    "id": "cli.forge.permission.triage",
+    "description": "Word for a repository permission: can manage issues and pull requests",
+    "other": "tri"
+  },
+  {
+    "id": "cli.forge.permission.write",
+    "description": "Word for a repository permission: can push",
+    "other": "écriture"
+  },
+  {
+    "id": "cli.forge.permission.maintain",
+    "description": "Word for a repository permission: can manage the repository",
+    "other": "maintenance"
+  },
+  {
+    "id": "cli.forge.permission.admin",
+    "description": "Word for a repository permission: holds every right",
+    "other": "administration"
+  },
+  {
+    "id": "cli.forge.permission.unknown",
+    "description": "Word for a repository permission that names no known right",
+    "other": "inconnu"
   }
 ]

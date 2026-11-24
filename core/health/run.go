@@ -14,7 +14,12 @@ import (
 // probes the service. Run should return when its context is done.
 type Probe struct {
 	Check Check
-	Run   func(ctx context.Context, deep bool) contracts.ProbeReport
+	Run   func(ctx context.Context, deep bool) (contracts.ProbeReport, Facts)
+}
+
+type answer struct {
+	report contracts.ProbeReport
+	facts  Facts
 }
 
 // The defaults a [Runner] falls back to when a field is zero.
@@ -67,32 +72,36 @@ func (r Runner) runOne(ctx context.Context, probe Probe, deep bool, timeout time
 	defer cancel()
 	clock := r.clock()
 	started := clock()
-	answer := make(chan contracts.ProbeReport, 1)
-	go answerProbe(probeCtx, probe, deep, answer)
+	answered := make(chan answer, 1)
+	go answerProbe(probeCtx, probe, deep, answered)
 	select {
-	case report := <-answer:
-		if report.Latency == 0 {
-			report.Latency = clock().Sub(started)
+	case got := <-answered:
+		if got.report.Latency == 0 {
+			got.report.Latency = clock().Sub(started)
 		}
 		if probeCtx.Err() != nil || ctx.Err() != nil {
 			return timedOut(probe.Check, timeout)
 		}
 		check := probe.Check
-		check.Report = Settled(report)
+		check.Report = Settled(got.report)
+		if got.facts.Forge != nil {
+			check.Facts.Forge = got.facts.Forge
+		}
 		return check
 	case <-probeCtx.Done():
 		return timedOut(probe.Check, timeout)
 	}
 }
 
-func answerProbe(ctx context.Context, probe Probe, deep bool, answer chan<- contracts.ProbeReport) {
+func answerProbe(ctx context.Context, probe Probe, deep bool, answered chan<- answer) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			slog.Error("health probe panicked", "check", probe.Check.Service(), "panic_type", fmt.Sprintf("%T", recovered))
-			answer <- contracts.ProbeReport{State: contracts.HealthDown}
+			answered <- answer{report: contracts.ProbeReport{State: contracts.HealthDown}}
 		}
 	}()
-	answer <- probe.Run(ctx, deep)
+	report, facts := probe.Run(ctx, deep)
+	answered <- answer{report: report, facts: facts}
 }
 
 func timedOut(check Check, timeout time.Duration) Check {

@@ -14,8 +14,10 @@ func healthVerb(source *healthSource) contracts.Cmd {
 	return contracts.New("health").
 		Help(clitext.CmdHelpHealth).
 		Param(healthParamDeep, clitext.CmdHelpHealthDeep, false).
+		Param(healthParamOrigin, clitext.CmdHelpHealthRepo, false).
+		Param(healthParamWatch, clitext.CmdHelpHealthWatch, false).
 		Do(func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
-			snapshot, err := source.run(ctx, in.Bool(healthParamDeep))
+			snapshot, err := source.run(ctx, in.Bool(healthParamDeep), in.Get(healthParamOrigin), in.Bool(healthParamWatch))
 			if err != nil {
 				return contracts.Result{}, err
 			}
@@ -24,4 +26,7 @@ func healthVerb(source *healthSource) contracts.Cmd {
 		})
 }
 
-const healthParamDeep = "deep"
+const (
+	healthParamDeep  = "deep"
+	healthParamWatch = "watch"
+)

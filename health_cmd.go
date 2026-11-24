@@ -21,6 +21,7 @@ const (
 	healthParamDeep     = "--deep"
 	healthParamWatch    = "--watch"
 	healthParamQuiet    = "--quiet"
+	healthParamRepo     = "--repo"
 )
 
 type healthOptions struct {
@@ -29,6 +30,7 @@ type healthOptions struct {
 	watch   bool
 	asJSON  bool
 	quiet   bool
+	repo    string
 	pal     termpaint.Palette
 }
 
@@ -39,6 +41,9 @@ func runHealth(ctx context.Context, layout host.RuntimeLayout, messages *clitext
 		return renderError(messages, lang, errUnknownArgument, clitext.FlagUnknown, clitext.Params{clitext.ParamCommand: healthVerb, clitext.ParamName: strconv.Quote(unknown)})
 	}
 	opts.pal = outputPalette(os.Stdout)
+	if cwd, cwdErr := os.Getwd(); cwdErr == nil {
+		opts.repo = host.CheckoutOrigin(ctx, cwd)
+	}
 	instance := host.ServedInstanceID(host.DefaultStatePath(), "")
 	if opts.watch {
 		return watchHealth(ctx, layout, messages, hostMessages, instance, opts, lang)
@@ -85,7 +90,7 @@ func daemonDownText(messages *clitext.Messages, lang i18n.Language, socket strin
 }
 
 func checkHealth(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, instance string, opts healthOptions, lang i18n.Language, writer io.Writer) (int, error) {
-	snapshot, err := fetchHealth(ctx, hostMessages, layout, instance, opts.deep)
+	snapshot, err := fetchHealth(ctx, hostMessages, layout, instance, opts)
 	if host.IsDaemonNotRunning(err) {
 		text, textErr := daemonDownText(messages, lang, host.CommandSocketPathIn(layout, instance))
 		if textErr != nil {
@@ -129,10 +134,16 @@ func writeHealth(writer io.Writer, messages *clitext.Messages, snapshot health.S
 	return snapshot.Table(writer, messages, lang, opts.pal)
 }
 
-func fetchHealth(ctx context.Context, hostMessages *host.Messages, layout host.RuntimeLayout, instance string, deep bool) (health.Snapshot, error) {
+func fetchHealth(ctx context.Context, hostMessages *host.Messages, layout host.RuntimeLayout, instance string, opts healthOptions) (health.Snapshot, error) {
 	argv := []string{healthVerb}
-	if deep {
+	if opts.deep {
 		argv = append(argv, healthParamDeep)
+	}
+	if opts.watch {
+		argv = append(argv, healthParamWatch)
+	}
+	if opts.repo != "" {
+		argv = append(argv, healthParamRepo, opts.repo)
 	}
 	out, err := host.DaemonDispatch(ctx, hostMessages, layout, instance, argv)
 	if err != nil {

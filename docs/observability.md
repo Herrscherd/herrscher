@@ -96,7 +96,7 @@ tool lines in the terminal UI yet.
 `herrscher health` asks the running daemon for a snapshot of everything it depends
 on, and prints it as a table grouped by what the checks cover: the daemon and its
 key proxy, the gateways, the backends with each account and profile, the
-compaction stages, the memory plugins and the key pools. Each line says the state
+compaction stages, the memory plugins, the key pools and the code forge. Each line says the state
 (ok, degraded, down or off), how long the probe took, and the facts the host knows
 about the service. Each compaction stage shows when it last ran and how it ended
 (done, short, failed, dry run or skipped), read from the usage ledger, or that there
@@ -106,6 +106,19 @@ data as partial. A compaction stage that reads its API key from the environment 
 shows whether that variable is set, by its name only (`TYPESAFE_API_KEY`), never its
 value, with the time and outcome of its last successful run and the time and note of
 its last failed one.
+
+The forge line checks the GitHub connection: where the token comes from and the
+login it belongs to, the permission the account has on the repository of the
+current directory (the session worktree when an agent runs it), and the requests
+left before the rate limit resets, with the time of the reset. The permission part
+is left out when that directory has no origin or its origin is not on github.com,
+and the rest of the line still shows. When that right cannot be read, the line says
+so with the reason the forge gave, and when the quota is also low, that reason
+follows the quota warning. No connection is a warning that points to
+`herrscher connect github`. A token the forge refuses is an error asking you to
+connect again. Fewer than 100 requests left is a warning, and the login stays on
+the line beside it. A quota the forge did not report is neither shown nor a
+warning. The token itself is never printed.
 
 A gateway the daemon does not run reads as off, and so does a memory plugin that is
 not the one in use: the first local memory plugin with a factory is the live one,
@@ -120,7 +133,11 @@ Each probe runs under a bounded pool with a five second limit. `--deep` lifts th
 limit to thirty seconds and asks the plugins that support it for a real round trip
 rather than a local check, which costs requests, so it is opt-in. `--watch`
 refreshes the table every fifteen seconds until interrupted, and `--quiet` prints
-nothing and only sets the exit code.
+nothing and only sets the exit code. A watch refreshes the successful forge facts,
+a low-quota report included, every five minutes, so GitHub is asked once every five
+minutes, not every fifteen seconds. A failed repo access check is retried every
+minute, and a failed connection is probed again on the next tick; a one-off
+`herrscher health` always asks the forge.
 
 The exit code tells a script the outcome: `0` when nothing is degraded or down,
 `2` when the worst state is degraded, and `1` when something is down or the

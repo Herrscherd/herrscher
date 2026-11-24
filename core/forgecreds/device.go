@@ -17,6 +17,9 @@ import (
 // flow needs no client secret, so none is held by the host.
 const ClientID = "Iv23liFEq6dF9ABLEueS"
 
+// AppInstallURL is the page where the herrscher GitHub App is installed on an account.
+const AppInstallURL = "https://github.com/apps/herrscher-for-github/installations/new"
+
 const (
 	deviceCodePath      = "/login/device/code"
 	formClientID        = "client_id"

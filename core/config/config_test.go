@@ -7,6 +7,33 @@ import (
 	"testing"
 )
 
+func TestTelemetryIsOffOnlyWhenConfiguredOff(t *testing.T) {
+	cases := map[string]struct {
+		json string
+		want bool
+	}{
+		"absent":   {json: `{}`, want: false},
+		"no flag":  {json: `{"telemetry":{}}`, want: false},
+		"enabled":  {json: `{"telemetry":{"enabled":true}}`, want: false},
+		"disabled": {json: `{"telemetry":{"enabled":false}}`, want: true},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.json")
+			if err := os.WriteFile(path, []byte(tc.json), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			c, err := Load(path)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if got := c.TelemetryOff(); got != tc.want {
+				t.Fatalf("TelemetryOff() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestLoadSessionMaxIdleDays(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "config.json")

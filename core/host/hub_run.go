@@ -21,7 +21,11 @@ import (
 	"github.com/Herrscherd/herrscher/core/otelexport"
 )
 
-func startTelemetry(ctx context.Context, messages *hostMessages, lang i18n.Language, log *slog.Logger) (otelexport.Exporter, func()) {
+func startTelemetry(ctx context.Context, messages *hostMessages, lang i18n.Language, log *slog.Logger, off bool) (otelexport.Exporter, func()) {
+	if off {
+		log.Info("turn telemetry disabled", "reason", messages.text(lang, "telemetry.disabled_by_config", nil))
+		return otelexport.Exporter{}, func() {}
+	}
 	telemetry, err := otelexport.Setup(ctx, os.LookupEnv)
 	if err != nil {
 		log.Warn("turn telemetry disabled", "reason", telemetryDisabledText(messages, lang, err), "err", err)
@@ -118,7 +122,11 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 		return wrapHost(messages, err, "serve.compaction", nil)
 	}
 	sessions.compaction = policy
-	telemetry, stopTelemetry := startTelemetry(ctx, messages, options.operatorLanguage(), log)
+	cfg, err := config.Load(config.DefaultPath())
+	if err != nil {
+		return wrapHost(messages, err, "serve.config", nil)
+	}
+	telemetry, stopTelemetry := startTelemetry(ctx, messages, options.operatorLanguage(), log, cfg.TelemetryOff())
 	defer stopTelemetry()
 	sessions.telemetry = telemetry
 	sessions.store = store
@@ -138,10 +146,6 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	ensureCodexAgent(deps.agents)
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)
-	}
-	cfg, err := config.Load(config.DefaultPath())
-	if err != nil {
-		return wrapHost(messages, err, "serve.config", nil)
 	}
 	sessions.outboundMaxBytes = cfg.EffectiveOutboundMaxBytes()
 	sessions.fileSenders = fileSendersOf(closers)

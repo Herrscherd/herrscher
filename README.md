@@ -69,7 +69,19 @@ Enable it by pointing the standard variables at a collector, for example:
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 herrscher serve
 ```
 
-The configuration is read from the environment only, through the standard OpenTelemetry variables, so no key is added to the configuration file:
+The configuration file has one telemetry key, `telemetry.enabled`, and it takes priority over the environment:
+
+```json
+{
+  "telemetry": {
+    "enabled": false
+  }
+}
+```
+
+`false` turns the export off even when an endpoint is set: no exporter is built, nothing connects, and an invalid endpoint is not reported. A missing key or `true` changes nothing, so the export still needs an endpoint. Use the key when the daemon runs as a service, since a service unit usually carries only `PATH` and cannot switch the export off through the environment.
+
+Otherwise the export reads the standard OpenTelemetry variables:
 
 - `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` enables the export (the traces variable wins when both are set). The endpoint rules are in the Endpoint paragraph below.
 - `OTEL_EXPORTER_OTLP_PROTOCOL` or `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL` selects `http/protobuf` (default) or `grpc`.

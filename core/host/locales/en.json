@@ -796,6 +796,11 @@
     "other": "herrscher: the approval request is over the size limit, so this tool call is refused"
   },
   {
+    "id": "hook.approval_answer_unreadable",
+    "description": "The approval hook refuses a tool call because the approval socket answered with a line it cannot read, a truncated or mistyped answer, or one over the size limit; the text received is never repeated",
+    "other": "herrscher: could not read the approval answer, so this tool call is refused"
+  },
+  {
     "id": "hook.approval_timeout",
     "description": "The approval hook refuses a tool call because no answer came within its own bound, which sits below the CLI's hook wait, Wait carries that bound",
     "other": "herrscher: no answer came within {{.Wait}}, so this tool call is refused before the CLI cuts the hook off"
@@ -964,5 +969,10 @@
     "id": "telemetry.exporter_failed",
     "description": "Turn telemetry stays off because the OTLP exporter did not start",
     "other": "turn telemetry is off: the OTLP exporter did not start"
+  },
+  {
+    "id": "telemetry.disabled_by_config",
+    "description": "Turn telemetry stays off because the configuration sets telemetry.enabled to false, even when an OTLP endpoint is set",
+    "other": "turn telemetry is off: the configuration sets telemetry.enabled to false"
   }
 ]

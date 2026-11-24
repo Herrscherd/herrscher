@@ -796,6 +796,11 @@
     "other": "herrscher : la requête d'approbation dépasse la taille limite, cet appel d'outil est donc refusé"
   },
   {
+    "id": "hook.approval_answer_unreadable",
+    "description": "Le hook d'approbation refuse un appel d'outil parce que la socket d'approbation a répondu une ligne qu'il ne sait pas lire, une réponse tronquée ou mal typée, ou au-delà de la taille limite ; le texte reçu n'est jamais répété",
+    "other": "herrscher : impossible de lire la réponse d'approbation, cet appel d'outil est donc refusé"
+  },
+  {
     "id": "hook.approval_timeout",
     "description": "Le hook d'approbation refuse un appel d'outil parce qu'aucune réponse n'est venue dans sa propre borne, placée sous l'attente du hook du CLI, Wait porte cette borne",
     "other": "herrscher : aucune réponse en {{.Wait}}, cet appel d'outil est donc refusé avant que le CLI ne coupe le hook"
@@ -964,5 +969,10 @@
     "id": "telemetry.exporter_failed",
     "description": "La télémétrie des tours reste désactivée parce que l'exportateur OTLP n'a pas démarré",
     "other": "la télémétrie des tours est désactivée : l'exportateur OTLP n'a pas démarré"
+  },
+  {
+    "id": "telemetry.disabled_by_config",
+    "description": "La télémétrie des tours reste désactivée parce que la configuration met telemetry.enabled à false, même si un point de terminaison OTLP est défini",
+    "other": "la télémétrie des tours est désactivée : la configuration met telemetry.enabled à false"
   }
 ]

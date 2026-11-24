@@ -27,6 +27,24 @@ func privateSocketPath(t *testing.T) string {
 	return filepath.Join(dir, "approval.sock")
 }
 
+func TestTheHookSendsEveryApprovalRequestWithAnID(t *testing.T) {
+	pinEnglish(t)
+	t.Setenv(SessionVar, "")
+	t.Setenv(TokenVar, "")
+	path := listenApprovals(t, func(_ context.Context, req contracts.ApprovalRequest) contracts.ApprovalAnswer {
+		if req.ID == "" {
+			t.Errorf("the hook sent a request without an ID, which the socket refuses")
+		}
+		return contracts.ApprovalAnswer{ID: req.ID, Decision: contracts.DecisionAllow}
+	})
+	t.Setenv(approvalsock.EnvApprovalSocket, path)
+	var out, errOut bytes.Buffer
+	mustRunHook(context.Background(), t, strings.NewReader(bashPayload), &out, &errOut, testTarget, forbidDaemon(t))
+	if d, _ := hookDecision(t, out.String()); d != "allow" {
+		t.Fatalf("decision %q, want allow from the socket answer", d)
+	}
+}
+
 func listenApprovals(t *testing.T, asker contracts.ApprovalAsker) string {
 	t.Helper()
 	path := privateSocketPath(t)
@@ -227,7 +245,7 @@ func TestHookRefusesAMalformedApprovalAnswerWithoutEchoingIt(t *testing.T) {
 	var out, errOut bytes.Buffer
 	mustRunHook(context.Background(), t, strings.NewReader(bashPayload), &out, &errOut, testTarget, forbidDaemon(t))
 	d, reason := hookDecision(t, out.String())
-	const want = "herrscher: the approval socket could not answer, so this tool call is refused"
+	const want = "herrscher: could not read the approval answer, so this tool call is refused"
 	if d != "deny" || reason != want {
 		t.Fatalf("got %q/%q, want deny/%q", d, reason, want)
 	}

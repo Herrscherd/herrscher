@@ -223,6 +223,7 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"hook.approval_answer_invalid":      nil,
 		"hook.approval_foreign_peer":        nil,
 		"hook.approval_request_too_large":   nil,
+		"hook.approval_answer_unreadable":   nil,
 		"hook.approval_timeout":             {"Wait"},
 		"approve.wait_truncated":            {"Wait", "Bound"},
 		"approval.request_unreadable":       {"Detail"},
@@ -257,6 +258,7 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"telemetry.endpoint_invalid":        nil,
 		"telemetry.protocol_unsupported":    nil,
 		"telemetry.exporter_failed":         nil,
+		"telemetry.disabled_by_config":      nil,
 	}
 	i18ntest.CheckDeclared(t, declared, hostLocaleSource(t))
 }

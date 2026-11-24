@@ -45,6 +45,7 @@ const (
 	hookAnswerInvalid        = "hook.approval_answer_invalid"
 	hookForeignPeer          = "hook.approval_foreign_peer"
 	hookRequestTooLarge      = "hook.approval_request_too_large"
+	hookApprovalUnreadable   = "hook.approval_answer_unreadable"
 )
 
 const (
@@ -193,6 +194,8 @@ func approvalSocketFailureKey(err error) string {
 		return hookForeignPeer
 	case errors.Is(err, approvalsock.ErrRequestTooLarge):
 		return hookRequestTooLarge
+	case errors.Is(err, approvalsock.ErrUnreadableAnswer):
+		return hookApprovalUnreadable
 	}
 	return hookApprovalSocketFailed
 }

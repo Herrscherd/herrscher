@@ -1,8 +1,8 @@
 package host
 
 import (
-	"encoding/hex"
 	"io"
+	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -126,14 +126,16 @@ func TestGoDeadDoesNotHoldTheHubLockWhileWaiting(t *testing.T) {
 }
 
 func TestApprovalIDsAreRandomAndWellFormed(t *testing.T) {
+	const base32Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+	const idLength = 26
 	seen := make(map[string]bool, 4096)
 	for range 4096 {
 		id := newApprovalID()
-		if len(id) != 2*approvalIDBytes {
-			t.Fatalf("newApprovalID() = %q, want %d hex characters", id, 2*approvalIDBytes)
+		if len(id) != idLength {
+			t.Fatalf("newApprovalID() = %q, want %d characters", id, idLength)
 		}
-		if _, err := hex.DecodeString(id); err != nil {
-			t.Fatalf("newApprovalID() = %q, not hex: %v", id, err)
+		if strings.IndexFunc(id, func(r rune) bool { return !strings.ContainsRune(base32Alphabet, r) }) != -1 {
+			t.Fatalf("newApprovalID() = %q, not base32", id)
 		}
 		if seen[id] {
 			t.Fatalf("newApprovalID() repeated %q within 4096 draws", id)

@@ -732,8 +732,8 @@
   },
   {
     "id": "hook.payload_unreadable",
-    "description": "The approval hook refuses a tool call whose payload it cannot parse, Detail carries the parse error",
-    "other": "herrscher: could not read the hook payload, so this tool call is refused: {{.Detail}}"
+    "description": "The approval hook refuses a tool call whose payload it cannot parse",
+    "other": "herrscher: could not read the hook payload, so this tool call is refused"
   },
   {
     "id": "hook.payload_too_large",
@@ -752,18 +752,18 @@
   },
   {
     "id": "hook.cancelled",
-    "description": "The approval hook refuses a tool call whose approval was cancelled before the daemon answered",
-    "other": "herrscher: the approval was cancelled before the daemon answered, so this tool call is refused"
+    "description": "The approval hook refuses a tool call whose approval was cancelled before an answer came, on the daemon or the approval socket path",
+    "other": "herrscher: the approval was cancelled before an answer came, so this tool call is refused"
   },
   {
     "id": "hook.daemon_failed",
-    "description": "The approval hook refuses a tool call because the daemon returned an error, Detail carries it",
-    "other": "herrscher: the daemon could not answer, so this tool call is refused: {{.Detail}}"
+    "description": "The approval hook refuses a tool call because the daemon returned an error",
+    "other": "herrscher: the daemon could not answer, so this tool call is refused"
   },
   {
     "id": "hook.answer_unreadable",
-    "description": "The approval hook refuses a tool call whose daemon answer it cannot parse, Answer carries the raw answer",
-    "other": "herrscher: could not read the daemon's answer {{.Answer}}, so this tool call is refused"
+    "description": "The approval hook refuses a tool call whose daemon answer it cannot parse or whose decision it does not know",
+    "other": "herrscher: could not read the daemon's answer, so this tool call is refused"
   },
   {
     "id": "hook.other_event",
@@ -772,8 +772,33 @@
   },
   {
     "id": "hook.approval_socket_failed",
-    "description": "The approval hook refuses a tool call because the approval socket failed or answered for another request, Detail carries the cause",
-    "other": "herrscher: the approval socket could not answer, so this tool call is refused: {{.Detail}}"
+    "description": "The approval hook refuses a tool call because the approval socket failed or answered for another request; the cause is not repeated, since it may echo received text",
+    "other": "herrscher: the approval socket could not answer, so this tool call is refused"
+  },
+  {
+    "id": "hook.approval_answer_mismatch",
+    "description": "The approval hook refuses a tool call because the approval socket answered for another request",
+    "other": "herrscher: the approval socket answered another request, so this tool call is refused"
+  },
+  {
+    "id": "hook.approval_answer_invalid",
+    "description": "The approval hook refuses a tool call because the approval socket sent a decision it does not know",
+    "other": "herrscher: the approval socket sent an unknown decision, so this tool call is refused"
+  },
+  {
+    "id": "hook.approval_foreign_peer",
+    "description": "The approval hook refuses a tool call because another user answers the approval socket",
+    "other": "herrscher: the approval socket is answered by another user, so this tool call is refused"
+  },
+  {
+    "id": "hook.approval_request_too_large",
+    "description": "The approval hook refuses a tool call because its approval request exceeds the size the socket accepts",
+    "other": "herrscher: the approval request is over the size limit, so this tool call is refused"
+  },
+  {
+    "id": "hook.approval_answer_unreadable",
+    "description": "The approval hook refuses a tool call because the approval socket answered with a line it cannot read, a truncated or mistyped answer, or one over the size limit; the text received is never repeated",
+    "other": "herrscher: could not read the approval answer, so this tool call is refused"
   },
   {
     "id": "hook.approval_timeout",
@@ -927,7 +952,27 @@
   },
   {
     "id": "hook.decision_unwritable",
-    "description": "The approval hook could not write its decision to stdout, Decision names it and Detail carries the error",
-    "other": "herrscher: could not write the {{.Decision}} decision: {{.Detail}}"
+    "description": "The approval hook could not write its decision to stdout, Decision names it",
+    "other": "herrscher: could not write the {{.Decision}} decision"
+  },
+  {
+    "id": "telemetry.endpoint_invalid",
+    "description": "Turn telemetry stays off because the configured OTLP endpoint is not an address its protocol accepts",
+    "other": "turn telemetry is off: the OTLP endpoint is not an address its protocol accepts"
+  },
+  {
+    "id": "telemetry.protocol_unsupported",
+    "description": "Turn telemetry stays off because the configured OTLP protocol is neither grpc nor http/protobuf",
+    "other": "turn telemetry is off: the OTLP protocol is not one herrscher supports"
+  },
+  {
+    "id": "telemetry.exporter_failed",
+    "description": "Turn telemetry stays off because the OTLP exporter did not start",
+    "other": "turn telemetry is off: the OTLP exporter did not start"
+  },
+  {
+    "id": "telemetry.disabled_by_config",
+    "description": "Turn telemetry stays off because the configuration sets telemetry.enabled to false, even when an OTLP endpoint is set",
+    "other": "turn telemetry is off: the configuration sets telemetry.enabled to false"
   }
 ]

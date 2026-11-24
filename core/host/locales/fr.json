@@ -732,8 +732,8 @@
   },
   {
     "id": "hook.payload_unreadable",
-    "description": "The approval hook refuses a tool call whose payload it cannot parse, Detail carries the parse error",
-    "other": "herrscher : impossible de lire la charge utile du hook, cet appel d'outil est donc refusé : {{.Detail}}"
+    "description": "Le hook d'approbation refuse un appel d'outil dont il ne peut pas lire la charge utile",
+    "other": "herrscher : impossible de lire la charge utile du hook, cet appel d'outil est donc refusé"
   },
   {
     "id": "hook.payload_too_large",
@@ -752,18 +752,18 @@
   },
   {
     "id": "hook.cancelled",
-    "description": "The approval hook refuses a tool call whose approval was cancelled before the daemon answered",
-    "other": "herrscher : l'approbation a été annulée avant la réponse du démon, cet appel d'outil est donc refusé"
+    "description": "Le hook d'approbation refuse un appel d'outil dont l'approbation a été annulée avant toute réponse, sur le chemin du démon ou de la socket d'approbation",
+    "other": "herrscher : l'approbation a été annulée avant toute réponse, cet appel d'outil est donc refusé"
   },
   {
     "id": "hook.daemon_failed",
-    "description": "The approval hook refuses a tool call because the daemon returned an error, Detail carries it",
-    "other": "herrscher : le démon n'a pas pu répondre, cet appel d'outil est donc refusé : {{.Detail}}"
+    "description": "Le hook d'approbation refuse un appel d'outil parce que le démon a renvoyé une erreur",
+    "other": "herrscher : le démon n'a pas pu répondre, cet appel d'outil est donc refusé"
   },
   {
     "id": "hook.answer_unreadable",
-    "description": "The approval hook refuses a tool call whose daemon answer it cannot parse, Answer carries the raw answer",
-    "other": "herrscher : impossible de lire la réponse du démon {{.Answer}}, cet appel d'outil est donc refusé"
+    "description": "Le hook d'approbation refuse un appel d'outil dont la réponse du démon est illisible ou dont la décision est inconnue",
+    "other": "herrscher : impossible de lire la réponse du démon, cet appel d'outil est donc refusé"
   },
   {
     "id": "hook.other_event",
@@ -772,8 +772,33 @@
   },
   {
     "id": "hook.approval_socket_failed",
-    "description": "Le hook d'approbation refuse un appel d'outil parce que la socket d'approbation a échoué ou répondu pour une autre requête, Detail porte la cause",
-    "other": "herrscher : la socket d'approbation n'a pas pu répondre, cet appel d'outil est donc refusé : {{.Detail}}"
+    "description": "Le hook d'approbation refuse un appel d'outil parce que la socket d'approbation a échoué ou répondu pour une autre requête ; la cause n'est pas répétée, car elle peut reprendre un texte reçu",
+    "other": "herrscher : la socket d'approbation n'a pas pu répondre, cet appel d'outil est donc refusé"
+  },
+  {
+    "id": "hook.approval_answer_mismatch",
+    "description": "Le hook d'approbation refuse un appel d'outil parce que la socket d'approbation a répondu pour une autre requête",
+    "other": "herrscher : la socket d'approbation a répondu pour une autre requête, cet appel d'outil est donc refusé"
+  },
+  {
+    "id": "hook.approval_answer_invalid",
+    "description": "Le hook d'approbation refuse un appel d'outil parce que la socket d'approbation a envoyé une décision inconnue",
+    "other": "herrscher : la socket d'approbation a envoyé une décision inconnue, cet appel d'outil est donc refusé"
+  },
+  {
+    "id": "hook.approval_foreign_peer",
+    "description": "Le hook d'approbation refuse un appel d'outil parce qu'un autre utilisateur répond sur la socket d'approbation",
+    "other": "herrscher : la socket d'approbation est tenue par un autre utilisateur, cet appel d'outil est donc refusé"
+  },
+  {
+    "id": "hook.approval_request_too_large",
+    "description": "Le hook d'approbation refuse un appel d'outil parce que sa requête d'approbation dépasse la taille acceptée par la socket",
+    "other": "herrscher : la requête d'approbation dépasse la taille limite, cet appel d'outil est donc refusé"
+  },
+  {
+    "id": "hook.approval_answer_unreadable",
+    "description": "Le hook d'approbation refuse un appel d'outil parce que la socket d'approbation a répondu une ligne qu'il ne sait pas lire, une réponse tronquée ou mal typée, ou au-delà de la taille limite ; le texte reçu n'est jamais répété",
+    "other": "herrscher : impossible de lire la réponse d'approbation, cet appel d'outil est donc refusé"
   },
   {
     "id": "hook.approval_timeout",
@@ -927,7 +952,27 @@
   },
   {
     "id": "hook.decision_unwritable",
-    "description": "The approval hook could not write its decision to stdout, Decision names it and Detail carries the error",
-    "other": "herrscher : impossible d'écrire la décision {{.Decision}} : {{.Detail}}"
+    "description": "The approval hook could not write its decision to stdout, Decision names it",
+    "other": "herrscher : impossible d'écrire la décision {{.Decision}}"
+  },
+  {
+    "id": "telemetry.endpoint_invalid",
+    "description": "La télémétrie des tours reste désactivée parce que le point de terminaison OTLP configuré n'est pas une adresse acceptée par son protocole",
+    "other": "la télémétrie des tours est désactivée : le point de terminaison OTLP n'est pas une adresse acceptée par son protocole"
+  },
+  {
+    "id": "telemetry.protocol_unsupported",
+    "description": "La télémétrie des tours reste désactivée parce que le protocole OTLP configuré n'est ni grpc ni http/protobuf",
+    "other": "la télémétrie des tours est désactivée : le protocole OTLP n'est pas pris en charge par herrscher"
+  },
+  {
+    "id": "telemetry.exporter_failed",
+    "description": "La télémétrie des tours reste désactivée parce que l'exportateur OTLP n'a pas démarré",
+    "other": "la télémétrie des tours est désactivée : l'exportateur OTLP n'a pas démarré"
+  },
+  {
+    "id": "telemetry.disabled_by_config",
+    "description": "La télémétrie des tours reste désactivée parce que la configuration met telemetry.enabled à false, même si un point de terminaison OTLP est défini",
+    "other": "la télémétrie des tours est désactivée : la configuration met telemetry.enabled à false"
   }
 ]

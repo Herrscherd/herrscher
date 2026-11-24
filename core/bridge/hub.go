@@ -310,6 +310,16 @@ func settleFailedReply(ctrl *turnController, out string, err error) string {
 	}
 }
 
+func turnOutcome(ctrl *turnController, failure error) contracts.TurnOutcome {
+	switch {
+	case ctrl.wasInterrupted():
+		return contracts.TurnInterrupted
+	case failure != nil:
+		return contracts.TurnFailed
+	}
+	return ""
+}
+
 func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, event contracts.Event, ctrl *turnController, eng *skills.Engine, aff affordances, pin *scopePin, lang i18n.Language) error {
 	turnCtx, endTurn := ctrl.begin(ctx)
 	defer endTurn()
@@ -357,7 +367,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	if tr, ok := orch.(contracts.TurnReactor); ok {
 		out = tr.React(ctx, out)
 	}
-	sink.Emit(contracts.Event{T: eventwire.EventReply, Text: out, Done: true, Cost: usage.cost, Tokens: usage.outTok, TokensIn: usage.inTok, CacheRead: usage.cacheRd, CacheCreate: usage.cacheCr, Resume: resumeToken(backend), Project: settledProject})
+	sink.Emit(contracts.Event{T: eventwire.EventReply, Text: out, Done: true, Outcome: turnOutcome(ctrl, failure), Cost: usage.cost, Tokens: usage.outTok, TokensIn: usage.inTok, CacheRead: usage.cacheRd, CacheCreate: usage.cacheCr, Resume: resumeToken(backend), Project: settledProject})
 	if orch != nil {
 		if err := orch.Observe(ctx, prompt, out); err != nil {
 			logger.Warn("memory observe failed; this turn was not recorded to memory", "err", err)

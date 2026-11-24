@@ -44,6 +44,7 @@ func runSessionIdentified(ctx context.Context, sessions *sessionTable, name, cha
 	driver.channel = channel
 	driver.outboxRoot = sessions.outboxRoot
 	driver.outboundMaxBytes = sessions.outboundMaxBytes
+	driver.telemetry = sessions.telemetry
 	driver.fileSenders = sessions.fileSenders
 	driver.participants = participants
 	driver.metrics = registry

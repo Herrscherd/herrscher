@@ -8,11 +8,13 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/otelexport"
 	"github.com/Herrscherd/herrscher/core/outbox"
 	"github.com/Herrscherd/herrscher/core/timeline"
 )
 
 func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event, turnStart time.Time, live int, files outbox.Frame) {
+	d.exportTurn(ctx, exportOutcome(event.Outcome), event)
 	d.turnReading = contextReading(live, event)
 	event.Coordination = d.maybeCoordinate(ctx, event.Text)
 	event.Cost = estimateTurnCost(event.Cost, priceableTokens{
@@ -44,6 +46,16 @@ func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event,
 	if verdict := d.gate.Check(d.name); verdict.Reason != "" {
 		d.emitPaused(ctx, verdict.Reason)
 	}
+}
+
+func exportOutcome(outcome contracts.TurnOutcome) otelexport.Outcome {
+	switch outcome {
+	case contracts.TurnFailed:
+		return otelexport.OutcomeFailed
+	case contracts.TurnInterrupted:
+		return otelexport.OutcomeInterrupted
+	}
+	return otelexport.OutcomeCompleted
 }
 
 func (d *sessionDriver) deliverPendingReply(text string) {

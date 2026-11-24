@@ -320,8 +320,9 @@ func TestHookReportsWhenItsDecisionCannotBeWritten(t *testing.T) {
 	if err := RunPermissionHook(context.Background(), NewMessages(), in, failingWriter{}, &errOut, testTarget, hookAnswerWait(), ask); err == nil {
 		t.Fatal("a decision the host could not write was reported as delivered")
 	}
-	if !strings.Contains(errOut.String(), "stdout is closed") {
-		t.Fatalf("stderr was %q, want the note naming the write failure", errOut.String())
+	const want = "herrscher: could not write the allow decision"
+	if got := strings.TrimSuffix(errOut.String(), "\n"); got != want {
+		t.Fatalf("stderr = %q, want the fixed note %q", got, want)
 	}
 }
 

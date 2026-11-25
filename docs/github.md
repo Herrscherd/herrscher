@@ -157,6 +157,31 @@ the same way. A pull request for a host other than github.com is refused. The
 token goes to git through its environment, never on the command line or in the
 clone's configuration.
 
+## Pull requests of a session
+
+A session worktree can open and follow its pull request from the terminal, with
+the same token and only for github.com:
+
+- `herrscher session pr open --name <session> --title <title> [--body <text>] [--base <branch>] [--draft]`
+  opens the pull request of the session branch. It does not push: the local
+  HEAD must already be on the remote branch, or the command refuses. The origin
+  must be a github.com repository. The base defaults to the remote default
+  branch. The number of the pull request is recorded in the session state, and a
+  session that already has one is refused.
+- `herrscher session pr status --name <session>` shows the title, URL, state,
+  draft flag, mergeability and head commit of the recorded pull request.
+- `herrscher session pr checks --name <session>` lists the check runs of its head
+  commit, reading every page up to a fixed bound.
+- `herrscher session pr comments --name <session>` lists the review threads, the
+  unresolved ones first, with their comments. Forge text is sanitized before it
+  is printed.
+
+Each command accepts `--json` for the raw structure. Errors are printed in the
+language of the session. A missing connection names `herrscher connect github`
+as the remedy, a rate limit gives the time of the reset, and a session without a
+pull request says to run `session pr open` first. The token never appears in
+arguments, output, logs or errors.
+
 ## Repositories to clone
 
 When you create a session, the choice of repositories lists the workspace

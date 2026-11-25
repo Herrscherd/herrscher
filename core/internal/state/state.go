@@ -103,6 +103,8 @@ type Session struct {
 
 	Participants []string `json:"participants,omitempty"`
 
+	PullRequest int `json:"pullRequest,omitempty"`
+
 	// Parent names the lead session that delegated this one (result-back P3).
 	// Empty = no parent. The coordinator reads it to find the delivery target
 	// of this session's completion report (Report).

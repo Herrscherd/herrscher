@@ -1,0 +1,507 @@
+package host
+
+import (
+	"cmp"
+	"context"
+	"errors"
+	"slices"
+	"strings"
+	"time"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/i18n"
+
+	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/forgecreds"
+	"github.com/Herrscherd/herrscher/core/forgeport"
+	"github.com/Herrscherd/herrscher/core/internal/runner"
+	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/termpaint"
+)
+
+const (
+	verbPR         = "pr"
+	verbPROpen     = "open"
+	verbPRStatus   = "status"
+	verbPRChecks   = "checks"
+	verbPRComments = "comments"
+	paramTitle     = "title"
+	paramBody      = "body"
+	paramBase      = "base"
+	paramDraft     = "draft"
+	gitHubHostName = "github.com"
+	originRemote   = "origin"
+	maxPRPages     = 20
+	resetUnknown   = "unknown time"
+)
+
+type sessionPRError struct {
+	key clitext.Key
+}
+
+func (f sessionPRError) Error() string { return string(f.key) }
+
+var (
+	errSessionPRNone    = sessionPRError{clitext.SessionPRNone}
+	errPRBranchUnpushed = sessionPRError{clitext.SessionPRUnpushed}
+	errPRNoBase         = sessionPRError{clitext.SessionPRNoBase}
+	errPRNoDir          = sessionPRError{clitext.SessionPRNoDir}
+	errPRPages          = sessionPRError{clitext.SessionPRPagesExceeded}
+)
+
+type sessionPRs struct {
+	messages *clitext.Messages
+	lang     languageSource
+	store    *state.State
+	opener   forgeOpener
+}
+
+type prTarget struct {
+	language i18n.Language
+	forge    contracts.Forge
+	ref      contracts.PullRequestRef
+}
+
+type prStatusView struct {
+	Number  int    `json:"number"`
+	Title   string `json:"title"`
+	URL     string `json:"url"`
+	State   string `json:"state"`
+	Draft   bool   `json:"draft"`
+	Merge   string `json:"merge"`
+	Head    string `json:"head"`
+	Base    string `json:"base"`
+	HeadSHA string `json:"headSha"`
+}
+
+type prCheckView struct {
+	Name       string `json:"name"`
+	Status     string `json:"status"`
+	Conclusion string `json:"conclusion"`
+	URL        string `json:"url"`
+}
+
+type prThreadView struct {
+	Path     string          `json:"path"`
+	Line     int             `json:"line"`
+	Resolved bool            `json:"resolved"`
+	Comments []prCommentView `json:"comments"`
+}
+
+type prCommentView struct {
+	Author    string    `json:"author"`
+	Body      string    `json:"body"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+func addSessionPRVerbs(reg *cli.Registry, messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener) error {
+	prs := sessionPRs{messages: messages, lang: lang, store: store, opener: opener}
+	return addVerbs(reg, prs.openVerb(), prs.statusVerb(), prs.checksVerb(), prs.commentsVerb())
+}
+
+func forgeOpenerFor(credentials *forgecreds.Credentials) forgeOpener {
+	return func(ctx context.Context, host contracts.ForgeHost) (contracts.Forge, error) {
+		return forgeport.Open(ctx, forgeport.KindGitHub, host, forgeCredentials(credentials))
+	}
+}
+
+func (p sessionPRs) openVerb() contracts.Cmd {
+	return contracts.New(nsSession, verbPR, verbPROpen).
+		Help(clitext.CmdHelpSessionPROpen).
+		Param(paramName, clitext.CmdParamSessionPRName, true).
+		ValueParam(paramTitle, clitext.CmdParamSessionPRTitle, true).
+		ValueParam(paramBody, clitext.CmdParamSessionPRBody, false).
+		ValueParam(paramBase, clitext.CmdParamSessionPRBase, false).
+		Param(paramDraft, clitext.CmdParamSessionPRDraft, false).
+		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+			return cli.Data(p.openPR(ctx, input))
+		})
+}
+
+func (p sessionPRs) statusVerb() contracts.Cmd {
+	return contracts.New(nsSession, verbPR, verbPRStatus).
+		Help(clitext.CmdHelpSessionPRStatus).
+		Param(paramName, clitext.CmdParamSessionPRName, true).
+		Do(p.status)
+}
+
+func (p sessionPRs) checksVerb() contracts.Cmd {
+	return contracts.New(nsSession, verbPR, verbPRChecks).
+		Help(clitext.CmdHelpSessionPRChecks).
+		Param(paramName, clitext.CmdParamSessionPRName, true).
+		Do(p.checks)
+}
+
+func (p sessionPRs) commentsVerb() contracts.Cmd {
+	return contracts.New(nsSession, verbPR, verbPRComments).
+		Help(clitext.CmdHelpSessionPRComments).
+		Param(paramName, clitext.CmdParamSessionPRName, true).
+		Do(p.comments)
+}
+
+func (p sessionPRs) openPR(ctx context.Context, input contracts.Input) (string, error) {
+	name := input.Get(paramName)
+	sess, err := p.session(name)
+	if err != nil {
+		return "", err
+	}
+	language := namedSessionLanguage(p.store, name, p.lang())
+	if sess.PullRequest != 0 {
+		return "", p.messages.Failure(language, state.ErrPullRequestRecorded, clitext.SessionPRRecorded, clitext.Params{clitext.ParamName: escapeLine(name), clitext.ParamNumber: sess.PullRequest})
+	}
+	dir, err := p.workDir(language, name, sess)
+	if err != nil {
+		return "", err
+	}
+	repo, err := prOriginRepo(ctx, dir)
+	if err != nil {
+		return "", p.failure(language, err)
+	}
+	branch, err := prGit(ctx, dir, "symbolic-ref", "--quiet", "--short", "HEAD")
+	if err != nil || branch == "" {
+		return "", p.messages.Failure(language, errPRBranchUnpushed, errPRBranchUnpushed.key, clitext.Params{clitext.ParamBranch: "HEAD"})
+	}
+	pushed, err := branchPushed(ctx, dir, branch)
+	if err != nil {
+		return "", err
+	}
+	if !pushed {
+		return "", p.messages.Failure(language, errPRBranchUnpushed, errPRBranchUnpushed.key, clitext.Params{clitext.ParamBranch: escapeLine(branch)})
+	}
+	base := input.Get(paramBase)
+	if base == "" {
+		base, err = defaultBranch(ctx, dir)
+		if err != nil {
+			return "", p.failure(language, err)
+		}
+	}
+	forge, err := p.opener(ctx, repo.Host())
+	if err != nil {
+		return "", p.failure(language, err)
+	}
+	opened, err := forge.OpenPullRequest(ctx, contracts.PullRequestDraft{Repo: repo, Head: branch, Base: base, Title: input.Get(paramTitle), Body: input.Get(paramBody), Draft: input.Bool(paramDraft)})
+	if err != nil {
+		return "", p.failure(language, err)
+	}
+	number := opened.Ref.Number()
+	if err := p.store.RecordPullRequest(name, number); err != nil {
+		return "", err
+	}
+	return p.messages.Text(language, clitext.SessionPROpened, clitext.Params{clitext.ParamName: escapeLine(name), clitext.ParamNumber: number, clitext.ParamURL: escapeLine(opened.URL)})
+}
+
+func (p sessionPRs) status(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+	target, err := p.target(ctx, input.Get(paramName))
+	if err != nil {
+		return contracts.Result{}, err
+	}
+	pullRequest, err := target.forge.PullRequest(ctx, target.ref, contracts.Revision(""))
+	if err != nil {
+		return contracts.Result{}, p.failure(target.language, err)
+	}
+	if input.JSON {
+		return cli.Data(marshalJSON(prStatusView{
+			Number:  target.ref.Number(),
+			Title:   pullRequest.Title,
+			URL:     pullRequest.URL,
+			State:   pullRequest.State.String(),
+			Draft:   pullRequest.Draft,
+			Merge:   pullRequest.Merge.String(),
+			Head:    pullRequest.Head,
+			Base:    pullRequest.Base,
+			HeadSHA: pullRequest.HeadSHA.String(),
+		}))
+	}
+	text, err := p.messages.Text(target.language, clitext.SessionPRStatus, clitext.Params{
+		clitext.ParamNumber: target.ref.Number(),
+		clitext.ParamState:  pullRequest.State.String(),
+		clitext.ParamMerge:  pullRequest.Merge.String(),
+		clitext.ParamTitle:  escapeLine(pullRequest.Title),
+		clitext.ParamHead:   escapeLine(pullRequest.Head),
+		clitext.ParamBase:   escapeLine(pullRequest.Base),
+		clitext.ParamURL:    escapeLine(pullRequest.URL),
+	})
+	return cli.Data(text, err)
+}
+
+func (p sessionPRs) checks(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+	target, err := p.target(ctx, input.Get(paramName))
+	if err != nil {
+		return contracts.Result{}, err
+	}
+	pullRequest, err := target.forge.PullRequest(ctx, target.ref, contracts.Revision(""))
+	if err != nil {
+		return contracts.Result{}, p.failure(target.language, err)
+	}
+	checks, err := collectPages(ctx, func(ctx context.Context, page contracts.PageRequest) (contracts.Page[contracts.Check], error) {
+		return target.forge.Checks(ctx, target.ref.Repo(), pullRequest.HeadSHA, page)
+	})
+	if err != nil {
+		return contracts.Result{}, p.failure(target.language, err)
+	}
+	if input.JSON {
+		views := make([]prCheckView, 0, len(checks))
+		for _, check := range checks {
+			views = append(views, checkView(check))
+		}
+		return cli.Data(marshalJSON(views))
+	}
+	if len(checks) == 0 {
+		text, err := p.messages.Text(target.language, clitext.SessionPRChecksEmpty, clitext.Params{clitext.ParamNumber: target.ref.Number()})
+		return cli.Data(text, err)
+	}
+	lines := make([]string, 0, len(checks))
+	for _, check := range checks {
+		line, err := p.messages.Text(target.language, clitext.SessionPRCheck, clitext.Params{
+			clitext.ParamStatus: checkWord(check),
+			clitext.ParamName:   escapeLine(check.Name),
+			clitext.ParamURL:    escapeLine(check.URL),
+		})
+		if err != nil {
+			return contracts.Result{}, err
+		}
+		lines = append(lines, line)
+	}
+	return cli.Data(strings.Join(lines, "\n"), nil)
+}
+
+func (p sessionPRs) comments(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+	target, err := p.target(ctx, input.Get(paramName))
+	if err != nil {
+		return contracts.Result{}, err
+	}
+	threads, err := collectPages(ctx, func(ctx context.Context, page contracts.PageRequest) (contracts.Page[contracts.ReviewThread], error) {
+		return target.forge.ReviewThreads(ctx, target.ref, page)
+	})
+	if err != nil {
+		return contracts.Result{}, p.failure(target.language, err)
+	}
+	slices.SortStableFunc(threads, compareThreads)
+	if input.JSON {
+		views := make([]prThreadView, 0, len(threads))
+		for _, thread := range threads {
+			views = append(views, threadView(thread))
+		}
+		return cli.Data(marshalJSON(views))
+	}
+	if len(threads) == 0 {
+		text, err := p.messages.Text(target.language, clitext.SessionPRCommentsEmpty, clitext.Params{clitext.ParamNumber: target.ref.Number()})
+		return cli.Data(text, err)
+	}
+	blocks := make([]string, 0, len(threads))
+	for _, thread := range threads {
+		block, err := p.threadText(target.language, thread)
+		if err != nil {
+			return contracts.Result{}, err
+		}
+		blocks = append(blocks, block)
+	}
+	return cli.Data(strings.Join(blocks, "\n"), nil)
+}
+
+func (p sessionPRs) threadText(language i18n.Language, thread contracts.ReviewThread) (string, error) {
+	resolution := clitext.Key(clitext.SessionPRUnresolved)
+	if thread.Resolved {
+		resolution = clitext.SessionPRResolved
+	}
+	word, err := p.messages.Text(language, resolution, nil)
+	if err != nil {
+		return "", err
+	}
+	header, err := p.messages.Text(language, clitext.SessionPRThread, clitext.Params{
+		clitext.ParamPath:       escapeLine(thread.Path),
+		clitext.ParamLine:       thread.Line,
+		clitext.ParamResolution: word,
+	})
+	if err != nil {
+		return "", err
+	}
+	lines := []string{header}
+	for _, comment := range thread.Comments {
+		line, err := p.messages.Text(language, clitext.SessionPRComment, clitext.Params{
+			clitext.ParamAuthor: escapeLine(comment.Author.Login),
+			clitext.ParamBody:   escapeLines(comment.Body),
+		})
+		if err != nil {
+			return "", err
+		}
+		lines = append(lines, line)
+	}
+	return strings.Join(lines, "\n"), nil
+}
+
+func (p sessionPRs) session(name string) (state.Session, error) {
+	sess, ok := p.store.FindSession(name)
+	if !ok {
+		return state.Session{}, &NotFoundError{Kind: kindSession, Name: name}
+	}
+	return sess, nil
+}
+
+func (p sessionPRs) workDir(language i18n.Language, name string, sess state.Session) (string, error) {
+	dir := sessionDir(sess)
+	if dir == "" {
+		return "", p.messages.Failure(language, errPRNoDir, errPRNoDir.key, clitext.Params{clitext.ParamName: escapeLine(name)})
+	}
+	return dir, nil
+}
+
+func (p sessionPRs) target(ctx context.Context, name string) (prTarget, error) {
+	sess, err := p.session(name)
+	if err != nil {
+		return prTarget{}, err
+	}
+	language := namedSessionLanguage(p.store, name, p.lang())
+	if sess.PullRequest == 0 {
+		return prTarget{}, p.messages.Failure(language, errSessionPRNone, errSessionPRNone.key, clitext.Params{clitext.ParamName: escapeLine(name)})
+	}
+	dir, err := p.workDir(language, name, sess)
+	if err != nil {
+		return prTarget{}, err
+	}
+	repo, err := prOriginRepo(ctx, dir)
+	if err != nil {
+		return prTarget{}, p.failure(language, err)
+	}
+	ref, err := contracts.NewPullRequestRef(repo, sess.PullRequest)
+	if err != nil {
+		return prTarget{}, p.failure(language, err)
+	}
+	forge, err := p.opener(ctx, repo.Host())
+	if err != nil {
+		return prTarget{}, p.failure(language, err)
+	}
+	return prTarget{language: language, forge: forge, ref: ref}, nil
+}
+
+func (p sessionPRs) failure(language i18n.Language, err error) error {
+	var limited *contracts.ForgeRateLimitedError
+	switch {
+	case errors.Is(err, contracts.ErrForgeNotConnected):
+		return p.messages.Failure(language, err, clitext.SessionPRNotConnected, nil)
+	case errors.Is(err, contracts.ErrForgeUnauthorized):
+		return p.messages.Failure(language, err, clitext.SessionPRUnauthorized, nil)
+	case errors.As(err, &limited):
+		return p.messages.Failure(language, err, clitext.SessionPRRateLimited, clitext.Params{clitext.ParamReset: resetText(limited.Reset)})
+	case errors.Is(err, contracts.ErrForgeWrongHost):
+		return p.messages.Failure(language, err, clitext.SessionPRWrongHost, nil)
+	case errors.Is(err, forgeport.ErrNoPlugin):
+		return p.messages.Failure(language, err, clitext.SessionPRForgeMissing, nil)
+	case errors.Is(err, errPRPages):
+		return p.messages.Failure(language, err, errPRPages.key, clitext.Params{clitext.ParamPages: maxPRPages})
+	case errors.Is(err, errPRNoBase):
+		return p.messages.Failure(language, err, errPRNoBase.key, nil)
+	}
+	return err
+}
+
+func prOriginRepo(ctx context.Context, dir string) (contracts.ForgeRepoRef, error) {
+	if _, err := originOf(ctx, dir); err != nil {
+		return contracts.ForgeRepoRef{}, err
+	}
+	origin, err := prGit(ctx, dir, "config", "--get", "remote."+originRemote+".url")
+	if err != nil {
+		return contracts.ForgeRepoRef{}, err
+	}
+	repo, err := contracts.ParseRepoRef(origin)
+	if err != nil {
+		return contracts.ForgeRepoRef{}, err
+	}
+	if repo.Host().String() != gitHubHostName {
+		return contracts.ForgeRepoRef{}, contracts.ErrForgeWrongHost
+	}
+	return repo, nil
+}
+
+func branchPushed(ctx context.Context, dir, branch string) (bool, error) {
+	head, err := prGit(ctx, dir, "rev-parse", "HEAD")
+	if err != nil {
+		return false, err
+	}
+	remote, err := prGit(ctx, dir, "ls-remote", "--heads", originRemote, "refs/heads/"+branch)
+	if err != nil {
+		return false, err
+	}
+	remoteHead, _, _ := strings.Cut(remote, "\t")
+	return remoteHead != "" && remoteHead == head, nil
+}
+
+func defaultBranch(ctx context.Context, dir string) (string, error) {
+	ref, err := prGit(ctx, dir, "symbolic-ref", "--quiet", "--short", "refs/remotes/"+originRemote+"/HEAD")
+	if err != nil || ref == "" {
+		return "", errPRNoBase
+	}
+	return strings.TrimPrefix(ref, originRemote+"/"), nil
+}
+
+func prGit(ctx context.Context, dir string, args ...string) (string, error) {
+	out, err := runner.Local{}.Command(ctx, dir, append([]string{"git"}, args...)...).Output()
+	return strings.TrimSpace(string(out)), err
+}
+
+func collectPages[T any](ctx context.Context, fetch func(context.Context, contracts.PageRequest) (contracts.Page[T], error)) ([]T, error) {
+	var items []T
+	var cursor contracts.PageCursor
+	for range maxPRPages {
+		page, err := fetch(ctx, contracts.PageRequest{Cursor: cursor, Limit: contracts.MaxPageLimit})
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, page.Items...)
+		if page.Next == "" {
+			return items, nil
+		}
+		cursor = page.Next
+	}
+	return nil, errPRPages
+}
+
+func compareThreads(a, b contracts.ReviewThread) int {
+	return cmp.Compare(resolvedRank(a.Resolved), resolvedRank(b.Resolved))
+}
+
+func resolvedRank(resolved bool) int {
+	if resolved {
+		return 1
+	}
+	return 0
+}
+
+func checkWord(check contracts.Check) string {
+	if conclusion, done := check.Concluded(); done {
+		return conclusion.String()
+	}
+	return check.Status.String()
+}
+
+func checkView(check contracts.Check) prCheckView {
+	view := prCheckView{Name: check.Name, Status: check.Status.String(), URL: check.URL}
+	if conclusion, done := check.Concluded(); done {
+		view.Conclusion = conclusion.String()
+	}
+	return view
+}
+
+func threadView(thread contracts.ReviewThread) prThreadView {
+	view := prThreadView{Path: thread.Path, Line: thread.Line, Resolved: thread.Resolved, Comments: make([]prCommentView, 0, len(thread.Comments))}
+	for _, comment := range thread.Comments {
+		view.Comments = append(view.Comments, prCommentView{Author: comment.Author.Login, Body: comment.Body, CreatedAt: comment.CreatedAt})
+	}
+	return view
+}
+
+func resetText(reset time.Time) string {
+	if reset.IsZero() {
+		return resetUnknown
+	}
+	return reset.UTC().Format(time.RFC3339)
+}
+
+func escapeLine(text string) string {
+	return termpaint.Escape(text).String()
+}
+
+func escapeLines(text string) string {
+	return termpaint.EscapeLines(text).String()
+}

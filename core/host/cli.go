@@ -70,7 +70,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addVerbs(reg, handoff); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addCheckpointCommands(reg, sessions.cliMessages, options.live.Get, hostState, sessions); err != nil {
+	if err := addCheckpointAndPRVerbs(reg, sessions, options, hostState); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addMemoryVerbs(reg, sessions.messages, sessions.cliMessages, options.live.Get); err != nil {
@@ -254,4 +254,11 @@ func memoryKindAllowed(kind contracts.NodeKind) bool {
 		return false
 	}
 	return false
+}
+
+func addCheckpointAndPRVerbs(reg *cli.Registry, sessions *sessionTable, options Options, hostState *state.State) error {
+	if err := addCheckpointCommands(reg, sessions.cliMessages, options.live.Get, hostState, sessions); err != nil {
+		return err
+	}
+	return addSessionPRVerbs(reg, sessions.cliMessages, options.live.Get, hostState, forgeOpenerFor(options.Forge))
 }

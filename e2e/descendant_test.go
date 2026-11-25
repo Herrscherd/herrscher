@@ -20,7 +20,12 @@ import (
 	"github.com/Herrscherd/herrscher/e2e/vendortest"
 )
 
-const descendantWait = 5 * time.Second
+const (
+	descendantWait = 5 * time.Second
+	descendantPoll = 100 * time.Millisecond
+)
+
+var errStillRunning = errors.New("the descendant still runs")
 
 func descendantGone(ts *testscript.TestScript, neg bool, args []string) {
 	if neg {
@@ -35,16 +40,28 @@ func descendantGone(ts *testscript.TestScript, neg bool, args []string) {
 	ts.Check(descendantNotExpired(pidPath))
 	entry := descendantEntry(token)
 	ts.Defer(func() { ts.Check(killDescendant(pid, entry)) })
-	deadline := time.Now().Add(descendantWait)
-	for time.Now().Before(deadline) {
-		alive, err := descendantAlive(pid, entry)
-		ts.Check(err)
-		if !alive {
-			return
-		}
-		time.Sleep(100 * time.Millisecond)
+	waitErr := awaitGone(time.Now().Add(descendantWait), func() (bool, error) {
+		return descendantAlive(pid, entry)
+	})
+	if waitErr != nil {
+		ts.Fatalf("the descendant %d of the fake claude still runs %s after the turn ended: %v", pid, descendantWait, waitErr)
 	}
-	ts.Fatalf("the descendant %d of the fake claude still runs %s after the turn ended", pid, descendantWait)
+}
+
+func awaitGone(deadline time.Time, alive func() (bool, error)) error {
+	var last error
+	for time.Now().Before(deadline) {
+		running, err := alive()
+		if err == nil && !running {
+			return nil
+		}
+		last = err
+		time.Sleep(descendantPoll)
+	}
+	if last != nil {
+		return last
+	}
+	return errStillRunning
 }
 
 var errDescendantExpired = errors.New("the check starts too late to see the descendant die: it may have ended on its own")
@@ -267,5 +284,41 @@ func TestRealUIDReadsTheUidLineOfTheStatusFile(t *testing.T) {
 	}
 	if _, err := realUID("Name:\tsleep\n"); err == nil {
 		t.Fatal("a status file without a Uid line was accepted")
+	}
+}
+
+func TestAwaitGoneRidesOutATransientRefusal(t *testing.T) {
+	calls := 0
+	err := awaitGone(time.Now().Add(descendantWait), func() (bool, error) {
+		calls++
+		switch calls {
+		case 1:
+			return false, errors.New("permission denied on the environment")
+		case 2:
+			return true, nil
+		}
+		return false, nil
+	})
+	if err != nil {
+		t.Fatalf("a transient refusal ended the wait for a descendant that did exit: %v", err)
+	}
+}
+
+func TestAwaitGoneReportsAPersistentRefusal(t *testing.T) {
+	refused := errors.New("cannot read the environment")
+	err := awaitGone(time.Now().Add(3*descendantPoll), func() (bool, error) {
+		return false, refused
+	})
+	if !errors.Is(err, refused) {
+		t.Fatalf("a refusal that never clears was reported as %v, want the refusal itself", err)
+	}
+}
+
+func TestAwaitGoneReportsASurvivingDescendant(t *testing.T) {
+	err := awaitGone(time.Now().Add(3*descendantPoll), func() (bool, error) {
+		return true, nil
+	})
+	if !errors.Is(err, errStillRunning) {
+		t.Fatalf("a descendant alive at the deadline was reported as %v, want errStillRunning", err)
 	}
 }

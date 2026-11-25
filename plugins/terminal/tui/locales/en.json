@@ -2402,6 +2402,10 @@
     "other": "no GitHub connection on this host: run `herrscher connect github`"
   },
   {
+    "id": "tui.diffgit.timed_out",
+    "other": "GitHub did not answer in time"
+  },
+  {
     "id": "tui.diffgit.wrong_host",
     "other": "the origin is not a github.com repository"
   },
@@ -2560,6 +2564,22 @@
   {
     "id": "tui.diffpanel.pr_failed",
     "other": "commit {{.Sha}}, PR failed: {{.Reason}}"
+  },
+  {
+    "id": "tui.diffpanel.pr_no_session",
+    "other": "cannot open a pull request: this channel has no session"
+  },
+  {
+    "id": "tui.diffpanel.pr_refused",
+    "other": "pull request not opened, nothing committed: {{.Reason}}"
+  },
+  {
+    "id": "tui.diffpanel.pr_timed_out",
+    "other": "commit {{.Sha}}, GitHub did not answer in time: run session pr status to see whether the pull request exists"
+  },
+  {
+    "id": "tui.diffpanel.pr_opened",
+    "other": "commit {{.Sha}}, PR opened: {{.Result}}"
   },
   {
     "id": "tui.diffpanel.title_turn",

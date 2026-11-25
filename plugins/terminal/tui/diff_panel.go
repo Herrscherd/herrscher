@@ -349,13 +349,24 @@ func (m *model) commitCmd(withPR bool) tea.Cmd {
 		panel.notice, panel.noticeBad = m.tr.t("tui.diffpanel.nothing_to_commit", nil), true
 		return nil
 	}
+	session := m.infoForChannel(panel.channel).Name
+	if withPR && session == "" {
+		panel.dlg = dialogNone
+		panel.notice, panel.noticeBad = m.tr.t("tui.diffpanel.pr_no_session", nil), true
+		return nil
+	}
 	panel.busy, panel.dlg, panel.editing = true, dialogNone, false
 	subject, body := splitMessage(message)
 	trans := m.tr
-	repo, base, session, backend := m.diffRepo(panel.channel), panel.report.Base, m.infoForChannel(panel.channel).Name, m.tm
+	repo, base, backend := m.diffRepo(panel.channel), panel.report.Base, m.tm
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), prCallLimit+gitCallLimit)
 		defer cancel()
+		if withPR {
+			if err := requireGitHub(ctx, backend); err != nil {
+				return diffActionMsg{notice: trans.t("tui.diffpanel.pr_refused", map[string]any{tplArgReason: localizedReason(trans, err)}), bad: true}
+			}
+		}
 		sha, err := repo.commit(ctx, message)
 		if err != nil {
 			return diffActionMsg{notice: trans.t("tui.diffpanel.commit_failed", map[string]any{tplArgReason: localizedReason(trans, err)}), bad: true}
@@ -366,16 +377,8 @@ func (m *model) commitCmd(withPR bool) tea.Cmd {
 		if err = repo.publishBranch(ctx, base); err != nil {
 			return diffActionMsg{notice: trans.t("tui.diffpanel.pr_failed", map[string]any{tplArgSha: sha, tplArgReason: localizedReason(trans, err)}), bad: true}
 		}
-		out, err := backend.Dispatch(sessionPROpenArgs(session, subject, body, base))
-		if err != nil {
-			return diffActionMsg{notice: trans.t("tui.diffpanel.pr_failed", map[string]any{tplArgSha: sha, tplArgReason: localizedReason(trans, err)}), bad: true}
-		}
-		return diffActionMsg{notice: out}
+		return openPullRequest(backend, trans, sha, session, subject, body, base)
 	}
-}
-
-func sessionPROpenArgs(session, title, body, base string) []string {
-	return []string{sessionVerb, "pr", "open", "--name", session, "--title", title, "--body", body, "--base", base}
 }
 
 func splitMessage(message string) (string, string) {

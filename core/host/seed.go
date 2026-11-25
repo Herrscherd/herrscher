@@ -296,10 +296,9 @@ func runOneShotBridge(ctx context.Context, cancel context.CancelFunc, sess state
 	if runtime.desk != nil {
 		ctx = contracts.WithApprovalAsker(ctx, runtime.desk.askerFor(seedConsumer, sess.Name))
 	}
-	if dir := seedBackendDir(sess); dir != "" {
-		bridge.ProjectLearnedSkills(ctx, orch, dir)
-	}
-	err := bridge.RunUntilClosed(ctx, func(string) (contracts.Backend, error) {
+	dir := seedRunDir(sess)
+	bridge.ProjectLearnedSkills(ctx, orch, dir)
+	err := bridge.RunUntilClosedIn(ctx, dir, func(string) (contracts.Backend, error) {
 		return runtime.backendFactory()(ctx, sess)
 	}, orch, sess.ChannelID, toBridge, fromBridge)
 	bridgeErr <- err

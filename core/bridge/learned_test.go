@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/skills"
 )
 
@@ -266,5 +267,84 @@ func TestProjectionRefusesALinkedHome(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(outside, ".claude")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("the projection wrote outside the worktree through a linked .herrscher (%v)", err)
+	}
+}
+
+func TestProjectionRefusesALinkedSkillDirectory(t *testing.T) {
+	outside := t.TempDir()
+	cwd := t.TempDir()
+	if err := os.MkdirAll(learnedRoot(cwd), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(learnedRoot(cwd), "retry-http")); err != nil {
+		t.Fatal(err)
+	}
+	orch := &learnedOrch{nodes: []contracts.Node{learnedNode("agents/a/skills/retry-http", "wait out a 429", "Retry once.")}}
+
+	ProjectLearnedSkills(context.Background(), orch, cwd)
+
+	if _, err := os.Stat(filepath.Join(outside, "SKILL.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the skill was written outside the worktree through a linked skill directory (%v)", err)
+	}
+}
+
+func TestProjectionReplacesALinkedSkillFileWithoutWritingItsTarget(t *testing.T) {
+	victim := filepath.Join(t.TempDir(), "precious")
+	if err := os.WriteFile(victim, []byte("precious\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cwd := t.TempDir()
+	dir := filepath.Join(learnedRoot(cwd), "retry-http")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(victim, filepath.Join(dir, "SKILL.md")); err != nil {
+		t.Fatal(err)
+	}
+	orch := &learnedOrch{nodes: []contracts.Node{learnedNode("agents/a/skills/retry-http", "wait out a 429", "Retry once.")}}
+
+	ProjectLearnedSkills(context.Background(), orch, cwd)
+
+	if got, err := os.ReadFile(victim); err != nil || string(got) != "precious\n" {
+		t.Fatalf("the target of a linked SKILL.md was overwritten: %q, %v", got, err)
+	}
+	info, err := os.Lstat(filepath.Join(dir, "SKILL.md"))
+	if err != nil || info.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("SKILL.md is still a link (%v, %v), want the projected file", info, err)
+	}
+}
+
+func TestProjectionKeepsTheFormerRootWhenTheVaultFails(t *testing.T) {
+	cwd := t.TempDir()
+	legacy := filepath.Join(skills.LegacyLearnedRoot(cwd), "retry-http", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(legacy), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacy, []byte("---\nname: retry-http\n---\nold\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ProjectLearnedSkills(context.Background(), &learnedOrch{err: errors.New("vault down")}, cwd)
+
+	if _, err := os.Stat(legacy); err != nil {
+		t.Fatalf("the former projection was removed while nothing replaced it: %v", err)
+	}
+}
+
+func TestRunUntilClosedInListsTheSkillsOfItsDirectory(t *testing.T) {
+	t.Setenv("HERRSCHER_STATE_DIR", t.TempDir())
+	t.Chdir(t.TempDir())
+	dir := t.TempDir()
+	ProjectLearnedSkills(context.Background(), &learnedOrch{nodes: []contracts.Node{learnedNode("agents/a/skills/brask-release", "release the Brask repository", "Run make tag, then make ship ZONE=4.")}}, dir)
+	in := make(chan contracts.Event, 1)
+	in <- contracts.Event{T: eventwire.EventInput, Text: "release it"}
+	close(in)
+	be := &captureBackend{reply: "ok"}
+
+	if err := RunUntilClosedIn(context.Background(), dir, func(string) (contracts.Backend, error) { return be, nil }, nil, "channel", in, make(chan contracts.Event, 8)); err != nil {
+		t.Fatalf("RunUntilClosedIn: %v", err)
+	}
+	if len(be.contexts) != 1 || !strings.Contains(be.contexts[0], "brask-release") {
+		t.Fatalf("turn context %q lists no skill of the session directory, the working directory being elsewhere", be.contexts)
 	}
 }

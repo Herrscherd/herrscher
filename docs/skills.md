@@ -15,23 +15,27 @@ so a repo skill overrides a global one of the same name.
 
 | Order | Root | Why |
 |-------|------|-----|
-| 1 | `<workspace>/.claude/skills/<name>/SKILL.md` | The session's repo: the bridge runs with `cwd = workspace`. |
+| 1 | `<workspace>/.claude/skills/<name>/SKILL.md` | The session's repo: the hub runs with `cwd = workspace`, and a one-shot run reads the session's worktree. |
 | 2 | `<workspace>/.herrscher/.claude/skills/<name>/SKILL.md` | The skills this agent wrote for itself, projected from memory at session start. |
 | 3 | `~/.claude/skills/<name>/SKILL.md` | User-global skills. |
 | 4 | `skills.roots` from `config.json` | Extra roots, appended after the three defaults. |
 
 The order is the policy. A repository's own skill beats one the agent taught itself, so a
-self-authored procedure can never shadow one the project committed; a learned skill beats a
-machine-wide playbook, because this agent's experience on this project is more specific than
-an instruction to the machine. Root 2 exists only when
-self-authored skills are on, and it belongs to the projection:
-it is rewritten and pruned at session start, so nothing hand-written should live there.
-The projection runs in both places a session starts: the hub of a long-running session and
-the one-shot run of `--print` or a seed, which projects into the session's worktree before
-its backend starts. An earlier release projected into `<workspace>/.herrscher/skills`; that
-directory is removed at the next projection. Nothing is projected, removed or handed to the vendor
-when `.herrscher`, `.herrscher/.claude` or one of the two skill roots is a symbolic link,
-since a repository could commit one that points outside the worktree.
+self-authored procedure can never shadow one the project committed; a learned skill beats
+a machine-wide playbook, because this agent's experience on this project is more specific
+than an instruction to the machine. Root 2 exists only when self-authored skills are on,
+and it belongs to the projection: it is rewritten and pruned at session start, so nothing
+hand-written should live there. The projection runs in both places a session starts: the
+hub of a long-running session and the one-shot run of `--print` or a seed, which projects
+into the session's worktree before its backend starts and builds its host-side engine on
+that worktree, not on the working directory of its process. An earlier release projected
+into `<workspace>/.herrscher/skills`; that directory is removed at the next projection
+that reads the vault, and kept when the vault cannot be read. Nothing is projected,
+removed or handed to the vendor when `.herrscher`, `.herrscher/.claude` or one of the two
+skill roots is a symbolic link, since a repository could commit one that points outside
+the worktree. A skill whose directory is a symbolic link is skipped, and each `SKILL.md`
+is written to a temporary file and renamed into place, which replaces a linked `SKILL.md`
+without writing its target.
 
 `Discover` only scans **immediate** `<root>/<name>/SKILL.md` entries. A missing root, an
 unreadable entry, or a `SKILL.md` that does not open with a `---` fence or has no `name`
@@ -102,13 +106,16 @@ The **claude** backend returns `true` (the `claude` CLI reads `.claude/skills` a
 `~/.claude/skills` on its own), so `newSkillEngine` returns a **nil** engine and the hub
 injects nothing, so no double loading.
 
+Backends that do not implement the capability, such as codex and cursor, get the host-side
+engine.
+
 The CLI does not read root 2 on its own, so the host hands the backend the directory that
-holds it, `<workspace>/.herrscher`, as the `skill-root` setting. The claude backend passes it
-as `--add-dir`, and the CLI loads the skills under `<workspace>/.herrscher/.claude/skills` as
-native skills. Without it, a skill the agent learned reached a claude session through no
-path: the recall leaves skill nodes out, since they are meant to come from the projection,
-and the engine that would list them is off for a native backend. Backends that do not implement the capability, such
-as codex and cursor, get the host-side engine.
+holds it, `<workspace>/.herrscher`, as the `skill-root` setting. The claude backend passes
+it as `--add-dir` in its stream strategy, and the CLI loads the skills under
+`<workspace>/.herrscher/.claude/skills` as native skills. Without it, a skill the agent
+learned reached a claude session through no path: the recall leaves skill nodes out, since
+they are meant to come from the projection, and the engine that would list them is off for
+a native backend. Codex and cursor ignore the setting.
 
 The engine is also nil when the feature is switched off in config. A nil engine means the
 memory context passes through `withSkills` unchanged.

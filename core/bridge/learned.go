@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,12 +34,12 @@ func ProjectLearnedSkills(ctx context.Context, orch contracts.Orchestrator, cwd 
 		logger.Warn("learned skills not projected: a directory of the projection is a symbolic link", "path", linked)
 		return
 	}
-	removeLegacyProjection(cwd)
 	nodes, err := src.LearnedSkills(ctx)
 	if err != nil {
 		logger.Warn("learned skills unavailable; this session runs on the skills already on disk", "err", err)
 		return
 	}
+	removeLegacyProjection(cwd)
 	if len(nodes) == 0 {
 		pruneProjection(cwd, nil)
 		return
@@ -55,17 +56,37 @@ func ProjectLearnedSkills(ctx context.Context, orch contracts.Orchestrator, cwd 
 			continue
 		}
 		dir := filepath.Join(root, name)
-		if err := os.MkdirAll(dir, dirShared); err != nil {
-			logger.Warn("cannot create a learned-skill directory", "dir", dir, "err", err)
-			continue
-		}
-		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), fileSecret); err != nil {
+		if err := writeSkillFile(dir, body); err != nil {
 			logger.Warn("cannot write a learned skill", "dir", dir, "err", err)
 			continue
 		}
 		kept[name] = true
 	}
 	pruneProjection(cwd, kept)
+}
+
+var errLinkedSkillDir = errors.New("the skill directory is a symbolic link")
+
+func writeSkillFile(dir, body string) error {
+	if info, err := os.Lstat(dir); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return errLinkedSkillDir
+	}
+	if err := os.MkdirAll(dir, dirShared); err != nil {
+		return err
+	}
+	staged, err := os.CreateTemp(dir, ".SKILL-*.md")
+	if err != nil {
+		return err
+	}
+	stagedPath := staged.Name()
+	_, writeErr := staged.WriteString(body)
+	if err := errors.Join(writeErr, staged.Chmod(fileSecret), staged.Close()); err != nil {
+		return errors.Join(err, os.Remove(stagedPath))
+	}
+	if err := os.Rename(stagedPath, filepath.Join(dir, "SKILL.md")); err != nil {
+		return errors.Join(err, os.Remove(stagedPath))
+	}
+	return nil
 }
 
 func removeLegacyProjection(cwd string) {

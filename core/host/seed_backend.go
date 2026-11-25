@@ -239,6 +239,17 @@ func seedBackendDir(sess state.Session) string {
 	return resolveBackendDir(dir)
 }
 
+func seedRunDir(sess state.Session) string {
+	if dir := seedBackendDir(sess); dir != "" {
+		return dir
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	return cwd
+}
+
 func learnedHomeOf(dir string) string {
 	if dir == "" || skills.LinkedLearnedDir(dir) != "" {
 		return ""

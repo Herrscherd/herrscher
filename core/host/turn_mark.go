@@ -9,6 +9,9 @@ import (
 const turnInterruptedKind = state.KindTurnInterrupted
 
 func (h *hub) openTurnMark(session, turnID string) {
+	if sess, ok := h.st.FindSession(session); ok {
+		h.announceInterruptedTurn(sess)
+	}
 	end := h.persists.begin()
 	defer end()
 	if err := h.st.SetInterruptedTurn(session, turnID); err != nil {

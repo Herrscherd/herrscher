@@ -114,7 +114,10 @@ func TestCancelKillsTheGrandchildBeforeRunReturns(t *testing.T) {
 		t.Fatalf("the grandchild %d was still alive a second after the leader got SIGINT, while the leader still runs: cancel did not signal its group", pid)
 	}
 	select {
-	case <-done:
+	case err := <-done:
+		if err == nil {
+			t.Error("a canceled call returned no error")
+		}
 	case <-time.After(groupWaitBound):
 		t.Fatal("invoke did not return after the context was canceled")
 	}

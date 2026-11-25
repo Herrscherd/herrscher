@@ -14,10 +14,9 @@ import (
 )
 
 const (
-	forgeAbsoluteQuotaFloor = 100
-	forgeRefreshEvery       = 5 * time.Minute
-	repoRetryEvery          = time.Minute
-	healthParamOrigin       = "repo"
+	forgeRefreshEvery = 5 * time.Minute
+	repoRetryEvery    = time.Minute
+	healthParamOrigin = "repo"
 )
 
 type repoProbe func(ctx context.Context, forge contracts.Forge, host contracts.ForgeHost, origin string) (string, *contracts.RepoPermission, error)
@@ -90,10 +89,10 @@ func githubRun(open forgeOpener, origin string, probeRepo repoProbe) runFunc {
 		if err != nil {
 			return forgeFailure(err), health.Facts{}
 		}
-		facts := &health.Forge{Source: connection.Source, Login: connection.Login, Quota: quotaOf(connection.RateLimit)}
+		facts := &health.Forge{Source: connection.Source, Login: connection.Login, Quota: health.QuotaOf(connection.RateLimit)}
 		repo, permission, repoErr := probeRepo(ctx, forge, host, origin)
 		facts.Repo, facts.Permission = repo, permission
-		report := forgeReady(connection)
+		report := health.ForgeReport(connection)
 		if repoErr != nil {
 			facts.RepoErr = repoErr.Error()
 			report = withRepoAccess(report, repo, repoErr)
@@ -142,27 +141,6 @@ func withRepoAccess(report contracts.ProbeReport, repo string, err error) contra
 
 func repoAccessNotice(repo string, err error) contracts.Notice {
 	return contracts.Notice{Code: contracts.CodeHealthRepoAccessUnreadable, Args: []contracts.Arg{contracts.Text("Repo", repo), contracts.Text("Reason", err.Error())}}
-}
-
-func forgeReady(connection contracts.ForgeConnection) contracts.ProbeReport {
-	if knownQuota(connection.RateLimit) && connection.RateLimit.Remaining < forgeAbsoluteQuotaFloor {
-		return contracts.ProbeReport{State: contracts.HealthDegraded, Detail: contracts.Notice{Code: contracts.CodeHealthRateLimited}}
-	}
-	if connection.Login == "" {
-		return contracts.ProbeReport{State: contracts.HealthOK, Detail: contracts.Notice{Code: contracts.CodeHealthConnected}}
-	}
-	return contracts.ProbeReport{State: contracts.HealthOK, Detail: contracts.Notice{Code: contracts.CodeHealthSignedInAs, Args: []contracts.Arg{contracts.Text("Name", connection.Login)}}}
-}
-
-func quotaOf(limit contracts.ForgeRateLimit) *health.Quota {
-	if !knownQuota(limit) {
-		return nil
-	}
-	return &health.Quota{Remaining: limit.Remaining, Reset: limit.Reset}
-}
-
-func knownQuota(limit contracts.ForgeRateLimit) bool {
-	return limit.Remaining != 0 || !limit.Reset.IsZero()
 }
 
 func gitHubConnectRemedy() contracts.Notice {

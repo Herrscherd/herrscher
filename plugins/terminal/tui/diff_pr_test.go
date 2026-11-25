@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -20,14 +21,20 @@ type prOpenBackend struct {
 	err    error
 	health string
 	hold   chan struct{}
+	onOpen func()
 }
 
 func newPROpenBackend(t *testing.T, reply string) *prOpenBackend {
 	t.Helper()
-	return &prOpenBackend{reply: reply, health: gitHubHealth(t, contracts.ProbeReport{State: contracts.HealthOK, Detail: contracts.Notice{Code: contracts.CodeHealthConnected}})}
+	return &prOpenBackend{reply: reply, health: gitHubHealth(t, contracts.ForgeConnection{Login: "octocat"})}
 }
 
-func gitHubHealth(t *testing.T, report contracts.ProbeReport) string {
+func gitHubHealth(t *testing.T, connection contracts.ForgeConnection) string {
+	t.Helper()
+	return healthWith(t, health.ForgeReport(connection))
+}
+
+func healthWith(t *testing.T, report contracts.ProbeReport) string {
 	t.Helper()
 	data, err := health.Encode(health.Snapshot{Checks: []health.Check{{Group: health.GroupForge, Name: forgeport.KindGitHub, Report: report}}})
 	if err != nil {
@@ -41,10 +48,28 @@ func (p *prOpenBackend) Dispatch(args []string) (string, error) {
 		return p.health, nil
 	}
 	p.dispatched = append(p.dispatched, args)
+	if p.onOpen != nil {
+		p.onOpen()
+	}
 	if p.hold != nil {
 		<-p.hold
 	}
 	return p.reply, p.err
+}
+
+func pressPROnGitHub(t *testing.T, connection contracts.ForgeConnection) (*recordingRunner, *prOpenBackend) {
+	t.Helper()
+	dir := initRepo(t)
+	gitIn(t, dir, "checkout", "-q", "-b", "feature")
+	writeAndCommitBase(t, dir)
+	runner := &recordingRunner{remote: "git@github.com:o/r.git\n"}
+	m, _ := newDiffModel(t, dir, runner.run, 120, 30)
+	backend := newPROpenBackend(t, "PR #42 opened against master")
+	backend.health = gitHubHealth(t, connection)
+	m.tm = backend
+	press(m, "ctrl+x", "d")
+	press(m, "p")
+	return runner, backend
 }
 
 func TestPRCommitsPushesAndDispatchesSessionPROpen(t *testing.T) {
@@ -119,7 +144,7 @@ func TestPRRefusesToPushWhenGitHubIsNotConnected(t *testing.T) {
 	runner := &recordingRunner{remote: "git@github.com:o/r.git\n"}
 	m, _ := newDiffModel(t, dir, runner.run, 120, 30)
 	backend := newPROpenBackend(t, "unused")
-	backend.health = gitHubHealth(t, contracts.ProbeReport{})
+	backend.health = healthWith(t, contracts.ProbeReport{State: contracts.HealthDegraded, Detail: contracts.Notice{Code: contracts.CodeHealthNotLoggedIn}})
 	m.tm = backend
 	press(m, "ctrl+x", "d")
 
@@ -130,6 +155,47 @@ func TestPRRefusesToPushWhenGitHubIsNotConnected(t *testing.T) {
 	}
 	if runner.pushes() != 0 || len(backend.dispatched) != 0 {
 		t.Fatalf("pushes = %d, dispatched = %v, want nothing pushed or opened", runner.pushes(), backend.dispatched)
+	}
+}
+
+func TestPRProceedsWhenGitHubIsConnectedWithoutAccountName(t *testing.T) {
+	runner, backend := pressPROnGitHub(t, contracts.ForgeConnection{})
+
+	if runner.pushes() != 1 || len(backend.dispatched) != 1 {
+		t.Fatalf("pushes = %d, dispatched = %v, want the branch pushed and one session pr open", runner.pushes(), backend.dispatched)
+	}
+}
+
+func TestPRProceedsWhenGitHubAccountIsSignedIn(t *testing.T) {
+	runner, backend := pressPROnGitHub(t, contracts.ForgeConnection{Login: "octocat"})
+
+	if runner.pushes() != 1 || len(backend.dispatched) != 1 {
+		t.Fatalf("pushes = %d, dispatched = %v, want the branch pushed and one session pr open", runner.pushes(), backend.dispatched)
+	}
+}
+
+func TestPRStopsWaitingWhenTheTUIQuits(t *testing.T) {
+	dir := initRepo(t)
+	gitIn(t, dir, "checkout", "-q", "-b", "feature")
+	writeAndCommitBase(t, dir)
+	runner := &recordingRunner{remote: "git@github.com:o/r.git\n"}
+	m, _ := newDiffModel(t, dir, runner.run, 120, 30)
+	ctx, quit := context.WithCancel(context.Background())
+	defer quit()
+	m.ctx = ctx
+	backend := newPROpenBackend(t, "unused")
+	backend.hold = make(chan struct{})
+	t.Cleanup(func() { close(backend.hold) })
+	backend.onOpen = quit
+	m.tm = backend
+	press(m, "ctrl+x", "d")
+	m.diff.openLimit = 50 * time.Millisecond
+
+	press(m, "p")
+
+	sha := strings.TrimSpace(gitIn(t, dir, "rev-parse", "--short", "HEAD"))
+	if !strings.Contains(screen(m), "commit "+sha+", PR failed") {
+		t.Fatalf("quitting the TUI did not end the wait for the pull request:\n%s", screen(m))
 	}
 }
 
@@ -161,8 +227,8 @@ func TestPRGivesUpWhenTheHostStaysSilent(t *testing.T) {
 	backend.hold = make(chan struct{})
 	t.Cleanup(func() { close(backend.hold) })
 	m.tm = backend
-	m.diff.openLimit = 50 * time.Millisecond
 	press(m, "ctrl+x", "d")
+	m.diff.openLimit = 50 * time.Millisecond
 
 	press(m, "p")
 

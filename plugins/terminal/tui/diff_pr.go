@@ -11,7 +11,10 @@ import (
 	"github.com/Herrscherd/herrscher/core/health"
 )
 
-const prOpenLimit = 2 * time.Minute
+const (
+	prOpenLimit   = 2 * time.Minute
+	commitPRLimit = gitCallLimit + prCallLimit + prOpenLimit
+)
 
 type dispatchReply struct {
 	out string
@@ -44,7 +47,7 @@ func requireGitHub(ctx context.Context, backend Backend) error {
 	checks := snapshot.Find(forgeport.KindGitHub)
 	for index := range checks {
 		check := &checks[index]
-		if check.Group == health.GroupForge && check.Report.Detail.Code == contracts.CodeHealthConnected {
+		if check.Group == health.GroupForge && check.Report.State == contracts.HealthOK {
 			return nil
 		}
 	}

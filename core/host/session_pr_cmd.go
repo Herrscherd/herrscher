@@ -224,6 +224,8 @@ func (p sessionPRs) openPR(ctx context.Context, input contracts.Input) (string, 
 }
 
 func (p sessionPRs) checks(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+	ctx, cancel := context.WithTimeout(ctx, p.forgeLimit)
+	defer cancel()
 	target, err := p.target(ctx, input.Get(paramName))
 	if err != nil {
 		return contracts.Result{}, err
@@ -269,6 +271,8 @@ func (p sessionPRs) checks(ctx context.Context, input contracts.Input) (contract
 }
 
 func (p sessionPRs) comments(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+	ctx, cancel := context.WithTimeout(ctx, p.forgeLimit)
+	defer cancel()
 	target, err := p.target(ctx, input.Get(paramName))
 	if err != nil {
 		return contracts.Result{}, err

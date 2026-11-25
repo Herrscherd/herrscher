@@ -163,7 +163,9 @@ func TestRefreshLockIsAvailableAgainOnceReleased(t *testing.T) {
 		t.Fatal(err)
 	}
 	release()
-	again, err := locks.acquire(t.Context(), "alpha")
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	again, err := locks.acquire(ctx, "alpha")
 	if err != nil {
 		t.Fatalf("acquire after release = %v, want the lock free", err)
 	}

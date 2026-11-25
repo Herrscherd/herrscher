@@ -368,7 +368,7 @@ func (m *model) commitCmd(withPR bool) tea.Cmd {
 		openWait: openWait,
 	}
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), prCallLimit+gitCallLimit)
+		ctx, cancel := context.WithTimeout(m.runContext(), commitPRLimit)
 		defer cancel()
 		return job.run(ctx)
 	}
@@ -407,7 +407,7 @@ func (j commitJob) openPR(ctx context.Context, sha string) diffActionMsg {
 	if err := j.repo.publishBranch(ctx, j.base); err != nil {
 		return diffActionMsg{notice: j.trans.t("tui.diffpanel.pr_failed", map[string]any{tplArgSha: sha, tplArgReason: localizedReason(j.trans, err)}), bad: true}
 	}
-	return openPullRequest(context.WithoutCancel(ctx), j.backend, j.trans, sha, j.session, j.subject, j.body, j.base, j.openWait)
+	return openPullRequest(ctx, j.backend, j.trans, sha, j.session, j.subject, j.body, j.base, j.openWait)
 }
 
 func splitMessage(message string) (string, string) {

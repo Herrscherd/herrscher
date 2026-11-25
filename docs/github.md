@@ -187,10 +187,12 @@ the same token and only for github.com:
 Each command accepts `--json` for the raw structure, whose state and check words
 stay in English. A state that no forge reports is written `unknown`.
 
-Each forge call is bounded to one minute. A forge that does not answer in that
-time fails with a message saying so, and the pull request may still have been
-opened: `session pr status` tells whether it exists. Human output and errors are printed in the language of the
-session, English or French. A missing connection names `herrscher connect github`
+Each command bounds its forge work to one minute: `session pr open`, `status`,
+`checks` and `comments` each stop after that, and a forge that does not answer in
+time fails with a message saying so. After a timed-out `open`, the pull request
+may still have been created: `session pr status` tells whether it exists.
+Human output and errors are printed in the language of the session, English or
+French. A missing connection names `herrscher connect github`
 as the remedy, a rate limit gives the time of the reset, and a session without a
 pull request says to run `session pr open` first. The token reaches git only
 through its environment, never through arguments, and it does not appear in

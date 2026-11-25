@@ -159,6 +159,9 @@ func (tb *tab) appendReply(trans translator, event contracts.Event) {
 		}
 	}
 	tb.endStream()
+	if event.Outcome == contracts.TurnInterrupted {
+		tb.appendRelayedNotice(trans, contracts.Notice{Code: contracts.CodeTurnInterrupted})
+	}
 	if event.Cost > 0 {
 		tb.lastCost = event.Cost
 		tb.costTotal += event.Cost

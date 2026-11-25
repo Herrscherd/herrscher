@@ -43,6 +43,17 @@ type Facts struct {
 	CompactionPartial   bool
 	CompactionUnknown   bool
 	Forge               *Forge
+	ForgeReset          time.Time
+}
+
+// RateLimitReset is the time the forge rate limit lifts, whichever state the forge
+// is in: the reset of the quota it reported when the connection answered, the reset
+// of the refusal when it gave no connection, and zero when neither named one.
+func (f Facts) RateLimitReset() time.Time {
+	if forge := f.Forge; forge != nil && forge.Quota != nil && !forge.Quota.Reset.IsZero() {
+		return forge.Quota.Reset
+	}
+	return f.ForgeReset
 }
 
 // Forge is the state of the code forge at the probe: the token source and the

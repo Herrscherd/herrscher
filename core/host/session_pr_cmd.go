@@ -32,6 +32,8 @@ const (
 	resetUnknown   = "unknown time"
 )
 
+const sessionPRForgeLimit = time.Minute
+
 type sessionPRError struct {
 	key clitext.Key
 }
@@ -53,24 +55,28 @@ type sessionPRs struct {
 	store       *state.State
 	opener      forgeOpener
 	credentials contracts.ForgeCredentials
+	refreshes   *refreshLocks
+	forgeLimit  time.Duration
 }
 
 type prTarget struct {
+	name     string
 	language i18n.Language
 	forge    contracts.Forge
 	ref      contracts.PullRequestRef
 }
 
 type prStatusView struct {
-	Number  int    `json:"number"`
-	Title   string `json:"title"`
-	URL     string `json:"url"`
-	State   string `json:"state"`
-	Draft   bool   `json:"draft"`
-	Merge   string `json:"merge"`
-	Head    string `json:"head"`
-	Base    string `json:"base"`
-	HeadSHA string `json:"headSha"`
+	Number     int    `json:"number"`
+	Title      string `json:"title"`
+	URL        string `json:"url"`
+	State      string `json:"state"`
+	Draft      bool   `json:"draft"`
+	Merge      string `json:"merge"`
+	Head       string `json:"head"`
+	Base       string `json:"base"`
+	HeadSHA    string `json:"headSha"`
+	Unrecorded bool   `json:"unrecorded,omitempty"`
 }
 
 type prCheckView struct {
@@ -94,8 +100,15 @@ type prCommentView struct {
 }
 
 func addSessionPRVerbs(reg *cli.Registry, messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials) error {
-	prs := sessionPRs{messages: messages, lang: lang, store: store, opener: opener, credentials: credentials}
-	return addVerbs(reg, prs.openVerb(), prs.statusVerb(), prs.checksVerb(), prs.commentsVerb())
+	return newSessionPRs(messages, lang, store, opener, credentials, sessionPRForgeLimit).addTo(reg)
+}
+
+func newSessionPRs(messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials, forgeLimit time.Duration) sessionPRs {
+	return sessionPRs{messages: messages, lang: lang, store: store, opener: opener, credentials: credentials, refreshes: newRefreshLocks(), forgeLimit: forgeLimit}
+}
+
+func (p sessionPRs) addTo(reg *cli.Registry) error {
+	return addVerbs(reg, p.openVerb(), p.statusVerb(), p.checksVerb(), p.commentsVerb())
 }
 
 func (p sessionPRs) openVerb() contracts.Cmd {
@@ -156,6 +169,8 @@ func (p sessionPRs) pushedBranch(ctx context.Context, language i18n.Language, di
 }
 
 func (p sessionPRs) openPR(ctx context.Context, input contracts.Input) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, p.forgeLimit)
+	defer cancel()
 	name := input.Get(paramName)
 	language := namedSessionLanguage(p.store, name, p.lang())
 	if err := p.store.ReservePullRequest(name); err != nil {
@@ -196,7 +211,8 @@ func (p sessionPRs) openPR(ctx context.Context, input contracts.Input) (string, 
 		return "", p.failure(language, err)
 	}
 	number := opened.Ref.Number()
-	if err := p.store.RecordPullRequest(name, number); err != nil {
+	record := state.PullRequestRecord{Number: number, State: opened.State, Draft: opened.Draft, URL: opened.URL}
+	if err := p.store.RecordPullRequest(name, record); err != nil {
 		return "", p.messages.Failure(language, err, clitext.SessionPROpenedUnrecorded, clitext.Params{
 			clitext.ParamName:   escapeLine(name),
 			clitext.ParamNumber: number,
@@ -207,49 +223,9 @@ func (p sessionPRs) openPR(ctx context.Context, input contracts.Input) (string, 
 	return p.messages.Text(language, clitext.SessionPROpened, clitext.Params{clitext.ParamName: escapeLine(name), clitext.ParamNumber: number, clitext.ParamURL: escapeLine(opened.URL)})
 }
 
-func (p sessionPRs) status(ctx context.Context, input contracts.Input) (contracts.Result, error) {
-	target, err := p.target(ctx, input.Get(paramName))
-	if err != nil {
-		return contracts.Result{}, err
-	}
-	pullRequest, err := target.forge.PullRequest(ctx, target.ref, contracts.Revision(""))
-	if err != nil {
-		return contracts.Result{}, p.failure(target.language, err)
-	}
-	if input.JSON {
-		return cli.Data(marshalJSON(prStatusView{
-			Number:  target.ref.Number(),
-			Title:   pullRequest.Title,
-			URL:     pullRequest.URL,
-			State:   pullRequest.State.String(),
-			Draft:   pullRequest.Draft,
-			Merge:   pullRequest.Merge.String(),
-			Head:    pullRequest.Head,
-			Base:    pullRequest.Base,
-			HeadSHA: pullRequest.HeadSHA.String(),
-		}))
-	}
-	stateText, err := p.stateWord(target.language, pullRequest.State)
-	if err != nil {
-		return contracts.Result{}, err
-	}
-	mergeText, err := p.mergeWord(target.language, pullRequest.Merge)
-	if err != nil {
-		return contracts.Result{}, err
-	}
-	text, err := p.messages.Text(target.language, clitext.SessionPRStatus, clitext.Params{
-		clitext.ParamNumber: target.ref.Number(),
-		clitext.ParamState:  stateText,
-		clitext.ParamMerge:  mergeText,
-		clitext.ParamTitle:  escapeLine(pullRequest.Title),
-		clitext.ParamHead:   escapeLine(pullRequest.Head),
-		clitext.ParamBase:   escapeLine(pullRequest.Base),
-		clitext.ParamURL:    escapeLine(pullRequest.URL),
-	})
-	return cli.Data(text, err)
-}
-
 func (p sessionPRs) checks(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+	ctx, cancel := context.WithTimeout(ctx, p.forgeLimit)
+	defer cancel()
 	target, err := p.target(ctx, input.Get(paramName))
 	if err != nil {
 		return contracts.Result{}, err
@@ -295,6 +271,8 @@ func (p sessionPRs) checks(ctx context.Context, input contracts.Input) (contract
 }
 
 func (p sessionPRs) comments(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+	ctx, cancel := context.WithTimeout(ctx, p.forgeLimit)
+	defer cancel()
 	target, err := p.target(ctx, input.Get(paramName))
 	if err != nil {
 		return contracts.Result{}, err
@@ -410,13 +388,15 @@ func (p sessionPRs) target(ctx context.Context, name string) (prTarget, error) {
 	if err != nil {
 		return prTarget{}, p.failure(language, err)
 	}
-	return prTarget{language: language, forge: client, ref: ref}, nil
+	return prTarget{name: name, language: language, forge: client, ref: ref}, nil
 }
 
 func (p sessionPRs) failure(language i18n.Language, err error) error {
 	var limited *contracts.ForgeRateLimitedError
 	var origin prOriginError
 	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return p.messages.Failure(language, err, clitext.SessionPRTimedOut, nil)
 	case errors.Is(err, contracts.ErrForgeNotConnected):
 		return p.messages.Failure(language, err, clitext.SessionPRNotConnected, nil)
 	case errors.Is(err, contracts.ErrForgeUnauthorized):

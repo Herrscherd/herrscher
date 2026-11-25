@@ -49,6 +49,7 @@ const (
 )
 
 type diffPanel struct {
+	openLimit time.Duration
 	open      bool
 	review    bool
 	channel   string
@@ -349,26 +350,64 @@ func (m *model) commitCmd(withPR bool) tea.Cmd {
 		panel.notice, panel.noticeBad = m.tr.t("tui.diffpanel.nothing_to_commit", nil), true
 		return nil
 	}
+	session := m.infoForChannel(panel.channel).Name
+	if withPR && session == "" {
+		panel.dlg = dialogNone
+		panel.notice, panel.noticeBad = m.tr.t("tui.diffpanel.pr_no_session", nil), true
+		return nil
+	}
 	panel.busy, panel.dlg, panel.editing = true, dialogNone, false
 	subject, body := splitMessage(message)
-	trans := m.tr
-	repo, base, opener := m.diffRepo(panel.channel), panel.report.Base, m.prs
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), prCallLimit+gitCallLimit)
-		defer cancel()
-		sha, err := repo.commit(ctx, message)
-		if err != nil {
-			return diffActionMsg{notice: trans.t("tui.diffpanel.commit_failed", map[string]any{tplArgReason: localizedReason(trans, err)}), bad: true}
-		}
-		if !withPR {
-			return diffActionMsg{notice: trans.t("tui.diffpanel.committed", map[string]any{tplArgSha: sha, "Subject": subject})}
-		}
-		number, err := repo.openPR(ctx, opener, base, subject, body)
-		if err != nil {
-			return diffActionMsg{notice: trans.t("tui.diffpanel.pr_failed", map[string]any{tplArgSha: sha, tplArgReason: localizedReason(trans, err)}), bad: true}
-		}
-		return diffActionMsg{notice: trans.t("tui.diffpanel.pr_opened", map[string]any{tplArgSha: sha, "Number": number, "Base": base})}
+	openWait := panel.openLimit
+	if openWait == 0 {
+		openWait = prOpenLimit
 	}
+	job := commitJob{
+		trans: m.tr, repo: m.diffRepo(panel.channel), backend: m.tm, withPR: withPR,
+		message: message, subject: subject, body: body, base: panel.report.Base, session: session,
+		openWait: openWait,
+	}
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(m.runContext(), commitPRLimit)
+		defer cancel()
+		return job.run(ctx)
+	}
+}
+
+type commitJob struct {
+	trans    translator
+	repo     gitRepo
+	backend  Backend
+	withPR   bool
+	message  string
+	subject  string
+	body     string
+	base     string
+	session  string
+	openWait time.Duration
+}
+
+func (j commitJob) run(ctx context.Context) diffActionMsg {
+	if j.withPR {
+		if err := requireGitHub(ctx, j.backend, j.trans); err != nil {
+			return diffActionMsg{notice: j.trans.t("tui.diffpanel.pr_refused", map[string]any{tplArgReason: localizedReason(j.trans, err)}), bad: true}
+		}
+	}
+	sha, err := j.repo.commit(ctx, j.message)
+	if err != nil {
+		return diffActionMsg{notice: j.trans.t("tui.diffpanel.commit_failed", map[string]any{tplArgReason: localizedReason(j.trans, err)}), bad: true}
+	}
+	if !j.withPR {
+		return diffActionMsg{notice: j.trans.t("tui.diffpanel.committed", map[string]any{tplArgSha: sha, "Subject": j.subject})}
+	}
+	return j.openPR(ctx, sha)
+}
+
+func (j commitJob) openPR(ctx context.Context, sha string) diffActionMsg {
+	if err := j.repo.publishBranch(ctx, j.base); err != nil {
+		return diffActionMsg{notice: j.trans.t("tui.diffpanel.pr_failed", map[string]any{tplArgSha: sha, tplArgReason: localizedReason(j.trans, err)}), bad: true}
+	}
+	return openPullRequest(ctx, j.backend, j.trans, sha, j.session, j.subject, j.body, j.base, j.openWait)
 }
 
 func splitMessage(message string) (string, string) {

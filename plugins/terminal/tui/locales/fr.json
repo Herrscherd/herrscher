@@ -609,6 +609,18 @@
     "other": "projet"
   },
   {
+    "id": "tui.status.label_pull_request",
+    "other": "PR"
+  },
+  {
+    "id": "tui.pr.label",
+    "other": "#{{.Number}} {{.State}}"
+  },
+  {
+    "id": "tui.sidebar.pull_request",
+    "other": "pull request"
+  },
+  {
     "id": "tui.status.label_context",
     "other": "contexte"
   },
@@ -2386,12 +2398,36 @@
     "other": "sortie git inattendue"
   },
   {
-    "id": "tui.diffgit.no_opener",
-    "other": "aucun forge n'est branché pour ouvrir les pull requests"
-  },
-  {
     "id": "tui.diffgit.forge_not_connected",
     "other": "aucune connexion GitHub sur cet hôte : lancez `herrscher connect github`"
+  },
+  {
+    "id": "tui.diffgit.forge_unauthorized",
+    "other": "GitHub a refusé l'identifiant enregistré : lancez `herrscher connect github`"
+  },
+  {
+    "id": "tui.diffgit.forge_rate_limited",
+    "other": "limite de débit de GitHub atteinte : réessayez plus tard"
+  },
+  {
+    "id": "tui.diffgit.forge_rate_limited_reset",
+    "other": "limite de débit de GitHub atteinte, réinitialisée à {{.Reset}}"
+  },
+  {
+    "id": "tui.diffgit.forge_unreachable",
+    "other": "GitHub est injoignable depuis cet hôte"
+  },
+  {
+    "id": "tui.diffgit.forge_repo_unreadable",
+    "other": "GitHub ne peut pas lire ce dépôt avec cette connexion"
+  },
+  {
+    "id": "tui.diffgit.forge_missing",
+    "other": "le forge GitHub n'est pas installé sur cet hôte"
+  },
+  {
+    "id": "tui.diffgit.timed_out",
+    "other": "GitHub n'a pas répondu à temps"
   },
   {
     "id": "tui.diffgit.wrong_host",
@@ -2554,8 +2590,20 @@
     "other": "commit {{.Sha}}, PR échouée : {{.Reason}}"
   },
   {
+    "id": "tui.diffpanel.pr_no_session",
+    "other": "impossible d'ouvrir une pull request : ce canal n'a pas de session"
+  },
+  {
+    "id": "tui.diffpanel.pr_refused",
+    "other": "pull request non ouverte, rien n'est commité : {{.Reason}}"
+  },
+  {
+    "id": "tui.diffpanel.pr_timed_out",
+    "other": "commit {{.Sha}}, GitHub n'a pas répondu à temps : lancez session pr status pour voir si la pull request existe"
+  },
+  {
     "id": "tui.diffpanel.pr_opened",
-    "other": "commit {{.Sha}}, PR #{{.Number}} ouverte contre {{.Base}}"
+    "other": "commit {{.Sha}}, PR ouverte : {{.Result}}"
   },
   {
     "id": "tui.diffpanel.title_turn",

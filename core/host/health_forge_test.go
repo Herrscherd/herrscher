@@ -90,13 +90,6 @@ func TestForgeStateFollowsTheConnection(t *testing.T) {
 	}
 }
 
-func TestNotConnectedPointsAtTheConnectCommand(t *testing.T) {
-	report, _ := probeOnce(t, openingWith(&fakeForge{connErr: contracts.ErrForgeNotConnected}, nil), "")
-	if !sameNotice(report.Remedy, gitHubConnectRemedy()) {
-		t.Errorf("remedy = %+v, want the connect command", report.Remedy)
-	}
-}
-
 func TestConnectedAccountReportsItsLogin(t *testing.T) {
 	report, facts := probeOnce(t, openingWith(connectedAs(4000), nil), "")
 	want := contracts.Notice{Code: contracts.CodeHealthSignedInAs, Args: []contracts.Arg{contracts.Text("Name", "octo")}}
@@ -359,5 +352,17 @@ func TestForgeProbesNeedCredentials(t *testing.T) {
 func TestCheckoutOriginIsEmptyOutsideACheckout(t *testing.T) {
 	if origin := CheckoutOrigin(context.Background(), t.TempDir()); origin != "" {
 		t.Errorf("CheckoutOrigin() = %q, want empty outside a checkout", origin)
+	}
+}
+
+func TestForgeProbeKeepsTheRateLimitResetOnBothStates(t *testing.T) {
+	reset := time.Date(2026, 11, 25, 10, 0, 0, 0, time.UTC)
+	limited := &fakeForge{connErr: &contracts.ForgeRateLimitedError{Reset: reset}}
+	if _, facts := probeOnce(t, openingWith(limited, nil), ""); !facts.RateLimitReset().Equal(reset) {
+		t.Errorf("down: RateLimitReset = %v, want %v", facts.RateLimitReset(), reset)
+	}
+	degraded := connectedAs(40)
+	if _, facts := probeOnce(t, openingWith(degraded, nil), ""); !facts.RateLimitReset().Equal(degraded.connection.RateLimit.Reset) {
+		t.Errorf("degraded: RateLimitReset = %v, want %v", facts.RateLimitReset(), degraded.connection.RateLimit.Reset)
 	}
 }

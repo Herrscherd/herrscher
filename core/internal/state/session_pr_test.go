@@ -4,6 +4,8 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+
+	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 func TestRecordPullRequestRollsBackWhenSaveFails(t *testing.T) {
@@ -12,7 +14,7 @@ func TestRecordPullRequestRollsBackWhenSaveFails(t *testing.T) {
 	must(t, s.AddSession(Session{Name: "main"}))
 	s.write = failEveryWrite
 
-	if err := s.RecordPullRequest("main", 7); !errors.Is(err, errInjectedSave) {
+	if err := s.RecordPullRequest("main", PullRequestRecord{Number: 7, State: contracts.PullRequestOpen}); !errors.Is(err, errInjectedSave) {
 		t.Fatalf("RecordPullRequest error = %v, want the save failure", err)
 	}
 	if got, _ := s.FindSession("main"); got.PullRequest != 0 {
@@ -28,9 +30,9 @@ func TestRecordPullRequestRollsBackWhenSaveFails(t *testing.T) {
 func TestRecordPullRequestRefusesASecondNumber(t *testing.T) {
 	s := NewState(filepath.Join(t.TempDir(), "state.json"))
 	must(t, s.AddSession(Session{Name: "main"}))
-	must(t, s.RecordPullRequest("main", 7))
+	must(t, s.RecordPullRequest("main", PullRequestRecord{Number: 7, State: contracts.PullRequestOpen}))
 
-	if err := s.RecordPullRequest("main", 8); !errors.Is(err, ErrPullRequestRecorded) {
+	if err := s.RecordPullRequest("main", PullRequestRecord{Number: 8, State: contracts.PullRequestOpen}); !errors.Is(err, ErrPullRequestRecorded) {
 		t.Fatalf("second RecordPullRequest error = %v, want ErrPullRequestRecorded", err)
 	}
 	if got, _ := s.FindSession("main"); got.PullRequest != 7 {

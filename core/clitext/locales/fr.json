@@ -5640,6 +5640,11 @@
     "other": "limite de requêtes GitHub atteinte, réinitialisée à {{.Reset}}"
   },
   {
+    "id": "cli.session.pr.timed_out",
+    "description": "Error: GitHub did not answer within the time limit, the pull request may or may not exist",
+    "other": "GitHub n'a pas répondu à temps : lancer session pr status pour voir si la pull request existe"
+  },
+  {
     "id": "cli.session.pr.forge_missing",
     "description": "Error: the GitHub forge plugin is not built into this host",
     "other": "le plugin forge GitHub n'est pas intégré"
@@ -5653,6 +5658,26 @@
     "id": "cli.session.pr.opened_unrecorded",
     "description": "Échec : GitHub a ouvert la pull request mais la session ne l'a pas enregistrée",
     "other": "session {{.Name}} : pull request #{{.Number}} ouverte à {{.URL}} mais non enregistrée dans la session : {{.Err}}"
+  },
+  {
+    "id": "cli.session.pr.refresh_unrecorded",
+    "description": "Avertissement : la lecture de la pull request sur la forge a réussi mais la session n'a pas pu enregistrer son état",
+    "other": "session {{.Name}} : la pull request #{{.Number}} a été lue sur la forge, mais son état n'a pas pu être enregistré dans la session"
+  },
+  {
+    "id": "cli.session.pr.state.draft",
+    "description": "Mot d'état de pull request pour un brouillon",
+    "other": "brouillon"
+  },
+  {
+    "id": "cli.session.pr.state.unknown",
+    "description": "Mot d'état de pull request quand l'état du forge est inconnu",
+    "other": "état inconnu"
+  },
+  {
+    "id": "cli.session.list.pull_request",
+    "description": "Partie pull request d'une ligne de la liste des sessions",
+    "other": "PR #{{.Number}} {{.State}}"
   },
   {
     "id": "cli.session.pr.opening",

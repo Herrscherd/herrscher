@@ -6,6 +6,7 @@ const (
 	AttachNoSession               = "cli.attach.no_session"
 	SessionListEmpty              = "cli.session.list.empty"
 	SessionListHeader             = "cli.session.list.header"
+	SessionListPullRequest        = "cli.session.list.pull_request"
 	SessionWhoEmpty               = "cli.session.who.empty"
 	SessionWhoHeader              = "cli.session.who.header"
 	SessionLogEmpty               = "cli.session.log.empty"
@@ -80,6 +81,7 @@ func sessionKeys() map[Key][]string {
 		AttachNoSession:               nil,
 		SessionListEmpty:              nil,
 		SessionListHeader:             nil,
+		SessionListPullRequest:        {ParamNumber, ParamState},
 		SessionWhoEmpty:               nil,
 		SessionWhoHeader:              {ParamName},
 		SessionLogEmpty:               nil,

@@ -11,6 +11,9 @@ var ErrPullRequestRecorded = errors.New("session already has a pull request")
 // ErrPullRequestOpening reports a session whose pull request another open is still creating.
 var ErrPullRequestOpening = errors.New("session pull request is already being opened")
 
+// ErrPullRequestMismatch reports a refresh of a pull request other than the one the session records.
+var ErrPullRequestMismatch = errors.New("session records another pull request")
+
 // SetResumeToken records the backend resume token for the named session,
 // persisting only when it changes. Turns report the same id, so this avoids
 // rewriting state.json every turn. A missing session or an unchanged token is a
@@ -207,25 +210,57 @@ func (s *State) SetSessionLanguage(name, lang string) (bool, error) {
 	return false, nil
 }
 
-// RecordPullRequest stores the number of the pull request a session opened.
-func (s *State) RecordPullRequest(name string, number int) error {
+// RecordPullRequest stores the pull request a session opened, all its fields at once. A session
+// that already records a pull request is refused with [ErrPullRequestRecorded].
+func (s *State) RecordPullRequest(name string, record PullRequestRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	idx, ok := s.sessionIndexLocked(name)
+	if !ok {
+		return fmt.Errorf("%w: %q", errNoSession, name)
+	}
+	if recorded := s.Sessions[idx].PullRequest; recorded != 0 {
+		return fmt.Errorf("%w: %d", ErrPullRequestRecorded, recorded)
+	}
+	return s.writePullRequestLocked(idx, record)
+}
+
+// RefreshPullRequest replaces the state, draft flag and URL of the pull request a session
+// records, after the forge was read again. A record for another number is refused with
+// [ErrPullRequestMismatch].
+func (s *State) RefreshPullRequest(name string, record PullRequestRecord) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	idx, ok := s.sessionIndexLocked(name)
+	if !ok {
+		return fmt.Errorf("%w: %q", errNoSession, name)
+	}
+	if recorded := s.Sessions[idx].PullRequest; recorded != record.Number {
+		return fmt.Errorf("%w: %d", ErrPullRequestMismatch, recorded)
+	}
+	return s.writePullRequestLocked(idx, record)
+}
+
+func (s *State) sessionIndexLocked(name string) (int, bool) {
 	for idx := range s.Sessions {
-		if s.Sessions[idx].Name != name {
-			continue
+		if s.Sessions[idx].Name == name {
+			return idx, true
 		}
-		if recorded := s.Sessions[idx].PullRequest; recorded != 0 {
-			return fmt.Errorf("%w: %d", ErrPullRequestRecorded, recorded)
-		}
-		s.Sessions[idx].PullRequest = number
-		if err := s.saveLocked(); err != nil {
-			s.Sessions[idx].PullRequest = 0
-			return err
-		}
+	}
+	return 0, false
+}
+
+func (s *State) writePullRequestLocked(idx int, record PullRequestRecord) error {
+	previous := s.Sessions[idx].PullRequestRecord()
+	if previous == record {
 		return nil
 	}
-	return fmt.Errorf("%w: %q", errNoSession, name)
+	setSessionPullRequest(&s.Sessions[idx], record)
+	if err := s.saveLocked(); err != nil {
+		setSessionPullRequest(&s.Sessions[idx], previous)
+		return err
+	}
+	return nil
 }
 
 // ReservePullRequest marks the named session as having a pull request being

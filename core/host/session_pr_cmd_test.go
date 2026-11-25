@@ -194,7 +194,7 @@ func TestPROpenRecordsTheNumberAndOpensFromThePushedBranch(t *testing.T) {
 func TestPROpenRefusesASessionThatAlreadyHasAPullRequest(t *testing.T) {
 	dir := prFixtureRepo(t)
 	st := prState(t, dir, "")
-	if err := st.RecordPullRequest("alpha", 7); err != nil {
+	if err := st.RecordPullRequest("alpha", state.PullRequestRecord{Number: 7, State: contracts.PullRequestOpen}); err != nil {
 		t.Fatal(err)
 	}
 	fake := &fakePRForge{pullRequest: prNumbered(t)}
@@ -279,27 +279,10 @@ func TestPRStatusWithoutAPullRequestSaysHowToOpenOne(t *testing.T) {
 	}
 }
 
-func TestPRStatusReadsTheRecordedPullRequest(t *testing.T) {
-	dir := prFixtureRepo(t)
-	st := prState(t, dir, "")
-	if err := st.RecordPullRequest("alpha", 42); err != nil {
-		t.Fatal(err)
-	}
-	reg := prRegistry(t, st, prForgeOpener(&fakePRForge{pullRequest: prNumbered(t)}))
-
-	out, err := runPR(t, reg, verbPRStatus, "--name", "alpha")
-	if err != nil {
-		t.Fatalf("status: %v", err)
-	}
-	if !strings.Contains(out, "pull request #42 (open") || !strings.Contains(out, "feat -> master") {
-		t.Fatalf("status output %q lacks the number, state or branches", out)
-	}
-}
-
 func TestPRForgeNotConnectedNamesTheRemedy(t *testing.T) {
 	dir := prFixtureRepo(t)
 	st := prState(t, dir, "")
-	if err := st.RecordPullRequest("alpha", 42); err != nil {
+	if err := st.RecordPullRequest("alpha", state.PullRequestRecord{Number: 42, State: contracts.PullRequestOpen}); err != nil {
 		t.Fatal(err)
 	}
 	reg := prRegistry(t, st, prForgeOpener(&fakePRForge{pullErr: contracts.ErrForgeNotConnected}))
@@ -316,7 +299,7 @@ func TestPRForgeNotConnectedNamesTheRemedy(t *testing.T) {
 func TestPRRateLimitedNamesTheResetTime(t *testing.T) {
 	dir := prFixtureRepo(t)
 	st := prState(t, dir, "")
-	if err := st.RecordPullRequest("alpha", 42); err != nil {
+	if err := st.RecordPullRequest("alpha", state.PullRequestRecord{Number: 42, State: contracts.PullRequestOpen}); err != nil {
 		t.Fatal(err)
 	}
 	reset := time.Date(2026, 11, 24, 10, 0, 0, 0, time.UTC)
@@ -335,7 +318,7 @@ func TestPRRateLimitedNamesTheResetTime(t *testing.T) {
 func TestPRChecksReadsEveryPageInOrder(t *testing.T) {
 	dir := prFixtureRepo(t)
 	st := prState(t, dir, "")
-	if err := st.RecordPullRequest("alpha", 42); err != nil {
+	if err := st.RecordPullRequest("alpha", state.PullRequestRecord{Number: 42, State: contracts.PullRequestOpen}); err != nil {
 		t.Fatal(err)
 	}
 	fake := &fakePRForge{
@@ -367,7 +350,7 @@ func TestPRChecksReadsEveryPageInOrder(t *testing.T) {
 func TestPRChecksRefusesMoreThanTheBoundedPages(t *testing.T) {
 	dir := prFixtureRepo(t)
 	st := prState(t, dir, "")
-	if err := st.RecordPullRequest("alpha", 42); err != nil {
+	if err := st.RecordPullRequest("alpha", state.PullRequestRecord{Number: 42, State: contracts.PullRequestOpen}); err != nil {
 		t.Fatal(err)
 	}
 	pages := make([][]contracts.Check, forge.MaxPages+1)
@@ -386,7 +369,7 @@ func TestPRChecksRefusesMoreThanTheBoundedPages(t *testing.T) {
 func TestPRCommentsListsUnresolvedThreadsFirst(t *testing.T) {
 	dir := prFixtureRepo(t)
 	st := prState(t, dir, "")
-	if err := st.RecordPullRequest("alpha", 42); err != nil {
+	if err := st.RecordPullRequest("alpha", state.PullRequestRecord{Number: 42, State: contracts.PullRequestOpen}); err != nil {
 		t.Fatal(err)
 	}
 	fake := &fakePRForge{
@@ -414,7 +397,7 @@ func TestPRCommentsListsUnresolvedThreadsFirst(t *testing.T) {
 func TestPRCommentsAreSanitized(t *testing.T) {
 	dir := prFixtureRepo(t)
 	st := prState(t, dir, "")
-	if err := st.RecordPullRequest("alpha", 42); err != nil {
+	if err := st.RecordPullRequest("alpha", state.PullRequestRecord{Number: 42, State: contracts.PullRequestOpen}); err != nil {
 		t.Fatal(err)
 	}
 	fake := &fakePRForge{
@@ -437,7 +420,7 @@ func TestPRCommentsAreSanitized(t *testing.T) {
 func TestPRCommentsReadInTheSessionLanguage(t *testing.T) {
 	dir := prFixtureRepo(t)
 	st := prState(t, dir, "fr")
-	if err := st.RecordPullRequest("alpha", 42); err != nil {
+	if err := st.RecordPullRequest("alpha", state.PullRequestRecord{Number: 42, State: contracts.PullRequestOpen}); err != nil {
 		t.Fatal(err)
 	}
 	fake := &fakePRForge{

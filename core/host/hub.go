@@ -381,9 +381,18 @@ func sessionInfos(st *state.State, partDir string, policy compactionPolicy, term
 			AutoCompactPercent: policy.percentFor(live),
 			ContextWindow:      policy.limits.LimitFor(live.Vendor, terms(live).window),
 			Language:           knownSessionLanguage(live),
+			PullRequest:        sessionPullRequest(live),
 		})
 	}
 	return out
+}
+
+func sessionPullRequest(s state.Session) contracts.SessionPullRequest {
+	record := s.PullRequestRecord()
+	if !record.Known() {
+		return contracts.SessionPullRequest{}
+	}
+	return contracts.SessionPullRequest{Number: record.Number, State: record.State, Draft: record.Draft, URL: record.URL}
 }
 
 func sessionModel(session state.Session) string {

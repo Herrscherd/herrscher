@@ -72,7 +72,7 @@ func prRegistryWithCredentials(t *testing.T, st *state.State, opener forgeOpener
 func TestPRVerbsRefuseARemoteSession(t *testing.T) {
 	dir := prFixtureRepo(t)
 	st := prStateWith(t, state.Session{Name: "alpha", ChannelID: "chan-alpha", Dir: dir, Host: "vps"})
-	if err := st.RecordPullRequest("alpha", prTestNumber); err != nil {
+	if err := st.RecordPullRequest("alpha", state.PullRequestRecord{Number: prTestNumber, State: contracts.PullRequestOpen}); err != nil {
 		t.Fatal(err)
 	}
 	forge := &fakePRForge{pullRequest: prNumbered(t)}
@@ -291,7 +291,7 @@ func TestPRGitCarriesTheTokenInTheEnvironmentNotOnArgv(t *testing.T) {
 func TestPRStatusJSONCarriesEveryField(t *testing.T) {
 	dir := prFixtureRepo(t)
 	st := prState(t, dir, "")
-	if err := st.RecordPullRequest("alpha", prTestNumber); err != nil {
+	if err := st.RecordPullRequest("alpha", state.PullRequestRecord{Number: prTestNumber, State: contracts.PullRequestOpen}); err != nil {
 		t.Fatal(err)
 	}
 	reg := prRegistry(t, st, prForgeOpener(&fakePRForge{pullRequest: prNumbered(t)}))
@@ -321,7 +321,7 @@ func TestPRStatusJSONCarriesEveryField(t *testing.T) {
 func TestPRStatusInFrenchTranslatesTheWords(t *testing.T) {
 	dir := prFixtureRepo(t)
 	st := prState(t, dir, "fr")
-	if err := st.RecordPullRequest("alpha", prTestNumber); err != nil {
+	if err := st.RecordPullRequest("alpha", state.PullRequestRecord{Number: prTestNumber, State: contracts.PullRequestOpen}); err != nil {
 		t.Fatal(err)
 	}
 	pullRequest := prNumbered(t)
@@ -345,7 +345,7 @@ func TestPRStatusInFrenchTranslatesTheWords(t *testing.T) {
 func TestPRChecksInFrenchTranslatesTheConclusions(t *testing.T) {
 	dir := prFixtureRepo(t)
 	st := prState(t, dir, "fr")
-	if err := st.RecordPullRequest("alpha", prTestNumber); err != nil {
+	if err := st.RecordPullRequest("alpha", state.PullRequestRecord{Number: prTestNumber, State: contracts.PullRequestOpen}); err != nil {
 		t.Fatal(err)
 	}
 	forge := &fakePRForge{
@@ -371,7 +371,7 @@ func TestPRChecksInFrenchTranslatesTheConclusions(t *testing.T) {
 func TestPRForgeNotConnectedInFrenchNamesTheRemedy(t *testing.T) {
 	dir := prFixtureRepo(t)
 	st := prState(t, dir, "fr")
-	if err := st.RecordPullRequest("alpha", prTestNumber); err != nil {
+	if err := st.RecordPullRequest("alpha", state.PullRequestRecord{Number: prTestNumber, State: contracts.PullRequestOpen}); err != nil {
 		t.Fatal(err)
 	}
 	reg := prRegistry(t, st, prForgeOpener(&fakePRForge{pullRequest: prNumbered(t), pullErr: contracts.ErrForgeNotConnected}))

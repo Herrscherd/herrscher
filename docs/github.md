@@ -167,13 +167,17 @@ the same token and only for github.com:
   HEAD must already be on the remote branch, or the command refuses. The origin
   must be a github.com repository. The base defaults to the branch that the
   local `origin/HEAD` names, and when that ref is missing `--base` is required.
-  The number of the pull request is recorded in the session state, and a session
-  that already has one is refused. A session that runs on another host is refused
+  The session state records the number, the state, the draft flag and the URL of
+  the pull request, all at once, and a session that already has one is refused.
+  A session that runs on another host is refused
   too, and a second open while the first is still running is refused. If GitHub
   opens the pull request but the number cannot be recorded, the command reports
   the URL and the number so the pull request is not lost.
-- `herrscher session pr status --name <session>` shows the title, URL, state,
-  draft flag, mergeability and head commit of the recorded pull request.
+- `herrscher session pr status --name <session>` reads the pull request again,
+  stores its state, draft flag and URL in the session, and shows the title, URL,
+  state, draft flag, mergeability and head commit. If the state cannot be stored,
+  the status is still shown, with a notice that the state was not recorded; in
+  `--json` the field `unrecorded` is then `true`.
 - `herrscher session pr checks --name <session>` lists the check runs of its head
   commit, reading every page up to a fixed bound.
 - `herrscher session pr comments --name <session>` lists the review threads, the
@@ -181,12 +185,39 @@ the same token and only for github.com:
   is printed.
 
 Each command accepts `--json` for the raw structure, whose state and check words
-stay in English. Human output and errors are printed in the language of the
-session, English or French. A missing connection names `herrscher connect github`
+stay in English. A state that no forge reports is written `unknown`.
+
+Each command bounds its forge work to one minute: `session pr open`, `status`,
+`checks` and `comments` each stop after that, and a forge that does not answer in
+time fails with a message saying so. After a timed-out `open`, the pull request
+may still have been created: `session pr status` tells whether it exists.
+Human output and errors are printed in the language of the session, English or
+French. A missing connection names `herrscher connect github`
 as the remedy, a rate limit gives the time of the reset, and a session without a
 pull request says to run `session pr open` first. The token reaches git only
 through its environment, never through arguments, and it does not appear in
 output or errors.
+
+A pull request opened from the terminal panel (`p` in the diff panel) goes through
+the same `session pr open` command, so it is recorded in the session like one
+opened from the command line. Before it commits or pushes anything, the panel checks
+the connection and refuses when the forge cannot take the pull request, each cause
+with its own message: no connection on this host (the remedy is `herrscher connect
+github`), the rate limit reached (with the time of the reset when the forge reported
+it), or the forge unreachable from this host. A saved token the forge refused, and a
+repository the connection cannot read, have their own messages too.
+
+`herrscher session list` shows the pull request of each session that has one,
+after the channel of the session, as `PR #42 open`, `PR #42 draft`,
+`PR #42 merged` or `PR #42 unknown state`. A draft is an open pull request
+marked as a draft. The `--json` form adds a `pullRequest` object with `number`,
+`state` (`open`, `closed`, `merged` or `unknown`, always in English), `draft` and
+`url`. A session without a pull request omits the field.
+
+A session whose pull request was recorded before its state was stored keeps its
+number with the state `unknown`. The session info that the TUI and the gateways
+receive carries no pull request for such a session, so they show nothing until
+`session pr status` stores the state, draft flag and URL.
 
 ## Repositories to clone
 

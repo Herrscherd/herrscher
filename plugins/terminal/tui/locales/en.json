@@ -609,6 +609,18 @@
     "other": "project"
   },
   {
+    "id": "tui.status.label_pull_request",
+    "other": "PR"
+  },
+  {
+    "id": "tui.pr.label",
+    "other": "#{{.Number}} {{.State}}"
+  },
+  {
+    "id": "tui.sidebar.pull_request",
+    "other": "pull request"
+  },
+  {
     "id": "tui.status.label_context",
     "other": "context"
   },
@@ -2386,12 +2398,36 @@
     "other": "unexpected git output"
   },
   {
-    "id": "tui.diffgit.no_opener",
-    "other": "no forge is wired to open pull requests"
-  },
-  {
     "id": "tui.diffgit.forge_not_connected",
     "other": "no GitHub connection on this host: run `herrscher connect github`"
+  },
+  {
+    "id": "tui.diffgit.forge_unauthorized",
+    "other": "GitHub refused the saved credential: run `herrscher connect github`"
+  },
+  {
+    "id": "tui.diffgit.forge_rate_limited",
+    "other": "GitHub rate limit reached: try again later"
+  },
+  {
+    "id": "tui.diffgit.forge_rate_limited_reset",
+    "other": "GitHub rate limit reached, it resets at {{.Reset}}"
+  },
+  {
+    "id": "tui.diffgit.forge_unreachable",
+    "other": "GitHub is unreachable from this host"
+  },
+  {
+    "id": "tui.diffgit.forge_repo_unreadable",
+    "other": "GitHub cannot read this repository with this connection"
+  },
+  {
+    "id": "tui.diffgit.forge_missing",
+    "other": "the GitHub forge is not installed on this host"
+  },
+  {
+    "id": "tui.diffgit.timed_out",
+    "other": "GitHub did not answer in time"
   },
   {
     "id": "tui.diffgit.wrong_host",
@@ -2554,8 +2590,20 @@
     "other": "commit {{.Sha}}, PR failed: {{.Reason}}"
   },
   {
+    "id": "tui.diffpanel.pr_no_session",
+    "other": "cannot open a pull request: this channel has no session"
+  },
+  {
+    "id": "tui.diffpanel.pr_refused",
+    "other": "pull request not opened, nothing committed: {{.Reason}}"
+  },
+  {
+    "id": "tui.diffpanel.pr_timed_out",
+    "other": "commit {{.Sha}}, GitHub did not answer in time: run session pr status to see whether the pull request exists"
+  },
+  {
     "id": "tui.diffpanel.pr_opened",
-    "other": "commit {{.Sha}}, PR #{{.Number}} opened against {{.Base}}"
+    "other": "commit {{.Sha}}, PR opened: {{.Result}}"
   },
   {
     "id": "tui.diffpanel.title_turn",

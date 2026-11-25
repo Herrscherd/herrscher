@@ -63,3 +63,23 @@ func TestUsageReportNamesTheNumbers(t *testing.T) {
 		}
 	}
 }
+
+func TestUsageReportAlignsThePullRequestRowWithTheOthers(t *testing.T) {
+	be := &fakeBackend{sessions: []contracts.SessionInfo{{
+		Name:        "s",
+		ChannelID:   "a",
+		Model:       "sonnet",
+		PullRequest: contracts.SessionPullRequest{Number: 42, State: contracts.PullRequestOpen},
+	}}}
+	m := startedModel(be)
+	syncLoaded(m)
+	m.active = "a"
+	out := m.usageReport(m.ensureTab("a"))
+
+	if !strings.Contains(out, "  PR       #42 open") {
+		t.Fatalf("pull request row is not aligned on the label column:\n%s", out)
+	}
+	if !strings.Contains(out, "  model    sonnet") {
+		t.Fatalf("model row moved:\n%s", out)
+	}
+}

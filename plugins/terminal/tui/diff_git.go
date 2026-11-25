@@ -38,7 +38,6 @@ var (
 	errUnknownScope  = errors.New("unknown diff scope")
 	errUnknownChange = errors.New("unknown git file status")
 	errMalformedStat = errors.New("unexpected git output")
-	errNoPROpener    = errors.New("no forge is wired to open pull requests")
 	hunkHeader       = regexp.MustCompile(`^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
 )
 
@@ -543,40 +542,16 @@ func (r gitRepo) commit(ctx context.Context, message string) (string, error) {
 	return strings.TrimSpace(sha), err
 }
 
-// PullRequestDraft is the branch and text a pull request is opened with.
-type PullRequestDraft struct {
-	Remote string
-	Head   string
-	Base   string
-	Title  string
-	Body   string
-}
-
-// PullRequestOpener opens a pull request for a draft and returns its number.
-type PullRequestOpener interface {
-	OpenPullRequest(ctx context.Context, draft PullRequestDraft) (int, error)
-}
-
-func (r gitRepo) openPR(ctx context.Context, opener PullRequestOpener, base, title, body string) (int, error) {
+func (r gitRepo) publishBranch(ctx context.Context, base string) error {
 	branch, err := r.git(ctx, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
-		return 0, err
+		return err
 	}
-	head := strings.TrimSpace(branch)
-	if head == base {
-		return 0, errOnBase
+	if strings.TrimSpace(branch) == base {
+		return errOnBase
 	}
-	if opener == nil {
-		return 0, errNoPROpener
-	}
-	if _, err = r.call(ctx, prCallLimit, gitEnvironment(), "push", "-u", "origin", "HEAD"); err != nil {
-		return 0, err
-	}
-	remote, err := r.call(ctx, prCallLimit, gitEnvironment(), "remote", "get-url", "origin")
-	if err != nil {
-		return 0, err
-	}
-	return opener.OpenPullRequest(ctx, PullRequestDraft{Remote: strings.TrimSpace(remote), Head: head, Base: base, Title: title, Body: body})
+	_, err = r.call(ctx, prCallLimit, gitEnvironment(), "push", "-u", "origin", "HEAD")
+	return err
 }
 
 func draftCommitMessage(files []diffFile) string {

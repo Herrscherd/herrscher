@@ -5640,6 +5640,11 @@
     "other": "GitHub rate limit reached, resets at {{.Reset}}"
   },
   {
+    "id": "cli.session.pr.timed_out",
+    "description": "Error: GitHub did not answer within the time limit, the pull request may or may not exist",
+    "other": "GitHub did not answer in time: run session pr status to see whether the pull request exists"
+  },
+  {
     "id": "cli.session.pr.forge_missing",
     "description": "Error: the GitHub forge plugin is not built into this host",
     "other": "the GitHub forge plugin is not built in"
@@ -5653,6 +5658,26 @@
     "id": "cli.session.pr.opened_unrecorded",
     "description": "Failure: GitHub opened the pull request but the session did not record it",
     "other": "session {{.Name}}: pull request #{{.Number}} was opened at {{.URL}} but could not be recorded in the session: {{.Err}}"
+  },
+  {
+    "id": "cli.session.pr.refresh_unrecorded",
+    "description": "Notice: the forge read of the pull request succeeded but the session could not save its state",
+    "other": "session {{.Name}}: pull request #{{.Number}} was read from the forge, but its state could not be saved in the session"
+  },
+  {
+    "id": "cli.session.pr.state.draft",
+    "description": "Pull request state word of a draft",
+    "other": "draft"
+  },
+  {
+    "id": "cli.session.pr.state.unknown",
+    "description": "Pull request state word when the forge state is not known",
+    "other": "unknown state"
+  },
+  {
+    "id": "cli.session.list.pull_request",
+    "description": "Pull request part of a session list line",
+    "other": "PR #{{.Number}} {{.State}}"
   },
   {
     "id": "cli.session.pr.opening",

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"embed"
 	"errors"
 	"io/fs"
@@ -24,6 +25,7 @@ const (
 	tplArgPath    = "Path"
 	tplArgReason  = "Reason"
 	tplArgSha     = "Sha"
+	tplArgResult  = "Result"
 	tplArgSpec    = "Spec"
 	tplArgText    = "Text"
 	tplArgTotal   = "Total"
@@ -112,8 +114,12 @@ func reasonKeys() []reasonKey {
 		{errUnknownScope, "tui.diffgit.unknown_scope"},
 		{errUnknownChange, "tui.diffgit.unknown_change"},
 		{errMalformedStat, "tui.diffgit.malformed_stat"},
-		{errNoPROpener, "tui.diffgit.no_opener"},
 		{contracts.ErrForgeNotConnected, "tui.diffgit.forge_not_connected"},
+		{contracts.ErrForgeUnauthorized, "tui.diffgit.forge_unauthorized"},
+		{errForgeRateLimited, "tui.diffgit.forge_rate_limited"},
+		{errForgeUnreachable, "tui.diffgit.forge_unreachable"},
+		{errForgeRepoUnreadable, "tui.diffgit.forge_repo_unreadable"},
+		{context.DeadlineExceeded, "tui.diffgit.timed_out"},
 		{contracts.ErrForgeWrongHost, "tui.diffgit.wrong_host"},
 		{contracts.ErrInvalidRepoRef, "tui.diffgit.invalid_remote"},
 		{errThemeCycle, "tui.reason.theme_cycle"},

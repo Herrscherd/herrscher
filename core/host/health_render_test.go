@@ -15,7 +15,7 @@ import (
 )
 
 func TestProbeFailureTextReachesTheTableNeutralised(t *testing.T) {
-	report := unreachableReport(errors.New("cli exited: \x1b]8;;https://evil.test\a\x1b[2J"))
+	report := health.Unreachable(errors.New("cli exited: \x1b]8;;https://evil.test\a\x1b[2J"))
 	snapshot := health.Snapshot{Checks: []health.Check{{Group: health.GroupBackends, Name: "claude", Report: report}}}
 	data, err := health.Encode(snapshot)
 	if err != nil {

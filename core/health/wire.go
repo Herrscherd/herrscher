@@ -42,6 +42,7 @@ type wireCheck struct {
 	Compaction *wireCompaction       `json:"compaction,omitempty"`
 	Partial    bool                  `json:"compaction_partial,omitempty"`
 	Unknown    bool                  `json:"compaction_unknown,omitempty"`
+	ForgeReset time.Time             `json:"forge_reset,omitzero"`
 	Forge      *wireForge            `json:"forge,omitempty"`
 }
 
@@ -111,20 +112,21 @@ func encodeCheck(check Check) (wireCheck, error) {
 		return wireCheck{}, fmt.Errorf("health check %s remedy: %w", check.Service(), err)
 	}
 	wire := wireCheck{
-		Group:     check.Group,
-		Name:      check.Name,
-		Account:   string(check.Account),
-		Default:   check.Default,
-		State:     report.State,
-		Latency:   int64(report.Latency),
-		Detail:    detail,
-		Remedy:    remedy,
-		Socket:    check.Facts.Socket,
-		Listen:    check.Facts.Listen,
-		Providers: check.Facts.Providers,
-		TimedOut:  int64(check.Facts.TimedOut),
-		Partial:   check.Facts.CompactionPartial,
-		Unknown:   check.Facts.CompactionUnknown,
+		Group:      check.Group,
+		Name:       check.Name,
+		Account:    string(check.Account),
+		Default:    check.Default,
+		State:      report.State,
+		Latency:    int64(report.Latency),
+		Detail:     detail,
+		Remedy:     remedy,
+		Socket:     check.Facts.Socket,
+		Listen:     check.Facts.Listen,
+		Providers:  check.Facts.Providers,
+		TimedOut:   int64(check.Facts.TimedOut),
+		Partial:    check.Facts.CompactionPartial,
+		Unknown:    check.Facts.CompactionUnknown,
+		ForgeReset: check.Facts.ForgeReset,
 	}
 	if pool := check.Facts.Pool; pool != nil {
 		wire.Pool = &wirePool{Keys: pool.Keys, Usable: pool.Usable, LastStatus: pool.LastStatus, CoolingFor: int64(pool.CoolingFor)}
@@ -182,6 +184,7 @@ func decodeCheck(wire wireCheck) (Check, error) {
 			TimedOut:          time.Duration(wire.TimedOut),
 			CompactionPartial: wire.Partial,
 			CompactionUnknown: wire.Unknown,
+			ForgeReset:        wire.ForgeReset,
 		},
 	}
 	if pool := wire.Pool; pool != nil {

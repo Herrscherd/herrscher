@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
 func gitIn(t *testing.T, dir string, args ...string) string {
@@ -46,29 +44,30 @@ func initRepo(t *testing.T) string {
 	return dir
 }
 
-type scriptedRunner struct {
+type recordingRunner struct {
 	remote string
+	calls  [][]string
 }
 
-func (s *scriptedRunner) run(ctx context.Context, dir string, env []string, tool cliTool, args ...string) (string, error) {
+func (r *recordingRunner) run(ctx context.Context, dir string, env []string, tool cliTool, args ...string) (string, error) {
+	r.calls = append(r.calls, args)
 	if len(args) > 0 && args[0] == "push" {
 		return "", nil
 	}
 	if len(args) > 1 && args[0] == "remote" && args[1] == "get-url" {
-		return s.remote, nil
+		return r.remote, nil
 	}
 	return execRunner(ctx, dir, env, tool, args...)
 }
 
-type fakePullRequests struct {
-	number int
-	err    error
-	drafts []PullRequestDraft
-}
-
-func (f *fakePullRequests) OpenPullRequest(_ context.Context, draft PullRequestDraft) (int, error) {
-	f.drafts = append(f.drafts, draft)
-	return f.number, f.err
+func (r *recordingRunner) pushes() int {
+	count := 0
+	for _, args := range r.calls {
+		if len(args) > 0 && args[0] == "push" {
+			count++
+		}
+	}
+	return count
 }
 
 type fileExpectation struct {
@@ -195,56 +194,29 @@ func TestCommitStagesEverythingWithTheGivenMessage(t *testing.T) {
 	}
 }
 
-func TestOpenPRPushesAndReturnsTheCreatedNumber(t *testing.T) {
+func TestPublishBranchPushesTheFeatureBranch(t *testing.T) {
 	dir := initRepo(t)
 	gitIn(t, dir, "checkout", "-q", "-b", "feature")
-	runner := &scriptedRunner{remote: "git@github.com:o/r.git\n"}
-	opener := &fakePullRequests{number: 42}
+	runner := &recordingRunner{remote: "git@github.com:o/r.git\n"}
 
-	number, err := newGitRepo(dir, runner.run).openPR(t.Context(), opener, "master", "feat: change", "body")
-	if err != nil {
+	if err := newGitRepo(dir, runner.run).publishBranch(t.Context(), "master"); err != nil {
 		t.Fatal(err)
 	}
-	if number != 42 {
-		t.Fatalf("number = %d, want 42", number)
-	}
-	want := PullRequestDraft{Remote: "git@github.com:o/r.git", Head: "feature", Base: "master", Title: "feat: change", Body: "body"}
-	if len(opener.drafts) != 1 || opener.drafts[0] != want {
-		t.Fatalf("drafts = %+v, want %+v", opener.drafts, want)
+	if runner.pushes() != 1 {
+		t.Fatalf("pushes = %d, want 1 (calls %v)", runner.pushes(), runner.calls)
 	}
 }
 
-func TestOpenPRRefusesTheBaseBranch(t *testing.T) {
+func TestPublishBranchRefusesTheBaseBranch(t *testing.T) {
 	dir := initRepo(t)
-	opener := &fakePullRequests{number: 1}
+	runner := &recordingRunner{remote: "git@github.com:o/r.git\n"}
 
-	_, err := newGitRepo(dir, (&scriptedRunner{}).run).openPR(t.Context(), opener, "master", "t", "b")
+	err := newGitRepo(dir, runner.run).publishBranch(t.Context(), "master")
 	if !errors.Is(err, errOnBase) {
 		t.Fatalf("err = %v, want errOnBase", err)
 	}
-	if len(opener.drafts) != 0 {
-		t.Fatalf("opener called from the base branch: %+v", opener.drafts)
-	}
-}
-
-func TestOpenPRWithoutOpenerReportsIt(t *testing.T) {
-	dir := initRepo(t)
-	gitIn(t, dir, "checkout", "-q", "-b", "feature")
-
-	_, err := newGitRepo(dir, (&scriptedRunner{remote: "git@github.com:o/r.git\n"}).run).openPR(t.Context(), nil, "master", "t", "b")
-	if !errors.Is(err, errNoPROpener) {
-		t.Fatalf("err = %v, want errNoPROpener", err)
-	}
-}
-
-func TestOpenPRKeepsTheOpenerError(t *testing.T) {
-	dir := initRepo(t)
-	gitIn(t, dir, "checkout", "-q", "-b", "feature")
-	opener := &fakePullRequests{err: contracts.ErrForgeNotConnected}
-
-	_, err := newGitRepo(dir, (&scriptedRunner{remote: "git@github.com:o/r.git\n"}).run).openPR(t.Context(), opener, "master", "t", "b")
-	if !errors.Is(err, contracts.ErrForgeNotConnected) {
-		t.Fatalf("err = %v, want ErrForgeNotConnected", err)
+	if runner.pushes() != 0 {
+		t.Fatalf("pushed the base branch: %v", runner.calls)
 	}
 }
 

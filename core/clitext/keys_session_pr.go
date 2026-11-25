@@ -12,34 +12,38 @@ const (
 	CmdParamSessionPRBase    = "cli.help.param.session.pr.base"
 	CmdParamSessionPRDraft   = "cli.help.param.session.pr.draft"
 
-	SessionPROpened           = "cli.session.pr.opened"
-	SessionPROpenedUnrecorded = "cli.session.pr.opened_unrecorded"
-	SessionPROpening          = "cli.session.pr.opening"
-	SessionPRStatus           = "cli.session.pr.status"
-	SessionPRCheck            = "cli.session.pr.check"
-	SessionPRChecksEmpty      = "cli.session.pr.checks_empty"
-	SessionPRThread           = "cli.session.pr.thread"
-	SessionPRComment          = "cli.session.pr.comment"
-	SessionPRResolved         = "cli.session.pr.resolved"
-	SessionPRUnresolved       = "cli.session.pr.unresolved"
-	SessionPRCommentsEmpty    = "cli.session.pr.comments_empty"
-	SessionPRNone             = "cli.session.pr.none"
-	SessionPRRecorded         = "cli.session.pr.recorded"
-	SessionPRRemote           = "cli.session.pr.remote"
-	SessionPRNoDir            = "cli.session.pr.no_dir"
-	SessionPRNoOrigin         = "cli.session.pr.no_origin"
-	SessionPROriginRead       = "cli.session.pr.origin_read"
-	SessionPRUnpushed         = "cli.session.pr.unpushed"
-	SessionPRNoBase           = "cli.session.pr.no_base"
-	SessionPRWrongHost        = "cli.session.pr.wrong_host"
-	SessionPRNotConnected     = "cli.session.pr.not_connected"
-	SessionPRUnauthorized     = "cli.session.pr.unauthorized"
-	SessionPRRateLimited      = "cli.session.pr.rate_limited"
-	SessionPRForgeMissing     = "cli.session.pr.forge_missing"
-	SessionPRPagesExceeded    = "cli.session.pr.pages_exceeded"
-	SessionPRFailed           = "cli.session.pr.failed"
-	SessionPRUnknownValue     = "cli.session.pr.unknown_value"
+	SessionPROpened            = "cli.session.pr.opened"
+	SessionPROpenedUnrecorded  = "cli.session.pr.opened_unrecorded"
+	SessionPRRefreshUnrecorded = "cli.session.pr.refresh_unrecorded"
+	SessionPROpening           = "cli.session.pr.opening"
+	SessionPRStatus            = "cli.session.pr.status"
+	SessionPRCheck             = "cli.session.pr.check"
+	SessionPRChecksEmpty       = "cli.session.pr.checks_empty"
+	SessionPRThread            = "cli.session.pr.thread"
+	SessionPRComment           = "cli.session.pr.comment"
+	SessionPRResolved          = "cli.session.pr.resolved"
+	SessionPRUnresolved        = "cli.session.pr.unresolved"
+	SessionPRCommentsEmpty     = "cli.session.pr.comments_empty"
+	SessionPRNone              = "cli.session.pr.none"
+	SessionPRRecorded          = "cli.session.pr.recorded"
+	SessionPRRemote            = "cli.session.pr.remote"
+	SessionPRNoDir             = "cli.session.pr.no_dir"
+	SessionPRNoOrigin          = "cli.session.pr.no_origin"
+	SessionPROriginRead        = "cli.session.pr.origin_read"
+	SessionPRUnpushed          = "cli.session.pr.unpushed"
+	SessionPRNoBase            = "cli.session.pr.no_base"
+	SessionPRWrongHost         = "cli.session.pr.wrong_host"
+	SessionPRNotConnected      = "cli.session.pr.not_connected"
+	SessionPRUnauthorized      = "cli.session.pr.unauthorized"
+	SessionPRRateLimited       = "cli.session.pr.rate_limited"
+	SessionPRTimedOut          = "cli.session.pr.timed_out"
+	SessionPRForgeMissing      = "cli.session.pr.forge_missing"
+	SessionPRPagesExceeded     = "cli.session.pr.pages_exceeded"
+	SessionPRFailed            = "cli.session.pr.failed"
+	SessionPRUnknownValue      = "cli.session.pr.unknown_value"
 
+	SessionPRStateDraft        = "cli.session.pr.state.draft"
+	SessionPRStateUnknown      = "cli.session.pr.state.unknown"
 	SessionPRStateOpen         = "cli.session.pr.state.open"
 	SessionPRStateClosed       = "cli.session.pr.state.closed"
 	SessionPRStateMerged       = "cli.session.pr.state.merged"
@@ -87,34 +91,38 @@ func sessionPRKeys() map[Key][]string {
 		CmdParamSessionPRBase:    nil,
 		CmdParamSessionPRDraft:   nil,
 
-		SessionPROpened:           {ParamName, ParamNumber, ParamURL},
-		SessionPROpenedUnrecorded: {ParamName, ParamNumber, ParamURL, ParamErr},
-		SessionPROpening:          {ParamName},
-		SessionPRStatus:           {ParamNumber, ParamState, ParamTitle, ParamURL, ParamHead, ParamBase, ParamMerge},
-		SessionPRCheck:            {ParamStatus, ParamName, ParamURL},
-		SessionPRChecksEmpty:      {ParamNumber},
-		SessionPRThread:           {ParamPath, ParamLine, ParamResolution},
-		SessionPRComment:          {ParamAuthor, ParamBody},
-		SessionPRResolved:         nil,
-		SessionPRUnresolved:       nil,
-		SessionPRCommentsEmpty:    {ParamNumber},
-		SessionPRNone:             {ParamName},
-		SessionPRRecorded:         {ParamName, ParamNumber},
-		SessionPRRemote:           {ParamName},
-		SessionPRNoDir:            {ParamName},
-		SessionPRNoOrigin:         {ParamPath},
-		SessionPROriginRead:       {ParamPath, ParamErr},
-		SessionPRUnpushed:         {ParamBranch},
-		SessionPRNoBase:           nil,
-		SessionPRWrongHost:        nil,
-		SessionPRNotConnected:     nil,
-		SessionPRUnauthorized:     nil,
-		SessionPRRateLimited:      {ParamReset},
-		SessionPRForgeMissing:     nil,
-		SessionPRPagesExceeded:    {ParamPages},
-		SessionPRFailed:           {ParamErr},
-		SessionPRUnknownValue:     {ParamValue},
+		SessionPROpened:            {ParamName, ParamNumber, ParamURL},
+		SessionPROpenedUnrecorded:  {ParamName, ParamNumber, ParamURL, ParamErr},
+		SessionPRRefreshUnrecorded: {ParamName, ParamNumber},
+		SessionPROpening:           {ParamName},
+		SessionPRStatus:            {ParamNumber, ParamState, ParamTitle, ParamURL, ParamHead, ParamBase, ParamMerge},
+		SessionPRCheck:             {ParamStatus, ParamName, ParamURL},
+		SessionPRChecksEmpty:       {ParamNumber},
+		SessionPRThread:            {ParamPath, ParamLine, ParamResolution},
+		SessionPRComment:           {ParamAuthor, ParamBody},
+		SessionPRResolved:          nil,
+		SessionPRUnresolved:        nil,
+		SessionPRCommentsEmpty:     {ParamNumber},
+		SessionPRNone:              {ParamName},
+		SessionPRRecorded:          {ParamName, ParamNumber},
+		SessionPRRemote:            {ParamName},
+		SessionPRNoDir:             {ParamName},
+		SessionPRNoOrigin:          {ParamPath},
+		SessionPROriginRead:        {ParamPath, ParamErr},
+		SessionPRUnpushed:          {ParamBranch},
+		SessionPRNoBase:            nil,
+		SessionPRWrongHost:         nil,
+		SessionPRNotConnected:      nil,
+		SessionPRUnauthorized:      nil,
+		SessionPRRateLimited:       {ParamReset},
+		SessionPRTimedOut:          nil,
+		SessionPRForgeMissing:      nil,
+		SessionPRPagesExceeded:     {ParamPages},
+		SessionPRFailed:            {ParamErr},
+		SessionPRUnknownValue:      {ParamValue},
 
+		SessionPRStateDraft:        nil,
+		SessionPRStateUnknown:      nil,
 		SessionPRStateOpen:         nil,
 		SessionPRStateClosed:       nil,
 		SessionPRStateMerged:       nil,

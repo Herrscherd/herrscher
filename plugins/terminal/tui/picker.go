@@ -120,26 +120,11 @@ func (m *model) resumeView() string {
 	rows := make([]overlayRow, 0, end-start)
 	for i := start; i < end; i++ {
 		row := m.resumeRows[i]
-		state := m.tr.t("tui.picker.state_live", nil)
-		if row.Archived {
-			state = m.tr.t("tui.picker.state_archived", nil)
-		}
-		cols := []string{}
-		if row.Project != "" {
-			cols = append(cols, termpaint.Escape(row.Project).String())
-		}
-		if row.LastTs != "" {
-			cols = append(cols, termpaint.Escape(row.LastTs).String())
-		}
-		if row.Vendor != "" {
-			cols = append(cols, termpaint.Escape(row.Vendor).String())
-		}
-		cols = append(cols, state)
 		mark := "  "
 		if row.Resumable {
 			mark = "⟲ "
 		}
-		rows = append(rows, overlayRow{mark: mark, label: termpaint.Escape(row.Name).String(), detail: strings.Join(cols, " · ")})
+		rows = append(rows, overlayRow{mark: mark, label: termpaint.Escape(row.Name).String(), detail: m.resumeDetail(row)})
 	}
 	footer := m.listFooter(ctxResume, m.tr.t("tui.common.open", nil))
 	if hidden := len(m.resumeRows) - (end - start); hidden > 0 {
@@ -153,6 +138,28 @@ func (m *model) resumeView() string {
 		list += "\n" + preview
 	}
 	return list
+}
+
+func (m *model) resumeDetail(row contracts.SessionInfo) string {
+	state := m.tr.t("tui.picker.state_live", nil)
+	if row.Archived {
+		state = m.tr.t("tui.picker.state_archived", nil)
+	}
+	cols := []string{}
+	if row.Project != "" {
+		cols = append(cols, termpaint.Escape(row.Project).String())
+	}
+	if row.LastTs != "" {
+		cols = append(cols, termpaint.Escape(row.LastTs).String())
+	}
+	if row.Vendor != "" {
+		cols = append(cols, termpaint.Escape(row.Vendor).String())
+	}
+	if pullRequest := m.pullRequestText(row.PullRequest); pullRequest != "" {
+		cols = append(cols, termpaint.Escape(pullRequest).String())
+	}
+	cols = append(cols, state)
+	return strings.Join(cols, " · ")
 }
 
 func (m *model) openSwitch() {

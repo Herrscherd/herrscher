@@ -41,6 +41,9 @@ func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event,
 		CtxTokens:   contextReading(live, event),
 		Tools:       d.calls.Calls(),
 	})
+	if event.Outcome == contracts.TurnInterrupted {
+		d.recordInterruption()
+	}
 	d.deliverPendingReply(event.Text)
 	d.metrics.TurnCompleted()
 	if verdict := d.gate.Check(d.name); verdict.Reason != "" {

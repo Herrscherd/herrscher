@@ -34,6 +34,15 @@ func (h *hub) interruptionAnnounced(name, turnID string) bool {
 	return false
 }
 
+func interruptedTurnEntry(turnID string) state.TranscriptEntry {
+	return state.TranscriptEntry{
+		Ts:     time.Now().UTC().Format(time.RFC3339),
+		Role:   "notice",
+		Kind:   turnInterruptedKind,
+		TurnID: turnID,
+	}
+}
+
 func (h *hub) announceInterruptedTurn(sess state.Session) {
 	if sess.InterruptedTurn == "" {
 		return
@@ -42,13 +51,7 @@ func (h *hub) announceInterruptedTurn(sess state.Session) {
 		h.clearTurnMark(sess.Name)
 		return
 	}
-	entry := state.TranscriptEntry{
-		Ts:     time.Now().UTC().Format(time.RFC3339),
-		Role:   "notice",
-		Kind:   turnInterruptedKind,
-		TurnID: sess.InterruptedTurn,
-	}
-	if err := h.appendTranscript(sess.Name, entry); err != nil {
+	if err := h.appendTranscript(sess.Name, interruptedTurnEntry(sess.InterruptedTurn)); err != nil {
 		lang := h.sessionLanguageSource(sess.Name)
 		warnLive(h.messages, h.warnings, lang, "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
 		return

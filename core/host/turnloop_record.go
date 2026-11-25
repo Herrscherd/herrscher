@@ -116,6 +116,13 @@ func (d *sessionDriver) recordEntry(role, text, shown string, cost float64, turn
 	d.sink.Transcript(entry)
 }
 
+func (d *sessionDriver) recordInterruption() {
+	if d.sink.Transcript == nil {
+		return
+	}
+	d.sink.Transcript(interruptedTurnEntry(d.currentTurnID()))
+}
+
 func (d *sessionDriver) currentTurnID() string {
 	if d.activeTurnID != "" {
 		return d.activeTurnID

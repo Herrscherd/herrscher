@@ -5,11 +5,23 @@ import (
 	"fmt"
 	"slices"
 	"testing"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
 	"github.com/Herrscherd/herrscher/core/health"
 )
+
+func TestForgeFailureFactsCarryTheRateLimitReset(t *testing.T) {
+	reset := time.Date(2026, 11, 25, 10, 0, 0, 0, time.UTC)
+	facts := health.ForgeFailureFacts(fmt.Errorf("probe: %w", &contracts.ForgeRateLimitedError{Reset: reset}))
+	if !facts.ForgeReset.Equal(reset) {
+		t.Errorf("ForgeReset = %v, want %v", facts.ForgeReset, reset)
+	}
+	if other := health.ForgeFailureFacts(contracts.ErrForgeUnauthorized); !other.ForgeReset.IsZero() {
+		t.Errorf("ForgeReset = %v for a refused credential, want none", other.ForgeReset)
+	}
+}
 
 func TestForgeFailureNamesTheCause(t *testing.T) {
 	tests := []struct {

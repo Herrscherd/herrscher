@@ -46,7 +46,7 @@ func requireGitHub(ctx context.Context, backend Backend, trans translator) error
 	for index := range checks {
 		check := &checks[index]
 		if check.Group == health.GroupForge {
-			return forgeRefusal(check, trans)
+			return forgeRefusal(check, trans, time.Now())
 		}
 	}
 	return missingForgeRefusal(trans)

@@ -16,13 +16,13 @@ var (
 	errForgeRepoUnreadable = errors.New("GitHub cannot read this repository with this connection")
 )
 
-func forgeRefusal(check *health.Check, trans translator) error {
+func forgeRefusal(check *health.Check, trans translator, now time.Time) error {
 	if check.Report.State == contracts.HealthOK {
 		return nil
 	}
 	code := check.Report.Detail.Code
 	if code == contracts.CodeHealthRateLimited {
-		return rateLimitRefusal(check.Facts.Forge, trans)
+		return rateLimitRefusal(refusalReset(check.Facts), trans, now)
 	}
 	if code == contracts.CodeHealthNotLoggedIn {
 		return contracts.ErrForgeNotConnected
@@ -36,11 +36,26 @@ func forgeRefusal(check *health.Check, trans translator) error {
 	return errForgeUnreachable
 }
 
-func rateLimitRefusal(forge *health.Forge, trans translator) error {
-	if forge == nil || forge.Quota == nil || forge.Quota.Reset.IsZero() {
+func refusalReset(facts health.Facts) time.Time {
+	if forge := facts.Forge; forge != nil && forge.Quota != nil && !forge.Quota.Reset.IsZero() {
+		return forge.Quota.Reset
+	}
+	return facts.ForgeReset
+}
+
+func rateLimitRefusal(reset time.Time, trans translator, now time.Time) error {
+	if reset.IsZero() {
 		return errForgeRateLimited
 	}
-	return keyedError{cause: errForgeRateLimited, key: "tui.diffgit.forge_rate_limited_reset", params: map[string]any{"Reset": forge.Quota.Reset.UTC().Format(time.RFC3339)}, catalog: trans.catalog}
+	return keyedError{cause: errForgeRateLimited, key: "tui.diffgit.forge_rate_limited_reset", params: map[string]any{"Reset": resetLabel(reset, now)}, catalog: trans.catalog}
+}
+
+func resetLabel(reset, now time.Time) string {
+	reset = reset.UTC()
+	if reset.Format(time.DateOnly) == now.UTC().Format(time.DateOnly) {
+		return reset.Format("15:04 MST")
+	}
+	return reset.Format("2006-01-02 15:04 MST")
 }
 
 func missingForgeRefusal(trans translator) error {

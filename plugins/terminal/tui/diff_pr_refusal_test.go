@@ -54,7 +54,47 @@ func TestPRRefusalGivesTheResetWhenTheReportCarriesIt(t *testing.T) {
 
 	m, runner, backend := pressPRWithHealth(t, healthWithFacts(t, report, facts))
 
-	requireRefusal(t, m, runner, backend, "GitHub rate limit reached, it resets at 2026-11-25T10:00:00Z")
+	requireRefusal(t, m, runner, backend, "GitHub rate limit reached, it resets at ")
+	requireScreenShows(t, m, "10:00 UTC")
+}
+
+func TestPRRefusalGivesTheResetWhenTheLimitIsSpent(t *testing.T) {
+	limited := &contracts.ForgeRateLimitedError{Reset: time.Date(2026, 11, 25, 10, 0, 0, 0, time.UTC)}
+	report := health.ForgeFailure(limited)
+	facts := health.ForgeFailureFacts(limited)
+
+	m, runner, backend := pressPRWithHealth(t, healthWithFacts(t, report, facts))
+
+	requireRefusal(t, m, runner, backend, "GitHub rate limit reached, it resets at ")
+	requireScreenShows(t, m, "10:00 UTC")
+}
+
+func requireScreenShows(t *testing.T, m *model, want string) {
+	t.Helper()
+	if !strings.Contains(screen(m), want) {
+		t.Fatalf("screen lacks %q:\n%s", want, screen(m))
+	}
+}
+
+func TestResetLabelShowsTheUTCClockAndTheDayOnlyWhenItIsNotToday(t *testing.T) {
+	now := time.Date(2026, 11, 25, 8, 30, 0, 0, time.UTC)
+	paris := time.FixedZone("CET", 60*60)
+	tests := []struct {
+		name  string
+		reset time.Time
+		want  string
+	}{
+		{name: "same UTC day shows the clock", reset: time.Date(2026, 11, 25, 10, 0, 0, 0, time.UTC), want: "10:00 UTC"},
+		{name: "another day adds the date", reset: time.Date(2026, 11, 26, 7, 15, 0, 0, time.UTC), want: "2026-11-26 07:15 UTC"},
+		{name: "another zone is shown in UTC", reset: time.Date(2026, 11, 25, 12, 0, 0, 0, paris), want: "11:00 UTC"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resetLabel(tt.reset, now); got != tt.want {
+				t.Errorf("resetLabel = %q, want %q", got, tt.want)
+			}
+		})
+	}
 }
 
 func TestPRRefusalSaysTheForgeIsUnreachable(t *testing.T) {

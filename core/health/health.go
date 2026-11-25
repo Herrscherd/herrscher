@@ -43,6 +43,7 @@ type Facts struct {
 	CompactionPartial   bool
 	CompactionUnknown   bool
 	Forge               *Forge
+	ForgeReset          time.Time
 }
 
 // Forge is the state of the code forge at the probe: the token source and the

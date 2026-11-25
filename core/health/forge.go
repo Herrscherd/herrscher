@@ -39,6 +39,16 @@ func ForgeFailure(err error) contracts.ProbeReport {
 	return Unreachable(err)
 }
 
+// ForgeFailureFacts are the facts of a forge that gave no connection: the time the
+// rate limit lifts when the forge refused the call for its rate limit.
+func ForgeFailureFacts(err error) Facts {
+	var limited *contracts.ForgeRateLimitedError
+	if errors.As(err, &limited) {
+		return Facts{ForgeReset: limited.Reset}
+	}
+	return Facts{}
+}
+
 // Unreachable is the report of a service that could not be asked, with the
 // technical reason.
 func Unreachable(err error) contracts.ProbeReport {

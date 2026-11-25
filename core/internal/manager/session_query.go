@@ -27,6 +27,53 @@ type sessionJSON struct {
 	Resumable    bool              `json:"resumable"`
 	Usage        *usageJSON        `json:"usage,omitempty"`
 	Task         string            `json:"task,omitempty"`
+	PullRequest  *pullRequestJSON  `json:"pullRequest,omitempty"`
+}
+
+type pullRequestJSON struct {
+	Number int    `json:"number"`
+	State  string `json:"state"`
+	Draft  bool   `json:"draft"`
+	URL    string `json:"url,omitempty"`
+}
+
+func pullRequestJSONView(record state.PullRequestRecord) *pullRequestJSON {
+	return &pullRequestJSON{Number: record.Number, State: pullRequestStateID(record.State), Draft: record.Draft, URL: record.URL}
+}
+
+func pullRequestStateID(value contracts.PullRequestState) string {
+	switch value {
+	case contracts.PullRequestOpen:
+		return "open"
+	case contracts.PullRequestClosed:
+		return "closed"
+	case contracts.PullRequestMerged:
+		return "merged"
+	}
+	return "unknown"
+}
+
+func pullRequestStateKey(record state.PullRequestRecord) clitext.Key {
+	if record.Draft && record.State == contracts.PullRequestOpen {
+		return clitext.SessionPRStateDraft
+	}
+	switch record.State {
+	case contracts.PullRequestOpen:
+		return clitext.SessionPRStateOpen
+	case contracts.PullRequestClosed:
+		return clitext.SessionPRStateClosed
+	case contracts.PullRequestMerged:
+		return clitext.SessionPRStateMerged
+	}
+	return clitext.SessionPRStateUnknown
+}
+
+func (h *Handler) sessionPullRequestText(session state.Session) string {
+	record := session.PullRequestRecord()
+	return h.text(clitext.SessionListPullRequest, clitext.Params{
+		clitext.ParamNumber: record.Number,
+		clitext.ParamState:  h.text(pullRequestStateKey(record), nil),
+	})
 }
 
 type usageJSON struct {
@@ -79,11 +126,15 @@ func sessionJSONRow(session state.Session) sessionJSON {
 	if session.Archived {
 		status = "archived"
 	}
-	return sessionJSON{
+	row := sessionJSON{
 		ID: session.Name, Incarnation: session.Incarnation, Name: session.Name, Agent: session.Agent, Project: session.Project, Status: status,
 		Worktree: session.Worktree, Gateways: gateways, Parent: session.Parent,
 		Resumable: session.ResumeToken != "",
 	}
+	if session.PullRequest != 0 {
+		row.PullRequest = pullRequestJSONView(session.PullRequestRecord())
+	}
+	return row
 }
 
 func (h *Handler) sessionListRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
@@ -114,8 +165,12 @@ func (h *Handler) sessionListRun(_ context.Context, input contracts.Input) (cont
 	var out strings.Builder
 	out.WriteString(h.text(clitext.SessionListHeader, nil) + "\n")
 	for i := range sessions {
-		s := sessions[i]
-		fmt.Fprintf(&out, "• %s (%s) %s\n", s.Name, s.Type, h.adminFor(s).ChannelRef(s.ChannelID))
+		session := sessions[i]
+		fmt.Fprintf(&out, "• %s (%s) %s", session.Name, session.Type, h.adminFor(session).ChannelRef(session.ChannelID))
+		if session.PullRequest != 0 {
+			out.WriteString(" " + h.sessionPullRequestText(session))
+		}
+		out.WriteString("\n")
 	}
 	return contracts.DataResult(out.String()), nil
 }

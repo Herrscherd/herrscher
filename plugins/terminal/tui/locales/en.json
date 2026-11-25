@@ -609,6 +609,38 @@
     "other": "project"
   },
   {
+    "id": "tui.status.label_pull_request",
+    "other": "pull request"
+  },
+  {
+    "id": "tui.pr.label",
+    "other": "#{{.Number}} {{.State}}"
+  },
+  {
+    "id": "tui.pr.state.open",
+    "other": "open"
+  },
+  {
+    "id": "tui.pr.state.closed",
+    "other": "closed"
+  },
+  {
+    "id": "tui.pr.state.merged",
+    "other": "merged"
+  },
+  {
+    "id": "tui.pr.state.draft",
+    "other": "draft"
+  },
+  {
+    "id": "tui.pr.state.unknown",
+    "other": "unknown state"
+  },
+  {
+    "id": "tui.sidebar.pull_request",
+    "other": "pull request"
+  },
+  {
     "id": "tui.status.label_context",
     "other": "context"
   },

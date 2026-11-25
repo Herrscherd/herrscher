@@ -178,6 +178,9 @@ func (m *model) usageReport(tab *tab) string {
 	if known && info.Project != "" {
 		lines = append(lines, m.usageRow("tui.status.label_project", info.Project))
 	}
+	if pr := m.pullRequestText(info.PullRequest); pr != "" {
+		lines = append(lines, m.usageRow("tui.status.label_pull_request", pr))
+	}
 	if used := m.contextTokens(tab); used > 0 {
 		lines = append(lines,
 			m.usageRow("tui.status.label_context", formatContext(used, limit)+"  ("+contextPercent(used, limit)+")"),

@@ -609,6 +609,38 @@
     "other": "projet"
   },
   {
+    "id": "tui.status.label_pull_request",
+    "other": "pull request"
+  },
+  {
+    "id": "tui.pr.label",
+    "other": "#{{.Number}} {{.State}}"
+  },
+  {
+    "id": "tui.pr.state.open",
+    "other": "ouverte"
+  },
+  {
+    "id": "tui.pr.state.closed",
+    "other": "fermée"
+  },
+  {
+    "id": "tui.pr.state.merged",
+    "other": "fusionnée"
+  },
+  {
+    "id": "tui.pr.state.draft",
+    "other": "brouillon"
+  },
+  {
+    "id": "tui.pr.state.unknown",
+    "other": "état inconnu"
+  },
+  {
+    "id": "tui.sidebar.pull_request",
+    "other": "pull request"
+  },
+  {
     "id": "tui.status.label_context",
     "other": "contexte"
   },

@@ -5655,6 +5655,26 @@
     "other": "session {{.Name}} : pull request #{{.Number}} ouverte à {{.URL}} mais non enregistrée dans la session : {{.Err}}"
   },
   {
+    "id": "cli.session.pr.refresh_unrecorded",
+    "description": "Échec : la session n'a pas pu enregistrer l'état rafraîchi de la pull request",
+    "other": "session {{.Name}} : l'état de la pull request n'a pas pu être enregistré dans la session : {{.Err}}"
+  },
+  {
+    "id": "cli.session.pr.state.draft",
+    "description": "Mot d'état de pull request pour un brouillon",
+    "other": "brouillon"
+  },
+  {
+    "id": "cli.session.pr.state.unknown",
+    "description": "Mot d'état de pull request quand l'état du forge est inconnu",
+    "other": "état inconnu"
+  },
+  {
+    "id": "cli.session.list.pull_request",
+    "description": "Partie pull request d'une ligne de la liste des sessions",
+    "other": "PR #{{.Number}} {{.State}}"
+  },
+  {
     "id": "cli.session.pr.opening",
     "description": "Refus : un pr open est déjà en cours pour cette session",
     "other": "la session {{.Name}} a déjà une pull request en cours d'ouverture"

@@ -5655,6 +5655,26 @@
     "other": "session {{.Name}}: pull request #{{.Number}} was opened at {{.URL}} but could not be recorded in the session: {{.Err}}"
   },
   {
+    "id": "cli.session.pr.refresh_unrecorded",
+    "description": "Failure: the session could not record the refreshed pull request state",
+    "other": "session {{.Name}}: the pull request state could not be recorded in the session: {{.Err}}"
+  },
+  {
+    "id": "cli.session.pr.state.draft",
+    "description": "Pull request state word of a draft",
+    "other": "draft"
+  },
+  {
+    "id": "cli.session.pr.state.unknown",
+    "description": "Pull request state word when the forge state is not known",
+    "other": "unknown state"
+  },
+  {
+    "id": "cli.session.list.pull_request",
+    "description": "Pull request part of a session list line",
+    "other": "PR #{{.Number}} {{.State}}"
+  },
+  {
     "id": "cli.session.pr.opening",
     "description": "Refusal: a pr open for this session is still running",
     "other": "session {{.Name}}: a pull request is already being opened"

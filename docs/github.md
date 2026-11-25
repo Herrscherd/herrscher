@@ -167,13 +167,15 @@ the same token and only for github.com:
   HEAD must already be on the remote branch, or the command refuses. The origin
   must be a github.com repository. The base defaults to the branch that the
   local `origin/HEAD` names, and when that ref is missing `--base` is required.
-  The number of the pull request is recorded in the session state, and a session
-  that already has one is refused. A session that runs on another host is refused
+  The session state records the number, the state, the draft flag and the URL of
+  the pull request, all at once, and a session that already has one is refused.
+  A session that runs on another host is refused
   too, and a second open while the first is still running is refused. If GitHub
   opens the pull request but the number cannot be recorded, the command reports
   the URL and the number so the pull request is not lost.
-- `herrscher session pr status --name <session>` shows the title, URL, state,
-  draft flag, mergeability and head commit of the recorded pull request.
+- `herrscher session pr status --name <session>` reads the pull request again,
+  stores its state, draft flag and URL in the session, and shows the title, URL,
+  state, draft flag, mergeability and head commit.
 - `herrscher session pr checks --name <session>` lists the check runs of its head
   commit, reading every page up to a fixed bound.
 - `herrscher session pr comments --name <session>` lists the review threads, the
@@ -187,6 +189,18 @@ as the remedy, a rate limit gives the time of the reset, and a session without a
 pull request says to run `session pr open` first. The token reaches git only
 through its environment, never through arguments, and it does not appear in
 output or errors.
+
+`herrscher session list` shows the pull request of each session that has one,
+after the channel of the session, as `PR #42 open`, `PR #42 draft`,
+`PR #42 merged` or `PR #42 unknown state`. A draft is an open pull request
+marked as a draft. The `--json` form adds a `pullRequest` object with `number`,
+`state` (`open`, `closed`, `merged` or `unknown`, always in English), `draft` and
+`url`. A session without a pull request omits the field.
+
+A session whose pull request was recorded before its state was stored keeps its
+number with the state `unknown`. The session info that the TUI and the gateways
+receive carries no pull request for such a session, so they show nothing until
+`session pr status` stores the state, draft flag and URL.
 
 ## Repositories to clone
 

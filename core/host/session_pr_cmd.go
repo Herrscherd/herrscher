@@ -56,6 +56,7 @@ type sessionPRs struct {
 }
 
 type prTarget struct {
+	name     string
 	language i18n.Language
 	forge    contracts.Forge
 	ref      contracts.PullRequestRef
@@ -196,7 +197,8 @@ func (p sessionPRs) openPR(ctx context.Context, input contracts.Input) (string, 
 		return "", p.failure(language, err)
 	}
 	number := opened.Ref.Number()
-	if err := p.store.RecordPullRequest(name, number); err != nil {
+	record := state.PullRequestRecord{Number: number, State: opened.State, Draft: opened.Draft, URL: opened.URL}
+	if err := p.store.RecordPullRequest(name, record); err != nil {
 		return "", p.messages.Failure(language, err, clitext.SessionPROpenedUnrecorded, clitext.Params{
 			clitext.ParamName:   escapeLine(name),
 			clitext.ParamNumber: number,
@@ -215,6 +217,9 @@ func (p sessionPRs) status(ctx context.Context, input contracts.Input) (contract
 	pullRequest, err := target.forge.PullRequest(ctx, target.ref, contracts.Revision(""))
 	if err != nil {
 		return contracts.Result{}, p.failure(target.language, err)
+	}
+	if recordErr := p.recordRefresh(target, pullRequest); recordErr != nil {
+		return contracts.Result{}, recordErr
 	}
 	if input.JSON {
 		return cli.Data(marshalJSON(prStatusView{
@@ -410,7 +415,18 @@ func (p sessionPRs) target(ctx context.Context, name string) (prTarget, error) {
 	if err != nil {
 		return prTarget{}, p.failure(language, err)
 	}
-	return prTarget{language: language, forge: client, ref: ref}, nil
+	return prTarget{name: name, language: language, forge: client, ref: ref}, nil
+}
+
+func (p sessionPRs) recordRefresh(target prTarget, pullRequest contracts.PullRequest) error {
+	record := state.PullRequestRecord{Number: target.ref.Number(), State: pullRequest.State, Draft: pullRequest.Draft, URL: pullRequest.URL}
+	if err := p.store.RefreshPullRequest(target.name, record); err != nil {
+		return p.messages.Failure(target.language, err, clitext.SessionPRRefreshUnrecorded, clitext.Params{
+			clitext.ParamName: escapeLine(target.name),
+			clitext.ParamErr:  escapeLine(err.Error()),
+		})
+	}
+	return nil
 }
 
 func (p sessionPRs) failure(language i18n.Language, err error) error {

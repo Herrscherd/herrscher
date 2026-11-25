@@ -137,6 +137,9 @@ func (m *model) sessionSection(tab *tab, info contracts.SessionInfo, branch stri
 	if len(where) > 0 {
 		lines = append(lines, sideRow(strings.Join(where, m.st.dim.Render(" : ")), width))
 	}
+	if pr := m.pullRequestText(info.PullRequest); pr != "" {
+		lines = append(lines, sideRow(m.st.dim.Render(m.tr.t("tui.sidebar.pull_request", nil)+" ")+m.st.text.Render(pr), width))
+	}
 	if info.Dir != "" {
 		lines = append(lines, sideRow(m.st.dim.Render(m.tr.t("tui.sidebar.worktree", nil)+" ")+m.st.text.Render(shortPath(info.Dir)), width))
 	}

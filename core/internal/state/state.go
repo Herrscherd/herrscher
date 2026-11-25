@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"sync"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
+
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
 )
 
@@ -103,7 +105,10 @@ type Session struct {
 
 	Participants []string `json:"participants,omitempty"`
 
-	PullRequest int `json:"pullRequest,omitempty"`
+	PullRequest      int                        `json:"pullRequest,omitempty"`
+	PullRequestState contracts.PullRequestState `json:"pullRequestState,omitempty"`
+	PullRequestDraft bool                       `json:"pullRequestDraft,omitempty"`
+	PullRequestURL   string                     `json:"pullRequestUrl,omitempty"`
 
 	// Parent names the lead session that delegated this one (result-back P3).
 	// Empty = no parent. The coordinator reads it to find the delivery target

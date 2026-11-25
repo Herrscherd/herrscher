@@ -31,7 +31,7 @@ func TestStableSubscriptionResetsTheFeedBackoff(t *testing.T) {
 	stop()
 }
 
-func TestDeliveredSignalResetsTheFeedBackoff(t *testing.T) {
+func TestSignalThenCloseKeepsTheGrowingBackoff(t *testing.T) {
 	clock := newFakeClock()
 	feed := &fakeFeed{clock: clock, refuse: errBoom, signals: make(chan contracts.PullRequestSignal)}
 	reader := newFakeReader(clock)
@@ -49,8 +49,8 @@ func TestDeliveredSignalResetsTheFeedBackoff(t *testing.T) {
 	reader.awaitRead(t)
 	clock.awaitArm(t)
 	close(feed.signals)
-	if again := clock.awaitArm(t); again != time.Second {
-		t.Fatalf("wait after a subscription that delivered a signal = %v, want the backoff reset to the first step", again)
+	if again := clock.awaitArm(t); again != 2*time.Second {
+		t.Fatalf("wait after a signal then a close = %v, want the backoff to keep growing to 2s", again)
 	}
 	stop()
 }

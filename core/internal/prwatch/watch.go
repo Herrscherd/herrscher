@@ -138,7 +138,6 @@ func (r *runner) idle(ctx context.Context, due time.Duration) bool {
 				r.dropFeed(signal.Err)
 				break
 			}
-			r.feedFailures = r.watch.Policy.Backoff
 			deadline = r.watch.Clock.Now()
 		}
 	}

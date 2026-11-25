@@ -143,6 +143,68 @@ func TestAnInterruptedTurnsReplyCarriesTheInterruptedOutcome(t *testing.T) {
 	}
 }
 
+type silentBackend struct{ started chan struct{} }
+
+func (b silentBackend) Respond(ctx context.Context, _ contracts.Prompt, _ func(contracts.BackendEvent)) (string, error) {
+	close(b.started)
+	<-ctx.Done()
+	return "", ctx.Err()
+}
+
+func (silentBackend) Close() error { return nil }
+
+type nilAfterCancelBackend struct{ started chan struct{} }
+
+func (b nilAfterCancelBackend) Respond(ctx context.Context, _ contracts.Prompt, _ func(contracts.BackendEvent)) (string, error) {
+	close(b.started)
+	<-ctx.Done()
+	return "half a thought", nil
+}
+
+func (nilAfterCancelBackend) Close() error { return nil }
+
+func interruptTurnAfterStart(t *testing.T, be contracts.Backend, started chan struct{}) (contracts.Event, error) {
+	t.Helper()
+	ctrl := &turnController{}
+	sink := &recordSink{}
+	result := make(chan error, 1)
+	go func() {
+		result <- runOneTurn(context.Background(), sink, be, nil, contracts.Event{T: eventwire.EventInput, Text: "go"}, ctrl, nil, affordances{}, nil, 0)
+	}()
+	<-started
+	ctrl.interrupt()
+	err := <-result
+	return finalReply(t, sink), err
+}
+
+func TestAnInterruptedTurnWithoutOutputStillCarriesTheOutcome(t *testing.T) {
+	be := silentBackend{started: make(chan struct{})}
+	reply, err := interruptTurnAfterStart(t, be, be.started)
+	if err != nil {
+		t.Fatalf("runOneTurn: %v", err)
+	}
+	if reply.Outcome != contracts.TurnInterrupted {
+		t.Fatalf("final reply outcome = %q, want %q", reply.Outcome, contracts.TurnInterrupted)
+	}
+	if reply.Text != "" {
+		t.Fatalf("an interrupted turn without output must not invent a reply text; got %q", reply.Text)
+	}
+}
+
+func TestAnInterruptedTurnThatReturnsNoErrorCarriesTheOutcome(t *testing.T) {
+	be := nilAfterCancelBackend{started: make(chan struct{})}
+	reply, err := interruptTurnAfterStart(t, be, be.started)
+	if err != nil {
+		t.Fatalf("runOneTurn: %v", err)
+	}
+	if reply.Outcome != contracts.TurnInterrupted {
+		t.Fatalf("final reply outcome = %q, want %q", reply.Outcome, contracts.TurnInterrupted)
+	}
+	if reply.Text != "half a thought" {
+		t.Fatalf("partial output must survive the interrupt; got %q", reply.Text)
+	}
+}
+
 func finalReply(t *testing.T, sink *recordSink) contracts.Event {
 	t.Helper()
 	if len(sink.events) == 0 {

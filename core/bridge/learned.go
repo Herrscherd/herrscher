@@ -23,6 +23,7 @@ type skillUser interface {
 	SkillUsed(ctx context.Context, names []string)
 }
 
+// ProjectLearnedSkills writes the active learned skills under the learned root of cwd.
 func ProjectLearnedSkills(ctx context.Context, orch contracts.Orchestrator, cwd string) {
 	src, ok := orch.(skillSource)
 	if !ok {

@@ -316,6 +316,7 @@ func (c *consolidateSpy) Close() error { return nil }
 
 type learnedSkillSpy struct {
 	consolidateSpy
+
 	skill contracts.Node
 }
 

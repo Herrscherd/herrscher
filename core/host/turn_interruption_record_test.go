@@ -18,10 +18,8 @@ func interruptionDriver(t *testing.T, partDir string) *sessionDriver {
 	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "main", nil, make(chan contracts.Event, 8), make(chan contracts.Event, 8), io.Discard)
 	d.gate = noBudgetGate{}
 	d.activeTurnID = "turn-1"
-	d.sink.Transcript = func(e state.TranscriptEntry) {
-		if err := state.AppendTranscript(state.TranscriptPath(partDir, "main"), e); err != nil {
-			t.Fatal(err)
-		}
+	d.sink.Transcript = func(e state.TranscriptEntry) error {
+		return state.AppendTranscript(state.TranscriptPath(partDir, "main"), e)
 	}
 	return d
 }

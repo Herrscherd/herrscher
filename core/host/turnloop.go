@@ -55,7 +55,7 @@ func (g *tokenGuard) trips(event contracts.Event) (uint64, bool) {
 type sessionSink struct {
 	Resume      func(token string)
 	Project     func(project string)
-	Transcript  func(state.TranscriptEntry)
+	Transcript  func(state.TranscriptEntry) error
 	Checkpoint  func(turnID, text string)
 	Usage       func([]usage.Record)
 	TurnOpened  func(turnID string)

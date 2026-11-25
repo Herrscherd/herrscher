@@ -68,7 +68,7 @@ func startBlockedTranscriptWrite(t *testing.T, h *hub, name string) <-chan struc
 	written := make(chan struct{})
 	go func() {
 		defer close(written)
-		sink.Transcript(state.TranscriptEntry{Role: "user", Text: "dernière écriture"})
+		logCleanup(sink.Transcript(state.TranscriptEntry{Role: "user", Text: "dernière écriture"}))
 	}()
 	awaitPersistWriteInFlight(t, h)
 	return written

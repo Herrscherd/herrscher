@@ -33,10 +33,12 @@ func (h *hub) liveSink(ctx context.Context, sess state.Session) sessionSink {
 				warnLive(h.messages, h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_project_pin", map[string]any{nameParam: sess.Name, detailParam: err})
 			}
 		},
-		Transcript: func(e state.TranscriptEntry) {
-			if err := h.appendTranscript(sess.Name, e); err != nil {
+		Transcript: func(e state.TranscriptEntry) error {
+			err := h.appendTranscript(sess.Name, e)
+			if err != nil {
 				warnLive(h.messages, h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
 			}
+			return err
 		},
 		Checkpoint: func(turnID, text string) {
 			h.takeCheckpoint(ctx, sess, turnID, text)

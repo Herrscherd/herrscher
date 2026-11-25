@@ -37,12 +37,12 @@ func (g *turnIDRoutedGateway) EmitTo(_ contracts.Conversation, e contracts.Event
 func TestRecordEntryStampsTheActiveTurn(t *testing.T) {
 	var got []state.TranscriptEntry
 	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s", nil, make(chan contracts.Event, 8), make(chan contracts.Event, 8), io.Discard)
-	d.sink.Transcript = func(e state.TranscriptEntry) { got = append(got, e) }
+	d.sink.Transcript = func(e state.TranscriptEntry) error { got = append(got, e); return nil }
 
 	d.activeTurnID = "turn-7"
-	d.recordEntry("assistant", "hi", "hi", 0, turnUsage{})
+	logCleanup(d.recordEntry("assistant", "hi", "hi", 0, turnUsage{}))
 	d.activeTurnID = ""
-	d.recordEntry("notice", "hors tour", "hors tour", 0, turnUsage{})
+	logCleanup(d.recordEntry("notice", "hors tour", "hors tour", 0, turnUsage{}))
 
 	if len(got) != 2 {
 		t.Fatalf("want 2 entries, got %d", len(got))
@@ -120,7 +120,7 @@ func TestTurnRecordsUserAndAssistantWithTheTurnID(t *testing.T) {
 	gateway := &turnIDPlainGateway{}
 	fromBridge := make(chan contracts.Event, 1)
 	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", []contracts.GatewaySet{{Gateway: gateway, Reader: gateway}}, make(chan contracts.Event, 8), fromBridge, io.Discard)
-	d.sink.Transcript = func(e state.TranscriptEntry) { entries = append(entries, e) }
+	d.sink.Transcript = func(e state.TranscriptEntry) error { entries = append(entries, e); return nil }
 	d.terms = func() modelTerms { return modelTerms{rates: sonnetRates()} }
 	ctx := context.Background()
 

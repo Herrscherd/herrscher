@@ -17,7 +17,7 @@ func completeTurnCapturing(t *testing.T, d *sessionDriver, reply contracts.Event
 	t.Helper()
 	var entries []state.TranscriptEntry
 	var replies []contracts.Event
-	d.sink.Transcript = func(e state.TranscriptEntry) { entries = append(entries, e) }
+	d.sink.Transcript = func(e state.TranscriptEntry) error { entries = append(entries, e); return nil }
 	d.emitTap = func(e contracts.Event) {
 		if e.T == eventwire.EventReply {
 			replies = append(replies, e)

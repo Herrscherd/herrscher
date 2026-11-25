@@ -117,7 +117,7 @@ func (d *sessionDriver) prepareTurn(ctx context.Context, item queued) (contracts
 	if d.sink.Checkpoint != nil {
 		d.sink.Checkpoint(event.TurnID, event.Text)
 	}
-	d.recordEntry("user", event.Text, event.Text, 0, turnUsage{})
+	logCleanup(d.recordEntry("user", event.Text, event.Text, 0, turnUsage{}))
 	d.fanOut(ctx, contracts.Event{T: eventwire.EventHuman, Who: event.Who, Text: event.Text})
 	return event, tokenGuard{headroom: verdict.Headroom, capped: verdict.Capped}, true
 }

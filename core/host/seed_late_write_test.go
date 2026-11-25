@@ -140,7 +140,7 @@ func TestOneShotTapsRecordNothingOnceTheSeedHasReturned(t *testing.T) {
 	gate := attachOneShotTaps(driver, state.Session{Name: "seed-a"}, runtime)
 
 	driver.emitTap(contracts.Event{T: eventwire.EventReply})
-	driver.sink.Transcript(state.TranscriptEntry{})
+	logCleanup(driver.sink.Transcript(state.TranscriptEntry{}))
 	driver.sink.Usage([]usage.Record{{In: 1}})
 	if want := []string{"publish", "transcript", "usage"}; !slices.Equal(recorded, want) {
 		t.Fatalf("while the seed runs the taps recorded %v, want %v", recorded, want)
@@ -148,7 +148,7 @@ func TestOneShotTapsRecordNothingOnceTheSeedHasReturned(t *testing.T) {
 
 	gate.shut()
 	driver.emitTap(contracts.Event{T: eventwire.EventReply})
-	driver.sink.Transcript(state.TranscriptEntry{})
+	logCleanup(driver.sink.Transcript(state.TranscriptEntry{}))
 	driver.sink.Usage([]usage.Record{{In: 1}})
 	if want := []string{"publish", "transcript", "usage"}; !slices.Equal(recorded, want) {
 		t.Fatalf("after the seed returned the taps recorded %v, want nothing more than %v", recorded, want)

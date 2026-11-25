@@ -363,6 +363,21 @@ func TestASeedWithACadenceDoesNotConsolidateTwice(t *testing.T) {
 	}
 }
 
+func TestASeedWhoseCadenceNeverFallsInOneTurnStillConsolidates(t *testing.T) {
+	backend := func(context.Context, state.Session) (contracts.Backend, error) {
+		return seedBackend{}, nil
+	}
+
+	sess := state.Session{Name: "solo", ChannelID: "channel", ConsolidateEvery: 10}
+	spy := &consolidateSpy{}
+	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), spy, oneShotSeedRuntime{desk: seedDesk(t), persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), backend: backend}); err != nil {
+		t.Fatalf("runOneShotSeedWith: %v", err)
+	}
+	if !spy.called {
+		t.Fatal("a one-shot at the default cadence of 10 never reaches it, so it must consolidate at its end or learn nothing")
+	}
+}
+
 func TestSeedBackendUsesTheStoredAccountThroughTheProxy(t *testing.T) {
 	saved := contracts.Default
 	t.Cleanup(func() { contracts.Default = saved })

@@ -20,6 +20,8 @@ import (
 
 const seedConsolidateTimeout = 60 * time.Second
 
+const oneShotTurns = 1
+
 const seedTurnTimeout = 120 * time.Second
 
 const seedJoinGrace = 2 * time.Second
@@ -345,8 +347,12 @@ func (r oneShotSeedRuntime) languageOf(sess state.Session) languageSource {
 	return func() i18n.Language { return knownSessionLanguage(sess) }
 }
 
+func cadenceConsolidatedTheOneShot(every int) bool {
+	return every > 0 && oneShotTurns%every == 0
+}
+
 func consolidateOneShot(ctx context.Context, orch contracts.Orchestrator, gate *seedGate, sess state.Session, messages *hostMessages, warn io.Writer, lang languageSource) {
-	if orch == nil || sess.ConsolidateEvery > 0 {
+	if orch == nil || cadenceConsolidatedTheOneShot(sess.ConsolidateEvery) {
 		return
 	}
 	gate.shut()

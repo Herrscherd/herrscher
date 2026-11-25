@@ -335,11 +335,13 @@ The memory tokens per turn of a single task vary by about 10000 from one run to
 the next, because the agent sometimes reads the repository before it answers.
 Only the `learned-skills` procedure gap stands clear of that noise.
 
-The likely cause of the `learned-skills` failure is that the extractor files a
-procedure as a private skill. With the setting on, it becomes a `SKILL.md` the
-agent has to open rather than a fact the recall injects, and Haiku answered
-without opening it. This is not verified yet; it is followed in
-[#274](https://github.com/Herrscherd/herrscher/issues/274).
+The cause of the `learned-skills` failure, found in
+[#274](https://github.com/Herrscherd/herrscher/issues/274) after this run: the
+extractor files a procedure as a private skill, and with the setting on it
+leaves the recall, which skips skill nodes. It was meant to come back as a
+`SKILL.md`, but a one-shot run never projected it, and the claude CLI never read
+the directory it was projected into. Both are fixed; the setting stays off
+until the bench measures it again.
 
 ### LongMemEval
 
@@ -361,7 +363,7 @@ places the recall layer, it does not decide a setting.
 
 | Setting | Default | Decision | Why |
 |---|---|---|---|
-| `MEMORY_LEARNED_SKILLS` | off | kept as an option, off | In 3 of 3 runs a taught procedure was not recalled with the setting on, against 3 of 3 recalled off, at about 32000 more tokens per turn. The cause is not verified ([#274](https://github.com/Herrscherd/herrscher/issues/274)). To revisit once a learned skill reaches the agent as reliably as a recalled fact. |
+| `MEMORY_LEARNED_SKILLS` | off | kept as an option, off | In 3 of 3 runs a taught procedure was not recalled with the setting on, against 3 of 3 recalled off, at about 32000 more tokens per turn. The cause, a learned skill reaching a claude session through no path, is fixed ([#274](https://github.com/Herrscherd/herrscher/issues/274)); to measure again before a new default. |
 | `MEMORY_RAW_ARCHIVE` | off | kept as an option, off | No measured gain: recall does not read it. It writes one node per turn. |
 | `MEMORY_REPORT_ENABLED` | on | kept on | No effect on recall or cost, and it is the audit trail of each pass. |
 | `MEMORY_PROMOTE_MIN_AGE_DAYS` | 0, off | kept as an option, not measured | It acts after days pass; the bench has no simulated clock. |

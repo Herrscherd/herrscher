@@ -13,6 +13,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/lease"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
+	"github.com/Herrscherd/herrscher/core/skills"
 )
 
 // BackendRequest is everything building a backend needs.
@@ -29,6 +30,7 @@ type BackendRequest struct {
 	Models       *ModelDiscovery
 	Session      string
 	SessionToken string
+	SkillRoot    string
 
 	resolver remoteBackendResolver
 }
@@ -181,6 +183,7 @@ func applyBackendRequest(settings map[string]string, req BackendRequest, route m
 	setIfPresent(settings, "kind", req.Kind)
 	setIfPresent(settings, "dir", req.Dir)
 	setIfPresent(settings, "resume", req.Resume)
+	setIfPresent(settings, "skill-root", req.SkillRoot)
 	setIfPresent(settings, "model", route.arg)
 	if env := withSessionIdentity(route.env, req.Session, req.SessionToken); len(env) > 0 {
 		settings["env"] = contracts.EncodeEnvSetting(env)
@@ -211,15 +214,13 @@ func newSeedBackend(ctx context.Context, messages *hostMessages, sess state.Sess
 }
 
 func newSeedBackendWithToken(ctx context.Context, messages *hostMessages, sess state.Session, keys *keyproxy.Proxy, models *ModelDiscovery, token string) (contracts.Backend, error) {
-	dir := sess.Dir
-	if dir == "" {
-		dir = sess.Worktree
-	}
+	dir := seedBackendDir(sess)
 	return buildBackendFor(ctx, messages, BackendRequest{
 		Vendor:       sess.Vendor,
 		Cmd:          sess.Cmd,
 		Kind:         sess.Backend,
-		Dir:          resolveBackendDir(dir),
+		Dir:          dir,
+		SkillRoot:    learnedHomeOf(seedRunDir(sess)),
 		Resume:       sess.ResumeToken,
 		ModelID:      sess.ModelID,
 		Account:      sess.Account,
@@ -228,6 +229,32 @@ func newSeedBackendWithToken(ctx context.Context, messages *hostMessages, sess s
 		Session:      sess.Name,
 		SessionToken: token,
 	})
+}
+
+func seedBackendDir(sess state.Session) string {
+	dir := sess.Dir
+	if dir == "" {
+		dir = sess.Worktree
+	}
+	return resolveBackendDir(dir)
+}
+
+func seedRunDir(sess state.Session) string {
+	if dir := seedBackendDir(sess); dir != "" {
+		return dir
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	return cwd
+}
+
+func learnedHomeOf(dir string) string {
+	if dir == "" || skills.LinkedLearnedDir(dir) != "" {
+		return ""
+	}
+	return skills.LearnedHome(dir)
 }
 
 func resolveBackendDir(dir string) string {

@@ -84,16 +84,20 @@ func loadTasks(cfg config) ([]task, int, error) {
 func execute(ctx context.Context, cfg config, tasks []task, skipped int, msgs catalogue) (report, error) {
 	parent, err := benchParent()
 	if err != nil {
-		return report{}, err
+		return failedReport(report{}, msgs, cfg.lang, err)
 	}
 	rep, runErr := measure(ctx, cfg, tasks, skipped, parent)
 	cleanupErr := os.RemoveAll(parent)
-	if runErr != nil {
-		rep.Status = statusFailed
-		rep.Failure = failureText(msgs, cfg.lang, runErr)
-		return rep, errors.Join(runErr, cleanupErr)
+	if failure := errors.Join(runErr, cleanupErr); failure != nil {
+		return failedReport(rep, msgs, cfg.lang, failure)
 	}
-	return rep, cleanupErr
+	return rep, nil
+}
+
+func failedReport(rep report, msgs catalogue, lang i18n.Language, cause error) (report, error) {
+	rep.Status = statusFailed
+	rep.Failure = failureText(msgs, lang, cause)
+	return rep, cause
 }
 
 func benchParent() (string, error) {
@@ -103,7 +107,7 @@ func benchParent() (string, error) {
 	}
 	benchRoot := filepath.Join(cacheRoot, benchDirName)
 	if err = os.MkdirAll(benchRoot, dirMode); err != nil {
-		return "", cacheError(err)
+		return "", pathError(msgErrCacheRoot, benchRoot, err)
 	}
 	if sweepErr := sweepOrphans(benchRoot); sweepErr != nil {
 		return "", sweepErr

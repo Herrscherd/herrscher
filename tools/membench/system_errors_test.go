@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
@@ -107,7 +108,7 @@ func TestSystemErrorsReadInFrench(t *testing.T) {
 			name: "run timed out",
 			err: func(t *testing.T) error {
 				t.Helper()
-				return runFailure("arm", fmt.Errorf("%w: stderr", context.DeadlineExceeded))
+				return timedOutRun(t)
 			},
 			want: "échec de l'exécution arm : délai dépassé",
 		},
@@ -151,7 +152,7 @@ func TestSystemErrorsReadInFrench(t *testing.T) {
 				_, err := benchParent()
 				return err
 			},
-			want: "répertoire de cache de membench inutilisable",
+			want: "répertoire de cache de membench inutilisable : " + filepath.Join(plain, benchDirName),
 		},
 		{
 			name: "sandbox parent missing",
@@ -224,6 +225,67 @@ func TestSystemErrorsReadInFrench(t *testing.T) {
 
 func budgetArgs(extra ...string) []string {
 	return append([]string{"-budget-tokens", "10", "-reserve-tokens", "5"}, extra...)
+}
+
+func timedOutRun(t *testing.T) error {
+	t.Helper()
+	binary := filepath.Join(t.TempDir(), "fake")
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\nexec sleep 30\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	box, err := newSandbox(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	r := runner{binary: binary, model: defaultModel}
+	_, invokeErr := r.invoke(ctx, box, step{agent: agentAlpha, prompt: "x"}, nil)
+	return runFailure("arm", invokeErr)
+}
+
+func TestDetailNeverLeaksSecretAcrossTheCutoff(t *testing.T) {
+	const secret = "placeholder-key"
+	binary := filepath.Join(t.TempDir(), "fake")
+	padding := strings.Repeat("a", maxDetailBytes-len(secret)/2)
+	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' '%s%s' >&2\nexit 3\n", padding, secret)
+	if err := os.WriteFile(binary, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	box, err := newSandbox(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := runner{binary: binary, model: defaultModel, apiKey: secret}
+	_, invokeErr := r.invoke(context.Background(), box, step{agent: agentAlpha, prompt: "x"}, nil)
+	got := failureText(loadCatalogue(), i18n.French, runFailure("arm", invokeErr))
+	if fragment := secret[:len(secret)/2]; strings.Contains(got, fragment) {
+		t.Errorf("failure text %q keeps the secret fragment %q", got, fragment)
+	}
+}
+
+func TestUnusableCacheStillWritesFailedStatus(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_CACHE_HOME", "")
+	binary := filepath.Join(t.TempDir(), "fake")
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	msgs := loadCatalogue()
+	cfg, err := parseConfig(budgetArgs("-herrscher", binary), nil, msgs, i18n.English, noEnv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep, runErr := execute(t.Context(), cfg, nil, 0, msgs)
+	if runErr == nil {
+		t.Fatal("execute returned no error without a cache directory")
+	}
+	if rep.Status != statusFailed {
+		t.Errorf("status %q, want %q", rep.Status, statusFailed)
+	}
+	if rep.Failure == "" {
+		t.Error("the report carries no failure text")
+	}
 }
 
 func TestRunFailureKeepsRedactedStderr(t *testing.T) {

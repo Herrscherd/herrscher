@@ -25,7 +25,7 @@ const (
 	descendantPoll = 100 * time.Millisecond
 )
 
-var errStillRunning = errors.New("the descendant still runs")
+var errStillRunning = errors.New("the descendant still alive")
 
 func descendantGone(ts *testscript.TestScript, neg bool, args []string) {
 	if neg {
@@ -44,7 +44,7 @@ func descendantGone(ts *testscript.TestScript, neg bool, args []string) {
 		return descendantAlive(pid, entry)
 	})
 	if waitErr != nil {
-		ts.Fatalf("the descendant %d of the fake claude still runs %s after the turn ended: %v", pid, descendantWait, waitErr)
+		ts.Fatalf("the descendant %d of the fake claude still alive %s after the turn ended: %v", pid, descendantWait, waitErr)
 	}
 }
 

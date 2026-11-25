@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 )
@@ -116,4 +117,55 @@ func flagDescription(t *testing.T, usage, name string) string {
 	}
 	description, _, _ := strings.Cut(rest, "\n")
 	return description
+}
+
+func TestPluralFormsDifferBetweenOneAndMany(t *testing.T) {
+	msgs := loadCatalogue()
+	for _, lang := range []i18n.Language{i18n.English, i18n.French} {
+		for _, key := range []msgKey{msgNotRun, msgSkippedLong} {
+			one, err := msgs.text(lang, key, params{paramCount: 1})
+			if err != nil {
+				t.Fatalf("%s for 1 in %v: %v", key, lang, err)
+			}
+			many, err := msgs.text(lang, key, params{paramCount: 2})
+			if err != nil {
+				t.Fatalf("%s for 2 in %v: %v", key, lang, err)
+			}
+			if wordingOf(one) == wordingOf(many) {
+				t.Errorf("%s in %v reads %q for both 1 and 2", key, lang, one)
+			}
+		}
+	}
+}
+
+func wordingOf(text string) string {
+	return strings.TrimSpace(strings.Map(func(r rune) rune {
+		if unicode.IsDigit(r) {
+			return -1
+		}
+		return r
+	}, text))
+}
+
+func TestEveryDeclaredKeyRendersEveryPlaceholder(t *testing.T) {
+	msgs := loadCatalogue()
+	for _, key := range declaredMessageKeys(t) {
+		args := params{}
+		for _, name := range paramsOf(msgKey(key)) {
+			args[name] = "x"
+			if name == paramCount {
+				args[name] = 2
+			}
+		}
+		for _, lang := range []i18n.Language{i18n.English, i18n.French} {
+			text, err := msgs.text(lang, msgKey(key), args)
+			if err != nil {
+				t.Errorf("%s in %v: %v", key, lang, err)
+				continue
+			}
+			if strings.Contains(text, "<no value>") {
+				t.Errorf("%s in %v renders a placeholder with no value: %q", key, lang, text)
+			}
+		}
+	}
 }

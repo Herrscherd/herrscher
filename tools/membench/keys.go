@@ -53,6 +53,7 @@ const (
 	msgErrRunSignal       msgKey = "membench.error.run_signal"
 	msgErrRunTimeout      msgKey = "membench.error.run_timeout"
 	msgErrCache           msgKey = "membench.error.cache"
+	msgErrCacheRoot       msgKey = "membench.error.cache_root"
 	msgErrSandbox         msgKey = "membench.error.sandbox"
 	msgErrVault           msgKey = "membench.error.vault"
 	msgErrSweep           msgKey = "membench.error.sweep"
@@ -121,6 +122,7 @@ func paramTable() []keyParams {
 		{key: msgErrDatasetJSON, params: []string{paramOffset}},
 		{key: msgErrDatasetDelim, params: []string{paramWant, paramOffset}},
 		{key: msgErrDatasetLarge, params: []string{paramLimit}},
+		{key: msgErrCacheRoot, params: []string{paramPath}},
 		{key: msgErrHerrscher, params: []string{paramPath}},
 		{key: msgErrHerrscherAbsent, params: []string{paramPath}},
 		{key: msgErrRun, params: []string{paramRun}},

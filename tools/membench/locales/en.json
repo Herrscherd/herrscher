@@ -147,8 +147,8 @@
   {
     "id": "membench.not_run",
     "description": "Message of the memory bench: not_run",
-    "one": "not run (budget): {{.Count}}",
-    "other": "not run (budget): {{.Count}}"
+    "one": "{{.Count}} arm not run (budget)",
+    "other": "{{.Count}} arms not run (budget)"
   },
   {
     "id": "membench.no_measure",
@@ -345,6 +345,11 @@
     "id": "membench.error.cache",
     "description": "Message of the memory bench: error.cache",
     "other": "membench cache directory unusable"
+  },
+  {
+    "id": "membench.error.cache_root",
+    "description": "Message of the memory bench: error.cache_root",
+    "other": "membench cache directory unusable: {{.Path}}"
   },
   {
     "id": "membench.error.sandbox",

@@ -203,9 +203,16 @@ func (r *runner) invoke(ctx context.Context, box sandbox, request step, assignme
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return "", runOutputError{stderr: redact(strings.TrimSpace(stderr.String()), r.apiKey), cause: err}
+		return "", runOutputError{stderr: redact(strings.TrimSpace(stderr.String()), r.apiKey), cause: deadlineAware(callCtx, err)}
 	}
 	return stdout.String(), nil
+}
+
+func deadlineAware(callCtx context.Context, err error) error {
+	if errors.Is(callCtx.Err(), context.DeadlineExceeded) {
+		return errors.Join(callCtx.Err(), err)
+	}
+	return err
 }
 
 func redact(text, secret string) string {

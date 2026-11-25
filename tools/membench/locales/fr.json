@@ -222,8 +222,8 @@
   {
     "id": "membench.not_run",
     "description": "Message of the memory bench: not_run",
-    "one": "non exécuté (budget) : {{.Count}}",
-    "other": "non exécuté (budget) : {{.Count}}"
+    "one": "{{.Count}} non exécuté (budget)",
+    "other": "{{.Count}} non exécutés (budget)"
   },
   {
     "id": "membench.report.title",
@@ -345,6 +345,11 @@
     "id": "membench.error.cache",
     "description": "Message of the memory bench: error.cache",
     "other": "répertoire de cache de membench inutilisable"
+  },
+  {
+    "id": "membench.error.cache_root",
+    "description": "Message of the memory bench: error.cache_root",
+    "other": "répertoire de cache de membench inutilisable : {{.Path}}"
   },
   {
     "id": "membench.error.sandbox",

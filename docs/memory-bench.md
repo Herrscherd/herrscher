@@ -47,8 +47,11 @@ on arm and `false` in the off arm.
 Exit codes: `0` complete, `1` failed, `2` usage error, `3` partial (the budget
 stopped the run before every arm ran).
 
-A failed run still writes its report. It keeps the arms that finished before
-the error, marks the status as failed with the cause, and exits `1`.
+A run that fails once the tasks are loaded still writes its report. It keeps the
+arms that finished before the error, marks the status as failed with the cause,
+and exits `1`. This includes a cache directory that cannot be used. A usage
+error or a dataset that cannot be read stops the bench before any arm runs: it
+writes no report and exits `2` or `1` with the message on stderr.
 
 ## What runs
 

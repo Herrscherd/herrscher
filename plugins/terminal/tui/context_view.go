@@ -12,7 +12,7 @@ import (
 const (
 	narrowContext   = 80
 	contextNameCols = 16
-	contextBarCols  = 16
+	contextBarCols  = gaugeWidth
 	contextValCols  = 20
 	defaultWidth    = 80
 )
@@ -168,7 +168,7 @@ func (m *model) contextCategoryLine(category contextCategory, limit, width int) 
 	}
 	tokens := injectedTokens(category, target.injected)
 	ratio := contextRatio(tokens, limit)
-	bar := barGauge(ratio, contextBarCols, palierStyle(ratio, m.st), m.st.dim, m.st.glyphs)
+	bar := barGauge(ratio, palierStyle(ratio, m.st), m.st.dim, m.st.glyphs)
 	return m.contextRow(m.tr.t(category.nameKey, nil), bar, estimatedTokens(tokens), m.tr.t("tui.context.host_estimate", nil), width)
 }
 
@@ -186,7 +186,7 @@ func (m *model) contextCacheLine(width int) string {
 		return m.contextRow(name, m.emptyContextBar(), unavailable, m.tr.t("tui.context.cache_need", nil), width)
 	}
 	ratio := target.lastPrompt.cacheShare()
-	bar := barGauge(ratio, contextBarCols, m.st.text, m.st.dim, m.st.glyphs)
+	bar := barGauge(ratio, m.st.text, m.st.dim, m.st.glyphs)
 	return m.contextRow(name, bar, fmt.Sprintf("%d%%", int(ratio*percentScale)), m.tr.t("tui.context.cache_note", nil), width)
 }
 

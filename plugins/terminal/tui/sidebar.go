@@ -31,7 +31,7 @@ const (
 	sidebarFileRows      = 6
 	sidebarSeparatorCols = 1
 	sidebarIndent        = " "
-	sidebarGaugeCells    = 16
+	sidebarGaugeCells    = gaugeWidth
 )
 
 func (m *model) sidebarVisible() bool {
@@ -299,7 +299,7 @@ func (m *model) contextSection(tab *tab, info contracts.SessionInfo, width int, 
 	if short {
 		return []string{m.sideHead(m.tr.t("tui.sidebar.context", nil), percent, width)}
 	}
-	gaugeLine := sidebarIndent + barGauge(ratio, sidebarGaugeCells, style, m.st.dim, m.st.glyphs) + " " + style.Render(percent)
+	gaugeLine := sidebarIndent + barGauge(ratio, style, m.st.dim, m.st.glyphs) + " " + style.Render(percent)
 	detail := fmt.Sprintf("%s / %s · %s", formatContextTokens(used), formatContextTokens(limit), compactThresholdLabel(m.tr, info.AutoCompactPercent))
 	return []string{
 		m.sideHead(m.tr.t("tui.sidebar.context", nil), "", width),

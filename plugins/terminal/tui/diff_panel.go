@@ -403,7 +403,7 @@ func (j commitJob) run(ctx context.Context) diffActionMsg {
 	if err := j.repo.publishBranch(ctx, j.base); err != nil {
 		return j.failure("tui.diffpanel.pr_failed", err, sha)
 	}
-	return openPullRequest(j.backend, j.trans, sha, j.session, j.subject, j.body, j.base, j.openWait)
+	return openPullRequest(context.WithoutCancel(ctx), j.backend, j.trans, sha, j.session, j.subject, j.body, j.base, j.openWait)
 }
 
 func (j commitJob) failure(key string, err error, sha string) diffActionMsg {

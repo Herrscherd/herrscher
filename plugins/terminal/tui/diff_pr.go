@@ -51,8 +51,8 @@ func requireGitHub(ctx context.Context, backend Backend) error {
 	return contracts.ErrForgeNotConnected
 }
 
-func openPullRequest(backend Backend, trans translator, sha, session, subject, body, base string, limit time.Duration) diffActionMsg {
-	ctx, cancel := context.WithTimeout(context.Background(), limit)
+func openPullRequest(parent context.Context, backend Backend, trans translator, sha, session, subject, body, base string, limit time.Duration) diffActionMsg {
+	ctx, cancel := context.WithTimeout(parent, limit)
 	defer cancel()
 	out, err := dispatchWithin(ctx, backend, sessionPROpenArgs(session, subject, body, base))
 	if errors.Is(err, context.DeadlineExceeded) {

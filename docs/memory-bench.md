@@ -179,8 +179,9 @@ the real `herrscher` and the fake `claude` of `e2e/vendortest`, then:
   then to `true`, with `TERMINAL_CONSOLIDATE_EVERY=0` as every bench arm sets
   it. The test checks that the node is archived and that a report is written
   only in the second run.
-- `TestBenchMeasuresEachArmFromTheLedger` runs the task pair against the real
-  binary, one arm off and one on. Each arm's turns, tokens and input come from
+- `TestBenchMeasuresEachArmFromTheLedger` runs the first task of the pair suite
+  (the same-agent task) against the real binary, with the `raw-archive` setting
+  only: one arm off and one on. Each arm's turns, tokens and input come from
   the usage ledger the local `--print` writes, so the test fails if a run does
   not record its usage.
 - `TestBenchStopsWithoutAUsageLedger` runs one arm against a binary that writes

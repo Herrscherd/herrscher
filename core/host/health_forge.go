@@ -2,7 +2,6 @@ package host
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
@@ -20,10 +19,6 @@ const (
 )
 
 type repoProbe func(ctx context.Context, forge contracts.Forge, host contracts.ForgeHost, origin string) (string, *contracts.RepoPermission, error)
-
-func gitHubConnectCommand() string {
-	return "herrscher connect github"
-}
 
 func forgeCredentials(creds *forgecreds.Credentials) contracts.ForgeCredentials {
 	if creds == nil {
@@ -79,15 +74,15 @@ func githubRun(open forgeOpener, origin string, probeRepo repoProbe) runFunc {
 	return func(ctx context.Context, _ bool) (contracts.ProbeReport, health.Facts) {
 		host, err := contracts.ParseForgeHost(forgeport.GitHubHost)
 		if err != nil {
-			return unreachableReport(err), health.Facts{}
+			return health.Unreachable(err), health.Facts{}
 		}
 		forge, err := open(ctx, host)
 		if err != nil {
-			return unreachableReport(err), health.Facts{}
+			return health.Unreachable(err), health.Facts{}
 		}
 		connection, err := forge.Connection(ctx)
 		if err != nil {
-			return forgeFailure(err), health.Facts{}
+			return health.ForgeFailure(err), health.Facts{}
 		}
 		facts := &health.Forge{Source: connection.Source, Login: connection.Login, Quota: health.QuotaOf(connection.RateLimit)}
 		repo, permission, repoErr := probeRepo(ctx, forge, host, origin)
@@ -95,7 +90,7 @@ func githubRun(open forgeOpener, origin string, probeRepo repoProbe) runFunc {
 		report := health.ForgeReport(connection)
 		if repoErr != nil {
 			facts.RepoErr = repoErr.Error()
-			report = withRepoAccess(report, repo, repoErr)
+			report = health.WithRepoAccess(report, repo, repoErr)
 		}
 		return report, health.Facts{Forge: facts}
 	}
@@ -117,34 +112,6 @@ func sessionRepoAccess(ctx context.Context, forge contracts.Forge, host contract
 func originRepo(origin string, host contracts.ForgeHost) (contracts.ForgeRepoRef, bool) {
 	ref, err := contracts.ParseRepoRef(origin)
 	return ref, err == nil && ref.Host() == host
-}
-
-func forgeFailure(err error) contracts.ProbeReport {
-	var limited *contracts.ForgeRateLimitedError
-	switch {
-	case errors.Is(err, contracts.ErrForgeNotConnected):
-		return contracts.ProbeReport{State: contracts.HealthDegraded, Detail: contracts.Notice{Code: contracts.CodeHealthNotLoggedIn}, Remedy: gitHubConnectRemedy()}
-	case errors.Is(err, contracts.ErrForgeUnauthorized):
-		return contracts.ProbeReport{State: contracts.HealthDown, Detail: contracts.Notice{Code: contracts.CodeHealthCredentialsRefused}, Remedy: gitHubConnectRemedy()}
-	case errors.As(err, &limited):
-		return contracts.ProbeReport{State: contracts.HealthDown, Detail: contracts.Notice{Code: contracts.CodeHealthRateLimited}}
-	}
-	return unreachableReport(err)
-}
-
-func withRepoAccess(report contracts.ProbeReport, repo string, err error) contracts.ProbeReport {
-	if report.State != contracts.HealthOK {
-		return report
-	}
-	return contracts.ProbeReport{State: contracts.HealthDegraded, Detail: repoAccessNotice(repo, err)}
-}
-
-func repoAccessNotice(repo string, err error) contracts.Notice {
-	return contracts.Notice{Code: contracts.CodeHealthRepoAccessUnreadable, Args: []contracts.Arg{contracts.Text("Repo", repo), contracts.Text("Reason", err.Error())}}
-}
-
-func gitHubConnectRemedy() contracts.Notice {
-	return contracts.Notice{Code: contracts.CodeHealthRemedyRun, Args: []contracts.Arg{contracts.Text("Command", gitHubConnectCommand())}}
 }
 
 type forgeCache struct {

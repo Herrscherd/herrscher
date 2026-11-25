@@ -90,13 +90,6 @@ func TestForgeStateFollowsTheConnection(t *testing.T) {
 	}
 }
 
-func TestNotConnectedPointsAtTheConnectCommand(t *testing.T) {
-	report, _ := probeOnce(t, openingWith(&fakeForge{connErr: contracts.ErrForgeNotConnected}, nil), "")
-	if !sameNotice(report.Remedy, gitHubConnectRemedy()) {
-		t.Errorf("remedy = %+v, want the connect command", report.Remedy)
-	}
-}
-
 func TestConnectedAccountReportsItsLogin(t *testing.T) {
 	report, facts := probeOnce(t, openingWith(connectedAs(4000), nil), "")
 	want := contracts.Notice{Code: contracts.CodeHealthSignedInAs, Args: []contracts.Arg{contracts.Text("Name", "octo")}}

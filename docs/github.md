@@ -200,7 +200,12 @@ output or errors.
 
 A pull request opened from the terminal panel (`p` in the diff panel) goes through
 the same `session pr open` command, so it is recorded in the session like one
-opened from the command line.
+opened from the command line. Before it commits or pushes anything, the panel checks
+the connection and refuses when the forge cannot take the pull request, each cause
+with its own message: no connection on this host (the remedy is `herrscher connect
+github`), the rate limit reached (with the time of the reset when the forge reported
+it), or the forge unreachable from this host. A saved token the forge refused, and a
+repository the connection cannot read, have their own messages too.
 
 `herrscher session list` shows the pull request of each session that has one,
 after the channel of the session, as `PR #42 open`, `PR #42 draft`,

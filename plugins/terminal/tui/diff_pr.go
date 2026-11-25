@@ -5,8 +5,6 @@ import (
 	"errors"
 	"time"
 
-	contracts "github.com/Herrscherd/herrscher-contracts"
-
 	"github.com/Herrscherd/herrscher/core/forgeport"
 	"github.com/Herrscherd/herrscher/core/health"
 )
@@ -35,7 +33,7 @@ func dispatchWithin(ctx context.Context, backend Backend, args []string) (string
 	}
 }
 
-func requireGitHub(ctx context.Context, backend Backend) error {
+func requireGitHub(ctx context.Context, backend Backend, trans translator) error {
 	out, err := dispatchWithin(ctx, backend, []string{verbHealth})
 	if err != nil {
 		return err
@@ -47,11 +45,11 @@ func requireGitHub(ctx context.Context, backend Backend) error {
 	checks := snapshot.Find(forgeport.KindGitHub)
 	for index := range checks {
 		check := &checks[index]
-		if check.Group == health.GroupForge && check.Report.State == contracts.HealthOK {
-			return nil
+		if check.Group == health.GroupForge {
+			return forgeRefusal(check, trans)
 		}
 	}
-	return contracts.ErrForgeNotConnected
+	return missingForgeRefusal(trans)
 }
 
 func openPullRequest(parent context.Context, backend Backend, trans translator, sha, session, subject, body, base string, limit time.Duration) diffActionMsg {

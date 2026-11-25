@@ -36,7 +36,12 @@ func gitHubHealth(t *testing.T, connection contracts.ForgeConnection) string {
 
 func healthWith(t *testing.T, report contracts.ProbeReport) string {
 	t.Helper()
-	data, err := health.Encode(health.Snapshot{Checks: []health.Check{{Group: health.GroupForge, Name: forgeport.KindGitHub, Report: report}}})
+	return healthWithFacts(t, report, health.Facts{})
+}
+
+func healthWithFacts(t *testing.T, report contracts.ProbeReport, facts health.Facts) string {
+	t.Helper()
+	data, err := health.Encode(health.Snapshot{Checks: []health.Check{{Group: health.GroupForge, Name: forgeport.KindGitHub, Report: report, Facts: facts}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +149,7 @@ func TestPRRefusesToPushWhenGitHubIsNotConnected(t *testing.T) {
 	runner := &recordingRunner{remote: "git@github.com:o/r.git\n"}
 	m, _ := newDiffModel(t, dir, runner.run, 120, 30)
 	backend := newPROpenBackend(t, "unused")
-	backend.health = healthWith(t, contracts.ProbeReport{State: contracts.HealthDegraded, Detail: contracts.Notice{Code: contracts.CodeHealthNotLoggedIn}})
+	backend.health = healthWith(t, health.ForgeFailure(contracts.ErrForgeNotConnected))
 	m.tm = backend
 	press(m, "ctrl+x", "d")
 

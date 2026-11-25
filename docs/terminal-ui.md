@@ -626,15 +626,19 @@ request through `herrscher session pr open`, the same command as on the command
 line. The number is then recorded in the session, so the sidebar, the `/usage`
 overlay and the `/resume` picker show it as `PR #42 open`. The panel shows the
 number it got back, next to the commit SHA. Before it commits anything, the panel
-checks the GitHub connection on this host, and without one it stops and says to run
-`herrscher connect github`: nothing is committed or pushed. A channel without a
-session cannot open a pull request, and the panel refuses that before it commits. When GitHub does not answer in time, the notice
-names the commit and says to run `session pr status` to see whether the pull
-request exists, since it may have been opened. `/review` opens the same panel in
+checks GitHub on this host, and it refuses with nothing committed or pushed, each
+cause with its own message: no GitHub connection, which names `herrscher connect
+github` as the remedy; the rate limit reached, which gives the time of the reset when
+GitHub reported one; GitHub unreachable from this host. A saved token GitHub has
+refused, and a repository the connection cannot read, have their own messages too.
+A channel without a session cannot open a pull request, and the panel refuses that
+before it commits. When GitHub does not answer in time, the notice names the commit
+and says to run `session pr status` to see whether the pull request exists, since it
+may have been opened. `/review` opens the same panel in
 review mode. Git calls have a timeout and run in the session's folder. The
-commit, the push and the pull request share one budget of 4 minutes 15 seconds:
-up to 15 seconds for the commit, 2 minutes for the push and 2 minutes for opening
-the pull request. If herrscher quits while they run, the wait ends too.
+GitHub check, the commit, the push and the pull request share one budget of 4 minutes
+15 seconds, the GitHub check included. If herrscher quits while they run, the wait
+ends too.
 
 ## Getting text back out
 

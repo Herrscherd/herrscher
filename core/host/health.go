@@ -187,7 +187,7 @@ func profileEnvReport(err error) contracts.ProbeReport {
 	if errors.Is(err, contracts.ErrNoProfileHome) {
 		return contracts.ProbeReport{State: contracts.HealthOff}
 	}
-	return unreachableReport(err)
+	return health.Unreachable(err)
 }
 
 func backendProbe(plugin contracts.Plugin, check health.Check, env map[string]string) health.Probe {
@@ -218,7 +218,7 @@ func loginReport(ctx context.Context, run accounts.Runner, vendor string, accoun
 	case errors.Is(err, contracts.ErrNoProfileHome):
 		return contracts.ProbeReport{State: contracts.HealthOff}
 	case err != nil:
-		return unreachableReport(err)
+		return health.Unreachable(err)
 	case !loggedIn:
 		return contracts.ProbeReport{
 			State:  contracts.HealthOff,
@@ -241,13 +241,6 @@ func loginRemedy(ctx context.Context, vendor string, account contracts.ProfileNa
 	return contracts.Notice{Code: contracts.CodeHealthRemedyRun, Args: []contracts.Arg{contracts.Text("Command", command)}}
 }
 
-func unreachableReport(err error) contracts.ProbeReport {
-	return contracts.ProbeReport{
-		State:  contracts.HealthDown,
-		Detail: contracts.Notice{Code: contracts.CodeHealthUnreachable, Args: []contracts.Arg{contracts.Text("Reason", err.Error())}},
-	}
-}
-
 func pluginProbeRun(settings []contracts.Setting, probe contracts.HealthProber, account contracts.ProfileName, getenv func(string) string) runFunc {
 	return func(ctx context.Context, deep bool) (contracts.ProbeReport, health.Facts) {
 		cfg, err := contracts.Resolve(settings, getenv)
@@ -261,11 +254,11 @@ func pluginProbeRun(settings []contracts.Setting, probe contracts.HealthProber, 
 func settingsReport(err error) contracts.ProbeReport {
 	missing, ok := errors.AsType[*contracts.MissingSettingsError](err)
 	if !ok || len(missing.Missing) == 0 {
-		return unreachableReport(err)
+		return health.Unreachable(err)
 	}
 	name, fromEnv := missingEnvName(missing.Missing[0])
 	if !fromEnv {
-		return unreachableReport(err)
+		return health.Unreachable(err)
 	}
 	return contracts.ProbeReport{
 		State:  contracts.HealthDown,

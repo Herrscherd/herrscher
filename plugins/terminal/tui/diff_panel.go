@@ -389,7 +389,7 @@ type commitJob struct {
 
 func (j commitJob) run(ctx context.Context) diffActionMsg {
 	if j.withPR {
-		if err := requireGitHub(ctx, j.backend); err != nil {
+		if err := requireGitHub(ctx, j.backend, j.trans); err != nil {
 			return diffActionMsg{notice: j.trans.t("tui.diffpanel.pr_refused", map[string]any{tplArgReason: localizedReason(j.trans, err)}), bad: true}
 		}
 	}

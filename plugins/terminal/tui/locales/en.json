@@ -2402,6 +2402,30 @@
     "other": "no GitHub connection on this host: run `herrscher connect github`"
   },
   {
+    "id": "tui.diffgit.forge_unauthorized",
+    "other": "GitHub refused the saved credential: run `herrscher connect github`"
+  },
+  {
+    "id": "tui.diffgit.forge_rate_limited",
+    "other": "GitHub rate limit reached: try again later"
+  },
+  {
+    "id": "tui.diffgit.forge_rate_limited_reset",
+    "other": "GitHub rate limit reached, it resets at {{.Reset}}"
+  },
+  {
+    "id": "tui.diffgit.forge_unreachable",
+    "other": "GitHub is unreachable from this host"
+  },
+  {
+    "id": "tui.diffgit.forge_repo_unreadable",
+    "other": "GitHub cannot read this repository with this connection"
+  },
+  {
+    "id": "tui.diffgit.forge_missing",
+    "other": "the GitHub forge is not installed on this host"
+  },
+  {
     "id": "tui.diffgit.timed_out",
     "other": "GitHub did not answer in time"
   },

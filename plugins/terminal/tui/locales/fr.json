@@ -2402,6 +2402,30 @@
     "other": "aucune connexion GitHub sur cet hôte : lancez `herrscher connect github`"
   },
   {
+    "id": "tui.diffgit.forge_unauthorized",
+    "other": "GitHub a refusé l'identifiant enregistré : lancez `herrscher connect github`"
+  },
+  {
+    "id": "tui.diffgit.forge_rate_limited",
+    "other": "limite de débit de GitHub atteinte : réessayez plus tard"
+  },
+  {
+    "id": "tui.diffgit.forge_rate_limited_reset",
+    "other": "limite de débit de GitHub atteinte, réinitialisée à {{.Reset}}"
+  },
+  {
+    "id": "tui.diffgit.forge_unreachable",
+    "other": "GitHub est injoignable depuis cet hôte"
+  },
+  {
+    "id": "tui.diffgit.forge_repo_unreadable",
+    "other": "GitHub ne peut pas lire ce dépôt avec cette connexion"
+  },
+  {
+    "id": "tui.diffgit.forge_missing",
+    "other": "le forge GitHub n'est pas installé sur cet hôte"
+  },
+  {
     "id": "tui.diffgit.timed_out",
     "other": "GitHub n'a pas répondu à temps"
   },

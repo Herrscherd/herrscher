@@ -266,9 +266,10 @@ func statusLine(translator *translator, rep report) string {
 	case statusInterrupted:
 		return joinSentences(translator.Text(msgStatusInterrupted, nil), notStartedText(translator, rep))
 	case statusPartial:
+		limit := budget{tokens: rep.LimitTokens, usd: rep.LimitUSD}
 		stopped := translator.Text(msgBudgetStopped, params{
-			paramSpent: amountText(translator, rep.SpentTokens, rep.SpentUSD),
-			paramLimit: amountText(translator, rep.LimitTokens, rep.LimitUSD),
+			paramSpent: amountText(translator, limit, rep.SpentTokens, rep.SpentUSD),
+			paramLimit: amountText(translator, limit, rep.LimitTokens, rep.LimitUSD),
 		})
 		return joinSentences(translator.Text(msgStatusPartial, nil), stopped, notRunText(translator, rep))
 	}
@@ -296,11 +297,15 @@ func notStartedText(translator *translator, rep report) string {
 	return translator.Text(msgNotStarted, params{paramCount: clitext.FormatNumber(translator.lang, float64(rep.NotRun), 0)})
 }
 
-func amountText(translator *translator, tokens int64, usd float64) string {
-	return translator.Text(msgAmount, params{
-		paramTokens: clitext.FormatNumber(translator.lang, float64(tokens), 0),
-		paramMoney:  clitext.FormatNumber(translator.lang, usd, moneyDecimals),
-	})
+func amountText(translator *translator, limit budget, tokens int64, usd float64) string {
+	var parts []string
+	if limit.tokens > 0 {
+		parts = append(parts, translator.Text(msgAmountTokens, params{paramTokens: clitext.FormatNumber(translator.lang, float64(tokens), 0)}))
+	}
+	if limit.usd > 0 {
+		parts = append(parts, translator.Text(msgAmountMoney, params{paramMoney: clitext.FormatNumber(translator.lang, usd, moneyDecimals)}))
+	}
+	return strings.Join(parts, ", ")
 }
 
 func rowsOf(rows []row, section msgKey) []row {

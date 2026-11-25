@@ -187,7 +187,7 @@ func (r *runner) assignments(box sandbox, option setting, enabled bool) []string
 
 func (r *runner) call(ctx context.Context, box sandbox, current task, request step, assignments []string) (string, tally, error) {
 	if len(request.prompt) > maxPromptBytes {
-		return "", tally{}, messageError{key: msgErrPromptLong, params: params{paramRun: current.id, paramLimit: strconv.Itoa(maxPromptBytes)}}
+		return "", tally{}, messageError{key: msgErrPromptLong, params: params{paramRun: current.id, paramLimit: byteSize(maxPromptBytes)}}
 	}
 	text, invokeErr := r.invoke(ctx, box, request, assignments)
 	cumulative, readErr := readTally(box.state)

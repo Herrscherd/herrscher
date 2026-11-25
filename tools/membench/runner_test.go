@@ -135,4 +135,7 @@ func TestOversizedPromptIsRefusedBeforeTheBinaryRuns(t *testing.T) {
 	if !ok || known.key != msgErrPromptLong {
 		t.Errorf("error %v, want the prompt-too-long message", err)
 	}
+	if known.params[paramLimit] != byteSize(maxPromptBytes) {
+		t.Errorf("limit %v, want the cap as a byte size", known.params[paramLimit])
+	}
 }

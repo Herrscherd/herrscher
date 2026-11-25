@@ -167,7 +167,7 @@ The unit tests run under `go test ./...`. They use no model: the budget, the
 scoring, the sampling, the report and the sandbox environment are tested
 directly.
 
-Four end-to-end tests run under `-tags e2e` in `scripts/check.sh`. They build
+Five end-to-end tests run under `-tags e2e` in `scripts/check.sh`. They build
 the real `herrscher` and the fake `claude` of `e2e/vendortest`, then:
 
 - `TestMemorySettingReachesTheRealBinary` runs `herrscher --print` with
@@ -186,6 +186,10 @@ the real `herrscher` and the fake `claude` of `e2e/vendortest`, then:
 - `TestBenchStopsWithoutAUsageLedger` runs one arm against a binary that writes
   no ledger. The bench must stop with the missing-ledger error, keep no outcome,
   and mark the run stopped.
+- `TestLearnedSkillSettingReachesTheRealBinary` runs `herrscher` with
+  `MEMORY_LEARNED_SKILLS` set to `false`, then to `true`, and checks that no
+  skill file is written in the first run and at least one in the second. It
+  fails if the bench does not forward the setting to the binary.
 
 The budget, isolation and scoring rules were checked by breaking them on
 purpose. Each break was caught by a named test: the sandbox dropping the

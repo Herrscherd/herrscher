@@ -34,7 +34,7 @@ func TestParseConfigRejectsBadFlags(t *testing.T) {
 		{"unknown setting", append(append([]string{}, withBudget...), "-settings", "bogus"), msgErrFlagValue},
 		{"unknown format", append(append([]string{}, withBudget...), "-format", "xml"), msgErrFlagValue},
 		{"max turns below three", append(append([]string{}, withBudget...), "-max-turns", "2"), msgErrFlagValue},
-		{"missing binary", []string{"-herrscher", "/nonexistent/membench-herrscher", "-budget-tokens", "10", "-reserve-tokens", "5"}, msgErrHerrscher},
+		{"missing binary", []string{"-herrscher", "/nonexistent/membench-herrscher", "-budget-tokens", "10", "-reserve-tokens", "5"}, msgErrHerrscherAbsent},
 		{"reserve above the ceiling", []string{"-herrscher", binary, "-budget-tokens", "10", "-reserve-tokens", "20"}, msgErrReserveCeiling},
 		{"default reserve above a small ceiling", []string{"-herrscher", binary, "-budget-tokens", "10"}, msgErrReserveCeiling},
 		{"reserve usd above the ceiling", []string{"-herrscher", binary, "-budget-usd", "1", "-reserve-usd", "2"}, msgErrReserveCeiling},

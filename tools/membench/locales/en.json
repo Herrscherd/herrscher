@@ -97,7 +97,7 @@
   {
     "id": "membench.error.dataset_read",
     "description": "Message of the memory bench: error.dataset_read",
-    "other": "cannot read the LongMemEval dataset {{.Path}}: {{.Err}}"
+    "other": "cannot read the LongMemEval dataset: {{.Path}}"
   },
   {
     "id": "membench.error.dataset_empty",
@@ -117,12 +117,12 @@
   {
     "id": "membench.error.herrscher",
     "description": "Message of the memory bench: error.herrscher",
-    "other": "herrscher binary {{.Path}} is unusable: {{.Err}}"
+    "other": "herrscher binary {{.Path}} is unusable"
   },
   {
     "id": "membench.error.run",
     "description": "Message of the memory bench: error.run",
-    "other": "run {{.Run}} failed: {{.Err}}"
+    "other": "run {{.Run}} failed"
   },
   {
     "id": "membench.report.title",
@@ -298,5 +298,45 @@
     "id": "membench.skipped_long",
     "description": "Message of the memory bench: skipped_long",
     "other": "{{.Count}} LongMemEval items were skipped because their prompt exceeds the argument size limit"
+  },
+  {
+    "id": "membench.error.dataset_missing",
+    "description": "Message of the memory bench: error.dataset_missing",
+    "other": "LongMemEval dataset not found: {{.Path}}"
+  },
+  {
+    "id": "membench.error.dataset_denied",
+    "description": "Message of the memory bench: error.dataset_denied",
+    "other": "access denied to the LongMemEval dataset: {{.Path}}"
+  },
+  {
+    "id": "membench.error.herrscher_absent",
+    "description": "Message of the memory bench: error.herrscher_absent",
+    "other": "herrscher binary {{.Path}} not found in PATH"
+  },
+  {
+    "id": "membench.error.run_exit",
+    "description": "Message of the memory bench: error.run_exit",
+    "other": "run {{.Run}} failed: exit code {{.Code}}"
+  },
+  {
+    "id": "membench.error.run_timeout",
+    "description": "Message of the memory bench: error.run_timeout",
+    "other": "run {{.Run}} failed: timed out"
+  },
+  {
+    "id": "membench.error.flags_syntax",
+    "description": "Message of the memory bench: error.flags_syntax",
+    "other": "invalid command-line arguments: see --help"
+  },
+  {
+    "id": "membench.error.credentials_absent",
+    "description": "Message of the memory bench: error.credentials_absent",
+    "other": "credentials file not found: {{.Path}}"
+  },
+  {
+    "id": "membench.error.credentials_read",
+    "description": "Message of the memory bench: error.credentials_read",
+    "other": "credentials file unreadable: {{.Path}}"
   }
 ]

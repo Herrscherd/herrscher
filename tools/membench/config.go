@@ -109,7 +109,7 @@ func parseConfig(args []string, stderr io.Writer, msgs catalogue, defaultLang i1
 			}
 			return config{}, errUsageRequested
 		}
-		return config{}, messageError{key: msgErrFlagValue, params: params{paramName: "flags", paramDetail: err.Error()}}
+		return config{}, messageError{key: msgErrFlagsSyntax}
 	}
 	return raw.resolve(defaultLang, getenv)
 }
@@ -171,7 +171,7 @@ func (r *rawFlags) resolve(defaultLang i18n.Language, getenv func(string) string
 	}
 	binary, err := exec.LookPath(r.binary)
 	if err != nil {
-		return config{}, messageError{key: msgErrHerrscher, params: params{paramPath: r.binary, paramErr: err.Error()}}
+		return config{}, herrscherError(r.binary, err)
 	}
 	cfg.binary = binary
 	return cfg, nil
@@ -213,7 +213,7 @@ func (r *rawFlags) validate(cfg *config) error {
 	}
 	if cfg.credentials != "" {
 		if _, err := os.Stat(cfg.credentials); err != nil {
-			return messageError{key: msgErrFlagValue, params: params{paramName: nameCredentials, paramDetail: err.Error()}}
+			return credentialsError(cfg.credentials, err)
 		}
 	}
 	settings, err := selectSettings(r.settings)
@@ -242,6 +242,20 @@ func (c *config) validateReserve() error {
 		}
 	}
 	return nil
+}
+
+func herrscherError(path string, cause error) error {
+	if errors.Is(cause, exec.ErrNotFound) || errors.Is(cause, os.ErrNotExist) {
+		return pathError(msgErrHerrscherAbsent, path)
+	}
+	return pathError(msgErrHerrscher, path)
+}
+
+func credentialsError(path string, cause error) error {
+	if errors.Is(cause, os.ErrNotExist) {
+		return pathError(msgErrAuthFileAbsent, path)
+	}
+	return pathError(msgErrAuthFileRead, path)
 }
 
 func flagError(name, detail string) error {

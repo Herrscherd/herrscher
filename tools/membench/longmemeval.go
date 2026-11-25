@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -153,7 +154,17 @@ func expectDelim(decoder *json.Decoder, want json.Delim) error {
 }
 
 func datasetRead(path string, cause error) error {
-	return messageError{key: msgErrDatasetRead, params: params{paramPath: path, paramErr: cause.Error()}}
+	switch {
+	case errors.Is(cause, os.ErrNotExist):
+		return pathError(msgErrDatasetMissing, path)
+	case errors.Is(cause, os.ErrPermission):
+		return pathError(msgErrDatasetDenied, path)
+	}
+	return pathError(msgErrDatasetRead, path)
+}
+
+func pathError(key msgKey, path string) error {
+	return messageError{key: key, params: params{paramPath: path}}
 }
 
 func datasetLarge(limit string) error {

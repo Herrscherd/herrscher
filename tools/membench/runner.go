@@ -214,5 +214,11 @@ func redact(text, secret string) string {
 }
 
 func runFailure(label string, cause error) error {
-	return messageError{key: msgErrRun, params: params{paramRun: label, paramErr: cause.Error()}}
+	if errors.Is(cause, context.DeadlineExceeded) {
+		return messageError{key: msgErrRunTimeout, params: params{paramRun: label}}
+	}
+	if exit, ok := errors.AsType[*exec.ExitError](cause); ok {
+		return messageError{key: msgErrRunExit, params: params{paramRun: label, paramCode: strconv.Itoa(exit.ExitCode())}}
+	}
+	return messageError{key: msgErrRun, params: params{paramRun: label}}
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -34,11 +35,11 @@ func namedSessionLanguage(st *state.State, name string, operator i18n.Language) 
 	return sessionLanguage(sess, i18n.Resolve(operator))
 }
 
-func addSessionVerbs(reg *cli.Registry, cliMessages *clitext.Messages, lang languageSource, store *state.State, layout RuntimeLayout, partDir, instID string, approvals *approvalTable, sessions *sessionTable, seedCoord *coordinatorSlot, models *ModelDiscovery) error {
+func addSessionVerbs(reg *cli.Registry, cliMessages *clitext.Messages, lang languageSource, store *state.State, layout RuntimeLayout, partDir, instID string, approvals *approvalTable, sessions *sessionTable, seedCoord *coordinatorSlot, models *ModelDiscovery, warnings io.Writer) error {
 	seen := newSeenTable(time.Now())
 	return addVerbs(
 		reg,
-		seedVerb(sessions, store, layout, instID, seedCoord),
+		seedVerb(sessions, store, layout, instID, seedCoord, localUsageLedger(partDir, store, sessions.messages, warnings)),
 		sessionSendVerb(sessions),
 		sessionPickVerb(cliMessages, lang, approvals, sessions),
 		sessionInfoVerb(store, partDir, sessions, models),
@@ -69,7 +70,11 @@ func addCheckpointCommands(reg *cli.Registry, cliMessages *clitext.Messages, lan
 	return addVerbs(reg, addCheckpointVerbs(cliMessages, lang, store, sessions)...)
 }
 
-func seedVerb(sessions *sessionTable, store *state.State, layout RuntimeLayout, instID string, seedCoord *coordinatorSlot) contracts.Cmd {
+func localUsageLedger(partDir string, store *state.State, messages *hostMessages, warnings io.Writer) usageLedger {
+	return usageLedger{partDir: partDir, current: store, messages: messages, warnings: warnings}
+}
+
+func seedVerb(sessions *sessionTable, store *state.State, layout RuntimeLayout, instID string, seedCoord *coordinatorSlot, ledger usageLedger) contracts.Cmd {
 	return contracts.New(nsSession, verbSeed).
 		Help(clitext.CmdHelpSessionSeed).
 		Param(paramName, clitext.CmdParamSessionSeedName, true).
@@ -77,11 +82,11 @@ func seedVerb(sessions *sessionTable, store *state.State, layout RuntimeLayout, 
 		ValueParam("turn_id", clitext.CmdParamSessionSeedTurnID, false).
 		ValueParam("timeout", clitext.CmdParamSessionSeedTimeout, false).
 		Do(func(cmdCtx context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(runSeedVerb(cmdCtx, sessions.messages, sessions.cliMessages, sessions.oneShotPersists, in, store, layout, instID, seedCoord.coord))
+			return cli.Data(runSeedVerb(cmdCtx, sessions.messages, sessions.cliMessages, sessions.oneShotPersists, in, store, layout, instID, seedCoord.coord, ledger))
 		})
 }
 
-func runSeedVerb(ctx context.Context, messages *hostMessages, cliMessages *clitext.Messages, newOneShot func() *persistWrites, input contracts.Input, store *state.State, layout RuntimeLayout, instID string, coord contracts.Coordinator) (string, error) {
+func runSeedVerb(ctx context.Context, messages *hostMessages, cliMessages *clitext.Messages, newOneShot func() *persistWrites, input contracts.Input, store *state.State, layout RuntimeLayout, instID string, coord contracts.Coordinator, ledger usageLedger) (string, error) {
 	rawTurnID, supplied := input.Lookup("turn_id")
 	turnID, err := resolveTurnID(rawTurnID, supplied)
 	if err != nil {
@@ -93,6 +98,10 @@ func runSeedVerb(ctx context.Context, messages *hostMessages, cliMessages *clite
 	}
 	runtime := oneShotSeedRuntimeFrom(ctx, messages, cliMessages, newOneShot)
 	runtime.timeout = timeout
+	if runtime.localRun {
+		runtime.warnings = ledger.warnings
+		runtime.recordUsage = ledger.oneShotRecorder(runtime)
+	}
 	reply, err := runOneShotSeedCommand(
 		ctx, store, input.Get(paramName), input.Get("task"),
 		turnID, runtime,

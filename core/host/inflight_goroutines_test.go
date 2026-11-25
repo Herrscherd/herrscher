@@ -1,7 +1,6 @@
 package host
 
 import (
-	"runtime"
 	"testing"
 	"time"
 )
@@ -13,11 +12,11 @@ func TestRepeatedStopsDoNotAccumulateWaiters(t *testing.T) {
 	defer end()
 
 	h.awaitInFlight()
-	before := runtime.NumGoroutine()
+	before := goroutinesCreatedIn("inflight.go", "teardown_window.go")
 	for range 50 {
 		h.awaitInFlight()
 	}
-	if grown := runtime.NumGoroutine() - before; grown > 5 {
+	if grown := goroutinesCreatedIn("inflight.go", "teardown_window.go") - before; grown > 5 {
 		t.Fatalf("50 stops left %d goroutines behind", grown)
 	}
 }

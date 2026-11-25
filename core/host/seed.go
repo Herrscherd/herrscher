@@ -43,6 +43,14 @@ type oneShotSeedRuntime struct {
 	desk            *approvalDesk
 	localRun        bool
 	persists        *persistWrites
+	joinGrace       time.Duration
+}
+
+func (r oneShotSeedRuntime) grace() time.Duration {
+	if r.joinGrace <= 0 {
+		return seedJoinGrace
+	}
+	return r.joinGrace
 }
 
 func (r oneShotSeedRuntime) backendFactory() func(context.Context, state.Session) (contracts.Backend, error) {
@@ -95,26 +103,39 @@ func runOneShotSeedIDWithRuntime(ctx context.Context, st *state.State, name, tas
 	if sess.Archived {
 		return "", errSeedArchivedSession
 	}
+	if err := requireApprovalDesk(runtime); err != nil {
+		return "", err
+	}
 	orch, mem, err := seedOrchestrator(ctx, runtime.messages, sess)
 	if err != nil {
 		return "", err
 	}
-	if mem != nil {
-		defer closeRead(mem)
-	}
-	return runOneShotSeedWithIDRuntime(ctx, sess, task, turnID, orch, runtime)
+	return runOneShotSeedWithIDRuntime(ctx, sess, task, turnID, orch, runtime, mem)
 }
 
-func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, turnID string, orch contracts.Orchestrator, runtime oneShotSeedRuntime) (string, error) {
+func requireApprovalDesk(runtime oneShotSeedRuntime) error {
 	if runtime.desk == nil && !runtime.localRun {
-		return "", errSeedWithoutApprovalDesk
+		return errSeedWithoutApprovalDesk
 	}
-	if orch != nil {
-		defer closeRead(orch)
+	return nil
+}
+
+func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, turnID string, orch contracts.Orchestrator, runtime oneShotSeedRuntime, memory ...io.Closer) (string, error) {
+	owned := append([]io.Closer{orch}, memory...)
+	if err := requireApprovalDesk(runtime); err != nil {
+		closeAll(owned)
+		return "", err
 	}
+	bridgeJoined := false
+	defer func() {
+		if bridgeJoined {
+			closeAll(owned)
+		}
+	}()
 	seedCtx, cancel := context.WithTimeout(ctx, oneShotTurnTimeout(runtime))
 	defer cancel()
 	toBridge := make(chan contracts.Event, 1)
+	bridgeIn := make(chan contracts.Event)
 	fromBridge := make(chan contracts.Event, bridgeEventBuffer)
 	driver := newSessionDriver(runtime.messages, runtime.cliMessages, sess.Name, nil, toBridge, fromBridge, runtime.warnings)
 	oneShot := runtime.persists
@@ -134,43 +155,81 @@ func runOneShotSeedWithIDRuntime(ctx context.Context, sess state.Session, task, 
 	pumpDone := make(chan struct{})
 	go func() { defer close(pumpDone); driver.pump(pumpCtx) }()
 
+	forwardCtx, stopForward := context.WithCancel(seedCtx)
+	defer stopForward()
+	go forwardToBridge(forwardCtx, toBridge, bridgeIn)
+
 	bridgeCtx, stopBridge := context.WithCancel(seedCtx)
 	defer stopBridge()
 	bridgeErr := make(chan error, 1)
-	go runOneShotBridge(bridgeCtx, cancel, sess, orch, runtime, toBridge, fromBridge, bridgeErr)
+	go runOneShotBridge(bridgeCtx, cancel, sess, orch, runtime, bridgeIn, fromBridge, bridgeErr)
 
+	grace := runtime.grace()
 	stopSeedWork := func() {
 		pumpCancel()
-		if !joinWithin(pumpDone, seedJoinGrace) {
+		if !joinWithin(pumpDone, grace) {
 			slog.Warn("seed pump outlived its grace", "session", sess.Name)
 		}
-		stopBridge()
+		stopForward()
 	}
 	reply, ok := driver.SeedAndWaitWithTurnID(seedCtx, task, turnID)
-	if !ok {
-		timeoutErr := oneShotTimeoutError(bridgeErr)
-		stopSeedWork()
-		return "", timeoutErr
+	if ok {
+		driver.awaitTurnRelease(seedCtx)
 	}
-	driver.awaitTurnRelease(seedCtx)
 	stopSeedWork()
-	ended, bridgeRunErr := bridgeEndWithin(bridgeErr, seedJoinGrace)
-	if !ended {
-		slog.Warn("seed bridge outlived its grace", "session", sess.Name)
+	joined, bridgeRunErr := endBridge(seedCtx, bridgeErr, grace, stopBridge)
+	if !joined {
+		warnLive(runtime.messages, runtime.warnings, runtime.languageOf(sess), "warn.seed_bridge_unjoined", map[string]any{graceParam: grace.String()})
+		go closeWhenBridgeEnds(bridgeErr, owned)
+		if !ok {
+			return "", errSeedTimeout
+		}
+		return reply, nil
 	}
-	if reportsFailedTurn(bridgeRunErr) {
-		return "", bridgeRunErr
+	bridgeJoined = true
+	if err := seedReplyError(ok, bridgeRunErr); err != nil {
+		return "", err
 	}
 	if runtime.coordinator != nil {
-		driver.coordinator = runtime.coordinator
-		driver.activeTurnID = turnID
-		if coordination := driver.maybeCoordinate(seedCtx, reply); coordination != nil {
-			driver.fanOut(seedCtx, contracts.Event{T: eventwire.EventReply, Done: true, Text: reply, Coordination: coordination})
-		}
-		driver.activeTurnID = ""
+		coordinateSeedReply(seedCtx, driver, runtime.coordinator, turnID, reply)
 	}
 	consolidateOneShot(ctx, orch, gate, sess, runtime.messages, runtime.warnings, runtime.languageOf(sess))
 	return reply, nil
+}
+
+func closeWhenBridgeEnds(bridgeErr <-chan error, owned []io.Closer) {
+	logCleanup(<-bridgeErr)
+	closeAll(owned)
+}
+
+func closeAll(closers []io.Closer) {
+	for _, closer := range closers {
+		if closer != nil {
+			closeRead(closer)
+		}
+	}
+}
+
+func seedReplyError(ok bool, bridgeRunErr error) error {
+	if !ok {
+		if bridgeRunErr != nil {
+			return bridgeRunErr
+		}
+		return errSeedTimeout
+	}
+	if reportsFailedTurn(bridgeRunErr) {
+		return bridgeRunErr
+	}
+	return nil
+}
+
+func coordinateSeedReply(ctx context.Context, driver *sessionDriver, coordinator contracts.Coordinator, turnID, reply string) {
+	driver.coordinator = coordinator
+	driver.activeTurnID = turnID
+	if coordination := driver.maybeCoordinate(ctx, reply); coordination != nil {
+		driver.fanOut(ctx, contracts.Event{T: eventwire.EventReply, Done: true, Text: reply, Coordination: coordination})
+	}
+	driver.activeTurnID = ""
 }
 
 func awaitOneShotWrites(messages *hostMessages, persists *persistWrites, warnings io.Writer, lang languageSource) {
@@ -213,6 +272,22 @@ func attachOneShotTaps(driver *sessionDriver, sess state.Session, runtime oneSho
 	return gate
 }
 
+func forwardToBridge(ctx context.Context, from <-chan contracts.Event, bridgeIn chan<- contracts.Event) {
+	defer close(bridgeIn)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event := <-from:
+			select {
+			case bridgeIn <- event:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+}
+
 func runOneShotBridge(ctx context.Context, cancel context.CancelFunc, sess state.Session, orch contracts.Orchestrator, runtime oneShotSeedRuntime, toBridge, fromBridge chan contracts.Event, bridgeErr chan<- error) {
 	if runtime.desk != nil {
 		ctx = contracts.WithApprovalAsker(ctx, runtime.desk.askerFor(seedConsumer, sess.Name))
@@ -244,24 +319,23 @@ func joinWithin(done <-chan struct{}, grace time.Duration) bool {
 	}
 }
 
-func bridgeEndWithin(bridgeErr <-chan error, grace time.Duration) (bool, error) {
+func bridgeEndWithin(ctx context.Context, bridgeErr <-chan error, grace time.Duration) (bool, error) {
 	select {
 	case err := <-bridgeErr:
 		return true, err
 	case <-time.After(grace):
 		return false, nil
+	case <-ctx.Done():
+		return false, nil
 	}
 }
 
-func oneShotTimeoutError(bridgeErr <-chan error) error {
-	select {
-	case err := <-bridgeErr:
-		if err != nil {
-			return err
-		}
-	default:
+func endBridge(ctx context.Context, bridgeErr <-chan error, grace time.Duration, stop func()) (bool, error) {
+	if ended, err := bridgeEndWithin(ctx, bridgeErr, grace); ended {
+		return true, err
 	}
-	return errSeedTimeout
+	stop()
+	return bridgeEndWithin(context.WithoutCancel(ctx), bridgeErr, grace)
 }
 
 func (r oneShotSeedRuntime) languageOf(sess state.Session) languageSource {

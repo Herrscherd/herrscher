@@ -20,7 +20,12 @@ import (
 	"github.com/Herrscherd/herrscher/e2e/vendortest"
 )
 
-const descendantWait = 5 * time.Second
+const (
+	descendantWait = 5 * time.Second
+	descendantPoll = 100 * time.Millisecond
+)
+
+var errStillAlive = errors.New("the descendant still alive")
 
 func descendantGone(ts *testscript.TestScript, neg bool, args []string) {
 	if neg {
@@ -35,16 +40,28 @@ func descendantGone(ts *testscript.TestScript, neg bool, args []string) {
 	ts.Check(descendantNotExpired(pidPath))
 	entry := descendantEntry(token)
 	ts.Defer(func() { ts.Check(killDescendant(pid, entry)) })
-	deadline := time.Now().Add(descendantWait)
-	for time.Now().Before(deadline) {
-		alive, err := descendantAlive(pid, entry)
-		ts.Check(err)
-		if !alive {
-			return
-		}
-		time.Sleep(100 * time.Millisecond)
+	waitErr := awaitGone(time.Now().Add(descendantWait), func() (bool, error) {
+		return descendantAlive(pid, entry)
+	})
+	if waitErr != nil {
+		ts.Fatalf("the descendant %d of the fake claude still alive %s after the turn ended: %v", pid, descendantWait, waitErr)
 	}
-	ts.Fatalf("the descendant %d of the fake claude still runs %s after the turn ended", pid, descendantWait)
+}
+
+func awaitGone(deadline time.Time, alive func() (bool, error)) error {
+	var last error
+	for time.Now().Before(deadline) {
+		running, err := alive()
+		if err == nil && !running {
+			return nil
+		}
+		last = err
+		time.Sleep(descendantPoll)
+	}
+	if last != nil {
+		return last
+	}
+	return errStillAlive
 }
 
 var errDescendantExpired = errors.New("the check starts too late to see the descendant die: it may have ended on its own")
@@ -114,7 +131,11 @@ func descendantAliveIn(root string, pid int, entry string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("cannot read the command of %d: %w", pid, err)
 	}
-	return line == "sleep "+strconv.Itoa(int(vendortest.DescendantSleep/time.Second)), nil
+	return line == "sleep "+descendantSleepArgument(), nil
+}
+
+func descendantSleepArgument() string {
+	return strconv.Itoa(int(vendortest.DescendantSleep / time.Second))
 }
 
 func gone(err error) bool {
@@ -168,7 +189,7 @@ func TestDescendantAliveIgnoresAForeignProcess(t *testing.T) {
 	}
 }
 
-func plantSleepStatus(t *testing.T, root string, pid int, name string, environMode fs.FileMode) {
+func plantSleepStatus(t *testing.T, root string, pid int, name, environ string, environMode fs.FileMode) {
 	t.Helper()
 	dir := filepath.Join(root, strconv.Itoa(pid))
 	if err := os.Mkdir(dir, 0o700); err != nil {
@@ -179,7 +200,10 @@ func plantSleepStatus(t *testing.T, root string, pid int, name string, environMo
 	if err := os.WriteFile(filepath.Join(dir, "status"), []byte(status), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "environ"), []byte("NOTHING=here\x00"), environMode); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "environ"), []byte(environ), environMode); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "cmdline"), []byte("sleep\x00"+descendantSleepArgument()+"\x00"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -190,26 +214,37 @@ func TestDescendantAliveFailsWhenTheEnvironOfOurSleepIsRefused(t *testing.T) {
 	}
 	root := t.TempDir()
 	const pid = 4242
-	plantSleepStatus(t, root, pid, "sleep", 0)
+	plantSleepStatus(t, root, pid, "sleep", "NOTHING=here\x00", 0)
 	alive, err := descendantAliveIn(root, pid, instanceEntry("probe"))
 	if err == nil {
 		t.Fatalf("a refused environ of our own sleep was read as a gone descendant (alive=%v): the turn-end check would pass while the descendant runs", alive)
 	}
 }
 
-func TestDescendantAliveIgnoresAReusedPidOfAnotherProgram(t *testing.T) {
+func TestDescendantAliveIgnoresASleepWithoutTheMarker(t *testing.T) {
 	root := t.TempDir()
 	const pid = 4243
-	plantSleepStatus(t, root, pid, "sudo", 0)
+	plantSleepStatus(t, root, pid, "sleep", "NOTHING=here\x00", 0o600)
 	alive, err := descendantAliveIn(root, pid, instanceEntry("probe"))
 	if err != nil || alive {
-		t.Fatalf("a reused pid of another program of our uid was taken for the descendant: alive=%v err=%v", alive, err)
+		t.Fatalf("a sleep of our uid without the marker was taken for the descendant: alive=%v err=%v", alive, err)
+	}
+}
+
+func TestDescendantAliveIgnoresAMarkedProcessOfAnotherProgram(t *testing.T) {
+	root := t.TempDir()
+	const pid = 4244
+	entry := instanceEntry("probe")
+	plantSleepStatus(t, root, pid, "sudo", entry+"\x00", 0o600)
+	alive, err := descendantAliveIn(root, pid, entry)
+	if err != nil || alive {
+		t.Fatalf("a marked process of another program of our uid was taken for the descendant: alive=%v err=%v", alive, err)
 	}
 }
 
 func startProbeSleep(t *testing.T, entry string) int {
 	t.Helper()
-	cmd := exec.CommandContext(t.Context(), "sleep", strconv.Itoa(int(vendortest.DescendantSleep/time.Second)))
+	cmd := exec.CommandContext(t.Context(), "sleep", descendantSleepArgument())
 	cmd.Env = append(os.Environ(), entry)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
@@ -267,5 +302,41 @@ func TestRealUIDReadsTheUidLineOfTheStatusFile(t *testing.T) {
 	}
 	if _, err := realUID("Name:\tsleep\n"); err == nil {
 		t.Fatal("a status file without a Uid line was accepted")
+	}
+}
+
+func TestAwaitGoneRidesOutATransientRefusal(t *testing.T) {
+	calls := 0
+	err := awaitGone(time.Now().Add(descendantWait), func() (bool, error) {
+		calls++
+		switch calls {
+		case 1:
+			return false, errors.New("permission denied on the environment")
+		case 2:
+			return true, nil
+		}
+		return false, nil
+	})
+	if err != nil {
+		t.Fatalf("a transient refusal ended the wait for a descendant that did exit: %v", err)
+	}
+}
+
+func TestAwaitGoneReportsAPersistentRefusal(t *testing.T) {
+	refused := errors.New("cannot read the environment")
+	err := awaitGone(time.Now().Add(3*descendantPoll), func() (bool, error) {
+		return false, refused
+	})
+	if !errors.Is(err, refused) {
+		t.Fatalf("a refusal that never clears was reported as %v, want the refusal itself", err)
+	}
+}
+
+func TestAwaitGoneReportsASurvivingDescendant(t *testing.T) {
+	err := awaitGone(time.Now().Add(3*descendantPoll), func() (bool, error) {
+		return true, nil
+	})
+	if !errors.Is(err, errStillAlive) {
+		t.Fatalf("a descendant alive at the deadline was reported as %v, want errStillAlive", err)
 	}
 }

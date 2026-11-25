@@ -148,8 +148,11 @@ silent failure.
 ## Usage, from the ledger
 
 `herrscher usage` asks the running daemon for the figures it recorded in the usage
-ledger, so the daemon must be up. A view is named after the command, and the
-default is the limits of each account:
+ledger, so the daemon must be up. A one-shot run without a daemon, such as
+`herrscher --print` or `herrscher session seed`, writes its usage to the same ledger
+through the same recorder as the daemon. When a daemon is up, the one-shot is
+forwarded to it and recorded once, by the daemon. A view is named after the command,
+and the default is the limits of each account:
 
 - `limits`: the quota windows of each account.
 - `cost`: the spend of the period, by session and by model.

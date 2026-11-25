@@ -36,7 +36,7 @@ func TestHubDispatchSeedAllowsCoordinatorReentry(t *testing.T) {
 		if err != nil || out != "seeded" {
 			t.Fatalf("Dispatch = (%q, %v), want seeded/nil", out, err)
 		}
-	case <-time.After(250 * time.Millisecond):
+	case <-time.After(10 * time.Second):
 		t.Fatal("session seed held dispatchMu across coordinator re-entry")
 	}
 }

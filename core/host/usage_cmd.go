@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -40,11 +41,32 @@ func (h *hub) recordUsage(sess state.Session, records []usage.Record) {
 }
 
 func (h *hub) recordUsageWith(persists *persistWrites, sess state.Session, records []usage.Record) {
+	h.usageLedger().record(persists, h.sessionLanguageSource(sess.Name), sess, records)
+}
+
+func (h *hub) usageLedger() usageLedger {
+	return usageLedger{partDir: h.partDir, current: h.st, messages: h.messages, warnings: h.warnings}
+}
+
+type usageLedger struct {
+	partDir  string
+	current  *state.State
+	messages *hostMessages
+	warnings io.Writer
+}
+
+func (l usageLedger) record(persists *persistWrites, lang languageSource, sess state.Session, records []usage.Record) {
 	end := persists.begin()
 	defer end()
-	ledger := usage.Ledger{Dir: usageDir(h.partDir), Now: time.Now}
-	if err := ledger.Append(stampUsage(records, h.st, sess)); err != nil {
-		warnLive(h.messages, h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_usage", map[string]any{nameParam: sess.Name, detailParam: err})
+	ledger := usage.Ledger{Dir: usageDir(l.partDir), Now: time.Now}
+	if err := ledger.Append(stampUsage(records, l.current, sess)); err != nil {
+		warnLive(l.messages, l.warnings, lang, "warn.session_usage", map[string]any{nameParam: sess.Name, detailParam: err})
+	}
+}
+
+func (l usageLedger) oneShotRecorder(runtime oneShotSeedRuntime) func(state.Session, []usage.Record) {
+	return func(sess state.Session, records []usage.Record) {
+		l.record(runtime.persists, runtime.languageOf(sess), sess, records)
 	}
 }
 

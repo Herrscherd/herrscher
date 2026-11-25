@@ -3,7 +3,6 @@ package host
 import (
 	"bytes"
 	"errors"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -218,13 +217,13 @@ func TestLateWritesBehindAFrozenWriterAreLostWithoutAGoroutine(t *testing.T) {
 	awaitGatedWrite(t, writer)
 	sink.Close()
 
-	before := runtime.NumGoroutine()
+	before := goroutinesCreatedIn("warning_sink.go")
 	for range 20 {
 		if _, err := sink.Write([]byte("stuck late\n")); !errors.Is(err, errWarningAbandoned) {
 			t.Fatalf("a late write behind a frozen writer returned %v, want errWarningAbandoned", err)
 		}
 	}
-	if grown := runtime.NumGoroutine() - before; grown > 1 {
+	if grown := goroutinesCreatedIn("warning_sink.go") - before; grown > 1 {
 		t.Fatalf("20 late writes that never got the writer added %d goroutines, want at most the one bounded log writer", grown)
 	}
 	if dropped := droppedWarnings(sink); dropped != 20 {
@@ -233,7 +232,7 @@ func TestLateWritesBehindAFrozenWriterAreLostWithoutAGoroutine(t *testing.T) {
 	writer.open()
 	awaitSinkLog(t, sink)
 	waitUntil(t, "the goroutines of the late writes to end once the writer is released", func() bool {
-		return runtime.NumGoroutine() <= before
+		return goroutinesCreatedIn("warning_sink.go") <= before
 	})
 }
 

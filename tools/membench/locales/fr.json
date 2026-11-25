@@ -1,0 +1,425 @@
+[
+  {
+    "id": "membench.amount.tokens",
+    "description": "Message of the memory bench: amount.tokens",
+    "other": "{{.Tokens}} jetons"
+  },
+  {
+    "id": "membench.amount.money",
+    "description": "Message of the memory bench: amount.money",
+    "other": "{{.Money}} $US"
+  },
+  {
+    "id": "membench.budget_stopped",
+    "description": "Message of the memory bench: budget_stopped",
+    "other": "Arrêt sur budget : {{.Spent}} consommés, plafond {{.Limit}}"
+  },
+  {
+    "id": "membench.cap.abstention",
+    "description": "Message of the memory bench: cap.abstention",
+    "other": "abstention"
+  },
+  {
+    "id": "membench.cap.extraction",
+    "description": "Message of the memory bench: cap.extraction",
+    "other": "extraction d'information"
+  },
+  {
+    "id": "membench.cap.multisession",
+    "description": "Message of the memory bench: cap.multisession",
+    "other": "raisonnement multi-session"
+  },
+  {
+    "id": "membench.cap.temporal",
+    "description": "Message of the memory bench: cap.temporal",
+    "other": "raisonnement temporel"
+  },
+  {
+    "id": "membench.cap.update",
+    "description": "Message of the memory bench: cap.update",
+    "other": "mise à jour des connaissances"
+  },
+  {
+    "id": "membench.col.capability",
+    "description": "Message of the memory bench: col.capability",
+    "other": "capacité"
+  },
+  {
+    "id": "membench.col.delta_success",
+    "description": "Message of the memory bench: col.delta_success",
+    "other": "Δ réussite"
+  },
+  {
+    "id": "membench.col.delta_tokens",
+    "description": "Message of the memory bench: col.delta_tokens",
+    "other": "Δ jetons"
+  },
+  {
+    "id": "membench.col.delta_turns",
+    "description": "Message of the memory bench: col.delta_turns",
+    "other": "Δ tours"
+  },
+  {
+    "id": "membench.col.false_recall",
+    "description": "Message of the memory bench: col.false_recall",
+    "other": "faux rappels"
+  },
+  {
+    "id": "membench.col.memory_tokens",
+    "description": "Message of the memory bench: col.memory_tokens",
+    "other": "jetons mémoire par tour"
+  },
+  {
+    "id": "membench.col.off",
+    "description": "Message of the memory bench: col.off",
+    "other": "sans"
+  },
+  {
+    "id": "membench.col.on",
+    "description": "Message of the memory bench: col.on",
+    "other": "avec"
+  },
+  {
+    "id": "membench.col.setting",
+    "description": "Message of the memory bench: col.setting",
+    "other": "réglage"
+  },
+  {
+    "id": "membench.col.task",
+    "description": "Message of the memory bench: col.task",
+    "other": "tâche"
+  },
+  {
+    "id": "membench.error.budget_missing",
+    "description": "Message of the memory bench: error.budget_missing",
+    "other": "un plafond est requis : --budget-tokens ou --budget-usd"
+  },
+  {
+    "id": "membench.error.dataset_large",
+    "description": "Message of the memory bench: the dataset exceeds the reading limit",
+    "other": "le jeu LongMemEval dépasse la limite de lecture de {{.Limit}}"
+  },
+  {
+    "id": "membench.error.dataset_read",
+    "description": "Message of the memory bench: error.dataset_read",
+    "other": "lecture du jeu LongMemEval impossible : {{.Path}}"
+  },
+  {
+    "id": "membench.error.dataset_empty",
+    "description": "Message of the memory bench: error.dataset_empty",
+    "other": "jeu LongMemEval invalide : aucun item n'a de sessions de preuve, de type de question connu et de réponse"
+  },
+  {
+    "id": "membench.error.dataset_json",
+    "description": "Message of the memory bench: error.dataset_json",
+    "other": "jeu LongMemEval invalide : JSON mal formé à l'octet {{.Offset}}"
+  },
+  {
+    "id": "membench.error.dataset_delim",
+    "description": "Message of the memory bench: error.dataset_delim",
+    "other": "jeu LongMemEval invalide : « {{.Want}} » attendu à l'octet {{.Offset}}"
+  },
+  {
+    "id": "membench.error.flag_value",
+    "description": "Message of the memory bench: error.flag_value",
+    "other": "{{.Name}} : {{.Detail}}"
+  },
+  {
+    "id": "membench.error.herrscher",
+    "description": "Message of the memory bench: error.herrscher",
+    "other": "binaire herrscher {{.Path}} inutilisable"
+  },
+  {
+    "id": "membench.error.run",
+    "description": "Message of the memory bench: error.run",
+    "other": "échec de l'exécution {{.Run}}"
+  },
+  {
+    "id": "membench.flag.budget_tokens",
+    "description": "Message of the memory bench: flag.budget_tokens",
+    "other": "plafond de jetons pour tout le banc, le banc s'arrête proprement au-delà"
+  },
+  {
+    "id": "membench.flag.budget_usd",
+    "description": "Message of the memory bench: flag.budget_usd",
+    "other": "plafond en dollars, respecté quand le backend rapporte un coût"
+  },
+  {
+    "id": "membench.flag.reserve_limit",
+    "description": "Message of the memory bench: reserve_limit",
+    "other": "réserve de jetons par appel, retenue avant chaque appel ; le banc ne lance jamais un appel que la réserve ferait dépasser le plafond ; 200000 par défaut"
+  },
+  {
+    "id": "membench.flag.reserve_usd",
+    "description": "Message of the memory bench: reserve_usd",
+    "other": "réserve en dollars par appel, retenue avant chaque appel selon la même règle que la réserve de jetons ; 0,5 par défaut"
+  },
+  {
+    "id": "membench.error.reserve_ceiling",
+    "description": "Message of the memory bench: reserve_ceiling",
+    "other": "la réserve par appel {{.Reserve}} dépasse le plafond {{.Limit}} : baisse la réserve ou relève le plafond"
+  },
+  {
+    "id": "membench.flag.credentials",
+    "description": "Message of the memory bench: flag.credentials",
+    "other": "fichier d'identifiants Claude copié dans la configuration isolée de chaque exécution, pour un vrai backend"
+  },
+  {
+    "id": "membench.flag.api_key_env",
+    "description": "Message of the memory bench: flag.api_key_env",
+    "other": "nom de la variable d'environnement qui contient une clé d'API, passée à chaque exécution et jamais placée sur la ligne de commande"
+  },
+  {
+    "id": "membench.flag.dataset",
+    "description": "Message of the memory bench: flag.dataset",
+    "other": "fichier du jeu LongMemEval que vous fournissez, vide pour ne lancer que les paires maison"
+  },
+  {
+    "id": "membench.flag.format",
+    "description": "Message of the memory bench: flag.format",
+    "other": "format du rendu : md ou json"
+  },
+  {
+    "id": "membench.flag.herrscher",
+    "description": "Message of the memory bench: flag.herrscher",
+    "other": "binaire herrscher à mesurer, cherché dans PATH s'il n'est pas un chemin"
+  },
+  {
+    "id": "membench.flag.lang",
+    "description": "Message of the memory bench: flag.lang",
+    "other": "langue du rendu : en ou fr"
+  },
+  {
+    "id": "membench.flag.max_turns",
+    "description": "Message of the memory bench: flag.max_turns",
+    "other": "invocations permises par tâche avant qu'elle compte comme un échec"
+  },
+  {
+    "id": "membench.flag.model",
+    "description": "Message of the memory bench: flag.model",
+    "other": "modèle Claude sur lequel tournent les tâches, le plus petit par défaut"
+  },
+  {
+    "id": "membench.flag.samples",
+    "description": "Message of the memory bench: flag.samples",
+    "other": "nombre de questions LongMemEval tirées"
+  },
+  {
+    "id": "membench.flag.seed",
+    "description": "Message of the memory bench: flag.seed",
+    "other": "graine du tirage LongMemEval"
+  },
+  {
+    "id": "membench.flag.settings",
+    "description": "Message of the memory bench: flag.settings",
+    "other": "réglages mémoire à mesurer, séparés par des virgules"
+  },
+  {
+    "id": "membench.no_measure",
+    "description": "Message of the memory bench: no_measure",
+    "other": "aucune mesure"
+  },
+  {
+    "id": "membench.row.partial",
+    "description": "Message of the memory bench: row.partial",
+    "other": "partiel"
+  },
+  {
+    "id": "membench.not_run",
+    "description": "Message of the memory bench: not_run",
+    "one": "{{.Count}} non exécuté (budget)",
+    "other": "{{.Count}} non exécutés (budget)"
+  },
+  {
+    "id": "membench.not_started",
+    "description": "Message of the memory bench: not_started",
+    "one": "{{.Count}} bras non démarré",
+    "other": "{{.Count}} bras non démarrés"
+  },
+  {
+    "id": "membench.status.interrupted",
+    "description": "Message of the memory bench: status.interrupted",
+    "other": "Passe interrompue par un signal, le rapport garde les bras terminés avant lui"
+  },
+  {
+    "id": "membench.status.failed_early",
+    "description": "Message of the memory bench: the run stopped on an error before any arm finished",
+    "other": "Passe en échec : une passe s'est arrêtée sur une erreur avant la fin du premier bras, détail : {{.Detail}}"
+  },
+  {
+    "id": "membench.error.run_output",
+    "description": "Message of the memory bench: the output of a run exceeds the cap",
+    "other": "la passe {{.Run}} a imprimé plus de {{.Limit}}"
+  },
+  {
+    "id": "membench.report.title",
+    "description": "Message of the memory bench: report.title",
+    "other": "Banc mémoire"
+  },
+  {
+    "id": "membench.section.longmemeval",
+    "description": "Message of the memory bench: section.longmemeval",
+    "other": "LongMemEval"
+  },
+  {
+    "id": "membench.section.pairs",
+    "description": "Message of the memory bench: section.pairs",
+    "other": "Paires maison"
+  },
+  {
+    "id": "membench.status.complete",
+    "description": "Message of the memory bench: status.complete",
+    "other": "Passe terminée."
+  },
+  {
+    "id": "membench.status.failed",
+    "description": "Message of the memory bench: the run stopped on an error",
+    "other": "Passe en échec : une passe s'est arrêtée sur une erreur, le rapport garde les bras terminés avant elle, détail : {{.Detail}}"
+  },
+  {
+    "id": "membench.status.partial",
+    "description": "Message of the memory bench: status.partial",
+    "other": "Passe partielle"
+  },
+  {
+    "id": "membench.usage",
+    "description": "Message of the memory bench: usage",
+    "other": "usage : membench [options] (voir docs/memory-bench.md)"
+  },
+  {
+    "id": "membench.variant.never_given",
+    "description": "Message of the memory bench: variant.never_given",
+    "other": "fait jamais donné"
+  },
+  {
+    "id": "membench.variant.other_agent",
+    "description": "Message of the memory bench: variant.other_agent",
+    "other": "autre agent du projet"
+  },
+  {
+    "id": "membench.variant.same_agent",
+    "description": "Message of the memory bench: variant.same_agent",
+    "other": "même agent"
+  },
+  {
+    "id": "membench.variant.stale",
+    "description": "Message of the memory bench: variant.stale",
+    "other": "fait périmé puis corrigé"
+  },
+  {
+    "id": "membench.error.no_usage",
+    "description": "Message of the memory bench: error.no_usage",
+    "other": "la passe {{.Run}} s'est terminée sans écrire d'enregistrement d'usage dans son répertoire d'état : le banc ne peut pas mesurer sa dépense et s'arrête"
+  },
+  {
+    "id": "membench.error.no_cost",
+    "description": "Message of the memory bench: error.no_cost",
+    "other": "la passe {{.Run}} n'a enregistré aucun coût, et un plafond en dollars en exige un : le banc s'arrête"
+  },
+  {
+    "id": "membench.error.spend_partial",
+    "description": "Message of the memory bench: error.spend_partial",
+    "other": "la passe {{.Run}} n'a pu être lue qu'en partie dans son registre d'usage : la dépense de cet appel n'est connue qu'en partie et le total du rapport est une borne inférieure, le banc s'arrête"
+  },
+  {
+    "id": "membench.error.prompt_long",
+    "description": "Message of the memory bench: error.prompt_long",
+    "other": "la passe {{.Run}} enverrait un prompt de plus de {{.Limit}}, la taille maximale d'un argument : le banc refuse cet élément et s'arrête"
+  },
+  {
+    "id": "membench.skipped_long",
+    "description": "Message of the memory bench: skipped_long",
+    "one": "{{.Count}} élément LongMemEval a été écarté car son prompt dépasse la taille maximale d'un argument",
+    "other": "{{.Count}} éléments LongMemEval ont été écartés car leur prompt dépasse la taille maximale d'un argument"
+  },
+  {
+    "id": "membench.error.dataset_missing",
+    "description": "Message of the memory bench: error.dataset_missing",
+    "other": "jeu LongMemEval introuvable : {{.Path}}"
+  },
+  {
+    "id": "membench.error.dataset_denied",
+    "description": "Message of the memory bench: error.dataset_denied",
+    "other": "accès refusé au jeu LongMemEval : {{.Path}}"
+  },
+  {
+    "id": "membench.error.herrscher_absent",
+    "description": "Message of the memory bench: error.herrscher_absent",
+    "other": "binaire herrscher {{.Path}} introuvable dans PATH"
+  },
+  {
+    "id": "membench.error.run_exit",
+    "description": "Message of the memory bench: error.run_exit",
+    "other": "échec de l'exécution {{.Run}} : code de sortie {{.Code}}"
+  },
+  {
+    "id": "membench.error.run_detail",
+    "description": "Message of the memory bench: error.run_detail",
+    "other": "échec de l'exécution {{.Run}} : {{.Detail}}"
+  },
+  {
+    "id": "membench.error.run_exit_detail",
+    "description": "Message of the memory bench: error.run_exit_detail",
+    "other": "échec de l'exécution {{.Run}} : code de sortie {{.Code}}, sortie d'erreur : {{.Detail}}"
+  },
+  {
+    "id": "membench.error.run_signal",
+    "description": "Message of the memory bench: error.run_signal",
+    "other": "échec de l'exécution {{.Run}} : tué par le signal {{.Signal}}"
+  },
+  {
+    "id": "membench.error.run_timeout",
+    "description": "Message of the memory bench: error.run_timeout",
+    "other": "échec de l'exécution {{.Run}} : délai dépassé"
+  },
+  {
+    "id": "membench.error.cache",
+    "description": "Message of the memory bench: error.cache",
+    "other": "répertoire de cache de membench inutilisable"
+  },
+  {
+    "id": "membench.error.cache_root",
+    "description": "Message of the memory bench: error.cache_root",
+    "other": "répertoire de cache de membench inutilisable : {{.Path}}"
+  },
+  {
+    "id": "membench.error.sandbox",
+    "description": "Message of the memory bench: error.sandbox",
+    "other": "bac à sable de membench impossible à préparer ou à nettoyer"
+  },
+  {
+    "id": "membench.error.vault",
+    "description": "Message of the memory bench: error.vault",
+    "other": "coffre de membench impossible à préparer"
+  },
+  {
+    "id": "membench.error.sweep",
+    "description": "Message of the memory bench: error.sweep",
+    "other": "nettoyage des exécutions orphelines de membench impossible"
+  },
+  {
+    "id": "membench.error.report",
+    "description": "Message of the memory bench: error.report",
+    "other": "écriture du rapport de membench impossible"
+  },
+  {
+    "id": "membench.error.system",
+    "description": "Message of the memory bench: error.system",
+    "other": "membench a rencontré une erreur système non classée"
+  },
+  {
+    "id": "membench.error.flags_syntax",
+    "description": "Message of the memory bench: error.flags_syntax",
+    "other": "arguments de la ligne de commande invalides : voir --help"
+  },
+  {
+    "id": "membench.error.credentials_absent",
+    "description": "Message of the memory bench: error.credentials_absent",
+    "other": "fichier d'identifiants introuvable : {{.Path}}"
+  },
+  {
+    "id": "membench.error.credentials_read",
+    "description": "Message of the memory bench: error.credentials_read",
+    "other": "fichier d'identifiants illisible : {{.Path}}"
+  }
+]

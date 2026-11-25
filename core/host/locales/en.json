@@ -640,6 +640,11 @@
     "other": "herrscher serve: a transcript, resume token or checkpoint write is still running after {{.Grace}}, stopping anyway: that write may be lost"
   },
   {
+    "id": "warn.seed_bridge_unjoined",
+    "description": "The bridge of a one-shot seed is still running when its join grace ends twice; the reply is returned without consolidating its memory, and the bridge may still write it",
+    "other": "herrscher seed: the turn is still being observed after {{.Grace}}, returning the reply without consolidating its memory: the observation may be lost"
+  },
+  {
     "id": "warn.warnings_dropped",
     "description": "A summary line: Count warnings were dropped while the output was blocked, written once it unblocks",
     "one": "herrscher serve: 1 warning lost while the output was blocked",

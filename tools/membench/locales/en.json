@@ -1,0 +1,425 @@
+[
+  {
+    "id": "membench.usage",
+    "description": "Message of the memory bench: usage",
+    "other": "usage: membench [options] (see docs/memory-bench.md)"
+  },
+  {
+    "id": "membench.flag.herrscher",
+    "description": "Message of the memory bench: flag.herrscher",
+    "other": "herrscher binary to measure, looked up in PATH when not a path"
+  },
+  {
+    "id": "membench.flag.model",
+    "description": "Message of the memory bench: flag.model",
+    "other": "Claude model the tasks run on, the smallest one by default"
+  },
+  {
+    "id": "membench.flag.budget_tokens",
+    "description": "Message of the memory bench: flag.budget_tokens",
+    "other": "token ceiling for the whole bench, the bench stops cleanly past it"
+  },
+  {
+    "id": "membench.flag.budget_usd",
+    "description": "Message of the memory bench: flag.budget_usd",
+    "other": "dollar ceiling, honored when the backend reports a cost"
+  },
+  {
+    "id": "membench.flag.reserve_limit",
+    "description": "Message of the memory bench: reserve_limit",
+    "other": "per-call token reserve, held back before each call; the bench never starts a call that the reserve would carry past the ceiling; defaults to 200000"
+  },
+  {
+    "id": "membench.flag.reserve_usd",
+    "description": "Message of the memory bench: reserve_usd",
+    "other": "per-call dollar reserve, held back before each call, the same rule as the token reserve; defaults to 0.5"
+  },
+  {
+    "id": "membench.error.reserve_ceiling",
+    "description": "Message of the memory bench: reserve_ceiling",
+    "other": "the per-call reserve {{.Reserve}} is above the ceiling {{.Limit}}: lower the reserve or raise the ceiling"
+  },
+  {
+    "id": "membench.flag.credentials",
+    "description": "Message of the memory bench: flag.credentials",
+    "other": "Claude credentials file copied into the isolated config of each run, for a real backend"
+  },
+  {
+    "id": "membench.flag.api_key_env",
+    "description": "Message of the memory bench: flag.api_key_env",
+    "other": "name of the environment variable that holds an API key, passed to each run and never put on the command line"
+  },
+  {
+    "id": "membench.flag.dataset",
+    "description": "Message of the memory bench: flag.dataset",
+    "other": "LongMemEval dataset file that you provide, empty runs the in-house pairs only"
+  },
+  {
+    "id": "membench.flag.samples",
+    "description": "Message of the memory bench: flag.samples",
+    "other": "number of LongMemEval questions drawn"
+  },
+  {
+    "id": "membench.flag.seed",
+    "description": "Message of the memory bench: flag.seed",
+    "other": "seed of the LongMemEval draw"
+  },
+  {
+    "id": "membench.flag.settings",
+    "description": "Message of the memory bench: flag.settings",
+    "other": "memory settings to measure, comma separated"
+  },
+  {
+    "id": "membench.flag.max_turns",
+    "description": "Message of the memory bench: flag.max_turns",
+    "other": "invocations allowed per task before it counts as a failure"
+  },
+  {
+    "id": "membench.flag.format",
+    "description": "Message of the memory bench: flag.format",
+    "other": "report format: md or json"
+  },
+  {
+    "id": "membench.flag.lang",
+    "description": "Message of the memory bench: flag.lang",
+    "other": "report language: en or fr"
+  },
+  {
+    "id": "membench.error.budget_missing",
+    "description": "Message of the memory bench: error.budget_missing",
+    "other": "a ceiling is required: --budget-tokens or --budget-usd"
+  },
+  {
+    "id": "membench.error.flag_value",
+    "description": "Message of the memory bench: error.flag_value",
+    "other": "{{.Name}}: {{.Detail}}"
+  },
+  {
+    "id": "membench.error.dataset_read",
+    "description": "Message of the memory bench: error.dataset_read",
+    "other": "cannot read the LongMemEval dataset: {{.Path}}"
+  },
+  {
+    "id": "membench.error.dataset_empty",
+    "description": "Message of the memory bench: error.dataset_empty",
+    "other": "invalid LongMemEval dataset: no item has evidence sessions, a known question type and an answer"
+  },
+  {
+    "id": "membench.error.dataset_json",
+    "description": "Message of the memory bench: error.dataset_json",
+    "other": "invalid LongMemEval dataset: malformed JSON at byte {{.Offset}}"
+  },
+  {
+    "id": "membench.error.dataset_delim",
+    "description": "Message of the memory bench: error.dataset_delim",
+    "other": "invalid LongMemEval dataset: expected {{.Want}} at byte {{.Offset}}"
+  },
+  {
+    "id": "membench.error.herrscher",
+    "description": "Message of the memory bench: error.herrscher",
+    "other": "herrscher binary {{.Path}} is unusable"
+  },
+  {
+    "id": "membench.error.run",
+    "description": "Message of the memory bench: error.run",
+    "other": "run {{.Run}} failed"
+  },
+  {
+    "id": "membench.report.title",
+    "description": "Message of the memory bench: report.title",
+    "other": "Memory bench"
+  },
+  {
+    "id": "membench.status.complete",
+    "description": "Message of the memory bench: status.complete",
+    "other": "Run complete."
+  },
+  {
+    "id": "membench.status.partial",
+    "description": "Message of the memory bench: status.partial",
+    "other": "Partial run"
+  },
+  {
+    "id": "membench.budget_stopped",
+    "description": "Message of the memory bench: budget_stopped",
+    "other": "Stopped on budget: {{.Spent}} spent, ceiling {{.Limit}}"
+  },
+  {
+    "id": "membench.not_run",
+    "description": "Message of the memory bench: not_run",
+    "one": "{{.Count}} arm not run (budget)",
+    "other": "{{.Count}} arms not run (budget)"
+  },
+  {
+    "id": "membench.not_started",
+    "description": "Message of the memory bench: not_started",
+    "one": "{{.Count}} arm not started",
+    "other": "{{.Count}} arms not started"
+  },
+  {
+    "id": "membench.status.interrupted",
+    "description": "Message of the memory bench: status.interrupted",
+    "other": "Run interrupted by a signal, the report keeps the arms finished before it"
+  },
+  {
+    "id": "membench.status.failed_early",
+    "description": "Message of the memory bench: the run stopped on an error before any arm finished",
+    "other": "Run failed: a run stopped on an error before any arm finished, detail: {{.Detail}}"
+  },
+  {
+    "id": "membench.error.run_output",
+    "description": "Message of the memory bench: the output of a run exceeds the cap",
+    "other": "run {{.Run}} printed more than {{.Limit}}"
+  },
+  {
+    "id": "membench.no_measure",
+    "description": "Message of the memory bench: no_measure",
+    "other": "no measure"
+  },
+  {
+    "id": "membench.row.partial",
+    "description": "Message of the memory bench: row.partial",
+    "other": "partial"
+  },
+  {
+    "id": "membench.section.pairs",
+    "description": "Message of the memory bench: section.pairs",
+    "other": "In-house pairs"
+  },
+  {
+    "id": "membench.section.longmemeval",
+    "description": "Message of the memory bench: section.longmemeval",
+    "other": "LongMemEval"
+  },
+  {
+    "id": "membench.col.task",
+    "description": "Message of the memory bench: col.task",
+    "other": "task"
+  },
+  {
+    "id": "membench.col.setting",
+    "description": "Message of the memory bench: col.setting",
+    "other": "setting"
+  },
+  {
+    "id": "membench.col.off",
+    "description": "Message of the memory bench: col.off",
+    "other": "off"
+  },
+  {
+    "id": "membench.col.on",
+    "description": "Message of the memory bench: col.on",
+    "other": "on"
+  },
+  {
+    "id": "membench.col.delta_success",
+    "description": "Message of the memory bench: col.delta_success",
+    "other": "delta success"
+  },
+  {
+    "id": "membench.col.delta_turns",
+    "description": "Message of the memory bench: col.delta_turns",
+    "other": "delta turns"
+  },
+  {
+    "id": "membench.col.delta_tokens",
+    "description": "Message of the memory bench: col.delta_tokens",
+    "other": "delta tokens"
+  },
+  {
+    "id": "membench.col.memory_tokens",
+    "description": "Message of the memory bench: col.memory_tokens",
+    "other": "memory tokens per turn"
+  },
+  {
+    "id": "membench.col.false_recall",
+    "description": "Message of the memory bench: col.false_recall",
+    "other": "false recalls"
+  },
+  {
+    "id": "membench.col.capability",
+    "description": "Message of the memory bench: col.capability",
+    "other": "capability"
+  },
+  {
+    "id": "membench.variant.same_agent",
+    "description": "Message of the memory bench: variant.same_agent",
+    "other": "same agent"
+  },
+  {
+    "id": "membench.variant.other_agent",
+    "description": "Message of the memory bench: variant.other_agent",
+    "other": "other agent of the project"
+  },
+  {
+    "id": "membench.variant.stale",
+    "description": "Message of the memory bench: variant.stale",
+    "other": "stale then corrected"
+  },
+  {
+    "id": "membench.variant.never_given",
+    "description": "Message of the memory bench: variant.never_given",
+    "other": "never given"
+  },
+  {
+    "id": "membench.cap.extraction",
+    "description": "Message of the memory bench: cap.extraction",
+    "other": "information extraction"
+  },
+  {
+    "id": "membench.cap.multisession",
+    "description": "Message of the memory bench: cap.multisession",
+    "other": "multi-session reasoning"
+  },
+  {
+    "id": "membench.cap.temporal",
+    "description": "Message of the memory bench: cap.temporal",
+    "other": "temporal reasoning"
+  },
+  {
+    "id": "membench.cap.update",
+    "description": "Message of the memory bench: cap.update",
+    "other": "knowledge update"
+  },
+  {
+    "id": "membench.cap.abstention",
+    "description": "Message of the memory bench: cap.abstention",
+    "other": "abstention"
+  },
+  {
+    "id": "membench.amount.tokens",
+    "description": "Message of the memory bench: amount.tokens",
+    "other": "{{.Tokens}} tokens"
+  },
+  {
+    "id": "membench.amount.money",
+    "description": "Message of the memory bench: amount.money",
+    "other": "{{.Money}} USD"
+  },
+  {
+    "id": "membench.status.failed",
+    "description": "Message of the memory bench: the run stopped on an error",
+    "other": "Run failed: a run stopped on an error, the report keeps the arms finished before it, detail: {{.Detail}}"
+  },
+  {
+    "id": "membench.error.dataset_large",
+    "description": "Message of the memory bench: the dataset exceeds the reading limit",
+    "other": "the LongMemEval dataset exceeds the reading limit of {{.Limit}}"
+  },
+  {
+    "id": "membench.error.no_usage",
+    "description": "Message of the memory bench: error.no_usage",
+    "other": "run {{.Run}} exited without writing a new usage record to its state directory, so the bench cannot measure its spend and stopped"
+  },
+  {
+    "id": "membench.error.no_cost",
+    "description": "Message of the memory bench: error.no_cost",
+    "other": "run {{.Run}} recorded no cost, and a US dollar ceiling needs one: the bench stopped"
+  },
+  {
+    "id": "membench.error.spend_partial",
+    "description": "Message of the memory bench: error.spend_partial",
+    "other": "run {{.Run}} could only be read in part from its usage ledger, so the spend of that call is only partly known and the report total is a lower bound: the bench stopped"
+  },
+  {
+    "id": "membench.error.prompt_long",
+    "description": "Message of the memory bench: error.prompt_long",
+    "other": "run {{.Run}} would send a prompt above {{.Limit}}, the most an argument can carry: the bench refused that item and stopped"
+  },
+  {
+    "id": "membench.skipped_long",
+    "description": "Message of the memory bench: skipped_long",
+    "one": "{{.Count}} LongMemEval item was skipped because its prompt exceeds the argument size limit",
+    "other": "{{.Count}} LongMemEval items were skipped because their prompt exceeds the argument size limit"
+  },
+  {
+    "id": "membench.error.dataset_missing",
+    "description": "Message of the memory bench: error.dataset_missing",
+    "other": "LongMemEval dataset not found: {{.Path}}"
+  },
+  {
+    "id": "membench.error.dataset_denied",
+    "description": "Message of the memory bench: error.dataset_denied",
+    "other": "access denied to the LongMemEval dataset: {{.Path}}"
+  },
+  {
+    "id": "membench.error.herrscher_absent",
+    "description": "Message of the memory bench: error.herrscher_absent",
+    "other": "herrscher binary {{.Path}} not found in PATH"
+  },
+  {
+    "id": "membench.error.run_exit",
+    "description": "Message of the memory bench: error.run_exit",
+    "other": "run {{.Run}} failed: exit code {{.Code}}"
+  },
+  {
+    "id": "membench.error.run_detail",
+    "description": "Message of the memory bench: error.run_detail",
+    "other": "run {{.Run}} failed: {{.Detail}}"
+  },
+  {
+    "id": "membench.error.run_exit_detail",
+    "description": "Message of the memory bench: error.run_exit_detail",
+    "other": "run {{.Run}} failed: exit code {{.Code}}, error output: {{.Detail}}"
+  },
+  {
+    "id": "membench.error.run_signal",
+    "description": "Message of the memory bench: error.run_signal",
+    "other": "run {{.Run}} failed: killed by signal {{.Signal}}"
+  },
+  {
+    "id": "membench.error.run_timeout",
+    "description": "Message of the memory bench: error.run_timeout",
+    "other": "run {{.Run}} failed: timed out"
+  },
+  {
+    "id": "membench.error.cache",
+    "description": "Message of the memory bench: error.cache",
+    "other": "membench cache directory unusable"
+  },
+  {
+    "id": "membench.error.cache_root",
+    "description": "Message of the memory bench: error.cache_root",
+    "other": "membench cache directory unusable: {{.Path}}"
+  },
+  {
+    "id": "membench.error.sandbox",
+    "description": "Message of the memory bench: error.sandbox",
+    "other": "membench sandbox cannot be prepared or cleaned up"
+  },
+  {
+    "id": "membench.error.vault",
+    "description": "Message of the memory bench: error.vault",
+    "other": "membench vault cannot be prepared"
+  },
+  {
+    "id": "membench.error.sweep",
+    "description": "Message of the memory bench: error.sweep",
+    "other": "membench cannot clean up orphaned runs"
+  },
+  {
+    "id": "membench.error.report",
+    "description": "Message of the memory bench: error.report",
+    "other": "membench cannot write the report"
+  },
+  {
+    "id": "membench.error.system",
+    "description": "Message of the memory bench: error.system",
+    "other": "membench hit an unclassified system error"
+  },
+  {
+    "id": "membench.error.flags_syntax",
+    "description": "Message of the memory bench: error.flags_syntax",
+    "other": "invalid command-line arguments: see --help"
+  },
+  {
+    "id": "membench.error.credentials_absent",
+    "description": "Message of the memory bench: error.credentials_absent",
+    "other": "credentials file not found: {{.Path}}"
+  },
+  {
+    "id": "membench.error.credentials_read",
+    "description": "Message of the memory bench: error.credentials_read",
+    "other": "credentials file unreadable: {{.Path}}"
+  }
+]

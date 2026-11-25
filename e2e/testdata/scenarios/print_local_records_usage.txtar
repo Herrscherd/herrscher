@@ -1,0 +1,7 @@
+exec herrscher --print 'say ping please'
+stdout '^first answer$'
+exec sh -c 'cat $HOME/.config/herrscher/usage/*.jsonl'
+stdout -count=1 '"in":950,"out":4,'
+-- claude.script --
+text first answer
+usage 950

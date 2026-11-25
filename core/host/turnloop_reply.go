@@ -40,6 +40,7 @@ func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event,
 		DurMs:       int(time.Since(turnStart).Milliseconds()),
 		CtxTokens:   contextReading(live, event),
 		Tools:       d.calls.Calls(),
+		Injected:    event.Injected,
 	})
 	d.deliverPendingReply(event.Text)
 	d.metrics.TurnCompleted()

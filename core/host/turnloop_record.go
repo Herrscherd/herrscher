@@ -61,6 +61,7 @@ type turnUsage struct {
 	InTokens, OutTokens, CacheRead, CacheCreate, DurMs int
 	CtxTokens                                          int
 	Tools                                              []timeline.Call
+	Injected                                           []contracts.InjectedPart
 }
 
 func (d *sessionDriver) recordUsage(event contracts.Event) {
@@ -109,6 +110,7 @@ func (d *sessionDriver) recordEntry(role, text, shown string, cost float64, turn
 		DurMs:       turn.DurMs,
 		CtxTokens:   turn.CtxTokens,
 		Tools:       turn.Tools,
+		Injected:    turn.Injected,
 	}
 	if shown != text {
 		entry.Displayed = shown

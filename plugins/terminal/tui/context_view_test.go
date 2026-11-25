@@ -107,3 +107,30 @@ func TestContextViewShowsTheRealThresholdAndTheBackKey(t *testing.T) {
 		t.Errorf("the footer must name the back key:\n%s", view)
 	}
 }
+
+func TestContextOverlayShowsTheBlocksTheHostWrote(t *testing.T) {
+	m := contextModel(t, 0)
+	m.tabs["c"].measureContext(contracts.Event{T: "reply", Done: true, TokensIn: 2_000, CacheRead: 6_000, Injected: []contracts.InjectedPart{
+		{Part: contracts.ContextMemory, Tokens: 1_200},
+		{Part: contracts.ContextSkills, Tokens: 340},
+		{Part: contracts.ContextCapabilities, Tokens: 500},
+		{Part: contracts.ContextIdentity, Tokens: 60},
+		{Part: "routines", Tokens: 40},
+	}})
+	view := ansi.Strip(m.contextView())
+	for _, want := range []string{"memory", "~1.2k", "skills", "~340", "host", "~600", "cache", "75%"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("overlay must show %q once the host measured its blocks:\n%s", want, view)
+		}
+	}
+}
+
+func TestContextOverlayReadsZeroForABlockTheHostDidNotWrite(t *testing.T) {
+	m := contextModel(t, 0)
+	m.tabs["c"].measureContext(contracts.Event{T: "reply", Done: true, Injected: []contracts.InjectedPart{{Part: contracts.ContextMemory, Tokens: 800}}})
+	for _, line := range strings.Split(ansi.Strip(m.contextView()), "\n") {
+		if strings.HasPrefix(line, "skills") && strings.Contains(line, unavailable) {
+			t.Fatalf("a measured turn without skills must read 0, not n/a: %q", line)
+		}
+	}
+}

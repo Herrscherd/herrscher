@@ -65,7 +65,7 @@ The pair suite has four tasks, each taught in one or more steps and then asked:
 | same agent | A fact taught to one agent is recalled by that agent. |
 | other agent | A fact taught to one agent is recalled by another. |
 | stale | A fact is corrected, and the corrected value is recalled, not the old one. A recall of the old value is false recall. |
-| never given | A fact that was never taught is not invented. The question asks for the password, or for the word NONE if it was never given. The reply succeeds when NONE is its only word; any reply other than NONE alone, a list number or a repeated NONE included, is false recall. |
+| never given | A fact that was never taught is not invented. The question asks for the password, or for the word NONE if it was never given. Scored as defined in *Scoring the never-given task* below. |
 
 With `-dataset`, the bench samples items of a LongMemEval file. Each item's
 evidence sessions are taught in order, then its question is asked. The five
@@ -88,23 +88,23 @@ For each task and setting, the report has one row with an off cell and an on
 cell, each with its runs, successes, false recalls, turns and tokens.
 
 - **Success**: the reply contains every expected value as whole words and no
-  forbidden one. For the never-given task, the reply succeeds when NONE is its
-  only word: case is ignored, and characters that are not letters or digits
-  separate words: NONE with punctuation or markdown around it succeeds, N-O-N-E
-  does not. A reply with no letter or digit is neither a success nor a false
-  recall. Matching is by whole word, so `42` does not match `1042`.
+  forbidden one. For the never-given task, the reply is scored as defined in
+  *Scoring the never-given task* below. Matching is by whole word, so `42` does
+  not match `1042`.
 - **Turns**: the calls of a run, one usage record each.
 - **Tokens to success**: the tokens of all runs divided by their successes. The
   delta is on minus off.
 - **Memory tokens per turn**: input tokens per turn on minus off. This is the
   cost the memory adds to each call.
 - **False recall**: a forbidden value (the stale answer) is given, or, for the
-  never-given task, the reply is any reply other than NONE alone, a list number
-  or a repeated NONE included. That covers an answer that says it does not know
-  in prose, a value stated, and
-  a verbose answer. It is counted, not averaged into success. The LongMemEval
-  section does not report it, because its reference answers do not mark
-  forbidden values.
+  never-given task, the reply is false recall as defined in *Scoring the
+  never-given task* below. It is counted, not averaged into success. The
+  LongMemEval section does not report it, because its reference answers do not
+  mark forbidden values.
+
+### Scoring the never-given task
+
+The reply is split into words at every character that is not a letter or a digit, and case is ignored. It is a success when its only word is NONE, so `NONE.`, `**NONE**` or `"none"` succeed. It is false recall when it has at least one word and NONE is not its only word, so a value, a sentence, `1. NONE`, `NONE NONE` and `N-O-N-E` are false recall. It is neither when it has no word, which covers an empty or blank reply.
 
 The never-given check is strict on purpose. The question fixes the reply
 format, so a reply that does not follow it cannot be told apart from an
@@ -247,11 +247,9 @@ it are renamed, and their values are unchanged.
 - The bench reads spend from the ledger of the binary it runs. A binary that
   writes no ledger stops the run with the missing-ledger error, as the
   `TestBenchStopsWithoutAUsageLedger` test checks.
-- The never-given task counts as false recall every reply that has a letter or a
-  digit and does not have NONE as its only word; a reply with no letter or digit
-  is neither a success nor a false recall. A model that answers in prose is
-  counted even when it invents nothing, so its false-recall figure measures
-  format compliance as well as invention.
+- Under *Scoring the never-given task*, a model that answers in prose is counted
+  as false recall even when it invents nothing, so its false-recall figure
+  measures format compliance as well as invention.
 - The settings gated by time of day are not exercised by the bench.
 - The effect of `HERRSCHER_OWNER_ID` on `--print` is not verified; the bench
   sets it, but its result is not measured.

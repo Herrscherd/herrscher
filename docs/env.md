@@ -21,9 +21,9 @@ The variables below are the ones the host and the bundled plugins read.
 | `DISCORD_TIDY_PINGS` | off | Delete the message that opened a turn once its answer is posted, so a channel keeps the work rather than the requests. Only the spellings people write (`1`, `true`, `yes`, `on`) count as on: a typo must not switch on something that deletes. | Discord gateway plugin |
 | `DISCORD_MESSAGE_DELETES` | off | Contribute the `discord message delete` verb to the daemon. Off, the verb is absent from the registry rather than present and failing: a command that was never registered cannot be talked into running by a message asking for it. On, it still refuses any message the bot did not write. | Discord gateway plugin |
 | `DCTL_STATE_DIR` | `~/.config/dctl` | Where the gateway keeps its own `0600` stores (`discord-allow.json`, `discord-router.json`). | Discord gateway plugin |
-| `HERRSCHER_OWNER_ID` | none | Owner snowflake; the fallback the per-daemon instance id is derived from when `HERRSCHER_INSTANCE_ID` is unset. | Host |
+| `HERRSCHER_OWNER_ID` | none | Owner snowflake; the fallback the per-daemon instance id is derived from (`u` and its last eight characters) when `HERRSCHER_INSTANCE_ID` is unset. Read only while the state holds no id. | Host |
 | `HERRSCHER_STATE_DIR` | `~/.config/herrscher` | The state directory (holds `state.json`); also the root of durable agent homes (`<stateDir>/agents/<name>/`). | Host |
-| `HERRSCHER_INSTANCE_ID` | none | Namespace slug for shared resources (isolates multiple instances). | Host |
+| `HERRSCHER_INSTANCE_ID` | none | Namespace slug for shared resources (worktrees, branches, sockets, channel titles), which isolates daemons sharing a repository or a home. Without it and without `HERRSCHER_OWNER_ID`, the first daemon start generates an id and writes it into the state. Once the state holds an id, that id wins, and a different value here refuses the start. See [the state migration](sessions.md#the-state-file-and-its-migration). | Host |
 
 ## Backends
 

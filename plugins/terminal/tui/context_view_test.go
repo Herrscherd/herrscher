@@ -147,3 +147,31 @@ func TestContextOverlayReadsZeroForABlockTheHostDidNotWrite(t *testing.T) {
 		}
 	}
 }
+
+func TestContextOverlayReadsZeroWhenTheHostWroteNothing(t *testing.T) {
+	m := contextModel(t, 0)
+	m.tabs["c"].measureContext(contracts.Event{T: "reply", Done: true, Injected: []contracts.InjectedPart{{Part: contracts.ContextMemory, Tokens: 800}}})
+	m.tabs["c"].measureContext(contracts.Event{T: "reply", Done: true, Injected: []contracts.InjectedPart{
+		{Part: contracts.ContextMemory}, {Part: contracts.ContextSkills}, {Part: contracts.ContextDelegation},
+		{Part: contracts.ContextCapabilities}, {Part: contracts.ContextIdentity},
+	}})
+	view := ansi.Strip(m.contextView())
+	if strings.Contains(view, "~800") {
+		t.Fatalf("a turn that wrote nothing must drop the last figures:\n%s", view)
+	}
+	read := 0
+	for _, line := range strings.Split(view, "\n") {
+		for _, part := range []string{"memory", "host"} {
+			if !strings.HasPrefix(line, part) {
+				continue
+			}
+			read++
+			if strings.Contains(line, unavailable) || !strings.Contains(line, " 0") {
+				t.Fatalf("%s must read 0 after a turn that wrote nothing: %q", part, line)
+			}
+		}
+	}
+	if read != 2 {
+		t.Fatalf("overlay must list memory and host, read %d of them:\n%s", read, view)
+	}
+}

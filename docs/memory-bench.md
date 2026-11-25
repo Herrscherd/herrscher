@@ -89,8 +89,9 @@ cell, each with its runs, successes, false recalls, turns and tokens.
 
 - **Success**: the reply contains every expected value as whole words and no
   forbidden one. For the never-given task, the reply succeeds when NONE is its
-  only word: case, punctuation and markdown around it are ignored. Matching is by
-  whole word, so `42` does not match `1042`.
+  only word: case and any character that is not a letter or a digit are ignored.
+  A reply with no letter or digit, empty or only symbols, is neither a success
+  nor a false recall. Matching is by whole word, so `42` does not match `1042`.
 - **Turns**: the calls of a run, one usage record each.
 - **Tokens to success**: the tokens of all runs divided by their successes. The
   delta is on minus off.
@@ -229,25 +230,26 @@ usage write in a local one-shot reaches the warnings writer.
 
 ## Lint exclusions
 
-The only gosec finding excluded by path for this package is G204 in
-`tools/membench/runner.go`: the binary run is the one the operator names with
-`-herrscher`, and running it is the purpose of the tool. The G101 exclusion was
-removed: the catalogue keys and flag names that tripped it are renamed, and their
-values are unchanged.
+`.golangci.yml` excludes two gosec findings by path for this package:
 
-`.golangci.yml` excludes G304 and G703 for `^(cmd|tools)/`, and this package
-falls under that rule: it reads the dataset and credentials paths the operator
-names.
+- G204 in `tools/membench/runner.go`: the binary run is the one the operator
+  names with `-herrscher`, and running it is the purpose of the tool.
+- G304 and G703 for `^(cmd|tools)/`: this package falls under that rule, since
+  it reads the dataset and credentials paths the operator names.
+
+The G101 exclusion was removed: the catalogue keys and flag names that tripped
+it are renamed, and their values are unchanged.
 
 ## Limitations
 
 - The bench reads spend from the ledger of the binary it runs. A binary that
   writes no ledger stops the run with the missing-ledger error, as the
   `TestBenchStopsWithoutAUsageLedger` test checks.
-- The never-given task counts as false recall every reply that does not have NONE
-  as its only word, so a model that answers in prose is counted even when it
-  invents nothing. Its
-  false-recall figure measures format compliance as well as invention.
+- The never-given task counts as false recall every non-empty reply that does not
+  have NONE as its only word, so a model that answers in prose is counted even
+  when it invents nothing. Its false-recall figure measures format compliance as
+  well as invention. A reply with no letter or digit is neither a success nor a
+  false recall.
 - The settings gated by time of day are not exercised by the bench.
 - The effect of `HERRSCHER_OWNER_ID` on `--print` is not verified; the bench
   sets it, but its result is not measured.

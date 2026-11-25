@@ -26,8 +26,8 @@ func (h *hub) liveSink(ctx context.Context, sess state.Session) sessionSink {
 		TurnFinished: func(turnID string) {
 			h.markTurnFinished(sess.Name, turnID)
 		},
-		TurnSettled: func() {
-			h.clearTurnMark(sess.Name)
+		TurnSettled: func(turnID string) {
+			h.clearTurnMark(sess.Name, turnID)
 		},
 		Project: func(pinned string) {
 			end := h.persists.begin()

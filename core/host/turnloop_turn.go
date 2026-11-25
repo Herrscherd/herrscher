@@ -163,7 +163,7 @@ func (d *sessionDriver) abandon(ctx context.Context, event contracts.Event) {
 
 func (d *sessionDriver) settleTurn() {
 	if d.sink.TurnSettled != nil {
-		d.sink.TurnSettled()
+		d.sink.TurnSettled(d.currentTurnID())
 	}
 }
 

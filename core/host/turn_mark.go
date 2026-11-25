@@ -27,10 +27,10 @@ func (h *hub) markTurnFinished(session, turnID string) {
 	}
 }
 
-func (h *hub) clearTurnMark(session string) {
+func (h *hub) clearTurnMark(session, turnID string) {
 	end := h.persists.begin()
 	defer end()
-	if err := h.st.ClearTurnMark(session); err != nil {
+	if err := h.st.ClearTurnMark(session, turnID); err != nil {
 		warnLive(h.messages, h.warnings, h.sessionLanguageSource(session), "warn.session_turn_mark_clear", map[string]any{nameParam: session, detailParam: err})
 	}
 }
@@ -59,7 +59,7 @@ func (h *hub) announceInterruptedTurn(sess state.Session) {
 		return
 	}
 	if sess.FinishedTurn == sess.InterruptedTurn || h.interruptionAnnounced(sess.Name, sess.InterruptedTurn) {
-		h.clearTurnMark(sess.Name)
+		h.clearTurnMark(sess.Name, sess.InterruptedTurn)
 		return
 	}
 	if err := h.appendTranscript(sess.Name, interruptedTurnEntry(sess.InterruptedTurn)); err != nil {
@@ -67,5 +67,5 @@ func (h *hub) announceInterruptedTurn(sess state.Session) {
 		warnLive(h.messages, h.warnings, lang, "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
 		return
 	}
-	h.clearTurnMark(sess.Name)
+	h.clearTurnMark(sess.Name, sess.InterruptedTurn)
 }

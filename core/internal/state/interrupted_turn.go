@@ -10,8 +10,8 @@ func (s *State) SetFinishedTurn(name, turnID string) error {
 	return s.setSessionField(name, func(sess *Session) *string { return &sess.FinishedTurn }, turnID)
 }
 
-// ClearTurnMark drops the open turn mark and the finished record of its turn in one save; on a failed save both fields stay as they were.
-func (s *State) ClearTurnMark(name string) error {
+// ClearTurnMark drops the open mark and the finished record only where they name turnID, so a settling turn never drops another turn's mark; on a failed save both fields stay as they were.
+func (s *State) ClearTurnMark(name, turnID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for idx := range s.Sessions {
@@ -20,10 +20,11 @@ func (s *State) ClearTurnMark(name string) error {
 		}
 		sess := &s.Sessions[idx]
 		previousTurn, previousFinished := sess.InterruptedTurn, sess.FinishedTurn
-		if previousTurn == "" && previousFinished == "" {
+		nextTurn, nextFinished := clearedIfOwnedBy(previousTurn, turnID), clearedIfOwnedBy(previousFinished, turnID)
+		if nextTurn == previousTurn && nextFinished == previousFinished {
 			return nil
 		}
-		sess.InterruptedTurn, sess.FinishedTurn = "", ""
+		sess.InterruptedTurn, sess.FinishedTurn = nextTurn, nextFinished
 		if err := s.saveLocked(); err != nil {
 			sess.InterruptedTurn, sess.FinishedTurn = previousTurn, previousFinished
 			return err
@@ -31,6 +32,13 @@ func (s *State) ClearTurnMark(name string) error {
 		return nil
 	}
 	return nil
+}
+
+func clearedIfOwnedBy(current, turnID string) string {
+	if current == turnID {
+		return ""
+	}
+	return current
 }
 
 // SetResumeTokenAndClearInterruptedTurn stores a restored resume token and drops the mark of the previous conversation in one save; on a failed save both fields stay as they were.

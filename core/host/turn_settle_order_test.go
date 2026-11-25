@@ -44,7 +44,7 @@ func newSettleOrder(refused string) *settleOrder {
 		order.steps = append(order.steps, step)
 		return nil
 	}
-	d.sink.TurnSettled = func() { order.steps = append(order.steps, stepSettled) }
+	d.sink.TurnSettled = func(string) { order.steps = append(order.steps, stepSettled) }
 	order.driver = d
 	return order
 }

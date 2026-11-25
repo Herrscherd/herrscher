@@ -60,7 +60,7 @@ type sessionSink struct {
 	Usage        func([]usage.Record)
 	TurnOpened   func(turnID string)
 	TurnFinished func(turnID string)
-	TurnSettled  func()
+	TurnSettled  func(turnID string)
 }
 
 type sessionDriver struct {

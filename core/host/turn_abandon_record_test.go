@@ -17,7 +17,7 @@ func abandonDriver(h *hub, toBridge, from chan contracts.Event) *sessionDriver {
 	d.sink = sessionSink{
 		Transcript:  func(e state.TranscriptEntry) error { return h.appendTranscript("main", e) },
 		TurnOpened:  func(turnID string) { h.openTurnMark("main", turnID) },
-		TurnSettled: func() { h.clearTurnMark("main") },
+		TurnSettled: func(turnID string) { h.clearTurnMark("main", turnID) },
 	}
 	return d
 }

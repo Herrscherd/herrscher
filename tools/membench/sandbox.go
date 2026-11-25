@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 )
 
@@ -15,16 +17,19 @@ const (
 	vaultEnv        = "OBSIDIAN_VAULT"
 	agedNodeFile    = "aged.md"
 	agedNodeText    = "---\ntype: fact\ntitle: old fact\nlastSeen: 2001-01-01T00:00:00Z\n---\nThe old fact.\n"
+	repoDir         = "membench-repo"
+	memoryAgentEnv  = "TERMINAL_MEMORY_AGENT"
 )
 
 type sandbox struct {
 	root   string
 	state  string
 	home   string
+	repo   string
 	config string
 }
 
-func newSandbox(parent string) (sandbox, error) {
+func newSandbox(ctx context.Context, parent string) (sandbox, error) {
 	root, err := os.MkdirTemp(parent, "run-")
 	if err != nil {
 		return sandbox{}, sandboxError(err)
@@ -35,12 +40,26 @@ func newSandbox(parent string) (sandbox, error) {
 		home:   filepath.Join(root, "home"),
 		config: filepath.Join(root, "claude"),
 	}
-	for _, dir := range []string{created.state, created.home, created.config} {
+	created.repo = filepath.Join(created.home, repoDir)
+	for _, dir := range []string{created.state, created.repo, created.config} {
 		if err := os.MkdirAll(dir, dirMode); err != nil {
 			return sandbox{}, errors.Join(sandboxError(err), created.close())
 		}
 	}
+	if err := created.initRepo(ctx); err != nil {
+		return sandbox{}, errors.Join(err, created.close())
+	}
 	return created, nil
+}
+
+func (s sandbox) initRepo(ctx context.Context) error {
+	cmd := exec.CommandContext(ctx, "git", "init", "--quiet")
+	cmd.Dir = s.repo
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + s.home, "GIT_CONFIG_NOSYSTEM=1"}
+	if err := cmd.Run(); err != nil {
+		return sandboxError(err)
+	}
+	return nil
 }
 
 func (s sandbox) close() error {
@@ -90,8 +109,12 @@ func (s sandbox) environ(model, owner string, assignments []string) []string {
 		"HERRSCHER_STATE_DIR=" + s.state,
 		"HERRSCHER_INSTANCE_ID=" + filepath.Base(s.root),
 		"HERRSCHER_OWNER_ID=" + owner,
+		memoryAgentEnv + "=" + owner,
 		"HERRSCHER_DEFAULT_MODEL=" + model,
 		"HERRSCHER_MODELS_DISCOVER=none",
+		"CLAUDE_CODE_DISABLE_AUTO_MEMORY=1",
+		"ENABLE_CLAUDEAI_MCP_SERVERS=false",
+		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
 	}
 	return append(env, assignments...)
 }

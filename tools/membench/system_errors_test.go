@@ -169,7 +169,7 @@ func TestSystemErrorsReadInFrench(t *testing.T) {
 		{
 			name: "sandbox parent missing",
 			err: func(*testing.T) error {
-				_, err := newSandbox(missing)
+				_, err := newSandbox(t.Context(), missing)
 				return err
 			},
 			want: "bac à sable de membench impossible à préparer ou à nettoyer",
@@ -246,7 +246,7 @@ func timedOutRun(t *testing.T) error {
 	if err := os.WriteFile(binary, []byte("#!/bin/sh\nexec sleep 30\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	box, err := newSandbox(t.TempDir())
+	box, err := newSandbox(t.Context(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +266,7 @@ func TestDetailNeverLeaksSecretAcrossTheCutoff(t *testing.T) {
 	if err := os.WriteFile(binary, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	box, err := newSandbox(t.TempDir())
+	box, err := newSandbox(t.Context(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -338,7 +338,7 @@ func TestRunFailureKeepsRedactedStderr(t *testing.T) {
 	if err := os.WriteFile(binary, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	box, err := newSandbox(t.TempDir())
+	box, err := newSandbox(t.Context(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

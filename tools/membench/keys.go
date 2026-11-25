@@ -97,6 +97,7 @@ const (
 	msgVariantOtherAgent  msgKey = "membench.variant.other_agent"
 	msgVariantStale       msgKey = "membench.variant.stale"
 	msgVariantNeverGiven  msgKey = "membench.variant.never_given"
+	msgVariantProcedure   msgKey = "membench.variant.procedure"
 	msgCapExtraction      msgKey = "membench.cap.extraction"
 	msgCapMultisession    msgKey = "membench.cap.multisession"
 	msgCapTemporal        msgKey = "membench.cap.temporal"

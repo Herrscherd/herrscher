@@ -93,9 +93,17 @@ func pairTasks() []task {
 				{agent: agentAlpha, prompt: "Remember this: the Quorr gate code is 4481."},
 				{agent: agentAlpha, prompt: "Correction: the Quorr gate code is 9056."},
 			},
-			ask:    step{agent: agentAlpha, prompt: "What is the Quorr gate code?"},
+			ask:    step{agent: agentAlpha, prompt: "What is the Quorr gate code? Reply with only the code."},
 			want:   []string{"9056"},
 			forbid: []string{"4481"},
+		},
+		{
+			section: msgSectionPairs,
+			group:   msgVariantProcedure,
+			id:      "procedure",
+			steps:   []step{{agent: agentAlpha, prompt: "Remember this procedure for this repository: to release it, first run `make tag`, then run `make ship ZONE=4`. Running `make ship` before `make tag` corrupts the release."}},
+			ask:     step{agent: agentAlpha, prompt: "Which commands release this repository, in order? Reply with only the commands."},
+			want:    []string{"make tag", "make ship zone 4"},
 		},
 		{
 			section:  msgSectionPairs,

@@ -24,7 +24,7 @@ heavy tool at a time.
 
 | Flag | Default | Meaning |
 |------|---------|---------|
-| `-herrscher` | `herrscher` | The binary to run, looked up on `PATH` or given as a path. |
+| `-herrscher` | `herrscher` | The binary to run, looked up on `PATH` or given as a path. A relative path is made absolute, since each call runs from its arm's repository. |
 | `-model` | `claude-haiku-5-5` | The model the runs use, passed as `HERRSCHER_DEFAULT_MODEL`. |
 | `-budget-tokens` | none | Ceiling in tokens (input, output and cache tokens of the ledger). |
 | `-budget-usd` | none | Ceiling in US dollars, from the cost the ledger records. |
@@ -58,13 +58,14 @@ writes no report and exits `2` or `1` with the message on stderr.
 
 ## What runs
 
-The pair suite has four tasks, each taught in one or more steps and then asked:
+The pair suite has five tasks, each taught in one or more steps and then asked:
 
 | Task | What it checks |
 |------|----------------|
 | same agent | A fact taught to one agent is recalled by that agent. |
 | other agent | A fact taught to one agent is recalled by another. |
-| stale | A fact is corrected, and the corrected value is recalled, not the old one. A recall of the old value is false recall. |
+| stale | A fact is corrected, and the corrected value is recalled, not the old one. The question asks for the code alone, so a reply that gives the old value is false recall, and a reply that names the old value as replaced cannot pass for a correct one. |
+| procedure | A two-step release procedure of the repository is recalled in order. It is the task where an agent may write the procedure down as a skill, so it is the one `learned-skills` can change. |
 | never given | A fact that was never taught is not invented. The question asks for the password, or for the word NONE if it was never given. Scored as defined in [Scoring the never-given task](#scoring-the-never-given-task). |
 
 With `-dataset`, the bench samples items of a LongMemEval file. Each item's
@@ -94,8 +95,10 @@ cell, each with its runs, successes, false recalls, turns and tokens.
 - **Turns**: the calls of a run, one usage record each.
 - **Tokens to success**: the tokens of all runs divided by their successes. The
   delta is on minus off.
-- **Memory tokens per turn**: input tokens per turn on minus off. This is the
-  cost the memory adds to each call.
+- **Memory tokens per turn**: prompt tokens per turn on minus off, counting
+  the uncached input, the cache reads and the cache writes. This is the cost the
+  memory adds to each call. The vendor caches the prompt, so the uncached input
+  alone stays near zero and would hide what the memory injects.
 - **False recall**: a forbidden value (the stale answer) is given, or, for the
   never-given task, the reply is false recall as defined in
   [Scoring the never-given task](#scoring-the-never-given-task). It is counted,
@@ -126,10 +129,9 @@ many runs each side has.
 ## Fixed conditions
 
 Every arm runs with `TERMINAL_CONSOLIDATE_EVERY=0`, whatever the user's default
-is. The default of 10 never consolidates a one-shot, so a one-shot would never
-sweep the vault and the report and sweep settings would have nothing to act on.
-With 0, consolidation runs at the end of each one-shot run that completes, with
-an orchestrator. The off arm and the on arm then differ only by the setting under
+is. A one-shot run that completes, with an orchestrator, consolidates at its end
+at 0 and at the default of 10 alike, so this pins the condition without
+departing from what a user runs. The off arm and the on arm then differ only by the setting under
 test, except for the two kinds of run described below. A run whose `herrscher`
 call errors stops the bench there: `forEachArm` in `tools/membench/runner.go`
 returns the error, `runAll` passes it on, and `execute` in
@@ -139,8 +141,7 @@ failed arm's spend is still counted. A run whose bridge is not joined within the
 grace but which returns a reply counts as completed for the bench: it is kept
 and enters the deltas as a complete pair. It does not consolidate at its end, so
 its arm differs from the other arm by that missing consolidation, and the bench
-does not mark such a run. A herrscher run by a user keeps the default of 10, so
-the bench measures a condition a user does not run by default.
+does not mark such a run.
 
 Each arm's vault (`OBSIDIAN_VAULT`) starts with one aged node in the real
 format, `type: fact` with `lastSeen: 2001-01-01T00:00:00Z`, in off and on arms
@@ -174,6 +175,24 @@ state, the home and the config of that run, and the run's environment is built
 from nothing: only `PATH` is inherited, the state, home and config variables
 point into the arm's directory, and `HERRSCHER_INSTANCE_ID` is unique to the
 arm.
+
+Every call runs from `membench-repo`, an empty git repository inside the arm's
+home. herrscher names the memory project after the repository a session stands
+in, so the facts a call learns go to the shared project scope where the next
+call recalls them. Run from a directory outside any repository, a call has no
+project, its facts stay in its own session scope, and no later call finds them.
+
+Each step names its agent twice: `HERRSCHER_OWNER_ID` and
+`TERMINAL_MEMORY_AGENT`, which decides the private memory scope. Without the
+second, both agents of the other-agent task would be the default `tui` agent.
+
+The vendor is kept from answering on its own:
+
+| Variable | Why |
+|---|---|
+| `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` | Claude Code keeps its own memory files under its config directory. Left on, it stores the taught fact and answers from it, so the bench would measure Claude Code's memory and not herrscher's. |
+| `ENABLE_CLAUDEAI_MCP_SERVERS=false` | The account's claude.ai connectors (mail, documents) are not loaded into a run. |
+| `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` | No skill or plugin is synced from the account into the run. |
 
 `ANTHROPIC_API_KEY` is never read from the caller's environment by default. A run
 uses the credentials given with `-credentials`. The key is passed to each run

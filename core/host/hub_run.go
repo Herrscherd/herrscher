@@ -66,6 +66,9 @@ func RunHub(ctx context.Context, cliMessages *clitext.Messages, hostMessages *Me
 		return localizeHostError(messages, cliMessages, options.operatorLanguage(), settingsErr)
 	}
 	serveErr := serveHub(ctx, messages, cliMessages, gws, closers, options, clock, tick)
+	if text, ok := stateFormatText(cliMessages, options.operatorLanguage(), serveErr); ok {
+		return localizedHostError{text: text, cause: serveErr}
+	}
 	if settings, ok := errors.AsType[compactorSettingsError](serveErr); ok {
 		return localizeCompactorSettings(messages, cliMessages, options.operatorLanguage(), settings)
 	}
@@ -98,7 +101,9 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	log := base.With("component", "serve")
 	monitor := health.NewHealth(time.Now())
 
-	store, err := loadHubState(options)
+	options = options.withDefaultGateways(gws)
+	announcer := stateAnnouncer{cliMessages: cliMessages, lang: options.operatorLanguage(), log: log, out: options.Warnings}
+	store, err := loadHubState(ctx, messages, announcer, options)
 	if err != nil {
 		return wrapHost(messages, err, "serve.load_state", nil)
 	}
@@ -109,7 +114,7 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	partDir := filepath.Dir(options.StatePath)
 	sup := newHubSupervisor(ctx, self, options.Runtime, base, monitor, partDir, options.StatePath)
 
-	instID, err := resolveInstanceID(messages, store, options.InstanceID, options.Owner, log)
+	instID, err := resolveInstanceID(messages, announcer, store, options.InstanceID, options.Owner)
 	if err != nil {
 		return wrapHost(messages, err, "serve.resolve_instance", nil)
 	}
@@ -119,7 +124,6 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	}
 	defer releaseInstance()
 
-	options = options.withDefaultGateways(gws)
 	approvals := newApprovalTable(options.Warnings).withRules(store).withMessages(messages, options.languageSource())
 	sessions := newSessionTable(messages, cliMessages)
 	options.health = &healthSource{}
@@ -200,9 +204,7 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	monitor.SetSessions(len(store.SnapshotSessions()))
 	bindSessionControl(gws, runningHub)
 
-	if instID != "" {
-		log.Info("instance resolved", "instance", instID)
-	}
+	log.Info("instance resolved", "instance", instID)
 	logCompiledPlugins(log)
 	startHubProbes(ctx, messages, gws, options, store, monitor, instID)
 

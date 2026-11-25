@@ -19,20 +19,13 @@ func CommandSocketPath(instanceID string) string {
 // CommandSocketPathIn is the operator command pipe; pipes have no directory, so
 // the layout is not used on this platform.
 func CommandSocketPathIn(_ RuntimeLayout, instanceID string) string {
-	if instanceID != "" {
-		return `\\.\pipe\herrscher-command-` + instanceID
-	}
-	return `\\.\pipe\herrscher-command`
+	return `\\.\pipe\herrscher-command-` + instanceID
 }
 
 // SessionCommandSocketPathIn is the per-session command pipe; the layout is not
 // used on this platform.
 func SessionCommandSocketPathIn(_ RuntimeLayout, instanceID, session string) string {
-	name := `\\.\pipe\herrscher-command`
-	if instanceID != "" {
-		name += "-" + instanceID
-	}
-	return name + "-s-" + control.SafeSessionName(session)
+	return `\\.\pipe\herrscher-command-` + instanceID + "-s-" + control.SafeSessionName(session)
 }
 
 // EventsSocketPath is the daemon-level per-session events fan-out pipe: a sibling
@@ -44,10 +37,7 @@ func EventsSocketPath(instanceID string) string {
 // EventsSocketPathIn is the per-session events pipe; the layout is not used on
 // this platform.
 func EventsSocketPathIn(_ RuntimeLayout, instanceID string) string {
-	if instanceID != "" {
-		return `\\.\pipe\herrscher-events-` + instanceID
-	}
-	return `\\.\pipe\herrscher-events`
+	return `\\.\pipe\herrscher-events-` + instanceID
 }
 
 func listenCommandSocket(_ context.Context, _ *hostMessages, _ RuntimeLayout, path string) (net.Listener, error) {

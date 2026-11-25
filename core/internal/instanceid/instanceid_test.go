@@ -1,6 +1,9 @@
 package instanceid
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestValidate(t *testing.T) {
 	tests := []struct {
@@ -67,7 +70,6 @@ func TestResolve(t *testing.T) {
 		{"explicit-wins", "alice", "343535234303787009", "alice", false},
 		{"explicit-invalid-errors", "Alice!", "12345678", "", true},
 		{"derive-from-owner", "", "343535234303787009", "u03787009", false},
-		{"legacy-no-inputs", "", "", "", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -79,5 +81,22 @@ func TestResolve(t *testing.T) {
 				t.Fatalf("Resolve(%q,%q) = %q, want %q", tt.explicit, tt.owner, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestResolveWithNoInputIsUnconfigured(t *testing.T) {
+	got, err := Resolve("", "")
+	if !errors.Is(err, ErrUnconfigured) || got != "" {
+		t.Fatalf("Resolve(\"\", \"\") = %q, %v, want ErrUnconfigured", got, err)
+	}
+}
+
+func TestGenerateGivesAValidFreshID(t *testing.T) {
+	first, second := Generate(), Generate()
+	if !Validate(first) || !Validate(second) {
+		t.Fatalf("Generate gave %q and %q, want valid ids", first, second)
+	}
+	if first == second {
+		t.Fatalf("Generate gave %q twice", first)
 	}
 }

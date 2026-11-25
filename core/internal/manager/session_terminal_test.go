@@ -79,7 +79,7 @@ func TestSessionCreateTerminalOnlyRoutesToTerminalAdmin(t *testing.T) {
 		args("name", "main", "terminal_only", "true", "shared", "true")); err != nil {
 		t.Fatalf("terminal-only create should succeed, got: %v", err)
 	}
-	if len(term.created) != 1 || term.created[0] != "main" {
+	if len(term.created) != 1 || term.created[0] != "inst__main" {
 		t.Fatalf("terminal admin should mint the channel, got %+v", term.created)
 	}
 	if len(chat.created) != 0 {

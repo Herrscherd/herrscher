@@ -38,14 +38,6 @@ func TestSessionCreateUsesQualifiedTitle(t *testing.T) {
 			logical:    "foo",
 			wantTitle:  "forum:bob__foo",
 		},
-		{
-			name:       "category-legacy",
-			instanceID: "",
-			homeType:   "",
-			setHome:    state.HomeRef{ID: "cat1", Type: "category"},
-			logical:    "foo",
-			wantTitle:  "foo",
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

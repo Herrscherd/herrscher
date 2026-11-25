@@ -4,17 +4,26 @@
 package instanceid
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 )
 
-const maxOwnerSuffix = 8
+const (
+	maxOwnerSuffix  = 8
+	generatedPrefix = "h"
+	generatedLength = 8
+)
 
 var (
 	idRe         = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,15}$`)
 	errInvalidID = errors.New("invalid instance id")
 )
+
+// ErrUnconfigured reports that neither an explicit id nor an owner was given to derive one from.
+var ErrUnconfigured = errors.New("neither HERRSCHER_INSTANCE_ID nor HERRSCHER_OWNER_ID is set")
 
 // Validate reports whether id is a well-formed instanceID slug.
 func Validate(id string) bool {
@@ -35,11 +44,7 @@ func Slugify(owner string) string {
 	return "u" + owner
 }
 
-// Resolve computes the instanceID from an explicit id (e.g. HERRSCHER_INSTANCE_ID)
-// and a fallback owner snowflake (e.g. HERRSCHER_OWNER_ID), per Spec §2:
-//  1. explicit, when set, must be a valid slug or Resolve errors;
-//  2. otherwise the owner is slugified;
-//  3. otherwise "" (legacy, non-namespaced mode).
+// Resolve computes the instanceID from an explicit id (HERRSCHER_INSTANCE_ID), else from the owner (HERRSCHER_OWNER_ID), else returns ErrUnconfigured.
 func Resolve(explicit, owner string) (string, error) {
 	if explicit != "" {
 		if !Validate(explicit) {
@@ -47,9 +52,17 @@ func Resolve(explicit, owner string) (string, error) {
 		}
 		return explicit, nil
 	}
+	if owner == "" {
+		return "", ErrUnconfigured
+	}
 	derived := Slugify(owner)
-	if derived != "" && !Validate(derived) {
+	if !Validate(derived) {
 		return "", fmt.Errorf("%w: HERRSCHER_OWNER_ID %q derives %q", errInvalidID, owner, derived)
 	}
 	return derived, nil
+}
+
+// Generate returns a fresh random instanceID, for a daemon that was given neither an id nor an owner.
+func Generate() string {
+	return generatedPrefix + strings.ToLower(rand.Text()[:generatedLength])
 }

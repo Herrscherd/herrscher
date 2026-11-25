@@ -5813,5 +5813,100 @@
     "id": "cli.session.pr.conclusion.other",
     "description": "Check conclusion word: completed without a conclusion the plugin can name",
     "other": "other"
+  },
+  {
+    "id": "cli.worktree.relocate_target_exists",
+    "description": "State migration refusal: the worktree target already exists",
+    "other": "session {{.Name}}: {{.Path}} already exists, the migration cannot move {{.From}} there; move or delete {{.Path}} by hand, then run herrscher serve again"
+  },
+  {
+    "id": "cli.worktree.relocate_branch_exists",
+    "description": "State migration refusal: the target branch already exists",
+    "other": "session {{.Name}}: branch {{.Branch}} already exists, the migration cannot rename {{.From}} to it; rename or delete {{.Branch}} by hand, then run herrscher serve again"
+  },
+  {
+    "id": "cli.worktree.relocate_upstream",
+    "description": "State migration refusal: the branch tracks a remote branch",
+    "other": "session {{.Name}}: branch {{.Branch}} tracks a remote branch, renaming it would cut its pull request off; merge or close the pull request, drop the tracking with git branch --unset-upstream {{.Branch}}, then run herrscher serve again"
+  },
+  {
+    "id": "cli.worktree.relocate_failed",
+    "description": "A move failed during the state migration",
+    "other": "session {{.Name}}: the move failed: {{.Err}} {{.Output}}"
+  },
+  {
+    "id": "cli.migration.started",
+    "description": "Notice that a state migration starts",
+    "other": "herrscher: migrating state {{.Path}} from format {{.From}} to format {{.To}}; the old file is kept in {{.File}}"
+  },
+  {
+    "id": "cli.migration.done",
+    "description": "Notice that a state migration finished",
+    "other": "herrscher: state {{.Path}} migrated to format {{.To}}"
+  },
+  {
+    "id": "cli.migration.instance_configured",
+    "description": "Migration: instance id taken from the configuration",
+    "other": "herrscher: migration: instance id {{.Value}} taken from HERRSCHER_INSTANCE_ID or HERRSCHER_OWNER_ID, written into the state"
+  },
+  {
+    "id": "cli.migration.instance_generated",
+    "description": "Migration: instance id generated for lack of configuration",
+    "other": "herrscher: migration: neither HERRSCHER_INSTANCE_ID nor HERRSCHER_OWNER_ID, instance id {{.Value}} generated and written into the state"
+  },
+  {
+    "id": "cli.migration.workspace_from_repo",
+    "description": "Migration: the old repo field becomes the workspace",
+    "other": "herrscher: migration: the old repo field {{.Path}} becomes the workspace"
+  },
+  {
+    "id": "cli.migration.repo_dropped",
+    "description": "Migration: the old repo field is dropped since a workspace already applies",
+    "other": "herrscher: migration: the old repo field {{.Path}} is dropped, a workspace already applies"
+  },
+  {
+    "id": "cli.migration.gateways_bound",
+    "description": "Migration: a session gets the gateway binding it was using",
+    "other": "herrscher: migration: session {{.Name}} bound to gateways {{.Kind}}"
+  },
+  {
+    "id": "cli.migration.worktree_relocated",
+    "description": "Migration: a session worktree or directory moves",
+    "other": "herrscher: migration: session {{.Name}}, directory {{.From}} moved to {{.To}}"
+  },
+  {
+    "id": "cli.migration.branch_renamed",
+    "description": "Migration: a session branch is renamed",
+    "other": "herrscher: migration: session {{.Name}}, branch {{.From}} renamed {{.To}}"
+  },
+  {
+    "id": "cli.migration.newer_format",
+    "description": "Refusal to start on a state written by a newer build",
+    "other": "state {{.Path}} has format {{.Have}}, this build reads up to format {{.Want}} only: run a newer herrscher build, or restore an older-format *.bak copy left next to it"
+  },
+  {
+    "id": "cli.migration.pending",
+    "description": "Refusal of a command on a state not migrated yet",
+    "other": "state {{.Path}} has an old format: run herrscher serve once to migrate it, then run this command again"
+  },
+  {
+    "id": "cli.migration.no_gateway",
+    "description": "Migration refusal: no channel gateway to bind",
+    "other": "session {{.Name}}: it has a channel but no bound gateway, and no channel gateway is built; run herrscher serve with the gateway of that channel configured, the migration will bind it"
+  },
+  {
+    "id": "cli.migration.remote_session",
+    "description": "Migration refusal: remote session in the old layout",
+    "other": "session {{.Name}}: its worktree {{.Path}} is on host {{.Host}} in the old layout without an instance id, and the migration does not move a remote worktree; close this session with the previous build (herrscher session close {{.Name}}), then start this build again"
+  },
+  {
+    "id": "cli.migration.refused",
+    "description": "State migration refusal, nothing is written",
+    "other": "state migration refused, the state was not rewritten: {{.Err}}"
+  },
+  {
+    "id": "cli.instance.generated",
+    "description": "Instance id generated for a fresh state",
+    "other": "herrscher: neither HERRSCHER_INSTANCE_ID nor HERRSCHER_OWNER_ID, instance id {{.Value}} generated and written into the state"
   }
 ]

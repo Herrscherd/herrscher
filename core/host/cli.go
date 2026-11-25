@@ -211,7 +211,10 @@ func NewRegistry(ctx context.Context, cliMessages *clitext.Messages, hostMessage
 	messages := hostMessages.owner
 	hostState, err := state.LoadState(options.StatePath)
 	if err != nil {
-		return nil, err
+		return nil, localizeStateFormatError(cliMessages, options.operatorLanguage(), err)
+	}
+	if hostState.Outdated() {
+		return nil, localizeStateFormatError(cliMessages, options.operatorLanguage(), &statePendingMigrationError{path: options.StatePath})
 	}
 	var home *state.HomeRef
 	if options.Home != nil {
@@ -219,7 +222,8 @@ func NewRegistry(ctx context.Context, cliMessages *clitext.Messages, hostMessage
 	}
 	hostState.ApplyDefaults(home, options.Workspace, options.Source)
 
-	instID, err := resolveInstanceID(messages, hostState, options.InstanceID, options.Owner, obs.Stderr(false))
+	announcer := stateAnnouncer{cliMessages: cliMessages, lang: options.operatorLanguage(), log: obs.Stderr(false), out: options.Warnings}
+	instID, err := resolveInstanceID(messages, announcer, hostState, options.InstanceID, options.Owner)
 	if err != nil {
 		return nil, localizeHostError(messages, cliMessages, options.operatorLanguage(), err)
 	}

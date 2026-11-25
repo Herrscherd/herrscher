@@ -16,7 +16,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/forgecreds"
 	"github.com/Herrscherd/herrscher/core/internal/health"
-	"github.com/Herrscherd/herrscher/core/internal/instanceid"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/runtimedir"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -157,31 +156,6 @@ func DefaultStatePath() string {
 	return filepath.Join(home, ".config", "herrscher", "state.json")
 }
 
-func resolveInstanceID(messages *hostMessages, hostState *state.State, optID, ownerID string, log *slog.Logger) (string, error) {
-	resolved, err := instanceid.Resolve(optID, ownerID)
-	if err != nil {
-		return "", err
-	}
-	if hostState.InstanceID != "" {
-		if resolved != "" && resolved != hostState.InstanceID {
-			return "", &instanceIDMismatchError{messages: messages, Have: hostState.InstanceID, Want: resolved}
-		}
-		return hostState.InstanceID, nil
-	}
-	if resolved == "" {
-		return "", nil
-	}
-	if len(hostState.SnapshotSessions()) > 0 {
-		log.Warn("legacy sessions present; staying in non-namespaced mode",
-			"sessions", len(hostState.SnapshotSessions()))
-		return "", nil
-	}
-	if err := hostState.SetInstanceID(resolved); err != nil {
-		return "", wrapHost(messages, err, "serve.instance_persist", nil)
-	}
-	return resolved, nil
-}
-
 func (options Options) operatorLanguage() i18n.Language {
 	return options.languageSource()()
 }
@@ -237,9 +211,12 @@ func CloseKeyProxy(ctx context.Context, log *slog.Logger, keys *keyproxy.Proxy) 
 	}
 }
 
-func loadHubState(opts Options) (*state.State, error) {
+func loadHubState(ctx context.Context, messages *hostMessages, announcer stateAnnouncer, opts Options) (*state.State, error) {
 	store, err := state.LoadState(opts.StatePath)
 	if err != nil {
+		return nil, err
+	}
+	if err := migrateHubState(ctx, messages, announcer, store, migrationInputs{optID: opts.InstanceID, ownerID: opts.Owner, defaultGateways: opts.DefaultGateways, configWorkspace: opts.Workspace}); err != nil {
 		return nil, err
 	}
 	var home *state.HomeRef
@@ -432,16 +409,6 @@ func firstReader(gws []Deps) contracts.ChannelReader {
 		if dep.Reader != nil {
 			return dep.Reader
 		}
-	}
-	return nil
-}
-
-func effectiveKinds(all []Deps, sess state.Session) []string {
-	if kinds := sess.BoundGateways(); len(kinds) > 0 {
-		return kinds
-	}
-	if sess.IsLegacy() {
-		return nonTerminalKinds(all)
 	}
 	return nil
 }

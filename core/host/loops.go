@@ -57,10 +57,7 @@ func statusContent(instanceID string, snap health.Snapshot) string {
 		dot, word = "🔴", "offline"
 	}
 	uptime := (time.Duration(snap.UptimeS) * time.Second).String()
-	prefix := ""
-	if instanceID != "" {
-		prefix = "[" + instanceID + "] "
-	}
+	prefix := "[" + instanceID + "] "
 	metrics := snap.Metrics
 	return fmt.Sprintf("%s%s **herrscher %s** · uptime %s · ping %dms · %d sessions · turns %d done/%d abandoned · %d restarts",
 		prefix, dot, word, uptime, snap.PingMS, snap.Sessions, metrics.TurnsCompleted, metrics.TurnsAbandoned, metrics.BridgeRestarts)

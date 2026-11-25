@@ -3,7 +3,6 @@ package state
 
 import (
 	"crypto/rand"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -99,9 +98,6 @@ type Session struct {
 	Journal          string `json:"journal,omitempty"`
 	ConsolidateEvery int    `json:"consolidateEvery,omitempty"`
 
-	// Gateways binds the session to a set of gateway kinds (e.g. "chat",
-	// "terminal"). Empty means "legacy": a pre-multi-gateway session whose
-	// binding the host resolves from the gateways actually built (see IsLegacy).
 	Gateways []string `json:"gateways,omitempty"`
 
 	Participants []string `json:"participants,omitempty"`
@@ -127,20 +123,9 @@ type Session struct {
 	PausedReason string `json:"paused_reason,omitempty"`
 }
 
-// BoundGateways returns the explicit gateway kinds this session is bound to, or
-// nil when it is legacy (no stored set). The state package stays platform-blind:
-// it never names a concrete gateway. A legacy session's effective binding is
-// resolved by the host against the gateways actually built (see IsLegacy).
+// BoundGateways returns the gateway kinds this session is bound to.
 func (s Session) BoundGateways() []string {
 	return append([]string(nil), s.Gateways...)
-}
-
-// IsLegacy reports whether this session predates explicit gateway binding: it
-// carries a channel but no stored gateway set. The host binds such a session to
-// the primary (non-terminal) gateways present, reproducing the original
-// single-gateway behavior without the core naming that gateway.
-func (s Session) IsLegacy() bool {
-	return len(s.Gateways) == 0 && s.ChannelID != ""
 }
 
 // State is the daemon's persisted configuration. All access is mutex-guarded.
@@ -149,8 +134,9 @@ type State struct {
 	path         string                                                 `json:"-"`
 	write        func(name string, data []byte, perm os.FileMode) error `json:"-"`
 	openingPR    map[string]bool                                        `json:"-"`
+	legacy       legacyFields                                           `json:"-"`
+	Format       int                                                    `json:"format"`
 	Home         HomeRef                                                `json:"home"`
-	Repo         string                                                 `json:"repo,omitempty"`
 	Workspace    string                                                 `json:"workspace,omitempty"`
 	Source       string                                                 `json:"source,omitempty"`
 	OperatorLang string                                                 `json:"operator_lang,omitempty"`
@@ -196,8 +182,10 @@ type RoleAssignment struct {
 	Label string `json:"label,omitempty"`
 }
 
-// NewState returns an empty state bound to path (not yet written).
-func NewState(path string) *State { return &State{path: path, write: os.WriteFile} }
+// NewState returns an empty state of the current format bound to path (not yet written).
+func NewState(path string) *State {
+	return &State{path: path, write: os.WriteFile, Format: CurrentFormat}
+}
 
 // ApplyDefaults seeds declarative config.json values into the in-memory state
 // for any field not already set, WITHOUT persisting. This keeps config.json the
@@ -228,7 +216,7 @@ func LoadState(path string) (*State, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := json.Unmarshal(buf, fresh); err != nil {
+	if err := fresh.decode(buf); err != nil {
 		return nil, err
 	}
 	seen := make(map[string]bool)
@@ -296,7 +284,7 @@ func (s *State) saveLocked() error {
 	if err := os.MkdirAll(filepath.Dir(s.path), privateDirMode); err != nil {
 		return err
 	}
-	buf, err := json.MarshalIndent(s, "", "  ")
+	buf, err := s.encodeLocked()
 	if err != nil {
 		return err
 	}
@@ -412,14 +400,11 @@ func (s *State) SetWorkspace(path string) error {
 	return s.saveLocked()
 }
 
-// WorkspaceRoot returns the configured workspace, else the legacy Repo, else "".
+// WorkspaceRoot returns the configured workspace, else "".
 func (s *State) WorkspaceRoot() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.Workspace != "" {
-		return s.Workspace
-	}
-	return s.Repo
+	return s.Workspace
 }
 
 // SetSource records the herrscher source-checkout path and persists.
@@ -461,14 +446,10 @@ func (s *State) SnapshotSessions() []Session {
 }
 
 // QualifiedName maps a logical session name to the name used on global resources
-// (channel title): "<InstanceID>__<name>". In legacy mode (empty InstanceID) it
-// returns the bare logical name, preserving pre-namespacing behavior.
+// (channel title): "<InstanceID>__<name>".
 func (s *State) QualifiedName(name string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.InstanceID == "" {
-		return name
-	}
 	return s.InstanceID + "__" + name
 }
 

@@ -24,17 +24,14 @@ const sessionsDir = ".herrscher-sessions"
 
 // Worktreer manages git worktrees. It is repo-stateless: the repo root is passed
 // to each method, so one Worktreer serves every project in the workspace.
-// With a non-empty instanceID, worktrees live under
-// <repo>/.herrscher-sessions/<instanceID>/<name> on branch session/<instanceID>/<name>;
-// with an empty instanceID (legacy) under <repo>/.herrscher-sessions/<name> on
-// branch session/<name>, so multiple daemons sharing a repo never collide.
+// Worktrees live under <repo>/.herrscher-sessions/<instanceID>/<name> on branch
+// session/<instanceID>/<name>, so multiple daemons sharing a repo never collide.
 type Worktreer struct {
 	messages   *clitext.Messages
 	instanceID string
 }
 
-// NewWorktreer builds a repo-stateless Worktreer, namespaced by instanceID
-// ("" means legacy, non-namespaced layout).
+// NewWorktreer builds a repo-stateless Worktreer, namespaced by instanceID.
 func NewWorktreer(messages *clitext.Messages, instanceID string) *Worktreer {
 	return &Worktreer{messages: messages, instanceID: instanceID}
 }
@@ -44,28 +41,24 @@ func (w *Worktreer) isGitRepo(ctx context.Context, repo string) bool {
 }
 
 // Path returns the on-disk worktree directory for a logical session name inside
-// repo, namespaced by instanceID when set.
+// repo, namespaced by instanceID.
 func (w *Worktreer) Path(repo, name string) string {
 	return w.pathIn(repo, sessionsDir, name)
 }
 
 func (w *Worktreer) pathIn(repo, dir, name string) string {
-	if w.instanceID == "" {
-		return filepath.Join(repo, dir, name)
-	}
 	return filepath.Join(repo, dir, w.instanceID, name)
 }
 
 // Branch returns the git branch backing a logical session name, namespaced by
-// instanceID when set.
+// instanceID.
 func (w *Worktreer) Branch(name string) string { return branchFor(w.instanceID, name) }
 
 func branchFor(instanceID, name string) string {
-	if instanceID == "" {
-		return "session/" + name
-	}
-	return "session/" + instanceID + "/" + name
+	return branchPrefix + instanceID + "/" + name
 }
+
+const branchPrefix = "session/"
 
 // Create adds a worktree on branch session/<name> inside repo. When base is
 // non-empty, the new branch starts at that ref (e.g. "session/<A>") so the
@@ -326,8 +319,7 @@ func (w *Worktreer) recoverEmptyOrphan(ctx context.Context, repo, name string) (
 }
 
 func (w *Worktreer) validSessionChild(repo, name string) (string, bool) {
-	if !validPathComponent(name) ||
-		(w.instanceID != "" && !validPathComponent(w.instanceID)) {
+	if !validPathComponent(name) || !validPathComponent(w.instanceID) {
 		return "", false
 	}
 	repo, err := filepath.Abs(repo)
@@ -339,12 +331,8 @@ func (w *Worktreer) validSessionChild(repo, name string) (string, bool) {
 		return "", false
 	}
 
-	root := filepath.Join(repo, sessionsDir)
-	expectedRoot := filepath.Join(resolvedRepo, sessionsDir)
-	if w.instanceID != "" {
-		root = filepath.Join(root, w.instanceID)
-		expectedRoot = filepath.Join(expectedRoot, w.instanceID)
-	}
+	root := filepath.Join(repo, sessionsDir, w.instanceID)
+	expectedRoot := filepath.Join(resolvedRepo, sessionsDir, w.instanceID)
 	resolvedRoot, err := resolveExistingPath(root)
 	if os.IsNotExist(err) {
 		return filepath.Join(root, name), true

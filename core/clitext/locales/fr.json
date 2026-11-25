@@ -5813,5 +5813,100 @@
     "id": "cli.session.pr.conclusion.other",
     "description": "Mot de conclusion de contrôle : terminé sans conclusion nommable",
     "other": "autre"
+  },
+  {
+    "id": "cli.worktree.relocate_target_exists",
+    "description": "Refus de la migration de l'état : la cible du worktree existe déjà",
+    "other": "session {{.Name}} : {{.Path}} existe déjà, la migration ne peut pas y déplacer {{.From}} ; déplace ou supprime {{.Path}} à la main, puis relance herrscher serve"
+  },
+  {
+    "id": "cli.worktree.relocate_branch_exists",
+    "description": "Refus de la migration de l'état : la branche cible existe déjà",
+    "other": "session {{.Name}} : la branche {{.Branch}} existe déjà, la migration ne peut pas y renommer {{.From}} ; renomme ou supprime {{.Branch}} à la main, puis relance herrscher serve"
+  },
+  {
+    "id": "cli.worktree.relocate_upstream",
+    "description": "Refus de la migration de l'état : la branche suit une branche distante",
+    "other": "session {{.Name}} : la branche {{.Branch}} suit une branche distante, la renommer couperait sa pull request ; fusionne ou ferme la pull request, retire le suivi avec git branch --unset-upstream {{.Branch}}, puis relance herrscher serve"
+  },
+  {
+    "id": "cli.worktree.relocate_failed",
+    "description": "Échec d'un déplacement pendant la migration de l'état",
+    "other": "session {{.Name}} : le déplacement a échoué : {{.Err}} {{.Output}}"
+  },
+  {
+    "id": "cli.migration.started",
+    "description": "Annonce du début d'une migration de l'état",
+    "other": "herrscher : migration de l'état {{.Path}} du format {{.From}} au format {{.To}} ; l'ancien fichier est gardé dans {{.File}}"
+  },
+  {
+    "id": "cli.migration.done",
+    "description": "Annonce de la fin d'une migration de l'état",
+    "other": "herrscher : état {{.Path}} migré au format {{.To}}"
+  },
+  {
+    "id": "cli.migration.instance_configured",
+    "description": "Migration : id d'instance tiré de la configuration",
+    "other": "herrscher : migration : id d'instance {{.Value}} tiré de HERRSCHER_INSTANCE_ID ou HERRSCHER_OWNER_ID, écrit dans l'état"
+  },
+  {
+    "id": "cli.migration.instance_generated",
+    "description": "Migration : id d'instance généré faute de configuration",
+    "other": "herrscher : migration : ni HERRSCHER_INSTANCE_ID ni HERRSCHER_OWNER_ID, id d'instance {{.Value}} généré et écrit dans l'état"
+  },
+  {
+    "id": "cli.migration.workspace_from_repo",
+    "description": "Migration : l'ancien champ repo devient le workspace",
+    "other": "herrscher : migration : l'ancien champ repo {{.Path}} devient le workspace"
+  },
+  {
+    "id": "cli.migration.repo_dropped",
+    "description": "Migration : l'ancien champ repo est retiré car un workspace s'applique déjà",
+    "other": "herrscher : migration : l'ancien champ repo {{.Path}} est retiré, un workspace s'applique déjà"
+  },
+  {
+    "id": "cli.migration.gateways_bound",
+    "description": "Migration : une session reçoit la liaison de passerelle qu'elle utilisait",
+    "other": "herrscher : migration : session {{.Name}} liée aux passerelles {{.Kind}}"
+  },
+  {
+    "id": "cli.migration.worktree_relocated",
+    "description": "Migration : un worktree ou un dossier de session est déplacé",
+    "other": "herrscher : migration : session {{.Name}}, dossier {{.From}} déplacé vers {{.To}}"
+  },
+  {
+    "id": "cli.migration.branch_renamed",
+    "description": "Migration : une branche de session est renommée",
+    "other": "herrscher : migration : session {{.Name}}, branche {{.From}} renommée {{.To}}"
+  },
+  {
+    "id": "cli.migration.newer_format",
+    "description": "Refus de démarrer sur un état écrit par un build plus récent",
+    "other": "l'état {{.Path}} est au format {{.Have}}, ce build ne lit que jusqu'au format {{.Want}} : lance un build de herrscher plus récent, ou restaure une copie *.bak de l'ancien format laissée à côté"
+  },
+  {
+    "id": "cli.migration.pending",
+    "description": "Refus d'une commande sur un état pas encore migré",
+    "other": "l'état {{.Path}} est d'un ancien format : lance herrscher serve une fois pour le migrer, puis relance cette commande"
+  },
+  {
+    "id": "cli.migration.no_gateway",
+    "description": "Refus de la migration : aucune passerelle de salon à lier",
+    "other": "session {{.Name}} : elle a un salon mais aucune passerelle liée, et aucune passerelle de salon n'est construite ; lance herrscher serve avec la passerelle de ce salon configurée, la migration la liera"
+  },
+  {
+    "id": "cli.migration.remote_session",
+    "description": "Refus de la migration : session distante dans l'ancienne disposition",
+    "other": "session {{.Name}} : son worktree {{.Path}} est sur l'hôte {{.Host}} dans l'ancienne disposition sans id d'instance, et la migration ne déplace pas un worktree distant ; ferme cette session avec le build précédent (herrscher session close {{.Name}}), puis relance ce build"
+  },
+  {
+    "id": "cli.migration.refused",
+    "description": "Refus de la migration de l'état, rien n'est écrit",
+    "other": "migration de l'état refusée, l'état n'a pas été réécrit : {{.Err}}"
+  },
+  {
+    "id": "cli.instance.generated",
+    "description": "Id d'instance généré pour un état neuf",
+    "other": "herrscher : ni HERRSCHER_INSTANCE_ID ni HERRSCHER_OWNER_ID, id d'instance {{.Value}} généré et écrit dans l'état"
   }
 ]

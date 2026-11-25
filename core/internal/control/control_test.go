@@ -13,13 +13,13 @@ import (
 
 func TestSocketPathDeterministicAndSafe(t *testing.T) {
 	layout := useShortRuntimeRoot(t)
-	a := SocketPath(layout, "", "my session.1")
-	b := SocketPath(layout, "", "my session.1")
+	a := SocketPath(layout, "u1", "my session.1")
+	b := SocketPath(layout, "u1", "my session.1")
 	if a != b {
 		t.Fatalf("SocketPath not deterministic: %q vs %q", a, b)
 	}
 	base := filepath.Base(a)
-	stem := strings.TrimSuffix(strings.TrimPrefix(base, "herrscher-control-"), ".sock")
+	stem := strings.TrimSuffix(strings.TrimPrefix(base, "herrscher-control-u1."), ".sock")
 	if stem == base || strings.ContainsAny(stem, " .") {
 		t.Fatalf("unsafe socket filename: %q (stem %q)", base, stem)
 	}
@@ -29,9 +29,6 @@ func TestSocketPathKeepsTwoInstancesApart(t *testing.T) {
 	layout := useShortRuntimeRoot(t)
 	if SocketPath(layout, "u1", "herrscher") == SocketPath(layout, "u2", "herrscher") {
 		t.Fatal("two daemons running a session of one name must not share its control socket")
-	}
-	if SocketPath(layout, "u1", "herrscher") == SocketPath(layout, "", "herrscher") {
-		t.Fatal("an instance must not fall back on the unnamespaced path")
 	}
 }
 

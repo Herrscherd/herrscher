@@ -186,6 +186,8 @@ func (f *fakeUpdater) Build(_ context.Context, pull bool) (string, error) {
 }
 func (f *fakeUpdater) Restart(_ context.Context) error { f.restarts++; return f.restartErr }
 
+const testInstance = "inst"
+
 func newTestHandler(t *testing.T, homeType string) (*Handler, *fakeChannelAdmin, *fakeSup, *fakeWT, *fakeForge, *state.State) {
 	t.Helper()
 	h, _, d, sup, wt, fg, st := newTestHandlerWithUpdater(t, homeType)
@@ -200,6 +202,7 @@ func newTestHandlerWithUpdater(t *testing.T, homeType string) (*Handler, *fakeUp
 	fg := &fakeForge{}
 	up := &fakeUpdater{version: "abc1234"}
 	st := state.NewState(t.TempDir() + "/s.json")
+	st.InstanceID = testInstance
 	agents := agent.NewStore(t.TempDir())
 	return NewHandler(clitext.NewMessages(), d, sup, wt, fg, up, agents, st, "claude", t.TempDir(), []string{"chat"}, nil, nil), up, d, sup, wt, fg, st
 }

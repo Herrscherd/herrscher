@@ -40,6 +40,10 @@ const (
 	WorktreeListFailed               = "cli.worktree.list_failed"
 	WorktreeResolveTarget            = "cli.worktree.resolve_target"
 	WorktreeResolveRegistered        = "cli.worktree.resolve_registered"
+	WorktreeRelocateTargetExists     = "cli.worktree.relocate_target_exists"
+	WorktreeRelocateBranchExists     = "cli.worktree.relocate_branch_exists"
+	WorktreeRelocateUpstream         = "cli.worktree.relocate_upstream"
+	WorktreeRelocateFailed           = "cli.worktree.relocate_failed"
 )
 
 func worktreeKeys() map[Key][]string {
@@ -73,5 +77,9 @@ func worktreeKeys() map[Key][]string {
 		WorktreeListFailed:               {ParamOutput, ParamErr},
 		WorktreeResolveTarget:            {ParamPath, ParamErr},
 		WorktreeResolveRegistered:        {ParamErr},
+		WorktreeRelocateTargetExists:     {ParamName, ParamPath, ParamFrom},
+		WorktreeRelocateBranchExists:     {ParamName, ParamBranch, ParamFrom},
+		WorktreeRelocateUpstream:         {ParamName, ParamBranch},
+		WorktreeRelocateFailed:           {ParamName, ParamOutput, ParamErr},
 	}
 }

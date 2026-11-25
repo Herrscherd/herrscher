@@ -439,9 +439,7 @@ func (s *Supervisor) remoteEnvBlock(sess state.Session, remoteDir string) string
 			env[k] = v
 		}
 	}
-	if s.instanceID != "" {
-		env["HERRSCHER_INSTANCE_ID"] = s.instanceID
-	}
+	env["HERRSCHER_INSTANCE_ID"] = s.instanceID
 	env["TMPDIR"] = "/tmp"
 	env[control.SessionVar] = sess.Name
 	if s.sessionCmdSocket != nil {

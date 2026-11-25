@@ -1,14 +1,14 @@
 package host
 
 import (
+	"bytes"
 	"context"
-	"io"
-	"log/slog"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
-	"github.com/Herrscherd/herrscher/core/internal/obs"
+	"github.com/Herrscherd/herrscher/core/internal/instanceid"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -89,80 +89,56 @@ func TestSeedTerminalHomeWhenForeground(t *testing.T) {
 
 func TestResolveInstanceID(t *testing.T) {
 	tests := []instanceIDCase{
-		{
-			name:       "fresh-state-freezes-explicit",
-			optID:      "alice",
-			wantID:     "alice",
-			wantFrozen: "alice",
-		},
-		{
-			name:       "fresh-state-derives-from-owner",
-			ownerID:    "343535234303787009",
-			wantID:     "u03787009",
-			wantFrozen: "u03787009",
-		},
-		{
-			name:       "no-inputs-stays-legacy",
-			wantID:     "",
-			wantFrozen: "",
-		},
-		{
-			name:       "existing-id-matches",
-			stateID:    "alice",
-			optID:      "alice",
-			wantID:     "alice",
-			wantFrozen: "alice",
-		},
-		{
-			name:       "existing-id-differs-errors",
-			stateID:    "alice",
-			optID:      "bob",
-			wantErr:    true,
-			wantFrozen: "alice",
-		},
-		{
-			name:        "legacy-sessions-block-new-id",
-			hasSessions: true,
-			optID:       "alice",
-			wantID:      "",
-			wantFrozen:  "",
-		},
-		{
-			name:    "invalid-explicit-errors",
-			optID:   "Bad!",
-			wantErr: true,
-		},
+		{name: "fresh-state-freezes-explicit", optID: "alice", wantID: "alice", wantFrozen: "alice"},
+		{name: "fresh-state-derives-from-owner", ownerID: "343535234303787009", wantID: "u03787009", wantFrozen: "u03787009"},
+		{name: "existing-id-matches", stateID: "alice", optID: "alice", wantID: "alice", wantFrozen: "alice"},
+		{name: "existing-id-wins-without-inputs", stateID: "alice", wantID: "alice", wantFrozen: "alice"},
+		{name: "existing-id-differs-errors", stateID: "alice", optID: "bob", wantErr: true, wantFrozen: "alice"},
+		{name: "invalid-explicit-errors", optID: "Bad!", wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			st := newInstanceIDState(t, tt.stateID, tt.hasSessions)
-			got, err := resolveInstanceID(newHostMessages(), st, tt.optID, tt.ownerID, obs.NewLogger(io.Discard, slog.LevelInfo))
+			st := state.NewState(t.TempDir() + "/s.json")
+			st.InstanceID = tt.stateID
+			got, err := resolveInstanceID(newHostMessages(), discardAnnouncer(), st, tt.optID, tt.ownerID)
 			assertInstanceIDOutcome(t, tt, st, got, err)
 		})
 	}
 }
 
-type instanceIDCase struct {
-	name        string
-	stateID     string
-	hasSessions bool
-	optID       string
-	ownerID     string
-	wantID      string
-	wantFrozen  string
-	wantErr     bool
+func TestResolveInstanceIDGeneratesAndFreezesAnIDWhenNothingIsConfigured(t *testing.T) {
+	path := t.TempDir() + "/s.json"
+	st := state.NewState(path)
+	var out bytes.Buffer
+	announcer := discardAnnouncer()
+	announcer.out = &out
+	got, err := resolveInstanceID(newHostMessages(), announcer, st, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !instanceid.Validate(got) {
+		t.Fatalf("generated id %q is not a valid instance id", got)
+	}
+	reloaded, err := state.LoadState(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.InstanceID != got {
+		t.Fatalf("frozen id = %q, want the generated %q", reloaded.InstanceID, got)
+	}
+	if !strings.Contains(out.String(), got) {
+		t.Fatalf("serve output %q does not announce the generated id %q", out.String(), got)
+	}
 }
 
-func newInstanceIDState(t *testing.T, stateID string, hasSessions bool) *state.State {
-	t.Helper()
-	st := state.NewState(t.TempDir() + "/s.json")
-	st.InstanceID = stateID
-	if hasSessions {
-		if err := st.AddSession(state.Session{Name: "old", ChannelID: "c"}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return st
+type instanceIDCase struct {
+	name       string
+	stateID    string
+	optID      string
+	ownerID    string
+	wantID     string
+	wantFrozen string
+	wantErr    bool
 }
 
 func assertInstanceIDOutcome(t *testing.T, tt instanceIDCase, st *state.State, got string, err error) {

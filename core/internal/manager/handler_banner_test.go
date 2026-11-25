@@ -117,7 +117,7 @@ func TestSessionCreateBanner(t *testing.T) {
 			wtPath:   "/wt/x",
 			shared:   false,
 			wantReply: []string{
-				"✅ Running on REF(new-demo).",
+				"✅ Running on REF(new-inst__demo).",
 				"Mode: isolated worktree",
 				"Worktree: `/wt/x`",
 				"Branch: `session/demo`",
@@ -132,7 +132,7 @@ func TestSessionCreateBanner(t *testing.T) {
 			wtPath:   "",
 			shared:   false,
 			wantReply: []string{
-				"✅ Running on REF(new-demo).",
+				"✅ Running on REF(new-inst__demo).",
 				"Mode: shared (not a git repo)",
 			},
 			wantSend: []string{"Mode: shared (not a git repo)"},
@@ -156,7 +156,7 @@ func TestSessionCreateBanner(t *testing.T) {
 			wtPath:   "/wt/x",
 			shared:   false,
 			wantReply: []string{
-				"✅ Running on REF(post-demo).",
+				"✅ Running on REF(post-inst__demo).",
 				"Mode: isolated worktree",
 			},
 			wantSend: []string{"Mode: isolated worktree"},

@@ -65,7 +65,7 @@ The pair suite has four tasks, each taught in one or more steps and then asked:
 | same agent | A fact taught to one agent is recalled by that agent. |
 | other agent | A fact taught to one agent is recalled by another. |
 | stale | A fact is corrected, and the corrected value is recalled, not the old one. A recall of the old value is false recall. |
-| never given | A fact that was never taught is not invented. The question asks for the password, or for the word NONE if it was never given. Replying NONE alone is success; any other reply is false recall. |
+| never given | A fact that was never taught is not invented. The question asks for the password, or for the word NONE if it was never given. The reply succeeds when NONE is its only word; any other word, a list number included, is false recall. |
 
 With `-dataset`, the bench samples items of a LongMemEval file. Each item's
 evidence sessions are taught in order, then its question is asked. The five
@@ -88,18 +88,18 @@ For each task and setting, the report has one row with an off cell and an on
 cell, each with its runs, successes, false recalls, turns and tokens.
 
 - **Success**: the reply contains every expected value as whole words and no
-  forbidden one. For the never-given task, the reply is the single word NONE,
-  case and final punctuation aside. Matching is by whole word, so `42` does not
-  match `1042`.
+  forbidden one. For the never-given task, the reply succeeds when NONE is its
+  only word: case, punctuation and markdown around it are ignored. Matching is by
+  whole word, so `42` does not match `1042`.
 - **Turns**: the calls of a run, one usage record each.
 - **Tokens to success**: the tokens of all runs divided by their successes. The
   delta is on minus off.
 - **Memory tokens per turn**: input tokens per turn on minus off. This is the
   cost the memory adds to each call.
 - **False recall**: a forbidden value (the stale answer) is given, or, for the
-  never-given task, the reply is anything other than the single word NONE. That
-  includes an answer that says it does not know in prose, a value stated, and a
-  verbose answer. It is counted, not averaged into success. The LongMemEval
+  never-given task, the reply has any word besides NONE, a list number included.
+  That covers an answer that says it does not know in prose, a value stated, and
+  a verbose answer. It is counted, not averaged into success. The LongMemEval
   section does not report it, because its reference answers do not mark
   forbidden values.
 
@@ -244,8 +244,9 @@ names.
 - The bench reads spend from the ledger of the binary it runs. A binary that
   writes no ledger stops the run with the missing-ledger error, as the
   `TestBenchStopsWithoutAUsageLedger` test checks.
-- The never-given task counts every reply other than NONE as false recall, so a
-  model that answers in prose is counted even when it invents nothing. Its
+- The never-given task counts as false recall every reply that does not have NONE
+  as its only word, so a model that answers in prose is counted even when it
+  invents nothing. Its
   false-recall figure measures format compliance as well as invention.
 - The settings gated by time of day are not exercised by the bench.
 - The effect of `HERRSCHER_OWNER_ID` on `--print` is not verified; the bench

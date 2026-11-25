@@ -352,7 +352,7 @@ func (m *model) commitCmd(withPR bool) tea.Cmd {
 	panel.busy, panel.dlg, panel.editing = true, dialogNone, false
 	subject, body := splitMessage(message)
 	trans := m.tr
-	repo, base, opener := m.diffRepo(panel.channel), panel.report.Base, m.prs
+	repo, base, session, backend := m.diffRepo(panel.channel), panel.report.Base, m.infoForChannel(panel.channel).Name, m.tm
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), prCallLimit+gitCallLimit)
 		defer cancel()
@@ -363,12 +363,19 @@ func (m *model) commitCmd(withPR bool) tea.Cmd {
 		if !withPR {
 			return diffActionMsg{notice: trans.t("tui.diffpanel.committed", map[string]any{tplArgSha: sha, "Subject": subject})}
 		}
-		number, err := repo.openPR(ctx, opener, base, subject, body)
+		if err = repo.publishBranch(ctx, base); err != nil {
+			return diffActionMsg{notice: trans.t("tui.diffpanel.pr_failed", map[string]any{tplArgSha: sha, tplArgReason: localizedReason(trans, err)}), bad: true}
+		}
+		out, err := backend.Dispatch(sessionPROpenArgs(session, subject, body, base))
 		if err != nil {
 			return diffActionMsg{notice: trans.t("tui.diffpanel.pr_failed", map[string]any{tplArgSha: sha, tplArgReason: localizedReason(trans, err)}), bad: true}
 		}
-		return diffActionMsg{notice: trans.t("tui.diffpanel.pr_opened", map[string]any{tplArgSha: sha, "Number": number, "Base": base})}
+		return diffActionMsg{notice: out}
 	}
+}
+
+func sessionPROpenArgs(session, title, body, base string) []string {
+	return []string{sessionVerb, "pr", "open", "--name", session, "--title", title, "--body", body, "--base", base}
 }
 
 func splitMessage(message string) (string, string) {

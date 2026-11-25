@@ -5656,8 +5656,8 @@
   },
   {
     "id": "cli.session.pr.refresh_unrecorded",
-    "description": "Échec : la session n'a pas pu enregistrer l'état rafraîchi de la pull request",
-    "other": "session {{.Name}} : l'état de la pull request n'a pas pu être enregistré dans la session : {{.Err}}"
+    "description": "Avertissement : la lecture de la pull request sur la forge a réussi mais la session n'a pas pu enregistrer son état",
+    "other": "session {{.Name}} : la pull request #{{.Number}} a été lue sur la forge, mais son état n'a pas pu être enregistré dans la session"
   },
   {
     "id": "cli.session.pr.state.draft",

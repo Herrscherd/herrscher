@@ -8,15 +8,10 @@ import (
 )
 
 func (p sessionPRs) stateWord(language i18n.Language, state contracts.PullRequestState) (string, error) {
-	switch state {
-	case contracts.PullRequestOpen:
-		return p.messages.Text(language, clitext.SessionPRStateOpen, nil)
-	case contracts.PullRequestClosed:
-		return p.messages.Text(language, clitext.SessionPRStateClosed, nil)
-	case contracts.PullRequestMerged:
-		return p.messages.Text(language, clitext.SessionPRStateMerged, nil)
+	if _, err := state.MarshalText(); err != nil {
+		return p.unknownWord(language, state.String())
 	}
-	return p.unknownWord(language, state.String())
+	return p.messages.Text(language, clitext.PullRequestStateKey(state, false), nil)
 }
 
 func (p sessionPRs) mergeWord(language i18n.Language, merge contracts.MergeState) (string, error) {

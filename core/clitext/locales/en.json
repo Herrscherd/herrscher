@@ -5656,8 +5656,8 @@
   },
   {
     "id": "cli.session.pr.refresh_unrecorded",
-    "description": "Failure: the session could not record the refreshed pull request state",
-    "other": "session {{.Name}}: the pull request state could not be recorded in the session: {{.Err}}"
+    "description": "Notice: the forge read of the pull request succeeded but the session could not save its state",
+    "other": "session {{.Name}}: pull request #{{.Number}} was read from the forge, but its state could not be saved in the session"
   },
   {
     "id": "cli.session.pr.state.draft",

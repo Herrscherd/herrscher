@@ -112,7 +112,6 @@ func reasonKeys() []reasonKey {
 		{errUnknownScope, "tui.diffgit.unknown_scope"},
 		{errUnknownChange, "tui.diffgit.unknown_change"},
 		{errMalformedStat, "tui.diffgit.malformed_stat"},
-		{errNoPROpener, "tui.diffgit.no_opener"},
 		{contracts.ErrForgeNotConnected, "tui.diffgit.forge_not_connected"},
 		{contracts.ErrForgeWrongHost, "tui.diffgit.wrong_host"},
 		{contracts.ErrInvalidRepoRef, "tui.diffgit.invalid_remote"},

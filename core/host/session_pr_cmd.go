@@ -53,6 +53,7 @@ type sessionPRs struct {
 	store       *state.State
 	opener      forgeOpener
 	credentials contracts.ForgeCredentials
+	refreshes   *refreshLocks
 }
 
 type prTarget struct {
@@ -63,15 +64,16 @@ type prTarget struct {
 }
 
 type prStatusView struct {
-	Number  int    `json:"number"`
-	Title   string `json:"title"`
-	URL     string `json:"url"`
-	State   string `json:"state"`
-	Draft   bool   `json:"draft"`
-	Merge   string `json:"merge"`
-	Head    string `json:"head"`
-	Base    string `json:"base"`
-	HeadSHA string `json:"headSha"`
+	Number     int    `json:"number"`
+	Title      string `json:"title"`
+	URL        string `json:"url"`
+	State      string `json:"state"`
+	Draft      bool   `json:"draft"`
+	Merge      string `json:"merge"`
+	Head       string `json:"head"`
+	Base       string `json:"base"`
+	HeadSHA    string `json:"headSha"`
+	Unrecorded bool   `json:"unrecorded,omitempty"`
 }
 
 type prCheckView struct {
@@ -95,7 +97,7 @@ type prCommentView struct {
 }
 
 func addSessionPRVerbs(reg *cli.Registry, messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials) error {
-	prs := sessionPRs{messages: messages, lang: lang, store: store, opener: opener, credentials: credentials}
+	prs := sessionPRs{messages: messages, lang: lang, store: store, opener: opener, credentials: credentials, refreshes: newRefreshLocks()}
 	return addVerbs(reg, prs.openVerb(), prs.statusVerb(), prs.checksVerb(), prs.commentsVerb())
 }
 
@@ -207,51 +209,6 @@ func (p sessionPRs) openPR(ctx context.Context, input contracts.Input) (string, 
 		})
 	}
 	return p.messages.Text(language, clitext.SessionPROpened, clitext.Params{clitext.ParamName: escapeLine(name), clitext.ParamNumber: number, clitext.ParamURL: escapeLine(opened.URL)})
-}
-
-func (p sessionPRs) status(ctx context.Context, input contracts.Input) (contracts.Result, error) {
-	target, err := p.target(ctx, input.Get(paramName))
-	if err != nil {
-		return contracts.Result{}, err
-	}
-	pullRequest, err := target.forge.PullRequest(ctx, target.ref, contracts.Revision(""))
-	if err != nil {
-		return contracts.Result{}, p.failure(target.language, err)
-	}
-	if recordErr := p.recordRefresh(target, pullRequest); recordErr != nil {
-		return contracts.Result{}, recordErr
-	}
-	if input.JSON {
-		return cli.Data(marshalJSON(prStatusView{
-			Number:  target.ref.Number(),
-			Title:   pullRequest.Title,
-			URL:     pullRequest.URL,
-			State:   pullRequest.State.String(),
-			Draft:   pullRequest.Draft,
-			Merge:   pullRequest.Merge.String(),
-			Head:    pullRequest.Head,
-			Base:    pullRequest.Base,
-			HeadSHA: pullRequest.HeadSHA.String(),
-		}))
-	}
-	stateText, err := p.stateWord(target.language, pullRequest.State)
-	if err != nil {
-		return contracts.Result{}, err
-	}
-	mergeText, err := p.mergeWord(target.language, pullRequest.Merge)
-	if err != nil {
-		return contracts.Result{}, err
-	}
-	text, err := p.messages.Text(target.language, clitext.SessionPRStatus, clitext.Params{
-		clitext.ParamNumber: target.ref.Number(),
-		clitext.ParamState:  stateText,
-		clitext.ParamMerge:  mergeText,
-		clitext.ParamTitle:  escapeLine(pullRequest.Title),
-		clitext.ParamHead:   escapeLine(pullRequest.Head),
-		clitext.ParamBase:   escapeLine(pullRequest.Base),
-		clitext.ParamURL:    escapeLine(pullRequest.URL),
-	})
-	return cli.Data(text, err)
 }
 
 func (p sessionPRs) checks(ctx context.Context, input contracts.Input) (contracts.Result, error) {
@@ -416,17 +373,6 @@ func (p sessionPRs) target(ctx context.Context, name string) (prTarget, error) {
 		return prTarget{}, p.failure(language, err)
 	}
 	return prTarget{name: name, language: language, forge: client, ref: ref}, nil
-}
-
-func (p sessionPRs) recordRefresh(target prTarget, pullRequest contracts.PullRequest) error {
-	record := state.PullRequestRecord{Number: target.ref.Number(), State: pullRequest.State, Draft: pullRequest.Draft, URL: pullRequest.URL}
-	if err := p.store.RefreshPullRequest(target.name, record); err != nil {
-		return p.messages.Failure(target.language, err, clitext.SessionPRRefreshUnrecorded, clitext.Params{
-			clitext.ParamName: escapeLine(target.name),
-			clitext.ParamErr:  escapeLine(err.Error()),
-		})
-	}
-	return nil
 }
 
 func (p sessionPRs) failure(language i18n.Language, err error) error {

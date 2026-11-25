@@ -97,3 +97,23 @@ func TestRefreshPullRequestRollsBackWhenSaveFails(t *testing.T) {
 		t.Fatalf("memory after a failed refresh = %+v, want %+v", got.PullRequestRecord(), original)
 	}
 }
+
+func TestRefreshPullRequestWithTheSameRecordDoesNotSave(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	s := NewState(path)
+	must(t, s.AddSession(Session{Name: "main"}))
+	record := PullRequestRecord{Number: 7, State: contracts.PullRequestOpen, URL: "https://example.test/pull/7"}
+	must(t, s.RecordPullRequest("main", record))
+
+	saves := 0
+	save := s.write
+	s.write = func(name string, data []byte, mode os.FileMode) error {
+		saves++
+		return save(name, data, mode)
+	}
+	must(t, s.RefreshPullRequest("main", record))
+
+	if saves != 0 {
+		t.Fatalf("an unchanged refresh saved the state %d times, want 0", saves)
+	}
+}

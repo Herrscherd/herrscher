@@ -42,37 +42,17 @@ func pullRequestJSONView(record state.PullRequestRecord) *pullRequestJSON {
 }
 
 func pullRequestStateID(value contracts.PullRequestState) string {
-	switch value {
-	case contracts.PullRequestOpen:
-		return "open"
-	case contracts.PullRequestClosed:
-		return "closed"
-	case contracts.PullRequestMerged:
-		return "merged"
+	if _, err := value.MarshalText(); err != nil {
+		return "unknown"
 	}
-	return "unknown"
-}
-
-func pullRequestStateKey(record state.PullRequestRecord) clitext.Key {
-	if record.Draft && record.State == contracts.PullRequestOpen {
-		return clitext.SessionPRStateDraft
-	}
-	switch record.State {
-	case contracts.PullRequestOpen:
-		return clitext.SessionPRStateOpen
-	case contracts.PullRequestClosed:
-		return clitext.SessionPRStateClosed
-	case contracts.PullRequestMerged:
-		return clitext.SessionPRStateMerged
-	}
-	return clitext.SessionPRStateUnknown
+	return value.String()
 }
 
 func (h *Handler) sessionPullRequestText(session state.Session) string {
 	record := session.PullRequestRecord()
 	return h.text(clitext.SessionListPullRequest, clitext.Params{
 		clitext.ParamNumber: record.Number,
-		clitext.ParamState:  h.text(pullRequestStateKey(record), nil),
+		clitext.ParamState:  h.text(clitext.PullRequestStateKey(record.State, record.Draft), nil),
 	})
 }
 

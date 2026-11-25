@@ -610,31 +610,11 @@
   },
   {
     "id": "tui.status.label_pull_request",
-    "other": "pull request"
+    "other": "PR"
   },
   {
     "id": "tui.pr.label",
     "other": "#{{.Number}} {{.State}}"
-  },
-  {
-    "id": "tui.pr.state.open",
-    "other": "ouverte"
-  },
-  {
-    "id": "tui.pr.state.closed",
-    "other": "fermée"
-  },
-  {
-    "id": "tui.pr.state.merged",
-    "other": "fusionnée"
-  },
-  {
-    "id": "tui.pr.state.draft",
-    "other": "brouillon"
-  },
-  {
-    "id": "tui.pr.state.unknown",
-    "other": "état inconnu"
   },
   {
     "id": "tui.sidebar.pull_request",
@@ -2418,10 +2398,6 @@
     "other": "sortie git inattendue"
   },
   {
-    "id": "tui.diffgit.no_opener",
-    "other": "aucun forge n'est branché pour ouvrir les pull requests"
-  },
-  {
     "id": "tui.diffgit.forge_not_connected",
     "other": "aucune connexion GitHub sur cet hôte : lancez `herrscher connect github`"
   },
@@ -2584,10 +2560,6 @@
   {
     "id": "tui.diffpanel.pr_failed",
     "other": "commit {{.Sha}}, PR échouée : {{.Reason}}"
-  },
-  {
-    "id": "tui.diffpanel.pr_opened",
-    "other": "commit {{.Sha}}, PR #{{.Number}} ouverte contre {{.Base}}"
   },
   {
     "id": "tui.diffpanel.title_turn",

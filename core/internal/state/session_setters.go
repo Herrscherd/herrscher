@@ -252,6 +252,9 @@ func (s *State) sessionIndexLocked(name string) (int, bool) {
 
 func (s *State) writePullRequestLocked(idx int, record PullRequestRecord) error {
 	previous := s.Sessions[idx].PullRequestRecord()
+	if previous == record {
+		return nil
+	}
 	setSessionPullRequest(&s.Sessions[idx], record)
 	if err := s.saveLocked(); err != nil {
 		setSessionPullRequest(&s.Sessions[idx], previous)

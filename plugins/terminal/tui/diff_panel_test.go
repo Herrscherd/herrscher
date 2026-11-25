@@ -275,23 +275,42 @@ func TestCommitWithNothingToCommitShowsANotice(t *testing.T) {
 	}
 }
 
-func TestPRCommitsThenOpensAndShowsTheNumber(t *testing.T) {
+type prOpenBackend struct {
+	fakeBackend
+
+	reply string
+	err   error
+}
+
+func (p *prOpenBackend) Dispatch(args []string) (string, error) {
+	p.dispatched = append(p.dispatched, args)
+	return p.reply, p.err
+}
+
+func TestPRCommitsPushesAndDispatchesSessionPROpen(t *testing.T) {
 	dir := initRepo(t)
 	gitIn(t, dir, "checkout", "-q", "-b", "feature")
 	writeAndCommitBase(t, dir)
-	runner := &scriptedRunner{remote: "git@github.com:o/r.git\n"}
+	runner := &recordingRunner{remote: "git@github.com:o/r.git\n"}
 	m, _ := newDiffModel(t, dir, runner.run, 120, 30)
-	opener := &fakePullRequests{number: 42}
-	m.prs = opener
+	backend := &prOpenBackend{reply: "PR #42 opened against master"}
+	m.tm = backend
 	press(m, "ctrl+x", "d")
 
 	press(m, "p")
 
 	if !strings.Contains(screen(m), "PR #42 opened against master") {
-		t.Fatalf("PR number missing:\n%s", screen(m))
+		t.Fatalf("PR notice missing:\n%s", screen(m))
 	}
-	if len(opener.drafts) != 1 || opener.drafts[0].Base != "master" || opener.drafts[0].Head != "feature" {
-		t.Fatalf("drafts = %+v", opener.drafts)
+	if runner.pushes() != 1 {
+		t.Fatalf("pushes = %d, want 1", runner.pushes())
+	}
+	if len(backend.dispatched) != 1 {
+		t.Fatalf("dispatched = %v, want one session pr open", backend.dispatched)
+	}
+	args := backend.dispatched[0]
+	if !slicesHavePrefix(args, "session", "pr", "open", "--name", "s") || !slicesContainPair(args, "--base", "master") {
+		t.Fatalf("dispatched = %v, want session pr open --name s --base master", args)
 	}
 }
 
@@ -299,9 +318,9 @@ func TestPRShowsTheConnectHintWhenNotConnected(t *testing.T) {
 	dir := initRepo(t)
 	gitIn(t, dir, "checkout", "-q", "-b", "feature")
 	writeAndCommitBase(t, dir)
-	runner := &scriptedRunner{remote: "git@github.com:o/r.git\n"}
+	runner := &recordingRunner{remote: "git@github.com:o/r.git\n"}
 	m, _ := newDiffModel(t, dir, runner.run, 120, 30)
-	m.prs = &fakePullRequests{err: fmt.Errorf("github: %w", contracts.ErrForgeNotConnected)}
+	m.tm = &prOpenBackend{err: fmt.Errorf("github: %w", contracts.ErrForgeNotConnected)}
 	press(m, "ctrl+x", "d")
 
 	press(m, "p")
@@ -309,6 +328,27 @@ func TestPRShowsTheConnectHintWhenNotConnected(t *testing.T) {
 	if !strings.Contains(screen(m), "herrscher connect github") {
 		t.Fatalf("connect hint missing:\n%s", screen(m))
 	}
+}
+
+func slicesHavePrefix(args []string, prefix ...string) bool {
+	if len(args) < len(prefix) {
+		return false
+	}
+	for i, want := range prefix {
+		if args[i] != want {
+			return false
+		}
+	}
+	return true
+}
+
+func slicesContainPair(args []string, flag, value string) bool {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == flag && args[i+1] == value {
+			return true
+		}
+	}
+	return false
 }
 
 func TestBranchToggleShowsCommitsAheadOfBase(t *testing.T) {

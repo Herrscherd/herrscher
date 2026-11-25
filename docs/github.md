@@ -190,6 +190,10 @@ pull request says to run `session pr open` first. The token reaches git only
 through its environment, never through arguments, and it does not appear in
 output or errors.
 
+A pull request opened from the terminal panel (`p` in the diff panel) goes through
+the same `session pr open` command, so it is recorded in the session like one
+opened from the command line.
+
 `herrscher session list` shows the pull request of each session that has one,
 after the channel of the session, as `PR #42 open`, `PR #42 draft`,
 `PR #42 merged` or `PR #42 unknown state`. A draft is an open pull request

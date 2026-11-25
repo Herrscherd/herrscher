@@ -92,7 +92,7 @@ func sessionPRKeys() map[Key][]string {
 
 		SessionPROpened:            {ParamName, ParamNumber, ParamURL},
 		SessionPROpenedUnrecorded:  {ParamName, ParamNumber, ParamURL, ParamErr},
-		SessionPRRefreshUnrecorded: {ParamName, ParamErr},
+		SessionPRRefreshUnrecorded: {ParamName, ParamNumber},
 		SessionPROpening:           {ParamName},
 		SessionPRStatus:            {ParamNumber, ParamState, ParamTitle, ParamURL, ParamHead, ParamBase, ParamMerge},
 		SessionPRCheck:             {ParamStatus, ParamName, ParamURL},

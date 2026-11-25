@@ -23,6 +23,8 @@ type Reader interface {
 
 // Policy sets how often a watch reads the forge and how it backs off. FeedPause is how long a
 // refused feed is left alone.
+const feedStableAfter = 5 * time.Minute
+
 type Policy struct {
 	Every     time.Duration
 	Backoff   obs.Backoff
@@ -74,14 +76,16 @@ func (w Watch) Run(ctx context.Context) {
 }
 
 type runner struct {
-	watch        Watch
-	since        contracts.Revision
-	saved        *recordKey
-	failures     obs.Backoff
-	feedFailures obs.Backoff
-	signals      <-chan contracts.PullRequestSignal
-	cancelFeed   context.CancelFunc
-	subscribeAt  time.Time
+	watch         Watch
+	since         contracts.Revision
+	saved         *recordKey
+	failures      obs.Backoff
+	feedFailures  obs.Backoff
+	signals       <-chan contracts.PullRequestSignal
+	cancelFeed    context.CancelFunc
+	subscribeAt   time.Time
+	subscribedAt  time.Time
+	subscriptions int
 }
 
 type recordKey struct {
@@ -112,7 +116,9 @@ func (r *runner) loop(ctx context.Context, due time.Duration) {
 func (r *runner) idle(ctx context.Context, due time.Duration) bool {
 	deadline := r.watch.Clock.Now().Add(due)
 	for {
-		r.subscribe(ctx)
+		if r.subscribe(ctx) {
+			deadline = r.watch.Clock.Now()
+		}
 		now := r.watch.Clock.Now()
 		remaining := r.readTime(deadline).Sub(now)
 		if remaining <= 0 {
@@ -125,11 +131,11 @@ func (r *runner) idle(ctx context.Context, due time.Duration) bool {
 		case <-timer:
 		case signal, open := <-r.signals:
 			if !open {
-				r.pauseFeed(r.feedFailures.Next(0))
+				r.dropFeed(nil)
 				break
 			}
 			if signal.Err != nil {
-				r.pauseFeed(r.feedDelay(signal.Err))
+				r.dropFeed(signal.Err)
 				break
 			}
 			r.feedFailures = r.watch.Policy.Backoff
@@ -152,22 +158,24 @@ func (r *runner) nextWake(now time.Time, remaining time.Duration) time.Duration 
 	return remaining
 }
 
-func (r *runner) subscribe(ctx context.Context) {
+func (r *runner) subscribe(ctx context.Context) bool {
 	if r.watch.Feed == nil || r.signals != nil {
-		return
+		return false
 	}
 	now := r.watch.Clock.Now()
 	if now.Before(r.subscribeAt) {
-		return
+		return false
 	}
 	feedCtx, cancel := context.WithCancel(ctx)
 	signals, err := r.watch.Feed.PullRequestEvents(feedCtx, r.watch.Ref)
 	if err != nil {
 		cancel()
 		r.subscribeAt = now.Add(r.feedDelay(err))
-		return
+		return false
 	}
-	r.signals, r.cancelFeed = signals, cancel
+	r.signals, r.cancelFeed, r.subscribedAt = signals, cancel, now
+	r.subscriptions++
+	return r.subscriptions > 1
 }
 
 func (r *runner) feedDelay(err error) time.Duration {
@@ -175,6 +183,13 @@ func (r *runner) feedDelay(err error) time.Duration {
 		return r.watch.Policy.FeedPause
 	}
 	return r.feedFailures.Next(0)
+}
+
+func (r *runner) dropFeed(err error) {
+	if r.watch.Clock.Now().Sub(r.subscribedAt) >= feedStableAfter {
+		r.feedFailures = r.watch.Policy.Backoff
+	}
+	r.pauseFeed(r.feedDelay(err))
 }
 
 func (r *runner) pauseFeed(delay time.Duration) {

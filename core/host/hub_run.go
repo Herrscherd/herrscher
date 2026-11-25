@@ -196,6 +196,12 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	sched := newScheduler(store, store, runningHub, sessions.Seed, clock, tick)
 	deps.schedSlot.sched = sched
 	go sched.Run(ctx)
+	prWatcher := newSessionPRWatcher(sessions.cliMessages, options.languageSource(), store, GitHubOpener(options.Forge), forgeCredentials(options.Forge))
+	prWatchStopped := make(chan struct{})
+	go func() {
+		defer close(prWatchStopped)
+		prWatcher.Run(ctx)
+	}()
 	runningHub.startReconcile(ctx)
 	monitor.SetSessions(len(store.SnapshotSessions()))
 	bindSessionControl(gws, runningHub)
@@ -207,5 +213,7 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	startHubProbes(ctx, messages, gws, options, store, monitor, instID)
 
 	log.Info("hub up; supervising sessions", "gateways", strings.Join(kindsOf(gws), ","))
-	return awaitHubStop(ctx, runningHub, sup, liveStopped, sockets, log)
+	stopErr := awaitHubStop(ctx, runningHub, sup, liveStopped, sockets, log)
+	<-prWatchStopped
+	return stopErr
 }

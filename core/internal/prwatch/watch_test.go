@@ -495,3 +495,15 @@ func awaitDone(ctx context.Context, t *testing.T) {
 		t.Fatal("the feed subscription was not cancelled")
 	}
 }
+
+func (f *fakeFeed) replaceSignals(signals chan contracts.PullRequestSignal) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.signals = signals
+}
+
+func (f *fakeFeed) setRefusal(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.refuse = err
+}

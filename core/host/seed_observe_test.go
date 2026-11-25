@@ -69,7 +69,7 @@ func (o *blockedObserveOrchestrator) Consolidate(context.Context) error { return
 func (o *blockedObserveOrchestrator) Close() error                      { return nil }
 
 const (
-	oneShotReturnMargin = 5 * time.Second
+	oneShotReturnMargin = 2 * time.Second
 	oneShotTestGrace    = 50 * time.Millisecond
 	oneShotHandoffWait  = 10 * time.Second
 )
@@ -103,6 +103,9 @@ func TestOneShotSeedReturnsWithinItsGraceWhenObserveNeverReturns(t *testing.T) {
 	bound := 2*oneShotTestGrace + oneShotReturnMargin
 	select {
 	case got := <-returned:
+		if elapsed := time.Since(started); elapsed < 2*oneShotTestGrace {
+			t.Fatalf("the one-shot returned after %v, before its two grace periods of %v", elapsed, 2*oneShotTestGrace)
+		}
 		if elapsed := time.Since(started); elapsed > bound {
 			t.Fatalf("the one-shot returned after %v, want within %v", elapsed, bound)
 		}

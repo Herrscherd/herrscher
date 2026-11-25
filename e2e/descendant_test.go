@@ -185,7 +185,7 @@ func TestDescendantAliveIgnoresAForeignProcess(t *testing.T) {
 	}
 }
 
-func plantSleepStatus(t *testing.T, root string, pid int, name string, environMode fs.FileMode) {
+func plantSleepStatus(t *testing.T, root string, pid int, name, environ string, environMode fs.FileMode) {
 	t.Helper()
 	dir := filepath.Join(root, strconv.Itoa(pid))
 	if err := os.Mkdir(dir, 0o700); err != nil {
@@ -196,7 +196,10 @@ func plantSleepStatus(t *testing.T, root string, pid int, name string, environMo
 	if err := os.WriteFile(filepath.Join(dir, "status"), []byte(status), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "environ"), []byte("NOTHING=here\x00"), environMode); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "environ"), []byte(environ), environMode); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "cmdline"), []byte("sleep\x00"+strconv.Itoa(int(vendortest.DescendantSleep/time.Second))+"\x00"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -207,20 +210,31 @@ func TestDescendantAliveFailsWhenTheEnvironOfOurSleepIsRefused(t *testing.T) {
 	}
 	root := t.TempDir()
 	const pid = 4242
-	plantSleepStatus(t, root, pid, "sleep", 0)
+	plantSleepStatus(t, root, pid, "sleep", "NOTHING=here\x00", 0)
 	alive, err := descendantAliveIn(root, pid, instanceEntry("probe"))
 	if err == nil {
 		t.Fatalf("a refused environ of our own sleep was read as a gone descendant (alive=%v): the turn-end check would pass while the descendant runs", alive)
 	}
 }
 
-func TestDescendantAliveIgnoresAReusedPidOfAnotherProgram(t *testing.T) {
+func TestDescendantAliveIgnoresASleepWithoutTheMarker(t *testing.T) {
 	root := t.TempDir()
 	const pid = 4243
-	plantSleepStatus(t, root, pid, "sudo", 0)
+	plantSleepStatus(t, root, pid, "sleep", "NOTHING=here\x00", 0o600)
 	alive, err := descendantAliveIn(root, pid, instanceEntry("probe"))
 	if err != nil || alive {
-		t.Fatalf("a reused pid of another program of our uid was taken for the descendant: alive=%v err=%v", alive, err)
+		t.Fatalf("a sleep of our uid without the marker was taken for the descendant: alive=%v err=%v", alive, err)
+	}
+}
+
+func TestDescendantAliveIgnoresAMarkedProcessOfAnotherProgram(t *testing.T) {
+	root := t.TempDir()
+	const pid = 4244
+	entry := instanceEntry("probe")
+	plantSleepStatus(t, root, pid, "sudo", entry+"\x00", 0o600)
+	alive, err := descendantAliveIn(root, pid, entry)
+	if err != nil || alive {
+		t.Fatalf("a marked process of another program of our uid was taken for the descendant: alive=%v err=%v", alive, err)
 	}
 }
 

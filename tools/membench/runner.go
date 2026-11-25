@@ -113,7 +113,7 @@ func (r *runner) forEachArm(ctx context.Context, tasks []task, settings []settin
 }
 
 func (r *runner) runArm(ctx context.Context, planned arm) (outcome, error) {
-	box, err := newSandbox(r.parent)
+	box, err := newSandbox(ctx, r.parent)
 	if err != nil {
 		return outcome{}, err
 	}
@@ -206,7 +206,7 @@ func (r *runner) invoke(ctx context.Context, box sandbox, request step, assignme
 	cmd := exec.CommandContext(callCtx, r.binary, "--print", request.prompt)
 	killGroupOnCancel(cmd)
 	cmd.WaitDelay = pipeWaitDelay
-	cmd.Dir = box.home
+	cmd.Dir = box.repo
 	cmd.Env = box.environ(r.model, request.agent, assignments)
 	stdout := boundedbuf.New(maxOutputBytes)
 	var stderr bytes.Buffer

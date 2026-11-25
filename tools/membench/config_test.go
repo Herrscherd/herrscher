@@ -91,3 +91,15 @@ func TestParseConfigAcceptsASelectedSetting(t *testing.T) {
 		t.Errorf("model %q, budget %+v; want the default model and a two dollar budget", cfg.model, cfg.budget)
 	}
 }
+
+func TestParseConfigResolvesARelativeBinaryToAnAbsolutePath(t *testing.T) {
+	binary := fakeBinary(t)
+	t.Chdir(filepath.Dir(binary))
+	cfg, err := parseConfig([]string{"-herrscher", "./herrscher", "-budget-usd", "2"}, io.Discard, loadCatalogue(), i18n.English, noEnv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.binary != binary {
+		t.Errorf("binary %q, want %q so a run started from its own home still finds it", cfg.binary, binary)
+	}
+}

@@ -1,7 +1,7 @@
 // Package prwatch follows the pull request of a session. It reads the request on a cadence,
 // asks again with the revision of its last read so an unchanged request costs nothing,
 // waits out the forge rate limit, and stops when the request is merged or closed. Where the
-// forge grants an event feed, a signal from it triggers a read at once, and a silent or
+// forge grants an event feed, a signal from it triggers a read at once, and a closed or
 // refused feed is subscribed again later.
 package prwatch
 
@@ -21,13 +21,11 @@ type Reader interface {
 	PullRequest(ctx context.Context, ref contracts.PullRequestRef, since contracts.Revision) (contracts.PullRequest, error)
 }
 
-// Policy sets how often a watch reads the forge and how it backs off. Silence is how long an
-// open feed may stay quiet before it is cut and subscribed again, and FeedPause is how long a
+// Policy sets how often a watch reads the forge and how it backs off. FeedPause is how long a
 // refused feed is left alone.
 type Policy struct {
 	Every     time.Duration
 	Backoff   obs.Backoff
-	Silence   time.Duration
 	FeedPause time.Duration
 }
 
@@ -83,7 +81,6 @@ type runner struct {
 	feedFailures obs.Backoff
 	signals      <-chan contracts.PullRequestSignal
 	cancelFeed   context.CancelFunc
-	heardAt      time.Time
 	subscribeAt  time.Time
 }
 
@@ -122,13 +119,10 @@ func (r *runner) idle(ctx context.Context, due time.Duration) bool {
 			return ctx.Err() == nil
 		}
 		timer := r.watch.Clock.After(r.nextWake(now, remaining))
-		silence := r.silenceTimer()
 		select {
 		case <-ctx.Done():
 			return false
 		case <-timer:
-		case <-silence:
-			r.pauseFeed(r.feedFailures.Next(0))
 		case signal, open := <-r.signals:
 			if !open {
 				r.pauseFeed(r.feedFailures.Next(0))
@@ -138,7 +132,6 @@ func (r *runner) idle(ctx context.Context, due time.Duration) bool {
 				r.pauseFeed(r.feedDelay(signal.Err))
 				break
 			}
-			r.heardAt = r.watch.Clock.Now()
 			r.feedFailures = r.watch.Policy.Backoff
 			deadline = r.watch.Clock.Now()
 		}
@@ -159,13 +152,6 @@ func (r *runner) nextWake(now time.Time, remaining time.Duration) time.Duration 
 	return remaining
 }
 
-func (r *runner) silenceTimer() <-chan time.Time {
-	if r.signals == nil {
-		return nil
-	}
-	return r.watch.Clock.After(r.heardAt.Add(r.watch.Policy.Silence).Sub(r.watch.Clock.Now()))
-}
-
 func (r *runner) subscribe(ctx context.Context) {
 	if r.watch.Feed == nil || r.signals != nil {
 		return
@@ -181,7 +167,7 @@ func (r *runner) subscribe(ctx context.Context) {
 		r.subscribeAt = now.Add(r.feedDelay(err))
 		return
 	}
-	r.signals, r.cancelFeed, r.heardAt = signals, cancel, now
+	r.signals, r.cancelFeed = signals, cancel
 }
 
 func (r *runner) feedDelay(err error) time.Duration {

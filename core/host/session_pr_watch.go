@@ -18,7 +18,6 @@ import (
 const (
 	prWatchScan      = time.Minute
 	prWatchEvery     = time.Minute
-	prWatchSilence   = 45 * time.Second
 	prWatchFeedPause = time.Hour
 	prWatchRetryBase = 30 * time.Second
 	prWatchRetryCap  = 15 * time.Minute
@@ -85,7 +84,6 @@ func prWatchPolicy() prwatch.Policy {
 	return prwatch.Policy{
 		Every:     prWatchEvery,
 		Backoff:   obs.Backoff{Base: prWatchRetryBase, Max: prWatchRetryCap, Factor: prWatchFactor, Jitter: prWatchJitter},
-		Silence:   prWatchSilence,
 		FeedPause: prWatchFeedPause,
 	}
 }

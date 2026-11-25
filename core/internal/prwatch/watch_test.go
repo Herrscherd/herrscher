@@ -210,7 +210,6 @@ func testPolicy(limit time.Duration) Policy {
 	return Policy{
 		Every:     time.Minute,
 		Backoff:   obs.Backoff{Base: time.Second, Max: limit, Factor: 2},
-		Silence:   10 * time.Minute,
 		FeedPause: time.Hour,
 	}
 }
@@ -417,10 +416,8 @@ func TestFeedSignalTriggersAReadAtOnce(t *testing.T) {
 
 	reader.awaitRead(t)
 	clock.awaitArm(t)
-	clock.awaitArm(t)
 	feed.signals <- contracts.PullRequestSignal{Kind: contracts.PullRequestNewCommit}
 	reader.awaitRead(t)
-	clock.awaitArm(t)
 	clock.awaitArm(t)
 	if got := len(reader.readCalls()); got != 2 {
 		t.Fatalf("reads = %d after a signal, want a read at once without advancing the clock", got)
@@ -428,27 +425,22 @@ func TestFeedSignalTriggersAReadAtOnce(t *testing.T) {
 	stop()
 }
 
-func TestSilentFeedIsCutWithoutARead(t *testing.T) {
+func TestQuietFeedStaysSubscribed(t *testing.T) {
 	clock := newFakeClock()
 	feed := &fakeFeed{clock: clock, signals: make(chan contracts.PullRequestSignal)}
 	reader := newFakeReader(clock)
 	store := &fakeStore{}
 	policy := testPolicy(time.Minute)
 	policy.Every = 10 * time.Minute
-	policy.Silence = 3 * time.Minute
 	stop, _ := startWatch(t, Watch{Ref: testRef(t), Reader: reader, Feed: feed, Save: store.save, Limit: &Limit{}, Clock: clock, Policy: policy})
 
 	reader.awaitRead(t)
 	clock.awaitArm(t)
-	clock.advance(clock.awaitArm(t))
-	resubscribe := clock.awaitArm(t)
-	clock.advance(resubscribe)
-	clock.awaitArm(t)
-	if got := len(feed.subscriptions()); got != 2 {
-		t.Fatalf("subscriptions = %d after the silence and its delay, want the feed asked again", got)
-	}
-	if got := len(reader.readCalls()); got != 1 {
-		t.Fatalf("reads = %d after the silence, want none: a cut feed is not a change", got)
+	clock.advance(time.Minute)
+	clock.advance(10 * time.Minute)
+	reader.awaitRead(t)
+	if err := feed.subscriptionContext(0).Err(); err != nil {
+		t.Fatalf("the feed was cut after a quiet minute (%v): the host no longer cuts a quiet feed", err)
 	}
 	stop()
 }

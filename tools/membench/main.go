@@ -99,18 +99,18 @@ func execute(ctx context.Context, cfg config, tasks []task, skipped int, msgs ca
 func benchParent() (string, error) {
 	cacheRoot, err := os.UserCacheDir()
 	if err != nil {
-		return "", fmt.Errorf("membench cache: %w", err)
+		return "", cacheError(err)
 	}
 	benchRoot := filepath.Join(cacheRoot, benchDirName)
 	if err = os.MkdirAll(benchRoot, dirMode); err != nil {
-		return "", fmt.Errorf("membench cache: %w", err)
+		return "", cacheError(err)
 	}
 	if sweepErr := sweepOrphans(benchRoot); sweepErr != nil {
 		return "", sweepErr
 	}
 	parent, err := os.MkdirTemp(benchRoot, "run-")
 	if err != nil {
-		return "", fmt.Errorf("membench cache: %w", err)
+		return "", sandboxError(err)
 	}
 	if err = writeOwner(parent); err != nil {
 		return "", errors.Join(err, os.RemoveAll(parent))
@@ -145,12 +145,12 @@ func fail(stderr io.Writer, msgs catalogue, lang i18n.Language, err error, code 
 func failureText(msgs catalogue, lang i18n.Language, err error) string {
 	known, ok := errors.AsType[messageError](err)
 	if !ok {
-		return err.Error()
+		known = messageError{key: msgErrSystem}
 	}
 	translator := msgs.For(lang)
 	text := translator.Text(known.key, known.params)
 	if translator.Err() != nil {
-		return err.Error()
+		return string(msgErrSystem)
 	}
 	return text
 }

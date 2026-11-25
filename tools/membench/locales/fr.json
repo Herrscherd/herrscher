@@ -222,6 +222,7 @@
   {
     "id": "membench.not_run",
     "description": "Message of the memory bench: not_run",
+    "one": "non exécuté (budget) : {{.Count}}",
     "other": "non exécuté (budget) : {{.Count}}"
   },
   {
@@ -297,6 +298,7 @@
   {
     "id": "membench.skipped_long",
     "description": "Message of the memory bench: skipped_long",
+    "one": "{{.Count}} élément LongMemEval a été écarté car son prompt dépasse la taille maximale d'un argument",
     "other": "{{.Count}} éléments LongMemEval ont été écartés car leur prompt dépasse la taille maximale d'un argument"
   },
   {
@@ -320,9 +322,54 @@
     "other": "échec de l'exécution {{.Run}} : code de sortie {{.Code}}"
   },
   {
+    "id": "membench.error.run_detail",
+    "description": "Message of the memory bench: error.run_detail",
+    "other": "échec de l'exécution {{.Run}} : {{.Detail}}"
+  },
+  {
+    "id": "membench.error.run_exit_detail",
+    "description": "Message of the memory bench: error.run_exit_detail",
+    "other": "échec de l'exécution {{.Run}} : code de sortie {{.Code}}, sortie d'erreur : {{.Detail}}"
+  },
+  {
+    "id": "membench.error.run_signal",
+    "description": "Message of the memory bench: error.run_signal",
+    "other": "échec de l'exécution {{.Run}} : tué par le signal {{.Signal}}"
+  },
+  {
     "id": "membench.error.run_timeout",
     "description": "Message of the memory bench: error.run_timeout",
     "other": "échec de l'exécution {{.Run}} : délai dépassé"
+  },
+  {
+    "id": "membench.error.cache",
+    "description": "Message of the memory bench: error.cache",
+    "other": "répertoire de cache de membench inutilisable"
+  },
+  {
+    "id": "membench.error.sandbox",
+    "description": "Message of the memory bench: error.sandbox",
+    "other": "bac à sable de membench impossible à préparer ou à nettoyer"
+  },
+  {
+    "id": "membench.error.vault",
+    "description": "Message of the memory bench: error.vault",
+    "other": "coffre de membench impossible à préparer"
+  },
+  {
+    "id": "membench.error.sweep",
+    "description": "Message of the memory bench: error.sweep",
+    "other": "nettoyage des exécutions orphelines de membench impossible"
+  },
+  {
+    "id": "membench.error.report",
+    "description": "Message of the memory bench: error.report",
+    "other": "écriture du rapport de membench impossible"
+  },
+  {
+    "id": "membench.error.system",
+    "description": "Message of the memory bench: error.system",
+    "other": "membench a rencontré une erreur système non classée"
   },
   {
     "id": "membench.error.flags_syntax",

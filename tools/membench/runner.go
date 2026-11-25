@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -17,6 +18,7 @@ const (
 	redactedSecret         = "[redacted]"
 	maxPromptBytes         = 128<<10 - 1
 	consolidateEveryRunEnv = "TERMINAL_CONSOLIDATE_EVERY=0"
+	maxDetailBytes         = 512
 )
 
 var (
@@ -201,7 +203,7 @@ func (r *runner) invoke(ctx context.Context, box sandbox, request step, assignme
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("%w: %s", err, redact(strings.TrimSpace(stderr.String()), r.apiKey))
+		return "", runOutputError{stderr: redact(strings.TrimSpace(stderr.String()), r.apiKey), cause: err}
 	}
 	return stdout.String(), nil
 }
@@ -213,12 +215,55 @@ func redact(text, secret string) string {
 	return strings.ReplaceAll(text, secret, redactedSecret)
 }
 
+type runOutputError struct {
+	stderr string
+	cause  error
+}
+
+func (o runOutputError) Error() string {
+	return o.cause.Error()
+}
+
+func (o runOutputError) Unwrap() error {
+	return o.cause
+}
+
 func runFailure(label string, cause error) error {
 	if errors.Is(cause, context.DeadlineExceeded) {
-		return messageError{key: msgErrRunTimeout, params: params{paramRun: label}}
+		return messageError{key: msgErrRunTimeout, params: params{paramRun: label}, cause: cause}
+	}
+	stderr := ""
+	if output, ok := errors.AsType[runOutputError](cause); ok {
+		stderr = output.stderr
 	}
 	if exit, ok := errors.AsType[*exec.ExitError](cause); ok {
-		return messageError{key: msgErrRunExit, params: params{paramRun: label, paramCode: strconv.Itoa(exit.ExitCode())}}
+		return exitRunFailure(label, exit, stderr, cause)
 	}
-	return messageError{key: msgErrRun, params: params{paramRun: label}}
+	return withDetail(msgErrRun, msgErrRunDetail, params{paramRun: label}, stderr, cause)
+}
+
+func exitRunFailure(label string, exit *exec.ExitError, stderr string, cause error) error {
+	if status, ok := exit.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+		return messageError{key: msgErrRunSignal, params: params{paramRun: label, paramSignal: strconv.Itoa(int(status.Signal()))}, cause: cause}
+	}
+	return withDetail(msgErrRunExit, msgErrRunExitDetail, params{paramRun: label, paramCode: strconv.Itoa(exit.ExitCode())}, stderr, cause)
+}
+
+func withDetail(plain, detailed msgKey, base params, stderr string, cause error) error {
+	if stderr == "" {
+		return messageError{key: plain, params: base, cause: cause}
+	}
+	base[paramDetail] = detailText(stderr)
+	return messageError{key: detailed, params: base, cause: cause}
+}
+
+func detailText(stderr string) string {
+	if len(stderr) <= maxDetailBytes {
+		return stderr
+	}
+	cut := maxDetailBytes
+	for cut > 0 && !utf8.RuneStart(stderr[cut]) {
+		cut--
+	}
+	return stderr[:cut]
 }

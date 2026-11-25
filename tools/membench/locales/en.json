@@ -147,6 +147,7 @@
   {
     "id": "membench.not_run",
     "description": "Message of the memory bench: not_run",
+    "one": "not run (budget): {{.Count}}",
     "other": "not run (budget): {{.Count}}"
   },
   {
@@ -297,6 +298,7 @@
   {
     "id": "membench.skipped_long",
     "description": "Message of the memory bench: skipped_long",
+    "one": "{{.Count}} LongMemEval item was skipped because its prompt exceeds the argument size limit",
     "other": "{{.Count}} LongMemEval items were skipped because their prompt exceeds the argument size limit"
   },
   {
@@ -320,9 +322,54 @@
     "other": "run {{.Run}} failed: exit code {{.Code}}"
   },
   {
+    "id": "membench.error.run_detail",
+    "description": "Message of the memory bench: error.run_detail",
+    "other": "run {{.Run}} failed: {{.Detail}}"
+  },
+  {
+    "id": "membench.error.run_exit_detail",
+    "description": "Message of the memory bench: error.run_exit_detail",
+    "other": "run {{.Run}} failed: exit code {{.Code}}, error output: {{.Detail}}"
+  },
+  {
+    "id": "membench.error.run_signal",
+    "description": "Message of the memory bench: error.run_signal",
+    "other": "run {{.Run}} failed: killed by signal {{.Signal}}"
+  },
+  {
     "id": "membench.error.run_timeout",
     "description": "Message of the memory bench: error.run_timeout",
     "other": "run {{.Run}} failed: timed out"
+  },
+  {
+    "id": "membench.error.cache",
+    "description": "Message of the memory bench: error.cache",
+    "other": "membench cache directory unusable"
+  },
+  {
+    "id": "membench.error.sandbox",
+    "description": "Message of the memory bench: error.sandbox",
+    "other": "membench sandbox cannot be prepared or cleaned up"
+  },
+  {
+    "id": "membench.error.vault",
+    "description": "Message of the memory bench: error.vault",
+    "other": "membench vault cannot be prepared"
+  },
+  {
+    "id": "membench.error.sweep",
+    "description": "Message of the memory bench: error.sweep",
+    "other": "membench cannot clean up orphaned runs"
+  },
+  {
+    "id": "membench.error.report",
+    "description": "Message of the memory bench: error.report",
+    "other": "membench cannot write the report"
+  },
+  {
+    "id": "membench.error.system",
+    "description": "Message of the memory bench: error.system",
+    "other": "membench hit an unclassified system error"
   },
   {
     "id": "membench.error.flags_syntax",

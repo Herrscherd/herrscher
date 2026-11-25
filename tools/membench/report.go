@@ -211,9 +211,15 @@ func writeReport(out io.Writer, rep report, cfg config, msgs catalogue) error {
 	if cfg.format == formatJSON {
 		encoder := json.NewEncoder(out)
 		encoder.SetIndent("", jsonIndent)
-		return encoder.Encode(rep)
+		if err := encoder.Encode(rep); err != nil {
+			return reportError(err)
+		}
+		return nil
 	}
-	return renderMarkdown(out, rep, msgs.For(cfg.lang))
+	if err := renderMarkdown(out, rep, msgs.For(cfg.lang)); err != nil {
+		return reportError(err)
+	}
+	return nil
 }
 
 func renderMarkdown(out io.Writer, rep report, translator *translator) error {

@@ -11,6 +11,7 @@ const (
 	paramPath    = "Path"
 	paramReserve = "Reserve"
 	paramRun     = "Run"
+	paramSignal  = "Signal"
 	paramSpent   = "Spent"
 	paramTokens  = "Tokens"
 	paramWant    = "Want"
@@ -46,8 +47,17 @@ const (
 	msgErrHerrscher       msgKey = "membench.error.herrscher"
 	msgErrHerrscherAbsent msgKey = "membench.error.herrscher_absent"
 	msgErrRun             msgKey = "membench.error.run"
+	msgErrRunDetail       msgKey = "membench.error.run_detail"
 	msgErrRunExit         msgKey = "membench.error.run_exit"
+	msgErrRunExitDetail   msgKey = "membench.error.run_exit_detail"
+	msgErrRunSignal       msgKey = "membench.error.run_signal"
 	msgErrRunTimeout      msgKey = "membench.error.run_timeout"
+	msgErrCache           msgKey = "membench.error.cache"
+	msgErrSandbox         msgKey = "membench.error.sandbox"
+	msgErrVault           msgKey = "membench.error.vault"
+	msgErrSweep           msgKey = "membench.error.sweep"
+	msgErrReport          msgKey = "membench.error.report"
+	msgErrSystem          msgKey = "membench.error.system"
 	msgErrFlagsSyntax     msgKey = "membench.error.flags_syntax"
 	msgErrAuthFileAbsent  msgKey = "membench.error.credentials_absent"
 	msgErrAuthFileRead    msgKey = "membench.error.credentials_read"
@@ -114,7 +124,10 @@ func paramTable() []keyParams {
 		{key: msgErrHerrscher, params: []string{paramPath}},
 		{key: msgErrHerrscherAbsent, params: []string{paramPath}},
 		{key: msgErrRun, params: []string{paramRun}},
+		{key: msgErrRunDetail, params: []string{paramRun, paramDetail}},
 		{key: msgErrRunExit, params: []string{paramRun, paramCode}},
+		{key: msgErrRunExitDetail, params: []string{paramRun, paramCode, paramDetail}},
+		{key: msgErrRunSignal, params: []string{paramRun, paramSignal}},
 		{key: msgErrRunTimeout, params: []string{paramRun}},
 		{key: msgErrAuthFileAbsent, params: []string{paramPath}},
 		{key: msgErrAuthFileRead, params: []string{paramPath}},

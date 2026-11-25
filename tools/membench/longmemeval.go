@@ -54,7 +54,7 @@ func loadLongMemEval(path string, samples int, seed uint64, maxTurns int) ([]tas
 		return nil, 0, datasetLarge(strconv.Itoa(maxDatasetBytes) + " bytes")
 	}
 	if readErr != nil {
-		return nil, 0, readErr
+		return nil, 0, readFailure(path, readErr)
 	}
 	if closeErr != nil {
 		return nil, 0, datasetRead(path, closeErr)
@@ -79,7 +79,7 @@ func sampleItems(source io.Reader, samples int, seed uint64, maxTurns int) ([]lm
 	for decoder.More() {
 		var item lmeItem
 		if err := decoder.Decode(&item); err != nil {
-			return nil, 0, 0, datasetMalformed(decoder.InputOffset())
+			return nil, 0, 0, decodeFailure(err, decoder.InputOffset())
 		}
 		decoded++
 		if decoded > maxDatasetItems {
@@ -145,7 +145,7 @@ func lowestKeys(kept []sampled, limit int) []sampled {
 func expectDelim(decoder *json.Decoder, want json.Delim) error {
 	token, err := decoder.Token()
 	if err != nil {
-		return datasetMalformed(decoder.InputOffset())
+		return decodeFailure(err, decoder.InputOffset())
 	}
 	if delim, ok := token.(json.Delim); !ok || delim != want {
 		return datasetDelim(want, decoder.InputOffset())
@@ -153,18 +153,38 @@ func expectDelim(decoder *json.Decoder, want json.Delim) error {
 	return nil
 }
 
+func readFailure(path string, cause error) error {
+	if _, known := errors.AsType[messageError](cause); known {
+		return cause
+	}
+	return datasetRead(path, cause)
+}
+
 func datasetRead(path string, cause error) error {
 	switch {
 	case errors.Is(cause, os.ErrNotExist):
-		return pathError(msgErrDatasetMissing, path)
+		return pathError(msgErrDatasetMissing, path, cause)
 	case errors.Is(cause, os.ErrPermission):
-		return pathError(msgErrDatasetDenied, path)
+		return pathError(msgErrDatasetDenied, path, cause)
 	}
-	return pathError(msgErrDatasetRead, path)
+	return pathError(msgErrDatasetRead, path, cause)
 }
 
-func pathError(key msgKey, path string) error {
-	return messageError{key: key, params: params{paramPath: path}}
+func decodeFailure(cause error, offset int64) error {
+	if isMalformed(cause) {
+		return datasetMalformed(offset)
+	}
+	return cause
+}
+
+func isMalformed(cause error) bool {
+	if _, ok := errors.AsType[*json.SyntaxError](cause); ok {
+		return true
+	}
+	if _, ok := errors.AsType[*json.UnmarshalTypeError](cause); ok {
+		return true
+	}
+	return errors.Is(cause, io.ErrUnexpectedEOF) || errors.Is(cause, io.EOF)
 }
 
 func datasetLarge(limit string) error {

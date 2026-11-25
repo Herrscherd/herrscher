@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -16,7 +15,7 @@ var runDirName = regexp.MustCompile(`^run-\d+$`)
 
 func writeOwner(dir string) error {
 	if err := os.WriteFile(filepath.Join(dir, ownerFileName), []byte(strconv.Itoa(os.Getpid())), credentialsMode); err != nil {
-		return fmt.Errorf("membench owner: %w", err)
+		return sandboxError(err)
 	}
 	return nil
 }
@@ -24,7 +23,7 @@ func writeOwner(dir string) error {
 func sweepOrphans(benchRoot string) error {
 	entries, err := os.ReadDir(benchRoot)
 	if err != nil {
-		return fmt.Errorf("membench sweep: %w", err)
+		return sweepError(err)
 	}
 	var failures []error
 	for _, entry := range entries {
@@ -36,7 +35,7 @@ func sweepOrphans(benchRoot string) error {
 			continue
 		}
 		if err := os.RemoveAll(dir); err != nil {
-			failures = append(failures, fmt.Errorf("membench sweep: %w", err))
+			failures = append(failures, sweepError(err))
 		}
 	}
 	return errors.Join(failures...)

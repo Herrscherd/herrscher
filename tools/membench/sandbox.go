@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -28,7 +27,7 @@ type sandbox struct {
 func newSandbox(parent string) (sandbox, error) {
 	root, err := os.MkdirTemp(parent, "run-")
 	if err != nil {
-		return sandbox{}, fmt.Errorf("membench sandbox: %w", err)
+		return sandbox{}, sandboxError(err)
 	}
 	created := sandbox{
 		root:   root,
@@ -38,7 +37,7 @@ func newSandbox(parent string) (sandbox, error) {
 	}
 	for _, dir := range []string{created.state, created.home, created.config} {
 		if err := os.MkdirAll(dir, dirMode); err != nil {
-			return sandbox{}, errors.Join(fmt.Errorf("membench sandbox: %w", err), created.close())
+			return sandbox{}, errors.Join(sandboxError(err), created.close())
 		}
 	}
 	return created, nil
@@ -46,7 +45,7 @@ func newSandbox(parent string) (sandbox, error) {
 
 func (s sandbox) close() error {
 	if err := os.RemoveAll(s.root); err != nil {
-		return fmt.Errorf("membench sandbox: %w", err)
+		return sandboxError(err)
 	}
 	return nil
 }
@@ -57,10 +56,10 @@ func (s sandbox) vault() string {
 
 func (s sandbox) plantAgedNode() error {
 	if err := os.MkdirAll(s.vault(), dirMode); err != nil {
-		return fmt.Errorf("membench vault: %w", err)
+		return vaultError(err)
 	}
 	if err := os.WriteFile(filepath.Join(s.vault(), agedNodeFile), []byte(agedNodeText), fileMode); err != nil {
-		return fmt.Errorf("membench vault: %w", err)
+		return vaultError(err)
 	}
 	return nil
 }
@@ -71,10 +70,10 @@ func (s sandbox) installCredentials(source string) error {
 	}
 	data, err := os.ReadFile(source)
 	if err != nil {
-		return fmt.Errorf("membench credentials: %w", err)
+		return pathError(msgErrAuthFileRead, source, err)
 	}
 	if err := os.WriteFile(filepath.Join(s.config, credentialsFile), data, credentialsMode); err != nil {
-		return fmt.Errorf("membench credentials: %w", err)
+		return sandboxError(err)
 	}
 	return nil
 }

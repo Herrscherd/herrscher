@@ -148,8 +148,10 @@ arm.
 `ANTHROPIC_API_KEY` is never read from the caller's environment by default. A run
 uses the credentials given with `-credentials`. The key is passed to each run
 only when `-api-key-env` names the variable that holds it. It travels in the
-run's environment, never on the command line, and the bench redacts it from the
-stderr of a failed run before that stderr goes into the error.
+run's environment, never on the command line. The bench redacts it from the stderr
+of a failed run, then puts the first 512 bytes of that redacted stderr in the error
+message, as the run's error output. A run killed by a signal or past its deadline
+reports no error output.
 
 ## Tests
 

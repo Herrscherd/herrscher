@@ -50,10 +50,15 @@ var errUsageRequested = errors.New("membench: usage requested")
 type messageError struct {
 	key    msgKey
 	params params
+	cause  error
 }
 
 func (e messageError) Error() string {
 	return string(e.key)
+}
+
+func (e messageError) Unwrap() error {
+	return e.cause
 }
 
 type config struct {
@@ -109,7 +114,7 @@ func parseConfig(args []string, stderr io.Writer, msgs catalogue, defaultLang i1
 			}
 			return config{}, errUsageRequested
 		}
-		return config{}, messageError{key: msgErrFlagsSyntax}
+		return config{}, messageError{key: msgErrFlagsSyntax, cause: err}
 	}
 	return raw.resolve(defaultLang, getenv)
 }
@@ -246,16 +251,16 @@ func (c *config) validateReserve() error {
 
 func herrscherError(path string, cause error) error {
 	if errors.Is(cause, exec.ErrNotFound) || errors.Is(cause, os.ErrNotExist) {
-		return pathError(msgErrHerrscherAbsent, path)
+		return pathError(msgErrHerrscherAbsent, path, cause)
 	}
-	return pathError(msgErrHerrscher, path)
+	return pathError(msgErrHerrscher, path, cause)
 }
 
 func credentialsError(path string, cause error) error {
 	if errors.Is(cause, os.ErrNotExist) {
-		return pathError(msgErrAuthFileAbsent, path)
+		return pathError(msgErrAuthFileAbsent, path, cause)
 	}
-	return pathError(msgErrAuthFileRead, path)
+	return pathError(msgErrAuthFileRead, path, cause)
 }
 
 func flagError(name, detail string) error {

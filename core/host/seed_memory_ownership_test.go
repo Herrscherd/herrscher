@@ -59,9 +59,10 @@ func (m *closeGuardMemory) Close() error {
 }
 
 type memoryWritingObserveOrchestrator struct {
-	seen    chan struct{}
-	release chan struct{}
-	memory  contracts.Memory
+	seen         chan struct{}
+	release      chan struct{}
+	memory       contracts.Memory
+	consolidated atomic.Int32
 }
 
 func (o *memoryWritingObserveOrchestrator) Context(context.Context) string { return "" }
@@ -72,8 +73,11 @@ func (o *memoryWritingObserveOrchestrator) Observe(ctx context.Context, _ contra
 	return o.memory.Record(ctx, contracts.Node{})
 }
 
-func (o *memoryWritingObserveOrchestrator) Consolidate(context.Context) error { return nil }
-func (o *memoryWritingObserveOrchestrator) Close() error                      { return nil }
+func (o *memoryWritingObserveOrchestrator) Consolidate(context.Context) error {
+	o.consolidated.Add(1)
+	return nil
+}
+func (o *memoryWritingObserveOrchestrator) Close() error { return nil }
 
 func registerSeedPlugins(t *testing.T, mem contracts.Memory, orch contracts.Orchestrator) *atomic.Int32 {
 	t.Helper()
@@ -138,6 +142,9 @@ func TestUnjoinedBridgeClosesMemoryOnlyWhenItEnds(t *testing.T) {
 		t.Fatal("the one-shot never returned while Observe was blocked")
 	}
 
+	if n := orch.consolidated.Load(); n != 0 {
+		t.Fatalf("consolidated %d time(s) while the bridge was not joined, want 0", n)
+	}
 	if n := mem.closeCalls.Load(); n != 0 {
 		t.Fatalf("memory closed %d time(s) while Observe still runs, want 0", n)
 	}

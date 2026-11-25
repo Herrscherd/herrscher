@@ -77,7 +77,7 @@ func TestAssignmentsCarryTheKeyOnlyWhenGiven(t *testing.T) {
 	}
 }
 
-func TestEveryArmSetsItsSettingAndConsolidatesOnEveryRun(t *testing.T) {
+func TestEveryArmSetsItsSettingAndConsolidateEveryZero(t *testing.T) {
 	box := sandbox{root: "run"}
 	for _, option := range knownSettings() {
 		for _, enabled := range []bool{false, true} {
@@ -86,7 +86,7 @@ func TestEveryArmSetsItsSettingAndConsolidatesOnEveryRun(t *testing.T) {
 				t.Errorf("arm %s enabled=%t: %v lacks its setting", option.name, enabled, got)
 			}
 			if !slices.Contains(got, "TERMINAL_CONSOLIDATE_EVERY=0") {
-				t.Errorf("arm %s enabled=%t: %v does not consolidate on every run, so report and sweep never act", option.name, enabled, got)
+				t.Errorf("arm %s enabled=%t: %v does not set TERMINAL_CONSOLIDATE_EVERY=0, so the end-of-run consolidation never runs", option.name, enabled, got)
 			}
 		}
 	}

@@ -117,8 +117,15 @@ is. The default of 10 never consolidates a one-shot, so a one-shot would never
 sweep the vault and the report and sweep settings would have nothing to act on.
 With 0, consolidation runs at the end of each one-shot run that completes, with
 an orchestrator, so the off arm and the on arm differ only by the setting under
-test. A herrscher run by a user keeps the default of 10, so the bench measures a
-condition a user does not run by default.
+test, as long as both runs complete. A run whose `herrscher` call errors stops
+the bench there: `forEachArm` in `tools/membench/runner.go` returns the error,
+`runAll` passes it on, `execute` in `tools/membench/main.go` marks the report
+failed, and the arms after it count as not started. A run whose bridge is not
+joined within the grace but which returns a reply is kept. It has no end-of-run
+consolidation, so its arm differs from the other arm by that missing
+consolidation too, and the bench does not mark such a run. A herrscher run by a
+user keeps the default of 10, so the bench measures a condition a user does not
+run by default.
 
 Each arm's vault (`OBSIDIAN_VAULT`) starts with one aged node in the real
 format, `type: fact` with `lastSeen: 2001-01-01T00:00:00Z`, in off and on arms
@@ -198,7 +205,7 @@ setting assignments fails `TestMemorySettingReachesTheRealBinary`, a reserve
 that ignores the reserve fails `TestMayStartKeepsTheReserveInFront`, and a
 scorer matching substrings fails `TestScoreMatchesWholeWordsOnly`.
 
-The wiring of the arms is tested without a model. `TestEveryArmSetsItsSettingAndConsolidatesOnEveryRun`
+The wiring of the arms is tested without a model. `TestEveryArmSetsItsSettingAndConsolidateEveryZero`
 checks that every arm sets its setting and `TERMINAL_CONSOLIDATE_EVERY=0`, and
 `TestEveryDeclaredKeyIsInBothCatalogues` and `TestUsageWritesInEachLanguage`
 check that every message key and the usage text exist in English and French.

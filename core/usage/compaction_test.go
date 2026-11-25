@@ -96,7 +96,7 @@ func TestSummarizeAggregatesCompactionsPerStage(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := Summarize(tc.records, Range7d, testNow(), tc.key).Stages
+			got := Summarize(tc.records, Range7d, testNow(), tc.key, nil).Stages
 			if jsonOf(t, got) != jsonOf(t, tc.want) {
 				t.Fatalf("Stages = %+v, want %+v", got, tc.want)
 			}
@@ -109,7 +109,7 @@ func TestSummarizeLeavesCompactionRunsOutOfTheSpend(t *testing.T) {
 		{Time: testNow(), Session: "chat", Model: "opus", In: 10, Cost: 2},
 		compactRecord(testNow(), "claude", "", Compaction{Stage: "jev", Outcome: contracts.CompactDone, Requests: 1}),
 	}
-	spend := Summarize(records, Range24h, testNow(), AccountKey{})
+	spend := Summarize(records, Range24h, testNow(), AccountKey{}, nil)
 	if spend.Sessions != 1 || spend.Cost != 2 || spend.Tokens.In != 10 || len(spend.Models) != 1 {
 		t.Fatalf("spend = %+v, want only the turn counted, the compaction run adds no session, cost or model", spend)
 	}
@@ -172,7 +172,7 @@ func TestLedgerReadsAnOldLedgerWithoutCompactionEntries(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Records: %v", err)
 			}
-			spend := Summarize(records, Range7d, testNow(), AccountKey{})
+			spend := Summarize(records, Range7d, testNow(), AccountKey{}, nil)
 			if spend.Cost != tc.wantCost {
 				t.Fatalf("Cost = %v, want %v", spend.Cost, tc.wantCost)
 			}

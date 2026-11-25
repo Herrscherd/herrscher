@@ -160,8 +160,8 @@ forwarded to it and recorded once, by the daemon. A view is named after the comm
 and the default is the limits of each account:
 
 - `limits`: the quota windows of each account.
-- `cost`: the spend of the period, by session and by model.
-- `tokens`: the tokens in and out of the period.
+- `cost`: the spend of the period, by account, by model and by session.
+- `tokens`: the tokens in and out of the period, by model and by session.
 - `compaction`: each compaction stage, with its runs and how they ended (done,
   short, failed, dry run, skipped), the calls it examined, kept, truncated and
   pruned, the share of characters it removed, the tokens it removed, its model
@@ -172,6 +172,25 @@ and the default is the limits of each account:
   failed, so a dry run or a skipped Jev is in neither count. A session counts once it
   has an attempt. The backend stage counts as behind Jev when its outcome is anything
   but skipped, so a dry run of the backend does count.
+
+Each session of the period has a row, in the `cost` view with its cost and the share of
+its input read from the prompt cache, and in the `tokens` view with its tokens and the
+tokens the host injected into its prompt per turn. The cache share is the cache read
+over the input of the session, the input, the cache read and the cache write together,
+as the period's cache share is. The rows are sorted by cost and the text views show the
+first eight, with a line for the sessions they leave out; `--json` gives all of them
+under `spend.sessionRows`.
+
+The injected figure is an estimate, marked `~`. Each turn of a session carries the size
+the host measured for each block it wrote into the prompt (memory, skills, delegation,
+capabilities, identity), at about four bytes per token, not a count from the vendor.
+The average is the injected tokens over the turns of the period that carry those sizes,
+so a turn written by an older daemon, which sends no sizes, is left out. A session with
+no sized turn reads `n/a`, and so does a vendor session that herrscher did not run, since
+it has no transcript here. The sizes come from the session transcript, which keeps at
+most about 4 MiB: once it grows past that, its oldest turns are dropped down to about
+2 MiB, so the average covers the sized turns still in the transcript, which may not be
+every turn of a long period.
 
 `--range` takes `24h`, `7d`, `30d` or `90d`, and `--account` and `--vendor` narrow the
 figures to one account or one vendor, with the same rule as for turns: a compaction is

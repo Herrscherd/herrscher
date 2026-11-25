@@ -60,6 +60,7 @@ type Spend struct {
 	Buckets  []Bucket     `json:"buckets"`
 	Accounts []Share      `json:"accounts,omitempty"`
 	Models   []Share      `json:"models,omitempty"`
+	Rows     []SessionRow `json:"sessionRows,omitempty"`
 	Split    CostSplit    `json:"split,omitzero"`
 	Saved    float64      `json:"saved,omitempty"`
 	Unpriced []string     `json:"unpriced,omitempty"`
@@ -96,8 +97,8 @@ type Share struct {
 }
 
 // Summarize totals the records of the period that the key matches, counting back from
-// now.
-func Summarize(records []Record, rng Range, now time.Time, key AccountKey) Spend {
+// now, and gives each session its row with the injection the host measured for it.
+func Summarize(records []Record, rng Range, now time.Time, key AccountKey, injected map[string]Injection) Spend {
 	now = now.UTC()
 	step := bucketStep(rng)
 	start := bucketStart(now.Add(-rng.Span()), rng)
@@ -106,10 +107,11 @@ func Summarize(records []Record, rng Range, now time.Time, key AccountKey) Spend
 		spend:    Spend{Buckets: make([]Bucket, count)},
 		start:    start,
 		step:     step,
-		sessions: make(map[string]bool),
+		sessions: make(map[string]SessionRow),
 		unpriced: make(map[string]bool),
 		accounts: make(map[AccountKey]Share),
 		models:   make(map[string]Share),
+		injected: injected,
 	}
 	for index := range totals.spend.Buckets {
 		totals.spend.Buckets[index].Start = start.Add(time.Duration(index) * step)
@@ -129,10 +131,11 @@ type spendTotals struct {
 	spend    Spend
 	start    time.Time
 	step     time.Duration
-	sessions map[string]bool
+	sessions map[string]SessionRow
 	unpriced map[string]bool
 	accounts map[AccountKey]Share
 	models   map[string]Share
+	injected map[string]Injection
 }
 
 func (t *spendTotals) add(record *Record) {
@@ -140,11 +143,12 @@ func (t *spendTotals) add(record *Record) {
 	spend.Cost += record.Cost
 	spend.Split = spend.Split.plus(record.Split)
 	spend.Saved += record.Saved
-	spend.Tokens.In += record.In
-	spend.Tokens.Out += record.Out
-	spend.Tokens.CacheRead += record.CacheRead
-	spend.Tokens.CacheCreate += record.CacheCreate
-	t.sessions[record.Session] = true
+	spend.Tokens = spend.Tokens.plus(recordTokens(*record))
+	row := t.sessions[record.Session]
+	row.Session = record.Session
+	row.Cost += record.Cost
+	row.Tokens = row.Tokens.plus(recordTokens(*record))
+	t.sessions[record.Session] = row
 	if record.Unpriced {
 		t.unpriced[record.Model] = true
 	}
@@ -166,6 +170,7 @@ func (t *spendTotals) add(record *Record) {
 
 func (t *spendTotals) done() Spend {
 	t.spend.Sessions = len(t.sessions)
+	t.spend.Rows = sortedSessionRows(t.sessions, t.injected)
 	t.spend.Accounts = sortedShares(t.accounts)
 	t.spend.Models = sortedShares(t.models)
 	t.spend.Unpriced = slices.Sorted(maps.Keys(t.unpriced))

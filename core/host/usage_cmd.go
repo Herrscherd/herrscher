@@ -83,6 +83,7 @@ func stampUsage(records []usage.Record, current *state.State, sess state.Session
 }
 
 type usageSource struct {
+	partDir     string
 	ledger      usage.Ledger
 	limits      *usage.LimitsCache
 	accounts    accounts.Store
@@ -98,6 +99,7 @@ func newUsageSource(messages *hostMessages, partDir string) *usageSource {
 		slog.Warn("usage: account store unavailable", "err", err)
 	}
 	return &usageSource{
+		partDir:     partDir,
 		ledger:      usage.Ledger{Dir: usageDir(partDir), Now: time.Now},
 		limits:      &usage.LimitsCache{Now: time.Now, Timeout: limitsTimeout(os.Getenv)},
 		accounts:    store,
@@ -189,7 +191,8 @@ func (s *usageSource) run(ctx context.Context, query usageQuery) usage.Snapshot 
 		slog.Warn("usage ledger not read whole", "err", err)
 	}
 	now := s.ledger.Now()
-	records, notes := s.withTranscripts(records, now.Add(-query.rng.Span()))
+	since := now.Add(-query.rng.Span())
+	records, notes := s.withTranscripts(records, since)
 	s.priceCompactions(records)
 	records = slices.DeleteFunc(records, func(record usage.Record) bool {
 		return !query.keeps(record)
@@ -200,7 +203,7 @@ func (s *usageSource) run(ctx context.Context, query usageQuery) usage.Snapshot 
 		Account:            query.account,
 		Vendor:             query.vendor,
 		Limits:             s.limits.Read(ctx, s.targets(query)),
-		Spend:              usage.Summarize(records, query.rng, now, query.account),
+		Spend:              usage.Summarize(records, query.rng, now, query.account, s.injections(records, since)),
 		LedgerTruncated:    err != nil,
 		TranscriptsPending: notes.pending,
 		Unreadable:         notes.unreadable,

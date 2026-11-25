@@ -155,7 +155,7 @@ func (d *sessionDriver) abandon(ctx context.Context, event contracts.Event) {
 	if event.T != eventwire.EventInput {
 		return
 	}
-	if ctx.Err() == nil {
+	if ctx.Err() == nil && d.recordInterruption() == nil {
 		d.settleTurn()
 	}
 	d.fanOut(ctx, contracts.Event{T: eventwire.EventAbandoned})

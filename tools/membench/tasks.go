@@ -9,6 +9,7 @@ import (
 const (
 	agentAlpha = "alpha"
 	agentBeta  = "beta"
+	noneAnswer = "none"
 )
 
 type step struct {
@@ -17,19 +18,15 @@ type step struct {
 }
 
 type task struct {
-	section msgKey
-	group   msgKey
-	id      string
-	steps   []step
-	ask     step
-	want    []string
-	forbid  []string
-	claims  []string
-	abstain bool
-}
-
-func valueClaimWords() []string {
-	return []string{"not", "no", "unknown", "pas", "inconnu", "inconnue", "aucun", "aucune"}
+	section  msgKey
+	group    msgKey
+	id       string
+	steps    []step
+	ask      step
+	want     []string
+	forbid   []string
+	abstain  bool
+	noneOnly bool
 }
 
 func abstentionMarkers() []string {
@@ -101,24 +98,36 @@ func pairTasks() []task {
 			forbid: []string{"4481"},
 		},
 		{
-			section: msgSectionPairs,
-			group:   msgVariantNeverGiven,
-			id:      "never-given",
-			steps:   []step{{agent: agentAlpha, prompt: "Remember this: the Tulm kiln runs at 900 degrees."}},
-			ask:     step{agent: agentAlpha, prompt: "What is the Ondrel vault password?"},
-			claims:  []string{"password is", "mot de passe est"},
-			abstain: true,
+			section:  msgSectionPairs,
+			group:    msgVariantNeverGiven,
+			id:       "never-given",
+			steps:    []step{{agent: agentAlpha, prompt: "Remember this: the Tulm kiln runs at 900 degrees."}},
+			ask:      step{agent: agentAlpha, prompt: "What is the Ondrel vault password? Reply with only the password, or with only the word NONE if you were never told it."},
+			noneOnly: true,
 		},
 	}
 }
 
 func score(current task, answer string) (bool, bool) {
 	words := wordsOf(answer)
-	falseRecall := containsAny(words, current.forbid) || statesValue(words, current.claims)
+	if current.noneOnly {
+		return scoreNoneOnly(words)
+	}
+	falseRecall := containsAny(words, current.forbid)
 	if current.abstain {
 		return containsAny(words, abstentionMarkers()) && !falseRecall, falseRecall
 	}
 	return containsAll(words, current.want) && !falseRecall, falseRecall
+}
+
+func scoreNoneOnly(words []string) (bool, bool) {
+	switch {
+	case len(words) == 0:
+		return false, false
+	case slices.Equal(words, []string{noneAnswer}):
+		return true, false
+	}
+	return false, true
 }
 
 func wordsOf(text string) []string {
@@ -127,19 +136,6 @@ func wordsOf(text string) []string {
 
 func notWordRune(r rune) bool {
 	return !unicode.IsLetter(r) && !unicode.IsDigit(r)
-}
-
-func statesValue(words, claims []string) bool {
-	for _, claim := range claims {
-		phrase := wordsOf(claim)
-		for start := 0; start+len(phrase) < len(words); start++ {
-			next := words[start+len(phrase)]
-			if slices.Equal(words[start:start+len(phrase)], phrase) && !slices.Contains(valueClaimWords(), next) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func containsAny(words, phrases []string) bool {

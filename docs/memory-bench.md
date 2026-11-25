@@ -65,7 +65,7 @@ The pair suite has four tasks, each taught in one or more steps and then asked:
 | same agent | A fact taught to one agent is recalled by that agent. |
 | other agent | A fact taught to one agent is recalled by another. |
 | stale | A fact is corrected, and the corrected value is recalled, not the old one. A recall of the old value is false recall. |
-| never given | A fact that was never taught is not invented. Saying so is success; stating a value for it, such as "the password is X", is false recall, even when the reply also says it does not know. |
+| never given | A fact that was never taught is not invented. The question asks for the password, or for the word NONE if it was never given. Replying NONE alone is success; any other reply is false recall. |
 
 With `-dataset`, the bench samples items of a LongMemEval file. Each item's
 evidence sessions are taught in order, then its question is asked. The five
@@ -88,20 +88,30 @@ For each task and setting, the report has one row with an off cell and an on
 cell, each with its runs, successes, false recalls, turns and tokens.
 
 - **Success**: the reply contains every expected value as whole words and no
-  forbidden one, or, for abstention, says it does not know and states no value
-  for the fact. Matching is by whole word, so `42` does not match `1042`.
+  forbidden one. For the never-given task, the reply is the single word NONE,
+  case and final punctuation aside. Matching is by whole word, so `42` does not
+  match `1042`.
 - **Turns**: the calls of a run, one usage record each.
 - **Tokens to success**: the tokens of all runs divided by their successes. The
   delta is on minus off.
 - **Memory tokens per turn**: input tokens per turn on minus off. This is the
   cost the memory adds to each call.
-- **False recall**: a forbidden value (the stale answer) is given, or, for a fact
-  never taught, a value is stated after `password is` or `mot de passe est`. It
-  is counted, not averaged into success. The LongMemEval section does
-  not report it, because its reference answers do not mark forbidden values.
+- **False recall**: a forbidden value (the stale answer) is given, or, for the
+  never-given task, the reply is anything other than the single word NONE. That
+  includes an answer that says it does not know in prose, a value stated, and a
+  verbose answer. It is counted, not averaged into success. The LongMemEval
+  section does not report it, because its reference answers do not mark
+  forbidden values.
+
+The never-given check is strict on purpose. The question fixes the reply
+format, so a reply that does not follow it cannot be told apart from an
+invention by its words. Scoring free text for disclaimers had let phrasings such
+as "not known to me, it is sesame" pass, so the scorer no longer reads prose.
 
 The LongMemEval scoring is a whole-word check of the reference answer in the
-reply. It is a proxy for the official judge, not a replacement for it.
+reply. Abstention items are matched against a list of phrases that say the
+answer is not known, such as "don't know" or "ne sais pas". This is a proxy for
+the official judge, not a replacement for it.
 
 Deltas are computed only on complete pairs: the off run and the on run of the
 same task. A task that ran in one arm only, because the budget stopped the run
@@ -234,9 +244,9 @@ names.
 - The bench reads spend from the ledger of the binary it runs. A binary that
   writes no ledger stops the run with the missing-ledger error, as the
   `TestBenchStopsWithoutAUsageLedger` test checks.
-- The never-given task detects an invented value only after `password is` or
-  `mot de passe est`. An invention phrased otherwise is not counted as false
-  recall, so the rate is a floor, not a measure of every invention.
+- The never-given task counts every reply other than NONE as false recall, so a
+  model that answers in prose is counted even when it invents nothing. Its
+  false-recall figure measures format compliance as well as invention.
 - The settings gated by time of day are not exercised by the bench.
 - The effect of `HERRSCHER_OWNER_ID` on `--print` is not verified; the bench
   sets it, but its result is not measured.

@@ -89,9 +89,10 @@ cell, each with its runs, successes, false recalls, turns and tokens.
 
 - **Success**: the reply contains every expected value as whole words and no
   forbidden one. For the never-given task, the reply succeeds when NONE is its
-  only word: case and any character that is not a letter or a digit are ignored.
-  A reply with no letter or digit, empty or only symbols, is neither a success
-  nor a false recall. Matching is by whole word, so `42` does not match `1042`.
+  only word: case is ignored, and characters that are not letters or digits
+  separate words: NONE with punctuation or markdown around it succeeds, N-O-N-E
+  does not. A reply with no letter or digit is neither a success nor a false
+  recall. Matching is by whole word, so `42` does not match `1042`.
 - **Turns**: the calls of a run, one usage record each.
 - **Tokens to success**: the tokens of all runs divided by their successes. The
   delta is on minus off.
@@ -245,11 +246,11 @@ it are renamed, and their values are unchanged.
 - The bench reads spend from the ledger of the binary it runs. A binary that
   writes no ledger stops the run with the missing-ledger error, as the
   `TestBenchStopsWithoutAUsageLedger` test checks.
-- The never-given task counts as false recall every non-empty reply that does not
-  have NONE as its only word, so a model that answers in prose is counted even
-  when it invents nothing. Its false-recall figure measures format compliance as
-  well as invention. A reply with no letter or digit is neither a success nor a
-  false recall.
+- The never-given task counts as false recall every reply that has a letter or a
+  digit and does not have NONE as its only word; a reply with no letter or digit
+  is neither a success nor a false recall. A model that answers in prose is
+  counted even when it invents nothing, so its false-recall figure measures
+  format compliance as well as invention.
 - The settings gated by time of day are not exercised by the bench.
 - The effect of `HERRSCHER_OWNER_ID` on `--print` is not verified; the bench
   sets it, but its result is not measured.

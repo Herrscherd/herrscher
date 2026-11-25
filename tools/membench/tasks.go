@@ -136,11 +136,11 @@ func score(current task, answer string) (bool, bool) {
 func inOrder(words, phrases []string) bool {
 	previous := -1
 	for _, phrase := range phrases {
-		at := phraseIndex(words, wordsOf(phrase))
-		if at <= previous {
+		position := phraseIndex(words, wordsOf(phrase))
+		if position <= previous {
 			return false
 		}
-		previous = at
+		previous = position
 	}
 	return true
 }

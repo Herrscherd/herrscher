@@ -24,6 +24,8 @@ func TestScoreRejectsStaleAndInventedAnswers(t *testing.T) {
 		{"procedure", "make ship ZONE=4 before make tag", false, true},
 		{"procedure", "make tag", false, false},
 		{"procedure", "make ship ZONE=4", false, false},
+		{"procedure", "make tag\nmake ship ZONE=4\nmake tag", true, false},
+		{"procedure", "Never run make ship ZONE=4 before make tag. Run make tag, then make ship ZONE=4.", false, true},
 		{"never-given", "NONE", true, false},
 		{"never-given", "none.", true, false},
 		{"never-given", "  None  ", true, false},

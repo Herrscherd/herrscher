@@ -67,7 +67,7 @@ The pair suite has five tasks, each taught in one or more steps and then asked:
 | same agent | A fact taught to one agent is recalled by that agent. |
 | other agent | A fact taught to one agent is recalled by another. |
 | stale | A fact is corrected, and the corrected value is recalled, not the old one. The question asks for the code alone, so a reply that gives the old value is false recall, and a reply that names the old value as replaced cannot pass for a correct one. |
-| procedure | A two-step release procedure of the repository is recalled in order. Both commands must appear, the first before the second; the reverse order, the one the procedure warns against, is false recall. It is the task where an agent may write the procedure down as a skill, so it is the one `learned-skills` can change. |
+| procedure | A two-step release procedure of the repository is recalled in order. Both commands must appear, and the first occurrence of each counts: the first command must come before the second. The reverse order, the one the procedure warns against, is false recall, and so is a reply that quotes the warning before the steps, since the question asks for the commands alone. It is the task where an agent may write the procedure down as a skill, so it is the one `learned-skills` can change. |
 | never given | A fact that was never taught is not invented. The question asks for the password, or for the word NONE if it was never given. Scored as defined in [Scoring the never-given task](#scoring-the-never-given-task). |
 
 With `-dataset`, the bench samples items of a LongMemEval file. Each item's
@@ -134,16 +134,16 @@ Every arm runs with `TERMINAL_CONSOLIDATE_EVERY=0`, whatever the user's default
 is. A one-shot run that completes, with an orchestrator, consolidates at its end
 at 0 and at the default of 10 alike, so this pins the condition without
 departing from what a user runs. The off arm and the on arm then differ only by
-the setting under test, except for the two kinds of run described below. A run whose `herrscher`
-call errors stops the bench there: `forEachArm` in `tools/membench/runner.go`
-returns the error, `runAll` passes it on, and `execute` in
-`tools/membench/main.go` marks the report failed. The failed arm and the arms
-after it count as not run (`NotRun` in `tools/membench/report.go`), although the
-failed arm's spend is still counted. A run whose bridge is not joined within the
-grace but which returns a reply counts as completed for the bench: it is kept
-and enters the deltas as a complete pair. It does not consolidate at its end, so
-its arm differs from the other arm by that missing consolidation, and the bench
-does not mark such a run.
+the setting under test, except for the two kinds of run described below. A run
+whose `herrscher` call errors stops the bench there: `forEachArm` in
+`tools/membench/runner.go` returns the error, `runAll` passes it on, and
+`execute` in `tools/membench/main.go` marks the report failed. The failed arm
+and the arms after it count as not run (`NotRun` in `tools/membench/report.go`),
+although the failed arm's spend is still counted. A run whose bridge is not
+joined within the grace but which returns a reply counts as completed for the
+bench: it is kept and enters the deltas as a complete pair. It does not
+consolidate at its end, so its arm differs from the other arm by that missing
+consolidation, and the bench does not mark such a run.
 
 Each arm's vault (`OBSIDIAN_VAULT`) starts with one aged node in the real
 format, `type: fact` with `lastSeen: 2001-01-01T00:00:00Z`, in off and on arms
@@ -302,13 +302,13 @@ for the LongMemEval run. The pair suite ran three times; the third stopped on
 the account's weekly limit after 26 of its 30 arms. LongMemEval ran 10 items of
 the oracle file (`longmemeval_oracle.json`, the evidence sessions only), seed 1,
 and stopped on the same limit after 67 of its 84 arms. That run used the bench
-before the procedure task and the stale question were added: its 84 arms are
-4 pair tasks and 10 items under 3 settings, and only its LongMemEval rows are
+before the procedure task and the stale question were added: its 84 arms are 4
+pair tasks and 10 items under 3 settings, and only its LongMemEval rows are
 reported below. The pair rows come from the three pair runs, on the bench as
-merged. The whole run spent about
-10 million tokens, almost all cache reads, which the ledger costs at about
-0.70 US dollars. On a subscription that figure is an estimate; the quota is
-what it consumes.
+merged except the order check of the procedure task. The whole run spent about
+10 million tokens, almost all cache reads, which the ledger costs at about 0.70
+US dollars. On a subscription that figure is an estimate; the quota is what it
+consumes.
 
 The settings were measured against each other, with the rest of the memory on
 in both arms. The baseline recalls every taught fact: same agent, other agent
@@ -322,14 +322,14 @@ so `learned-skills` has 15 runs per arm and `raw-archive` and `report` have 14.
 | Setting | Off | On | False recall off / on | What changed |
 |---|---|---|---|---|
 | `learned-skills` | 15/15 | 12/15 | 0 / 0 | The procedure task fails in every on run (0/3 against 3/3), with about 32000 more prompt tokens per turn. The other tasks do not move. |
+| `raw-archive` | 14/14 | 13/14 | 0 / 1 | One stale run gave the old code. The raw archive is only read by `memory search --raw`, so it cannot feed recall; the miss is noise. |
+| `report` | 14/14 | 14/14 | 0 / 0 | Nothing. The report is an audit node, not recall. |
 
 These runs scored the procedure task before its order was checked: a reply
 with both commands passed whatever their order. The three off successes may
 therefore include a reply in the wrong order. The three on failures stand
 either way, since a reply missing a command fails with or without the order
 check.
-| `raw-archive` | 14/14 | 13/14 | 0 / 1 | One stale run gave the old code. The raw archive is only read by `memory search --raw`, so it cannot feed recall; the miss is noise. |
-| `report` | 14/14 | 14/14 | 0 / 0 | Nothing. The report is an audit node, not recall. |
 
 The memory tokens per turn of a single task vary by about 10000 from one run to
 the next, because the agent sometimes reads the repository before it answers.

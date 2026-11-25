@@ -12,7 +12,9 @@ bench itself reaches a real model and spends money, so it requires a budget.
 ## Running it
 
 Build the bench, then start it with a budget. The budget is required: the bench
-refuses to start without `-budget-tokens` or `-budget-usd`.
+refuses to start without `-budget-tokens` or `-budget-usd`. `git` must be on
+`PATH`, since every arm runs from a repository it creates with `git init`;
+without it, every arm fails to prepare its sandbox.
 
 ```sh
 go build -o "$BIN_DIR/membench" ./tools/membench
@@ -65,7 +67,7 @@ The pair suite has five tasks, each taught in one or more steps and then asked:
 | same agent | A fact taught to one agent is recalled by that agent. |
 | other agent | A fact taught to one agent is recalled by another. |
 | stale | A fact is corrected, and the corrected value is recalled, not the old one. The question asks for the code alone, so a reply that gives the old value is false recall, and a reply that names the old value as replaced cannot pass for a correct one. |
-| procedure | A two-step release procedure of the repository is recalled in order. It is the task where an agent may write the procedure down as a skill, so it is the one `learned-skills` can change. |
+| procedure | A two-step release procedure of the repository is recalled in order. Both commands must appear, the first before the second; the reverse order, the one the procedure warns against, is false recall. It is the task where an agent may write the procedure down as a skill, so it is the one `learned-skills` can change. |
 | never given | A fact that was never taught is not invented. The question asks for the password, or for the word NONE if it was never given. Scored as defined in [Scoring the never-given task](#scoring-the-never-given-task). |
 
 With `-dataset`, the bench samples items of a LongMemEval file. Each item's
@@ -131,8 +133,8 @@ many runs each side has.
 Every arm runs with `TERMINAL_CONSOLIDATE_EVERY=0`, whatever the user's default
 is. A one-shot run that completes, with an orchestrator, consolidates at its end
 at 0 and at the default of 10 alike, so this pins the condition without
-departing from what a user runs. The off arm and the on arm then differ only by the setting under
-test, except for the two kinds of run described below. A run whose `herrscher`
+departing from what a user runs. The off arm and the on arm then differ only by
+the setting under test, except for the two kinds of run described below. A run whose `herrscher`
 call errors stops the bench there: `forEachArm` in `tools/membench/runner.go`
 returns the error, `runAll` passes it on, and `execute` in
 `tools/membench/main.go` marks the report failed. The failed arm and the arms
@@ -192,7 +194,7 @@ The vendor is kept from answering on its own:
 |---|---|
 | `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` | Claude Code keeps its own memory files under its config directory. Left on, it stores the taught fact and answers from it, so the bench would measure Claude Code's memory and not herrscher's. |
 | `ENABLE_CLAUDEAI_MCP_SERVERS=false` | The account's claude.ai connectors (mail, documents) are not loaded into a run. |
-| `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` | No skill or plugin is synced from the account into the run. |
+| `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` | Keeps the run from reaching the account's non-essential services. With the three variables set, no skill or plugin synced from the account appeared in a run's config directory, where they did before; which of the three stops the sync was not isolated. |
 
 `ANTHROPIC_API_KEY` is never read from the caller's environment by default. A run
 uses the credentials given with `-credentials`. The key is passed to each run
@@ -299,7 +301,11 @@ The first real run used `claude-haiku-5-5` on a Claude subscription, through
 for the LongMemEval run. The pair suite ran three times; the third stopped on
 the account's weekly limit after 26 of its 30 arms. LongMemEval ran 10 items of
 the oracle file (`longmemeval_oracle.json`, the evidence sessions only), seed 1,
-and stopped on the same limit after 67 of its 84 arms. The whole run spent about
+and stopped on the same limit after 67 of its 84 arms. That run used the bench
+before the procedure task and the stale question were added: its 84 arms are
+4 pair tasks and 10 items under 3 settings, and only its LongMemEval rows are
+reported below. The pair rows come from the three pair runs, on the bench as
+merged. The whole run spent about
 10 million tokens, almost all cache reads, which the ledger costs at about
 0.70 US dollars. On a subscription that figure is an estimate; the quota is
 what it consumes.
@@ -310,11 +316,18 @@ and corrected fact all pass, and the never-given fact is never invented.
 
 ### Pair suite
 
-Successes over runs, summed over the five tasks, three runs each.
+Successes over runs, summed over the five tasks. The third pass was cut short,
+so `learned-skills` has 15 runs per arm and `raw-archive` and `report` have 14.
 
 | Setting | Off | On | False recall off / on | What changed |
 |---|---|---|---|---|
 | `learned-skills` | 15/15 | 12/15 | 0 / 0 | The procedure task fails in every on run (0/3 against 3/3), with about 32000 more prompt tokens per turn. The other tasks do not move. |
+
+These runs scored the procedure task before its order was checked: a reply
+with both commands passed whatever their order. The three off successes may
+therefore include a reply in the wrong order. The three on failures stand
+either way, since a reply missing a command fails with or without the order
+check.
 | `raw-archive` | 14/14 | 13/14 | 0 / 1 | One stale run gave the old code. The raw archive is only read by `memory search --raw`, so it cannot feed recall; the miss is noise. |
 | `report` | 14/14 | 14/14 | 0 / 0 | Nothing. The report is an audit node, not recall. |
 
@@ -325,7 +338,8 @@ Only the `learned-skills` procedure gap stands clear of that noise.
 The likely cause of the `learned-skills` failure is that the extractor files a
 procedure as a private skill. With the setting on, it becomes a `SKILL.md` the
 agent has to open rather than a fact the recall injects, and Haiku answered
-without opening it. This is not verified yet.
+without opening it. This is not verified yet; it is followed in
+[#274](https://github.com/Herrscherd/herrscher/issues/274).
 
 ### LongMemEval
 
@@ -347,7 +361,7 @@ places the recall layer, it does not decide a setting.
 
 | Setting | Default | Decision | Why |
 |---|---|---|---|
-| `MEMORY_LEARNED_SKILLS` | off | kept as an option, off | It makes a taught procedure unrecallable and costs about 32000 tokens per turn. To revisit once a learned skill reaches the agent as reliably as a recalled fact. |
+| `MEMORY_LEARNED_SKILLS` | off | kept as an option, off | In 3 of 3 runs a taught procedure was not recalled with the setting on, against 3 of 3 recalled off, at about 32000 more tokens per turn. The cause is not verified ([#274](https://github.com/Herrscherd/herrscher/issues/274)). To revisit once a learned skill reaches the agent as reliably as a recalled fact. |
 | `MEMORY_RAW_ARCHIVE` | off | kept as an option, off | No measured gain: recall does not read it. It writes one node per turn. |
 | `MEMORY_REPORT_ENABLED` | on | kept on | No effect on recall or cost, and it is the audit trail of each pass. |
 | `MEMORY_PROMOTE_MIN_AGE_DAYS` | 0, off | kept as an option, not measured | It acts after days pass; the bench has no simulated clock. |

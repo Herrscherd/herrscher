@@ -21,10 +21,10 @@ type Reader interface {
 	PullRequest(ctx context.Context, ref contracts.PullRequestRef, since contracts.Revision) (contracts.PullRequest, error)
 }
 
-// Policy sets how often a watch reads the forge and how it backs off. FeedPause is how long a
-// refused feed is left alone.
 const feedStableAfter = 5 * time.Minute
 
+// Policy sets how often a watch reads the forge and how it backs off. FeedPause is how long a
+// refused feed is left alone.
 type Policy struct {
 	Every     time.Duration
 	Backoff   obs.Backoff

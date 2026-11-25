@@ -11,17 +11,19 @@ import (
 
 var errUnknownMergeState = errors.New("unknown merge state")
 
-var mergeStates = []contracts.MergeState{
-	contracts.MergeStateUnknown,
-	contracts.MergeStateClean,
-	contracts.MergeStateConflicting,
-	contracts.MergeStateBlocked,
-	contracts.MergeStateBehind,
-	contracts.MergeStateDraft,
+func mergeStates() []contracts.MergeState {
+	return []contracts.MergeState{
+		contracts.MergeStateUnknown,
+		contracts.MergeStateClean,
+		contracts.MergeStateConflicting,
+		contracts.MergeStateBlocked,
+		contracts.MergeStateBehind,
+		contracts.MergeStateDraft,
+	}
 }
 
 func parseMergeState(text string) (contracts.MergeState, error) {
-	for _, state := range mergeStates {
+	for _, state := range mergeStates() {
 		if state.String() == text {
 			return state, nil
 		}
@@ -34,7 +36,7 @@ type enumText interface {
 	String() string
 }
 
-func encodeEnum[T enumText](value T, parse func(string) (T, error)) ([]byte, error) {
+func encodeEnum[Enum enumText](value Enum, parse func(string) (Enum, error)) ([]byte, error) {
 	name := value.String()
 	if _, err := parse(name); err != nil {
 		return nil, fmt.Errorf("state: %s has no stored name: %w", name, err)
@@ -42,11 +44,11 @@ func encodeEnum[T enumText](value T, parse func(string) (T, error)) ([]byte, err
 	return []byte(name), nil
 }
 
-func decodeEnum[T enumText](text []byte, parse func(string) (T, error)) T {
+func decodeEnum[Enum enumText](text []byte, parse func(string) (Enum, error)) Enum {
 	value, err := parse(string(text))
 	if err != nil {
 		slog.Warn("state: pull request value not recognised, read as unknown", "value", string(text))
-		var unknown T
+		var unknown Enum
 		return unknown
 	}
 	return value
@@ -85,10 +87,12 @@ func (s *persistedChecksState) UnmarshalText(text []byte) error {
 	return nil
 }
 
+// MarshalJSON stores the pull request enums as text.
 func (s Session) MarshalJSON() ([]byte, error) {
 	type plain Session
 	return json.Marshal(struct {
 		plain
+
 		PullRequestState  persistedPullRequestState `json:"pullRequestState,omitempty"`
 		PullRequestMerge  persistedMergeState       `json:"pullRequestMerge,omitempty"`
 		PullRequestChecks persistedChecksState      `json:"pullRequestChecks,omitempty"`
@@ -100,10 +104,12 @@ func (s Session) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// UnmarshalJSON reads the pull request enums from text, unrecognised text giving the unknown value.
 func (s *Session) UnmarshalJSON(data []byte) error {
 	type plain Session
 	decoded := struct {
 		*plain
+
 		PullRequestState  persistedPullRequestState `json:"pullRequestState,omitempty"`
 		PullRequestMerge  persistedMergeState       `json:"pullRequestMerge,omitempty"`
 		PullRequestChecks persistedChecksState      `json:"pullRequestChecks,omitempty"`

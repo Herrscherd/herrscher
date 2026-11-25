@@ -14,7 +14,7 @@ import (
 
 func TestPullRequestEnumsRoundTripEveryValue(t *testing.T) {
 	for _, state := range contracts.PullRequestStates() {
-		for _, merge := range mergeStates {
+		for _, merge := range mergeStates() {
 			for _, checks := range []contracts.ChecksState{contracts.ChecksUnknown, contracts.ChecksNone, contracts.ChecksPending, contracts.ChecksPassed, contracts.ChecksFailed, contracts.ChecksActionRequired} {
 				session := Session{Name: "main", PullRequest: 7, PullRequestState: state, PullRequestMerge: merge, PullRequestChecks: checks}
 				buf, err := json.Marshal(session)

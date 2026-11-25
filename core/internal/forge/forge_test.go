@@ -148,11 +148,78 @@ func TestListGitHubStopsAtThePageBound(t *testing.T) {
 	client := newClient(fakeCreds{}, openWith(forge), &fakeRunner{})
 
 	_, err := client.List(context.Background())
-	if !errors.Is(err, errTooManyPages) {
-		t.Fatalf("err = %v, want errTooManyPages", err)
+	if !errors.Is(err, ErrTooManyPages) {
+		t.Fatalf("err = %v, want ErrTooManyPages", err)
 	}
-	if len(forge.cursors) != maxListPages {
-		t.Fatalf("pages fetched = %d, want %d", len(forge.cursors), maxListPages)
+	if len(forge.cursors) != MaxPages {
+		t.Fatalf("pages fetched = %d, want %d", len(forge.cursors), MaxPages)
+	}
+}
+
+func TestCollectPagesJoinsEveryPageInOrder(t *testing.T) {
+	pages := map[contracts.PageCursor]contracts.Page[string]{
+		"":   {Items: []string{"a", "b"}, Next: "p2"},
+		"p2": {Items: []string{"c"}},
+	}
+	items, err := CollectPages(context.Background(), func(_ context.Context, page contracts.PageRequest) (contracts.Page[string], error) {
+		return pages[page.Cursor], nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(items, []string{"a", "b", "c"}) {
+		t.Fatalf("items = %v, want a b c", items)
+	}
+}
+
+func TestCollectPagesStopsWithTheSentinelAtTheBound(t *testing.T) {
+	fetched := 0
+	_, err := CollectPages(context.Background(), func(_ context.Context, page contracts.PageRequest) (contracts.Page[int], error) {
+		fetched++
+		return contracts.Page[int]{Items: []int{fetched}, Next: page.Cursor + "x"}, nil
+	})
+	if !errors.Is(err, ErrTooManyPages) {
+		t.Fatalf("err = %v, want ErrTooManyPages", err)
+	}
+	if fetched != MaxPages {
+		t.Fatalf("pages fetched = %d, want %d", fetched, MaxPages)
+	}
+}
+
+func TestGitEnvironmentCarriesTheTokenOnlyInConfigValues(t *testing.T) {
+	t.Setenv(configCount, "")
+	env, err := GitEnvironment(context.Background(), fakeCreds{secret: testToken}, mustHost(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"GIT_TERMINAL_PROMPT=0",
+		"GIT_CONFIG_COUNT=1",
+		"GIT_CONFIG_KEY_0=http.https://github.com/.extraheader",
+		"GIT_CONFIG_VALUE_0=Authorization: Basic " + basicTestHeader(),
+	}
+	if !slices.Equal(env, want) {
+		t.Fatalf("env = %q, want %q", env, want)
+	}
+}
+
+func TestGitEnvironmentWithoutCredentialHoldsNoToken(t *testing.T) {
+	for _, creds := range []contracts.ForgeCredentials{nil, fakeCreds{err: contracts.ErrForgeNotConnected}, fakeCreds{zero: true}} {
+		env, err := GitEnvironment(context.Background(), creds, mustHost(t))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Equal(env, []string{"GIT_TERMINAL_PROMPT=0"}) {
+			t.Fatalf("env = %q, want only GIT_TERMINAL_PROMPT=0", env)
+		}
+	}
+}
+
+func TestGitEnvironmentReturnsAnUnexpectedCredentialError(t *testing.T) {
+	boom := errors.New("keyring locked")
+	_, err := GitEnvironment(context.Background(), fakeCreds{err: boom}, mustHost(t))
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want the credential error", err)
 	}
 }
 

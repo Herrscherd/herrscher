@@ -103,6 +103,7 @@ func definitionOf(role Role) (definition, bool) {
 				"commands", "whoami",
 				"session send", "session seed", "session handoff",
 				"session list", "session info", "session log", "session history", "session watch", "session who", "session scrollback", "session checkpoints",
+				"session pr open", "session pr status", "session pr checks", "session pr comments",
 				"agent list", "agent show",
 				"models list",
 				"memory search", "memory locate", "memory record", "memory unlink", "memory restore",

@@ -1,6 +1,15 @@
 package state
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+// ErrPullRequestRecorded reports a session that already holds a pull request.
+var ErrPullRequestRecorded = errors.New("session already has a pull request")
+
+// ErrPullRequestOpening reports a session whose pull request another open is still creating.
+var ErrPullRequestOpening = errors.New("session pull request is already being opened")
 
 // SetResumeToken records the backend resume token for the named session,
 // persisting only when it changes. Turns report the same id, so this avoids
@@ -196,4 +205,47 @@ func (s *State) SetSessionLanguage(name, lang string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// RecordPullRequest stores the number of the pull request a session opened.
+func (s *State) RecordPullRequest(name string, number int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for idx := range s.Sessions {
+		if s.Sessions[idx].Name != name {
+			continue
+		}
+		if recorded := s.Sessions[idx].PullRequest; recorded != 0 {
+			return fmt.Errorf("%w: %d", ErrPullRequestRecorded, recorded)
+		}
+		s.Sessions[idx].PullRequest = number
+		if err := s.saveLocked(); err != nil {
+			s.Sessions[idx].PullRequest = 0
+			return err
+		}
+		return nil
+	}
+	return fmt.Errorf("%w: %q", errNoSession, name)
+}
+
+// ReservePullRequest marks the named session as having a pull request being
+// opened, so a second open for it is refused until ReleasePullRequest runs.
+func (s *State) ReservePullRequest(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.openingPR[name] {
+		return ErrPullRequestOpening
+	}
+	if s.openingPR == nil {
+		s.openingPR = make(map[string]bool)
+	}
+	s.openingPR[name] = true
+	return nil
+}
+
+// ReleasePullRequest clears the reservation ReservePullRequest made for name.
+func (s *State) ReleasePullRequest(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.openingPR, name)
 }

@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 
@@ -228,6 +229,31 @@ func TestEverySessionNamingVerbIsClassified(t *testing.T) {
 			}
 			t.Errorf("`%s --%s` names something. Add it to sessionArg if that is a session "+
 				"the caller acts on, or to notASession with the reason if it is not.", verb, p.Name)
+		}
+	}
+}
+
+func TestASessionReachesOnlyItsOwnPullRequests(t *testing.T) {
+	st := authzState(t, []state.Session{{Name: "revue"}, {Name: "release"}}, nil)
+	verbs := [][]string{
+		{"session", "pr", "open"},
+		{"session", "pr", "status"},
+		{"session", "pr", "checks"},
+		{"session", "pr", "comments"},
+	}
+	h := authzHub(t, st, verbs...)
+	ctx := withSessionPrincipal(context.Background(), "revue")
+	for _, verb := range verbs {
+		own := append(slices.Clone(verb), "--name", "revue")
+		if err := h.authorize(ctx, own); err != nil {
+			t.Fatalf("a session was refused its own %v: %v", verb, err)
+		}
+		other := append(slices.Clone(verb), "--name", "release")
+		if err := h.authorize(ctx, other); err == nil {
+			t.Fatalf("a session may not run %v on another session", verb)
+		}
+		if err := h.authorize(withLocalPrincipal(context.Background()), other); err != nil {
+			t.Fatalf("the operator socket was refused %v: %v", verb, err)
 		}
 	}
 }

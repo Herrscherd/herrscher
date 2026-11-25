@@ -67,6 +67,10 @@ func TestAgentMayWorkAndMayNotDisarmItself(t *testing.T) {
 		{"models", "list"},
 		{"commands"},
 		{"whoami"},
+		{"session", "pr", "open"},
+		{"session", "pr", "status"},
+		{"session", "pr", "checks"},
+		{"session", "pr", "comments"},
 	}
 	for _, path := range allowed {
 		if ok, why := Decide(req(p, path...), RoleAgent); !ok {

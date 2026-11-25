@@ -5503,5 +5503,290 @@
     "id": "cli.forge.permission.unknown",
     "description": "Word for a repository permission that names no known right",
     "other": "unknown"
+  },
+  {
+    "id": "cli.help.cmd.session.pr.open",
+    "description": "Help of the command session pr open",
+    "other": "open the pull request of a session's branch on GitHub and record its number"
+  },
+  {
+    "id": "cli.help.cmd.session.pr.status",
+    "description": "Help of the command session pr status",
+    "other": "show the pull request recorded for a session"
+  },
+  {
+    "id": "cli.help.cmd.session.pr.checks",
+    "description": "Help of the command session pr checks",
+    "other": "list the checks of a session's pull request, every page"
+  },
+  {
+    "id": "cli.help.cmd.session.pr.comments",
+    "description": "Help of the command session pr comments",
+    "other": "list the review threads of a session's pull request, unresolved first"
+  },
+  {
+    "id": "cli.help.param.session.pr.name",
+    "description": "Help of the --name param of the session pr commands",
+    "other": "session name"
+  },
+  {
+    "id": "cli.help.param.session.pr.title",
+    "description": "Help of the --title param of the command session pr open",
+    "other": "title of the pull request"
+  },
+  {
+    "id": "cli.help.param.session.pr.body",
+    "description": "Help of the --body param of the command session pr open",
+    "other": "body of the pull request"
+  },
+  {
+    "id": "cli.help.param.session.pr.base",
+    "description": "Help of the --base param of the command session pr open",
+    "other": "branch the pull request merges into, default the default branch of origin"
+  },
+  {
+    "id": "cli.help.param.session.pr.draft",
+    "description": "Help of the --draft param of the command session pr open",
+    "other": "open the pull request as a draft"
+  },
+  {
+    "id": "cli.session.pr.opened",
+    "description": "Confirmation: a pull request was opened and its number recorded",
+    "other": "session {{.Name}}: pull request #{{.Number}} opened at {{.URL}}"
+  },
+  {
+    "id": "cli.session.pr.status",
+    "description": "The pull request of a session, one line each: number, state, merge state, title, branches, URL",
+    "other": "pull request #{{.Number}} ({{.State}}, merge {{.Merge}}): {{.Title}}\n{{.Head}} -> {{.Base}}\n{{.URL}}"
+  },
+  {
+    "id": "cli.session.pr.check",
+    "description": "One check of a pull request: its status or conclusion, name and URL",
+    "other": "{{.Status}} {{.Name}} {{.URL}}"
+  },
+  {
+    "id": "cli.session.pr.checks_empty",
+    "description": "Message: a pull request has no checks yet",
+    "other": "pull request #{{.Number}} has no checks yet"
+  },
+  {
+    "id": "cli.session.pr.thread",
+    "description": "Header of a review thread: file, line and whether it is resolved",
+    "other": "{{.Path}}:{{.Line}} ({{.Resolution}})"
+  },
+  {
+    "id": "cli.session.pr.comment",
+    "description": "One message of a review thread: its author and body",
+    "other": "  {{.Author}}: {{.Body}}"
+  },
+  {
+    "id": "cli.session.pr.resolved",
+    "description": "Word: a review thread that is resolved",
+    "other": "resolved"
+  },
+  {
+    "id": "cli.session.pr.unresolved",
+    "description": "Word: a review thread that is not resolved",
+    "other": "unresolved"
+  },
+  {
+    "id": "cli.session.pr.comments_empty",
+    "description": "Message: a pull request has no review comments",
+    "other": "pull request #{{.Number}} has no review comments"
+  },
+  {
+    "id": "cli.session.pr.none",
+    "description": "Error: the session has no pull request recorded yet",
+    "other": "session {{.Name}} has no pull request, run session pr open"
+  },
+  {
+    "id": "cli.session.pr.recorded",
+    "description": "Error: the session already has a pull request recorded",
+    "other": "session {{.Name}} already has pull request #{{.Number}}"
+  },
+  {
+    "id": "cli.session.pr.no_dir",
+    "description": "Error: the session has no directory to read its branch from",
+    "other": "session {{.Name}} has no directory to read its branch from"
+  },
+  {
+    "id": "cli.session.pr.unpushed",
+    "description": "Error: the branch is not pushed to origin at its current commit",
+    "other": "branch {{.Branch}} is not pushed to origin at its current commit, push it first"
+  },
+  {
+    "id": "cli.session.pr.no_base",
+    "description": "Error: no base branch was given and origin has no default branch",
+    "other": "no local origin/HEAD to read the default branch from: pass --base"
+  },
+  {
+    "id": "cli.session.pr.wrong_host",
+    "description": "Error: origin is not on github.com",
+    "other": "origin is not on github.com: pull requests open only there"
+  },
+  {
+    "id": "cli.session.pr.not_connected",
+    "description": "Error: no GitHub credential is stored",
+    "other": "no GitHub credential: run herrscher connect github"
+  },
+  {
+    "id": "cli.session.pr.unauthorized",
+    "description": "Error: GitHub refused the stored credential",
+    "other": "GitHub refused the credential: run herrscher connect github"
+  },
+  {
+    "id": "cli.session.pr.rate_limited",
+    "description": "Error: GitHub rate limit reached, with the reset time",
+    "other": "GitHub rate limit reached, resets at {{.Reset}}"
+  },
+  {
+    "id": "cli.session.pr.forge_missing",
+    "description": "Error: the GitHub forge plugin is not built into this host",
+    "other": "the GitHub forge plugin is not built in"
+  },
+  {
+    "id": "cli.session.pr.pages_exceeded",
+    "description": "Error: a GitHub listing has more pages than the command reads",
+    "other": "GitHub listing has more than {{.Pages}} pages of results, the command stops there"
+  },
+  {
+    "id": "cli.session.pr.opened_unrecorded",
+    "description": "Failure: GitHub opened the pull request but the session did not record it",
+    "other": "session {{.Name}}: pull request #{{.Number}} was opened at {{.URL}} but could not be recorded in the session: {{.Err}}"
+  },
+  {
+    "id": "cli.session.pr.opening",
+    "description": "Refusal: a pr open for this session is still running",
+    "other": "session {{.Name}}: a pull request is already being opened"
+  },
+  {
+    "id": "cli.session.pr.remote",
+    "description": "Refusal: the session runs on a remote host",
+    "other": "session {{.Name}} runs on another host: run session pr on that host"
+  },
+  {
+    "id": "cli.session.pr.no_origin",
+    "description": "Refusal: the checkout has no origin remote",
+    "other": "{{.Path}} has no origin remote"
+  },
+  {
+    "id": "cli.session.pr.origin_read",
+    "description": "Failure: git could not read the origin remote",
+    "other": "cannot read the origin of {{.Path}}: {{.Err}}"
+  },
+  {
+    "id": "cli.session.pr.failed",
+    "description": "Failure: a cause without a catalogue key, passed through",
+    "other": "the pull request command failed: {{.Err}}"
+  },
+  {
+    "id": "cli.session.pr.unknown_value",
+    "description": "Fallback for an enum value this build does not know",
+    "other": "unknown value {{.Value}}"
+  },
+  {
+    "id": "cli.session.pr.state.open",
+    "description": "Pull request state word",
+    "other": "open"
+  },
+  {
+    "id": "cli.session.pr.state.closed",
+    "description": "Pull request state word",
+    "other": "closed"
+  },
+  {
+    "id": "cli.session.pr.state.merged",
+    "description": "Pull request state word",
+    "other": "merged"
+  },
+  {
+    "id": "cli.session.pr.merge.unknown",
+    "description": "Merge state word: the forge has not said yet",
+    "other": "unknown"
+  },
+  {
+    "id": "cli.session.pr.merge.clean",
+    "description": "Merge state word: can be merged now",
+    "other": "clean"
+  },
+  {
+    "id": "cli.session.pr.merge.conflicting",
+    "description": "Merge state word: conflicts with its base",
+    "other": "conflicting"
+  },
+  {
+    "id": "cli.session.pr.merge.blocked",
+    "description": "Merge state word: waits for required checks or reviews",
+    "other": "blocked"
+  },
+  {
+    "id": "cli.session.pr.merge.behind",
+    "description": "Merge state word: base moved past the branch",
+    "other": "behind"
+  },
+  {
+    "id": "cli.session.pr.merge.draft",
+    "description": "Merge state word: still a draft",
+    "other": "draft"
+  },
+  {
+    "id": "cli.session.pr.check_status.queued",
+    "description": "Check status word",
+    "other": "queued"
+  },
+  {
+    "id": "cli.session.pr.check_status.in_progress",
+    "description": "Check status word",
+    "other": "in progress"
+  },
+  {
+    "id": "cli.session.pr.check_status.completed",
+    "description": "Check status word",
+    "other": "completed"
+  },
+  {
+    "id": "cli.session.pr.conclusion.none",
+    "description": "Check conclusion word: not completed yet",
+    "other": "no conclusion"
+  },
+  {
+    "id": "cli.session.pr.conclusion.success",
+    "description": "Check conclusion word",
+    "other": "success"
+  },
+  {
+    "id": "cli.session.pr.conclusion.failure",
+    "description": "Check conclusion word",
+    "other": "failure"
+  },
+  {
+    "id": "cli.session.pr.conclusion.neutral",
+    "description": "Check conclusion word",
+    "other": "neutral"
+  },
+  {
+    "id": "cli.session.pr.conclusion.cancelled",
+    "description": "Check conclusion word",
+    "other": "cancelled"
+  },
+  {
+    "id": "cli.session.pr.conclusion.skipped",
+    "description": "Check conclusion word",
+    "other": "skipped"
+  },
+  {
+    "id": "cli.session.pr.conclusion.timed_out",
+    "description": "Check conclusion word",
+    "other": "timed out"
+  },
+  {
+    "id": "cli.session.pr.conclusion.action_required",
+    "description": "Check conclusion word",
+    "other": "action required"
+  },
+  {
+    "id": "cli.session.pr.conclusion.other",
+    "description": "Check conclusion word: completed without a conclusion the plugin can name",
+    "other": "other"
   }
 ]

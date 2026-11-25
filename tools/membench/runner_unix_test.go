@@ -156,7 +156,7 @@ func writeGroupScript(t *testing.T, dir, body string) string {
 
 func groupTestBox(t *testing.T) sandbox {
 	t.Helper()
-	box, err := newSandbox(t.TempDir())
+	box, err := newSandbox(t.Context(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

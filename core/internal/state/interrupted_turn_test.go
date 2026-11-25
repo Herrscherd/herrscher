@@ -70,3 +70,30 @@ func TestBackendTargetChangeClearsInterruptedTurn(t *testing.T) {
 		t.Fatalf("a new backend must drop the mark, got %q", got.InterruptedTurn)
 	}
 }
+
+func TestClearTurnMarkLeavesAnotherTurnsMark(t *testing.T) {
+	s := NewState(filepath.Join(t.TempDir(), "state.json"))
+	must(t, s.AddSession(Session{Name: "main", InterruptedTurn: "turn-1"}))
+	must(t, s.ClearTurnMark("main", "turn-2"))
+	if got, _ := s.FindSession("main"); got.InterruptedTurn != "turn-1" {
+		t.Fatalf("InterruptedTurn = %q, want the stale turn-1 kept by a settle of turn-2", got.InterruptedTurn)
+	}
+}
+
+func TestClearTurnMarkDropsItsOwnMarkAndFinishedRecord(t *testing.T) {
+	s := NewState(filepath.Join(t.TempDir(), "state.json"))
+	must(t, s.AddSession(Session{Name: "main", InterruptedTurn: "turn-1", FinishedTurn: "turn-1"}))
+	must(t, s.ClearTurnMark("main", "turn-1"))
+	if got, _ := s.FindSession("main"); got.InterruptedTurn != "" || got.FinishedTurn != "" {
+		t.Fatalf("mark = %q, finished = %q, want both cleared", got.InterruptedTurn, got.FinishedTurn)
+	}
+}
+
+func TestClearTurnMarkKeepsTheStaleMarkWhenTheFinishedRecordIsSettled(t *testing.T) {
+	s := NewState(filepath.Join(t.TempDir(), "state.json"))
+	must(t, s.AddSession(Session{Name: "main", InterruptedTurn: "turn-1", FinishedTurn: "turn-2"}))
+	must(t, s.ClearTurnMark("main", "turn-2"))
+	if got, _ := s.FindSession("main"); got.InterruptedTurn != "turn-1" || got.FinishedTurn != "" {
+		t.Fatalf("mark = %q, finished = %q, want turn-1 kept and turn-2 cleared", got.InterruptedTurn, got.FinishedTurn)
+	}
+}

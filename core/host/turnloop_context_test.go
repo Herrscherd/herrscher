@@ -20,7 +20,7 @@ func recordedTurn(t *testing.T, events ...contracts.Event) state.TranscriptEntry
 	fromBridge := make(chan contracts.Event, 8)
 	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s1", []contracts.GatewaySet{{Gateway: a, Reader: a}}, toBridge, fromBridge, io.Discard)
 	entries := make(chan state.TranscriptEntry, 8)
-	d.sink.Transcript = func(e state.TranscriptEntry) { entries <- e }
+	d.sink.Transcript = func(e state.TranscriptEntry) error { entries <- e; return nil }
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go d.run(ctx)

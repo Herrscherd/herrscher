@@ -22,8 +22,6 @@ import (
 
 const errPrefix = "⚠️ "
 
-const interruptNotice = "⏹ interrupted"
-
 const (
 	backendKindText     = "text"
 	backendKindThinking = "thinking"
@@ -297,17 +295,10 @@ func (e *TurnFailedError) Notice() contracts.Notice { return contracts.NoticeOf(
 func (e *TurnFailedError) PartialOutput() string { return e.partial }
 
 func settleFailedReply(ctrl *turnController, out string, err error) string {
-	switch {
-	case ctrl.wasInterrupted():
-		if out == "" {
-			return interruptNotice
-		}
-		return strings.TrimSpace(out) + "\n\n" + interruptNotice
-	case out == "":
+	if out == "" && !ctrl.wasInterrupted() {
 		return errPrefix + err.Error()
-	default:
-		return out
 	}
+	return out
 }
 
 func turnOutcome(ctrl *turnController, failure error) contracts.TurnOutcome {

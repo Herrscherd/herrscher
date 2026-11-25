@@ -257,6 +257,11 @@
     "other": "stale then corrected"
   },
   {
+    "id": "membench.variant.procedure",
+    "description": "Message of the memory bench: variant.procedure",
+    "other": "procedure of the repository"
+  },
+  {
     "id": "membench.variant.never_given",
     "description": "Message of the memory bench: variant.never_given",
     "other": "never given"

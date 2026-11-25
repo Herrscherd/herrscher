@@ -225,7 +225,7 @@ func TestPickReplyIsRecordedWithItsTurnID(t *testing.T) {
 	fromBridge := make(chan contracts.Event, 8)
 	d, _ := identifiedTestDriver(toBridge, fromBridge)
 	recorded := make(chan state.TranscriptEntry, 8)
-	d.sink.Transcript = func(e state.TranscriptEntry) { recorded <- e }
+	d.sink.Transcript = func(e state.TranscriptEntry) error { recorded <- e; return nil }
 	d.terms = func() modelTerms { return modelTerms{rates: sonnetRates()} }
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -20,6 +20,8 @@ import (
 
 const seedConsolidateTimeout = 60 * time.Second
 
+const oneShotTurns = 1
+
 const seedTurnTimeout = 120 * time.Second
 
 const seedJoinGrace = 2 * time.Second
@@ -33,7 +35,7 @@ type oneShotSeedRuntime struct {
 	sessionLanguage func(name string) languageSource
 	coordinator     contracts.Coordinator
 	publish         func(session string, event contracts.Event)
-	record          func(session string, entry state.TranscriptEntry)
+	record          func(session string, entry state.TranscriptEntry) error
 	recordUsage     func(sess state.Session, records []usage.Record)
 	resume          func(session, token string)
 	timeout         time.Duration
@@ -250,8 +252,10 @@ func oneShotTurnTimeout(runtime oneShotSeedRuntime) time.Duration {
 func attachOneShotTaps(driver *sessionDriver, sess state.Session, runtime oneShotSeedRuntime) *seedGate {
 	gate := newSeedGate(runtime.messages, sess.Name, runtime.warnings, runtime.languageOf(sess))
 	if runtime.record != nil {
-		driver.sink.Transcript = func(entry state.TranscriptEntry) {
-			gate.admit(lateTranscriptKey, func() { runtime.record(sess.Name, entry) })
+		driver.sink.Transcript = func(entry state.TranscriptEntry) error {
+			var err error
+			gate.admit(lateTranscriptKey, func() { err = runtime.record(sess.Name, entry) })
+			return err
 		}
 	}
 	if runtime.publish != nil {
@@ -345,8 +349,12 @@ func (r oneShotSeedRuntime) languageOf(sess state.Session) languageSource {
 	return func() i18n.Language { return knownSessionLanguage(sess) }
 }
 
+func cadenceConsolidatedTheOneShot(every int) bool {
+	return every > 0 && oneShotTurns%every == 0
+}
+
 func consolidateOneShot(ctx context.Context, orch contracts.Orchestrator, gate *seedGate, sess state.Session, messages *hostMessages, warn io.Writer, lang languageSource) {
-	if orch == nil || sess.ConsolidateEvery > 0 {
+	if orch == nil || cadenceConsolidatedTheOneShot(sess.ConsolidateEvery) {
 		return
 	}
 	gate.shut()

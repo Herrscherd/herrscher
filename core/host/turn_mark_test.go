@@ -161,3 +161,50 @@ func TestResumeOfAnArchivedSessionAnnouncesItsMark(t *testing.T) {
 		t.Fatalf("transcript = %+v, want the interruption notice at revive", entries)
 	}
 }
+
+func TestFailedClearOfAFinishedTurnAnnouncesNothingAtRestart(t *testing.T) {
+	warnings := &lockedBuffer{}
+	path := filepath.Join(t.TempDir(), "state.json")
+	st := state.NewState(path)
+	if err := st.AddSession(state.Session{Name: "main"}); err != nil {
+		t.Fatal(err)
+	}
+	partDir := t.TempDir()
+	h := hubWarningInto(t, st, partDir, warnings)
+	h.openTurnMark("main", "turn-1")
+	h.markTurnFinished("main", "turn-1")
+	if err := os.Mkdir(path+".tmp", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	h.clearTurnMark("main", "turn-1")
+	awaitSinkQuiet(t, h.sink)
+	if err := os.Remove(path + ".tmp"); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, _ := st.FindSession("main"); got.InterruptedTurn != "turn-1" || got.FinishedTurn != "turn-1" {
+		t.Fatalf("mark = %q, finished = %q after a failed clear, want both restored", got.InterruptedTurn, got.FinishedTurn)
+	}
+	if n := strings.Count(warnings.String(), "\n"); n != 1 || !strings.Contains(warnings.String(), `"main"`) {
+		t.Fatalf("warnings = %q, want exactly one line naming the session", warnings.String())
+	}
+
+	restarted, err := state.LoadState(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	startWarnings := &lockedBuffer{}
+	next := hubWarningInto(t, restarted, partDir, startWarnings)
+	sess, _ := restarted.FindSession("main")
+	next.announceInterruptedTurn(sess)
+	awaitSinkQuiet(t, next.sink)
+	if entries := state.ReadTranscript(state.TranscriptPath(partDir, "main"), 10); len(entries) != 0 {
+		t.Fatalf("transcript = %+v after a restart, want no notice for the finished turn-1", entries)
+	}
+	if startWarnings.String() != "" {
+		t.Fatalf("warnings = %q after a restart, want none", startWarnings.String())
+	}
+	if got, _ := restarted.FindSession("main"); got.InterruptedTurn != "" {
+		t.Fatalf("mark = %q after the restart, want cleared", got.InterruptedTurn)
+	}
+}

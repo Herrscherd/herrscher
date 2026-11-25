@@ -17,3 +17,11 @@ func PullRequestStateKey(state contracts.PullRequestState, draft bool) Key {
 	}
 	return SessionPRStateUnknown
 }
+
+// PullRequestStateID is the machine word for a pull request state in JSON output: open, closed or merged, and unknown for a state no forge reports.
+func PullRequestStateID(state contracts.PullRequestState) string {
+	if _, err := state.MarshalText(); err != nil {
+		return "unknown"
+	}
+	return state.String()
+}

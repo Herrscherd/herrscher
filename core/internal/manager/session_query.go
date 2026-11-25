@@ -38,14 +38,7 @@ type pullRequestJSON struct {
 }
 
 func pullRequestJSONView(record state.PullRequestRecord) *pullRequestJSON {
-	return &pullRequestJSON{Number: record.Number, State: pullRequestStateID(record.State), Draft: record.Draft, URL: record.URL}
-}
-
-func pullRequestStateID(value contracts.PullRequestState) string {
-	if _, err := value.MarshalText(); err != nil {
-		return "unknown"
-	}
-	return value.String()
+	return &pullRequestJSON{Number: record.Number, State: clitext.PullRequestStateID(record.State), Draft: record.Draft, URL: record.URL}
 }
 
 func (h *Handler) sessionPullRequestText(session state.Session) string {

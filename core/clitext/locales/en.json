@@ -5640,6 +5640,11 @@
     "other": "GitHub rate limit reached, resets at {{.Reset}}"
   },
   {
+    "id": "cli.session.pr.timed_out",
+    "description": "Error: GitHub did not answer within the time limit, the pull request may or may not exist",
+    "other": "GitHub did not answer in time: run session pr status to see whether the pull request exists"
+  },
+  {
     "id": "cli.session.pr.forge_missing",
     "description": "Error: the GitHub forge plugin is not built into this host",
     "other": "the GitHub forge plugin is not built in"

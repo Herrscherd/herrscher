@@ -6,40 +6,46 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 )
 
-func TestPullRequestStateKeyIsDistinctPerState(t *testing.T) {
+func TestPullRequestStateKeyGivesEachStateItsOwnLabel(t *testing.T) {
 	cases := []struct {
-		name   string
-		state  contracts.PullRequestState
-		draft  bool
-		key    Key
-		jsonID string
+		name  string
+		state contracts.PullRequestState
+		draft bool
+		key   Key
 	}{
-		{name: "open", state: contracts.PullRequestOpen, key: SessionPRStateOpen, jsonID: "open"},
-		{name: "open draft", state: contracts.PullRequestOpen, draft: true, key: SessionPRStateDraft, jsonID: "open"},
-		{name: "closed", state: contracts.PullRequestClosed, key: SessionPRStateClosed, jsonID: "closed"},
-		{name: "merged", state: contracts.PullRequestMerged, key: SessionPRStateMerged, jsonID: "merged"},
-		{name: "unknown", state: contracts.PullRequestState(99), key: SessionPRStateUnknown, jsonID: "PullRequestState(99)"},
+		{name: "open", state: contracts.PullRequestOpen, key: SessionPRStateOpen},
+		{name: "open draft", state: contracts.PullRequestOpen, draft: true, key: SessionPRStateDraft},
+		{name: "closed", state: contracts.PullRequestClosed, key: SessionPRStateClosed},
+		{name: "merged", state: contracts.PullRequestMerged, key: SessionPRStateMerged},
+		{name: "unknown", state: contracts.PullRequestState(99), key: SessionPRStateUnknown},
 	}
-	keys := make(map[Key]string)
-	ids := make(map[string]string)
+	seen := make(map[Key]string)
 	for _, tc := range cases {
 		key := PullRequestStateKey(tc.state, tc.draft)
 		if key != tc.key {
 			t.Errorf("%s maps to %q, want %q", tc.name, key, tc.key)
 		}
-		if other, seen := keys[key]; seen {
+		if other, dup := seen[key]; dup {
 			t.Errorf("%s and %s share the label key %q", tc.name, other, key)
 		}
-		keys[key] = tc.name
-		if got := tc.state.String(); got != tc.jsonID {
-			t.Errorf("%s JSON id = %q, want %q", tc.name, got, tc.jsonID)
+		seen[key] = tc.name
+	}
+}
+
+func TestPullRequestStateIDNamesEachKnownStateAndMapsAnyOtherToUnknown(t *testing.T) {
+	cases := []struct {
+		name  string
+		state contracts.PullRequestState
+		want  string
+	}{
+		{name: "open", state: contracts.PullRequestOpen, want: "open"},
+		{name: "closed", state: contracts.PullRequestClosed, want: "closed"},
+		{name: "merged", state: contracts.PullRequestMerged, want: "merged"},
+		{name: "unknown value", state: contracts.PullRequestState(99), want: "unknown"},
+	}
+	for _, tc := range cases {
+		if got := PullRequestStateID(tc.state); got != tc.want {
+			t.Errorf("%s JSON id = %q, want %q", tc.name, got, tc.want)
 		}
-		if tc.draft {
-			continue
-		}
-		if other, seen := ids[tc.jsonID]; seen {
-			t.Errorf("%s and %s share the JSON id %q", tc.name, other, tc.jsonID)
-		}
-		ids[tc.jsonID] = tc.name
 	}
 }

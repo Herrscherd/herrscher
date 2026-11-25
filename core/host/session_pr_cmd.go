@@ -32,6 +32,8 @@ const (
 	resetUnknown   = "unknown time"
 )
 
+const sessionPRForgeLimit = time.Minute
+
 type sessionPRError struct {
 	key clitext.Key
 }
@@ -54,6 +56,7 @@ type sessionPRs struct {
 	opener      forgeOpener
 	credentials contracts.ForgeCredentials
 	refreshes   *refreshLocks
+	forgeLimit  time.Duration
 }
 
 type prTarget struct {
@@ -97,8 +100,15 @@ type prCommentView struct {
 }
 
 func addSessionPRVerbs(reg *cli.Registry, messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials) error {
-	prs := sessionPRs{messages: messages, lang: lang, store: store, opener: opener, credentials: credentials, refreshes: newRefreshLocks()}
-	return addVerbs(reg, prs.openVerb(), prs.statusVerb(), prs.checksVerb(), prs.commentsVerb())
+	return newSessionPRs(messages, lang, store, opener, credentials, sessionPRForgeLimit).addTo(reg)
+}
+
+func newSessionPRs(messages *clitext.Messages, lang languageSource, store *state.State, opener forgeOpener, credentials contracts.ForgeCredentials, forgeLimit time.Duration) sessionPRs {
+	return sessionPRs{messages: messages, lang: lang, store: store, opener: opener, credentials: credentials, refreshes: newRefreshLocks(), forgeLimit: forgeLimit}
+}
+
+func (p sessionPRs) addTo(reg *cli.Registry) error {
+	return addVerbs(reg, p.openVerb(), p.statusVerb(), p.checksVerb(), p.commentsVerb())
 }
 
 func (p sessionPRs) openVerb() contracts.Cmd {
@@ -159,6 +169,8 @@ func (p sessionPRs) pushedBranch(ctx context.Context, language i18n.Language, di
 }
 
 func (p sessionPRs) openPR(ctx context.Context, input contracts.Input) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, p.forgeLimit)
+	defer cancel()
 	name := input.Get(paramName)
 	language := namedSessionLanguage(p.store, name, p.lang())
 	if err := p.store.ReservePullRequest(name); err != nil {
@@ -379,6 +391,8 @@ func (p sessionPRs) failure(language i18n.Language, err error) error {
 	var limited *contracts.ForgeRateLimitedError
 	var origin prOriginError
 	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return p.messages.Failure(language, err, clitext.SessionPRTimedOut, nil)
 	case errors.Is(err, contracts.ErrForgeNotConnected):
 		return p.messages.Failure(language, err, clitext.SessionPRNotConnected, nil)
 	case errors.Is(err, contracts.ErrForgeUnauthorized):

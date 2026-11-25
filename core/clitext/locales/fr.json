@@ -5640,6 +5640,11 @@
     "other": "limite de requêtes GitHub atteinte, réinitialisée à {{.Reset}}"
   },
   {
+    "id": "cli.session.pr.timed_out",
+    "description": "Error: GitHub did not answer within the time limit, the pull request may or may not exist",
+    "other": "GitHub n'a pas répondu à temps : lancer session pr status pour voir si la pull request existe"
+  },
+  {
     "id": "cli.session.pr.forge_missing",
     "description": "Error: the GitHub forge plugin is not built into this host",
     "other": "le plugin forge GitHub n'est pas intégré"

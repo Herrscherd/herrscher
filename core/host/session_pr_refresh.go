@@ -14,23 +14,27 @@ import (
 
 type refreshLocks struct {
 	mu    sync.Mutex
-	locks map[string]*sync.Mutex
+	slots map[string]chan struct{}
 }
 
 func newRefreshLocks() *refreshLocks {
-	return &refreshLocks{locks: make(map[string]*sync.Mutex)}
+	return &refreshLocks{slots: make(map[string]chan struct{})}
 }
 
-func (l *refreshLocks) lock(name string) func() {
+func (l *refreshLocks) acquire(ctx context.Context, name string) (func(), error) {
 	l.mu.Lock()
-	guard, ok := l.locks[name]
+	slot, ok := l.slots[name]
 	if !ok {
-		guard = new(sync.Mutex)
-		l.locks[name] = guard
+		slot = make(chan struct{}, 1)
+		l.slots[name] = slot
 	}
 	l.mu.Unlock()
-	guard.Lock()
-	return guard.Unlock
+	select {
+	case slot <- struct{}{}:
+		return func() { <-slot }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 func (p sessionPRs) status(ctx context.Context, input contracts.Input) (contracts.Result, error) {
@@ -47,7 +51,7 @@ func (p sessionPRs) status(ctx context.Context, input contracts.Input) (contract
 			Number:     target.ref.Number(),
 			Title:      pullRequest.Title,
 			URL:        pullRequest.URL,
-			State:      pullRequest.State.String(),
+			State:      clitext.PullRequestStateID(pullRequest.State),
 			Draft:      pullRequest.Draft,
 			Merge:      pullRequest.Merge.String(),
 			Head:       pullRequest.Head,
@@ -87,8 +91,13 @@ func (p sessionPRs) status(ctx context.Context, input contracts.Input) (contract
 }
 
 func (p sessionPRs) refresh(ctx context.Context, target prTarget) (contracts.PullRequest, bool, error) {
-	unlock := p.refreshes.lock(target.name)
-	defer unlock()
+	ctx, cancel := context.WithTimeout(ctx, p.forgeLimit)
+	defer cancel()
+	release, err := p.refreshes.acquire(ctx, target.name)
+	if err != nil {
+		return contracts.PullRequest{}, false, p.failure(target.language, err)
+	}
+	defer release()
 	pullRequest, err := target.forge.PullRequest(ctx, target.ref, contracts.Revision(""))
 	if err != nil {
 		return contracts.PullRequest{}, false, p.failure(target.language, err)

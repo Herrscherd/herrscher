@@ -6,11 +6,13 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/Herrscherd/herrscher/core/scope"
 )
 
 func sandboxAt(t *testing.T, parent string) sandbox {
 	t.Helper()
-	box, err := newSandbox(parent)
+	box, err := newSandbox(t.Context(), parent)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,13 +46,43 @@ func TestEnvironDropsInheritedSecrets(t *testing.T) {
 	}
 }
 
+func TestEveryArmRunsInARepositoryThatNamesAProject(t *testing.T) {
+	box := sandboxAt(t, t.TempDir())
+	if got := scope.ProjectFromDir(t.Context(), box.repo); got != repoDir {
+		t.Errorf("project of the run directory %q, want %q so facts land in a shared project scope", got, repoDir)
+	}
+}
+
+func TestEnvironNamesTheMemoryAgentAfterTheStep(t *testing.T) {
+	box := sandboxAt(t, t.TempDir())
+	for _, agent := range []string{agentAlpha, agentBeta} {
+		if env := box.environ("claude-haiku-5-5", agent, nil); !slices.Contains(env, memoryAgentEnv+"="+agent) {
+			t.Errorf("environment of %s lacks its memory agent, so two agents would share one private scope", agent)
+		}
+	}
+}
+
+func TestEnvironKeepsTheVendorsOwnMemoryAndAccountOut(t *testing.T) {
+	box := sandboxAt(t, t.TempDir())
+	env := box.environ("claude-haiku-5-5", "alpha", nil)
+	for _, want := range []string{
+		"CLAUDE_CODE_DISABLE_AUTO_MEMORY=1",
+		"ENABLE_CLAUDEAI_MCP_SERVERS=false",
+		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
+	} {
+		if !slices.Contains(env, want) {
+			t.Errorf("environment lacks %q, so the vendor could answer from its own memory or account", want)
+		}
+	}
+}
+
 func TestSandboxesAreDistinctAndClosed(t *testing.T) {
 	parent := t.TempDir()
-	first, err := newSandbox(parent)
+	first, err := newSandbox(t.Context(), parent)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := newSandbox(parent)
+	second, err := newSandbox(t.Context(), parent)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +131,7 @@ func TestInstallCredentialsIsPrivate(t *testing.T) {
 }
 
 func TestPlantAgedNodeWritesTheRealFormat(t *testing.T) {
-	box, err := newSandbox(t.TempDir())
+	box, err := newSandbox(t.Context(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

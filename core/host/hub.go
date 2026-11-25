@@ -203,10 +203,12 @@ func (h *hub) daemonSeedRuntime() oneShotSeedRuntime {
 		resume: func(session, token string) {
 			h.keepResumeTokenWith(oneShot, session, token)
 		},
-		record: func(session string, entry state.TranscriptEntry) {
-			if err := h.appendTranscriptWith(oneShot, session, entry); err != nil {
+		record: func(session string, entry state.TranscriptEntry) error {
+			err := h.appendTranscriptWith(oneShot, session, entry)
+			if err != nil {
 				warnLive(h.messages, h.warnings, h.sessionLanguageSource(session), "warn.session_seed_transcript", map[string]any{nameParam: session, detailParam: err})
 			}
+			return err
 		},
 	}
 }

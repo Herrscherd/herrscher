@@ -25,10 +25,11 @@ func TestEachTurnStartsItsToolTimelineFresh(t *testing.T) {
 	fromBridge := make(chan contracts.Event, 16)
 	d, _ := identifiedTestDriver(toBridge, fromBridge)
 	var replies []state.TranscriptEntry
-	d.sink.Transcript = func(entry state.TranscriptEntry) {
+	d.sink.Transcript = func(entry state.TranscriptEntry) error {
 		if entry.Role == "assistant" {
 			replies = append(replies, entry)
 		}
+		return nil
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -40,7 +40,7 @@ func goBuild(tb testing.TB, dir, out string, args ...string) {
 
 func printIntoVault(tb testing.TB, bins binaries, option setting, enabled bool, prompt string, count func(vault string) (int, error)) int {
 	tb.Helper()
-	box, err := newSandbox(tb.TempDir())
+	box, err := newSandbox(tb.Context(), tb.TempDir())
 	if err != nil {
 		tb.Fatal(err)
 	}
@@ -174,7 +174,7 @@ func TestBenchMeasuresEachArmFromTheLedger(t *testing.T) {
 
 func playArmWithLedger(t *testing.T, r runner, planned arm) (outcome, tally) {
 	t.Helper()
-	box, err := newSandbox(t.TempDir())
+	box, err := newSandbox(t.Context(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

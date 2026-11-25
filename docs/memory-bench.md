@@ -12,7 +12,9 @@ bench itself reaches a real model and spends money, so it requires a budget.
 ## Running it
 
 Build the bench, then start it with a budget. The budget is required: the bench
-refuses to start without `-budget-tokens` or `-budget-usd`.
+refuses to start without `-budget-tokens` or `-budget-usd`. `git` must be on
+`PATH`, since every arm runs from a repository it creates with `git init`;
+without it, every arm fails to prepare its sandbox.
 
 ```sh
 go build -o "$BIN_DIR/membench" ./tools/membench
@@ -24,7 +26,7 @@ heavy tool at a time.
 
 | Flag | Default | Meaning |
 |------|---------|---------|
-| `-herrscher` | `herrscher` | The binary to run, looked up on `PATH` or given as a path. |
+| `-herrscher` | `herrscher` | The binary to run, looked up on `PATH` or given as a path. A relative path is made absolute, since each call runs from its arm's repository. |
 | `-model` | `claude-haiku-5-5` | The model the runs use, passed as `HERRSCHER_DEFAULT_MODEL`. |
 | `-budget-tokens` | none | Ceiling in tokens (input, output and cache tokens of the ledger). |
 | `-budget-usd` | none | Ceiling in US dollars, from the cost the ledger records. |
@@ -58,13 +60,14 @@ writes no report and exits `2` or `1` with the message on stderr.
 
 ## What runs
 
-The pair suite has four tasks, each taught in one or more steps and then asked:
+The pair suite has five tasks, each taught in one or more steps and then asked:
 
 | Task | What it checks |
 |------|----------------|
 | same agent | A fact taught to one agent is recalled by that agent. |
 | other agent | A fact taught to one agent is recalled by another. |
-| stale | A fact is corrected, and the corrected value is recalled, not the old one. A recall of the old value is false recall. |
+| stale | A fact is corrected, and the corrected value is recalled, not the old one. The question asks for the code alone, so a reply that gives the old value is false recall, and a reply that names the old value as replaced cannot pass for a correct one. |
+| procedure | A two-step release procedure of the repository is recalled in order. Both commands must appear, and the first occurrence of each counts: the first command must come before the second. The reverse order, the one the procedure warns against, is false recall, and so is a reply that names `make ship ZONE=4` before `make tag`, even inside a warning, since the question asks for the commands alone. Quoting the warning as taught, `make ship` without the zone, does not count as the second command. It is the task where an agent may write the procedure down as a skill, so it is the one `learned-skills` can change. |
 | never given | A fact that was never taught is not invented. The question asks for the password, or for the word NONE if it was never given. Scored as defined in [Scoring the never-given task](#scoring-the-never-given-task). |
 
 With `-dataset`, the bench samples items of a LongMemEval file. Each item's
@@ -94,8 +97,10 @@ cell, each with its runs, successes, false recalls, turns and tokens.
 - **Turns**: the calls of a run, one usage record each.
 - **Tokens to success**: the tokens of all runs divided by their successes. The
   delta is on minus off.
-- **Memory tokens per turn**: input tokens per turn on minus off. This is the
-  cost the memory adds to each call.
+- **Memory tokens per turn**: prompt tokens per turn on minus off, counting
+  the uncached input, the cache reads and the cache writes. This is the cost the
+  memory adds to each call. The vendor caches the prompt, so the uncached input
+  alone stays near zero and would hide what the memory injects.
 - **False recall**: a forbidden value (the stale answer) is given, or, for the
   never-given task, the reply is false recall as defined in
   [Scoring the never-given task](#scoring-the-never-given-task). It is counted,
@@ -126,21 +131,19 @@ many runs each side has.
 ## Fixed conditions
 
 Every arm runs with `TERMINAL_CONSOLIDATE_EVERY=0`, whatever the user's default
-is. The default of 10 never consolidates a one-shot, so a one-shot would never
-sweep the vault and the report and sweep settings would have nothing to act on.
-With 0, consolidation runs at the end of each one-shot run that completes, with
-an orchestrator. The off arm and the on arm then differ only by the setting under
-test, except for the two kinds of run described below. A run whose `herrscher`
-call errors stops the bench there: `forEachArm` in `tools/membench/runner.go`
-returns the error, `runAll` passes it on, and `execute` in
-`tools/membench/main.go` marks the report failed. The failed arm and the arms
-after it count as not run (`NotRun` in `tools/membench/report.go`), although the
-failed arm's spend is still counted. A run whose bridge is not joined within the
-grace but which returns a reply counts as completed for the bench: it is kept
-and enters the deltas as a complete pair. It does not consolidate at its end, so
-its arm differs from the other arm by that missing consolidation, and the bench
-does not mark such a run. A herrscher run by a user keeps the default of 10, so
-the bench measures a condition a user does not run by default.
+is. A one-shot run that completes, with an orchestrator, consolidates at its end
+at 0 and at the default of 10 alike, so this pins the condition without
+departing from what a user runs. The off arm and the on arm then differ only by
+the setting under test, except for the two kinds of run described below. A run
+whose `herrscher` call errors stops the bench there: `forEachArm` in
+`tools/membench/runner.go` returns the error, `runAll` passes it on, and
+`execute` in `tools/membench/main.go` marks the report failed. The failed arm
+and the arms after it count as not run (`NotRun` in `tools/membench/report.go`),
+although the failed arm's spend is still counted. A run whose bridge is not
+joined within the grace but which returns a reply counts as completed for the
+bench: it is kept and enters the deltas as a complete pair. It does not
+consolidate at its end, so its arm differs from the other arm by that missing
+consolidation, and the bench does not mark such a run.
 
 Each arm's vault (`OBSIDIAN_VAULT`) starts with one aged node in the real
 format, `type: fact` with `lastSeen: 2001-01-01T00:00:00Z`, in off and on arms
@@ -174,6 +177,24 @@ state, the home and the config of that run, and the run's environment is built
 from nothing: only `PATH` is inherited, the state, home and config variables
 point into the arm's directory, and `HERRSCHER_INSTANCE_ID` is unique to the
 arm.
+
+Every call runs from `membench-repo`, an empty git repository inside the arm's
+home. herrscher names the memory project after the repository a session stands
+in, so the facts a call learns go to the shared project scope where the next
+call recalls them. Run from a directory outside any repository, a call has no
+project, its facts stay in its own session scope, and no later call finds them.
+
+Each step names its agent twice: `HERRSCHER_OWNER_ID` and
+`TERMINAL_MEMORY_AGENT`, which decides the private memory scope. Without the
+second, both agents of the other-agent task would be the default `tui` agent.
+
+The vendor is kept from answering on its own:
+
+| Variable | Why |
+|---|---|
+| `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` | Claude Code keeps its own memory files under its config directory. Left on, it stores the taught fact and answers from it, so the bench would measure Claude Code's memory and not herrscher's. |
+| `ENABLE_CLAUDEAI_MCP_SERVERS=false` | The account's claude.ai connectors (mail, documents) are not loaded into a run. |
+| `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` | Keeps the run from reaching the account's non-essential services. With the three variables set, no skill or plugin synced from the account appeared in a run's config directory, where they did before; which of the three stops the sync was not isolated. |
 
 `ANTHROPIC_API_KEY` is never read from the caller's environment by default. A run
 uses the credentials given with `-credentials`. The key is passed to each run
@@ -272,3 +293,97 @@ it are renamed, and their values are unchanged.
   the directory of the dead owner. The sweep runs before the new run directory
   and its copy are made, so a launch never removes a copy it is still using. The
   window lasts until the next launch.
+
+## First run and decisions (2026-11-25)
+
+The first real run used `claude-haiku-5-5` on a Claude subscription, through
+`-credentials`, with a ceiling of 8 million tokens per pair run and 20 million
+for the LongMemEval run. The pair suite ran three times; the third stopped on
+the account's weekly limit after 26 of its 30 arms. LongMemEval ran 10 items of
+the oracle file (`longmemeval_oracle.json`, the evidence sessions only), seed 1,
+and stopped on the same limit after 67 of its 84 arms. That run used the bench
+before the procedure task and the stale question were added: its 84 arms are 4
+pair tasks and 10 items under 3 settings, and only its LongMemEval rows are
+reported below. The pair rows come from the three pair runs, on the bench as
+merged except the order check of the procedure task. The whole run spent about
+10 million tokens, almost all cache reads, which the ledger costs at about 0.70
+US dollars. On a subscription that figure is an estimate; the quota is what it
+consumes.
+
+The settings were measured against each other, with the rest of the memory on
+in both arms. The baseline recalls every taught fact: same agent, other agent
+and corrected fact all pass, and the never-given fact is never invented.
+
+### Pair suite
+
+Successes over runs, summed over the five tasks. The third pass was cut short,
+so `learned-skills` has 15 runs per arm and `raw-archive` and `report` have 14.
+
+| Setting | Off | On | False recall off / on | What changed |
+|---|---|---|---|---|
+| `learned-skills` | 15/15 | 12/15 | 0 / 0 | The procedure task fails in every on run (0/3 against 3/3), with about 32000 more prompt tokens per turn. The other tasks do not move. |
+| `raw-archive` | 14/14 | 13/14 | 0 / 1 | One stale run gave the old code. The raw archive is only read by `memory search --raw`, so it cannot feed recall; the miss is noise. |
+| `report` | 14/14 | 14/14 | 0 / 0 | Nothing. The report is an audit node, not recall. |
+
+These runs scored the procedure task before its order was checked: a reply
+with both commands passed whatever their order. The three off successes may
+therefore include a reply in the wrong order. The three on failures stand
+either way, since a reply missing a command fails with or without the order
+check.
+
+The memory tokens per turn of a single task vary by about 10000 from one run to
+the next, because the agent sometimes reads the repository before it answers.
+Only the `learned-skills` procedure gap stands clear of that noise.
+
+The likely cause of the `learned-skills` failure is that the extractor files a
+procedure as a private skill. With the setting on, it becomes a `SKILL.md` the
+agent has to open rather than a fact the recall injects, and Haiku answered
+without opening it. This is not verified yet; it is followed in
+[#274](https://github.com/Herrscherd/herrscher/issues/274).
+
+### LongMemEval
+
+Successes over runs, summed over the capabilities the sample reached
+(extraction, multi-session, temporal reasoning, abstention; the sample drew no
+knowledge-update item). Scored by whole-word match of the reference answer, a
+proxy that fails most free-text answers.
+
+| Setting | Off | On |
+|---|---|---|
+| `learned-skills` | 2/8 | 3/7 |
+| `raw-archive` | 1/7 | 2/7 |
+| `report` | 3/7 | 3/7 |
+
+At these counts a single item moves a rate by more than 10 points. LongMemEval
+places the recall layer, it does not decide a setting.
+
+### Decision per setting
+
+| Setting | Default | Decision | Why |
+|---|---|---|---|
+| `MEMORY_LEARNED_SKILLS` | off | kept as an option, off | In 3 of 3 runs a taught procedure was not recalled with the setting on, against 3 of 3 recalled off, at about 32000 more tokens per turn. The cause is not verified ([#274](https://github.com/Herrscherd/herrscher/issues/274)). To revisit once a learned skill reaches the agent as reliably as a recalled fact. |
+| `MEMORY_RAW_ARCHIVE` | off | kept as an option, off | No measured gain: recall does not read it. It writes one node per turn. |
+| `MEMORY_REPORT_ENABLED` | on | kept on | No effect on recall or cost, and it is the audit trail of each pass. |
+| `MEMORY_PROMOTE_MIN_AGE_DAYS` | 0, off | kept as an option, not measured | It acts after days pass; the bench has no simulated clock. |
+| `MEMORY_IDLE_DAYS` | 0, off | kept as an option, not measured | Same. |
+| `MEMORY_MERGE_MIN` | 0, off | kept as an option, not measured | It needs a domain with many nodes, which one-shot tasks do not build. |
+| `AGENT_STALE_DAYS`, `AGENT_ARCHIVE_DAYS` | 30, 90 | kept on, not measured | Already on; they act after days pass. |
+| `TERMINAL_CONSOLIDATE_EVERY` | 10 | kept at 10 | A one-shot now consolidates at its end unless the cadence already did on its single turn. Before, at 10 a `--print` never consolidated and learned nothing. |
+
+### What the run found in the bench
+
+The first attempts measured the wrong memory, and the bench was fixed before the
+numbers above:
+
+- Claude Code's own automatic memory stored the taught fact and answered from
+  it. It is now off in every run.
+- The account's claude.ai connectors and synced skills were loaded into each
+  run. They are now off.
+- Run outside a git repository, a call had no project scope, so nothing it
+  learned was ever recalled. Every call now runs from a repository.
+- Both agents of the other-agent task were the same memory agent. Each step now
+  sets `TERMINAL_MEMORY_AGENT`.
+- The memory tokens per turn read the uncached input only, which caching keeps
+  near zero. They now count the cached prompt too.
+- The stale task counted a correct answer that named the old value as replaced
+  as false recall. The question now asks for the code alone.

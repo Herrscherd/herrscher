@@ -61,7 +61,7 @@ func TestLiveTermsFollowAModelSwitch(t *testing.T) {
 	}
 
 	var entries []state.TranscriptEntry
-	d.sink = sessionSink{Transcript: func(e state.TranscriptEntry) { entries = append(entries, e) }}
+	d.sink = sessionSink{Transcript: func(e state.TranscriptEntry) error { entries = append(entries, e); return nil }}
 	d.completeTurn(context.Background(), contracts.Event{T: eventwire.EventReply, Text: "hi", Done: true, TokensIn: 1000}, time.Now(), 0, outbox.Frame{})
 	want := 1000 * 1.0 / 1_000_000
 	if len(entries) != 1 || entries[0].Cost != want {

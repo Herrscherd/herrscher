@@ -37,8 +37,9 @@ func readTally(stateDir string) (tally, error) {
 	for i := range records {
 		record := records[i]
 		total.turns++
-		total.input += record.In
-		total.tokens += record.In + record.Out + record.CacheRead + record.CacheCreate
+		prompt := record.In + record.CacheRead + record.CacheCreate
+		total.input += prompt
+		total.tokens += prompt + record.Out
 		total.usd += record.Cost
 	}
 	if err != nil {

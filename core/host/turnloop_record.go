@@ -61,6 +61,7 @@ type turnUsage struct {
 	InTokens, OutTokens, CacheRead, CacheCreate, DurMs int
 	CtxTokens                                          int
 	Tools                                              []timeline.Call
+	Injected                                           []contracts.InjectedPart
 }
 
 func (d *sessionDriver) recordUsage(event contracts.Event) {
@@ -92,9 +93,9 @@ func hasTurnUsage(event contracts.Event) bool {
 	return event.TokensIn != 0 || event.Tokens != 0 || event.CacheRead != 0 || event.CacheCreate != 0 || event.Cost != 0
 }
 
-func (d *sessionDriver) recordEntry(role, text, shown string, cost float64, turn turnUsage) {
+func (d *sessionDriver) recordEntry(role, text, shown string, cost float64, turn turnUsage) error {
 	if d.sink.Transcript == nil || (text == "" && shown == "" && len(turn.Tools) == 0) {
-		return
+		return nil
 	}
 	entry := state.TranscriptEntry{
 		Ts:          time.Now().UTC().Format(time.RFC3339),
@@ -109,11 +110,19 @@ func (d *sessionDriver) recordEntry(role, text, shown string, cost float64, turn
 		DurMs:       turn.DurMs,
 		CtxTokens:   turn.CtxTokens,
 		Tools:       turn.Tools,
+		Injected:    turn.Injected,
 	}
 	if shown != text {
 		entry.Displayed = shown
 	}
-	d.sink.Transcript(entry)
+	return d.sink.Transcript(entry)
+}
+
+func (d *sessionDriver) recordInterruption() error {
+	if d.sink.Transcript == nil {
+		return nil
+	}
+	return d.sink.Transcript(interruptedTurnEntry(d.currentTurnID()))
 }
 
 func (d *sessionDriver) currentTurnID() string {

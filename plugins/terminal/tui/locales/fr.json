@@ -501,6 +501,30 @@
     "other": "taille du prompt système, envoyé à chaque tour"
   },
   {
+    "id": "tui.context.cat_host",
+    "other": "hôte"
+  },
+  {
+    "id": "tui.context.cat_host_need",
+    "other": "taille des blocs de délégation, de capacités, d’identité et des autres blocs de l’hôte"
+  },
+  {
+    "id": "tui.context.host_estimate",
+    "other": "estimation, sur le texte écrit par l’hôte"
+  },
+  {
+    "id": "tui.context.cache",
+    "other": "cache"
+  },
+  {
+    "id": "tui.context.cache_need",
+    "other": "part du prompt lue depuis le cache, par tour"
+  },
+  {
+    "id": "tui.context.cache_note",
+    "other": "du dernier prompt lu depuis le cache"
+  },
+  {
     "id": "tui.context.cat_tools",
     "other": "outils et MCP"
   },

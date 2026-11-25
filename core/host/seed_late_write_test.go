@@ -83,7 +83,7 @@ func seedSharingSession(backend contracts.Backend, budget time.Duration, log *st
 		timeout:     budget,
 		sessions:    table,
 		publish:     func(string, contracts.Event) { log.note(eventwire.EventReply) },
-		record:      func(string, state.TranscriptEntry) { log.note("transcript") },
+		record:      func(string, state.TranscriptEntry) error { log.note("transcript"); return nil },
 		recordUsage: func(state.Session, []usage.Record) {
 			log.note("usage")
 		},
@@ -133,14 +133,14 @@ func TestOneShotTapsRecordNothingOnceTheSeedHasReturned(t *testing.T) {
 		messages:    newHostMessages(),
 		cliMessages: clitext.NewMessages(),
 		publish:     func(string, contracts.Event) { recorded = append(recorded, "publish") },
-		record:      func(string, state.TranscriptEntry) { recorded = append(recorded, "transcript") },
+		record:      func(string, state.TranscriptEntry) error { recorded = append(recorded, "transcript"); return nil },
 		recordUsage: func(state.Session, []usage.Record) { recorded = append(recorded, "usage") },
 	}
 	driver := &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), persists: newPersistWrites()}
 	gate := attachOneShotTaps(driver, state.Session{Name: "seed-a"}, runtime)
 
 	driver.emitTap(contracts.Event{T: eventwire.EventReply})
-	driver.sink.Transcript(state.TranscriptEntry{})
+	logCleanup(driver.sink.Transcript(state.TranscriptEntry{}))
 	driver.sink.Usage([]usage.Record{{In: 1}})
 	if want := []string{"publish", "transcript", "usage"}; !slices.Equal(recorded, want) {
 		t.Fatalf("while the seed runs the taps recorded %v, want %v", recorded, want)
@@ -148,7 +148,7 @@ func TestOneShotTapsRecordNothingOnceTheSeedHasReturned(t *testing.T) {
 
 	gate.shut()
 	driver.emitTap(contracts.Event{T: eventwire.EventReply})
-	driver.sink.Transcript(state.TranscriptEntry{})
+	logCleanup(driver.sink.Transcript(state.TranscriptEntry{}))
 	driver.sink.Usage([]usage.Record{{In: 1}})
 	if want := []string{"publish", "transcript", "usage"}; !slices.Equal(recorded, want) {
 		t.Fatalf("after the seed returned the taps recorded %v, want nothing more than %v", recorded, want)

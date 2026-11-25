@@ -26,6 +26,9 @@ type tab struct {
 	costTotal          float64
 	ctxTokens          int
 	ctxMeasured        bool
+	injected           []contracts.InjectedPart
+	injectedKnown      bool
+	lastPrompt         promptReading
 	compaction         compaction
 	lastCompact        compaction
 	openedAt           time.Time
@@ -120,6 +123,9 @@ func lastAgentIndex(entries []entry) int {
 }
 
 func (tb *tab) measureContext(event contracts.Event) {
+	if event.Done {
+		tb.measureInjected(event)
+	}
 	used := event.TokensIn + event.CacheRead + event.CacheCreate
 	tb.measureCompaction(used)
 	if used <= 0 {
@@ -159,6 +165,9 @@ func (tb *tab) appendReply(trans translator, event contracts.Event) {
 		}
 	}
 	tb.endStream()
+	if event.Outcome == contracts.TurnInterrupted {
+		tb.appendRelayedNotice(trans, contracts.Notice{Code: contracts.CodeTurnInterrupted})
+	}
 	if event.Cost > 0 {
 		tb.lastCost = event.Cost
 		tb.costTotal += event.Cost

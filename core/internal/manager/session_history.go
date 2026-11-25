@@ -23,19 +23,20 @@ const (
 )
 
 type historyTurn struct {
-	TurnID      string          `json:"turn_id"`
-	Started     string          `json:"started,omitempty"`
-	Prompt      string          `json:"prompt,omitempty"`
-	Reply       string          `json:"reply,omitempty"`
-	Notices     []string        `json:"notices,omitempty"`
-	Interrupted bool            `json:"interrupted,omitempty"`
-	TokensIn    int             `json:"tokens_in,omitempty"`
-	TokensOut   int             `json:"tokens_out,omitempty"`
-	CacheRead   int             `json:"cache_read,omitempty"`
-	CacheCreate int             `json:"cache_create,omitempty"`
-	DurMs       int             `json:"dur_ms,omitempty"`
-	Cost        float64         `json:"cost,omitempty"`
-	Tools       []timeline.Call `json:"tools,omitempty"`
+	TurnID      string                   `json:"turn_id"`
+	Started     string                   `json:"started,omitempty"`
+	Prompt      string                   `json:"prompt,omitempty"`
+	Reply       string                   `json:"reply,omitempty"`
+	Notices     []string                 `json:"notices,omitempty"`
+	Interrupted bool                     `json:"interrupted,omitempty"`
+	TokensIn    int                      `json:"tokens_in,omitempty"`
+	TokensOut   int                      `json:"tokens_out,omitempty"`
+	CacheRead   int                      `json:"cache_read,omitempty"`
+	CacheCreate int                      `json:"cache_create,omitempty"`
+	DurMs       int                      `json:"dur_ms,omitempty"`
+	Cost        float64                  `json:"cost,omitempty"`
+	Tools       []timeline.Call          `json:"tools,omitempty"`
+	Injected    []contracts.InjectedPart `json:"injected,omitempty"`
 }
 
 func (h *Handler) sessionHistoryRun(ctx context.Context, input contracts.Input) (contracts.Result, error) {
@@ -134,6 +135,9 @@ func absorb(turn *historyTurn, entry state.TranscriptEntry) {
 		turn.DurMs += entry.DurMs
 		turn.Cost += entry.Cost
 		turn.Tools = append(turn.Tools, entry.Tools...)
+		if len(entry.Injected) > 0 {
+			turn.Injected = entry.Injected
+		}
 	default:
 		turn.Notices = append(turn.Notices, entry.ShownText())
 	}

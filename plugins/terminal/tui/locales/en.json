@@ -501,6 +501,30 @@
     "other": "size of the system prompt, sent every turn"
   },
   {
+    "id": "tui.context.cat_host",
+    "other": "host"
+  },
+  {
+    "id": "tui.context.cat_host_need",
+    "other": "size of the delegation, capabilities, identity and other host blocks"
+  },
+  {
+    "id": "tui.context.host_estimate",
+    "other": "estimate, from the text the host wrote"
+  },
+  {
+    "id": "tui.context.cache",
+    "other": "cache"
+  },
+  {
+    "id": "tui.context.cache_need",
+    "other": "share of the prompt read from the cache, per turn"
+  },
+  {
+    "id": "tui.context.cache_note",
+    "other": "of the last prompt read from the cache"
+  },
+  {
     "id": "tui.context.cat_tools",
     "other": "tools and MCP"
   },

@@ -38,7 +38,7 @@ func playArmCapturingVault(t *testing.T, enabled bool) (string, error) {
 	if err := os.WriteFile(binary, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	box, err := newSandbox(t.TempDir())
+	box, err := newSandbox(t.Context(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestFailedCallIsChargedFromTheLedger(t *testing.T) {
 	if err := os.WriteFile(binary, []byte("#!/bin/sh\nexit 1\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	box, err := newSandbox(t.TempDir())
+	box, err := newSandbox(t.Context(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestUnreadableLedgerDayStillChargesTheReadableSpend(t *testing.T) {
 	if err := os.WriteFile(binary, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	box, err := newSandbox(t.TempDir())
+	box, err := newSandbox(t.Context(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestUnreadableLedgerDayStillChargesTheReadableSpend(t *testing.T) {
 
 func TestOversizedPromptIsRefusedBeforeTheBinaryRuns(t *testing.T) {
 	bench := &runner{binary: filepath.Join(t.TempDir(), "missing"), meter: &meter{}}
-	box, err := newSandbox(t.TempDir())
+	box, err := newSandbox(t.Context(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

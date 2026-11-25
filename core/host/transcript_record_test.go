@@ -12,11 +12,11 @@ import (
 func TestDriverRecordsTranscript(t *testing.T) {
 	var got []state.TranscriptEntry
 	d := newSessionDriver(newHostMessages(), clitext.NewMessages(), "s", nil, make(chan contracts.Event, 8), make(chan contracts.Event, 8), io.Discard)
-	d.sink.Transcript = func(e state.TranscriptEntry) { got = append(got, e) }
+	d.sink.Transcript = func(e state.TranscriptEntry) error { got = append(got, e); return nil }
 
-	d.recordEntry("user", "hello", "hello", 0, turnUsage{})
-	d.recordEntry("assistant", "hi there", "hi there", 0.02, turnUsage{})
-	d.recordEntry("assistant", "", "", 0, turnUsage{})
+	logCleanup(d.recordEntry("user", "hello", "hello", 0, turnUsage{}))
+	logCleanup(d.recordEntry("assistant", "hi there", "hi there", 0.02, turnUsage{}))
+	logCleanup(d.recordEntry("assistant", "", "", 0, turnUsage{}))
 
 	if len(got) != 2 {
 		t.Fatalf("want 2 entries, got %d", len(got))

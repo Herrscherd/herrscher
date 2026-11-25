@@ -109,13 +109,22 @@ palette.
 ## Context, and what fills it
 
 `/context` opens the window's room: the total used against the session's window,
-and a line for each part that fills it (system prompt, tools and MCP servers,
-memory, skills, files read, conversation), with what is free. Only the total is
-known: the backends report one count of input tokens per turn, not a breakdown,
-so each part reads `n/a` until a backend reports it. Without any count yet, the
-total reads `n/a` too, and no percentage is invented. Below 80 columns the bars
-go and the overlay becomes a plain list. `esc` or `z` closes it, `k` re-reads the
-figures.
+and a line for each part that fills it (system prompt, host blocks, tools and
+MCP servers, memory, skills, files read, conversation), the share of the last
+prompt read from the prompt cache, and what is free. The total comes from the
+backend, which reports one count of input tokens per turn, not a breakdown. The
+parts the host writes itself are sized by the host at the end of each turn:
+`memory` (the recall block), `skills` (the menu and the loaded skills) and
+`host` (the delegation, capabilities and identity blocks, and any block a newer
+host adds). Their figures start with `~`: they are estimates at about four bytes
+per token, not counts from the vendor. Every turn reply sizes all of them, so a
+part the host left empty on the last turn reads `0`. A reply that carries no
+sizes, such as a posted notice or a reply from a daemon that does not measure
+them, leaves the last figures in place. The other parts read `n/a` until a
+backend reports them, and so does every host part before the first measured
+turn. Without any count yet, the total reads `n/a` too, and no percentage is
+invented. Below 80 columns the bars go and the overlay becomes a plain list.
+`esc` or `z` closes it, `k` re-reads the figures.
 
 `/compact`, or `c` inside `/context`, asks the session to compact its conversation
 through the host (`herrscher session compact --name <name> [--instruction <text>]`).

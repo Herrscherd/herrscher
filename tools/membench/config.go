@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -178,7 +179,11 @@ func (r *rawFlags) resolve(defaultLang i18n.Language, getenv func(string) string
 	if err != nil {
 		return config{}, herrscherError(r.binary, err)
 	}
-	cfg.binary = binary
+	absolute, err := filepath.Abs(binary)
+	if err != nil {
+		return config{}, herrscherError(r.binary, err)
+	}
+	cfg.binary = absolute
 	return cfg, nil
 }
 

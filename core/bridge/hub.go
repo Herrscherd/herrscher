@@ -22,8 +22,6 @@ import (
 
 const errPrefix = "⚠️ "
 
-const interruptNotice = "⏹ interrupted"
-
 const (
 	backendKindText     = "text"
 	backendKindThinking = "thinking"
@@ -297,17 +295,10 @@ func (e *TurnFailedError) Notice() contracts.Notice { return contracts.NoticeOf(
 func (e *TurnFailedError) PartialOutput() string { return e.partial }
 
 func settleFailedReply(ctrl *turnController, out string, err error) string {
-	switch {
-	case ctrl.wasInterrupted():
-		if out == "" {
-			return interruptNotice
-		}
-		return strings.TrimSpace(out) + "\n\n" + interruptNotice
-	case out == "":
+	if out == "" && !ctrl.wasInterrupted() {
 		return errPrefix + err.Error()
-	default:
-		return out
 	}
+	return out
 }
 
 func turnOutcome(ctrl *turnController, failure error) contracts.TurnOutcome {
@@ -335,7 +326,8 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	}
 	turn := beginTurnOutbox(backend, aff.outbox)
 	defer turn.discard()
-	prompt := contracts.Prompt{Content: event.Text, Context: withIdentity(withCapabilities(withDelegation(withSkills(memCtx, eng), aff.roster), aff.caps), aff.user), Author: event.Who, Attachments: event.Attachments, Language: lang, Outbox: turn.dir}
+	injected := composeTurnContext(memCtx, eng, aff)
+	prompt := contracts.Prompt{Content: event.Text, Context: injected.String(), Author: event.Who, Attachments: event.Attachments, Language: lang, Outbox: turn.dir}
 	var usage turnUsage
 	var streamed []string
 	var calls toolCallGuard
@@ -367,30 +359,13 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	if tr, ok := orch.(contracts.TurnReactor); ok {
 		out = tr.React(ctx, out)
 	}
-	sink.Emit(contracts.Event{T: eventwire.EventReply, Text: out, Done: true, Outcome: turnOutcome(ctrl, failure), Cost: usage.cost, Tokens: usage.outTok, TokensIn: usage.inTok, CacheRead: usage.cacheRd, CacheCreate: usage.cacheCr, Resume: resumeToken(backend), Project: settledProject})
+	sink.Emit(contracts.Event{T: eventwire.EventReply, Text: out, Done: true, Outcome: turnOutcome(ctrl, failure), Cost: usage.cost, Tokens: usage.outTok, TokensIn: usage.inTok, CacheRead: usage.cacheRd, CacheCreate: usage.cacheCr, Injected: injected.sizes(), Resume: resumeToken(backend), Project: settledProject})
 	if orch != nil {
 		if err := orch.Observe(ctx, prompt, out); err != nil {
 			logger.Warn("memory observe failed; this turn was not recorded to memory", "err", err)
 		}
 	}
 	return failure
-}
-
-func withSkills(memCtx string, eng *skills.Engine) string {
-	if eng == nil {
-		return memCtx
-	}
-	parts := make([]string, 0, partsCap)
-	if memCtx != "" {
-		parts = append(parts, memCtx)
-	}
-	if menu := eng.Menu(); menu != "" {
-		parts = append(parts, menu)
-	}
-	if exp := eng.Expansions(); exp != "" {
-		parts = append(parts, exp)
-	}
-	return strings.Join(parts, "\n\n")
 }
 
 type turnEventSink struct {

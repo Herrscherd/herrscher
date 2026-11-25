@@ -9,6 +9,9 @@ import (
 const turnInterruptedKind = state.KindTurnInterrupted
 
 func (h *hub) openTurnMark(session, turnID string) {
+	if sess, ok := h.st.FindSession(session); ok && !h.announceInterruptedTurn(sess) {
+		return
+	}
 	end := h.persists.begin()
 	defer end()
 	if err := h.st.SetInterruptedTurn(session, turnID); err != nil {
@@ -16,10 +19,18 @@ func (h *hub) openTurnMark(session, turnID string) {
 	}
 }
 
-func (h *hub) clearTurnMark(session string) {
+func (h *hub) markTurnFinished(session, turnID string) {
 	end := h.persists.begin()
 	defer end()
-	if err := h.st.SetInterruptedTurn(session, ""); err != nil {
+	if err := h.st.SetFinishedTurn(session, turnID); err != nil {
+		warnLive(h.messages, h.warnings, h.sessionLanguageSource(session), "warn.session_turn_mark_set", map[string]any{nameParam: session, detailParam: err})
+	}
+}
+
+func (h *hub) clearTurnMark(session, turnID string) {
+	end := h.persists.begin()
+	defer end()
+	if err := h.st.ClearTurnMark(session, turnID); err != nil {
 		warnLive(h.messages, h.warnings, h.sessionLanguageSource(session), "warn.session_turn_mark_clear", map[string]any{nameParam: session, detailParam: err})
 	}
 }
@@ -34,24 +45,28 @@ func (h *hub) interruptionAnnounced(name, turnID string) bool {
 	return false
 }
 
-func (h *hub) announceInterruptedTurn(sess state.Session) {
-	if sess.InterruptedTurn == "" {
-		return
-	}
-	if h.interruptionAnnounced(sess.Name, sess.InterruptedTurn) {
-		h.clearTurnMark(sess.Name)
-		return
-	}
-	entry := state.TranscriptEntry{
+func interruptedTurnEntry(turnID string) state.TranscriptEntry {
+	return state.TranscriptEntry{
 		Ts:     time.Now().UTC().Format(time.RFC3339),
 		Role:   "notice",
 		Kind:   turnInterruptedKind,
-		TurnID: sess.InterruptedTurn,
+		TurnID: turnID,
 	}
-	if err := h.appendTranscript(sess.Name, entry); err != nil {
+}
+
+func (h *hub) announceInterruptedTurn(sess state.Session) bool {
+	if sess.InterruptedTurn == "" {
+		return true
+	}
+	if sess.FinishedTurn == sess.InterruptedTurn || h.interruptionAnnounced(sess.Name, sess.InterruptedTurn) {
+		h.clearTurnMark(sess.Name, sess.InterruptedTurn)
+		return true
+	}
+	if err := h.appendTranscript(sess.Name, interruptedTurnEntry(sess.InterruptedTurn)); err != nil {
 		lang := h.sessionLanguageSource(sess.Name)
 		warnLive(h.messages, h.warnings, lang, "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
-		return
+		return false
 	}
-	h.clearTurnMark(sess.Name)
+	h.clearTurnMark(sess.Name, sess.InterruptedTurn)
+	return true
 }

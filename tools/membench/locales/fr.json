@@ -307,6 +307,11 @@
     "other": "fait périmé puis corrigé"
   },
   {
+    "id": "membench.variant.procedure",
+    "description": "Message of the memory bench: variant.procedure",
+    "other": "procédure du dépôt"
+  },
+  {
     "id": "membench.error.no_usage",
     "description": "Message of the memory bench: error.no_usage",
     "other": "la passe {{.Run}} s'est terminée sans écrire d'enregistrement d'usage dans son répertoire d'état : le banc ne peut pas mesurer sa dépense et s'arrête"

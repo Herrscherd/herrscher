@@ -168,6 +168,10 @@ func (r *runner) read(ctx context.Context) (time.Duration, bool) {
 	}
 	if errors.Is(err, contracts.ErrForgeNotModified) {
 		r.failures = r.watch.Policy.Backoff
+		if r.saved == nil && r.since != "" {
+			r.since = ""
+			return 0, false
+		}
 		return r.watch.Policy.Every, false
 	}
 	if err == nil {

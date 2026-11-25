@@ -314,6 +314,45 @@ func TestMemberJoiningAReadGroupGetsTheCurrentStateWithoutANewRead(t *testing.T)
 	}
 }
 
+type unchangedSinceForge struct {
+	contracts.Forge
+
+	unchangedSince contracts.Revision
+	current        contracts.PullRequest
+}
+
+func (f *unchangedSinceForge) PullRequest(_ context.Context, ref contracts.PullRequestRef, since contracts.Revision) (contracts.PullRequest, error) {
+	if since == f.unchangedSince {
+		return contracts.PullRequest{}, contracts.ErrForgeNotModified
+	}
+	pull := f.current
+	pull.Ref = ref
+	return pull, nil
+}
+
+func TestMemberJoiningAGroupWhoseFirstReadWasNotModifiedGetsTheMergedState(t *testing.T) {
+	dir := prFixtureRepo(t)
+	st := prState(t, dir, "")
+	openPRSession(t, st, "beta", dir, prTestNumber)
+	if err := st.RefreshPullRequest("beta", state.PullRequestRecord{Number: prTestNumber, State: contracts.PullRequestOpen, URL: "u", Revision: "r1"}); err != nil {
+		t.Fatal(err)
+	}
+	client := &unchangedSinceForge{unchangedSince: "r1", current: contracts.PullRequest{State: contracts.PullRequestMerged, URL: "u", Revision: "r2"}}
+	w := newPRWatchTestWatcher(t, st, client, &prWatchTestClock{now: time.Unix(0, 0)})
+	ctx := prWatchTestContext(t)
+	w.scan(ctx)
+
+	openPRSession(t, st, "gamma", dir, prTestNumber)
+	w.scan(ctx)
+
+	for _, name := range []string{"beta", "gamma"} {
+		waitForPRWatch(t, name+" to receive the merged state", func() bool {
+			sess, _ := st.FindSession(name)
+			return sess.PullRequestState == contracts.PullRequestMerged && sess.PullRequestRevision == "r2"
+		})
+	}
+}
+
 func TestRunReturnsOnlyAfterEveryWatchEnds(t *testing.T) {
 	dir := prFixtureRepo(t)
 	st := prState(t, dir, "")

@@ -55,6 +55,19 @@ func TestPersistedRevisionMakesTheFirstReadConditional(t *testing.T) {
 	stop()
 }
 
+func TestNotModifiedWithoutAStoredStateReadsInFull(t *testing.T) {
+	clock := newFakeClock()
+	reader := newFakeReader(clock, reply{err: contracts.ErrForgeNotModified}, reply{pull: open("r2")})
+	store := &fakeStore{}
+	stop, _ := startWatch(t, Watch{Ref: testRef(t), Since: "r1", Reader: reader, Save: store.save, Limit: &Limit{}, Clock: clock, Policy: testPolicy(time.Minute)})
+
+	reader.awaitRead(t)
+	if second := reader.awaitRead(t); second.since != "" {
+		t.Fatalf("read after a 304 with nothing stored since = %q, want the whole request", second.since)
+	}
+	stop()
+}
+
 func TestFirstReadWaitsForTheStagger(t *testing.T) {
 	clock := newFakeClock()
 	start := clock.Now()

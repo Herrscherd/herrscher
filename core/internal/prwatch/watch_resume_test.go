@@ -2,6 +2,7 @@ package prwatch
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -62,6 +63,46 @@ func TestRevisionAloneChangeIsSaved(t *testing.T) {
 		t.Fatalf("last persisted revision = %q, want r2", last)
 	}
 	stop()
+}
+
+func TestFieldChangingAloneIsSaved(t *testing.T) {
+	head := mustCommitSHA(t, strings.Repeat("a", 40))
+	pushed := mustCommitSHA(t, strings.Repeat("b", 40))
+	base := contracts.PullRequest{Revision: "r1", State: contracts.PullRequestOpen, URL: "u", HeadSHA: head, Merge: contracts.MergeStateClean, Checks: contracts.ChecksPassed, LatestReview: "v1"}
+	changes := map[string]func(*contracts.PullRequest){
+		"head sha":      func(pull *contracts.PullRequest) { pull.HeadSHA = pushed },
+		"merge":         func(pull *contracts.PullRequest) { pull.Merge = contracts.MergeStateBlocked },
+		"checks":        func(pull *contracts.PullRequest) { pull.Checks = contracts.ChecksFailed },
+		"latest review": func(pull *contracts.PullRequest) { pull.LatestReview = "v2" },
+	}
+	for name, change := range changes {
+		t.Run(name, func(t *testing.T) {
+			clock := newFakeClock()
+			changed := base
+			change(&changed)
+			reader := newFakeReader(clock, reply{pull: base}, reply{pull: changed})
+			store := &fakeStore{}
+			stop, _ := startWatch(t, Watch{Ref: testRef(t), Reader: reader, Save: store.save, Limit: &Limit{}, Clock: clock, Policy: testPolicy(time.Minute)})
+
+			reader.awaitRead(t)
+			clock.tick(t)
+			reader.awaitRead(t)
+			clock.awaitArm(t)
+			if got := len(store.persisted()); got != 2 {
+				t.Fatalf("persisted = %d, want 2: a change of the %s alone is saved", got, name)
+			}
+			stop()
+		})
+	}
+}
+
+func mustCommitSHA(t *testing.T, text string) contracts.CommitSHA {
+	t.Helper()
+	sha, err := contracts.ParseCommitSHA(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sha
 }
 
 func TestPersistedRevisionMakesTheFirstReadConditional(t *testing.T) {

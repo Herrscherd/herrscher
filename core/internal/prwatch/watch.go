@@ -21,7 +21,9 @@ type Reader interface {
 	PullRequest(ctx context.Context, ref contracts.PullRequestRef, since contracts.Revision) (contracts.PullRequest, error)
 }
 
-// Policy sets how often a watch reads the forge and how it backs off.
+// Policy sets how often a watch reads the forge and how it backs off. Silence is how long an
+// open feed may stay quiet before it is cut and subscribed again, and FeedPause is how long a
+// refused feed is left alone.
 type Policy struct {
 	Every     time.Duration
 	Backoff   obs.Backoff
@@ -31,25 +33,20 @@ type Policy struct {
 
 // Watch is the following of one pull request. Since is the revision of the last read saved,
 // so the first read asks the forge for a change only; zero asks for the whole request. Stagger
-// delays the first read. Save persists a read whose state, draft flag, URL or revision differs
-// from the last one saved; a failed Save counts as a failed read and is retried in full. Limit
-// is shared with every watch on the same forge, and NewWatch refuses a nil one.
+// delays the first read. Feed is the forge's event feed, nil when the forge grants none. Save
+// persists a read whose state, draft flag, URL, head commit, merge state, checks or latest
+// review differs from the last one saved; a failed Save counts as a failed read and is retried
+// in full. Limit is shared with every watch on the same forge, and NewWatch refuses a nil one.
 type Watch struct {
 	Ref     contracts.PullRequestRef
 	Since   contracts.Revision
 	Stagger time.Duration
 	Reader  Reader
-	Feed    Feed
+	Feed    contracts.PullRequestFeed
 	Save    func(ctx context.Context, pull contracts.PullRequest) error
 	Limit   *Limit
 	Clock   Clock
 	Policy  Policy
-}
-
-// Ended reports whether a pull request in state is merged or closed, so that no further
-// change is expected and the watch stops.
-func Ended(state contracts.PullRequestState) bool {
-	return state == contracts.PullRequestClosed || state == contracts.PullRequestMerged
 }
 
 // ErrLimitRequired reports a watch built without the limit shared with the other watches of
@@ -62,6 +59,12 @@ func NewWatch(watch Watch) (Watch, error) {
 		return Watch{}, ErrLimitRequired
 	}
 	return watch, nil
+}
+
+// Ended reports whether a pull request in state is merged or closed, so that no further
+// change is expected and the watch stops.
+func Ended(state contracts.PullRequestState) bool {
+	return state == contracts.PullRequestClosed || state == contracts.PullRequestMerged
 }
 
 // Run follows the pull request until ctx is done or the request has ended. It returns only
@@ -78,19 +81,25 @@ type runner struct {
 	saved        *recordKey
 	failures     obs.Backoff
 	feedFailures obs.Backoff
-	signals      <-chan FeedEvent
+	signals      <-chan contracts.PullRequestSignal
+	cancelFeed   context.CancelFunc
 	heardAt      time.Time
 	subscribeAt  time.Time
 }
 
 type recordKey struct {
-	state    contracts.PullRequestState
-	draft    bool
-	url      string
-	revision contracts.Revision
+	state        contracts.PullRequestState
+	draft        bool
+	url          string
+	revision     contracts.Revision
+	headSHA      contracts.CommitSHA
+	merge        contracts.MergeState
+	checks       contracts.ChecksState
+	latestReview contracts.ReviewID
 }
 
 func (r *runner) loop(ctx context.Context, due time.Duration) {
+	defer r.closeFeed()
 	for {
 		if !r.idle(ctx, r.heldFor(due)) {
 			return
@@ -108,30 +117,43 @@ func (r *runner) heldFor(due time.Duration) time.Duration {
 }
 
 func (r *runner) idle(ctx context.Context, due time.Duration) bool {
-	r.subscribe(ctx)
-	if due <= 0 {
-		return ctx.Err() == nil
-	}
-	timer := r.watch.Clock.After(due)
-	silence := r.silenceTimer()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-timer:
-		return true
-	case <-silence:
-		r.signals = nil
-		r.subscribeAt = r.watch.Clock.Now()
-		return true
-	case _, open := <-r.signals:
-		if !open {
-			r.signals = nil
-			r.subscribeAt = r.watch.Clock.Now().Add(r.feedFailures.Next(0))
+	deadline := r.watch.Clock.Now().Add(due)
+	for {
+		r.subscribe(ctx)
+		now := r.watch.Clock.Now()
+		remaining := deadline.Sub(now)
+		if remaining <= 0 {
+			return ctx.Err() == nil
+		}
+		timer := r.watch.Clock.After(r.nextWake(now, remaining))
+		silence := r.silenceTimer()
+		select {
+		case <-ctx.Done():
+			return false
+		case <-timer:
+		case <-silence:
+			r.pauseFeed(r.feedFailures.Next(0))
+		case signal, open := <-r.signals:
+			if !open {
+				r.pauseFeed(r.feedFailures.Next(0))
+				break
+			}
+			if signal.Err != nil {
+				r.pauseFeed(r.feedDelay(signal.Err))
+				break
+			}
+			r.heardAt = r.watch.Clock.Now()
+			r.feedFailures = r.watch.Policy.Backoff
 			return true
 		}
-		r.heardAt = r.watch.Clock.Now()
-		return true
 	}
+}
+
+func (r *runner) nextWake(now time.Time, remaining time.Duration) time.Duration {
+	if r.watch.Feed != nil && r.signals == nil && r.subscribeAt.After(now) {
+		return min(remaining, r.subscribeAt.Sub(now))
+	}
+	return remaining
 }
 
 func (r *runner) silenceTimer() <-chan time.Time {
@@ -149,20 +171,33 @@ func (r *runner) subscribe(ctx context.Context) {
 	if now.Before(r.subscribeAt) {
 		return
 	}
-	signals, err := r.watch.Feed.Subscribe(ctx, r.watch.Ref)
+	feedCtx, cancel := context.WithCancel(ctx)
+	signals, err := r.watch.Feed.PullRequestEvents(feedCtx, r.watch.Ref)
 	if err != nil {
+		cancel()
 		r.subscribeAt = now.Add(r.feedDelay(err))
 		return
 	}
-	r.signals, r.heardAt = signals, now
-	r.feedFailures = r.watch.Policy.Backoff
+	r.signals, r.cancelFeed, r.heardAt = signals, cancel, now
 }
 
 func (r *runner) feedDelay(err error) time.Duration {
-	if errors.Is(err, ErrFeedRefused) {
+	if errors.Is(err, contracts.ErrFeedRefused) {
 		return r.watch.Policy.FeedPause
 	}
 	return r.feedFailures.Next(0)
+}
+
+func (r *runner) pauseFeed(delay time.Duration) {
+	r.closeFeed()
+	r.subscribeAt = r.watch.Clock.Now().Add(delay)
+}
+
+func (r *runner) closeFeed() {
+	if r.cancelFeed != nil {
+		r.cancelFeed()
+	}
+	r.cancelFeed, r.signals = nil, nil
 }
 
 func (r *runner) read(ctx context.Context) (time.Duration, bool) {
@@ -210,7 +245,7 @@ func (r *runner) observe(ctx context.Context, pull contracts.PullRequest) (time.
 }
 
 func (r *runner) record(ctx context.Context, pull contracts.PullRequest) error {
-	key := recordKey{state: pull.State, draft: pull.Draft, url: pull.URL, revision: pull.Revision}
+	key := keyOf(pull)
 	if r.saved != nil && *r.saved == key {
 		return nil
 	}
@@ -219,4 +254,17 @@ func (r *runner) record(ctx context.Context, pull contracts.PullRequest) error {
 	}
 	r.saved = &key
 	return nil
+}
+
+func keyOf(pull contracts.PullRequest) recordKey {
+	return recordKey{
+		state:        pull.State,
+		draft:        pull.Draft,
+		url:          pull.URL,
+		revision:     pull.Revision,
+		headSHA:      pull.HeadSHA,
+		merge:        pull.Merge,
+		checks:       pull.Checks,
+		latestReview: pull.LatestReview,
+	}
 }

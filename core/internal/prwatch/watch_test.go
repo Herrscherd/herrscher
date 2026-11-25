@@ -163,18 +163,20 @@ func (s *fakeStore) persisted() []contracts.PullRequest {
 
 type fakeFeed struct {
 	clock      *fakeClock
-	refuse     bool
-	signals    chan FeedEvent
+	refuse     error
+	signals    chan contracts.PullRequestSignal
 	mu         sync.Mutex
 	subscribed []time.Time
+	contexts   []context.Context
 }
 
-func (f *fakeFeed) Subscribe(_ context.Context, _ contracts.PullRequestRef) (<-chan FeedEvent, error) {
+func (f *fakeFeed) PullRequestEvents(ctx context.Context, _ contracts.PullRequestRef) (<-chan contracts.PullRequestSignal, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.subscribed = append(f.subscribed, f.clock.Now())
-	if f.refuse {
-		return nil, ErrFeedRefused
+	f.contexts = append(f.contexts, ctx)
+	if f.refuse != nil {
+		return nil, f.refuse
 	}
 	return f.signals, nil
 }
@@ -183,6 +185,12 @@ func (f *fakeFeed) subscriptions() []time.Time {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]time.Time(nil), f.subscribed...)
+}
+
+func (f *fakeFeed) subscriptionContext(index int) context.Context {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.contexts[index]
 }
 
 func testRef(t *testing.T) contracts.PullRequestRef {
@@ -203,7 +211,7 @@ func testPolicy(limit time.Duration) Policy {
 		Every:     time.Minute,
 		Backoff:   obs.Backoff{Base: time.Second, Max: limit, Factor: 2},
 		Silence:   10 * time.Minute,
-		FeedPause: 30 * time.Minute,
+		FeedPause: time.Hour,
 	}
 }
 
@@ -382,7 +390,7 @@ func TestCancelStopsTheWatchWithoutAnotherRead(t *testing.T) {
 
 func TestRefusedFeedPausesBeforeSubscribingAgain(t *testing.T) {
 	clock := newFakeClock()
-	feed := &fakeFeed{clock: clock, refuse: true, signals: make(chan FeedEvent)}
+	feed := &fakeFeed{clock: clock, refuse: contracts.ErrFeedRefused, signals: make(chan contracts.PullRequestSignal)}
 	reader := newFakeReader(clock)
 	store := &fakeStore{}
 	stop, _ := startWatch(t, Watch{Ref: testRef(t), Reader: reader, Feed: feed, Save: store.save, Limit: &Limit{}, Clock: clock, Policy: testPolicy(time.Minute)})
@@ -394,15 +402,15 @@ func TestRefusedFeedPausesBeforeSubscribingAgain(t *testing.T) {
 		clock.tick(t)
 	}
 	times := feed.subscriptions()
-	if gap := times[1].Sub(times[0]); gap < 30*time.Minute {
-		t.Fatalf("feed asked again after %v, want at least the pause of 30m", gap)
+	if gap := times[1].Sub(times[0]); gap < time.Hour {
+		t.Fatalf("feed asked again after %v, want at least the pause of 1h", gap)
 	}
 	stop()
 }
 
 func TestFeedSignalTriggersAReadAtOnce(t *testing.T) {
 	clock := newFakeClock()
-	feed := &fakeFeed{clock: clock, signals: make(chan FeedEvent)}
+	feed := &fakeFeed{clock: clock, signals: make(chan contracts.PullRequestSignal)}
 	reader := newFakeReader(clock)
 	store := &fakeStore{}
 	stop, _ := startWatch(t, Watch{Ref: testRef(t), Reader: reader, Feed: feed, Save: store.save, Limit: &Limit{}, Clock: clock, Policy: testPolicy(time.Minute)})
@@ -410,7 +418,7 @@ func TestFeedSignalTriggersAReadAtOnce(t *testing.T) {
 	reader.awaitRead(t)
 	clock.awaitArm(t)
 	clock.awaitArm(t)
-	feed.signals <- FeedChanged
+	feed.signals <- contracts.PullRequestSignal{Kind: contracts.PullRequestNewCommit}
 	reader.awaitRead(t)
 	clock.awaitArm(t)
 	clock.awaitArm(t)
@@ -420,9 +428,9 @@ func TestFeedSignalTriggersAReadAtOnce(t *testing.T) {
 	stop()
 }
 
-func TestSilentFeedIsSubscribedAgain(t *testing.T) {
+func TestSilentFeedIsCutWithoutARead(t *testing.T) {
 	clock := newFakeClock()
-	feed := &fakeFeed{clock: clock, signals: make(chan FeedEvent)}
+	feed := &fakeFeed{clock: clock, signals: make(chan contracts.PullRequestSignal)}
 	reader := newFakeReader(clock)
 	store := &fakeStore{}
 	policy := testPolicy(time.Minute)
@@ -431,12 +439,67 @@ func TestSilentFeedIsSubscribedAgain(t *testing.T) {
 	stop, _ := startWatch(t, Watch{Ref: testRef(t), Reader: reader, Feed: feed, Save: store.save, Limit: &Limit{}, Clock: clock, Policy: policy})
 
 	reader.awaitRead(t)
-	first, second := clock.awaitArm(t), clock.awaitArm(t)
-	clock.advance(min(first, second))
-	reader.awaitRead(t)
+	clock.awaitArm(t)
+	clock.advance(clock.awaitArm(t))
+	resubscribe := clock.awaitArm(t)
+	clock.advance(resubscribe)
 	clock.awaitArm(t)
 	if got := len(feed.subscriptions()); got != 2 {
-		t.Fatalf("subscriptions = %d after the silence, want the feed asked again", got)
+		t.Fatalf("subscriptions = %d after the silence and its delay, want the feed asked again", got)
+	}
+	if got := len(reader.readCalls()); got != 1 {
+		t.Fatalf("reads = %d after the silence, want none: a cut feed is not a change", got)
 	}
 	stop()
+}
+
+func TestFeedErrCancelsTheSubscriptionAndTriggersNoRead(t *testing.T) {
+	clock := newFakeClock()
+	feed := &fakeFeed{clock: clock, signals: make(chan contracts.PullRequestSignal)}
+	reader := newFakeReader(clock)
+	store := &fakeStore{}
+	stop, _ := startWatch(t, Watch{Ref: testRef(t), Reader: reader, Feed: feed, Save: store.save, Limit: &Limit{}, Clock: clock, Policy: testPolicy(time.Minute)})
+
+	reader.awaitRead(t)
+	clock.awaitArm(t)
+	feed.signals <- contracts.PullRequestSignal{Err: errBoom}
+	awaitDone(t, feed.subscriptionContext(0))
+	clock.awaitArm(t)
+	if got := len(reader.readCalls()); got != 1 {
+		t.Fatalf("reads = %d after a feed error, want none: the read waits for the cadence", got)
+	}
+	stop()
+}
+
+func TestRefusalMidStreamPausesTheFeed(t *testing.T) {
+	clock := newFakeClock()
+	feed := &fakeFeed{clock: clock, signals: make(chan contracts.PullRequestSignal)}
+	reader := newFakeReader(clock)
+	store := &fakeStore{}
+	stop, _ := startWatch(t, Watch{Ref: testRef(t), Reader: reader, Feed: feed, Save: store.save, Limit: &Limit{}, Clock: clock, Policy: testPolicy(time.Minute)})
+
+	reader.awaitRead(t)
+	clock.awaitArm(t)
+	feed.signals <- contracts.PullRequestSignal{Err: contracts.ErrFeedRefused}
+	awaitDone(t, feed.subscriptionContext(0))
+	for guard := 0; len(feed.subscriptions()) < 2; guard++ {
+		if guard > 100 {
+			t.Fatal("the refused feed was never asked again")
+		}
+		clock.tick(t)
+	}
+	times := feed.subscriptions()
+	if gap := times[1].Sub(times[0]); gap < time.Hour {
+		t.Fatalf("feed asked again after %v, want at least the pause of 1h", gap)
+	}
+	stop()
+}
+
+func awaitDone(t *testing.T, ctx context.Context) {
+	t.Helper()
+	select {
+	case <-ctx.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("the feed subscription was not cancelled")
+	}
 }

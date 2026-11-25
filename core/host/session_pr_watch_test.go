@@ -9,6 +9,7 @@ import (
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher-contracts/forgetest"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
@@ -384,4 +385,59 @@ func TestRunReturnsOnlyAfterEveryWatchEnds(t *testing.T) {
 	if groups := groupCount(w); groups != 0 {
 		t.Fatalf("groups = %d after Run returned, want 0", groups)
 	}
+}
+
+type feedPRForge struct {
+	countingPRForge
+
+	signals chan contracts.PullRequestSignal
+}
+
+func (f *feedPRForge) PullRequestEvents(ctx context.Context, _ contracts.PullRequestRef) (<-chan contracts.PullRequestSignal, error) {
+	out := make(chan contracts.PullRequestSignal)
+	go func() {
+		defer close(out)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case signal := <-f.signals:
+				select {
+				case out <- signal:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+	return out, nil
+}
+
+func TestPullRequestFeedPassesTheForgetestCheck(t *testing.T) {
+	ref, err := contracts.NewPullRequestRef(prRepoRef(t), prTestNumber)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forgetest.CheckPullRequestFeed(t, &feedPRForge{signals: make(chan contracts.PullRequestSignal)}, ref)
+}
+
+func TestFeedSignalTriggersARead(t *testing.T) {
+	dir := prFixtureRepo(t)
+	st := prState(t, dir, "")
+	openPRSession(t, st, "beta", dir, prTestNumber)
+	client := &feedPRForge{
+		countingPRForge: countingPRForge{fakePRForge: fakePRForge{pullRequest: contracts.PullRequest{State: contracts.PullRequestOpen, Revision: "r1"}}},
+		signals:         make(chan contracts.PullRequestSignal),
+	}
+	w := newPRWatchTestWatcher(t, st, client, &prWatchTestClock{now: time.Unix(0, 0)})
+	ctx := prWatchTestContext(t)
+	w.scan(ctx)
+
+	waitForPRWatch(t, "the first read", func() bool { return client.reads.Load() == 1 })
+	select {
+	case client.signals <- contracts.PullRequestSignal{Kind: contracts.PullRequestNewCommit}:
+	case <-time.After(prWatchTestTimeout):
+		t.Fatal("the watch did not subscribe to the feed of the forge")
+	}
+	waitForPRWatch(t, "a read at once after the signal", func() bool { return client.reads.Load() == 2 })
 }

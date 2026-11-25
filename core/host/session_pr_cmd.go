@@ -211,7 +211,7 @@ func (p sessionPRs) openPR(ctx context.Context, input contracts.Input) (string, 
 		return "", p.failure(language, err)
 	}
 	number := opened.Ref.Number()
-	record := state.PullRequestRecord{Number: number, State: opened.State, Draft: opened.Draft, URL: opened.URL, Revision: opened.Revision}
+	record := state.NewPullRequestRecord(number, opened)
 	if err := p.store.RecordPullRequest(name, record); err != nil {
 		return "", p.messages.Failure(language, err, clitext.SessionPROpenedUnrecorded, clitext.Params{
 			clitext.ParamName:   escapeLine(name),

@@ -18,8 +18,8 @@ import (
 const (
 	prWatchScan      = time.Minute
 	prWatchEvery     = time.Minute
-	prWatchSilence   = 10 * time.Minute
-	prWatchFeedPause = 30 * time.Minute
+	prWatchSilence   = 45 * time.Second
+	prWatchFeedPause = time.Hour
 	prWatchRetryBase = 30 * time.Second
 	prWatchRetryCap  = 15 * time.Minute
 	prWatchJitter    = 0.2
@@ -245,11 +245,13 @@ func (w *prWatcher) join(ctx context.Context, key prGroupKey, name string, targe
 func (w *prWatcher) startGroupLocked(ctx context.Context, key prGroupKey, name string, target prTarget) (*prGroup, error) {
 	groupCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	group := &prGroup{key: key, members: make(map[string]bool), cancel: cancel, finished: make(chan struct{})}
+	feed, _ := target.forge.(contracts.PullRequestFeed)
 	watch, err := prwatch.NewWatch(prwatch.Watch{
 		Ref:     target.ref,
 		Since:   w.recordedRevision(name),
 		Stagger: w.stagger(),
 		Reader:  target.forge,
+		Feed:    feed,
 		Save:    w.save(group),
 		Limit:   w.limit,
 		Clock:   w.clock,
@@ -339,7 +341,7 @@ func (w *prWatcher) saveMember(ctx context.Context, name string, number int, pul
 		return err
 	}
 	defer release()
-	record := state.PullRequestRecord{Number: number, State: pull.State, Draft: pull.Draft, URL: pull.URL, Revision: pull.Revision}
+	record := state.NewPullRequestRecord(number, pull)
 	if err := w.store.RefreshPullRequest(name, record); err != nil {
 		slog.Warn("session pull request state not saved", "session", name, "err", err)
 		return err

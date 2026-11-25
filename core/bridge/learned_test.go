@@ -333,6 +333,7 @@ func TestProjectionKeepsTheFormerRootWhenTheVaultFails(t *testing.T) {
 
 func TestRunUntilClosedInListsTheSkillsOfItsDirectory(t *testing.T) {
 	t.Setenv("HERRSCHER_STATE_DIR", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
 	t.Chdir(t.TempDir())
 	dir := t.TempDir()
 	ProjectLearnedSkills(context.Background(), &learnedOrch{nodes: []contracts.Node{learnedNode("agents/a/skills/brask-release", "release the Brask repository", "Run make tag, then make ship ZONE=4.")}}, dir)

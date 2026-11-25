@@ -220,7 +220,7 @@ func newSeedBackendWithToken(ctx context.Context, messages *hostMessages, sess s
 		Cmd:          sess.Cmd,
 		Kind:         sess.Backend,
 		Dir:          dir,
-		SkillRoot:    learnedHomeOf(dir),
+		SkillRoot:    learnedHomeOf(seedRunDir(sess)),
 		Resume:       sess.ResumeToken,
 		ModelID:      sess.ModelID,
 		Account:      sess.Account,

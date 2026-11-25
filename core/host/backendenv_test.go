@@ -470,10 +470,12 @@ func TestASeedBackendIsHandedTheLearnedSkillHomeOfItsWorktree(t *testing.T) {
 	}
 }
 
-func TestASeedBackendWithoutADirectoryIsHandedNoSkillRoot(t *testing.T) {
+func TestASeedBackendWithoutADirectoryIsHandedTheSkillHomeOfTheWorkingDirectory(t *testing.T) {
+	cwd := t.TempDir()
+	t.Chdir(cwd)
 	got := seedBackendSettings(t, state.Session{Vendor: "claude", Cmd: "claude"})
-	if root, ok := got.Settings["skill-root"]; ok {
-		t.Fatalf("skill-root %q reached the backend of a session with no directory", root)
+	if want := skills.LearnedHome(cwd); got.Get("skill-root") != want {
+		t.Fatalf("skill-root %q, want %q where a session with no directory projects its skills", got.Get("skill-root"), want)
 	}
 }
 

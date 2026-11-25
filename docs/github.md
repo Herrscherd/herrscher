@@ -175,7 +175,9 @@ the same token and only for github.com:
   the URL and the number so the pull request is not lost.
 - `herrscher session pr status --name <session>` reads the pull request again,
   stores its state, draft flag and URL in the session, and shows the title, URL,
-  state, draft flag, mergeability and head commit.
+  state, draft flag, mergeability and head commit. If the state cannot be stored,
+  the status is still shown, with a notice that the state was not recorded; in
+  `--json` the field `unrecorded` is then `true`.
 - `herrscher session pr checks --name <session>` lists the check runs of its head
   commit, reading every page up to a fixed bound.
 - `herrscher session pr comments --name <session>` lists the review threads, the
@@ -183,7 +185,11 @@ the same token and only for github.com:
   is printed.
 
 Each command accepts `--json` for the raw structure, whose state and check words
-stay in English. Human output and errors are printed in the language of the
+stay in English. A state that no forge reports is written `unknown`.
+
+Each forge call is bounded to one minute. A forge that does not answer in that
+time fails with a message saying so, and the pull request may still have been
+opened: `session pr status` tells whether it exists. Human output and errors are printed in the language of the
 session, English or French. A missing connection names `herrscher connect github`
 as the remedy, a rate limit gives the time of the reset, and a session without a
 pull request says to run `session pr open` first. The token reaches git only

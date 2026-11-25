@@ -625,9 +625,15 @@ and `p` commits, pushes the session branch to its origin and opens the pull
 request through `herrscher session pr open`, the same command as on the command
 line. The number is then recorded in the session, so the sidebar, the `/usage`
 overlay and the `/resume` picker show it as `PR #42 open`. The panel shows the
-number it got back. Without a GitHub connection, it says to run
-`herrscher connect github`. `/review` opens the same panel in review mode. Git
-calls have a timeout and run in the session's folder.
+number it got back, next to the commit SHA. Before it commits anything, the panel
+checks the GitHub connection on this host, and without one it stops and says to run
+`herrscher connect github`: nothing is committed or pushed. The check reads the
+host's health report, so it can lag behind a connection that was just made or
+lost. A channel without a session cannot open a pull request, and the panel
+refuses that before it commits. When GitHub does not answer in time, the notice
+names the commit and says to run `session pr status` to see whether the pull
+request exists, since it may have been opened. `/review` opens the same panel in
+review mode. Git calls have a timeout and run in the session's folder.
 
 ## Getting text back out
 

@@ -152,8 +152,11 @@ func TestContextOverlayReadsZeroWhenTheHostWroteNothing(t *testing.T) {
 	m := contextModel(t, 0)
 	m.tabs["c"].measureContext(contracts.Event{T: "reply", Done: true, Injected: []contracts.InjectedPart{{Part: contracts.ContextMemory, Tokens: 800}}})
 	m.tabs["c"].measureContext(contracts.Event{T: "reply", Done: true, Injected: []contracts.InjectedPart{
-		{Part: contracts.ContextMemory}, {Part: contracts.ContextSkills}, {Part: contracts.ContextDelegation},
-		{Part: contracts.ContextCapabilities}, {Part: contracts.ContextIdentity},
+		{Part: contracts.ContextMemory},
+		{Part: contracts.ContextSkills},
+		{Part: contracts.ContextDelegation},
+		{Part: contracts.ContextCapabilities},
+		{Part: contracts.ContextIdentity},
 	}})
 	view := ansi.Strip(m.contextView())
 	if strings.Contains(view, "~800") {

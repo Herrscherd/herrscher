@@ -29,7 +29,6 @@ import (
 const (
 	githubLabel  = "github"
 	gitlabLabel  = "gitlab"
-	maxListPages = 20
 	tokenUser    = "x-access-token"
 	subRepo      = "repo"
 	subList      = "list"
@@ -45,10 +44,13 @@ var ErrRepoSpec = errors.New("invalid repo spec")
 // ErrConfigCount matches a GIT_CONFIG_COUNT that is not a count from 0 to 1000.
 var ErrConfigCount = errors.New(configCount + " is not a count from 0 to " + strconv.Itoa(maxConfigs))
 
-var (
-	errTooManyPages = errors.New("repository listing has more pages than the bound")
-	specRe          = regexp.MustCompile(`^[\w.\-]+/[\w.\-]+$`)
-)
+// MaxPages bounds how many pages CollectPages fetches before it stops.
+const MaxPages = 20
+
+// ErrTooManyPages matches a listing that still has a next page after MaxPages pages.
+var ErrTooManyPages = errors.New("listing has more pages than the bound")
+
+var specRe = regexp.MustCompile(`^[\w.\-]+/[\w.\-]+$`)
 
 // Repo is one remote repository discovered on a forge host.
 type Repo struct {
@@ -150,19 +152,30 @@ func (c *Client) listGitHub(ctx context.Context) ([]Repo, error) {
 	if err != nil {
 		return nil, notConnectedAsEmpty(err, "github open")
 	}
-	var out []Repo
+	items, err := CollectPages(ctx, forge.Repositories)
+	if err != nil {
+		return nil, notConnectedAsEmpty(err, "github repositories")
+	}
+	return githubRepos(items), nil
+}
+
+// CollectPages fetches every page of a listing, following each cursor from the
+// first page, and returns the items in order. It stops with an error wrapping
+// ErrTooManyPages when a MaxPages-th page still names a next one.
+func CollectPages[T any](ctx context.Context, fetch func(context.Context, contracts.PageRequest) (contracts.Page[T], error)) ([]T, error) {
+	var items []T
 	var cursor contracts.PageCursor
 	for fetched := 1; ; fetched++ {
-		page, err := forge.Repositories(ctx, contracts.PageRequest{Cursor: cursor, Limit: contracts.MaxPageLimit})
+		page, err := fetch(ctx, contracts.PageRequest{Cursor: cursor, Limit: contracts.MaxPageLimit})
 		if err != nil {
-			return nil, notConnectedAsEmpty(err, "github repositories")
+			return nil, err
 		}
-		out = append(out, githubRepos(page.Items)...)
+		items = append(items, page.Items...)
 		if page.Next == "" {
-			return out, nil
+			return items, nil
 		}
-		if fetched == maxListPages {
-			return nil, fmt.Errorf("github repositories: %w after %d pages", errTooManyPages, maxListPages)
+		if fetched == MaxPages {
+			return nil, fmt.Errorf("%w after %d pages", ErrTooManyPages, MaxPages)
 		}
 		cursor = page.Next
 	}
@@ -234,7 +247,7 @@ func (c *Client) Clone(ctx context.Context, spec, workspace string) (string, err
 	if _, statErr := os.Stat(dir); statErr == nil {
 		return dir, nil
 	}
-	token, tokenErr := c.gitHubToken(ctx, target)
+	token, tokenErr := gitHubToken(ctx, c.creds, target)
 	if tokenErr != nil {
 		return "", fmt.Errorf("clone %s: %w", target.label, tokenErr)
 	}
@@ -370,11 +383,30 @@ func urlLocation(rest string) (string, string, bool) {
 	return host, repoPath, !strings.HasPrefix(userinfo, "-")
 }
 
-func (c *Client) gitHubToken(ctx context.Context, target cloneTarget) (contracts.ForgeToken, error) {
+func gitHubToken(ctx context.Context, creds contracts.ForgeCredentials, target cloneTarget) (contracts.ForgeToken, error) {
 	if !target.githubHTTPS {
 		return contracts.ForgeToken{}, nil
 	}
-	token, err := c.creds.Token(ctx, target.host)
+	return hostToken(ctx, creds, target.host)
+}
+
+// GitEnvironment returns the environment that runs git against host. It stops git
+// from prompting and, when creds holds a valid token for host, carries that token
+// in GIT_CONFIG_* values only, never on a command line. Without a token the
+// environment holds no credential.
+func GitEnvironment(ctx context.Context, creds contracts.ForgeCredentials, host contracts.ForgeHost) ([]string, error) {
+	token, err := hostToken(ctx, creds, host)
+	if err != nil {
+		return nil, err
+	}
+	return gitEnvironment(os.Getenv, host, token)
+}
+
+func hostToken(ctx context.Context, creds contracts.ForgeCredentials, host contracts.ForgeHost) (contracts.ForgeToken, error) {
+	if creds == nil {
+		creds = unconnected{}
+	}
+	token, err := creds.Token(ctx, host)
 	if errors.Is(err, contracts.ErrForgeNotConnected) {
 		return contracts.ForgeToken{}, nil
 	}

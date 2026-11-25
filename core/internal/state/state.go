@@ -142,6 +142,7 @@ type State struct {
 	mu           sync.Mutex                                             `json:"-"`
 	path         string                                                 `json:"-"`
 	write        func(name string, data []byte, perm os.FileMode) error `json:"-"`
+	openingPR    map[string]bool                                        `json:"-"`
 	Home         HomeRef                                                `json:"home"`
 	Repo         string                                                 `json:"repo,omitempty"`
 	Workspace    string                                                 `json:"workspace,omitempty"`

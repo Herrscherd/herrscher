@@ -2,9 +2,11 @@ package host
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -16,6 +18,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/forgeport"
+	"github.com/Herrscherd/herrscher/core/internal/forge"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -78,9 +81,9 @@ func pageAt[T any](pages [][]T, cursor contracts.PageCursor) contracts.Page[T] {
 	return contracts.Page[T]{Items: pages[index], Next: next}
 }
 
-func prForgeOpener(forge contracts.Forge) forgeOpener {
+func prForgeOpener(client contracts.Forge) forgeOpener {
 	return func(context.Context, contracts.ForgeHost) (contracts.Forge, error) {
-		return forge, nil
+		return client, nil
 	}
 }
 
@@ -129,7 +132,7 @@ func prState(t *testing.T, dir, language string) *state.State {
 func prRegistry(t *testing.T, st *state.State, opener forgeOpener) *cli.Registry {
 	t.Helper()
 	reg := cli.NewRegistry(clitext.NewMessages())
-	if err := addSessionPRVerbs(reg, clitext.NewMessages(), fixedLanguage(i18n.English), st, opener); err != nil {
+	if err := addSessionPRVerbs(reg, clitext.NewMessages(), fixedLanguage(i18n.English), st, opener, nil); err != nil {
 		t.Fatal(err)
 	}
 	return reg
@@ -165,8 +168,8 @@ func prNumbered(t *testing.T) contracts.PullRequest {
 func TestPROpenRecordsTheNumberAndOpensFromThePushedBranch(t *testing.T) {
 	dir := prFixtureRepo(t)
 	st := prState(t, dir, "")
-	forge := &fakePRForge{pullRequest: prNumbered(t)}
-	reg := prRegistry(t, st, prForgeOpener(forge))
+	fake := &fakePRForge{pullRequest: prNumbered(t)}
+	reg := prRegistry(t, st, prForgeOpener(fake))
 
 	out, err := runPR(t, reg, verbPROpen, "--name", "alpha", "--title", "Titre")
 	if err != nil {
@@ -175,10 +178,10 @@ func TestPROpenRecordsTheNumberAndOpensFromThePushedBranch(t *testing.T) {
 	if !strings.Contains(out, "#42") {
 		t.Fatalf("open output %q does not name pull request #42", out)
 	}
-	if len(forge.opened) != 1 {
-		t.Fatalf("forge opened %d pull requests, want 1", len(forge.opened))
+	if len(fake.opened) != 1 {
+		t.Fatalf("forge opened %d pull requests, want 1", len(fake.opened))
 	}
-	draft := forge.opened[0]
+	draft := fake.opened[0]
 	if draft.Head != "feat" || draft.Base != "master" || draft.Title != "Titre" || draft.Repo.String() != prRepoRef(t).String() {
 		t.Fatalf("draft = %+v, want head feat, base master (origin default), title Titre on acme/widget", draft)
 	}
@@ -194,8 +197,8 @@ func TestPROpenRefusesASessionThatAlreadyHasAPullRequest(t *testing.T) {
 	if err := st.RecordPullRequest("alpha", 7); err != nil {
 		t.Fatal(err)
 	}
-	forge := &fakePRForge{pullRequest: prNumbered(t)}
-	reg := prRegistry(t, st, prForgeOpener(forge))
+	fake := &fakePRForge{pullRequest: prNumbered(t)}
+	reg := prRegistry(t, st, prForgeOpener(fake))
 
 	_, err := runPR(t, reg, verbPROpen, "--name", "alpha", "--title", "Titre", "--base", "master")
 	if !errors.Is(err, state.ErrPullRequestRecorded) {
@@ -204,7 +207,7 @@ func TestPROpenRefusesASessionThatAlreadyHasAPullRequest(t *testing.T) {
 	if !strings.Contains(err.Error(), "already has pull request #7") {
 		t.Fatalf("error %q does not name the recorded pull request", err)
 	}
-	if len(forge.opened) != 0 {
+	if len(fake.opened) != 0 {
 		t.Fatalf("forge opened a second pull request, want none")
 	}
 }
@@ -213,14 +216,14 @@ func TestPROpenRefusesAnUnpushedBranch(t *testing.T) {
 	dir := prFixtureRepo(t)
 	commitFrame(t, dir, "v3\n")
 	st := prState(t, dir, "")
-	forge := &fakePRForge{pullRequest: prNumbered(t)}
-	reg := prRegistry(t, st, prForgeOpener(forge))
+	fake := &fakePRForge{pullRequest: prNumbered(t)}
+	reg := prRegistry(t, st, prForgeOpener(fake))
 
 	_, err := runPR(t, reg, verbPROpen, "--name", "alpha", "--title", "Titre", "--base", "master")
 	if err == nil || !strings.Contains(err.Error(), "branch feat is not pushed") {
 		t.Fatalf("open with an unpushed commit = %v, want a refusal naming branch feat", err)
 	}
-	if len(forge.opened) != 0 {
+	if len(fake.opened) != 0 {
 		t.Fatalf("forge opened a pull request for an unpushed branch")
 	}
 	sess, _ := st.FindSession("alpha")
@@ -233,8 +236,8 @@ func TestPROpenRefusesAnOriginOffGitHub(t *testing.T) {
 	dir := prFixtureRepo(t)
 	gitIn(t.Context(), t, dir, "remote", "set-url", originRemote, "https://gitlab.com/acme/widget.git")
 	st := prState(t, dir, "")
-	forge := &fakePRForge{pullRequest: prNumbered(t)}
-	reg := prRegistry(t, st, prForgeOpener(forge))
+	fake := &fakePRForge{pullRequest: prNumbered(t)}
+	reg := prRegistry(t, st, prForgeOpener(fake))
 
 	_, err := runPR(t, reg, verbPROpen, "--name", "alpha", "--title", "Titre", "--base", "master")
 	if !errors.Is(err, contracts.ErrForgeWrongHost) {
@@ -243,7 +246,7 @@ func TestPROpenRefusesAnOriginOffGitHub(t *testing.T) {
 	if !strings.Contains(err.Error(), "github.com") {
 		t.Fatalf("error %q does not name github.com", err)
 	}
-	if len(forge.opened) != 0 {
+	if len(fake.opened) != 0 {
 		t.Fatalf("forge opened a pull request on a foreign host")
 	}
 }
@@ -335,22 +338,29 @@ func TestPRChecksReadsEveryPageInOrder(t *testing.T) {
 	if err := st.RecordPullRequest("alpha", 42); err != nil {
 		t.Fatal(err)
 	}
-	forge := &fakePRForge{
+	fake := &fakePRForge{
 		pullRequest: prNumbered(t),
 		checkPages: [][]contracts.Check{
 			{{Name: "unit", Status: contracts.CheckCompleted, Conclusion: contracts.ConclusionSuccess}},
 			{{Name: "lint", Status: contracts.CheckCompleted, Conclusion: contracts.ConclusionFailure}},
 		},
 	}
-	reg := prRegistry(t, st, prForgeOpener(forge))
+	reg := prRegistry(t, st, prForgeOpener(fake))
 
-	out, err := runPR(t, reg, verbPRChecks, "--name", "alpha")
+	out, err := runPR(t, reg, verbPRChecks, "--name", "alpha", "--json")
 	if err != nil {
 		t.Fatalf("checks: %v", err)
 	}
-	unit, lint := strings.Index(out, "unit"), strings.Index(out, "lint")
-	if unit < 0 || lint < 0 || unit > lint {
-		t.Fatalf("checks output %q does not list unit then lint", out)
+	var checks []prCheckView
+	if err := json.Unmarshal([]byte(out), &checks); err != nil {
+		t.Fatalf("checks --json %q does not decode: %v", out, err)
+	}
+	want := []prCheckView{
+		{Name: "unit", Status: contracts.CheckCompleted.String(), Conclusion: contracts.ConclusionSuccess.String()},
+		{Name: "lint", Status: contracts.CheckCompleted.String(), Conclusion: contracts.ConclusionFailure.String()},
+	}
+	if !slices.Equal(checks, want) {
+		t.Fatalf("checks = %+v, want %+v in page order", checks, want)
 	}
 }
 
@@ -360,16 +370,16 @@ func TestPRChecksRefusesMoreThanTheBoundedPages(t *testing.T) {
 	if err := st.RecordPullRequest("alpha", 42); err != nil {
 		t.Fatal(err)
 	}
-	pages := make([][]contracts.Check, maxPRPages+1)
+	pages := make([][]contracts.Check, forge.MaxPages+1)
 	for index := range pages {
 		pages[index] = []contracts.Check{{Name: "check", Status: contracts.CheckCompleted}}
 	}
-	forge := &fakePRForge{pullRequest: prNumbered(t), checkPages: pages}
-	reg := prRegistry(t, st, prForgeOpener(forge))
+	fake := &fakePRForge{pullRequest: prNumbered(t), checkPages: pages}
+	reg := prRegistry(t, st, prForgeOpener(fake))
 
 	_, err := runPR(t, reg, verbPRChecks, "--name", "alpha")
-	if !errors.Is(err, errPRPages) {
-		t.Fatalf("checks over %d pages = %v, want errPRPages", maxPRPages, err)
+	if !errors.Is(err, forge.ErrTooManyPages) {
+		t.Fatalf("checks over %d pages = %v, want forge.ErrTooManyPages", forge.MaxPages, err)
 	}
 }
 
@@ -379,21 +389,25 @@ func TestPRCommentsListsUnresolvedThreadsFirst(t *testing.T) {
 	if err := st.RecordPullRequest("alpha", 42); err != nil {
 		t.Fatal(err)
 	}
-	forge := &fakePRForge{
+	fake := &fakePRForge{
 		pullRequest: prNumbered(t),
 		threadPages: [][]contracts.ReviewThread{{
 			{Path: "resolved.go", Line: 1, Resolved: true, Comments: []contracts.ReviewComment{{Author: contracts.ForgeActor{Login: "ana"}, Body: "done"}}},
 			{Path: "open.go", Line: 2, Comments: []contracts.ReviewComment{{Author: contracts.ForgeActor{Login: "bo"}, Body: "fix this"}}},
 		}},
 	}
-	reg := prRegistry(t, st, prForgeOpener(forge))
+	reg := prRegistry(t, st, prForgeOpener(fake))
 
-	out, err := runPR(t, reg, verbPRComments, "--name", "alpha")
+	out, err := runPR(t, reg, verbPRComments, "--name", "alpha", "--json")
 	if err != nil {
 		t.Fatalf("comments: %v", err)
 	}
-	if strings.Index(out, "open.go") > strings.Index(out, "resolved.go") {
-		t.Fatalf("comments output %q lists the resolved thread before the unresolved one", out)
+	var threads []prThreadView
+	if err := json.Unmarshal([]byte(out), &threads); err != nil {
+		t.Fatalf("comments --json %q does not decode: %v", out, err)
+	}
+	if len(threads) != 2 || threads[0].Path != "open.go" || threads[0].Resolved || threads[1].Path != "resolved.go" || !threads[1].Resolved {
+		t.Fatalf("threads = %+v, want open.go unresolved then resolved.go resolved", threads)
 	}
 }
 
@@ -403,13 +417,13 @@ func TestPRCommentsAreSanitized(t *testing.T) {
 	if err := st.RecordPullRequest("alpha", 42); err != nil {
 		t.Fatal(err)
 	}
-	forge := &fakePRForge{
+	fake := &fakePRForge{
 		pullRequest: prNumbered(t),
 		threadPages: [][]contracts.ReviewThread{{
 			{Path: "main.go", Line: 3, Comments: []contracts.ReviewComment{{Author: contracts.ForgeActor{Login: "eve"}, Body: "\x1b[31mred\x1b[0m"}}},
 		}},
 	}
-	reg := prRegistry(t, st, prForgeOpener(forge))
+	reg := prRegistry(t, st, prForgeOpener(fake))
 
 	out, err := runPR(t, reg, verbPRComments, "--name", "alpha")
 	if err != nil {
@@ -426,13 +440,13 @@ func TestPRCommentsReadInTheSessionLanguage(t *testing.T) {
 	if err := st.RecordPullRequest("alpha", 42); err != nil {
 		t.Fatal(err)
 	}
-	forge := &fakePRForge{
+	fake := &fakePRForge{
 		pullRequest: prNumbered(t),
 		threadPages: [][]contracts.ReviewThread{{
 			{Path: "main.go", Line: 3, Comments: []contracts.ReviewComment{{Author: contracts.ForgeActor{Login: "eve"}, Body: "merci"}}},
 		}},
 	}
-	reg := prRegistry(t, st, prForgeOpener(forge))
+	reg := prRegistry(t, st, prForgeOpener(fake))
 
 	out, err := runPR(t, reg, verbPRComments, "--name", "alpha")
 	if err != nil {

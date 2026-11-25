@@ -5617,7 +5617,7 @@
   {
     "id": "cli.session.pr.no_base",
     "description": "Error: no base branch was given and origin has no default branch",
-    "other": "origin has no default branch: pass --base"
+    "other": "no local origin/HEAD to read the default branch from: pass --base"
   },
   {
     "id": "cli.session.pr.wrong_host",
@@ -5648,5 +5648,145 @@
     "id": "cli.session.pr.pages_exceeded",
     "description": "Error: a GitHub listing has more pages than the command reads",
     "other": "GitHub listing has more than {{.Pages}} pages of results, the command stops there"
+  },
+  {
+    "id": "cli.session.pr.opened_unrecorded",
+    "description": "Failure: GitHub opened the pull request but the session did not record it",
+    "other": "session {{.Name}}: pull request #{{.Number}} was opened at {{.URL}} but could not be recorded in the session: {{.Err}}"
+  },
+  {
+    "id": "cli.session.pr.opening",
+    "description": "Refusal: a pr open for this session is still running",
+    "other": "session {{.Name}}: a pull request is already being opened"
+  },
+  {
+    "id": "cli.session.pr.remote",
+    "description": "Refusal: the session runs on a remote host",
+    "other": "session {{.Name}} runs on another host: run session pr on that host"
+  },
+  {
+    "id": "cli.session.pr.no_origin",
+    "description": "Refusal: the checkout has no origin remote",
+    "other": "{{.Path}} has no origin remote"
+  },
+  {
+    "id": "cli.session.pr.origin_read",
+    "description": "Failure: git could not read the origin remote",
+    "other": "cannot read the origin of {{.Path}}: {{.Err}}"
+  },
+  {
+    "id": "cli.session.pr.failed",
+    "description": "Failure: a cause without a catalogue key, passed through",
+    "other": "the pull request command failed: {{.Err}}"
+  },
+  {
+    "id": "cli.session.pr.unknown_value",
+    "description": "Fallback for an enum value this build does not know",
+    "other": "unknown value {{.Value}}"
+  },
+  {
+    "id": "cli.session.pr.state.open",
+    "description": "Pull request state word",
+    "other": "open"
+  },
+  {
+    "id": "cli.session.pr.state.closed",
+    "description": "Pull request state word",
+    "other": "closed"
+  },
+  {
+    "id": "cli.session.pr.state.merged",
+    "description": "Pull request state word",
+    "other": "merged"
+  },
+  {
+    "id": "cli.session.pr.merge.unknown",
+    "description": "Merge state word: the forge has not said yet",
+    "other": "unknown"
+  },
+  {
+    "id": "cli.session.pr.merge.clean",
+    "description": "Merge state word: can be merged now",
+    "other": "clean"
+  },
+  {
+    "id": "cli.session.pr.merge.conflicting",
+    "description": "Merge state word: conflicts with its base",
+    "other": "conflicting"
+  },
+  {
+    "id": "cli.session.pr.merge.blocked",
+    "description": "Merge state word: waits for required checks or reviews",
+    "other": "blocked"
+  },
+  {
+    "id": "cli.session.pr.merge.behind",
+    "description": "Merge state word: base moved past the branch",
+    "other": "behind"
+  },
+  {
+    "id": "cli.session.pr.merge.draft",
+    "description": "Merge state word: still a draft",
+    "other": "draft"
+  },
+  {
+    "id": "cli.session.pr.check_status.queued",
+    "description": "Check status word",
+    "other": "queued"
+  },
+  {
+    "id": "cli.session.pr.check_status.in_progress",
+    "description": "Check status word",
+    "other": "in progress"
+  },
+  {
+    "id": "cli.session.pr.check_status.completed",
+    "description": "Check status word",
+    "other": "completed"
+  },
+  {
+    "id": "cli.session.pr.conclusion.none",
+    "description": "Check conclusion word: not completed yet",
+    "other": "no conclusion"
+  },
+  {
+    "id": "cli.session.pr.conclusion.success",
+    "description": "Check conclusion word",
+    "other": "success"
+  },
+  {
+    "id": "cli.session.pr.conclusion.failure",
+    "description": "Check conclusion word",
+    "other": "failure"
+  },
+  {
+    "id": "cli.session.pr.conclusion.neutral",
+    "description": "Check conclusion word",
+    "other": "neutral"
+  },
+  {
+    "id": "cli.session.pr.conclusion.cancelled",
+    "description": "Check conclusion word",
+    "other": "cancelled"
+  },
+  {
+    "id": "cli.session.pr.conclusion.skipped",
+    "description": "Check conclusion word",
+    "other": "skipped"
+  },
+  {
+    "id": "cli.session.pr.conclusion.timed_out",
+    "description": "Check conclusion word",
+    "other": "timed out"
+  },
+  {
+    "id": "cli.session.pr.conclusion.action_required",
+    "description": "Check conclusion word",
+    "other": "action required"
+  },
+  {
+    "id": "cli.session.pr.conclusion.other",
+    "description": "Check conclusion word: completed without a conclusion the plugin can name",
+    "other": "other"
   }
 ]

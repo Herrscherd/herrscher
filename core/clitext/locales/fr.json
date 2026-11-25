@@ -5617,7 +5617,7 @@
   {
     "id": "cli.session.pr.no_base",
     "description": "Error: no base branch was given and origin has no default branch",
-    "other": "origin n'a pas de branche par défaut : passer --base"
+    "other": "aucun origin/HEAD local pour lire la branche par défaut : passer --base"
   },
   {
     "id": "cli.session.pr.wrong_host",
@@ -5648,5 +5648,145 @@
     "id": "cli.session.pr.pages_exceeded",
     "description": "Error: a GitHub listing has more pages than the command reads",
     "other": "la liste GitHub dépasse {{.Pages}} pages de résultats, la commande s'arrête là"
+  },
+  {
+    "id": "cli.session.pr.opened_unrecorded",
+    "description": "Échec : GitHub a ouvert la pull request mais la session ne l'a pas enregistrée",
+    "other": "session {{.Name}} : pull request #{{.Number}} ouverte à {{.URL}} mais non enregistrée dans la session : {{.Err}}"
+  },
+  {
+    "id": "cli.session.pr.opening",
+    "description": "Refus : un pr open est déjà en cours pour cette session",
+    "other": "la session {{.Name}} a déjà une pull request en cours d'ouverture"
+  },
+  {
+    "id": "cli.session.pr.remote",
+    "description": "Refus : la session tourne sur un hôte distant",
+    "other": "la session {{.Name}} tourne sur un autre hôte : lancer session pr sur cet hôte"
+  },
+  {
+    "id": "cli.session.pr.no_origin",
+    "description": "Refus : la copie de travail n'a pas de remote origin",
+    "other": "{{.Path}} n'a pas de remote origin"
+  },
+  {
+    "id": "cli.session.pr.origin_read",
+    "description": "Échec : git n'a pas pu lire le remote origin",
+    "other": "lecture de l'origine de {{.Path}} impossible : {{.Err}}"
+  },
+  {
+    "id": "cli.session.pr.failed",
+    "description": "Échec : une cause sans clé du catalogue, transmise telle quelle",
+    "other": "la commande pull request a échoué : {{.Err}}"
+  },
+  {
+    "id": "cli.session.pr.unknown_value",
+    "description": "Repli pour une valeur d'énumération que ce build ne connaît pas",
+    "other": "valeur inconnue {{.Value}}"
+  },
+  {
+    "id": "cli.session.pr.state.open",
+    "description": "Mot d'état de pull request",
+    "other": "ouverte"
+  },
+  {
+    "id": "cli.session.pr.state.closed",
+    "description": "Mot d'état de pull request",
+    "other": "fermée"
+  },
+  {
+    "id": "cli.session.pr.state.merged",
+    "description": "Mot d'état de pull request",
+    "other": "fusionnée"
+  },
+  {
+    "id": "cli.session.pr.merge.unknown",
+    "description": "Mot d'état de fusion : la forge ne s'est pas prononcée",
+    "other": "inconnue"
+  },
+  {
+    "id": "cli.session.pr.merge.clean",
+    "description": "Mot d'état de fusion : fusionnable maintenant",
+    "other": "propre"
+  },
+  {
+    "id": "cli.session.pr.merge.conflicting",
+    "description": "Mot d'état de fusion : en conflit avec sa base",
+    "other": "en conflit"
+  },
+  {
+    "id": "cli.session.pr.merge.blocked",
+    "description": "Mot d'état de fusion : attend des contrôles ou des revues requis",
+    "other": "bloquée"
+  },
+  {
+    "id": "cli.session.pr.merge.behind",
+    "description": "Mot d'état de fusion : la base a avancé",
+    "other": "en retard"
+  },
+  {
+    "id": "cli.session.pr.merge.draft",
+    "description": "Mot d'état de fusion : encore un brouillon",
+    "other": "brouillon"
+  },
+  {
+    "id": "cli.session.pr.check_status.queued",
+    "description": "Mot d'état de contrôle",
+    "other": "en file"
+  },
+  {
+    "id": "cli.session.pr.check_status.in_progress",
+    "description": "Mot d'état de contrôle",
+    "other": "en cours"
+  },
+  {
+    "id": "cli.session.pr.check_status.completed",
+    "description": "Mot d'état de contrôle",
+    "other": "terminé"
+  },
+  {
+    "id": "cli.session.pr.conclusion.none",
+    "description": "Mot de conclusion de contrôle : pas encore terminé",
+    "other": "sans conclusion"
+  },
+  {
+    "id": "cli.session.pr.conclusion.success",
+    "description": "Mot de conclusion de contrôle",
+    "other": "réussi"
+  },
+  {
+    "id": "cli.session.pr.conclusion.failure",
+    "description": "Mot de conclusion de contrôle",
+    "other": "échec"
+  },
+  {
+    "id": "cli.session.pr.conclusion.neutral",
+    "description": "Mot de conclusion de contrôle",
+    "other": "neutre"
+  },
+  {
+    "id": "cli.session.pr.conclusion.cancelled",
+    "description": "Mot de conclusion de contrôle",
+    "other": "annulé"
+  },
+  {
+    "id": "cli.session.pr.conclusion.skipped",
+    "description": "Mot de conclusion de contrôle",
+    "other": "ignoré"
+  },
+  {
+    "id": "cli.session.pr.conclusion.timed_out",
+    "description": "Mot de conclusion de contrôle",
+    "other": "dépassé"
+  },
+  {
+    "id": "cli.session.pr.conclusion.action_required",
+    "description": "Mot de conclusion de contrôle",
+    "other": "action requise"
+  },
+  {
+    "id": "cli.session.pr.conclusion.other",
+    "description": "Mot de conclusion de contrôle : terminé sans conclusion nommable",
+    "other": "autre"
   }
 ]

@@ -9,8 +9,8 @@ import (
 const turnInterruptedKind = state.KindTurnInterrupted
 
 func (h *hub) openTurnMark(session, turnID string) {
-	if sess, ok := h.st.FindSession(session); ok {
-		h.announceInterruptedTurn(sess)
+	if sess, ok := h.st.FindSession(session); ok && !h.announceInterruptedTurn(sess) {
+		return
 	}
 	end := h.persists.begin()
 	defer end()
@@ -54,18 +54,19 @@ func interruptedTurnEntry(turnID string) state.TranscriptEntry {
 	}
 }
 
-func (h *hub) announceInterruptedTurn(sess state.Session) {
+func (h *hub) announceInterruptedTurn(sess state.Session) bool {
 	if sess.InterruptedTurn == "" {
-		return
+		return true
 	}
 	if sess.FinishedTurn == sess.InterruptedTurn || h.interruptionAnnounced(sess.Name, sess.InterruptedTurn) {
 		h.clearTurnMark(sess.Name, sess.InterruptedTurn)
-		return
+		return true
 	}
 	if err := h.appendTranscript(sess.Name, interruptedTurnEntry(sess.InterruptedTurn)); err != nil {
 		lang := h.sessionLanguageSource(sess.Name)
 		warnLive(h.messages, h.warnings, lang, "warn.session_transcript", map[string]any{nameParam: sess.Name, detailParam: err})
-		return
+		return false
 	}
 	h.clearTurnMark(sess.Name, sess.InterruptedTurn)
+	return true
 }

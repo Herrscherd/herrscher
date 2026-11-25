@@ -54,6 +54,33 @@ func TestSampleSkipsIneligibleItems(t *testing.T) {
 	}
 }
 
+func TestSampleReadsNumericAnswersAsWritten(t *testing.T) {
+	fixture := `[{"question_id":"big","question_type":"multi-session","question":"q","answer":1000000,"haystack_session_ids":["s1"],"haystack_sessions":[[{"role":"user","content":"x"}]],"answer_session_ids":["s1"]}]`
+	items, _, _, err := sampleItems(strings.NewReader(fixture), 10, 1, 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("sampled %d items, want the numeric answer kept", len(items))
+	}
+	if got := itemTask(items[0]).want; len(got) != 1 || got[0] != "1000000" {
+		t.Errorf("want %q, want the number written in full", got)
+	}
+}
+
+func TestSampleSkipsItemsWithoutAUsableAnswer(t *testing.T) {
+	const evidence = `"haystack_session_ids":["s1"],"haystack_sessions":[[{"role":"user","content":"x"}]],"answer_session_ids":["s1"]`
+	fixture := `[{"question_id":"keep","question_type":"multi-session","question":"q","answer":"a",` + evidence + `},` +
+		`{"question_id":"null-answer","question_type":"multi-session","question":"q","answer":null,` + evidence + `},` +
+		`{"question_id":"blank-answer","question_type":"multi-session","question":"q","answer":"  ",` + evidence + `},` +
+		`{"question_id":"object-answer","question_type":"multi-session","question":"q","answer":{"x":1},` + evidence + `},` +
+		`{"question_id":"missing-answer","question_type":"multi-session","question":"q",` + evidence + `}]`
+	ids := sampledIDs(t, fixture, 10, 1)
+	if strings.Join(ids, ",") != "keep" {
+		t.Errorf("sampled %v, want only the item with an answer", ids)
+	}
+}
+
 func TestItemTaskAsksTheQuestionAfterItsEvidence(t *testing.T) {
 	item := lmeItem{
 		QuestionID:   "q1",

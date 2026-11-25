@@ -317,6 +317,11 @@
     "other": "la passe {{.Run}} n'a enregistré aucun coût, et un plafond en dollars en exige un : le banc s'arrête"
   },
   {
+    "id": "membench.error.spend_partial",
+    "description": "Message of the memory bench: error.spend_partial",
+    "other": "la passe {{.Run}} n'a pu être lue qu'en partie dans son registre d'usage : la dépense de cet appel n'est connue qu'en partie et le total du rapport est une borne inférieure, le banc s'arrête"
+  },
+  {
     "id": "membench.error.prompt_long",
     "description": "Message of the memory bench: error.prompt_long",
     "other": "la passe {{.Run}} enverrait un prompt de plus de {{.Limit}}, la taille maximale d'un argument : le banc refuse cet élément et s'arrête"

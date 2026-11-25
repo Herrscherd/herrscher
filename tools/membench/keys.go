@@ -65,6 +65,7 @@ const (
 	msgErrAuthFileRead    msgKey = "membench.error.credentials_read"
 	msgErrNoUsage         msgKey = "membench.error.no_usage"
 	msgErrNoCost          msgKey = "membench.error.no_cost"
+	msgErrSpendPartial    msgKey = "membench.error.spend_partial"
 	msgErrPromptLong      msgKey = "membench.error.prompt_long"
 	msgSkippedLong        msgKey = "membench.skipped_long"
 	msgReportTitle        msgKey = "membench.report.title"
@@ -141,6 +142,7 @@ func paramTable() []keyParams {
 		{key: msgErrAuthFileRead, params: []string{paramPath}},
 		{key: msgErrNoUsage, params: []string{paramRun}},
 		{key: msgErrNoCost, params: []string{paramRun}},
+		{key: msgErrSpendPartial, params: []string{paramRun}},
 		{key: msgErrPromptLong, params: []string{paramRun, paramLimit}},
 		{key: msgSkippedLong, params: []string{paramCount}},
 		{key: msgStatusFailed, params: []string{paramDetail}},

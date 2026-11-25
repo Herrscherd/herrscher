@@ -72,8 +72,9 @@ With `-dataset`, the bench samples items of a LongMemEval file. Each item's
 evidence sessions are taught in order, then its question is asked. The five
 capabilities are extraction, multi-session, temporal reasoning, knowledge
 update and abstention. An item is eligible when it has evidence sessions, fits
-within `-max-turns`, has a known question type, and has an answer (abstention
-items may have none).
+within `-max-turns`, has a known question type, and has an answer: a non-blank
+string or a number, written in full in the task. An item with a null, blank or
+other answer is skipped.
 
 The file is streamed, never loaded whole, and it is capped at 512 MiB and
 100000 items. The sample keeps the items with the lowest seeded hash of their
@@ -235,3 +236,9 @@ names.
   signalled on cancellation and reaped after every call. The signal reaches only
   that group. A descendant that leaves it, for example with `setsid`, is not
   reached and can outlive its call, even a successful one.
+- Credentials on a killed run: the credentials file is copied into each run's
+  directory, and that directory is removed when the run ends. A SIGKILL of the
+  bench skips the removal, so the copy stays on disk until a later launch sweeps
+  the directory of the dead owner. The sweep runs before the new run directory
+  and its copy are made, so a launch never removes a copy it is still using. The
+  window lasts until the next launch.

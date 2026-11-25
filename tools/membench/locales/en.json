@@ -317,6 +317,11 @@
     "other": "run {{.Run}} recorded no cost, and a US dollar ceiling needs one: the bench stopped"
   },
   {
+    "id": "membench.error.spend_partial",
+    "description": "Message of the memory bench: error.spend_partial",
+    "other": "run {{.Run}} could only be read in part from its usage ledger, so the spend of that call is only partly known and the report total is a lower bound: the bench stopped"
+  },
+  {
     "id": "membench.error.prompt_long",
     "description": "Message of the memory bench: error.prompt_long",
     "other": "run {{.Run}} would send a prompt above {{.Limit}}, the most an argument can carry: the bench refused that item and stopped"

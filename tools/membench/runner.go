@@ -192,7 +192,7 @@ func (r *runner) call(ctx context.Context, box sandbox, current task, request st
 	text, invokeErr := r.invoke(ctx, box, request, assignments)
 	cumulative, readErr := readTally(box.state)
 	if readErr != nil {
-		return "", tally{}, runFailure(current.id, errors.Join(invokeErr, readErr))
+		return "", cumulative, messageError{key: msgErrSpendPartial, params: params{paramRun: current.id}, cause: runFailure(current.id, errors.Join(invokeErr, readErr))}
 	}
 	if invokeErr != nil {
 		return "", cumulative, runFailure(current.id, invokeErr)

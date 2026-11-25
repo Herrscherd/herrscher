@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 )
 
 const deadPID = 2147483646
@@ -45,6 +46,25 @@ func TestSweepRemovesOnlyOrphanedBenchRuns(t *testing.T) {
 	}
 	if _, err := os.Stat(orphan); !os.IsNotExist(err) {
 		t.Errorf("orphaned run %s still exists: %v", orphan, err)
+	}
+}
+
+func TestSweepRemovesStaleUnownedRunsOnly(t *testing.T) {
+	root := t.TempDir()
+	stale := makeRun(t, root, "run-1101", 0)
+	fresh := makeRun(t, root, "run-1102", 0)
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := sweepOrphans(root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Errorf("stale unowned run %s still exists: %v", stale, err)
+	}
+	if _, err := os.Stat(fresh); err != nil {
+		t.Errorf("fresh unowned run %s was removed: %v", fresh, err)
 	}
 }
 

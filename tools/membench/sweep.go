@@ -7,9 +7,13 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
-const ownerFileName = "owner.pid"
+const (
+	ownerFileName = "owner.pid"
+	unownedGrace  = 10 * time.Minute
+)
 
 var runDirName = regexp.MustCompile(`^run-\d+$`)
 
@@ -44,11 +48,19 @@ func sweepOrphans(benchRoot string) error {
 func orphaned(dir string) bool {
 	data, err := os.ReadFile(filepath.Join(dir, ownerFileName))
 	if err != nil {
-		return false
+		return unownedStale(dir)
 	}
 	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil || pid <= 0 {
-		return false
+		return unownedStale(dir)
 	}
 	return !processAlive(pid)
+}
+
+func unownedStale(dir string) bool {
+	info, err := os.Stat(dir)
+	if err != nil {
+		return false
+	}
+	return time.Since(info.ModTime()) > unownedGrace
 }

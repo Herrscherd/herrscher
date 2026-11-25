@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"slices"
@@ -210,7 +209,7 @@ func eligibleItem(item lmeItem, maxTurns int) bool {
 	if len(evidenceSessions(item)) == 0 || len(evidenceSessions(item))+1 > maxTurns {
 		return false
 	}
-	return isAbstention(item) || strings.TrimSpace(answerText(item)) != ""
+	return strings.TrimSpace(answerText(item)) != ""
 }
 
 func capabilityOf(item lmeItem) (msgKey, bool) {
@@ -235,7 +234,13 @@ func isAbstention(item lmeItem) bool {
 }
 
 func answerText(item lmeItem) string {
-	return fmt.Sprint(item.Answer)
+	switch answer := item.Answer.(type) {
+	case string:
+		return answer
+	case float64:
+		return strconv.FormatFloat(answer, 'f', -1, 64)
+	}
+	return ""
 }
 
 func evidenceSessions(item lmeItem) []int {

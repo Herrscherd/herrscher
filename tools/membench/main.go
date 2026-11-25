@@ -31,6 +31,7 @@ const (
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	context.AfterFunc(ctx, stop)
 	code := run(ctx, os.Args[1:], os.Stdout, os.Stderr, os.Getenv)
 	stop()
 	os.Exit(int(code))

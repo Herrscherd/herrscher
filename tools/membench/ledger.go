@@ -33,9 +33,6 @@ func (t tally) spend() spend {
 func readTally(stateDir string) (tally, error) {
 	ledger := usage.Ledger{Dir: filepath.Join(stateDir, usageSubdir), Now: time.Now}
 	records, err := ledger.Records(usage.Range24h)
-	if err != nil {
-		return tally{}, fmt.Errorf("membench usage: %w", err)
-	}
 	var total tally
 	for i := range records {
 		record := records[i]
@@ -43,6 +40,9 @@ func readTally(stateDir string) (tally, error) {
 		total.input += record.In
 		total.tokens += record.In + record.Out + record.CacheRead + record.CacheCreate
 		total.usd += record.Cost
+	}
+	if err != nil {
+		return total, fmt.Errorf("membench usage: %w", err)
 	}
 	return total, nil
 }

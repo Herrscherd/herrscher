@@ -29,6 +29,10 @@ func ProjectLearnedSkills(ctx context.Context, orch contracts.Orchestrator, cwd 
 	if !ok {
 		return
 	}
+	if linked := skills.LinkedLearnedDir(cwd); linked != "" {
+		logger.Warn("learned skills not projected: a directory of the projection is a symbolic link", "path", linked)
+		return
+	}
 	removeLegacyProjection(cwd)
 	nodes, err := src.LearnedSkills(ctx)
 	if err != nil {

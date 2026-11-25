@@ -144,7 +144,7 @@ func (f backendFlags) request(models *host.ModelDiscovery, skillRoot string) hos
 
 func workingSkillRoot() string {
 	cwd, err := os.Getwd()
-	if err != nil {
+	if err != nil || skills.LinkedLearnedDir(cwd) != "" {
 		return ""
 	}
 	return skills.LearnedHome(cwd)

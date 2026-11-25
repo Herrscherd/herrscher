@@ -240,7 +240,7 @@ func seedBackendDir(sess state.Session) string {
 }
 
 func learnedHomeOf(dir string) string {
-	if dir == "" {
+	if dir == "" || skills.LinkedLearnedDir(dir) != "" {
 		return ""
 	}
 	return skills.LearnedHome(dir)

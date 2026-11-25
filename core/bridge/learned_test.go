@@ -243,3 +243,28 @@ func TestProjectionRemovesTheFormerRoot(t *testing.T) {
 		t.Fatalf("Discover found %d skills under the new root, want 1", len(got))
 	}
 }
+
+func TestProjectionRefusesALinkedHome(t *testing.T) {
+	outside := t.TempDir()
+	kept := filepath.Join(outside, "skills", "mine", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(kept), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(kept, []byte("---\nname: mine\n---\nmine\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cwd := t.TempDir()
+	if err := os.Symlink(outside, skills.LearnedHome(cwd)); err != nil {
+		t.Fatal(err)
+	}
+	orch := &learnedOrch{nodes: []contracts.Node{learnedNode("agents/a/skills/retry-http", "wait out a 429", "Retry once.")}}
+
+	ProjectLearnedSkills(context.Background(), orch, cwd)
+
+	if _, err := os.Stat(kept); err != nil {
+		t.Fatalf("a file outside the worktree was removed through a linked .herrscher: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outside, ".claude")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the projection wrote outside the worktree through a linked .herrscher (%v)", err)
+	}
+}

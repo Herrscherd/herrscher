@@ -1,6 +1,7 @@
 package host
 
 import (
+	"os"
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -41,5 +42,15 @@ func TestSeedBackendWithoutADirectoryNamesNoSkillRoot(t *testing.T) {
 	applyBackendRequest(settings, BackendRequest{SkillRoot: learnedHomeOf(seedBackendDir(state.Session{}))}, modelRoute{})
 	if got, ok := settings["skill-root"]; ok {
 		t.Fatalf("skill-root setting %q with no session directory", got)
+	}
+}
+
+func TestSeedBackendNamesNoSkillRootThroughALinkedHome(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Symlink(t.TempDir(), skills.LearnedHome(dir)); err != nil {
+		t.Fatal(err)
+	}
+	if got := learnedHomeOf(dir); got != "" {
+		t.Fatalf("skill root %q through a linked .herrscher, would open a directory outside the worktree to the vendor", got)
 	}
 }

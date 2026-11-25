@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/skills"
 )
 
 func creds(t *testing.T) contracts.GatewayCreds {
@@ -438,5 +440,27 @@ func TestChooseVendorReadsTheBackendEnvironment(t *testing.T) {
 	}
 	if vendor != "beta" {
 		t.Fatalf("vendor %q, want beta from HERRSCHER_BACKEND when neither the vendor nor the model is given", vendor)
+	}
+}
+
+func TestASeedBackendIsHandedTheLearnedSkillHomeOfItsWorktree(t *testing.T) {
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+	var got contracts.PluginConfig
+	contracts.Default.Register(contracts.Plugin{
+		Manifest: contracts.Manifest{Kind: "claude", Category: contracts.CategoryBackend},
+		Backend: func(_ context.Context, cfg contracts.PluginConfig) (contracts.Backend, error) {
+			got = cfg
+			return seedBackend{}, nil
+		},
+	})
+	worktree := t.TempDir()
+
+	if _, err := newSeedBackend(context.Background(), newHostMessages(), state.Session{Vendor: "claude", Cmd: "claude", Worktree: worktree}, nil, nil); err != nil {
+		t.Fatalf("newSeedBackend: %v", err)
+	}
+	if want := skills.LearnedHome(worktree); got.Get("skill-root") != want {
+		t.Fatalf("skill-root %q reached the backend, want %q", got.Get("skill-root"), want)
 	}
 }

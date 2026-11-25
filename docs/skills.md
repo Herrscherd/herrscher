@@ -29,7 +29,9 @@ it is rewritten and pruned at session start, so nothing hand-written should live
 The projection runs in both places a session starts: the hub of a long-running session and
 the one-shot run of `--print` or a seed, which projects into the session's worktree before
 its backend starts. An earlier release projected into `<workspace>/.herrscher/skills`; that
-directory is removed at the next projection.
+directory is removed at the next projection. Nothing is projected, removed or handed to the vendor
+when `.herrscher`, `.herrscher/.claude` or one of the two skill roots is a symbolic link,
+since a repository could commit one that points outside the worktree.
 
 `Discover` only scans **immediate** `<root>/<name>/SKILL.md` entries. A missing root, an
 unreadable entry, or a `SKILL.md` that does not open with a `---` fence or has no `name`

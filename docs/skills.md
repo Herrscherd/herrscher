@@ -16,7 +16,7 @@ so a repo skill overrides a global one of the same name.
 | Order | Root | Why |
 |-------|------|-----|
 | 1 | `<workspace>/.claude/skills/<name>/SKILL.md` | The session's repo: the bridge runs with `cwd = workspace`. |
-| 2 | `<workspace>/.herrscher/skills/<name>/SKILL.md` | The skills this agent wrote for itself, projected from memory at session start. |
+| 2 | `<workspace>/.herrscher/.claude/skills/<name>/SKILL.md` | The skills this agent wrote for itself, projected from memory at session start. |
 | 3 | `~/.claude/skills/<name>/SKILL.md` | User-global skills. |
 | 4 | `skills.roots` from `config.json` | Extra roots, appended after the three defaults. |
 
@@ -26,6 +26,10 @@ machine-wide playbook, because this agent's experience on this project is more s
 an instruction to the machine. Root 2 exists only when
 self-authored skills are on, and it belongs to the projection:
 it is rewritten and pruned at session start, so nothing hand-written should live there.
+The projection runs in both places a session starts: the hub of a long-running session and
+the one-shot run of `--print` or a seed, which projects into the session's worktree before
+its backend starts. An earlier release projected into `<workspace>/.herrscher/skills`; that
+directory is removed at the next projection.
 
 `Discover` only scans **immediate** `<root>/<name>/SKILL.md` entries. A missing root, an
 unreadable entry, or a `SKILL.md` that does not open with a `---` fence or has no `name`
@@ -94,7 +98,14 @@ type SkillNative interface {
 
 The **claude** backend returns `true` (the `claude` CLI reads `.claude/skills` and
 `~/.claude/skills` on its own), so `newSkillEngine` returns a **nil** engine and the hub
-injects nothing, so no double loading. Backends that do not implement the capability, such
+injects nothing, so no double loading.
+
+The CLI does not read root 2 on its own, so the host hands the backend the directory that
+holds it, `<workspace>/.herrscher`, as the `skill-root` setting. The claude backend passes it
+as `--add-dir`, and the CLI loads the skills under `<workspace>/.herrscher/.claude/skills` as
+native skills. Without it, a skill the agent learned reached a claude session through no
+path: the recall leaves skill nodes out, since they are meant to come from the projection,
+and the engine that would list them is off for a native backend. Backends that do not implement the capability, such
 as codex and cursor, get the host-side engine.
 
 The engine is also nil when the feature is switched off in config. A nil engine means the

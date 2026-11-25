@@ -39,7 +39,7 @@ func TestProjectionRoundTripsThroughDiscover(t *testing.T) {
 		learnedNode("agents/a/skills/retry-http", "wait out a 429 before retrying", "Read Retry-After, sleep, retry once."),
 	}}
 
-	projectLearnedSkills(context.Background(), orch, cwd)
+	ProjectLearnedSkills(context.Background(), orch, cwd)
 
 	found := skills.Discover([]string{learnedRoot(cwd)})
 	if len(found) != 1 {
@@ -65,12 +65,12 @@ func TestProjectionIsStableAcrossRuns(t *testing.T) {
 	orch := &learnedOrch{nodes: []contracts.Node{learnedNode("agents/a/skills/x", "t", "b")}}
 	path := filepath.Join(learnedRoot(cwd), "x", "SKILL.md")
 
-	projectLearnedSkills(context.Background(), orch, cwd)
+	ProjectLearnedSkills(context.Background(), orch, cwd)
 	first, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	projectLearnedSkills(context.Background(), orch, cwd)
+	ProjectLearnedSkills(context.Background(), orch, cwd)
 	second, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -83,13 +83,13 @@ func TestProjectionIsStableAcrossRuns(t *testing.T) {
 func TestProjectionRemovesWhatIsNoLongerProjected(t *testing.T) {
 	cwd := t.TempDir()
 	orch := &learnedOrch{nodes: []contracts.Node{learnedNode("agents/a/skills/gone", "t", "b")}}
-	projectLearnedSkills(context.Background(), orch, cwd)
+	ProjectLearnedSkills(context.Background(), orch, cwd)
 	if len(skills.Discover([]string{learnedRoot(cwd)})) != 1 {
 		t.Fatal("setup: the skill was not projected")
 	}
 
 	orch.nodes = nil
-	projectLearnedSkills(context.Background(), orch, cwd)
+	ProjectLearnedSkills(context.Background(), orch, cwd)
 
 	if got := skills.Discover([]string{learnedRoot(cwd)}); len(got) != 0 {
 		t.Errorf("an archived skill still lives on disk: %v", got)
@@ -108,9 +108,9 @@ func TestProjectionTouchesNothingOutsideItsOwnRoot(t *testing.T) {
 	}
 
 	orch := &learnedOrch{nodes: []contracts.Node{learnedNode("agents/a/skills/learned", "t", "b")}}
-	projectLearnedSkills(context.Background(), orch, cwd)
+	ProjectLearnedSkills(context.Background(), orch, cwd)
 	orch.nodes = nil
-	projectLearnedSkills(context.Background(), orch, cwd)
+	ProjectLearnedSkills(context.Background(), orch, cwd)
 
 	if _, err := os.Stat(filepath.Join(handWritten, "SKILL.md")); err != nil {
 		t.Fatalf("the projection destroyed a hand-written skill: %v", err)
@@ -119,8 +119,8 @@ func TestProjectionTouchesNothingOutsideItsOwnRoot(t *testing.T) {
 
 func TestProjectionIsSilentWithoutTheCapability(t *testing.T) {
 	cwd := t.TempDir()
-	projectLearnedSkills(context.Background(), plainOrch{}, cwd)
-	projectLearnedSkills(context.Background(), nil, cwd)
+	ProjectLearnedSkills(context.Background(), plainOrch{}, cwd)
+	ProjectLearnedSkills(context.Background(), nil, cwd)
 	if _, err := os.Stat(learnedRoot(cwd)); !os.IsNotExist(err) {
 		t.Errorf("an orchestrator without the capability still made a root: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestProjectionIsSilentWithoutTheCapability(t *testing.T) {
 
 func TestProjectionSurvivesAnUnreachableVault(t *testing.T) {
 	cwd := t.TempDir()
-	projectLearnedSkills(context.Background(), &learnedOrch{err: errors.New("vault unreachable")}, cwd)
+	ProjectLearnedSkills(context.Background(), &learnedOrch{err: errors.New("vault unreachable")}, cwd)
 	if _, err := os.Stat(learnedRoot(cwd)); !os.IsNotExist(err) {
 		t.Errorf("wrote a root despite the error: %v", err)
 	}
@@ -221,4 +221,25 @@ func TestReportSkillUseForwardsOnlyWhatWasActivated(t *testing.T) {
 func TestReportSkillUseIsSilentWithoutTheCapability(_ *testing.T) {
 	reportSkillUse(context.Background(), plainOrch{}, []string{"alpha"})
 	reportSkillUse(context.Background(), nil, []string{"alpha"})
+}
+
+func TestProjectionRemovesTheFormerRoot(t *testing.T) {
+	cwd := t.TempDir()
+	legacy := filepath.Join(skills.LegacyLearnedRoot(cwd), "retry-http", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(legacy), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacy, []byte("---\nname: retry-http\n---\nold\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	orch := &learnedOrch{nodes: []contracts.Node{learnedNode("agents/a/skills/retry-http", "wait out a 429", "Retry once.")}}
+
+	ProjectLearnedSkills(context.Background(), orch, cwd)
+
+	if _, err := os.Stat(skills.LegacyLearnedRoot(cwd)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("former root still present (%v), so a stale copy of the skill outlives its node", err)
+	}
+	if got := skills.Discover([]string{learnedRoot(cwd)}); len(got) != 1 {
+		t.Fatalf("Discover found %d skills under the new root, want 1", len(got))
+	}
 }

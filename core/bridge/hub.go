@@ -145,7 +145,7 @@ func runHub(parent context.Context, newBackend BackendFactory, orch contracts.Or
 	if err != nil {
 		return fmt.Errorf("working directory: %w", err)
 	}
-	projectLearnedSkills(ctx, orch, cwd)
+	ProjectLearnedSkills(ctx, orch, cwd)
 	eng := newSkillEngine(backend)
 	var pin *scopePin
 	if opts.Scope != nil && !opts.ProjectPinned {

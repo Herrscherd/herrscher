@@ -10,6 +10,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	orchestrator "github.com/Herrscherd/herrscher-orchestrator"
 	"github.com/Herrscherd/herrscher/core/host"
+	"github.com/Herrscherd/herrscher/core/skills"
 )
 
 type fakeExtractor struct{}
@@ -41,7 +42,7 @@ func TestBackendFlagsCarryModelID(t *testing.T) {
 	if err := fs.Parse([]string{"--cmd", "claude", "--vendor", "claude", "--model", "gw-claude-opus-5"}); err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	req := f.request(nil)
+	req := f.request(nil, "")
 	if req.ModelID != "gw-claude-opus-5" {
 		t.Fatalf("BackendRequest.ModelID = %q, want the --model value", req.ModelID)
 	}
@@ -54,7 +55,7 @@ func TestBackendFlagsCarryModelID(t *testing.T) {
 	if err := fs.Parse([]string{"--cmd", "claude"}); err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if got := f.request(nil).ModelID; got != "" {
+	if got := f.request(nil, "").ModelID; got != "" {
 		t.Fatalf("legacy call with no --model produced ModelID %q", got)
 	}
 }
@@ -101,5 +102,18 @@ func TestNewBackendForRefusesAccountWithRemoteBackend(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "perso") {
 		t.Fatalf("error does not name the account: %v", err)
+	}
+}
+
+func TestBridgeRequestsNameTheLearnedSkillHomeOfTheWorkingDirectory(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	fs := flag.NewFlagSet("bridge", flag.ContinueOnError)
+	f := declareBackendFlags(fs, testMessages().For(i18n.English))
+	if err := fs.Parse([]string{"--cmd", "claude"}); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got, want := f.request(nil, workingSkillRoot()).SkillRoot, skills.LearnedHome(dir); got != want {
+		t.Fatalf("SkillRoot = %q, want %q so the vendor loads the skills the bridge projects there", got, want)
 	}
 }

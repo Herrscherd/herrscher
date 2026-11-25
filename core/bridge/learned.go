@@ -8,12 +8,11 @@ import (
 	"unicode"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/skills"
 )
 
-const projectionDir = ".herrscher"
-
 func learnedRoot(cwd string) string {
-	return filepath.Join(cwd, projectionDir, "skills")
+	return skills.LearnedRoot(cwd)
 }
 
 type skillSource interface {
@@ -24,11 +23,12 @@ type skillUser interface {
 	SkillUsed(ctx context.Context, names []string)
 }
 
-func projectLearnedSkills(ctx context.Context, orch contracts.Orchestrator, cwd string) {
+func ProjectLearnedSkills(ctx context.Context, orch contracts.Orchestrator, cwd string) {
 	src, ok := orch.(skillSource)
 	if !ok {
 		return
 	}
+	removeLegacyProjection(cwd)
 	nodes, err := src.LearnedSkills(ctx)
 	if err != nil {
 		logger.Warn("learned skills unavailable; this session runs on the skills already on disk", "err", err)
@@ -61,6 +61,13 @@ func projectLearnedSkills(ctx context.Context, orch contracts.Orchestrator, cwd 
 		kept[name] = true
 	}
 	pruneProjection(cwd, kept)
+}
+
+func removeLegacyProjection(cwd string) {
+	legacy := skills.LegacyLearnedRoot(cwd)
+	if err := os.RemoveAll(legacy); err != nil {
+		logger.Warn("cannot remove the learned skills projected under the former root", "root", legacy, "err", err)
+	}
 }
 
 func pruneProjection(cwd string, kept map[string]bool) {

@@ -101,7 +101,7 @@ type recordKey struct {
 func (r *runner) loop(ctx context.Context, due time.Duration) {
 	defer r.closeFeed()
 	for {
-		if !r.idle(ctx, r.heldFor(due)) {
+		if !r.idle(ctx, due) {
 			return
 		}
 		wait, ended := r.read(ctx)
@@ -112,16 +112,12 @@ func (r *runner) loop(ctx context.Context, due time.Duration) {
 	}
 }
 
-func (r *runner) heldFor(due time.Duration) time.Duration {
-	return max(due, r.watch.Limit.Until().Sub(r.watch.Clock.Now()))
-}
-
 func (r *runner) idle(ctx context.Context, due time.Duration) bool {
 	deadline := r.watch.Clock.Now().Add(due)
 	for {
 		r.subscribe(ctx)
 		now := r.watch.Clock.Now()
-		remaining := deadline.Sub(now)
+		remaining := r.readTime(deadline).Sub(now)
 		if remaining <= 0 {
 			return ctx.Err() == nil
 		}
@@ -144,9 +140,16 @@ func (r *runner) idle(ctx context.Context, due time.Duration) bool {
 			}
 			r.heardAt = r.watch.Clock.Now()
 			r.feedFailures = r.watch.Policy.Backoff
-			return true
+			deadline = r.watch.Clock.Now()
 		}
 	}
+}
+
+func (r *runner) readTime(deadline time.Time) time.Time {
+	if until := r.watch.Limit.Until(); until.After(deadline) {
+		return until
+	}
+	return deadline
 }
 
 func (r *runner) nextWake(now time.Time, remaining time.Duration) time.Duration {

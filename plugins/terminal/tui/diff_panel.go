@@ -358,32 +358,56 @@ func (m *model) commitCmd(withPR bool) tea.Cmd {
 	}
 	panel.busy, panel.dlg, panel.editing = true, dialogNone, false
 	subject, body := splitMessage(message)
-	trans := m.tr
-	repo, base, backend := m.diffRepo(panel.channel), panel.report.Base, m.tm
 	openWait := panel.openLimit
 	if openWait == 0 {
 		openWait = prOpenLimit
 	}
+	job := commitJob{
+		trans: m.tr, repo: m.diffRepo(panel.channel), backend: m.tm, withPR: withPR,
+		message: message, subject: subject, body: body, base: panel.report.Base, session: session,
+		openWait: openWait,
+	}
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), prCallLimit+gitCallLimit)
 		defer cancel()
-		if withPR {
-			if err := requireGitHub(ctx, backend); err != nil {
-				return diffActionMsg{notice: trans.t("tui.diffpanel.pr_refused", map[string]any{tplArgReason: localizedReason(trans, err)}), bad: true}
-			}
-		}
-		sha, err := repo.commit(ctx, message)
-		if err != nil {
-			return diffActionMsg{notice: trans.t("tui.diffpanel.commit_failed", map[string]any{tplArgReason: localizedReason(trans, err)}), bad: true}
-		}
-		if !withPR {
-			return diffActionMsg{notice: trans.t("tui.diffpanel.committed", map[string]any{tplArgSha: sha, "Subject": subject})}
-		}
-		if err = repo.publishBranch(ctx, base); err != nil {
-			return diffActionMsg{notice: trans.t("tui.diffpanel.pr_failed", map[string]any{tplArgSha: sha, tplArgReason: localizedReason(trans, err)}), bad: true}
-		}
-		return openPullRequest(backend, trans, sha, session, subject, body, base, openWait)
+		return job.run(ctx)
 	}
+}
+
+type commitJob struct {
+	trans    translator
+	repo     gitRepo
+	backend  Backend
+	withPR   bool
+	message  string
+	subject  string
+	body     string
+	base     string
+	session  string
+	openWait time.Duration
+}
+
+func (j commitJob) run(ctx context.Context) diffActionMsg {
+	if j.withPR {
+		if err := requireGitHub(ctx, j.backend); err != nil {
+			return j.failure("tui.diffpanel.pr_refused", err, "")
+		}
+	}
+	sha, err := j.repo.commit(ctx, j.message)
+	if err != nil {
+		return j.failure("tui.diffpanel.commit_failed", err, "")
+	}
+	if !j.withPR {
+		return diffActionMsg{notice: j.trans.t("tui.diffpanel.committed", map[string]any{tplArgSha: sha, "Subject": j.subject})}
+	}
+	if err := j.repo.publishBranch(ctx, j.base); err != nil {
+		return j.failure("tui.diffpanel.pr_failed", err, sha)
+	}
+	return openPullRequest(j.backend, j.trans, sha, j.session, j.subject, j.body, j.base, j.openWait)
+}
+
+func (j commitJob) failure(key string, err error, sha string) diffActionMsg {
+	return diffActionMsg{notice: j.trans.t(key, map[string]any{tplArgSha: sha, tplArgReason: localizedReason(j.trans, err)}), bad: true}
 }
 
 func splitMessage(message string) (string, string) {

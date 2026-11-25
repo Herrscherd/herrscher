@@ -95,7 +95,8 @@ func TestCancelKillsTheGrandchildBeforeRunReturns(t *testing.T) {
 	}
 	dir := t.TempDir()
 	pidFile := filepath.Join(dir, "pid")
-	script := "#!/bin/sh\ntrap 'sleep 2; exit 0' INT\nenv --default-signal=INT sleep 30 &\necho $! > '" + pidFile + "'\nwait\n"
+	marker := filepath.Join(dir, "marker")
+	script := fmt.Sprintf("#!/bin/sh\ntrap 'echo got > %s; sleep 3; exit 0' INT\nenv --default-signal=INT sh -c 'echo $$ > %s; exec sleep 30' &\nwait\n", marker, pidFile)
 	binary := writeGroupScript(t, dir, script)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -108,14 +109,14 @@ func TestCancelKillsTheGrandchildBeforeRunReturns(t *testing.T) {
 	}()
 	pid := readGroupPID(t, pidFile)
 	cancel()
+	waitForFile(t, marker)
+	if !waitDead(pid, time.Second) {
+		t.Fatalf("the grandchild %d was still alive a second after the leader got SIGINT, while the leader still runs: cancel did not signal its group", pid)
+	}
 	select {
-	case err := <-done:
-		t.Logf("invoke returned %v after the leader handled SIGINT", err)
+	case <-done:
 	case <-time.After(groupWaitBound):
 		t.Fatal("invoke did not return after the context was canceled")
-	}
-	if processAlive(pid) {
-		t.Errorf("the grandchild %d survived until invoke returned: cancel did not signal its group", pid)
 	}
 }
 
@@ -182,10 +183,31 @@ func readGroupPID(t *testing.T, path string) int {
 
 func waitGroupDead(t *testing.T, pid int) {
 	t.Helper()
-	deadline := time.Now().Add(groupWaitBound)
+	if !waitDead(pid, groupWaitBound) {
+		t.Fatalf("the grandchild %d is still alive after its group was reaped", pid)
+	}
+}
+
+func waitDead(pid int, bound time.Duration) bool {
+	deadline := time.Now().Add(bound)
 	for processAlive(pid) {
 		if time.Now().After(deadline) {
-			t.Fatalf("the grandchild %d is still alive after its group was reaped", pid)
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return true
+}
+
+func waitForFile(t *testing.T, path string) {
+	t.Helper()
+	deadline := time.Now().Add(groupWaitBound)
+	for {
+		if _, err := os.Stat(path); err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s never appeared", path)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}

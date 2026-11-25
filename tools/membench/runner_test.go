@@ -15,6 +15,7 @@ import (
 )
 
 func TestEveryArmPlantsTheAgedNodeBeforeTheBinaryRuns(t *testing.T) {
+	skipOffUnix(t)
 	for _, enabled := range []bool{false, true} {
 		t.Run("enabled="+strconv.FormatBool(enabled), func(t *testing.T) {
 			seen, err := playArmCapturingVault(t, enabled)
@@ -99,6 +100,7 @@ func TestPlanArmsPairsEachSettingOffThenOn(t *testing.T) {
 }
 
 func TestFailedCallIsChargedFromTheLedger(t *testing.T) {
+	skipOffUnix(t)
 	binary := filepath.Join(t.TempDir(), "herrscher")
 	if err := os.WriteFile(binary, []byte("#!/bin/sh\nexit 1\n"), 0o700); err != nil {
 		t.Fatal(err)

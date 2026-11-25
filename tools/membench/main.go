@@ -17,10 +17,11 @@ import (
 type exitCode int
 
 const (
-	exitComplete exitCode = 0
-	exitFailed   exitCode = 1
-	exitUsage    exitCode = 2
-	exitPartial  exitCode = 3
+	exitComplete    exitCode = 0
+	exitFailed      exitCode = 1
+	exitUsage       exitCode = 2
+	exitPartial     exitCode = 3
+	exitInterrupted exitCode = 4
 )
 
 const (
@@ -55,7 +56,10 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) ex
 	if runErr != nil {
 		return fail(stderr, msgs, cfg.lang, runErr, exitFailed)
 	}
-	if rep.Status == statusPartial {
+	switch rep.Status {
+	case statusInterrupted:
+		return exitInterrupted
+	case statusPartial:
 		return exitPartial
 	}
 	return exitComplete
@@ -88,7 +92,7 @@ func plannedArms(cfg config, tasks []task) int {
 func execute(ctx context.Context, cfg config, tasks []task, skipped int, msgs catalogue) (report, error) {
 	parent, err := benchParent()
 	if err != nil {
-		return failedReport(report{NotRun: plannedArms(cfg, tasks)}, msgs, cfg.lang, err)
+		return failedReport(reportFrame(cfg, plannedArms(cfg, tasks)), msgs, cfg.lang, err)
 	}
 	rep, runErr := measure(ctx, cfg, tasks, skipped, parent)
 	cleanupErr := os.RemoveAll(parent)

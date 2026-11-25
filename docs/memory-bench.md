@@ -45,7 +45,10 @@ The settings are the environment variables `MEMORY_LEARNED_SKILLS`,
 on arm and `false` in the off arm.
 
 Exit codes: `0` complete, `1` failed, `2` usage error, `3` partial (the budget
-stopped the run before every arm ran).
+stopped the run before every arm ran), `4` interrupted (a signal such as Ctrl-C
+stopped the run; the report keeps the arms finished before it and counts the
+others as not started). A call whose output exceeds 1 MiB fails its run, since a
+cut answer would score wrong without a trace.
 
 A run that fails once the tasks are loaded still writes its report. It keeps the
 arms that finished before the error, marks the status as failed with the cause,

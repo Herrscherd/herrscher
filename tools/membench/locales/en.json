@@ -157,6 +157,21 @@
     "other": "{{.Count}} arms not started"
   },
   {
+    "id": "membench.status.interrupted",
+    "description": "Message of the memory bench: status.interrupted",
+    "other": "interrupted by a signal, the report keeps the arms finished before it"
+  },
+  {
+    "id": "membench.status.failed_early",
+    "description": "Message of the memory bench: the run stopped on an error before any arm finished",
+    "other": "failed: a run stopped on an error before any arm finished: {{.Detail}}"
+  },
+  {
+    "id": "membench.error.run_output",
+    "description": "Message of the memory bench: the output of a run exceeds the cap",
+    "other": "run {{.Run}} printed more than {{.Limit}} bytes"
+  },
+  {
     "id": "membench.no_measure",
     "description": "Message of the memory bench: no_measure",
     "other": "no measure"

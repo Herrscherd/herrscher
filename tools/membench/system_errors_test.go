@@ -312,12 +312,22 @@ func TestUnusableCacheStillWritesFailedStatus(t *testing.T) {
 	if rep.NotRun != planned {
 		t.Errorf("NotRun %d, want the %d planned arms", rep.NotRun, planned)
 	}
+	if rep.Model != cfg.model || rep.LimitTokens != cfg.budget.tokens || rep.LimitUSD != cfg.budget.usd {
+		t.Errorf("failed report carries model %q and limits %d tokens, %g USD; want %q, %d, %g",
+			rep.Model, rep.LimitTokens, rep.LimitUSD, cfg.model, cfg.budget.tokens, cfg.budget.usd)
+	}
 	var out strings.Builder
 	if err := writeReport(&out, rep, cfg, msgs); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(out.String(), "budget") {
 		t.Errorf("report %q blames the budget for a failure that did not come from it", out.String())
+	}
+	if !strings.Contains(out.String(), "before any arm finished") {
+		t.Errorf("report %q does not say that no arm finished", out.String())
+	}
+	if want := fmt.Sprintf("%d arms not started", planned); !strings.Contains(out.String(), want) {
+		t.Errorf("report %q does not count the arms not started, want %q", out.String(), want)
 	}
 }
 

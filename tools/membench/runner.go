@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 	"unicode/utf8"
+
+	"github.com/Herrscherd/herrscher/internal/boundedbuf"
 )
 
 const (
@@ -19,12 +21,14 @@ const (
 	maxPromptBytes         = 128<<10 - 1
 	consolidateEveryRunEnv = "TERMINAL_CONSOLIDATE_EVERY=0"
 	maxDetailBytes         = 512
+	maxOutputBytes         = 1 << 20
 	pipeWaitDelay          = 5 * time.Second
 )
 
 var (
-	errBudgetStop = errors.New("membench: spend ceiling reached")
-	errCanceled   = errors.New("membench: run canceled")
+	errBudgetStop    = errors.New("membench: spend ceiling reached")
+	errCanceled      = errors.New("membench: run canceled")
+	errOutputTooLong = errors.New("membench: run output exceeds the cap")
 )
 
 type outcome struct {
@@ -43,6 +47,7 @@ type outcome struct {
 type execution struct {
 	outcomes []outcome
 	stopped  bool
+	canceled bool
 }
 
 type runner struct {
@@ -60,7 +65,8 @@ func (r *runner) runAll(ctx context.Context, tasks []task, settings []setting) (
 		result.outcomes = append(result.outcomes, got)
 	})
 	result.stopped = err != nil
-	if errors.Is(err, errBudgetStop) || errors.Is(err, errCanceled) {
+	result.canceled = errors.Is(err, errCanceled)
+	if errors.Is(err, errBudgetStop) || result.canceled {
 		return result, nil
 	}
 	return result, err
@@ -202,13 +208,26 @@ func (r *runner) invoke(ctx context.Context, box sandbox, request step, assignme
 	cmd.WaitDelay = pipeWaitDelay
 	cmd.Dir = box.home
 	cmd.Env = box.environ(r.model, request.agent, assignments)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
+	stdout := boundedbuf.New(maxOutputBytes)
+	var stderr bytes.Buffer
+	cmd.Stdout = stdout
 	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return "", runOutputError{stderr: redact(strings.TrimSpace(stderr.String()), r.apiKey), cause: deadlineAware(callCtx, err)}
+	runErr := cmd.Run()
+	reapErr := reapGroup(cmd)
+	if runErr != nil && !exitedWithHeldPipe(cmd, runErr) {
+		return "", runOutputError{stderr: redact(strings.TrimSpace(stderr.String()), r.apiKey), cause: errors.Join(deadlineAware(callCtx, runErr), reapErr)}
+	}
+	if reapErr != nil {
+		return "", reapErr
+	}
+	if stdout.Truncated() {
+		return "", errOutputTooLong
 	}
 	return stdout.String(), nil
+}
+
+func exitedWithHeldPipe(cmd *exec.Cmd, err error) bool {
+	return errors.Is(err, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success()
 }
 
 func deadlineAware(callCtx context.Context, err error) error {
@@ -239,6 +258,9 @@ func (o runOutputError) Unwrap() error {
 }
 
 func runFailure(label string, cause error) error {
+	if errors.Is(cause, errOutputTooLong) {
+		return messageError{key: msgErrRunOutput, params: params{paramRun: label, paramLimit: strconv.Itoa(maxOutputBytes)}, cause: cause}
+	}
 	if errors.Is(cause, context.DeadlineExceeded) {
 		return messageError{key: msgErrRunTimeout, params: params{paramRun: label}, cause: cause}
 	}

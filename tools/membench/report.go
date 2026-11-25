@@ -11,15 +11,16 @@ import (
 )
 
 const (
-	statusComplete = "complete"
-	statusPartial  = "partial"
-	statusFailed   = "failed"
-	signedPrefix   = "+"
-	percent        = 100
-	turnDecimals   = 2
-	memoryDecimals = 1
-	moneyDecimals  = 4
-	jsonIndent     = "  "
+	statusComplete    = "complete"
+	statusPartial     = "partial"
+	statusFailed      = "failed"
+	statusInterrupted = "interrupted"
+	signedPrefix      = "+"
+	percent           = 100
+	turnDecimals      = 2
+	memoryDecimals    = 1
+	moneyDecimals     = 4
+	jsonIndent        = "  "
 )
 
 type cell struct {
@@ -164,17 +165,25 @@ type rowKey struct {
 	setting string
 }
 
-func summarize(cfg config, executed execution, spent spend, planned int) report {
-	rep := report{
+func reportFrame(cfg config, planned int) report {
+	return report{
 		Status:      statusComplete,
 		Model:       cfg.model,
 		LimitTokens: cfg.budget.tokens,
 		LimitUSD:    cfg.budget.usd,
-		SpentTokens: spent.tokens,
-		SpentUSD:    spent.usd,
-		NotRun:      planned - len(executed.outcomes),
+		NotRun:      planned,
 	}
-	if executed.stopped {
+}
+
+func summarize(cfg config, executed execution, spent spend, planned int) report {
+	rep := reportFrame(cfg, planned)
+	rep.SpentTokens = spent.tokens
+	rep.SpentUSD = spent.usd
+	rep.NotRun = planned - len(executed.outcomes)
+	switch {
+	case executed.canceled:
+		rep.Status = statusInterrupted
+	case executed.stopped:
 		rep.Status = statusPartial
 	}
 	index := make(map[rowKey]int)
@@ -250,7 +259,12 @@ func renderMarkdown(out io.Writer, rep report, translator *translator) error {
 func statusLine(translator *translator, rep report) string {
 	switch rep.Status {
 	case statusFailed:
+		if len(rep.Rows) == 0 {
+			return translator.Text(msgStatusFailedEarly, params{paramDetail: rep.Failure}) + " " + notStartedText(translator, rep)
+		}
 		return translator.Text(msgStatusFailed, params{paramDetail: rep.Failure}) + " " + notStartedText(translator, rep)
+	case statusInterrupted:
+		return translator.Text(msgStatusInterrupted, nil) + " " + notStartedText(translator, rep)
 	case statusPartial:
 		stopped := translator.Text(msgBudgetStopped, params{
 			paramSpent: amountText(translator, rep.SpentTokens, rep.SpentUSD),

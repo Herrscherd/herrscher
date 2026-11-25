@@ -52,6 +52,7 @@ const (
 	msgErrRunExitDetail   msgKey = "membench.error.run_exit_detail"
 	msgErrRunSignal       msgKey = "membench.error.run_signal"
 	msgErrRunTimeout      msgKey = "membench.error.run_timeout"
+	msgErrRunOutput       msgKey = "membench.error.run_output"
 	msgErrCache           msgKey = "membench.error.cache"
 	msgErrCacheRoot       msgKey = "membench.error.cache_root"
 	msgErrSandbox         msgKey = "membench.error.sandbox"
@@ -70,6 +71,8 @@ const (
 	msgStatusComplete     msgKey = "membench.status.complete"
 	msgStatusPartial      msgKey = "membench.status.partial"
 	msgStatusFailed       msgKey = "membench.status.failed"
+	msgStatusFailedEarly  msgKey = "membench.status.failed_early"
+	msgStatusInterrupted  msgKey = "membench.status.interrupted"
 	msgBudgetStopped      msgKey = "membench.budget_stopped"
 	msgNotRun             msgKey = "membench.not_run"
 	msgNotStarted         msgKey = "membench.not_started"
@@ -132,6 +135,7 @@ func paramTable() []keyParams {
 		{key: msgErrRunExitDetail, params: []string{paramRun, paramCode, paramDetail}},
 		{key: msgErrRunSignal, params: []string{paramRun, paramSignal}},
 		{key: msgErrRunTimeout, params: []string{paramRun}},
+		{key: msgErrRunOutput, params: []string{paramRun, paramLimit}},
 		{key: msgErrAuthFileAbsent, params: []string{paramPath}},
 		{key: msgErrAuthFileRead, params: []string{paramPath}},
 		{key: msgErrNoUsage, params: []string{paramRun}},
@@ -139,6 +143,7 @@ func paramTable() []keyParams {
 		{key: msgErrPromptLong, params: []string{paramRun, paramLimit}},
 		{key: msgSkippedLong, params: []string{paramCount}},
 		{key: msgStatusFailed, params: []string{paramDetail}},
+		{key: msgStatusFailedEarly, params: []string{paramDetail}},
 		{key: msgBudgetStopped, params: []string{paramSpent, paramLimit}},
 		{key: msgNotRun, params: []string{paramCount}},
 		{key: msgNotStarted, params: []string{paramCount}},

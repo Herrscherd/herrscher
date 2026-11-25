@@ -161,6 +161,28 @@ func TestEveryDeclaredKeyRendersEveryPlaceholder(t *testing.T) {
 	}
 }
 
+func TestFrenchWordingDiffersFromEnglish(t *testing.T) {
+	msgs := loadCatalogue()
+	sharedWording := []msgKey{msgSectionLongMemEval, msgCapAbstention}
+	for _, key := range declaredMessageKeys(t) {
+		if slices.Contains(sharedWording, msgKey(key)) {
+			continue
+		}
+		args := sampleParams(msgKey(key))
+		english, err := msgs.text(i18n.English, msgKey(key), args)
+		if err != nil {
+			t.Fatalf("%s in English: %v", key, err)
+		}
+		french, err := msgs.text(i18n.French, msgKey(key), args)
+		if err != nil {
+			t.Fatalf("%s in French: %v", key, err)
+		}
+		if english == french {
+			t.Errorf("%s reads %q in both English and French", key, french)
+		}
+	}
+}
+
 func sampleParams(key msgKey) params {
 	args := params{}
 	for _, name := range paramsOf(key) {

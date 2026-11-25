@@ -228,8 +228,23 @@
   {
     "id": "membench.not_started",
     "description": "Message of the memory bench: not_started",
-    "one": "{{.Count}} non démarré",
-    "other": "{{.Count}} non démarrés"
+    "one": "{{.Count}} bras non démarré",
+    "other": "{{.Count}} bras non démarrés"
+  },
+  {
+    "id": "membench.status.interrupted",
+    "description": "Message of the memory bench: status.interrupted",
+    "other": "interrompu par un signal, le rapport garde les bras terminés avant lui"
+  },
+  {
+    "id": "membench.status.failed_early",
+    "description": "Message of the memory bench: the run stopped on an error before any arm finished",
+    "other": "échec : une passe s'est arrêtée sur une erreur avant la fin du premier bras : {{.Detail}}"
+  },
+  {
+    "id": "membench.error.run_output",
+    "description": "Message of the memory bench: the output of a run exceeds the cap",
+    "other": "la passe {{.Run}} a imprimé plus de {{.Limit}} octets"
   },
   {
     "id": "membench.report.title",

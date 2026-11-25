@@ -22,19 +22,31 @@ func newRefreshLocks() *refreshLocks {
 }
 
 func (l *refreshLocks) acquire(ctx context.Context, name string) (func(), error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	slot := l.slot(name)
+	select {
+	case slot <- struct{}{}:
+		if err := ctx.Err(); err != nil {
+			<-slot
+			return nil, err
+		}
+		return func() { <-slot }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (l *refreshLocks) slot(name string) chan struct{} {
 	l.mu.Lock()
+	defer l.mu.Unlock()
 	slot, ok := l.slots[name]
 	if !ok {
 		slot = make(chan struct{}, 1)
 		l.slots[name] = slot
 	}
-	l.mu.Unlock()
-	select {
-	case slot <- struct{}{}:
-		return func() { <-slot }, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
+	return slot
 }
 
 func (p sessionPRs) status(ctx context.Context, input contracts.Input) (contracts.Result, error) {
@@ -102,7 +114,7 @@ func (p sessionPRs) refresh(ctx context.Context, target prTarget) (contracts.Pul
 	if err != nil {
 		return contracts.PullRequest{}, false, p.failure(target.language, err)
 	}
-	record := state.PullRequestRecord{Number: target.ref.Number(), State: pullRequest.State, Draft: pullRequest.Draft, URL: pullRequest.URL}
+	record := state.PullRequestRecord{Number: target.ref.Number(), State: pullRequest.State, Draft: pullRequest.Draft, URL: pullRequest.URL, Revision: pullRequest.Revision}
 	if err := p.store.RefreshPullRequest(target.name, record); err != nil {
 		slog.Warn("session pull request state not saved", "session", target.name, "err", err)
 		return pullRequest, true, nil

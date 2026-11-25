@@ -390,24 +390,24 @@ type commitJob struct {
 func (j commitJob) run(ctx context.Context) diffActionMsg {
 	if j.withPR {
 		if err := requireGitHub(ctx, j.backend); err != nil {
-			return j.failure("tui.diffpanel.pr_refused", err, "")
+			return diffActionMsg{notice: j.trans.t("tui.diffpanel.pr_refused", map[string]any{tplArgReason: localizedReason(j.trans, err)}), bad: true}
 		}
 	}
 	sha, err := j.repo.commit(ctx, j.message)
 	if err != nil {
-		return j.failure("tui.diffpanel.commit_failed", err, "")
+		return diffActionMsg{notice: j.trans.t("tui.diffpanel.commit_failed", map[string]any{tplArgReason: localizedReason(j.trans, err)}), bad: true}
 	}
 	if !j.withPR {
 		return diffActionMsg{notice: j.trans.t("tui.diffpanel.committed", map[string]any{tplArgSha: sha, "Subject": j.subject})}
 	}
-	if err := j.repo.publishBranch(ctx, j.base); err != nil {
-		return j.failure("tui.diffpanel.pr_failed", err, sha)
-	}
-	return openPullRequest(context.WithoutCancel(ctx), j.backend, j.trans, sha, j.session, j.subject, j.body, j.base, j.openWait)
+	return j.openPR(ctx, sha)
 }
 
-func (j commitJob) failure(key string, err error, sha string) diffActionMsg {
-	return diffActionMsg{notice: j.trans.t(key, map[string]any{tplArgSha: sha, tplArgReason: localizedReason(j.trans, err)}), bad: true}
+func (j commitJob) openPR(ctx context.Context, sha string) diffActionMsg {
+	if err := j.repo.publishBranch(ctx, j.base); err != nil {
+		return diffActionMsg{notice: j.trans.t("tui.diffpanel.pr_failed", map[string]any{tplArgSha: sha, tplArgReason: localizedReason(j.trans, err)}), bad: true}
+	}
+	return openPullRequest(context.WithoutCancel(ctx), j.backend, j.trans, sha, j.session, j.subject, j.body, j.base, j.openWait)
 }
 
 func splitMessage(message string) (string, string) {

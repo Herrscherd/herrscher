@@ -115,10 +115,10 @@ many runs each side has.
 Every arm runs with `TERMINAL_CONSOLIDATE_EVERY=0`, whatever the user's default
 is. The default of 10 never consolidates a one-shot, so a one-shot would never
 sweep the vault and the report and sweep settings would have nothing to act on.
-With 0, consolidation runs at the end of each one-shot, so the off arm and the
-on arm differ only by the setting under test. A herrscher run by a user keeps
-the default of 10, so the bench measures a condition a user does not run by
-default.
+With 0, consolidation runs at the end of each one-shot run that completes, with
+an orchestrator, so the off arm and the on arm differ only by the setting under
+test. A herrscher run by a user keeps the default of 10, so the bench measures a
+condition a user does not run by default.
 
 Each arm's vault (`OBSIDIAN_VAULT`) starts with one aged node in the real
 format, `type: fact` with `lastSeen: 2001-01-01T00:00:00Z`, in off and on arms

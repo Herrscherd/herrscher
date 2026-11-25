@@ -131,7 +131,11 @@ func descendantAliveIn(root string, pid int, entry string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("cannot read the command of %d: %w", pid, err)
 	}
-	return line == "sleep "+strconv.Itoa(int(vendortest.DescendantSleep/time.Second)), nil
+	return line == "sleep "+descendantSleepArgument(), nil
+}
+
+func descendantSleepArgument() string {
+	return strconv.Itoa(int(vendortest.DescendantSleep / time.Second))
 }
 
 func gone(err error) bool {
@@ -199,7 +203,7 @@ func plantSleepStatus(t *testing.T, root string, pid int, name, environ string, 
 	if err := os.WriteFile(filepath.Join(dir, "environ"), []byte(environ), environMode); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "cmdline"), []byte("sleep\x00"+strconv.Itoa(int(vendortest.DescendantSleep/time.Second))+"\x00"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "cmdline"), []byte("sleep\x00"+descendantSleepArgument()+"\x00"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -240,7 +244,7 @@ func TestDescendantAliveIgnoresAMarkedProcessOfAnotherProgram(t *testing.T) {
 
 func startProbeSleep(t *testing.T, entry string) int {
 	t.Helper()
-	cmd := exec.CommandContext(t.Context(), "sleep", strconv.Itoa(int(vendortest.DescendantSleep/time.Second)))
+	cmd := exec.CommandContext(t.Context(), "sleep", descendantSleepArgument())
 	cmd.Env = append(os.Environ(), entry)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)

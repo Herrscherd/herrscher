@@ -103,10 +103,11 @@ func TestOneShotSeedReturnsWithinItsGraceWhenObserveNeverReturns(t *testing.T) {
 	bound := 2*oneShotTestGrace + oneShotReturnMargin
 	select {
 	case got := <-returned:
-		if elapsed := time.Since(started); elapsed < 2*oneShotTestGrace {
+		elapsed := time.Since(started)
+		if elapsed < 2*oneShotTestGrace {
 			t.Fatalf("the one-shot returned after %v, before its two grace periods of %v", elapsed, 2*oneShotTestGrace)
 		}
-		if elapsed := time.Since(started); elapsed > bound {
+		if elapsed > bound {
 			t.Fatalf("the one-shot returned after %v, want within %v", elapsed, bound)
 		}
 		if got.err != nil {

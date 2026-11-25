@@ -43,6 +43,26 @@ func TestIdenticalReadIsNotSavedTwice(t *testing.T) {
 	stop()
 }
 
+func TestRevisionAloneChangeIsSaved(t *testing.T) {
+	clock := newFakeClock()
+	reader := newFakeReader(clock, reply{pull: open("r1")}, reply{pull: open("r2")})
+	store := &fakeStore{}
+	stop, _ := startWatch(t, Watch{Ref: testRef(t), Reader: reader, Save: store.save, Limit: &Limit{}, Clock: clock, Policy: testPolicy(time.Minute)})
+
+	reader.awaitRead(t)
+	clock.tick(t)
+	reader.awaitRead(t)
+	clock.awaitArm(t)
+	persisted := store.persisted()
+	if len(persisted) != 2 {
+		t.Fatalf("persisted = %d, want 2: a new revision with the same state is saved", len(persisted))
+	}
+	if last := persisted[1].Revision; last != "r2" {
+		t.Fatalf("last persisted revision = %q, want r2", last)
+	}
+	stop()
+}
+
 func TestPersistedRevisionMakesTheFirstReadConditional(t *testing.T) {
 	clock := newFakeClock()
 	reader := newFakeReader(clock, reply{err: contracts.ErrForgeNotModified})

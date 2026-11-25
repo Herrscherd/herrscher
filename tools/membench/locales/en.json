@@ -132,17 +132,17 @@
   {
     "id": "membench.status.complete",
     "description": "Message of the memory bench: status.complete",
-    "other": "complete"
+    "other": "Run complete."
   },
   {
     "id": "membench.status.partial",
     "description": "Message of the memory bench: status.partial",
-    "other": "partial"
+    "other": "Partial run"
   },
   {
     "id": "membench.budget_stopped",
     "description": "Message of the memory bench: budget_stopped",
-    "other": "stopped on budget: {{.Spent}} spent, ceiling {{.Limit}}"
+    "other": "Stopped on budget: {{.Spent}} spent, ceiling {{.Limit}}"
   },
   {
     "id": "membench.not_run",
@@ -159,12 +159,12 @@
   {
     "id": "membench.status.interrupted",
     "description": "Message of the memory bench: status.interrupted",
-    "other": "interrupted by a signal, the report keeps the arms finished before it"
+    "other": "Run interrupted by a signal, the report keeps the arms finished before it"
   },
   {
     "id": "membench.status.failed_early",
     "description": "Message of the memory bench: the run stopped on an error before any arm finished",
-    "other": "failed: a run stopped on an error before any arm finished: {{.Detail}}"
+    "other": "Run failed: a run stopped on an error before any arm finished, detail: {{.Detail}}"
   },
   {
     "id": "membench.error.run_output",
@@ -299,7 +299,7 @@
   {
     "id": "membench.status.failed",
     "description": "Message of the memory bench: the run stopped on an error",
-    "other": "failed: a run stopped on an error, the report keeps the arms finished before it: {{.Detail}}"
+    "other": "Run failed: a run stopped on an error, the report keeps the arms finished before it, detail: {{.Detail}}"
   },
   {
     "id": "membench.error.dataset_large",
@@ -309,7 +309,7 @@
   {
     "id": "membench.error.no_usage",
     "description": "Message of the memory bench: error.no_usage",
-    "other": "run {{.Run}} wrote no usage record, so the bench cannot measure its spend and stopped; a local herrscher --print writes no usage ledger"
+    "other": "run {{.Run}} exited without writing a new usage record to its state directory, so the bench cannot measure its spend and stopped"
   },
   {
     "id": "membench.error.no_cost",

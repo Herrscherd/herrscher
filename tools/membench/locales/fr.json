@@ -12,7 +12,7 @@
   {
     "id": "membench.budget_stopped",
     "description": "Message of the memory bench: budget_stopped",
-    "other": "arrêt sur budget : {{.Spent}} consommés, plafond {{.Limit}}"
+    "other": "Arrêt sur budget : {{.Spent}} consommés, plafond {{.Limit}}"
   },
   {
     "id": "membench.cap.abstention",
@@ -239,12 +239,12 @@
   {
     "id": "membench.status.interrupted",
     "description": "Message of the memory bench: status.interrupted",
-    "other": "interrompu par un signal, le rapport garde les bras terminés avant lui"
+    "other": "Passe interrompue par un signal, le rapport garde les bras terminés avant lui"
   },
   {
     "id": "membench.status.failed_early",
     "description": "Message of the memory bench: the run stopped on an error before any arm finished",
-    "other": "échec : une passe s'est arrêtée sur une erreur avant la fin du premier bras : {{.Detail}}"
+    "other": "Passe en échec : une passe s'est arrêtée sur une erreur avant la fin du premier bras, détail : {{.Detail}}"
   },
   {
     "id": "membench.error.run_output",
@@ -269,17 +269,17 @@
   {
     "id": "membench.status.complete",
     "description": "Message of the memory bench: status.complete",
-    "other": "terminé"
+    "other": "Passe terminée."
   },
   {
     "id": "membench.status.failed",
     "description": "Message of the memory bench: the run stopped on an error",
-    "other": "échec : une passe s'est arrêtée sur une erreur, le rapport garde les bras terminés avant elle : {{.Detail}}"
+    "other": "Passe en échec : une passe s'est arrêtée sur une erreur, le rapport garde les bras terminés avant elle, détail : {{.Detail}}"
   },
   {
     "id": "membench.status.partial",
     "description": "Message of the memory bench: status.partial",
-    "other": "partiel"
+    "other": "Passe partielle"
   },
   {
     "id": "membench.usage",
@@ -309,7 +309,7 @@
   {
     "id": "membench.error.no_usage",
     "description": "Message of the memory bench: error.no_usage",
-    "other": "la passe {{.Run}} n'a écrit aucun enregistrement d'usage : le banc ne peut pas mesurer sa dépense et s'arrête ; un herrscher --print local n'écrit pas de registre d'usage"
+    "other": "la passe {{.Run}} s'est terminée sans écrire d'enregistrement d'usage dans son répertoire d'état : le banc ne peut pas mesurer sa dépense et s'arrête"
   },
   {
     "id": "membench.error.no_cost",

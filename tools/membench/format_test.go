@@ -78,3 +78,80 @@ func TestStatusLineSeparatesTheCountFromTheStatus(t *testing.T) {
 		}
 	}
 }
+
+func TestStatusLinesAreSentencesInEachLanguage(t *testing.T) {
+	msgs := loadCatalogue()
+	tests := []struct {
+		name string
+		rep  report
+		en   string
+		fr   string
+	}{
+		{
+			name: "complete",
+			rep:  report{Status: statusComplete},
+			en:   "Run complete.",
+			fr:   "Passe terminée.",
+		},
+		{
+			name: "partial",
+			rep:  report{Status: statusPartial, NotRun: 1, SpentTokens: 9, LimitTokens: 10},
+			en:   "Partial run. Stopped on budget: 9 tokens spent, ceiling 10 tokens. 1 arm not run (budget)",
+			fr:   "Passe partielle. Arrêt sur budget : 9 jetons consommés, plafond 10 jetons. 1 non exécuté (budget)",
+		},
+		{
+			name: "interrupted",
+			rep:  report{Status: statusInterrupted, NotRun: 1},
+			en:   "Run interrupted by a signal, the report keeps the arms finished before it. 1 arm not started",
+			fr:   "Passe interrompue par un signal, le rapport garde les bras terminés avant lui. 1 bras non démarré",
+		},
+		{
+			name: "failed",
+			rep:  report{Status: statusFailed, Failure: "boom", NotRun: 1, Rows: []row{{}}},
+			en:   "Run failed: a run stopped on an error, the report keeps the arms finished before it, detail: boom. 1 arm not started",
+			fr:   "Passe en échec : une passe s'est arrêtée sur une erreur, le rapport garde les bras terminés avant elle, détail : boom. 1 bras non démarré",
+		},
+		{
+			name: "failed before any arm",
+			rep:  report{Status: statusFailed, Failure: "boom", NotRun: 1},
+			en:   "Run failed: a run stopped on an error before any arm finished, detail: boom. 1 arm not started",
+			fr:   "Passe en échec : une passe s'est arrêtée sur une erreur avant la fin du premier bras, détail : boom. 1 bras non démarré",
+		},
+	}
+	for _, tt := range tests {
+		for _, c := range []struct {
+			lang i18n.Language
+			want string
+		}{{i18n.English, tt.en}, {i18n.French, tt.fr}} {
+			translator := msgs.For(c.lang)
+			got := statusLine(translator, tt.rep)
+			if err := translator.Err(); err != nil {
+				t.Fatalf("%v: %v", c.lang, err)
+			}
+			if got != c.want {
+				t.Errorf("%v %s line is %q, want %q", c.lang, tt.name, got, c.want)
+			}
+		}
+	}
+}
+
+func TestNoUsageErrorDescribesTheRealCause(t *testing.T) {
+	msgs := loadCatalogue()
+	wants := []struct {
+		lang i18n.Language
+		want string
+	}{
+		{i18n.English, "run x exited without writing a new usage record to its state directory, so the bench cannot measure its spend and stopped"},
+		{i18n.French, "la passe x s'est terminée sans écrire d'enregistrement d'usage dans son répertoire d'état : le banc ne peut pas mesurer sa dépense et s'arrête"},
+	}
+	for _, c := range wants {
+		translator := msgs.For(c.lang)
+		got := translator.Text(msgErrNoUsage, params{paramRun: "x"})
+		if err := translator.Err(); err != nil {
+			t.Fatalf("%v: %v", c.lang, err)
+		}
+		if got != c.want {
+			t.Errorf("%v no-usage error is %q, want %q", c.lang, got, c.want)
+		}
+	}
+}

@@ -463,7 +463,7 @@ func TestFeedErrCancelsTheSubscriptionAndTriggersNoRead(t *testing.T) {
 	reader.awaitRead(t)
 	clock.awaitArm(t)
 	feed.signals <- contracts.PullRequestSignal{Err: errBoom}
-	awaitDone(t, feed.subscriptionContext(0))
+	awaitDone(feed.subscriptionContext(0), t)
 	clock.awaitArm(t)
 	if got := len(reader.readCalls()); got != 1 {
 		t.Fatalf("reads = %d after a feed error, want none: the read waits for the cadence", got)
@@ -481,7 +481,7 @@ func TestRefusalMidStreamPausesTheFeed(t *testing.T) {
 	reader.awaitRead(t)
 	clock.awaitArm(t)
 	feed.signals <- contracts.PullRequestSignal{Err: contracts.ErrFeedRefused}
-	awaitDone(t, feed.subscriptionContext(0))
+	awaitDone(feed.subscriptionContext(0), t)
 	for guard := 0; len(feed.subscriptions()) < 2; guard++ {
 		if guard > 100 {
 			t.Fatal("the refused feed was never asked again")
@@ -495,7 +495,7 @@ func TestRefusalMidStreamPausesTheFeed(t *testing.T) {
 	stop()
 }
 
-func awaitDone(t *testing.T, ctx context.Context) {
+func awaitDone(ctx context.Context, t *testing.T) {
 	t.Helper()
 	select {
 	case <-ctx.Done():

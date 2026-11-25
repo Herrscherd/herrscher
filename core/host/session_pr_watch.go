@@ -242,16 +242,23 @@ func (w *prWatcher) join(ctx context.Context, key prGroupKey, name string, targe
 	return group, nil
 }
 
+func feedOf(forge contracts.Forge) contracts.PullRequestFeed {
+	feed, ok := forge.(contracts.PullRequestFeed)
+	if !ok {
+		return nil
+	}
+	return feed
+}
+
 func (w *prWatcher) startGroupLocked(ctx context.Context, key prGroupKey, name string, target prTarget) (*prGroup, error) {
 	groupCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	group := &prGroup{key: key, members: make(map[string]bool), cancel: cancel, finished: make(chan struct{})}
-	feed, _ := target.forge.(contracts.PullRequestFeed)
 	watch, err := prwatch.NewWatch(prwatch.Watch{
 		Ref:     target.ref,
 		Since:   w.recordedRevision(name),
 		Stagger: w.stagger(),
 		Reader:  target.forge,
-		Feed:    feed,
+		Feed:    feedOf(target.forge),
 		Save:    w.save(group),
 		Limit:   w.limit,
 		Clock:   w.clock,

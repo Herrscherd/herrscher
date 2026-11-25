@@ -198,6 +198,9 @@ func TestPROpenWithoutAnOriginHeadNamesTheBaseFlag(t *testing.T) {
 func TestPRVerbsKeepTheTokenOutOfOutputAndErrors(t *testing.T) {
 	dir := prFixtureRepo(t)
 	st := prState(t, dir, "")
+	if err := st.AddSession(state.Session{Name: "beta", ChannelID: "chan-beta", Dir: dir}); err != nil {
+		t.Fatal(err)
+	}
 	token, err := contracts.NewForgeToken(prTestSecret, "bot", contracts.TokenSourceEnv)
 	if err != nil {
 		t.Fatal(err)
@@ -219,8 +222,17 @@ func TestPRVerbsKeepTheTokenOutOfOutputAndErrors(t *testing.T) {
 		}
 	}
 	forge.openErr = contracts.ErrForgeUnauthorized
-	_, err = runPR(t, reg, verbPROpen, "--name", "alpha", "--title", "Titre")
+	_, err = runPR(t, reg, verbPROpen, "--name", "beta", "--title", "Titre")
+	if !errors.Is(err, contracts.ErrForgeUnauthorized) {
+		t.Fatalf("open refused by the forge = %v, want ErrForgeUnauthorized", err)
+	}
 	seen = append(seen, err.Error())
+	forge.pullErr = contracts.ErrForgeUnauthorized
+	out, err := runPR(t, reg, verbPRStatus, "--name", "alpha", "--json")
+	if !errors.Is(err, contracts.ErrForgeUnauthorized) {
+		t.Fatalf("status refused by the forge = %v, want ErrForgeUnauthorized", err)
+	}
+	seen = append(seen, out, err.Error())
 	for _, text := range seen {
 		if strings.Contains(text, prTestSecret) || strings.Contains(text, base64.StdEncoding.EncodeToString([]byte(prTestSecret))) {
 			t.Fatalf("output or error %q carries the token", text)

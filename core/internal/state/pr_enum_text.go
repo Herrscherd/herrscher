@@ -11,19 +11,34 @@ import (
 
 var errUnknownMergeState = errors.New("unknown merge state")
 
-func mergeStates() []contracts.MergeState {
-	return []contracts.MergeState{
-		contracts.MergeStateUnknown,
-		contracts.MergeStateClean,
-		contracts.MergeStateConflicting,
-		contracts.MergeStateBlocked,
-		contracts.MergeStateBehind,
-		contracts.MergeStateDraft,
+func knownPullRequestState(state contracts.PullRequestState) bool {
+	switch state {
+	case contracts.PullRequestOpen, contracts.PullRequestClosed, contracts.PullRequestMerged:
+		return true
 	}
+	return false
+}
+
+func knownMergeState(state contracts.MergeState) bool {
+	switch state {
+	case contracts.MergeStateUnknown, contracts.MergeStateClean, contracts.MergeStateConflicting,
+		contracts.MergeStateBlocked, contracts.MergeStateBehind, contracts.MergeStateDraft:
+		return true
+	}
+	return false
+}
+
+func knownChecksState(state contracts.ChecksState) bool {
+	switch state {
+	case contracts.ChecksUnknown, contracts.ChecksNone, contracts.ChecksPending,
+		contracts.ChecksPassed, contracts.ChecksFailed, contracts.ChecksActionRequired:
+		return true
+	}
+	return false
 }
 
 func parseMergeState(text string) (contracts.MergeState, error) {
-	for _, state := range mergeStates() {
+	for state := contracts.MergeStateUnknown; knownMergeState(state); state++ {
 		if state.String() == text {
 			return state, nil
 		}
@@ -44,14 +59,26 @@ func encodeEnum[Enum enumText](value Enum, parse func(string) (Enum, error)) ([]
 	return []byte(name), nil
 }
 
-func decodeEnum[Enum enumText](text []byte, parse func(string) (Enum, error)) Enum {
-	value, err := parse(string(text))
-	if err != nil {
-		slog.Warn("state: pull request value not recognised, read as unknown", "value", string(text))
-		var unknown Enum
-		return unknown
+func decodeEnum[Enum enumText](data []byte, parseText func(string) (Enum, error), known func(Enum) bool) Enum {
+	var text string
+	if err := json.Unmarshal(data, &text); err == nil {
+		value, parseErr := parseText(text)
+		if parseErr != nil {
+			return unrecognisedEnum[Enum](text)
+		}
+		return value
 	}
-	return value
+	var number int
+	if err := json.Unmarshal(data, &number); err == nil && known(Enum(number)) {
+		return Enum(number)
+	}
+	return unrecognisedEnum[Enum](string(data))
+}
+
+func unrecognisedEnum[Enum enumText](value string) Enum {
+	slog.Warn("state: pull request value not recognised, read as unknown", "value", value)
+	var unknown Enum
+	return unknown
 }
 
 type persistedPullRequestState contracts.PullRequestState
@@ -60,8 +87,8 @@ func (s persistedPullRequestState) MarshalText() ([]byte, error) {
 	return encodeEnum(contracts.PullRequestState(s), contracts.ParsePullRequestState)
 }
 
-func (s *persistedPullRequestState) UnmarshalText(text []byte) error {
-	*s = persistedPullRequestState(decodeEnum(text, contracts.ParsePullRequestState))
+func (s *persistedPullRequestState) UnmarshalJSON(data []byte) error {
+	*s = persistedPullRequestState(decodeEnum(data, contracts.ParsePullRequestState, knownPullRequestState))
 	return nil
 }
 
@@ -71,8 +98,8 @@ func (s persistedMergeState) MarshalText() ([]byte, error) {
 	return encodeEnum(contracts.MergeState(s), parseMergeState)
 }
 
-func (s *persistedMergeState) UnmarshalText(text []byte) error {
-	*s = persistedMergeState(decodeEnum(text, parseMergeState))
+func (s *persistedMergeState) UnmarshalJSON(data []byte) error {
+	*s = persistedMergeState(decodeEnum(data, parseMergeState, knownMergeState))
 	return nil
 }
 
@@ -82,8 +109,8 @@ func (s persistedChecksState) MarshalText() ([]byte, error) {
 	return encodeEnum(contracts.ChecksState(s), contracts.ParseChecksState)
 }
 
-func (s *persistedChecksState) UnmarshalText(text []byte) error {
-	*s = persistedChecksState(decodeEnum(text, contracts.ParseChecksState))
+func (s *persistedChecksState) UnmarshalJSON(data []byte) error {
+	*s = persistedChecksState(decodeEnum(data, contracts.ParseChecksState, knownChecksState))
 	return nil
 }
 
@@ -104,7 +131,8 @@ func (s Session) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// UnmarshalJSON reads the pull request enums from text, unrecognised text giving the unknown value.
+// UnmarshalJSON reads the pull request enums from text or from the integers older builds wrote,
+// unrecognised values giving the unknown value.
 func (s *Session) UnmarshalJSON(data []byte) error {
 	type plain Session
 	decoded := struct {

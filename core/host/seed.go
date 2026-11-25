@@ -33,7 +33,7 @@ type oneShotSeedRuntime struct {
 	sessionLanguage func(name string) languageSource
 	coordinator     contracts.Coordinator
 	publish         func(session string, event contracts.Event)
-	record          func(session string, entry state.TranscriptEntry)
+	record          func(session string, entry state.TranscriptEntry) error
 	recordUsage     func(sess state.Session, records []usage.Record)
 	resume          func(session, token string)
 	timeout         time.Duration
@@ -192,8 +192,9 @@ func attachOneShotTaps(driver *sessionDriver, sess state.Session, runtime oneSho
 	gate := newSeedGate(runtime.messages, sess.Name, runtime.warnings, runtime.languageOf(sess))
 	if runtime.record != nil {
 		driver.sink.Transcript = func(entry state.TranscriptEntry) error {
-			gate.admit(lateTranscriptKey, func() { runtime.record(sess.Name, entry) })
-			return nil
+			var err error
+			gate.admit(lateTranscriptKey, func() { err = runtime.record(sess.Name, entry) })
+			return err
 		}
 	}
 	if runtime.publish != nil {

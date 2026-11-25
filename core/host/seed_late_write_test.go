@@ -83,7 +83,7 @@ func seedSharingSession(backend contracts.Backend, budget time.Duration, log *st
 		timeout:     budget,
 		sessions:    table,
 		publish:     func(string, contracts.Event) { log.note(eventwire.EventReply) },
-		record:      func(string, state.TranscriptEntry) { log.note("transcript") },
+		record:      func(string, state.TranscriptEntry) error { log.note("transcript"); return nil },
 		recordUsage: func(state.Session, []usage.Record) {
 			log.note("usage")
 		},
@@ -133,7 +133,7 @@ func TestOneShotTapsRecordNothingOnceTheSeedHasReturned(t *testing.T) {
 		messages:    newHostMessages(),
 		cliMessages: clitext.NewMessages(),
 		publish:     func(string, contracts.Event) { recorded = append(recorded, "publish") },
-		record:      func(string, state.TranscriptEntry) { recorded = append(recorded, "transcript") },
+		record:      func(string, state.TranscriptEntry) error { recorded = append(recorded, "transcript"); return nil },
 		recordUsage: func(state.Session, []usage.Record) { recorded = append(recorded, "usage") },
 	}
 	driver := &sessionDriver{messages: newHostMessages(), cliMessages: clitext.NewMessages(), persists: newPersistWrites()}

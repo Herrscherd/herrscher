@@ -58,15 +58,14 @@ writes no report and exits `2` or `1` with the message on stderr.
 
 ## What runs
 
-The pair suite has four tasks, each taught with one or more `Remember this:`
-steps and then asked:
+The pair suite has four tasks, each taught in one or more steps and then asked:
 
 | Task | What it checks |
 |------|----------------|
 | same agent | A fact taught to one agent is recalled by that agent. |
 | other agent | A fact taught to one agent is recalled by another. |
 | stale | A fact is corrected, and the corrected value is recalled, not the old one. A recall of the old value is false recall. |
-| never given | A fact that was never taught is not invented. Saying so is success; giving the secret the bench plants is false recall. |
+| never given | A fact that was never taught is not invented. Saying so is success; stating a value for it, such as "the password is X", is false recall, even when the reply also says it does not know. |
 
 With `-dataset`, the bench samples items of a LongMemEval file. Each item's
 evidence sessions are taught in order, then its question is asked. The five
@@ -89,15 +88,16 @@ For each task and setting, the report has one row with an off cell and an on
 cell, each with its runs, successes, false recalls, turns and tokens.
 
 - **Success**: the reply contains every expected value as whole words and no
-  forbidden one, or, for abstention, says it does not know without giving the
-  forbidden value. Matching is by whole word, so `42` does not match `1042`.
+  forbidden one, or, for abstention, says it does not know and states no value
+  for the fact. Matching is by whole word, so `42` does not match `1042`.
 - **Turns**: the calls of a run, one usage record each.
 - **Tokens to success**: the tokens of all runs divided by their successes. The
   delta is on minus off.
 - **Memory tokens per turn**: input tokens per turn on minus off. This is the
   cost the memory adds to each call.
-- **False recall**: a forbidden value (the stale answer, the planted secret) is
-  given. It is counted, not averaged into success. The LongMemEval section does
+- **False recall**: a forbidden value (the stale answer) is given, or, for a fact
+  never taught, a value is stated after `password is` or `mot de passe est`. It
+  is counted, not averaged into success. The LongMemEval section does
   not report it, because its reference answers do not mark forbidden values.
 
 The LongMemEval scoring is a whole-word check of the reference answer in the
@@ -234,6 +234,9 @@ names.
 - The bench reads spend from the ledger of the binary it runs. A binary that
   writes no ledger stops the run with the missing-ledger error, as the
   `TestBenchStopsWithoutAUsageLedger` test checks.
+- The never-given task detects an invented value only after `password is` or
+  `mot de passe est`. An invention phrased otherwise is not counted as false
+  recall, so the rate is a floor, not a measure of every invention.
 - The settings gated by time of day are not exercised by the bench.
 - The effect of `HERRSCHER_OWNER_ID` on `--print` is not verified; the bench
   sets it, but its result is not measured.

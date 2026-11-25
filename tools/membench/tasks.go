@@ -24,7 +24,12 @@ type task struct {
 	ask     step
 	want    []string
 	forbid  []string
+	claims  []string
 	abstain bool
+}
+
+func valueClaimWords() []string {
+	return []string{"not", "no", "unknown", "pas", "inconnu", "inconnue", "aucun", "aucune"}
 }
 
 func abstentionMarkers() []string {
@@ -32,6 +37,9 @@ func abstentionMarkers() []string {
 		"don't know",
 		"do not know",
 		"not know",
+		"not known",
+		"unknown",
+		"inconnu",
 		"don't have",
 		"do not have",
 		"no information",
@@ -98,7 +106,7 @@ func pairTasks() []task {
 			id:      "never-given",
 			steps:   []step{{agent: agentAlpha, prompt: "Remember this: the Tulm kiln runs at 900 degrees."}},
 			ask:     step{agent: agentAlpha, prompt: "What is the Ondrel vault password?"},
-			forbid:  []string{"hunter2"},
+			claims:  []string{"password is", "mot de passe est"},
 			abstain: true,
 		},
 	}
@@ -106,7 +114,7 @@ func pairTasks() []task {
 
 func score(current task, answer string) (bool, bool) {
 	words := wordsOf(answer)
-	falseRecall := containsAny(words, current.forbid)
+	falseRecall := containsAny(words, current.forbid) || statesValue(words, current.claims)
 	if current.abstain {
 		return containsAny(words, abstentionMarkers()) && !falseRecall, falseRecall
 	}
@@ -119,6 +127,19 @@ func wordsOf(text string) []string {
 
 func notWordRune(r rune) bool {
 	return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+}
+
+func statesValue(words, claims []string) bool {
+	for _, claim := range claims {
+		phrase := wordsOf(claim)
+		for start := 0; start+len(phrase) < len(words); start++ {
+			next := words[start+len(phrase)]
+			if slices.Equal(words[start:start+len(phrase)], phrase) && !slices.Contains(valueClaimWords(), next) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func containsAny(words, phrases []string) bool {

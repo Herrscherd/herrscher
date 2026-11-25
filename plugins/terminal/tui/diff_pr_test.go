@@ -13,8 +13,6 @@ import (
 	"github.com/Herrscherd/herrscher/core/health"
 )
 
-var connectedGitHub = contracts.ProbeReport{State: contracts.HealthOK, Detail: contracts.Notice{Code: contracts.CodeHealthConnected}}
-
 type prOpenBackend struct {
 	fakeBackend
 
@@ -26,7 +24,7 @@ type prOpenBackend struct {
 
 func newPROpenBackend(t *testing.T, reply string) *prOpenBackend {
 	t.Helper()
-	return &prOpenBackend{reply: reply, health: gitHubHealth(t, connectedGitHub)}
+	return &prOpenBackend{reply: reply, health: gitHubHealth(t, contracts.ProbeReport{State: contracts.HealthOK, Detail: contracts.Notice{Code: contracts.CodeHealthConnected}})}
 }
 
 func gitHubHealth(t *testing.T, report contracts.ProbeReport) string {
@@ -163,9 +161,7 @@ func TestPRGivesUpWhenTheHostStaysSilent(t *testing.T) {
 	backend.hold = make(chan struct{})
 	t.Cleanup(func() { close(backend.hold) })
 	m.tm = backend
-	previous := prOpenLimit
-	prOpenLimit = 50 * time.Millisecond
-	t.Cleanup(func() { prOpenLimit = previous })
+	m.diff.openLimit = 50 * time.Millisecond
 	press(m, "ctrl+x", "d")
 
 	press(m, "p")

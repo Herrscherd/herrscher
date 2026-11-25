@@ -49,6 +49,7 @@ const (
 )
 
 type diffPanel struct {
+	openLimit time.Duration
 	open      bool
 	review    bool
 	channel   string
@@ -359,6 +360,10 @@ func (m *model) commitCmd(withPR bool) tea.Cmd {
 	subject, body := splitMessage(message)
 	trans := m.tr
 	repo, base, backend := m.diffRepo(panel.channel), panel.report.Base, m.tm
+	openWait := panel.openLimit
+	if openWait == 0 {
+		openWait = prOpenLimit
+	}
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), prCallLimit+gitCallLimit)
 		defer cancel()
@@ -377,7 +382,7 @@ func (m *model) commitCmd(withPR bool) tea.Cmd {
 		if err = repo.publishBranch(ctx, base); err != nil {
 			return diffActionMsg{notice: trans.t("tui.diffpanel.pr_failed", map[string]any{tplArgSha: sha, tplArgReason: localizedReason(trans, err)}), bad: true}
 		}
-		return openPullRequest(backend, trans, sha, session, subject, body, base)
+		return openPullRequest(backend, trans, sha, session, subject, body, base, openWait)
 	}
 }
 

@@ -11,7 +11,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/health"
 )
 
-var prOpenLimit = 2 * time.Minute
+const prOpenLimit = 2 * time.Minute
 
 type dispatchReply struct {
 	out string
@@ -41,7 +41,9 @@ func requireGitHub(ctx context.Context, backend Backend) error {
 	if err != nil {
 		return err
 	}
-	for _, check := range snapshot.Find(forgeport.KindGitHub) {
+	checks := snapshot.Find(forgeport.KindGitHub)
+	for index := range checks {
+		check := &checks[index]
 		if check.Group == health.GroupForge && check.Report.Detail.Code == contracts.CodeHealthConnected {
 			return nil
 		}
@@ -49,8 +51,8 @@ func requireGitHub(ctx context.Context, backend Backend) error {
 	return contracts.ErrForgeNotConnected
 }
 
-func openPullRequest(backend Backend, trans translator, sha, session, subject, body, base string) diffActionMsg {
-	ctx, cancel := context.WithTimeout(context.Background(), prOpenLimit)
+func openPullRequest(backend Backend, trans translator, sha, session, subject, body, base string, limit time.Duration) diffActionMsg {
+	ctx, cancel := context.WithTimeout(context.Background(), limit)
 	defer cancel()
 	out, err := dispatchWithin(ctx, backend, sessionPROpenArgs(session, subject, body, base))
 	if errors.Is(err, context.DeadlineExceeded) {

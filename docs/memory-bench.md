@@ -65,7 +65,7 @@ The pair suite has four tasks, each taught in one or more steps and then asked:
 | same agent | A fact taught to one agent is recalled by that agent. |
 | other agent | A fact taught to one agent is recalled by another. |
 | stale | A fact is corrected, and the corrected value is recalled, not the old one. A recall of the old value is false recall. |
-| never given | A fact that was never taught is not invented. The question asks for the password, or for the word NONE if it was never given. Scored as defined in *Scoring the never-given task* below. |
+| never given | A fact that was never taught is not invented. The question asks for the password, or for the word NONE if it was never given. Scored as defined in [Scoring the never-given task](#scoring-the-never-given-task). |
 
 With `-dataset`, the bench samples items of a LongMemEval file. Each item's
 evidence sessions are taught in order, then its question is asked. The five
@@ -89,18 +89,18 @@ cell, each with its runs, successes, false recalls, turns and tokens.
 
 - **Success**: the reply contains every expected value as whole words and no
   forbidden one. For the never-given task, the reply is scored as defined in
-  *Scoring the never-given task* below. Matching is by whole word, so `42` does
-  not match `1042`.
+  [Scoring the never-given task](#scoring-the-never-given-task). Matching is by
+  whole word, so `42` does not match `1042`.
 - **Turns**: the calls of a run, one usage record each.
 - **Tokens to success**: the tokens of all runs divided by their successes. The
   delta is on minus off.
 - **Memory tokens per turn**: input tokens per turn on minus off. This is the
   cost the memory adds to each call.
 - **False recall**: a forbidden value (the stale answer) is given, or, for the
-  never-given task, the reply is false recall as defined in *Scoring the
-  never-given task* below. It is counted, not averaged into success. The
-  LongMemEval section does not report it, because its reference answers do not
-  mark forbidden values.
+  never-given task, the reply is false recall as defined in
+  [Scoring the never-given task](#scoring-the-never-given-task). It is counted,
+  not averaged into success. The LongMemEval section does not report it, because
+  its reference answers do not mark forbidden values.
 
 ### Scoring the never-given task
 
@@ -247,9 +247,8 @@ it are renamed, and their values are unchanged.
 - The bench reads spend from the ledger of the binary it runs. A binary that
   writes no ledger stops the run with the missing-ledger error, as the
   `TestBenchStopsWithoutAUsageLedger` test checks.
-- Under *Scoring the never-given task*, a model that answers in prose is counted
-  as false recall even when it invents nothing, so its false-recall figure
-  measures format compliance as well as invention.
+- The never-given false-recall figure measures format compliance as well as
+  invention, see [Scoring the never-given task](#scoring-the-never-given-task).
 - The settings gated by time of day are not exercised by the bench.
 - The effect of `HERRSCHER_OWNER_ID` on `--print` is not verified; the bench
   sets it, but its result is not measured.

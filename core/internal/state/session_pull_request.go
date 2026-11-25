@@ -6,10 +6,11 @@ import contracts "github.com/Herrscherd/herrscher-contracts"
 // Number zero means the session has none. State is zero while it is not known yet, which is
 // the case of a session recorded before its state was stored.
 type PullRequestRecord struct {
-	Number int
-	State  contracts.PullRequestState
-	Draft  bool
-	URL    string
+	Number   int
+	State    contracts.PullRequestState
+	Draft    bool
+	URL      string
+	Revision contracts.Revision
 }
 
 // Known reports whether the record names a pull request with a positive number and a state
@@ -28,7 +29,7 @@ func (r PullRequestRecord) Known() bool {
 // PullRequestRecord returns the pull request recorded on the session, with a zero Number when
 // it has none.
 func (s Session) PullRequestRecord() PullRequestRecord {
-	return PullRequestRecord{Number: s.PullRequest, State: s.PullRequestState, Draft: s.PullRequestDraft, URL: s.PullRequestURL}
+	return PullRequestRecord{Number: s.PullRequest, State: s.PullRequestState, Draft: s.PullRequestDraft, URL: s.PullRequestURL, Revision: s.PullRequestRevision}
 }
 
 func setSessionPullRequest(session *Session, record PullRequestRecord) {
@@ -36,4 +37,5 @@ func setSessionPullRequest(session *Session, record PullRequestRecord) {
 	session.PullRequestState = record.State
 	session.PullRequestDraft = record.Draft
 	session.PullRequestURL = record.URL
+	session.PullRequestRevision = record.Revision
 }

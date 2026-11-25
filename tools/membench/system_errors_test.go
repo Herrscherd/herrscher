@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +23,13 @@ func exitFailure() error {
 
 func killedFailure() error {
 	return exec.CommandContext(context.Background(), "sh", "-c", "kill -KILL $$").Run()
+}
+
+func skipOffUnix(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("needs the Unix shell and the Unix cache directory lookup")
+	}
 }
 
 type failingWriter struct{}
@@ -114,7 +122,9 @@ func TestSystemErrorsReadInFrench(t *testing.T) {
 		},
 		{
 			name: "run exited",
-			err: func(*testing.T) error {
+			err: func(t *testing.T) error {
+				t.Helper()
+				skipOffUnix(t)
 				return runFailure("arm", exitFailure())
 			},
 			want: "échec de l'exécution arm : code de sortie 3",
@@ -128,7 +138,9 @@ func TestSystemErrorsReadInFrench(t *testing.T) {
 		},
 		{
 			name: "run killed by signal",
-			err: func(*testing.T) error {
+			err: func(t *testing.T) error {
+				t.Helper()
+				skipOffUnix(t)
 				return runFailure("arm", killedFailure())
 			},
 			want: "échec de l'exécution arm : tué par le signal 9",
@@ -229,6 +241,7 @@ func budgetArgs(extra ...string) []string {
 
 func timedOutRun(t *testing.T) error {
 	t.Helper()
+	skipOffUnix(t)
 	binary := filepath.Join(t.TempDir(), "fake")
 	if err := os.WriteFile(binary, []byte("#!/bin/sh\nexec sleep 30\n"), 0o700); err != nil {
 		t.Fatal(err)
@@ -245,6 +258,7 @@ func timedOutRun(t *testing.T) error {
 }
 
 func TestDetailNeverLeaksSecretAcrossTheCutoff(t *testing.T) {
+	skipOffUnix(t)
 	const secret = "placeholder-key"
 	binary := filepath.Join(t.TempDir(), "fake")
 	padding := strings.Repeat("a", maxDetailBytes-len(secret)/2)
@@ -265,6 +279,7 @@ func TestDetailNeverLeaksSecretAcrossTheCutoff(t *testing.T) {
 }
 
 func TestUnusableCacheStillWritesFailedStatus(t *testing.T) {
+	skipOffUnix(t)
 	t.Setenv("HOME", "")
 	t.Setenv("XDG_CACHE_HOME", "")
 	binary := filepath.Join(t.TempDir(), "fake")
@@ -276,7 +291,15 @@ func TestUnusableCacheStillWritesFailedStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rep, runErr := execute(t.Context(), cfg, nil, 0, msgs)
+	tasks, _, err := loadTasks(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	planned := plannedArms(cfg, tasks)
+	if planned == 0 {
+		t.Fatal("no arm is planned, the test would prove nothing")
+	}
+	rep, runErr := execute(t.Context(), cfg, tasks, 0, msgs)
 	if runErr == nil {
 		t.Fatal("execute returned no error without a cache directory")
 	}
@@ -286,9 +309,20 @@ func TestUnusableCacheStillWritesFailedStatus(t *testing.T) {
 	if rep.Failure == "" {
 		t.Error("the report carries no failure text")
 	}
+	if rep.NotRun != planned {
+		t.Errorf("NotRun %d, want the %d planned arms", rep.NotRun, planned)
+	}
+	var out strings.Builder
+	if err := writeReport(&out, rep, cfg, msgs); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "budget") {
+		t.Errorf("report %q blames the budget for a failure that did not come from it", out.String())
+	}
 }
 
 func TestRunFailureKeepsRedactedStderr(t *testing.T) {
+	skipOffUnix(t)
 	binary := filepath.Join(t.TempDir(), "fake")
 	script := "#!/bin/sh\necho 'boom: quota detail placeholder-key' >&2\nexit 3\n"
 	if err := os.WriteFile(binary, []byte(script), 0o700); err != nil {

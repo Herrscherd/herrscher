@@ -122,7 +122,7 @@ func flagDescription(t *testing.T, usage, name string) string {
 func TestPluralFormsDifferBetweenOneAndMany(t *testing.T) {
 	msgs := loadCatalogue()
 	for _, lang := range []i18n.Language{i18n.English, i18n.French} {
-		for _, key := range []msgKey{msgNotRun, msgSkippedLong} {
+		for _, key := range []msgKey{msgNotRun, msgNotStarted, msgSkippedLong} {
 			one, err := msgs.text(lang, key, params{paramCount: 1})
 			if err != nil {
 				t.Fatalf("%s for 1 in %v: %v", key, lang, err)
@@ -150,22 +150,36 @@ func wordingOf(text string) string {
 func TestEveryDeclaredKeyRendersEveryPlaceholder(t *testing.T) {
 	msgs := loadCatalogue()
 	for _, key := range declaredMessageKeys(t) {
-		args := params{}
-		for _, name := range paramsOf(msgKey(key)) {
-			args[name] = "x"
-			if name == paramCount {
-				args[name] = 2
-			}
-		}
+		args := sampleParams(msgKey(key))
 		for _, lang := range []i18n.Language{i18n.English, i18n.French} {
-			text, err := msgs.text(lang, msgKey(key), args)
-			if err != nil {
-				t.Errorf("%s in %v: %v", key, lang, err)
-				continue
-			}
-			if strings.Contains(text, "<no value>") {
-				t.Errorf("%s in %v renders a placeholder with no value: %q", key, lang, text)
-			}
+			checkRendered(t, msgs, lang, msgKey(key), args)
 		}
+		got := failureText(msgs, i18n.French, messageError{key: msgKey(key), params: args})
+		if strings.Contains(got, "membench.") || strings.Contains(got, "<no value>") {
+			t.Errorf("%s reaches the French failure text as %q", key, got)
+		}
+	}
+}
+
+func sampleParams(key msgKey) params {
+	args := params{}
+	for _, name := range paramsOf(key) {
+		args[name] = "x"
+		if name == paramCount {
+			args[name] = 2
+		}
+	}
+	return args
+}
+
+func checkRendered(t *testing.T, msgs catalogue, lang i18n.Language, key msgKey, args params) {
+	t.Helper()
+	text, err := msgs.text(lang, key, args)
+	if err != nil {
+		t.Errorf("%s in %v: %v", key, lang, err)
+		return
+	}
+	if strings.Contains(text, "<no value>") {
+		t.Errorf("%s in %v renders a placeholder with no value: %q", key, lang, text)
 	}
 }

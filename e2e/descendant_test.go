@@ -25,7 +25,7 @@ const (
 	descendantPoll = 100 * time.Millisecond
 )
 
-var errStillRunning = errors.New("the descendant still alive")
+var errStillAlive = errors.New("the descendant still alive")
 
 func descendantGone(ts *testscript.TestScript, neg bool, args []string) {
 	if neg {
@@ -61,7 +61,7 @@ func awaitGone(deadline time.Time, alive func() (bool, error)) error {
 	if last != nil {
 		return last
 	}
-	return errStillRunning
+	return errStillAlive
 }
 
 var errDescendantExpired = errors.New("the check starts too late to see the descendant die: it may have ended on its own")
@@ -318,7 +318,7 @@ func TestAwaitGoneReportsASurvivingDescendant(t *testing.T) {
 	err := awaitGone(time.Now().Add(3*descendantPoll), func() (bool, error) {
 		return true, nil
 	})
-	if !errors.Is(err, errStillRunning) {
-		t.Fatalf("a descendant alive at the deadline was reported as %v, want errStillRunning", err)
+	if !errors.Is(err, errStillAlive) {
+		t.Fatalf("a descendant alive at the deadline was reported as %v, want errStillAlive", err)
 	}
 }

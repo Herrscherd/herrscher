@@ -250,7 +250,7 @@ func renderMarkdown(out io.Writer, rep report, translator *translator) error {
 func statusLine(translator *translator, rep report) string {
 	switch rep.Status {
 	case statusFailed:
-		return translator.Text(msgStatusFailed, params{paramDetail: rep.Failure}) + " " + notRunText(translator, rep)
+		return translator.Text(msgStatusFailed, params{paramDetail: rep.Failure}) + " " + notStartedText(translator, rep)
 	case statusPartial:
 		stopped := translator.Text(msgBudgetStopped, params{
 			paramSpent: amountText(translator, rep.SpentTokens, rep.SpentUSD),
@@ -263,6 +263,10 @@ func statusLine(translator *translator, rep report) string {
 
 func notRunText(translator *translator, rep report) string {
 	return translator.Text(msgNotRun, params{paramCount: clitext.FormatNumber(translator.lang, float64(rep.NotRun), 0)})
+}
+
+func notStartedText(translator *translator, rep report) string {
+	return translator.Text(msgNotStarted, params{paramCount: clitext.FormatNumber(translator.lang, float64(rep.NotRun), 0)})
 }
 
 func amountText(translator *translator, tokens int64, usd float64) string {

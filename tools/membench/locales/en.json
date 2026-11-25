@@ -151,6 +151,12 @@
     "other": "{{.Count}} arms not run (budget)"
   },
   {
+    "id": "membench.not_started",
+    "description": "Message of the memory bench: not_started",
+    "one": "{{.Count}} arm not started",
+    "other": "{{.Count}} arms not started"
+  },
+  {
     "id": "membench.no_measure",
     "description": "Message of the memory bench: no_measure",
     "other": "no measure"

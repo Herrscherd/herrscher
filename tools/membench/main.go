@@ -81,10 +81,14 @@ func loadTasks(cfg config) ([]task, int, error) {
 	return append(tasks, sampled...), skipped, nil
 }
 
+func plannedArms(cfg config, tasks []task) int {
+	return len(tasks) * len(cfg.settings) * armsPerSetting
+}
+
 func execute(ctx context.Context, cfg config, tasks []task, skipped int, msgs catalogue) (report, error) {
 	parent, err := benchParent()
 	if err != nil {
-		return failedReport(report{}, msgs, cfg.lang, err)
+		return failedReport(report{NotRun: plannedArms(cfg, tasks)}, msgs, cfg.lang, err)
 	}
 	rep, runErr := measure(ctx, cfg, tasks, skipped, parent)
 	cleanupErr := os.RemoveAll(parent)
@@ -133,8 +137,7 @@ func measure(ctx context.Context, cfg config, tasks []task, skipped int, parent 
 		meter:       ceiling,
 	}
 	executed, err := bench.runAll(ctx, tasks, cfg.settings)
-	planned := len(tasks) * len(cfg.settings) * armsPerSetting
-	rep := summarize(cfg, executed, ceiling.spent, planned)
+	rep := summarize(cfg, executed, ceiling.spent, plannedArms(cfg, tasks))
 	rep.SkippedLong = skipped
 	return rep, err
 }

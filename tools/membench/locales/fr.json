@@ -226,6 +226,12 @@
     "other": "{{.Count}} non exécutés (budget)"
   },
   {
+    "id": "membench.not_started",
+    "description": "Message of the memory bench: not_started",
+    "one": "{{.Count}} non démarré",
+    "other": "{{.Count}} non démarrés"
+  },
+  {
     "id": "membench.report.title",
     "description": "Message of the memory bench: report.title",
     "other": "Banc mémoire"

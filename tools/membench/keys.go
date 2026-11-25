@@ -72,6 +72,7 @@ const (
 	msgStatusFailed       msgKey = "membench.status.failed"
 	msgBudgetStopped      msgKey = "membench.budget_stopped"
 	msgNotRun             msgKey = "membench.not_run"
+	msgNotStarted         msgKey = "membench.not_started"
 	msgAmount             msgKey = "membench.amount"
 	msgNoMeasure          msgKey = "membench.no_measure"
 	msgRowPartial         msgKey = "membench.row.partial"
@@ -140,6 +141,7 @@ func paramTable() []keyParams {
 		{key: msgStatusFailed, params: []string{paramDetail}},
 		{key: msgBudgetStopped, params: []string{paramSpent, paramLimit}},
 		{key: msgNotRun, params: []string{paramCount}},
+		{key: msgNotStarted, params: []string{paramCount}},
 		{key: msgAmount, params: []string{paramTokens, paramMoney}},
 	}
 }

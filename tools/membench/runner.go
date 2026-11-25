@@ -19,6 +19,7 @@ const (
 	maxPromptBytes         = 128<<10 - 1
 	consolidateEveryRunEnv = "TERMINAL_CONSOLIDATE_EVERY=0"
 	maxDetailBytes         = 512
+	pipeWaitDelay          = 5 * time.Second
 )
 
 var (
@@ -197,6 +198,8 @@ func (r *runner) invoke(ctx context.Context, box sandbox, request step, assignme
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(callCtx, r.binary, "--print", request.prompt)
+	killGroupOnCancel(cmd)
+	cmd.WaitDelay = pipeWaitDelay
 	cmd.Dir = box.home
 	cmd.Env = box.environ(r.model, request.agent, assignments)
 	var stdout, stderr bytes.Buffer

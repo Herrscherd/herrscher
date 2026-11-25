@@ -49,15 +49,35 @@ func TestTurnContextKeepsEveryBlockInItsOrder(t *testing.T) {
 	}
 }
 
-func TestTurnContextSizesOnlyTheBlocksItWrote(t *testing.T) {
+func TestTurnContextSizesEveryBlockWithZeroForAnEmptyOne(t *testing.T) {
 	aff := affordances{caps: "  session: list"}
 	got := composeTurnContext("MEM", nil, aff).sizes()
 	want := []contracts.InjectedPart{
 		{Part: contracts.ContextMemory, Tokens: contextwindow.EstimateTokens("MEM")},
+		{Part: contracts.ContextSkills, Tokens: 0},
+		{Part: contracts.ContextDelegation, Tokens: 0},
 		{Part: contracts.ContextCapabilities, Tokens: contextwindow.EstimateTokens(capabilitiesBlock(aff.caps))},
+		{Part: contracts.ContextIdentity, Tokens: 0},
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("sizes = %+v, want %+v", got, want)
+	}
+}
+
+func TestTurnReplyWithNothingInjectedStillCarriesZeroSizes(t *testing.T) {
+	sink := &recordSink{}
+	if err := runOneTurn(context.Background(), sink, &captureBackend{reply: "ok"}, stubMemory{}, contracts.Event{T: eventwire.EventInput, Text: "hi"}, nil, nil,
+		affordances{}, nil, 0); err != nil {
+		t.Fatalf("turn failed: %v", err)
+	}
+	reply := sink.events[len(sink.events)-1]
+	if !reply.Done || len(reply.Injected) != 5 {
+		t.Fatalf("an empty turn must still say it measured every block: %+v", reply.Injected)
+	}
+	for _, part := range reply.Injected {
+		if part.Tokens != 0 {
+			t.Fatalf("empty turn sized %s at %d", part.Part, part.Tokens)
+		}
 	}
 }
 
@@ -69,8 +89,12 @@ func TestTurnReplyCarriesTheInjectedSizes(t *testing.T) {
 		t.Fatalf("turn failed: %v", err)
 	}
 	reply := sink.events[len(sink.events)-1]
-	want := []contracts.InjectedPart{{Part: contracts.ContextMemory, Tokens: contextwindow.EstimateTokens(recall)}}
-	if !reply.Done || !slices.Equal(reply.Injected, want) {
+	want := composeTurnContext(recall, nil, affordances{}).sizes()
+	if want[0].Tokens != contextwindow.EstimateTokens(recall) || !reply.Done || !slices.Equal(reply.Injected, want) {
 		t.Fatalf("reply injected = %+v (done %v), want %+v", reply.Injected, reply.Done, want)
 	}
+}
+
+func nothingInjected() []contracts.InjectedPart {
+	return composeTurnContext("", nil, affordances{}).sizes()
 }

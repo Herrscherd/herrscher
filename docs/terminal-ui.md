@@ -117,14 +117,14 @@ parts the host writes itself are sized by the host at the end of each turn:
 `memory` (the recall block), `skills` (the menu and the loaded skills) and
 `host` (the delegation, capabilities and identity blocks, and any block a newer
 host adds). Their figures start with `~`: they are estimates at about four bytes
-per token, not counts from the vendor. A part the host did not write on the last
-measured turn reads `0`. A reply that carries no sizes, such as a posted notice
-or a reply from a daemon that does not measure them, leaves the last figures in
-place. The other parts read `n/a` until a backend reports them, and so does
-every host part before the first measured turn. Without any count yet, the total
-reads `n/a` too, and no percentage is invented. Below 80 columns the bars go and
-the overlay becomes a plain list. `esc` or `z` closes it, `k` re-reads the
-figures.
+per token, not counts from the vendor. Every turn reply sizes all of them, so a
+part the host left empty on the last turn reads `0`. A reply that carries no
+sizes, such as a posted notice or a reply from a daemon that does not measure
+them, leaves the last figures in place. The other parts read `n/a` until a
+backend reports them, and so does every host part before the first measured
+turn. Without any count yet, the total reads `n/a` too, and no percentage is
+invented. Below 80 columns the bars go and the overlay becomes a plain list.
+`esc` or `z` closes it, `k` re-reads the figures.
 
 `/compact`, or `c` inside `/context`, asks the session to compact its conversation
 through the host (`herrscher session compact --name <name> [--instruction <text>]`).

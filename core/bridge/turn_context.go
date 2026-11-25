@@ -40,11 +40,9 @@ func (c turnContext) String() string {
 }
 
 func (c turnContext) sizes() []contracts.InjectedPart {
-	var parts []contracts.InjectedPart
+	parts := make([]contracts.InjectedPart, 0, len(c.blocks))
 	for _, block := range c.blocks {
-		if block.text != "" {
-			parts = append(parts, contracts.InjectedPart{Part: block.part, Tokens: contextwindow.EstimateTokens(block.text)})
-		}
+		parts = append(parts, contracts.InjectedPart{Part: block.part, Tokens: contextwindow.EstimateTokens(block.text)})
 	}
 	return parts
 }

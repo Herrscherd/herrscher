@@ -16,19 +16,15 @@ const delegationIntro = "You can hand a full mission to another agent. It runs a
 	"When a worker's result later lands in your turn, synthesize it for the human. " +
 	"This requires your session to be an isolated, committed worktree."
 
-func withDelegation(baseCtx string, roster contracts.RosterProvider) string {
+func delegationBlock(roster contracts.RosterProvider) string {
 	if roster == nil {
-		return baseCtx
+		return ""
 	}
 	agents := roster.Agents()
 	if len(agents) == 0 {
-		return baseCtx
+		return ""
 	}
 	var out strings.Builder
-	if baseCtx != "" {
-		out.WriteString(baseCtx)
-		out.WriteString("\n\n")
-	}
 	out.WriteString("<delegation>\n")
 	out.WriteString(delegationIntro)
 	out.WriteString("\nAvailable agents:\n")

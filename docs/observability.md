@@ -77,6 +77,11 @@ fewer tokens than the turn had can make it negative: `--json` keeps that raw val
 while the text form and the terminal UI show it as zero. A call that never got
 its outcome keeps the state `started` and has no end. The text form lists the calls
 before the usage line of the turn, with the same `✓`, `✗` and `…` lines as the watch.
+Each turn of `--json` also carries an `injected` array, one `{"part", "tokens"}`
+entry per block the host composes into the turn's context (`memory`, `skills`,
+`delegation`, `capabilities`, `identity`), with `0` for a block it left empty.
+`tokens` there is an estimate the host makes at about four bytes per token, not a
+count from the vendor.
 A turn with tool calls and no reply is kept. The `detail` and the `error` of a call are
 kept up to 4096 bytes: a longer one is cut at the last whole character under that bound,
 and the rest is dropped. Within that bound they are stored verbatim: the `detail` is what

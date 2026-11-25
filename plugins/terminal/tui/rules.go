@@ -21,10 +21,11 @@ func indent(s string) string {
 const gaugeWidth = 16
 
 func gauge(ratio float64, style, empty lipgloss.Style, glyphs glyphSet) string {
-	return empty.Render("[") + barGauge(ratio, gaugeWidth, style, empty, glyphs) + empty.Render("]")
+	return empty.Render("[") + barGauge(ratio, style, empty, glyphs) + empty.Render("]")
 }
 
-func barGauge(ratio float64, cells int, style, empty lipgloss.Style, glyphs glyphSet) string {
+func barGauge(ratio float64, style, empty lipgloss.Style, glyphs glyphSet) string {
+	cells := gaugeWidth
 	if ratio < 0 {
 		ratio = 0
 	}

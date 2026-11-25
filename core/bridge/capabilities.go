@@ -13,16 +13,12 @@ const capabilitiesIntro = "You are one session of a running Herrscher daemon: it
 	"operator's to run, and asking them is the way to it. " +
 	"A handoff (`session handoff`) opens a new session with a brief of this one: run it only when the operator asks for it. Its limit per session tree is a local guard that resets when the daemon restarts, and a handoff whose brief started counts toward it even if it fails. When the operator closes a session, its direct children become roots and their quota starts again."
 
-func withCapabilities(baseCtx, summary string) string {
+func capabilitiesBlock(summary string) string {
 	summary = strings.TrimSpace(summary)
 	if summary == "" {
-		return baseCtx
+		return ""
 	}
 	var out strings.Builder
-	if baseCtx != "" {
-		out.WriteString(baseCtx)
-		out.WriteString("\n\n")
-	}
 	out.WriteString("<capabilities>\n")
 	out.WriteString(capabilitiesIntro)
 	out.WriteString("\nVerbs you may run:\n")

@@ -26,6 +26,8 @@ func TestScoreRejectsStaleAndInventedAnswers(t *testing.T) {
 		{"never-given", "- NONE", true, false},
 		{"never-given", "(NONE)", true, false},
 		{"never-given", "1. NONE", false, true},
+		{"never-given", "NONE" + " NONE", false, true},
+		{"never-given", "N-O-N-E", false, true},
 		{"never-given", "The answer is NONE", false, true},
 		{"never-given", "", false, false},
 		{"never-given", "   ", false, false},

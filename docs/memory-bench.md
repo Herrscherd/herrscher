@@ -65,7 +65,7 @@ The pair suite has four tasks, each taught in one or more steps and then asked:
 | same agent | A fact taught to one agent is recalled by that agent. |
 | other agent | A fact taught to one agent is recalled by another. |
 | stale | A fact is corrected, and the corrected value is recalled, not the old one. A recall of the old value is false recall. |
-| never given | A fact that was never taught is not invented. The question asks for the password, or for the word NONE if it was never given. The reply succeeds when NONE is its only word; any other word, a list number included, is false recall. |
+| never given | A fact that was never taught is not invented. The question asks for the password, or for the word NONE if it was never given. The reply succeeds when NONE is its only word; any reply other than NONE alone, a list number or a repeated NONE included, is false recall. |
 
 With `-dataset`, the bench samples items of a LongMemEval file. Each item's
 evidence sessions are taught in order, then its question is asked. The five
@@ -99,8 +99,9 @@ cell, each with its runs, successes, false recalls, turns and tokens.
 - **Memory tokens per turn**: input tokens per turn on minus off. This is the
   cost the memory adds to each call.
 - **False recall**: a forbidden value (the stale answer) is given, or, for the
-  never-given task, the reply has any word besides NONE, a list number included.
-  That covers an answer that says it does not know in prose, a value stated, and
+  never-given task, the reply is any reply other than NONE alone, a list number
+  or a repeated NONE included. That covers an answer that says it does not know
+  in prose, a value stated, and
   a verbose answer. It is counted, not averaged into success. The LongMemEval
   section does not report it, because its reference answers do not mark
   forbidden values.

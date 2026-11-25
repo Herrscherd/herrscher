@@ -187,7 +187,14 @@ func (w *prWatcher) follow(ctx context.Context, name string, number int, previou
 		return
 	}
 	key := prGroupKey{repo: target.ref.Repo().String(), number: number}
-	group := w.join(ctx, key, name, target)
+	group, err := w.join(ctx, key, name, target)
+	if err != nil {
+		if ctx.Err() == nil {
+			slog.Warn("session pull request not followed", "session", name, "err", err)
+			w.refuse(name, number)
+		}
+		return
+	}
 	w.catchUp(ctx, group, name)
 	select {
 	case <-ctx.Done():
@@ -219,23 +226,26 @@ func (w *prWatcher) refuse(name string, number int) {
 	refusal.until = w.clock.Now().Add(refusal.retry.Next(0))
 }
 
-func (w *prWatcher) join(ctx context.Context, key prGroupKey, name string, target prTarget) *prGroup {
+func (w *prWatcher) join(ctx context.Context, key prGroupKey, name string, target prTarget) (*prGroup, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	delete(w.refusals, name)
 	group, ok := w.groups[key]
 	if !ok {
-		group = w.startGroupLocked(ctx, key, name, target)
+		started, err := w.startGroupLocked(ctx, key, name, target)
+		if err != nil {
+			return nil, err
+		}
+		group = started
 	}
 	group.members[name] = true
-	return group
+	return group, nil
 }
 
-func (w *prWatcher) startGroupLocked(ctx context.Context, key prGroupKey, name string, target prTarget) *prGroup {
+func (w *prWatcher) startGroupLocked(ctx context.Context, key prGroupKey, name string, target prTarget) (*prGroup, error) {
 	groupCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	group := &prGroup{key: key, members: make(map[string]bool), cancel: cancel, finished: make(chan struct{})}
-	w.groups[key] = group
-	watch := prwatch.Watch{
+	watch, err := prwatch.NewWatch(prwatch.Watch{
 		Ref:     target.ref,
 		Since:   w.recordedRevision(name),
 		Stagger: w.stagger(),
@@ -244,14 +254,19 @@ func (w *prWatcher) startGroupLocked(ctx context.Context, key prGroupKey, name s
 		Limit:   w.limit,
 		Clock:   w.clock,
 		Policy:  w.policy,
+	})
+	if err != nil {
+		cancel()
+		return nil, err
 	}
+	w.groups[key] = group
 	w.watches.Add(1)
 	go func() {
 		defer w.watches.Done()
 		defer w.finish(group)
 		watch.Run(groupCtx)
 	}()
-	return group
+	return group, nil
 }
 
 func (w *prWatcher) recordedRevision(name string) contracts.Revision {

@@ -32,8 +32,8 @@ type Policy struct {
 // Watch is the following of one pull request. Since is the revision of the last read saved,
 // so the first read asks the forge for a change only; zero asks for the whole request. Stagger
 // delays the first read. Save persists a read whose state, draft flag, URL or revision differs
-// from the last one saved; a failed Save counts as a failed read and is retried in full. A nil
-// Limit gives the watch a limit of its own.
+// from the last one saved; a failed Save counts as a failed read and is retried in full. Limit
+// is shared with every watch on the same forge, and NewWatch refuses a nil one.
 type Watch struct {
 	Ref     contracts.PullRequestRef
 	Since   contracts.Revision
@@ -52,20 +52,24 @@ func Ended(state contracts.PullRequestState) bool {
 	return state == contracts.PullRequestClosed || state == contracts.PullRequestMerged
 }
 
+// ErrLimitRequired reports a watch built without the limit shared with the other watches of
+// its forge.
+var ErrLimitRequired = errors.New("prwatch: watch without a shared limit")
+
+// NewWatch returns watch once it can run, and ErrLimitRequired when it has no Limit.
+func NewWatch(watch Watch) (Watch, error) {
+	if watch.Limit == nil {
+		return Watch{}, ErrLimitRequired
+	}
+	return watch, nil
+}
+
 // Run follows the pull request until ctx is done or the request has ended. It returns only
 // after its loop has stopped, so a caller that waits for Run to return owns no goroutine of
 // the watch.
 func (w Watch) Run(ctx context.Context) {
 	follower := &runner{watch: w, since: w.Since, failures: w.Policy.Backoff, feedFailures: w.Policy.Backoff}
-	follower.watch.Limit = limitOrOwn(w.Limit)
 	follower.loop(ctx, w.Stagger)
-}
-
-func limitOrOwn(limit *Limit) *Limit {
-	if limit == nil {
-		return &Limit{}
-	}
-	return limit
 }
 
 type runner struct {

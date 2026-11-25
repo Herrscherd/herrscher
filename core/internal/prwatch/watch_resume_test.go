@@ -1,6 +1,7 @@
 package prwatch
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -105,15 +106,21 @@ func TestFirstReadWaitsForTheStagger(t *testing.T) {
 	stop()
 }
 
-func TestNilLimitGivesTheWatchALimitOfItsOwn(t *testing.T) {
+func TestWatchWithoutALimitIsRefused(t *testing.T) {
 	clock := newFakeClock()
-	reader := newFakeReader(clock, reply{pull: open("r1")})
+	reader := newFakeReader(clock)
 	store := &fakeStore{}
-	stop, _ := startWatch(t, Watch{Ref: testRef(t), Reader: reader, Save: store.save, Clock: clock, Policy: testPolicy(time.Minute)})
-
-	reader.awaitRead(t)
-	if d := clock.tick(t); d != time.Minute {
-		t.Fatalf("wait = %v, want Every", d)
+	_, err := NewWatch(Watch{Ref: testRef(t), Reader: reader, Save: store.save, Clock: clock, Policy: testPolicy(time.Minute)})
+	if !errors.Is(err, ErrLimitRequired) {
+		t.Fatalf("NewWatch without a limit: err = %v, want ErrLimitRequired", err)
 	}
-	stop()
+}
+
+func TestWatchWithALimitIsAccepted(t *testing.T) {
+	clock := newFakeClock()
+	reader := newFakeReader(clock)
+	store := &fakeStore{}
+	if _, err := NewWatch(Watch{Ref: testRef(t), Reader: reader, Save: store.save, Limit: &Limit{}, Clock: clock, Policy: testPolicy(time.Minute)}); err != nil {
+		t.Fatalf("NewWatch with a limit: err = %v, want nil", err)
+	}
 }

@@ -23,6 +23,9 @@ func (h *hub) liveSink(ctx context.Context, sess state.Session) sessionSink {
 		TurnOpened: func(turnID string) {
 			h.openTurnMark(sess.Name, turnID)
 		},
+		TurnFinished: func(turnID string) {
+			h.markTurnFinished(sess.Name, turnID)
+		},
 		TurnSettled: func() {
 			h.clearTurnMark(sess.Name)
 		},

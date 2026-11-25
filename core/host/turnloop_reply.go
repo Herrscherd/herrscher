@@ -23,6 +23,9 @@ func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event,
 		cacheRead:     event.CacheRead,
 		cacheWrite:    event.CacheCreate,
 	}, d.modelNow().rates)
+	if event.Outcome != contracts.TurnInterrupted && d.sink.TurnFinished != nil {
+		d.sink.TurnFinished(d.currentTurnID())
+	}
 	shown := d.deliverReply(ctx, event, files)
 	if d.sink.Resume != nil && event.Resume != "" {
 		d.sink.Resume(event.Resume)

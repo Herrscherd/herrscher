@@ -56,11 +56,16 @@ func Ended(state contracts.PullRequestState) bool {
 // after its loop has stopped, so a caller that waits for Run to return owns no goroutine of
 // the watch.
 func (w Watch) Run(ctx context.Context) {
-	if w.Limit == nil {
-		w.Limit = &Limit{}
+	follower := &runner{watch: w, since: w.Since, failures: w.Policy.Backoff, feedFailures: w.Policy.Backoff}
+	follower.watch.Limit = limitOrOwn(w.Limit)
+	follower.loop(ctx, w.Stagger)
+}
+
+func limitOrOwn(limit *Limit) *Limit {
+	if limit == nil {
+		return &Limit{}
 	}
-	r := &runner{watch: w, since: w.Since, failures: w.Policy.Backoff, feedFailures: w.Policy.Backoff}
-	r.loop(ctx, w.Stagger)
+	return limit
 }
 
 type runner struct {

@@ -91,7 +91,8 @@ func prWatchPolicy() prwatch.Policy {
 }
 
 func prWatchStagger() time.Duration {
-	return rand.N(prWatchEvery)
+	jitter := rand.Float64
+	return time.Duration(jitter() * float64(prWatchEvery))
 }
 
 func (w *prWatcher) Run(ctx context.Context) {

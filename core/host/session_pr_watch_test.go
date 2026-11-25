@@ -44,6 +44,7 @@ func (c *prWatchTestClock) After(d time.Duration) <-chan time.Time {
 
 type countingPRForge struct {
 	fakePRForge
+
 	reads atomic.Int32
 }
 
@@ -83,10 +84,10 @@ func followOf(w *prWatcher, name string) (*sessionFollow, bool) {
 	return follow, ok
 }
 
-func prRefusalOf(w *prWatcher, name string) (prRefusal, bool) {
+func betaRefusal(w *prWatcher) (prRefusal, bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	refusal, ok := w.refusals[name]
+	refusal, ok := w.refusals["beta"]
 	if !ok {
 		return prRefusal{}, false
 	}
@@ -259,14 +260,14 @@ func TestRefusedTargetIsRetriedAtTheNextScanWithAGrowingCooldown(t *testing.T) {
 
 	w.scan(ctx)
 	waitForPRWatch(t, "the first refusal", func() bool {
-		_, ok := prRefusalOf(w, "beta")
+		_, ok := betaRefusal(w)
 		return ok
 	})
 	waitForPRWatch(t, "the refused watch to be forgotten", func() bool {
 		_, ok := followOf(w, "beta")
 		return !ok
 	})
-	first, _ := prRefusalOf(w, "beta")
+	first, _ := betaRefusal(w)
 	firstCooldown := first.until.Sub(clock.Now())
 
 	w.scan(ctx)
@@ -277,10 +278,10 @@ func TestRefusedTargetIsRetriedAtTheNextScanWithAGrowingCooldown(t *testing.T) {
 	clock.Advance(prWatchScan)
 	w.scan(ctx)
 	waitForPRWatch(t, "the second refusal", func() bool {
-		refusal, ok := prRefusalOf(w, "beta")
+		refusal, ok := betaRefusal(w)
 		return ok && refusal.until.After(first.until)
 	})
-	second, _ := prRefusalOf(w, "beta")
+	second, _ := betaRefusal(w)
 	secondCooldown := second.until.Sub(clock.Now())
 	if secondCooldown <= firstCooldown {
 		t.Fatalf("cooldown = %v after a refusal of %v, want it to grow", secondCooldown, firstCooldown)

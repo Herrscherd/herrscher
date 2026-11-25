@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"context"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/contextwindow"
 	"github.com/Herrscherd/herrscher/core/eventwire"
 	"github.com/Herrscherd/herrscher/core/identity"
+	"github.com/Herrscherd/herrscher/core/skills"
 )
 
 type stubMemory struct {
@@ -27,6 +29,22 @@ func TestTurnContextJoinsTheBlocksInTheirOrder(t *testing.T) {
 	got := composeTurnContext("MEM", nil, aff).String()
 	want := "MEM" + blockSeparator + capabilitiesBlock(aff.caps) + blockSeparator + identityBlock(aff.user)
 	if got != want {
+		t.Fatalf("turn context:\n got %q\nwant %q", got, want)
+	}
+}
+
+func TestTurnContextKeepsEveryBlockInItsOrder(t *testing.T) {
+	root := t.TempDir()
+	writeBridgeSkill(t, root, "demo", "name: demo\ndescription: a demo\n", "DEMO BODY\n")
+	eng := skills.NewEngine([]string{filepath.Join(root, ".claude", "skills")})
+	aff := affordances{
+		roster: stubRoster{agents: []contracts.AgentInfo{{Name: "codex", Backend: "codex"}}},
+		caps:   "  session: list",
+		user:   identity.Identity{Name: "Jane Doe"},
+	}
+	got := composeTurnContext("MEM", eng, aff).String()
+	want := strings.Join([]string{"MEM", eng.Menu(), delegationBlock(aff.roster), capabilitiesBlock(aff.caps), identityBlock(aff.user)}, blockSeparator)
+	if eng.Menu() == "" || got != want {
 		t.Fatalf("turn context:\n got %q\nwant %q", got, want)
 	}
 }

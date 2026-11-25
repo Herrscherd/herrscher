@@ -506,7 +506,7 @@
   },
   {
     "id": "tui.context.cat_host_need",
-    "other": "size of the delegation, capabilities and identity blocks"
+    "other": "size of the delegation, capabilities, identity and other host blocks"
   },
   {
     "id": "tui.context.host_estimate",

@@ -19,8 +19,10 @@ func (p promptReading) cacheShare() float64 {
 }
 
 func (tb *tab) measureInjected(reply contracts.Event) {
-	tb.injected = reply.Injected
-	tb.injectedKnown = true
+	if len(reply.Injected) > 0 {
+		tb.injected = reply.Injected
+		tb.injectedKnown = true
+	}
 	if reading := (promptReading{fresh: reply.TokensIn, cacheRead: reply.CacheRead, cacheCreate: reply.CacheCreate}); reading.total() > 0 {
 		tb.lastPrompt = reading
 	}

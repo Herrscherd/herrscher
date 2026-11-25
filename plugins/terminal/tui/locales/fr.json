@@ -506,7 +506,7 @@
   },
   {
     "id": "tui.context.cat_host_need",
-    "other": "taille des blocs de délégation, de capacités et d’identité"
+    "other": "taille des blocs de délégation, de capacités, d’identité et des autres blocs de l’hôte"
   },
   {
     "id": "tui.context.host_estimate",

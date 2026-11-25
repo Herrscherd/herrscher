@@ -125,6 +125,19 @@ func TestContextOverlayShowsTheBlocksTheHostWrote(t *testing.T) {
 	}
 }
 
+func TestContextOverlayKeepsTheLastSizesWhenADoneCarriesNone(t *testing.T) {
+	m := contextModel(t, 0)
+	m.tabs["c"].measureContext(contracts.Event{T: "reply", Done: true})
+	if view := ansi.Strip(m.contextView()); strings.Contains(view, "~") {
+		t.Fatalf("a daemon that sends no sizes must leave the parts n/a:\n%s", view)
+	}
+	m.tabs["c"].measureContext(contracts.Event{T: "reply", Done: true, Injected: []contracts.InjectedPart{{Part: contracts.ContextMemory, Tokens: 800}}})
+	m.tabs["c"].measureContext(contracts.Event{T: "reply", Done: true, Text: "posted"})
+	if view := ansi.Strip(m.contextView()); !strings.Contains(view, "~800") {
+		t.Fatalf("a notice without sizes must keep the last turn's figures:\n%s", view)
+	}
+}
+
 func TestContextOverlayReadsZeroForABlockTheHostDidNotWrite(t *testing.T) {
 	m := contextModel(t, 0)
 	m.tabs["c"].measureContext(contracts.Event{T: "reply", Done: true, Injected: []contracts.InjectedPart{{Part: contracts.ContextMemory, Tokens: 800}}})

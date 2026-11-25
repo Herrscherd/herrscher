@@ -291,3 +291,85 @@ it are renamed, and their values are unchanged.
   the directory of the dead owner. The sweep runs before the new run directory
   and its copy are made, so a launch never removes a copy it is still using. The
   window lasts until the next launch.
+
+## First run and decisions (2026-11-25)
+
+The first real run used `claude-haiku-5-5` on a Claude subscription, through
+`-credentials`, with a ceiling of 8 million tokens per pair run and 20 million
+for the LongMemEval run. The pair suite ran three times; the third stopped on
+the account's weekly limit after 26 of its 30 arms. LongMemEval ran 10 items of
+the oracle file (`longmemeval_oracle.json`, the evidence sessions only), seed 1,
+and stopped on the same limit after 67 of its 84 arms. The whole run spent about
+10 million tokens, almost all cache reads, which the ledger costs at about
+0.70 US dollars. On a subscription that figure is an estimate; the quota is
+what it consumes.
+
+The settings were measured against each other, with the rest of the memory on
+in both arms. The baseline recalls every taught fact: same agent, other agent
+and corrected fact all pass, and the never-given fact is never invented.
+
+### Pair suite
+
+Successes over runs, summed over the five tasks, three runs each.
+
+| Setting | Off | On | False recall off / on | What changed |
+|---|---|---|---|---|
+| `learned-skills` | 15/15 | 12/15 | 0 / 0 | The procedure task fails in every on run (0/3 against 3/3), with about 32000 more prompt tokens per turn. The other tasks do not move. |
+| `raw-archive` | 14/14 | 13/14 | 0 / 1 | One stale run gave the old code. The raw archive is only read by `memory search --raw`, so it cannot feed recall; the miss is noise. |
+| `report` | 14/14 | 14/14 | 0 / 0 | Nothing. The report is an audit node, not recall. |
+
+The memory tokens per turn of a single task vary by about 10000 from one run to
+the next, because the agent sometimes reads the repository before it answers.
+Only the `learned-skills` procedure gap stands clear of that noise.
+
+The likely cause of the `learned-skills` failure is that the extractor files a
+procedure as a private skill. With the setting on, it becomes a `SKILL.md` the
+agent has to open rather than a fact the recall injects, and Haiku answered
+without opening it. This is not verified yet.
+
+### LongMemEval
+
+Successes over runs, summed over the capabilities the sample reached
+(extraction, multi-session, temporal reasoning, abstention; the sample drew no
+knowledge-update item). Scored by whole-word match of the reference answer, a
+proxy that fails most free-text answers.
+
+| Setting | Off | On |
+|---|---|---|
+| `learned-skills` | 2/8 | 3/7 |
+| `raw-archive` | 1/7 | 2/7 |
+| `report` | 3/7 | 3/7 |
+
+At these counts a single item moves a rate by more than 10 points. LongMemEval
+places the recall layer, it does not decide a setting.
+
+### Decision per setting
+
+| Setting | Default | Decision | Why |
+|---|---|---|---|
+| `MEMORY_LEARNED_SKILLS` | off | kept as an option, off | It makes a taught procedure unrecallable and costs about 32000 tokens per turn. To revisit once a learned skill reaches the agent as reliably as a recalled fact. |
+| `MEMORY_RAW_ARCHIVE` | off | kept as an option, off | No measured gain: recall does not read it. It writes one node per turn. |
+| `MEMORY_REPORT_ENABLED` | on | kept on | No effect on recall or cost, and it is the audit trail of each pass. |
+| `MEMORY_PROMOTE_MIN_AGE_DAYS` | 0, off | kept as an option, not measured | It acts after days pass; the bench has no simulated clock. |
+| `MEMORY_IDLE_DAYS` | 0, off | kept as an option, not measured | Same. |
+| `MEMORY_MERGE_MIN` | 0, off | kept as an option, not measured | It needs a domain with many nodes, which one-shot tasks do not build. |
+| `AGENT_STALE_DAYS`, `AGENT_ARCHIVE_DAYS` | 30, 90 | kept on, not measured | Already on; they act after days pass. |
+| `TERMINAL_CONSOLIDATE_EVERY` | 10 | kept at 10 | A one-shot now consolidates at its end unless the cadence already did on its single turn. Before, at 10 a `--print` never consolidated and learned nothing. |
+
+### What the run found in the bench
+
+The first attempts measured the wrong memory, and the bench was fixed before the
+numbers above:
+
+- Claude Code's own automatic memory stored the taught fact and answered from
+  it. It is now off in every run.
+- The account's claude.ai connectors and synced skills were loaded into each
+  run. They are now off.
+- Run outside a git repository, a call had no project scope, so nothing it
+  learned was ever recalled. Every call now runs from a repository.
+- Both agents of the other-agent task were the same memory agent. Each step now
+  sets `TERMINAL_MEMORY_AGENT`.
+- The memory tokens per turn read the uncached input only, which caching keeps
+  near zero. They now count the cached prompt too.
+- The stale task counted a correct answer that named the old value as replaced
+  as false recall. The question now asks for the code alone.

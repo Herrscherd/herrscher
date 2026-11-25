@@ -29,16 +29,21 @@ type Policy struct {
 	FeedPause time.Duration
 }
 
-// Watch is the following of one pull request. Save persists a read whose state, draft flag
-// or URL differs from the last one saved; a failed Save counts as a failed read.
+// Watch is the following of one pull request. Since is the revision of the last read saved,
+// so the first read asks the forge for a change only; zero asks for the whole request. Stagger
+// delays the first read. Save persists a read whose state, draft flag, URL or revision differs
+// from the last one saved; a failed Save counts as a failed read and is retried in full. A nil
+// Limit gives the watch a limit of its own.
 type Watch struct {
-	Ref    contracts.PullRequestRef
-	Reader Reader
-	Feed   Feed
-	Save   func(ctx context.Context, pull contracts.PullRequest) error
-	Limit  *Limit
-	Clock  Clock
-	Policy Policy
+	Ref     contracts.PullRequestRef
+	Since   contracts.Revision
+	Stagger time.Duration
+	Reader  Reader
+	Feed    Feed
+	Save    func(ctx context.Context, pull contracts.PullRequest) error
+	Limit   *Limit
+	Clock   Clock
+	Policy  Policy
 }
 
 // Ended reports whether a pull request in state is merged or closed, so that no further
@@ -51,8 +56,11 @@ func Ended(state contracts.PullRequestState) bool {
 // after its loop has stopped, so a caller that waits for Run to return owns no goroutine of
 // the watch.
 func (w Watch) Run(ctx context.Context) {
-	r := &runner{watch: w, failures: w.Policy.Backoff, feedFailures: w.Policy.Backoff}
-	r.loop(ctx)
+	if w.Limit == nil {
+		w.Limit = &Limit{}
+	}
+	r := &runner{watch: w, since: w.Since, failures: w.Policy.Backoff, feedFailures: w.Policy.Backoff}
+	r.loop(ctx, w.Stagger)
 }
 
 type runner struct {
@@ -61,19 +69,19 @@ type runner struct {
 	saved        *recordKey
 	failures     obs.Backoff
 	feedFailures obs.Backoff
-	signals      <-chan struct{}
+	signals      <-chan FeedEvent
 	heardAt      time.Time
 	subscribeAt  time.Time
 }
 
 type recordKey struct {
-	state contracts.PullRequestState
-	draft bool
-	url   string
+	state    contracts.PullRequestState
+	draft    bool
+	url      string
+	revision contracts.Revision
 }
 
-func (r *runner) loop(ctx context.Context) {
-	var due time.Duration
+func (r *runner) loop(ctx context.Context, due time.Duration) {
 	for {
 		if !r.idle(ctx, r.heldFor(due)) {
 			return
@@ -161,10 +169,18 @@ func (r *runner) read(ctx context.Context) (time.Duration, bool) {
 		return r.observe(ctx, pull)
 	}
 	if limited, ok := errors.AsType[*contracts.ForgeRateLimitedError](err); ok && !limited.Reset.IsZero() {
-		r.watch.Limit.Hold(limited.Reset)
-		return limited.Reset.Sub(r.watch.Clock.Now()), false
+		return r.hold(limited.Reset), false
 	}
 	return r.failures.Next(0), false
+}
+
+func (r *runner) hold(reset time.Time) time.Duration {
+	now := r.watch.Clock.Now()
+	if !reset.After(now) {
+		reset = now.Add(r.failures.Next(0))
+	}
+	r.watch.Limit.Hold(reset)
+	return reset.Sub(now)
 }
 
 func (r *runner) observe(ctx context.Context, pull contracts.PullRequest) (time.Duration, bool) {
@@ -181,7 +197,7 @@ func (r *runner) observe(ctx context.Context, pull contracts.PullRequest) (time.
 }
 
 func (r *runner) record(ctx context.Context, pull contracts.PullRequest) error {
-	key := recordKey{state: pull.State, draft: pull.Draft, url: pull.URL}
+	key := recordKey{state: pull.State, draft: pull.Draft, url: pull.URL, revision: pull.Revision}
 	if r.saved != nil && *r.saved == key {
 		return nil
 	}

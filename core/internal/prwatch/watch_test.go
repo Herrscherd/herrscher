@@ -164,12 +164,12 @@ func (s *fakeStore) persisted() []contracts.PullRequest {
 type fakeFeed struct {
 	clock      *fakeClock
 	refuse     bool
-	signals    chan struct{}
+	signals    chan FeedEvent
 	mu         sync.Mutex
 	subscribed []time.Time
 }
 
-func (f *fakeFeed) Subscribe(_ context.Context, _ contracts.PullRequestRef) (<-chan struct{}, error) {
+func (f *fakeFeed) Subscribe(_ context.Context, _ contracts.PullRequestRef) (<-chan FeedEvent, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.subscribed = append(f.subscribed, f.clock.Now())
@@ -234,15 +234,22 @@ func open(revision contracts.Revision) contracts.PullRequest {
 
 func TestNotModifiedReadChangesNothing(t *testing.T) {
 	clock := newFakeClock()
-	reader := newFakeReader(clock, reply{pull: open("r1")}, reply{err: contracts.ErrForgeNotModified})
+	reader := newFakeReader(clock, reply{pull: open("r1")}, reply{err: contracts.ErrForgeNotModified}, reply{err: contracts.ErrForgeNotModified})
 	store := &fakeStore{}
 	stop, _ := startWatch(t, Watch{Ref: testRef(t), Reader: reader, Save: store.save, Limit: &Limit{}, Clock: clock, Policy: testPolicy(time.Minute)})
 
 	reader.awaitRead(t)
-	clock.tick(t)
-	second := reader.awaitRead(t)
-	if second.since != "r1" {
+	if d := clock.tick(t); d != time.Minute {
+		t.Fatalf("wait after the first read = %v, want Every", d)
+	}
+	if second := reader.awaitRead(t); second.since != "r1" {
 		t.Fatalf("second read since = %q, want the revision of the first", second.since)
+	}
+	if d := clock.tick(t); d != time.Minute {
+		t.Fatalf("wait after a 304 = %v, want Every and no backoff", d)
+	}
+	if third := reader.awaitRead(t); third.since != "r1" {
+		t.Fatalf("third read since = %q, want the revision still held after a 304", third.since)
 	}
 	clock.awaitArm(t)
 	if got := len(store.persisted()); got != 1 {
@@ -277,9 +284,11 @@ func TestFailedSaveIsRetriedWithAFullRead(t *testing.T) {
 	clock := newFakeClock()
 	reader := newFakeReader(clock, reply{pull: open("r1")}, reply{pull: open("r1")})
 	store := &fakeStore{failures: 1}
-	stop, _ := startWatch(t, Watch{Ref: testRef(t), Reader: reader, Save: store.save, Limit: &Limit{}, Clock: clock, Policy: testPolicy(time.Minute)})
+	stop, _ := startWatch(t, Watch{Ref: testRef(t), Since: "r0", Reader: reader, Save: store.save, Limit: &Limit{}, Clock: clock, Policy: testPolicy(time.Minute)})
 
-	reader.awaitRead(t)
+	if first := reader.awaitRead(t); first.since != "r0" {
+		t.Fatalf("first read since = %q, want the persisted revision r0", first.since)
+	}
 	if d := clock.tick(t); d != time.Second {
 		t.Fatalf("wait after a failed save = %v, want the first backoff step", d)
 	}
@@ -373,7 +382,7 @@ func TestCancelStopsTheWatchWithoutAnotherRead(t *testing.T) {
 
 func TestRefusedFeedPausesBeforeSubscribingAgain(t *testing.T) {
 	clock := newFakeClock()
-	feed := &fakeFeed{clock: clock, refuse: true, signals: make(chan struct{})}
+	feed := &fakeFeed{clock: clock, refuse: true, signals: make(chan FeedEvent)}
 	reader := newFakeReader(clock)
 	store := &fakeStore{}
 	stop, _ := startWatch(t, Watch{Ref: testRef(t), Reader: reader, Feed: feed, Save: store.save, Limit: &Limit{}, Clock: clock, Policy: testPolicy(time.Minute)})
@@ -393,7 +402,7 @@ func TestRefusedFeedPausesBeforeSubscribingAgain(t *testing.T) {
 
 func TestFeedSignalTriggersAReadAtOnce(t *testing.T) {
 	clock := newFakeClock()
-	feed := &fakeFeed{clock: clock, signals: make(chan struct{})}
+	feed := &fakeFeed{clock: clock, signals: make(chan FeedEvent)}
 	reader := newFakeReader(clock)
 	store := &fakeStore{}
 	stop, _ := startWatch(t, Watch{Ref: testRef(t), Reader: reader, Feed: feed, Save: store.save, Limit: &Limit{}, Clock: clock, Policy: testPolicy(time.Minute)})
@@ -401,7 +410,7 @@ func TestFeedSignalTriggersAReadAtOnce(t *testing.T) {
 	reader.awaitRead(t)
 	clock.awaitArm(t)
 	clock.awaitArm(t)
-	feed.signals <- struct{}{}
+	feed.signals <- FeedChanged
 	reader.awaitRead(t)
 	clock.awaitArm(t)
 	clock.awaitArm(t)
@@ -413,7 +422,7 @@ func TestFeedSignalTriggersAReadAtOnce(t *testing.T) {
 
 func TestSilentFeedIsSubscribedAgain(t *testing.T) {
 	clock := newFakeClock()
-	feed := &fakeFeed{clock: clock, signals: make(chan struct{})}
+	feed := &fakeFeed{clock: clock, signals: make(chan FeedEvent)}
 	reader := newFakeReader(clock)
 	store := &fakeStore{}
 	policy := testPolicy(time.Minute)

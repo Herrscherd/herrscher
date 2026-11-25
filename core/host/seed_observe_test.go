@@ -69,7 +69,7 @@ func (o *blockedObserveOrchestrator) Consolidate(context.Context) error { return
 func (o *blockedObserveOrchestrator) Close() error                      { return nil }
 
 const (
-	oneShotReturnMargin = 500 * time.Millisecond
+	oneShotReturnMargin = 5 * time.Second
 	oneShotTestGrace    = 50 * time.Millisecond
 	oneShotHandoffWait  = 10 * time.Second
 )

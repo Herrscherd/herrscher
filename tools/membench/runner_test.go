@@ -123,6 +123,36 @@ func TestFailedCallIsChargedFromTheLedger(t *testing.T) {
 	}
 }
 
+func TestUnreadableLedgerDayStillChargesTheReadableSpend(t *testing.T) {
+	skipOffUnix(t)
+	binary := filepath.Join(t.TempDir(), "herrscher")
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	box, err := newSandbox(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(box.state, usageSubdir)
+	ledger := usage.Ledger{Dir: dir, Now: time.Now}
+	if err = ledger.Append([]usage.Record{{Time: time.Now(), In: 100, Out: 20, Cost: 0.01}}); err != nil {
+		t.Fatal(err)
+	}
+	unreadable := time.Now().Add(-24*time.Hour).UTC().Format(time.DateOnly) + ".jsonl"
+	if err = os.MkdirAll(filepath.Join(dir, unreadable), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	bench := &runner{binary: binary, meter: &meter{}}
+	planned := arm{current: pairTasks()[0], option: setting{name: "report", env: "MEMORY_REPORT_ENABLED"}, enabled: true}
+	_, err = bench.play(context.Background(), box, planned)
+	if known, ok := errors.AsType[messageError](err); !ok || known.key != msgErrSpendPartial {
+		t.Fatalf("error %v, want the spend_partial message for the unreadable day", err)
+	}
+	if bench.meter.spent.tokens != 120 {
+		t.Errorf("spent %d tokens, want the 120 the readable day recorded", bench.meter.spent.tokens)
+	}
+}
+
 func TestOversizedPromptIsRefusedBeforeTheBinaryRuns(t *testing.T) {
 	bench := &runner{binary: filepath.Join(t.TempDir(), "missing"), meter: &meter{}}
 	box, err := newSandbox(t.TempDir())

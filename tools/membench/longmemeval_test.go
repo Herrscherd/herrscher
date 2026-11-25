@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -55,7 +56,7 @@ func TestSampleSkipsIneligibleItems(t *testing.T) {
 }
 
 func TestSampleReadsNumericAnswersAsWritten(t *testing.T) {
-	fixture := `[{"question_id":"big","question_type":"multi-session","question":"q","answer":1000000,"haystack_session_ids":["s1"],"haystack_sessions":[[{"role":"user","content":"x"}]],"answer_session_ids":["s1"]}]`
+	fixture := `[{"question_id":"big","question_type":"multi-session","question":"q","answer":9007199254740993,"haystack_session_ids":["s1"],"haystack_sessions":[[{"role":"user","content":"x"}]],"answer_session_ids":["s1"]}]`
 	items, _, _, err := sampleItems(strings.NewReader(fixture), 10, 1, 6)
 	if err != nil {
 		t.Fatal(err)
@@ -63,8 +64,23 @@ func TestSampleReadsNumericAnswersAsWritten(t *testing.T) {
 	if len(items) != 1 {
 		t.Fatalf("sampled %d items, want the numeric answer kept", len(items))
 	}
-	if got := itemTask(items[0]).want; len(got) != 1 || got[0] != "1000000" {
-		t.Errorf("want %q, want the number written in full", got)
+	if got := itemTask(items[0]).want; len(got) != 1 || got[0] != "9007199254740993" {
+		t.Errorf("want %q, want the number written in full without float rounding", got)
+	}
+}
+
+func TestSampleKeepsAbstentionsWithoutAnAnswer(t *testing.T) {
+	const evidence = `"haystack_session_ids":["s1"],"haystack_sessions":[[{"role":"user","content":"x"}]],"answer_session_ids":["s1"]`
+	fixture := `[{"question_id":"q_abs","question_type":"single-session-user","question":"q","answer":null,` + evidence + `}]`
+	items, _, _, err := sampleItems(strings.NewReader(fixture), 10, 1, 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("sampled %d items, want the abstention kept without an answer", len(items))
+	}
+	if built := itemTask(items[0]); !built.abstain || len(built.want) != 0 {
+		t.Errorf("task %+v, want an abstention with nothing to score", built)
 	}
 }
 
@@ -86,7 +102,7 @@ func TestItemTaskAsksTheQuestionAfterItsEvidence(t *testing.T) {
 		QuestionID:   "q1",
 		QuestionType: "knowledge-update",
 		Question:     "Where now?",
-		Answer:       "Lisbon",
+		Answer:       json.RawMessage(`"Lisbon"`),
 		SessionIDs:   []string{"s1", "s2"},
 		Sessions:     [][]lmeTurn{{{Role: "user", Content: "I live in Porto."}}, {{Role: "user", Content: "I moved to Lisbon."}}},
 		Evidence:     []string{"s2"},

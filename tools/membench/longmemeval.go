@@ -27,13 +27,13 @@ type lmeTurn struct {
 }
 
 type lmeItem struct {
-	QuestionID   string      `json:"question_id"`
-	QuestionType string      `json:"question_type"`
-	Question     string      `json:"question"`
-	Answer       any         `json:"answer"`
-	SessionIDs   []string    `json:"haystack_session_ids"`
-	Sessions     [][]lmeTurn `json:"haystack_sessions"`
-	Evidence     []string    `json:"answer_session_ids"`
+	QuestionID   string          `json:"question_id"`
+	QuestionType string          `json:"question_type"`
+	Question     string          `json:"question"`
+	Answer       json.RawMessage `json:"answer"`
+	SessionIDs   []string        `json:"haystack_session_ids"`
+	Sessions     [][]lmeTurn     `json:"haystack_sessions"`
+	Evidence     []string        `json:"answer_session_ids"`
 }
 
 type sampled struct {
@@ -209,7 +209,7 @@ func eligibleItem(item lmeItem, maxTurns int) bool {
 	if len(evidenceSessions(item)) == 0 || len(evidenceSessions(item))+1 > maxTurns {
 		return false
 	}
-	return strings.TrimSpace(answerText(item)) != ""
+	return isAbstention(item) || strings.TrimSpace(answerText(item)) != ""
 }
 
 func capabilityOf(item lmeItem) (msgKey, bool) {
@@ -234,11 +234,13 @@ func isAbstention(item lmeItem) bool {
 }
 
 func answerText(item lmeItem) string {
-	switch answer := item.Answer.(type) {
-	case string:
-		return answer
-	case float64:
-		return strconv.FormatFloat(answer, 'f', -1, 64)
+	var text string
+	if json.Unmarshal(item.Answer, &text) == nil {
+		return text
+	}
+	var number json.Number
+	if json.Unmarshal(item.Answer, &number) == nil {
+		return number.String()
 	}
 	return ""
 }

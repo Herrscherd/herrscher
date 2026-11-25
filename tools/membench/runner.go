@@ -214,7 +214,7 @@ func (r *runner) invoke(ctx context.Context, box sandbox, request step, assignme
 	cmd.Stderr = &stderr
 	runErr := cmd.Run()
 	reapErr := reapGroup(cmd)
-	if runErr != nil && !exitedWithHeldPipe(cmd, runErr) {
+	if runErr != nil && !errors.Is(runErr, exec.ErrWaitDelay) {
 		return "", runOutputError{stderr: redact(strings.TrimSpace(stderr.String()), r.apiKey), cause: errors.Join(deadlineAware(callCtx, runErr), reapErr)}
 	}
 	if reapErr != nil {
@@ -224,10 +224,6 @@ func (r *runner) invoke(ctx context.Context, box sandbox, request step, assignme
 		return "", errOutputTooLong
 	}
 	return stdout.String(), nil
-}
-
-func exitedWithHeldPipe(cmd *exec.Cmd, err error) bool {
-	return errors.Is(err, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success()
 }
 
 func deadlineAware(callCtx context.Context, err error) error {
@@ -259,7 +255,7 @@ func (o runOutputError) Unwrap() error {
 
 func runFailure(label string, cause error) error {
 	if errors.Is(cause, errOutputTooLong) {
-		return messageError{key: msgErrRunOutput, params: params{paramRun: label, paramLimit: strconv.Itoa(maxOutputBytes)}, cause: cause}
+		return messageError{key: msgErrRunOutput, params: params{paramRun: label, paramLimit: byteSize(maxOutputBytes)}, cause: cause}
 	}
 	if errors.Is(cause, context.DeadlineExceeded) {
 		return messageError{key: msgErrRunTimeout, params: params{paramRun: label}, cause: cause}

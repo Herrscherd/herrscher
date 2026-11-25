@@ -30,10 +30,13 @@ const (
 )
 
 func main() {
-	os.Exit(int(run(os.Args[1:], os.Stdout, os.Stderr, os.Getenv)))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	code := run(ctx, os.Args[1:], os.Stdout, os.Stderr, os.Getenv)
+	stop()
+	os.Exit(int(code))
 }
 
-func run(args []string, stdout, stderr io.Writer, getenv func(string) string) exitCode {
+func run(ctx context.Context, args []string, stdout, stderr io.Writer, getenv func(string) string) exitCode {
 	lang := defaultLanguage(getenv)
 	msgs := loadCatalogue()
 	cfg, err := parseConfig(args, stderr, msgs, lang, getenv)
@@ -47,8 +50,6 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) ex
 	if err != nil {
 		return fail(stderr, msgs, cfg.lang, err, exitFailed)
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	rep, runErr := execute(ctx, cfg, tasks, skipped, msgs)
 	if writeErr := writeReport(stdout, rep, cfg, msgs); writeErr != nil {
 		return fail(stderr, msgs, cfg.lang, writeErr, exitFailed)

@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -85,6 +87,49 @@ func TestCancelSendsSIGINTToTheLeader(t *testing.T) {
 		t.Errorf("the leader did not receive SIGINT: %v", err)
 	}
 	waitGroupDead(t, pid)
+}
+
+func TestCancelKillsTheGrandchildBeforeRunReturns(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("env --default-signal is a GNU coreutils option")
+	}
+	dir := t.TempDir()
+	pidFile := filepath.Join(dir, "pid")
+	script := "#!/bin/sh\ntrap 'sleep 2; exit 0' INT\nenv --default-signal=INT sleep 30 &\necho $! > '" + pidFile + "'\nwait\n"
+	binary := writeGroupScript(t, dir, script)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	box := groupTestBox(t)
+	done := make(chan error, 1)
+	go func() {
+		r := runner{binary: binary, model: defaultModel}
+		_, err := r.invoke(ctx, box, step{agent: agentAlpha, prompt: "x"}, nil)
+		done <- err
+	}()
+	pid := readGroupPID(t, pidFile)
+	cancel()
+	select {
+	case err := <-done:
+		t.Logf("invoke returned %v after the leader handled SIGINT", err)
+	case <-time.After(groupWaitBound):
+		t.Fatal("invoke did not return after the context was canceled")
+	}
+	if processAlive(pid) {
+		t.Errorf("the grandchild %d survived until invoke returned: cancel did not signal its group", pid)
+	}
+}
+
+func TestNonZeroExitWithHeldPipeIsAnError(t *testing.T) {
+	dir := t.TempDir()
+	pidFile := filepath.Join(dir, "pid")
+	binary := writeGroupScript(t, dir, "#!/bin/sh\nsleep 30 &\necho $! > '"+pidFile+"'\necho answer\nexit 3\n")
+	r := runner{binary: binary, model: defaultModel}
+	answer, err := r.invoke(context.Background(), groupTestBox(t), step{agent: agentAlpha, prompt: "x"}, nil)
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("invoke returned %v and answer %q for a run that exited 3, want the exit error", err, answer)
+	}
+	waitGroupDead(t, readGroupPID(t, pidFile))
 }
 
 func TestOutputBeyondTheCapIsAnError(t *testing.T) {

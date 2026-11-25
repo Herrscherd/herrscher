@@ -228,3 +228,10 @@ names.
   intervals.
 - The ceiling can be exceeded by the part of a single call that is wider than
   the reserve, as described above.
+- Output cap: a call whose answer exceeds 1 MiB fails its run. The bench never
+  cuts an answer, since a cut answer would score wrong without a trace. The
+  limit also bounds the memory the bench holds for one call.
+- Process groups: each call runs in its own process group, and the group is
+  signalled on cancellation and reaped after every call. The signal reaches only
+  that group. A descendant that leaves it, for example with `setsid`, is not
+  reached and can outlive its call, even a successful one.

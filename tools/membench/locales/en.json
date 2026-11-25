@@ -169,7 +169,7 @@
   {
     "id": "membench.error.run_output",
     "description": "Message of the memory bench: the output of a run exceeds the cap",
-    "other": "run {{.Run}} printed more than {{.Limit}} bytes"
+    "other": "run {{.Run}} printed more than {{.Limit}}"
   },
   {
     "id": "membench.no_measure",

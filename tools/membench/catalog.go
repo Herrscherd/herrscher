@@ -9,6 +9,7 @@ import (
 	"slices"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
 //go:embed locales
@@ -77,7 +78,7 @@ func (c catalogue) For(lang i18n.Language) *translator {
 }
 
 func (t *translator) Text(key msgKey, args params) string {
-	text, err := t.cat.text(t.lang, key, args)
+	text, err := t.cat.text(t.lang, key, t.localize(args))
 	if err != nil {
 		if t.err == nil {
 			t.err = err
@@ -85,6 +86,48 @@ func (t *translator) Text(key msgKey, args params) string {
 		return string(key)
 	}
 	return text
+}
+
+func (t *translator) localize(args params) params {
+	localized := make(params, len(args))
+	for name, value := range args {
+		if size, ok := value.(byteSize); ok {
+			localized[name] = byteText(t.lang, size)
+			continue
+		}
+		localized[name] = value
+	}
+	return localized
+}
+
+type byteSize int64
+
+const (
+	kibibyte = 1 << 10
+	mebibyte = 1 << 20
+)
+
+type byteSymbols struct {
+	bytes, kibi, mebi string
+}
+
+func byteText(lang i18n.Language, size byteSize) string {
+	symbols := byteSymbolsOf(lang)
+	value, unit := float64(size), symbols.bytes
+	switch {
+	case size >= mebibyte && size%mebibyte == 0:
+		value, unit = float64(size/mebibyte), symbols.mebi
+	case size >= kibibyte && size%kibibyte == 0:
+		value, unit = float64(size/kibibyte), symbols.kibi
+	}
+	return clitext.FormatNumber(lang, value, 0) + " " + unit
+}
+
+func byteSymbolsOf(lang i18n.Language) byteSymbols {
+	if lang == i18n.French {
+		return byteSymbols{bytes: "o", kibi: "Kio", mebi: "Mio"}
+	}
+	return byteSymbols{bytes: "B", kibi: "KiB", mebi: "MiB"}
 }
 
 func (t *translator) Err() error {

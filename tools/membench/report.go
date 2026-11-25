@@ -260,19 +260,32 @@ func statusLine(translator *translator, rep report) string {
 	switch rep.Status {
 	case statusFailed:
 		if len(rep.Rows) == 0 {
-			return translator.Text(msgStatusFailedEarly, params{paramDetail: rep.Failure}) + " " + notStartedText(translator, rep)
+			return joinSentences(translator.Text(msgStatusFailedEarly, params{paramDetail: rep.Failure}), notStartedText(translator, rep))
 		}
-		return translator.Text(msgStatusFailed, params{paramDetail: rep.Failure}) + " " + notStartedText(translator, rep)
+		return joinSentences(translator.Text(msgStatusFailed, params{paramDetail: rep.Failure}), notStartedText(translator, rep))
 	case statusInterrupted:
-		return translator.Text(msgStatusInterrupted, nil) + " " + notStartedText(translator, rep)
+		return joinSentences(translator.Text(msgStatusInterrupted, nil), notStartedText(translator, rep))
 	case statusPartial:
 		stopped := translator.Text(msgBudgetStopped, params{
 			paramSpent: amountText(translator, rep.SpentTokens, rep.SpentUSD),
 			paramLimit: amountText(translator, rep.LimitTokens, rep.LimitUSD),
 		})
-		return translator.Text(msgStatusPartial, nil) + " " + stopped + " " + notRunText(translator, rep)
+		return joinSentences(translator.Text(msgStatusPartial, nil), stopped, notRunText(translator, rep))
 	}
 	return translator.Text(msgStatusComplete, nil)
+}
+
+func joinSentences(sentences ...string) string {
+	kept := make([]string, 0, len(sentences))
+	for _, sentence := range sentences {
+		if trimmed := strings.TrimSpace(sentence); trimmed != "" {
+			kept = append(kept, trimmed)
+		}
+	}
+	for index := range len(kept) - 1 {
+		kept[index] = strings.TrimRight(kept[index], ".") + "."
+	}
+	return strings.Join(kept, " ")
 }
 
 func notRunText(translator *translator, rep report) string {

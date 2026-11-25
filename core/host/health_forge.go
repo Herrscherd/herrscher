@@ -82,7 +82,7 @@ func githubRun(open forgeOpener, origin string, probeRepo repoProbe) runFunc {
 		}
 		connection, err := forge.Connection(ctx)
 		if err != nil {
-			return health.ForgeFailure(err), health.ForgeFailureFacts(err)
+			return health.ForgeFailure(err)
 		}
 		facts := &health.Forge{Source: connection.Source, Login: connection.Login, Quota: health.QuotaOf(connection.RateLimit)}
 		repo, permission, repoErr := probeRepo(ctx, forge, host, origin)

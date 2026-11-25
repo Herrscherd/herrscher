@@ -12,14 +12,22 @@ import (
 	"github.com/Herrscherd/herrscher/core/health"
 )
 
-func TestForgeFailureFactsCarryTheRateLimitReset(t *testing.T) {
+func TestForgeFailureCarriesTheRateLimitReset(t *testing.T) {
 	reset := time.Date(2026, 11, 25, 10, 0, 0, 0, time.UTC)
-	facts := health.ForgeFailureFacts(fmt.Errorf("probe: %w", &contracts.ForgeRateLimitedError{Reset: reset}))
-	if !facts.ForgeReset.Equal(reset) {
-		t.Errorf("ForgeReset = %v, want %v", facts.ForgeReset, reset)
+	_, facts := health.ForgeFailure(fmt.Errorf("probe: %w", &contracts.ForgeRateLimitedError{Reset: reset}))
+	if !facts.RateLimitReset().Equal(reset) {
+		t.Errorf("RateLimitReset = %v, want %v", facts.RateLimitReset(), reset)
 	}
-	if other := health.ForgeFailureFacts(contracts.ErrForgeUnauthorized); !other.ForgeReset.IsZero() {
-		t.Errorf("ForgeReset = %v for a refused credential, want none", other.ForgeReset)
+	if _, other := health.ForgeFailure(contracts.ErrForgeUnauthorized); !other.RateLimitReset().IsZero() {
+		t.Errorf("RateLimitReset = %v for a refused credential, want none", other.RateLimitReset())
+	}
+}
+
+func TestRateLimitResetReadsTheReportedQuotaWhenConnected(t *testing.T) {
+	reset := time.Date(2026, 11, 25, 11, 0, 0, 0, time.UTC)
+	facts := health.Facts{Forge: &health.Forge{Quota: health.QuotaOf(contracts.ForgeRateLimit{Remaining: 40, Reset: reset})}}
+	if !facts.RateLimitReset().Equal(reset) {
+		t.Errorf("RateLimitReset = %v, want the quota reset %v", facts.RateLimitReset(), reset)
 	}
 }
 
@@ -37,7 +45,7 @@ func TestForgeFailureNamesTheCause(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			report := health.ForgeFailure(tt.err)
+			report, _ := health.ForgeFailure(tt.err)
 			if report.State != tt.want {
 				t.Errorf("state = %v, want %v", report.State, tt.want)
 			}
@@ -51,7 +59,7 @@ func TestForgeFailureNamesTheCause(t *testing.T) {
 func TestForgeFailureRemedyNamesTheConnectCommand(t *testing.T) {
 	want := []contracts.Arg{contracts.Text("Command", "herrscher connect github")}
 	for _, err := range []error{contracts.ErrForgeNotConnected, contracts.ErrForgeUnauthorized} {
-		report := health.ForgeFailure(err)
+		report, _ := health.ForgeFailure(err)
 		if report.Remedy.Code != contracts.CodeHealthRemedyRun || !slices.Equal(report.Remedy.Args, want) {
 			t.Errorf("ForgeFailure(%v) remedy = %+v, want the connect command", err, report.Remedy)
 		}
@@ -59,7 +67,7 @@ func TestForgeFailureRemedyNamesTheConnectCommand(t *testing.T) {
 }
 
 func TestForgeFailureRateLimitHasNoRemedy(t *testing.T) {
-	report := health.ForgeFailure(&contracts.ForgeRateLimitedError{})
+	report, _ := health.ForgeFailure(&contracts.ForgeRateLimitedError{})
 	if report.Remedy.Code != 0 {
 		t.Errorf("remedy = %+v, want none: a new connection does not lift the limit", report.Remedy)
 	}

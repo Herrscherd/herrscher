@@ -25,28 +25,19 @@ func ForgeReport(connection contracts.ForgeConnection) contracts.ProbeReport {
 
 // ForgeFailure is the report of a forge that gave no connection, from the error
 // it returned: a missing credential is degraded, a refused credential and a rate
-// limit are down, and any other failure is unreachable.
-func ForgeFailure(err error) contracts.ProbeReport {
+// limit are down, and any other failure is unreachable. The facts carry the time
+// the rate limit lifts when the forge refused the call for its rate limit.
+func ForgeFailure(err error) (contracts.ProbeReport, Facts) {
 	var limited *contracts.ForgeRateLimitedError
 	switch {
 	case errors.Is(err, contracts.ErrForgeNotConnected):
-		return contracts.ProbeReport{State: contracts.HealthDegraded, Detail: contracts.Notice{Code: contracts.CodeHealthNotLoggedIn}, Remedy: connectRemedy()}
+		return contracts.ProbeReport{State: contracts.HealthDegraded, Detail: contracts.Notice{Code: contracts.CodeHealthNotLoggedIn}, Remedy: connectRemedy()}, Facts{}
 	case errors.Is(err, contracts.ErrForgeUnauthorized):
-		return contracts.ProbeReport{State: contracts.HealthDown, Detail: contracts.Notice{Code: contracts.CodeHealthCredentialsRefused}, Remedy: connectRemedy()}
+		return contracts.ProbeReport{State: contracts.HealthDown, Detail: contracts.Notice{Code: contracts.CodeHealthCredentialsRefused}, Remedy: connectRemedy()}, Facts{}
 	case errors.As(err, &limited):
-		return contracts.ProbeReport{State: contracts.HealthDown, Detail: contracts.Notice{Code: contracts.CodeHealthRateLimited}}
+		return contracts.ProbeReport{State: contracts.HealthDown, Detail: contracts.Notice{Code: contracts.CodeHealthRateLimited}}, Facts{ForgeReset: limited.Reset}
 	}
-	return Unreachable(err)
-}
-
-// ForgeFailureFacts are the facts of a forge that gave no connection: the time the
-// rate limit lifts when the forge refused the call for its rate limit.
-func ForgeFailureFacts(err error) Facts {
-	var limited *contracts.ForgeRateLimitedError
-	if errors.As(err, &limited) {
-		return Facts{ForgeReset: limited.Reset}
-	}
-	return Facts{}
+	return Unreachable(err), Facts{}
 }
 
 // Unreachable is the report of a service that could not be asked, with the

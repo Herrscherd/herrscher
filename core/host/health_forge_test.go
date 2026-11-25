@@ -354,3 +354,15 @@ func TestCheckoutOriginIsEmptyOutsideACheckout(t *testing.T) {
 		t.Errorf("CheckoutOrigin() = %q, want empty outside a checkout", origin)
 	}
 }
+
+func TestForgeProbeKeepsTheRateLimitResetOnBothStates(t *testing.T) {
+	reset := time.Date(2026, 11, 25, 10, 0, 0, 0, time.UTC)
+	limited := &fakeForge{connErr: &contracts.ForgeRateLimitedError{Reset: reset}}
+	if _, facts := probeOnce(t, openingWith(limited, nil), ""); !facts.RateLimitReset().Equal(reset) {
+		t.Errorf("down: RateLimitReset = %v, want %v", facts.RateLimitReset(), reset)
+	}
+	degraded := connectedAs(40)
+	if _, facts := probeOnce(t, openingWith(degraded, nil), ""); !facts.RateLimitReset().Equal(degraded.connection.RateLimit.Reset) {
+		t.Errorf("degraded: RateLimitReset = %v, want %v", facts.RateLimitReset(), degraded.connection.RateLimit.Reset)
+	}
+}

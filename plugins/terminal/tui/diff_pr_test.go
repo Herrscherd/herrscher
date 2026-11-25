@@ -149,7 +149,8 @@ func TestPRRefusesToPushWhenGitHubIsNotConnected(t *testing.T) {
 	runner := &recordingRunner{remote: "git@github.com:o/r.git\n"}
 	m, _ := newDiffModel(t, dir, runner.run, 120, 30)
 	backend := newPROpenBackend(t, "unused")
-	backend.health = healthWith(t, health.ForgeFailure(contracts.ErrForgeNotConnected))
+	report, facts := health.ForgeFailure(contracts.ErrForgeNotConnected)
+	backend.health = healthWithFacts(t, report, facts)
 	m.tm = backend
 	press(m, "ctrl+x", "d")
 

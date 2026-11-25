@@ -37,7 +37,7 @@ func requireRefusal(t *testing.T, m *model, runner *recordingRunner, backend *pr
 }
 
 func TestPRRefusesWhenTheForgeRateLimitIsSpent(t *testing.T) {
-	report := health.ForgeFailure(&contracts.ForgeRateLimitedError{})
+	report, _ := health.ForgeFailure(&contracts.ForgeRateLimitedError{})
 
 	m, runner, backend := pressPRWithHealth(t, healthWith(t, report))
 
@@ -60,8 +60,7 @@ func TestPRRefusalGivesTheResetWhenTheReportCarriesIt(t *testing.T) {
 
 func TestPRRefusalGivesTheResetWhenTheLimitIsSpent(t *testing.T) {
 	limited := &contracts.ForgeRateLimitedError{Reset: time.Date(2026, 11, 25, 10, 0, 0, 0, time.UTC)}
-	report := health.ForgeFailure(limited)
-	facts := health.ForgeFailureFacts(limited)
+	report, facts := health.ForgeFailure(limited)
 
 	m, runner, backend := pressPRWithHealth(t, healthWithFacts(t, report, facts))
 
@@ -98,7 +97,7 @@ func TestResetLabelShowsTheUTCClockAndTheDayOnlyWhenItIsNotToday(t *testing.T) {
 }
 
 func TestPRRefusalSaysTheForgeIsUnreachable(t *testing.T) {
-	report := health.ForgeFailure(errors.New("dial tcp 140.82.112.3:443: connection refused"))
+	report, _ := health.ForgeFailure(errors.New("dial tcp 140.82.112.3:443: connection refused"))
 
 	m, runner, backend := pressPRWithHealth(t, healthWith(t, report))
 
@@ -109,7 +108,7 @@ func TestPRRefusalSaysTheForgeIsUnreachable(t *testing.T) {
 }
 
 func TestPRRefusalSaysTheCredentialWasRefused(t *testing.T) {
-	report := health.ForgeFailure(contracts.ErrForgeUnauthorized)
+	report, _ := health.ForgeFailure(contracts.ErrForgeUnauthorized)
 
 	m, runner, backend := pressPRWithHealth(t, healthWith(t, report))
 

@@ -22,7 +22,7 @@ func forgeRefusal(check *health.Check, trans translator, now time.Time) error {
 	}
 	code := check.Report.Detail.Code
 	if code == contracts.CodeHealthRateLimited {
-		return rateLimitRefusal(refusalReset(check.Facts), trans, now)
+		return rateLimitRefusal(check.Facts.RateLimitReset(), trans, now)
 	}
 	if code == contracts.CodeHealthNotLoggedIn {
 		return contracts.ErrForgeNotConnected
@@ -34,13 +34,6 @@ func forgeRefusal(check *health.Check, trans translator, now time.Time) error {
 		return errForgeRepoUnreadable
 	}
 	return errForgeUnreachable
-}
-
-func refusalReset(facts health.Facts) time.Time {
-	if forge := facts.Forge; forge != nil && forge.Quota != nil && !forge.Quota.Reset.IsZero() {
-		return forge.Quota.Reset
-	}
-	return facts.ForgeReset
 }
 
 func rateLimitRefusal(reset time.Time, trans translator, now time.Time) error {

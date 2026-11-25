@@ -17,10 +17,26 @@ type transcriptLine struct {
 
 func transcriptLines(lines []contracts.ScrollbackLine) []transcriptLine {
 	out := make([]transcriptLine, 0, len(lines))
-	for _, ln := range lines {
-		out = append(out, transcriptLine{turnID: ln.TurnID, role: ln.Role, text: ln.Text})
+	for _, line := range lines {
+		if line.Notice != nil {
+			continue
+		}
+		out = append(out, transcriptLine{turnID: line.TurnID, role: line.Role, text: line.Text})
 	}
 	return out
+}
+
+func interruptionRecorded(history []contracts.ScrollbackLine, turnID string) bool {
+	for index := range history {
+		if notice := history[index].Notice; notice != nil && notice.Code == contracts.CodeTurnInterrupted && history[index].TurnID == turnID {
+			return true
+		}
+	}
+	return false
+}
+
+func noticedInHistory(event contracts.Event, history []contracts.ScrollbackLine) bool {
+	return event.T == eventwire.EventReply && event.Outcome == contracts.TurnInterrupted && event.Text == "" && interruptionRecorded(history, event.TurnID)
 }
 
 func replyLine(routed RoutedEvent) (transcriptLine, bool) {
@@ -70,7 +86,7 @@ func unseenPending(history []contracts.ScrollbackLine, pending []RoutedEvent) []
 	}
 	out := make([]RoutedEvent, 0, len(pending))
 	for index := range pending {
-		if !skip[index] {
+		if !skip[index] && !noticedInHistory(pending[index].Event, history) {
 			out = append(out, pending[index])
 		}
 	}

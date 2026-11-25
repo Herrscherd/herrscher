@@ -23,8 +23,10 @@ func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event,
 		cacheRead:     event.CacheRead,
 		cacheWrite:    event.CacheCreate,
 	}, d.modelNow().rates)
+	if event.Outcome != contracts.TurnInterrupted && d.sink.TurnFinished != nil {
+		d.sink.TurnFinished(d.currentTurnID())
+	}
 	shown := d.deliverReply(ctx, event, files)
-	d.settleTurn()
 	if d.sink.Resume != nil && event.Resume != "" {
 		d.sink.Resume(event.Resume)
 	}
@@ -32,7 +34,18 @@ func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event,
 		d.sink.Project(event.Project)
 	}
 	d.recordUsage(event)
-	d.recordEntry("assistant", event.Text, shown.Text, event.Cost, turnUsage{
+	if d.recordTurnTrace(event, shown, turnStart, live) {
+		d.settleTurn()
+	}
+	d.deliverPendingReply(event.Text)
+	d.metrics.TurnCompleted()
+	if verdict := d.gate.Check(d.name); verdict.Reason != "" {
+		d.emitPaused(ctx, verdict.Reason)
+	}
+}
+
+func (d *sessionDriver) recordTurnTrace(event, shown contracts.Event, turnStart time.Time, live int) bool {
+	err := d.recordEntry("assistant", event.Text, shown.Text, event.Cost, turnUsage{
 		InTokens:    event.TokensIn,
 		OutTokens:   event.Tokens,
 		CacheRead:   event.CacheRead,
@@ -41,11 +54,13 @@ func (d *sessionDriver) completeTurn(ctx context.Context, event contracts.Event,
 		CtxTokens:   contextReading(live, event),
 		Tools:       d.calls.Calls(),
 	})
-	d.deliverPendingReply(event.Text)
-	d.metrics.TurnCompleted()
-	if verdict := d.gate.Check(d.name); verdict.Reason != "" {
-		d.emitPaused(ctx, verdict.Reason)
+	if err != nil {
+		return false
 	}
+	if event.Outcome != contracts.TurnInterrupted {
+		return true
+	}
+	return d.recordInterruption() == nil
 }
 
 func exportOutcome(outcome contracts.TurnOutcome) otelexport.Outcome {

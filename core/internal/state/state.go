@@ -76,6 +76,7 @@ type Session struct {
 	// start fresh.
 	ResumeToken     string `json:"resumeToken,omitempty"`
 	InterruptedTurn string `json:"interruptedTurn,omitempty"`
+	FinishedTurn    string `json:"finishedTurn,omitempty"`
 
 	// Archived marks a session closed-but-kept (session archive): its row,
 	// transcript and ResumeToken are retained so /resume can revive it, but the

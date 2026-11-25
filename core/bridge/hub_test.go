@@ -205,8 +205,8 @@ func TestInbound_InterruptCancelsTurn(t *testing.T) {
 	if last.T != eventwire.EventReply || !last.Done {
 		t.Fatalf("interrupted turn must still emit reply{done}; got %+v", last)
 	}
-	if last.Text != interruptNotice {
-		t.Fatalf("an interrupted turn must read as interrupted; got %q", last.Text)
+	if last.Outcome != contracts.TurnInterrupted {
+		t.Fatalf("an interrupted turn must carry the interrupted outcome; got %q", last.Outcome)
 	}
 }
 
@@ -245,8 +245,8 @@ func TestInterruptKeepsPartialOutput(t *testing.T) {
 	if !strings.Contains(last.Text, "half a thought") {
 		t.Fatalf("partial output must survive the interrupt; got %q", last.Text)
 	}
-	if !strings.Contains(last.Text, interruptNotice) {
-		t.Fatalf("a cut-short reply must say so; got %q", last.Text)
+	if last.Outcome != contracts.TurnInterrupted {
+		t.Fatalf("a cut-short reply must carry the interrupted outcome; got %q", last.Outcome)
 	}
 }
 

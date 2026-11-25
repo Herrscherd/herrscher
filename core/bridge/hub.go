@@ -22,8 +22,6 @@ import (
 
 const errPrefix = "⚠️ "
 
-const interruptNotice = "⏹ interrupted"
-
 const (
 	backendKindText     = "text"
 	backendKindThinking = "thinking"
@@ -296,18 +294,11 @@ func (e *TurnFailedError) Notice() contracts.Notice { return contracts.NoticeOf(
 // PartialOutput is the text the backend streamed in the attempt that failed, since its last reset, empty when it streamed none.
 func (e *TurnFailedError) PartialOutput() string { return e.partial }
 
-func settleFailedReply(ctrl *turnController, out string, err error) string {
-	switch {
-	case ctrl.wasInterrupted():
-		if out == "" {
-			return interruptNotice
-		}
-		return strings.TrimSpace(out) + "\n\n" + interruptNotice
-	case out == "":
+func settleFailedReply(out string, err error) string {
+	if out == "" {
 		return errPrefix + err.Error()
-	default:
-		return out
 	}
+	return out
 }
 
 func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts.Backend, orch contracts.Orchestrator, event contracts.Event, ctrl *turnController, eng *skills.Engine, aff affordances, pin *scopePin, lang i18n.Language) error {
@@ -342,9 +333,12 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	}
 	out, err := backend.Respond(turnCtx, prompt, onEvent)
 	var failure error
+	var outcome contracts.TurnOutcome
 	if err != nil {
-		out = settleFailedReply(ctrl, out, err)
-		if !ctrl.wasInterrupted() {
+		if ctrl.wasInterrupted() {
+			outcome = contracts.TurnInterrupted
+		} else {
+			out = settleFailedReply(out, err)
 			failure = &TurnFailedError{Err: err, partial: strings.TrimSpace(strings.Join(streamed, ""))}
 		}
 	}
@@ -357,7 +351,7 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	if tr, ok := orch.(contracts.TurnReactor); ok {
 		out = tr.React(ctx, out)
 	}
-	sink.Emit(contracts.Event{T: eventwire.EventReply, Text: out, Done: true, Cost: usage.cost, Tokens: usage.outTok, TokensIn: usage.inTok, CacheRead: usage.cacheRd, CacheCreate: usage.cacheCr, Resume: resumeToken(backend), Project: settledProject})
+	sink.Emit(contracts.Event{T: eventwire.EventReply, Text: out, Done: true, Outcome: outcome, Cost: usage.cost, Tokens: usage.outTok, TokensIn: usage.inTok, CacheRead: usage.cacheRd, CacheCreate: usage.cacheCr, Resume: resumeToken(backend), Project: settledProject})
 	if orch != nil {
 		if err := orch.Observe(ctx, prompt, out); err != nil {
 			logger.Warn("memory observe failed; this turn was not recorded to memory", "err", err)

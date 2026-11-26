@@ -30,7 +30,7 @@ const (
 	UsageEnvRoute        = "cli.usage.env.route"
 	UsageEnvGateway      = "cli.usage.env.gateway"
 	UsageEnvDefaultModel = "cli.usage.env.default_model"
-	UsageEnvInit         = "cli.usage.env.init"
+	UsageEnvSetupRoute   = "cli.usage.env.setup_route"
 )
 
 func usageKeys() map[Key][]string {
@@ -63,6 +63,6 @@ func usageKeys() map[Key][]string {
 		UsageEnvRoute:        nil,
 		UsageEnvGateway:      nil,
 		UsageEnvDefaultModel: nil,
-		UsageEnvInit:         nil,
+		UsageEnvSetupRoute:   nil,
 	}
 }

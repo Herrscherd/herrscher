@@ -39,6 +39,7 @@ const (
 	ManageFindingMovesBack          = "cli.manage.finding.moves_back"
 	ManageFindingContracts          = "cli.manage.finding.contracts"
 	ManageNoHostModule              = "cli.manage.no_host_module"
+	ManageHostNotFound              = "cli.manage.host_not_found"
 	ManageNotCompiledIn             = "cli.manage.not_compiled_in"
 	ManageNoVersions                = "cli.manage.no_versions"
 	ManageGoList                    = "cli.manage.go_list"
@@ -120,6 +121,7 @@ func manageKeys() map[Key][]string {
 		ManageFindingMovesBack:          {ParamModule, ParamCurrent, ParamVersion},
 		ManageFindingContracts:          {ParamModule, ParamVersion, ParamWant, ParamHave},
 		ManageNoHostModule:              nil,
+		ManageHostNotFound:              {ParamPath},
 		ManageNotCompiledIn:             {ParamModule},
 		ManageNoVersions:                nil,
 		ManageGoList:                    {ParamArgs, ParamErr, ParamOutput},

@@ -42,7 +42,7 @@
   {
     "id": "cli.usage.start.setup",
     "description": "Ligne d'aide : ouvrir la configuration interactive et son tableau de bord",
-    "other": "choisit les modules, connecte, configure tout (tableau de bord)"
+    "other": "choisit les modules, connecte, configure tout (tableau de bord) ; --yes pour les scripts"
   },
   {
     "id": "cli.usage.session.verbs",
@@ -135,7 +135,7 @@
     "other": "     HERRSCHER_DEFAULT_MODEL (modèle pris quand `session create` n'en nomme aucun)"
   },
   {
-    "id": "cli.usage.env.init",
+    "id": "cli.usage.env.setup_route",
     "description": "Ligne de variables : `herrscher setup route` règle la route",
     "other": "     `herrscher setup route` règle ces trois réglages, inutile de les écrire à la main"
   },
@@ -851,6 +851,11 @@
     "other": "{{.Module}}@{{.Version}} demande contracts {{.Want}} ; la composition résout {{.Have}}"
   },
   {
+    "id": "cli.manage.host_not_found",
+    "description": "Error: --host names a directory with no plugins.go",
+    "other": "aucun module hôte dans {{.Path}} (pas de plugins.go)"
+  },
+  {
     "id": "cli.manage.no_host_module",
     "description": "Error: no host module was found where the command looked",
     "other": "aucun module hôte trouvé (plugins.go recherché) ; passe --host DIR"
@@ -992,7 +997,7 @@
   },
   {
     "id": "cli.manage.flag.host",
-    "description": "Flag help: the --host flag of the plugin, init, update and install verbs",
+    "description": "Flag help: the --host flag of the plugin, setup, update and install verbs",
     "other": "chemin du module hôte"
   },
   {
@@ -1058,17 +1063,17 @@
   },
   {
     "id": "cli.manage.seed_failed",
-    "description": "Error: init could not copy .env.example to .env",
+    "description": "Error: setup could not copy .env.example to .env",
     "other": "amorçage de {{.Path}} : {{.Err}}"
   },
   {
     "id": "cli.manage.seeded",
-    "description": "Confirmation: init copied .env.example to .env",
+    "description": "Confirmation: setup copied .env.example to .env",
     "other": "{{.Path}} créé à partir de .env.example : renseigne tes secrets"
   },
   {
     "id": "cli.manage.env_write_failed",
-    "description": "Error: init could not write the secrets",
+    "description": "Error: setup could not write the secrets",
     "other": "écriture des secrets : {{.Err}}"
   },
   {
@@ -1138,7 +1143,7 @@
   },
   {
     "id": "cli.manage.stack_header",
-    "description": "Heading of the stack summary printed after init composes the plugin list",
+    "description": "Heading of the stack summary printed after setup composes the plugin list",
     "other": "pile"
   },
   {
@@ -4549,6 +4554,16 @@
     "id": "cli.setup.unknown_section",
     "description": "Error: setup was given a section it does not know",
     "other": "section inconnue : {{.Name}}"
+  },
+  {
+    "id": "cli.setup.stack_takes_no_section",
+    "description": "Error: setup composing a stack was also given a section name",
+    "other": "setup --yes et les options de pile ne prennent pas de section (reçu {{.Name}}) ; lance herrscher setup {{.Name}} seul"
+  },
+  {
+    "id": "cli.setup.stack_flag_needs_yes",
+    "description": "Error: a flag that only applies to the stack composition was given without --yes or a stack flag",
+    "other": "--{{.Name}} ne s'applique qu'avec --yes ou une option de pile"
   },
   {
     "id": "cli.setup.needs_terminal",

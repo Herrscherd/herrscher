@@ -19,8 +19,10 @@ import (
 )
 
 var (
-	errUnknownSection = clitext.SentinelError("unknown setup section")
-	errNeedsTerminal  = clitext.SentinelError("setup needs an interactive terminal")
+	errUnknownSection      = clitext.SentinelError("unknown setup section")
+	errNeedsTerminal       = clitext.SentinelError("setup needs an interactive terminal")
+	errStackTakesNoSection = clitext.SentinelError("setup composing a stack takes no section")
+	errStackFlagNeedsYes   = clitext.SentinelError("flag only applies when setup composes a stack")
 )
 
 func setupSections() map[string]setupScreen {
@@ -76,7 +78,18 @@ func setupHost(ctx context.Context, messages *clitext.Messages, hostMessages *ho
 		writeCatalog(messages, out)
 		return 0
 	}
-	if *yes || stackFlagsSet(flags) {
+	if *hostDir != "" {
+		if _, err := resolveHost(messages, *hostDir); err != nil {
+			errOut.Println(err)
+			return exitUsage
+		}
+	}
+	stack := *yes || stackFlagsSet(flags)
+	if err := checkSetupMode(messages, flags, stack); err != nil {
+		errOut.Println(err)
+		return exitUsage
+	}
+	if stack {
 		choices := make(map[string]string, len(kinds))
 		for cat, kind := range kinds {
 			choices[cat] = *kind
@@ -94,6 +107,25 @@ func setupHost(ctx context.Context, messages *clitext.Messages, hostMessages *ho
 	}
 	deps := liveDeps(messages, hostMessages, *hostDir)
 	return runSetup(ctx, messages, errOut, deps, screen)
+}
+
+func checkSetupMode(messages *clitext.Messages, flags *flag.FlagSet, stack bool) error {
+	if stack {
+		if flags.NArg() > 0 {
+			return failure(messages, errStackTakesNoSection, clitext.SetupStackTakesNoSection, clitext.Params{clitext.ParamName: flags.Arg(0)})
+		}
+		return nil
+	}
+	var stackOnly string
+	flags.Visit(func(f *flag.Flag) {
+		if stackOnly == "" && (f.Name == "no-build" || f.Name == "no-trial") {
+			stackOnly = f.Name
+		}
+	})
+	if stackOnly != "" {
+		return failure(messages, errStackFlagNeedsYes, clitext.SetupStackFlagNeedsYes, clitext.Params{clitext.ParamName: stackOnly})
+	}
+	return nil
 }
 
 func setupEntry(messages *clitext.Messages, rest []string) (setupScreen, error) {

@@ -106,7 +106,7 @@ Run on a terminal with no stack flag, `herrscher setup` opens the interactive se
 
 #### Config-only mode
 
-When `setup --yes` finds **no source checkout** (the common case for a pacman-installed `herrscher`, whose plugins are already compiled in) it runs in **config-only** mode: it skips the rewrite and the rebuild, then points you at `herrscher serve`.
+When `setup --yes` runs without `--host` and finds **no source checkout** (the common case for a pacman-installed `herrscher`, whose plugins are already compiled in) it runs in **config-only** mode: it skips the rewrite and the rebuild, then points you at `herrscher serve`.
 
 #### Examples
 
@@ -134,10 +134,10 @@ herrscher setup --yes --no-build                    # rewrite plugins.go + seed 
 | `--list` | Print the catalog and exit. |
 | `--no-build` | Stop after writing `plugins.go` (and seeding `.env`). |
 | `--no-trial` | Skip the short prompt sent to each chosen backend at the end. |
-| `--host DIR` | The host source checkout to rewrite. |
+| `--host DIR` | The host source checkout to rewrite. `setup` fails when it holds no `plugins.go`, instead of falling back to another checkout. |
 | `--yes` | Skip the interactive setup; take flags/defaults silently. |
 
-Passing any stack flag (`--gateway/--backend/--memory/--orchestrator/--extractor/--skills/--compactor/--with`) counts as non-interactive intent and skips the interactive setup.
+Passing any stack flag (`--gateway/--backend/--memory/--orchestrator/--extractor/--skills/--compactor/--with`) counts as non-interactive intent and skips the interactive setup. In that mode `setup` takes no section name, and `--no-build` and `--no-trial` are refused outside it.
 
 ### `plugin`: list / add / remove
 

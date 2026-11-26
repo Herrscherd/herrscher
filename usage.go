@@ -84,7 +84,7 @@ func usage(messages *clitext.Messages, lang i18n.Language) error {
 		"  " + hint.Render(translator.Text(clitext.UsageEnvRoute, nil)),
 		"  " + hint.Render(translator.Text(clitext.UsageEnvGateway, nil)),
 		"  " + hint.Render(translator.Text(clitext.UsageEnvDefaultModel, nil)),
-		"  " + hint.Render(translator.Text(clitext.UsageEnvInit, nil)),
+		"  " + hint.Render(translator.Text(clitext.UsageEnvSetupRoute, nil)),
 	}
 	if err := errors.Join(translator.Err(), platform.Err()); err != nil {
 		return messages.Failure(lang, err, clitext.UsageWrap, clitext.Params{clitext.ParamDetail: err.Error()})

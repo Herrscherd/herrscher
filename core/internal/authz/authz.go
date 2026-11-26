@@ -32,6 +32,9 @@ const (
 	RoleOperator Role = "operator"
 	// RoleObserver runs only what reads.
 	RoleObserver Role = "observer"
+	// RoleApprover runs what reads, and answers an approval: it lists the
+	// pending requests and allows or denies them, nothing else.
+	RoleApprover Role = "approver"
 	// RoleAgent is what a connection on a session's command socket holds.
 	RoleAgent Role = "agent"
 )
@@ -42,6 +45,10 @@ const LocalPrincipal = "local"
 // SessionPrefix marks a principal minted for a session. Only the core mints
 // one, from the listener a connection arrived on.
 const SessionPrefix = "session:"
+
+// DevicePrefix marks a principal minted for a paired device. Only a client
+// certificate the daemon's own authority verified mints one.
+const DevicePrefix = "device:"
 
 // Principal is who is calling. It is never declared by the caller: it is
 // derived from the entry point, because locally the agent and the daemon share
@@ -55,6 +62,18 @@ type Principal struct {
 // SessionPrincipal is the principal a session's own command socket carries.
 func SessionPrincipal(session string) Principal {
 	return Principal{ID: SessionPrefix + session, Session: session}
+}
+
+// DevicePrincipal is the principal of the paired device with the given id. The
+// caller must have verified the device's client certificate first.
+func DevicePrincipal(id string) Principal {
+	return Principal{ID: DevicePrefix + id}
+}
+
+// Reserved reports whether id names a principal only the core mints, so a
+// caller that merely claims it must not be believed.
+func Reserved(id string) bool {
+	return id == LocalPrincipal || strings.HasPrefix(id, SessionPrefix) || strings.HasPrefix(id, DevicePrefix)
 }
 
 // Subject is the session a verb names, resolved by the caller from the parsed
@@ -85,18 +104,11 @@ func definitionOf(role Role) (definition, bool) {
 	case RoleOwner:
 		return definition{allowAll: true, plugins: true}, true
 	case RoleOperator:
-		return definition{allowAll: true, deny: []string{"role *"}, plugins: true}, true
+		return definition{allowAll: true, deny: []string{"role *", "device approve"}, plugins: true}, true
 	case RoleObserver:
-		return definition{allow: []string{
-			"commands", "whoami",
-			"session list", "session info", "session log", "session history", "session watch", "session who", "session scrollback", "session checkpoints",
-			"agent list", "agent show",
-			"models list",
-			"approve list",
-			"host list",
-			"schedule list",
-			"memory search", "memory locate",
-		}}, true
+		return definition{allow: observerVerbs()}, true
+	case RoleApprover:
+		return definition{allow: append(observerVerbs(), "approve allow", "approve deny")}, true
 	case RoleAgent:
 		return definition{
 			allow: []string{
@@ -111,7 +123,7 @@ func definitionOf(role Role) (definition, bool) {
 			},
 			deny: []string{
 				"approve list", "approve allow", "approve deny", "approve rule", "approve mode",
-				"host *", "role *", "schedule *", "service *", "set *", "plugin *",
+				"host *", "role *", "device *", "schedule *", "service *", "set *", "plugin *",
 				"skill approve", "memory forget",
 				"session create",
 				"session close", "session archive", "session resume", "session interrupt",
@@ -122,6 +134,19 @@ func definitionOf(role Role) (definition, bool) {
 	case RoleNone:
 	}
 	return definition{}, false
+}
+
+func observerVerbs() []string {
+	return []string{
+		"commands", "whoami",
+		"session list", "session info", "session log", "session history", "session watch", "session who", "session scrollback", "session checkpoints",
+		"agent list", "agent show",
+		"models list",
+		"approve list",
+		"host list",
+		"schedule list",
+		"memory search", "memory locate",
+	}
 }
 
 // Decide answers whether the request may run, and why not when it may not.
@@ -183,7 +208,7 @@ func refusal(req Request, role Role, verb string) string {
 		return fmt.Sprintf(
 			"herrscher: %#q is not something a session may run. Ask your operator to run it for you.", verb)
 	}
-	for _, candidate := range []Role{RoleObserver, RoleOperator, RoleOwner} {
+	for _, candidate := range []Role{RoleObserver, RoleApprover, RoleOperator, RoleOwner} {
 		if permits(candidate, verb, req.Contributed) {
 			return fmt.Sprintf("herrscher: %#q needs the %#q role, and %s has %#q",
 				verb, candidate, req.Principal.ID, role)
@@ -207,11 +232,13 @@ func match(pattern, verb string) bool {
 // before calling: the display label decides nothing, so the pure package has no
 // reason to know the shape it is stored in.
 //
-// Three rules carry the defaults. local is always owner. A session is always
-// agent. A gateway principal takes its assignment, or observer when the table
-// holds anything at all, or no role when it is empty. That last one is what
-// makes an upgrade a no-op for humans, and the first grant a cliff: the verb
-// that writes it says so.
+// Four rules carry the defaults. local is always owner. A session is always
+// agent. A device takes its assignment, or observer, never no role: a device
+// exists only because a certificate proved it, so an empty table must not
+// leave it unrestricted. A gateway principal takes its assignment, or observer
+// when the table holds anything at all, or no role when it is empty. That last
+// one is what makes an upgrade a no-op for humans, and the first grant a cliff:
+// the verb that writes it says so.
 func RoleOf(principal Principal, assignments map[string]string) Role {
 	if principal.ID == LocalPrincipal {
 		return RoleOwner
@@ -219,11 +246,14 @@ func RoleOf(principal Principal, assignments map[string]string) Role {
 	if principal.Session != "" {
 		return RoleAgent
 	}
-	if len(assignments) == 0 {
-		return RoleNone
-	}
 	if name, ok := assignments[principal.ID]; ok && Grantable(name) {
 		return Role(name)
+	}
+	if strings.HasPrefix(principal.ID, DevicePrefix) {
+		return RoleObserver
+	}
+	if len(assignments) == 0 {
+		return RoleNone
 	}
 	return RoleObserver
 }
@@ -233,7 +263,7 @@ func RoleOf(principal Principal, assignments map[string]string) Role {
 // table by hand would be claiming a human is a session.
 func Grantable(name string) bool {
 	switch Role(name) {
-	case RoleOwner, RoleOperator, RoleObserver:
+	case RoleOwner, RoleOperator, RoleObserver, RoleApprover:
 		return true
 	case RoleNone, RoleAgent:
 	}
@@ -242,7 +272,7 @@ func Grantable(name string) bool {
 
 // GrantableRoles lists them, sorted, for a message that has to name the choice.
 func GrantableRoles() []string {
-	out := []string{string(RoleOwner), string(RoleOperator), string(RoleObserver)}
+	out := []string{string(RoleOwner), string(RoleOperator), string(RoleObserver), string(RoleApprover)}
 	sort.Strings(out)
 	return out
 }

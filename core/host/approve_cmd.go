@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -28,7 +29,7 @@ func addApproveCommands(reg *cli.Registry, messages *hostMessages, cliMessages *
 	desk := newApprovalDesk(messages, lang, warn, hostState, agents, approvals, sessions)
 	return addVerbs(
 		reg,
-		approveListVerb(cliMessages, lang, approvals),
+		approveListVerb(cliMessages, lang, hostState, approvals),
 		approveAllowVerb(cliMessages, lang, approvals),
 		approveDenyVerb(cliMessages, lang, approvals),
 		approveRuleVerb(cliMessages, lang, hostState),
@@ -38,16 +39,20 @@ func addApproveCommands(reg *cli.Registry, messages *hostMessages, cliMessages *
 	)
 }
 
-func approveListVerb(cliMessages *clitext.Messages, lang languageSource, approvals *approvalTable) contracts.Cmd {
+func approveListVerb(cliMessages *clitext.Messages, lang languageSource, hostState *state.State, approvals *approvalTable) contracts.Cmd {
 	return contracts.New(nsApprove, "list").
 		Help(clitext.CmdHelpApproveList).
-		Do(func(_ context.Context, in contracts.Input) (contracts.Result, error) {
-			return cli.Data(listApprovals(cliMessages, lang(), approvals, in.JSON))
+		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+			visible := func(string) bool { return true }
+			if caller := principalOf(ctx).Session; caller != "" {
+				visible = func(session string) bool { return inSubtreeOf(hostState, caller, session) }
+			}
+			return cli.Data(listApprovals(cliMessages, lang(), approvals, visible, input.JSON))
 		})
 }
 
-func listApprovals(cliMessages *clitext.Messages, lang i18n.Language, approvals *approvalTable, asJSON bool) (string, error) {
-	pending := pendingApprovals(approvals)
+func listApprovals(cliMessages *clitext.Messages, lang i18n.Language, approvals *approvalTable, visible func(session string) bool, asJSON bool) (string, error) {
+	pending := slices.DeleteFunc(pendingApprovals(approvals), func(entry PendingApproval) bool { return !visible(entry.Session) })
 	sort.SliceStable(pending, func(left, job int) bool {
 		if pending[left].Age != pending[job].Age {
 			return pending[left].Age > pending[job].Age

@@ -67,6 +67,27 @@ type Config struct {
 	Keys *KeysConfig `json:"keys,omitempty"`
 
 	Telemetry *TelemetryConfig `json:"telemetry,omitempty"`
+
+	SelfTools *SelfToolsConfig `json:"selfTools,omitempty"`
+}
+
+// SelfToolsConfig configures the herrscher MCP server a session gets. A nil Enabled means on; Expose is core or all.
+type SelfToolsConfig struct {
+	Enabled *bool  `json:"enabled,omitempty"`
+	Expose  string `json:"expose,omitempty"`
+}
+
+// SelfToolsOff reports whether the configuration turns the self tools off.
+func (c Config) SelfToolsOff() bool {
+	return c.SelfTools != nil && c.SelfTools.Enabled != nil && !*c.SelfTools.Enabled
+}
+
+// SelfToolsExpose is the exposure the configuration asks for, empty when it says none.
+func (c Config) SelfToolsExpose() string {
+	if c.SelfTools == nil {
+		return ""
+	}
+	return c.SelfTools.Expose
 }
 
 // TelemetryConfig configures the turn telemetry. A nil pointer, or a nil Enabled,

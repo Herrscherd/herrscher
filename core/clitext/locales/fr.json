@@ -6075,5 +6075,145 @@
     "id": "cli.session.issue.no_writer",
     "description": "Refusal when the forge plugin cannot write issues",
     "other": "le plugin forge compilé ne sait ni ouvrir ni commenter une issue : mettez-le à jour avec `herrscher update`"
+  },
+  {
+    "id": "cli.help.cmd.setup.check",
+    "description": "Help of the command setup check",
+    "other": "donner l'état de chaque section de la configuration (ok, warning, bad ou off), sans rien changer"
+  },
+  {
+    "id": "cli.help.cmd.connect.status",
+    "description": "Help of the command connect status",
+    "other": "afficher les connexions forge de l'hôte et l'origine de chaque jeton"
+  },
+  {
+    "id": "cli.help.cmd.plugin.list",
+    "description": "Help of the command plugin list",
+    "other": "lister les modules compilés dans le binaire, avec leurs versions"
+  },
+  {
+    "id": "cli.help.cmd.plugin.add",
+    "description": "Help of the command plugin add",
+    "other": "ajouter un module et recompiler le binaire depuis les sources"
+  },
+  {
+    "id": "cli.help.cmd.plugin.rm",
+    "description": "Help of the command plugin rm",
+    "other": "retirer un module et recompiler le binaire depuis les sources"
+  },
+  {
+    "id": "cli.help.param.plugin.module",
+    "description": "Help of the parameter module of plugin add and rm",
+    "other": "le chemin du module, avec @version au besoin"
+  },
+  {
+    "id": "cli.help.param.plugin.no_build",
+    "description": "Help of the parameter no_build of plugin add and rm",
+    "other": "modifier la liste des modules sans recompiler"
+  },
+  {
+    "id": "cli.help.cmd.env.get",
+    "description": "Help of the command env get",
+    "other": "afficher les variables du fichier de réglages du démon, secrets masqués"
+  },
+  {
+    "id": "cli.help.cmd.env.set",
+    "description": "Help of the command env set",
+    "other": "régler une variable du fichier de réglages du démon ; une session ne règle jamais un secret"
+  },
+  {
+    "id": "cli.help.cmd.env.unset",
+    "description": "Help of the command env unset",
+    "other": "retirer une variable du fichier de réglages du démon"
+  },
+  {
+    "id": "cli.help.param.env.key",
+    "description": "Help of the parameter key of env",
+    "other": "le nom de la variable, comme HERRSCHER_BACKEND"
+  },
+  {
+    "id": "cli.help.param.env.value",
+    "description": "Help of the parameter value of env set",
+    "other": "la valeur, sur une ligne"
+  },
+  {
+    "id": "cli.host.env.set",
+    "description": "Reply of env set",
+    "other": "{{.Key}} réglé dans {{.Path}}. Le démon le lit à son prochain démarrage : `herrscher service restart`."
+  },
+  {
+    "id": "cli.host.env.unset",
+    "description": "Reply of env unset",
+    "other": "{{.Key}} retiré de {{.Path}}. Le démon le lit à son prochain démarrage : `herrscher service restart`."
+  },
+  {
+    "id": "cli.help.cmd.session.pr.reply",
+    "description": "Help of the command session pr reply",
+    "other": "répondre dans un fil de revue de la pull request d'une session"
+  },
+  {
+    "id": "cli.help.param.session.pr.thread",
+    "description": "Help of the parameter thread of session pr reply",
+    "other": "l'identifiant du fil, tel que `session pr comments --json` le donne"
+  },
+  {
+    "id": "cli.help.param.session.pr.reply_body",
+    "description": "Help of the parameter body of session pr reply",
+    "other": "la réponse, en Markdown"
+  },
+  {
+    "id": "cli.session.pr.replied",
+    "description": "Reply of session pr reply",
+    "other": "réponse postée dans un fil de revue de la pull request #{{.Number}}"
+  },
+  {
+    "id": "cli.health.facts.self_tools",
+    "description": "Facts of the self tools health check",
+    "other": "{{.Mode}} · {{.Count}} outils · {{.Size}} octets de schémas par tour"
+  },
+  {
+    "id": "cli.health.facts.self_tools_off",
+    "description": "Facts of the self tools health check when they are off",
+    "other": "coupé : les sessions n'ont pas de serveur MCP herrscher"
+  },
+  {
+    "id": "cli.help.param.session.issue.limit",
+    "description": "Help of the parameter limit of session issue list",
+    "other": "le nombre d'issues listées au plus, 100 par défaut"
+  },
+  {
+    "id": "cli.session.issue.truncated",
+    "description": "Line under an issue listing cut at its limit",
+    "other": "(les {{.Count}} premières seulement : augmentez --limit pour voir la suite)"
+  },
+  {
+    "id": "cli.session.issue.bad_limit",
+    "description": "Refusal of an issue limit out of range",
+    "other": "--limit prend un nombre de 1 à {{.Count}}"
+  },
+  {
+    "id": "cli.host.fault.env_key",
+    "description": "Error of env: not a variable name",
+    "other": "ce n'est pas un nom de variable : lettres, chiffres et _, sans chiffre en tête"
+  },
+  {
+    "id": "cli.host.fault.env_value",
+    "description": "Error of env set: a value on several lines",
+    "other": "une valeur ne contient pas de saut de ligne"
+  },
+  {
+    "id": "cli.host.fault.env_no_file",
+    "description": "Error of env: the daemon has no settings file",
+    "other": "le démon a démarré sans fichier de réglages, il n'y en a donc aucun à modifier"
+  },
+  {
+    "id": "cli.host.fault.env_no_such_key",
+    "description": "Error of env: the variable is not in the file",
+    "other": "le fichier de réglages ne règle pas cette variable"
+  },
+  {
+    "id": "cli.host.fault.secret_from_session",
+    "description": "Error of env set: a session tried to write a secret",
+    "other": "une session n'écrit jamais un secret : l'opérateur le règle avec `herrscher env set` dans un terminal"
   }
 ]

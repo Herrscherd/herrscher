@@ -73,6 +73,23 @@ func TestAWriteTheDaemonWouldRefuseLeavesTheFileAsItWas(t *testing.T) {
 	}
 }
 
+func TestAKeyTheFileAlreadyHeldDoesNotBlockAnEdit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"$schema": "https://example.invalid/config.json", "cmd": "claude"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	doc, err := ReadDocument(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = doc.Set("compactAt", "60"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = doc.Write(path); err != nil {
+		t.Fatalf("Write refused an edit because of a key Load ignores: %v", err)
+	}
+}
+
 func TestARewriteKeepsTheCommentedFileBesideIt(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	if err := os.WriteFile(path, []byte(Template("", ":8787")), 0o600); err != nil {

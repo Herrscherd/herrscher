@@ -22,6 +22,9 @@ const (
 	paramNumber      = "number"
 	paramLabels      = "labels"
 	paramState       = "state"
+	paramLimit       = "limit"
+	defaultIssues    = 100
+	maxIssues        = forge.MaxPages * contracts.MaxPageLimit
 	issueStateClosed = "closed"
 	issueStateOpen   = "open"
 )
@@ -30,6 +33,7 @@ var (
 	errIssueNoWriter = sessionPRError{clitext.SessionIssueNoWriter}
 	errIssueNumber   = sessionPRError{clitext.SessionIssueBadNumber}
 	errIssueState    = sessionPRError{clitext.SessionIssueBadState}
+	errIssueLimit    = sessionPRError{clitext.SessionIssueBadLimit}
 )
 
 type issueView struct {
@@ -55,6 +59,7 @@ func (p sessionPRs) issueVerbs() []contracts.Cmd {
 			Param(paramName, clitext.CmdParamSessionIssueName, true).
 			ValueParam(paramState, clitext.CmdParamSessionIssueState, false).
 			ValueParam(paramLabels, clitext.CmdParamSessionIssueLabels, false).
+			ValueParam(paramLimit, clitext.CmdParamSessionIssueLimit, false).
 			Do(p.listIssues),
 		contracts.New(nsSession, verbIssue, verbIssueShow).
 			Help(clitext.CmdHelpSessionIssueShow).
@@ -155,7 +160,11 @@ func (p sessionPRs) listIssues(ctx context.Context, input contracts.Input) (cont
 	if err != nil {
 		return contracts.Result{}, err
 	}
-	issues, err := forge.CollectPages(ctx, func(ctx context.Context, page contracts.PageRequest) (contracts.Page[contracts.Issue], error) {
+	limit, err := p.issueLimit(target.language, input.Get(paramLimit))
+	if err != nil {
+		return contracts.Result{}, err
+	}
+	issues, truncated, err := forge.CollectUpTo(ctx, limit, func(ctx context.Context, page contracts.PageRequest) (contracts.Page[contracts.Issue], error) {
 		return target.forge.Issues(ctx, target.repo, query, page)
 	})
 	if err != nil {
@@ -168,7 +177,7 @@ func (p sessionPRs) listIssues(ctx context.Context, input contracts.Input) (cont
 		views = append(views, view)
 	}
 	if input.JSON {
-		return cli.Data(marshalJSON(views))
+		return cli.Data(marshalJSON(issueListing{Issues: views, Truncated: truncated}))
 	}
 	if len(views) == 0 {
 		return cli.Data(p.messages.Text(target.language, clitext.SessionIssueNone, clitext.Params{clitext.ParamRepo: target.repo.String()}))
@@ -177,7 +186,30 @@ func (p sessionPRs) listIssues(ctx context.Context, input contracts.Input) (cont
 	for _, view := range views {
 		lines = append(lines, "#"+strconv.Itoa(view.Number)+"\t"+view.State+"\t"+escapeLine(view.Title)+"\t"+view.URL)
 	}
+	if truncated {
+		more, err := p.messages.Text(target.language, clitext.SessionIssueTruncated, clitext.Params{clitext.ParamCount: limit})
+		if err != nil {
+			return contracts.Result{}, err
+		}
+		lines = append(lines, more)
+	}
 	return cli.Data(strings.Join(lines, "\n"), nil)
+}
+
+type issueListing struct {
+	Issues    []issueView `json:"issues"`
+	Truncated bool        `json:"truncated"`
+}
+
+func (p sessionPRs) issueLimit(language i18n.Language, raw string) (int, error) {
+	if strings.TrimSpace(raw) == "" {
+		return defaultIssues, nil
+	}
+	limit, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || limit <= 0 || limit > maxIssues {
+		return 0, p.messages.Failure(language, errIssueLimit, errIssueLimit.key, clitext.Params{clitext.ParamCount: maxIssues})
+	}
+	return limit, nil
 }
 
 func (p sessionPRs) showIssue(ctx context.Context, input contracts.Input) (contracts.Result, error) {

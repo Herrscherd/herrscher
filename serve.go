@@ -154,6 +154,8 @@ func serveWith(ctx context.Context, layout host.RuntimeLayout, messages *clitext
 		RemoteCategories:    remoteCategories(),
 		ForegroundBound:     foreground != nil,
 		ContributedCommands: extra,
+		HostCommands:        hostVerbs(),
+		ConfigPath:          scanFlag(args, "config", config.DefaultPath()),
 	}
 
 	withCompactionConfig(&opts, cfg)

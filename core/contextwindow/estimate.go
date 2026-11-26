@@ -6,5 +6,10 @@ const bytesPerToken = 4
 // four bytes per token. It is a size the host announces as an estimate, never a
 // count a vendor reported.
 func EstimateTokens(text string) int {
-	return (len(text) + bytesPerToken - 1) / bytesPerToken
+	return EstimateBytes(len(text))
+}
+
+// EstimateBytes estimates the tokens of a block of size bytes, at the same four bytes per token.
+func EstimateBytes(size int) int {
+	return (size + bytesPerToken - 1) / bytesPerToken
 }

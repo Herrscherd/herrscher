@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"slices"
 	"strconv"
@@ -67,7 +68,8 @@ func ParseExposure(name string) (Exposure, error) {
 	return ExposureCore, fmt.Errorf("%w %q", errUnknownExposure, name)
 }
 
-func coreVerbs() []string {
+// CoreVerbs lists the verbs that get a tool of their own under [ExposureCore]: reads a session runs without asking.
+func CoreVerbs() []string {
 	return []string{
 		"whoami",
 		"health",
@@ -83,6 +85,7 @@ func coreVerbs() []string {
 		"approve list",
 		"memory search",
 		"config get",
+		"env get",
 		"session issue list",
 		"session issue show",
 	}
@@ -109,31 +112,18 @@ func (declared spec) toolName() string {
 	return strings.Join(declared.Path, pathJoiner)
 }
 
-// LocalTool is a tool this process answers itself, for what needs no daemon and changes nothing.
-type LocalTool struct {
-	Tool Tool
-	Run  func(ctx context.Context, args map[string]any) (string, error)
-}
-
 type catalog struct {
 	daemon   Daemon
 	exposure Exposure
-	locals   []LocalTool
 	mu       sync.Mutex
 	specs    []spec
-	loaded   bool
 }
 
-func newCatalog(daemon Daemon, exposure Exposure, locals []LocalTool) *catalog {
-	return &catalog{daemon: daemon, exposure: exposure, locals: locals}
+func newCatalog(daemon Daemon, exposure Exposure) *catalog {
+	return &catalog{daemon: daemon, exposure: exposure}
 }
 
-func (c *catalog) load(ctx context.Context) ([]spec, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.loaded {
-		return c.specs, nil
-	}
+func (c *catalog) refresh(ctx context.Context) ([]spec, error) {
 	out, err := c.daemon.Dispatch(ctx, []string{"commands", "--json"})
 	if err != nil {
 		return nil, err
@@ -142,17 +132,43 @@ func (c *catalog) load(ctx context.Context) ([]spec, error) {
 	if err := json.Unmarshal([]byte(out), &specs); err != nil {
 		return nil, fmt.Errorf("selftools: read the command list: %w", err)
 	}
-	c.specs, c.loaded = specs, true
+	c.mu.Lock()
+	c.specs = specs
+	c.mu.Unlock()
 	return specs, nil
+}
+
+func (c *catalog) load(ctx context.Context) ([]spec, error) {
+	c.mu.Lock()
+	cached := c.specs
+	c.mu.Unlock()
+	if cached != nil {
+		return cached, nil
+	}
+	return c.refresh(ctx)
+}
+
+func (c *catalog) lookup(ctx context.Context, find func([]spec) (spec, bool)) (spec, bool, error) {
+	specs, err := c.load(ctx)
+	if err != nil {
+		return spec{}, false, err
+	}
+	if found, ok := find(specs); ok {
+		return found, true, nil
+	}
+	specs, err = c.refresh(ctx)
+	if err != nil {
+		return spec{}, false, err
+	}
+	found, ok := find(specs)
+	return found, ok, nil
 }
 
 func (c *catalog) tools(ctx context.Context) []Tool {
 	tools := []Tool{commandsToolDef(), runToolDef()}
-	for _, local := range c.locals {
-		tools = append(tools, local.Tool)
-	}
-	specs, err := c.load(ctx)
+	specs, err := c.refresh(ctx)
 	if err != nil {
+		slog.Warn("self tools: the daemon's verbs are not listed", "err", err)
 		return tools
 	}
 	for _, declared := range specs {
@@ -167,7 +183,7 @@ func (c *catalog) exposes(declared spec) bool {
 	if c.exposure == ExposureAll {
 		return true
 	}
-	return slices.Contains(coreVerbs(), declared.verb())
+	return slices.Contains(CoreVerbs(), declared.verb())
 }
 
 func (c *catalog) call(ctx context.Context, name string, raw json.RawMessage) (string, error) {
@@ -181,25 +197,25 @@ func (c *catalog) call(ctx context.Context, name string, raw json.RawMessage) (s
 	case runTool:
 		return c.runCommand(ctx, args)
 	}
-	for _, local := range c.locals {
-		if local.Tool.Name == name {
-			return local.Run(ctx, args)
+	target, found, err := c.lookup(ctx, func(specs []spec) (spec, bool) {
+		for _, declared := range specs {
+			if declared.toolName() == name && c.exposes(declared) {
+				return declared, true
+			}
 		}
-	}
-	specs, err := c.load(ctx)
+		return spec{}, false
+	})
 	if err != nil {
 		return "", err
 	}
-	for _, declared := range specs {
-		if declared.toolName() == name && c.exposes(declared) {
-			return c.dispatch(ctx, declared, args)
-		}
+	if !found {
+		return "", fmt.Errorf("%w %q", errUnknownTool, name)
 	}
-	return "", fmt.Errorf("%w %q", errUnknownTool, name)
+	return c.dispatch(ctx, target, args)
 }
 
 func (c *catalog) listCommands(ctx context.Context, args map[string]any) (string, error) {
-	specs, err := c.load(ctx)
+	specs, err := c.refresh(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -230,11 +246,10 @@ func (c *catalog) runCommand(ctx context.Context, args map[string]any) (string, 
 	if len(path) == 0 {
 		return "", errNoCommand
 	}
-	specs, err := c.load(ctx)
+	target, ok, err := c.lookup(ctx, func(specs []spec) (spec, bool) { return matchSpec(specs, path) })
 	if err != nil {
 		return "", err
 	}
-	target, ok := matchSpec(specs, path)
 	if !ok {
 		return "", fmt.Errorf("%w %q", errUnknownCommand, command)
 	}
@@ -385,4 +400,24 @@ func restTokens(raw any) ([]string, error) {
 		out = append(out, text)
 	}
 	return out, nil
+}
+
+// Measure counts the tools a server built on the verbs in specsJSON, the output of `commands --json`, lists under exposure, and the bytes their declarations weigh.
+func Measure(specsJSON []byte, exposure Exposure) (int, int, error) {
+	var specs []spec
+	if err := json.Unmarshal(specsJSON, &specs); err != nil {
+		return 0, 0, fmt.Errorf("selftools: read the command list: %w", err)
+	}
+	listed := &catalog{exposure: exposure, specs: specs}
+	tools := []Tool{commandsToolDef(), runToolDef()}
+	for _, declared := range specs {
+		if listed.exposes(declared) {
+			tools = append(tools, verbTool(declared))
+		}
+	}
+	raw, err := json.Marshal(tools)
+	if err != nil {
+		return 0, 0, fmt.Errorf("selftools: encode the tools: %w", err)
+	}
+	return len(tools), len(raw), nil
 }

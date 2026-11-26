@@ -5,9 +5,15 @@ package host
 import (
 	"context"
 	"io"
+	"os"
 	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
@@ -18,7 +24,27 @@ import (
 type escalationRig struct {
 	store     *state.State
 	approvals *approvalTable
+	sessions  *sessionTable
 	socket    string
+	envFile   string
+	events    *eventLog
+}
+
+type eventLog struct {
+	mu     sync.Mutex
+	notice []string
+}
+
+func (l *eventLog) publish(session string, event contracts.Event) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.notice = append(l.notice, session+": "+event.Text)
+}
+
+func (l *eventLog) all() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return slices.Clone(l.notice)
 }
 
 func newEscalationRig(t *testing.T) escalationRig {
@@ -27,8 +53,14 @@ func newEscalationRig(t *testing.T) escalationRig {
 	if err != nil {
 		t.Fatalf("LoadState: %v", err)
 	}
-	if addErr := st.AddSession(state.Session{Name: "s1"}); addErr != nil {
-		t.Fatalf("AddSession: %v", addErr)
+	for _, name := range []string{"s1", "s2"} {
+		if addErr := st.AddSession(state.Session{Name: name}); addErr != nil {
+			t.Fatalf("AddSession: %v", addErr)
+		}
+	}
+	envFile := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(envFile, []byte("# kept\nHERRSCHER_BACKEND=claude\nGATEWAY_BOT_TOKEN=s3cret\n"), 0o600); err != nil {
+		t.Fatal(err)
 	}
 	reg := cli.NewRegistry(clitext.NewMessages())
 	approvalTab := newApprovalTable(io.Discard)
@@ -36,13 +68,17 @@ func newEscalationRig(t *testing.T) escalationRig {
 	if approveErr := addApproveCommands(reg, newHostMessages(), clitext.NewMessages(), fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); approveErr != nil {
 		t.Fatalf("addApproveCommands: %v", approveErr)
 	}
+	if err := addVerbs(reg, envVerbs(clitext.NewMessages(), fixedLanguage(i18n.English), func() string { return envFile }, newEditLock())...); err != nil {
+		t.Fatal(err)
+	}
 	desk := newApprovalDesk(newHostMessages(), fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab)
-	h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, st: st, reg: reg, desk: desk, live: make(map[string]liveSession)})
+	events := &eventLog{}
+	h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, st: st, reg: reg, desk: desk, live: make(map[string]liveSession), eventPublisher: events.publish, selfRestarts: newSelfRestarts()})
 	socket := filepath.Join(t.TempDir(), "s1.sock")
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	serveTestCommandSocket(ctx, t, isolatedRuntimeDir(t), socket, asSession{disp: h, session: "s1", lang: h.sessionLanguageSource("s1"), messages: clitext.NewMessages()}, defaultCommandReadTimeout)
-	return escalationRig{store: st, approvals: approvalTab, socket: socket}
+	return escalationRig{store: st, approvals: approvalTab, sessions: sessionTab, socket: socket, envFile: envFile, events: events}
 }
 
 func (r escalationRig) dispatchAsync(t *testing.T, argv []string) <-chan error {
@@ -55,13 +91,19 @@ func (r escalationRig) dispatchAsync(t *testing.T, argv []string) <-chan error {
 	return done
 }
 
+func (r escalationRig) dispatch(t *testing.T, argv ...string) (string, error) {
+	t.Helper()
+	out, _, err := dispatchLiveCommand(t.Context(), newHostMessages(), isolatedRuntimeDir(t), r.socket, argv)
+	return out, err
+}
+
 func TestAVerbTheAgentMayNotRunIsPutToTheOperatorAndRunsOnAllow(t *testing.T) {
 	rig := newEscalationRig(t)
 	done := rig.dispatchAsync(t, []string{"approve", "rule", "allow Read(*)"})
 
-	pending := awaitPendingLive(t, rig.approvals, 1)[0]
-	if pending.Session != "s1" || pending.Tool != approval.VerbTool || pending.Subject != "approve rule allow Read(*)" {
-		t.Fatalf("pending = %+v, want the verb asked as Herrscher(approve rule allow Read(*)) for s1", pending)
+	pending := onlyPending(t, rig.approvals)
+	if pending.Session != "s1" || pending.Tool != approval.VerbTool || pending.Subject != `approve rule "allow Read(*)"` {
+		t.Fatalf("pending = %+v, want the verb asked as Herrscher(approve rule \"allow Read(*)\") for s1", pending)
 	}
 	if !answerApproval(rig.approvals, pending.ID, approval.Allow) {
 		t.Fatal("the question vanished before the operator answered")
@@ -78,7 +120,7 @@ func TestAVerbTheOperatorRefusesNeverRuns(t *testing.T) {
 	rig := newEscalationRig(t)
 	done := rig.dispatchAsync(t, []string{"approve", "rule", "allow Bash(*)"})
 
-	pending := awaitPendingLive(t, rig.approvals, 1)[0]
+	pending := onlyPending(t, rig.approvals)
 	if !answerApproval(rig.approvals, pending.ID, approval.Deny) {
 		t.Fatal("the question vanished before the operator answered")
 	}
@@ -99,4 +141,64 @@ func TestAnsweringAnApprovalIsRefusedWithoutAQuestion(t *testing.T) {
 	if pending := pendingApprovals(rig.approvals); len(pending) != 0 {
 		t.Fatalf("pending = %+v, want no question: a session cannot ask to answer its own", pending)
 	}
+}
+
+func TestAnAllowedVerbIsAnnouncedToTheSession(t *testing.T) {
+	rig := newEscalationRig(t)
+	done := rig.dispatchAsync(t, []string{"env", "set", "--key", "HERRSCHER_BACKEND", "--value", "codex"})
+	pending := onlyPending(t, rig.approvals)
+	if !answerApproval(rig.approvals, pending.ID, approval.Allow) {
+		t.Fatal("the question vanished before the operator answered")
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("the allowed verb failed: %v", err)
+	}
+	notices := rig.events.all()
+	if len(notices) != 1 || !strings.HasPrefix(notices[0], "s1: ") || !strings.Contains(notices[0], "env set") || !strings.Contains(notices[0], "allowed by the operator") {
+		t.Fatalf("notices = %q, want one telling s1 the operator allowed env set", notices)
+	}
+	raw, err := os.ReadFile(rig.envFile)
+	if err != nil || !strings.Contains(string(raw), "HERRSCHER_BACKEND=codex") || !strings.Contains(string(raw), "# kept") {
+		t.Fatalf("env file = %q, %v, want the new value and the comment kept", raw, err)
+	}
+}
+
+func TestASecretIsRefusedBeforeTheOperatorIsAskedAndHiddenOnRead(t *testing.T) {
+	rig := newEscalationRig(t)
+	if _, err := rig.dispatch(t, "env", "set", "--key", "GATEWAY_BOT_TOKEN", "--value", "leaked"); err == nil || !strings.Contains(err.Error(), "never written by a session") {
+		t.Fatalf("setting a secret from a session: %v, want the refusal", err)
+	}
+	if pending := pendingApprovals(rig.approvals); len(pending) != 0 {
+		t.Fatalf("pending = %+v: the secret must never reach a question", pending)
+	}
+	out, err := rig.dispatch(t, "env", "get")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "s3cret") || !strings.Contains(out, "GATEWAY_BOT_TOKEN=(set, hidden)") || !strings.Contains(out, "HERRSCHER_BACKEND=claude") {
+		t.Fatalf("env get = %q, want the secret hidden and the rest shown", out)
+	}
+}
+
+func TestApproveListShowsASessionOnlyItsOwnQuestions(t *testing.T) {
+	rig := newEscalationRig(t)
+	other := make(chan approval.Decision, 1)
+	go func() {
+		decision, _ := askApproval(t.Context(), rig.approvals, rig.sessions, "s2", approval.Request{Tool: "Bash", Subject: "git push"},
+			approval.Policy{{Decision: approval.Ask, Tool: "Bash", Pattern: "git push*"}}, approval.ModeAsk, time.Minute, 0)
+		other <- decision
+	}()
+	onlyPending(t, rig.approvals)
+	out, err := rig.dispatch(t, "approve", "list", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "s2") || strings.Contains(out, "git push") {
+		t.Fatalf("approve list from s1 = %q, want nothing of s2's question", out)
+	}
+	pending := pendingApprovals(rig.approvals)
+	if !answerApproval(rig.approvals, pending[0].ID, approval.Deny) {
+		t.Fatal("s2's question vanished")
+	}
+	<-other
 }

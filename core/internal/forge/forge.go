@@ -181,6 +181,29 @@ func CollectPages[T any](ctx context.Context, fetch func(context.Context, contra
 	}
 }
 
+// CollectUpTo fetches the pages of a listing until it holds limit items or the
+// listing ends, and reports whether items were left out. It never fetches more
+// than MaxPages pages.
+func CollectUpTo[T any](ctx context.Context, limit int, fetch func(context.Context, contracts.PageRequest) (contracts.Page[T], error)) ([]T, bool, error) {
+	var items []T
+	var cursor contracts.PageCursor
+	for fetched := 1; fetched <= MaxPages; fetched++ {
+		page, err := fetch(ctx, contracts.PageRequest{Cursor: cursor, Limit: min(contracts.MaxPageLimit, limit-len(items))})
+		if err != nil {
+			return nil, false, err
+		}
+		items = append(items, page.Items...)
+		if len(items) >= limit {
+			return items[:limit], page.Next != "" || len(items) > limit, nil
+		}
+		if page.Next == "" {
+			return items, false, nil
+		}
+		cursor = page.Next
+	}
+	return items, true, nil
+}
+
 func notConnectedAsEmpty(err error, label string) error {
 	if errors.Is(err, contracts.ErrForgeNotConnected) {
 		return nil

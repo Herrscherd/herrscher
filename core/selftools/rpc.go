@@ -99,15 +99,69 @@ type callResult struct {
 
 // Server answers MCP requests with the tools of one daemon.
 type Server struct {
-	daemon  Daemon
-	version string
-	catalog *catalog
+	version  string
+	catalog  *catalog
+	inFlight inFlight
 }
 
-// NewServer returns a Server that reaches the daemon through daemon, names itself with version,
-// and offers the local tools beside the daemon's verbs.
-func NewServer(daemon Daemon, version string, exposure Exposure, locals ...LocalTool) *Server {
-	return &Server{daemon: daemon, version: version, catalog: newCatalog(daemon, exposure, locals)}
+// NewServer returns a Server that reaches the daemon through daemon and names itself with version.
+func NewServer(daemon Daemon, version string, exposure Exposure) *Server {
+	return &Server{version: version, catalog: newCatalog(daemon, exposure), inFlight: inFlight{calls: make(map[string]context.CancelFunc)}}
+}
+
+type inFlight struct {
+	mu    sync.Mutex
+	calls map[string]context.CancelFunc
+}
+
+func (f *inFlight) start(parent context.Context, callID json.RawMessage) (context.Context, func()) {
+	ctx, cancel := context.WithCancel(parent)
+	if len(callID) == 0 {
+		return ctx, cancel
+	}
+	key := string(callID)
+	f.mu.Lock()
+	f.calls[key] = cancel
+	f.mu.Unlock()
+	return ctx, func() {
+		f.mu.Lock()
+		delete(f.calls, key)
+		f.mu.Unlock()
+		cancel()
+	}
+}
+
+func (f *inFlight) cancel(callID json.RawMessage) {
+	f.mu.Lock()
+	cancel, ok := f.calls[string(callID)]
+	f.mu.Unlock()
+	if ok {
+		cancel()
+	}
+}
+
+type cancelledParams struct {
+	RequestID json.RawMessage `json:"requestId"`
+}
+
+func (s *Server) cancelled(line []byte) bool {
+	var req request
+	if json.Unmarshal(line, &req) != nil || req.Method != "notifications/cancelled" {
+		return false
+	}
+	var params cancelledParams
+	if json.Unmarshal(req.Params, &params) == nil {
+		s.inFlight.cancel(params.RequestID)
+	}
+	return true
+}
+
+func requestID(line []byte) json.RawMessage {
+	var req request
+	if json.Unmarshal(line, &req) != nil {
+		return nil
+	}
+	return req.ID
 }
 
 // Serve reads one JSON-RPC message per line from in and writes each answer to out, until in ends or ctx is done.
@@ -124,7 +178,7 @@ func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 			return err
 		}
 		line := slices.Clone(scanner.Bytes())
-		if len(line) == 0 {
+		if len(line) == 0 || s.cancelled(line) {
 			continue
 		}
 		select {
@@ -132,9 +186,11 @@ func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		}
+		callCtx, done := s.inFlight.start(ctx, requestID(line))
 		running.Go(func() {
 			defer func() { <-slots }()
-			if reply, answer := s.handle(ctx, line); answer {
+			defer done()
+			if reply, answer := s.handle(callCtx, line); answer {
 				answers.write(reply)
 			}
 		})

@@ -16,7 +16,8 @@ type injectedBlock struct {
 }
 
 type turnContext struct {
-	blocks []injectedBlock
+	blocks         []injectedBlock
+	selfToolsBytes int
 }
 
 func composeTurnContext(memCtx string, eng *skills.Engine, aff affordances) turnContext {
@@ -26,7 +27,7 @@ func composeTurnContext(memCtx string, eng *skills.Engine, aff affordances) turn
 		{part: contracts.ContextDelegation, text: delegationBlock(aff.roster)},
 		{part: contracts.ContextCapabilities, text: capabilitiesBlock(aff.caps)},
 		{part: contracts.ContextIdentity, text: identityBlock(aff.user)},
-	}}
+	}, selfToolsBytes: aff.selfTools}
 }
 
 func (c turnContext) String() string {
@@ -43,6 +44,9 @@ func (c turnContext) sizes() []contracts.InjectedPart {
 	parts := make([]contracts.InjectedPart, 0, len(c.blocks))
 	for _, block := range c.blocks {
 		parts = append(parts, contracts.InjectedPart{Part: block.part, Tokens: contextwindow.EstimateTokens(block.text)})
+	}
+	if c.selfToolsBytes > 0 {
+		parts = append(parts, contracts.InjectedPart{Part: contracts.ContextSelfTools, Tokens: contextwindow.EstimateBytes(c.selfToolsBytes)})
 	}
 	return parts
 }

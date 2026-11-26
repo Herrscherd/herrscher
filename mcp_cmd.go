@@ -3,13 +3,15 @@ package main
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/core/selftools"
-	"github.com/Herrscherd/herrscher/manage"
 )
 
 const (
@@ -18,7 +20,10 @@ const (
 	selfToolsCallTimeout = host.SelfToolsCallWait
 )
 
-var errNoDaemon = errors.New("herrscher: no daemon answers on the command socket of this session")
+var (
+	errNoDaemon        = errors.New("herrscher: no daemon answers on the command socket of this session")
+	errNoSessionSocket = errors.New("herrscher mcp: no session command socket (" + host.SessionCommandSocketVar + "): the self tools run inside a session, never on the operator's socket")
+)
 
 type sessionDaemon struct {
 	layout       host.RuntimeLayout
@@ -42,22 +47,24 @@ func runMCP(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Me
 	if len(args) > 0 {
 		return renderError(messages, lang, errUnknownArgument, clitext.FlagUnknown, clitext.Params{clitext.ParamCommand: mcpVerb, clitext.ParamName: args[0]})
 	}
-	exposure, err := selftools.ParseExposure(envx.Get(selfToolsScope))
-	if err != nil {
-		return err
+	if strings.TrimSpace(os.Getenv(host.SessionCommandSocketVar)) == "" {
+		return errNoSessionSocket
 	}
-	server := selftools.NewServer(sessionDaemon{layout: layout, messages: messages, hostMessages: hostMessages}, herrscherVersion(), exposure, setupCheckTool(messages, hostMessages))
+	exposure := chosenExposure()
+	server := selftools.NewServer(sessionDaemon{layout: layout, messages: messages, hostMessages: hostMessages}, herrscherVersion(), exposure)
 	return server.Serve(ctx, os.Stdin, os.Stdout)
 }
 
-func setupCheckTool(messages *clitext.Messages, hostMessages *host.Messages) selftools.LocalTool {
-	return selftools.LocalTool{
-		Tool: selftools.BooleanTool("setup_check",
-			"Report each section of the herrscher setup (connections, modules, gateways, backends, memory, routing) as ok, warning, bad or off, "+
-				"the way `herrscher setup` shows it, without changing anything.",
-			map[string]string{"probe": "Also check each account against its service. No sign-in is opened."}),
-		Run: func(ctx context.Context, args map[string]any) (string, error) {
-			return manage.CheckSetup(ctx, messages, hostMessages, selftools.Flag(args, "probe")).JSON()
-		},
+func chosenExposure() selftools.Exposure {
+	asked := envx.Get(selfToolsScope)
+	if strings.TrimSpace(asked) == "" {
+		if configured, err := config.Load(config.DefaultPath()); err == nil {
+			asked = configured.SelfToolsExpose()
+		}
 	}
+	exposure, err := selftools.ParseExposure(asked)
+	if err != nil {
+		slog.Warn("self tools: unknown exposure, serving the core set", "err", err)
+	}
+	return exposure
 }

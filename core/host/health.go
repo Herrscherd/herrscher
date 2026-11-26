@@ -35,6 +35,7 @@ type healthInputs struct {
 	repo       string
 	watching   bool
 	now        func() time.Time
+	selfTools  func() health.SelfTools
 }
 
 type healthSource struct {
@@ -69,8 +70,20 @@ func healthProbes(inputs healthInputs) []health.Probe {
 	probes = append(probes, backendProbes(inputs)...)
 	probes = append(probes, memoryProbes(inputs.memory)...)
 	probes = append(probes, forgeProbes(inputs)...)
+	probes = append(probes, selfToolsProbes(inputs)...)
 	history := lastCompactions(inputs.ledger)
 	return append(probes, compactionProbes(inputs.compaction.names, history, compactionKey)...)
+}
+
+func selfToolsProbes(inputs healthInputs) []health.Probe {
+	if inputs.selfTools == nil {
+		return nil
+	}
+	facts := inputs.selfTools()
+	return []health.Probe{{
+		Check: health.Check{Group: health.GroupCore, Name: health.ServiceSelfTools, Facts: health.Facts{SelfTools: &facts}},
+		Run:   reportRun(contracts.ProbeReport{State: contracts.HealthOK}),
+	}}
 }
 
 func daemonProbe(daemon health.Daemon) health.Probe {

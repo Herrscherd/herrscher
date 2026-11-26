@@ -17,12 +17,16 @@ func TestProcessGoneAcceptsAZombie(t *testing.T) {
 	if _, err := os.Stat("/proc/self/stat"); err != nil {
 		t.Skip("process states are read from /proc")
 	}
-	cmd := exec.Command("sh", "-c", "exit 0")
+	cmd := exec.CommandContext(t.Context(), "sh", "-c", "exit 0")
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
 	pid := cmd.Process.Pid
-	t.Cleanup(func() { _ = cmd.Wait() })
+	t.Cleanup(func() {
+		if err := cmd.Wait(); err != nil {
+			t.Errorf("reap zombie %d: %v", pid, err)
+		}
+	})
 	awaitZombie(t, pid)
 	if err := syscall.Kill(pid, 0); err != nil {
 		t.Fatalf("a zombie must still answer kill(pid, 0), got %v", err)

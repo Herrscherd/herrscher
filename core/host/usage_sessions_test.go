@@ -125,3 +125,16 @@ func TestInjectionAverageFollowsTheAccountAndVendorFilters(t *testing.T) {
 		})
 	}
 }
+
+func TestSpendLeavesTheLedgerItIsGivenUntouched(t *testing.T) {
+	now := time.Now().UTC()
+	source := sessionUsageSource(t, now)
+	coverClaudeTranscripts(t, source, now)
+	ledger := []usage.Record{herrscherTurn("herrscher-name", "", now.Add(-time.Hour))}
+
+	source.spend(ledger, usageQuery{rng: usage.Range7d}, now)
+
+	if len(ledger) != 1 || ledger[0].Session != "herrscher-name" || ledger[0].CacheRead != 300 {
+		t.Errorf("ledger = %+v, want the turn it was given, still whole", ledger)
+	}
+}

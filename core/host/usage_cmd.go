@@ -211,10 +211,12 @@ func (s *usageSource) run(ctx context.Context, query usageQuery) usage.Snapshot 
 }
 
 func (s *usageSource) spend(ledger []usage.Record, query usageQuery, now time.Time) (usage.Spend, transcriptState) {
-	records, notes := s.withTranscripts(ledger, now.Add(-query.rng.Span()))
+	kept := query.filter(ledger)
+	rows := usage.SessionRows(kept)
+	records, notes := s.withTranscripts(kept, query, now.Add(-query.rng.Span()))
 	s.priceCompactions(records)
-	spend := usage.Summarize(query.filter(records), query.rng, now, query.account)
-	spend.Rows = usage.SessionRows(query.filter(ledger))
+	spend := usage.Summarize(records, query.rng, now, query.account)
+	spend.Rows = rows
 	return spend, notes
 }
 
@@ -232,17 +234,17 @@ type transcriptState struct {
 	priced     bool
 }
 
-func (s *usageSource) withTranscripts(ledger []usage.Record, since time.Time) ([]usage.Record, transcriptState) {
+func (s *usageSource) withTranscripts(kept []usage.Record, query usageQuery, since time.Time) ([]usage.Record, transcriptState) {
 	if s.transcripts == nil || s.prices == nil {
-		return ledger, transcriptState{priced: true}
+		return kept, transcriptState{priced: true}
 	}
 	view := s.transcripts.View(since)
-	records := slices.DeleteFunc(slices.Clone(ledger), func(record usage.Record) bool {
+	records := slices.DeleteFunc(kept, func(record usage.Record) bool {
 		return record.Compaction == nil && view.Covered[usage.AccountKey{Vendor: record.Vendor, Account: record.Account}]
 	})
 	book := s.prices.Book()
 	book.Price(view.Records)
-	return append(records, view.Records...), transcriptState{
+	return append(records, query.filter(view.Records)...), transcriptState{
 		pending:    !view.Scanned,
 		unreadable: view.Unreadable,
 		priced:     !book.Empty() || len(view.Records) == 0,

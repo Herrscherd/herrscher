@@ -33,7 +33,10 @@ const (
 	flagNoBuild       = "--no-build"
 )
 
-var errHostVerbBinary = errors.New("herrscher: this binary cannot name itself, so the daemon cannot run the verb")
+var (
+	errHostVerbBinary = errors.New("herrscher: this binary cannot name itself, so the daemon cannot run the verb")
+	errModuleFlag     = errors.New("herrscher plugin: a module path never starts with -")
+)
 
 type hostVerbError struct {
 	verb   string
@@ -55,7 +58,7 @@ type selfExec struct {
 	path          []string
 	help          string
 	wait          time.Duration
-	argv          func(contracts.Input) []string
+	argv          func(contracts.Input) ([]string, error)
 	exitIsVerdict bool
 }
 
@@ -78,7 +81,10 @@ func (verb selfExec) run(ctx context.Context, input contracts.Input) (contracts.
 	}
 	bounded, cancel := context.WithTimeout(ctx, verb.wait)
 	defer cancel()
-	args := verb.argv(input)
+	args, err := verb.argv(input)
+	if err != nil {
+		return contracts.Result{}, err
+	}
 	command := exec.CommandContext(bounded, binary, args...)
 	command.Env = withoutSessionSocket(os.Environ())
 	command.Stdin = bytes.NewReader(nil)
@@ -117,29 +123,43 @@ func jsonIf(input contracts.Input) []string {
 	return nil
 }
 
-func moduleOf(input contracts.Input) []string {
+func moduleOf(input contracts.Input) ([]string, error) {
+	modules := input.Rest
 	if module := strings.TrimSpace(input.Get(paramModule)); module != "" {
-		return []string{module}
+		modules = []string{module}
 	}
-	return input.Rest
+	for _, module := range modules {
+		if strings.HasPrefix(module, "-") {
+			return nil, errModuleFlag
+		}
+	}
+	return modules, nil
+}
+
+func pluginArgv(input contracts.Input, sub string) ([]string, error) {
+	modules, err := moduleOf(input)
+	if err != nil {
+		return nil, err
+	}
+	return append(append([]string{familyPlugin, sub, flagYes}, flagIf(input, paramNoBuild, flagNoBuild)...), modules...), nil
 }
 
 func hostVerbs() []contracts.Cmd {
 	return []contracts.Cmd{
-		selfExec{path: []string{familySetup, verbCheck}, help: clitext.CmdHelpSetupCheck, wait: hostVerbReadWait, exitIsVerdict: true, argv: func(input contracts.Input) []string {
-			return append(append([]string{familySetup, verbCheck}, flagIf(input, paramProbe, "--probe")...), jsonIf(input)...)
+		selfExec{path: []string{familySetup, verbCheck}, help: clitext.CmdHelpSetupCheck, wait: hostVerbReadWait, exitIsVerdict: true, argv: func(input contracts.Input) ([]string, error) {
+			return append(append([]string{familySetup, verbCheck}, flagIf(input, paramProbe, "--probe")...), jsonIf(input)...), nil
 		}}.declare(contracts.Param{Name: paramProbe, Help: clitext.ManageFlagSetupProbe}),
-		selfExec{path: []string{familyConnect, verbStatus}, help: clitext.CmdHelpConnectStatus, wait: hostVerbReadWait, argv: func(contracts.Input) []string {
-			return []string{familyConnect, verbStatus}
+		selfExec{path: []string{familyConnect, verbStatus}, help: clitext.CmdHelpConnectStatus, wait: hostVerbReadWait, argv: func(contracts.Input) ([]string, error) {
+			return []string{familyConnect, verbStatus}, nil
 		}}.declare(),
-		selfExec{path: []string{familyPlugin, verbList}, help: clitext.CmdHelpPluginList, wait: hostVerbReadWait, argv: func(contracts.Input) []string {
-			return []string{familyPlugin, verbList}
+		selfExec{path: []string{familyPlugin, verbList}, help: clitext.CmdHelpPluginList, wait: hostVerbReadWait, argv: func(contracts.Input) ([]string, error) {
+			return []string{familyPlugin, verbList}, nil
 		}}.declare(),
-		selfExec{path: []string{familyPlugin, verbAdd}, help: clitext.CmdHelpPluginAdd, wait: hostVerbBuildWait, argv: func(input contracts.Input) []string {
-			return append(append([]string{familyPlugin, verbAdd, flagYes}, flagIf(input, paramNoBuild, flagNoBuild)...), moduleOf(input)...)
+		selfExec{path: []string{familyPlugin, verbAdd}, help: clitext.CmdHelpPluginAdd, wait: hostVerbBuildWait, argv: func(input contracts.Input) ([]string, error) {
+			return pluginArgv(input, verbAdd)
 		}}.declare(contracts.Param{Name: paramModule, Help: clitext.CmdParamPluginModule, ValueRequired: true}, contracts.Param{Name: paramNoBuild, Help: clitext.CmdParamPluginNoBuild}),
-		selfExec{path: []string{familyPlugin, verbRm}, help: clitext.CmdHelpPluginRemove, wait: hostVerbBuildWait, argv: func(input contracts.Input) []string {
-			return append(append([]string{familyPlugin, verbRemove, flagYes}, flagIf(input, paramNoBuild, flagNoBuild)...), moduleOf(input)...)
+		selfExec{path: []string{familyPlugin, verbRm}, help: clitext.CmdHelpPluginRemove, wait: hostVerbBuildWait, argv: func(input contracts.Input) ([]string, error) {
+			return pluginArgv(input, verbRemove)
 		}}.declare(contracts.Param{Name: paramModule, Help: clitext.CmdParamPluginModule, ValueRequired: true}, contracts.Param{Name: paramNoBuild, Help: clitext.CmdParamPluginNoBuild}),
 	}
 }

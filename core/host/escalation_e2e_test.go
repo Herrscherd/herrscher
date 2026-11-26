@@ -68,12 +68,14 @@ func newEscalationRig(t *testing.T) escalationRig {
 	if approveErr := addApproveCommands(reg, newHostMessages(), clitext.NewMessages(), fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); approveErr != nil {
 		t.Fatalf("addApproveCommands: %v", approveErr)
 	}
-	if err := addVerbs(reg, envVerbs(clitext.NewMessages(), fixedLanguage(i18n.English), func() string { return envFile }, newEditLock())...); err != nil {
+	notices := &noticeSlot{}
+	if err := addVerbs(reg, envVerbs(clitext.NewMessages(), fixedLanguage(i18n.English), func() string { return envFile }, newEditLock(), notices)...); err != nil {
 		t.Fatal(err)
 	}
 	desk := newApprovalDesk(newHostMessages(), fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab)
 	events := &eventLog{}
-	h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, st: st, reg: reg, desk: desk, live: make(map[string]liveSession), eventPublisher: events.publish, selfRestarts: newSelfRestarts()})
+	h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, st: st, reg: reg, desk: desk, live: make(map[string]liveSession), eventPublisher: events.publish, selfRestarts: newSelfRestarts(st)})
+	notices.bind(h.announce)
 	socket := filepath.Join(t.TempDir(), "s1.sock")
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
@@ -165,7 +167,7 @@ func TestAnAllowedVerbIsAnnouncedToTheSession(t *testing.T) {
 
 func TestASecretIsRefusedBeforeTheOperatorIsAskedAndHiddenOnRead(t *testing.T) {
 	rig := newEscalationRig(t)
-	if _, err := rig.dispatch(t, "env", "set", "--key", "GATEWAY_BOT_TOKEN", "--value", "leaked"); err == nil || !strings.Contains(err.Error(), "never written by a session") {
+	if _, err := rig.dispatch(t, "env", "set", "--key", "GATEWAY_BOT_TOKEN", "--value", "leaked"); err == nil || !strings.Contains(err.Error(), "never writes a secret") {
 		t.Fatalf("setting a secret from a session: %v, want the refusal", err)
 	}
 	if pending := pendingApprovals(rig.approvals); len(pending) != 0 {
@@ -201,4 +203,44 @@ func TestApproveListShowsASessionOnlyItsOwnQuestions(t *testing.T) {
 		t.Fatal("s2's question vanished")
 	}
 	<-other
+}
+
+func TestAClientThatHangsUpWithdrawsItsQuestion(t *testing.T) {
+	rig := newEscalationRig(t)
+	ctx, hangUp := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := dispatchLiveCommand(ctx, newHostMessages(), isolatedRuntimeDir(t), rig.socket, []string{"approve", "rule", "allow Read(*)"})
+		done <- err
+	}()
+	onlyPending(t, rig.approvals)
+	hangUp()
+	if err := <-done; err == nil {
+		t.Fatal("a call withdrawn by its client reported success")
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for len(pendingApprovals(rig.approvals)) != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("pending = %+v: the question outlived the call that asked it", pendingApprovals(rig.approvals))
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := rig.store.ApprovalRules(); len(got) != 0 {
+		t.Fatalf("rules = %v, want none: the call was withdrawn", got)
+	}
+}
+
+func TestASessionAsksTheOperatorForASecretWithoutSendingIt(t *testing.T) {
+	rig := newEscalationRig(t)
+	out, err := rig.dispatch(t, "env", "request", "--key", "GATEWAY_BOT_TOKEN", "--reason", "the gateway needs it")
+	if err != nil {
+		t.Fatalf("env request: %v", err)
+	}
+	notices := rig.events.all()
+	if len(notices) != 1 || !strings.Contains(notices[0], "GATEWAY_BOT_TOKEN") || !strings.Contains(notices[0], "herrscher env set") {
+		t.Fatalf("notices = %q, out = %q, want one asking the operator to set the key", notices, out)
+	}
+	if pending := pendingApprovals(rig.approvals); len(pending) != 0 {
+		t.Fatalf("pending = %+v, want no question: a request carries no value", pending)
+	}
 }

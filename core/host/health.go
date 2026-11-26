@@ -36,6 +36,8 @@ type healthInputs struct {
 	watching   bool
 	now        func() time.Time
 	selfTools  func() health.SelfTools
+
+	selfToolsAnswer func(ctx context.Context, socket string) (int, error)
 }
 
 type healthSource struct {
@@ -82,7 +84,19 @@ func selfToolsProbes(inputs healthInputs) []health.Probe {
 	facts := inputs.selfTools()
 	return []health.Probe{{
 		Check: health.Check{Group: health.GroupCore, Name: health.ServiceSelfTools, Facts: health.Facts{SelfTools: &facts}},
-		Run:   reportRun(contracts.ProbeReport{State: contracts.HealthOK}),
+		Run: func(ctx context.Context, deep bool) (contracts.ProbeReport, health.Facts) {
+			if !deep || !facts.Enabled || inputs.selfToolsAnswer == nil {
+				return contracts.ProbeReport{State: contracts.HealthOK}, health.Facts{SelfTools: &facts}
+			}
+			answered, err := inputs.selfToolsAnswer(ctx, inputs.daemon.Socket)
+			if err != nil {
+				detail := contracts.Notice{Code: contracts.CodeUnexpected, Args: []contracts.Arg{contracts.Text("Detail", err.Error())}}
+				return contracts.ProbeReport{State: contracts.HealthDegraded, Detail: detail}, health.Facts{SelfTools: &facts}
+			}
+			measured := facts
+			measured.Tools = answered
+			return contracts.ProbeReport{State: contracts.HealthOK}, health.Facts{SelfTools: &measured}
+		},
 	}}
 }
 

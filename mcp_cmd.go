@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
-	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/core/selftools"
@@ -57,11 +56,6 @@ func runMCP(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Me
 
 func chosenExposure() selftools.Exposure {
 	asked := envx.Get(selfToolsScope)
-	if strings.TrimSpace(asked) == "" {
-		if configured, err := config.Load(config.DefaultPath()); err == nil {
-			asked = configured.SelfToolsExpose()
-		}
-	}
 	exposure, err := selftools.ParseExposure(asked)
 	if err != nil {
 		slog.Warn("self tools: unknown exposure, serving the core set", "err", err)

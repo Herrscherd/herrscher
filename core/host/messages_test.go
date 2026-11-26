@@ -265,6 +265,8 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"selftools.ran_steward":             {"Subject"},
 		"selftools.failed_asked":            {"Subject", "Detail"},
 		"selftools.failed_steward":          {"Subject", "Detail"},
+		"selftools.env_requested":           {"Key", "Reason"},
+		"selftools.restart_resumed":         nil,
 	}
 	i18ntest.CheckDeclared(t, declared, hostLocaleSource(t))
 }

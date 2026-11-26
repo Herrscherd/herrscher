@@ -54,10 +54,10 @@ func loadedConfig(path string) config.Config {
 	return configured
 }
 
-func fileVerbs(cliMessages *clitext.Messages, options Options) []contracts.Cmd {
+func fileVerbs(cliMessages *clitext.Messages, options Options, notices *noticeSlot) []contracts.Cmd {
 	configPath := func() string { return configPathOr(options.ConfigPath) }
 	edits := newEditLock()
-	return append(configVerbs(cliMessages, options.live.Get, configPath, edits), envVerbs(cliMessages, options.live.Get, daemonEnvFile, edits)...)
+	return append(configVerbs(cliMessages, options.live.Get, configPath, edits), envVerbs(cliMessages, options.live.Get, daemonEnvFile, edits, notices)...)
 }
 
 func configVerbs(cliMessages *clitext.Messages, lang languageSource, path func() string, edits *editLock) []contracts.Cmd {

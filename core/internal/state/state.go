@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
@@ -187,6 +188,10 @@ type State struct {
 	// core/internal/authz, so a fifth role is a code change and a review rather
 	// than a file nobody reads.
 	Roles map[string]RoleAssignment `json:"roles,omitempty"`
+	// SelfRestarts is when each session last restarted the daemon, kept here so the next daemon still knows.
+	SelfRestarts map[string]time.Time `json:"selfRestarts,omitempty"`
+	// RestartResumes are the sessions whose turn asked for the restart, told to carry on once the daemon is back.
+	RestartResumes []string `json:"restartResumes,omitempty"`
 }
 
 // RoleAssignment is one principal's role, plus a name a human can read.

@@ -132,7 +132,7 @@ func (model *setupModel) quietProbe(kind probeKind) (func(context.Context) probe
 		return func(bounded context.Context) probeResult { return prober.claude(bounded, false) }, model.modules[moduleClaude]
 	case probeCodex:
 		return func(bounded context.Context) probeResult { return prober.codex(bounded, false) }, model.modules[moduleCodex] && !model.codexKey
-	case probeCursor, probeVault:
+	case probeCursor, probeVault, probeGrok:
 	}
 	return nil, false
 }

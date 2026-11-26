@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"path/filepath"
 	"testing"
@@ -11,23 +12,39 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-func TestASessionRestartsTheDaemonOncePerWindow(t *testing.T) {
+func TestASessionRestartsTheDaemonOncePerWindowAcrossRestarts(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	st, err := state.LoadState(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 	now := time.Date(2026, 11, 26, 9, 0, 0, 0, time.UTC)
-	restarts := newSelfRestarts()
-	restarts.now = func() time.Time { return now }
-	if err := restarts.admit("s1", verbServiceRestart); err != nil {
+	clock := func() time.Time { return now }
+	restarts := newSelfRestarts(st)
+	restarts.now = clock
+	if err = restarts.admit("s1", verbServiceRestart); err != nil {
 		t.Fatalf("first restart: %v", err)
 	}
-	now = now.Add(selfRestartWindow / 2)
-	if err := restarts.admit("s1", verbServiceRestart); err == nil {
-		t.Fatal("a second restart inside the window was admitted")
+	reloaded, err := state.LoadState(path)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err := restarts.admit("s2", verbServiceRestart); err != nil {
+	next := newSelfRestarts(reloaded)
+	next.now = clock
+	now = now.Add(selfRestartWindow / 2)
+	if err = next.admit("s1", verbServiceUpdate); err == nil {
+		t.Fatal("an update inside the window, from the daemon that came back, was admitted")
+	}
+	if err = next.admit("s2", verbServiceRestart); err != nil {
 		t.Fatalf("another session's restart: %v", err)
 	}
 	now = now.Add(selfRestartWindow)
-	if err := restarts.admit("s1", verbServiceRestart); err != nil {
+	if err = next.admit("s1", verbServiceRestart); err != nil {
 		t.Fatalf("restart after the window: %v", err)
+	}
+	resumes, err := reloaded.TakeRestartResumes()
+	if err != nil || len(resumes) != 2 {
+		t.Fatalf("resumes = %v, %v, want s1 and s2 told to carry on", resumes, err)
 	}
 }
 
@@ -76,4 +93,16 @@ func TestTheSelfToolsPreparerSkipsASessionWithoutAWorktree(t *testing.T) {
 		t.Fatalf("provisioned = %q, want the isolated worktree alone", provisioned)
 	}
 	selfToolsPreparer(nil, slog.New(slog.DiscardHandler))(t.Context(), state.Session{Worktree: "/wt/x"})
+}
+
+func TestTheHealthProbeReadsTheToolsTheServerListed(t *testing.T) {
+	out := []byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18"}}
+{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"herrscher_commands"},{"name":"herrscher_run"},{"name":"session_list"}]}}
+`)
+	if tools, err := listedTools(out); err != nil || tools != 3 {
+		t.Fatalf("listedTools = %d, %v, want 3", tools, err)
+	}
+	if _, err := listedTools([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`)); !errors.Is(err, errSelfToolsSilent) {
+		t.Fatalf("a server that listed nothing: %v, want errSelfToolsSilent", err)
+	}
 }

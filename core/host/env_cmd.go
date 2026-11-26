@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
@@ -17,6 +18,9 @@ import (
 
 const (
 	nsEnv          = "env"
+	paramReason    = "reason"
+	keyParam       = "Key"
+	reasonParam    = "Reason"
 	envFileVar     = "HERRSCHER_ENV_FILE"
 	envFileMode    = 0o600
 	hiddenEnvValue = "(set, hidden)"
@@ -25,18 +29,35 @@ const (
 )
 
 var (
-	errEnvKey        = errors.New("not a variable name: letters, digits and _, not starting with a digit")
-	errEnvValue      = errors.New("a value holds no line break")
-	errEnvNoFile     = errors.New("the daemon was started without a settings file, so there is none to edit")
-	errEnvNoSuchKey  = errors.New("the settings file does not set this variable")
-	errSecretSession = errors.New("a secret is never written by a session: the operator sets it with `herrscher env set` in a terminal")
-	envKeyPattern    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	errEnvKey            = errors.New("not a variable name: letters, digits and _, not starting with a digit")
+	errEnvValue          = errors.New("a value holds no line break")
+	errEnvNoFile         = errors.New("the daemon was started without a settings file, so there is none to edit")
+	errEnvNoSuchKey      = errors.New("the settings file does not set this variable")
+	errEnvQuote          = errors.New("a value holding a single quote cannot also hold a double quote, a dollar, a backquote or a backslash")
+	errEnvRequestOutside = errors.New("env request is how a session asks the operator for a secret; from a terminal, run `herrscher env set`")
+	errEnvRequestUnheard = errors.New("the daemon cannot reach the session's gateways yet, so nobody would read the request")
+	errSecretSession     = errors.New("a session never writes a secret or a variable it cannot read back: ask the operator with `env request`")
+	envKeyPattern        = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 )
 
 func isSecretEnvKey(key string) bool {
+	return !envShownInClear(key)
+}
+
+func envShownInClear(key string) bool {
 	upper := strings.ToUpper(key)
-	for _, marker := range []string{"TOKEN", "KEY", "SECRET", "PASSWORD", "PASSWD", "CREDENTIAL"} {
+	for _, marker := range []string{"TOKEN", "KEY", "SECRET", "PASSWORD", "PASSWD", "CREDENTIAL", "AUTH", "HEADERS", "DSN", "URL", "PAT", "PASS"} {
 		if strings.Contains(upper, marker) {
+			return false
+		}
+	}
+	for _, prefix := range []string{"HERRSCHER_", "MEMORY_", "AGENT_", "JEV_", "OBSIDIAN_", "OTEL_"} {
+		if strings.HasPrefix(upper, prefix) {
+			return true
+		}
+	}
+	for _, suffix := range []string{"_MODEL", "_CMD", "_STREAM", "_DIR", "_KIND", "_EFFORT", "_VERBOSITY", "_CONTEXT_MESSAGES", "_TIDY_PINGS", "_MESSAGE_DELETES", "_HOME"} {
+		if strings.HasSuffix(upper, suffix) {
 			return true
 		}
 	}
@@ -97,33 +118,39 @@ func (d *envDocument) index(key string) int {
 	return slices.IndexFunc(d.lines, func(line envLine) bool { return line.key == key })
 }
 
-func (d *envDocument) set(key, value string) {
-	rendered := key + "=" + quotedEnvValue(value)
-	line := envLine{raw: rendered, key: key, value: value}
-	if found := d.index(key); found >= 0 {
-		d.lines[found] = line
-		return
+func (d *envDocument) set(key, value string) error {
+	quoted, err := quotedEnvValue(value)
+	if err != nil {
+		return err
 	}
-	d.lines = append(d.lines, line)
+	line := envLine{raw: key + "=" + quoted, key: key, value: value}
+	found := d.index(key)
+	if found < 0 {
+		d.lines = append(d.lines, line)
+		return nil
+	}
+	d.lines[found] = line
+	d.lines = slices.Concat(d.lines[:found+1], slices.DeleteFunc(slices.Clone(d.lines[found+1:]), func(later envLine) bool { return later.key == key }))
+	return nil
 }
 
 func (d *envDocument) unset(key string) bool {
-	found := d.index(key)
-	if found < 0 {
-		return false
-	}
-	d.lines = slices.Delete(d.lines, found, found+1)
-	return true
+	before := len(d.lines)
+	d.lines = slices.DeleteFunc(d.lines, func(line envLine) bool { return line.key == key })
+	return len(d.lines) != before
 }
 
-func quotedEnvValue(value string) string {
+func quotedEnvValue(value string) (string, error) {
 	if !strings.ContainsAny(value, envQuotable) {
-		return value
+		return value, nil
 	}
 	if !strings.Contains(value, "'") {
-		return "'" + value + "'"
+		return "'" + value + "'", nil
 	}
-	return `"` + value + `"`
+	if strings.ContainsAny(value, "\"$`\\") {
+		return "", errEnvQuote
+	}
+	return `"` + value + `"`, nil
 }
 
 func (d *envDocument) write(path string) error {
@@ -171,52 +198,110 @@ func refuseSecretFromSession(ctx context.Context, key string) error {
 	return nil
 }
 
-func envVerbs(cliMessages *clitext.Messages, lang languageSource, path func() string, edits *editLock) []contracts.Cmd {
-	return []contracts.Cmd{
-		contracts.New(nsEnv, "get").
-			Help(clitext.CmdHelpEnvGet).
-			ValueParam(paramKey, clitext.CmdParamEnvKey, false).
-			Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
-				file := path()
-				if file == "" {
-					return contracts.Result{}, errEnvNoFile
-				}
-				doc, err := readEnvDocument(file)
-				if err != nil {
-					return contracts.Result{}, err
-				}
-				return cli.Data(doc.render(strings.TrimSpace(firstOf(input.Get(paramKey), input.Rest))))
-			}),
-		contracts.New(nsEnv, "set").
-			Help(clitext.CmdHelpEnvSet).
-			Param(paramKey, clitext.CmdParamEnvKey, true).
-			Param(paramValue, clitext.CmdParamEnvValue, true).
-			Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
-				key, value := strings.TrimSpace(input.Get(paramKey)), input.Get(paramValue)
-				if err := refuseSecretFromSession(ctx, key); err != nil {
-					return contracts.Result{}, err
-				}
-				if strings.ContainsAny(value, "\r\n") {
-					return contracts.Result{}, errEnvValue
-				}
-				return cli.Data(editEnv(cliMessages, lang, path(), key, clitext.HostEnvSet, edits, func(doc *envDocument) error {
-					doc.set(key, value)
-					return nil
-				}))
-			}),
-		contracts.New(nsEnv, "unset").
-			Help(clitext.CmdHelpEnvUnset).
-			Param(paramKey, clitext.CmdParamEnvKey, true).
-			Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
-				key := strings.TrimSpace(input.Get(paramKey))
-				return cli.Data(editEnv(cliMessages, lang, path(), key, clitext.HostEnvUnset, edits, func(doc *envDocument) error {
-					if !doc.unset(key) {
-						return errEnvNoSuchKey
-					}
-					return nil
-				}))
-			}),
+type noticeSlot struct {
+	mu     sync.Mutex
+	notify func(session, key string, params map[string]any)
+}
+
+func (s *noticeSlot) bind(notify func(session, key string, params map[string]any)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.notify = notify
+}
+
+func (s *noticeSlot) send(session, key string, params map[string]any) bool {
+	if s == nil {
+		return false
 	}
+	s.mu.Lock()
+	notify := s.notify
+	s.mu.Unlock()
+	if notify == nil {
+		return false
+	}
+	notify(session, key, params)
+	return true
+}
+
+func envVerbs(cliMessages *clitext.Messages, lang languageSource, path func() string, edits *editLock, notices *noticeSlot) []contracts.Cmd {
+	return []contracts.Cmd{
+		envRequestVerb(cliMessages, lang, notices),
+		envGetVerb(path),
+		envSetVerb(cliMessages, lang, path, edits),
+		envUnsetVerb(cliMessages, lang, path, edits),
+	}
+}
+
+func envRequestVerb(cliMessages *clitext.Messages, lang languageSource, notices *noticeSlot) contracts.Cmd {
+	return contracts.New(nsEnv, "request").
+		Help(clitext.CmdHelpEnvRequest).
+		Param(paramKey, clitext.CmdParamEnvKey, true).
+		ValueParam(paramReason, clitext.CmdParamEnvReason, false).
+		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+			key := strings.TrimSpace(input.Get(paramKey))
+			if err := checkEnvKey(key); err != nil {
+				return contracts.Result{}, err
+			}
+			session := principalOf(ctx).Session
+			if session == "" {
+				return contracts.Result{}, errEnvRequestOutside
+			}
+			if !notices.send(session, "selftools.env_requested", map[string]any{keyParam: key, reasonParam: strings.TrimSpace(input.Get(paramReason))}) {
+				return contracts.Result{}, errEnvRequestUnheard
+			}
+			return contracts.DataResult(replyText(cliMessages, lang()).Text(clitext.HostEnvRequested, clitext.Params{clitext.ParamKey: key})), nil
+		})
+}
+
+func envGetVerb(path func() string) contracts.Cmd {
+	return contracts.New(nsEnv, "get").
+		Help(clitext.CmdHelpEnvGet).
+		ValueParam(paramKey, clitext.CmdParamEnvKey, false).
+		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
+			file := path()
+			if file == "" {
+				return contracts.Result{}, errEnvNoFile
+			}
+			doc, err := readEnvDocument(file)
+			if err != nil {
+				return contracts.Result{}, err
+			}
+			return cli.Data(doc.render(strings.TrimSpace(firstOf(input.Get(paramKey), input.Rest))))
+		})
+}
+
+func envSetVerb(cliMessages *clitext.Messages, lang languageSource, path func() string, edits *editLock) contracts.Cmd {
+	return contracts.New(nsEnv, "set").
+		Help(clitext.CmdHelpEnvSet).
+		Param(paramKey, clitext.CmdParamEnvKey, true).
+		Param(paramValue, clitext.CmdParamEnvValue, true).
+		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+			key, value := strings.TrimSpace(input.Get(paramKey)), input.Get(paramValue)
+			if err := refuseSecretFromSession(ctx, key); err != nil {
+				return contracts.Result{}, err
+			}
+			if strings.ContainsAny(value, "\r\n") {
+				return contracts.Result{}, errEnvValue
+			}
+			return cli.Data(editEnv(cliMessages, lang, path(), key, clitext.HostEnvSet, edits, func(doc *envDocument) error {
+				return doc.set(key, value)
+			}))
+		})
+}
+
+func envUnsetVerb(cliMessages *clitext.Messages, lang languageSource, path func() string, edits *editLock) contracts.Cmd {
+	return contracts.New(nsEnv, "unset").
+		Help(clitext.CmdHelpEnvUnset).
+		Param(paramKey, clitext.CmdParamEnvKey, true).
+		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
+			key := strings.TrimSpace(input.Get(paramKey))
+			return cli.Data(editEnv(cliMessages, lang, path(), key, clitext.HostEnvUnset, edits, func(doc *envDocument) error {
+				if !doc.unset(key) {
+					return errEnvNoSuchKey
+				}
+				return nil
+			}))
+		})
 }
 
 func editEnv(cliMessages *clitext.Messages, lang languageSource, path, key string, done clitext.Key, edits *editLock, edit func(*envDocument) error) (string, error) {

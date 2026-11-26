@@ -437,7 +437,7 @@ func (t *approvalTable) operatorRefusal(reason string) string {
 	if reason == "" {
 		return ""
 	}
-	return t.text("approval.operator_refused", map[string]any{"Reason": reason})
+	return t.text("approval.operator_refused", map[string]any{reasonParam: reason})
 }
 
 func approvalSession(approvals *approvalTable, approvalID string) (string, bool) {

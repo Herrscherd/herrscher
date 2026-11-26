@@ -362,6 +362,20 @@ its stderr, as `stderr: "..."`. When the caller cancels the measure, the cause i
 (requests to the client, notifications) are skipped, and an answer is matched by its id
 alone. No server is dropped from the report.
 
+The servers of a report are measured four at a time, under one budget of 40 seconds shared
+by all of them. A server still running when the budget is spent is stopped as on timeout,
+and a server the budget reaches before it starts is not started; both are reported with the
+cause `budget`. Each server keeps its own 15 second timeout inside that budget. The report
+lists the servers in the order of `mcp.json`, whatever order they finish in.
+
+`mcp weight` runs in the daemon, and it needs one listening: without a daemon it is refused
+with the same message as the other daemon-owned verbs, with or without `--deep`. It is
+read-only and does not wait for the daemon's dispatch lock, so it answers while another
+command is being applied. The command client waits at most 50 seconds for the report. If
+the client gives up or disconnects, the measure is not cancelled: it runs on until the
+budget is spent. Stopping the daemon cancels it, and the probes kill the process groups they
+started, reporting the cause `canceled`.
+
 The probe kills the server, waits up to two seconds for its output to end, and then waits
 for the process to exit. On Unix the server runs in its own process group and the probe
 kills the whole group, so the subprocesses it starts die with it. A subprocess that leaves

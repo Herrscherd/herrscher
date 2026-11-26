@@ -149,15 +149,13 @@ func runWithoutCommand(ctx context.Context, layout host.RuntimeLayout, messages 
 
 func runManageCmd(messages *clitext.Messages, hostMessages *host.Messages, cmd string, args []string) (int, bool) {
 	switch cmd {
-	case "init", "setup", "plugin", "update", "install":
+	case "setup", "plugin", "update", "install":
 	default:
 		return 0, false
 	}
 	mctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	switch cmd {
-	case "init":
-		return manage.InitCmd(mctx, messages, hostMessages, args), true
 	case "setup":
 		return manage.SetupCmd(mctx, messages, hostMessages, args), true
 	case "plugin":

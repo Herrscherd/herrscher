@@ -154,7 +154,7 @@ func lookupModel(plugins []contracts.Plugin, policy contracts.RoutePolicy, sourc
 
 // EnvRoutePolicy selects which models are offered; EnvDefaultModel names the one
 // a session gets when it creates without --model. Both are written by
-// `herrscher init` and read here, so the wizard and the daemon cannot drift.
+// `herrscher setup` and read here, so the wizard and the daemon cannot drift.
 const (
 	EnvRoutePolicy  = "HERRSCHER_ROUTE_POLICY"
 	EnvDefaultModel = "HERRSCHER_DEFAULT_MODEL"

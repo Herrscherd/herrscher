@@ -64,6 +64,7 @@ func runWith(layout host.RuntimeLayout) int {
 	if err := host.CaptureStartupSecrets(func() error { return loadHostEnv(messages) }, hideGatewayKeys); err != nil {
 		return reportError(messages, err)
 	}
+	contracts.Default.PreferBackend(host.PreferredBackend(os.Getenv))
 
 	ctx, stop := notifyStop(context.Background())
 	defer stop()

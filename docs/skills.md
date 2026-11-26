@@ -2,7 +2,7 @@
 
 A **skill** is an Anthropic-format `SKILL.md`: a `---` fenced frontmatter block carrying
 `name` and `description`, then a markdown body of instructions. Herrscher makes any such
-skill usable on **every** backend, including codex and cursor, which have no native skill
+skill usable on **every** backend, including codex, cursor and antigravity, which have no native skill
 loader, by replicating Claude's progressive disclosure at the bridge seam.
 
 The engine lives in the dependency-free `core/skills` package (`Discover` + `Engine`);
@@ -106,7 +106,7 @@ The **claude** backend returns `true` (the `claude` CLI reads `.claude/skills` a
 `~/.claude/skills` on its own), so `newSkillEngine` returns a **nil** engine and the hub
 injects nothing, so no double loading.
 
-Backends that do not implement the capability, such as codex and cursor, get the host-side
+Backends that do not implement the capability, such as codex, cursor and antigravity, get the host-side
 engine.
 
 The CLI does not read root 2 on its own, so the host hands the backend the directory that
@@ -115,7 +115,7 @@ it as `--add-dir` in its stream strategy, and the CLI loads the skills under
 `<workspace>/.herrscher/.claude/skills` as native skills. Without it, a skill the agent
 learned reached a claude session through no path: the recall leaves skill nodes out, since
 they are meant to come from the projection, and the engine that would list them is off for
-a native backend. Codex and cursor ignore the setting.
+a native backend. Codex, cursor and antigravity ignore the setting.
 
 The engine is also nil when the feature is switched off in config. A nil engine means the
 memory context passes through `withSkills` unchanged.

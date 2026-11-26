@@ -75,6 +75,8 @@ name, which no Claude rule names. Before each turn of a gated session the Grok
 backend checks with `grok inspect` that Grok loads that hook, enabled, for the
 worktree, and refuses the turn when it does not, rather than run it ungated. Cursor declares that it enforces
 nothing, because `cursor-agent` exposes no hook and no approval channel.
+Antigravity declares the same: `agy` runs headless with every tool call
+approved, since a permission prompt in a headless turn would block it.
 
 That last one is the shape of every limit here: a mode that will not bite is said
 out loud at create time rather than discovered on the first tool call nobody was

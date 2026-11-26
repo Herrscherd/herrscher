@@ -24,6 +24,13 @@ const (
 	SessionIssueNone           = "cli.session.issue.none"
 	SessionIssueBadNumber      = "cli.session.issue.bad_number"
 	SessionIssueBadState       = "cli.session.issue.bad_state"
+	CmdHelpSessionIssueOpen    = "cli.help.cmd.session.issue.open"
+	CmdHelpSessionIssueComment = "cli.help.cmd.session.issue.comment"
+	CmdParamSessionIssueTitle  = "cli.help.param.session.issue.title"
+	CmdParamSessionIssueBody   = "cli.help.param.session.issue.body"
+	SessionIssueOpened         = "cli.session.issue.opened"
+	SessionIssueCommented      = "cli.session.issue.commented"
+	SessionIssueNoWriter       = "cli.session.issue.no_writer"
 )
 
 func selfToolsKeys() map[Key][]string {
@@ -50,5 +57,12 @@ func selfToolsKeys() map[Key][]string {
 		SessionIssueNone:           {ParamRepo},
 		SessionIssueBadNumber:      {ParamNumber},
 		SessionIssueBadState:       {ParamState},
+		CmdHelpSessionIssueOpen:    nil,
+		CmdHelpSessionIssueComment: nil,
+		CmdParamSessionIssueTitle:  nil,
+		CmdParamSessionIssueBody:   nil,
+		SessionIssueOpened:         {ParamNumber, ParamURL},
+		SessionIssueCommented:      {ParamNumber},
+		SessionIssueNoWriter:       nil,
 	}
 }

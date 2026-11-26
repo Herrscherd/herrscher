@@ -92,3 +92,59 @@ func TestIssueShowGivesTheBodyAndRefusesANumberThatIsNotOne(t *testing.T) {
 		t.Fatalf("the forge was asked %d times, want once: a bad number never reaches it", len(fake.asked))
 	}
 }
+
+type writingIssueForge struct {
+	fakeIssueForge
+
+	drafts   []contracts.IssueDraft
+	comments map[int]string
+}
+
+func (f *writingIssueForge) OpenIssue(_ context.Context, draft contracts.IssueDraft) (contracts.Issue, error) {
+	f.drafts = append(f.drafts, draft)
+	ref, err := contracts.NewIssueRef(draft.Repo, 9)
+	if err != nil {
+		return contracts.Issue{}, err
+	}
+	return contracts.Issue{Ref: ref, Title: draft.Title, URL: "https://github.com/acme/widget/issues/9", State: contracts.IssueOpen}, nil
+}
+
+func (f *writingIssueForge) CommentOnIssue(_ context.Context, ref contracts.IssueRef, body string) error {
+	if f.comments == nil {
+		f.comments = make(map[int]string)
+	}
+	f.comments[ref.Number()] = body
+	return nil
+}
+
+func TestIssueOpenAndCommentGoThroughTheForgeOfTheSessionsRepository(t *testing.T) {
+	st := prState(t, prFixtureRepo(t), "")
+	fake := &writingIssueForge{}
+	reg := prRegistry(t, st, prForgeOpener(fake))
+
+	out, err := runIssue(t, reg, "open", "--name", "alpha", "--title", "Crash", "--body=--verbose breaks it", "--labels", "bug")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if !strings.Contains(out, "#9") || !strings.Contains(out, "issues/9") {
+		t.Fatalf("open output %q, want #9 and its URL", out)
+	}
+	draft := fake.drafts[0]
+	if draft.Title != "Crash" || draft.Body != "--verbose breaks it" || !slices.Equal(draft.Labels, []string{"bug"}) || draft.Repo.String() != prRepoRef(t).String() {
+		t.Fatalf("draft = %+v, want the title, body and label on acme/widget", draft)
+	}
+	if _, err := runIssue(t, reg, "comment", "--name", "alpha", "--number", "9", "--body", "fixed"); err != nil {
+		t.Fatalf("comment: %v", err)
+	}
+	if fake.comments[9] != "fixed" {
+		t.Fatalf("comments = %v, want fixed on #9", fake.comments)
+	}
+}
+
+func TestIssueOpenSaysSoWhenTheForgeCannotWrite(t *testing.T) {
+	st := prState(t, prFixtureRepo(t), "")
+	reg := prRegistry(t, st, prForgeOpener(&fakeIssueForge{}))
+	if _, err := runIssue(t, reg, "open", "--name", "alpha", "--title", "Crash"); !errors.Is(err, errIssueNoWriter) {
+		t.Fatalf("open on a read-only forge: %v, want the no-writer refusal", err)
+	}
+}

@@ -76,10 +76,13 @@ version is kept as `config.json.bak` and the reply says so.
 
 ## Issues
 
-`session issue list` and `session issue show` read the issues of the repository
-the session works in, through the host's forge connection: the agent never
-holds a token. `--state` takes `open` (the default) or `closed`, `--labels` a
-comma separated list. Both are reads, so an agent runs them without asking.
+`session issue list`, `show`, `open` and `comment` work on the repository the
+session works in, through the host's forge connection: the agent never holds a
+token. `--state` takes `open` (the default) or `closed`, `--labels` a comma
+separated list. An agent runs all four without asking, as it already opens its
+pull request with `session pr open`: what it writes there is public on the
+forge, under the account `herrscher connect` connected. A forge plugin too old
+to write issues makes `open` and `comment` say so and name `herrscher update`.
 
 ## Where it is declared
 

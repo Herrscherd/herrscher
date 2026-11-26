@@ -17,6 +17,8 @@ const (
 	verbIssue        = "issue"
 	verbIssueList    = "list"
 	verbIssueShow    = "show"
+	verbIssueOpen    = "open"
+	verbIssueComment = "comment"
 	paramNumber      = "number"
 	paramLabels      = "labels"
 	paramState       = "state"
@@ -25,8 +27,9 @@ const (
 )
 
 var (
-	errIssueNumber = sessionPRError{clitext.SessionIssueBadNumber}
-	errIssueState  = sessionPRError{clitext.SessionIssueBadState}
+	errIssueNoWriter = sessionPRError{clitext.SessionIssueNoWriter}
+	errIssueNumber   = sessionPRError{clitext.SessionIssueBadNumber}
+	errIssueState    = sessionPRError{clitext.SessionIssueBadState}
 )
 
 type issueView struct {
@@ -58,6 +61,19 @@ func (p sessionPRs) issueVerbs() []contracts.Cmd {
 			Param(paramName, clitext.CmdParamSessionIssueName, true).
 			ValueParam(paramNumber, clitext.CmdParamSessionIssueNumber, true).
 			Do(p.showIssue),
+		contracts.New(nsSession, verbIssue, verbIssueOpen).
+			Help(clitext.CmdHelpSessionIssueOpen).
+			Param(paramName, clitext.CmdParamSessionIssueName, true).
+			ValueParam(paramTitle, clitext.CmdParamSessionIssueTitle, true).
+			ValueParam(paramBody, clitext.CmdParamSessionIssueBody, false).
+			ValueParam(paramLabels, clitext.CmdParamSessionIssueLabels, false).
+			Do(p.openIssue),
+		contracts.New(nsSession, verbIssue, verbIssueComment).
+			Help(clitext.CmdHelpSessionIssueComment).
+			Param(paramName, clitext.CmdParamSessionIssueName, true).
+			ValueParam(paramNumber, clitext.CmdParamSessionIssueNumber, true).
+			ValueParam(paramBody, clitext.CmdParamSessionIssueBody, true).
+			Do(p.commentIssue),
 	}
 }
 
@@ -95,6 +111,14 @@ func (p sessionPRs) issueRef(target issueTarget, raw string) (contracts.IssueRef
 		return contracts.IssueRef{}, p.failure(target.language, err)
 	}
 	return ref, nil
+}
+
+func (p sessionPRs) writer(target issueTarget) (contracts.IssueWriter, error) {
+	writer, ok := target.forge.(contracts.IssueWriter)
+	if !ok {
+		return nil, p.messages.Failure(target.language, errIssueNoWriter, errIssueNoWriter.key, nil)
+	}
+	return writer, nil
 }
 
 func (p sessionPRs) issueQuery(language i18n.Language, input contracts.Input) (contracts.IssueQuery, error) {
@@ -180,6 +204,48 @@ func (p sessionPRs) showIssue(ctx context.Context, input contracts.Input) (contr
 		head += "\n" + strings.Join(view.Labels, ", ")
 	}
 	return cli.Data(head+"\n\n"+view.Body, nil)
+}
+
+func (p sessionPRs) openIssue(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+	ctx, cancel := context.WithTimeout(ctx, p.forgeLimit)
+	defer cancel()
+	target, err := p.issueTarget(ctx, input.Get(paramName))
+	if err != nil {
+		return contracts.Result{}, err
+	}
+	writer, err := p.writer(target)
+	if err != nil {
+		return contracts.Result{}, err
+	}
+	opened, err := writer.OpenIssue(ctx, contracts.IssueDraft{Repo: target.repo, Title: input.Get(paramTitle), Body: input.Get(paramBody), Labels: splitLabels(input.Get(paramLabels))})
+	if err != nil {
+		return contracts.Result{}, p.failure(target.language, err)
+	}
+	if input.JSON {
+		return cli.Data(marshalJSON(viewOfIssue(opened)))
+	}
+	return cli.Data(p.messages.Text(target.language, clitext.SessionIssueOpened, clitext.Params{clitext.ParamNumber: opened.Ref.Number(), clitext.ParamURL: escapeLine(opened.URL)}))
+}
+
+func (p sessionPRs) commentIssue(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+	ctx, cancel := context.WithTimeout(ctx, p.forgeLimit)
+	defer cancel()
+	target, err := p.issueTarget(ctx, input.Get(paramName))
+	if err != nil {
+		return contracts.Result{}, err
+	}
+	ref, err := p.issueRef(target, input.Get(paramNumber))
+	if err != nil {
+		return contracts.Result{}, err
+	}
+	writer, err := p.writer(target)
+	if err != nil {
+		return contracts.Result{}, err
+	}
+	if err := writer.CommentOnIssue(ctx, ref, input.Get(paramBody)); err != nil {
+		return contracts.Result{}, p.failure(target.language, err)
+	}
+	return cli.Data(p.messages.Text(target.language, clitext.SessionIssueCommented, clitext.Params{clitext.ParamNumber: ref.Number()}))
 }
 
 func viewOfIssue(issue contracts.Issue) issueView {

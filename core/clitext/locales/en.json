@@ -6040,5 +6040,40 @@
     "id": "cli.session.issue.bad_state",
     "description": "Refusal of an issue state other than open or closed",
     "other": "{{.State}} is not an issue state: open or closed"
+  },
+  {
+    "id": "cli.help.cmd.session.issue.open",
+    "description": "Help of the command session issue open",
+    "other": "open an issue on the repository a session works in, through the host's forge connection"
+  },
+  {
+    "id": "cli.help.cmd.session.issue.comment",
+    "description": "Help of the command session issue comment",
+    "other": "comment on an issue of the repository a session works in"
+  },
+  {
+    "id": "cli.help.param.session.issue.title",
+    "description": "Help of the parameter title of session issue open",
+    "other": "the issue title"
+  },
+  {
+    "id": "cli.help.param.session.issue.body",
+    "description": "Help of the parameter body of session issue",
+    "other": "the text, in Markdown"
+  },
+  {
+    "id": "cli.session.issue.opened",
+    "description": "Reply of session issue open",
+    "other": "opened issue #{{.Number}}: {{.URL}}"
+  },
+  {
+    "id": "cli.session.issue.commented",
+    "description": "Reply of session issue comment",
+    "other": "commented on issue #{{.Number}}"
+  },
+  {
+    "id": "cli.session.issue.no_writer",
+    "description": "Refusal when the forge plugin cannot write issues",
+    "other": "the forge plugin compiled in cannot open or comment on issues: update it with `herrscher update`"
   }
 ]

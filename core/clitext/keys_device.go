@@ -59,6 +59,11 @@ const (
 	DeviceFaultUntrusted             = "cli.host.fault.device_untrusted"
 	DeviceFaultNeedsRoles            = "cli.host.fault.device_needs_roles"
 	CmdParamDeviceApproveFingerprint = "cli.help.param.device.approve.fingerprint"
+	FaultScopedAnswerRole            = "cli.host.fault.scoped_answer_role"
+	FaultHumanAnswerRole             = "cli.host.fault.human_answer_role"
+	FaultRoleNeedsLocal              = "cli.host.fault.role_needs_local"
+	DeviceFaultAuthorityMissing      = "cli.host.fault.device_authority_missing"
+	DeviceFaultRequestTooLarge       = "cli.host.fault.device_request_too_large"
 )
 
 func deviceKeys() map[Key][]string {
@@ -114,5 +119,10 @@ func deviceKeys() map[Key][]string {
 		DeviceFaultUntrusted:             nil,
 		DeviceFaultNeedsRoles:            nil,
 		CmdParamDeviceApproveFingerprint: nil,
+		FaultScopedAnswerRole:            nil,
+		FaultHumanAnswerRole:             nil,
+		FaultRoleNeedsLocal:              nil,
+		DeviceFaultAuthorityMissing:      nil,
+		DeviceFaultRequestTooLarge:       nil,
 	}
 }

@@ -3,6 +3,7 @@ package state
 import (
 	"crypto/rand"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -87,7 +88,7 @@ func TestEnrollingADeviceGrantsItsRoleInTheSameSave(t *testing.T) {
 		t.Fatal(err)
 	}
 	enrolled, first, err := st.EnrollDevice(func(registry *devices.Registry) (devices.Enrolment, error) {
-		device := devices.Device{ID: id, Name: "phone"}
+		device := devices.Device{ID: id, Name: "phone", LastSeen: time.Now()}
 		registry.Devices = append(registry.Devices, device)
 		return devices.Enrolment{Device: device, Role: authz.RoleApprover}, nil
 	})
@@ -127,5 +128,76 @@ func TestAFailedEnrollmentPersistsNeitherTheDeviceNorItsRole(t *testing.T) {
 	}
 	if len(reloaded.RoleNames()) != 0 || len(reloaded.DeviceRegistry().Devices) != 0 {
 		t.Fatal("a failed enrolment must leave neither a device nor a role behind")
+	}
+}
+
+func TestAFailedSaveRestoresTheRegistryInMemory(t *testing.T) {
+	st, err := LoadState(filepath.Join(t.TempDir(), "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.write = func(string, []byte, os.FileMode) error { return errors.New("disk full") }
+	now := time.Date(2026, 11, 26, 9, 0, 0, 0, time.UTC)
+	err = st.UpdateDevices(func(registry *devices.Registry) error {
+		_, openErr := registry.OpenWindow(now, "phone", authz.RoleApprover, rand.Reader)
+		return openErr
+	})
+	if err == nil {
+		t.Fatal("a failed save must be reported")
+	}
+	if st.DeviceRegistry().Pairing != nil {
+		t.Fatal("a window that was never saved must not stay open in memory")
+	}
+}
+
+func TestAFailedEnrollmentSaveRestoresTheDeviceAndItsRole(t *testing.T) {
+	st, err := LoadState(filepath.Join(t.TempDir(), "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.write = func(string, []byte, os.FileMode) error { return errors.New("disk full") }
+	id, err := devices.NewDeviceID(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = st.EnrollDevice(func(registry *devices.Registry) (devices.Enrolment, error) {
+		device := devices.Device{ID: id, LastSeen: time.Now()}
+		registry.Devices = append(registry.Devices, device)
+		return devices.Enrolment{Device: device, Role: authz.RoleApprover}, nil
+	})
+	if err == nil {
+		t.Fatal("a failed save must be reported")
+	}
+	if len(st.DeviceRegistry().Devices) != 0 || len(st.RoleNames()) != 0 {
+		t.Fatal("a failed enrolment must leave neither the device nor its role in memory")
+	}
+}
+
+func TestADeviceWhoseRetentionIsOverIsPurgedWithItsRole(t *testing.T) {
+	st, err := LoadState(filepath.Join(t.TempDir(), "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := devices.NewDeviceID(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpdateDevices(func(registry *devices.Registry) error {
+		registry.Devices = append(registry.Devices, devices.Device{ID: id, LastSeen: time.Now()})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	st.mu.Lock()
+	st.Roles = map[string]RoleAssignment{id.Principal().ID: {Role: "observer"}}
+	st.mu.Unlock()
+	if err := st.UpdateDevices(func(registry *devices.Registry) error {
+		registry.Devices[0].LastSeen = time.Now().Add(-61 * 24 * time.Hour)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(st.DeviceRegistry().Devices) != 0 || len(st.RoleNames()) != 0 {
+		t.Fatal("a device past its retention must be purged together with its role")
 	}
 }

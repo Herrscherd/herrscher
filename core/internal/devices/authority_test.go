@@ -236,3 +236,21 @@ func assertMode(t *testing.T, path string, want os.FileMode) {
 		t.Fatalf("%s mode = %v, want %v", filepath.Base(path), got, want)
 	}
 }
+
+func TestAnAbsentAuthorityIsNotRebuiltOnceDevicesArePaired(t *testing.T) {
+	stateDir := t.TempDir()
+	if _, err := devices.LoadOrCreateAuthority(stateDir, epochInstant(), rand.Reader, true); !errors.Is(err, devices.ErrAuthorityMissing) {
+		t.Fatalf("absent authority with devices paired = %v, want ErrAuthorityMissing", err)
+	}
+	if _, err := os.Stat(authorityCertPath(stateDir)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("nothing may be rebuilt when devices are paired")
+	}
+}
+
+func TestTheServerCertificateDeclaresItsCAStatusExplicitly(t *testing.T) {
+	authority := newAuthority(t, epochInstant())
+	server := authority.ServerCertificate().Leaf
+	if !server.BasicConstraintsValid || server.IsCA {
+		t.Fatal("the server certificate must state explicitly that it is not a CA")
+	}
+}

@@ -6118,7 +6118,7 @@
   {
     "id": "cli.host.fault.device_malformed_fingerprint",
     "description": "Reply or error of a device command: device malformed fingerprint",
-    "other": "une empreinte fait huit lettres et chiffres, telle qu'affichée par l'appareil, avec ou sans le tiret"
+    "other": "une empreinte fait seize lettres et chiffres, telle qu'affichée par l'appareil, avec ou sans le tiret"
   },
   {
     "id": "cli.host.fault.device_signature",
@@ -6164,5 +6164,30 @@
     "id": "cli.host.device.unnamed",
     "description": "Reply of a device command: a window without a name",
     "other": "appareil sans nom"
+  },
+  {
+    "id": "cli.host.fault.scoped_answer_role",
+    "description": "Error of a host command: FaultScopedAnswerRole",
+    "other": "une réponse durable, avec --always ou --session, demande le rôle owner ou operator"
+  },
+  {
+    "id": "cli.host.fault.human_answer_role",
+    "description": "Error of a host command: FaultHumanAnswerRole",
+    "other": "une demande sur les appareils ou les rôles de herrscher n'est tranchée que par owner"
+  },
+  {
+    "id": "cli.host.fault.role_needs_local",
+    "description": "Error of a host command: FaultRoleNeedsLocal",
+    "other": "les verbes role demandent une table de rôles : tant qu'elle n'existe pas, seul l'opérateur local les exécute, attribuez donc le premier rôle depuis le shell local avec `role grant`"
+  },
+  {
+    "id": "cli.host.fault.device_authority_missing",
+    "description": "Error of a device command: device_authority_missing",
+    "other": "l'autorité des appareils manque alors que des appareils sont appairés : rien n'a été reconstruit"
+  },
+  {
+    "id": "cli.host.fault.device_request_too_large",
+    "description": "Error of a device command: device_request_too_large",
+    "other": "la demande de certificat est trop volumineuse"
   }
 ]

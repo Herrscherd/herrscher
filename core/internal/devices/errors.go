@@ -76,3 +76,9 @@ var ErrMalformedFingerprint = errors.New("malformed fingerprint")
 
 // ErrFingerprintMismatch reports a fingerprint that does not match the key the device sent.
 var ErrFingerprintMismatch = errors.New("the fingerprint does not match the one the device shows: nothing was signed")
+
+// ErrAuthorityMissing reports that the device authority is gone while devices are paired, so nothing is rebuilt.
+var ErrAuthorityMissing = errors.New("the device authority is missing although devices are paired: nothing was rebuilt")
+
+// ErrRequestTooLarge reports a certificate request larger than any device request can legitimately be.
+var ErrRequestTooLarge = errors.New("the certificate request is too large")

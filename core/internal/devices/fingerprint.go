@@ -8,10 +8,10 @@ import (
 )
 
 const (
-	shortFingerprintBytes = 5
+	shortFingerprintBytes = 10
 	byteBits              = 8
 	symbolBits            = 5
-	symbolCount           = 8
+	symbolCount           = 16
 	symbolGroup           = symbolCount / 2
 	symbolMask            = 1<<symbolBits - 1
 )
@@ -22,20 +22,25 @@ func KeyFingerprint(spki []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// ShortFingerprint is the short authentication string shown on both ends of a pairing, so an operator can compare what the device shows with what the daemon shows.
+// ShortFingerprint is the short authentication string shown on both ends of a pairing, so an operator can
+// compare what the device shows with what the daemon shows. It carries 80 bits, as sixteen symbols of the pairing alphabet in two groups of eight.
 func ShortFingerprint(spki []byte) string {
 	sum := sha256.Sum256(spki)
-	var bits uint64
-	for _, b := range sum[:shortFingerprintBytes] {
-		bits = bits<<byteBits | uint64(b)
-	}
-	out := make([]byte, 0, symbolCount+1)
-	for idx := range symbolCount {
-		if idx == symbolGroup {
-			out = append(out, '-')
+	symbols := symbolsOf(sum[:shortFingerprintBytes], symbolCount)
+	return symbols[:symbolGroup] + "-" + symbols[symbolGroup:]
+}
+
+func symbolsOf(raw []byte, count int) string {
+	out := make([]byte, 0, count)
+	var acc, bits uint
+	for _, b := range raw {
+		acc = acc<<byteBits | uint(b)
+		bits += byteBits
+		for bits >= symbolBits && len(out) < count {
+			bits -= symbolBits
+			out = append(out, pairingAlphabet[(acc>>bits)&symbolMask])
 		}
-		shift := uint(shortFingerprintBytes*byteBits - symbolBits*(idx+1))
-		out = append(out, pairingAlphabet[(bits>>shift)&symbolMask])
+		acc &= (1 << bits) - 1
 	}
 	return string(out)
 }

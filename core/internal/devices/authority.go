@@ -143,6 +143,8 @@ func loadOrCreateAuthorityCertificate(dir string, now time.Time, rnd io.Reader, 
 	switch {
 	case state == pairComplete:
 		return readPair(certPath, keyPath)
+	case state == pairAbsent && enrolled:
+		return nil, nil, ErrAuthorityMissing
 	case state == pairPartial && enrolled:
 		return nil, nil, ErrAuthorityFiles
 	}
@@ -245,14 +247,16 @@ func issueServerCertificate(caCert *x509.Certificate, caKey *ecdsa.PrivateKey, n
 		return nil, nil, err
 	}
 	template := &x509.Certificate{
-		SerialNumber: serial,
-		Subject:      pkix.Name{CommonName: "herrscher daemon"},
-		NotBefore:    now.Add(-clockSkew),
-		NotAfter:     now.Add(serverCertValidity),
-		DNSNames:     []string{"localhost"},
-		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1"), net.IPv6loopback},
-		KeyUsage:     x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		SerialNumber:          serial,
+		Subject:               pkix.Name{CommonName: "herrscher daemon"},
+		NotBefore:             now.Add(-clockSkew),
+		NotAfter:              now.Add(serverCertValidity),
+		DNSNames:              []string{"localhost"},
+		IPAddresses:           []net.IP{net.ParseIP("127.0.0.1"), net.IPv6loopback},
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		IsCA:                  false,
 	}
 	der, err := x509.CreateCertificate(rnd, template, caCert, &key.PublicKey, caKey)
 	if err != nil {
@@ -302,7 +306,18 @@ func writePrivate(path string, data []byte) (err error) {
 	if err = os.Rename(temporary, path); err != nil {
 		return fmt.Errorf("%w: %w", ErrAuthorityFiles, err)
 	}
+	if err = syncDirectory(filepath.Dir(path)); err != nil {
+		return fmt.Errorf("%w: %w", ErrAuthorityFiles, err)
+	}
 	return nil
+}
+
+func syncDirectory(dir string) error {
+	handle, err := os.Open(filepath.Clean(dir))
+	if err != nil {
+		return err
+	}
+	return errors.Join(handle.Sync(), handle.Close())
 }
 
 func parseCertificatePEM(data []byte) (*x509.Certificate, error) {

@@ -277,7 +277,7 @@ func TestDenyClosesTheWindowAndGrantsNothing(t *testing.T) {
 
 func TestARevokedDeviceCannotAuthenticate(t *testing.T) {
 	registry, authority, enrolment := pairedRegistry(t)
-	if err := registry.Revoke(enrolment.Device.ID); err != nil {
+	if err := registry.Revoke(epochInstant(), enrolment.Device.ID); err != nil {
 		t.Fatal(err)
 	}
 	verified, err := authority.VerifyClient(enrolment.Certificate, epochInstant())
@@ -370,7 +370,7 @@ func TestRevokeOfAnUnknownDeviceIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := registry.Revoke(id); !errors.Is(err, devices.ErrUnknownDevice) {
+	if err := registry.Revoke(epochInstant(), id); !errors.Is(err, devices.ErrUnknownDevice) {
 		t.Fatalf("revoke unknown = %v, want ErrUnknownDevice", err)
 	}
 }
@@ -524,8 +524,11 @@ func TestTheRightFingerprintSignsAndTheTypedFormIsNormalised(t *testing.T) {
 	}
 }
 
-func TestAFingerprintIsEightSymbolsOfThePairingAlphabet(t *testing.T) {
-	for _, text := range []string{"", "ABCD", "ABCDEFGH0", "ABCDEFGHIJ"} {
+func TestAFingerprintIsSixteenSymbolsOfThePairingAlphabet(t *testing.T) {
+	if got := len(strings.ReplaceAll(devices.ShortFingerprint(make([]byte, 32)), "-", "")); got != 16 {
+		t.Fatalf("short fingerprint has %d symbols, want 16 (80 bits)", got)
+	}
+	for _, text := range []string{"", "ABCD", "ABCDEFGHIJKLMNO0", "ABCDEFGHIJ"} {
 		if _, err := devices.ParseFingerprint(text); !errors.Is(err, devices.ErrMalformedFingerprint) {
 			t.Fatalf("ParseFingerprint(%q) = %v, want ErrMalformedFingerprint", text, err)
 		}
@@ -553,4 +556,86 @@ func TestACertificateRequestSignedWithANonSHA2AlgorithmIsRefusedAtRedeem(t *test
 	if err := registry.Redeem(epochInstant(), code, csr); !errors.Is(err, devices.ErrUnsupportedSignature) {
 		t.Fatalf("SHA-1 request at redeem = %v, want ErrUnsupportedSignature", err)
 	}
+}
+
+func TestADeviceWhoseRetentionIsOverIsPurgedAndOthersStay(t *testing.T) {
+	now := epochInstant()
+	active, expiring, expired, revoked, lingering := mustID(t), mustID(t), mustID(t), mustID(t), mustID(t)
+	registry := devices.Registry{Devices: []devices.Device{
+		{ID: active, LastSeen: now},
+		{ID: lingering, LastSeen: now.Add(-59 * 24 * time.Hour)},
+		{ID: expired, LastSeen: now.Add(-61 * 24 * time.Hour)},
+		{ID: revoked, Revoked: true, RevokedAt: now.Add(-31 * 24 * time.Hour), LastSeen: now},
+		{ID: expiring, Revoked: true, RevokedAt: now.Add(-29 * 24 * time.Hour), LastSeen: now},
+	}}
+	purged := registry.Purge(now)
+	if len(purged) != 2 || !containsID(purged, expired) || !containsID(purged, revoked) {
+		t.Fatalf("purged %v, want the expired and the long-revoked devices only", purged)
+	}
+	if _, found := registry.Find(active); !found {
+		t.Fatal("an active device must stay")
+	}
+	if _, found := registry.Find(lingering); !found {
+		t.Fatal("a device expired less than thirty days ago must stay")
+	}
+	if _, found := registry.Find(expiring); !found {
+		t.Fatal("a device revoked less than thirty days ago must stay")
+	}
+}
+
+func TestRevokingKeepsTheFirstRevocationTime(t *testing.T) {
+	var registry devices.Registry
+	id := mustID(t)
+	registry.Devices = []devices.Device{{ID: id, LastSeen: epochInstant()}}
+	first := epochInstant()
+	if err := registry.Revoke(first, id); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Revoke(first.Add(time.Hour), id); err != nil {
+		t.Fatal(err)
+	}
+	device, _ := registry.Find(id)
+	if !device.RevokedAt.Equal(first) {
+		t.Fatalf("second revocation moved the time to %v", device.RevokedAt)
+	}
+}
+
+func TestACertificateRequestAboveTheBoundIsRefused(t *testing.T) {
+	var registry devices.Registry
+	code := openWindow(t, &registry, epochInstant())
+	key, err := ecdsaKey(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	der, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{
+		Subject: pkix.Name{CommonName: strings.Repeat("x", 8192)},
+	}, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	csr, err := x509.ParseCertificateRequest(der)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Redeem(epochInstant(), code, csr); !errors.Is(err, devices.ErrRequestTooLarge) {
+		t.Fatalf("oversized request = %v, want ErrRequestTooLarge", err)
+	}
+}
+
+func mustID(t *testing.T) devices.DeviceID {
+	t.Helper()
+	id, err := devices.NewDeviceID(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func containsID(ids []devices.DeviceID, want devices.DeviceID) bool {
+	for _, id := range ids {
+		if id == want {
+			return true
+		}
+	}
+	return false
 }

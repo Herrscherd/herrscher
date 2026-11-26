@@ -22,6 +22,12 @@ const (
 // InactivityLimit is how long a device may go without connecting before its record expires.
 const InactivityLimit = 30 * 24 * time.Hour
 
+const (
+	retentionAfterRevocation = 30 * 24 * time.Hour
+	retentionAfterExpiry     = 30 * 24 * time.Hour
+	maxRequestBytes          = 4096
+)
+
 // Registry is the set of devices the daemon has paired, with the pairing window in progress, if any.
 type Registry struct {
 	Devices []Device `json:"devices,omitempty"`
@@ -55,6 +61,7 @@ type Device struct {
 	CreatedAt   time.Time `json:"createdAt"`
 	LastSeen    time.Time `json:"lastSeen"`
 	Revoked     bool      `json:"revoked,omitempty"`
+	RevokedAt   time.Time `json:"revokedAt,omitempty"`
 }
 
 // Status is what a device's record says about whether it may connect.
@@ -225,13 +232,39 @@ func (r *Registry) Deny(now time.Time, code PairingCode) error {
 }
 
 // Revoke marks a device as revoked, so that its certificate authenticates it no more.
-func (r *Registry) Revoke(deviceID DeviceID) error {
+func (r *Registry) Revoke(now time.Time, deviceID DeviceID) error {
 	idx := r.indexOf(deviceID)
 	if idx < 0 {
 		return ErrUnknownDevice
 	}
-	r.Devices[idx].Revoked = true
+	if !r.Devices[idx].Revoked {
+		r.Devices[idx].Revoked = true
+		r.Devices[idx].RevokedAt = now
+	}
 	return nil
+}
+
+// Purge removes the devices whose retention is over and returns their identifiers, so their roles can go too.
+func (r *Registry) Purge(now time.Time) []DeviceID {
+	kept := make([]Device, 0, len(r.Devices))
+	var purged []DeviceID
+	for idx := range r.Devices {
+		device := &r.Devices[idx]
+		if device.retentionOverAt(now) {
+			purged = append(purged, device.ID)
+			continue
+		}
+		kept = append(kept, *device)
+	}
+	r.Devices = kept
+	return purged
+}
+
+func (d Device) retentionOverAt(now time.Time) bool {
+	if d.Revoked {
+		return now.Sub(d.RevokedAt) > retentionAfterRevocation
+	}
+	return now.Sub(d.LastSeen) > InactivityLimit+retentionAfterExpiry
 }
 
 // Seen records that the device connected at now, which keeps it from expiring.
@@ -323,6 +356,9 @@ func acceptsSignature(algorithm x509.SignatureAlgorithm) bool {
 func checkRequest(csr *x509.CertificateRequest) error {
 	if csr == nil {
 		return ErrBadRequest
+	}
+	if len(csr.Raw) > maxRequestBytes {
+		return ErrRequestTooLarge
 	}
 	if !acceptsSignature(csr.SignatureAlgorithm) {
 		return ErrUnsupportedSignature

@@ -48,3 +48,13 @@ func TestEveryCoreToolIsAVerbASessionRunsWithoutAsking(t *testing.T) {
 		}
 	}
 }
+
+func TestTheDaemonsOwnReadsAreNeverAnnounced(t *testing.T) {
+	reg := operatorRegistryForTest(t)
+	for _, verb := range []string{"session accounts", "session overview", "host check", "session list", "config get", "session get-mode"} {
+		path := strings.Fields(verb)
+		if authz.Writes(path, false, reg.ReadOnly(path)) {
+			t.Errorf("%q would be announced as a write", verb)
+		}
+	}
+}

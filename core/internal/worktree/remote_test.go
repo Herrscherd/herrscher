@@ -2,6 +2,7 @@ package worktree
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"strings"
 	"testing"
@@ -125,5 +126,32 @@ func TestRemoteMaterializeFeedsThePayloadOnStdin(t *testing.T) {
 	argv := strings.Join(f.seen[0], " ")
 	if argv != "hs worktree materialize --worktree /srv/work/wt" {
 		t.Fatalf("argv = %q", argv)
+	}
+}
+
+func TestRemoteBranchAtReadsTheCheckedOutBranchOnTheHost(t *testing.T) {
+	f := &fakeCommander{stdout: "session/inst/alpha\n"}
+	got, err := NewRemote(clitext.NewMessages(), f, "hs", "inst").BranchAt(t.Context(), "/srv/work/proj/.herrscher-sessions/inst/alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "session/inst/alpha" {
+		t.Fatalf("branch = %q, want session/inst/alpha", got)
+	}
+	argv := strings.Join(f.seen[0], " ")
+	if want := "git -C /srv/work/proj/.herrscher-sessions/inst/alpha symbolic-ref --short HEAD"; argv != want {
+		t.Fatalf("argv = %q, want %q", argv, want)
+	}
+}
+
+func TestRemoteBranchAtRefusesWithTheHostError(t *testing.T) {
+	f := &fakeCommander{fail: true}
+	_, err := NewRemote(clitext.NewMessages(), f, "hs", "inst").BranchAt(t.Context(), "/srv/p")
+	failure, ok := errors.AsType[FailureError](err)
+	if !ok || failure.Key != clitext.WorktreeBranchUnreadable {
+		t.Fatalf("err = %v, want a %s refusal", err, clitext.WorktreeBranchUnreadable)
+	}
+	if !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("the remote message is lost: %v", err)
 	}
 }

@@ -157,18 +157,26 @@ func (t *approvalTable) rated(ctx context.Context, sessions *sessionTable, sessi
 	return risk.Decision()
 }
 
+func settledWithoutAsking(ctx context.Context, approvals *approvalTable, sessions *sessionTable, session string, req approval.Request, mode approval.Mode, decided approval.Decision, matched bool) approval.Decision {
+	if approval.RequiresHuman(req) {
+		return approval.Ask
+	}
+	if sessions.remembers(session, req) {
+		return approval.Allow
+	}
+	if approval.Judged(mode, req.Tool, decided, matched) {
+		return approvals.rated(ctx, sessions, session, req, decided)
+	}
+	return decided
+}
+
 func askApproval(ctx context.Context, approvals *approvalTable, sessions *sessionTable, session string, req approval.Request, pol approval.Policy, mode approval.Mode, wait, bound time.Duration) (approval.Decision, string) {
 	raw, matched := pol.Decide(req)
 	decided := approval.Apply(mode, req.Tool, raw, matched)
 	if decided == approval.Deny {
 		return approval.Deny, approvals.denialReason(mode, req)
 	}
-	if sessions.remembers(session, req) {
-		return approval.Allow, ""
-	}
-	if approval.Judged(mode, req.Tool, decided, matched) {
-		decided = approvals.rated(ctx, sessions, session, req, decided)
-	}
+	decided = settledWithoutAsking(ctx, approvals, sessions, session, req, mode, decided, matched)
 	if decided == approval.Allow {
 		return approval.Allow, ""
 	}

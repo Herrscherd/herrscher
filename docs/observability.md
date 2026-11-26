@@ -362,12 +362,13 @@ its stderr, as `stderr: "..."`. When the caller cancels the measure, the cause i
 (requests to the client, notifications) are skipped, and an answer is matched by its id
 alone. No server is dropped from the report.
 
-The probe stops the server, reads its output to the end, and then waits for the process
-to exit. On Unix the server runs in its own process group and the probe kills the whole
-group, so the subprocesses it starts die with it. A subprocess that leaves the group
-itself (for example by starting a new session) can keep the output open: the report then
-keeps the tools already listed and gives the cause `stop`, and the text report prints a
-second line for it. On Windows only the direct child is killed, and its subprocesses may
+The probe kills the server, waits up to two seconds for its output to end, and then waits
+for the process to exit. On Unix the server runs in its own process group and the probe
+kills the whole group, so the subprocesses it starts die with it. A subprocess that leaves
+the group itself (for example by starting a new session) can keep the output open past that
+wait: the probe then closes its end of the output, so the reader does not stay blocked, the
+report keeps the tools already listed and gives the cause `stop`, and the text report prints
+a second line for it. On Windows only the direct child is killed, and its subprocesses may
 keep running after the probe returns.
 
 **Tokens are an estimate.** They come from `contextwindow.EstimateTokens`, which counts
@@ -383,6 +384,17 @@ What is not measured:
 
 `--deep` runs the commands declared in the agent's `mcp.json` on this machine, with
 the permissions of the operator. Run it only on agents whose `mcp.json` you trust.
+
+### Lint exclusions
+
+The MCP weight code adds three path exclusions to `.golangci.yml`, and each one stays for
+the reason in this table. No other exclusion in the file is described here.
+
+| Path | Linter | Reason |
+|---|---|---|
+| `core/internal/mcpweight/rpc.go` | gosec G204 | `start` runs the server command that the agent's `mcp.json` declares, with its arguments after `{{WORKTREE}}` substitution. No shell is involved, and the operator trusts that file, as `--deep` says. |
+| `core/internal/mcpweight/config.go` | gosec G304 | `ReadServers` reads the `mcp.json` at the path the agent home defines. |
+| `core/internal/mcpweight/fake_test.go` | revive deep-exit | `TestFakeServer` and `serveFake` end the test binary's process, so that it acts as a server that exits, fails or stops answering. The file builds only into test binaries. |
 
 ## Also
 

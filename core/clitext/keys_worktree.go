@@ -18,6 +18,7 @@ const (
 	WorktreeScratchNoRoot             = "cli.worktree.scratch_no_root"
 	WorktreeScratchBadName            = "cli.worktree.scratch_bad_name"
 	WorktreeScratchRemoveRefused      = "cli.worktree.scratch_remove_refused"
+	WorktreeOutsideRoot               = "cli.worktree.outside_root"
 	WorktreeScratchCreate             = "cli.worktree.scratch_create"
 	WorktreeScratchRemove             = "cli.worktree.scratch_remove"
 	WorktreeFlagBase                  = "cli.worktree.flag_base"
@@ -58,6 +59,7 @@ func worktreeKeys() map[Key][]string {
 		WorktreeScratchNoRoot:             {ParamName},
 		WorktreeScratchBadName:            {ParamName},
 		WorktreeScratchRemoveRefused:      {ParamName, ParamRoot},
+		WorktreeOutsideRoot:               {ParamPath, ParamRoot},
 		WorktreeScratchCreate:             {ParamPath, ParamErr},
 		WorktreeScratchRemove:             {ParamPath, ParamErr},
 		WorktreeFlagBase:                  {ParamRef},

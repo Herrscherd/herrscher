@@ -44,10 +44,16 @@ type Worktrees interface {
 	// one, which is what tells a rollback whether the worktree is its to remove.
 	PreExisting(ctx context.Context, repo, name string) bool
 	Branch(name string) string
-	Remove(ctx context.Context, repo, name string, force bool) error
+	// BranchAt reads the branch checked out in the worktree at path.
+	BranchAt(ctx context.Context, path string) (string, error)
+	// RemoveAt removes the worktree recorded at path, refusing a path that is
+	// not a session directory of repo.
+	RemoveAt(ctx context.Context, repo, path string, force bool) error
 	Scratch(root, name string) (path string, err error)
 	ScratchPath(root, name string) string
-	RemoveScratch(root, name string) error
+	// RemoveScratchAt deletes the scratch directory recorded at path, refusing a
+	// path that is not a scratch directory of root.
+	RemoveScratchAt(root, path string) error
 }
 
 // Hosts resolves where a session's process runs. The manager needs four things

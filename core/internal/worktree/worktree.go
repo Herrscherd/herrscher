@@ -143,7 +143,7 @@ func (w *Worktreer) reusable(ctx context.Context, repo, path, branch string) (bo
 		return false, NewFailure(w.messages, clitext.WorktreeInspect, clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: statErr}, statErr)
 	}
 
-	tip, err := w.branchAt(ctx, path)
+	tip, err := w.BranchAt(ctx, path)
 	if err != nil {
 		return false, err
 	}
@@ -153,7 +153,8 @@ func (w *Worktreer) reusable(ctx context.Context, repo, path, branch string) (bo
 	return true, nil
 }
 
-func (w *Worktreer) branchAt(ctx context.Context, path string) (string, error) {
+// BranchAt reads the branch checked out in the worktree at path.
+func (w *Worktreer) BranchAt(ctx context.Context, path string) (string, error) {
 	out, err := exec.CommandContext(ctx, "git", "-C", path, "symbolic-ref", "--short", "HEAD").Output()
 	if err != nil {
 		return "", NewFailure(w.messages, clitext.WorktreeBranchUnreadable, clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamErr: err}, err)

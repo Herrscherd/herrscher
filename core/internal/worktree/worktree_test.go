@@ -553,3 +553,19 @@ func TestABranchAlreadyCheckedOutIsStillAnError(t *testing.T) {
 		t.Fatal("want an error: the branch is checked out by another worktree")
 	}
 }
+
+func TestRemoveAtRefusesARecordedPathOutsideTheSessionsRoot(t *testing.T) {
+	repo := initRepo(t)
+	outside := filepath.Join(t.TempDir(), "victim")
+	if err := os.Mkdir(outside, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	w := NewWorktreer(clitext.NewMessages(), "inst")
+
+	if err := w.RemoveAt(context.Background(), repo, outside, true); err == nil {
+		t.Fatal("a recorded path outside the sessions root must be refused")
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatalf("the refused removal must leave %s in place: %v", outside, err)
+	}
+}

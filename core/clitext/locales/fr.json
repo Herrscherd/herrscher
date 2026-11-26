@@ -3568,6 +3568,11 @@
     "other": "refus d'un répertoire de travail : pour supprimer la session {{.Name}} sous la racine {{.Root}}"
   },
   {
+    "id": "cli.worktree.outside_root",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.outside_root)",
+    "other": "refus de supprimer {{.Path}} : ce dossier n'est pas sous {{.Root}}, rien n'a été supprimé"
+  },
+  {
     "id": "cli.worktree.scratch_create",
     "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.scratch_create)",
     "other": "répertoire de travail {{.Path}} : {{.Err}}"

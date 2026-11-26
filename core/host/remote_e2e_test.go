@@ -116,7 +116,7 @@ func TestE2ERemoteProvisionAndWorktree(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := createE2EWorktree(ctx, t, wt, repo)
-	defer func() { logCleanup(wt.Remove(ctx, repo, "demo", true)) }()
+	defer func() { logCleanup(wt.RemoveAt(ctx, repo, path, true)) }()
 
 	assertE2EMaterialized(ctx, t, layout, p, st, provisioned, path)
 	removeE2EWorktree(ctx, t, layout, wt, provisioned, repo, path)
@@ -218,7 +218,7 @@ func assertE2EMaterialized(ctx context.Context, t *testing.T, layout RuntimeLayo
 
 func removeE2EWorktree(ctx context.Context, t *testing.T, layout RuntimeLayout, wt manager.Worktrees, provisioned state.Host, repo, path string) {
 	t.Helper()
-	if err := wt.Remove(ctx, repo, "demo", true); err != nil {
+	if err := wt.RemoveAt(ctx, repo, path, true); err != nil {
 		t.Fatalf("remote worktree remove: %v", err)
 	}
 	if _, err := capture(ctx, runnerForTest(t, layout, provisioned), "test", "-d", path); err == nil {

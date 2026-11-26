@@ -88,7 +88,7 @@ func refusedDirtyClose(t *testing.T) error {
 	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.AddSession(state.Session{Name: "dirty", ChannelID: "42", Type: "text", Worktree: "/wt/x"}); err != nil {
+	if err := st.AddSession(state.Session{Name: "dirty", ChannelID: "42", Type: "text", Worktree: "/ws/.herrscher-sessions/inst/dirty"}); err != nil {
 		t.Fatal(err)
 	}
 	wt.removeErr = errors.New("uncommitted changes")

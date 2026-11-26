@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/clitext"
@@ -28,16 +29,16 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 	}
 	repo := repoFor(repoRoot, sess.Project)
 	if sess.Worktree != "" && sess.Scratch {
-		if err := wtRoot.RemoveScratch(repo, name); err != nil {
+		if err := wtRoot.RemoveScratchAt(repo, sess.Worktree); err != nil {
 			h.warnIfFailed(h.sup.StartWithin(sess, supervisorGrace), "start "+name)
 			return contracts.Result{}, err
 		}
 	}
 	if sess.Worktree != "" && !sess.Scratch {
 		force := input.Bool("force")
-		if err := wtRoot.Remove(ctx, repo, name, force); err != nil {
+		if err := wtRoot.RemoveAt(ctx, repo, sess.Worktree, force); err != nil {
 			h.warnIfFailed(h.sup.StartWithin(sess, supervisorGrace), "start "+name)
-			return contracts.Result{}, newDirtyWorktreeError(name, wtRoot.Branch(name), err)
+			return contracts.Result{}, newDirtyWorktreeError(name, h.keptBranch(ctx, wtRoot, sess.Worktree), err)
 		}
 	}
 	note := h.tidyChannel(ctx, sess)
@@ -52,6 +53,15 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 		return contracts.DataResult(h.text(clitext.SessionClosed, clitext.Params{clitext.ParamName: name}) + note), nil
 	}
 	return contracts.NoticeResult(sessionNotice(contracts.CodeSessionClosed, name)), nil
+}
+
+func (h *Handler) keptBranch(ctx context.Context, worktrees Worktrees, path string) string {
+	branch, err := worktrees.BranchAt(ctx, path)
+	if err != nil || branch == "" {
+		h.log.Warn("worktree branch unreadable", "path", path, "err", err)
+		return worktrees.Branch(filepath.Base(path))
+	}
+	return branch
 }
 
 func (h *Handler) sessionArchiveRun(ctx context.Context, input contracts.Input) (contracts.Result, error) {

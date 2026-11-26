@@ -145,12 +145,12 @@ func (h *Handler) rollbackWorkspace(ctx context.Context, worktrees Worktrees, re
 		return
 	}
 	if space.scratch {
-		if rmErr := worktrees.RemoveScratch(repo, name); rmErr != nil {
+		if rmErr := worktrees.RemoveScratchAt(repo, space.path); rmErr != nil {
 			h.log.Warn("scratch rollback failed", "session", name, "err", rmErr)
 		}
 		return
 	}
-	if rmErr := worktrees.Remove(context.WithoutCancel(ctx), repo, name, true); rmErr != nil {
+	if rmErr := worktrees.RemoveAt(context.WithoutCancel(ctx), repo, space.path, true); rmErr != nil {
 		h.log.Warn("worktree rollback failed", "session", name, "err", rmErr)
 	}
 }

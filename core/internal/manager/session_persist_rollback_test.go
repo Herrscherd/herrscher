@@ -43,7 +43,7 @@ func TestSessionCreateRollsBackWhenPersistFails(t *testing.T) {
 			if _, err := h.sessionCreateRun(context.Background(), args("name", "demo")); err == nil {
 				t.Fatal("expected a persist error")
 			}
-			if len(wt.removed) != 1 || wt.removed[0] != "demo" {
+			if len(wt.removed) != 1 || wt.removed[0] != wt.path {
 				t.Fatalf("worktree must be rolled back, removed = %+v", wt.removed)
 			}
 			if len(d.archived) != 1 || d.archived[0] != tc.channelID {

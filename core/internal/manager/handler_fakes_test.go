@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -126,11 +127,15 @@ func (f *fakeWT) Create(_ context.Context, repo, name, base string) (string, err
 
 func (f *fakeWT) PreExisting(context.Context, string, string) bool { return f.preExisting }
 func (f *fakeWT) Branch(name string) string                        { return "session/inst/" + name }
-func (f *fakeWT) Remove(_ context.Context, _, name string, force bool) error {
+func (f *fakeWT) BranchAt(context.Context, string) (string, error) {
+	return "", errors.New("no git in the fake")
+}
+
+func (f *fakeWT) RemoveAt(_ context.Context, _, path string, force bool) error {
 	if f.removeErr != nil && !force {
 		return f.removeErr
 	}
-	f.removed = append(f.removed, name)
+	f.removed = append(f.removed, path)
 	return nil
 }
 
@@ -153,7 +158,8 @@ func (f *fakeWT) ScratchPath(root, name string) string {
 	return filepath.Join(root, ".herrscher-scratch", name)
 }
 
-func (f *fakeWT) RemoveScratch(root, name string) error {
+func (f *fakeWT) RemoveScratchAt(root, path string) error {
+	name := filepath.Base(path)
 	f.removedScrap = append(f.removedScrap, name)
 	return os.RemoveAll(f.ScratchPath(root, name))
 }

@@ -123,7 +123,7 @@ func (w *Worktreer) planDirMove(plan Relocation) (dirPlan, error) {
 }
 
 func (w *Worktreer) checkOnBranch(ctx context.Context, path, branch string) error {
-	tip, err := w.branchAt(ctx, path)
+	tip, err := w.BranchAt(ctx, path)
 	if err != nil {
 		return err
 	}

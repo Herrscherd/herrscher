@@ -3568,6 +3568,11 @@
     "other": "refusing a scratch directory: to remove session {{.Name}} under root {{.Root}}"
   },
   {
+    "id": "cli.worktree.outside_root",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.outside_root)",
+    "other": "refusing to remove {{.Path}}: it is not under {{.Root}}, nothing was removed"
+  },
+  {
     "id": "cli.worktree.scratch_create",
     "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.scratch_create)",
     "other": "scratch {{.Path}}: {{.Err}}"

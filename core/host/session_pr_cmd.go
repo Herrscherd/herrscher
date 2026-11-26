@@ -108,7 +108,7 @@ func newSessionPRs(messages *clitext.Messages, lang languageSource, store *state
 }
 
 func (p sessionPRs) addTo(reg *cli.Registry) error {
-	return addVerbs(reg, p.openVerb(), p.statusVerb(), p.checksVerb(), p.commentsVerb())
+	return addVerbs(reg, append(p.issueVerbs(), p.openVerb(), p.statusVerb(), p.checksVerb(), p.commentsVerb())...)
 }
 
 func (p sessionPRs) openVerb() contracts.Cmd {

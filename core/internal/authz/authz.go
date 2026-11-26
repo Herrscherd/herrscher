@@ -100,6 +100,7 @@ func definitionOf(role Role) (definition, bool) {
 			"host list",
 			"schedule list",
 			"memory search", "memory locate",
+			"session issue list", "session issue show",
 		}}, true
 	case RoleAgent:
 		return definition{
@@ -113,7 +114,7 @@ func definitionOf(role Role) (definition, bool) {
 				"memory search", "memory locate", "memory record", "memory unlink", "memory restore",
 				"approve ask",
 				"health", "usage", "skill list", "schedule list", "host list",
-				"config get", "issue list", "issue show",
+				"config get", "session issue list", "session issue show",
 			},
 			deny: []string{
 				"approve list", "approve allow", "approve deny", "approve rule", "approve mode",

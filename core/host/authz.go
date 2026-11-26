@@ -93,6 +93,8 @@ func sessionArgs() map[string]string {
 		"session pr status":   paramName,
 		"session pr checks":   paramName,
 		"session pr comments": paramName,
+		"session issue list":  paramName,
+		"session issue show":  paramName,
 		"approve ask":         paramSession,
 		"approve mode":        paramSession,
 		"schedule add":        paramSession,

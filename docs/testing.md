@@ -159,9 +159,9 @@ up to five seconds for no such process, failing otherwise. Neither can be negate
 `claude`, checks the overview, then switches the session to `codex`, then to
 `cursor-agent`, then to `grok`, then to `agy`. Before the switches away from `claude` and
 `codex`, `sessionrunning` checks that the previous vendor process runs, and after them
-`sessionstopped` waits for that process to stop. `cursor-agent` and `grok` exit after each
-turn, so the switches to `grok` and `agy` are checked through the overview and the prompt
-log only. The `codex`, `cursor-agent`, `grok` and `agy` prompts get `echo: <prompt>` back. Its `claude.script` holds one
+`sessionstopped` waits for that process to stop. `cursor-agent` exits after each turn, so
+the switches to `grok` and then `agy` are checked through the overview and the prompt log
+only. The `codex`, `cursor-agent`, `grok` and `agy` prompts get `echo: <prompt>` back. Its `claude.script` holds one
 turn, so the later turns are past the end of the script and echo.
 
 Every bug found by hand becomes a scenario before it is fixed: the scenario is written

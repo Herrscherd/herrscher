@@ -10,7 +10,6 @@ const (
 	UsageStartPrint      = "cli.usage.start.print"
 	UsageStartTUI        = "cli.usage.start.tui"
 	UsageStartVersion    = "cli.usage.start.version"
-	UsageStartInit       = "cli.usage.start.init"
 	UsageStartSetup      = "cli.usage.start.setup"
 	UsageSessionVerbs    = "cli.usage.session.verbs"
 	UsageAgentVerbs      = "cli.usage.agent.verbs"
@@ -44,7 +43,6 @@ func usageKeys() map[Key][]string {
 		UsageStartPrint:      nil,
 		UsageStartTUI:        nil,
 		UsageStartVersion:    nil,
-		UsageStartInit:       nil,
 		UsageStartSetup:      nil,
 		UsageSessionVerbs:    nil,
 		UsageAgentVerbs:      nil,

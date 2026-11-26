@@ -44,20 +44,44 @@ func sectionList() string {
 	return strings.Join(names, "|")
 }
 
-// SetupCmd opens the interactive setup: it picks the modules, configures each of
-// them (signing in to Claude and Codex), writes the settings and, on a source
-// host, rewrites plugins.go and rebuilds. An optional section name opens that
-// screen directly; an existing settings file opens the dashboard.
+// SetupCmd configures the host. On a terminal it opens the interactive setup:
+// it picks the modules, configures each of them (signing in to Claude and
+// Codex), writes the settings and, on a source host, rewrites plugins.go and
+// rebuilds. An optional section name opens that screen directly; an existing
+// settings file opens the dashboard. With --yes or a stack flag it composes the
+// stack without prompting, which is the path for scripts.
 func SetupCmd(ctx context.Context, messages *clitext.Messages, hostMessages *host.Messages, args []string) int {
 	out, errOut := errwriter.New(os.Stdout), errwriter.New(os.Stderr)
-	return errwriter.Finish(setupHost(ctx, messages, hostMessages, errOut, args), out, errOut)
+	return errwriter.Finish(setupHost(ctx, messages, hostMessages, out, errOut, args), out, errOut)
 }
 
-func setupHost(ctx context.Context, messages *clitext.Messages, hostMessages *host.Messages, errOut *errwriter.Writer, args []string) int {
+func setupHost(ctx context.Context, messages *clitext.Messages, hostMessages *host.Messages, out, errOut *errwriter.Writer, args []string) int {
 	flags := flag.NewFlagSet("setup", flag.ContinueOnError)
 	hostDir := flags.String("host", "", msg(messages, clitext.ManageFlagHost, nil))
+	noBuild := flags.Bool("no-build", false, msg(messages, clitext.ManageFlagSetupNoBuild, nil))
+	noTrial := flags.Bool("no-trial", false, msg(messages, clitext.ManageFlagSetupNoTrial, nil))
+	list := flags.Bool("list", false, msg(messages, clitext.ManageFlagList, nil))
+	yes := flags.Bool("yes", false, msg(messages, clitext.ManageFlagSetupYes, nil))
+	kinds := make(map[string]*string, len(categories()))
+	for _, cat := range categories() {
+		kinds[cat] = flags.String(cat, defaultStack()[cat], msg(messages, clitext.ManageFlagCategory, clitext.Params{clitext.ParamCategory: cat}))
+	}
+	var extras multiFlag
+	flags.Var(&extras, "with", msg(messages, clitext.ManageFlagWith, nil))
 	if err := flags.Parse(args); err != nil {
 		return parseExit(err)
+	}
+
+	if *list {
+		writeCatalog(messages, out)
+		return 0
+	}
+	if *yes || stackFlagsSet(flags) {
+		choices := make(map[string]string, len(kinds))
+		for cat, kind := range kinds {
+			choices[cat] = *kind
+		}
+		return composeStack(ctx, messages, out, errOut, stackOptions{hostDir: *hostDir, noBuild: *noBuild, noTrial: *noTrial, choices: choices, extras: extras})
 	}
 	screen, err := setupEntry(messages, flags.Args())
 	if err != nil {

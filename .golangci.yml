@@ -255,10 +255,10 @@ linters:
       - path: ^manage/(manage|seam|version|setup_probe)\.go$
         linters: [gosec]
         text: "^G204:"
-      - path: ^manage/(apply|init|lifecycle|manage|setup)\.go$
+      - path: ^manage/(apply|lifecycle|manage|setup|setup_stack)\.go$
         linters: [gosec]
         text: "^G304:"
-      - path: ^manage/(apply|init|manage|seam)\.go$
+      - path: ^manage/(apply|manage|seam|setup_stack)\.go$
         linters: [gosec]
         text: "^G(306|703):"
       - path: ^envfile\.go$

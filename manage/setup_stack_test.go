@@ -103,7 +103,7 @@ func TestResolveStackAlwaysKeepsTerminal(t *testing.T) {
 
 func TestStackFlagsSetCoversEveryStackFlag(t *testing.T) {
 	for _, name := range []string{"gateway", "backend", "memory", "orchestrator", "extractor", "with"} {
-		fs := flag.NewFlagSet("init", flag.ContinueOnError)
+		fs := flag.NewFlagSet("setup", flag.ContinueOnError)
 		fs.String("gateway", "", "")
 		fs.String("backend", "", "")
 		fs.String("memory", "", "")
@@ -117,7 +117,7 @@ func TestStackFlagsSetCoversEveryStackFlag(t *testing.T) {
 			t.Errorf("stackFlagsSet false after -%s: the wizard would overwrite it", name)
 		}
 	}
-	fs := flag.NewFlagSet("init", flag.ContinueOnError)
+	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
 	fs.String("gateway", "", "")
 	if err := fs.Parse(nil); err != nil {
 		t.Fatal(err)

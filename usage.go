@@ -49,7 +49,6 @@ func usage(messages *clitext.Messages, lang i18n.Language) error {
 			row("herrscher --print \"<texte>\"", clitext.UsageStartPrint),
 			row("herrscher", clitext.UsageStartTUI),
 			row("herrscher version", clitext.UsageStartVersion),
-			row("herrscher init", clitext.UsageStartInit),
 			row("herrscher setup", clitext.UsageStartSetup),
 		),
 		"",

@@ -40,11 +40,6 @@
     "other": "affiche la version du binaire"
   },
   {
-    "id": "cli.usage.start.init",
-    "description": "Ligne d'aide : composer la pile de plugins et les secrets",
-    "other": "compose la pile de plugins (options, ou la configuration sur un terminal)"
-  },
-  {
     "id": "cli.usage.start.setup",
     "description": "Ligne d'aide : ouvrir la configuration interactive et son tableau de bord",
     "other": "choisit les modules, connecte, configure tout (tableau de bord)"
@@ -893,7 +888,7 @@
   {
     "id": "cli.manage.unknown_kind.listed",
     "description": "Error: a module kind given as a flag is not in the catalog, with the way to list it",
-    "other": "{{.Category}} : type inconnu {{.Kind}} (essaie `herrscher init --list`)"
+    "other": "{{.Category}} : type inconnu {{.Kind}} (essaie `herrscher setup --list`)"
   },
   {
     "id": "cli.manage.invalid_module_path",
@@ -1011,13 +1006,13 @@
     "other": "lance go get -u sur les plugins, sans tidy ni compilation"
   },
   {
-    "id": "cli.manage.flag.init_no_build",
-    "description": "Flag help: the --no-build flag of herrscher init",
+    "id": "cli.manage.flag.setup_no_build",
+    "description": "Flag help: the --no-build flag of herrscher setup",
     "other": "écrit plugins.go sans lancer go get ni la compilation"
   },
   {
-    "id": "cli.manage.flag.init_no_trial",
-    "description": "Flag help: the --no-trial flag of herrscher init",
+    "id": "cli.manage.flag.setup_no_trial",
+    "description": "Flag help: the --no-trial flag of herrscher setup",
     "other": "ne pas envoyer la courte question au backend choisi à la fin"
   },
   {
@@ -1027,32 +1022,32 @@
   },
   {
     "id": "cli.manage.flag.list",
-    "description": "Flag help: the --list flag of herrscher init",
+    "description": "Flag help: the --list flag of herrscher setup",
     "other": "affiche le catalogue catalog() des modules, puis quitte"
   },
   {
-    "id": "cli.manage.flag.init_yes",
-    "description": "Flag help: the --yes flag of herrscher init, which skips the wizard",
+    "id": "cli.manage.flag.setup_yes",
+    "description": "Flag help: the --yes flag of herrscher setup, which skips the wizard",
     "other": "passe l'assistant interactif ; utilise les options et les valeurs par défaut"
   },
   {
     "id": "cli.manage.flag.category",
-    "description": "Flag help: a stack flag of herrscher init, Category is the flag's category",
+    "description": "Flag help: a stack flag of herrscher setup, Category is the flag's category",
     "other": "type de module {{.Category}} (ou none)"
   },
   {
     "id": "cli.manage.flag.with",
-    "description": "Flag help: the --with flag of herrscher init, which adds a module path",
+    "description": "Flag help: the --with flag of herrscher setup, which adds a module path",
     "other": "ajoute un chemin de module tel quel, sans le résoudre (répétable)"
   },
   {
-    "id": "cli.manage.init.wrote_no_build",
-    "description": "Confirmation: init wrote plugins.go without building, and how to build it",
+    "id": "cli.manage.setup.wrote_no_build",
+    "description": "Confirmation: setup wrote plugins.go without building, and how to build it",
     "other": "plugins.go écrit (--no-build) ; lance `go mod tidy && go build` dans l'hôte pour appliquer"
   },
   {
     "id": "cli.manage.wrote_settings",
-    "description": "Confirmation: init wrote settings to an env file, Count selects the plural form",
+    "description": "Confirmation: setup wrote settings to an env file, Count selects the plural form",
     "one": "1 réglage écrit dans {{.Path}}",
     "other": "{{.Count}} réglages écrits dans {{.Path}}"
   },
@@ -4558,7 +4553,7 @@
   {
     "id": "cli.setup.needs_terminal",
     "description": "Error: setup was started without a terminal",
-    "other": "herrscher setup a besoin d'un terminal ; sans terminal, utilise herrscher init --yes et ses options"
+    "other": "herrscher setup a besoin d'un terminal ; sans terminal, utilise herrscher setup --yes et ses options"
   },
   {
     "id": "cli.setup.failed",

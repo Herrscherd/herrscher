@@ -69,14 +69,14 @@ const (
 	ManageFlagHost                  = "cli.manage.flag.host"
 	ManageFlagPluginNoBuild         = "cli.manage.flag.plugin_no_build"
 	ManageFlagUpdateNoBuild         = "cli.manage.flag.update_no_build"
-	ManageFlagInitNoBuild           = "cli.manage.flag.init_no_build"
-	ManageFlagInitNoTrial           = "cli.manage.flag.init_no_trial"
+	ManageFlagSetupNoBuild          = "cli.manage.flag.setup_no_build"
+	ManageFlagSetupNoTrial          = "cli.manage.flag.setup_no_trial"
 	ManageFlagYes                   = "cli.manage.flag.yes"
 	ManageFlagList                  = "cli.manage.flag.list"
-	ManageFlagInitYes               = "cli.manage.flag.init_yes"
+	ManageFlagSetupYes              = "cli.manage.flag.setup_yes"
 	ManageFlagCategory              = "cli.manage.flag.category"
 	ManageFlagWith                  = "cli.manage.flag.with"
-	ManageInitWroteNoBuild          = "cli.manage.init.wrote_no_build"
+	ManageSetupWroteNoBuild         = "cli.manage.setup.wrote_no_build"
 	ManageWroteSettings             = "cli.manage.wrote_settings"
 	ManageBuildRestored             = "cli.manage.build_restored"
 	ManageSeedFailed                = "cli.manage.seed_failed"
@@ -150,14 +150,14 @@ func manageKeys() map[Key][]string {
 		ManageFlagHost:                  nil,
 		ManageFlagPluginNoBuild:         nil,
 		ManageFlagUpdateNoBuild:         nil,
-		ManageFlagInitNoBuild:           nil,
-		ManageFlagInitNoTrial:           nil,
+		ManageFlagSetupNoBuild:          nil,
+		ManageFlagSetupNoTrial:          nil,
 		ManageFlagYes:                   nil,
 		ManageFlagList:                  nil,
-		ManageFlagInitYes:               nil,
+		ManageFlagSetupYes:              nil,
 		ManageFlagCategory:              {ParamCategory},
 		ManageFlagWith:                  nil,
-		ManageInitWroteNoBuild:          nil,
+		ManageSetupWroteNoBuild:         nil,
 		ManageWroteSettings:             {ParamCount, ParamPath},
 		ManageBuildRestored:             {ParamPath},
 		ManageSeedFailed:                {ParamPath, ParamErr},

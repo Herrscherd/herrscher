@@ -71,16 +71,16 @@ Operator warnings follow the operator language, read live at the moment they are
 
 ## Managing the compiled-in set
 
-The same binary manages its own plugin composition (the `manage/` package). Four verbs (`init`, `plugin`, `update`, `install`) compose and maintain the compiled-in plugin set. They do **not** run the runtime; they edit **`plugins.go`** (the blank-import list between the `herrscher:plugins` / `herrscher:end` markers) and rebuild.
+The same binary manages its own plugin composition (the `manage/` package). Four verbs (`setup`, `plugin`, `update`, `install`) compose and maintain the compiled-in plugin set. They do **not** run the runtime; they edit **`plugins.go`** (the blank-import list between the `herrscher:plugins` / `herrscher:end` markers) and rebuild.
 
 Plugins are compiled **into** the single binary (the xcaddy pattern): you add a blank import and rebuild, and there is no dynamic loading. Each plugin self-registers into the global `contracts.Default` registry from its `init()`. For authoring your own plugin, see Writing a plugin.
 
 
-### `init`: compose the stack from a catalog
+### `setup`: compose the stack from a catalog
 
-`herrscher init` builds a fresh plugin stack from a built-in **catalog** of published modules, picking **one kind per category** (gateway / backend / memory / orchestrator / extractor / skills).
+`herrscher setup` builds a fresh plugin stack from a built-in **catalog** of published modules, picking **one kind per category** (gateway / backend / memory / orchestrator / extractor / skills / compactor).
 
-With no flags it writes the batteries-included **default stack**:
+`herrscher setup --yes` writes the batteries-included **default stack**:
 
 | Category | Kinds | Default kind | Module |
 |----------|-------|--------------|--------|
@@ -96,29 +96,27 @@ The extractor is what turns the basic orchestrator into a **Learner**. Without o
 
 The skills plugin builds no port at all: it contributes playbooks, and it costs nothing to keep in a build that does not need them: its factory declines on a machine without Superset, so all it adds there is one line at startup saying so.
 
-**In-tree plugins are always re-emitted.** The terminal gateway (`github.com/Herrscherd/herrscher/plugins/terminal`) lives inside the host module itself, so `init` puts it back into `plugins.go` on every run (dropping it would silently remove a compiled-in gateway), and it is excluded from `go get`, since it is not an external module.
+**In-tree plugins are always re-emitted.** The terminal gateway (`github.com/Herrscherd/herrscher/plugins/terminal`) lives inside the host module itself, so `setup` puts it back into `plugins.go` on every run (dropping it would silently remove a compiled-in gateway), and it is excluded from `go get`, since it is not an external module.
 
 It rewrites `plugins.go` to exactly that set, seeds a `.env` from `.env.example` (never clobbering an existing one), then `go get`s each external module, runs `go mod tidy`, and rebuilds. **If the build fails it restores the original `plugins.go`.**
 
-#### Interactive wizard
+#### Interactive or scripted
 
-Run on a terminal with no stack flags, `herrscher init` prompts for each category (pick a kind or `none`) then reads the active gateway's secrets. The Discord bot token is read with **echo disabled**, so it never appears on screen, and is upserted into `.env` (existing keys preserved).
-
-Pass `--yes`, any stack flag, or run non-interactively (a service / CI pipe) to skip the wizard and take the flags/defaults silently.
+Run on a terminal with no stack flag, `herrscher setup` opens the interactive setup (see [install](install.md)). Pass `--yes` or any stack flag to compose the stack without prompting: this is the path for scripts, CI and services. Without a terminal and without either, `setup` exits with an error pointing at `--yes`.
 
 #### Config-only mode
 
-When `init` finds **no source checkout** (the common case for a pacman-installed `herrscher`, whose plugins are already compiled in) it runs in **config-only** mode: it skips the plugin menu and the rebuild, collecting only the gateway secrets and writing them to `$HERRSCHER_ENV_FILE` (else `./.env`), then points you at `herrscher serve`.
+When `setup --yes` finds **no source checkout** (the common case for a pacman-installed `herrscher`, whose plugins are already compiled in) it runs in **config-only** mode: it skips the rewrite and the rebuild, then points you at `herrscher serve`.
 
 #### Examples
 
 ```bash
-herrscher init                                     # interactive wizard on a tty, else default stack
-herrscher init --yes                               # the default stack, no prompts, then build
-herrscher init --list                              # print the module catalog and exit
-herrscher init --memory none --orchestrator none   # drop a category ("none"), no wizard
-herrscher init --backend claude --with github.com/acme/extra-plugin   # pin an extra module
-herrscher init --no-build                          # rewrite plugins.go + seed .env only
+herrscher setup                                     # interactive setup on a terminal
+herrscher setup --yes                               # the default stack, no prompts, then build
+herrscher setup --list                              # print the module catalog and exit
+herrscher setup --memory none --orchestrator none   # drop a category ("none"), no prompts
+herrscher setup --backend claude --with github.com/acme/extra-plugin   # pin an extra module
+herrscher setup --yes --no-build                    # rewrite plugins.go + seed .env only
 ```
 
 #### Flags
@@ -131,12 +129,15 @@ herrscher init --no-build                          # rewrite plugins.go + seed .
 | `--orchestrator K` | Choose the orchestrator kind (or `none`). |
 | `--extractor K` | Choose the extractor kind (or `none`). |
 | `--skills K` | Choose the skills kind (or `none`). |
+| `--compactor K` | Choose the compactor kind (or `none`). |
 | `--with MODULE` | Pin an extra module path verbatim (repeatable). |
 | `--list` | Print the catalog and exit. |
 | `--no-build` | Stop after writing `plugins.go` (and seeding `.env`). |
-| `--yes` | Skip the wizard; take flags/defaults silently. |
+| `--no-trial` | Skip the short prompt sent to each chosen backend at the end. |
+| `--host DIR` | The host source checkout to rewrite. |
+| `--yes` | Skip the interactive setup; take flags/defaults silently. |
 
-Passing any stack flag (`--gateway/--backend/--memory/--orchestrator/--extractor/--skills/--with`) counts as non-interactive intent and skips the wizard.
+Passing any stack flag (`--gateway/--backend/--memory/--orchestrator/--extractor/--skills/--compactor/--with`) counts as non-interactive intent and skips the interactive setup.
 
 ### `plugin`: list / add / remove
 

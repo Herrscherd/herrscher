@@ -54,10 +54,11 @@ func sectionList() string {
 // stack without prompting, which is the path for scripts.
 func SetupCmd(ctx context.Context, messages *clitext.Messages, hostMessages *host.Messages, args []string) int {
 	out, errOut := errwriter.New(os.Stdout), errwriter.New(os.Stderr)
-	return errwriter.Finish(setupHost(ctx, messages, hostMessages, out, errOut, args), out, errOut)
+	terminal := isTerminal(os.Stdin) && isTerminal(os.Stdout)
+	return errwriter.Finish(setupHost(ctx, messages, hostMessages, out, errOut, terminal, args), out, errOut)
 }
 
-func setupHost(ctx context.Context, messages *clitext.Messages, hostMessages *host.Messages, out, errOut *errwriter.Writer, args []string) int {
+func setupHost(ctx context.Context, messages *clitext.Messages, hostMessages *host.Messages, out, errOut *errwriter.Writer, terminal bool, args []string) int {
 	flags := flag.NewFlagSet("setup", flag.ContinueOnError)
 	hostDir := flags.String("host", "", msg(messages, clitext.ManageFlagHost, nil))
 	noBuild := flags.Bool("no-build", false, msg(messages, clitext.ManageFlagSetupNoBuild, nil))
@@ -101,7 +102,7 @@ func setupHost(ctx context.Context, messages *clitext.Messages, hostMessages *ho
 		errOut.Println(err)
 		return exitUsage
 	}
-	if !isTerminal(os.Stdin) || !isTerminal(os.Stdout) {
+	if !terminal {
 		errOut.Println(failure(messages, errNeedsTerminal, clitext.SetupNeedsTerminal, nil))
 		return 1
 	}

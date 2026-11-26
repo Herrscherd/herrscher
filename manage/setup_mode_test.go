@@ -27,7 +27,7 @@ func hostCheckout(t *testing.T) string {
 func runSetupHost(t *testing.T, args ...string) (int, string) {
 	t.Helper()
 	var out, errOut bytes.Buffer
-	code := setupHost(context.Background(), testMessages(), nil, errwriter.New(&out), errwriter.New(&errOut), args)
+	code := setupHost(context.Background(), testMessages(), nil, errwriter.New(&out), errwriter.New(&errOut), false, args)
 	return code, errOut.String()
 }
 

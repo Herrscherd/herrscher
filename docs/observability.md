@@ -181,16 +181,16 @@ as the period's cache share is. The rows are sorted by cost and the text views s
 first eight, with a line for the sessions they leave out; `--json` gives all of them
 under `spend.sessionRows`.
 
-The injected figure is an estimate, marked `~`. Each turn of a session carries the size
-the host measured for each block it wrote into the prompt (memory, skills, delegation,
-capabilities, identity), at about four bytes per token, not a count from the vendor.
-The average is the injected tokens over the turns of the period that carry those sizes,
-so a turn written by an older daemon, which sends no sizes, is left out. A session with
-no sized turn reads `n/a`, and so does a vendor session that herrscher did not run, since
-it has no transcript here. The sizes come from the session transcript, which keeps at
-most about 4 MiB: once it grows past that, its oldest turns are dropped down to about
-2 MiB, so the average covers the sized turns still in the transcript, which may not be
-every turn of a long period.
+The injected figure is an estimate, marked `~`. The host measures each block it writes
+into the prompt of a turn (memory, skills, delegation, capabilities, identity), at about
+four bytes per token, not a count from the vendor, and records their total in the usage
+ledger with the cost of that turn. The average is that total over the turns of the period
+that carry a measurement. It comes from the same records as the cost, so a session that
+is renamed or deleted keeps its own figures and never takes those of another session.
+A turn with no ledger record, such as one with no usage, is not counted. A record written
+before this version carries no measurement and is left out: a session whose turns all
+predate it reads `n/a`, and so does a vendor session that herrscher did not run, since it
+writes no record here.
 
 `--range` takes `24h`, `7d`, `30d` or `90d`, and `--account` and `--vendor` narrow the
 figures to one account or one vendor, with the same rule as for turns: a compaction is

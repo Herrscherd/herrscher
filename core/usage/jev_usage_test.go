@@ -118,7 +118,7 @@ func TestCompactionsFollowTheAccountFilterLikeTurns(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			spend := Summarize(records, Range7d, testNow(), tc.key, nil)
+			spend := Summarize(records, Range7d, testNow(), tc.key)
 			if got := spend.Jev.Runs; got != tc.want {
 				t.Fatalf("Jev.Runs = %d, want %d", got, tc.want)
 			}

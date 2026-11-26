@@ -97,8 +97,8 @@ type Share struct {
 }
 
 // Summarize totals the records of the period that the key matches, counting back from
-// now, and gives each session its row with the injection the host measured for it.
-func Summarize(records []Record, rng Range, now time.Time, key AccountKey, injected map[string]Injection) Spend {
+// now, and gives each named session its row from the same records as its cost.
+func Summarize(records []Record, rng Range, now time.Time, key AccountKey) Spend {
 	now = now.UTC()
 	step := bucketStep(rng)
 	start := bucketStart(now.Add(-rng.Span()), rng)
@@ -111,7 +111,6 @@ func Summarize(records []Record, rng Range, now time.Time, key AccountKey, injec
 		unpriced: make(map[string]bool),
 		accounts: make(map[AccountKey]Share),
 		models:   make(map[string]Share),
-		injected: injected,
 	}
 	for index := range totals.spend.Buckets {
 		totals.spend.Buckets[index].Start = start.Add(time.Duration(index) * step)
@@ -135,7 +134,6 @@ type spendTotals struct {
 	unpriced map[string]bool
 	accounts map[AccountKey]Share
 	models   map[string]Share
-	injected map[string]Injection
 }
 
 func (t *spendTotals) add(record *Record) {
@@ -144,11 +142,9 @@ func (t *spendTotals) add(record *Record) {
 	spend.Split = spend.Split.plus(record.Split)
 	spend.Saved += record.Saved
 	spend.Tokens = spend.Tokens.plus(recordTokens(*record))
-	row := t.sessions[record.Session]
-	row.Session = record.Session
-	row.Cost += record.Cost
-	row.Tokens = row.Tokens.plus(recordTokens(*record))
-	t.sessions[record.Session] = row
+	if record.Session != "" {
+		t.addSessionRow(record)
+	}
 	if record.Unpriced {
 		t.unpriced[record.Model] = true
 	}
@@ -168,9 +164,21 @@ func (t *spendTotals) add(record *Record) {
 	t.models[record.Model] = modelShare
 }
 
+func (t *spendTotals) addSessionRow(record *Record) {
+	row := t.sessions[record.Session]
+	row.Session = record.Session
+	row.Cost += record.Cost
+	row.Tokens = row.Tokens.plus(recordTokens(*record))
+	if record.InjectedMeasured {
+		row.Injection.Turns++
+		row.Injection.Tokens += record.InjectedTokens
+	}
+	t.sessions[record.Session] = row
+}
+
 func (t *spendTotals) done() Spend {
 	t.spend.Sessions = len(t.sessions)
-	t.spend.Rows = sortedSessionRows(t.sessions, t.injected)
+	t.spend.Rows = sortedSessionRows(t.sessions)
 	t.spend.Accounts = sortedShares(t.accounts)
 	t.spend.Models = sortedShares(t.models)
 	t.spend.Unpriced = slices.Sorted(maps.Keys(t.unpriced))

@@ -32,12 +32,11 @@ type SessionRow struct {
 	Injection  Injection `json:"injection"`
 }
 
-func sortedSessionRows(rows map[string]SessionRow, injected map[string]Injection) []SessionRow {
+func sortedSessionRows(rows map[string]SessionRow) []SessionRow {
 	out := make([]SessionRow, 0, len(rows))
 	for _, name := range slices.Sorted(maps.Keys(rows)) {
 		row := rows[name]
 		row.CacheRatio = cacheRatio(row.Tokens)
-		row.Injection = injected[name]
 		out = append(out, row)
 	}
 	slices.SortStableFunc(out, func(left, right SessionRow) int {

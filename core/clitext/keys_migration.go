@@ -19,6 +19,10 @@ const (
 	MigrationConversationReset  = "cli.migration.conversation_reset"
 	MigrationBackupFailed       = "cli.migration.backup_failed"
 	MigrationRefused            = "cli.migration.refused"
+	MigrationCheckpointsRekeyed = "cli.migration.checkpoints_rekeyed"
+	MigrationCheckpointConflict = "cli.migration.checkpoint_conflict"
+	MigrationCheckpointInspect  = "cli.migration.checkpoint_inspect"
+	MigrationCheckpointMove     = "cli.migration.checkpoint_move"
 	InstanceGenerated           = "cli.instance.generated"
 )
 
@@ -41,6 +45,10 @@ func migrationKeys() map[Key][]string {
 		MigrationConversationReset:  {ParamName, ParamPath},
 		MigrationBackupFailed:       {ParamPath, ParamErr},
 		MigrationRefused:            {ParamErr},
+		MigrationCheckpointsRekeyed: {ParamName, ParamCount, ParamFrom, ParamTo},
+		MigrationCheckpointConflict: {ParamName, ParamRef, ParamHave, ParamWant, ParamPath},
+		MigrationCheckpointInspect:  {ParamName, ParamPath, ParamErr},
+		MigrationCheckpointMove:     {ParamName, ParamPath, ParamErr},
 		InstanceGenerated:           {ParamValue},
 	}
 }

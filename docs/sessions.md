@@ -21,6 +21,20 @@ never one derived from the current name. Creating a new session under the old
 name is refused while the renamed session still holds that folder (or that
 scratch directory): pick another name, or close the renamed session first.
 
+Checkpoints (see [rewinding](terminal-ui.md#rewinding)) are git refs
+`refs/herrscher/checkpoints/<incarnation>/<n>`, with the undo point at
+`refs/herrscher/undo/<incarnation>`. The incarnation is the random identity the
+state gives each session object: a rename keeps it, while closing a session and
+creating another under the same name gives the new one a new incarnation. So a
+renamed session lists and rewinds the checkpoints it took under its earlier
+name, and a session that takes a name freed by a rename or a close sees none of
+the checkpoints of the session that had it. The session id (`s_<name>`) is not
+used: it is handed out again to a new session once the old one is closed. The
+refs live in the repository of the worktree and are shared by all its
+worktrees. Closing a session leaves its refs where they are, under an
+incarnation no other session gets. Only local sessions take checkpoints: a
+session on another [host](remote.md), or in a scratch directory, has none.
+
 
 ## The state file and its migration
 
@@ -66,6 +80,14 @@ and writes the new file atomically. Each change is announced on the output of
 - **Gateway binding.** A session with a channel and no gateway binding is bound
   to the channel gateways this daemon builds (every built gateway but the
   terminal), which is the binding it was already using implicitly.
+- **Checkpoint refs.** The checkpoints and the undo point a local session
+  filed under its current name (`refs/herrscher/checkpoints/<name>/`,
+  `refs/herrscher/undo/<name>`) move under its incarnation, in one git
+  transaction per session (`git update-ref --stdin`), before any worktree
+  moves. A ref already at its new place with the same commit counts as moved,
+  so a migration stopped after the move finishes it, and a second run moves
+  nothing. Refs a session filed under a name it had before a rename are left
+  where they are, as are those of closed sessions.
 - **Old `repo` field.** It becomes the workspace when neither the state nor
   `config.json` sets one, and is dropped otherwise, since a workspace already
   applied in its place.
@@ -104,7 +126,11 @@ It refuses, writes nothing, and says what to do instead of guessing, when:
   instance layout would nest every other session inside it (set
   `HERRSCHER_INSTANCE_ID` to another id);
 - a session has a channel and no binding, and this `serve` builds no channel
-  gateway to bind it to.
+  gateway to bind it to;
+- a checkpoint ref a session's checkpoints would move to already holds another
+  commit. The refusal names the ref and both commits; look at it with
+  `git log -1 <ref>`, delete it with `git update-ref -d <ref>` if it is not
+  wanted, and start `serve` again.
 
 A session that runs on another [host](remote.md) is not refused: the migration
 cannot reach that machine, so it points the state at the new place and prints,

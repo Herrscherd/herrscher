@@ -202,7 +202,7 @@ func TestStopWaitsForACheckpointInFlight(t *testing.T) {
 	taking := newBlockingCheckpoints()
 	h.checkpoints = taking
 	t.Cleanup(taking.unblock)
-	sess := state.Session{Name: name, ChannelID: "c1", Worktree: t.TempDir()}
+	sess := state.Session{Name: name, Incarnation: "inc_test", ChannelID: "c1", Worktree: t.TempDir()}
 	taken := runInBackground(func() { h.takeCheckpoint(t.Context(), sess, "turn-1", "texte") })
 	select {
 	case <-taking.entered:

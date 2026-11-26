@@ -5950,6 +5950,26 @@
     "other": "state migration refused, the state was not rewritten: {{.Err}}"
   },
   {
+    "id": "cli.migration.checkpoints_rekeyed",
+    "description": "Migration: the checkpoint refs of a session move to its stable key",
+    "other": "herrscher: migration: session {{.Name}}, {{.Count}} checkpoint refs moved from {{.From}} to {{.To}}"
+  },
+  {
+    "id": "cli.migration.checkpoint_conflict",
+    "description": "Migration refusal: a checkpoint ref already holds another commit",
+    "other": "session {{.Name}}: its checkpoints move to {{.Ref}}, which already holds {{.Have}} instead of {{.Want}}, so nothing was moved; look at it with git -C {{.Path}} log -1 {{.Ref}}, delete it with git -C {{.Path}} update-ref -d {{.Ref}} if it is not wanted, then start herrscher serve again"
+  },
+  {
+    "id": "cli.migration.checkpoint_inspect",
+    "description": "Migration refusal: the checkpoint refs of a session cannot be read",
+    "other": "session {{.Name}}: cannot read the checkpoint refs of {{.Path}}: {{.Err}}; nothing was moved"
+  },
+  {
+    "id": "cli.migration.checkpoint_move",
+    "description": "Migration refusal: the checkpoint refs of a session cannot be moved",
+    "other": "session {{.Name}}: cannot move the checkpoint refs of {{.Path}}: {{.Err}}; they move in one git transaction, so none moved, and the next start of herrscher serve tries again"
+  },
+  {
     "id": "cli.instance.generated",
     "description": "Instance id generated for a fresh state",
     "other": "herrscher: neither HERRSCHER_INSTANCE_ID nor HERRSCHER_OWNER_ID, instance id {{.Value}} generated and written into the state"

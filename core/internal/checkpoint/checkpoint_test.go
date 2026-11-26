@@ -174,11 +174,11 @@ func TestUndoWithoutRestoreFails(t *testing.T) {
 	}
 }
 
-func TestRejectsSessionNameWithSeparator(t *testing.T) {
+func TestRejectsAKeyWithSeparator(t *testing.T) {
 	var store Store
 	dir := initRepo(t)
 	if _, err := store.Take(context.Background(), dir, "a/b", Meta{}); err == nil {
-		t.Fatal("session name with / accepted")
+		t.Fatal("key with / accepted")
 	}
 }
 

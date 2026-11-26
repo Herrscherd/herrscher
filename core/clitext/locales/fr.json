@@ -5950,6 +5950,26 @@
     "other": "migration de l'état refusée, l'état n'a pas été réécrit : {{.Err}}"
   },
   {
+    "id": "cli.migration.checkpoints_rekeyed",
+    "description": "Migration : les refs de checkpoint d'une session passent sous sa clé stable",
+    "other": "herrscher : migration : session {{.Name}}, {{.Count}} refs de checkpoint déplacées de {{.From}} vers {{.To}}"
+  },
+  {
+    "id": "cli.migration.checkpoint_conflict",
+    "description": "Refus de la migration : une ref de checkpoint porte déjà un autre commit",
+    "other": "session {{.Name}} : ses checkpoints vont sous {{.Ref}}, qui porte déjà {{.Have}} au lieu de {{.Want}}, donc rien n'a été déplacé ; regarde-la avec git -C {{.Path}} log -1 {{.Ref}}, supprime-la avec git -C {{.Path}} update-ref -d {{.Ref}} si elle ne sert pas, puis relance herrscher serve"
+  },
+  {
+    "id": "cli.migration.checkpoint_inspect",
+    "description": "Refus de la migration : les refs de checkpoint d'une session sont illisibles",
+    "other": "session {{.Name}} : impossible de lire les refs de checkpoint de {{.Path}} : {{.Err}} ; rien n'a été déplacé"
+  },
+  {
+    "id": "cli.migration.checkpoint_move",
+    "description": "Refus de la migration : les refs de checkpoint d'une session ne peuvent pas être déplacées",
+    "other": "session {{.Name}} : impossible de déplacer les refs de checkpoint de {{.Path}} : {{.Err}} ; elles bougent en une seule transaction git, donc aucune n'a bougé, et le prochain herrscher serve réessaie"
+  },
+  {
     "id": "cli.instance.generated",
     "description": "Id d'instance généré pour un état neuf",
     "other": "herrscher : ni HERRSCHER_INSTANCE_ID ni HERRSCHER_OWNER_ID, id d'instance {{.Value}} généré et écrit dans l'état"

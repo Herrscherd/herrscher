@@ -92,11 +92,18 @@ func migrateHubState(ctx context.Context, messages *hostMessages, announcer stat
 	if err != nil {
 		return err
 	}
+	rekeys, err := planCheckpointRekeys(ctx, announcer.cliMessages, sessions)
+	if err != nil {
+		return err
+	}
 	backup, err := store.Backup()
 	if err != nil {
 		return &stateMigrationRefusedError{messages: announcer.cliMessages, key: clitext.MigrationBackupFailed, params: clitext.Params{clitext.ParamPath: store.Path(), clitext.ParamErr: err.Error()}, cause: err}
 	}
 	announcer.announce(clitext.MigrationStarted, clitext.Params{clitext.ParamPath: store.Path(), clitext.ParamFrom: store.Format, clitext.ParamTo: state.CurrentFormat, clitext.ParamFile: backup})
+	if err := rekeyCheckpoints(ctx, announcer, rekeys); err != nil {
+		return err
+	}
 	migration.Relocated, err = relocateSessions(ctx, worktrees, announcer, sessions, plans)
 	if err != nil {
 		return err

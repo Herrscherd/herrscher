@@ -114,7 +114,7 @@ func checkpointsVerb(messages *hostMessages, cliMessages *clitext.Messages, lang
 			if err != nil {
 				return contracts.Result{}, err
 			}
-			views, err := checkpointViews(ctx, checkpoints, sess.Worktree, sess.Name)
+			views, err := checkpointViews(ctx, checkpoints, sess.Worktree, sess.Incarnation)
 			if err != nil {
 				return contracts.Result{}, err
 			}
@@ -155,7 +155,7 @@ func rewindSession(ctx context.Context, messages *hostMessages, cliMessages *cli
 		return "", busyRewindError(messages, sess.Name)
 	}
 	defer release()
-	entry, err := sessions.checkpoints.Get(ctx, sess.Worktree, sess.Name, position)
+	entry, err := sessions.checkpoints.Get(ctx, sess.Worktree, sess.Incarnation, position)
 	if err != nil {
 		return "", err
 	}
@@ -166,7 +166,7 @@ func rewindSession(ctx context.Context, messages *hostMessages, cliMessages *cli
 		}
 	}
 	if what != whatConversation {
-		if _, err = sessions.checkpoints.Restore(ctx, sess.Worktree, sess.Name, position); err != nil {
+		if _, err = sessions.checkpoints.Restore(ctx, sess.Worktree, sess.Incarnation, position); err != nil {
 			return "", err
 		}
 	}
@@ -204,7 +204,7 @@ func undoVerb(messages *hostMessages, cliMessages *clitext.Messages, lang langua
 				return contracts.Result{}, busyRewindError(messages, sess.Name)
 			}
 			defer release()
-			if err := sessions.checkpoints.Undo(ctx, sess.Worktree, sess.Name); err != nil {
+			if err := sessions.checkpoints.Undo(ctx, sess.Worktree, sess.Incarnation); err != nil {
 				return contracts.Result{}, err
 			}
 			return contracts.DataResult(replyText(cliMessages, namedSessionLanguage(sessionStore, sess.Name, lang())).Text(clitext.HostCheckpointUndone, clitext.Params{clitext.ParamName: sess.Name})), nil
@@ -245,7 +245,7 @@ func forkCheckpoint(ctx context.Context, messages *hostMessages, host forkHost, 
 	if err != nil {
 		return "", err
 	}
-	entry, err := checkpoints.Get(ctx, source.Worktree, source.Name, index)
+	entry, err := checkpoints.Get(ctx, source.Worktree, source.Incarnation, index)
 	if err != nil {
 		return "", err
 	}
@@ -298,7 +298,7 @@ func forkCheckpoint(ctx context.Context, messages *hostMessages, host forkHost, 
 }
 
 type checkpointTaker interface {
-	Take(ctx context.Context, dir, session string, meta checkpoint.Meta) (checkpoint.Entry, error)
+	Take(ctx context.Context, dir, key string, meta checkpoint.Meta) (checkpoint.Entry, error)
 }
 
 func (h *hub) takeCheckpoint(ctx context.Context, sess state.Session, turnID, text string) {
@@ -312,7 +312,7 @@ func (h *hub) takeCheckpoint(ctx context.Context, sess state.Session, turnID, te
 	end := h.persists.begin()
 	defer end()
 	meta := checkpoint.Meta{Turn: turnID, Text: text, Conversation: conversationPosition(current)}
-	if _, err := h.checkpoints.Take(context.WithoutCancel(ctx), sess.Worktree, sess.Name, meta); err != nil {
+	if _, err := h.checkpoints.Take(context.WithoutCancel(ctx), sess.Worktree, sess.Incarnation, meta); err != nil {
 		warnLive(h.messages, h.warnings, h.sessionLanguageSource(sess.Name), "warn.session_checkpoint", map[string]any{nameParam: sess.Name, detailParam: err})
 	}
 }
@@ -397,9 +397,9 @@ func busyRewindError(messages *hostMessages, name string) error {
 	return wrapHost(messages, errTurnInFlight, "session.refused", map[string]any{nameParam: name})
 }
 
-func checkpointViews(ctx context.Context, checkpoints *checkpoint.Store, worktree, name string) ([]checkpointView, error) {
+func checkpointViews(ctx context.Context, checkpoints *checkpoint.Store, worktree, key string) ([]checkpointView, error) {
 	views := make([]checkpointView, 0)
-	entries, err := checkpoints.List(ctx, worktree, name)
+	entries, err := checkpoints.List(ctx, worktree, key)
 	if err != nil || len(entries) == 0 {
 		return views, err
 	}

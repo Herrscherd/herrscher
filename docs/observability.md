@@ -160,8 +160,8 @@ forwarded to it and recorded once, by the daemon. A view is named after the comm
 and the default is the limits of each account:
 
 - `limits`: the quota windows of each account.
-- `cost`: the spend of the period, by session and by model.
-- `tokens`: the tokens in and out of the period.
+- `cost`: the spend of the period, by account, by model and by session.
+- `tokens`: the tokens in and out of the period, by model and by session.
 - `compaction`: each compaction stage, with its runs and how they ended (done,
   short, failed, dry run, skipped), the calls it examined, kept, truncated and
   pruned, the share of characters it removed, the tokens it removed, its model
@@ -172,6 +172,41 @@ and the default is the limits of each account:
   failed, so a dry run or a skipped Jev is in neither count. A session counts once it
   has an attempt. The backend stage counts as behind Jev when its outcome is anything
   but skipped, so a dry run of the backend does count.
+
+Each session name of the period has a row, in the `cost` view with its cost and the share
+of its input read from the prompt cache, and in the `tokens` view with its tokens and the
+tokens the host injected into its prompt per turn. The rows come from the herrscher usage
+ledger only, so the cost of a row is the cost written with each of its turns. The rows
+need not add up to the period total: where the vendor transcripts cover an account, the
+total prices those turns from the transcripts, not from the ledger, and a row carries no
+share of that total. A row is per session name: a name reused after its session is deleted
+adds the turns of both sessions into one row. The herrscher session transcripts are not
+read. Vendor sessions read from the vendor transcripts have no row, and the vendor
+transcripts still feed the period totals and the by-model figures, as before. The cache
+share is the cache read over the input of the session, the input, the cache read and the
+cache write together, as the period's cache share is. The rows are sorted by cost and the
+text views show the first eight, with a line for the sessions they leave out.
+
+`--json` gives all the rows under `spend.sessionRows`, in the same order, each with:
+
+- `session`: the session name.
+- `cost`: the cost of its turns, as the cost view shows it.
+- `tokens`: `in`, `out`, `cacheRead` and `cacheCreate`, the tokens of its turns.
+- `cacheRatio`: the cache read share of its input, as a percentage from 0 to 100.
+- `injection`: `turns`, the turns that carry a measurement, and `tokens`, the estimated
+  tokens injected over those turns. The average the text views show is `tokens` divided
+  by `turns`. The JSON gives no average: a consumer divides, and skips the division when
+  `turns` is 0, which the text views show as `n/a`.
+
+The injected figure is an estimate, marked `~`. The host measures each block it writes
+into the prompt of a turn (memory, skills, delegation, capabilities, identity), at about
+four bytes per token, not a count from the vendor, and records their total in the usage
+ledger with the cost of that turn. The average is that total over the turns of the period
+that carry a measurement. It comes from the same ledger records as the cost of the row, and
+a name reused after a delete adds the measured turns of both sessions, as it adds the cost.
+A turn with no ledger record, such as one with no usage, is not counted. A record written
+before this version carries no measurement and is left out: a session whose turns all
+predate it reads `n/a`.
 
 `--range` takes `24h`, `7d`, `30d` or `90d`, and `--account` and `--vendor` narrow the
 figures to one account or one vendor, with the same rule as for turns: a compaction is

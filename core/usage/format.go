@@ -37,3 +37,24 @@ func formatPercent(lang i18n.Language, value float64) string {
 	}
 	return clitext.FormatNumber(lang, value, decimals) + percentSuffix
 }
+
+func formatTokens(lang i18n.Language, count int64, text *renderer) string {
+	value, unit := float64(count), ""
+	for _, key := range []clitext.Key{clitext.SpendUnitKilo, clitext.SpendUnitMega, clitext.SpendUnitGiga} {
+		if math.Round(value) < kilo {
+			break
+		}
+		value, unit = value/kilo, text.text(key, nil)
+	}
+	if unit == "" {
+		return clitext.FormatNumber(lang, value, 0)
+	}
+	return clitext.FormatNumber(lang, value, scaledDecimals(value)) + " " + unit
+}
+
+func scaledDecimals(value float64) int {
+	if math.Round(value*decimalBase)/decimalBase >= wholeFrom {
+		return 0
+	}
+	return 1
+}

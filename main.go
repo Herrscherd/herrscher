@@ -187,8 +187,6 @@ func runCommand(ctx context.Context, layout host.RuntimeLayout, messages *clitex
 		return runApprove(ctx, layout, messages, hostMessages, args)
 	case "role":
 		return runRole(ctx, layout, messages, hostMessages, args)
-	case "mcp":
-		return runMCP(ctx, layout, messages, hostMessages, args)
 	case "memory":
 		return runMemory(ctx, layout, messages, hostMessages, args)
 	case "models":

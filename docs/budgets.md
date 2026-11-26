@@ -127,8 +127,9 @@ Two deliberate limits:
 - **A `pick` is not watched.** It answers a turn that is already rendered; cutting it would
   leave that turn unanswered.
 - **A backend that reports no usage is not watched either.** The Claude, Grok and
-  Antigravity backends stream token counts; with codex or cursor the counter stays at zero, so token caps
-  fall back to boundary-only enforcement. Nothing breaks: the guard simply never fires.
+  Antigravity backends stream token counts; with codex or cursor the counter stays at
+  zero, so token caps fall back to boundary-only enforcement. Nothing breaks: the guard
+  simply never fires.
 
 ## Resuming
 

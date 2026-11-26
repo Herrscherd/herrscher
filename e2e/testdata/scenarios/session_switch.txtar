@@ -39,6 +39,14 @@ exec herrscher session seed --name switching --task 'fourth with grok'
 stdout '^echo: fourth with grok$'
 exec cat $VENDORTEST_LOG
 stdout 'grok prompt .*fourth with grok'
+exec herrscher session switch --name switching --vendor antigravity --cmd agy
+exec herrscher session overview
+cp stdout $WORK/overview-antigravity.json
+grep -count=1 '"vendor":"antigravity"' $WORK/overview-antigravity.json
+exec herrscher session seed --name switching --task 'fifth with antigravity'
+stdout '^echo: fifth with antigravity$'
+exec cat $VENDORTEST_LOG
+stdout 'antigravity prompt .*fifth with antigravity'
 kill -INT daemon
 wait daemon
 ! waitdaemon

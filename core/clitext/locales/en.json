@@ -477,7 +477,7 @@
   {
     "id": "cli.bridge.flag.vendor",
     "description": "Help of the --vendor flag of bridge",
-    "other": "backend vendor: claude | codex | cursor (empty = the vendor of the cmd binary, then HERRSCHER_BACKEND; with a model, HERRSCHER_BACKEND, then the model's vendor)"
+    "other": "backend vendor: claude | codex | cursor | grok | antigravity (empty = the vendor of the cmd binary, then HERRSCHER_BACKEND; with a model, HERRSCHER_BACKEND, then the model's vendor)"
   },
   {
     "id": "cli.bridge.flag.resume",
@@ -1540,7 +1540,7 @@
   {
     "id": "cli.help.param.session.handoff.vendor",
     "description": "Help of the --vendor param of the command session handoff",
-    "other": "agent backend vendor for the new session: claude | codex | cursor"
+    "other": "agent backend vendor for the new session: claude | codex | cursor | grok | antigravity"
   },
   {
     "id": "cli.help.param.session.handoff.account",
@@ -2365,7 +2365,7 @@
   {
     "id": "cli.help.param.session.create.vendor",
     "description": "Help of the --vendor param of the command session create",
-    "other": "agent backend vendor: claude | codex | cursor"
+    "other": "agent backend vendor: claude | codex | cursor | grok | antigravity"
   },
   {
     "id": "cli.help.param.session.create.model",
@@ -2605,7 +2605,7 @@
   {
     "id": "cli.help.param.agent.create.backend",
     "description": "Help of the --backend param of the command agent create",
-    "other": "agent backend vendor: claude | codex | cursor"
+    "other": "agent backend vendor: claude | codex | cursor | grok | antigravity"
   },
   {
     "id": "cli.help.param.agent.create.cmd",
@@ -4731,6 +4731,11 @@
     "other": "Grok Build CLI, grok.com account or xAI API key"
   },
   {
+    "id": "cli.setup.module.antigravity",
+    "description": "Description of the Antigravity backend module",
+    "other": "Google Antigravity CLI (agy)"
+  },
+  {
     "id": "cli.setup.module.obsidian",
     "description": "Description of the Obsidian memory module",
     "other": "notes in an Obsidian vault"
@@ -4929,6 +4934,27 @@
     "id": "cli.setup.cursor.ok",
     "description": "Probe result: cursor-agent is installed and a key is set",
     "other": "cursor-agent found, key entered"
+  },
+  {
+    "id": "cli.setup.antigravity.intro",
+    "description": "Line of the Antigravity screen that says how the agent signs in",
+    "other": "The agent signs in to Antigravity with your Google account, via agy."
+  },
+  {
+    "id": "cli.setup.antigravity.hint",
+    "description": "Hint of the Antigravity screen about the interactive sign in",
+    "other": "agy opens: sign in, then quit it to come back here."
+  },
+  {
+    "id": "cli.setup.antigravity.login",
+    "description": "Action that opens agy to sign in",
+    "other": "sign in with agy"
+  },
+  {
+    "id": "cli.setup.antigravity.ok",
+    "description": "Probe result: agy is signed in and lists models, Count selects the plural form",
+    "one": "agy signed in · 1 model",
+    "other": "agy signed in · {{.Count}} models"
   },
   {
     "id": "cli.setup.memory.sub",

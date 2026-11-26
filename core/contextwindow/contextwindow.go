@@ -17,7 +17,7 @@ const (
 
 func vendorLimit(vendor string) (int, bool) {
 	switch strings.ToLower(vendor) {
-	case "claude", "codex", "cursor":
+	case "claude", "codex", "cursor", "antigravity":
 		return standard, true
 	case "grok":
 		return grok, true

@@ -45,6 +45,7 @@ func backendTrials(chosen moduleSet, value func(string) string) []trialSpec {
 		{module: moduleCodex, section: kindCodex, command: setupCommand{name: kindCodex, args: []string{"exec", "--skip-git-repo-check", trialPrompt}}},
 		{module: moduleCursor, section: kindCursor, command: setupCommand{name: cursorCLI, args: []string{"-p", trialPrompt}, env: presentEnv(value, envCursorKey)}},
 		{module: moduleGrok, section: kindGrok, command: setupCommand{name: grokCLI, args: []string{"-p", trialPrompt, "--no-auto-update"}, env: presentEnv(value, envXAIKey)}},
+		{module: moduleAntigravity, section: kindAntigravity, command: setupCommand{name: antigravityCLI, args: []string{"--print=" + trialPrompt, "--mode", "plan"}}},
 	}
 	picked := make([]trialSpec, 0, len(specs))
 	for index := range specs {

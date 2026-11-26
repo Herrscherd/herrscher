@@ -504,3 +504,29 @@ func TestConsolidationFailureIsWarnedInTheSessionLanguage(t *testing.T) {
 		t.Fatalf("consolidation failure fell back to english: %q", got)
 	}
 }
+
+func TestPreferredBackendIsClaudeUnlessTheEnvironmentNamesOne(t *testing.T) {
+	for env, want := range map[string]string{"": "claude", "codex": "codex", "antigravity": "antigravity"} {
+		if got := PreferredBackend(func(string) string { return env }); got != want {
+			t.Fatalf("PreferredBackend with HERRSCHER_BACKEND=%q = %q, want %q", env, got, want)
+		}
+	}
+}
+
+func TestPreferredBackendStaysTheFallbackWhateverTheImportOrder(t *testing.T) {
+	var registry contracts.Registry
+	for _, kind := range []string{"antigravity", "claude", "codex"} {
+		registry.Register(contracts.Plugin{
+			Manifest: contracts.Manifest{Kind: kind, Category: contracts.CategoryBackend},
+			Backend:  func(context.Context, contracts.PluginConfig) (contracts.Backend, error) { return seedBackend{}, nil },
+		})
+	}
+	registry.PreferBackend(PreferredBackend(func(string) string { return "" }))
+	plugin, err := selectBackend("", registry.Backends())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plugin.Manifest.Kind != "claude" {
+		t.Fatalf("fallback backend = %q, want claude even when antigravity registers first", plugin.Manifest.Kind)
+	}
+}

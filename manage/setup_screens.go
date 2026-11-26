@@ -90,6 +90,8 @@ func (model *setupModel) rows() []setupRow {
 		return model.cursorRows()
 	case screenGrok:
 		return model.grokRows()
+	case screenAntigravity:
+		return model.antigravityRows()
 	case screenObsidian:
 		return model.vaultRows()
 	case screenRoute:
@@ -318,6 +320,12 @@ func setGrokKey(useKey bool) func(*setupModel) tea.Cmd {
 		target.draft.set(envXAIKey, target.fields[envXAIKey].Value())
 		return nil
 	}
+}
+
+func (model *setupModel) antigravityRows() []setupRow {
+	rows := []setupRow{line(toneBold, model.text(clitext.SetupAntigravityIntro, nil)), line(toneDim, model.text(clitext.SetupAntigravityHint, nil)), blank()}
+	rows = append(rows, model.probeRows(probeAntigravity, model.text(clitext.SetupAntigravityLogin, nil))...)
+	return append(rows, blank(), model.continueRow())
 }
 
 func (model *setupModel) vaultRows() []setupRow {
@@ -609,6 +617,7 @@ func (model *setupModel) sections() []hubSection {
 		model.moduleSection(moduleCodex, screenCodex, model.probeState(probeCodex)),
 		model.moduleSection(moduleCursor, screenCursor, model.keyState(envCursorKey)),
 		model.moduleSection(moduleGrok, screenGrok, model.probeState(probeGrok)),
+		model.moduleSection(moduleAntigravity, screenAntigravity, model.probeState(probeAntigravity)),
 		model.moduleSection(moduleObsidian, screenObsidian, sectionState{tone: toneOK, text: model.vaultState()}),
 		hubSection{name: model.text(clitext.SetupSectionRoute, nil), state: model.routeState(), screen: screenRoute, tone: toneOK},
 	)

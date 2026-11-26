@@ -38,14 +38,14 @@ of defaults change. Which one is active comes from `--vendor` then
 `HERRSCHER_BACKEND` (see Transport); only the active
 backend's vars are read.
 
-| Setting | Claude | Codex | Cursor | Grok | Meaning |
-|---------|--------|-------|--------|------|---------|
-| `cmd` | `CLAUDE_CMD` (`claude`) | `CODEX_CMD` (`codex`) | `CURSOR_CMD` (`cursor-agent`) | `GROK_CMD` (`grok`) | Base command to run the agent. |
-| `model` | `CLAUDE_MODEL` | `CODEX_MODEL` | `CURSOR_MODEL` | `GROK_MODEL` | Model override. Unset ⇒ the CLI's own default. |
-| `stream` | `CLAUDE_STREAM` (`true`) | `CODEX_STREAM` (`true`) | `CURSOR_STREAM` (`true`) | no setting, always streaming-json | Streaming mode: stream-json, persistent app-server, resume-based stream respectively. For Claude and Codex, exactly the string `false` disables it. Cursor also takes `off` and every false spelling of a boolean (`0`, `f`, `false`), and refuses a value that is not a boolean. |
-| `dir` | `CLAUDE_DIR` | `CODEX_DIR` | `CURSOR_DIR` | `GROK_DIR` | Working directory. |
-| `kind` | `CLAUDE_KIND` | `CODEX_KIND` | `CURSOR_KIND` | no setting | Backend kind. |
-| `effort` | no variable | `CODEX_EFFORT` | no variable | `GROK_EFFORT` | Reasoning effort override (Codex and Grok): Grok takes `low`, `medium`, `high` or `xhigh`. |
+| Setting | Claude | Codex | Cursor | Grok | Antigravity | Meaning |
+|---------|--------|-------|--------|------|-------------|---------|
+| `cmd` | `CLAUDE_CMD` (`claude`) | `CODEX_CMD` (`codex`) | `CURSOR_CMD` (`cursor-agent`) | `GROK_CMD` (`grok`) | `ANTIGRAVITY_CMD` (`agy`) | Base command to run the agent. |
+| `model` | `CLAUDE_MODEL` | `CODEX_MODEL` | `CURSOR_MODEL` | `GROK_MODEL` | `ANTIGRAVITY_MODEL` | Model override. Unset ⇒ the CLI's own default. |
+| `stream` | `CLAUDE_STREAM` (`true`) | `CODEX_STREAM` (`true`) | `CURSOR_STREAM` (`true`) | no setting, always streaming-json | no setting, always stream-json | Streaming mode: stream-json, persistent app-server and resume-based stream for Claude, Codex and Cursor; Grok and Antigravity always stream. For Claude and Codex, exactly the string `false` disables it. Cursor also takes `off` and every false spelling of a boolean (`0`, `f`, `false`), and refuses a value that is not a boolean. |
+| `dir` | `CLAUDE_DIR` | `CODEX_DIR` | `CURSOR_DIR` | `GROK_DIR` | `ANTIGRAVITY_DIR` | Working directory. |
+| `kind` | `CLAUDE_KIND` | `CODEX_KIND` | `CURSOR_KIND` | no setting | no setting | Backend kind. |
+| `effort` | no variable | `CODEX_EFFORT` | no variable | `GROK_EFFORT` | `ANTIGRAVITY_EFFORT` | Reasoning effort override (Codex, Grok and Antigravity): Grok takes `low`, `medium`, `high` or `xhigh`, Antigravity `low`, `medium`, `high`, `xhigh` or `max`. |
 
 The `llm` extractor has **no env vars of its own**: it resolves the first
 registered backend the same way the host does, so it reads that backend's
@@ -283,7 +283,7 @@ Distributed transport lets certain categories run as separate processes over NAT
 
 | Variable | Default | Meaning | Read by |
 |----------|---------|---------|---------|
-| `HERRSCHER_BACKEND` | none (⇒ default) | Agent backend vendor when a session doesn't set one via `--vendor`: `claude\|codex\|cursor\|grok`. Precedence: `session.Vendor` → `HERRSCHER_BACKEND` → default. | Host |
+| `HERRSCHER_BACKEND` | none (⇒ `claude`) | Agent backend vendor when a session doesn't set one via `--vendor`: `claude\|codex\|cursor\|grok\|antigravity`. Precedence: `session.Vendor` → `HERRSCHER_BACKEND` → `claude`. When that backend is compiled in, the host puts it first in the plugin registry at startup, so the default and every lookup that takes the first backend (the `llm` extractor and the smart-approval judge included) do not depend on the import paths of the compiled plugins. A stack without it falls back to the first backend Go initialises. | Host |
 | `HERRSCHER_REMOTE` | none (⇒ all in-process) | Comma-separated categories to run out-of-process: `memory`, `orchestrator`, `backend`. | Host |
 | `HERRSCHER_NATS` | `nats://127.0.0.1:4222` | The NATS server URL (required in remote mode). | Host (transport) |
 | `HERRSCHER_ANNOUNCE_KEY` | none | Shared secret of at least 32 random bytes that signs the announcements a plugin-host publishes. Every host and plugin-host must hold the same one, and a host with a remote category refuses to start without a valid key. See [Plugins on another machine](remote.md#plugins-on-another-machine). | Host and plugin-host (transport) |

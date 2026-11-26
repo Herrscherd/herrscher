@@ -143,7 +143,12 @@ its standard input. Its `tool` steps go through every `PreToolUse` hook of
 when it sets `failClosed`, as Grok does. It records `grok prompt "<text>"` and `grok
 result call-N allowed` or `denied: <reason>`. `approval_grok_hook_gates_tool_calls.txtar`
 drives a Grok session created without `--cmd` through an allowed then a denied
-`run_terminal_command`, gated by a `Bash` rule.
+`run_terminal_command`, gated by a `Bash` rule. The `agy` fake answers `models` with a
+signed-in listing (its "Fetching available models..." line on standard error, as the real
+CLI does) and `--version`, and replays one turn per `--input-format stream-json
+--output-format stream-json` invocation, reading the prompt from the `user` event on its
+standard input and resuming the conversation named by `--conversation`. It records
+`antigravity prompt "<text>"`.
 
 `sessionrunning <session> <vendor command>` fails the scenario unless a process of its
 instance has `--session <session>` and `--cmd <vendor command>` on its command line, so a
@@ -152,11 +157,11 @@ up to five seconds for no such process, failing otherwise. Neither can be negate
 
 `session_switch.txtar` covers a vendor switch on one session. It seeds a prompt through
 `claude`, checks the overview, then switches the session to `codex`, then to
-`cursor-agent`, then to `grok`. Before the switches away from `claude` and `codex`,
-`sessionrunning` checks that the previous vendor process runs, and after them
+`cursor-agent`, then to `grok`, then to `agy`. Before the switches away from `claude` and
+`codex`, `sessionrunning` checks that the previous vendor process runs, and after them
 `sessionstopped` waits for that process to stop. `cursor-agent` exits after each turn, so
-the switch to `grok` is checked through the overview and the prompt log only. The `codex`,
-`cursor-agent` and `grok` prompts get `echo: <prompt>` back. Its `claude.script` holds one
+the switches to `grok` and then `agy` are checked through the overview and the prompt log
+only. The `codex`, `cursor-agent`, `grok` and `agy` prompts get `echo: <prompt>` back. Its `claude.script` holds one
 turn, so the later turns are past the end of the script and echo.
 
 Every bug found by hand becomes a scenario before it is fixed: the scenario is written

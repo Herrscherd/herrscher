@@ -68,7 +68,13 @@ func branchPushed(ctx context.Context, dir, branch string, env []string) (bool, 
 
 func defaultBranch(ctx context.Context, dir string) (string, error) {
 	ref, err := prGit(ctx, dir, nil, "symbolic-ref", "--quiet", "--short", "refs/remotes/"+originRemote+"/HEAD")
-	if err != nil || ref == "" {
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", ctxErr
+		}
+		return "", errPRNoBase
+	}
+	if ref == "" {
 		return "", errPRNoBase
 	}
 	return strings.TrimPrefix(ref, originRemote+"/"), nil
@@ -80,5 +86,8 @@ func prGit(ctx context.Context, dir string, env []string, args ...string) (strin
 		cmd.Env = append(os.Environ(), env...)
 	}
 	out, err := cmd.Output()
+	if err != nil && ctx.Err() != nil {
+		return "", ctx.Err()
+	}
 	return strings.TrimSpace(string(out)), err
 }

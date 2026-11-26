@@ -75,12 +75,18 @@ It refuses, writes nothing, and says what to do instead of guessing, when:
   from its pull request (merge or close the pull request, run
   `git branch --unset-upstream session/<name>`, then start `serve` again);
 - the branch to rename was pushed without tracking, so a remote-tracking ref
-  `<remote>/session/<name>` exists, or the session records a pull request and a
-  remote still holds the branch (or cannot be asked): the pull request would stop
-  receiving pushes. Once it is merged or closed, delete the branch on the remote
-  (`git push <remote> --delete session/<name>`, or `git branch -dr
-  <remote>/session/<name>` when it is already gone there) and start `serve`
-  again;
+  `<remote>/session/<name>` exists, or the session records a pull request and
+  `origin` still holds the branch: the pull request would stop receiving pushes.
+  Once it is merged or closed, delete the branch on the remote (`git push
+  <remote> --delete session/<name>`, or `git branch -dr <remote>/session/<name>`
+  when it is already gone there) and start `serve` again;
+- the session records a pull request and `origin` cannot be asked whether it
+  still holds the branch. Only `origin`, the remote pull requests push to, is
+  asked, with the forge credentials of the connection, without prompting, and
+  for at most a minute. The refusal names the session and prints the commands
+  that move it by hand (`mkdir -p`, `git worktree move`, `git branch -m`), which
+  need no network: run them once the pull request is merged or closed, or start
+  `serve` again once `origin` answers;
 - the worktree is checked out on another branch than `session/<name>`;
 - a session, or the folder of its worktree, is named like the instance id: the
   instance layout would nest every other session inside it (set
@@ -91,8 +97,8 @@ It refuses, writes nothing, and says what to do instead of guessing, when:
 A session that runs on another [host](remote.md) is not refused: the migration
 cannot reach that machine, so it points the state at the new place and prints,
 for that session, the commands to run on the host (`mkdir -p`, `git worktree
-move`, `git branch -m`, or a plain `mv` for a scratch directory) before the
-session starts again.
+move`, `git branch -m`, or a plain `mv` for a scratch directory). Until they are
+run, the session fails to start on the host and the daemon keeps retrying.
 
 A move that fails halfway is put back, and the next start picks the migration up
 where it stopped: a directory or branch already at its new place counts as done.

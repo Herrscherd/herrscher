@@ -351,14 +351,11 @@ func (a Agent) writeCodexConfig(codexDir, worktreePath string) error {
 	if err != nil {
 		return fmt.Errorf("read %s: %w", mcpFile, err)
 	}
-	servers, err := ParseMCPServers(mcp)
+	servers, err := parseCodexMCPServers(mcp)
 	if err != nil {
 		return err
 	}
-	codexConfig, err := renderCodexMCP(servers, worktreePath)
-	if err != nil {
-		return err
-	}
+	codexConfig := renderCodexMCP(servers, worktreePath)
 	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), codexConfig, fileMode); err != nil {
 		return fmt.Errorf("write config.toml: %w", err)
 	}

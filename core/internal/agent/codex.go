@@ -6,18 +6,15 @@ import (
 	"strings"
 )
 
-func renderCodexMCP(servers []MCPServer, worktree string) ([]byte, error) {
+func renderCodexMCP(servers []MCPServer, worktree string) []byte {
 	var out strings.Builder
 	for index, server := range servers {
-		if err := checkCodexTransport(server); err != nil {
-			return nil, err
-		}
 		if index > 0 {
 			out.WriteByte('\n')
 		}
 		writeCodexMCPServer(&out, server, worktree)
 	}
-	return []byte(out.String()), nil
+	return []byte(out.String())
 }
 
 func checkCodexTransport(server MCPServer) error {

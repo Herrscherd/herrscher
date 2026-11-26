@@ -63,6 +63,11 @@ command = "zeta"
 			raw:     `{"mcpServers":{"broken":{"type":"stdio","command":""}}}`,
 			wantErr: "missing command",
 		},
+		{
+			name:    "reports an unsupported transport before a later server's missing command",
+			raw:     `{"mcpServers":{"a":{"type":"http"},"b":{"command":""}}}`,
+			wantErr: "unsupported MCP transport",
+		},
 	}
 
 	for _, tt := range tests {
@@ -74,10 +79,10 @@ command = "zeta"
 
 func checkCodexMCPCase(t *testing.T, raw, want, wantErr, worktree string) {
 	t.Helper()
-	servers, err := ParseMCPServers([]byte(raw))
+	servers, err := parseCodexMCPServers([]byte(raw))
 	var got []byte
 	if err == nil {
-		got, err = renderCodexMCP(servers, worktree)
+		got = renderCodexMCP(servers, worktree)
 	}
 	if wantErr != "" {
 		if err == nil || !strings.Contains(err.Error(), wantErr) {

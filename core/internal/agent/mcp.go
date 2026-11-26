@@ -35,6 +35,14 @@ type mcpServerEntry struct {
 
 // ParseMCPServers reads the servers of an mcp.json document sorted by name. It refuses an empty server name, and a server that runs as a local process without a command.
 func ParseMCPServers(raw []byte) ([]MCPServer, error) {
+	return parseMCPServers(raw, allowAnyTransport)
+}
+
+func parseCodexMCPServers(raw []byte) ([]MCPServer, error) {
+	return parseMCPServers(raw, checkCodexTransport)
+}
+
+func parseMCPServers(raw []byte, checkTransport func(MCPServer) error) ([]MCPServer, error) {
 	var config mcpDocument
 	if err := json.Unmarshal(raw, &config); err != nil {
 		return nil, fmt.Errorf("parse mcp.json: %w", err)
@@ -43,7 +51,13 @@ func ParseMCPServers(raw []byte) ([]MCPServer, error) {
 	for _, name := range slices.Sorted(maps.Keys(config.MCPServers)) {
 		entry := config.MCPServers[name]
 		server := MCPServer{Name: name, Type: entry.Type, URL: entry.URL, Command: entry.Command, Args: entry.Args, Env: entry.Env}
-		if err := checkMCPServer(server); err != nil {
+		if err := checkMCPName(server); err != nil {
+			return nil, err
+		}
+		if err := checkTransport(server); err != nil {
+			return nil, err
+		}
+		if err := checkMCPCommand(server); err != nil {
 			return nil, err
 		}
 		servers = append(servers, server)
@@ -51,10 +65,18 @@ func ParseMCPServers(raw []byte) ([]MCPServer, error) {
 	return servers, nil
 }
 
-func checkMCPServer(server MCPServer) error {
+func allowAnyTransport(MCPServer) error {
+	return nil
+}
+
+func checkMCPName(server MCPServer) error {
 	if strings.TrimSpace(server.Name) == "" {
 		return ErrEmptyMCPServerName
 	}
+	return nil
+}
+
+func checkMCPCommand(server MCPServer) error {
 	runsLocally := server.Type == "" || server.Type == TransportStdio
 	if runsLocally && strings.TrimSpace(server.Command) == "" {
 		return fmt.Errorf("%w %q", ErrMissingMCPCommand, server.Name)

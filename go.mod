@@ -6,6 +6,7 @@ toolchain go1.27.4
 
 require (
 	github.com/BurntSushi/toml v1.6.0
+	github.com/Herrscherd/herrscher-antigravity-backend v0.1.0
 	github.com/Herrscherd/herrscher-claude-backend v0.19.0
 	github.com/Herrscherd/herrscher-codex-backend v0.11.0
 	github.com/Herrscherd/herrscher-contracts v0.48.0

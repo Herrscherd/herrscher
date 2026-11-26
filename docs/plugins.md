@@ -7,7 +7,7 @@ reinstalls the binary. Restart the service afterwards to run it.
 | Category | Port | Official plugin |
 |----------|------|-----------------|
 | Gateway | `Gateway` | [herrscher-discord-gateway], [herrscher-telegram-gateway], in-tree `terminal` |
-| Backend | `Backend` | [herrscher-claude-backend], [herrscher-codex-backend], [herrscher-cursor-backend], [herrscher-grok-backend], [herrscher-pixellab-backend] |
+| Backend | `Backend` | [herrscher-claude-backend], [herrscher-codex-backend], [herrscher-cursor-backend], [herrscher-grok-backend], [herrscher-antigravity-backend], [herrscher-pixellab-backend] |
 | Memory | `Memory` | [herrscher-obsidian-memory] |
 | Orchestrator | `Orchestrator` | [herrscher-orchestrator] |
 | Skills | playbooks only | [herrscher-superset-skills] |
@@ -85,7 +85,7 @@ With no flags it writes the batteries-included **default stack**:
 | Category | Kinds | Default kind | Module |
 |----------|-------|--------------|--------|
 | Gateway | `discord` \| `telegram` | `discord` | herrscher-discord-gateway, herrscher-telegram-gateway |
-| Backend | `claude` \| `codex` \| `cursor` \| `grok` | `claude` | herrscher-claude-backend |
+| Backend | `claude` \| `codex` \| `cursor` \| `grok` \| `antigravity` | `claude` | herrscher-claude-backend |
 | Memory | `obsidian` | `obsidian` | herrscher-obsidian-memory |
 | Orchestrator | `basic` | `basic` | herrscher-orchestrator |
 | Extractor | `llm` | `llm` | herrscher-llm-extractor |
@@ -184,6 +184,7 @@ These verbs are distinct from the runtime commands (`serve`, `bridge`, `session`
 [herrscher-codex-backend]: https://github.com/Herrscherd/herrscher-codex-backend
 [herrscher-cursor-backend]: https://github.com/Herrscherd/herrscher-cursor-backend
 [herrscher-grok-backend]: https://github.com/Herrscherd/herrscher-grok-backend
+[herrscher-antigravity-backend]: https://github.com/Herrscherd/herrscher-antigravity-backend
 [herrscher-pixellab-backend]: https://github.com/Herrscherd/herrscher-pixellab-backend
 [herrscher-obsidian-memory]: https://github.com/Herrscherd/herrscher-obsidian-memory
 [herrscher-orchestrator]: https://github.com/Herrscherd/herrscher-orchestrator

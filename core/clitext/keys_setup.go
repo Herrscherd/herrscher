@@ -40,6 +40,7 @@ const (
 	SetupModuleCodex            = "cli.setup.module.codex"
 	SetupModuleCursor           = "cli.setup.module.cursor"
 	SetupModuleGrok             = "cli.setup.module.grok"
+	SetupModuleAntigravity      = "cli.setup.module.antigravity"
 	SetupModuleObsidian         = "cli.setup.module.obsidian"
 	SetupModuleBasic            = "cli.setup.module.basic"
 	SetupModuleLLM              = "cli.setup.module.llm"
@@ -85,6 +86,10 @@ const (
 	SetupCursorKeyHint          = "cli.setup.cursor.key_hint"
 	SetupCursorProbe            = "cli.setup.cursor.probe"
 	SetupCursorOK               = "cli.setup.cursor.ok"
+	SetupAntigravityIntro       = "cli.setup.antigravity.intro"
+	SetupAntigravityHint        = "cli.setup.antigravity.hint"
+	SetupAntigravityLogin       = "cli.setup.antigravity.login"
+	SetupAntigravityOK          = "cli.setup.antigravity.ok"
 	SetupMemorySub              = "cli.setup.memory.sub"
 	SetupVault                  = "cli.setup.vault"
 	SetupVaultHint              = "cli.setup.vault_hint"
@@ -172,44 +177,44 @@ const (
 
 func setupKeys() map[Key][]string {
 	return map[Key][]string{
-		SetupUsage:                  {ParamName},
-		SetupUnknownSection:         {ParamName},
-		SetupNeedsTerminal:          nil,
-		SetupFailed:                 {ParamErr},
-		SetupTitle:                  nil,
-		SetupLabelHost:              nil,
-		SetupLabelSettings:          nil,
-		SetupHostBinary:             nil,
-		SetupHostSource:             {ParamPath},
-		SetupEnvMissing:             {ParamPath},
-		SetupEnvFound:               {ParamPath},
-		SetupWelcomeSub:             nil,
-		SetupWelcomeQuestion:        nil,
-		SetupQuick:                  nil,
-		SetupQuickHint:              nil,
-		SetupCustom:                 nil,
-		SetupCustomHint:             nil,
-		SetupDashboard:              nil,
-		SetupDashboardHint:          nil,
-		SetupModulesSub:             nil,
-		SetupModulesMany:            nil,
-		SetupModulesOne:             nil,
-		SetupModulesBuiltin:         nil,
-		SetupModulesCount:           {ParamCount},
-		SetupCategoryGateway:        nil,
-		SetupCategoryBackend:        nil,
-		SetupCategoryMemory:         nil,
-		SetupCategoryOrchestrator:   nil,
-		SetupCategoryExtractor:      nil,
-		SetupCategorySkills:         nil,
-		SetupCategoryCompactor:      nil,
-		SetupModuleTerminal:         nil,
-		SetupModuleChatBot:          {ParamName},
-		SetupModuleTelegram:         nil,
-		SetupModuleClaude:           nil,
-		SetupModuleCodex:            nil,
-		SetupModuleCursor:           nil,
-		SetupModuleGrok:             nil,
+		SetupUsage:                {ParamName},
+		SetupUnknownSection:       {ParamName},
+		SetupNeedsTerminal:        nil,
+		SetupFailed:               {ParamErr},
+		SetupTitle:                nil,
+		SetupLabelHost:            nil,
+		SetupLabelSettings:        nil,
+		SetupHostBinary:           nil,
+		SetupHostSource:           {ParamPath},
+		SetupEnvMissing:           {ParamPath},
+		SetupEnvFound:             {ParamPath},
+		SetupWelcomeSub:           nil,
+		SetupWelcomeQuestion:      nil,
+		SetupQuick:                nil,
+		SetupQuickHint:            nil,
+		SetupCustom:               nil,
+		SetupCustomHint:           nil,
+		SetupDashboard:            nil,
+		SetupDashboardHint:        nil,
+		SetupModulesSub:           nil,
+		SetupModulesMany:          nil,
+		SetupModulesOne:           nil,
+		SetupModulesBuiltin:       nil,
+		SetupModulesCount:         {ParamCount},
+		SetupCategoryGateway:      nil,
+		SetupCategoryBackend:      nil,
+		SetupCategoryMemory:       nil,
+		SetupCategoryOrchestrator: nil,
+		SetupCategoryExtractor:    nil,
+		SetupCategorySkills:       nil,
+		SetupCategoryCompactor:    nil,
+		SetupModuleTerminal:       nil,
+		SetupModuleChatBot:        {ParamName},
+		SetupModuleTelegram:       nil,
+		SetupModuleClaude:         nil,
+		SetupModuleCodex:          nil,
+		SetupModuleCursor:         nil,
+		SetupModuleGrok, SetupModuleAntigravity: nil,
 		SetupModuleObsidian:         nil,
 		SetupModuleBasic:            nil,
 		SetupModuleLLM:              nil,
@@ -255,6 +260,10 @@ func setupKeys() map[Key][]string {
 		SetupCursorKeyHint:          nil,
 		SetupCursorProbe:            nil,
 		SetupCursorOK:               nil,
+		SetupAntigravityIntro:       nil,
+		SetupAntigravityHint:        nil,
+		SetupAntigravityLogin:       nil,
+		SetupAntigravityOK:          {ParamCount},
 		SetupMemorySub:              nil,
 		SetupVault:                  nil,
 		SetupVaultHint:              nil,

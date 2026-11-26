@@ -18,7 +18,7 @@ stdout 'notice'
 stdout 'sans réponse|no reply'
 waitlog 'start .*--resume tok-restart-42'
 ! grep 'start .*--resume tok-interrupted-43' $WORK/claude.log
-grep -count=1 '^prompt .*tour interrompu' $WORK/claude.log
+grep -count=1 '^prompt "<memory.*tour interrompu' $WORK/claude.log
 kill -INT daemon2
 wait daemon2
 ! waitdaemon

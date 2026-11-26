@@ -44,6 +44,7 @@ const (
 	probeCodex
 	probeCursor
 	probeGrok
+	probeAntigravity
 	probeVault
 )
 
@@ -299,7 +300,32 @@ func firstLine(out []byte) string {
 	return ""
 }
 
-const cursorCLI = "cursor-agent"
+const (
+	cursorCLI      = "cursor-agent"
+	antigravityCLI = "agy"
+)
+
+func (prober setupProber) antigravity(ctx context.Context, afterLogin bool) probeResult {
+	out, err := prober.run(ctx, setupCommand{name: antigravityCLI, args: []string{"models"}})
+	if errors.Is(err, exec.ErrNotFound) {
+		return failed(clitext.SetupCLIMissing, clitext.Params{clitext.ParamName: antigravityCLI})
+	}
+	listed := listedModels(out)
+	if err != nil || listed == 0 {
+		return loggedOut(afterLogin)
+	}
+	return passed(clitext.SetupAntigravityOK, clitext.Params{clitext.ParamCount: listed})
+}
+
+func listedModels(out []byte) int {
+	listed := 0
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if modelID, label, isListed := strings.Cut(strings.TrimSpace(line), "\t"); isListed && modelID != "" && strings.TrimSpace(label) != "" {
+			listed++
+		}
+	}
+	return listed
+}
 
 func (prober setupProber) cursor(key string) probeResult {
 	if _, err := prober.lookPath(cursorCLI); err != nil {

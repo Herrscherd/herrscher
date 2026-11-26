@@ -22,6 +22,7 @@ const (
 	moduleCodex
 	moduleCursor
 	moduleGrok
+	moduleAntigravity
 	moduleObsidian
 	moduleBasic
 	moduleLLM
@@ -30,17 +31,18 @@ const (
 )
 
 const (
-	kindTerminal = "terminal"
-	kindClaude   = "claude"
-	kindCodex    = "codex"
-	kindCursor   = "cursor"
-	kindGrok     = "grok"
-	kindObsidian = "obsidian"
-	kindBasic    = "basic"
-	kindLLM      = "llm"
-	kindSuperset = "superset"
-	kindJev      = "jev"
-	verbLogin    = "login"
+	kindTerminal    = "terminal"
+	kindClaude      = "claude"
+	kindCodex       = "codex"
+	kindCursor      = "cursor"
+	kindGrok        = "grok"
+	kindAntigravity = "antigravity"
+	kindObsidian    = "obsidian"
+	kindBasic       = "basic"
+	kindLLM         = "llm"
+	kindSuperset    = "superset"
+	kindJev         = "jev"
+	verbLogin       = "login"
 )
 
 const (
@@ -83,18 +85,19 @@ type moduleSpec struct {
 
 func moduleSpecs() map[setupModule]moduleSpec {
 	return map[setupModule]moduleSpec{
-		moduleTerminal: {nil, catGateway, kindTerminal, clitext.SetupModuleTerminal},
-		moduleDiscord:  {discordParams(), catGateway, kindDiscord, clitext.SetupModuleChatBot},
-		moduleTelegram: {nil, catGateway, kindTelegram, clitext.SetupModuleTelegram},
-		moduleClaude:   {nil, catBackend, kindClaude, clitext.SetupModuleClaude},
-		moduleCodex:    {nil, catBackend, kindCodex, clitext.SetupModuleCodex},
-		moduleCursor:   {nil, catBackend, kindCursor, clitext.SetupModuleCursor},
-		moduleGrok:     {nil, catBackend, kindGrok, clitext.SetupModuleGrok},
-		moduleObsidian: {nil, catMemory, kindObsidian, clitext.SetupModuleObsidian},
-		moduleBasic:    {nil, catOrchestrator, kindBasic, clitext.SetupModuleBasic},
-		moduleLLM:      {nil, catExtractor, kindLLM, clitext.SetupModuleLLM},
-		moduleSuperset: {nil, catSkills, kindSuperset, clitext.SetupModuleSuperset},
-		moduleJev:      {nil, catCompactor, kindJev, clitext.SetupModuleJev},
+		moduleTerminal:    {nil, catGateway, kindTerminal, clitext.SetupModuleTerminal},
+		moduleDiscord:     {discordParams(), catGateway, kindDiscord, clitext.SetupModuleChatBot},
+		moduleTelegram:    {nil, catGateway, kindTelegram, clitext.SetupModuleTelegram},
+		moduleClaude:      {nil, catBackend, kindClaude, clitext.SetupModuleClaude},
+		moduleCodex:       {nil, catBackend, kindCodex, clitext.SetupModuleCodex},
+		moduleCursor:      {nil, catBackend, kindCursor, clitext.SetupModuleCursor},
+		moduleGrok:        {nil, catBackend, kindGrok, clitext.SetupModuleGrok},
+		moduleAntigravity: {nil, catBackend, kindAntigravity, clitext.SetupModuleAntigravity},
+		moduleObsidian:    {nil, catMemory, kindObsidian, clitext.SetupModuleObsidian},
+		moduleBasic:       {nil, catOrchestrator, kindBasic, clitext.SetupModuleBasic},
+		moduleLLM:         {nil, catExtractor, kindLLM, clitext.SetupModuleLLM},
+		moduleSuperset:    {nil, catSkills, kindSuperset, clitext.SetupModuleSuperset},
+		moduleJev:         {nil, catCompactor, kindJev, clitext.SetupModuleJev},
 	}
 }
 
@@ -117,7 +120,7 @@ type moduleGroup struct {
 func moduleGroups() []moduleGroup {
 	return []moduleGroup{
 		{clitext.SetupCategoryGateway, []setupModule{moduleTerminal, moduleDiscord, moduleTelegram}, true},
-		{clitext.SetupCategoryBackend, []setupModule{moduleClaude, moduleCodex, moduleCursor, moduleGrok}, true},
+		{clitext.SetupCategoryBackend, []setupModule{moduleClaude, moduleCodex, moduleCursor, moduleGrok, moduleAntigravity}, true},
 		{clitext.SetupCategoryMemory, []setupModule{moduleObsidian}, false},
 		{clitext.SetupCategoryOrchestrator, []setupModule{moduleBasic}, false},
 		{clitext.SetupCategoryExtractor, []setupModule{moduleLLM}, false},
@@ -200,7 +203,7 @@ func (set moduleSet) paths(extras []string) []string {
 
 func (set moduleSet) backendKinds() map[string]bool {
 	kinds := make(map[string]bool)
-	for _, mod := range []setupModule{moduleClaude, moduleCodex, moduleCursor} {
+	for _, mod := range []setupModule{moduleClaude, moduleCodex, moduleCursor, moduleAntigravity} {
 		if set[mod] {
 			kinds[mod.spec().kind] = true
 		}

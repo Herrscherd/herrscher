@@ -1160,3 +1160,79 @@ func TestGrokLoginStatusRunsWithoutAnInheritedKey(t *testing.T) {
 		t.Fatalf("calls = %+v, want the grok probe to drop the key variables", calls)
 	}
 }
+
+func TestAntigravityStatusReadsTheModelListing(t *testing.T) {
+	cases := []struct {
+		reply  fakeReply
+		key    clitext.Key
+		name   string
+		listed int
+	}{
+		{reply: fakeReply{out: "Fetching available models...\ngemini-4-hydrogen-high\tGemini 4 Hydrogen (High)\ngemini-3.8-flash-low\tGemini 3.8 Flash (Low)\n"}, key: clitext.SetupAntigravityOK, listed: 2},
+		{reply: fakeReply{out: "Fetching available models...\nError: Please sign in to view available models.\n", err: errProbeStatus}, key: clitext.SetupLoggedOut},
+		{reply: fakeReply{out: "Fetching available models...\n"}, key: clitext.SetupLoggedOut},
+		{reply: fakeReply{err: exec.ErrNotFound}, key: clitext.SetupCLIMissing, name: antigravityCLI},
+	}
+	for _, tc := range cases {
+		shell := newShell()
+		shell.replies["agy models"] = tc.reply
+		got := setupProber{run: shell.run}.antigravity(context.Background(), false)
+		if got.key != tc.key || (tc.name != "" && got.params[clitext.ParamName] != tc.name) || (tc.listed != 0 && got.params[clitext.ParamCount] != tc.listed) {
+			t.Errorf("reply %q: got %+v", tc.reply.out, got)
+		}
+	}
+}
+
+func TestAntigravitySignInOpensAgyThenRechecks(t *testing.T) {
+	modules := defaultModules()
+	modules[moduleAntigravity] = true
+	harness := newHarness(t, nil, screenAntigravity, nil)
+	harness.model.modules = modules
+	harness.shell.replies["agy models"] = fakeReply{out: "Error: Please sign in to view available models.\n", err: errProbeStatus}
+	harness.drive(harness.model.statusCheck(probeAntigravity))
+	if got := harness.model.probes[probeAntigravity]; got.key != clitext.SetupLoggedOut {
+		t.Fatalf("status = %+v, want logged out", got)
+	}
+	harness.choose(t, harness.text(clitext.SetupAntigravityLogin))
+	if got := harness.model.probes[probeAntigravity]; got.key != clitext.SetupLoginUnfinished {
+		t.Fatalf("after a sign in that did not finish, probe = %+v, want unfinished", got)
+	}
+	harness.shell.replies["agy models"] = fakeReply{out: "gemini-4-hydrogen-high\tGemini 4 Hydrogen (High)\n"}
+	harness.choose(t, harness.text(clitext.SetupAntigravityLogin))
+	if got := harness.model.probes[probeAntigravity]; got.state != probePassed || got.key != clitext.SetupAntigravityOK {
+		t.Fatalf("after sign in, probe = %+v, want signed in", got)
+	}
+}
+
+func TestAntigravitySignInRunsAgyAlone(t *testing.T) {
+	if args := loginCmd(t.Context(), probeAntigravity).Args; !slices.Equal(args, []string{antigravityCLI}) {
+		t.Fatalf("sign in runs %q, want agy with no argument", args)
+	}
+	if name := loginCLI(probeAntigravity); name != antigravityCLI {
+		t.Fatalf("a missing CLI is reported as %q, want agy", name)
+	}
+}
+
+func TestAntigravityModuleComesFromTheBackendCatalog(t *testing.T) {
+	if spec := moduleAntigravity.spec(); spec.category != catBackend || moduleAntigravity.path() != "github.com/Herrscherd/herrscher-antigravity-backend" {
+		t.Fatalf("spec = %+v, path = %q", spec, moduleAntigravity.path())
+	}
+}
+
+func TestChosenAntigravityModuleIsOfferedAsABackendKind(t *testing.T) {
+	chosen := make(moduleSet)
+	chosen[moduleAntigravity] = true
+	if !chosen.backendKinds()[kindAntigravity] {
+		t.Fatal("a chosen antigravity module is not offered as a backend kind")
+	}
+}
+
+func TestAntigravityTrialRunsOneReadOnlyHeadlessTurn(t *testing.T) {
+	chosen := make(moduleSet)
+	chosen[moduleAntigravity] = true
+	trials := backendTrials(chosen, func(string) string { return "" })
+	want := []string{"--print=" + trialPrompt, "--mode", "plan"}
+	if len(trials) != 1 || trials[0].command.name != antigravityCLI || !slices.Equal(trials[0].command.args, want) {
+		t.Fatalf("trials = %+v, want agy %q", trials, want)
+	}
+}

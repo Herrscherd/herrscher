@@ -4163,6 +4163,42 @@
     "other": "TOKENS"
   },
   {
+    "id": "cli.spend.col.session",
+    "description": "SESSION column header of the spend tables",
+    "other": "SESSION"
+  },
+  {
+    "id": "cli.spend.col.cache_read",
+    "description": "CACHE READ column header of the session cost table, the share of the input read from the cache",
+    "other": "CACHE READ"
+  },
+  {
+    "id": "cli.spend.col.injected",
+    "description": "INJECTED PER TURN column header of the session tokens table, the blocks the host injects each turn",
+    "other": "INJECTED PER TURN"
+  },
+  {
+    "id": "cli.spend.injected.tokens",
+    "description": "One session row: the estimated tokens the host injected per turn, marked as an estimate by the leading tilde",
+    "other": "~{{.Tokens}}"
+  },
+  {
+    "id": "cli.spend.injected.estimate",
+    "description": "Usage report note: the injected tokens per turn are estimated at about four bytes per token, not counted by the vendor",
+    "other": "per-turn injection is an estimate at about four bytes per token, not a vendor count"
+  },
+  {
+    "id": "cli.spend.not_sized",
+    "description": "Usage report: a session whose turns carry no injected sizes (older daemon or no measured turn)",
+    "other": "n/a"
+  },
+  {
+    "id": "cli.spend.more_sessions",
+    "description": "Usage report: how many sessions the table leaves out, Count gives their number",
+    "one": "and {{.Count}} more session",
+    "other": "and {{.Count}} more sessions"
+  },
+  {
     "id": "cli.spend.model.unknown",
     "description": "Spend row of a model the ledger did not name",
     "other": "unknown model"
@@ -4705,6 +4741,11 @@
     "other": "Cursor agent"
   },
   {
+    "id": "cli.setup.module.grok",
+    "description": "Description of the Grok backend module",
+    "other": "Grok Build CLI, grok.com account or xAI API key"
+  },
+  {
     "id": "cli.setup.module.obsidian",
     "description": "Description of the Obsidian memory module",
     "other": "notes in an Obsidian vault"
@@ -4863,6 +4904,26 @@
     "id": "cli.setup.codex.account_hint",
     "description": "Hint of the ChatGPT account choice",
     "other": "signs in through codex login"
+  },
+  {
+    "id": "cli.setup.grok.question",
+    "description": "Question of the Grok screen",
+    "other": "How does the agent sign in to Grok?"
+  },
+  {
+    "id": "cli.setup.grok.account",
+    "description": "Grok sign-in choice",
+    "other": "grok.com account"
+  },
+  {
+    "id": "cli.setup.grok.account_hint",
+    "description": "Hint of the grok.com account choice",
+    "other": "signs in through grok login"
+  },
+  {
+    "id": "cli.setup.grok.key_shadowed",
+    "description": "Grok key check when a grok.com login takes precedence over the key",
+    "other": "key accepted, but grok signs in with its grok.com login before any key: run {{.Name}} to use the key"
   },
   {
     "id": "cli.setup.cursor.key",
@@ -5822,7 +5883,7 @@
   {
     "id": "cli.session.pr.conclusion.action_required",
     "description": "Check conclusion word",
-    "other": "action required"
+    "other": "waiting for a human action"
   },
   {
     "id": "cli.session.pr.conclusion.other",
@@ -5985,5 +6046,40 @@
     "id": "cli.instance.generated",
     "description": "Instance id generated for a fresh state",
     "other": "herrscher: neither HERRSCHER_INSTANCE_ID nor HERRSCHER_OWNER_ID, instance id {{.Value}} generated and written into the state"
+  },
+  {
+    "id": "cli.setup.module.telegram",
+    "description": "Description of the Telegram gateway module",
+    "other": "Telegram bot, private chats and groups"
+  },
+  {
+    "id": "cli.setup.telegram.intro",
+    "description": "Intro of the Telegram bot screen",
+    "other": "Send /newbot to @BotFather on Telegram, keep its privacy mode on, then paste the token it gives."
+  },
+  {
+    "id": "cli.setup.telegram.user",
+    "description": "Label of the Telegram user id field",
+    "other": "your numeric Telegram user ID"
+  },
+  {
+    "id": "cli.setup.telegram.user_hint",
+    "description": "Hint of the Telegram user id field",
+    "other": "a bot such as @userinfobot shows it; nobody else may talk to the bot"
+  },
+  {
+    "id": "cli.host.err.no_channel_admin",
+    "description": "Error when setting the home while no gateway manages channels",
+    "other": "no running gateway manages channels, so there is no home to set: start a gateway that does"
+  },
+  {
+    "id": "cli.setup.telegram.user_missing",
+    "description": "Hub state of the Telegram module without a usable user id",
+    "other": "no numeric user ID: nobody may talk to the bot, so it will not start"
+  },
+  {
+    "id": "cli.setup.telegram.malformed",
+    "description": "Hub state of the Telegram module when one of its settings cannot be parsed",
+    "other": "a Telegram setting is malformed (an id that is not a number, or a switch other than on, off, yes, no, true, false, 1 or 0), so the gateway will not start"
   }
 ]

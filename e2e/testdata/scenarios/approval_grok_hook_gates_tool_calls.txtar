@@ -1,0 +1,25 @@
+! exec herrscher serve &daemon&
+waitdaemon
+exec herrscher session create --name grokked --vendor grok --approvals ask
+exec herrscher approve rule 'ask Bash(git push*)'
+exec herrscher session send --name grokked --text 'push the branch'
+waitapproval APPROVAL
+exec herrscher approve allow $APPROVAL
+waitlog 'grok result call-1 allowed'
+exec herrscher session send --name grokked --text 'push again'
+waitapproval APPROVAL
+exec herrscher approve deny $APPROVAL --reason 'not today'
+waitlog 'grok result call-1 denied: herrscher: the operator refused: not today'
+! grep 'failed:' $VENDORTEST_LOG
+kill -INT daemon
+wait daemon
+! waitdaemon
+
+-- claude.script --
+tool run_terminal_command {"command":"git push origin master"}
+expect allowed
+text pushed the branch
+---
+tool run_terminal_command {"command":"git push origin master"}
+expect denied
+text push refused

@@ -62,6 +62,7 @@ const (
 	HostHandoffPointer          = "cli.host.handoff.pointer"
 	HostHandoffReport           = "cli.host.handoff.report"
 	HostErrMissingChannel       = "cli.host.err.missing_channel"
+	HostErrNoChannelAdmin       = "cli.host.err.no_channel_admin"
 	HostErrMissingName          = "cli.host.err.missing_name"
 	HostErrMissingPath          = "cli.host.err.missing_path"
 	HostErrUnsupportedLang      = "cli.host.err.unsupported_lang"
@@ -173,6 +174,7 @@ func hostKeys() map[Key][]string {
 		HostHandoffPointer:          {ParamWhere, ParamTo},
 		HostHandoffReport:           {ParamTarget, ParamSource, ParamAccount, ParamReply, ParamBrief},
 		HostErrMissingChannel:       nil,
+		HostErrNoChannelAdmin:       nil,
 		HostErrMissingName:          nil,
 		HostErrMissingPath:          nil,
 		HostErrMissingSoul:          nil,

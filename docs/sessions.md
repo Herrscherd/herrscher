@@ -9,9 +9,16 @@ before it answers, the same turn runs on a fresh backend session instead of
 failing: the conversation goes on, without the backend's earlier history.
 
 A session can be created explicitly or adopt an existing one with `--channel_id`.
-On Discord it opens the first time its owner pings the bot in a channel. A new
-session lands in the daemon's home unless `--under` names another category or
-forum, so work opened from one server does not surface in another.
+On Discord it opens the first time its owner pings the bot in a channel, and on
+Telegram with the first message of a private chat, a group or a forum topic. A
+new session lands in the daemon's home unless `--under` names another category
+or forum, so work opened from one server does not surface in another.
+
+A session that adopts a conversation of its one gateway (`--gateways telegram`)
+is announced in that conversation: its banner and its account notice go through
+that gateway, never through the home's. A gateway that manages no channels gets
+the banner as a plain post, and a gateway that is not running gets nothing: the
+session starts, its banner is skipped with a warning in the daemon's log.
 
 Renaming a session keeps its worktree `.herrscher-sessions/<id>/<old name>` and
 its branch `session/<id>/<old name>`: the agent runs in that folder and the
@@ -205,14 +212,16 @@ Off by default: `MEMORY_LEARNED_SKILLS`.
 ## Delegation across vendors
 
 An agent ends a turn with a `⟢` trailer to delegate, fan out, route, merge or
-hand off. Workers inherit their agent's vendor, so one run can mix Claude, Codex
-and Cursor.
+hand off. Workers inherit their agent's vendor, so one run can mix Claude, Codex,
+Cursor and Grok.
 
 ## Choosing a session's vendor
 
 Without `--model`, a session's vendor is the first of these that is set:
-`--vendor`, then the vendor whose CLI the `--cmd` binary is (`claude`, `codex`
-or `cursor`), then `HERRSCHER_BACKEND`. With `--model`, the model names its
+`--vendor`, then the vendor whose CLI the `--cmd` binary is (`claude`, `codex`,
+`cursor-agent` or `grok`), then `HERRSCHER_BACKEND`. A `--cmd` left unset is the
+host's default command, and a vendor whose CLI is not that command runs its own
+default instead, so `--vendor grok` runs `grok` without a `--cmd`. With `--model`, the model names its
 vendor: `--vendor` or `HERRSCHER_BACKEND`, when set, must agree with it, and
 without either the model's vendor is used.
 

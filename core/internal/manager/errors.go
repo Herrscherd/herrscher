@@ -19,6 +19,8 @@ var (
 	ErrConflictingPlacement = clitext.SentinelError("terminal_only and under contradict each other: one keeps the session in the terminal, the other puts it in a gateway container")
 	// ErrExplicitCmdRefused is returned when a session names a cmd under the gateway-only route policy.
 	ErrExplicitCmdRefused = &sentinelError{text: "an explicit cmd is refused under the gateway-only route policy: it bypasses the model catalog; select a model instead", code: contracts.CodeExplicitCmdRefused}
+	// ErrNoChannelAdmin is returned when a home is set while no running gateway manages channels.
+	ErrNoChannelAdmin = clitext.SentinelError("no running gateway manages channels")
 	// ErrMissingChannel is returned when a command omits the channel it targets.
 	ErrMissingChannel = clitext.SentinelError("missing channel")
 	// ErrMissingName is returned when a command omits the session name.

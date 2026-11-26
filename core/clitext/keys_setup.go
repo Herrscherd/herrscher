@@ -35,9 +35,11 @@ const (
 	SetupCategoryCompactor      = "cli.setup.category.compactor"
 	SetupModuleTerminal         = "cli.setup.module.terminal"
 	SetupModuleChatBot          = "cli.setup.module.chat_bot"
+	SetupModuleTelegram         = "cli.setup.module.telegram"
 	SetupModuleClaude           = "cli.setup.module.claude"
 	SetupModuleCodex            = "cli.setup.module.codex"
 	SetupModuleCursor           = "cli.setup.module.cursor"
+	SetupModuleGrok             = "cli.setup.module.grok"
 	SetupModuleObsidian         = "cli.setup.module.obsidian"
 	SetupModuleBasic            = "cli.setup.module.basic"
 	SetupModuleLLM              = "cli.setup.module.llm"
@@ -54,6 +56,11 @@ const (
 	SetupBotOK                  = "cli.setup.bot.ok"
 	SetupBotRefused             = "cli.setup.bot.refused"
 	SetupBotEmpty               = "cli.setup.bot.empty"
+	SetupTelegramIntro          = "cli.setup.telegram.intro"
+	SetupTelegramUser           = "cli.setup.telegram.user"
+	SetupTelegramUserHint       = "cli.setup.telegram.user_hint"
+	SetupTelegramUserMissing    = "cli.setup.telegram.user_missing"
+	SetupTelegramMalformed      = "cli.setup.telegram.malformed"
 	SetupBackendSub             = "cli.setup.backend.sub"
 	SetupClaudeQuestion         = "cli.setup.claude.question"
 	SetupClaudeSubscription     = "cli.setup.claude.subscription"
@@ -70,6 +77,10 @@ const (
 	SetupCodexQuestion          = "cli.setup.codex.question"
 	SetupCodexAccount           = "cli.setup.codex.account"
 	SetupCodexAccountHint       = "cli.setup.codex.account_hint"
+	SetupGrokQuestion           = "cli.setup.grok.question"
+	SetupGrokAccount            = "cli.setup.grok.account"
+	SetupGrokAccountHint        = "cli.setup.grok.account_hint"
+	SetupGrokKeyShadowed        = "cli.setup.grok.key_shadowed"
 	SetupCursorKey              = "cli.setup.cursor.key"
 	SetupCursorKeyHint          = "cli.setup.cursor.key_hint"
 	SetupCursorProbe            = "cli.setup.cursor.probe"
@@ -194,9 +205,11 @@ func setupKeys() map[Key][]string {
 		SetupCategoryCompactor:      nil,
 		SetupModuleTerminal:         nil,
 		SetupModuleChatBot:          {ParamName},
+		SetupModuleTelegram:         nil,
 		SetupModuleClaude:           nil,
 		SetupModuleCodex:            nil,
 		SetupModuleCursor:           nil,
+		SetupModuleGrok:             nil,
 		SetupModuleObsidian:         nil,
 		SetupModuleBasic:            nil,
 		SetupModuleLLM:              nil,
@@ -213,6 +226,11 @@ func setupKeys() map[Key][]string {
 		SetupBotOK:                  {ParamName},
 		SetupBotRefused:             {ParamName},
 		SetupBotEmpty:               {ParamName},
+		SetupTelegramIntro:          nil,
+		SetupTelegramUser:           nil,
+		SetupTelegramUserHint:       nil,
+		SetupTelegramUserMissing:    nil,
+		SetupTelegramMalformed:      nil,
 		SetupBackendSub:             nil,
 		SetupClaudeQuestion:         nil,
 		SetupClaudeSubscription:     nil,
@@ -229,6 +247,10 @@ func setupKeys() map[Key][]string {
 		SetupCodexQuestion:          nil,
 		SetupCodexAccount:           nil,
 		SetupCodexAccountHint:       nil,
+		SetupGrokQuestion:           nil,
+		SetupGrokAccount:            nil,
+		SetupGrokAccountHint:        nil,
+		SetupGrokKeyShadowed:        {ParamName},
 		SetupCursorKey:              nil,
 		SetupCursorKeyHint:          nil,
 		SetupCursorProbe:            nil,

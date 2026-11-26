@@ -102,10 +102,15 @@ type Session struct {
 
 	Participants []string `json:"participants,omitempty"`
 
-	PullRequest      int                        `json:"pullRequest,omitempty"`
-	PullRequestState contracts.PullRequestState `json:"pullRequestState,omitempty"`
-	PullRequestDraft bool                       `json:"pullRequestDraft,omitempty"`
-	PullRequestURL   string                     `json:"pullRequestUrl,omitempty"`
+	PullRequest             int                        `json:"pullRequest,omitempty"`
+	PullRequestState        contracts.PullRequestState `json:"pullRequestState,omitempty"`
+	PullRequestDraft        bool                       `json:"pullRequestDraft,omitempty"`
+	PullRequestURL          string                     `json:"pullRequestUrl,omitempty"`
+	PullRequestRevision     contracts.Revision         `json:"pullRequestRevision,omitempty"`
+	PullRequestHeadSHA      string                     `json:"pullRequestHeadSha,omitempty"`
+	PullRequestMerge        contracts.MergeState       `json:"pullRequestMerge,omitempty"`
+	PullRequestChecks       contracts.ChecksState      `json:"pullRequestChecks,omitempty"`
+	PullRequestLatestReview contracts.ReviewID         `json:"pullRequestLatestReview,omitempty"`
 
 	// Parent names the lead session that delegated this one (result-back P3).
 	// Empty = no parent. The coordinator reads it to find the delivery target

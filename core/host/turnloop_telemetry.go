@@ -52,6 +52,8 @@ func genAIProvider(vendor string) string {
 		return semconv.GenAIProviderNameAnthropic.Value.AsString()
 	case backendCodex:
 		return semconv.GenAIProviderNameOpenAI.Value.AsString()
+	case contracts.VendorGrok:
+		return semconv.GenAIProviderNameXAI.Value.AsString()
 	}
 	return vendor
 }

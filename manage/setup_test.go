@@ -3,8 +3,10 @@ package manage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,6 +42,7 @@ func newShell() *fakeShell {
 		"claude -p " + trialPrompt:                        {out: "OK\n"},
 		"codex exec --skip-git-repo-check " + trialPrompt: {out: "OK\n"},
 		cursorCLI + " -p " + trialPrompt:                  {out: "OK\n"},
+		grokCLI + " models":                               {out: "You are logged in with grok.com.\n\nDefault model: grok-4.7\n"},
 	}}
 }
 
@@ -94,6 +97,21 @@ func discordServer(t *testing.T) *httptest.Server {
 	return server
 }
 
+func telegramServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/bot123:good/getMe" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if _, err := w.Write([]byte(`{"ok":true,"result":{"id":7,"username":"herrscher_bot"}}`)); err != nil {
+			t.Errorf("write: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
 func anthropicServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -116,8 +134,25 @@ func testProber(t *testing.T, shell *fakeShell) setupProber {
 		lookPath:     func(string) (string, error) { return "/usr/bin/cursor-agent", nil },
 		client:       http.DefaultClient,
 		discordURL:   discordServer(t).URL,
+		telegramURL:  telegramServer(t).URL,
 		anthropicURL: anthropicServer(t).URL,
+		xaiURL:       xaiServer(t).URL,
 	}
+}
+
+func xaiServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/api-key" || r.Header.Get("Authorization") != "Bearer xai-good" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if _, err := w.Write([]byte(`{"api_key_blocked":false}`)); err != nil {
+			t.Errorf("write: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server
 }
 
 func fakeCatalog(contracts.RoutePolicy) ([]host.CatalogEntry, error) {
@@ -452,6 +487,98 @@ func TestModulesScreenTogglesAndSkipsUncheckedSections(t *testing.T) {
 	}
 	harness.proceed(t)
 	harness.expectScreen(t, screenClaude)
+}
+
+func TestTheTelegramModuleAsksForItsTokenAndChecksIt(t *testing.T) {
+	harness := newHarness(t, nil, screenWelcome, nil)
+	harness.choose(t, harness.text(clitext.SetupCustom))
+	harness.focus(t, func(row setupRow) bool { return row.text == kindTelegram })
+	harness.press(tea.KeyMsg{Type: tea.KeySpace})
+	harness.proceed(t)
+	harness.expectScreen(t, screenDiscord)
+	harness.proceed(t)
+	harness.expectScreen(t, screenTelegram)
+
+	harness.fill(t, envTelegramBot, "123:good")
+	harness.fill(t, envTelegramUser, "42")
+	harness.choose(t, harness.text(clitext.SetupBotProbe))
+	if got := harness.model.probes[probeTelegram]; got.state != probePassed || got.params[clitext.ParamName] != "@herrscher_bot" {
+		t.Fatalf("telegram probe = %+v, want passed as @herrscher_bot", got)
+	}
+}
+
+func TestATelegramTokenTheBotAPIRefusesIsReported(t *testing.T) {
+	harness := newHarness(t, nil, screenTelegram, map[string]string{envTelegramBot: "123:bad"})
+	harness.choose(t, harness.text(clitext.SetupBotProbe))
+	if got := harness.model.probes[probeTelegram]; got.state != probeFailed || got.key != clitext.SetupBotRefused {
+		t.Fatalf("telegram probe with a wrong token = %+v", got)
+	}
+}
+
+func TestATelegramProbeThatCannotConnectNeverShowsTheToken(t *testing.T) {
+	prober := setupProber{client: http.DefaultClient, telegramURL: "http://127.0.0.1:1"}
+
+	for _, token := range []string{"123:secret", "123:sec ret"} {
+		got := prober.telegram(t.Context(), token)
+
+		shown := fmt.Sprint(got.params)
+		if got.state != probeFailed || strings.Contains(shown, token) || strings.Contains(shown, url.PathEscape(token)) {
+			t.Fatalf("probe = %+v", got)
+		}
+	}
+}
+
+func TestTheTelegramSectionFlagsWhatStopsTheGateway(t *testing.T) {
+	var malformed, missing clitext.Key = clitext.SetupTelegramMalformed, clitext.SetupTelegramUserMissing
+	cases := []struct {
+		env  map[string]string
+		want clitext.Key
+	}{
+		{make(map[string]string), missing},
+		{map[string]string{envTelegramUser: "@ana"}, malformed},
+		{map[string]string{envTelegramUser: "0"}, malformed},
+		{map[string]string{envTelegramMany: "42, ana"}, malformed},
+		{map[string]string{envTelegramAll: "maybe"}, malformed},
+		{map[string]string{envTelegramUser: "42", envTelegramMany: "42, ana"}, malformed},
+		{map[string]string{envTelegramUser: "@ana", envTelegramAll: "on"}, malformed},
+		{map[string]string{envTelegramUser: "42", envTelegramAll: "maybe"}, malformed},
+		{map[string]string{envTelegramUser: "42", envTelegramChat: "mygroup"}, malformed},
+		{map[string]string{envTelegramAll: "off"}, missing},
+		{map[string]string{envTelegramUser: "42"}, ""},
+		{map[string]string{envTelegramMany: "42 43"}, ""},
+		{map[string]string{envTelegramAll: "on"}, ""},
+		{map[string]string{envTelegramUser: "42", envTelegramAll: "off"}, ""},
+		{map[string]string{envTelegramUser: "42", envTelegramChat: "-100500, -100600"}, ""},
+	}
+	for _, tc := range cases {
+		tc.env[envTelegramBot] = "123:good"
+		harness := newHarness(t, nil, screenHub, tc.env)
+		harness.model.modules[moduleTelegram] = true
+		for _, section := range harness.model.sections() {
+			if section.screen != screenTelegram {
+				continue
+			}
+			flagged := section.state == harness.text(malformed) || section.state == harness.text(missing)
+			if (tc.want == "") == flagged || (tc.want != "" && section.state != harness.text(tc.want)) {
+				t.Fatalf("env %v: telegram section = %+v, want %q", tc.env, section, tc.want)
+			}
+		}
+	}
+}
+
+func TestTheTelegramSettingsAreWrittenToTheEnvFile(t *testing.T) {
+	harness := newHarness(t, nil, screenTelegram, nil)
+	harness.fill(t, envTelegramBot, "123:good")
+	harness.fill(t, envTelegramUser, "42")
+	harness.drive(harness.model.goTo(screenReview))
+	harness.choose(t, harness.text(clitext.SetupReviewSave))
+
+	env := harness.envFile(t)
+	for _, want := range []string{"TELEGRAM_BOT_TOKEN=123:good", "TELEGRAM_USER_ID=42"} {
+		if !strings.Contains(env, want) {
+			t.Errorf("env file = %q, want line %q", env, want)
+		}
+	}
 }
 
 const setupManifest = `package main
@@ -945,4 +1072,91 @@ func TestAbandonGivesUpOnAStuckStepAndLeavesTheFiles(t *testing.T) {
 	}
 	close(release)
 	<-finished
+}
+
+func grokHarness(t *testing.T) *setupHarness {
+	t.Helper()
+	modules := defaultModules()
+	modules[moduleGrok] = true
+	harness := newHarness(t, nil, screenGrok, nil)
+	harness.model.modules = modules
+	return harness
+}
+
+func TestGrokSignInRunsTheLoginThenRechecks(t *testing.T) {
+	harness := grokHarness(t)
+	harness.shell.replies[grokCLI+" models"] = fakeReply{out: "You are not authenticated.\n"}
+	harness.drive(harness.model.statusCheck(probeGrok))
+	if got := harness.model.probes[probeGrok]; got.key != clitext.SetupLoggedOut {
+		t.Fatalf("status = %+v, want logged out", got)
+	}
+	harness.shell.replies[grokCLI+" models"] = fakeReply{out: "You are logged in with grok.com.\n"}
+	harness.choose(t, harness.text(clitext.SetupLogin))
+	if got := harness.model.probes[probeGrok]; got.state != probePassed || got.params[clitext.ParamName] != "grok.com" {
+		t.Fatalf("after login, probe = %+v, want signed in with grok.com", got)
+	}
+}
+
+func TestGrokAPIKeyIsCheckedAndWritten(t *testing.T) {
+	harness := grokHarness(t)
+	harness.choose(t, harness.text(clitext.SetupAPIKey))
+	harness.fill(t, envXAIKey, "xai-bad")
+	harness.choose(t, harness.text(clitext.SetupCheckKey))
+	if got := harness.model.probes[probeGrok]; got.key != clitext.SetupKeyRefused {
+		t.Fatalf("probe = %+v, want refused", got)
+	}
+	harness.focus(t, func(row setupRow) bool { return row.field == envXAIKey })
+	harness.press(tea.KeyMsg{Type: tea.KeyCtrlU})
+	harness.typeText("xai-good")
+	harness.choose(t, harness.text(clitext.SetupCheckKey))
+	if got := harness.model.probes[probeGrok]; got.key != clitext.SetupGrokKeyShadowed {
+		t.Fatalf("probe = %+v, want the key shadowed by the grok.com login", got)
+	}
+	harness.shell.replies[grokCLI+" models"] = fakeReply{out: "You are not authenticated.\n"}
+	harness.choose(t, harness.text(clitext.SetupCheckKey))
+	if got := harness.model.probes[probeGrok]; got.key != clitext.SetupKeyAccepted {
+		t.Fatalf("probe = %+v, want accepted", got)
+	}
+	if got := harness.model.draft.written()[envXAIKey]; got != "xai-good" {
+		t.Fatalf("written key = %q", got)
+	}
+	harness.choose(t, harness.text(clitext.SetupGrokAccount))
+	if got, ok := harness.model.draft.written()[envXAIKey]; ok {
+		t.Fatalf("back on the account the key is still written: %q", got)
+	}
+}
+
+func TestGrokStatusWithoutTheCLISaysItIsMissing(t *testing.T) {
+	shell := newShell()
+	shell.replies[grokCLI+" models"] = fakeReply{err: exec.ErrNotFound}
+	got := setupProber{run: shell.run}.grok(context.Background(), false)
+	if got.key != clitext.SetupCLIMissing || got.params[clitext.ParamName] != grokCLI {
+		t.Fatalf("probe = %+v, want the grok CLI missing", got)
+	}
+}
+
+func TestAnXAIKeyInTheSettingsPicksTheGrokModule(t *testing.T) {
+	harness := newHarness(t, nil, screenWelcome, map[string]string{envXAIKey: "xai-good"})
+	if !harness.model.modules[moduleGrok] || !harness.model.grokKey {
+		t.Fatalf("modules = %v, grokKey = %v; want the grok module on its key", harness.model.modules, harness.model.grokKey)
+	}
+}
+
+func TestGrokLoginStatusRunsWithoutAnInheritedKey(t *testing.T) {
+	t.Setenv("XAI_API_KEY", "xai-shell")
+	t.Setenv("GROK_CODE_XAI_API_KEY", "")
+	status := grokLoginStatus()
+	status.name, status.args = "sh", []string{"-c", "env"}
+	out, err := execRunner(t.Context(), status)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), "XAI_API_KEY") {
+		t.Fatalf("the status check inherits a key, so grok would report it instead of the login:\n%s", out)
+	}
+	shell := newShell()
+	setupProber{run: shell.run}.grok(t.Context(), false)
+	if calls := shell.calls; len(calls) != 1 || len(calls[0].unset) == 0 {
+		t.Fatalf("calls = %+v, want the grok probe to drop the key variables", calls)
+	}
 }

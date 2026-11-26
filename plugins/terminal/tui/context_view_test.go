@@ -107,3 +107,74 @@ func TestContextViewShowsTheRealThresholdAndTheBackKey(t *testing.T) {
 		t.Errorf("the footer must name the back key:\n%s", view)
 	}
 }
+
+func TestContextOverlayShowsTheBlocksTheHostWrote(t *testing.T) {
+	m := contextModel(t, 0)
+	m.tabs["c"].measureContext(contracts.Event{T: "reply", Done: true, TokensIn: 2_000, CacheRead: 6_000, Injected: []contracts.InjectedPart{
+		{Part: contracts.ContextMemory, Tokens: 1_200},
+		{Part: contracts.ContextSkills, Tokens: 340},
+		{Part: contracts.ContextCapabilities, Tokens: 500},
+		{Part: contracts.ContextIdentity, Tokens: 60},
+		{Part: "routines", Tokens: 40},
+	}})
+	view := ansi.Strip(m.contextView())
+	for _, want := range []string{"memory", "~1.2k", "skills", "~340", "host", "~600", "cache", "75%"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("overlay must show %q once the host measured its blocks:\n%s", want, view)
+		}
+	}
+}
+
+func TestContextOverlayKeepsTheLastSizesWhenADoneCarriesNone(t *testing.T) {
+	m := contextModel(t, 0)
+	m.tabs["c"].measureContext(contracts.Event{T: "reply", Done: true})
+	if view := ansi.Strip(m.contextView()); strings.Contains(view, "~") {
+		t.Fatalf("a daemon that sends no sizes must leave the parts n/a:\n%s", view)
+	}
+	m.tabs["c"].measureContext(contracts.Event{T: "reply", Done: true, Injected: []contracts.InjectedPart{{Part: contracts.ContextMemory, Tokens: 800}}})
+	m.tabs["c"].measureContext(contracts.Event{T: "reply", Done: true, Text: "posted"})
+	if view := ansi.Strip(m.contextView()); !strings.Contains(view, "~800") {
+		t.Fatalf("a notice without sizes must keep the last turn's figures:\n%s", view)
+	}
+}
+
+func TestContextOverlayReadsZeroForABlockTheHostDidNotWrite(t *testing.T) {
+	m := contextModel(t, 0)
+	m.tabs["c"].measureContext(contracts.Event{T: "reply", Done: true, Injected: []contracts.InjectedPart{{Part: contracts.ContextMemory, Tokens: 800}}})
+	for _, line := range strings.Split(ansi.Strip(m.contextView()), "\n") {
+		if strings.HasPrefix(line, "skills") && strings.Contains(line, unavailable) {
+			t.Fatalf("a measured turn without skills must read 0, not n/a: %q", line)
+		}
+	}
+}
+
+func TestContextOverlayReadsZeroWhenTheHostWroteNothing(t *testing.T) {
+	m := contextModel(t, 0)
+	m.tabs["c"].measureContext(contracts.Event{T: "reply", Done: true, Injected: []contracts.InjectedPart{{Part: contracts.ContextMemory, Tokens: 800}}})
+	m.tabs["c"].measureContext(contracts.Event{T: "reply", Done: true, Injected: []contracts.InjectedPart{
+		{Part: contracts.ContextMemory},
+		{Part: contracts.ContextSkills},
+		{Part: contracts.ContextDelegation},
+		{Part: contracts.ContextCapabilities},
+		{Part: contracts.ContextIdentity},
+	}})
+	view := ansi.Strip(m.contextView())
+	if strings.Contains(view, "~800") {
+		t.Fatalf("a turn that wrote nothing must drop the last figures:\n%s", view)
+	}
+	read := 0
+	for _, line := range strings.Split(view, "\n") {
+		for _, part := range []string{"memory", "host"} {
+			if !strings.HasPrefix(line, part) {
+				continue
+			}
+			read++
+			if strings.Contains(line, unavailable) || !strings.Contains(line, " 0") {
+				t.Fatalf("%s must read 0 after a turn that wrote nothing: %q", part, line)
+			}
+		}
+	}
+	if read != 2 {
+		t.Fatalf("overlay must list memory and host, read %d of them:\n%s", read, view)
+	}
+}

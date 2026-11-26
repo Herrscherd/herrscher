@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -91,6 +92,15 @@ func Run(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestr
 
 // RunUntilClosed serves compaction requests, history reads and prunes, and input turns until input closes or ctx ends.
 func RunUntilClosed(ctx context.Context, newBackend BackendFactory, orch contracts.Orchestrator, channel string, input <-chan contracts.Event, out chan<- contracts.Event) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "."
+	}
+	return RunUntilClosedIn(ctx, cwd, newBackend, orch, channel, input, out)
+}
+
+// RunUntilClosedIn is RunUntilClosed for a session whose skills live in dir rather than in the working directory.
+func RunUntilClosedIn(ctx context.Context, dir string, newBackend BackendFactory, orch contracts.Orchestrator, channel string, input <-chan contracts.Event, out chan<- contracts.Event) error {
 	resp, err := newBackend(channel)
 	if err != nil {
 		return fmt.Errorf("backend: %w", err)
@@ -108,7 +118,7 @@ func RunUntilClosed(ctx context.Context, newBackend BackendFactory, orch contrac
 				lang = languageOf(event.Value)
 				continue
 			}
-			router := turnRouter{sink: channelSink{done: ctx.Done(), out: out}, backend: resp, orch: orch, eng: newSkillEngine(resp)}
+			router := turnRouter{sink: channelSink{done: ctx.Done(), out: out}, backend: resp, orch: orch, eng: newSkillEngineIn(resp, dir)}
 			if turnErr := router.route(ctx, event, lang); turnErr != nil {
 				return turnErr
 			}

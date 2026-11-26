@@ -19,6 +19,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/host"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
 	"github.com/Herrscherd/herrscher/core/scope"
+	"github.com/Herrscherd/herrscher/core/skills"
 )
 
 var errModelNotRoutable = errors.New("cannot be routed through the remote backend resolver")
@@ -134,11 +135,19 @@ func declareBackendFlags(flags *flag.FlagSet, translator *clitext.Translator) ba
 	return parsed
 }
 
-func (f backendFlags) request(models *host.ModelDiscovery) host.BackendRequest {
+func (f backendFlags) request(models *host.ModelDiscovery, skillRoot string) host.BackendRequest {
 	return host.BackendRequest{
 		Vendor: *f.vendor, Cmd: *f.cmd, Kind: *f.kind, Resume: *f.resume, ModelID: *f.modelID, Account: *f.account,
-		Models: models,
+		Models: models, SkillRoot: skillRoot,
 	}
+}
+
+func workingSkillRoot() string {
+	cwd, err := os.Getwd()
+	if err != nil || skills.LinkedLearnedDir(cwd) != "" {
+		return ""
+	}
+	return skills.LearnedHome(cwd)
 }
 
 func runBridgeWithOutbox(ctx context.Context, newBackend bridge.BackendFactory, orch contracts.Orchestrator, opts bridge.Options, statePath string) error {
@@ -152,8 +161,9 @@ func runBridgeWithOutbox(ctx context.Context, newBackend bridge.BackendFactory, 
 
 func bridgeRequests(messages *host.Messages, flags backendFlags, statePath string) func() host.BackendRequest {
 	models := host.BridgeModelDiscovery(messages, statePath)
+	skillRoot := workingSkillRoot()
 	return func() host.BackendRequest {
-		return flags.request(models)
+		return flags.request(models, skillRoot)
 	}
 }
 

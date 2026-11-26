@@ -280,7 +280,7 @@ func TestRunHubOneTurn(t *testing.T) {
 
 	want := []contracts.Event{
 		{T: eventwire.EventChunk, Text: "thinking"},
-		{T: eventwire.EventReply, Text: "done · 4 files", Done: true},
+		{T: eventwire.EventReply, Text: "done · 4 files", Done: true, Injected: nothingInjected()},
 	}
 	if len(sink.events) != len(want) {
 		t.Fatalf("emitted %+v, want %+v", sink.events, want)
@@ -323,7 +323,7 @@ func TestRunHubEmptyReplyStillTerminates(t *testing.T) {
 
 	runHubTurns(context.Background(), in, sink, fakeBackend{reply: ""})
 
-	if len(sink.events) == 0 || !sameEvent(sink.events[len(sink.events)-1], contracts.Event{T: eventwire.EventReply, Done: true}) {
+	if len(sink.events) == 0 || !sameEvent(sink.events[len(sink.events)-1], contracts.Event{T: eventwire.EventReply, Done: true, Injected: nothingInjected()}) {
 		t.Fatalf("empty reply must still emit a terminal reply{done}; got %+v", sink.events)
 	}
 }

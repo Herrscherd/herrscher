@@ -10,6 +10,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/accounts"
+	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/keyproxy"
 )
@@ -20,6 +21,8 @@ const (
 	codexProxyGrantEnv   = "HERRSCHER_KEY_PROXY_GRANT"
 	proxyDirMode         = 0o700
 	proxyFileMode        = 0o600
+	grokAPIBaseURLEnv    = "GROK_XAI_API_BASE_URL"
+	grokKeyVariable      = "XAI_API_KEY"
 )
 
 func providerByVendor(vendor string) (string, bool) {
@@ -28,6 +31,8 @@ func providerByVendor(vendor string) (string, bool) {
 		return "anthropic", true
 	case contracts.VendorCodex:
 		return "openai", true
+	case contracts.VendorGrok:
+		return config.ProviderXAI, true
 	}
 	return "", false
 }
@@ -98,10 +103,16 @@ func sessionEnv(messages *hostMessages, req BackendRequest, vendor string, route
 func noRelease() {}
 
 func proxyEnvFor(vendor string, grant keyproxy.Grant) map[string]string {
-	if vendor == contracts.VendorCodex {
+	switch vendor {
+	case contracts.VendorCodex:
 		return map[string]string{
 			contracts.EnvOpenAIBaseURL: grant.BaseURL + "/v1",
 			contracts.EnvNeubloxToken:  grant.Token,
+		}
+	case contracts.VendorGrok:
+		return map[string]string{
+			grokAPIBaseURLEnv: grant.BaseURL + "/v1",
+			grokKeyVariable:   grant.Token,
 		}
 	}
 	return map[string]string{
@@ -125,7 +136,7 @@ func codexProfileProxyEnv(messages *hostMessages, profileDir string, grant keypr
 	}, nil
 }
 
-func writeCodexProxyHome(messages *hostMessages, root *os.Root, config string) error {
+func writeCodexProxyHome(messages *hostMessages, root *os.Root, configText string) error {
 	if mkErr := root.Mkdir(codexProxyHomeDir, proxyDirMode); mkErr != nil && !errors.Is(mkErr, fs.ErrExist) {
 		return wrapHost(messages, mkErr, "account.codex_home_create", nil)
 	}
@@ -133,7 +144,7 @@ func writeCodexProxyHome(messages *hostMessages, root *os.Root, config string) e
 	if err != nil {
 		return wrapHost(messages, err, "account.codex_config_open", nil)
 	}
-	_, writeErr := file.WriteString(config)
+	_, writeErr := file.WriteString(configText)
 	if joined := errors.Join(writeErr, file.Close()); joined != nil {
 		return wrapHost(messages, joined, "account.codex_config_write", nil)
 	}

@@ -27,9 +27,11 @@ func setupSections() map[string]setupScreen {
 	return map[string]setupScreen{
 		"modules":     screenModules,
 		kindDiscord:   screenDiscord,
+		kindTelegram:  screenTelegram,
 		kindClaude:    screenClaude,
 		kindCodex:     screenCodex,
 		kindCursor:    screenCursor,
+		kindGrok:      screenGrok,
 		kindObsidian:  screenObsidian,
 		"route":       screenRoute,
 		"connections": screenConnections,

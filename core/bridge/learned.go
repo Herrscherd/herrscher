@@ -2,18 +2,18 @@ package bridge
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"unicode"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/skills"
 )
 
-const projectionDir = ".herrscher"
-
 func learnedRoot(cwd string) string {
-	return filepath.Join(cwd, projectionDir, "skills")
+	return skills.LearnedRoot(cwd)
 }
 
 type skillSource interface {
@@ -24,9 +24,14 @@ type skillUser interface {
 	SkillUsed(ctx context.Context, names []string)
 }
 
-func projectLearnedSkills(ctx context.Context, orch contracts.Orchestrator, cwd string) {
+// ProjectLearnedSkills writes the active learned skills under the learned root of cwd.
+func ProjectLearnedSkills(ctx context.Context, orch contracts.Orchestrator, cwd string) {
 	src, ok := orch.(skillSource)
 	if !ok {
+		return
+	}
+	if linked := skills.LinkedLearnedDir(cwd); linked != "" {
+		logger.Warn("learned skills not projected: a directory of the projection is a symbolic link", "path", linked)
 		return
 	}
 	nodes, err := src.LearnedSkills(ctx)
@@ -34,6 +39,7 @@ func projectLearnedSkills(ctx context.Context, orch contracts.Orchestrator, cwd 
 		logger.Warn("learned skills unavailable; this session runs on the skills already on disk", "err", err)
 		return
 	}
+	removeLegacyProjection(cwd)
 	if len(nodes) == 0 {
 		pruneProjection(cwd, nil)
 		return
@@ -50,17 +56,44 @@ func projectLearnedSkills(ctx context.Context, orch contracts.Orchestrator, cwd 
 			continue
 		}
 		dir := filepath.Join(root, name)
-		if err := os.MkdirAll(dir, dirShared); err != nil {
-			logger.Warn("cannot create a learned-skill directory", "dir", dir, "err", err)
-			continue
-		}
-		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), fileSecret); err != nil {
+		if err := writeSkillFile(dir, body); err != nil {
 			logger.Warn("cannot write a learned skill", "dir", dir, "err", err)
 			continue
 		}
 		kept[name] = true
 	}
 	pruneProjection(cwd, kept)
+}
+
+var errLinkedSkillDir = errors.New("the skill directory is a symbolic link")
+
+func writeSkillFile(dir, body string) error {
+	if info, err := os.Lstat(dir); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return errLinkedSkillDir
+	}
+	if err := os.MkdirAll(dir, dirShared); err != nil {
+		return err
+	}
+	staged, err := os.CreateTemp(dir, ".SKILL-*.md")
+	if err != nil {
+		return err
+	}
+	stagedPath := staged.Name()
+	_, writeErr := staged.WriteString(body)
+	if err := errors.Join(writeErr, staged.Chmod(fileSecret), staged.Close()); err != nil {
+		return errors.Join(err, os.Remove(stagedPath))
+	}
+	if err := os.Rename(stagedPath, filepath.Join(dir, "SKILL.md")); err != nil {
+		return errors.Join(err, os.Remove(stagedPath))
+	}
+	return nil
+}
+
+func removeLegacyProjection(cwd string) {
+	legacy := skills.LegacyLearnedRoot(cwd)
+	if err := os.RemoveAll(legacy); err != nil {
+		logger.Warn("cannot remove the learned skills projected under the former root", "root", legacy, "err", err)
+	}
 }
 
 func pruneProjection(cwd string, kept map[string]bool) {

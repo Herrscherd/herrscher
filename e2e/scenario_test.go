@@ -29,6 +29,9 @@ func TestMain(m *testing.M) {
 		"codex": func() {
 			os.Exit(vendortest.Codex(os.Args[1:], vendortest.Streams{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}, vendortest.FilesFrom(os.Getenv)))
 		},
+		"grok": func() {
+			os.Exit(vendortest.Grok(os.Args[1:], vendortest.Streams{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}, vendortest.FilesFrom(os.Getenv)))
+		},
 	})
 }
 

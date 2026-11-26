@@ -9,5 +9,5 @@ const (
 	maxRedirects  = 10
 	dialTimeout   = 30 * time.Second
 	dialKeepAlive = 30 * time.Second
-	partsCap      = 3
+	skillPartsCap = 2
 )

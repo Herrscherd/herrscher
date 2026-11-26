@@ -6,7 +6,8 @@ This page takes you from an empty directory to a running Herrscher daemon. Herrs
 
 `setup` opens an interactive screen: you check the modules you want (gateways,
 backends, memory, skills), then each one is configured in turn. The Discord token
-is checked against Discord, Claude and Codex open their own sign-in
+is checked against Discord and the Telegram token against Telegram, which also
+needs your numeric user ID, since a Telegram bot answers nobody by default. Claude and Codex open their own sign-in
 (`claude auth login`, `codex login`) or take an API key, the memory vault is tested
 for writing, and the route screen sets the policy, the gateway credentials that
 `gateway-only` needs, the default model and the language. A review lists what will
@@ -25,7 +26,7 @@ or export `HERRSCHER_ENV_FILE`, so the host finds what `setup` wrote.
 Once the settings are written, `setup` sends each chosen backend CLI one short
 prompt and waits for its answer. A backend that does not answer is shown with its
 output and the remedy: install the CLI when it is missing, or sign in again with
-`herrscher setup claude` (or `codex`, `cursor`). The settings stay written and
+`herrscher setup claude` (or `codex`, `cursor`, `grok`). The settings stay written and
 `setup` exits with status 1, so a script sees the failure.
 
 On a machine with no settings file and no host state yet, a bare `herrscher` in a
@@ -33,7 +34,7 @@ terminal opens `setup` instead of serving. Without a terminal it prints the
 usage after a line saying to run `herrscher setup`.
 
 Run again, `setup` opens a dashboard with the state of every section, and
-`herrscher setup discord` (or `claude`, `codex`, `cursor`, `obsidian`, `route`,
+`herrscher setup discord` (or `telegram`, `claude`, `codex`, `cursor`, `grok`, `obsidian`, `route`,
 `modules`, `connections`) jumps straight to one. `herrscher init --yes` with its
 stack flags stays the non-interactive path for scripts, and `herrscher models list`
 shows what the active policy offers. `init` ends with the same prompt to each chosen backend and

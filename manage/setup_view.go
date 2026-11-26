@@ -153,9 +153,9 @@ func (model *setupModel) screenSub() clitext.Key {
 		return clitext.SetupWelcomeSub
 	case screenModules:
 		return clitext.SetupModulesSub
-	case screenDiscord:
+	case screenDiscord, screenTelegram:
 		return clitext.SetupBotSub
-	case screenClaude, screenCodex, screenCursor:
+	case screenClaude, screenCodex, screenCursor, screenGrok:
 		return clitext.SetupBackendSub
 	case screenObsidian:
 		return clitext.SetupMemorySub

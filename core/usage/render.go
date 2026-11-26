@@ -322,6 +322,10 @@ func costBody(snapshot Snapshot, text *renderer, zone *time.Location) []string {
 	lines = append(lines, modelTable(spend.Models, spend.Cost, text, clitext.SpendColCost, func(share Share) string {
 		return formatMoney(lang, share.Cost)
 	}, func(share Share) float64 { return share.Cost })...)
+	if rows := sessionCostTable(spend.Rows, text); len(rows) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, rows...)
+	}
 	if detail := costDetail(spend, text); len(detail) > 0 {
 		lines = append(lines, "")
 		lines = append(lines, detail...)
@@ -376,49 +380,6 @@ func costNotes(snapshot Snapshot, text *renderer) []string {
 		return nil
 	}
 	return append([]string{""}, notes...)
-}
-
-// TokenLines writes the tokens of the period by type, with the share of the cache read in
-// the input, then the tokens by model.
-func TokenLines(snapshot Snapshot, messages *clitext.Messages, lang i18n.Language, pal termpaint.Palette) ([]string, error) {
-	text := &renderer{messages: messages, lang: lang, pal: pal}
-	lines := append(truncatedNotice(snapshot, text), tokenBody(snapshot, text)...)
-	return lines, text.err
-}
-
-func tokenBody(snapshot Snapshot, text *renderer) []string {
-	lang, pal := text.lang, text.pal
-	tokens := snapshot.Spend.Tokens
-	if tokens.Total() == 0 {
-		return append([]string{emptyLine(snapshot, clitext.SpendEmpty, text)}, costNotes(snapshot, text)...)
-	}
-	lines := []string{
-		text.text(clitext.SpendVolumeTotal, clitext.Params{
-			clitext.ParamTotal: termpaint.Paint(pal.Strong, formatTokens(lang, tokens.Total(), text)),
-			clitext.ParamIn:    formatTokens(lang, tokens.In, text),
-			clitext.ParamOut:   formatTokens(lang, tokens.Out, text),
-		}),
-		termpaint.Paint(pal.Dim, text.text(clitext.SpendVolumeCache, clitext.Params{
-			clitext.ParamRead:   formatTokens(lang, tokens.CacheRead, text),
-			clitext.ParamCreate: formatTokens(lang, tokens.CacheCreate, text),
-			clitext.ParamRatio:  formatPercent(lang, cacheRatio(tokens)),
-		})),
-	}
-	lines = append(lines, "")
-	models := slices.Clone(snapshot.Spend.Models)
-	slices.SortStableFunc(models, func(a, b Share) int { return cmp.Compare(b.Tokens, a.Tokens) })
-	lines = append(lines, modelTable(models, float64(tokens.Total()), text, clitext.SpendColVolume, func(share Share) string {
-		return formatTokens(lang, share.Tokens, text)
-	}, func(share Share) float64 { return float64(share.Tokens) })...)
-	return append(lines, costNotes(snapshot, text)...)
-}
-
-func cacheRatio(tokens Tokens) float64 {
-	input := tokens.In + tokens.CacheRead + tokens.CacheCreate
-	if input == 0 {
-		return 0
-	}
-	return float64(tokens.CacheRead) / float64(input) * percentScale
 }
 
 func sparkline(snapshot Snapshot, text *renderer, zone *time.Location) string {
@@ -503,25 +464,4 @@ func modelLabel(share Share, text *renderer) termpaint.Printed {
 		return termpaint.Escape(text.text(clitext.SpendModelUnknown, nil))
 	}
 	return termpaint.Escape(share.Model)
-}
-
-func formatTokens(lang i18n.Language, count int64, text *renderer) string {
-	value, unit := float64(count), ""
-	for _, key := range []clitext.Key{clitext.SpendUnitKilo, clitext.SpendUnitMega, clitext.SpendUnitGiga} {
-		if math.Round(value) < kilo {
-			break
-		}
-		value, unit = value/kilo, text.text(key, nil)
-	}
-	if unit == "" {
-		return clitext.FormatNumber(lang, value, 0)
-	}
-	return clitext.FormatNumber(lang, value, scaledDecimals(value)) + " " + unit
-}
-
-func scaledDecimals(value float64) int {
-	if math.Round(value*decimalBase)/decimalBase >= wholeFrom {
-		return 0
-	}
-	return 1
 }

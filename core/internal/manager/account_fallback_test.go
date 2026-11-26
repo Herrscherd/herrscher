@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -19,6 +20,7 @@ type fakeAccountFallback struct {
 	reads    []usage.AccountLimits
 	balanced []string
 	notices  []contracts.Notice
+	gateways [][]string
 }
 
 func (f *fakeAccountFallback) Balance(_ context.Context, _, planned string) usage.Choice {
@@ -26,7 +28,8 @@ func (f *fakeAccountFallback) Balance(_ context.Context, _, planned string) usag
 	return usage.ChooseAccount(planned, f.reads)
 }
 
-func (f *fakeAccountFallback) Notify(_ context.Context, _ state.HomeRef, _ string, _ i18n.Language, notice contracts.Notice) {
+func (f *fakeAccountFallback) Notify(_ context.Context, _ state.HomeRef, gateways []string, _ string, _ i18n.Language, notice contracts.Notice) {
+	f.gateways = append(f.gateways, gateways)
 	f.notices = append(f.notices, notice)
 }
 
@@ -342,5 +345,20 @@ func TestResumedThenSwitchedSessionKeepsItsAccount(t *testing.T) {
 	}
 	if len(fallback.balanced) != 0 {
 		t.Fatalf("resume and switch balanced accounts %v, want none", fallback.balanced)
+	}
+}
+
+func TestTheAccountNoticeOfAnAdoptedSessionNamesItsGateway(t *testing.T) {
+	h, fallback, _ := newFallbackHandler(t, spentDefaultWork(), readOf("perso", 10))
+
+	if _, err := h.sessionCreateRun(t.Context(), args("name", "fresh", "vendor", "claude")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.sessionCreateRun(t.Context(), args("name", "tg-42", "vendor", "claude", "channel_id", "42", "gateways", "telegram", "shared", "true")); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(fallback.gateways) != 2 || fallback.gateways[0] != nil || !slices.Equal(fallback.gateways[1], []string{"telegram"}) {
+		t.Fatalf("notice gateways = %q, want the home for the first and telegram for the adopted one", fallback.gateways)
 	}
 }

@@ -7,12 +7,14 @@ import (
 	_ "github.com/Herrscherd/herrscher-cursor-backend"
 	_ "github.com/Herrscherd/herrscher-discord-gateway"
 	_ "github.com/Herrscherd/herrscher-github-forge"
+	_ "github.com/Herrscherd/herrscher-grok-backend"
 	_ "github.com/Herrscherd/herrscher-jev-compactor"
 	_ "github.com/Herrscherd/herrscher-llm-extractor"
 	_ "github.com/Herrscherd/herrscher-obsidian-memory"
 	_ "github.com/Herrscherd/herrscher-orchestrator"
 	_ "github.com/Herrscherd/herrscher-pixellab-backend"
 	_ "github.com/Herrscherd/herrscher-superset-skills"
+	_ "github.com/Herrscherd/herrscher-telegram-gateway"
 	_ "github.com/Herrscherd/herrscher/plugins/terminal"
 	// herrscher:end
 )

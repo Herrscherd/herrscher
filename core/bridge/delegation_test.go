@@ -11,24 +11,24 @@ type stubRoster struct{ agents []contracts.AgentInfo }
 
 func (s stubRoster) Agents() []contracts.AgentInfo { return s.agents }
 
-func TestWithDelegationListsAgentsAndMarkers(t *testing.T) {
+func TestDelegationBlockListsAgentsAndMarkers(t *testing.T) {
 	r := stubRoster{agents: []contracts.AgentInfo{{Name: "codex", Backend: "codex", Tags: []string{"refactor", "tests"}}}}
-	got := withDelegation("MEM", r)
-	for _, want := range []string{"MEM", "<delegation>", "⟢ delegate:", "⟢ route:", "codex", "refactor"} {
+	got := delegationBlock(r)
+	for _, want := range []string{"<delegation>", "⟢ delegate:", "⟢ route:", "codex", "refactor"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("delegation block missing %q in:\n%s", want, got)
 		}
 	}
 }
 
-func TestWithDelegationNilRosterUnchanged(t *testing.T) {
-	if got := withDelegation("MEM", nil); got != "MEM" {
-		t.Fatalf("nil roster must return base unchanged, got %q", got)
+func TestDelegationBlockIsEmptyWithoutRoster(t *testing.T) {
+	if got := delegationBlock(nil); got != "" {
+		t.Fatalf("nil roster must write no block, got %q", got)
 	}
 }
 
-func TestWithDelegationEmptyRosterUnchanged(t *testing.T) {
-	if got := withDelegation("MEM", stubRoster{}); got != "MEM" {
-		t.Fatalf("empty roster must return base unchanged, got %q", got)
+func TestDelegationBlockIsEmptyForAnEmptyRoster(t *testing.T) {
+	if got := delegationBlock(stubRoster{}); got != "" {
+		t.Fatalf("empty roster must write no block, got %q", got)
 	}
 }

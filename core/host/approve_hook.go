@@ -105,6 +105,7 @@ func RunPermissionHook(ctx context.Context, owner *Messages, stdin io.Reader, ou
 		return refuseHook(messages, out, errOut, lang, hookNamesNoTool, nil)
 	}
 
+	payload.ToolName = approval.CanonicalTool(payload.ToolName)
 	if socket := strings.TrimSpace(os.Getenv(approvalsock.EnvApprovalSocket)); socket != "" {
 		return askApprovalSocket(ctx, messages, out, errOut, lang, socket, answerWait, payload)
 	}

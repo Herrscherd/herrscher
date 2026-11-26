@@ -55,5 +55,9 @@ func (h *Handler) announceAccount(ctx context.Context, req createRequest, channe
 	if req.notice == nil {
 		return
 	}
-	h.fallback.Notify(ctx, req.home, channelID, h.noticeLanguage(req.lang), *req.notice)
+	var gateways []string
+	if req.adopted != "" {
+		gateways = req.options.gateways
+	}
+	h.fallback.Notify(ctx, req.home, gateways, channelID, h.noticeLanguage(req.lang), *req.notice)
 }

@@ -38,6 +38,13 @@ const (
 const worktreeToken = "{{WORKTREE}}"
 
 const (
+	keyHooks        = "hooks"
+	keyCommand      = "command"
+	preToolUse      = "PreToolUse"
+	approveHookVerb = " approve hook"
+)
+
+const (
 	dirMode  = 0o755
 	fileMode = 0o644
 )
@@ -67,15 +74,15 @@ func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 		doc = make(map[string]any)
 	}
 	hooks := make(map[string]any)
-	if raw, ok := doc["hooks"]; ok && raw != nil {
+	if raw, ok := doc[keyHooks]; ok && raw != nil {
 		object, ok := raw.(map[string]any)
 		if !ok {
-			return nil, &SettingsShapeError{Path: "hooks", Want: "an object", Got: raw}
+			return nil, &SettingsShapeError{Path: keyHooks, Want: "an object", Got: raw}
 		}
 		hooks = object
 	}
 	var pre []any
-	if raw, ok := hooks["PreToolUse"]; ok && raw != nil {
+	if raw, ok := hooks[preToolUse]; ok && raw != nil {
 		list, ok := raw.([]any)
 		if !ok {
 			return nil, &SettingsShapeError{Path: "hooks.PreToolUse", Want: "a list", Got: raw}
@@ -88,15 +95,8 @@ func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 			kept = append(kept, entry)
 		}
 	}
-	hooks["PreToolUse"] = append(kept, map[string]any{
-		"matcher": "*",
-		"hooks": []any{map[string]any{
-			"type":    "command",
-			"command": shellquote.Quote(herrscherBin) + " approve hook",
-			"timeout": hookWaitSeconds,
-		}},
-	})
-	doc["hooks"] = hooks
+	hooks[preToolUse] = append(kept, approvalGroup(approvalHandler(herrscherBin)))
+	doc[keyHooks] = hooks
 	return json.MarshalIndent(doc, "", "  ")
 }
 
@@ -105,7 +105,7 @@ func isApprovalHook(entry any) bool {
 	if !ok {
 		return false
 	}
-	list, ok := section["hooks"].([]any)
+	list, ok := section[keyHooks].([]any)
 	if !ok {
 		return false
 	}
@@ -114,7 +114,7 @@ func isApprovalHook(entry any) bool {
 		if !ok {
 			continue
 		}
-		if cmd, ok := hookMap["command"].(string); ok && strings.HasSuffix(cmd, " approve hook") {
+		if cmd, ok := hookMap[keyCommand].(string); ok && strings.HasSuffix(cmd, approveHookVerb) {
 			return true
 		}
 	}
@@ -182,6 +182,45 @@ func MaterializeHook(ctx context.Context, worktree, herrscherBin string) error {
 	if err := os.WriteFile(path, out, fileMode); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
+	return writeGrokHook(worktree, herrscherBin)
+}
+
+const grokHookFile = "herrscher-approve.json"
+
+func grokHookPath(dst string) string {
+	return filepath.Join(dst, ".grok", "hooks", grokHookFile)
+}
+
+func grokHook(herrscherBin string) ([]byte, error) {
+	handler := approvalHandler(herrscherBin)
+	handler["failClosed"] = true
+	return json.MarshalIndent(map[string]any{keyHooks: map[string]any{preToolUse: []any{approvalGroup(handler)}}}, "", "  ")
+}
+
+func approvalHandler(herrscherBin string) map[string]any {
+	return map[string]any{
+		"type":     keyCommand,
+		keyCommand: shellquote.Quote(herrscherBin) + approveHookVerb,
+		"timeout":  hookWaitSeconds,
+	}
+}
+
+func approvalGroup(handler map[string]any) map[string]any {
+	return map[string]any{"matcher": "*", keyHooks: []any{handler}}
+}
+
+func writeGrokHook(dst, herrscherBin string) error {
+	out, err := grokHook(herrscherBin)
+	if err != nil {
+		return err
+	}
+	path := grokHookPath(dst)
+	if err := os.MkdirAll(filepath.Dir(path), dirMode); err != nil {
+		return fmt.Errorf("create .grok/hooks dir: %w", err)
+	}
+	if err := os.WriteFile(path, out, fileMode); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
 	return nil
 }
 
@@ -192,6 +231,7 @@ func materializedGitExcludes() []string {
 		"/.claude/",
 		"/.mcp.json",
 		"/.herrscher/",
+		"/.grok/hooks/" + grokHookFile,
 	}
 }
 
@@ -221,6 +261,7 @@ type Agent struct {
 //	<worktree>/AGENTS.md             (from <home>/SOUL.md)
 //	<worktree>/.claude/USER.md       (from <home>/USER.md, when present)
 //	<worktree>/.codex/config.toml    (converted from <home>/mcp.json)
+//	<worktree>/.grok/hooks/herrscher-approve.json (the approval hook, for Grok Build)
 //
 // When <home>/USER.md exists, it is also referenced from CLAUDE.md via a
 // Claude Code @import and inlined into AGENTS.md (Codex has no import
@@ -229,9 +270,11 @@ type Agent struct {
 //
 // The settings file is the one that is not merely copied: a PreToolUse hook
 // calling this binary's `approve hook` is injected into it, which is what puts
-// the session's tool calls in front of the approval policy. It goes there and
-// nowhere else, so it binds Claude Code and not the other vendors materialized
-// beside it. MaterializeAs takes the binary to call and materializes no hook at
+// the session's tool calls in front of the approval policy. The same command
+// goes into <worktree>/.grok/hooks/herrscher-approve.json, failing closed,
+// because Grok Build lets a call run when a hook fails. It goes nowhere else,
+// so it binds Claude Code and Grok Build and not the other vendors materialized
+// beside them. MaterializeAs takes the binary to call and materializes no hook at
 // all when given none.
 //
 // Any worktreeToken in a source file is replaced with the worktree path.
@@ -279,6 +322,11 @@ func (a Agent) MaterializeIntoAs(dst, worktreePath, herrscherBin string) error {
 	}
 	if err := a.writeInstructions(dst, claudeDir, worktreePath); err != nil {
 		return err
+	}
+	if herrscherBin != "" {
+		if err := writeGrokHook(dst, herrscherBin); err != nil {
+			return err
+		}
 	}
 	return a.writeCodexConfig(codexDir, worktreePath)
 }

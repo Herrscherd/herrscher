@@ -53,6 +53,7 @@ func (d *sessionDriver) recordTurnTrace(event, shown contracts.Event, turnStart 
 		DurMs:       int(time.Since(turnStart).Milliseconds()),
 		CtxTokens:   contextReading(live, event),
 		Tools:       d.calls.Calls(),
+		Injected:    event.Injected,
 	})
 	if err != nil {
 		return false

@@ -100,7 +100,7 @@ func listAccounts(ctx context.Context, messages *clitext.Messages, store account
 		return err
 	}
 	native := translator.Text(clitext.AccountNativeLabel, nil)
-	for _, vendor := range []string{contracts.VendorClaude, contracts.VendorCodex} {
+	for _, vendor := range []string{contracts.VendorClaude, contracts.VendorCodex, contracts.VendorGrok} {
 		if err := emitf(output, "%-8s %-10s %s\n", vendor, native, loginState(ctx, translator, vendor, nil)); err != nil {
 			return err
 		}

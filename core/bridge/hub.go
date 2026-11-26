@@ -145,7 +145,7 @@ func runHub(parent context.Context, newBackend BackendFactory, orch contracts.Or
 	if err != nil {
 		return fmt.Errorf("working directory: %w", err)
 	}
-	projectLearnedSkills(ctx, orch, cwd)
+	ProjectLearnedSkills(ctx, orch, cwd)
 	eng := newSkillEngine(backend)
 	var pin *scopePin
 	if opts.Scope != nil && !opts.ProjectPinned {
@@ -326,7 +326,8 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	}
 	turn := beginTurnOutbox(backend, aff.outbox)
 	defer turn.discard()
-	prompt := contracts.Prompt{Content: event.Text, Context: withIdentity(withCapabilities(withDelegation(withSkills(memCtx, eng), aff.roster), aff.caps), aff.user), Author: event.Who, Attachments: event.Attachments, Language: lang, Outbox: turn.dir}
+	injected := composeTurnContext(memCtx, eng, aff)
+	prompt := contracts.Prompt{Content: event.Text, Context: injected.String(), Author: event.Who, Attachments: event.Attachments, Language: lang, Outbox: turn.dir}
 	var usage turnUsage
 	var streamed []string
 	var calls toolCallGuard
@@ -358,30 +359,13 @@ func runOneTurn(ctx context.Context, sink contracts.EventSink, backend contracts
 	if tr, ok := orch.(contracts.TurnReactor); ok {
 		out = tr.React(ctx, out)
 	}
-	sink.Emit(contracts.Event{T: eventwire.EventReply, Text: out, Done: true, Outcome: turnOutcome(ctrl, failure), Cost: usage.cost, Tokens: usage.outTok, TokensIn: usage.inTok, CacheRead: usage.cacheRd, CacheCreate: usage.cacheCr, Resume: resumeToken(backend), Project: settledProject})
+	sink.Emit(contracts.Event{T: eventwire.EventReply, Text: out, Done: true, Outcome: turnOutcome(ctrl, failure), Cost: usage.cost, Tokens: usage.outTok, TokensIn: usage.inTok, CacheRead: usage.cacheRd, CacheCreate: usage.cacheCr, Injected: injected.sizes(), Resume: resumeToken(backend), Project: settledProject})
 	if orch != nil {
 		if err := orch.Observe(ctx, prompt, out); err != nil {
 			logger.Warn("memory observe failed; this turn was not recorded to memory", "err", err)
 		}
 	}
 	return failure
-}
-
-func withSkills(memCtx string, eng *skills.Engine) string {
-	if eng == nil {
-		return memCtx
-	}
-	parts := make([]string, 0, partsCap)
-	if memCtx != "" {
-		parts = append(parts, memCtx)
-	}
-	if menu := eng.Menu(); menu != "" {
-		parts = append(parts, menu)
-	}
-	if exp := eng.Expansions(); exp != "" {
-		parts = append(parts, exp)
-	}
-	return strings.Join(parts, "\n\n")
 }
 
 type turnEventSink struct {

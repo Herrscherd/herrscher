@@ -67,6 +67,13 @@ const (
 	SpendChartDaily            = "cli.spend.chart_daily"
 	SpendChartHourly           = "cli.spend.chart_hourly"
 	SpendPanelVolume           = "cli.spend.panel_volume"
+	SpendColSession            = "cli.spend.col.session"
+	SpendColCacheRead          = "cli.spend.col.cache_read"
+	SpendColInjected           = "cli.spend.col.injected"
+	SpendInjectedTokens        = "cli.spend.injected.tokens"
+	SpendInjectedEstimate      = "cli.spend.injected.estimate"
+	SpendNotSized              = "cli.spend.not_sized"
+	SpendMoreSessions          = "cli.spend.more_sessions"
 )
 
 // Placeholder names of the quota and spend texts, as the catalogues write them.
@@ -153,5 +160,12 @@ func spendKeys() map[Key][]string {
 		SpendChartDaily:            nil,
 		SpendChartHourly:           nil,
 		SpendPanelVolume:           {ParamTotal, ParamRead, ParamIn, ParamOut, ParamSaved},
+		SpendColSession:            nil,
+		SpendColCacheRead:          nil,
+		SpendColInjected:           nil,
+		SpendInjectedTokens:        {ParamTokens},
+		SpendInjectedEstimate:      nil,
+		SpendNotSized:              nil,
+		SpendMoreSessions:          {ParamCount},
 	}
 }

@@ -101,5 +101,5 @@ type updater interface {
 
 type accountFallback interface {
 	Balance(ctx context.Context, vendor, planned string) usage.Choice
-	Notify(ctx context.Context, home state.HomeRef, channelID string, lang i18n.Language, notice contracts.Notice)
+	Notify(ctx context.Context, home state.HomeRef, gateways []string, channelID string, lang i18n.Language, notice contracts.Notice)
 }

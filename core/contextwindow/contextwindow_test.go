@@ -3,7 +3,7 @@ package contextwindow
 import "testing"
 
 func TestLimitKnownVendorsDefaultWindow(t *testing.T) {
-	cases := map[string]int{"claude": 200_000, "Codex": 200_000, "cursor": 200_000}
+	cases := map[string]int{"claude": 200_000, "Codex": 200_000, "cursor": 200_000, "grok": 256_000}
 	for vendor, want := range cases {
 		if got := (Limits{}).Limit(vendor); got != want {
 			t.Fatalf("Limit(%q) = %d, want %d", vendor, got, want)

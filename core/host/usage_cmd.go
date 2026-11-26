@@ -183,29 +183,41 @@ func (q usageQuery) keeps(record usage.Record) bool {
 	return q.matches(record.Vendor, record.Account)
 }
 
+func (q usageQuery) filter(records []usage.Record) []usage.Record {
+	return slices.DeleteFunc(slices.Clone(records), func(record usage.Record) bool {
+		return !q.keeps(record)
+	})
+}
+
 func (s *usageSource) run(ctx context.Context, query usageQuery) usage.Snapshot {
-	records, err := s.ledger.Records(query.rng)
+	ledger, err := s.ledger.Records(query.rng)
 	if err != nil {
 		slog.Warn("usage ledger not read whole", "err", err)
 	}
 	now := s.ledger.Now()
-	records, notes := s.withTranscripts(records, now.Add(-query.rng.Span()))
-	s.priceCompactions(records)
-	records = slices.DeleteFunc(records, func(record usage.Record) bool {
-		return !query.keeps(record)
-	})
+	spend, notes := s.spend(ledger, query, now)
 	return usage.Snapshot{
 		At:                 now,
 		Range:              query.rng,
 		Account:            query.account,
 		Vendor:             query.vendor,
 		Limits:             s.limits.Read(ctx, s.targets(query)),
-		Spend:              usage.Summarize(records, query.rng, now, query.account),
+		Spend:              spend,
 		LedgerTruncated:    err != nil,
 		TranscriptsPending: notes.pending,
 		Unreadable:         notes.unreadable,
 		PricesMissing:      !notes.priced,
 	}
+}
+
+func (s *usageSource) spend(ledger []usage.Record, query usageQuery, now time.Time) (usage.Spend, transcriptState) {
+	kept := query.filter(ledger)
+	rows := usage.SessionRows(kept)
+	records, notes := s.withTranscripts(kept, query, now.Add(-query.rng.Span()))
+	s.priceCompactions(records)
+	spend := usage.Summarize(records, query.rng, now, query.account)
+	spend.Rows = rows
+	return spend, notes
 }
 
 func (s *usageSource) priceCompactions(records []usage.Record) {
@@ -222,17 +234,17 @@ type transcriptState struct {
 	priced     bool
 }
 
-func (s *usageSource) withTranscripts(ledger []usage.Record, since time.Time) ([]usage.Record, transcriptState) {
+func (s *usageSource) withTranscripts(kept []usage.Record, query usageQuery, since time.Time) ([]usage.Record, transcriptState) {
 	if s.transcripts == nil || s.prices == nil {
-		return ledger, transcriptState{priced: true}
+		return kept, transcriptState{priced: true}
 	}
 	view := s.transcripts.View(since)
-	records := slices.DeleteFunc(ledger, func(record usage.Record) bool {
+	records := slices.DeleteFunc(kept, func(record usage.Record) bool {
 		return record.Compaction == nil && view.Covered[usage.AccountKey{Vendor: record.Vendor, Account: record.Account}]
 	})
 	book := s.prices.Book()
 	book.Price(view.Records)
-	return append(records, view.Records...), transcriptState{
+	return append(records, query.filter(view.Records)...), transcriptState{
 		pending:    !view.Scanned,
 		unreadable: view.Unreadable,
 		priced:     !book.Empty() || len(view.Records) == 0,

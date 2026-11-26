@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
+	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/skills"
 )
 
 func creds(t *testing.T) contracts.GatewayCreds {
@@ -438,5 +440,52 @@ func TestChooseVendorReadsTheBackendEnvironment(t *testing.T) {
 	}
 	if vendor != "beta" {
 		t.Fatalf("vendor %q, want beta from HERRSCHER_BACKEND when neither the vendor nor the model is given", vendor)
+	}
+}
+
+func seedBackendSettings(t *testing.T, sess state.Session) contracts.PluginConfig {
+	t.Helper()
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+	var got contracts.PluginConfig
+	contracts.Default.Register(contracts.Plugin{
+		Manifest: contracts.Manifest{Kind: "claude", Category: contracts.CategoryBackend},
+		Backend: func(_ context.Context, cfg contracts.PluginConfig) (contracts.Backend, error) {
+			got = cfg
+			return seedBackend{}, nil
+		},
+	})
+	if _, err := newSeedBackend(context.Background(), newHostMessages(), sess, nil, nil); err != nil {
+		t.Fatalf("newSeedBackend: %v", err)
+	}
+	return got
+}
+
+func TestASeedBackendIsHandedTheLearnedSkillHomeOfItsWorktree(t *testing.T) {
+	worktree := t.TempDir()
+	got := seedBackendSettings(t, state.Session{Vendor: "claude", Cmd: "claude", Worktree: worktree})
+	if want := skills.LearnedHome(worktree); got.Get("skill-root") != want {
+		t.Fatalf("skill-root %q reached the backend, want %q", got.Get("skill-root"), want)
+	}
+}
+
+func TestASeedBackendWithoutADirectoryIsHandedTheSkillHomeOfTheWorkingDirectory(t *testing.T) {
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+	got := seedBackendSettings(t, state.Session{Vendor: "claude", Cmd: "claude"})
+	if want := skills.LearnedHome(cwd); got.Get("skill-root") != want {
+		t.Fatalf("skill-root %q, want %q where a session with no directory projects its skills", got.Get("skill-root"), want)
+	}
+}
+
+func TestASeedBackendIsHandedNoSkillRootThroughALinkedHome(t *testing.T) {
+	worktree := t.TempDir()
+	if err := os.Symlink(t.TempDir(), skills.LearnedHome(worktree)); err != nil {
+		t.Fatal(err)
+	}
+	got := seedBackendSettings(t, state.Session{Vendor: "claude", Cmd: "claude", Worktree: worktree})
+	if root, ok := got.Settings["skill-root"]; ok {
+		t.Fatalf("skill-root %q through a linked .herrscher would open a directory outside the worktree to the vendor", root)
 	}
 }

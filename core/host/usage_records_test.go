@@ -46,3 +46,53 @@ func TestUsageRecordsSkipsEmptyTurn(t *testing.T) {
 		t.Fatalf("records = %+v, want none", got)
 	}
 }
+
+func sizedParts(tokens ...int) []contracts.InjectedPart {
+	parts := make([]contracts.InjectedPart, 0, len(tokens))
+	for _, count := range tokens {
+		parts = append(parts, contracts.InjectedPart{Part: contracts.ContextMemory, Tokens: count})
+	}
+	return parts
+}
+
+func TestUsageRecordsStampsTheInjectedTotalOnTheFirstModelOnly(t *testing.T) {
+	event := contracts.Event{
+		Models: []contracts.ModelUsage{
+			{Model: "opus", In: 10, Cost: 0.25},
+			{Model: "haiku", In: 1},
+		},
+		Injected: sizedParts(100, 0, 50, 25, 25),
+	}
+	got := usageRecords("s1", time.Now(), "fallback", event)
+	if len(got) != 2 {
+		t.Fatalf("records = %d, want 2", len(got))
+	}
+	if !got[0].InjectedMeasured || got[0].InjectedTokens != 200 {
+		t.Errorf("first record = measured %t, %d tokens; want measured, 200 tokens", got[0].InjectedMeasured, got[0].InjectedTokens)
+	}
+	if got[1].InjectedMeasured || got[1].InjectedTokens != 0 {
+		t.Errorf("second record carries the turn's injection again: %+v", got[1])
+	}
+}
+
+func TestUsageRecordsMeasuresATurnOfFiveZeroBlocks(t *testing.T) {
+	event := contracts.Event{TokensIn: 5, Injected: sizedParts(0, 0, 0, 0, 0)}
+	got := usageRecords("s1", time.Now(), "opus", event)
+	if len(got) != 1 {
+		t.Fatalf("records = %d, want 1", len(got))
+	}
+	if !got[0].InjectedMeasured || got[0].InjectedTokens != 0 {
+		t.Errorf("record = %+v, want a measured turn of 0 tokens", got[0])
+	}
+}
+
+func TestUsageRecordsLeavesATurnWithoutSizesUnmeasured(t *testing.T) {
+	event := contracts.Event{TokensIn: 5, Tokens: 6}
+	got := usageRecords("s1", time.Now(), "opus", event)
+	if len(got) != 1 {
+		t.Fatalf("records = %d, want 1", len(got))
+	}
+	if got[0].InjectedMeasured || got[0].InjectedTokens != 0 {
+		t.Errorf("record = %+v, want an unmeasured turn", got[0])
+	}
+}

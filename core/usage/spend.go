@@ -60,6 +60,7 @@ type Spend struct {
 	Buckets  []Bucket     `json:"buckets"`
 	Accounts []Share      `json:"accounts,omitempty"`
 	Models   []Share      `json:"models,omitempty"`
+	Rows     []SessionRow `json:"sessionRows,omitempty"`
 	Split    CostSplit    `json:"split,omitzero"`
 	Saved    float64      `json:"saved,omitempty"`
 	Unpriced []string     `json:"unpriced,omitempty"`
@@ -140,10 +141,7 @@ func (t *spendTotals) add(record *Record) {
 	spend.Cost += record.Cost
 	spend.Split = spend.Split.plus(record.Split)
 	spend.Saved += record.Saved
-	spend.Tokens.In += record.In
-	spend.Tokens.Out += record.Out
-	spend.Tokens.CacheRead += record.CacheRead
-	spend.Tokens.CacheCreate += record.CacheCreate
+	spend.Tokens = spend.Tokens.plus(recordTokens(*record))
 	t.sessions[record.Session] = true
 	if record.Unpriced {
 		t.unpriced[record.Model] = true

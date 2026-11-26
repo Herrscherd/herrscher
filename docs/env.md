@@ -20,6 +20,12 @@ The variables below are the ones the host and the bundled plugins read.
 | `DISCORD_CONTEXT_MESSAGES` | `30` | How many prior channel messages are carried into the turn as context, all authors. | Discord gateway plugin |
 | `DISCORD_TIDY_PINGS` | off | Delete the message that opened a turn once its answer is posted, so a channel keeps the work rather than the requests. Only the spellings people write (`1`, `true`, `yes`, `on`) count as on: a typo must not switch on something that deletes. | Discord gateway plugin |
 | `DISCORD_MESSAGE_DELETES` | off | Contribute the `discord message delete` verb to the daemon. Off, the verb is absent from the registry rather than present and failing: a command that was never registered cannot be talked into running by a message asking for it. On, it still refuses any message the bot did not write. | Discord gateway plugin |
+| `TELEGRAM_BOT_TOKEN` | unset (required for the Telegram gateway) | The token BotFather gave. Keep the bot's privacy mode on and set no webhook: Telegram refuses polling while one is set. | Telegram gateway plugin |
+| `TELEGRAM_USER_ID` | unset | The numeric id of the user the bot always obeys. The gateway refuses to start unless this, `TELEGRAM_ALLOWED_USERS` or `TELEGRAM_ALLOW_ALL_USERS` says who may talk to it. | Telegram gateway plugin |
+| `TELEGRAM_ALLOWED_USERS` | unset | Numeric user ids allowed to make the bot act, comma or space separated. | Telegram gateway plugin |
+| `TELEGRAM_ALLOWED_CHATS` | unset (no group) | Numeric ids of the groups the bot answers in. A group not listed here stays closed. | Telegram gateway plugin |
+| `TELEGRAM_ALLOW_ALL_USERS` | off | Let anyone who can reach the bot make it act. | Telegram gateway plugin |
+| `TELEGRAM_AGENT` | unset | The persona every Telegram session runs as. | Telegram gateway plugin |
 | `DCTL_STATE_DIR` | `~/.config/dctl` | Where the gateway keeps its own `0600` stores (`discord-allow.json`, `discord-router.json`). | Discord gateway plugin |
 | `HERRSCHER_OWNER_ID` | none | Owner snowflake; the fallback the per-daemon instance id is derived from (`u` and its last eight characters) when `HERRSCHER_INSTANCE_ID` is unset. Read only while the state holds no id. | Host |
 | `HERRSCHER_STATE_DIR` | `~/.config/herrscher` | The state directory (holds `state.json`); also the root of durable agent homes (`<stateDir>/agents/<name>/`). | Host |
@@ -32,14 +38,14 @@ of defaults change. Which one is active comes from `--vendor` then
 `HERRSCHER_BACKEND` (see Transport); only the active
 backend's vars are read.
 
-| Setting | Claude | Codex | Cursor | Meaning |
-|---------|--------|-------|--------|---------|
-| `cmd` | `CLAUDE_CMD` (`claude`) | `CODEX_CMD` (`codex`) | `CURSOR_CMD` (`cursor-agent`) | Base command to run the agent. |
-| `model` | `CLAUDE_MODEL` | `CODEX_MODEL` | `CURSOR_MODEL` | Model override. Unset ⇒ the CLI's own default. |
-| `stream` | `CLAUDE_STREAM` (`true`) | `CODEX_STREAM` (`true`) | `CURSOR_STREAM` (`true`) | Streaming mode: stream-json, persistent app-server, resume-based stream respectively. For Claude and Codex, exactly the string `false` disables it. Cursor also takes `off` and every false spelling of a boolean (`0`, `f`, `false`), and refuses a value that is not a boolean. |
-| `dir` | `CLAUDE_DIR` | `CODEX_DIR` | `CURSOR_DIR` | Working directory. |
-| `kind` | `CLAUDE_KIND` | `CODEX_KIND` | `CURSOR_KIND` | Backend kind. |
-| `effort` | no variable | `CODEX_EFFORT` | no variable | Reasoning effort override (Codex only). |
+| Setting | Claude | Codex | Cursor | Grok | Meaning |
+|---------|--------|-------|--------|------|---------|
+| `cmd` | `CLAUDE_CMD` (`claude`) | `CODEX_CMD` (`codex`) | `CURSOR_CMD` (`cursor-agent`) | `GROK_CMD` (`grok`) | Base command to run the agent. |
+| `model` | `CLAUDE_MODEL` | `CODEX_MODEL` | `CURSOR_MODEL` | `GROK_MODEL` | Model override. Unset ⇒ the CLI's own default. |
+| `stream` | `CLAUDE_STREAM` (`true`) | `CODEX_STREAM` (`true`) | `CURSOR_STREAM` (`true`) | no setting, always streaming-json | Streaming mode: stream-json, persistent app-server, resume-based stream respectively. For Claude and Codex, exactly the string `false` disables it. Cursor also takes `off` and every false spelling of a boolean (`0`, `f`, `false`), and refuses a value that is not a boolean. |
+| `dir` | `CLAUDE_DIR` | `CODEX_DIR` | `CURSOR_DIR` | `GROK_DIR` | Working directory. |
+| `kind` | `CLAUDE_KIND` | `CODEX_KIND` | `CURSOR_KIND` | no setting | Backend kind. |
+| `effort` | no variable | `CODEX_EFFORT` | no variable | `GROK_EFFORT` | Reasoning effort override (Codex and Grok): Grok takes `low`, `medium`, `high` or `xhigh`. |
 
 The `llm` extractor has **no env vars of its own**: it resolves the first
 registered backend the same way the host does, so it reads that backend's
@@ -277,7 +283,7 @@ Distributed transport lets certain categories run as separate processes over NAT
 
 | Variable | Default | Meaning | Read by |
 |----------|---------|---------|---------|
-| `HERRSCHER_BACKEND` | none (⇒ default) | Agent backend vendor when a session doesn't set one via `--vendor`: `claude\|codex\|cursor`. Precedence: `session.Vendor` → `HERRSCHER_BACKEND` → default. | Host |
+| `HERRSCHER_BACKEND` | none (⇒ default) | Agent backend vendor when a session doesn't set one via `--vendor`: `claude\|codex\|cursor\|grok`. Precedence: `session.Vendor` → `HERRSCHER_BACKEND` → default. | Host |
 | `HERRSCHER_REMOTE` | none (⇒ all in-process) | Comma-separated categories to run out-of-process: `memory`, `orchestrator`, `backend`. | Host |
 | `HERRSCHER_NATS` | `nats://127.0.0.1:4222` | The NATS server URL (required in remote mode). | Host (transport) |
 | `HERRSCHER_ANNOUNCE_KEY` | none | Shared secret of at least 32 random bytes that signs the announcements a plugin-host publishes. Every host and plugin-host must hold the same one, and a host with a remote category refuses to start without a valid key. See [Plugins on another machine](remote.md#plugins-on-another-machine). | Host and plugin-host (transport) |

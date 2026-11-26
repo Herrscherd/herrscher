@@ -373,3 +373,22 @@ func TestHookRefusesAPayloadOneByteOverTheLimit(t *testing.T) {
 		t.Fatalf("got %q, want deny: a valid payload cut at the limit must not pass as a complete one", d)
 	}
 }
+
+func TestHookAsksGrokToolsUnderTheirClaudeNames(t *testing.T) {
+	hookSession(t)
+	var asked []string
+	ask := func(_ context.Context, argv []string) (string, bool, error) {
+		asked = argv
+		return `{"decision":"allow"}`, true, nil
+	}
+	in := strings.NewReader(`{"hookEventName":"pre_tool_use","hook_event_name":"PreToolUse","tool_name":"run_terminal_command","tool_input":{"command":"git push","description":"push"}}`)
+	var out, errOut bytes.Buffer
+	mustRunHook(context.Background(), t, in, &out, &errOut, testTarget, ask)
+	joined := strings.Join(asked, " ")
+	if !strings.Contains(joined, "--tool Bash") || !strings.Contains(joined, "--subject git push") {
+		t.Fatalf("asked %q, want the Bash rule asked about the command", asked)
+	}
+	if decision, _ := hookDecision(t, out.String()); decision != "allow" {
+		t.Fatalf("decision = %q, want allow", decision)
+	}
+}

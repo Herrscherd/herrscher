@@ -67,7 +67,7 @@ func redeemWith(t *testing.T, st *state.State, code string) string {
 	}
 	csr := phoneRequest(t)
 	if err := st.UpdateDevices(func(registry *devices.Registry) error {
-		return registry.Redeem(time.Now(), parsed, csr)
+		return registry.Redeem(time.Now(), parsed, csr.Raw)
 	}); err != nil {
 		t.Fatalf("redeem: %v", err)
 	}

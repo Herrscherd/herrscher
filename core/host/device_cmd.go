@@ -144,19 +144,13 @@ func previewDevice(cliMessages *clitext.Messages, lang i18n.Language, store *sta
 }
 
 func signDevice(cliMessages *clitext.Messages, lang i18n.Language, store *state.State, code devices.PairingCode, fingerprint devices.Fingerprint) (string, error) {
-	stateDir := store.PrivateDir()
+	authority, err := devices.LoadOrCreateAuthority(store.PrivateDir(), time.Now(), rand.Reader, len(store.DeviceRegistry().Devices) > 0)
+	if err != nil {
+		return "", err
+	}
 	enrolment, first, err := store.EnrollDevice(func(registry *devices.Registry) (devices.Enrolment, error) {
-		enrolled := len(registry.Devices) > 0
-		var authority *devices.Authority
-		sign := func(csr *x509.CertificateRequest, deviceID devices.DeviceID, now time.Time) (*x509.Certificate, error) {
-			if authority == nil {
-				loaded, loadErr := devices.LoadOrCreateAuthority(stateDir, now, rand.Reader, enrolled)
-				if loadErr != nil {
-					return nil, loadErr
-				}
-				authority = loaded
-			}
-			return authority.SignClient(csr, deviceID, now, rand.Reader)
+		sign := func(csr *x509.CertificateRequest, deviceID devices.DeviceID, signedAt time.Time) (*x509.Certificate, error) {
+			return authority.SignClient(csr, deviceID, signedAt, rand.Reader)
 		}
 		return registry.Approve(time.Now(), code, fingerprint, rand.Reader, sign)
 	})

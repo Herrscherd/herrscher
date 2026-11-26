@@ -165,14 +165,20 @@ authenticate, and the signed certificate is not handed to anyone yet.
   a process of the same user: such a process can read the authority's key file,
   just as it can read `HERRSCHER_ANNOUNCE_KEY`. The user account is the boundary.
 - **Shell administration from an agent.** A Bash command that runs `herrscher
-  device` or `herrscher role` needs a person's decision. The check is a text
-  barrier and works on the best effort basis: it reads the command after removing
-  quotes and backslashes, accepts global options before the verb, and treats a
-  command that expands a variable, a substitution or an `eval` and spells
-  herrscher's letters or the verbs as administration. A command that builds the
-  verb in a way the text does not reveal can still get past it. The real boundary
-  is the user account: an agent's shell reaches the operator socket as `local`,
-  and a process of the same uid can do what the daemon can.
+  device` or `herrscher role` needs a person's decision. This is a text barrier,
+  at best. The check reads the command after removing quotes, backslashes and
+  separators, and it treats as administration: a command that names `herrscher`
+  together with the word `device`, `role` or `xargs` (for example
+  `echo role grant bob owner | xargs herrscher`); a command that expands a
+  variable, a substitution or an `eval` and spells `herrscher` out of pieces
+  (for example `B=herrscher; $B device list`); and a command that feeds an
+  interpreter (`sh`, `bash`, `zsh`, `eval`, `python -c`, `perl -e`) with
+  content decoded or unescaped (for example `echo <base64> | base64 -d | sh`).
+  Forms the check does not name can still pass, and the real boundary is the user
+  account. In particular, a script written to a file and then run, a file
+  downloaded and run, or an encoding the check does not know, is not seen. An
+  agent's shell reaches the operator socket as `local`, and a process of the same
+  uid can do what the daemon can.
 - **Certificates.** A client certificate is valid for thirty days and states that
   it is not a CA. It is not renewed yet. The approval signs it, but nothing keeps
   or delivers it: the network listener of a later pull request will hand it to the

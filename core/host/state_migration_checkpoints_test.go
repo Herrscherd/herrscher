@@ -57,8 +57,13 @@ func TestMigrationFilesTheCheckpointsOfASessionUnderItsIncarnation(t *testing.T)
 	if left := refsMatching(t, repo, "refs/herrscher/undo/alpha"); len(left) != 0 {
 		t.Fatalf("undo point left under the session name: %v", left)
 	}
-	if !strings.Contains(out.String(), "3 checkpoint refs moved from refs/herrscher/checkpoints/alpha/ to refs/herrscher/checkpoints/"+migratedIncarnation+"/") {
-		t.Fatalf("serve output does not announce the checkpoint move:\n%s", out)
+	for _, want := range []string{
+		"session alpha, 2 checkpoint refs moved from refs/herrscher/checkpoints/alpha/ to refs/herrscher/checkpoints/" + migratedIncarnation + "/",
+		"session alpha, undo point moved from refs/herrscher/undo/alpha to refs/herrscher/undo/" + migratedIncarnation,
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("serve output does not announce %q:\n%s", want, out)
+		}
 	}
 	sess, _ := loadForMigration(t, path).FindSession("alpha")
 	var store checkpoint.Store
@@ -74,11 +79,32 @@ func TestMigrationFilesTheCheckpointsOfASessionUnderItsIncarnation(t *testing.T)
 	if err := migrateHubState(t.Context(), newHostMessages(), announcer, loadForMigration(t, path), migrationInputs{optID: "inst", defaultGateways: []string{"chat"}}); err != nil {
 		t.Fatalf("a migration started again after its refs moved: %v", err)
 	}
-	if strings.Contains(out.String(), "checkpoint refs moved") {
+	if strings.Contains(out.String(), "checkpoint ref") || strings.Contains(out.String(), "undo point") {
 		t.Fatalf("the second run announces a move it did not make:\n%s", out)
 	}
 	if kept := refsMatching(t, repo, "refs/herrscher/checkpoints/"+migratedIncarnation+"/"); len(kept) != 2 {
 		t.Fatalf("after the second run the incarnation holds %v", kept)
+	}
+}
+
+func TestMigrationAnnouncesARefAlreadyAtItsNewNameAsFinishedNotMoved(t *testing.T) {
+	repo, _, path := checkpointedBareSession(t)
+	gitOutput(t, repo, "update-ref", "refs/herrscher/checkpoints/"+migratedIncarnation+"/1", gitOutput(t, repo, "rev-parse", "HEAD"))
+	announcer, out, _ := recordingAnnouncer()
+	if err := migrateHubState(t.Context(), newHostMessages(), announcer, loadForMigration(t, path), migrationInputs{optID: "inst", defaultGateways: []string{"chat"}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"session alpha, 1 checkpoint ref moved from refs/herrscher/checkpoints/alpha/",
+		"session alpha, undo point moved",
+		"session alpha, 1 checkpoint ref was already at its new name, its old name is deleted",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("serve output does not announce %q:\n%s", want, out)
+		}
+	}
+	if left := refsMatching(t, repo, "refs/herrscher/checkpoints/alpha/"); len(left) != 0 {
+		t.Fatalf("refs left under the session name: %v", left)
 	}
 }
 

@@ -33,6 +33,7 @@ type RefMove struct {
 	From   string
 	To     string
 	Commit string
+	undo   bool
 	landed bool
 }
 
@@ -49,9 +50,39 @@ func RefsOf(key string) string {
 	return checkpointPrefix(key)
 }
 
+// UndoRefOf returns the ref the undo point filed under key lives at.
+func UndoRefOf(key string) string {
+	return undoRef(key)
+}
+
 // Empty reports whether the rekey has nothing to move.
 func (r Rekey) Empty() bool {
 	return len(r.Moves) == 0
+}
+
+// RekeyTally counts what a rekey does: the checkpoints it renames, whether it
+// renames the undo point, and the refs already at their new name whose old
+// name it only deletes.
+type RekeyTally struct {
+	Checkpoints int
+	Undo        bool
+	Finished    int
+}
+
+// Tally counts the refs of the rekey by what applying it does to them.
+func (r Rekey) Tally() RekeyTally {
+	var tally RekeyTally
+	for _, move := range r.Moves {
+		switch {
+		case move.landed:
+			tally.Finished++
+		case move.undo:
+			tally.Undo = true
+		default:
+			tally.Checkpoints++
+		}
+	}
+	return tally
 }
 
 // PlanRekey lists the refs filed under from in the repository of dir and the
@@ -77,7 +108,7 @@ func PlanRekey(ctx context.Context, dir, from, target string) (Rekey, error) {
 	}
 	plan := Rekey{Dir: dir}
 	for _, source := range sources {
-		move := RefMove{From: source.name, To: rekeyedName(source.name, from, target), Commit: source.commit}
+		move := RefMove{From: source.name, To: rekeyedName(source.name, from, target), Commit: source.commit, undo: source.name == undoRef(from)}
 		if held, ok := targets[move.To]; ok {
 			if held != move.Commit {
 				return Rekey{}, &RekeyConflictError{Ref: move.To, Have: held, Want: move.Commit}

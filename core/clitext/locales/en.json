@@ -5951,8 +5951,20 @@
   },
   {
     "id": "cli.migration.checkpoints_rekeyed",
-    "description": "Migration: the checkpoint refs of a session move to its stable key",
+    "description": "Migration: the checkpoint refs of a session move to its stable key (Count selects the plural form)",
+    "one": "herrscher: migration: session {{.Name}}, 1 checkpoint ref moved from {{.From}} to {{.To}}",
     "other": "herrscher: migration: session {{.Name}}, {{.Count}} checkpoint refs moved from {{.From}} to {{.To}}"
+  },
+  {
+    "id": "cli.migration.undo_rekeyed",
+    "description": "Migration: the undo point of a session moves to its stable key",
+    "other": "herrscher: migration: session {{.Name}}, undo point moved from {{.From}} to {{.To}}"
+  },
+  {
+    "id": "cli.migration.rekey_finished",
+    "description": "Migration: refs already at their new name lose their old name, finishing an interrupted migration (Count selects the plural form)",
+    "one": "herrscher: migration: session {{.Name}}, 1 checkpoint ref was already at its new name, its old name is deleted, which finishes an interrupted migration",
+    "other": "herrscher: migration: session {{.Name}}, {{.Count}} checkpoint refs were already at their new name, their old names are deleted, which finishes an interrupted migration"
   },
   {
     "id": "cli.migration.checkpoint_conflict",
@@ -5962,7 +5974,7 @@
   {
     "id": "cli.migration.checkpoint_inspect",
     "description": "Migration refusal: the checkpoint refs of a session cannot be read",
-    "other": "session {{.Name}}: cannot read the checkpoint refs of {{.Path}}: {{.Err}}; nothing was moved"
+    "other": "session {{.Name}}: cannot read the checkpoint refs of {{.Path}}: {{.Err}}; nothing was moved. Make git -C {{.Path}} for-each-ref refs/herrscher/ work: fix the rights on the folder, add it with git config --global --add safe.directory {{.Path}} if git calls its owner dubious, or run git worktree repair {{.Path}} from its repository if that repository moved; then start herrscher serve again"
   },
   {
     "id": "cli.migration.checkpoint_move",

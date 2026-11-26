@@ -5951,8 +5951,20 @@
   },
   {
     "id": "cli.migration.checkpoints_rekeyed",
-    "description": "Migration : les refs de checkpoint d'une session passent sous sa clé stable",
+    "description": "Migration : les refs de checkpoint d'une session passent sous sa clé stable (Count choisit le pluriel)",
+    "one": "herrscher : migration : session {{.Name}}, 1 ref de checkpoint déplacée de {{.From}} vers {{.To}}",
     "other": "herrscher : migration : session {{.Name}}, {{.Count}} refs de checkpoint déplacées de {{.From}} vers {{.To}}"
+  },
+  {
+    "id": "cli.migration.undo_rekeyed",
+    "description": "Migration : le point d'undo d'une session passe sous sa clé stable",
+    "other": "herrscher : migration : session {{.Name}}, point d'undo déplacé de {{.From}} vers {{.To}}"
+  },
+  {
+    "id": "cli.migration.rekey_finished",
+    "description": "Migration : des refs déjà sous leur nouveau nom perdent l'ancien, ce qui termine une migration interrompue (Count choisit le pluriel)",
+    "one": "herrscher : migration : session {{.Name}}, 1 ref de checkpoint était déjà sous son nouveau nom, son ancien nom est supprimé, ce qui termine une migration interrompue",
+    "other": "herrscher : migration : session {{.Name}}, {{.Count}} refs de checkpoint étaient déjà sous leur nouveau nom, leurs anciens noms sont supprimés, ce qui termine une migration interrompue"
   },
   {
     "id": "cli.migration.checkpoint_conflict",
@@ -5962,7 +5974,7 @@
   {
     "id": "cli.migration.checkpoint_inspect",
     "description": "Refus de la migration : les refs de checkpoint d'une session sont illisibles",
-    "other": "session {{.Name}} : impossible de lire les refs de checkpoint de {{.Path}} : {{.Err}} ; rien n'a été déplacé"
+    "other": "session {{.Name}} : impossible de lire les refs de checkpoint de {{.Path}} : {{.Err}} ; rien n'a été déplacé. Fais marcher git -C {{.Path}} for-each-ref refs/herrscher/ : corrige les droits du dossier, ajoute-le avec git config --global --add safe.directory {{.Path}} si git juge son propriétaire douteux, ou lance git worktree repair {{.Path}} depuis son dépôt si ce dépôt a bougé ; puis relance herrscher serve"
   },
   {
     "id": "cli.migration.checkpoint_move",

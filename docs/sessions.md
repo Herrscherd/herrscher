@@ -86,8 +86,14 @@ and writes the new file atomically. Each change is announced on the output of
   transaction per session (`git update-ref --stdin`), before any worktree
   moves. A ref already at its new place with the same commit counts as moved,
   so a migration stopped after the move finishes it, and a second run moves
-  nothing. Refs a session filed under a name it had before a rename are left
+  nothing, and the announce says how many checkpoints moved, whether the undo
+  point moved, and how many refs were already in place and only lost their old
+  name. Refs a session filed under a name it had before a rename are left
   where they are, as are those of closed sessions.
+- **Folders in no git repository.** A local session whose folder is gone, or
+  belongs to no git repository (git says `not a git repository`), holds no
+  checkpoint ref and has no worktree git could move: the migration leaves it
+  where it is, its stored worktree unchanged, and announces nothing for it.
 - **Old `repo` field.** It becomes the workspace when neither the state nor
   `config.json` sets one, and is dropped otherwise, since a workspace already
   applied in its place.
@@ -131,6 +137,13 @@ It refuses, writes nothing, and says what to do instead of guessing, when:
   commit. The refusal names the ref and both commits; look at it with
   `git log -1 <ref>`, delete it with `git update-ref -d <ref>` if it is not
   wanted, and start `serve` again.
+- git cannot read the checkpoint refs of a session's folder for another reason
+  than the folder being in no repository: a worktree whose repository moved, a
+  folder git calls of dubious ownership, a folder it may not read. The refusal
+  names the session, the folder and git's error; make
+  `git -C <folder> for-each-ref refs/herrscher/` work (fix the rights, add the
+  folder to `safe.directory`, or run `git worktree repair <folder>` from its
+  repository), and start `serve` again.
 
 A session that runs on another [host](remote.md) is not refused: the migration
 cannot reach that machine, so it points the state at the new place and prints,

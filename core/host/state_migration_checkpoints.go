@@ -10,6 +10,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/checkpoint"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
 
 type checkpointRekey struct {
@@ -23,6 +24,13 @@ func planCheckpointRekeys(ctx context.Context, cliMessages *clitext.Messages, se
 	for idx := range sessions {
 		sess := sessions[idx]
 		if !checkpointable(sess) || worktreeGone(sess.Worktree) {
+			continue
+		}
+		outside, err := worktree.OutsideAnyRepository(ctx, sess.Worktree)
+		if err != nil {
+			return nil, &stateMigrationRefusedError{messages: cliMessages, key: clitext.MigrationCheckpointInspect, params: checkpointFailureParams(sess, err), cause: err}
+		}
+		if outside {
 			continue
 		}
 		plan, err := checkpoint.PlanRekey(ctx, sess.Worktree, sess.Name, sess.Incarnation)
@@ -48,14 +56,34 @@ func rekeyCheckpoints(ctx context.Context, announcer stateAnnouncer, rekeys []ch
 			sess := state.Session{Name: rekey.session, Worktree: rekey.plan.Dir}
 			return &stateMigrationRefusedError{messages: announcer.cliMessages, key: clitext.MigrationCheckpointMove, params: checkpointFailureParams(sess, err), cause: err}
 		}
+		announceRekey(announcer, rekey)
+	}
+	return nil
+}
+
+func announceRekey(announcer stateAnnouncer, rekey checkpointRekey) {
+	tally := rekey.plan.Tally()
+	if tally.Checkpoints > 0 {
 		announcer.announce(clitext.MigrationCheckpointsRekeyed, clitext.Params{
 			clitext.ParamName:  rekey.session,
-			clitext.ParamCount: len(rekey.plan.Moves),
+			clitext.ParamCount: tally.Checkpoints,
 			clitext.ParamFrom:  checkpoint.RefsOf(rekey.session),
 			clitext.ParamTo:    checkpoint.RefsOf(rekey.key),
 		})
 	}
-	return nil
+	if tally.Undo {
+		announcer.announce(clitext.MigrationUndoRekeyed, clitext.Params{
+			clitext.ParamName: rekey.session,
+			clitext.ParamFrom: checkpoint.UndoRefOf(rekey.session),
+			clitext.ParamTo:   checkpoint.UndoRefOf(rekey.key),
+		})
+	}
+	if tally.Finished > 0 {
+		announcer.announce(clitext.MigrationRekeyFinished, clitext.Params{
+			clitext.ParamName:  rekey.session,
+			clitext.ParamCount: tally.Finished,
+		})
+	}
 }
 
 func checkpointFailureParams(sess state.Session, err error) clitext.Params {

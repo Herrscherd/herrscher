@@ -77,7 +77,7 @@ func (w *Worktreer) BareTarget(sess BareSession) (Relocation, error) {
 	return plan, nil
 }
 
-// PlanBareRelocation reports what moving a session out of the id-less layout still has to do on this machine, refusing what it cannot decide alone.
+// PlanBareRelocation reports what moving a session out of the id-less layout still has to do on this machine, refusing what it cannot decide alone. A worktree that lies in no git repository, or whose repository is gone, is left where it is.
 func (w *Worktreer) PlanBareRelocation(ctx context.Context, sess BareSession) (Relocation, error) {
 	plan, err := w.BareTarget(sess)
 	if err != nil {
@@ -88,6 +88,14 @@ func (w *Worktreer) PlanBareRelocation(ctx context.Context, sess BareSession) (R
 		return Relocation{}, err
 	}
 	if sess.Scratch {
+		return plan, nil
+	}
+	gone, err := w.outsideAnyRepository(ctx, plan)
+	if err != nil {
+		return Relocation{}, err
+	}
+	if gone {
+		plan.dir, plan.moveBranch = dirMissing, false
 		return plan, nil
 	}
 	if plan.dir == dirToMove {
@@ -120,6 +128,30 @@ func (w *Worktreer) planDirMove(plan Relocation) (dirPlan, error) {
 		return dirMoved, nil
 	}
 	return dirMissing, nil
+}
+
+func (w *Worktreer) outsideAnyRepository(ctx context.Context, plan Relocation) (bool, error) {
+	var probe string
+	switch plan.dir {
+	case dirMoved:
+		return false, nil
+	case dirToMove:
+		probe = plan.FromPath
+	case dirMissing:
+		probe = plan.Repo
+		present, err := exists(probe)
+		if err != nil {
+			return false, NewFailure(w.messages, clitext.WorktreeInspect, clitext.Params{clitext.ParamPath: strconv.Quote(probe), clitext.ParamErr: err}, err)
+		}
+		if !present {
+			return true, nil
+		}
+	}
+	outside, err := OutsideAnyRepository(ctx, probe)
+	if err != nil {
+		return false, NewFailure(w.messages, clitext.WorktreeInspect, clitext.Params{clitext.ParamPath: strconv.Quote(probe), clitext.ParamErr: err}, err)
+	}
+	return outside, nil
 }
 
 func (w *Worktreer) checkOnBranch(ctx context.Context, path, branch string) error {

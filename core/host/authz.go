@@ -182,7 +182,7 @@ func (h *hub) admitted(session string, path, args []string, role authz.Role, con
 	if err := h.selfRestarts.admit(session, strings.Join(path, " ")); err != nil {
 		return admission{}, err
 	}
-	if !authz.Writes(path, contributed) {
+	if !authz.Writes(path, contributed, h.reg.ReadOnly(path)) {
 		return admission{}, nil
 	}
 	how := admittedDirect

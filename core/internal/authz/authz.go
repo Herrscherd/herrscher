@@ -106,7 +106,7 @@ func definitionOf(role Role) (definition, bool) {
 			"memory search", "memory locate",
 			"session issue list", "session issue show",
 			"health", "usage", "skill list", "config get", "env get", "plugin list", "connect status", "setup check",
-			"session pr status", "session pr checks", "session pr comments",
+			"session pr status", "session pr checks", "session pr comments", "session get-mode",
 		}}, true
 	case RoleAgent:
 		return definition{
@@ -362,13 +362,18 @@ func readWords() []string {
 }
 
 // Writes reports whether a verb changes something, which is what the daemon announces when a session runs it.
-// A read is what an observer runs, or a verb, a plugin's included, whose last word names a read; approve ask and env request say so on their own.
-func Writes(path []string, contributed bool) bool {
+// A verb that declared itself read only is a read. Among the daemon's own verbs, so is what an observer runs and a verb whose
+// last word names a read; a plugin's verb is a read only when it declared it. approve ask and env request say so on their own.
+func Writes(path []string, contributed, declaredRead bool) bool {
 	verb := strings.Join(path, " ")
-	if verb == "approve ask" || verb == "env request" || len(path) == 0 {
+	if declaredRead || verb == "approve ask" || verb == "env request" || len(path) == 0 {
 		return false
 	}
-	if slices.Contains(readWords(), path[len(path)-1]) {
+	if contributed {
+		return true
+	}
+	last, _, _ := strings.Cut(path[len(path)-1], "-")
+	if slices.Contains(readWords(), last) {
 		return false
 	}
 	return !permits(RoleObserver, verb, contributed)

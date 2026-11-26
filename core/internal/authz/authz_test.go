@@ -372,12 +372,18 @@ func TestEachVerbAnAgentRunsIsAReadOrAnAnnouncedWrite(t *testing.T) {
 	def, _ := definitionOf(RoleAgent)
 	for _, verb := range def.allow {
 		want := slices.Contains(writes, verb)
-		if got := Writes(strings.Fields(verb), false); got != want {
+		if got := Writes(strings.Fields(verb), false, false); got != want {
 			t.Errorf("Writes(%q) = %v, want %v", verb, got, want)
 		}
 	}
-	if Writes([]string{"acmechat", "channel", "read"}, true) {
-		t.Error("a plugin's read counts as a write")
+	if !Writes([]string{"acmechat", "channel", "comments"}, true, false) {
+		t.Error("a plugin's verb that declared nothing is taken for a read from its name")
+	}
+	if Writes([]string{"acmechat", "channel", "read"}, true, true) {
+		t.Error("a plugin's verb declared read only counts as a write")
+	}
+	if Writes([]string{"session", "get-mode"}, false, false) {
+		t.Error("get-mode counts as a write")
 	}
 }
 
@@ -387,16 +393,16 @@ func TestAnObserverReadsWhatASessionReadsAndWritesNothing(t *testing.T) {
 		if ok, why := Decide(req(human, path...), RoleObserver); !ok {
 			t.Errorf("observer refused %v: %s", path, why)
 		}
-		if Writes(path, false) {
+		if Writes(path, false, false) {
 			t.Errorf("%v counts as a write", path)
 		}
 	}
 	for _, path := range [][]string{{"session", "send"}, {"session", "issue", "open"}, {"memory", "record"}} {
-		if !Writes(path, false) {
+		if !Writes(path, false, false) {
 			t.Errorf("%v does not count as a write", path)
 		}
 	}
-	if Writes([]string{"approve", "ask"}, false) {
+	if Writes([]string{"approve", "ask"}, false, false) {
 		t.Error("approve ask, asked by the hook at each tool call, counts as a write")
 	}
 }

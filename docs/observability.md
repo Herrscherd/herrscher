@@ -173,24 +173,27 @@ and the default is the limits of each account:
   has an attempt. The backend stage counts as behind Jev when its outcome is anything
   but skipped, so a dry run of the backend does count.
 
-Each session of the period has a row, in the `cost` view with its cost and the share of
-its input read from the prompt cache, and in the `tokens` view with its tokens and the
-tokens the host injected into its prompt per turn. The cache share is the cache read
-over the input of the session, the input, the cache read and the cache write together,
-as the period's cache share is. The rows are sorted by cost and the text views show the
-first eight, with a line for the sessions they leave out; `--json` gives all of them
-under `spend.sessionRows`.
+Each session name of the period has a row, in the `cost` view with its cost and the share
+of its input read from the prompt cache, and in the `tokens` view with its tokens and the
+tokens the host injected into its prompt per turn. The rows come from the herrscher usage
+ledger only, and a row is per session name: a name reused after its session is deleted
+adds the turns of both sessions into one row. The herrscher session transcripts are not
+read. Vendor sessions read from the vendor transcripts have no row, and the vendor
+transcripts still feed the period totals and the by-model figures, as before. The cache
+share is the cache read over the input of the session, the input, the cache read and the
+cache write together, as the period's cache share is. The rows are sorted by cost and the
+text views show the first eight, with a line for the sessions they leave out; `--json`
+gives all of them under `spend.sessionRows`.
 
 The injected figure is an estimate, marked `~`. The host measures each block it writes
 into the prompt of a turn (memory, skills, delegation, capabilities, identity), at about
 four bytes per token, not a count from the vendor, and records their total in the usage
 ledger with the cost of that turn. The average is that total over the turns of the period
-that carry a measurement. It comes from the same records as the cost, so a session that
-is renamed or deleted keeps its own figures and never takes those of another session.
+that carry a measurement. It comes from the same ledger records as the cost of the row, and
+a name reused after a delete adds the measured turns of both sessions, as it adds the cost.
 A turn with no ledger record, such as one with no usage, is not counted. A record written
 before this version carries no measurement and is left out: a session whose turns all
-predate it reads `n/a`, and so does a vendor session that herrscher did not run, since it
-writes no record here.
+predate it reads `n/a`.
 
 `--range` takes `24h`, `7d`, `30d` or `90d`, and `--account` and `--vendor` narrow the
 figures to one account or one vendor, with the same rule as for turns: a compaction is

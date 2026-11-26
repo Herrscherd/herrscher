@@ -4170,7 +4170,7 @@
   {
     "id": "cli.spend.injected.estimate",
     "description": "Usage report note: the injected tokens per turn are estimated at about four bytes per token, not counted by the vendor",
-    "other": "injecté par tour est une estimation à environ quatre octets par jeton, et non un décompte du fournisseur"
+    "other": "L'injection par tour est une estimation à environ quatre octets par jeton, et non un décompte du fournisseur"
   },
   {
     "id": "cli.spend.not_sized",

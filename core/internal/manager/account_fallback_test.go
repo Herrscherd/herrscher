@@ -26,7 +26,7 @@ func (f *fakeAccountFallback) Balance(_ context.Context, _, planned string) usag
 	return usage.ChooseAccount(planned, f.reads)
 }
 
-func (f *fakeAccountFallback) Notify(_ context.Context, _ state.HomeRef, _ string, _ i18n.Language, notice contracts.Notice) {
+func (f *fakeAccountFallback) Notify(_ context.Context, _ state.HomeRef, _ []string, _ string, _ i18n.Language, notice contracts.Notice) {
 	f.notices = append(f.notices, notice)
 }
 

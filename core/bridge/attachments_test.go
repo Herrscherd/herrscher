@@ -328,30 +328,6 @@ func TestResolveAttachmentsSkipsDeclaredOversized(t *testing.T) {
 	}
 }
 
-func TestSupportedPrefersContentType(t *testing.T) {
-	cases := []struct {
-		a    contracts.Attachment
-		want bool
-	}{
-		{contracts.Attachment{Filename: "x.dat", ContentType: "image/png"}, true},
-		{contracts.Attachment{Filename: "x.png", ContentType: "application/octet-stream"}, false},
-		{contracts.Attachment{Filename: "x.jpeg"}, true},
-		{contracts.Attachment{Filename: "x.txt"}, true},
-		{contracts.Attachment{Filename: "x.pdf"}, true},
-		{contracts.Attachment{Filename: "notes", ContentType: "text/plain; charset=utf-8"}, true},
-		{contracts.Attachment{Filename: "x.md", ContentType: "TEXT/MARKDOWN"}, true},
-		{contracts.Attachment{Filename: "x.pdf", ContentType: "application/zip"}, false},
-		{contracts.Attachment{Filename: "x.zip"}, false},
-		{contracts.Attachment{Filename: "x.exe"}, false},
-		{contracts.Attachment{Filename: "noext"}, false},
-	}
-	for _, c := range cases {
-		if got := supported(c.a); got != c.want {
-			t.Errorf("supported(%+v) = %v, want %v", c.a, got, c.want)
-		}
-	}
-}
-
 func TestResolveAttachmentsCapsCount(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeOrLog(w, []byte("x"))

@@ -7,6 +7,7 @@ import (
 	"os"
 	"sync"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
@@ -21,6 +22,7 @@ type Handler struct {
 	log             *slog.Logger
 	d               channelAdmin
 	td              channelAdmin
+	gatewayAdmins   map[string]contracts.ChannelAdmin
 	fallback        accountFallback
 	sup             supervisor
 	wt              Worktrees
@@ -356,6 +358,13 @@ func NewHandler(messages *clitext.Messages, d channelAdmin, sup supervisor, wt W
 // home gateway. nil-safe: until set, terminal-only sessions fall back to the
 // home gateway's admin.
 func (h *Handler) SetTerminalAdmin(td channelAdmin) { h.td = td }
+
+// SetGatewayAdmins wires the channel admin of each gateway kind. A session that
+// adopted a conversation of its one gateway is announced and named through that
+// gateway, never through the home gateway.
+func (h *Handler) SetGatewayAdmins(admins map[string]contracts.ChannelAdmin) {
+	h.gatewayAdmins = admins
+}
 
 // PartDir returns the participants journal directory (used by tests/wiring).
 func (h *Handler) PartDir() string { return h.partDir }

@@ -184,7 +184,7 @@ func TestNoticeReachesTheGatewayOfTheHomeAsATypedNotice(t *testing.T) {
 	fallback := newAccountFallback(nil, []Deps{{Gateway: gateway, Admin: labeledAdmin{"chat"}}})
 	notice := contracts.Notice{Code: contracts.CodeAccountFallback, Args: []contracts.Arg{contracts.Text("From", "work"), contracts.Text("To", "perso")}}
 
-	fallback.Notify(t.Context(), state.HomeRef{ID: "home", Type: "forum"}, "chan-1", i18n.English, notice)
+	fallback.Notify(t.Context(), state.HomeRef{ID: "home", Type: "forum"}, nil, "chan-1", i18n.English, notice)
 
 	record := awaitNotice(t, gateway)
 	if record.conv.ID != "chan-1" || record.notice.Code != contracts.CodeAccountFallback || record.lang != i18n.English {
@@ -197,7 +197,7 @@ func TestNoticeIsDroppedWhenTheGatewayHasNoSink(t *testing.T) {
 	fallback := newAccountFallback(nil, []Deps{{Gateway: fakeGateway{}, Admin: admin}})
 	notice := contracts.Notice{Code: contracts.CodeAccountFallback, Args: []contracts.Arg{contracts.Text("From", "work"), contracts.Text("To", "perso")}}
 
-	fallback.Notify(t.Context(), state.HomeRef{ID: "home", Type: "forum"}, "chan-1", i18n.English, notice)
+	fallback.Notify(t.Context(), state.HomeRef{ID: "home", Type: "forum"}, nil, "chan-1", i18n.English, notice)
 
 	if len(admin.sent) != 0 {
 		t.Fatalf("sent %q, want no text: a gateway without a notice sink gets no account notice", admin.sent)
@@ -245,7 +245,7 @@ func TestNoticeIsNotResentWhenTheGatewayPostedItsFallback(t *testing.T) {
 	fallback := newAccountFallback(nil, []Deps{{Gateway: gateway, Admin: admin}})
 	notice := contracts.Notice{Code: contracts.CodeAccountNoQuota, Args: []contracts.Arg{contracts.Text("Vendor", "claude"), contracts.Text("Account", "work")}}
 
-	fallback.Notify(t.Context(), state.HomeRef{ID: "home", Type: "forum"}, "chan-1", i18n.English, notice)
+	fallback.Notify(t.Context(), state.HomeRef{ID: "home", Type: "forum"}, nil, "chan-1", i18n.English, notice)
 
 	if gateway.calls != 1 || len(admin.sent) != 0 {
 		t.Fatalf("notify calls %d, sent %q: the gateway's fallback counts as delivered, nothing is sent again", gateway.calls, admin.sent)

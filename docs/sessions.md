@@ -9,9 +9,15 @@ before it answers, the same turn runs on a fresh backend session instead of
 failing: the conversation goes on, without the backend's earlier history.
 
 A session can be created explicitly or adopt an existing one with `--channel_id`.
-On Discord it opens the first time its owner pings the bot in a channel. A new
-session lands in the daemon's home unless `--under` names another category or
-forum, so work opened from one server does not surface in another.
+On Discord it opens the first time its owner pings the bot in a channel, and on
+Telegram with the first message of a private chat, a group or a forum topic. A
+new session lands in the daemon's home unless `--under` names another category
+or forum, so work opened from one server does not surface in another.
+
+A session that adopts a conversation of its one gateway (`--gateways telegram`)
+is announced in that conversation: its banner and its account notice go through
+that gateway, never through the home's. A gateway that manages no channels gets
+the banner as a plain post.
 
 
 ## Memory

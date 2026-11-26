@@ -65,7 +65,37 @@ func (h *Handler) adminFor(sess state.Session) channelAdmin {
 	if h.td != nil && strings.HasPrefix(sess.ChannelID, "terminal/") {
 		return h.td
 	}
+	if admin := h.adoptingAdmin(sess.Owned, sess.Gateways); admin != nil {
+		return admin
+	}
 	return h.d
+}
+
+func (h *Handler) adoptingAdmin(owned bool, gateways []string) channelAdmin {
+	if owned || len(gateways) != 1 {
+		return nil
+	}
+	if admin, ok := h.gatewayAdmins[gateways[0]]; ok && admin != nil {
+		return admin
+	}
+	return nil
+}
+
+func (h *Handler) announcingAdmin(adopted string, gateways []string, home channelAdmin) channelAdmin {
+	if adopted == "" {
+		return home
+	}
+	if admin := h.adoptingAdmin(false, gateways); admin != nil {
+		return admin
+	}
+	return home
+}
+
+func channelRef(admin channelAdmin, channelID string) string {
+	if admin == nil {
+		return channelID
+	}
+	return admin.ChannelRef(channelID)
 }
 
 func (h *Handler) tidyChannel(ctx context.Context, sess state.Session) string {

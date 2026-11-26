@@ -156,6 +156,7 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)
 	}
+	deps.handler.SetGatewayAdmins(gatewayAdmins(gws))
 	sessions.outboundMaxBytes = cfg.EffectiveOutboundMaxBytes()
 	sessions.fileSenders = fileSendersOf(closers)
 	if fallback := accountFallbackFor(cfg, options.usage, gws); fallback != nil {

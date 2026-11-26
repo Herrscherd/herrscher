@@ -524,6 +524,10 @@ func TestTheTelegramSectionNeedsSomeoneTheBotMayAnswer(t *testing.T) {
 		{map[string]string{envTelegramUser: "42"}, false},
 		{map[string]string{envTelegramMany: "42 43"}, false},
 		{map[string]string{envTelegramAll: "on"}, false},
+		{map[string]string{envTelegramUser: "42", envTelegramMany: "42, ana"}, true},
+		{map[string]string{envTelegramUser: "@ana", envTelegramAll: "on"}, true},
+		{map[string]string{envTelegramUser: "42", envTelegramAll: "maybe"}, true},
+		{map[string]string{envTelegramUser: "42", envTelegramAll: "off"}, false},
 	}
 	for _, tc := range cases {
 		tc.env[envTelegramBot] = "123:good"

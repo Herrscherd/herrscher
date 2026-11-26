@@ -606,14 +606,20 @@ func (model *setupModel) telegramState() sectionState {
 }
 
 func (model *setupModel) telegramAudience() bool {
-	if telegramID(model.draft.value(envTelegramUser)) {
-		return true
-	}
-	if slices.Contains([]string{"1", "true", "yes", "on"}, strings.ToLower(strings.TrimSpace(model.draft.value(envTelegramAll)))) {
-		return true
-	}
+	owner := strings.TrimSpace(model.draft.value(envTelegramUser))
 	allowed := strings.FieldsFunc(model.draft.value(envTelegramMany), func(char rune) bool { return strings.ContainsRune(", \t\n", char) })
-	return len(allowed) > 0 && !slices.ContainsFunc(allowed, func(id string) bool { return !telegramID(id) })
+	everyone := strings.ToLower(strings.TrimSpace(model.draft.value(envTelegramAll)))
+	switchOn, switchOff := []string{"1", "true", "yes", "on"}, []string{"0", "false", "no", "off"}
+	if owner != "" && !telegramID(owner) {
+		return false
+	}
+	if slices.ContainsFunc(allowed, func(id string) bool { return !telegramID(id) }) {
+		return false
+	}
+	if everyone != "" && !slices.Contains(switchOn, everyone) && !slices.Contains(switchOff, everyone) {
+		return false
+	}
+	return owner != "" || len(allowed) > 0 || slices.Contains(switchOn, everyone)
 }
 
 func telegramID(raw string) bool {

@@ -125,7 +125,7 @@ func (f *fakeWT) Create(_ context.Context, repo, name, base string) (string, err
 }
 
 func (f *fakeWT) PreExisting(context.Context, string, string) bool { return f.preExisting }
-func (f *fakeWT) Branch(name string) string                        { return "session/" + name }
+func (f *fakeWT) Branch(name string) string                        { return "session/inst/" + name }
 func (f *fakeWT) Remove(_ context.Context, _, name string, force bool) error {
 	if f.removeErr != nil && !force {
 		return f.removeErr

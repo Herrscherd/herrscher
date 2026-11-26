@@ -37,7 +37,7 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 		force := input.Bool("force")
 		if err := wtRoot.Remove(ctx, repo, name, force); err != nil {
 			h.warnIfFailed(h.sup.StartWithin(sess, supervisorGrace), "start "+name)
-			return contracts.Result{}, newDirtyWorktreeError(name, err)
+			return contracts.Result{}, newDirtyWorktreeError(name, wtRoot.Branch(name), err)
 		}
 	}
 	note := h.tidyChannel(ctx, sess)

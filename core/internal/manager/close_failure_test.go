@@ -63,11 +63,11 @@ func TestARefusedCloseNamesTheDirtySessionInEachLanguage(t *testing.T) {
 	}{
 		{"english", i18n.English, []string{
 			"session dirty has uncommitted changes: commit them, or close it with force:true to discard them",
-			"branch session/dirty is kept.",
+			"branch session/inst/dirty is kept.",
 		}},
 		{"french", i18n.French, []string{
 			"la session « dirty » a des changements non validés : valide-les, ou ferme-la avec force:true pour les abandonner",
-			"la branche session/dirty est conservée.",
+			"la branche session/inst/dirty est conservée.",
 		}},
 	}
 	for _, tc := range cases {

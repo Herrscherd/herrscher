@@ -120,7 +120,7 @@ func TestSessionCreateBanner(t *testing.T) {
 				"✅ Running on REF(new-inst__demo).",
 				"Mode: isolated worktree",
 				"Worktree: `/wt/x`",
-				"Branch: `session/demo`",
+				"Branch: `session/inst/demo`",
 				"Command: `claude`",
 			},
 			wantSend: []string{"Mode: isolated worktree", "Worktree: `/wt/x`"},

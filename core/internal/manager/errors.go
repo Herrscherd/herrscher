@@ -217,17 +217,22 @@ func restartLostError(messages *clitext.Messages, lang i18n.Language, name strin
 	return localize(messages, lang, english, clitext.SessionSwitchRestartLost, params, restartErr, rollbackErr)
 }
 
-func newDirtyWorktreeError(name string, cause error) error {
-	return &dirtyWorktreeError{name: name, cause: cause}
+func newDirtyWorktreeError(name, branch string, cause error) error {
+	return &dirtyWorktreeError{name: name, branch: branch, cause: cause}
 }
 
 type dirtyWorktreeError struct {
-	name  string
-	cause error
+	name   string
+	branch string
+	cause  error
 }
 
 func (e *dirtyWorktreeError) Error() string {
-	return fmt.Sprintf("%v; commit, or close with force:true to discard (branch session/%s is kept)", e.cause, e.name)
+	return fmt.Sprintf("%v; commit, or close with force:true to discard (branch %s is kept)", e.cause, e.branch)
+}
+
+func (e *dirtyWorktreeError) KeptBranch() string {
+	return e.branch
 }
 
 func (e *dirtyWorktreeError) Unwrap() error {

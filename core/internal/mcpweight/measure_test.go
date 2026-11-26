@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Herrscherd/herrscher/core/contextwindow"
+	"github.com/Herrscherd/herrscher/core/internal/agent"
 )
 
 const missingCommand = "/nonexistent/herrscher-mcp-weight-missing"
@@ -20,8 +21,8 @@ func TestMeasureCountsToolsAcrossPagesExactly(t *testing.T) {
 	if !result.Measured || result.Cause != "" {
 		t.Fatalf("Measure = %+v, want a measured server", result)
 	}
-	if result.Tools != len(fakeToolDefinitions()) {
-		t.Errorf("Tools = %d, want %d", result.Tools, len(fakeToolDefinitions()))
+	if result.Tools != fakeToolCount {
+		t.Errorf("Tools = %d, want %d", result.Tools, fakeToolCount)
 	}
 	if result.Bytes != expectedBytes() {
 		t.Errorf("Bytes = %d, want %d", result.Bytes, expectedBytes())
@@ -45,8 +46,19 @@ func TestMeasureReportsSilentServerAsTimeout(t *testing.T) {
 	}
 }
 
+func TestMeasureReportsParentCancellationAsCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	timer := time.AfterFunc(500*time.Millisecond, cancel)
+	defer timer.Stop()
+	result := Measure(ctx, fakeServer("silent"), DefaultTimeout)
+	if result.Measured || result.Cause != CauseCanceled {
+		t.Fatalf("Measure = %+v, want a canceled measure, not a timeout", result)
+	}
+}
+
 func TestMeasureReportsHTTPServerAsNotMeasuredWithoutStarting(t *testing.T) {
-	remote := Server{Name: "remote", Type: "http", URL: "https://example.invalid/mcp", Command: missingCommand}
+	remote := agent.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp", Command: missingCommand}
 	result := Measure(context.Background(), remote, DefaultTimeout)
 	if result.Measured || result.Cause != CauseNotStdio {
 		t.Fatalf("Measure = %+v, want a server not measured", result)
@@ -57,7 +69,7 @@ func TestMeasureReportsHTTPServerAsNotMeasuredWithoutStarting(t *testing.T) {
 }
 
 func TestMeasureReportsMissingCommandAsStartFailure(t *testing.T) {
-	result := Measure(context.Background(), Server{Name: "gone", Command: missingCommand}, DefaultTimeout)
+	result := Measure(context.Background(), agent.MCPServer{Name: "gone", Command: missingCommand}, DefaultTimeout)
 	if result.Measured || result.Cause != CauseStart {
 		t.Fatalf("Measure = %+v, want a start failure", result)
 	}
@@ -67,6 +79,16 @@ func TestMeasureReportsEarlyExitAsExited(t *testing.T) {
 	result := Measure(context.Background(), fakeServer("exit"), DefaultTimeout)
 	if result.Measured || result.Cause != CauseExited {
 		t.Fatalf("Measure = %+v, want an exited server", result)
+	}
+}
+
+func TestMeasureKeepsTheServerStderrTailInTheDetail(t *testing.T) {
+	result := Measure(context.Background(), fakeServer("stderr-exit"), DefaultTimeout)
+	if result.Measured || result.Cause != CauseExited {
+		t.Fatalf("Measure = %+v, want an exited server", result)
+	}
+	if want := `stderr: "missing token"`; !strings.Contains(result.Detail, want) {
+		t.Fatalf("Detail = %q, want it to contain %q", result.Detail, want)
 	}
 }
 
@@ -98,12 +120,26 @@ func TestMeasureStopsAtThePageLimit(t *testing.T) {
 	}
 }
 
+func TestMeasureRefusesDefinitionsOverTheTotalLimitAcrossPages(t *testing.T) {
+	result := Measure(context.Background(), fakeServer("bulky"), DefaultTimeout)
+	if result.Measured || result.Cause != CauseTooLarge {
+		t.Fatalf("Measure = %+v, want the total size limit, not the page limit", result)
+	}
+}
+
+func TestMeasureSkipsServerRequestsThatReuseAnID(t *testing.T) {
+	result := Measure(context.Background(), fakeServer("server-request"), DefaultTimeout)
+	if !result.Measured || result.Tools != fakeToolCount || result.Cause != "" {
+		t.Fatalf("Measure = %+v, want the tools after a server request with the same id", result)
+	}
+}
+
 func TestDescribeNamesWhyAServerIsNotStarted(t *testing.T) {
-	stdio := Describe(Server{Name: "local", Command: missingCommand})
-	if stdio.Measured || stdio.Cause != CauseNotStarted || stdio.Transport != TransportStdio {
+	stdio := Describe(agent.MCPServer{Name: "local", Command: missingCommand})
+	if stdio.Measured || stdio.Cause != CauseNotStarted || stdio.Transport != agent.TransportStdio {
 		t.Fatalf("Describe(stdio) = %+v, want a server not started", stdio)
 	}
-	sse := Describe(Server{Name: "stream", Type: "sse"})
+	sse := Describe(agent.MCPServer{Name: "stream", Type: "sse"})
 	if sse.Cause != CauseNotStdio || sse.Transport != "sse" {
 		t.Fatalf("Describe(sse) = %+v, want a server not stdio", sse)
 	}
@@ -143,8 +179,18 @@ func TestReadServersRefusesMalformedFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"mcpServers":`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ReadServers(path); !errors.Is(err, ErrConfig) {
-		t.Fatalf("ReadServers error = %v, want ErrConfig", err)
+	if _, err := ReadServers(path); err == nil || !strings.Contains(err.Error(), "parse mcp.json") {
+		t.Fatalf("ReadServers error = %v, want a parse error", err)
+	}
+}
+
+func TestReadServersRefusesStdioWithoutCommand(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp.json")
+	if err := os.WriteFile(path, []byte(`{"mcpServers":{"broken":{"type":"stdio"}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadServers(path); !errors.Is(err, agent.ErrMissingMCPCommand) {
+		t.Fatalf("ReadServers error = %v, want ErrMissingMCPCommand", err)
 	}
 }
 

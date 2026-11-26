@@ -6,16 +6,27 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/Herrscherd/herrscher/core/internal/agent"
 )
 
 type session struct {
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
-	inbound chan inboundLine
-	nextID  int
+	cmd            *exec.Cmd
+	stdin          io.WriteCloser
+	inbound        chan inboundLine
+	stopping       chan struct{}
+	readerDone     chan struct{}
+	stderr         *tailBuffer
+	nextID         int
+	outputCloseErr error
 }
 
 type inboundLine struct {
@@ -31,7 +42,8 @@ type request struct {
 }
 
 type response struct {
-	ID     *int            `json:"id"`
+	ID     json.RawMessage `json:"id"`
+	Method string          `json:"method"`
 	Result json.RawMessage `json:"result"`
 	Error  *remoteError    `json:"error"`
 }
@@ -41,7 +53,9 @@ type remoteError struct {
 	Message string `json:"message"`
 }
 
-func (e *remoteError) Error() string { return e.Message }
+func (e *remoteError) Error() string {
+	return fmt.Sprintf("code %d: %s", e.Code, strconv.Quote(e.Message))
+}
 
 type clientInfo struct {
 	Name    string `json:"name"`
@@ -63,25 +77,80 @@ type toolsPage struct {
 	NextCursor string            `json:"nextCursor"`
 }
 
-func start(ctx context.Context, server Server, dir string) (*session, error) {
+type tailBuffer struct {
+	mu    sync.Mutex
+	limit int
+	data  []byte
+}
+
+func (b *tailBuffer) Write(chunk []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	written := len(chunk)
+	if len(chunk) > b.limit {
+		chunk = chunk[len(chunk)-b.limit:]
+	}
+	b.data = append(b.data, chunk...)
+	if excess := len(b.data) - b.limit; excess > 0 {
+		b.data = b.data[excess:]
+	}
+	return written, nil
+}
+
+func (b *tailBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return strings.TrimSpace(string(b.data))
+}
+
+func start(ctx context.Context, server agent.MCPServer, dir string) (*session, error) {
 	cmd := exec.CommandContext(ctx, substitute(server.Command, dir), substituteAll(server.Args, dir)...)
 	cmd.Dir = dir
 	cmd.Env = environment(server.Env, dir)
 	cmd.WaitDelay = stopWaitDelay
+	cmd.Cancel = func() error { return killProcessTree(cmd) }
+	isolateProcessGroup(cmd)
+	stderr := &tailBuffer{limit: stderrTailBytes}
+	cmd.Stderr = stderr
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, fail(CauseStart, err)
 	}
-	stdout, err := cmd.StdoutPipe()
+	stdout, outputWriter, err := os.Pipe()
 	if err != nil {
-		return nil, fail(CauseStart, err)
+		return nil, fail(CauseStart, errors.Join(err, closeAll(stdin)))
 	}
+	cmd.Stdout = outputWriter
 	if err := cmd.Start(); err != nil {
-		return nil, fail(CauseStart, err)
+		return nil, fail(CauseStart, errors.Join(err, closeAll(stdin, stdout, outputWriter)))
 	}
-	inbound := make(chan inboundLine)
-	go readLines(ctx, stdout, inbound)
-	return &session{cmd: cmd, stdin: stdin, inbound: inbound, nextID: 1}, nil
+	if err := outputWriter.Close(); err != nil {
+		return nil, fail(CauseStart, errors.Join(err, discardStarted(cmd, stdin, stdout)))
+	}
+	session := &session{
+		cmd:        cmd,
+		stdin:      stdin,
+		inbound:    make(chan inboundLine),
+		stopping:   make(chan struct{}),
+		readerDone: make(chan struct{}),
+		stderr:     stderr,
+		nextID:     1,
+	}
+	go session.read(stdout)
+	return session, nil
+}
+
+func closeAll(closers ...io.Closer) error {
+	var errs []error
+	for _, closer := range closers {
+		errs = append(errs, closer.Close())
+	}
+	return errors.Join(errs...)
+}
+
+func discardStarted(cmd *exec.Cmd, closers ...io.Closer) error {
+	killErr := killProcessTree(cmd)
+	return errors.Join(killErr, closeAll(closers...), cmd.Wait())
 }
 
 func substituteAll(values []string, dir string) []string {
@@ -92,20 +161,21 @@ func substituteAll(values []string, dir string) []string {
 	return out
 }
 
-func readLines(ctx context.Context, output io.Reader, inbound chan<- inboundLine) {
+func (s *session) read(output *os.File) {
+	defer close(s.readerDone)
+	defer s.closeOutput(output)
 	scanner := bufio.NewScanner(output)
 	scanner.Buffer(make([]byte, 0, initialBuffer), maxMessageBytes)
 	for scanner.Scan() {
 		select {
-		case inbound <- inboundLine{line: bytes.Clone(scanner.Bytes())}:
-		case <-ctx.Done():
+		case s.inbound <- inboundLine{line: bytes.Clone(scanner.Bytes())}:
+		case <-s.stopping:
 			return
 		}
 	}
-	end := endOfOutput(scanner.Err())
 	select {
-	case inbound <- inboundLine{err: end}:
-	case <-ctx.Done():
+	case s.inbound <- inboundLine{err: endOfOutput(scanner.Err())}:
+	case <-s.stopping:
 	}
 }
 
@@ -130,6 +200,7 @@ func listTools(ctx context.Context, session *session) ([]json.RawMessage, error)
 		return nil, err
 	}
 	var tools []json.RawMessage
+	definitionBytes := 0
 	cursor := ""
 	for page := 1; page <= MaxPages; page++ {
 		raw, err := session.call(ctx, methodToolsList, listParams{Cursor: cursor})
@@ -143,6 +214,10 @@ func listTools(ctx context.Context, session *session) ([]json.RawMessage, error)
 		if listed.Tools == nil {
 			return nil, fail(CauseProtocol, errNoTools)
 		}
+		definitionBytes += totalBytes(listed.Tools)
+		if definitionBytes > maxDefinitionBytes {
+			return nil, fail(CauseTooLarge, errDefinitionsTooLarge)
+		}
 		tools = append(tools, listed.Tools...)
 		if listed.NextCursor == "" {
 			return tools, nil
@@ -150,6 +225,14 @@ func listTools(ctx context.Context, session *session) ([]json.RawMessage, error)
 		cursor = listed.NextCursor
 	}
 	return nil, fail(CauseTooManyPages, errPageLimit)
+}
+
+func totalBytes(tools []json.RawMessage) int {
+	total := 0
+	for _, tool := range tools {
+		total += len(tool)
+	}
+	return total
 }
 
 func (s *session) call(ctx context.Context, method string, params any) (json.RawMessage, error) {
@@ -167,7 +250,7 @@ func (s *session) call(ctx context.Context, method string, params any) (json.Raw
 		if err := json.Unmarshal(received.line, &message); err != nil {
 			return nil, fail(CauseProtocol, err)
 		}
-		if message.ID == nil || *message.ID != requestID {
+		if message.Method != "" || !answers(message.ID, requestID) {
 			continue
 		}
 		if message.Error != nil {
@@ -175,6 +258,11 @@ func (s *session) call(ctx context.Context, method string, params any) (json.Raw
 		}
 		return message.Result, nil
 	}
+}
+
+func answers(rawID json.RawMessage, requestID int) bool {
+	var id *int
+	return json.Unmarshal(rawID, &id) == nil && id != nil && *id == requestID
 }
 
 func (s *session) send(message request) error {
@@ -196,18 +284,41 @@ func (s *session) receive(ctx context.Context) (inboundLine, error) {
 		}
 		return received, nil
 	case <-ctx.Done():
-		return inboundLine{}, fail(CauseTimeout, ctx.Err())
+		return inboundLine{}, contextFailure(ctx.Err())
 	}
 }
 
-func (s *session) stop() error {
-	killErr := s.cmd.Process.Kill()
-	if errors.Is(killErr, os.ErrProcessDone) {
-		killErr = nil
+func contextFailure(err error) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return fail(CauseTimeout, err)
 	}
+	return fail(CauseCanceled, err)
+}
+
+func (s *session) stop() error {
+	close(s.stopping)
+	killErr := killProcessTree(s.cmd)
+	outputErr := s.awaitOutput()
 	waitErr := s.cmd.Wait()
 	if _, exited := errors.AsType[*exec.ExitError](waitErr); exited {
 		waitErr = nil
 	}
-	return errors.Join(killErr, waitErr)
+	return errors.Join(killErr, outputErr, waitErr)
+}
+
+func (s *session) awaitOutput() error {
+	select {
+	case <-s.readerDone:
+		return s.outputCloseErr
+	case <-time.After(stopWaitDelay):
+		return errOutputOpen
+	}
+}
+
+func (s *session) closeOutput(output *os.File) {
+	s.outputCloseErr = output.Close()
+}
+
+func (s *session) stderrTail() string {
+	return s.stderr.String()
 }

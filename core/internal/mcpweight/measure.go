@@ -8,10 +8,12 @@ import (
 	"maps"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Herrscherd/herrscher/core/contextwindow"
+	"github.com/Herrscherd/herrscher/core/internal/agent"
 )
 
 // DefaultTimeout bounds the whole exchange with one server, from its start to its last answer.
@@ -22,7 +24,9 @@ const MaxPages = 100
 
 const (
 	maxMessageBytes     = 4 << 20
+	maxDefinitionBytes  = 16 << 20
 	initialBuffer       = 64 << 10
+	stderrTailBytes     = 1 << 10
 	stopWaitDelay       = 2 * time.Second
 	rpcVersion          = "2.0"
 	protocolVersion     = "2025-06-18"
@@ -39,13 +43,14 @@ const (
 // Cause names why a server was not measured, or where its exchange failed.
 type Cause string
 
-// The causes a Result carries when it is not measured.
+// The causes a Result carries when the server was not measured, or was measured but did not stop cleanly.
 const (
 	CauseNotStdio     Cause = "not_stdio"
 	CauseNotStarted   Cause = "not_started"
 	CauseStart        Cause = "start"
 	CauseExited       Cause = "exited"
 	CauseTimeout      Cause = "timeout"
+	CauseCanceled     Cause = "canceled"
 	CauseProtocol     Cause = "protocol"
 	CauseRejected     Cause = "rejected"
 	CauseTooLarge     Cause = "too_large"
@@ -54,11 +59,13 @@ const (
 )
 
 var (
-	errNoTools   = errors.New("tools/list answered without a tools array")
-	errPageLimit = errors.New("tools/list kept returning a next cursor past the page limit")
+	errNoTools             = errors.New("tools/list answered without a tools array")
+	errPageLimit           = errors.New("tools/list kept returning a next cursor past the page limit")
+	errDefinitionsTooLarge = errors.New("tools/list definitions exceed the total size limit")
+	errOutputOpen          = errors.New("the server output is still open after the server was killed")
 )
 
-// Result is the weight of one server's tool definitions, or the reason it has none.
+// Result is the weight of one server's tool definitions, or the reason it has none. Cause is set when the server was not measured, and also when it was measured but did not stop cleanly, in which case Measured stays true.
 type Result struct {
 	Name      string `json:"name"`
 	Transport string `json:"transport"`
@@ -84,7 +91,7 @@ func fail(cause Cause, err error) error {
 }
 
 // Describe reports a server without starting it: a stdio server is listed as not started, any other transport as not stdio.
-func Describe(server Server) Result {
+func Describe(server agent.MCPServer) Result {
 	result := Result{Name: server.Name, Transport: server.Transport(), Cause: CauseNotStdio}
 	if server.Stdio() {
 		result.Cause = CauseNotStarted
@@ -93,18 +100,28 @@ func Describe(server Server) Result {
 }
 
 // Measure starts a stdio server in a scratch directory, lists its tools across every page and reports their count and size. Any other transport is reported as not measured, and a failure is reported with its cause, never dropped.
-func Measure(ctx context.Context, server Server, timeout time.Duration) Result {
+func Measure(ctx context.Context, server agent.MCPServer, timeout time.Duration) Result {
 	if !server.Stdio() {
 		return Describe(server)
 	}
 	result := Result{Name: server.Name, Transport: server.Transport()}
-	tools, err := serve(ctx, server, timeout)
-	if err != nil {
-		result.Cause = causeOf(err)
-		result.Detail = err.Error()
+	outcome := serve(ctx, server, timeout)
+	if outcome.err != nil {
+		result.Cause = causeOf(outcome.err)
+		result.Detail = detail(outcome.err, outcome.stderr)
 		return result
 	}
+	fillWeight(&result, outcome.tools)
+	if outcome.stop != nil {
+		result.Cause = CauseStop
+		result.Detail = detail(outcome.stop, outcome.stderr)
+	}
+	return result
+}
+
+func fillWeight(result *Result, tools []json.RawMessage) {
 	var definitions strings.Builder
+	definitions.Grow(totalBytes(tools))
 	for _, tool := range tools {
 		definitions.Write(tool)
 	}
@@ -112,7 +129,13 @@ func Measure(ctx context.Context, server Server, timeout time.Duration) Result {
 	result.Tools = len(tools)
 	result.Bytes = definitions.Len()
 	result.Tokens = contextwindow.EstimateTokens(definitions.String())
-	return result
+}
+
+func detail(err error, stderr string) string {
+	if stderr == "" {
+		return err.Error()
+	}
+	return err.Error() + "; stderr: " + strconv.Quote(stderr)
 }
 
 func causeOf(err error) Cause {
@@ -122,28 +145,29 @@ func causeOf(err error) Cause {
 	return CauseProtocol
 }
 
-func serve(ctx context.Context, server Server, timeout time.Duration) ([]json.RawMessage, error) {
+type outcome struct {
+	tools  []json.RawMessage
+	stderr string
+	err    error
+	stop   error
+}
+
+func serve(ctx context.Context, server agent.MCPServer, timeout time.Duration) outcome {
 	dir, err := os.MkdirTemp("", scratchPattern)
 	if err != nil {
-		return nil, fail(CauseStart, err)
+		return outcome{err: fail(CauseStart, err)}
 	}
 	defer removeScratch(dir)
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	session, err := start(runCtx, server, dir)
 	if err != nil {
-		return nil, err
+		return outcome{err: err}
 	}
 	tools, listErr := listTools(runCtx, session)
 	cancel()
 	stopErr := session.stop()
-	if listErr != nil {
-		return nil, listErr
-	}
-	if stopErr != nil {
-		return nil, fail(CauseStop, stopErr)
-	}
-	return tools, nil
+	return outcome{tools: tools, stderr: session.stderrTail(), err: listErr, stop: stopErr}
 }
 
 func removeScratch(dir string) {

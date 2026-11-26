@@ -351,7 +351,11 @@ func (a Agent) writeCodexConfig(codexDir, worktreePath string) error {
 	if err != nil {
 		return fmt.Errorf("read %s: %w", mcpFile, err)
 	}
-	codexConfig, err := renderCodexMCP(mcp, worktreePath)
+	servers, err := ParseMCPServers(mcp)
+	if err != nil {
+		return err
+	}
+	codexConfig, err := renderCodexMCP(servers, worktreePath)
 	if err != nil {
 		return err
 	}

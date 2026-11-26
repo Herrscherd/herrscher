@@ -5891,14 +5891,14 @@
     "other": "{{.Name}} ({{.Transport}}): not measured, {{.Reason}}: {{.Detail}}"
   },
   {
-    "id": "cli.mcp.weight.estimate",
-    "description": "Footer of the mcp weight report explaining that tokens are estimated",
-    "other": "Tokens are estimated at about 4 bytes per token, the model does not count them."
+    "id": "cli.mcp.weight.stopped",
+    "description": "A measured server whose stop failed: its tools are kept, Reason and Detail say why",
+    "other": "{{.Name}}: measured, but {{.Reason}}: {{.Detail}}"
   },
   {
-    "id": "cli.mcp.weight.unknown_agent",
-    "description": "Failure of mcp weight when no agent has the name, Agent is the name given",
-    "other": "no agent named {{.Agent}}"
+    "id": "cli.mcp.weight.estimate",
+    "description": "Footer of the mcp weight report explaining that bytes are raw and tokens are estimated",
+    "other": "Bytes are the raw size of the tool definitions the server sends. Tokens are an estimate at about 4 bytes per token, the model does not count them."
   },
   {
     "id": "cli.mcp.weight.cause.not_stdio",
@@ -5926,6 +5926,11 @@
     "other": "the server did not answer in time"
   },
   {
+    "id": "cli.mcp.weight.cause.canceled",
+    "description": "Cause of a measure canceled by its caller before the server answered",
+    "other": "the measure was canceled before the server answered"
+  },
+  {
     "id": "cli.mcp.weight.cause.protocol",
     "description": "Cause of a server whose answer breaks the MCP exchange",
     "other": "the server answered outside the MCP exchange"
@@ -5938,7 +5943,7 @@
   {
     "id": "cli.mcp.weight.cause.too_large",
     "description": "Cause of a server that sent a message over the size limit",
-    "other": "the server sent a message over the size limit"
+    "other": "the server sent more data than the size limit allows"
   },
   {
     "id": "cli.mcp.weight.cause.too_many_pages",

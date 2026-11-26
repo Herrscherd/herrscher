@@ -2,49 +2,51 @@ package clitext
 
 // Keys of the MCP tool weight command.
 const (
-	CmdHelpMCPWeight         = "cli.help.cmd.mcp.weight"
-	CmdParamMCPWeightAgent   = "cli.help.param.mcp.weight.agent"
-	CmdParamMCPWeightDeep    = "cli.help.param.mcp.weight.deep"
-	MCPWeightHeader          = "cli.mcp.weight.header"
-	MCPWeightNone            = "cli.mcp.weight.none"
-	MCPWeightMeasured        = "cli.mcp.weight.measured"
-	MCPWeightFailed          = "cli.mcp.weight.failed"
-	MCPWeightFailedDetail    = "cli.mcp.weight.failed_detail"
-	MCPWeightEstimate        = "cli.mcp.weight.estimate"
-	MCPWeightUnknownAgent    = "cli.mcp.weight.unknown_agent"
-	MCPWeightCauseNotStdio   = "cli.mcp.weight.cause.not_stdio"
-	MCPWeightCauseNotStarted = "cli.mcp.weight.cause.not_started"
-	MCPWeightCauseStart      = "cli.mcp.weight.cause.start"
-	MCPWeightCauseExited     = "cli.mcp.weight.cause.exited"
-	MCPWeightCauseTimeout    = "cli.mcp.weight.cause.timeout"
-	MCPWeightCauseProtocol   = "cli.mcp.weight.cause.protocol"
-	MCPWeightCauseRejected   = "cli.mcp.weight.cause.rejected"
-	MCPWeightCauseTooLarge   = "cli.mcp.weight.cause.too_large"
-	MCPWeightCauseTooMany    = "cli.mcp.weight.cause.too_many_pages"
-	MCPWeightCauseStop       = "cli.mcp.weight.cause.stop"
+	CmdHelpToolWeight         = "cli.help.cmd.mcp.weight"
+	CmdParamToolWeightAgent   = "cli.help.param.mcp.weight.agent"
+	CmdParamToolWeightDeep    = "cli.help.param.mcp.weight.deep"
+	ToolWeightHeader          = "cli.mcp.weight.header"
+	ToolWeightNone            = "cli.mcp.weight.none"
+	ToolWeightMeasured        = "cli.mcp.weight.measured"
+	ToolWeightFailed          = "cli.mcp.weight.failed"
+	ToolWeightFailedDetail    = "cli.mcp.weight.failed_detail"
+	ToolWeightStopped         = "cli.mcp.weight.stopped"
+	ToolWeightEstimate        = "cli.mcp.weight.estimate"
+	ToolWeightCauseNotStdio   = "cli.mcp.weight.cause.not_stdio"
+	ToolWeightCauseNotStarted = "cli.mcp.weight.cause.not_started"
+	ToolWeightCauseStart      = "cli.mcp.weight.cause.start"
+	ToolWeightCauseExited     = "cli.mcp.weight.cause.exited"
+	ToolWeightCauseTimeout    = "cli.mcp.weight.cause.timeout"
+	ToolWeightCauseCanceled   = "cli.mcp.weight.cause.canceled"
+	ToolWeightCauseProtocol   = "cli.mcp.weight.cause.protocol"
+	ToolWeightCauseRejected   = "cli.mcp.weight.cause.rejected"
+	ToolWeightCauseTooLarge   = "cli.mcp.weight.cause.too_large"
+	ToolWeightCauseTooMany    = "cli.mcp.weight.cause.too_many_pages"
+	ToolWeightCauseStop       = "cli.mcp.weight.cause.stop"
 )
 
 func mcpKeys() map[Key][]string {
 	return map[Key][]string{
-		CmdHelpMCPWeight:         nil,
-		CmdParamMCPWeightAgent:   nil,
-		CmdParamMCPWeightDeep:    nil,
-		MCPWeightHeader:          {ParamAgent},
-		MCPWeightNone:            nil,
-		MCPWeightMeasured:        {ParamName, ParamTransport, ParamTools, ParamBytes, ParamTokens},
-		MCPWeightFailed:          {ParamName, ParamTransport, ParamReason},
-		MCPWeightFailedDetail:    {ParamName, ParamTransport, ParamReason, ParamDetail},
-		MCPWeightEstimate:        nil,
-		MCPWeightUnknownAgent:    {ParamAgent},
-		MCPWeightCauseNotStdio:   nil,
-		MCPWeightCauseNotStarted: nil,
-		MCPWeightCauseStart:      nil,
-		MCPWeightCauseExited:     nil,
-		MCPWeightCauseTimeout:    nil,
-		MCPWeightCauseProtocol:   nil,
-		MCPWeightCauseRejected:   nil,
-		MCPWeightCauseTooLarge:   nil,
-		MCPWeightCauseTooMany:    nil,
-		MCPWeightCauseStop:       nil,
+		CmdHelpToolWeight:         nil,
+		CmdParamToolWeightAgent:   nil,
+		CmdParamToolWeightDeep:    nil,
+		ToolWeightHeader:          {ParamAgent},
+		ToolWeightNone:            nil,
+		ToolWeightMeasured:        {ParamName, ParamTransport, ParamTools, ParamBytes, ParamTokens},
+		ToolWeightFailed:          {ParamName, ParamTransport, ParamReason},
+		ToolWeightFailedDetail:    {ParamName, ParamTransport, ParamReason, ParamDetail},
+		ToolWeightStopped:         {ParamName, ParamReason, ParamDetail},
+		ToolWeightEstimate:        nil,
+		ToolWeightCauseNotStdio:   nil,
+		ToolWeightCauseNotStarted: nil,
+		ToolWeightCauseStart:      nil,
+		ToolWeightCauseExited:     nil,
+		ToolWeightCauseTimeout:    nil,
+		ToolWeightCauseCanceled:   nil,
+		ToolWeightCauseProtocol:   nil,
+		ToolWeightCauseRejected:   nil,
+		ToolWeightCauseTooLarge:   nil,
+		ToolWeightCauseTooMany:    nil,
+		ToolWeightCauseStop:       nil,
 	}
 }

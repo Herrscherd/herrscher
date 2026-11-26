@@ -325,11 +325,16 @@ CLI, which only that backend's gate prevents.
 
 ## MCP tool weight, per agent
 
-`herrscher mcp weight --agent <name>` reads the agent's `mcp.json` and reports what
-each MCP server's tool definitions cost in context: the number of tools, the size in
-bytes of their JSON definitions, and an estimated token count. `--json` prints the
-same results as a list of objects with `name`, `transport`, `measured`, `tools`,
-`bytes`, `tokens`, `cause` and `detail`.
+`herrscher mcp weight --agent <name>` reads the agent's `mcp.json` and reports, for each
+MCP server, the size of its tool definitions: the number of tools, the size in bytes of
+their raw JSON as the server sent it, and an estimated token count. These numbers are the
+weight of what the server advertises, not what the model sees in its context. `--json`
+prints the same results as a list of objects with `name`, `transport`, `measured`,
+`tools`, `bytes`, `tokens`, `cause` and `detail`.
+
+The file is parsed once, strictly: an empty server name, or a server that runs as a local
+process (no `type`, or `stdio`) without a `command`, refuses the whole report with an
+error, as the Codex configuration does. A missing file is an empty report.
 
 Without `--deep` nothing is started. A stdio server is listed as not started, and a
 server with any other transport (`http`, `sse`, a URL) as not stdio. Those are the
@@ -344,17 +349,26 @@ of each definition as the server sent it, not re-serialized. Each server is star
 - in a fresh scratch directory under the system temporary directory, removed afterwards;
 - with the environment of the command running `mcp weight`, plus the `env` declared
   for that server in `mcp.json`;
-- with every `{{WORKTREE}}` in its `args` and `env` values replaced by the scratch
-  directory path.
+- with every `{{WORKTREE}}` in its `command`, `args` and `env` values replaced by the
+  scratch directory path.
 
 The whole exchange with one server is bounded by a 15 second timeout, from the start
-to the last answer. A server that exceeds it, exits early, refuses a request, answers
-outside the protocol, or sends a message over 4 MiB is reported with its cause and
-its error detail. No server is dropped from the report.
+to the last answer. The definitions of all its pages together may not exceed 16 MiB,
+and no single message may exceed 4 MiB. A server that exceeds the timeout, exits early,
+refuses a request, answers outside the protocol, or exceeds a size limit is reported
+with its cause and its error detail, which ends with the last 1 KiB the server wrote to
+its stderr, as `stderr: "..."`. When the caller cancels the measure, the cause is
+`canceled`, not `timeout`. Messages the server sends with a method of their own
+(requests to the client, notifications) are skipped, and an answer is matched by its id
+alone. No server is dropped from the report.
 
-The probe always kills the child process and waits for it to exit. It kills only that
-direct child: a server that starts its own subprocesses may leave them running after
-the probe returns.
+The probe stops the server, reads its output to the end, and then waits for the process
+to exit. On Unix the server runs in its own process group and the probe kills the whole
+group, so the subprocesses it starts die with it. A subprocess that leaves the group
+itself (for example by starting a new session) can keep the output open: the report then
+keeps the tools already listed and gives the cause `stop`, and the text report prints a
+second line for it. On Windows only the direct child is killed, and its subprocesses may
+keep running after the probe returns.
 
 **Tokens are an estimate.** They come from `contextwindow.EstimateTokens`, which counts
 about four bytes per token. They are not counted by the model's tokenizer, and the

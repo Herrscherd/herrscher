@@ -1,58 +1,34 @@
 package agent
 
 import (
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 )
 
-type codexMCPServer struct {
-	Type    string            `json:"type"`
-	Command string            `json:"command"`
-	Args    []string          `json:"args"`
-	Env     map[string]string `json:"env"`
-}
-
-type codexMCPConfig struct {
-	MCPServers map[string]codexMCPServer `json:"mcpServers"`
-}
-
-func renderCodexMCP(raw []byte, worktree string) ([]byte, error) {
-	var config codexMCPConfig
-	if err := json.Unmarshal(raw, &config); err != nil {
-		return nil, fmt.Errorf("parse mcp.json: %w", err)
-	}
-
+func renderCodexMCP(servers []MCPServer, worktree string) ([]byte, error) {
 	var out strings.Builder
-	for index, name := range sortedKeys(config.MCPServers) {
-		server := config.MCPServers[name]
-		if err := checkCodexMCPServer(name, server); err != nil {
+	for index, server := range servers {
+		if err := checkCodexTransport(server); err != nil {
 			return nil, err
 		}
 		if index > 0 {
 			out.WriteByte('\n')
 		}
-		writeCodexMCPServer(&out, name, server, worktree)
+		writeCodexMCPServer(&out, server, worktree)
 	}
 	return []byte(out.String()), nil
 }
 
-func checkCodexMCPServer(name string, server codexMCPServer) error {
-	if strings.TrimSpace(name) == "" {
-		return ErrEmptyMCPServerName
-	}
-	if server.Type != "" && server.Type != "stdio" {
-		return fmt.Errorf("%w %q for server %q", ErrUnsupportedMCPTransport, server.Type, name)
-	}
-	if strings.TrimSpace(server.Command) == "" {
-		return fmt.Errorf("%w %q", ErrMissingMCPCommand, name)
+func checkCodexTransport(server MCPServer) error {
+	if server.Type != "" && server.Type != TransportStdio {
+		return fmt.Errorf("%w %q for server %q", ErrUnsupportedMCPTransport, server.Type, server.Name)
 	}
 	return nil
 }
 
-func writeCodexMCPServer(out *strings.Builder, name string, server codexMCPServer, worktree string) {
-	table := "[mcp_servers." + tomlKey(name) + "]\n"
+func writeCodexMCPServer(out *strings.Builder, server MCPServer, worktree string) {
+	table := "[mcp_servers." + tomlKey(server.Name) + "]\n"
 	out.WriteString(table)
 	out.WriteString("command = " + substituteWorktree(server.Command, worktree) + "\n")
 	if len(server.Args) > 0 {
@@ -69,7 +45,7 @@ func writeCodexMCPServer(out *strings.Builder, name string, server codexMCPServe
 		return
 	}
 	out.WriteByte('\n')
-	out.WriteString("[mcp_servers." + tomlKey(name) + ".env]\n")
+	out.WriteString("[mcp_servers." + tomlKey(server.Name) + ".env]\n")
 	for _, key := range sortedKeys(server.Env) {
 		out.WriteString(tomlKey(key) + " = " + substituteWorktree(server.Env[key], worktree) + "\n")
 	}

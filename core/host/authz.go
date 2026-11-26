@@ -158,6 +158,9 @@ func (h *hub) authorize(ctx context.Context, args []string) (admission, error) {
 		Subject:     h.subjectOf(principal, path, input),
 	}
 	if principal.Session != "" {
+		if listsApprovalRules(path, input) {
+			return admission{}, nil
+		}
 		if err := h.guardSessionCall(principal.Session, strings.Join(path, " "), input); err != nil {
 			return admission{}, err
 		}
@@ -200,6 +203,10 @@ func (h *hub) escalate(ctx context.Context, session string, path, args []string)
 		return admission{}, err
 	}
 	return admission{session: session, verb: strings.Join(path, " "), subject: subject, how: admittedAsked}, nil
+}
+
+func listsApprovalRules(path []string, input contracts.Input) bool {
+	return strings.Join(path, " ") == "approve rule" && input.Get("rule") == "" && input.Get("rm") == "" && len(input.Rest) == 0
 }
 
 func verbSubject(args []string) string {

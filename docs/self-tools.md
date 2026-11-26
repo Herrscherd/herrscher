@@ -71,12 +71,15 @@ The daemon decides each call under the role of the session, as it decides the
 - **The subtree still binds.** A verb that names another session than the
   caller or one it delegated is refused, asked or not.
 - **Each write is announced.** Every verb a session runs that changes
-  something (anything an `observer` would not run: `session send`,
-  `session issue open`, `session pr reply`, `memory record`, a verb run after
-  an approval or as steward, ...) is posted to the session's gateways as a
-  notice, cut at 240 characters, and so is a question the operator refused.
-  Reads stay silent, and so do `approve ask`, which the approval hook calls at
-  each tool call, and `env request`, which is its own notice.
+  something (`session send`, `session issue open`, `session pr reply`,
+  `memory record`, a verb run after an approval or as steward, ...) is posted
+  to the session's gateways as a notice, cut at 240 characters, and so is a
+  question the operator refused. Reads stay silent: what an `observer` runs,
+  a verb whose last word names a read (`list`, `show`, `get`, `read`,
+  `status`, `checks`, `comments`, ...), a plugin's included, and
+  `approve rule` with no rule, which only lists the session's own rules. So do
+  `approve ask`, which the approval hook calls at each tool call, and
+  `env request`, which is its own notice.
 
 ### Guards that hold even after an approval
 

@@ -1,6 +1,7 @@
 package authz
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -359,6 +360,24 @@ func TestAgentIsNotGrantable(t *testing.T) {
 	}
 	if got := RoleOf(Principal{ID: "chat:1"}, map[string]string{"chat:1": "agent"}); got != RoleObserver {
 		t.Fatalf("RoleOf = %q, want observer: agent hand-written into the table is not a grant", got)
+	}
+}
+
+func TestEachVerbAnAgentRunsIsAReadOrAnAnnouncedWrite(t *testing.T) {
+	writes := []string{
+		"session send", "session seed", "session handoff",
+		"session pr open", "session pr reply", "session issue open", "session issue comment",
+		"memory record", "memory unlink", "memory restore",
+	}
+	def, _ := definitionOf(RoleAgent)
+	for _, verb := range def.allow {
+		want := slices.Contains(writes, verb)
+		if got := Writes(strings.Fields(verb), false); got != want {
+			t.Errorf("Writes(%q) = %v, want %v", verb, got, want)
+		}
+	}
+	if Writes([]string{"discord", "channel", "read"}, true) {
+		t.Error("a plugin's read counts as a write")
 	}
 }
 

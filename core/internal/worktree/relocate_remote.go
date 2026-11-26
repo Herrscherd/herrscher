@@ -16,14 +16,14 @@ import (
 )
 
 const (
-	pullRequestRemote  = "origin"
-	defaultOriginLimit = time.Minute
-	originWaitDelay    = 2 * time.Second
+	pullRequestRemote = "origin"
+	originWaitDelay   = 2 * time.Second
 )
 
-// OriginAccess is how the migration asks the pull request remote whether it still holds a branch: the environment git runs with, or why origin cannot be asked at all.
+// OriginAccess is how the migration asks the pull request remote whether it still holds a branch: the environment git runs with, the deadline the question must end by, or why origin cannot be asked at all.
 type OriginAccess struct {
 	Env         []string
+	Deadline    time.Time
 	Unavailable error
 }
 
@@ -71,8 +71,11 @@ func (w *Worktreer) originHolding(ctx context.Context, plan Relocation, access O
 	if access.Unavailable != nil {
 		return "", w.originUnreachable(plan, nil, access.Unavailable)
 	}
-	ctx, cancel := context.WithTimeout(ctx, defaultOriginLimit)
-	defer cancel()
+	if !access.Deadline.IsZero() {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, access.Deadline)
+		defer cancel()
+	}
 	lsRemote := exec.CommandContext(ctx, "git", "-C", plan.Repo, "ls-remote", "--heads", pullRequestRemote, "refs/heads/"+plan.FromBranch)
 	lsRemote.Env = append(append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS="), access.Env...)
 	lsRemote.WaitDelay = originWaitDelay

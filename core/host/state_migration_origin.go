@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"os"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
@@ -11,10 +12,12 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
 
-func planLocalBareRelocation(ctx context.Context, worktrees *worktree.Worktreer, creds contracts.ForgeCredentials, repo string, bare worktree.BareSession) (worktree.Relocation, error) {
-	ctx, cancel := context.WithTimeout(ctx, sessionPRForgeLimit)
+func planLocalBareRelocation(ctx context.Context, worktrees *worktree.Worktreer, creds contracts.ForgeCredentials, repo string, bare worktree.BareSession, limit time.Duration) (worktree.Relocation, error) {
+	deadline := time.Now().Add(limit)
+	originCtx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
-	bare.Origin = migrationOriginAccess(ctx, creds, repo, bare.PullRequest)
+	bare.Origin = migrationOriginAccess(originCtx, creds, repo, bare.PullRequest)
+	bare.Origin.Deadline = deadline
 	return worktrees.PlanBareRelocation(ctx, bare)
 }
 

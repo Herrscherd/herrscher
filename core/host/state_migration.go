@@ -151,7 +151,7 @@ func planSessionRelocations(ctx context.Context, cliMessages *clitext.Messages, 
 		bare := worktree.BareSession{Name: sess.Name, Path: sess.Worktree, Scratch: sess.Scratch, PullRequest: sess.PullRequest}
 		plan, err := worktrees.BareTarget(bare)
 		if err == nil && sess.Host == "" {
-			plan, err = planLocalBareRelocation(ctx, worktrees, creds, plan.Repo, bare)
+			plan, err = planLocalBareRelocation(ctx, worktrees, creds, plan.Repo, bare, sessionPRForgeLimit)
 		}
 		if err != nil {
 			return nil, &stateMigrationRefusedError{messages: cliMessages, cause: err}

@@ -155,7 +155,7 @@ func TestMigrationRunsTheOriginQuestionThroughABatchSSH(t *testing.T) {
 	repo, from := bareSessionWithOrigin(t, "ssh://git@github.com/acme/app.git")
 	argv := fakeSSHRecorder(t)
 	worktrees := worktree.NewWorktreer(clitext.NewMessages(), "inst")
-	_, err := planLocalBareRelocation(t.Context(), worktrees, nil, repo, worktree.BareSession{Name: "alpha", Path: from, PullRequest: 12})
+	_, err := planLocalBareRelocation(t.Context(), worktrees, nil, repo, worktree.BareSession{Name: "alpha", Path: from, PullRequest: 12}, sessionPRForgeLimit)
 	if failure, ok := errors.AsType[worktree.FailureError](err); !ok || failure.Key != clitext.WorktreeRelocateRemoteUnreachable {
 		t.Fatalf("err = %v, want a %s refusal", err, clitext.WorktreeRelocateRemoteUnreachable)
 	}

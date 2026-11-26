@@ -103,7 +103,7 @@ func listHosts(st *state.State, asJSON bool) (string, error) {
 }
 
 func hostCheckVerb(messages *hostMessages, lang languageSource, warn io.Writer, store *state.State, layout RuntimeLayout) contracts.Cmd {
-	return contracts.New("host", "check").
+	return contracts.New("host", "check").Reads().
 		Help(clitext.CmdHelpHostCheck).
 		ValueParam(paramName, clitext.CmdParamHostCheckName, false).
 		Do(func(ctx context.Context, in contracts.Input) (contracts.Result, error) {

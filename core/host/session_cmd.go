@@ -161,7 +161,7 @@ func sessionInfoVerb(store *state.State, partDir string, sessions *sessionTable,
 }
 
 func sessionOverviewVerb(src overviewSource) contracts.Cmd {
-	return contracts.New(nsSession, "overview").
+	return contracts.New(nsSession, "overview").Reads().
 		Help(clitext.CmdHelpSessionOverview).
 		Do(func(_ context.Context, _ contracts.Input) (contracts.Result, error) {
 			b, err := json.Marshal(src.overviews())

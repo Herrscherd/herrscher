@@ -43,11 +43,11 @@ func (w *Worktreer) isGitRepo(ctx context.Context, repo string) bool {
 // Path returns the on-disk worktree directory for a logical session name inside
 // repo, namespaced by instanceID.
 func (w *Worktreer) Path(repo, name string) string {
-	return w.pathIn(repo, sessionsDir, name)
+	return sessionPathIn(repo, w.instanceID, name)
 }
 
-func (w *Worktreer) pathIn(repo, dir, name string) string {
-	return filepath.Join(repo, dir, w.instanceID, name)
+func sessionPathIn(repo, instanceID, name string) string {
+	return filepath.Join(repo, sessionsDir, instanceID, name)
 }
 
 // Branch returns the git branch backing a logical session name, namespaced by

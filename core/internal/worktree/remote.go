@@ -64,6 +64,12 @@ func (r *Remote) Create(ctx context.Context, repo, name, base string) (string, e
 	return out.Path, nil
 }
 
+// Path returns the worktree directory Create makes for name inside repo on the
+// remote host.
+func (r *Remote) Path(repo, name string) string {
+	return sessionPathIn(repo, r.instanceID, name)
+}
+
 // PreExisting reports whether Create would reuse a worktree. It has no error
 // return, so a host that cannot answer is reported as "yes, one is there": that
 // is the direction where a failed rollback leaves a directory behind, rather

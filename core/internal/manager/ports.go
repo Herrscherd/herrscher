@@ -43,6 +43,8 @@ type Worktrees interface {
 	// PreExisting says whether Create would reuse a worktree rather than make
 	// one, which is what tells a rollback whether the worktree is its to remove.
 	PreExisting(ctx context.Context, repo, name string) bool
+	// Path is the worktree directory Create makes for name inside repo.
+	Path(repo, name string) string
 	Branch(name string) string
 	// BranchAt reads the branch checked out in the worktree at path.
 	BranchAt(ctx context.Context, path string) (string, error)

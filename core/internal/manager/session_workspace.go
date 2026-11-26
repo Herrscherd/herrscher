@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -99,6 +100,9 @@ func (h *Handler) ensureWorkspace(ctx context.Context, worktrees Worktrees, repo
 	if req.shared {
 		return workspace{}, nil
 	}
+	if err := h.claimWorkspace(req, worktrees.Path(repo, req.name)); err != nil {
+		return workspace{}, err
+	}
 	reused := worktrees.PreExisting(ctx, repo, req.name)
 	path, err := worktrees.Create(ctx, repo, req.name, req.base)
 	if err != nil {
@@ -107,12 +111,29 @@ func (h *Handler) ensureWorkspace(ctx context.Context, worktrees Worktrees, repo
 	return workspace{path: path, reused: reused}, nil
 }
 
+func (h *Handler) claimWorkspace(req createRequest, path string) error {
+	sessions := h.st.SnapshotSessions()
+	for i := range sessions {
+		sess := &sessions[i]
+		if sess.Name == req.name || sess.Host != req.hostName || sess.Worktree == "" || filepath.Clean(sess.Worktree) != filepath.Clean(path) {
+			continue
+		}
+		english := fmt.Sprintf("session %q: %v: %s belongs to session %q", req.name, ErrWorkspaceTaken, path, sess.Name)
+		params := clitext.Params{clitext.ParamName: strconv.Quote(req.name), clitext.ParamOwner: strconv.Quote(sess.Name), clitext.ParamPath: strconv.Quote(path)}
+		return localize(h.messages, h.currentLanguage(), english, clitext.HostErrWorkspaceTaken, params, ErrWorkspaceTaken)
+	}
+	return nil
+}
+
 func (h *Handler) provisionAgent(ctx context.Context, req *createRequest, worktrees Worktrees, repo string, space *workspace) error {
 	agentName := req.runtime.agent
 	if req.shared {
 		return &SharedAgentError{Agent: agentName}
 	}
 	if space.path == "" {
+		if err := h.claimWorkspace(*req, worktrees.ScratchPath(repo, req.name)); err != nil {
+			return err
+		}
 		if _, statErr := os.Stat(worktrees.ScratchPath(repo, req.name)); statErr == nil {
 			space.reused = true
 		}

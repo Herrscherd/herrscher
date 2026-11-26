@@ -28,6 +28,8 @@ func (stoppingWorktrees) Create(context.Context, string, string, string) (string
 
 func (stoppingWorktrees) PreExisting(context.Context, string, string) bool { return false }
 
+func (stoppingWorktrees) Path(string, string) string { return "" }
+
 func (stoppingWorktrees) Branch(string) string { return "" }
 
 func (stoppingWorktrees) BranchAt(context.Context, string) (string, error) {

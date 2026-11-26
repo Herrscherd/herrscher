@@ -13,6 +13,14 @@ On Discord it opens the first time its owner pings the bot in a channel. A new
 session lands in the daemon's home unless `--under` names another category or
 forum, so work opened from one server does not surface in another.
 
+Renaming a session keeps its worktree `.herrscher-sessions/<id>/<old name>` and
+its branch `session/<id>/<old name>`: the agent runs in that folder and the
+branch may carry a pull request. Closing it, spawning or merging from it, and
+reporting its branch all read the branch checked out in the recorded worktree,
+never one derived from the current name. Creating a new session under the old
+name is refused while the renamed session still holds that folder (or that
+scratch directory): pick another name, or close the renamed session first.
+
 
 ## The state file and its migration
 
@@ -81,12 +89,16 @@ It refuses, writes nothing, and says what to do instead of guessing, when:
   <remote> --delete session/<name>`, or `git branch -dr <remote>/session/<name>`
   when it is already gone there) and start `serve` again;
 - the session records a pull request and `origin` cannot be asked whether it
-  still holds the branch. Only `origin`, the remote pull requests push to, is
-  asked, with the forge credentials of the connection, without prompting, and
-  for at most a minute. The refusal names the session and prints the commands
-  that move it by hand (`mkdir -p`, `git worktree move`, `git branch -m`), which
-  need no network: run them once the pull request is merged or closed, or start
-  `serve` again once `origin` answers;
+  still holds the branch, including when the forge token of the connection
+  cannot be refreshed. Only `origin`, the remote pull requests push to, is
+  asked, with that token. Git runs with its terminal prompt and askpass program
+  turned off, and ssh in batch mode with a ten second connect timeout, unless
+  `GIT_SSH_COMMAND`, `GIT_SSH` or `core.sshCommand` already choose the ssh
+  command, which then decides whether it prompts. Getting the token and asking
+  `origin` share one limit of a minute. The refusal names the session and
+  prints the commands that move it by hand (`mkdir -p`, `git worktree move`,
+  `git branch -m`), which need no network: run them once the pull request is
+  merged or closed, or start `serve` again once `origin` answers;
 - the worktree is checked out on another branch than `session/<name>`;
 - a session, or the folder of its worktree, is named like the instance id: the
   instance layout would nest every other session inside it (set

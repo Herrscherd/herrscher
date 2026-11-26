@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -64,6 +65,10 @@ func (f *fakeWTC) IsCleanAt(_ context.Context, path string) (bool, error) {
 	return f.clean, f.err
 }
 func (f *fakeWTC) Branch(name string) string { return "session/" + name }
+func (f *fakeWTC) BranchAt(_ context.Context, path string) (string, error) {
+	return "", errors.New("no git in the fake: " + path)
+}
+
 func (f *fakeWTC) BranchExistsAt(_ context.Context, _, branch string) (bool, error) {
 	return f.branches[branch], nil
 }

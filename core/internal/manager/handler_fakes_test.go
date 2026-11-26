@@ -125,6 +125,10 @@ func (f *fakeWT) Create(_ context.Context, repo, name, base string) (string, err
 	return f.path, nil
 }
 
+func (f *fakeWT) Path(repo, name string) string {
+	return filepath.Join(repo, ".herrscher-sessions", "inst", name)
+}
+
 func (f *fakeWT) PreExisting(context.Context, string, string) bool { return f.preExisting }
 func (f *fakeWT) Branch(name string) string                        { return "session/inst/" + name }
 func (f *fakeWT) BranchAt(context.Context, string) (string, error) {

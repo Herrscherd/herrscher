@@ -3128,6 +3128,11 @@
     "other": "worktree : {{.Err}}"
   },
   {
+    "id": "cli.host.err.workspace_taken",
+    "description": "Reply of a host command, err workspace taken by another session",
+    "other": "impossible de créer la session {{.Name}} : {{.Path}} est encore le dossier de la session {{.Owner}}, qui l'a gardé en étant renommée ; choisis un autre nom, ou ferme d'abord {{.Owner}}"
+  },
+  {
     "id": "cli.host.err.provision_agent",
     "description": "Reply of a host command, err provision agent",
     "other": "provisionnement de l'agent \"{{.Agent}}\" : {{.Err}}"

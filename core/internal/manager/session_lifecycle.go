@@ -2,13 +2,14 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"path/filepath"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
 
 func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (contracts.Result, error) {
@@ -28,18 +29,9 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 		return contracts.Result{}, err
 	}
 	repo := repoFor(repoRoot, sess.Project)
-	if sess.Worktree != "" && sess.Scratch {
-		if err := wtRoot.RemoveScratchAt(repo, sess.Worktree); err != nil {
-			h.warnIfFailed(h.sup.StartWithin(sess, supervisorGrace), "start "+name)
-			return contracts.Result{}, err
-		}
-	}
-	if sess.Worktree != "" && !sess.Scratch {
-		force := input.Bool("force")
-		if err := wtRoot.RemoveAt(ctx, repo, sess.Worktree, force); err != nil {
-			h.warnIfFailed(h.sup.StartWithin(sess, supervisorGrace), "start "+name)
-			return contracts.Result{}, newDirtyWorktreeError(name, h.keptBranch(ctx, wtRoot, sess.Worktree), err)
-		}
+	if err := h.removeWorkspace(ctx, wtRoot, repo, sess, input.Bool("force")); err != nil {
+		h.warnIfFailed(h.sup.StartWithin(sess, supervisorGrace), "start "+name)
+		return contracts.Result{}, err
 	}
 	note := h.tidyChannel(ctx, sess)
 	if err := h.persisted(func() error { return h.st.RemoveSession(name) }); err != nil {
@@ -55,11 +47,24 @@ func (h *Handler) sessionCloseRun(ctx context.Context, input contracts.Input) (c
 	return contracts.NoticeResult(sessionNotice(contracts.CodeSessionClosed, name)), nil
 }
 
+func (h *Handler) removeWorkspace(ctx context.Context, worktrees Worktrees, repo string, sess state.Session, force bool) error {
+	switch {
+	case sess.Worktree == "":
+		return nil
+	case sess.Scratch:
+		return worktrees.RemoveScratchAt(repo, sess.Worktree)
+	}
+	err := worktrees.RemoveAt(ctx, repo, sess.Worktree, force)
+	if err == nil || errors.Is(err, worktree.ErrOutsideRoot) {
+		return err
+	}
+	return newDirtyWorktreeError(sess.Name, h.keptBranch(ctx, worktrees, sess.Worktree), err)
+}
+
 func (h *Handler) keptBranch(ctx context.Context, worktrees Worktrees, path string) string {
-	branch, err := worktrees.BranchAt(ctx, path)
-	if err != nil || branch == "" {
+	branch, err := worktree.SessionBranch(ctx, worktrees, path)
+	if err != nil {
 		h.log.Warn("worktree branch unreadable", "path", path, "err", err)
-		return worktrees.Branch(filepath.Base(path))
 	}
 	return branch
 }

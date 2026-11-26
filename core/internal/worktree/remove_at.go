@@ -11,6 +11,10 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
+// ErrOutsideRoot is the cause of a refusal to remove a recorded path that is not
+// a session or scratch directory of this instance.
+var ErrOutsideRoot = clitext.SentinelError("the recorded path is outside the instance root")
+
 // RemoveAt removes the worktree recorded at path, which must be a session
 // directory of this instance inside repo. The recorded directory picks the
 // worktree, not the session's current name, so a renamed session still removes
@@ -58,5 +62,5 @@ func absent(path string) bool {
 }
 
 func outsideRoot(messages *clitext.Messages, path, root string) error {
-	return NewFailure(messages, clitext.WorktreeOutsideRoot, clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamRoot: strconv.Quote(root)}, nil)
+	return NewFailure(messages, clitext.WorktreeOutsideRoot, clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamRoot: strconv.Quote(root)}, ErrOutsideRoot)
 }

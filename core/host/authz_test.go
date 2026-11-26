@@ -170,13 +170,13 @@ func TestDispatchRefusesBeforeReachingTheRegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, st: st, reg: reg, live: make(map[string]liveSession)})
-	if _, err := h.Dispatch(withSessionPrincipal(context.Background(), "revue"), []string{"approve", "rule"}); err == nil {
+	if _, err := h.Dispatch(withSessionPrincipal(context.Background(), "revue"), []string{"approve", "rule", "allow Bash(*)"}); err == nil {
 		t.Fatal("Dispatch must refuse")
 	}
 	if ran {
 		t.Fatal("the handler ran, so the refusal decided nothing")
 	}
-	if _, err := h.Dispatch(withLocalPrincipal(context.Background()), []string{"approve", "rule"}); err != nil {
+	if _, err := h.Dispatch(withLocalPrincipal(context.Background()), []string{"approve", "rule", "allow Bash(*)"}); err != nil {
 		t.Fatalf("the operator socket was refused: %v", err)
 	}
 	if !ran {

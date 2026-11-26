@@ -376,7 +376,7 @@ func TestEachVerbAnAgentRunsIsAReadOrAnAnnouncedWrite(t *testing.T) {
 			t.Errorf("Writes(%q) = %v, want %v", verb, got, want)
 		}
 	}
-	if Writes([]string{"discord", "channel", "read"}, true) {
+	if Writes([]string{"acmechat", "channel", "read"}, true) {
 		t.Error("a plugin's read counts as a write")
 	}
 }

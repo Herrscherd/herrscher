@@ -61,7 +61,7 @@ func authzState(t *testing.T, sessions []state.Session, roles map[string]string)
 func TestASessionMayNotRewriteThePolicyItIsBoundBy(t *testing.T) {
 	st := authzState(t, []state.Session{{Name: "revue"}}, nil)
 	h := authzHub(t, st, []string{"approve", "rule"})
-	err := h.authorize(withSessionPrincipal(context.Background(), "revue"), []string{"approve", "rule", "allow Bash(*)"})
+	_, err := h.authorize(withSessionPrincipal(context.Background(), "revue"), []string{"approve", "rule", "allow Bash(*)"})
 	if err == nil {
 		t.Fatal("a session must not widen the rules that decide its own tool calls")
 	}
@@ -74,7 +74,7 @@ func TestTheOperatorSocketMayRunAnything(t *testing.T) {
 	st := authzState(t, nil, nil)
 	h := authzHub(t, st, []string{"approve", "rule"}, []string{"role", "grant"})
 	for _, argv := range [][]string{{"approve", "rule"}, {"role", "grant"}} {
-		if err := h.authorize(withLocalPrincipal(context.Background()), argv); err != nil {
+		if _, err := h.authorize(withLocalPrincipal(context.Background()), argv); err != nil {
 			t.Fatalf("the operator socket was refused %v: %v", argv, err)
 		}
 	}
@@ -84,10 +84,10 @@ func TestASessionMayNotSpeakForAnother(t *testing.T) {
 	st := authzState(t, []state.Session{{Name: "revue"}, {Name: "release"}}, nil)
 	h := authzHub(t, st, []string{"approve", "ask"})
 	ctx := withSessionPrincipal(context.Background(), "revue")
-	if err := h.authorize(ctx, []string{"approve", "ask", "--session", "revue"}); err != nil {
+	if _, err := h.authorize(ctx, []string{"approve", "ask", "--session", "revue"}); err != nil {
 		t.Fatalf("a session must ask for itself: %v", err)
 	}
-	err := h.authorize(ctx, []string{"approve", "ask", "--session", "release"})
+	_, err := h.authorize(ctx, []string{"approve", "ask", "--session", "release"})
 	if err == nil {
 		t.Fatal("a session must not open an approval in another session's name")
 	}
@@ -106,11 +106,11 @@ func TestASessionReachesTheSessionsItDelegated(t *testing.T) {
 	h := authzHub(t, st, []string{"session", "send"})
 	ctx := withSessionPrincipal(context.Background(), "lead")
 	for _, target := range []string{"lead", "worker", "grandchild"} {
-		if err := h.authorize(ctx, []string{"session", "send", "--name", target}); err != nil {
+		if _, err := h.authorize(ctx, []string{"session", "send", "--name", target}); err != nil {
 			t.Fatalf("lead was refused its own subtree at %q: %v", target, err)
 		}
 	}
-	if err := h.authorize(ctx, []string{"session", "send", "--name", "stranger"}); err == nil {
+	if _, err := h.authorize(ctx, []string{"session", "send", "--name", "stranger"}); err == nil {
 		t.Fatal("lead must not drive a session it did not delegate")
 	}
 }
@@ -122,7 +122,7 @@ func TestASubtreeWalkTerminatesOnACycle(t *testing.T) {
 	}, nil)
 	h := authzHub(t, st, []string{"session", "send"})
 	ctx := withSessionPrincipal(context.Background(), "outsider")
-	if err := h.authorize(ctx, []string{"session", "send", "--name", "a"}); err == nil {
+	if _, err := h.authorize(ctx, []string{"session", "send", "--name", "a"}); err == nil {
 		t.Fatal("a cycle that reaches nobody must refuse")
 	}
 }
@@ -131,7 +131,7 @@ func TestAnEmptyRoleTableLeavesGatewaysExactlyAsTheyWere(t *testing.T) {
 	st := authzState(t, nil, nil)
 	h := authzHub(t, st, []string{"host", "rm"})
 	ctx := contracts.WithPrincipal(context.Background(), "chat:1234")
-	if err := h.authorize(ctx, []string{"host", "rm"}); err != nil {
+	if _, err := h.authorize(ctx, []string{"host", "rm"}); err != nil {
 		t.Fatalf("an install that configured nothing must not change: %v", err)
 	}
 }
@@ -139,10 +139,10 @@ func TestAnEmptyRoleTableLeavesGatewaysExactlyAsTheyWere(t *testing.T) {
 func TestTheFirstGrantMakesEveryOtherAccountAnObserver(t *testing.T) {
 	st := authzState(t, nil, map[string]string{"chat:1": "owner"})
 	h := authzHub(t, st, []string{"host", "rm"})
-	if err := h.authorize(contracts.WithPrincipal(context.Background(), "chat:1"), []string{"host", "rm"}); err != nil {
+	if _, err := h.authorize(contracts.WithPrincipal(context.Background(), "chat:1"), []string{"host", "rm"}); err != nil {
 		t.Fatalf("the owner was refused: %v", err)
 	}
-	err := h.authorize(contracts.WithPrincipal(context.Background(), "chat:2"), []string{"host", "rm"})
+	_, err := h.authorize(contracts.WithPrincipal(context.Background(), "chat:2"), []string{"host", "rm"})
 	if err == nil {
 		t.Fatal("an unnamed account must be an observer once the table holds anything")
 	}
@@ -153,7 +153,7 @@ func TestAGatewayCannotClaimToBeTheOperatorSocketOrASession(t *testing.T) {
 	h := authzHub(t, st, []string{"role", "grant"})
 	for _, claim := range []string{authz.LocalPrincipal, authz.SessionPrefix + "revue"} {
 		ctx := contracts.WithPrincipal(context.Background(), claim)
-		if err := h.authorize(ctx, []string{"role", "grant"}); err == nil {
+		if _, err := h.authorize(ctx, []string{"role", "grant"}); err == nil {
 			t.Fatalf("a gateway claiming %q was believed", claim)
 		}
 	}
@@ -172,13 +172,13 @@ func TestDispatchRefusesBeforeReachingTheRegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := testHub(t, &hub{messages: newHostMessages(), cliMessages: clitext.NewMessages(), warnings: io.Discard, st: st, reg: reg, live: make(map[string]liveSession)})
-	if _, err := h.Dispatch(withSessionPrincipal(context.Background(), "revue"), []string{"approve", "rule"}); err == nil {
+	if _, err := h.Dispatch(withSessionPrincipal(context.Background(), "revue"), []string{"approve", "rule", "allow Bash(*)"}); err == nil {
 		t.Fatal("Dispatch must refuse")
 	}
 	if ran {
 		t.Fatal("the handler ran, so the refusal decided nothing")
 	}
-	if _, err := h.Dispatch(withLocalPrincipal(context.Background()), []string{"approve", "rule"}); err != nil {
+	if _, err := h.Dispatch(withLocalPrincipal(context.Background()), []string{"approve", "rule", "allow Bash(*)"}); err != nil {
 		t.Fatalf("the operator socket was refused: %v", err)
 	}
 	if !ran {
@@ -190,7 +190,7 @@ func TestAnUnknownVerbIsDispatchsErrorAndNotARefusal(t *testing.T) {
 	st := authzState(t, []state.Session{{Name: "revue"}}, nil)
 	h := authzHub(t, st, []string{"session", "send"})
 	ctx := withSessionPrincipal(context.Background(), "revue")
-	if err := h.authorize(ctx, []string{"quantum", "entangle"}); err != nil {
+	if _, err := h.authorize(ctx, []string{"quantum", "entangle"}); err != nil {
 		t.Fatalf("an unregistered verb must fall through to Dispatch, which names it: %v", err)
 	}
 }
@@ -247,14 +247,14 @@ func TestASessionReachesOnlyItsOwnPullRequests(t *testing.T) {
 	ctx := withSessionPrincipal(context.Background(), "revue")
 	for _, verb := range verbs {
 		own := append(slices.Clone(verb), "--name", "revue")
-		if err := h.authorize(ctx, own); err != nil {
+		if _, err := h.authorize(ctx, own); err != nil {
 			t.Fatalf("a session was refused its own %v: %v", verb, err)
 		}
 		other := append(slices.Clone(verb), "--name", "release")
-		if err := h.authorize(ctx, other); err == nil {
+		if _, err := h.authorize(ctx, other); err == nil {
 			t.Fatalf("a session may not run %v on another session", verb)
 		}
-		if err := h.authorize(withLocalPrincipal(context.Background()), other); err != nil {
+		if _, err := h.authorize(withLocalPrincipal(context.Background()), other); err != nil {
 			t.Fatalf("the operator socket was refused %v: %v", verb, err)
 		}
 	}

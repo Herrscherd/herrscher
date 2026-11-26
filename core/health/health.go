@@ -16,6 +16,8 @@ const (
 	ServiceDaemon = "daemon"
 	// ServiceProxy names the check of the key proxy, in [GroupCore].
 	ServiceProxy = "proxy"
+	// ServiceSelfTools names the check of the MCP server sessions get, in [GroupCore].
+	ServiceSelfTools = "self-tools"
 )
 
 // Check is one service checked, for one account when the service has accounts.
@@ -44,6 +46,23 @@ type Facts struct {
 	CompactionUnknown   bool
 	Forge               *Forge
 	ForgeReset          time.Time
+	SelfTools           *SelfTools
+}
+
+// SelfTools is what a session's herrscher MCP server lists: whether sessions get it, the exposure, the tools and the bytes their declarations add to each turn.
+type SelfTools struct {
+	Enabled     bool
+	Exposure    string
+	Tools       int
+	SchemaBytes int
+}
+
+// TurnBytes is what the declarations add to each turn of a session: their size when sessions get the server, nothing otherwise.
+func (s SelfTools) TurnBytes() int {
+	if !s.Enabled {
+		return 0
+	}
+	return s.SchemaBytes
 }
 
 // RateLimitReset is the time the forge rate limit lifts, whichever state the forge

@@ -10,7 +10,6 @@ const (
 	UsageStartPrint      = "cli.usage.start.print"
 	UsageStartTUI        = "cli.usage.start.tui"
 	UsageStartVersion    = "cli.usage.start.version"
-	UsageStartInit       = "cli.usage.start.init"
 	UsageStartSetup      = "cli.usage.start.setup"
 	UsageSessionVerbs    = "cli.usage.session.verbs"
 	UsageAgentVerbs      = "cli.usage.agent.verbs"
@@ -31,7 +30,7 @@ const (
 	UsageEnvRoute        = "cli.usage.env.route"
 	UsageEnvGateway      = "cli.usage.env.gateway"
 	UsageEnvDefaultModel = "cli.usage.env.default_model"
-	UsageEnvInit         = "cli.usage.env.init"
+	UsageEnvSetupRoute   = "cli.usage.env.setup_route"
 )
 
 func usageKeys() map[Key][]string {
@@ -44,7 +43,6 @@ func usageKeys() map[Key][]string {
 		UsageStartPrint:      nil,
 		UsageStartTUI:        nil,
 		UsageStartVersion:    nil,
-		UsageStartInit:       nil,
 		UsageStartSetup:      nil,
 		UsageSessionVerbs:    nil,
 		UsageAgentVerbs:      nil,
@@ -65,6 +63,6 @@ func usageKeys() map[Key][]string {
 		UsageEnvRoute:        nil,
 		UsageEnvGateway:      nil,
 		UsageEnvDefaultModel: nil,
-		UsageEnvInit:         nil,
+		UsageEnvSetupRoute:   nil,
 	}
 }

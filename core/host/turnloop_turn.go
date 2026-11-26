@@ -102,7 +102,7 @@ func (d *sessionDriver) prepareTurn(ctx context.Context, item queued) (contracts
 	verdict := d.gate.Check(d.name)
 	if verdict.Reason != "" {
 		d.emitPaused(ctx, verdict.Reason)
-		d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("turn.budget_refused", map[string]any{"Reason": verdict.Reason})})
+		d.fanOut(ctx, contracts.Event{T: eventwire.EventStatus, Text: d.hostText("turn.budget_refused", map[string]any{reasonParam: verdict.Reason})})
 		return event, tokenGuard{}, false
 	}
 	if event.TurnID == "" {

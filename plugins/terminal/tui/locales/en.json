@@ -743,7 +743,7 @@
   },
   {
     "id": "tui.statusline.note_vendor",
-    "other": "claude, codex, cursor"
+    "other": "claude, codex, cursor, grok, antigravity"
   },
   {
     "id": "tui.statusline.field_repo",

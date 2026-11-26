@@ -1,6 +1,7 @@
 package authz
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -71,6 +72,7 @@ func TestAgentMayWorkAndMayNotDisarmItself(t *testing.T) {
 		{"session", "pr", "status"},
 		{"session", "pr", "checks"},
 		{"session", "pr", "comments"},
+		{"approve", "list"},
 	}
 	for _, path := range allowed {
 		if ok, why := Decide(req(p, path...), RoleAgent); !ok {
@@ -81,7 +83,6 @@ func TestAgentMayWorkAndMayNotDisarmItself(t *testing.T) {
 		{"approve", "rule"},
 		{"approve", "mode"},
 		{"approve", "allow"},
-		{"approve", "list"},
 		{"host", "rm"},
 		{"role", "grant"},
 		{"schedule", "add"},
@@ -200,10 +201,125 @@ func TestRoleOfLocalIsAlwaysOwner(t *testing.T) {
 	}
 }
 
-func TestRoleOfASessionIsAlwaysAgent(t *testing.T) {
-	assignments := map[string]string{"session:revue": "owner"}
-	if got := RoleOf(SessionPrincipal("revue"), assignments); got != RoleAgent {
-		t.Fatalf("RoleOf(session) = %q, want agent: the role is structural and not grantable", got)
+func TestASessionIsAgentUnlessGrantedSteward(t *testing.T) {
+	cases := map[string]Role{"owner": RoleAgent, "operator": RoleAgent, "steward": RoleSteward, "": RoleAgent}
+	for granted, want := range cases {
+		assignments := map[string]string{"session:revue": granted}
+		if got := RoleOf(SessionPrincipal("revue"), assignments); got != want {
+			t.Errorf("RoleOf(session granted %q) = %q, want %q", granted, got, want)
+		}
+	}
+}
+
+func TestAStewardSessionLeavesHumansWithoutARole(t *testing.T) {
+	assignments := map[string]string{"session:revue": "steward"}
+	if got := RoleOf(Principal{ID: "chat:1"}, assignments); got != RoleNone {
+		t.Fatalf("RoleOf(human) = %q, want none: trusting a session must not demote every human to observer", got)
+	}
+}
+
+func TestEachFamilyUnderEachRoleASessionCanHold(t *testing.T) {
+	session := SessionPrincipal("revue")
+	const (
+		runs = iota
+		asks
+		never
+	)
+	cases := []struct {
+		path    []string
+		agent   int
+		steward int
+	}{
+		{[]string{"session", "list"}, runs, runs},
+		{[]string{"session", "create"}, asks, asks},
+		{[]string{"session", "set-budget"}, asks, runs},
+		{[]string{"schedule", "add"}, asks, runs},
+		{[]string{"schedule", "list"}, runs, runs},
+		{[]string{"config", "get"}, runs, runs},
+		{[]string{"config", "set"}, asks, asks},
+		{[]string{"config", "unset"}, asks, asks},
+		{[]string{"env", "get"}, runs, runs},
+		{[]string{"env", "set"}, asks, asks},
+		{[]string{"env", "unset"}, asks, asks},
+		{[]string{"plugin", "list"}, runs, runs},
+		{[]string{"plugin", "add"}, asks, runs},
+		{[]string{"setup", "check"}, runs, runs},
+		{[]string{"connect", "status"}, runs, runs},
+		{[]string{"service", "restart"}, asks, runs},
+		{[]string{"set", "lang"}, asks, runs},
+		{[]string{"host", "list"}, runs, runs},
+		{[]string{"host", "add"}, asks, runs},
+		{[]string{"agent", "create"}, asks, runs},
+		{[]string{"approve", "list"}, runs, runs},
+		{[]string{"approve", "rule"}, asks, asks},
+		{[]string{"approve", "mode"}, asks, asks},
+		{[]string{"approve", "allow"}, never, never},
+		{[]string{"approve", "deny"}, never, never},
+		{[]string{"role", "grant"}, never, never},
+		{[]string{"session", "issue", "open"}, runs, runs},
+	}
+	verdict := func(role Role, path []string) int {
+		request := req(session, path...)
+		if ok, _ := Decide(request, role); ok {
+			return runs
+		}
+		if Escalable(request, role) {
+			return asks
+		}
+		return never
+	}
+	for _, tc := range cases {
+		if got := verdict(RoleAgent, tc.path); got != tc.agent {
+			t.Errorf("agent %v = %d, want %d (0 runs, 1 asks, 2 never)", tc.path, got, tc.agent)
+		}
+		if got := verdict(RoleSteward, tc.path); got != tc.steward {
+			t.Errorf("steward %v = %d, want %d (0 runs, 1 asks, 2 never)", tc.path, got, tc.steward)
+		}
+	}
+}
+
+func TestAStewardStaysInsideItsSubtree(t *testing.T) {
+	request := Request{Principal: SessionPrincipal("revue"), Path: []string{"session", "close"}, Subject: Subject{Session: "other"}}
+	if ok, _ := Decide(request, RoleSteward); ok {
+		t.Fatal("a steward closed a session outside its subtree")
+	}
+	if Escalable(request, RoleSteward) {
+		t.Fatal("a steward could ask for a session outside its subtree")
+	}
+}
+
+func TestANeverVerbSaysEvenApprovalWillNotRunIt(t *testing.T) {
+	_, why := Decide(req(SessionPrincipal("revue"), "role", "grant"), RoleAgent)
+	if !strings.Contains(why, "even with the operator's approval") {
+		t.Fatalf("refusal %q, want it to say no approval runs it", why)
+	}
+	_, why = Decide(req(SessionPrincipal("revue"), "agent", "create"), RoleAgent)
+	if !strings.Contains(why, "steward") {
+		t.Fatalf("refusal %q, want it to name the steward role", why)
+	}
+}
+
+func TestARefusedVerbIsPutToTheOperatorOnlyWhenNothingElseForbidsIt(t *testing.T) {
+	session := SessionPrincipal("revue")
+	cases := []struct {
+		name string
+		req  Request
+		role Role
+		want bool
+	}{
+		{"a configuration verb", req(session, "schedule", "add"), RoleAgent, true},
+		{"a verb no list names", req(session, "agent", "create"), RoleAgent, true},
+		{"a verb the agent already runs", req(session, "session", "list"), RoleAgent, false},
+		{"granting a role", req(session, "role", "grant"), RoleAgent, false},
+		{"answering an approval", req(session, "approve", "allow"), RoleAgent, false},
+		{"a session outside the subtree", Request{Principal: session, Path: []string{"session", "close"}, Subject: Subject{Session: "other"}}, RoleAgent, false},
+		{"its own subtree", Request{Principal: session, Path: []string{"session", "close"}, Subject: Subject{Session: "revue", InSubtree: true}}, RoleAgent, true},
+		{"a human observer", req(Principal{ID: "chat:1"}, "schedule", "add"), RoleObserver, false},
+	}
+	for _, tc := range cases {
+		if got := Escalable(tc.req, tc.role); got != tc.want {
+			t.Errorf("%s: Escalable = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }
 
@@ -231,8 +347,11 @@ func TestAnUnknownRoleNameFallsBackToObserver(t *testing.T) {
 }
 
 func TestAgentIsNotGrantable(t *testing.T) {
-	if Grantable("agent") {
-		t.Fatal("agent must not be grantable")
+	if Grantable("agent") || Grantable("steward") {
+		t.Fatal("agent and steward must not be grantable to a human")
+	}
+	if !GrantableToSession("steward") || GrantableToSession("owner") {
+		t.Fatal("a session may be granted steward and nothing else")
 	}
 	for _, name := range []string{"owner", "operator", "observer"} {
 		if !Grantable(name) {
@@ -241,6 +360,50 @@ func TestAgentIsNotGrantable(t *testing.T) {
 	}
 	if got := RoleOf(Principal{ID: "chat:1"}, map[string]string{"chat:1": "agent"}); got != RoleObserver {
 		t.Fatalf("RoleOf = %q, want observer: agent hand-written into the table is not a grant", got)
+	}
+}
+
+func TestEachVerbAnAgentRunsIsAReadOrAnAnnouncedWrite(t *testing.T) {
+	writes := []string{
+		"session send", "session seed", "session handoff",
+		"session pr open", "session pr reply", "session issue open", "session issue comment",
+		"memory record", "memory unlink", "memory restore",
+	}
+	def, _ := definitionOf(RoleAgent)
+	for _, verb := range def.allow {
+		want := slices.Contains(writes, verb)
+		if got := Writes(strings.Fields(verb), false, false); got != want {
+			t.Errorf("Writes(%q) = %v, want %v", verb, got, want)
+		}
+	}
+	if !Writes([]string{"acmechat", "channel", "comments"}, true, false) {
+		t.Error("a plugin's verb that declared nothing is taken for a read from its name")
+	}
+	if Writes([]string{"acmechat", "channel", "read"}, true, true) {
+		t.Error("a plugin's verb declared read only counts as a write")
+	}
+	if Writes([]string{"session", "get-mode"}, false, false) {
+		t.Error("get-mode counts as a write")
+	}
+}
+
+func TestAnObserverReadsWhatASessionReadsAndWritesNothing(t *testing.T) {
+	human := Principal{ID: "chat:1"}
+	for _, path := range [][]string{{"health"}, {"usage"}, {"config", "get"}, {"env", "get"}, {"plugin", "list"}, {"connect", "status"}, {"setup", "check"}} {
+		if ok, why := Decide(req(human, path...), RoleObserver); !ok {
+			t.Errorf("observer refused %v: %s", path, why)
+		}
+		if Writes(path, false, false) {
+			t.Errorf("%v counts as a write", path)
+		}
+	}
+	for _, path := range [][]string{{"session", "send"}, {"session", "issue", "open"}, {"memory", "record"}} {
+		if !Writes(path, false, false) {
+			t.Errorf("%v does not count as a write", path)
+		}
+	}
+	if Writes([]string{"approve", "ask"}, false, false) {
+		t.Error("approve ask, asked by the hook at each tool call, counts as a write")
 	}
 }
 

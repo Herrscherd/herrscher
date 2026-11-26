@@ -217,6 +217,8 @@ func (s Snapshot) facts(check Check, text *renderer) string {
 		return poolFacts(check.Facts.Pool, text)
 	case check.Facts.Forge != nil:
 		return forgeFacts(check.Facts.Forge, text)
+	case check.Facts.SelfTools != nil:
+		return selfToolsFacts(check.Facts.SelfTools, text)
 	case check.Group == GroupCore && check.Name == ServiceProxy:
 		return text.key(clitext.HealthProxyFacts, clitext.Params{
 			clitext.ParamListen: check.Facts.Listen,
@@ -231,6 +233,17 @@ func (s Snapshot) facts(check Check, text *renderer) string {
 		return homeRelative(s.Daemon.Socket)
 	}
 	return ""
+}
+
+func selfToolsFacts(self *SelfTools, text *renderer) string {
+	if !self.Enabled {
+		return text.key(clitext.HealthSelfToolsOff, nil)
+	}
+	return text.key(clitext.HealthSelfToolsFacts, clitext.Params{
+		clitext.ParamMode:  self.Exposure,
+		clitext.ParamCount: self.Tools,
+		clitext.ParamSize:  self.SchemaBytes,
+	})
 }
 
 func compactionFacts(facts Facts, text *renderer) string {

@@ -64,6 +64,7 @@ func runWith(layout host.RuntimeLayout) int {
 	if err := host.CaptureStartupSecrets(func() error { return loadHostEnv(messages) }, hideGatewayKeys); err != nil {
 		return reportError(messages, err)
 	}
+	contracts.Default.PreferBackend(host.PreferredBackend(os.Getenv))
 
 	ctx, stop := notifyStop(context.Background())
 	defer stop()
@@ -148,15 +149,13 @@ func runWithoutCommand(ctx context.Context, layout host.RuntimeLayout, messages 
 
 func runManageCmd(messages *clitext.Messages, hostMessages *host.Messages, cmd string, args []string) (int, bool) {
 	switch cmd {
-	case "init", "setup", "plugin", "update", "install":
+	case "setup", "plugin", "update", "install":
 	default:
 		return 0, false
 	}
 	mctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	switch cmd {
-	case "init":
-		return manage.InitCmd(mctx, messages, hostMessages, args), true
 	case "setup":
 		return manage.SetupCmd(mctx, messages, hostMessages, args), true
 	case "plugin":
@@ -204,6 +203,8 @@ func runCommand(ctx context.Context, layout host.RuntimeLayout, messages *clitex
 		return runWhoami(ctx, messages, args)
 	case connectVerb:
 		return runConnect(ctx, messages, args)
+	case mcpVerb:
+		return runMCP(ctx, layout, messages, hostMessages, args)
 	}
 	return runForwarded(ctx, layout, messages, hostMessages, cmd, args)
 }

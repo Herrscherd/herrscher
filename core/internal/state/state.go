@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
@@ -117,6 +118,9 @@ type Session struct {
 	PullRequestChecks       contracts.ChecksState      `json:"pullRequestChecks,omitempty"`
 	PullRequestLatestReview contracts.ReviewID         `json:"pullRequestLatestReview,omitempty"`
 
+	// ApprovalRules are the rules that bind this session alone, on top of the daemon's.
+	ApprovalRules []string `json:"approvalRules,omitempty"`
+
 	// Parent names the lead session that delegated this one (result-back P3).
 	// Empty = no parent. The coordinator reads it to find the delivery target
 	// of this session's completion report (Report).
@@ -189,6 +193,10 @@ type State struct {
 	// than a file nobody reads.
 	Roles   map[string]RoleAssignment `json:"roles,omitempty"`
 	Devices *devices.Registry         `json:"devices,omitempty"`
+	// SelfRestarts is when each session last restarted the daemon, kept here so the next daemon still knows.
+	SelfRestarts map[string]time.Time `json:"selfRestarts,omitempty"`
+	// RestartResumes are the sessions whose turn asked for the restart, told to carry on once the daemon is back.
+	RestartResumes []string `json:"restartResumes,omitempty"`
 }
 
 // RoleAssignment is one principal's role, plus a name a human can read.

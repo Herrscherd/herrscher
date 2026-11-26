@@ -13,7 +13,7 @@ stdout '^reprise fraîche$'
 ! stdout 'No conversation found'
 waitlog 'start .*--resume tok-refused-7'
 grep -count=1 'start .*--resume tok-refused-7' $WORK/claude.log
-grep -count=2 '^prompt .*après redémarrage' $WORK/claude.log
+grep -count=2 '^prompt "<memory.*après redémarrage' $WORK/claude.log
 kill -INT daemon2
 wait daemon2
 ! waitdaemon

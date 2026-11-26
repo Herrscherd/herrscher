@@ -424,11 +424,11 @@ func TestSummaryRefusedAtCloseIsAnnouncedOnceByTheBilan(t *testing.T) {
 }
 
 func TestSecondCloseIsSilentAndRecountsNothing(t *testing.T) {
-	logs := captureDefaultLog(t)
+	logger, logs := newCapturedLogger(nil)
 	writer := newGatedWarnings("frozen")
 	t.Cleanup(writer.open)
 	messages := newHostMessages()
-	sink := newTestWarningSink(t, messages, writer, englishLostLine(messages), slog.Default())
+	sink := newTestWarningSink(t, messages, writer, englishLostLine(messages), logger)
 	if _, err := sink.Write([]byte("frozen\n")); !errors.Is(err, errWarningLate) {
 		t.Fatalf("write returned %v, want errWarningLate", err)
 	}

@@ -247,7 +247,7 @@ type sessionRoleError struct {
 }
 
 func (e *sessionRoleError) Error() string {
-	return fmt.Sprintf("%#q is a session, and a session is always `agent`: the socket it arrives on decides that, not this table", e.Principal)
+	return fmt.Sprintf("%#q is a session: it is `agent`, and the one role it can be granted is `steward`", e.Principal)
 }
 
 type roleRequiredError struct {

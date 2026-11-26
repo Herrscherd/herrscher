@@ -286,6 +286,18 @@ func resolveBackendDir(dir string) string {
 	return filepath.Join(cwd, dir)
 }
 
+// PreferredBackend names the backend kind the host puts first in the registry
+// at startup: HERRSCHER_BACKEND when it is set, claude otherwise. Go
+// initialises the compiled plugins in the order of their import paths, so
+// without it the default backend would change whenever a backend whose path
+// sorts first is compiled in.
+func PreferredBackend(getenv func(string) string) string {
+	if kind := getenv("HERRSCHER_BACKEND"); kind != "" {
+		return kind
+	}
+	return vendorClaude
+}
+
 func selectBackend(desired string, plugins []contracts.Plugin) (contracts.Plugin, error) {
 	for idx := range plugins {
 		plugin := plugins[idx]

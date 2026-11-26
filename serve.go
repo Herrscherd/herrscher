@@ -154,6 +154,8 @@ func serveWith(ctx context.Context, layout host.RuntimeLayout, messages *clitext
 		RemoteCategories:    remoteCategories(),
 		ForegroundBound:     foreground != nil,
 		ContributedCommands: extra,
+		HostCommands:        hostVerbs(),
+		ConfigPath:          scanFlag(args, "config", config.DefaultPath()),
 	}
 
 	withCompactionConfig(&opts, cfg)
@@ -447,7 +449,11 @@ func runPromptWith(ctx context.Context, messages *clitext.Messages, dispatcher v
 const forwardTimeout = 60 * time.Second
 
 func forwardUnknownVerb(ctx context.Context, layout host.RuntimeLayout, hostMessages *host.Messages, argv []string) (string, bool, error) {
-	ctx, cancel := context.WithTimeout(ctx, forwardTimeout)
+	return forwardWithin(ctx, forwardTimeout, layout, hostMessages, argv)
+}
+
+func forwardWithin(ctx context.Context, timeout time.Duration, layout host.RuntimeLayout, hostMessages *host.Messages, argv []string) (string, bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	instance := envx.Get("INSTANCE_ID")
 	if instance == "" {

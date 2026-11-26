@@ -32,6 +32,7 @@ const (
 	screenCodex
 	screenCursor
 	screenGrok
+	screenAntigravity
 	screenObsidian
 	screenRoute
 	screenReview
@@ -41,7 +42,7 @@ const (
 )
 
 func flowOrder() []setupScreen {
-	return []setupScreen{screenModules, screenDiscord, screenTelegram, screenClaude, screenCodex, screenCursor, screenGrok, screenObsidian, screenRoute, screenReview}
+	return []setupScreen{screenModules, screenDiscord, screenTelegram, screenClaude, screenCodex, screenCursor, screenGrok, screenAntigravity, screenObsidian, screenRoute, screenReview}
 }
 
 type setupDeps struct {
@@ -342,6 +343,8 @@ func (model *setupModel) shown(screen setupScreen) bool {
 		return model.modules[moduleCursor]
 	case screenGrok:
 		return model.modules[moduleGrok]
+	case screenAntigravity:
+		return model.modules[moduleAntigravity]
 	case screenObsidian:
 		return model.modules[moduleObsidian]
 	case screenWelcome, screenModules, screenRoute, screenReview, screenInstall, screenConnections, screenHub:
@@ -395,7 +398,7 @@ func (model *setupModel) back() tea.Cmd {
 			return model.openHub()
 		}
 		return nil
-	case screenModules, screenDiscord, screenTelegram, screenClaude, screenCodex, screenCursor, screenGrok, screenObsidian, screenRoute, screenReview, screenConnections:
+	case screenModules, screenDiscord, screenTelegram, screenClaude, screenCodex, screenCursor, screenGrok, screenAntigravity, screenObsidian, screenRoute, screenReview, screenConnections:
 	}
 	if target, ok := model.returnTarget(); ok {
 		return model.goTo(target)
@@ -437,10 +440,12 @@ func (model *setupModel) enter(screen setupScreen) tea.Cmd {
 		return model.statusCheck(probeCodex)
 	case screenGrok:
 		return model.statusCheck(probeGrok)
+	case screenAntigravity:
+		return model.statusCheck(probeAntigravity)
 	case screenRoute:
 		return model.loadCatalog()
 	case screenHub:
-		return tea.Batch(model.statusCheck(probeClaude), model.statusCheck(probeCodex), model.statusCheck(probeGrok), model.githubStatus())
+		return tea.Batch(model.statusCheck(probeClaude), model.statusCheck(probeCodex), model.statusCheck(probeGrok), model.statusCheck(probeAntigravity), model.githubStatus())
 	case screenInstall:
 		return model.startInstall()
 	case screenConnections:
@@ -462,6 +467,10 @@ func (model *setupModel) statusCheck(kind probeKind) tea.Cmd {
 		}
 	case probeGrok:
 		if !model.modules[moduleGrok] || model.grokKey {
+			return nil
+		}
+	case probeAntigravity:
+		if !model.modules[moduleAntigravity] {
 			return nil
 		}
 	case probeDiscord, probeTelegram, probeCursor, probeVault:
@@ -492,6 +501,7 @@ func (model *setupModel) probeInput(kind probeKind) string {
 		}
 	case probeVault:
 		return model.draft.value(envVault)
+	case probeAntigravity:
 	}
 	return ""
 }
@@ -503,6 +513,8 @@ func (model *setupModel) vendorStatus(kind probeKind, afterLogin bool) tea.Cmd {
 		return model.probe(kind, func(ctx context.Context) probeResult { return prober.codex(ctx, afterLogin) })
 	case probeGrok:
 		return model.probe(kind, func(ctx context.Context) probeResult { return prober.grok(ctx, afterLogin) })
+	case probeAntigravity:
+		return model.probe(kind, func(ctx context.Context) probeResult { return prober.antigravity(ctx, afterLogin) })
 	case probeDiscord, probeTelegram, probeClaude, probeCursor, probeVault:
 	}
 	return model.probe(kind, func(ctx context.Context) probeResult { return prober.claude(ctx, afterLogin) })
@@ -548,6 +560,8 @@ func (model *setupModel) runProbe(kind probeKind) tea.Cmd {
 		}
 		key := model.draft.value(envXAIKey)
 		return model.probe(kind, func(ctx context.Context) probeResult { return prober.xaiKey(ctx, key) })
+	case probeAntigravity:
+		return model.login(kind)
 	case probeVault:
 		path := expandHome(model.draft.value(envVault))
 		return model.probe(kind, func(context.Context) probeResult { return vaultCheck(path) })
@@ -570,14 +584,7 @@ func (model *setupModel) loginDone(done loginDoneMsg) tea.Cmd {
 }
 
 func loginCLI(kind probeKind) string {
-	switch kind {
-	case probeCodex:
-		return kindCodex
-	case probeGrok:
-		return grokCLI
-	case probeDiscord, probeTelegram, probeClaude, probeCursor, probeVault:
-	}
-	return kindClaude
+	return loginCmd(context.Background(), kind).Args[0]
 }
 
 func loginCmd(ctx context.Context, kind probeKind) *exec.Cmd {
@@ -586,6 +593,8 @@ func loginCmd(ctx context.Context, kind probeKind) *exec.Cmd {
 		return exec.CommandContext(ctx, kindCodex, verbLogin)
 	case probeGrok:
 		return exec.CommandContext(ctx, grokCLI, verbLogin)
+	case probeAntigravity:
+		return exec.CommandContext(ctx, antigravityCLI)
 	case probeDiscord, probeTelegram, probeClaude, probeCursor, probeVault:
 	}
 	return exec.CommandContext(ctx, kindClaude, "auth", verbLogin)
@@ -673,6 +682,8 @@ func probeScreen(kind probeKind) setupScreen {
 		return screenCursor
 	case probeGrok:
 		return screenGrok
+	case probeAntigravity:
+		return screenAntigravity
 	case probeVault:
 		return screenObsidian
 	}

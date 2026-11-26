@@ -85,9 +85,10 @@ type hub struct {
 	seedBackend      func(context.Context, state.Session) (contracts.Backend, error)
 	models           *ModelDiscovery
 
-	approvals *approvalTable
-	sessions  *sessionTable
-	desk      *approvalDesk
+	approvals    *approvalTable
+	sessions     *sessionTable
+	desk         *approvalDesk
+	selfRestarts *selfRestarts
 }
 
 type forgetter interface{ forget(string) }
@@ -159,9 +160,32 @@ func sessionFailureKey(stage supervisor.Stage) string {
 }
 
 func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, error) {
-	if err := h.authorize(ctx, args); err != nil {
+	admitted, err := h.authorize(ctx, args)
+	if err != nil {
 		return contracts.Result{}, err
 	}
+	res, runErr := h.dispatchAuthorized(ctx, args)
+	if admitted.session != "" {
+		h.announceSelfRun(admitted, runErr)
+	}
+	return res, runErr
+}
+
+func (h *hub) announceSelfRun(admitted admission, runErr error) {
+	key := "selftools.ran_" + admitted.how
+	detail := ""
+	if runErr != nil {
+		key, detail = "selftools.failed_"+admitted.how, runErr.Error()
+		if restartsTheDaemon(admitted.verb) && h.st != nil {
+			if err := h.st.ForgetRestartResume(admitted.session); err != nil {
+				slog.Warn("self restart: the resume of a failed restart was not dropped", "session", admitted.session, "err", err)
+			}
+		}
+	}
+	h.announceSelfCall(admitted.session, key, clippedSubject(admitted.subject), detail)
+}
+
+func (h *hub) dispatchAuthorized(ctx context.Context, args []string) (contracts.Result, error) {
 	ctx = withRestarter(ctx, h)
 
 	if isSessionSeedCommand(args) || isSessionHandoffCommand(args) {

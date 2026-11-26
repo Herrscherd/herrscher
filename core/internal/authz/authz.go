@@ -9,11 +9,12 @@ package authz
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
 
-// Role names a set of verbs. The four are defined here and not configurable:
+// Role names a set of verbs. The roles are defined here and not configurable:
 // what a role model buys is naming a set of rights, not inventing a language to
 // describe new ones. What an operator configures is who holds which.
 type Role string
@@ -37,6 +38,14 @@ const (
 	RoleApprover Role = "approver"
 	// RoleAgent is what a connection on a session's command socket holds.
 	RoleAgent Role = "agent"
+	// RoleSteward is a session the operator trusts to configure the daemon: it runs everything an operator does except role and answering approvals.
+	RoleSteward Role = "steward"
+)
+
+const (
+	roleFamily    = "role *"
+	deviceFamily  = "device *"
+	sessionCreate = "session create"
 )
 
 // LocalPrincipal is the caller on the daemon's operator socket, which any process of the daemon's uid reaches, an approved agent shell included.
@@ -104,7 +113,7 @@ func definitionOf(role Role) (definition, bool) {
 	case RoleOwner:
 		return definition{allowAll: true, plugins: true}, true
 	case RoleOperator:
-		return definition{allowAll: true, deny: []string{"role *", "device approve"}, plugins: true}, true
+		return definition{allowAll: true, deny: []string{roleFamily, "device approve"}, plugins: true}, true
 	case RoleObserver:
 		return definition{allow: observerVerbs()}, true
 	case RoleApprover:
@@ -115,22 +124,29 @@ func definitionOf(role Role) (definition, bool) {
 				"commands", "whoami",
 				"session send", "session seed", "session handoff",
 				"session list", "session info", "session log", "session history", "session watch", "session who", "session scrollback", "session checkpoints",
-				"session pr open", "session pr status", "session pr checks", "session pr comments",
+				"session pr open", "session pr status", "session pr checks", "session pr comments", "session pr reply",
+				"session issue open", "session issue comment",
 				"agent list", "agent show",
 				"models list",
 				"memory search", "memory locate", "memory record", "memory unlink", "memory restore",
-				"approve ask",
+				"approve ask", "approve list",
+				"health", "usage", "skill list", "schedule list", "host list", "plugin list", "connect status", "setup check", "env get", "env request",
+				"config get", "session issue list", "session issue show",
 			},
 			deny: []string{
-				"approve list", "approve allow", "approve deny", "approve rule", "approve mode",
-				"host *", "role *", "device *", "schedule *", "service *", "set *", "plugin *",
+				"approve allow", "approve deny", "approve rule", "approve mode",
+				"host add", "host check", "host provision", "host rm", roleFamily, deviceFamily,
+				"schedule add", "schedule rm", "schedule run", "schedule pause", "schedule resume",
+				"service *", "set *", "plugin add", "plugin rm",
 				"skill approve", "memory forget",
-				"session create",
+				sessionCreate,
 				"session close", "session archive", "session resume", "session interrupt",
 				"session switch", "session set-budget",
 			},
 			plugins: true,
 		}, true
+	case RoleSteward:
+		return definition{allowAll: true, deny: append(neverForSessions(), stewardAsks()...), plugins: true}, true
 	case RoleNone:
 	}
 	return definition{}, false
@@ -146,7 +162,41 @@ func observerVerbs() []string {
 		"host list",
 		"schedule list",
 		"memory search", "memory locate",
+		"session issue list", "session issue show",
+		"health", "usage", "skill list", "config get", "env get", "plugin list", "connect status", "setup check",
+		"session pr status", "session pr checks", "session pr comments", "session get-mode",
 	}
+}
+
+func neverForSessions() []string {
+	return []string{roleFamily, deviceFamily, "approve allow", "approve deny"}
+}
+
+func stewardAsks() []string {
+	return []string{"approve rule", "approve mode", sessionCreate, "config set", "config unset", "env set", "env unset"}
+}
+
+func isNeverForSessions(verb string) bool {
+	for _, pattern := range neverForSessions() {
+		if match(pattern, verb) {
+			return true
+		}
+	}
+	return false
+}
+
+// Escalable reports whether a request the role refuses may be put to the operator instead:
+// a session asking for a verb its role does not run, inside its own subtree, and never a verb
+// that grants rights or answers an approval.
+func Escalable(req Request, role Role) bool {
+	if (role != RoleAgent && role != RoleSteward) || req.Principal.Session == "" {
+		return false
+	}
+	if req.Subject.Session != "" && !req.Subject.InSubtree {
+		return false
+	}
+	verb := strings.Join(req.Path, " ")
+	return !permits(role, verb, req.Contributed) && !isNeverForSessions(verb)
 }
 
 // Decide answers whether the request may run, and why not when it may not.
@@ -193,7 +243,7 @@ func permits(role Role, verb string, contributed bool) bool {
 }
 
 func agentHint(verb string) (string, bool) {
-	if verb == "session create" {
+	if verb == sessionCreate {
 		return "To delegate, end your turn with `⟢ delegate: <agent>` and the task: " +
 			"the worker that opens runs a registered agent, so it answers to a policy the way you do.", true
 	}
@@ -201,12 +251,8 @@ func agentHint(verb string) (string, bool) {
 }
 
 func refusal(req Request, role Role, verb string) string {
-	if role == RoleAgent {
-		if hint, ok := agentHint(verb); ok {
-			return fmt.Sprintf("herrscher: %#q is not something a session may run. %s", verb, hint)
-		}
-		return fmt.Sprintf(
-			"herrscher: %#q is not something a session may run. Ask your operator to run it for you.", verb)
+	if role == RoleAgent || role == RoleSteward {
+		return sessionRefusal(verb)
 	}
 	for _, candidate := range []Role{RoleObserver, RoleApprover, RoleOperator, RoleOwner} {
 		if permits(candidate, verb, req.Contributed) {
@@ -215,6 +261,18 @@ func refusal(req Request, role Role, verb string) string {
 		}
 	}
 	return fmt.Sprintf("herrscher: %#q is not something any role may run", verb)
+}
+
+func sessionRefusal(verb string) string {
+	if isNeverForSessions(verb) {
+		return fmt.Sprintf("herrscher: %#q is never run for a session, even with the operator's approval: it grants rights or answers an approval.", verb)
+	}
+	if hint, ok := agentHint(verb); ok {
+		return fmt.Sprintf("herrscher: %#q is not something a session may run. %s", verb, hint)
+	}
+	return fmt.Sprintf("herrscher: %#q is not something a session may run alone. "+
+		"It is put to the operator when the daemon can ask, the operator can grant this session the `steward` role, "+
+		"or run it for you.", verb)
 }
 
 func match(pattern, verb string) bool {
@@ -232,30 +290,54 @@ func match(pattern, verb string) bool {
 // before calling: the display label decides nothing, so the pure package has no
 // reason to know the shape it is stored in.
 //
-// Four rules carry the defaults. local is always owner. A session is always
-// agent. A device takes its assignment, or observer, never no role: a device
-// exists only because a certificate proved it, so an empty table must not
-// leave it unrestricted. A gateway principal takes its assignment, or observer
-// when the table holds anything at all, or no role when it is empty. That last
-// one is what makes an upgrade a no-op for humans, and the first grant a cliff:
-// the verb that writes it says so.
+// Three rules carry the defaults. local is always owner. A session is agent,
+// or steward when the table grants it that. A gateway principal takes its
+// assignment, or observer when the table holds a human grant, or no role when
+// it holds none. That last one is what makes an upgrade a no-op for humans, and
+// the first human grant a cliff: the verb that writes it says so.
 func RoleOf(principal Principal, assignments map[string]string) Role {
 	if principal.ID == LocalPrincipal {
 		return RoleOwner
 	}
 	if principal.Session != "" {
+		if Role(assignments[principal.ID]) == RoleSteward {
+			return RoleSteward
+		}
 		return RoleAgent
+	}
+	if strings.HasPrefix(principal.ID, DevicePrefix) {
+		if name, ok := assignments[principal.ID]; ok && Grantable(name) {
+			return Role(name)
+		}
+		return RoleObserver
+	}
+	if !HoldsHumanAssignment(assignments) {
+		return RoleNone
 	}
 	if name, ok := assignments[principal.ID]; ok && Grantable(name) {
 		return Role(name)
 	}
-	if strings.HasPrefix(principal.ID, DevicePrefix) {
-		return RoleObserver
-	}
-	if len(assignments) == 0 {
-		return RoleNone
-	}
 	return RoleObserver
+}
+
+// HoldsHumanAssignment reports whether the table grants a role to anyone but a session, which is what turns every other human into an observer.
+func HoldsHumanAssignment(assignments map[string]string) bool {
+	for principal := range assignments {
+		if !strings.HasPrefix(principal, SessionPrefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// SessionGrantableRoles lists the roles a session principal can be granted, for a message that has to name the choice.
+func SessionGrantableRoles() []string {
+	return []string{string(RoleSteward)}
+}
+
+// GrantableToSession reports whether name is a role an operator may assign to a session principal: steward alone.
+func GrantableToSession(name string) bool {
+	return Role(name) == RoleSteward
 }
 
 // Grantable reports whether name is a role an operator may assign. agent is
@@ -265,7 +347,7 @@ func Grantable(name string) bool {
 	switch Role(name) {
 	case RoleOwner, RoleOperator, RoleObserver, RoleApprover:
 		return true
-	case RoleNone, RoleAgent:
+	case RoleNone, RoleAgent, RoleSteward:
 	}
 	return false
 }
@@ -305,4 +387,31 @@ func Describe(role Role) string {
 		buf.WriteString("\nnever runs " + strings.Join(def.deny, ", "))
 	}
 	return buf.String()
+}
+
+func readWords() []string {
+	return []string{"list", "show", "get", "read", "status", "info", "checks", "comments", "log", "history", "search", "locate", "who", "scrollback", "watch", "checkpoints"}
+}
+
+// Writes reports whether a verb changes something, which is what the daemon announces when a session runs it.
+// A verb that declared itself read only is a read. Among the daemon's own verbs, so is what an observer runs and a verb whose
+// last word names a read; a plugin's verb is a read only when it declared it. approve ask and env request say so on their own.
+func Writes(path []string, contributed, declaredRead bool) bool {
+	verb := strings.Join(path, " ")
+	if declaredRead || verb == "approve ask" || verb == "env request" || len(path) == 0 {
+		return false
+	}
+	if contributed {
+		return true
+	}
+	last, _, _ := strings.Cut(path[len(path)-1], "-")
+	if slices.Contains(readWords(), last) {
+		return false
+	}
+	return !permits(RoleObserver, verb, contributed)
+}
+
+// AgentRuns reports whether a plain session runs the verb without asking, which is what tells a read from a configuration change.
+func AgentRuns(path []string, contributed bool) bool {
+	return permits(RoleAgent, strings.Join(path, " "), contributed)
 }

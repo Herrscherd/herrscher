@@ -979,5 +979,50 @@
     "id": "telemetry.disabled_by_config",
     "description": "La télémétrie des tours reste désactivée parce que la configuration met telemetry.enabled à false, même si un point de terminaison OTLP est défini",
     "other": "la télémétrie des tours est désactivée : la configuration met telemetry.enabled à false"
+  },
+  {
+    "id": "selftools.refused",
+    "description": "Notice: a verb a session asked for was refused",
+    "other": "herrscher : la session a demandé {{.Subject}}, refusé : {{.Detail}}"
+  },
+  {
+    "id": "selftools.ran_asked",
+    "description": "Notice: a verb a session asked for ran after the operator allowed it",
+    "other": "herrscher : la session a lancé {{.Subject}}, accepté par l'opérateur"
+  },
+  {
+    "id": "selftools.ran_steward",
+    "description": "Notice: a steward session ran a configuration verb",
+    "other": "herrscher : la session a lancé {{.Subject}} en tant que steward"
+  },
+  {
+    "id": "selftools.failed_asked",
+    "description": "Notice: a verb the operator allowed failed",
+    "other": "herrscher : la session a lancé {{.Subject}}, accepté par l'opérateur, et l'appel a échoué : {{.Detail}}"
+  },
+  {
+    "id": "selftools.failed_steward",
+    "description": "Notice: a verb a steward session ran failed",
+    "other": "herrscher : la session a lancé {{.Subject}} en tant que steward, et l'appel a échoué : {{.Detail}}"
+  },
+  {
+    "id": "selftools.env_requested",
+    "description": "Notice: a session asks the operator to set a secret",
+    "other": "herrscher : la session vous demande de régler {{.Key}} dans le fichier de réglages du démon. Lancez `herrscher env set --key {{.Key}} --value …` dans un terminal, puis `herrscher service restart`. {{.Reason}}"
+  },
+  {
+    "id": "selftools.restart_resumed",
+    "description": "Turn handed to a session after the daemon restart it asked for",
+    "other": "herrscher : le démon est revenu après le redémarrage que vous avez demandé. Reprenez la tâche en cours."
+  },
+  {
+    "id": "selftools.ran_direct",
+    "description": "Notice: a session ran a verb that changes something, within its own rights",
+    "other": "herrscher : la session a lancé {{.Subject}}"
+  },
+  {
+    "id": "selftools.failed_direct",
+    "description": "Notice: a verb a session ran within its own rights failed",
+    "other": "herrscher : la session a lancé {{.Subject}}, et l'appel a échoué : {{.Detail}}"
   }
 ]

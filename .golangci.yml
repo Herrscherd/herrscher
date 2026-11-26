@@ -196,9 +196,15 @@ linters:
       - path: ^core/internal/manager/session\.go$
         linters: [misspell]
         text: "marrage"
-      - path: ^core/internal/agent/(agent|store)\.go$
+      - path: ^core/internal/agent/(agent|store|selftools)\.go$
         linters: [gosec]
         text: "^G(304|204|703):"
+      - path: ^core/config/document\.go$
+        linters: [gosec]
+        text: "^G703:"
+      - path: ^(host_verbs|core/host/selftools)\.go$
+        linters: [gosec]
+        text: "^G204:"
       - path: ^core/internal/agent/agent\.go$
         linters: [gosec]
         text: "^G101:"
@@ -255,10 +261,10 @@ linters:
       - path: ^manage/(manage|seam|version|setup_probe)\.go$
         linters: [gosec]
         text: "^G204:"
-      - path: ^manage/(apply|init|lifecycle|manage|setup)\.go$
+      - path: ^manage/(apply|lifecycle|manage|setup|setup_stack)\.go$
         linters: [gosec]
         text: "^G304:"
-      - path: ^manage/(apply|init|manage|seam)\.go$
+      - path: ^manage/(apply|manage|seam|setup_stack)\.go$
         linters: [gosec]
         text: "^G(306|703):"
       - path: ^envfile\.go$

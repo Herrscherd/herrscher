@@ -21,7 +21,8 @@ line of its own.
 - The everyday verbs have a tool of their own: `whoami`, `health`,
   `session_list`, `session_info`, `session_who`, `session_log`,
   `session_history`, `agent_list`, `models_list`, `skill_list`,
-  `schedule_list`, `approve_list`, `memory_search` and `config_get`.
+  `schedule_list`, `approve_list`, `memory_search`, `config_get`,
+  `session_issue_list` and `session_issue_show`.
   `HERRSCHER_SELF_TOOLS_EXPOSE=all` gives every verb one, at the cost of more
   schemas in each turn.
 - `setup_check` reports each section of `herrscher setup` as `ok`, `warning`,
@@ -72,6 +73,13 @@ included, and refused before anything is written. The daemon reads the file at
 start, so a change takes effect at the next `herrscher service restart`.
 A rewrite cannot keep full-line comments: when the file had some, the previous
 version is kept as `config.json.bak` and the reply says so.
+
+## Issues
+
+`session issue list` and `session issue show` read the issues of the repository
+the session works in, through the host's forge connection: the agent never
+holds a token. `--state` takes `open` (the default) or `closed`, `--labels` a
+comma separated list. Both are reads, so an agent runs them without asking.
 
 ## Where it is declared
 

@@ -5995,5 +5995,50 @@
     "id": "cli.manage.flag.json",
     "description": "Help of the --json flag of setup check",
     "other": "afficher le rapport en JSON"
+  },
+  {
+    "id": "cli.help.cmd.session.issue.list",
+    "description": "Help of the command session issue list",
+    "other": "lister les issues du dépôt où travaille une session"
+  },
+  {
+    "id": "cli.help.cmd.session.issue.show",
+    "description": "Help of the command session issue show",
+    "other": "afficher une issue du dépôt où travaille une session"
+  },
+  {
+    "id": "cli.help.param.session.issue.name",
+    "description": "Help of the parameter name of session issue",
+    "other": "la session dont le dépôt porte les issues"
+  },
+  {
+    "id": "cli.help.param.session.issue.state",
+    "description": "Help of the parameter state of session issue list",
+    "other": "open (par défaut) ou closed"
+  },
+  {
+    "id": "cli.help.param.session.issue.labels",
+    "description": "Help of the parameter labels of session issue",
+    "other": "étiquettes, séparées par des virgules"
+  },
+  {
+    "id": "cli.help.param.session.issue.number",
+    "description": "Help of the parameter number of session issue",
+    "other": "le numéro de l'issue"
+  },
+  {
+    "id": "cli.session.issue.none",
+    "description": "Reply of session issue list with no issue",
+    "other": "aucune issue ne correspond sur {{.Repo}}"
+  },
+  {
+    "id": "cli.session.issue.bad_number",
+    "description": "Refusal of an issue number that is not a positive number",
+    "other": "{{.Number}} n'est pas un numéro d'issue"
+  },
+  {
+    "id": "cli.session.issue.bad_state",
+    "description": "Refusal of an issue state other than open or closed",
+    "other": "{{.State}} n'est pas un état d'issue : open ou closed"
   }
 ]

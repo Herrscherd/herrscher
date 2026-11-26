@@ -83,6 +83,8 @@ func coreVerbs() []string {
 		"approve list",
 		"memory search",
 		"config get",
+		"session issue list",
+		"session issue show",
 	}
 }
 

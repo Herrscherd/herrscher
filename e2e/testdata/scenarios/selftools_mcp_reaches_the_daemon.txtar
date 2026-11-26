@@ -1,0 +1,21 @@
+! exec herrscher serve &daemon&
+waitdaemon
+exec herrscher session create --name relayed
+stdin $WORK/mcp.jsonl
+exec herrscher mcp
+stdout '"serverInfo":\{"name":"herrscher"'
+stdout '"name":"herrscher_run"'
+stdout '"name":"session_list"'
+stdout '"name":"setup_check"'
+stdout '"id":3,"result":\{"content":\[\{"type":"text","text":"[^"]*relayed'
+stdout '"id":4,"result":\{"content":.*"isError":true'
+kill -INT daemon
+wait daemon
+! waitdaemon
+
+-- mcp.jsonl --
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}
+{"jsonrpc":"2.0","method":"notifications/initialized"}
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"session_list","arguments":{}}}
+{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"herrscher_run","arguments":{"command":"approve allow","rest":["--always"]}}}

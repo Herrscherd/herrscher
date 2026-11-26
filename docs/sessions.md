@@ -102,6 +102,15 @@ and writes the new file atomically. Each change is announced on the output of
   folder sat in (the folder above `.herrscher-sessions`), the same way and
   with the same refusals. A gone folder outside that layout names no
   repository, so its refs, if any, stay under the session name.
+  Format 0 filed these refs by session name only, with no instance id, so two
+  instances on the same repository that each have a session `alpha` share
+  `refs/herrscher/checkpoints/alpha/` and `refs/herrscher/undo/alpha`. Nothing
+  in the refs says which instance made which checkpoint, so the first instance
+  to migrate files all of them under its own `alpha`, including when its
+  `alpha` is gone and the other instance's `alpha` is still running. The other
+  instance then finds none left under the name. Migrate such instances in the
+  order whose sessions should keep the checkpoints, or copy the refs aside
+  (`git for-each-ref refs/herrscher/`) before the first `serve`.
 - **Folders in no git repository.** A local session whose folder belongs to no
   git repository (git finds no repository in the folder or any parent, and no
   `.git` entry sits on its path), or whose folder is gone with no repository
@@ -160,6 +169,17 @@ It refuses, writes nothing, and says what to do instead of guessing, when:
   `git -C <folder> for-each-ref refs/herrscher/` work (fix the rights, add the
   folder to `safe.directory`, or run `git worktree repair <folder>` from its
   repository), and start `serve` again.
+- git finds no repository for a session's folder, yet a `.git` entry sits on
+  its path: a home under dotfiles kept in `~/.git` with `GIT_CEILING_DIRECTORIES`
+  set to `~`, a filesystem boundary git does not cross, or an empty or broken
+  `.git`. The refusal names the session, the folder and that entry. Start
+  `serve` once without `GIT_CEILING_DIRECTORIES` (or with
+  `GIT_DISCOVERY_ACROSS_FILESYSTEM=1` for a filesystem boundary): the migration
+  then reads that repository and moves only the refs under `refs/herrscher/`
+  filed under the session's name, never a branch or a tag, and later starts may
+  set the variable back. Repair or remove a `.git` that is empty or broken, or
+  move the folder out of the path of a repository it does not belong to, then
+  start `serve` again.
 
 A session that runs on another [host](remote.md) is not refused: the migration
 cannot reach that machine, so it points the state at the new place and prints,

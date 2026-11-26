@@ -233,6 +233,52 @@ func TestCostLinesShowTheCacheReadShareOfEachSession(t *testing.T) {
 	}
 }
 
+func TestCostLinesPrintNoShareOfThePeriodTotalPerSession(t *testing.T) {
+	snapshot := Snapshot{Range: Range7d, Spend: Spend{Cost: 3, Sessions: 1, Rows: []SessionRow{
+		{Session: "alpha", Cost: 2, CacheRatio: 25},
+	}}}
+	lines, err := CostLines(snapshot, clitext.NewMessages(), i18n.French, time.UTC, termpaint.Palette{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := lineContaining(lines, "alpha")
+	if row == "" {
+		t.Fatalf("cost has no row for alpha:\n%s", strings.Join(lines, "\n"))
+	}
+	if !strings.Contains(row, formatMoney(i18n.French, 2)) || !strings.Contains(row, "25 %") {
+		t.Errorf("row %q misses its cost or its cache read share", row)
+	}
+	if share := formatPercent(i18n.French, shareOf(2, 3)); strings.Contains(row, share) {
+		t.Errorf("row %q prints the share %q of the period total", row, share)
+	}
+}
+
+func TestCostLinesPrintNoShareWhenThePeriodTotalIsZero(t *testing.T) {
+	snapshot := Snapshot{Range: Range7d, Spend: Spend{Cost: 0, Sessions: 1, Rows: []SessionRow{
+		{Session: "alpha", Cost: 2, CacheRatio: 25},
+	}}}
+	lines, err := CostLines(snapshot, clitext.NewMessages(), i18n.French, time.UTC, termpaint.Palette{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := lineContaining(lines, "alpha")
+	if !strings.Contains(row, formatMoney(i18n.French, 2)) {
+		t.Fatalf("row %q misses its cost", row)
+	}
+	if strings.Contains(row, formatPercent(i18n.French, 0)) {
+		t.Errorf("row %q prints a zero share against a zero total", row)
+	}
+}
+
+func lineContaining(lines []string, want string) string {
+	for _, line := range lines {
+		if strings.Contains(line, want) {
+			return line
+		}
+	}
+	return ""
+}
+
 func TestSessionTablesShowTheFirstRowsAndCountTheRest(t *testing.T) {
 	var rows []SessionRow
 	for index := range sessionCount {

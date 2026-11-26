@@ -176,14 +176,27 @@ and the default is the limits of each account:
 Each session name of the period has a row, in the `cost` view with its cost and the share
 of its input read from the prompt cache, and in the `tokens` view with its tokens and the
 tokens the host injected into its prompt per turn. The rows come from the herrscher usage
-ledger only, and a row is per session name: a name reused after its session is deleted
+ledger only, so the cost of a row is the cost written with each of its turns. The rows
+need not add up to the period total: where the vendor transcripts cover an account, the
+total prices those turns from the transcripts, not from the ledger, and a row carries no
+share of that total. A row is per session name: a name reused after its session is deleted
 adds the turns of both sessions into one row. The herrscher session transcripts are not
 read. Vendor sessions read from the vendor transcripts have no row, and the vendor
 transcripts still feed the period totals and the by-model figures, as before. The cache
 share is the cache read over the input of the session, the input, the cache read and the
 cache write together, as the period's cache share is. The rows are sorted by cost and the
-text views show the first eight, with a line for the sessions they leave out; `--json`
-gives all of them under `spend.sessionRows`.
+text views show the first eight, with a line for the sessions they leave out.
+
+`--json` gives all the rows under `spend.sessionRows`, in the same order, each with:
+
+- `session`: the session name.
+- `cost`: the cost of its turns, as the cost view shows it.
+- `tokens`: `in`, `out`, `cacheRead` and `cacheCreate`, the tokens of its turns.
+- `cacheRatio`: the cache read share of its input, as a percentage from 0 to 100.
+- `injection`: `turns`, the turns that carry a measurement, and `tokens`, the estimated
+  tokens injected over those turns. The average the text views show is `tokens` divided
+  by `turns`. The JSON gives no average: a consumer divides, and skips the division when
+  `turns` is 0, which the text views show as `n/a`.
 
 The injected figure is an estimate, marked `~`. The host measures each block it writes
 into the prompt of a turn (memory, skills, delegation, capabilities, identity), at about

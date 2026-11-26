@@ -19,14 +19,14 @@ import (
 )
 
 type session struct {
-	cmd            *exec.Cmd
-	stdin          io.WriteCloser
-	inbound        chan inboundLine
-	stopping       chan struct{}
-	readerDone     chan struct{}
-	stderr         *tailBuffer
-	nextID         int
-	outputCloseErr error
+	cmd        *exec.Cmd
+	stdin      io.WriteCloser
+	output     *os.File
+	inbound    chan inboundLine
+	stopping   chan struct{}
+	readerDone chan struct{}
+	stderr     *tailBuffer
+	nextID     int
 }
 
 type inboundLine struct {
@@ -130,13 +130,14 @@ func start(ctx context.Context, server agent.MCPServer, dir string) (*session, e
 	session := &session{
 		cmd:        cmd,
 		stdin:      stdin,
+		output:     stdout,
 		inbound:    make(chan inboundLine),
 		stopping:   make(chan struct{}),
 		readerDone: make(chan struct{}),
 		stderr:     stderr,
 		nextID:     1,
 	}
-	go session.read(stdout)
+	go session.read()
 	return session, nil
 }
 
@@ -161,10 +162,9 @@ func substituteAll(values []string, dir string) []string {
 	return out
 }
 
-func (s *session) read(output *os.File) {
+func (s *session) read() {
 	defer close(s.readerDone)
-	defer s.closeOutput(output)
-	scanner := bufio.NewScanner(output)
+	scanner := bufio.NewScanner(s.output)
 	scanner.Buffer(make([]byte, 0, initialBuffer), maxMessageBytes)
 	for scanner.Scan() {
 		select {
@@ -298,7 +298,7 @@ func contextFailure(err error) error {
 func (s *session) stop() error {
 	close(s.stopping)
 	killErr := killProcessTree(s.cmd)
-	outputErr := s.awaitOutput()
+	outputErr := s.closeOutput()
 	waitErr := s.cmd.Wait()
 	if _, exited := errors.AsType[*exec.ExitError](waitErr); exited {
 		waitErr = nil
@@ -306,17 +306,13 @@ func (s *session) stop() error {
 	return errors.Join(killErr, outputErr, waitErr)
 }
 
-func (s *session) awaitOutput() error {
+func (s *session) closeOutput() error {
 	select {
 	case <-s.readerDone:
-		return s.outputCloseErr
+		return s.output.Close()
 	case <-time.After(stopWaitDelay):
-		return errOutputOpen
+		return errors.Join(errOutputOpen, s.output.Close())
 	}
-}
-
-func (s *session) closeOutput(output *os.File) {
-	s.outputCloseErr = output.Close()
 }
 
 func (s *session) stderrTail() string {

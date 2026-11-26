@@ -5,9 +5,11 @@ package mcpweight
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -60,7 +62,7 @@ func awaitProcessGone(t *testing.T, pid int) {
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		if err := syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
+		if processGone(pid) {
 			return
 		}
 		select {
@@ -69,6 +71,27 @@ func awaitProcessGone(t *testing.T, pid int) {
 			t.Fatalf("grandchild %d is still alive after its server was stopped", pid)
 		}
 	}
+}
+
+func processGone(pid int) bool {
+	state, err := processState(pid)
+	if err != nil {
+		return errors.Is(syscall.Kill(pid, 0), syscall.ESRCH)
+	}
+	return state == "Z"
+}
+
+func processState(pid int) (string, error) {
+	raw, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	if err != nil {
+		return "", err
+	}
+	stat := string(raw)
+	closing := strings.LastIndexByte(stat, ')')
+	if closing < 0 || closing+2 >= len(stat) {
+		return "", fmt.Errorf("malformed stat of process %d", pid)
+	}
+	return stat[closing+2 : closing+3], nil
 }
 
 func killOnCleanup(t *testing.T, pid int) {

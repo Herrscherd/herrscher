@@ -27,6 +27,7 @@ const (
 	screenWelcome setupScreen = iota
 	screenModules
 	screenDiscord
+	screenTelegram
 	screenClaude
 	screenCodex
 	screenCursor
@@ -39,7 +40,7 @@ const (
 )
 
 func flowOrder() []setupScreen {
-	return []setupScreen{screenModules, screenDiscord, screenClaude, screenCodex, screenCursor, screenObsidian, screenRoute, screenReview}
+	return []setupScreen{screenModules, screenDiscord, screenTelegram, screenClaude, screenCodex, screenCursor, screenObsidian, screenRoute, screenReview}
 }
 
 type setupDeps struct {
@@ -148,7 +149,7 @@ func (model *setupModel) startModules(settings map[string]string) (moduleSet, []
 
 func (model *setupModel) newFields() map[string]textinput.Model {
 	fields := make(map[string]textinput.Model)
-	for _, key := range []string{envDiscordToken, envDiscordUser, envAnthropicKey, fieldCodexKey, envCursorKey, envVault, envGatewayURL, envGatewayToken} {
+	for _, key := range []string{envDiscordToken, envDiscordUser, envTelegramBot, envTelegramUser, envAnthropicKey, fieldCodexKey, envCursorKey, envVault, envGatewayURL, envGatewayToken} {
 		input := textinput.New()
 		input.Prompt = ""
 		input.SetValue(model.draft.value(key))
@@ -303,6 +304,7 @@ func (model *setupModel) typeInto(key string, press tea.KeyMsg) tea.Cmd {
 func fieldProbes() map[string]probeKind {
 	return map[string]probeKind{
 		envDiscordToken: probeDiscord,
+		envTelegramBot:  probeTelegram,
 		envAnthropicKey: probeClaude,
 		fieldCodexKey:   probeCodex,
 		envCursorKey:    probeCursor,
@@ -323,6 +325,8 @@ func (model *setupModel) shown(screen setupScreen) bool {
 	switch screen {
 	case screenDiscord:
 		return model.modules[moduleDiscord]
+	case screenTelegram:
+		return model.modules[moduleTelegram]
 	case screenClaude:
 		return model.modules[moduleClaude]
 	case screenCodex:
@@ -382,7 +386,7 @@ func (model *setupModel) back() tea.Cmd {
 			return model.openHub()
 		}
 		return nil
-	case screenModules, screenDiscord, screenClaude, screenCodex, screenCursor, screenObsidian, screenRoute, screenReview, screenConnections:
+	case screenModules, screenDiscord, screenTelegram, screenClaude, screenCodex, screenCursor, screenObsidian, screenRoute, screenReview, screenConnections:
 	}
 	if target, ok := model.returnTarget(); ok {
 		return model.goTo(target)
@@ -430,7 +434,7 @@ func (model *setupModel) enter(screen setupScreen) tea.Cmd {
 		return model.startInstall()
 	case screenConnections:
 		return model.githubStatus()
-	case screenWelcome, screenModules, screenDiscord, screenCursor, screenObsidian, screenReview:
+	case screenWelcome, screenModules, screenDiscord, screenTelegram, screenCursor, screenObsidian, screenReview:
 	}
 	return nil
 }
@@ -445,7 +449,7 @@ func (model *setupModel) statusCheck(kind probeKind) tea.Cmd {
 		if !model.modules[moduleCodex] || model.codexKey {
 			return nil
 		}
-	case probeDiscord, probeCursor, probeVault:
+	case probeDiscord, probeTelegram, probeCursor, probeVault:
 		return nil
 	}
 	return model.vendorStatus(kind, false)
@@ -455,6 +459,8 @@ func (model *setupModel) probeInput(kind probeKind) string {
 	switch kind {
 	case probeDiscord:
 		return model.draft.value(envDiscordToken)
+	case probeTelegram:
+		return model.draft.value(envTelegramBot)
 	case probeClaude:
 		if model.claudeKey {
 			return model.draft.value(envAnthropicKey)
@@ -495,6 +501,9 @@ func (model *setupModel) runProbe(kind probeKind) tea.Cmd {
 	case probeDiscord:
 		token := model.draft.value(envDiscordToken)
 		return model.probe(kind, func(ctx context.Context) probeResult { return prober.discord(ctx, token) })
+	case probeTelegram:
+		token := model.draft.value(envTelegramBot)
+		return model.probe(kind, func(ctx context.Context) probeResult { return prober.telegram(ctx, token) })
 	case probeClaude:
 		if !model.claudeKey {
 			return model.login(kind)
@@ -610,6 +619,8 @@ func probeScreen(kind probeKind) setupScreen {
 	switch kind {
 	case probeDiscord:
 		return screenDiscord
+	case probeTelegram:
+		return screenTelegram
 	case probeClaude:
 		return screenClaude
 	case probeCodex:

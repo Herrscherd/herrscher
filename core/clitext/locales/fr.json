@@ -5813,5 +5813,25 @@
     "id": "cli.session.pr.conclusion.other",
     "description": "Mot de conclusion de contrôle : terminé sans conclusion nommable",
     "other": "autre"
+  },
+  {
+    "id": "cli.setup.module.telegram",
+    "description": "Description of the Telegram gateway module",
+    "other": "bot Telegram, conversations privées et groupes"
+  },
+  {
+    "id": "cli.setup.telegram.intro",
+    "description": "Intro of the Telegram bot screen",
+    "other": "Envoie /newbot à @BotFather sur Telegram, garde son mode confidentialité activé, puis colle le jeton qu'il donne."
+  },
+  {
+    "id": "cli.setup.telegram.user",
+    "description": "Label of the Telegram user id field",
+    "other": "ton identifiant numérique Telegram"
+  },
+  {
+    "id": "cli.setup.telegram.user_hint",
+    "description": "Hint of the Telegram user id field",
+    "other": "un bot comme @userinfobot l'affiche ; personne d'autre ne peut parler au bot"
   }
 ]

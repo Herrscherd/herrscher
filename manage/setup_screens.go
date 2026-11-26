@@ -78,6 +78,8 @@ func (model *setupModel) rows() []setupRow {
 		return model.moduleRows()
 	case screenDiscord:
 		return model.discordRows()
+	case screenTelegram:
+		return model.telegramRows()
 	case screenClaude:
 		return model.claudeRows()
 	case screenCodex:
@@ -202,6 +204,18 @@ func (model *setupModel) discordRows() []setupRow {
 		blank(),
 	}
 	rows = append(rows, model.probeRows(probeDiscord, model.text(clitext.SetupBotProbe, nil))...)
+	return append(rows, blank(), model.continueRow())
+}
+
+func (model *setupModel) telegramRows() []setupRow {
+	rows := []setupRow{
+		line(toneDim, model.text(clitext.SetupTelegramIntro, nil)),
+		blank(),
+		fieldRow(envTelegramBot, model.text(clitext.SetupBotToken, nil), model.text(clitext.SetupBotTokenHint, nil)),
+		fieldRow(envTelegramUser, model.text(clitext.SetupTelegramUser, nil), model.text(clitext.SetupTelegramUserHint, nil)),
+		blank(),
+	}
+	rows = append(rows, model.probeRows(probeTelegram, model.text(clitext.SetupBotProbe, nil))...)
 	return append(rows, blank(), model.continueRow())
 }
 
@@ -410,6 +424,8 @@ func settingScreen(key string) setupScreen {
 	switch key {
 	case envDiscordToken, envDiscordUser:
 		return screenDiscord
+	case envTelegramBot, envTelegramUser:
+		return screenTelegram
 	case envAnthropicKey:
 		return screenClaude
 	case envCursorKey:
@@ -549,7 +565,8 @@ func (model *setupModel) sections() []hubSection {
 		tone:   toneOK,
 	}}
 	sections = append(sections,
-		model.moduleSection(moduleDiscord, screenDiscord, model.discordState()),
+		model.moduleSection(moduleDiscord, screenDiscord, model.botState(probeDiscord, envDiscordToken)),
+		model.moduleSection(moduleTelegram, screenTelegram, model.botState(probeTelegram, envTelegramBot)),
 		model.moduleSection(moduleClaude, screenClaude, model.probeState(probeClaude)),
 		model.moduleSection(moduleCodex, screenCodex, model.probeState(probeCodex)),
 		model.moduleSection(moduleCursor, screenCursor, model.keyState(envCursorKey)),
@@ -572,11 +589,11 @@ func (model *setupModel) moduleSection(mod setupModule, screen setupScreen, stat
 	return section
 }
 
-func (model *setupModel) discordState() sectionState {
-	if result, ok := model.probes[probeDiscord]; ok && result.state != probeRunning {
+func (model *setupModel) botState(kind probeKind, tokenKey string) sectionState {
+	if result, ok := model.probes[kind]; ok && result.state != probeRunning {
 		return model.resultState(result)
 	}
-	return model.keyState(envDiscordToken)
+	return model.keyState(tokenKey)
 }
 
 func (model *setupModel) keyState(key string) sectionState {

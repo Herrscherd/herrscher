@@ -5813,5 +5813,25 @@
     "id": "cli.session.pr.conclusion.other",
     "description": "Check conclusion word: completed without a conclusion the plugin can name",
     "other": "other"
+  },
+  {
+    "id": "cli.setup.module.telegram",
+    "description": "Description of the Telegram gateway module",
+    "other": "Telegram bot, private chats and groups"
+  },
+  {
+    "id": "cli.setup.telegram.intro",
+    "description": "Intro of the Telegram bot screen",
+    "other": "Send /newbot to @BotFather on Telegram, keep its privacy mode on, then paste the token it gives."
+  },
+  {
+    "id": "cli.setup.telegram.user",
+    "description": "Label of the Telegram user id field",
+    "other": "your numeric Telegram user ID"
+  },
+  {
+    "id": "cli.setup.telegram.user_hint",
+    "description": "Hint of the Telegram user id field",
+    "other": "a bot such as @userinfobot shows it; nobody else may talk to the bot"
   }
 ]

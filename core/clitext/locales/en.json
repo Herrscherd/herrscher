@@ -3578,6 +3578,11 @@
     "other": "refusing to remove {{.Path}}: it is not under {{.Root}}, nothing was removed"
   },
   {
+    "id": "cli.worktree.outside_root_gone",
+    "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.outside_root_gone)",
+    "other": "refusing to remove {{.Path}}: it is not under {{.Root}} and no longer exists, nothing was removed; close the session with force:true to drop it"
+  },
+  {
     "id": "cli.worktree.scratch_create",
     "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.scratch_create)",
     "other": "scratch {{.Path}}: {{.Err}}"

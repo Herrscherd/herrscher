@@ -19,16 +19,20 @@ var ErrOutsideRoot = clitext.SentinelError("the recorded path is outside the ins
 // directory of this instance inside repo. The recorded directory picks the
 // worktree, not the session's current name, so a renamed session still removes
 // the worktree it was created with. A path outside that root is refused, unless
-// force is set and nothing is there any more.
+// force is set and nothing is there any more; without force, the refusal of
+// such a vanished path says to force.
 func (w *Worktreer) RemoveAt(ctx context.Context, repo, path string, force bool) error {
 	root := w.sessionsRoot(repo)
 	if dir, ok := recordedChild(root, path); ok {
 		return w.Remove(ctx, repo, dir, force)
 	}
-	if force && absent(path) {
+	if !absent(path) {
+		return outsideRoot(w.messages, path, root)
+	}
+	if force {
 		return nil
 	}
-	return outsideRoot(w.messages, path, root)
+	return NewFailure(w.messages, clitext.WorktreeOutsideRootGone, clitext.Params{clitext.ParamPath: strconv.Quote(path), clitext.ParamRoot: strconv.Quote(root)}, ErrOutsideRoot)
 }
 
 // RemoveScratchAt deletes the scratch directory recorded at path, which must be

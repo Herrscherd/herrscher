@@ -3575,7 +3575,7 @@
   {
     "id": "cli.worktree.outside_root",
     "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.outside_root)",
-    "other": "refus de supprimer {{.Path}} : ce dossier n'est pas sous {{.Root}}, rien n'a été supprimé"
+    "other": "refus de supprimer {{.Path}} : ce dossier n'est pas sous {{.Root}}, rien n'a été supprimé ; il peut contenir du travail, déplace-le ou supprime-le toi-même, puis ferme la session avec force:true"
   },
   {
     "id": "cli.worktree.outside_root_gone",

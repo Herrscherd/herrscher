@@ -3575,7 +3575,7 @@
   {
     "id": "cli.worktree.outside_root",
     "description": "Erreur du paquet worktree rendue à l'opérateur (cli.worktree.outside_root)",
-    "other": "refusing to remove {{.Path}}: it is not under {{.Root}}, nothing was removed"
+    "other": "refusing to remove {{.Path}}: it is not under {{.Root}}, nothing was removed; it may hold work, so move or delete it yourself, then close the session with force:true"
   },
   {
     "id": "cli.worktree.outside_root_gone",

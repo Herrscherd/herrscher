@@ -21,6 +21,14 @@ func skillRoots(cwd string, extra []string) []string {
 }
 
 func newSkillEngine(backend contracts.Backend) *skills.Engine {
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "."
+	}
+	return newSkillEngineIn(backend, cwd)
+}
+
+func newSkillEngineIn(backend contracts.Backend, cwd string) *skills.Engine {
 	if n, ok := skillNativeOf(backend); ok && n.NativeSkills() {
 		return nil
 	}
@@ -35,10 +43,6 @@ func newSkillEngine(backend contracts.Backend) *skills.Engine {
 			return nil
 		}
 		extra = cfg.Skills.Roots
-	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		cwd = "."
 	}
 	return skills.NewEngine(skillRoots(cwd, extra))
 }

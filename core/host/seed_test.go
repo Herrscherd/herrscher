@@ -19,6 +19,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/accounts"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/state"
+	"github.com/Herrscherd/herrscher/core/skills"
 )
 
 func TestSelectBackendVendorPrecedence(t *testing.T) {
@@ -312,6 +313,35 @@ func (c *consolidateSpy) Consolidate(ctx context.Context) error {
 	return c.err
 }
 func (c *consolidateSpy) Close() error { return nil }
+
+type learnedSkillSpy struct {
+	consolidateSpy
+
+	skill contracts.Node
+}
+
+func (l *learnedSkillSpy) LearnedSkills(context.Context) ([]contracts.Node, error) {
+	return []contracts.Node{l.skill}, nil
+}
+
+func TestASeedProjectsItsLearnedSkillsBeforeTheBackendStarts(t *testing.T) {
+	worktree := t.TempDir()
+	projected := filepath.Join(skills.LearnedRoot(worktree), "brask-release", "SKILL.md")
+	var seenAtSpawn bool
+	backend := func(context.Context, state.Session) (contracts.Backend, error) {
+		_, err := os.Stat(projected)
+		seenAtSpawn = err == nil
+		return seedBackend{}, nil
+	}
+	orch := &learnedSkillSpy{skill: contracts.Node{Key: "agents/alpha/skills/brask-release", Kind: contracts.KindSkill, Title: "release the Brask repository", Body: "Run make tag, then make ship ZONE=4."}}
+	sess := state.Session{Name: "solo", ChannelID: "channel", Worktree: worktree}
+	if _, err := runOneShotSeedWithIDRuntime(context.Background(), sess, "tâche", newTurnID(), orch, oneShotSeedRuntime{desk: seedDesk(t), persists: newPersistWrites(), messages: newHostMessages(), cliMessages: clitext.NewMessages(), backend: backend}); err != nil {
+		t.Fatalf("runOneShotSeedWith: %v", err)
+	}
+	if !seenAtSpawn {
+		t.Fatalf("%s absent when the backend started, so a one-shot never sees what its agent learned", projected)
+	}
+}
 
 func TestASeedKeepsItsReplyWhenConsolidationFails(t *testing.T) {
 	backend := func(context.Context, state.Session) (contracts.Backend, error) {

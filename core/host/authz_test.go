@@ -257,3 +257,12 @@ func TestASessionReachesOnlyItsOwnPullRequests(t *testing.T) {
 		}
 	}
 }
+
+func TestAGatewayCannotClaimTheIdentityOfAPairedDevice(t *testing.T) {
+	st := authzState(t, nil, map[string]string{"device:0123": "owner", "chat:1": "owner"})
+	h := authzHub(t, st, []string{"role", "grant"})
+	ctx := contracts.WithPrincipal(context.Background(), "device:0123")
+	if err := h.authorize(ctx, []string{"role", "grant"}); err == nil {
+		t.Fatal("a gateway claiming the identity of an owner device was believed")
+	}
+}

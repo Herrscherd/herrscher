@@ -97,3 +97,55 @@ settings guard it:
   authenticated announcement advertises. Without it, the host dials loopback
   addresses only, so plaintext traffic never leaves the machine.
 
+
+## Trust model of devices
+
+A device is a client that drives the daemon from another machine. This section
+describes what the daemon does today: the pairing, the registry and the
+authority are in place, and no network listener accepts a device yet, so no
+device can authenticate until that listener lands.
+
+- **Principal.** A device is the principal `device:<id>`. The principal is minted
+  only from a client certificate that the daemon's own authority verified, and a
+  caller that claims the prefix itself is treated as unverified, the same as
+  `local` and `session:`.
+- **Role.** A device holds a role through `role grant`, like any other principal.
+  `approver` is the role for answering approvals: it runs what `observer` runs,
+  plus `approve allow` and `approve deny`, and nothing else. A device with no
+  assignment is an `observer`, even when the table is empty, because a verified
+  device must never fall back to running everything.
+- **Who runs the device verbs.** `device pair`, `device list`, `device deny` and
+  `device revoke` run for `owner`, `operator` and `local`. `device approve` runs
+  for `owner` and `local` only, so an operator can open a window but cannot
+  sign a certificate. `observer`, `approver` and a session never run them.
+- **Pairing.** `device pair` opens one window at a time. It prints a code of ten
+  characters from an alphabet without the ambiguous symbols, drawn from the
+  operating system's random source. The window lasts ten minutes and accepts five
+  wrong codes at most, after which it closes. The daemon keeps only a salted SHA-256
+  digest of the code, and compares digests in constant time. A code redeems once.
+  Redeeming it records the device's certificate request as pending and signs
+  nothing. `device list` shows the pending request with the short fingerprint of
+  the device's key, and `device approve` signs the certificate and grants the role.
+  Only the public key crosses the pairing: the private key is generated on the
+  device and never reaches the daemon.
+- **Authority.** The daemon's certificate authority is an ECDSA P-256 key, created
+  the first time a device is approved. P-256 rather than Ed25519 because the
+  Secure Enclave and the platform keystores of phones sign with P-256 keys, and
+  the Go TLS stack accepts it for client certificates. Its files live in the
+  daemon's state directory, in a directory of mode 0700, and each key file has
+  mode 0600. A key without its certificate, or the reverse, is refused rather
+  than replaced, since replacing the authority would unpair every device. The
+  daemon also keeps a server certificate signed by the authority, for clients to
+  pin later. No command prints a key, and no log line carries one.
+- **Certificates.** A client certificate is valid for thirty days. It is not
+  renewed yet: renewal is a follow-up of #320.
+- **Expiry and revocation.** A device that has not connected for thirty days is
+  expired, and so is a device an operator revokes. Either refuses the certificate
+  at every connection. `device revoke` keeps the device's role in the table, which
+  does nothing while the device stays revoked.
+- **Journal.** Opening a pairing window, approving, denying and revoking are
+  logged with the device's identifier and role. A log line never carries the
+  pairing code or a key.
+- **Not yet.** The mTLS listener, the ssh route and the Tailscale route are later
+  pieces of #320. Until the listener is wired, no request reaches the pairing
+  from the network, and the daemon refuses any device it does not know.

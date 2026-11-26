@@ -5909,5 +5909,185 @@
     "id": "cli.setup.telegram.malformed",
     "description": "Hub state of the Telegram module when one of its settings cannot be parsed",
     "other": "a Telegram setting is malformed (an id that is not a number, or a switch other than on, off, yes, no, true, false, 1 or 0), so the gateway will not start"
+  },
+  {
+    "id": "cli.host.device.paired",
+    "description": "Reply of a host command, paired",
+    "other": "pairing code {{.Code}}, valid for ten minutes. Type it on the device, then run `device approve` with the same code once `device list` shows the fingerprint the device shows. The device is granted `{{.Role}}`."
+  },
+  {
+    "id": "cli.host.device.approved",
+    "description": "Reply of a host command, approved",
+    "other": "{{.Name}} ({{.ID}}) is approved as `{{.Role}}`. Key fingerprint {{.Fingerprint}}."
+  },
+  {
+    "id": "cli.host.device.denied",
+    "description": "Reply of a host command, denied",
+    "other": "pairing window closed: nothing was granted."
+  },
+  {
+    "id": "cli.host.device.revoked",
+    "description": "Reply of a host command, revoked",
+    "other": "{{.ID}} is revoked: its certificate no longer authenticates."
+  },
+  {
+    "id": "cli.host.device.none",
+    "description": "Reply of a host command, none",
+    "other": "no device is paired, and no pairing window is open."
+  },
+  {
+    "id": "cli.host.device.row",
+    "description": "Reply of a host command, row",
+    "other": "{{.ID}}  {{.Name}}  {{.Role}}  {{.Status}}  last seen {{.When}}"
+  },
+  {
+    "id": "cli.host.device.pending",
+    "description": "Reply of a host command, pending",
+    "other": "waiting for approval: {{.Name}} as `{{.Role}}`, key fingerprint {{.Fingerprint}}"
+  },
+  {
+    "id": "cli.host.device.status_active",
+    "description": "Reply of a host command, status active",
+    "other": "active"
+  },
+  {
+    "id": "cli.host.device.status_expired",
+    "description": "Reply of a host command, status expired",
+    "other": "expired"
+  },
+  {
+    "id": "cli.host.device.status_revoked",
+    "description": "Reply of a host command, status revoked",
+    "other": "revoked"
+  },
+  {
+    "id": "cli.host.fault.device_id_missing",
+    "description": "Error of a host command, device id missing",
+    "other": "name a device (see `device list`)"
+  },
+  {
+    "id": "cli.host.fault.device_code_missing",
+    "description": "Error of a host command, device code missing",
+    "other": "name the pairing code that `device pair` printed"
+  },
+  {
+    "id": "cli.host.fault.device_malformed_id",
+    "description": "Error of a host command, device malformed id",
+    "other": "a device id is 32 lowercase hexadecimal characters, as `device list` prints it"
+  },
+  {
+    "id": "cli.host.fault.device_malformed_code",
+    "description": "Error of a host command, device malformed code",
+    "other": "a pairing code is ten letters and digits, as `device pair` printed it"
+  },
+  {
+    "id": "cli.host.fault.device_role",
+    "description": "Error of a host command, device role",
+    "other": "a device can only be given a role herrscher grants (see `role list`)"
+  },
+  {
+    "id": "cli.host.fault.device_window_open",
+    "description": "Error of a host command, device window open",
+    "other": "a pairing window is already open: approve it, deny it, or wait for it to expire"
+  },
+  {
+    "id": "cli.host.fault.device_no_window",
+    "description": "Error of a host command, device no window",
+    "other": "no pairing window is open: start one with `device pair`"
+  },
+  {
+    "id": "cli.host.fault.device_expired",
+    "description": "Error of a host command, device expired",
+    "other": "the pairing code has expired: start a new window with `device pair`"
+  },
+  {
+    "id": "cli.host.fault.device_redeemed",
+    "description": "Error of a host command, device redeemed",
+    "other": "that code already brought a request: approve it or deny it"
+  },
+  {
+    "id": "cli.host.fault.device_nothing_pending",
+    "description": "Error of a host command, device nothing pending",
+    "other": "no device has redeemed this code yet"
+  },
+  {
+    "id": "cli.host.fault.device_wrong_code",
+    "description": "Error of a host command, device wrong code",
+    "other": "the pairing code is wrong"
+  },
+  {
+    "id": "cli.host.fault.device_too_many",
+    "description": "Error of a host command, device too many",
+    "other": "too many wrong codes: the window is closed, start a new one with `device pair`"
+  },
+  {
+    "id": "cli.host.fault.device_bad_request",
+    "description": "Error of a host command, device bad request",
+    "other": "the device's certificate request does not check out"
+  },
+  {
+    "id": "cli.host.fault.device_unsupported_key",
+    "description": "Error of a host command, device unsupported key",
+    "other": "the device key must be ECDSA on P-256"
+  },
+  {
+    "id": "cli.host.fault.device_unknown",
+    "description": "Error of a host command, device unknown",
+    "other": "no device has that id (see `device list`)"
+  },
+  {
+    "id": "cli.host.fault.device_authority",
+    "description": "Error of a host command, device authority",
+    "other": "the device authority cannot be read or created: check the daemon's log"
+  },
+  {
+    "id": "cli.help.cmd.device.pair",
+    "description": "Help of the command device pair",
+    "other": "open a pairing window and print its one-time code; the role defaults to approver"
+  },
+  {
+    "id": "cli.help.cmd.device.approve",
+    "description": "Help of the command device approve",
+    "other": "approve the device that redeemed the code: sign its certificate and grant its role"
+  },
+  {
+    "id": "cli.help.cmd.device.deny",
+    "description": "Help of the command device deny",
+    "other": "close the pairing window without granting anything"
+  },
+  {
+    "id": "cli.help.cmd.device.list",
+    "description": "Help of the command device list",
+    "other": "list the paired devices, their role and whether they may connect, and the request waiting for approval"
+  },
+  {
+    "id": "cli.help.cmd.device.revoke",
+    "description": "Help of the command device revoke",
+    "other": "revoke a paired device: its certificate stops authenticating"
+  },
+  {
+    "id": "cli.help.param.device.pair.name",
+    "description": "Help or reply text of a device command, pair name",
+    "other": "a readable name for the device, shown by `device list`"
+  },
+  {
+    "id": "cli.help.param.device.pair.role",
+    "description": "Help or reply text of a device command, pair role",
+    "other": "the role the device is granted once approved, one of the grantable roles; approver by default"
+  },
+  {
+    "id": "cli.help.param.device.approve.code",
+    "description": "Help or reply text of a device command, approve code",
+    "other": "the code the device was paired with; also takes a bare argument"
+  },
+  {
+    "id": "cli.help.param.device.deny.code",
+    "description": "Help or reply text of a device command, deny code",
+    "other": "the code of the window to close; also takes a bare argument"
+  },
+  {
+    "id": "cli.help.param.device.revoke.id",
+    "description": "Help or reply text of a device command, revoke id",
+    "other": "the device to revoke, as `device list` prints it; also takes a bare argument"
   }
 ]

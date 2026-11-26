@@ -101,6 +101,7 @@ func runBridge(ctx context.Context, messages *clitext.Messages, hostMessages *ho
 		HubSocket:        *hubSocket,
 		Roster:           host.NewRoster(rosterRoot),
 		Capabilities:     os.Getenv(host.EnvCapabilities),
+		SelfToolsBytes:   selfToolsBytes(),
 		LaunchProject:    *project,
 		ProjectPinned:    *projectPinned,
 		MemoryAgent:      *agent,
@@ -321,4 +322,12 @@ func closeLogged(log *slog.Logger, what string, c io.Closer) {
 	if err := c.Close(); err != nil {
 		log.Warn("close failed", "what", what, "err", err)
 	}
+}
+
+func selfToolsBytes() int {
+	size, err := strconv.Atoi(os.Getenv(host.EnvSelfToolsBytes))
+	if err != nil || size < 0 {
+		return 0
+	}
+	return size
 }

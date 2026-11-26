@@ -30,6 +30,9 @@ The variables below are the ones the host and the bundled plugins read.
 | `HERRSCHER_OWNER_ID` | none | Owner snowflake; the fallback the per-daemon instance id is derived from when `HERRSCHER_INSTANCE_ID` is unset. | Host |
 | `HERRSCHER_STATE_DIR` | `~/.config/herrscher` | The state directory (holds `state.json`); also the root of durable agent homes (`<stateDir>/agents/<name>/`). | Host |
 | `HERRSCHER_INSTANCE_ID` | none | Namespace slug for shared resources (isolates multiple instances). | Host |
+| `HERRSCHER_SELF_TOOLS` | on | `off` (or `0`, `false`, `no`) stops declaring the `herrscher` MCP server in session worktrees; it wins over `selfTools.enabled` in `config.json`. See [Self tools](self-tools.md). | Host |
+| `HERRSCHER_SELF_TOOLS_EXPOSE` | `core` | `all` gives every daemon verb a tool of its own in `herrscher mcp`; `core` gives the everyday reads a tool and reaches the rest through `herrscher_run`. Wins over `selfTools.expose`. | `herrscher mcp`, Host |
+| `HERRSCHER_SELF_TOOLS_BYTES` | set by the daemon | The weight of the self tools declarations, handed to each bridge so it reports it in the turn's context sizes. | Bridge |
 
 ## Backends
 

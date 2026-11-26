@@ -80,12 +80,12 @@ func grantRole(cliMessages *clitext.Messages, lang i18n.Language, store *state.S
 	if err := grantable(principal, role); err != nil {
 		return "", err
 	}
-	first, err := store.SetRole(principal, role, strings.TrimSpace(input.Get("label")))
-	if err != nil {
+	firstHuman := !isSessionPrincipal(principal) && !authz.HoldsHumanAssignment(store.RoleNames())
+	if _, err := store.SetRole(principal, role, strings.TrimSpace(input.Get("label"))); err != nil {
 		return "", err
 	}
 	out := replyText(cliMessages, lang).Text(clitext.HostRoleGranted, clitext.Params{clitext.ParamPrincipal: principal, clitext.ParamRole: role})
-	if first {
+	if firstHuman {
 		out += "\n" + replyText(cliMessages, lang).Text(clitext.HostRoleFirstGrant, nil)
 	}
 	return out, nil
@@ -130,7 +130,7 @@ func revokeRole(cliMessages *clitext.Messages, lang i18n.Language, store *state.
 	if !removed {
 		return "", &noRoleError{Principal: principal}
 	}
-	if len(store.RoleAssignments()) == 0 {
+	if !isSessionPrincipal(principal) && !authz.HoldsHumanAssignment(store.RoleNames()) {
 		return replyText(cliMessages, lang).Text(clitext.HostRoleRevokedLast, clitext.Params{clitext.ParamPrincipal: principal}), nil
 	}
 	return replyText(cliMessages, lang).Text(clitext.HostRoleRevoked, clitext.Params{clitext.ParamPrincipal: principal}), nil
@@ -150,8 +150,19 @@ func showRole(cliMessages *clitext.Messages, lang i18n.Language, store *state.St
 	if principal == "" {
 		return "", errPrincipalMissing
 	}
-	role := authz.RoleOf(authz.Principal{ID: principal}, store.RoleNames())
+	role := authz.RoleOf(principalNamed(principal), store.RoleNames())
 	return replyText(cliMessages, lang).Text(clitext.HostRoleHolds, clitext.Params{clitext.ParamPrincipal: principal, clitext.ParamRole: string(role)}) + "\n" + authz.Describe(role), nil
+}
+
+func isSessionPrincipal(principal string) bool {
+	return strings.HasPrefix(principal, authz.SessionPrefix)
+}
+
+func principalNamed(principal string) authz.Principal {
+	if session, ok := strings.CutPrefix(principal, authz.SessionPrefix); ok {
+		return authz.SessionPrincipal(session)
+	}
+	return authz.Principal{ID: principal}
 }
 
 func grantable(principal, role string) error {
@@ -161,7 +172,13 @@ func grantable(principal, role string) error {
 	if principal == authz.LocalPrincipal {
 		return errLocalPrincipalRole
 	}
-	if strings.HasPrefix(principal, authz.SessionPrefix) {
+	if isSessionPrincipal(principal) {
+		switch {
+		case authz.GrantableToSession(role):
+			return nil
+		case role == "":
+			return &roleRequiredError{Grantable: authz.SessionGrantableRoles()}
+		}
 		return &sessionRoleError{Principal: principal}
 	}
 	if role == "" {

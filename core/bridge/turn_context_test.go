@@ -64,6 +64,18 @@ func TestTurnContextSizesEveryBlockWithZeroForAnEmptyOne(t *testing.T) {
 	}
 }
 
+func TestTurnContextSizesTheSelfToolsDeclarationsWithoutInjectingThem(t *testing.T) {
+	turn := composeTurnContext("MEM", nil, affordances{selfTools: 9214})
+	sizes := turn.sizes()
+	last := sizes[len(sizes)-1]
+	if last.Part != contracts.ContextSelfTools || last.Tokens != contextwindow.EstimateBytes(9214) {
+		t.Fatalf("sizes = %+v, want the self tools part last at %d tokens", sizes, contextwindow.EstimateBytes(9214))
+	}
+	if turn.String() != "MEM" {
+		t.Fatalf("turn context = %q, want the declarations kept out of the prompt", turn.String())
+	}
+}
+
 func TestTurnReplyWithNothingInjectedStillCarriesZeroSizes(t *testing.T) {
 	sink := &recordSink{}
 	if err := runOneTurn(context.Background(), sink, &captureBackend{reply: "ok"}, stubMemory{}, contracts.Event{T: eventwire.EventInput, Text: "hi"}, nil, nil,

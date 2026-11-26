@@ -1,0 +1,59 @@
+! exec herrscher serve &daemon&
+waitdaemon
+exec herrscher session create --name relayed
+sessionsocket relayed SESSION_SOCKET
+
+stdin $WORK/outside.jsonl
+! exec herrscher mcp
+stderr 'no session command socket'
+
+env HERRSCHER_COMMAND_SOCKET=$SESSION_SOCKET
+stdin $WORK/reads.jsonl
+exec herrscher mcp
+stdout '"serverInfo":\{"name":"herrscher"'
+stdout '"name":"herrscher_run"'
+stdout '"name":"session_list"'
+stdout '"id":3,"result":\{"content":\[\{"type":"text","text":"[^"]*relayed'
+stdout '"id":4,"result":\{"content":.*even with the operator.s approval.*"isError":true'
+stdout '"id":5,"result":\{"content":.*"isError":true'
+stdout '"id":6,"result":\{"content":\[\{"type":"text","text":"\{\\"sections\\":\[.*"isError":false'
+
+stdin $WORK/refused.jsonl
+exec herrscher mcp &refused&
+env HERRSCHER_COMMAND_SOCKET=
+waitapproval APPROVAL
+exec herrscher approve deny $APPROVAL --reason 'not today'
+wait refused
+stdout '"id":1,"result":\{"content":.*not today.*"isError":true'
+exec herrscher schedule list
+! stdout digest
+
+env HERRSCHER_COMMAND_SOCKET=$SESSION_SOCKET
+stdin $WORK/allowed.jsonl
+exec herrscher mcp &allowed&
+env HERRSCHER_COMMAND_SOCKET=
+waitapproval APPROVAL
+exec herrscher approve allow $APPROVAL
+wait allowed
+stdout '"id":1,"result":\{"content":.*"isError":false'
+exec herrscher schedule list
+stdout digest
+
+kill -INT daemon
+wait daemon
+! waitdaemon
+
+-- outside.jsonl --
+{"jsonrpc":"2.0","id":1,"method":"tools/list"}
+-- reads.jsonl --
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}
+{"jsonrpc":"2.0","method":"notifications/initialized"}
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"session_list","arguments":{}}}
+{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"herrscher_run","arguments":{"command":"role grant","rest":["chat:1","owner"]}}}
+{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"herrscher_run","arguments":{"command":"approve allow","rest":["--always"]}}}
+{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"herrscher_run","arguments":{"command":"setup check","json":true}}}
+-- refused.jsonl --
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"herrscher_run","arguments":{"command":"schedule add","args":{"name":"digest","session":"relayed","every":"30m","task":"read the PRs"}}}}
+-- allowed.jsonl --
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"herrscher_run","arguments":{"command":"schedule add","args":{"name":"digest","session":"relayed","every":"30m","task":"read the PRs"}}}}

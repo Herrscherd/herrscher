@@ -1,5 +1,8 @@
 package approval
 
+// VerbTool is the tool name a daemon verb carries when a session asks the operator to run it: `allow --always` writes the exact verb, and a wider rule such as `allow Herrscher(schedule add *)` is written by hand with `approve rule`.
+const VerbTool = "Herrscher"
+
 const (
 	keyFilePath   = "file_path"
 	toolBash      = "Bash"

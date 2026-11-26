@@ -15,6 +15,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/config"
+	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/internal/health"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -151,7 +152,10 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	if specsErr != nil {
 		log.Warn("command help texts not fully rendered", "err", specsErr)
 	}
-	sup.SetBridgeEnv(hubBridgeEnv(specs, kinds))
+	selfTools := measuredSelfTools(reg, loadedConfig(options.ConfigPath), envx.Getenv)
+	measured := selfTools()
+	sup.SetBridgeEnv(hubBridgeEnv(specs, kinds, measured.TurnBytes(), measured.Exposure))
+	sup.SetLocalPrepare(selfToolsPreparer(selfToolsProvisioner(envx.Getenv, loadedConfig(options.ConfigPath)), log))
 	ensureCodexAgent(deps.agents)
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)
@@ -167,7 +171,10 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 		return wrapHost(messages, err, "serve.key_proxy", nil)
 	}
 	defer CloseKeyProxy(ctx, log, keys)
-	options.health.bind(newHealthInputs(messages, options.Runtime, instID, keys, gws, policy, partDir, forgeCredentials(options.Forge)))
+	inputs := newHealthInputs(messages, options.Runtime, instID, keys, gws, policy, partDir, forgeCredentials(options.Forge))
+	inputs.selfTools = selfTools
+	inputs.selfToolsAnswer = askSelfToolsServer
+	options.health.bind(inputs)
 	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions, withWarnings(options.Warnings), withForge(options.Forge))
 	runningHub.lang = options.Language
 	runningHub.language = options.languageSource()
@@ -176,6 +183,10 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 		return newSeedBackendWithToken(seedCtx, messages, sess, keys, runningHub.models, sessions.seedToken(seedCtx, sess.Name, liveSessionAllowed(store)))
 	}
 	runningHub.desk = newApprovalDesk(messages, options.languageSource(), options.Warnings, store, deps.agents, approvals, sessions)
+	runningHub.selfRestarts = newSelfRestarts(store)
+	deps.notices.bind(func(session, key string, params map[string]any) {
+		runningHub.announce(session, key, params)
+	})
 	runningHub.contributedKinds = kinds
 	runningHub.instanceID = instID
 	runningHub.runtime = options.Runtime
@@ -204,6 +215,13 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 		prWatcher.Run(ctx)
 	}()
 	runningHub.startReconcile(ctx)
+	resumesStopped := make(chan struct{})
+	go func() {
+		defer close(resumesStopped)
+		resumeAfterSelfRestart(ctx, store, sessions.Seed, func(session string) string {
+			return messages.text(runningHub.sessionLanguageSource(session)(), "selftools.restart_resumed", nil)
+		}, log)
+	}()
 	monitor.SetSessions(len(store.SnapshotSessions()))
 	bindSessionControl(gws, runningHub)
 
@@ -216,5 +234,6 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	log.Info("hub up; supervising sessions", "gateways", strings.Join(kindsOf(gws), ","))
 	stopErr := awaitHubStop(ctx, runningHub, sup, liveStopped, sockets, log)
 	<-prWatchStopped
+	<-resumesStopped
 	return stopErr
 }

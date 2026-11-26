@@ -71,7 +71,7 @@ var ErrSigning = errors.New("the device certificate could not be signed")
 // ErrUnsupportedSignature reports a certificate request signed with an algorithm other than ECDSA over SHA-256 or SHA-384.
 var ErrUnsupportedSignature = errors.New("the certificate request must be signed with ECDSA and SHA-256 or SHA-384")
 
-// ErrMalformedFingerprint reports a short fingerprint that is not eight symbols of the pairing alphabet.
+// ErrMalformedFingerprint reports a short fingerprint that is not sixteen symbols of the pairing alphabet.
 var ErrMalformedFingerprint = errors.New("malformed fingerprint")
 
 // ErrFingerprintMismatch reports a fingerprint that does not match the key the device sent.

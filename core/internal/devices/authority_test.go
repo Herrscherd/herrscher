@@ -254,3 +254,41 @@ func TestTheServerCertificateDeclaresItsCAStatusExplicitly(t *testing.T) {
 		t.Fatal("the server certificate must state explicitly that it is not a CA")
 	}
 }
+
+func TestAServerCertificateNotSignedByTheCurrentAuthorityIsReissued(t *testing.T) {
+	first := t.TempDir()
+	second := t.TempDir()
+	if _, err := devices.LoadOrCreateAuthority(first, epochInstant(), rand.Reader, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := devices.LoadOrCreateAuthority(second, epochInstant(), rand.Reader, false); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"server-cert.pem", "server-key.pem"} {
+		data, err := os.ReadFile(filepath.Join(first, "devices", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(second, "devices", name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	authority, err := devices.LoadOrCreateAuthority(second, epochInstant(), rand.Reader, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caPEM, err := os.ReadFile(authorityCertPath(second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, _ := pem.Decode(caPEM)
+	ca, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(ca)
+	if _, err := authority.ServerCertificate().Leaf.Verify(x509.VerifyOptions{Roots: roots, CurrentTime: epochInstant(), DNSName: "localhost", KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}); err != nil {
+		t.Fatalf("a server certificate from another authority was kept: %v", err)
+	}
+}

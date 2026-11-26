@@ -138,7 +138,7 @@ func (r *Registry) OpenWindow(now time.Time, name string, role authz.Role, rnd i
 }
 
 // Redeem takes the window's code and the request of a device that asks to be paired.
-func (r *Registry) Redeem(now time.Time, code PairingCode, csr *x509.CertificateRequest) error {
+func (r *Registry) Redeem(now time.Time, code PairingCode, der []byte) error {
 	window, err := r.window(now, code)
 	if err != nil {
 		return err
@@ -146,11 +146,18 @@ func (r *Registry) Redeem(now time.Time, code PairingCode, csr *x509.Certificate
 	if window.Pending != nil {
 		return ErrPairingAlreadyRedeemed
 	}
+	if len(der) > maxRequestBytes {
+		return ErrRequestTooLarge
+	}
+	csr, err := x509.ParseCertificateRequest(der)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrBadRequest, err)
+	}
 	if checkErr := checkRequest(csr); checkErr != nil {
 		return checkErr
 	}
 	window.Pending = &Request{
-		CSR:         csr.Raw,
+		CSR:         append([]byte(nil), der...),
 		Fingerprint: ShortFingerprint(csr.RawSubjectPublicKeyInfo),
 		RedeemedAt:  now,
 	}
@@ -356,9 +363,6 @@ func acceptsSignature(algorithm x509.SignatureAlgorithm) bool {
 func checkRequest(csr *x509.CertificateRequest) error {
 	if csr == nil {
 		return ErrBadRequest
-	}
-	if len(csr.Raw) > maxRequestBytes {
-		return ErrRequestTooLarge
 	}
 	if !acceptsSignature(csr.SignatureAlgorithm) {
 		return ErrUnsupportedSignature

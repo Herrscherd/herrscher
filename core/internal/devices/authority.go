@@ -160,7 +160,7 @@ func loadOrIssueServerCertificate(dir string, caCert *x509.Certificate, caKey *e
 	}
 	if state == pairComplete {
 		server, key, readErr := readPair(certPath, keyPath)
-		if readErr == nil && now.Before(server.NotAfter) {
+		if readErr == nil && now.Before(server.NotAfter) && server.CheckSignatureFrom(caCert) == nil {
 			return server, key, nil
 		}
 	}

@@ -95,10 +95,10 @@ func TestAnExpiredCodeIsRefusedAndClosesTheWindow(t *testing.T) {
 	var registry devices.Registry
 	code := openWindow(t, &registry, epochInstant())
 	csr, _ := requestFor(t, elliptic.P256())
-	if err := registry.Redeem(epochInstant().Add(10*time.Minute), code, csr); !errors.Is(err, devices.ErrPairingExpired) {
+	if err := registry.Redeem(epochInstant().Add(10*time.Minute), code, csr.Raw); !errors.Is(err, devices.ErrPairingExpired) {
 		t.Fatalf("redeem after ten minutes = %v, want ErrPairingExpired", err)
 	}
-	if err := registry.Redeem(epochInstant().Add(time.Minute), code, csr); !errors.Is(err, devices.ErrNoPairingWindow) {
+	if err := registry.Redeem(epochInstant().Add(time.Minute), code, csr.Raw); !errors.Is(err, devices.ErrNoPairingWindow) {
 		t.Fatalf("the window must be closed after an expired code: %v", err)
 	}
 }
@@ -107,11 +107,11 @@ func TestACodeRedeemedAgainIsRefused(t *testing.T) {
 	var registry devices.Registry
 	code := openWindow(t, &registry, epochInstant())
 	csr, _ := requestFor(t, elliptic.P256())
-	if err := registry.Redeem(epochInstant(), code, csr); err != nil {
+	if err := registry.Redeem(epochInstant(), code, csr.Raw); err != nil {
 		t.Fatalf("first redeem: %v", err)
 	}
 	other, _ := requestFor(t, elliptic.P256())
-	if err := registry.Redeem(epochInstant().Add(time.Minute), code, other); !errors.Is(err, devices.ErrPairingAlreadyRedeemed) {
+	if err := registry.Redeem(epochInstant().Add(time.Minute), code, other.Raw); !errors.Is(err, devices.ErrPairingAlreadyRedeemed) {
 		t.Fatalf("replayed code = %v, want ErrPairingAlreadyRedeemed", err)
 	}
 }
@@ -122,11 +122,11 @@ func TestFourWrongCodesLeaveTheWindowOpenForTheRightOne(t *testing.T) {
 	csr, _ := requestFor(t, elliptic.P256())
 	wrong := wrongCodeFor(t, code)
 	for range 4 {
-		if err := registry.Redeem(epochInstant(), wrong, csr); !errors.Is(err, devices.ErrWrongCode) {
+		if err := registry.Redeem(epochInstant(), wrong, csr.Raw); !errors.Is(err, devices.ErrWrongCode) {
 			t.Fatalf("wrong code = %v, want ErrWrongCode", err)
 		}
 	}
-	if err := registry.Redeem(epochInstant(), code, csr); err != nil {
+	if err := registry.Redeem(epochInstant(), code, csr.Raw); err != nil {
 		t.Fatalf("right code after four wrong ones was refused: %v", err)
 	}
 }
@@ -137,14 +137,14 @@ func TestTheFifthWrongCodeClosesTheWindow(t *testing.T) {
 	csr, _ := requestFor(t, elliptic.P256())
 	wrong := wrongCodeFor(t, code)
 	for range 4 {
-		if err := registry.Redeem(epochInstant(), wrong, csr); !errors.Is(err, devices.ErrWrongCode) {
+		if err := registry.Redeem(epochInstant(), wrong, csr.Raw); !errors.Is(err, devices.ErrWrongCode) {
 			t.Fatalf("wrong code = %v, want ErrWrongCode", err)
 		}
 	}
-	if err := registry.Redeem(epochInstant(), wrong, csr); !errors.Is(err, devices.ErrTooManyAttempts) {
+	if err := registry.Redeem(epochInstant(), wrong, csr.Raw); !errors.Is(err, devices.ErrTooManyAttempts) {
 		t.Fatalf("fifth wrong code = %v, want ErrTooManyAttempts", err)
 	}
-	if err := registry.Redeem(epochInstant(), code, csr); !errors.Is(err, devices.ErrNoPairingWindow) {
+	if err := registry.Redeem(epochInstant(), code, csr.Raw); !errors.Is(err, devices.ErrNoPairingWindow) {
 		t.Fatalf("the right code after the lock = %v, want ErrNoPairingWindow", err)
 	}
 }
@@ -153,7 +153,7 @@ func TestRedeemWaitsForApprovalAndSignsNothing(t *testing.T) {
 	var registry devices.Registry
 	code := openWindow(t, &registry, epochInstant())
 	csr, _ := requestFor(t, elliptic.P256())
-	if err := registry.Redeem(epochInstant(), code, csr); err != nil {
+	if err := registry.Redeem(epochInstant(), code, csr.Raw); err != nil {
 		t.Fatal(err)
 	}
 	if len(registry.Devices) != 0 {
@@ -175,7 +175,7 @@ func TestRedeemRefusesARequestWhoseSignatureDoesNotCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := registry.Redeem(epochInstant(), code, tampered); !errors.Is(err, devices.ErrBadRequest) {
+	if err := registry.Redeem(epochInstant(), code, tampered.Raw); !errors.Is(err, devices.ErrBadRequest) {
 		t.Fatalf("tampered request = %v, want ErrBadRequest", err)
 	}
 }
@@ -184,7 +184,7 @@ func TestRedeemRefusesAKeyThatIsNotP256(t *testing.T) {
 	var registry devices.Registry
 	code := openWindow(t, &registry, epochInstant())
 	csr, _ := requestFor(t, elliptic.P384())
-	if err := registry.Redeem(epochInstant(), code, csr); !errors.Is(err, devices.ErrUnsupportedKey) {
+	if err := registry.Redeem(epochInstant(), code, csr.Raw); !errors.Is(err, devices.ErrUnsupportedKey) {
 		t.Fatalf("P-384 request = %v, want ErrUnsupportedKey", err)
 	}
 }
@@ -202,7 +202,7 @@ func TestApproveRegistersTheDeviceWithItsCertificate(t *testing.T) {
 	var registry devices.Registry
 	code := openWindow(t, &registry, epochInstant())
 	csr, _ := requestFor(t, elliptic.P256())
-	if err := registry.Redeem(epochInstant(), code, csr); err != nil {
+	if err := registry.Redeem(epochInstant(), code, csr.Raw); err != nil {
 		t.Fatal(err)
 	}
 	authority := newAuthority(t, epochInstant())
@@ -240,7 +240,7 @@ func TestAFailedSigningKeepsTheRequestForAnotherTry(t *testing.T) {
 	var registry devices.Registry
 	code := openWindow(t, &registry, epochInstant())
 	csr, _ := requestFor(t, elliptic.P256())
-	if err := registry.Redeem(epochInstant(), code, csr); err != nil {
+	if err := registry.Redeem(epochInstant(), code, csr.Raw); err != nil {
 		t.Fatal(err)
 	}
 	failing := func(*x509.CertificateRequest, devices.DeviceID, time.Time) (*x509.Certificate, error) {
@@ -261,7 +261,7 @@ func TestDenyClosesTheWindowAndGrantsNothing(t *testing.T) {
 	var registry devices.Registry
 	code := openWindow(t, &registry, epochInstant())
 	csr, _ := requestFor(t, elliptic.P256())
-	if err := registry.Redeem(epochInstant(), code, csr); err != nil {
+	if err := registry.Redeem(epochInstant(), code, csr.Raw); err != nil {
 		t.Fatal(err)
 	}
 	if err := registry.Deny(epochInstant(), code); err != nil {
@@ -270,7 +270,7 @@ func TestDenyClosesTheWindowAndGrantsNothing(t *testing.T) {
 	if len(registry.Devices) != 0 {
 		t.Fatal("deny must not register a device")
 	}
-	if err := registry.Redeem(epochInstant(), code, csr); !errors.Is(err, devices.ErrNoPairingWindow) {
+	if err := registry.Redeem(epochInstant(), code, csr.Raw); !errors.Is(err, devices.ErrNoPairingWindow) {
 		t.Fatalf("redeem after deny = %v, want ErrNoPairingWindow", err)
 	}
 }
@@ -394,7 +394,7 @@ func pairedRegistry(t *testing.T) (*devices.Registry, *devices.Authority, device
 	var registry devices.Registry
 	code := openWindow(t, &registry, epochInstant())
 	csr, _ := requestFor(t, elliptic.P256())
-	if err := registry.Redeem(epochInstant(), code, csr); err != nil {
+	if err := registry.Redeem(epochInstant(), code, csr.Raw); err != nil {
 		t.Fatal(err)
 	}
 	authority := newAuthority(t, epochInstant())
@@ -439,7 +439,7 @@ func TestPreviewShowsTheRequestAndSignsNothing(t *testing.T) {
 	var registry devices.Registry
 	code := openWindow(t, &registry, epochInstant())
 	csr, _ := requestFor(t, elliptic.P256())
-	if err := registry.Redeem(epochInstant(), code, csr); err != nil {
+	if err := registry.Redeem(epochInstant(), code, csr.Raw); err != nil {
 		t.Fatal(err)
 	}
 	preview, err := registry.Preview(epochInstant(), code)
@@ -458,7 +458,7 @@ func TestAWrongFingerprintSignsNothingAndCountsAsAnAttempt(t *testing.T) {
 	var registry devices.Registry
 	code := openWindow(t, &registry, epochInstant())
 	csr, _ := requestFor(t, elliptic.P256())
-	if err := registry.Redeem(epochInstant(), code, csr); err != nil {
+	if err := registry.Redeem(epochInstant(), code, csr.Raw); err != nil {
 		t.Fatal(err)
 	}
 	other, _ := requestFor(t, elliptic.P256())
@@ -483,7 +483,7 @@ func TestFiveWrongFingerprintsCloseTheWindow(t *testing.T) {
 	var registry devices.Registry
 	code := openWindow(t, &registry, epochInstant())
 	csr, _ := requestFor(t, elliptic.P256())
-	if err := registry.Redeem(epochInstant(), code, csr); err != nil {
+	if err := registry.Redeem(epochInstant(), code, csr.Raw); err != nil {
 		t.Fatal(err)
 	}
 	other, _ := requestFor(t, elliptic.P256())
@@ -508,7 +508,7 @@ func TestTheRightFingerprintSignsAndTheTypedFormIsNormalised(t *testing.T) {
 	var registry devices.Registry
 	code := openWindow(t, &registry, epochInstant())
 	csr, _ := requestFor(t, elliptic.P256())
-	if err := registry.Redeem(epochInstant(), code, csr); err != nil {
+	if err := registry.Redeem(epochInstant(), code, csr.Raw); err != nil {
 		t.Fatal(err)
 	}
 	typed := strings.ToLower(strings.ReplaceAll(devices.ShortFingerprint(csr.RawSubjectPublicKeyInfo), "-", " "))
@@ -553,7 +553,7 @@ func TestACertificateRequestSignedWithANonSHA2AlgorithmIsRefusedAtRedeem(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := registry.Redeem(epochInstant(), code, csr); !errors.Is(err, devices.ErrUnsupportedSignature) {
+	if err := registry.Redeem(epochInstant(), code, csr.Raw); !errors.Is(err, devices.ErrUnsupportedSignature) {
 		t.Fatalf("SHA-1 request at redeem = %v, want ErrUnsupportedSignature", err)
 	}
 }
@@ -617,7 +617,7 @@ func TestACertificateRequestAboveTheBoundIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := registry.Redeem(epochInstant(), code, csr); !errors.Is(err, devices.ErrRequestTooLarge) {
+	if err := registry.Redeem(epochInstant(), code, csr.Raw); !errors.Is(err, devices.ErrRequestTooLarge) {
 		t.Fatalf("oversized request = %v, want ErrRequestTooLarge", err)
 	}
 }
@@ -638,4 +638,20 @@ func containsID(ids []devices.DeviceID, want devices.DeviceID) bool {
 		}
 	}
 	return false
+}
+
+func TestAnOversizedRequestIsRefusedBeforeItIsParsed(t *testing.T) {
+	var registry devices.Registry
+	code := openWindow(t, &registry, epochInstant())
+	if err := registry.Redeem(epochInstant(), code, make([]byte, 5000)); !errors.Is(err, devices.ErrRequestTooLarge) {
+		t.Fatalf("oversized bytes = %v, want ErrRequestTooLarge before any parsing", err)
+	}
+}
+
+func TestGarbageBytesAreRefusedAsABadRequest(t *testing.T) {
+	var registry devices.Registry
+	code := openWindow(t, &registry, epochInstant())
+	if err := registry.Redeem(epochInstant(), code, []byte("not a request")); !errors.Is(err, devices.ErrBadRequest) {
+		t.Fatalf("garbage bytes = %v, want ErrBadRequest", err)
+	}
 }

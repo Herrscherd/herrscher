@@ -50,7 +50,7 @@ type Fingerprint struct {
 	value string
 }
 
-// ParseFingerprint accepts the eight symbols in either case, with or without the dash ShortFingerprint writes.
+// ParseFingerprint accepts the sixteen symbols in either case, with or without the dash ShortFingerprint writes.
 func ParseFingerprint(text string) (Fingerprint, error) {
 	normalised := strings.ToUpper(strings.NewReplacer("-", "", " ", "").Replace(text))
 	if len(normalised) != symbolCount {

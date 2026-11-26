@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Herrscherd/herrscher/core/contextwindow"
@@ -18,6 +19,15 @@ import (
 
 // DefaultTimeout bounds the whole exchange with one server, from its start to its last answer.
 const DefaultTimeout = 15 * time.Second
+
+// DefaultBudget bounds the measure of all the servers of one agent together.
+const DefaultBudget = 40 * time.Second
+
+// ReplyMargin is the room kept between the budget and the caller's deadline, for the servers still stopping and for the report to be written.
+const ReplyMargin = 10 * time.Second
+
+// Concurrency caps how many servers are measured at the same time.
+const Concurrency = 4
 
 // MaxPages caps how many tools/list pages one server may return before the measure gives up.
 const MaxPages = 100
@@ -50,6 +60,7 @@ const (
 	CauseStart        Cause = "start"
 	CauseExited       Cause = "exited"
 	CauseTimeout      Cause = "timeout"
+	CauseBudget       Cause = "budget"
 	CauseCanceled     Cause = "canceled"
 	CauseProtocol     Cause = "protocol"
 	CauseRejected     Cause = "rejected"
@@ -63,6 +74,7 @@ var (
 	errPageLimit           = errors.New("tools/list kept returning a next cursor past the page limit")
 	errDefinitionsTooLarge = errors.New("tools/list definitions exceed the total size limit")
 	errOutputOpen          = errors.New("the server output is still open after the server was killed")
+	errBudgetExceeded      = errors.New("the measure budget of all the servers is spent")
 )
 
 // Result is the weight of one server's tool definitions, or the reason it has none. Cause is set when the server was not measured, and also when it was measured but did not stop cleanly, in which case Measured stays true.
@@ -119,6 +131,28 @@ func Measure(ctx context.Context, server agent.MCPServer, timeout time.Duration)
 	return result
 }
 
+// MeasureAll measures the servers in order of their config, at most Concurrency at a time, all within one budget. A server the budget cuts short is reported with CauseBudget, and every server gets a Result.
+func MeasureAll(ctx context.Context, servers []agent.MCPServer, budget time.Duration) []Result {
+	budgetCtx, cancel := context.WithTimeoutCause(ctx, budget, errBudgetExceeded)
+	defer cancel()
+	results := make([]Result, len(servers))
+	pending := make(chan int)
+	var workers sync.WaitGroup
+	for range min(Concurrency, len(servers)) {
+		workers.Go(func() {
+			for index := range pending {
+				results[index] = Measure(budgetCtx, servers[index], DefaultTimeout)
+			}
+		})
+	}
+	for index := range servers {
+		pending <- index
+	}
+	close(pending)
+	workers.Wait()
+	return results
+}
+
 func fillWeight(result *Result, tools []json.RawMessage) {
 	var definitions strings.Builder
 	definitions.Grow(totalBytes(tools))
@@ -162,12 +196,19 @@ func serve(ctx context.Context, server agent.MCPServer, timeout time.Duration) o
 	defer cancel()
 	session, err := start(runCtx, server, dir)
 	if err != nil {
-		return outcome{err: err}
+		return outcome{err: startFailure(runCtx, err)}
 	}
 	tools, listErr := listTools(runCtx, session)
 	cancel()
 	stopErr := session.stop()
 	return outcome{tools: tools, stderr: session.stderrTail(), err: listErr, stop: stopErr}
+}
+
+func startFailure(ctx context.Context, err error) error {
+	if ctx.Err() != nil {
+		return contextFailure(ctx)
+	}
+	return err
 }
 
 func removeScratch(dir string) {

@@ -122,7 +122,7 @@ func start(ctx context.Context, server agent.MCPServer, dir string) (*session, e
 	}
 	cmd.Stdout = outputWriter
 	if err := cmd.Start(); err != nil {
-		return nil, fail(CauseStart, errors.Join(err, closeAll(stdin, stdout, outputWriter)))
+		return nil, fail(CauseStart, errors.Join(err, closeAll(stdout, outputWriter)))
 	}
 	if err := outputWriter.Close(); err != nil {
 		return nil, fail(CauseStart, errors.Join(err, discardStarted(cmd, stdin, stdout)))
@@ -284,15 +284,19 @@ func (s *session) receive(ctx context.Context) (inboundLine, error) {
 		}
 		return received, nil
 	case <-ctx.Done():
-		return inboundLine{}, contextFailure(ctx.Err())
+		return inboundLine{}, contextFailure(ctx)
 	}
 }
 
-func contextFailure(err error) error {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return fail(CauseTimeout, err)
+func contextFailure(ctx context.Context) error {
+	cause := context.Cause(ctx)
+	switch {
+	case errors.Is(cause, errBudgetExceeded):
+		return fail(CauseBudget, cause)
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		return fail(CauseTimeout, ctx.Err())
 	}
-	return fail(CauseCanceled, err)
+	return fail(CauseCanceled, ctx.Err())
 }
 
 func (s *session) stop() error {

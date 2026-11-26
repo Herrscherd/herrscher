@@ -9,6 +9,7 @@ package authz
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -105,6 +106,7 @@ func definitionOf(role Role) (definition, bool) {
 			"memory search", "memory locate",
 			"session issue list", "session issue show",
 			"health", "usage", "skill list", "config get", "env get", "plugin list", "connect status", "setup check",
+			"session pr status", "session pr checks", "session pr comments",
 		}}, true
 	case RoleAgent:
 		return definition{
@@ -355,11 +357,18 @@ func Describe(role Role) string {
 	return buf.String()
 }
 
+func readWords() []string {
+	return []string{"list", "show", "get", "read", "status", "info", "checks", "comments", "log", "history", "search", "locate", "who", "scrollback", "watch", "checkpoints"}
+}
+
 // Writes reports whether a verb changes something, which is what the daemon announces when a session runs it.
-// A read is what an observer runs; approve ask and env request say so on their own.
+// A read is what an observer runs, or a verb, a plugin's included, whose last word names a read; approve ask and env request say so on their own.
 func Writes(path []string, contributed bool) bool {
 	verb := strings.Join(path, " ")
-	if verb == "approve ask" || verb == "env request" {
+	if verb == "approve ask" || verb == "env request" || len(path) == 0 {
+		return false
+	}
+	if slices.Contains(readWords(), path[len(path)-1]) {
 		return false
 	}
 	return !permits(RoleObserver, verb, contributed)

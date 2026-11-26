@@ -265,6 +265,29 @@ func TestADirectWriteIsAnnouncedAndAReadIsNot(t *testing.T) {
 	}
 }
 
+func TestASessionListsItsOwnRulesWithoutAQuestionOrANotice(t *testing.T) {
+	rig := newEscalationRig(t)
+	if _, err := rig.store.AddSessionApprovalRule("s1", "allow Read(*)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rig.store.AddSessionApprovalRule("s2", "allow Bash(*)"); err != nil {
+		t.Fatal(err)
+	}
+	out, err := rig.dispatch(t, "approve", "rule")
+	if err != nil {
+		t.Fatalf("approve rule: %v", err)
+	}
+	if !strings.Contains(out, "Read(*)") || strings.Contains(out, "Bash(*)") {
+		t.Fatalf("listing = %q, want s1's rule and nothing of s2", out)
+	}
+	if _, err := rig.dispatch(t, "approve", "rule", "--session", "s2"); err == nil {
+		t.Fatal("s1 listed the rules of s2, outside its subtree")
+	}
+	if pending, notices := pendingApprovals(rig.approvals), rig.events.all(); len(pending) != 0 || len(notices) != 0 {
+		t.Fatalf("pending = %+v, notices = %q, want a silent read", pending, notices)
+	}
+}
+
 func TestASessionNeverUnsetsASecret(t *testing.T) {
 	rig := newEscalationRig(t)
 	if _, err := rig.dispatch(t, "env", "unset", "--key", "GATEWAY_BOT_TOKEN"); err == nil {

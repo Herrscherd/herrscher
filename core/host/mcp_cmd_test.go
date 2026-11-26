@@ -83,7 +83,7 @@ func hostFakeMCPResult(method string) map[string]any {
 
 func TestMCPWeightUnknownAgentFails(t *testing.T) {
 	agents := singleAgent{name: "known", home: t.TempDir()}
-	_, err := mcpWeightReport(context.Background(), clitext.NewMessages(), testLanguage()(), agents, mcpWeightRequest{agent: "ghost"})
+	_, err := mcpWeightReport(context.Background(), clitext.NewMessages(), testLanguage()(), agents, mcpweight.NewMeasurer(), mcpWeightRequest{agent: "ghost"})
 	unknown, ok := errors.AsType[*UnknownError](err)
 	if !ok || unknown.Kind != kindAgent || unknown.Name != "ghost" {
 		t.Fatalf("mcpWeightReport(unknown agent) error = %v, want an UnknownError for the agent ghost", err)
@@ -92,7 +92,7 @@ func TestMCPWeightUnknownAgentFails(t *testing.T) {
 
 func TestMCPWeightWithoutServersReportsAnEmptyList(t *testing.T) {
 	agents := singleAgent{name: "bare", home: t.TempDir()}
-	out, err := mcpWeightReport(context.Background(), clitext.NewMessages(), testLanguage()(), agents, mcpWeightRequest{agent: "bare", asJSON: true})
+	out, err := mcpWeightReport(context.Background(), clitext.NewMessages(), testLanguage()(), agents, mcpweight.NewMeasurer(), mcpWeightRequest{agent: "bare", asJSON: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestMCPWeightWithoutServersReportsAnEmptyList(t *testing.T) {
 func TestMCPWeightWithoutDeepDescribesEachServerWithoutStartingIt(t *testing.T) {
 	home := writeMCPHome(t, `{"mcpServers":{"local":{"command":"/nonexistent/herrscher-mcp-cmd-test"},"remote":{"type":"http","url":"https://example.invalid/mcp"}}}`)
 	agents := singleAgent{name: "described", home: home}
-	out, err := mcpWeightReport(context.Background(), clitext.NewMessages(), testLanguage()(), agents, mcpWeightRequest{agent: "described", asJSON: true})
+	out, err := mcpWeightReport(context.Background(), clitext.NewMessages(), testLanguage()(), agents, mcpweight.NewMeasurer(), mcpWeightRequest{agent: "described", asJSON: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestMCPWeightDeepMeasuresTheServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	agents := singleAgent{name: "deep", home: writeMCPHome(t, string(raw))}
-	out, err := mcpWeightReport(context.Background(), clitext.NewMessages(), testLanguage()(), agents, mcpWeightRequest{agent: "deep", deep: true, asJSON: true})
+	out, err := mcpWeightReport(context.Background(), clitext.NewMessages(), testLanguage()(), agents, mcpweight.NewMeasurer(), mcpWeightRequest{agent: "deep", deep: true, asJSON: true})
 	if err != nil {
 		t.Fatal(err)
 	}

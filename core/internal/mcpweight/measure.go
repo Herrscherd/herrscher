@@ -131,26 +131,53 @@ func Measure(ctx context.Context, server agent.MCPServer, timeout time.Duration)
 	return result
 }
 
-// MeasureAll measures the servers in order of their config, at most Concurrency at a time, all within one budget. A server the budget cuts short is reported with CauseBudget, and every server gets a Result.
-func MeasureAll(ctx context.Context, servers []agent.MCPServer, budget time.Duration) []Result {
+// Measurer measures servers under one slot pool shared by all its calls, so that reports asked at the same time never run more than Concurrency servers together.
+type Measurer struct {
+	slots chan struct{}
+}
+
+// NewMeasurer returns a Measurer that keeps at most Concurrency stdio servers running at a time.
+func NewMeasurer() *Measurer {
+	return &Measurer{slots: make(chan struct{}, Concurrency)}
+}
+
+// MeasureAll measures the servers within one budget, each stdio server only once it holds one of the measurer's slots, and the results keep the order of the servers given. A server the budget or the caller cuts short while it waits for a slot is reported with its cause, and every server gets a Result.
+func (m *Measurer) MeasureAll(ctx context.Context, servers []agent.MCPServer, budget time.Duration) []Result {
 	budgetCtx, cancel := context.WithTimeoutCause(ctx, budget, errBudgetExceeded)
 	defer cancel()
 	results := make([]Result, len(servers))
-	pending := make(chan int)
-	var workers sync.WaitGroup
-	for range min(Concurrency, len(servers)) {
-		workers.Go(func() {
-			for index := range pending {
-				results[index] = Measure(budgetCtx, servers[index], DefaultTimeout)
-			}
+	var measures sync.WaitGroup
+	for index, server := range servers {
+		measures.Go(func() {
+			results[index] = m.measureInTurn(budgetCtx, server)
 		})
 	}
-	for index := range servers {
-		pending <- index
-	}
-	close(pending)
-	workers.Wait()
+	measures.Wait()
 	return results
+}
+
+func (m *Measurer) measureInTurn(ctx context.Context, server agent.MCPServer) Result {
+	if !server.Stdio() {
+		return Describe(server)
+	}
+	if err := m.acquire(ctx); err != nil {
+		return Result{Name: server.Name, Transport: server.Transport(), Cause: causeOf(err), Detail: err.Error()}
+	}
+	defer m.release()
+	return Measure(ctx, server, DefaultTimeout)
+}
+
+func (m *Measurer) acquire(ctx context.Context) error {
+	select {
+	case m.slots <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return contextFailure(ctx)
+	}
+}
+
+func (m *Measurer) release() {
+	<-m.slots
 }
 
 func fillWeight(result *Result, tools []json.RawMessage) {

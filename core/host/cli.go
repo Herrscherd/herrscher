@@ -12,6 +12,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
+	"github.com/Herrscherd/herrscher/core/internal/mcpweight"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/supervisor"
@@ -43,6 +44,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	logCleanup(cfgErr)
 	updater := serviceUpdater{cfg: upCfg, st: hostState, messages: sessions.cliMessages, lang: options.languageSource()}
 	agents := agent.NewStore(filepath.Join(partDir, "agents"))
+	mcpMeasurer := mcpweight.NewMeasurer()
 	if n, ok := agent.UserBudgetFromEnv(os.Getenv); ok {
 		agents.SetUserBudget(n)
 	}
@@ -67,7 +69,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addVerbs(reg, handoff, mcpWeightVerb(sessions.cliMessages, options.live.Get, agents)); err != nil {
+	if err := addVerbs(reg, handoff, mcpWeightVerb(sessions.cliMessages, options.live.Get, agents, mcpMeasurer)); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addCheckpointAndPRVerbs(reg, sessions, options, hostState); err != nil {

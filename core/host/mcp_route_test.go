@@ -11,6 +11,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/internal/mcpweight"
 )
 
 func TestMCPWeightDoesNotWaitForTheDispatchLock(t *testing.T) {
@@ -44,22 +45,33 @@ func TestMCPWeightDoesNotWaitForTheDispatchLock(t *testing.T) {
 }
 
 func TestMCPWeightRefusesWithoutADaemon(t *testing.T) {
-	reg := cli.NewRegistry(clitext.NewMessages())
-	if err := addVerbs(reg, mcpWeightVerb(clitext.NewMessages(), func() i18n.Language { return i18n.English }, nil)); err != nil {
-		t.Fatalf("addVerbs: %v", err)
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{name: "without deep", args: []string{nsMCP, verbWeight, "--agent", "arc"}},
+		{name: "with deep", args: []string{nsMCP, verbWeight, "--agent", "arc", "--deep"}},
 	}
-	noDaemon := func(context.Context, string, []string) (string, bool, error) { return "", false, nil }
-	forwardDaemonOwnedCommands(reg, RuntimeLayout{}, "inst", noDaemon)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := cli.NewRegistry(clitext.NewMessages())
+			if err := addVerbs(reg, mcpWeightVerb(clitext.NewMessages(), func() i18n.Language { return i18n.English }, nil, mcpweight.NewMeasurer())); err != nil {
+				t.Fatalf("addVerbs: %v", err)
+			}
+			noDaemon := func(context.Context, string, []string) (string, bool, error) { return "", false, nil }
+			forwardDaemonOwnedCommands(reg, RuntimeLayout{}, "inst", noDaemon)
 
-	_, err := reg.Dispatch(context.Background(), []string{nsMCP, verbWeight, "--agent", "arc"})
-	if !errors.Is(err, errDaemonRequired) {
-		t.Fatalf("err = %v, want the daemon-required refusal", err)
+			_, err := reg.Dispatch(context.Background(), tc.args)
+			if !errors.Is(err, errDaemonRequired) {
+				t.Fatalf("err = %v, want the daemon-required refusal", err)
+			}
+		})
 	}
 }
 
 func TestMCPWeightIsAnsweredByTheDaemonWhenOneListens(t *testing.T) {
 	reg := cli.NewRegistry(clitext.NewMessages())
-	if err := addVerbs(reg, mcpWeightVerb(clitext.NewMessages(), func() i18n.Language { return i18n.English }, nil)); err != nil {
+	if err := addVerbs(reg, mcpWeightVerb(clitext.NewMessages(), func() i18n.Language { return i18n.English }, nil, mcpweight.NewMeasurer())); err != nil {
 		t.Fatalf("addVerbs: %v", err)
 	}
 	var forwarded []string

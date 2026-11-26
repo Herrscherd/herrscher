@@ -362,11 +362,15 @@ its stderr, as `stderr: "..."`. When the caller cancels the measure, the cause i
 (requests to the client, notifications) are skipped, and an answer is matched by its id
 alone. No server is dropped from the report.
 
-The servers of a report are measured four at a time, under one budget of 40 seconds shared
-by all of them. A server still running when the budget is spent is stopped as on timeout,
-and a server the budget reaches before it starts is not started; both are reported with the
-cause `budget`. Each server keeps its own 15 second timeout inside that budget. The report
-lists the servers in the order of `mcp.json`, whatever order they finish in.
+The servers of a report are measured under one budget of 40 seconds shared by all of them.
+Each stdio server takes one of four slots before it starts, and the slots belong to the
+daemon, not to the report: two `mcp weight --deep` requests at the same time share the same
+four, so the daemon never runs more than four measured servers together, whatever the
+number of clients. A server still running when the budget is spent is stopped as on timeout.
+A server still waiting for a slot when the budget is spent, or when the caller cancels, is
+not started and is reported with the cause `budget` or `canceled`. Each started server keeps
+its own 15 second timeout inside that budget. The report lists the servers sorted by name,
+as `mcp.json` is read, whatever order they finish in.
 
 `mcp weight` runs in the daemon, and it needs one listening: without a daemon it is refused
 with the same message as the other daemon-owned verbs, with or without `--deep`. It is

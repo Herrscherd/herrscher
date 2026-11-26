@@ -38,7 +38,7 @@ func TestMeasureAllReportsBlockedServersAsBudgetExceededWithinTheBudget(t *testi
 	}
 	const budget = time.Second
 	started := time.Now()
-	results := MeasureAll(context.Background(), servers, budget)
+	results := NewMeasurer().MeasureAll(context.Background(), servers, budget)
 	elapsed := time.Since(started)
 	if len(results) != len(servers) {
 		t.Fatalf("MeasureAll returned %d results for %d servers", len(results), len(servers))
@@ -53,13 +53,13 @@ func TestMeasureAllReportsBlockedServersAsBudgetExceededWithinTheBudget(t *testi
 	}
 }
 
-func TestMeasureAllKeepsTheConfigOrder(t *testing.T) {
+func TestMeasureAllReportsInTheOrderGiven(t *testing.T) {
 	servers := []agent.MCPServer{fakeServer("two-pages"), fakeServer("rejecting"), fakeServer("exit"), fakeServer("garbage")}
-	results := MeasureAll(context.Background(), servers, DefaultBudget)
+	results := NewMeasurer().MeasureAll(context.Background(), servers, DefaultBudget)
 	wantCauses := []Cause{"", CauseRejected, CauseExited, CauseProtocol}
 	for index, result := range results {
 		if result.Name != servers[index].Name {
-			t.Fatalf("result %d is %q, want %q: the report must follow the config order", index, result.Name, servers[index].Name)
+			t.Fatalf("result %d is %q, want %q: the report must follow the order given", index, result.Name, servers[index].Name)
 		}
 		if result.Cause != wantCauses[index] {
 			t.Errorf("result %d cause = %q, want %q", index, result.Cause, wantCauses[index])
@@ -74,7 +74,7 @@ func TestMeasureAllReportsEveryServerCanceledWhenTheParentIsCanceled(t *testing.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	servers := []agent.MCPServer{fakeServer("two-pages"), fakeServer("silent"), fakeServer("two-pages")}
-	for index, result := range MeasureAll(ctx, servers, DefaultBudget) {
+	for index, result := range NewMeasurer().MeasureAll(ctx, servers, DefaultBudget) {
 		if result.Measured || result.Cause != CauseCanceled {
 			t.Fatalf("result %d = %+v, want canceled, not a start failure", index, result)
 		}
@@ -82,7 +82,7 @@ func TestMeasureAllReportsEveryServerCanceledWhenTheParentIsCanceled(t *testing.
 }
 
 func TestMeasureAllOfNoServersIsEmpty(t *testing.T) {
-	if results := MeasureAll(context.Background(), nil, DefaultBudget); len(results) != 0 {
+	if results := NewMeasurer().MeasureAll(context.Background(), nil, DefaultBudget); len(results) != 0 {
 		t.Fatalf("MeasureAll = %v, want nothing", results)
 	}
 }

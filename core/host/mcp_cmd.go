@@ -32,18 +32,18 @@ type mcpWeightRequest struct {
 	asJSON bool
 }
 
-func mcpWeightVerb(cliMessages *clitext.Messages, lang languageSource, agents agentLookup) contracts.Cmd {
+func mcpWeightVerb(cliMessages *clitext.Messages, lang languageSource, agents agentLookup, measurer *mcpweight.Measurer) contracts.Cmd {
 	return contracts.New(nsMCP, verbWeight).
 		Help(clitext.CmdHelpToolWeight).
 		ValueParam(paramAgent, clitext.CmdParamToolWeightAgent, true).
 		Param(paramMCPDeep, clitext.CmdParamToolWeightDeep, false).
 		Do(func(ctx context.Context, in contracts.Input) (contracts.Result, error) {
 			req := mcpWeightRequest{agent: in.Get(paramAgent), deep: in.Bool(paramMCPDeep), asJSON: in.JSON}
-			return cli.Data(mcpWeightReport(ctx, cliMessages, lang(), agents, req))
+			return cli.Data(mcpWeightReport(ctx, cliMessages, lang(), agents, measurer, req))
 		})
 }
 
-func mcpWeightReport(ctx context.Context, cliMessages *clitext.Messages, lang i18n.Language, agents agentLookup, req mcpWeightRequest) (string, error) {
+func mcpWeightReport(ctx context.Context, cliMessages *clitext.Messages, lang i18n.Language, agents agentLookup, measurer *mcpweight.Measurer, req mcpWeightRequest) (string, error) {
 	found, ok := agents.Get(req.agent)
 	if !ok {
 		return "", &UnknownError{Kind: kindAgent, Name: req.agent}
@@ -52,7 +52,7 @@ func mcpWeightReport(ctx context.Context, cliMessages *clitext.Messages, lang i1
 	if err != nil {
 		return "", err
 	}
-	results := mcpWeigh(ctx, servers, req.deep)
+	results := mcpWeigh(ctx, measurer, servers, req.deep)
 	if req.asJSON {
 		body, encodeErr := json.Marshal(results)
 		return string(body), encodeErr
@@ -60,9 +60,9 @@ func mcpWeightReport(ctx context.Context, cliMessages *clitext.Messages, lang i1
 	return renderMCPWeight(cliMessages, lang, req.agent, results), nil
 }
 
-func mcpWeigh(ctx context.Context, servers []agent.MCPServer, deep bool) []mcpweight.Result {
+func mcpWeigh(ctx context.Context, measurer *mcpweight.Measurer, servers []agent.MCPServer, deep bool) []mcpweight.Result {
 	if deep {
-		return mcpweight.MeasureAll(ctx, servers, mcpweight.DefaultBudget)
+		return measurer.MeasureAll(ctx, servers, mcpweight.DefaultBudget)
 	}
 	results := make([]mcpweight.Result, 0, len(servers))
 	for _, server := range servers {

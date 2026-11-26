@@ -117,9 +117,9 @@ func checkSetupMode(messages *clitext.Messages, flags *flag.FlagSet, stack bool)
 		return nil
 	}
 	var stackOnly string
-	flags.Visit(func(f *flag.Flag) {
-		if stackOnly == "" && (f.Name == "no-build" || f.Name == "no-trial") {
-			stackOnly = f.Name
+	flags.Visit(func(given *flag.Flag) {
+		if stackOnly == "" && (given.Name == "no-build" || given.Name == "no-trial") {
+			stackOnly = given.Name
 		}
 	})
 	if stackOnly != "" {

@@ -3,6 +3,7 @@ package manage
 import (
 	"errors"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -598,10 +599,26 @@ func (model *setupModel) botState(kind probeKind, tokenKey string) sectionState 
 }
 
 func (model *setupModel) telegramState() sectionState {
-	if owner, err := strconv.ParseInt(strings.TrimSpace(model.draft.value(envTelegramUser)), 10, 64); err != nil || owner == 0 {
+	if !model.telegramAudience() {
 		return sectionState{tone: toneBad, text: model.text(clitext.SetupTelegramUserMissing, nil)}
 	}
 	return model.botState(probeTelegram, envTelegramBot)
+}
+
+func (model *setupModel) telegramAudience() bool {
+	if telegramID(model.draft.value(envTelegramUser)) {
+		return true
+	}
+	if slices.Contains([]string{"1", "true", "yes", "on"}, strings.ToLower(strings.TrimSpace(model.draft.value(envTelegramAll)))) {
+		return true
+	}
+	allowed := strings.FieldsFunc(model.draft.value(envTelegramMany), func(char rune) bool { return strings.ContainsRune(", \t\n", char) })
+	return len(allowed) > 0 && !slices.ContainsFunc(allowed, func(id string) bool { return !telegramID(id) })
+}
+
+func telegramID(raw string) bool {
+	id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	return err == nil && id != 0
 }
 
 func (model *setupModel) keyState(key string) sectionState {

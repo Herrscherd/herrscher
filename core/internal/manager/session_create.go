@@ -156,6 +156,9 @@ func (h *Handler) chooseHome(ctx context.Context, input contracts.Input, adopted
 	if terminalOnly {
 		return state.HomeRef{}, nil, h.localized(ErrConflictingPlacement, clitext.HostErrConflictingPlacement)
 	}
+	if admin == nil {
+		return state.HomeRef{}, nil, h.localized(ErrNoChannelAdmin, clitext.HostErrNoChannelAdmin)
+	}
 	kind, err := admin.Kind(ctx, under)
 	if err != nil {
 		return state.HomeRef{}, nil, h.labelled("inspect channel", clitext.HostErrInspectChannel, err)

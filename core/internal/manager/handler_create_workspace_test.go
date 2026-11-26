@@ -296,3 +296,26 @@ func TestSettingAHomeWithoutAnyChannelAdminIsRefused(t *testing.T) {
 		t.Fatalf("set home = %v", err)
 	}
 }
+
+func TestCreatingASessionWithoutAnyChannelAdminIsRefusedNotAPanic(t *testing.T) {
+	st := state.NewState(t.TempDir() + "/s.json")
+	if err := st.SetHome(state.HomeRef{ID: "cat1", Type: "category"}); err != nil {
+		t.Fatal(err)
+	}
+	h := NewHandler(clitext.NewMessages(), nil, &fakeSup{}, &fakeWT{path: "/wt/x", scratchBase: t.TempDir()}, &fakeForge{}, &fakeUpdater{version: "abc1234"}, agent.NewStore(t.TempDir()), st, "claude", t.TempDir(), []string{"chat"}, nil, nil)
+
+	for _, input := range []contracts.Input{args("name", "a1"), args("name", "a2", "under", "c1")} {
+		if _, err := h.sessionCreateRun(context.Background(), input); !errors.Is(err, ErrNoChannelAdmin) {
+			t.Fatalf("create %v = %v, want the refusal", input.Args, err)
+		}
+	}
+}
+
+func TestArchivingWithoutAnyChannelAdminSaysTheChannelStaysOpen(t *testing.T) {
+	st := state.NewState(t.TempDir() + "/s.json")
+	h := NewHandler(clitext.NewMessages(), nil, &fakeSup{}, &fakeWT{path: "/wt/x", scratchBase: t.TempDir()}, &fakeForge{}, &fakeUpdater{version: "abc1234"}, agent.NewStore(t.TempDir()), st, "claude", t.TempDir(), []string{"chat"}, nil, nil)
+
+	if note := h.tidyChannel(context.Background(), state.Session{Name: "s1", ChannelID: "c1", Owned: true}); note == "" {
+		t.Fatal("the channel stayed open without a word")
+	}
+}

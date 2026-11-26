@@ -511,13 +511,30 @@ func TestATelegramProbeThatCannotConnectNeverShowsTheToken(t *testing.T) {
 	}
 }
 
-func TestTheTelegramSectionNeedsANumericUserID(t *testing.T) {
-	for _, user := range []string{"", "@ana", "0"} {
-		harness := newHarness(t, nil, screenHub, map[string]string{envTelegramBot: "123:good", envTelegramUser: user})
+func TestTheTelegramSectionNeedsSomeoneTheBotMayAnswer(t *testing.T) {
+	cases := []struct {
+		env     map[string]string
+		missing bool
+	}{
+		{make(map[string]string), true},
+		{map[string]string{envTelegramUser: "@ana"}, true},
+		{map[string]string{envTelegramUser: "0"}, true},
+		{map[string]string{envTelegramMany: "42, ana"}, true},
+		{map[string]string{envTelegramAll: "maybe"}, true},
+		{map[string]string{envTelegramUser: "42"}, false},
+		{map[string]string{envTelegramMany: "42 43"}, false},
+		{map[string]string{envTelegramAll: "on"}, false},
+	}
+	for _, tc := range cases {
+		tc.env[envTelegramBot] = "123:good"
+		harness := newHarness(t, nil, screenHub, tc.env)
 		harness.model.modules[moduleTelegram] = true
 		for _, section := range harness.model.sections() {
-			if section.screen == screenTelegram && (section.tone != toneBad || section.state != harness.text(clitext.SetupTelegramUserMissing)) {
-				t.Fatalf("user %q: telegram section = %+v", user, section)
+			if section.screen != screenTelegram {
+				continue
+			}
+			if flagged := section.state == harness.text(clitext.SetupTelegramUserMissing); flagged != tc.missing {
+				t.Fatalf("env %v: telegram section = %+v", tc.env, section)
 			}
 		}
 	}

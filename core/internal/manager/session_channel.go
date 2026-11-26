@@ -43,6 +43,9 @@ func (h *Handler) openChannel(ctx context.Context, req createRequest, title stri
 	if req.adopted != "" {
 		return channelSlot{id: req.adopted, typ: "text"}, nil
 	}
+	if req.admin == nil {
+		return channelSlot{}, h.localized(ErrNoChannelAdmin, clitext.HostErrNoChannelAdmin)
+	}
 	switch req.home.Type {
 	case categoryKind, terminalPlace:
 		chID, err := req.admin.CreateUnder(ctx, req.home.ID, title)
@@ -104,7 +107,7 @@ func (h *Handler) tidyChannel(ctx context.Context, sess state.Session) string {
 	}
 	admin := h.adminFor(sess)
 	if admin == nil {
-		return ""
+		return "\n" + h.text(clitext.SessionChannelLeftOpen, clitext.Params{clitext.ParamErr: h.localized(ErrNoChannelAdmin, clitext.HostErrNoChannelAdmin).Error()})
 	}
 	if err := admin.Archive(ctx, sess.ChannelID); err != nil {
 		return "\n" + h.text(clitext.SessionChannelLeftOpen, clitext.Params{clitext.ParamErr: err.Error()})

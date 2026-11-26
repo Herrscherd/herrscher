@@ -1,7 +1,10 @@
 package host
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -14,34 +17,38 @@ import (
 const (
 	selfRestartWindow  = 10 * time.Minute
 	verbServiceRestart = "service restart"
+	verbServiceUpdate  = "service update"
 	verbEnvSet         = "env set"
 	verbSetBudget      = "session set-budget"
 )
 
 type selfRestarts struct {
-	mu   sync.Mutex
-	last map[string]time.Time
-	now  func() time.Time
+	mu    sync.Mutex
+	store *state.State
+	now   func() time.Time
 }
 
-func newSelfRestarts() *selfRestarts {
-	return &selfRestarts{last: make(map[string]time.Time), now: time.Now}
+func newSelfRestarts(store *state.State) *selfRestarts {
+	return &selfRestarts{store: store, now: time.Now}
+}
+
+func restartsTheDaemon(verb string) bool {
+	return verb == verbServiceRestart || verb == verbServiceUpdate
 }
 
 func (r *selfRestarts) admit(session, verb string) error {
-	if r == nil || verb != verbServiceRestart {
+	if r == nil || r.store == nil || !restartsTheDaemon(verb) {
 		return nil
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := r.now()
-	if previous, ok := r.last[session]; ok && now.Sub(previous) < selfRestartWindow {
+	if previous, ok := r.store.LastSelfRestart(session); ok && now.Sub(previous) < selfRestartWindow {
 		return &accessDeniedError{Reason: fmt.Sprintf(
 			"herrscher: session %q already restarted the daemon %s ago; a session restarts it once every %s.",
 			session, now.Sub(previous).Round(time.Second), selfRestartWindow)}
 	}
-	r.last[session] = now
-	return nil
+	return r.store.RecordSelfRestart(session, now)
 }
 
 func (h *hub) guardSessionCall(session, verb string, input contracts.Input) error {
@@ -102,9 +109,40 @@ func budgetWithinParent(store *state.State, caller string, input contracts.Input
 }
 
 func (h *hub) announceSelfCall(session, key, subject, detail string) {
+	h.announce(session, key, map[string]any{"Subject": subject, "Detail": detail})
+}
+
+func (h *hub) announce(session, key string, params map[string]any) {
 	if h.eventPublisher == nil || session == "" {
 		return
 	}
-	text := h.messages.text(h.sessionLanguageSource(session)(), key, map[string]any{"Subject": subject, "Detail": detail})
+	text := h.messages.text(h.sessionLanguageSource(session)(), key, params)
 	h.eventPublisher(session, contracts.Event{T: eventwire.EventNotice, Text: text})
+}
+
+const (
+	resumeWait  = 2 * time.Minute
+	resumeRetry = 2 * time.Second
+)
+
+func resumeAfterSelfRestart(ctx context.Context, store *state.State, seed func(session, task string) bool, text func(session string) string, log *slog.Logger) {
+	pending, err := store.TakeRestartResumes()
+	if err != nil {
+		log.Warn("self restart: the sessions to resume were not read", "err", err)
+	}
+	deadline := time.Now().Add(resumeWait)
+	for len(pending) > 0 {
+		pending = slices.DeleteFunc(pending, func(session string) bool { return seed(session, text(session)) })
+		if len(pending) == 0 || time.Now().After(deadline) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(resumeRetry):
+		}
+	}
+	for _, session := range pending {
+		log.Warn("self restart: the session was not resumed, it is not running", "session", session)
+	}
 }

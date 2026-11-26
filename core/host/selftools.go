@@ -1,10 +1,15 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
+	"os"
+	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/cli"
@@ -90,3 +95,40 @@ const EnvSelfToolsExpose = "HERRSCHER_SELF_TOOLS_EXPOSE"
 
 // EnvSelfToolsBytes carries the weight of the self tools declarations down to the bridge, which reports it in each turn's context sizes.
 const EnvSelfToolsBytes = "HERRSCHER_SELF_TOOLS_BYTES"
+
+const selfToolsProbeWait = 10 * time.Second
+
+var errSelfToolsSilent = errors.New("herrscher mcp answered, but listed no tool")
+
+func askSelfToolsServer(ctx context.Context, socket string) (int, error) {
+	binary := agent.SelfBin()
+	if binary == "" {
+		return 0, errSelfToolsSilent
+	}
+	bounded, cancel := context.WithTimeout(ctx, selfToolsProbeWait)
+	defer cancel()
+	command := exec.CommandContext(bounded, binary, "mcp")
+	command.Env = append(os.Environ(), SessionCommandSocketVar+"="+socket)
+	command.Stdin = strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}` + "\n" +
+		`{"jsonrpc":"2.0","id":2,"method":"tools/list"}` + "\n")
+	out, err := command.Output()
+	if err != nil {
+		return 0, err
+	}
+	return listedTools(out)
+}
+
+func listedTools(out []byte) (int, error) {
+	for _, line := range bytes.Split(out, []byte("\n")) {
+		var reply struct {
+			ID     int `json:"id"`
+			Result struct {
+				Tools []json.RawMessage `json:"tools"`
+			} `json:"result"`
+		}
+		if json.Unmarshal(line, &reply) == nil && reply.ID == 2 && len(reply.Result.Tools) > 0 {
+			return len(reply.Result.Tools), nil
+		}
+	}
+	return 0, errSelfToolsSilent
+}

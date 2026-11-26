@@ -54,6 +54,9 @@ const (
 	CmdParamSessionIssueLimit  = "cli.help.param.session.issue.limit"
 	SessionIssueTruncated      = "cli.session.issue.truncated"
 	SessionIssueBadLimit       = "cli.session.issue.bad_limit"
+	CmdHelpEnvRequest          = "cli.help.cmd.env.request"
+	CmdParamEnvReason          = "cli.help.param.env.reason"
+	HostEnvRequested           = "cli.host.env.requested"
 )
 
 // ParamSize is the parameter that carries a size in bytes.
@@ -113,5 +116,8 @@ func selfToolsKeys() map[Key][]string {
 		CmdParamSessionIssueLimit:  nil,
 		SessionIssueTruncated:      {ParamCount},
 		SessionIssueBadLimit:       {ParamCount},
+		CmdHelpEnvRequest:          nil,
+		CmdParamEnvReason:          nil,
+		HostEnvRequested:           {ParamKey},
 	}
 }

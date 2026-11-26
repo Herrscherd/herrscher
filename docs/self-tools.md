@@ -26,8 +26,10 @@ line of its own. The list is read again at each `tools/list`.
   `session_issue_list` and `session_issue_show`. A test keeps every one of them
   a verb the agent runs without asking.
   `HERRSCHER_SELF_TOOLS_EXPOSE=all`, or `selfTools.expose` in `config.json`,
-  gives every verb a tool, at the cost of more schemas in each turn. An unknown
-  value serves the core set and says so on stderr.
+  gives every verb a tool, at the cost of more schemas in each turn. The daemon
+  settles the exposure and hands it to each session, so the server and the
+  weight the daemon reports never disagree. An unknown value serves the core
+  set and says so on stderr.
 
 A value is sent as `--name=value`, so a value that starts with `--` stays a
 value. A positional argument that starts with `-` is refused, and so is a
@@ -36,7 +38,8 @@ parses.
 
 Calls run concurrently, eight at most, so a call that waits on the operator
 does not hold the others back. `notifications/cancelled` stops the call it
-names.
+names: the server drops its connection to the daemon, and the daemon withdraws
+the question that call was waiting on, so a late `allow` runs nothing.
 
 ## What it may change
 
@@ -45,7 +48,8 @@ The daemon decides each call under the role of the session, as it decides the
 
 - **Reads pass.** What the `agent` role runs runs at once, now including
   `health`, `usage`, `skill list`, `schedule list`, `host list`, `plugin list`,
-  `connect status`, `setup check`, `config get`, `env get` and `approve list`.
+  `connect status`, `setup check`, `config get`, `env get`, `env request` and
+  `approve list`.
   `approve list` shows the session its own questions and those of the sessions
   it delegated, nothing else.
 - **Writes are asked.** A verb the `agent` role does not run is not refused any
@@ -69,22 +73,33 @@ The daemon decides each call under the role of the session, as it decides the
 
 ### Guards that hold even after an approval
 
-- A secret (a variable whose name holds `TOKEN`, `KEY`, `SECRET`, `PASSWORD`,
-  `PASSWD` or `CREDENTIAL`) is never written by a session: `env set` on one is
-  refused before any question, so the value never reaches a gateway. The
-  operator sets it with `herrscher env set` in a terminal.
-- A session restarts the daemon once every ten minutes at most.
+- A session never writes a secret. A variable counts as one unless it is shown
+  in clear by `env get`: a name under `HERRSCHER_`, `MEMORY_`, `AGENT_`,
+  `JEV_`, `OBSIDIAN_` or `OTEL_`, or ending in `_MODEL`, `_CMD`, `_STREAM`,
+  `_DIR`, `_KIND`, `_EFFORT`, `_VERBOSITY`, `_CONTEXT_MESSAGES`, `_TIDY_PINGS`,
+  `_MESSAGE_DELETES` or `_HOME`, and holding none of `TOKEN`, `KEY`, `SECRET`,
+  `PASSWORD`, `PASSWD`, `PASS`, `PAT`, `CREDENTIAL`, `AUTH`, `HEADERS`, `DSN`
+  or `URL`. `env set` on any other variable is refused before any question, so
+  no value reaches a gateway. The session asks for it with
+  `env request --key <name> [--reason …]`, which posts the request on its
+  gateways with the command for the operator to type; no value travels.
+- A session restarts the daemon once every ten minutes at most, by
+  `service restart` or `service update`. The time is kept in `state.json`, so
+  the daemon that comes back still knows it. When the daemon is back, the
+  session that asked gets a turn telling it so, to carry on with its task.
 - `session set-budget` from a session never sets a cap above the cap of the
   target's parent, and never removes a cap the parent has.
 
 ### A trusted agent
 
 `herrscher role grant session:<name> steward` lets one session configure the
-daemon without asking. A `steward` runs what an `operator` runs, with three
-exceptions on top of the verbs never run for a session: `approve rule`,
-`approve mode` and `session create` are still put to the operator, because they
-change the policy every session answers to, or open a session outside the
-steward's subtree. It stays inside its subtree. It is the one role a session
+daemon without asking. A `steward` runs what an `operator` runs, with these
+exceptions on top of the verbs never run for a session, still put to the
+operator: `approve rule` and `approve mode`, which change the policy every
+session answers to; `session create`, which opens a session outside the
+steward's subtree; and `config set|unset` and `env set|unset`, which decide who
+commands the daemon (the owner, the gateway allow lists) and where the API keys
+go (`keys.*`). It stays inside its subtree. It is the one role a session
 can be granted, and granting it to a session does not turn the humans of the
 gateways into observers, as the first human grant does.
 
@@ -101,8 +116,12 @@ keep full-line comments: when the file had some, the previous version is kept
 as `config.json.bak` and the reply says so.
 
 `env get`, `env set` and `env unset` do the same on the daemon's settings file
-(`HERRSCHER_ENV_FILE`). Comments and the other lines are kept, and `env get`
-hides the value of every secret.
+(`HERRSCHER_ENV_FILE`). Comments and the other lines are kept, a variable set
+twice is left once, and `env get` hides the value of every variable it does
+not show in clear (the rule above). A value with a space or a shell character
+is written between single quotes; one that holds a single quote is written
+between double quotes, and refused if it also holds `"`, `$`, a backquote or
+a backslash, which no quoting keeps intact for every reader of the file.
 
 Both files are read at start: a change takes effect at the next
 `herrscher service restart`. Two edits of the same file never interleave.
@@ -111,7 +130,10 @@ Both files are read at start: a change takes effect at the next
 
 `plugin list`, `plugin add --module <path[@version]>` and
 `plugin rm --module <path>` run `herrscher plugin` in the daemon's environment:
-`add` and `rm` rebuild the binary (`--no_build` only edits the module list).
+`add` and `rm` rebuild the binary (`--no_build` only edits the module list),
+within fifteen minutes. A module path never starts with `-`. A call that waits
+for the operator and then for a build still fits in one tool call: the self
+tools wait for the approval deadline plus twenty minutes.
 `connect status` shows the forge connections and where each token comes from.
 `setup check` reports each section of `herrscher setup` as `ok`, `warning`,
 `bad` or `off` without changing anything; `--probe` also checks each account
@@ -142,20 +164,28 @@ included:
   `.mcp.json` is the one herrscher wrote;
 - `.codex/config.toml` gets the same server, with `env_vars` forwarding the
   session's socket, name and token, which Codex does not pass on by itself, and
-  a `tool_timeout_sec` long enough for an operator's answer. A file that did
-  not declare the server keeps its comments.
+  a `tool_timeout_sec` long enough for an operator's answer. The file is left
+  as it is when it already declares this exact server, and the server is
+  appended when it declares none, so comments stay; only a different
+  `herrscher` table makes the file be rewritten.
+- `.cursor/mcp.json` gets the same server for `cursor-agent`, which may ask
+  the operator once to approve a project MCP server.
 
 When the repository tracks `.mcp.json` or `.claude/settings.local.json`,
 nothing is enabled for Claude Code, so a server the repository ships under the
-name `herrscher` never runs unasked; a tracked `.codex/config.toml` is left
-alone too. The daemon's log says which file was skipped. A shared session and a
+name `herrscher` never runs unasked; a tracked `.codex/config.toml` or
+`.cursor/mcp.json` is left alone too, and so is any of these paths that
+crosses a symbolic link. The daemon's log says which file was skipped. A shared session and a
 session on another host get no server. `HERRSCHER_SELF_TOOLS=off`, or
 `selfTools.enabled: false` in `config.json`, turns the declaration off.
 
 ## What it costs
 
 `herrscher health` has a `self-tools` line: whether sessions get the server,
-the exposure, the number of tools and the bytes their declarations weigh. The
+the exposure, the number of tools and the bytes their declarations weigh.
+`herrscher health --deep` also starts `herrscher mcp` against the daemon and
+counts the tools it lists, so the line says the server answers and not only
+what it would list. The
 same weight is reported in each turn's context sizes, under the tools line of
 `/context` in the terminal UI.
 

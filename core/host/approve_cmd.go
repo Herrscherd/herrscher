@@ -127,13 +127,13 @@ func approveDenyVerb(cliMessages *clitext.Messages, lang languageSource, approva
 	return contracts.New(nsApprove, "deny").
 		Help(clitext.CmdHelpApproveDeny).
 		ValueParam("id", clitext.CmdParamApproveDenyID, false).
-		ValueParam("reason", clitext.CmdParamApproveDenyReason, false).
+		ValueParam(paramReason, clitext.CmdParamApproveDenyReason, false).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			approvalID := firstOf(input.Get("id"), input.Rest)
 			if approvalID == "" {
 				return contracts.Result{}, errRequestNameMissing
 			}
-			answer := approvalAnswer{scope: scopeDeny, reason: approvals.operatorRefusal(input.Get("reason"))}
+			answer := approvalAnswer{scope: scopeDeny, reason: approvals.operatorRefusal(input.Get(paramReason))}
 			if !settleApproval(approvals, approvalID, answer) {
 				return contracts.Result{}, &requestNotWaitingError{ID: approvalID}
 			}

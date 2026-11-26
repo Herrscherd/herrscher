@@ -118,6 +118,9 @@ func TestMaterializeSelfToolsAddsTheServerBesideWhatIsThere(t *testing.T) {
 	if err := MaterializeSelfTools(t.Context(), worktree, selfToolsBin); err != nil {
 		t.Fatal(err)
 	}
+	if raw, err := os.ReadFile(filepath.Join(worktree, ".codex", "config.toml")); err != nil || !strings.Contains(string(raw), "# kept by hand") {
+		t.Fatalf("codex config after a second launch = %q, %v, want the hand comment still there", raw, err)
+	}
 	again := listField(t, readJSON(t, filepath.Join(worktree, ".claude", localSettingsFile)), "enabledMcpjsonServers")
 	if len(again) != len(enabled) {
 		t.Fatalf("a second run enabled the server twice: %v", again)
@@ -175,5 +178,22 @@ func TestAnUntrackedServerThatIsNotOursIsReplacedBeforeBeingEnabled(t *testing.T
 	self := objectField(t, objectField(t, readJSON(t, filepath.Join(worktree, ".mcp.json")), "mcpServers"), SelfToolsServer)
 	if self["command"] != selfToolsBin || self["env"] != nil {
 		t.Fatalf("herrscher server = %v, want ours and nothing of the one it replaced", self)
+	}
+}
+
+func TestASymlinkedClaudeDirectoryIsNeverWrittenThrough(t *testing.T) {
+	worktree := gitRepo(t)
+	elsewhere := t.TempDir()
+	if err := os.Symlink(elsewhere, filepath.Join(worktree, ".claude")); err != nil {
+		t.Fatal(err)
+	}
+	if err := MaterializeSelfTools(t.Context(), worktree, selfToolsBin); !errors.Is(err, ErrSymlinkConfig) {
+		t.Fatalf("err = %v, want ErrSymlinkConfig", err)
+	}
+	if entries, err := os.ReadDir(elsewhere); err != nil || len(entries) != 0 {
+		t.Fatalf("the link target holds %v (%v): herrscher wrote through the symlink", entries, err)
+	}
+	if _, err := os.Stat(filepath.Join(worktree, ".cursor", "mcp.json")); err != nil {
+		t.Fatalf("the cursor declaration was not written beside the refused one: %v", err)
 	}
 }

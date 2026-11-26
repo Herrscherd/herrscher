@@ -176,6 +176,11 @@ func (h *hub) announceSelfRun(admitted admission, runErr error) {
 	detail := ""
 	if runErr != nil {
 		key, detail = "selftools.failed_"+admitted.how, runErr.Error()
+		if restartsTheDaemon(admitted.verb) && h.st != nil {
+			if err := h.st.ForgetRestartResume(admitted.session); err != nil {
+				slog.Warn("self restart: the resume of a failed restart was not dropped", "session", admitted.session, "err", err)
+			}
+		}
 	}
 	h.announceSelfCall(admitted.session, key, admitted.subject, detail)
 }

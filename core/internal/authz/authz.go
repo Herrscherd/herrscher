@@ -117,7 +117,7 @@ func definitionOf(role Role) (definition, bool) {
 				"models list",
 				"memory search", "memory locate", "memory record", "memory unlink", "memory restore",
 				"approve ask", "approve list",
-				"health", "usage", "skill list", "schedule list", "host list", "plugin list", "connect status", "setup check", "env get",
+				"health", "usage", "skill list", "schedule list", "host list", "plugin list", "connect status", "setup check", "env get", "env request",
 				"config get", "session issue list", "session issue show",
 			},
 			deny: []string{
@@ -144,7 +144,7 @@ func neverForSessions() []string {
 }
 
 func stewardAsks() []string {
-	return []string{"approve rule", "approve mode", sessionCreate}
+	return []string{"approve rule", "approve mode", sessionCreate, "config set", "config unset", "env set", "env unset"}
 }
 
 func isNeverForSessions(verb string) bool {

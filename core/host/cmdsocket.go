@@ -242,7 +242,8 @@ func joinHandlersWithin(handlers *sync.WaitGroup, budget time.Duration) bool {
 func handleCommandConn(ctx context.Context, conn net.Conn, disp dispatcher, readTimeout time.Duration) {
 	defer closeRead(conn)
 	logCleanup(conn.SetReadDeadline(time.Now().Add(readTimeout)))
-	line, err := bufio.NewReader(conn).ReadBytes('\n')
+	reader := bufio.NewReader(conn)
+	line, err := reader.ReadBytes('\n')
 	var resp cmdResponse
 	var req cmdRequest
 	switch {
@@ -252,7 +253,9 @@ func handleCommandConn(ctx context.Context, conn net.Conn, disp dispatcher, read
 		msg := "command socket: malformed request"
 		resp.Err = &msg
 	default:
-		out, derr := disp.Dispatch(clitext.WithCallerLanguage(withCallerToken(ctx, req.Token), req.Lang), req.Argv)
+		callCtx, stopWatching := watchHangUp(ctx, conn, reader, disp)
+		out, derr := disp.Dispatch(clitext.WithCallerLanguage(withCallerToken(callCtx, req.Token), req.Lang), req.Argv)
+		stopWatching()
 		if derr != nil {
 			msg := derr.Error()
 			resp.Err = &msg
@@ -266,6 +269,31 @@ func handleCommandConn(ctx context.Context, conn net.Conn, disp dispatcher, read
 	logCleanup(marshalErr)
 	logCleanup(conn.SetWriteDeadline(time.Now().Add(readTimeout)))
 	logWriteFailure(conn.Write(append(payload, '\n')))
+}
+
+type hangUpCancels interface {
+	cancelsOnHangUp() bool
+}
+
+func watchHangUp(ctx context.Context, conn net.Conn, reader *bufio.Reader, disp dispatcher) (context.Context, func()) {
+	aware, ok := disp.(hangUpCancels)
+	if !ok || !aware.cancelsOnHangUp() {
+		return ctx, func() {}
+	}
+	callCtx, cancel := context.WithCancel(ctx)
+	logCleanup(conn.SetReadDeadline(time.Time{}))
+	watched := make(chan struct{})
+	go func() {
+		defer close(watched)
+		if _, err := reader.ReadByte(); err != nil {
+			cancel()
+		}
+	}()
+	return callCtx, func() {
+		logCleanup(conn.SetReadDeadline(time.Now()))
+		<-watched
+		cancel()
+	}
 }
 
 func closeOnDone(ctx context.Context, conn net.Conn) func() {

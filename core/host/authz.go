@@ -44,6 +44,8 @@ type asSession struct {
 	messages *clitext.Messages
 }
 
+func (asSession) cancelsOnHangUp() bool { return true }
+
 func (a asSession) Dispatch(ctx context.Context, args []string) (string, error) {
 	res, err := a.disp.Dispatch(withSessionPrincipal(ctx, a.session), args)
 	return cli.Render(a.messages, res, err, a.lang())
@@ -127,6 +129,7 @@ func notASessionArgs() map[string]bool {
 
 type admission struct {
 	session string
+	verb    string
 	subject string
 	how     string
 }
@@ -175,7 +178,7 @@ func (h *hub) admitted(session string, path, args []string, role authz.Role, con
 		return admission{}, err
 	}
 	if role == authz.RoleSteward && !authz.AgentRuns(path, contributed) {
-		return admission{session: session, subject: verbSubject(args), how: admittedSteward}, nil
+		return admission{session: session, verb: strings.Join(path, " "), subject: verbSubject(args), how: admittedSteward}, nil
 	}
 	return admission{}, nil
 }
@@ -190,7 +193,7 @@ func (h *hub) escalate(ctx context.Context, session string, path, args []string)
 	if err := h.selfRestarts.admit(session, strings.Join(path, " ")); err != nil {
 		return admission{}, err
 	}
-	return admission{session: session, subject: subject, how: admittedAsked}, nil
+	return admission{session: session, verb: strings.Join(path, " "), subject: subject, how: admittedAsked}, nil
 }
 
 func verbSubject(args []string) string {

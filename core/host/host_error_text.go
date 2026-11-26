@@ -111,6 +111,10 @@ func hostErrorKeys() []hostErrorKey {
 		{errEnvNoFile, "cli.host.fault.env_no_file"},
 		{errEnvNoSuchKey, "cli.host.fault.env_no_such_key"},
 		{errSecretSession, "cli.host.fault.secret_from_session"},
+		{errEnvRequestOutside, "cli.host.fault.env_request_outside"},
+		{errEnvRequestUnheard, "cli.host.fault.env_request_unheard"},
+		{errEnvQuote, "cli.host.fault.env_quote"},
+		{errSelfToolsSilent, "cli.host.fault.self_tools_silent"},
 	}
 }
 

@@ -25,6 +25,7 @@ type hostDeps struct {
 	handler   *manager.Handler
 	seedCoord *coordinatorSlot
 	schedSlot *schedulerSlot
+	notices   *noticeSlot
 }
 
 type coordinatorSlot struct {
@@ -52,6 +53,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	wireSupervisor(sup, options.Runtime, hostState, instID, sessions)
 	seedCoord := &coordinatorSlot{}
 	schedSlot := &schedulerSlot{}
+	notices := &noticeSlot{}
 
 	reg := cli.NewRegistry(sessions.cliMessages)
 	if err := addVerbs(reg, hdl.Commands()...); err != nil {
@@ -91,14 +93,14 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addRoleCommands(reg, sessions.cliMessages, options.live.Get, hostState); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addVerbs(reg, append(append(fileVerbs(sessions.cliMessages, options), options.HostCommands...), memorySearchVerb(sessions.messages, sessions.cliMessages, options.live.Get), whoamiVerb(), commandsVerb(sessions.cliMessages, options.live.Get, reg), healthVerb(options.health), usageVerb(options.usage))...); err != nil {
+	if err := addVerbs(reg, append(append(fileVerbs(sessions.cliMessages, options, notices), options.HostCommands...), memorySearchVerb(sessions.messages, sessions.cliMessages, options.live.Get), whoamiVerb(), commandsVerb(sessions.cliMessages, options.live.Get, reg), healthVerb(options.health), usageVerb(options.usage))...); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addPluginVerbs(sessions.messages, reg, extra); err != nil {
 		return nil, hostDeps{}, err
 	}
 	localizeCommandErrors(sessions.messages, sessions.cliMessages, reg, hostState, options.live)
-	return reg, hostDeps{wt: worktrees, agents: agents, handler: hdl, seedCoord: seedCoord, schedSlot: schedSlot}, nil
+	return reg, hostDeps{wt: worktrees, agents: agents, handler: hdl, seedCoord: seedCoord, schedSlot: schedSlot, notices: notices}, nil
 }
 
 func addPluginVerbs(messages *hostMessages, reg *cli.Registry, extra []contracts.Cmd) error {

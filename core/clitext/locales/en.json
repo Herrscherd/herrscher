@@ -6214,6 +6214,41 @@
   {
     "id": "cli.host.fault.secret_from_session",
     "description": "Error of env set: a session tried to write a secret",
-    "other": "a secret is never written by a session: the operator sets it with `herrscher env set` in a terminal"
+    "other": "a session never writes a secret or a variable it cannot read back: ask the operator with `env request`"
+  },
+  {
+    "id": "cli.help.cmd.env.request",
+    "description": "Help of the command env request",
+    "other": "ask the operator to set a secret in the daemon's settings file; no value is sent"
+  },
+  {
+    "id": "cli.help.param.env.reason",
+    "description": "Help of the parameter reason of env request",
+    "other": "why the session needs it"
+  },
+  {
+    "id": "cli.host.env.requested",
+    "description": "Reply of env request",
+    "other": "asked the operator to set {{.Key}}; it takes effect at the daemon's next start"
+  },
+  {
+    "id": "cli.host.fault.env_request_outside",
+    "description": "Error of env request outside a session",
+    "other": "env request is how a session asks the operator for a secret; from a terminal, run `herrscher env set`"
+  },
+  {
+    "id": "cli.host.fault.env_request_unheard",
+    "description": "Error of env request when no gateway can carry it",
+    "other": "the daemon cannot reach the session's gateways yet, so nobody would read the request"
+  },
+  {
+    "id": "cli.host.fault.env_quote",
+    "description": "Error of env set: a value no quoting keeps intact",
+    "other": "a value holding a single quote cannot also hold a double quote, a dollar, a backquote or a backslash"
+  },
+  {
+    "id": "cli.host.fault.self_tools_silent",
+    "description": "Health: the self tools server listed no tool",
+    "other": "herrscher mcp answered, but listed no tool"
   }
 ]

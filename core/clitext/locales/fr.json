@@ -6214,6 +6214,41 @@
   {
     "id": "cli.host.fault.secret_from_session",
     "description": "Error of env set: a session tried to write a secret",
-    "other": "une session n'écrit jamais un secret : l'opérateur le règle avec `herrscher env set` dans un terminal"
+    "other": "une session n'écrit jamais un secret ni une variable qu'elle ne peut pas relire : demandez à l'opérateur avec `env request`"
+  },
+  {
+    "id": "cli.help.cmd.env.request",
+    "description": "Help of the command env request",
+    "other": "demander à l'opérateur de régler un secret du fichier de réglages du démon ; aucune valeur n'est envoyée"
+  },
+  {
+    "id": "cli.help.param.env.reason",
+    "description": "Help of the parameter reason of env request",
+    "other": "pourquoi la session en a besoin"
+  },
+  {
+    "id": "cli.host.env.requested",
+    "description": "Reply of env request",
+    "other": "demande envoyée à l'opérateur pour régler {{.Key}} ; elle prend effet au prochain démarrage du démon"
+  },
+  {
+    "id": "cli.host.fault.env_request_outside",
+    "description": "Error of env request outside a session",
+    "other": "env request sert à une session pour demander un secret à l'opérateur ; depuis un terminal, lancez `herrscher env set`"
+  },
+  {
+    "id": "cli.host.fault.env_request_unheard",
+    "description": "Error of env request when no gateway can carry it",
+    "other": "le démon ne joint pas encore les passerelles de la session, personne ne lirait la demande"
+  },
+  {
+    "id": "cli.host.fault.env_quote",
+    "description": "Error of env set: a value no quoting keeps intact",
+    "other": "une valeur qui contient une apostrophe ne peut pas contenir aussi un guillemet, un dollar, un accent grave ou une barre oblique inverse"
+  },
+  {
+    "id": "cli.host.fault.self_tools_silent",
+    "description": "Health: the self tools server listed no tool",
+    "other": "herrscher mcp a répondu, sans lister aucun outil"
   }
 ]

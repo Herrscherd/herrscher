@@ -16,6 +16,7 @@ stdout '"name":"session_list"'
 stdout '"id":3,"result":\{"content":\[\{"type":"text","text":"[^"]*relayed'
 stdout '"id":4,"result":\{"content":.*even with the operator.s approval.*"isError":true'
 stdout '"id":5,"result":\{"content":.*"isError":true'
+stdout '"id":6,"result":\{"content":\[\{"type":"text","text":"\{\\"sections\\":\[.*"isError":false'
 
 stdin $WORK/refused.jsonl
 exec herrscher mcp &refused&
@@ -51,6 +52,7 @@ wait daemon
 {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"session_list","arguments":{}}}
 {"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"herrscher_run","arguments":{"command":"role grant","rest":["chat:1","owner"]}}}
 {"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"herrscher_run","arguments":{"command":"approve allow","rest":["--always"]}}}
+{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"herrscher_run","arguments":{"command":"setup check","json":true}}}
 -- refused.jsonl --
 {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"herrscher_run","arguments":{"command":"schedule add","args":{"name":"digest","session":"relayed","every":"30m","task":"read the PRs"}}}}
 -- allowed.jsonl --

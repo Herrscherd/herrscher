@@ -18,6 +18,7 @@ import (
 )
 
 const (
+	mcpVerbArg     = "mcp"
 	stdioTransport = "stdio"
 	mcpCommandKey  = "command"
 )
@@ -46,7 +47,12 @@ func selfToolsEnv() []string {
 }
 
 // SelfToolsCallWait is how long one self tool call may last: long enough for the operator to answer the question a refused verb becomes.
-const SelfToolsCallWait = HookWait + time.Minute
+const SelfToolsCallWait = HookWait + selfToolsLongestVerb
+
+const selfToolsLongestVerb = 20 * time.Minute
+
+// ErrSymlinkConfig reports a session configuration path that crosses a symbolic link, which the self tools never write through.
+var ErrSymlinkConfig = errors.New("the path crosses a symbolic link, so herrscher does not write through it")
 
 var errNotOurServer = errors.New("the herrscher MCP server declared here is not the one herrscher wrote, so it is not enabled")
 
@@ -61,15 +67,52 @@ func MaterializeSelfTools(ctx context.Context, worktree, herrscherBin string) er
 	if err := EnsureGitExcludes(ctx, worktree); err != nil {
 		return err
 	}
-	return errors.Join(materializeClaudeSelfTools(ctx, worktree, herrscherBin), materializeCodexSelfTools(ctx, worktree, herrscherBin))
+	return errors.Join(
+		materializeClaudeSelfTools(ctx, worktree, herrscherBin),
+		materializeCodexSelfTools(ctx, worktree, herrscherBin),
+		materializeCursorSelfTools(ctx, worktree, herrscherBin),
+	)
+}
+
+func refuseUnsafe(ctx context.Context, worktree string, rels ...string) error {
+	for _, rel := range rels {
+		if crossesSymlink(worktree, rel) {
+			return fmt.Errorf("%s: %w", rel, ErrSymlinkConfig)
+		}
+		if tracked(ctx, worktree, rel) {
+			return fmt.Errorf("%s: %w", rel, ErrTrackedConfig)
+		}
+	}
+	return nil
+}
+
+func crossesSymlink(worktree, rel string) bool {
+	current := worktree
+	for _, part := range strings.Split(filepath.ToSlash(rel), "/") {
+		current = filepath.Join(current, part)
+		info, err := os.Lstat(current)
+		if err != nil {
+			return false
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func materializeCursorSelfTools(ctx context.Context, worktree, herrscherBin string) error {
+	rel := filepath.Join(".cursor", "mcp.json")
+	if err := refuseUnsafe(ctx, worktree, rel); err != nil {
+		return err
+	}
+	return writeClaudeSelfTools(filepath.Join(worktree, rel), herrscherBin)
 }
 
 func materializeClaudeSelfTools(ctx context.Context, worktree, herrscherBin string) error {
 	declaration, settings := ".mcp.json", filepath.Join(".claude", localSettingsFile)
-	for _, rel := range []string{declaration, settings} {
-		if tracked(ctx, worktree, rel) {
-			return fmt.Errorf("%s: %w", rel, ErrTrackedConfig)
-		}
+	if err := refuseUnsafe(ctx, worktree, declaration, settings); err != nil {
+		return err
 	}
 	path := filepath.Join(worktree, declaration)
 	if err := writeClaudeSelfTools(path, herrscherBin); err != nil {
@@ -87,8 +130,8 @@ func materializeClaudeSelfTools(ctx context.Context, worktree, herrscherBin stri
 
 func materializeCodexSelfTools(ctx context.Context, worktree, herrscherBin string) error {
 	rel := filepath.Join(".codex", "config.toml")
-	if tracked(ctx, worktree, rel) {
-		return fmt.Errorf("%s: %w", rel, ErrTrackedConfig)
+	if err := refuseUnsafe(ctx, worktree, rel); err != nil {
+		return err
 	}
 	return writeCodexSelfTools(filepath.Join(worktree, rel), herrscherBin)
 }
@@ -97,7 +140,7 @@ func claudeServerEntry(herrscherBin string) map[string]any {
 	return map[string]any{
 		"type":        stdioTransport,
 		mcpCommandKey: herrscherBin,
-		"args":        []any{"mcp"},
+		"args":        []any{mcpVerbArg},
 	}
 }
 
@@ -116,7 +159,7 @@ func declaresOurServer(path, herrscherBin string) (bool, error) {
 	}
 	want := claudeServerEntry(herrscherBin)
 	args, argsOK := entry["args"].([]any)
-	return entry[mcpCommandKey] == want[mcpCommandKey] && entry["type"] == want["type"] && argsOK && len(args) == 1 && args[0] == "mcp" && len(entry) == len(want), nil
+	return entry[mcpCommandKey] == want[mcpCommandKey] && entry["type"] == want["type"] && argsOK && len(args) == 1 && args[0] == mcpVerbArg && len(entry) == len(want), nil
 }
 
 func tracked(ctx context.Context, worktree, rel string) bool {
@@ -236,6 +279,9 @@ func writeCodexSelfTools(path, herrscherBin string) error {
 		return err
 	}
 	table := codexServerTable(herrscherBin)
+	if sameCodexServer(servers[SelfToolsServer], herrscherBin) {
+		return nil
+	}
 	var out []byte
 	if _, declared := servers[SelfToolsServer]; declared {
 		out, err = replaceCodexServer(doc, servers, table)
@@ -256,6 +302,34 @@ func writeCodexSelfTools(path, herrscherBin string) error {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
+}
+
+func sameCodexServer(declared any, herrscherBin string) bool {
+	entry, ok := declared.(map[string]any)
+	if !ok || len(entry) != 4 || entry[mcpCommandKey] != herrscherBin {
+		return false
+	}
+	timeout, isNumber := entry["tool_timeout_sec"].(int64)
+	if !isNumber || timeout != int64(SelfToolsCallWait/time.Second) {
+		return false
+	}
+	return slices.Equal(stringsOf(entry["args"]), []string{mcpVerbArg}) && slices.Equal(stringsOf(entry["env_vars"]), selfToolsEnv())
+}
+
+func stringsOf(raw any) []string {
+	list, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(list))
+	for _, item := range list {
+		text, isText := item.(string)
+		if !isText {
+			return nil
+		}
+		out = append(out, text)
+	}
+	return out
 }
 
 func appendCodexServer(existing []byte, table string) []byte {

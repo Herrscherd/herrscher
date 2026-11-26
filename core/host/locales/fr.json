@@ -1004,5 +1004,15 @@
     "id": "selftools.failed_steward",
     "description": "Notice: a verb a steward session ran failed",
     "other": "herrscher : la session a lancé {{.Subject}} en tant que steward, et l'appel a échoué : {{.Detail}}"
+  },
+  {
+    "id": "selftools.env_requested",
+    "description": "Notice: a session asks the operator to set a secret",
+    "other": "herrscher : la session vous demande de régler {{.Key}} dans le fichier de réglages du démon. Lancez `herrscher env set --key {{.Key}} --value …` dans un terminal, puis `herrscher service restart`. {{.Reason}}"
+  },
+  {
+    "id": "selftools.restart_resumed",
+    "description": "Turn handed to a session after the daemon restart it asked for",
+    "other": "herrscher : le démon est revenu après le redémarrage que vous avez demandé. Reprenez la tâche en cours."
   }
 ]

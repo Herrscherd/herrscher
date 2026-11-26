@@ -88,6 +88,8 @@ func (model *setupModel) rows() []setupRow {
 		return model.codexRows()
 	case screenCursor:
 		return model.cursorRows()
+	case screenGrok:
+		return model.grokRows()
 	case screenObsidian:
 		return model.vaultRows()
 	case screenRoute:
@@ -286,6 +288,38 @@ func (model *setupModel) cursorRows() []setupRow {
 	return append(rows, blank(), model.continueRow())
 }
 
+func (model *setupModel) grokRows() []setupRow {
+	rows := []setupRow{
+		line(toneBold, model.text(clitext.SetupGrokQuestion, nil)),
+		choice(!model.grokKey, model.text(clitext.SetupGrokAccount, nil), model.text(clitext.SetupGrokAccountHint, nil), setGrokKey(false)),
+		choice(model.grokKey, model.text(clitext.SetupAPIKey, nil), model.text(clitext.SetupAPIKeyHint, nil), setGrokKey(true)),
+		blank(),
+	}
+	label := model.text(clitext.SetupLogin, nil)
+	if model.grokKey {
+		rows = append(rows, fieldRow(envXAIKey, model.text(clitext.SetupAPIKey, nil), "xai-…"))
+		label = model.text(clitext.SetupCheckKey, nil)
+	}
+	rows = append(rows, model.probeRows(probeGrok, label)...)
+	return append(rows, blank(), model.continueRow())
+}
+
+func setGrokKey(useKey bool) func(*setupModel) tea.Cmd {
+	return func(target *setupModel) tea.Cmd {
+		if target.grokKey == useKey {
+			return nil
+		}
+		target.grokKey = useKey
+		delete(target.probes, probeGrok)
+		if !useKey {
+			target.draft.set(envXAIKey, "")
+			return target.statusCheck(probeGrok)
+		}
+		target.draft.set(envXAIKey, target.fields[envXAIKey].Value())
+		return nil
+	}
+}
+
 func (model *setupModel) vaultRows() []setupRow {
 	rows := []setupRow{fieldRow(envVault, model.text(clitext.SetupVault, nil), model.text(clitext.SetupVaultHint, nil)), blank()}
 	rows = append(rows, model.probeRows(probeVault, model.text(clitext.SetupVaultProbe, nil))...)
@@ -432,6 +466,8 @@ func settingScreen(key string) setupScreen {
 		return screenClaude
 	case envCursorKey:
 		return screenCursor
+	case envXAIKey:
+		return screenGrok
 	case envVault:
 		return screenObsidian
 	}
@@ -572,6 +608,7 @@ func (model *setupModel) sections() []hubSection {
 		model.moduleSection(moduleClaude, screenClaude, model.probeState(probeClaude)),
 		model.moduleSection(moduleCodex, screenCodex, model.probeState(probeCodex)),
 		model.moduleSection(moduleCursor, screenCursor, model.keyState(envCursorKey)),
+		model.moduleSection(moduleGrok, screenGrok, model.probeState(probeGrok)),
 		model.moduleSection(moduleObsidian, screenObsidian, sectionState{tone: toneOK, text: model.vaultState()}),
 		hubSection{name: model.text(clitext.SetupSectionRoute, nil), state: model.routeState(), screen: screenRoute, tone: toneOK},
 	)
@@ -652,6 +689,9 @@ func (model *setupModel) probeState(kind probeKind) sectionState {
 	if !ok {
 		if kind == probeClaude && model.claudeKey {
 			return model.keyState(envAnthropicKey)
+		}
+		if kind == probeGrok && model.grokKey {
+			return model.keyState(envXAIKey)
 		}
 		return sectionState{tone: toneOK, text: model.text(clitext.SetupHubConfigured, nil)}
 	}

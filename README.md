@@ -92,7 +92,7 @@ Otherwise the export reads the standard OpenTelemetry variables:
 
 The export follows the GenAI semantic conventions pinned to **semconv v1.41.0** (`go.opentelemetry.io/otel/semconv/v1.41.0`). Each settled turn becomes one `invoke_agent <session>` span, and each tool call of that turn becomes an `execute_tool <tool>` child span.
 
-Exported: the operation name, the provider (`anthropic` or `openai` for the built-in backends, the vendor name otherwise), the session as `gen_ai.agent.name`, the request model as it was when the turn started, the input and output token counts, the cache read and cache creation counts, the tool name and call id, and the start and end timestamps of the turn and of each call. Every free-text field is cut to the timeline bound (`timeline.MaxFieldBytes`, 4096 bytes).
+Exported: the operation name, the provider (`anthropic`, `openai` or `x_ai` for the built-in backends, the vendor name otherwise), the session as `gen_ai.agent.name`, the request model as it was when the turn started, the input and output token counts, the cache read and cache creation counts, the tool name and call id, and the start and end timestamps of the turn and of each call. Every free-text field is cut to the timeline bound (`timeline.MaxFieldBytes`, 4096 bytes).
 
 Input tokens: `gen_ai.usage.input_tokens` is the sum of the uncached input, the cache reads and the cache creations the backend reported, so it counts every input token. The two cache attributes give the cached part of that sum.
 

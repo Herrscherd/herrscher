@@ -31,6 +31,14 @@ exec herrscher session seed --name switching --task 'third with cursor'
 stdout '^echo: third with cursor$'
 exec cat $VENDORTEST_LOG
 stdout 'cursor prompt .*third with cursor'
+exec herrscher session switch --name switching --vendor grok --cmd grok
+exec herrscher session overview
+cp stdout $WORK/overview-grok.json
+grep -count=1 '"vendor":"grok"' $WORK/overview-grok.json
+exec herrscher session seed --name switching --task 'fourth with grok'
+stdout '^echo: fourth with grok$'
+exec cat $VENDORTEST_LOG
+stdout 'grok prompt .*fourth with grok'
 kill -INT daemon
 wait daemon
 ! waitdaemon

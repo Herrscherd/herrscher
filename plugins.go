@@ -7,6 +7,7 @@ import (
 	_ "github.com/Herrscherd/herrscher-cursor-backend"
 	_ "github.com/Herrscherd/herrscher-discord-gateway"
 	_ "github.com/Herrscherd/herrscher-github-forge"
+	_ "github.com/Herrscherd/herrscher-grok-backend"
 	_ "github.com/Herrscherd/herrscher-jev-compactor"
 	_ "github.com/Herrscherd/herrscher-llm-extractor"
 	_ "github.com/Herrscherd/herrscher-obsidian-memory"

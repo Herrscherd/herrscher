@@ -21,6 +21,7 @@ const (
 	moduleClaude
 	moduleCodex
 	moduleCursor
+	moduleGrok
 	moduleObsidian
 	moduleBasic
 	moduleLLM
@@ -33,6 +34,7 @@ const (
 	kindClaude   = "claude"
 	kindCodex    = "codex"
 	kindCursor   = "cursor"
+	kindGrok     = "grok"
 	kindObsidian = "obsidian"
 	kindBasic    = "basic"
 	kindLLM      = "llm"
@@ -50,6 +52,7 @@ const (
 	envTelegramAll  = "TELEGRAM_ALLOW_ALL_USERS"
 	envTelegramChat = "TELEGRAM_ALLOWED_CHATS"
 	envCursorKey    = "CURSOR_API_KEY"
+	envXAIKey       = "XAI_API_KEY"
 	envVault        = "OBSIDIAN_VAULT"
 	envAnthropicKey = contracts.EnvAnthropicAPIKey
 	envLanguage     = language.EnvVar
@@ -86,6 +89,7 @@ func moduleSpecs() map[setupModule]moduleSpec {
 		moduleClaude:   {nil, catBackend, kindClaude, clitext.SetupModuleClaude},
 		moduleCodex:    {nil, catBackend, kindCodex, clitext.SetupModuleCodex},
 		moduleCursor:   {nil, catBackend, kindCursor, clitext.SetupModuleCursor},
+		moduleGrok:     {nil, catBackend, kindGrok, clitext.SetupModuleGrok},
 		moduleObsidian: {nil, catMemory, kindObsidian, clitext.SetupModuleObsidian},
 		moduleBasic:    {nil, catOrchestrator, kindBasic, clitext.SetupModuleBasic},
 		moduleLLM:      {nil, catExtractor, kindLLM, clitext.SetupModuleLLM},
@@ -113,7 +117,7 @@ type moduleGroup struct {
 func moduleGroups() []moduleGroup {
 	return []moduleGroup{
 		{clitext.SetupCategoryGateway, []setupModule{moduleTerminal, moduleDiscord, moduleTelegram}, true},
-		{clitext.SetupCategoryBackend, []setupModule{moduleClaude, moduleCodex, moduleCursor}, true},
+		{clitext.SetupCategoryBackend, []setupModule{moduleClaude, moduleCodex, moduleCursor, moduleGrok}, true},
 		{clitext.SetupCategoryMemory, []setupModule{moduleObsidian}, false},
 		{clitext.SetupCategoryOrchestrator, []setupModule{moduleBasic}, false},
 		{clitext.SetupCategoryExtractor, []setupModule{moduleLLM}, false},
@@ -243,11 +247,11 @@ func (draft settingsDraft) written() map[string]string {
 }
 
 func setupEnvKeys() []string {
-	return []string{envDiscordToken, envDiscordUser, envTelegramBot, envTelegramUser, envTelegramMany, envTelegramAll, envTelegramChat, envAnthropicKey, envCursorKey, envVault, envPolicy, envModel, envGatewayURL, envGatewayToken, envLanguage}
+	return []string{envDiscordToken, envDiscordUser, envTelegramBot, envTelegramUser, envTelegramMany, envTelegramAll, envTelegramChat, envAnthropicKey, envCursorKey, envXAIKey, envVault, envPolicy, envModel, envGatewayURL, envGatewayToken, envLanguage}
 }
 
 func secretKeys() map[string]bool {
-	return map[string]bool{envDiscordToken: true, envTelegramBot: true, envAnthropicKey: true, envCursorKey: true, envGatewayToken: true, fieldCodexKey: true}
+	return map[string]bool{envDiscordToken: true, envTelegramBot: true, envAnthropicKey: true, envCursorKey: true, envXAIKey: true, envGatewayToken: true, fieldCodexKey: true}
 }
 
 func readSettings(getenv func(string) string) map[string]string {

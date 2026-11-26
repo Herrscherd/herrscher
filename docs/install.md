@@ -26,7 +26,7 @@ or export `HERRSCHER_ENV_FILE`, so the host finds what `setup` wrote.
 Once the settings are written, `setup` sends each chosen backend CLI one short
 prompt and waits for its answer. A backend that does not answer is shown with its
 output and the remedy: install the CLI when it is missing, or sign in again with
-`herrscher setup claude` (or `codex`, `cursor`). The settings stay written and
+`herrscher setup claude` (or `codex`, `cursor`, `grok`). The settings stay written and
 `setup` exits with status 1, so a script sees the failure.
 
 On a machine with no settings file and no host state yet, a bare `herrscher` in a
@@ -34,7 +34,7 @@ terminal opens `setup` instead of serving. Without a terminal it prints the
 usage after a line saying to run `herrscher setup`.
 
 Run again, `setup` opens a dashboard with the state of every section, and
-`herrscher setup discord` (or `telegram`, `claude`, `codex`, `cursor`, `obsidian`, `route`,
+`herrscher setup discord` (or `telegram`, `claude`, `codex`, `cursor`, `grok`, `obsidian`, `route`,
 `modules`, `connections`) jumps straight to one. `herrscher init --yes` with its
 stack flags stays the non-interactive path for scripts, and `herrscher models list`
 shows what the active policy offers. `init` ends with the same prompt to each chosen backend and

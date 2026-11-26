@@ -85,7 +85,7 @@ type priceEntry struct {
 }
 
 func firstPartyProviders() []string {
-	return []string{"anthropic", "openai"}
+	return []string{"anthropic", "openai", "xai"}
 }
 
 func unpriceableModels() []string {

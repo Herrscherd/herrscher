@@ -4726,6 +4726,11 @@
     "other": "agent Cursor"
   },
   {
+    "id": "cli.setup.module.grok",
+    "description": "Description of the Grok backend module",
+    "other": "Grok Build CLI, compte grok.com ou clé API xAI"
+  },
+  {
     "id": "cli.setup.module.obsidian",
     "description": "Description of the Obsidian memory module",
     "other": "notes dans un coffre Obsidian"
@@ -4884,6 +4889,26 @@
     "id": "cli.setup.codex.account_hint",
     "description": "Hint of the ChatGPT account choice",
     "other": "connexion par codex login"
+  },
+  {
+    "id": "cli.setup.grok.question",
+    "description": "Question of the Grok screen",
+    "other": "Comment l'agent se connecte à Grok ?"
+  },
+  {
+    "id": "cli.setup.grok.account",
+    "description": "Grok sign-in choice",
+    "other": "compte grok.com"
+  },
+  {
+    "id": "cli.setup.grok.account_hint",
+    "description": "Hint of the grok.com account choice",
+    "other": "connexion par grok login, sans clé"
+  },
+  {
+    "id": "cli.setup.grok.key_shadowed",
+    "description": "Grok key check when a grok.com login takes precedence over the key",
+    "other": "clé acceptée, mais grok passe par sa connexion grok.com avant toute clé : lancez {{.Name}} pour utiliser la clé"
   },
   {
     "id": "cli.setup.cursor.key",

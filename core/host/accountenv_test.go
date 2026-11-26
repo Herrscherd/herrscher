@@ -264,3 +264,81 @@ func TestProfileUsersCountsSessionsFollowingTheDefault(t *testing.T) {
 		t.Fatalf("users of boulot = %v, want autre only", got)
 	}
 }
+
+func TestGrokProfileGoesThroughTheXAIProxy(t *testing.T) {
+	root, store := profileRoot(t, contracts.VendorGrok, "perso")
+	keys := keysWith(t, config.ProviderXAI, map[string]string{"KEY_MAIN": "xai-real-value"})
+	env, release, err := sessionEnv(newHostMessages(), BackendRequest{AccountRoot: root, Account: "perso", Keys: keys}, contracts.VendorGrok, modelRoute{})
+	if err != nil {
+		t.Fatalf("sessionEnv: %v", err)
+	}
+	defer release()
+	if env[contracts.EnvGrokHome] != dirOf(t, store, contracts.VendorGrok, mustProfile(t, "perso")) {
+		t.Fatalf("GROK_HOME = %q, want the profile directory", env[contracts.EnvGrokHome])
+	}
+	if base := env[grokAPIBaseURLEnv]; !strings.HasPrefix(base, "http://127.0.0.1:") || !strings.HasSuffix(base, "/v1") {
+		t.Fatalf("base URL = %q, want the loopback proxy under /v1", base)
+	}
+	if !strings.HasPrefix(env[grokKeyVariable], "hsk_") {
+		t.Fatalf("key = %q, want an ephemeral proxy token", env[grokKeyVariable])
+	}
+	for name, value := range env {
+		if strings.Contains(value, "xai-real-value") {
+			t.Fatalf("%s carries the real key", name)
+		}
+	}
+}
+
+func TestGrokSpawnGetsTheProfileTheProxyAndItsOwnCommand(t *testing.T) {
+	var got contracts.PluginConfig
+	saved := contracts.Default
+	t.Cleanup(func() { contracts.Default = saved })
+	contracts.Default = contracts.Registry{}
+	for _, kind := range []string{contracts.VendorClaude, contracts.VendorGrok} {
+		contracts.Default.Register(contracts.Plugin{
+			Manifest: contracts.Manifest{Kind: kind, Category: contracts.CategoryBackend, Config: []contracts.Setting{{Key: "cmd", Default: kind}}},
+			Backend: func(_ context.Context, cfg contracts.PluginConfig) (contracts.Backend, error) {
+				got = cfg
+				return seedBackend{}, nil
+			},
+		})
+	}
+	root, store := profileRoot(t, contracts.VendorGrok, "perso")
+	keys := keysWith(t, config.ProviderXAI, map[string]string{"KEY_MAIN": "xai-real-value"})
+	backend, err := BuildBackendFor(context.Background(), NewMessages(), BackendRequest{
+		Vendor: contracts.VendorGrok, Cmd: contracts.VendorClaude, AccountRoot: root, Account: "perso", Keys: keys,
+	})
+	if err != nil {
+		t.Fatalf("BuildBackendFor: %v", err)
+	}
+	t.Cleanup(func() {
+		if closeErr := backend.Close(); closeErr != nil {
+			t.Errorf("close: %v", closeErr)
+		}
+	})
+	if cmd := got.Get("cmd"); cmd != contracts.VendorGrok {
+		t.Fatalf("cmd = %q, want the grok default instead of the claude command", cmd)
+	}
+	env := contracts.ParseEnvSetting(got.Get("env"))
+	if env[contracts.EnvGrokHome] != dirOf(t, store, contracts.VendorGrok, mustProfile(t, "perso")) {
+		t.Fatalf("GROK_HOME = %q, want the profile directory", env[contracts.EnvGrokHome])
+	}
+	if !strings.HasPrefix(env[grokKeyVariable], "hsk_") || !strings.HasSuffix(env[grokAPIBaseURLEnv], "/v1") {
+		t.Fatalf("env = %v, want the proxy token and base URL", env)
+	}
+}
+
+func TestACommandOfTheSessionVendorIsKept(t *testing.T) {
+	plugins := []contracts.Plugin{testBackendPlugin(contracts.VendorClaude), testBackendPlugin(contracts.VendorGrok)}
+	cases := []struct{ vendor, cmd, want string }{
+		{contracts.VendorGrok, "claude --model x", ""},
+		{contracts.VendorGrok, "grok --debug", "grok --debug"},
+		{contracts.VendorGrok, "/opt/wrapper.sh", "/opt/wrapper.sh"},
+		{contracts.VendorClaude, "claude", "claude"},
+	}
+	for _, c := range cases {
+		if got := commandFor(c.vendor, c.cmd, plugins); got != c.want {
+			t.Errorf("commandFor(%q, %q) = %q, want %q", c.vendor, c.cmd, got, c.want)
+		}
+	}
+}

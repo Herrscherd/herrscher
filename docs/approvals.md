@@ -61,8 +61,20 @@ session's worktree, with or without an agent: a session created without `--agent
 now gets one written into `.claude/settings.local.json`, which is local to the
 worktree and never touches a tracked settings file. Codex is asked over the
 app-server, which requests an approval per command and per patch, so the same
-rules bite there. Cursor declares that it enforces nothing, because `cursor-agent`
-exposes no hook and no approval channel.
+rules bite there. Grok Build gets the same hook command in
+`.grok/hooks/herrscher-approve.json`, written beside the Claude one with
+`failClosed`, because Grok lets a call run when a hook times out or crashes. The
+Grok backend runs its CLI with folder trust off, so that project hook loads in a
+headless run, and the hook asks about Grok's tools under their Claude names
+(`run_terminal_command` is `Bash`; `read_file` and `hashline_read` are `Read`;
+`search_replace` and `hashline_edit` are `Edit`; `write` is `Write`; `grep` and
+`hashline_grep` are `Grep`; `list_dir` is `LS`; `todo_write` is `TodoWrite`;
+`spawn_subagent` is `Task`; `web_fetch` is `WebFetch`; `web_search` is
+`WebSearch`), so one set of rules covers both. Any other Grok tool keeps its own
+name, which no Claude rule names. Before each turn of a gated session the Grok
+backend checks with `grok inspect` that Grok loads that hook, enabled, for the
+worktree, and refuses the turn when it does not, rather than run it ungated. Cursor declares that it enforces
+nothing, because `cursor-agent` exposes no hook and no approval channel.
 
 That last one is the shape of every limit here: a mode that will not bite is said
 out loud at create time rather than discovered on the first tool call nobody was

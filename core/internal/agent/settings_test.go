@@ -281,3 +281,66 @@ func TestInjectApprovalHookKeepsForeignPreToolUseHooks(t *testing.T) {
 		t.Fatalf("%d approval hooks, want 1: %s", n, out)
 	}
 }
+
+func grokHookCommand(t *testing.T, dir string) (string, map[string]any) {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(dir, ".grok", "hooks", "herrscher-approve.json"))
+	if err != nil {
+		t.Fatalf("read the grok hook: %v", err)
+	}
+	var doc struct {
+		Hooks struct {
+			PreToolUse []struct {
+				Matcher string           `json:"matcher"`
+				Hooks   []map[string]any `json:"hooks"`
+			} `json:"PreToolUse"`
+		} `json:"hooks"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil || len(doc.Hooks.PreToolUse) != 1 || len(doc.Hooks.PreToolUse[0].Hooks) != 1 {
+		t.Fatalf("grok hook file %s is not one PreToolUse handler: %v", raw, err)
+	}
+	handler := doc.Hooks.PreToolUse[0].Hooks[0]
+	command, isText := handler["command"].(string)
+	if !isText || doc.Hooks.PreToolUse[0].Matcher != "*" {
+		t.Fatalf("grok handler %v does not match every tool with a command", handler)
+	}
+	return command, handler
+}
+
+func TestMaterializeWritesTheGrokHookFailingClosedWithTheClaudeCommand(t *testing.T) {
+	home := t.TempDir()
+	writeHomeFiles(t, home)
+	dst := t.TempDir()
+	if err := (Agent{Name: "a", Home: home}).MaterializeIntoAs(dst, "/far/worktree", "/far/bin/herrscher"); err != nil {
+		t.Fatalf("MaterializeIntoAs: %v", err)
+	}
+	command, handler := grokHookCommand(t, dst)
+	if command != "'/far/bin/herrscher' approve hook" {
+		t.Fatalf("command = %q, want the Claude hook's command, which Grok runs once for both files", command)
+	}
+	if handler["failClosed"] != true || handler["timeout"] != float64(hookWaitSeconds) {
+		t.Fatalf("handler = %v, want it to fail closed and wait as long as the Claude hook", handler)
+	}
+}
+
+func TestMaterializeHookAlsoWritesTheGrokHook(t *testing.T) {
+	dir := t.TempDir()
+	if err := MaterializeHook(t.Context(), dir, "/usr/local/bin/herrscher"); err != nil {
+		t.Fatalf("MaterializeHook: %v", err)
+	}
+	if command, _ := grokHookCommand(t, dir); command != "'/usr/local/bin/herrscher' approve hook" {
+		t.Fatalf("command = %q", command)
+	}
+}
+
+func TestMaterializeWithoutBinaryWritesNoGrokHook(t *testing.T) {
+	home := t.TempDir()
+	writeHomeFiles(t, home)
+	dst := t.TempDir()
+	if err := (Agent{Name: "a", Home: home}).MaterializeIntoAs(dst, "/far/worktree", ""); err != nil {
+		t.Fatalf("MaterializeIntoAs: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, ".grok")); !os.IsNotExist(err) {
+		t.Fatalf("a bypass session got a .grok directory, err = %v", err)
+	}
+}

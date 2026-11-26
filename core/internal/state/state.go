@@ -12,6 +12,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 
+	"github.com/Herrscherd/herrscher/core/internal/devices"
 	"github.com/Herrscherd/herrscher/core/internal/schedule"
 )
 
@@ -187,6 +188,9 @@ type State struct {
 	// core/internal/authz, so a fifth role is a code change and a review rather
 	// than a file nobody reads.
 	Roles map[string]RoleAssignment `json:"roles,omitempty"`
+	// Devices is the set of paired devices and the pairing window in progress. It
+	// lives here for the reason roles do, and its types are in core/internal/devices.
+	Devices *devices.Registry `json:"devices,omitempty"`
 }
 
 // RoleAssignment is one principal's role, plus a name a human can read.

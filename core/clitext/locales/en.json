@@ -5843,5 +5843,10 @@
     "id": "cli.setup.telegram.user_missing",
     "description": "Hub state of the Telegram module without a usable user id",
     "other": "no numeric user ID: nobody may talk to the bot, so it will not start"
+  },
+  {
+    "id": "cli.setup.telegram.malformed",
+    "description": "Hub state of the Telegram module when one of its settings cannot be parsed",
+    "other": "a Telegram setting is malformed (an id that is not a number, or an unknown on or off word), so the gateway will not start"
   }
 ]

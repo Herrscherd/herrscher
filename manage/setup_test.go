@@ -511,23 +511,27 @@ func TestATelegramProbeThatCannotConnectNeverShowsTheToken(t *testing.T) {
 	}
 }
 
-func TestTheTelegramSectionNeedsSomeoneTheBotMayAnswer(t *testing.T) {
+func TestTheTelegramSectionFlagsWhatStopsTheGateway(t *testing.T) {
+	var malformed, missing clitext.Key = clitext.SetupTelegramMalformed, clitext.SetupTelegramUserMissing
 	cases := []struct {
-		env     map[string]string
-		missing bool
+		env  map[string]string
+		want clitext.Key
 	}{
-		{make(map[string]string), true},
-		{map[string]string{envTelegramUser: "@ana"}, true},
-		{map[string]string{envTelegramUser: "0"}, true},
-		{map[string]string{envTelegramMany: "42, ana"}, true},
-		{map[string]string{envTelegramAll: "maybe"}, true},
-		{map[string]string{envTelegramUser: "42"}, false},
-		{map[string]string{envTelegramMany: "42 43"}, false},
-		{map[string]string{envTelegramAll: "on"}, false},
-		{map[string]string{envTelegramUser: "42", envTelegramMany: "42, ana"}, true},
-		{map[string]string{envTelegramUser: "@ana", envTelegramAll: "on"}, true},
-		{map[string]string{envTelegramUser: "42", envTelegramAll: "maybe"}, true},
-		{map[string]string{envTelegramUser: "42", envTelegramAll: "off"}, false},
+		{make(map[string]string), missing},
+		{map[string]string{envTelegramUser: "@ana"}, malformed},
+		{map[string]string{envTelegramUser: "0"}, malformed},
+		{map[string]string{envTelegramMany: "42, ana"}, malformed},
+		{map[string]string{envTelegramAll: "maybe"}, malformed},
+		{map[string]string{envTelegramUser: "42", envTelegramMany: "42, ana"}, malformed},
+		{map[string]string{envTelegramUser: "@ana", envTelegramAll: "on"}, malformed},
+		{map[string]string{envTelegramUser: "42", envTelegramAll: "maybe"}, malformed},
+		{map[string]string{envTelegramUser: "42", envTelegramChat: "mygroup"}, malformed},
+		{map[string]string{envTelegramAll: "off"}, missing},
+		{map[string]string{envTelegramUser: "42"}, ""},
+		{map[string]string{envTelegramMany: "42 43"}, ""},
+		{map[string]string{envTelegramAll: "on"}, ""},
+		{map[string]string{envTelegramUser: "42", envTelegramAll: "off"}, ""},
+		{map[string]string{envTelegramUser: "42", envTelegramChat: "-100500, -100600"}, ""},
 	}
 	for _, tc := range cases {
 		tc.env[envTelegramBot] = "123:good"
@@ -537,8 +541,9 @@ func TestTheTelegramSectionNeedsSomeoneTheBotMayAnswer(t *testing.T) {
 			if section.screen != screenTelegram {
 				continue
 			}
-			if flagged := section.state == harness.text(clitext.SetupTelegramUserMissing); flagged != tc.missing {
-				t.Fatalf("env %v: telegram section = %+v", tc.env, section)
+			flagged := section.state == harness.text(malformed) || section.state == harness.text(missing)
+			if (tc.want == "") == flagged || (tc.want != "" && section.state != harness.text(tc.want)) {
+				t.Fatalf("env %v: telegram section = %+v, want %q", tc.env, section, tc.want)
 			}
 		}
 	}

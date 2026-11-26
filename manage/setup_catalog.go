@@ -48,6 +48,7 @@ const (
 	envTelegramUser = "TELEGRAM_USER_ID"
 	envTelegramMany = "TELEGRAM_ALLOWED_USERS"
 	envTelegramAll  = "TELEGRAM_ALLOW_ALL_USERS"
+	envTelegramChat = "TELEGRAM_ALLOWED_CHATS"
 	envCursorKey    = "CURSOR_API_KEY"
 	envVault        = "OBSIDIAN_VAULT"
 	envAnthropicKey = contracts.EnvAnthropicAPIKey
@@ -242,7 +243,7 @@ func (draft settingsDraft) written() map[string]string {
 }
 
 func setupEnvKeys() []string {
-	return []string{envDiscordToken, envDiscordUser, envTelegramBot, envTelegramUser, envTelegramMany, envTelegramAll, envAnthropicKey, envCursorKey, envVault, envPolicy, envModel, envGatewayURL, envGatewayToken, envLanguage}
+	return []string{envDiscordToken, envDiscordUser, envTelegramBot, envTelegramUser, envTelegramMany, envTelegramAll, envTelegramChat, envAnthropicKey, envCursorKey, envVault, envPolicy, envModel, envGatewayURL, envGatewayToken, envLanguage}
 }
 
 func secretKeys() map[string]bool {

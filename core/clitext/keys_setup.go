@@ -59,6 +59,7 @@ const (
 	SetupTelegramUser           = "cli.setup.telegram.user"
 	SetupTelegramUserHint       = "cli.setup.telegram.user_hint"
 	SetupTelegramUserMissing    = "cli.setup.telegram.user_missing"
+	SetupTelegramMalformed      = "cli.setup.telegram.malformed"
 	SetupBackendSub             = "cli.setup.backend.sub"
 	SetupClaudeQuestion         = "cli.setup.claude.question"
 	SetupClaudeSubscription     = "cli.setup.claude.subscription"
@@ -223,6 +224,7 @@ func setupKeys() map[Key][]string {
 		SetupTelegramUser:           nil,
 		SetupTelegramUserHint:       nil,
 		SetupTelegramUserMissing:    nil,
+		SetupTelegramMalformed:      nil,
 		SetupBackendSub:             nil,
 		SetupClaudeQuestion:         nil,
 		SetupClaudeSubscription:     nil,

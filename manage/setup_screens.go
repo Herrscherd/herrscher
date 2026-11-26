@@ -599,27 +599,40 @@ func (model *setupModel) botState(kind probeKind, tokenKey string) sectionState 
 }
 
 func (model *setupModel) telegramState() sectionState {
-	if !model.telegramAudience() {
+	switch {
+	case !model.telegramWellFormed():
+		return sectionState{tone: toneBad, text: model.text(clitext.SetupTelegramMalformed, nil)}
+	case !model.telegramAudience():
 		return sectionState{tone: toneBad, text: model.text(clitext.SetupTelegramUserMissing, nil)}
 	}
 	return model.botState(probeTelegram, envTelegramBot)
 }
 
-func (model *setupModel) telegramAudience() bool {
+func telegramSwitchOn() []string { return []string{"1", "true", "yes", "on"} }
+
+func telegramSwitchOff() []string { return []string{"0", "false", "no", "off"} }
+
+func telegramIDs(raw string) []string {
+	return strings.FieldsFunc(raw, func(char rune) bool { return strings.ContainsRune(", \t\n", char) })
+}
+
+func (model *setupModel) telegramWellFormed() bool {
 	owner := strings.TrimSpace(model.draft.value(envTelegramUser))
-	allowed := strings.FieldsFunc(model.draft.value(envTelegramMany), func(char rune) bool { return strings.ContainsRune(", \t\n", char) })
-	everyone := strings.ToLower(strings.TrimSpace(model.draft.value(envTelegramAll)))
-	switchOn, switchOff := []string{"1", "true", "yes", "on"}, []string{"0", "false", "no", "off"}
 	if owner != "" && !telegramID(owner) {
 		return false
 	}
-	if slices.ContainsFunc(allowed, func(id string) bool { return !telegramID(id) }) {
-		return false
+	for _, key := range []string{envTelegramMany, envTelegramChat} {
+		if slices.ContainsFunc(telegramIDs(model.draft.value(key)), func(id string) bool { return !telegramID(id) }) {
+			return false
+		}
 	}
-	if everyone != "" && !slices.Contains(switchOn, everyone) && !slices.Contains(switchOff, everyone) {
-		return false
-	}
-	return owner != "" || len(allowed) > 0 || slices.Contains(switchOn, everyone)
+	everyone := strings.ToLower(strings.TrimSpace(model.draft.value(envTelegramAll)))
+	return everyone == "" || slices.Contains(telegramSwitchOn(), everyone) || slices.Contains(telegramSwitchOff(), everyone)
+}
+
+func (model *setupModel) telegramAudience() bool {
+	everyone := strings.ToLower(strings.TrimSpace(model.draft.value(envTelegramAll)))
+	return strings.TrimSpace(model.draft.value(envTelegramUser)) != "" || len(telegramIDs(model.draft.value(envTelegramMany))) > 0 || slices.Contains(telegramSwitchOn(), everyone)
 }
 
 func telegramID(raw string) bool {

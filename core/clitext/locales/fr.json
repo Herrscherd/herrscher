@@ -5843,5 +5843,10 @@
     "id": "cli.setup.telegram.user_missing",
     "description": "Hub state of the Telegram module without a usable user id",
     "other": "pas d'identifiant numérique : personne ne peut parler au bot, il ne démarrera pas"
+  },
+  {
+    "id": "cli.setup.telegram.malformed",
+    "description": "Hub state of the Telegram module when one of its settings cannot be parsed",
+    "other": "un réglage Telegram est mal formé (un identifiant qui n'est pas un nombre, ou un mot autre que oui ou non), la passerelle ne démarrera pas"
   }
 ]

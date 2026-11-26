@@ -32,10 +32,10 @@ func SessionCommandSocketPathIn(layout RuntimeLayout, instanceID, session string
 // EventsSocketPath is the unix socket of the daemon's per-session events fan-out
 // for instanceID in the per-user directory of the user running this process. It
 // is the contract for Neublox's HerrscherEventSource, which must call this
-// function rather than rebuild the name. The directory is <run user>/<uid>/herrscher
-// when systemd has made a private one for the uid, and /tmp/herrscher-<uid>
-// otherwise. The socket is named herrscher-events-<instanceID>, or takes its hashed name in that directory when the full path is longer
-// than the unix socket limit.
+// function rather than rebuild the name. The directory is
+// <run user>/<uid>/herrscher when systemd has made a private one for the uid,
+// and /tmp/herrscher-<uid> otherwise. The socket is herrscher-events-<instanceID>,
+// or a hashed name in that directory when the full path passes the unix limit.
 func EventsSocketPath(instanceID string) string {
 	return EventsSocketPathIn(ProductionRuntime(), instanceID)
 }

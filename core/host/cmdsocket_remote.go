@@ -15,5 +15,12 @@ func commandSocketTargetFrom(layout RuntimeLayout, instanceID func() string) str
 	if p := strings.TrimSpace(os.Getenv(control.CommandSocketVar)); p != "" {
 		return p
 	}
-	return CommandSocketPathIn(layout, instanceID())
+	return servedSocket(layout, instanceID(), CommandSocketPathIn)
+}
+
+func servedSocket(layout RuntimeLayout, instanceID string, pathOf func(RuntimeLayout, string) string) string {
+	if instanceID == "" {
+		return ""
+	}
+	return pathOf(layout, instanceID)
 }

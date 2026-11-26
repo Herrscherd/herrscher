@@ -42,6 +42,9 @@ type cmdResponse struct {
 }
 
 func dispatchLiveCommand(ctx context.Context, messages *hostMessages, layout runtimedir.Layout, path string, argv []string) (string, bool, error) {
+	if path == "" {
+		return "", false, nil
+	}
 	dialCtx, cancel := context.WithTimeout(ctx, commandDialTimeout)
 	defer cancel()
 	conn, err := dialCommandSocket(dialCtx, messages, layout, path)

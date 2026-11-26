@@ -39,9 +39,14 @@ daemon starts each remote runner again, with the new paths, once the migration
 is done. A runner from before the upgrade that is still alive on the remote
 machine keeps dialling the old paths and gets no answer: restart that session
 once. A
-remote session still in the layout without an instance id is refused by the
-migration, since its worktree is on the other machine: close it with the previous
-build before upgrading.
+remote session still in the layout without an instance id is migrated in the
+state only, since its worktree is on the other machine and the migration does not
+reach it: the state points at the new place, and `serve` prints the commands to
+run on that host (`mkdir -p` of the new parent, `git worktree move`, then
+`git branch -m session/<name> session/<id>/<name>`, or `mv` for a scratch
+directory). Run them before the session starts again; until then its runner does
+not find its folder. Keep the old branch name if it carries an open pull
+request.
 
 Three refusals replace a blind start: a host that was never provisioned, a host
 running a different build than this daemon would ship, and `--clone` combined

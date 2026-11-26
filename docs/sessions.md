@@ -21,10 +21,15 @@ without the field is format 0, written by a build from before the field existed.
 
 `herrscher serve` migrates a format 0 file once, at boot, before it supervises
 any session. It holds the state lock while it does, so no other daemon and no
-session of this state runs during the migration. It first keeps the old file
-next to the new one, as `state.json.before-format-1.bak` (a hard link to the old
-content), then writes the new file atomically. Each change is announced on the
-output of `serve` and in the daemon log, in the operator language:
+session of this state runs during the migration. Before it moves anything, it
+writes a copy of the old file, byte for byte as it was read, next to it as
+`state.json.before-format-1.bak` (mode 0600, written to a temporary file and then
+renamed). A copy left by an earlier migration is never overwritten: the next one
+is `state.json.before-format-1.2.bak`, then `.3.bak`, and the start of the
+migration names the exact file. If that copy cannot be written, the migration
+refuses before it touches a worktree or a branch. Then it moves what it has to,
+and writes the new file atomically. Each change is announced on the output of
+`serve` and in the daemon log, in the operator language:
 
 - **Instance id.** A state without an instance id gets one. It comes from
   `HERRSCHER_INSTANCE_ID`, else from `HERRSCHER_OWNER_ID`, else it is generated
@@ -32,14 +37,24 @@ output of `serve` and in the daemon log, in the operator language:
   never runs without an id any more: the id-less layout, its bare branch names
   and its bare socket names are gone.
 - **Sessions of the id-less layout.** A session whose worktree is
-  `<repo>/.herrscher-sessions/<name>` moves to
+  `<repo>/.herrscher-sessions/<folder>` moves to
   `<repo>/.herrscher-sessions/<id>/<name>` with `git worktree move`, and its
-  branch `session/<name>` is renamed `session/<id>/<name>`. A scratch directory
-  `.herrscher-scratch/<name>` moves to `.herrscher-scratch/<id>/<name>`. The
+  branch `session/<folder>` is renamed `session/<id>/<name>`. `<folder>` is the
+  name the session had when its worktree was made, so a session renamed since
+  then lands under its current name. A scratch directory
+  `.herrscher-scratch/<folder>` moves to `.herrscher-scratch/<id>/<name>`. The
   session's stored worktree and directory follow. Uncommitted work moves with the
-  directory, since the move is a rename. Sockets are not moved: their paths are
-  derived from the id each time the daemon starts, so the new ones are simply
-  used, and the bridges the daemon starts after the migration dial them.
+  directory, since the move is a rename. Only what actually moved is announced: a
+  directory already at its new place, or found nowhere, is not. Sockets are not
+  moved: their paths are derived from the id each time the daemon starts, so the
+  new ones are simply used, and the bridges the daemon starts after the
+  migration dial them.
+- **Conversations.** A moved session that holds a resume token is announced as
+  starting a new conversation on its next turn. A backend that files its
+  conversations by working directory (Claude Code keeps them under
+  `~/.claude/projects/<encoded folder>/`) does not find the old one from the new
+  folder, refuses the token, and starts afresh, as it does for any resume token
+  it refuses (see above). The old conversation file stays where it was.
 - **Gateway binding.** A session with a channel and no gateway binding is bound
   to the channel gateways this daemon builds (every built gateway but the
   terminal), which is the binding it was already using implicitly.
@@ -59,11 +74,25 @@ It refuses, writes nothing, and says what to do instead of guessing, when:
 - the branch to rename tracks a remote branch, since renaming it would cut it off
   from its pull request (merge or close the pull request, run
   `git branch --unset-upstream session/<name>`, then start `serve` again);
+- the branch to rename was pushed without tracking, so a remote-tracking ref
+  `<remote>/session/<name>` exists, or the session records a pull request and a
+  remote still holds the branch (or cannot be asked): the pull request would stop
+  receiving pushes. Once it is merged or closed, delete the branch on the remote
+  (`git push <remote> --delete session/<name>`, or `git branch -dr
+  <remote>/session/<name>` when it is already gone there) and start `serve`
+  again;
 - the worktree is checked out on another branch than `session/<name>`;
-- the session runs on another [host](remote.md): the migration does not move a
-  remote worktree (close the session with the previous build first);
+- a session, or the folder of its worktree, is named like the instance id: the
+  instance layout would nest every other session inside it (set
+  `HERRSCHER_INSTANCE_ID` to another id);
 - a session has a channel and no binding, and this `serve` builds no channel
   gateway to bind it to.
+
+A session that runs on another [host](remote.md) is not refused: the migration
+cannot reach that machine, so it points the state at the new place and prints,
+for that session, the commands to run on the host (`mkdir -p`, `git worktree
+move`, `git branch -m`, or a plain `mv` for a scratch directory) before the
+session starts again.
 
 A move that fails halfway is put back, and the next start picks the migration up
 where it stopped: a directory or branch already at its new place counts as done.
@@ -71,13 +100,12 @@ Run twice, the migration changes nothing the second time.
 
 A file of a newer format than the build is refused at load, by `serve` and by
 every command, with the file and both formats named. Commands run outside the
-daemon (`herrscher session ...` with no daemon up) refuse a format 0 file and ask
-for one `herrscher serve` first, since only the daemon has the gateways and the
-lock the migration needs.
-
-A backend that keys its conversations by working directory may not find the old
-conversation after its worktree moved, and then starts a fresh one, as it does
-for any resume token it refuses (see above).
+daemon refuse a format 0 file and ask to restart the daemon, since only the
+daemon has the gateways and the lock the migration needs. That is also what an
+upgrade with the old daemon still running looks like: the new client finds no
+daemon on the socket of the new instance id, falls back to running the command
+itself, and meets the old file. `herrscher serve` cannot start while the old
+daemon holds the lock, so stop the old daemon first, then run `herrscher serve`.
 
 
 ## Memory

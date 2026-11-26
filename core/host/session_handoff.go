@@ -14,6 +14,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
+	"github.com/Herrscherd/herrscher/core/internal/shellquote"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
@@ -287,7 +288,7 @@ func shellQuote(value string) string {
 	if strings.Trim(value, shellSafeChars) == "" {
 		return value
 	}
-	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
+	return shellquote.Quote(value)
 }
 
 func (d handoffDeps) deliver(ctx context.Context, source, target, reply, brief, account string) (string, error) {

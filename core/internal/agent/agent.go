@@ -18,6 +18,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/Herrscherd/herrscher/core/internal/shellquote"
 )
 
 const (
@@ -56,10 +58,6 @@ const hookWaitSeconds = 900
 // tool call.
 const HookWait = hookWaitSeconds * time.Second
 
-func shellSingleQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
 func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 	var doc map[string]any
 	if err := json.Unmarshal(settings, &doc); err != nil {
@@ -94,7 +92,7 @@ func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 		"matcher": "*",
 		"hooks": []any{map[string]any{
 			"type":    "command",
-			"command": shellSingleQuote(herrscherBin) + " approve hook",
+			"command": shellquote.Quote(herrscherBin) + " approve hook",
 			"timeout": hookWaitSeconds,
 		}},
 	})

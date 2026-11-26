@@ -44,11 +44,12 @@ func backendTrials(chosen moduleSet, value func(string) string) []trialSpec {
 		{module: moduleClaude, section: kindClaude, command: setupCommand{name: kindClaude, args: []string{"-p", trialPrompt}, env: presentEnv(value, envAnthropicKey)}},
 		{module: moduleCodex, section: kindCodex, command: setupCommand{name: kindCodex, args: []string{"exec", "--skip-git-repo-check", trialPrompt}}},
 		{module: moduleCursor, section: kindCursor, command: setupCommand{name: cursorCLI, args: []string{"-p", trialPrompt}, env: presentEnv(value, envCursorKey)}},
+		{module: moduleGrok, section: kindGrok, command: setupCommand{name: grokCLI, args: []string{"-p", trialPrompt, "--no-auto-update"}, env: presentEnv(value, envXAIKey)}},
 	}
 	picked := make([]trialSpec, 0, len(specs))
-	for _, spec := range specs {
-		if chosen[spec.module] {
-			picked = append(picked, spec)
+	for index := range specs {
+		if chosen[specs[index].module] {
+			picked = append(picked, specs[index])
 		}
 	}
 	return picked
@@ -103,8 +104,9 @@ func trialRemedy(messages *clitext.Messages, spec trialSpec, err error) string {
 
 func (model *setupModel) startTrials() tea.Cmd {
 	model.install.trials = nil
-	for _, spec := range backendTrials(model.modules, model.draft.value) {
-		model.install.trials = append(model.install.trials, trialStep{spec: spec, label: trialLabel(model.messages, spec)})
+	specs := backendTrials(model.modules, model.draft.value)
+	for index := range specs {
+		model.install.trials = append(model.install.trials, trialStep{spec: specs[index], label: trialLabel(model.messages, specs[index])})
 	}
 	if len(model.install.trials) == 0 {
 		model.install.cancel()

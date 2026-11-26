@@ -25,3 +25,34 @@ func TestSubjectOf(t *testing.T) {
 		}
 	}
 }
+
+func TestGrokToolsMeetTheModesUnderTheirClaudeNames(t *testing.T) {
+	cases := []struct {
+		grok string
+		mode Mode
+		want Decision
+	}{
+		{"run_terminal_command", ModeAsk, Ask},
+		{"search_replace", ModeAsk, Ask},
+		{"hashline_edit", ModeAsk, Ask},
+		{"write", ModeAsk, Ask},
+		{"read_file", ModePlan, Allow},
+		{"hashline_read", ModePlan, Allow},
+		{"grep", ModePlan, Allow},
+		{"hashline_grep", ModePlan, Allow},
+		{"list_dir", ModePlan, Allow},
+		{"todo_write", ModePlan, Allow},
+		{"web_fetch", ModePlan, Allow},
+		{"web_search", ModePlan, Allow},
+		{"spawn_subagent", ModePlan, Deny},
+		{"image_gen", ModePlan, Deny},
+	}
+	for _, c := range cases {
+		if got := Apply(c.mode, CanonicalTool(c.grok), Allow, false); got != c.want {
+			t.Errorf("%s in %s: got %q, want %q", c.grok, c.mode, got, c.want)
+		}
+	}
+	if got := SubjectOf(CanonicalTool("read_file"), map[string]any{"target_file": "/repo/a.go"}); got != "/repo/a.go" {
+		t.Fatalf("read_file subject = %q, want its target_file", got)
+	}
+}

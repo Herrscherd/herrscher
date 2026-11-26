@@ -17,11 +17,12 @@ func trialStack(ctx context.Context, messages *clitext.Messages, out, errOut *er
 	}
 	out.Println(msg(messages, clitext.SetupTrialTitle, nil))
 	code := 0
-	for _, spec := range specs {
+	for index := range specs {
+		spec := &specs[index]
 		if ctx.Err() != nil {
 			return 1
 		}
-		label := trialLabel(messages, spec)
+		label := trialLabel(messages, *spec)
 		output, err := runTrialIn(ctx, execRunner, spec.command, trialTimeout)
 		if trialAnswered(string(output), err) {
 			out.Println("  ✓ " + label)
@@ -29,7 +30,7 @@ func trialStack(ctx context.Context, messages *clitext.Messages, out, errOut *er
 		}
 		code = 1
 		errOut.Println("  ✗ " + label)
-		for _, line := range trialFailureLines(messages, spec, lastLines(string(output), outputTail), err) {
+		for _, line := range trialFailureLines(messages, *spec, lastLines(string(output), outputTail), err) {
 			errOut.Println("    " + line)
 		}
 	}

@@ -20,6 +20,8 @@ const (
 	ProviderAnthropic = "anthropic"
 	// ProviderOpenAI names the OpenAI API key pool.
 	ProviderOpenAI = "openai"
+	// ProviderXAI names the xAI API key pool, served to Grok Build.
+	ProviderXAI = "xai"
 )
 
 const (
@@ -108,7 +110,7 @@ func sortedProviders(providers map[string]ProviderKeys) []string {
 }
 
 func validateProvider(provider string, pool ProviderKeys) error {
-	if provider != ProviderAnthropic && provider != ProviderOpenAI {
+	if provider != ProviderAnthropic && provider != ProviderOpenAI && provider != ProviderXAI {
 		return fmt.Errorf("%q: %w", provider, ErrKeysProvider)
 	}
 	if err := validateBaseURL(pool.BaseURL); err != nil {

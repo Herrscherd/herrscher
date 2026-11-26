@@ -31,6 +31,7 @@ func setupSections() map[string]setupScreen {
 		kindClaude:    screenClaude,
 		kindCodex:     screenCodex,
 		kindCursor:    screenCursor,
+		kindGrok:      screenGrok,
 		kindObsidian:  screenObsidian,
 		"route":       screenRoute,
 		"connections": screenConnections,

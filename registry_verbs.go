@@ -39,6 +39,12 @@ func runRole(ctx context.Context, layout host.RuntimeLayout, messages *clitext.M
 	return runRegistryVerb(ctx, layout, messages, hostMessages, "role", args)
 }
 
+func runMCP(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, args []string) error {
+	ctx, cancel := context.WithTimeout(ctx, host.MCPWeightDeadline)
+	defer cancel()
+	return runRegistryVerb(ctx, layout, messages, hostMessages, "mcp", args)
+}
+
 func runMemory(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, args []string) error {
 	return runRegistryVerb(ctx, layout, messages, hostMessages, "memory", args)
 }

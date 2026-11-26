@@ -17,6 +17,7 @@ const (
 	ToolWeightCauseStart      = "cli.mcp.weight.cause.start"
 	ToolWeightCauseExited     = "cli.mcp.weight.cause.exited"
 	ToolWeightCauseTimeout    = "cli.mcp.weight.cause.timeout"
+	ToolWeightCauseBudget     = "cli.mcp.weight.cause.budget"
 	ToolWeightCauseCanceled   = "cli.mcp.weight.cause.canceled"
 	ToolWeightCauseProtocol   = "cli.mcp.weight.cause.protocol"
 	ToolWeightCauseRejected   = "cli.mcp.weight.cause.rejected"
@@ -42,6 +43,7 @@ func mcpKeys() map[Key][]string {
 		ToolWeightCauseStart:      nil,
 		ToolWeightCauseExited:     nil,
 		ToolWeightCauseTimeout:    nil,
+		ToolWeightCauseBudget:     nil,
 		ToolWeightCauseCanceled:   nil,
 		ToolWeightCauseProtocol:   nil,
 		ToolWeightCauseRejected:   nil,

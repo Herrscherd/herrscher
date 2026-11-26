@@ -5951,6 +5951,11 @@
     "other": "the server did not answer in time"
   },
   {
+    "id": "cli.mcp.weight.cause.budget",
+    "description": "Cause of a server the measure budget of the whole report cut short",
+    "other": "the measure budget ran out before the server answered"
+  },
+  {
     "id": "cli.mcp.weight.cause.canceled",
     "description": "Cause of a measure canceled by its caller before the server answered",
     "other": "the measure was canceled before the server answered"

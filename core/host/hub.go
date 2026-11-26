@@ -180,6 +180,10 @@ func (h *hub) Dispatch(ctx context.Context, args []string) (contracts.Result, er
 		return h.reg.Dispatch(ctx, args)
 	}
 
+	if isReadOnlyCommand(args) {
+		return h.reg.Dispatch(ctx, args)
+	}
+
 	return h.reconciling(ctx, func() (contracts.Result, error) { return h.reg.Dispatch(ctx, args) })
 }
 

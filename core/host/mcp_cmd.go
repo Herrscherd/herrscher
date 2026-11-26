@@ -13,7 +13,18 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/mcpweight"
 )
 
-const paramMCPDeep = "deep"
+const (
+	paramMCPDeep = "deep"
+	nsMCP        = "mcp"
+	verbWeight   = "weight"
+)
+
+// MCPWeightDeadline is how long the operator waits for the daemon's mcp weight report: the whole measure budget plus the margin for the servers still stopping.
+const MCPWeightDeadline = mcpweight.DefaultBudget + mcpweight.ReplyMargin
+
+func isReadOnlyCommand(args []string) bool {
+	return len(args) >= 2 && args[0] == nsMCP && args[1] == verbWeight
+}
 
 type mcpWeightRequest struct {
 	agent  string
@@ -22,7 +33,7 @@ type mcpWeightRequest struct {
 }
 
 func mcpWeightVerb(cliMessages *clitext.Messages, lang languageSource, agents agentLookup) contracts.Cmd {
-	return contracts.New("mcp", "weight").
+	return contracts.New(nsMCP, verbWeight).
 		Help(clitext.CmdHelpToolWeight).
 		ValueParam(paramAgent, clitext.CmdParamToolWeightAgent, true).
 		Param(paramMCPDeep, clitext.CmdParamToolWeightDeep, false).
@@ -41,10 +52,7 @@ func mcpWeightReport(ctx context.Context, cliMessages *clitext.Messages, lang i1
 	if err != nil {
 		return "", err
 	}
-	results := make([]mcpweight.Result, 0, len(servers))
-	for _, server := range servers {
-		results = append(results, mcpWeigh(ctx, server, req.deep))
-	}
+	results := mcpWeigh(ctx, servers, req.deep)
 	if req.asJSON {
 		body, encodeErr := json.Marshal(results)
 		return string(body), encodeErr
@@ -52,11 +60,15 @@ func mcpWeightReport(ctx context.Context, cliMessages *clitext.Messages, lang i1
 	return renderMCPWeight(cliMessages, lang, req.agent, results), nil
 }
 
-func mcpWeigh(ctx context.Context, server agent.MCPServer, deep bool) mcpweight.Result {
-	if !deep {
-		return mcpweight.Describe(server)
+func mcpWeigh(ctx context.Context, servers []agent.MCPServer, deep bool) []mcpweight.Result {
+	if deep {
+		return mcpweight.MeasureAll(ctx, servers, mcpweight.DefaultBudget)
 	}
-	return mcpweight.Measure(ctx, server, mcpweight.DefaultTimeout)
+	results := make([]mcpweight.Result, 0, len(servers))
+	for _, server := range servers {
+		results = append(results, mcpweight.Describe(server))
+	}
+	return results
 }
 
 func renderMCPWeight(cliMessages *clitext.Messages, lang i18n.Language, agentName string, results []mcpweight.Result) string {
@@ -120,6 +132,8 @@ func mcpWeightCauseKey(cause mcpweight.Cause) clitext.Key {
 		return clitext.ToolWeightCauseExited
 	case mcpweight.CauseTimeout:
 		return clitext.ToolWeightCauseTimeout
+	case mcpweight.CauseBudget:
+		return clitext.ToolWeightCauseBudget
 	case mcpweight.CauseCanceled:
 		return clitext.ToolWeightCauseCanceled
 	case mcpweight.CauseRejected:

@@ -5951,6 +5951,11 @@
     "other": "le serveur n'a pas répondu à temps"
   },
   {
+    "id": "cli.mcp.weight.cause.budget",
+    "description": "Cause d'un serveur coupé par le budget de mesure de tout le rapport",
+    "other": "le budget de mesure est épuisé avant la réponse du serveur"
+  },
+  {
     "id": "cli.mcp.weight.cause.canceled",
     "description": "Cause d'une mesure annulée par son appelant avant la réponse du serveur",
     "other": "la mesure a été annulée avant la réponse du serveur"

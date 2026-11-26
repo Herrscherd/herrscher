@@ -203,7 +203,7 @@ func (set moduleSet) paths(extras []string) []string {
 
 func (set moduleSet) backendKinds() map[string]bool {
 	kinds := make(map[string]bool)
-	for _, mod := range []setupModule{moduleClaude, moduleCodex, moduleCursor, moduleAntigravity} {
+	for _, mod := range []setupModule{moduleClaude, moduleCodex, moduleCursor, moduleGrok, moduleAntigravity} {
 		if set[mod] {
 			kinds[mod.spec().kind] = true
 		}

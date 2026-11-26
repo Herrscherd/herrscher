@@ -159,6 +159,8 @@ func fakeCatalog(contracts.RoutePolicy) ([]host.CatalogEntry, error) {
 	return []host.CatalogEntry{
 		{ModelSpec: contracts.ModelSpec{ID: "claude-opus", Label: "Opus"}, Vendor: kindClaude},
 		{ModelSpec: contracts.ModelSpec{ID: "gpt-codex", Label: "Codex"}, Vendor: kindCodex},
+		{ModelSpec: contracts.ModelSpec{ID: "grok-build", Label: "Grok"}, Vendor: kindGrok},
+		{ModelSpec: contracts.ModelSpec{ID: "gemini-agy", Label: "Gemini"}, Vendor: kindAntigravity},
 	}, nil
 }
 
@@ -1224,11 +1226,18 @@ func TestAntigravityModuleComesFromTheBackendCatalog(t *testing.T) {
 	}
 }
 
-func TestChosenAntigravityModuleIsOfferedAsABackendKind(t *testing.T) {
-	chosen := make(moduleSet)
-	chosen[moduleAntigravity] = true
-	if !chosen.backendKinds()[kindAntigravity] {
-		t.Fatal("a chosen antigravity module is not offered as a backend kind")
+func TestRouteOffersTheModelsOfEachChosenBackend(t *testing.T) {
+	for mod, want := range map[setupModule]string{moduleGrok: "grok-build", moduleAntigravity: "gemini-agy"} {
+		harness := newHarness(t, nil, screenRoute, nil)
+		harness.model.modules = make(moduleSet)
+		harness.model.modules[mod] = true
+		var offered []string
+		for _, entry := range harness.model.offeredModels() {
+			offered = append(offered, entry.ID)
+		}
+		if !slices.Equal(offered, []string{want}) {
+			t.Fatalf("with only %s chosen, offered = %v, want %q", mod.spec().kind, offered, want)
+		}
 	}
 }
 

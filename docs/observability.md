@@ -323,6 +323,53 @@ model discovery for its whole life. Under `gateway-only` the host drops every na
 whatever the backend returned; a backend that ignores the policy would still launch its own
 CLI, which only that backend's gate prevents.
 
+## MCP tool weight, per agent
+
+`herrscher mcp weight --agent <name>` reads the agent's `mcp.json` and reports what
+each MCP server's tool definitions cost in context: the number of tools, the size in
+bytes of their JSON definitions, and an estimated token count. `--json` prints the
+same results as a list of objects with `name`, `transport`, `measured`, `tools`,
+`bytes`, `tokens`, `cause` and `detail`.
+
+Without `--deep` nothing is started. A stdio server is listed as not started, and a
+server with any other transport (`http`, `sse`, a URL) as not stdio. Those are the
+only two causes that come without starting anything.
+
+With `--deep`, each stdio server is started as a child process and asked over
+newline-delimited JSON-RPC for `initialize`, then `notifications/initialized`, then
+`tools/list`. The probe follows `nextCursor` for at most 100 pages. The tool count is
+the number of definitions across all pages. The byte count is the sum of the raw JSON
+of each definition as the server sent it, not re-serialized. Each server is started:
+
+- in a fresh scratch directory under the system temporary directory, removed afterwards;
+- with the environment of the command running `mcp weight`, plus the `env` declared
+  for that server in `mcp.json`;
+- with every `{{WORKTREE}}` in its `args` and `env` values replaced by the scratch
+  directory path.
+
+The whole exchange with one server is bounded by a 15 second timeout, from the start
+to the last answer. A server that exceeds it, exits early, refuses a request, answers
+outside the protocol, or sends a message over 4 MiB is reported with its cause and
+its error detail. No server is dropped from the report.
+
+The probe always kills the child process and waits for it to exit. It kills only that
+direct child: a server that starts its own subprocesses may leave them running after
+the probe returns.
+
+**Tokens are an estimate.** They come from `contextwindow.EstimateTokens`, which counts
+about four bytes per token. They are not counted by the model's tokenizer, and the
+report says so in its footer.
+
+What is not measured:
+
+- servers that are not stdio, which are never contacted;
+- tools a server would hide from the agent through its own configuration, since the
+  probe reads what the server advertises;
+- the system prompt, the tool results and the model's tool-selection cost.
+
+`--deep` runs the commands declared in the agent's `mcp.json` on this machine, with
+the permissions of the operator. Run it only on agents whose `mcp.json` you trust.
+
 ## Also
 
 Cross-backend skills, where one `SKILL.md` works on every backend. The playbooks

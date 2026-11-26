@@ -412,3 +412,8 @@ func EnsureGitExcludes(ctx context.Context, worktree string) error {
 	}
 	return nil
 }
+
+// MCPConfigPath is the mcp.json of the agent, the file the MCP tool weight command reads.
+func (a Agent) MCPConfigPath() string {
+	return filepath.Join(a.Home, mcpFile)
+}

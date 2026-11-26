@@ -5849,5 +5849,105 @@
     "id": "cli.session.pr.conclusion.other",
     "description": "Check conclusion word: completed without a conclusion the plugin can name",
     "other": "other"
+  },
+  {
+    "id": "cli.help.cmd.mcp.weight",
+    "description": "Help of the command mcp weight",
+    "other": "estimate the token cost of the tool definitions of each MCP server of an agent"
+  },
+  {
+    "id": "cli.help.param.mcp.weight.agent",
+    "description": "Help of the --agent param of the command mcp weight",
+    "other": "the agent whose mcp.json is measured"
+  },
+  {
+    "id": "cli.help.param.mcp.weight.deep",
+    "description": "Help of the --deep param of the command mcp weight",
+    "other": "start each stdio server to list its tools; without it, servers are only described"
+  },
+  {
+    "id": "cli.mcp.weight.header",
+    "description": "Header of the mcp weight report, Agent is the agent name",
+    "other": "MCP tool weight for {{.Agent}}"
+  },
+  {
+    "id": "cli.mcp.weight.none",
+    "description": "Mcp weight report when the agent's mcp.json has no server",
+    "other": "no MCP server in this agent's mcp.json"
+  },
+  {
+    "id": "cli.mcp.weight.measured",
+    "description": "One measured server of the mcp weight report, Tools Bytes Tokens are numbers",
+    "other": "{{.Name}} ({{.Transport}}): {{.Tools}} tools, {{.Bytes}} bytes, about {{.Tokens}} tokens (estimate)"
+  },
+  {
+    "id": "cli.mcp.weight.failed",
+    "description": "One server of the mcp weight report that was not measured, Reason is the cause",
+    "other": "{{.Name}} ({{.Transport}}): not measured, {{.Reason}}"
+  },
+  {
+    "id": "cli.mcp.weight.failed_detail",
+    "description": "One server of the mcp weight report that was not measured, with the detail of the failure",
+    "other": "{{.Name}} ({{.Transport}}): not measured, {{.Reason}}: {{.Detail}}"
+  },
+  {
+    "id": "cli.mcp.weight.estimate",
+    "description": "Footer of the mcp weight report explaining that tokens are estimated",
+    "other": "Tokens are estimated at about 4 bytes per token, the model does not count them."
+  },
+  {
+    "id": "cli.mcp.weight.unknown_agent",
+    "description": "Failure of mcp weight when no agent has the name, Agent is the name given",
+    "other": "no agent named {{.Agent}}"
+  },
+  {
+    "id": "cli.mcp.weight.cause.not_stdio",
+    "description": "Cause of a server not measured: its transport is not stdio",
+    "other": "the transport is not stdio, so the server is not started"
+  },
+  {
+    "id": "cli.mcp.weight.cause.not_started",
+    "description": "Cause of a stdio server not measured without --deep",
+    "other": "the stdio server was not started, run again with --deep"
+  },
+  {
+    "id": "cli.mcp.weight.cause.start",
+    "description": "Cause of a server that could not be started",
+    "other": "the server could not be started"
+  },
+  {
+    "id": "cli.mcp.weight.cause.exited",
+    "description": "Cause of a server that exited before answering",
+    "other": "the server exited before answering"
+  },
+  {
+    "id": "cli.mcp.weight.cause.timeout",
+    "description": "Cause of a server that did not answer in time",
+    "other": "the server did not answer in time"
+  },
+  {
+    "id": "cli.mcp.weight.cause.protocol",
+    "description": "Cause of a server whose answer breaks the MCP exchange",
+    "other": "the server answered outside the MCP exchange"
+  },
+  {
+    "id": "cli.mcp.weight.cause.rejected",
+    "description": "Cause of a server that refused tools/list",
+    "other": "the server refused tools/list"
+  },
+  {
+    "id": "cli.mcp.weight.cause.too_large",
+    "description": "Cause of a server that sent a message over the size limit",
+    "other": "the server sent a message over the size limit"
+  },
+  {
+    "id": "cli.mcp.weight.cause.too_many_pages",
+    "description": "Cause of a server that kept paging tools/list past the limit",
+    "other": "tools/list kept returning pages past the page limit"
+  },
+  {
+    "id": "cli.mcp.weight.cause.stop",
+    "description": "Cause of a server that did not stop cleanly",
+    "other": "the server did not stop cleanly"
   }
 ]

@@ -205,6 +205,18 @@ linters:
       - path: ^core/(identity|scope|service|keyproxy|internal/(forge|runner|supervisor|worktree|checkpoint))/
         linters: [gosec]
         text: "^G204:"
+      - path: ^core/internal/mcpweight/(rpc|measure)\.go$
+        linters: [gosec]
+        text: "^G204:"
+      - path: ^core/internal/mcpweight/config\.go$
+        linters: [gosec]
+        text: "^G304:"
+      - path: ^core/internal/mcpweight/fake_test\.go$
+        linters: [revive]
+        text: "deep-exit"
+      - path: ^core/clitext/keys_mcp\.go$
+        linters: [gosec]
+        text: "^G101:"
       - path: ^core/forgecreds/gh\.go$
         linters: [gosec]
         text: "^G204:"

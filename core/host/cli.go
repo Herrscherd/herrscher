@@ -67,7 +67,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addVerbs(reg, handoff); err != nil {
+	if err := addVerbs(reg, handoff, mcpWeightVerb(sessions.cliMessages, options.live.Get, agents)); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addCheckpointAndPRVerbs(reg, sessions, options, hostState); err != nil {

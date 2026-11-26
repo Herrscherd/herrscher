@@ -5849,5 +5849,105 @@
     "id": "cli.session.pr.conclusion.other",
     "description": "Mot de conclusion de contrôle : terminé sans conclusion nommable",
     "other": "autre"
+  },
+  {
+    "id": "cli.help.cmd.mcp.weight",
+    "description": "Aide de la commande mcp weight",
+    "other": "estime le coût en jetons des définitions d'outils de chaque serveur MCP d'un agent"
+  },
+  {
+    "id": "cli.help.param.mcp.weight.agent",
+    "description": "Aide du paramètre --agent de la commande mcp weight",
+    "other": "l'agent dont le mcp.json est mesuré"
+  },
+  {
+    "id": "cli.help.param.mcp.weight.deep",
+    "description": "Aide du paramètre --deep de la commande mcp weight",
+    "other": "démarre chaque serveur stdio pour lister ses outils ; sans lui, les serveurs sont seulement décrits"
+  },
+  {
+    "id": "cli.mcp.weight.header",
+    "description": "En-tête du rapport mcp weight, Agent est le nom de l'agent",
+    "other": "Poids des outils MCP pour {{.Agent}}"
+  },
+  {
+    "id": "cli.mcp.weight.none",
+    "description": "Rapport mcp weight quand le mcp.json de l'agent n'a aucun serveur",
+    "other": "aucun serveur MCP dans le mcp.json de cet agent"
+  },
+  {
+    "id": "cli.mcp.weight.measured",
+    "description": "Un serveur mesuré du rapport mcp weight, Tools Bytes Tokens sont des nombres",
+    "other": "{{.Name}} ({{.Transport}}) : {{.Tools}} outils, {{.Bytes}} octets, environ {{.Tokens}} jetons (estimation)"
+  },
+  {
+    "id": "cli.mcp.weight.failed",
+    "description": "Un serveur du rapport mcp weight non mesuré, Reason est la cause",
+    "other": "{{.Name}} ({{.Transport}}) : non mesuré, {{.Reason}}"
+  },
+  {
+    "id": "cli.mcp.weight.failed_detail",
+    "description": "Un serveur du rapport mcp weight non mesuré, avec le détail de l'échec",
+    "other": "{{.Name}} ({{.Transport}}) : non mesuré, {{.Reason}} : {{.Detail}}"
+  },
+  {
+    "id": "cli.mcp.weight.estimate",
+    "description": "Pied du rapport mcp weight qui dit que les jetons sont estimés",
+    "other": "Les jetons sont estimés à environ 4 octets par jeton, le modèle ne les compte pas."
+  },
+  {
+    "id": "cli.mcp.weight.unknown_agent",
+    "description": "Échec de mcp weight quand aucun agent n'a ce nom, Agent est le nom donné",
+    "other": "aucun agent nommé {{.Agent}}"
+  },
+  {
+    "id": "cli.mcp.weight.cause.not_stdio",
+    "description": "Cause d'un serveur non mesuré : son transport n'est pas stdio",
+    "other": "le transport n'est pas stdio, le serveur n'est donc pas démarré"
+  },
+  {
+    "id": "cli.mcp.weight.cause.not_started",
+    "description": "Cause d'un serveur stdio non mesuré sans --deep",
+    "other": "le serveur stdio n'a pas été démarré, relancer avec --deep"
+  },
+  {
+    "id": "cli.mcp.weight.cause.start",
+    "description": "Cause d'un serveur qui n'a pas pu démarrer",
+    "other": "le serveur n'a pas pu démarrer"
+  },
+  {
+    "id": "cli.mcp.weight.cause.exited",
+    "description": "Cause d'un serveur arrêté avant de répondre",
+    "other": "le serveur s'est arrêté avant de répondre"
+  },
+  {
+    "id": "cli.mcp.weight.cause.timeout",
+    "description": "Cause d'un serveur qui n'a pas répondu à temps",
+    "other": "le serveur n'a pas répondu à temps"
+  },
+  {
+    "id": "cli.mcp.weight.cause.protocol",
+    "description": "Cause d'un serveur dont la réponse sort de l'échange MCP",
+    "other": "le serveur a répondu hors de l'échange MCP"
+  },
+  {
+    "id": "cli.mcp.weight.cause.rejected",
+    "description": "Cause d'un serveur qui a refusé tools/list",
+    "other": "le serveur a refusé tools/list"
+  },
+  {
+    "id": "cli.mcp.weight.cause.too_large",
+    "description": "Cause d'un serveur qui a envoyé un message au-delà de la limite",
+    "other": "le serveur a envoyé un message au-delà de la limite de taille"
+  },
+  {
+    "id": "cli.mcp.weight.cause.too_many_pages",
+    "description": "Cause d'un serveur qui a paginé tools/list au-delà de la limite",
+    "other": "tools/list a renvoyé des pages au-delà de la limite"
+  },
+  {
+    "id": "cli.mcp.weight.cause.stop",
+    "description": "Cause d'un serveur qui ne s'est pas arrêté proprement",
+    "other": "le serveur ne s'est pas arrêté proprement"
   }
 ]

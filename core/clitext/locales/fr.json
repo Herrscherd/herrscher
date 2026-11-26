@@ -5807,7 +5807,7 @@
   {
     "id": "cli.session.pr.conclusion.action_required",
     "description": "Mot de conclusion de contrôle",
-    "other": "action requise"
+    "other": "en attente d'une action humaine"
   },
   {
     "id": "cli.session.pr.conclusion.other",

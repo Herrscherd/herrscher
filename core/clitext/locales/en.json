@@ -5807,7 +5807,7 @@
   {
     "id": "cli.session.pr.conclusion.action_required",
     "description": "Check conclusion word",
-    "other": "action required"
+    "other": "waiting for a human action"
   },
   {
     "id": "cli.session.pr.conclusion.other",

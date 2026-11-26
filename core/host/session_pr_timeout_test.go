@@ -14,7 +14,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
-const prSilentForgeLimit = 20 * time.Millisecond
+const prSilentForgeLimit = time.Second
 
 type silentPRForge struct {
 	contracts.Forge
@@ -44,7 +44,7 @@ func TestPROpenGivesUpWhenTheForgeStaysSilent(t *testing.T) {
 	st := prState(t, dir, "")
 	reg := prRegistryWithSilentLimit(t, st, prForgeOpener(silentPRForge{}))
 
-	_, err := runPR(t, reg, verbPROpen, "--name", "alpha", "--title", "Titre")
+	_, err := runPR(t, reg, verbPROpen, "--name", "alpha", "--title", "Titre", "--base", "master")
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("open against a silent forge = %v, want the deadline", err)
 	}

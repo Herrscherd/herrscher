@@ -31,42 +31,6 @@ var (
 	errNotAllowedCDN     = errors.New("not an allowed CDN https url")
 )
 
-func supportedExts() map[string]bool {
-	return map[string]bool{
-		".png": true, ".jpg": true, ".jpeg": true, ".gif": true,
-		".webp": true, ".bmp": true,
-		".pdf": true, ".txt": true, ".md": true, ".markdown": true,
-		".csv": true, ".tsv": true, ".log": true, ".json": true,
-		".yaml": true, ".yml": true, ".toml": true, ".xml": true,
-	}
-}
-
-func supportedTypes() map[string]bool {
-	return map[string]bool{
-		"application/pdf": true, "application/json": true,
-		"application/xml": true, "application/toml": true,
-		"application/x-yaml": true, "application/yaml": true,
-	}
-}
-
-func supported(att contracts.Attachment) bool {
-	if att.ContentType != "" {
-		return supportedType(att.ContentType)
-	}
-	return supportedExts()[strings.ToLower(filepath.Ext(att.Filename))]
-}
-
-func supportedType(contentType string) bool {
-	contentType = strings.ToLower(strings.TrimSpace(contentType))
-	if i := strings.IndexByte(contentType, ';'); i >= 0 {
-		contentType = strings.TrimSpace(contentType[:i])
-	}
-	if strings.HasPrefix(contentType, "image/") || strings.HasPrefix(contentType, "text/") {
-		return true
-	}
-	return supportedTypes()[contentType]
-}
-
 const maxAttachmentBytes = 10 << 20
 
 const maxAttachmentsPerMessage = 8
@@ -152,7 +116,7 @@ func ResolveAttachments(ctx context.Context, client *http.Client, msg contracts.
 }
 
 func attachmentAdmissible(att contracts.Attachment) bool {
-	if !supported(att) {
+	if !contracts.ModelReadable(att) {
 		logger.Warn("attachment skipped: not a type the model can be handed",
 			"file", att.Filename, "type", att.ContentType)
 		return false

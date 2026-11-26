@@ -3,7 +3,9 @@ package manage
 import (
 	"errors"
 	"os"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -78,6 +80,8 @@ func (model *setupModel) rows() []setupRow {
 		return model.moduleRows()
 	case screenDiscord:
 		return model.discordRows()
+	case screenTelegram:
+		return model.telegramRows()
 	case screenClaude:
 		return model.claudeRows()
 	case screenCodex:
@@ -202,6 +206,18 @@ func (model *setupModel) discordRows() []setupRow {
 		blank(),
 	}
 	rows = append(rows, model.probeRows(probeDiscord, model.text(clitext.SetupBotProbe, nil))...)
+	return append(rows, blank(), model.continueRow())
+}
+
+func (model *setupModel) telegramRows() []setupRow {
+	rows := []setupRow{
+		line(toneDim, model.text(clitext.SetupTelegramIntro, nil)),
+		blank(),
+		fieldRow(envTelegramBot, model.text(clitext.SetupBotToken, nil), model.text(clitext.SetupBotTokenHint, nil)),
+		fieldRow(envTelegramUser, model.text(clitext.SetupTelegramUser, nil), model.text(clitext.SetupTelegramUserHint, nil)),
+		blank(),
+	}
+	rows = append(rows, model.probeRows(probeTelegram, model.text(clitext.SetupBotProbe, nil))...)
 	return append(rows, blank(), model.continueRow())
 }
 
@@ -410,6 +426,8 @@ func settingScreen(key string) setupScreen {
 	switch key {
 	case envDiscordToken, envDiscordUser:
 		return screenDiscord
+	case envTelegramBot, envTelegramUser:
+		return screenTelegram
 	case envAnthropicKey:
 		return screenClaude
 	case envCursorKey:
@@ -549,7 +567,8 @@ func (model *setupModel) sections() []hubSection {
 		tone:   toneOK,
 	}}
 	sections = append(sections,
-		model.moduleSection(moduleDiscord, screenDiscord, model.discordState()),
+		model.moduleSection(moduleDiscord, screenDiscord, model.botState(probeDiscord, envDiscordToken)),
+		model.moduleSection(moduleTelegram, screenTelegram, model.telegramState()),
 		model.moduleSection(moduleClaude, screenClaude, model.probeState(probeClaude)),
 		model.moduleSection(moduleCodex, screenCodex, model.probeState(probeCodex)),
 		model.moduleSection(moduleCursor, screenCursor, model.keyState(envCursorKey)),
@@ -572,11 +591,53 @@ func (model *setupModel) moduleSection(mod setupModule, screen setupScreen, stat
 	return section
 }
 
-func (model *setupModel) discordState() sectionState {
-	if result, ok := model.probes[probeDiscord]; ok && result.state != probeRunning {
+func (model *setupModel) botState(kind probeKind, tokenKey string) sectionState {
+	if result, ok := model.probes[kind]; ok && result.state != probeRunning {
 		return model.resultState(result)
 	}
-	return model.keyState(envDiscordToken)
+	return model.keyState(tokenKey)
+}
+
+func (model *setupModel) telegramState() sectionState {
+	switch {
+	case !model.telegramWellFormed():
+		return sectionState{tone: toneBad, text: model.text(clitext.SetupTelegramMalformed, nil)}
+	case !model.telegramAudience():
+		return sectionState{tone: toneBad, text: model.text(clitext.SetupTelegramUserMissing, nil)}
+	}
+	return model.botState(probeTelegram, envTelegramBot)
+}
+
+func telegramSwitchOn() []string { return []string{"1", "true", "yes", "on"} }
+
+func telegramSwitchOff() []string { return []string{"0", "false", "no", "off"} }
+
+func telegramIDs(raw string) []string {
+	return strings.FieldsFunc(raw, func(char rune) bool { return strings.ContainsRune(", \t\n", char) })
+}
+
+func (model *setupModel) telegramWellFormed() bool {
+	owner := strings.TrimSpace(model.draft.value(envTelegramUser))
+	if owner != "" && !telegramID(owner) {
+		return false
+	}
+	for _, key := range []string{envTelegramMany, envTelegramChat} {
+		if slices.ContainsFunc(telegramIDs(model.draft.value(key)), func(id string) bool { return !telegramID(id) }) {
+			return false
+		}
+	}
+	everyone := strings.ToLower(strings.TrimSpace(model.draft.value(envTelegramAll)))
+	return everyone == "" || slices.Contains(telegramSwitchOn(), everyone) || slices.Contains(telegramSwitchOff(), everyone)
+}
+
+func (model *setupModel) telegramAudience() bool {
+	everyone := strings.ToLower(strings.TrimSpace(model.draft.value(envTelegramAll)))
+	return strings.TrimSpace(model.draft.value(envTelegramUser)) != "" || len(telegramIDs(model.draft.value(envTelegramMany))) > 0 || slices.Contains(telegramSwitchOn(), everyone)
+}
+
+func telegramID(raw string) bool {
+	id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	return err == nil && id != 0
 }
 
 func (model *setupModel) keyState(key string) sectionState {

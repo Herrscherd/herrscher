@@ -24,7 +24,8 @@ var (
 func catalog() map[string]map[string]string {
 	return map[string]map[string]string{
 		catGateway: {
-			kindDiscord: "github.com/Herrscherd/herrscher-discord-gateway",
+			kindDiscord:  "github.com/Herrscherd/herrscher-discord-gateway",
+			kindTelegram: "github.com/Herrscherd/herrscher-telegram-gateway",
 		},
 		catBackend: {
 			kindClaude: "github.com/Herrscherd/herrscher-claude-backend",

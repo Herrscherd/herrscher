@@ -13,6 +13,7 @@ import (
 	_ "github.com/Herrscherd/herrscher-orchestrator"
 	_ "github.com/Herrscherd/herrscher-pixellab-backend"
 	_ "github.com/Herrscherd/herrscher-superset-skills"
+	_ "github.com/Herrscherd/herrscher-telegram-gateway"
 	_ "github.com/Herrscherd/herrscher/plugins/terminal"
 	// herrscher:end
 )

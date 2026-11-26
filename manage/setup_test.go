@@ -3,8 +3,10 @@ package manage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -94,6 +96,21 @@ func discordServer(t *testing.T) *httptest.Server {
 	return server
 }
 
+func telegramServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/bot123:good/getMe" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if _, err := w.Write([]byte(`{"ok":true,"result":{"id":7,"username":"herrscher_bot"}}`)); err != nil {
+			t.Errorf("write: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
 func anthropicServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -116,6 +133,7 @@ func testProber(t *testing.T, shell *fakeShell) setupProber {
 		lookPath:     func(string) (string, error) { return "/usr/bin/cursor-agent", nil },
 		client:       http.DefaultClient,
 		discordURL:   discordServer(t).URL,
+		telegramURL:  telegramServer(t).URL,
 		anthropicURL: anthropicServer(t).URL,
 	}
 }
@@ -452,6 +470,98 @@ func TestModulesScreenTogglesAndSkipsUncheckedSections(t *testing.T) {
 	}
 	harness.proceed(t)
 	harness.expectScreen(t, screenClaude)
+}
+
+func TestTheTelegramModuleAsksForItsTokenAndChecksIt(t *testing.T) {
+	harness := newHarness(t, nil, screenWelcome, nil)
+	harness.choose(t, harness.text(clitext.SetupCustom))
+	harness.focus(t, func(row setupRow) bool { return row.text == kindTelegram })
+	harness.press(tea.KeyMsg{Type: tea.KeySpace})
+	harness.proceed(t)
+	harness.expectScreen(t, screenDiscord)
+	harness.proceed(t)
+	harness.expectScreen(t, screenTelegram)
+
+	harness.fill(t, envTelegramBot, "123:good")
+	harness.fill(t, envTelegramUser, "42")
+	harness.choose(t, harness.text(clitext.SetupBotProbe))
+	if got := harness.model.probes[probeTelegram]; got.state != probePassed || got.params[clitext.ParamName] != "@herrscher_bot" {
+		t.Fatalf("telegram probe = %+v, want passed as @herrscher_bot", got)
+	}
+}
+
+func TestATelegramTokenTheBotAPIRefusesIsReported(t *testing.T) {
+	harness := newHarness(t, nil, screenTelegram, map[string]string{envTelegramBot: "123:bad"})
+	harness.choose(t, harness.text(clitext.SetupBotProbe))
+	if got := harness.model.probes[probeTelegram]; got.state != probeFailed || got.key != clitext.SetupBotRefused {
+		t.Fatalf("telegram probe with a wrong token = %+v", got)
+	}
+}
+
+func TestATelegramProbeThatCannotConnectNeverShowsTheToken(t *testing.T) {
+	prober := setupProber{client: http.DefaultClient, telegramURL: "http://127.0.0.1:1"}
+
+	for _, token := range []string{"123:secret", "123:sec ret"} {
+		got := prober.telegram(t.Context(), token)
+
+		shown := fmt.Sprint(got.params)
+		if got.state != probeFailed || strings.Contains(shown, token) || strings.Contains(shown, url.PathEscape(token)) {
+			t.Fatalf("probe = %+v", got)
+		}
+	}
+}
+
+func TestTheTelegramSectionFlagsWhatStopsTheGateway(t *testing.T) {
+	var malformed, missing clitext.Key = clitext.SetupTelegramMalformed, clitext.SetupTelegramUserMissing
+	cases := []struct {
+		env  map[string]string
+		want clitext.Key
+	}{
+		{make(map[string]string), missing},
+		{map[string]string{envTelegramUser: "@ana"}, malformed},
+		{map[string]string{envTelegramUser: "0"}, malformed},
+		{map[string]string{envTelegramMany: "42, ana"}, malformed},
+		{map[string]string{envTelegramAll: "maybe"}, malformed},
+		{map[string]string{envTelegramUser: "42", envTelegramMany: "42, ana"}, malformed},
+		{map[string]string{envTelegramUser: "@ana", envTelegramAll: "on"}, malformed},
+		{map[string]string{envTelegramUser: "42", envTelegramAll: "maybe"}, malformed},
+		{map[string]string{envTelegramUser: "42", envTelegramChat: "mygroup"}, malformed},
+		{map[string]string{envTelegramAll: "off"}, missing},
+		{map[string]string{envTelegramUser: "42"}, ""},
+		{map[string]string{envTelegramMany: "42 43"}, ""},
+		{map[string]string{envTelegramAll: "on"}, ""},
+		{map[string]string{envTelegramUser: "42", envTelegramAll: "off"}, ""},
+		{map[string]string{envTelegramUser: "42", envTelegramChat: "-100500, -100600"}, ""},
+	}
+	for _, tc := range cases {
+		tc.env[envTelegramBot] = "123:good"
+		harness := newHarness(t, nil, screenHub, tc.env)
+		harness.model.modules[moduleTelegram] = true
+		for _, section := range harness.model.sections() {
+			if section.screen != screenTelegram {
+				continue
+			}
+			flagged := section.state == harness.text(malformed) || section.state == harness.text(missing)
+			if (tc.want == "") == flagged || (tc.want != "" && section.state != harness.text(tc.want)) {
+				t.Fatalf("env %v: telegram section = %+v, want %q", tc.env, section, tc.want)
+			}
+		}
+	}
+}
+
+func TestTheTelegramSettingsAreWrittenToTheEnvFile(t *testing.T) {
+	harness := newHarness(t, nil, screenTelegram, nil)
+	harness.fill(t, envTelegramBot, "123:good")
+	harness.fill(t, envTelegramUser, "42")
+	harness.drive(harness.model.goTo(screenReview))
+	harness.choose(t, harness.text(clitext.SetupReviewSave))
+
+	env := harness.envFile(t)
+	for _, want := range []string{"TELEGRAM_BOT_TOKEN=123:good", "TELEGRAM_USER_ID=42"} {
+		if !strings.Contains(env, want) {
+			t.Errorf("env file = %q, want line %q", env, want)
+		}
+	}
 }
 
 const setupManifest = `package main

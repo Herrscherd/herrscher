@@ -5954,5 +5954,40 @@
     "id": "cli.mcp.weight.cause.stop",
     "description": "Cause of a server that did not stop cleanly",
     "other": "the server did not stop cleanly"
+  },
+  {
+    "id": "cli.setup.module.telegram",
+    "description": "Description of the Telegram gateway module",
+    "other": "Telegram bot, private chats and groups"
+  },
+  {
+    "id": "cli.setup.telegram.intro",
+    "description": "Intro of the Telegram bot screen",
+    "other": "Send /newbot to @BotFather on Telegram, keep its privacy mode on, then paste the token it gives."
+  },
+  {
+    "id": "cli.setup.telegram.user",
+    "description": "Label of the Telegram user id field",
+    "other": "your numeric Telegram user ID"
+  },
+  {
+    "id": "cli.setup.telegram.user_hint",
+    "description": "Hint of the Telegram user id field",
+    "other": "a bot such as @userinfobot shows it; nobody else may talk to the bot"
+  },
+  {
+    "id": "cli.host.err.no_channel_admin",
+    "description": "Error when setting the home while no gateway manages channels",
+    "other": "no running gateway manages channels, so there is no home to set: start a gateway that does"
+  },
+  {
+    "id": "cli.setup.telegram.user_missing",
+    "description": "Hub state of the Telegram module without a usable user id",
+    "other": "no numeric user ID: nobody may talk to the bot, so it will not start"
+  },
+  {
+    "id": "cli.setup.telegram.malformed",
+    "description": "Hub state of the Telegram module when one of its settings cannot be parsed",
+    "other": "a Telegram setting is malformed (an id that is not a number, or a switch other than on, off, yes, no, true, false, 1 or 0), so the gateway will not start"
   }
 ]

@@ -15,6 +15,9 @@ func (h *Handler) setHomeRun(ctx context.Context, input contracts.Input) (contra
 	if !ok || channelID == "" {
 		return contracts.Result{}, h.localized(ErrMissingChannel, clitext.HostErrMissingChannel)
 	}
+	if h.d == nil {
+		return contracts.Result{}, h.localized(ErrNoChannelAdmin, clitext.HostErrNoChannelAdmin)
+	}
 	kind, err := h.d.Kind(ctx, channelID)
 	if err != nil {
 		return contracts.Result{}, h.labelled("inspect channel", clitext.HostErrInspectChannel, err)

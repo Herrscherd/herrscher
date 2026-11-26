@@ -43,6 +43,9 @@ func (h *Handler) openChannel(ctx context.Context, req createRequest, title stri
 	if req.adopted != "" {
 		return channelSlot{id: req.adopted, typ: "text"}, nil
 	}
+	if req.admin == nil {
+		return channelSlot{}, h.localized(ErrNoChannelAdmin, clitext.HostErrNoChannelAdmin)
+	}
 	switch req.home.Type {
 	case categoryKind, terminalPlace:
 		chID, err := req.admin.CreateUnder(ctx, req.home.ID, title)
@@ -65,14 +68,48 @@ func (h *Handler) adminFor(sess state.Session) channelAdmin {
 	if h.td != nil && strings.HasPrefix(sess.ChannelID, "terminal/") {
 		return h.td
 	}
+	if admin, routed := h.gatewayRoute(sess.Owned, sess.Gateways); routed {
+		return admin
+	}
 	return h.d
+}
+
+func (h *Handler) gatewayRoute(owned bool, gateways []string) (channelAdmin, bool) {
+	if owned || len(gateways) != 1 || h.gatewayAdmins == nil {
+		return nil, false
+	}
+	if admin, ok := h.gatewayAdmins[gateways[0]]; ok && admin != nil {
+		return admin, true
+	}
+	return nil, true
+}
+
+func (h *Handler) announcingAdmin(adopted string, gateways []string, home channelAdmin) channelAdmin {
+	if adopted == "" {
+		return home
+	}
+	if admin, routed := h.gatewayRoute(false, gateways); routed {
+		return admin
+	}
+	return home
+}
+
+func channelRef(admin channelAdmin, channelID string) string {
+	if admin == nil {
+		return channelID
+	}
+	return admin.ChannelRef(channelID)
 }
 
 func (h *Handler) tidyChannel(ctx context.Context, sess state.Session) string {
 	if !sess.Owned {
 		return ""
 	}
-	if err := h.adminFor(sess).Archive(ctx, sess.ChannelID); err != nil {
+	admin := h.adminFor(sess)
+	if admin == nil {
+		return "\n" + h.text(clitext.SessionChannelLeftOpen, clitext.Params{clitext.ParamErr: h.localized(ErrNoChannelAdmin, clitext.HostErrNoChannelAdmin).Error()})
+	}
+	if err := admin.Archive(ctx, sess.ChannelID); err != nil {
 		return "\n" + h.text(clitext.SessionChannelLeftOpen, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	return ""

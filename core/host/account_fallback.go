@@ -67,8 +67,20 @@ func defaultFirst(targets []usage.Target) []usage.Target {
 	return targets
 }
 
-func (f *accountFallback) Notify(ctx context.Context, home state.HomeRef, channelID string, lang i18n.Language, notice contracts.Notice) {
-	gateway, ok := gatewayForHome(f.gateways, home)
+func gatewayOfSession(gws []Deps, home state.HomeRef, gateways []string) (Deps, bool) {
+	if len(gateways) != 1 {
+		return gatewayForHome(gws, home)
+	}
+	for _, dep := range gws {
+		if dep.Gateway != nil && dep.Gateway.Manifest().Kind == gateways[0] {
+			return dep, true
+		}
+	}
+	return Deps{}, false
+}
+
+func (f *accountFallback) Notify(ctx context.Context, home state.HomeRef, gateways []string, channelID string, lang i18n.Language, notice contracts.Notice) {
+	gateway, ok := gatewayOfSession(f.gateways, home, gateways)
 	if !ok {
 		slog.Warn("account notice dropped, no gateway for the home", "code", notice.Code)
 		return

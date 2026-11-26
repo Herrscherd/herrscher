@@ -35,6 +35,7 @@ const (
 	SetupCategoryCompactor      = "cli.setup.category.compactor"
 	SetupModuleTerminal         = "cli.setup.module.terminal"
 	SetupModuleChatBot          = "cli.setup.module.chat_bot"
+	SetupModuleTelegram         = "cli.setup.module.telegram"
 	SetupModuleClaude           = "cli.setup.module.claude"
 	SetupModuleCodex            = "cli.setup.module.codex"
 	SetupModuleCursor           = "cli.setup.module.cursor"
@@ -54,6 +55,11 @@ const (
 	SetupBotOK                  = "cli.setup.bot.ok"
 	SetupBotRefused             = "cli.setup.bot.refused"
 	SetupBotEmpty               = "cli.setup.bot.empty"
+	SetupTelegramIntro          = "cli.setup.telegram.intro"
+	SetupTelegramUser           = "cli.setup.telegram.user"
+	SetupTelegramUserHint       = "cli.setup.telegram.user_hint"
+	SetupTelegramUserMissing    = "cli.setup.telegram.user_missing"
+	SetupTelegramMalformed      = "cli.setup.telegram.malformed"
 	SetupBackendSub             = "cli.setup.backend.sub"
 	SetupClaudeQuestion         = "cli.setup.claude.question"
 	SetupClaudeSubscription     = "cli.setup.claude.subscription"
@@ -194,6 +200,7 @@ func setupKeys() map[Key][]string {
 		SetupCategoryCompactor:      nil,
 		SetupModuleTerminal:         nil,
 		SetupModuleChatBot:          {ParamName},
+		SetupModuleTelegram:         nil,
 		SetupModuleClaude:           nil,
 		SetupModuleCodex:            nil,
 		SetupModuleCursor:           nil,
@@ -213,6 +220,11 @@ func setupKeys() map[Key][]string {
 		SetupBotOK:                  {ParamName},
 		SetupBotRefused:             {ParamName},
 		SetupBotEmpty:               {ParamName},
+		SetupTelegramIntro:          nil,
+		SetupTelegramUser:           nil,
+		SetupTelegramUserHint:       nil,
+		SetupTelegramUserMissing:    nil,
+		SetupTelegramMalformed:      nil,
 		SetupBackendSub:             nil,
 		SetupClaudeQuestion:         nil,
 		SetupClaudeSubscription:     nil,

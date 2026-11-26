@@ -62,9 +62,13 @@ func (h *Handler) sessionCreateRun(ctx context.Context, input contracts.Input) (
 	}
 	h.warnIfFailed(h.sup.StartWithin(sess, supervisorGrace), "start "+req.name)
 	banner := h.sessionBanner(h.noticeLanguage(req.lang), place.repo, req.name, place.space.path, place.wt.Branch(req.name), req.runtime.cmd, req.runtime.model, req.shared)
-	h.warnIfFailed(req.admin.Send(ctx, sess.ChannelID, banner), "send banner for "+req.name)
+	if req.admin != nil {
+		h.warnIfFailed(req.admin.Send(ctx, sess.ChannelID, banner), "send banner for "+req.name)
+	} else {
+		h.log.Warn("session banner not sent, no running gateway owns its conversation", "session", req.name, "gateways", req.options.gateways)
+	}
 	h.announceAccount(ctx, req, sess.ChannelID)
-	return contracts.DataResult(h.text(clitext.SessionRunning, clitext.Params{clitext.ParamChannel: req.admin.ChannelRef(sess.ChannelID), clitext.ParamBanner: banner, clitext.ParamApprovals: approvalsNote})), nil
+	return contracts.DataResult(h.text(clitext.SessionRunning, clitext.Params{clitext.ParamChannel: channelRef(req.admin, sess.ChannelID), clitext.ParamBanner: banner, clitext.ParamApprovals: approvalsNote})), nil
 }
 
 func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input) (createRequest, error) {
@@ -96,6 +100,7 @@ func (h *Handler) parseCreateRequest(ctx context.Context, input contracts.Input)
 	if err != nil {
 		return createRequest{}, err
 	}
+	admin = h.announcingAdmin(adopted, options.gateways, admin)
 	explicitAccount, _ := input.Lookup("account")
 	hostName, planned, err := h.checkSessionAccount(input, runtime)
 	if err != nil {
@@ -150,6 +155,9 @@ func (h *Handler) chooseHome(ctx context.Context, input contracts.Input, adopted
 	}
 	if terminalOnly {
 		return state.HomeRef{}, nil, h.localized(ErrConflictingPlacement, clitext.HostErrConflictingPlacement)
+	}
+	if admin == nil {
+		return state.HomeRef{}, nil, h.localized(ErrNoChannelAdmin, clitext.HostErrNoChannelAdmin)
 	}
 	kind, err := admin.Kind(ctx, under)
 	if err != nil {

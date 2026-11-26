@@ -14,7 +14,7 @@ The variables below are the ones the host and the bundled plugins read.
 
 | Variable | Default | Meaning | Read by |
 |----------|---------|---------|---------|
-| `DISCORD_BOT_TOKEN` | unset (required for the Discord gateway) | The Discord bot token. Required when the active gateway is Discord; read with echo disabled by the `init` wizard. | Discord gateway plugin |
+| `DISCORD_BOT_TOKEN` | unset (required for the Discord gateway) | The Discord bot token. Required when the active gateway is Discord; read with echo disabled by the `setup` wizard. | Discord gateway plugin |
 | `DISCORD_USER_ID` | unset (required for the Discord gateway) | The Discord user the bot obeys. It reads every channel it can see, but only this user's mentions and replies make it act: the bot is bound to a person, not to a channel. | Discord gateway plugin |
 | `DISCORD_VERBOSITY` | `silent` | How much of a turn is posted in-channel: `silent` (the answer and nothing else), `quiet` (adds a live list of tool names), `actions` (adds each tool's detail), `full` (adds the assistant's thinking). Raise it only in a channel you would not mind screenshotting. | Discord gateway plugin |
 | `DISCORD_CONTEXT_MESSAGES` | `30` | How many prior channel messages are carried into the turn as context, all authors. | Discord gateway plugin |
@@ -306,5 +306,5 @@ the unit:
 - `~/.config/herrscher/herrscher.env`, the secrets file the service sources
   (`DISCORD_BOT_TOKEN=`, `DISCORD_USER_ID=`).
 - root `.env`, auto-loaded by the host; seeded from `.env.example` by
-  `herrscher init`.
+  `herrscher setup`.
 - `~/.config/herrscher/config.json`, the config template.

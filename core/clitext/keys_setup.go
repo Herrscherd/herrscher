@@ -5,6 +5,8 @@ const (
 	SetupUsage                  = "cli.setup.usage"
 	SetupUnknownSection         = "cli.setup.unknown_section"
 	SetupNeedsTerminal          = "cli.setup.needs_terminal"
+	SetupStackTakesNoSection    = "cli.setup.stack_takes_no_section"
+	SetupStackFlagNeedsYes      = "cli.setup.stack_flag_needs_yes"
 	SetupFailed                 = "cli.setup.failed"
 	SetupTitle                  = "cli.setup.title"
 	SetupLabelHost              = "cli.setup.label.host"
@@ -180,6 +182,8 @@ func setupKeys() map[Key][]string {
 		SetupUsage:                  {ParamName},
 		SetupUnknownSection:         {ParamName},
 		SetupNeedsTerminal:          nil,
+		SetupStackTakesNoSection:    {ParamName},
+		SetupStackFlagNeedsYes:      {ParamName},
 		SetupFailed:                 {ParamErr},
 		SetupTitle:                  nil,
 		SetupLabelHost:              nil,

@@ -40,14 +40,9 @@
     "other": "print the build version"
   },
   {
-    "id": "cli.usage.start.init",
-    "description": "Usage line: compose the plugin stack and the secrets",
-    "other": "compose the plugin stack (flags, or the setup on a terminal)"
-  },
-  {
     "id": "cli.usage.start.setup",
     "description": "Usage line: open the interactive setup and its dashboard",
-    "other": "pick modules, sign in, configure everything (dashboard)"
+    "other": "pick modules, sign in, configure everything (dashboard); --yes for scripts"
   },
   {
     "id": "cli.usage.session.verbs",
@@ -140,7 +135,7 @@
     "other": "     HERRSCHER_DEFAULT_MODEL (model taken when `session create` names none)"
   },
   {
-    "id": "cli.usage.env.init",
+    "id": "cli.usage.env.setup_route",
     "description": "Environment line: `herrscher setup route` sets the route",
     "other": "     `herrscher setup route` sets these three, no need to write them by hand"
   },
@@ -856,6 +851,11 @@
     "other": "{{.Module}}@{{.Version}} wants contracts {{.Want}}; the composition resolves {{.Have}}"
   },
   {
+    "id": "cli.manage.host_not_found",
+    "description": "Error: --host names a directory with no plugins.go",
+    "other": "no host module at {{.Path}} (no plugins.go there)"
+  },
+  {
     "id": "cli.manage.no_host_module",
     "description": "Error: no host module was found where the command looked",
     "other": "no host module found (looked for plugins.go); pass --host DIR"
@@ -893,7 +893,7 @@
   {
     "id": "cli.manage.unknown_kind.listed",
     "description": "Error: a module kind given as a flag is not in the catalog, with the way to list it",
-    "other": "{{.Category}}: unknown kind {{.Kind}} (try `herrscher init --list`)"
+    "other": "{{.Category}}: unknown kind {{.Kind}} (try `herrscher setup --list`)"
   },
   {
     "id": "cli.manage.invalid_module_path",
@@ -997,7 +997,7 @@
   },
   {
     "id": "cli.manage.flag.host",
-    "description": "Flag help: the --host flag of the plugin, init, update and install verbs",
+    "description": "Flag help: the --host flag of the plugin, setup, update and install verbs",
     "other": "path to the host module"
   },
   {
@@ -1011,13 +1011,13 @@
     "other": "go get -u the plugins but skip tidy/build"
   },
   {
-    "id": "cli.manage.flag.init_no_build",
-    "description": "Flag help: the --no-build flag of herrscher init",
+    "id": "cli.manage.flag.setup_no_build",
+    "description": "Flag help: the --no-build flag of herrscher setup",
     "other": "write plugins.go but skip go get/build"
   },
   {
-    "id": "cli.manage.flag.init_no_trial",
-    "description": "Flag help: the --no-trial flag of herrscher init",
+    "id": "cli.manage.flag.setup_no_trial",
+    "description": "Flag help: the --no-trial flag of herrscher setup",
     "other": "skip the short prompt sent to the chosen backend at the end"
   },
   {
@@ -1027,32 +1027,32 @@
   },
   {
     "id": "cli.manage.flag.list",
-    "description": "Flag help: the --list flag of herrscher init",
+    "description": "Flag help: the --list flag of herrscher setup",
     "other": "list the module catalog() and exit"
   },
   {
-    "id": "cli.manage.flag.init_yes",
-    "description": "Flag help: the --yes flag of herrscher init, which skips the wizard",
+    "id": "cli.manage.flag.setup_yes",
+    "description": "Flag help: the --yes flag of herrscher setup, which skips the wizard",
     "other": "skip the interactive wizard; use flags/defaults"
   },
   {
     "id": "cli.manage.flag.category",
-    "description": "Flag help: a stack flag of herrscher init, Category is the flag's category",
+    "description": "Flag help: a stack flag of herrscher setup, Category is the flag's category",
     "other": "{{.Category}} module kind (or none)"
   },
   {
     "id": "cli.manage.flag.with",
-    "description": "Flag help: the --with flag of herrscher init, which adds a module path",
+    "description": "Flag help: the --with flag of herrscher setup, which adds a module path",
     "other": "pin an extra module path verbatim (repeatable)"
   },
   {
-    "id": "cli.manage.init.wrote_no_build",
-    "description": "Confirmation: init wrote plugins.go without building, and how to build it",
+    "id": "cli.manage.setup.wrote_no_build",
+    "description": "Confirmation: setup wrote plugins.go without building, and how to build it",
     "other": "wrote plugins.go (--no-build); run `go mod tidy && go build` in the host to apply"
   },
   {
     "id": "cli.manage.wrote_settings",
-    "description": "Confirmation: init wrote settings to an env file, Count selects the plural form",
+    "description": "Confirmation: setup wrote settings to an env file, Count selects the plural form",
     "one": "wrote 1 setting to {{.Path}}",
     "other": "wrote {{.Count}} settings to {{.Path}}"
   },
@@ -1063,17 +1063,17 @@
   },
   {
     "id": "cli.manage.seed_failed",
-    "description": "Error: init could not copy .env.example to .env",
+    "description": "Error: setup could not copy .env.example to .env",
     "other": "seed {{.Path}}: {{.Err}}"
   },
   {
     "id": "cli.manage.seeded",
-    "description": "Confirmation: init copied .env.example to .env",
+    "description": "Confirmation: setup copied .env.example to .env",
     "other": "seeded {{.Path}} from .env.example: fill in your secrets"
   },
   {
     "id": "cli.manage.env_write_failed",
-    "description": "Error: init could not write the secrets",
+    "description": "Error: setup could not write the secrets",
     "other": "write secrets: {{.Err}}"
   },
   {
@@ -1143,7 +1143,7 @@
   },
   {
     "id": "cli.manage.stack_header",
-    "description": "Heading of the stack summary printed after init composes the plugin list",
+    "description": "Heading of the stack summary printed after setup composes the plugin list",
     "other": "stack"
   },
   {
@@ -4556,9 +4556,19 @@
     "other": "unknown section {{.Name}}"
   },
   {
+    "id": "cli.setup.stack_takes_no_section",
+    "description": "Error: setup composing a stack was also given a section name",
+    "other": "setup --yes and the stack flags take no section (got {{.Name}}); run herrscher setup {{.Name}} on its own"
+  },
+  {
+    "id": "cli.setup.stack_flag_needs_yes",
+    "description": "Error: a flag that only applies to the stack composition was given without --yes or a stack flag",
+    "other": "--{{.Name}} only applies with --yes or a stack flag"
+  },
+  {
     "id": "cli.setup.needs_terminal",
     "description": "Error: setup was started without a terminal",
-    "other": "herrscher setup needs a terminal; without one, use herrscher init --yes with its flags"
+    "other": "herrscher setup needs a terminal; without one, use herrscher setup --yes with its flags"
   },
   {
     "id": "cli.setup.failed",

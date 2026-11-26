@@ -36,9 +36,9 @@ usage after a line saying to run `herrscher setup`.
 
 Run again, `setup` opens a dashboard with the state of every section, and
 `herrscher setup discord` (or `telegram`, `claude`, `codex`, `cursor`, `grok`, `antigravity`, `obsidian`, `route`,
-`modules`, `connections`) jumps straight to one. `herrscher init --yes` with its
-stack flags stays the non-interactive path for scripts, and `herrscher models list`
-shows what the active policy offers. `init` ends with the same prompt to each chosen backend and
+`modules`, `connections`) jumps straight to one. `herrscher setup --yes` with its
+stack flags is the non-interactive path for scripts, and `herrscher models list`
+shows what the active policy offers. `setup --yes` ends with the same prompt to each chosen backend and
 exits with status 1 when one does not answer, scripts included. A script that
 prepares a machine before its backend CLI is installed or signed in passes
 `--no-trial`.

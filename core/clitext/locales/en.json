@@ -6038,6 +6038,11 @@
     "other": "session {{.Name}}: cannot read the checkpoint refs of {{.Path}}: {{.Err}}; nothing was moved. Make git -C {{.Path}} for-each-ref refs/herrscher/ work: fix the rights on the folder, add it with git config --global --add safe.directory {{.Path}} if git calls its owner dubious, or run git worktree repair {{.Path}} from its repository if that repository moved; then start herrscher serve again"
   },
   {
+    "id": "cli.migration.checkpoint_hidden_repository",
+    "description": "Migration refusal: git finds no repository for a session folder although a .git entry sits on its path",
+    "other": "session {{.Name}}: git finds no repository for {{.Path}}, yet {{.Repo}} sits on its path, so its checkpoint refs may live there: {{.Err}}; nothing was moved. If GIT_CEILING_DIRECTORIES stops the search below {{.Repo}}, start herrscher serve once without it (or with GIT_DISCOVERY_ACROSS_FILESYSTEM=1 if a filesystem boundary stops it): the migration then only moves refs under refs/herrscher/ of that repository, and later starts can set it back. If {{.Repo}} is empty or broken, repair or remove it. If {{.Path}} does not belong to that repository, move the folder out of its path. Then start herrscher serve again"
+  },
+  {
     "id": "cli.migration.checkpoint_move",
     "description": "Migration refusal: the checkpoint refs of a session cannot be moved",
     "other": "session {{.Name}}: cannot move the checkpoint refs of {{.Path}}: {{.Err}}; they move in one git transaction, so none moved, and the next start of herrscher serve tries again"

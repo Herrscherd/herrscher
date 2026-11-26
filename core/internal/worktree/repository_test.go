@@ -2,15 +2,19 @@ package worktree
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 func TestOutsideAnyRepositoryTellsAFolderOfNoRepositoryFromAFolderOfOne(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("GIT_CEILING_DIRECTORIES", root)
+	if entry, err := gitEntryOnPath(root); err != nil || entry != "" {
+		t.Skipf("the temporary directory %s sits under %q (err %v), so no folder in it is outside every repository; point TMPDIR outside any repository to run this test", root, entry, err)
+	}
 	t.Setenv("LANGUAGE", "fr")
 	t.Setenv("LANG", "fr_FR.UTF-8")
 	plain := filepath.Join(root, "plain")
@@ -70,7 +74,7 @@ func TestOutsideAnyRepositoryRefusesAFolderUnderAGitEntryGitDoesNotSee(t *testin
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
 	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Join(repo, "a"))
-	if outside, err := OutsideAnyRepository(t.Context(), hidden); !errors.Is(err, ErrHiddenRepository) || outside {
+	if outside, err := OutsideAnyRepository(t.Context(), hidden); !errors.Is(err, ErrHiddenRepository) || !strings.Contains(fmt.Sprint(err), filepath.Join(repo, ".git")) || outside {
 		t.Fatalf("OutsideAnyRepository(repo/a/b) = %v, %v, want an error naming %s", outside, err, filepath.Join(repo, ".git"))
 	}
 }

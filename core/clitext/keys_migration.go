@@ -24,6 +24,7 @@ const (
 	MigrationRekeyFinished      = "cli.migration.rekey_finished"
 	MigrationCheckpointConflict = "cli.migration.checkpoint_conflict"
 	MigrationCheckpointInspect  = "cli.migration.checkpoint_inspect"
+	MigrationCheckpointHidden   = "cli.migration.checkpoint_hidden_repository"
 	MigrationCheckpointMove     = "cli.migration.checkpoint_move"
 	InstanceGenerated           = "cli.instance.generated"
 )
@@ -52,6 +53,7 @@ func migrationKeys() map[Key][]string {
 		MigrationRekeyFinished:      {ParamName, ParamCount},
 		MigrationCheckpointConflict: {ParamName, ParamRef, ParamHave, ParamWant, ParamPath},
 		MigrationCheckpointInspect:  {ParamName, ParamPath, ParamErr},
+		MigrationCheckpointHidden:   {ParamName, ParamPath, ParamRepo, ParamErr},
 		MigrationCheckpointMove:     {ParamName, ParamPath, ParamErr},
 		InstanceGenerated:           {ParamValue},
 	}

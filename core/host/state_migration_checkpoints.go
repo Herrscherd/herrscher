@@ -32,7 +32,7 @@ func planCheckpointRekeys(ctx context.Context, cliMessages *clitext.Messages, se
 		}
 		outside, err := worktree.OutsideAnyRepository(ctx, dir)
 		if err != nil {
-			return nil, &stateMigrationRefusedError{messages: cliMessages, key: clitext.MigrationCheckpointInspect, params: checkpointFailureParams(sess.Name, dir, err), cause: err}
+			return nil, repositoryDiscoveryRefusal(cliMessages, sess.Name, dir, err)
 		}
 		if outside {
 			continue
@@ -87,6 +87,16 @@ func announceRekey(announcer stateAnnouncer, rekey checkpointRekey) {
 			clitext.ParamCount: tally.Finished,
 		})
 	}
+}
+
+func repositoryDiscoveryRefusal(cliMessages *clitext.Messages, name, dir string, err error) error {
+	hidden, ok := errors.AsType[*worktree.HiddenRepositoryError](err)
+	if !ok {
+		return &stateMigrationRefusedError{messages: cliMessages, key: clitext.MigrationCheckpointInspect, params: checkpointFailureParams(name, dir, err), cause: err}
+	}
+	params := checkpointFailureParams(name, dir, hidden.Err)
+	params[clitext.ParamRepo] = hidden.Entry
+	return &stateMigrationRefusedError{messages: cliMessages, key: clitext.MigrationCheckpointHidden, params: params, cause: err}
 }
 
 func checkpointFailureParams(name, dir string, err error) clitext.Params {

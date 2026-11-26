@@ -11,10 +11,24 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
+func gitEntryAbove(dir string) (string, bool) {
+	for current := dir; ; current = filepath.Dir(current) {
+		entry := filepath.Join(current, ".git")
+		if _, err := os.Lstat(entry); err == nil {
+			return entry, true
+		}
+		if filepath.Dir(current) == current {
+			return "", false
+		}
+	}
+}
+
 func folderOutsideAnyRepository(t *testing.T, rel string) string {
 	t.Helper()
 	root := t.TempDir()
-	t.Setenv("GIT_CEILING_DIRECTORIES", root)
+	if entry, found := gitEntryAbove(root); found {
+		t.Skipf("the temporary directory %s sits under %s, so no folder in it is outside every repository; point TMPDIR outside any repository to run this test", root, entry)
+	}
 	t.Setenv("LANGUAGE", "fr")
 	dir := filepath.Join(root, rel)
 	if err := os.MkdirAll(dir, 0o750); err != nil {

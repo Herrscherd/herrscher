@@ -6038,6 +6038,11 @@
     "other": "session {{.Name}} : impossible de lire les refs de checkpoint de {{.Path}} : {{.Err}} ; rien n'a été déplacé. Fais marcher git -C {{.Path}} for-each-ref refs/herrscher/ : corrige les droits du dossier, ajoute-le avec git config --global --add safe.directory {{.Path}} si git juge son propriétaire douteux, ou lance git worktree repair {{.Path}} depuis son dépôt si ce dépôt a bougé ; puis relance herrscher serve"
   },
   {
+    "id": "cli.migration.checkpoint_hidden_repository",
+    "description": "Refus de la migration : git ne trouve aucun dépôt pour le dossier d'une session alors qu'une entrée .git est sur son chemin",
+    "other": "session {{.Name}} : git ne trouve aucun dépôt pour {{.Path}}, pourtant {{.Repo}} est sur son chemin, donc ses refs de checkpoint y sont peut-être : {{.Err}} ; rien n'a été déplacé. Si GIT_CEILING_DIRECTORIES arrête la recherche sous {{.Repo}}, lance herrscher serve une fois sans lui (ou avec GIT_DISCOVERY_ACROSS_FILESYSTEM=1 si c'est une frontière de système de fichiers qui l'arrête) : la migration ne déplace alors que des refs sous refs/herrscher/ de ce dépôt, et les démarrages suivants peuvent le remettre. Si {{.Repo}} est vide ou cassé, répare-le ou retire-le. Si {{.Path}} n'appartient pas à ce dépôt, sors le dossier de son chemin. Puis relance herrscher serve"
+  },
+  {
     "id": "cli.migration.checkpoint_move",
     "description": "Refus de la migration : les refs de checkpoint d'une session ne peuvent pas être déplacées",
     "other": "session {{.Name}} : impossible de déplacer les refs de checkpoint de {{.Path}} : {{.Err}} ; elles bougent en une seule transaction git, donc aucune n'a bougé, et le prochain herrscher serve réessaie"

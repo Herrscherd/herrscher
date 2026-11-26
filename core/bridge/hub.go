@@ -152,7 +152,7 @@ func runHub(parent context.Context, newBackend BackendFactory, orch contracts.Or
 		pin = &scopePin{resolve: opts.Scope, current: opts.LaunchProject, agent: opts.MemoryAgent, orch: orch}
 	}
 	runHubTurnsCtl(ctx, events, conn, backend, orch, ctrl, eng,
-		affordances{roster: opts.Roster, caps: opts.Capabilities, user: identity.FromDir(ctx, cwd), outbox: outboundSettings{root: opts.OutboxRoot, session: opts.Channel, maxBytes: opts.OutboundMaxBytes}, approvals: approvals}, pin)
+		affordances{roster: opts.Roster, caps: opts.Capabilities, selfTools: opts.SelfToolsBytes, user: identity.FromDir(ctx, cwd), outbox: outboundSettings{root: opts.OutboxRoot, session: opts.Channel, maxBytes: opts.OutboundMaxBytes}, approvals: approvals}, pin)
 	if err := parent.Err(); err != nil {
 		return err
 	}
@@ -170,6 +170,7 @@ func reportControlScan(err error) error {
 type affordances struct {
 	roster    contracts.RosterProvider
 	caps      string
+	selfTools int
 	user      identity.Identity
 	outbox    outboundSettings
 	approvals *approvalChannel

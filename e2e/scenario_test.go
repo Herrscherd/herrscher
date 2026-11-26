@@ -54,6 +54,7 @@ func TestScenarios(t *testing.T) {
 			"instancegone":   instanceGone,
 			"sessionrunning": sessionRunning,
 			"sessionstopped": sessionStopped,
+			"sessionsocket":  sessionSocket,
 		},
 	})
 }

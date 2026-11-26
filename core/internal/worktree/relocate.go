@@ -251,3 +251,17 @@ func InBareLayout(path string, scratch bool) bool {
 	}
 	return path != "" && filepath.Base(filepath.Dir(filepath.Clean(path))) == layoutDir
 }
+
+// LayoutRepository reports the repository a session worktree of either layout lives in, read from its path alone, so it answers for a worktree that is gone.
+func LayoutRepository(path string) (string, bool) {
+	if path == "" {
+		return "", false
+	}
+	parent := filepath.Dir(filepath.Clean(path))
+	for _, dir := range []string{parent, filepath.Dir(parent)} {
+		if filepath.Base(dir) == sessionsDir {
+			return filepath.Dir(dir), true
+		}
+	}
+	return "", false
+}

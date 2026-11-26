@@ -23,24 +23,28 @@ func planCheckpointRekeys(ctx context.Context, cliMessages *clitext.Messages, se
 	var rekeys []checkpointRekey
 	for idx := range sessions {
 		sess := sessions[idx]
-		if !checkpointable(sess) || worktreeGone(sess.Worktree) {
+		if !checkpointable(sess) {
 			continue
 		}
-		outside, err := worktree.OutsideAnyRepository(ctx, sess.Worktree)
+		dir, found := checkpointRefsHolder(sess.Worktree)
+		if !found {
+			continue
+		}
+		outside, err := worktree.OutsideAnyRepository(ctx, dir)
 		if err != nil {
-			return nil, &stateMigrationRefusedError{messages: cliMessages, key: clitext.MigrationCheckpointInspect, params: checkpointFailureParams(sess, err), cause: err}
+			return nil, &stateMigrationRefusedError{messages: cliMessages, key: clitext.MigrationCheckpointInspect, params: checkpointFailureParams(sess.Name, dir, err), cause: err}
 		}
 		if outside {
 			continue
 		}
-		plan, err := checkpoint.PlanRekey(ctx, sess.Worktree, sess.Name, sess.Incarnation)
+		plan, err := checkpoint.PlanRekey(ctx, dir, sess.Name, sess.Incarnation)
 		if conflict, ok := errors.AsType[*checkpoint.RekeyConflictError](err); ok {
 			return nil, &stateMigrationRefusedError{messages: cliMessages, key: clitext.MigrationCheckpointConflict, params: clitext.Params{
-				clitext.ParamName: strconv.Quote(sess.Name), clitext.ParamRef: conflict.Ref, clitext.ParamHave: conflict.Have, clitext.ParamWant: conflict.Want, clitext.ParamPath: sess.Worktree,
+				clitext.ParamName: strconv.Quote(sess.Name), clitext.ParamRef: conflict.Ref, clitext.ParamHave: conflict.Have, clitext.ParamWant: conflict.Want, clitext.ParamPath: dir,
 			}, cause: err}
 		}
 		if err != nil {
-			return nil, &stateMigrationRefusedError{messages: cliMessages, key: clitext.MigrationCheckpointInspect, params: checkpointFailureParams(sess, err), cause: err}
+			return nil, &stateMigrationRefusedError{messages: cliMessages, key: clitext.MigrationCheckpointInspect, params: checkpointFailureParams(sess.Name, dir, err), cause: err}
 		}
 		if !plan.Empty() {
 			rekeys = append(rekeys, checkpointRekey{session: sess.Name, key: sess.Incarnation, plan: plan})
@@ -53,8 +57,7 @@ func rekeyCheckpoints(ctx context.Context, announcer stateAnnouncer, rekeys []ch
 	var store checkpoint.Store
 	for _, rekey := range rekeys {
 		if err := store.ApplyRekey(ctx, rekey.plan); err != nil {
-			sess := state.Session{Name: rekey.session, Worktree: rekey.plan.Dir}
-			return &stateMigrationRefusedError{messages: announcer.cliMessages, key: clitext.MigrationCheckpointMove, params: checkpointFailureParams(sess, err), cause: err}
+			return &stateMigrationRefusedError{messages: announcer.cliMessages, key: clitext.MigrationCheckpointMove, params: checkpointFailureParams(rekey.session, rekey.plan.Dir, err), cause: err}
 		}
 		announceRekey(announcer, rekey)
 	}
@@ -86,8 +89,19 @@ func announceRekey(announcer stateAnnouncer, rekey checkpointRekey) {
 	}
 }
 
-func checkpointFailureParams(sess state.Session, err error) clitext.Params {
-	return clitext.Params{clitext.ParamName: strconv.Quote(sess.Name), clitext.ParamPath: sess.Worktree, clitext.ParamErr: err.Error()}
+func checkpointFailureParams(name, dir string, err error) clitext.Params {
+	return clitext.Params{clitext.ParamName: strconv.Quote(name), clitext.ParamPath: dir, clitext.ParamErr: err.Error()}
+}
+
+func checkpointRefsHolder(worktreePath string) (string, bool) {
+	if !worktreeGone(worktreePath) {
+		return worktreePath, true
+	}
+	repo, ok := worktree.LayoutRepository(worktreePath)
+	if !ok || worktreeGone(repo) {
+		return "", false
+	}
+	return repo, true
 }
 
 func worktreeGone(path string) bool {

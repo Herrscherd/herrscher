@@ -11,6 +11,7 @@ import (
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/checkpoint"
+	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
 
 const migratedIncarnation = "inc_ALPHA"
@@ -136,5 +137,45 @@ func TestMigrationRefusesACheckpointRefThatAlreadyHoldsAnotherCommit(t *testing.
 	}
 	if len(backups) != 0 {
 		t.Fatalf("the refused migration wrote a copy %v before refusing", backups)
+	}
+}
+
+func checkpointedGoneWorktree(t *testing.T, gone string) string {
+	t.Helper()
+	repo, _ := worktree.LayoutRepository(gone)
+	gitOutput(t, repo, "worktree", "add", "-q", gone, "-b", "session/alpha")
+	head := gitOutput(t, gone, "rev-parse", "HEAD")
+	gitOutput(t, gone, "update-ref", "refs/herrscher/checkpoints/alpha/1", head)
+	if err := os.RemoveAll(gone); err != nil {
+		t.Fatal(err)
+	}
+	return writeFormat0State(t, []map[string]any{{"name": "alpha", "incarnation": migratedIncarnation, "channelID": "c1", "type": "channel", "cmd": "claude", "worktree": gone, "dir": gone, "gateways": []string{"chat"}}}, nil)
+}
+
+func TestMigrationFilesTheCheckpointsOfAGoneWorktreeFromItsRepository(t *testing.T) {
+	for _, layout := range []struct {
+		name string
+		path func(repo string) string
+	}{
+		{"id-less layout", func(repo string) string { return filepath.Join(repo, ".herrscher-sessions", "alpha") }},
+		{"instance layout", func(repo string) string { return filepath.Join(repo, ".herrscher-sessions", "inst", "alpha") }},
+	} {
+		t.Run(layout.name, func(t *testing.T) {
+			repo := tempRepo(t)
+			path := checkpointedGoneWorktree(t, layout.path(repo))
+			announcer, out, _ := recordingAnnouncer()
+			if err := migrateHubState(t.Context(), newHostMessages(), announcer, loadForMigration(t, path), migrationInputs{optID: "inst", defaultGateways: []string{"chat"}}); err != nil {
+				t.Fatal(err)
+			}
+			if left := refsMatching(t, repo, "refs/herrscher/checkpoints/alpha/"); len(left) != 0 {
+				t.Fatalf("refs of the gone worktree left under the session name: %v", left)
+			}
+			if moved := refsMatching(t, repo, "refs/herrscher/checkpoints/"+migratedIncarnation+"/"); len(moved) != 1 {
+				t.Fatalf("refs under the incarnation = %v, want the one checkpoint of the gone worktree", moved)
+			}
+			if !strings.Contains(out.String(), "session alpha, 1 checkpoint ref moved") {
+				t.Fatalf("serve output does not announce the moved checkpoint:\n%s", out)
+			}
+		})
 	}
 }

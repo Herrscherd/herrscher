@@ -97,10 +97,19 @@ and writes the new file atomically. Each change is announced on the output of
   point moved, and how many refs were already in place and only lost their old
   name. Refs a session filed under a name it had before a rename are left
   where they are, as are those of closed sessions.
-- **Folders in no git repository.** A local session whose folder is gone, or
-  belongs to no git repository (git says `not a git repository`), holds no
-  checkpoint ref and has no worktree git could move: the migration leaves it
-  where it is, its stored worktree unchanged, and announces nothing for it.
+  Checkpoint refs belong to the repository, not to the worktree folder, so the
+  refs of a session whose folder is gone move too, read from the repository the
+  folder sat in (the folder above `.herrscher-sessions`), the same way and
+  with the same refusals. A gone folder outside that layout names no
+  repository, so its refs, if any, stay under the session name.
+- **Folders in no git repository.** A local session whose folder belongs to no
+  git repository (git finds no repository in the folder or any parent, and no
+  `.git` entry sits on its path), or whose folder is gone with no repository
+  left to read, holds no checkpoint ref and has no worktree git could move: the
+  migration leaves it where it is, its stored worktree unchanged, and announces
+  nothing for it. Closing such a session is refused while its folder exists,
+  since it may hold work and lies outside the instance root: move or delete the
+  folder yourself, then close the session with `force:true`.
 - **Old `repo` field.** It becomes the workspace when neither the state nor
   `config.json` sets one, and is dropped otherwise, since a workspace already
   applied in its place.

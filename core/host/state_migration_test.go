@@ -150,7 +150,7 @@ func TestMigrationPointsARemoteSessionAtItsNewPlaceAndSaysWhatToRunThere(t *test
 	if sess.Worktree != "/srv/work/app/.herrscher-sessions/alice/far" || sess.Dir != sess.Worktree {
 		t.Fatalf("remote session worktree = %q dir = %q, want the instance layout path", sess.Worktree, sess.Dir)
 	}
-	for _, want := range []string{"build1", `worktree move "/srv/work/app/.herrscher-sessions/far" "/srv/work/app/.herrscher-sessions/alice/far"`, "branch -m session/far session/alice/far"} {
+	for _, want := range []string{"build1", "worktree move '/srv/work/app/.herrscher-sessions/far' '/srv/work/app/.herrscher-sessions/alice/far'", "branch -m 'session/far' 'session/alice/far'", "fails to start there and keeps retrying"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("serve output does not tell the operator %q:\n%s", want, out)
 		}

@@ -5847,7 +5847,7 @@
   {
     "id": "cli.worktree.relocate_remote_unreachable",
     "description": "State migration refusal: a remote could not be asked about a pull request branch",
-    "other": "branch {{.Branch}} carries a pull request, and remote {{.Target}} could not be asked whether it still holds it: {{.Err}} {{.Output}}; run herrscher serve again once the remote answers"
+    "other": "session {{.Name}}: branch {{.Branch}} carries a pull request, and remote {{.Target}} could not be asked whether it still holds it: {{.Err}} {{.Output}}; run herrscher serve again once the remote answers, or, if the pull request is merged or closed, move the session yourself, which needs no network: {{.Command}}, then run herrscher serve again"
   },
   {
     "id": "cli.migration.started",
@@ -5912,12 +5912,12 @@
   {
     "id": "cli.migration.remote_worktree",
     "description": "Migration notice: a remote session worktree the operator moves by hand",
-    "other": "herrscher: migration: session {{.Name}} lives on host {{.Host}}, which the migration does not reach; the state now points to {{.To}}, so before the session starts again run on {{.Host}}: mkdir -p {{.Where}} && git -C {{.Repo}} worktree move {{.From}} {{.To}} && git -C {{.Repo}} branch -m {{.Branch}} {{.Target}} (keep the branch name if it carries an open pull request)"
+    "other": "herrscher: migration: session {{.Name}} lives on host {{.Host}}, which the migration does not reach; the state now points to {{.To}}, and until these commands are run on {{.Host}} the session fails to start there and keeps retrying: mkdir -p {{.Where}} && git -C {{.Repo}} worktree move {{.From}} {{.To}} && git -C {{.Repo}} branch -m {{.Branch}} {{.Target}} (keep the branch name if it carries an open pull request)"
   },
   {
     "id": "cli.migration.remote_scratch",
     "description": "Migration notice: a remote scratch directory the operator moves by hand",
-    "other": "herrscher: migration: session {{.Name}} lives on host {{.Host}}, which the migration does not reach; the state now points to {{.To}}, so before the session starts again run on {{.Host}}: mkdir -p {{.Where}} && mv {{.From}} {{.To}}"
+    "other": "herrscher: migration: session {{.Name}} lives on host {{.Host}}, which the migration does not reach; the state now points to {{.To}}, and until these commands are run on {{.Host}} the session fails to start there and keeps retrying: mkdir -p {{.Where}} && mv {{.From}} {{.To}}"
   },
   {
     "id": "cli.migration.conversation_reset",

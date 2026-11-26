@@ -5847,7 +5847,7 @@
   {
     "id": "cli.worktree.relocate_remote_unreachable",
     "description": "Refus de migration : un remote n'a pas pu être interrogé sur la branche d'une pull request",
-    "other": "la branche {{.Branch}} porte une pull request, et le remote {{.Target}} n'a pas pu dire s'il la garde encore : {{.Err}} {{.Output}} ; relance herrscher serve quand le remote répond"
+    "other": "session {{.Name}} : la branche {{.Branch}} porte une pull request, et le remote {{.Target}} n'a pas pu dire s'il la garde encore : {{.Err}} {{.Output}} ; relance herrscher serve quand le remote répond, ou, si la pull request est fusionnée ou fermée, déplace la session toi-même, sans réseau : {{.Command}}, puis relance herrscher serve"
   },
   {
     "id": "cli.migration.started",
@@ -5912,12 +5912,12 @@
   {
     "id": "cli.migration.remote_worktree",
     "description": "Annonce de migration : worktree d'une session distante que l'opérateur déplace à la main",
-    "other": "herrscher : migration : la session {{.Name}} vit sur l'hôte {{.Host}}, que la migration n'atteint pas ; l'état pointe maintenant vers {{.To}}, donc avant que la session ne redémarre lance sur {{.Host}} : mkdir -p {{.Where}} && git -C {{.Repo}} worktree move {{.From}} {{.To}} && git -C {{.Repo}} branch -m {{.Branch}} {{.Target}} (garde le nom de la branche si elle porte une pull request ouverte)"
+    "other": "herrscher : migration : la session {{.Name}} vit sur l'hôte {{.Host}}, que la migration n'atteint pas ; l'état pointe maintenant vers {{.To}}, et tant que ces commandes ne sont pas lancées sur {{.Host}} la session échoue à démarrer là-bas et réessaie : mkdir -p {{.Where}} && git -C {{.Repo}} worktree move {{.From}} {{.To}} && git -C {{.Repo}} branch -m {{.Branch}} {{.Target}} (garde le nom de la branche si elle porte une pull request ouverte)"
   },
   {
     "id": "cli.migration.remote_scratch",
     "description": "Annonce de migration : dossier scratch d'une session distante que l'opérateur déplace à la main",
-    "other": "herrscher : migration : la session {{.Name}} vit sur l'hôte {{.Host}}, que la migration n'atteint pas ; l'état pointe maintenant vers {{.To}}, donc avant que la session ne redémarre lance sur {{.Host}} : mkdir -p {{.Where}} && mv {{.From}} {{.To}}"
+    "other": "herrscher : migration : la session {{.Name}} vit sur l'hôte {{.Host}}, que la migration n'atteint pas ; l'état pointe maintenant vers {{.To}}, et tant que ces commandes ne sont pas lancées sur {{.Host}} la session échoue à démarrer là-bas et réessaie : mkdir -p {{.Where}} && mv {{.From}} {{.To}}"
   },
   {
     "id": "cli.migration.conversation_reset",

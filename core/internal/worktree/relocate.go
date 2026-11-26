@@ -51,6 +51,7 @@ type BareSession struct {
 	Path        string
 	Scratch     bool
 	PullRequest int
+	Origin      OriginAccess
 }
 
 // BareTarget reports where a session of the id-less layout belongs under this instance, without looking at the disk.
@@ -94,7 +95,7 @@ func (w *Worktreer) PlanBareRelocation(ctx context.Context, sess BareSession) (R
 			return Relocation{}, branchErr
 		}
 	}
-	plan.moveBranch, err = w.planBranchRename(ctx, plan, sess.PullRequest)
+	plan.moveBranch, err = w.planBranchRename(ctx, plan, sess)
 	if err != nil {
 		return Relocation{}, err
 	}
@@ -132,7 +133,7 @@ func (w *Worktreer) checkOnBranch(ctx context.Context, path, branch string) erro
 	return nil
 }
 
-func (w *Worktreer) planBranchRename(ctx context.Context, plan Relocation, pullRequest int) (bool, error) {
+func (w *Worktreer) planBranchRename(ctx context.Context, plan Relocation, sess BareSession) (bool, error) {
 	fromExists, err := w.BranchExistsAt(ctx, plan.Repo, plan.FromBranch)
 	if err != nil {
 		return false, err
@@ -151,7 +152,7 @@ func (w *Worktreer) planBranchRename(ctx context.Context, plan Relocation, pullR
 	if err == nil && strings.TrimSpace(string(upstream)) != "" {
 		return false, NewFailure(w.messages, clitext.WorktreeRelocateUpstream, clitext.Params{clitext.ParamName: strconv.Quote(plan.Name), clitext.ParamBranch: strconv.Quote(plan.FromBranch)}, nil)
 	}
-	remote, err := w.pushedAs(ctx, plan.Repo, plan.FromBranch, pullRequest != 0)
+	remote, err := w.pushedAs(ctx, plan, sess)
 	if err != nil {
 		return false, err
 	}
@@ -159,42 +160,6 @@ func (w *Worktreer) planBranchRename(ctx context.Context, plan Relocation, pullR
 		return false, NewFailure(w.messages, clitext.WorktreeRelocateRemoteBranch, clitext.Params{clitext.ParamName: strconv.Quote(plan.Name), clitext.ParamBranch: plan.FromBranch, clitext.ParamTarget: remote}, nil)
 	}
 	return true, nil
-}
-
-func (w *Worktreer) pushedAs(ctx context.Context, repo, branch string, askRemotes bool) (string, error) {
-	out, err := exec.CommandContext(ctx, "git", "-C", repo, "for-each-ref", "--format=%(refname:lstrip=2)", "refs/remotes").Output()
-	if err != nil {
-		return "", NewFailure(w.messages, clitext.WorktreeInspect, clitext.Params{clitext.ParamPath: strconv.Quote(repo), clitext.ParamErr: err}, err)
-	}
-	for ref := range strings.Lines(string(out)) {
-		if remote, rest, ok := strings.Cut(strings.TrimSpace(ref), "/"); ok && rest == branch {
-			return remote, nil
-		}
-	}
-	if !askRemotes {
-		return "", nil
-	}
-	return w.remoteHolding(ctx, repo, branch)
-}
-
-func (w *Worktreer) remoteHolding(ctx context.Context, repo, branch string) (string, error) {
-	out, err := exec.CommandContext(ctx, "git", "-C", repo, "remote").Output()
-	if err != nil {
-		return "", NewFailure(w.messages, clitext.WorktreeInspect, clitext.Params{clitext.ParamPath: strconv.Quote(repo), clitext.ParamErr: err}, err)
-	}
-	for remote := range strings.Lines(string(out)) {
-		remote = strings.TrimSpace(remote)
-		lsRemote := exec.CommandContext(ctx, "git", "-C", repo, "ls-remote", "--heads", remote, "refs/heads/"+branch)
-		lsRemote.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-		heads, lsErr := lsRemote.CombinedOutput()
-		if lsErr != nil {
-			return "", NewFailure(w.messages, clitext.WorktreeRelocateRemoteUnreachable, clitext.Params{clitext.ParamBranch: branch, clitext.ParamTarget: remote, clitext.ParamOutput: redact.Output(heads), clitext.ParamErr: lsErr}, lsErr)
-		}
-		if strings.TrimSpace(string(heads)) != "" {
-			return remote, nil
-		}
-	}
-	return "", nil
 }
 
 // Relocate carries out a planned relocation: the directory first, then the branch, putting the directory back when the branch cannot follow.

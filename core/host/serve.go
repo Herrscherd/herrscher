@@ -216,7 +216,7 @@ func loadHubState(ctx context.Context, messages *hostMessages, announcer stateAn
 	if err != nil {
 		return nil, err
 	}
-	if err := migrateHubState(ctx, messages, announcer, store, migrationInputs{optID: opts.InstanceID, ownerID: opts.Owner, defaultGateways: opts.DefaultGateways, configWorkspace: opts.Workspace}); err != nil {
+	if err := migrateHubState(ctx, messages, announcer, store, migrationInputs{optID: opts.InstanceID, ownerID: opts.Owner, defaultGateways: opts.DefaultGateways, configWorkspace: opts.Workspace, forge: forgeCredentials(opts.Forge)}); err != nil {
 		return nil, err
 	}
 	var home *state.HomeRef

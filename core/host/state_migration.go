@@ -10,9 +10,11 @@ import (
 	"strconv"
 	"strings"
 
+	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher-contracts/i18n"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/instanceid"
+	"github.com/Herrscherd/herrscher/core/internal/shellquote"
 	"github.com/Herrscherd/herrscher/core/internal/state"
 	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
@@ -69,6 +71,7 @@ type migrationInputs struct {
 	ownerID         string
 	defaultGateways []string
 	configWorkspace string
+	forge           contracts.ForgeCredentials
 }
 
 func migrateHubState(ctx context.Context, messages *hostMessages, announcer stateAnnouncer, store *state.State, inputs migrationInputs) error {
@@ -85,7 +88,7 @@ func migrateHubState(ctx context.Context, messages *hostMessages, announcer stat
 	}
 	worktrees := worktree.NewWorktreer(announcer.cliMessages, instID)
 	sessions := store.SnapshotSessions()
-	plans, err := planSessionRelocations(ctx, announcer.cliMessages, worktrees, sessions)
+	plans, err := planSessionRelocations(ctx, announcer.cliMessages, worktrees, sessions, inputs.forge)
 	if err != nil {
 		return err
 	}
@@ -138,7 +141,7 @@ type sessionRelocation struct {
 	remote bool
 }
 
-func planSessionRelocations(ctx context.Context, cliMessages *clitext.Messages, worktrees *worktree.Worktreer, sessions []state.Session) (map[string]sessionRelocation, error) {
+func planSessionRelocations(ctx context.Context, cliMessages *clitext.Messages, worktrees *worktree.Worktreer, sessions []state.Session, creds contracts.ForgeCredentials) (map[string]sessionRelocation, error) {
 	plans := make(map[string]sessionRelocation)
 	for idx := range sessions {
 		sess := sessions[idx]
@@ -146,12 +149,12 @@ func planSessionRelocations(ctx context.Context, cliMessages *clitext.Messages, 
 			continue
 		}
 		bare := worktree.BareSession{Name: sess.Name, Path: sess.Worktree, Scratch: sess.Scratch, PullRequest: sess.PullRequest}
-		var plan worktree.Relocation
-		var err error
-		if sess.Host != "" {
-			plan, err = worktrees.BareTarget(bare)
-		} else {
-			plan, err = worktrees.PlanBareRelocation(ctx, bare)
+		plan, err := worktrees.BareTarget(bare)
+		if err == nil && sess.Host == "" {
+			bare.Origin, err = migrationOriginAccess(ctx, creds, plan.Repo, sess.PullRequest)
+			if err == nil {
+				plan, err = worktrees.PlanBareRelocation(ctx, bare)
+			}
 		}
 		if err != nil {
 			return nil, &stateMigrationRefusedError{messages: cliMessages, cause: err}
@@ -201,14 +204,15 @@ func relocateLocal(ctx context.Context, worktrees *worktree.Worktreer, announcer
 }
 
 func announceRemoteRelocation(announcer stateAnnouncer, sess state.Session, plan worktree.Relocation) {
-	params := clitext.Params{clitext.ParamName: sess.Name, clitext.ParamHost: sess.Host, clitext.ParamFrom: strconv.Quote(plan.FromPath), clitext.ParamTo: strconv.Quote(plan.ToPath), clitext.ParamWhere: strconv.Quote(filepath.Dir(plan.ToPath))}
+	quote := shellquote.Quote
+	params := clitext.Params{clitext.ParamName: sess.Name, clitext.ParamHost: sess.Host, clitext.ParamFrom: quote(plan.FromPath), clitext.ParamTo: quote(plan.ToPath), clitext.ParamWhere: quote(filepath.Dir(plan.ToPath))}
 	if plan.Scratch {
 		announcer.announce(clitext.MigrationRemoteScratch, params)
 		return
 	}
-	params[clitext.ParamRepo] = strconv.Quote(plan.Repo)
-	params[clitext.ParamBranch] = plan.FromBranch
-	params[clitext.ParamTarget] = plan.ToBranch
+	params[clitext.ParamRepo] = quote(plan.Repo)
+	params[clitext.ParamBranch] = quote(plan.FromBranch)
+	params[clitext.ParamTarget] = quote(plan.ToBranch)
 	announcer.announce(clitext.MigrationRemoteWorktree, params)
 }
 

@@ -86,6 +86,6 @@ func worktreeKeys() map[Key][]string {
 		WorktreeRelocateFailed:            {ParamName, ParamOutput, ParamErr},
 		WorktreeRelocateNameIsInstance:    {ParamName, ParamValue, ParamPath},
 		WorktreeRelocateRemoteBranch:      {ParamName, ParamBranch, ParamTarget},
-		WorktreeRelocateRemoteUnreachable: {ParamBranch, ParamTarget, ParamOutput, ParamErr},
+		WorktreeRelocateRemoteUnreachable: {ParamName, ParamBranch, ParamTarget, ParamOutput, ParamErr, ParamCommand},
 	}
 }

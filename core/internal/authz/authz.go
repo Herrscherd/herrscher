@@ -104,6 +104,7 @@ func definitionOf(role Role) (definition, bool) {
 			"schedule list",
 			"memory search", "memory locate",
 			"session issue list", "session issue show",
+			"health", "usage", "skill list", "config get", "env get", "plugin list", "connect status", "setup check",
 		}}, true
 	case RoleAgent:
 		return definition{
@@ -352,6 +353,16 @@ func Describe(role Role) string {
 		buf.WriteString("\nnever runs " + strings.Join(def.deny, ", "))
 	}
 	return buf.String()
+}
+
+// Writes reports whether a verb changes something, which is what the daemon announces when a session runs it.
+// A read is what an observer runs; approve ask and env request say so on their own.
+func Writes(path []string, contributed bool) bool {
+	verb := strings.Join(path, " ")
+	if verb == "approve ask" || verb == "env request" {
+		return false
+	}
+	return !permits(RoleObserver, verb, contributed)
 }
 
 // AgentRuns reports whether a plain session runs the verb without asking, which is what tells a read from a configuration change.

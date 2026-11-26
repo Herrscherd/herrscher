@@ -15,48 +15,50 @@ const (
 	ManageFlagSetupProbe   = "cli.manage.flag.setup_probe"
 	ManageFlagJSON         = "cli.manage.flag.json"
 
-	CmdHelpSessionIssueList    = "cli.help.cmd.session.issue.list"
-	CmdHelpSessionIssueShow    = "cli.help.cmd.session.issue.show"
-	CmdParamSessionIssueName   = "cli.help.param.session.issue.name"
-	CmdParamSessionIssueState  = "cli.help.param.session.issue.state"
-	CmdParamSessionIssueLabels = "cli.help.param.session.issue.labels"
-	CmdParamSessionIssueNumber = "cli.help.param.session.issue.number"
-	SessionIssueNone           = "cli.session.issue.none"
-	SessionIssueBadNumber      = "cli.session.issue.bad_number"
-	SessionIssueBadState       = "cli.session.issue.bad_state"
-	CmdHelpSessionIssueOpen    = "cli.help.cmd.session.issue.open"
-	CmdHelpSessionIssueComment = "cli.help.cmd.session.issue.comment"
-	CmdParamSessionIssueTitle  = "cli.help.param.session.issue.title"
-	CmdParamSessionIssueBody   = "cli.help.param.session.issue.body"
-	SessionIssueOpened         = "cli.session.issue.opened"
-	SessionIssueCommented      = "cli.session.issue.commented"
-	SessionIssueNoWriter       = "cli.session.issue.no_writer"
-	CmdHelpSetupCheck          = "cli.help.cmd.setup.check"
-	CmdHelpConnectStatus       = "cli.help.cmd.connect.status"
-	CmdHelpPluginList          = "cli.help.cmd.plugin.list"
-	CmdHelpPluginAdd           = "cli.help.cmd.plugin.add"
-	CmdHelpPluginRemove        = "cli.help.cmd.plugin.rm"
-	CmdParamPluginModule       = "cli.help.param.plugin.module"
-	CmdParamPluginNoBuild      = "cli.help.param.plugin.no_build"
-	CmdHelpEnvGet              = "cli.help.cmd.env.get"
-	CmdHelpEnvSet              = "cli.help.cmd.env.set"
-	CmdHelpEnvUnset            = "cli.help.cmd.env.unset"
-	CmdParamEnvKey             = "cli.help.param.env.key"
-	CmdParamEnvValue           = "cli.help.param.env.value"
-	HostEnvSet                 = "cli.host.env.set"
-	HostEnvUnset               = "cli.host.env.unset"
-	CmdHelpSessionPRReply      = "cli.help.cmd.session.pr.reply"
-	CmdParamSessionPRThread    = "cli.help.param.session.pr.thread"
-	CmdParamSessionPRReplyBody = "cli.help.param.session.pr.reply_body"
-	SessionPRReplied           = "cli.session.pr.replied"
-	HealthSelfToolsFacts       = "cli.health.facts.self_tools"
-	HealthSelfToolsOff         = "cli.health.facts.self_tools_off"
-	CmdParamSessionIssueLimit  = "cli.help.param.session.issue.limit"
-	SessionIssueTruncated      = "cli.session.issue.truncated"
-	SessionIssueBadLimit       = "cli.session.issue.bad_limit"
-	CmdHelpEnvRequest          = "cli.help.cmd.env.request"
-	CmdParamEnvReason          = "cli.help.param.env.reason"
-	HostEnvRequested           = "cli.host.env.requested"
+	CmdHelpSessionIssueList     = "cli.help.cmd.session.issue.list"
+	CmdHelpSessionIssueShow     = "cli.help.cmd.session.issue.show"
+	CmdParamSessionIssueName    = "cli.help.param.session.issue.name"
+	CmdParamSessionIssueState   = "cli.help.param.session.issue.state"
+	CmdParamSessionIssueLabels  = "cli.help.param.session.issue.labels"
+	CmdParamSessionIssueNumber  = "cli.help.param.session.issue.number"
+	SessionIssueNone            = "cli.session.issue.none"
+	SessionIssueBadNumber       = "cli.session.issue.bad_number"
+	SessionIssueBadState        = "cli.session.issue.bad_state"
+	CmdHelpSessionIssueOpen     = "cli.help.cmd.session.issue.open"
+	CmdHelpSessionIssueComment  = "cli.help.cmd.session.issue.comment"
+	CmdParamSessionIssueTitle   = "cli.help.param.session.issue.title"
+	CmdParamSessionIssueBody    = "cli.help.param.session.issue.body"
+	SessionIssueOpened          = "cli.session.issue.opened"
+	SessionIssueCommented       = "cli.session.issue.commented"
+	SessionIssueNoWriter        = "cli.session.issue.no_writer"
+	CmdHelpSetupCheck           = "cli.help.cmd.setup.check"
+	CmdHelpConnectStatus        = "cli.help.cmd.connect.status"
+	CmdHelpPluginList           = "cli.help.cmd.plugin.list"
+	CmdHelpPluginAdd            = "cli.help.cmd.plugin.add"
+	CmdHelpPluginRemove         = "cli.help.cmd.plugin.rm"
+	CmdParamPluginModule        = "cli.help.param.plugin.module"
+	CmdParamPluginNoBuild       = "cli.help.param.plugin.no_build"
+	CmdHelpEnvGet               = "cli.help.cmd.env.get"
+	CmdHelpEnvSet               = "cli.help.cmd.env.set"
+	CmdHelpEnvUnset             = "cli.help.cmd.env.unset"
+	CmdParamEnvKey              = "cli.help.param.env.key"
+	CmdParamEnvValue            = "cli.help.param.env.value"
+	HostEnvSet                  = "cli.host.env.set"
+	HostEnvUnset                = "cli.host.env.unset"
+	CmdHelpSessionPRReply       = "cli.help.cmd.session.pr.reply"
+	CmdParamSessionPRThread     = "cli.help.param.session.pr.thread"
+	CmdParamSessionPRReplyBody  = "cli.help.param.session.pr.reply_body"
+	SessionPRReplied            = "cli.session.pr.replied"
+	HealthSelfToolsFacts        = "cli.health.facts.self_tools"
+	HealthSelfToolsOff          = "cli.health.facts.self_tools_off"
+	CmdParamSessionIssueLimit   = "cli.help.param.session.issue.limit"
+	SessionIssueTruncated       = "cli.session.issue.truncated"
+	SessionIssueBadLimit        = "cli.session.issue.bad_limit"
+	CmdHelpEnvRequest           = "cli.help.cmd.env.request"
+	CmdParamEnvReason           = "cli.help.param.env.reason"
+	HostEnvRequested            = "cli.host.env.requested"
+	CmdParamApproveRuleSession  = "cli.help.param.approve.rule.session"
+	HostApproveRuleSessionAdded = "cli.host.approve.rule_session_added"
 )
 
 // ParamSize is the parameter that carries a size in bytes.
@@ -77,47 +79,49 @@ func selfToolsKeys() map[Key][]string {
 		ManageFlagSetupProbe:   nil,
 		ManageFlagJSON:         nil,
 
-		CmdHelpSessionIssueList:    nil,
-		CmdHelpSessionIssueShow:    nil,
-		CmdParamSessionIssueName:   nil,
-		CmdParamSessionIssueState:  nil,
-		CmdParamSessionIssueLabels: nil,
-		CmdParamSessionIssueNumber: nil,
-		SessionIssueNone:           {ParamRepo},
-		SessionIssueBadNumber:      {ParamNumber},
-		SessionIssueBadState:       {ParamState},
-		CmdHelpSessionIssueOpen:    nil,
-		CmdHelpSessionIssueComment: nil,
-		CmdParamSessionIssueTitle:  nil,
-		CmdParamSessionIssueBody:   nil,
-		SessionIssueOpened:         {ParamNumber, ParamURL},
-		SessionIssueCommented:      {ParamNumber},
-		SessionIssueNoWriter:       nil,
-		CmdHelpSetupCheck:          nil,
-		CmdHelpConnectStatus:       nil,
-		CmdHelpPluginList:          nil,
-		CmdHelpPluginAdd:           nil,
-		CmdHelpPluginRemove:        nil,
-		CmdParamPluginModule:       nil,
-		CmdParamPluginNoBuild:      nil,
-		CmdHelpEnvGet:              nil,
-		CmdHelpEnvSet:              nil,
-		CmdHelpEnvUnset:            nil,
-		CmdParamEnvKey:             nil,
-		CmdParamEnvValue:           nil,
-		HostEnvSet:                 {ParamKey, ParamPath},
-		HostEnvUnset:               {ParamKey, ParamPath},
-		CmdHelpSessionPRReply:      nil,
-		CmdParamSessionPRThread:    nil,
-		CmdParamSessionPRReplyBody: nil,
-		SessionPRReplied:           {ParamNumber},
-		HealthSelfToolsFacts:       {ParamMode, ParamCount, ParamSize},
-		HealthSelfToolsOff:         nil,
-		CmdParamSessionIssueLimit:  nil,
-		SessionIssueTruncated:      {ParamCount},
-		SessionIssueBadLimit:       {ParamCount},
-		CmdHelpEnvRequest:          nil,
-		CmdParamEnvReason:          nil,
-		HostEnvRequested:           {ParamKey},
+		CmdHelpSessionIssueList:     nil,
+		CmdHelpSessionIssueShow:     nil,
+		CmdParamSessionIssueName:    nil,
+		CmdParamSessionIssueState:   nil,
+		CmdParamSessionIssueLabels:  nil,
+		CmdParamSessionIssueNumber:  nil,
+		SessionIssueNone:            {ParamRepo},
+		SessionIssueBadNumber:       {ParamNumber},
+		SessionIssueBadState:        {ParamState},
+		CmdHelpSessionIssueOpen:     nil,
+		CmdHelpSessionIssueComment:  nil,
+		CmdParamSessionIssueTitle:   nil,
+		CmdParamSessionIssueBody:    nil,
+		SessionIssueOpened:          {ParamNumber, ParamURL},
+		SessionIssueCommented:       {ParamNumber},
+		SessionIssueNoWriter:        nil,
+		CmdHelpSetupCheck:           nil,
+		CmdHelpConnectStatus:        nil,
+		CmdHelpPluginList:           nil,
+		CmdHelpPluginAdd:            nil,
+		CmdHelpPluginRemove:         nil,
+		CmdParamPluginModule:        nil,
+		CmdParamPluginNoBuild:       nil,
+		CmdHelpEnvGet:               nil,
+		CmdHelpEnvSet:               nil,
+		CmdHelpEnvUnset:             nil,
+		CmdParamEnvKey:              nil,
+		CmdParamEnvValue:            nil,
+		HostEnvSet:                  {ParamKey, ParamPath},
+		HostEnvUnset:                {ParamKey, ParamPath},
+		CmdHelpSessionPRReply:       nil,
+		CmdParamSessionPRThread:     nil,
+		CmdParamSessionPRReplyBody:  nil,
+		SessionPRReplied:            {ParamNumber},
+		HealthSelfToolsFacts:        {ParamMode, ParamCount, ParamSize},
+		HealthSelfToolsOff:          nil,
+		CmdParamSessionIssueLimit:   nil,
+		SessionIssueTruncated:       {ParamCount},
+		SessionIssueBadLimit:        {ParamCount},
+		CmdHelpEnvRequest:           nil,
+		CmdParamEnvReason:           nil,
+		HostEnvRequested:            {ParamKey},
+		CmdParamApproveRuleSession:  nil,
+		HostApproveRuleSessionAdded: {ParamRule, ParamName},
 	}
 }

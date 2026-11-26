@@ -19,6 +19,7 @@ const (
 	verbServiceRestart = "service restart"
 	verbServiceUpdate  = "service update"
 	verbEnvSet         = "env set"
+	verbEnvUnset       = "env unset"
 	verbSetBudget      = "session set-budget"
 )
 
@@ -48,12 +49,12 @@ func (r *selfRestarts) admit(session, verb string) error {
 			"herrscher: session %q already restarted the daemon %s ago; a session restarts it once every %s.",
 			session, now.Sub(previous).Round(time.Second), selfRestartWindow)}
 	}
-	return r.store.RecordSelfRestart(session, now)
+	return r.store.RecordSelfRestart(session, now, now.Add(-selfRestartWindow))
 }
 
 func (h *hub) guardSessionCall(session, verb string, input contracts.Input) error {
 	switch verb {
-	case verbEnvSet:
+	case verbEnvSet, verbEnvUnset:
 		if isSecretEnvKey(input.Get(paramKey)) {
 			return &accessDeniedError{Reason: errSecretSession.Error()}
 		}
@@ -106,6 +107,16 @@ func budgetWithinParent(store *state.State, caller string, input contracts.Input
 		}
 	}
 	return nil
+}
+
+const announcedSubjectRunes = 240
+
+func clippedSubject(subject string) string {
+	runes := []rune(subject)
+	if len(runes) <= announcedSubjectRunes {
+		return subject
+	}
+	return string(runes[:announcedSubjectRunes]) + "…"
 }
 
 func (h *hub) announceSelfCall(session, key, subject, detail string) {

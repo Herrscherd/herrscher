@@ -68,6 +68,11 @@ func newEscalationRig(t *testing.T) escalationRig {
 	if approveErr := addApproveCommands(reg, newHostMessages(), clitext.NewMessages(), fixedLanguage(i18n.English), io.Discard, st, nil, approvalTab, sessionTab); approveErr != nil {
 		t.Fatalf("addApproveCommands: %v", approveErr)
 	}
+	if err := addVerbs(reg, contracts.New("session", "send").Param(paramName, "", true).Param("text", "", true).Do(func(context.Context, contracts.Input) (contracts.Result, error) {
+		return contracts.DataResult("sent"), nil
+	})); err != nil {
+		t.Fatal(err)
+	}
 	notices := &noticeSlot{}
 	if err := addVerbs(reg, envVerbs(clitext.NewMessages(), fixedLanguage(i18n.English), func() string { return envFile }, newEditLock(), notices)...); err != nil {
 		t.Fatal(err)
@@ -113,8 +118,9 @@ func TestAVerbTheAgentMayNotRunIsPutToTheOperatorAndRunsOnAllow(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatalf("the allowed verb failed: %v", err)
 	}
-	if got := rig.store.ApprovalRules(); len(got) != 1 {
-		t.Fatalf("rules = %v, want the one the operator allowed", got)
+	own, _ := rig.store.SessionApprovalRules("s1")
+	if global := rig.store.ApprovalRules(); len(global) != 0 || len(own) != 1 {
+		t.Fatalf("daemon rules = %v, s1 rules = %v, want the allowed rule bound to s1 alone", global, own)
 	}
 }
 
@@ -242,5 +248,29 @@ func TestASessionAsksTheOperatorForASecretWithoutSendingIt(t *testing.T) {
 	}
 	if pending := pendingApprovals(rig.approvals); len(pending) != 0 {
 		t.Fatalf("pending = %+v, want no question: a request carries no value", pending)
+	}
+}
+
+func TestADirectWriteIsAnnouncedAndAReadIsNot(t *testing.T) {
+	rig := newEscalationRig(t)
+	if _, err := rig.dispatch(t, "session", "send", "--name", "s1", "--text", "hello"); err != nil {
+		t.Fatalf("session send: %v", err)
+	}
+	if _, err := rig.dispatch(t, "approve", "list"); err != nil {
+		t.Fatalf("approve list: %v", err)
+	}
+	notices := rig.events.all()
+	if len(notices) != 1 || !strings.Contains(notices[0], "session send") {
+		t.Fatalf("notices = %q, want the send announced and the read left silent", notices)
+	}
+}
+
+func TestASessionNeverUnsetsASecret(t *testing.T) {
+	rig := newEscalationRig(t)
+	if _, err := rig.dispatch(t, "env", "unset", "--key", "GATEWAY_BOT_TOKEN"); err == nil {
+		t.Fatal("a session unset a secret")
+	}
+	if pending := pendingApprovals(rig.approvals); len(pending) != 0 {
+		t.Fatalf("pending = %+v, want the refusal before any question", pending)
 	}
 }

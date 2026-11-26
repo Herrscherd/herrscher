@@ -119,6 +119,7 @@ func notASessionArgs() map[string]bool {
 		"host provision name":   true,
 		"host rm name":          true,
 		"approve allow session": true,
+		"approve rule session":  true,
 		"schedule add name":     true,
 		"schedule rm name":      true,
 		"schedule run name":     true,
@@ -137,6 +138,7 @@ type admission struct {
 const (
 	admittedAsked   = "asked"
 	admittedSteward = "steward"
+	admittedDirect  = "direct"
 )
 
 func (h *hub) authorize(ctx context.Context, args []string) (admission, error) {
@@ -177,10 +179,14 @@ func (h *hub) admitted(session string, path, args []string, role authz.Role, con
 	if err := h.selfRestarts.admit(session, strings.Join(path, " ")); err != nil {
 		return admission{}, err
 	}
-	if role == authz.RoleSteward && !authz.AgentRuns(path, contributed) {
-		return admission{session: session, verb: strings.Join(path, " "), subject: verbSubject(args), how: admittedSteward}, nil
+	if !authz.Writes(path, contributed) {
+		return admission{}, nil
 	}
-	return admission{}, nil
+	how := admittedDirect
+	if role == authz.RoleSteward && !authz.AgentRuns(path, contributed) {
+		how = admittedSteward
+	}
+	return admission{session: session, verb: strings.Join(path, " "), subject: verbSubject(args), how: how}, nil
 }
 
 func (h *hub) escalate(ctx context.Context, session string, path, args []string) (admission, error) {

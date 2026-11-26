@@ -1227,7 +1227,11 @@ func TestAntigravityModuleComesFromTheBackendCatalog(t *testing.T) {
 }
 
 func TestRouteOffersTheModelsOfEachChosenBackend(t *testing.T) {
-	for mod, want := range map[setupModule]string{moduleGrok: "grok-build", moduleAntigravity: "gemini-agy"} {
+	for _, tc := range []struct {
+		mod  setupModule
+		want string
+	}{{moduleGrok, "grok-build"}, {moduleAntigravity, "gemini-agy"}} {
+		mod, want := tc.mod, tc.want
 		harness := newHarness(t, nil, screenRoute, nil)
 		harness.model.modules = make(moduleSet)
 		harness.model.modules[mod] = true

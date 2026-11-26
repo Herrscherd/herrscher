@@ -60,6 +60,9 @@ The daemon decides each call under the role of the session, as it decides the
   quoted, so two different calls never read the same. `allow --always` writes
   a rule for that exact call. A wider rule, such as
   `allow Herrscher(schedule add *)`, is written by hand with `approve rule`.
+  `approve rule` asked by a session writes a rule that binds that session
+  alone (`--session`, its own name by default, or a session it delegated),
+  never one that binds the whole daemon.
   The session's approval mode does not change this: even a `bypass` session
   asks.
 - **Some verbs are never run for a session.** `role *`, `approve allow` and
@@ -67,26 +70,31 @@ The daemon decides each call under the role of the session, as it decides the
   session does not grant itself rights and does not answer its own questions.
 - **The subtree still binds.** A verb that names another session than the
   caller or one it delegated is refused, asked or not.
-- **Each write is announced.** A verb a session ran after an approval, or as
-  steward, and a question the operator refused, are posted to the session as a
-  notice.
+- **Each write is announced.** Every verb a session runs that changes
+  something (anything an `observer` would not run: `session send`,
+  `session issue open`, `session pr reply`, `memory record`, a verb run after
+  an approval or as steward, ...) is posted to the session's gateways as a
+  notice, cut at 240 characters, and so is a question the operator refused.
+  Reads stay silent, and so do `approve ask`, which the approval hook calls at
+  each tool call, and `env request`, which is its own notice.
 
 ### Guards that hold even after an approval
 
 - A session never writes a secret. A variable counts as one unless it is shown
   in clear by `env get`: a name under `HERRSCHER_`, `MEMORY_`, `AGENT_`,
-  `JEV_`, `OBSIDIAN_` or `OTEL_`, or ending in `_MODEL`, `_CMD`, `_STREAM`,
-  `_DIR`, `_KIND`, `_EFFORT`, `_VERBOSITY`, `_CONTEXT_MESSAGES`, `_TIDY_PINGS`,
-  `_MESSAGE_DELETES` or `_HOME`, and holding none of `TOKEN`, `KEY`, `SECRET`,
+  `JEV_`, `OBSIDIAN_` or `OTEL_`, or ending in `_MODEL`, `_STREAM`,
+  `_DIR`, `_KIND`, `_EFFORT`, `_VERBOSITY`, `_CONTEXT_MESSAGES`, `_TIDY_PINGS`
+  or `_MESSAGE_DELETES`, and holding none of `TOKEN`, `KEY`, `SECRET`,
   `PASSWORD`, `PASSWD`, `PASS`, `PAT`, `CREDENTIAL`, `AUTH`, `HEADERS`, `DSN`
-  or `URL`. `env set` on any other variable is refused before any question, so
-  no value reaches a gateway. The session asks for it with
+  or `URL`. `env set` and `env unset` on any other variable are refused before any
+  question, so no value reaches a gateway and no secret is erased. The session asks for it with
   `env request --key <name> [--reason …]`, which posts the request on its
   gateways with the command for the operator to type; no value travels.
 - A session restarts the daemon once every ten minutes at most, by
   `service restart` or `service update`. The time is kept in `state.json`, so
-  the daemon that comes back still knows it. When the daemon is back, the
-  session that asked gets a turn telling it so, to carry on with its task.
+  the daemon that comes back still knows it; entries older than the window are
+  dropped. When the daemon is back, the session that asked gets a turn telling
+  it so, to carry on with its task; a restart that failed tells nobody.
 - `session set-budget` from a session never sets a cap above the cap of the
   target's parent, and never removes a cap the parent has.
 
@@ -183,9 +191,12 @@ session on another host get no server. `HERRSCHER_SELF_TOOLS=off`, or
 
 `herrscher health` has a `self-tools` line: whether sessions get the server,
 the exposure, the number of tools and the bytes their declarations weigh.
-`herrscher health --deep` also starts `herrscher mcp` against the daemon and
-counts the tools it lists, so the line says the server answers and not only
-what it would list. The
+`herrscher health --deep` also starts `herrscher mcp` against the daemon's own
+command socket and counts the tools it lists, so the line says the binary
+answers and the daemon serves it its verbs. The path through a session's own
+socket is what the end to end scenario proves. A session that asks for
+`health --deep` gets the measured line without the start, so it cannot make
+the daemon spawn processes in a loop. The
 same weight is reported in each turn's context sizes, under the tools line of
 `/context` in the terminal UI.
 

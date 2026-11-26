@@ -361,3 +361,23 @@ func TestAgentIsNotGrantable(t *testing.T) {
 		t.Fatalf("RoleOf = %q, want observer: agent hand-written into the table is not a grant", got)
 	}
 }
+
+func TestAnObserverReadsWhatASessionReadsAndWritesNothing(t *testing.T) {
+	human := Principal{ID: "chat:1"}
+	for _, path := range [][]string{{"health"}, {"usage"}, {"config", "get"}, {"env", "get"}, {"plugin", "list"}, {"connect", "status"}, {"setup", "check"}} {
+		if ok, why := Decide(req(human, path...), RoleObserver); !ok {
+			t.Errorf("observer refused %v: %s", path, why)
+		}
+		if Writes(path, false) {
+			t.Errorf("%v counts as a write", path)
+		}
+	}
+	for _, path := range [][]string{{"session", "send"}, {"session", "issue", "open"}, {"memory", "record"}} {
+		if !Writes(path, false) {
+			t.Errorf("%v does not count as a write", path)
+		}
+	}
+	if Writes([]string{"approve", "ask"}, false) {
+		t.Error("approve ask, asked by the hook at each tool call, counts as a write")
+	}
+}

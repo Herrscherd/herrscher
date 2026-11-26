@@ -1,6 +1,7 @@
 package state
 
 import (
+	"maps"
 	"slices"
 	"time"
 )
@@ -13,13 +14,14 @@ func (s *State) LastSelfRestart(session string) (time.Time, bool) {
 	return at, ok
 }
 
-// RecordSelfRestart notes that session restarts the daemon at when, and that its turn resumes once the daemon is back.
-func (s *State) RecordSelfRestart(session string, when time.Time) error {
+// RecordSelfRestart notes that session restarts the daemon at when, that its turn resumes once the daemon is back, and forgets the restarts older than forgetBefore.
+func (s *State) RecordSelfRestart(session string, when, forgetBefore time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.SelfRestarts == nil {
 		s.SelfRestarts = make(map[string]time.Time)
 	}
+	maps.DeleteFunc(s.SelfRestarts, func(_ string, at time.Time) bool { return at.Before(forgetBefore) })
 	s.SelfRestarts[session] = when
 	if !slices.Contains(s.RestartResumes, session) {
 		s.RestartResumes = append(s.RestartResumes, session)

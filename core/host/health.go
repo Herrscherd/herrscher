@@ -85,7 +85,7 @@ func selfToolsProbes(inputs healthInputs) []health.Probe {
 	return []health.Probe{{
 		Check: health.Check{Group: health.GroupCore, Name: health.ServiceSelfTools, Facts: health.Facts{SelfTools: &facts}},
 		Run: func(ctx context.Context, deep bool) (contracts.ProbeReport, health.Facts) {
-			if !deep || !facts.Enabled || inputs.selfToolsAnswer == nil {
+			if !deep || !facts.Enabled || inputs.selfToolsAnswer == nil || principalOf(ctx).Session != "" {
 				return contracts.ProbeReport{State: contracts.HealthOK}, health.Facts{SelfTools: &facts}
 			}
 			answered, err := inputs.selfToolsAnswer(ctx, inputs.daemon.Socket)

@@ -6250,5 +6250,15 @@
     "id": "cli.host.fault.self_tools_silent",
     "description": "Health: the self tools server listed no tool",
     "other": "herrscher mcp a répondu, sans lister aucun outil"
+  },
+  {
+    "id": "cli.help.param.approve.rule.session",
+    "description": "Help of the parameter session of approve rule",
+    "other": "lier la règle à cette seule session ; une session qui demande une règle en obtient toujours une à elle"
+  },
+  {
+    "id": "cli.host.approve.rule_session_added",
+    "description": "Reply of approve rule for one session",
+    "other": "règle {{.Rule}} ajoutée pour la seule session {{.Name}}"
   }
 ]

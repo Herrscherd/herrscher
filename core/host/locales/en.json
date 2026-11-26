@@ -1014,5 +1014,15 @@
     "id": "selftools.restart_resumed",
     "description": "Turn handed to a session after the daemon restart it asked for",
     "other": "herrscher: the daemon is back after the restart you asked for. Carry on with the task you were on."
+  },
+  {
+    "id": "selftools.ran_direct",
+    "description": "Notice: a session ran a verb that changes something, within its own rights",
+    "other": "herrscher: the session ran {{.Subject}}"
+  },
+  {
+    "id": "selftools.failed_direct",
+    "description": "Notice: a verb a session ran within its own rights failed",
+    "other": "herrscher: the session ran {{.Subject}}, and it failed: {{.Detail}}"
   }
 ]

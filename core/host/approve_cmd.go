@@ -146,7 +146,20 @@ func approveRuleVerb(cliMessages *clitext.Messages, lang languageSource, store *
 		Help(clitext.CmdHelpApproveRule).
 		ValueParam("rule", clitext.CmdParamApproveRuleRule, false).
 		ValueParam("rm", clitext.CmdParamApproveRuleRm, false).
-		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
+		ValueParam(paramSession, clitext.CmdParamApproveRuleSession, false).
+		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+			scope := strings.TrimSpace(input.Get(paramSession))
+			if caller := principalOf(ctx).Session; caller != "" {
+				if scope == "" {
+					scope = caller
+				}
+				if !inSubtreeOf(store, caller, scope) {
+					return contracts.Result{}, &accessDeniedError{Reason: fmt.Sprintf("herrscher: `approve rule` names session %q, and you are session %q. A session reaches itself and the sessions it delegated, nothing else.", scope, caller)}
+				}
+			}
+			if scope != "" {
+				return cli.Data(sessionApprovalRule(cliMessages, lang(), store, scope, input))
+			}
 			if rm := strings.TrimSpace(input.Get("rm")); rm != "" {
 				return cli.Data(removeApprovalRule(cliMessages, lang(), store, rm))
 			}
@@ -156,6 +169,57 @@ func approveRuleVerb(cliMessages *clitext.Messages, lang languageSource, store *
 			}
 			return cli.Data(addApprovalRule(cliMessages, lang(), store, raw))
 		})
+}
+
+func sessionApprovalRule(cliMessages *clitext.Messages, lang i18n.Language, store *state.State, session string, input contracts.Input) (string, error) {
+	rules, found := store.SessionApprovalRules(session)
+	if !found {
+		return "", &NotFoundError{Kind: kindSession, Name: session}
+	}
+	if rm := strings.TrimSpace(input.Get("rm")); rm != "" {
+		return removeSessionApprovalRule(cliMessages, lang, store, session, rm)
+	}
+	raw := firstOf(input.Get("rule"), input.Rest)
+	if raw == "" {
+		return listSessionApprovalRules(cliMessages, lang, rules, input.JSON)
+	}
+	parsed, err := approval.ParseRule(raw)
+	if err != nil {
+		return "", err
+	}
+	if _, err := store.AddSessionApprovalRule(session, parsed.String()); err != nil {
+		return "", err
+	}
+	return replyText(cliMessages, lang).Text(clitext.HostApproveRuleSessionAdded, clitext.Params{clitext.ParamRule: parsed.String(), clitext.ParamName: session}), nil
+}
+
+func removeSessionApprovalRule(cliMessages *clitext.Messages, lang i18n.Language, store *state.State, session, raw string) (string, error) {
+	parsed, err := approval.ParseRule(raw)
+	if err != nil {
+		return "", err
+	}
+	removed, err := store.RemoveSessionApprovalRule(session, parsed.String())
+	if err != nil {
+		return "", err
+	}
+	if !removed {
+		return "", &noSuchRuleError{Rule: parsed.String()}
+	}
+	return replyText(cliMessages, lang).Text(clitext.HostApproveRuleRemoved, clitext.Params{clitext.ParamRule: parsed.String()}), nil
+}
+
+func listSessionApprovalRules(cliMessages *clitext.Messages, lang i18n.Language, rules []string, asJSON bool) (string, error) {
+	if asJSON {
+		if rules == nil {
+			rules = []string{}
+		}
+		encoded, err := json.Marshal(rules)
+		return string(encoded), err
+	}
+	if len(rules) == 0 {
+		return replyText(cliMessages, lang).Text(clitext.HostApproveRuleNone, nil), nil
+	}
+	return "- " + strings.Join(rules, "\n- "), nil
 }
 
 func removeApprovalRule(cliMessages *clitext.Messages, lang i18n.Language, store *state.State, raw string) (string, error) {
@@ -306,7 +370,8 @@ func readAgentPolicy(messages *hostMessages, lang languageSource, warn io.Writer
 
 func sessionPolicy(messages *hostMessages, lang languageSource, warn io.Writer, hostState *state.State, agents *agent.Store, session string) (approval.Policy, approval.Mode) {
 	var daemon approval.Policy
-	for _, raw := range hostState.ApprovalRules() {
+	own, _ := hostState.SessionApprovalRules(session)
+	for _, raw := range append(hostState.ApprovalRules(), own...) {
 		rule, err := approval.ParseRule(raw)
 		if err != nil {
 			warnLive(messages, warn, lang, "warn.approvals_state_rule", map[string]any{ruleParam: raw, detailParam: err})

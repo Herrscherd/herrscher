@@ -182,7 +182,7 @@ func (h *hub) announceSelfRun(admitted admission, runErr error) {
 			}
 		}
 	}
-	h.announceSelfCall(admitted.session, key, admitted.subject, detail)
+	h.announceSelfCall(admitted.session, key, clippedSubject(admitted.subject), detail)
 }
 
 func (h *hub) dispatchAuthorized(ctx context.Context, args []string) (contracts.Result, error) {

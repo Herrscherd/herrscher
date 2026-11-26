@@ -285,8 +285,11 @@ func watchHangUp(ctx context.Context, conn net.Conn, reader *bufio.Reader, disp 
 	watched := make(chan struct{})
 	go func() {
 		defer close(watched)
-		if _, err := reader.ReadByte(); err != nil {
-			cancel()
+		for {
+			if _, err := reader.ReadByte(); err != nil {
+				cancel()
+				return
+			}
 		}
 	}()
 	return callCtx, func() {

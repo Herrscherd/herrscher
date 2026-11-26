@@ -56,7 +56,7 @@ func envShownInClear(key string) bool {
 			return true
 		}
 	}
-	for _, suffix := range []string{"_MODEL", "_CMD", "_STREAM", "_DIR", "_KIND", "_EFFORT", "_VERBOSITY", "_CONTEXT_MESSAGES", "_TIDY_PINGS", "_MESSAGE_DELETES", "_HOME"} {
+	for _, suffix := range []string{"_MODEL", "_STREAM", "_DIR", "_KIND", "_EFFORT", "_VERBOSITY", "_CONTEXT_MESSAGES", "_TIDY_PINGS", "_MESSAGE_DELETES"} {
 		if strings.HasSuffix(upper, suffix) {
 			return true
 		}
@@ -293,8 +293,11 @@ func envUnsetVerb(cliMessages *clitext.Messages, lang languageSource, path func(
 	return contracts.New(nsEnv, "unset").
 		Help(clitext.CmdHelpEnvUnset).
 		Param(paramKey, clitext.CmdParamEnvKey, true).
-		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
+		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
 			key := strings.TrimSpace(input.Get(paramKey))
+			if err := refuseSecretFromSession(ctx, key); err != nil {
+				return contracts.Result{}, err
+			}
 			return cli.Data(editEnv(cliMessages, lang, path(), key, clitext.HostEnvUnset, edits, func(doc *envDocument) error {
 				if !doc.unset(key) {
 					return errEnvNoSuchKey

@@ -117,6 +117,9 @@ type Session struct {
 	PullRequestChecks       contracts.ChecksState      `json:"pullRequestChecks,omitempty"`
 	PullRequestLatestReview contracts.ReviewID         `json:"pullRequestLatestReview,omitempty"`
 
+	// ApprovalRules are the rules that bind this session alone, on top of the daemon's.
+	ApprovalRules []string `json:"approvalRules,omitempty"`
+
 	// Parent names the lead session that delegated this one (result-back P3).
 	// Empty = no parent. The coordinator reads it to find the delivery target
 	// of this session's completion report (Report).

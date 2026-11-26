@@ -97,6 +97,9 @@ daemon-only and fails without one. The approval hook never falls back: when it
 cannot reach a daemon, it denies the tool call and says why
 (`core/host/approve_hook.go`, `refuseHook`).
 
+`approve rule --session <name>` binds a rule to one session alone, beside the
+daemon's rules, and a session asking for a rule always gets one of that kind.
+
 `approve list`, `approve allow <id> [--session | --always]`,
 `approve deny <id> [--reason '…']`, `approve rule`, `approve ask` and
 `approve mode` (`ask`, `accept-edits`, `plan`, `auto`, `bypass`, `strict` or

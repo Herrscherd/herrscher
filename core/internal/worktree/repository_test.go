@@ -36,3 +36,40 @@ func TestOutsideAnyRepositoryReportsAFolderGitCannotEnterAsAnError(t *testing.T)
 		t.Fatalf("OutsideAnyRepository(missing) = %v, %v, want an error", outside, err)
 	}
 }
+
+func TestRepositoryDiscoveryFailedOnlyForASearchThatFoundNoRepository(t *testing.T) {
+	cases := []struct {
+		name     string
+		exitCode int
+		stderr   string
+		want     bool
+	}{
+		{"no repository in any parent", 128, "fatal: not a git repository (or any of the parent directories): .git\n", true},
+		{"no repository up to a mount point", 128, "fatal: not a git repository (or any parent up to mount point /mnt)\nStopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n", true},
+		{"dangling gitfile on git 2.39 and older", 128, "fatal: not a git repository: /tmp/g/repo/.git/worktrees/wt\n", false},
+		{"dangling gitfile on recent git", 128, "fatal: gitfile does not point to a valid repository: /tmp/g/repo/.git/worktrees/wt\n", false},
+		{"other exit code", 1, "fatal: not a git repository (or any of the parent directories): .git\n", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := repositoryDiscoveryFailed(tc.exitCode, tc.stderr); got != tc.want {
+				t.Fatalf("repositoryDiscoveryFailed(%d, %q) = %v, want %v", tc.exitCode, tc.stderr, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestOutsideAnyRepositoryRefusesAFolderUnderAGitEntryGitDoesNotSee(t *testing.T) {
+	repo := t.TempDir()
+	hidden := filepath.Join(repo, "a", "b")
+	if err := os.MkdirAll(hidden, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.CommandContext(t.Context(), "git", "init", "-q", repo).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Join(repo, "a"))
+	if outside, err := OutsideAnyRepository(t.Context(), hidden); err == nil || outside {
+		t.Fatalf("OutsideAnyRepository(repo/a/b) = %v, %v, want an error naming %s", outside, err, filepath.Join(repo, ".git"))
+	}
+}

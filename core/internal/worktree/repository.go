@@ -5,14 +5,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
 const (
-	gitFatalExitCode = 128
-	notARepoMessage  = "not a git repository"
+	gitFatalExitCode     = 128
+	discoveryFailMessage = "not a git repository (or any"
+	gitEntryName         = ".git"
 )
 
 // OutsideAnyRepository reports whether dir belongs to no git repository. Any other failure of git is returned as an error, never as outside.
@@ -25,8 +28,41 @@ func OutsideAnyRepository(ctx context.Context, dir string) (bool, error) {
 	if err == nil {
 		return false, nil
 	}
-	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok && exitErr.ExitCode() == gitFatalExitCode && strings.Contains(stderr.String(), notARepoMessage) {
-		return true, nil
+	failure := fmt.Errorf("%s: %w", strings.TrimSpace(stderr.String()), err)
+	exitErr, ok := errors.AsType[*exec.ExitError](err)
+	if !ok || !repositoryDiscoveryFailed(exitErr.ExitCode(), stderr.String()) {
+		return false, failure
 	}
-	return false, fmt.Errorf("%s: %w", strings.TrimSpace(stderr.String()), err)
+	entry, err := gitEntryOnPath(dir)
+	if err != nil {
+		return false, err
+	}
+	if entry != "" {
+		return false, fmt.Errorf("%s exists but git sees no repository there: %w", entry, failure)
+	}
+	return true, nil
+}
+
+func repositoryDiscoveryFailed(exitCode int, stderr string) bool {
+	return exitCode == gitFatalExitCode && strings.Contains(stderr, discoveryFailMessage)
+}
+
+func gitEntryOnPath(dir string) (string, error) {
+	current, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	for {
+		entry := filepath.Join(current, gitEntryName)
+		if _, err := os.Lstat(entry); err == nil {
+			return entry, nil
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			return "", err
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", nil
+		}
+		current = parent
+	}
 }

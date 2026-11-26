@@ -32,15 +32,15 @@ func newCheckpointFixture(t *testing.T) *checkpointFixture {
 	return &checkpointFixture{t: t, repo: repo, st: st, hub: h, reg: checkpointRegistry(st, sessions), warnings: &warnings}
 }
 
-func (f *checkpointFixture) take(name, text string) {
+func (f *checkpointFixture) takeAlpha(text string) {
 	f.t.Helper()
-	sess, ok := f.st.FindSession(name)
+	sess, ok := f.st.FindSession("alpha")
 	if !ok {
-		f.t.Fatalf("no session %q to take a checkpoint of", name)
+		f.t.Fatal("no session alpha to take a checkpoint of")
 	}
 	f.hub.takeCheckpoint(f.t.Context(), sess, newTurnID(), text)
 	if f.warnings.Len() > 0 {
-		f.t.Fatalf("taking a checkpoint of %q warned: %s", name, f.warnings)
+		f.t.Fatalf("taking a checkpoint of alpha warned: %s", f.warnings)
 	}
 }
 
@@ -82,9 +82,9 @@ func (f *checkpointFixture) rename(from, to string) {
 
 func TestARenamedSessionListsAndRewindsTheCheckpointsItTookBefore(t *testing.T) {
 	f := newCheckpointFixture(t)
-	f.take("alpha", "premier")
+	f.takeAlpha("premier")
 	writeFrame(t, f.repo, "v2\n")
-	f.take("alpha", "second")
+	f.takeAlpha("second")
 	f.rename("alpha", "beta")
 	writeFrame(t, f.repo, "v3\n")
 
@@ -101,7 +101,7 @@ func TestARenamedSessionListsAndRewindsTheCheckpointsItTookBefore(t *testing.T) 
 
 func TestASessionRenamedToAFreedNameInheritsNoCheckpoint(t *testing.T) {
 	f := newCheckpointFixture(t)
-	f.take("alpha", "premier")
+	f.takeAlpha("premier")
 	f.rename("alpha", "beta")
 	gamma := f.addSessionIn("gamma")
 	writeFrame(t, gamma, "gamma\n")
@@ -123,7 +123,7 @@ func TestASessionRenamedToAFreedNameInheritsNoCheckpoint(t *testing.T) {
 
 func TestANewSessionNamedLikeAClosedOneInheritsNoCheckpoint(t *testing.T) {
 	f := newCheckpointFixture(t)
-	f.take("alpha", "premier")
+	f.takeAlpha("premier")
 	if err := f.st.RemoveSession("alpha"); err != nil {
 		t.Fatal(err)
 	}

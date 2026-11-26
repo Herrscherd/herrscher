@@ -55,29 +55,29 @@ func (r Rekey) Empty() bool {
 }
 
 // PlanRekey lists the refs filed under from in the repository of dir and the
-// names they take under to. A ref already at its new name with the same commit
+// names they take under target. A ref already at its new name with the same commit
 // counts as moved, so a plan made after an interrupted rekey finishes it. It
 // returns a [*RekeyConflictError] when a new name already holds another commit,
 // and an empty plan when from cannot name a ref, since nothing can be filed
 // under it.
-func PlanRekey(ctx context.Context, dir, from, to string) (Rekey, error) {
-	if validKey(from) != nil {
+func PlanRekey(ctx context.Context, dir, from, target string) (Rekey, error) {
+	if !usableKey(from) {
 		return Rekey{Dir: dir}, nil
 	}
-	if err := validKey(to); err != nil {
+	if err := validKey(target); err != nil {
 		return Rekey{}, err
 	}
 	sources, err := listRefs(ctx, dir, checkpointPrefix(from), undoRef(from))
 	if err != nil {
 		return Rekey{}, err
 	}
-	targets, err := refsUnder(ctx, dir, checkpointPrefix(to), undoRef(to))
+	targets, err := refsUnder(ctx, dir, checkpointPrefix(target), undoRef(target))
 	if err != nil {
 		return Rekey{}, err
 	}
 	plan := Rekey{Dir: dir}
 	for _, source := range sources {
-		move := RefMove{From: source.name, To: rekeyedName(source.name, from, to), Commit: source.commit}
+		move := RefMove{From: source.name, To: rekeyedName(source.name, from, target), Commit: source.commit}
 		if held, ok := targets[move.To]; ok {
 			if held != move.Commit {
 				return Rekey{}, &RekeyConflictError{Ref: move.To, Have: held, Want: move.Commit}
@@ -142,9 +142,13 @@ func listRefs(ctx context.Context, dir string, patterns ...string) ([]namedRef, 
 	return refs, nil
 }
 
-func rekeyedName(ref, from, to string) string {
+func rekeyedName(ref, from, target string) string {
 	if ref == undoRef(from) {
-		return undoRef(to)
+		return undoRef(target)
 	}
-	return checkpointPrefix(to) + strings.TrimPrefix(ref, checkpointPrefix(from))
+	return checkpointPrefix(target) + strings.TrimPrefix(ref, checkpointPrefix(from))
+}
+
+func usableKey(key string) bool {
+	return validKey(key) == nil
 }

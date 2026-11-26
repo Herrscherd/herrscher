@@ -48,7 +48,7 @@ func TestMigrationFilesTheCheckpointsOfASessionUnderItsIncarnation(t *testing.T)
 		t.Fatal(err)
 	}
 	announcer, out, _ := recordingAnnouncer()
-	if err := migrateHubState(t.Context(), newHostMessages(), announcer, loadForMigration(t, path), migrationInputs{optID: "inst", defaultGateways: []string{"chat"}}); err != nil {
+	if err = migrateHubState(t.Context(), newHostMessages(), announcer, loadForMigration(t, path), migrationInputs{optID: "inst", defaultGateways: []string{"chat"}}); err != nil {
 		t.Fatal(err)
 	}
 	if left := refsMatching(t, repo, "refs/herrscher/checkpoints/alpha/"); len(left) != 0 {
@@ -104,7 +104,11 @@ func TestMigrationRefusesACheckpointRefThatAlreadyHoldsAnotherCommit(t *testing.
 	if _, statErr := os.Stat(from); statErr != nil {
 		t.Fatalf("the refused migration moved the worktree: %v", statErr)
 	}
-	if backups, _ := filepath.Glob(path + ".before-format-1*"); len(backups) != 0 {
+	backups, globErr := filepath.Glob(path + ".before-format-1*")
+	if globErr != nil {
+		t.Fatal(globErr)
+	}
+	if len(backups) != 0 {
 		t.Fatalf("the refused migration wrote a copy %v before refusing", backups)
 	}
 }

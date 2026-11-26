@@ -71,11 +71,11 @@ func checkpointState(t *testing.T, worktree string) *state.State {
 	return st
 }
 
-func checkpointKeyOf(t *testing.T, st *state.State, name string) string {
+func alphaCheckpointKey(t *testing.T, st *state.State) string {
 	t.Helper()
-	sess, ok := st.FindSession(name)
+	sess, ok := st.FindSession("alpha")
 	if !ok || sess.Incarnation == "" {
-		t.Fatalf("session %q has no incarnation to file its checkpoints under", name)
+		t.Fatal("session alpha has no incarnation to file its checkpoints under")
 	}
 	return sess.Incarnation
 }
@@ -93,7 +93,7 @@ func TestCheckpointsListsMessagesWithTheFilesTheyTouched(t *testing.T) {
 	ctx := context.Background()
 	checkpoints := &checkpoint.Store{}
 	st := checkpointState(t, repo)
-	if _, err := checkpoints.Take(ctx, repo, checkpointKeyOf(t, st, "alpha"), checkpoint.Meta{Turn: "t1", Text: "ajoute une file"}); err != nil {
+	if _, err := checkpoints.Take(ctx, repo, alphaCheckpointKey(t, st), checkpoint.Meta{Turn: "t1", Text: "ajoute une file"}); err != nil {
 		t.Fatal(err)
 	}
 	writeFrame(t, repo, "v2\nv2b\n")
@@ -120,7 +120,7 @@ func TestRewindRestoresCodeAndRefusesConversation(t *testing.T) {
 	ctx := context.Background()
 	checkpoints := &checkpoint.Store{}
 	st := checkpointState(t, repo)
-	if _, err := checkpoints.Take(ctx, repo, checkpointKeyOf(t, st, "alpha"), checkpoint.Meta{Turn: "t1", Text: "avant"}); err != nil {
+	if _, err := checkpoints.Take(ctx, repo, alphaCheckpointKey(t, st), checkpoint.Meta{Turn: "t1", Text: "avant"}); err != nil {
 		t.Fatal(err)
 	}
 	writeFrame(t, repo, "v2\n")
@@ -154,7 +154,7 @@ func TestRewindRefusedWhileTurnInFlight(t *testing.T) {
 	ctx := context.Background()
 	checkpoints := &checkpoint.Store{}
 	st := checkpointState(t, repo)
-	if _, err := checkpoints.Take(ctx, repo, checkpointKeyOf(t, st, "alpha"), checkpoint.Meta{Turn: "t1", Text: "avant"}); err != nil {
+	if _, err := checkpoints.Take(ctx, repo, alphaCheckpointKey(t, st), checkpoint.Meta{Turn: "t1", Text: "avant"}); err != nil {
 		t.Fatal(err)
 	}
 	sessions := newSessionTable(newHostMessages(), clitext.NewMessages())
@@ -214,7 +214,7 @@ func TestForkCreatesOwnWorktreeAtCheckpointAndLeavesOriginal(t *testing.T) {
 	ctx := context.Background()
 	checkpoints := &checkpoint.Store{}
 	st := checkpointState(t, repo)
-	if _, err := checkpoints.Take(ctx, repo, checkpointKeyOf(t, st, "alpha"), checkpoint.Meta{Turn: "t1", Text: "avant", Conversation: conversation.Start}); err != nil {
+	if _, err := checkpoints.Take(ctx, repo, alphaCheckpointKey(t, st), checkpoint.Meta{Turn: "t1", Text: "avant", Conversation: conversation.Start}); err != nil {
 		t.Fatal(err)
 	}
 	writeFrame(t, repo, "v2\n")
@@ -265,7 +265,7 @@ func TestRewindConversationResumesAtTheCheckpointPosition(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTranscript(t, home, repo, "tok-1", "u1", "u2", "u3")
-	if _, err := checkpoints.Take(ctx, repo, checkpointKeyOf(t, st, "alpha"), checkpoint.Meta{Turn: "t1", Text: "avant", Conversation: "u2"}); err != nil {
+	if _, err := checkpoints.Take(ctx, repo, alphaCheckpointKey(t, st), checkpoint.Meta{Turn: "t1", Text: "avant", Conversation: "u2"}); err != nil {
 		t.Fatal(err)
 	}
 	restarter := &fakeRestarter{}
@@ -305,7 +305,7 @@ func TestForkCarriesTheConversationToTheCheckpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTranscript(t, home, repo, "tok-1", "u1", "u2", "u3")
-	if _, err := checkpoints.Take(ctx, repo, checkpointKeyOf(t, st, "alpha"), checkpoint.Meta{Turn: "t1", Text: "avant", Conversation: "u1"}); err != nil {
+	if _, err := checkpoints.Take(ctx, repo, alphaCheckpointKey(t, st), checkpoint.Meta{Turn: "t1", Text: "avant", Conversation: "u1"}); err != nil {
 		t.Fatal(err)
 	}
 	host := &fakeForkHost{t: t, repo: repo, st: st}
@@ -331,7 +331,7 @@ func TestForkRefusedWhenTheCheckpointHasNoConversationPosition(t *testing.T) {
 	ctx := context.Background()
 	checkpoints := &checkpoint.Store{}
 	st := checkpointState(t, repo)
-	if _, err := checkpoints.Take(ctx, repo, checkpointKeyOf(t, st, "alpha"), checkpoint.Meta{Turn: "t1", Text: "avant"}); err != nil {
+	if _, err := checkpoints.Take(ctx, repo, alphaCheckpointKey(t, st), checkpoint.Meta{Turn: "t1", Text: "avant"}); err != nil {
 		t.Fatal(err)
 	}
 	host := &fakeForkHost{t: t, repo: repo, st: st}

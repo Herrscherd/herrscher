@@ -232,6 +232,7 @@ func materializedGitExcludes() []string {
 		"/.codex/",
 		"/.claude/",
 		"/.mcp.json",
+		"/.cursor/mcp.json",
 		"/.herrscher/",
 		"/.grok/hooks/" + grokHookFile,
 	}

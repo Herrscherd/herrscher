@@ -43,6 +43,14 @@ func (d *approvalDesk) decideWithin(ctx context.Context, bound time.Duration, se
 	return askApproval(bounded, d.approvals, d.sessions, session, req, pol, mode, d.store.ApprovalWait(), bound)
 }
 
+func (d *approvalDesk) decideVerb(ctx context.Context, session string, req approval.Request) (approval.Decision, string) {
+	bound := hookDeskBound()
+	bounded, cancel := context.WithTimeout(ctx, bound)
+	defer cancel()
+	pol, _ := sessionPolicy(d.messages, d.lang, d.warn, d.store, d.agents, session)
+	return askApproval(bounded, d.approvals, d.sessions, session, req, pol, approval.ModeStrict, d.store.ApprovalWait(), bound)
+}
+
 type approvalConsumer int
 
 const (

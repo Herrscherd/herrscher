@@ -6045,5 +6045,330 @@
     "id": "cli.setup.telegram.malformed",
     "description": "Hub state of the Telegram module when one of its settings cannot be parsed",
     "other": "a Telegram setting is malformed (an id that is not a number, or a switch other than on, off, yes, no, true, false, 1 or 0), so the gateway will not start"
+  },
+  {
+    "id": "cli.help.cmd.config.get",
+    "description": "Help of the command config get",
+    "other": "print config.json, or the value at one dotted key"
+  },
+  {
+    "id": "cli.help.param.config.get.key",
+    "description": "Help of the parameter key of config get",
+    "other": "dotted key, such as telemetry.enabled; empty prints the whole file"
+  },
+  {
+    "id": "cli.help.cmd.config.set",
+    "description": "Help of the command config set",
+    "other": "set one dotted key of config.json, checked as the daemon reads it"
+  },
+  {
+    "id": "cli.help.param.config.set.key",
+    "description": "Help of the parameter key of config set",
+    "other": "dotted key, such as compactAt or skills.enabled"
+  },
+  {
+    "id": "cli.help.param.config.set.value",
+    "description": "Help of the parameter value of config set",
+    "other": "the value, as JSON (80, true, [\"a\"]) or as plain text"
+  },
+  {
+    "id": "cli.help.cmd.config.unset",
+    "description": "Help of the command config unset",
+    "other": "remove one dotted key of config.json"
+  },
+  {
+    "id": "cli.help.param.config.unset.key",
+    "description": "Help of the parameter key of config unset",
+    "other": "dotted key to remove"
+  },
+  {
+    "id": "cli.host.config.set",
+    "description": "Reply of config set",
+    "other": "{{.Key}} set in {{.Path}}. The daemon reads it at its next start: `herrscher service restart`."
+  },
+  {
+    "id": "cli.host.config.unset",
+    "description": "Reply of config unset",
+    "other": "{{.Key}} removed from {{.Path}}. The daemon reads it at its next start: `herrscher service restart`."
+  },
+  {
+    "id": "cli.host.config.backup",
+    "description": "Reply of a config write that dropped comments",
+    "other": "The file held comments a rewrite cannot keep: the previous version is in {{.Path}}."
+  },
+  {
+    "id": "cli.manage.flag.setup_probe",
+    "description": "Help of the --probe flag of setup check",
+    "other": "also check each account against its service (no sign-in is opened)"
+  },
+  {
+    "id": "cli.manage.flag.json",
+    "description": "Help of the --json flag of setup check",
+    "other": "print the report as JSON"
+  },
+  {
+    "id": "cli.help.cmd.session.issue.list",
+    "description": "Help of the command session issue list",
+    "other": "list the issues of the repository a session works in"
+  },
+  {
+    "id": "cli.help.cmd.session.issue.show",
+    "description": "Help of the command session issue show",
+    "other": "show one issue of the repository a session works in"
+  },
+  {
+    "id": "cli.help.param.session.issue.name",
+    "description": "Help of the parameter name of session issue",
+    "other": "the session whose repository holds the issues"
+  },
+  {
+    "id": "cli.help.param.session.issue.state",
+    "description": "Help of the parameter state of session issue list",
+    "other": "open (default) or closed"
+  },
+  {
+    "id": "cli.help.param.session.issue.labels",
+    "description": "Help of the parameter labels of session issue",
+    "other": "labels, separated by commas"
+  },
+  {
+    "id": "cli.help.param.session.issue.number",
+    "description": "Help of the parameter number of session issue",
+    "other": "the issue number"
+  },
+  {
+    "id": "cli.session.issue.none",
+    "description": "Reply of session issue list with no issue",
+    "other": "no issue matches on {{.Repo}}"
+  },
+  {
+    "id": "cli.session.issue.bad_number",
+    "description": "Refusal of an issue number that is not a positive number",
+    "other": "{{.Number}} is not an issue number"
+  },
+  {
+    "id": "cli.session.issue.bad_state",
+    "description": "Refusal of an issue state other than open or closed",
+    "other": "{{.State}} is not an issue state: open or closed"
+  },
+  {
+    "id": "cli.help.cmd.session.issue.open",
+    "description": "Help of the command session issue open",
+    "other": "open an issue on the repository a session works in, through the host's forge connection"
+  },
+  {
+    "id": "cli.help.cmd.session.issue.comment",
+    "description": "Help of the command session issue comment",
+    "other": "comment on an issue of the repository a session works in"
+  },
+  {
+    "id": "cli.help.param.session.issue.title",
+    "description": "Help of the parameter title of session issue open",
+    "other": "the issue title"
+  },
+  {
+    "id": "cli.help.param.session.issue.body",
+    "description": "Help of the parameter body of session issue",
+    "other": "the text, in Markdown"
+  },
+  {
+    "id": "cli.session.issue.opened",
+    "description": "Reply of session issue open",
+    "other": "opened issue #{{.Number}}: {{.URL}}"
+  },
+  {
+    "id": "cli.session.issue.commented",
+    "description": "Reply of session issue comment",
+    "other": "commented on issue #{{.Number}}"
+  },
+  {
+    "id": "cli.session.issue.no_writer",
+    "description": "Refusal when the forge plugin cannot write issues",
+    "other": "the forge plugin compiled in cannot open or comment on issues: update it with `herrscher update`"
+  },
+  {
+    "id": "cli.help.cmd.setup.check",
+    "description": "Help of the command setup check",
+    "other": "report each section of the setup as ok, warning, bad or off, without changing anything"
+  },
+  {
+    "id": "cli.help.cmd.connect.status",
+    "description": "Help of the command connect status",
+    "other": "show the forge connections of the host and where each token comes from"
+  },
+  {
+    "id": "cli.help.cmd.plugin.list",
+    "description": "Help of the command plugin list",
+    "other": "list the modules compiled into the binary, with their versions"
+  },
+  {
+    "id": "cli.help.cmd.plugin.add",
+    "description": "Help of the command plugin add",
+    "other": "add a module and rebuild the binary from source"
+  },
+  {
+    "id": "cli.help.cmd.plugin.rm",
+    "description": "Help of the command plugin rm",
+    "other": "remove a module and rebuild the binary from source"
+  },
+  {
+    "id": "cli.help.param.plugin.module",
+    "description": "Help of the parameter module of plugin add and rm",
+    "other": "the module path, optionally with @version"
+  },
+  {
+    "id": "cli.help.param.plugin.no_build",
+    "description": "Help of the parameter no_build of plugin add and rm",
+    "other": "edit the module list without rebuilding"
+  },
+  {
+    "id": "cli.help.cmd.env.get",
+    "description": "Help of the command env get",
+    "other": "print the variables of the daemon's settings file, secrets hidden"
+  },
+  {
+    "id": "cli.help.cmd.env.set",
+    "description": "Help of the command env set",
+    "other": "set one variable in the daemon's settings file; a session never sets a secret"
+  },
+  {
+    "id": "cli.help.cmd.env.unset",
+    "description": "Help of the command env unset",
+    "other": "remove one variable from the daemon's settings file"
+  },
+  {
+    "id": "cli.help.param.env.key",
+    "description": "Help of the parameter key of env",
+    "other": "the variable name, such as HERRSCHER_BACKEND"
+  },
+  {
+    "id": "cli.help.param.env.value",
+    "description": "Help of the parameter value of env set",
+    "other": "the value, on one line"
+  },
+  {
+    "id": "cli.host.env.set",
+    "description": "Reply of env set",
+    "other": "{{.Key}} set in {{.Path}}. The daemon reads it at its next start: `herrscher service restart`."
+  },
+  {
+    "id": "cli.host.env.unset",
+    "description": "Reply of env unset",
+    "other": "{{.Key}} removed from {{.Path}}. The daemon reads it at its next start: `herrscher service restart`."
+  },
+  {
+    "id": "cli.help.cmd.session.pr.reply",
+    "description": "Help of the command session pr reply",
+    "other": "reply in one review thread of a session's pull request"
+  },
+  {
+    "id": "cli.help.param.session.pr.thread",
+    "description": "Help of the parameter thread of session pr reply",
+    "other": "the thread id, as `session pr comments --json` gives it"
+  },
+  {
+    "id": "cli.help.param.session.pr.reply_body",
+    "description": "Help of the parameter body of session pr reply",
+    "other": "the reply, in Markdown"
+  },
+  {
+    "id": "cli.session.pr.replied",
+    "description": "Reply of session pr reply",
+    "other": "replied in a review thread of pull request #{{.Number}}"
+  },
+  {
+    "id": "cli.health.facts.self_tools",
+    "description": "Facts of the self tools health check",
+    "other": "{{.Mode}} · {{.Count}} tools · {{.Size}} bytes of schemas a turn"
+  },
+  {
+    "id": "cli.health.facts.self_tools_off",
+    "description": "Facts of the self tools health check when they are off",
+    "other": "off: sessions get no herrscher MCP server"
+  },
+  {
+    "id": "cli.help.param.session.issue.limit",
+    "description": "Help of the parameter limit of session issue list",
+    "other": "the most issues to list, 100 by default"
+  },
+  {
+    "id": "cli.session.issue.truncated",
+    "description": "Line under an issue listing cut at its limit",
+    "other": "(the first {{.Count}} only: raise --limit to see more)"
+  },
+  {
+    "id": "cli.session.issue.bad_limit",
+    "description": "Refusal of an issue limit out of range",
+    "other": "--limit takes a number from 1 to {{.Count}}"
+  },
+  {
+    "id": "cli.host.fault.env_key",
+    "description": "Error of env: not a variable name",
+    "other": "not a variable name: letters, digits and _, not starting with a digit"
+  },
+  {
+    "id": "cli.host.fault.env_value",
+    "description": "Error of env set: a value on several lines",
+    "other": "a value holds no line break"
+  },
+  {
+    "id": "cli.host.fault.env_no_file",
+    "description": "Error of env: the daemon has no settings file",
+    "other": "the daemon was started without a settings file, so there is none to edit"
+  },
+  {
+    "id": "cli.host.fault.env_no_such_key",
+    "description": "Error of env: the variable is not in the file",
+    "other": "the settings file does not set this variable"
+  },
+  {
+    "id": "cli.host.fault.secret_from_session",
+    "description": "Error of env set: a session tried to write a secret",
+    "other": "a session never writes a secret or a variable it cannot read back: ask the operator with `env request`"
+  },
+  {
+    "id": "cli.help.cmd.env.request",
+    "description": "Help of the command env request",
+    "other": "ask the operator to set a secret in the daemon's settings file; no value is sent"
+  },
+  {
+    "id": "cli.help.param.env.reason",
+    "description": "Help of the parameter reason of env request",
+    "other": "why the session needs it"
+  },
+  {
+    "id": "cli.host.env.requested",
+    "description": "Reply of env request",
+    "other": "asked the operator to set {{.Key}}; it takes effect at the daemon's next start"
+  },
+  {
+    "id": "cli.host.fault.env_request_outside",
+    "description": "Error of env request outside a session",
+    "other": "env request is how a session asks the operator for a secret; from a terminal, run `herrscher env set`"
+  },
+  {
+    "id": "cli.host.fault.env_request_unheard",
+    "description": "Error of env request when no gateway can carry it",
+    "other": "the daemon cannot reach the session's gateways yet, so nobody would read the request"
+  },
+  {
+    "id": "cli.host.fault.env_quote",
+    "description": "Error of env set: a value no quoting keeps intact",
+    "other": "a value holding a single quote cannot also hold a double quote, a dollar, a backquote or a backslash"
+  },
+  {
+    "id": "cli.host.fault.self_tools_silent",
+    "description": "Health: the self tools server listed no tool",
+    "other": "herrscher mcp answered, but listed no tool"
+  },
+  {
+    "id": "cli.help.param.approve.rule.session",
+    "description": "Help of the parameter session of approve rule",
+    "other": "bind the rule to this session alone; a session asking for a rule always gets one of its own"
+  },
+  {
+    "id": "cli.host.approve.rule_session_added",
+    "description": "Reply of approve rule for one session",
+    "other": "rule {{.Rule}} added for session {{.Name}} alone"
   }
 ]

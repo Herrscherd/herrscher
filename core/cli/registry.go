@@ -164,6 +164,16 @@ func (r *Registry) Run(ctx context.Context, path []string, input contracts.Input
 	return cmd.Run(ctx, input)
 }
 
+// ReadOnly reports whether the command at path declared itself read only.
+func (r *Registry) ReadOnly(path []string) bool {
+	for index := range r.cmds {
+		if key(r.cmds[index].Path) == key(path) {
+			return r.cmds[index].ReadOnly
+		}
+	}
+	return false
+}
+
 // Runner is a command's handler, named so a caller can wrap one.
 type Runner func(context.Context, contracts.Input) (contracts.Result, error)
 

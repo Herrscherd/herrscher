@@ -97,6 +97,9 @@ daemon-only and fails without one. The approval hook never falls back: when it
 cannot reach a daemon, it denies the tool call and says why
 (`core/host/approve_hook.go`, `refuseHook`).
 
+`approve rule --session <name>` binds a rule to one session alone, beside the
+daemon's rules, and a session asking for a rule always gets one of that kind.
+
 `approve list`, `approve allow <id> [--session | --always]`,
 `approve deny <id> [--reason '…']`, `approve rule`, `approve ask` and
 `approve mode` (`ask`, `accept-edits`, `plan`, `auto`, `bypass`, `strict` or
@@ -111,7 +114,9 @@ behaved before this existed.
 command socket the CLI resolves. That is the one named by `HERRSCHER_COMMAND_SOCKET`
 when the variable is set, and the operator's socket otherwise
 (`core/host/cmdsocket_remote.go`). With the variable set, they reach the session's
-own socket, where the agent role refuses them. Without it, they reach the
+own socket, where the agent role refuses `approve allow` and `approve deny` and
+puts `approve rule` and `approve mode` to the operator as a question
+([Self tools](self-tools.md#what-it-may-change)). Without it, they reach the
 operator's socket, where they run as `owner`. The `role` verbs follow the same
 path. The operator's socket asks for no second proof: a process running under the
 daemon's user account is the operator, as far as the daemon can tell.
@@ -215,7 +220,9 @@ For humans, nothing changes while nobody holds a role. Each gateway keeps its ow
 rules and herrscher decides nothing. `role grant <principal> <owner|operator|observer>`
 hands the decision to the core, and says so plainly the first time, because from
 then on every gateway account without a role is `observer`. `role list`,
-`role show` and `role revoke` are the rest of the surface.
+`role show` and `role revoke` are the rest of the surface. A session principal
+(`session:<name>`) takes one role, `steward`, which does not count as that first
+human grant ([Self tools](self-tools.md#a-trusted-agent)).
 
 Locally this is a guardrail rather than a wall: the agent and the daemon run
 under one account, so nothing stops a determined agent from looking for the

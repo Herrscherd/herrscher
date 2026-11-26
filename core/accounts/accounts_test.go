@@ -141,6 +141,9 @@ func TestStatusReadsEachVendorsAnswer(t *testing.T) {
 		{contracts.VendorClaude, `{"loggedIn": false}`, false},
 		{contracts.VendorCodex, "Logged in using ChatGPT\n", true},
 		{contracts.VendorCodex, "Not logged in\n", false},
+		{contracts.VendorGrok, "You are logged in with grok.com.\n\nDefault model: grok-4.7\n", true},
+		{contracts.VendorGrok, "You are using XAI_API_KEY.\n", true},
+		{contracts.VendorGrok, "You are not authenticated.\n\nDefault model: grok-4.6\n", false},
 	}
 	for _, tc := range cases {
 		run := func(_ context.Context, _ string, env map[string]string) ([]byte, error) {
@@ -247,5 +250,24 @@ func TestAddCommandNamesTheVendorAndTheAccount(t *testing.T) {
 	got := AddCommand("claude", "work")
 	if want := "herrscher account add claude work"; got != want {
 		t.Fatalf("AddCommand() = %q, want %q", got, want)
+	}
+}
+
+func TestGrokUnknownAnswerIsNotTakenForLoggedOut(t *testing.T) {
+	run := func(context.Context, string, map[string]string) ([]byte, error) {
+		return []byte("Error: the leader socket is unreachable\n"), nil
+	}
+	if _, err := Status(context.Background(), run, contracts.VendorGrok, nil); !errors.Is(err, errUnrecognisedLoginStatus) {
+		t.Fatalf("err = %v, want an unrecognised status", err)
+	}
+}
+
+func TestGrokStatusIgnoresAKeyInheritedFromTheDaemon(t *testing.T) {
+	kept := inheritedEnv(contracts.VendorGrok, []string{"XAI_API_KEY=xai-daemon", "GROK_CODE_XAI_API_KEY=", "HOME=/home/x"})
+	if len(kept) != 1 || kept[0] != "HOME=/home/x" {
+		t.Fatalf("env = %q, want the keys dropped so grok reports the login of the profile", kept)
+	}
+	if got := inheritedEnv(contracts.VendorClaude, []string{"XAI_API_KEY=k"}); len(got) != 1 {
+		t.Fatalf("claude env = %q, want it untouched", got)
 	}
 }

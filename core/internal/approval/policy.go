@@ -266,7 +266,7 @@ func (r Risk) Decision() Decision {
 // IsRead reports whether tool only reads, so a smart judge never rates it.
 func IsRead(tool string) bool {
 	switch tool {
-	case toolRead, "Glob", "Grep", "LS":
+	case toolRead, "Glob", toolGrep, toolLS:
 		return true
 	}
 	return false
@@ -331,7 +331,7 @@ func Merge(daemon, agent Policy) Policy {
 // Anything unknown, an MCP tool or a sub-agent included, counts as a write.
 func ReadOnly(tool string) bool {
 	switch tool {
-	case toolRead, "Grep", "Glob", "LS", "WebFetch", "WebSearch", "TodoWrite":
+	case toolRead, toolGrep, "Glob", toolLS, "WebFetch", "WebSearch", "TodoWrite":
 		return true
 	}
 	return false

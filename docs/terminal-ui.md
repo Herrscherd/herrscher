@@ -143,7 +143,7 @@ restores the default, 0 disables it for that session). The window size comes fro
 the session's model and vendor, in this order: `HERRSCHER_CONTEXT_LIMIT` when it is a positive number,
 then the `contextLimits` table of `config.json` (a vendor name to a window in tokens,
 for example `{"contextLimits": {"codex": 400000}}`), then the window the resolved model declares (its `contextWindow`, when it is positive),
-then the built-in size of 200000 for `claude`, `cursor` and `codex`, for a model that
+then the built-in size of 200000 for `claude`, `cursor` and `codex` (256000 for `grok`), for a model that
 declares none. `HERRSCHER_CONTEXT_LIMIT` and `contextLimits` are settings you make on
 purpose, so they take precedence over the window the catalogue declares for the model.
 Vendor names are case-insensitive. `config.json`

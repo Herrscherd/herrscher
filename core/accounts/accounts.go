@@ -18,6 +18,10 @@ import (
 )
 
 const (
+	grokCommand      = "grok"
+	grokSignedIn     = "You are logged in with "
+	grokUsingAPIKey  = "You are using XAI_API_KEY."
+	grokNotSignedIn  = "You are not authenticated."
 	defaultsFileName = "defaults.json"
 	dirMode          = 0o700
 	fileMode         = 0o600
@@ -258,7 +262,7 @@ func OSRunner(ctx context.Context, vendor string, env map[string]string) ([]byte
 	if err != nil {
 		return nil, err
 	}
-	cmd.Env = contracts.MergeEnv(os.Environ(), env)
+	cmd.Env = contracts.MergeEnv(inheritedEnv(vendor, os.Environ()), env)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -269,6 +273,22 @@ func OSRunner(ctx context.Context, vendor string, env map[string]string) ([]byte
 		}
 	}
 	return answerOf(stdout.Bytes(), stderr.Bytes()), nil
+}
+
+func inheritedEnv(vendor string, environ []string) []string {
+	if vendor != contracts.VendorGrok {
+		return environ
+	}
+	return slices.DeleteFunc(slices.Clone(environ), func(entry string) bool {
+		name, _, _ := strings.Cut(entry, "=")
+		return slices.Contains(GrokKeyVariables(), name)
+	})
+}
+
+// GrokKeyVariables names the variables the grok CLI reads an xAI API key from:
+// while one of them is set, even empty, grok reports the key instead of its login.
+func GrokKeyVariables() []string {
+	return []string{"XAI_API_KEY", "GROK_CODE_XAI_API_KEY"}
 }
 
 func answerOf(stdout, stderr []byte) []byte {
@@ -285,6 +305,8 @@ func LoginCommand(ctx context.Context, vendor string) (*exec.Cmd, error) {
 		return exec.CommandContext(ctx, "claude", "auth", "login"), nil
 	case contracts.VendorCodex:
 		return exec.CommandContext(ctx, "codex", "login"), nil
+	case contracts.VendorGrok:
+		return exec.CommandContext(ctx, grokCommand, "login"), nil
 	}
 	return nil, fmt.Errorf("vendor %q: %w", vendor, contracts.ErrNoProfileHome)
 }
@@ -312,6 +334,8 @@ func statusCommand(ctx context.Context, vendor string) (*exec.Cmd, error) {
 		return exec.CommandContext(ctx, "claude", "auth", "status"), nil
 	case contracts.VendorCodex:
 		return exec.CommandContext(ctx, "codex", "login", "status"), nil
+	case contracts.VendorGrok:
+		return exec.CommandContext(ctx, grokCommand, "models"), nil
 	}
 	return nil, fmt.Errorf("vendor %q: %w", vendor, contracts.ErrNoProfileHome)
 }
@@ -327,6 +351,9 @@ func parseLoggedIn(vendor string, out []byte) (bool, error) {
 		return status.LoggedIn, nil
 	}
 	text := strings.TrimSpace(string(out))
+	if vendor == contracts.VendorGrok {
+		return parseGrokLoggedIn(text)
+	}
 	switch {
 	case strings.HasPrefix(text, "Logged in"):
 		return true, nil
@@ -334,4 +361,14 @@ func parseLoggedIn(vendor string, out []byte) (bool, error) {
 		return false, nil
 	}
 	return false, fmt.Errorf("%s login status: %w", vendor, errUnrecognisedLoginStatus)
+}
+
+func parseGrokLoggedIn(text string) (bool, error) {
+	switch {
+	case strings.HasPrefix(text, grokSignedIn), strings.HasPrefix(text, grokUsingAPIKey):
+		return true, nil
+	case strings.HasPrefix(text, grokNotSignedIn):
+		return false, nil
+	}
+	return false, fmt.Errorf("%s login status: %w", contracts.VendorGrok, errUnrecognisedLoginStatus)
 }

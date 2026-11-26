@@ -135,6 +135,15 @@ turn count, so each turn goes to whichever vendor asks for it next. `codex` answ
 stream mode, one turn per `turn/start` request. `cursor-agent` answers the `status` probe
 and replays one turn per invocation, with the prompt on its standard input. Both record
 their prompts in `$VENDORTEST_LOG` as `codex prompt "<text>"` and `cursor prompt "<text>"`.
+The `grok` fake answers `models` with a signed-in listing, `inspect --json` with the
+`PreToolUse` hooks of `.grok/hooks/*.json` listed as project hooks matching `*`, and
+replays one turn per `-p --output-format streaming-json` invocation, with the prompt on
+its standard input. Its `tool` steps go through every `PreToolUse` hook of
+`.grok/hooks/*.json` in its working directory, a hook that fails counting as a denial only
+when it sets `failClosed`, as Grok does. It records `grok prompt "<text>"` and `grok
+result call-N allowed` or `denied: <reason>`. `approval_grok_hook_gates_tool_calls.txtar`
+drives a Grok session created without `--cmd` through an allowed then a denied
+`run_terminal_command`, gated by a `Bash` rule.
 
 `sessionrunning <session> <vendor command>` fails the scenario unless a process of its
 instance has `--session <session>` and `--cmd <vendor command>` on its command line, so a
@@ -142,11 +151,13 @@ switch that proves nothing cannot pass. `sessionstopped` takes the same argument
 up to five seconds for no such process, failing otherwise. Neither can be negated.
 
 `session_switch.txtar` covers a vendor switch on one session. It seeds a prompt through
-`claude`, checks the overview, then switches the session to `codex` and then to
-`cursor-agent`. Before each switch `sessionrunning` checks that the previous vendor process
-runs, and after it `sessionstopped` waits for that process to stop. The `codex` and
-`cursor-agent` prompts get `echo: <prompt>` back. Its `claude.script` holds one turn, so the
-later turns are past the end of the script and echo.
+`claude`, checks the overview, then switches the session to `codex`, then to
+`cursor-agent`, then to `grok`. Before the switches away from `claude` and `codex`,
+`sessionrunning` checks that the previous vendor process runs, and after them
+`sessionstopped` waits for that process to stop. `cursor-agent` exits after each turn, so
+the switch to `grok` is checked through the overview and the prompt log only. The `codex`,
+`cursor-agent` and `grok` prompts get `echo: <prompt>` back. Its `claude.script` holds one
+turn, so the later turns are past the end of the script and echo.
 
 Every bug found by hand becomes a scenario before it is fixed: the scenario is written
 first, fails on the bug, and passes with the fix.

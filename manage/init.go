@@ -31,6 +31,7 @@ func catalog() map[string]map[string]string {
 			kindClaude: "github.com/Herrscherd/herrscher-claude-backend",
 			kindCodex:  "github.com/Herrscherd/herrscher-codex-backend",
 			kindCursor: "github.com/Herrscherd/herrscher-cursor-backend",
+			kindGrok:   "github.com/Herrscherd/herrscher-grok-backend",
 		},
 		catMemory: {
 			kindObsidian: "github.com/Herrscherd/herrscher-obsidian-memory",

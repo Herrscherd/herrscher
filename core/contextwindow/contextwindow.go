@@ -10,6 +10,7 @@ import (
 
 const (
 	standard = 200_000
+	grok     = 256_000
 	fallback = 200_000
 	envLimit = "HERRSCHER_CONTEXT_LIMIT"
 )
@@ -18,6 +19,8 @@ func vendorLimit(vendor string) (int, bool) {
 	switch strings.ToLower(vendor) {
 	case "claude", "codex", "cursor":
 		return standard, true
+	case "grok":
+		return grok, true
 	}
 	return 0, false
 }

@@ -31,6 +31,7 @@ const (
 	screenClaude
 	screenCodex
 	screenCursor
+	screenGrok
 	screenObsidian
 	screenRoute
 	screenReview
@@ -40,7 +41,7 @@ const (
 )
 
 func flowOrder() []setupScreen {
-	return []setupScreen{screenModules, screenDiscord, screenTelegram, screenClaude, screenCodex, screenCursor, screenObsidian, screenRoute, screenReview}
+	return []setupScreen{screenModules, screenDiscord, screenTelegram, screenClaude, screenCodex, screenCursor, screenGrok, screenObsidian, screenRoute, screenReview}
 }
 
 type setupDeps struct {
@@ -102,6 +103,7 @@ type setupModel struct {
 	cursor    int
 	claudeKey bool
 	codexKey  bool
+	grokKey   bool
 	envExists bool
 }
 
@@ -124,6 +126,7 @@ func newSetupModel(messages *clitext.Messages, deps setupDeps, start setupStart)
 		base:      screenWelcome,
 		detour:    screenWelcome,
 		claudeKey: settings[envAnthropicKey] != "",
+		grokKey:   settings[envXAIKey] != "",
 		envExists: start.envExists,
 	}
 	model.modules, model.extras = model.startModules(settings)
@@ -144,12 +147,15 @@ func (model *setupModel) startModules(settings map[string]string) (moduleSet, []
 	if settings[envCursorKey] != "" {
 		set[moduleCursor] = true
 	}
+	if settings[envXAIKey] != "" {
+		set[moduleGrok] = true
+	}
 	return set, nil
 }
 
 func (model *setupModel) newFields() map[string]textinput.Model {
 	fields := make(map[string]textinput.Model)
-	for _, key := range []string{envDiscordToken, envDiscordUser, envTelegramBot, envTelegramUser, envAnthropicKey, fieldCodexKey, envCursorKey, envVault, envGatewayURL, envGatewayToken} {
+	for _, key := range []string{envDiscordToken, envDiscordUser, envTelegramBot, envTelegramUser, envAnthropicKey, fieldCodexKey, envCursorKey, envXAIKey, envVault, envGatewayURL, envGatewayToken} {
 		input := textinput.New()
 		input.Prompt = ""
 		input.SetValue(model.draft.value(key))
@@ -308,6 +314,7 @@ func fieldProbes() map[string]probeKind {
 		envAnthropicKey: probeClaude,
 		fieldCodexKey:   probeCodex,
 		envCursorKey:    probeCursor,
+		envXAIKey:       probeGrok,
 		envVault:        probeVault,
 	}
 }
@@ -333,6 +340,8 @@ func (model *setupModel) shown(screen setupScreen) bool {
 		return model.modules[moduleCodex]
 	case screenCursor:
 		return model.modules[moduleCursor]
+	case screenGrok:
+		return model.modules[moduleGrok]
 	case screenObsidian:
 		return model.modules[moduleObsidian]
 	case screenWelcome, screenModules, screenRoute, screenReview, screenInstall, screenConnections, screenHub:
@@ -386,7 +395,7 @@ func (model *setupModel) back() tea.Cmd {
 			return model.openHub()
 		}
 		return nil
-	case screenModules, screenDiscord, screenTelegram, screenClaude, screenCodex, screenCursor, screenObsidian, screenRoute, screenReview, screenConnections:
+	case screenModules, screenDiscord, screenTelegram, screenClaude, screenCodex, screenCursor, screenGrok, screenObsidian, screenRoute, screenReview, screenConnections:
 	}
 	if target, ok := model.returnTarget(); ok {
 		return model.goTo(target)
@@ -426,10 +435,12 @@ func (model *setupModel) enter(screen setupScreen) tea.Cmd {
 		return model.statusCheck(probeClaude)
 	case screenCodex:
 		return model.statusCheck(probeCodex)
+	case screenGrok:
+		return model.statusCheck(probeGrok)
 	case screenRoute:
 		return model.loadCatalog()
 	case screenHub:
-		return tea.Batch(model.statusCheck(probeClaude), model.statusCheck(probeCodex), model.githubStatus())
+		return tea.Batch(model.statusCheck(probeClaude), model.statusCheck(probeCodex), model.statusCheck(probeGrok), model.githubStatus())
 	case screenInstall:
 		return model.startInstall()
 	case screenConnections:
@@ -447,6 +458,10 @@ func (model *setupModel) statusCheck(kind probeKind) tea.Cmd {
 		}
 	case probeCodex:
 		if !model.modules[moduleCodex] || model.codexKey {
+			return nil
+		}
+	case probeGrok:
+		if !model.modules[moduleGrok] || model.grokKey {
 			return nil
 		}
 	case probeDiscord, probeTelegram, probeCursor, probeVault:
@@ -471,6 +486,10 @@ func (model *setupModel) probeInput(kind probeKind) string {
 		}
 	case probeCursor:
 		return model.draft.value(envCursorKey)
+	case probeGrok:
+		if model.grokKey {
+			return model.draft.value(envXAIKey)
+		}
 	case probeVault:
 		return model.draft.value(envVault)
 	}
@@ -479,8 +498,12 @@ func (model *setupModel) probeInput(kind probeKind) string {
 
 func (model *setupModel) vendorStatus(kind probeKind, afterLogin bool) tea.Cmd {
 	prober := model.deps.prober
-	if kind == probeCodex {
+	switch kind {
+	case probeCodex:
 		return model.probe(kind, func(ctx context.Context) probeResult { return prober.codex(ctx, afterLogin) })
+	case probeGrok:
+		return model.probe(kind, func(ctx context.Context) probeResult { return prober.grok(ctx, afterLogin) })
+	case probeDiscord, probeTelegram, probeClaude, probeCursor, probeVault:
 	}
 	return model.probe(kind, func(ctx context.Context) probeResult { return prober.claude(ctx, afterLogin) })
 }
@@ -519,6 +542,12 @@ func (model *setupModel) runProbe(kind probeKind) tea.Cmd {
 	case probeCursor:
 		key := model.draft.value(envCursorKey)
 		return model.probe(kind, func(context.Context) probeResult { return prober.cursor(key) })
+	case probeGrok:
+		if !model.grokKey {
+			return model.login(kind)
+		}
+		key := model.draft.value(envXAIKey)
+		return model.probe(kind, func(ctx context.Context) probeResult { return prober.xaiKey(ctx, key) })
 	case probeVault:
 		path := expandHome(model.draft.value(envVault))
 		return model.probe(kind, func(context.Context) probeResult { return vaultCheck(path) })
@@ -533,22 +562,37 @@ func (model *setupModel) login(kind probeKind) tea.Cmd {
 
 func (model *setupModel) loginDone(done loginDoneMsg) tea.Cmd {
 	if errors.Is(done.err, exec.ErrNotFound) {
-		name := kindClaude
-		if done.kind == probeCodex {
-			name = kindCodex
-		}
+		name := loginCLI(done.kind)
 		model.probes[done.kind] = failed(clitext.SetupCLIMissing, clitext.Params{clitext.ParamName: name})
 		return nil
 	}
 	return model.vendorStatus(done.kind, true)
 }
 
-func execLogin(ctx context.Context, kind probeKind) tea.Cmd {
-	name, args := kindClaude, []string{"auth", verbLogin}
-	if kind == probeCodex {
-		name, args = kindCodex, []string{verbLogin}
+func loginCLI(kind probeKind) string {
+	switch kind {
+	case probeCodex:
+		return kindCodex
+	case probeGrok:
+		return grokCLI
+	case probeDiscord, probeTelegram, probeClaude, probeCursor, probeVault:
 	}
-	cmd := exec.CommandContext(ctx, name, args...)
+	return kindClaude
+}
+
+func loginCmd(ctx context.Context, kind probeKind) *exec.Cmd {
+	switch kind {
+	case probeCodex:
+		return exec.CommandContext(ctx, kindCodex, verbLogin)
+	case probeGrok:
+		return exec.CommandContext(ctx, grokCLI, verbLogin)
+	case probeDiscord, probeTelegram, probeClaude, probeCursor, probeVault:
+	}
+	return exec.CommandContext(ctx, kindClaude, "auth", verbLogin)
+}
+
+func execLogin(ctx context.Context, kind probeKind) tea.Cmd {
+	cmd := loginCmd(ctx, kind)
 	return tea.ExecProcess(cmd, func(err error) tea.Msg { return loginDoneMsg{kind: kind, err: err} })
 }
 
@@ -627,6 +671,8 @@ func probeScreen(kind probeKind) setupScreen {
 		return screenCodex
 	case probeCursor:
 		return screenCursor
+	case probeGrok:
+		return screenGrok
 	case probeVault:
 		return screenObsidian
 	}

@@ -46,6 +46,7 @@ const (
 const (
 	defaultAnthropicBaseURL = "https://api.anthropic.com"
 	defaultOpenAIBaseURL    = "https://api.openai.com"
+	defaultXAIBaseURL       = "https://api.x.ai"
 )
 
 var (
@@ -179,6 +180,9 @@ func providerDefaults(name, baseURL string) (*url.URL, AuthStyle, error) {
 		return upstream, AuthXAPIKey, err
 	case config.ProviderOpenAI:
 		upstream, err := parseBase(baseURL, defaultOpenAIBaseURL)
+		return upstream, AuthBearer, err
+	case config.ProviderXAI:
+		upstream, err := parseBase(baseURL, defaultXAIBaseURL)
 		return upstream, AuthBearer, err
 	}
 	return nil, "", fmt.Errorf("%q: %w", name, config.ErrKeysProvider)

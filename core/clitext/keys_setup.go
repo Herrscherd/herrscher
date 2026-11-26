@@ -39,6 +39,7 @@ const (
 	SetupModuleClaude           = "cli.setup.module.claude"
 	SetupModuleCodex            = "cli.setup.module.codex"
 	SetupModuleCursor           = "cli.setup.module.cursor"
+	SetupModuleGrok             = "cli.setup.module.grok"
 	SetupModuleObsidian         = "cli.setup.module.obsidian"
 	SetupModuleBasic            = "cli.setup.module.basic"
 	SetupModuleLLM              = "cli.setup.module.llm"
@@ -76,6 +77,10 @@ const (
 	SetupCodexQuestion          = "cli.setup.codex.question"
 	SetupCodexAccount           = "cli.setup.codex.account"
 	SetupCodexAccountHint       = "cli.setup.codex.account_hint"
+	SetupGrokQuestion           = "cli.setup.grok.question"
+	SetupGrokAccount            = "cli.setup.grok.account"
+	SetupGrokAccountHint        = "cli.setup.grok.account_hint"
+	SetupGrokKeyShadowed        = "cli.setup.grok.key_shadowed"
 	SetupCursorKey              = "cli.setup.cursor.key"
 	SetupCursorKeyHint          = "cli.setup.cursor.key_hint"
 	SetupCursorProbe            = "cli.setup.cursor.probe"
@@ -204,6 +209,7 @@ func setupKeys() map[Key][]string {
 		SetupModuleClaude:           nil,
 		SetupModuleCodex:            nil,
 		SetupModuleCursor:           nil,
+		SetupModuleGrok:             nil,
 		SetupModuleObsidian:         nil,
 		SetupModuleBasic:            nil,
 		SetupModuleLLM:              nil,
@@ -241,6 +247,10 @@ func setupKeys() map[Key][]string {
 		SetupCodexQuestion:          nil,
 		SetupCodexAccount:           nil,
 		SetupCodexAccountHint:       nil,
+		SetupGrokQuestion:           nil,
+		SetupGrokAccount:            nil,
+		SetupGrokAccountHint:        nil,
+		SetupGrokKeyShadowed:        {ParamName},
 		SetupCursorKey:              nil,
 		SetupCursorKeyHint:          nil,
 		SetupCursorProbe:            nil,

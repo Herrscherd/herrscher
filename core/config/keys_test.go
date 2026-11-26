@@ -8,6 +8,7 @@ import (
 func TestValidateKeysAcceptsAWellFormedPool(t *testing.T) {
 	keys := &KeysConfig{Providers: map[string]ProviderKeys{
 		ProviderAnthropic: {Sources: []KeySource{{Name: "main", KeyEnv: "ANTHROPIC_KEY"}}},
+		ProviderXAI:       {Sources: []KeySource{{Name: "main", KeyEnv: "XAI_KEY"}}},
 		ProviderOpenAI: {
 			Strategy: StrategyRoundRobin,
 			Sources: []KeySource{

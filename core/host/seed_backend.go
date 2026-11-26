@@ -105,6 +105,7 @@ func buildBackend(ctx context.Context, messages *hostMessages, req BackendReques
 		return failWith(err)
 	}
 	route.env = env
+	req.Cmd = commandFor(plugin.Manifest.Kind, req.Cmd, plugins)
 	applyBackendRequest(cfg.Settings, req, route)
 	backend, err = plugin.Backend(ctx, cfg)
 	if err != nil {
@@ -176,6 +177,13 @@ func (req BackendRequest) remoteAccountRefusal(messages *hostMessages) error {
 		return &remoteAccountError{messages: messages, Account: req.Account}
 	}
 	return nil
+}
+
+func commandFor(vendor, cmd string, plugins []contracts.Plugin) string {
+	if owner := vendorOfCmd(cmd, plugins); owner != "" && owner != vendor {
+		return ""
+	}
+	return cmd
 }
 
 func applyBackendRequest(settings map[string]string, req BackendRequest, route modelRoute) {

@@ -11,9 +11,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/Herrscherd/herrscher/core/accounts"
 	"github.com/Herrscherd/herrscher/core/clitext"
 )
 
@@ -23,6 +25,7 @@ const (
 	telegramAPI      = "https://api.telegram.org"
 	redactedToken    = "[token]"
 	anthropicAPI     = "https://api.anthropic.com"
+	xaiAPI           = "https://api.x.ai"
 	anthropicVersion = "2023-06-01"
 	probeBodyLimit   = 1 << 16
 	codexLoggedIn    = "Logged in"
@@ -40,6 +43,7 @@ const (
 	probeClaude
 	probeCodex
 	probeCursor
+	probeGrok
 	probeVault
 )
 
@@ -76,18 +80,30 @@ type setupCommand struct {
 	name  string
 	args  []string
 	env   []string
+	unset []string
 }
 
 const processWaitDelay = 5 * time.Second
 
 type commandRunner func(ctx context.Context, cmd setupCommand) ([]byte, error)
 
+func withoutVariables(environ, names []string) []string {
+	return slices.DeleteFunc(slices.Clone(environ), func(entry string) bool {
+		name, _, _ := strings.Cut(entry, "=")
+		return slices.Contains(names, name)
+	})
+}
+
+func grokLoginStatus() setupCommand {
+	return setupCommand{name: grokCLI, args: []string{"models"}, unset: accounts.GrokKeyVariables()}
+}
+
 func execRunner(ctx context.Context, cmd setupCommand) ([]byte, error) {
 	proc := exec.CommandContext(ctx, cmd.name, cmd.args...)
 	proc.Dir = cmd.dir
 	proc.WaitDelay = processWaitDelay
-	if len(cmd.env) > 0 {
-		proc.Env = append(os.Environ(), cmd.env...)
+	if len(cmd.env) > 0 || len(cmd.unset) > 0 {
+		proc.Env = append(withoutVariables(os.Environ(), cmd.unset), cmd.env...)
 	}
 	if cmd.stdin != "" {
 		proc.Stdin = strings.NewReader(cmd.stdin)
@@ -106,6 +122,7 @@ type setupProber struct {
 	discordURL   string
 	telegramURL  string
 	anthropicURL string
+	xaiURL       string
 }
 
 func liveProber() setupProber {
@@ -116,6 +133,7 @@ func liveProber() setupProber {
 		discordURL:   discordAPI,
 		telegramURL:  telegramAPI,
 		anthropicURL: anthropicAPI,
+		xaiURL:       xaiAPI,
 	}
 }
 
@@ -291,6 +309,44 @@ func (prober setupProber) cursor(key string) probeResult {
 		return failed(clitext.SetupKeyEmpty, nil)
 	}
 	return passed(clitext.SetupCursorOK, nil)
+}
+
+const (
+	grokCLI      = "grok"
+	grokSignedIn = "You are logged in with "
+)
+
+func (prober setupProber) grok(ctx context.Context, afterLogin bool) probeResult {
+	out, err := prober.run(ctx, grokLoginStatus())
+	if errors.Is(err, exec.ErrNotFound) {
+		return failed(clitext.SetupCLIMissing, clitext.Params{clitext.ParamName: grokCLI})
+	}
+	status := firstLine(out)
+	account, signedIn := strings.CutPrefix(status, grokSignedIn)
+	if err != nil || !signedIn {
+		return loggedOut(afterLogin)
+	}
+	return passed(clitext.SetupLoggedIn, clitext.Params{clitext.ParamName: strings.TrimSuffix(account, ".")})
+}
+
+func (prober setupProber) xaiKey(ctx context.Context, key string) probeResult {
+	if strings.TrimSpace(key) == "" {
+		return failed(clitext.SetupKeyEmpty, nil)
+	}
+	status, err := prober.getJSON(ctx, prober.xaiURL+"/v1/api-key", http.Header{"Authorization": {"Bearer " + key}}, nil)
+	switch {
+	case err != nil:
+		return probeError(err)
+	case status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusBadRequest:
+		return failed(clitext.SetupKeyRefused, nil)
+	case status != http.StatusOK:
+		return probeError(errProbeStatus)
+	}
+	out, err := prober.run(ctx, grokLoginStatus())
+	if err == nil && strings.HasPrefix(firstLine(out), grokSignedIn) {
+		return failed(clitext.SetupGrokKeyShadowed, clitext.Params{clitext.ParamName: grokCLI + " logout"})
+	}
+	return passed(clitext.SetupKeyAccepted, nil)
 }
 
 func vaultCheck(path string) probeResult {

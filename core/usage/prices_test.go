@@ -10,6 +10,8 @@ const priceList = `{
 	"claude-opus-4-1": {"input_cost_per_token": 0.000015, "output_cost_per_token": 0.000075, "cache_read_input_token_cost": 0.0000015, "cache_creation_input_token_cost": 0.00001875, "cache_creation_input_token_cost_above_1hr": 0.00003, "provider_specific_entry": {"fast": 2}},
 	"openrouter/openai/gpt-5": {"input_cost_per_token": 0.000002, "output_cost_per_token": 0.00002, "litellm_provider": "openrouter"},
 	"openai/gpt-5": {"input_cost_per_token": 0.00000125, "output_cost_per_token": 0.00001, "litellm_provider": "openai"},
+	"openrouter/x-ai/grok-4": {"input_cost_per_token": 0.000004, "output_cost_per_token": 0.00002, "litellm_provider": "openrouter"},
+	"xai/grok-4": {"input_cost_per_token": 0.000003, "output_cost_per_token": 0.000015, "litellm_provider": "xai"},
 	"no-output": {"input_cost_per_token": 0.000001}
 }`
 
@@ -25,6 +27,9 @@ func TestParsePricesKeepsPricedModelsAndPrefersTheFirstPartyAlias(t *testing.T) 
 	gpt, ok := book.Lookup("GPT-5")
 	if !ok || !near(gpt.In, 0.00000125) || !near(gpt.CacheRead, gpt.In) {
 		t.Fatalf("gpt-5 = %+v, %v, want the openai rates", gpt, ok)
+	}
+	if grok, found := book.Lookup("grok-4"); !found || !near(grok.In, 0.000003) {
+		t.Fatalf("grok-4 = %+v, %v, want the xai rates", grok, found)
 	}
 	if _, ok := book.Lookup("claude-opus-4-1[1m]"); !ok {
 		t.Fatal("a context suffix hides the model")

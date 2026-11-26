@@ -4726,6 +4726,11 @@
     "other": "Cursor agent"
   },
   {
+    "id": "cli.setup.module.grok",
+    "description": "Description of the Grok backend module",
+    "other": "Grok Build CLI, grok.com account or xAI API key"
+  },
+  {
     "id": "cli.setup.module.obsidian",
     "description": "Description of the Obsidian memory module",
     "other": "notes in an Obsidian vault"
@@ -4884,6 +4889,26 @@
     "id": "cli.setup.codex.account_hint",
     "description": "Hint of the ChatGPT account choice",
     "other": "signs in through codex login"
+  },
+  {
+    "id": "cli.setup.grok.question",
+    "description": "Question of the Grok screen",
+    "other": "How does the agent sign in to Grok?"
+  },
+  {
+    "id": "cli.setup.grok.account",
+    "description": "Grok sign-in choice",
+    "other": "grok.com account"
+  },
+  {
+    "id": "cli.setup.grok.account_hint",
+    "description": "Hint of the grok.com account choice",
+    "other": "signs in through grok login"
+  },
+  {
+    "id": "cli.setup.grok.key_shadowed",
+    "description": "Grok key check when a grok.com login takes precedence over the key",
+    "other": "key accepted, but grok signs in with its grok.com login before any key: run {{.Name}} to use the key"
   },
   {
     "id": "cli.setup.cursor.key",

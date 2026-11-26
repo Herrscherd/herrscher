@@ -111,65 +111,78 @@ authenticate, and the signed certificate is not handed to anyone yet.
   `session:` are. A device holds a role through `role grant`, like any principal.
   `approver` runs what `observer` runs, plus `approve allow` and `approve deny`.
   A device with no assignment is an `observer`, even in an empty table.
-- **No role table.** While nothing holds a role, a gateway account runs every
-  verb the daemon has always let it run, except the device verbs: they are
-  refused to any principal other than the local operator, with a message that
-  points to `role grant`. Grant a role first, and the table then decides.
-- **Who runs the device verbs.** `device pair`, `device list`, `device deny` and
-  `device revoke` run for `owner`, `operator` and `local`. `device approve` runs
-  for `owner` and `local` only. An `operator` may open a window with
-  `device pair --role owner`, but only an owner can sign, so an operator can
-  open a window that an owner must validate. `observer`, `approver` and a session
-  never run any device verb.
+- **No role table.** While nothing holds a role, the device verbs and the role
+  verbs are refused to every principal except the local operator, with a message
+  that points to `role grant` from the local shell. A gateway account keeps the
+  verbs it always had, except that it cannot leave a standing answer or answer a
+  request about devices or roles (see below).
+- **Who runs what.** `device pair`, `device list`, `device deny` and `device
+  revoke` run for `owner`, `operator` and `local`. `device approve` runs for
+  `owner` and `local` only. An `operator` may open a window with
+  `device pair --role owner`, but only an owner can sign, so an operator opens a
+  window that an owner must validate. `observer`, `approver` and a session never
+  run any device verb.
+- **Answers to approvals.** `approve allow --always` and `approve allow --session`
+  leave a standing answer, so they need `owner` or `operator` (or `local`). A
+  request whose command runs `herrscher device` or `herrscher role` is answered by
+  `owner` or `local` only, so an `approver` or an `operator` cannot grant itself
+  an owner role through an agent's shell.
 - **Pairing.** `device pair` opens one window at a time and prints a code of ten
   characters from an alphabet without the ambiguous symbols, drawn from the
   operating system's random source. The code is valid for ten minutes and is
-  usable once. The window accepts five wrong codes at most: the fifth wrong code
-  closes it. The daemon keeps only a salted SHA-256 digest of the code and
-  compares digests in constant time. Redeeming the code records the device's
-  certificate request as pending and signs nothing. The code is passed on the
-  command line, so a process of the same user can read it in `/proc/<pid>/cmdline`
-  while the command runs. That is why approval needs more than the code.
+  usable once. A window closes at its fifth wrong attempt, whether that attempt
+  is a wrong pairing code or a wrong fingerprint. The daemon keeps only a salted
+  SHA-256 digest of the code and compares digests in constant time. Redeeming the
+  code records the device's certificate request as pending and signs nothing. A
+  request is refused above 4 KiB. The code is passed on the command line, so a
+  process of the same user can read it in `/proc/<pid>/cmdline` while the command
+  runs. That is why approval needs more than the code.
 - **Approval.** `device approve <code>` only shows the pending request: its name,
   its role and the short fingerprint of the device's key. Nothing is signed.
   `device approve <code> --fingerprint <fingerprint>` signs, and only when the
   fingerprint the operator copies from the device's own display matches the key
-  the device sent. Case and separators are ignored, and the comparison is in
+  the device sent. The fingerprint carries 80 bits, as sixteen symbols of the
+  pairing alphabet. Case and separators are ignored, and the comparison is in
   constant time. A wrong fingerprint signs nothing and counts as one wrong attempt.
-  The role given to `device pair --role` is granted at approval, in the same save
-  as the device record, so a device is never registered without its role.
-  `device deny <code>` closes the window without granting anything.
+  The role given to `device pair --role` is applied at approval, in the same save
+  as the device record, so a device is never registered without its role. If the
+  save fails, the daemon's memory goes back to what was saved. `device deny <code>`
+  closes the window without granting anything.
 - **Authority.** The authority is an ECDSA P-256 key, created the first time a
-  device is approved. P-256 rather than Ed25519 because the Secure Enclave and
-  the platform keystores of phones sign with P-256 keys, and the Go TLS stack
-  accepts P-256 for client certificates. Its files live in a `devices`
-  subdirectory of the state directory, which is created with mode 0700 and holds
-  nothing else. The state directory's own mode is not changed. Each key file has
-  mode 0600 and is written through a fresh temporary file, then renamed. The key
-  is written before the certificate, so a crash leaves a partial pair. A partial
-  pair is rebuilt when no device was enrolled under it, and refused once one was,
-  since replacing the authority would unpair the devices already signed. The
-  daemon also keeps a server certificate signed by the authority, for clients to
-  pin later.
+  device is approved. P-256 rather than Ed25519 because the Secure Enclave and the
+  platform keystores of phones sign with P-256 keys, and the Go TLS stack accepts
+  P-256 for client certificates. Its files live in a `devices` subdirectory of the
+  state directory, created with mode 0700 and holding nothing else. The state
+  directory's own mode is left as it is. Each key file has mode 0600 and is written
+  through a fresh exclusive temporary file, then renamed, and the directory is
+  synced. The key is written before the certificate. A partial pair is rebuilt
+  when no device has been enrolled under it. Once devices are paired, a partial or
+  absent authority is refused with a message and nothing is rebuilt, since
+  replacing it would unpair the devices already signed. The server certificate
+  signed by the authority is not a CA, and clients will pin it later.
 - **Keys are not exposed by the commands, and that is all.** No command prints a
   key, and no log line carries one. This holds against the commands, not against
   a process of the same user: such a process can read the authority's key file,
   just as it can read `HERRSCHER_ANNOUNCE_KEY`. The user account is the boundary.
-- **Shell administration from an agent.** A Bash command that runs `herrscher device`
-  or `herrscher role` is always decided by a person. No rule, no remembered
-  "always" answer, no bypass, auto or smart mode lets it through. The check reads
-  the command text. A command that builds the verb from variables is not
-  recognised, so this covers the commands written as herrscher names them. An
-  agent's shell reaches the operator socket as `local`, so the user account stays
-  the real boundary.
+- **Shell administration from an agent.** A Bash command that runs `herrscher
+  device` or `herrscher role` needs a person's decision. The check is a text
+  barrier and works on the best effort basis: it reads the command after removing
+  quotes and backslashes, accepts global options before the verb, and treats a
+  command that expands a variable, a substitution or an `eval` and spells
+  herrscher's letters or the verbs as administration. A command that builds the
+  verb in a way the text does not reveal can still get past it. The real boundary
+  is the user account: an agent's shell reaches the operator socket as `local`,
+  and a process of the same uid can do what the daemon can.
 - **Certificates.** A client certificate is valid for thirty days and states that
   it is not a CA. It is not renewed yet. The approval signs it, but nothing keeps
   or delivers it: the network listener of a later pull request will hand it to the
   device. Until then, a paired device has no certificate the daemon can present.
-- **Expiry and revocation.** A device that has not connected for thirty days is
-  expired, and so is a device an operator revokes. Either refuses the certificate
-  at every connection. `device revoke` keeps the device's role in the table, which
-  does nothing while the device stays revoked.
+- **Expiry, revocation and retention.** A device that has not connected for thirty
+  days is expired, and so is a device an operator revokes. Either refuses the
+  certificate at every connection. `device revoke` keeps the device's role in the
+  table, which does nothing while the device stays revoked. A device is removed
+  from the registry, with its role, once it has been revoked for more than thirty
+  days, or once it has been inactive for more than sixty days.
 - **Journal.** The daemon logs an opened window with its name and role, a denial
   with the window's name, role and whether a request had redeemed it, an approval
   with the device's identifier and role, and a revocation with the identifier and

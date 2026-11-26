@@ -100,7 +100,7 @@ func RunPermissionHook(ctx context.Context, owner *Messages, stdin io.Reader, ou
 	case payload.HookEventName != "" && payload.HookEventName != hookEvent:
 		note := hookText(messages, lang, hookOtherEvent, map[string]any{expectedParam: hookEvent, eventParam: payload.HookEventName})
 		logWriteFailure(fmt.Fprintln(errOut, note))
-		return writeHookDecision(messages, out, errOut, lang, "allow", "")
+		return writeHookDecision(messages, out, errOut, lang, verbAllow, "")
 	case payload.ToolName == "":
 		return refuseHook(messages, out, errOut, lang, hookNamesNoTool, nil)
 	}
@@ -170,9 +170,9 @@ func askApprovalSocket(ctx context.Context, messages *hostMessages, out, errOut 
 		if answer.Reason == "" {
 			return refuseHookWithText(messages, out, errOut, lang, messages.text(lang, approvalDenialUnexplainedKey, nil))
 		}
-		return writeHookDecision(messages, out, errOut, lang, "deny", answer.Reason)
+		return writeHookDecision(messages, out, errOut, lang, verbDeny, answer.Reason)
 	}
-	return writeHookDecision(messages, out, errOut, lang, "allow", answer.Reason)
+	return writeHookDecision(messages, out, errOut, lang, verbAllow, answer.Reason)
 }
 
 // RunApprovalHook is RunPermissionHook wired to the operator daemon.
@@ -211,7 +211,7 @@ func refuseHook(messages *hostMessages, out, errOut io.Writer, lang i18n.Languag
 
 func refuseHookWithText(messages *hostMessages, out, errOut io.Writer, lang i18n.Language, reason string) error {
 	logWriteFailure(fmt.Fprintln(errOut, reason))
-	return writeHookDecision(messages, out, errOut, lang, "deny", reason)
+	return writeHookDecision(messages, out, errOut, lang, verbDeny, reason)
 }
 
 func hookText(messages *hostMessages, lang i18n.Language, key string, params map[string]any) string {
@@ -238,5 +238,5 @@ func writeHookDecision(messages *hostMessages, out, errOut io.Writer, lang i18n.
 }
 
 func isDecision(decision string) bool {
-	return decision == "allow" || decision == "deny"
+	return decision == verbAllow || decision == verbDeny
 }

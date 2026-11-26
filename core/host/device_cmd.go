@@ -183,7 +183,7 @@ func signDevice(cliMessages *clitext.Messages, lang i18n.Language, store *state.
 }
 
 func deviceDenyVerb(cliMessages *clitext.Messages, lang languageSource, store *state.State) contracts.Cmd {
-	return contracts.New("device", "deny").
+	return contracts.New("device", verbDeny).
 		Help(clitext.CmdHelpDeviceDeny).
 		ValueParam("code", clitext.CmdParamDeviceDenyCode, false).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
@@ -223,7 +223,8 @@ func listDevices(cliMessages *clitext.Messages, lang i18n.Language, store *state
 	registry := store.DeviceRegistry()
 	names := store.RoleNames()
 	listing := deviceListing{Devices: make([]deviceView, 0, len(registry.Devices))}
-	for _, device := range registry.Devices {
+	for idx := range registry.Devices {
+		device := &registry.Devices[idx]
 		listing.Devices = append(listing.Devices, deviceView{
 			ID:          device.ID.String(),
 			Name:        device.Name,
@@ -300,7 +301,7 @@ func revokeDevice(cliMessages *clitext.Messages, lang i18n.Language, store *stat
 		return "", err
 	}
 	err = store.UpdateDevices(func(registry *devices.Registry) error {
-		return registry.Revoke(deviceID)
+		return registry.Revoke(time.Now(), deviceID)
 	})
 	if err != nil {
 		return "", err

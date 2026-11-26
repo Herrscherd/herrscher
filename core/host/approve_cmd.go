@@ -69,7 +69,7 @@ func listApprovals(cliMessages *clitext.Messages, lang i18n.Language, approvals 
 }
 
 func approveAllowVerb(cliMessages *clitext.Messages, lang languageSource, approvals *approvalTable) contracts.Cmd {
-	return contracts.New(nsApprove, "allow").
+	return contracts.New(nsApprove, verbAllow).
 		Help(clitext.CmdHelpApproveAllow).
 		ValueParam("id", clitext.CmdParamApproveAllowID, false).
 		Param(paramSession, clitext.CmdParamApproveAllowSession, false).
@@ -119,7 +119,7 @@ func allowOperands(input contracts.Input) (string, approvalScope, error) {
 }
 
 func approveDenyVerb(cliMessages *clitext.Messages, lang languageSource, approvals *approvalTable) contracts.Cmd {
-	return contracts.New(nsApprove, "deny").
+	return contracts.New(nsApprove, verbDeny).
 		Help(clitext.CmdHelpApproveDeny).
 		ValueParam("id", clitext.CmdParamApproveDenyID, false).
 		ValueParam("reason", clitext.CmdParamApproveDenyReason, false).

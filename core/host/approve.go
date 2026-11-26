@@ -57,13 +57,13 @@ func approvalScopes() []approvalScope {
 func (s approvalScope) String() string {
 	switch s {
 	case scopeOnce:
-		return "allow"
+		return verbAllow
 	case scopeSession:
 		return "allow-session"
 	case scopeAlways:
 		return "allow-always"
 	case scopeDeny:
-		return "deny"
+		return verbDeny
 	}
 	return ""
 }
@@ -309,6 +309,16 @@ func registerApproval(approvals *approvalTable, pending *pendingApproval) (func(
 
 func (t *approvalTable) warnWaitTruncated(configured, bound time.Duration) {
 	warnTo(t.messages, t.warn, t.lang(), "approve.wait_truncated", map[string]any{waitParam: configured.String(), boundParam: bound.Round(time.Second).String()})
+}
+
+func (t *approvalTable) requestOf(approvalID string) (approval.Request, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	pending := t.m[approvalID]
+	if pending == nil {
+		return approval.Request{}, false
+	}
+	return pending.req, true
 }
 
 func settleApproval(approvals *approvalTable, approvalID string, answer approvalAnswer) bool {

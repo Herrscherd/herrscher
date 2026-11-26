@@ -110,6 +110,9 @@ func hostErrorKeys() []hostErrorKey {
 		{errDeviceIDMissing, clitext.HostDeviceIDMissing},
 		{errDeviceCodeMissing, clitext.HostDeviceCodeMissing},
 		{errDeviceNeedsRoles, clitext.DeviceFaultNeedsRoles},
+		{errScopedAnswerRole, clitext.FaultScopedAnswerRole},
+		{errHumanAnswerRole, clitext.FaultHumanAnswerRole},
+		{errRoleNeedsLocal, clitext.FaultRoleNeedsLocal},
 	}
 }
 
@@ -131,6 +134,8 @@ func deviceErrorKeys() []hostErrorKey {
 		{devices.ErrAuthorityFiles, clitext.DeviceFaultAuthority},
 		{devices.ErrAuthorityExpired, clitext.DeviceFaultAuthority},
 		{devices.ErrRandomSource, clitext.DeviceFaultRandom},
+		{devices.ErrAuthorityMissing, clitext.DeviceFaultAuthorityMissing},
+		{devices.ErrRequestTooLarge, clitext.DeviceFaultRequestTooLarge},
 		{devices.ErrSigning, clitext.DeviceFaultSigning},
 		{devices.ErrFingerprintMismatch, clitext.DeviceFaultFingerprint},
 		{devices.ErrMalformedFingerprint, clitext.DeviceFaultMalformedFingerprint},

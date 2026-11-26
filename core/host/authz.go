@@ -7,6 +7,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/authz"
 )
 
@@ -122,7 +123,7 @@ func (h *hub) authorize(ctx context.Context, args []string) error {
 	principal := principalOf(ctx)
 	role := authz.RoleOf(principal, h.roleNames())
 	if role == authz.RoleNone {
-		return h.refuseDeviceVerbWithoutRoles(principal, args)
+		return h.refuseWithoutRoles(principal, args)
 	}
 	path, input, ok := h.reg.Resolve(args)
 	if !ok {
@@ -134,21 +135,61 @@ func (h *hub) authorize(ctx context.Context, args []string) error {
 		Contributed: h.isContributedCommand(args),
 		Subject:     h.subjectOf(principal, path, input),
 	}, role)
-	if allowed {
-		return nil
+	if !allowed {
+		return &accessDeniedError{Reason: why}
 	}
-	return &accessDeniedError{Reason: why}
+	return h.refuseUnsafeAnswer(principal, role, path, input)
 }
 
-func (h *hub) refuseDeviceVerbWithoutRoles(principal authz.Principal, args []string) error {
+func (h *hub) refuseWithoutRoles(principal authz.Principal, args []string) error {
 	if principal.ID == authz.LocalPrincipal {
 		return nil
 	}
-	path, _, ok := h.reg.Resolve(args)
-	if !ok || len(path) == 0 || path[0] != "device" {
+	path, input, ok := h.reg.Resolve(args)
+	if !ok || len(path) == 0 {
 		return nil
 	}
-	return localizeHostError(h.messages, h.cliMessages, h.textLanguage()(), errDeviceNeedsRoles)
+	switch path[0] {
+	case "device":
+		return h.localized(errDeviceNeedsRoles)
+	case "role":
+		return h.localized(errRoleNeedsLocal)
+	}
+	return h.refuseUnsafeAnswer(principal, authz.RoleNone, path, input)
+}
+
+func (h *hub) refuseUnsafeAnswer(principal authz.Principal, role authz.Role, path []string, input contracts.Input) error {
+	if principal.ID == authz.LocalPrincipal || len(path) != 2 || path[0] != "approve" {
+		return nil
+	}
+	var approvalID string
+	var scope approvalScope
+	switch path[1] {
+	case verbAllow:
+		requested, parsed, err := allowOperands(input)
+		if err != nil {
+			return err
+		}
+		approvalID, scope = requested, parsed
+	case verbDeny:
+		approvalID, scope = firstOf(input.Get("id"), input.Rest), scopeDeny
+	default:
+		return nil
+	}
+	if (scope == scopeSession || scope == scopeAlways) && role != authz.RoleOwner && role != authz.RoleOperator {
+		return h.localized(errScopedAnswerRole)
+	}
+	if h.approvals == nil {
+		return nil
+	}
+	if request, found := h.approvals.requestOf(approvalID); found && approval.RequiresHuman(request) && role != authz.RoleOwner {
+		return h.localized(errHumanAnswerRole)
+	}
+	return nil
+}
+
+func (h *hub) localized(err error) error {
+	return localizeHostError(h.messages, h.cliMessages, h.textLanguage()(), err)
 }
 
 func (h *hub) roleNames() map[string]string {

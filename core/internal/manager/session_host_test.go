@@ -294,3 +294,27 @@ func TestSessionCreateKeepsTheModeItWarnedAbout(t *testing.T) {
 		t.Fatalf("the session must exist with the mode asked for, got %q ok=%v", sess.Approvals, ok)
 	}
 }
+
+func TestSessionCreateOnHostDoesNotTakeTheWorktreeARenamedRemoteSessionKept(t *testing.T) {
+	h, hs, _, st := handlerWithHosts(t)
+	kept := hs.wt.Path("/srv/work/app", "alpha")
+	hs.wt.path = kept
+	if _, err := h.sessionCreateRun(context.Background(), args("name", "alpha", "host", "build1", "project", "app")); err != nil {
+		t.Fatal(err)
+	}
+	renameSession(t, h, "alpha", "beta")
+
+	_, err := h.sessionCreateRun(context.Background(), args("name", "alpha", "host", "build1", "project", "app"))
+	if !errors.Is(err, ErrWorkspaceTaken) {
+		t.Fatalf("err = %v, want %v", err, ErrWorkspaceTaken)
+	}
+	if len(hs.wt.created) != 1 {
+		t.Fatalf("the refused create asked the host for a worktree: %v", hs.wt.created)
+	}
+	if _, found := st.FindSession("alpha"); found {
+		t.Fatal("the refused create recorded a session alpha")
+	}
+	if beta, _ := st.FindSession("beta"); beta.Worktree != kept || beta.Host != "build1" {
+		t.Fatalf("beta = %+v, want it to keep %q on build1", beta, kept)
+	}
+}

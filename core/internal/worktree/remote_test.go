@@ -155,3 +155,15 @@ func TestRemoteBranchAtRefusesWithTheHostError(t *testing.T) {
 		t.Fatalf("the remote message is lost: %v", err)
 	}
 }
+
+func TestRemotePathIsTheDirectoryTheHostCreateVerbMakes(t *testing.T) {
+	repo := initRepo(t)
+	messages := clitext.NewMessages()
+	made, err := NewWorktreer(messages, "inst").Create(t.Context(), repo, "alpha", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := NewRemote(messages, &fakeCommander{}, "hs", "inst").Path(repo, "alpha"); got != made {
+		t.Fatalf("Remote.Path = %q, want %q, the path worktree create makes on the host", got, made)
+	}
+}

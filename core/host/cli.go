@@ -9,6 +9,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/config"
 	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/internal/agent"
 	"github.com/Herrscherd/herrscher/core/internal/manager"
@@ -91,7 +92,7 @@ func buildRegistry(ctx context.Context, deps Deps, options Options, hostState *s
 	if err := addRoleCommands(reg, sessions.cliMessages, options.live.Get, hostState); err != nil {
 		return nil, hostDeps{}, err
 	}
-	if err := addVerbs(reg, memorySearchVerb(sessions.messages, sessions.cliMessages, options.live.Get), whoamiVerb(), commandsVerb(sessions.cliMessages, options.live.Get, reg), healthVerb(options.health), usageVerb(options.usage)); err != nil {
+	if err := addVerbs(reg, append(configVerbs(sessions.cliMessages, options.live.Get, config.DefaultPath), memorySearchVerb(sessions.messages, sessions.cliMessages, options.live.Get), whoamiVerb(), commandsVerb(sessions.cliMessages, options.live.Get, reg), healthVerb(options.health), usageVerb(options.usage))...); err != nil {
 		return nil, hostDeps{}, err
 	}
 	if err := addPluginVerbs(sessions.messages, reg, extra); err != nil {
@@ -141,6 +142,7 @@ func wireManagerHandler(ctx context.Context, lang languageSource, warn io.Writer
 		return validateModelChoice(models, vendor, modelID)
 	})
 	hdl.SetGateResolver(GateFor)
+	hdl.SetSelfTools(selfToolsProvisioner(envx.Getenv))
 	if sessions != nil {
 		hdl.SetWriteTracker(persistTracker{persists: sessions.persists})
 	}

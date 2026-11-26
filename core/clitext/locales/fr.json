@@ -5935,5 +5935,65 @@
     "id": "cli.setup.telegram.malformed",
     "description": "Hub state of the Telegram module when one of its settings cannot be parsed",
     "other": "un réglage Telegram est mal formé (un identifiant qui n'est pas un nombre, ou un interrupteur autre que on, off, yes, no, true, false, 1 ou 0), la passerelle ne démarrera pas"
+  },
+  {
+    "id": "cli.help.cmd.config.get",
+    "description": "Help of the command config get",
+    "other": "afficher config.json, ou la valeur d'une clé pointée"
+  },
+  {
+    "id": "cli.help.param.config.get.key",
+    "description": "Help of the parameter key of config get",
+    "other": "clé pointée, comme telemetry.enabled ; vide affiche tout le fichier"
+  },
+  {
+    "id": "cli.help.cmd.config.set",
+    "description": "Help of the command config set",
+    "other": "régler une clé pointée de config.json, vérifiée comme le démon la lit"
+  },
+  {
+    "id": "cli.help.param.config.set.key",
+    "description": "Help of the parameter key of config set",
+    "other": "clé pointée, comme compactAt ou skills.enabled"
+  },
+  {
+    "id": "cli.help.param.config.set.value",
+    "description": "Help of the parameter value of config set",
+    "other": "la valeur, en JSON (80, true, [\"a\"]) ou en texte brut"
+  },
+  {
+    "id": "cli.help.cmd.config.unset",
+    "description": "Help of the command config unset",
+    "other": "retirer une clé pointée de config.json"
+  },
+  {
+    "id": "cli.help.param.config.unset.key",
+    "description": "Help of the parameter key of config unset",
+    "other": "clé pointée à retirer"
+  },
+  {
+    "id": "cli.host.config.set",
+    "description": "Reply of config set",
+    "other": "{{.Key}} réglé dans {{.Path}}. Le démon le lit à son prochain démarrage : `herrscher service restart`."
+  },
+  {
+    "id": "cli.host.config.unset",
+    "description": "Reply of config unset",
+    "other": "{{.Key}} retiré de {{.Path}}. Le démon le lit à son prochain démarrage : `herrscher service restart`."
+  },
+  {
+    "id": "cli.host.config.backup",
+    "description": "Reply of a config write that dropped comments",
+    "other": "Le fichier contenait des commentaires qu'une réécriture ne peut pas garder : la version précédente est dans {{.Path}}."
+  },
+  {
+    "id": "cli.manage.flag.setup_probe",
+    "description": "Help of the --probe flag of setup check",
+    "other": "vérifier aussi chaque compte auprès de son service (aucune connexion n'est ouverte)"
+  },
+  {
+    "id": "cli.manage.flag.json",
+    "description": "Help of the --json flag of setup check",
+    "other": "afficher le rapport en JSON"
   }
 ]

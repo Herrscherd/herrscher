@@ -5935,5 +5935,65 @@
     "id": "cli.setup.telegram.malformed",
     "description": "Hub state of the Telegram module when one of its settings cannot be parsed",
     "other": "a Telegram setting is malformed (an id that is not a number, or a switch other than on, off, yes, no, true, false, 1 or 0), so the gateway will not start"
+  },
+  {
+    "id": "cli.help.cmd.config.get",
+    "description": "Help of the command config get",
+    "other": "print config.json, or the value at one dotted key"
+  },
+  {
+    "id": "cli.help.param.config.get.key",
+    "description": "Help of the parameter key of config get",
+    "other": "dotted key, such as telemetry.enabled; empty prints the whole file"
+  },
+  {
+    "id": "cli.help.cmd.config.set",
+    "description": "Help of the command config set",
+    "other": "set one dotted key of config.json, checked as the daemon reads it"
+  },
+  {
+    "id": "cli.help.param.config.set.key",
+    "description": "Help of the parameter key of config set",
+    "other": "dotted key, such as compactAt or skills.enabled"
+  },
+  {
+    "id": "cli.help.param.config.set.value",
+    "description": "Help of the parameter value of config set",
+    "other": "the value, as JSON (80, true, [\"a\"]) or as plain text"
+  },
+  {
+    "id": "cli.help.cmd.config.unset",
+    "description": "Help of the command config unset",
+    "other": "remove one dotted key of config.json"
+  },
+  {
+    "id": "cli.help.param.config.unset.key",
+    "description": "Help of the parameter key of config unset",
+    "other": "dotted key to remove"
+  },
+  {
+    "id": "cli.host.config.set",
+    "description": "Reply of config set",
+    "other": "{{.Key}} set in {{.Path}}. The daemon reads it at its next start: `herrscher service restart`."
+  },
+  {
+    "id": "cli.host.config.unset",
+    "description": "Reply of config unset",
+    "other": "{{.Key}} removed from {{.Path}}. The daemon reads it at its next start: `herrscher service restart`."
+  },
+  {
+    "id": "cli.host.config.backup",
+    "description": "Reply of a config write that dropped comments",
+    "other": "The file held comments a rewrite cannot keep: the previous version is in {{.Path}}."
+  },
+  {
+    "id": "cli.manage.flag.setup_probe",
+    "description": "Help of the --probe flag of setup check",
+    "other": "also check each account against its service (no sign-in is opened)"
+  },
+  {
+    "id": "cli.manage.flag.json",
+    "description": "Help of the --json flag of setup check",
+    "other": "print the report as JSON"
   }
 ]

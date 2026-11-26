@@ -34,7 +34,11 @@ const (
 	RoleObserver Role = "observer"
 	// RoleAgent is what a connection on a session's command socket holds.
 	RoleAgent Role = "agent"
+	// RoleSteward is a session the operator trusts to configure the daemon: it runs everything an operator does except role and answering approvals.
+	RoleSteward Role = "steward"
 )
+
+const roleFamily = "role *"
 
 // LocalPrincipal is the caller on the daemon's operator socket, which any process of the daemon's uid reaches, an approved agent shell included.
 const LocalPrincipal = "local"
@@ -85,7 +89,7 @@ func definitionOf(role Role) (definition, bool) {
 	case RoleOwner:
 		return definition{allowAll: true, plugins: true}, true
 	case RoleOperator:
-		return definition{allowAll: true, deny: []string{"role *"}, plugins: true}, true
+		return definition{allowAll: true, deny: []string{roleFamily}, plugins: true}, true
 	case RoleObserver:
 		return definition{allow: []string{
 			"commands", "whoami",
@@ -108,10 +112,14 @@ func definitionOf(role Role) (definition, bool) {
 				"models list",
 				"memory search", "memory locate", "memory record", "memory unlink", "memory restore",
 				"approve ask",
+				"health", "usage", "skill list", "schedule list", "host list",
+				"config get", "issue list", "issue show",
 			},
 			deny: []string{
 				"approve list", "approve allow", "approve deny", "approve rule", "approve mode",
-				"host *", "role *", "schedule *", "service *", "set *", "plugin *",
+				"host add", "host check", "host provision", "host rm", roleFamily,
+				"schedule add", "schedule rm", "schedule run", "schedule pause", "schedule resume",
+				"service *", "set *", "plugin *",
 				"skill approve", "memory forget",
 				"session create",
 				"session close", "session archive", "session resume", "session interrupt",
@@ -119,9 +127,37 @@ func definitionOf(role Role) (definition, bool) {
 			},
 			plugins: true,
 		}, true
+	case RoleSteward:
+		return definition{allowAll: true, deny: neverForSessions(), plugins: true}, true
 	case RoleNone:
 	}
 	return definition{}, false
+}
+
+func neverForSessions() []string {
+	return []string{roleFamily, "approve allow", "approve deny"}
+}
+
+// Escalable reports whether a request the role refuses may be put to the operator instead:
+// a session asking for a verb its role does not run, inside its own subtree, and never a verb
+// that grants rights or answers an approval.
+func Escalable(req Request, role Role) bool {
+	if role != RoleAgent || req.Principal.Session == "" {
+		return false
+	}
+	if req.Subject.Session != "" && !req.Subject.InSubtree {
+		return false
+	}
+	verb := strings.Join(req.Path, " ")
+	if permits(role, verb, req.Contributed) {
+		return false
+	}
+	for _, pattern := range neverForSessions() {
+		if match(pattern, verb) {
+			return false
+		}
+	}
+	return true
 }
 
 // Decide answers whether the request may run, and why not when it may not.
@@ -217,15 +253,32 @@ func RoleOf(principal Principal, assignments map[string]string) Role {
 		return RoleOwner
 	}
 	if principal.Session != "" {
+		if Role(assignments[principal.ID]) == RoleSteward {
+			return RoleSteward
+		}
 		return RoleAgent
 	}
-	if len(assignments) == 0 {
+	if !holdsHumanAssignment(assignments) {
 		return RoleNone
 	}
 	if name, ok := assignments[principal.ID]; ok && Grantable(name) {
 		return Role(name)
 	}
 	return RoleObserver
+}
+
+func holdsHumanAssignment(assignments map[string]string) bool {
+	for principal := range assignments {
+		if !strings.HasPrefix(principal, SessionPrefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// GrantableToSession reports whether name is a role an operator may assign to a session principal: steward alone.
+func GrantableToSession(name string) bool {
+	return Role(name) == RoleSteward
 }
 
 // Grantable reports whether name is a role an operator may assign. agent is
@@ -235,7 +288,7 @@ func Grantable(name string) bool {
 	switch Role(name) {
 	case RoleOwner, RoleOperator, RoleObserver:
 		return true
-	case RoleNone, RoleAgent:
+	case RoleNone, RoleAgent, RoleSteward:
 	}
 	return false
 }

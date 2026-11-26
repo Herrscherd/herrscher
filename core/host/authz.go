@@ -7,6 +7,7 @@ import (
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/authz"
 )
 
@@ -127,16 +128,28 @@ func (h *hub) authorize(ctx context.Context, args []string) error {
 	if !ok {
 		return nil
 	}
-	allowed, why := authz.Decide(authz.Request{
+	req := authz.Request{
 		Principal:   principal,
 		Path:        path,
 		Contributed: h.isContributedCommand(args),
 		Subject:     h.subjectOf(principal, path, input),
-	}, role)
+	}
+	allowed, why := authz.Decide(req, role)
 	if allowed {
 		return nil
 	}
+	if authz.Escalable(req, role) && h.desk != nil {
+		return h.escalate(ctx, principal.Session, args)
+	}
 	return &accessDeniedError{Reason: why}
+}
+
+func (h *hub) escalate(ctx context.Context, session string, args []string) error {
+	decision, reason := h.desk.decideVerb(ctx, session, approval.Request{Tool: approval.VerbTool, Subject: strings.Join(args, " ")})
+	if decision == approval.Allow {
+		return nil
+	}
+	return &accessDeniedError{Reason: reason}
 }
 
 func (h *hub) roleNames() map[string]string {

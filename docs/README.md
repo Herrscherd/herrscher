@@ -18,4 +18,5 @@ The [README](../README.md) is the startup page. These guides go deeper.
 | [Skills](skills.md) | Cross-backend skills: discovery, the menu, hot reload. |
 | [Budgets](budgets.md) | Spend and token caps for sessions, and how a paused session resumes. |
 | [Memory bench](memory-bench.md) | Measuring the memory settings against each other, under a hard spend ceiling. |
+| [Self tools](self-tools.md) | The MCP server a session uses to read and configure its own daemon, and what it may change. |
 | [Environment variables](env.md) | Every variable the binary reads, its default, and who reads it. |

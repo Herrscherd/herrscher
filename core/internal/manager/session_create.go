@@ -38,6 +38,7 @@ func (h *Handler) sessionCreateRun(ctx context.Context, input contracts.Input) (
 		return contracts.Result{}, err
 	}
 	approvalsNote := h.approvalsNote(ctx, req, place.space)
+	h.provisionSelfTools(ctx, req, place.space)
 	runDir := place.space.path
 	if runDir == "" {
 		runDir = place.repo

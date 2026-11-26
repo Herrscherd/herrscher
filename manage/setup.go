@@ -49,6 +49,9 @@ func sectionList() string {
 // host, rewrites plugins.go and rebuilds. An optional section name opens that
 // screen directly; an existing settings file opens the dashboard.
 func SetupCmd(ctx context.Context, messages *clitext.Messages, hostMessages *host.Messages, args []string) int {
+	if len(args) > 0 && args[0] == setupCheckVerb {
+		return setupCheckCmd(ctx, messages, hostMessages, args[1:])
+	}
 	out, errOut := errwriter.New(os.Stdout), errwriter.New(os.Stderr)
 	return errwriter.Finish(setupHost(ctx, messages, hostMessages, errOut, args), out, errOut)
 }

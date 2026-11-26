@@ -17,7 +17,8 @@ or forum, so work opened from one server does not surface in another.
 A session that adopts a conversation of its one gateway (`--gateways telegram`)
 is announced in that conversation: its banner and its account notice go through
 that gateway, never through the home's. A gateway that manages no channels gets
-the banner as a plain post.
+the banner as a plain post, and a gateway that is not running gets nothing: the
+session starts, its banner is skipped with a warning in the daemon's log.
 
 
 ## Memory

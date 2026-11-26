@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -154,13 +155,22 @@ func (prober setupProber) telegram(ctx context.Context, token string) probeResul
 	status, err := prober.getJSON(ctx, prober.telegramURL+"/bot"+token+"/getMe", http.Header{}, &identity)
 	switch {
 	case err != nil:
-		return failed(clitext.SetupProbeFailed, clitext.Params{clitext.ParamErr: strings.ReplaceAll(err.Error(), token, redactedToken)})
+		return failed(clitext.SetupProbeFailed, clitext.Params{clitext.ParamErr: withoutToken(err, token)})
 	case status == http.StatusUnauthorized, status == http.StatusNotFound:
 		return failed(clitext.SetupBotRefused, telegramParams())
 	case status != http.StatusOK:
 		return probeError(errProbeStatus)
 	}
 	return passed(clitext.SetupBotOK, clitext.Params{clitext.ParamName: "@" + identity.Result.Username})
+}
+
+func withoutToken(err error, token string) string {
+	var request *url.Error
+	if errors.As(err, &request) {
+		err = request.Err
+	}
+	text := strings.ReplaceAll(err.Error(), token, redactedToken)
+	return strings.ReplaceAll(text, url.PathEscape(token), redactedToken)
 }
 
 func (prober setupProber) anthropicKey(ctx context.Context, key string) probeResult {
@@ -180,8 +190,8 @@ func (prober setupProber) anthropicKey(ctx context.Context, key string) probeRes
 	return passed(clitext.SetupKeyAccepted, nil)
 }
 
-func (prober setupProber) getJSON(ctx context.Context, url string, header http.Header, into any) (int, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+func (prober setupProber) getJSON(ctx context.Context, endpoint string, header http.Header, into any) (int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)
 	if err != nil {
 		return 0, err
 	}

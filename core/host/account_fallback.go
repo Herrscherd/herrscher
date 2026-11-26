@@ -68,14 +68,15 @@ func defaultFirst(targets []usage.Target) []usage.Target {
 }
 
 func gatewayOfSession(gws []Deps, home state.HomeRef, gateways []string) (Deps, bool) {
-	if len(gateways) == 1 {
-		for _, dep := range gws {
-			if dep.Gateway != nil && dep.Gateway.Manifest().Kind == gateways[0] {
-				return dep, true
-			}
+	if len(gateways) != 1 {
+		return gatewayForHome(gws, home)
+	}
+	for _, dep := range gws {
+		if dep.Gateway != nil && dep.Gateway.Manifest().Kind == gateways[0] {
+			return dep, true
 		}
 	}
-	return gatewayForHome(gws, home)
+	return Deps{}, false
 }
 
 func (f *accountFallback) Notify(ctx context.Context, home state.HomeRef, gateways []string, channelID string, lang i18n.Language, notice contracts.Notice) {

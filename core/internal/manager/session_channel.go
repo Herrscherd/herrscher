@@ -65,27 +65,27 @@ func (h *Handler) adminFor(sess state.Session) channelAdmin {
 	if h.td != nil && strings.HasPrefix(sess.ChannelID, "terminal/") {
 		return h.td
 	}
-	if admin := h.adoptingAdmin(sess.Owned, sess.Gateways); admin != nil {
+	if admin, routed := h.gatewayRoute(sess.Owned, sess.Gateways); routed {
 		return admin
 	}
 	return h.d
 }
 
-func (h *Handler) adoptingAdmin(owned bool, gateways []string) channelAdmin {
-	if owned || len(gateways) != 1 {
-		return nil
+func (h *Handler) gatewayRoute(owned bool, gateways []string) (channelAdmin, bool) {
+	if owned || len(gateways) != 1 || h.gatewayAdmins == nil {
+		return nil, false
 	}
 	if admin, ok := h.gatewayAdmins[gateways[0]]; ok && admin != nil {
-		return admin
+		return admin, true
 	}
-	return nil
+	return nil, true
 }
 
 func (h *Handler) announcingAdmin(adopted string, gateways []string, home channelAdmin) channelAdmin {
 	if adopted == "" {
 		return home
 	}
-	if admin := h.adoptingAdmin(false, gateways); admin != nil {
+	if admin, routed := h.gatewayRoute(false, gateways); routed {
 		return admin
 	}
 	return home
@@ -102,7 +102,11 @@ func (h *Handler) tidyChannel(ctx context.Context, sess state.Session) string {
 	if !sess.Owned {
 		return ""
 	}
-	if err := h.adminFor(sess).Archive(ctx, sess.ChannelID); err != nil {
+	admin := h.adminFor(sess)
+	if admin == nil {
+		return ""
+	}
+	if err := admin.Archive(ctx, sess.ChannelID); err != nil {
 		return "\n" + h.text(clitext.SessionChannelLeftOpen, clitext.Params{clitext.ParamErr: err.Error()})
 	}
 	return ""

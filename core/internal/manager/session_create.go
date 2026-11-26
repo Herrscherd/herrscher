@@ -64,6 +64,8 @@ func (h *Handler) sessionCreateRun(ctx context.Context, input contracts.Input) (
 	banner := h.sessionBanner(h.noticeLanguage(req.lang), place.repo, req.name, place.space.path, place.wt.Branch(req.name), req.runtime.cmd, req.runtime.model, req.shared)
 	if req.admin != nil {
 		h.warnIfFailed(req.admin.Send(ctx, sess.ChannelID, banner), "send banner for "+req.name)
+	} else {
+		h.log.Warn("session banner not sent, no running gateway owns its conversation", "session", req.name, "gateways", req.options.gateways)
 	}
 	h.announceAccount(ctx, req, sess.ChannelID)
 	return contracts.DataResult(h.text(clitext.SessionRunning, clitext.Params{clitext.ParamChannel: channelRef(req.admin, sess.ChannelID), clitext.ParamBanner: banner, clitext.ParamApprovals: approvalsNote})), nil

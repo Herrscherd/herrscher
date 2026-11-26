@@ -26,8 +26,8 @@ github.com/Herrscherd/herrscher-pixellab-backend v0.1.1 h1:wFBXof+M2Uf1MpyDojxuU
 github.com/Herrscherd/herrscher-pixellab-backend v0.1.1/go.mod h1:nDgNZs364zy9ynsZ26WmRztixBuqVp9n7Qgvbs+pfso=
 github.com/Herrscherd/herrscher-superset-skills v0.4.0 h1:3HFejzZKqDXcVwtYYc9/47JCUFynIVJkmI+ykpaXKtI=
 github.com/Herrscherd/herrscher-superset-skills v0.4.0/go.mod h1:W0QWCDWkqY2mnyIsum0gnGPy7NInifNMCVY/0fxGnTw=
-github.com/Herrscherd/herrscher-telegram-gateway v0.2.0 h1:P09K/dunLEErggQYzea4btC2D0mBn50+7R90oh6HMS8=
-github.com/Herrscherd/herrscher-telegram-gateway v0.2.0/go.mod h1:e6wCuf+p4DeHsVLnajz9rVch+ht4Gd1T9GkfFeiDE8g=
+github.com/Herrscherd/herrscher-telegram-gateway v0.2.1 h1:nolSzx3tWBqEntjOKxW+Y/9Hs6GqysGAXAtdYWDD9xw=
+github.com/Herrscherd/herrscher-telegram-gateway v0.2.1/go.mod h1:e6wCuf+p4DeHsVLnajz9rVch+ht4Gd1T9GkfFeiDE8g=
 github.com/Herrscherd/herrscher-transport v0.8.0 h1:YWO4PGwAy9jf6ufNFyXe1g3XvborGRGmt5ifYFEd0qc=
 github.com/Herrscherd/herrscher-transport v0.8.0/go.mod h1:5hCltbEca6vyRvdXUZl4k0AUsO5NaC3TlFhFQ84h9A0=
 github.com/MakeNowJust/heredoc v1.0.0 h1:cXCdzVdstXyiTqTvfqk9SDHpKNjxuom+DOlyEeQ4pzQ=

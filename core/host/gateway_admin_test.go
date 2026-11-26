@@ -77,3 +77,15 @@ func TestAnAccountNoticeReachesTheGatewayTheSessionAdopted(t *testing.T) {
 		t.Fatal("the home gateway also got the notice")
 	}
 }
+
+func TestAnAccountNoticeForAGatewayThatIsNotRunningIsDropped(t *testing.T) {
+	home := newNoticeGateway()
+	fallback := newAccountFallback(nil, []Deps{{Gateway: kindedNoticeGateway{home, "chat"}, Admin: labeledAdmin{"chat"}}})
+	notice := contracts.Notice{Code: contracts.CodeAccountFallback, Args: []contracts.Arg{contracts.Text("From", "work"), contracts.Text("To", "perso")}}
+
+	fallback.Notify(t.Context(), state.HomeRef{ID: "home", Type: "forum"}, []string{"telegram"}, "43", i18n.English, notice)
+
+	if len(home.delivered) != 0 {
+		t.Fatal("the home gateway got the notice of a conversation it does not own")
+	}
+}

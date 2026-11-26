@@ -359,9 +359,10 @@ func NewHandler(messages *clitext.Messages, d channelAdmin, sup supervisor, wt W
 // home gateway's admin.
 func (h *Handler) SetTerminalAdmin(td channelAdmin) { h.td = td }
 
-// SetGatewayAdmins wires the channel admin of each gateway kind. A session that
-// adopted a conversation of its one gateway is announced and named through that
-// gateway, never through the home gateway.
+// SetGatewayAdmins wires the channel admin of each running gateway kind. A
+// session that adopted a conversation of its one gateway is announced and named
+// through that gateway, never through the home gateway, and gets no banner when
+// that gateway is not running.
 func (h *Handler) SetGatewayAdmins(admins map[string]contracts.ChannelAdmin) {
 	h.gatewayAdmins = admins
 }

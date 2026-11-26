@@ -271,3 +271,28 @@ func TestASessionAdoptingAConversationWithNoAdminAtAllStillStarts(t *testing.T) 
 		t.Fatal("the session was not recorded")
 	}
 }
+
+func TestASessionAdoptedForAGatewayThatIsNotRunningSaysNothingThroughTheHome(t *testing.T) {
+	h, home, _, _, _, st := newTestHandler(t, "")
+	h.SetGatewayAdmins(map[string]contracts.ChannelAdmin{"chat": home})
+
+	if _, err := cli.Plain(h.sessionCreateRun(context.Background(), args("name", "tg-43", "channel_id", "43", "gateways", "telegram", "shared", "true"))); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if len(home.sent) != 0 {
+		t.Fatalf("the home gateway posted %+v into a conversation it does not own", home.sent)
+	}
+	sess, _ := st.FindSession("tg-43")
+	if got := channelRef(h.adminFor(sess), sess.ChannelID); got != "43" {
+		t.Fatalf("listed as %q, want the raw id", got)
+	}
+}
+
+func TestSettingAHomeWithoutAnyChannelAdminIsRefused(t *testing.T) {
+	st := state.NewState(t.TempDir() + "/s.json")
+	h := NewHandler(clitext.NewMessages(), nil, &fakeSup{}, &fakeWT{path: "/wt/x", scratchBase: t.TempDir()}, &fakeForge{}, &fakeUpdater{version: "abc1234"}, agent.NewStore(t.TempDir()), st, "claude", t.TempDir(), []string{"chat"}, nil, nil)
+
+	if _, err := h.setHomeRun(context.Background(), args("channel", "c1")); !errors.Is(err, ErrNoChannelAdmin) {
+		t.Fatalf("set home = %v", err)
+	}
+}

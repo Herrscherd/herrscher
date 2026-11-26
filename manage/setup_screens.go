@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -566,7 +567,7 @@ func (model *setupModel) sections() []hubSection {
 	}}
 	sections = append(sections,
 		model.moduleSection(moduleDiscord, screenDiscord, model.botState(probeDiscord, envDiscordToken)),
-		model.moduleSection(moduleTelegram, screenTelegram, model.botState(probeTelegram, envTelegramBot)),
+		model.moduleSection(moduleTelegram, screenTelegram, model.telegramState()),
 		model.moduleSection(moduleClaude, screenClaude, model.probeState(probeClaude)),
 		model.moduleSection(moduleCodex, screenCodex, model.probeState(probeCodex)),
 		model.moduleSection(moduleCursor, screenCursor, model.keyState(envCursorKey)),
@@ -594,6 +595,13 @@ func (model *setupModel) botState(kind probeKind, tokenKey string) sectionState 
 		return model.resultState(result)
 	}
 	return model.keyState(tokenKey)
+}
+
+func (model *setupModel) telegramState() sectionState {
+	if owner, err := strconv.ParseInt(strings.TrimSpace(model.draft.value(envTelegramUser)), 10, 64); err != nil || owner == 0 {
+		return sectionState{tone: toneBad, text: model.text(clitext.SetupTelegramUserMissing, nil)}
+	}
+	return model.botState(probeTelegram, envTelegramBot)
 }
 
 func (model *setupModel) keyState(key string) sectionState {

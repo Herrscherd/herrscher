@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -500,10 +501,40 @@ func TestATelegramTokenTheBotAPIRefusesIsReported(t *testing.T) {
 func TestATelegramProbeThatCannotConnectNeverShowsTheToken(t *testing.T) {
 	prober := setupProber{client: http.DefaultClient, telegramURL: "http://127.0.0.1:1"}
 
-	got := prober.telegram(t.Context(), "123:secret")
+	for _, token := range []string{"123:secret", "123:sec ret"} {
+		got := prober.telegram(t.Context(), token)
 
-	if got.state != probeFailed || strings.Contains(fmt.Sprint(got.params), "123:secret") {
-		t.Fatalf("probe = %+v", got)
+		shown := fmt.Sprint(got.params)
+		if got.state != probeFailed || strings.Contains(shown, token) || strings.Contains(shown, url.PathEscape(token)) {
+			t.Fatalf("probe = %+v", got)
+		}
+	}
+}
+
+func TestTheTelegramSectionNeedsANumericUserID(t *testing.T) {
+	for _, user := range []string{"", "@ana", "0"} {
+		harness := newHarness(t, nil, screenHub, map[string]string{envTelegramBot: "123:good", envTelegramUser: user})
+		harness.model.modules[moduleTelegram] = true
+		for _, section := range harness.model.sections() {
+			if section.screen == screenTelegram && (section.tone != toneBad || section.state != harness.text(clitext.SetupTelegramUserMissing)) {
+				t.Fatalf("user %q: telegram section = %+v", user, section)
+			}
+		}
+	}
+}
+
+func TestTheTelegramSettingsAreWrittenToTheEnvFile(t *testing.T) {
+	harness := newHarness(t, nil, screenTelegram, nil)
+	harness.fill(t, envTelegramBot, "123:good")
+	harness.fill(t, envTelegramUser, "42")
+	harness.drive(harness.model.goTo(screenReview))
+	harness.choose(t, harness.text(clitext.SetupReviewSave))
+
+	env := harness.envFile(t)
+	for _, want := range []string{"TELEGRAM_BOT_TOKEN=123:good", "TELEGRAM_USER_ID=42"} {
+		if !strings.Contains(env, want) {
+			t.Errorf("env file = %q, want line %q", env, want)
+		}
 	}
 }
 

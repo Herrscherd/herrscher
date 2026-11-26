@@ -5833,5 +5833,15 @@
     "id": "cli.setup.telegram.user_hint",
     "description": "Hint of the Telegram user id field",
     "other": "a bot such as @userinfobot shows it; nobody else may talk to the bot"
+  },
+  {
+    "id": "cli.host.err.no_channel_admin",
+    "description": "Error when setting the home while no gateway manages channels",
+    "other": "no running gateway manages channels, so there is no home to set: start a gateway that does"
+  },
+  {
+    "id": "cli.setup.telegram.user_missing",
+    "description": "Hub state of the Telegram module without a usable user id",
+    "other": "no numeric user ID: nobody may talk to the bot, so it will not start"
   }
 ]

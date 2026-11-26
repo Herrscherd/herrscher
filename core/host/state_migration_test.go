@@ -140,10 +140,103 @@ func TestMigrationRefusesAChannelSessionWhenNoChannelGatewayIsBuilt(t *testing.T
 	assertRefusedUntouched(t, path, err, "triage")
 }
 
-func TestMigrationRefusesARemoteSessionInTheBareLayout(t *testing.T) {
-	path := writeFormat0State(t, []map[string]any{{"name": "far", "channelID": "c1", "type": "channel", "cmd": "claude", "host": "build1", "worktree": "/srv/work/app/.herrscher-sessions/far", "gateways": []string{"chat"}}}, nil)
-	err := migrateHubState(t.Context(), newHostMessages(), discardAnnouncer(), loadForMigration(t, path), migrationInputs{optID: "alice", defaultGateways: []string{"chat"}})
-	assertRefusedUntouched(t, path, err, "build1")
+func TestMigrationPointsARemoteSessionAtItsNewPlaceAndSaysWhatToRunThere(t *testing.T) {
+	path := writeFormat0State(t, []map[string]any{{"name": "far", "channelID": "c1", "type": "channel", "cmd": "claude", "host": "build1", "worktree": "/srv/work/app/.herrscher-sessions/far", "dir": "/srv/work/app/.herrscher-sessions/far", "gateways": []string{"chat"}}}, nil)
+	announcer, out, _ := recordingAnnouncer()
+	if err := migrateHubState(t.Context(), newHostMessages(), announcer, loadForMigration(t, path), migrationInputs{optID: "alice", defaultGateways: []string{"chat"}}); err != nil {
+		t.Fatal(err)
+	}
+	sess, _ := loadForMigration(t, path).FindSession("far")
+	if sess.Worktree != "/srv/work/app/.herrscher-sessions/alice/far" || sess.Dir != sess.Worktree {
+		t.Fatalf("remote session worktree = %q dir = %q, want the instance layout path", sess.Worktree, sess.Dir)
+	}
+	for _, want := range []string{"build1", `worktree move "/srv/work/app/.herrscher-sessions/far" "/srv/work/app/.herrscher-sessions/alice/far"`, "branch -m session/far session/alice/far"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("serve output does not tell the operator %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestMigrationThatCannotKeepACopyMovesNothing(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root writes into a read-only folder")
+	}
+	_, from := bareSessionRepo(t, "alpha")
+	path := writeFormat0State(t, []map[string]any{{"name": "alpha", "channelID": "c1", "type": "channel", "cmd": "claude", "worktree": from, "gateways": []string{"chat"}}}, nil)
+	store := loadForMigration(t, path)
+	stateDir := filepath.Dir(path)
+	if err := os.Chmod(stateDir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if chmodErr := os.Chmod(stateDir, 0o700); chmodErr != nil {
+			t.Error(chmodErr)
+		}
+	})
+	err := migrateHubState(t.Context(), newHostMessages(), discardAnnouncer(), store, migrationInputs{optID: "alice", defaultGateways: []string{"chat"}})
+	assertRefusedUntouched(t, path, err, "could not be written")
+	if _, statErr := os.Stat(from); statErr != nil {
+		t.Fatalf("the worktree moved although no copy of the old state was kept: %v", statErr)
+	}
+}
+
+func TestMigrationAnnouncesTheConversationAMovedSessionLeavesBehind(t *testing.T) {
+	_, from := bareSessionRepo(t, "alpha")
+	path := writeFormat0State(t, []map[string]any{{"name": "alpha", "channelID": "c1", "type": "channel", "cmd": "claude", "worktree": from, "dir": from, "resumeToken": "tok-1", "gateways": []string{"chat"}}}, nil)
+	announcer, out, _ := recordingAnnouncer()
+	if err := migrateHubState(t.Context(), newHostMessages(), announcer, loadForMigration(t, path), migrationInputs{optID: "alice", defaultGateways: []string{"chat"}}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "session alpha now works in") || !strings.Contains(out.String(), "new conversation") {
+		t.Fatalf("serve output does not announce the conversation reset:\n%s", out)
+	}
+}
+
+func TestMigrationAnnouncesOnlyWhatItMoved(t *testing.T) {
+	repo := tempRepo(t)
+	gone := filepath.Join(repo, ".herrscher-sessions", "gone")
+	path := writeFormat0State(t, []map[string]any{{"name": "gone", "channelID": "c1", "type": "channel", "cmd": "claude", "worktree": gone, "gateways": []string{"chat"}}}, nil)
+	announcer, out, _ := recordingAnnouncer()
+	if err := migrateHubState(t.Context(), newHostMessages(), announcer, loadForMigration(t, path), migrationInputs{optID: "alice", defaultGateways: []string{"chat"}}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "moved to") || strings.Contains(out.String(), "renamed") {
+		t.Fatalf("serve output announces a move that did not happen:\n%s", out)
+	}
+	if sess, _ := loadForMigration(t, path).FindSession("gone"); sess.Worktree != gone {
+		t.Fatalf("worktree of a session found nowhere = %q, want it left at %q", sess.Worktree, gone)
+	}
+}
+
+func TestMigrationRefusesASessionNamedLikeTheInstanceBeforeMovingAnyOther(t *testing.T) {
+	repo, dev := bareSessionRepo(t, "dev")
+	other := filepath.Join(repo, ".herrscher-sessions", "x")
+	if out, err := exec.CommandContext(t.Context(), "git", "-C", repo, "worktree", "add", "-q", other, "-b", "session/x").CombinedOutput(); err != nil {
+		t.Fatalf("worktree add: %v\n%s", err, out)
+	}
+	path := writeFormat0State(t, []map[string]any{
+		{"name": "x", "channelID": "c1", "type": "channel", "cmd": "claude", "worktree": other, "gateways": []string{"chat"}},
+		{"name": "dev", "channelID": "c2", "type": "channel", "cmd": "claude", "worktree": dev, "gateways": []string{"chat"}},
+	}, nil)
+	err := migrateHubState(t.Context(), newHostMessages(), discardAnnouncer(), loadForMigration(t, path), migrationInputs{optID: "dev", defaultGateways: []string{"chat"}})
+	assertRefusedUntouched(t, path, err, "HERRSCHER_INSTANCE_ID")
+	if _, statErr := os.Stat(other); statErr != nil {
+		t.Fatalf("session x moved before the refusal: %v", statErr)
+	}
+}
+
+func TestMigrationAnnouncesTheNumberedCopyItKeeps(t *testing.T) {
+	path := writeFormat0State(t, []map[string]any{}, map[string]any{"instanceID": "alice"})
+	if err := os.WriteFile(path+".before-format-1.bak", []byte("earlier"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	announcer, out, _ := recordingAnnouncer()
+	if err := migrateHubState(t.Context(), newHostMessages(), announcer, loadForMigration(t, path), migrationInputs{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), path+".before-format-1.2.bak") {
+		t.Fatalf("serve output does not name the copy it kept:\n%s", out)
+	}
 }
 
 func TestMigrationRefusesAndMovesNothingWhenATargetIsTaken(t *testing.T) {
@@ -162,8 +255,8 @@ func TestMigrationRefusesAndMovesNothingWhenATargetIsTaken(t *testing.T) {
 func TestNewRegistryRefusesAStateThatIsNotMigratedYet(t *testing.T) {
 	path := writeFormat0State(t, []map[string]any{}, nil)
 	_, err := NewRegistry(t.Context(), clitext.NewMessages(), NewMessages(), nil, Options{StatePath: path, Warnings: io.Discard})
-	if err == nil || !strings.Contains(err.Error(), "herrscher serve") {
-		t.Fatalf("NewRegistry = %v, want the refusal that asks for herrscher serve", err)
+	if err == nil || !strings.Contains(err.Error(), "restart the daemon") || !strings.Contains(err.Error(), "stop the herrscher serve still running") {
+		t.Fatalf("NewRegistry = %v, want the refusal that asks to restart the daemon", err)
 	}
 }
 

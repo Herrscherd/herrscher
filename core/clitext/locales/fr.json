@@ -5835,6 +5835,21 @@
     "other": "session {{.Name}} : le déplacement a échoué : {{.Err}} {{.Output}}"
   },
   {
+    "id": "cli.worktree.relocate_name_is_instance",
+    "description": "Refus de migration : un nom de session est l'id d'instance",
+    "other": "session {{.Name}} : son nom, ou le dossier {{.Path}} où elle vit, est l'id d'instance {{.Value}}, et la disposition par instance rangerait toutes les autres sessions dedans ; donne un autre id à HERRSCHER_INSTANCE_ID, puis relance herrscher serve"
+  },
+  {
+    "id": "cli.worktree.relocate_remote_branch",
+    "description": "Refus de migration : la branche a été poussée sur un remote",
+    "other": "session {{.Name}} : la branche {{.Branch}} est sur le remote {{.Target}}, et la renommer laisserait sa pull request sur l'ancienne branche ; une fois la pull request fusionnée ou fermée, supprime la branche là-bas avec git push {{.Target}} --delete {{.Branch}} (ou git branch -dr {{.Target}}/{{.Branch}} si elle n'y est déjà plus), puis relance herrscher serve"
+  },
+  {
+    "id": "cli.worktree.relocate_remote_unreachable",
+    "description": "Refus de migration : un remote n'a pas pu être interrogé sur la branche d'une pull request",
+    "other": "la branche {{.Branch}} porte une pull request, et le remote {{.Target}} n'a pas pu dire s'il la garde encore : {{.Err}} {{.Output}} ; relance herrscher serve quand le remote répond"
+  },
+  {
     "id": "cli.migration.started",
     "description": "Annonce du début d'une migration de l'état",
     "other": "herrscher : migration de l'état {{.Path}} du format {{.From}} au format {{.To}} ; l'ancien fichier est gardé dans {{.File}}"
@@ -5887,7 +5902,7 @@
   {
     "id": "cli.migration.pending",
     "description": "Refus d'une commande sur un état pas encore migré",
-    "other": "l'état {{.Path}} est d'un ancien format : lance herrscher serve une fois pour le migrer, puis relance cette commande"
+    "other": "l'état {{.Path}} est d'un ancien format : redémarre le daemon pour que ce build le migre (arrête le herrscher serve encore lancé, puis lance herrscher serve), puis relance cette commande"
   },
   {
     "id": "cli.migration.no_gateway",
@@ -5895,9 +5910,24 @@
     "other": "session {{.Name}} : elle a un salon mais aucune passerelle liée, et aucune passerelle de salon n'est construite ; lance herrscher serve avec la passerelle de ce salon configurée, la migration la liera"
   },
   {
-    "id": "cli.migration.remote_session",
-    "description": "Refus de la migration : session distante dans l'ancienne disposition",
-    "other": "session {{.Name}} : son worktree {{.Path}} est sur l'hôte {{.Host}} dans l'ancienne disposition sans id d'instance, et la migration ne déplace pas un worktree distant ; ferme cette session avec le build précédent (herrscher session close {{.Name}}), puis relance ce build"
+    "id": "cli.migration.remote_worktree",
+    "description": "Annonce de migration : worktree d'une session distante que l'opérateur déplace à la main",
+    "other": "herrscher : migration : la session {{.Name}} vit sur l'hôte {{.Host}}, que la migration n'atteint pas ; l'état pointe maintenant vers {{.To}}, donc avant que la session ne redémarre lance sur {{.Host}} : mkdir -p {{.Where}} && git -C {{.Repo}} worktree move {{.From}} {{.To}} && git -C {{.Repo}} branch -m {{.Branch}} {{.Target}} (garde le nom de la branche si elle porte une pull request ouverte)"
+  },
+  {
+    "id": "cli.migration.remote_scratch",
+    "description": "Annonce de migration : dossier scratch d'une session distante que l'opérateur déplace à la main",
+    "other": "herrscher : migration : la session {{.Name}} vit sur l'hôte {{.Host}}, que la migration n'atteint pas ; l'état pointe maintenant vers {{.To}}, donc avant que la session ne redémarre lance sur {{.Host}} : mkdir -p {{.Where}} && mv {{.From}} {{.To}}"
+  },
+  {
+    "id": "cli.migration.conversation_reset",
+    "description": "Annonce de migration : une session déplacée repart sur une conversation neuve",
+    "other": "herrscher : migration : la session {{.Name}} travaille maintenant dans {{.Path}} ; un backend qui range ses conversations par dossier (c'est le cas de Claude Code) n'y retrouvera pas l'ancienne, son prochain tour repart donc sur une conversation neuve"
+  },
+  {
+    "id": "cli.migration.backup_failed",
+    "description": "Refus de migration : la copie de l'ancien état n'a pas pu être écrite",
+    "other": "la copie de l'ancien état n'a pas pu être écrite à côté de {{.Path}} ({{.Err}}), rien n'a donc été déplacé ; libère de la place ou corrige les droits de son dossier, puis relance herrscher serve"
   },
   {
     "id": "cli.migration.refused",

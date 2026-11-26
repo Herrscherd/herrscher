@@ -135,6 +135,8 @@ type State struct {
 	write        func(name string, data []byte, perm os.FileMode) error `json:"-"`
 	openingPR    map[string]bool                                        `json:"-"`
 	legacy       legacyFields                                           `json:"-"`
+	original     []byte                                                 `json:"-"`
+	backupPath   string                                                 `json:"-"`
 	Format       int                                                    `json:"format"`
 	Home         HomeRef                                                `json:"home"`
 	Workspace    string                                                 `json:"workspace,omitempty"`
@@ -218,6 +220,9 @@ func LoadState(path string) (*State, error) {
 	}
 	if err := fresh.decode(buf); err != nil {
 		return nil, err
+	}
+	if fresh.Format < CurrentFormat {
+		fresh.original = buf
 	}
 	seen := make(map[string]bool)
 	for idx := range fresh.Sessions {

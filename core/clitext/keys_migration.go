@@ -14,7 +14,10 @@ const (
 	MigrationNewerFormat        = "cli.migration.newer_format"
 	MigrationPending            = "cli.migration.pending"
 	MigrationNoGateway          = "cli.migration.no_gateway"
-	MigrationRemoteSession      = "cli.migration.remote_session"
+	MigrationRemoteWorktree     = "cli.migration.remote_worktree"
+	MigrationRemoteScratch      = "cli.migration.remote_scratch"
+	MigrationConversationReset  = "cli.migration.conversation_reset"
+	MigrationBackupFailed       = "cli.migration.backup_failed"
 	MigrationRefused            = "cli.migration.refused"
 	InstanceGenerated           = "cli.instance.generated"
 )
@@ -33,7 +36,10 @@ func migrationKeys() map[Key][]string {
 		MigrationNewerFormat:        {ParamPath, ParamHave, ParamWant},
 		MigrationPending:            {ParamPath},
 		MigrationNoGateway:          {ParamName},
-		MigrationRemoteSession:      {ParamName, ParamHost, ParamPath},
+		MigrationRemoteWorktree:     {ParamName, ParamHost, ParamRepo, ParamFrom, ParamTo, ParamWhere, ParamBranch, ParamTarget},
+		MigrationRemoteScratch:      {ParamName, ParamHost, ParamFrom, ParamTo, ParamWhere},
+		MigrationConversationReset:  {ParamName, ParamPath},
+		MigrationBackupFailed:       {ParamPath, ParamErr},
 		MigrationRefused:            {ParamErr},
 		InstanceGenerated:           {ParamValue},
 	}

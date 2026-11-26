@@ -5835,6 +5835,21 @@
     "other": "session {{.Name}}: the move failed: {{.Err}} {{.Output}}"
   },
   {
+    "id": "cli.worktree.relocate_name_is_instance",
+    "description": "State migration refusal: a session name is the instance id",
+    "other": "session {{.Name}}: its name, or the folder {{.Path}} it lives in, is the instance id {{.Value}}, and the instance layout would put every other session inside it; set HERRSCHER_INSTANCE_ID to another id, then run herrscher serve again"
+  },
+  {
+    "id": "cli.worktree.relocate_remote_branch",
+    "description": "State migration refusal: the branch was pushed to a remote",
+    "other": "session {{.Name}}: branch {{.Branch}} is on remote {{.Target}}, and renaming it would leave its pull request on the old branch; once the pull request is merged or closed, delete the branch there with git push {{.Target}} --delete {{.Branch}} (or git branch -dr {{.Target}}/{{.Branch}} if it is already gone there), then run herrscher serve again"
+  },
+  {
+    "id": "cli.worktree.relocate_remote_unreachable",
+    "description": "State migration refusal: a remote could not be asked about a pull request branch",
+    "other": "branch {{.Branch}} carries a pull request, and remote {{.Target}} could not be asked whether it still holds it: {{.Err}} {{.Output}}; run herrscher serve again once the remote answers"
+  },
+  {
     "id": "cli.migration.started",
     "description": "Notice that a state migration starts",
     "other": "herrscher: migrating state {{.Path}} from format {{.From}} to format {{.To}}; the old file is kept in {{.File}}"
@@ -5887,7 +5902,7 @@
   {
     "id": "cli.migration.pending",
     "description": "Refusal of a command on a state not migrated yet",
-    "other": "state {{.Path}} has an old format: run herrscher serve once to migrate it, then run this command again"
+    "other": "state {{.Path}} has an old format: restart the daemon so this build migrates it (stop the herrscher serve still running, then run herrscher serve), then run this command again"
   },
   {
     "id": "cli.migration.no_gateway",
@@ -5895,9 +5910,24 @@
     "other": "session {{.Name}}: it has a channel but no bound gateway, and no channel gateway is built; run herrscher serve with the gateway of that channel configured, the migration will bind it"
   },
   {
-    "id": "cli.migration.remote_session",
-    "description": "Migration refusal: remote session in the old layout",
-    "other": "session {{.Name}}: its worktree {{.Path}} is on host {{.Host}} in the old layout without an instance id, and the migration does not move a remote worktree; close this session with the previous build (herrscher session close {{.Name}}), then start this build again"
+    "id": "cli.migration.remote_worktree",
+    "description": "Migration notice: a remote session worktree the operator moves by hand",
+    "other": "herrscher: migration: session {{.Name}} lives on host {{.Host}}, which the migration does not reach; the state now points to {{.To}}, so before the session starts again run on {{.Host}}: mkdir -p {{.Where}} && git -C {{.Repo}} worktree move {{.From}} {{.To}} && git -C {{.Repo}} branch -m {{.Branch}} {{.Target}} (keep the branch name if it carries an open pull request)"
+  },
+  {
+    "id": "cli.migration.remote_scratch",
+    "description": "Migration notice: a remote scratch directory the operator moves by hand",
+    "other": "herrscher: migration: session {{.Name}} lives on host {{.Host}}, which the migration does not reach; the state now points to {{.To}}, so before the session starts again run on {{.Host}}: mkdir -p {{.Where}} && mv {{.From}} {{.To}}"
+  },
+  {
+    "id": "cli.migration.conversation_reset",
+    "description": "Migration notice: a moved session starts a new conversation",
+    "other": "herrscher: migration: session {{.Name}} now works in {{.Path}}; a backend that files its conversations by folder (Claude Code does) will not find the old one there, so its next turn starts a new conversation"
+  },
+  {
+    "id": "cli.migration.backup_failed",
+    "description": "Migration refusal: the copy of the old state could not be written",
+    "other": "the copy of the old state could not be written next to {{.Path}} ({{.Err}}), so nothing was moved; free some space or fix the rights on its folder, then run herrscher serve again"
   },
   {
     "id": "cli.migration.refused",

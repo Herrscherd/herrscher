@@ -12,8 +12,14 @@ import (
 // CurrentFormat is the version of the state file this build writes.
 const CurrentFormat = 1
 
-// ErrNoGatewayToBind reports a session with a channel and no gateway binding while no gateway is offered to bind it to.
-var ErrNoGatewayToBind = errors.New("a session carries a channel but no gateway binding, and no gateway is built to bind it to")
+// NoGatewayToBindError reports a session with a channel and no gateway binding while no gateway is offered to bind it to.
+type NoGatewayToBindError struct {
+	Session string
+}
+
+func (e *NoGatewayToBindError) Error() string {
+	return fmt.Sprintf("session %q carries a channel but no gateway binding, and no gateway is built to bind it to", e.Session)
+}
 
 // NewerFormatError reports a state file written by a newer build than this one.
 type NewerFormatError struct {
@@ -38,8 +44,6 @@ const (
 	ChangeRepoDropped FormatChangeKind = "repo_dropped"
 	// ChangeGatewaysBound reports a session given the gateway binding it was implicitly using.
 	ChangeGatewaysBound FormatChangeKind = "gateways_bound"
-	// ChangeSessionRelocated reports a session whose worktree or directory moved into the instance layout.
-	ChangeSessionRelocated FormatChangeKind = "session_relocated"
 )
 
 // FormatChange is one change a format migration made, as announced to the operator.
@@ -102,33 +106,22 @@ func (s *State) Outdated() bool {
 	return s.Format < CurrentFormat
 }
 
-// LegacyRepo returns the repo field an older format stored in place of the workspace.
-func (s *State) LegacyRepo() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.legacy.repo
-}
-
-// UnboundChannelSessions names the sessions that carry a channel and no gateway binding.
-func (s *State) UnboundChannelSessions() []string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var names []string
-	for idx := range s.Sessions {
-		if needsGatewayBinding(s.Sessions[idx]) {
-			names = append(names, s.Sessions[idx].Name)
-		}
-	}
-	return names
-}
-
 func needsGatewayBinding(sess Session) bool {
 	return len(sess.Gateways) == 0 && sess.ChannelID != ""
 }
 
-// BackupPath is where the migration to CurrentFormat keeps the file it replaced.
-func (s *State) BackupPath() string {
-	return fmt.Sprintf("%s.before-format-%d.bak", s.path, CurrentFormat)
+// CheckMigration refuses a migration the state cannot carry out with what it is given, before anything is touched.
+func (s *State) CheckMigration(migration FormatMigration) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.checkMigrationLocked(migration)
+}
+
+// Backup copies the file this outdated state was read from next to it, under a name no earlier copy holds, and returns that name.
+func (s *State) Backup() (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.backupLocked()
 }
 
 // MigrateFormat brings an outdated state to CurrentFormat, keeps a copy of the old file next to it, writes the new one atomically and lists every change.
@@ -141,7 +134,7 @@ func (s *State) MigrateFormat(migration FormatMigration) ([]FormatChange, error)
 	if err := s.checkMigrationLocked(migration); err != nil {
 		return nil, err
 	}
-	if err := s.backupLocked(); err != nil {
+	if _, err := s.backupLocked(); err != nil {
 		return nil, err
 	}
 	changes := s.migrateInstanceLocked(migration.InstanceID)
@@ -163,7 +156,7 @@ func (s *State) checkMigrationLocked(migration FormatMigration) error {
 	}
 	for idx := range s.Sessions {
 		if needsGatewayBinding(s.Sessions[idx]) {
-			return fmt.Errorf("%w: %q", ErrNoGatewayToBind, s.Sessions[idx].Name)
+			return &NoGatewayToBindError{Session: s.Sessions[idx].Name}
 		}
 	}
 	return nil
@@ -171,15 +164,61 @@ func (s *State) checkMigrationLocked(migration FormatMigration) error {
 
 var errNoInstanceID = errors.New("a format migration needs an instance id")
 
-func (s *State) backupLocked() error {
-	if _, err := os.Lstat(s.BackupPath()); err == nil {
-		return nil
+func (s *State) backupLocked() (string, error) {
+	if s.backupPath != "" || s.original == nil {
+		return s.backupPath, nil
 	}
-	err := os.Link(s.path, s.BackupPath())
-	if os.IsNotExist(err) {
-		return nil
+	target, err := s.freeBackupPathLocked()
+	if err != nil {
+		return "", err
 	}
-	return err
+	tmp := target + ".tmp"
+	if err := s.writeFile(tmp, s.original, privateFileMode); err != nil {
+		return "", errors.Join(err, removeIfPresent(tmp))
+	}
+	if err := os.Rename(tmp, target); err != nil {
+		return "", errors.Join(err, removeIfPresent(tmp))
+	}
+	s.backupPath = target
+	return target, nil
+}
+
+func (s *State) freeBackupPathLocked() (string, error) {
+	for copyNumber := 1; ; copyNumber++ {
+		candidate := backupName(s.path, copyNumber)
+		taken, err := pathTaken(candidate)
+		if err != nil {
+			return "", err
+		}
+		if !taken {
+			return candidate, nil
+		}
+	}
+}
+
+func backupName(path string, copyNumber int) string {
+	if copyNumber == 1 {
+		return fmt.Sprintf("%s.before-format-%d.bak", path, CurrentFormat)
+	}
+	return fmt.Sprintf("%s.before-format-%d.%d.bak", path, CurrentFormat, copyNumber)
+}
+
+func pathTaken(path string) (bool, error) {
+	_, err := os.Lstat(path)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return false, err
+}
+
+func removeIfPresent(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 func (s *State) migrateInstanceLocked(instanceID string) []FormatChange {
@@ -213,7 +252,6 @@ func (s *State) migrateSessionsLocked(migration FormatMigration) []FormatChange 
 		}
 		if moved, ok := migration.Relocated[sess.Name]; ok {
 			sess.Worktree, sess.Dir = moved.Worktree, moved.Dir
-			changes = append(changes, FormatChange{Kind: ChangeSessionRelocated, Session: sess.Name, Value: moved.Worktree})
 		}
 	}
 	return changes

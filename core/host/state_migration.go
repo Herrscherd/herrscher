@@ -79,22 +79,26 @@ func migrateHubState(ctx context.Context, messages *hostMessages, announcer stat
 	if err != nil {
 		return err
 	}
+	migration := state.FormatMigration{InstanceID: instID, DefaultGateways: inputs.defaultGateways, ConfigWorkspace: inputs.configWorkspace}
+	if checkErr := store.CheckMigration(migration); checkErr != nil {
+		return migrationCheckRefusal(announcer.cliMessages, checkErr)
+	}
 	worktrees := worktree.NewWorktreer(announcer.cliMessages, instID)
 	sessions := store.SnapshotSessions()
 	plans, err := planSessionRelocations(ctx, announcer.cliMessages, worktrees, sessions)
 	if err != nil {
 		return err
 	}
-	if unbound := store.UnboundChannelSessions(); len(unbound) > 0 && len(inputs.defaultGateways) == 0 {
-		return &stateMigrationRefusedError{messages: announcer.cliMessages, key: clitext.MigrationNoGateway, params: clitext.Params{clitext.ParamName: strconv.Quote(unbound[0])}}
+	backup, err := store.Backup()
+	if err != nil {
+		return &stateMigrationRefusedError{messages: announcer.cliMessages, key: clitext.MigrationBackupFailed, params: clitext.Params{clitext.ParamPath: store.Path(), clitext.ParamErr: err.Error()}, cause: err}
 	}
-	from := store.Format
-	announcer.announce(clitext.MigrationStarted, clitext.Params{clitext.ParamPath: store.Path(), clitext.ParamFrom: from, clitext.ParamTo: state.CurrentFormat, clitext.ParamFile: store.BackupPath()})
-	relocated, err := relocateSessions(ctx, worktrees, announcer, sessions, plans)
+	announcer.announce(clitext.MigrationStarted, clitext.Params{clitext.ParamPath: store.Path(), clitext.ParamFrom: store.Format, clitext.ParamTo: state.CurrentFormat, clitext.ParamFile: backup})
+	migration.Relocated, err = relocateSessions(ctx, worktrees, announcer, sessions, plans)
 	if err != nil {
 		return err
 	}
-	changes, err := store.MigrateFormat(state.FormatMigration{InstanceID: instID, DefaultGateways: inputs.defaultGateways, ConfigWorkspace: inputs.configWorkspace, Relocated: relocated})
+	changes, err := store.MigrateFormat(migration)
 	if err != nil {
 		return err
 	}
@@ -103,6 +107,13 @@ func migrateHubState(ctx context.Context, messages *hostMessages, announcer stat
 	}
 	announcer.announce(clitext.MigrationDone, clitext.Params{clitext.ParamPath: store.Path(), clitext.ParamTo: state.CurrentFormat})
 	return nil
+}
+
+func migrationCheckRefusal(cliMessages *clitext.Messages, err error) error {
+	if unbound, ok := errors.AsType[*state.NoGatewayToBindError](err); ok {
+		return &stateMigrationRefusedError{messages: cliMessages, key: clitext.MigrationNoGateway, params: clitext.Params{clitext.ParamName: strconv.Quote(unbound.Session)}}
+	}
+	return err
 }
 
 func announceFormatChange(announcer stateAnnouncer, change state.FormatChange, origin instanceOrigin) {
@@ -119,47 +130,86 @@ func announceFormatChange(announcer stateAnnouncer, change state.FormatChange, o
 		announcer.announce(clitext.MigrationRepoDropped, clitext.Params{clitext.ParamPath: change.Value})
 	case state.ChangeGatewaysBound:
 		announcer.announce(clitext.MigrationGatewaysBound, clitext.Params{clitext.ParamName: change.Session, clitext.ParamKind: change.Value})
-	case state.ChangeSessionRelocated:
 	}
 }
 
-func planSessionRelocations(ctx context.Context, cliMessages *clitext.Messages, worktrees *worktree.Worktreer, sessions []state.Session) (map[string]worktree.Relocation, error) {
-	plans := make(map[string]worktree.Relocation)
+type sessionRelocation struct {
+	plan   worktree.Relocation
+	remote bool
+}
+
+func planSessionRelocations(ctx context.Context, cliMessages *clitext.Messages, worktrees *worktree.Worktreer, sessions []state.Session) (map[string]sessionRelocation, error) {
+	plans := make(map[string]sessionRelocation)
 	for idx := range sessions {
 		sess := sessions[idx]
-		if !worktree.InBareLayout(sess.Name, sess.Worktree, sess.Scratch) {
+		if !worktree.InBareLayout(sess.Worktree, sess.Scratch) {
 			continue
 		}
+		bare := worktree.BareSession{Name: sess.Name, Path: sess.Worktree, Scratch: sess.Scratch, PullRequest: sess.PullRequest}
+		var plan worktree.Relocation
+		var err error
 		if sess.Host != "" {
-			return nil, &stateMigrationRefusedError{messages: cliMessages, key: clitext.MigrationRemoteSession, params: clitext.Params{clitext.ParamName: strconv.Quote(sess.Name), clitext.ParamHost: sess.Host, clitext.ParamPath: strconv.Quote(sess.Worktree)}}
+			plan, err = worktrees.BareTarget(bare)
+		} else {
+			plan, err = worktrees.PlanBareRelocation(ctx, bare)
 		}
-		plan, err := worktrees.PlanBareRelocation(ctx, sess.Name, sess.Worktree, sess.Scratch)
 		if err != nil {
 			return nil, &stateMigrationRefusedError{messages: cliMessages, cause: err}
 		}
-		plans[sess.Name] = plan
+		plans[sess.Name] = sessionRelocation{plan: plan, remote: sess.Host != ""}
 	}
 	return plans, nil
 }
 
-func relocateSessions(ctx context.Context, worktrees *worktree.Worktreer, announcer stateAnnouncer, sessions []state.Session, plans map[string]worktree.Relocation) (map[string]state.Relocation, error) {
+func relocateSessions(ctx context.Context, worktrees *worktree.Worktreer, announcer stateAnnouncer, sessions []state.Session, plans map[string]sessionRelocation) (map[string]state.Relocation, error) {
 	relocated := make(map[string]state.Relocation, len(plans))
 	for idx := range sessions {
 		sess := sessions[idx]
-		plan, ok := plans[sess.Name]
+		planned, ok := plans[sess.Name]
 		if !ok {
 			continue
 		}
-		if err := worktrees.Relocate(ctx, plan); err != nil {
-			return nil, &stateMigrationRefusedError{messages: announcer.cliMessages, cause: err}
+		plan := planned.plan
+		if planned.remote {
+			announceRemoteRelocation(announcer, sess, plan)
+		} else if err := relocateLocal(ctx, worktrees, announcer, sess, plan); err != nil {
+			return nil, err
 		}
-		announcer.announce(clitext.MigrationWorktreeRelocated, clitext.Params{clitext.ParamName: sess.Name, clitext.ParamFrom: plan.FromPath, clitext.ParamTo: plan.ToPath})
-		if plan.ToBranch != "" {
-			announcer.announce(clitext.MigrationBranchRenamed, clitext.Params{clitext.ParamName: sess.Name, clitext.ParamFrom: plan.FromBranch, clitext.ParamTo: plan.ToBranch})
+		if !planned.remote && !plan.DirAtTarget() {
+			continue
 		}
-		relocated[sess.Name] = state.Relocation{Worktree: plan.ToPath, Dir: retargetDir(sess.Dir, plan.FromPath, plan.ToPath)}
+		moved := state.Relocation{Worktree: plan.ToPath, Dir: retargetDir(sess.Dir, plan.FromPath, plan.ToPath)}
+		relocated[sess.Name] = moved
+		if sess.ResumeToken != "" && (planned.remote || plan.MovesDir()) {
+			announcer.announce(clitext.MigrationConversationReset, clitext.Params{clitext.ParamName: sess.Name, clitext.ParamPath: moved.Dir})
+		}
 	}
 	return relocated, nil
+}
+
+func relocateLocal(ctx context.Context, worktrees *worktree.Worktreer, announcer stateAnnouncer, sess state.Session, plan worktree.Relocation) error {
+	if err := worktrees.Relocate(ctx, plan); err != nil {
+		return &stateMigrationRefusedError{messages: announcer.cliMessages, cause: err}
+	}
+	if plan.MovesDir() {
+		announcer.announce(clitext.MigrationWorktreeRelocated, clitext.Params{clitext.ParamName: sess.Name, clitext.ParamFrom: plan.FromPath, clitext.ParamTo: plan.ToPath})
+	}
+	if plan.RenamesBranch() {
+		announcer.announce(clitext.MigrationBranchRenamed, clitext.Params{clitext.ParamName: sess.Name, clitext.ParamFrom: plan.FromBranch, clitext.ParamTo: plan.ToBranch})
+	}
+	return nil
+}
+
+func announceRemoteRelocation(announcer stateAnnouncer, sess state.Session, plan worktree.Relocation) {
+	params := clitext.Params{clitext.ParamName: sess.Name, clitext.ParamHost: sess.Host, clitext.ParamFrom: strconv.Quote(plan.FromPath), clitext.ParamTo: strconv.Quote(plan.ToPath), clitext.ParamWhere: strconv.Quote(filepath.Dir(plan.ToPath))}
+	if plan.Scratch {
+		announcer.announce(clitext.MigrationRemoteScratch, params)
+		return
+	}
+	params[clitext.ParamRepo] = strconv.Quote(plan.Repo)
+	params[clitext.ParamBranch] = plan.FromBranch
+	params[clitext.ParamTarget] = plan.ToBranch
+	announcer.announce(clitext.MigrationRemoteWorktree, params)
 }
 
 func retargetDir(dir, oldRoot, newRoot string) string {
@@ -191,13 +241,13 @@ func (e *stateMigrationRefusedError) text(cliMessages *clitext.Messages, lang i1
 }
 
 func (e *stateMigrationRefusedError) reason(cliMessages *clitext.Messages, lang i18n.Language) string {
+	if e.key != "" {
+		return renderMigrationText(cliMessages, lang, e.key, e.params)
+	}
 	if failure, ok := errors.AsType[worktree.FailureError](e.cause); ok {
 		return failure.Text(lang)
 	}
-	if e.cause != nil {
-		return e.cause.Error()
-	}
-	return renderMigrationText(cliMessages, lang, e.key, e.params)
+	return e.cause.Error()
 }
 
 func stateFormatText(cliMessages *clitext.Messages, lang i18n.Language, err error) (string, bool) {

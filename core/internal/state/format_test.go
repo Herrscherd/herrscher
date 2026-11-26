@@ -38,11 +38,7 @@ func formatFixtures() []formatFixture {
 					"notes": {Worktree: "/srv/work/.herrscher-scratch/h7k2m9q4x/notes", Dir: "/srv/work/.herrscher-scratch/h7k2m9q4x/notes"},
 				},
 			},
-			changes: []FormatChange{
-				{Kind: ChangeInstanceAssigned, Value: "h7k2m9q4x"},
-				{Kind: ChangeSessionRelocated, Session: "alpha", Value: "/srv/work/app/.herrscher-sessions/h7k2m9q4x/alpha"},
-				{Kind: ChangeSessionRelocated, Session: "notes", Value: "/srv/work/.herrscher-scratch/h7k2m9q4x/notes"},
-			},
+			changes: []FormatChange{{Kind: ChangeInstanceAssigned, Value: "h7k2m9q4x"}},
 		},
 	}
 }
@@ -94,12 +90,69 @@ func TestMigrateFormatBringsEachOldShapeToTheExpectedFile(t *testing.T) {
 
 func TestMigrateFormatKeepsTheOldFileNextToTheNewOne(t *testing.T) {
 	path, original := copyFixture(t, "format0-repo")
-	migrated := loadOutdated(t, path)
-	if _, err := migrated.MigrateFormat(FormatMigration{InstanceID: "alice"}); err != nil {
+	if _, err := loadOutdated(t, path).MigrateFormat(FormatMigration{InstanceID: "alice"}); err != nil {
 		t.Fatal(err)
 	}
-	if backup := mustRead(t, migrated.BackupPath()); !bytes.Equal(backup, original) {
+	if backup := mustRead(t, path+".before-format-1.bak"); !bytes.Equal(backup, original) {
 		t.Fatalf("backup:\n%s\nwant the original file:\n%s", backup, original)
+	}
+}
+
+func TestBackupCopiesTheBytesReadAtLoadEvenAfterALoadTimeRewrite(t *testing.T) {
+	original := []byte(`{"home":{"id":"h","type":"category"},"sessions":[{"name":"alpha","channelID":"c1","type":"channel","cmd":"claude","gateways":["chat"]}]}`)
+	path := filepath.Join(t.TempDir(), "state.json")
+	must(t, os.WriteFile(path, original, privateFileMode))
+	loaded := loadOutdated(t, path)
+	if bytes.Equal(mustRead(t, path), original) {
+		t.Fatal("the fixture was expected to be rewritten at load by the incarnation backfill")
+	}
+	backup, err := loaded.Backup()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := mustRead(t, backup); !bytes.Equal(got, original) {
+		t.Fatalf("backup:\n%s\nwant the file as it was before the load:\n%s", got, original)
+	}
+	if info, err := os.Stat(backup); err != nil || info.Mode().Perm() != privateFileMode {
+		t.Fatalf("backup mode = %v, %v, want %v", info.Mode().Perm(), err, os.FileMode(privateFileMode))
+	}
+}
+
+func TestBackupNeverOverwritesAnEarlierCopy(t *testing.T) {
+	path, original := copyFixture(t, "format0-repo")
+	earlier := []byte("an earlier migration")
+	must(t, os.WriteFile(path+".before-format-1.bak", earlier, privateFileMode))
+	backup, err := loadOutdated(t, path).Backup()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if backup != path+".before-format-1.2.bak" || !bytes.Equal(mustRead(t, backup), original) {
+		t.Fatalf("backup %s holds %q, want %s.before-format-1.2.bak with the file just read", backup, mustRead(t, backup), path)
+	}
+	if !bytes.Equal(mustRead(t, path+".before-format-1.bak"), earlier) {
+		t.Fatal("the earlier copy was overwritten")
+	}
+}
+
+func TestABackupThatCannotBeWrittenLeavesNoCopyAndNoMigration(t *testing.T) {
+	path, original := copyFixture(t, "format0-repo")
+	migrated := loadOutdated(t, path)
+	errNoLinks := errors.New("operation not permitted")
+	migrated.write = func(name string, data []byte, perm os.FileMode) error {
+		if strings.HasSuffix(name, ".bak.tmp") {
+			return errNoLinks
+		}
+		return os.WriteFile(name, data, perm)
+	}
+	if _, err := migrated.MigrateFormat(FormatMigration{InstanceID: "alice"}); !errors.Is(err, errNoLinks) {
+		t.Fatalf("MigrateFormat = %v, want the backup failure", err)
+	}
+	if got := mustRead(t, path); !bytes.Equal(got, original) {
+		t.Fatalf("a failed backup let the migration rewrite the file:\n%s", got)
+	}
+	matches, err := filepath.Glob(path + ".before-format-*")
+	if err != nil || len(matches) != 0 {
+		t.Fatalf("a failed backup left %v behind", matches)
 	}
 }
 
@@ -138,8 +191,8 @@ func TestLoadStateRefusesANewerFormat(t *testing.T) {
 func TestMigrateFormatRefusesAChannelSessionWithNoGatewayToBind(t *testing.T) {
 	path, original := copyFixture(t, "format0-unbound")
 	_, err := loadOutdated(t, path).MigrateFormat(FormatMigration{InstanceID: "alice"})
-	if !errors.Is(err, ErrNoGatewayToBind) || !strings.Contains(err.Error(), "triage") {
-		t.Fatalf("MigrateFormat = %v, want ErrNoGatewayToBind naming triage", err)
+	if unbound, ok := errors.AsType[*NoGatewayToBindError](err); !ok || unbound.Session != "triage" {
+		t.Fatalf("MigrateFormat = %v, want a NoGatewayToBindError naming triage", err)
 	}
 	if got := mustRead(t, path); !bytes.Equal(got, original) {
 		t.Fatalf("a refused migration rewrote the file:\n%s", got)
@@ -154,17 +207,18 @@ func TestMigrateFormatDropsTheRepoWhenTheConfigSetsAWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []FormatChange{{Kind: ChangeRepoDropped, Value: "/srv/work/herrscher"}}
-	if !slices.Equal(changes, want) || migrated.Workspace != "" || migrated.LegacyRepo() != "" {
-		t.Fatalf("changes = %+v workspace = %q repo = %q, want the repo dropped and the workspace left to the config", changes, migrated.Workspace, migrated.LegacyRepo())
+	if !slices.Equal(changes, want) || migrated.Workspace != "" || bytes.Contains(mustRead(t, path), []byte(`"repo"`)) {
+		t.Fatalf("changes = %+v workspace = %q file:\n%s\nwant the repo dropped and the workspace left to the config", changes, migrated.Workspace, mustRead(t, path))
 	}
 }
 
 func TestAnOldFileSavedBeforeItsMigrationKeepsItsRepo(t *testing.T) {
 	path, _ := copyFixture(t, "format0-repo")
 	must(t, loadOutdated(t, path).SetOperatorLang("fr"))
-	reloaded := loadOutdated(t, path)
-	if reloaded.LegacyRepo() != "/srv/work/herrscher" {
-		t.Fatalf("repo after a save = %q, want it kept for the migration", reloaded.LegacyRepo())
+	changes, err := loadOutdated(t, path).MigrateFormat(FormatMigration{InstanceID: "alice"})
+	want := []FormatChange{{Kind: ChangeWorkspaceFromRepo, Value: "/srv/work/herrscher"}}
+	if err != nil || !slices.Equal(changes, want) {
+		t.Fatalf("migration after a save = %+v, %v, want the repo still there to become the workspace", changes, err)
 	}
 }
 

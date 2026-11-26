@@ -7,8 +7,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/devices"
 )
 
-// UpdateDevices runs update on the device registry under the state's lock and persists the result. The
-// registry is saved even when update fails, so a refused code still counts against the window.
+// UpdateDevices runs update on the device registry under the state's lock and persists the result.
 func (s *State) UpdateDevices(update func(*devices.Registry) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -40,4 +39,30 @@ func (s *State) DeviceRegistry() devices.Registry {
 // PrivateDir is the directory the state file lives in, where the device authority keeps its keys.
 func (s *State) PrivateDir() string {
 	return filepath.Dir(s.path)
+}
+
+// EnrollDevice runs enroll on the registry and grants the role of the device it approved, under one lock and in one save.
+func (s *State) EnrollDevice(enroll func(*devices.Registry) (devices.Enrolment, error)) (devices.Enrolment, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.Devices == nil {
+		s.Devices = &devices.Registry{}
+	}
+	enrolment, enrollErr := enroll(s.Devices)
+	if enrollErr != nil {
+		return devices.Enrolment{}, false, errors.Join(enrollErr, s.saveLocked())
+	}
+	first := len(s.Roles) == 0
+	if s.Roles == nil {
+		s.Roles = make(map[string]RoleAssignment)
+	}
+	label := enrolment.Device.Name
+	if label == "" {
+		label = enrolment.Device.ID.String()
+	}
+	s.Roles[enrolment.Device.ID.Principal().ID] = RoleAssignment{Role: string(enrolment.Role), Label: label}
+	if err := s.saveLocked(); err != nil {
+		return devices.Enrolment{}, false, err
+	}
+	return enrolment, first, nil
 }

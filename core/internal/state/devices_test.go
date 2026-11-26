@@ -75,3 +75,57 @@ func TestTheDeviceRegistryIsReadBackFromTheStateFile(t *testing.T) {
 		t.Fatalf("PrivateDir = %q, want the state directory", reloaded.PrivateDir())
 	}
 }
+
+func TestEnrollingADeviceGrantsItsRoleInTheSameSave(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	st, err := LoadState(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := devices.NewDeviceID(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enrolled, first, err := st.EnrollDevice(func(registry *devices.Registry) (devices.Enrolment, error) {
+		device := devices.Device{ID: id, Name: "phone"}
+		registry.Devices = append(registry.Devices, device)
+		return devices.Enrolment{Device: device, Role: authz.RoleApprover}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !first || enrolled.Device.ID != id {
+		t.Fatalf("enrol reported first=%v, device %v", first, enrolled.Device.ID)
+	}
+	reloaded, err := LoadState(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reloaded.RoleNames()[id.Principal().ID]; got != "approver" {
+		t.Fatalf("the device holds %q after reload, want approver", got)
+	}
+	if len(reloaded.DeviceRegistry().Devices) != 1 {
+		t.Fatal("the device must be persisted with its role")
+	}
+}
+
+func TestAFailedEnrollmentPersistsNeitherTheDeviceNorItsRole(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	st, err := LoadState(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = st.EnrollDevice(func(*devices.Registry) (devices.Enrolment, error) {
+		return devices.Enrolment{}, devices.ErrFingerprintMismatch
+	})
+	if !errors.Is(err, devices.ErrFingerprintMismatch) {
+		t.Fatalf("enrol = %v, want ErrFingerprintMismatch", err)
+	}
+	reloaded, err := LoadState(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reloaded.RoleNames()) != 0 || len(reloaded.DeviceRegistry().Devices) != 0 {
+		t.Fatal("a failed enrolment must leave neither a device nor a role behind")
+	}
+}

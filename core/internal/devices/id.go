@@ -11,7 +11,7 @@ import (
 
 const deviceIDBytes = 16
 
-// DeviceID names a paired device. Its zero value is not a device, and only NewDeviceID or ParseDeviceID make one.
+// DeviceID names a paired device.
 type DeviceID struct {
 	value string
 }
@@ -20,7 +20,7 @@ type DeviceID struct {
 func NewDeviceID(rnd io.Reader) (DeviceID, error) {
 	raw := make([]byte, deviceIDBytes)
 	if _, err := io.ReadFull(rnd, raw); err != nil {
-		return DeviceID{}, fmt.Errorf("cannot draw a device id: %w", err)
+		return DeviceID{}, fmt.Errorf("%w: %w", ErrRandomSource, err)
 	}
 	return DeviceID{value: hex.EncodeToString(raw)}, nil
 }

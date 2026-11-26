@@ -6048,7 +6048,7 @@
   {
     "id": "cli.help.cmd.device.approve",
     "description": "Help of the command device approve",
-    "other": "approuve l'appareil qui a utilisé le code : signe son certificat et lui accorde son rôle"
+    "other": "affiche la demande en attente, ou avec --fingerprint signe son certificat et accorde son rôle"
   },
   {
     "id": "cli.help.cmd.device.deny",
@@ -6089,5 +6089,80 @@
     "id": "cli.help.param.device.revoke.id",
     "description": "Help or reply text of a device command, revoke id",
     "other": "l'appareil à révoquer, tel qu'affiché par `device list` ; accepte aussi un argument nu"
+  },
+  {
+    "id": "cli.host.device.preview",
+    "description": "Reply or error of a device command: preview",
+    "other": "en attente d'approbation : {{.Name}} comme `{{.Role}}`. Vérifiez que l'appareil affiche l'empreinte {{.Fingerprint}}, puis approuvez avec `device approve <code> --fingerprint {{.Fingerprint}}`. Rien n'est encore signé."
+  },
+  {
+    "id": "cli.host.device.first_grant",
+    "description": "Reply or error of a device command: first grant",
+    "other": "c'est le premier rôle : désormais chaque compte passerelle sans rôle est `observer`, et c'est aussi le cas du compte qui a approuvé cet appareil s'il n'a pas de rôle. Nommez les autres avec `role grant` avant qu'ils ne le découvrent."
+  },
+  {
+    "id": "cli.host.fault.device_random_source",
+    "description": "Reply or error of a device command: device random source",
+    "other": "la source d'aléa du système a échoué : réessayez"
+  },
+  {
+    "id": "cli.host.fault.device_signing",
+    "description": "Reply or error of a device command: device signing",
+    "other": "le certificat de l'appareil n'a pas pu être signé : consultez le journal du daemon"
+  },
+  {
+    "id": "cli.host.fault.device_fingerprint",
+    "description": "Reply or error of a device command: device fingerprint",
+    "other": "l'empreinte ne correspond pas à celle que l'appareil affiche : rien n'a été signé"
+  },
+  {
+    "id": "cli.host.fault.device_malformed_fingerprint",
+    "description": "Reply or error of a device command: device malformed fingerprint",
+    "other": "une empreinte fait huit lettres et chiffres, telle qu'affichée par l'appareil, avec ou sans le tiret"
+  },
+  {
+    "id": "cli.host.fault.device_signature",
+    "description": "Reply or error of a device command: device signature",
+    "other": "la demande de certificat doit être signée en ECDSA avec SHA-256 ou SHA-384"
+  },
+  {
+    "id": "cli.host.fault.device_revoked",
+    "description": "Reply or error of a device command: device revoked",
+    "other": "l'appareil est révoqué"
+  },
+  {
+    "id": "cli.host.fault.device_inactive",
+    "description": "Reply or error of a device command: device inactive",
+    "other": "l'appareil ne s'est pas connecté depuis trente jours"
+  },
+  {
+    "id": "cli.host.fault.device_certificate_expired",
+    "description": "Reply or error of a device command: device certificate expired",
+    "other": "le certificat client est hors de sa période de validité"
+  },
+  {
+    "id": "cli.host.fault.device_certificate_mismatch",
+    "description": "Reply or error of a device command: device certificate mismatch",
+    "other": "le certificat client ne correspond pas à l'enregistrement de l'appareil"
+  },
+  {
+    "id": "cli.host.fault.device_untrusted",
+    "description": "Reply or error of a device command: device untrusted",
+    "other": "le certificat client n'a pas été émis par ce daemon"
+  },
+  {
+    "id": "cli.host.fault.device_needs_roles",
+    "description": "Reply or error of a device command: device needs roles",
+    "other": "les verbes device demandent une table de rôles : attribuez d'abord un rôle avec `role grant`, jusque-là seul l'opérateur local les exécute"
+  },
+  {
+    "id": "cli.help.param.device.approve.fingerprint",
+    "description": "Reply or error of a device command: fingerprint",
+    "other": "l'empreinte courte affichée par l'appareil ; sans elle, approve n'affiche que la demande et ne signe rien"
+  },
+  {
+    "id": "cli.host.device.unnamed",
+    "description": "Reply of a device command: a window without a name",
+    "other": "appareil sans nom"
   }
 ]

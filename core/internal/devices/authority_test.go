@@ -4,6 +4,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
 	"os"
@@ -14,9 +15,12 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/devices"
 )
 
-func TestTheAuthorityIsKeptAcrossLoadsAndItsFilesStayPrivate(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "devices")
-	first, err := devices.LoadOrCreateAuthority(dir, epochInstant(), rand.Reader)
+func TestTheAuthorityIsKeptAcrossLoadsAndItsSecretsStayPrivate(t *testing.T) {
+	stateDir := t.TempDir()
+	if err := os.Chmod(stateDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	first, err := devices.LoadOrCreateAuthority(stateDir, epochInstant(), rand.Reader, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,39 +29,80 @@ func TestTheAuthorityIsKeptAcrossLoadsAndItsFilesStayPrivate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := devices.LoadOrCreateAuthority(dir, epochInstant().Add(time.Hour), rand.Reader)
+	second, err := devices.LoadOrCreateAuthority(stateDir, epochInstant().Add(time.Hour), rand.Reader, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := second.VerifyClient(cert, epochInstant().Add(time.Hour)); err != nil {
 		t.Fatalf("a reload must keep the authority that signed the certificate: %v", err)
 	}
-	assertMode(t, dir, 0o700)
+	assertMode(t, filepath.Join(stateDir, "devices"), 0o700)
+	assertMode(t, stateDir, 0o750)
 	for _, name := range []string{"authority-key.pem", "authority-cert.pem", "server-key.pem", "server-cert.pem"} {
-		assertMode(t, filepath.Join(dir, name), 0o600)
+		assertMode(t, filepath.Join(stateDir, "devices", name), 0o600)
 	}
 }
 
-func TestAnAuthorityKeyWithoutItsCertificateIsRefusedNotReplaced(t *testing.T) {
-	dir := t.TempDir()
-	if _, err := devices.LoadOrCreateAuthority(dir, epochInstant(), rand.Reader); err != nil {
+func TestAPartialAuthorityIsRebuiltWhenNoDeviceWasEnrolled(t *testing.T) {
+	stateDir := t.TempDir()
+	if _, err := devices.LoadOrCreateAuthority(stateDir, epochInstant(), rand.Reader, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Remove(filepath.Join(dir, "authority-cert.pem")); err != nil {
+	if err := os.Remove(authorityCertPath(stateDir)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := devices.LoadOrCreateAuthority(dir, epochInstant(), rand.Reader); !errors.Is(err, devices.ErrAuthorityFiles) {
-		t.Fatalf("partial authority = %v, want ErrAuthorityFiles", err)
+	if _, err := devices.LoadOrCreateAuthority(stateDir, epochInstant(), rand.Reader, false); err != nil {
+		t.Fatalf("a partial pair with no device enrolled must be rebuilt: %v", err)
+	}
+	if _, err := os.Stat(authorityCertPath(stateDir)); err != nil {
+		t.Fatal("the rebuilt pair must be complete")
+	}
+}
+
+func TestAPartialAuthorityIsRefusedOnceADeviceWasEnrolled(t *testing.T) {
+	stateDir := t.TempDir()
+	if _, err := devices.LoadOrCreateAuthority(stateDir, epochInstant(), rand.Reader, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(authorityCertPath(stateDir)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := devices.LoadOrCreateAuthority(stateDir, epochInstant(), rand.Reader, true); !errors.Is(err, devices.ErrAuthorityFiles) {
+		t.Fatalf("partial pair with devices enrolled = %v, want ErrAuthorityFiles: replacing it would unpair them", err)
+	}
+}
+
+func TestAnAuthorityKeyNeverFollowsASymlinkPlantedAtAGuessableName(t *testing.T) {
+	stateDir := t.TempDir()
+	target := filepath.Join(t.TempDir(), "victim")
+	if err := os.WriteFile(target, []byte("untouched"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(stateDir, "devices"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(stateDir, "devices", "authority-key.pem.tmp")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := devices.LoadOrCreateAuthority(stateDir, epochInstant(), rand.Reader, false); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "untouched" {
+		t.Fatal("a planted symlink was followed and its target overwritten")
 	}
 }
 
 func TestTheServerCertificateIsSignedByTheAuthority(t *testing.T) {
-	dir := t.TempDir()
-	authority, err := devices.LoadOrCreateAuthority(dir, epochInstant(), rand.Reader)
+	stateDir := t.TempDir()
+	authority, err := devices.LoadOrCreateAuthority(stateDir, epochInstant(), rand.Reader, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	caPEM, err := os.ReadFile(filepath.Join(dir, "authority-cert.pem"))
+	caPEM, err := os.ReadFile(authorityCertPath(stateDir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,15 +111,15 @@ func TestTheServerCertificateIsSignedByTheAuthority(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := authority.ServerCertificate().Leaf
 	roots := x509.NewCertPool()
 	roots.AddCert(ca)
+	server := authority.ServerCertificate().Leaf
 	if _, err := server.Verify(x509.VerifyOptions{Roots: roots, CurrentTime: epochInstant(), DNSName: "localhost", KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}); err != nil {
 		t.Fatalf("the server certificate does not chain to the authority: %v", err)
 	}
 }
 
-func TestASignedClientCertificateCarriesTheDeviceAndThirtyDays(t *testing.T) {
+func TestASignedClientCertificateCarriesTheDeviceThirtyDaysAndIsNoAuthority(t *testing.T) {
 	authority := newAuthority(t, epochInstant())
 	csr, _ := requestFor(t, elliptic.P256())
 	id := mustDeviceID(t)
@@ -91,6 +136,9 @@ func TestASignedClientCertificateCarriesTheDeviceAndThirtyDays(t *testing.T) {
 	if len(cert.ExtKeyUsage) != 1 || cert.ExtKeyUsage[0] != x509.ExtKeyUsageClientAuth {
 		t.Fatalf("ext key usage = %v, want client authentication only", cert.ExtKeyUsage)
 	}
+	if !cert.BasicConstraintsValid || cert.IsCA {
+		t.Fatal("a client certificate must state explicitly that it is not a CA")
+	}
 }
 
 func TestSignClientRefusesARequestWhoseSignatureDoesNotCheck(t *testing.T) {
@@ -102,6 +150,28 @@ func TestSignClientRefusesARequestWhoseSignatureDoesNotCheck(t *testing.T) {
 	}
 	if _, err := authority.SignClient(tampered, mustDeviceID(t), epochInstant(), rand.Reader); !errors.Is(err, devices.ErrBadRequest) {
 		t.Fatalf("tampered request = %v, want ErrBadRequest", err)
+	}
+}
+
+func TestSignClientRefusesARequestSignedWithSHA1(t *testing.T) {
+	authority := newAuthority(t, epochInstant())
+	key, err := ecdsaKey(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	der, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{
+		Subject:            pkix.Name{CommonName: "phone"},
+		SignatureAlgorithm: x509.ECDSAWithSHA1,
+	}, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	csr, err := x509.ParseCertificateRequest(der)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authority.SignClient(csr, mustDeviceID(t), epochInstant(), rand.Reader); !errors.Is(err, devices.ErrUnsupportedSignature) {
+		t.Fatalf("SHA-1 request = %v, want ErrUnsupportedSignature", err)
 	}
 }
 
@@ -134,11 +204,11 @@ func TestVerifyClientRefusesAnExpiredCertificate(t *testing.T) {
 }
 
 func TestAnAuthorityPastItsValidityIsRefused(t *testing.T) {
-	dir := t.TempDir()
-	if _, err := devices.LoadOrCreateAuthority(dir, epochInstant(), rand.Reader); err != nil {
+	stateDir := t.TempDir()
+	if _, err := devices.LoadOrCreateAuthority(stateDir, epochInstant(), rand.Reader, false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := devices.LoadOrCreateAuthority(dir, epochInstant().Add(6*365*24*time.Hour), rand.Reader); !errors.Is(err, devices.ErrAuthorityExpired) {
+	if _, err := devices.LoadOrCreateAuthority(stateDir, epochInstant().Add(6*365*24*time.Hour), rand.Reader, false); !errors.Is(err, devices.ErrAuthorityExpired) {
 		t.Fatalf("authority five years and more old = %v, want ErrAuthorityExpired", err)
 	}
 }
@@ -150,6 +220,10 @@ func mustDeviceID(t *testing.T) devices.DeviceID {
 		t.Fatal(err)
 	}
 	return id
+}
+
+func authorityCertPath(stateDir string) string {
+	return filepath.Join(stateDir, "devices", "authority-cert.pem")
 }
 
 func assertMode(t *testing.T, path string, want os.FileMode) {

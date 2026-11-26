@@ -4,6 +4,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"errors"
 	"strings"
 	"testing"
@@ -192,7 +193,7 @@ func TestApproveWithoutARedeemedCodeIsRefused(t *testing.T) {
 	var registry devices.Registry
 	code := openWindow(t, &registry, epochInstant())
 	authority := newAuthority(t, epochInstant())
-	if _, err := registry.Approve(epochInstant(), code, rand.Reader, signerFor(authority)); !errors.Is(err, devices.ErrNothingPending) {
+	if _, err := registry.Approve(epochInstant(), code, devices.Fingerprint{}, rand.Reader, signerFor(authority)); !errors.Is(err, devices.ErrNothingPending) {
 		t.Fatalf("approve with nothing pending = %v, want ErrNothingPending", err)
 	}
 }
@@ -205,7 +206,7 @@ func TestApproveRegistersTheDeviceWithItsCertificate(t *testing.T) {
 		t.Fatal(err)
 	}
 	authority := newAuthority(t, epochInstant())
-	enrolment, err := registry.Approve(epochInstant().Add(time.Minute), reparse(t, code), rand.Reader, signerFor(authority))
+	enrolment, err := registry.Approve(epochInstant().Add(time.Minute), reparse(t, code), fingerprintFor(t, csr), rand.Reader, signerFor(authority))
 	if err != nil {
 		t.Fatalf("approve: %v", err)
 	}
@@ -245,13 +246,13 @@ func TestAFailedSigningKeepsTheRequestForAnotherTry(t *testing.T) {
 	failing := func(*x509.CertificateRequest, devices.DeviceID, time.Time) (*x509.Certificate, error) {
 		return nil, errors.New("disk full")
 	}
-	if _, err := registry.Approve(epochInstant(), code, rand.Reader, failing); err == nil {
+	if _, err := registry.Approve(epochInstant(), code, fingerprintFor(t, csr), rand.Reader, failing); err == nil {
 		t.Fatal("a failed signature must fail the approval")
 	}
 	if registry.Pairing == nil || registry.Pairing.Pending == nil {
 		t.Fatal("a failed signature must keep the request pending")
 	}
-	if _, err := registry.Approve(epochInstant(), code, rand.Reader, signerFor(newAuthority(t, epochInstant()))); err != nil {
+	if _, err := registry.Approve(epochInstant(), code, fingerprintFor(t, csr), rand.Reader, signerFor(newAuthority(t, epochInstant()))); err != nil {
 		t.Fatalf("approval after the failure: %v", err)
 	}
 }
@@ -397,7 +398,7 @@ func pairedRegistry(t *testing.T) (*devices.Registry, *devices.Authority, device
 		t.Fatal(err)
 	}
 	authority := newAuthority(t, epochInstant())
-	enrolment, err := registry.Approve(epochInstant(), code, rand.Reader, signerFor(authority))
+	enrolment, err := registry.Approve(epochInstant(), code, fingerprintFor(t, csr), rand.Reader, signerFor(authority))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -423,4 +424,133 @@ func tamperLastByte(der []byte) []byte {
 	out := append([]byte(nil), der...)
 	out[len(out)-1] ^= 0x01
 	return out
+}
+
+func fingerprintFor(t *testing.T, csr *x509.CertificateRequest) devices.Fingerprint {
+	t.Helper()
+	fingerprint, err := devices.ParseFingerprint(devices.ShortFingerprint(csr.RawSubjectPublicKeyInfo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fingerprint
+}
+
+func TestPreviewShowsTheRequestAndSignsNothing(t *testing.T) {
+	var registry devices.Registry
+	code := openWindow(t, &registry, epochInstant())
+	csr, _ := requestFor(t, elliptic.P256())
+	if err := registry.Redeem(epochInstant(), code, csr); err != nil {
+		t.Fatal(err)
+	}
+	preview, err := registry.Preview(epochInstant(), code)
+	if err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+	if preview.Name != "phone" || preview.Role != authz.RoleApprover || preview.Fingerprint != devices.ShortFingerprint(csr.RawSubjectPublicKeyInfo) {
+		t.Fatalf("preview = %+v", preview)
+	}
+	if len(registry.Devices) != 0 || registry.Pairing == nil || registry.Pairing.Pending == nil {
+		t.Fatal("a preview must leave the request pending and register nothing")
+	}
+}
+
+func TestAWrongFingerprintSignsNothingAndCountsAsAnAttempt(t *testing.T) {
+	var registry devices.Registry
+	code := openWindow(t, &registry, epochInstant())
+	csr, _ := requestFor(t, elliptic.P256())
+	if err := registry.Redeem(epochInstant(), code, csr); err != nil {
+		t.Fatal(err)
+	}
+	other, _ := requestFor(t, elliptic.P256())
+	wrong := fingerprintFor(t, other)
+	signed := false
+	sign := func(*x509.CertificateRequest, devices.DeviceID, time.Time) (*x509.Certificate, error) {
+		signed = true
+		return nil, errors.New("must not sign")
+	}
+	if _, err := registry.Approve(epochInstant(), code, wrong, rand.Reader, sign); !errors.Is(err, devices.ErrFingerprintMismatch) {
+		t.Fatalf("wrong fingerprint = %v, want ErrFingerprintMismatch", err)
+	}
+	if signed {
+		t.Fatal("a wrong fingerprint must never reach the signer")
+	}
+	if registry.Pairing == nil || registry.Pairing.Failures != 1 {
+		t.Fatal("a wrong fingerprint must count as one attempt and keep the window")
+	}
+}
+
+func TestFiveWrongFingerprintsCloseTheWindow(t *testing.T) {
+	var registry devices.Registry
+	code := openWindow(t, &registry, epochInstant())
+	csr, _ := requestFor(t, elliptic.P256())
+	if err := registry.Redeem(epochInstant(), code, csr); err != nil {
+		t.Fatal(err)
+	}
+	other, _ := requestFor(t, elliptic.P256())
+	wrong := fingerprintFor(t, other)
+	noSign := func(*x509.CertificateRequest, devices.DeviceID, time.Time) (*x509.Certificate, error) {
+		return nil, errors.New("must not sign")
+	}
+	for range 4 {
+		if _, err := registry.Approve(epochInstant(), code, wrong, rand.Reader, noSign); !errors.Is(err, devices.ErrFingerprintMismatch) {
+			t.Fatalf("wrong fingerprint = %v, want ErrFingerprintMismatch", err)
+		}
+	}
+	if _, err := registry.Approve(epochInstant(), code, wrong, rand.Reader, noSign); !errors.Is(err, devices.ErrTooManyAttempts) {
+		t.Fatalf("fifth wrong fingerprint = %v, want ErrTooManyAttempts", err)
+	}
+	if _, err := registry.Preview(epochInstant(), code); !errors.Is(err, devices.ErrNoPairingWindow) {
+		t.Fatalf("the window after five wrong fingerprints = %v, want ErrNoPairingWindow", err)
+	}
+}
+
+func TestTheRightFingerprintSignsAndTheTypedFormIsNormalised(t *testing.T) {
+	var registry devices.Registry
+	code := openWindow(t, &registry, epochInstant())
+	csr, _ := requestFor(t, elliptic.P256())
+	if err := registry.Redeem(epochInstant(), code, csr); err != nil {
+		t.Fatal(err)
+	}
+	typed := strings.ToLower(strings.ReplaceAll(devices.ShortFingerprint(csr.RawSubjectPublicKeyInfo), "-", " "))
+	fingerprint, err := devices.ParseFingerprint(typed)
+	if err != nil {
+		t.Fatalf("ParseFingerprint(%q): %v", typed, err)
+	}
+	if _, err := registry.Approve(epochInstant(), code, fingerprint, rand.Reader, signerFor(newAuthority(t, epochInstant()))); err != nil {
+		t.Fatalf("the right fingerprint in another case and separator was refused: %v", err)
+	}
+	if len(registry.Devices) != 1 {
+		t.Fatal("the right fingerprint must register the device")
+	}
+}
+
+func TestAFingerprintIsEightSymbolsOfThePairingAlphabet(t *testing.T) {
+	for _, text := range []string{"", "ABCD", "ABCDEFGH0", "ABCDEFGHIJ"} {
+		if _, err := devices.ParseFingerprint(text); !errors.Is(err, devices.ErrMalformedFingerprint) {
+			t.Fatalf("ParseFingerprint(%q) = %v, want ErrMalformedFingerprint", text, err)
+		}
+	}
+}
+
+func TestACertificateRequestSignedWithANonSHA2AlgorithmIsRefusedAtRedeem(t *testing.T) {
+	var registry devices.Registry
+	code := openWindow(t, &registry, epochInstant())
+	key, err := ecdsaKey(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	der, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{
+		Subject:            pkix.Name{CommonName: "phone"},
+		SignatureAlgorithm: x509.ECDSAWithSHA1,
+	}, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	csr, err := x509.ParseCertificateRequest(der)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Redeem(epochInstant(), code, csr); !errors.Is(err, devices.ErrUnsupportedSignature) {
+		t.Fatalf("SHA-1 request at redeem = %v, want ErrUnsupportedSignature", err)
+	}
 }

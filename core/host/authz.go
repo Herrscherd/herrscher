@@ -122,7 +122,7 @@ func (h *hub) authorize(ctx context.Context, args []string) error {
 	principal := principalOf(ctx)
 	role := authz.RoleOf(principal, h.roleNames())
 	if role == authz.RoleNone {
-		return nil
+		return h.refuseDeviceVerbWithoutRoles(principal, args)
 	}
 	path, input, ok := h.reg.Resolve(args)
 	if !ok {
@@ -138,6 +138,17 @@ func (h *hub) authorize(ctx context.Context, args []string) error {
 		return nil
 	}
 	return &accessDeniedError{Reason: why}
+}
+
+func (h *hub) refuseDeviceVerbWithoutRoles(principal authz.Principal, args []string) error {
+	if principal.ID == authz.LocalPrincipal {
+		return nil
+	}
+	path, _, ok := h.reg.Resolve(args)
+	if !ok || len(path) == 0 || path[0] != "device" {
+		return nil
+	}
+	return localizeHostError(h.messages, h.cliMessages, h.textLanguage()(), errDeviceNeedsRoles)
 }
 
 func (h *hub) roleNames() map[string]string {

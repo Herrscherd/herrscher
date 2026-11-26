@@ -22,6 +22,7 @@ import (
 var (
 	errDeviceIDMissing   = errors.New("name a device (see `device list`)")
 	errDeviceCodeMissing = errors.New("name the pairing code that `device pair` printed")
+	errDeviceNeedsRoles  = errors.New("the device verbs need a role table: grant a role with `role grant` first, until then only the local operator runs them")
 )
 
 type deviceView struct {
@@ -90,7 +91,7 @@ func pairDevice(cliMessages *clitext.Messages, lang i18n.Language, store *state.
 	if err != nil {
 		return "", err
 	}
-	slog.Info("device pairing window opened", "role", role)
+	slog.Info("device pairing window opened", "name", name, "role", role)
 	return replyText(cliMessages, lang).Text(clitext.HostDevicePaired, clitext.Params{clitext.ParamCode: code.String(), clitext.ParamRole: role}), nil
 }
 
@@ -98,6 +99,7 @@ func deviceApproveVerb(cliMessages *clitext.Messages, lang languageSource, store
 	return contracts.New("device", "approve").
 		Help(clitext.CmdHelpDeviceApprove).
 		ValueParam("code", clitext.CmdParamDeviceApproveCode, false).
+		ValueParam("fingerprint", clitext.CmdParamDeviceApproveFingerprint, false).
 		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
 			return cli.Data(approveDevice(cliMessages, lang(), store, input))
 		})
@@ -108,44 +110,74 @@ func approveDevice(cliMessages *clitext.Messages, lang i18n.Language, store *sta
 	if err != nil {
 		return "", err
 	}
-	var enrolment devices.Enrolment
-	var authority *devices.Authority
-	err = store.UpdateDevices(func(registry *devices.Registry) error {
-		approved, approveErr := registry.Approve(time.Now(), code, rand.Reader, func(csr *x509.CertificateRequest, deviceID devices.DeviceID, now time.Time) (*x509.Certificate, error) {
+	typed := strings.TrimSpace(input.Get("fingerprint"))
+	if typed == "" {
+		return previewDevice(cliMessages, lang, store, code)
+	}
+	fingerprint, err := devices.ParseFingerprint(typed)
+	if err != nil {
+		return "", err
+	}
+	return signDevice(cliMessages, lang, store, code, fingerprint)
+}
+
+func previewDevice(cliMessages *clitext.Messages, lang i18n.Language, store *state.State, code devices.PairingCode) (string, error) {
+	var preview devices.Preview
+	err := store.UpdateDevices(func(registry *devices.Registry) error {
+		shown, previewErr := registry.Preview(time.Now(), code)
+		preview = shown
+		return previewErr
+	})
+	if err != nil {
+		return "", err
+	}
+	text := replyText(cliMessages, lang)
+	name := preview.Name
+	if name == "" {
+		name = text.Text(clitext.HostDeviceUnnamed, nil)
+	}
+	return text.Text(clitext.HostDevicePreview, clitext.Params{
+		clitext.ParamName:        name,
+		clitext.ParamRole:        string(preview.Role),
+		clitext.ParamFingerprint: preview.Fingerprint,
+	}), nil
+}
+
+func signDevice(cliMessages *clitext.Messages, lang i18n.Language, store *state.State, code devices.PairingCode, fingerprint devices.Fingerprint) (string, error) {
+	stateDir := store.PrivateDir()
+	enrolment, first, err := store.EnrollDevice(func(registry *devices.Registry) (devices.Enrolment, error) {
+		enrolled := len(registry.Devices) > 0
+		var authority *devices.Authority
+		sign := func(csr *x509.CertificateRequest, deviceID devices.DeviceID, now time.Time) (*x509.Certificate, error) {
 			if authority == nil {
-				loaded, loadErr := devices.LoadOrCreateAuthority(store.PrivateDir(), now, rand.Reader)
+				loaded, loadErr := devices.LoadOrCreateAuthority(stateDir, now, rand.Reader, enrolled)
 				if loadErr != nil {
 					return nil, loadErr
 				}
 				authority = loaded
 			}
 			return authority.SignClient(csr, deviceID, now, rand.Reader)
-		})
-		enrolment = approved
-		return approveErr
+		}
+		return registry.Approve(time.Now(), code, fingerprint, rand.Reader, sign)
 	})
 	if err != nil {
 		return "", err
 	}
-	principal := enrolment.Device.ID.Principal().ID
 	role := string(enrolment.Role)
 	name := enrolment.Device.Name
 	if name == "" {
 		name = enrolment.Device.ID.String()
 	}
-	first, err := store.SetRole(principal, role, name)
-	if err != nil {
-		return "", err
-	}
 	slog.Info("device approved", "device", enrolment.Device.ID.String(), "role", role)
-	out := replyText(cliMessages, lang).Text(clitext.HostDeviceApproved, clitext.Params{
+	text := replyText(cliMessages, lang)
+	out := text.Text(clitext.HostDeviceApproved, clitext.Params{
 		clitext.ParamID:          enrolment.Device.ID.String(),
 		clitext.ParamName:        name,
 		clitext.ParamRole:        role,
 		clitext.ParamFingerprint: enrolment.Fingerprint,
 	})
 	if first {
-		out += "\n" + replyText(cliMessages, lang).Text(clitext.HostRoleFirstGrant, nil)
+		out += "\n" + text.Text(clitext.HostDeviceFirstGrant, nil)
 	}
 	return out, nil
 }
@@ -164,13 +196,17 @@ func denyDevice(cliMessages *clitext.Messages, lang i18n.Language, store *state.
 	if err != nil {
 		return "", err
 	}
+	var closed devices.Window
 	err = store.UpdateDevices(func(registry *devices.Registry) error {
+		if registry.Pairing != nil {
+			closed = *registry.Pairing
+		}
 		return registry.Deny(time.Now(), code)
 	})
 	if err != nil {
 		return "", err
 	}
-	slog.Info("device pairing window closed without a grant")
+	slog.Info("device pairing window closed without a grant", "name", closed.Name, "role", string(closed.Role), "redeemed", closed.Pending != nil)
 	return replyText(cliMessages, lang).Text(clitext.HostDeviceDenied, nil), nil
 }
 
@@ -269,7 +305,7 @@ func revokeDevice(cliMessages *clitext.Messages, lang i18n.Language, store *stat
 	if err != nil {
 		return "", err
 	}
-	slog.Info("device revoked", "device", deviceID.String())
+	slog.Info("device revoked", "device", deviceID.String(), "role", store.RoleNames()[deviceID.Principal().ID])
 	return replyText(cliMessages, lang).Text(clitext.HostDeviceRevoked, clitext.Params{clitext.ParamID: deviceID.String()}), nil
 }
 

@@ -61,3 +61,18 @@ var ErrAuthorityExpired = errors.New("the device authority certificate has expir
 
 // ErrAuthorityFiles reports a device authority whose files are missing, partial or unreadable.
 var ErrAuthorityFiles = errors.New("the device authority files are missing or unreadable")
+
+// ErrRandomSource reports that the operating system's random source failed.
+var ErrRandomSource = errors.New("the operating system's random source failed")
+
+// ErrSigning reports that the authority could not sign a certificate.
+var ErrSigning = errors.New("the device certificate could not be signed")
+
+// ErrUnsupportedSignature reports a certificate request signed with an algorithm other than ECDSA over SHA-256 or SHA-384.
+var ErrUnsupportedSignature = errors.New("the certificate request must be signed with ECDSA and SHA-256 or SHA-384")
+
+// ErrMalformedFingerprint reports a short fingerprint that is not eight symbols of the pairing alphabet.
+var ErrMalformedFingerprint = errors.New("malformed fingerprint")
+
+// ErrFingerprintMismatch reports a fingerprint that does not match the key the device sent.
+var ErrFingerprintMismatch = errors.New("the fingerprint does not match the one the device shows: nothing was signed")

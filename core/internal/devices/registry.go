@@ -28,8 +28,7 @@ type Registry struct {
 	Pairing *Window  `json:"pairing,omitempty"`
 }
 
-// Window is an open pairing window. It keeps the code only as a salted digest and the request of
-// the device once one redeemed it.
+// Window is an open pairing window.
 type Window struct {
 	Name      string     `json:"name,omitempty"`
 	Role      authz.Role `json:"role"`
@@ -70,8 +69,7 @@ const (
 	StatusRevoked
 )
 
-// Enrolment is what an approval produced: the new device, the role it was granted and the
-// certificate that the device keeps.
+// Enrolment is what an approval produced: the new device, the role it was granted and the certificate that the device keeps.
 type Enrolment struct {
 	Device      Device
 	Role        authz.Role
@@ -106,8 +104,7 @@ func (d Device) StatusAt(now time.Time) Status {
 	return StatusActive
 }
 
-// OpenWindow opens a pairing window that grants role to the device once an operator approves it, and
-// returns the code the operator reads out. A window still open refuses a second one.
+// OpenWindow opens a pairing window that grants role to the device once an operator approves it, and returns the code the operator reads out.
 func (r *Registry) OpenWindow(now time.Time, name string, role authz.Role, rnd io.Reader) (PairingCode, error) {
 	if !authz.Grantable(string(role)) {
 		return PairingCode{}, ErrUngrantableRole
@@ -133,8 +130,7 @@ func (r *Registry) OpenWindow(now time.Time, name string, role authz.Role, rnd i
 	return code, nil
 }
 
-// Redeem takes the window's code and the request of a device that asks to be paired. It records the
-// request for an operator to approve and signs nothing.
+// Redeem takes the window's code and the request of a device that asks to be paired.
 func (r *Registry) Redeem(now time.Time, code PairingCode, csr *x509.CertificateRequest) error {
 	window, err := r.window(now, code)
 	if err != nil {
@@ -154,15 +150,36 @@ func (r *Registry) Redeem(now time.Time, code PairingCode, csr *x509.Certificate
 	return nil
 }
 
-// Approve registers the pending device under a fresh identifier, through sign, and closes the window.
-// sign runs only once the code is right and a request waits, and a failure there leaves the window open.
-func (r *Registry) Approve(now time.Time, code PairingCode, rnd io.Reader, sign Signer) (Enrolment, error) {
+// Preview is what an operator reads before approving: the name and role the window was opened with, and the fingerprint the device shows.
+type Preview struct {
+	Name        string
+	Role        authz.Role
+	Fingerprint string
+}
+
+// Preview returns the pending request of the window, and signs nothing.
+func (r *Registry) Preview(now time.Time, code PairingCode) (Preview, error) {
+	window, err := r.window(now, code)
+	if err != nil {
+		return Preview{}, err
+	}
+	if window.Pending == nil {
+		return Preview{}, ErrNothingPending
+	}
+	return Preview{Name: window.Name, Role: window.Role, Fingerprint: window.Pending.Fingerprint}, nil
+}
+
+// Approve registers the pending device under a fresh identifier and closes the window.
+func (r *Registry) Approve(now time.Time, code PairingCode, fingerprint Fingerprint, rnd io.Reader, sign Signer) (Enrolment, error) {
 	window, err := r.window(now, code)
 	if err != nil {
 		return Enrolment{}, err
 	}
 	if window.Pending == nil {
 		return Enrolment{}, ErrNothingPending
+	}
+	if !fingerprint.matches(window.Pending.Fingerprint) {
+		return Enrolment{}, r.refuse(window, ErrFingerprintMismatch)
 	}
 	csr, err := x509.ParseCertificateRequest(window.Pending.CSR)
 	if err != nil {
@@ -236,9 +253,7 @@ func (r *Registry) Find(deviceID DeviceID) (Device, bool) {
 	return r.Devices[idx], true
 }
 
-// Authenticate turns a client certificate the authority verified into the principal of its device. It
-// refuses a device that is unknown, revoked or inactive, and a certificate that is outside its validity
-// or that no longer matches the record.
+// Authenticate turns a client certificate the authority verified into the principal of its device.
 func (r *Registry) Authenticate(client VerifiedClient, now time.Time) (authz.Principal, error) {
 	cert := client.cert
 	if cert == nil {
@@ -280,12 +295,16 @@ func (r *Registry) window(now time.Time, code PairingCode) (*Window, error) {
 	if subtle.ConstantTimeCompare(window.Digest, code.digest(window.Salt)) == 1 {
 		return window, nil
 	}
+	return nil, r.refuse(window, ErrWrongCode)
+}
+
+func (r *Registry) refuse(window *Window, reason error) error {
 	window.Failures++
 	if window.Failures >= maxPairingAttempts {
 		r.Pairing = nil
-		return nil, ErrTooManyAttempts
+		return ErrTooManyAttempts
 	}
-	return nil, ErrWrongCode
+	return reason
 }
 
 func (r *Registry) indexOf(deviceID DeviceID) int {
@@ -297,9 +316,16 @@ func (r *Registry) indexOf(deviceID DeviceID) int {
 	return -1
 }
 
+func acceptsSignature(algorithm x509.SignatureAlgorithm) bool {
+	return algorithm == x509.ECDSAWithSHA256 || algorithm == x509.ECDSAWithSHA384
+}
+
 func checkRequest(csr *x509.CertificateRequest) error {
 	if csr == nil {
 		return ErrBadRequest
+	}
+	if !acceptsSignature(csr.SignatureAlgorithm) {
+		return ErrUnsupportedSignature
 	}
 	if err := csr.CheckSignature(); err != nil {
 		return fmt.Errorf("%w: %w", ErrBadRequest, err)

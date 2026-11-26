@@ -266,3 +266,18 @@ func TestAGatewayCannotClaimTheIdentityOfAPairedDevice(t *testing.T) {
 		t.Fatal("a gateway claiming the identity of an owner device was believed")
 	}
 }
+
+func TestDeviceVerbsNeedARoleTableForGatewaysButNotTheLocalOperator(t *testing.T) {
+	st := authzState(t, nil, nil)
+	h := authzHub(t, st, []string{"device", "list"}, []string{"session", "list"})
+	gateway := contracts.WithPrincipal(context.Background(), "chat:1")
+	if err := h.authorize(gateway, []string{"device", "list"}); err == nil {
+		t.Fatal("with no role table a gateway account must not run a device verb")
+	}
+	if err := h.authorize(gateway, []string{"session", "list"}); err != nil {
+		t.Fatalf("with no role table a gateway keeps the old behaviour on other verbs: %v", err)
+	}
+	if err := h.authorize(withLocalPrincipal(context.Background()), []string{"device", "list"}); err != nil {
+		t.Fatalf("the local operator must run a device verb with no role table: %v", err)
+	}
+}

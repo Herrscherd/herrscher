@@ -10,7 +10,10 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -56,7 +59,7 @@ func pairCode(t *testing.T, reg *cli.Registry, args ...string) string {
 	return code
 }
 
-func redeemWith(t *testing.T, st *state.State, code string) {
+func redeemWith(t *testing.T, st *state.State, code string) string {
 	t.Helper()
 	parsed, err := devices.ParsePairingCode(code)
 	if err != nil {
@@ -68,6 +71,7 @@ func redeemWith(t *testing.T, st *state.State, code string) {
 	}); err != nil {
 		t.Fatalf("redeem: %v", err)
 	}
+	return devices.ShortFingerprint(csr.RawSubjectPublicKeyInfo)
 }
 
 func phoneRequest(t *testing.T) *x509.CertificateRequest {
@@ -87,6 +91,25 @@ func phoneRequest(t *testing.T) *x509.CertificateRequest {
 	return csr
 }
 
+func wrongCodeLike(code string) string {
+	if strings.HasPrefix(code, "A") {
+		return "B" + code[1:]
+	}
+	return "A" + code[1:]
+}
+
+func wrongFingerprintLike(fingerprint string) string {
+	if strings.HasPrefix(fingerprint, "A") {
+		return "B" + fingerprint[1:]
+	}
+	return "A" + fingerprint[1:]
+}
+
+func devicesDirExists(st *state.State) bool {
+	_, err := os.Stat(filepath.Join(st.PrivateDir(), "devices"))
+	return !errors.Is(err, fs.ErrNotExist)
+}
+
 func TestPairPrintsACodeThatGrantsApproverByDefault(t *testing.T) {
 	reg, _ := deviceRegistry(t)
 	out, err := dispatchDevice(t, reg, "device", "pair")
@@ -104,26 +127,59 @@ func TestPairPrintsACodeThatGrantsApproverByDefault(t *testing.T) {
 func TestASecondPairingWindowIsRefused(t *testing.T) {
 	reg, _ := deviceRegistry(t)
 	pairCode(t, reg, "device", "pair")
-	_, err := dispatchDevice(t, reg, "device", "pair")
-	if !errors.Is(err, devices.ErrPairingOpen) {
+	if _, err := dispatchDevice(t, reg, "device", "pair"); !errors.Is(err, devices.ErrPairingOpen) {
 		t.Fatalf("second window = %v, want ErrPairingOpen", err)
 	}
 }
 
 func TestPairRefusesARoleThatIsNotGrantable(t *testing.T) {
 	reg, _ := deviceRegistry(t)
-	_, err := dispatchDevice(t, reg, "device", "pair", "--role", "agent")
-	if !errors.Is(err, devices.ErrUngrantableRole) {
+	if _, err := dispatchDevice(t, reg, "device", "pair", "--role", "agent"); !errors.Is(err, devices.ErrUngrantableRole) {
 		t.Fatalf("pair --role agent = %v, want ErrUngrantableRole", err)
+	}
+}
+
+func TestApproveWithoutAFingerprintOnlyShowsTheRequestAndSignsNothing(t *testing.T) {
+	reg, st := deviceRegistry(t)
+	code := pairCode(t, reg, "device", "pair", "--name", "telephone", "--role", "observer")
+	fingerprint := redeemWith(t, st, code)
+	out, err := dispatchDevice(t, reg, "device", "approve", code)
+	if err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+	if !strings.Contains(out, fingerprint) || !strings.Contains(out, "telephone") {
+		t.Fatalf("the preview must show the name and the fingerprint the device shows: %q", out)
+	}
+	if len(st.DeviceRegistry().Devices) != 0 || devicesDirExists(st) {
+		t.Fatal("a preview must not sign, nor create the authority")
+	}
+	if st.DeviceRegistry().Pairing == nil || st.DeviceRegistry().Pairing.Pending == nil {
+		t.Fatal("a preview must leave the request waiting")
+	}
+}
+
+func TestAWrongFingerprintSignsNothingAndCountsAsAnAttempt(t *testing.T) {
+	reg, st := deviceRegistry(t)
+	code := pairCode(t, reg, "device", "pair")
+	fingerprint := redeemWith(t, st, code)
+	_, err := dispatchDevice(t, reg, "device", "approve", code, "--fingerprint", wrongFingerprintLike(fingerprint))
+	if !errors.Is(err, devices.ErrFingerprintMismatch) {
+		t.Fatalf("wrong fingerprint = %v, want ErrFingerprintMismatch", err)
+	}
+	if len(st.DeviceRegistry().Devices) != 0 || devicesDirExists(st) {
+		t.Fatal("a wrong fingerprint must not sign, nor create the authority")
+	}
+	if st.DeviceRegistry().Pairing.Failures != 1 {
+		t.Fatal("a wrong fingerprint must be saved as one attempt")
 	}
 }
 
 func TestTheFullPairingGrantsTheRoleAndShowsTheDevice(t *testing.T) {
 	reg, st := deviceRegistry(t)
 	code := pairCode(t, reg, "device", "pair", "--name", "telephone", "--role", "observer")
-	redeemWith(t, st, code)
+	fingerprint := redeemWith(t, st, code)
 
-	out, err := dispatchDevice(t, reg, "device", "approve", code)
+	out, err := dispatchDevice(t, reg, "device", "approve", code, "--fingerprint", fingerprint)
 	if err != nil {
 		t.Fatalf("device approve: %v", err)
 	}
@@ -168,16 +224,16 @@ func TestTheFullPairingGrantsTheRoleAndShowsTheDevice(t *testing.T) {
 	}
 }
 
-func TestTheFirstDeviceGrantWarnsAboutTheCliff(t *testing.T) {
+func TestTheFirstDeviceGrantWarnsAboutTheCliffAndTheApprovingAccount(t *testing.T) {
 	reg, st := deviceRegistry(t)
 	code := pairCode(t, reg, "device", "pair")
-	redeemWith(t, st, code)
-	out, err := dispatchDevice(t, reg, "device", "approve", code)
+	fingerprint := redeemWith(t, st, code)
+	out, err := dispatchDevice(t, reg, "device", "approve", code, "--fingerprint", fingerprint)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "observer") {
-		t.Fatalf("the first grant must warn that gateways without a role become observers: %q", out)
+	if !strings.Contains(out, "observer") || !strings.Contains(out, "approved this device") {
+		t.Fatalf("the first grant must warn that gateways without a role and the approving account lose their rights: %q", out)
 	}
 }
 
@@ -185,8 +241,7 @@ func TestApproveRefusesAWrongCodeAndCountsIt(t *testing.T) {
 	reg, st := deviceRegistry(t)
 	code := pairCode(t, reg, "device", "pair")
 	redeemWith(t, st, code)
-	wrong := wrongCodeLike(code)
-	if _, err := dispatchDevice(t, reg, "device", "approve", wrong); !errors.Is(err, devices.ErrWrongCode) {
+	if _, err := dispatchDevice(t, reg, "device", "approve", wrongCodeLike(code)); !errors.Is(err, devices.ErrWrongCode) {
 		t.Fatalf("wrong code = %v, want ErrWrongCode", err)
 	}
 	if st.DeviceRegistry().Pairing.Failures != 1 {
@@ -197,12 +252,12 @@ func TestApproveRefusesAWrongCodeAndCountsIt(t *testing.T) {
 func TestApproveOutputNeverRepeatsTheCode(t *testing.T) {
 	reg, st := deviceRegistry(t)
 	code := pairCode(t, reg, "device", "pair")
-	redeemWith(t, st, code)
-	out, err := dispatchDevice(t, reg, "device", "approve", code)
+	fingerprint := redeemWith(t, st, code)
+	out, err := dispatchDevice(t, reg, "device", "approve", code, "--fingerprint", fingerprint)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(out, strings.ReplaceAll(code, "-", "")) || strings.Contains(out, code) {
+	if strings.Contains(out, code) || strings.Contains(out, strings.ReplaceAll(code, "-", "")) {
 		t.Fatalf("approve repeated the pairing code: %q", out)
 	}
 }
@@ -215,8 +270,8 @@ func TestNoLogLineCarriesThePairingCode(t *testing.T) {
 
 	reg, st := deviceRegistry(t)
 	code := pairCode(t, reg, "device", "pair")
-	redeemWith(t, st, code)
-	if _, err := dispatchDevice(t, reg, "device", "approve", code); err != nil {
+	fingerprint := redeemWith(t, st, code)
+	if _, err := dispatchDevice(t, reg, "device", "approve", code, "--fingerprint", fingerprint); err != nil {
 		t.Fatal(err)
 	}
 	if logs.Len() == 0 {
@@ -250,11 +305,4 @@ func TestRevokeAndApproveNameWhatTheyNeed(t *testing.T) {
 	if _, err := dispatchDevice(t, reg, "device", "approve"); !errors.Is(err, errDeviceCodeMissing) {
 		t.Fatalf("approve with no code = %v, want errDeviceCodeMissing", err)
 	}
-}
-
-func wrongCodeLike(code string) string {
-	if strings.HasPrefix(code, "A") {
-		return "B" + code[1:]
-	}
-	return "A" + code[1:]
 }

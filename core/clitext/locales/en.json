@@ -6048,7 +6048,7 @@
   {
     "id": "cli.help.cmd.device.approve",
     "description": "Help of the command device approve",
-    "other": "approve the device that redeemed the code: sign its certificate and grant its role"
+    "other": "show the waiting request, or with --fingerprint sign its certificate and grant its role"
   },
   {
     "id": "cli.help.cmd.device.deny",
@@ -6089,5 +6089,80 @@
     "id": "cli.help.param.device.revoke.id",
     "description": "Help or reply text of a device command, revoke id",
     "other": "the device to revoke, as `device list` prints it; also takes a bare argument"
+  },
+  {
+    "id": "cli.host.device.preview",
+    "description": "Reply or error of a device command: preview",
+    "other": "waiting for approval: {{.Name}} as `{{.Role}}`. Check that the device shows the fingerprint {{.Fingerprint}}, then approve with `device approve <code> --fingerprint {{.Fingerprint}}`. Nothing is signed yet."
+  },
+  {
+    "id": "cli.host.device.first_grant",
+    "description": "Reply or error of a device command: first grant",
+    "other": "this is the first role: from now on every gateway account without one is `observer`, and so is the account that approved this device if it holds no role. Name the others with `role grant` before they find out."
+  },
+  {
+    "id": "cli.host.fault.device_random_source",
+    "description": "Reply or error of a device command: device random source",
+    "other": "the operating system's random source failed: try again"
+  },
+  {
+    "id": "cli.host.fault.device_signing",
+    "description": "Reply or error of a device command: device signing",
+    "other": "the device certificate could not be signed: check the daemon's log"
+  },
+  {
+    "id": "cli.host.fault.device_fingerprint",
+    "description": "Reply or error of a device command: device fingerprint",
+    "other": "the fingerprint does not match the one the device shows: nothing was signed"
+  },
+  {
+    "id": "cli.host.fault.device_malformed_fingerprint",
+    "description": "Reply or error of a device command: device malformed fingerprint",
+    "other": "a fingerprint is eight letters and digits, as the device shows it, with or without the dash"
+  },
+  {
+    "id": "cli.host.fault.device_signature",
+    "description": "Reply or error of a device command: device signature",
+    "other": "the certificate request must be signed with ECDSA and SHA-256 or SHA-384"
+  },
+  {
+    "id": "cli.host.fault.device_revoked",
+    "description": "Reply or error of a device command: device revoked",
+    "other": "the device is revoked"
+  },
+  {
+    "id": "cli.host.fault.device_inactive",
+    "description": "Reply or error of a device command: device inactive",
+    "other": "the device has not connected for thirty days"
+  },
+  {
+    "id": "cli.host.fault.device_certificate_expired",
+    "description": "Reply or error of a device command: device certificate expired",
+    "other": "the client certificate is outside its validity period"
+  },
+  {
+    "id": "cli.host.fault.device_certificate_mismatch",
+    "description": "Reply or error of a device command: device certificate mismatch",
+    "other": "the client certificate does not match the device record"
+  },
+  {
+    "id": "cli.host.fault.device_untrusted",
+    "description": "Reply or error of a device command: device untrusted",
+    "other": "the client certificate was not issued by this daemon"
+  },
+  {
+    "id": "cli.host.fault.device_needs_roles",
+    "description": "Reply or error of a device command: device needs roles",
+    "other": "the device verbs need a role table: grant a role with `role grant` first, until then only the local operator runs them"
+  },
+  {
+    "id": "cli.help.param.device.approve.fingerprint",
+    "description": "Reply or error of a device command: fingerprint",
+    "other": "the short fingerprint the device shows; without it, approve only shows the request and signs nothing"
+  },
+  {
+    "id": "cli.host.device.unnamed",
+    "description": "Reply of a device command: a window without a name",
+    "other": "unnamed device"
   }
 ]

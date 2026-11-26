@@ -13,17 +13,16 @@ const (
 	pairingSaltBytes  = 16
 )
 
-// PairingCode is the one-time code an operator reads to a device. Its zero value is not a code.
+// PairingCode is the one-time code an operator reads to a device.
 type PairingCode struct {
 	value string
 }
 
-// NewPairingCode draws ten characters of the pairing alphabet from rnd. The alphabet has
-// thirty-two symbols, which divides the byte range evenly, so no symbol is favoured.
+// NewPairingCode draws ten characters of the pairing alphabet from rnd.
 func NewPairingCode(rnd io.Reader) (PairingCode, error) {
 	raw := make([]byte, pairingCodeLength)
 	if _, err := io.ReadFull(rnd, raw); err != nil {
-		return PairingCode{}, fmt.Errorf("cannot draw a pairing code: %w", err)
+		return PairingCode{}, fmt.Errorf("%w: %w", ErrRandomSource, err)
 	}
 	out := make([]byte, pairingCodeLength)
 	for idx, b := range raw {
@@ -62,7 +61,7 @@ func (c PairingCode) digest(salt []byte) []byte {
 func newSalt(rnd io.Reader) ([]byte, error) {
 	salt := make([]byte, pairingSaltBytes)
 	if _, err := io.ReadFull(rnd, salt); err != nil {
-		return nil, fmt.Errorf("cannot salt a pairing code: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrRandomSource, err)
 	}
 	return salt, nil
 }

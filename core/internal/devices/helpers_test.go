@@ -54,7 +54,7 @@ func reparse(t *testing.T, code devices.PairingCode) devices.PairingCode {
 
 func newAuthority(t *testing.T, now time.Time) *devices.Authority {
 	t.Helper()
-	authority, err := devices.LoadOrCreateAuthority(t.TempDir(), now, rand.Reader)
+	authority, err := devices.LoadOrCreateAuthority(t.TempDir(), now, rand.Reader, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,4 +65,9 @@ func signerFor(authority *devices.Authority) devices.Signer {
 	return func(csr *x509.CertificateRequest, id devices.DeviceID, now time.Time) (*x509.Certificate, error) {
 		return authority.SignClient(csr, id, now, rand.Reader)
 	}
+}
+
+func ecdsaKey(t *testing.T) (*ecdsa.PrivateKey, error) {
+	t.Helper()
+	return ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 }

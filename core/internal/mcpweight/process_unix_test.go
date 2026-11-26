@@ -17,7 +17,7 @@ func TestProcessGoneAcceptsAZombie(t *testing.T) {
 	if _, err := os.Stat("/proc/self/stat"); err != nil {
 		t.Skip("process states are read from /proc")
 	}
-	cmd := exec.CommandContext(t.Context(), "sh", "-c", "exit 0")
+	cmd := exec.CommandContext(context.Background(), "sh", "-c", "exit 0")
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}

@@ -21,17 +21,10 @@ const (
 	originWaitDelay    = 2 * time.Second
 )
 
-// OriginAccess is how the migration asks the pull request remote whether it still holds a branch: the environment git runs with, and how long the question may take.
+// OriginAccess is how the migration asks the pull request remote whether it still holds a branch: the environment git runs with, or why origin cannot be asked at all.
 type OriginAccess struct {
-	Env   []string
-	Limit time.Duration
-}
-
-func (a OriginAccess) limit() time.Duration {
-	if a.Limit <= 0 {
-		return defaultOriginLimit
-	}
-	return a.Limit
+	Env         []string
+	Unavailable error
 }
 
 func (w *Worktreer) pushedAs(ctx context.Context, plan Relocation, sess BareSession) (string, error) {
@@ -75,26 +68,33 @@ func (w *Worktreer) remoteRefs(ctx context.Context, repo string) (map[string]boo
 }
 
 func (w *Worktreer) originHolding(ctx context.Context, plan Relocation, access OriginAccess) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, access.limit())
+	if access.Unavailable != nil {
+		return "", w.originUnreachable(plan, nil, access.Unavailable)
+	}
+	ctx, cancel := context.WithTimeout(ctx, defaultOriginLimit)
 	defer cancel()
 	lsRemote := exec.CommandContext(ctx, "git", "-C", plan.Repo, "ls-remote", "--heads", pullRequestRemote, "refs/heads/"+plan.FromBranch)
 	lsRemote.Env = append(append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS="), access.Env...)
 	lsRemote.WaitDelay = originWaitDelay
 	heads, err := lsRemote.CombinedOutput()
 	if err != nil {
-		return "", NewFailure(w.messages, clitext.WorktreeRelocateRemoteUnreachable, clitext.Params{
-			clitext.ParamName:    strconv.Quote(plan.Name),
-			clitext.ParamBranch:  plan.FromBranch,
-			clitext.ParamTarget:  pullRequestRemote,
-			clitext.ParamOutput:  redact.Output(heads),
-			clitext.ParamErr:     err,
-			clitext.ParamCommand: manualRelocation(plan),
-		}, err)
+		return "", w.originUnreachable(plan, heads, err)
 	}
 	if strings.TrimSpace(string(heads)) != "" {
 		return pullRequestRemote, nil
 	}
 	return "", nil
+}
+
+func (w *Worktreer) originUnreachable(plan Relocation, output []byte, err error) error {
+	return NewFailure(w.messages, clitext.WorktreeRelocateRemoteUnreachable, clitext.Params{
+		clitext.ParamName:    strconv.Quote(plan.Name),
+		clitext.ParamBranch:  plan.FromBranch,
+		clitext.ParamTarget:  pullRequestRemote,
+		clitext.ParamOutput:  redact.Output(output),
+		clitext.ParamErr:     err,
+		clitext.ParamCommand: manualRelocation(plan),
+	}, err)
 }
 
 func manualRelocation(plan Relocation) string {

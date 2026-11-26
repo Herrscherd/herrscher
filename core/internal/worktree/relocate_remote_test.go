@@ -1,9 +1,11 @@
 package worktree
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Herrscherd/herrscher/core/clitext"
+	"github.com/Herrscherd/herrscher/core/internal/shellquote"
 )
 
 func localAlphaRepo(t *testing.T) (string, string) {
@@ -50,15 +53,35 @@ func unreachableParams(t *testing.T, err error) clitext.Params {
 	return failure.Params
 }
 
+func recordingAskpass(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "asked")
+	script := filepath.Join(dir, "askpass")
+	body := "#!/bin/sh\ntouch " + shellquote.Quote(marker) + "\necho secret\n"
+	if err := os.WriteFile(script, []byte(body), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIT_ASKPASS", script)
+	t.Setenv("SSH_ASKPASS", script)
+	t.Setenv("SSH_ASKPASS_REQUIRE", "force")
+	t.Setenv("DISPLAY", ":0")
+	return marker
+}
+
 func TestPlanBareRelocationRefusesWithoutPromptingWhenOriginWantsCredentials(t *testing.T) {
 	repo, from := localAlphaRepo(t)
 	gitIn(t, repo, "remote", "add", "origin", authRequiredURL(t))
+	marker := recordingAskpass(t)
 	w := NewWorktreer(clitext.NewMessages(), "inst")
 	started := time.Now()
 	_, err := w.PlanBareRelocation(t.Context(), BareSession{Name: "alpha", Path: from, PullRequest: 12})
 	unreachableParams(t, err)
 	if elapsed := time.Since(started); elapsed > 20*time.Second {
 		t.Fatalf("asking origin took %s, want an immediate refusal", elapsed)
+	}
+	if _, statErr := os.Stat(marker); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("asking origin ran the askpass program (stat %v), want no prompt at all", statErr)
 	}
 	text := err.Error()
 	for _, want := range []string{`"alpha"`, "worktree move", "branch -m 'session/alpha' 'session/inst/alpha'"} {
@@ -72,8 +95,10 @@ func TestPlanBareRelocationBoundsTheQuestionToOrigin(t *testing.T) {
 	repo, from := localAlphaRepo(t)
 	gitIn(t, repo, "remote", "add", "origin", silentURL(t))
 	w := NewWorktreer(clitext.NewMessages(), "inst")
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
 	started := time.Now()
-	_, err := w.PlanBareRelocation(t.Context(), BareSession{Name: "alpha", Path: from, PullRequest: 12, Origin: OriginAccess{Limit: 300 * time.Millisecond}})
+	_, err := w.PlanBareRelocation(ctx, BareSession{Name: "alpha", Path: from, PullRequest: 12})
 	unreachableParams(t, err)
 	if elapsed := time.Since(started); elapsed > 10*time.Second {
 		t.Fatalf("a silent origin held the plan for %s, want it cut at its limit", elapsed)

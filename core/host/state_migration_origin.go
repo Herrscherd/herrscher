@@ -11,23 +11,28 @@ import (
 	"github.com/Herrscherd/herrscher/core/internal/worktree"
 )
 
-func migrationOriginAccess(ctx context.Context, creds contracts.ForgeCredentials, repo string, pullRequest int) (worktree.OriginAccess, error) {
-	access := worktree.OriginAccess{Limit: sessionPRForgeLimit}
-	if pullRequest == 0 {
-		return access, nil
-	}
+func planLocalBareRelocation(ctx context.Context, worktrees *worktree.Worktreer, creds contracts.ForgeCredentials, repo string, bare worktree.BareSession) (worktree.Relocation, error) {
 	ctx, cancel := context.WithTimeout(ctx, sessionPRForgeLimit)
 	defer cancel()
+	bare.Origin = migrationOriginAccess(ctx, creds, repo, bare.PullRequest)
+	return worktrees.PlanBareRelocation(ctx, bare)
+}
+
+func migrationOriginAccess(ctx context.Context, creds contracts.ForgeCredentials, repo string, pullRequest int) worktree.OriginAccess {
+	var access worktree.OriginAccess
+	if pullRequest == 0 {
+		return access
+	}
 	if origin, err := prOriginRepo(ctx, repo); err == nil {
 		access.Env, err = forge.GitEnvironment(ctx, creds, origin.Host())
 		if err != nil {
-			return worktree.OriginAccess{}, err
+			return worktree.OriginAccess{Unavailable: err}
 		}
 	}
 	if !sshCommandChosen(ctx, repo) {
 		access.Env = append(access.Env, "GIT_SSH_COMMAND="+runner.GitSSHCommand)
 	}
-	return access, nil
+	return access
 }
 
 func sshCommandChosen(ctx context.Context, repo string) bool {

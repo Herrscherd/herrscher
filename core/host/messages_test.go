@@ -260,6 +260,11 @@ func TestHostCatalogDeclaresEveryKeyWithItsParameters(t *testing.T) {
 		"telemetry.protocol_unsupported":    nil,
 		"telemetry.exporter_failed":         nil,
 		"telemetry.disabled_by_config":      nil,
+		"selftools.refused":                 {"Subject", "Detail"},
+		"selftools.ran_asked":               {"Subject"},
+		"selftools.ran_steward":             {"Subject"},
+		"selftools.failed_asked":            {"Subject", "Detail"},
+		"selftools.failed_steward":          {"Subject", "Detail"},
 	}
 	i18ntest.CheckDeclared(t, declared, hostLocaleSource(t))
 }

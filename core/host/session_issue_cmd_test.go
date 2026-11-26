@@ -10,6 +10,7 @@ import (
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
 	"github.com/Herrscherd/herrscher/core/cli"
+	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 type fakeIssueForge struct {
@@ -61,15 +62,32 @@ func TestIssueListReadsEveryPageOfTheSessionsRepository(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
-	var views []issueView
-	if err := json.Unmarshal([]byte(out), &views); err != nil {
+	var listing issueListing
+	if err := json.Unmarshal([]byte(out), &listing); err != nil {
 		t.Fatalf("list output %q: %v", out, err)
 	}
-	if len(views) != 2 || views[0].Number != 3 || views[1].Number != 4 || views[0].Body != "" {
+	views := listing.Issues
+	if listing.Truncated || len(views) != 2 || views[0].Number != 3 || views[1].Number != 4 || views[0].Body != "" {
 		t.Fatalf("views = %+v, want #3 then #4 without their bodies", views)
 	}
 	if query := fake.queries[0]; query.State != contracts.IssueClosed || !slices.Equal(query.Labels, []string{"bug", "ui"}) {
 		t.Fatalf("query = %+v, want closed issues labelled bug and ui", query)
+	}
+}
+
+func TestIssueListStopsAtItsLimitAndSaysSo(t *testing.T) {
+	st := prState(t, prFixtureRepo(t), "")
+	fake := &fakeIssueForge{pages: [][]contracts.Issue{{issueNumbered(t, 1, "a"), issueNumbered(t, 2, "b")}, {issueNumbered(t, 3, "c")}}}
+	reg := prRegistry(t, st, prForgeOpener(fake))
+	out, err := runIssue(t, reg, verbIssueList, "--name", "alpha", "--limit", "2")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if !strings.Contains(out, "#2") || strings.Contains(out, "#3") || !strings.Contains(out, "--limit") {
+		t.Fatalf("list output %q, want the first two and a line naming --limit", out)
+	}
+	if _, err := runIssue(t, reg, verbIssueList, "--name", "alpha", "--limit", "0"); !errors.Is(err, errIssueLimit) {
+		t.Fatalf("limit 0: %v, want the limit refusal", err)
 	}
 }
 
@@ -146,5 +164,38 @@ func TestIssueOpenSaysSoWhenTheForgeCannotWrite(t *testing.T) {
 	reg := prRegistry(t, st, prForgeOpener(&fakeIssueForge{}))
 	if _, err := runIssue(t, reg, "open", "--name", "alpha", "--title", "Crash"); !errors.Is(err, errIssueNoWriter) {
 		t.Fatalf("open on a read-only forge: %v, want the no-writer refusal", err)
+	}
+}
+
+type replyingPRForge struct {
+	fakePRForge
+
+	replies map[string]string
+}
+
+func (f *replyingPRForge) ReplyToThread(_ context.Context, thread contracts.ThreadRef, body string) error {
+	if f.replies == nil {
+		f.replies = make(map[string]string)
+	}
+	f.replies[thread.ID()] = body
+	return nil
+}
+
+func TestPRReplyAnswersTheNamedThreadOfTheSessionsPullRequest(t *testing.T) {
+	st := prState(t, prFixtureRepo(t), "")
+	if err := st.RecordPullRequest("alpha", state.PullRequestRecord{Number: prTestNumber, State: contracts.PullRequestOpen}); err != nil {
+		t.Fatal(err)
+	}
+	fake := &replyingPRForge{fakePRForge: fakePRForge{pullRequest: prNumbered(t)}}
+	reg := prRegistry(t, st, prForgeOpener(fake))
+	out, err := runPR(t, reg, verbPRReply, "--name", "alpha", "--thread", "PRRT_1", "--body", "done in abc123")
+	if err != nil {
+		t.Fatalf("reply: %v", err)
+	}
+	if fake.replies["PRRT_1"] != "done in abc123" || !strings.Contains(out, "#42") {
+		t.Fatalf("replies = %v, out = %q, want the body on PRRT_1 and #42 named", fake.replies, out)
+	}
+	if _, err := runPR(t, reg, verbPRReply, "--name", "alpha", "--thread", "PRRT_1", "--body", " "); err == nil {
+		t.Fatal("an empty reply was sent")
 	}
 }

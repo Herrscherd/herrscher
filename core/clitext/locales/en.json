@@ -6075,5 +6075,145 @@
     "id": "cli.session.issue.no_writer",
     "description": "Refusal when the forge plugin cannot write issues",
     "other": "the forge plugin compiled in cannot open or comment on issues: update it with `herrscher update`"
+  },
+  {
+    "id": "cli.help.cmd.setup.check",
+    "description": "Help of the command setup check",
+    "other": "report each section of the setup as ok, warning, bad or off, without changing anything"
+  },
+  {
+    "id": "cli.help.cmd.connect.status",
+    "description": "Help of the command connect status",
+    "other": "show the forge connections of the host and where each token comes from"
+  },
+  {
+    "id": "cli.help.cmd.plugin.list",
+    "description": "Help of the command plugin list",
+    "other": "list the modules compiled into the binary, with their versions"
+  },
+  {
+    "id": "cli.help.cmd.plugin.add",
+    "description": "Help of the command plugin add",
+    "other": "add a module and rebuild the binary from source"
+  },
+  {
+    "id": "cli.help.cmd.plugin.rm",
+    "description": "Help of the command plugin rm",
+    "other": "remove a module and rebuild the binary from source"
+  },
+  {
+    "id": "cli.help.param.plugin.module",
+    "description": "Help of the parameter module of plugin add and rm",
+    "other": "the module path, optionally with @version"
+  },
+  {
+    "id": "cli.help.param.plugin.no_build",
+    "description": "Help of the parameter no_build of plugin add and rm",
+    "other": "edit the module list without rebuilding"
+  },
+  {
+    "id": "cli.help.cmd.env.get",
+    "description": "Help of the command env get",
+    "other": "print the variables of the daemon's settings file, secrets hidden"
+  },
+  {
+    "id": "cli.help.cmd.env.set",
+    "description": "Help of the command env set",
+    "other": "set one variable in the daemon's settings file; a session never sets a secret"
+  },
+  {
+    "id": "cli.help.cmd.env.unset",
+    "description": "Help of the command env unset",
+    "other": "remove one variable from the daemon's settings file"
+  },
+  {
+    "id": "cli.help.param.env.key",
+    "description": "Help of the parameter key of env",
+    "other": "the variable name, such as HERRSCHER_BACKEND"
+  },
+  {
+    "id": "cli.help.param.env.value",
+    "description": "Help of the parameter value of env set",
+    "other": "the value, on one line"
+  },
+  {
+    "id": "cli.host.env.set",
+    "description": "Reply of env set",
+    "other": "{{.Key}} set in {{.Path}}. The daemon reads it at its next start: `herrscher service restart`."
+  },
+  {
+    "id": "cli.host.env.unset",
+    "description": "Reply of env unset",
+    "other": "{{.Key}} removed from {{.Path}}. The daemon reads it at its next start: `herrscher service restart`."
+  },
+  {
+    "id": "cli.help.cmd.session.pr.reply",
+    "description": "Help of the command session pr reply",
+    "other": "reply in one review thread of a session's pull request"
+  },
+  {
+    "id": "cli.help.param.session.pr.thread",
+    "description": "Help of the parameter thread of session pr reply",
+    "other": "the thread id, as `session pr comments --json` gives it"
+  },
+  {
+    "id": "cli.help.param.session.pr.reply_body",
+    "description": "Help of the parameter body of session pr reply",
+    "other": "the reply, in Markdown"
+  },
+  {
+    "id": "cli.session.pr.replied",
+    "description": "Reply of session pr reply",
+    "other": "replied in a review thread of pull request #{{.Number}}"
+  },
+  {
+    "id": "cli.health.facts.self_tools",
+    "description": "Facts of the self tools health check",
+    "other": "{{.Mode}} · {{.Count}} tools · {{.Size}} bytes of schemas a turn"
+  },
+  {
+    "id": "cli.health.facts.self_tools_off",
+    "description": "Facts of the self tools health check when they are off",
+    "other": "off: sessions get no herrscher MCP server"
+  },
+  {
+    "id": "cli.help.param.session.issue.limit",
+    "description": "Help of the parameter limit of session issue list",
+    "other": "the most issues to list, 100 by default"
+  },
+  {
+    "id": "cli.session.issue.truncated",
+    "description": "Line under an issue listing cut at its limit",
+    "other": "(the first {{.Count}} only: raise --limit to see more)"
+  },
+  {
+    "id": "cli.session.issue.bad_limit",
+    "description": "Refusal of an issue limit out of range",
+    "other": "--limit takes a number from 1 to {{.Count}}"
+  },
+  {
+    "id": "cli.host.fault.env_key",
+    "description": "Error of env: not a variable name",
+    "other": "not a variable name: letters, digits and _, not starting with a digit"
+  },
+  {
+    "id": "cli.host.fault.env_value",
+    "description": "Error of env set: a value on several lines",
+    "other": "a value holds no line break"
+  },
+  {
+    "id": "cli.host.fault.env_no_file",
+    "description": "Error of env: the daemon has no settings file",
+    "other": "the daemon was started without a settings file, so there is none to edit"
+  },
+  {
+    "id": "cli.host.fault.env_no_such_key",
+    "description": "Error of env: the variable is not in the file",
+    "other": "the settings file does not set this variable"
+  },
+  {
+    "id": "cli.host.fault.secret_from_session",
+    "description": "Error of env set: a session tried to write a secret",
+    "other": "a secret is never written by a session: the operator sets it with `herrscher env set` in a terminal"
   }
 ]

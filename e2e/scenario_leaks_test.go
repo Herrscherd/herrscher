@@ -322,3 +322,26 @@ func onlyPendingApproval(ts *testscript.TestScript) (string, bool) {
 	}
 	return pending[0].ID, true
 }
+
+func sessionSocket(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) != 2 {
+		ts.Fatalf("usage: sessionsocket <session> <variable>")
+	}
+	root, instance := ts.Getenv(runtimeRootEnv), ts.Getenv(instanceEnv)
+	deadline := time.Now().Add(daemonWait)
+	for time.Now().Before(deadline) {
+		for _, dir := range runtimeDirs(root) {
+			layout, err := host.RuntimeAt(dir)
+			if err != nil {
+				continue
+			}
+			path := host.SessionCommandSocketPathIn(layout, instance, args[0])
+			if _, statErr := os.Stat(path); statErr == nil {
+				ts.Setenv(args[1], path)
+				return
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	ts.Fatalf("no command socket for session %s within %s", args[0], daemonWait)
+}

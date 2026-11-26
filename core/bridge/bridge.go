@@ -53,6 +53,8 @@ type Options struct {
 	// handed down at spawn (the bridge holds no registry of its own). Empty
 	// injects no <capabilities> block.
 	Capabilities string
+	// SelfToolsBytes is the size of the herrscher MCP server's declarations the vendor sends with each turn, reported in the context sizes.
+	SelfToolsBytes int
 	// Scope decides which memory project a session's conversation is actually
 	// about, on its first prompt. It is injected because the answer lives in the
 	// vault and the bridge package holds no memory of its own, which is also

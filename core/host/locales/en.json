@@ -979,5 +979,30 @@
     "id": "telemetry.disabled_by_config",
     "description": "Turn telemetry stays off because the configuration sets telemetry.enabled to false, even when an OTLP endpoint is set",
     "other": "turn telemetry is off: the configuration sets telemetry.enabled to false"
+  },
+  {
+    "id": "selftools.refused",
+    "description": "Notice: a verb a session asked for was refused",
+    "other": "herrscher: the session asked for {{.Subject}}, refused: {{.Detail}}"
+  },
+  {
+    "id": "selftools.ran_asked",
+    "description": "Notice: a verb a session asked for ran after the operator allowed it",
+    "other": "herrscher: the session ran {{.Subject}}, allowed by the operator"
+  },
+  {
+    "id": "selftools.ran_steward",
+    "description": "Notice: a steward session ran a configuration verb",
+    "other": "herrscher: the session ran {{.Subject}} as steward"
+  },
+  {
+    "id": "selftools.failed_asked",
+    "description": "Notice: a verb the operator allowed failed",
+    "other": "herrscher: the session ran {{.Subject}}, allowed by the operator, and it failed: {{.Detail}}"
+  },
+  {
+    "id": "selftools.failed_steward",
+    "description": "Notice: a verb a steward session ran failed",
+    "other": "herrscher: the session ran {{.Subject}} as steward, and it failed: {{.Detail}}"
   }
 ]

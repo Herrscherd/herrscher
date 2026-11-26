@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -9,6 +10,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/internal/approval"
 	"github.com/Herrscherd/herrscher/core/internal/authz"
+	"github.com/Herrscherd/herrscher/core/internal/state"
 )
 
 type corePrincipalKey struct{}
@@ -93,6 +95,7 @@ func sessionArgs() map[string]string {
 		"session pr status":     paramName,
 		"session pr checks":     paramName,
 		"session pr comments":   paramName,
+		"session pr reply":      paramName,
 		"session issue list":    paramName,
 		"session issue show":    paramName,
 		"session issue open":    paramName,
@@ -122,15 +125,26 @@ func notASessionArgs() map[string]bool {
 	}
 }
 
-func (h *hub) authorize(ctx context.Context, args []string) error {
+type admission struct {
+	session string
+	subject string
+	how     string
+}
+
+const (
+	admittedAsked   = "asked"
+	admittedSteward = "steward"
+)
+
+func (h *hub) authorize(ctx context.Context, args []string) (admission, error) {
 	principal := principalOf(ctx)
 	role := authz.RoleOf(principal, h.roleNames())
 	if role == authz.RoleNone {
-		return nil
+		return admission{}, nil
 	}
 	path, input, ok := h.reg.Resolve(args)
 	if !ok {
-		return nil
+		return admission{}, nil
 	}
 	req := authz.Request{
 		Principal:   principal,
@@ -138,22 +152,56 @@ func (h *hub) authorize(ctx context.Context, args []string) error {
 		Contributed: h.isContributedCommand(args),
 		Subject:     h.subjectOf(principal, path, input),
 	}
+	if principal.Session != "" {
+		if err := h.guardSessionCall(principal.Session, strings.Join(path, " "), input); err != nil {
+			return admission{}, err
+		}
+	}
 	allowed, why := authz.Decide(req, role)
 	if allowed {
-		return nil
+		return h.admitted(principal.Session, path, args, role, req.Contributed)
 	}
 	if authz.Escalable(req, role) && h.desk != nil {
-		return h.escalate(ctx, principal.Session, args)
+		return h.escalate(ctx, principal.Session, path, args)
 	}
-	return &accessDeniedError{Reason: why}
+	return admission{}, &accessDeniedError{Reason: why}
 }
 
-func (h *hub) escalate(ctx context.Context, session string, args []string) error {
-	decision, reason := h.desk.decideVerb(ctx, session, approval.Request{Tool: approval.VerbTool, Subject: strings.Join(args, " ")})
-	if decision == approval.Allow {
-		return nil
+func (h *hub) admitted(session string, path, args []string, role authz.Role, contributed bool) (admission, error) {
+	if session == "" {
+		return admission{}, nil
 	}
-	return &accessDeniedError{Reason: reason}
+	if err := h.selfRestarts.admit(session, strings.Join(path, " ")); err != nil {
+		return admission{}, err
+	}
+	if role == authz.RoleSteward && !authz.AgentRuns(path, contributed) {
+		return admission{session: session, subject: verbSubject(args), how: admittedSteward}, nil
+	}
+	return admission{}, nil
+}
+
+func (h *hub) escalate(ctx context.Context, session string, path, args []string) (admission, error) {
+	subject := verbSubject(args)
+	decision, reason := h.desk.decideVerb(ctx, session, approval.Request{Tool: approval.VerbTool, Subject: subject})
+	if decision != approval.Allow {
+		h.announceSelfCall(session, "selftools.refused", subject, reason)
+		return admission{}, &accessDeniedError{Reason: reason}
+	}
+	if err := h.selfRestarts.admit(session, strings.Join(path, " ")); err != nil {
+		return admission{}, err
+	}
+	return admission{session: session, subject: subject, how: admittedAsked}, nil
+}
+
+func verbSubject(args []string) string {
+	quoted := make([]string, 0, len(args))
+	for _, token := range args {
+		if token == "" || strings.ContainsAny(token, " \t\"'\\") {
+			token = strconv.Quote(token)
+		}
+		quoted = append(quoted, token)
+	}
+	return strings.Join(quoted, " ")
 }
 
 func (h *hub) roleNames() map[string]string {
@@ -191,14 +239,18 @@ func (h *hub) subjectOf(principal authz.Principal, path []string, input contract
 }
 
 func (h *hub) inSubtree(caller, target string) bool {
+	return inSubtreeOf(h.st, caller, target)
+}
+
+func inSubtreeOf(store *state.State, caller, target string) bool {
 	if caller == target {
 		return true
 	}
-	if h.st == nil {
+	if store == nil {
 		return false
 	}
 	parents := make(map[string]string)
-	sessions := h.st.SnapshotSessions()
+	sessions := store.SnapshotSessions()
 	for idx := range sessions {
 		s := sessions[idx]
 		parents[s.Name] = s.Parent

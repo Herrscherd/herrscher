@@ -71,6 +71,7 @@ func TestAgentMayWorkAndMayNotDisarmItself(t *testing.T) {
 		{"session", "pr", "status"},
 		{"session", "pr", "checks"},
 		{"session", "pr", "comments"},
+		{"approve", "list"},
 	}
 	for _, path := range allowed {
 		if ok, why := Decide(req(p, path...), RoleAgent); !ok {
@@ -81,7 +82,6 @@ func TestAgentMayWorkAndMayNotDisarmItself(t *testing.T) {
 		{"approve", "rule"},
 		{"approve", "mode"},
 		{"approve", "allow"},
-		{"approve", "list"},
 		{"host", "rm"},
 		{"role", "grant"},
 		{"schedule", "add"},
@@ -217,17 +217,82 @@ func TestAStewardSessionLeavesHumansWithoutARole(t *testing.T) {
 	}
 }
 
-func TestAStewardConfiguresButNeverGrantsNorAnswersApprovals(t *testing.T) {
-	p := SessionPrincipal("revue")
-	for _, path := range [][]string{{"schedule", "add"}, {"set", "lang"}, {"session", "create"}, {"config", "set"}, {"service", "restart"}} {
-		if ok, why := Decide(req(p, path...), RoleSteward); !ok {
-			t.Errorf("steward refused %v: %s", path, why)
+func TestEachFamilyUnderEachRoleASessionCanHold(t *testing.T) {
+	session := SessionPrincipal("revue")
+	const (
+		runs = iota
+		asks
+		never
+	)
+	cases := []struct {
+		path    []string
+		agent   int
+		steward int
+	}{
+		{[]string{"session", "list"}, runs, runs},
+		{[]string{"session", "create"}, asks, asks},
+		{[]string{"session", "set-budget"}, asks, runs},
+		{[]string{"schedule", "add"}, asks, runs},
+		{[]string{"schedule", "list"}, runs, runs},
+		{[]string{"config", "get"}, runs, runs},
+		{[]string{"config", "set"}, asks, runs},
+		{[]string{"env", "get"}, runs, runs},
+		{[]string{"env", "set"}, asks, runs},
+		{[]string{"plugin", "list"}, runs, runs},
+		{[]string{"plugin", "add"}, asks, runs},
+		{[]string{"setup", "check"}, runs, runs},
+		{[]string{"connect", "status"}, runs, runs},
+		{[]string{"service", "restart"}, asks, runs},
+		{[]string{"set", "lang"}, asks, runs},
+		{[]string{"host", "list"}, runs, runs},
+		{[]string{"host", "add"}, asks, runs},
+		{[]string{"agent", "create"}, asks, runs},
+		{[]string{"approve", "list"}, runs, runs},
+		{[]string{"approve", "rule"}, asks, asks},
+		{[]string{"approve", "mode"}, asks, asks},
+		{[]string{"approve", "allow"}, never, never},
+		{[]string{"approve", "deny"}, never, never},
+		{[]string{"role", "grant"}, never, never},
+		{[]string{"session", "issue", "open"}, runs, runs},
+	}
+	verdict := func(role Role, path []string) int {
+		request := req(session, path...)
+		if ok, _ := Decide(request, role); ok {
+			return runs
+		}
+		if Escalable(request, role) {
+			return asks
+		}
+		return never
+	}
+	for _, tc := range cases {
+		if got := verdict(RoleAgent, tc.path); got != tc.agent {
+			t.Errorf("agent %v = %d, want %d (0 runs, 1 asks, 2 never)", tc.path, got, tc.agent)
+		}
+		if got := verdict(RoleSteward, tc.path); got != tc.steward {
+			t.Errorf("steward %v = %d, want %d (0 runs, 1 asks, 2 never)", tc.path, got, tc.steward)
 		}
 	}
-	for _, path := range [][]string{{"role", "grant"}, {"approve", "allow"}, {"approve", "deny"}} {
-		if ok, _ := Decide(req(p, path...), RoleSteward); ok {
-			t.Errorf("steward ran %v", path)
-		}
+}
+
+func TestAStewardStaysInsideItsSubtree(t *testing.T) {
+	request := Request{Principal: SessionPrincipal("revue"), Path: []string{"session", "close"}, Subject: Subject{Session: "other"}}
+	if ok, _ := Decide(request, RoleSteward); ok {
+		t.Fatal("a steward closed a session outside its subtree")
+	}
+	if Escalable(request, RoleSteward) {
+		t.Fatal("a steward could ask for a session outside its subtree")
+	}
+}
+
+func TestANeverVerbSaysEvenApprovalWillNotRunIt(t *testing.T) {
+	_, why := Decide(req(SessionPrincipal("revue"), "role", "grant"), RoleAgent)
+	if !strings.Contains(why, "even with the operator's approval") {
+		t.Fatalf("refusal %q, want it to say no approval runs it", why)
+	}
+	_, why = Decide(req(SessionPrincipal("revue"), "agent", "create"), RoleAgent)
+	if !strings.Contains(why, "steward") {
+		t.Fatalf("refusal %q, want it to name the steward role", why)
 	}
 }
 

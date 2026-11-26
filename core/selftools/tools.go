@@ -97,18 +97,3 @@ func verbTool(declared spec) Tool {
 		InputSchema: inputSchema{Type: typeObject, Properties: properties, Required: required, AdditionalProperties: false},
 	}
 }
-
-// BooleanTool declares a tool whose arguments are a few optional booleans.
-func BooleanTool(name, description string, flags map[string]string) Tool {
-	properties := make(map[string]property, len(flags))
-	for flagName, help := range flags {
-		properties[flagName] = property{Type: typeBoolean, Description: help}
-	}
-	return Tool{Name: name, Description: description, InputSchema: inputSchema{Type: typeObject, Properties: properties, AdditionalProperties: false}}
-}
-
-// Flag reads an optional boolean argument of a tool call.
-func Flag(args map[string]any, name string) bool {
-	value, ok := args[name].(bool)
-	return ok && value
-}

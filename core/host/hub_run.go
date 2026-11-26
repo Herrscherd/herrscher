@@ -15,6 +15,7 @@ import (
 	"github.com/Herrscherd/herrscher/core/cli"
 	"github.com/Herrscherd/herrscher/core/clitext"
 	"github.com/Herrscherd/herrscher/core/config"
+	"github.com/Herrscherd/herrscher/core/envx"
 	"github.com/Herrscherd/herrscher/core/internal/health"
 	"github.com/Herrscherd/herrscher/core/internal/obs"
 	"github.com/Herrscherd/herrscher/core/internal/state"
@@ -151,7 +152,9 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	if specsErr != nil {
 		log.Warn("command help texts not fully rendered", "err", specsErr)
 	}
-	sup.SetBridgeEnv(hubBridgeEnv(specs, kinds))
+	selfTools := measuredSelfTools(reg, loadedConfig(options.ConfigPath), envx.Getenv)
+	sup.SetBridgeEnv(hubBridgeEnv(specs, kinds, selfTools().TurnBytes()))
+	sup.SetLocalPrepare(selfToolsPreparer(selfToolsProvisioner(envx.Getenv, loadedConfig(options.ConfigPath)), log))
 	ensureCodexAgent(deps.agents)
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)
@@ -167,7 +170,9 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 		return wrapHost(messages, err, "serve.key_proxy", nil)
 	}
 	defer CloseKeyProxy(ctx, log, keys)
-	options.health.bind(newHealthInputs(messages, options.Runtime, instID, keys, gws, policy, partDir, forgeCredentials(options.Forge)))
+	inputs := newHealthInputs(messages, options.Runtime, instID, keys, gws, policy, partDir, forgeCredentials(options.Forge))
+	inputs.selfTools = selfTools
+	options.health.bind(inputs)
 	runningHub := newHub(store, sup, gws, partDir, reg, monitor.Metrics(), approvals, sessions, withWarnings(options.Warnings), withForge(options.Forge))
 	runningHub.lang = options.Language
 	runningHub.language = options.languageSource()
@@ -176,6 +181,7 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 		return newSeedBackendWithToken(seedCtx, messages, sess, keys, runningHub.models, sessions.seedToken(seedCtx, sess.Name, liveSessionAllowed(store)))
 	}
 	runningHub.desk = newApprovalDesk(messages, options.languageSource(), options.Warnings, store, deps.agents, approvals, sessions)
+	runningHub.selfRestarts = newSelfRestarts()
 	runningHub.contributedKinds = kinds
 	runningHub.instanceID = instID
 	runningHub.runtime = options.Runtime

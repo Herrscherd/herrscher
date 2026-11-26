@@ -202,6 +202,9 @@ linters:
       - path: ^core/config/document\.go$
         linters: [gosec]
         text: "^G703:"
+      - path: ^host_verbs\.go$
+        linters: [gosec]
+        text: "^G204:"
       - path: ^core/internal/agent/agent\.go$
         linters: [gosec]
         text: "^G101:"

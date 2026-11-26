@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	contracts "github.com/Herrscherd/herrscher-contracts"
@@ -119,6 +120,12 @@ type Options struct {
 	// the time a set reaches here it has been decorated and no longer answers to
 	// CommandSource.
 	ContributedCommands []contracts.Cmd
+
+	// HostCommands are verbs the composition root declares for the daemon itself, decided by roles like the core ones.
+	HostCommands []contracts.Cmd
+
+	// ConfigPath is the config.json the daemon was started with, the one `config set` edits. Empty means the default path.
+	ConfigPath string
 }
 
 // HomeRef is the seed home channel from config.json: a channel id and its kind
@@ -260,10 +267,13 @@ func newHubSupervisor(ctx context.Context, self string, layout RuntimeLayout, ba
 	return sup
 }
 
-func hubBridgeEnv(specs []cli.Spec, kinds map[string]bool) []string {
+func hubBridgeEnv(specs []cli.Spec, kinds map[string]bool, selfToolsBytes int) []string {
 	bridgeEnv := append(GatewayEnvPairs(), AnnounceKeyEnvPairs()...)
 	if pair := CapabilityEnvPair(specs, func(family string) bool { return kinds[family] }); pair != "" {
 		bridgeEnv = append(bridgeEnv, pair)
+	}
+	if selfToolsBytes > 0 {
+		bridgeEnv = append(bridgeEnv, EnvSelfToolsBytes+"="+strconv.Itoa(selfToolsBytes))
 	}
 	return bridgeEnv
 }

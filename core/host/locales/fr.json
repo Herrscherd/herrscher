@@ -979,5 +979,30 @@
     "id": "telemetry.disabled_by_config",
     "description": "La télémétrie des tours reste désactivée parce que la configuration met telemetry.enabled à false, même si un point de terminaison OTLP est défini",
     "other": "la télémétrie des tours est désactivée : la configuration met telemetry.enabled à false"
+  },
+  {
+    "id": "selftools.refused",
+    "description": "Notice: a verb a session asked for was refused",
+    "other": "herrscher : la session a demandé {{.Subject}}, refusé : {{.Detail}}"
+  },
+  {
+    "id": "selftools.ran_asked",
+    "description": "Notice: a verb a session asked for ran after the operator allowed it",
+    "other": "herrscher : la session a lancé {{.Subject}}, accepté par l'opérateur"
+  },
+  {
+    "id": "selftools.ran_steward",
+    "description": "Notice: a steward session ran a configuration verb",
+    "other": "herrscher : la session a lancé {{.Subject}} en tant que steward"
+  },
+  {
+    "id": "selftools.failed_asked",
+    "description": "Notice: a verb the operator allowed failed",
+    "other": "herrscher : la session a lancé {{.Subject}}, accepté par l'opérateur, et l'appel a échoué : {{.Detail}}"
+  },
+  {
+    "id": "selftools.failed_steward",
+    "description": "Notice: a verb a steward session ran failed",
+    "other": "herrscher : la session a lancé {{.Subject}} en tant que steward, et l'appel a échoué : {{.Detail}}"
   }
 ]

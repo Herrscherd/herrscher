@@ -162,6 +162,9 @@ func grantable(principal, role string) error {
 		return errLocalPrincipalRole
 	}
 	if strings.HasPrefix(principal, authz.SessionPrefix) {
+		if authz.GrantableToSession(role) {
+			return nil
+		}
 		return &sessionRoleError{Principal: principal}
 	}
 	if role == "" {

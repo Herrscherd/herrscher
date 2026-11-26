@@ -200,10 +200,58 @@ func TestRoleOfLocalIsAlwaysOwner(t *testing.T) {
 	}
 }
 
-func TestRoleOfASessionIsAlwaysAgent(t *testing.T) {
-	assignments := map[string]string{"session:revue": "owner"}
-	if got := RoleOf(SessionPrincipal("revue"), assignments); got != RoleAgent {
-		t.Fatalf("RoleOf(session) = %q, want agent: the role is structural and not grantable", got)
+func TestASessionIsAgentUnlessGrantedSteward(t *testing.T) {
+	cases := map[string]Role{"owner": RoleAgent, "operator": RoleAgent, "steward": RoleSteward, "": RoleAgent}
+	for granted, want := range cases {
+		assignments := map[string]string{"session:revue": granted}
+		if got := RoleOf(SessionPrincipal("revue"), assignments); got != want {
+			t.Errorf("RoleOf(session granted %q) = %q, want %q", granted, got, want)
+		}
+	}
+}
+
+func TestAStewardSessionLeavesHumansWithoutARole(t *testing.T) {
+	assignments := map[string]string{"session:revue": "steward"}
+	if got := RoleOf(Principal{ID: "chat:1"}, assignments); got != RoleNone {
+		t.Fatalf("RoleOf(human) = %q, want none: trusting a session must not demote every human to observer", got)
+	}
+}
+
+func TestAStewardConfiguresButNeverGrantsNorAnswersApprovals(t *testing.T) {
+	p := SessionPrincipal("revue")
+	for _, path := range [][]string{{"schedule", "add"}, {"set", "lang"}, {"session", "create"}, {"config", "set"}, {"service", "restart"}} {
+		if ok, why := Decide(req(p, path...), RoleSteward); !ok {
+			t.Errorf("steward refused %v: %s", path, why)
+		}
+	}
+	for _, path := range [][]string{{"role", "grant"}, {"approve", "allow"}, {"approve", "deny"}} {
+		if ok, _ := Decide(req(p, path...), RoleSteward); ok {
+			t.Errorf("steward ran %v", path)
+		}
+	}
+}
+
+func TestARefusedVerbIsPutToTheOperatorOnlyWhenNothingElseForbidsIt(t *testing.T) {
+	session := SessionPrincipal("revue")
+	cases := []struct {
+		name string
+		req  Request
+		role Role
+		want bool
+	}{
+		{"a configuration verb", req(session, "schedule", "add"), RoleAgent, true},
+		{"a verb no list names", req(session, "agent", "create"), RoleAgent, true},
+		{"a verb the agent already runs", req(session, "session", "list"), RoleAgent, false},
+		{"granting a role", req(session, "role", "grant"), RoleAgent, false},
+		{"answering an approval", req(session, "approve", "allow"), RoleAgent, false},
+		{"a session outside the subtree", Request{Principal: session, Path: []string{"session", "close"}, Subject: Subject{Session: "other"}}, RoleAgent, false},
+		{"its own subtree", Request{Principal: session, Path: []string{"session", "close"}, Subject: Subject{Session: "revue", InSubtree: true}}, RoleAgent, true},
+		{"a human observer", req(Principal{ID: "chat:1"}, "schedule", "add"), RoleObserver, false},
+	}
+	for _, tc := range cases {
+		if got := Escalable(tc.req, tc.role); got != tc.want {
+			t.Errorf("%s: Escalable = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }
 
@@ -231,8 +279,11 @@ func TestAnUnknownRoleNameFallsBackToObserver(t *testing.T) {
 }
 
 func TestAgentIsNotGrantable(t *testing.T) {
-	if Grantable("agent") {
-		t.Fatal("agent must not be grantable")
+	if Grantable("agent") || Grantable("steward") {
+		t.Fatal("agent and steward must not be grantable to a human")
+	}
+	if !GrantableToSession("steward") || GrantableToSession("owner") {
+		t.Fatal("a session may be granted steward and nothing else")
 	}
 	for _, name := range []string{"owner", "operator", "observer"} {
 		if !Grantable(name) {

@@ -158,24 +158,31 @@ func Load(path string) (Config, error) {
 	if err := json.Unmarshal(stripComments(buf), &cfg); err != nil {
 		return cfg, fmt.Errorf("parse %s: %w", path, err)
 	}
+	if err := validateLoaded(cfg); err != nil {
+		return cfg, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return cfg, nil
+}
+
+func validateLoaded(cfg Config) error {
 	if cfg.CompactAt != nil {
 		if err := contracts.ValidateAutoCompactPercent(*cfg.CompactAt); err != nil {
-			return cfg, fmt.Errorf("parse %s: compactAt: %w", path, err)
+			return fmt.Errorf("compactAt: %w", err)
 		}
 	}
 	if err := ValidateCompactStack(cfg.CompactStack); err != nil {
-		return cfg, fmt.Errorf("parse %s: compactStack: %w", path, err)
+		return fmt.Errorf("compactStack: %w", err)
 	}
 	if err := ValidateContextLimits(cfg.ContextLimits); err != nil {
-		return cfg, fmt.Errorf("parse %s: contextLimits: %w", path, err)
+		return fmt.Errorf("contextLimits: %w", err)
 	}
 	if err := ValidateKeys(cfg.Keys); err != nil {
-		return cfg, fmt.Errorf("parse %s: %w", path, err)
+		return err
 	}
 	if err := validateOutboundFileMaxMB(cfg.OutboundFileMaxMB); err != nil {
-		return cfg, fmt.Errorf("parse %s: outboundFileMaxMB: %w", path, err)
+		return fmt.Errorf("outboundFileMaxMB: %w", err)
 	}
-	return cfg, nil
+	return nil
 }
 
 var (

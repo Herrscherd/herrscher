@@ -50,6 +50,7 @@ type Handler struct {
 	defaultLang     i18n.Language
 	onLanguage      func(i18n.Language)
 	writes          WriteTracker
+	selfTools       SelfToolsProvisioner
 }
 
 // SetHosts wires the placement resolver. Without it every session is local,

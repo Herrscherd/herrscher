@@ -16,13 +16,13 @@ func sessionRecord(session string, cost float64, in, read, create int64) Record 
 	return Record{Time: testNow().Add(-time.Hour), Session: session, Vendor: "claude", Model: "opus", In: in, CacheRead: read, CacheCreate: create, Cost: cost}
 }
 
-func TestSummarizeGivesEachSessionItsCacheReadShare(t *testing.T) {
+func TestSessionRowsGivesEachSessionItsCacheReadShare(t *testing.T) {
 	records := []Record{
 		sessionRecord("alpha", 2, 100, 300, 100),
 		sessionRecord("alpha", 1, 100, 100, 0),
 		sessionRecord("beta", 1, 50, 0, 0),
 	}
-	rows := Summarize(records, Range7d, testNow(), AccountKey{}).Rows
+	rows := SessionRows(records)
 	if len(rows) != 2 || rows[0].Session != "alpha" || rows[1].Session != "beta" {
 		t.Fatalf("rows = %+v, want alpha then beta by cost", rows)
 	}
@@ -38,10 +38,10 @@ func TestSummarizeGivesEachSessionItsCacheReadShare(t *testing.T) {
 	}
 }
 
-func TestSummarizeLeavesCompactionRecordsOutOfSessionRows(t *testing.T) {
+func TestSessionRowsLeavesCompactionRecordsOutOfSessionRows(t *testing.T) {
 	compaction := sessionRecord("gamma", 9, 10, 10, 10)
 	compaction.Compaction = &Compaction{Stage: "backend"}
-	rows := Summarize([]Record{compaction}, Range7d, testNow(), AccountKey{}).Rows
+	rows := SessionRows([]Record{compaction})
 	if len(rows) != 0 {
 		t.Fatalf("a compaction run gave a session row: %+v", rows)
 	}
@@ -72,14 +72,14 @@ func rowsByName(rows []SessionRow) map[string]SessionRow {
 	return byName
 }
 
-func TestSummarizeAveragesOnlyTheMeasuredTurnsOfEachSession(t *testing.T) {
+func TestSessionRowsAveragesOnlyTheMeasuredTurnsOfEachSession(t *testing.T) {
 	records := []Record{
 		measuredRecord("alpha", 500),
 		measuredRecord("alpha", 300),
 		sessionRecord("alpha", 1, 10, 0, 0),
 		sessionRecord("beta", 1, 10, 0, 0),
 	}
-	byName := rowsByName(Summarize(records, Range7d, testNow(), AccountKey{}).Rows)
+	byName := rowsByName(SessionRows(records))
 	if byName["alpha"].Injection != (Injection{Turns: 2, Tokens: 800}) {
 		t.Errorf("alpha injection = %+v, want two measured turns of 800 tokens", byName["alpha"].Injection)
 	}
@@ -88,17 +88,17 @@ func TestSummarizeAveragesOnlyTheMeasuredTurnsOfEachSession(t *testing.T) {
 	}
 }
 
-func TestSummarizeCountsAMeasuredTurnOfZeroTokens(t *testing.T) {
-	rows := Summarize([]Record{measuredRecord("alpha", 0)}, Range7d, testNow(), AccountKey{}).Rows
+func TestSessionRowsCountsAMeasuredTurnOfZeroTokens(t *testing.T) {
+	rows := SessionRows([]Record{measuredRecord("alpha", 0)})
 	average, ok := rows[0].Injection.Average()
 	if !ok || average != 0 {
 		t.Fatalf("average = %v, %t, want 0, true for a measured turn of zero tokens", average, ok)
 	}
 }
 
-func TestSummarizeTakesEachSessionInjectionFromItsOwnRecords(t *testing.T) {
+func TestSessionRowsTakesEachSessionInjectionFromItsOwnRecords(t *testing.T) {
 	records := []Record{measuredRecord("old-name", 400), sessionRecord("new-name", 3, 10, 0, 0)}
-	byName := rowsByName(Summarize(records, Range7d, testNow(), AccountKey{}).Rows)
+	byName := rowsByName(SessionRows(records))
 	if byName["old-name"].Injection != (Injection{Turns: 1, Tokens: 400}) {
 		t.Errorf("old-name injection = %+v, want its one measured turn", byName["old-name"].Injection)
 	}
@@ -118,7 +118,7 @@ func TestRecordWithoutInjectionFieldReadsAsUnmeasured(t *testing.T) {
 	if record.InjectedMeasured {
 		t.Fatal("an old record without the field reads as measured")
 	}
-	rows := Summarize([]Record{record}, Range7d, testNow(), AccountKey{}).Rows
+	rows := SessionRows([]Record{record})
 	if _, ok := rows[0].Injection.Average(); ok {
 		t.Errorf("an old record reads an average: %+v", rows[0].Injection)
 	}
@@ -134,13 +134,17 @@ func TestUnmeasuredRecordOmitsTheInjectionFieldsOnDisk(t *testing.T) {
 	}
 }
 
-func TestSummarizeDropsSessionRowsWithoutAName(t *testing.T) {
-	spend := Summarize([]Record{sessionRecord("", 4, 10, 0, 0), sessionRecord("alpha", 1, 10, 0, 0)}, Range7d, testNow(), AccountKey{})
-	if len(spend.Rows) != 1 || spend.Rows[0].Session != "alpha" {
-		t.Fatalf("rows = %+v, want only the named session alpha", spend.Rows)
+func TestSessionRowsSkipTheUnnamedSession(t *testing.T) {
+	rows := SessionRows([]Record{sessionRecord("", 4, 10, 0, 0), sessionRecord("alpha", 1, 10, 0, 0)})
+	if len(rows) != 1 || rows[0].Session != "alpha" {
+		t.Fatalf("rows = %+v, want only the named session alpha", rows)
 	}
-	if spend.Sessions != 1 {
-		t.Errorf("sessions = %d, want 1 named session", spend.Sessions)
+}
+
+func TestSummarizeCountsTheUnnamedSessionAsOneSession(t *testing.T) {
+	spend := Summarize([]Record{sessionRecord("", 4, 10, 0, 0), sessionRecord("alpha", 1, 10, 0, 0)}, Range7d, testNow(), AccountKey{})
+	if spend.Sessions != 2 {
+		t.Errorf("sessions = %d, want the unnamed session counted with alpha", spend.Sessions)
 	}
 	if spend.Cost != 5 {
 		t.Errorf("cost = %v, want the unnamed record still counted in the totals", spend.Cost)

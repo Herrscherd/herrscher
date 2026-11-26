@@ -32,6 +32,32 @@ type SessionRow struct {
 	Injection  Injection `json:"injection"`
 }
 
+// SessionRows gives each named session of the records its row, by name, most costly first.
+// The records are the herrscher ledger of the period: a compaction and an unnamed record
+// carry no row.
+func SessionRows(records []Record) []SessionRow {
+	rows := make(map[string]SessionRow)
+	for index := range records {
+		record := &records[index]
+		if record.Compaction != nil || record.Session == "" {
+			continue
+		}
+		rows[record.Session] = addToRow(rows[record.Session], record)
+	}
+	return sortedSessionRows(rows)
+}
+
+func addToRow(row SessionRow, record *Record) SessionRow {
+	row.Session = record.Session
+	row.Cost += record.Cost
+	row.Tokens = row.Tokens.plus(recordTokens(*record))
+	if record.InjectedMeasured {
+		row.Injection.Turns++
+		row.Injection.Tokens += record.InjectedTokens
+	}
+	return row
+}
+
 func sortedSessionRows(rows map[string]SessionRow) []SessionRow {
 	out := make([]SessionRow, 0, len(rows))
 	for _, name := range slices.Sorted(maps.Keys(rows)) {

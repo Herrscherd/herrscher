@@ -97,7 +97,7 @@ type Share struct {
 }
 
 // Summarize totals the records of the period that the key matches, counting back from
-// now, and gives each named session its row from the same records as its cost.
+// now.
 func Summarize(records []Record, rng Range, now time.Time, key AccountKey) Spend {
 	now = now.UTC()
 	step := bucketStep(rng)
@@ -107,7 +107,7 @@ func Summarize(records []Record, rng Range, now time.Time, key AccountKey) Spend
 		spend:    Spend{Buckets: make([]Bucket, count)},
 		start:    start,
 		step:     step,
-		sessions: make(map[string]SessionRow),
+		sessions: make(map[string]bool),
 		unpriced: make(map[string]bool),
 		accounts: make(map[AccountKey]Share),
 		models:   make(map[string]Share),
@@ -130,7 +130,7 @@ type spendTotals struct {
 	spend    Spend
 	start    time.Time
 	step     time.Duration
-	sessions map[string]SessionRow
+	sessions map[string]bool
 	unpriced map[string]bool
 	accounts map[AccountKey]Share
 	models   map[string]Share
@@ -142,9 +142,7 @@ func (t *spendTotals) add(record *Record) {
 	spend.Split = spend.Split.plus(record.Split)
 	spend.Saved += record.Saved
 	spend.Tokens = spend.Tokens.plus(recordTokens(*record))
-	if record.Session != "" {
-		t.addSessionRow(record)
-	}
+	t.sessions[record.Session] = true
 	if record.Unpriced {
 		t.unpriced[record.Model] = true
 	}
@@ -164,21 +162,8 @@ func (t *spendTotals) add(record *Record) {
 	t.models[record.Model] = modelShare
 }
 
-func (t *spendTotals) addSessionRow(record *Record) {
-	row := t.sessions[record.Session]
-	row.Session = record.Session
-	row.Cost += record.Cost
-	row.Tokens = row.Tokens.plus(recordTokens(*record))
-	if record.InjectedMeasured {
-		row.Injection.Turns++
-		row.Injection.Tokens += record.InjectedTokens
-	}
-	t.sessions[record.Session] = row
-}
-
 func (t *spendTotals) done() Spend {
 	t.spend.Sessions = len(t.sessions)
-	t.spend.Rows = sortedSessionRows(t.sessions)
 	t.spend.Accounts = sortedShares(t.accounts)
 	t.spend.Models = sortedShares(t.models)
 	t.spend.Unpriced = slices.Sorted(maps.Keys(t.unpriced))

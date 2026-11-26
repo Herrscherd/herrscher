@@ -506,7 +506,7 @@ func TestConsolidationFailureIsWarnedInTheSessionLanguage(t *testing.T) {
 }
 
 func TestPreferredBackendIsClaudeUnlessTheEnvironmentNamesOne(t *testing.T) {
-	for env, want := range map[string]string{"": "claude", "  ": "claude", "codex": "codex", " antigravity ": "antigravity"} {
+	for env, want := range map[string]string{"": "claude", "codex": "codex", "antigravity": "antigravity"} {
 		if got := PreferredBackend(func(string) string { return env }); got != want {
 			t.Fatalf("PreferredBackend with HERRSCHER_BACKEND=%q = %q, want %q", env, got, want)
 		}

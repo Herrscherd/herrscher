@@ -1208,8 +1208,13 @@ func TestAntigravitySignInRunsAgyAlone(t *testing.T) {
 	if args := loginCmd(t.Context(), probeAntigravity).Args; !slices.Equal(args, []string{antigravityCLI}) {
 		t.Fatalf("sign in runs %q, want agy with no argument", args)
 	}
-	if name := loginCLI(probeAntigravity); name != antigravityCLI {
-		t.Fatalf("a missing CLI is reported as %q, want agy", name)
+}
+
+func TestMissingSignInCLIIsNamedAfterTheCommandItRuns(t *testing.T) {
+	for _, kind := range []probeKind{probeClaude, probeCodex, probeGrok, probeAntigravity} {
+		if name, want := loginCLI(kind), loginCmd(t.Context(), kind).Args[0]; name != want {
+			t.Fatalf("kind %d: a missing CLI is reported as %q, want %q", kind, name, want)
+		}
 	}
 }
 

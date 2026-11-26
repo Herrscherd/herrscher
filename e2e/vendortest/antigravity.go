@@ -11,7 +11,8 @@ import (
 const (
 	antigravityLabel           = "antigravity"
 	antigravityVersion         = "1.5.18 (vendortest)"
-	antigravityModels          = "Fetching available models...\nvendortest-model\tVendortest Model (High)"
+	antigravityFetching        = "Fetching available models..."
+	antigravityModels          = "vendortest-model\tVendortest Model (High)"
 	defaultAntigravityConv     = "vendortest-antigravity-conversation"
 	antigravityInputFormat     = "--input-format"
 	antigravityOutputFormat    = "--output-format"
@@ -34,7 +35,7 @@ func Antigravity(args []string, streams Streams, files Files) int {
 		return exitOf(streams.Err, writeLine(streams.Out, antigravityVersion))
 	}
 	if len(args) > 0 && args[0] == antigravityModelsCommand {
-		return exitOf(streams.Err, writeLine(streams.Out, antigravityModels))
+		return exitOf(streams.Err, errors.Join(writeLine(streams.Err, antigravityFetching), writeLine(streams.Out, antigravityModels)))
 	}
 	if flagValue(args, antigravityInputFormat) != antigravityStreamFormat || flagValue(args, antigravityOutputFormat) != antigravityStreamFormat {
 		return exitOf(streams.Err, errAntigravityArgs)

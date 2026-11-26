@@ -292,7 +292,7 @@ func resolveBackendDir(dir string) string {
 // without it the default backend would change whenever a backend whose path
 // sorts first is compiled in.
 func PreferredBackend(getenv func(string) string) string {
-	if kind := strings.TrimSpace(getenv("HERRSCHER_BACKEND")); kind != "" {
+	if kind := getenv("HERRSCHER_BACKEND"); kind != "" {
 		return kind
 	}
 	return vendorClaude

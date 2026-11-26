@@ -1,6 +1,7 @@
 package worktree
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -69,7 +70,7 @@ func TestOutsideAnyRepositoryRefusesAFolderUnderAGitEntryGitDoesNotSee(t *testin
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
 	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Join(repo, "a"))
-	if outside, err := OutsideAnyRepository(t.Context(), hidden); err == nil || outside {
+	if outside, err := OutsideAnyRepository(t.Context(), hidden); !errors.Is(err, ErrHiddenRepository) || outside {
 		t.Fatalf("OutsideAnyRepository(repo/a/b) = %v, %v, want an error naming %s", outside, err, filepath.Join(repo, ".git"))
 	}
 }

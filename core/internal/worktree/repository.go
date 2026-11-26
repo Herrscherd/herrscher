@@ -10,7 +10,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/Herrscherd/herrscher/core/clitext"
 )
+
+// ErrHiddenRepository is the cause when git finds no repository for a folder that a .git entry on its path says belongs to one.
+var ErrHiddenRepository = clitext.SentinelError("git finds no repository under a .git entry")
 
 const (
 	gitFatalExitCode     = 128
@@ -38,7 +43,7 @@ func OutsideAnyRepository(ctx context.Context, dir string) (bool, error) {
 		return false, err
 	}
 	if entry != "" {
-		return false, fmt.Errorf("%s exists but git sees no repository there: %w", entry, failure)
+		return false, fmt.Errorf("%s: %w: %w", entry, ErrHiddenRepository, failure)
 	}
 	return true, nil
 }

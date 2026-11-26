@@ -5847,6 +5847,6 @@
   {
     "id": "cli.setup.telegram.malformed",
     "description": "Hub state of the Telegram module when one of its settings cannot be parsed",
-    "other": "a Telegram setting is malformed (an id that is not a number, or an unknown on or off word), so the gateway will not start"
+    "other": "a Telegram setting is malformed (an id that is not a number, or a switch other than on, off, yes, no, true, false, 1 or 0), so the gateway will not start"
   }
 ]

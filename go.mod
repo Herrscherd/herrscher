@@ -8,7 +8,7 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/Herrscherd/herrscher-claude-backend v0.19.0
 	github.com/Herrscherd/herrscher-codex-backend v0.11.0
-	github.com/Herrscherd/herrscher-contracts v0.45.0
+	github.com/Herrscherd/herrscher-contracts v0.46.0
 	github.com/Herrscherd/herrscher-cursor-backend v0.9.0
 	github.com/Herrscherd/herrscher-discord-gateway v0.33.0
 	github.com/Herrscherd/herrscher-github-forge v0.2.0
@@ -18,6 +18,7 @@ require (
 	github.com/Herrscherd/herrscher-orchestrator v0.6.0
 	github.com/Herrscherd/herrscher-pixellab-backend v0.1.1
 	github.com/Herrscherd/herrscher-superset-skills v0.4.0
+	github.com/Herrscherd/herrscher-telegram-gateway v0.2.1
 	github.com/Herrscherd/herrscher-transport v0.8.0
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/charmbracelet/bubbles v1.0.0

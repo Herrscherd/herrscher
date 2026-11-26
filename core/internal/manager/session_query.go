@@ -139,7 +139,7 @@ func (h *Handler) sessionListRun(_ context.Context, input contracts.Input) (cont
 	out.WriteString(h.text(clitext.SessionListHeader, nil) + "\n")
 	for i := range sessions {
 		session := sessions[i]
-		fmt.Fprintf(&out, "• %s (%s) %s", session.Name, session.Type, h.adminFor(session).ChannelRef(session.ChannelID))
+		fmt.Fprintf(&out, "• %s (%s) %s", session.Name, session.Type, channelRef(h.adminFor(session), session.ChannelID))
 		if session.PullRequest != 0 {
 			out.WriteString(" " + h.sessionPullRequestText(session))
 		}

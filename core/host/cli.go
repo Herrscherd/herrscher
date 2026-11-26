@@ -239,6 +239,7 @@ func NewRegistry(ctx context.Context, cliMessages *clitext.Messages, hostMessage
 	if ta := terminalAdmin(gws); ta != nil {
 		deps.handler.SetTerminalAdmin(ta)
 	}
+	deps.handler.SetGatewayAdmins(gatewayAdmins(gws))
 	forwardDaemonOwnedCommands(reg, options.Runtime, instID, forwarderFor(messages, options.Runtime))
 	return reg, nil
 }

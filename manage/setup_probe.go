@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +20,8 @@ import (
 const (
 	probeTimeout     = 20 * time.Second
 	discordAPI       = "https://discord.com/api/v10"
+	telegramAPI      = "https://api.telegram.org"
+	redactedToken    = "[token]"
 	anthropicAPI     = "https://api.anthropic.com"
 	anthropicVersion = "2023-06-01"
 	probeBodyLimit   = 1 << 16
@@ -33,6 +36,7 @@ type probeKind int
 
 const (
 	probeDiscord probeKind = iota
+	probeTelegram
 	probeClaude
 	probeCodex
 	probeCursor
@@ -100,6 +104,7 @@ type setupProber struct {
 	lookPath     func(string) (string, error)
 	client       *http.Client
 	discordURL   string
+	telegramURL  string
 	anthropicURL string
 }
 
@@ -109,6 +114,7 @@ func liveProber() setupProber {
 		lookPath:     exec.LookPath,
 		client:       &http.Client{Timeout: probeTimeout},
 		discordURL:   discordAPI,
+		telegramURL:  telegramAPI,
 		anthropicURL: anthropicAPI,
 	}
 }
@@ -134,6 +140,39 @@ func (prober setupProber) discord(ctx context.Context, token string) probeResult
 	return passed(clitext.SetupBotOK, clitext.Params{clitext.ParamName: user.Username})
 }
 
+type telegramIdentity struct {
+	Result struct {
+		Username string `json:"username"`
+	} `json:"result"`
+}
+
+func (prober setupProber) telegram(ctx context.Context, token string) probeResult {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return failed(clitext.SetupBotEmpty, telegramParams())
+	}
+	var identity telegramIdentity
+	status, err := prober.getJSON(ctx, prober.telegramURL+"/bot"+token+"/getMe", http.Header{}, &identity)
+	switch {
+	case err != nil:
+		return failed(clitext.SetupProbeFailed, clitext.Params{clitext.ParamErr: withoutToken(err, token)})
+	case status == http.StatusUnauthorized, status == http.StatusNotFound:
+		return failed(clitext.SetupBotRefused, telegramParams())
+	case status != http.StatusOK:
+		return probeError(errProbeStatus)
+	}
+	return passed(clitext.SetupBotOK, clitext.Params{clitext.ParamName: "@" + identity.Result.Username})
+}
+
+func withoutToken(err error, token string) string {
+	var request *url.Error
+	if errors.As(err, &request) {
+		err = request.Err
+	}
+	text := strings.ReplaceAll(err.Error(), token, redactedToken)
+	return strings.ReplaceAll(text, url.PathEscape(token), redactedToken)
+}
+
 func (prober setupProber) anthropicKey(ctx context.Context, key string) probeResult {
 	if strings.TrimSpace(key) == "" {
 		return failed(clitext.SetupKeyEmpty, nil)
@@ -151,8 +190,8 @@ func (prober setupProber) anthropicKey(ctx context.Context, key string) probeRes
 	return passed(clitext.SetupKeyAccepted, nil)
 }
 
-func (prober setupProber) getJSON(ctx context.Context, url string, header http.Header, into any) (int, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+func (prober setupProber) getJSON(ctx context.Context, endpoint string, header http.Header, into any) (int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)
 	if err != nil {
 		return 0, err
 	}

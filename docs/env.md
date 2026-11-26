@@ -20,6 +20,12 @@ The variables below are the ones the host and the bundled plugins read.
 | `DISCORD_CONTEXT_MESSAGES` | `30` | How many prior channel messages are carried into the turn as context, all authors. | Discord gateway plugin |
 | `DISCORD_TIDY_PINGS` | off | Delete the message that opened a turn once its answer is posted, so a channel keeps the work rather than the requests. Only the spellings people write (`1`, `true`, `yes`, `on`) count as on: a typo must not switch on something that deletes. | Discord gateway plugin |
 | `DISCORD_MESSAGE_DELETES` | off | Contribute the `discord message delete` verb to the daemon. Off, the verb is absent from the registry rather than present and failing: a command that was never registered cannot be talked into running by a message asking for it. On, it still refuses any message the bot did not write. | Discord gateway plugin |
+| `TELEGRAM_BOT_TOKEN` | unset (required for the Telegram gateway) | The token BotFather gave. Keep the bot's privacy mode on and set no webhook: Telegram refuses polling while one is set. | Telegram gateway plugin |
+| `TELEGRAM_USER_ID` | unset | The numeric id of the user the bot always obeys. The gateway refuses to start unless this, `TELEGRAM_ALLOWED_USERS` or `TELEGRAM_ALLOW_ALL_USERS` says who may talk to it. | Telegram gateway plugin |
+| `TELEGRAM_ALLOWED_USERS` | unset | Numeric user ids allowed to make the bot act, comma or space separated. | Telegram gateway plugin |
+| `TELEGRAM_ALLOWED_CHATS` | unset (no group) | Numeric ids of the groups the bot answers in. A group not listed here stays closed. | Telegram gateway plugin |
+| `TELEGRAM_ALLOW_ALL_USERS` | off | Let anyone who can reach the bot make it act. | Telegram gateway plugin |
+| `TELEGRAM_AGENT` | unset | The persona every Telegram session runs as. | Telegram gateway plugin |
 | `DCTL_STATE_DIR` | `~/.config/dctl` | Where the gateway keeps its own `0600` stores (`discord-allow.json`, `discord-router.json`). | Discord gateway plugin |
 | `HERRSCHER_OWNER_ID` | none | Owner snowflake; the fallback the per-daemon instance id is derived from when `HERRSCHER_INSTANCE_ID` is unset. | Host |
 | `HERRSCHER_STATE_DIR` | `~/.config/herrscher` | The state directory (holds `state.json`); also the root of durable agent homes (`<stateDir>/agents/<name>/`). | Host |

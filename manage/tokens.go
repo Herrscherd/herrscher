@@ -10,6 +10,7 @@ const (
 	catSkills       = "skills"
 	catCompactor    = "compactor"
 	kindDiscord     = "discord"
+	kindTelegram    = "telegram"
 	kindNone        = "none"
 	verbGet         = "get"
 	verbPin         = "pin"

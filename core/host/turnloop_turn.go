@@ -29,7 +29,7 @@ func (d *sessionDriver) pump(ctx context.Context) {
 				continue
 			}
 			if d.abandonedByInterrupt(item) {
-				d.fanOut(ctx, contracts.Event{T: eventwire.EventAbandoned})
+				d.fanOut(ctx, contracts.Event{T: eventwire.EventAbandoned, Who: item.ev.Who, Text: item.ev.Text})
 				d.releaseTurn()
 				continue
 			}

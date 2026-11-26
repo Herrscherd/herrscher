@@ -6,7 +6,7 @@ reinstalls the binary. Restart the service afterwards to run it.
 
 | Category | Port | Official plugin |
 |----------|------|-----------------|
-| Gateway | `Gateway` | [herrscher-discord-gateway], in-tree `terminal` |
+| Gateway | `Gateway` | [herrscher-discord-gateway], [herrscher-telegram-gateway], in-tree `terminal` |
 | Backend | `Backend` | [herrscher-claude-backend], [herrscher-codex-backend], [herrscher-cursor-backend], [herrscher-pixellab-backend] |
 | Memory | `Memory` | [herrscher-obsidian-memory] |
 | Orchestrator | `Orchestrator` | [herrscher-orchestrator] |
@@ -84,7 +84,7 @@ With no flags it writes the batteries-included **default stack**:
 
 | Category | Kinds | Default kind | Module |
 |----------|-------|--------------|--------|
-| Gateway | `discord` | `discord` | herrscher-discord-gateway |
+| Gateway | `discord` \| `telegram` | `discord` | herrscher-discord-gateway, herrscher-telegram-gateway |
 | Backend | `claude` \| `codex` \| `cursor` | `claude` | herrscher-claude-backend |
 | Memory | `obsidian` | `obsidian` | herrscher-obsidian-memory |
 | Orchestrator | `basic` | `basic` | herrscher-orchestrator |
@@ -179,6 +179,7 @@ These verbs are distinct from the runtime commands (`serve`, `bridge`, `session`
 - Layout & wiring: how the module and its plugin siblings fit together.
 
 [herrscher-discord-gateway]: https://github.com/Herrscherd/herrscher-discord-gateway
+[herrscher-telegram-gateway]: https://github.com/Herrscherd/herrscher-telegram-gateway
 [herrscher-claude-backend]: https://github.com/Herrscherd/herrscher-claude-backend
 [herrscher-codex-backend]: https://github.com/Herrscherd/herrscher-codex-backend
 [herrscher-cursor-backend]: https://github.com/Herrscherd/herrscher-cursor-backend

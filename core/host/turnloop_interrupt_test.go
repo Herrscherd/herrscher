@@ -22,8 +22,8 @@ func TestInterruptAbandonsATurnQueuedBehindACompaction(t *testing.T) {
 	f.driver.Interrupt()
 	f.from <- measuredAnswer(t, 4_000)
 
-	if abandoned := waitEmitted(t, f, eventwire.EventAbandoned); abandoned.T != eventwire.EventAbandoned {
-		t.Fatalf("event = %+v, want the queued turn abandoned", abandoned)
+	if abandoned := waitEmitted(t, f, eventwire.EventAbandoned); abandoned.Who != "alice" || abandoned.Text != "vas-y" {
+		t.Fatalf("event = %+v, want the queued turn abandoned with its author and text", abandoned)
 	}
 	drainWithoutInput(t, f)
 

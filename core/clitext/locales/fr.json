@@ -5849,5 +5849,40 @@
     "id": "cli.session.pr.conclusion.other",
     "description": "Mot de conclusion de contrôle : terminé sans conclusion nommable",
     "other": "autre"
+  },
+  {
+    "id": "cli.setup.module.telegram",
+    "description": "Description of the Telegram gateway module",
+    "other": "bot Telegram, conversations privées et groupes"
+  },
+  {
+    "id": "cli.setup.telegram.intro",
+    "description": "Intro of the Telegram bot screen",
+    "other": "Envoie /newbot à @BotFather sur Telegram, garde son mode confidentialité activé, puis colle le jeton qu'il donne."
+  },
+  {
+    "id": "cli.setup.telegram.user",
+    "description": "Label of the Telegram user id field",
+    "other": "ton identifiant numérique Telegram"
+  },
+  {
+    "id": "cli.setup.telegram.user_hint",
+    "description": "Hint of the Telegram user id field",
+    "other": "un bot comme @userinfobot l'affiche ; personne d'autre ne peut parler au bot"
+  },
+  {
+    "id": "cli.host.err.no_channel_admin",
+    "description": "Error when setting the home while no gateway manages channels",
+    "other": "aucune passerelle en marche ne gère de salons, donc pas de maison à définir : démarre une passerelle qui en gère"
+  },
+  {
+    "id": "cli.setup.telegram.user_missing",
+    "description": "Hub state of the Telegram module without a usable user id",
+    "other": "pas d'identifiant numérique : personne ne peut parler au bot, il ne démarrera pas"
+  },
+  {
+    "id": "cli.setup.telegram.malformed",
+    "description": "Hub state of the Telegram module when one of its settings cannot be parsed",
+    "other": "un réglage Telegram est mal formé (un identifiant qui n'est pas un nombre, ou un interrupteur autre que on, off, yes, no, true, false, 1 ou 0), la passerelle ne démarrera pas"
   }
 ]

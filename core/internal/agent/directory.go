@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"errors"
 	"log/slog"
 	"slices"
 	"strings"
@@ -121,20 +120,11 @@ func (d *Directory) tokenLocked(gateway, agent string, rules []voiceRule) contra
 	token, err := contracts.NewBotToken(secret)
 	if err != nil {
 		if d.firstTime("token:" + key) {
-			d.log.Warn("bot token refused, the agent speaks as the gateway's own bot", "key", key, "reason", refusalOf(err))
+			d.log.Warn("bot token refused, the agent speaks as the gateway's own bot", "key", key, "reason", "invalid bot token")
 		}
 		return contracts.BotToken{}
 	}
 	return token
-}
-
-func refusalOf(err error) error {
-	for _, sentinel := range []error{contracts.ErrEmptyBotToken, contracts.ErrInvalidBotToken} {
-		if errors.Is(err, sentinel) {
-			return sentinel
-		}
-	}
-	return err
 }
 
 func (d *Directory) sharedLocked(gateway, key string, rules []voiceRule) bool {

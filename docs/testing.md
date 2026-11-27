@@ -189,3 +189,7 @@ an ssh host when two environment variables are set:
   tests. Without it the directory is left in place. A non-empty directory is never
   removed, and the tests remove only the socket files they created.
 
+## Write failures
+
+The write-failure tests of `core/forgecreds` skip on Windows and as root, where file and directory modes are not enforced. `core/internal/atomicfile` has no test that the old content survives a failed rename over a regular file on Linux: without an injection seam that rename cannot be made to fail, and none exists.
+

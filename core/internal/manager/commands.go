@@ -125,6 +125,11 @@ func (h *Handler) Commands() []contracts.Cmd {
 			Param("name", clitext.CmdParamAgentSetSoulName, true).
 			Param("soul", clitext.CmdParamAgentSetSoulSoul, true).
 			Do(h.agentSetSoulRun),
+		contracts.New("agent", "set-reply").
+			Help(clitext.CmdHelpAgentSetReply).
+			Param("name", clitext.CmdParamAgentSetReplyName, false).
+			Param("rule", clitext.CmdParamAgentSetReplyRule, false).
+			Do(h.agentSetReplyRun),
 		contracts.New("set", "home").
 			Help(clitext.CmdHelpSetHome).
 			Param("channel", clitext.CmdParamSetHomeChannel, true).

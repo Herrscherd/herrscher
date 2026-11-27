@@ -19,6 +19,10 @@ const (
 	tailscaleMaxBody    = 4 << 20
 )
 
+// ErrTailscaleStatus reports a status request that tailscaled answered with a
+// status other than 200 OK.
+var ErrTailscaleStatus = errors.New("tailscale refused its status request")
+
 // Tailscale lists the online peers of the tailnet through the local API of
 // tailscaled. Without Tailscale on the machine, the socket is missing and the
 // source is empty, not failed.
@@ -39,6 +43,9 @@ func (Tailscale) Name() string {
 // Find returns one candidate per online peer of the tailnet. Peers are proposed
 // as reachable machines, not as verified herrscher daemons.
 func (source Tailscale) Find(ctx context.Context) ([]Candidate, error) {
+	ctx, cancel := context.WithTimeout(ctx, SourceDeadline)
+	defer cancel()
+
 	body, err := source.status(ctx)
 	if err != nil {
 		return nil, err
@@ -58,7 +65,7 @@ func (source Tailscale) status(ctx context.Context) ([]byte, error) {
 	}}
 	defer client.CloseIdleConnections()
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, tailscaleStatusURL, nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, tailscaleStatusURL, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -69,11 +76,11 @@ func (source Tailscale) status(ctx context.Context) ([]byte, error) {
 		}
 		return nil, err
 	}
-	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("tailscale status: %s", response.Status)
+		return nil, errors.Join(fmt.Errorf("%w: %s", ErrTailscaleStatus, response.Status), response.Body.Close())
 	}
-	return io.ReadAll(io.LimitReader(response.Body, tailscaleMaxBody))
+	body, readErr := io.ReadAll(io.LimitReader(response.Body, tailscaleMaxBody))
+	return body, errors.Join(readErr, response.Body.Close())
 }
 
 func isSocketAbsent(err error) bool {
@@ -106,8 +113,8 @@ func candidatesFromTailscaleStatus(body []byte) ([]Candidate, error) {
 			continue
 		}
 		found = append(found, Candidate{
-			Name:    peer.HostName,
-			Address: address,
+			Name:    plainText(peer.HostName),
+			Address: plainText(address),
 			Route:   RouteTailnet,
 		})
 	}

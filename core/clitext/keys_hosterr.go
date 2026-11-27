@@ -5,6 +5,8 @@ func hostErrKeys() map[Key][]string {
 		"cli.host.fault.conversation_account":          nil,
 		"cli.host.fault.announce_window":               nil,
 		"cli.host.fault.fingerprint_invalid":           nil,
+		"cli.host.fault.announce_no_address":           nil,
+		"cli.host.fault.tailscale_status":              nil,
 		HostFaultUnsupportedLang:                       nil,
 		"cli.host.fault.conversation_fork":             nil,
 		"cli.host.fault.conversation_restore":          nil,

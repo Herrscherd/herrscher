@@ -118,6 +118,8 @@ func hostErrorKeys() []hostErrorKey {
 		{errSelfToolsSilent, "cli.host.fault.self_tools_silent"},
 		{discovery.ErrWindowOutOfRange, "cli.host.fault.announce_window"},
 		{discovery.ErrFingerprintInvalid, "cli.host.fault.fingerprint_invalid"},
+		{discovery.ErrNoAddress, "cli.host.fault.announce_no_address"},
+		{discovery.ErrTailscaleStatus, "cli.host.fault.tailscale_status"},
 	}
 }
 

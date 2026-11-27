@@ -22,6 +22,10 @@ const (
 // exceeds MaxAnnounceWindow.
 var ErrWindowOutOfRange = errors.New("announcement window must be positive and at most ten minutes")
 
+// ErrNoAddress reports an announcement without any address to publish. Without one,
+// a resolver would look the instance up by name and learn the fingerprint.
+var ErrNoAddress = errors.New("announcement has no address to publish")
+
 // Announcement is what a daemon publishes on the local network while a pairing
 // window is open: its presence, its fingerprint and the port it listens on. It
 // carries no user name, no session name and no build version.
@@ -47,22 +51,25 @@ type Serve func(ctx context.Context, a Announcement) error
 // Advertise publishes the announcement for at most window and returns once the
 // window closes or serve returns. The window is the only way an announcement ends
 // early or late: nothing stays on the network after it.
-func Advertise(ctx context.Context, a Announcement, window time.Duration, serve Serve) error {
-	if a.Fingerprint.IsZero() {
+func Advertise(ctx context.Context, announcement Announcement, window time.Duration, serve Serve) error {
+	if announcement.Fingerprint.IsZero() {
 		return ErrFingerprintInvalid
+	}
+	if len(announcement.Addresses) == 0 {
+		return ErrNoAddress
 	}
 	if window <= 0 || window > MaxAnnounceWindow {
 		return ErrWindowOutOfRange
 	}
 	ctx, cancel := context.WithTimeout(ctx, window)
 	defer cancel()
-	return serve(ctx, a)
+	return serve(ctx, announcement)
 }
 
 // ServeMDNS answers the DNS-SD questions for the announcement until ctx ends. The
 // host name it publishes is derived from the fingerprint, never from the machine.
-func ServeMDNS(ctx context.Context, a Announcement) error {
-	zone, err := a.zone()
+func ServeMDNS(ctx context.Context, announcement Announcement) error {
+	zone, err := announcement.zone()
 	if err != nil {
 		return err
 	}

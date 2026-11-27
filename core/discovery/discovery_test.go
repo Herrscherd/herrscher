@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 )
 
 type fakeSource struct {
@@ -19,12 +20,24 @@ func (s fakeSource) Find(context.Context) ([]Candidate, error) {
 	return s.found, s.err
 }
 
-func TestDiscoverMergesSortsAndDeduplicatesTheSources(t *testing.T) {
+type silentSource struct {
+	name string
+}
+
+func (s silentSource) Name() string { return s.name }
+
+func (s silentSource) Find(ctx context.Context) ([]Candidate, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func TestDiscoverSortsTheSourcesAndDropsRepeatedCandidates(t *testing.T) {
 	sshAlias := Candidate{Name: "build1", Address: "build1", Route: RouteSSH, SSHTarget: "build1"}
 	tailnetPeer := Candidate{Name: "build1", Address: "build1.tailnet.example.ts.net", Route: RouteTailnet}
+	sameTailnetPeer := Candidate{Name: "build1", Address: "BUILD1.tailnet.example.ts.net.", Route: RouteTailnet}
 	report := Discover(context.Background(), []Source{
 		fakeSource{name: "ssh-config", found: []Candidate{sshAlias, sshAlias}},
-		fakeSource{name: "tailscale", found: []Candidate{tailnetPeer}},
+		fakeSource{name: "tailscale", found: []Candidate{tailnetPeer, sameTailnetPeer}},
 	})
 	want := []Candidate{tailnetPeer, sshAlias}
 	if !slices.Equal(report.Candidates, want) {
@@ -43,6 +56,26 @@ func TestAFailingSourceIsReportedAndDoesNotStopTheOthers(t *testing.T) {
 	}
 	if len(report.Candidates) != 1 || report.Candidates[0] != peer {
 		t.Fatalf("the healthy source was lost: %+v", report.Candidates)
+	}
+}
+
+func TestASourceThatNeverAnswersEndsAtTheDeadline(t *testing.T) {
+	started := time.Now()
+	report := Discover(context.Background(), []Source{silentSource{name: "stuck"}})
+	if !slices.Equal(report.Unavailable, []string{"stuck"}) {
+		t.Fatalf("unavailable %v, want [stuck]", report.Unavailable)
+	}
+	if elapsed := time.Since(started); elapsed > 10*SourceDeadline {
+		t.Fatalf("discovery waited %v for a silent source", elapsed)
+	}
+}
+
+func TestACancelledDiscoveryReturnsAtOnce(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	report := Discover(ctx, []Source{silentSource{name: "stuck"}, fakeSource{name: "ssh-config"}})
+	if !slices.Equal(report.Unavailable, []string{"stuck"}) {
+		t.Fatalf("unavailable %v, want [stuck]", report.Unavailable)
 	}
 }
 
@@ -72,5 +105,20 @@ func TestDefaultSourcesCoverTheThreeRoutes(t *testing.T) {
 	}
 	if !slices.Equal(names, []string{"dns-sd", "tailscale", "ssh-config"}) {
 		t.Fatalf("got sources %v", names)
+	}
+}
+
+func TestPlainTextRemovesWhatATerminalWouldObey(t *testing.T) {
+	hostile := "a\x1b]0;pwn\x07b\u009bc\u202ed\u2066e\tf\x7f"
+	got := plainText(hostile)
+	for _, forbidden := range []rune{'\x1b', '\x07', '\u009b', '\u202e', '\u2066', '\x7f', '\t'} {
+		for _, char := range got {
+			if char == forbidden {
+				t.Fatalf("plainText kept %U in %q", forbidden, got)
+			}
+		}
+	}
+	if got != "a]0;pwnbcdef" {
+		t.Fatalf("plainText(%q) = %q", hostile, got)
 	}
 }

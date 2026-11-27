@@ -101,39 +101,64 @@ settings guard it:
 ## Discovery
 
 `herrscher host discover` lists the machines a session could run on. It reads
-three sources and proposes what it finds, without adding anything:
+three sources and proposes what it finds, without adding anything. Every source
+has the same deadline of two seconds, and a source that does not answer by then
+is listed as unavailable while the others are still shown:
 
 - **Local network (`lan`):** a DNS-SD browse for `_herrscher._tcp` lasting two
   seconds. It only sends multicast questions and changes nothing on the network.
+  The browse reads answers as they arrive. The multicast library drops an answer
+  when its buffer is full, so a burst of more than 256 answers that the reader
+  has not taken yet is lost without a message.
 - **Tailnet (`tailnet`):** the online peers that tailscaled reports on its local
-  socket. Without Tailscale on the machine, this source is empty and silent.
+  socket, read up to 4 MiB. Without Tailscale on the machine, this source is empty
+  and silent. A socket that accepts and never answers is unavailable.
 - **SSH configuration (`ssh`):** the concrete `Host` aliases of `~/.ssh/config`.
   Patterns with wildcards (`*`, `?`) or negations (`!`) are skipped, and files
   named by `Include` directives are not followed.
 
-Every candidate is unverified, including a daemon that announces itself. The
-output shows its route, its fingerprint when one is announced, and the
-`herrscher host add` command that would register it, with placeholders for the
-name, the ssh target and the workspace. Nothing is written until that command runs.
+Every candidate is unverified, including a daemon that announces itself. Names
+and addresses that come from the network are cleaned before they are shown: control
+characters, the C1 range and bidirectional overrides are removed, so a machine
+cannot write to the terminal of the operator. Addresses are compared in lowercase
+without the trailing dot.
+
+Candidates that share a route, a name, an address and an ssh target are listed
+once. The same machine found on two routes stays on two lines, one per route,
+because each route leads to a different `herrscher host add` command. The lines are
+not merged across routes.
+
+The output shows the route, the fingerprint when one is announced, and the
+`herrscher host add` command that would register the candidate. The command is
+proposed only when the name and the target are plain host names (letters, digits,
+`.`, `-`, `_`, `@`, `:` and square brackets, starting with a letter, a digit or a
+bracket). Any other name gets no command, only a line that says so. The ssh alias
+and the tailnet name shown are the real ones; the placeholders stay for what the
+operator still has to choose: `<name>` for a daemon found on the local network,
+`<user>` when no ssh alias exists, and `<path>` for the workspace. Nothing is
+written until the command runs.
 
 ### What a daemon announces
 
-An announcement is off by default. It only exists while a pairing window is open,
-and a window lasts at most ten minutes. The announcement is a DNS-SD service
-instance named `herrscher-<fingerprint>` with two TXT fields:
+This is the planned behavior of the announcement. It is not wired yet: no daemon
+publishes it today, and `device pair` does not use it. Once wired, an announcement
+only exists while a pairing window is open, and a window lasts at most ten minutes. It is a DNS-SD service instance named `herrscher-<fingerprint>` with
+two TXT fields:
 
 - `proto=1`, the revision of the discovery protocol;
 - `fp=<fingerprint>`, sixteen lowercase hex digits from the daemon's key.
 
 Its SRV target is `herrscher-<fingerprint>.local.`, so the machine's own host name
 is never published. The port and the addresses of the daemon go in the SRV and A
-records, since a client needs them to connect.
+records, since a client needs them to connect. An announcement without any address
+is refused, because a resolver would then look up the instance by name and learn
+the fingerprint.
 
 The announcement never carries a user name, a session name, a build version, or
 any other TXT field. `TestTheAnnouncementNeverNamesTheMachine` and
 `TestAnAnnouncementPublishesOnlyPresenceAndFingerprint` in `core/discovery` hold
-that rule. The announcer is not yet wired to `device pair`: that follows the
-device work (#323), and it will stay behind a config flag that is off by default.
+that rule. When the announcer is wired to `device pair`, it follows the device
+work (#323) and stays behind a config flag that is off by default.
 
 ### What discovery never does
 

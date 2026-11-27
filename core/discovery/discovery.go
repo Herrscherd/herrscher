@@ -10,7 +10,9 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"sync"
+	"unicode"
 )
 
 // Route names the network path a candidate was found on.
@@ -122,8 +124,16 @@ type sourceOutcome struct {
 }
 
 // Discover asks every source at once and merges what they return. A source that
-// fails is listed as unavailable and does not stop the others.
+// fails or stops answering when SourceDeadline ends is listed as unavailable and
+// does not stop the others. Every source receives that deadline as its context and
+// must return once the context ends: Discover waits for all of them. Candidates
+// that name the same route, the same machine and the same target are listed once;
+// the same machine found on two routes stays twice, since each route leads to its
+// own command.
 func Discover(ctx context.Context, sources []Source) Report {
+	ctx, cancel := context.WithTimeout(ctx, SourceDeadline)
+	defer cancel()
+
 	outcomes := make([]sourceOutcome, len(sources))
 	var pending sync.WaitGroup
 	for index, source := range sources {
@@ -140,19 +150,39 @@ func Discover(ctx context.Context, sources []Source) Report {
 			report.Unavailable = append(report.Unavailable, outcome.name)
 			continue
 		}
-		report.Candidates = append(report.Candidates, outcome.found...)
+		for _, candidate := range outcome.found {
+			candidate.Address = normalizeAddress(candidate.Address)
+			report.Candidates = append(report.Candidates, candidate)
+		}
 	}
 	slices.SortFunc(report.Candidates, compareCandidates)
 	report.Candidates = slices.Compact(report.Candidates)
 	return report
 }
 
-func compareCandidates(a, b Candidate) int {
+func normalizeAddress(address string) string {
+	return strings.ToLower(strings.TrimSuffix(address, "."))
+}
+
+func compareCandidates(left, right Candidate) int {
 	return cmp.Or(
-		cmp.Compare(a.Route, b.Route),
-		cmp.Compare(a.Name, b.Name),
-		cmp.Compare(a.Address, b.Address),
-		cmp.Compare(a.Fingerprint.digest, b.Fingerprint.digest),
-		cmp.Compare(a.SSHTarget, b.SSHTarget),
+		cmp.Compare(left.Route, right.Route),
+		cmp.Compare(left.Name, right.Name),
+		cmp.Compare(left.Address, right.Address),
+		cmp.Compare(left.Fingerprint.digest, right.Fingerprint.digest),
+		cmp.Compare(left.SSHTarget, right.SSHTarget),
 	)
+}
+
+func plainText(text string) string {
+	return strings.Map(func(char rune) rune {
+		if unicode.IsControl(char) || isBidiControl(char) {
+			return -1
+		}
+		return char
+	}, text)
+}
+
+func isBidiControl(char rune) bool {
+	return char >= 0x202A && char <= 0x202E || char >= 0x2066 && char <= 0x2069
 }

@@ -34,8 +34,8 @@ func (source SSHConfig) Find(_ context.Context) ([]Candidate, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = file.Close() }()
-	return candidatesFromSSHConfig(file)
+	found, readErr := candidatesFromSSHConfig(file)
+	return found, errors.Join(readErr, file.Close())
 }
 
 func candidatesFromSSHConfig(reader io.Reader) ([]Candidate, error) {
@@ -46,13 +46,13 @@ func candidatesFromSSHConfig(reader io.Reader) ([]Candidate, error) {
 	var found []Candidate
 	for _, host := range config.Hosts {
 		for _, pattern := range host.Patterns {
-			alias := pattern.String()
+			alias := plainText(pattern.String())
 			if strings.ContainsAny(alias, sshWildcards) {
 				continue
 			}
 			found = append(found, Candidate{
 				Name:      alias,
-				Address:   hostNameOf(config, alias),
+				Address:   plainText(hostNameOf(config, alias)),
 				Route:     RouteSSH,
 				SSHTarget: alias,
 			})

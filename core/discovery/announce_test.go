@@ -13,39 +13,51 @@ import (
 )
 
 func TestAnAnnouncementPublishesOnlyPresenceAndFingerprint(t *testing.T) {
-	a := Announcement{Fingerprint: mustFingerprint(t, fakeFingerprint), Port: 7000, Addresses: []net.IP{net.ParseIP("192.0.2.10")}}
+	a := Announcement{Fingerprint: mustFingerprint(t), Port: 7000, Addresses: []net.IP{net.ParseIP("192.0.2.10")}}
 	zone, err := a.zone()
 	if err != nil {
 		t.Fatal(err)
 	}
 	allowed := []string{"proto=1", "fp=" + fakeFingerprint}
+	seenTXT := 0
+	seenSRV := 0
 	for _, question := range []string{ServiceType + ".local.", "herrscher-" + fakeFingerprint + "." + ServiceType + ".local."} {
 		for _, record := range zone.Records(dns.Question{Name: question, Qtype: dns.TypeANY, Qclass: dns.ClassINET}) {
-			txt, ok := record.(*dns.TXT)
-			if !ok {
-				continue
-			}
-			if !slices.Equal(txt.Txt, allowed) {
-				t.Errorf("published TXT %q, want exactly %q", txt.Txt, allowed)
+			switch typed := record.(type) {
+			case *dns.TXT:
+				seenTXT++
+				if !slices.Equal(typed.Txt, allowed) {
+					t.Errorf("published TXT %q, want exactly %q", typed.Txt, allowed)
+				}
+			case *dns.SRV:
+				seenSRV++
 			}
 		}
+	}
+	if seenTXT == 0 || seenSRV == 0 {
+		t.Fatalf("the zone published %d TXT and %d SRV records, want at least one of each", seenTXT, seenSRV)
 	}
 }
 
 func TestTheAnnouncementNeverNamesTheMachine(t *testing.T) {
-	a := Announcement{Fingerprint: mustFingerprint(t, fakeFingerprint), Port: 7000, Addresses: []net.IP{net.ParseIP("192.0.2.10")}}
+	a := Announcement{Fingerprint: mustFingerprint(t), Port: 7000, Addresses: []net.IP{net.ParseIP("192.0.2.10")}}
 	zone, err := a.zone()
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, record := range zone.Records(dns.Question{Name: "herrscher-" + fakeFingerprint + ".local.", Qtype: dns.TypeANY, Qclass: dns.ClassINET}) {
+	seenSRV := 0
+	for _, record := range zone.Records(dns.Question{Name: "herrscher-" + fakeFingerprint + "." + ServiceType + ".local.", Qtype: dns.TypeANY, Qclass: dns.ClassINET}) {
 		srv, ok := record.(*dns.SRV)
 		if !ok {
 			continue
 		}
+		seenSRV++
 		if srv.Target != "herrscher-"+fakeFingerprint+".local." {
 			t.Errorf("SRV target %q names something other than the fingerprint", srv.Target)
 		}
+	}
+	if seenSRV == 0 {
+		t.Fatal("the zone published no SRV record, the target rule was not checked")
 	}
 	for _, text := range a.TXT() {
 		for _, forbidden := range []string{"user=", "session=", "version=", "host="} {
@@ -57,7 +69,7 @@ func TestTheAnnouncementNeverNamesTheMachine(t *testing.T) {
 }
 
 func TestAdvertiseStopsAfterItsWindow(t *testing.T) {
-	a := Announcement{Fingerprint: mustFingerprint(t, fakeFingerprint), Port: 7000}
+	a := Announcement{Fingerprint: mustFingerprint(t), Port: 7000, Addresses: []net.IP{net.ParseIP("192.0.2.10")}}
 	started := time.Now()
 	err := Advertise(context.Background(), a, 30*time.Millisecond, func(ctx context.Context, _ Announcement) error {
 		<-ctx.Done()
@@ -72,7 +84,7 @@ func TestAdvertiseStopsAfterItsWindow(t *testing.T) {
 }
 
 func TestAdvertiseRefusesAWindowOutOfRange(t *testing.T) {
-	a := Announcement{Fingerprint: mustFingerprint(t, fakeFingerprint), Port: 7000}
+	a := Announcement{Fingerprint: mustFingerprint(t), Port: 7000, Addresses: []net.IP{net.ParseIP("192.0.2.10")}}
 	serve := func(context.Context, Announcement) error {
 		t.Fatal("an out of range window must not publish")
 		return nil
@@ -89,14 +101,24 @@ func TestAdvertiseRefusesAnAnnouncementWithoutAFingerprint(t *testing.T) {
 		t.Fatal("an announcement without a fingerprint must not publish")
 		return nil
 	}
-	if err := Advertise(context.Background(), Announcement{Port: 7000}, time.Second, serve); !errors.Is(err, ErrFingerprintInvalid) {
+	if err := Advertise(context.Background(), Announcement{Port: 7000, Addresses: []net.IP{net.ParseIP("192.0.2.10")}}, time.Second, serve); !errors.Is(err, ErrFingerprintInvalid) {
 		t.Fatalf("got %v, want ErrFingerprintInvalid", err)
 	}
 }
 
-func mustFingerprint(t *testing.T, text string) Fingerprint {
+func TestAdvertiseRefusesAnAnnouncementWithoutAnAddress(t *testing.T) {
+	serve := func(context.Context, Announcement) error {
+		t.Fatal("an announcement without an address must not publish")
+		return nil
+	}
+	if err := Advertise(context.Background(), Announcement{Fingerprint: mustFingerprint(t), Port: 7000}, time.Second, serve); !errors.Is(err, ErrNoAddress) {
+		t.Fatalf("got %v, want ErrNoAddress", err)
+	}
+}
+
+func mustFingerprint(t *testing.T) Fingerprint {
 	t.Helper()
-	fingerprint, err := ParseFingerprint(text)
+	fingerprint, err := ParseFingerprint(fakeFingerprint)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -16,7 +16,7 @@ const (
 
 	serviceDomain    = "local"
 	serviceSuffix    = "." + ServiceType + "." + serviceDomain + "."
-	entryBufferSize  = 64
+	entryBufferSize  = 256
 	fingerprintField = "fp="
 )
 
@@ -33,11 +33,23 @@ func (MDNSSource) Name() string {
 
 // Find browses the service for the window and returns one candidate per announced
 // daemon that answered. The browse ends on its own: a silent network is an empty list.
+// Answers are read while the browse runs; hashicorp/mdns drops an answer when the
+// channel is full, so a burst larger than entryBufferSize unread answers is lost.
 func (source MDNSSource) Find(ctx context.Context) ([]Candidate, error) {
 	ctx, cancel := context.WithTimeout(ctx, source.Window)
 	defer cancel()
 
 	entries := make(chan *mdns.ServiceEntry, entryBufferSize)
+	var found []Candidate
+	readDone := make(chan struct{})
+	go func() {
+		defer close(readDone)
+		for entry := range entries {
+			if candidate, ok := candidateFromEntry(entry); ok {
+				found = append(found, candidate)
+			}
+		}
+	}()
 	err := mdns.QueryContext(ctx, &mdns.QueryParam{
 		Service: ServiceType,
 		Domain:  serviceDomain,
@@ -45,15 +57,9 @@ func (source MDNSSource) Find(ctx context.Context) ([]Candidate, error) {
 		Entries: entries,
 	})
 	close(entries)
+	<-readDone
 	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
 		return nil, err
-	}
-
-	var found []Candidate
-	for entry := range entries {
-		if candidate, ok := candidateFromEntry(entry); ok {
-			found = append(found, candidate)
-		}
 	}
 	return found, nil
 }
@@ -64,8 +70,8 @@ func candidateFromEntry(entry *mdns.ServiceEntry) (Candidate, bool) {
 		return Candidate{}, false
 	}
 	return Candidate{
-		Name:        strings.TrimSuffix(entry.Name, serviceSuffix),
-		Address:     address,
+		Name:        plainText(strings.TrimSuffix(entry.Name, serviceSuffix)),
+		Address:     plainText(address),
 		Route:       RouteLAN,
 		Fingerprint: fingerprintOf(entry.InfoFields),
 	}, true

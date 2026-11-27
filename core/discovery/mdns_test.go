@@ -62,3 +62,17 @@ func TestAnEntryWithOnlyAHostNameUsesIt(t *testing.T) {
 		t.Fatalf("got %+v, ok %v", candidate, ok)
 	}
 }
+
+func TestAnEntryFromTheNetworkCannotInjectControls(t *testing.T) {
+	candidate, ok := candidateFromEntry(&mdns.ServiceEntry{
+		Name:   "a\x1b]0;pwn\x07._herrscher._tcp.local.",
+		Host:   "b\u202ec.local.",
+		AddrV4: net.ParseIP("192.0.2.12"),
+	})
+	if !ok {
+		t.Fatal("the entry has an address and must be a candidate")
+	}
+	if candidate.Name != "a]0;pwn" || candidate.Address != "192.0.2.12" {
+		t.Fatalf("got name %q, address %q", candidate.Name, candidate.Address)
+	}
+}

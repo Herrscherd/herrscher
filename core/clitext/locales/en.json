@@ -2078,6 +2078,11 @@
     "other": "source {{.Source}} unavailable, its hosts are not listed"
   },
   {
+    "id": "cli.discover.add_unsafe",
+    "description": "Reply of host discover, a name or address is not a plain host name, so no command is proposed",
+    "other": "not a plain host name, register it by hand"
+  },
+  {
     "id": "cli.help.param.host.add.name",
     "description": "Help of the --name param of the command host add",
     "other": "host name (unique; `local` is reserved); also takes a bare argument"
@@ -3466,6 +3471,16 @@
     "id": "cli.host.fault.fingerprint_invalid",
     "description": "Erreur d'une commande hôte rendue à l'opérateur (fingerprint invalid)",
     "other": "fingerprint is not sixteen lowercase hex digits"
+  },
+  {
+    "id": "cli.host.fault.announce_no_address",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (announce no address)",
+    "other": "announcement has no address to publish"
+  },
+  {
+    "id": "cli.host.fault.tailscale_status",
+    "description": "Erreur d'une commande hôte rendue à l'opérateur (tailscale status)",
+    "other": "tailscale refused its status request"
   },
   {
     "id": "cli.host.fault.local_host_reserved",

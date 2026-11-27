@@ -24,8 +24,11 @@ func TestWriteReplacesContentAndGivesPerm(t *testing.T) {
 		t.Fatalf("content = %q, %v; want new", raw, err)
 	}
 	info, err := os.Stat(path)
-	if err != nil || info.Mode().Perm() != 0o640 {
-		t.Fatalf("mode = %v, %v; want 0640", info.Mode().Perm(), err)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if info.Mode().Perm() != 0o640 {
+		t.Fatalf("mode = %v; want 0640", info.Mode().Perm())
 	}
 }
 

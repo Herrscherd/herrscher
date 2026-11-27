@@ -219,6 +219,8 @@ func (s Snapshot) facts(check Check, text *renderer) string {
 		return forgeFacts(check.Facts.Forge, text)
 	case check.Facts.SelfTools != nil:
 		return selfToolsFacts(check.Facts.SelfTools, text)
+	case check.Facts.RTK != nil:
+		return rtkFacts(check.Facts.RTK, text)
 	case check.Group == GroupCore && check.Name == ServiceProxy:
 		return text.key(clitext.HealthProxyFacts, clitext.Params{
 			clitext.ParamListen: check.Facts.Listen,
@@ -233,6 +235,16 @@ func (s Snapshot) facts(check Check, text *renderer) string {
 		return homeRelative(s.Daemon.Socket)
 	}
 	return ""
+}
+
+func rtkFacts(state *RTK, text *renderer) string {
+	switch {
+	case !state.Present:
+		return text.key(clitext.HealthRTKAbsent, nil)
+	case state.UserHook:
+		return text.key(clitext.HealthRTKUserHook, clitext.Params{clitext.ParamVersion: state.Version})
+	}
+	return text.key(clitext.HealthRTKFacts, clitext.Params{clitext.ParamVersion: state.Version})
 }
 
 func selfToolsFacts(self *SelfTools, text *renderer) string {

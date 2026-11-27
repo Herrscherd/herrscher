@@ -150,6 +150,41 @@ daemon cannot be reached. An unreachable daemon is reported on stderr with the
 socket it was looked for, so a stopped daemon reads as a finding rather than a
 silent failure.
 
+## Condensed tool output, through rtk
+
+Long Bash output fills an agent's context fast. herrscher can route the Bash calls
+of an agent through [rtk](https://github.com/rtk-ai/rtk), which condenses the
+output before the model reads it. The switch is off by default, and it is set per
+agent by writing `on` into the agent's `rtk` file in its home directory. Any other
+content, or no file, keeps it off. Only agent sessions can use it: a session
+started without an agent never rewrites a command.
+
+When the switch is on, the approval hook rewrites an eligible Bash command to its
+`rtk` form only if all of these hold: `rtk` is on the PATH, the command is a Bash
+call, the command is not already run by one of the user's own Claude hooks (a hook
+whose command is `rtk hook` or `rtk-rewrite`, in `~/.claude/settings.json` or in
+the project's `.claude/settings.json` or `settings.local.json`), and rtk accepts
+the command as a plain prefix of itself. A chain, a pipe or a command rtk would
+change inside itself stays as written. The rewrite never changes what is
+approved: the approval rules and the daemon decide on the command as the agent
+wrote it, and only an allowed command runs in its `rtk` form. A denied command is
+never rewritten, and every failure of the rewrite falls back to the original
+command.
+
+`herrscher health` shows a line for rtk, in one of three states: the version when
+rtk is on the PATH, a note that your own Claude hook already runs rtk when that
+hook is installed, or a note that rtk is not on the PATH, in which case agent Bash
+output is not condensed. The line is off in the last state and ok otherwise.
+
+Condensing drops lines, so rtk keeps the complete output on disk. The condensed
+output ends with a line naming that file, of the form
+`[see remaining: tail -n +1 <path>]`, and the files sit in `$XDG_DATA_HOME/rtk/tee/`
+(by default `~/.local/share/rtk/tee/`), named by timestamp and command. Read the
+full output with the path from that line.
+
+herrscher carries no condenser of its own. The rewrite is the only path: when rtk
+is absent or the switch is off, Bash output reaches the agent unchanged.
+
 ## Usage, from the ledger
 
 `herrscher usage` asks the running daemon for the figures it recorded in the usage

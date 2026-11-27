@@ -31,6 +31,7 @@ const (
 	hostFile     = "host"
 	modelFile    = "model"
 	accountFile  = "account"
+	rtkFile      = "rtk"
 )
 
 const worktreeToken = "{{WORKTREE}}"
@@ -40,6 +41,7 @@ const (
 	keyCommand      = "command"
 	preToolUse      = "PreToolUse"
 	approveHookVerb = " approve hook"
+	rtkHookFlag     = " --rtk"
 )
 
 const (
@@ -67,7 +69,7 @@ func shellSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
+func injectApprovalHook(settings []byte, herrscherBin string, rtk bool) ([]byte, error) {
 	var doc map[string]any
 	if err := json.Unmarshal(settings, &doc); err != nil {
 		return nil, fmt.Errorf("settings.json: %w", err)
@@ -97,7 +99,7 @@ func injectApprovalHook(settings []byte, herrscherBin string) ([]byte, error) {
 			kept = append(kept, entry)
 		}
 	}
-	hooks[preToolUse] = append(kept, approvalGroup(approvalHandler(herrscherBin)))
+	hooks[preToolUse] = append(kept, approvalGroup(approvalHandler(herrscherBin, rtk)))
 	doc[keyHooks] = hooks
 	return json.MarshalIndent(doc, "", "  ")
 }
@@ -116,7 +118,7 @@ func isApprovalHook(entry any) bool {
 		if !ok {
 			continue
 		}
-		if cmd, ok := hookMap[keyCommand].(string); ok && strings.HasSuffix(cmd, approveHookVerb) {
+		if cmd, ok := hookMap[keyCommand].(string); ok && strings.Contains(cmd, approveHookVerb) {
 			return true
 		}
 	}
@@ -177,7 +179,7 @@ func MaterializeHook(ctx context.Context, worktree, herrscherBin string) error {
 	case !os.IsNotExist(err):
 		return fmt.Errorf("read %s: %w", path, err)
 	}
-	out, err := injectApprovalHook(cur, herrscherBin)
+	out, err := injectApprovalHook(cur, herrscherBin, false)
 	if err != nil {
 		return err
 	}
@@ -194,15 +196,19 @@ func grokHookPath(dst string) string {
 }
 
 func grokHook(herrscherBin string) ([]byte, error) {
-	handler := approvalHandler(herrscherBin)
+	handler := approvalHandler(herrscherBin, false)
 	handler["failClosed"] = true
 	return json.MarshalIndent(map[string]any{keyHooks: map[string]any{preToolUse: []any{approvalGroup(handler)}}}, "", "  ")
 }
 
-func approvalHandler(herrscherBin string) map[string]any {
+func approvalHandler(herrscherBin string, rtk bool) map[string]any {
+	command := shellSingleQuote(herrscherBin) + approveHookVerb
+	if rtk {
+		command += rtkHookFlag
+	}
 	return map[string]any{
 		"type":     keyCommand,
-		keyCommand: shellSingleQuote(herrscherBin) + approveHookVerb,
+		keyCommand: command,
 		"timeout":  hookWaitSeconds,
 	}
 }
@@ -253,6 +259,7 @@ type Agent struct {
 	Host string
 	// Account is the default account profile of this agent's sessions, from <home>/account. Empty = the vendor default.
 	Account string
+	RTK     bool
 }
 
 // Materialize provisions the agent into a session worktree by writing the files
@@ -354,7 +361,7 @@ func (a Agent) copyTemplates(dst, claudeDir, worktreePath, herrscherBin string) 
 		}
 		out := []byte(strings.ReplaceAll(string(buf), worktreeToken, repl))
 		if template.settings && herrscherBin != "" {
-			if out, err = injectApprovalHook(out, herrscherBin); err != nil {
+			if out, err = injectApprovalHook(out, herrscherBin, a.RTK); err != nil {
 				return err
 			}
 		}

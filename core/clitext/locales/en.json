@@ -6357,6 +6357,21 @@
     "other": "replied in a review thread of pull request #{{.Number}}"
   },
   {
+    "id": "cli.health.facts.rtk",
+    "description": "Facts of the rtk health check when rtk is installed",
+    "other": "rtk {{.Version}}: agents can have their Bash output condensed through it, off by default and per agent"
+  },
+  {
+    "id": "cli.health.facts.rtk_user_hook",
+    "description": "Facts of the rtk health check when the operator's own Claude hook already runs rtk",
+    "other": "rtk {{.Version}}: already run by your own Claude hook, so herrscher does not rewrite a command twice"
+  },
+  {
+    "id": "cli.health.facts.rtk_absent",
+    "description": "Facts of the rtk health check when rtk is not on the PATH",
+    "other": "not on PATH: agent Bash output is not condensed"
+  },
+  {
     "id": "cli.health.facts.self_tools",
     "description": "Facts of the self tools health check",
     "other": "{{.Mode}} · {{.Count}} tools · {{.Size}} bytes of schemas a turn"

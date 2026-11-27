@@ -48,6 +48,9 @@ const (
 	HealthForgeRepo           = "cli.health.facts.forge_repo"
 	HealthForgeRepoUnknown    = "cli.health.facts.forge_repo_unknown"
 	HealthForgeRepoUnreadable = "cli.health.facts.forge_repo_unreadable"
+	HealthRTKFacts            = "cli.health.facts.rtk"
+	HealthRTKUserHook         = "cli.health.facts.rtk_user_hook"
+	HealthRTKAbsent           = "cli.health.facts.rtk_absent"
 )
 
 func healthKeys() map[Key][]string {
@@ -98,5 +101,8 @@ func healthKeys() map[Key][]string {
 		HealthForgeRepo:           {ParamRepo, ParamPermission},
 		HealthForgeRepoUnknown:    {ParamRepo},
 		HealthForgeRepoUnreadable: {ParamReason},
+		HealthRTKFacts:            {ParamVersion},
+		HealthRTKUserHook:         {ParamVersion},
+		HealthRTKAbsent:           nil,
 	}
 }

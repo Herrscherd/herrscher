@@ -12,7 +12,7 @@ const hookBlockingExit = 2
 
 func runApprove(ctx context.Context, layout host.RuntimeLayout, messages *clitext.Messages, hostMessages *host.Messages, args []string) error {
 	if len(args) > 0 && args[0] == "hook" {
-		if err := host.RunApprovalHook(ctx, layout, hostMessages, os.Stdin, os.Stdout, os.Stderr); err != nil {
+		if err := host.RunApprovalHook(ctx, layout, hostMessages, os.Stdin, os.Stdout, os.Stderr, host.ParseHookOptions(args[1:])); err != nil {
 			return exitStatusError{code: hookBlockingExit}
 		}
 		return nil

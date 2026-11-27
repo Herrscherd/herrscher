@@ -18,6 +18,8 @@ const (
 	ServiceProxy = "proxy"
 	// ServiceSelfTools names the check of the MCP server sessions get, in [GroupCore].
 	ServiceSelfTools = "self-tools"
+	// ServiceRTK names the check of the rtk CLI that condenses agent command output, in [GroupCore].
+	ServiceRTK = "rtk"
 )
 
 // Check is one service checked, for one account when the service has accounts.
@@ -47,6 +49,14 @@ type Facts struct {
 	Forge               *Forge
 	ForgeReset          time.Time
 	SelfTools           *SelfTools
+	RTK                 *RTK
+}
+
+// RTK is the state of the rtk CLI: whether it is on the PATH, its version, and whether the operator's own Claude hook already runs it.
+type RTK struct {
+	Present  bool
+	Version  string
+	UserHook bool
 }
 
 // SelfTools is what a session's herrscher MCP server lists: whether sessions get it, the exposure, the tools and the bytes their declarations add to each turn.

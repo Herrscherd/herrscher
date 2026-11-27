@@ -2758,17 +2758,17 @@
     "other": "salons : aucun"
   },
   {
-    "id": "cli.host.agent.show_token",
+    "id": "cli.host.agent.show_bot",
     "description": "Ligne de agent show, état du jeton de bot sur une passerelle",
     "other": "jeton de bot sur {{.Kind}} : {{.State}}"
   },
   {
-    "id": "cli.host.agent.token_set",
+    "id": "cli.host.agent.bot_set",
     "description": "Mot de agent show, un jeton de bot est défini",
     "other": "défini"
   },
   {
-    "id": "cli.host.agent.token_not_set",
+    "id": "cli.host.agent.bot_not_set",
     "description": "Mot de agent show, aucun jeton de bot défini",
     "other": "non défini"
   },

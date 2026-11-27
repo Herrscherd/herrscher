@@ -15,9 +15,9 @@ const (
 	HostAgentShowReply          = "cli.host.agent.show_reply"
 	HostAgentShowChannels       = "cli.host.agent.show_channels"
 	HostAgentShowNoChannels     = "cli.host.agent.show_no_channels"
-	HostAgentShowToken          = "cli.host.agent.show_token"
-	HostAgentTokenSet           = "cli.host.agent.token_set"
-	HostAgentTokenNotSet        = "cli.host.agent.token_not_set"
+	HostAgentShowBot            = "cli.host.agent.show_bot"
+	HostAgentBotSet             = "cli.host.agent.bot_set"
+	HostAgentBotNotSet          = "cli.host.agent.bot_not_set"
 	HostErrUnknownReplyRule     = "cli.host.err.unknown_reply_rule"
 	HostErrBadChannel           = "cli.host.err.bad_channel"
 	HostErrReadVoice            = "cli.host.err.read_voice"
@@ -136,9 +136,9 @@ func hostKeys() map[Key][]string {
 		HostAgentShowReply:          {ParamRule},
 		HostAgentShowChannels:       {ParamChannels},
 		HostAgentShowNoChannels:     nil,
-		HostAgentShowToken:          {ParamKind, ParamState},
-		HostAgentTokenSet:           nil,
-		HostAgentTokenNotSet:        nil,
+		HostAgentShowBot:            {ParamKind, ParamState},
+		HostAgentBotSet:             nil,
+		HostAgentBotNotSet:          nil,
 		HostErrUnknownReplyRule:     nil,
 		HostErrBadChannel:           {ParamChannel},
 		HostErrReadVoice:            {ParamErr},

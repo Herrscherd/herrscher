@@ -81,6 +81,14 @@ func (h *Handler) agentListRun(_ context.Context, input contracts.Input) (contra
 	return contracts.DataResult(out.String()), nil
 }
 
+type agentView struct {
+	agent    agent.Agent
+	soul     string
+	reply    contracts.ReplyRule
+	channels []agent.Channel
+	tokens   map[string]bool
+}
+
 func (h *Handler) agentShowRun(_ context.Context, input contracts.Input) (contracts.Result, error) {
 	name, ok := input.Lookup(nameParam)
 	if !ok {
@@ -102,43 +110,55 @@ func (h *Handler) agentShowRun(_ context.Context, input contracts.Input) (contra
 	if err != nil {
 		return contracts.Result{}, h.labelled("read channels", clitext.HostErrReadVoice, err)
 	}
-	tokens := h.tokenPresence(candidate.Name)
+	view := agentView{agent: candidate, soul: string(soul), reply: reply, channels: channels, tokens: h.tokenPresence(candidate.Name)}
 	if input.JSON {
-		tags := candidate.Tags
-		if tags == nil {
-			tags = []string{}
-		}
-		channelRefs := make([]string, 0, len(channels))
-		for _, channel := range channels {
-			channelRefs = append(channelRefs, channel.String())
-		}
-		buf, err := json.Marshal(struct {
-			Name     string          `json:"name"`
-			Tags     []string        `json:"tags"`
-			Backend  string          `json:"backend"`
-			Soul     string          `json:"soul"`
-			Reply    string          `json:"reply"`
-			Channels []string        `json:"channels"`
-			Tokens   map[string]bool `json:"tokens"`
-		}{candidate.Name, tags, candidate.Backend, string(soul), reply.String(), channelRefs, tokens})
-		if err != nil {
-			return contracts.Result{}, err
-		}
-		return contracts.DataResult(string(buf)), nil
+		return h.agentShowJSON(view)
 	}
+	return contracts.DataResult(h.agentShowText(view)), nil
+}
+
+func (h *Handler) agentShowJSON(view agentView) (contracts.Result, error) {
+	tags := view.agent.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+	channelRefs := make([]string, 0, len(view.channels))
+	for _, channel := range view.channels {
+		channelRefs = append(channelRefs, channel.String())
+	}
+	buf, err := json.Marshal(struct {
+		Name     string          `json:"name"`
+		Tags     []string        `json:"tags"`
+		Backend  string          `json:"backend"`
+		Soul     string          `json:"soul"`
+		Reply    string          `json:"reply"`
+		Channels []string        `json:"channels"`
+		Tokens   map[string]bool `json:"tokens"`
+	}{view.agent.Name, tags, view.agent.Backend, view.soul, view.reply.String(), channelRefs, view.tokens})
+	if err != nil {
+		return contracts.Result{}, err
+	}
+	return contracts.DataResult(string(buf)), nil
+}
+
+func (h *Handler) agentShowText(view agentView) string {
 	var out strings.Builder
-	fmt.Fprintf(&out, "%s (%#q)\n", candidate.Name, candidate.Home)
-	out.WriteString(h.text(clitext.HostAgentShowReply, clitext.Params{clitext.ParamRule: reply.String()}) + "\n")
-	out.WriteString(h.channelsLine(channels) + "\n")
-	for _, kind := range sortedKinds(tokens) {
-		state := h.text(clitext.HostAgentTokenNotSet, nil)
-		if tokens[kind] {
-			state = h.text(clitext.HostAgentTokenSet, nil)
-		}
-		out.WriteString(h.text(clitext.HostAgentShowToken, clitext.Params{clitext.ParamKind: kind, clitext.ParamState: state}) + "\n")
+	fmt.Fprintf(&out, "%s (%#q)\n", view.agent.Name, view.agent.Home)
+	out.WriteString(h.text(clitext.HostAgentShowReply, clitext.Params{clitext.ParamRule: view.reply.String()}) + "\n")
+	out.WriteString(h.channelsLine(view.channels) + "\n")
+	for _, kind := range sortedKinds(view.tokens) {
+		out.WriteString(h.tokenLine(kind, view.tokens[kind]) + "\n")
 	}
-	out.WriteString("\n" + string(soul))
-	return contracts.DataResult(out.String()), nil
+	out.WriteString("\n" + view.soul)
+	return out.String()
+}
+
+func (h *Handler) tokenLine(kind string, set bool) string {
+	state := h.text(clitext.HostAgentBotNotSet, nil)
+	if set {
+		state = h.text(clitext.HostAgentBotSet, nil)
+	}
+	return h.text(clitext.HostAgentShowBot, clitext.Params{clitext.ParamKind: kind, clitext.ParamState: state})
 }
 
 func (h *Handler) tokenPresence(name string) map[string]bool {

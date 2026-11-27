@@ -19,17 +19,17 @@ func (f fakeBotTokens) HasToken(gateway, name string) bool {
 	return slices.Contains(f[gateway], name)
 }
 
-func createAgentNamed(t *testing.T, h *Handler, name string) {
+func createRin(t *testing.T, h *Handler) {
 	t.Helper()
-	if _, err := h.agentCreateRun(context.Background(), args("name", name, "soul", "persona")); err != nil {
-		t.Fatalf("create %s: %v", name, err)
+	if _, err := h.agentCreateRun(context.Background(), args("name", "rin", "soul", "persona")); err != nil {
+		t.Fatalf("create rin: %v", err)
 	}
 }
 
 func TestSetReplyTakesTheRuleAndChannelsAsOperands(t *testing.T) {
 	h, _, _, _, _, _ := newTestHandler(t, "")
-	createAgentNamed(t, h, "rin")
-	if _, err := h.agentSetReplyRun(context.Background(), contracts.Input{Rest: []string{"rin", "channels", "discord:111", "telegram:-9"}}); err != nil {
+	createRin(t, h)
+	if _, err := h.agentSetReplyRun(context.Background(), contracts.Input{Rest: []string{"rin", "channels", "chat:111", "other:-9"}}); err != nil {
 		t.Fatalf("set-reply: %v", err)
 	}
 	reply, err := h.agents.Reply("rin")
@@ -44,7 +44,7 @@ func TestSetReplyTakesTheRuleAndChannelsAsOperands(t *testing.T) {
 
 func TestSetReplyRefusesUnknownRuleWithoutEchoingIt(t *testing.T) {
 	h, _, _, _, _, _ := newTestHandler(t, "")
-	createAgentNamed(t, h, "rin")
+	createRin(t, h)
 	_, err := h.agentSetReplyRun(context.Background(), contracts.Input{Rest: []string{"rin", "shouting"}})
 	if !errors.Is(err, contracts.ErrUnknownReplyRule) {
 		t.Fatalf("err = %v; want unknown reply rule", err)
@@ -52,36 +52,38 @@ func TestSetReplyRefusesUnknownRuleWithoutEchoingIt(t *testing.T) {
 	if strings.Contains(err.Error(), "shouting") {
 		t.Fatalf("the refused rule was echoed: %q", err)
 	}
-	if reply, _ := h.agents.Reply("rin"); reply != contracts.ReplyOnMention {
-		t.Fatalf("reply changed to %v by a refused rule", reply)
+	reply, err := h.agents.Reply("rin")
+	if err != nil || reply != contracts.ReplyOnMention {
+		t.Fatalf("reply after a refused rule = %v, %v; want mention", reply, err)
 	}
 }
 
 func TestSetReplyRefusesBadChannelAndKeepsTheRule(t *testing.T) {
 	h, _, _, _, _, _ := newTestHandler(t, "")
-	createAgentNamed(t, h, "rin")
-	_, err := h.agentSetReplyRun(context.Background(), contracts.Input{Rest: []string{"rin", "never", "discord"}})
+	createRin(t, h)
+	_, err := h.agentSetReplyRun(context.Background(), contracts.Input{Rest: []string{"rin", "never", "chat"}})
 	if !errors.Is(err, agent.ErrBadChannel) {
 		t.Fatalf("err = %v; want a bad channel", err)
 	}
-	if reply, _ := h.agents.Reply("rin"); reply != contracts.ReplyOnMention {
-		t.Fatalf("reply changed to %v although the channel was refused", reply)
+	reply, err := h.agents.Reply("rin")
+	if err != nil || reply != contracts.ReplyOnMention {
+		t.Fatalf("reply after a refused channel = %v, %v; want mention", reply, err)
 	}
 }
 
 func TestAgentShowReportsVoiceAndTokenStateWithoutAnyToken(t *testing.T) {
 	h, _, _, _, _, _ := newTestHandler(t, "")
-	h.SetGatewayAdmins(map[string]contracts.ChannelAdmin{"discord": nil, "telegram": nil})
-	h.SetBotTokens(fakeBotTokens{"discord": {"rin"}})
-	createAgentNamed(t, h, "rin")
-	if _, err := h.agentSetReplyRun(context.Background(), contracts.Input{Rest: []string{"rin", "channels", "discord:111"}}); err != nil {
+	h.SetGatewayAdmins(map[string]contracts.ChannelAdmin{"chat": nil, "other": nil})
+	h.SetBotTokens(fakeBotTokens{"chat": {"rin"}})
+	createRin(t, h)
+	if _, err := h.agentSetReplyRun(context.Background(), contracts.Input{Rest: []string{"rin", "channels", "chat:111"}}); err != nil {
 		t.Fatalf("set-reply: %v", err)
 	}
 	out, err := cli.Plain(h.agentShowRun(context.Background(), args("name", "rin")))
 	if err != nil {
 		t.Fatalf("show: %v", err)
 	}
-	for _, want := range []string{"reply: channels", "channels: discord:111", "bot token on discord: set", "bot token on telegram: not set"} {
+	for _, want := range []string{"reply: channels", "channels: chat:111", "bot token on chat: set", "bot token on other: not set"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("show lacks %q:\n%s", want, out)
 		}
@@ -90,10 +92,10 @@ func TestAgentShowReportsVoiceAndTokenStateWithoutAnyToken(t *testing.T) {
 
 func TestAgentShowJSONCarriesReplyChannelsAndTokenState(t *testing.T) {
 	h, _, _, _, _, _ := newTestHandler(t, "")
-	h.SetGatewayAdmins(map[string]contracts.ChannelAdmin{"discord": nil})
-	h.SetBotTokens(fakeBotTokens{"discord": {"rin"}})
-	createAgentNamed(t, h, "rin")
-	if _, err := h.agentSetReplyRun(context.Background(), contracts.Input{Rest: []string{"rin", "channels", "discord:111"}}); err != nil {
+	h.SetGatewayAdmins(map[string]contracts.ChannelAdmin{"chat": nil})
+	h.SetBotTokens(fakeBotTokens{"chat": {"rin"}})
+	createRin(t, h)
+	if _, err := h.agentSetReplyRun(context.Background(), contracts.Input{Rest: []string{"rin", "channels", "chat:111"}}); err != nil {
 		t.Fatalf("set-reply: %v", err)
 	}
 	out, err := cli.Plain(h.agentShowRun(context.Background(), contracts.Input{Args: map[string]string{"name": "rin"}, JSON: true}))
@@ -108,7 +110,7 @@ func TestAgentShowJSONCarriesReplyChannelsAndTokenState(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("unmarshal %q: %v", out, err)
 	}
-	if got.Reply != "channels" || len(got.Channels) != 1 || got.Channels[0] != "discord:111" || !got.Tokens["discord"] {
+	if got.Reply != "channels" || len(got.Channels) != 1 || got.Channels[0] != "chat:111" || !got.Tokens["chat"] {
 		t.Fatalf("show json = %+v", got)
 	}
 }

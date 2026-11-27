@@ -2758,17 +2758,17 @@
     "other": "channels: none"
   },
   {
-    "id": "cli.host.agent.show_token",
+    "id": "cli.host.agent.show_bot",
     "description": "Line of agent show, bot token state on one gateway kind",
     "other": "bot token on {{.Kind}}: {{.State}}"
   },
   {
-    "id": "cli.host.agent.token_set",
+    "id": "cli.host.agent.bot_set",
     "description": "Word of agent show, a bot token is set",
     "other": "set"
   },
   {
-    "id": "cli.host.agent.token_not_set",
+    "id": "cli.host.agent.bot_not_set",
     "description": "Word of agent show, no bot token is set",
     "other": "not set"
   },

@@ -56,7 +56,7 @@ func tokensOf(environ []string) map[string]string {
 	tokens := make(map[string]string)
 	for _, entry := range environ {
 		key, value, found := strings.Cut(entry, "=")
-		if found && value != "" && strings.Contains(key, tokenInfix) {
+		if found && value != "" && strings.Contains(key, botInfix) {
 			tokens[key] = value
 		}
 	}
@@ -107,7 +107,9 @@ func (d *Directory) tokenLocked(gateway, agent string, rules []voiceRule) contra
 	}
 	token, err := contracts.NewBotToken(secret)
 	if err != nil {
-		d.warnOnce("token:"+key, "bot token is empty, the agent speaks as the gateway's own bot", "key", key)
+		if d.firstTime("token:" + key) {
+			d.log.Warn("bot token is empty, the agent speaks as the gateway's own bot", "key", key)
+		}
 		return contracts.BotToken{}
 	}
 	return token
@@ -120,10 +122,12 @@ func (d *Directory) sharedLocked(gateway, key string, rules []voiceRule) bool {
 			holders++
 		}
 	}
-	if holders < 2 {
+	if holders <= 1 {
 		return false
 	}
-	d.warnOnce("clash:"+key, "agents share one bot token key, none of them gets its token", "key", key)
+	if d.firstTime("clash:" + key) {
+		d.log.Warn("agents share one bot token key, none of them gets its token", "key", key)
+	}
 	return true
 }
 
@@ -141,12 +145,14 @@ func (d *Directory) currentLocked() []voiceRule {
 func (d *Directory) readLocked() []voiceRule {
 	agents, err := d.store.List()
 	if err != nil {
-		d.warnOnce("list:"+err.Error(), "agent list unreadable, agents keep their last rules", "err", err)
+		if d.firstTime("list:" + err.Error()) {
+			d.log.Warn("agent list unreadable, agents keep their last rules", "err", err)
+		}
 		return d.rules
 	}
 	rules := make([]voiceRule, 0, len(agents))
-	for _, listed := range agents {
-		rules = append(rules, d.ruleOf(listed.Name))
+	for index := range agents {
+		rules = append(rules, d.ruleOf(agents[index].Name))
 	}
 	return rules
 }
@@ -154,23 +160,27 @@ func (d *Directory) readLocked() []voiceRule {
 func (d *Directory) ruleOf(name string) voiceRule {
 	reply, err := d.store.Reply(name)
 	if err != nil {
-		d.warnOnce("reply:"+name+err.Error(), "agent reply rule unreadable, the agent is treated as never", "agent", name, "err", err)
+		if d.firstTime("reply:" + name + err.Error()) {
+			d.log.Warn("agent reply rule unreadable, the agent is treated as never", "agent", name, "err", err)
+		}
 		return voiceRule{agent: name, reply: contracts.ReplyNever}
 	}
 	channels, err := d.store.Channels(name)
 	if err != nil {
-		d.warnOnce("channels:"+name+err.Error(), "agent channels unreadable, the agent is treated as never", "agent", name, "err", err)
+		if d.firstTime("channels:" + name + err.Error()) {
+			d.log.Warn("agent channels unreadable, the agent is treated as never", "agent", name, "err", err)
+		}
 		return voiceRule{agent: name, reply: contracts.ReplyNever}
 	}
 	return voiceRule{agent: name, reply: reply, channels: channels}
 }
 
-func (d *Directory) warnOnce(key, msg string, args ...any) {
+func (d *Directory) firstTime(key string) bool {
 	if d.warned[key] {
-		return
+		return false
 	}
 	d.warned[key] = true
-	d.log.Warn(msg, args...)
+	return true
 }
 
 func channelsOn(gateway string, channels []Channel) []string {

@@ -15,7 +15,7 @@ import (
 const (
 	replyFile    = "reply"
 	channelsFile = "channels"
-	tokenInfix   = "_BOT_TOKEN_"
+	botInfix     = "_BOT_TOKEN_"
 )
 
 // ErrBadChannel is returned for a channel that is not gateway:conversation, with
@@ -47,9 +47,9 @@ func (c Channel) String() string { return c.Gateway + ":" + c.Conversation }
 
 // BotTokenKey names the daemon secret that holds the bot token of one agent on
 // one gateway kind: the kind and the agent name, upper-cased, with dashes turned
-// into underscores, as in DISCORD_BOT_TOKEN_RIN.
+// into underscores, as in CHAT_BOT_TOKEN_RIN.
 func BotTokenKey(kind, agentName string) string {
-	return envSegment(kind) + tokenInfix + envSegment(agentName)
+	return envSegment(kind) + botInfix + envSegment(agentName)
 }
 
 func envSegment(text string) string {
@@ -63,7 +63,7 @@ func (s *Store) Reply(name string) (contracts.ReplyRule, error) {
 	if err != nil {
 		return contracts.ReplyNever, err
 	}
-	buf, err := os.ReadFile(filepath.Join(home, replyFile))
+	buf, err := os.ReadFile(filepath.Clean(filepath.Join(home, replyFile)))
 	if errors.Is(err, fs.ErrNotExist) {
 		return contracts.ReplyOnMention, nil
 	}
@@ -98,7 +98,7 @@ func (s *Store) Channels(name string) ([]Channel, error) {
 	if err != nil {
 		return nil, err
 	}
-	buf, err := os.ReadFile(filepath.Join(home, channelsFile))
+	buf, err := os.ReadFile(filepath.Clean(filepath.Join(home, channelsFile)))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}

@@ -41,7 +41,7 @@ func TestUnknownReplyFileIsAnError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(a.Home, replyFile), []byte("sometimes\n"), fileMode); err != nil {
+	if err = os.WriteFile(filepath.Join(a.Home, replyFile), []byte("sometimes\n"), fileMode); err != nil {
 		t.Fatalf("write reply: %v", err)
 	}
 	got, err := s.Reply("rin")
@@ -72,12 +72,12 @@ func TestParseChannel(t *testing.T) {
 		text string
 		ok   bool
 	}{
-		{"discord:123456789012345678", true},
-		{"telegram:-1001234567890", true},
-		{"discord", false},
+		{"chat:123456789012345678", true},
+		{"other:-1001234567890", true},
+		{"chat", false},
 		{":123", false},
-		{"discord:", false},
-		{"discord:12 34", false},
+		{"chat:", false},
+		{"chat:12 34", false},
 	} {
 		_, err := ParseChannel(tc.text)
 		if (err == nil) != tc.ok {
@@ -94,7 +94,7 @@ func TestChannelsSortedDedupedAndBadLineRefused(t *testing.T) {
 	if _, err := s.Create(CreateSpec{Name: "rin"}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	written := []Channel{{"telegram", "-1"}, {"discord", "2"}, {"discord", "2"}}
+	written := []Channel{{"other", "-1"}, {"chat", "2"}, {"chat", "2"}}
 	if err := s.SetChannels("rin", written); err != nil {
 		t.Fatalf("set channels: %v", err)
 	}
@@ -102,11 +102,11 @@ func TestChannelsSortedDedupedAndBadLineRefused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("channels: %v", err)
 	}
-	want := []Channel{{"discord", "2"}, {"telegram", "-1"}}
+	want := []Channel{{"chat", "2"}, {"other", "-1"}}
 	if !slices.Equal(got, want) {
 		t.Fatalf("channels = %v; want %v", got, want)
 	}
-	if err := s.SetChannels("rin", []Channel{{"discord", ""}}); !errors.Is(err, ErrBadChannel) {
+	if err = s.SetChannels("rin", []Channel{{"chat", ""}}); !errors.Is(err, ErrBadChannel) {
 		t.Fatalf("err = %v; want ErrBadChannel", err)
 	}
 	kept, err := s.Channels("rin")
@@ -117,14 +117,14 @@ func TestChannelsSortedDedupedAndBadLineRefused(t *testing.T) {
 
 func TestBotTokenKey(t *testing.T) {
 	for _, tc := range []struct{ kind, name, want string }{
-		{"discord", "rin", "DISCORD_BOT_TOKEN_RIN"},
-		{"telegram", "my-agent", "TELEGRAM_BOT_TOKEN_MY_AGENT"},
+		{"chat", "rin", "CHAT_BOT_TOKEN_RIN"},
+		{"other", "my-agent", "OTHER_BOT_TOKEN_MY_AGENT"},
 	} {
 		if got := BotTokenKey(tc.kind, tc.name); got != tc.want {
 			t.Errorf("BotTokenKey(%q, %q) = %q; want %q", tc.kind, tc.name, got, tc.want)
 		}
 	}
-	if BotTokenKey("discord", "my-agent") != BotTokenKey("discord", "my_agent") {
+	if BotTokenKey("chat", "my-agent") != BotTokenKey("chat", "my_agent") {
 		t.Fatal("names differing by a dash and an underscore must share a key, so the clash is detectable")
 	}
 }

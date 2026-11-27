@@ -25,7 +25,7 @@ func directoryWith(t *testing.T, environ []string) (*Store, *Directory, *bytes.B
 }
 
 func TestAgentVoicesSortedWithOwnTokenAndChannelsOfTheGateway(t *testing.T) {
-	store, dir, _, _ := directoryWith(t, []string{"DISCORD_BOT_TOKEN_RIN=" + testSecret})
+	store, dir, _, _ := directoryWith(t, []string{"CHAT_BOT_TOKEN_RIN=" + testSecret})
 	for _, name := range []string{"rin", "anna"} {
 		if _, err := store.Create(CreateSpec{Name: name}); err != nil {
 			t.Fatalf("create %s: %v", name, err)
@@ -34,10 +34,10 @@ func TestAgentVoicesSortedWithOwnTokenAndChannelsOfTheGateway(t *testing.T) {
 	if err := store.SetReply("rin", contracts.ReplyInChannels); err != nil {
 		t.Fatalf("set reply: %v", err)
 	}
-	if err := store.SetChannels("rin", []Channel{{"discord", "111"}, {"telegram", "-9"}}); err != nil {
+	if err := store.SetChannels("rin", []Channel{{"chat", "111"}, {"other", "-9"}}); err != nil {
 		t.Fatalf("set channels: %v", err)
 	}
-	voices := dir.AgentVoices("discord")
+	voices := dir.AgentVoices("chat")
 	if len(voices) != 2 || voices[0].Agent != "anna" || voices[1].Agent != "rin" {
 		t.Fatalf("voices = %+v; want anna then rin", voices)
 	}
@@ -48,9 +48,9 @@ func TestAgentVoicesSortedWithOwnTokenAndChannelsOfTheGateway(t *testing.T) {
 		t.Fatalf("rin = %+v; want its token and the channels rule", voices[1])
 	}
 	if got := voices[1].Channels; len(got) != 1 || got[0] != "111" {
-		t.Fatalf("channels on discord = %v; want [111]", got)
+		t.Fatalf("channels on chat = %v; want [111]", got)
 	}
-	if !dir.HasToken("discord", "rin") || dir.HasToken("telegram", "rin") {
+	if !dir.HasToken("chat", "rin") || dir.HasToken("other", "rin") {
 		t.Fatal("HasToken must follow the gateway kind of the key")
 	}
 }
@@ -60,31 +60,31 @@ func TestAgentVoicesRereadsRulesAfterItsTTL(t *testing.T) {
 	if _, err := store.Create(CreateSpec{Name: "rin"}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if got := dir.AgentVoices("discord")[0].Reply; got != contracts.ReplyOnMention {
+	if got := dir.AgentVoices("chat")[0].Reply; got != contracts.ReplyOnMention {
 		t.Fatalf("reply = %v; want mention", got)
 	}
 	if err := store.SetReply("rin", contracts.ReplyNever); err != nil {
 		t.Fatalf("set reply: %v", err)
 	}
 	*clock = clock.Add(voiceCacheTTL - time.Second)
-	if got := dir.AgentVoices("discord")[0].Reply; got != contracts.ReplyOnMention {
+	if got := dir.AgentVoices("chat")[0].Reply; got != contracts.ReplyOnMention {
 		t.Fatalf("reply within the cache = %v; want the cached mention", got)
 	}
 	*clock = clock.Add(2 * time.Second)
-	if got := dir.AgentVoices("discord")[0].Reply; got != contracts.ReplyNever {
+	if got := dir.AgentVoices("chat")[0].Reply; got != contracts.ReplyNever {
 		t.Fatalf("reply after the TTL = %v; want never", got)
 	}
 }
 
 func TestSharedTokenKeyGivesNoTokenAndLogsOnce(t *testing.T) {
-	store, dir, logs, _ := directoryWith(t, []string{"DISCORD_BOT_TOKEN_MY_AGENT=" + testSecret})
+	store, dir, logs, _ := directoryWith(t, []string{"CHAT_BOT_TOKEN_MY_AGENT=" + testSecret})
 	for _, name := range []string{"my-agent", "my_agent"} {
 		if _, err := store.Create(CreateSpec{Name: name}); err != nil {
 			t.Fatalf("create %s: %v", name, err)
 		}
 	}
 	for range 2 {
-		for _, voice := range dir.AgentVoices("discord") {
+		for _, voice := range dir.AgentVoices("chat") {
 			if voice.Token.Valid() {
 				t.Fatalf("%s got a token although its key is shared", voice.Agent)
 			}
@@ -107,7 +107,7 @@ func TestUnreadableReplyRuleIsTreatedAsNever(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(a.Home, replyFile), []byte("always\n"), fileMode); err != nil {
 		t.Fatalf("write reply: %v", err)
 	}
-	if got := dir.AgentVoices("discord")[0].Reply; got != contracts.ReplyNever {
+	if got := dir.AgentVoices("chat")[0].Reply; got != contracts.ReplyNever {
 		t.Fatalf("reply = %v; want never for an unknown rule", got)
 	}
 	if !strings.Contains(logs.String(), "treated as never") {

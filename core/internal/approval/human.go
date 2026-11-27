@@ -1,6 +1,9 @@
 package approval
 
-import "strings"
+import (
+	"path"
+	"strings"
+)
 
 // RequiresHuman reports whether req runs herrscher's device or role verbs from a shell, or names them with a
 // command that can reach them, which only a person may decide: no rule, no remembered answer and no mode lets them
@@ -13,7 +16,7 @@ func RequiresHuman(req Request) bool {
 		return false
 	}
 	words := strings.Fields(normalizeShell(req.Subject))
-	if hasWord(words, "herrscher") && (hasWord(words, "device") || hasWord(words, "role") || hasWord(words, "xargs")) {
+	if namesHerrscher(req.Subject, words) && (hasWord(words, "device") || hasWord(words, "role") || hasWord(words, "xargs")) {
 		return true
 	}
 	if (strings.ContainsAny(req.Subject, "$`") || hasWord(words, "eval")) && assemblesHerrscher(words) {
@@ -30,6 +33,22 @@ func normalizeShell(command string) string {
 		}
 		return char
 	}, unquoted))
+}
+
+func namesHerrscher(command string, words []string) bool {
+	if hasWord(words, "herrscher") {
+		return true
+	}
+	for _, field := range strings.Fields(strings.NewReplacer(`\`, "", `"`, "", `'`, "", "`", "").Replace(command)) {
+		if !strings.ContainsAny(field, "*?[") {
+			continue
+		}
+		segment := field[strings.LastIndex(field, "/")+1:]
+		if matched, err := path.Match(segment, "herrscher"); err == nil && matched {
+			return true
+		}
+	}
+	return false
 }
 
 func hasWord(words []string, want string) bool {

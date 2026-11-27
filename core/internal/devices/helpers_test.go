@@ -6,12 +6,18 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"io"
 	"testing"
 	"time"
 
 	"github.com/Herrscherd/herrscher/core/internal/authz"
 	"github.com/Herrscherd/herrscher/core/internal/devices"
 )
+
+func loadAuthority(stateDir string, now time.Time, rnd io.Reader, enrolled bool) (*devices.Authority, error) {
+	gate := &devices.AuthorityGate{}
+	return gate.LoadOrCreate(stateDir, now, rnd, enrolled)
+}
 
 func epochInstant() time.Time {
 	return time.Date(2026, 11, 26, 9, 0, 0, 0, time.UTC)
@@ -54,7 +60,7 @@ func reparse(t *testing.T, code devices.PairingCode) devices.PairingCode {
 
 func newAuthority(t *testing.T, now time.Time) *devices.Authority {
 	t.Helper()
-	authority, err := devices.LoadOrCreateAuthority(t.TempDir(), now, rand.Reader, false)
+	authority, err := loadAuthority(t.TempDir(), now, rand.Reader, false)
 	if err != nil {
 		t.Fatal(err)
 	}

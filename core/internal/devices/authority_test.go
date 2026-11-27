@@ -20,7 +20,7 @@ func TestTheAuthorityIsKeptAcrossLoadsAndItsSecretsStayPrivate(t *testing.T) {
 	if err := os.Chmod(stateDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	first, err := devices.LoadOrCreateAuthority(stateDir, epochInstant(), rand.Reader, false)
+	first, err := loadAuthority(stateDir, epochInstant(), rand.Reader, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestTheAuthorityIsKeptAcrossLoadsAndItsSecretsStayPrivate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := devices.LoadOrCreateAuthority(stateDir, epochInstant().Add(time.Hour), rand.Reader, true)
+	second, err := loadAuthority(stateDir, epochInstant().Add(time.Hour), rand.Reader, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,13 +45,13 @@ func TestTheAuthorityIsKeptAcrossLoadsAndItsSecretsStayPrivate(t *testing.T) {
 
 func TestAPartialAuthorityIsRebuiltWhenNoDeviceWasEnrolled(t *testing.T) {
 	stateDir := t.TempDir()
-	if _, err := devices.LoadOrCreateAuthority(stateDir, epochInstant(), rand.Reader, false); err != nil {
+	if _, err := loadAuthority(stateDir, epochInstant(), rand.Reader, false); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Remove(authorityCertPath(stateDir)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := devices.LoadOrCreateAuthority(stateDir, epochInstant(), rand.Reader, false); err != nil {
+	if _, err := loadAuthority(stateDir, epochInstant(), rand.Reader, false); err != nil {
 		t.Fatalf("a partial pair with no device enrolled must be rebuilt: %v", err)
 	}
 	if _, err := os.Stat(authorityCertPath(stateDir)); err != nil {
@@ -61,13 +61,13 @@ func TestAPartialAuthorityIsRebuiltWhenNoDeviceWasEnrolled(t *testing.T) {
 
 func TestAPartialAuthorityIsRefusedOnceADeviceWasEnrolled(t *testing.T) {
 	stateDir := t.TempDir()
-	if _, err := devices.LoadOrCreateAuthority(stateDir, epochInstant(), rand.Reader, false); err != nil {
+	if _, err := loadAuthority(stateDir, epochInstant(), rand.Reader, false); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Remove(authorityCertPath(stateDir)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := devices.LoadOrCreateAuthority(stateDir, epochInstant(), rand.Reader, true); !errors.Is(err, devices.ErrAuthorityFiles) {
+	if _, err := loadAuthority(stateDir, epochInstant(), rand.Reader, true); !errors.Is(err, devices.ErrAuthorityFiles) {
 		t.Fatalf("partial pair with devices enrolled = %v, want ErrAuthorityFiles: replacing it would unpair them", err)
 	}
 }
@@ -84,7 +84,7 @@ func TestAnAuthorityKeyNeverFollowsASymlinkPlantedAtAGuessableName(t *testing.T)
 	if err := os.Symlink(target, filepath.Join(stateDir, "devices", "authority-key.pem.tmp")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := devices.LoadOrCreateAuthority(stateDir, epochInstant(), rand.Reader, false); err != nil {
+	if _, err := loadAuthority(stateDir, epochInstant(), rand.Reader, false); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(target)
@@ -98,7 +98,7 @@ func TestAnAuthorityKeyNeverFollowsASymlinkPlantedAtAGuessableName(t *testing.T)
 
 func TestTheServerCertificateIsSignedByTheAuthority(t *testing.T) {
 	stateDir := t.TempDir()
-	authority, err := devices.LoadOrCreateAuthority(stateDir, epochInstant(), rand.Reader, false)
+	authority, err := loadAuthority(stateDir, epochInstant(), rand.Reader, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,10 +205,10 @@ func TestVerifyClientRefusesAnExpiredCertificate(t *testing.T) {
 
 func TestAnAuthorityPastItsValidityIsRefused(t *testing.T) {
 	stateDir := t.TempDir()
-	if _, err := devices.LoadOrCreateAuthority(stateDir, epochInstant(), rand.Reader, false); err != nil {
+	if _, err := loadAuthority(stateDir, epochInstant(), rand.Reader, false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := devices.LoadOrCreateAuthority(stateDir, epochInstant().Add(6*365*24*time.Hour), rand.Reader, false); !errors.Is(err, devices.ErrAuthorityExpired) {
+	if _, err := loadAuthority(stateDir, epochInstant().Add(6*365*24*time.Hour), rand.Reader, false); !errors.Is(err, devices.ErrAuthorityExpired) {
 		t.Fatalf("authority five years and more old = %v, want ErrAuthorityExpired", err)
 	}
 }
@@ -271,7 +271,7 @@ func TestConcurrentLoadsOfAnAbsentAuthorityAgreeOnOneAuthority(t *testing.T) {
 
 func TestAnAbsentAuthorityIsNotRebuiltOnceDevicesArePaired(t *testing.T) {
 	stateDir := t.TempDir()
-	if _, err := devices.LoadOrCreateAuthority(stateDir, epochInstant(), rand.Reader, true); !errors.Is(err, devices.ErrAuthorityMissing) {
+	if _, err := loadAuthority(stateDir, epochInstant(), rand.Reader, true); !errors.Is(err, devices.ErrAuthorityMissing) {
 		t.Fatalf("absent authority with devices paired = %v, want ErrAuthorityMissing", err)
 	}
 	if _, err := os.Stat(authorityCertPath(stateDir)); !errors.Is(err, os.ErrNotExist) {
@@ -290,10 +290,10 @@ func TestTheServerCertificateDeclaresItsCAStatusExplicitly(t *testing.T) {
 func TestAServerCertificateNotSignedByTheCurrentAuthorityIsReissued(t *testing.T) {
 	first := t.TempDir()
 	second := t.TempDir()
-	if _, err := devices.LoadOrCreateAuthority(first, epochInstant(), rand.Reader, false); err != nil {
+	if _, err := loadAuthority(first, epochInstant(), rand.Reader, false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := devices.LoadOrCreateAuthority(second, epochInstant(), rand.Reader, false); err != nil {
+	if _, err := loadAuthority(second, epochInstant(), rand.Reader, false); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"server-cert.pem", "server-key.pem"} {
@@ -305,7 +305,7 @@ func TestAServerCertificateNotSignedByTheCurrentAuthorityIsReissued(t *testing.T
 			t.Fatal(err)
 		}
 	}
-	authority, err := devices.LoadOrCreateAuthority(second, epochInstant(), rand.Reader, false)
+	authority, err := loadAuthority(second, epochInstant(), rand.Reader, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,5 +322,37 @@ func TestAServerCertificateNotSignedByTheCurrentAuthorityIsReissued(t *testing.T
 	roots.AddCert(ca)
 	if _, err := authority.ServerCertificate().Leaf.Verify(x509.VerifyOptions{Roots: roots, CurrentTime: epochInstant(), DNSName: "localhost", KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}); err != nil {
 		t.Fatalf("a server certificate from another authority was kept: %v", err)
+	}
+}
+
+func TestTwoGatesInOneProcessSerialiseThroughTheLockFile(t *testing.T) {
+	stateDir := t.TempDir()
+	const callers = 6
+	results := make(chan *devices.Authority, callers)
+	errs := make(chan error, callers)
+	for range callers {
+		go func() {
+			gate := &devices.AuthorityGate{}
+			authority, err := gate.LoadOrCreate(stateDir, epochInstant(), rand.Reader, false)
+			results <- authority
+			errs <- err
+		}()
+	}
+	var authorities []*devices.Authority
+	for range callers {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+		authorities = append(authorities, <-results)
+	}
+	csr, _ := requestFor(t, elliptic.P256())
+	cert, err := authorities[0].SignClient(csr, mustDeviceID(t), epochInstant(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for idx, authority := range authorities {
+		if _, err := authority.VerifyClient(cert, epochInstant()); err != nil {
+			t.Fatalf("gate %d created a different authority: %v", idx, err)
+		}
 	}
 }

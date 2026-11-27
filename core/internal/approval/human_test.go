@@ -5,6 +5,8 @@ import "testing"
 func TestRequiresHumanCatchesEveryWayOfNamingHerrscherAdministration(t *testing.T) {
 	for _, subject := range []string{
 		"herrscher device approve ABCDE-FGHJK",
+		"/bin/herr*  device list",
+		"/bin/herr[s]cher device list",
 		"herrscher device list",
 		"herrscher role grant chat:1 owner",
 		"cd /srv && herrscher device pair",

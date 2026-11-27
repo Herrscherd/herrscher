@@ -152,7 +152,9 @@ authenticate, and the signed certificate is not handed to anyone yet.
   carries a fingerprint, before any signature. P-256 rather than Ed25519 because the Secure Enclave and the
   platform keystores of phones sign with P-256 keys, and the Go TLS stack accepts
   P-256 for client certificates. Its files live in a `devices` subdirectory of the
-  state directory, created with mode 0700 and holding nothing else. The state
+  state directory, created with mode 0700. Creating the authority takes an
+  exclusive lock file, `devices/authority.lock`, so a one-off command run while
+  the daemon is up cannot write a key and a certificate that do not match. The state
   directory's own mode is left as it is. Each key file has mode 0600 and is written
   through a fresh exclusive temporary file, then renamed, and the directory is
   synced. The key is written before the certificate. A partial pair is rebuilt
@@ -168,7 +170,8 @@ authenticate, and the signed certificate is not handed to anyone yet.
   device or role verbs needs a person's decision. This is a text barrier, and it
   over-blocks on purpose. The command is split on every punctuation mark and every
   blank, line breaks included, and it needs a person when it contains:
-  - the word `herrscher` together with the word `device`, `role` or `xargs`. This
+  - the word `herrscher`, or a shell glob that can expand to it (`/bin/herr*`,
+    `/bin/herr[s]cher`), together with the word `device`, `role` or `xargs`. This
     also covers a command that only reads, such as `grep "herrscher role"
     docs/remote.md`, which needs the owner's decision;
   - the name spelled out of pieces through an expansion, a substitution or an

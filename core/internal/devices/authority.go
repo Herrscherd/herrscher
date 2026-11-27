@@ -1,6 +1,7 @@
 package devices
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/tls"
@@ -17,6 +18,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/Herrscherd/herrscher/core/internal/filelock"
 )
 
 const (
@@ -31,6 +34,7 @@ const (
 	serverCertFile     = "server-cert.pem"
 	serverKeyFile      = "server-key.pem"
 	serialBytes        = 16
+	authorityLockFile  = "authority.lock"
 	serialTopBitMask   = 0x7f
 	clockSkew          = time.Minute
 	pemECKey           = "EC PRIVATE KEY"
@@ -52,11 +56,21 @@ type AuthorityGate struct {
 	mu sync.Mutex
 }
 
-// LoadOrCreate is LoadOrCreateAuthority under the gate.
+// LoadOrCreate loads the authority kept under stateDir, or creates it. It holds the gate's mutex for the
+// goroutines of this process and an exclusive lock file for the other processes, a one-off command included.
 func (g *AuthorityGate) LoadOrCreate(stateDir string, now time.Time, rnd io.Reader, enrolled bool) (*Authority, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return LoadOrCreateAuthority(stateDir, now, rnd, enrolled)
+	dir := filepath.Join(stateDir, secretDirName)
+	if err := os.MkdirAll(dir, privateDirMode); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrAuthorityFiles, err)
+	}
+	release, err := filelock.Acquire(context.Background(), filepath.Join(dir, authorityLockFile))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrAuthorityFiles, err)
+	}
+	defer release()
+	return loadOrCreateAuthority(stateDir, now, rnd, enrolled)
 }
 
 // VerifiedClient is a client certificate the authority has checked.
@@ -72,8 +86,8 @@ const (
 	pairPartial
 )
 
-// LoadOrCreateAuthority reads the authority kept under stateDir, in a devices directory of mode 0700 that holds nothing else, and creates it the first time.
-func LoadOrCreateAuthority(stateDir string, now time.Time, rnd io.Reader, enrolled bool) (*Authority, error) {
+// loadOrCreateAuthority reads the authority kept under stateDir, in a devices directory of mode 0700 that holds nothing else, and creates it the first time.
+func loadOrCreateAuthority(stateDir string, now time.Time, rnd io.Reader, enrolled bool) (*Authority, error) {
 	dir := filepath.Join(stateDir, secretDirName)
 	if err := os.MkdirAll(dir, privateDirMode); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrAuthorityFiles, err)

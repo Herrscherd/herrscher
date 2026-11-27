@@ -11,8 +11,9 @@ import (
 const blockSeparator = "\n\n"
 
 type injectedBlock struct {
-	part contracts.ContextPart
-	text string
+	part    contracts.ContextPart
+	text    string
+	omitted bool
 }
 
 type turnContext struct {
@@ -33,7 +34,7 @@ func composeTurnContext(memCtx string, eng *skills.Engine, aff affordances) turn
 func (c turnContext) String() string {
 	texts := make([]string, 0, len(c.blocks))
 	for _, block := range c.blocks {
-		if block.text != "" {
+		if block.text != "" && !block.omitted {
 			texts = append(texts, block.text)
 		}
 	}
@@ -43,12 +44,19 @@ func (c turnContext) String() string {
 func (c turnContext) sizes() []contracts.InjectedPart {
 	parts := make([]contracts.InjectedPart, 0, len(c.blocks))
 	for _, block := range c.blocks {
-		parts = append(parts, contracts.InjectedPart{Part: block.part, Tokens: contextwindow.EstimateTokens(block.text)})
+		parts = append(parts, contracts.InjectedPart{Part: block.part, Tokens: sentTokens(block)})
 	}
 	if c.selfToolsBytes > 0 {
 		parts = append(parts, contracts.InjectedPart{Part: contracts.ContextSelfTools, Tokens: contextwindow.EstimateBytes(c.selfToolsBytes)})
 	}
 	return parts
+}
+
+func sentTokens(block injectedBlock) int {
+	if block.omitted {
+		return 0
+	}
+	return contextwindow.EstimateTokens(block.text)
 }
 
 func skillsBlock(eng *skills.Engine) string {

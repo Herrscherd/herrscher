@@ -69,6 +69,18 @@ type Config struct {
 	Telemetry *TelemetryConfig `json:"telemetry,omitempty"`
 
 	SelfTools *SelfToolsConfig `json:"selfTools,omitempty"`
+
+	ContextDelta *ContextDeltaConfig `json:"contextDelta,omitempty"`
+}
+
+// ContextDeltaConfig configures the context delta: a block is sent only when it changed since the previous turn of a session that keeps its history. A nil Enabled means off.
+type ContextDeltaConfig struct {
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// ContextDeltaEnabled reports whether the configuration turns the context delta on.
+func (c Config) ContextDeltaEnabled() bool {
+	return c.ContextDelta != nil && c.ContextDelta.Enabled != nil && *c.ContextDelta.Enabled
 }
 
 // SelfToolsConfig configures the herrscher MCP server a session gets. A nil Enabled means on; Expose is core or all.

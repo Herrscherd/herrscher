@@ -102,6 +102,7 @@ func runBridge(ctx context.Context, messages *clitext.Messages, hostMessages *ho
 		Roster:           host.NewRoster(rosterRoot),
 		Capabilities:     os.Getenv(host.EnvCapabilities),
 		SelfToolsBytes:   selfToolsBytes(),
+		ContextDelta:     host.ContextDeltaOn(os.Getenv(host.EnvContextDelta)),
 		LaunchProject:    *project,
 		ProjectPinned:    *projectPinned,
 		MemoryAgent:      *agent,

@@ -418,6 +418,70 @@ the reason in this table. No other exclusion in the file is described here.
 | `core/internal/mcpweight/config.go` | gosec G304 | `ReadServers` reads the `mcp.json` at the path the agent home defines. |
 | `core/internal/mcpweight/fake_test.go` | revive deep-exit | `TestFakeServer` and `serveFake` end the test binary's process, so that it acts as a server that exits, fails or stops answering. The file builds only into test binaries. |
 
+## Context resend on change
+
+Each turn, the bridge prepends a context block to the user message: memory recall,
+skills, delegation, capabilities, identity and self tools. Most backends keep their own
+history, so a block sent on an earlier turn is still in front of the model. With the
+switch on, a block whose content has not changed since it was last sent in the same
+session is left out of the next prompt. `/context` then reports what was sent this
+turn, so a block left out counts 0 tokens and the parts stay measured.
+
+The switch is off by default. It is set for the whole daemon, not per agent or per
+session:
+
+- `HERRSCHER_CONTEXT_DELTA=1` (or `true`, `on`, `yes`), which wins over
+- `contextDelta.enabled: true` in `config.json`.
+
+### Where each backend places the context
+
+`contracts.Prompt.Context` is prepended to the current user message in every backend, so
+it sits after the history, never before it. No backend places it before the history, so
+nothing is moved into `CLAUDE.md` or `AGENTS.md`: the earlier turns stay byte-identical,
+and only the current message grows.
+
+| Backend | Where the context lands | Keeps its own history | Source |
+|---|---|---|---|
+| claude | `withContext` in the stream path, fenced as `<memory data-only="true">` | yes, resumable session | `claude-backend` `stream.go` (`withContext`, `turnContent`), `stream_responder.go` (`ResumeToken`) |
+| codex | `withContext` before the turn content | yes | `codex-backend` `prompt.go`, `stream.go` (`ResumeToken`) |
+| cursor | `withContext` in the stream and one-shot paths | yes | `cursor-backend` `stream.go`, `backend.go`, `ResumeToken` |
+| grok | `withContext` in `runTurn` | yes | `grok-backend` `prompt.go`, `backend.go` (`ResumeToken`) |
+| antigravity | `withContext` in the turn | yes | `antigravity-backend` `backend.go` (`ResumeToken`) |
+| pixellab | does not read `Prompt.Context` | n/a | `pixellab-backend` |
+
+Sources are the module versions pinned in `go.mod` at the time of writing.
+
+### What counts as history kept
+
+A backend keeps history for this feature when it exposes a non-empty resume token
+(`contracts.ResumeAware`). That signal is a proxy: the bridge cannot see the vendor's
+history, only the token. A backend that answers without one gets the full context on every
+turn.
+
+### Digests and reset triggers
+
+The ledger keeps one sha256 digest per block, per session. A block is sent again in full
+when any of these happens first:
+
+- the session incarnation changed (`Event.SessionIncarnation`);
+- the vendor resume token changed, or was lost after the turn;
+- the backend announced a resume notice, or reset its attempt during the turn;
+- the turn failed;
+- a compaction or a history prune ran (`compactwire.EventRequest`, `historywire.EventPrune`).
+
+A turn without a session incarnation, and every one-shot path, always sends everything.
+A reset that lands while a turn is in flight is not committed, so a stale digest is never
+stored.
+
+### Open risk
+
+Vendor-side automatic compaction is not visible on the live stream (the claude
+`compact_boundary` marker appears only in the transcript). If the vendor drops a block
+on its own, the bridge cannot see it and may leave that block out while the model no
+longer has it. This is the reason the switch stays off by default. `/context` also cannot
+show the full size of an omitted block: that needs a contracts field, recorded as a
+follow-up.
+
 ## Also
 
 Cross-backend skills, where one `SKILL.md` works on every backend. The playbooks

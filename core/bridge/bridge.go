@@ -55,6 +55,10 @@ type Options struct {
 	Capabilities string
 	// SelfToolsBytes is the size of the herrscher MCP server's declarations the vendor sends with each turn, reported in the context sizes.
 	SelfToolsBytes int
+	// ContextDelta sends each host block only when it changed since the previous
+	// turn, for a session whose backend keeps its history across turns. False sends
+	// every block on every turn.
+	ContextDelta bool
 	// Scope decides which memory project a session's conversation is actually
 	// about, on its first prompt. It is injected because the answer lives in the
 	// vault and the bridge package holds no memory of its own, which is also
@@ -144,10 +148,12 @@ func (r turnRouter) route(ctx context.Context, event contracts.Event, lang i18n.
 	switch event.T {
 	case compactwire.EventRequest:
 		runCompact(ctx, r.sink, r.backend, r.ctrl, r.aff.approvals, lang, event)
+		r.aff.ledger.reset()
 	case historywire.EventRead:
 		runHistoryRead(ctx, r.sink, r.backend, r.ctrl, event)
 	case historywire.EventPrune:
 		runHistoryPrune(ctx, r.sink, r.backend, r.ctrl, event)
+		r.aff.ledger.reset()
 	case eventwire.EventInput:
 		return runOneTurn(ctx, r.sink, r.backend, r.orch, event, r.ctrl, r.eng, r.aff, r.pin, lang)
 	}

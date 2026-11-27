@@ -154,7 +154,7 @@ func serveHub(ctx context.Context, messages *hostMessages, cliMessages *clitext.
 	}
 	selfTools := measuredSelfTools(reg, loadedConfig(options.ConfigPath), envx.Getenv)
 	measured := selfTools()
-	sup.SetBridgeEnv(hubBridgeEnv(specs, kinds, measured.TurnBytes(), measured.Exposure))
+	sup.SetBridgeEnv(hubBridgeEnv(specs, kinds, measured.TurnBytes(), measured.Exposure, contextDeltaSetting(envx.Getenv, loadedConfig(options.ConfigPath))))
 	sup.SetLocalPrepare(selfToolsPreparer(selfToolsProvisioner(envx.Getenv, loadedConfig(options.ConfigPath)), log))
 	ensureCodexAgent(deps.agents)
 	if ta := terminalAdmin(gws); ta != nil {

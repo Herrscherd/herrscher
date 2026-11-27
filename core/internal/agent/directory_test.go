@@ -2,10 +2,10 @@ package agent
 
 import (
 	"bytes"
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -125,34 +125,44 @@ func TestAgentVoicesConcurrentWithRuleWrites(t *testing.T) {
 		}
 	}
 	dir.ttl = 0
-	rules := []contracts.ReplyRule{contracts.ReplyOnMention, contracts.ReplyInChannels, contracts.ReplyNever}
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for i := range 60 {
-			if err := store.SetReply("rin", rules[i%len(rules)]); err != nil {
-				t.Errorf("set reply: %v", err)
-			}
-			if err := store.SetChannels("rin", []Channel{{"chat", fmt.Sprint(i)}}); err != nil {
-				t.Errorf("set channels: %v", err)
-			}
-		}
+		writeRulesAndChannels(t, store, 60)
 	}()
 	for range 4 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for range 60 {
-				if voices := dir.AgentVoices("chat"); len(voices) != 2 {
-					t.Errorf("voices = %d; want 2", len(voices))
-				}
-			}
+			readVoices(t, dir, 60)
 		}()
 	}
 	wg.Wait()
 	if strings.Contains(logs.String(), "treated as never") {
 		t.Fatalf("a read saw a half-written rule file: %q", logs.String())
+	}
+}
+
+func writeRulesAndChannels(t *testing.T, store *Store, rounds int) {
+	t.Helper()
+	rules := []contracts.ReplyRule{contracts.ReplyOnMention, contracts.ReplyInChannels, contracts.ReplyNever}
+	for i := range rounds {
+		if err := store.SetReply("rin", rules[i%len(rules)]); err != nil {
+			t.Errorf("set reply: %v", err)
+		}
+		if err := store.SetChannels("rin", []Channel{{"chat", strconv.Itoa(i)}}); err != nil {
+			t.Errorf("set channels: %v", err)
+		}
+	}
+}
+
+func readVoices(t *testing.T, dir *Directory, rounds int) {
+	t.Helper()
+	for range rounds {
+		if voices := dir.AgentVoices("chat"); len(voices) != 2 {
+			t.Errorf("voices = %d; want 2", len(voices))
+		}
 	}
 }
 

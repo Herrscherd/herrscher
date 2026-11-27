@@ -58,14 +58,14 @@ type AuthorityGate struct {
 
 // LoadOrCreate loads the authority kept under stateDir, or creates it. It holds the gate's mutex for the
 // goroutines of this process and an exclusive lock file for the other processes, a one-off command included.
-func (g *AuthorityGate) LoadOrCreate(stateDir string, now time.Time, rnd io.Reader, enrolled bool) (*Authority, error) {
+func (g *AuthorityGate) LoadOrCreate(ctx context.Context, stateDir string, now time.Time, rnd io.Reader, enrolled bool) (*Authority, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	dir := filepath.Join(stateDir, secretDirName)
 	if err := os.MkdirAll(dir, privateDirMode); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrAuthorityFiles, err)
 	}
-	release, err := filelock.Acquire(context.Background(), filepath.Join(dir, authorityLockFile))
+	release, err := filelock.Acquire(ctx, filepath.Join(dir, authorityLockFile))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrAuthorityFiles, err)
 	}
@@ -86,7 +86,6 @@ const (
 	pairPartial
 )
 
-// loadOrCreateAuthority reads the authority kept under stateDir, in a devices directory of mode 0700 that holds nothing else, and creates it the first time.
 func loadOrCreateAuthority(stateDir string, now time.Time, rnd io.Reader, enrolled bool) (*Authority, error) {
 	dir := filepath.Join(stateDir, secretDirName)
 	if err := os.MkdirAll(dir, privateDirMode); err != nil {

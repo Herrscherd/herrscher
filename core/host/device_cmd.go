@@ -101,12 +101,12 @@ func deviceApproveVerb(cliMessages *clitext.Messages, lang languageSource, store
 		Help(clitext.CmdHelpDeviceApprove).
 		ValueParam("code", clitext.CmdParamDeviceApproveCode, false).
 		ValueParam("fingerprint", clitext.CmdParamDeviceApproveFingerprint, false).
-		Do(func(_ context.Context, input contracts.Input) (contracts.Result, error) {
-			return cli.Data(approveDevice(cliMessages, lang(), store, gate, input))
+		Do(func(ctx context.Context, input contracts.Input) (contracts.Result, error) {
+			return cli.Data(approveDevice(ctx, cliMessages, lang(), store, gate, input))
 		})
 }
 
-func approveDevice(cliMessages *clitext.Messages, lang i18n.Language, store *state.State, gate *devices.AuthorityGate, input contracts.Input) (string, error) {
+func approveDevice(ctx context.Context, cliMessages *clitext.Messages, lang i18n.Language, store *state.State, gate *devices.AuthorityGate, input contracts.Input) (string, error) {
 	code, err := codeOperand(input)
 	if err != nil {
 		return "", err
@@ -119,7 +119,7 @@ func approveDevice(cliMessages *clitext.Messages, lang i18n.Language, store *sta
 	if err != nil {
 		return "", err
 	}
-	return signDevice(cliMessages, lang, store, gate, code, fingerprint)
+	return signDevice(ctx, cliMessages, lang, store, gate, code, fingerprint)
 }
 
 func previewDevice(cliMessages *clitext.Messages, lang i18n.Language, store *state.State, code devices.PairingCode) (string, error) {
@@ -144,8 +144,8 @@ func previewDevice(cliMessages *clitext.Messages, lang i18n.Language, store *sta
 	}), nil
 }
 
-func signDevice(cliMessages *clitext.Messages, lang i18n.Language, store *state.State, gate *devices.AuthorityGate, code devices.PairingCode, fingerprint devices.Fingerprint) (string, error) {
-	authority, err := gate.LoadOrCreate(store.PrivateDir(), time.Now(), rand.Reader, len(store.DeviceRegistry().Devices) > 0)
+func signDevice(ctx context.Context, cliMessages *clitext.Messages, lang i18n.Language, store *state.State, gate *devices.AuthorityGate, code devices.PairingCode, fingerprint devices.Fingerprint) (string, error) {
+	authority, err := gate.LoadOrCreate(ctx, store.PrivateDir(), time.Now(), rand.Reader, len(store.DeviceRegistry().Devices) > 0)
 	if err != nil {
 		return "", err
 	}

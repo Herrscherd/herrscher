@@ -1,6 +1,7 @@
 package devices_test
 
 import (
+	"context"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
@@ -245,7 +246,7 @@ func TestConcurrentLoadsOfAnAbsentAuthorityAgreeOnOneAuthority(t *testing.T) {
 	errs := make(chan error, callers)
 	for range callers {
 		go func() {
-			authority, err := gate.LoadOrCreate(stateDir, epochInstant(), rand.Reader, false)
+			authority, err := gate.LoadOrCreate(context.Background(), stateDir, epochInstant(), rand.Reader, false)
 			results <- authority
 			errs <- err
 		}()
@@ -333,7 +334,7 @@ func TestTwoGatesInOneProcessSerialiseThroughTheLockFile(t *testing.T) {
 	for range callers {
 		go func() {
 			gate := &devices.AuthorityGate{}
-			authority, err := gate.LoadOrCreate(stateDir, epochInstant(), rand.Reader, false)
+			authority, err := gate.LoadOrCreate(context.Background(), stateDir, epochInstant(), rand.Reader, false)
 			results <- authority
 			errs <- err
 		}()

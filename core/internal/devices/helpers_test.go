@@ -1,6 +1,7 @@
 package devices_test
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -16,7 +17,7 @@ import (
 
 func loadAuthority(stateDir string, now time.Time, rnd io.Reader, enrolled bool) (*devices.Authority, error) {
 	gate := &devices.AuthorityGate{}
-	return gate.LoadOrCreate(stateDir, now, rnd, enrolled)
+	return gate.LoadOrCreate(context.Background(), stateDir, now, rnd, enrolled)
 }
 
 func epochInstant() time.Time {
